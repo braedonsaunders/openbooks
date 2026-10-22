@@ -41,10 +41,10 @@ export async function resolveInsightBookScope(
   const entity = REPORT_ENTITY_MAP[query.source]
   if (!entity?.bookScope) return undefined
   if (insightQueryReferencesBook(query)) return null
-  const { rows } = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active
-  `)
+  `, 'objects')
   if (rows.length !== 1) {
     throw new InsightBookScopeError()
   }

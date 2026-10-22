@@ -30,7 +30,7 @@ async function seedRevokedWaiver(orgId: string, actorId: string, partyId: string
   const waiver = (await db.execute<{ id: string }>(sql`
     insert into compliance_waivers
       (org_id,party_id,requirement_id,reason,effective_from,expires_on,created_by,updated_by,requested_by,approved_by,approved_at)
-    values (${orgId},${partyId},${requirementId},'Bounded exception window','2026-06-01','2026-08-01',${actorId},${actorId},${actorId},null,null) returning id`)).rows[0]!;
+    values (${orgId},${partyId},${requirementId},'Bounded exception window','2026-06-01','2026-08-01',${actorId},${actorId},${actorId},null,null) returning id`, "objects"))[0]!;
   const released=await submitComplianceWaiver({orgId,actorId,id:waiver.id});
   assert.equal(released.status,'approved');
   await db.execute(sql`update compliance_waivers set revoked_at=${revokedAt}::timestamptz,
@@ -53,22 +53,18 @@ test(
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, subsidiary_id, created_by, updated_by)
           values (${partyId}, ${org.orgId}, 'company', 'Revocation Vendor', ${org.subsidiaryId}, ${actorId}, ${actorId})`);
-        const cls = (
-          await db.execute<{ id: string }>(sql`
+        const cls = (await db.execute<{ id: string }>(sql`
             insert into compliance_classes (org_id, code, name, created_by, updated_by)
             values (${org.orgId}, 'TRADE', 'Trade', ${actorId}, ${actorId})
-            returning id`)
-        ).rows[0]!.id;
+            returning id`, "objects"))[0]!.id;
         await db.execute(sql`
           insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
           values (${org.orgId}, ${partyId}, ${cls}, ${actorId}, ${actorId})`);
-        const req = (
-          await db.execute<{ id: string }>(sql`
+        const req = (await db.execute<{ id: string }>(sql`
             insert into compliance_requirements
               (org_id, class_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
             values (${org.orgId}, ${cls}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
-            returning id`)
-        ).rows[0]!.id;
+            returning id`, "objects"))[0]!.id;
         await seedRevokedWaiver(org.orgId, actorId, partyId, req, '2026-07-10T14:00:00Z');
       });
       const statusAt = (asOf: string) =>
@@ -109,22 +105,18 @@ test(
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, subsidiary_id, created_by, updated_by)
           values (${partyId}, ${org.orgId}, 'company', 'Timezone Vendor', ${org.subsidiaryId}, ${actorId}, ${actorId})`);
-        const cls = (
-          await db.execute<{ id: string }>(sql`
+        const cls = (await db.execute<{ id: string }>(sql`
             insert into compliance_classes (org_id, code, name, created_by, updated_by)
             values (${org.orgId}, 'TRADE', 'Trade', ${actorId}, ${actorId})
-            returning id`)
-        ).rows[0]!.id;
+            returning id`, "objects"))[0]!.id;
         await db.execute(sql`
           insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
           values (${org.orgId}, ${partyId}, ${cls}, ${actorId}, ${actorId})`);
-        const req = (
-          await db.execute<{ id: string }>(sql`
+        const req = (await db.execute<{ id: string }>(sql`
             insert into compliance_requirements
               (org_id, class_id, code, name, category, enforcement, requires_verification, created_by, updated_by)
             values (${org.orgId}, ${cls}, 'GL', 'General Liability', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
-            returning id`)
-        ).rows[0]!.id;
+            returning id`, "objects"))[0]!.id;
         await seedRevokedWaiver(org.orgId, actorId, partyId, req, '2026-07-10T02:00:00Z');
       });
       const statusAt = (asOf: string) =>

@@ -141,10 +141,10 @@ export async function launcherDataFor({
     payrollBankProfiles(orgId),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from pay_schedules
-       where org_id = ${orgId} and is_active order by name`),
+       where org_id = ${orgId} and is_active order by name`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from subsidiaries
-       where org_id = ${orgId} and is_active and not is_elimination order by name`),
+       where org_id = ${orgId} and is_active and not is_elimination order by name`, 'objects'),
   ])
   // The pay-schedule form options come from the registry entity's OWN field
   // declaration — the wizard renders the same select the setup drawer does.
@@ -163,8 +163,8 @@ export async function launcherDataFor({
     vendorKeysByCountry,
     frequencies,
     canManageEntities,
-    schedules: schedulesRes.rows,
-    subsidiaries: subsidiariesRes.rows,
+    schedules: schedulesRes,
+    subsidiaries: subsidiariesRes,
     bankProfiles: bankProfiles.map((p) => ({
       id: p.id,
       name: p.name,
@@ -180,14 +180,14 @@ export async function PacksTabSlot() {
   if (!authz) return null
   const orgId = authz.user.orgId
   const [countriesRes, componentsRes] = await Promise.all([
-    db.execute<{ countries: unknown }>(sql`select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`),
+    db.execute<{ countries: unknown }>(sql`select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`, 'objects'),
     db.execute<{ n: number }>(sql`
       select count(*)::int as n from pay_components
-       where org_id = ${orgId} and system_key is not null`),
+       where org_id = ${orgId} and system_key is not null`, 'objects'),
   ])
-  const raw = countriesRes.rows[0]?.countries
+  const raw = countriesRes[0]?.countries
   const installedCountries = Array.isArray(raw) ? raw.map(String) : []
-  const componentCount = Number(componentsRes.rows[0]?.n ?? 0)
+  const componentCount = Number(componentsRes[0]?.n ?? 0)
   return (
     <PayrollCountryPacks
       installedCountries={installedCountries}
@@ -222,30 +222,30 @@ export async function AccountsTabSlot() {
   const allowedSubsidiaryIds = authz.allowedSubsidiaryIds ?? undefined
   const [settings, blobRes, accountsRes, vendorsRes] = await Promise.all([
     payrollSettings(orgId, allowedSubsidiaryIds),
-    db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
+    db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`, 'objects'),
     db.execute<{ id: string; number: string | null; name: string }>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and not is_summary and is_active
-       order by number nulls last, name`),
+       order by number nulls last, name`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
        where p.org_id = ${orgId} and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null, { orgWideNull: true })}
-       order by p.display_name`),
+       order by p.display_name`, 'objects'),
   ])
-  const blob = blobRes.rows[0]?.p ?? {}
+  const blob = blobRes[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
   const packs = await packSlotState(orgId, installed)
   return (
     <PayrollSetupWorkspace
       settings={settings}
       packs={packs}
-      accounts={accountsRes.rows.map((account) => ({
+      accounts={accountsRes.map((account) => ({
         id: account.id,
         label: account.number ? `${account.number} · ${account.name}` : account.name,
       }))}
-      vendors={vendorsRes.rows.map((vendor) => ({ id: vendor.id, label: vendor.name }))}
+      vendors={vendorsRes.map((vendor) => ({ id: vendor.id, label: vendor.name }))}
       netPaySettlementClearing={parseNetPayClearingWindows(blob[NET_PAY_CLEARING_SETTINGS_KEY])}
     />
   )

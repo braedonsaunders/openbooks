@@ -132,8 +132,8 @@ async function loadScheduledActors(orgId: string, prefix: string): Promise<Actor
         and al.table_name = 'bank_statements' and al.row_id = bs.id
      where bsl.org_id = ${orgId} and bsl.bank_transaction_id like ${prefix}
      order by bsl.bank_transaction_id
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 /** Every actor column touched in the org equals exactly the expected id set. */
@@ -147,8 +147,8 @@ async function countForeignActorRows(orgId: string, forbidden: string[]): Promis
       (select count(*) from bank_statement_lines where org_id = ${orgId} and created_by = any(${forbiddenIds}::uuid[])) +
       (select count(*) from audit_log where org_id = ${orgId} and actor_id = any(${forbiddenIds}::uuid[]))
     )::int as n
-  `));
-  return Number(r.rows[0]!.n);
+  `, "objects"));
+  return Number(r[0]!.n);
 }
 
 type LastResultRow = {
@@ -167,8 +167,8 @@ async function loadSchedule(id: string): Promise<LastResultRow> {
   const r = (await db.execute<LastResultRow>(sql`
     select last_run_at as "lastRunAt", last_result as "lastResult"
       from sftp_import_schedules where id = ${id}
-  `));
-  return r.rows[0]!;
+  `, "objects"));
+  return r[0]!;
 }
 
 test(
@@ -250,14 +250,14 @@ test(
         select count(*)::int as n from audit_log
          where org_id = ${f.org.orgId} and table_name = 'bank_statements'
            and request_id = ${sftpImportAuditSource(f.authoredScheduleId)}
-      `);
-      assert.equal(Number(authoredAudit.rows[0]!.n), 1);
+      `, "objects");
+      assert.equal(Number(authoredAudit[0]!.n), 1);
       const unauthoredAudit = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${f.org.orgId} and table_name = 'bank_statements'
            and request_id = ${sftpImportAuditSource(f.unauthoredScheduleId)}
-      `);
-      assert.equal(Number(unauthoredAudit.rows[0]!.n), 1);
+      `, "objects");
+      assert.equal(Number(unauthoredAudit[0]!.n), 1);
 
       // No impersonation anywhere in the tenant's financial evidence.
       assert.equal(await countForeignActorRows(f.org.orgId, [f.authorId, f.org.orgId]), 0);
@@ -277,9 +277,9 @@ test(
         select id from bank_statements
          where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.bank}
            and source_file_sha256 is not null
-      `);
+      `, "objects");
       assert.ok(fileOutcome.statementIds.length >= 1);
-      const persistedIds = new Set(statementIds.rows.map((row) => row.id));
+      const persistedIds = new Set(statementIds.map((row) => row.id));
       for (const statementId of fileOutcome.statementIds) {
         assert.ok(persistedIds.has(statementId), `recorded statement ${statementId} exists`);
       }
@@ -300,7 +300,7 @@ test(
       // carries system provenance rather than some other identity.
       const beforeStatements = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statements where org_id = ${f.org.orgId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       const replayBytes = ofxStatement(["sftp-deposit-a", "sftp-deposit-b"]);
       assert.deepEqual(replayBytes, readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed", day, generations[0]!)));
       stageFile(f.rootPrefix, "inbound", "acct.ofx", replayBytes);
@@ -311,7 +311,7 @@ test(
       assert.equal(rerun.duplicates, 2, "every replayed line is recognized as a duplicate");
       const afterStatements = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statements where org_id = ${f.org.orgId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(afterStatements, beforeStatements);
       assert.equal(await countForeignActorRows(f.org.orgId, [f.authorId, f.org.orgId]), 0);
       // The replay archives as a numbered second generation: the first
@@ -343,7 +343,7 @@ test(
       const before = (await db.execute<{ last_result: unknown; run_claim_token: string | null }>(sql`
         select last_result, run_claim_token from sftp_import_schedules
          where id = ${f.authoredScheduleId} and org_id = ${f.org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
 
       const skipped = (await runDueSftpImports(f.org.orgId, f.authoredScheduleId))[0]!;
       assert.equal(skipped.alreadyRunning, true);
@@ -353,7 +353,7 @@ test(
       const after = (await db.execute<{ last_result: unknown; run_claim_token: string | null }>(sql`
         select last_result, run_claim_token from sftp_import_schedules
          where id = ${f.authoredScheduleId} and org_id = ${f.org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(after, before, "a losing invocation does not persist schedule evidence or a claim");
 
       await blocker.query("select pg_advisory_unlock(hashtextextended($1, 0))", [lockKey]);
@@ -415,8 +415,8 @@ test(
           join audit_log al on al.org_id = bs.org_id
             and al.table_name = 'bank_statements' and al.row_id = bs.id
          where bsl.org_id = ${f.org.orgId} and bsl.bank_transaction_id = 'manual-upload-1'
-      `));
-      const row = r.rows[0]!;
+      `, "objects"));
+      const row = r[0]!;
       assert.equal(row.statementActor, f.authorId);
       assert.equal(row.lineActor, f.authorId);
       assert.equal(row.auditActor, f.authorId);
@@ -469,9 +469,9 @@ test(
       const lines = await db.execute<{ amount: string }>(sql`
         select amount from bank_statement_lines
          where org_id = ${f.org.orgId} and bank_transaction_id = 'sftp-utf16-a'
-      `);
-      assert.equal(lines.rows.length, 1);
-      assert.equal(lines.rows[0]!.amount, "-42.5000");
+      `, "objects");
+      assert.equal(lines.length, 1);
+      assert.equal(lines[0]!.amount, "-42.5000");
     } finally {
       await dropScratchOrgReporting(f.org.orgId);
     }
@@ -510,8 +510,8 @@ test(
       const lines = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statement_lines
          where org_id = ${f.org.orgId} and bank_transaction_id = ${lateFitid}
-      `);
-      assert.equal(lines.rows[0]!.n, 1);
+      `, "objects");
+      assert.equal(lines[0]!.n, 1);
       // The failure stays in the folder for a later retry; the import moves on.
       assert.ok(listFolder(f.rootPrefix, "inbound").includes("a-broken.ofx"));
       assert.ok(!listFolder(f.rootPrefix, "inbound").includes("z-good.ofx"));
@@ -558,10 +558,10 @@ test(
       assert.equal(orphaned.errors.length, 1);
       assert.match(orphaned.errors[0]!, /was deleted during the scan/);
       assert.match(orphaned.errors[0]!, /last_result was not recorded/);
-      const audit = (await db.execute<{ action: string; changes: typeof run; request: string | null }>(sql`
+      const audit = await db.execute<{ action: string; changes: typeof run; request: string | null }>(sql`
         select action, changes, request_id as request from audit_log
          where org_id = ${f.org.orgId} and table_name = 'sftp_import_schedules' and row_id = ${f.authoredScheduleId}
-      `)).rows;
+      `, "objects");
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.action, "scan_outcome_unrecorded");
       assert.deepEqual(audit[0]!.changes, run);

@@ -37,12 +37,12 @@ export interface ProjectBudgetReportRow {
 }
 
 export async function projectBudgetProjectOptions(authz: Authz): Promise<{ id: string; label: string }[]> {
-  const rows = (await db.execute<{ id: string; code: string | null; name: string }>(sql`
+  const rows = await db.execute<{ id: string; code: string | null; name: string }>(sql`
     select id, code, name from projects
      where org_id = ${authz.user.orgId} and is_active
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
      order by code nulls last, name, id
-     limit 2000`)).rows
+     limit 2000`, 'objects')
   return rows.map((row) => ({ id: row.id, label: row.code ? `${row.code} · ${row.name}` : row.name }))
 }
 

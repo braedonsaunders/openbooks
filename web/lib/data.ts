@@ -21,8 +21,8 @@ export const orgInfo = cache(async (orgId?: string) => {
              where b.org_id = o.id and b.is_primary limit 1) as book
       from orgs o
      where o.id = ${activeOrgId}
-  `));
-  return r.rows[0] as { name: string; base_currency: string; book: string } | undefined;
+  `, "objects"));
+  return r[0] as { name: string; base_currency: string; book: string } | undefined;
 });
 
 export async function dashboardData(orgId?: string) {
@@ -34,12 +34,12 @@ export async function dashboardData(orgId?: string) {
       (select count(*) from accounts where org_id = ${activeOrgId} and is_active) as accounts,
       (select count(*) from parties where org_id = ${activeOrgId}) as parties,
       (select coalesce(sum(amount), 0) from journal_lines where org_id = ${activeOrgId}) as ledger_sum
-  `));
+  `, "objects"));
   const runs = (await db.execute(sql`
     select id, source, status, started_at, finished_at, stats, error_message, triggered_by
       from sync_runs where org_id = ${activeOrgId} order by started_at desc limit 8
-  `));
-  return { totals: r.rows[0], runs: runs.rows };
+  `, "objects"));
+  return { totals: r[0], runs };
 }
 
 /**
@@ -109,8 +109,8 @@ export async function accountsWithBalances(
       ) s on s.account_id = a.id
      where a.org_id = ${orgId} ${accountSubsidiaryScope}
      order by a.number nulls last, a.name
-  `));
-  return r.rows as {
+  `, "objects"));
+  return r as {
     id: string; parent_id: string | null; number: string | null; name: string;
     type: string; is_summary: boolean; is_active: boolean; balance: string;
   }[];
@@ -164,7 +164,7 @@ export async function entryDetail(
       from journal_entries e
       left join journal_entries re on re.id = e.reverses_entry_id and re.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${orgId}${entrySubsidiaryFilter}
-  `));
+  `, "objects"));
   const lines = (await db.execute<JournalEntryDetailLineRow>(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,
            a.number as account_number, a.name as account_name, l.account_id,
@@ -178,10 +178,10 @@ export async function entryDetail(
       left join documents doc on doc.id = e.source_document_id and doc.org_id = e.org_id
      where l.entry_id = ${id} and l.org_id = ${orgId}${lineSubsidiaryFilter}
      order by l.line_number
-  `));
+  `, "objects"));
   // Without payroll.read the collapsed line keeps the account and the summed
   // amount but names no employee and shows no per-employee memo or amount.
-  const mapped = lines.rows.map((x) => ({
+  const mapped = lines.map((x) => ({
     ...x,
     entryId: id,
     accountId: x.account_id,
@@ -204,5 +204,5 @@ export async function entryDetail(
     } = row
     return rest
   })
-  return { entry: e.rows[0] ?? null, lines: shaped };
+  return { entry: e[0] ?? null, lines: shaped };
 }

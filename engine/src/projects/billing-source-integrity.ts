@@ -49,19 +49,19 @@ function editableLineKey(line: Row): string {
 
 /** Only relational reservations establish provenance; custom JSON is never authority. */
 async function sources(tx: SqlExecutor, orgId: string, documentId: string): Promise<Row[]> {
-  return (await tx.execute<Row>(sql`
+  return await tx.execute<Row>(sql`
     select 'vendor_application' as source, id from vendor_pay_applications
       where org_id=${orgId} and vendor_bill_document_id=${documentId}
     union all select 'vendor_release', id from vendor_retainage_releases
       where org_id=${orgId} and vendor_bill_document_id=${documentId}
     union all select 'customer_application', id from pay_applications
       where org_id=${orgId} and invoice_document_id=${documentId}
-  `)).rows;
+  `, "objects");
 }
 async function documentSnapshot(tx: SqlExecutor, orgId: string, id: string) {
-  const d = (await tx.execute<Row>(sql`select * from documents where org_id=${orgId} and id=${id}`)).rows[0];
+  const d = (await tx.execute<Row>(sql`select * from documents where org_id=${orgId} and id=${id}`, "objects"))[0];
   if (!d) return refuse();
-  const lines = (await tx.execute<Row>(sql`select * from document_lines where org_id=${orgId} and document_id=${id} order by line_number`)).rows;
+  const lines = await tx.execute<Row>(sql`select * from document_lines where org_id=${orgId} and document_id=${id} order by line_number`, "objects");
   return { document: camel(d), lines: lines.map(camel) };
 }
 
@@ -128,13 +128,13 @@ export async function assertGeneratedBillingPostable(
       join projects p on p.org_id=s.org_id and p.id=s.project_id
       where a.org_id=${orgId} and a.id=${source.id} and a.vendor_bill_document_id=${id}
       ${lock ? sql`for share of a, s, p` : sql``}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if (!evidence || evidence.status !== "billed") refuse();
     gross = decimal(evidence.gross); retained = decimal(evidence.retained); total = decimal(evidence.total);
     grossAmounts = (await tx.execute<{ amount: string }>(sql`
       select (work_completed_this_period + materials_stored_current - previous_materials_stored)::text as amount
       from vendor_pay_application_lines where org_id=${orgId} and pay_application_id=${source.id}
-    `)).rows.map(l => l.amount).filter(amount => cmp(amount, "0") !== 0);
+    `, "objects")).map(l => l.amount).filter(amount => cmp(amount, "0") !== 0);
   } else if (release) {
     evidence = (await tx.execute<Row>(sql`
       select r.amount as total, s.vendor_id as party, s.project_id as project, s.currency, p.subsidiary_id as subsidiary
@@ -143,7 +143,7 @@ export async function assertGeneratedBillingPostable(
       join projects p on p.org_id=s.org_id and p.id=s.project_id
       where r.org_id=${orgId} and r.id=${source.id} and r.vendor_bill_document_id=${id}
       ${lock ? sql`for share of r, s, p` : sql``}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if (!evidence) refuse();
     gross = total = decimal(evidence.total);
   } else {
@@ -156,19 +156,19 @@ export async function assertGeneratedBillingPostable(
       left join subsidiaries s on s.org_id=p.org_id and s.id=p.subsidiary_id
       where a.org_id=${orgId} and a.id=${source.id} and a.invoice_document_id=${id}
       ${lock ? sql`for share of a, p` : sql``}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if (!evidence || !["invoiced", "posted"].includes(String(evidence.status))) refuse();
     release = evidence.kind === "retainage_release";
     // Customer monetary snapshots live in the immutable generation audit.
     // Extract decimals as text in PostgreSQL; never JSON-parse numeric money.
-    const audits = (await tx.execute<Row>(sql`
+    const audits = await tx.execute<Row>(sql`
       select changes->'totals'->>'grossThisPeriod' as gross,
         changes->'totals'->>'retainageThisPeriod' as retained,
         changes->'totals'->>'currentDue' as total, changes->'after'->>'amount' as amount
       from audit_log where org_id=${orgId} and table_name='pay_applications' and row_id=${source.id}
         and action=${release ? "retainage_release" : "invoice"}
         and changes->'after'->>'invoiceId'=${id}
-    `)).rows;
+    `, "objects");
     if (audits.length !== 1) refuse();
     const audit = audits[0]!;
     gross = decimal(release ? audit.amount : audit.gross);
@@ -180,7 +180,7 @@ export async function assertGeneratedBillingPostable(
           lateral jsonb_array_elements(a.changes->'totals'->'lines') line
         where a.org_id=${orgId} and a.table_name='pay_applications' and a.row_id=${source.id}
           and a.action='invoice' and a.changes->'after'->>'invoiceId'=${id}
-      `)).rows.map(l => decimal(l.amount)).filter(amount => cmp(amount, "0") !== 0);
+      `, "objects")).map(l => decimal(l.amount)).filter(amount => cmp(amount, "0") !== 0);
     }
   }
   const doc = input.document, lines = input.lines;
@@ -193,12 +193,12 @@ export async function assertGeneratedBillingPostable(
       l.itemId || l.taxCodeId || l.taxGroupId || cmp(decimal(l.taxAmount ?? "0"), "0") !== 0)) refuse();
   const components = await tx.execute(sql`select c.id from document_line_tax_components c
     join document_lines l on l.org_id=c.org_id and l.id=c.document_line_id
-    where l.org_id=${orgId} and l.document_id=${id} limit 1`);
-  if (components.rows.length) refuse();
+    where l.org_id=${orgId} and l.document_id=${id} limit 1`, "objects");
+  if (components.length) refuse();
   const control = (await tx.execute<{ account: string | null }>(sql`
     select settings->'controlAccounts'->>${kind === "vendor_bill" ? "retainagePayable" : "retainageReceivable"} as account
       from orgs where id=${orgId}
-  `)).rows[0]?.account;
+  `, "objects"))[0]?.account;
   if (release) {
     if (!control || lines.length !== 1 || lines[0]!.accountId !== control || cmp(decimal(lines[0]!.amount), total) !== 0) refuse();
   } else {
@@ -243,14 +243,14 @@ async function assertRetainageReleasePostable(
     await tx.execute(sql`select id from projects where org_id = ${orgId} and id = ${project} for update`);
     const control = (await tx.execute<{ account: string | null }>(sql`
       select settings->'controlAccounts'->>'retainageReceivable' as account from orgs where id = ${orgId}
-    `)).rows[0]?.account;
+    `, "objects"))[0]?.account;
     if (!control) refuse();
-    const books = (await tx.execute(sql`
+    const books = await tx.execute(sql`
       select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
-    `)).rows;
+    `, "objects");
     if (books.length !== 1) refuse();
     const held = String(
-      (await tx.execute<{ held: string | number }>(projectRetainageHeldSql(orgId, project, control!))).rows[0]?.held ?? "0",
+      (await tx.execute<{ held: string | number }>(projectRetainageHeldSql(orgId, project, control!), "objects"))[0]?.held ?? "0",
     );
     // Pending releases other than this one. Posted releases are already sunk
     // in the GL balance and must not be subtracted again.
@@ -261,7 +261,7 @@ async function assertRetainageReleasePostable(
        where pa.org_id = ${orgId} and pa.project_id = ${project} and pa.kind = 'retainage_release'
          and pa.status in ('invoiced', 'posted') and d.status not in ('posted', 'voided')
          and d.id <> ${documentId}
-    `)).rows[0]?.reserved ?? "0");
+    `, "objects"))[0]?.reserved ?? "0");
     if (cmp(input.total, add(held, neg(others))) > 0) refuse();
     return;
   }
@@ -270,7 +270,7 @@ async function assertRetainageReleasePostable(
       join vendor_retainage_releases r on r.org_id = s.org_id and r.subcontract_id = s.id
      where r.org_id = ${orgId} and r.id = ${String(input.source.id)}
      for update of s
-  `)).rows[0];
+  `, "objects"))[0];
   if (!sub) refuse();
   const balance = (await tx.execute<{ held: string; released: string }>(sql`
     select coalesce(sum(case when d.status = 'posted' then vpa.retainage_this_period else 0 end), 0)::text as held,
@@ -280,7 +280,7 @@ async function assertRetainageReleasePostable(
       from vendor_pay_applications vpa
       left join documents d on d.id = vpa.vendor_bill_document_id and d.org_id = vpa.org_id
      where vpa.org_id = ${orgId} and vpa.subcontract_id = ${sub!.id} and vpa.status = 'billed'
-  `)).rows[0];
+  `, "objects"))[0];
   // This release's own draft bill is inside `released`; back it out so the
   // check measures remaining capacity for it, mirroring creation-time funds.
   const others = add(String(balance?.released ?? "0"), neg(input.total));

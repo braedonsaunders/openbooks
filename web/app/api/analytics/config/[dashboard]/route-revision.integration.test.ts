@@ -135,8 +135,8 @@ async function storedSettings(
     select settings -> 'analytics' -> ${dashboard} as values,
            coalesce((settings -> 'analytics' ->> ${`${dashboard}Revision`})::int, 0) as revision
       from orgs where id = ${orgId}
-  `);
-  return { values: r.rows[0]?.values ?? null, revision: Number(r.rows[0]?.revision ?? 0) };
+  `, "objects");
+  return { values: r[0]?.values ?? null, revision: Number(r[0]?.revision ?? 0) };
 }
 
 const { ANALYTICS_CONFIG } = (await import("../../../../../lib/analytics/config-spec.ts")) as typeof import("../../../../../lib/analytics/config-spec.ts");
@@ -223,9 +223,9 @@ test(
       select actor_id as actor, action, changes from audit_log
        where org_id = ${f.orgId} and table_name = 'orgs' and row_id = ${f.orgId}
        order by id desc limit 5
-    `);
-    assert.equal(audits.rows.length, 1, "exactly one audit row covers the update");
-    const audit = audits.rows[0]!;
+    `, "objects");
+    assert.equal(audits.length, 1, "exactly one audit row covers the update");
+    const audit = audits[0]!;
     assert.equal(audit.actor, f.actorId);
     assert.equal(audit.action, "update");
     assert.deepEqual(audit.changes.before.analytics[DASHBOARD], {});

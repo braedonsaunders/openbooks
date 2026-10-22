@@ -157,7 +157,7 @@ interface IngestChannel {
 async function loadIngestChannel(orgId: string, channelId: string): Promise<IngestChannel> {
   const row = (await db.execute<{ id: string; kind: string; name: string; currency: string; external_account: string }>(sql`
     select id, kind, name, currency, external_account from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -216,7 +216,7 @@ export async function resolveCustomer(
         select p.id from parties p
          where p.org_id = ${orgId} and p.id = ${linked.nativeId} and p.is_active
            and exists (select 1 from customer_roles cr
-             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`)).rows[0];
+             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)`, "objects"))[0];
       if (party) return party.id;
     }
   }
@@ -227,7 +227,7 @@ export async function resolveCustomer(
        where p.org_id = ${orgId} and p.is_active and lower(p.email) = ${email}
          and exists (select 1 from customer_roles cr
            where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-       order by p.created_at limit 1`)).rows[0];
+       order by p.created_at limit 1`, "objects"))[0];
     if (party) {
       if (order.customerExternalId) {
         await linkExternal(orgId, actor, {
@@ -249,14 +249,14 @@ export async function resolveCustomer(
     insert into parties (org_id, kind, display_name, email, is_active, custom, created_by, updated_by)
     values (${orgId}, 'company', ${displayName}, ${email},
       true, '{}'::jsonb, ${actor}, ${actor})
-    returning id`);
-  if (inserted.rows.length !== 1) throw new Error("Customer party insert returned an unexpected row count");
-  const partyId = inserted.rows[0]!.id;
+    returning id`, "objects");
+  if (inserted.length !== 1) throw new Error("Customer party insert returned an unexpected row count");
+  const partyId = inserted[0]!.id;
   const customerRole = await db.execute<{ party_id: string }>(sql`
     insert into customer_roles (org_id, party_id, is_active, created_by, updated_by)
     values (${orgId}, ${partyId}, true, ${actor}, ${actor})
-    returning party_id`);
-  if (customerRole.rows.length !== 1) throw new Error("Storefront customer role insert returned an unexpected row count");
+    returning party_id`, "objects");
+  if (customerRole.length !== 1) throw new Error("Storefront customer role insert returned an unexpected row count");
   if (order.customerExternalId) {
     await linkExternal(orgId, actor, {
       channelId: channel.id,
@@ -322,7 +322,7 @@ export async function ingestChannelOrder(
         : null;
     const existing = (await db.execute<OrderDbRow>(sql`
       select ${ORDER_COLUMNS} from channel_orders
-       where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${order.externalId}`)).rows[0];
+       where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${order.externalId}`, "objects"))[0];
     if (existing) {
       // Posted history is immutable: a redelivered order that already
       // posted (or summarized, or was deliberately excluded) is observed,
@@ -343,7 +343,7 @@ export async function ingestChannelOrder(
                    cancelled_at = ${order.cancelledAt},
                    updated_by = ${actor}, updated_at = now()
              where org_id = ${orgId} and id = ${existing.id}
-             returning ${ORDER_COLUMNS}`)).rows[0];
+             returning ${ORDER_COLUMNS}`, "objects"))[0];
           if (!retracked) {
             throw new Error("Channel order tracking update matched no row; the order left while it was ingested");
           }
@@ -381,8 +381,8 @@ export async function ingestChannelOrder(
                exclude_reason = ${excludedReason},
                updated_by = ${actor}, updated_at = now()
          where org_id = ${orgId} and id = ${existing.id}
-         returning ${ORDER_COLUMNS}`);
-      if (updated.rows.length !== 1) {
+         returning ${ORDER_COLUMNS}`, "objects");
+      if (updated.length !== 1) {
         throw new Error("Channel order update matched no row; the order left while it was ingested");
       }
       await db.execute(sql`
@@ -398,7 +398,7 @@ export async function ingestChannelOrder(
       // complete a storefront-fulfilled order: close its governing draft
       // while the update is in hand.
       await maybeCloseGoverningOrder(orgId, actor, existing.id);
-      return toOrderRow(updated.rows[0]!);
+      return toOrderRow(updated[0]!);
     }
     // A redelivery racing the first store collides on the channel-external
     // unique key; the conflict is expected and benign, so re-read the
@@ -424,13 +424,13 @@ export async function ingestChannelOrder(
         ${excludedReason ? "excluded" : "pending"}, ${excludedReason}, ${actor}, ${actor})
       -- Concurrent ingestion reuses the same channel order selected below.
       on conflict (org_id, channel_id, external_id) do nothing
-      returning id`);
-    const id = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`
+      returning id`, "objects");
+    const id = inserted[0]?.id ?? (await db.execute<{ id: string }>(sql`
       select id from channel_orders
-       where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${order.externalId}`)).rows[0]?.id;
+       where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${order.externalId}`, "objects"))[0]?.id;
     if (!id) throw new Error("Channel order store returned no row; the order was lost");
     const row = (await db.execute<OrderDbRow>(sql`
-      select ${ORDER_COLUMNS} from channel_orders where org_id = ${orgId} and id = ${id}`)).rows[0];
+      select ${ORDER_COLUMNS} from channel_orders where org_id = ${orgId} and id = ${id}`, "objects"))[0];
     if (!row) throw new Error("Channel order store returned no row; the order was lost");
     await refreshOrderEconomics(orgId, actor, id, "order ingested");
     await maybeCloseGoverningOrder(orgId, actor, id);
@@ -460,7 +460,7 @@ export async function ingestChannelEvent(
     await loadIngestChannel(orgId, channelId);
     const order = (await db.execute<{ id: string; posting_status: string }>(sql`
       select id, posting_status from channel_orders
-       where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`)).rows[0];
+       where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`, "objects"))[0];
     if (!order) {
       refuse(
         "channel_order_unknown",
@@ -480,13 +480,13 @@ export async function ingestChannelEvent(
         'pending', ${event.occurredAt}, ${actor}, ${actor})
       -- Repeated delivery reuses the same order event selected below.
       on conflict (org_id, order_id, external_id) do nothing
-      returning id`);
-    const eventId = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`
+      returning id`, "objects");
+    const eventId = inserted[0]?.id ?? (await db.execute<{ id: string }>(sql`
       select id from channel_order_events
-       where org_id = ${orgId} and order_id = ${order.id} and external_id = ${event.externalId}`)).rows[0]?.id;
+       where org_id = ${orgId} and order_id = ${order.id} and external_id = ${event.externalId}`, "objects"))[0]?.id;
     if (!eventId) throw new Error("Channel event store returned no row; the event was lost");
     if (event.kind === "cancellation" && order.posting_status === "pending") {
-      const parked = await db.execute(sql`
+      const parked = await db.execute<never>(sql`
         update channel_orders
            set posting_status = 'excluded', exclude_reason = 'Cancelled at the storefront before posting.',
                updated_by = ${actor}, updated_at = now()
@@ -634,7 +634,7 @@ function toOrderDetail(row: OrderDetailDbRow): ChannelOrderDetail {
 export async function loadChannelOrder(orgId: string, orderId: string): Promise<ChannelOrderDetail | null> {
   const row = (await db.execute<OrderDetailDbRow>(sql`
     select ${ORDER_DETAIL_COLUMNS} from channel_orders
-     where org_id = ${orgId} and id = ${orderId}`)).rows[0];
+     where org_id = ${orgId} and id = ${orderId}`, "objects"))[0];
   return row ? toOrderDetail(row) : null;
 }
 
@@ -644,12 +644,12 @@ export async function loadChannelOrder(orgId: string, orderId: string): Promise<
  * through postChannelOrder, which re-reads and locks the row.
  */
 export async function claimPendingChannelOrders(orgId: string, limit: number): Promise<string[]> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from channel_orders
      where org_id = ${orgId} and posting_status = 'pending'
      order by ordered_at
      limit ${limit}
-     for update skip locked`)).rows;
+     for update skip locked`, "objects");
   return rows.map((row) => row.id);
 }
 
@@ -672,9 +672,9 @@ async function markOrderExceptionIn(
   const before = (await db.execute<Record<string, unknown>>(sql`
     select posting_status, posting_document_id, summary_id, exception_code, exception_reason, exception_remedy
       from channel_orders where org_id = ${orgId} and id = ${orderId}
-       and posting_status in ('pending','exception') for update`)).rows[0];
+       and posting_status in ('pending','exception') for update`, "objects"))[0];
   if (!before) throw new Error("Channel order exception mark matched no row; the order posted or left while it parked");
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update channel_orders
        set posting_status = 'exception',
            posting_document_id = null,
@@ -709,9 +709,9 @@ export async function parkPendingChannelOrders(
   error: CommerceError,
 ): Promise<number> {
   return withOrg(orgId, async () => {
-    const pending = (await db.execute<{ id: string }>(sql`select id from channel_orders
+    const pending = await db.execute<{ id: string }>(sql`select id from channel_orders
       where org_id = ${orgId} and channel_id = ${channelId} and posting_status = 'pending'
-      order by id for update`)).rows;
+      order by id for update`, "objects");
     for (const order of pending) await markOrderException(orgId, order.id, actor,
       { code: error.code, reason: error.message, remedy: error.remedy });
     return pending.length;
@@ -725,7 +725,7 @@ export async function markOrderPosted(
   actor: string | null,
   documentId: string,
 ): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update channel_orders
        set posting_status = 'posted',
            posting_document_id = ${documentId},
@@ -745,7 +745,7 @@ export async function linkOrderDocument(
   actor: string | null,
   documentId: string,
 ): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update channel_orders
        set posting_document_id = ${documentId},
            updated_by = ${actor}, updated_at = now()
@@ -812,16 +812,16 @@ function toEventRow(row: ChannelEventDbRow): ChannelEventRow {
 export async function loadChannelEvent(orgId: string, eventId: string): Promise<ChannelEventRow | null> {
   const row = (await db.execute<ChannelEventDbRow>(sql`
     select ${EVENT_COLUMNS} from channel_order_events
-     where org_id = ${orgId} and id = ${eventId}`)).rows[0];
+     where org_id = ${orgId} and id = ${eventId}`, "objects"))[0];
   return row ? toEventRow(row) : null;
 }
 
 /** List an order's events, oldest first: the drawer's refunds and fulfilments timeline. */
 export async function listChannelOrderEvents(orgId: string, orderId: string): Promise<ChannelEventRow[]> {
-  const rows = (await db.execute<ChannelEventDbRow>(sql`
+  const rows = await db.execute<ChannelEventDbRow>(sql`
     select ${EVENT_COLUMNS} from channel_order_events
      where org_id = ${orgId} and order_id = ${orderId}
-     order by occurred_at`)).rows;
+     order by occurred_at`, "objects");
   return rows.map(toEventRow);
 }
 
@@ -832,7 +832,7 @@ export async function markChannelEventPosted(
   actor: string | null,
   documentId: string | null,
 ): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update channel_order_events
        set posting_status = 'posted',
            posting_document_id = ${documentId},
@@ -852,7 +852,7 @@ export async function markChannelEventException(
   actor: string | null,
   exception: { code: string; reason: string; remedy: string },
 ): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update channel_order_events
        set posting_status = 'exception',
            posting_document_id = null,
@@ -877,7 +877,7 @@ export async function markChannelEventException(
  * pending or parked row moves, so a posted event is never rewritten.
  */
 export async function markChannelEventIgnored(orgId: string, eventId: string, actor: string | null): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update channel_order_events
        set posting_status = 'ignored',
            exception_code = null, exception_reason = null, exception_remedy = null,
@@ -933,10 +933,10 @@ export async function maybeCloseGoverningOrder(
   // function (governedSalesOrderRef), never re-spelled in SQL.
   const key = (await db.execute<{ channel_id: string; external_id: string }>(sql`
     select channel_id, external_id from channel_orders
-     where org_id = ${orgId} and id = ${orderId}`)).rows[0];
+     where org_id = ${orgId} and id = ${orderId}`, "objects"))[0];
   if (!key) return { closed: false, documentId: null, skipped: "no_draft" };
   const channel = (await db.execute<{ kind: string }>(sql`
-    select kind from sales_channels where org_id = ${orgId} and id = ${key.channel_id}`)).rows[0];
+    select kind from sales_channels where org_id = ${orgId} and id = ${key.channel_id}`, "objects"))[0];
   if (!channel) return { closed: false, documentId: null, skipped: "no_draft" };
   const draft = (await db.execute<{ id: string }>(sql`
     select id from documents
@@ -944,7 +944,7 @@ export async function maybeCloseGoverningOrder(
        and external_source = ${channel.kind}
        and external_ref = ${governedSalesOrderRef(key.external_id)}
        and status = 'draft'
-     order by created_at desc limit 1`)).rows[0];
+     order by created_at desc limit 1`, "objects"))[0];
   if (!draft) return { closed: false, documentId: null, skipped: "no_draft" };
   const order = await loadChannelOrder(orgId, orderId);
   if (!order) return { closed: false, documentId: null, skipped: "no_draft" };
@@ -955,7 +955,7 @@ export async function maybeCloseGoverningOrder(
     const cancelled = (await db.execute<{ id: string }>(sql`
       select id from channel_order_events
        where org_id = ${orgId} and order_id = ${order.id} and kind = 'cancellation'
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (cancelled) reason = "cancelled";
     else if (order.fulfilmentStatus === "fulfilled" && (await isOrderSettledForClose(orgId, order))) {
       reason = "fulfilled_settled";
@@ -966,7 +966,7 @@ export async function maybeCloseGoverningOrder(
   const voidReason = reason === "cancelled"
     ? `Storefront order ${order.externalNumber} was cancelled; its governing sales order is closed.`
     : `Storefront order ${order.externalNumber} is fulfilled and settled; its governing sales order is closed.`;
-  const closed = await db.execute(sql`
+  const closed = await db.execute<never>(sql`
     update documents
        set status = 'voided',
            void_reason = ${voidReason},
@@ -980,11 +980,11 @@ export async function maybeCloseGoverningOrder(
     // A zero-row write is a failure unless the draft already closed: a
     // concurrent trigger won the race, and its void stands for both.
     const live = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${orgId} and id = ${draft.id}`)).rows[0];
+      select status from documents where org_id = ${orgId} and id = ${draft.id}`, "objects"))[0];
     if (live?.status === "voided") return { closed: true, documentId: draft.id, reason };
     throw new Error("Governing sales order changed while it closed; the draft left while its order completed");
   }
-  const audited = await db.execute(sql`
+  const audited = await db.execute<never>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'documents', ${draft.id}, 'update',
       ${JSON.stringify({
@@ -1008,16 +1008,16 @@ async function isOrderSettledForClose(
 ): Promise<boolean> {
   if (order.postingDocumentId) {
     const doc = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`)).rows[0];
+      select status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`, "objects"))[0];
     return doc?.status === "posted";
   }
   if (order.summaryId) {
     const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
       select posting_document_id from channel_daily_summaries
-       where org_id = ${orgId} and id = ${order.summaryId}`)).rows[0];
+       where org_id = ${orgId} and id = ${order.summaryId}`, "objects"))[0];
     if (!summary?.posting_document_id) return false;
     const doc = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${orgId} and id = ${summary.posting_document_id}`)).rows[0];
+      select status from documents where org_id = ${orgId} and id = ${summary.posting_document_id}`, "objects"))[0];
     return doc?.status === "posted";
   }
   return false;
@@ -1030,7 +1030,7 @@ export async function markOrderSummarized(
   actor: string | null,
   summaryId: string,
 ): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update channel_orders
        set posting_status = 'summarized',
            summary_id = ${summaryId},

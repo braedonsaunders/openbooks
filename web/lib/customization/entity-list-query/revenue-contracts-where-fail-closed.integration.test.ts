@@ -17,10 +17,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type Filter = { key: string; operator: string; value?: string | null; to?: string | null };
 
 async function contractCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts rc
-      where ${revenueContractWhere({ ...defaultListView("revenue_contract"), filters: viewFilters as never }, {}, orgId)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts rc
+      where ${revenueContractWhere({ ...defaultListView("revenue_contract"), filters: viewFilters as never }, {}, orgId)}`, "objects");
   return rows[0]!.n;
 }
 

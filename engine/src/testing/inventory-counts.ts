@@ -30,9 +30,9 @@ export async function grantInventoryOperator(
 ): Promise<void> {
   const changed =
     await db.execute(sql`update app_roles set permissions='["items.read","items.post","items.manage"]'::jsonb
-    where org_id=${orgId} and id in (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id`);
+    where org_id=${orgId} and id in (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id`, "objects");
   assert.ok(
-    changed.rows.length,
+    changed.length,
     "inventory operator must have an explicit role grant",
   );
 }
@@ -45,15 +45,13 @@ export async function confirmCountObservation(
   quantity: string,
   actorId?: string,
 ): Promise<void> {
-  const line = (
-    await db.execute<{
+  const line = (await db.execute<{
       expected: string;
       first: string | null;
       tolerance: string | null;
     }>(sql`
     select expected_quantity::text as expected,first_counted_quantity::text as first,variance_tolerance::text as tolerance
-    from stock_count_lines where org_id=${orgId} and stock_count_id=${countId} and id=${lineId}`)
-  ).rows[0];
+    from stock_count_lines where org_id=${orgId} and stock_count_id=${countId} and id=${lineId}`, "objects"))[0];
   assert.ok(line, "count observation must resolve its own line");
   if (!requiresSecondCount(line.expected, line.first, line.tolerance)) return;
   const observer =

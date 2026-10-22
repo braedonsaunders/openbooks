@@ -342,14 +342,14 @@ export async function SetupEntitySection({
   const order = sortValue ? sql`${sortValue} ${sql.raw(list.dir)} nulls last, ${sql.raw(idColumn)}`
     : sql`${sql.raw(orderExpr(entity))}, ${sql.raw(idColumn)}`
   const [rowsRes, countRes] = await Promise.all([
-    drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`
+    drawerOnly ? Promise.resolve([]) : db.execute(sql`
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${order}
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-    drawerOnly ? Promise.resolve({ rows: [] }) : db.execute(sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`),
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
+    drawerOnly ? Promise.resolve([]) : db.execute(sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`, 'objects'),
   ])
-  const rows = rowsRes.rows;
-  const total = Number(countRes.rows[0]?.n ?? 0)
+  const rows = rowsRes;
+  const total = Number(countRes[0]?.n ?? 0)
 
   const refLabels: Record<string, Map<string, string>> = {}
   for (const [source, opts] of Object.entries(refOptions)) {
@@ -380,8 +380,8 @@ export async function SetupEntitySection({
              ${bandPredicate}
              ${fixedPredicate}
              ${visibleRowIds !== undefined ? sql`and ${sql.raw(idColumn)} = any (${`{${[...visibleRowIds].join(',')}}`}::uuid[])` : sql``}
-             limit 1`)
-          return selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
+             limit 1`, 'objects')
+          return selected[0] ? { creating: false, row: selected[0] } : null
         })()
     : null
 
@@ -413,16 +413,16 @@ export async function SetupEntitySection({
                   left join labor_rate_version_policies p on p.org_id = v.org_id and p.version_id = v.id
                  where v.org_id = ${orgId} and v.rate_book_id = ${bookId} and v.status = 'active'
                  order by v.effective_from desc
-                 limit 1`)
-            : Promise.resolve({ rows: [] as { id: string; effective_from: string; effective_to: string | null; labor_derivation_policy: 'explicit' | 'time_type_multipliers' | null }[] }),
+                 limit 1`, 'objects')
+            : Promise.resolve([] as { id: string; effective_from: string; effective_to: string | null; labor_derivation_policy: 'explicit' | 'time_type_multipliers' | null }[]),
           db.execute<{ id: string; code: string | null; name: string; kind: string; unit: string | null; is_active: boolean }>(sql`
             select id, code, name, kind, unit, is_active
               from items
              where org_id = ${orgId}
-             order by is_active desc, name, code`),
-          db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`),
+             order by is_active desc, name, code`, 'objects'),
+          db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects'),
         ])
-        const version = versionResult.rows[0]
+        const version = versionResult[0]
         const linesResult = version
           ? await db.execute<{
               item_id: string; unit_code: string; unit_name: string; base_quantity: string;
@@ -440,13 +440,13 @@ export async function SetupEntitySection({
                 left join item_rate_profiles profile
                   on profile.org_id = line.org_id and profile.item_id = line.item_id
                where line.org_id = ${orgId} and line.version_id = ${version.id}
-               order by line.sort_order, line.item_id, line.unit_code`)
-          : { rows: [] }
+               order by line.sort_order, line.item_id, line.unit_code`, 'objects')
+          : []
         return {
           latestEffectiveFrom: version?.effective_from ? String(version.effective_from).slice(0, 10) : null,
           latestEffectiveTo: version?.effective_to ? String(version.effective_to).slice(0, 10) : null,
           latestLaborDerivationPolicy: version?.labor_derivation_policy ?? null,
-          lines: linesResult.rows.map((line): RateBookLine => ({
+          lines: linesResult.map((line): RateBookLine => ({
             itemId: String(line.item_id),
             unitCode: String(line.unit_code),
             unitName: String(line.unit_name),
@@ -458,11 +458,11 @@ export async function SetupEntitySection({
             invoicePresentation: line.invoice_presentation ? String(line.invoice_presentation) : 'rate_components',
             timeTypeBillRates: line.time_type_bill_rates ?? {},
           })),
-          items: itemsResult.rows.map((item): RateBookItemOption => ({
+          items: itemsResult.map((item): RateBookItemOption => ({
             id: String(item.id), code: item.code, name: item.name, kind: item.kind,
             unit: item.unit, isActive: item.is_active,
           })),
-          baseCurrency: String(orgResult.rows[0]?.base_currency ?? open.row?.currency ?? 'USD'),
+          baseCurrency: String(orgResult[0]?.base_currency ?? open.row?.currency ?? 'USD'),
         }
       })()
     : null
@@ -473,25 +473,25 @@ export async function SetupEntitySection({
           db.execute<{ value: string; label: string }>(sql`
             select id::text as value, name as label from subsidiaries
              where org_id = ${orgId} and is_active
-             ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name`),
+             ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name`, 'objects'),
           db.execute<{ value: string; label: string }>(sql`
             select id::text as value, coalesce(nullif(code, ''), name) as label from departments
              where org_id = ${orgId} and is_active
-             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`),
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`, 'objects'),
           db.execute<{ value: string; label: string }>(sql`
             select id::text as value, case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label from projects
              where org_id = ${orgId} and is_active
-             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`),
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`, 'objects'),
           db.execute<{ value: string; label: string }>(sql`
             select id::text as value, coalesce(nullif(code, ''), name) as label from locations
              where org_id = ${orgId} and is_active
-             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`),
+             ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code nulls last, name`, 'objects'),
         ])
         return {
-          subsidiaries: subsidiaries.rows,
-          departments: departments.rows,
-          projects: projects.rows,
-          locations: locations.rows,
+          subsidiaries,
+          departments,
+          projects,
+          locations,
         }
       })()
     : null

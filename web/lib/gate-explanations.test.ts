@@ -38,7 +38,7 @@ const AVAILABILITY_MOCK = `
   export function denyInactiveExtensionPermissions(set) { return set }
 `;
 const DB_MOCK = withPlatformDbTestSurface(`
-  export const db = { execute: async () => ({ rows: [] }) }
+  export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }
   export async function withOrgContext(_org, fn) { return fn() }
   export async function withOrgTransaction(_org, fn) { return fn(db) }
   export async function withTransactionSavepoint(_tx, fn) { return fn() }

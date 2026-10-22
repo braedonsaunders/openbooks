@@ -88,7 +88,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
         insert into app_roles (org_id, key, name, is_built_in, permissions)
         values (${org.orgId}, 'posting-effects-operator', 'Posting Effects Operator', false, '["ar.post"]'::jsonb)
         returning id
-      `);
+      `, "objects");
       await tx.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)
         values (${actorId}, ${org.orgId}, ${`posting-effects-${actorId.slice(0, 8)}@test.local`},
@@ -96,7 +96,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
       `);
       await tx.execute(sql`
         insert into role_assignments (org_id, user_id, role_id)
-        values (${org.orgId}, ${actorId}, ${role.rows[0]!.id})
+        values (${org.orgId}, ${actorId}, ${role[0]!.id})
       `);
     });
     await db.execute(sql`
@@ -147,8 +147,8 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
         from audit_log
        where org_id=${org.orgId} and table_name='posting_effects' and row_id=${effectId}
          and request_id='posting_effects_terminal_failure'
-    `);
-    assert.deepEqual(terminalAudit.rows, [{
+    `, "objects");
+    assert.deepEqual(terminalAudit, [{
       event: "posting_effects_terminal_failure",
       reason: "inventory projection remained inconsistent",
     }]);
@@ -164,7 +164,7 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
         && /Retry posting effects on the posted document/.test(error.message));
     const unvoided = (await db.execute<{ status: string; void_requested_at: Date | null }>(sql`
       select status, void_requested_at from documents where org_id=${org.orgId} and id=${documentId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(unvoided.status, 'posted'); assert.equal(unvoided.void_requested_at, null);
     const closeScope = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
     assert.equal(await incompletePostingEffectsCount(db, closeScope), 1);
@@ -199,16 +199,16 @@ test("attempt ceiling terminalizes posting effects and authorized replay preserv
     }>(sql`
       select status, attempt_count, terminal_failure_reason
         from posting_effects where id=${effectId} and org_id=${org.orgId}
-    `);
-    assert.deepEqual(replayed.rows, [{ status: "pending", attempt_count: 0, terminal_failure_reason: null }]);
+    `, "objects");
+    assert.deepEqual(replayed, [{ status: "pending", attempt_count: 0, terminal_failure_reason: null }]);
 
     const replayAudit = await db.execute<{ event: string; actor_id: string; reason: string }>(sql`
       select changes->>'event' as event, actor_id, changes->>'reason' as reason
         from audit_log
        where org_id=${org.orgId} and table_name='posting_effects' and row_id=${effectId}
          and request_id='posting_effects_replay'
-    `);
-    assert.deepEqual(replayAudit.rows, [{
+    `, "objects");
+    assert.deepEqual(replayAudit, [{
       event: "posting_effects_replay_authorized",
       actor_id: actorId,
       reason: "Controller verified the inventory configuration and approved a deterministic replay.",
@@ -358,14 +358,14 @@ test("stale recovery spares fresh leases and stays silent without a terminal tra
     }>(sql`
       select id, status, attempt_count, lease_token, locked_at
         from posting_effects where org_id = ${org.orgId} order by id
-    `);
-    const fresh = rows.rows.find((r) => r.id === freshId)!;
+    `, "objects");
+    const fresh = rows.find((r) => r.id === freshId)!;
     assert.deepEqual(
       { status: fresh.status, attempt_count: fresh.attempt_count, lease_token: fresh.lease_token },
       { status: "running", attempt_count: 0, lease_token: freshLease },
     );
     assert.equal(new Date(fresh.locked_at!).getTime(), freshAt.getTime());
-    const stale = rows.rows.find((r) => r.id === staleId)!;
+    const stale = rows.find((r) => r.id === staleId)!;
     assert.deepEqual(
       { status: stale.status, attempt_count: stale.attempt_count, lease_token: stale.lease_token },
       { status: "failed", attempt_count: 0, lease_token: null },
@@ -375,8 +375,8 @@ test("stale recovery spares fresh leases and stays silent without a terminal tra
       select count(*)::text as count from audit_log
        where org_id = ${org.orgId} and table_name = 'posting_effects'
          and request_id = 'posting_effects_terminal_failure'
-    `);
-    assert.equal(terminalAudit.rows[0]!.count, "0");
+    `, "objects");
+    assert.equal(terminalAudit[0]!.count, "0");
     assert.deepEqual(
       logs.filter((line) => line.includes(TERMINAL_FAILURE_LOG_EVENT)),
       [],
@@ -406,7 +406,7 @@ test("failure evidence truncates at one thousand characters and replay guards it
         insert into app_roles (org_id, key, name, is_built_in, permissions)
         values (${org.orgId}, 'posting-effects-guard', 'Posting Effects Guard', false, '["ar.post"]'::jsonb)
         returning id
-      `);
+      `, "objects");
       await tx.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)
         values (${actorId}, ${org.orgId}, ${`posting-effects-guard-${actorId.slice(0, 8)}@test.local`},
@@ -414,7 +414,7 @@ test("failure evidence truncates at one thousand characters and replay guards it
       `);
       await tx.execute(sql`
         insert into role_assignments (org_id, user_id, role_id)
-        values (${org.orgId}, ${actorId}, ${role.rows[0]!.id})
+        values (${org.orgId}, ${actorId}, ${role[0]!.id})
       `);
     });
     for (let i = 0; i < 2; i += 1) {
@@ -445,8 +445,8 @@ test("failure evidence truncates at one thousand characters and replay guards it
     await markPostingEffectsFailed(first, new Error("x".repeat(2000)), failedAt);
     const stored = await db.execute<{ error: string }>(sql`
       select error from posting_effects where id = ${effectIds[0]} and org_id = ${org.orgId}
-    `);
-    assert.equal(stored.rows[0]!.error.length, 1000);
+    `, "objects");
+    assert.equal(stored[0]!.error.length, 1000);
 
     await assert.rejects(
       () => replayTerminalPostingEffect({
@@ -492,8 +492,8 @@ test("failure evidence truncates at one thousand characters and replay guards it
     });
     const replayed = await db.execute<{ id: string; status: string; attempt_count: number }>(sql`
       select id, status, attempt_count from posting_effects where org_id = ${org.orgId} order by id
-    `);
-    assert.deepEqual(replayed.rows, replayed.rows.map((r) => ({
+    `, "objects");
+    assert.deepEqual(replayed, replayed.map((r) => ({
       id: r.id,
       status: "pending",
       attempt_count: 0,
@@ -612,8 +612,8 @@ test("the due drain never takes more than two hundred rows per call", { skip: !D
     const left = await db.execute<{ count: string }>(sql`
       select count(*)::text as count from posting_effects
        where org_id = ${org.orgId} and status = 'pending'
-    `);
-    assert.equal(left.rows[0]!.count, "1");
+    `, "objects");
+    assert.equal(left[0]!.count, "1");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -785,8 +785,8 @@ test("a recovered posting-effect lease fences the stale worker completion", { sk
       lease_token: string | null;
     }>(sql`
       select status, attempt_count, lease_token from posting_effects where id=${effectId}
-    `);
-    assert.deepEqual(stored.rows, [{ status: "succeeded", attempt_count: 2, lease_token: null }]);
+    `, "objects");
+    assert.deepEqual(stored, [{ status: "succeeded", attempt_count: 2, lease_token: null }]);
   } finally {
     releaseOld?.();
     await dropScratchOrg(org.orgId);

@@ -132,7 +132,7 @@ export async function postIntercompanyFundTransfer(
         select id, status, from_bank_account_id, to_bank_account_id, amount::text as amount, transfer_date::text as transfer_date,
                from_subsidiary_id, to_subsidiary_id, currency, memo, reason
           from intercompany_fund_transfers
-         where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
+         where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`, "objects"))[0];
       if (prior) {
         const same = prior.from_bank_account_id === input.fromBankAccountId
           && prior.to_bank_account_id === input.toBankAccountId
@@ -150,11 +150,11 @@ export async function postIntercompanyFundTransfer(
         return prior.id;
       }
     }
-    const accounts = (await db.execute<{
+    const accounts = await db.execute<{
       id: string; name: string; type: string; is_active: boolean; is_summary: boolean; currency_restriction: string | null;
     }>(sql`
       select id, name, type, is_active, is_summary, currency_restriction from accounts
-       where org_id = ${orgId} and id in (${input.fromBankAccountId}, ${input.toBankAccountId})`)).rows;
+       where org_id = ${orgId} and id in (${input.fromBankAccountId}, ${input.toBankAccountId})`, "objects");
     const from = accounts.find((account) => account.id === input.fromBankAccountId);
     const to = accounts.find((account) => account.id === input.toBankAccountId);
     if (!from || !to) refuse("a chosen bank account does not exist in this organization", 404);
@@ -254,14 +254,14 @@ export async function postIntercompanyFundTransfer(
     } catch (error) {
       intercompanyPostingRefusal(error);
     }
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into intercompany_fund_transfers
         (org_id, transfer_number, transfer_date, from_subsidiary_id, to_subsidiary_id, from_bank_account_id,
          to_bank_account_id, currency, amount, memo, reason, entry_id, idempotency_key, created_by)
       values (${orgId}, ${transferNumber}, ${input.transferDate}, ${input.fromSubsidiaryId}, ${input.toSubsidiaryId},
               ${input.fromBankAccountId}, ${input.toBankAccountId}, ${currency}, ${input.amount}, ${input.memo ?? null},
               ${input.reason}, ${posted.entryId}, ${input.idempotencyKey ?? null}, ${actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(inserted, "the transfer could not be recorded");
     const transferId = inserted[0]!.id;
     await auditIntercompany(db, {
@@ -303,7 +303,7 @@ export async function reverseIntercompanyFundTransfer(
       select status, entry_id, transfer_number, transfer_date::text as transfer_date, from_subsidiary_id, to_subsidiary_id
         from intercompany_fund_transfers
        where org_id = ${orgId} and id = ${transferId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!transfer || !scopeAllows(allowedSubsidiaryIds, [transfer.from_subsidiary_id, transfer.to_subsidiary_id])) {
       refuse("transfer not found", 404);
     }
@@ -326,12 +326,12 @@ export async function reverseIntercompanyFundTransfer(
       custom: { intercompanyTransfer: transfer.transfer_number, reversal: true },
       closeModules: ["banking"],
     });
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update intercompany_fund_transfers
          set status = 'reversed', reversal_entry_id = ${reversalEntryId}, reversal_date = ${input.reversalDate},
              reverse_reason = ${reason}, reversed_by = ${actorId}, reversed_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${transferId} and status = 'posted'
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(updated, "the transfer changed while it was being reversed");
     await auditIntercompany(db, {
       orgId,
@@ -367,7 +367,7 @@ export async function loadIntercompanyFundTransfer(
            entry_id, reversal_entry_id, reversal_date::text as reversal_date, reverse_reason, created_by,
            created_at::text as created_at
       from intercompany_fund_transfers
-     where org_id = ${orgId} and id = ${transferId}`)).rows[0];
+     where org_id = ${orgId} and id = ${transferId}`, "objects"))[0];
   if (!row || !scopeAllows(allowedSubsidiaryIds, [row.from_subsidiary_id, row.to_subsidiary_id])) refuse("transfer not found", 404);
   return {
     id: row.id,
@@ -399,14 +399,14 @@ export async function listIntercompanyFundTransfers(
 ): Promise<FundTransferDetail[]> {
   const limit = Math.min(Math.max(options.limit ?? 200, 1), 500);
   const allowed = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds];
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from intercompany_fund_transfers
      where org_id = ${orgId}
        and (${allowed === null}::boolean
             or (from_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])
                 and to_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])))
      order by transfer_date desc, transfer_number desc
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   const out: FundTransferDetail[] = [];
   for (const row of rows) out.push(await loadIntercompanyFundTransfer(orgId, row.id, allowedSubsidiaryIds));
   return out;

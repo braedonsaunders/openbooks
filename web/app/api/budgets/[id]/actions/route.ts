@@ -121,8 +121,8 @@ export const POST = defineRoute({
         const locked = await tx.execute<{ id: string; name: string; description: string | null; book_id: string; fiscal_year: number; kind: string; status: string; revision: number; submitted_by: string | null }>(sql`
             select id, name, description, book_id, fiscal_year, kind, status, revision, submitted_by
               from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-          `)
-        const scenario = locked.rows[0]
+          `, 'objects')
+        const scenario = locked[0]
         if (!scenario) throw new BudgetMutationError('not_found', 404)
         if (Number(scenario.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
 
@@ -177,9 +177,9 @@ export const POST = defineRoute({
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
                  and destination.id is null
                order by starts_on, source_period.id
-            `)
-          if (unmapped.rows.length > 0) {
-              const names = await unmappedPeriodNames(unmapped.rows)
+            `, 'objects')
+          if (unmapped.length > 0) {
+              const names = await unmappedPeriodNames(unmapped)
               throw new BudgetMutationError(`unmapped_periods: no ${targetYear} period matches source period(s) ${names}`)
             }
         }
@@ -190,8 +190,8 @@ export const POST = defineRoute({
           const periods = await tx.execute(sql`
               select 1 from accounting_periods
                where org_id = ${user.orgId} and fiscal_year = ${targetYear} and not is_adjustment limit 1
-            `)
-          if (!periods.rows[0]) throw new BudgetMutationError('target_year_has_no_periods')
+            `, 'objects')
+          if (!periods[0]) throw new BudgetMutationError('target_year_has_no_periods')
           await assertFullPeriodMapping(null, null, targetYear)
           // Budgets cover the P&L only: refuse legacy balance-sheet source
           // lines by name instead of copying lines the worksheet hides (the
@@ -203,9 +203,9 @@ export const POST = defineRoute({
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
                  and a.type not in ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-            `)
-          if (nonPnlCopy.rows.length > 0) {
-              throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlCopy.rows.map((row) => row.display).join(', ')}`)
+            `, 'objects')
+          if (nonPnlCopy.length > 0) {
+              throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlCopy.map((row) => row.display).join(', ')}`)
             }
           await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${scenario.book_id}:${targetYear}:${scenario.kind}`}, 0))`)
           const baseName = `${scenario.name} Copy`
@@ -214,8 +214,8 @@ export const POST = defineRoute({
                where org_id = ${user.orgId} and book_id = ${scenario.book_id}
                  and fiscal_year = ${targetYear} and kind = ${scenario.kind}
                  and (name = ${baseName} or name like ${`${baseName} (%`})
-            `)
-          const used = new Set(existing.rows.map((row) => row.name))
+            `, 'objects')
+          const used = new Set(existing.map((row) => row.name))
           let name = baseName
           for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
           const created = await tx.execute<{ id: string }>(sql`
@@ -224,8 +224,8 @@ export const POST = defineRoute({
               values (${user.orgId}, ${scenario.book_id}, ${targetYear}, ${name}, ${scenario.description},
                       ${scenario.kind}, 'draft', ${user.id}, ${user.id})
               returning id
-            `)
-          const newId = created.rows[0]!.id
+            `, 'objects')
+          const newId = created[0]!.id
           await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
@@ -307,9 +307,9 @@ export const POST = defineRoute({
                         source_period.is_adjustment, source_period.starts_on, source_period.ends_on
               having sum(l.amount) <> 0
                order by source_period.starts_on, source_period.id
-            `)
-          if (unmappedActuals.rows.length > 0) {
-              const names = await unmappedPeriodNames(unmappedActuals.rows)
+            `, 'objects')
+          if (unmappedActuals.length > 0) {
+              const names = await unmappedPeriodNames(unmappedActuals)
               throw new BudgetMutationError(`unmapped_periods: no ${scenario.fiscal_year} period matches prior-year actuals period(s) ${names}`)
             }
           await tx.execute(sql`
@@ -369,8 +369,8 @@ export const POST = defineRoute({
           if (!sourceScenarioId || sourceScenarioId === id) throw new BudgetMutationError('invalid_source_scenario')
           const source = await tx.execute<{ id: string }>(sql`
               select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
-            `)
-          if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
+            `, 'objects')
+          if (!source[0]) throw new BudgetMutationError('invalid_source_scenario')
           const sourceOutOfScope = await scenarioOutOfScopeSubsidiaryNames(
               sourceScenarioId,
               user.orgId,
@@ -387,9 +387,9 @@ export const POST = defineRoute({
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
                  and a.type not in ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-            `)
-          if (nonPnlApply.rows.length > 0) {
-              throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlApply.rows.map((row) => row.display).join(', ')}`)
+            `, 'objects')
+          if (nonPnlApply.length > 0) {
+              throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlApply.map((row) => row.display).join(', ')}`)
             }
           await tx.execute(sql`
               delete from budget_lines

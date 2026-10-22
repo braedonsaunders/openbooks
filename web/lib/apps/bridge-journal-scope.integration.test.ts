@@ -115,9 +115,9 @@ function callBridge(
 async function journalSubsidiaries(orgId: string): Promise<string[]> {
   const r = await withOrgContext(orgId, () =>
     db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id::text from documents where org_id = ${orgId} and kind = 'journal' order by created_at`),
+      select subsidiary_id::text from documents where org_id = ${orgId} and kind = 'journal' order by created_at`, 'objects'),
   )
-  return r.rows.map((row) => row.subsidiary_id)
+  return r.map((row) => row.subsidiary_id)
 }
 
 test('a bridge caller restricted to a child entity journals into that entity, never the root', { skip: !DB }, async () => {
@@ -133,9 +133,9 @@ test('a bridge caller restricted to a child entity journals into that entity, ne
     assert.deepEqual(await journalSubsidiaries(fx.org.orgId), [fx.childId])
     const entries = await withOrgContext(fx.org.orgId, () =>
       db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id::text from journal_entries where org_id = ${fx.org.orgId}`),
+        select subsidiary_id::text from journal_entries where org_id = ${fx.org.orgId}`, 'objects'),
     )
-    assert.deepEqual(entries.rows.map((r) => r.subsidiary_id), [fx.childId])
+    assert.deepEqual(entries.map((r) => r.subsidiary_id), [fx.childId])
 
     // Explicit root: refused as "not found"; nothing new is written.
     const refused = await callBridge(

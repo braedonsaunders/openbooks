@@ -118,7 +118,7 @@ test("the close checklist counts each legal entity whose stock compensation or n
     assert.deepEqual(due.interest.map((row) => row.subsidiaryId), [w.org.subsidiaryId]);
     assert.deepEqual(await closeEquityPostings(w.org.orgId, { through, subsidiaryIds: [randomUUID()] }), { compensation: [], interest: [] }, "another entity's close sees none of these runs");
     const currency = (await db.execute<{ currency: string }>(sql`
-      select base_currency as currency from subsidiaries where org_id = ${w.org.orgId} and id = ${w.org.subsidiaryId}`)).rows[0]!.currency;
+      select base_currency as currency from subsidiaries where org_id = ${w.org.orgId} and id = ${w.org.subsidiaryId}`, "objects"))[0]!.currency;
     const before = await equityPostingsDue(w.org.orgId, w.org.subsidiaryId, currency, through);
     assert.ok(before.compensation.due && /[1-9]/.test(before.compensation.amount));
 

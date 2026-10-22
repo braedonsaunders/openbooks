@@ -20,7 +20,7 @@ export default async function PortalServicePage({ params }: { params: Promise<{ 
       listPortalServiceRequests(orgId, partyId),
       db.execute<{ value: string; label: string }>(sql`select id as value,
           coalesce(nullif(btrim(label), ''), nullif(concat_ws(', ', line1, city, region), ''), '—') as label
-        from addresses where org_id = ${orgId} and party_id = ${partyId} order by is_default_shipping desc, label nulls last, id`).then((result) => result.rows),
+        from addresses where org_id = ${orgId} and party_id = ${partyId} order by is_default_shipping desc, label nulls last, id`, 'objects'),
     ])
     return { requests, addresses }
   })

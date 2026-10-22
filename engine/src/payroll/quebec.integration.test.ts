@@ -141,9 +141,9 @@ describe("quebec", () => {
 
         const stubs = (await db.execute<Record<string, string>>(sql`
           select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-        `));
-        assert.equal(stubs.rows.length, 1);
-        const stub = stubs.rows[0]!;
+        `, "objects"));
+        assert.equal(stubs.length, 1);
+        const stub = stubs[0]!;
         assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
         // Both engines called directly with the same facts (pay date 2026-07-21).
@@ -174,9 +174,9 @@ describe("quebec", () => {
             join pay_components c on c.id = l.component_id
            where l.org_id = ${org.orgId} and l.stub_id = ${stub.id}
            order by l.sequence
-        `));
+        `, "objects"));
         const line = (systemKey: string, kind: string) =>
-          stubLines.rows.find((row) => row.system_key === systemKey && row.kind === kind);
+          stubLines.find((row) => row.system_key === systemKey && row.kind === kind);
 
         const qcTax = line("qc_income_tax", "deduction");
         assert.ok(qcTax, "Québec income tax is its own stub line");
@@ -197,7 +197,7 @@ describe("quebec", () => {
         // the 130 slot is pinned by the second-tier ON test in
         // payroll-employer-taxes.) Any shift in a sort key reorders the stub.
         assert.deepEqual(
-          stubLines.rows
+          stubLines
             .filter((row) => row.sequence >= 100)
             .map((row) => [row.sequence, row.system_key, row.kind]),
           [
@@ -232,9 +232,9 @@ describe("quebec", () => {
         const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
           select account_id, amount from document_lines
            where org_id = ${org.orgId} and document_id = ${run.documentId}
-        `));
-        assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
-        const qcLegs = glLines.rows.filter((row) => row.account_id === qcPayable);
+        `, "objects"));
+        assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
+        const qcLegs = glLines.filter((row) => row.account_id === qcPayable);
         assert.equal(qcLegs.length, 1, "one credit leg on the Québec liability account");
         assert.equal(qcLegs[0]!.amount, neg(quebec.totalTax));
 
@@ -437,10 +437,10 @@ describe("quebec-hsf", () => {
         const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
           select employee_party_id, factors from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-        `));
-        assert.equal(stubs.rows.length, 2);
+        `, "objects"));
+        assert.equal(stubs.length, 2);
         const stubFor = (employeeId: string) =>
-          stubs.rows.find((row) => row.employee_party_id === employeeId)!;
+          stubs.find((row) => row.employee_party_id === employeeId)!;
 
         // QC golden: 2400.00 × 1.65% = 39.60 on the full gross — no exemption,
         // no cap, exactly as the publication states the contribution.
@@ -455,13 +455,13 @@ describe("quebec-hsf", () => {
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
              and s.employee_party_id = ${qcEmployeeId} and c.system_key = 'hsf'
-        `));
-        assert.equal(qcLines.rows.length, 1);
+        `, "objects"));
+        assert.equal(qcLines.length, 1);
         assert.deepEqual(
-          [qcLines.rows[0]!.sequence, qcLines.rows[0]!.kind, qcLines.rows[0]!.description],
+          [qcLines[0]!.sequence, qcLines[0]!.kind, qcLines[0]!.description],
           [280, "employer_contribution", "Health Services Fund"],
         );
-        assert.equal(qcLines.rows[0]!.amount, "39.6000");
+        assert.equal(qcLines[0]!.amount, "39.6000");
 
         // The region gate retains a zero HSF basis and emits no premium line.
         const onFactors = stubFor(onEmployeeId).factors;
@@ -474,8 +474,8 @@ describe("quebec-hsf", () => {
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
              and s.employee_party_id = ${onEmployeeId} and c.system_key = 'hsf'
-        `));
-        assert.equal(onHsfLines.rows.length, 0);
+        `, "objects"));
+        assert.equal(onHsfLines.length, 0);
 
         // Remittance: the pack's regional declaration sends the QC stub's HSF
         // to the Revenu Québec vendor; the CRA vendor never sees it.
@@ -483,9 +483,9 @@ describe("quebec-hsf", () => {
         const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
           select account_id, amount from document_lines
            where org_id = ${org.orgId} and document_id = ${run.documentId}
-        `));
-        assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
-        const hsfLeg = glLines.rows.filter((row) => row.account_id === hsfPayable);
+        `, "objects"));
+        assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
+        const hsfLeg = glLines.filter((row) => row.account_id === hsfPayable);
         assert.equal(sum(hsfLeg.map((row) => row.amount)), neg("39.6000"));
 
         const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
@@ -602,7 +602,7 @@ describe("qpip-employer-cap", () => {
           const factors = (await db.execute<{ factors: unknown }>(sql`
             select factors from pay_stubs
              where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-          `)).rows[0]!.factors as Record<string, string>;
+          `, "objects"))[0]!.factors as Record<string, string>;
           employerQpip.push(factors.QPIP_ER!);
           await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
         }

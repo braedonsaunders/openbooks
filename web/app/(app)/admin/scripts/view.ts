@@ -137,29 +137,29 @@ export async function loadScripts(
              (select max(r.at) from script_runs r where r.script_id = s.id) as last_run
         from user_scripts s where ${where}
        order by s.trigger_point, s.sort_order, s.name
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
       db.execute<{ trigger_point: string; n: string }>(sql`
-      select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`),
+      select trigger_point, count(*) as n from user_scripts where org_id = ${orgId} group by 1`, 'objects'),
       db.execute<{ n: string }>(
-        sql`select count(*) as n from user_scripts where ${where}`,
+        sql`select count(*) as n from user_scripts where ${where}`, 'objects',
       ),
       drawerScriptId
         ? db.execute<ScriptDetailRow>(
-            sql`select * from user_scripts where id = ${drawerScriptId} and org_id = ${orgId}`,
+            sql`select * from user_scripts where id = ${drawerScriptId} and org_id = ${orgId}`, 'objects',
           )
         : null,
       drawerScriptId
         ? db.execute<ScriptRunRow>(sql`
           select status, error_message, logs, duration_ms, at, target_kind
-            from script_runs where script_id = ${drawerScriptId} and org_id = ${orgId} order by at desc limit 20`)
+            from script_runs where script_id = ${drawerScriptId} and org_id = ${orgId} order by at desc limit 20`, 'objects')
         : null,
       db.execute<{ key: string; name: string }>(sql`
       select key, name from custom_record_types
-       where org_id = ${orgId} and status = 'published' order by name`),
+       where org_id = ${orgId} and status = 'published' order by name`, 'objects'),
     ])
 
   const customTypeName = new Map<string, string>(
-    customTypes.rows.map((r) => [String(r.key), String(r.name)]),
+    customTypes.map((r) => [String(r.key), String(r.name)]),
   )
   const builtInKindKey = new Map(
     BUILT_IN_SCRIPT_KINDS.map((k) => [k.value, k.labelKey]),
@@ -185,7 +185,7 @@ export async function loadScripts(
     backLabel: tHub('title'),
     searchPlaceholder: t('searchPlaceholder'),
     triggerFilterLabel: t('triggerFilter'),
-    triggerOptions: triggers.rows.map((r) => ({
+    triggerOptions: triggers.map((r) => ({
       value: String(r.trigger_point),
       label: triggerLabel(String(r.trigger_point)),
       count: Number(r.n),
@@ -198,7 +198,7 @@ export async function loadScripts(
     columnRuns: t('table.runs'),
     columnLastRun: t('table.lastRun'),
     columnStatus: t('table.status'),
-    rows: scripts.rows.map((s) => ({
+    rows: scripts.map((s) => ({
       id: String(s.id),
       name: String(s.name),
       href: buildListDrawerHref('/admin/scripts', sp, 'script', String(s.id)),
@@ -211,13 +211,13 @@ export async function loadScripts(
       statusLabel: s.is_active ? t('statusActive') : t('statusDisabled'),
       statusVariant: s.is_active ? 'success' : 'outline',
     })),
-    total: Number(totalRow.rows[0]?.n ?? 0),
+    total: Number(totalRow[0]?.n ?? 0),
     currentPage: params.page,
     perPage: params.perPage,
     drawerOpen: Boolean(scriptId),
-    drawerScript: open?.rows[0] ?? null,
-    drawerRuns: runs?.rows ?? [],
-    customTypes: customTypes.rows.map((r) => ({
+    drawerScript: open?.[0] ?? null,
+    drawerRuns: runs ?? [],
+    customTypes: customTypes.map((r) => ({
       key: String(r.key),
       name: String(r.name),
     })),

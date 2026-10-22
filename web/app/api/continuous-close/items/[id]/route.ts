@@ -137,8 +137,8 @@ export const PATCH = defineRoute({
         updated_at = now(), updated_by = ${authz.user.id}
        where id = ${id} and org_id = ${authz.user.orgId} and status = ${locked.status}
        returning id
-    `));
-    if (changed.rows.length === 0) return { error: "conflict" as const };
+    `, "objects"));
+    if (changed.length === 0) return { error: "conflict" as const };
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${authz.user.orgId}, 'ai_work_items', ${id}, 'update',

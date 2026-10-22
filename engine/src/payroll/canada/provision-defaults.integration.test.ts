@@ -49,15 +49,15 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
     const exclusions = async (id: string) => (await db.execute<{ program_exclusions: string[]; vacationable: boolean }>(
       sql`select program_exclusions from pay_component_statutory_treatments
         where pay_component_id = ${id} and effective_from <= ${today}::date
-          and (effective_to is null or effective_to >= ${today}::date)`,
-    )).rows[0]!.program_exclusions;
+          and (effective_to is null or effective_to >= ${today}::date)`, "objects",
+    ))[0]!.program_exclusions;
     assert.deepEqual(await exclusions(shared), ["cnt", "eht", "hsf", "wcb"]);
     assert.deepEqual(await exclusions(foreign), []);
     assert.deepEqual(await exclusions(otherShared), []);
-    const facts = (await db.execute<{ filing_account_id: string; fact_value: string; effective_from: string }>(sql`
+    const facts = await db.execute<{ filing_account_id: string; fact_value: string; effective_from: string }>(sql`
       select filing_account_id, fact_value, effective_from::text from payroll_employer_facts
        where org_id = ${org.orgId} order by filing_account_id
-    `)).rows;
+    `, "objects");
     assert.equal(facts.length, 2);
     assert.deepEqual(facts.find(row => row.filing_account_id === standard), {
       filing_account_id: standard, fact_value: "1.4000", effective_from: "2026-01-01",
@@ -65,21 +65,21 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
     assert.deepEqual(facts.find(row => row.filing_account_id === reduced), {
       filing_account_id: reduced, fact_value: "1.1670", effective_from: "2026-08-01",
     });
-    const audits = (await db.execute<{ table_name: string; actor_id: string; changes: Record<string, unknown> }>(sql`
+    const audits = await db.execute<{ table_name: string; actor_id: string; changes: Record<string, unknown> }>(sql`
       select table_name, actor_id, changes from audit_log
        where org_id = ${org.orgId} and (row_id = ${shared} or table_name = 'payroll_employer_facts')
-    `)).rows;
+    `, "objects");
     assert.equal(audits.length, 2);
     assert.ok(audits.every(row => row.actor_id === actorId && row.changes.before !== undefined && row.changes.after !== undefined && row.changes.reason));
     assert.equal((await db.execute(sql`select count(*)::int as count from audit_log
       where org_id = ${org.orgId} and table_name = 'pay_component_statutory_treatments'
-        and changes->>'reason' = 'Canadian non-taxable earnings default to excluded from applicable employer levies.'`)).rows[0]!.count, 2);
+        and changes->>'reason' = 'Canadian non-taxable earnings default to excluded from applicable employer levies.'`, "objects"))[0]!.count, 2);
     await db.execute(sql`update pay_component_statutory_treatments
       set program_exclusions = '{}' where org_id = ${org.orgId} and pay_component_id = ${shared}
         and effective_from <= ${today}::date and (effective_to is null or effective_to >= ${today}::date)`);
     await provisionPayrollPackDefaults(org.orgId, actorId);
     assert.deepEqual(await exclusions(shared), [], "a later explicit assessability choice remains authoritative");
-    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from payroll_employer_facts where org_id = ${org.orgId}`)).rows[0]!.count, 2);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from payroll_employer_facts where org_id = ${org.orgId}`, "objects"))[0]!.count, 2);
   } finally {
     await dropScratchOrgReporting(other.orgId);
     await dropScratchOrgReporting(org.orgId);
@@ -106,11 +106,11 @@ test('Canadian defaults retain bounded policy windows and leave historical and g
         (${org.orgId},${expired},${today}::date-10,${today}::date-5,array['wcb'],false)`);
     await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions,vacationable)
       values(${org.orgId},${scoped},${groupId},${today}::date-1,array['wcb'],true)`);
-    const read = async () => (await db.execute<{ component: string; scope: string | null; from: string; to: string | null; exclusions: string[]; vacationable: boolean }>(sql`
+    const read = async () => await db.execute<{ component: string; scope: string | null; from: string; to: string | null; exclusions: string[]; vacationable: boolean }>(sql`
       select pay_component_id::text as component,worker_comp_group_id::text as scope,
         effective_from::text as "from",effective_to::text as "to",program_exclusions as exclusions,vacationable
       from pay_component_statutory_treatments where org_id=${org.orgId}
-        and pay_component_id in (${bounded},${expired},${scoped}) order by pay_component_id,effective_from`)).rows;
+        and pay_component_id in (${bounded},${expired},${scoped}) order by pay_component_id,effective_from`, "objects");
     const before = await read();
     await provisionPayrollPackDefaults(org.orgId, actorId);
     const after = await read();

@@ -24,7 +24,7 @@ test(
       const id = (await withBypassContext(() => db.execute<{ id: string }>(sql`
         insert into pdf_templates (org_id, record_type, name, source_html, compiled_html, created_by, updated_by)
         values (${org.orgId}, 'customer_invoice', 'Provenance', '<p>Proof</p>', '<p>Proof</p>', ${actor}, ${actor})
-        returning id`))).rows[0]!.id
+        returning id`, 'objects')))[0]!.id
 
       const byDefault = await withBypassContext(() => resolvePdfTemplate(org.orgId, 'customer_invoice', null))
       assert.equal(byDefault?.provenance.templateId, id)
@@ -58,7 +58,7 @@ test(
         withBypassContext(() => db.execute<{ id: string }>(sql`
           insert into pdf_templates (org_id, record_type, name, footer_html, source_html, compiled_html, created_by, updated_by)
           values (${org.orgId}, 'customer_invoice', ${name}, ${footer}, '<p>Same</p>', '<p>Same</p>', ${actor}, ${actor})
-          returning id`)).then((r) => r.rows[0]!.id)
+          returning id`, 'objects')).then((r) => r[0]!.id)
       const footed = await seed('Footed', '<p>footer v1</p>')
       const bare = await seed('Bare', null)
       const clone = await seed('Clone', '<p>footer v1</p>')

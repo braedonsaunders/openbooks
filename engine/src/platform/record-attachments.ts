@@ -27,7 +27,7 @@ export async function uploadCabinetAttachment(input: {
     insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
     values (${input.orgId}, ${file.id}, ${input.targetTable}, ${input.targetId}, ${input.createdBy}, now())
     returning id
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!link) throw new Error('Record attachment did not persist')
   await recordFileEvent({
     orgId: input.orgId, actorId: input.createdBy, table: 'file_attachments',

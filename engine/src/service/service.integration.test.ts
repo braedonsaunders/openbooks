@@ -43,9 +43,9 @@ const at = (date: string, time: string) => `${date}T${time}:00.000Z`;
 
 async function technician(orgId: string, subsidiaryId: string, name: string, userId: string): Promise<{ party: string; employment: string }> {
   const party = randomUUID();
-  affected(await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${party}, ${orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`), "technician");
-  affected(await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${orgId}, ${party}, 'Service technician', '2026-01-01', true)`), "employee role");
-  affected(await db.execute(sql`update users set party_id = ${party} where org_id = ${orgId} and id = ${userId}`), "user link");
+  affected(await db.execute<never>(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${party}, ${orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`), "technician");
+  affected(await db.execute<never>(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${orgId}, ${party}, 'Service technician', '2026-01-01', true)`), "employee role");
+  affected(await db.execute<never>(sql`update users set party_id = ${party} where org_id = ${orgId} and id = ${userId}`), "user link");
   return { party, employment: await seedWorkerEmployment(orgId, party, subsidiaryId) };
 }
 
@@ -53,17 +53,17 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const ids = await withBypassContext(async () => {
-      const today = (await db.execute<{ today: string }>(sql`select (now() at time zone 'UTC')::date::text as today`)).rows[0]!.today;
+      const today = (await db.execute<{ today: string }>(sql`select (now() at time zone 'UTC')::date::text as today`, "objects"))[0]!.today;
       // The scratch spine holds one fixed month; invoices and stock movements date today.
-      const calendar = (await db.execute<{ fiscalCalendarId: string }>(sql`select fiscal_calendar_id as "fiscalCalendarId" from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`)).rows[0]!.fiscalCalendarId;
+      const calendar = (await db.execute<{ fiscalCalendarId: string }>(sql`select fiscal_calendar_id as "fiscalCalendarId" from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`, "objects"))[0]!.fiscalCalendarId;
       const monthStart = `${today.slice(0, 7)}-01`;
-      const exists = (await db.execute(sql`select 1 from accounting_periods where org_id = ${org.orgId} and starts_on <= ${today} and ends_on >= ${today}`)).rows.length;
+      const exists = (await db.execute(sql`select 1 from accounting_periods where org_id = ${org.orgId} and starts_on <= ${today} and ends_on >= ${today}`, "objects")).length;
       if (!exists) {
-        affected(await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        affected(await db.execute<never>(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
           values (${randomUUID()}, ${org.orgId}, ${Number(today.slice(0, 4))}, ${Number(today.slice(5, 7))}, ${today.slice(0, 7)}, ${monthStart},
             (date_trunc('month', ${monthStart}::date) + interval '1 month - 1 day')::date, false, ${calendar})`), "current period");
       }
-      affected(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
+      affected(await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
         || '{"hrm":true,"hrmShiftPlanning":true,"serviceDispatch":true,"hrmCertifications":true,"timeTracking":true,"inventory":true,"orders":true}'::jsonb) where id = ${org.orgId}`), "features");
       const dispatcher = await createScratchUser(org.orgId, "Dana Dispatcher", "service_office");
       const dispatcher2 = await createScratchUser(org.orgId, "Drew Dispatcher", "service_desk");
@@ -78,26 +78,26 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
       const a = await technician(org.orgId, org.subsidiaryId, "Alex Tech", techAUser);
       const b = await technician(org.orgId, org.subsidiaryId, "Blair Tech", techBUser);
       const gasType = randomUUID();
-      affected(await db.execute(sql`insert into hrm_qualification_types (id, org_id, code, name, category) values (${gasType}, ${org.orgId}, 'GAS', 'Gas fitter', 'license')`), "qualification type");
-      affected(await db.execute(sql`insert into hrm_worker_qualifications (org_id, employment_id, type_id, issued_on, status, verified_by, verified_at)
+      affected(await db.execute<never>(sql`insert into hrm_qualification_types (id, org_id, code, name, category) values (${gasType}, ${org.orgId}, 'GAS', 'Gas fitter', 'license')`), "qualification type");
+      affected(await db.execute<never>(sql`insert into hrm_worker_qualifications (org_id, employment_id, type_id, issued_on, status, verified_by, verified_at)
         values (${org.orgId}, ${a.employment}, ${gasType}, '2026-01-01', 'valid', ${dispatcher}, now())`), "Alex holds the gas ticket");
-      affected(await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.customerId}, true)`), "customer role");
+      affected(await db.execute<never>(sql`insert into customer_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.customerId}, true)`), "customer role");
       const addressId = randomUUID();
-      affected(await db.execute(sql`insert into addresses (id, org_id, party_id, label, line1, city, region, postal_code, country)
+      affected(await db.execute<never>(sql`insert into addresses (id, org_id, party_id, label, line1, city, region, postal_code, country)
         values (${addressId}, ${org.orgId}, ${org.customerId}, 'Plant', '12 Furnace Rd', 'Hamilton', 'ON', 'L8P 1A1', 'CA')`), "service address");
       const item = async (name: string) => {
         const id = randomUUID();
-        affected(await db.execute(sql`insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation, income_account_id)
+        affected(await db.execute<never>(sql`insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation, income_account_id)
           values (${id}, ${org.orgId}, 'service', ${name}, false, true, '{}'::jsonb, 'billing', 'normal', ${org.accounts.revenue})`), name);
         return id;
       };
       const board = async (code: string, type: "dispatch" | "shift_roster", views: string, defaultView: string) => {
         const id = randomUUID();
-        affected(await db.execute(sql`insert into schedule_boards (id, org_id, code, name, row_kind, board_type, views, default_view, grain, time_zone, publish_policy, day_starts, day_ends, day_break_minutes)
+        affected(await db.execute<never>(sql`insert into schedule_boards (id, org_id, code, name, row_kind, board_type, views, default_view, grain, time_zone, publish_policy, day_starts, day_ends, day_break_minutes)
           values (${id}, ${org.orgId}, ${code}, ${`Board ${code}`}, 'people', ${type}, ${views}::text[], ${defaultView}, 'timed', 'UTC', 'live', '07:00', '19:00', 0)`), "board");
         return id;
       };
-      affected(await db.execute(sql`insert into service_dispatch_policies (org_id, effective_from, notify_arrival_window, notify_en_route, arrival_window_minutes,
+      affected(await db.execute<never>(sql`insert into service_dispatch_policies (org_id, effective_from, notify_arrival_window, notify_en_route, arrival_window_minutes,
           default_visit_minutes, urgent_response_hours, high_response_hours, normal_response_hours, low_response_hours, agreement_horizon_days, reason, created_by)
         values (${org.orgId}, '2020-01-01', false, false, 120, 60, 4, 24, 72, null, 28, 'Service desk standards', ${dispatcher})`), "dispatch policy");
       return {
@@ -137,7 +137,7 @@ test("a job is dispatched, worked, completed with a stock part and labor, and in
   assert.equal(assigned.visitStatus, "scheduled");
   assert.deepEqual(assigned.notices.map((notice) => notice.kind), ["arrival_window"], "booking a visit announces its arrival window");
   const window = (await withBypassContext(() => db.execute<{ startsAt: string; endsAt: string }>(sql`select to_char(window_starts_at at time zone 'UTC', 'HH24:MI') as "startsAt",
-    to_char(window_ends_at at time zone 'UTC', 'HH24:MI') as "endsAt" from service_visits where id = ${visitId}`))).rows[0]!;
+    to_char(window_ends_at at time zone 'UTC', 'HH24:MI') as "endsAt" from service_visits where id = ${visitId}`, "objects")))[0]!;
   assert.deepEqual(window, { startsAt: "14:00", endsAt: "16:00" }, "the arrival window takes the policy's width from the booked start");
   const dispatched = await dispatchVisit({ ...as(f, f.dispatcher), boardId: f.dispatchBoard, visitId: visitId!, expectedRevision: assigned.visitRevision });
 
@@ -176,23 +176,23 @@ test("a job is dispatched, worked, completed with a stock part and labor, and in
   assert.equal(completed.partsIssued, 1);
   assert.equal(completed.laborEntryIds.length, 1);
 
-  const issued = (await withBypassContext(() => db.execute<{ movementId: string | null }>(sql`select inventory_movement_id as "movementId" from service_visit_parts where id = ${part.partId}`))).rows[0]!;
+  const issued = (await withBypassContext(() => db.execute<{ movementId: string | null }>(sql`select inventory_movement_id as "movementId" from service_visit_parts where id = ${part.partId}`, "objects")))[0]!;
   assert.ok(issued.movementId, "the part issued from stock at completion");
-  const labor = (await withBypassContext(() => db.execute<{ status: string; hours: string; billable: boolean }>(sql`select status, hours::text, is_billable as billable from time_entries where service_visit_id = ${visitId}`))).rows;
+  const labor = await withBypassContext(() => db.execute<{ status: string; hours: string; billable: boolean }>(sql`select status, hours::text, is_billable as billable from time_entries where service_visit_id = ${visitId}`, "objects"));
   assert.deepEqual(labor, [{ status: "draft", hours: "1.5000", billable: true }], "labor stays available for submission from the technician's timesheet");
-  const week = (await withBypassContext(() => db.execute<{ status: string }>(sql`
+  const week = await withBypassContext(() => db.execute<{ status: string }>(sql`
     select distinct w.status from timesheet_weeks w
     join time_entries te on te.org_id = w.org_id and te.employee_party_id = w.employee_party_id
       and te.worked_on between w.week_start and w.week_start + 6
-    where te.service_visit_id = ${visitId}`))).rows;
+    where te.service_visit_id = ${visitId}`, "objects"));
   assert.deepEqual(week, [{ status: "draft" }], "the week remains submittable through the timesheet workflow");
   await assert.rejects(invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id, visitId }), code("service_labor_unapproved"));
   // Timesheet approval is the native approver's decision.
   await withBypassContext(() => db.execute(sql`update time_entries set status = 'approved', approved_by = ${f.dispatcher}, approved_at = now() where service_visit_id = ${visitId}`));
 
   const invoice = await invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id, visitId });
-  const lines = (await withBypassContext(() => db.execute<{ itemId: string | null; amount: string; quantity: string }>(sql`select item_id as "itemId", amount::text, quantity::text
-    from document_lines where document_id = ${invoice.invoiceId} order by line_number`))).rows;
+  const lines = await withBypassContext(() => db.execute<{ itemId: string | null; amount: string; quantity: string }>(sql`select item_id as "itemId", amount::text, quantity::text
+    from document_lines where document_id = ${invoice.invoiceId} order by line_number`, "objects"));
   assert.deepEqual(lines.map((line) => line.amount), ["120.0000", "30.0000", "120.0000"], "scope, the billable part and 1.5 h of labor at 80");
   assert.equal(lines[1]!.itemId, null, "an issued stock part bills on the item's income account so stock is not relieved twice");
   assert.equal(lines[2]!.itemId, f.laborItem);
@@ -207,13 +207,13 @@ test("a job is dispatched, worked, completed with a stock part and labor, and in
   const totals = (await withBypassContext(() => db.execute<{ debits: string; credits: string; receivable: string }>(sql`select
       sum(case when amount > 0 then amount else 0 end)::text as debits, sum(case when amount < 0 then -amount else 0 end)::text as credits,
       sum(case when account_id = ${f.org.accounts.ar} then amount else 0 end)::text as receivable
-    from journal_lines where entry_id = ${entryId}`))).rows[0]!;
+    from journal_lines where entry_id = ${entryId}`, "objects")))[0]!;
   assert.equal(totals.debits, totals.credits, "the invoice posting balances");
   assert.equal(totals.receivable, "270.0000");
   const issues = (await withBypassContext(() => db.execute<{ count: number }>(sql`select count(*)::int as count from inventory_movements
-    where org_id = ${f.org.orgId} and item_id = ${f.org.items.fifo} and kind = 'issue'`))).rows[0]!.count;
+    where org_id = ${f.org.orgId} and item_id = ${f.org.items.fifo} and kind = 'issue'`, "objects")))[0]!.count;
   assert.equal(issues, 1, "posting the invoice issued no further stock");
-  const billed = (await withBypassContext(() => db.execute<{ billing: string }>(sql`select billing_status as billing from time_entries where service_visit_id = ${visitId}`))).rows;
+  const billed = await withBypassContext(() => db.execute<{ billing: string }>(sql`select billing_status as billing from time_entries where service_visit_id = ${visitId}`, "objects"));
   assert.deepEqual(billed, [{ billing: "billed" }]);
 
   // The service reports run on the native report engine over the same records.
@@ -240,9 +240,9 @@ test("agreement generation is idempotent, keeps skipped occurrences and supersed
   assert.equal(created.generated, 4, "a 28-day horizon from today holds four weekly occurrences");
   const agreementId = created.agreement.id;
   assert.equal((await generateAgreementVisits({ ...as(f, f.dispatcher), agreementId })).generated, 0, "regeneration creates nothing new");
-  const visits = async () => (await withBypassContext(() => db.execute<{ id: string; occursOn: string; status: string; cancelKind: string | null; revision: number; versionId: string }>(sql`
+  const visits = async () => await withBypassContext(() => db.execute<{ id: string; occursOn: string; status: string; cancelKind: string | null; revision: number; versionId: string }>(sql`
     select id, occurs_on::text as "occursOn", status, cancel_kind as "cancelKind", revision, agreement_version_id as "versionId"
-    from service_visits where agreement_id = ${agreementId} order by occurs_on, created_at`))).rows;
+    from service_visits where agreement_id = ${agreementId} order by occurs_on, created_at`, "objects"));
   const [first, second, third] = await visits();
   await cancelVisit({ ...as(f, f.dispatcher), visitId: first!.id, expectedRevision: first!.revision, reason: "Customer closed that week", skip: true });
   assert.equal((await generateAgreementVisits({ ...as(f, f.dispatcher), agreementId })).generated, 0, "a skipped occurrence is a decision regeneration keeps");
@@ -250,7 +250,7 @@ test("agreement generation is idempotent, keeps skipped occurrences and supersed
     startsAt: at(third!.occursOn, "08:00"), overrideReason: "Planned visit" });
 
   const effectiveFrom = second!.occursOn;
-  const changed = await addAgreementVersion({ ...as(f, f.dispatcher), agreementId, expectedRevision: (await withBypassContext(() => db.execute<{ revision: number }>(sql`select revision from service_agreements where id = ${agreementId}`))).rows[0]!.revision,
+  const changed = await addAgreementVersion({ ...as(f, f.dispatcher), agreementId, expectedRevision: (await withBypassContext(() => db.execute<{ revision: number }>(sql`select revision from service_agreements where id = ${agreementId}`, "objects")))[0]!.revision,
     effectiveFrom, reason: "Customer moved to fortnightly visits",
     version: { recurrence: { repeat: "weekly", interval: 2 }, windowStarts: "13:00", windowEnds: "16:00", estimatedMinutes: 120, priority: "normal",
       lines: [{ itemId: f.repairItem, quantity: "1", unitPrice: "140.00" }] } });
@@ -301,11 +301,11 @@ test("voiding a per-job invoice releases its billing link before reopening the j
   assert.equal(reopened.status, "open");
   const released = (await withBypassContext(() => db.execute<{ releasedAt: string | null; reason: string | null }>(sql`
     select released_at as "releasedAt", release_reason as reason from service_billings
-     where org_id = ${f.org.orgId} and job_id = ${job.id} and invoice_document_id = ${invoice.invoiceId}`))).rows[0]!;
+     where org_id = ${f.org.orgId} and job_id = ${job.id} and invoice_document_id = ${invoice.invoiceId}`, "objects")))[0]!;
   assert.ok(released.releasedAt);
   assert.equal(released.reason, "The invoice was voided");
   const releasedCount = (await withBypassContext(() => db.execute<{ count: number }>(sql`select count(*)::int as count from service_billings
-    where org_id = ${f.org.orgId} and job_id = ${job.id} and released_at is not null`))).rows[0]!.count;
+    where org_id = ${f.org.orgId} and job_id = ${job.id} and released_at is not null`, "objects")))[0]!.count;
   assert.equal(releasedCount, 2, "both voided billing links are released");
 }));
 
@@ -323,26 +323,26 @@ test("rejecting a completion removes draft labor from a later invoice", enabled,
     labor: [{ startedAt: at(f.today, "08:00"), hours: "4" }] });
   assert.equal(first.reviewStatus, "pending");
   const firstGate = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-    select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`))).rows[0]!;
+    select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`, "objects")))[0]!;
   await withOrgContext(f.org.orgId, () => decideGate({ gateId: firstGate.id, decision: "rejected", userId: f.dispatcher, comment: "Correct the work record" }));
   const rejectedLabor = (await withBypassContext(() => db.execute<{ status: string; rejectionReason: string | null }>(sql`
-    select status, rejection_reason as "rejectionReason" from time_entries where org_id = ${f.org.orgId} and id = ${first.laborEntryIds[0]}`))).rows[0]!;
+    select status, rejection_reason as "rejectionReason" from time_entries where org_id = ${f.org.orgId} and id = ${first.laborEntryIds[0]}`, "objects")))[0]!;
   assert.deepEqual(rejectedLabor, { status: "rejected", rejectionReason: "Correct the work record" });
 
   const reopenedRevision = (await withBypassContext(() => db.execute<{ revision: number }>(sql`
-    select revision from service_visits where org_id = ${f.org.orgId} and id = ${visitId}`))).rows[0]!.revision;
+    select revision from service_visits where org_id = ${f.org.orgId} and id = ${visitId}`, "objects")))[0]!.revision;
   const second = await completeVisit({ ...as(f, f.techAUser), visitId, expectedRevision: reopenedRevision, workNotes: "Corrected completion.",
     labor: [{ startedAt: at(f.today, "08:00"), hours: "3" }] });
   assert.equal(second.reviewStatus, "pending");
   const secondGate = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-    select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`))).rows[0]!;
+    select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'service_visit_completion' and subject_id = ${visitId} and status = 'pending'`, "objects")))[0]!;
   await withOrgContext(f.org.orgId, () => decideGate({ gateId: secondGate.id, decision: "approved", userId: f.dispatcher }));
   await withBypassContext(() => db.execute(sql`update time_entries set status = 'approved', approved_by = ${f.dispatcher}, approved_at = now()
     where org_id = ${f.org.orgId} and id = ${second.laborEntryIds[0]}`));
 
   const invoice = await invoiceServiceWork({ ...as(f, f.dispatcher), jobId: job.id, visitId });
   const laborLine = (await withBypassContext(() => db.execute<{ quantity: string; amount: string }>(sql`
-    select quantity::numeric(20, 4)::text, amount::text from document_lines where org_id = ${f.org.orgId} and document_id = ${invoice.invoiceId} and item_id = ${f.laborItem}`))).rows[0]!;
+    select quantity::numeric(20, 4)::text, amount::text from document_lines where org_id = ${f.org.orgId} and document_id = ${invoice.invoiceId} and item_id = ${f.laborItem}`, "objects")))[0]!;
   assert.deepEqual(laborLine, { quantity: "3.0000", amount: "240.0000" });
 }));
 
@@ -355,7 +355,7 @@ test("two dispatchers assigning the same visit: exactly one booking wins and the
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   const rejected = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
   assert.ok(code("service_stale")(rejected.reason), `the loser is refused as stale: ${String(rejected.reason)}`);
-  const bookings = (await withBypassContext(() => db.execute<{ count: number }>(sql`select count(*)::int as count from schedule_entries where service_visit_id = ${visitId} and status = 'published'`))).rows[0]!.count;
+  const bookings = (await withBypassContext(() => db.execute<{ count: number }>(sql`select count(*)::int as count from schedule_entries where service_visit_id = ${visitId} and status = 'published'`, "objects")))[0]!.count;
   assert.equal(bookings, 1);
 }));
 
@@ -408,7 +408,7 @@ test("one person is never double-booked across boards, and leave and qualificati
 test("a portal request lands in the queue once, the customer sees only their own requests, and the board draws its working day", enabled, async () => fixture(async (f) => {
   const portalLink = randomUUID();
   await withBypassContext(async () => {
-    affected(await db.execute(sql`insert into customer_portal_links (id, org_id, party_id, contact_email, purpose, token_hash, expires_at)
+    affected(await db.execute<never>(sql`insert into customer_portal_links (id, org_id, party_id, contact_email, purpose, token_hash, expires_at)
       values (${portalLink}, ${f.org.orgId}, ${f.org.customerId}, 'buyer@example.com', 'session', ${`hash-${portalLink}`}, now() + interval '1 hour')`), "portal session");
   });
   const key = randomUUID();

@@ -26,7 +26,7 @@ export async function validateEntitlementPlanConfiguration(
   for (const [label, id] of [["payout", payoutId], ["deposit", depositId]] as const) {
     if (id === null) continue;
     const component = (await executor.execute<{ code: string; kind: string; is_active: boolean }>(sql`
-      select code, kind, is_active from pay_components where org_id = ${orgId} and id = ${id}`)).rows[0];
+      select code, kind, is_active from pay_components where org_id = ${orgId} and id = ${id}`, "objects"))[0];
     if (!component) throw new PayrollError(`The plan's ${label} component is not visible in this organization — choose a payroll component from Payroll setup`);
     if (!component.is_active) throw new PayrollError(`Payroll component ${component.code} is inactive — re-enable it before binding it as the plan's ${label} component`);
     if (owed && label === "payout") {

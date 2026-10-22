@@ -75,20 +75,21 @@ const mockSources = new Map<string, string>([
               }
               return query
             },
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               if (/\b(insert into|update|delete from)\b/i.test(text)) {
                 state.persisted += 1
               }
               if (text.includes("delete from connections")) {
                 state.deletes += 1
-                return { rows: state.deleteRows }
+                return inMode({ rows: state.deleteRows })
               }
               if (text.includes("insert into audit_log")) {
                 state.audits += 1
-                return { rows: [] }
+                return inMode({ rows: [] })
               }
-              return { rows: [] }
+              return inMode({ rows: [] })
             },
           }
           return callback(tx)

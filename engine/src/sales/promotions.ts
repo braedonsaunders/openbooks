@@ -253,7 +253,7 @@ const PROMOTION_COLUMNS = sql`
 
 async function readPromotion(runner: SqlExecutor, orgId: string, id: string): Promise<Promotion> {
   const row = (await runner.execute<PromotionRow>(sql`
-    select ${PROMOTION_COLUMNS} from promotions where org_id = ${orgId} and id = ${id}`)).rows[0];
+    select ${PROMOTION_COLUMNS} from promotions where org_id = ${orgId} and id = ${id}`, "objects"))[0];
   if (!row) throw refusal("Promotion not found", "not_found", 404);
   return toPromotion(row);
 }
@@ -286,7 +286,7 @@ async function insertPromotion(runner: SqlExecutor, orgId: string, actorId: stri
               ${input.kind === "buy_x_get_y" ? parseCount(input.getQuantity, "Free quantity") : null},
               ${input.startsAt ?? null}, ${input.endsAt ?? null}, ${input.channelScopeId ?? null},
               ${input.usageLimit ?? null}, ${input.discountAccountId ?? null}, ${actorId}, ${actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!inserted) throw refusal("The promotion was not saved", "changed_concurrently", 409, "Try saving the promotion again");
     id = inserted.id;
   } catch (error) {
@@ -331,7 +331,7 @@ export async function setPromotionStatus(
     throw refusal(`Promotion status ${status} is not a transition`, "invalid_input", 422, "Activate a draft or archive a promotion that is done");
   }
   const current = (await runner.execute<{ status: string; code: string }>(sql`
-    select status, code from promotions where org_id = ${orgId} and id = ${id} for update`)).rows[0];
+    select status, code from promotions where org_id = ${orgId} and id = ${id} for update`, "objects"))[0];
   if (!current) throw refusal("Promotion not found", "not_found", 404);
   const remedy = promotionStatusTransition(current.status as PromotionStatus, status);
   if (remedy !== null) {
@@ -342,7 +342,7 @@ export async function setPromotionStatus(
       remedy,
     );
   }
-  const updated = await runner.execute(sql`
+  const updated = await runner.execute<never>(sql`
     update promotions set status = ${status}, updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and id = ${id} and status = ${current.status}`);
   if (updated.rowCount !== 1) throw refusal(`Promotion ${current.code} changed during the update`, "changed_concurrently", 409, "Reload the promotion and try again");
@@ -351,10 +351,10 @@ export async function setPromotionStatus(
 }
 
 export async function listPromotions(runner: SqlExecutor, orgId: string, activeOnly: boolean): Promise<Promotion[]> {
-  const rows = (await runner.execute<PromotionRow>(sql`
+  const rows = await runner.execute<PromotionRow>(sql`
     select ${PROMOTION_COLUMNS}
       from promotions where org_id = ${orgId} ${activeOnly ? sql`and status = 'active'` : sql``}
-     order by code`)).rows;
+     order by code`, "objects");
   return rows.map(toPromotion);
 }
 
@@ -483,7 +483,7 @@ export async function applyPromotion(
   const shares = computedMinor > remainingMinor ? apportion(remainingMinor, computed) : computed;
   const inserted = await insertDiscountLines(runner, orgId, actorId, document, promotion, lines, shares, discountAccountId, scale);
   const total = shares.reduce((sum, share) => sum + share, 0n);
-  const updatedDocument = await runner.execute(sql`
+  const updatedDocument = await runner.execute<never>(sql`
     update documents
        set updated_by = ${actorId}
      where org_id = ${orgId} and id = ${document.id} and status = 'draft'`);
@@ -520,7 +520,7 @@ async function lockDocument(
   const row = (await runner.execute<LockedDocument>(sql`
     select d.id, d.kind, d.status, d.document_number, d.currency, d.subsidiary_id,
            (select max(line_number) from document_lines where org_id = ${orgId} and document_id = d.id) as max_line
-      from documents d where d.org_id = ${orgId} and d.id = ${documentId} for update of d`)).rows[0];
+      from documents d where d.org_id = ${orgId} and d.id = ${documentId} for update of d`, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw refusal("Sales document not found", "not_found", 404);
   }
@@ -549,10 +549,10 @@ async function lockPromotion(
   const row = input.promotionId
     ? (await runner.execute<PromotionRow>(sql`
         select ${PROMOTION_COLUMNS}
-          from promotions where org_id = ${orgId} and id = ${input.promotionId} for update`)).rows[0]
+          from promotions where org_id = ${orgId} and id = ${input.promotionId} for update`, "objects"))[0]
     : (await runner.execute<PromotionRow>(sql`
         select ${PROMOTION_COLUMNS}
-          from promotions where org_id = ${orgId} and lower(code) = lower(${parseCode(input.code)}) for update`)).rows[0];
+          from promotions where org_id = ${orgId} and lower(code) = lower(${parseCode(input.code)}) for update`, "objects"))[0];
   if (!row) {
     throw refusal(
       input.promotionId ? "Promotion not found" : `Promotion code ${String(input.code)} does not exist`,
@@ -606,7 +606,7 @@ async function refuseRepeatApplication(
   const applied = (await runner.execute<{ applied: boolean }>(sql`
     select exists (select 1 from document_lines
                     where org_id = ${orgId} and document_id = ${document.id}
-                      and promotion_id = ${promotion.id}) as applied`)).rows[0];
+                      and promotion_id = ${promotion.id}) as applied`, "objects"))[0];
   if (applied?.applied) {
     throw refusal(
       `Promotion ${promotion.code} is already applied to ${document.document_number}`,
@@ -627,11 +627,11 @@ async function loadEligibleLines(
   // line, tagged with a promotion or not, already reduces what is left to
   // discount, so it is summed as an offset. All lines are locked so the
   // offsets cannot move while the new discount is sized.
-  const rows = (await runner.execute<{ line_id: string; line_number: number; amount: string; quantity: string; unit_price: string; promotion_id: string | null }>(sql`
+  const rows = await runner.execute<{ line_id: string; line_number: number; amount: string; quantity: string; unit_price: string; promotion_id: string | null }>(sql`
     select id as line_id, line_number, amount::text, quantity::text, unit_price::text, promotion_id
       from document_lines
      where org_id = ${orgId} and document_id = ${documentId}
-     order by line_number for update`)).rows;
+     order by line_number for update`, "objects");
   const lines: EligibleLine[] = [];
   let eligibleUnits = 0n;
   let offsetUnits = 0n;
@@ -765,7 +765,7 @@ async function insertDiscountLines(
       values (${orgId}, ${document.id}, ${lineNumber}, ${discountAccountId},
               ${`Promotion ${promotion.code} — ${promotion.name}`}, '1', ${amount}, ${amount},
               '0', false, false, '0', '0', ${promotion.id}, '{}'::jsonb, ${actorId}, ${actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw refusal(`Promotion ${promotion.code} could not add its discount line`, "changed_concurrently", 409, "Reload the document and apply the promotion again");
     inserted.push({ lineId: row.id, lineNumber, amountMinor: share.toString() });
     lineNumber += 1;
@@ -779,7 +779,7 @@ async function insertDiscountLines(
 async function countRedemption(runner: SqlExecutor, orgId: string, promotion: Promotion): Promise<void> {
   // The promotion row is already locked by lockPromotion, so the count and
   // the limit check serialize against concurrent checkouts.
-  const updated = await runner.execute(sql`
+  const updated = await runner.execute<never>(sql`
     update promotions set usage_count = usage_count + 1, updated_at = now()
      where org_id = ${orgId} and id = ${promotion.id} and usage_count = ${promotion.usageCount}`);
   if (updated.rowCount !== 1) {
@@ -798,8 +798,8 @@ async function writePromotionAudit(
   const result = await runner.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'promotions', ${promotionId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`);
-  if (result.rows.length !== 1) throw new Error("promotion change was not audited");
+    returning id`, "objects");
+  if (result.length !== 1) throw new Error("promotion change was not audited");
 }
 
 async function writeDocumentAudit(
@@ -812,8 +812,8 @@ async function writeDocumentAudit(
   const result = await runner.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'documents', ${documentId}, 'update', ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`);
-  if (result.rows.length !== 1) throw new Error("promotion application was not audited");
+    returning id`, "objects");
+  if (result.length !== 1) throw new Error("promotion application was not audited");
 }
 
 function isUniqueViolation(error: unknown): boolean {

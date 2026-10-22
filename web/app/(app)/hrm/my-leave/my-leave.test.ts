@@ -142,7 +142,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export const db = { execute: async () => ({ rows: globalThis.__myLeaveEmploymentRows ?? [] }) };",
+        url: "data:text/javascript,export const db = { execute: async (_query, mode) => Promise.resolve({ rows: globalThis.__myLeaveEmploymentRows ?? [] }).then((result) => (mode === 'objects' ? result.rows : result)) };",
       };
     }
     return nextResolve(specifier, context);

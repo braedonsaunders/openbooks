@@ -45,8 +45,8 @@ async function legacyGET(req: Request, { params }: { params: Promise<{ id: strin
            boxes, snapshot_hash, version,
            functional_currency, translation, subsidiary_ids,
            registration_id, registration_number
-      from tax_filings where id = ${id} and org_id = ${gate.user.orgId} limit 1`))
-  const row = saved.rows[0]
+      from tax_filings where id = ${id} and org_id = ${gate.user.orgId} limit 1`, 'objects'))
+  const row = saved[0]
   if (!row) return notFound("record")
   // This immutable snapshot records the exact subsidiaries whose activity the
   // return includes. Apply the row gate after the org-bound lookup so a

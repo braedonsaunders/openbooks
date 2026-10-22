@@ -29,11 +29,11 @@ const ATTENDANCE_TYPES = SCHEDULE_BOARD_TYPES.filter((type) => type.capabilities
 
 /** Active boards whose type observes attendance, within the reader's legal entities. */
 export async function attendanceBoardOptions(authz: Authz): Promise<{ id: string; label: string }[]> {
-  const rows = (await db.execute<{ id: string; code: string; name: string }>(sql`
+  const rows = await db.execute<{ id: string; code: string; name: string }>(sql`
     select id, code, name from schedule_boards
      where org_id = ${authz.user.orgId} and is_active and board_type = any(${pgTextArrayLiteral(ATTENDANCE_TYPES)}::text[])
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-     order by name, code, id limit 500`)).rows
+     order by name, code, id limit 500`, 'objects')
   return rows.map((row) => ({ id: row.id, label: `${row.code} · ${row.name}` }))
 }
 

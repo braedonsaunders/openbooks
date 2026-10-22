@@ -104,7 +104,7 @@ async function balance(orgId: string, accountId: string): Promise<string> {
   return withBypassContext(async () => (await db.execute<{ total: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as total from journal_lines l
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`)).rows[0]!.total);
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`, "objects"))[0]!.total);
 }
 
 function request(s: Pick<Scenario, "source" | "target" | "actorId">, overrides: Partial<Parameters<typeof requestAccountMerge>[1]> = {}) {
@@ -148,7 +148,7 @@ test("P&L merge balances and period locks follow each subsidiary's fiscal calend
       { id: randomUUID(), month: 7, name: "2026-07", start: "2026-07-01", end: "2026-07-31" },
     ];
     const defaultCalendar = (await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where org_id=${s.org.orgId} and id=${s.org.periodId}`)).rows[0]!.id;
+      select fiscal_calendar_id as id from accounting_periods where org_id=${s.org.orgId} and id=${s.org.periodId}`, "objects"))[0]!.id;
     await withOrgContext(s.org.orgId, async () => {
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
         values(${januaryPeriod},${s.org.orgId},${defaultCalendar},2026,1,'2026-01','2026-01-01','2026-01-31'),
@@ -209,7 +209,7 @@ test("account merge deduplicates editable CAM account arrays and blocks sealed p
     const outcome=await requestAccountMerge(editable.org.orgId,request(editable,{expectedDigest:preview.digest}));
     assert.equal(outcome.status,'completed');
     const saved=(await db.execute<{expense_account_ids:string[]}>(sql`
-      select expense_account_ids from cam_pools where org_id=${editable.org.orgId} and id=${editablePoolId}`)).rows[0];
+      select expense_account_ids from cam_pools where org_id=${editable.org.orgId} and id=${editablePoolId}`, "objects"))[0];
     assert.deepEqual(saved?.expense_account_ids,[editable.target]);
 
     const finalizedPool=await camPool(sealed,'finalized',[sealed.source]);
@@ -218,9 +218,9 @@ test("account merge deduplicates editable CAM account arrays and blocks sealed p
       {sourceAccountId:sealed.source,targetAccountId:sealed.target,effectiveDate:EFFECTIVE},null);
     assert.ok(blocked.refusals.some(refusal=>refusal.code==='reference_in_flight'));
     assert.ok(blocked.references.some(ref=>ref.key==='cam_pools.expense_account_ids' && ref.blocked===2 && ref.redirect===0));
-    const preserved=(await db.execute<{id:string;expense_account_ids:string[]}>(sql`
+    const preserved=await db.execute<{id:string;expense_account_ids:string[]}>(sql`
       select id,expense_account_ids from cam_pools where org_id=${sealed.org.orgId}
-        and id in (${finalizedPool},${invoicedPool}) order by id`)).rows;
+        and id in (${finalizedPool},${invoicedPool}) order by id`, "objects");
     assert.deepEqual(preserved.map(row=>row.expense_account_ids),[[sealed.source],[sealed.source]]);
   } finally {
     await dropScratchOrg(editable.org.orgId);
@@ -242,27 +242,27 @@ test("a merge moves the balance by a balanced reclass, moves configuration, and 
 
     await withBypassContext(async () => {
       const account = (await db.execute<{ is_active: boolean; merged_into_id: string; merge_reason: string }>(sql`
-        select is_active, merged_into_id, merge_reason from accounts where org_id = ${s.org.orgId} and id = ${s.source}`)).rows[0]!;
+        select is_active, merged_into_id, merge_reason from accounts where org_id = ${s.org.orgId} and id = ${s.source}`, "objects"))[0]!;
       assert.deepEqual(account, { is_active: false, merged_into_id: s.target, merge_reason: "Duplicate account created by the opening import" });
       const entry = (await db.execute<{ origin: string; posting_date: string; status: string }>(sql`
-        select origin, posting_date::text as posting_date, status from journal_entries where org_id = ${s.org.orgId} and id = ${outcome.entryIds[0]}`)).rows[0]!;
+        select origin, posting_date::text as posting_date, status from journal_entries where org_id = ${s.org.orgId} and id = ${outcome.entryIds[0]}`, "objects"))[0]!;
       assert.deepEqual(entry, { origin: "account_merge", posting_date: EFFECTIVE, status: "posted" });
-      const lines = (await db.execute<{ account_id: string; amount: string; department_id: string | null }>(sql`
+      const lines = await db.execute<{ account_id: string; amount: string; department_id: string | null }>(sql`
         select account_id, amount::text as amount, department_id from journal_lines
-         where org_id = ${s.org.orgId} and entry_id = ${outcome.entryIds[0]} order by line_number`)).rows;
+         where org_id = ${s.org.orgId} and entry_id = ${outcome.entryIds[0]} order by line_number`, "objects");
       assert.equal(lines.length, 4);
       assert.ok(lines.some((line) => line.account_id === s.target && line.amount === "120.0000" && line.department_id === s.department));
       assert.ok(lines.some((line) => line.account_id === s.source && line.amount === "-120.0000" && line.department_id === s.department));
       // Posted history keeps its account: the original lines were not touched.
       const original = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
-         where l.org_id = ${s.org.orgId} and l.account_id = ${s.source} and e.origin = 'manual'`)).rows[0]!.n;
+         where l.org_id = ${s.org.orgId} and l.account_id = ${s.source} and e.origin = 'manual'`, "objects"))[0]!.n;
       assert.equal(original, 2);
       const role = (await db.execute<{ default_expense_account_id: string }>(sql`
-        select default_expense_account_id from vendor_roles where org_id = ${s.org.orgId} and id = ${s.vendorRole}`)).rows[0]!;
+        select default_expense_account_id from vendor_roles where org_id = ${s.org.orgId} and id = ${s.vendorRole}`, "objects"))[0]!;
       assert.equal(role.default_expense_account_id, s.target);
-      const audits = (await db.execute<{ table_name: string; action: string }>(sql`
-        select table_name, action from audit_log where org_id = ${s.org.orgId} and (row_id = ${s.source} or row_id = ${outcome.mergeId})`)).rows;
+      const audits = await db.execute<{ table_name: string; action: string }>(sql`
+        select table_name, action from audit_log where org_id = ${s.org.orgId} and (row_id = ${s.source} or row_id = ${outcome.mergeId})`, "objects");
       assert.ok(audits.some((row) => row.table_name === "accounts" && row.action === "merge"));
       assert.ok(audits.some((row) => row.table_name === "vendor_roles" && row.action === "update"));
     });
@@ -322,7 +322,7 @@ test("a merge preserves dated book mappings and refuses until their window ends 
     await withOrgContext(s.org.orgId, async () => {
       const saved = (await db.execute<{ source_account_id: string; target_account_id: string; effective_to: string }>(sql`
         select source_account_id, target_account_id, effective_to::text as effective_to
-        from accounting_book_account_maps where org_id = ${s.org.orgId} and id = ${mapping.id}`)).rows[0];
+        from accounting_book_account_maps where org_id = ${s.org.orgId} and id = ${mapping.id}`, "objects"))[0];
       assert.deepEqual(saved, { source_account_id: s.source, target_account_id: s.target, effective_to: "2026-07-30" });
     });
   } finally { await dropScratchOrg(s.org.orgId); }
@@ -346,7 +346,7 @@ test("active capitalization rules block a merge and inactive rules retain their 
     assert.equal((await requestAccountMerge(s.org.orgId, request(s, { expectedDigest: preview.digest }))).status, "completed");
     await withOrgContext(s.org.orgId, async () => {
       const saved = (await db.execute<{ account_id: string }>(sql`
-        select account_id from asset_capitalization_rules where org_id = ${s.org.orgId} and id = ${ruleId}`)).rows[0];
+        select account_id from asset_capitalization_rules where org_id = ${s.org.orgId} and id = ${ruleId}`, "objects"))[0];
       assert.equal(saved?.account_id, s.source);
     });
   } finally { await dropScratchOrg(s.org.orgId); }
@@ -377,16 +377,16 @@ test("a merge reclasses each book's recorded balance once at its recorded exchan
     if (outcome.status !== "completed") return;
     assert.equal(outcome.entryIds.length, 2, "one reclass per book, with no extra replicated reclass");
     await withOrgContext(s.org.orgId, async () => {
-      const balances = (await db.execute<{ book_id: string; account_id: string; amount: string }>(sql`
+      const balances = await db.execute<{ book_id: string; account_id: string; amount: string }>(sql`
         select e.book_id, l.account_id, sum(l.amount)::text as amount from journal_lines l
         join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
         where e.org_id = ${s.org.orgId} and e.status in ('posted', 'reversed') and l.account_id in (${s.source}, ${s.target})
-        group by e.book_id, l.account_id`)).rows;
+        group by e.book_id, l.account_id`, "objects");
       assert.equal(balances.find(row => row.book_id === s.org.bookId && row.account_id === s.target)?.amount, "150.0000");
       assert.equal(balances.find(row => row.book_id === bookId && row.account_id === s.target)?.amount, "102.0000");
       assert.ok(balances.filter(row => row.account_id === s.source).every(row => row.amount === "0.0000"));
       const copies = (await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries
-        where org_id = ${s.org.orgId} and origin = 'account_merge'`)).rows[0]!;
+        where org_id = ${s.org.orgId} and origin = 'account_merge'`, "objects"))[0]!;
       assert.equal(copies.count, 2);
     });
   } finally {
@@ -415,7 +415,7 @@ test("a retried merge returns the same record, and a stale preview is refused", 
       (error: unknown) => error instanceof AccountMergeError && error.code === "account_merge_key_conflict",
     );
     const entries = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${s.org.orgId} and origin = 'account_merge'`)).rows[0]!.n);
+      select count(*)::int as n from journal_entries where org_id = ${s.org.orgId} and origin = 'account_merge'`, "objects"))[0]!.n);
     assert.equal(entries, 1, "a retry posts nothing twice");
   } finally {
     await dropScratchOrg(s.org.orgId);
@@ -432,8 +432,8 @@ test("concurrent merges of one account produce exactly one merge and one reclass
     ]);
     assert.ok(results.some((result) => result.status === "fulfilled"));
     await withBypassContext(async () => {
-      const merges = (await db.execute<{ n: number }>(sql`select count(*)::int as n from account_merges where org_id = ${s.org.orgId}`)).rows[0]!.n;
-      const reclasses = (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id = ${s.org.orgId} and origin = 'account_merge'`)).rows[0]!.n;
+      const merges = (await db.execute<{ n: number }>(sql`select count(*)::int as n from account_merges where org_id = ${s.org.orgId}`, "objects"))[0]!.n;
+      const reclasses = (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id = ${s.org.orgId} and origin = 'account_merge'`, "objects"))[0]!.n;
       assert.equal(merges, 1);
       assert.equal(reclasses, 1);
     });
@@ -541,14 +541,14 @@ test(
       applyApprovedAccountMerge(s.org.orgId, { changeId: proposed.changeId, actorId: s.actorId, allowedSubsidiaryIds: null }),
       /approval|Flows/i,
     );
-      const gates=await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${s.org.orgId} and subject_kind='financial_change' and subject_id=${proposed.changeId} and status='pending'`));
-      assert.equal(gates.rows.length,1);
-      await decideGate({gateId:gates.rows[0]!.id,userId:actors.approver1Id,decision:"approved"});
+      const gates=await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${s.org.orgId} and subject_kind='financial_change' and subject_id=${proposed.changeId} and status='pending'`, "objects"));
+      assert.equal(gates.length,1);
+      await decideGate({gateId:gates[0]!.id,userId:actors.approver1Id,decision:"approved"});
       const applied = await applyApprovedAccountMerge(s.org.orgId, { changeId: proposed.changeId, actorId: s.actorId, allowedSubsidiaryIds: null });
       assert.equal(applied.status, "completed");
       assert.equal(await balance(s.org.orgId, s.source), "0.0000");
       const change = await withBypassContext(async () => (await db.execute<{ status: string }>(sql`
-      select status from financial_changes where org_id = ${s.org.orgId} and id = ${proposed.changeId}`)).rows[0]!.status);
+      select status from financial_changes where org_id = ${s.org.orgId} and id = ${proposed.changeId}`, "objects"))[0]!.status);
       assert.equal(change, "applied");
     } finally {
     await dropScratchOrg(s.org.orgId);
@@ -576,7 +576,7 @@ test("every live foreign key into accounts is classified and guarded against mer
          and t.tgargs=(select decode(string_agg(encode(convert_to(ga.attname::text,'UTF8'),'hex')||'00','' order by ga.attname::text COLLATE "C"),'hex')
            from unnest(t.tgattr::smallint[]) k(attnum)
            join pg_attribute ga on ga.attrelid=t.tgrelid and ga.attnum=k.attnum and not ga.attisdropped)
-    `)).rows.map((row) => `${row.table_name}.${row.column_name}`));
+    `, "objects")).map((row) => `${row.table_name}.${row.column_name}`));
     const unguarded = columns
       .filter((column) => classifyAccountReference(column) !== "owned")
       .map((column) => `${column.table}.${column.column}`)
@@ -618,10 +618,10 @@ test("balancing policy successors fence the requested merge date and retained me
       effectiveDate:"2026-07-30", expectedDigest:onDate.digest,
     }));
     assert.equal(outcome.status, "completed");
-    const retained = async (orgId: string) => (await withBypassContext(() => db.execute<{ account_id: string; clearing_account_id: string }>(sql`
+    const retained = async (orgId: string) => await withBypassContext(() => db.execute<{ account_id: string; clearing_account_id: string }>(sql`
       select p.account_id,b.clearing_account_id from account_translation_policies p
         join segment_balancing_policies b on b.org_id=p.org_id and b.effective_from=p.effective_from
-       where p.org_id=${orgId}`))).rows;
+       where p.org_id=${orgId}`, "objects"));
     assert.deepEqual(await retained(org.orgId), [{account_id:source,clearing_account_id:source}]);
     await assert.rejects(() => withBypassContext(() => db.execute(sql`
       insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
@@ -637,7 +637,7 @@ test("balancing policy successors fence the requested merge date and retained me
 
     sandbox = await withBypassContext(() => createSandbox({ productionOrgId:org.orgId,name:"Retained merged policies",tier:"full",masked:false }));
     const clonedSource = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select ob_rebase(${source}::uuid,o.sandbox_seed)::text as id from orgs o where o.id=${sandbox!.sandboxOrgId}`))).rows[0]!.id;
+      select ob_rebase(${source}::uuid,o.sandbox_seed)::text as id from orgs o where o.id=${sandbox!.sandboxOrgId}`, "objects")))[0]!.id;
     assert.deepEqual(await retained(sandbox.sandboxOrgId), [{account_id:clonedSource,clearing_account_id:clonedSource}]);
     await refreshSandbox(sandbox.sandboxId);
     assert.deepEqual(await retained(sandbox.sandboxOrgId), [{account_id:clonedSource,clearing_account_id:clonedSource}]);

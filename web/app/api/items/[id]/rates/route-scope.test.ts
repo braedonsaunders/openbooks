@@ -25,11 +25,12 @@ stubModules({
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
       export const db = {
-        async execute() {
+        async execute(_query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.dbCalls += 1
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
-        async transaction(work) { return work({ execute: async () => ({ rows: [] }) }) },
+        async transaction(work) { return work({ execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }) },
       }
     `,
     "@/lib/authz": `

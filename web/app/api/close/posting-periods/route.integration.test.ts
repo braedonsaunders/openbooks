@@ -138,12 +138,10 @@ test("posting-periods route scopes preview and commit to the caller's subsidiari
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    const second = (
-      (await db.execute<{ id: string }>(sql`
+    const second = (await db.execute<{ id: string }>(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-          from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`))
-    ).rows[0]!.id;
+          from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects"))[0]!.id;
     const seed = async (subsidiaryId: string | null): Promise<string> => {
       const id = randomUUID();
       await db.execute(sql`
@@ -176,8 +174,8 @@ test("posting-periods route scopes preview and commit to the caller's subsidiari
     assert.equal(commitRes.status, 200);
     const committed = (await commitRes.json()) as { assigned: { documentId: string }[] };
     assert.deepEqual(committed.assigned.map((row) => row.documentId), [visible]);
-    const stored = (await db.execute<{ id: string; posting_period_id: string | null }>(sql`
-      select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${visible}, ${hidden}, ${unattributed})`)).rows;
+    const stored = await db.execute<{ id: string; posting_period_id: string | null }>(sql`
+      select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${visible}, ${hidden}, ${unattributed})`, "objects");
     assert.equal(stored.find((row) => row.id === visible)?.posting_period_id, org.periodId);
     assert.equal(stored.find((row) => row.id === hidden)?.posting_period_id, null);
     assert.equal(stored.find((row) => row.id === unattributed)?.posting_period_id, null);

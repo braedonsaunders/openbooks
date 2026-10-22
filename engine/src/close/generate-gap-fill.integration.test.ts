@@ -24,7 +24,7 @@ async function defaultCalendarId(orgId: string): Promise<string> {
   const found = (await db.execute<{ id: string }>(sql`
     select id from fiscal_calendars
      where org_id = ${orgId} and is_default and is_active
-     limit 1`)).rows[0]?.id;
+     limit 1`, "objects"))[0]?.id;
   assert.ok(found, "scratch org must seed a default fiscal calendar");
   return found;
 }
@@ -57,8 +57,7 @@ async function periodRow(orgId: string, periodNumber: number) {
   }>(sql`
     select id, name, starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods
-     where org_id = ${orgId} and fiscal_year = 2026 and period_number = ${periodNumber}`))
-    .rows[0];
+     where org_id = ${orgId} and fiscal_year = 2026 and period_number = ${periodNumber}`, "objects"))[0];
 }
 
 /** Carve the SIM shape: 05..08 present with legacy names, 09..12 missing. */

@@ -37,13 +37,13 @@ export const GET = defineRoute({
             from notifications
            where org_id = ${orgId} and user_id = ${userId}
            order by created_at desc
-           limit 30`),
+           limit 30`, 'objects'),
         db.execute<{ n: number }>(sql`
           select count(*)::int as n
             from notifications
-           where org_id = ${orgId} and user_id = ${userId} and read_at is null`),
+           where org_id = ${orgId} and user_id = ${userId} and read_at is null`, 'objects'),
       ]))
-    return NextResponse.json({ items: items.rows, unread: unread.rows[0]?.n ?? 0 })
+    return NextResponse.json({ items, unread: unread[0]?.n ?? 0 })
   },
 });
 

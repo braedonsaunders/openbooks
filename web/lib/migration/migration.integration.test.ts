@@ -43,11 +43,11 @@ test('migration plan, staged files and the opening journal run through the nativ
       assert.equal(after.updatedBy, actor)
       const audit = await inOrg(() => db.execute<{ reason: string; path: string }>(sql`
         select changes->>'reason' as reason, changes->'migrationPlan'->'after'->>'path' as path
-          from audit_log where org_id=${org.orgId} and table_name='orgs' and changes ? 'migrationPlan' order by at desc, id desc limit 1`))
-      assert.deepEqual(audit.rows[0], { reason: 'test plan', path: 'spreadsheet' })
+          from audit_log where org_id=${org.orgId} and table_name='orgs' and changes ? 'migrationPlan' order by at desc, id desc limit 1`, 'objects'))
+      assert.deepEqual(audit[0], { reason: 'test plan', path: 'spreadsheet' })
 
       const foreignConnection = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
-        insert into connections (org_id, source, display_name, auth_kind, status) values (${other.orgId}, 'example', 'Other org', 'token', 'unconfigured') returning id`)).rows[0]!.id)
+        insert into connections (org_id, source, display_name, auth_kind, status) values (${other.orgId}, 'example', 'Other org', 'token', 'unconfigured') returning id`, 'objects'))[0]!.id)
       await assert.rejects(inOrg(() => updateMigrationPlan(me, { connectionId: foreignConnection }, 'test')), (error: unknown) => error instanceof MigrationPlanRefusal && error.status === 404)
       await assert.rejects(inOrg(() => updateMigrationPlan(me, { openingBalanceAccountId: randomUUID() }, 'test')), (error: unknown) => error instanceof MigrationPlanRefusal && error.status === 404)
       assert.equal((await inOrg(() => readMigrationPlan(org.orgId))).connectionId, null, 'a refused change leaves the plan untouched')
@@ -60,17 +60,17 @@ test('migration plan, staged files and the opening journal run through the nativ
       assert.equal(moved.resource, 'accounts')
       assert.equal(moved.state, 'mapping')
       assert.ok(moved.fields.some((field) => field.key === 'number'), 'the staged job carries the new resource fields')
-      const history = await inOrg(() => db.execute<{ resource_key: string; resource_label: string }>(sql`select resource_key, resource_label from import_jobs where org_id=${org.orgId} and id=${job.id}`))
-      assert.equal(history.rows[0]!.resource_key, 'accounts')
+      const history = await inOrg(() => db.execute<{ resource_key: string; resource_label: string }>(sql`select resource_key, resource_label from import_jobs where org_id=${org.orgId} and id=${job.id}`, 'objects'))
+      assert.equal(history[0]!.resource_key, 'accounts')
       const event = await inOrg(() => db.execute<{ before: string; after: string }>(sql`
         select evidence->>'beforeResource' as before, evidence->>'resource' as after from data_transfer_events
-         where org_id=${org.orgId} and job_id=${job.id} and action='resource-selected'`))
-      assert.deepEqual(event.rows[0], { before: 'items', after: 'accounts' })
+         where org_id=${org.orgId} and job_id=${job.id} and action='resource-selected'`, 'objects'))
+      assert.deepEqual(event[0], { before: 'items', after: 'accounts' })
       await assert.rejects(inOrg(() => commandTransfer(authz, job.id, { action: 'select-resource', revision: job.revision, resource: 'parties' })), /changed concurrently/)
     })
 
     const numbers = await inOrg(async () => Object.fromEntries((await db.execute<{ id: string; number: string }>(sql`
-      select id, number from accounts where org_id=${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.revenue}, ${org.accounts.clearing})`)).rows.map((row) => [row.id, row.number])))
+      select id, number from accounts where org_id=${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.revenue}, ${org.accounts.clearing})`, 'objects')).map((row) => [row.id, row.number])))
     const bank = numbers[org.accounts.bank]!, revenue = numbers[org.accounts.revenue]!, clearing = numbers[org.accounts.clearing]!
     assert.ok(bank && revenue && clearing, 'fixture accounts carry numbers')
 
@@ -96,12 +96,12 @@ test('migration plan, staged files and the opening journal run through the nativ
       const drafted = await inOrg(() => draftOpeningBalances(authz, { transferId: job.id, columns, documentDate: '2026-09-30', excludeRows: [3] }, key))
       assert.equal(drafted.status, 'draft')
       const lines = await inOrg(() => db.execute<{ account_id: string; amount: string }>(sql`
-        select account_id, amount::text from document_lines where org_id=${org.orgId} and document_id=${drafted.journalId} order by line_number`))
-      assert.deepEqual(lines.rows.map((line) => [line.account_id, line.amount]), [
+        select account_id, amount::text from document_lines where org_id=${org.orgId} and document_id=${drafted.journalId} order by line_number`, 'objects'))
+      assert.deepEqual(lines.map((line) => [line.account_id, line.amount]), [
         [org.accounts.bank, '1250.5000'], [org.accounts.revenue, '-1000.0000'], [org.accounts.clearing, '-250.5000'],
       ])
-      const doc = await inOrg(() => db.execute<{ status: string; document_date: string }>(sql`select status, document_date::text from documents where org_id=${org.orgId} and id=${drafted.journalId}`))
-      assert.deepEqual(doc.rows[0], { status: 'draft', document_date: '2026-09-30' })
+      const doc = await inOrg(() => db.execute<{ status: string; document_date: string }>(sql`select status, document_date::text from documents where org_id=${org.orgId} and id=${drafted.journalId}`, 'objects'))
+      assert.deepEqual(doc[0], { status: 'draft', document_date: '2026-09-30' })
       assert.equal((await inOrg(() => readMigrationPlan(org.orgId))).openingJournalId, drafted.journalId)
       const replay = await inOrg(() => draftOpeningBalances(authz, { transferId: job.id, columns, documentDate: '2026-09-30', excludeRows: [3] }, key))
       assert.equal(replay.journalId, drafted.journalId, 'the same command key finds the same draft')

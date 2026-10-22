@@ -52,8 +52,8 @@ export async function listScopedAccountOptions(
        ${options.reconcilableOnly ? sql`and a.reconcilable` : sql``}
        ${typeFilter}
      order by a.number nulls last, a.name, a.id
-  `)
-  return rows.rows
+  `, 'objects')
+  return rows
 }
 
 /**
@@ -74,9 +74,9 @@ export async function listScopedPartyOptionsWithCurrent(
   if (currentPartyId && !options.some((option) => option.id === currentPartyId)) {
     const current = await db.execute<ScopedPartyOption>(sql`
       select p.id, p.display_name, p.subsidiary_id from parties p
-       where p.id = ${currentPartyId} and p.org_id = ${orgId} and p.is_active`)
-    if (current.rows[0]) {
-      options.push(current.rows[0])
+       where p.id = ${currentPartyId} and p.org_id = ${orgId} and p.is_active`, 'objects')
+    if (current[0]) {
+      options.push(current[0])
       options.sort((a, b) => a.display_name.localeCompare(b.display_name))
     }
   }
@@ -106,8 +106,8 @@ export async function listScopedPartyOptions(
        ${roleFilter}
      order by p.display_name, p.id
      limit 2000
-  `)
-  return result.rows
+  `, 'objects')
+  return result
 }
 
 export async function listScopedCardOptions(
@@ -127,8 +127,8 @@ export async function listScopedCardOptions(
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by pc.label
-  `)
-  return result.rows.map((card) => ({
+  `, 'objects')
+  return result.map((card) => ({
     id: card.id,
     label: card.label,
     display_name: card.last_four ? `${card.network ?? ''} •••• ${card.last_four} — ${card.holder ?? ''}`.trim() : card.label,
@@ -150,8 +150,8 @@ export async function listScopedDepartmentOptions(
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${activeOnly ? sql`and d.is_active` : sql``}
      order by d.name, d.id
-  `)
-  return result.rows
+  `, 'objects')
+  return result
 }
 
 /** Customers that own at least one project the actor can see, for project-scoped selections. */
@@ -170,8 +170,8 @@ export async function listScopedProjectCustomerOptions(
        )
      order by c.display_name, c.id
      limit 2000
-  `)
-  return result.rows
+  `, 'objects')
+  return result
 }
 
 export async function listScopedProjectOptions(
@@ -187,6 +187,6 @@ export async function listScopedProjectOptions(
        ${activeOnly ? sql`and p.is_active` : sql``}
      order by p.name, p.id
      limit 2000
-  `)
-  return result.rows
+  `, 'objects')
+  return result
 }

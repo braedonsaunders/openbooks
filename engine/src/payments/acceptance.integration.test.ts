@@ -228,8 +228,8 @@ test("a poison webhook event rolls back without starving its later batch sibling
         from payment_attempts
        where org_id = ${org.orgId} and link_id = ${linkId}
        order by external_ref
-    `);
-    assert.deepEqual(attempts.rows, [
+    `, "objects");
+    assert.deepEqual(attempts, [
       {
         external_ref: "BRQ-ENGINE-POISON",
         status: "initiated",
@@ -469,10 +469,10 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     assert.equal(session.redirectUrl, "https://checkout.stripe.test/cs_test_123");
     const attempt = (await db.execute<{ status: string; amount: string; surcharge_amount: string }>(sql`
       select status, amount, surcharge_amount from payment_attempts where org_id = ${org.orgId} and external_ref = 'cs_test_123'
-    `));
-    assert.equal(attempt.rows[0]!.status, "initiated");
-    assert.equal(attempt.rows[0]!.amount, "100.0000");
-    assert.equal(attempt.rows[0]!.surcharge_amount, "3.0000");
+    `, "objects"));
+    assert.equal(attempt[0]!.status, "initiated");
+    assert.equal(attempt[0]!.amount, "100.0000");
+    assert.equal(attempt[0]!.surcharge_amount, "3.0000");
     await createCheckoutSession(link.token, "https://app.test/pay/" + link.token, async () => ({
       status: 200, json: async () => ({ id: "cs_test_123", url: session.redirectUrl }),
     }));
@@ -498,25 +498,25 @@ test("payment link settles a signed webhook into an applied receipt with a surch
     // Receipt posted and fully applied: invoice clears.
     const invoice = (await db.execute<{ open_balance: string }>(sql`
       select open_balance from documents where id = ${invoiceId}
-    `));
-    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+    `, "objects"));
+    assert.equal(invoice[0]!.open_balance, "0.0000");
 
     const payment = (await db.execute<{ id: string; status: string; total: string }>(sql`
       select id, status, total from documents
        where org_id = ${org.orgId} and kind = 'customer_payment' and memo like '%INV-PAY-1%'
-    `));
-    assert.equal(payment.rows.length, 1);
-    assert.equal(payment.rows[0]!.status, "posted");
-    assert.equal(payment.rows[0]!.total, "103.0000");
+    `, "objects"));
+    assert.equal(payment.length, 1);
+    assert.equal(payment[0]!.status, "posted");
+    assert.equal(payment[0]!.total, "103.0000");
 
     // Journal: DR bank 103 / CR AR 100 / CR fee income 3.
     const lines = (await db.execute<{ account_id: string; amount: string }>(sql`
       select jl.account_id, jl.amount from journal_lines jl
         join journal_entries je on je.id = jl.entry_id
-       where je.source_document_id = ${payment.rows[0]!.id} order by jl.line_number
-    `));
+       where je.source_document_id = ${payment[0]!.id} order by jl.line_number
+    `, "objects"));
     assert.deepEqual(
-      lines.rows.map((l) => [l.account_id === org.accounts.bank ? "bank" : l.account_id === org.accounts.ar ? "ar" : "fee", l.amount]),
+      lines.map((l) => [l.account_id === org.accounts.bank ? "bank" : l.account_id === org.accounts.ar ? "ar" : "fee", l.amount]),
       [["bank", "103.0000"], ["ar", "-100.0000"], ["fee", "-3.0000"]],
     );
 
@@ -526,24 +526,24 @@ test("payment link settles a signed webhook into an applied receipt with a surch
         join journal_lines jl on jl.id = a.to_line_id
         join journal_entries je on je.id = jl.entry_id
        where a.org_id = ${org.orgId} and a.unapplied_at is null and je.source_document_id = ${invoiceId}
-    `));
-    assert.equal(apps.rows[0]!.n, 1);
+    `, "objects"));
+    assert.equal(apps[0]!.n, 1);
 
     // Link + attempt terminal states.
     const terminal = (await db.execute<{ link_status: string; attempt_status: string }>(sql`
       select (select status from payment_links where id = ${link.id}) as link_status,
              (select status from payment_attempts where org_id = ${org.orgId} and external_ref = 'cs_test_123') as attempt_status
-    `));
-    assert.equal(terminal.rows[0]!.link_status, "paid");
-    assert.equal(terminal.rows[0]!.attempt_status, "succeeded");
+    `, "objects"));
+    assert.equal(terminal[0]!.link_status, "paid");
+    assert.equal(terminal[0]!.attempt_status, "succeeded");
 
     // Redelivery is a duplicate, never a second receipt.
     const replay = await handleProviderWebhook("stripe", { "stripe-signature": `t=${t},v1=${v1}` }, body);
     assert.equal(replay?.status, "duplicate");
     const paymentCount = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'
-    `));
-    assert.equal(paymentCount.rows[0]!.n, 1);
+    `, "objects"));
+    assert.equal(paymentCount[0]!.n, 1);
 
     // A forged signature never resolves an org.
     const forged = await handleProviderWebhook("stripe", { "stripe-signature": `t=${t},v1=${"0".repeat(64)}` }, body);
@@ -589,7 +589,7 @@ test("the pay-link bearer token never rests in plaintext", { skip: !DB }, async 
     // The row on disk: no plaintext token anywhere.
     const stored = (await db.execute<{ token: string | null; token_hash: string | null; token_sealed: string | null }>(sql`
       select token, token_hash, token_sealed from payment_links
-       where org_id = ${org.orgId} and document_id = ${invoiceId}`)).rows[0]!;
+       where org_id = ${org.orgId} and document_id = ${invoiceId}`, "objects"))[0]!;
     assert.equal(stored.token, null, "the raw bearer token must not be stored");
     assert.ok(stored.token_hash, "the lookup hash must be stored");
     assert.ok(stored.token_sealed, "the sealed display copy must be stored");
@@ -674,7 +674,7 @@ test("a stale provider session after another channel payment enters discrepancy 
         join journal_entries je on je.id = jl.entry_id
        where je.source_document_id = ${invoiceId} and jl.org_id = ${org.orgId}
          and jl.is_open_item
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const first = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
@@ -715,7 +715,7 @@ test("a stale provider session after another channel payment enters discrepancy 
         from payment_attempts attempt
         join documents invoice on invoice.id = ${invoiceId}
        where attempt.org_id = ${org.orgId} and attempt.external_ref = 'cs_test_d2over'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(state.status, "succeeded");
     assert.equal(state.payment_document_id, null);
     assert.equal(state.open_balance, "80.0000");
@@ -773,7 +773,7 @@ test("webhook settles only the provider-confirmed quoted amount and currency", {
         from payment_attempts attempt
        where attempt.org_id = ${org.orgId}
          and attempt.external_ref = 'cs_evidence_1'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const expectedUnderpaymentEvidence = {
       reason: "amount_currency_mismatch",
       provider: "stripe",
@@ -818,11 +818,11 @@ test("webhook settles only the provider-confirmed quoted amount and currency", {
             and audit.action = 'update'
             and audit.changes->'after' ? 'settlementDiscrepancy'
             and attempt.external_ref = 'cs_evidence_1') as discrepancy_count
-    `));
-    assert.equal(unchanged.rows[0]!.attempt_status, "initiated");
-    assert.equal(unchanged.rows[0]!.invoice_balance, "100.0000");
-    assert.equal(unchanged.rows[0]!.payment_count, 0);
-    assert.equal(unchanged.rows[0]!.discrepancy_count, 2);
+    `, "objects"));
+    assert.equal(unchanged[0]!.attempt_status, "initiated");
+    assert.equal(unchanged[0]!.invoice_balance, "100.0000");
+    assert.equal(unchanged[0]!.payment_count, 0);
+    assert.equal(unchanged[0]!.discrepancy_count, 2);
 
     const paid = signedStripeBody(
       "whsec_INV-PAY-EVIDENCE",
@@ -846,11 +846,11 @@ test("webhook settles only the provider-confirmed quoted amount and currency", {
         join documents payment on payment.id = attempt.payment_document_id
        where attempt.org_id = ${org.orgId}
          and attempt.external_ref = 'cs_evidence_1'
-    `));
-    assert.equal(settled.rows[0]!.payment_total, "103.0000");
-    assert.equal(settled.rows[0]!.payment_currency, "CAD");
-    assert.equal(settled.rows[0]!.paid_amount, "103.0000");
-    assert.equal(settled.rows[0]!.paid_currency, "CAD");
+    `, "objects"));
+    assert.equal(settled[0]!.payment_total, "103.0000");
+    assert.equal(settled[0]!.payment_currency, "CAD");
+    assert.equal(settled[0]!.paid_amount, "103.0000");
+    assert.equal(settled[0]!.paid_currency, "CAD");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -891,22 +891,22 @@ test("redelivery recovers an attempt stranded by a crash after its claim committ
     const payments = (await db.execute<{ id: string; status: string; total: string }>(sql`
       select id, status, total from documents
        where org_id = ${org.orgId} and kind = 'customer_payment'
-    `));
-    assert.equal(payments.rows.length, 1);
-    assert.equal(payments.rows[0]!.status, "posted");
-    assert.equal(payments.rows[0]!.total, "103.0000");
+    `, "objects"));
+    assert.equal(payments.length, 1);
+    assert.equal(payments[0]!.status, "posted");
+    assert.equal(payments[0]!.total, "103.0000");
     const invoice = (await db.execute<{ open_balance: string }>(sql`
       select open_balance from documents where id = ${fx.invoiceId}
-    `));
-    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+    `, "objects"));
+    assert.equal(invoice[0]!.open_balance, "0.0000");
 
     // The completion marker is written: the attempt is terminal again.
     const attempt = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
       select status, journal_entry_id from payment_attempts
        where org_id = ${org.orgId} and external_ref = 'cs_kill_1'
-    `));
-    assert.equal(attempt.rows[0]!.status, "succeeded");
-    assert.ok(attempt.rows[0]!.journal_entry_id, "recovered attempt must record its journal entry");
+    `, "objects"));
+    assert.equal(attempt[0]!.status, "succeeded");
+    assert.ok(attempt[0]!.journal_entry_id, "recovered attempt must record its journal entry");
 
     // And the next redelivery dedupes — still one receipt, one journal entry.
     const replay = await handleProviderWebhook("stripe", delivery.headers, delivery.body);
@@ -916,9 +916,9 @@ test("redelivery recovers an attempt stranded by a crash after its claim committ
              (select count(*)::int from journal_entries je
                 join documents d on d.id = je.source_document_id and d.org_id = je.org_id
                where d.org_id = ${org.orgId} and d.kind = 'customer_payment') as entries
-    `));
-    assert.equal(counts.rows[0]!.docs, 1);
-    assert.equal(counts.rows[0]!.entries, 1);
+    `, "objects"));
+    assert.equal(counts[0]!.docs, 1);
+    assert.equal(counts[0]!.entries, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -959,15 +959,15 @@ test("concurrent double-resume of a stranded attempt posts exactly one journal e
                where d.org_id = ${org.orgId} and d.kind = 'customer_payment') as entries,
              (select journal_entry_id::text from payment_attempts
                where org_id = ${org.orgId} and external_ref = 'cs_race_1') as marker
-    `));
-    assert.equal(counts.rows[0]!.docs, 1, "exactly one receipt despite concurrent resumers");
-    assert.equal(counts.rows[0]!.entries, 1, "exactly one journal entry despite concurrent resumers");
-    assert.ok(counts.rows[0]!.marker, "completion marker recorded");
+    `, "objects"));
+    assert.equal(counts[0]!.docs, 1, "exactly one receipt despite concurrent resumers");
+    assert.equal(counts[0]!.entries, 1, "exactly one journal entry despite concurrent resumers");
+    assert.ok(counts[0]!.marker, "completion marker recorded");
 
     const invoice = (await db.execute<{ open_balance: string }>(sql`
       select open_balance from documents where id = ${fx.invoiceId}
-    `));
-    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+    `, "objects"));
+    assert.equal(invoice[0]!.open_balance, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1041,15 +1041,15 @@ test("concurrent hosted-checkout requests share one provider session for one inv
       select external_ref, status, amount, surcharge_amount, event_payload as payload
         from payment_attempts
        where org_id = ${org.orgId} and link_id = ${fx.link.id}
-    `));
-    assert.equal(attempts.rows.length, 1, "exactly one initiated attempt for the link despite the concurrent pair");
+    `, "objects"));
+    assert.equal(attempts.length, 1, "exactly one initiated attempt for the link despite the concurrent pair");
     assert.deepEqual(
       {
-        external_ref: attempts.rows[0]!.external_ref,
-        status: attempts.rows[0]!.status,
-        amount: attempts.rows[0]!.amount,
-        surcharge_amount: attempts.rows[0]!.surcharge_amount,
-        redirectUrl: attempts.rows[0]!.payload?.redirectUrl,
+        external_ref: attempts[0]!.external_ref,
+        status: attempts[0]!.status,
+        amount: attempts[0]!.amount,
+        surcharge_amount: attempts[0]!.surcharge_amount,
+        redirectUrl: attempts[0]!.payload?.redirectUrl,
       },
       {
         external_ref: "cs_checkout_race_1",
@@ -1100,7 +1100,7 @@ test("checkout rechecks a link voided while it waits for its per-link lock", { s
     assert.equal(providerCalls, 0, "a voided link must be refused before contacting the provider");
     const attempts = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(attempts.count, 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -1127,8 +1127,8 @@ test("a failed provider checkout leaves the link free for a genuine retry", { sk
     );
     const afterFailure = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
-    `));
-    assert.equal(afterFailure.rows[0]!.n, 0, "failed checkout leaves no attempt behind");
+    `, "objects"));
+    assert.equal(afterFailure[0]!.n, 0, "failed checkout leaves no attempt behind");
 
     const retry = await createCheckoutSession(fx.link.token, returnUrl, async () => ({
       status: 200,
@@ -1137,8 +1137,8 @@ test("a failed provider checkout leaves the link free for a genuine retry", { sk
     assert.deepEqual(retry, { redirectUrl: "https://checkout.stripe.test/cs_retry_ok" });
     const attempts = (await db.execute<{ external_ref: string; status: string }>(sql`
       select external_ref, status from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
-    `));
-    assert.deepEqual(attempts.rows, [{ external_ref: "cs_retry_ok", status: "initiated" }]);
+    `, "objects"));
+    assert.deepEqual(attempts, [{ external_ref: "cs_retry_ok", status: "initiated" }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1182,14 +1182,14 @@ test("redelivery resumes onto the reserved receipt draft after a mid-settlement 
 
     const payments = (await db.execute<{ id: string; status: string }>(sql`
       select id, status from documents where org_id = ${org.orgId} and kind = 'customer_payment'
-    `));
-    assert.equal(payments.rows.length, 1, "resume must reuse the reserved draft, not mint another");
-    assert.equal(payments.rows[0]!.id, draft.id);
-    assert.equal(payments.rows[0]!.status, "posted");
+    `, "objects"));
+    assert.equal(payments.length, 1, "resume must reuse the reserved draft, not mint another");
+    assert.equal(payments[0]!.id, draft.id);
+    assert.equal(payments[0]!.status, "posted");
     const invoice = (await db.execute<{ open_balance: string }>(sql`
       select open_balance from documents where id = ${fx.invoiceId}
-    `));
-    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+    `, "objects"));
+    assert.equal(invoice[0]!.open_balance, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1228,7 +1228,7 @@ test("checkout refuses a frozen link quote after a partial payment", { skip: !DB
         join journal_entries je on je.id = jl.entry_id
        where je.source_document_id = ${fx.invoiceId} and jl.org_id = ${org.orgId}
          and jl.is_open_item
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const partial = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
       kind: "customer_payment",
@@ -1275,7 +1275,7 @@ test("checkout refuses a frozen link quote after a partial payment", { skip: !DB
     const attempts = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(attempts.n, 0, "a refused stale quote must not leave a payment attempt");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -1306,7 +1306,7 @@ test("a live checkout session collected after a partial payment enters settlemen
         join journal_entries je on je.id = jl.entry_id
        where je.source_document_id = ${fx.invoiceId} and jl.org_id = ${org.orgId}
          and jl.is_open_item
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const partial = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId, kind: "customer_payment", createdBy: fx.userId,
       partyId: org.customerId, bankAccountId: org.accounts.bank,
@@ -1343,7 +1343,7 @@ test("a live checkout session collected after a partial payment enters settlemen
         from payment_attempts attempt
         join documents invoice on invoice.id = ${fx.invoiceId}
        where attempt.org_id = ${org.orgId} and attempt.external_ref = 'cs_stale_after_partial'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(state.status, "succeeded");
     assert.equal(state.payment_document_id, null);
     assert.equal(state.journal_entry_id, null);
@@ -1387,7 +1387,7 @@ test("hosted checkout reads the quoted fee account from payment-link audit evide
       select surcharge_amount, event_payload->>'feeIncomeAccountId' as fee_income_account_id
         from payment_attempts
        where org_id = ${org.orgId} and external_ref = 'cs_audit_fee'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(attempt.surcharge_amount, "3.0000");
     assert.equal(attempt.fee_income_account_id, org.accounts.revenue);
   } finally {
@@ -1609,7 +1609,7 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     assert.equal(frozenPage.totalAmount, "103.0000");
     const frozenLink = (await db.execute<{ surcharge_amount: string }>(sql`
       select surcharge_amount from payment_links where id = ${stripeLink.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(frozenLink.surcharge_amount, "3.0000", "the link keeps the fee quoted at creation");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -1653,7 +1653,7 @@ test("invalid acceptance references fail before checkout and at storage", { skip
         (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'customer_payment') as payments,
         (select count(*)::int from journal_entries where org_id = ${org.orgId} and source_document_id is not null) as journals,
         (select count(*)::int from audit_log where org_id = ${org.orgId}) as audits
-    `);
+    `, "objects");
     await db.execute(sql`
       update accounts set is_active = false
        where id = ${org.accounts.bank} and org_id = ${org.orgId}
@@ -1675,9 +1675,9 @@ test("invalid acceptance references fail before checkout and at storage", { skip
         (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'customer_payment') as payments,
         (select count(*)::int from journal_entries where org_id = ${org.orgId} and source_document_id is not null) as journals,
         (select count(*)::int from audit_log where org_id = ${org.orgId}) as audits
-    `);
+    `, "objects");
     assert.equal(providerCalls, 0);
-    assert.deepEqual(after.rows[0], before.rows[0]);
+    assert.deepEqual(after[0], before[0]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1744,7 +1744,7 @@ test("hosted checkout refuses an expired payment link without calling the provid
     const state = (await db.execute<{ status: string; attempts: number }>(sql`
       select (select status from payment_links where id = ${fx.link.id} and org_id = ${org.orgId}) as status,
              (select count(*)::int from payment_attempts where org_id = ${org.orgId} and link_id = ${fx.link.id}) as attempts
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(state, { status: "expired", attempts: 0 });
   } finally {
     await dropScratchOrg(org.orgId);

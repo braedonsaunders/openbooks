@@ -128,8 +128,8 @@ export async function publishOverheadRates(
          where r.org_id = ${orgId}
            and r.department_id = any(${`{${[...new Set(toPublish.map((r) => r.departmentId))].join(',')}}`}::uuid[])
            and r.rate_kind = 'per_hour' and r.method = 'standard'
-           and (r.effective_to is null or r.effective_to >= ${effectiveFrom}::date)`)
-      const standards: OverheadStandardRateRow[] = touched.rows.map((row) => ({
+           and (r.effective_to is null or r.effective_to >= ${effectiveFrom}::date)`, 'objects')
+      const standards: OverheadStandardRateRow[] = touched.map((row) => ({
         departmentId: row.department_id,
         departmentName: row.department_name,
         ratePerHour: String(row.rate_percent),
@@ -178,9 +178,9 @@ export async function currentPublishedRates(orgId: string): Promise<Map<string, 
   const r = (await db.execute<{ department_id: string | null; rate_percent: string }>(sql`
     select department_id, rate_percent from overhead_rates
      where org_id = ${orgId} and rate_kind = 'per_hour' and effective_from <= ${today}
-       and (effective_to is null or effective_to >= ${today})`))
+       and (effective_to is null or effective_to >= ${today})`, 'objects'))
   const out = new Map<string, string>()
-  for (const row of r.rows) {
+  for (const row of r) {
     if (!row.department_id || row.rate_percent === null || String(row.rate_percent).trim() === '') continue
     out.set(row.department_id, String(row.rate_percent))
   }

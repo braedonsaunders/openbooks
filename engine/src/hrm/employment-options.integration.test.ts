@@ -34,7 +34,7 @@ const skip = !process.env.OPENBOOKS_DB_URL;
 async function mkPrimaryAssignment(orgId: string, employmentId: string, jobTitle: string): Promise<void> {
   const slot = (await db.execute<{ id: string }>(sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, 'primary') returning id`)).rows[0]!.id;
+    values (${orgId}, ${employmentId}, 'primary') returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, version_no, job_title, fte, is_primary,
@@ -61,7 +61,7 @@ async function mkLocation(
 ): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into locations (org_id, name, code, subsidiary_id, is_active)
-    values (${orgId}, ${name}, ${code}, ${subsidiaryId}, ${isActive}) returning id`)).rows[0]!.id;
+    values (${orgId}, ${name}, ${code}, ${subsidiaryId}, ${isActive}) returning id`, "objects"))[0]!.id;
 }
 
 test("employment options name the person, employer, and live primary job", { skip }, async () => {

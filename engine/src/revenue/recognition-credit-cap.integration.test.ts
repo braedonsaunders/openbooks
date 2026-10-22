@@ -42,8 +42,8 @@ async function seedRecognitionTermPeriods(
     select fiscal_calendar_id
       from accounting_periods
      where id = ${org.periodId} and org_id = ${org.orgId}
-  `);
-  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+  `, "objects");
+  const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
     [2026, 8, "2026-08-01", "2026-08-31"],
@@ -78,8 +78,8 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
      where line.org_id = ${orgId}
        and line.account_id = ${accountId}
        and entry.status = 'posted'
-  `);
-  return r.rows[0]!.balance;
+  `, "objects");
+  return r[0]!.balance;
 }
 
 async function postInvoice(
@@ -188,32 +188,24 @@ async function postAndApplyCredit(
     },
     { audit: { actorId: adminId, source: "test" } },
   );
-  const creditEntry = (
-    await db.execute<{ posted_entry_id: string }>(sql`
+  const creditEntry = (await db.execute<{ posted_entry_id: string }>(sql`
       select posted_entry_id from documents
        where id = ${creditId} and org_id = ${org.orgId}
-    `)
-  ).rows[0]!.posted_entry_id;
-  const invoiceEntry = (
-    await db.execute<{ posted_entry_id: string }>(sql`
+    `, "objects"))[0]!.posted_entry_id;
+  const invoiceEntry = (await db.execute<{ posted_entry_id: string }>(sql`
       select posted_entry_id from documents
        where id = ${invoiceId} and org_id = ${org.orgId}
-    `)
-  ).rows[0]!.posted_entry_id;
-  const fromLine = (
-    await db.execute<{ id: string }>(sql`
+    `, "objects"))[0]!.posted_entry_id;
+  const fromLine = (await db.execute<{ id: string }>(sql`
       select id from journal_lines
        where entry_id = ${creditEntry} and org_id = ${org.orgId}
          and account_id = ${org.accounts.ar}
-    `)
-  ).rows[0]!.id;
-  const toLine = (
-    await db.execute<{ id: string }>(sql`
+    `, "objects"))[0]!.id;
+  const toLine = (await db.execute<{ id: string }>(sql`
       select id from journal_lines
        where entry_id = ${invoiceEntry} and org_id = ${org.orgId}
          and account_id = ${org.accounts.ar}
-    `)
-  ).rows[0]!.id;
+    `, "objects"))[0]!.id;
   await db.execute(sql`
     insert into applications
       (org_id, from_line_id, to_line_id, amount, applied_on, source_amount,
@@ -351,7 +343,7 @@ test('credits follow prospective reallocation into an added promise rather than 
   await seedRecognitionTermPeriods(org);
   const invoiceId=await postInvoice(org,actors.adminId,'INV-AMENDED-CREDIT');
   const first=await runRevenueRecognition(org.orgId,'2026-09-30',actors.adminId);assert.equal(first.totalAmount,'300.0000');
-  const original=(await db.execute<{id:string;contract_id:string}>(sql`select o.id,o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${org.orgId} and dl.document_id=${invoiceId}`)).rows[0]!;
+  const original=(await db.execute<{id:string;contract_id:string}>(sql`select o.id,o.contract_id from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id where o.org_id=${org.orgId} and dl.document_id=${invoiceId}`, "objects"))[0]!;
   const {proposeRevenueModification,applyRevenueModification}=await import('./contract-modifications.ts');
   const {submitFinancialChange}=await import('../flows/financial-changes-adapter.ts');
   const {seedApprovalFlow}=await import('../testing/fixtures.ts');
@@ -361,7 +353,7 @@ test('credits follow prospective reallocation into an added promise rather than 
   const promise={description:'Remaining promise',standaloneSellingPrice:'450',recognitionRuleId:org.recognitionRuleId,recognitionEndsOn:'2027-06-30',percentComplete:'25',deferredAccountId:org.accounts.deferred,recognizedAccountId:org.accounts.recognized};
   const {changeId}=await proposeRevenueModification(org.orgId,original.contract_id,actors.submitterId,{effectiveOn:'2026-10-01',reason:'Reallocate distinct remaining service without new consideration',idempotencyKey:randomUUID(),subsidiaryId:org.subsidiaryId,enforceableRightsEvidence:'Both parties signed the changed service scope',assessment:'Two equally priced remaining promises; unchanged CAD recognition basis',bookRates:[{bookId:org.bookId,fxRate:'1'}],groups:[{treatment:'prospective',existingObligationIds:[original.id],considerationChange:'0',remainingDistinct:true,additionsAtStandalonePrice:false,promises:[{...promise,existingId:original.id},{...promise,description:'New replacement promise',percentComplete:'0'}]}]});
   await submitFinancialChange(org.orgId,changeId,actors.submitterId);
-  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`)).rows[0]!;
+  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, "objects"))[0]!;
   await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'});
   const applied=await applyRevenueModification(org.orgId,changeId,actors.submitterId);assert.equal((applied.obligationIds as string[]).length,2);
   await postAndApplyCredit(org,actors.adminId,invoiceId,'CM-AMENDED-CREDIT','900',org.accounts.deferred);
@@ -406,11 +398,11 @@ for (const scenario of [
       }
       const after = await runRevenueRecognition(org.orgId, "2027-06-30", actors.adminId);
       assert.equal(toUnits(after.totalAmount), toUnits(scenario.additional));
-      const balances = (await db.execute<{ book_id: string; amount: string }>(sql`
+      const balances = await db.execute<{ book_id: string; amount: string }>(sql`
         select e.book_id,sum(l.amount)::text as amount from journal_lines l
         join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
         where l.org_id=${org.orgId} and l.account_id=${org.accounts.recognized}
-          and e.status in ('posted','reversed') group by e.book_id`)).rows;
+          and e.status in ('posted','reversed') group by e.book_id`, "objects");
       assert.deepEqual(new Set(balances.map(r => r.book_id)), new Set([org.bookId, secondBook]));
       // The set comparison above rides an inline map, so pin the row count
       // directly: both books must have posted, or the loop proves nothing.

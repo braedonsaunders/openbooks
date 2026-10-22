@@ -93,9 +93,9 @@ async function seedAsset(): Promise<Fixture> {
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
      where l.org_id = ${org.orgId} and s.asset_id = ${assetId}
      order by l.sequence
-     limit 1`);
-  assert.ok(line.rows[0], "the fixture must have a schedule line to post");
-  return { orgId: org.orgId, actorId, assetId, scheduleLineId: line.rows[0]!.id };
+     limit 1`, "objects");
+  assert.ok(line[0], "the fixture must have a schedule line to post");
+  return { orgId: org.orgId, actorId, assetId, scheduleLineId: line[0]!.id };
 }
 
 async function openAssetHolder(fixture: Fixture): Promise<Client> {
@@ -122,7 +122,7 @@ async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Pr
   return new Request(`http://openbooks.test/api/assets/${fixture.assetId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...body, expectedUpdatedAt: (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${fixture.assetId}`)).rows[0]!.revision }),
+    body: JSON.stringify({ ...body, expectedUpdatedAt: (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${fixture.assetId}`, "objects"))[0]!.revision }),
   });
 }
 
@@ -136,8 +136,8 @@ async function waitForAssetLock(settled: () => boolean): Promise<void> {
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
          and query ilike '%from fixed_assets%'
-         and query ilike '%for update%'`);
-    if ((blocked.rows[0]?.n ?? 0) > 0) return;
+         and query ilike '%for update%'`, "objects");
+    if ((blocked[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   assert.fail("timed out waiting for the asset PATCH to park on fixed_assets");
@@ -184,9 +184,9 @@ test(
                (select count(*)::int from audit_log l
                  where l.org_id = a.org_id and l.table_name = 'fixed_assets' and l.row_id = a.id) as audits
           from fixed_assets a
-         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`);
-      assert.equal(state.rows[0]?.acquisition_cost, "12000.0000");
-      assert.equal(state.rows[0]?.audits, 0, "the refused stale save must leave no audit row");
+         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`, "objects");
+      assert.equal(state[0]?.acquisition_cost, "12000.0000");
+      assert.equal(state[0]?.audits, 0, "the refused stale save must leave no audit row");
     } finally {
       if (holder) {
         await holder.query("rollback").catch(() => undefined);
@@ -213,16 +213,16 @@ test(
                (select count(*)::int from audit_log l
                  where l.org_id = a.org_id and l.table_name = 'fixed_assets' and l.row_id = a.id) as audits
           from fixed_assets a
-         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`);
-      assert.equal(state.rows[0]?.acquisition_cost, "13000.0000");
-      assert.equal(state.rows[0]?.audits, 1);
+         where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`, "objects");
+      assert.equal(state[0]?.acquisition_cost, "13000.0000");
+      assert.equal(state[0]?.audits, 1);
 
-      const sourceSubsidiary = (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`)).rows[0]!.subsidiary_id
+      const sourceSubsidiary = (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects"))[0]!.subsidiary_id
       await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${randomUUID()},${fixture.orgId},${sourceSubsidiary},'Other entity','CAD','CA')`)
-      const target = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${fixture.orgId} and name = 'Other entity'`)).rows[0]!.id
+      const target = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${fixture.orgId} and name = 'Other entity'`, "objects"))[0]!.id
       await db.execute(sql`insert into equipment_units(org_id,subsidiary_id,name,unit_number,status,purchase_price,fixed_asset_id) values (${fixture.orgId},${sourceSubsidiary},'Linked unit','LINK-ASSET','draft','100.0000',${fixture.assetId})`)
       const refused = await PATCH(await patchRequest(fixture, { subsidiaryId: target }), { params: Promise.resolve({ id: fixture.assetId }) })
-      assert.deepEqual([refused.status, (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`)).rows[0]?.subsidiary_id], [409, sourceSubsidiary])
+      assert.deepEqual([refused.status, (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects"))[0]?.subsidiary_id], [409, sourceSubsidiary])
     } finally {
       routeState.authz = null;
       await dropScratchOrgReporting(fixture.orgId);
@@ -248,7 +248,7 @@ test(
         params: Promise.resolve({ id: fixture.assetId }),
       });
       assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`);
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId} and org_id = ${fixture.orgId}`)).rows[0]?.custom;
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId} and org_id = ${fixture.orgId}`, "objects"))[0]?.custom;
       assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
     } finally {
       routeState.authz = null;
@@ -321,10 +321,10 @@ test(
                (select count(*)::int from depreciation_schedule_lines l
                   join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
                  where l.org_id = ${fixture.orgId} and s.asset_id = ${fixture.assetId}
-                   and l.posted_amount is not null) as "postedLines"`);
-      assert.equal(before.rows[0]?.events, 1, "the fixture must carry an impairment event");
-      assert.equal(before.rows[0]?.postedJournals, 1, "the fixture must carry a posted impairment journal");
-      assert.equal(before.rows[0]?.postedLines, 0, "the fixture must have no posted depreciation lines");
+                   and l.posted_amount is not null) as "postedLines"`, "objects");
+      assert.equal(before[0]?.events, 1, "the fixture must carry an impairment event");
+      assert.equal(before[0]?.postedJournals, 1, "the fixture must carry a posted impairment journal");
+      assert.equal(before[0]?.postedLines, 0, "the fixture must have no posted depreciation lines");
 
       const response = await DELETE(deleteRequest(fixture), {
         params: Promise.resolve({ id: fixture.assetId }),
@@ -339,10 +339,10 @@ test(
                (select count(*)::int from journal_entries je
                   join asset_events e on e.journal_entry_id = je.id and e.org_id = je.org_id
                  where e.org_id = ${fixture.orgId} and e.asset_id = ${fixture.assetId}
-                   and je.status = 'posted') as "postedJournals"`);
-      assert.equal(after.rows[0]?.assets, 1, "the refused delete must keep the asset");
-      assert.equal(after.rows[0]?.events, 1, "the refused delete must keep the impairment event");
-      assert.equal(after.rows[0]?.postedJournals, 1, "the refused delete must keep the posted journal linked");
+                   and je.status = 'posted') as "postedJournals"`, "objects");
+      assert.equal(after[0]?.assets, 1, "the refused delete must keep the asset");
+      assert.equal(after[0]?.events, 1, "the refused delete must keep the impairment event");
+      assert.equal(after[0]?.postedJournals, 1, "the refused delete must keep the posted journal linked");
     } finally {
       routeState.authz = null;
       await dropScratchOrgReporting(fixture.orgId);
@@ -377,10 +377,10 @@ test(
                (select count(*)::int from journal_entries je
                   join asset_events e on e.journal_entry_id = je.id and e.org_id = je.org_id
                  where e.org_id = ${fixture.orgId} and e.asset_id = ${fixture.assetId}
-                   and je.status = 'posted') as "postedJournals"`);
-      assert.equal(after.rows[0]?.status, "written_off");
-      assert.equal(after.rows[0]?.events, 1, "the refused delete must keep the disposal event");
-      assert.equal(after.rows[0]?.postedJournals, 1, "the refused delete must keep the posted disposal journal linked");
+                   and je.status = 'posted') as "postedJournals"`, "objects");
+      assert.equal(after[0]?.status, "written_off");
+      assert.equal(after[0]?.events, 1, "the refused delete must keep the disposal event");
+      assert.equal(after[0]?.postedJournals, 1, "the refused delete must keep the posted disposal journal linked");
     } finally {
       routeState.authz = null;
       await dropScratchOrgReporting(fixture.orgId);
@@ -400,13 +400,13 @@ test(
         values
           (${randomUUID()}, ${fixture.orgId}, 'fixed_assets', null, 'ref_party', 'Reference party', 'reference', '{"referenceTable":"parties"}'::jsonb, false, true, ${fixture.actorId}, ${fixture.actorId})
       `);
-      const foreignParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${foreign.orgId} limit 1`)).rows[0]!.id;
-      const ownParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${fixture.orgId} limit 1`)).rows[0]!.id;
+      const foreignParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${foreign.orgId} limit 1`, "objects"))[0]!.id;
+      const ownParty = (await db.execute<{ id: string }>(sql`select id from parties where org_id = ${fixture.orgId} limit 1`, "objects"))[0]!.id;
       const refused = await PATCH(await patchRequest(fixture, { custom: { ref_party: foreignParty } }), {
         params: Promise.resolve({ id: fixture.assetId }),
       });
       assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(await refused.clone().json().catch(() => null))}`);
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId}`)).rows[0]?.custom;
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from fixed_assets where id = ${fixture.assetId}`, "objects"))[0]?.custom;
       assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, "refused references store nothing");
       const saved = await PATCH(await patchRequest(fixture, { custom: { ref_party: ownParty } }), {
         params: Promise.resolve({ id: fixture.assetId }),

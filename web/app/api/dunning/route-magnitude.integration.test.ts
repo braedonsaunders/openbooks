@@ -57,12 +57,12 @@ const stage = (override: Record<string, unknown> = {}) => ({
 
 async function counts(orgId: string) {
   const policies = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${orgId}`),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${orgId}`, "objects"),
   );
   const stages = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_stages where org_id = ${orgId}`),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_stages where org_id = ${orgId}`, "objects"),
   );
-  return { policies: policies.rows[0]!.n, stages: stages.rows[0]!.n };
+  return { policies: policies[0]!.n, stages: stages[0]!.n };
 }
 
 test("dunning writes refuse magnitudes the integer and money columns cannot hold", async () => {

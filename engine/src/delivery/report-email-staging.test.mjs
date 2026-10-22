@@ -53,7 +53,7 @@ const sources = {
   './email-attachments.ts': emailAttachmentsStub,
   '../platform/business-date.ts': `export const businessToday = async () => '2026-01-01';`,
   '../platform/db.ts': `
-    export const db = { execute: async () => globalThis.__reportEmailStageTest.queue.shift() ?? { rows: [] } };
+    export const db = { execute: async (_query, mode) => Promise.resolve(globalThis.__reportEmailStageTest.queue.shift() ?? { rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) };
   `,
   '../platform/terminal-failure.ts': `
     export const EMAIL_DELIVERY_WORKER_IDENTITY = 'test';

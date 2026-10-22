@@ -19,11 +19,9 @@ const KINDS = ["vendor_bill", "vendor_credit"] as const;
 const view = { ...defaultListView("vendor_bill"), filters: [] };
 
 async function countRows(orgId: string, adhoc: Parameters<typeof documentWhere>[2]): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      where ${documentWhere([...KINDS], { ...view, filters: [] }, adhoc, orgId, null)}`)
-  ).rows;
+      where ${documentWhere([...KINDS], { ...view, filters: [] }, adhoc, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 
@@ -75,11 +73,9 @@ test("malformed saved-view structured filters match nothing instead of throwing"
     await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
       values (${id}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-F', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`);
     const run = async (filters: FilterClause[]): Promise<number> => {
-      const rows = (
-        await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+      const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
-          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`)
-      ).rows;
+          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`, "objects");
       return rows[0]!.n;
     };
     assert.equal(
@@ -112,11 +108,9 @@ test("saved custom-field filters restrict the document list instead of dropping"
         (${west}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-W', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"west"}'}::jsonb),
         (${east}, ${org.orgId}, 'vendor_bill', 'draft', 'BILL-E', ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', ${'{"region":"east"}'}::jsonb)`);
     const run = async (filters: FilterClause[]): Promise<number> => {
-      const rows = (
-        await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+      const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
-          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`)
-      ).rows;
+          where ${documentWhere([...KINDS], { ...view, filters }, {}, org.orgId, null)}`, "objects");
       return rows[0]!.n;
     };
     assert.equal(await run([]), 2, "unfiltered list sees both bills");

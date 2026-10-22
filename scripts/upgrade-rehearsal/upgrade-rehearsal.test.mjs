@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
-import { REMEDY_DIR_PREFIX, coverageGaps, defaultMatrix, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, clearPhaseLogSink, diffFindingKeys, findingKeys, harness, maskDatabaseUrl, phaseLogPath, PhaseRefusal, preUpgradeDumpName, run, setPhaseLogSink, summarize, tailLines, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
+import { REMEDY_DIR_PREFIX, coverageGaps, defaultMatrix, loadConfig, planMatrix, readCandidateBaseline, readSourceBaselineAtTag, sourceEligibilityProblems, sourceUpgradeRefusal, validateConfig } from "./plan.mjs";
+import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, clearPhaseLogSink, diffFindingKeys, findingKeys, harness, maskDatabaseUrl, phaseLogPath, PhaseRefusal, preUpgradeDumpName, run, setPhaseLogSink, summarize, tailLines } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
@@ -38,9 +38,20 @@ test("source harness evidence names its checkout even when CI declares the candi
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+const CANDIDATE_BASELINE = Object.freeze({
+  filename: "baselines/next.sql",
+  baselineSha256: "a".repeat(64),
+  upgradeFromRelease: "v1.0.0",
+});
+// Every source tree already records the candidate's baseline identity.
+const CARRIES_BASELINE = Object.freeze({
+  candidateBaseline: CANDIDATE_BASELINE,
+  sourceBaseline: () => ({ filename: "baselines/next.sql", baselineSha256: "a".repeat(64) }),
+});
+
 function config(overrides = {}) {
   return {
-    sources: [{ tag: "v0.1.0-alpha.22" }, { tag: "v0.1.0-alpha.23" }],
+    sources: [{ tag: "v1.0.0" }, { tag: "v1.1.0" }],
     requiredDatasetClasses: ["empty", "small"],
     datasets: [
       { id: "empty", class: "empty", steps: [] },
@@ -61,34 +72,40 @@ test("the committed rehearsal config is well-formed", () => {
   assert.deepEqual(validateConfig(loadConfig()), []);
 });
 
+test("the committed matrix rehearses exactly the release the candidate baseline upgrades from", () => {
+  const { upgradeFromRelease } = readCandidateBaseline();
+  const committed = loadConfig();
+  assert.deepEqual(committed.sources.map((source) => source.tag), [upgradeFromRelease]);
+  assert.deepEqual(planMatrix(committed).include, committed.datasets.map((dataset) => ({ source: upgradeFromRelease, dataset: dataset.id })));
+  assert.deepEqual(defaultMatrix(committed).include, [{ source: upgradeFromRelease, dataset: "multi-entity" }]);
+});
+
 test("the matrix is one cell per source release and dataset", () => {
-  assert.deepEqual(planMatrix(config()).include, [
-    { source: "v0.1.0-alpha.22", dataset: "empty" },
-    { source: "v0.1.0-alpha.22", dataset: "small" },
-    { source: "v0.1.0-alpha.23", dataset: "empty" },
-    { source: "v0.1.0-alpha.23", dataset: "small" },
+  assert.deepEqual(planMatrix(config(), CARRIES_BASELINE).include, [
+    { source: "v1.0.0", dataset: "empty" },
+    { source: "v1.0.0", dataset: "small" },
+    { source: "v1.1.0", dataset: "empty" },
+    { source: "v1.1.0", dataset: "small" },
   ]);
 });
 
 test("the release default is oldest plus latest source on the gate datasets", () => {
-  const declared = { ...loadConfig(), sources: [
-    { tag: "v0.1.0-alpha.22" }, { tag: "v0.1.0-alpha.23" }, { tag: "v0.1.0-alpha.26" },
-  ] };
-  assert.deepEqual(defaultMatrix(declared).include, [
-    { source: "v0.1.0-alpha.22", dataset: "multi-entity" },
-    { source: "v0.1.0-alpha.26", dataset: "multi-entity" },
+  const declared = { ...loadConfig(), sources: [{ tag: "v1.0.0" }, { tag: "v1.1.0" }, { tag: "v1.2.0" }] };
+  assert.deepEqual(defaultMatrix(declared, CARRIES_BASELINE).include, [
+    { source: "v1.0.0", dataset: "multi-entity" },
+    { source: "v1.2.0", dataset: "multi-entity" },
   ]);
-  assert.equal(planMatrix(declared).include.length, declared.sources.length * declared.datasets.length);
+  assert.equal(planMatrix(declared, CARRIES_BASELINE).include.length, declared.sources.length * declared.datasets.length);
 });
 
 test("the release default refuses an unknown dataset and dedupes one source", () => {
   const unknown = config();
   unknown.defaultGate = { datasets: ["no-such-dataset"] };
   assert.throws(() => defaultMatrix(unknown), /unknown dataset/);
-  const single = config({ sources: [{ tag: "v0.1.0-alpha.23" }], requiredDatasetClasses: ["empty", "small", "multi-entity"] });
+  const single = config({ sources: [{ tag: "v1.0.0" }], requiredDatasetClasses: ["empty", "small", "multi-entity"] });
   single.datasets.push({ id: "multi-entity", class: "multi-entity", steps: [{ kind: "samples" }] });
   single.defaultGate = { datasets: ["multi-entity"] };
-  assert.deepEqual(defaultMatrix(single).include, [{ source: "v0.1.0-alpha.23", dataset: "multi-entity" }]);
+  assert.deepEqual(defaultMatrix(single, CARRIES_BASELINE).include, [{ source: "v1.0.0", dataset: "multi-entity" }]);
 });
 
 test("the release default refuses a vacuous gate", () => {
@@ -120,6 +137,63 @@ test("malformed sources, unknown step kinds, and empty non-empty datasets are re
   const backwards = config();
   backwards.datasets[1].steps[0].start = "2026-04-01";
   assert.ok(validateConfig(backwards).some((p) => p.includes("starts after it ends")));
+});
+
+test("a source upgrades only as the baseline's previous release or by already recording that baseline", () => {
+  const same = { filename: "baselines/next.sql", baselineSha256: "a".repeat(64) };
+  assert.equal(sourceUpgradeRefusal("v1.0.0", CANDIDATE_BASELINE, null), null);
+  assert.equal(sourceUpgradeRefusal("v1.1.0", CANDIDATE_BASELINE, same), null);
+  assert.match(sourceUpgradeRefusal("v0.9.0", CANDIDATE_BASELINE, null), /v0\.9\.0 cannot upgrade .*records no release baseline.*upgrade to v1\.0\.0 first/);
+  assert.match(
+    sourceUpgradeRefusal("v0.9.0", CANDIDATE_BASELINE, { filename: "baselines/older.sql", baselineSha256: "c".repeat(64) }),
+    /records baselines\/older\.sql at cccccccccccc rather than baselines\/next\.sql/,
+  );
+  assert.match(sourceUpgradeRefusal("v1.1.0", CANDIDATE_BASELINE, { ...same, baselineSha256: "b".repeat(64) }), /cannot upgrade/);
+  assert.match(sourceUpgradeRefusal(undefined, CANDIDATE_BASELINE, null), /\(untagged\) cannot upgrade/);
+  // An unknown candidate identity refuses even the previous release's tag.
+  for (const candidate of [null, { ...CANDIDATE_BASELINE, upgradeFromRelease: undefined }, { ...CANDIDATE_BASELINE, baselineSha256: "" }]) {
+    assert.match(sourceUpgradeRefusal("v1.0.0", candidate, same), /no usable release baseline manifest/);
+  }
+});
+
+test("the plan refuses an ineligible source, a missing previous release, and an unreadable tag by name", () => {
+  const unreadable = () => { throw new Error("release tag v1.1.0 is not available in this checkout"); };
+  assert.throws(
+    () => planMatrix(config({ sources: [{ tag: "v1.0.0" }, { tag: "v0.9.0" }] }), { candidateBaseline: CANDIDATE_BASELINE, sourceBaseline: () => null }),
+    /v0\.9\.0 cannot upgrade/,
+  );
+  assert.throws(() => defaultMatrix({ ...loadConfig(), sources: [{ tag: "v0.9.0" }] }, { candidateBaseline: CANDIDATE_BASELINE, sourceBaseline: () => null }), /sources must include v1\.0\.0/);
+  assert.deepEqual(sourceEligibilityProblems(config({ sources: [{ tag: "v1.1.0" }] }), CARRIES_BASELINE), [
+    "sources must include v1.0.0: existing installations adopt baselines/next.sql from it, and the gate must rehearse that path",
+  ]);
+  assert.deepEqual(sourceEligibilityProblems(config(), { candidateBaseline: CANDIDATE_BASELINE, sourceBaseline: unreadable }), [
+    "source v1.1.0: release tag v1.1.0 is not available in this checkout",
+  ]);
+  // The previous release qualifies by tag; its tree is never read.
+  assert.deepEqual(sourceEligibilityProblems(config({ sources: [{ tag: "v1.0.0" }] }), { candidateBaseline: CANDIDATE_BASELINE, sourceBaseline: unreadable }), []);
+  assert.deepEqual(sourceEligibilityProblems(config(), { candidateBaseline: null, sourceBaseline: unreadable }).length, 1);
+});
+
+test("a source tag's baseline identity is read from its tree, and an unresolvable tag refuses", () => {
+  const directory = mkdtempSync(join(tmpdir(), "openbooks-upgrade-source-"));
+  try {
+    const git = (...args) => execFileSync("git", ["-C", directory, ...args], { stdio: "pipe", encoding: "utf8" }).trim();
+    const commit = (message) => git("-c", "user.name=Upgrade Verification", "-c", "user.email=verification@example.invalid", "commit", "--quiet", "-m", message);
+    git("init", "--quiet");
+    writeFileSync(join(directory, "README.md"), "source\n");
+    git("add", "README.md");
+    commit("Release without a baseline");
+    git("tag", "v1.0.0");
+    mkdirSync(join(directory, "schema/migrations"), { recursive: true });
+    writeFileSync(join(directory, "schema/migrations/baseline.json"), JSON.stringify({ filename: "baselines/next.sql", baselineSha256: "a".repeat(64) }));
+    git("add", "schema");
+    commit("Release carrying the baseline");
+    git("tag", "v1.1.0");
+    assert.equal(readSourceBaselineAtTag("v1.0.0", directory), null);
+    assert.deepEqual(readSourceBaselineAtTag("v1.1.0", directory), { filename: "baselines/next.sql", baselineSha256: "a".repeat(64) });
+    assert.throws(() => readSourceBaselineAtTag("v9.9.9", directory), /v9\.9\.9 is not available in this checkout; fetch release tags/);
+    assert.equal(sourceUpgradeRefusal("v1.1.0", CANDIDATE_BASELINE, readSourceBaselineAtTag("v1.1.0", directory)), null);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 function snapshot(overrides = {}) {
@@ -173,19 +247,28 @@ test("the candidate harness runs on every seeded org, even one that never posted
   assert.deepEqual(candidateHarnessOrgIds([], snapshot()), ["o1"]);
 });
 
-test("the summary names a refusal and the slowest migrations", () => {
+test("the summary names a refusal, the adopted baseline, and each slow migration with its recorded digest", () => {
   const text = summarize({
-    source: "v0.1.0-alpha.23",
-    candidate: "abc",
+    source: "v1.0.0",
+    candidate: "deadbeef",
     dataset: "small",
     ok: false,
     error: "[ledger-parity] 1 ledger difference(s) across the upgrade",
     phases: [{ name: "ledger-parity", ok: false, seconds: 1 }],
-    upgrade: { seconds: 12, migrations: [{ filename: "generated/0296_x.sql", seconds: 9 }] },
+    baselineAdoption: { filename: "baselines/next.sql", sha256: "a".repeat(64) },
+    upgrade: { seconds: 12, migrations: [
+      { filename: "generated/0001_x.sql", sha256: "0123456789abcdef", seconds: 9 },
+      { filename: "generated/0002_y.sql", sha256: null, seconds: 2 },
+    ] },
     refusals: [{ section: "trialBalance", key: "o1" }],
   });
+  assert.match(text, /candidate: `deadbeef`/);
   assert.match(text, /REFUSED:\*\* \[ledger-parity\]/);
-  assert.match(text, /generated\/0296_x\.sql \| 9/);
+  assert.match(text, /Adopted release baseline baselines\/next\.sql \(sha256 aaaaaaaa\)/);
+  assert.match(text, /\| generated\/0001_x\.sql \| 01234567 \| 9 \|/);
+  // A migration the ledger did not record never borrows a digest.
+  assert.match(text, /\| generated\/0002_y\.sql \| unrecorded \| 2 \|/);
+  assert.match(summarize({ source: "v1.0.0", dataset: "empty", ok: true, phases: [], upgrade: { seconds: 1, migrations: [] }, refusals: [] }), /Upgrade applied no migrations in 1s/);
 });
 
 test("the rehearsal starts only on explicit dispatch without candidate branches", () => {
@@ -196,36 +279,36 @@ test("the rehearsal starts only on explicit dispatch without candidate branches"
 
 test("finding keys compare as a multiset, so a duplicate refusal is not hidden", () => {
   const actual = findingKeys([
-    { severity: "refuse", code: "0296.bad_a" },
-    { severity: "notice", code: "0297.note_b" },
-    { severity: "refuse", code: "0296.bad_a" },
+    { severity: "refuse", code: "0001.bad_a" },
+    { severity: "notice", code: "0002.note_b" },
+    { severity: "refuse", code: "0001.bad_a" },
   ]);
-  assert.deepEqual(actual, ["notice:0297.note_b", "refuse:0296.bad_a", "refuse:0296.bad_a"]);
-  assert.deepEqual(diffFindingKeys(actual, ["refuse:0296.bad_a", "notice:0297.note_b", "refuse:0296.bad_a"]), {
+  assert.deepEqual(actual, ["notice:0002.note_b", "refuse:0001.bad_a", "refuse:0001.bad_a"]);
+  assert.deepEqual(diffFindingKeys(actual, ["refuse:0001.bad_a", "notice:0002.note_b", "refuse:0001.bad_a"]), {
     missing: [],
     extra: [],
   });
-  assert.deepEqual(diffFindingKeys(["refuse:0296.bad_a"], ["refuse:0296.bad_a", "refuse:0296.missing"]), {
-    missing: ["refuse:0296.missing"],
+  assert.deepEqual(diffFindingKeys(["refuse:0001.bad_a"], ["refuse:0001.bad_a", "refuse:0001.missing"]), {
+    missing: ["refuse:0001.missing"],
     extra: [],
   });
-  assert.deepEqual(diffFindingKeys(["refuse:0296.bad_a", "refuse:0296.surprise"], ["refuse:0296.bad_a"]), {
+  assert.deepEqual(diffFindingKeys(["refuse:0001.bad_a", "refuse:0001.surprise"], ["refuse:0001.bad_a"]), {
     missing: [],
-    extra: ["refuse:0296.surprise"],
+    extra: ["refuse:0001.surprise"],
   });
 });
 
 function refusalDataset(overrides = {}) {
   return {
-    id: "edge-refusals",
+    id: "edge-probe",
     class: "edge",
-    steps: [{ kind: "seeder", name: "legacy-shapes" }],
-    expectFindings: [{ code: "0296.bad_a", severity: "refuse" }],
+    steps: [{ kind: "seeder", name: "probe-shapes" }],
+    expectFindings: [{ code: "0001.bad_a", severity: "refuse" }],
     remedies: [
       {
         kind: "remedy",
-        code: "0296.bad_a",
-        sql: `${REMEDY_DIR_PREFIX}0296.bad_a.sql`,
+        code: "0001.bad_a",
+        sql: `${REMEDY_DIR_PREFIX}0001.bad_a.sql`,
       },
     ],
     ...overrides,
@@ -234,7 +317,7 @@ function refusalDataset(overrides = {}) {
 
 function refusalConfig(datasets) {
   return {
-    sources: [{ tag: "v0.1.0-alpha.23" }],
+    sources: [{ tag: "v1.0.0" }],
     requiredDatasetClasses: ["edge"],
     datasets,
   };
@@ -253,19 +336,16 @@ test("a dataset declaring assertions needs its assertions file, and the flag is 
   assert.ok(
     validateConfig(refusalConfig([malformed])).some((problem) => problem.includes("assertions must be true or absent")),
   );
-  const committed = loadConfig().datasets.find((dataset) => dataset.id === "edge-legacy");
-  assert.equal(committed?.assertions, true);
-  assert.deepEqual(validateConfig(loadConfig()), []);
 });
 
 test("a remedy outside the remedies directory is refused (no private remedies)", () => {
   for (const sql of [
-    "scripts/upgrade-rehearsal/remediations/edge-refusals.sql",
-    "schema/migrations/preflight/remedies/../0296.bad_a.sql",
+    "scripts/upgrade-rehearsal/remediations/edge-probe.sql",
+    "schema/migrations/preflight/remedies/../0001.bad_a.sql",
     "schema/migrations/preflight/remedies/notes.txt",
     "schema/migrations/preflight/remedies/.sql",
   ]) {
-    const dataset = refusalDataset({ remedies: [{ kind: "remedy", code: "0296.bad_a", sql }] });
+    const dataset = refusalDataset({ remedies: [{ kind: "remedy", code: "0001.bad_a", sql }] });
     assert.ok(
       validateConfig(refusalConfig([dataset])).some((problem) => problem.includes("remedy sql must be a file under")),
       sql,
@@ -275,13 +355,13 @@ test("a remedy outside the remedies directory is refused (no private remedies)",
 
 test("a remedy whose code matches neither its file nor an expected refuse is refused", () => {
   const wrongFile = refusalDataset({
-    remedies: [{ kind: "remedy", code: "0296.bad_a", sql: `${REMEDY_DIR_PREFIX}0296.other.sql` }],
+    remedies: [{ kind: "remedy", code: "0001.bad_a", sql: `${REMEDY_DIR_PREFIX}0001.other.sql` }],
   });
   assert.ok(
     validateConfig(refusalConfig([wrongFile])).some((problem) => problem.includes("does not match its file")),
   );
   const unmatched = refusalDataset({
-    remedies: [{ kind: "remedy", code: "0296.unexpected", sql: `${REMEDY_DIR_PREFIX}0296.unexpected.sql` }],
+    remedies: [{ kind: "remedy", code: "0001.unexpected", sql: `${REMEDY_DIR_PREFIX}0001.unexpected.sql` }],
   });
   assert.ok(
     validateConfig(refusalConfig([unmatched])).some((problem) => problem.includes("matches no expected refuse")),
@@ -303,7 +383,7 @@ test("malformed expectFindings and a remedy hiding in steps are refused", () => 
   const badCode = refusalDataset({ expectFindings: [{ code: "oops", severity: "refuse" }], remedies: [] });
   assert.ok(validateConfig(refusalConfig([badCode])).some((problem) => problem.includes("must look like")));
   const badSeverity = refusalDataset({
-    expectFindings: [{ code: "0296.bad_a", severity: "warn" }],
+    expectFindings: [{ code: "0001.bad_a", severity: "warn" }],
     remedies: [],
   });
   assert.ok(validateConfig(refusalConfig([badSeverity])).some((problem) => problem.includes("severity must be")));
@@ -313,46 +393,18 @@ test("malformed expectFindings and a remedy hiding in steps are refused", () => 
   );
 });
 
-test("every summary carries the candidate SHA and the five watch-list digests", () => {
-  assert.deepEqual(WATCH_LIST_MIGRATIONS, [
-    "0293_stock_count_line_subject_unique",
-    "0294_dunning_delivery_state_machine",
-    "0296_payroll_remittance_destination_snapshot",
-    "0299_stock_count_line_counted_nonnegative",
-    "0301_item_price_schedule_versioning",
-  ]);
-  const digests = watchListDigests();
-  assert.equal(digests.length, 5);
-  for (const entry of digests) {
-    assert.match(entry.digest, /^[0-9a-f]{8}$/, `${entry.name} must resolve to a real digest on this tree, never a placeholder`);
-  }
-  const text = summarize({
-    source: "v0.1.0-alpha.23",
-    candidate: "deadbeef",
-    dataset: "perf-1m",
-    ok: true,
-    phases: [{ name: "seed", ok: true, seconds: 1 }],
-    upgrade: null,
-    refusals: [],
-  });
-  assert.match(text, /candidate: `deadbeef`/);
-  for (const entry of digests) {
-    assert.ok(text.includes(`| ${entry.name} | ${entry.digest} |`), `summary must name ${entry.name} with its digest`);
-  }
-});
-
 test("the summary lists unexpected preflight notices by code", () => {
   const text = summarize({
-    source: "v0.1.0-alpha.23",
+    source: "v1.0.0",
     candidate: "abc",
-    dataset: "edge-legacy",
+    dataset: "edge",
     ok: true,
     phases: [{ name: "preflight", ok: true, seconds: 1 }],
     upgrade: null,
-    preflight: { expected: false, notices: [{ code: "0297.old_rule" }, { code: "0297.old_rule" }] },
+    preflight: { expected: false, notices: [{ code: "0002.old_rule" }, { code: "0002.old_rule" }] },
     refusals: [],
   });
-  assert.match(text, /Preflight notices.*0297\.old_rule/);
+  assert.match(text, /Preflight notices.*0002\.old_rule/);
 });
 
 test("publish refuses a release whose exact commit has no passing upgrade-verification job", () => {
@@ -391,38 +443,38 @@ test("only harness checks a source release declares broken may fail at the sourc
 });
 
 test("the assertions file lives per dataset under assertions/", () => {
-  assert.ok(assertionsFileFor("edge-legacy").endsWith("scripts/upgrade-rehearsal/assertions/edge-legacy.mjs"));
-  assert.ok(assertionsFileFor("edge-refusals").endsWith("assertions/edge-refusals.mjs"));
+  assert.ok(assertionsFileFor("edge").endsWith("scripts/upgrade-rehearsal/assertions/edge.mjs"));
+  assert.ok(assertionsFileFor("edge-probe").endsWith("assertions/edge-probe.mjs"));
 });
 
 test("a clean assertions result passes, naming nothing", () => {
   assert.equal(
-    assertionsRefusal("edge-legacy", { assertions: [{ name: "waiver-frozen-or-legacy", ok: true }] }),
+    assertionsRefusal("edge", { assertions: [{ name: "artifact-frozen-or-refused", ok: true }] }),
     null,
   );
 });
 
 test("a failed post-upgrade assertion refuses by check name", () => {
-  const refusal = assertionsRefusal("edge-legacy", {
+  const refusal = assertionsRefusal("edge", {
     assertions: [
-      { name: "waiver-frozen-or-legacy", ok: true },
+      { name: "artifact-frozen-or-refused", ok: true },
       { name: "unbound-schedule-paused", ok: false, detail: "no notice row" },
     ],
   });
-  assert.match(refusal, /edge-legacy.*unbound-schedule-paused/);
-  assert.doesNotMatch(refusal, /waiver-frozen-or-legacy/);
+  assert.match(refusal, /edge.*unbound-schedule-paused/);
+  assert.doesNotMatch(refusal, /artifact-frozen-or-refused/);
 });
 
 test("a result that declares no checks refuses instead of reading green", () => {
   for (const result of [{ assertions: [] }, {}, null, { assertions: [{ name: "x", ok: 1 }] }]) {
-    assert.match(assertionsRefusal("edge-legacy", result) ?? "", /edge-legacy/, JSON.stringify(result));
+    assert.match(assertionsRefusal("edge", result) ?? "", /edge/, JSON.stringify(result));
   }
 });
 
 test("the pre-upgrade dump name carries source, candidate, and stamp, and a hostile tag cannot escape the report dir", () => {
   assert.equal(
-    preUpgradeDumpName("v0.1.0-alpha.23", "deadbeef", "2026-01-01T00-00-00"),
-    "pre-v0.1.0-alpha.23-deadbeef-2026-01-01T00-00-00.dump",
+    preUpgradeDumpName("v1.0.0", "deadbeef", "2026-01-01T00-00-00"),
+    "pre-v1.0.0-deadbeef-2026-01-01T00-00-00.dump",
   );
   const hostile = preUpgradeDumpName("refs/tags/v1 ../../x", "abc", "s");
   assert.equal(hostile, "pre-refs_tags_v1_.._.._x-abc-s.dump");
@@ -499,8 +551,8 @@ test("a phase evidence log failure refuses at child close", async () => {
 });
 
 test("a declared source harness defect must name its check and say why the tagged check is wrong", () => {
-  const vague = config({ sources: [{ tag: "v0.1.0-alpha.23", knownHarnessDefects: [{ check: "open-balance-fresh", reason: "flaky" }] }] });
+  const vague = config({ sources: [{ tag: "v1.0.0", knownHarnessDefects: [{ check: "open-balance-fresh", reason: "flaky" }] }] });
   assert.ok(validateConfig(vague).some((p) => p.includes("needs a reason")));
-  const unnamed = config({ sources: [{ tag: "v0.1.0-alpha.23", knownHarnessDefects: [{ reason: "x".repeat(60) }] }] });
+  const unnamed = config({ sources: [{ tag: "v1.0.0", knownHarnessDefects: [{ reason: "x".repeat(60) }] }] });
   assert.ok(validateConfig(unnamed).some((p) => p.includes("needs its check name")));
 });

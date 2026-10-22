@@ -1,1 +1,0 @@
-Predicate-matched reconciliation only: it ends approved, unexpired reopen windows whose every covered module is already closed, writes one audit row per ended window, and changes no schema, constraint, or index. A rerun matches nothing, so no existing row can make it refuse.

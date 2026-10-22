@@ -111,9 +111,9 @@ export const PATCH = defineRoute({
     // route). Without this, a hidden-entity TIN could be overwritten blind.
     const partyScope = await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
-       where id = ${partyId} and org_id = ${orgId}`)
-    if (!partyScope.rows[0]) return notFound("record")
-    const scopeDenied = guardSubsidiaryScope(gate, partyScope.rows[0].subsidiaryId, { orgWideNull: true })
+       where id = ${partyId} and org_id = ${orgId}`, 'objects')
+    if (!partyScope[0]) return notFound("record")
+    const scopeDenied = guardSubsidiaryScope(gate, partyScope[0].subsidiaryId, { orgWideNull: true })
     if (scopeDenied) return scopeDenied
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
@@ -187,8 +187,8 @@ export const PATCH = defineRoute({
     if (body.complianceClassId) {
       const exists = await db.execute(sql`
         select 1 from compliance_classes
-         where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`)
-      if (exists.rows.length === 0) {
+         where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`, 'objects')
+      if (exists.length === 0) {
         return NextResponse.json({ error: 'unknown compliance class' }, { status: 400 })
       }
     }
@@ -205,8 +205,8 @@ export const PATCH = defineRoute({
           select ${VENDOR_ROLE_AUDIT_COLUMNS}
             from vendor_roles
            where org_id = ${orgId} and party_id = ${partyId}
-           for update`)
-        const before = role.rows[0]
+           for update`, 'objects')
+        const before = role[0]
         if (!before) {
           recordMissing = true
           return
@@ -225,8 +225,8 @@ export const PATCH = defineRoute({
             is_t4a = coalesce(${body.reportable ?? null}, is_t4a),
             updated_at = now(), updated_by = ${actorId}
           where org_id = ${orgId} and party_id = ${partyId}
-          returning ${VENDOR_ROLE_AUDIT_COLUMNS}`)
-        const after = updated.rows[0]
+          returning ${VENDOR_ROLE_AUDIT_COLUMNS}`, 'objects')
+        const after = updated[0]
         // The row was locked by this transaction's own read, so a zero-row
         // update means it vanished under the lock — still the vendor-missing
         // refusal, raised through the flag like the pre-lock read.

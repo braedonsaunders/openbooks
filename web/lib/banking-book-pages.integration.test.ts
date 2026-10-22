@@ -103,7 +103,7 @@ for (const page of ['match', 'reconcile'] as const) {
         assert.deepEqual(data.glRows.map(row => ({ id: row.id, amount: row.amount })), [{ id: primaryLine, amount: '100.0000' }])
         assert.equal(((page === 'match' ? loaded.session : loaded.reconciliation) as { currency: string }).currency, 'USD')
         if (page === 'reconcile') {
-          const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId}`)).rows[0]!
+          const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId}`, 'objects'))[0]!
           await createMatch({ reconciliationId: recon.id, statementLineIds: [statement.id], journalLineIds: [primaryLine] }, ctx)
           const updated = await loadReconciliation(org.accounts.bank, recon.id, {})
           const matched = updated.matchedRows as Array<{ gl_amount: string; stmt_amount: string }>
@@ -153,7 +153,7 @@ test('bank account detail and statement drawer preserve EUR amounts without seco
     }, ctx))
     const statementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       select id from bank_statements where org_id=${org.orgId} and account_id=${org.accounts.bank}
-    `))).rows[0]!.id
+    `, 'objects')))[0]!.id
     assert.equal(statement.imported, 1)
     await withOrgContext(org.orgId, async () => {
       await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: '525' }, ctx)

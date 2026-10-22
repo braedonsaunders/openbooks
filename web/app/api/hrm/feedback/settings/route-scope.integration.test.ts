@@ -68,7 +68,7 @@ test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", 
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
     const stored = (await withBypassContext(() => db.execute<{ setting: string }>(sql`
-      select settings #>> '{hrm_feedback,public_praise_by}' as setting from orgs where id = ${org.orgId}`))).rows[0]?.setting;
+      select settings #>> '{hrm_feedback,public_praise_by}' as setting from orgs where id = ${org.orgId}`, "objects")))[0]?.setting;
     assert.equal(stored, "anyone", "the refused org-wide policy change must not persist");
   } finally {
     state.allowedSubsidiaryIds = null;

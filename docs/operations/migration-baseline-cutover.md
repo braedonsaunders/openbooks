@@ -1,20 +1,25 @@
 # Release migration baseline cutover
 
-A release cut replaces historical migration replay for fresh installations with
-one verified baseline. Historical SQL remains immutable in `generated/` for
-upgrade evidence and migration regression tests. Forward ordinals continue above
-the cut; they are not reused or renumbered. The deployment runner uses
-`schema/migrations/baseline.json` when present and otherwise follows the existing
-chain.
+A release cut folds every migration into one verified baseline and retires the
+replaced SQL. Fresh installations apply the baseline and then the forward
+migrations above it, which are numbered again from `0001`. Existing
+installations never replay the retired migrations: they complete the previous
+release, then adopt the new baseline identity after verification.
 
-## Prepare and activate the release
+`schema/migrations/baseline.json` is the release record. It names the
+baseline file and its digest, the digest of its catalog evidence, the previous
+release an installation upgrades from (`upgradeFromRelease`), that release's
+exact migration ledger (`upgradeFrom`) and every retired migration identity the
+baseline covers (`covered`). A forward migration may not reuse a covered
+identity.
 
-Land the release's migration changes before activation. Preparation may run while
-development continues, but its candidate records the exact input filenames and
-digests and refuses changes made during replay. A candidate containing
-uncommitted migration inputs cannot be activated.
+## Prepare the candidate
 
-Use the existing release-pinned PostgreSQL test container. Supply its loopback
+Land the release's migration changes before preparation. Preparation may run
+while unrelated development continues; its candidate records the commit and
+refuses migration inputs that change during the run.
+
+Use the release-pinned PostgreSQL test container. Supply its loopback
 administrator URL in `OPENBOOKS_BASELINE_ADMIN_URL`, naming the `postgres`
 maintenance database. Remote hosts and tenant database URLs are refused.
 
@@ -22,88 +27,107 @@ maintenance database. Remote hosts and tenant database URLs are refused.
 node --import tsx scripts/prepare-migration-baseline.mts --output /absolute/path/to/new-candidate
 ```
 
-Preparation creates three disposable databases, replays the original bytes through
-the production migration executor, refreshes RLS and governed views, and captures
-schema and reviewed system seeds. It installs the candidate into the second
-database and compares table and view definitions, columns, constraints and their
+Preparation creates three disposable databases. It installs the tree through
+the native bootstrap as a schema-only restore target, so the baseline
+reproduces exactly what a fresh deployment receives, including prerequisite
+order and every reviewed execution rule, and it refuses unless that
+installation's ledger equals the tree's release plan. It then captures the
+catalog of `public`, `openbooks_query` and the private `tenant_retirement`
+authority: table and view definitions, columns, constraints and their
 validation state, index validity, functions, triggers, policies, enum values,
-sequence definitions, PUBLIC/read privileges and system registry contents. SQL
-bodies and error messages are compared without collapsing whitespace. PostgreSQL
-deparses constraints in its canonical pretty form so redundant parentheses do
-not masquerade as changed conditions. Both disposable databases are removed.
+sequence definitions, PUBLIC/read privileges, system-function privileges and
+system registry contents. SQL bodies and error messages are compared without
+collapsing whitespace. PostgreSQL deparses constraints in its canonical pretty
+form so redundant parentheses do not masquerade as changed conditions.
 
-The ISO currency registry, module query registry, document-close registry and
-platform-settings singleton are preserved. Installation settings and tenant
-data are never exported. Any other nonempty table refuses preparation until its
-seed has been reviewed. Required `btree_gist` and `pgcrypto` extensions accompany
-the dump; `pg_trgm` retains the established optional-extension policy.
+The candidate is the canonical dump of those schemas, the reviewed system seeds
+and the system-function privilege changes derived against PostgreSQL's initial
+privileges. It is installed into the second database, and into the third with
+`pg_trgm` unavailable, and both catalogs must equal the installation's. All
+three databases are removed.
 
-On the final committed tree, activate the verified candidate:
+The ISO currency registry, module query registry, document-close registry,
+scheduling board types, marketplace-nexus rules and platform-settings singleton
+are preserved. Installation settings, tenant data and migration ledger evidence
+never enter the baseline. Any other nonempty table refuses preparation until
+its seed has been reviewed. Required `btree_gist` and `pgcrypto` extensions
+accompany the dump; `pg_trgm` retains the established optional-extension
+policy.
+
+## Activate on the final tree
+
+On the final committed tree, activate the verified candidate and name the
+previous release:
 
 ```sh
-node scripts/activate-migration-baseline.mjs /absolute/path/to/new-candidate alpha29
+node scripts/activate-migration-baseline.mjs /absolute/path/to/new-candidate alpha35 --upgrade-from v0.1.0-alpha.34.3
 ```
 
-This writes `baselines/alpha29.sql`, its catalog evidence, the tenant-policy
-environment it was verified with, and the active manifest. It refuses changed SQL, missing coverage, an uncommitted migration
-tree or a candidate prepared on another commit. Commit these artifacts with the
-release. Run the normal release checks, fresh installation, and upgrade
-rehearsals against that exact commit before tagging. The baseline is immutable
-after publication; subsequent changes use forward migrations.
+Activation refuses uncommitted migration changes, a candidate prepared on a
+commit this tree does not descend from, and any migration change since that
+commit. It verifies that the named release ships no migration the candidate
+does not cover and that the candidate's upgrade ledger is exactly that
+release's plan. It writes `baselines/<name>.sql`, its catalog evidence and the
+manifest, then retires the replaced inputs: the covered SQL, the previous
+baseline and its evidence, their preflight decisions, remedies no remaining
+preflight references, and prerequisite declarations for covered migrations.
 
-## Reconcile and adopt an existing installation
+Commit these changes with the release. Run the release checks, a fresh
+installation and the upgrade rehearsal against that exact commit before
+tagging. The baseline is immutable after publication; later schema changes use
+forward migrations.
 
-An old ledger does not prove that the schema matches its digests. Never restamp
-an old baseline and never execute the new baseline over existing tenant data.
-The release's upgrade check and migration runner refuse an existing database
-until it has explicitly adopted the new baseline identity.
+The baseline is applied with the maintenance login, because it creates the
+private retirement authority and system-function privileges. Bootstrap then
+hands every business object to the restricted business owner, the host's
+provisioned database owner on host-managed installations, before any forward
+migration runs as that owner.
 
-Before cutover, retain the old release image and migration inputs. Take a full
-backup or storage snapshot and prove restoration into an isolated database.
-Rehearse the existing installation's upgrade on that restored copy. Use the
-previous migration runner and its preflights to apply missing forward work; if
-the stored schema and ledger disagree, reconcile the actual object and data
-differences before trusting migration history. Data backfills, credential seals
-and other application-side upgrade work must also complete. Schema equivalence
-alone cannot prove that historical data transformations ran.
+## Upgrade an existing installation
+
+An installation older than `upgradeFromRelease` first upgrades to that release
+with that release's image and bootstrap, which applies its remaining
+migrations, preflights and application-side upgrade steps. This release's
+bootstrap refuses any database that has neither an empty schema nor the adopted
+baseline identity; it never executes baseline SQL over tenant data.
+
+Before cutover, retain the previous release image. Take a full backup or
+storage snapshot and prove restoration into an isolated database. Rehearse the
+adoption on that restored copy.
 
 Set `OPENBOOKS_BASELINE_TARGET_URL` explicitly to the maintenance login for the
-named database. The adoption tool does not read application `.env` credentials.
-It requires a superuser or BYPASSRLS maintenance login, verifies every catalog
-section and reviewed registry against the pinned release evidence, and preserves
-existing installation settings.
+named database. The adoption tool does not read application `.env`
+credentials.
 
 ```sh
 node --import tsx scripts/adopt-migration-baseline.mts --database openbooks --check
 ```
 
+The check requires a superuser or BYPASSRLS maintenance login so no system
+registry is hidden. It refuses unless the database records every migration of
+the previous release at its published digest: schema equivalence alone cannot
+prove that the previous release's data transformations ran. It then verifies
+every catalog section and reviewed registry against the release evidence and
+preserves existing installation settings.
+
 For the production cutover, stop application and worker services and other
-database clients, take the final backup, apply the rehearsed reconciliation,
-and rerun the check. Adopt only after the check passes:
+database clients, take the final backup and rerun the check. Adopt only after
+the check passes:
 
 ```sh
 node --import tsx scripts/adopt-migration-baseline.mts --database openbooks --apply \
-  --actor 'operator identity' --reason 'verified release schema reconciliation' \
+  --actor 'operator identity' --reason 'verified release schema adoption' \
   --backup 'reference to the verified pre-cutover backup'
 ```
 
-Adoption shares the deployment bootstrap lock and refuses other client sessions.
-For a legacy installation whose business objects are still owned by its privileged
-maintenance login, add `--isolate-business-owner --runtime-role <runtime login>`
-to both check and apply. After complete catalog verification, the apply step hands
-only public/query business objects to the constrained `openbooks_schema_owner`.
-It requires a superuser, an existing unprivileged runtime login, no private
-retirement authority and no unresolved object owners. Private authority and the
-bypass predicate retain their ownership. The runtime cannot assume the schema
-owner. The adoption audit records the former owners, object counts and resulting
-owner. Any failure rolls back the ownership changes and adoption together.
-
-It appends the new baseline ledger identity and an adoption audit in one
-transaction. The audit records the database, login, operator, timestamp, reason,
-backup reference, catalog digest and complete previous ledger. Historical
-ledger rows and tenant data remain unchanged. The tool does not execute baseline
-SQL or correct mismatched schemas. A second adoption of the same verified
-identity makes no writes.
+Adoption shares the deployment bootstrap lock and refuses other client
+sessions. It appends the baseline ledger identity and an adoption audit in one
+transaction. The audit records the database, login, operator, timestamp,
+reason, backup reference, catalog digest and complete previous ledger.
+Historical ledger rows and tenant data remain unchanged. The tool does not
+execute baseline SQL or correct mismatched schemas; reconcile an installation
+whose catalog differs with its database owner before adopting. A second
+adoption of the same verified identity makes no writes.
 
 Run the release's read-only bootstrap upgrade check, start the new services,
 and verify tenant isolation, posting controls, accounting reconciliations and
@@ -119,28 +143,18 @@ and function bodies remain exact. A direct read-role schema USAGE grant is
 redundant when PUBLIC already has USAGE; catalog equivalence compares that
 effective access while still refusing added PUBLIC CREATE privileges.
 
-### Complete a historical upgrade
+When adoption runs as a database administrator, ensure the installation audit is
+included in subsequent backups: grant the dedicated backup login USAGE on
+`openbooks_migrations` and SELECT on its audit tables. Keep CREATE, INSERT,
+UPDATE and DELETE restricted to the maintenance owner.
 
-For an existing database that has not adopted the active release baseline, run
-`node --import tsx scripts/bootstrap.ts --historical-migrations --check --json`
-with its maintenance connection. Resolve every refusal, take a verified backup,
-then run the same command without `--check --json`. This explicit mode applies
-only the retained historical migrations the release baseline covers, and
-refuses fresh databases or an already adopted baseline. It does not adopt the
-baseline. Migrations above the release cut apply afterwards through ordinary
-bootstrap, once the baseline is adopted. Follow the catalog
-verification and audited adoption steps above before ordinary deployment.
+### Restore verification with unqualified validation functions
 
-The release rehearsal exercises this path on the oldest and latest supported
-releases with populated multi-entity accounting data, then verifies a backup,
-adopts the baseline and checks ordinary bootstrap idempotence.
-
-### Restore verification with legacy validation functions
-
-Some historical SQL validators call other functions without a schema qualifier.
-`pg_restore` clears the session search path, so a direct restoration can refuse
-valid bank matching rules even though the same validators accept them in the
-application. Do not bypass the checks or change tenant rows to complete a restore.
+Some validators call other functions without a schema qualifier. `pg_restore`
+clears the session search path, so a direct restoration can refuse valid bank
+matching rules even though the same validators accept them in the
+application. Do not bypass the checks or change tenant rows to complete a
+restore.
 
 On an isolated restoration target, restore pre-data first. Capture the original
 function definitions and settings. Temporarily set `search_path=public,pg_catalog`
@@ -149,8 +163,3 @@ post-data, then restore those original function settings before any application
 connects. Preserve existing explicit search paths, especially security-definer
 functions. Verify the restored catalog and financial fingerprints against the
 source snapshot. Keep the restoration target isolated until verification passes.
-
-When adoption runs as a database administrator, ensure the installation audit is
-included in subsequent backups: grant the dedicated backup login USAGE on
-`openbooks_migrations` and SELECT on its audit tables. Keep CREATE, INSERT,
-UPDATE and DELETE restricted to the maintenance owner.

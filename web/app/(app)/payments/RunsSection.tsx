@@ -97,8 +97,8 @@ export async function RunsSection({
      where p.org_id = ${orgId} and p.is_active ${profileScope}
        and (${collections} = false or (f.direction <> 'credit' and f.rail in ('nacha_debit', 'sepa_debit', 'custom')))
        and (${collections} = true or f.direction <> 'debit')
-  `)))
-  const hasPaymentProfile = Number(profileCount.rows[0]?.n ?? 0) > 0
+  `, 'objects')))
+  const hasPaymentProfile = Number(profileCount[0]?.n ?? 0) > 0
 
   const billParams = parsePrefixedListParams(sp, 'bills', {
     sort: 'due',
@@ -176,11 +176,11 @@ export async function RunsSection({
       select * from open_bills where open > 0 ${billWhere}
       order by ${BILL_SORTS[billParams.sort]} ${billParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, document_number
       limit ${billParams.perPage} offset ${(billParams.page - 1) * billParams.perPage}
-    `)) : Promise.resolve({ rows: [] }),
+    `, 'objects')) : Promise.resolve([]),
     building ? (db.execute(sql`
       with open_bills as (${openBillsCte})
       select count(*) as n from open_bills where open > 0 ${billWhere}
-    `)) : Promise.resolve({ rows: [{ n: 0 }] }),
+    `, 'objects')) : Promise.resolve([{ n: 0 }]),
     (db.execute<PaymentRunRow>(sql`
       select r.id, r.run_number, r.method, r.status, r.currency, r.scheduled_for, r.exported_at, r.created_at,
              a.number as bank_number, a.name as bank_name,
@@ -193,16 +193,16 @@ export async function RunsSection({
        group by r.id, a.number, a.name
        order by ${RUN_SORTS[runParams.sort]} ${runParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.run_number
        limit ${runParams.perPage} offset ${(runParams.page - 1) * runParams.perPage}
-    `)),
+    `, 'objects')),
     (db.execute<{ status: string; n: string }>(sql`
       select r.status, count(*) as n from payment_runs r where ${runScope} and r.direction = ${direction} group by r.status
-    `)),
+    `, 'objects')),
     (db.execute(sql`
       select count(*) as n
         from payment_runs r
         left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
        where ${runScope} and r.direction = ${direction} ${runStatusWhere} ${runSearchWhere}
-    `)),
+    `, 'objects')),
     building ? db.execute<BankProfileRow>(sql`
       select p.id, p.name, p.currency, f.name as format_name,
              a.number as bank_number, a.name as bank_name
@@ -213,7 +213,7 @@ export async function RunsSection({
        where p.org_id = ${orgId} and p.is_active ${profileScope} and f.direction <> ${collections ? 'credit' : 'debit'}
          and (${collections} = false or f.rail in ('nacha_debit', 'sepa_debit', 'custom'))
        order by p.name
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
   ])
 
   // Bills handed over from the AP cockpit's pay-run planner (?preselect=id,id).
@@ -223,11 +223,11 @@ export async function RunsSection({
     ? (await db.execute<RunBill>(sql`
         with open_bills as (${openBillsCte})
         select * from open_bills where open > 0 and id in (${sql.join(preselectIds.map((id) => sql`${id}`), sql`, `)})
-      `)).rows
+      `, 'objects'))
     : []
 
-  const runsTotal = runCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
-  const runsFilteredTotal = Number(runFilteredCount.rows[0]?.n ?? 0)
+  const runsTotal = runCounts.reduce((a: number, r) => a + Number(r.n), 0)
+  const runsFilteredTotal = Number(runFilteredCount[0]?.n ?? 0)
   // Pre-rendered server cells for the shared registered runs table. Search,
   // status filter, sort and paging stay URL-driven against the loader's
   // server window — the table never filters or reslices that window again.
@@ -310,8 +310,8 @@ export async function RunsSection({
         left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
         left join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
        where r.id = ${runId} and ${runScope} and r.direction = ${direction}
-    `)))
-    if (run.rows[0]) {
+    `, 'objects')))
+    if (run[0]) {
       // Approval belongs to Flows; with Flows off there is no run approval
       // to show or decide.
       const flowsOn = await isFeatureEnabled(orgId, 'flows')
@@ -320,14 +320,14 @@ export async function RunsSection({
       // visible-payee set filters the instructions, the source-document
       // items, and the readiness verdicts (names, amounts, bank blockers,
       // compliance reasons).
-      const payees = (await db.execute<{ id: string }>(sql`
+      const payees = await db.execute<{ id: string }>(sql`
         select p.id from parties p
          where p.org_id = ${orgId} and p.id in (
            select i.payee_party_id from payment_instructions i
             where i.payment_run_id = ${runId} and i.org_id = ${orgId}
          )
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-      `)).rows
+      `, 'objects')
       const visiblePayeeIds = authz.allowedSubsidiaryIds === null
         ? null
         : new Set(payees.map((payee) => payee.id))
@@ -352,7 +352,7 @@ export async function RunsSection({
             left join payment_settlements ps on ps.payment_instruction_id = i.id and ps.org_id = i.org_id
            where i.payment_run_id = ${runId} and i.org_id = ${orgId} ${payeeScope}
            order by p.display_name
-        `)),
+        `, 'objects')),
         paymentRunReadiness(runId, orgId, visiblePayeeIds),
         (db.execute(sql`
           select pf.id, pf.sequence_number, pf.filename, pf.content_hash, pf.status,
@@ -364,13 +364,13 @@ export async function RunsSection({
             left join payment_file_deliveries d on d.payment_file_id = pf.id and d.org_id = pf.org_id
            where pf.payment_run_id = ${runId} and pf.org_id = ${orgId}
            group by pf.id order by pf.sequence_number desc
-        `)),
+        `, 'objects')),
         (db.execute(sql`
           select e.id, e.event_type, e.from_status, e.to_status, e.details, e.created_at,
                  u.name as actor_name
             from payment_events e left join users u on u.id = e.actor_id
            where e.payment_run_id = ${runId} and e.org_id = ${orgId} order by e.created_at desc limit 100
-        `)),
+        `, 'objects')),
         (db.execute(sql`
           select ri.id, ri.kind, ri.gross_amount, ri.discount_amount, ri.credit_amount,
                  ri.payment_amount, ri.currency, ri.status, d.document_number,
@@ -380,18 +380,18 @@ export async function RunsSection({
             left join parties p on p.id = d.party_id and p.org_id = d.org_id
            where ri.payment_run_id = ${runId} and ri.org_id = ${orgId} ${itemPartyScope}
            order by p.display_name, d.document_number
-        `)),
+        `, 'objects')),
       ])
       drawer = (
         <RunDrawer
-          run={run.rows[0] as unknown as PaymentRunClient}
-          instructions={instructions.rows as unknown as PaymentInstructionClient[]}
+          run={run[0] as unknown as PaymentRunClient}
+          instructions={instructions as unknown as PaymentInstructionClient[]}
           eftConfigured={readiness.eft.ok}
           eftMissing={readiness.eft.ok ? [] : readiness.eft.missing}
           blockers={readiness.blockers as RunBlockerClient[]}
-          files={files.rows as unknown as PaymentFileClient[]}
-          events={events.rows as unknown as PaymentEventClient[]}
-          items={items.rows as unknown as PaymentRunItemClient[]}
+          files={files as unknown as PaymentFileClient[]}
+          events={events as unknown as PaymentEventClient[]}
+          items={items as unknown as PaymentRunItemClient[]}
           canApprove={canApprove}
           approvalSubjectKind={flowsOn ? paymentRunSubjectKind(direction) : null}
           closeHref={`${basePath}?view=runs`}
@@ -422,7 +422,7 @@ export async function RunsSection({
 
         <RegisteredListTable
           source="payments_runs"
-          rows={runs.rows}
+          rows={runs}
           columns={runColumns}
           rowKey={(r) => r.id}
           empty={
@@ -450,7 +450,7 @@ export async function RunsSection({
                 paramKey="runsStatus"
                 label={tCommon('labels.status')}
                 pageParamKey="runsPage"
-                options={runCounts.rows.map((r) => ({
+                options={runCounts.map((r) => ({
                   value: r.status,
                   label: runStatusLabel(String(r.status)),
                   count: Number(r.n),
@@ -471,8 +471,8 @@ export async function RunsSection({
           bodyClassName="overflow-hidden"
         >
           <RunBuilder
-            bills={bills.rows as RunBill[]}
-            bankProfiles={bankProfiles.rows}
+            bills={bills as RunBill[]}
+            bankProfiles={bankProfiles}
             sp={sp}
             sort={billParams.sort}
             dir={billParams.dir}
@@ -492,7 +492,7 @@ export async function RunsSection({
               <Pagination
                 basePath={basePath}
                 currentParams={sp}
-                total={Number(billCount.rows[0]?.n ?? 0)}
+                total={Number(billCount[0]?.n ?? 0)}
                 page={billParams.page}
                 perPage={billParams.perPage}
                 pageParamKey="billsPage"

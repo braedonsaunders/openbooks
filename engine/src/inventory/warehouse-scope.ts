@@ -60,6 +60,6 @@ export async function assertWarehousingForScope(
 async function singleWarehouseKindLocation(runner: Runner, orgId: string): Promise<boolean> {
   const rows = (await runner.execute<{ n: string }>(sql`
     select count(*)::text as n from stock_locations
-     where org_id = ${orgId} and is_active and kind = 'warehouse'`)).rows[0];
+     where org_id = ${orgId} and is_active and kind = 'warehouse'`, "objects"))[0];
   return Number(rows?.n ?? "0") === 1;
 }

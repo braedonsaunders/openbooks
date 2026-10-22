@@ -30,25 +30,21 @@ export async function assetDepreciationCalendar(
   assetId: string,
   bookId: string,
 ): Promise<string> {
-  const retained = (
-    await runner.execute<{ id: string }>(sql`
+  const retained = await runner.execute<{ id: string }>(sql`
     select distinct period.fiscal_calendar_id as id
       from depreciation_schedules schedule
       join depreciation_schedule_lines line on line.schedule_id = schedule.id and line.org_id = schedule.org_id
       join accounting_periods period on period.id = line.period_id and period.org_id = line.org_id
      where schedule.org_id = ${orgId} and schedule.asset_id = ${assetId} and schedule.book_id = ${bookId}
-  `)
-  ).rows;
+  `, "objects");
   if (retained.length > 1)
     throw new DepreciationRefusalError(
       "asset depreciation schedule spans multiple fiscal calendars",
     );
   if (retained[0]) return retained[0].id;
-  const defaults = (
-    await runner.execute<{ id: string }>(sql`
+  const defaults = await runner.execute<{ id: string }>(sql`
     select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active for share
-  `)
-  ).rows;
+  `, "objects");
   if (defaults.length !== 1)
     throw new DepreciationRefusalError(
       "asset depreciation requires one active default fiscal calendar",
@@ -96,8 +92,8 @@ async function loadUnremeasuredAssetPlan(
            depreciation_convention, depreciation_units_total,
            opening_accumulated_depreciation::text as opening_accumulated_depreciation,
            opening_accumulated_as_of::text as opening_accumulated_as_of
-      from fixed_assets where id = ${assetId} and org_id = ${orgId} for update`);
-  const asset = assetRes.rows[0];
+      from fixed_assets where id = ${assetId} and org_id = ${orgId} for update`, "objects");
+  const asset = assetRes[0];
   if (!asset) throw new DepreciationRefusalError("asset not found");
   // The subsidiary scope is enforced inside the lock, not by the route's
   // precheck: a concurrent PATCH could move the asset into a restricted
@@ -116,8 +112,8 @@ async function loadUnremeasuredAssetPlan(
     default_convention: string | null;
   }>(sql`
     select default_method, default_depreciation_method_id, default_life_months, default_convention
-      from asset_categories where id = ${asset.category_id} and org_id = ${orgId} for update`);
-  const category = catRes.rows[0];
+      from asset_categories where id = ${asset.category_id} and org_id = ${orgId} for update`, "objects");
+  const category = catRes[0];
   if (!category) throw new DepreciationRefusalError("asset category not found");
 
   const bookId = forBookId ?? (await primaryBookId(runner, orgId));
@@ -142,8 +138,8 @@ async function loadUnremeasuredAssetPlan(
     convention: string | null;
   }>(sql`
     select method, depreciation_method_id, life_months, rate_percent, units_total, convention from depreciation_book_policies
-     where org_id = ${orgId} and book_id = ${bookId} and category_id = ${asset.category_id} limit 1`);
-  const pol = policyRes.rows[0];
+     where org_id = ${orgId} and book_id = ${bookId} and category_id = ${asset.category_id} limit 1`, "objects");
+  const pol = policyRes[0];
   const method: DepreciationMethod =
     pol?.method ??
     asset.depreciation_method ??
@@ -180,8 +176,7 @@ async function loadUnremeasuredAssetPlan(
   // every other policy field. A header that still records no convention has
   // no resolvable policy behind it: IS DISTINCT FROM treats that as drift
   // and fails closed, and the refusal below names the remedy.
-  const drift = (
-    await runner.execute(sql`
+  const drift = (await runner.execute(sql`
     select 1 from depreciation_schedules schedule
      where schedule.org_id = ${orgId} and schedule.asset_id = ${assetId} and schedule.book_id = ${bookId}
        and row(schedule.method, schedule.depreciation_method_id, schedule.life_months, schedule.rate_percent, schedule.units_total, schedule.convention)
@@ -193,8 +188,7 @@ async function loadUnremeasuredAssetPlan(
             where event.org_id = schedule.org_id and event.asset_id = schedule.asset_id
               and entry.book_id = schedule.book_id and entry.status in ('posted', 'reversed')))
      limit 1
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (drift)
     throw new DepreciationRefusalError(
       "historical depreciation policy differs from the retained schedule; reconcile the policy before rebuilding or restoring impairment",
@@ -231,8 +225,8 @@ async function loadUnremeasuredAssetPlan(
   }>(sql`
     select id, formula, end_of_life from depreciation_methods
      where org_id = ${orgId} and id = ${depreciationMethodId} and is_active limit 1
-     for share`);
-  if (depreciationMethodId && !custom2.rows[0])
+     for share`, "objects");
+  if (depreciationMethodId && !custom2[0])
     throw new DepreciationRefusalError(
       "configured depreciation formula is inactive or unavailable",
     );
@@ -240,14 +234,14 @@ async function loadUnremeasuredAssetPlan(
     conventionFraction(convention);
 
   let plan: ScheduleLinePlan[] = [];
-  if (custom2.rows[0]) {
+  if (custom2[0]) {
     const start = monthStart(asset.in_service_on);
     plan = computeScheduleByFormula({
       cost: asset.acquisition_cost,
       salvage: asset.salvage_value,
       lifePeriods: lifeMonths,
-      formula: custom2.rows[0].formula,
-      endOfLife: custom2.rows[0].end_of_life,
+      formula: custom2[0].formula,
+      endOfLife: custom2[0].end_of_life,
       firstPeriodFraction,
       firstFractionPeriods,
     }).map((r) => ({
@@ -336,8 +330,7 @@ export async function unimpairedAssetCarryingValue(
     !depreciationMethodId &&
     (method === "manual" || method === "units_of_production")
   ) {
-    const evidence = (
-      await runner.execute<{
+    const evidence = await runner.execute<{
         manual_amount: string | null;
         production_units: string | null;
         held_depreciable: string;
@@ -351,8 +344,7 @@ export async function unimpairedAssetCarryingValue(
        where schedule.org_id = ${orgId} and schedule.asset_id = ${assetId} and schedule.book_id = ${bookId}
          and input.voided_at is null and period.ends_on <= ${asOfDate}
        order by line.sequence
-    `)
-    ).rows;
+    `, "objects");
     let usedUnits = "0";
     for (const input of evidence) {
       const originalDepreciable = add(
@@ -399,13 +391,11 @@ export async function unimpairedAssetCarryingValue(
       }
     }
   } else {
-    const periods = (
-      await runner.execute<{ starts_on: string; ends_on: string }>(sql`
+    const periods = await runner.execute<{ starts_on: string; ends_on: string }>(sql`
       select starts_on::text, ends_on::text from accounting_periods
        where org_id = ${orgId} and fiscal_calendar_id = ${calendarId} and not is_adjustment and starts_on <= ${asOfDate}
        order by starts_on for share
-    `)
-    ).rows;
+    `, "objects");
     for (const line of plan) {
       if (line.periodMonth > asOfDate) continue;
       // Continue-from-accumulated (migration 0156): pre-cutover months have
@@ -512,19 +502,19 @@ export async function buildScheduleWithRunner(
       depreciation_method_id: string | null;
     }>(sql`
       select id, method, depreciation_method_id from depreciation_schedules
-       where asset_id = ${assetId} and org_id = ${orgId} and book_id = ${bookId} limit 1`);
+       where asset_id = ${assetId} and org_id = ${orgId} and book_id = ${bookId} limit 1`, "objects");
     let scheduleId: string;
-    if (existing.rows[0]) {
-      scheduleId = existing.rows[0].id;
+    if (existing[0]) {
+      scheduleId = existing[0].id;
       if (
-        existing.rows[0].method !== method ||
-        existing.rows[0].depreciation_method_id !== depreciationMethodId
+        existing[0].method !== method ||
+        existing[0].depreciation_method_id !== depreciationMethodId
       ) {
         const evidence = await tx.execute(sql`
           select 1 from depreciation_schedule_lines
            where org_id = ${orgId} and schedule_id = ${scheduleId} and source <> 'formula'
-           limit 1 for update`);
-        if (evidence.rows[0]) {
+           limit 1 for update`, "objects");
+        if (evidence[0]) {
           throw new DepreciationRefusalError(
             "depreciation method cannot change after manual or production evidence exists",
           );
@@ -540,8 +530,8 @@ export async function buildScheduleWithRunner(
       const ins = await tx.execute<{ id: string }>(sql`
         insert into depreciation_schedules (org_id, asset_id, book_id, method, depreciation_method_id, life_months, rate_percent, units_total, convention, created_by, updated_by)
         values (${orgId}, ${assetId}, ${bookId}, ${method}, ${depreciationMethodId}, ${lifeMonths || null}, ${ratePercent}, ${unitsTotal}, ${convention}, ${actorId}, ${actorId})
-        returning id`);
-      scheduleId = ins.rows[0]!.id;
+        returning id`, "objects");
+      scheduleId = ins[0]!.id;
     }
 
     // Input-driven amounts are retained evidence, not a formula schedule.
@@ -560,15 +550,12 @@ export async function buildScheduleWithRunner(
       return { scheduleId, lineCount: 0, skippedMonths: [] };
     }
 
-    const periods = (
-      await tx.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+    const periods = await tx.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
       select id, starts_on::text, ends_on::text from accounting_periods
        where org_id = ${orgId} and fiscal_calendar_id = ${calendarId} and not is_adjustment
        order by starts_on for share
-    `)
-    ).rows;
-    const retained = (
-      await tx.execute<{
+    `, "objects");
+    const retained = await tx.execute<{
         id: string;
         period_id: string;
         sequence: number;
@@ -583,14 +570,12 @@ export async function buildScheduleWithRunner(
         join accounting_periods period on period.id = line.period_id and period.org_id = line.org_id
        where line.org_id = ${orgId} and line.schedule_id = ${scheduleId}
        for update of line
-    `)
-    ).rows;
+    `, "objects");
 
     // A reversal restores basis as of its own date, not retroactively. Keep the
     // latest cutoff even when all valuation deltas have been reversed, so a
     // subsequent explicit rebuild cannot rewrite earlier projections.
-    const remeasurement = (
-      await tx.execute<{ delta: string; cutoff: string | null }>(sql`
+    const remeasurement = (await tx.execute<{ delta: string; cutoff: string | null }>(sql`
       select coalesce(sum(event.amount) filter (
                -- Live entries only: the delta counts standing remeasurements; the cutoff still reads reversed history.
                where entry.status = 'posted' and reversal.id is null
@@ -602,8 +587,7 @@ export async function buildScheduleWithRunner(
        where event.org_id = ${orgId} and event.asset_id = ${assetId}
          and entry.book_id = ${bookId} and entry.status in ('posted', 'reversed')
          and event.kind in ('impaired', 'revalued')
-    `)
-    ).rows[0]!;
+    `, "objects"))[0]!;
     if (
       basisChange.cutoff &&
       (!remeasurement.cutoff || basisChange.cutoff > remeasurement.cutoff)
@@ -918,8 +902,8 @@ export async function buildAllSchedulesWithRunner(
 ): Promise<BuildScheduleResult[]> {
   const books = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_active
-     order by is_primary desc, code`));
+     order by is_primary desc, code`, "objects"));
   const results: BuildScheduleResult[] = [];
-  for (const b of books.rows) results.push(await buildScheduleWithRunner(runner, assetId, orgId, actorId, b.id, allowedSubsidiaryIds));
+  for (const b of books) results.push(await buildScheduleWithRunner(runner, assetId, orgId, actorId, b.id, allowedSubsidiaryIds));
   return results;
 }

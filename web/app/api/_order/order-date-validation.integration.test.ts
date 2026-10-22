@@ -94,7 +94,7 @@ async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Pr
   const revision = await withOrgContext(fixture.orgId, async () =>
     (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from documents where id = ${fixture.orderId}`)).rows[0]!.revision);
+        from documents where id = ${fixture.orderId}`, "objects"))[0]!.revision);
   return new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -113,8 +113,8 @@ test(
       assert.equal(response.status, 422, `impossible documentDate must be a 422: ${response.status}`);
       const state = await withOrgContext(fixture.orgId, async () =>
         (await db.execute<{ document_date: string }>(sql`
-        select document_date::text as document_date from documents where id = ${fixture.orderId}`)));
-      assert.notEqual(state.rows[0]?.document_date, "2026-02-30");
+        select document_date::text as document_date from documents where id = ${fixture.orderId}`, "objects")));
+      assert.notEqual(state[0]?.document_date, "2026-02-30");
     } finally {
       gateState.authz = null;
       await dropScratchOrg(fixture.orgId);
@@ -133,8 +133,8 @@ test(
       assert.equal(response.status, 422, `impossible dueDate must be a 422: ${response.status}`);
       const state = await withOrgContext(fixture.orgId, async () =>
         (await db.execute<{ due_date: string | null }>(sql`
-        select due_date::text as due_date from documents where id = ${fixture.orderId}`)));
-      assert.equal(state.rows[0]?.due_date, null);
+        select due_date::text as due_date from documents where id = ${fixture.orderId}`, "objects")));
+      assert.equal(state[0]?.due_date, null);
     } finally {
       gateState.authz = null;
       await dropScratchOrg(fixture.orgId);
@@ -154,9 +154,9 @@ test(
       assert.equal(response.status, 200, `valid save failed: ${JSON.stringify(await response.json())}`);
       const state = await withOrgContext(fixture.orgId, async () =>
         (await db.execute<{ document_date: string; memo: string }>(sql`
-        select document_date::text as document_date, memo from documents where id = ${fixture.orderId}`)));
-      assert.equal(state.rows[0]?.document_date, "2026-07-20");
-      assert.equal(state.rows[0]?.memo, "Dated terms");
+        select document_date::text as document_date, memo from documents where id = ${fixture.orderId}`, "objects")));
+      assert.equal(state[0]?.document_date, "2026-07-20");
+      assert.equal(state[0]?.memo, "Dated terms");
     } finally {
       gateState.authz = null;
       await dropScratchOrg(fixture.orgId);
@@ -168,7 +168,7 @@ async function seedDraftQuoteWithLine(tag: string) {
   const fixture = await seedDraftQuote(tag);
   return withBypassContext(async () => {
     const account = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${fixture.orgId} order by number limit 1`)).rows[0]!.id;
+      select id from accounts where org_id = ${fixture.orgId} order by number limit 1`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into document_lines(org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
       values (${fixture.orgId}, ${fixture.orderId}, 1, ${account}, 'Seeded line', 1, 100, 100)
@@ -188,7 +188,7 @@ async function orderState(fixture: Fixture) {
              (select total::text from documents
                where org_id = ${fixture.orgId} and id = ${fixture.orderId}) as total,
              (select party_id::text from documents
-               where org_id = ${fixture.orgId} and id = ${fixture.orderId}) as party`)).rows[0]!);
+               where org_id = ${fixture.orgId} and id = ${fixture.orderId}) as party`, "objects"))[0]!);
 }
 
 test(
@@ -259,8 +259,8 @@ test(
       const state = await withOrgContext(fixture.orgId, async () =>
         (await db.execute<{ party: string }>(sql`
         select party_id::text as party from documents
-         where org_id = ${fixture.orgId} and id = ${fixture.orderId}`)));
-      assert.notEqual(state.rows[0]?.party, foreign.customerId);
+         where org_id = ${fixture.orgId} and id = ${fixture.orderId}`, "objects")));
+      assert.notEqual(state[0]?.party, foreign.customerId);
     } finally {
       gateState.authz = null;
       await dropScratchOrg(fixture.orgId);

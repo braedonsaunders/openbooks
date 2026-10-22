@@ -78,8 +78,8 @@ async function readLocaleSettings(): Promise<{ user_locale: unknown; org_default
         from users u
         left join orgs o on o.id = ${activeUser.orgId}
        where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active
-    `));
-  return r.rows[0] ?? null;
+    `, "objects"));
+  return r[0] ?? null;
 }
 const renderLocaleSettings = cache(readLocaleSettings);
 function activeLocaleSettings() {
@@ -109,8 +109,8 @@ async function readTimeZone(): Promise<string> {
       select settings ->> 'timeZone' as time_zone
         from orgs
        where id = ${activeUser.orgId}
-    `)));
-  const stored = r.rows[0]?.time_zone;
+    `, "objects")));
+  const stored = r[0]?.time_zone;
   if (stored == null || String(stored).trim() === "") return "UTC";
   const canonical = canonicalTimeZone(String(stored));
   if (!canonical) {

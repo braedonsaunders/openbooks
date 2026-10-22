@@ -13,7 +13,7 @@ const state = {
 const mockSources = new Map<string, string>([
   [
     'mock:db',
-    `export const db = { execute: async () => ({ rows: [] }) }`,
+    `export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }`,
   ],
   [
     'mock:file-cabinet',

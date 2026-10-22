@@ -65,7 +65,7 @@ test('mapping catalog and saved rules use native organization reads, permissions
     const saved = await save(mappings); assert.equal(saved.status, 200, JSON.stringify(await saved.json()));
     await withOrgContext(org.orgId, async () => {
       assert.deepEqual((await getConnection(org.orgId, id))!.config.entityMappings, mappings);
-      const audit = (await db.execute<{ changes: Record<string, unknown> }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='connections' and row_id=${id} and actor_id=${state.userId}`)).rows;
+      const audit = await db.execute<{ changes: Record<string, unknown> }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='connections' and row_id=${id} and actor_id=${state.userId}`, 'objects');
       assert.equal(audit.length, 1);
     });
     assert.equal((await save({ version: 1, entities: { items: [{ target: 'custom.owner', missing: 'default', defaultValue: foreign.customerId }] } })).status, 422);

@@ -112,32 +112,33 @@ const mockSources = new Map<string, string>([
       const fx = globalThis.projectCostingFx
 
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           harness.queries.push(text)
           const convert = text.includes('d.fx_rate')
 
           if (text.includes('billing_status')) {
-            return { rows: [{ revenue: '0.0000', cost: '0.0000', hours: '0', cnt: '0' }] }
+            return inMode({ rows: [{ revenue: '0.0000', cost: '0.0000', hours: '0', cnt: '0' }] })
           }
 
           if (text.includes('billed_by_line_id')) {
             const amounts = harness.costs.map((cost) => fx.costAmounts(cost, convert))
-            return {
+            return inMode({
               rows: [{
                 revenue: fx.sumMoney(amounts.map((amount) => amount.revenue)),
                 cost: fx.sumMoney(amounts.map((amount) => amount.cost)),
                 cnt: String(amounts.length),
               }],
-            }
+            })
           }
 
-          if (text.includes('from projects p')) return { rows: [{ contract_value: '0.0000', cost_budget: '0.0000' }] }
-          if (text.includes('select a.id as account_id')) return { rows: [] }
-          if (text.includes('from journal_lines l')) return { rows: [{ cost: '0.0000', revenue: '0.0000' }] }
+          if (text.includes('from projects p')) return inMode({ rows: [{ contract_value: '0.0000', cost_budget: '0.0000' }] })
+          if (text.includes('select a.id as account_id')) return inMode({ rows: [] })
+          if (text.includes('from journal_lines l')) return inMode({ rows: [{ cost: '0.0000', revenue: '0.0000' }] })
           if (text.includes('from document_lines dl') && text.includes('quantity_billed')) {
             const orders = harness.orders
-            return {
+            return inMode({
               rows: [{
                 committed_cost: fx.sumMoney(
                   orders
@@ -150,10 +151,10 @@ const mockSources = new Map<string, string>([
                     .map((order) => fx.orderAmount(order, convert)),
                 ),
               }],
-            }
+            })
           }
-          if (text.includes('from accounts a')) return { rows: [] }
-          if (text.includes('from documents d')) return { rows: [] }
+          if (text.includes('from accounts a')) return inMode({ rows: [] })
+          if (text.includes('from documents d')) return inMode({ rows: [] })
           throw new Error('unexpected project-costing query: ' + text)
         },
       }

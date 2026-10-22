@@ -54,11 +54,9 @@ export async function assertSaleableStock(
     await runner.execute(
       sql`select id from serials where org_id=${orgId} and id=${selection.serialId} for update`,
     );
-  const row = (
-    await runner.execute<{ eligible: boolean }>(sql`select
+  const row = (await runner.execute<{ eligible: boolean }>(sql`select
     ${saleableLocation(sql`${orgId}`, sql`${stockLocationId}::uuid`)}
-    and ${unheldTracking(sql`${orgId}`, sql`${selection.lotId ?? null}::uuid`, sql`${selection.serialId ?? null}::uuid`)} as eligible`)
-  ).rows[0];
+    and ${unheldTracking(sql`${orgId}`, sql`${selection.lotId ?? null}::uuid`, sql`${selection.serialId ?? null}::uuid`)} as eligible`, "objects"))[0];
   if (!row?.eligible)
     throw new InventoryError(
       "Stock is held, unavailable, externally owned, or in vendor custody — release the hold or return cleared stock to an active company bin before picking or selling",
@@ -71,12 +69,10 @@ export async function assertOwnedLocation(
   orgId: string,
   stockLocationId: string,
 ): Promise<void> {
-  const row = (
-    await runner.execute<{
+  const row = (await runner.execute<{
       ownership: string;
     }>(sql`select inventory_ownership as ownership from stock_locations
-    where org_id=${orgId} and id=${stockLocationId} for share`)
-  ).rows[0];
+    where org_id=${orgId} and id=${stockLocationId} for share`, "objects"))[0];
   if (!row || row.ownership !== "owned")
     throw new InventoryError(
       "Use the Consignment receipt command for externally owned stock; valued inventory requires an owned location",

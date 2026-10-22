@@ -29,15 +29,15 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
       from payment_runs r
       left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
      where r.id = ${id} and r.org_id = ${gate.user.orgId}
-  `))
-  if (!run.rows[0]) return notFound("record")
+  `, 'objects'))
+  if (!run[0]) return notFound("record")
 
   // One transaction for the whole response: every payee owner is locked for
   // share first, so a concurrent rehome blocks until these reads commit and
   // instructions and readiness verdicts cannot disagree. Payees outside the
   // caller's scope read as missing from both lists, like party bank reads.
   return withOrgTransaction(gate.user.orgId, async () => {
-    const payees = (await db.execute<{ id: string }>(sql`
+    const payees = await db.execute<{ id: string }>(sql`
       select p.id from parties p
        where p.org_id = ${gate.user.orgId} and p.id in (
          select i.payee_party_id from payment_instructions i
@@ -45,7 +45,7 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
        )
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        for share of p
-    `)).rows
+    `, 'objects')
     const visiblePayeeIds = gate.allowedSubsidiaryIds === null
       ? null
       : new Set(payees.map((payee) => payee.id))
@@ -60,12 +60,12 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
        where i.payment_run_id = ${id} and i.org_id = ${gate.user.orgId}
          ${visiblePayeeIds === null ? sql`` : sql`and i.payee_party_id = any (${`{${[...visiblePayeeIds].join(",")}}`}::uuid[])`}
        order by p.display_name
-    `)
+    `, 'objects')
     const readiness = await paymentRunReadiness(id, gate.user.orgId, visiblePayeeIds)
 
     return NextResponse.json({
-      run: run.rows[0],
-      instructions: (instructions as unknown as { rows: Record<string, unknown>[] }).rows,
+      run: run[0],
+      instructions,
       eftConfigured: readiness.eft.ok,
       eftMissing: readiness.eft.ok ? [] : readiness.eft.missing,
       blockers: readiness.blockers,

@@ -47,15 +47,15 @@ async function supersedeVersion(
     await tx.execute(sql`set constraints worker_employment_versions_change_tenant_fkey deferred`)
     const nextNo = ((await tx.execute<{ n: number }>(sql`
       select coalesce(max(version_no), 0)::int as n
-        from worker_employment_versions where org_id = ${orgId} and employment_id = ${employmentId}`)).rows[0]?.n ?? 0) + 1
-    const recordedAt = (await tx.execute<{ at: Date }>(sql`select now() as at`)).rows[0]!.at
-    const prior = (await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
+        from worker_employment_versions where org_id = ${orgId} and employment_id = ${employmentId}`, 'objects'))[0]?.n ?? 0) + 1
+    const recordedAt = (await tx.execute<{ at: Date }>(sql`select now() as at`, 'objects'))[0]!.at
+    const prior = await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
       select id, version_no, to_jsonb(worker_employment_versions) as before
         from worker_employment_versions
        where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-       order by version_no`)).rows
+       order by version_no`, 'objects')
     const revision = (await tx.execute<{ revision: number }>(sql`
-      select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}`)).rows[0]!.revision + 1
+      select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}`, 'objects'))[0]!.revision + 1
     const changeId = (await tx.execute<{ id: string }>(sql`
       insert into employment_changes
         (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
@@ -69,7 +69,7 @@ async function supersedeVersion(
                 row_id: row.id,
                 before: row.before,
               })))}::jsonb)
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     for (const row of prior) {
       await tx.execute(sql`
         update worker_employment_versions
@@ -87,22 +87,22 @@ async function supersedeVersion(
 }
 
 async function revisionsFor(orgId: string, employmentId: string): Promise<Revision[]> {
-  return (await db.execute<Revision>(sql`
+  return await db.execute<Revision>(sql`
     select status, effective_from::text, effective_to::text,
            to_char(recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as recorded_at,
            case when recorded_until is null then null
                 else to_char(recorded_until at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end as recorded_until
       from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
-     order by version_no`)).rows
+     order by version_no`, 'objects')
 }
 
 async function directoryStatus(orgId: string, partyId: string): Promise<string | null> {
-  const rows = (await db.execute<{ status: string | null }>(sql`
+  const rows = await db.execute<{ status: string | null }>(sql`
     select emp.employment_status as status
       from parties p
       ${employeeBaseJoins(true, TODAY, null)}
-     where p.org_id = ${orgId} and p.id = ${partyId}`)).rows
+     where p.org_id = ${orgId} and p.id = ${partyId}`, 'objects')
   return rows[0]?.status ?? null
 }
 
@@ -130,10 +130,10 @@ test('employee directory and temporal resolver agree at an ended, boundary, and 
     const fixture = await withBypass(async () => {
       const partyId = (await db.execute<{ id: string }>(sql`
         insert into parties (org_id, kind, display_name)
-        values (${scratch.orgId}, 'person', 'Directory temporal subject') returning id`)).rows[0]!.id
+        values (${scratch.orgId}, 'person', 'Directory temporal subject') returning id`, 'objects'))[0]!.id
       const employmentId = (await db.execute<{ id: string }>(sql`
         insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-        values (${scratch.orgId}, ${partyId}, ${scratch.subsidiaryId}) returning id`)).rows[0]!.id
+        values (${scratch.orgId}, ${partyId}, ${scratch.subsidiaryId}) returning id`, 'objects'))[0]!.id
       await db.execute(sql`
         insert into employee_roles (org_id, party_id) values (${scratch.orgId}, ${partyId})`)
 

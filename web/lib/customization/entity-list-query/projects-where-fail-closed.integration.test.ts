@@ -19,10 +19,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type Filter = { key: string; operator: string; value?: string | null; to?: string | null };
 
 async function projectCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from projects p
-      where ${projectWhere({ ...defaultListView("project"), filters: viewFilters as never }, {}, orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from projects p
+      where ${projectWhere({ ...defaultListView("project"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 
@@ -63,16 +61,16 @@ test('saved billing classifications resolve custom types and keep entity scope',
           values(${org.orgId},${owner},${name},${type})`);
       }
       const view = {...defaultListView('project'),filters:[{key:'billing_method',operator:'eq' as const,value:'fixed_price'}]};
-      const read = async (scope:Set<string>) => (await db.execute<{name:string;method:string}>(sql`
+      const read = async (scope:Set<string>) => await db.execute<{name:string;method:string}>(sql`
         select p.name,${PROJECT_BUILT_IN_EXPR.billing_method!} as method from projects p
         where ${projectWhere(view,{},org.orgId,scope)}
-        order by ${PROJECT_SORTS.billing_method!},p.name`)).rows;
+        order by ${PROJECT_SORTS.billing_method!},p.name`, "objects");
       assert.deepEqual(await read(new Set([org.subsidiaryId])),[{name:'Visible fixed',method:'fixed_price'}]);
       assert.deepEqual(await read(new Set()),[]);
-      const unfiltered = (await db.execute<{method:string}>(sql`
+      const unfiltered = await db.execute<{method:string}>(sql`
         select ${PROJECT_BUILT_IN_EXPR.billing_method!} as method from projects p
         where ${projectWhere({...view,filters:[]},{},org.orgId,new Set([org.subsidiaryId]))}
-        order by ${PROJECT_SORTS.billing_method!},p.name`)).rows;
+        order by ${PROJECT_SORTS.billing_method!},p.name`, "objects");
       assert.deepEqual(unfiltered.map(row=>row.method),['fixed_price','time_and_materials']);
     } finally { await dropScratchOrg(org.orgId); }
   });

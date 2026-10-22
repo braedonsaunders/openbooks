@@ -22,10 +22,8 @@ async function oppCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_opportunities o
-      where ${opportunityWhere({ ...defaultListView("opportunity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_opportunities o
+      where ${opportunityWhere({ ...defaultListView("opportunity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 

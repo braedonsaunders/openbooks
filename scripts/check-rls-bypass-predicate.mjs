@@ -1,26 +1,24 @@
 #!/usr/bin/env node
 /**
- * RLS bypass-predicate gate (RELEASE BLOCKER RLS-GUC-ESCALATION, extended by
- * RLS-GUC-TRIGGERS/0402): tenant policies AND function/trigger bodies must
+ * RLS bypass-predicate gate: tenant policies AND function/trigger bodies must
  * call public.app_bypass_rls_active() instead of trusting the raw
- * app.bypass_rls GUC inline. Any SET on the runtime pool used to escalate
- * across tenants; the predicate additionally requires a privileged login, so
- * the raw read is the hole.
+ * app.bypass_rls GUC inline. Any SET on the runtime pool could otherwise
+ * escalate across tenants; the predicate additionally requires a privileged
+ * login, so the raw read is the hole.
  *
- * Migration 0399 rewrote every existing policy at apply time and 0402
- * rewrote every existing function/trigger body, so generated migrations at
- * or below the 0402 ordinal are frozen history and out of scope here. This
- * gate is forward-looking: every NEWER generated migration, plus the
- * environments.sql backstop (which re-applies the org_isolation template
- * on every bootstrap), must not introduce an executable
- * current_setting('app.bypass_rls', ...) read — in a policy expression or
- * in a function/trigger body. SQL comments are stripped before matching, so
- * prose naming the GUC does not count. Bodies wrap lines where policy
- * expressions did not, so matching runs over both individual lines (for
- * precise locations) and the whole file (for reads split across lines).
+ * The gate scans the release schema (the active baseline plus every forward
+ * migration) and the environments.sql backstop, which re-applies the
+ * org_isolation template on every bootstrap. None of them may contain an
+ * executable current_setting('app.bypass_rls', ...) read in a policy
+ * expression or a function/trigger body. The one exemption is the definition
+ * of public.app_bypass_rls_active() itself, which is where the GUC is read
+ * together with the privileged-login check. SQL comments are stripped before
+ * matching, so prose naming the GUC does not count. Bodies wrap lines where
+ * policy expressions did not, so matching runs over both individual lines
+ * (for precise locations) and the whole file (for reads split across lines).
  *
- * A gated migration that still reads the raw GUC is accepted only when it is
- * SUPERSEDED: a named later migration drops each of its offending policies
+ * A forward migration that still reads the raw GUC is accepted only when it
+ * is SUPERSEDED: a named later migration drops each of its offending policies
  * (and any re-creation there goes through the predicate, which the scan of
  * that later file enforces). The gate reads the superseding file and refuses
  * when it is missing, is not later, or does not drop the policy — a
@@ -29,67 +27,50 @@
  *
  *   node scripts/check-rls-bypass-predicate.mjs
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { stripSqlComments } from './check-migration-headers.mjs'
+import { releaseSchemaFiles } from './release-schema-sql.mjs'
 
 const root = '.'
-
-/**
- * Ordinal of the last rewriter migration (0402 bodies; 0399 policies):
- * generated files at or below are remediated at apply time by the chain, so
- * their inline reads are frozen history, not new trust.
- */
-export const BYPASS_PREDICATE_CUTOFF_ORDINAL = 402
 
 export function migrationOrdinal(basename) {
   const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(basename)
   return match ? Number(match[1]) : null
 }
 
-const SCAN_FILES = [
-  join(root, 'schema', 'migrations', 'environments.sql'),
-  ...readdirSync(join(root, 'schema', 'migrations', 'generated'))
-    .filter((f) => f.endsWith('.sql'))
-    .map((f) => join(root, 'schema', 'migrations', 'generated', f)),
-]
+/** The release schema files, baseline first, in apply order. */
+export const RELEASE_SCAN_FILES = releaseSchemaFiles(root).map(({ path }) => path)
+
+const SCAN_FILES = [join(root, 'schema', 'migrations', 'environments.sql'), ...RELEASE_SCAN_FILES]
 
 /** An executable read of the raw bypass GUC (any spacing/cast spelling). */
 export const INLINE_BYPASS_GUC = /current_setting\s*\(\s*'app\.bypass_rls'/
 
 /**
- * Gated migrations whose raw reads live only in policies a later migration
+ * Forward migrations whose raw reads live only in policies a later migration
  * replaced. Published migrations are immutable, so the fix for such a file is
  * a later migration, and this map names it together with every policy it must
  * drop: `policies` lists [policy, table] pairs.
  */
-export const INLINE_BYPASS_GUC_SUPERSEDED = new Map([
-  ['0691_financial_rate_preferences_versions.sql', {
-    by: '0707_financial_policy_bypass_predicate.sql',
-    policies: [['org_isolation', 'fx_rate_types'], ['org_isolation', 'account_translation_policies'], ['org_isolation', 'subsidiary_accounting_preferences']],
-  }],
-  ['0692_journal_instruction_modes.sql', {
-    by: '0707_financial_policy_bypass_predicate.sql',
-    policies: [['org_isolation', 'journal_reversal_instructions']],
-  }],
-  ['0693_balancing_segment_policy_versions.sql', {
-    by: '0707_financial_policy_bypass_predicate.sql',
-    policies: [['org_isolation', 'segment_balancing_policies']],
-  }],
-  ['0694_period_entity_gl_audit_numbering.sql', {
-    by: '0707_financial_policy_bypass_predicate.sql',
-    policies: [['org_isolation', 'gl_audit_number_policies'], ['org_isolation', 'gl_audit_number_assignments']],
-  }],
-  ['0489_pay_component_department_expenses.sql', {
-    by: '0539_query_console_and_script_authority_hardening.sql',
-    policies: [['tenant_isolation', 'pay_component_department_expenses']],
-  }],
-  ['0497_psp_automation.sql', {
-    by: '0539_query_console_and_script_authority_hardening.sql',
-    policies: [['org_isolation', 'payment_disputes']],
-  }],
-])
+export const INLINE_BYPASS_GUC_SUPERSEDED = new Map()
+
+/** The predicate's own definition: the single place the raw GUC is read. */
+const PREDICATE_DEFINITION =
+  /CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:"?public"?\.)?"?app_bypass_rls_active"?\s*\(\s*\)[\s\S]*?\bAS\s+(\$[A-Za-z_]*\$)[\s\S]*?\1/gi
+
+/**
+ * Blank the predicate's definition, keeping its newlines so reported line
+ * numbers still point into the scanned file.
+ */
+export function withoutPredicateDefinition(content) {
+  return content.replace(PREDICATE_DEFINITION, (definition) => definition.replace(/[^\n]/g, ' '))
+}
+
+function executableSql(content) {
+  return stripSqlComments(withoutPredicateDefinition(content))
+}
 
 function dropsPolicy(content, policy, table) {
   return new RegExp(
@@ -116,7 +97,7 @@ export function supersessionFailure(basename, claim, files) {
 /** Line numbers (1-based) of executable inline-GUC reads in comment-stripped SQL. */
 export function findInlineBypassTrust(content) {
   const hits = []
-  for (const [index, line] of stripSqlComments(content).split('\n').entries()) {
+  for (const [index, line] of executableSql(content).split('\n').entries()) {
     if (INLINE_BYPASS_GUC.test(line)) hits.push(index + 1)
   }
   return hits
@@ -128,15 +109,7 @@ export function findInlineBypassTrust(content) {
  * holds an executable read anywhere, even if no single line does.
  */
 export function hasInlineBypassTrust(content) {
-  return INLINE_BYPASS_GUC.test(stripSqlComments(content))
-}
-
-/** Whether a scan file is post-predicate and therefore gated. */
-export function isGatedFile(file) {
-  const basename = file.split('/').pop()
-  if (basename === 'environments.sql') return true
-  const ordinal = migrationOrdinal(basename)
-  return ordinal !== null && ordinal > BYPASS_PREDICATE_CUTOFF_ORDINAL
+  return INLINE_BYPASS_GUC.test(executableSql(content))
 }
 
 export function auditBypassPredicate(files = SCAN_FILES, superseded = INLINE_BYPASS_GUC_SUPERSEDED) {
@@ -144,10 +117,7 @@ export function auditBypassPredicate(files = SCAN_FILES, superseded = INLINE_BYP
   const stale = []
   const unproven = []
   const seenAllowlisted = new Set()
-  let gated = 0
   for (const file of files) {
-    if (!isGatedFile(file)) continue
-    gated += 1
     const basename = file.split('/').pop()
     const content = readFileSync(file, 'utf8')
     const hits = findInlineBypassTrust(content)
@@ -163,17 +133,22 @@ export function auditBypassPredicate(files = SCAN_FILES, superseded = INLINE_BYP
   for (const basename of superseded.keys()) {
     if (!seenAllowlisted.has(basename)) stale.push(basename)
   }
-  return { violations, stale, unproven, gated }
+  return { violations, stale, unproven, scanned: files.length }
 }
 
 function main() {
-  const { violations, stale, unproven, gated } = auditBypassPredicate()
+  if (RELEASE_SCAN_FILES.length === 0) {
+    console.error('no release schema to scan; the active migration baseline is missing')
+    process.exitCode = 1
+    return
+  }
+  const { violations, stale, unproven, scanned } = auditBypassPredicate()
   console.log(
-    `checked RLS bypass predicate; gated-files=${gated} violations=${violations.length} stale-supersessions=${stale.length}`,
+    `checked RLS bypass predicate; scanned-files=${scanned} violations=${violations.length} stale-supersessions=${stale.length}`,
   )
   if (violations.length) {
     console.error(
-      `new inline app.bypass_rls trust (call public.app_bypass_rls_active() instead): ${violations.join(' ')}`,
+      `inline app.bypass_rls trust (call public.app_bypass_rls_active() instead): ${violations.join(' ')}`,
     )
     process.exitCode = 1
   }

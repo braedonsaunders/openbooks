@@ -134,7 +134,7 @@ export function findUnknownPeriodTokens(text: string): string[] {
 /** The org's configured locale for customer-facing text, English unless set. */
 export async function orgDefaultLocale(runner: Pick<typeof db, "execute">, orgId: string): Promise<string> {
   const row = (await runner.execute<{ locale: string | null }>(sql`
-    select settings->>'defaultLocale' as "locale" from orgs where id = ${orgId}`)).rows[0];
+    select settings->>'defaultLocale' as "locale" from orgs where id = ${orgId}`, "objects"))[0];
   const locale = (row?.locale ?? "").trim();
   return locale || "en";
 }
@@ -150,10 +150,10 @@ export async function assertTemplateTokensKnown(
   orgId: string,
   templateId: string,
 ): Promise<void> {
-  const lines = (await runner.execute<{ description: string | null }>(sql`
-    select description from document_lines where org_id = ${orgId} and document_id = ${templateId}`)).rows;
+  const lines = await runner.execute<{ description: string | null }>(sql`
+    select description from document_lines where org_id = ${orgId} and document_id = ${templateId}`, "objects");
   const memo = (await runner.execute<{ memo: string | null }>(sql`
-    select memo from documents where id = ${templateId} and org_id = ${orgId}`)).rows[0]?.memo ?? null;
+    select memo from documents where id = ${templateId} and org_id = ${orgId}`, "objects"))[0]?.memo ?? null;
   const unknown = new Set<string>();
   for (const row of lines) {
     if (row.description) for (const token of findUnknownPeriodTokens(row.description)) unknown.add(token);
@@ -211,7 +211,7 @@ export async function previewRunTokens(
              next_run_on::text as "nextRunOn", ends_on::text as "endsOn",
              run_count as "runCount", anchor_day as "anchorDay", max_occurrences as "maxOccurrences"
         from recurring_schedules where id = ${input.scheduleId} and org_id = ${orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) return null;
     templateId = row.templateId;
     cadence = row.cadence as Cadence;
@@ -253,9 +253,9 @@ export async function previewRunTokens(
   const line = (await runner.execute<{ description: string | null }>(sql`
     select description from document_lines
      where org_id = ${orgId} and document_id = ${templateId}
-     order by line_number limit 1`)).rows[0];
+     order by line_number limit 1`, "objects"))[0];
   const memo = (await runner.execute<{ memo: string | null }>(sql`
-    select memo from documents where id = ${templateId} and org_id = ${orgId}`)).rows[0]?.memo ?? null;
+    select memo from documents where id = ${templateId} and org_id = ${orgId}`, "objects"))[0]?.memo ?? null;
   return {
     occurrenceOn: nextRunOn,
     description: typeof line?.description === "string" ? resolvePeriodTokens(line.description, ctx) : null,
@@ -419,8 +419,8 @@ async function findOccurrenceDocument(
       join documents d on d.id = g.document_id and d.org_id = g.org_id
      where g.org_id = ${orgId} and g.schedule_id = ${scheduleId} and g.occurrence_on = ${occurrenceOn}
      limit 1
-  `));
-  const row = prior.rows[0];
+  `, "objects"));
+  const row = prior[0];
   if (!row) return null;
   return { documentId: row.id, documentNumber: row.documentNumber, posted: row.status === "posted" };
 }
@@ -553,7 +553,7 @@ async function claimAndGenerateOccurrence(
              run_count as "runCount", max_occurrences as "maxOccurrences",
              skipped_run_ons::text[] as "skippedRunOns"
         from recurring_schedules where id = ${scheduleId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!current?.isActive || current.nextRunOn !== occurrenceDate) return null;
     if (current.endsOn && occurrenceDate > current.endsOn) {
       throw new RecurringError("recurring occurrence is after the schedule end date");
@@ -593,8 +593,8 @@ async function claimAndGenerateOccurrence(
              last_run_at = now()
        where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${occurrenceDate}
       returning id
-    `));
-    if (!claimed.rows.length) return null; // another worker won it
+    `, "objects"));
+    if (!claimed.length) return null; // another worker won it
     // Date the document with its OCCURRENCE date, not today: after a
     // scheduler outage (or for a back-dated schedule) the catch-up
     // occurrences must land in their own periods — July/August/September
@@ -786,7 +786,7 @@ export async function runScheduleCatchUp(
              run_count as "runCount", max_occurrences as "maxOccurrences",
              skipped_run_ons::text[] as "skippedRunOns"
         from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
-    `)).rows[0]);
+    `, "objects"))[0]);
     if (!row) throw new RecurringError("recurring schedule not found", 404);
     const runCount = Number(row.runCount);
     const maxOccurrences = row.maxOccurrences == null ? null : Number(row.maxOccurrences);
@@ -811,7 +811,7 @@ export async function runScheduleCatchUp(
       select d.kind from documents d
        where d.id = ${row.templateId} and d.org_id = ${orgId}
          ${recurringTemplateScopeFilter(orgId, sql`d.id`, sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!template) throw new RecurringError("recurring schedule not found", 404);
     if (!(await isRecurringKindEnabled(orgId, template.kind))) throw new RecurringError("template document kind is disabled", 404);
     // Advancing past one occurrence without generating: the skip-all choice,
@@ -828,8 +828,8 @@ export async function runScheduleCatchUp(
                last_run_at = now()
          where id = ${scheduleId} and org_id = ${orgId} and next_run_on = ${target}
         returning id
-      `)));
-      return moved.rows.length > 0;
+      `, "objects")));
+      return moved.length > 0;
     };
     // upcoming (computed above for the paused guard) is this pass's pending
     // set: the row has not moved since this pass read it.
@@ -854,7 +854,7 @@ export async function runScheduleCatchUp(
         select ends_on::text as "endsOn", next_run_on::text as "nextRunOn",
                run_count as "runCount", max_occurrences as "maxOccurrences"
           from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
-      `)).rows[0]);
+      `, "objects"))[0]);
       // An exhausted occurrence limit ends the run exactly as the end date
       // does, deactivating the schedule so the tick stays quiet too.
       const limitReached = done?.maxOccurrences != null && Number(done.runCount) >= done.maxOccurrences;
@@ -998,7 +998,7 @@ export async function runScheduleNow(
       select template_document_id as "templateId", auto_post as "autoPost",
              is_active as "isActive", name, run_count as "runCount", max_occurrences as "maxOccurrences"
         from recurring_schedules where id = ${scheduleId} and org_id = ${row.orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!current) throw new RecurringError("recurring schedule not found", 404);
     if (!(await actorHasPermission(db, row.orgId, actorId, "documents.manage"))) {
       throw new RecurringError("missing permission: documents.manage", 403);
@@ -1026,7 +1026,7 @@ export async function runScheduleNow(
          ${recurringTemplateScopeFilter(row.orgId, sql`d.id`, sql`d.subsidiary_id`, scope)}
          ${authority ? recurringTemplateScopeFilter(row.orgId, sql`d.id`, sql`d.subsidiary_id`, authority.allowedSubsidiaryIds) : sql``}
        for share of d
-    `)).rows[0];
+    `, "objects"))[0];
     if (!template) throw new RecurringError("recurring schedule not found", 404);
     if (!(await isRecurringKindEnabled(row.orgId, template.kind))) {
       throw new RecurringError("template document kind is disabled", 404);
@@ -1097,8 +1097,8 @@ async function generateFromTemplate(
     custom: Record<string, unknown> | null;
   }>(sql`
     select * from documents where id = ${templateId} and org_id = ${orgId} for share
-  `));
-  const tpl = tplRes.rows[0];
+  `, "objects"));
+  const tpl = tplRes[0];
   if (!tpl) throw new Error("recurring template document not found");
   if (!(await isRecurringKindEnabled(orgId, String(tpl.kind)))) {
     throw new Error("template document kind is disabled");
@@ -1107,17 +1107,17 @@ async function generateFromTemplate(
   const lineRes = (await db.execute<Record<string, unknown>>(sql`
     select * from document_lines where document_id = ${templateId} and org_id = ${orgId}
      order by line_number
-  `));
+  `, "objects"));
   // Stored templates and existing generated documents stay. Turning Inventory
   // off must refuse a generate that would persist inventory / assembly / kit.
   if (!(await inventoryFeatureEnabled(db, orgId))) {
     const itemIds = [...new Set(
-      lineRes.rows.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
+      lineRes.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
     )];
     for (const itemId of itemIds) {
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${orgId}`));
-      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        select kind from items where id = ${itemId} and org_id = ${orgId}`, "objects"));
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         throw new RecurringError("Inventory is disabled", 404);
       }
     }
@@ -1128,12 +1128,12 @@ async function generateFromTemplate(
   const equipmentOn = await orgFeatureEnabled(orgId, "equipment");
   if (!equipmentOn) {
     const itemIds = [...new Set(
-      lineRes.rows.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
+      lineRes.map((line) => line.item_id).filter((itemId): itemId is string => Boolean(itemId)),
     )];
     for (const itemId of itemIds) {
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${orgId}`));
-      if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+        select kind from items where id = ${itemId} and org_id = ${orgId}`, "objects"));
+      if (item[0] && item[0].kind === "equipment_charge") {
         throw new RecurringError("Equipment is disabled", 404);
       }
     }
@@ -1148,7 +1148,7 @@ async function generateFromTemplate(
     select run_count as "runCount", ends_on::text as "endsOn", cadence, cron, anchor_day as "anchorDay",
            max_occurrences as "maxOccurrences"
       from recurring_schedules where id = ${context.scheduleId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!sched) throw new RecurringError("recurring schedule not found", 404);
   const cadence = sched.cadence as Cadence;
   const periodEnd = advanceCadence(
@@ -1216,13 +1216,13 @@ async function generateFromTemplate(
             ${JSON.stringify(tpl.extra_dims ?? {})}::jsonb, ${JSON.stringify(provenance)}::jsonb, ${context.actorId},
             ${tpl.payment_card_id})
     returning id
-  `));
-  const newId = created.rows[0]!.id;
+  `, "objects"));
+  const newId = created[0]!.id;
 
   const amounts: string[] = [];
   const taxes: string[] = [];
   const taxProfiles = new Map<string, TaxComponentConfig[]>();
-  for (const l of lineRes.rows) {
+  for (const l of lineRes) {
     const profileKey = `${l.tax_code_id ?? ""}:${l.tax_group_id ?? ""}`;
     let configs = taxProfiles.get(profileKey);
     if (!configs) {
@@ -1252,8 +1252,8 @@ async function generateFromTemplate(
             ${taxAmount}, ${l.department_id}, ${l.project_id}, ${l.location_id}, ${l.class_id},
             ${l.subsidiary_id}, ${JSON.stringify(l.extra_dims ?? {})}::jsonb, ${l.party_id}, ${l.is_billable ?? false}, ${JSON.stringify(l.custom ?? {})}::jsonb, ${context.actorId}, ${l.settlement_type}, ${l.journal_eliminate ?? false})
       returning id
-    `);
-    if (tax) await persistLineTaxComponents(orgId, inserted.rows[0]!.id, tax.components, context.actorId);
+    `, "objects");
+    if (tax) await persistLineTaxComponents(orgId, inserted[0]!.id, tax.components, context.actorId);
     amounts.push(amount);
     taxes.push(taxAmount);
   }

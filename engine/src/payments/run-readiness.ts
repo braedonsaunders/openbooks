@@ -48,11 +48,11 @@ export async function paymentRunComplianceDecisions(
       join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
      where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
        and i.status <> 'cancelled' and ri.kind <> 'credit'
-  `));
-  if (rows.rows.length === 0) return [];
+  `, "objects"));
+  if (rows.length === 0) return [];
   const decisions = await evaluateBillsForRelease({
     orgId,
-    bills: rows.rows.map((r) => ({
+    bills: rows.map((r) => ({
       documentId: r.document_id,
       documentNumber: r.document_number,
       partyId: r.payee_party_id,
@@ -65,8 +65,8 @@ export async function paymentRunComplianceDecisions(
   });
   return decisions.map((d, i) => ({
     ...d,
-    instructionId: rows.rows[i]!.instruction_id,
-    payee: rows.rows[i]!.payee,
+    instructionId: rows[i]!.instruction_id,
+    payee: rows[i]!.payee,
   }));
 }
 
@@ -211,8 +211,8 @@ export async function lockRunBankEvidence(
         left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
        where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
        order by p.display_name, i.id
-    `));
-    if (instructions.rows.length === 0) throw new PaymentError("run has no payable instructions");
+    `, "objects"));
+    if (instructions.length === 0) throw new PaymentError("run has no payable instructions");
     // Locking party_bank_accounts does not block a party rehome: the scope
     // owner is the party row. Hold every payee party through evidence
     // rendering so a rehome racing generation either waits behind this
@@ -220,7 +220,7 @@ export async function lockRunBankEvidence(
     await lockScopeRows(
       db,
       orgId,
-      [...new Set(instructions.rows.map((r) => r.payee_party_id))].map((id) => ({ kind: "party" as const, id })),
+      [...new Set(instructions.map((r) => r.payee_party_id))].map((id) => ({ kind: "party" as const, id })),
       allowedSubsidiaryIds ?? null,
       "share",
     );
@@ -229,7 +229,7 @@ export async function lockRunBankEvidence(
     // exports of one run from deadlocking each other.
     const bankIds = [
       ...new Set(
-        instructions.rows
+        instructions
           .map((r) => r.payee_bank_account_id)
           .filter((id): id is string => id !== null),
       ),
@@ -251,7 +251,7 @@ export async function lockRunBankEvidence(
 
     const evidence: Array<{ id: string; amount: string; payee: string; documentNumber: string | null; detail: Extract<RailBankDetail, { ok: true }> }> = [];
     const blockers: string[] = [];
-    for (const r of instructions.rows) {
+    for (const r of instructions) {
       const bank = r.payee_bank_account_id ? byId.get(r.payee_bank_account_id) : undefined;
       if (!bank) {
         blockers.push(`${r.payee} (no approved bank account on file)`);
@@ -316,11 +316,11 @@ export async function assertRunPayeesInScope(
   runId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<void> {
-  const rows = (await db.execute<{ payee_party_id: string }>(sql`
+  const rows = await db.execute<{ payee_party_id: string }>(sql`
     select distinct i.payee_party_id
       from payment_instructions i
      where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
-  `)).rows;
+  `, "objects");
   await assertPaymentPartiesInScope(orgId, rows.map((r) => r.payee_party_id), allowedSubsidiaryIds);
 }
 
@@ -358,9 +358,9 @@ export async function paymentRunReadiness(
       left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
       left join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where r.id = ${runId} and r.org_id = ${orgId}
-  `));
-  const method = runInfo.rows[0]?.method;
-  const rail = runInfo.rows[0]?.rail;
+  `, "objects"));
+  const method = runInfo[0]?.method;
+  const rail = runInfo[0]?.rail;
   // Collection runs carry method `direct_debit` regardless of rail, which used
   // to skip every bank check below and report green while the exporter stored
   // an unvalidated file. Resolve the rail's own bank method so debtors face
@@ -394,25 +394,25 @@ export async function paymentRunReadiness(
       join parties p on p.id = i.payee_party_id and p.org_id = i.org_id
       left join party_bank_accounts b on b.id = i.payee_bank_account_id and b.org_id = i.org_id
      where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled' ${payeeScope}
-  `));
+  `, "objects"));
 
   // An unpinned payee is named by the state its bank details are in, so the
   // blocker says what is missing and how to fix it. The state comes from the
   // same classification run creation and the run builder use.
   const payeeSideMethod = method === "ach" || method === "sepa" || method === "eft";
-  const unpinnedPartyIds = [...new Set(rows.rows.filter((r) => !r.payee_bank_account_id).map((r) => r.payee_party_id))];
+  const unpinnedPartyIds = [...new Set(rows.filter((r) => !r.payee_bank_account_id).map((r) => r.payee_party_id))];
   const payeeBankStates = new Map<string, string>();
   if (payeeSideMethod && unpinnedPartyIds.length > 0) {
     const states = await db.execute<{ party_id: string; state: string }>(sql`
       select p.id as party_id, ${payeeBankStateSql(sql`p.id`, sql`${orgId}::uuid`)} as state
         from parties p
        where p.org_id = ${orgId} and p.id = any(${`{${unpinnedPartyIds.join(",")}}`}::uuid[])
-    `);
-    for (const row of states.rows) payeeBankStates.set(row.party_id, row.state);
+    `, "objects");
+    for (const row of states) payeeBankStates.set(row.party_id, row.state);
   }
 
   const blockers: RunBlocker[] = [];
-  for (const r of rows.rows) {
+  for (const r of rows) {
     if (method === "cheque" || method === "positive_pay") continue;
     if (!r.payee_bank_account_id) {
       const reason = payeeSideMethod

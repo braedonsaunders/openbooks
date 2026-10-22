@@ -89,9 +89,9 @@ async function setup() {
 }
 
 async function orderDrafts(orgId: string, kind: string) {
-  return (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  return await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select id, subsidiary_id from documents where org_id = ${orgId} and kind = ${kind}
-  `)).rows
+  `, 'objects')
 }
 
 for (const { kind, post, permission } of CASES) {

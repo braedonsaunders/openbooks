@@ -69,11 +69,11 @@ test("a marketplace line saved through the editor books facilitator-collected ta
       lines: [{ accountId: f.org.accounts.revenue, amount: "200.0000", taxCodeId: f.taxCode, marketplaceFacilitator: "Amazon" }],
     }, { source: "api", allowedSubsidiaryIds: null }));
     assert.equal(result.status, 201, JSON.stringify(result.body));
-    const evidence = (await withOrgContext(f.org.orgId, () => db.execute<{ collectedBy: string; facilitatorName: string | null; taxAmount: string }>(sql`
+    const evidence = await withOrgContext(f.org.orgId, () => db.execute<{ collectedBy: string; facilitatorName: string | null; taxAmount: string }>(sql`
       select c.collected_by as "collectedBy", c.facilitator_name as "facilitatorName", c.tax_amount::text as "taxAmount"
         from document_line_tax_components c
         join document_lines dl on dl.id = c.document_line_id and dl.org_id = c.org_id
-       where dl.document_id = ${createdId(result.body)} and dl.org_id = ${f.org.orgId}`))).rows;
+       where dl.document_id = ${createdId(result.body)} and dl.org_id = ${f.org.orgId}`, "objects"));
     // Before the editor delegated to the engine writer, collected_by fell to
     // its 'merchant' default and the facilitator's tax posted as ours.
     assert.deepEqual(evidence, [{ collectedBy: "marketplace", facilitatorName: "Amazon", taxAmount: "20.0000" }]);
@@ -94,10 +94,10 @@ test("moving a draft's date across a rate change refuses a header-only save", { 
     assert.equal(created.status, 201, JSON.stringify(created.body));
     const id = createdId(created.body);
     const taxTotal = async () => (await withOrgContext(f.org.orgId, () => db.execute<{ t: string }>(sql`
-      select tax_total::text as t from documents where id = ${id} and org_id = ${f.org.orgId}`))).rows[0]!.t;
+      select tax_total::text as t from documents where id = ${id} and org_id = ${f.org.orgId}`, "objects")))[0]!.t;
     assert.equal(await taxTotal(), "50.0000");
     const expectedUpdatedAt = (await withOrgContext(f.org.orgId, () => db.execute<{ revision: string }>(sql`
-      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where org_id=${f.org.orgId} and id=${id}`))).rows[0]!.revision;
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where org_id=${f.org.orgId} and id=${id}`, "objects")))[0]!.revision;
     // The stored 5% would otherwise post on an August date where 6% applies.
     const headerOnly = await withOrgContext(f.org.orgId, () => updateRecord(f.user, invoices, [], id, { expectedUpdatedAt, documentDate: "2026-08-15" }, { source: "api", allowedSubsidiaryIds: null }));
     assert.equal(headerOnly.status, 422);

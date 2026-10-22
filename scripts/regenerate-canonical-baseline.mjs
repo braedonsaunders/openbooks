@@ -1,28 +1,25 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
 import { splitSqlStatements } from "./check-migration-preflights.mjs";
 import { stripSqlComments } from "./check-migration-headers.mjs";
 
 /**
- * The input is a schema-only dump produced inside the release-pinned
- * PostgreSQL image, never by an arbitrary workstation client:
+ * The input is a schema-only dump that scripts/prepare-migration-baseline.mts
+ * produces inside the release-pinned PostgreSQL image, never by an arbitrary
+ * workstation client:
  *
  * postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
  *
  * pg_dump --format=plain --schema-only --encoding=UTF8 --no-owner
  *   --no-tablespaces --no-table-access-method --no-security-labels
  *   --no-publications --no-subscriptions --strict-names --schema=public
- *   --schema=openbooks_query --exclude-table=public._applied_migrations
+ *   --schema=openbooks_query --schema=tenant_retirement
+ *   --exclude-table=<each migration ledger table>
  *
  * PostgreSQL 16.9 predates psql's restrict-key metacommands. The transformer
  * rejects every psql metacommand, so its output remains node-postgres-safe.
  *
  * The baseline also carries hand-written prose that pg_dump cannot know about:
  * design-rationale blocks sitting under a `-- Name: ...` object header. Those
- * are lifted from the previous baseline and re-anchored onto the same headers,
- * so regenerating in place is a fixed point instead of a silent doc deletion.
- * `--output` doubles as the default annotation source; `--no-annotations`
- * regenerates without them.
+ * are lifted from the previous baseline and re-anchored onto the same headers.
  */
 
 const HEADER = `-- OpenBooks canonical PostgreSQL baseline.
@@ -324,66 +321,4 @@ export function canonicalizePgDump(rawDump, { annotations = new Map(), registryR
   source = restoreHandwrittenAnnotations(source, annotations);
 
   return `${HEADER}${source}\n\n\n-- Rebuild the reviewed query catalog after every canonical table exists. This\n-- also revokes any public-table grants emitted earlier in the baseline.\nSELECT public.openbooks_refresh_query_catalog();\n\n\n-- End of canonical baseline.\n`;
-}
-
-const USAGE = "usage: regenerate-canonical-baseline --dump <pg_dump.sql> --output <0001_baseline.sql>"
-  + " [--annotations <previous_baseline.sql> | --no-annotations]";
-
-function parseArguments(argv) {
-  const known = new Set(["--dump", "--output", "--annotations", "--no-annotations"]);
-  const values = new Map();
-  for (let index = 0; index < argv.length; index += 1) {
-    const flag = argv[index];
-    if (!known.has(flag)) throw new Error(USAGE);
-    if (values.has(flag)) throw new Error(USAGE);
-    if (flag === "--no-annotations") {
-      values.set(flag, true);
-      continue;
-    }
-    const value = argv[index + 1];
-    if (value === undefined || value.startsWith("--")) throw new Error(USAGE);
-    values.set(flag, value);
-    index += 1;
-  }
-
-  const dump = values.get("--dump");
-  const output = values.get("--output");
-  const explicitAnnotations = values.get("--annotations");
-  if (!dump || !output) throw new Error(USAGE);
-  if (values.has("--no-annotations") && explicitAnnotations !== undefined) {
-    throw new Error(USAGE);
-  }
-
-  return {
-    dump,
-    output,
-    // Regenerating in place is the normal call, so the file being replaced is
-    // the default source of the prose that has to survive.
-    annotations: values.has("--no-annotations") ? null : explicitAnnotations ?? output,
-    annotationsRequired: explicitAnnotations !== undefined,
-  };
-}
-
-async function readAnnotations(path, required) {
-  if (path === null) return new Map();
-  let previous;
-  try {
-    previous = await readFile(path, "utf8");
-  } catch (err) {
-    if (!required && err.code === "ENOENT") return new Map();
-    throw err;
-  }
-  return extractHandwrittenAnnotations(previous);
-}
-
-async function main() {
-  const { dump, output, annotations, annotationsRequired } = parseArguments(process.argv.slice(2));
-  const canonical = canonicalizePgDump(await readFile(dump, "utf8"), {
-    annotations: await readAnnotations(annotations, annotationsRequired),
-  });
-  await writeFile(output, canonical, { encoding: "utf8", mode: 0o644 });
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main();
 }

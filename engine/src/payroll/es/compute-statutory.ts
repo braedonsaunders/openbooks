@@ -113,8 +113,8 @@ async function refuseIfPriorPayChanged(
         and d.status <> 'voided'
         and s.gross <> ${currentOrdinaryGross}::numeric
     ) as changed
-  `);
-  if (prior.rows[0]?.changed === true) {
+  `, "objects");
+  if (prior[0]?.changed === true) {
     fail(
       "prior committed pay in this tax year differs from current ordinary pay; the Article 87 "
       + "regularization needs year-to-date retentions and remaining expected remuneration. "

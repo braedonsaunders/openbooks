@@ -111,7 +111,7 @@ export async function readAvailability(
   const weekStarts = weeksBetween(firstSunday, lastSunday);
   const lastSaturday = addCalendarDays(lastSunday, 6);
   const requestedIds = list(employeeIds);
-  const employeeRows = (await db.execute<{
+  const employeeRows = await db.execute<{
     party_id: string;
     display_name: string;
     job_title: string | null;
@@ -137,7 +137,7 @@ export async function readAvailability(
        and p.id in (${requestedIds})
        ${scopePredicate(allowedSubsidiaryIds)}
      order by p.id
-  `)).rows;
+  `, "objects");
   if (employeeRows.length === 0) return [];
 
   const employees: EmployeeAvailabilityScope[] = employeeRows.map((row) => ({
@@ -170,7 +170,7 @@ export async function readAvailability(
        and e.worker_party_id in (${ids})
        and a.on_date >= ${firstSunday} and a.on_date <= ${lastSaturday}
      order by e.worker_party_id, a.on_date, a.id
-  `)).rows.map((row) => ({
+  `, "objects")).map((row) => ({
     id: row.id,
     employeePartyId: row.employee_party_id,
     onDate: row.on_date,

@@ -52,7 +52,7 @@ test("a committed count create retried with the same key returns the original co
     assert.deepEqual(replay, { ...result, replayed: true });
     assert.equal(replay.id, result.id, "the retry must return the ORIGINAL count id");
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from stock_counts where org_id=${org.orgId}`)).rows[0]!.n,
+      (await db.execute<{ n: number }>(sql`select count(*)::int as n from stock_counts where org_id=${org.orgId}`, "objects"))[0]!.n,
       1, "the retry must replay, not open a second count",
     );
     // A restricted actor gets the same response for the extant count outside

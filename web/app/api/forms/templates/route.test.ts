@@ -70,11 +70,12 @@ const mockSources = new Map<string, string>([
         async transaction(work) {
           state.transactionStarts += 1
           const tx = {
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               state.calls.push(text)
               if (text.includes('select 1 from form_templates')) {
-                return { rows: state.dupe ? [{ '?column?': 1 }] : [] }
+                return inMode({ rows: state.dupe ? [{ '?column?': 1 }] : [] })
               }
               if (text.includes('insert into form_templates')) {
                 if (state.raceInsert) {
@@ -82,13 +83,13 @@ const mockSources = new Map<string, string>([
                   wrapped.cause = { code: '23505' }
                   throw wrapped
                 }
-                return { rows: [{ id: 'template-1' }] }
+                return inMode({ rows: [{ id: 'template-1' }] })
               }
               if (text.includes('insert into form_template_versions')) {
                 if (state.failVersionWrite) throw new Error('version write failed')
-                return { rows: [] }
+                return inMode({ rows: [] })
               }
-              return { rows: [] }
+              return inMode({ rows: [] })
             },
           }
           return work(tx)

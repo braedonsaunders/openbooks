@@ -237,9 +237,9 @@ test(
       // The refusal enables nothing: the schedule stays inactive.
       const state = await withBypass(async () => {
         const r = await db.execute<{ is_active: boolean }>(
-          sql`select is_active from sftp_import_schedules where id = ${scheduleId}`,
+          sql`select is_active from sftp_import_schedules where id = ${scheduleId}`, "objects",
         );
-        return r.rows[0];
+        return r[0];
       });
       assert.equal(state?.is_active, false);
     } finally {
@@ -267,9 +267,9 @@ test(
       // Neither the schedule nor the server is silently enabled.
       const state = await withBypass(async () => {
         const r = await db.execute<{ is_active: boolean }>(
-          sql`select is_active from sftp_servers where id = ${serverId}`,
+          sql`select is_active from sftp_servers where id = ${serverId}`, "objects",
         );
-        return r.rows[0];
+        return r[0];
       });
       assert.equal(state?.is_active, false);
     } finally {

@@ -70,7 +70,7 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
   const secondId = (await withBypass(() => db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-      from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`))).rows[0]!.id;
+      from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects")))[0]!.id;
   const giftProgram = await withBypass(() =>
     createProgram({
       orgId: org.orgId,
@@ -111,8 +111,8 @@ async function seedScopeOrg(): Promise<ScopeFixture> {
       const updated = await db.execute(sql`
         update app_roles set permissions = '["stored_value.read","stored_value.manage","stored_value.adjust"]'::jsonb,
           subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
-         where org_id = ${org.orgId} and key = ${key} returning id`);
-      assert.equal(updated.rows.length, 1, `${key}: scoped actor setup updates one role`);
+         where org_id = ${org.orgId} and key = ${key} returning id`, "objects");
+      assert.equal(updated.length, 1, `${key}: scoped actor setup updates one role`);
     });
     return user;
   }
@@ -188,7 +188,7 @@ async function balanceOf(orgId: string, accountId: string): Promise<{ balance: s
   return (await withOrgContext(orgId, () => db.execute<{ balance: string; status: string; entries: number }>(sql`
     select a.balance_minor::text as balance, a.status,
       (select count(*)::int from stored_value_entries where org_id = ${orgId} and account_id = ${accountId}) as entries
-      from stored_value_accounts a where a.org_id = ${orgId} and a.id = ${accountId}`))).rows[0]!;
+      from stored_value_accounts a where a.org_id = ${orgId} and a.id = ${accountId}`, "objects")))[0]!;
 }
 
 test("a restricted actor's adjustment of a foreign-entity account reads as missing and writes nothing", { skip: !DB }, async () => {
@@ -316,7 +316,7 @@ test("a single-entity actor issues into their entity by default, and is refused 
       }),
     );
     const home = (await withOrgContext(fx.orgId, () => db.execute<{ subsidiary: string }>(sql`
-      select subsidiary_id as subsidiary from stored_value_accounts where org_id = ${fx.orgId} and id = ${issued.accountId}`))).rows[0]!;
+      select subsidiary_id as subsidiary from stored_value_accounts where org_id = ${fx.orgId} and id = ${issued.accountId}`, "objects")))[0]!;
     assert.equal(home.subsidiary, fx.subsidiaryId, "the issue lands in the actor's single allowed entity");
     await assert.rejects(
       withOrgContext(fx.orgId, () =>

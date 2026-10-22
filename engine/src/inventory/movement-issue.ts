@@ -170,7 +170,7 @@ export async function issueInventory(
         const where = (await tx.execute<{ item: string; location: string | null }>(sql`
           select coalesce(nullif(btrim(i.code), ''), i.name) as item, l.code as location
             from items i left join stock_locations l on l.org_id = i.org_id and l.id = ${input.stockLocationId}
-           where i.org_id = ${orgId} and i.id = ${input.itemId}`)).rows[0];
+           where i.org_id = ${orgId} and i.id = ${input.itemId}`, "objects"))[0];
         const item = where?.item ?? input.itemId;
         const location = where?.location ? ` at ${where.location}` : "";
         throw new InventoryError(
@@ -263,8 +263,8 @@ export async function issueInventory(
               ${neg(issueQuantity)}, ${unitCost}, ${neg(cost)}, ${input.documentLineId ?? null}, ${entryId},
               ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`));
-    const movementId = mv.rows[0]!.id;
+      returning id`, "objects"));
+    const movementId = mv[0]!.id;
     await recordConsumptions(
       tx,
       orgId,
@@ -274,8 +274,8 @@ export async function issueInventory(
       actorId,
     );
     if (input.inspectionScrapId) {
-      const stamped=await tx.execute(sql`update inventory_inspections set scrap_movement_id=${movementId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${input.inspectionScrapId} and status='fail' and disposition is null and scrap_movement_id is null returning id`);
-      if (stamped.rows.length!==1) throw new InventoryError("The inspection scrap effect was not recorded.");
+      const stamped=await tx.execute(sql`update inventory_inspections set scrap_movement_id=${movementId},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${input.inspectionScrapId} and status='fail' and disposition is null and scrap_movement_id is null returning id`, "objects");
+      if (stamped.length!==1) throw new InventoryError("The inspection scrap effect was not recorded.");
     }
     if (!isZero(shortfallQuantity)) {
       await tx.execute(sql`

@@ -35,23 +35,23 @@ async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   await withBypassContext(async () => {
-    const enabled = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"demandPlanning":true}'::jsonb) where id=${org.orgId} returning id`);
-    assert.equal(enabled.rows.length, 1);
+    const enabled = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"demandPlanning":true}'::jsonb) where id=${org.orgId} returning id`, "objects");
+    assert.equal(enabled.length, 1);
     const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!.fiscal_calendar_id;
+      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`, "objects"))[0]!.fiscal_calendar_id;
     // Transfer orders resolve their transit default up front, so the
     // fixture carries a transit location like the movement fence suite.
     const transit = await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active)
-      values(${randomUUID()},${org.orgId},${org.locationId},'PLAN-TRANSIT','transit',true) returning id`);
-    assert.equal(transit.rows.length, 1);
+      values(${randomUUID()},${org.orgId},${org.locationId},'PLAN-TRANSIT','transit',true) returning id`, "objects");
+    assert.equal(transit.length, 1);
     for (const [number, name, start, end] of [
       [5, "2026-05", "2026-05-01", "2026-05-31"],
       [6, "2026-06", "2026-06-01", "2026-06-30"],
     ] as const) {
       const seeded = await db.execute(sql`
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-        values (${randomUUID()}, ${org.orgId}, 2026, ${number}, ${name}, ${start}, ${end}, false, ${cal}) returning id`);
-      assert.equal(seeded.rows.length, 1);
+        values (${randomUUID()}, ${org.orgId}, 2026, ${number}, ${name}, ${start}, ${end}, false, ${cal}) returning id`, "objects");
+      assert.equal(seeded.length, 1);
     }
   });
   return { org, actorId };
@@ -277,7 +277,7 @@ test("a repeated idempotency key replays the stored run instead of planning twic
     assert.equal(replay.replayed, true);
     assert.equal(replay.id, first.id);
     const count = await withBypassContext(async () => (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from demand_forecast_runs where org_id = ${f.org.orgId}`)).rows[0]!.count);
+      select count(*)::text as count from demand_forecast_runs where org_id = ${f.org.orgId}`, "objects"))[0]!.count);
     assert.equal(count, "1");
   } finally {
     await dropScratchOrg(f.org.orgId);
@@ -289,8 +289,8 @@ test("a disabled demandPlanning gate refuses the run, the policy save and the re
   try {
     await seed(f);
     await withBypassContext(async () => {
-      const disabled = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"demandPlanning":false}'::jsonb) where id=${f.org.orgId} returning id`);
-      assert.equal(disabled.rows.length, 1);
+      const disabled = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"demandPlanning":false}'::jsonb) where id=${f.org.orgId} returning id`, "objects");
+      assert.equal(disabled.length, 1);
     });
     await assert.rejects(
       run(f),
@@ -320,8 +320,8 @@ test("forecast accuracy compares past forecasts against actual issues by item cl
           (id, org_id, number, as_of, horizon_weeks, parameters, status, run_by, ran_at, created_by, updated_by)
         values (${runId}, ${f.org.orgId}, 'DFP-000001', '2026-05-01', 8,
           ${JSON.stringify({ subsidiaryId: f.org.subsidiaryId })}::jsonb,
-          'complete', ${f.actorId}, now(), ${f.actorId}, ${f.actorId}) returning id`);
-      assert.equal(inserted.rows.length, 1);
+          'complete', ${f.actorId}, now(), ${f.actorId}, ${f.actorId}) returning id`, "objects");
+      assert.equal(inserted.length, 1);
       for (const day of GRID) {
         const row = await db.execute(sql`
           insert into demand_forecasts
@@ -329,8 +329,8 @@ test("forecast accuracy compares past forecasts against actual issues by item cl
              forecast_qty, lower_qty, upper_qty, method, explanation, created_by, updated_by)
           values (${f.org.orgId}, ${runId}, ${f.org.items.fifo}, ${f.org.stockLocationId},
             ${day}::date, 'week', '12', '10', '14', 'moving_average', '{}'::jsonb,
-            ${f.actorId}, ${f.actorId}) returning id`);
-        assert.equal(row.rows.length, 1);
+            ${f.actorId}, ${f.actorId}) returning id`, "objects");
+        assert.equal(row.length, 1);
       }
     });
     const rows = await withBypassContext(() => forecastAccuracy(db, f.org.orgId, f.org.subsidiaryId));

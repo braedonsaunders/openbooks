@@ -197,27 +197,27 @@ async function seedFinalizedFiling(
     const recipients = await db.execute<{ id: string }>(sql`
       select id from information_return_recipients
        where org_id = ${org.orgId} and filing_id = ${filing.id}
-       order by party_id`);
-    return { filingId: filing.id, recipientIds: recipients.rows.map((row) => row.id) };
+       order by party_id`, "objects");
+    return { filingId: filing.id, recipientIds: recipients.map((row) => row.id) };
   });
 }
 
 async function printedAts(orgId: string, filingId: string): Promise<(string | null)[]> {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ printed_at: string | null }>(sql`
       select printed_at::text as printed_at from information_return_recipients
-       where org_id = ${orgId} and filing_id = ${filingId} order by party_id`),
-  )).rows;
+       where org_id = ${orgId} and filing_id = ${filingId} order by party_id`, "objects"),
+  );
   return rows.map((row) => row.printed_at);
 }
 
 async function auditCount(orgId: string, filingId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${orgId} and table_name = 'information_return_recipients'
-         and row_id in (select id from information_return_recipients where filing_id = ${filingId})`),
-  )).rows;
+         and row_id in (select id from information_return_recipients where filing_id = ${filingId})`, "objects"),
+  );
   return rows[0]!.n;
 }
 

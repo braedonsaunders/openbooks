@@ -256,6 +256,6 @@ export async function projectProfitabilityCustomerOptions(
      where p.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by cu.display_name, cu.id
-  `))
-  return result.rows
+  `, "objects"))
+  return result
 }

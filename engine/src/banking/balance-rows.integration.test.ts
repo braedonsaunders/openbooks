@@ -194,7 +194,7 @@ async function postReceipt(org: ScratchOrg, actorId: string, amount: string): Pr
          'Receipt', 'draft', 'manual', ${actorId}, ${actorId})
     `);
     const offsetAmount = `-${amount}`;
-    const [line] = (await tx.execute<{ id: string }>(sql`
+    const [line] = await tx.execute<{ id: string }>(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -204,7 +204,7 @@ async function postReceipt(org: ScratchOrg, actorId: string, amount: string): Pr
         (${randomUUID()}, ${org.orgId}, ${entryId}, 2,
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD', ${offsetAmount}, 1, 'Receipt')
       returning id
-    `)).rows;
+    `, "objects");
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -261,14 +261,14 @@ test(
       const stored = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(stored, 1, "the balance row is never written as a transaction");
       assert.equal(imported.balanceCandidates.length, 1);
 
       const [receipt] = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100.00" },
         ctx,

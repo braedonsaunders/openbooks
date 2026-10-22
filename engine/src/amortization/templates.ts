@@ -36,7 +36,7 @@ export async function resolveTemplateVersion(
 ): Promise<TemplateVersion> {
   const named = (await runner.execute<{ code: string; name: string }>(sql`
     select code, name from expense_amortization_templates
-     where org_id = ${orgId} and id = ${templateId}`)).rows[0];
+     where org_id = ${orgId} and id = ${templateId}`, "objects"))[0];
   if (!named) {
     throw new AmortizationError("The amortization template does not exist in this organization.", {
       status: 404,
@@ -49,7 +49,7 @@ export async function resolveTemplateVersion(
       from expense_amortization_templates
      where org_id = ${orgId} and code = ${named.code} and is_active and effective_from <= ${onDate}
      order by effective_from desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!row) {
     throw new AmortizationError(
       `Amortization template ${named.code} has no active version in effect on ${onDate}.`,
@@ -66,7 +66,7 @@ export async function resolveTemplateVersion(
 export async function loadTemplateVersion(runner: SqlExecutor, orgId: string, templateId: string): Promise<TemplateVersion> {
   const row = (await runner.execute<TemplateRow>(sql`
     select ${TEMPLATE_COLUMNS} from expense_amortization_templates
-     where org_id = ${orgId} and id = ${templateId}`)).rows[0];
+     where org_id = ${orgId} and id = ${templateId}`, "objects"))[0];
   if (!row) {
     throw new AmortizationError("The amortization template does not exist in this organization.", {
       status: 404,
@@ -86,7 +86,7 @@ interface AccountFacts {
 
 async function accountFacts(runner: SqlExecutor, orgId: string, accountId: string): Promise<AccountFacts | null> {
   const row = (await runner.execute<{ code: string; type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select coalesce(number, name) as code, type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+    select coalesce(number, name) as code, type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
   return row ? { code: row.code, type: row.type, isActive: row.is_active, isSummary: row.is_summary } : null;
 }
 
@@ -180,7 +180,7 @@ export async function listCurrentTemplates(
   onDate: string,
   retainedIds: readonly string[] = [],
 ): Promise<{ id: string; code: string; name: string; method: AmortizationMethod; termSource: AmortizationTermSource }[]> {
-  const rows = (await runner.execute<{ id: string; code: string; name: string; method: string; term_source: string }>(sql`
+  const rows = await runner.execute<{ id: string; code: string; name: string; method: string; term_source: string }>(sql`
     with current_versions as (
       select distinct on (code) id, code, name, method, term_source
         from expense_amortization_templates
@@ -191,7 +191,7 @@ export async function listCurrentTemplates(
     ${retainedIds.length > 0 ? sql`union
       select id, code, name, method, term_source from expense_amortization_templates
       where org_id = ${orgId} and id in (${sql.join(retainedIds.map(id => sql`${id}::uuid`), sql`, `)})` : sql``}
-    order by code, id`)).rows;
+    order by code, id`, "objects");
   return rows.map((row) => ({
     id: row.id,
     code: row.code,

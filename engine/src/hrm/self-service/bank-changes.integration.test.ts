@@ -64,14 +64,14 @@ function fakeNotifier(seen: Array<{ data: Parameters<BankChangeNotifier>[0]; job
 }
 
 async function bankRows(orgId: string, partyId: string): Promise<Array<Record<string, unknown>>> {
-  return (await db.execute<Record<string, unknown>>(sql`
+  return await db.execute<Record<string, unknown>>(sql`
     select id::text as id, bank_name as "bankName", account_number_encrypted as sealed,
            account_last_four as "lastFour", approval_status as status, is_active as "isActive",
            retired_at as "retiredAt", to_jsonb(party_bank_accounts) as row
       from party_bank_accounts
      where org_id = ${orgId} and party_id = ${partyId}
      order by created_at, id
-  `)).rows;
+  `, "objects");
 }
 
 test("bank change with no flow applies sealed, masked, audited, and notified", { skip: !DB }, async () => {
@@ -116,12 +116,12 @@ test("bank change with no flow applies sealed, masked, audited, and notified", {
         (select count(*) from hrm_employment_change_requests where org_id = ${h.org.orgId} and payload::text like ${`%${ACCOUNT}%`}) +
         (select count(*) from audit_log where org_id = ${h.org.orgId} and changes::text like ${`%${ACCOUNT}%`})
       )::int as n
-    `);
-    assert.equal(leaks.rows[0]!.n, 0, "the full account number persists nowhere");
+    `, "objects");
+    assert.equal(leaks[0]!.n, 0, "the full account number persists nowhere");
     const audits = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${h.org.orgId} and table_name = 'party_bank_accounts' and action = 'insert'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(audits, 1, "the bank write carries its own audit entry");
 
     // The fraud notice names the bank and the last four only, to the
@@ -233,7 +233,7 @@ test("bank filing refusals name the field and store nothing", { skip: !DB }, asy
 
     const requests = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_employment_change_requests where org_id = ${h.org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(requests, 0, "refused filings store no request");
     assert.equal((await bankRows(h.org.orgId, h.workerPartyId)).length, 0, "refused filings store no bank row");
   });

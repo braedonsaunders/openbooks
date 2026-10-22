@@ -23,12 +23,12 @@ const KNOWN_TARGETS: Record<string, Record<string, number>> = {
 }
 
 async function measuresForNsId(nsId: string) {
-  const p = (await db.execute<{ id: string; org_id: string; code: string; name: string }>(sql`select id, org_id, code, name from projects where custom->>'nsId' = ${nsId} limit 1`))
-  if (!p.rows[0]) return null
-  const { id, org_id } = p.rows[0]
+  const p = (await db.execute<{ id: string; org_id: string; code: string; name: string }>(sql`select id, org_id, code, name from projects where custom->>'nsId' = ${nsId} limit 1`, 'objects'))
+  if (!p[0]) return null
+  const { id, org_id } = p[0]
   const type = await loadProjectType(org_id, id)
   const fin = await resolveProjectFinancials(org_id, id, type.financialProfile)
-  return { project: p.rows[0], type: type.key, measures: fin.measures }
+  return { project: p[0], type: type.key, measures: fin.measures }
 }
 
 async function main() {

@@ -21,12 +21,12 @@ test('saved week lifecycle wins over mixed entry status while totals and empty h
     await withBypassContext(async () => {
       assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
         coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"timeTracking":true}'::jsonb)
-        where id=${org.orgId} returning id`)).rows.length, 1)
+        where id=${org.orgId} returning id`, 'objects')).length, 1)
       assert.equal((await db.execute(sql`update app_roles set permissions='["time.read"]'::jsonb
-        where org_id=${org.orgId} and key='week-reviewer' returning id`)).rows.length, 1)
+        where org_id=${org.orgId} and key='week-reviewer' returning id`, 'objects')).length, 1)
       assert.equal((await db.execute(sql`update app_roles set permissions='["time.read"]'::jsonb,
         subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb
-        where org_id=${org.orgId} and key='restricted-week-reviewer' returning id`)).rows.length,1)
+        where org_id=${org.orgId} and key='restricted-week-reviewer' returning id`, 'objects')).length,1)
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
         values(${foreign},${other.orgId},'person','Other week worker',${other.subsidiaryId},true,'{}'::jsonb)`)
       await db.execute(sql`insert into timesheet_weeks(id,org_id,employee_party_id,week_start,status,created_by,updated_by)
@@ -52,7 +52,7 @@ test('saved week lifecycle wins over mixed entry status while totals and empty h
       }
     })
     const before = await withOrgContext(org.orgId, () => db.execute(sql`
-      select id,status,hours from time_entries where org_id=${org.orgId} order by id`))
+      select id,status,hours from time_entries where org_id=${org.orgId} order by id`, 'objects'))
     const view = defaultListView('timesheet_week')
     const read = (over: { actorId?: string; filters?: typeof view.filters } = {}) =>
       withOrgContext(org.orgId, async () => {
@@ -80,8 +80,8 @@ test('saved week lifecycle wins over mixed entry status while totals and empty h
     const none = await read({ actorId:emptyActor })
     assert.ok(none.ok)
     if (none.ok) assert.equal(none.rows.length,0)
-    assert.deepEqual((await withOrgContext(org.orgId,()=>db.execute(sql`
-      select id,status,hours from time_entries where org_id=${org.orgId} order by id`))).rows,before.rows,
+    assert.deepEqual(await withOrgContext(org.orgId,()=>db.execute(sql`
+      select id,status,hours from time_entries where org_id=${org.orgId} order by id`, 'objects')),before,
       'list reads do not change atomic approval or financial provenance')
   } finally {
     await dropScratchOrgReporting(org.orgId)

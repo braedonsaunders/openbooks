@@ -61,7 +61,7 @@ async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>): Pr
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Attention tester", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
       assert.equal(result.rowCount, 1);
     });
     await run(org, actor);

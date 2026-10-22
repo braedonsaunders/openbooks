@@ -30,7 +30,8 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.psp-disputes-route-test')]
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const staticText = (chunk) => {
             if (typeof chunk !== 'object' || chunk === null) return ''
             if (Array.isArray(chunk.value)) return chunk.value.join('')
@@ -47,9 +48,9 @@ const mockSources = new Map<string, string>([
           const text = (query?.queryChunks ?? []).map(staticText).join('')
           if (text.includes('from payment_disputes')) {
             const id = params.find((value) => state.existingDisputes.has(value))
-            return { rows: id ? [{ id }] : [] }
+            return Promise.resolve({ rows: id ? [{ id }] : [] }).then(inMode)
           }
-          return { rows: [] }
+          return Promise.resolve({ rows: [] }).then(inMode)
         }
       }
     `,

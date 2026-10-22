@@ -144,8 +144,8 @@ async function assertTaxCodeMatchesPack(
      where code.org_id = ${args.orgId} and code.id = ${args.codeId}
      group by code.id, code.name, code.jurisdiction_id, code.country,
               code.region, code.applies_to, code.is_active
-  `));
-  const actual = result.rows[0];
+  `, "objects"));
+  const actual = result[0];
   const expectedRates = packRateSchedule(args.definition.rates ?? []);
   const actualRates = packRateSchedule(actual?.rates ?? []);
   const metadataMatches = actual
@@ -221,8 +221,8 @@ async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Prom
      where code.org_id = ${args.orgId} and code.id = ${args.codeId}
      group by code.id, code.name, code.jurisdiction_id, code.country,
               code.region, code.applies_to, code.is_active
-  `));
-  const actual = result.rows[0];
+  `, "objects"));
+  const actual = result[0];
   if (!actual) return null;
   // Metadata drift means the tenant customized or renamed the code; that is not
   // pack-owned anymore and belongs to the conflict assert below, not to us.
@@ -243,8 +243,8 @@ async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Prom
   const used = (await args.tx.execute(sql`
     select 1 from document_line_tax_components
      where org_id = ${args.orgId} and tax_code_id = ${args.codeId}
-     limit 1`));
-  if (used.rows.length > 0) return args.definition.code;
+     limit 1`, "objects"));
+  if (used.length > 0) return args.definition.code;
 
   await args.tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -264,10 +264,10 @@ async function refreshPackCodeRatesIfUnused(args: PackCodeRateRefreshArgs): Prom
       insert into tax_rates
         (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
       values (${args.orgId}, ${args.codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${args.actorId}, ${args.actorId})
-      returning id`));
+      returning id`, "objects"));
     await args.tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${args.orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
+      values (${args.orgId}, 'tax_rates', ${insertedRate[0]!.id}, 'insert',
               ${JSON.stringify({ source: "tax_setup", pack: args.packCode, taxCode: args.definition.code, refreshed: true, after: rate })}::jsonb,
               ${args.actorId})`);
   }
@@ -310,8 +310,8 @@ async function assertCountryPackVersionIntegrity(
         from tax_country_pack_installations
        where org_id = ${orgId} and pack_code = ${pack.code} and version = ${pack.version}
        limit 1
-    `));
-    const row = existing.rows[0];
+    `, "objects"));
+    const row = existing[0];
     if (row && row.contentHash !== countryPackHash(pack)) {
       throw new TaxRequestValidationError(`country pack ${pack.code} version ${pack.version} changed after installation; publish a new version`);
     }
@@ -339,9 +339,9 @@ async function recordCountryPackInstallations(
           from tax_country_pack_installations
          where org_id = ${orgId} and pack_code = ${pack.code} and status = 'active'
          limit 1
-      `));
-      if (active.rows[0]?.version === pack.version) {
-        if (active.rows[0].contentHash !== hash) {
+      `, "objects"));
+      if (active[0]?.version === pack.version) {
+        if (active[0].contentHash !== hash) {
           throw new TaxRequestValidationError(
             `country pack ${pack.code} version ${pack.version} installed content does not match the repository declaration for that version; ` +
               `publish a new pack version instead of editing the declared one, then re-run tax provisioning`,
@@ -355,8 +355,8 @@ async function recordCountryPackInstallations(
            set status = 'superseded', superseded_at = now(), superseded_by = ${actorId}
          where org_id = ${orgId} and pack_code = ${pack.code} and status = 'active'
         returning id, version, content_hash as "contentHash"
-      `));
-      for (const previous of superseded.rows) {
+      `, "objects"));
+      for (const previous of superseded) {
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'tax_country_pack_installations', ${previous.id}, 'update',
@@ -369,10 +369,10 @@ async function recordCountryPackInstallations(
           (org_id, pack_code, country, version, content_hash, manifest, status, installed_by)
         values (${orgId}, ${pack.code}, ${pack.country}, ${pack.version}, ${hash}, ${JSON.stringify(pack)}::jsonb, 'active', ${actorId})
         returning id
-      `));
+      `, "objects"));
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'tax_country_pack_installations', ${installed.rows[0]!.id}, 'insert',
+        values (${orgId}, 'tax_country_pack_installations', ${installed[0]!.id}, 'insert',
                 ${JSON.stringify({ source: "tax_setup", after: { packCode: pack.code, country: pack.country, version: pack.version, contentHash: hash, status: "active", completeness: pack.completeness } })}::jsonb,
                 ${actorId})`);
     }
@@ -499,8 +499,8 @@ export async function packInstallationStatuses(orgId: string): Promise<PackInsta
     select pack_code as "packCode", version, content_hash as "contentHash", installed_at as "installedAt"
       from tax_country_pack_installations
      where org_id = ${orgId} and status = 'active'
-  `));
-  const byPack = new Map(installed.rows.map((row) => [row.packCode, row]));
+  `, "objects"));
+  const byPack = new Map(installed.map((row) => [row.packCode, row]));
   return [...COUNTRY_TAX_PACKS]
     .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0))
     .map((pack) => {
@@ -662,12 +662,12 @@ async function provisionTaxPacksInTenant(
         values (${orgId}, ${country}, ${countryName}, ${country}, 'country', ${countryTaxType}, true, ${actorId}, ${actorId})
         -- Country identity already provisioned by an earlier install remains authoritative.
         on conflict (org_id, code) do nothing
-        returning id`));
-      if (parent.rows[0]) {
+        returning id`, "objects"));
+      if (parent[0]) {
         jurisdictionsCreated++;
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'tax_jurisdictions', ${parent.rows[0].id}, 'insert',
+          values (${orgId}, 'tax_jurisdictions', ${parent[0].id}, 'insert',
                   ${JSON.stringify({ source: "tax_setup", countryPack: localization?.code ?? null, countryPackVersion: localization?.version ?? null, after: { code: country, name: countryName, country, level: "country", taxType: countryTaxType, isActive: true } })}::jsonb,
                   ${actorId})`);
       }
@@ -676,9 +676,9 @@ async function provisionTaxPacksInTenant(
     for (const pack of packs) {
       const j = pack.jurisdiction;
       const parentId = j.level === "state"
-        ? ((await tx.execute<{ id: string }>(sql`
+        ? (await tx.execute<{ id: string }>(sql`
             select id from tax_jurisdictions where org_id = ${orgId} and code = ${j.country} limit 1
-          `))).rows[0]?.id ?? null
+          `, "objects"))[0]?.id ?? null
         : null;
       const jur = (await tx.execute<{ id: string; inserted: boolean }>(sql`
         insert into tax_jurisdictions
@@ -689,9 +689,9 @@ async function provisionTaxPacksInTenant(
               parent_id = coalesce(tax_jurisdictions.parent_id, excluded.parent_id),
               updated_at = now(), updated_by = ${actorId}
         where tax_jurisdictions.org_id = ${orgId}
-        returning id, (xmax = 0) as inserted`));
-      const jurisdictionId = jur.rows[0]?.id ?? null;
-      if (jur.rows[0]?.inserted) {
+        returning id, (xmax = 0) as inserted`, "objects"));
+      const jurisdictionId = jur[0]?.id ?? null;
+      if (jur[0]?.inserted) {
         jurisdictionsCreated++;
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -711,8 +711,8 @@ async function provisionTaxPacksInTenant(
           insert into tax_codes (org_id, code, name, jurisdiction_id, country, region, applies_to, is_active, created_by, updated_by)
           select ${orgId}, ${def.code}, ${def.name}, ${jurisdictionId}, ${j.country}, ${j.region ?? null}, 'both', true, ${actorId}, ${actorId}
            where not exists (select 1 from tax_codes where org_id = ${orgId} and code = ${def.code})
-          returning id`));
-        let codeId = inserted.rows[0]?.id ?? null;
+          returning id`, "objects"));
+        let codeId = inserted[0]?.id ?? null;
         if (codeId) {
           taxCodesCreated++;
           await tx.execute(sql`
@@ -728,17 +728,17 @@ async function provisionTaxPacksInTenant(
               insert into tax_rates
                 (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
               values (${orgId}, ${codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
-              returning id`));
+              returning id`, "objects"));
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
+              values (${orgId}, 'tax_rates', ${insertedRate[0]!.id}, 'insert',
                       ${JSON.stringify({ source: "tax_setup", pack: pack.code, taxCode: def.code, after: rate })}::jsonb,
                       ${actorId})`);
           }
         } else {
           const existing = (await tx.execute<{ id: string }>(sql`
-            select id from tax_codes where org_id = ${orgId} and code = ${def.code} limit 1`));
-          codeId = existing.rows[0]?.id ?? null;
+            select id from tax_codes where org_id = ${orgId} and code = ${def.code} limit 1`, "objects"));
+          codeId = existing[0]?.id ?? null;
         }
         if (!codeId || !jurisdictionId) {
           throw new Error(`tax code ${def.code} could not be created or resolved`);
@@ -778,18 +778,18 @@ async function provisionTaxPacksInTenant(
         insert into tax_groups (org_id, code, name, is_active)
         select ${orgId}, ${groupCode}, ${`${j.name} tax`}, true
          where not exists (select 1 from tax_groups where org_id = ${orgId} and code = ${groupCode})
-        returning id`));
-      if (grp.rows[0]) taxGroupsCreated++;
-      if (grp.rows[0]) {
+        returning id`, "objects"));
+      if (grp[0]) taxGroupsCreated++;
+      if (grp[0]) {
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'tax_groups', ${grp.rows[0].id}, 'insert',
+          values (${orgId}, 'tax_groups', ${grp[0].id}, 'insert',
                   ${JSON.stringify({ source: "tax_setup", pack: pack.code, after: { code: groupCode, name: `${j.name} tax`, taxCodes: groupTaxCodes, isActive: true } })}::jsonb,
                   ${actorId})`);
       }
       const groupId =
-        grp.rows[0]?.id ??
-        ((await tx.execute<{ id: string }>(sql`select id from tax_groups where org_id = ${orgId} and code = ${groupCode} limit 1`))).rows[0]?.id ??
+        grp[0]?.id ??
+        (await tx.execute<{ id: string }>(sql`select id from tax_groups where org_id = ${orgId} and code = ${groupCode} limit 1`, "objects"))[0]?.id ??
         null;
       if (groupId) {
         for (const [sequence, codeId] of codeIds.entries()) {
@@ -807,21 +807,21 @@ async function provisionTaxPacksInTenant(
     for (const subdivision of subdivisions) {
       const localization = countryTaxPack(subdivision.country);
       const jurisdictionCode = `${subdivision.country}-${subdivision.region}`;
-      const parentId = ((await tx.execute<{ id: string }>(sql`
+      const parentId = (await tx.execute<{ id: string }>(sql`
         select id from tax_jurisdictions where org_id = ${orgId} and code = ${subdivision.country} limit 1
-      `))).rows[0]?.id ?? null;
+      `, "objects"))[0]?.id ?? null;
       const jur = (await tx.execute<{ id: string }>(sql`
         insert into tax_jurisdictions
           (org_id, code, name, country, region, level, tax_type, parent_id, is_active, created_by, updated_by)
         values (${orgId}, ${jurisdictionCode}, ${subdivision.name}, ${subdivision.country}, ${subdivision.region}, 'state', ${subdivision.taxType}, ${parentId}, true, ${actorId}, ${actorId})
         -- Existing subdivision identity is retained; missing parent linkage is repaired below.
         on conflict (org_id, code) do nothing
-        returning id`));
-      if (jur.rows[0]) {
+        returning id`, "objects"));
+      if (jur[0]) {
         jurisdictionsCreated++;
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'tax_jurisdictions', ${jur.rows[0].id}, 'insert',
+          values (${orgId}, 'tax_jurisdictions', ${jur[0].id}, 'insert',
                   ${JSON.stringify({ source: "tax_setup", countryPack: subdivision.countryPackCode, countryPackVersion: subdivision.countryPackVersion, coverage: subdivision.coverage, after: { code: jurisdictionCode, name: subdivision.name, country: subdivision.country, region: subdivision.region, level: "state", taxType: subdivision.taxType, parentId, isActive: true } })}::jsonb,
                   ${actorId})`);
       } else if (parentId) {
@@ -829,11 +829,11 @@ async function provisionTaxPacksInTenant(
           update tax_jurisdictions
              set parent_id = ${parentId}, updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and code = ${jurisdictionCode} and parent_id is null
-          returning id`));
-        if (linked.rows[0]) {
+          returning id`, "objects"));
+        if (linked[0]) {
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'tax_jurisdictions', ${linked.rows[0].id}, 'update',
+            values (${orgId}, 'tax_jurisdictions', ${linked[0].id}, 'update',
                     ${JSON.stringify({ source: "tax_setup", countryPack: subdivision.countryPackCode, countryPackVersion: subdivision.countryPackVersion, before: { parentId: null }, after: { parentId } })}::jsonb,
                     ${actorId})`);
         }
@@ -842,19 +842,19 @@ async function provisionTaxPacksInTenant(
         update tax_jurisdictions
            set is_active = true, updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and code = ${jurisdictionCode} and not is_active
-        returning id`));
-      if (reactivated.rows[0]) {
+        returning id`, "objects"));
+      if (reactivated[0]) {
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'tax_jurisdictions', ${reactivated.rows[0].id}, 'update',
+          values (${orgId}, 'tax_jurisdictions', ${reactivated[0].id}, 'update',
                   ${JSON.stringify({ source: "tax_setup", countryPack: subdivision.countryPackCode, countryPackVersion: subdivision.countryPackVersion, before: { isActive: false }, after: { isActive: true } })}::jsonb,
                   ${actorId})`);
       }
 
-      const jurisdictionId = jur.rows[0]?.id ??
-        ((await tx.execute<{ id: string }>(sql`
+      const jurisdictionId = jur[0]?.id ??
+        (await tx.execute<{ id: string }>(sql`
           select id from tax_jurisdictions where org_id = ${orgId} and code = ${jurisdictionCode} limit 1
-        `))).rows[0]?.id ?? null;
+        `, "objects"))[0]?.id ?? null;
       const def = subdivision.defaultTaxCode;
       if (jurisdictionId && def) {
         if (!def.rates?.length) throw new Error(`country pack ${localization?.code ?? subdivision.country} has no effective-dated rates for ${def.code}`);
@@ -863,13 +863,13 @@ async function provisionTaxPacksInTenant(
             (org_id, code, name, jurisdiction_id, country, region, applies_to, is_active, created_by, updated_by)
           select ${orgId}, ${def.code}, ${def.name}, ${jurisdictionId}, ${subdivision.country}, ${subdivision.region}, 'both', true, ${actorId}, ${actorId}
            where not exists (select 1 from tax_codes where org_id = ${orgId} and code = ${def.code})
-          returning id`));
-        let codeId = code.rows[0]?.id ?? null;
+          returning id`, "objects"));
+        let codeId = code[0]?.id ?? null;
         if (codeId) {
           taxCodesCreated++;
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'tax_codes', ${code.rows[0]!.id}, 'insert',
+            values (${orgId}, 'tax_codes', ${code[0]!.id}, 'insert',
                     ${JSON.stringify({ source: "tax_setup", after: { code: def.code, name: def.name, jurisdictionCode, country: subdivision.country, region: subdivision.region, appliesTo: "both", isActive: true } })}::jsonb,
                     ${actorId})`);
           for (const rate of def.rates) {
@@ -877,18 +877,18 @@ async function provisionTaxPacksInTenant(
               insert into tax_rates
                 (org_id, tax_code_id, rate_percent, effective_from, effective_to, created_by, updated_by)
               values (${orgId}, ${codeId}, ${persistPackRatePercent(rate.ratePercent)}, ${rate.effectiveFrom}, ${rate.effectiveTo ?? null}, ${actorId}, ${actorId})
-              returning id`));
+              returning id`, "objects"));
             await tx.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'tax_rates', ${insertedRate.rows[0]!.id}, 'insert',
+              values (${orgId}, 'tax_rates', ${insertedRate[0]!.id}, 'insert',
                       ${JSON.stringify({ source: "tax_setup", taxCode: def.code, after: rate })}::jsonb,
                       ${actorId})`);
           }
         } else {
           const existingCode = (await tx.execute<{ id: string }>(sql`
             select id from tax_codes where org_id = ${orgId} and code = ${def.code} limit 1
-          `));
-          codeId = existingCode.rows[0]?.id ?? null;
+          `, "objects"));
+          codeId = existingCode[0]?.id ?? null;
         }
         if (!codeId) throw new Error(`tax code ${def.code} could not be created or resolved`);
         const staleSubdivisionCode = await refreshPackCodeRatesIfUnused({
@@ -920,25 +920,25 @@ async function provisionTaxPacksInTenant(
           insert into tax_groups (org_id, code, name, is_active)
           select ${orgId}, ${groupCode}, ${`${subdivision.name} tax`}, true
            where not exists (select 1 from tax_groups where org_id = ${orgId} and code = ${groupCode})
-          returning id`));
-        const groupId = insertedGroup.rows[0]?.id ??
-          ((await tx.execute<{ id: string }>(sql`
+          returning id`, "objects"));
+        const groupId = insertedGroup[0]?.id ??
+          (await tx.execute<{ id: string }>(sql`
             select id from tax_groups where org_id = ${orgId} and code = ${groupCode} limit 1
-          `))).rows[0]?.id ?? null;
+          `, "objects"))[0]?.id ?? null;
         if (!groupId) {
           throw new Error(`tax group ${groupCode} could not be created or resolved`);
         }
-        if (insertedGroup.rows[0]) taxGroupsCreated++;
+        if (insertedGroup[0]) taxGroupsCreated++;
         await tx.execute(sql`
           insert into tax_group_members (tax_group_id, tax_code_id, sequence)
           select ${groupId}, ${codeId}, 1
            where not exists (
                select 1 from tax_group_members
                 where tax_group_id = ${groupId} and tax_code_id = ${codeId})`);
-        if (insertedGroup.rows[0]) {
+        if (insertedGroup[0]) {
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'tax_groups', ${insertedGroup.rows[0].id}, 'insert',
+            values (${orgId}, 'tax_groups', ${insertedGroup[0].id}, 'insert',
                     ${JSON.stringify({ source: "tax_setup", after: { code: groupCode, name: `${subdivision.name} tax`, taxCodes: [def.code], isActive: true } })}::jsonb,
                     ${actorId})`);
         }
@@ -974,12 +974,12 @@ async function provisionTaxPacksInTenant(
            and not exists (
              select 1 from tax_registrations r
               where r.org_id = ${orgId} and r.jurisdiction_id = j.id and r.return_form_code = ${pack.code})
-        returning id`));
-      if (res.rows[0]) {
+        returning id`, "objects"));
+      if (res[0]) {
         registrationsCreated++;
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'tax_registrations', ${res.rows[0].id}, 'insert',
+          values (${orgId}, 'tax_registrations', ${res[0].id}, 'insert',
                   ${JSON.stringify({ source: "tax_setup", pack: pack.code, after: { jurisdictionCode: pack.jurisdiction.code, filingFrequency: pack.defaultFrequency, returnFormCode: pack.code, isActive: true } })}::jsonb,
                   ${actorId})`);
       }
@@ -996,12 +996,12 @@ async function provisionTaxPacksInTenant(
            and not exists (
              select 1 from tax_registrations r
               where r.org_id = ${orgId} and r.jurisdiction_id = j.id)
-        returning id`));
-      if (res.rows[0]) {
+        returning id`, "objects"));
+      if (res[0]) {
         registrationsCreated++;
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'tax_registrations', ${res.rows[0].id}, 'insert',
+          values (${orgId}, 'tax_registrations', ${res[0].id}, 'insert',
                   ${JSON.stringify({ source: "tax_setup", status: "draft", jurisdictionCode, after: { filingFrequency: "quarterly", returnFormCode: null, isActive: false } })}::jsonb,
                   ${actorId})`);
       }

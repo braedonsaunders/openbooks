@@ -548,8 +548,8 @@ const SOURCES: Record<string, EntityListSource> = {
             select id::text as value, name as label
               from crm_account_statuses
              where org_id=${orgId} and is_active
-             order by lifecycle_stage, sequence, name`)
-          return result.rows
+             order by lifecycle_stage, sequence, name`, 'objects')
+          return result
         },
       },
       {
@@ -558,8 +558,8 @@ const SOURCES: Record<string, EntityListSource> = {
         loadOptions: async (orgId) => {
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select id::text as value, name as label from users
-             where org_id=${orgId} and is_active order by name`)
-          return result.rows
+             where org_id=${orgId} and is_active order by name`, 'objects')
+          return result
         },
       },
     ],
@@ -613,8 +613,8 @@ const SOURCES: Record<string, EntityListSource> = {
             select id::text as value, name as label
               from departments
              where org_id = ${orgId} and is_active
-             order by name`)
-          return result.rows
+             order by name`, 'objects')
+          return result
         },
       },
       { paramKey: 'employmentStatus', filterKey: 'employment_status' },
@@ -627,8 +627,8 @@ const SOURCES: Record<string, EntityListSource> = {
               from subsidiaries
              where org_id = ${orgId} and is_active
                ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds ?? null)}
-             order by name`)
-          return result.rows
+             order by name`, 'objects')
+          return result
         },
       },
     ],
@@ -656,8 +656,8 @@ const SOURCES: Record<string, EntityListSource> = {
       // over that set. Sorting by the same reader the rows display keeps the
       // order tied to the cockpit by construction.
       const found = await db.execute<{ id: string }>(sql`
-        select p.id from ${tableSql} ${baseJoins} where ${where}`)
-      const ids = [...new Set(found.rows.map((r) => String(r.id ?? '')).filter((id) => id.length > 0))]
+        select p.id from ${tableSql} ${baseJoins} where ${where}`, 'objects')
+      const ids = [...new Set(found.map((r) => String(r.id ?? '')).filter((id) => id.length > 0))]
       if (ids.length === 0) return []
       // Misconfigured rows carry no cost (never a fake zero): they rank as
       // zero for ordering stability and render their error beside the cell.
@@ -668,8 +668,8 @@ const SOURCES: Record<string, EntityListSource> = {
       return ids
     },
     quickFilters: [
-      {paramKey:'workflowFilter',filterKey:'workflow',loadOptions:async orgId=>(await db.execute<EntityQuickFilterOption & Record<string,unknown>>(sql`select id as value,name as label from operating_profiles where org_id=${orgId} and family='project' order by name,id`)).rows},
-      {paramKey:'department',filterKey:'operating_department',loadOptions:async(orgId,scope=null)=>(await db.execute<EntityQuickFilterOption & Record<string,unknown>>(sql`select id as value,name as label from departments where org_id=${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`,scope,{orgWideNull:true})} order by name,id`)).rows},
+      {paramKey:'workflowFilter',filterKey:'workflow',loadOptions:async orgId=>await db.execute<EntityQuickFilterOption & Record<string,unknown>>(sql`select id as value,name as label from operating_profiles where org_id=${orgId} and family='project' order by name,id`, 'objects')},
+      {paramKey:'department',filterKey:'operating_department',loadOptions:async(orgId,scope=null)=>await db.execute<EntityQuickFilterOption & Record<string,unknown>>(sql`select id as value,name as label from departments where org_id=${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`,scope,{orgWideNull:true})} order by name,id`, 'objects')},
       { paramKey: 'status', filterKey: 'status' },
       {
         paramKey: 'billing',
@@ -681,8 +681,8 @@ const SOURCES: Record<string, EntityListSource> = {
           // these in after, so they still win on any value collision.
           const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`
             select key as value, name as label from project_types
-             where org_id = ${orgId} and is_active order by name`)
-          return result.rows
+             where org_id = ${orgId} and is_active order by name`, 'objects')
+          return result
         },
       },
     ],
@@ -734,8 +734,8 @@ const SOURCES: Record<string, EntityListSource> = {
             select id::text as value, name as label
               from crm_opportunity_statuses
              where org_id = ${orgId} and is_active
-             order by sequence, name`)
-          return result.rows
+             order by sequence, name`, 'objects')
+          return result
         },
       },
       {
@@ -746,8 +746,8 @@ const SOURCES: Record<string, EntityListSource> = {
             select id::text as value, name as label
               from users
              where org_id = ${orgId} and is_active
-             order by name`)
-          return result.rows
+             order by name`, 'objects')
+          return result
         },
       },
       { paramKey: 'category', filterKey: 'forecast_category' },
@@ -802,8 +802,8 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'owner',
         filterKey: 'assigned_user_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`select id::text as value, name as label from users where org_id=${orgId} and is_active order by name`)
-          return result.rows
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`select id::text as value, name as label from users where org_id=${orgId} and is_active order by name`, 'objects')
+          return result
         },
       },
     ],
@@ -1088,16 +1088,16 @@ const SOURCES: Record<string, EntityListSource> = {
               from budget_scenarios bs
              where bs.org_id = ${orgId} ${visibleLineFilter}
              group by bs.fiscal_year
-             order by bs.fiscal_year desc`)
-          return result.rows
+             order by bs.fiscal_year desc`, 'objects')
+          return result
         },
       },
       {
         paramKey: 'book',
         filterKey: 'book_id',
         loadOptions: async (orgId) => {
-          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`select id::text as value, name as label from accounting_books where org_id=${orgId} and is_active order by name`)
-          return result.rows
+          const result = await db.execute<EntityQuickFilterOption & Record<string, unknown>>(sql`select id::text as value, name as label from accounting_books where org_id=${orgId} and is_active order by name`, 'objects')
+          return result
         },
       },
     ],
@@ -1423,8 +1423,8 @@ const SOURCES: Record<string, EntityListSource> = {
                ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
                and p.kind in ('person', 'employee')
                and (p.kind = 'person' or exists (select 1 from employee_roles r where r.party_id=p.id and r.org_id=p.org_id and r.is_active))
-             order by p.display_name`)
-          return result.rows
+             order by p.display_name`, 'objects')
+          return result
         },
       },
     ],
@@ -1457,8 +1457,8 @@ const SOURCES: Record<string, EntityListSource> = {
              where a.org_id=${orgId} and a.is_active
                ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds ?? null)}
                and exists (select 1 from reconciliations r where r.org_id=a.org_id and r.account_id=a.id)
-             order by a.number nulls last, a.name`)
-          return result.rows
+             order by a.number nulls last, a.name`, 'objects')
+          return result
         },
       },
     ],
@@ -1491,8 +1491,8 @@ const SOURCES: Record<string, EntityListSource> = {
              where a.org_id=${orgId} and a.is_active
                ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds ?? null)}
                and exists (select 1 from bank_statements bs where bs.org_id=a.org_id and bs.account_id=a.id)
-             order by a.number nulls last, a.name`)
-          return result.rows
+             order by a.number nulls last, a.name`, 'objects')
+          return result
         },
       },
     ],

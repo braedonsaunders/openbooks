@@ -23,25 +23,25 @@ export async function createPreviewActor(tx: SqlExecutor, input: {
   const created = await tx.execute<{ id: string }>(sql`
     insert into users (id, org_id, email, name, password_hash, is_active, is_super_admin, created_by, updated_by)
     values (${actorId},${input.orgId},${email},${name},'sample-company-direct-login-disabled',true,false,${actorId},${actorId})
-    returning id`);
-  if (created.rows.length !== 1) throw new SampleCompanyError("sample administrator identity was not created");
+    returning id`, "objects");
+  if (created.length !== 1) throw new SampleCompanyError("sample administrator identity was not created");
   const person = await tx.execute<{ id: string }>(sql`
     insert into parties (id,org_id,kind,display_name,is_active,created_by,updated_by)
-    values (${personId},${input.orgId},'person',${name},true,${actorId},${actorId}) returning id`);
-  if (person.rows.length !== 1) throw new SampleCompanyError("sample administrator person was not created");
+    values (${personId},${input.orgId},'person',${name},true,${actorId},${actorId}) returning id`, "objects");
+  if (person.length !== 1) throw new SampleCompanyError("sample administrator person was not created");
   const linked = await tx.execute<{ id: string }>(sql`
     update users set party_id=${personId},updated_by=${actorId}
-    where org_id=${input.orgId} and id=${actorId} and party_id is null returning id`);
-  if (linked.rows.length !== 1) throw new SampleCompanyError("sample administrator person was not linked");
+    where org_id=${input.orgId} and id=${actorId} and party_id is null returning id`, "objects");
+  if (linked.length !== 1) throw new SampleCompanyError("sample administrator person was not linked");
   const createdRole = await tx.execute<{ id: string }>(sql`
     insert into app_roles (id,org_id,key,name,description,is_built_in,permissions,subsidiary_restriction,created_by,updated_by)
     values (${roleId},${input.orgId},${role.key},${role.name},${role.description},false,
-      ${JSON.stringify(role.permissions)}::jsonb,${JSON.stringify(role.subsidiaryRestriction)}::jsonb,${actorId},${actorId}) returning id`);
-  if (createdRole.rows.length !== 1) throw new SampleCompanyError("sample administrator role was not created");
+      ${JSON.stringify(role.permissions)}::jsonb,${JSON.stringify(role.subsidiaryRestriction)}::jsonb,${actorId},${actorId}) returning id`, "objects");
+  if (createdRole.length !== 1) throw new SampleCompanyError("sample administrator role was not created");
   const assignment = await tx.execute<{ id: string }>(sql`
     insert into role_assignments (org_id,user_id,role_id,created_by,updated_by)
-    values (${input.orgId},${actorId},${roleId},${actorId},${actorId}) returning id`);
-  if (assignment.rows.length !== 1) throw new SampleCompanyError("sample administrator role was not assigned");
+    values (${input.orgId},${actorId},${roleId},${actorId},${actorId}) returning id`, "objects");
+  if (assignment.length !== 1) throw new SampleCompanyError("sample administrator role was not assigned");
 
   const provenance = {
     source: "sample_company_administrator_provisioning",
@@ -52,12 +52,12 @@ export async function createPreviewActor(tx: SqlExecutor, input: {
     { table: "users", id: actorId, after: { name, email, isActive: true, isSuperAdmin: false, partyId: personId, directLogin: "disabled" } },
     { table: "parties", id: personId, after: { kind: "person", displayName: name, isActive: true } },
     { table: "app_roles", id: roleId, after: role },
-    { table: "role_assignments", id: assignment.rows[0]!.id, after: { userId: actorId, roleId } },
+    { table: "role_assignments", id: assignment[0]!.id, after: { userId: actorId, roleId } },
   ];
   const audited = await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id,table_name,row_id,action,actor_id,changes)
     values ${sql.join(evidence.map(record => sql`(${input.orgId},${record.table},${record.id},'insert',${actorId},
-      ${JSON.stringify({ ...provenance, before: null, after: record.after })}::jsonb)`), sql`, `)} returning id`);
-  if (audited.rows.length !== evidence.length) throw new SampleCompanyError("sample administrator provisioning audit was not recorded");
+      ${JSON.stringify({ ...provenance, before: null, after: record.after })}::jsonb)`), sql`, `)} returning id`, "objects");
+  if (audited.length !== evidence.length) throw new SampleCompanyError("sample administrator provisioning audit was not recorded");
   return actorId;
 }

@@ -183,7 +183,7 @@ export async function receiveInventory(
       // would book found stock for nothing and its later sale at zero COGS.
       if (isZero(onHand.unitCost)) {
         const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
-          from items where org_id = ${orgId} and id = ${input.itemId}`)).rows[0]?.label ?? input.itemId;
+          from items where org_id = ${orgId} and id = ${input.itemId}`, "objects"))[0]?.label ?? input.itemId;
         throw new InventoryCostBasisError(`item ${label} has no cost basis at this stock location — nothing valued is on hand to average — so the ${input.quantity} received needs a unit cost; enter the unit cost of the received quantity`, label);
       }
       layerUnitCost = onHand.unitCost;
@@ -276,7 +276,7 @@ export async function receiveInventory(
        where deficit.org_id=${orgId} and deficit.item_id=${input.itemId} and deficit.stock_location_id=${input.stockLocationId}
          and deficit.subsidiary_id=${input.subsidiaryId}
          and deficit.remaining_quantity>0 order by deficit.created_at,deficit.id for update of deficit
-    `));
+    `, "objects"));
     let receiptUnits = toUnits(input.quantity);
     let provisionalValueUnits = 0n;
     let settledReceiptValueUnits = 0n;
@@ -287,7 +287,7 @@ export async function receiveInventory(
       offsetAccountId: string;
       correction: string;
     }[] = [];
-    for (const deficit of deficits.rows) {
+    for (const deficit of deficits) {
       if (receiptUnits === 0n) break;
       const available = toUnits(deficit.remaining_quantity);
       const take = available < receiptUnits ? available : receiptUnits;
@@ -301,7 +301,7 @@ export async function receiveInventory(
       // deficit without that record has no truthful destination.
       if (!deficit.offset_account_id) {
         const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
-          from items where org_id = ${orgId} and id = ${input.itemId}`)).rows[0]?.label ?? input.itemId;
+          from items where org_id = ${orgId} and id = ${input.itemId}`, "objects"))[0]?.label ?? input.itemId;
         throw new InventoryError(
           `item ${label} has negative stock issued on ${deficit.issued_on} without a recorded charge account, so this receipt cannot correct that issue's provisional cost; record the account under the item's Inventory tab (Shortfalls awaiting a charge account), then receive again`,
         );
@@ -440,8 +440,8 @@ export async function receiveInventory(
               ${input.serialId ?? null}, ${receiptQuantity}, ${receiptUnitCost}, ${assetDelta},
               ${input.documentLineId ?? null}, ${entryId}, ${idempotencyKey},
               'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`));
-    const movementId = mv.rows[0]!.id;
+      returning id`, "objects"));
+    const movementId = mv[0]!.id;
 
     for (const settlement of settlements) {
       await tx.execute(sql`

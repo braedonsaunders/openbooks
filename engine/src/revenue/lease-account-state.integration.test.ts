@@ -42,7 +42,7 @@ for (const phase of ["commencement", "payment"] as const) {
           (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
           (select count(*)::int from lease_agreement_schedule_lines
              where org_id=${org.orgId} and lease_id=${leaseId} and payment_entry_id is not null) as claimed
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       const run = phase === "commencement"
         ? commenceLease(org.orgId, leaseId, null)
         : postDueLeaseSchedules(org.orgId, "2026-07-31", null);
@@ -56,7 +56,7 @@ for (const phase of ["commencement", "payment"] as const) {
           (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
           (select count(*)::int from lease_agreement_schedule_lines
              where org_id=${org.orgId} and lease_id=${leaseId} and payment_entry_id is not null) as claimed
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(after, before);
     } finally {
       await dropScratchOrg(org.orgId);

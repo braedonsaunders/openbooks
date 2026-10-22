@@ -58,7 +58,7 @@ for (const [label, fields] of cases) {
         insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,country,province,pay_basis,
           federal_claim_code,federal_claim_amount,tax_exempt,sin_encrypted,sin_last3)
         values (${org.orgId},${employeeId},${scheduleId},'CA','ON','salary',1,'1000',true,${sealSecret("123456789", { orgId: org.orgId, purpose: "payroll.employee.sin" })},'789')`);
-      const before = (await db.execute(sql`select * from employee_payroll_profiles where employee_party_id=${employeeId}`)).rows[0];
+      const before = (await db.execute(sql`select * from employee_payroll_profiles where employee_party_id=${employeeId}`, "objects"))[0];
       if (label === "audit failure") {
         await db.execute(sql.raw(`create function public."${trigger}"() returns trigger language plpgsql as $$
           begin
@@ -89,12 +89,12 @@ for (const [label, fields] of cases) {
         if (accepted) assert.equal(response.status, 200, JSON.stringify(await response.json()));
         else assert.ok(response.status === 400 || response.status === 422, `expected validation refusal, got ${response.status}`);
       }
-      const after = (await db.execute(sql`select * from employee_payroll_profiles where employee_party_id=${employeeId}`)).rows[0];
+      const after = (await db.execute(sql`select * from employee_payroll_profiles where employee_party_id=${employeeId}`, "objects"))[0];
       if (!accepted) assert.deepEqual(after, before);
-      const audits = (await db.execute<{ actor_id: string; row_id: string; request_id: string; changes: Record<string, unknown>; action: string }>(sql`
+      const audits = await db.execute<{ actor_id: string; row_id: string; request_id: string; changes: Record<string, unknown>; action: string }>(sql`
         select actor_id,row_id,request_id,changes,action from audit_log
          where org_id=${org.orgId} and table_name='employee_payroll_profiles'
-      `)).rows;
+      `, "objects");
       assert.equal(audits.length, label === "concurrent create" ? 2 : accepted ? 1 : 0);
       if (label === "concurrent create") {
         const created = audits.find(audit => audit.action === "insert");

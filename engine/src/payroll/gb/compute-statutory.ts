@@ -93,7 +93,7 @@ export async function gbEmployeePriorPeriod(ctx: Pick<
       count(*) as stub_count,
       min(s.history_run_pay_date) as first_pay
     from ${employerScopedStatutoryStubs(scope,{employeePartyId})} s
-  `)).rows[0];
+  `, "objects"))[0];
   if(!rows)throw new PayrollPackError('GB committed statutory history did not return its required prior totals');
   return {
     taxablePay: String(rows.taxable),

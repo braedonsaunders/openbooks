@@ -33,11 +33,11 @@ async function postBankJournal(org: ScratchOrg, actorId: string, amount: string,
       values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`EVD-${entryId.slice(0, 8)}`}, ${date},
               ${org.periodId}, 'Deposit', 'draft', 'manual', ${actorId}, ${actorId})`);
     const offset = amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
-    const [bankLine] = (await tx.execute<{ id: string }>(sql`
+    const [bankLine] = await tx.execute<{ id: string }>(sql`
       insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
       values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1, 'deposit'),
              (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offset}, 'CAD', ${offset}, 1, 'deposit')
-      returning id`)).rows;
+      returning id`, "objects");
     await tx.execute(sql`
       update journal_entries set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
        where id = ${entryId} and org_id = ${org.orgId}`);
@@ -73,12 +73,12 @@ async function importLines(
 
 async function statementLineIds(statementId: string): Promise<string[]> {
   return (await db.execute<{ id: string }>(sql`
-    select id from bank_statement_lines where statement_id = ${statementId} order by line_number`)).rows.map((row) => row.id);
+    select id from bank_statement_lines where statement_id = ${statementId} order by line_number`, "objects")).map((row) => row.id);
 }
 
 async function userName(orgId: string, userId: string): Promise<string | null> {
   const row = (await db.execute<{ name: string | null }>(sql`
-    select name from users where id = ${userId} and org_id = ${orgId}`)).rows[0];
+    select name from users where id = ${userId} and org_id = ${orgId}`, "objects"))[0];
   return row?.name ?? null;
 }
 

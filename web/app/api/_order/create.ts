@@ -132,8 +132,8 @@ export async function createOrder(
       select 1 from subsidiaries
        where id = ${subsidiaryId} and org_id = ${user.orgId}
          and is_active and not is_elimination
-    `))
-    if (!subsidiary.rows[0]) return bad('order subsidiary must be an active operating subsidiary of this organization')
+    `, 'objects'))
+    if (!subsidiary[0]) return bad('order subsidiary must be an active operating subsidiary of this organization')
   } else if (subsidiaryId === null && gate.allowedSubsidiaryIds) {
     return bad(
       'clearing the order subsidiary is not available with restricted subsidiary scope — choose a visible subsidiary instead',
@@ -148,9 +148,9 @@ export async function createOrder(
   // missing org row (or an unconfigured base currency) refuses by name
   // instead of silently booking foreign-currency intent as CAD.
   const orgRow = (await db.execute<{ base_currency: string | null }>(
-    sql`select base_currency from orgs where id = ${user.orgId}`,
+    sql`select base_currency from orgs where id = ${user.orgId}`, 'objects',
   ))
-  const baseCurrency = orgRow.rows[0]?.base_currency
+  const baseCurrency = orgRow[0]?.base_currency
   if (!baseCurrency) {
     return bad('this organization has no base currency configured — set one before creating orders')
   }
@@ -171,10 +171,10 @@ export async function createOrder(
     const lineItemIds = ids(lines.map((l) => l.itemId))
     const activeIds = async (table: string, wanted: string[], extra = ''): Promise<Set<string>> => {
       if (wanted.length === 0) return new Set()
-      const rows = (await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
         select id from ${sql.identifier(table)}
          where org_id = ${user.orgId} and is_active ${sql.raw(extra)}
-           and id = any(${`{${wanted.join(',')}}`}::uuid[])`)).rows
+           and id = any(${`{${wanted.join(',')}}`}::uuid[])`, 'objects')
       return new Set(rows.map((r) => r.id))
     }
     const [partyOptions, departmentOptions, projectOptions, items, accountOptions] = await Promise.all([
@@ -299,8 +299,8 @@ export async function createOrder(
     for (const l of preparedLines) {
       if (!l.itemId) continue
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`))
-      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`, 'objects'))
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         return notFound("record")
       }
     }
@@ -408,8 +408,8 @@ export async function createOrder(
         -- A concurrent request-ID collision is refused below, so no second order is reported as created.
         on conflict (id) do nothing
         returning id
-      `))
-      if (!inserted.rows[0]) throw new Error('idempotency_key_conflict')
+      `, 'objects'))
+      if (!inserted[0]) throw new Error('idempotency_key_conflict')
       for (let i = 0; i < preparedLines.length; i++) {
         const l = preparedLines[i]!
         const lineId = (await tx.execute<{ id: string }>(sql`
@@ -425,10 +425,10 @@ export async function createOrder(
                   ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb,
                   ${l.workFrom ?? null}, ${l.workTo ?? null})
           returning id
-        `))
+        `, 'objects'))
         await persistLineTaxComponents(tx, {
           orgId: user.orgId,
-          documentLineId: lineId.rows[0]!.id,
+          documentLineId: lineId[0]!.id,
           components: l.taxComponents,
           actorId: user.id,
         })
@@ -466,7 +466,7 @@ export async function createOrder(
       if (gate.allowedSubsidiaryIds) {
         const written = (await tx.execute<{ subsidiary_id: string | null }>(sql`
           select subsidiary_id from documents where id = ${requestId} and org_id = ${user.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!written || !gate.allowedSubsidiaryIds.has(String(written.subsidiary_id ?? ''))) {
           throw new Error('order_scope_invisible')
         }

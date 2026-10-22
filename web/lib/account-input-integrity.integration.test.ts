@@ -56,7 +56,7 @@ for (const method of ["POST", "PATCH"] as const) {
           await db.execute(sql`insert into accounts(id,org_id,number,name,type,description,currency_restriction,subsidiary_id,monetary)
             values (${id},${org.orgId},'AUDIT-1','Original account','asset_other','Original description','CAD',${org.subsidiaryId},true)`);
         }
-        const before = (await db.execute(sql`select * from accounts where id=${id}`)).rows[0];
+        const before = (await db.execute(sql`select * from accounts where id=${id}`, "objects"))[0];
         const body = method === "POST" ? { name: "New account", type: "asset_other", ...fields } : fields;
         const invoke = () => withOrgContext(org.orgId, () => {
           const request = new Request("http://audit.local/api/accounts/" + id, {
@@ -69,7 +69,7 @@ for (const method of ["POST", "PATCH"] as const) {
         const responseBody = await response.json();
         if (accepted) assert.ok(response.status >= 200 && response.status < 300, JSON.stringify(responseBody));
         else assert.ok(response.status === 400 || response.status === 422, `expected validation refusal, got ${response.status}: ${JSON.stringify(responseBody)}`);
-        const after = (await db.execute(sql`select * from accounts where id=${id}`)).rows[0];
+        const after = (await db.execute(sql`select * from accounts where id=${id}`, "objects"))[0];
         if (!accepted) assert.deepEqual(after, before, "malformed input cannot change account policy");
         else if (label === "valid edit") {
           assert.equal(after?.name, "Reviewed account");
@@ -82,7 +82,7 @@ for (const method of ["POST", "PATCH"] as const) {
           assert.equal((await invoke()).status, 200, "exact create replay stays idempotent");
         }
         const audits = (await db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
-          where org_id=${org.orgId} and table_name='accounts' and row_id=${id}`)).rows[0]!.n;
+          where org_id=${org.orgId} and table_name='accounts' and row_id=${id}`, "objects"))[0]!.n;
         assert.equal(audits, accepted ? 1 : 0);
       } finally {
         session.user = null;
@@ -156,8 +156,8 @@ const accountListCases = [
                 from accounts a
                 ${scopedJoin}
                where a.org_id = ${scratch.orgId} and a.id = ${accountId}
-            `))
-            assert.equal(scoped.rows[0]?.balance, '100.0000')
+            `, "objects"))
+            assert.equal(scoped[0]?.balance, '100.0000')
           } finally {
             await withBypass(() => dropScratchOrg(scratch.orgId))
           }
@@ -207,7 +207,7 @@ const accountListCases = [
                   from accounts a
                   ${joinFor(scope)}
                  where a.org_id = ${scratch.orgId} and a.id = ${accountId}
-              `))).rows[0]?.balance ?? null
+              `, "objects")))[0]?.balance ?? null
 
             assert.equal(await balanceUnder(new Set()), '0', 'present-but-empty scope denies every line')
             assert.equal(await balanceUnder(null), '100.0000', 'unrestricted scope still reads the posted line')

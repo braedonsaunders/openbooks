@@ -44,8 +44,8 @@ export async function listStatementCustomerCurrencies(
      where cr.org_id = ${orgId} and cr.currency is not null
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by cr.currency
-  `)
-  return rows.rows.map((row) => row.currency)
+  `, 'objects')
+  return rows.map((row) => row.currency)
 }
 
 export interface StatementBatchFilters {
@@ -132,7 +132,7 @@ export async function loadStatementBatchParties(
 ): Promise<Map<string, StatementPartyInfo>> {
   const out = new Map<string, StatementPartyInfo>()
   if (partyIds.length === 0) return out
-  const parties = (await db.execute<{
+  const parties = await db.execute<{
     id: string
     display_name: string
     email: string | null
@@ -143,8 +143,8 @@ export async function loadStatementBatchParties(
       from parties p
       left join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id
      where p.org_id = ${orgId} and p.id in ${sql`(${sql.join(partyIds.map((id) => sql`${id}`), sql`, `)})`}
-  `)).rows
-  const contacts = (await db.execute<{
+  `, 'objects')
+  const contacts = await db.execute<{
     party_id: string
     role: string | null
     email: string | null
@@ -153,7 +153,7 @@ export async function loadStatementBatchParties(
   }>(sql`
     select party_id, role, email, is_primary, is_active from contacts
      where org_id = ${orgId} and party_id in ${sql`(${sql.join(partyIds.map((id) => sql`${id}`), sql`, `)})`}
-  `)).rows
+  `, 'objects')
   const byParty = new Map<string, StatementPartyContact[]>()
   for (const row of contacts) {
     const list = byParty.get(row.party_id) ?? []
@@ -345,19 +345,19 @@ export async function readStatementBatchRunForRender(orgId: string, runId: strin
     authorization_snapshot: { version?: number; userId?: string; allowedSubsidiaryIds?: string[] | null };
   }>(sql`
     select period_from::text as period_from, period_to::text as period_to, authorization_snapshot
-      from statement_batch_runs where id = ${runId} and org_id = ${orgId} limit 1`)).rows[0] ?? null
+      from statement_batch_runs where id = ${runId} and org_id = ${orgId} limit 1`, 'objects'))[0] ?? null
 }
 
 /** The recipient email a batch run recorded for one customer. */
 export async function readStatementBatchItemEmail(orgId: string, runId: string, partyId: string) {
   return (await db.execute<{ to_email: string | null }>(sql`
     select to_email from statement_batch_items
-     where run_id = ${runId} and party_id = ${partyId} and org_id = ${orgId} limit 1`)).rows[0] ?? null
+     where run_id = ${runId} and party_id = ${partyId} and org_id = ${orgId} limit 1`, 'objects'))[0] ?? null
 }
 
 /** A statement customer's display name and entity. */
 export async function readStatementParty(orgId: string, partyId: string) {
   return (await db.execute<{ display_name: string; subsidiary_id: string | null }>(sql`
     select display_name, subsidiary_id::text as subsidiary_id from parties
-     where id = ${partyId} and org_id = ${orgId} limit 1`)).rows[0] ?? null
+     where id = ${partyId} and org_id = ${orgId} limit 1`, 'objects'))[0] ?? null
 }

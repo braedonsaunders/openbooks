@@ -72,8 +72,8 @@ export async function loadWorkItemAccess(
       ${WORK_ITEM_SUBJECT_JOIN}
      where w.id = ${itemId} and w.org_id = ${orgId}
        ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)) return null;
   return {
     agentKey: row.agent_key,
@@ -99,8 +99,8 @@ export async function withLockedWorkItemAccess<T>(
       select subject_type, subject_id from ai_work_items
        where id = ${itemId} and org_id = ${orgId}
        for update
-    `);
-    const subject = item.rows[0];
+    `, "objects");
+    const subject = item[0];
     if (!subject) return null;
     // Lock the source row whose subsidiary determines visibility. Budget
     // edits lock their scenario before changing its subsidiary lines.
@@ -111,8 +111,8 @@ export async function withLockedWorkItemAccess<T>(
         select account_id from reconciliations
          where id = ${subject.subject_id} and org_id = ${orgId}
          for share
-      `);
-      const accountId = reconciliation.rows[0]?.account_id;
+      `, "objects");
+      const accountId = reconciliation[0]?.account_id;
       if (accountId) {
         await tx.execute(sql`select id from accounts where id = ${accountId} and org_id = ${orgId} for share`);
       }
@@ -134,8 +134,8 @@ export async function withLockedWorkItemAccess<T>(
         ${WORK_ITEM_SUBJECT_JOIN}
        where w.id = ${itemId} and w.org_id = ${orgId}
          ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
-    `);
-    const row = result.rows[0];
+    `, "objects");
+    const row = result[0];
     if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subjectType ?? "", row.subjectSubsidiaryId)) return null;
     return use(tx, {
       agentKey: row.agent_key,

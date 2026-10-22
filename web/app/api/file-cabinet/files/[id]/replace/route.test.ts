@@ -98,11 +98,9 @@ async function seedFile(orgId: string, folderId: string, userId: string): Promis
 }
 
 async function versionCount(orgId: string, fileId: string): Promise<number> {
-  const rows = (
-    await db.execute<{ n: string }>(
-      sql`select count(*)::text as n from file_versions fv join files fi on fi.id = fv.file_id and fi.org_id = ${orgId} where fv.file_id = ${fileId}`,
+  const rows = await db.execute<{ n: string }>(
+      sql`select count(*)::text as n from file_versions fv join files fi on fi.id = fv.file_id and fi.org_id = ${orgId} where fv.file_id = ${fileId}`, 'objects',
     )
-  ).rows
   return Number(rows[0]?.n ?? 0)
 }
 
@@ -111,11 +109,9 @@ test('a replace stores a new version, keeps the old one, and audits the actor', 
   const userId = randomUUID()
   try {
     gate(org.orgId, userId, ['documents.manage'])
-    const folder = (
-      await db.execute<{ id: string }>(
-        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`,
-      )
-    ).rows[0]!.id
+    const folder = (await db.execute<{ id: string }>(
+        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`, 'objects',
+      ))[0]!.id
     const fileId = await seedFile(org.orgId, folder, userId)
     assert.equal(await versionCount(org.orgId, fileId), 1)
 
@@ -127,18 +123,14 @@ test('a replace stores a new version, keeps the old one, and audits the actor', 
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), { ok: true })
     assert.equal(await versionCount(org.orgId, fileId), 2)
-    const current = (
-      await db.execute<{ content_type: string; size_bytes: number }>(
-        sql`select content_type, size_bytes from files where id = ${fileId} and org_id = ${org.orgId}`,
-      )
-    ).rows[0]!
+    const current = (await db.execute<{ content_type: string; size_bytes: number }>(
+        sql`select content_type, size_bytes from files where id = ${fileId} and org_id = ${org.orgId}`, 'objects',
+      ))[0]!
     assert.equal(current.content_type, 'text/csv')
     assert.equal(current.size_bytes, 8)
-    const audits = (
-      await db.execute<{ actor_id: string; event: string }>(
-        sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${org.orgId} and table_name = 'files' and row_id = ${fileId}`,
+    const audits = await db.execute<{ actor_id: string; event: string }>(
+        sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${org.orgId} and table_name = 'files' and row_id = ${fileId}`, 'objects',
       )
-    ).rows
     assert.deepEqual(audits, [{ actor_id: userId, event: 'replace' }])
   } finally {
     state.authz = null
@@ -168,11 +160,9 @@ test('a missing part and a disallowed type are refused with names', { skip: !DB 
   const userId = randomUUID()
   try {
     gate(org.orgId, userId, ['documents.manage'])
-    const folder = (
-      await db.execute<{ id: string }>(
-        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`,
-      )
-    ).rows[0]!.id
+    const folder = (await db.execute<{ id: string }>(
+        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`, 'objects',
+      ))[0]!.id
     const fileId = await seedFile(org.orgId, folder, userId)
 
     const missing = await POST(postRequest(fileId, null), ctx(fileId))

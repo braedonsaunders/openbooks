@@ -99,10 +99,10 @@ async function scheduleMonthly(s: ExpenseOrg, templateId: string): Promise<strin
 type Leg = { account_id: string; amount: string; party_id: string | null; payment_card_id: string | null; is_open_item: boolean };
 
 async function postedLegs(docId: string, orgId: string): Promise<Leg[]> {
-  return (await db.execute<Leg>(sql`
+  return await db.execute<Leg>(sql`
     select jl.account_id, jl.amount::text as amount, jl.party_id, jl.payment_card_id, jl.is_open_item
       from documents d join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id
-     where d.id = ${docId} and d.org_id = ${orgId}`)).rows;
+     where d.id = ${docId} and d.org_id = ${orgId}`, "objects");
 }
 
 test("recurring clone preserves company-paid settlement and funding card", { skip: !DB }, async () => {
@@ -118,7 +118,7 @@ test("recurring clone preserves company-paid settlement and funding card", { ski
     const gen = (await db.execute<{ settlement: string | null; card: string | null; status: string }>(sql`
       select l.settlement_type as settlement, d.payment_card_id as card, d.status
         from documents d join document_lines l on l.document_id = d.id and l.org_id = d.org_id
-       where d.id = ${genId} and d.org_id = ${s.orgId}`)).rows[0]!;
+       where d.id = ${genId} and d.org_id = ${s.orgId}`, "objects"))[0]!;
     assert.equal(gen.settlement, "company_paid");
     assert.equal(gen.card, s.cardId);
     assert.equal(gen.status, "posted");
@@ -150,7 +150,7 @@ test("recurring clone preserves a mixed settlement report per the canonical expe
     const genId = result.documents[0]!.documentId;
     const settlements = (await db.execute<{ settlement: string | null }>(sql`
       select settlement_type as settlement from document_lines
-       where document_id = ${genId} and org_id = ${s.orgId} order by line_number`)).rows.map((r) => r.settlement);
+       where document_id = ${genId} and org_id = ${s.orgId} order by line_number`, "objects")).map((r) => r.settlement);
     assert.deepEqual(settlements, ["out_of_pocket", "company_paid", "personal"]);
     const legs = await postedLegs(genId, s.orgId);
     const byAccount = new Map(legs.map((l) => [l.account_id, l]));
@@ -185,18 +185,18 @@ test("recurring clone without a funding card refuses with no generated document"
     assert.equal(result.failed, 1);
     const sched = (await db.execute<{ last_error: string | null; next_run_on: string; is_active: boolean }>(sql`
       select last_error, next_run_on::text as next_run_on, is_active from recurring_schedules
-       where id = ${scheduleId} and org_id = ${s.orgId}`)).rows[0]!;
+       where id = ${scheduleId} and org_id = ${s.orgId}`, "objects"))[0]!;
     assert.match(sched.last_error ?? "", /corporate card/);
     // Scheduler atomicity: the claim rolled back (still due, still active) and
     // no document, occurrence guard row, or journal survived the refusal.
     assert.equal(sched.next_run_on, s.date);
     assert.equal(sched.is_active, true);
     assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${s.orgId}`)).rows[0]!.n, 1);
+      select count(*)::int as n from documents where org_id = ${s.orgId}`, "objects"))[0]!.n, 1);
     assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from recurring_occurrence_documents where org_id = ${s.orgId}`)).rows[0]!.n, 0);
+      select count(*)::int as n from recurring_occurrence_documents where org_id = ${s.orgId}`, "objects"))[0]!.n, 0);
     assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_lines where org_id = ${s.orgId}`)).rows[0]!.n, 0);
+      select count(*)::int as n from journal_lines where org_id = ${s.orgId}`, "objects"))[0]!.n, 0);
   } finally {
     await dropScratchOrg(s.orgId);
   }

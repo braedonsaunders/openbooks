@@ -74,7 +74,7 @@ async function fixture() {
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, class_id, code, name, category, enforcement, created_by, updated_by)
     values (${org.orgId}, ${scopeClassId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { org, hiddenPartyId, visiblePartyId, hiddenProjectId, visibleProjectId, requirementId };
 }
 
@@ -94,8 +94,8 @@ const post = (body: unknown) =>
   );
 
 async function waiverCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_waivers where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_waivers where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

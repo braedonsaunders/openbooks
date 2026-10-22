@@ -124,13 +124,13 @@ test("a EUR payout of USD charges posts balanced with realized FX", { skip: !DB 
     const posted = await postSettlementBatch(org.orgId, batchId, userId, null);
     assert.ok(posted.entryId);
 
-    const lines = (await db.execute<{ name: string; amount: string }>(sql`
+    const lines = await db.execute<{ name: string; amount: string }>(sql`
       select a.name, jl.amount::text as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
        where jl.org_id = ${org.orgId} and je.id = ${posted.entryId}
-       order by a.name`)).rows;
+       order by a.name`, "objects");
     const total = lines.reduce((sum, l) => sum + BigInt(Math.round(Number(l.amount) * 10_000)), 0n);
     assert.equal(total, 0n);
     const byName = new Map(lines.map((l) => [l.name, l.amount]));
@@ -175,11 +175,11 @@ test("equal foreign charges and refunds offset realized FX in the settlement cur
       },
     } satisfies ParsedSettlement, accounts, null);
     const posted = await postSettlementBatch(org.orgId, batchId, userId, null);
-    const lines = (await db.execute<{ accountId: string; amount: string }>(sql`
+    const lines = await db.execute<{ accountId: string; amount: string }>(sql`
       select account_id as "accountId", sum(amount)::text as amount
         from journal_lines
        where org_id = ${org.orgId} and entry_id = ${posted.entryId}
-       group by account_id`)).rows;
+       group by account_id`, "objects");
     assert.equal(lines.reduce((sum, line) => sum + toUnits(line.amount), 0n), 0n);
     assert.equal(lines.find((line) => line.accountId === org.accounts.fxGainLoss)?.amount, undefined);
     const clearing = lines.find((line) => line.accountId === org.accounts.clearing);

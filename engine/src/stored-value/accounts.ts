@@ -128,11 +128,11 @@ async function assertPostingAccount(
   label: string,
   types: readonly string[],
 ): Promise<void> {
-  const rows = (await runner.execute<{ id: string; type: string }>(sql`
+  const rows = await runner.execute<{ id: string; type: string }>(sql`
     select id, type from accounts
      where org_id = ${orgId} and id = ${accountId} and is_active and not is_summary
      for key share
-  `)).rows;
+  `, "objects");
   if (rows.length !== 1 || !types.includes(rows[0]!.type)) {
     throw storedValueRefusal({
       message: `${label} must be an active posting account of type ${types.join(" or ")} in this organization.`,
@@ -153,7 +153,7 @@ export async function postingContext(
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
      limit 1 for share
-  `)).rows[0];
+  `, "objects"))[0];
   // A movement posts on its own legal entity; only a caller naming none
   // falls back to the hierarchy root, the same default the document kernel
   // applies. The row-count check turns an entity outside this org into a
@@ -163,12 +163,12 @@ export async function postingContext(
       select id, nullif(trim(base_currency), '') as currency from subsidiaries
        where org_id = ${orgId} and id = ${subsidiaryId}
        limit 1 for share
-    `)).rows[0]
+    `, "objects"))[0]
     : (await runner.execute<{ id: string; currency: string | null }>(sql`
       select id, nullif(trim(base_currency), '') as currency from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination and parent_id is null
        limit 1 for share
-    `)).rows[0];
+    `, "objects"))[0];
   const period = await resolveCoveringPeriod(runner, orgId, postingDate);
   if (!book || !subsidiary?.id || !subsidiary?.currency || !period) {
     throw storedValueRefusal({
@@ -212,19 +212,19 @@ export async function loadStoredValueProgram(
   programId: string,
   runner: SqlExecutor = db,
 ): Promise<StoredValueProgramRow> {
-  const rows = (await runner.execute<StoredValueProgramRow>(sql`
+  const rows = await runner.execute<StoredValueProgramRow>(sql`
     select id, org_id as "orgId", name, kind, liability_account_id as "liabilityAccountId",
            breakage_income_account_id as "breakageIncomeAccountId", breakage_policy as "breakagePolicy",
            breakage_rate::text as "breakageRate", expiry_months as "expiryMonths",
            inactivity_months as "inactivityMonths", currency, is_active as "isActive"
       from stored_value_programs
      where org_id = ${orgId} and id = ${programId}
-  `)).rows;
+  `, "objects");
   const program = rows[0];
   if (!program) {
     const count = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from stored_value_programs where org_id = ${orgId} and id = ${programId}`);
-    if (count.rows[0]?.n === 0) {
+      select count(*)::int as n from stored_value_programs where org_id = ${orgId} and id = ${programId}`, "objects");
+    if (count[0]?.n === 0) {
       throw storedValueRefusal({
         message: "The stored-value program does not exist in this organization.",
         code: "stored_value_program_missing",
@@ -358,7 +358,7 @@ export async function validateProgramCandidate(
     select id from stored_value_programs
      where org_id = ${orgId} and kind = ${candidate.kind} and name = ${name}
        and (${excludeId}::uuid is null or id <> ${excludeId}::uuid)
-  `)).rows[0];
+  `, "objects"))[0];
   if (idempotencyGuard) {
     throw storedValueRefusal({
       message: `A ${candidate.kind === "gift_card" ? "gift card" : "store credit"} program named "${name}" already exists.`,
@@ -386,7 +386,7 @@ export async function createProgram(input: {
 }): Promise<StoredValueProgramRow> {
   await requireStoredValueFeature(db, input.orgId);
   const { name, policy, rate } = await validateProgramCandidate(db, input.orgId, input);
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(sql`
     insert into stored_value_programs
       (org_id, name, kind, liability_account_id, breakage_income_account_id,
        breakage_policy, breakage_rate, expiry_months, inactivity_months,
@@ -396,7 +396,7 @@ export async function createProgram(input: {
       ${input.expiryMonths ?? null}, ${input.inactivityMonths ?? 24},
       ${input.currency ?? null}, ${input.actorId ?? null}, ${input.actorId ?? null})
     returning id
-  `)).rows;
+  `, "objects");
   if (inserted.length !== 1 || !inserted[0]) {
     throw storedValueRefusal({
       message: "The stored-value program could not be saved.",
@@ -434,7 +434,7 @@ interface EntryInsert {
  * priorStoredValueEntry before the update and refuse a replayed insert after.
  */
 export async function insertStoredValueEntry(orgId: string, entry: EntryInsert): Promise<{ entryId: string; replayed: boolean }> {
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const inserted = await db.execute<{ id: string }>(sql`
     insert into stored_value_entries
       (org_id, account_id, kind, amount_minor, balance_after, currency,
        functional_amount_minor, fx_rate,
@@ -447,11 +447,11 @@ export async function insertStoredValueEntry(orgId: string, entry: EntryInsert):
     -- Replays resolve the original entry below; balance-changing callers refuse a replayed insert.
     on conflict (org_id, idempotency_key) do nothing
     returning id
-  `)).rows;
+  `, "objects");
   if (inserted.length === 1 && inserted[0]) return { entryId: inserted[0].id, replayed: false };
   const existing = (await db.execute<{ id: string }>(sql`
     select id from stored_value_entries where org_id = ${orgId} and idempotency_key = ${entry.idempotencyKey}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!existing) {
     throw storedValueRefusal({
       message: "The stored-value entry could not be recorded.",
@@ -491,7 +491,7 @@ export async function priorStoredValueEntry(
            balance_after::text as "balanceAfter", journal_entry_id as "journalEntryId"
       from stored_value_entries
      where org_id = ${orgId} and idempotency_key = ${idempotencyKey}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   const amountMinor = BigInt(row.amountMinor);
   const mismatches = [
@@ -568,7 +568,7 @@ export async function lockStoredValueAccount(
   /** REQUIRED actor scope; explicit null is the unrestricted grant, named outright by paths acting on their own document-anchored entity. */
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<StoredValueAccountRow> {
-  const rows = (await db.execute<StoredValueAccountRaw>(sql`
+  const rows = await db.execute<StoredValueAccountRaw>(sql`
     select id, org_id as "orgId", program_id as "programId", kind, code_hash as "codeHash",
            code_last4 as "codeLast4", customer_party_id as "customerPartyId", currency,
            subsidiary_id as "subsidiaryId",
@@ -579,7 +579,7 @@ export async function lockStoredValueAccount(
       from stored_value_accounts
      where org_id = ${orgId} and id = ${accountId}
      for update
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   // Absent, cross-org, and out-of-scope read identically: no existence probe
   // distinguishes them, so a hidden record is indistinguishable from a
@@ -891,7 +891,7 @@ async function assertIssueReplayIntent(
       select id from subsidiaries
        where org_id = ${input.orgId} and is_active and not is_elimination and parent_id is null
        limit 1 for share
-    `)).rows[0]?.id ?? null;
+    `, "objects"))[0]?.id ?? null;
   }
   // The issue journal carries the funding leg (debit-positive), the date the
   // value actually posted on, the memo text, and the stated-or-defaulted
@@ -904,7 +904,7 @@ async function assertIssueReplayIntent(
                  order by line_number limit 1) as "debitAccountId"
           from journal_entries je
          where je.org_id = ${input.orgId} and je.id = ${priorEntry.journalEntryId}
-      `)).rows[0] ?? null
+      `, "objects"))[0] ?? null
     : null;
   const evidence = (journal?.journalCustom as { storedValueIssue?: {
     expiresOnStated?: unknown; postingDateStated?: unknown; memoStated?: unknown;
@@ -992,7 +992,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
            document_line_id as "documentLineId", journal_entry_id as "journalEntryId"
       from stored_value_entries
      where org_id = ${input.orgId} and idempotency_key = ${replayKey}
-  `)).rows[0];
+  `, "objects"))[0];
   if (replayedRef) {
     // The prior account locks under the actor's scope BEFORE any fingerprint
     // or amount message: a hidden original reads as missing and no hidden
@@ -1051,7 +1051,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
     const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
        where org_id = ${input.orgId} and id = ${input.customerPartyId} and is_active
-    `)).rows[0];
+    `, "objects"))[0];
     if (
       !party ||
       input.allowedSubsidiaryIds === undefined ||
@@ -1091,7 +1091,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateStoredValueCode();
     const codeHash = hashStoredValueCode(input.orgId, code);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into stored_value_accounts
         (org_id, program_id, kind, code_hash, code_last4, customer_party_id, currency,
          subsidiary_id,
@@ -1106,7 +1106,7 @@ export async function issueStoredValue(input: IssueInput): Promise<IssueResult> 
       -- A generated code collision mints a new code on the next bounded retry.
       on conflict (org_id, code_hash) do nothing
       returning id
-    `)).rows;
+    `, "objects");
     // A code collision is expected to be vanishingly rare but possible: the
     // conflict is benign, so mint a fresh code and retry rather than fail.
     if (inserted.length !== 1 || !inserted[0]) continue;
@@ -1204,11 +1204,9 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
   });
   if (prior) return { entryId: prior.entryId, balanceMinor: prior.balanceAfter };
   if (input.documentId) {
-    const owner = (
-      await db.execute<{ partyId: string | null }>(sql`
+    const owner = (await db.execute<{ partyId: string | null }>(sql`
         select party_id as "partyId" from documents
-         where org_id = ${input.orgId} and id = ${input.documentId}`)
-    ).rows[0];
+         where org_id = ${input.orgId} and id = ${input.documentId}`, "objects"))[0];
     if (owner && !storedValueAccountOwnedByCustomer(account, owner.partyId)) {
       throw storedValueRefusal({
         message: `Stored-value …${account.codeLast4} belongs to another customer and cannot move on this document.`,
@@ -1232,14 +1230,14 @@ export async function redeemStoredValue(input: RedeemInput): Promise<{ entryId: 
   }
   const pricing = await priceRedemption(input, account);
   const balanceMinor = account.balanceMinor - input.amountMinor;
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update stored_value_accounts
        set balance_minor = ${balanceMinor.toString()},
            last_activity_on = CURRENT_DATE,
            updated_at = now(), updated_by = ${input.actorId ?? null}
      where org_id = ${input.orgId} and id = ${account.id} and balance_minor = ${account.balanceMinor.toString()}
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} changed while redeeming; the balance no longer covers this redemption.`,
@@ -1339,7 +1337,7 @@ async function priceRedemption(
   if (doc.subsidiaryId !== account.subsidiaryId) {
     const accountSub = (await db.execute<{ name: string }>(sql`
       select name from subsidiaries where org_id = ${input.orgId} and id = ${account.subsidiaryId}
-    `)).rows[0]?.name ?? account.subsidiaryId;
+    `, "objects"))[0]?.name ?? account.subsidiaryId;
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} belongs to ${accountSub}, but the document posts to ${doc.subsidiaryName}: one entity cannot relieve another's debt.`,
       code: "stored_value_cross_entity",
@@ -1477,14 +1475,14 @@ export async function adjustStoredValue(input: AdjustInput): Promise<{ entryId: 
     actorId: input.actorId ?? null,
     auditChanges: { accountId: account.id, reason },
   });
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update stored_value_accounts
        set balance_minor = ${balanceMinor.toString()},
            last_activity_on = CURRENT_DATE,
            updated_at = now(), updated_by = ${input.actorId ?? null}
      where org_id = ${input.orgId} and id = ${account.id} and balance_minor = ${account.balanceMinor.toString()}
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} changed while adjusting.`,
@@ -1547,12 +1545,12 @@ export async function setStoredValueStatus(input: {
       status: 409,
     });
   }
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update stored_value_accounts
        set status = ${input.to}, updated_at = now(), updated_by = ${input.actorId ?? null}
      where org_id = ${input.orgId} and id = ${account.id} and status = ${account.status}
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} changed while updating its status.`,
@@ -1598,7 +1596,7 @@ export async function lookupStoredValueByCode(
   if (!normalized) return null;
   if (allowedSubsidiaryIds === undefined) return null;
   const digest = hashStoredValueCode(orgId, code);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; programId: string; kind: StoredValueKind; currency: string;
     balanceMinor: string; status: StoredValueStatus; expiresOn: string | null;
     customerPartyId: string | null; codeHash: string; subsidiaryId: string;
@@ -1610,7 +1608,7 @@ export async function lookupStoredValueByCode(
       from stored_value_accounts
      where org_id = ${orgId} and code_hash = ${digest}
      limit 1
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   if (!row || !digestsEqual(digest, row.codeHash)) return null;
   if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
@@ -1658,7 +1656,7 @@ export async function resolveStoredValueTender(
   if (!normalized) return null;
   if (allowedSubsidiaryIds === undefined) return null;
   const digest = hashStoredValueCode(orgId, code);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; kind: StoredValueKind; currency: string; balanceRaw: string;
     status: StoredValueStatus; customerPartyId: string | null; codeHash: string;
     codeLast4: string; accountLiability: string | null; programLiability: string | null;
@@ -1672,7 +1670,7 @@ export async function resolveStoredValueTender(
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.code_hash = ${digest}
      limit 1
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   if (!row || !digestsEqual(digest, row.codeHash)) return null;
   if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
@@ -1702,7 +1700,7 @@ export async function loadStoredValueTenderAccount(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<TenderResolution | null> {
   if (allowedSubsidiaryIds === undefined) return null;
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; kind: StoredValueKind; currency: string; balanceRaw: string;
     status: StoredValueStatus; customerPartyId: string | null;
     codeLast4: string; accountLiability: string | null; programLiability: string | null;
@@ -1716,7 +1714,7 @@ export async function loadStoredValueTenderAccount(
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.id = ${accountId}
      limit 1
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   if (!row) return null;
   if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
@@ -1765,7 +1763,7 @@ async function attachDocumentIssueInTransaction(input: DocumentIssueInput): Prom
   const replayed = (await db.execute<{ account_id: string; id: string }>(sql`
     select account_id, id from stored_value_entries
      where org_id = ${input.orgId} and idempotency_key = ${`stored-value:issue-entry:${input.idempotencyKey}`}
-  `)).rows[0];
+  `, "objects"))[0];
   if (replayed) {
     return { accountId: replayed.account_id, code: null, entryId: replayed.id, journalEntryId: input.journalEntryId, replayed: true };
   }
@@ -1822,7 +1820,7 @@ async function attachDocumentIssueInTransaction(input: DocumentIssueInput): Prom
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateStoredValueCode();
     const codeHash = hashStoredValueCode(input.orgId, code);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into stored_value_accounts
         (org_id, program_id, kind, code_hash, code_last4, customer_party_id, currency,
          subsidiary_id,
@@ -1837,7 +1835,7 @@ async function attachDocumentIssueInTransaction(input: DocumentIssueInput): Prom
       -- A generated code collision mints a new code on the next bounded retry.
       on conflict (org_id, code_hash) do nothing
       returning id
-    `)).rows;
+    `, "objects");
     // A code collision is expected to be vanishingly rare but possible: the
     // conflict is benign, so mint a fresh code and retry rather than fail.
     if (inserted.length !== 1 || !inserted[0]) continue;
@@ -1885,7 +1883,7 @@ export async function expireStoredValueAccount(input: {
     const prior = (await db.execute<{ id: string }>(sql`
       select id from stored_value_entries
        where org_id = ${input.orgId} and idempotency_key = ${`stored-value:expire-entry:${input.idempotencyKey}`}
-    `)).rows[0];
+    `, "objects"))[0];
     if (prior) return { entryId: prior.id, journalEntryId: null };
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} is already ${account.status}.`,
@@ -1941,7 +1939,7 @@ export async function expireStoredValueAccount(input: {
       auditChanges: { accountId: account.id },
     });
   }
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update stored_value_accounts
        set balance_minor = '0', status = 'expired',
            last_activity_on = CURRENT_DATE,
@@ -1949,7 +1947,7 @@ export async function expireStoredValueAccount(input: {
      where org_id = ${input.orgId} and id = ${account.id} and status = 'active'
        and balance_minor = ${account.balanceMinor.toString()}
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} changed while expiring.`,

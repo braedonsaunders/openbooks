@@ -10,7 +10,7 @@ import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 export async function completePaymentPostingEffectsForReturn(orgId: string, documentId: string,
   options: { requireEvidence?: boolean } = {}): Promise<void> {
   const effect = (await db.execute<{ status: string }>(sql`select status from posting_effects
-    where org_id = ${orgId} and document_id = ${documentId}`)).rows[0];
+    where org_id = ${orgId} and document_id = ${documentId}`, "objects"))[0];
   // Historical postings without an outbox retain the native void contract.
   if (!effect) {
     if (options.requireEvidence) throw new PaymentError("Receipt posting-effects evidence is unavailable; reconcile its native posting before resuming the provider return.");
@@ -23,7 +23,7 @@ export async function completePaymentPostingEffectsForReturn(orgId: string, docu
     throw new PaymentError(`Receipt posting effects could not complete: ${error instanceof Error ? error.message : "unknown effect refusal"}. Resolve the cause on the posted receipt; terminal failures require Retry posting effects with a review reason before resuming the provider return.`, { cause: error });
   }
   const completed = (await db.execute<{ status: string }>(sql`select status from posting_effects
-    where org_id = ${orgId} and document_id = ${documentId}`)).rows[0];
+    where org_id = ${orgId} and document_id = ${documentId}`, "objects"))[0];
   if (completed?.status !== "succeeded") throw new PaymentError(
     `Receipt posting effects are ${completed?.status ?? "unavailable"}; wait for their native completion before resuming the provider return. Terminal failures require Retry posting effects on the posted receipt with a review reason.`,
   );
@@ -43,8 +43,8 @@ export async function reversePaymentForReturn(
        where d.id = ${paymentDocumentId} and d.org_id = ${orgId}
          and d.kind in ('vendor_payment', 'customer_payment') and d.status = 'posted'
        for update
-    `));
-    const payment = row.rows[0];
+    `, "objects"));
+    const payment = row[0];
     if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
     await completePaymentPostingEffectsForReturn(orgId, payment.id);
     // The void-evidence CHECK caps void_reason at 500 chars, but bank return
@@ -57,7 +57,7 @@ export async function reversePaymentForReturn(
     }
     const voidReason = `Bank return: ${reasonText}`;
     const reversalDay = reversalDate ?? (await businessToday(orgId));
-    const stamped = await db.execute(sql`
+    const stamped = await db.execute<never>(sql`
       update documents
          set void_reason = ${voidReason},
              void_requested_at = now(),
@@ -76,8 +76,7 @@ export async function reversePaymentForReturn(
       // this same transaction, so the displaced request is re-read under the
       // row lock, overwritten, preserved alongside the bank evidence in the
       // audit trail, and its requester notified — never silently adopted.
-      const pending = (
-        await db.execute<{
+      const pending = (await db.execute<{
           void_reason: string | null;
           void_requested_by: string | null;
           void_reversal_date: string | null;
@@ -85,8 +84,7 @@ export async function reversePaymentForReturn(
         }>(sql`
         select void_reason, void_requested_by, void_reversal_date, status
           from documents where id = ${payment.id} and org_id = ${orgId}
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!pending || pending.status !== "posted") {
         // Not a supersedeable pending request (already voided, or the
         // document moved on): completion returns the existing reversal for

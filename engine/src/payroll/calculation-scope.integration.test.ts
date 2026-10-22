@@ -17,7 +17,7 @@ async function snapshot(orgId: string) {
     'components',(select jsonb_agg(to_jsonb(c) order by id) from pay_components c where org_id=${orgId}),
     'projection',(select jsonb_agg(to_jsonb(d) order by id) from document_lines d where org_id=${orgId}),
     'claims',(select jsonb_agg(jsonb_build_object('id',id,'batch',payroll_batch_ref) order by id) from time_entries where org_id=${orgId})
-    ) as state`)).rows[0]!.state;
+    ) as state`, "objects"))[0]!.state;
 }
 
 for (const scenario of ["existing snapshot", "fresh roster"] as const) {

@@ -32,7 +32,7 @@ export async function NativeExtension({ appKey, searchParams }: {
   const entry = (await db.execute<{ content: string }>(sql`
     select content from app_files where org_id=${authz.user.orgId} and app_id=${app.id}
       and version_id=${app.activeVersionId} and path=${app.manifest.frontend.entry} and not is_binary
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!entry) notFound()
   const ui = parseNativeExtension(entry.content)
   const selected = typeof searchParams.screen === 'string' ? searchParams.screen : ui.screens[0]!.key

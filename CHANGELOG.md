@@ -6,6 +6,22 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+- Replace the migration history with one verified release baseline,
+  `baselines/alpha35.sql`. Fresh installations apply the baseline and the
+  forward migrations above it, which are numbered again from `0001`. The
+  retired migration identities and their digests remain recorded in
+  `schema/migrations/baseline.json`.
+- Upgrade to drizzle-orm 1.0.0-rc.5. Query parameters are no longer included
+  in database error messages.
+
+Existing installations must first complete v0.1.0-alpha.34.3, then verify and
+adopt the baseline with `scripts/adopt-migration-baseline.mts --check` and
+`--apply` during a maintenance window with a verified backup, following the
+[baseline cutover procedure](docs/operations/migration-baseline-cutover.md).
+Adoption refuses an incomplete previous-release ledger or any catalog
+difference and changes no tenant data. Older releases upgrade to
+v0.1.0-alpha.34.3 first.
+
 ## [0.1.0-alpha.31] - 2026-10-13
 
 - Add multi-book accounting, account mappings and translation, intercompany

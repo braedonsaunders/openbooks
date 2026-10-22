@@ -363,8 +363,8 @@ export async function lohnsteuerbescheinigungSlips(
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'DE'
      group by s.employee_party_id, p.display_name, s.filing_account_id
      order by p.display_name
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollPackError(
       `DE Lohnsteuerbescheinigung: no committed German (DE) pay stubs for ${taxYear} — commit a `
       + `${taxYear} DE pay run before issuing Lohnsteuerbescheinigungen (an empty statutory form is `
@@ -373,18 +373,18 @@ export async function lohnsteuerbescheinigungSlips(
   }
   // No ANY($array): a bare JavaScript array interpolates as a row
   // constructor, not a PostgreSQL array — filter in JS instead.
-  const wanted = new Set(rows.rows.map((row) => String(row.employee_party_id)));
+  const wanted = new Set(rows.map((row) => String(row.employee_party_id)));
   const profiles = (await db.execute<{ employee_party_id: string; province: string; sin_encrypted: string | null }>(sql`
     select employee_party_id, province, sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId}
-  `));
+  `, "objects"));
   const landByEmployee = new Map(
-    profiles.rows
+    profiles
       .filter((row) => wanted.has(String(row.employee_party_id)))
       .map((row) => [String(row.employee_party_id), String(row.province ?? "")]),
   );
   const identifierByEmployee = new Map(
-    profiles.rows
+    profiles
       .filter((row) => wanted.has(String(row.employee_party_id)))
       .map((row) => [String(row.employee_party_id), row.sin_encrypted == null ? null : unsealSecret(row.sin_encrypted, { orgId, purpose: "payroll.employee.sin" })]),
   );
@@ -405,9 +405,9 @@ export async function lohnsteuerbescheinigungSlips(
   const roles = (await db.execute<{ employee_party_id: string; hired_on: string | null; terminated_on: string | null }>(sql`
     select employee_party_id, hired_on::text, terminated_on::text from employee_roles
      where org_id = ${orgId}
-  `));
+  `, "objects"));
   const spellsByEmployee = new Map<string, { hiredOn: string | null; terminatedOn: string | null }[]>();
-  for (const role of roles.rows) {
+  for (const role of roles) {
     const key = String(role.employee_party_id);
     if (!wanted.has(key)) continue;
     const spells = spellsByEmployee.get(key) ?? [];
@@ -416,7 +416,7 @@ export async function lohnsteuerbescheinigungSlips(
   }
 
   const slips: DeLohnsteuerbescheinigungSlip[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
     const employeeName = String(row.display_name);
     const spells = spellsByEmployee.get(employeePartyId) ?? [];

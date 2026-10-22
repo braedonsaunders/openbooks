@@ -170,12 +170,12 @@ export function reconcilePositions(book: EquityBook, recorded: readonly Position
 
 /** Recorded movements of a legal entity, summed per position and date. */
 async function recordedMovements(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<PositionMovement[]> {
-  const rows = (await runner.execute<{ position_kind: PositionKind; security_id: string | null; plan_id: string | null; effective_on: string; shares: string; as_converted: string }>(sql`
+  const rows = await runner.execute<{ position_kind: PositionKind; security_id: string | null; plan_id: string | null; effective_on: string; shares: string; as_converted: string }>(sql`
     select position_kind, security_id, plan_id, effective_on::text as effective_on,
            sum(shares_delta)::text as shares, sum(as_converted_delta)::text as as_converted
       from equity_position_movements
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
-     group by position_kind, security_id, plan_id, effective_on`)).rows;
+     group by position_kind, security_id, plan_id, effective_on`, "objects");
   return rows.map((row) => ({
     kind: row.position_kind, securityId: row.security_id, planId: row.plan_id, effectiveOn: row.effective_on,
     sharesDelta: BigInt(row.shares), asConvertedDelta: BigInt(row.as_converted),
@@ -195,10 +195,10 @@ export async function syncPositionLedger(runner: SqlExecutor, orgId: string, sub
     const batch = append.slice(start, start + 500);
     const values = batch.map((row) => sql`(${orgId}, ${subsidiaryId}, ${row.kind}, ${row.securityId}, ${row.planId}, ${row.effectiveOn}::date,
       ${row.sharesDelta.toString()}::bigint, ${row.asConvertedDelta.toString()}::bigint)`);
-    const written = (await runner.execute<{ id: string }>(sql`
+    const written = await runner.execute<{ id: string }>(sql`
       insert into equity_position_movements (org_id, subsidiary_id, position_kind, security_id, plan_id, effective_on, shares_delta, as_converted_delta)
       values ${sql.join(values, sql`, `)}
-      returning id`)).rows;
+      returning id`, "objects");
     if (written.length !== batch.length) {
       throw equityError("positionsStale");
     }
@@ -208,10 +208,10 @@ export async function syncPositionLedger(runner: SqlExecutor, orgId: string, sub
 
 /** The cap table a SQL sum of the ledger gives on a date, per position (for verification). */
 export async function ledgerPositions(runner: SqlExecutor, orgId: string, subsidiaryId: string, on: string): Promise<Map<string, PositionValue>> {
-  const rows = (await runner.execute<{ security_id: string | null; plan_id: string | null; shares: string; as_converted: string }>(sql`
+  const rows = await runner.execute<{ security_id: string | null; plan_id: string | null; shares: string; as_converted: string }>(sql`
     select security_id, plan_id, sum(shares_delta)::text as shares, sum(as_converted_delta)::text as as_converted
       from equity_position_movements
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and effective_on <= ${on}::date
-     group by security_id, plan_id`)).rows;
+     group by security_id, plan_id`, "objects");
   return new Map(rows.map((row) => [row.plan_id ? `p:${row.plan_id}` : `s:${row.security_id}`, { shares: BigInt(row.shares), asConverted: BigInt(row.as_converted) }]));
 }

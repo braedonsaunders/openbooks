@@ -102,7 +102,7 @@ async function openLineId(orgId: string, documentId: string): Promise<string> {
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.source_document_id = ${documentId}
          and jl.is_open_item
-       limit 1`)).rows[0],
+       limit 1`, "objects"))[0],
   );
   assert.ok(row, `document ${documentId} has no open-item line`);
   return row.id;
@@ -115,7 +115,7 @@ async function openBalance(orgId: string, lineId: string): Promise<string> {
         from journal_lines jl
         left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
        where jl.org_id = ${orgId} and jl.id = ${lineId}
-       group by jl.id`)).rows[0],
+       group by jl.id`, "objects"))[0],
   );
   return row!.open;
 }
@@ -127,7 +127,7 @@ async function sourceOpenBalance(orgId: string, lineId: string): Promise<string>
         from journal_lines jl
         left join applications a on a.from_line_id = jl.id and a.org_id = jl.org_id
        where jl.org_id = ${orgId} and jl.id = ${lineId}
-       group by jl.id`)).rows[0],
+       group by jl.id`, "objects"))[0],
   );
   return row!.open;
 }
@@ -135,7 +135,7 @@ async function sourceOpenBalance(orgId: string, lineId: string): Promise<string>
 async function entryCount(orgId: string): Promise<number> {
   const row = await withBypass(async () =>
     (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from journal_entries where org_id = ${orgId}`)).rows[0],
+      select count(*)::text as n from journal_entries where org_id = ${orgId}`, "objects"))[0],
   );
   return Number(row!.n);
 }
@@ -192,7 +192,7 @@ test("a full credit settles an invoice with no cash and posts no journal entry",
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from audit_log
          where org_id = ${org.orgId} and table_name = 'applications'
-           and row_id = ${result.applicationIds[0]!} and action = 'insert'`)).rows[0],
+           and row_id = ${result.applicationIds[0]!} and action = 'insert'`, "objects"))[0],
     );
     assert.equal(Number(audit!.n), 1);
   }),
@@ -520,7 +520,7 @@ test("a retried apply with the same key replays the settlement it already wrote"
     const rows = await withBypass(async () =>
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and from_line_id = ${creditLine}`)).rows[0],
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`, "objects"))[0],
     );
     assert.equal(Number(rows!.n), 1, "a retried submit must not write a second settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
@@ -561,7 +561,7 @@ test("the same key with a different payload is a named conflict, never a second 
     const rows = await withBypass(async () =>
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and from_line_id = ${creditLine}`)).rows[0],
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`, "objects"))[0],
     );
     assert.equal(Number(rows!.n), 1, "a conflicting payload must not write beside the keyed settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
@@ -613,7 +613,7 @@ test("a key owned by another organization fails closed as a foreign key", { skip
       );
       const otherRows = await withBypass(async () =>
         (await db.execute<{ n: string }>(sql`
-          select count(*)::text as n from applications where org_id = ${other.orgId}`)).rows[0],
+          select count(*)::text as n from applications where org_id = ${other.orgId}`, "objects"))[0],
       );
       assert.equal(Number(otherRows!.n), 0, "the foreign-key refusal must write nothing");
     } finally {
@@ -654,7 +654,7 @@ test("an invoice line cannot masquerade as the credit, even naming its own sourc
     const rows = await withBypass(async () =>
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and (from_line_id = ${invoiceLine} or to_line_id = ${targetLine})`)).rows[0],
+         where org_id = ${org.orgId} and (from_line_id = ${invoiceLine} or to_line_id = ${targetLine})`, "objects"))[0],
     );
     assert.equal(Number(rows!.n), 0, "the refused masquerade must write nothing");
   }),
@@ -684,7 +684,7 @@ test("concurrent identical submits share one settlement through the key fence", 
     const rows = await withBypass(async () =>
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from applications
-         where org_id = ${org.orgId} and from_line_id = ${creditLine}`)).rows[0],
+         where org_id = ${org.orgId} and from_line_id = ${creditLine}`, "objects"))[0],
     );
     assert.equal(Number(rows!.n), 1, "both concurrent submits resolve to one settlement");
     assert.equal(await openBalance(org.orgId, invoiceLine), "170.0000");
@@ -714,15 +714,15 @@ test("voiding a payment releases the credits it applied, and only then may they 
       await postPaymentWithApplications(payment.id, undefined, userId);
       return payment.id;
     });
-    const carried = await withBypass(async () => (await db.execute<{ id: string }>(sql`
+    const carried = await withBypass(async () => await db.execute<{ id: string }>(sql`
       select id from applications
        where org_id = ${org.orgId} and from_line_id = ${creditLine} and to_line_id = ${invoiceLine} and unapplied_at is null
-    `)).rows);
+    `, "objects"));
     assert.equal(carried.length, 1);
     assert.equal(await openBalance(org.orgId, invoiceLine), "0.0000");
     // While the payment stands, its credit is released only by voiding it.
     const payment = await withBypass(async () => (await db.execute<{ document_number: string }>(sql`
-      select document_number from documents where id = ${paymentId} and org_id = ${org.orgId}`)).rows[0]!);
+      select document_number from documents where id = ${paymentId} and org_id = ${org.orgId}`, "objects"))[0]!);
     await assert.rejects(
       () => withBypass(() => unapplyCreditSettlement(org.orgId, userId, carried[0]!.id)),
       (error: unknown) => error instanceof PaymentError
@@ -736,10 +736,10 @@ test("voiding a payment releases the credits it applied, and only then may they 
     assert.equal(voided.status, "voided");
     assert.equal(await openBalance(org.orgId, invoiceLine), "300.0000");
     assert.equal(await sourceOpenBalance(org.orgId, creditLine), "100.0000");
-    const evidence = await withBypass(async () => (await db.execute<{ changes: { mode: string; released: Array<{ applicationId: string; amount: string }>; notLive: unknown[] } }>(sql`
+    const evidence = await withBypass(async () => await db.execute<{ changes: { mode: string; released: Array<{ applicationId: string; amount: string }>; notLive: unknown[] } }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${paymentId}
-         and changes ->> 'mode' = 'void_release_carried_credits'`)).rows);
+         and changes ->> 'mode' = 'void_release_carried_credits'`, "objects"));
     assert.deepEqual(evidence.map((row) => row.changes.released.map((r) => [r.applicationId, r.amount])), [[[carried[0]!.id, "100"]]]);
     assert.deepEqual(evidence[0]!.changes.notLive, []);
     // The voided payment no longer claims the credit, which can be applied again.
@@ -844,7 +844,7 @@ test("a foreign-currency credit settles its currency's invoice at carrying amoun
     const application = (await withBypass(async () => (await db.execute<{
       amount: string; source_amount: string; source_transaction_amount: string; target_transaction_amount: string; fx_gain_loss_entry_id: string | null;
     }>(sql`select amount::text, source_amount::text, source_transaction_amount::text, target_transaction_amount::text, fx_gain_loss_entry_id
-             from applications where org_id = ${org.orgId} and id = ${result.applicationIds[0]!}`)).rows[0]))!;
+             from applications where org_id = ${org.orgId} and id = ${result.applicationIds[0]!}`, "objects"))[0]))!;
     assert.deepEqual([
       application.amount,
       application.source_amount,
@@ -852,14 +852,14 @@ test("a foreign-currency credit settles its currency's invoice at carrying amoun
       application.target_transaction_amount,
     ], ["130.0000", "140.0000", "100.0000", "100.0000"]);
     assert.ok(application.fx_gain_loss_entry_id, "the carrying difference is realized");
-    const fxLines = new Map((await withBypass(async () => (await db.execute<{ account_id: string; amount: string }>(sql`
+    const fxLines = new Map((await withBypass(async () => await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${application.fx_gain_loss_entry_id}`)).rows)).map((row) => [row.account_id, row.amount]));
+       where org_id = ${org.orgId} and entry_id = ${application.fx_gain_loss_entry_id}`, "objects"))).map((row) => [row.account_id, row.amount]));
     assert.deepEqual(fxLines, new Map([[org.accounts.ar, "10.0000"], [org.accounts.fxGainLoss, "-10.0000"]]));
     const arBalance = async () => (await withBypass(async () => (await db.execute<{ total: string }>(sql`
       select coalesce(sum(l.amount), 0)::text as total from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-       where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar} and e.status in ('posted', 'reversed')`)).rows[0]))!.total;
+       where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar} and e.status in ('posted', 'reversed')`, "objects"))[0]))!.total;
     assert.equal(await arBalance(), "0.0000", "both items closed leaves nothing on the receivable control");
 
     const released = await withBypass(() => unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!));
@@ -869,7 +869,7 @@ test("a foreign-currency credit settles its currency's invoice at carrying amoun
       targetCarryingAmount: string; settledDocument: string; toLineId: string;
     } } }>(sql`
       select changes from audit_log where org_id = ${org.orgId} and row_id = ${result.applicationIds[0]!}
-        and action = 'delete' order by at desc, id desc limit 1`)).rows[0]))!;
+        and action = 'delete' order by at desc, id desc limit 1`, "objects"))[0]))!;
     assert.deepEqual(audit.changes.before, {
       amount: "100.0000",
       appliedOn: org.date,
@@ -880,7 +880,7 @@ test("a foreign-currency credit settles its currency's invoice at carrying amoun
       toLineId: invoiceLine,
     });
     const fxStatus = (await withBypass(async () => (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where org_id = ${org.orgId} and id = ${application.fx_gain_loss_entry_id}`)).rows[0]))!.status;
+      select status from journal_entries where org_id = ${org.orgId} and id = ${application.fx_gain_loss_entry_id}`, "objects"))[0]))!.status;
     assert.equal(fxStatus, "reversed");
     assert.equal(await arBalance(), "-10.0000", "the released items carry their original amounts again");
   }));

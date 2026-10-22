@@ -121,7 +121,7 @@ async function runRow(runId: string): Promise<{
   flowRunId: string | null;
   error: string | null;
 }> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     status: string;
     journal_entry_id: string | null;
     reversal_entry_id: string | null;
@@ -129,7 +129,7 @@ async function runRow(runId: string): Promise<{
     error: string | null;
   }>(sql`
     select status, journal_entry_id, reversal_entry_id, flow_run_id::text, error
-      from allocation_runs where id = ${runId}`)).rows;
+      from allocation_runs where id = ${runId}`, "objects");
   const row = rows[0];
   assert.ok(row);
   return {
@@ -142,16 +142,16 @@ async function runRow(runId: string): Promise<{
 }
 
 async function lineageCount(orgId: string, runId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(sql`
     select count(*)::text as count from allocation_lineage
-     where org_id = ${orgId} and run_id = ${runId}`)).rows;
+     where org_id = ${orgId} and run_id = ${runId}`, "objects");
   return Number(rows[0]?.count ?? 0);
 }
 
 async function pendingGateForRun(runId: string): Promise<{ id: string } | null> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from flow_gates
-     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`)).rows;
+     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`, "objects");
   return rows[0] ?? null;
 }
 
@@ -403,8 +403,8 @@ test("a disable racing a post serializes on the fence: the post sees the final s
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
-         and wait_event = 'advisory'`);
-      if (waiting.rows[0]!.n > 0) sightings += 1;
+         and wait_event = 'advisory'`, "objects");
+      if (waiting[0]!.n > 0) sightings += 1;
       if (sightings >= 3) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }

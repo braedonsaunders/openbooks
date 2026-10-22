@@ -101,25 +101,27 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.budget-actions-route-test')]
       const sqlText = globalThis.openbooksBudgetSqlText
       export const db = {
-        async execute(query) {
-          return globalThis.openbooksBudgetMockedQuery(query)
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
+          return inMode(await globalThis.openbooksBudgetMockedQuery(query))
         },
         async transaction(work) {
           return work({
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               state.queries.push(text)
               if (text.includes('select id, name, description, book_id')) {
-                return { rows: [{
+                return inMode({ rows: [{
                   id: '${SCENARIO_ID}', name: 'FY2026 Budget', description: null,
                   book_id: '${BOOK_ID}', fiscal_year: 2026,
                   kind: 'budget', status: state.scenarioStatus, revision: state.scenarioRevision,
-                }] }
+                }] })
               }
-              if (text.includes('select id from budget_scenarios')) return { rows: [{ id: '${SOURCE_SCENARIO_ID}' }] }
-              if (text.includes('select 1 from accounting_periods')) return { rows: [{ one: 1 }] }
-              if (text.includes('insert into budget_scenarios')) return { rows: [{ id: '00000000-0000-4000-8000-000000000007' }] }
-              return { rows: [] }
+              if (text.includes('select id from budget_scenarios')) return inMode({ rows: [{ id: '${SOURCE_SCENARIO_ID}' }] })
+              if (text.includes('select 1 from accounting_periods')) return inMode({ rows: [{ one: 1 }] })
+              if (text.includes('insert into budget_scenarios')) return inMode({ rows: [{ id: '00000000-0000-4000-8000-000000000007' }] })
+              return inMode({ rows: [] })
             },
           })
         },
@@ -174,9 +176,9 @@ if (process.env.VITEST) {
   vi['mock']('@openbooks/engine/platform/db', () => ({
     withOrgTransaction: async (_orgId: string, work: () => Promise<unknown>) => work(),
     db: {
-      execute: async (query: unknown) => mockedQuery(query),
-      transaction: async (work: (tx: { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> }) => unknown) =>
-        work({ execute: async (query) => mockedQuery(query) }),
+      execute: async (query: unknown, mode?: string) => Promise.resolve(mockedQuery(query)).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
+      transaction: async (work: (tx: { execute: (query: unknown, mode?: string) => Promise<unknown> }) => unknown) =>
+        work({ execute: async (query, mode?: string) => Promise.resolve(mockedQuery(query)).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)) }),
     },
   }))
   vi['mock']('../../../../../lib/authz', () => ({

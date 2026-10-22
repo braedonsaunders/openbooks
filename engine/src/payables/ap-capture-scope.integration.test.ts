@@ -62,13 +62,13 @@ async function seedHiddenPo(org: ScratchOrg, vendor: string, subsidiaryId: strin
 
 async function billCount(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'vendor_bill'`)).rows[0]!.n;
+    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'vendor_bill'`, "objects"))[0]!.n;
 }
 
 async function poBilled(orgId: string, poId: string): Promise<string> {
   return (await db.execute<{ quantity_billed: string }>(sql`
     select quantity_billed::text as quantity_billed from document_lines
-     where org_id = ${orgId} and document_id = ${poId}`)).rows[0]!.quantity_billed;
+     where org_id = ${orgId} and document_id = ${poId}`, "objects"))[0]!.quantity_billed;
 }
 
 const ZERO_QTY = "0.00000000";
@@ -87,7 +87,7 @@ test("manual materialize of an out-of-scope purchase order refuses and writes no
               'scope.pdf', 'application/pdf', 4)`);
     const poId = await seedHiddenPo(org, vendor, hidden, "PO-HID-1");
     const poLineId = (await db.execute<{ id: string }>(sql`select id from document_lines
-      where org_id=${org.orgId} and document_id=${poId} and line_number=1`)).rows[0]!.id;
+      where org_id=${org.orgId} and document_id=${poId} and line_number=1`, "objects"))[0]!.id;
     const captureId = randomUUID();
     await db.execute(sql`
       insert into ap_capture_items
@@ -113,7 +113,7 @@ test("manual materialize of an out-of-scope purchase order refuses and writes no
     assert.equal(await billCount(org.orgId), 0, "a refused materialize creates no vendor bill");
     assert.equal(await poBilled(org.orgId, poId), ZERO_QTY, "a refused materialize advances no billed quantity");
     const left = (await db.execute<{ status: string; document_id: string | null }>(sql`
-      select status, document_id from ap_capture_items where id = ${captureId} and org_id = ${org.orgId}`)).rows[0]!;
+      select status, document_id from ap_capture_items where id = ${captureId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(left.status, "needs_review");
     assert.equal(left.document_id, null);
     // An unrestricted caller still materializes the same item.
@@ -212,16 +212,16 @@ test("auto-materialize leaves an out-of-scope purchase-order match in review", {
     });
     const held = (await db.execute<{ status: string; document_id: string | null; validation_issues: Array<{ code: string; severity: string }> }>(sql`
       select status, document_id, validation_issues from ap_capture_items
-       where id = ${captureA} and org_id = ${org.orgId}`)).rows[0]!;
+       where id = ${captureA} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(held.status, "needs_review", "an out-of-scope match stays in review, not failed");
     assert.equal(held.document_id, null, "an out-of-scope match creates no draft bill");
     assert.ok(
       held.validation_issues.some((issue) => issue.code === "purchase_order_out_of_scope" && issue.severity === "blocking"),
       "the hold names the out-of-scope purchase order",
     );
-    const blocked = (await db.execute(sql`
+    const blocked = await db.execute(sql`
       select 1 from ap_capture_events
-       where org_id = ${org.orgId} and capture_item_id = ${captureA} and event_kind = 'auto_materialize_blocked'`)).rows;
+       where org_id = ${org.orgId} and capture_item_id = ${captureA} and event_kind = 'auto_materialize_blocked'`, "objects");
     assert.equal(blocked.length, 1, "the hold is recorded as capture evidence");
     assert.equal(await billCount(org.orgId), 0, "an out-of-scope auto-match advances no billed quantity");
     assert.equal(await poBilled(org.orgId, poem), ZERO_QTY);
@@ -233,7 +233,7 @@ test("auto-materialize leaves an out-of-scope purchase-order match in review", {
       allowedSubsidiaryIds: null, fetchImpl: stubFetchFor(payloadFor(invoiceB, "PO-HID-AUTO")), lookup: stubLookup,
     });
     const freed = (await db.execute<{ status: string; document_id: string | null }>(sql`
-      select status, document_id from ap_capture_items where id = ${captureB} and org_id = ${org.orgId}`)).rows[0]!;
+      select status, document_id from ap_capture_items where id = ${captureB} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(freed.status, "materialized");
     assert.ok(freed.document_id);
     assert.equal(await billCount(org.orgId), 1);

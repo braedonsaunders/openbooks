@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * Repo-wide audit: every generated migration with ordinal >= 0242 (the first
- * after v0.1.0-alpha.23) must have EXACTLY ONE decision file in
- * schema/migrations/preflight/:
+ * Repo-wide audit: every generated migration must have EXACTLY ONE decision
+ * file in schema/migrations/preflight/:
  *
  *   <basename>.sql   a preflight: exactly one read-only statement
  *                    (SELECT or WITH ... SELECT) returning zero rows when the
@@ -18,7 +17,7 @@
  *
  * Refused by name:
  *
- *   preflight-missing        a >= 0242 migration with no decision file
+ *   preflight-missing        a migration with no decision file
  *   preflight-contradiction  both <basename>.sql and <basename>.none exist
  *   preflight-orphan         a decision file with no matching migration
  *   preflight-none-short     a .none reason under 20 non-whitespace chars
@@ -27,8 +26,7 @@
  *   preflight-write-keyword  a .sql file containing a write keyword or call
  *   preflight-code-format    a code literal that is not '<this ordinal>.<snake_reason>'
  *                            (bootstrap's evaluator rejects the row, so the
- *                            upgrade check crashes instead of refusing by name;
- *                            13 preflights had it, found by the perf-1m rehearsal)
+ *                            upgrade check would crash instead of refusing by name)
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -38,9 +36,6 @@ import { stripSqlComments } from "./check-migration-headers.mjs";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GENERATED_DIR = join(ROOT, "schema", "migrations", "generated");
 const PREFLIGHT_DIR = join(ROOT, "schema", "migrations", "preflight");
-
-/** First ordinal covered by the preflight contract (after v0.1.0-alpha.23). */
-export const PREFLIGHT_MIN_ORDINAL = 242;
 
 /** Shortest honest "no preflight needed" reason, in non-whitespace chars. */
 export const NONE_REASON_MIN_NONWS = 20;
@@ -373,8 +368,7 @@ export function scanTree(generatedDir = GENERATED_DIR, preflightDir = PREFLIGHT_
   );
 
   for (const file of generated) {
-    const ordinal = ordinalOf(file);
-    if (ordinal === null || ordinal < PREFLIGHT_MIN_ORDINAL) continue;
+    if (ordinalOf(file) === null) continue;
     const stem = file.replace(/\.sql$/, "");
     const hasSql = sqlSet.has(`${stem}.sql`);
     const hasNone = noneSet.has(`${stem}.none`);

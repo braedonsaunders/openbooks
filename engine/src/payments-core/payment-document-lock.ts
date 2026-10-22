@@ -24,7 +24,7 @@ export async function lockEditablePaymentDocument(
   orgId: string,
   options: { requireDraft?: boolean; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ) {
-  const candidates = (await db.execute<{ run_id: string; instruction_id: string }>(sql`
+  const candidates = await db.execute<{ run_id: string; instruction_id: string }>(sql`
     select run.id as run_id, instruction.id as instruction_id
       from payment_instructions instruction
       join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
@@ -33,7 +33,7 @@ export async function lockEditablePaymentDocument(
        and run.status in ('draft', 'pending_approval', 'approved', 'processing',
                           'generated', 'delivered', 'partially_failed')
      order by run.id, instruction.id
-  `)).rows;
+  `, "objects");
   const runIds = [...new Set(candidates.map((row) => row.run_id))].sort();
   if (runIds.length) {
     await db.execute(sql`select id from payment_runs where org_id = ${orgId} and id in ${runIds} order by id for update`);
@@ -54,7 +54,7 @@ export async function lockEditablePaymentDocument(
        and run.status in ('draft', 'pending_approval', 'approved', 'processing',
                           'generated', 'delivered', 'partially_failed')
      order by run.id, instruction.id limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (claimed) {
     throw new PaymentError(
       `payment is claimed by open payment run ${claimed.runNumber} (${claimed.status}) — ` +

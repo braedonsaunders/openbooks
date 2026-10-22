@@ -46,7 +46,7 @@ for (const mode of ['API requests', 'app installs', 'API and app installs', 'rev
       const counts = (await withOrgContext(org.orgId, () => db.execute<{ definitions: number; apps: number; versions: number }>(sql`select
         (select count(*)::int from custom_field_defs where org_id=${org.orgId} and key=${field.key}) as definitions,
         (select count(*)::int from apps where org_id=${org.orgId}) as apps,
-        (select count(*)::int from app_versions where org_id=${org.orgId}) as versions`))).rows[0]!;
+        (select count(*)::int from app_versions where org_id=${org.orgId}) as versions`, 'objects')))[0]!;
       assert.deepEqual(counts, { definitions: 1, apps: winners[0]!.app ? 1 : 0, versions: winners[0]!.app ? 1 : 0 }, 'losing installs roll back every app/version write');
     } finally { state.user = null; await dropScratchOrg(org.orgId); }
   });

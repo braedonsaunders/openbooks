@@ -48,11 +48,11 @@ test(
       const item = org.items.fifo;
       const areaId = randomUUID(), binId = randomUUID();
       const area = await run(() => db.execute(sql`insert into stock_locations(id,org_id,location_id,parent_id,code,kind,is_active)
-        values(${areaId},${org.orgId},${org.locationId},${org.stockLocationId},'INSPECTION','bin',true) returning id`));
-      assert.equal(area.rows.length, 1);
+        values(${areaId},${org.orgId},${org.locationId},${org.stockLocationId},'INSPECTION','bin',true) returning id`, "objects"));
+      assert.equal(area.length, 1);
       const bin = await run(() => db.execute(sql`insert into stock_locations(id,org_id,location_id,parent_id,code,kind,is_active)
-        values(${binId},${org.orgId},${org.locationId},${areaId},'INSPECTION-1','bin',true) returning id`));
-      assert.equal(bin.rows.length, 1);
+        values(${binId},${org.orgId},${org.locationId},${areaId},'INSPECTION-1','bin',true) returning id`, "objects"));
+      assert.equal(bin.length, 1);
       await run(() =>
         db.execute(
           sql`update item_inventory_profiles set tracking='lot' where org_id=${org.orgId} and item_id=${item}`,
@@ -140,13 +140,11 @@ test(
           reason: "Inspection passed today",
         }),
       );
-      const released = (
-        await run(() =>
+      const released = (await run(() =>
           db.execute<{ count: number }>(
-            sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and row_id=${early} and changes->>'operation'='release'`,
+            sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and row_id=${early} and changes->>'operation'='release'`, "objects",
           ),
-        )
-      ).rows[0]!.count;
+        ))[0]!.count;
       assert.equal(released, 1);
       const inquiry = await run(() =>
         inventoryInquiry(org.orgId, actor, { view: "layers", itemId: item }),
@@ -158,10 +156,10 @@ test(
       );
       const quarantined = await run(() =>
         db.execute(
-          sql`update stock_locations set kind='quarantine' where org_id=${org.orgId} and id=${areaId} returning id`,
+          sql`update stock_locations set kind='quarantine' where org_id=${org.orgId} and id=${areaId} returning id`, "objects",
         ),
       );
-      assert.equal(quarantined.rows.length, 1);
+      assert.equal(quarantined.length, 1);
       assert.deepEqual(await choices(), []);
       assert.equal(
         cmp(
@@ -255,19 +253,19 @@ test(
       const defaultAudit = await run(() => db.execute<{ reason: string; actor_id: string }>(sql`
         select changes->>'reason' as reason, actor_id from audit_log
         where org_id=${org.orgId} and row_id=${line.id} and changes->>'operation'='second_count'
-        order by at desc,id desc limit 1`));
-      assert.deepEqual(defaultAudit.rows, [{ reason: "Second count observation", actor_id: actor }]);
+        order by at desc,id desc limit 1`, "objects"));
+      assert.deepEqual(defaultAudit, [{ reason: "Second count observation", actor_id: actor }]);
       const preserved = await run(() => db.execute(sql`select expected_quantity::text,first_counted_quantity::text,
-        counted_quantity::text from stock_count_lines where org_id=${org.orgId} and id=${line.id}`));
+        counted_quantity::text from stock_count_lines where org_id=${org.orgId} and id=${line.id}`, "objects"));
       await run(() => recordSecondCount(org.orgId, actor, { countId: count.id, lineId: line.id,
         countedQuantity: "8", reason: "Modeled source review; not a physical count" }));
       const sourceAudit = await run(() => db.execute<{ reason: string; actor_id: string }>(sql`
         select changes->>'reason' as reason, actor_id from audit_log
         where org_id=${org.orgId} and row_id=${line.id} and changes->>'operation'='second_count'
-        order by at desc,id desc limit 1`));
-      assert.deepEqual(sourceAudit.rows, [{ reason: "Modeled source review; not a physical count", actor_id: actor }]);
-      assert.deepEqual((await run(() => db.execute(sql`select expected_quantity::text,first_counted_quantity::text,
-        counted_quantity::text from stock_count_lines where org_id=${org.orgId} and id=${line.id}`))).rows,preserved.rows);
+        order by at desc,id desc limit 1`, "objects"));
+      assert.deepEqual(sourceAudit, [{ reason: "Modeled source review; not a physical count", actor_id: actor }]);
+      assert.deepEqual(await run(() => db.execute(sql`select expected_quantity::text,first_counted_quantity::text,
+        counted_quantity::text from stock_count_lines where org_id=${org.orgId} and id=${line.id}`, "objects")),preserved);
       detail = await run(() => getStockCountDetail(org.orgId, count.id, null));
       assert.equal(detail.lines[0]!.expectedQuantity, null);
       await run(() => submitStockCountForReview(org.orgId, actor, count.id));
@@ -378,13 +376,11 @@ test(
           }),
         ),
       );
-      const afterRefusal = (
-        await run(() =>
+      const afterRefusal = (await run(() =>
           db.execute<{ remaining_quantity: string }>(
-            sql`select remaining_quantity::text from consignment_stock where org_id=${org.orgId} and id=${receipt.stockId}`,
+            sql`select remaining_quantity::text from consignment_stock where org_id=${org.orgId} and id=${receipt.stockId}`, "objects",
           ),
-        )
-      ).rows[0]!;
+        ))[0]!;
       assert.equal(
         cmp(afterRefusal.remaining_quantity, "1"),
         0,
@@ -414,17 +410,15 @@ test(
         }),
       );
       assert.ok(acquired.receiptMovementId);
-      const movement = (
-        await run(() =>
+      const movement = (await run(() =>
           db.execute<{
             lot_id: string;
             serial_id: string;
             journal_entry_id: string;
           }>(
-            sql`select lot_id,serial_id,journal_entry_id from inventory_movements where org_id=${org.orgId} and id=${acquired.receiptMovementId}`,
+            sql`select lot_id,serial_id,journal_entry_id from inventory_movements where org_id=${org.orgId} and id=${acquired.receiptMovementId}`, "objects",
           ),
-        )
-      ).rows[0]!;
+        ))[0]!;
       assert.equal(movement.lot_id, lot);
       assert.equal(movement.serial_id, serial);
       assert.ok(movement.journal_entry_id);
@@ -486,22 +480,18 @@ test(
           }),
         );
       await assert.rejects(open(), /effective A cycle-count policy/);
-      const policy = (
-        await run(() =>
+      const policy = (await run(() =>
           db.execute<{
             id: string;
           }>(sql`insert into inventory_count_policies(org_id,subsidiary_id,abc_class,interval_days,variance_tolerance,effective_from,created_by,updated_by)
-   values(${org.orgId},${org.subsidiaryId},'A',7,'2',${org.date},${actor},${actor}) returning id`),
-        )
-      ).rows[0]!;
+   values(${org.orgId},${org.subsidiaryId},'A',7,'2',${org.date},${actor},${actor}) returning id`, "objects"),
+        ))[0]!;
       const count = await open();
-      const line = (
-        await run(() =>
+      const line = (await run(() =>
           db.execute<{ variance_tolerance: string }>(
-            sql`select variance_tolerance::text from stock_count_lines where org_id=${org.orgId} and stock_count_id=${count.id}`,
+            sql`select variance_tolerance::text from stock_count_lines where org_id=${org.orgId} and stock_count_id=${count.id}`, "objects",
           ),
-        )
-      ).rows[0]!;
+        ))[0]!;
       assert.equal(cmp(line.variance_tolerance, "2"), 0);
       const due = await run(() =>
         inventoryInquiry(org.orgId, actor, { view: "cycle_due" }),
@@ -604,8 +594,8 @@ test(
       await run(() => submitStockCountForReview(org.orgId, first, count.id));
       const subject = await run(() => stockCountsFlowAdapter.loadContext(count.id));
       assert.deepEqual(new Set(subject?.makerUserIds), new Set([first,second]), "all historical observers remain count makers");
-      const gates = (await run(() => db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates
-        where org_id=${org.orgId} and subject_id=${count.id} and status='pending'`))).rows;
+      const gates = await run(() => db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates
+        where org_id=${org.orgId} and subject_id=${count.id} and status='pending'`, "objects"));
       assert.deepEqual(gates.map(gate => gate.assignee_user_id), [reviewer], "tenant self-approval prevention excludes every historical observer");
       await assert.rejects(run(() => withOrgTransaction(org.orgId,()=>postStockCount(org.orgId,second,count.id))), /approval|review|Flow/);
       await decideGate({ gateId:gates[0]!.id,decision:"approved",userId:reviewer,allowedSubsidiaryIds:null });
@@ -617,7 +607,7 @@ test(
       assert.equal(posted.status, "posted");
       const audit = (await run(() => db.execute<{actor_id:string;changes:Record<string,unknown>}>(sql`
         select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='stock_counts'
-          and row_id=${count.id} and changes->>'operation'='post'`))).rows[0]!;
+          and row_id=${count.id} and changes->>'operation'='post'`, "objects")))[0]!;
       assert.equal(audit.actor_id,reviewer);
       assert.ok(audit.changes.review, "native posting retains its reviewed policy evidence");
     } finally {

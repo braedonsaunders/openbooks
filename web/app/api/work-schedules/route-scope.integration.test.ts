@@ -84,15 +84,13 @@ async function fixture() {
     values (${org.orgId}, ${empA}, '2025-01-06', true),
            (${org.orgId}, ${empB}, '2025-01-06', true)`));
   const seed = async (id: string, employeePartyId: string | null, subsidiaryId: string | null) =>
-    (
-      await withBypassContext(() => db.execute<{ id: string }>(sql`
+    (await withBypassContext(() => db.execute<{ id: string }>(sql`
         insert into work_schedules
           (id, org_id, name, employee_party_id, subsidiary_id, pattern, cycle_days, cycle_anchor,
            effective_from, is_active, created_by, updated_by)
         values (${id}, ${org.orgId}, ${`seed ${id.slice(0, 4)}`}, ${employeePartyId}, ${subsidiaryId},
                 'varies', null, null, '2026-01-05', true, ${actorId}, ${actorId})
-        returning id`))
-    ).rows[0]!.id;
+        returning id`, "objects")))[0]!.id;
   const scheduleA = await seed(randomUUID(), empA, null);
   const scheduleB = await seed(randomUUID(), empB, null);
   const scheduleSubB = await seed(randomUUID(), null, branchId);
@@ -114,11 +112,9 @@ const post = (body: unknown) =>
   );
 
 async function scheduleCount(orgId: string): Promise<number> {
-  const rows = (
-    await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${orgId}`),
-    )
-  ).rows;
+  const rows = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${orgId}`, "objects"),
+    );
   return rows[0]!.n;
 }
 
@@ -187,13 +183,11 @@ test("save and delete cannot touch another subsidiary's pattern", async () => {
     const remove = await post({ action: "delete", id: scheduleB });
     assert.equal(remove.status, 404);
     assert.deepEqual(await remove.json(), { error: "not_found" });
-    const rows = (
-      await withBypassContext(() =>
+    const rows = await withBypassContext(() =>
         db.execute<{ n: number }>(
-          sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId} and id = ${scheduleB}`,
+          sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId} and id = ${scheduleB}`, "objects",
         ),
-      )
-    ).rows;
+      );
     assert.equal(rows[0]!.n, 1, "a refused delete removes nothing");
   } finally {
     state.allowedSubsidiaryIds = null;

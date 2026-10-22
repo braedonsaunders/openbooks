@@ -38,7 +38,7 @@ async function openReviewedCount(org: ScratchOrg & { actorId: string }, counted:
   });
   await startStockCount(org.orgId, null, count.id);
   const lineId = (await db.execute<{ id: string }>(sql`
-    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
+    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`, "objects"))[0]!.id;
   await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
   await confirmCountObservation(org.orgId,count.id,lineId,counted);
   await submitStockCountForReview(org.orgId, org.actorId, count.id);
@@ -47,7 +47,7 @@ async function openReviewedCount(org: ScratchOrg & { actorId: string }, counted:
 
 async function lockWaiters(): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from pg_stat_activity where wait_event_type = 'Lock'`)).rows[0]!.n;
+    select count(*)::int as n from pg_stat_activity where wait_event_type = 'Lock'`, "objects"))[0]!.n;
 }
 
 test("two counts racing one position serialize: exactly one posts, the other refuses drift with nothing posted", { skip: !DB }, async () => {
@@ -99,14 +99,14 @@ test("two counts racing one position serialize: exactly one posts, the other ref
     const loserId = winner.id === first.countId ? second.countId : first.countId;
     assert.equal(
       (await db.execute<{ status: string }>(sql`
-        select status from stock_counts where org_id = ${org.orgId} and id = ${loserId}`)).rows[0]!.status,
+        select status from stock_counts where org_id = ${org.orgId} and id = ${loserId}`, "objects"))[0]!.status,
       "review",
       "the refused count stays in review",
     );
     assert.equal(
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from stock_count_lines
-         where org_id = ${org.orgId} and stock_count_id = ${loserId} and adjustment_movement_id is not null`)).rows[0]!.n,
+         where org_id = ${org.orgId} and stock_count_id = ${loserId} and adjustment_movement_id is not null`, "objects"))[0]!.n,
       "0",
       "the refused count posts no adjustment",
     );
@@ -120,7 +120,7 @@ test("two counts racing one position serialize: exactly one posts, the other ref
     assert.equal(
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from inventory_movements
-         where org_id = ${org.orgId} and memo like 'Stock count %'`)).rows[0]!.n,
+         where org_id = ${org.orgId} and memo like 'Stock count %'`, "objects"))[0]!.n,
       "1",
       "exactly one variance adjustment exists across both counts",
     );
@@ -163,7 +163,7 @@ test("a lot-tracked line posts under the position locks; serial counts require t
     });
     await startStockCount(org.orgId, null, count.id);
     const lineId = (await db.execute<{ id: string }>(sql`
-      select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
+      select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`, "objects"))[0]!.id;
     await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" });
     await confirmCountObservation(org.orgId,count.id,lineId,"9");
     await submitStockCountForReview(org.orgId, org.actorId, count.id);
@@ -176,7 +176,7 @@ test("a lot-tracked line posts under the position locks; serial counts require t
     );
 
     const before = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from stock_counts where org_id = ${org.orgId}`)).rows[0]!.n;
+      select count(*)::text as n from stock_counts where org_id = ${org.orgId}`, "objects"))[0]!.n;
     await assert.rejects(
       createStockCount(org.orgId, null, {
         locationId: org.locationId,
@@ -188,7 +188,7 @@ test("a lot-tracked line posts under the position locks; serial counts require t
     );
     assert.equal(
       (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from stock_counts where org_id = ${org.orgId}`)).rows[0]!.n,
+        select count(*)::text as n from stock_counts where org_id = ${org.orgId}`, "objects"))[0]!.n,
       before,
       "a refused serial creation stores no draft",
     );

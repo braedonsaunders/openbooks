@@ -50,7 +50,7 @@ async function fixture(): Promise<{ orgId: string; waiverId: string }> {
   const waiverId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into lien_waivers (org_id, waiver_number, direction, party_id, project_id, waiver_type, through_date, amount, currency, created_by, updated_by)
     values (${org.orgId}, 'W-1', 'received', ${partyId}, ${projectId}, 'conditional_progress', '2026-03-31', '1000.00', 'CAD', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { orgId: org.orgId, waiverId };
 }
 
@@ -67,10 +67,10 @@ const patch = (waiverId: string, body: unknown) =>
   );
 
 async function waiverOf(orgId: string, waiverId: string) {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ through_date: string; amount: string; status: string }>(
-      sql`select through_date::text as through_date, amount::text as amount, status from lien_waivers where org_id = ${orgId} and id = ${waiverId}`,
-    ))).rows;
+      sql`select through_date::text as through_date, amount::text as amount, status from lien_waivers where org_id = ${orgId} and id = ${waiverId}`, "objects",
+    ));
   return rows[0]!;
 }
 

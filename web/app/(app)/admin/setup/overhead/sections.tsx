@@ -212,10 +212,10 @@ export async function OverheadLifecycleTabSlot({ departments }: { departments?: 
   const [live, lifecycleRes, publishedRates] = await Promise.all([
     liveDepartments(),
     db.execute<{ c: { mode?: string; cadence?: string } | null }>(sql`
-      select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`),
+      select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`, 'objects'),
     currentPublishedRates(orgId),
   ])
-  const lifecycleCfg = lifecycleRes.rows[0]?.c ?? {}
+  const lifecycleCfg = lifecycleRes[0]?.c ?? {}
   const lifecycle = {
     mode: (['manual', 'scheduled', 'live'].includes(lifecycleCfg.mode ?? '') ? lifecycleCfg.mode : 'manual') as 'manual' | 'scheduled' | 'live',
     cadence: (lifecycleCfg.cadence === 'quarterly' ? 'quarterly' : 'monthly') as 'monthly' | 'quarterly',
@@ -236,7 +236,7 @@ export async function OverheadApplicationTabSlot() {
     overheadApplicationSettings(orgId),
     listOverheadApplications(orgId),
     countUnappliedOverheadTime(orgId),
-    db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and is_active order by number nulls last, name`),
+    db.execute<Record<string, unknown>>(sql`select id, number, name from accounts where org_id = ${orgId} and is_active order by number nulls last, name`, 'objects'),
     getOverheadSystemRuleEvidence(orgId),
   ])
   const systemRuleEvidence: OverheadSystemRuleEvidence | null = systemRule.ruleId ? systemRule : null
@@ -244,7 +244,7 @@ export async function OverheadApplicationTabSlot() {
     <OverheadApplication
       mode={application.mode}
       accountId={application.accountId}
-      accounts={(accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
+      accounts={accountsRes.map((r) => ({
         id: String(r.id),
         label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
       }))}

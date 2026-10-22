@@ -53,8 +53,8 @@ test("WIP ceilings preserve line project precedence, invoice fallback, credits a
           const updated = await db.execute<{ id: string }>(sql`update documents
             set status='voided', void_reason='Cancelled duplicate invoice',
                 voided_at='2026-07-15T12:00:00Z', voided_by=${voidActor}
-            where org_id=${org.orgId} and id=${id} returning id`);
-          assert.deepEqual(updated.rows.map(row => row.id), [id]);
+            where org_id=${org.orgId} and id=${id} returning id`, "objects");
+          assert.deepEqual(updated.map(row => row.id), [id]);
         }
       };
       // A nonnull line project takes precedence even when its invoice belongs
@@ -69,10 +69,10 @@ test("WIP ceilings preserve line project precedence, invoice fallback, credits a
       await invoice(projects[0]!, "customer_invoice", "2026-07-15", "voided", [[null, "999.0000"]]);
 
       const read = (asOf: boolean, scope: ReadonlySet<string> | null = null, orgId = org.orgId) =>
-        withOrgContext(org.orgId, async () => (await db.execute<{ project_id: string; amount: string }>(sql`
+        withOrgContext(org.orgId, async () => await db.execute<{ project_id: string; amount: string }>(sql`
           ${eligibleWipSourcesSql(orgId, scope, asOf ? { kind: "as_of", periodEnd: "2026-07-31" } : { kind: "open" })}
           select project_id, sum(capped_available_value)::text as amount
-            from eligible_sources group by project_id`)).rows);
+            from eligible_sources group by project_id`, "objects"));
       const amounts = (rows: { project_id: string; amount: string }[]) => new Map(rows.map((row) => [row.project_id, row.amount]));
       assert.deepEqual(amounts(await read(false)), new Map([[projects[0], "600.0000"], [projects[1], "310.0000"]]));
       assert.deepEqual(amounts(await read(true)), new Map([[projects[0], "675.0000"], [projects[1], "310.0000"]]));

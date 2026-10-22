@@ -1,1 +1,0 @@
-Additive: new empty intercompany tables, nullable intercompany pair account columns and a pair guard that checks only those new columns beyond its existing rules; no existing row can make it refuse.

@@ -35,8 +35,7 @@ export const stockCountsFlowAdapter = defineTableSubjectAdapter({
   scope: tableScope("column", "stock_counts", "subsidiary_id"),
   releaseViaHandler: true,
   async loadContext(id) {
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         id: string;
         org_id: string;
         status: string;
@@ -51,18 +50,15 @@ export const stockCountsFlowAdapter = defineTableSubjectAdapter({
       select c.id,c.org_id,c.status,c.subsidiary_id as "subsidiaryId",c.location_id as "locationId",
         c.counted_on::text as "countedOn",c.memo,c.created_by,c.submitted_by,
         (select coalesce(sum(l.counted_quantity-l.expected_quantity),0)::text from stock_count_lines l where l.org_id=c.org_id and l.stock_count_id=c.id) as variance
-      from stock_counts c where c.id=${id}`)
-    ).rows[0];
+      from stock_counts c where c.id=${id}`, "objects"))[0];
     if (!row) return null;
-    const authors = (
-      await db.execute<{ id: string }>(sql`
+    const authors = await db.execute<{ id: string }>(sql`
       select distinct actor as id from (
         select created_by as actor from stock_counts where org_id=${row.org_id} and id=${id}
         union select first_counted_by from stock_count_lines where org_id=${row.org_id} and stock_count_id=${id}
         union select second_counted_by from stock_count_lines where org_id=${row.org_id} and stock_count_id=${id}
         union select actor_id from audit_log where org_id=${row.org_id} and table_name='stock_count_lines' and changes->>'countId'=${id}
-      ) authors where actor is not null`)
-    ).rows;
+      ) authors where actor is not null`, "objects");
     return {
       values: { ...row },
       submitterUserId: row.submitted_by,
@@ -78,11 +74,9 @@ export const stockCountsFlowAdapter = defineTableSubjectAdapter({
   },
   async getStatus(id) {
     return (
-      (
-        await db.execute<{ status: string }>(
-          sql`select status from stock_counts where id=${id}`,
-        )
-      ).rows[0]?.status ?? null
+      (await db.execute<{ status: string }>(
+          sql`select status from stock_counts where id=${id}`, "objects",
+        ))[0]?.status ?? null
     );
   },
   async changeStatus() {

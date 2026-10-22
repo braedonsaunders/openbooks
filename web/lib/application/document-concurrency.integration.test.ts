@@ -56,8 +56,8 @@ async function buildIdempotencyHarness() {
              '{features,queryConsole}', 'true'::jsonb, true)
          where id = ${org.orgId}
          returning id
-      `);
-      if (!enabled.rows[0]) {
+      `, "objects");
+      if (!enabled[0]) {
         throw new Error(`scripts/queryConsole feature write matched 0 rows for org ${org.orgId}`);
       }
       const granted = await db.execute<{ id: string }>(sql`
@@ -66,8 +66,8 @@ async function buildIdempotencyHarness() {
          where org_id = ${org.orgId}
            and id in (select role_id from role_assignments where org_id = ${org.orgId} and user_id = ${actorId})
          returning id
-      `);
-      if (!granted.rows[0]) {
+      `, "objects");
+      if (!granted[0]) {
         throw new Error(`sql.execute grant matched 0 roles for actor ${actorId}`);
       }
       await db.execute(sql`
@@ -85,8 +85,8 @@ async function buildIdempotencyHarness() {
   }
 
   async function countRows(query: ReturnType<typeof sql>): Promise<number> {
-    const result = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(query));
-    return Number(result.rows[0]!.count);
+    const result = await withOrgContext(org.orgId, () => db.execute<{ count: number }>(query, "objects"));
+    return Number(result[0]!.count);
   }
 
   return {
@@ -163,7 +163,7 @@ test("a duplicate waits out an in-flight attempt without pinning a pool client, 
          and state = 'idle in transaction'
          and xact_start < clock_timestamp() - interval '50 milliseconds'
          and pid <> pg_backend_pid()
-    `);
+    `, "objects");
     const waitingClients = h.pool.waitingCount;
 
     gate.openRelease();
@@ -180,7 +180,7 @@ test("a duplicate waits out an in-flight attempt without pinning a pool client, 
       assert.deepEqual(duplicateOutcome.value.value, leaderValue);
     }
     assert.ok(
-      (pinned.rows[0]?.pinned ?? 0) <= 1,
+      (pinned[0]?.pinned ?? 0) <= 1,
       "only the in-flight claimant may hold an open transaction while duplicates wait",
     );
     assert.equal(waitingClients, 0, "no duplicate may queue for a pooled client while waiting");
@@ -402,8 +402,8 @@ test("a duplicate-key void storm stays exact-once and leaves the request pool re
     const { withOrgContext: scopedRead } = await import("@openbooks/engine/platform/db");
     const status = await scopedRead(h.org.orgId, () => h.db.execute<{ status: string; void_requested_at: Date | null }>(h.sql`
       select status, void_requested_at from documents where id = ${documentId}
-    `));
-    assert.deepEqual(status.rows[0], { status: "voided", void_requested_at: null });
+    `, "objects"));
+    assert.deepEqual(status[0], { status: "voided", void_requested_at: null });
     assert.equal(
       await h.countRows(h.sql`
         select count(*)::int as count

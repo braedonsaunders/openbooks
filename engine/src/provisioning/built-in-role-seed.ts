@@ -44,8 +44,8 @@ export async function upsertBuiltInRolesForOrg(
               updated_at = now()
         where app_roles.is_built_in
         returning id
-      `);
-      if (upserted.rows.length !== 1) {
+      `, "objects");
+      if (upserted.length !== 1) {
         throw new Error(
           `built-in role "${key}" for organization ${orgId} was not seeded: ` +
             `a custom role already uses that key. In Admin -> Users & Roles, ` +

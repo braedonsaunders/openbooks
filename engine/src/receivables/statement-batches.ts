@@ -129,7 +129,7 @@ export async function createStatementBatchRun(args: {
   if (args.recipients.length === 0) {
     throw new StatementBatchError("statement batch has no recipients — adjust the period or filters");
   }
-  const runRows = (await db.execute<{ id: string }>(sql`
+  const runRows = await db.execute<{ id: string }>(sql`
     insert into statement_batch_runs
       (org_id, period_from, period_to, filters, recipient_count, status, authorization_snapshot, created_by)
     values (
@@ -138,21 +138,21 @@ export async function createStatementBatchRun(args: {
       ${JSON.stringify({ version: 1, userId: args.senderId, allowedSubsidiaryIds: args.allowedSubsidiaryIds })}::jsonb,
       ${args.senderId}
     )
-    returning id::text as id`)).rows;
+    returning id::text as id`, "objects");
   const runId = runRows[0]?.id;
   // A required write matching zero rows is a failure, not a success.
   if (!runId) refuseBatchWrite("statement batch run was not recorded");
   for (const recipient of args.recipients) {
     // A fresh run id cannot collide, so a conflict here means the input
     // listed one customer twice — refusing beats sending them two letters.
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into statement_batch_items
         (org_id, run_id, party_id, to_email, balance, overdue, currency_code, status, created_by)
       values (${args.orgId}, ${runId}, ${recipient.partyId}, ${recipient.toEmail},
               ${recipient.balance}, ${recipient.overdue}, ${recipient.currency}, 'queued', ${args.senderId})
       -- Only a customer listed twice can collide; the empty result refuses below.
       on conflict (run_id, party_id) do nothing
-      returning id::text as id`)).rows;
+      returning id::text as id`, "objects");
     if (!inserted[0]) refuseBatchWrite("statement batch item was not recorded — the input listed one customer twice; refusing beats sending them two letters");
   }
   for (const exclusion of args.excluded) {
@@ -180,7 +180,7 @@ export async function getStatementBatchRun(
   runId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<StatementBatchRunRow | null> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; period_from: string | null; period_to: string; filters: Record<string, unknown>;
     recipient_count: number; status: StatementBatchRunStatus;
     authorization_snapshot: StatementBatchRunRow["authorizationSnapshot"];
@@ -190,7 +190,7 @@ export async function getStatementBatchRun(
            filters, recipient_count, status, authorization_snapshot, created_at, created_by::text as created_by
       from statement_batch_runs where id = ${runId} and org_id = ${orgId}
         and ${statementBatchScopeFilter("statement_batch_runs", allowedSubsidiaryIds)}
-      limit 1`)).rows;
+      limit 1`, "objects");
   const row = rows[0];
   if (!row) return null;
   return {
@@ -211,7 +211,7 @@ export async function listStatementBatchItems(
   runId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<StatementBatchItemRow[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; run_id: string; party_id: string; party_name: string | null; to_email: string | null;
     balance: string; overdue: string; currency_code: string | null; status: StatementBatchItemStatus;
     error: string | null; delivery_key: string | null; email_log_id: string | null; sent_at: Date | null;
@@ -224,7 +224,7 @@ export async function listStatementBatchItems(
       left join parties p on p.id = i.party_id and p.org_id = i.org_id
      where i.org_id = ${orgId} and i.run_id = ${runId}
        and ${statementBatchScopeFilter("r", allowedSubsidiaryIds)}
-     order by p.display_name nulls last, i.created_at`)).rows;
+     order by p.display_name nulls last, i.created_at`, "objects");
   return rows.map((row) => ({
     id: row.id,
     runId: row.run_id,
@@ -248,7 +248,7 @@ export async function listStatementBatchRuns(
 ): Promise<(StatementBatchRunRow & { sent: number; failed: number; skipped: number })[]> {
   const limit = Math.min(Math.max(opts.limit ?? 25, 1), 100);
   const offset = Math.max(opts.offset ?? 0, 0);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; period_from: string | null; period_to: string; filters: Record<string, unknown>;
     recipient_count: number; status: StatementBatchRunStatus;
     authorization_snapshot: StatementBatchRunRow["authorizationSnapshot"];
@@ -265,7 +265,7 @@ export async function listStatementBatchRuns(
        and ${statementBatchScopeFilter("r", opts.allowedSubsidiaryIds)}
      group by r.id
      order by r.created_at desc
-     limit ${limit} offset ${offset}`)).rows;
+     limit ${limit} offset ${offset}`, "objects");
   return rows.map((row) => ({
     id: row.id,
     periodFrom: row.period_from,
@@ -292,12 +292,12 @@ export async function claimStatementBatchItem(
   runId: string,
   partyId: string,
 ): Promise<{ state: "claimed"; item: StatementBatchItemRow } | { state: "already-sent" } | { state: "skipped" } | null> {
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update statement_batch_items
        set status = 'sending', error = null, updated_at = now()
      where org_id = ${orgId} and run_id = ${runId} and party_id = ${partyId}
        and status in ('queued', 'sending', 'failed')
-    returning id::text as id`)).rows;
+    returning id::text as id`, "objects");
   if (updated[0]) {
     const items = await listStatementBatchItems(orgId, runId);
     const item = items.find((candidate) => candidate.partyId === partyId);
@@ -306,7 +306,7 @@ export async function claimStatementBatchItem(
   }
   const current = (await db.execute<{ status: string }>(sql`
     select status from statement_batch_items
-     where org_id = ${orgId} and run_id = ${runId} and party_id = ${partyId} limit 1`)).rows[0];
+     where org_id = ${orgId} and run_id = ${runId} and party_id = ${partyId} limit 1`, "objects"))[0];
   if (!current) return null;
   if (current.status === "sent") return { state: "already-sent" };
   if (current.status === "skipped") return { state: "skipped" };
@@ -320,30 +320,30 @@ export async function settleStatementBatchItemSent(
   emailLogId: string,
   deliveryKey: string,
 ): Promise<void> {
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update statement_batch_items
        set status = 'sent', error = null, email_log_id = ${emailLogId},
            delivery_key = ${deliveryKey}, sent_at = coalesce(sent_at, now()), updated_at = now()
      where id = ${itemId} and org_id = ${orgId} and status in ('sending', 'sent')
-    returning id::text as id`)).rows;
+    returning id::text as id`, "objects");
   if (!updated[0]) refuseZeroRowWrite(`statement batch item ${itemId} was not marked sent`);
   await maybeFinishStatementBatchRun(orgId, (await itemRunId(orgId, itemId))!);
 }
 
 /** Delivery failed: the error stays on the run for Retry; a sent item is never overwritten. */
 export async function settleStatementBatchItemFailed(orgId: string, itemId: string, error: string): Promise<void> {
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update statement_batch_items
        set status = 'failed', error = ${error.slice(0, 500)}, updated_at = now()
      where id = ${itemId} and org_id = ${orgId} and status in ('sending', 'failed')
-    returning id::text as id`)).rows;
+    returning id::text as id`, "objects");
   if (!updated[0]) refuseZeroRowWrite(`statement batch item ${itemId} was not marked failed`);
   await maybeFinishStatementBatchRun(orgId, (await itemRunId(orgId, itemId))!);
 }
 
 async function itemRunId(orgId: string, itemId: string): Promise<string | null> {
-  const rows = (await db.execute<{ run_id: string }>(sql`
-    select run_id::text as run_id from statement_batch_items where id = ${itemId} and org_id = ${orgId} limit 1`)).rows;
+  const rows = await db.execute<{ run_id: string }>(sql`
+    select run_id::text as run_id from statement_batch_items where id = ${itemId} and org_id = ${orgId} limit 1`, "objects");
   return rows[0]?.run_id ?? null;
 }
 
@@ -367,7 +367,7 @@ export async function retryStatementBatchRun(
 ): Promise<{ requeued: number }> {
   const run = await getStatementBatchRun(orgId, runId, allowedSubsidiaryIds);
   if (!run) throw new Error("statement batch run was not found");
-  const rearmed = (await db.execute<{ party_id: string }>(sql`
+  const rearmed = await db.execute<{ party_id: string }>(sql`
     update statement_batch_items
        set status = 'queued', error = null, updated_at = now()
      where org_id = ${orgId} and run_id = ${runId} and status in ('failed', 'queued') and to_email is not null
@@ -376,7 +376,7 @@ export async function retryStatementBatchRun(
           where r.org_id = ${orgId} and r.id = ${runId}
             and ${statementBatchScopeFilter("r", allowedSubsidiaryIds)}
        )
-    returning party_id::text as party_id`)).rows;
+    returning party_id::text as party_id`, "objects");
   if (rearmed.length === 0) return { requeued: 0 };
   await db.execute(sql`
     update statement_batch_runs set status = 'sending', updated_at = now()

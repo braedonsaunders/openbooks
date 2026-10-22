@@ -36,16 +36,16 @@ async function seedReturnActors(orgId: string) {
 }
 
 async function docStatus(orgId: string, id: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status from documents where id = ${id} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ status: string }>(sql`
+    select status from documents where id = ${id} and org_id = ${orgId}`, "objects");
   return rows[0]!.status;
 }
 
 async function latestDocumentAudit(orgId: string, id: string) {
-  const rows = (await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } } }>(sql`
+  const rows = await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } } }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
-     order by at desc, id desc limit 1`)).rows;
+     order by at desc, id desc limit 1`, "objects");
   return rows[0]!;
 }
 
@@ -53,7 +53,7 @@ async function latestDocumentAudit(orgId: string, id: string) {
 async function seedApprovedPurchaseOrder(orgId: string, actorId: string): Promise<string> {
   const orderId = await seedDraftDocument(orgId, { kind: "purchase_order", createdBy: actorId });
   const account = (await db.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${orgId} order by number limit 1`)).rows[0]!.id;
+    select id from accounts where org_id = ${orgId} order by number limit 1`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into document_lines(org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
     values (${orgId}, ${orderId}, 1, ${account}, 'Seeded line', '3040', '10', '30400')`);
@@ -168,8 +168,8 @@ test("a flow-governed purchase order resubmits into a new run after return", { s
     const first = await submitForApproval("purchase_order", orderId, actors.submitterId);
     assert.equal(first.gated, true);
     const firstRunId = first.runId!;
-    const gates = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${orderId} and org_id = ${org.orgId}`)).rows;
+    const gates = await db.execute<{ id: string }>(sql`
+      select id from flow_gates where subject_id = ${orderId} and org_id = ${org.orgId}`, "objects");
     await decideGate({ gateId: gates[0]!.id, decision: "approved", userId: actors.approver1Id });
     assert.equal(await docStatus(org.orgId, orderId), "approved");
 

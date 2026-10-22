@@ -156,8 +156,8 @@ export async function pit11Slips(orgId: string, taxYear: number): Promise<Pit11S
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'PL'
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `));
-  return rows.rows.map((row) => {
+  `, "objects"));
+  return rows.map((row) => {
     const przychod = normalizeMoney(num(row.przychod));
     const kup = normalizeMoney(num(row.kup));
     return {
@@ -355,8 +355,8 @@ async function loadValidPesel(orgId: string, employeePartyId: string): Promise<s
   const rows = await db.execute<{ sin_encrypted: string | null }>(sql`
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-  `);
-  const sealed = rows.rows[0]?.sin_encrypted ?? null;
+  `, "objects");
+  const sealed = rows[0]?.sin_encrypted ?? null;
   const pesel = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   if (!pesel || !isValidPesel(pesel)) {
     throw new PayrollError(

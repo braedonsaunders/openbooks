@@ -131,8 +131,8 @@ async function waitForAccountShare(settled: () => boolean): Promise<void> {
        where datname = current_database() and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
          and query ilike '%from accounts a%'
-         and query ilike '%for share of a%'`);
-    if (blocked.rows[0]?.n) return;
+         and query ilike '%for share of a%'`, "objects");
+    if (blocked[0]?.n) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   assert.fail("timed out waiting for asset writer to lock the referenced account");
@@ -166,7 +166,7 @@ for (const writer of writers) {
             body: JSON.stringify({
               expectedUpdatedAt: (await db.execute<{ revision: string }>(sql`
                 select ${documentRevisionSql(sql`updated_at`)} as revision
-                  from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`)).rows[0]!.revision,
+                  from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects"))[0]!.revision,
               assetAccountId: fixture.accountId,
             }),
           }), { params: Promise.resolve({ id: fixture.assetId }) });
@@ -182,13 +182,13 @@ for (const writer of writers) {
         writer === "POST create" ? "invalid_asset_account" : "Invalid asset account",
       );
       const stored = await db.execute<{ asset_account_id: string | null }>(sql`
-        select asset_account_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`);
-      assert.equal(stored.rows[0]?.asset_account_id ?? null, null, "the hidden account must not be stored");
+        select asset_account_id from fixed_assets where org_id = ${fixture.orgId} and id = ${fixture.assetId}`, "objects");
+      assert.equal(stored[0]?.asset_account_id ?? null, null, "the hidden account must not be stored");
       if (writer === "POST create") {
         const created = await db.execute<{ n: number }>(sql`
           select count(*)::int as n from fixed_assets
-           where org_id = ${fixture.orgId} and asset_account_id = ${fixture.accountId}`);
-        assert.equal(created.rows[0]?.n ?? 0, 0);
+           where org_id = ${fixture.orgId} and asset_account_id = ${fixture.accountId}`, "objects");
+        assert.equal(created[0]?.n ?? 0, 0);
       }
     } finally {
       if (holder) {

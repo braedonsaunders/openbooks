@@ -301,8 +301,8 @@ test('version lifecycle: draft edit, publish problems inline, targets, retire', 
   })
   assert.equal(mismatchedPublish.status, 404)
   const remainsDraft = await db.execute<{ status: string }>(sql`
-    select status from allocation_rule_versions where org_id = ${f.orgId} and id = ${branched.body.version.id}`)
-  assert.equal(remainsDraft.rows[0]?.status, 'draft')
+    select status from allocation_rule_versions where org_id = ${f.orgId} and id = ${branched.body.version.id}`, 'objects')
+  assert.equal(remainsDraft[0]?.status, 'draft')
 
   const published = await read<{ version: { status: string; definitionHash: string }; targets: unknown[] }>(
     await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), {
@@ -317,8 +317,8 @@ test('version lifecycle: draft edit, publish problems inline, targets, retire', 
   })
   assert.equal(mismatchedRetire.status, 404)
   const remainsPublished = await db.execute<{ status: string }>(sql`
-    select status from allocation_rule_versions where org_id = ${f.orgId} and id = ${branched.body.version.id}`)
-  assert.equal(remainsPublished.rows[0]?.status, 'published')
+    select status from allocation_rule_versions where org_id = ${f.orgId} and id = ${branched.body.version.id}`, 'objects')
+  assert.equal(remainsPublished[0]?.status, 'published')
 
   const frozen = await targetsRoute.PUT(
     jsonRequest('http://openbooks.test/x', 'PUT', {

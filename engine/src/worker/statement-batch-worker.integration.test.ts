@@ -239,9 +239,9 @@ test("a definite provider failure is recorded on the delivery log", async () => 
         }),
       ),
     );
-    const rows = (await withOrgContext(org.orgId, () => db.execute<{ status: string; attempts: unknown }>(sql`
+    const rows = await withOrgContext(org.orgId, () => db.execute<{ status: string; attempts: unknown }>(sql`
       select status, meta -> 'attempts' as attempts from email_log
-       where org_id = ${org.orgId} and delivery_key = 'obem_ffffffffffffffffffffffffffffffffffffffff'`))).rows;
+       where org_id = ${org.orgId} and delivery_key = 'obem_ffffffffffffffffffffffffffffffffffffffff'`, "objects"));
     assert.equal(rows[0]!.status, "failed");
     assert.ok(JSON.stringify(rows[0]!.attempts).includes("notSent"));
   } finally {

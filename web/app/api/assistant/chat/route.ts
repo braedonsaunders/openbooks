@@ -144,7 +144,7 @@ export const POST = defineRoute({
   }
 
   const org = (await db.execute<{ base_currency: string }>(
-    sql`select base_currency from orgs where id = ${authz.user.orgId}`,
+    sql`select base_currency from orgs where id = ${authz.user.orgId}`, "objects",
   ));
 
   const today = await businessToday(authz.user.orgId);
@@ -209,7 +209,7 @@ export const POST = defineRoute({
       : null;
     const baseSystem = assistantSystemPrompt({
       orgName: aiConfig?.org?.name ?? null,
-      baseCurrency: org.rows[0]?.base_currency ?? null,
+      baseCurrency: org[0]?.base_currency ?? null,
       userName: authz.user.name,
       today,
       fiscal: await orgFiscalContext(today, authz.user.orgId),

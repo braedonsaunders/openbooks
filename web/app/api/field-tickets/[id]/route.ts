@@ -91,14 +91,14 @@ async function guardTicketScope(authz: Authz, ticketId: string): Promise<NextRes
       from documents d
       join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
      where d.id = ${ticketId} and d.org_id = ${authz.user.orgId} and d.kind = 'field_ticket'
-  `)
-  if (!owned.rows[0]) return notFound("record")
+  `, 'objects')
+  if (!owned[0]) return notFound("record")
   // A few route unit fakes omit the optional field; production Authz always
   // supplies null (unrestricted) or a concrete set.
   const scopedAuthz = authz.allowedSubsidiaryIds === undefined
     ? { ...authz, allowedSubsidiaryIds: null }
     : authz
-  return guardSubsidiaryScope(scopedAuthz, owned.rows[0].subsidiaryId)
+  return guardSubsidiaryScope(scopedAuthz, owned[0].subsidiaryId)
 }
 
 /** A project re-home is itself a subsidiary boundary, not just an org check. */
@@ -107,12 +107,12 @@ async function guardProjectScope(authz: Authz, projectId: string): Promise<NextR
     select p.subsidiary_id as "subsidiaryId"
       from projects p
      where p.id = ${projectId} and p.org_id = ${authz.user.orgId} and p.is_active
-  `)
-  if (!project.rows[0]) return notFound("record")
+  `, 'objects')
+  if (!project[0]) return notFound("record")
   const scopedAuthz = authz.allowedSubsidiaryIds === undefined
     ? { ...authz, allowedSubsidiaryIds: null }
     : authz
-  return guardSubsidiaryScope(scopedAuthz, project.rows[0].subsidiaryId)
+  return guardSubsidiaryScope(scopedAuthz, project[0].subsidiaryId)
 }
 
 /**
@@ -245,15 +245,15 @@ export const POST = defineRoute({
       }
       if (!(await isFeatureEnabled(orgId, 'equipment'))) {
         const item = (await db.execute<{ kind: string }>(sql`
-          select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
-        if (item.rows[0]?.kind === 'equipment_charge') {
+          select kind from items where id = ${body.itemId} and org_id = ${orgId}`, 'objects'))
+        if (item[0]?.kind === 'equipment_charge') {
           return notFound("record")
         }
       }
       if (!(await isFeatureEnabled(orgId, 'inventory'))) {
         const item = (await db.execute<{ kind: string }>(sql`
-          select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          select kind from items where id = ${body.itemId} and org_id = ${orgId}`, 'objects'))
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           return notFound("record")
         }
       }

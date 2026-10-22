@@ -477,8 +477,7 @@ export async function loadPositionsPage(
       const to = resolved.version.effectiveTo
       let manage: PositionManageProps | null = null
       if (canManage && resolved.version.status !== 'closed') {
-        const periods = (
-          await db.execute<{
+        const periods = await db.execute<{
             id: string
             fiscalYear: number
             periodNumber: number
@@ -493,8 +492,7 @@ export async function loadPositionsPage(
            where org_id = ${authz.user.orgId}::uuid
            order by starts_on desc, period_number desc
            limit 200
-        `)
-        ).rows
+        `, 'objects')
         // Funding periods read as every period list labels them, in the viewer's locale.
         const locale = await getLocale()
         const fundedByPeriod = new Map(

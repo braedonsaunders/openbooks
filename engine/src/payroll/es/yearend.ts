@@ -102,8 +102,8 @@ export async function es190Slips(orgId: string, taxYear: number): Promise<Es190S
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed ES pay stubs for tax year ${taxYear} — the Modelo 190 reports amounts `
       + "actually paid and withheld, so calculate and commit the year's pay runs first",
@@ -111,7 +111,7 @@ export async function es190Slips(orgId: string, taxYear: number): Promise<Es190S
   }
   const domicilio = payrollCertificate("ES", "es_domicilio");
   const slips: Es190Slip[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
     const employeeName = String(row.display_name);
     const stored = await storedTaxCertificates(db, orgId, employeePartyId, "ES");
@@ -196,15 +196,15 @@ export async function es216Quarters(orgId: string, taxYear: number): Promise<Es2
                     where l2.org_id = ${orgId} and l2.stub_id = s.id and l2.kind = 'deduction'
                       and pc2.system_key = 'irnr')
      group by 1 order by 1
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 216 reports IRNR `
       + "actually withheld each period, so a year with only resident payrolls files no 216; "
       + "calculate and commit a nonresident pay run first",
     );
   }
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
     perceptores: Number(row.perceptores),
     percepciones: num(row.percepciones),
@@ -268,15 +268,15 @@ export async function es296Slips(orgId: string, taxYear: number): Promise<Es296S
                       and pc2.system_key = 'irnr')
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed ES IRNR withholding for tax year ${taxYear} — the Modelo 296 summarises `
       + "IRNR actually withheld per nonresident perceptor, so a year with only resident "
       + "payrolls files no 296",
     );
   }
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     percepcionIntegra: num(row.percepcion),
@@ -334,15 +334,15 @@ export async function es111Quarters(orgId: string, taxYear: number): Promise<Es1
        and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
      group by 1 order by 1
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed ES pay stubs for tax year ${taxYear} — the Modelo 111 reports amounts `
       + "actually paid and withheld in each quarter, so calculate and commit the year's pay "
       + "runs first",
     );
   }
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
     perceptores: Number(row.perceptores),
     percepciones: num(row.percepciones),
@@ -377,15 +377,15 @@ export async function es111Months(orgId: string, taxYear: number): Promise<Es111
        and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'ES'
      group by 1 order by 1
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed ES pay stubs for tax year ${taxYear} — the Modelo 111 reports amounts `
       + "actually paid and withheld in each month, so calculate and commit the year's pay "
       + "runs first",
     );
   }
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     month: Number(row.month),
     perceptores: Number(row.perceptores),
     percepciones: num(row.percepciones),

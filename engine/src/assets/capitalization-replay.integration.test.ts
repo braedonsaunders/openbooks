@@ -51,7 +51,7 @@ for (const capability of ["cip", "proposals"] as const) {
         return (allowedSubsidiaryIds: readonly string[] | null = null) => acceptAssetProposals(org.orgId, request, { actorId, allowedSubsidiaryIds });
       });
       const journalCount = async () => (await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
-        select count(*)::int as count from journal_entries where org_id = ${org.orgId}`))).rows[0]!.count;
+        select count(*)::int as count from journal_entries where org_id = ${org.orgId}`, "objects")))[0]!.count;
       const count = await journalCount();
       assert.equal((await replay()).replayed, true);
       const refused = async (code: string, work: () => Promise<unknown>) => {

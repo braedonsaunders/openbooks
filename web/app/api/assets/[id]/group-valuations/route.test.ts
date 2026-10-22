@@ -23,7 +23,7 @@ const _hooks = registerHooks({
     if (specifier === "@openbooks/engine/platform/db")
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export const db={execute:async()=>({rows:[]})};export const ambientTenantOrgId=()=>null;export const currentRequestOrgResolver=()=>null;export const registerRequestOrgResolver=()=>{};export const withBypass=fn=>fn();export const withBypassContext=fn=>fn()",
+        url: "data:text/javascript,export const db={execute:async(_query, mode)=>Promise.resolve({rows:[]}).then((result) => (mode === 'objects' ? result.rows : result))};export const ambientTenantOrgId=()=>null;export const currentRequestOrgResolver=()=>null;export const registerRequestOrgResolver=()=>{};export const withBypass=fn=>fn();export const withBypassContext=fn=>fn()",
       };
     if (specifier === "@/lib/api/json")
       return next(

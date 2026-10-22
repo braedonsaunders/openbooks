@@ -92,9 +92,9 @@ function csvBody(accountId: string, text: string, mode: "preview" | "import") {
 }
 
 async function storedLineCount(orgId: string, accountId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from bank_statement_lines
-     where org_id = ${orgId} and account_id = ${accountId}`)).rows;
+     where org_id = ${orgId} and account_id = ${accountId}`, "objects");
   return rows[0]!.n;
 }
 

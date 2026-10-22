@@ -95,18 +95,19 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
-      const execute = async (query) => {
+      const execute = async (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         state.databaseCalls.push(text)
         if (state.inTransaction) state.pendingQueries.push(text)
         else state.committedQueries.push(text)
-        if (text.includes('select settings')) return { rows: [{ cats: state.priorCategories, rev: state.priorRevision }] }
+        if (text.includes('select settings')) return inMode({ rows: [{ cats: state.priorCategories, rev: state.priorRevision }] })
         // Reference checks: the double serves exactly the seeded rows, so an
         // unseeded id refuses — a double that always resolves could never
         // produce the refusal under test.
-        if (text.includes('from accounts')) return { rows: [...state.accounts].map(([id, row]) => ({ id, ...row })) }
-        if (text.includes('from parties')) return { rows: [...state.parties].map(([id, row]) => ({ id, ...row })) }
-        return { rows: [] }
+        if (text.includes('from accounts')) return inMode({ rows: [...state.accounts].map(([id, row]) => ({ id, ...row })) })
+        if (text.includes('from parties')) return inMode({ rows: [...state.parties].map(([id, row]) => ({ id, ...row })) })
+        return inMode({ rows: [] })
       }
       export const db = {
         execute,

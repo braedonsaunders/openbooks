@@ -91,7 +91,7 @@ async function calculatedRun(fx: AdoptionFixture) {
       is_billable, billing_status, costing_basis, created_by, updated_by)
     values (${fx.orgId}, ${fx.employeeId}, '2026-07-14', 8, 'approved', false,
       'unbilled', 'actual', ${fx.actorId}, ${fx.actorId}) returning id
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId,
     payScheduleId: fx.scheduleId, periodStart: "2026-07-05", periodEnd: "2026-07-18" });
   const input = { orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId };
@@ -146,7 +146,7 @@ test("historical report classification is fixed while snapshotted calculation in
       // A new identity can carry changed treatment for future assignments.
       const next = (await db.execute<{id: string}>(sql`insert into pay_components
         (org_id, code, name, kind, taxable) values (${fx.orgId}, 'FUTURE', 'Future earning', 'earning', false)
-        returning id`)).rows[0]!;
+        returning id`, "objects"))[0]!;
       await db.execute(sql`update pay_components set taxable = true where org_id = ${fx.orgId} and id = ${next.id}`);
       await db.execute(sql`delete from pay_components where org_id = ${fx.orgId} and id = ${next.id}`);
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
@@ -239,7 +239,7 @@ test("a raw component policy edit invalidates an already calculated run",
         where org_id=${fx.orgId} and system_key='base_pay'`);
       await assert.rejects(commitPayRun(input), /recalculate|changed|stale/i);
       assert.equal((await db.execute(sql`select run_status from pay_runs
-        where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]?.run_status, 'calculated');
+        where org_id=${fx.orgId} and document_id=${input.documentId}`, "objects"))[0]?.run_status, 'calculated');
     } finally { await dropScratchOrgReporting(fx.orgId); }
   });
 
@@ -260,7 +260,7 @@ test("commit waits for an earlier component editor and then refuses its stale ca
       await editor.query("commit");
       await assert.rejects(committing, /recalculate|changed|stale/i);
       assert.equal((await db.execute(sql`select run_status from pay_runs
-        where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]?.run_status, 'calculated');
+        where org_id=${fx.orgId} and document_id=${input.documentId}`, "objects"))[0]?.run_status, 'calculated');
     } finally {
       await editor.query("rollback").catch(() => {}); await committing?.catch(() => {});
       await editor.end(); await dropScratchOrgReporting(fx.orgId);
@@ -294,7 +294,7 @@ test("country snapshots capture calculation provenance and cannot be overwritten
     try {
       const {input}=await calculatedRun(fx);
       const stub=(await db.execute(sql`select id,country,country_source from pay_stubs
-        where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`)).rows[0]!;
+        where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`, "objects"))[0]!;
       assert.equal(stub.country,'CA');assert.equal(stub.country_source,'calculation');
       for (const phase of ['calculated','committed']) {
         if (phase==='committed') await commitPayRun(input);
@@ -307,7 +307,7 @@ test("country snapshots capture calculation provenance and cannot be overwritten
   });
 
 test("payroll country has no region-inference function", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  assert.equal((await db.execute(sql`select to_regprocedure('public.payroll_legacy_region_country(text)')::text as signature`)).rows[0]?.signature, null);
+  assert.equal((await db.execute(sql`select to_regprocedure('public.payroll_legacy_region_country(text)')::text as signature`, "objects"))[0]?.signature, null);
 });
 
 for (const province of ['ON','UNKNOWN']) {
@@ -317,11 +317,11 @@ for (const province of ['ON','UNKNOWN']) {
       try {
         const {input}=await calculatedRun(fx);
         const saved=(await db.execute<{row:Record<string,unknown>}>(sql`select to_jsonb(s) as row from pay_stubs s
-          where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`)).rows[0]!.row;
+          where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`, "objects"))[0]!.row;
         await db.execute(sql`delete from pay_stubs where org_id=${fx.orgId} and id=${saved.id}`);
         const replacement={...saved,province,country:null,country_source:'unknown'};
         await db.execute(sql`insert into pay_stubs select (jsonb_populate_record(null::pay_stubs,${JSON.stringify(replacement)}::jsonb)).*`);
-        const row=(await db.execute(sql`select country,country_source from pay_stubs where org_id=${fx.orgId} and id=${saved.id}`)).rows[0]!;
+        const row=(await db.execute(sql`select country,country_source from pay_stubs where org_id=${fx.orgId} and id=${saved.id}`, "objects"))[0]!;
         assert.deepEqual(row,{country:null,country_source:'unknown'});
         await db.execute(sql`update pay_runs set run_status='committed' where org_id=${fx.orgId} and document_id=${input.documentId}`);
         for (const read of [t4Slips,w2Slips,form941Worksheet,rl1Slips]) {
@@ -355,7 +355,7 @@ test("a dated vacation-base policy edit invalidates an already calculated run",
           and component.org_id=treatment.org_id and component.system_key='base_pay'`);
       await assert.rejects(commitPayRun(input), /recalculate|changed|stale/i);
       assert.equal((await db.execute(sql`select run_status from pay_runs
-        where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]?.run_status, 'calculated');
+        where org_id=${fx.orgId} and document_id=${input.documentId}`, "objects"))[0]?.run_status, 'calculated');
     } finally { await dropScratchOrgReporting(fx.orgId); }
   });
 
@@ -365,17 +365,17 @@ test("W-2 and Form 941 retain original employer and date across a real party tra
     const f = await withBypassContext(() => seedRetainedHistory());
     try { await withOrgContext(f.orgId, async () => {
       assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD'
-        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length, 1);
+        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`, "objects")).length, 1);
       const employerB = randomUUID(), state = randomUUID();
       assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values(${employerB},${f.orgId},${f.subsidiaryId},'Successor US legal employer','USD','US') returning id`)).rows.length, 1);
+        values(${employerB},${f.orgId},${f.subsidiaryId},'Successor US legal employer','USD','US') returning id`, "objects")).length, 1);
       const employmentB = await seedWorkerEmployment(f.orgId, f.employeeId, employerB);
       const einA = await seedUsEinAccount(f.orgId, f.actorId, f.subsidiaryId, '12-3456789');
       const einB = await seedUsEinAccount(f.orgId, f.actorId, employerB, '98-7654321');
       // The organization-owned registration has two attested, nonoverlapping employer periods.
       assert.equal((await db.execute(sql`insert into payroll_filing_accounts
         (id,org_id,country,program_type,account_number,name,subsidiary_id,state_code,is_active,created_by,updated_by)
-        values(${state},${f.orgId},'US','us_state_sui','NJ-ORIGINAL','Retained state registration',null,'NJ',true,${f.actorId},${f.actorId}) returning id`)).rows.length, 1);
+        values(${state},${f.orgId},'US','us_state_sui','NJ-ORIGINAL','Retained state registration',null,'NJ',true,${f.actorId},${f.actorId}) returning id`, "objects")).length, 1);
       for (const interval of [
         { subsidiaryId: f.subsidiaryId, federalAccountId: einA, effectiveFrom: '2026-01-01', effectiveTo: '2026-06-14' },
         { subsidiaryId: employerB, federalAccountId: einB, effectiveFrom: '2026-06-15', effectiveTo: null },
@@ -388,7 +388,7 @@ test("W-2 and Form 941 retain original employer and date across a real party tra
           assert.equal((await tx.execute(sql`insert into payroll_us_filing_account_employer_lineage
             (org_id,filing_account_id,federal_account_id,subsidiary_id,effective_from,effective_to,source_reference,change_reason,created_by,updated_by)
             values(${f.orgId},${state},${input.federalAccountId},${input.subsidiaryId},${input.effectiveFrom},${input.effectiveTo},
-              ${input.sourceReference},${input.changeReason},${f.actorId},${f.actorId}) returning id`)).rows.length, 1);
+              ${input.sourceReference},${input.changeReason},${f.actorId},${f.actorId}) returning id`, "objects")).length, 1);
         });
       }
       const components = new Map<string, string>();
@@ -416,10 +416,10 @@ test("W-2 and Form 941 retain original employer and date across a real party tra
       const retained: { stubId: string; documentId: string }[] = [];
       for (const source of sources) {
         assert.equal((await db.execute(sql`update parties set subsidiary_id=${source.subsidiaryId}
-          where org_id=${f.orgId} and id=${f.employeeId} returning id`)).rows.length, 1);
+          where org_id=${f.orgId} and id=${f.employeeId} returning id`, "objects")).length, 1);
         assert.equal((await db.execute(sql`update employee_payroll_profiles set country='US',province='NJ',
           employment_id=${source.employmentId},filing_account_id=${state}
-          where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length, 1);
+          where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`, "objects")).length, 1);
         const documentId = randomUUID(), stubId = randomUUID();
         await seedPayrollDocument(f.orgId, documentId, { kind: 'pay_run',
           documentNumber: `PAY-RETAINED-${source.date}`, subsidiaryId: source.subsidiaryId,
@@ -427,7 +427,7 @@ test("W-2 and Form 941 retain original employer and date across a real party tra
         assert.equal((await db.execute(sql`insert into pay_runs
           (document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,created_by,updated_by)
           values(${documentId},${f.orgId},${f.scheduleId},${source.date},${source.date},${source.date},2026,'committed',${f.actorId},${f.actorId})
-          returning document_id`)).rows.length, 1);
+          returning document_id`, "objects")).length, 1);
         await seedPayrollStub(f.orgId, documentId, f.employeeId, source.employmentId, { id: stubId,
           country: 'US', countrySource: 'calculation', province: 'NJ', filingAccountId: state, filingAccountSource: 'insertion',
           periodsPerYear: 26, payDate: source.date, taxYear: 2026, currency: 'USD', gross: source.wage, netPay: source.net,
@@ -479,20 +479,20 @@ test("W-2 and Form 941 retain original employer and date across a real party tra
         assert.equal(quarter.medicareTax, ein === einA ? '29.0000' : '58.0000');
       }
       assert.equal((await db.execute(sql`update payroll_filing_accounts set is_active=false
-        where org_id=${f.orgId} and id=${einA} returning id`)).rows.length, 1);
+        where org_id=${f.orgId} and id=${einA} returning id`, "objects")).length, 1);
       // Move the actual party again after both original sources exist; neither reader may use today's map.
       assert.equal((await db.execute(sql`update parties set subsidiary_id=${f.subsidiaryId}
-        where org_id=${f.orgId} and id=${f.employeeId} returning id`)).rows.length, 1);
+        where org_id=${f.orgId} and id=${f.employeeId} returning id`, "objects")).length, 1);
       assert.equal((await db.execute(sql`update employee_payroll_profiles set country='CA',province='ON',
         employment_id=${f.employmentId},filing_account_id=null
-        where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length, 1);
+        where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`, "objects")).length, 1);
       assert.deepEqual(await w2Slips(f.orgId, 2026), beforeW2);
       assert.deepEqual(await form941Worksheet(f.orgId, 2026), before941);
       assert.deepEqual(await t4Slips(f.orgId, 2026), []);
-      const retainedSources = (await db.execute<{ id: string; employer: string; date: string }>(sql`
+      const retainedSources = await db.execute<{ id: string; employer: string; date: string }>(sql`
         select s.id,d.subsidiary_id as employer,s.pay_date::text as date from pay_stubs s
         join documents d on d.org_id=s.org_id and d.id=s.pay_run_document_id
-        where s.org_id=${f.orgId} order by s.pay_date`)).rows;
+        where s.org_id=${f.orgId} order by s.pay_date`, "objects");
       assert.deepEqual(retainedSources, retained.map((row, index) => ({ id: row.stubId,
         employer: sources[index]!.subsidiaryId, date: sources[index]!.date })));
     }); } finally { await withBypassContext(() => dropScratchOrgReporting(f.orgId)); }

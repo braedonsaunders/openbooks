@@ -1,10 +1,9 @@
 import { seedApprovedBankAccountFixture } from "../testing/bank-accounts.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
-import { db, pool, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import {
   generatePaymentFileArtifact,
@@ -27,14 +26,6 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-const paymentInstructionClaimFenceBundleGuardMigration = readFileSync(
-  new URL(
-    "../../../schema/migrations/generated/0080_payment_instruction_claim_fence_bundle_guard.sql",
-    import.meta.url,
-  ),
-  "utf8",
-);
 
 /** The storage-enforced duplicate-live-reservation violation, anywhere in a cause chain. */
 function isLiveSourceConflict(error: unknown): boolean {
@@ -826,7 +817,7 @@ test("a payee bank account requires native approval evidence before a payment ru
       values(${bankId},${org.orgId},${org.vendorId},'Vendor bank','CA','CAD','{"routingNumber":"021000021"}'::jsonb,
         'approved',true,null,${options.actorId},${options.actorId})`)),
       error => error instanceof Error && error.cause instanceof Error && /pending native Flow routing/.test(error.cause.message));
-    assert.equal((await db.execute(sql`select id from party_bank_accounts where org_id=${org.orgId} and id=${bankId}`)).rows.length,0);
+    assert.equal((await db.execute<{ id: string }>(sql`select id from party_bank_accounts where org_id=${org.orgId} and id=${bankId}`, "objects")).length,0);
     await grantScratchPermissions(org.orgId,options.actorId,["parties.manage"]);
     await seedApprovedBankAccountFixture({orgId:org.orgId,actorId:options.actorId,partyId:org.vendorId,id:bankId,
       bankName:'Vendor bank',country:'CA',currency:'CAD',routing:{routingNumber:'021000021'},lastFour:'0021'});
@@ -1544,37 +1535,6 @@ test("one concurrent payment-run poster owns the processing claim and its eviden
   } finally {
     releaseInstruction?.();
     await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
-
-test("0080 payment-instruction claim-fence bundle guard replays safely", { skip: !DB }, async () => {
-  const client = await pool.connect();
-  const before=(await client.query<{definition:string}>("select pg_get_functiondef('public.enforce_payment_instruction_posting_claim()'::regprocedure) as definition")).rows[0]!.definition;
-  try {
-    await client.query("begin");
-    await client.query(paymentInstructionClaimFenceBundleGuardMigration);
-    await client.query(paymentInstructionClaimFenceBundleGuardMigration);
-
-    const functionState = await client.query<{ definition: string; trigger_count: number }>(`
-      select pg_get_functiondef(
-               'public.enforce_payment_instruction_posting_claim()'::regprocedure
-             ) as definition,
-             (select count(*)::int
-                from pg_trigger
-               where tgrelid = 'public.payment_instructions'::regclass
-                 and tgname = 'payment_instructions_posting_claim_fence'
-                 and not tgisinternal) as trigger_count
-    `);
-    assert.match(functionState.rows[0]!.definition, /to_jsonb\(new\).*status/i);
-    assert.equal(functionState.rows[0]!.trigger_count, 1);
-    await client.query("rollback");
-    const after=(await client.query<{definition:string}>("select pg_get_functiondef('public.enforce_payment_instruction_posting_claim()'::regprocedure) as definition")).rows[0]!.definition;
-    assert.equal(after,before,"isolated published-migration replay preserves the current native guard contract");
-  } catch (error) {
-    await client.query("rollback").catch(() => undefined);
-    throw error;
-  } finally {
-    client.release();
   }
 });
 
@@ -2354,7 +2314,7 @@ test("cancellation judges the run under its row lock, not the caller's stale rea
     // wire-fixture payments are demoted to plain draft documents (their
     // posting evidence removed under the amend kernel bypass) so every child
     // mutation a stale cancellation attempts is actually available to it.
-    // Append-only (0380) removed the amend bypass for posted-line deletes:
+    // Append-only journal storage gives the amend bypass no posted-line deletes:
     // demote through the sandbox-wipe path the teardown uses, on this
     // scratch org only.
     await withOrgContext(org.orgId, () => db.transaction(async (tx) => {

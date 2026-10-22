@@ -63,8 +63,8 @@ test("publish freezes the definition and stamps a recomputable hash", { skip: !p
       effective_from: unknown;
       basis_kind: string;
     }>(sql`select status, definition_hash, effective_from, basis_kind
-              from allocation_rule_versions where org_id = ${orgId} and id = ${versionId}`);
-    const row = rows.rows[0];
+              from allocation_rule_versions where org_id = ${orgId} and id = ${versionId}`, "objects");
+    const row = rows[0];
     assert.ok(row);
     assert.equal(row.status, "published");
     assert.match(row.definition_hash ?? "", /^[0-9a-f]{64}$/);
@@ -128,7 +128,7 @@ test("publish refuses a stepped basis by name", { skip: !process.env.OPENBOOKS_D
       },
     );
     const status = (await db.execute<{ status: string }>(sql`
-      select status from allocation_rule_versions where org_id = ${orgId} and id = ${draft.version.id}`)).rows[0]!;
+      select status from allocation_rule_versions where org_id = ${orgId} and id = ${draft.version.id}`, "objects"))[0]!;
     assert.equal(status.status, "draft");
   } finally {
     await dropScratchOrg(orgId);
@@ -164,9 +164,9 @@ test("publish refuses overlapping windows and advances the current pointer", { s
     const published = await publishVersion(successor.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     assert.equal(published.version.versionNo, 3);
     const head = await db.execute<{ current_version_id: string }>(
-      sql`select current_version_id from allocation_rules where org_id = ${orgId} and id = ${rule.id}`,
+      sql`select current_version_id from allocation_rules where org_id = ${orgId} and id = ${rule.id}`, "objects",
     );
-    assert.equal(head.rows[0]?.current_version_id, published.version.id);
+    assert.equal(head[0]?.current_version_id, published.version.id);
   } finally {
     await dropScratchOrg(orgId);
   }
@@ -278,16 +278,16 @@ test("retire clears the current pointer and audit evidence records every transit
     const live = await listRulesInEffect({ orgId, mode: "period", onDate: "2026-07-15" });
     assert.deepEqual(live, []);
     const head = await db.execute<{ current_version_id: string | null }>(
-      sql`select current_version_id from allocation_rules where org_id = ${orgId} and id = ${rule.id}`,
+      sql`select current_version_id from allocation_rules where org_id = ${orgId} and id = ${rule.id}`, "objects",
     );
-    assert.equal(head.rows[0]?.current_version_id, null);
+    assert.equal(head[0]?.current_version_id, null);
     const audit = await db.execute<{ table_name: string; action: string; changes: unknown }>(
-      sql`select table_name, action, changes from audit_log where org_id = ${orgId} order by at asc`,
+      sql`select table_name, action, changes from audit_log where org_id = ${orgId} order by at asc`, "objects",
     );
-    const tables = audit.rows.map((r) => `${r.table_name}:${r.action}`);
+    const tables = audit.map((r) => `${r.table_name}:${r.action}`);
     assert.ok(tables.includes("allocation_rules:insert"), `expected rule insert evidence, got ${tables.join(",")}`);
     assert.ok(tables.includes("allocation_rule_versions:update"), `expected version evidence, got ${tables.join(",")}`);
-    for (const row of audit.rows) {
+    for (const row of audit) {
       const changes = row.changes as { reason?: unknown; before?: unknown; after?: unknown };
       assert.ok(typeof changes.reason === "string", "every audit write carries a reason");
       assert.ok("before" in changes && "after" in changes, "every audit write carries before/after");
@@ -388,8 +388,8 @@ test("rule head creation rolls back when its initial draft cannot be created", {
       select
         (select count(*)::text from allocation_rules where org_id = ${orgId} and key = ${key}) as heads,
         (select count(*)::text from allocation_rule_versions v join allocation_rules r on r.org_id = v.org_id and r.id = v.rule_id
-          where r.org_id = ${orgId} and r.key = ${key}) as versions`);
-    assert.deepEqual(rows.rows[0], { heads: "0", versions: "0" });
+          where r.org_id = ${orgId} and r.key = ${key}) as versions`, "objects");
+    assert.deepEqual(rows[0], { heads: "0", versions: "0" });
   } finally {
     await dropScratchOrg(orgId);
   }

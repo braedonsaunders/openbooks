@@ -20,7 +20,7 @@ async function usdBill(orgId: string, actor: string, vendorId: string, accountId
 async function stored(orgId: string, id: string) {
   return (await db.execute<{ fx_rate: string; evidence: Record<string, unknown> | null }>(sql`
     select fx_rate::text as fx_rate, document_fx_rate_evidence as evidence
-      from documents where org_id = ${orgId} and id = ${id}`)).rows[0]!;
+      from documents where org_id = ${orgId} and id = ${id}`, "objects"))[0]!;
 }
 
 test("an explicit bill rate is bound to its posting identity, posts its own entity and freezes with the bill", enabled, async () => {
@@ -48,7 +48,7 @@ test("an explicit bill rate is bound to its posting identity, posts its own enti
       select changes->'before'->'document'->'document_fx_rate_evidence' as before,
              changes->'after'->'document'->'document_fx_rate_evidence' as after
         from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${created.id} and action = 'update'
-       order by at desc limit 1`)).rows[0];
+       order by at desc limit 1`, "objects"))[0];
     assert.deepEqual([audit?.before, audit?.after], [null, row.evidence], "the recorded rate is in the audited before/after state");
 
     // Moving the posting date without a replacement refuses; a replacement
@@ -66,9 +66,9 @@ test("an explicit bill rate is bound to its posting identity, posts its own enti
       (error) => errorChainMatches(error, /recorded exchange rate evidence changes only on a draft/),
     );
     const entry = await postDocument(created.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-    const lines = (await db.execute<{ account_id: string; amount: string; fx_rate: string }>(sql`
+    const lines = await db.execute<{ account_id: string; amount: string; fx_rate: string }>(sql`
       select account_id, amount::text as amount, fx_rate::text as fx_rate from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${entry} order by line_number`)).rows;
+       where org_id = ${org.orgId} and entry_id = ${entry} order by line_number`, "objects");
     assert.deepEqual(lines.map((line) => [line.account_id, line.amount]).sort(),
       [[org.accounts.cogs, "136.0000"], [org.accounts.ap, "-136.0000"]].sort());
     row = await stored(org.orgId, created.id);
@@ -78,7 +78,7 @@ test("an explicit bill rate is bound to its posting identity, posts its own enti
       select d.document_fx_rate_evidence as evidence,
              (select count(*)::int from audit_log a where a.org_id = d.org_id and a.table_name = 'documents' and a.row_id = d.id) as audits,
              (select count(*)::int from journal_entries e where e.org_id = d.org_id and e.source_document_id = d.id) as entries
-        from documents d where d.org_id = ${org.orgId} and d.id = ${created.id}`)).rows[0]!;
+        from documents d where d.org_id = ${org.orgId} and d.id = ${created.id}`, "objects"))[0]!;
     const recorded = await history();
     await assert.rejects(
       db.execute(sql`update documents set document_fx_rate_evidence = null where org_id = ${org.orgId} and id = ${created.id}`),

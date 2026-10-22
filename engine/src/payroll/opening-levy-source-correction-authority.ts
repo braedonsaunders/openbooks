@@ -31,7 +31,7 @@ export function openingLevySourceCorrectionRequestSha256(correction: OpeningLevy
 export async function requireUnconsumedOpeningLevySource(tx: Pick<typeof db, 'execute'>, input: {
   orgId: string; taxYear: number; subsidiaryId: string; employeePartyId: string; openingBalanceId: string; authorityId: string;
 }): Promise<void> {
-  const consumed = (await tx.execute(sql`
+  const consumed = await tx.execute(sql`
     select r.document_id from pay_runs r
       join documents d on d.org_id=r.org_id and d.id=r.document_id
      where r.org_id=${input.orgId} and r.tax_year=${input.taxYear}
@@ -44,10 +44,10 @@ export async function requireUnconsumedOpeningLevySource(tx: Pick<typeof db, 'ex
          or exists (select 1 from pay_stubs s where s.org_id=r.org_id and s.pay_run_document_id=r.document_id
            and s.employee_party_id=${input.employeePartyId}))
      limit 1
-  `)).rows;
+  `, 'objects');
   if (consumed.length) throw new PayrollError('Committed payroll retains this opening source; complete its native governed void before correcting the certificate, then calculate its replacement from the corrected source');
-  const issued = (await tx.execute(sql`
+  const issued = await tx.execute(sql`
     select id from payroll_filing_submissions where org_id=${input.orgId} and tax_year=${input.taxYear} limit 1
-  `)).rows;
+  `, 'objects');
   if (issued.length) throw new PayrollError('An issued payroll filing retains history for this tax year; preserve its original source certificate and artifacts. Source certificate replacement for an issued year is unavailable');
 }

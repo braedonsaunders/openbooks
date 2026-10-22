@@ -61,11 +61,11 @@ export async function GET(req: Request) {
         select trigger, filters, authorization_snapshot from report_runs
          where id=${runId} and org_id=${orgId} and definition_id=${definitionId}
            and trigger in ('scheduled', 'close-package')
-      `))
-      if (!run.rows[0]) return notFound("record")
-      authorization_snapshot = run.rows[0].authorization_snapshot
-      const stored = run.rows[0].filters
-      if (run.rows[0].trigger === 'close-package') {
+      `, 'objects'))
+      if (!run[0]) return notFound("record")
+      authorization_snapshot = run[0].authorization_snapshot
+      const stored = run[0].filters
+      if (run[0].trigger === 'close-package') {
         // Close-package runs carry their send context beside the statement
         // params; without it the run cannot name its authorizing send.
         const ctx = (stored as { closePackage?: unknown } | null)?.closePackage
@@ -147,8 +147,8 @@ export async function GET(req: Request) {
                  || jsonb_build_object('renders', coalesce(authorization_snapshot->'renders', '[]'::jsonb) || jsonb_build_array(${JSON.stringify(render)}::jsonb))
          where id = ${runId} and org_id = ${orgId}
          returning id
-      `)
-      if (recorded.rows.length !== 1) throw new Error('report run render evidence was not recorded')
+      `, 'objects')
+      if (recorded.length !== 1) throw new Error('report run render evidence was not recorded')
     }
     const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {

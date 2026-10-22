@@ -16,8 +16,8 @@ test('module board deletion archives the native board, retains source evidence a
   try {
     const actorId = await withBypassContext(async () => {
       const id = (await seedFlowActors(org.orgId)).adminId
-      const grants = await db.execute(sql`update app_roles set permissions='["admin.setup.manage","hrm.shifts.read","hrm.shifts.approve"]'::jsonb where org_id=${org.orgId} and key='admin' returning id`)
-      assert.equal(grants.rows.length, 1, 'the native role receives the actual Setup and scheduling command grants')
+      const grants = await db.execute(sql`update app_roles set permissions='["admin.setup.manage","hrm.shifts.read","hrm.shifts.approve"]'::jsonb where org_id=${org.orgId} and key='admin' returning id`, 'objects')
+      assert.equal(grants.length, 1, 'the native role receives the actual Setup and scheduling command grants')
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"hrm":true,"hrmShiftPlanning":true,"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`)
       return id
     })
@@ -43,7 +43,7 @@ test('module board deletion archives the native board, retains source evidence a
     const preview = await previewSourceHistory(nativeActor, batch)
     const [created] = await importSourceHistory(nativeActor, batch, preview.approvalHash)
     assert.ok(created)
-    const before = await withOrgTransaction(org.orgId, () => db.execute(sql`select * from schedule_source_records where id=${created.id}`))
+    const before = await withOrgTransaction(org.orgId, () => db.execute(sql`select * from schedule_source_records where id=${created.id}`, 'objects'))
     const refused = await withOrgTransaction(other.orgId, () => deleteSetupRecord({ ...actor, orgId: other.orgId }, 'schedule-boards', boardId))
     assert.equal(refused.status, 404)
     for (const auditReason of [null, 12, {}, '', '  ', 'x'.repeat(2001)]) {
@@ -53,12 +53,12 @@ test('module board deletion archives the native board, retains source evidence a
     const result = await withOrgTransaction(org.orgId, () => deleteSetupRecord(actor, 'schedule-boards', boardId, { auditReason: '  Retire the superseded board  ' }))
     assert.equal(result.status, 200, JSON.stringify(result.body))
     const readback = await withOrgTransaction(org.orgId, async () => ({
-      board: (await db.execute<{ is_active: boolean }>(sql`select is_active from schedule_boards where id=${boardId}`)).rows[0],
-      source: (await db.execute(sql`select * from schedule_source_records where id=${created.id}`)).rows,
-      audits: (await db.execute<{ actor_id: string; changes: { before: { is_active: boolean }; after: { is_active: boolean } } }>(sql`select actor_id,changes from audit_log where table_name='schedule_boards' and row_id=${boardId} and action='update'`)).rows,
+      board: (await db.execute<{ is_active: boolean }>(sql`select is_active from schedule_boards where id=${boardId}`, 'objects'))[0],
+      source: await db.execute(sql`select * from schedule_source_records where id=${created.id}`, 'objects'),
+      audits: await db.execute<{ actor_id: string; changes: { before: { is_active: boolean }; after: { is_active: boolean } } }>(sql`select actor_id,changes from audit_log where table_name='schedule_boards' and row_id=${boardId} and action='update'`, 'objects'),
     }))
     assert.equal(readback.board?.is_active, false)
-    assert.deepEqual(readback.source, before.rows)
+    assert.deepEqual(readback.source, before)
     assert.equal(readback.audits.length, 1)
     assert.equal(readback.audits[0]!.actor_id, actorId)
     assert.equal(readback.audits[0]!.changes.before.is_active, true)
@@ -67,8 +67,8 @@ test('module board deletion archives the native board, retains source evidence a
     assert.equal((await listBoards(nativeActor)).some(row => row.id === boardId), false)
     assert.equal((await listBoards(nativeActor, { includeArchived: true })).some(row => row.id === boardId), true)
     assert.equal((await withOrgTransaction(org.orgId, () => deleteSetupRecord(actor, 'schedule-boards', boardId))).status, 200)
-    const audits = await withOrgTransaction(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int n from audit_log where table_name='schedule_boards' and row_id=${boardId} and action='update'`))
-    assert.equal(audits.rows[0]!.n, 1)
+    const audits = await withOrgTransaction(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int n from audit_log where table_name='schedule_boards' and row_id=${boardId} and action='update'`, 'objects'))
+    assert.equal(audits[0]!.n, 1)
   } finally { await dropScratchOrgReporting(org.orgId); await dropScratchOrgReporting(other.orgId) }
 })
 
@@ -82,7 +82,7 @@ test('saved hour-column and whole-board sharing settings reopen through the nati
   const refused=await withOrgTransaction(org.orgId,()=>updateSetupRecord(actor,'schedule-boards',{id,distributionVisibility:'board'}));assert.equal(refused.status,400);assert.match(String(refused.body.error),/legal entity/);
   const saved=await withOrgTransaction(org.orgId,()=>updateSetupRecord(actor,'schedule-boards',{id,subsidiaryId:org.subsidiaryId,showHoursColumn:false,showTotals:true,distributionVisibility:'board'}));assert.equal(saved.status,200,JSON.stringify(saved.body));
   const board=(await listBoards({orgId:org.orgId,actorId})).find(b=>b.id===id)!;assert.equal(board.showHoursColumn,false);assert.equal(board.showTotals,true);assert.equal(board.distributionVisibility,'board');assert.equal(board.dayPolicyKnown,false);
-  const evidence=await withOrgTransaction(org.orgId,()=>db.execute<{actor_id:string;changes:{after:{show_hours_column:boolean}}}>(sql`select actor_id,changes from audit_log where table_name='schedule_boards' and row_id=${id} and action='update'`));assert.equal(evidence.rows.length,1);assert.equal(evidence.rows[0]!.actor_id,actorId);
+  const evidence=await withOrgTransaction(org.orgId,()=>db.execute<{actor_id:string;changes:{after:{show_hours_column:boolean}}}>(sql`select actor_id,changes from audit_log where table_name='schedule_boards' and row_id=${id} and action='update'`, 'objects'));assert.equal(evidence.length,1);assert.equal(evidence[0]!.actor_id,actorId);
  } finally {await dropScratchOrgReporting(org.orgId)}
 });
 

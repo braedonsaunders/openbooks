@@ -41,12 +41,13 @@ function refusingTx(): Tx {
 
 function stubTx(rows: Record<string, unknown>,taxYear=2026): Tx {
   return {
-    execute: async (query:SQL) => {
+    execute: async (query:SQL, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const text=new PgDialect().sqlToQuery(query).sql;
-      if(text.includes("d.kind='pay_run'"))return {rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'GBP',taxYear}]};
-      if(text.includes('select s.id from pay_stubs s'))return {rows:[]};
-      if(text.includes('jsonb_array_elements_text'))return {rows:[]};
-      if(text.includes('history_run_pay_date'))return {rows:[rows]};
+      if(text.includes("d.kind='pay_run'"))return inMode({rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'GBP',taxYear}]});
+      if(text.includes('select s.id from pay_stubs s'))return inMode({rows:[]});
+      if(text.includes('jsonb_array_elements_text'))return inMode({rows:[]});
+      if(text.includes('history_run_pay_date'))return inMode({rows:[rows]});
       throw new Error('Unexpected database read outside the declared statutory history fixture');
     },
   } as unknown as Tx;

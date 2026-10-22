@@ -133,8 +133,8 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
         from automations a
         join orgs o on o.id = a.org_id and o.env_kind = 'production'
        where a.status = 'enabled'
-    `);
-    for (const automation of automations.rows) {
+    `, "objects");
+    for (const automation of automations) {
       try {
         await withOrg(automation.orgId, async () => {
           // Feature-off orgs never fire, even with stale enabled rows.
@@ -170,13 +170,11 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
         summary.errors.push(`${automation.name}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    const checklistOrgs = (
-      await db.execute<{ org_id: string }>(
+    const checklistOrgs = await db.execute<{ org_id: string }>(
         sql`select distinct s.org_id from hrm_process_steps s
           join orgs o on o.id = s.org_id and o.env_kind = 'production'
-         where s.status='pending' and s.design->>'reminderDays' is not null`,
-      )
-    ).rows;
+         where s.status='pending' and s.design->>'reminderDays' is not null`, "objects",
+      );
     for (const org of checklistOrgs) {
       try {
         await runChecklistReminders(org.org_id);
@@ -322,9 +320,9 @@ async function fireDateRelative(
        where org_id = ${automation.orgId} and ${sql.identifier(trigger.dateField)} = ${matchDate}::date
          ${cursor}
        order by id limit 200
-    `);
-    if (rows.rows.length === 0) break;
-    for (const row of rows.rows) {
+    `, "objects");
+    if (rows.length === 0) break;
+    for (const row of rows) {
       try {
         const result = await executeAutomation({
           orgId: automation.orgId,
@@ -347,7 +345,7 @@ async function fireDateRelative(
         outcome.errors.push(`${source.entity} ${row.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
-    lastId = rows.rows[rows.rows.length - 1]!.id;
+    lastId = rows[rows.length - 1]!.id;
   }
   return outcome;
 }
@@ -395,9 +393,9 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
               subject_kind as "subjectKind", subject_id as "subjectId",
               trigger_fingerprint as "triggerFingerprint", payload,
               attempt_count as "attemptCount"
-  `);
+  `, "objects");
   const outcome = { drained: 0, failed: 0, errors: [] as string[] };
-  for (const event of claimed.rows) {
+  for (const event of claimed) {
     try {
       const firings = await fireClaimedEvent(event);
       if (firings.failed > 0) {
@@ -410,7 +408,7 @@ async function drainEventQueue(now: Date): Promise<{ drained: number; failed: nu
         await markEventDead(event, "no enabled automation remains for this event after a previous failure — inspect the automation's error state, fix it, and re-stage the trigger");
         outcome.failed += 1;
       } else {
-        const finished = await db.execute(sql`
+        const finished = await db.execute<never>(sql`
           update automation_event_queue set status = 'done'
            where id = ${event.id} and org_id = ${event.orgId}
              and org_id in (select id from orgs where env_kind = 'production')
@@ -444,11 +442,11 @@ async function fireClaimedEvent(event: ClaimedEvent): Promise<{ attempted: numbe
       select a.id, a.name, a.trigger from automations a
        join orgs o on o.id = a.org_id and o.env_kind = 'production'
        where a.org_id = ${event.orgId} and a.status = 'enabled'
-    `);
+    `, "objects");
     let attempted = 0;
     let failed = 0;
     let firstError = "";
-    for (const automation of automations.rows) {
+    for (const automation of automations) {
       let trigger: AutomationTrigger;
       try {
         trigger = parseAutomationTrigger(automation.trigger);
@@ -504,7 +502,7 @@ async function parkEventForRetry(event: ClaimedEvent, message: string, now: Date
     return;
   }
   const dueAt = new Date(now.getTime() + schedulerOutboxBackoffMs(attempts));
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update automation_event_queue
        set status = 'pending', attempt_count = ${attempts},
            next_attempt_at = ${dueAt}, error = ${message.slice(0, 1000)}
@@ -517,7 +515,7 @@ async function parkEventForRetry(event: ClaimedEvent, message: string, now: Date
 }
 
 async function markEventDead(event: ClaimedEvent, message: string): Promise<void> {
-  const stamped = await db.execute(sql`
+  const stamped = await db.execute<never>(sql`
     update automation_event_queue
        set status = 'dead', attempt_count = ${event.attemptCount + 1}, error = ${message.slice(0, 1000)}
      where id = ${event.id} and org_id = ${event.orgId}
@@ -587,8 +585,8 @@ async function tickActorFor(automation: { id: string; orgId: string; name: strin
   const recipe = await db.execute<{ publisherId: string | null }>(sql`
     select updated_by as "publisherId" from automations
      where id = ${automation.id} and org_id = ${automation.orgId} limit 1
-  `);
-  const publisherId = recipe.rows[0]?.publisherId;
+  `, "objects");
+  const publisherId = recipe[0]?.publisherId;
   if (!publisherId) {
     throw new Error(
       `automation '${automation.name}' records no publishing author — re-save it as a user holding automations.run, then re-enable it`,
@@ -597,8 +595,8 @@ async function tickActorFor(automation: { id: string; orgId: string; name: strin
   const publishers = await db.execute<{ name: string; isActive: boolean }>(sql`
     select name, is_active as "isActive" from users
      where id = ${publisherId} and org_id = ${automation.orgId} limit 1
-  `);
-  const publisher = publishers.rows[0];
+  `, "objects");
+  const publisher = publishers[0];
   if (!publisher?.isActive) {
     throw new Error(
       `automation '${automation.name}' cannot fire: its publisher is no longer an active user in this org — re-save or re-enable it as an active user holding automations.run`,

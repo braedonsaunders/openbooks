@@ -55,19 +55,19 @@ function sideOf(req: Request, body?: { side?: unknown }): Side {
 }
 
 async function loadParty(orgId: string, id: string) {
-  const rows = (await db.execute<{ id: string; display_name: string | null; email: string | null; subsidiary_id: string | null }>(sql`
+  const rows = await db.execute<{ id: string; display_name: string | null; email: string | null; subsidiary_id: string | null }>(sql`
     select id, display_name, email, subsidiary_id from parties where id = ${id} and org_id = ${orgId} limit 1
-  `)).rows
+  `, 'objects')
   return rows[0] ?? null
 }
 
 async function statementRecipient(orgId: string, party: { id: string; email: string | null }): Promise<string | null> {
-  const contacts = (await db.execute<{
+  const contacts = await db.execute<{
     role: string | null; email: string | null; isPrimary: boolean; isActive: boolean
   }>(sql`
     select role, email, is_primary as "isPrimary", is_active as "isActive"
       from contacts where org_id = ${orgId} and party_id = ${party.id}
-  `)).rows
+  `, 'objects')
   return pickStatementEmail(contacts, party.email)
 }
 

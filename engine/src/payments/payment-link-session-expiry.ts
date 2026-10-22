@@ -15,8 +15,8 @@ export async function loadPaymentProviderConfig<T extends Record<string, unknown
       from psp_provider_configs
      where org_id = ${orgId} and provider = ${provider}
      limit 1
-  `);
-  return (result.rows[0] as T | undefined) ?? null;
+  `, "objects");
+  return (result[0] as T | undefined) ?? null;
 }
 
 type StripeSessionConfig = {
@@ -65,8 +65,8 @@ export async function expireStalePaymentLinkSessions(
        and link.document_id in ${invoiceIds}
        and attempt.status = 'initiated' and link.amount is not null
        and link.amount > invoice.open_balance
-  `));
-  if (attempts.rows.length === 0) return;
+  `, "objects"));
+  if (attempts.length === 0) return;
 
   const config = await loadStripeSessionConfig(orgId);
   const apiBase = config ? stripeApiBase(config.settings ?? {}) : null;
@@ -75,7 +75,7 @@ export async function expireStalePaymentLinkSessions(
       ? undefined
       : unsealJson<{ apiKey?: string }>(config.secrets, { orgId, purpose: "payment.provider.secrets" }).apiKey;
   if (!config) return;
-  for (const attempt of attempts.rows) {
+  for (const attempt of attempts) {
     let expired = false;
     try {
       if (!apiBase) throw new Error("stripe API endpoint is not allowlisted");
@@ -103,8 +103,8 @@ export async function expireStalePaymentLinkSessions(
                updated_at = now()
          where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
          returning id
-      `);
-      if (!updated.rows[0]) return;
+      `, "objects");
+      if (!updated[0]) return;
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'payment_attempts', ${attempt.id}, 'update',

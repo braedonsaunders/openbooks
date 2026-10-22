@@ -148,7 +148,7 @@ export async function supersedeLaborCostRate(
        and (effective_from = ${effectiveFrom}::date
             or (is_active and effective_from < ${effectiveFrom}::date
                 and (effective_to is null or effective_to >= ${effectiveFrom}::date)))
-     order by effective_from`);
+     order by effective_from`, "objects");
 
   const predecessor = await db.execute<{ payrollRateScale: number; payrollAmountRounding: PayrollAmountRounding }>(sql`
     select payroll_rate_scale as "payrollRateScale", payroll_amount_rounding as "payrollAmountRounding"
@@ -160,10 +160,10 @@ export async function supersedeLaborCostRate(
        and department_id is not distinct from ${scope.departmentId}
        and subsidiary_id is not distinct from ${scope.subsidiaryId}
        and effective_from <= ${effectiveFrom}::date
-     order by effective_from desc limit 1 for update`);
+     order by effective_from desc limit 1 for update`, "objects");
   const rounding = requirePayrollWageRounding(
-    query.payrollRateScale ?? predecessor.rows[0]?.payrollRateScale ?? 4,
-    query.payrollAmountRounding ?? predecessor.rows[0]?.payrollAmountRounding ?? "dimension_group",
+    query.payrollRateScale ?? predecessor[0]?.payrollRateScale ?? 4,
+    query.payrollAmountRounding ?? predecessor[0]?.payrollAmountRounding ?? "dimension_group",
   );
 
   // Close the previous open row in this scope the day before the new
@@ -192,8 +192,8 @@ export async function supersedeLaborCostRate(
        and department_id is not distinct from ${scope.departmentId}
        and subsidiary_id is not distinct from ${scope.subsidiaryId}
        and is_active
-       and effective_from > ${effectiveFrom}::date`);
-  const successorFrom = successor.rows[0]?.start ?? null;
+       and effective_from > ${effectiveFrom}::date`, "objects");
+  const successorFrom = successor[0]?.start ?? null;
   const upserted = await db.execute<LaborCostRateRow>(sql`
     insert into labor_cost_rates
       (org_id, employee_party_id, job_title, trade_id, department_id, subsidiary_id, currency,
@@ -217,10 +217,10 @@ export async function supersedeLaborCostRate(
                   notes = excluded.notes, is_active = true,
                   updated_at = now(), updated_by = ${actorId}
               where labor_cost_rates.org_id = ${orgId}
-    returning ${LABOR_COST_RATE_ROW_COLUMNS}`);
-  const after = upserted.rows[0];
+    returning ${LABOR_COST_RATE_ROW_COLUMNS}`, "objects");
+  const after = upserted[0];
   if (!after) fail("the wage upsert matched no row — the save is refused, never a silent success");
-  const corrected = before.rows.some((row: LaborCostRateRow) => row.effectiveFrom === effectiveFrom);
+  const corrected = before.some((row: LaborCostRateRow) => row.effectiveFrom === effectiveFrom);
 
   // Attributable evidence commits with the data it describes: the
   // authenticated actor, the change reason, and the exact before/after
@@ -230,7 +230,7 @@ export async function supersedeLaborCostRate(
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'labor_cost_rates', ${after.id},
             ${corrected ? "update" : "insert"},
-            ${JSON.stringify({ reason: query.reason, scope, effectiveFrom, before: before.rows, after })},
+            ${JSON.stringify({ reason: query.reason, scope, effectiveFrom, before, after })},
             ${actorId})`);
-  return { rateId: after.id, corrected, before: before.rows, after };
+  return { rateId: after.id, corrected, before, after };
 }

@@ -132,20 +132,20 @@ async function lockRma(runner: SqlExecutor, orgId: string, documentId: string, s
            null::uuid as source_document_id, null::text as stage, null::uuid as customer_credit_id
       from documents d
      where d.org_id = ${orgId} and d.id = ${documentId}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!row || row.kind !== "rma" || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw refusal("Return authorization not found", "not_found", 404);
   }
   const side = (await runner.execute<{ source_document_id: string; stage: ReturnStage; customer_credit_id: string | null }>(sql`
     select source_document_id, stage, customer_credit_id from rma_documents
-     where org_id = ${orgId} and document_id = ${documentId} for update`)).rows[0];
+     where org_id = ${orgId} and document_id = ${documentId} for update`, "objects"))[0];
   return { ...row, source_document_id: side?.source_document_id ?? null, stage: side?.stage ?? null, customer_credit_id: side?.customer_credit_id ?? null };
 }
 
 function sourceMovementId(line: RmaLine): string | null { return line.source_issue_movement_id; }
 
 async function loadDocumentLines(runner: SqlExecutor, orgId: string, documentId: string): Promise<RmaLine[]> {
-  return (await runner.execute<RmaLine>(sql`
+  return await runner.execute<RmaLine>(sql`
     select l.id as line_id, l.line_number, l.item_id, l.stock_location_id,
            movement.lot_id, movement.serial_id,
            l.quantity::text as quantity, l.custom,
@@ -157,7 +157,7 @@ async function loadDocumentLines(runner: SqlExecutor, orgId: string, documentId:
       left join inventory_movements movement on movement.id = r.source_issue_movement_id and movement.org_id = r.org_id
      where l.org_id = ${orgId} and l.document_id = ${documentId}
      order by l.line_number
-     for update of l`)).rows;
+     for update of l`, "objects");
 }
 
 async function returnedByCreditNumbers(runner: SqlExecutor, orgId: string, movementId: string): Promise<string[]> {
@@ -172,7 +172,7 @@ async function returnedByCreditNumbers(runner: SqlExecutor, orgId: string, movem
        evidenceKey: "sourceIssueMovementId",
        sourceId: sql`${movementId}`,
      })}
-     order by credit.document_number`)).rows.map((row) => row.document_number);
+     order by credit.document_number`, "objects")).map((row) => row.document_number);
 }
 
 /** Authorize a draft RMA against live customer shipment movements, then route it through Flows. */
@@ -214,7 +214,7 @@ export async function authorizeReturn(
     selectedSources.add(sourceId);
     const quantity = parseQuantity(line.quantity, `Line ${line.line_number} authorized quantity`);
     const movement = (await runner.execute<{ id: string }>(sql`
-      select id from inventory_movements where org_id = ${orgId} and id = ${sourceId} for update`)).rows[0];
+      select id from inventory_movements where org_id = ${orgId} and id = ${sourceId} for update`, "objects"))[0];
     if (!movement) throw refusal(`Line ${line.line_number} shipment not found`, "source_unavailable", 422, "Choose a customer shipment from the returnable sources");
     let source;
     try {
@@ -249,9 +249,9 @@ export async function authorizeReturn(
         from rma_lines rl
         join rma_documents rd on rd.document_id = rl.document_id and rd.org_id = rl.org_id
        where rl.org_id = ${orgId} and rl.source_issue_movement_id = ${sourceId}
-         and rd.stage in ('requested', 'receiving', 'inspected')`)).rows[0]?.quantity ?? "0";
+         and rd.stage in ('requested', 'receiving', 'inspected')`, "objects"))[0]?.quantity ?? "0";
     const available = (await runner.execute<{ quantity: string }>(sql`
-      select (${source.remaining}::numeric - ${active}::numeric)::text as quantity`)).rows[0]?.quantity ?? "0";
+      select (${source.remaining}::numeric - ${active}::numeric)::text as quantity`, "objects"))[0]?.quantity ?? "0";
     if (compareDecimal(quantity, available) > 0) {
       throw refusal(
         `Line ${line.line_number} authorizes ${quantity}, but only ${available} remains after existing return authorizations`,
@@ -267,7 +267,7 @@ export async function authorizeReturn(
   const created = (await runner.execute<{ document_id: string }>(sql`
     insert into rma_documents (document_id, org_id, source_document_id, decided_at, decided_by, created_by, updated_by)
     values (${documentId}, ${orgId}, ${sourceDocumentId}, now(), ${actorId}, ${actorId}, ${actorId})
-    returning document_id`)).rows[0];
+    returning document_id`, "objects"))[0];
   if (!created) throw new Error("RMA authorization was not recorded");
   let inserted = 0;
   for (const line of lines) {
@@ -276,7 +276,7 @@ export async function authorizeReturn(
     const row = (await runner.execute<{ line_id: string }>(sql`
       insert into rma_lines (line_id, org_id, document_id, source_issue_movement_id, authorized, created_by, updated_by)
       values (${line.line_id}, ${orgId}, ${documentId}, ${sourceId}, ${quantity}, ${actorId}, ${actorId})
-      returning line_id`)).rows[0];
+      returning line_id`, "objects"))[0];
     if (!row) throw new Error(`RMA line ${line.line_number} was not recorded`);
     inserted++;
   }
@@ -314,12 +314,12 @@ export async function rejectReturn(
     throw refusal("A rejection reason must contain 8 to 1,000 characters", "invalid_input", 422, "Enter a clear reason for rejecting the return");
   }
   // The document carries bounded void evidence; the return retains the full rejection reason.
-  const updatedDoc = await runner.execute(sql`
+  const updatedDoc = await runner.execute<never>(sql`
     update documents set status = 'voided', voided_at = now(), voided_by = ${actorId},
       void_reason = ${reason.trim().slice(0, 500)}, updated_by = ${actorId}, updated_at = now()
      where id = ${documentId} and org_id = ${orgId} and kind = 'rma' and status in ('draft', 'approved')`);
   if (updatedDoc.rowCount !== 1) throw refusal(`${header.document_number} changed before it could be rejected`, "changed_concurrently", 409, RMA_REMEDY);
-  const updated = await runner.execute(sql`
+  const updated = await runner.execute<never>(sql`
     update rma_documents set stage = 'rejected', rejection_reason = ${reason.trim()}, updated_by = ${actorId}, updated_at = now()
      where document_id = ${documentId} and org_id = ${orgId} and stage = 'requested'`);
   if (updated.rowCount !== 1) throw refusal(`${header.document_number} changed before it could be rejected`, "changed_concurrently", 409, RMA_REMEDY);
@@ -353,12 +353,12 @@ export async function receiveReturn(
     if (compareDecimal(quantity, line.authorized ?? "0") > 0) {
       throw refusal(`Line ${line.line_number} received quantity exceeds its authorization`, "invalid_quantity", 422, "Enter no more than the authorized quantity");
     }
-    const updatedLine = await runner.execute(sql`
+    const updatedLine = await runner.execute<never>(sql`
       update rma_lines set received = ${quantity}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId} and line_id = ${line.line_id}`);
     if (updatedLine.rowCount !== 1) throw refusal(`Line ${line.line_number} changed while being received`, "changed_concurrently", 409, RMA_REMEDY);
   }
-  const updated = await runner.execute(sql`
+  const updated = await runner.execute<never>(sql`
     update rma_documents set stage = 'receiving', received_at = now(), received_by = ${actorId}, updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and document_id = ${documentId} and stage = 'requested'`);
   if (updated.rowCount !== 1) throw refusal(`${header.document_number} changed while goods were being received`, "changed_concurrently", 409, RMA_REMEDY);
@@ -445,13 +445,13 @@ export async function recordReturnInspection(
     if (decision.disposition === "vendor-return" && !decision.vendorId) {
       throw refusal(`Line ${line.line_number} needs a vendor for the return draft`, "invalid_input", 422, "Select the vendor who supplied the goods");
     }
-    const updated = await runner.execute(sql`
+    const updated = await runner.execute<never>(sql`
       update rma_lines set accepted = ${accepted}, disposition = ${decision.disposition},
              disposition_location_id = ${decision.dispositionLocationId}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId} and line_id = ${line.line_id}`);
     if (updated.rowCount !== 1) throw refusal(`Line ${line.line_number} changed during inspection`, "changed_concurrently", 409, RMA_REMEDY);
   }
-  const stage = await runner.execute(sql`
+  const stage = await runner.execute<never>(sql`
     update rma_documents set stage = 'inspected', customer_credit_id = ${customerCreditId},
            inspected_at = coalesce(inspected_at, now()), inspected_by = coalesce(inspected_by, ${actorId}),
            updated_by = ${actorId}, updated_at = now()
@@ -478,7 +478,7 @@ export async function completeReturnInspection(
   if (header.stage !== "inspected" || !header.customer_credit_id) {
     throw refusal(`${header.document_number} has not been inspected`, "wrong_stage", 409, "Inspect the received goods before completing the return");
   }
-  const updated = await runner.execute(sql`
+  const updated = await runner.execute<never>(sql`
     update rma_documents set stage = 'done', updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and document_id = ${documentId} and stage = 'inspected' and customer_credit_id = ${header.customer_credit_id}`);
   if (updated.rowCount !== 1) throw refusal(`${header.document_number} changed before inspection completed`, "changed_concurrently", 409, RMA_REMEDY);
@@ -500,11 +500,11 @@ export async function getReturnAuthorization(
            d.document_date::text as document_date, d.currency,
            r.source_document_id, r.stage, r.customer_credit_id
       from documents d join rma_documents r on r.document_id = d.id and r.org_id = d.org_id
-     where d.org_id = ${orgId} and d.id = ${documentId}`)).rows[0];
+     where d.org_id = ${orgId} and d.id = ${documentId}`, "objects"))[0];
   if (!header || header.kind !== "rma" || !subsidiaryScopeAllows(allowedSubsidiaryIds, header.subsidiary_id)) {
     throw refusal("Return authorization not found", "not_found", 404);
   }
-  const lines = (await runner.execute<RmaLine>(sql`
+  const lines = await runner.execute<RmaLine>(sql`
     select l.id as line_id, l.line_number, l.item_id, l.stock_location_id, movement.lot_id, movement.serial_id,
            l.quantity::text as quantity,
            l.custom, r.authorized::text as authorized, r.received::text as received,
@@ -513,7 +513,7 @@ export async function getReturnAuthorization(
       from document_lines l join rma_lines r on r.line_id = l.id and r.org_id = l.org_id
       left join inventory_movements movement on movement.id = r.source_issue_movement_id and movement.org_id = r.org_id
      where l.org_id = ${orgId} and l.document_id = ${documentId}
-     order by l.line_number`)).rows;
+     order by l.line_number`, "objects");
   return {
     id: header.id,
     documentNumber: header.document_number,
@@ -547,11 +547,11 @@ export async function listReturnAuthorizations(
   scope: ReadonlySet<string> | null,
 ): Promise<ReturnAuthorization[]> {
   await assertReturnAuthorizationsFeature(runner, orgId);
-  const docs = (await runner.execute<{ id: string }>(sql`
+  const docs = await runner.execute<{ id: string }>(sql`
     select d.id from documents d join rma_documents r on r.document_id = d.id and r.org_id = d.org_id
      where d.org_id = ${orgId}
        ${scope === null ? sql`` : scope.size === 0 ? sql`and false` : sql`and d.subsidiary_id = any(${uuidArray([...scope])}::uuid[])`}
-     order by d.document_date desc, d.document_number desc limit 500`)).rows;
+     order by d.document_date desc, d.document_number desc limit 500`, "objects");
   const result: ReturnAuthorization[] = [];
   for (const doc of docs) result.push(await getReturnAuthorization(runner, orgId, doc.id, scope));
   return result;
@@ -568,6 +568,6 @@ async function writeAudit(
   const result = await runner.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'rma_documents', ${documentId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`);
-  if (result.rows.length !== 1) throw new Error("return authorization change was not audited");
+    returning id`, "objects");
+  if (result.length !== 1) throw new Error("return authorization change was not audited");
 }

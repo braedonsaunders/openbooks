@@ -124,14 +124,14 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
     const type = (await db.execute<{ id: string; code: string; is_active: boolean; value_crossing: string }>(sql`
       select id, code, is_active, value_crossing from hrm_leave_types
        where org_id = ${orgId} and id = ${query.leaveTypeId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!type) throw new LeaveError("NOT_FOUND", "leave type not found in this organization — check the type id");
     if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before recording`);
     const existing = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_absences
        where org_id = ${orgId} and employment_id = ${query.employmentId} and on_date = ${onDate}
          and reversal_of is null
-    `)).rows[0]?.n ?? 0;
+    `, "objects"))[0]?.n ?? 0;
     if (existing > 0) {
       throw new LeaveError(
         "REFUSED",
@@ -156,7 +156,7 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
         values (${orgId}, null, ${query.employmentId}, ${onDate}, ${hours},
           ${query.leaveTypeId}, 'recorded', ${reason}, ${actorId}, ${actorId})
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new LeaveError(
@@ -175,7 +175,7 @@ export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceD
         ${JSON.stringify({ event: "absence_recorded", before: null, after: { employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded", reason } })}::jsonb,
         ${actorId})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!audited) throw new LeaveError("REFUSED", "the absence was stored without its audit event — no event was written; retry the request");
     return { id: inserted.id, employmentId: query.employmentId, onDate, hours, leaveTypeCode: type.code, source: "recorded" as const, reason };
   });
@@ -219,7 +219,7 @@ export async function getAbsence(query: { orgId: string; actorId: string; absenc
         join worker_employments e on e.id = a.employment_id and e.org_id = a.org_id
         join parties p on p.id = e.worker_party_id and p.org_id = a.org_id
        where a.org_id = ${orgId} and a.id = ${query.absenceId}
-    `)).rows[0];
+    `, "objects"))[0];
     // Zero rows is a failure: unknown id, or an id from another
     // organization — never report which, so existence cannot be probed
     // across tenants.
@@ -272,7 +272,7 @@ export async function absenceCalendarForDepartment(
   const scope = allowed === null ? sql`` : sql`and e.employer_subsidiary_id in (${sql.join(
     [...allowed].map((id) => sql`${id}::uuid`), sql`, `,
   )})`;
-  const members = (await exec.execute<{ employment_id: string; employer_subsidiary_id: string; worker_name: string }>(sql`
+  const members = await exec.execute<{ employment_id: string; employer_subsidiary_id: string; worker_name: string }>(sql`
     select e.id as employment_id, e.employer_subsidiary_id, p.display_name as worker_name
       from worker_employments e
       join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
@@ -283,7 +283,7 @@ export async function absenceCalendarForDepartment(
             and a.on_date >= ${from} and a.on_date <= ${to}
        )
      order by p.display_name, e.id
-  `)).rows;
+  `, "objects");
   const visible = members.filter((member) => allowed === null || allowed.has(member.employer_subsidiary_id));
   const days: DepartmentAbsenceDay[] = [];
   for (const member of visible) {
@@ -296,7 +296,7 @@ export async function absenceCalendarForDepartment(
          and v.effective_from <= a.on_date
          and (v.effective_to is null or v.effective_to > a.on_date)
     )`;
-    const rows = (await exec.execute<{
+    const rows = await exec.execute<{
       id: string; on_date: string; hours: string; code: string; source: "request" | "recorded";
       leave_request_id: string | null; reason: string | null;
     }>(sql`
@@ -306,7 +306,7 @@ export async function absenceCalendarForDepartment(
        where a.org_id = ${orgId} and a.employment_id = ${member.employment_id}
          and a.on_date >= ${from} and a.on_date <= ${to} ${department}
        order by a.on_date, t.code, a.id
-    `)).rows;
+    `, "objects");
     // Net each leave type independently: a cancelled vacation and a new
     // sick day on the same date must not inherit each other's type or hours.
     const net = new Map<string, { onDate: string; hours: string; code: string; source: "request" | "recorded"; id: string; leaveRequestId: string | null; reason: string | null }>();
@@ -362,7 +362,7 @@ export async function employmentsOnLeave(
           [...allowedEmployerIds].map((id) => sql`${id}::uuid`),
           sql`, `,
         )})`;
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     employment_id: string; worker_name: string; code: string; hours: string;
   }>(sql`
     select a.employment_id, p.display_name as worker_name, t.code,
@@ -376,7 +376,7 @@ export async function employmentsOnLeave(
      group by a.employment_id, p.display_name, t.code
     having sum(a.hours) <> 0
      order by p.display_name
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     employmentId: row.employment_id,
     workerName: row.worker_name,

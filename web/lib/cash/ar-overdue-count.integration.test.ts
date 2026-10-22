@@ -33,7 +33,7 @@ test('the AR home overdue count and amount come from the same open-item row set'
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'AR Controller', 'admin'))
     const secondSub = randomUUID()
     await withBypassContext(async () => {
-      const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id as string
+      const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, 'objects'))[0]!.id as string
       for (const [n, name, from, to] of [[5, '2026-05', '2026-05-01', '2026-05-31'], [6, '2026-06', '2026-06-01', '2026-06-30']] as const) {
         await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
           values (${randomUUID()}, ${org.orgId}, 2026, ${n}, ${name}, ${from}, ${to}, false, ${calendarId})`)
@@ -62,11 +62,11 @@ test('the AR home overdue count and amount come from the same open-item row set'
       await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${payId}`)
       await postDocument(payId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
       const toLine = (await db.execute(sql`select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id
-        where jl.org_id = ${org.orgId} and je.source_document_id = ${ids[0]} and jl.is_open_item`)).rows[0]?.id as string
+        where jl.org_id = ${org.orgId} and je.source_document_id = ${ids[0]} and jl.is_open_item`, 'objects'))[0]?.id as string
       // The payment's AR leg settles the invoice (from_line); receipt legs post
       // under the payment kind, which is not an open-item kind.
       const fromLine = (await db.execute(sql`select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id
-        where jl.org_id = ${org.orgId} and je.source_document_id = ${payId} and jl.account_id = ${org.accounts.ar}`)).rows[0]?.id as string
+        where jl.org_id = ${org.orgId} and je.source_document_id = ${payId} and jl.account_id = ${org.accounts.ar}`, 'objects'))[0]?.id as string
       await db.execute(sql`insert into applications
         (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
          source_transaction_currency, target_transaction_amount, target_transaction_currency,
@@ -83,8 +83,8 @@ test('the AR home overdue count and amount come from the same open-item row set'
       const count = balances.overdueCount
       const amount = balances.overdue
       const docs = await db.execute(sql`select d.id from documents d
-        where d.org_id = ${org.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'`)
-      assert.equal(docs.rows.length, 7)
+        where d.org_id = ${org.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'`, 'objects')
+      assert.equal(docs.length, 7)
       // Six invoices still carry open balances totalling 8000.00; the settled
       // one leaves both the count and the amount.
       assert.equal(items.length, 6)

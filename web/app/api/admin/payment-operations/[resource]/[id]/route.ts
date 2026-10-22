@@ -139,8 +139,8 @@ export const PATCH = defineRoute({
           // preceding its own update rather than a stale pre-transaction read.
           const before = (await tx.execute<Record<string, unknown>>(sql`
             select * from payment_formats where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom' for update
-          `))
-          if (!before.rows[0]) return 'missing'
+          `, 'objects'))
+          if (!before[0]) return 'missing'
           const updated = (await tx.execute<Record<string, unknown>>(sql`
             update payment_formats set
               name = coalesce(${body.name?.trim() ?? null}, name),
@@ -152,10 +152,10 @@ export const PATCH = defineRoute({
               is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
             where id = ${id} and org_id = ${gate.user.orgId} and rail = 'custom'
             returning *
-          `))
-          if (!updated.rows[0]) return 'missing'
+          `, 'objects'))
+          if (!updated[0]) return 'missing'
           await auditConfigChange(tx, gate.user.orgId, 'payment_formats', id, 'update',
-            { before: before.rows[0], after: updated.rows[0] }, gate.user.id, request.headers.get('X-Request-Id'))
+            { before: before[0], after: updated[0] }, gate.user.id, request.headers.get('X-Request-Id'))
           return 'updated'
         })
         if (formatWrite === 'missing') {
@@ -172,13 +172,13 @@ export const PATCH = defineRoute({
         ) {
           return NextResponse.json({ error: 'action must be submit_for_approval or create_draft' }, { status: 400 })
         }
-        const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`))
-        if (!current.rows[0]) return notFound("record")
-        const next = body.cron || body.timezone ? computeNextRunAt(body.cron?.trim() || current.rows[0].cron, new Date(), body.timezone?.trim() || current.rows[0].timezone) : undefined
+        const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`, 'objects'))
+        if (!current[0]) return notFound("record")
+        const next = body.cron || body.timezone ? computeNextRunAt(body.cron?.trim() || current[0].cron, new Date(), body.timezone?.trim() || current[0].timezone) : undefined
         if ((body.cron || body.timezone) && !next) return NextResponse.json({ error: 'cron expression or time zone is invalid' }, { status: 400 })
         if (body.paymentBankProfileId) {
-          const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
-          if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
+          const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`, 'objects'))
+          if (!profile[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
         }
         // A write that matches zero rows is a failure, not a success: the row
         // may be missing or belong to another org (or have vanished between the
@@ -187,8 +187,8 @@ export const PATCH = defineRoute({
         const scheduleWrite = await db.transaction(async (tx) => {
           const before = (await tx.execute<Record<string, unknown>>(sql`
             select * from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}
-          `))
-          if (!before.rows[0]) return 'missing' as const
+          `, 'objects'))
+          if (!before[0]) return 'missing' as const
           const updated = (await tx.execute<Record<string, unknown>>(sql`
             update payment_schedules set
               name = coalesce(${body.name?.trim() ?? null}, name),
@@ -201,10 +201,10 @@ export const PATCH = defineRoute({
               is_active = coalesce(${body.isActive ?? null}, is_active), updated_at = now(), updated_by = ${gate.user.id}
             where id = ${id} and org_id = ${gate.user.orgId}
             returning *
-          `))
-          if (!updated.rows[0]) return 'missing' as const
+          `, 'objects'))
+          if (!updated[0]) return 'missing' as const
           await auditConfigChange(tx, gate.user.orgId, 'payment_schedules', id, 'update',
-            { before: before.rows[0], after: updated.rows[0] }, gate.user.id, request.headers.get('X-Request-Id'))
+            { before: before[0], after: updated[0] }, gate.user.id, request.headers.get('X-Request-Id'))
           return 'updated' as const
         })
         if (scheduleWrite === 'missing') return notFound("record")
@@ -237,7 +237,7 @@ export const PATCH = defineRoute({
         const mandateWrite = await db.transaction(async (tx) => {
           const candidate = (await tx.execute<{ party_id: string }>(sql`
             select party_id from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
-          `)).rows[0]
+          `, 'objects'))[0]
           if (!candidate) return 'missing' as const
           // Mandates follow their counterparty's legal-entity ownership. Lock
           // the party before the mandate, matching party rehome lock order.
@@ -246,11 +246,11 @@ export const PATCH = defineRoute({
              where p.id = ${candidate.party_id} and p.org_id = ${gate.user.orgId} and p.is_active
                ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
              for update
-          `)).rows[0]
+          `, 'objects'))[0]
           if (!party) return 'missing' as const
           const before = (await tx.execute<Record<string, unknown>>(sql`
             select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId} for update
-          `)).rows[0]
+          `, 'objects'))[0]
           if (!before || before.party_id !== candidate.party_id) return 'missing' as const
           const updated = (await tx.execute<Record<string, unknown>>(sql`
             update payment_mandates set
@@ -261,10 +261,10 @@ export const PATCH = defineRoute({
               updated_at = now(), updated_by = ${gate.user.id}
             where id = ${id} and org_id = ${gate.user.orgId}
             returning *
-          `))
-          if (!updated.rows[0]) return 'missing' as const
+          `, 'objects'))
+          if (!updated[0]) return 'missing' as const
           await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', id, 'update',
-            { before, after: updated.rows[0] }, gate.user.id, request.headers.get('X-Request-Id'))
+            { before, after: updated[0] }, gate.user.id, request.headers.get('X-Request-Id'))
           return 'updated' as const
         })
         if (mandateWrite === 'missing') return notFound("record")

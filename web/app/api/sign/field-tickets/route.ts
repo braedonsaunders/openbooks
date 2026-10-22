@@ -96,16 +96,16 @@ export const POST = defineRoute({
           from documents d
           join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
          where d.id = ${verified.ticketId} and d.org_id = ${verified.orgId}
-           and d.kind = 'field_ticket'`))
-      const row = doc.rows[0]
+           and d.kind = 'field_ticket'`, 'objects'))
+      const row = doc[0]
       if (!row) return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
       if (row.status !== 'approved') return NextResponse.json({ error: 'This ticket is not open for signing' }, { status: 422 })
       const existing = await db.execute(sql`
         select id from field_ticket_signatures
          where org_id = ${verified.orgId} and field_ticket_id = ${verified.ticketId}
            and role = 'customer'
-      `)
-      if (existing.rows.length) {
+      `, 'objects')
+      if (existing.length) {
         return NextResponse.json({ error: 'This ticket is already signed' }, { status: 422 })
       }
       const acceptedAt = new Date().toISOString()
@@ -115,8 +115,8 @@ export const POST = defineRoute({
          where id = ${verified.requestId} and org_id = ${verified.orgId}
            and responded_at is null and revoked_at is null
         returning id
-      `)
-      if (responseStamp.rows.length !== 1) {
+      `, 'objects')
+      if (responseStamp.length !== 1) {
         return NextResponse.json({ error: 'This signing request is no longer available' }, { status: 422 })
       }
 
@@ -139,10 +139,10 @@ export const POST = defineRoute({
         values (${verified.orgId}, ${verified.ticketId}, 'customer', ${name},
                 ${comment}, ${file.id}, ${acceptedAt}, null)
         returning id
-      `))
+      `, 'objects'))
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${verified.orgId}, 'field_ticket_signatures', ${inserted.rows[0]!.id}, 'insert',
+        values (${verified.orgId}, 'field_ticket_signatures', ${inserted[0]!.id}, 'insert',
                 ${JSON.stringify({
                   fieldTicketId: verified.ticketId,
                   role: 'customer',

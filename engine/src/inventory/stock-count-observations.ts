@@ -46,8 +46,8 @@ export async function auditCountedChange(
               after: input.after,
             })}::jsonb,
             ${actorId})
-    returning id`));
-  if (written.rows.length === 0) {
+    returning id`, "objects"));
+  if (written.length === 0) {
     throw new InventoryError("count observation was not audited — reload the count and try again");
   }
 }

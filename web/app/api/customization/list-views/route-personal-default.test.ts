@@ -95,19 +95,20 @@ function haystack(statements: unknown[]): string {
 
 function installDb() {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: () => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
   }
   state.statements = []
   state.defaultCount = 1
   state.db = {
-    execute: async () => ({ rows: [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
     transaction: async (fn) => {
       const tx = {
-        execute: async (query: unknown) => {
+        execute: async (query: unknown, mode?: string) => {
+          const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
           state.statements.push(query)
           const text = haystack([query])
-          if (/count\(\*\)/.test(text)) return { rows: [{ n: state.defaultCount }] }
-          return { rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Mine' }] }
+          if (/count\(\*\)/.test(text)) return inMode({ rows: [{ n: state.defaultCount }] })
+          return inMode({ rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Mine' }] })
         },
       }
       return fn(tx)

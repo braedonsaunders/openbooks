@@ -44,9 +44,9 @@ export const GET = defineRoute({
         from parties
        where id = ${party} and org_id = ${user.orgId}
        limit 1
-    `);
-    if (!partyRow.rows[0]) return notFound("record");
-    const scopeDenied = guardSubsidiaryScope(gate, partyRow.rows[0].subsidiaryId, { orgWideNull: true });
+    `, "objects");
+    if (!partyRow[0]) return notFound("record");
+    const scopeDenied = guardSubsidiaryScope(gate, partyRow[0].subsidiaryId, { orgWideNull: true });
     if (scopeDenied) return scopeDenied;
 
     const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
@@ -92,7 +92,7 @@ export const GET = defineRoute({
           ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
           ${subsidiaryVisibleFilter(sql`sp.subsidiary_id`, gate.allowedSubsidiaryIds)}
         group by pe.source_document_id, coalesce(psub.base_currency, o.base_currency), pe.posting_date
-      `)),
+      `, "objects")),
       // Open items with days-overdue — off the shared cash-engine reader, not
       // a bespoke aggregate. The old query joined reversed entries
       // without the document's current posting projection, so an append-only
@@ -127,13 +127,13 @@ export const GET = defineRoute({
           ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, gate.allowedSubsidiaryIds)}
         order by coalesce(d.document_date, d.posting_date) desc
         limit 200
-      `)),
+      `, "objects")),
     ]);
 
     // Payment legs aggregate in JS over the grouped rows: distinct source
     // documents count, days average like SQL avg (nulls ignored), and the paid
     // total translates per group — never summed across functional frames raw.
-    const legs = (pay.rows ?? []) as Array<{ pid: unknown; days: unknown; paid: unknown; func: unknown; date: unknown }>;
+    const legs = (pay ?? []) as Array<{ pid: unknown; days: unknown; paid: unknown; func: unknown; date: unknown }>;
     const paymentCount = new Set(legs.map((l) => String(l.pid))).size;
     const dayValues = legs
       .map((l) => l.days)
@@ -147,7 +147,7 @@ export const GET = defineRoute({
     // org reads CAD 135, never CAD 100, in both the payment list and the
     // 12-month total. Missing coverage refuses 422 by name for either.
     const fxResult = await flowRates(user.orgId, [
-      ...recent.rows.map((r) => ({
+      ...recent.map((r) => ({
         func: typeof r.func === "string" ? r.func : null,
         date: String(r.date ?? today).slice(0, 10),
       })),
@@ -166,7 +166,7 @@ export const GET = defineRoute({
     let recentAmounts: string[];
     let totalPaid: string;
     try {
-      recentAmounts = recent.rows.map((r) =>
+      recentAmounts = recent.map((r) =>
         mulDecimal(String(r.func_amount ?? "0"), fx.rateAt(typeof r.func === "string" ? r.func : null, String(r.date ?? today).slice(0, 10))));
       totalPaid = normalizeMoney(legs.reduce(
         (total, l) => add(total, mulDecimal(String(l.paid ?? "0"), fx.rateAt(typeof l.func === "string" ? l.func : null, String(l.date ?? today).slice(0, 10)))),
@@ -208,7 +208,7 @@ export const GET = defineRoute({
       reliability,
       currency,
       openItems: rows,
-      recentPayments: ((recent.rows)).map((r, i) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: normalizeMoney(recentAmounts[i] ?? "0") })),
+      recentPayments: ((recent)).map((r, i) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: normalizeMoney(recentAmounts[i] ?? "0") })),
     });
 
   },

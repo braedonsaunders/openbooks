@@ -130,26 +130,22 @@ async function storeShopifyLocation(
     on conflict (org_id, channel_id, external_location_id)
       do update set external_name = excluded.external_name,
                     updated_by = excluded.updated_by, updated_at = now()
-    returning id`);
+    returning id`, "objects");
   const id =
-    inserted.rows[0]?.id ??
-    (
-      await db.execute<{ id: string }>(sql`
+    inserted[0]?.id ??
+    (await db.execute<{ id: string }>(sql`
         select id from sales_channel_locations
          where org_id = ${orgId} and channel_id = ${channel.channelId}
-           and external_location_id = ${externalLocationId}`)
-    ).rows[0]?.id;
+           and external_location_id = ${externalLocationId}`, "objects"))[0]?.id;
   if (!id) throw new Error("Channel location store returned no row; the location was lost");
-  const current = (
-    await db.execute<{ stock_location_id: string | null }>(sql`
+  const current = (await db.execute<{ stock_location_id: string | null }>(sql`
       select stock_location_id from sales_channel_locations
-       where org_id = ${orgId} and id = ${id}`)
-  ).rows[0];
+       where org_id = ${orgId} and id = ${id}`, "objects"))[0];
   if (!current) throw new Error("Channel location store lost its row; the location was not stored");
   if (current.stock_location_id) return "matched";
   const candidates = await findStockCandidates(orgId, externalName);
   if (candidates.length === 1 && candidates[0]) {
-    const mapped = await db.execute(sql`
+    const mapped = await db.execute<never>(sql`
       update sales_channel_locations
          set stock_location_id = ${candidates[0].id}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id} and stock_location_id is null`);
@@ -173,14 +169,12 @@ interface StockCandidate {
  * row for the operator instead of guessing.
  */
 async function findStockCandidates(orgId: string, shopifyName: string): Promise<StockCandidate[]> {
-  const rows = (
-    await db.execute<{ id: string; code: string; name: string }>(sql`
+  const rows = await db.execute<{ id: string; code: string; name: string }>(sql`
       select sl.id, sl.code, l.name
         from stock_locations sl
         join locations l on l.org_id = sl.org_id and l.id = sl.location_id
        where sl.org_id = ${orgId} and sl.is_active
-         and (lower(sl.code) = lower(${shopifyName}) or lower(l.name) = lower(${shopifyName}))`)
-  ).rows;
+         and (lower(sl.code) = lower(${shopifyName}) or lower(l.name) = lower(${shopifyName}))`, "objects");
   return rows.map((row) => ({ id: row.id, label: `${row.name} (${row.code})` }));
 }
 
@@ -214,12 +208,10 @@ export async function applyLocationWebhook(
          and external_location_id = ${numericId} and stock_location_id is null
        returning id, stock_location_id`);
     if ((deleted.rowCount ?? 0) === 1) return { action: "removed", externalLocationId: numericId };
-    const mapped = (
-      await db.execute<{ id: string }>(sql`
+    const mapped = (await db.execute<{ id: string }>(sql`
         select id from sales_channel_locations
          where org_id = ${orgId} and channel_id = ${channel.channelId}
-           and external_location_id = ${numericId}`)
-    ).rows[0];
+           and external_location_id = ${numericId}`, "objects"))[0];
     if (mapped) {
       return { action: "kept_mapped", externalLocationId: numericId };
     }

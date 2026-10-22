@@ -72,10 +72,10 @@ export async function resolveEmploymentServiceCredit(executor: Pick<typeof db, '
     from worker_employments e left join payroll_service_credits c on c.org_id = e.org_id and c.employment_id = e.id
       and c.effective_from <= ${input.asOf}::date and (c.effective_to is null or c.effective_to >= ${input.asOf}::date)
     where e.org_id = ${input.orgId} and e.id = ${input.employmentId}
-  `);
-  const row = rows.rows[0];
+  `, 'objects');
+  const row = rows[0];
   if (!row) throw new PayrollError('The employment is outside this organization or no longer available; select an employment in this organization.');
-  if (rows.rows.length !== 1) throw new PayrollError('Service baselines overlap; close the conflicting effective windows before calculating payroll.');
+  if (rows.length !== 1) throw new PayrollError('Service baselines overlap; close the conflicting effective windows before calculating payroll.');
   if (!row.id) {
     if (!row.service_start) return null;
     return computeEmploymentServiceCredit({ id: null, convention: 'calendar_months', asOfDate: String(row.service_start).slice(0, 10), creditedMonths: 0, creditedDays: null, sourceSnapshot: { source: 'employment_service_start' } }, input.asOf);
@@ -106,9 +106,9 @@ export async function validateServiceCreditConfiguration(executor: Pick<typeof d
   let stored: Record<string, unknown> = {};
   if (rowId) {
     if (!isUuid(rowId)) throw new PayrollError('Select a saved employee policy before changing its configuration.');
-    const result = await executor.execute<Record<string, unknown>>(sql`select * from payroll_service_credits where org_id = ${orgId} and id = ${rowId} for update`);
-    if (result.rows.length !== 1) throw new PayrollError('Service credit was not found in this organization; reopen the employee service record.');
-    const row = result.rows[0]!;
+    const result = await executor.execute<Record<string, unknown>>(sql`select * from payroll_service_credits where org_id = ${orgId} and id = ${rowId} for update`, 'objects');
+    if (result.length !== 1) throw new PayrollError('Service credit was not found in this organization; reopen the employee service record.');
+    const row = result[0]!;
     stored = { employmentId: row.employment_id, convention: row.convention, asOfDate: row.as_of_date, creditedDays: row.credited_days, creditedMonths: row.credited_months, effectiveFrom: row.effective_from, effectiveTo: row.effective_to, reason: row.reason };
   }
   const values = { ...stored, ...body };
@@ -124,6 +124,6 @@ export async function validateServiceCreditConfiguration(executor: Pick<typeof d
   const creditedMonths = values.creditedMonths == null || values.creditedMonths === '' ? null : Number(values.creditedMonths);
   computeEmploymentServiceCredit({ id: rowId ?? null, convention: values.convention as ServiceCreditBaseline['convention'], asOfDate: values.asOfDate,
     creditedDays, creditedMonths, sourceSnapshot: {} }, values.asOfDate);
-  const employment = await executor.execute(sql`select id from worker_employments where org_id = ${orgId} and id = ${values.employmentId}`);
-  if (employment.rows.length !== 1) throw new PayrollError('Select an employment in this organization for credited service.');
+  const employment = await executor.execute(sql`select id from worker_employments where org_id = ${orgId} and id = ${values.employmentId}`, 'objects');
+  if (employment.length !== 1) throw new PayrollError('Select an employment in this organization for credited service.');
 }

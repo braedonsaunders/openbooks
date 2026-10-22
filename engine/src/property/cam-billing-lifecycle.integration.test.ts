@@ -36,7 +36,7 @@ for(const kind of ['invoice','credit'] as const){
   const first=await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31');
   assert.equal(first.documents.length,1);
   await withOrgTransaction(org.orgId,()=>deleteDocument(first.documents[0]!,actor,org.orgId,{reason:'Discard CAM draft for correction',allowedSubsidiaryIds:null}));
-  const released=(await db.execute<{invoice_document_id:string|null;reconciliation_amount:string}>(sql`select invoice_document_id,reconciliation_amount::text from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0]!;
+  const released=(await db.execute<{invoice_document_id:string|null;reconciliation_amount:string}>(sql`select invoice_document_id,reconciliation_amount::text from cam_allocations where org_id=${org.orgId} and id=${allocation}`, 'objects'))[0]!;
   assert.equal(released.invoice_document_id,null);
   assert.equal(released.reconciliation_amount,kind==='credit'?'-100.0000':'100.0000');
   await assert.rejects(withOrgTransaction(org.orgId,()=>reopenFinalizedCamPool(org.orgId, actor, null,cam,'Cannot reinterpret an invoiced pool')));
@@ -44,8 +44,8 @@ for(const kind of ['invoice','credit'] as const){
   assert.equal(again.flatMap(r=>r.documents).length,1);
   const id=again.flatMap(r=>r.documents)[0]!;
   assert.notEqual(id,first.documents[0]);
-  assert.equal((await db.execute<{kind:string;total:string}>(sql`select kind,total::text from documents where id=${id} and org_id=${org.orgId}`)).rows[0]!.kind,kind==='credit'?'customer_credit':'customer_invoice');
-  const audits=(await db.execute<{actor_id:string}>(sql`select actor_id from audit_log where org_id=${org.orgId} and table_name='cam_allocations' and row_id=${allocation} and action='billing_released'`)).rows;
+  assert.equal((await db.execute<{kind:string;total:string}>(sql`select kind,total::text from documents where id=${id} and org_id=${org.orgId}`, 'objects'))[0]!.kind,kind==='credit'?'customer_credit':'customer_invoice');
+  const audits=await db.execute<{actor_id:string}>(sql`select actor_id from audit_log where org_id=${org.orgId} and table_name='cam_allocations' and row_id=${allocation} and action='billing_released'`, 'objects');
   assert.equal(audits.length,1);
   assert.equal(audits[0]!.actor_id,actor);
  }));
@@ -65,7 +65,7 @@ test('CAM billing waits for reopening and refuses its now-open pool',{skip:!proc
  const resume=new Promise<void>(r=>{proceed=r;});
  const reopen=withOrgTransaction(org.orgId,async()=>{
   await db.execute(sql`select id from cam_pools where id=${cam} and org_id=${org.orgId} for update`);
-  ready((await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
+  ready((await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid);
   await resume;
   await reopenFinalizedCamPool(org.orgId, actor, null,cam,'Correct source configuration');
  });
@@ -76,7 +76,7 @@ test('CAM billing waits for reopening and refuses its now-open pool',{skip:!proc
   await waitForLock(pid);
   proceed();await reopen;
   assert.deepEqual(await billing,{documents:[]});
-  assert.equal((await db.execute(sql`select id from documents where org_id=${org.orgId} and custom->'propertyManagement'->>'allocationId'=${allocation}`)).rows.length,0);
+  assert.equal((await db.execute(sql`select id from documents where org_id=${org.orgId} and custom->'propertyManagement'->>'allocationId'=${allocation}`, 'objects')).length,0);
  }finally{proceed();await reopen.catch(()=>{});await billing?.catch(()=>{});}
 }));
 
@@ -94,7 +94,7 @@ for(const kind of ['customer_invoice','customer_credit'] as const){
   assert.equal(voided.status,'voided');assert.ok(voided.reversalEntryId);
   const again=await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31');
   assert.equal(again.documents.length,1);assert.notEqual(again.documents[0],invoice);
-  const history=(await db.execute<{custom:{propertyManagement:{predecessorInvoiceId:string}}}>(sql`select custom from documents where id=${again.documents[0]} and org_id=${org.orgId}`)).rows[0]!;
+  const history=(await db.execute<{custom:{propertyManagement:{predecessorInvoiceId:string}}}>(sql`select custom from documents where id=${again.documents[0]} and org_id=${org.orgId}`, 'objects'))[0]!;
   assert.equal(history.custom.propertyManagement.predecessorInvoiceId,invoice);
   assert.deepEqual(await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31'),{documents:[]});
  }));
@@ -134,7 +134,7 @@ test('reopening rechecks billed dependencies after waiting for the billing pool 
   const result=await settled;
   const [billed,reopened]=result;if(billed!.status==='rejected')throw billed.reason;
   if(reopened!.status==='fulfilled')assert.fail(`reopening settled fulfilled: ${JSON.stringify(reopened.value)}`);
-  const remaining=(await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0];
+  const remaining=(await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`, 'objects'))[0];
   assert.ok(remaining?.invoice_document_id,'successful invoice retains its allocation');
  }finally{await client.query('rollback');client.release();await billing?.catch(()=>{});await reopening?.catch(()=>{});}
 }));
@@ -143,11 +143,11 @@ test('CAM reservation release is tenant-scoped and rolls back with its audit evi
  const invoice=(await billCamReconciliation(org.orgId, actor, null,cam,'2026-07-31')).documents[0]!;
  await assert.rejects(withOrgTransaction(org.orgId,async()=>{
   await releaseCamBillingProvenance(db,org.orgId,invoice,{actorId:actor,reason:'Aborted correction'});
-  assert.equal((await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0]!.invoice_document_id,null);
+  assert.equal((await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`, 'objects'))[0]!.invoice_document_id,null);
   throw new Error('rollback proof');
  }),/rollback proof/);
  const foreign=randomUUID();
  await withOrgTransaction(foreign,()=>releaseCamBillingProvenance(db,foreign,invoice,{actorId:actor,reason:'Foreign attempt'}));
- assert.equal((await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`)).rows[0]!.invoice_document_id,invoice);
- assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='cam_allocations' and row_id=${allocation} and action='billing_released'`)).rows.length,0);
+ assert.equal((await db.execute<{invoice_document_id:string|null}>(sql`select invoice_document_id from cam_allocations where org_id=${org.orgId} and id=${allocation}`, 'objects'))[0]!.invoice_document_id,invoice);
+ assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='cam_allocations' and row_id=${allocation} and action='billing_released'`, 'objects')).length,0);
 }));

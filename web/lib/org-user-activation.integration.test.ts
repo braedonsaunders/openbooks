@@ -37,7 +37,7 @@ for (const kind of ["production", "preview", "sandbox"] as const) {
           // A sandbox is born with its clone seed (lifecycle.ts); the rebase of every
           // member id derives from it, so a seedless sandbox has no member to enter.
           await db.execute(sql`update orgs set env_kind=${kind},sandbox_of=${kind === "sandbox" ? homeOrg.orgId : null},sandbox_seed=${kind === "sandbox" ? randomUUID() : null} where id=${target.orgId}`);
-          const seed = (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id=${target.orgId}`)).rows[0]!.seed;
+          const seed = (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id=${target.orgId}`, "objects"))[0]!.seed;
           const actingId = await createScratchUser(target.orgId, "Mapped member", "member", kind === "sandbox" ? rebaseUuid(homeId, seed) as ReturnType<typeof randomUUID> : randomUUID());
           if (kind === "sandbox") await db.execute(sql`insert into sandboxes(org_id,production_org_id,name,status) values (${target.orgId},${homeOrg.orgId},'Activation review','ready')`);
           else await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id,is_active) values (${homeId},${target.orgId},${actingId},true)`);
@@ -97,11 +97,11 @@ async function seed(): Promise<Fixture> {
   const sandbox = await createScratchOrg();
   const homeUserId = await createScratchUser(home.orgId, "Home member", "member");
   const homeRoleId = (await db.execute<{ id: string }>(sql`
-    select id from app_roles where org_id = ${home.orgId} and key = 'member'`)).rows[0]!.id;
+    select id from app_roles where org_id = ${home.orgId} and key = 'member'`, "objects"))[0]!.id;
   await db.execute(sql`update orgs set env_kind = 'production' where id = ${home.orgId}`);
   await db.execute(sql`update orgs set env_kind = 'sandbox', sandbox_of = ${home.orgId}, sandbox_seed = ${randomUUID()} where id = ${sandbox.orgId}`);
   const seedValue = (await db.execute<{ seed: string }>(sql`
-    select sandbox_seed::text as seed from orgs where id = ${sandbox.orgId}`)).rows[0]!.seed;
+    select sandbox_seed::text as seed from orgs where id = ${sandbox.orgId}`, "objects"))[0]!.seed;
   const sandboxUserId = await createScratchUser(
     sandbox.orgId, "Cloned member", "member", rebaseUuid(homeUserId, seedValue) as `${string}-${string}-${string}-${string}-${string}`,
   );
@@ -157,7 +157,7 @@ test("sandbox entry requires admin.sandboxes.manage in the production org", { sk
 
     // The permission is evaluated in the PRODUCTION org: a role held only inside the sandbox does not count.
     const sandboxRoleId = (await db.execute<{ id: string }>(sql`
-      select id from app_roles where org_id = ${f.sandboxOrgId} and key = 'member'`)).rows[0]!.id;
+      select id from app_roles where org_id = ${f.sandboxOrgId} and key = 'member'`, "objects"))[0]!.id;
     await setRolePermissions(sandboxRoleId, ["admin.sandboxes.manage"]);
     assert.equal(await resolveActiveEnv(home, f.sandboxOrgId), null, "sandbox-side grant does not admit");
 

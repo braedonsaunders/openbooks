@@ -106,7 +106,7 @@ async function patchRequest(
   const revision = await withOrgContext(fixture.orgId, async () =>
     (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from documents where id = ${fixture.orderId}`)).rows[0]!.revision);
+        from documents where id = ${fixture.orderId}`, "objects"))[0]!.revision);
   return new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },

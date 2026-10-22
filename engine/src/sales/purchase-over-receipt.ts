@@ -31,7 +31,7 @@ export async function resolveOverReceiptTolerance(
   itemCategory: string | null,
   receiptDate: string,
 ): Promise<OverReceiptTolerance | null> {
-  const rows = (await runner.execute<{ percent: string; quantity: string }>(sql`
+  const rows = await runner.execute<{ percent: string; quantity: string }>(sql`
     select tolerance_percent::text as percent, tolerance_quantity::text as quantity
       from purchase_over_receipt_tolerances
      where org_id = ${orgId}
@@ -41,7 +41,7 @@ export async function resolveOverReceiptTolerance(
        and (item_category is null or item_category = ${itemCategory})
      order by (item_category is null)
      limit 1
-  `)).rows
+  `, 'objects')
   const row = rows[0]
   if (!row) return null
   return { percent: row.percent, quantity: row.quantity }

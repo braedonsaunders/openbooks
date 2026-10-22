@@ -103,8 +103,8 @@ test('assignment accepts org roles and rejects strangers', { skip: !process.env.
   try {
     const itemId = await seedFinding(org.orgId);
     await asUser(org.orgId, 'Writer', 'b06_assign_writer', WRITER);
-    const role = await db.execute<{ id: string }>(sql`select id from app_roles where org_id=${org.orgId} and key='b06_assign_writer'`);
-    const roleId = String(role.rows[0]?.id);
+    const role = await db.execute<{ id: string }>(sql`select id from app_roles where org_id=${org.orgId} and key='b06_assign_writer'`, 'objects');
+    const roleId = String(role[0]?.id);
     await withOrgContext(org.orgId, async () => {
       const authz = await getAuthz();
       assert.ok(authz);

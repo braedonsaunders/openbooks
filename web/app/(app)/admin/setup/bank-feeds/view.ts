@@ -117,13 +117,13 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
        where c.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by c.created_at desc
-    `),
+    `, 'objects'),
     listReconcilableBankAccounts(authz.user.orgId),
     db.execute<SftpServerRow>(sql`
       select id, name, username, root_prefix as "rootPrefix", is_active as "isActive",
              last_connected_at as "lastConnectedAt"
         from sftp_servers where org_id = ${authz.user.orgId} order by created_at desc
-    `),
+    `, 'objects'),
     db.execute<SftpScheduleRow>(sql`
       select sc.id, sc.sftp_server_id as "sftpServerId", sc.account_id as "accountId", sc.format, sc.folder,
              sc.is_active as "isActive", sc.last_run_at as "lastRunAt",
@@ -134,7 +134,7 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
        where sc.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by sc.created_at desc
-    `),
+    `, 'objects'),
     loadDaemonConfig(),
     headers(),
   ])
@@ -158,18 +158,18 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
   return {
     // Client-side dates stay raw: the island renders them with
     // `new Date(…).toLocaleDateString("en-CA")` in the browser.
-    connections: conns.rows.map((c) => ({
+    connections: conns.map((c) => ({
       ...c,
       lastSyncAt: iso(c.lastSyncAt),
       lastAttemptAt: iso(c.lastAttemptAt),
     })),
     // Servers are org-wide configuration with no account to scope by: a
     // restricted caller sees none, mirroring the servers API.
-    sftpServers: (authz.allowedSubsidiaryIds !== null ? [] : servers.rows).map((s) => ({
+    sftpServers: (authz.allowedSubsidiaryIds !== null ? [] : servers).map((s) => ({
       ...s,
       lastConnectedAt: iso(s.lastConnectedAt),
     })),
-    sftpSchedules: sched.rows.map((s) => ({
+    sftpSchedules: sched.map((s) => ({
       ...s,
       lastRunAt: iso(s.lastRunAt),
     })),

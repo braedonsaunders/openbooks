@@ -91,7 +91,7 @@ test('customer revenue reconciles invoiced billings to ledger recognized revenue
       // A second open period so the void mirror lands in a later period than
       // its invoice (the cross-period shape the recon voids row must explain).
       const cal = (await db.execute<{ id: string }>(
-        sql`select fiscal_calendar_id as id from accounting_periods where org_id = ${scratch.orgId} limit 1`)).rows[0]!.id
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id = ${scratch.orgId} limit 1`, 'objects'))[0]!.id
       await db.execute(sql`insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${randomUUID()}, ${scratch.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${cal})`)

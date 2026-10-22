@@ -106,16 +106,16 @@ export function resolveUsW2StateAccount(
 export async function loadUsFilingAccounts(
   tx: Pick<typeof db, 'execute'>, orgId: string,
 ): Promise<(UsFilingAccountRef & { accountNumber: string })[]> {
-  const accounts = (await tx.execute<{
+  const accounts = await tx.execute<{
     id: string; name: string; program_type: string; subsidiary_id: string | null;
     state_code: string | null; is_active: boolean; account_number: string;
   }>(sql`select id, name, program_type, subsidiary_id, state_code, is_active, account_number
-    from payroll_filing_accounts where org_id = ${orgId} and country = 'US' order by id for share`)).rows;
-  const affiliations = (await tx.execute<UsFilingAccountLineage>(sql`
+    from payroll_filing_accounts where org_id = ${orgId} and country = 'US' order by id for share`, 'objects');
+  const affiliations = await tx.execute<UsFilingAccountLineage>(sql`
     select id, filing_account_id as "filingAccountId", federal_account_id as "federalAccountId",
       subsidiary_id as "subsidiaryId", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
       source_reference as "sourceReference" from payroll_us_filing_account_employer_lineage
-    where org_id = ${orgId} order by filing_account_id, effective_from, id`)).rows;
+    where org_id = ${orgId} order by filing_account_id, effective_from, id`, 'objects');
   return accounts.map(account => ({ id: account.id, name: account.name, programType: account.program_type,
     subsidiaryId: account.subsidiary_id, stateCode: account.state_code, isActive: account.is_active,
     accountNumber: account.account_number, affiliations: affiliations.filter(row => row.filingAccountId === account.id) }));

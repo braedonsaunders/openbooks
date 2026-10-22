@@ -96,15 +96,15 @@ export async function readBoardSourceHistory(actor: ScheduleActor, boardId: stri
     const allowed = await boardAuthority(actor, board, 'read');
     if (!isIsoCalendarDate(from) || !isIsoCalendarDate(through) || from > through)
       throw new ScheduleError('Choose a valid source history date range.');
-    const records = (await db.execute<Omit<BoardSourceRecord,'color'>>(sql`select r.id,r.source_system as "sourceSystem",r.source_dataset as "sourceDataset",
+    const records = await db.execute<Omit<BoardSourceRecord,'color'>>(sql`select r.id,r.source_system as "sourceSystem",r.source_dataset as "sourceDataset",
       r.source_key as "sourceKey",r.worker_party_id as "workerPartyId",r.on_date::text as "onDate",r.label,r.source_result as result,
       r.source_notes as notes,r.visible_in_source as "visibleInSource",r.created_at::text as "recordedAt",r.linked_entry_id as "linkedEntryId"
       from schedule_source_records r join parties p on p.org_id=r.org_id and p.id=r.worker_party_id
       where r.org_id=${actor.orgId} and r.board_id=${board.id} and r.disposition in ('recorded','linked') and r.on_date between ${from} and ${through}
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`,allowed)}
       and not exists(select 1 from schedule_source_records n where n.org_id=r.org_id and n.supersedes_id=r.id)
-      order by r.on_date,r.source_key,r.id`)).rows;
-    const codes = (await db.execute<{code:string;label:string;color:string|null}>(sql`select code,label,color from schedule_codes where org_id=${actor.orgId} order by code`)).rows;
+      order by r.on_date,r.source_key,r.id`, "objects");
+    const codes = await db.execute<{code:string;label:string;color:string|null}>(sql`select code,label,color from schedule_codes where org_id=${actor.orgId} order by code`, "objects");
     return records.map(record=>({...record,color:sourceObservationColor(board.cellColorRules,record.label,codes)}));
   });
 }
@@ -127,15 +127,15 @@ async function admittedRows(actor: ScheduleActor, batch: SourceScheduleBatch) {
     select p.id,p.subsidiary_id as "subsidiaryId" from parties p
     where p.org_id=${actor.orgId} and p.id=any(${sql.param(workerIds)}::uuid[]) and p.kind='person'
     and exists(select 1 from employee_roles er where er.org_id=p.org_id and er.party_id=p.id)
-    ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authority)} order by p.id for share of p`)).rows : []).map(worker => [worker.id,worker]));
+    ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authority)} order by p.id for share of p`, "objects")) : []).map(worker => [worker.id,worker]));
   const linkedIds = batch.rows.flatMap(row => row.linkedEntryId ? [row.linkedEntryId] : []);
   const linkedEntries = new Map((linkedIds.length ? (await db.execute<{id:string;boardId:string;workerPartyId:string|null;onDate:string}>(sql`
     select id,board_id as "boardId",worker_party_id as "workerPartyId",starts_on::text as "onDate" from schedule_entries
-    where org_id=${actor.orgId} and id=any(${sql.param(linkedIds)}::uuid[]) order by id for share`)).rows : []).map(entry=>[entry.id,entry]));
+    where org_id=${actor.orgId} and id=any(${sql.param(linkedIds)}::uuid[]) order by id for share`, "objects")) : []).map(entry=>[entry.id,entry]));
   const heads = new Map((await db.execute<SourceHead>(sql`select r.id,r.source_key as "sourceKey",r.assessment_hash as "assessmentHash"
     from schedule_source_records r where r.org_id=${actor.orgId} and r.source_system=${batch.sourceSystem}
     and r.source_dataset=${batch.sourceDataset} and r.source_key=any(${sql.param(batch.rows.map(row=>row.sourceKey))}::text[])
-    and not exists(select 1 from schedule_source_records n where n.org_id=r.org_id and n.supersedes_id=r.id)`)).rows.map(head=>[head.sourceKey,head]));
+    and not exists(select 1 from schedule_source_records n where n.org_id=r.org_id and n.supersedes_id=r.id)`, "objects")).map(head=>[head.sourceKey,head]));
   const admitted = [];
   for (const row of batch.rows) {
     const board = row.boardId ? boards.get(row.boardId)! : null;
@@ -192,10 +192,10 @@ export async function importSourceHistory(actor: ScheduleActor, batch: SourceSch
         ${assessmentHash},${batch.captureHash},${sql.param(row.payload)}::jsonb,${row.disposition},${row.boardId},${row.workerPartyId},
         ${subsidiaryId},${row.onDate},${row.label},${row.result},${row.notes},${row.visibleInSource},${row.linkedEntryId},
         ${prior?.id ?? null},${row.reason},${actor.actorId})`);
-      const saved = (await db.execute<{id:string;sourceKey:string}>(sql`insert into schedule_source_records(
+      const saved = await db.execute<{id:string;sourceKey:string}>(sql`insert into schedule_source_records(
         id,org_id,source_system,source_dataset,source_key,source_hash,assessment_hash,capture_hash,source_payload,
         disposition,board_id,worker_party_id,subsidiary_id,on_date,label,source_result,source_notes,visible_in_source,
-        linked_entry_id,supersedes_id,reason,created_by) values ${sql.join(values,sql`, `)} returning id,source_key as "sourceKey"`)).rows;
+        linked_entry_id,supersedes_id,reason,created_by) values ${sql.join(values,sql`, `)} returning id,source_key as "sourceKey"`, "objects");
       const returned = new Map(saved.map(row=>[row.sourceKey,row.id]));
       if (saved.length !== fresh.length || returned.size !== fresh.length || fresh.some(row=>returned.get(row.row.sourceKey)!==row.id))
         throw new ScheduleError("Source evidence was not saved completely.", {code:'schedule_source_not_saved'});

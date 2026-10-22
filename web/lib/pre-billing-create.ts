@@ -58,8 +58,8 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
       select coalesce(max((regexp_replace(worksheet_number, '\\D', '', 'g'))::bigint), 0) as n
         from prebills
        where org_id = ${orgId} and worksheet_number ~ '^PB-[0-9]+$'
-    `))
-    const worksheetNumber = `PB-${(BigInt(numberRow.rows[0]?.n ?? '0') + 1n).toString().padStart(5, '0')}`
+    `, 'objects'))
+    const worksheetNumber = `PB-${(BigInt(numberRow[0]?.n ?? '0') + 1n).toString().padStart(5, '0')}`
     const candidates = (await tx.execute<RawPreBillingSource>(sql`
       with candidates as (
         select 'time_entry'::text as source_type,
@@ -151,7 +151,7 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
                   and worksheet.status in ('draft', 'review', 'approved', 'customer_review')
              )
        order by candidate.source_date, candidate.source_type, candidate.source_id
-    `))
+    `, 'objects'))
 
     const overheadRates = (await tx.execute<OverheadRateRow>(sql`
       select department_id, rate_kind, rate_percent::text as rate,
@@ -161,9 +161,9 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
          and effective_from <= ${periodEnd}
          and (effective_to is null or ${periodStart ?? periodEnd}::date <= effective_to)
        order by effective_from, department_id nulls first, id
-    `))
+    `, 'objects'))
 
-    const priced = candidates.rows.flatMap((source) => {
+    const priced = candidates.flatMap((source) => {
       const version = effectivePreBillingPolicy(policy.versions, policy.fallbackProfile, source.source_date)
       const calculated = pricePreBillingSource(version.financialProfile, {
         sourceType: source.source_type,
@@ -174,7 +174,7 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
         nativeBillAmount: source.native_bill_amount,
         quantity: source.quantity,
         costingBasis: source.costing_basis,
-        rateEngineOverhead: rateEngineOverhead(source, version.financialProfile, overheadRates.rows),
+        rateEngineOverhead: rateEngineOverhead(source, version.financialProfile, overheadRates),
       }, policy.markupPercent)
       return calculated.eligible ? [{ ...source, ...calculated, policyVersion: version }] : []
     })
@@ -204,8 +204,8 @@ export async function createPrebill(orgId: string, actorId: string, input: Creat
         ${input.notes?.trim() || null}, 'draft', ${JSON.stringify({ policy: policySnapshot })}::jsonb,
         ${actorId}, ${actorId}
       ) returning id, worksheet_number as "worksheetNumber"
-    `))
-    const prebill = created.rows[0]!
+    `, 'objects'))
+    const prebill = created[0]!
 
     let lineNumber = 1
     for (const source of billable) {

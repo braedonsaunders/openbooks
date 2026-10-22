@@ -114,8 +114,8 @@ async function installTaxReturnPackWith(
           level = excluded.level, tax_type = excluded.tax_type, is_active = true,
           updated_at = now(), updated_by = ${actorId}
     where tax_jurisdictions.org_id = ${orgId}
-    returning id`));
-  const jurisdictionId = jurRes.rows[0]?.id ?? null;
+    returning id`, "objects"));
+  const jurisdictionId = jurRes[0]?.id ?? null;
 
   const formRes = (await tx.execute<{ id: string; inserted: boolean }>(sql`
     insert into tax_return_forms
@@ -134,7 +134,7 @@ async function installTaxReturnPackWith(
           is_active = true,
           updated_at = now(), updated_by = ${actorId}
     where tax_return_forms.org_id = ${orgId}
-    returning id, (xmax = 0) as inserted`));
+    returning id, (xmax = 0) as inserted`, "objects"));
 
   await tx.execute(sql`delete from tax_report_lines where org_id = ${orgId} and report_code = ${pack.code}`);
 
@@ -144,14 +144,14 @@ async function installTaxReturnPackWith(
       from tax_codes c
       left join tax_jurisdictions j on j.id = c.jurisdiction_id and j.org_id = c.org_id
      where c.org_id = ${orgId} and c.is_active
-       and c.applies_to in ('sales', 'purchases', 'both')`));
+       and c.applies_to in ('sales', 'purchases', 'both')`, "objects"));
   // Prefer tax codes scoped to THIS jurisdiction (so a state return sums only its
   // own state's codes, not every US code); fall back to country, then to codes
   // with no country at all.
   const jurisdictionCodes = jurisdictionId
-    ? candidates.rows.filter((row) => row.jurisdiction_id === jurisdictionId)
+    ? candidates.filter((row) => row.jurisdiction_id === jurisdictionId)
     : [];
-  const countryCodes = candidates.rows.filter((row) => row.country === pack.country);
+  const countryCodes = candidates.filter((row) => row.country === pack.country);
   const includedTaxTypes = countryTaxPackForReturn(pack.code)?.parentReturnIncludedTaxTypes;
   const eligible = j.level === "state" || j.level === "county" || j.level === "city"
     ? jurisdictionCodes
@@ -159,7 +159,7 @@ async function installTaxReturnPackWith(
       ? countryCodes.filter((row) => row.jurisdiction_tax_type === null || includedTaxTypes.includes(row.jurisdiction_tax_type))
       : countryCodes.length > 0
         ? countryCodes
-        : candidates.rows.filter((row) => row.country === null);
+        : candidates.filter((row) => row.country === null);
   const sales = eligible.filter((row) => row.applies_to === "sales" || row.applies_to === "both");
   const purchases = eligible.filter((row) => row.applies_to === "purchases" || row.applies_to === "both");
 
@@ -168,7 +168,7 @@ async function installTaxReturnPackWith(
   // from a state return while the filed figures silently understate.
   const subdivisionReturn = j.level === "state" || j.level === "county" || j.level === "city";
   const eligibleIds = new Set(eligible.map((row) => row.id));
-  const excludedCodes: ExcludedTaxCode[] = candidates.rows
+  const excludedCodes: ExcludedTaxCode[] = candidates
     .filter((row) => !eligibleIds.has(row.id))
     .map((row) => describeExcludedCode(row, {
       packCountry: pack.country,
@@ -200,16 +200,16 @@ async function installTaxReturnPackWith(
   }
 
   const result = {
-    formCreated: formRes.rows[0]?.inserted ?? false,
+    formCreated: formRes[0]?.inserted ?? false,
     boxRows,
     mappedSalesCodes: sales.length,
     mappedPurchaseCodes: purchases.length,
     excludedCodes,
   };
-  if (actorId && formRes.rows[0]) {
+  if (actorId && formRes[0]) {
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'tax_return_forms', ${formRes.rows[0].id},
+      values (${orgId}, 'tax_return_forms', ${formRes[0].id},
               ${result.formCreated ? "insert" : "update"},
               ${JSON.stringify({ pack: pack.code, resetToLibraryDefaults: !result.formCreated, boxRows, mappedSalesCodes: sales.length, mappedPurchaseCodes: purchases.length, excludedCodes })}::jsonb,
               ${actorId})`);

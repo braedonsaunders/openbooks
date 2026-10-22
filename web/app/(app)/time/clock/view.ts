@@ -185,11 +185,11 @@ async function clockBody(orgId: string, userId: string, t: ClockText) {
   // keeps the existing org-wide list, matching the API's attribution rule.
   const employeeSub = (await db.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id::text as subsidiary_id from parties
-     where org_id = ${orgId} and id = ${partyId}`)).rows[0]?.subsidiary_id ?? null
+     where org_id = ${orgId} and id = ${partyId}`, 'objects'))[0]?.subsidiary_id ?? null
   const entityArm = employeeSub
     ? sql`and (p.subsidiary_id is null or p.subsidiary_id = ${employeeSub})`
     : sql``
-  const projects = (await db.execute<{ id: string; name: string; code: string | null }>(sql`
+  const projects = await db.execute<{ id: string; name: string; code: string | null }>(sql`
     select p.id::text as id, p.name, p.code
       from projects p
      where p.org_id = ${orgId} and p.is_active ${entityArm}
@@ -197,12 +197,12 @@ async function clockBody(orgId: string, userId: string, t: ClockText) {
                 where te.org_id = p.org_id and te.project_id = p.id
                   and te.employee_party_id = ${partyId}) desc nulls last,
               p.name
-     limit 200`)).rows
-  const tasks = (await db.execute<{ id: string; name: string }>(sql`
+     limit 200`, 'objects')
+  const tasks = await db.execute<{ id: string; name: string }>(sql`
     select t.id::text as id, t.name from project_tasks t
       join projects p on p.id = t.project_id and p.org_id = t.org_id
      where t.org_id = ${orgId} and p.is_active ${entityArm}
-     order by t.name limit 500`)).rows
+     order by t.name limit 500`, 'objects')
   const projectNames = new Map(projects.map((project) => [project.id, project.name]))
   return {
     ownerKey: fieldClockOwnerKey(orgId, userId, partyId),

@@ -280,19 +280,20 @@ const provisionPostSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.provision-post-test')]
       const sqlText = globalThis.openbooksProvisionPostSqlText
       export const db = {
-        execute: (query) => {
+        execute: (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.dbCalls.push(text)
-          if (text.includes('user_permission_overrides')) return Promise.resolve({ rows: [] })
+          if (text.includes('user_permission_overrides')) return Promise.resolve({ rows: [] }).then(inMode)
           if (text.includes('role_assignments'))
-            return Promise.resolve({ rows: [{ permissions: state.rolePermissions }] })
+            return Promise.resolve({ rows: [{ permissions: state.rolePermissions }] }).then(inMode)
           if (text.includes('tax_provision_runs'))
-            return Promise.resolve({ rows: state.runExists ? [{ id: 'row' }] : [] })
+            return Promise.resolve({ rows: state.runExists ? [{ id: 'row' }] : [] }).then(inMode)
           if (text.includes('parent_id is null'))
             return Promise.resolve({
               rows: state.rootSubsidiaryId ? [{ id: state.rootSubsidiaryId }] : [],
-            })
-          return Promise.resolve({ rows: [] })
+            }).then(inMode)
+          return Promise.resolve({ rows: [] }).then(inMode)
         },
         transaction: async (work) => work({}),
       }

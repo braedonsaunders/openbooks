@@ -34,9 +34,9 @@ export async function loadOrgFilingCalendar(
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
       left join subsidiaries s on s.org_id=r.org_id and s.id=r.subsidiary_id
      where r.org_id = ${orgId} and r.is_active
-  `));
+  `, "objects"));
   return buildFilingCalendar(
-    rows.rows.map((r) => ({
+    rows.map((r) => ({
       registrationId: r.id,
       subsidiaryId: r.subsidiary_id,
       subsidiaryName: r.subsidiary_name,

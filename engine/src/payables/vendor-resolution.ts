@@ -26,8 +26,8 @@ export async function resolveVendorParty(
        where p.org_id = ${orgId} and p.is_active
          and regexp_replace(lower(tax_id.value), '[^a-z0-9]', '', 'g') = ${taxKey}
        limit 2
-    `));
-    if (tax.rows.length === 1) return tax.rows[0]!.id;
+    `, "objects"));
+    if (tax.length === 1) return tax[0]!.id;
   }
   if (!input.name) return null;
   const alias = vendorMatchKey(input.name);
@@ -37,8 +37,8 @@ export async function resolveVendorParty(
      where org_id = ${orgId} and rule_kind = 'vendor_alias' and is_active
        and match->>'alias' = ${alias}
      order by confirmation_count desc limit 2
-  `));
-  if (learned.rows.length === 1 && learned.rows[0]!.id) return learned.rows[0]!.id;
+  `, "objects"));
+  if (learned.length === 1 && learned[0]!.id) return learned[0]!.id;
   const exact = (await db.execute<{ id: string }>(sql`
     select p.id from parties p
     join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
@@ -48,6 +48,6 @@ export async function resolveVendorParty(
         or regexp_replace(lower(coalesce(p.legal_name, '')), '[^a-z0-9]', '', 'g') = ${alias}
       )
     limit 2
-  `));
-  return exact.rows.length === 1 ? exact.rows[0]!.id : null;
+  `, "objects"));
+  return exact.length === 1 ? exact[0]!.id : null;
 }

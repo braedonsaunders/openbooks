@@ -157,34 +157,34 @@ test("same source file with divergent invoice numbers admits exactly one draft",
     const { documentId } = assertExactlyOneDuplicateRefusal(raced);
     const loserId = ((await db.execute<{ id: string }>(sql`
       select id from ap_capture_items where org_id = ${org.orgId} and document_id is null
-    `)).rows.map((row) => row.id));
+    `, "objects")).map((row) => row.id));
     assert.equal(loserId.length, 1, "the loser stays unmaterialized and reusable");
     // No orphan writes on the loser: one bill, its lines, its attachment,
     // and exactly one draft_created event for the winner.
-    const bills = (await db.execute<{ id: string }>(sql`
+    const bills = await db.execute<{ id: string }>(sql`
       select id from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-    `)).rows;
+    `, "objects");
     assert.equal(bills.length, 1, "one source file produces one draft bill");
     assert.equal(bills[0]!.id, documentId);
     const lines = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from document_lines where org_id = ${org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(lines, "1");
     const attachments = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from file_attachments
        where org_id = ${org.orgId} and target_table = 'documents'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(attachments, "1");
     const drafts = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from ap_capture_events
        where org_id = ${org.orgId} and event_kind = 'draft_created'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(drafts, "1", "only the winner records a draft_created event");
     // Sequential replay of the winner stays idempotent on the existing path.
     const replay = await materializeCapture({ orgId: org.orgId, captureItemId: (await db.execute<{ id: string }>(sql`
       select id from ap_capture_items where org_id = ${org.orgId} and document_id = ${documentId}
-    `)).rows[0]!.id, actorId: null, allowedSubsidiaryIds: null });
+    `, "objects"))[0]!.id, actorId: null, allowedSubsidiaryIds: null });
     assert.equal(replay.documentId, documentId, "replaying a materialized capture returns the same draft");
   } finally {
     await cleanup(org.orgId);
@@ -208,7 +208,7 @@ test("sequential duplicate of the same source file is refused", { skip: !DB }, a
     const count = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(count, "1");
   } finally {
     await cleanup(org.orgId);
@@ -227,7 +227,7 @@ test("same vendor invoice from different source files still admits exactly one d
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
          and regexp_replace(lower(nullif(reference_number, '')), '[^a-z0-9]', '', 'g') = 'sameinv'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(count, "1", "exactly one draft bill survives the same-invoice race");
   } finally {
     await cleanup(org.orgId);
@@ -245,7 +245,7 @@ test("unrelated captures both materialize", { skip: !DB }, async () => {
     const count = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
        where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(count, "2");
   } finally {
     await cleanup(org.orgId);
@@ -278,7 +278,7 @@ test("the source fence is org-scoped: identical hash and invoice in two orgs bot
       const count = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from documents
          where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(count, "1", `org ${label} holds its own draft`);
     }
   } finally {

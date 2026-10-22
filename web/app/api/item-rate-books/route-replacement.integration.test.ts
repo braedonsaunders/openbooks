@@ -71,15 +71,15 @@ async function fixture() {
 }
 
 async function activeVersions(orgId: string, book: string) {
-  return (await withOrgContext(orgId, () => db.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
+  return await withOrgContext(orgId, () => db.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
     select id, effective_from::text, effective_to::text from item_rate_versions
      where org_id = ${orgId} and rate_book_id = ${book} and status = 'active'
-     order by effective_from`))).rows
+     order by effective_from`, 'objects'))
 }
 
 async function lineCount(orgId: string, versionId: string) {
   return (await withOrgContext(orgId, () => db.execute<{ count: string }>(sql`
-    select count(*)::text as count from item_rate_lines where org_id = ${orgId} and version_id = ${versionId}`))).rows[0]!.count
+    select count(*)::text as count from item_rate_lines where org_id = ${orgId} and version_id = ${versionId}`, 'objects')))[0]!.count
 }
 
 test('bounded rate versions retain expiry gaps and resolve only their recorded windows', async () => {
@@ -100,14 +100,14 @@ test('bounded rate versions retain expiry gaps and resolve only their recorded w
     assert.equal(original.status, 200, await original.text())
     const before = (await activeVersions(org.orgId, book))[0]!
     const originalLines = await withOrgContext(org.orgId, () => db.execute(sql`
-      select * from item_rate_lines where org_id=${org.orgId} and version_id=${before.id} order by id`))
+      select * from item_rate_lines where org_id=${org.orgId} and version_id=${before.id} order by id`, 'objects'))
     const replacement = await post('2026-02-01', '2026-02-28')
     assert.equal(replacement.status, 200, await replacement.text())
     const versions = await activeVersions(org.orgId, book)
     assert.deepEqual(versions[0], before, 'a later version cannot extend the prior expiry into the gap')
     assert.equal(versions[1]!.effective_to, '2026-02-28')
-    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
-      select * from item_rate_lines where org_id=${org.orgId} and version_id=${before.id} order by id`))).rows, originalLines.rows)
+    assert.deepEqual(await withOrgContext(org.orgId, () => db.execute(sql`
+      select * from item_rate_lines where org_id=${org.orgId} and version_id=${before.id} order by id`, 'objects')), originalLines)
     const resolve = (onDate: string) => resolveItemRate({
       orgId: org.orgId, projectId: project, itemId: org.items.service, onDate, baseQuantity: '1',
     })
@@ -118,9 +118,9 @@ test('bounded rate versions retain expiry gaps and resolve only their recorded w
     const open = await post('2026-03-01', null)
     assert.equal(open.status, 200, await open.text())
     assert.equal((await activeVersions(org.orgId, book))[2]!.effective_to, null)
-    const audits = (await withOrgContext(org.orgId, () => db.execute<{
+    const audits = await withOrgContext(org.orgId, () => db.execute<{
       actor_id: string; changes: { effectiveTo: string | null; closedVersion: unknown };
-    }>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='item_rate_versions' order by at,id`))).rows
+    }>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='item_rate_versions' order by at,id`, 'objects'))
     assert.equal(audits.length, 3)
     assert.ok(audits.every((audit) => audit.actor_id === org.orgId))
     assert.deepEqual(audits.map((audit) => audit.changes.effectiveTo), ['2025-12-31', '2026-02-28', null])
@@ -141,14 +141,14 @@ test('invalid or reversed version end dates refuse before header, pricing or aud
         'profiles',(select jsonb_agg(to_jsonb(p) order by id) from item_rate_profiles p where p.org_id=${org.orgId}),
         'lines',(select jsonb_agg(to_jsonb(l) order by id) from item_rate_lines l where l.org_id=${org.orgId}),
         'audit',(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where a.org_id=${org.orgId})
-      ) as evidence`))
-    const before = (await snapshot()).rows
+      ) as evidence`, 'objects'))
+    const before = await snapshot()
     for (const effectiveTo of ['2026-02-30', '2025-12-31', 'tomorrow']) {
       const refused = await bookPost({ id: book, code: 'REPLACE', name: 'Changed name', replaceRates: true,
         effectiveFrom: '2026-01-01', effectiveTo, lines: tiers(org.items.service) })
       assert.equal(refused.status, 422)
       assert.match(String((await refused.json()).error), /Effective to.*real calendar date.*on or after/)
-      assert.deepEqual((await snapshot()).rows, before)
+      assert.deepEqual(await snapshot(), before)
     }
   } finally {
     routeState.gate = null
@@ -218,10 +218,10 @@ test('an empty replacement refuses without the flag and clears with it', async (
     assert.equal(await lineCount(org.orgId, live.id), '0')
     const closed = (await withOrgContext(org.orgId, () => db.execute<{ effective_to: string }>(sql`
       select effective_to::text from item_rate_versions
-       where org_id = ${org.orgId} and rate_book_id = ${book} and effective_from = '2026-01-01'`))).rows[0]
+       where org_id = ${org.orgId} and rate_book_id = ${book} and effective_from = '2026-01-01'`, 'objects')))[0]
     assert.equal(String(closed!.effective_to).slice(0, 10), '2026-01-31')
     const closure = (await withOrgContext(org.orgId, () => db.execute<{ changes: { closedVersion: unknown } }>(sql`
-      select changes from audit_log where org_id=${org.orgId} and table_name='item_rate_versions' and row_id=${live.id}`))).rows[0]!
+      select changes from audit_log where org_id=${org.orgId} and table_name='item_rate_versions' and row_id=${live.id}`, 'objects')))[0]!
     assert.deepEqual(closure.changes.closedVersion, { id: versions[0]!.id, before: { effectiveTo: null }, after: { effectiveTo: '2026-01-31' } })
   } finally {
     routeState.gate = null

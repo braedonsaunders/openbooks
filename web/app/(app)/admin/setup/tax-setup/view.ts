@@ -49,13 +49,13 @@ export async function loadTaxSetup(
   const orgId = authz.user.orgId
 
   const [installed, installedJurisdictions, jurisdictions, registrations, hmrc, abn] = await Promise.all([
-    db.execute<{ code: string }>(sql`select distinct code from tax_return_forms where org_id = ${orgId} and is_active`),
+    db.execute<{ code: string }>(sql`select distinct code from tax_return_forms where org_id = ${orgId} and is_active`, 'objects'),
     db.execute<{ code: string }>(sql`
       select code from tax_jurisdictions
        where org_id = ${orgId} and is_active and level = 'state'
-    `),
-    db.execute<{ n: number }>(sql`select count(*)::int as n from tax_jurisdictions where org_id = ${orgId} and is_active`),
-    db.execute<{ n: number }>(sql`select count(*)::int as n from tax_registrations where org_id = ${orgId} and is_active`),
+    `, 'objects'),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from tax_jurisdictions where org_id = ${orgId} and is_active`, 'objects'),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from tax_registrations where org_id = ${orgId} and is_active`, 'objects'),
     readAuthorityConnectionStatus(db, orgId, 'hmrc'),
     readAuthorityConnectionStatus(db, orgId, 'abn'),
   ])
@@ -66,17 +66,17 @@ export async function loadTaxSetup(
     guide: {
       countries: supportedTaxCountries(),
       installedCodes: [
-        ...installed.rows.map((r) => r.code),
-        ...installedJurisdictions.rows.map((r) => `JURISDICTION:${r.code}`),
+        ...installed.map((r) => r.code),
+        ...installedJurisdictions.map((r) => `JURISDICTION:${r.code}`),
       ],
       step2Title: t('step2.title'),
       step2Description: t('step2.description'),
-      step2Stat: t('step2.stat', { count: jurisdictions.rows[0]?.n ?? 0 }),
+      step2Stat: t('step2.stat', { count: jurisdictions[0]?.n ?? 0 }),
       step2Href: '/admin/setup/tax-jurisdictions',
       step2Cta: t('step2.cta'),
       step3Title: t('step3.title'),
       step3Description: t('step3.description'),
-      step3Stat: t('step3.stat', { count: registrations.rows[0]?.n ?? 0 }),
+      step3Stat: t('step3.stat', { count: registrations[0]?.n ?? 0 }),
       step3Href: '/admin/setup/tax-jurisdictions?setupTab=tax-registrations',
       step3Cta: t('step3.cta'),
     },

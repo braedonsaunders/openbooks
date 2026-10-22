@@ -45,7 +45,7 @@ test('naming a New-lead placeholder draft without isActive activates it reason-f
     }), params as never))
     assert.equal(completed.status, 200, JSON.stringify(await completed.clone().json()))
     const stored = (await withBypassContext(() => db.execute<{ display_name: string; is_active: boolean }>(sql`
-      select display_name, is_active from parties where id = ${draftId}`))).rows[0]!
+      select display_name, is_active from parties where id = ${draftId}`, 'objects')))[0]!
     assert.equal(stored.display_name, 'T12 Test Lead 2')
     assert.equal(stored.is_active, true)
 

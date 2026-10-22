@@ -55,13 +55,11 @@ test("an estimate create maps a lifecycle refusal to a 422 with its message", { 
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Estimator", "admin"));
-    const partyId = (
-      await withBypassContext(() =>
+    const partyId = (await withBypassContext(() =>
         db.execute<{ id: string }>(sql`
           insert into parties (org_id, kind, display_name, is_active)
-          values (${org.orgId}, 'company', 'Refused Customer', true) returning id`),
-      )
-    ).rows[0]!.id;
+          values (${org.orgId}, 'company', 'Refused Customer', true) returning id`, "objects"),
+      ))[0]!.id;
     const res = (await withOrgContext(
       org.orgId,
       () =>

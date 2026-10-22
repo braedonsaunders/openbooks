@@ -13,12 +13,13 @@ const registration = { id: 'registration-1', subsidiaryId: 'subsidiary-a', ident
 function recordedRunner(replies: Record<string, unknown>[][]) {
   const queries: { sql: string; params: unknown[] }[] = []
   const runner = {
-    async execute(query: SQL) {
+    async execute(query: SQL, mode?: string) {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
       const compiled = dialect.sqlToQuery(query)
       queries.push({ sql: compiled.sql, params: compiled.params })
       const rows = replies.shift()
       assert.ok(rows, `unexpected query: ${compiled.sql}`)
-      return { rows }
+      return inMode({ rows })
     },
   } as unknown as SqlExecutor
   return { runner, queries }

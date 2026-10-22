@@ -49,9 +49,9 @@ async function fixture() {
   state.actorId = randomUUID()
   state.allowed = null
   const bankNumber = (await db.execute<{ number: string }>(sql`
-    select number from accounts where id = ${org.accounts.bank}`)).rows[0]!.number
+    select number from accounts where id = ${org.accounts.bank}`, 'objects'))[0]!.number
   const bankName = (await db.execute<{ name: string }>(sql`
-    select name from accounts where id = ${org.accounts.bank}`)).rows[0]!.name
+    select name from accounts where id = ${org.accounts.bank}`, 'objects'))[0]!.name
   const scenarioId = randomUUID()
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -103,7 +103,7 @@ test('the worksheet save refuses a balance-sheet account by name', async () => {
     const body = (await response.json()) as { error?: string }
     assert.match(body.error ?? '', /non_pnl_account/, `the save must refuse: ${JSON.stringify(body)}`)
     const count = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_lines where scenario_id = ${f.scenarioId} and org_id = ${f.org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_lines where scenario_id = ${f.scenarioId} and org_id = ${f.org.orgId}`, 'objects'))[0]!.n
     assert.equal(count, 0, 'nothing is written')
   } finally {
     await dropScratchOrg(f.org.orgId)

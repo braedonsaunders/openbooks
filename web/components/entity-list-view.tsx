@@ -368,7 +368,7 @@ export async function EntityListView({
       : (typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs, today) : countJoinsSource)
 
   const statusCounts = source.statusCounts === false
-    ? await Promise.resolve({ rows: [] })
+    ? await Promise.resolve([])
     // A CRM-off customer list has one constant status bucket ('customer'):
     // grouping by a constant is a Postgres 42601, so count it ungrouped
     // instead of skipping the facet.
@@ -376,12 +376,12 @@ export async function EntityListView({
       ? await (db.execute(sql`
           select ${statusExpr} as status, count(*) as n from ${tableSql}
             ${countJoins}
-           where ${countWhere}`))
+           where ${countWhere}`, 'objects'))
       : await (db.execute(sql`
           select ${statusExpr} as status, count(*) as n from ${tableSql}
             ${countJoins}
            where ${countWhere}
-           group by ${statusExpr}`))
+           group by ${statusExpr}`, 'objects'))
   // Rows, enrichment, and the filtered total arrive from the shared reader;
   // the facet counts above keep their own status-grouped query.
   const rows = readResult.rows
@@ -411,7 +411,7 @@ export async function EntityListView({
     return value.replace(/_/g, ' ')
   }
 
-  const statusCountByValue = new Map(statusCounts.rows.map((r) => [String(r.status), Number(r.n)]))
+  const statusCountByValue = new Map(statusCounts.map((r) => [String(r.status), Number(r.n)]))
   // DB-seeded status names (opportunity stages) reach the picker as English
   // labels; render them through the source's catalog hook when it names this
   // filter, so the picker button matches the translated table cells.

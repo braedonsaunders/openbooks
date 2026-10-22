@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import test, { before } from "node:test";
+import test from "node:test";
 import { sql } from "drizzle-orm";
 
 // The storage backend resolves its data root from the engine env snapshot
@@ -26,26 +26,11 @@ const {
 } = await import("./operations.ts");
 const { PaymentError } = await import("../payments-core/payment-errors.ts");
 const { deliverRunToSftp } = await import("../sftp/import-job.ts");
-const { db, pool, withBypass, withOrgContext } = await import("../platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("../platform/db.ts");
 const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } =
   await import("../testing/fixtures.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-
-const migration0290 = readFileSync(
-  "schema/migrations/generated/0290_payment_file_delivery_claim.sql",
-  "utf8",
-);
-
-before(async () => {
-  if (!DB) return;
-  const client = await pool.connect();
-  try {
-    await client.query(migration0290);
-  } finally {
-    client.release();
-  }
-});
 
 interface DeliveryFixture {
   orgId: string;

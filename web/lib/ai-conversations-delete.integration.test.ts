@@ -34,7 +34,7 @@ async function seedUser(orgId: string, userId: string): Promise<void> {
     insert into app_roles (org_id, key, name, is_built_in, permissions)
     values (${orgId}, ${`delete-${userId.slice(0, 8)}`}, 'Delete User', false, '[]'::jsonb)
     returning id
-  `)).rows[0]!.id;
+  `, "objects"))[0]!.id;
   await db.execute(sql`
     insert into users (id, org_id, email, name, password_hash, is_active)
     values (${userId}, ${orgId}, ${`delete-${userId.slice(0, 8)}@scratch.test`}, 'Delete User', 'x', false)
@@ -143,7 +143,7 @@ const consolidatedRows = [
             insert into app_roles (org_id, key, name, is_built_in, permissions)
             values (${orgId}, ${`paging-${userId.slice(0, 8)}`}, 'Paging User', false, '[]'::jsonb)
             returning id
-          `)).rows[0]!.id;
+          `, "objects"))[0]!.id;
           await db.execute(sql`
             insert into users (id, org_id, email, name, password_hash, is_active)
             values (${userId}, ${orgId}, ${`paging-${userId.slice(0, 8)}@scratch.test`}, 'Paging User', 'x', false)

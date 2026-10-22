@@ -68,13 +68,13 @@ export async function accountRegister(
   const acct = (await db.execute<AccountRegisterAccount & { subsidiary_id: string | null }>(sql`
     select id, number, name, type, is_summary, subsidiary_id from accounts
      where id = ${accountId} and org_id = ${orgId}
-  `));
-  if (!acct.rows[0]) return { account: undefined, lines: [], total: 0, balance: '0' };
+  `, "objects"));
+  if (!acct[0]) return { account: undefined, lines: [], total: 0, balance: '0' };
   // The header carries the account's number, name and balance: an
   // out-of-scope account is indistinguishable from a missing one, even when
   // the line filter below would already return zero rows. The shared chart
   // (null subsidiary) reads for every caller.
-  if (!subsidiaryScopeAllows(allowedSubsidiaryIds ?? null, acct.rows[0].subsidiary_id, { orgWideNull: true })) {
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds ?? null, acct[0].subsidiary_id, { orgWideNull: true })) {
     return { account: undefined, lines: [], total: 0, balance: '0' };
   }
   const dateFilter =
@@ -216,7 +216,7 @@ export async function accountRegister(
   // `total` counts raw posted lines (the pagination/truncation basis);
   // `lines` may be shorter after a confidentiality collapse, while `balance`
   // always covers the full posted set.
-  return { account: acct.rows[0], lines: confidential, total: Number(totals.n), balance: totals.bal };
+  return { account: acct[0], lines: confidential, total: Number(totals.n), balance: totals.bal };
 }
 
 // ---------------------------------------------------------------------------
@@ -506,14 +506,14 @@ export async function partnerStatement(
     select p.display_name
       from parties p
      where p.id = ${partyId} and p.org_id = ${orgId}${partySubsidiaryFilter}
-  `))
+  `, "objects"))
   const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId, { bookId: opts.bookId, partyId })
   // The register only surfaces parties with window lines, but a statement is
   // addressed to one party: with no window activity the opening (= closing)
   // is still the pre-window control balance, never zero.
   const opening = p?.opening ?? (await preWindowBalance(opts.side, opts.from, partyId, orgId, opts.dims, opts.bookId, opts.canSeePayroll))
   return {
-    party: { id: partyId, name: nameRow.rows[0]?.display_name ?? p?.partyName ?? null },
+    party: { id: partyId, name: nameRow[0]?.display_name ?? p?.partyName ?? null },
     side: opts.side,
     from: opts.from,
     to: opts.to,
@@ -556,6 +556,6 @@ async function preWindowBalance(
        and l.party_id = ${partyId}
        ${payrollExclusion}
        and ${dimWhere(dims, sql`l`)}
-  `))
-  return (rows.rows[0]?.balance ?? '0') as ExactDecimal
+  `, "objects"))
+  return (rows[0]?.balance ?? '0') as ExactDecimal
 }

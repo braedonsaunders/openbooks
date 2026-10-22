@@ -36,7 +36,7 @@ async function seedObligation(org: ScratchOrg, method = 'milestone') {
   await db.execute(sql`insert into performance_obligations
     (id, org_id, contract_id, description, recognition_rule_id, booked_amount, allocated_price, recognition_starts_on, created_by, updated_by)
     values (${obligationId}, ${org.orgId}, ${contractId}, 'Milestone deliverable', ${ruleId}, '1000', '1000', ${org.date}, ${actorId}, ${actorId})`);
-  const endsOn = (await db.execute<{ ends_on: string }>(sql`select ends_on from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!.ends_on;
+  const endsOn = (await db.execute<{ ends_on: string }>(sql`select ends_on from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, 'objects'))[0]!.ends_on;
   return { obligationId, orgId: org.orgId, actorId, periodMonth: `${org.date.slice(0, 7)}-01`, endsOn };
 }
 
@@ -45,17 +45,17 @@ async function netRecognized(orgId: string, obligationId: string, bookId: string
     select coalesce((select sum(case when l.journal_entry_id is not null and l.reversal_journal_entry_id is null then coalesce(l.recognized_amount,0) else 0 end)
       from recognition_schedule_lines l
       join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-     where l.org_id=${orgId} and s.obligation_id=${obligationId} and s.book_id=${bookId}),0)::text as net`)).rows[0]!;
+     where l.org_id=${orgId} and s.obligation_id=${obligationId} and s.book_id=${bookId}),0)::text as net`, 'objects'))[0]!;
   return row.net;
 }
 
 async function unpostedNegativeLines(orgId: string, obligationId: string) {
-  return (await db.execute<{ id: string; planned_amount: string }>(sql`
+  return await db.execute<{ id: string; planned_amount: string }>(sql`
     select l.id, l.planned_amount
       from recognition_schedule_lines l
       join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
      where l.org_id=${orgId} and s.obligation_id=${obligationId}
-       and l.journal_entry_id is null and l.planned_amount::numeric < 0`)).rows;
+       and l.journal_entry_id is null and l.planned_amount::numeric < 0`, 'objects');
 }
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
@@ -65,8 +65,8 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
       join journal_entries entry on entry.id = line.entry_id
      where line.org_id = ${orgId}
        and line.account_id = ${accountId}
-       and entry.status = 'posted'`);
-  return r.rows[0]!.balance;
+       and entry.status = 'posted'`, 'objects');
+  return r[0]!.balance;
 }
 
 for (const method of ['milestone', 'usage']) {
@@ -162,10 +162,10 @@ test('a historical reversal lowers the book net the next correction is measured 
       select l.id, l.journal_entry_id from recognition_schedule_lines l
         join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
        where l.org_id=${org.orgId} and s.obligation_id=${input.obligationId} and s.book_id=${org.bookId}
-         and l.journal_entry_id is not null`)).rows[0]!;
+         and l.journal_entry_id is not null`, 'objects'))[0]!;
     const source = (await db.execute<{ book_id: string; subsidiary_id: string; posting_date: string; period_id: string; entry_number: string }>(sql`
       select book_id, subsidiary_id, posting_date::text, period_id, entry_number from journal_entries
-       where id = ${primaryPosted.journal_entry_id} and org_id = ${org.orgId}`)).rows[0]!;
+       where id = ${primaryPosted.journal_entry_id} and org_id = ${org.orgId}`, 'objects'))[0]!;
     const reversalId = randomUUID();
     await db.execute(sql`insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)

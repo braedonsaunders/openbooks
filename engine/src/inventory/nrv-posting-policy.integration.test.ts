@@ -30,7 +30,7 @@ for (const operation of ["write-down", "recovery"] as const) {
           values(${siblingId},${org.orgId},${org.subsidiaryId},'Other inventory owner','CAD','CA')`);
         const before = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
         const accountId = (await db.execute<{ id: string }>(sql`
-          select asset_account_id as id from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.id;
+          select asset_account_id as id from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`, "objects"))[0]!.id;
         if (policy === "account restriction") await db.execute(sql`update accounts set subsidiary_id=${siblingId},subsidiary_include_children=false
           where org_id=${org.orgId} and id=${accountId}`);
         else await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${ownerId}`);
@@ -43,7 +43,7 @@ for (const operation of ["write-down", "recovery"] as const) {
         const counts = (await db.execute<{ journals: number; writedowns: number; reversed: string }>(sql`select
           (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
           (select count(*)::int from inventory_writedowns where org_id=${org.orgId}) as writedowns,
-          (select coalesce(sum(reversed_amount),0)::text from inventory_writedowns where org_id=${org.orgId}) as reversed`)).rows[0]!;
+          (select coalesce(sum(reversed_amount),0)::text from inventory_writedowns where org_id=${org.orgId}) as reversed`, "objects"))[0]!;
         assert.equal(counts.journals, operation === "recovery" ? 2 : 1);
         assert.equal(counts.writedowns, operation === "recovery" ? 1 : 0);
         assert.match(counts.reversed, /^0(?:\.0+)?$/);
@@ -84,8 +84,8 @@ for (const bookBreak of ["inactive primary book", "non-posting primary book"] as
         assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), before);
       });
       const writedowns = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from inventory_writedowns where org_id=${org.orgId}`));
-      assert.equal(writedowns.rows[0]!.n, 0);
+        select count(*)::int as n from inventory_writedowns where org_id=${org.orgId}`, "objects"));
+      assert.equal(writedowns[0]!.n, 0);
       await db.execute(sql`update accounting_books set is_active=true, posts_gl=true where org_id=${org.orgId} and is_primary`);
       assert.ok((await writeDownInventoryToNrv(org.orgId, actorId, input)).entryId);
     } finally {
@@ -112,7 +112,7 @@ test("NRV write-down measures only the requesting entity when a sibling shares t
       });
     }
     const accountId = (await db.execute<{ id: string }>(sql`
-      select asset_account_id as id from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.id;
+      select asset_account_id as id from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`, "objects"))[0]!.id;
     await db.execute(sql`update accounts set subsidiary_id=${ownerId},subsidiary_include_children=false
       where org_id=${org.orgId} and id=${accountId}`);
     // The owner's request succeeds on its own layers even though a sibling
@@ -127,8 +127,8 @@ test("NRV write-down measures only the requesting entity when a sibling shares t
     const siblingLayers = (await db.execute<{ value: string }>(sql`
       select round(sum(remaining_quantity * unit_cost),4)::text as value from cost_layers
        where org_id=${org.orgId} and item_id=${org.items.fifo}
-         and stock_location_id=${org.stockLocationId} and subsidiary_id=${siblingId}`));
-    assert.equal(siblingLayers.rows[0]!.value, "50.0000");
+         and stock_location_id=${org.stockLocationId} and subsidiary_id=${siblingId}`, "objects"));
+    assert.equal(siblingLayers[0]!.value, "50.0000");
     // The sibling's own request is still refused while the account is
     // restricted to the owner — scoping never bypasses entity permission.
     await assert.rejects(writeDownInventoryToNrv(org.orgId, actorId, {

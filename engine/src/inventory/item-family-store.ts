@@ -30,8 +30,8 @@ export async function writeFamilyAudit(
   const written = (await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, ${table}, ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`));
-  if (written.rows.length === 0) {
+    returning id`, "objects"));
+  if (written.length === 0) {
     throw new InventoryError("family change was not audited; reload and try again");
   }
 }
@@ -42,7 +42,7 @@ export async function lockFamily(tx: Runner, orgId: string, familyId: string): P
     select id, code, name, description, category, kind, default_unit, default_rate, status
       from item_families
      where org_id = ${orgId} and id = ${familyId}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!row) {
     throw new ItemFamilyError(
       "the product family is not in this organization",
@@ -55,20 +55,20 @@ export async function lockFamily(tx: Runner, orgId: string, familyId: string): P
 }
 
 export async function loadOptions(tx: Runner, orgId: string, familyId: string): Promise<FamilyOptionRecord[]> {
-  const rows = (await tx.execute<{ id: string; name: string; position: number; values: string[] }>(sql`
+  const rows = await tx.execute<{ id: string; name: string; position: number; values: string[] }>(sql`
     select id, name, position, "values"
       from item_family_options
      where org_id = ${orgId} and family_id = ${familyId}
-     order by position`)).rows;
+     order by position`, "objects");
   return rows.map((row) => ({ id: row.id, name: row.name, position: row.position, values: row.values ?? [] }));
 }
 
 export async function loadVariants(tx: Runner, orgId: string, familyId: string): Promise<VariantRow[]> {
-  return (await tx.execute<VariantRow>(sql`
+  return await tx.execute<VariantRow>(sql`
     select id, code, name, option_values, kind, unit, default_rate, default_cost, is_active
       from items
      where org_id = ${orgId} and family_id = ${familyId}
-     order by code nulls last, name`)).rows;
+     order by code nulls last, name`, "objects");
 }
 
 /** Read one family with options, variants and on-hand quantities. */
@@ -78,7 +78,7 @@ export async function getItemFamily(orgId: string, familyId: string): Promise<It
     const row = (await tx.execute<FamilyRow>(sql`
       select id, code, name, description, category, kind, default_unit, default_rate, status
         from item_families
-       where org_id = ${orgId} and id = ${familyId}`)).rows[0];
+       where org_id = ${orgId} and id = ${familyId}`, "objects"))[0];
     if (!row) return null;
     const options = await loadOptions(tx, orgId, familyId);
     const variants = await loadVariants(tx, orgId, familyId);
@@ -87,14 +87,14 @@ export async function getItemFamily(orgId: string, familyId: string): Promise<It
         select item_id, coalesce(sum(remaining_quantity), 0)::text as quantity
           from cost_layers
          where org_id = ${orgId} and item_id = any(${uuidArray(variants.map((variant) => variant.id))}::uuid[])
-         group by item_id`)).rows.map((entry) => [entry.item_id, entry.quantity] as [string, string]),
+         group by item_id`, "objects")).map((entry) => [entry.item_id, entry.quantity] as [string, string]),
     );
     const barcodes = variants.length === 0 ? new Map<string, { value: string; kind: string }>() : new Map(
       (await tx.execute<{ item_id: string; value: string; kind: string }>(sql`
         select distinct on (item_id) item_id, value, kind
           from item_identifiers
          where org_id = ${orgId} and item_id = any(${uuidArray(variants.map((variant) => variant.id))}::uuid[])
-         order by item_id, updated_at desc`)).rows.map((entry) => [entry.item_id, { value: entry.value, kind: entry.kind }] as [string, { value: string; kind: string }]),
+         order by item_id, updated_at desc`, "objects")).map((entry) => [entry.item_id, { value: entry.value, kind: entry.kind }] as [string, { value: string; kind: string }]),
     );
     return {
       ...toFamilyRecord(row),
@@ -120,10 +120,10 @@ export async function getItemFamily(orgId: string, familyId: string): Promise<It
 export async function listItemFamilies(orgId: string): Promise<{ id: string; code: string; name: string }[]> {
   return db.transaction(async (tx) => {
     await assertItemVariantsReadable(tx, orgId);
-    return (await tx.execute<{ id: string; code: string; name: string }>(sql`
+    return await tx.execute<{ id: string; code: string; name: string }>(sql`
       select id, code, name
         from item_families
        where org_id = ${orgId} and status = 'active'
-       order by name, code, id`)).rows;
+       order by name, code, id`, "objects");
   });
 }

@@ -628,8 +628,8 @@ export async function loadRequirementPolicies(
       from compliance_requirements
      where org_id = ${orgId} and is_active
      order by category, code
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 export type ApplicableRequirement = {
@@ -656,8 +656,8 @@ export async function loadApplicableRequirement(
       join vendor_roles vr on vr.org_id = req.org_id and vr.party_id = ${partyId}
      where req.org_id = ${orgId} and req.id = ${requirementId} and req.is_active
        and (req.class_id is null or req.class_id = vr.compliance_class_id)
-  `);
-  return applicable.rows[0];
+  `, "objects");
+  return applicable[0];
 }
 
 export interface VendorComplianceInputs {
@@ -683,7 +683,7 @@ export async function loadVendorComplianceInputs(
         from vendor_roles vr
         left join compliance_classes cc
                on cc.id = vr.compliance_class_id and cc.org_id = vr.org_id and cc.is_active
-       where vr.org_id = ${orgId} and vr.party_id = ${partyId}`);
+       where vr.org_id = ${orgId} and vr.party_id = ${partyId}`, "objects");
   const records = await runner.execute<EvidenceRecord>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId", status,
              effective_from as "effectiveFrom", expires_on as "expiresOn",
@@ -694,7 +694,7 @@ export async function loadVendorComplianceInputs(
              primary_noncontributory as "primaryNoncontributory",
              verified_at as "verifiedAt"
         from compliance_records
-       where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`);
+       where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`, "objects");
   // Revoked rows load too: the evaluator dates them by the revocation's
   // org-local date, so an as-of read sees the exception exactly while it
   // was in force. Pending requests (never approved) load too but the
@@ -704,20 +704,20 @@ export async function loadVendorComplianceInputs(
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              approved_at as "approvedAt", revoked_at as "revokedAt"
         from compliance_waivers
-       where org_id = ${orgId} and party_id = ${partyId}`);
+       where org_id = ${orgId} and party_id = ${partyId}`, "objects");
   const lienWaivers = await runner.execute<LienWaiverEvidence>(sql`
       select id, waiver_number as "waiverNumber", status, direction,
              project_id as "projectId", through_date as "throughDate",
              amount, currency, jurisdiction, bill_document_id as "billDocumentId"
         from lien_waivers
        where org_id = ${orgId} and party_id = ${partyId} and direction = 'received'
-         and status = 'signed'`);
+         and status = 'signed'`, "objects");
   const timeZone = await businessTimeZone(orgId);
   return {
-    classId: role.rows[0]?.classId ?? null,
-    lienWaiverEnforcement: role.rows[0]?.lienWaiverEnforcement ?? "none",
-    records: records.rows,
-    waivers: waivers.rows.map((row) => {
+    classId: role[0]?.classId ?? null,
+    lienWaiverEnforcement: role[0]?.lienWaiverEnforcement ?? "none",
+    records,
+    waivers: waivers.map((row) => {
       const revokedAt = row.revokedAt as unknown as string | Date | null;
       return {
         ...row,
@@ -727,7 +727,7 @@ export async function loadVendorComplianceInputs(
             : revocationLocalDate(revokedAt, timeZone),
       };
     }),
-    lienWaivers: lienWaivers.rows,
+    lienWaivers,
   };
 }
 
@@ -929,11 +929,9 @@ export async function evaluateBillsForRelease(args: {
     projectIds.length === 0
       ? new Map<string, string | null>()
       : new Map<string, string | null>(
-          (
-            await runner.execute<{ id: string; siteJurisdiction: string | null }>(sql`
+          (await runner.execute<{ id: string; siteJurisdiction: string | null }>(sql`
               select id, site_jurisdiction as "siteJurisdiction" from projects
-               where org_id = ${args.orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`)
-          ).rows.map((row) => [row.id, row.siteJurisdiction]),
+               where org_id = ${args.orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`, "objects")).map((row) => [row.id, row.siteJurisdiction]),
         );
   return args.bills.map((bill) =>
     evaluateBillRelease({

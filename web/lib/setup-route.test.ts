@@ -40,7 +40,7 @@ const mockSources = new Map<string, string>([
       export const withBypassContext = (fn) => fn()
       export const withOrgTransaction = () => { state.transactionCalls++; throw new Error('read-only currency route must not open a transaction') }
       export const db = {
-        execute() { state.executeCalls++; return Promise.resolve({ rows: [] }) },
+        execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.executeCalls++; return Promise.resolve({ rows: [] }).then(inMode) },
         transaction() { state.transactionCalls++; throw new Error('read-only currency route must not open a transaction') },
       }
     `,

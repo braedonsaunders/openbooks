@@ -36,13 +36,13 @@ test('native bill-only books retain unknown cost, explicit pins and earlier vers
     const read = () => withOrgContext(org.orgId, () => db.execute(sql`
       select to_jsonb(l) as line,to_jsonb(p) as profile from item_rate_lines l
       join item_rate_version_profiles p on p.org_id=l.org_id and p.version_id=l.version_id and p.item_id=l.item_id
-      where l.org_id=${org.orgId} and l.version_id=${versionId}`))
-    const before = (await read()).rows as { line: { cost_rate: null; bill_rate: string }; profile: { pricing_policy: string } }[]
+      where l.org_id=${org.orgId} and l.version_id=${versionId}`, 'objects'))
+    const before = (await read()) as { line: { cost_rate: null; bill_rate: string }; profile: { pricing_policy: string } }[]
     assert.equal(before[0]!.line.cost_rate, null)
     assert.equal(cmp(String(before[0]!.line.bill_rate), '80'), 0)
     assert.equal(before[0]!.profile.pricing_policy, 'explicit')
     const readPolicy = (id: string) => withOrgContext(org.orgId, async () =>
-      (await db.execute(sql`select * from labor_rate_version_policies where org_id=${org.orgId} and version_id=${id}`)).rows)
+      await db.execute(sql`select * from labor_rate_version_policies where org_id=${org.orgId} and version_id=${id}`, 'objects'))
     const originalPolicy = await readPolicy(versionId)
     assert.equal(originalPolicy.length, 1)
     assert.equal(originalPolicy[0]!.derivation_policy, 'time_type_multipliers', 'version policy is independent of the item profile')
@@ -63,7 +63,7 @@ test('native bill-only books retain unknown cost, explicit pins and earlier vers
     const assigned = await assign(bookId, versionId)
     assert.equal(assigned.status, 200, 'the native assignment writer resolves the authored labor policy and exact version pin')
     const assignmentBefore = await withOrgContext(org.orgId, async () =>
-      (await db.execute(sql`select * from item_rate_book_assignments where org_id=${org.orgId} and project_id=${project}`)).rows)
+      await db.execute(sql`select * from item_rate_book_assignments where org_id=${org.orgId} and project_id=${project}`, 'objects'))
     assert.equal(assignmentBefore[0]!.rate_version_id, versionId)
     assert.equal(assignmentBefore[0]!.date_basis, 'usage_date')
     const generic = await post({ code: 'ITEM-ONLY', name: 'Item pricing only', isDefault: false,
@@ -98,16 +98,16 @@ test('native bill-only books retain unknown cost, explicit pins and earlier vers
     assert.equal((await readPolicy((await explicit.json() as { versionId: string }).versionId))[0]!.derivation_policy, 'explicit')
     assert.deepEqual(await readPolicy(versionId), originalPolicy, 'a later explicit policy preserves the earlier whole policy row')
     assert.deepEqual(await withOrgContext(org.orgId, async () =>
-      (await db.execute(sql`select * from item_rate_book_assignments where org_id=${org.orgId} and project_id=${project}`)).rows), assignmentBefore)
-    assert.deepEqual((await read()).rows, before, 'a new known cost or policy cannot reinterpret the prior version')
+      await db.execute(sql`select * from item_rate_book_assignments where org_id=${org.orgId} and project_id=${project}`, 'objects')), assignmentBefore)
+    assert.deepEqual(await read(), before, 'a new known cost or policy cannot reinterpret the prior version')
     const preservedBilling = await withOrgContext(org.orgId, () => snapshotTimeBillRates(org.orgId, [entry], { dryRun: true }))
     assert.ok(preservedBilling.has(entry))
     assert.equal(cmp(preservedBilling.get(entry)!, '80'), 0)
     await assert.rejects(resolveItemRate({ orgId: org.orgId, projectId: project, itemId: org.items.service,
       onDate: '2025-06-01', baseQuantity: '2' }), /No cost rates are configured/)
-    const audits = (await withOrgContext(org.orgId, () => db.execute<{ actor_id: string; changes: { laborPolicy: { before: null; after: Record<string, unknown> } } }>(sql`
+    const audits = await withOrgContext(org.orgId, () => db.execute<{ actor_id: string; changes: { laborPolicy: { before: null; after: Record<string, unknown> } } }>(sql`
       select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='item_rate_versions'
-       and row_id in (select id from item_rate_versions where org_id=${org.orgId} and rate_book_id=${bookId})`))).rows
+       and row_id in (select id from item_rate_versions where org_id=${org.orgId} and rate_book_id=${bookId})`, 'objects'))
     assert.equal(audits.length, 3)
     assert.ok(audits.every((row) => row.actor_id === actorId))
     assert.ok(audits.every(row => row.changes.laborPolicy.before === null && row.changes.laborPolicy.after.org_id === org.orgId))

@@ -28,15 +28,15 @@ async function listOpenItems(req: Request) {
   const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
      where id = ${partyId} and org_id = ${gate.user.orgId}
-  `))
-  if (!party.rows[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+  `, 'objects'))
+  if (!party[0]) return notFound("record")
+  const scopeDenied = guardSubsidiaryScope(gate, party[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
   if (subsidiaryId) {
     if (!isUuid(subsidiaryId)) return notFound('record')
     const entityDenied = guardSubsidiaryScope(gate, subsidiaryId)
     if (entityDenied) return entityDenied
-    if (!(await db.execute(sql`select id from subsidiaries where org_id = ${gate.user.orgId} and id = ${subsidiaryId} and is_active`)).rows[0]) return notFound('record')
+    if (!(await db.execute(sql`select id from subsidiaries where org_id = ${gate.user.orgId} and id = ${subsidiaryId} and is_active`, 'objects'))[0]) return notFound('record')
   }
 
   try {

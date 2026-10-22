@@ -35,7 +35,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:engine-db",
     `
-      export const db = { execute: async () => ({ rows: [] }) }
+      export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }
       export function ambientTenantOrgId() { return null }
       export function withBypass(_orgId, fn) { return fn(db) }
       export function withBypassContext(_ctx, fn) { return fn() }

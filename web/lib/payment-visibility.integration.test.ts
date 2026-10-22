@@ -459,21 +459,17 @@ for (const boundary of [
                 'a guessed foreign payment ID must not create a drawer',
               )
             } else if (boundary === 'posting rehome race') {
-              const revision = (
-                await db.execute<{ revision: string }>(
-                  sql`select (revision_seq)::text as revision from documents where id=${payment.id} and org_id=${org.orgId}`,
-                )
-              ).rows[0]!.revision
-              const targetLine = (
-                await db.execute<{ id: string }>(sql`
+              const revision = (await db.execute<{ revision: string }>(
+                  sql`select (revision_seq)::text as revision from documents where id=${payment.id} and org_id=${org.orgId}`, 'objects',
+                ))[0]!.revision
+              const targetLine = (await db.execute<{ id: string }>(sql`
                   select jl.id
                     from journal_lines jl
                     join documents d on d.posted_entry_id = jl.entry_id and d.org_id = jl.org_id
                    where d.org_id = ${org.orgId} and d.id = ${docs.VISIBLE}
                      and jl.is_open_item and jl.amount < 0
                    limit 1
-                `)
-              ).rows[0]!.id
+                `, 'objects'))[0]!.id
               let unlockHolder = () => {}
               let signalHeld = () => {}
               const held = new Promise<void>((resolve) => { signalHeld = resolve })
@@ -519,8 +515,8 @@ for (const boundary of [
                            and query ilike '%from documents%'
                            and query ilike '%for update%'
                       ) as waiting
-                    `))
-                  waiting = lockState.rows[0]!.waiting
+                    `, 'objects'))
+                  waiting = lockState[0]!.waiting
                   if (!waiting) await new Promise((resolve) => setTimeout(resolve, 20))
                 }
               } finally {
@@ -540,17 +536,15 @@ for (const boundary of [
                 select status, subsidiary_id, posted_entry_id,
                        custom->'allocations' as allocations
                   from documents where org_id=${org.orgId} and id=${payment.id}
-              `)).rows[0]!
+              `, 'objects'))[0]!
               assert.equal(persisted.status, 'draft')
               assert.equal(persisted.subsidiary_id, other)
               assert.equal(persisted.posted_entry_id, null)
               assert.deepEqual(persisted.allocations, [], 'rejected posting must not save the requested allocation')
             } else if (boundary === 'read revision race') {
-              const exact = (
-                await db.execute<{ revision: string }>(
-                  sql`select (revision_seq)::text as revision from documents where id=${payment.id} and org_id=${org.orgId}`,
-                )
-              ).rows[0]!.revision
+              const exact = (await db.execute<{ revision: string }>(
+                  sql`select (revision_seq)::text as revision from documents where id=${payment.id} and org_id=${org.orgId}`, 'objects',
+                ))[0]!.revision
               let interleaved = false
               state.afterPaymentLoad = async () => {
                 interleaved = true
@@ -716,11 +710,9 @@ test(
       const row = await withOrgContext(
         org.orgId,
         async () =>
-          (
-            await db.execute<{ memo: string; custom: Record<string, unknown> }>(
-              sql`select memo,custom from documents where id=${payment.id} and org_id=${org.orgId}`,
-            )
-          ).rows[0]!,
+          (await db.execute<{ memo: string; custom: Record<string, unknown> }>(
+              sql`select memo,custom from documents where id=${payment.id} and org_id=${org.orgId}`, 'objects',
+            ))[0]!,
       )
       assert.equal(row.memo, 'waiting writer')
       assert.equal(

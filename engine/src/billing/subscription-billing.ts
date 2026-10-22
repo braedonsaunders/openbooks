@@ -86,8 +86,8 @@ export async function lockCustomerForScope(
      where c.org_id = ${orgId} and c.id = ${customerId}
        ${allowed}
      for share of c
-  `);
-  if (!customer.rows[0]) throw new ScopeNotFoundError();
+  `, "objects");
+  if (!customer[0]) throw new ScopeNotFoundError();
 }
 
 /** Lock and scope-check the customer whose entity determines subscription billing. */
@@ -109,8 +109,8 @@ export async function lockSubscriptionCustomerForScope(
      where s.org_id = ${orgId} and s.id = ${subscriptionId}
        ${allowed}
      for share of c
-  `);
-  if (!customer.rows[0]) throw new ScopeNotFoundError();
+  `, "objects");
+  if (!customer[0]) throw new ScopeNotFoundError();
 }
 
 /**
@@ -462,12 +462,12 @@ export interface ContractRecurring {
  * what it bills. Plan-priced subscriptions have no entry.
  */
 export async function contractRecurringAmounts(orgId: string, asOf: string): Promise<Map<string, ContractRecurring>> {
-  const contracts = (await db.execute<{ subscriptionId: string; pinnedVersionId: string }>(sql`
+  const contracts = await db.execute<{ subscriptionId: string; pinnedVersionId: string }>(sql`
     select subscription_id as "subscriptionId", plan_version_id as "pinnedVersionId"
       from subscription_lifecycles where org_id = ${orgId}
-  `)).rows;
+  `, "objects");
   if (contracts.length === 0) return new Map();
-  const changes = (await db.execute<{
+  const changes = await db.execute<{
     subscriptionId: string; effectiveOn: string; seq: number; fromVersionId: string | null; toVersionId: string | null;
   }>(sql`
     select subscription_id as "subscriptionId", effective_on::text as "effectiveOn", amendment_number as seq,
@@ -475,10 +475,10 @@ export async function contractRecurringAmounts(orgId: string, asOf: string): Pro
            after_snapshot #>> '{lifecycle,planVersionId}' as "toVersionId"
       from subscription_amendments
      where org_id = ${orgId} and amendment_type = 'change_plan'
-  `)).rows;
-  const versions = (await db.execute<{ id: string; interval: Interval; intervalCount: number }>(sql`
+  `, "objects");
+  const versions = await db.execute<{ id: string; interval: Interval; intervalCount: number }>(sql`
     select id, interval, interval_count as "intervalCount" from subscription_plan_versions where org_id = ${orgId}
-  `)).rows;
+  `, "objects");
   const versionById = new Map(versions.map((version) => [version.id, version]));
   const changesBySubscription = new Map<string, PlanChangeFact[]>();
   for (const change of changes) {
@@ -486,13 +486,13 @@ export async function contractRecurringAmounts(orgId: string, asOf: string): Pro
     list.push({ effectiveOn: change.effectiveOn, seq: Number(change.seq), fromVersionId: change.fromVersionId, toVersionId: change.toVersionId });
     changesBySubscription.set(change.subscriptionId, list);
   }
-  const components = (await db.execute<{ subscriptionId: string; quantity: string | null; unitPrice: string | null }>(sql`
+  const components = await db.execute<{ subscriptionId: string; quantity: string | null; unitPrice: string | null }>(sql`
     select c.subscription_id as "subscriptionId", c.quantity::text as quantity, c.unit_price::text as "unitPrice"
       from subscription_components c
       join subscription_lifecycles l on l.org_id = c.org_id and l.subscription_id = c.subscription_id
      where c.org_id = ${orgId}
        and c.effective_from <= ${asOf}::date and (c.effective_to is null or c.effective_to >= ${asOf}::date)
-  `)).rows;
+  `, "objects");
   const linesBySubscription = new Map<string, Array<{ quantity: string; unitPrice: string }>>();
   for (const row of components) {
     if (row.quantity === null || row.unitPrice === null) continue;
@@ -672,7 +672,7 @@ async function resolveIncomeAccount(orgId: string, incomeAccountId: string | nul
   const account = (await db.execute<{ id: string }>(sql`
     select id from accounts where org_id = ${orgId} and id = ${incomeAccountId}
       and is_active and not is_summary for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!account) {
     throw new SubscriptionError("The configured billing income account must be an active, non-summary account in this organization");
   }
@@ -823,8 +823,8 @@ async function createSubscriptionInvoiceInTransaction(
     )];
     for (const itemId of itemIds) {
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`));
-      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`, "objects"));
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         throw new SubscriptionError("Inventory is disabled", 404);
       }
     }
@@ -839,8 +839,8 @@ async function createSubscriptionInvoiceInTransaction(
     )];
     for (const itemId of itemIds) {
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`));
-      if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+        select kind from items where id = ${itemId} and org_id = ${spec.orgId}`, "objects"));
+      if (item[0] && item[0].kind === "equipment_charge") {
         throw new SubscriptionError("Equipment is disabled", 404);
       }
     }
@@ -894,7 +894,7 @@ async function createSubscriptionInvoiceInTransaction(
         // refuses inside loadTaxComponentConfig; that refusal is preserved.
         const meta = (await db.execute<{ code: string; isActive: boolean }>(sql`
           select code, is_active as "isActive" from tax_codes
-           where id = ${taxCodeId} and org_id = ${spec.orgId}`)).rows[0];
+           where id = ${taxCodeId} and org_id = ${spec.orgId}`, "objects"))[0];
         if (meta && !meta.isActive) {
           throw new SubscriptionError(
             `tax code ${meta.code} is inactive on ${spec.invoiceDate}; refusing to invoice it as 0% tax — ` +
@@ -941,8 +941,8 @@ async function createSubscriptionInvoiceInTransaction(
             ${spec.currency}, 'draft', ${spec.subsidiaryId}, ${spec.locationId ?? null}, ${spec.memo}, ${netAmount}, ${taxTotal}, ${total},
             ${JSON.stringify(headerCustom)}::jsonb, ${spec.actorId})
     returning id
-  `));
-  const invoiceId = created.rows[0]!.id;
+  `, "objects"));
+  const invoiceId = created[0]!.id;
 
   for (const [index, preparedLine] of prepared.entries()) {
     // The line-level subledger entity is the service party: a service-entity
@@ -961,16 +961,16 @@ async function createSubscriptionInvoiceInTransaction(
             ${linePartyId},
             ${JSON.stringify(preparedLine.input.custom ?? {})}::jsonb, true, ${spec.actorId})
       returning id
-    `);
+    `, "objects");
     if (preparedLine.taxComponents.length) {
-      await persistLineTaxComponents(spec.orgId, line.rows[0]!.id, preparedLine.taxComponents, spec.actorId);
+      await persistLineTaxComponents(spec.orgId, line[0]!.id, preparedLine.taxComponents, spec.actorId);
     }
   }
 
   if (spec.renewalPeriod && kind === "customer_invoice") {
     // A renewal order is a service-term commitment. The renews edge relieves
     // native customer exposure without handing periodic stock to fulfillment.
-    const orders = (await db.execute<{id:string}>(sql`
+    const orders = await db.execute<{id:string}>(sql`
       select d.id from subscription_renewal_occurrences o
       join documents d on d.org_id=o.org_id and d.id=o.document_id
       where o.org_id=${spec.orgId} and o.subscription_id=${spec.renewalPeriod.subscriptionId}
@@ -979,10 +979,10 @@ async function createSubscriptionInvoiceInTransaction(
         and o.snapshot->'source'->'request'->'custom'->'subscriptionRenewal'->>'termEndsOn'>=${spec.renewalPeriod.endsOn}
         and d.party_id=${spec.customerId} and d.currency=${spec.currency}
         and d.subsidiary_id=${spec.subsidiaryId} for share of d
-    `)).rows;
+    `, "objects");
     if(orders.length>1) throw new SubscriptionError('Multiple accepted renewal orders cover this service period; review renewal agreement history');
     if(orders[0] && !(await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by)
-      values(${spec.orgId},${orders[0].id},${invoiceId},'renews',${spec.actorId}) returning id`)).rows[0]) throw new SubscriptionError('Renewal billing provenance could not be saved');
+      values(${spec.orgId},${orders[0].id},${invoiceId},'renews',${spec.actorId}) returning id`, "objects"))[0]) throw new SubscriptionError('Renewal billing provenance could not be saved');
   }
   let posted = false;
   if (spec.autoPost && !spec.consolidation) {
@@ -1025,7 +1025,7 @@ export async function resolveSubscriptionLineTax(
 ): Promise<{ taxCodeId: string | null; source: SubscriptionLineTaxSource | null }> {
   if (input.planTaxCodeId) {
     const usable = (await runner.execute<{ id: string }>(sql`
-      select id from tax_codes where id = ${input.planTaxCodeId} and org_id = ${orgId} and is_active`)).rows[0];
+      select id from tax_codes where id = ${input.planTaxCodeId} and org_id = ${orgId} and is_active`, "objects"))[0];
     if (!usable) {
       throw new SubscriptionError(
         "the billing plan names a tax code that is not active in this organization; " +
@@ -1047,10 +1047,10 @@ export async function resolveSubscriptionLineTax(
     // refusal below, never to silent zero.
     const partyCode = (await runner.execute<{ tax_code_id: string | null }>(sql`
       select tax_code_id from customer_roles
-       where org_id = ${orgId} and party_id = ${input.customerId} and is_active`)).rows[0]?.tax_code_id ?? null;
+       where org_id = ${orgId} and party_id = ${input.customerId} and is_active`, "objects"))[0]?.tax_code_id ?? null;
     if (partyCode) {
       const usable = (await runner.execute<{ id: string }>(sql`
-        select id from tax_codes where id = ${partyCode} and org_id = ${orgId} and is_active`)).rows[0];
+        select id from tax_codes where id = ${partyCode} and org_id = ${orgId} and is_active`, "objects"))[0];
       if (usable) return { taxCodeId: partyCode, source: "party" };
     }
   }
@@ -1058,7 +1058,7 @@ export async function resolveSubscriptionLineTax(
     select (exists(select 1 from customer_roles
                     where org_id = ${orgId} and party_id = ${input.customerId} and tax_code_id is not null)
             or exists(select 1 from items
-                       where org_id = ${orgId} and id = ${input.itemId} and tax_code_id is not null)) as named`)).rows[0]?.named === true;
+                       where org_id = ${orgId} and id = ${input.itemId} and tax_code_id is not null)) as named`, "objects"))[0]?.named === true;
   if (named) {
     throw new SubscriptionError(
       "the customer or item names tax that cannot be resolved to an active tax code in this organization; " +
@@ -1086,7 +1086,7 @@ async function billOne(
   // read and this claim must refuse instead of cutting a new invoice.
   const live = (await db.execute<{ status: string }>(sql`
     select status from subscriptions where id = ${sub.id} and org_id = ${sub.orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!live) throw new SubscriptionError("subscription not found");
   if (live.status === "canceled") {
     throw new SubscriptionError("subscription is canceled — set its status back to active before billing");
@@ -1116,8 +1116,8 @@ async function billOne(
        and pi.period_starts_on = ${guard.startsOn}
        and pi.period_ends_on = ${guard.endsOn} and pi.contract_revision = ${guard.revision}
      limit 1
-  `));
-  if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted", created: false };
+  `, "objects"));
+  if (prior[0]) return { invoiceId: prior[0].invoiceId, documentNumber: prior[0].documentNumber, posted: prior[0].status === "posted", created: false };
   // The charge bills through the payer hierarchy on the billing date: the
   // header carries the payer (AR) and the billing entity, the lines carry
   // the service party (and the service entity across legal entities), and a
@@ -1278,14 +1278,14 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
          and case (o.settings->'features'->>'subscriptionBilling') when 'true' then true when 'false' then false else false end
          and (l.id is null or case (o.settings->'features'->>'advancedSubscriptions') when 'true' then true when 'false' then false else false end)
          ${orgScope}
-    `)),
+    `, "objects")),
   );
 
   // Orgs whose business day cannot be read (a misconfigured calendar) fail
   // per org, not per tick: their subscriptions surface the failure through
   // last_error and the loop continues with the next tenant.
   const orgDateFailures = new Map<string, string>();
-  for (const row of due.rows) {
+  for (const row of due) {
     let today = asOf ?? orgBusinessDates.get(row.orgId);
     if (!today) {
       const dateFailure = orgDateFailures.get(row.orgId);
@@ -1346,10 +1346,10 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
              set next_bill_on = ${advanced}, current_period_start = ${row.nextBillOn}, last_billed_at = now()
            where id = ${row.id} and org_id = ${row.orgId} and next_bill_on = ${row.nextBillOn} and status = 'active'
           returning id
-        `));
-        if (!claimed.rows.length) return null; // another tick won it
-        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`));
-        const s = r.rows[0];
+        `, "objects"));
+        if (!claimed.length) return null; // another tick won it
+        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${row.id} and s.org_id = ${row.orgId} limit 1`, "objects"));
+        const s = r[0];
         if (!s) throw new SubscriptionError("subscription vanished");
         // Engine-initiated: explicit null (the repository system identity)
         // plus the scheduler source marker — never a row id, never a historic
@@ -1431,14 +1431,14 @@ export async function billSubscriptionNow(
         from subscriptions s join orgs o on o.id = s.org_id
         left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
        where s.id = ${subscriptionId} and s.org_id = ${orgId}
-    `)),
+    `, "objects")),
   );
-  if (!meta.rows[0]) throw new SubscriptionError("subscription not found");
-  if (meta.rows[0].advancedLifecycle && !meta.rows[0].advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
+  if (!meta[0]) throw new SubscriptionError("subscription not found");
+  if (meta[0].advancedLifecycle && !meta[0].advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
   const gen = await withOrg(orgId, async () => {
     await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, allowedSubsidiaryIds);
-    const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`));
-    const s = r.rows[0];
+    const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`, "objects"));
+    const s = r[0];
     if (!s) throw new SubscriptionError("subscription not found");
     return billOne(s, s.nextBillOn, s.nextBillOn, s.currentPeriodStart, { actorId, source: "bill_now" });
   });
@@ -1615,8 +1615,8 @@ export async function runSubscriptionCatchUp(
            set next_bill_on = ${advanced}, current_period_start = ${periodStart}, last_billed_at = now()
          where id = ${subscriptionId} and org_id = ${orgId} and next_bill_on = ${periodStart} and status = 'active'
         returning id
-      `)));
-      return moved.rows.length > 0;
+      `, "objects")));
+      return moved.length > 0;
     };
     const billThis =
       input.mode === "post_all" ||
@@ -1638,7 +1638,7 @@ export async function runSubscriptionCatchUp(
        where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}
          and pi.period_starts_on = ${periodStart}
        order by d.created_at desc limit 1
-    `)).rows[0]);
+    `, "objects"))[0]);
     if (already) {
       if (!(await advancePast())) continue; // another worker advanced it; recompute
       results.push({
@@ -1656,10 +1656,10 @@ export async function runSubscriptionCatchUp(
              set next_bill_on = ${advanced}, current_period_start = ${periodStart}, last_billed_at = now()
            where id = ${subscriptionId} and org_id = ${orgId} and next_bill_on = ${periodStart} and status = 'active'
           returning id
-        `));
-        if (!claimed.rows.length) return null; // another worker won it
-        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`));
-        const s = r.rows[0];
+        `, "objects"));
+        if (!claimed.length) return null; // another worker won it
+        const r = (await db.execute<SubRow>(sql`${SUB_SELECT} where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1`, "objects"));
+        const s = r[0];
         if (!s) throw new SubscriptionError("subscription vanished");
         return billOne(s, periodStart, periodStart, periodStart, { actorId: input.actorId, source: "catch_up" }, {
           autoPost: postThis,
@@ -1674,7 +1674,7 @@ export async function runSubscriptionCatchUp(
            where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}
              and pi.period_starts_on = ${periodStart}
            order by d.created_at desc limit 1
-        `)).rows[0]);
+        `, "objects"))[0]);
         results.push({
           periodStart,
           status: "replayed",
@@ -1746,9 +1746,9 @@ type SubDetail = SubRow & {
 /** Refuse a subscription id the caller's organization does not own. */
 async function requireSubscriptionInOrg(orgId: string, subscriptionId: string): Promise<void> {
   const meta = await withOrgContext(orgId, async () =>
-    (await db.execute<{ id: string }>(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`)),
+    (await db.execute<{ id: string }>(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")),
   );
-  if (!meta.rows[0]) throw new SubscriptionError("subscription not found");
+  if (!meta[0]) throw new SubscriptionError("subscription not found");
 }
 
 /**
@@ -1783,8 +1783,8 @@ export async function loadSubRow(subscriptionId: string, orgId: string): Promise
       left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
       join orgs o on o.id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1
-  `));
-  const d = r.rows[0];
+  `, "objects"));
+  const d = r[0];
   if (!d) throw new SubscriptionError("subscription not found");
   return d;
 }

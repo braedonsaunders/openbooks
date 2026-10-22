@@ -135,8 +135,8 @@ test(
       const kept = await withBypassContext(async () => {
         const r = await db.execute<{ count: number; active: boolean }>(sql`
           select count(*)::int as count, bool_and(is_active) as active
-            from sftp_servers where id = ${fixture.serverId} and org_id = ${fixture.orgId}`);
-        return r.rows[0]!;
+            from sftp_servers where id = ${fixture.serverId} and org_id = ${fixture.orgId}`, "objects");
+        return r[0]!;
       });
       assert.equal(kept.count, 1);
       assert.equal(kept.active, true);

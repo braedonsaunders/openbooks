@@ -162,12 +162,13 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           if (isInsertStatement(query) && !state.insideOrgTransaction) {
             state.outOfTransactionInsertStatements =
               (state.outOfTransactionInsertStatements ?? 0) + 1
           }
-          return executeOnConnection(query)
+          return Promise.resolve(executeOnConnection(query)).then(inMode)
         },
         insert() {
           state.rootInsertCalls++
@@ -178,12 +179,13 @@ const mockSources = new Map<string, string>([
           const pending = { documents: [], lines: [] }
           try {
             const result = await callback({
-              execute(query) {
+              execute(query, mode) {
+                const inMode = (result) => (mode === 'objects' ? result.rows : result)
                 if (isInsertStatement(query) && !state.insideOrgTransaction) {
                   state.outOfTransactionInsertStatements =
                     (state.outOfTransactionInsertStatements ?? 0) + 1
                 }
-                return executeOnConnection(query)
+                return Promise.resolve(executeOnConnection(query)).then(inMode)
               },
               insert(target) {
                 if (target === schema.documents) {

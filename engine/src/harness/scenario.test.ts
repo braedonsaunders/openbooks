@@ -158,8 +158,8 @@ test("inventory-subledger-gl-tieout fails when layers are rewritten while the co
     await db.execute(sql`
       update journal_entries set status = 'posted', posted_at = now() where id = ${probeEntryId}`);
     const dr = await db.execute<{ n: string }>(sql`
-      select count(*) n from journal_lines where entry_id = ${probeEntryId}`);
-    assert.equal(Number(dr.rows[0]!.n), 2);
+      select count(*) n from journal_lines where entry_id = ${probeEntryId}`, "objects");
+    assert.equal(Number(dr[0]!.n), 2);
 
     const cp = await runScenarioForOrg(org.orgId, { at: org.date });
     const check = invCheck(cp);

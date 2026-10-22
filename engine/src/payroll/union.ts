@@ -33,8 +33,8 @@ export async function upsertUnionFringe(
     const agreement = (await tx.execute<{ id: string; name: string; remittance_party_id: string | null }>(sql`
       select id, name, remittance_party_id from union_agreements
        where org_id = ${orgId} and id = ${input.agreementId}
-    `));
-    if (!agreement.rows[0]) throw new PayrollError("union agreement not found");
+    `, "objects"));
+    if (!agreement[0]) throw new PayrollError("union agreement not found");
     if (!input.liabilityAccountId) {
       throw new PayrollError("a union fringe needs a liability account");
     }
@@ -49,7 +49,7 @@ export async function upsertUnionFringe(
                                   created_by, updated_by)
       values (${orgId}, ${componentCode}, ${input.name}, ${kind}, 'fixed_amount', false, false, false,
               false, ${taxTreatment}, ${input.expenseAccountId ?? null},
-              ${input.liabilityAccountId}, ${agreement.rows[0].remittance_party_id},
+              ${input.liabilityAccountId}, ${agreement[0].remittance_party_id},
               ${input.sequence ?? 300}, ${actorId}, ${actorId})
       on conflict (org_id, country, code) do update
         set name = excluded.name, tax_treatment = excluded.tax_treatment,
@@ -59,8 +59,8 @@ export async function upsertUnionFringe(
             updated_by = ${actorId}, updated_at = now()
       where pay_components.org_id = ${orgId}
       returning id
-    `));
-    const componentId = component.rows[0]!.id;
+    `, "objects"));
+    const componentId = component[0]!.id;
     const today = await businessTodayInTx(tx, orgId);
     // Retain historical and group-only policy choices. An initial default may
     // fill only an unconfigured component or the gap before its first future default.
@@ -81,14 +81,14 @@ export async function upsertUnionFringe(
             and (treatment.worker_comp_group_id is not null or treatment.effective_from <= ${today}::date)
        )
       returning id::text as id, effective_from::text as effective_from, effective_to::text as effective_to
-    `);
-    if (statutoryTreatment.rows[0]) {
+    `, "objects");
+    if (statutoryTreatment[0]) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
-        values (${orgId}, 'pay_component_statutory_treatments', ${statutoryTreatment.rows[0].id}, 'insert', ${actorId},
+        values (${orgId}, 'pay_component_statutory_treatments', ${statutoryTreatment[0].id}, 'insert', ${actorId},
           ${JSON.stringify({
             before: null,
-            after: { payComponentId: componentId, workerCompGroupId: null, programExclusions: [], vacationable: false, effectiveFrom: statutoryTreatment.rows[0].effective_from, effectiveTo: statutoryTreatment.rows[0].effective_to },
+            after: { payComponentId: componentId, workerCompGroupId: null, programExclusions: [], vacationable: false, effectiveFrom: statutoryTreatment[0].effective_from, effectiveTo: statutoryTreatment[0].effective_to },
             reason: 'Initial contribution-program and employer-levy treatment created for the union pay component.',
           })}::jsonb)
       `);
@@ -98,8 +98,8 @@ export async function upsertUnionFringe(
           select 1 from pay_component_statutory_treatments treatment
            where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId}
         ) as exists
-      `);
-      if (existing.rows[0]?.exists !== true) {
+      `, "objects");
+      if (existing[0]?.exists !== true) {
         throw new PayrollError("the union pay component statutory history was not retained; reload Payroll Setup and retry");
       }
     }
@@ -118,8 +118,8 @@ export async function upsertUnionFringe(
             sequence = excluded.sequence, updated_by = ${actorId}, updated_at = now()
       where union_fringes.org_id = ${orgId}
       returning id
-    `));
-    return { fringeId: fringe.rows[0]!.id, componentId };
+    `, "objects"));
+    return { fringeId: fringe[0]!.id, componentId };
   });
 }
 
@@ -143,8 +143,8 @@ export async function fringesForEmployee(
      where f.org_id = ${orgId} and f.agreement_id = ${agreementId} and f.is_active
        and (f.classification_id is null or f.classification_id = ${classificationId})
      order by f.sequence, f.code
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 export interface RemittanceReportRow {
@@ -175,8 +175,8 @@ export async function unionRemittanceReport(
        and s.pay_date between ${from} and ${to}
      group by f.code, f.name, f.paid_by, f.sequence
      order by f.sequence, f.code
-  `));
-  return r.rows.map((row) => ({
+  `, "objects"));
+  return r.map((row) => ({
     fringeCode: row.fringe_code, fringeName: row.fringe_name, paidBy: row.paid_by,
     employees: row.employees, hours: row.hours, amount: row.amount,
   }));

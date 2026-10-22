@@ -34,7 +34,7 @@ const { postDocument } = (await import('@openbooks/engine/ledger/posting-documen
 const AS_OF = '2026-04-30'
 
 async function addPeriod(org: ScratchOrg, year: number, month: number, first: string, last: string): Promise<void> {
-  const cal = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id
+  const cal = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!.id
   await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
     values (${randomUUID()}, ${org.orgId}, ${cal}, ${year}, ${month}, ${first.slice(0, 7)}, ${first}, ${last}, false)
     on conflict do nothing`)
@@ -65,15 +65,15 @@ async function postPayment(org: ScratchOrg, number: string, date: string, amount
 }
 
 async function controlLegId(entryId: string, accountId: string): Promise<string> {
-  const r = await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and account_id = ${accountId}`)
-  assert.ok(r.rows[0], 'expected the control leg to exist')
-  return r.rows[0]!.id
+  const r = await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and account_id = ${accountId}`, 'objects')
+  assert.ok(r[0], 'expected the control leg to exist')
+  return r[0]!.id
 }
 
 /** Settlement link between the payment's and the bill's AP control legs. */
 async function applyPayment(org: ScratchOrg, paymentDocId: string, billDocId: string, amount: string, appliedOn: string): Promise<void> {
-  const pay = (await db.execute<{ posted_entry_id: string }>(sql`select posted_entry_id from documents where id = ${paymentDocId}`)).rows[0]!
-  const bill = (await db.execute<{ posted_entry_id: string }>(sql`select posted_entry_id from documents where id = ${billDocId}`)).rows[0]!
+  const pay = (await db.execute<{ posted_entry_id: string }>(sql`select posted_entry_id from documents where id = ${paymentDocId}`, 'objects'))[0]!
+  const bill = (await db.execute<{ posted_entry_id: string }>(sql`select posted_entry_id from documents where id = ${billDocId}`, 'objects'))[0]!
   await db.execute(sql`insert into applications (org_id, from_line_id, to_line_id, amount, source_amount, applied_on,
       source_transaction_amount, source_transaction_currency, target_transaction_amount, target_transaction_currency,
       settlement_rate, settlement_rate_source, settlement_rate_reference)
@@ -84,8 +84,8 @@ async function applyPayment(org: ScratchOrg, paymentDocId: string, billDocId: st
 async function glControl(org: ScratchOrg, asOf: string = AS_OF): Promise<string> {
   const r = await db.execute<{ bal: string }>(sql`select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.posting_date <= ${asOf} and e.book_id = ${org.bookId}
-    where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ap}`)
-  return r.rows[0]!.bal
+    where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ap}`, 'objects')
+  return r[0]!.bal
 }
 
 test('AP aging nets a fully applied payment: no negative bucket, both views tie the control', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

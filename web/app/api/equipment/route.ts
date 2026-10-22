@@ -116,12 +116,12 @@ export const POST = defineRoute({
        where org_id = ${user.orgId} and is_active and not is_elimination
          ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
        order by (parent_id is null) desc, name
-    `);
+    `, "objects");
     const subsidiaryId = suppliedSubsidiaryId
-      ? (subsidiaries.rows.some((row) => String(row.id).toLowerCase() === suppliedSubsidiaryId)
+      ? (subsidiaries.some((row) => String(row.id).toLowerCase() === suppliedSubsidiaryId)
           ? suppliedSubsidiaryId
           : null)
-      : (subsidiaries.rows[0] ? String(subsidiaries.rows[0].id) : null);
+      : (subsidiaries[0] ? String(subsidiaries[0].id) : null);
     if (suppliedSubsidiaryId && !subsidiaryId) {
       return bad("invalid_subsidiary", "subsidiaryId");
     }
@@ -139,8 +139,8 @@ export const POST = defineRoute({
         select 1 from items
          where id = ${chargeItemId} and org_id = ${user.orgId}
            and kind = 'equipment_charge' and is_active
-      `);
-      if (!item.rows[0]) return bad("charge_item_not_found", "chargeItemId");
+      `, "objects");
+      if (!item[0]) return bad("charge_item_not_found", "chargeItemId");
     }
 
     const fixedAssetId = textOrNull(body.fixedAssetId)?.toLowerCase() ?? null;
@@ -152,9 +152,9 @@ export const POST = defineRoute({
       const found = await db.execute<{ subsidiary_id: string }>(sql`
         select subsidiary_id from fixed_assets
          where id = ${fixedAssetId} and org_id = ${user.orgId}
-      `);
-      if (!found.rows[0]) return bad("fixed_asset_not_found", "fixedAssetId");
-      if (String(found.rows[0].subsidiary_id) !== String(subsidiaryId)) {
+      `, "objects");
+      if (!found[0]) return bad("fixed_asset_not_found", "fixedAssetId");
+      if (String(found[0].subsidiary_id) !== String(subsidiaryId)) {
         return bad("subsidiary_mismatch", "fixedAssetId");
       }
     }
@@ -168,8 +168,8 @@ export const POST = defineRoute({
       const found = await db.execute(sql`
         select 1 from item_rate_books
          where id = ${rateBookId} and org_id = ${user.orgId} and is_active
-      `);
-      if (!found.rows[0]) return bad("rate_book_not_found", "rateBookId");
+      `, "objects");
+      if (!found[0]) return bad("rate_book_not_found", "rateBookId");
     }
 
     const priceRaw = body.purchasePrice ?? "0";
@@ -254,8 +254,8 @@ export const POST = defineRoute({
             const nextRes = await tx.execute<{ n: number }>(sql`
               select coalesce(max((regexp_replace(unit_number, '\\D', '', 'g'))::int), 0) + 1 as n
                 from equipment_units
-               where org_id = ${user.orgId} and unit_number ~ '^EQ-\\d+$'`);
-            unitNumber = `EQ-${String(Number(nextRes.rows[0]?.n ?? 1)).padStart(4, "0")}`;
+               where org_id = ${user.orgId} and unit_number ~ '^EQ-\\d+$'`, "objects");
+            unitNumber = `EQ-${String(Number(nextRes[0]?.n ?? 1)).padStart(4, "0")}`;
           }
           const inserted = await tx.execute<{ id: string }>(sql`
             insert into equipment_units
@@ -270,12 +270,12 @@ export const POST = defineRoute({
                ${capacityQuantity}, ${capacityUnit}, ${user.id}, ${user.id})
             -- A retry is accepted only after the existing audited create payload is verified below.
             on conflict (id) do nothing
-            returning id`);
-          if (!inserted.rows[0]) {
+            returning id`, "objects");
+          if (!inserted[0]) {
             const prior = await tx.execute<{ id: string }>(sql`
               select id from equipment_units
                where id = ${requestId} and org_id = ${user.orgId}
-            `);
+            `, "objects");
             const replay = await resolveIdempotentReplay(tx, {
               orgId: user.orgId,
               table: 'equipment_units',
@@ -283,7 +283,7 @@ export const POST = defineRoute({
               match: snapshot,
             })
             if (replay === 'conflict') {
-              throw new EquipmentIdempotencyConflict(prior.rows[0] ? 'changed-payload' : 'foreign-key')
+              throw new EquipmentIdempotencyConflict(prior[0] ? 'changed-payload' : 'foreign-key')
             }
             return { id: requestId, replayed: true };
           }

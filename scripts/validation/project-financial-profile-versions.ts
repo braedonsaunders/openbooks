@@ -79,8 +79,8 @@ async function main(): Promise<void> {
               and (v.effective_to is null or v.effective_to >= current_date)
          ) <> 1
       ) as unresolved_current
-  `));
-  const counts = population.rows[0]!;
+  `, "objects"));
+  const counts = population[0]!;
   for (const key of [
     "missing_versions",
     "overlaps",
@@ -110,8 +110,8 @@ async function main(): Promise<void> {
      )
      order by pt.org_id, pt.id
      limit 1
-  `));
-  const type = candidate.rows[0];
+  `, "objects"));
+  const type = candidate[0];
   if (!type) throw new Error("no project type available for rollback exercise");
 
   try {
@@ -175,8 +175,8 @@ async function main(): Promise<void> {
                and row_id = ${published.id}
                and action = 'insert'
           ) as audit_exists
-      `));
-      if (!evidence.rows[0]?.version_exists || !evidence.rows[0]?.audit_exists) {
+      `, "objects"));
+      if (!evidence[0]?.version_exists || !evidence[0]?.audit_exists) {
         throw new Error("controlled publication did not produce version and audit evidence");
       }
       throw ROLLBACK;
@@ -191,8 +191,8 @@ async function main(): Promise<void> {
      where org_id = ${type.org_id}
        and project_type_id = ${type.id}
        and effective_from = date '9999-01-01'
-  `));
-  if (persistedProbe.rows[0]?.n !== 0) {
+  `, "objects"));
+  if (persistedProbe[0]?.n !== 0) {
     throw new Error("rollback-only validation version persisted");
   }
 

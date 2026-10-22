@@ -21,16 +21,16 @@ async function setup() {
     (id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
     values(${filingId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001',
       'Canadian payroll account','regular',true,true,${fx.actorId},${fx.actorId})`);
-  const rows = (await db.execute(sql`update employee_payroll_profiles set cpp_exempt=false,ei_exempt=true,
+  const rows = await db.execute(sql`update employee_payroll_profiles set cpp_exempt=false,ei_exempt=true,
     filing_account_id=${filingId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}
-    returning employee_party_id`)).rows;
+    returning employee_party_id`, "objects");
   assert.equal(rows.length,1);
   return fx;
 }
 async function stub(fx: AdoptionFixture, documentId: string) {
-  const rows = (await db.execute<{ gross:string;factors:Record<string,string> }>(sql`
+  const rows = await db.execute<{ gross:string;factors:Record<string,string> }>(sql`
     select gross::text,factors from pay_stubs where org_id=${fx.orgId}
-      and pay_run_document_id=${documentId} and employee_party_id=${fx.employeeId}`)).rows;
+      and pay_run_document_id=${documentId} and employee_party_id=${fx.employeeId}`, "objects");
   assert.equal(rows.length,1);
   return rows[0]!;
 }
@@ -40,8 +40,8 @@ test("native separate bonus keeps full CPP with a tax income reference and later
     const fx = await withBypassContext(setup);
     try {
       await withOrgContext(fx.orgId,async () => {
-        const components = (await db.execute<{ id:string;system_key:string }>(sql`select id,system_key
-          from pay_components where org_id=${fx.orgId} and system_key in ('base_pay','bonus')`)).rows;
+        const components = await db.execute<{ id:string;system_key:string }>(sql`select id,system_key
+          from pay_components where org_id=${fx.orgId} and system_key in ('base_pay','bonus')`, "objects");
         const create = async (from:string,to:string,date:string,type:'regular'|'bonus',base:string,bonus:string) => {
           const run = await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
             periodStart:from,periodEnd:to,payDate:date,runType:type});
@@ -95,9 +95,9 @@ test("native backdated wage retro pays its pensionable delta without a CPP perio
         await commitPayRun(command);
         const original = await stub(fx,source.documentId);
         assert.equal(original.gross,'240.0000');
-        const closed = (await db.execute(sql`update labor_cost_rates set effective_to='2025-12-31'
+        const closed = await db.execute(sql`update labor_cost_rates set effective_to='2025-12-31'
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and effective_from='2020-01-01'
-          returning id`)).rows;
+          returning id`, "objects");
         assert.equal(closed.length,1);
         await seedPayrollWage(fx.orgId,fx.employeeId,fx.actorId,
           {currency:'CAD',rate:'35',basis:'hour',effectiveFrom:'2026-01-01'});

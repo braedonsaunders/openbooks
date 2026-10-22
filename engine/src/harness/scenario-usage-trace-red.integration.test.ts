@@ -36,7 +36,7 @@ async function usageInvoice(org: ScratchOrg, actor: string, tag: string) {
   await publishUsagePlanVersion(org.orgId, actor, version.id);
   const link = (await withBypassContext(() => db.execute<{ id: string }>(sql`insert into subscription_usage_links
     (org_id, subscription_id, customer_id, plan_version_id, meter_ids, effective_from, created_by, updated_by)
-    values (${org.orgId}, ${subscriptionId}, ${org.customerId}, ${version.id}, ARRAY[${meter.id}]::uuid[], ${org.date}, ${actor}, ${actor}) returning id`))).rows[0]!;
+    values (${org.orgId}, ${subscriptionId}, ${org.customerId}, ${version.id}, ARRAY[${meter.id}]::uuid[], ${org.date}, ${actor}, ${actor}) returning id`, "objects")))[0]!;
   await ingestUsageRecords(org.orgId, actor, [{ meterKey: meter.key, customerId: org.customerId, subscriptionId, occurredOn: org.date,
     quantity: "3", source: "api", idempotencyKey: randomUUID() }]);
   const run = await commitRateRun(org.orgId, actor, link.id, org.date, org.date);
@@ -47,8 +47,8 @@ async function usageInvoice(org: ScratchOrg, actor: string, tag: string) {
 async function post(org: ScratchOrg, actor: string, invoiceId: string): Promise<void> {
   await withBypassContext(async () => {
     const approved = await db.execute(sql`update documents set status = 'approved'
-      where org_id = ${org.orgId} and id = ${invoiceId} and status = 'draft' returning id`);
-    assert.equal(approved.rows.length, 1);
+      where org_id = ${org.orgId} and id = ${invoiceId} and status = 'draft' returning id`, "objects");
+    assert.equal(approved.length, 1);
   });
   await postDocument(invoiceId, { control: await loadRequiredControlAccounts(org.orgId) }, { audit: { actorId: actor, source: "usage-trace-test" } });
 }
@@ -63,7 +63,7 @@ test("usage-invoice-trace passes clean rated invoices and identifies a changed d
   try {
     const actor = await createScratchUser(org.orgId, "Usage trace reviewer", "admin");
     await withBypassContext(async () => {
-      const enabled = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
+      const enabled = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}',
         '{"subscriptionBilling":true,"usageBilling":true}'::jsonb, true) where id = ${org.orgId}`);
       assert.equal(enabled.rowCount, 1);
     });
@@ -75,14 +75,14 @@ test("usage-invoice-trace passes clean rated invoices and identifies a changed d
 
     const line = (await db.execute<{ id: string; number: number }>(sql`
       select id, line_number as number from document_lines
-       where org_id = ${org.orgId} and document_id = ${changedInvoice} order by line_number limit 1`)).rows[0]!;
-    const changed = await db.execute(sql`update document_lines set amount = amount + 0.01 where org_id = ${org.orgId} and id = ${line.id} returning id`);
-    assert.equal(changed.rows.length, 1);
+       where org_id = ${org.orgId} and document_id = ${changedInvoice} order by line_number limit 1`, "objects"))[0]!;
+    const changed = await db.execute(sql`update document_lines set amount = amount + 0.01 where org_id = ${org.orgId} and id = ${line.id} returning id`, "objects");
+    assert.equal(changed.length, 1);
     const header = await db.execute(sql`update documents d set subtotal = totals.subtotal, tax_total = totals.tax_total, total = totals.total
       from (select sum(amount) as subtotal, sum(tax_amount) as tax_total, sum(amount + tax_amount) as total
               from document_lines where org_id = ${org.orgId} and document_id = ${changedInvoice}) totals
-      where d.org_id = ${org.orgId} and d.id = ${changedInvoice} and d.status = 'draft' returning d.id`);
-    assert.equal(header.rows.length, 1);
+      where d.org_id = ${org.orgId} and d.id = ${changedInvoice} and d.status = 'draft' returning d.id`, "objects");
+    assert.equal(header.length, 1);
     await post(org, actor, changedInvoice);
 
     const cp = await runScenario(org.orgId, { at: org.date });

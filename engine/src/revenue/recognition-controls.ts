@@ -36,7 +36,7 @@ export async function controlRecognition(orgId: string, actorId: string, obligat
       left join documents d on d.org_id=dl.org_id and d.id=dl.document_id
       left join projects p on p.org_id=c.org_id and p.id=c.project_id
       where o.org_id=${orgId} and o.id=${obligationId} for update of o
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!row || !row.subsidiary_id) throw new ScopeNotFoundError();
     await lockActorCommandAuthority(tx, orgId, actorId, row.subsidiary_id, 'ar.post');
     if(!await lockAndCheckOrgFeature(tx,orgId,'revenueRecognition')) throw new RevenueRecognitionFeatureOffError();
@@ -51,14 +51,14 @@ export async function controlRecognition(orgId: string, actorId: string, obligat
         delivered_on=${input.action === 'deliver' ? input.effectiveOn : row.delivered_on},
         control_revision=control_revision+1, updated_at=now(), updated_by=${actorId}
       where org_id=${orgId} and id=${obligationId} and control_revision=${input.expectedRevision} returning id
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!next) throw new RevenueRecognitionError('Recognition control could not be saved; reopen the contract');
     const event = (await tx.execute(sql`
       insert into recognition_control_events (org_id,obligation_id,actor_id,action,reason,effective_on,evidence,before_state,after_state)
       select ${orgId},o.id,${actorId},${input.action},${input.reason.trim()},${input.effectiveOn ?? null},${input.evidence ?? null},${JSON.stringify(row)}::jsonb,
         jsonb_build_object('recognitionHeld',o.recognition_held,'holdReason',o.hold_reason,'deliveredOn',o.delivered_on,'revision',o.control_revision)
       from performance_obligations o where o.id=${obligationId} and o.org_id=${orgId} returning id
-    `)).rows[0];
+    `, 'objects'))[0];
     if (!event) throw new RevenueRecognitionError('Recognition evidence could not be recorded');
     return { id: obligationId, revision: row.control_revision + 1 };
   }));

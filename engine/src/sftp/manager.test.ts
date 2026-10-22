@@ -137,7 +137,12 @@ function sqlText(query: unknown): string {
 }
 
 function asRunner(execute: (query: unknown) => Promise<{ rows: unknown[] }>): SqlExecutor {
-  return { execute: execute as SqlExecutor["execute"] };
+  // 'objects' mode resolves to the rows themselves, raw mode to the result.
+  const modeAware = async (query: unknown, mode?: string) => {
+    const result = await execute(query);
+    return mode === "objects" ? result.rows : result;
+  };
+  return { execute: modeAware as SqlExecutor["execute"] };
 }
 
 const storedWinner = {

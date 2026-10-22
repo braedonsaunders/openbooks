@@ -9,11 +9,11 @@ export const validateServiceCredit: SetupEntityValidationHook = async ({ body, o
   const { PayrollError } = await import('@openbooks/engine/payroll/entitlements')
   let values = { ...body }
   if (rowId) {
-    const row = (await executor.execute<Record<string, unknown>>(sql`select * from payroll_service_credits where org_id=${orgId} and id=${rowId}`)).rows[0]
+    const row = (await executor.execute<Record<string, unknown>>(sql`select * from payroll_service_credits where org_id=${orgId} and id=${rowId}`, 'objects'))[0]
     if (!row) return 'Service credit no longer exists; reopen its employment'
     values = { ...Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value])), ...values }
   }
-  const employment = (await executor.execute<{ employer_subsidiary_id: string }>(sql`select employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${String(values.employmentId ?? '')}`)).rows[0]
+  const employment = (await executor.execute<{ employer_subsidiary_id: string }>(sql`select employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${String(values.employmentId ?? '')}`, 'objects'))[0]
   if (!employment) return 'Select an employment in this organization'
   try { await validateServiceCreditConfiguration(executor, orgId, values, rowId); return null }
   catch (error) { if (error instanceof PayrollError) return error.message; throw error }
@@ -26,7 +26,7 @@ export const validateEntitlementPlan: SetupEntityValidationHook = async ({ body,
   const { PayrollError } = await import('@openbooks/engine/payroll/entitlements')
   let values = { ...body }
   if (rowId) {
-    const row = (await executor.execute<Record<string, unknown>>(sql`select direction, payout_component_id, deposit_component_id from entitlement_plans where org_id=${orgId} and id=${rowId}`)).rows[0]
+    const row = (await executor.execute<Record<string, unknown>>(sql`select direction, payout_component_id, deposit_component_id from entitlement_plans where org_id=${orgId} and id=${rowId}`, 'objects'))[0]
     if (!row) return 'Entitlement plan no longer exists; reopen Benefits programs'
     values = {
       direction: row.direction,
@@ -44,7 +44,7 @@ export const validateLeavePayrollEntitlementMapping: SetupEntityValidationHook =
   const current = rowId
     ? (await executor.execute<{ leave_type_id: string; entitlement_plan_id: string; is_active: boolean }>(sql`
         select leave_type_id::text, entitlement_plan_id::text, is_active
-          from hrm_leave_payroll_entitlement_mappings where org_id = ${orgId} and id = ${rowId}`)).rows[0]
+          from hrm_leave_payroll_entitlement_mappings where org_id = ${orgId} and id = ${rowId}`, 'objects'))[0]
     : null
   if (rowId && !current) return 'The leave entitlement mapping no longer exists; reopen the leave type in Setup'
   const leaveTypeId = String(body.leaveTypeId ?? current?.leave_type_id ?? '')
@@ -60,16 +60,16 @@ export const validateLeavePayrollEntitlementMapping: SetupEntityValidationHook =
      where org_id = ${orgId} and leave_type_id = ${leaveTypeId}
        and status = 'consumed' and absence_date >= ${effectiveFrom}::date
      limit 1
-  `)).rows[0]
+  `, 'objects'))[0]
   if (alreadyCalculated) return 'This effective date would change leave already calculated in payroll; choose a later date, or release and recalculate the affected pay run before adding the mapping.'
   const leaveType = (await executor.execute<{ value_crossing: string }>(sql`
-    select value_crossing from hrm_leave_types where org_id = ${orgId} and id = ${leaveTypeId}`)).rows[0]
+    select value_crossing from hrm_leave_types where org_id = ${orgId} and id = ${leaveTypeId}`, 'objects'))[0]
   if (!leaveType) return 'Choose a leave type in this organization'
   if (leaveType.value_crossing !== 'bank_in') return 'Only a leave type that banks approved hours can map to an entitlement plan; change its payroll treatment to bank_in first.'
   if (!active) return null
   const plan = (await executor.execute<{ unit: string; direction: string; system_key: string | null; is_active: boolean }>(sql`
     select unit, direction, system_key, is_active from entitlement_plans
-     where org_id = ${orgId} and id = ${planId}`)).rows[0]
+     where org_id = ${orgId} and id = ${planId}`, 'objects'))[0]
   if (!plan?.is_active || plan.unit !== 'hours' || plan.direction !== 'accrue' || plan.system_key === 'vacation') {
     return 'Choose an active hours-based accruing entitlement plan other than Vacation in Benefits, then add a new effective-dated mapping.'
   }
@@ -82,11 +82,11 @@ export const validateVacationTerm: SetupEntityValidationHook = async ({ body, or
   const { PayrollError } = await import('@openbooks/engine/payroll/entitlements')
   let values = { ...body }
   if (rowId) {
-    const row = (await executor.execute<Record<string, unknown>>(sql`select * from payroll_vacation_terms where org_id=${orgId} and id=${rowId}`)).rows[0]
+    const row = (await executor.execute<Record<string, unknown>>(sql`select * from payroll_vacation_terms where org_id=${orgId} and id=${rowId}`, 'objects'))[0]
     if (!row) return 'Vacation terms no longer exist; reopen the employment'
     values = { ...Object.fromEntries(Object.entries(row).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value])), ...values }
   }
-  const employment = (await executor.execute<{ employer_subsidiary_id: string }>(sql`select employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${String(values.employmentId ?? '')}`)).rows[0]
+  const employment = (await executor.execute<{ employer_subsidiary_id: string }>(sql`select employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${String(values.employmentId ?? '')}`, 'objects'))[0]
   if (!employment) return 'Select an employment in this organization'
   try { await validateVacationTermConfiguration(executor, orgId, values, rowId); return null }
   catch (error) { if (error instanceof PayrollError) return error.message; throw error }
@@ -101,7 +101,7 @@ export const validateContributionWrite: SetupEntityValidationHook = async ({ ent
   const { BenefitsError, validateBenefitContributionConfiguration } = await import('@openbooks/engine/hrm/benefits')
   let values = { ...body }
   if (rowId) {
-    const existing = (await executor.execute<Record<string, unknown>>(sql`select * from ${sql.raw(entity.table)} where org_id=${orgId} and id=${rowId}`)).rows[0]
+    const existing = (await executor.execute<Record<string, unknown>>(sql`select * from ${sql.raw(entity.table)} where org_id=${orgId} and id=${rowId}`, 'objects'))[0]
     if (!existing) return 'Contribution configuration no longer exists; reopen its owning record'
     const camel = Object.fromEntries(Object.entries(existing).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value]))
     values = { ...camel, ...values, id: rowId }
@@ -116,7 +116,7 @@ export const validateContributionWrite: SetupEntityValidationHook = async ({ ent
     if (entity.key === 'benefit-enrollment-configuration' || entity.key === 'benefit-enrollment-terms') {
       const enrollmentId = entity.key === 'benefit-enrollment-configuration' ? rowId : String(values.enrollmentId ?? '')
       if (!enrollmentId) return 'Select the employee enrollment before editing its contribution terms'
-      const enrollment = (await executor.execute<{ employment_id: string; plan_id: string; status: string; submission_snapshot: unknown }>(sql`select employment_id,plan_id,status,submission_snapshot from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId} for update`)).rows[0]
+      const enrollment = (await executor.execute<{ employment_id: string; plan_id: string; status: string; submission_snapshot: unknown }>(sql`select employment_id,plan_id,status,submission_snapshot from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId} for update`, 'objects'))[0]
       if (!enrollment) return 'Employee enrollment no longer exists; reopen an enrollment in this organization'
       const authz = await getAuthz()
       if (!authz || authz.user.orgId !== orgId) return 'The current session cannot manage this organization; reopen Benefits'
@@ -124,7 +124,7 @@ export const validateContributionWrite: SetupEntityValidationHook = async ({ ent
       if (enrollment.status !== 'elected' || enrollment.submission_snapshot != null) return 'Submitted and active enrollment elections are immutable; open the active enrollment and choose Edit to create a dated replacement'
       if (entity.key === 'benefit-enrollment-configuration') {
         if (values.classKey != null && values.classKey !== '') {
-          const selected = (await executor.execute(sql`select id from hrm_benefit_contribution_classes where org_id=${orgId} and plan_id=${enrollment.plan_id} and class_key=${String(values.classKey)}`)).rows[0]
+          const selected = (await executor.execute(sql`select id from hrm_benefit_contribution_classes where org_id=${orgId} and plan_id=${enrollment.plan_id} and class_key=${String(values.classKey)}`, 'objects'))[0]
           if (!selected) return 'Choose an eligibility class from this enrollment plan'
         }
         return null
@@ -155,8 +155,8 @@ export const validateDepartmentExpenseWrite: SetupEntityValidationHook = async (
       effective_from: string | null; effective_to: string | null;
     }>(
       sql`select pay_component_id, department_id, effective_from::text, effective_to::text
-            from pay_component_department_expenses where id = ${rowId} and org_id = ${orgId}`,
-    )).rows[0]
+            from pay_component_department_expenses where id = ${rowId} and org_id = ${orgId}`, 'objects',
+    ))[0]
     : null
   if (rowId && !current) return 'Department expense mapping no longer exists; reopen pay-component setup'
   // The drawer posts an untouched date input as an empty string, which is
@@ -169,14 +169,14 @@ export const validateDepartmentExpenseWrite: SetupEntityValidationHook = async (
   const from = text(body.effectiveFrom) ?? current?.effective_from ?? null
   const through = body.effectiveTo === undefined ? current?.effective_to ?? null : text(body.effectiveTo)
   if (!componentId || !departmentId || !from) return null
-  const clashes = (await executor.execute<{ id: string }>(sql`
+  const clashes = await executor.execute<{ id: string }>(sql`
     select id from pay_component_department_expenses
      where org_id = ${orgId} and is_active
        and pay_component_id = ${componentId}::uuid and department_id = ${departmentId}::uuid
        and daterange(effective_from, coalesce(effective_to, 'infinity'::date), '[]')
          && daterange(${from}::date, coalesce(${through}::date, 'infinity'::date), '[]')
        and (${rowId ?? null}::uuid is null or id <> ${rowId ?? null}::uuid)
-  `)).rows
+  `, 'objects')
   if (clashes.length > 0) {
     return 'This component and department already have an active expense mapping overlapping those dates — close the existing window first (set its effective-to), then add the new one.'
   }

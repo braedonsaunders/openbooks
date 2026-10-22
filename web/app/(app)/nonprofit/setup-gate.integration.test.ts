@@ -45,8 +45,8 @@ test('nonprofit setup with the feature off redirects to the Features explanation
 })
 test('nonprofit cockpit surfaces a refused fund tie-out with its exact remedy', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await withCockpitReader('Tie-out reader', 'tieout-reader@scratch.test', true, async (org) => {
-    const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"nonprofit":true,"fundAccounting":true}'::jsonb,true) where id=${org.orgId} returning id`))
-    assert.equal(enabled.rows.length, 1)
+    const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"nonprofit":true,"fundAccounting":true}'::jsonb,true) where id=${org.orgId} returning id`, 'objects'))
+    assert.equal(enabled.length, 1)
     const data = await withOrgContext(org.orgId, () => loadNonprofit())
     assert.equal(data.hasTieout, false)
     const refusal = data.attention.find((entry) => entry.tone === 'negative')

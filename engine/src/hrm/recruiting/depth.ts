@@ -31,7 +31,7 @@ export async function loadFeatureState(
 ): Promise<Record<string, boolean>> {
   const row = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
     select settings->'features' as features from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.features ?? {};
 }
 
@@ -71,7 +71,7 @@ export async function notifyUsers(
               ${notice.body ?? null}, ${notice.href ?? null},
               ${args.actorId}, ${args.actorId})
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!id) {
       throw new RecruitingError(
         "REFUSED",
@@ -88,9 +88,9 @@ export async function userIdsForParties(
   partyIds: readonly string[],
 ): Promise<string[]> {
   if (partyIds.length === 0) return [];
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select id from users where org_id = ${orgId} and party_id = any(${pgUuidArray(partyIds)}::uuid[])
-  `)).rows;
+  `, "objects");
   return rows.map((row) => row.id);
 }
 

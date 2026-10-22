@@ -54,8 +54,8 @@ test(
         value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
       const profile = await db.execute(sql`update employee_payroll_profiles
         set filing_account_id=${filingAccountId}
-        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
-      assert.equal(profile.rows.length, 1, "the remittance fixture binds its employee to the declared CRA account");
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, "objects");
+      assert.equal(profile.length, 1, "the remittance fixture binds its employee to the declared CRA account");
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
 
@@ -261,7 +261,7 @@ test(
       const nulled = await db.transaction(async (tx) => {
         await tx.execute(sql`alter table pay_stub_lines disable trigger pay_stub_line_liability_guard`);
         try {
-          return await tx.execute(sql`
+          return await tx.execute<never>(sql`
             update pay_stub_lines set liability_account_id = null,
                    liability_account_source = 'unknown', liability_account_evidence = null
              where org_id = ${fx.orgId}

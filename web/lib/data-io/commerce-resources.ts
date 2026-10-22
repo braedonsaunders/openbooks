@@ -57,10 +57,10 @@ function explicitChannelSpendScope(ctx: import('./resource-core').ReadCtx | Writ
 async function resolveChannelId(orgId: string, channel: string, scope: ReadonlySet<string> | null): Promise<string> {
   const value = channel.trim()
   if (!value) throw new Error('channel is required')
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from sales_channels c
      where c.org_id = ${orgId} and (c.name = ${value} or c.id::text = ${value})
-       ${subsidiaryReadFilter(sql`c.subsidiary_id`, scope)}`)).rows
+       ${subsidiaryReadFilter(sql`c.subsidiary_id`, scope)}`, 'objects')
   if (rows.length === 0) throw new Error(`channel "${value}" not found — create it under Channels first`)
   if (rows.length > 1) {
     throw new Error(

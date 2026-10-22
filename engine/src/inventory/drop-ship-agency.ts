@@ -42,13 +42,13 @@ async function source(tx:SqlExecutor,orgId:string,lineId:string):Promise<Source>
     join items item on item.org_id=sale.org_id and item.id=sale.item_id
     where route.org_id=${orgId} and route.sales_order_line_id=${lineId} and sales_order.kind='sales_order' and purchase_order.kind='purchase_order'
       and purchase.item_id=sale.item_id and purchase_order.subsidiary_id=sales_order.subsidiary_id and purchase_order.currency=sales_order.currency
-    for share of route,sale,purchase,sales_order,purchase_order,item`)).rows[0]
+    for share of route,sale,purchase,sales_order,purchase_order,item`, 'objects'))[0]
   if(!row || !row.subsidiary_id)throw new ScopeNotFoundError()
   return row
 }
 async function account(tx:SqlExecutor,orgId:string,id:string|null,subsidiaryId:string) {
   if(!id || !isUuid(id))throw new AgencyError('Select an active vendor pass-through liability account for the agency assessment')
-  const row=(await tx.execute<{type:string}>(sql`select type from accounts where org_id=${orgId} and id=${id} and is_active and not is_summary for share`)).rows[0]
+  const row=(await tx.execute<{type:string}>(sql`select type from accounts where org_id=${orgId} and id=${id} and is_active and not is_summary for share`, 'objects'))[0]
   if(!row || !['liability_current_other','liability_long_term'].includes(row.type))throw new AgencyError('Choose an active posting liability account outside the AP control accounts for vendor pass-through consideration')
   try{await validateSubsidiaryRestrictions(tx,{orgId,ctx:await loadSubsidiaryContext(tx,orgId),lines:[{accountId:id,amount:'0',subsidiaryId}],docSubsidiaryId:subsidiaryId})}catch(error){throw new AgencyError(error instanceof Error ? error.message : 'Choose an account permitted for the assessed legal entity')}
 }
@@ -67,7 +67,7 @@ function validate(s:Source,input:Pick<AgencyAssessment,'controlsBeforeTransfer'|
 async function unused(tx:SqlExecutor,orgId:string,s:Source) {
   const used=(await tx.execute(sql`select 1 from documents child join document_links link on link.org_id=child.org_id and link.to_document_id=child.id
     where child.org_id=${orgId} and link.from_document_id in (${s.sales_order_id},${s.purchase_order_id})
-      and child.kind in ('customer_invoice','vendor_bill','purchase_receipt','sales_fulfillment') and child.status in ('approved','posted','voided') limit 1`)).rows.length
+      and child.kind in ('customer_invoice','vendor_bill','purchase_receipt','sales_fulfillment') and child.status in ('approved','posted','voided') limit 1`, 'objects')).length
   if(used)throw new AgencyError('Assess control before approving an invoice, bill or shipment confirmation; correct existing accounting through the controlled document reversal workflow and use a new order for the changed arrangement')
 }
 export async function proposeDropShipAssessment(orgId:string,actorId:string,input:AgencyAssessment) {
@@ -88,7 +88,7 @@ export async function proposeDropShipAssessment(orgId:string,actorId:string,inpu
 export async function applyDropShipAssessment(orgId:string,id:string,actorId:string) {
   return withOrgTransaction(orgId,async()=>{
     await lockActorCommandAuthority(db,orgId,actorId,null,'ar.post');await feature(db,orgId)
-    if(!(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${id} and domain='sales' and operation='drop_ship_control_assessment' for update`)).rows.length)throw new ScopeNotFoundError()
+    if(!(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${id} and domain='sales' and operation='drop_ship_control_assessment' for update`, 'objects')).length)throw new ScopeNotFoundError()
     const c=await loadFinancialChange(db,orgId,id);await lockActorCommandAuthority(db,orgId,actorId,c.subsidiary_id,'ar.post')
     if(c.status==='applied')return c.result!
     const s=await source(db,orgId,c.subject_id)
@@ -96,7 +96,7 @@ export async function applyDropShipAssessment(orgId:string,id:string,actorId:str
     const assessment=c.payload as unknown as AgencyAssessment;validate(s,assessment)
     if(!assessment.controlsBeforeTransfer)await account(db,orgId,assessment.passThroughAccountId,s.subsidiary_id)
     await unused(db,orgId,s)
-    if((await db.execute(sql`select id from financial_changes where org_id=${orgId} and domain='sales' and subject_id=${s.sales_line_id} and status='applied'`)).rows.length)
+    if((await db.execute(sql`select id from financial_changes where org_id=${orgId} and domain='sales' and subject_id=${s.sales_line_id} and status='applied'`, 'objects')).length)
       throw new AgencyError('An approved control assessment already governs this line; use a new order for a changed contractual arrangement')
     const result={presentation:assessment.controlsBeforeTransfer ? 'principal_gross' : 'agent_net',fee:add(s.sales_amount,neg(s.purchase_amount)),source:s}
     await completeFinancialChange(db,orgId,id,actorId,result);return result
@@ -106,7 +106,7 @@ export async function applyDropShipAssessment(orgId:string,id:string,actorId:str
  * reversals. No caller-provided custom flag can elect net revenue. */
 async function policy(tx:SqlExecutor,orgId:string,lineId:string,date:string) {
   const c=(await tx.execute<{id:string;effective_on:string;payload:AgencyAssessment;before_state:Source}>(sql`select id,effective_on::text,payload,before_state from financial_changes
-    where org_id=${orgId} and domain='sales' and subject_id=${lineId} and operation='drop_ship_control_assessment' and status='applied' for share`)).rows[0]
+    where org_id=${orgId} and domain='sales' and subject_id=${lineId} and operation='drop_ship_control_assessment' and status='applied' for share`, 'objects'))[0]
   if(!c)return null
   await feature(tx,orgId)
   const s=await source(tx,orgId,lineId)
@@ -119,7 +119,7 @@ async function policy(tx:SqlExecutor,orgId:string,lineId:string,date:string) {
 }
 export async function agencyForPurchaseLine(tx:SqlExecutor,orgId:string,lineId:string,date:string) {
   if(!isUuid(lineId))throw new AgencyError('The vendor bill requires a valid purchase-order source line — create it through native order conversion')
-  const route=(await tx.execute<{id:string}>(sql`select sales_order_line_id as id from drop_ship_lines where org_id=${orgId} and purchase_order_line_id=${lineId}`)).rows[0]
+  const route=(await tx.execute<{id:string}>(sql`select sales_order_line_id as id from drop_ship_lines where org_id=${orgId} and purchase_order_line_id=${lineId}`, 'objects'))[0]
   return route ? policy(tx,orgId,route.id,date) : null
 }
 export interface AgencyPosting {accountId:string;vendorAmount:string}
@@ -128,19 +128,19 @@ export interface AgencyPosting {accountId:string;vendorAmount:string}
  * than recomputed past rounding, determine each correcting posting. */
 export async function resolveAgencyPosting(tx:SqlExecutor,orgId:string,documentId:string):Promise<Map<string,AgencyPosting>> {
   const result=new Map<string,AgencyPosting>()
-  const document=(await tx.execute<{kind:string;document_date:string;subsidiary_id:string;currency:string;party_id:string|null}>(sql`select kind,document_date::text,subsidiary_id,currency,party_id from documents where org_id=${orgId} and id=${documentId}`)).rows[0]
+  const document=(await tx.execute<{kind:string;document_date:string;subsidiary_id:string;currency:string;party_id:string|null}>(sql`select kind,document_date::text,subsidiary_id,currency,party_id from documents where org_id=${orgId} and id=${documentId}`, 'objects'))[0]
   if(!document || !['customer_invoice','vendor_bill'].includes(document.kind))return result
-  const lines=(await tx.execute<{id:string;item_id:string;amount:string;quantity:string;unit:string|null;tax_amount:string;custom:Record<string,unknown>}>(sql`select id,item_id,amount::text,quantity::text,unit,tax_amount::text,custom from document_lines where org_id=${orgId} and document_id=${documentId} order by id`)).rows
+  const lines=await tx.execute<{id:string;item_id:string;amount:string;quantity:string;unit:string|null;tax_amount:string;custom:Record<string,unknown>}>(sql`select id,item_id,amount::text,quantity::text,unit,tax_amount::text,custom from document_lines where org_id=${orgId} and document_id=${documentId} order by id`, 'objects')
   const governed=(await tx.execute(sql`select 1 from document_links link join drop_ship_lines route on route.org_id=link.org_id
     join document_lines source_line on source_line.org_id=route.org_id and source_line.id=case when ${document.kind}='vendor_bill' then route.purchase_order_line_id else route.sales_order_line_id end
     join financial_changes change on change.org_id=route.org_id and change.subject_id=route.sales_order_line_id and change.domain='sales' and change.status='applied'
-    where link.org_id=${orgId} and link.to_document_id=${documentId} and link.from_document_id=source_line.document_id and link.link_type='bills' and change.payload->>'controlsBeforeTransfer'='false' limit 1`)).rows.length>0
+    where link.org_id=${orgId} and link.to_document_id=${documentId} and link.from_document_id=source_line.document_id and link.link_type='bills' and change.payload->>'controlsBeforeTransfer'='false' limit 1`, 'objects')).length>0
   const sourceIds=new Set<string>()
   for(const line of lines){
     const converted=line.custom?.convertedFrom as {lineId?:string}|undefined
     if(document.kind==='customer_invoice' && converted?.lineId)sourceIds.add(converted.lineId)
     const purchaseId=typeof line.custom?.purchaseOrderLineId==='string' ? line.custom.purchaseOrderLineId : (line.custom?.apCaptureEvidence as {purchaseOrderLineId?:string}|undefined)?.purchaseOrderLineId
-    if(document.kind==='vendor_bill' && purchaseId){const route=(await tx.execute<{id:string}>(sql`select sales_order_line_id as id from drop_ship_lines where org_id=${orgId} and purchase_order_line_id=${purchaseId}`)).rows[0];if(route)sourceIds.add(route.id)}
+    if(document.kind==='vendor_bill' && purchaseId){const route=(await tx.execute<{id:string}>(sql`select sales_order_line_id as id from drop_ship_lines where org_id=${orgId} and purchase_order_line_id=${purchaseId}`, 'objects'))[0];if(route)sourceIds.add(route.id)}
   }
   for(const id of [...sourceIds].sort())await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`agency-source:${orgId}:${id}`},0))`)
   for(const l of lines) {
@@ -149,14 +149,14 @@ export async function resolveAgencyPosting(tx:SqlExecutor,orgId:string,documentI
     if(governed && (document.kind==='customer_invoice' ? !converted?.lineId : !purchaseId))throw new AgencyError('Create the invoice or bill from its assessed order so every line retains its source-line evidence')
     if(governed){
       const sourceId=document.kind==='vendor_bill' ? purchaseId : converted?.lineId
-      if(!isUuid(sourceId) || !(await tx.execute(sql`select 1 from document_lines source_line join document_links link on link.org_id=source_line.org_id and link.from_document_id=source_line.document_id and link.to_document_id=${documentId} and link.link_type='bills' where source_line.org_id=${orgId} and source_line.id=${sourceId} and source_line.item_id=${l.item_id}`)).rows.length)throw new AgencyError('Every agency invoice or bill line must preserve the item and source line of its linked assessed order')
+      if(!isUuid(sourceId) || !(await tx.execute(sql`select 1 from document_lines source_line join document_links link on link.org_id=source_line.org_id and link.from_document_id=source_line.document_id and link.to_document_id=${documentId} and link.link_type='bills' where source_line.org_id=${orgId} and source_line.id=${sourceId} and source_line.item_id=${l.item_id}`, 'objects')).length)throw new AgencyError('Every agency invoice or bill line must preserve the item and source line of its linked assessed order')
     }
     const p=document.kind==='vendor_bill' ? (purchaseId ? await agencyForPurchaseLine(tx,orgId,purchaseId,document.document_date) : null) : (converted?.lineId ? await policy(tx,orgId,converted.lineId,document.document_date) : null)
     if(!p)continue
     const s=p.source,sourceDocumentId=document.kind==='vendor_bill' ? s.purchase_order_id : s.sales_order_id
     if(document.party_id!==(document.kind==='vendor_bill' ? s.purchase_party_id : s.sales_party_id) || document.subsidiary_id!==s.subsidiary_id || document.currency!==s.currency || l.item_id!==s.item_id || l.unit!==s.sales_unit || cmp(l.tax_amount,'0')!==0
       || (converted && converted.documentId!==sourceDocumentId))throw new AgencyError('The invoice or bill must preserve its assessed order’s item, unit, legal entity, currency and tax treatment')
-    if(!(await tx.execute(sql`select 1 from document_links where org_id=${orgId} and from_document_id=${sourceDocumentId} and to_document_id=${documentId} and link_type='bills'`)).rows.length)
+    if(!(await tx.execute(sql`select 1 from document_links where org_id=${orgId} and from_document_id=${sourceDocumentId} and to_document_id=${documentId} and link_type='bills'`, 'objects')).length)
       throw new AgencyError('Create this invoice or bill through the assessed order’s native conversion so its contractual source is retained')
     const q=canonicalDecimal(l.quantity,8)
     const sourceAmount=document.kind==='vendor_bill' ? s.purchase_amount : s.sales_amount
@@ -165,8 +165,8 @@ export async function resolveAgencyPosting(tx:SqlExecutor,orgId:string,documentI
     const previous=(await tx.execute<{gross:string;vendor:string;quantity:string}>(sql`select coalesce(sum(allocation.gross_amount),0)::text as gross,coalesce(sum(allocation.vendor_amount),0)::text as vendor,coalesce(sum(allocation.quantity),0)::text as quantity
       from drop_ship_agent_allocations allocation join documents prior on prior.org_id=allocation.org_id and prior.id=allocation.document_id
       where allocation.org_id=${orgId} and allocation.sales_order_line_id=${s.sales_line_id} and allocation.kind=${document.kind}
-        and (prior.status='posted' or prior.id=${documentId}) and allocation.document_line_id<>${l.id}`)).rows[0]!
-    const cancelled=(await tx.execute<{quantity:string}>(sql`select quantity_cancelled::text as quantity from document_lines where org_id=${orgId} and id=${document.kind==='vendor_bill' ? s.purchase_line_id : s.sales_line_id} for share`)).rows[0]!
+        and (prior.status='posted' or prior.id=${documentId}) and allocation.document_line_id<>${l.id}`, 'objects'))[0]!
+    const cancelled=(await tx.execute<{quantity:string}>(sql`select quantity_cancelled::text as quantity from document_lines where org_id=${orgId} and id=${document.kind==='vendor_bill' ? s.purchase_line_id : s.sales_line_id} for share`, 'objects'))[0]!
     const availableQuantity=toQuantityUnits(s.quantity)-toQuantityUnits(cancelled.quantity)
     const totalQuantity=toQuantityUnits(previous.quantity)+toQuantityUnits(q)
     if(totalQuantity>availableQuantity)throw new AgencyError('The assessed order quantity was cancelled or already billed — review the native order cancellation and use a new approved order for additional goods')
@@ -177,19 +177,19 @@ export async function resolveAgencyPosting(tx:SqlExecutor,orgId:string,documentI
       const delivered=(await tx.execute<{quantity:string}>(sql`select coalesce(sum(line.quantity),0)::text as quantity from document_lines line join documents receipt on receipt.org_id=line.org_id and receipt.id=line.document_id
         where line.org_id=${orgId} and receipt.kind='purchase_receipt' and receipt.status in ('approved','posted') and receipt.custom ? 'dropShipConfirmation'
           and line.custom->'receipt'->>'sourceLineId'=${s.purchase_line_id}
-          and receipt.subsidiary_id=${s.subsidiary_id} and receipt.currency=${s.currency}`)).rows[0]!.quantity
+          and receipt.subsidiary_id=${s.subsidiary_id} and receipt.currency=${s.currency}`, 'objects'))[0]!.quantity
       if(totalQuantity>toQuantityUnits(delivered))throw new AgencyError('Confirm the vendor shipment from the paired purchase order before recognizing the arranging fee for these quantities')
     }
     const vendor=document.kind==='vendor_bill' ? l.amount : add(fromUnits(roundDiv(toUnits(add(previous.gross,l.amount))*toUnits(s.purchase_amount),toUnits(s.sales_amount))),neg(previous.vendor))
-    const old=(await tx.execute<{vendor_amount:string;gross_amount:string;quantity:string;change_id:string}>(sql`select vendor_amount::text,gross_amount::text,quantity::text,change_id from drop_ship_agent_allocations where org_id=${orgId} and document_line_id=${l.id}`)).rows[0]
+    const old=(await tx.execute<{vendor_amount:string;gross_amount:string;quantity:string;change_id:string}>(sql`select vendor_amount::text,gross_amount::text,quantity::text,change_id from drop_ship_agent_allocations where org_id=${orgId} and document_line_id=${l.id}`, 'objects'))[0]
     if(old) {
       if(old.change_id!==p.change.id || cmp(old.gross_amount,l.amount)!==0 || cmp(old.quantity,q)!==0)throw new AgencyError('The stored agency allocation differs from this document — use a controlled reversal and replacement')
       result.set(l.id,{accountId:p.accountId,vendorAmount:old.vendor_amount});continue
     }
     if(cmp(vendor,'0')<0 || cmp(vendor,l.amount)>0)throw new AgencyError('Reconcile earlier agency invoice reversals before replacing this allocation; the resulting vendor entitlement cannot exceed the billed consideration')
     const inserted=await tx.execute(sql`insert into drop_ship_agent_allocations(org_id,document_line_id,document_id,sales_order_line_id,change_id,kind,gross_amount,vendor_amount,quantity)
-      values(${orgId},${l.id},${documentId},${s.sales_line_id},${p.change.id},${document.kind},${l.amount},${vendor},${q}) returning document_line_id`)
-    if(inserted.rows.length!==1)throw new AgencyError('The agency allocation could not be recorded — reload the document before retrying')
+      values(${orgId},${l.id},${documentId},${s.sales_line_id},${p.change.id},${document.kind},${l.amount},${vendor},${q}) returning document_line_id`, 'objects')
+    if(inserted.length!==1)throw new AgencyError('The agency allocation could not be recorded — reload the document before retrying')
     result.set(l.id,{accountId:p.accountId,vendorAmount:vendor})
   }
   return result
@@ -208,5 +208,5 @@ export async function isAgencyConfirmationLine(tx:SqlExecutor,orgId:string,recei
       and line.quantity>0 and line.quantity<=(change.before_state->>'purchase_quantity')::numeric
       and line.tax_amount=0 and line.amount=round((change.before_state->>'purchase_amount')::numeric*line.quantity/(change.before_state->>'purchase_quantity')::numeric,4)
       and exists(select 1 from document_links link where link.org_id=receipt.org_id and link.to_document_id=receipt.id and link.link_type='fulfills'
-        and link.from_document_id::text=change.before_state->>'purchase_order_id') for share of change`)).rows.length===1
+        and link.from_document_id::text=change.before_state->>'purchase_order_id') for share of change`, 'objects')).length===1
 }

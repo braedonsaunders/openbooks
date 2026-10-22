@@ -60,15 +60,16 @@ function executor(
   state.__calendarRefusal = null
   const queries: { sql: string; params: unknown[] }[] = []
   const exec = {
-    execute: async (query: Parameters<typeof dialect.sqlToQuery>[0]) => {
+    execute: async (query: Parameters<typeof dialect.sqlToQuery>[0], mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
       const compiled = dialect.sqlToQuery(query)
       queries.push(compiled)
       if (compiled.sql.includes('from worker_employments e'))
-        return { rows: members }
+        return inMode({ rows: members })
       const employee = compiled.params.find(
         (value) => typeof value === 'string' && Object.hasOwn(days, value),
       ) as string
-      return { rows: days[employee] ?? [] }
+      return inMode({ rows: days[employee] ?? [] })
     },
   } as unknown as SqlExecutor
   return { exec, queries }

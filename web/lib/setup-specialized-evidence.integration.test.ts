@@ -24,10 +24,10 @@ const authenticate = (org: ScratchOrg) => seedSetupActor(org, state);
 const send = setupWriteSender({ POST, PATCH, DELETE });
 const json = (value: unknown) => JSON.parse(JSON.stringify(value));
 async function row(table: string, id: string) {
-  return (await db.execute(sql`select * from ${sql.identifier(table)} where id=${id}`)).rows[0];
+  return (await db.execute(sql`select * from ${sql.identifier(table)} where id=${id}`, 'objects'))[0];
 }
 async function evidence(id: string, action: string) {
-  return (await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where row_id=${id} and action=${action} order by at desc limit 1`)).rows[0]!;
+  return (await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where row_id=${id} and action=${action} order by at desc limit 1`, 'objects'))[0]!;
 }
 
 for(const entity of ['accounting-books','item-rate-books'] as const){
@@ -92,7 +92,7 @@ async function rejectAudit(table:string,actorId:string,predicate:string){
  return async()=>{await db.execute(sql.raw(`drop trigger if exists "${name}" on audit_log; drop function if exists public."${name}"();`));};
 }
 async function snapshot(table:string,orgId:string){
- return (await db.execute(sql`select (select jsonb_agg(to_jsonb(r) order by id) from ${sql.identifier(table)} r where org_id=${orgId}) as rows,(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${orgId} and table_name=${table}) as audits`)).rows;
+ return await db.execute(sql`select (select jsonb_agg(to_jsonb(r) order by id) from ${sql.identifier(table)} r where org_id=${orgId}) as rows,(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${orgId} and table_name=${table}) as audits`, 'objects');
 }
 for(const entity of ['accounting-books','item-rate-books'] as const){
  for(const method of ['POST','PATCH'] as const){
@@ -149,7 +149,7 @@ for (const method of ['POST','PATCH'] as const) {
    const response=await send(method,'accounting-books',{...body,...(id?{id}:{})});
    assert.equal(response.status,400);
    assert.match((await response.json()).error,/reconciliation.*controlled book conversion/i);
-   assert.deepEqual((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows,[{id:org.bookId}]);
+   assert.deepEqual(await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`, 'objects'),[{id:org.bookId}]);
   } finally {state.gate=null;await dropScratchOrg(org.orgId);}
  });
 }
@@ -194,7 +194,7 @@ test('the first reconciliation and primary reassignment serialize on the shared 
    waiting=Boolean((await db.execute<{waiting:boolean}>(sql`select exists(select 1 from pg_locks
     where locktype='advisory' and not granted and mode='ExclusiveLock'
      and classid=((hashtextextended(${key},0)>>32)&4294967295)::oid
-     and objid=(hashtextextended(${key},0)&4294967295)::oid) as waiting`)).rows[0]!.waiting);
+     and objid=(hashtextextended(${key},0)&4294967295)::oid) as waiting`, 'objects'))[0]!.waiting);
    if(!waiting) await new Promise(resolve=>setTimeout(resolve,10));
   }
   assert.ok(waiting,'setup waits on the shared accounting-book fence');
@@ -202,7 +202,7 @@ test('the first reconciliation and primary reassignment serialize on the shared 
   const response=await attempt;
   assert.equal(response.status,400);
   assert.match((await response.json()).error,/controlled book conversion/);
-  assert.deepEqual((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows,[{id:org.bookId}]);
+  assert.deepEqual(await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`, 'objects'),[{id:org.bookId}]);
  } finally {
   release();await Promise.allSettled([holding,attempt].filter(Boolean));
   state.gate=null;await dropScratchOrg(org.orgId);

@@ -31,7 +31,7 @@ async function openItemAccount(
         join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id and jl.is_open_item
        where d.org_id = ${orgId} and d.id = ${target.documentId}
        order by jl.line_number
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
   if (!row) throw new PspAutomationError("the settled document has no posted receivable open item");
   return row.account_id;
 }
@@ -95,7 +95,7 @@ export async function refundAgainstCredit(
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.source_document_id = ${refundId} and jl.is_open_item
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!refundLine) throw new PspAutomationError("refund receipt posted without an open item");
     // Convergent retry: an existing application for these endpoints settles the
     // run without a second write.
@@ -103,7 +103,7 @@ export async function refundAgainstCredit(
       select id from applications
        where org_id = ${orgId} and from_line_id = ${creditLineId} and to_line_id = ${refundLine.id}
          and unapplied_at is null
-    `)).rows[0];
+    `, "objects"))[0];
     if (!settled) {
       await applyStandaloneCredits(
         orgId,
@@ -148,7 +148,7 @@ export async function applyPaymentToOpenItem(
 ): Promise<string> {
   const appliedOn = await businessToday(orgId);
   await lockApplicationEvidence(db, orgId, [opts.fromLineId, opts.toLineId]);
-  const endpoints = (await db.execute<{
+  const endpoints = await db.execute<{
     id: string; currency: string; amount: string; txn_amount: string; account_id: string; party_id: string | null;
     subsidiary_id: string; book_id: string; status: string; is_open_item: boolean; functional_currency: string;
     source_document_id: string | null; document_number: string; document_kind: string;
@@ -169,7 +169,7 @@ export async function applyPaymentToOpenItem(
            and (a.from_line_id = jl.id or a.to_line_id = jl.id)
       ) ap on true
      where jl.org_id = ${orgId} and (jl.id = ${opts.fromLineId} or jl.id = ${opts.toLineId})
-  `)).rows;
+  `, "objects");
   const from = endpoints.find((row) => row.id === opts.fromLineId);
   const to = endpoints.find((row) => row.id === opts.toLineId);
   if (!from || !to) {
@@ -232,7 +232,7 @@ export async function openCreditCovering(
   currency: string,
   refundedAmount: string,
 ): Promise<{ documentId: string; lineId: string; open: string } | null> {
-  const credits = (await db.execute<{ id: string; open_balance: string }>(sql`
+  const credits = await db.execute<{ id: string; open_balance: string }>(sql`
     select id, open_balance::text
       from documents
      where org_id = ${orgId} and kind = 'customer_credit' and status = 'posted'
@@ -240,7 +240,7 @@ export async function openCreditCovering(
        and subsidiary_id = ${subsidiaryId}
        and open_balance::numeric >= ${refundedAmount}::numeric
      order by document_date asc limit 1
-  `)).rows;
+  `, "objects");
   const credit = credits[0];
   if (!credit) return null;
   const line = (await db.execute<{ id: string; open: string }>(sql`
@@ -251,7 +251,7 @@ export async function openCreditCovering(
      where jl.org_id = ${orgId} and je.source_document_id = ${credit.id} and jl.is_open_item
      group by jl.id having (abs(jl.amount) - coalesce(sum(a.source_amount), 0)) >= ${refundedAmount}::numeric
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!line) return null;
   return { documentId: credit.id, lineId: line.id, open: line.open };
 }
@@ -260,7 +260,7 @@ export async function openCreditCovering(
  *  check fails the run instead of reporting a posted refund the attempt
  *  never reflects. */
 export async function setAttemptRefunded(orgId: string, attemptId: string, receiptId: string | null): Promise<void> {
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<never>(sql`
     update payment_attempts set status = 'refunded', updated_at = now()
      where id = ${attemptId} and org_id = ${orgId} and status in ('succeeded', 'initiated', 'refunded')
   `));
@@ -268,7 +268,7 @@ export async function setAttemptRefunded(orgId: string, attemptId: string, recei
     throw new PspAutomationError("payment attempt left the refundable state while posting");
   }
   if (receiptId !== null) {
-    const relinked = (await db.execute(sql`
+    const relinked = (await db.execute<never>(sql`
       update payment_attempts set payment_document_id = ${receiptId}, updated_at = now()
        where id = ${attemptId} and org_id = ${orgId}
     `));

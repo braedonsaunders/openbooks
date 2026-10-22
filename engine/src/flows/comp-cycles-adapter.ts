@@ -94,8 +94,8 @@ async function loadCycle(subjectId: string): Promise<CycleRow | null> {
            created_by, revision
       from hrm_comp_cycles
      where id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const hrmCompCycleFlowAdapter: FlowSubjectAdapter =
@@ -122,12 +122,10 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter =
     async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
       const cycle = await loadCycle(subjectId);
       if (!cycle) return null;
-      const fingerprint = (
-        await db.execute<{
+      const fingerprint = (await db.execute<{
           value: string;
         }>(sql`select public.compensation_cycle_approval_fingerprint(c) as value
-      from hrm_comp_cycles c where c.org_id=${cycle.org_id} and c.id=${subjectId}`)
-      ).rows[0]?.value;
+      from hrm_comp_cycles c where c.org_id=${cycle.org_id} and c.id=${subjectId}`, "objects"))[0]?.value;
       if (!fingerprint)
         throw new Error(
           "The compensation cycle is unavailable for submission.",
@@ -189,8 +187,8 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter =
        where org_id = ${orgId} and status = 'in_review'
        order by created_at desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
 
     async releaseApproval(

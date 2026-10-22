@@ -164,7 +164,7 @@ async function loadVersions(
   from: string,
   to: string,
 ) {
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     id: string;
     subsidiary_id: string | null;
     week_starts_on: number;
@@ -183,7 +183,7 @@ async function loadVersions(
        and (effective_to is null or effective_to >= ${from}::date)
        and (subsidiary_id is null or subsidiary_id = ${subsidiaryId})
      order by effective_from
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -268,7 +268,7 @@ async function calendarSubject(
   if (subsidiaryId) {
     const facts = (await tx.execute<{ name: string; country: string }>(sql`
       select name, country from subsidiaries where id = ${subsidiaryId} and org_id = ${orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (facts) {
       return { text: `subsidiary "${facts.name}"`, subsidiaryCountry: facts.country };
     }
@@ -276,7 +276,7 @@ async function calendarSubject(
   }
   const org = (await tx.execute<{ name: string }>(sql`
     select name from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   return { text: org ? `the organization "${org.name}"` : `the organization ${orgId}`, subsidiaryCountry: null };
 }
 

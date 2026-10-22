@@ -85,11 +85,11 @@ export async function loadMatch(
        where s.org_id = ${orgId} and l.org_id = ${orgId}
          and l.currency = a.currency_restriction and l.match_status = 'unmatched'
        group by s.account_id
-    `),
+    `, 'objects'),
     listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }),
   ]))
 
-  const unmatchedByAccount = new Map(unmatchedRes.rows.map((r) => [r.id, Number(r.unmatched)]))
+  const unmatchedByAccount = new Map(unmatchedRes.map((r) => [r.id, Number(r.unmatched)]))
   // The picker names only the caller's own subsidiaries' accounts: a shared
   // account (or another entity's) is not offered, so it cannot be selected.
   const visibleRefs = accountRefs.filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId))
@@ -128,8 +128,8 @@ export async function loadMatch(
     select id, through_date, statement_balance, currency, status from reconciliations
      where org_id = ${orgId} and account_id = ${account.id} and status <> 'signed_off'
      order by created_at desc limit 1
-  `))
-  const session = openRes.rows[0] ?? null
+  `, 'objects'))
+  const session = openRes[0] ?? null
 
   let data = null
   let totals = null
@@ -171,19 +171,19 @@ export async function loadMatch(
           from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
           left join bank_statement_lines dup on dup.id = l.possible_duplicate_of and dup.org_id = l.org_id
          where ${stmtWhere} order by l.posted_on, l.line_number
-         limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}`),
-      db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${stmtWhere}`),
+         limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}`, 'objects'),
+      db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${stmtWhere}`, 'objects'),
       db.execute<CountRow>(sql`
         select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
          where s.account_id = ${account.id} and s.org_id = ${orgId}
-           and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.possible_duplicate_of is not null`),
+           and l.currency = ${session.currency} and l.match_status = 'unmatched' and l.possible_duplicate_of is not null`, 'objects'),
       db.execute<GlRow>(sql`
         select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount, coalesce(jl.memo, je.memo) as memo, p.display_name as party
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
           left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
          where ${glWhere} order by je.posting_date, jl.line_number
-         limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}`),
-      db.execute<CountRow>(sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id where ${glWhere}`),
+         limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}`, 'objects'),
+      db.execute<CountRow>(sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id where ${glWhere}`, 'objects'),
       // Review: auto matches with low confidence in this session
       db.execute<ReviewRow>(sql`
         select m.id, m.statement_line_id, m.confidence, m.match_reasons,
@@ -195,32 +195,32 @@ export async function loadMatch(
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
            and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7
-         order by m.confidence asc, sl.posted_on limit 50`),
+         order by m.confidence asc, sl.posted_on limit 50`, 'objects'),
       db.execute<CountRow>(sql`
         select count(*) as n
           from reconciliation_matches m
          where m.reconciliation_id = ${session.id} and m.org_id = ${orgId}
-           and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7`),
+           and m.matched_by = 'auto' and m.confidence is not null and m.confidence <= 0.7`, 'objects'),
       db.execute<StatementRow>(sql`
         select l.id, l.posted_on, l.amount, l.description
           from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
          where ${exWhere} order by l.posted_on, l.line_number
-         limit ${exParams.perPage} offset ${(exParams.page - 1) * exParams.perPage}`),
-      db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${exWhere}`),
+         limit ${exParams.perPage} offset ${(exParams.page - 1) * exParams.perPage}`, 'objects'),
+      db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${exWhere}`, 'objects'),
     ]))
 
     // Offset-account suggestions from confirmed history for the visible
     // lines; the workspace shows one only where no rule suggests a posting.
-    const offsetSuggestions = await offsetSuggestionsFromHistory(orgId, account.id, stmt.rows)
+    const offsetSuggestions = await offsetSuggestionsFromHistory(orgId, account.id, stmt)
 
     data = {
-      stmtRows: stmt.rows, stmtTotal: Number(stmtC.rows[0]?.n ?? 0), stmtParams,
+      stmtRows: stmt, stmtTotal: Number(stmtC[0]?.n ?? 0), stmtParams,
       offsetSuggestions,
       canRecordPayments: can(authz, 'ar.pay') || can(authz, 'ap.pay'),
-      flaggedTotal: Number(flaggedC.rows[0]?.n ?? 0),
-      glRows: gl.rows, glTotal: Number(glC.rows[0]?.n ?? 0), glParams,
-      reviewRows: review.rows, reviewTotal: Number(reviewC.rows[0]?.n ?? 0),
-      excludedRows: ex.rows, excludedTotal: Number(exC.rows[0]?.n ?? 0), exParams,
+      flaggedTotal: Number(flaggedC[0]?.n ?? 0),
+      glRows: gl, glTotal: Number(glC[0]?.n ?? 0), glParams,
+      reviewRows: review, reviewTotal: Number(reviewC[0]?.n ?? 0),
+      excludedRows: ex, excludedTotal: Number(exC[0]?.n ?? 0), exParams,
     }
   }
 

@@ -181,8 +181,8 @@ export async function lockEmploymentScopeRows(
        and e.id in (${sql.join(ordered.map(id => sql`${id}::uuid`), sql`, `)})
      order by e.id
      for update of e
-  `);
-  const byId = new Map(result.rows.map(row => [row.id, row]));
+  `, "objects");
+  const byId = new Map(result.map(row => [row.id, row]));
   const visible: LockedEmploymentScope[] = [];
   for (const id of ordered) {
     const row = byId.get(id);
@@ -213,39 +213,39 @@ export async function lockScopeRow(
   const result = kind === "party"
     ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
         select p.id, p.subsidiary_id as "subsidiaryId" from parties p
-         where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`)
+         where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`, "objects")
     : kind === "equipment_unit"
       ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
           select e.id, e.subsidiary_id as "subsidiaryId" from equipment_units e
-           where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`)
+           where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`, "objects")
       : kind === "project"
       ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
           select p.id, p.subsidiary_id as "subsidiaryId" from projects p
-           where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`)
+           where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`, "objects")
       : kind === "document"
         ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
             select d.id, d.subsidiary_id as "subsidiaryId" from documents d
-             where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`)
+             where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`, "objects")
         : kind === "fixed_asset"
           ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
               select a.id, a.subsidiary_id as "subsidiaryId" from fixed_assets a
-               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`)
+               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`, "objects")
         : kind === "equipment"
           ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
               select e.id, e.subsidiary_id as "subsidiaryId" from equipment_units e
-               where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`)
+               where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`, "objects")
         : kind === "account"
           ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
               select a.id, a.subsidiary_id as "subsidiaryId" from accounts a
-               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`)
+               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`, "objects")
           : kind === "department"
             ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
                 select d.id, d.subsidiary_id as "subsidiaryId" from departments d
-                 where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`)
+                 where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`, "objects")
             : await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
                 select e.id, e.employer_subsidiary_id as "subsidiaryId" from worker_employments e
-                 where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`);
-  const row = result.rows[0];
+                 where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`, "objects");
+  const row = result[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiaryId, options)) throw new ScopeNotFoundError();
   return row;
 }
@@ -316,8 +316,8 @@ export async function refuseFixedAssetRehomeWithEquipment(
   const linked = await tx.execute<{ id: string }>(sql`
     select id from equipment_units
      where org_id = ${orgId} and fixed_asset_id = ${assetId}
-     limit 1`);
-  if (linked.rows.length > 0) throw new FixedAssetEquipmentLinkConflict();
+     limit 1`, "objects");
+  if (linked.length > 0) throw new FixedAssetEquipmentLinkConflict();
 }
 
 /**

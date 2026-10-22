@@ -67,8 +67,8 @@ async function ledgerBankBalance(org: ScratchOrg): Promise<string> {
        and je.book_id = (select b.id from accounting_books b
                           where b.org_id = ${org.orgId} and b.is_primary
                           order by b.created_at limit 1)
-     where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.bank}`);
-  return rows.rows[0]!.balance;
+     where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.bank}`, "objects");
+  return rows[0]!.balance;
 }
 
 /**

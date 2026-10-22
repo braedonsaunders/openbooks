@@ -420,8 +420,8 @@ export const GET = defineRoute({
            ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by e.posting_date desc, e.entry_number
          limit 10
-      `);
-      return NextResponse.json({ entries: entries.rows });
+      `, "objects");
+      return NextResponse.json({ entries });
     }
     // Document picker for manual line links: posted documents the caller may
     // see whose number contains the query, newest first. A restricted caller
@@ -438,8 +438,8 @@ export const GET = defineRoute({
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by d.document_date desc, d.document_number
          limit 10
-      `);
-      return NextResponse.json({ documents: docs.rows });
+      `, "objects");
+      return NextResponse.json({ documents: docs });
     }
     // Batch journal suggestion: posted entries whose revenue lines total
     // exactly the batch's charge total, for the operator to confirm. A
@@ -492,8 +492,8 @@ export const GET = defineRoute({
           left join accounts fx on fx.org_id = b.org_id and fx.id = b.fx_account_id
          where b.org_id = ${orgId} and b.id = ${batchId}${scopedBatch}
          limit 1
-      `);
-      const row = batch.rows[0] as Record<string, unknown> | undefined;
+      `, "objects");
+      const row = batch[0] as Record<string, unknown> | undefined;
       if (!row) return notFound('record')
       // Drafts use the same entity and primary-book resolution as posting;
       // posted history keeps the actual journal identity even if Setup changes.
@@ -513,7 +513,7 @@ export const GET = defineRoute({
       const book = postingBookId
         ? (await db.execute<{ name: string }>(sql`
             select name from accounting_books where org_id = ${orgId} and id = ${postingBookId}
-          `)).rows[0]
+          `, "objects"))[0]
         : undefined;
       const review = {
         postingEntityId: postingEntityId ?? null,
@@ -535,7 +535,7 @@ export const GET = defineRoute({
           left join documents d on d.org_id = l.org_id and d.id = l.document_id
          where l.org_id = ${orgId} and l.batch_id = ${batchId}
          order by l.line_number
-      `);
+      `, "objects");
       // The payout drawer reads the deposit tie-out and any in-transit
       // accruals beside the lines: both derive from posted state, so the
       // detail carries them instead of growing new endpoints.
@@ -547,8 +547,8 @@ export const GET = defineRoute({
           from psp_payout_accruals
          where org_id = ${orgId} and batch_id = ${batchId}
          order by accrual_date
-      `);
-      return NextResponse.json({ batch: { ...row, ...review }, lines: lines.rows, tieout, accruals: accruals.rows });
+      `, "objects");
+      return NextResponse.json({ batch: { ...row, ...review }, lines, tieout, accruals });
     }
     const subsidiaryFilter = gate.allowedSubsidiaryIds
       ? gate.allowedSubsidiaryIds.size > 0
@@ -570,8 +570,8 @@ export const GET = defineRoute({
         from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination${subsidiaryIdFilter}
        order by name
-    `)
-      : { rows: [] };
+    `, "objects")
+      : [];
     const [batches, configs] = await Promise.all([
       db.execute(sql`
       select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
@@ -584,12 +584,12 @@ export const GET = defineRoute({
              memo, line_count as "lineCount"
         from psp_settlement_batches where org_id = ${orgId}${subsidiaryFilter}
        order by settlement_date desc, created_at desc
-    `),
+    `, "objects"),
       // Provider configuration is organization-wide and has no subsidiary_id.
       // Do not expose it to a restricted caller when its account defaults may
       // span entities; setup administrators can use the dedicated setup route.
       gate.allowedSubsidiaryIds
-        ? Promise.resolve({ rows: [] })
+        ? Promise.resolve([])
         : db.execute(sql`
       select id, provider, display_name as "displayName", is_enabled as "isEnabled",
              default_bank_account_id as "defaultBankAccountId",
@@ -601,12 +601,12 @@ export const GET = defineRoute({
              default_chargeback_loss_account_id as "defaultChargebackLossAccountId",
              default_dispute_fee_account_id as "defaultDisputeFeeAccountId"
         from psp_provider_configs where org_id = ${orgId}
-    `),
+    `, "objects"),
     ])
     return NextResponse.json({
-      batches: batches.rows,
-      configs: configs.rows,
-      subsidiaries: subsidiaries.rows,
+      batches,
+      configs,
+      subsidiaries,
     });
   },
 })

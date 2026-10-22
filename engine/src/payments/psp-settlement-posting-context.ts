@@ -37,8 +37,8 @@ export async function validateSettlementPostingAccounts(
     select id, subsidiary_id from accounts
      where org_id = ${orgId} and is_active and not is_summary
        and id = any(${`{${ids.join(",")}}`}::uuid[])
-  `));
-  const found = new Map(rows.rows.map((r) => [r.id.toLowerCase(), r.subsidiary_id]));
+  `, "objects"));
+  const found = new Map(rows.map((r) => [r.id.toLowerCase(), r.subsidiary_id]));
   const missing = ids.find((id) => !found.has(id.toLowerCase()));
   if (missing) {
     const label = accounts.find((a) => a.id === missing)?.label ?? "settlement";
@@ -64,8 +64,8 @@ export async function primaryBookId(orgId: string): Promise<string> {
   const r = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
      limit 1 for share
-  `));
-  const id = r.rows[0]?.id;
+  `, "objects"));
+  const id = r[0]?.id;
   if (!id) throw new PspSettlementError("no active primary posting book");
   return id;
 }

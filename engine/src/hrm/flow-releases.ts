@@ -21,8 +21,8 @@ async function loadCycleOrg(
 ): Promise<{ org_id: string } | null> {
   if (!isUuid(subjectId)) return null;
   const result = await db.execute<{ org_id: string }>(sql`
-    select org_id from hrm_comp_cycles where id = ${subjectId} and org_id = ${orgId}`);
-  return result.rows[0] ?? null;
+    select org_id from hrm_comp_cycles where id = ${subjectId} and org_id = ${orgId}`, "objects");
+  return result[0] ?? null;
 }
 
 type ReleaseArgs = {

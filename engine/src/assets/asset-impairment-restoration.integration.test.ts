@@ -20,8 +20,8 @@ async function glBalance(orgId: string, accountId: string): Promise<bigint> {
   const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`));
-  return toUnits(r.rows[0]!.bal);
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 /** Nine open months beyond the seeded July period, so a ten-month life leaves unposted lines to rebuild. */
@@ -66,11 +66,9 @@ async function seedDepreciatedAsset(
             ${org.date}, ${org.date}, 1000, 0, 'straight_line', 10,
             'full_month', '{}'::jsonb, ${actorId}, ${actorId})`);
   if (opts.futurePeriods) {
-    const calendarId = (
-      await db.execute<{ id: string }>(sql`
+    const calendarId = (await db.execute<{ id: string }>(sql`
         select fiscal_calendar_id as id from accounting_periods
-         where org_id = ${org.orgId} limit 1`)
-    ).rows[0]!.id;
+         where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
     for (const [fiscalYear, periodNumber, name, startsOn, endsOn] of FUTURE_PERIODS) {
       await db.execute(sql`
         insert into accounting_periods
@@ -185,20 +183,20 @@ test(
       // The whole remeasurement evidence surface: schedule lines (posted and
       // future), lifecycle events, and revaluation journals.
       const evidence = async () => ({
-        lines: (await db.execute<{ sequence: number; planned: string; posted: string | null }>(sql`
+        lines: await db.execute<{ sequence: number; planned: string; posted: string | null }>(sql`
           select l.sequence, l.planned_amount::text as planned, l.posted_amount::text as posted
             from depreciation_schedule_lines l
             join depreciation_schedules s
               on s.id = l.schedule_id and s.org_id = l.org_id
            where s.org_id = ${org.orgId} and s.asset_id = ${assetId}
              and s.book_id = ${org.bookId}
-           order by l.sequence`)).rows,
-        events: (await db.execute<{ n: number }>(sql`
+           order by l.sequence`, "objects"),
+        events: await db.execute<{ n: number }>(sql`
           select count(*)::int as n from asset_events
-           where org_id = ${org.orgId} and asset_id = ${assetId}`)).rows,
-        journals: (await db.execute<{ n: number }>(sql`
+           where org_id = ${org.orgId} and asset_id = ${assetId}`, "objects"),
+        journals: await db.execute<{ n: number }>(sql`
           select count(*)::int as n from journal_entries
-           where org_id = ${org.orgId} and origin = 'revaluation'`)).rows,
+           where org_id = ${org.orgId} and origin = 'revaluation'`, "objects"),
       });
       const futurePlanned = async () =>
         (await evidence()).lines.filter((line) => line.posted === null).map((line) => line.planned);

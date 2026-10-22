@@ -218,8 +218,8 @@ async function departmentLabels(orgId: string, ids: readonly string[]): Promise<
   if (ids.length === 0) return new Map()
   const rows = await db.execute<DepartmentLabelRow>(sql`
     select id, name from departments where org_id = ${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-  `)
-  return new Map(rows.rows.map((row) => [row.id, row.name]))
+  `, 'objects')
+  return new Map(rows.map((row) => [row.id, row.name]))
 }
 
 function selectedPeople(population: ReportPopulation, filters: ResourcingReportFilters): FactPerson[] {
@@ -405,7 +405,7 @@ export async function loadEngagementFacts(
   )
   const projectsById = await projectInfo(orgId, assignments.map((assignment) => assignment.projectId), allowedSubsidiaryIds)
   const settings = await laborCostingSettings(orgId)
-  const orgCurrency = (await db.execute<OrganizationCurrencyRow>(sql`select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? 'USD'
+  const orgCurrency = (await db.execute<OrganizationCurrencyRow>(sql`select base_currency from orgs where id = ${orgId}`, 'objects'))[0]?.base_currency ?? 'USD'
   const departmentNames = await departmentLabels(orgId, [...new Set(people.flatMap((person) => person.departmentId ? [person.departmentId] : []))])
   const output: Record<string, unknown>[] = []
   for (const assignment of assignments) {

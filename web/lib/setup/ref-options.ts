@@ -26,11 +26,11 @@ export async function loadAccounts(
     select id, number, name, type, subsidiary_id as "subsidiaryId",
       subsidiary_include_children as "includeChildren" from accounts
      where org_id = ${orgId} and not is_summary and is_active
-     order by number nulls last, name`);
+     order by number nulls last, name`, 'objects');
   const ctx = await loadSubsidiaryContext(db, orgId)
   const targets = [...ctx.byId.values()].filter((subsidiary) => subsidiary.isActive && !subsidiary.isElimination
     && (allowedSubsidiaryIds === null || allowedSubsidiaryIds.has(subsidiary.id)))
-  return r.rows.map((account) => ({
+  return r.map((account) => ({
     value: account.id as string,
     label: `${account.number ? `${account.number} · ` : ''}${account.name}`,
     accountType: account.type as string,
@@ -55,8 +55,8 @@ export async function loadVendors(
      join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
      where p.org_id = ${orgId} and p.is_active
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-     order by p.display_name`);
-  return vendors.rows as RefOption[]
+     order by p.display_name`, 'objects');
+  return vendors as RefOption[]
 }
 
 /** Options for a setup-entity ref source (id + code/name label). */
@@ -67,36 +67,36 @@ export async function loadEntityOptions(
   locale?: string,
 ): Promise<RefOption[]> {
   if (source === 'payroll-lineage-employers') {
-    return (await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
+    return await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
       where org_id=${orgId} and country='US' and not is_elimination
-        ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name,id`)).rows
+        ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name,id`, 'objects')
   }
   if (source === 'us-federal-filing-accounts') {
     // Retired registrations remain available for original-source qualification.
-    return (await db.execute<RefOption>(sql`select id::text as value, account_number || ' · ' || name as label,
+    return await db.execute<RefOption>(sql`select id::text as value, account_number || ' · ' || name as label,
       subsidiary_id::text as "scopeValue" from payroll_filing_accounts
       where org_id=${orgId} and country='US' and program_type='us_ein'
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-      order by name,id`)).rows
+      order by name,id`, 'objects')
   }
-  if (source === 'renewable-subscriptions') return (await db.execute<RefOption>(sql`
+  if (source === 'renewable-subscriptions') return await db.execute<RefOption>(sql`
     select s.id::text as value,p.display_name || ' · ' || plan.name as label from subscriptions s
     join parties p on p.org_id=s.org_id and p.id=s.customer_id join subscription_plans plan on plan.org_id=s.org_id and plan.id=s.plan_id
     join subscription_lifecycles l on l.org_id=s.org_id and l.subscription_id=s.id
     where s.org_id=${orgId} and s.status='active' and l.term_ends_on is not null
       ${subsidiaryVisibleFilter(sql`coalesce(p.subsidiary_id,(select id from subsidiaries where org_id=${orgId} and parent_id is null))`,allowedSubsidiaryIds)}
-    order by label,s.id`)).rows;
+    order by label,s.id`, 'objects');
   if (source === 'operating-profiles') {
-    return (await db.execute<RefOption>(sql`select id::text as value,name as label,family as "scopeValue" from operating_profiles where org_id=${orgId} and is_active and current_version_id is not null order by name,id`)).rows
+    return await db.execute<RefOption>(sql`select id::text as value,name as label,family as "scopeValue" from operating_profiles where org_id=${orgId} and is_active and current_version_id is not null order by name,id`, 'objects')
   }
   if (source === 'project-types') {
-    return (await db.execute<RefOption>(sql`select id::text as value,name as label from project_types where org_id=${orgId} order by name,id`)).rows
+    return await db.execute<RefOption>(sql`select id::text as value,name as label from project_types where org_id=${orgId} order by name,id`, 'objects')
   }
   if (source === 'subsidiaries') {
     const employers = await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
       where org_id=${orgId} and is_active and not is_elimination
-      ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name,id`)
-    return employers.rows
+      ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name,id`, 'objects')
+    return employers
   }
   if (source === 'compensation-currencies') {
     const { organizationCurrencyOptions } = await import('@openbooks/engine/organization/currencies')
@@ -115,25 +115,25 @@ export async function loadEntityOptions(
       join parties p on p.org_id=e.org_id and p.id=e.worker_party_id
       join subsidiaries s on s.org_id=e.org_id and s.id=e.employer_subsidiary_id
       where e.org_id=${orgId} ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowedSubsidiaryIds)}
-      order by p.display_name,e.id`)
-    return rows.rows
+      order by p.display_name,e.id`, 'objects')
+    return rows
   }
   if (source === 'approved-compensation-package-versions') {
     const rows = await db.execute<RefOption>(sql`select v.id::text as value,p.code || ' · ' || v.version::text || ' · ' || v.effective_from::text as label,
       p.id::text as "scopeValue" from payroll_compensation_versions v join payroll_compensation_packages p on p.org_id=v.org_id and p.id=v.package_id
       where v.org_id=${orgId} and v.status='approved' and p.status='active'
-      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by p.code,v.version desc,v.id`)
-    return rows.rows
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by p.code,v.version desc,v.id`, 'objects')
+    return rows
   }
   if (source === 'payroll-compensation-packages') {
     const rows = await db.execute<RefOption>(sql`select id::text as value,code || ' · ' || name as label from payroll_compensation_packages
-      where org_id=${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code,id`)
-    return rows.rows
+      where org_id=${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by code,id`, 'objects')
+    return rows
   }
   if (source === 'compensation-package-components') {
     const rows = await db.execute<RefOption>(sql`select id::text as value,code || ' · ' || name as label from pay_components
-      where org_id=${orgId} and is_active and system_key is null and kind in ('earning','deduction','contribution') order by code,id`)
-    return rows.rows
+      where org_id=${orgId} and is_active and system_key is null and kind in ('earning','deduction','contribution') order by code,id`, 'objects')
+    return rows
   }
   if (source === 'benefit-contribution-rules' || source === 'benefit-contribution-classes' || source === 'benefit-enrollment-rules' || source === 'benefit-recovery-deduction-rules' || source === 'benefit-recovery-premium-rules') {
     const classes = source === 'benefit-contribution-classes'
@@ -149,8 +149,8 @@ export async function loadEntityOptions(
       join hrm_benefit_plans p on p.org_id=c.org_id and p.id=c.plan_id
       ${enrollmentScoped ? sql`join hrm_benefit_enrollments e on e.org_id=c.org_id and e.plan_id=c.plan_id` : sql``}
       where c.org_id=${orgId} ${recoveryFilter} ${subsidiaryVisibleFilter(sql`p.employer_subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-      order by c.name,c.id`)
-    return rows.rows
+      order by c.name,c.id`, 'objects')
+    return rows
   }
   if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
   if (source === 'sales-channels') {
@@ -158,8 +158,8 @@ export async function loadEntityOptions(
     // reference list like `trades`: the channel picker in map/location forms.
     const channels = await db.execute(sql`
       select id as value, name as label from sales_channels
-       where org_id = ${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by name`);
-    return channels.rows as RefOption[]
+       where org_id = ${orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by name`, 'objects');
+    return channels as RefOption[]
   }
   // `vendors` names the parties+vendor_roles picker, not a registry entity:
   // without this branch the generic lookup below finds no entry and every
@@ -170,8 +170,8 @@ export async function loadEntityOptions(
     // convert between operator majors and storage minors exactly, from the
     // authoritative table rather than a client guess.
     const options = await db.execute(sql`
-      select code as value, name as label, minor_units as "minorUnits" from currencies order by code`);
-    return options.rows as RefOption[]
+      select code as value, name as label, minor_units as "minorUnits" from currencies order by code`, 'objects');
+    return options as RefOption[]
   }
   if (source === 'accounting-periods') {
     // Periods read as every period list labels them, from the fiscal position
@@ -181,15 +181,15 @@ export async function loadEntityOptions(
     const label = locale ? periodDisplayLabelSql(locale, 'p') : canonicalPeriodLabelSql('p')
     const periods = await db.execute(sql`
       select p.id as value, ${label} as label from accounting_periods p
-       where p.org_id = ${orgId} order by p.starts_on desc, p.period_number desc`);
-    return periods.rows as RefOption[]
+       where p.org_id = ${orgId} order by p.starts_on desc, p.period_number desc`, 'objects');
+    return periods as RefOption[]
   }
   if (source === 'items') {
     const items = await db.execute(sql`
       select id as value,
              case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
-        from items where org_id = ${orgId} and is_active order by code nulls last, name`);
-    return items.rows as RefOption[]
+        from items where org_id = ${orgId} and is_active order by code nulls last, name`, 'objects');
+    return items as RefOption[]
   }
   if (source === 'customers') {
     const customers = await db.execute(sql`
@@ -197,48 +197,44 @@ export async function loadEntityOptions(
        join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
        where p.org_id = ${orgId} and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       order by p.display_name`);
-    return customers.rows as RefOption[]
+       order by p.display_name`, 'objects');
+    return customers as RefOption[]
   }
   if (source === 'einvoice-customers') {
-    return (await db.execute<RefOption>(sql`
+    return await db.execute<RefOption>(sql`
       select p.id::text as value, p.display_name as label from parties p
       join customer_roles c on c.org_id=p.org_id and c.party_id=p.id
       where p.org_id=${orgId} ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-      order by p.display_name,p.id`)).rows
+      order by p.display_name,p.id`, 'objects')
   }
   if (source === "schedule-delivery-roles")
-    return (
-      await db.execute<RefOption>(
-        sql`select key as value,name as label from app_roles where org_id=${orgId} order by name,key`,
-      )
-    ).rows;
+    return await db.execute<RefOption>(
+        sql`select key as value,name as label from app_roles where org_id=${orgId} order by name,key`, 'objects',
+      );
   if (source === "schedule-operators")
-    return (
-      await db.execute<RefOption>(
-        sql`select id as value,name as label from users where org_id=${orgId} and is_active order by name,id`,
-      )
-    ).rows;
+    return await db.execute<RefOption>(
+        sql`select id as value,name as label from users where org_id=${orgId} and is_active order by name,id`, 'objects',
+      );
   if (source === "schedule-subjects") {
-    return (await db.execute<RefOption>(sql`
+    return await db.execute<RefOption>(sql`
       select id::text as value,display_name as label,'people' as "scopeValue" from parties
        where org_id=${orgId} and kind='person' and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,allowedSubsidiaryIds)}
       union all select id::text,unit_number || ' · ' || name,'resources' from equipment_units
        where org_id=${orgId} and status='active' ${subsidiaryVisibleFilter(sql`subsidiary_id`,allowedSubsidiaryIds)}
       union all select id::text,name,'resources' from locations
        where org_id=${orgId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,allowedSubsidiaryIds)}
-      order by label,value`)).rows;
+      order by label,value`, 'objects');
   }
   if (source === "schedule-contacts") {
-    return (await db.execute(sql`select id as value,display_name as label from parties where org_id=${orgId} and kind='person' and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,allowedSubsidiaryIds)} order by display_name,id`)).rows as RefOption[]
+    return (await db.execute(sql`select id as value,display_name as label from parties where org_id=${orgId} and kind='person' and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,allowedSubsidiaryIds)} order by display_name,id`, 'objects')) as RefOption[]
   }
   if (source === 'employees') {
     // Role-scoped view of the native parties model — never a parallel roster.
     const employees = await db.execute(sql`
       select p.id as value, p.display_name as label from parties p
        join employee_roles e on e.party_id = p.id and e.org_id = p.org_id and e.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`);
-    return employees.rows as RefOption[]
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`, 'objects');
+    return employees as RefOption[]
   }
   if (source === 'pdf-templates') {
     // Active quote templates for the order-form picker. The PDF template
@@ -246,8 +242,8 @@ export async function loadEntityOptions(
     const templates = await db.execute(sql`
       select id as value, name as label from pdf_templates
        where org_id = ${orgId} and is_active and record_type = 'quote'
-       order by is_default desc, name`);
-    return templates.rows as RefOption[]
+       order by is_default desc, name`, 'objects');
+    return templates as RefOption[]
   }
   if (source === 'equipment-units') {
     // The chargeable unit register. Like `trades`, a legitimate scope key with
@@ -256,8 +252,8 @@ export async function loadEntityOptions(
       select id as value, unit_number || ' · ' || name as label from equipment_units
        where org_id = ${orgId} and status = 'active'
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-       order by unit_number`);
-    return units.rows as RefOption[]
+       order by unit_number`, 'objects');
+    return units as RefOption[]
   }
   if (source === 'job-titles') {
     // Distinct free-text job titles from the active employee roster — the
@@ -269,16 +265,16 @@ export async function loadEntityOptions(
              trim(job_title) as value, trim(job_title) as label
         from employee_roles
        where org_id = ${orgId} and is_active and coalesce(trim(job_title), '') <> ''
-       order by lower(regexp_replace(trim(job_title), '\\s+', ' ', 'g')), trim(job_title)`);
-    return titles.rows as RefOption[]
+       order by lower(regexp_replace(trim(job_title), '\\s+', ' ', 'g')), trim(job_title)`, 'objects');
+    return titles as RefOption[]
   }
   if (source === 'trades') {
     // `trades` is a bare reference list with no setup-registry entry of its
     // own, but it is a legitimate scope key (labor_cost_rates uses it too).
     const trades = await db.execute(sql`
       select id as value, name as label from trades
-       where org_id = ${orgId} and is_active order by name`);
-    return trades.rows as RefOption[]
+       where org_id = ${orgId} and is_active order by name`, 'objects');
+    return trades as RefOption[]
   }
   if (source === 'projects') {
     const projects = await db.execute(sql`
@@ -286,8 +282,8 @@ export async function loadEntityOptions(
         from (select id,code,name,is_active,${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)} as owner_subsidiary_id
                 from projects where org_id = ${orgId}) project
        where project.is_active ${subsidiaryVisibleFilter(sql`project.owner_subsidiary_id`, allowedSubsidiaryIds)}
-       order by project.code nulls last, project.name`);
-    return projects.rows as RefOption[]
+       order by project.code nulls last, project.name`, 'objects');
+    return projects as RefOption[]
   }
   if (source === 'funds') {
     // The org's fund segment values — never the generic setup tables, which
@@ -302,8 +298,8 @@ export async function loadEntityOptions(
         join segment_definitions sd on sd.org_id = sv.org_id and sd.id = sv.segment_id
        where sv.org_id = ${orgId} and sd.key = 'fund' and sd.source_kind = 'custom'
          and sv.is_active
-       order by sv.code nulls last, sv.name`);
-    return funds.rows as RefOption[]
+       order by sv.code nulls last, sv.name`, 'objects');
+    return funds as RefOption[]
   }
   if (source === 'chart-accounts') {
     // Every account of the chart — summary and inactive accounts included —
@@ -311,18 +307,18 @@ export async function loadEntityOptions(
     const accounts = await db.execute<RefOption>(sql`
       select id::text as value, concat_ws(' · ', number, name) as label, type as "accountType"
         from accounts where org_id = ${orgId}
-       order by number nulls last, name, id`)
-    return accounts.rows
+       order by number nulls last, name, id`, 'objects')
+    return accounts
   }
   if (source === 'all-segment-definitions') {
-    return (await db.execute<RefOption>(sql`
+    return await db.execute<RefOption>(sql`
       select id::text as value, name as label from segment_definitions
-       where org_id = ${orgId} and is_active order by sort_order, name, id`)).rows
+       where org_id = ${orgId} and is_active order by sort_order, name, id`, 'objects')
   }
   if (source === 'segment-dimension-values') {
     // Values of every active segment, built-in and custom alike, scoped to
     // their segment definition so a picker offers only that segment's values.
-    return (await db.execute<RefOption>(sql`
+    return await db.execute<RefOption>(sql`
       select v.id::text as value, concat_ws(' · ', v.code, v.name) as label, sd.id::text as "scopeValue"
         from segment_definitions sd
         join lateral (
@@ -340,7 +336,7 @@ export async function loadEntityOptions(
            where sd.storage_column = 'subsidiary_id' and s.org_id = sd.org_id
         ) v on true
        where sd.org_id = ${orgId} and sd.is_active
-       order by sd.sort_order, v.code nulls last, v.name, v.id`)).rows
+       order by sd.sort_order, v.code nulls last, v.name, v.id`, 'objects')
   }
   const target = SETUP_ENTITY_BY_KEY.get(source)
   if (!target) return []
@@ -365,8 +361,8 @@ export async function loadEntityOptions(
   const r = await db.execute(sql`
     select ${sql.raw(valueCol)} as value, ${labelExpr} as label
       from ${setupReadSource(target)}${orgFilter}${customSegmentFilter}${subsidiaryFilter}
-     order by ${sql.raw(orderCol)}`);
-  return r.rows as RefOption[]
+     order by ${sql.raw(orderCol)}`, 'objects');
+  return r as RefOption[]
 }
 
 /** All ref-source option lists an entity's fields/columns need, keyed by source. */

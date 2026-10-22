@@ -308,7 +308,7 @@ export async function importSettlementBatch(
       select name, is_active as "isActive"
         from subsidiaries
        where org_id = ${orgId} and id = ${subsidiaryId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!sub) {
       throw new PspSettlementError(
         "settlement subsidiary is not a subsidiary of this organization",
@@ -377,8 +377,8 @@ export async function importSettlementBatch(
       -- batch selected below is reused and reconciled, so the first insert wins.
       on conflict (org_id, provider, external_ref) do nothing
       returning id
-    `));
-    const created = inserted.rows.length === 1;
+    `, "objects"));
+    const created = inserted.length === 1;
     const current = (await db.execute<{ id: string; status: string; subsidiary_id: string | null }>(sql`
       select id, status, subsidiary_id
         from psp_settlement_batches
@@ -386,8 +386,8 @@ export async function importSettlementBatch(
          and provider = ${parsed.provider}
          and external_ref = ${parsed.externalRef}
        for update
-    `));
-    const row = current.rows[0];
+    `, "objects"));
+    const row = current[0];
     if (!row)
       throw new PspSettlementError("settlement batch could not be locked");
     if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) {
@@ -437,8 +437,8 @@ export async function importSettlementBatch(
                source_payload, line_count, memo
           from psp_settlement_batches
          where id = ${batchId} and org_id = ${orgId}
-      `)).rows[0];
-      const storedLines = (await db.execute<{
+      `, "objects"))[0];
+      const storedLines = await db.execute<{
         line_number: number;
         kind: string;
         external_ref: string | null;
@@ -452,7 +452,7 @@ export async function importSettlementBatch(
           from psp_settlement_lines
          where batch_id = ${batchId} and org_id = ${orgId}
          order by line_number
-      `)).rows;
+      `, "objects");
       if (!stored) throw new PspSettlementError("settlement batch could not be read");
       const persistedTotals = {
         grossAmount: stored.gross_amount,
@@ -508,7 +508,7 @@ export async function importSettlementBatch(
         clearingAccountId: accounts.clearingAccountId ?? null,
         subsidiaryId,
       };
-      const repaired = await db.execute(sql`
+      const repaired = await db.execute<never>(sql`
         update psp_settlement_batches
            set bank_account_id = ${after.bankAccountId},
                fee_account_id = ${after.feeAccountId},

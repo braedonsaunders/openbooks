@@ -25,7 +25,7 @@ test("master accounting verification is audited, idempotent, and refuses stock t
       select settings->'demoData'->'accountingVerification' as proof,
         (select count(*)::int from audit_log where org_id=${world.orgId} and changes->>'reason'='Verify master demonstration accounting before making it available as a source') as audits
       from orgs where id=${world.orgId}
-    `)).rows[0]);
+    `, "objects"))[0]);
     const before = await evidence();
     assert.equal(before!.audits, 1);
     assert.equal((before!.proof as { status: string }).status, "passed");
@@ -54,7 +54,7 @@ test("accounting certification refuses ordinary tenant books before inspecting o
   try {
     await assert.rejects(verifyAndRegisterDemoAccounting(org.orgId), /requires an installed synthetic master demo/);
     await withOrgContext(org.orgId, async () => {
-      const row = (await db.execute(sql`select settings ? 'demoData' as certified from orgs where id=${org.orgId}`)).rows[0];
+      const row = (await db.execute(sql`select settings ? 'demoData' as certified from orgs where id=${org.orgId}`, "objects"))[0];
       assert.equal(row!.certified, false);
     });
   } finally { await withBypass(() => dropScratchOrg(org.orgId)); }

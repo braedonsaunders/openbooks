@@ -51,8 +51,8 @@ test('activation re-validates the name under the row lock', async () => {
         select exists(
           select 1 from pg_stat_activity
            where wait_event_type = 'Lock' and query ilike '%from projects%for update%'
-        ) as waiting`)
-      if (waiting.rows[0]?.waiting) break
+        ) as waiting`, 'objects')
+      if (waiting[0]?.waiting) break
       if (Date.now() > deadline) throw new Error('PATCH never blocked on the project row lock')
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
@@ -61,7 +61,7 @@ test('activation re-validates the name under the row lock', async () => {
     await holder.query('COMMIT')
     const response = await pending
     assert.equal(response.status, 422, JSON.stringify(await response.json()))
-    const stored = (await db.execute<{ name: string; is_active: boolean }>(sql`select name, is_active from projects where id=${projectId} and org_id=${org.orgId}`)).rows[0]
+    const stored = (await db.execute<{ name: string; is_active: boolean }>(sql`select name, is_active from projects where id=${projectId} and org_id=${org.orgId}`, 'objects'))[0]
     assert.equal(stored?.is_active, false, 'a nameless project must not activate')
   } finally {
     try { await holder.query('ROLLBACK') } catch { /* already committed */ }

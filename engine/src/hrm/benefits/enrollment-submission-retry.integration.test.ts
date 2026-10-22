@@ -21,19 +21,19 @@ test('a refused enrollment rolls back before corrected tenant routing releases f
       values(${flowId},${h.org.orgId},'Benefits election policy','hrm_benefit_enrollment',true,${JSON.stringify(graph)}::jsonb)`);
     const query={orgId:h.org.orgId,actorId:h.actorId,employmentId,planId,windowId,effectiveFrom:'2026-03-01',contributionTerms:await seededContributionTerms(h.org.orgId,planId)};
     await assert.rejects(electEnrollment(query),/zero assignees/);
-    assert.equal((await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${h.org.orgId} and plan_id=${planId}`)).rows.length,0);
-    assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${h.org.orgId} and subject_kind='hrm_benefit_enrollment'`)).rows.length,0);
-    assert.equal((await db.execute(sql`select id from flow_runs where org_id=${h.org.orgId} and flow_id=${flowId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${h.org.orgId} and plan_id=${planId}`, 'objects')).length,0);
+    assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${h.org.orgId} and subject_kind='hrm_benefit_enrollment'`, 'objects')).length,0);
+    assert.equal((await db.execute(sql`select id from flow_runs where org_id=${h.org.orgId} and flow_id=${flowId}`, 'objects')).length,0);
     await db.execute(sql`update flows set graph=${JSON.stringify({schemaVersion:1,nodes:[trigger],edges:[]})}::jsonb where org_id=${h.org.orgId} and id=${flowId}`);
     const active=await electEnrollment(query);
     assert.equal(active.status,'active');
     const receipt=(await db.execute<{policy:{kind:string;runIds:string[]};actor_id:string}>(sql`select policy,actor_id from flow_submissions
-      where org_id=${h.org.orgId} and subject_kind='hrm_benefit_enrollment' and subject_id=${active.id}`)).rows[0]!;
+      where org_id=${h.org.orgId} and subject_kind='hrm_benefit_enrollment' and subject_id=${active.id}`, 'objects'))[0]!;
     assert.equal(receipt.policy.kind,'ungated');assert.equal(receipt.policy.runIds.length,1);assert.equal(receipt.actor_id,h.actorId);
     const evidence=async()=>({
-      election:(await db.execute(sql`select to_jsonb(e) as snapshot from hrm_benefit_enrollments e where org_id=${h.org.orgId} and id=${active.id}`)).rows,
-      terms:(await db.execute(sql`select to_jsonb(t) as snapshot from hrm_benefit_enrollment_terms t where org_id=${h.org.orgId} and enrollment_id=${active.id} order by id`)).rows,
-      events:(await db.execute(sql`select id from hrm_benefit_events where org_id=${h.org.orgId} and enrollment_id=${active.id} order by id`)).rows,
+      election:await db.execute(sql`select to_jsonb(e) as snapshot from hrm_benefit_enrollments e where org_id=${h.org.orgId} and id=${active.id}`, 'objects'),
+      terms:await db.execute(sql`select to_jsonb(t) as snapshot from hrm_benefit_enrollment_terms t where org_id=${h.org.orgId} and enrollment_id=${active.id} order by id`, 'objects'),
+      events:await db.execute(sql`select id from hrm_benefit_events where org_id=${h.org.orgId} and enrollment_id=${active.id} order by id`, 'objects'),
     });
     const original=await evidence();
     assert.equal(original.terms.length,2);

@@ -120,7 +120,7 @@ async function authorizeInviteIssuance(args: {
     password_hash: string;
   }>(sql`
     select id, is_active, password_hash from users
-     where id = ${targetUserId} and org_id = ${orgId} for update`)).rows[0];
+     where id = ${targetUserId} and org_id = ${orgId} for update`, "objects"))[0];
   if (!found) {
     throw new InviteIssuanceRefusedError({ error: "user not found", status: 409 });
   }
@@ -137,10 +137,10 @@ async function authorizeInviteIssuance(args: {
     });
   }
   if (gate.user.isSuperAdmin) return;
-  const granted = (await db.execute<{ role_id: string; permissions: unknown }>(sql`
+  const granted = await db.execute<{ role_id: string; permissions: unknown }>(sql`
     select a.role_id, r.permissions from role_assignments a
       join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-     where a.org_id = ${orgId} and a.user_id = ${found.id}`)).rows;
+     where a.org_id = ${orgId} and a.user_id = ${found.id}`, "objects");
   const grantedPermissions = granted.flatMap((row) =>
     Array.isArray(row.permissions)
       ? row.permissions.filter((p): p is string => typeof p === "string")
@@ -153,10 +153,10 @@ async function authorizeInviteIssuance(args: {
     select permission, effect
       from user_permission_overrides
      where user_id = ${found.id} and org_id = ${orgId}
-  `);
+  `, "objects");
   const effective = resolveEffectivePermissions({
     rolePermissionSets: [grantedPermissions],
-    overrides: overrides.rows,
+    overrides,
   });
   const missing = permissionsOutsideCeiling(gate.permissions, effective);
   if (missing.length > 0) {
@@ -279,7 +279,7 @@ async function legacyGET(req: Request) {
        and (${rawQ} = '' or p.display_name ilike ${like} or coalesce(p.email, '') ilike ${like})
      group by p.id, p.display_name, p.kind
      order by p.display_name
-     limit ${limit}`);
+     limit ${limit}`, "objects");
 
   type PersonOption = {
     value: string;
@@ -301,7 +301,7 @@ async function legacyGET(req: Request) {
       isActive,
     };
   };
-  const options: PersonOption[] = optionsR.rows.map((r) => toOption(r, true));
+  const options: PersonOption[] = optionsR.map((r) => toOption(r, true));
 
   let selected: PersonOption | null = null;
   if (include !== null && !options.some((o) => o.value === include)) {
@@ -323,8 +323,8 @@ async function legacyGET(req: Request) {
           select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active
         ) r on r.party_id = p.id
        where p.org_id = ${orgId} and p.id = ${include} ${partyScope}
-       group by p.id, p.display_name, p.kind, p.is_active`);
-    const found = selR.rows[0];
+       group by p.id, p.display_name, p.kind, p.is_active`, "objects");
+    const found = selR[0];
     if (found) selected = toOption(found, found.is_active);
   } else if (include !== null) {
     selected = options.find((o) => o.value === include) ?? null;
@@ -357,8 +357,8 @@ export const POST = defineRoute({
     // Grants lock their role first, matching role deletion's role → user order.
     const lockTargetUser = async () => {
       const target = await db.execute(sql`
-        select id from users where id = ${userId} and org_id = ${actor.orgId} for update`);
-      return target.rows.length > 0;
+        select id from users where id = ${userId} and org_id = ${actor.orgId} for update`, "objects");
+      return target.length > 0;
     };
 
     switch (body.action) {
@@ -369,8 +369,8 @@ export const POST = defineRoute({
         const roleId = body.roleId.toLowerCase();
         return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
           const role = await db.execute<{ id: string; key: string; permissions: unknown; subsidiary_restriction: unknown }>(sql`
-            select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
-          if (!role.rows[0])
+            select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`, "objects");
+          if (!role[0])
             return NextResponse.json({ error: "role not found" }, { status: 404 });
           if (!actor.isSuperAdmin) {
             if (userId === actor.id.toLowerCase()) {
@@ -379,8 +379,8 @@ export const POST = defineRoute({
                 { status: 403 },
               );
             }
-            const rolePermissions = Array.isArray(role.rows[0].permissions)
-              ? role.rows[0].permissions.filter((p): p is string => typeof p === "string")
+            const rolePermissions = Array.isArray(role[0].permissions)
+              ? role[0].permissions.filter((p): p is string => typeof p === "string")
               : [];
             const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
             if (missing.length > 0) {
@@ -397,7 +397,7 @@ export const POST = defineRoute({
             // carries no new permission.
             const widening = coverageRefusal(
               gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
-              storedRestriction(role.rows[0].subsidiary_restriction));
+              storedRestriction(role[0].subsidiary_restriction));
             if (widening) return widening;
           }
           if (!await lockTargetUser()) return NextResponse.json({ error: "user not found" }, { status: 404 });
@@ -406,12 +406,12 @@ export const POST = defineRoute({
             values (${actor.orgId}, ${userId}, ${roleId}, ${actor.id}, ${actor.id})
             -- An existing identical role assignment already grants the requested role.
             on conflict (org_id, user_id, role_id) do nothing
-            returning id`);
-          if (inserted.rows[0]) {
+            returning id`, "objects");
+          if (inserted[0]) {
             await audit(db, {
               orgId: actor.orgId,
               tableName: "role_assignments",
-              rowId: inserted.rows[0].id,
+              rowId: inserted[0].id,
               action: "insert",
               changes: {
                 userId: [null, userId],
@@ -440,11 +440,11 @@ export const POST = defineRoute({
             select id, role_id from role_assignments
              where org_id = ${actor.orgId} and user_id = ${userId}
              order by id for update
-          `);
-          if (!assignments.rows.some((row) => row.role_id === roleId)) {
+          `, "objects");
+          if (!assignments.some((row) => row.role_id === roleId)) {
             return NextResponse.json({ ok: true });
           }
-          if (assignments.rows.length === 1) {
+          if (assignments.length === 1) {
             return NextResponse.json(
               { error: "an active user must retain at least one role" },
               { status: 409 },
@@ -454,12 +454,12 @@ export const POST = defineRoute({
             delete from role_assignments
              where org_id = ${actor.orgId} and user_id = ${userId} and role_id = ${roleId}
             returning id
-          `);
-          if (deleted.rows[0]) {
+          `, "objects");
+          if (deleted[0]) {
             await audit(db, {
               orgId: actor.orgId,
               tableName: "role_assignments",
-              rowId: deleted.rows[0].id,
+              rowId: deleted[0].id,
               action: "delete",
               changes: {
                 userId: [userId, null],
@@ -486,8 +486,8 @@ export const POST = defineRoute({
         }
         return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
           const targetRows = await db.execute<{ id: string; is_active: boolean }>(sql`
-            select id, is_active from users where id = ${userId} and org_id = ${actor.orgId} for update`);
-          const target = targetRows.rows[0];
+            select id, is_active from users where id = ${userId} and org_id = ${actor.orgId} for update`, "objects");
+          const target = targetRows[0];
           if (!target) return NextResponse.json({ error: "user not found" }, { status: 404 });
           if (body.isActive) {
             // No row cap: the grant union is semantic coverage, and a bound
@@ -497,8 +497,8 @@ export const POST = defineRoute({
                 from role_assignments
                where org_id = ${actor.orgId} and user_id = ${userId}
                for key share
-            `);
-            if (assigned.rows.length === 0) {
+            `, "objects");
+            if (assigned.length === 0) {
               return NextResponse.json(
                 { error: "assign at least one role before activating this user" },
                 { status: 409 },
@@ -510,7 +510,7 @@ export const POST = defineRoute({
             // authority. Deactivation only removes access and is never judged.
             if (!target.is_active && !actor.isSuperAdmin) {
               const policies = await resolveRoleGrantPolicies(
-                db, actor.orgId, assigned.rows.map((row) => row.role_id));
+                db, actor.orgId, assigned.map((row) => row.role_id));
               // Reactivation restores overrides as well as roles: resolve the
               // target's stored effective permissions canonically. Grant
               // overrides above the actor's ceiling refuse; deny overrides
@@ -519,10 +519,10 @@ export const POST = defineRoute({
                 select permission, effect
                   from user_permission_overrides
                  where user_id = ${userId} and org_id = ${actor.orgId}
-              `);
+              `, "objects");
               const effective = resolveEffectivePermissions({
                 rolePermissionSets: policies.map((policy) => policy.permissions),
-                overrides: overrides.rows,
+                overrides,
               });
               const missing = permissionsOutsideCeiling(gate.permissions, effective);
               if (missing.length > 0) {
@@ -557,8 +557,8 @@ export const POST = defineRoute({
               returning id
             )
             select id from changed_identity
-          `);
-          if (updated.rows[0]) {
+          `, "objects");
+          if (updated[0]) {
             // Session revocation is in the same SQL statement as deactivation, so
             // a later reactivation cannot revive pre-disable browser sessions.
             await audit(db, {
@@ -640,8 +640,8 @@ export const POST = defineRoute({
           // employment, so unlink waits for in-flight reads and later readers
           // observe the committed link state.
           const currentRows = await db.execute<{ id: string; party_id: string | null }>(sql`
-            select id, party_id from users where id = ${userId} and org_id = ${actor.orgId} for update`);
-          const currentRow = currentRows.rows[0];
+            select id, party_id from users where id = ${userId} and org_id = ${actor.orgId} for update`, "objects");
+          const currentRow = currentRows[0];
           if (selfLink && (await countOtherActiveUserAdministrators(db, actor.orgId, actor.id)) > 0) {
             return selfLinkRefusal();
           }
@@ -677,8 +677,8 @@ export const POST = defineRoute({
               subsidiary_id: string | null;
             }>(sql`
               select id, kind, display_name, is_active, subsidiary_id from parties
-               where id = ${partyId} and org_id = ${actor.orgId}`);
-            const found = party.rows[0];
+               where id = ${partyId} and org_id = ${actor.orgId}`, "objects");
+            const found = party[0];
             if (!found) return NextResponse.json({ error: "party not found" }, { status: 404 });
             // A subsidiary-restricted admin cannot link a login to an employee
             // outside their scope: out-of-scope answers exactly like missing,
@@ -700,12 +700,12 @@ export const POST = defineRoute({
                where org_id = ${actor.orgId} and party_id = ${partyId} and is_active
               union all
               select 'employee' as role from employee_roles
-               where org_id = ${actor.orgId} and party_id = ${partyId} and is_active`);
+               where org_id = ${actor.orgId} and party_id = ${partyId} and is_active`, "objects");
             partySignals = {
               id: partyId,
               kind: found.kind,
               displayName: found.display_name,
-              roles: rolesR.rows.map((r) => r.role).sort(),
+              roles: rolesR.map((r) => r.role).sort(),
             };
           }
           // Precise affected-row count with the concurrency predicate: under a
@@ -715,12 +715,12 @@ export const POST = defineRoute({
             ? await db.execute<{ id: string }>(sql`
                 update users set party_id = ${partyId}, updated_at = now(), updated_by = ${actor.id}
                  where id = ${userId} and org_id = ${actor.orgId} and party_id is null
-                returning id`)
+                returning id`, "objects")
             : await db.execute<{ id: string }>(sql`
                 update users set party_id = ${partyId}, updated_at = now(), updated_by = ${actor.id}
                  where id = ${userId} and org_id = ${actor.orgId} and party_id = ${expected}
-                returning id`);
-          if (!updated.rows[0]) {
+                returning id`, "objects");
+          if (!updated[0]) {
             return NextResponse.json(
               { error: "stale link: the user's linked person changed — refresh and try again" },
               { status: 409 },
@@ -771,12 +771,12 @@ export const POST = defineRoute({
         // below (re-issuing) instead of failing.
         const created = await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
           const role = await db.execute<{ id: string; key: string; permissions: unknown; subsidiary_restriction: unknown }>(sql`
-            select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
-          if (!role.rows[0])
+            select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`, "objects");
+          if (!role[0])
             return NextResponse.json({ error: "role not found" }, { status: 404 });
           if (!actor.isSuperAdmin) {
-            const rolePermissions = Array.isArray(role.rows[0].permissions)
-              ? role.rows[0].permissions.filter((p): p is string => typeof p === "string")
+            const rolePermissions = Array.isArray(role[0].permissions)
+              ? role[0].permissions.filter((p): p is string => typeof p === "string")
               : [];
             const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
             if (missing.length > 0) {
@@ -790,7 +790,7 @@ export const POST = defineRoute({
             }
             const widening = coverageRefusal(
               gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
-              storedRestriction(role.rows[0].subsidiary_restriction), "invite with");
+              storedRestriction(role[0].subsidiary_restriction), "invite with");
             if (widening) return widening;
           }
           // One active home identity per login address across organizations:
@@ -807,13 +807,13 @@ export const POST = defineRoute({
             values (${actor.orgId}, ${email}, ${name}, ${UNUSABLE_PASSWORD_HASH}, true, ${actor.id}, ${actor.id})
             -- An existing email is re-read under lock below and is either a resumable invitation or a refusal.
             on conflict do nothing
-            returning id`);
-          const newUserId = inserted.rows[0]?.id;
+            returning id`, "objects");
+          const newUserId = inserted[0]?.id;
           if (newUserId) {
             const assignment = await db.execute<{ id: string }>(sql`
               insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
               values (${actor.orgId}, ${newUserId}, ${roleId}, ${actor.id}, ${actor.id})
-              returning id`);
+              returning id`, "objects");
             await audit(db, {
               orgId: actor.orgId,
               tableName: "users",
@@ -825,11 +825,11 @@ export const POST = defineRoute({
               },
               actorId: actor.id,
             });
-            if (assignment.rows[0]) {
+            if (assignment[0]) {
               await audit(db, {
                 orgId: actor.orgId,
                 tableName: "role_assignments",
-                rowId: assignment.rows[0].id,
+                rowId: assignment[0].id,
                 action: "insert",
                 changes: {
                   userId: [null, newUserId],
@@ -855,7 +855,7 @@ export const POST = defineRoute({
           }>(sql`
             select id, email, name, is_active, password_hash from users
              where org_id = ${actor.orgId} and lower(email) = ${email}
-             for update`)).rows[0];
+             for update`, "objects"))[0];
           if (!existing || !existing.is_active || existing.password_hash !== UNUSABLE_PASSWORD_HASH) {
             return NextResponse.json(
               { error: "a user with this email already exists" },
@@ -870,12 +870,12 @@ export const POST = defineRoute({
             values (${actor.orgId}, ${existing.id}, ${roleId}, ${actor.id}, ${actor.id})
             -- A resumed invitation preserves an already granted role rather than creating a duplicate assignment.
             on conflict (org_id, user_id, role_id) do nothing
-            returning id`);
-          if (reassign.rows[0]) {
+            returning id`, "objects");
+          if (reassign[0]) {
             await audit(db, {
               orgId: actor.orgId,
               tableName: "role_assignments",
-              rowId: reassign.rows[0].id,
+              rowId: reassign[0].id,
               action: "insert",
               changes: {
                 userId: [null, existing.id],
@@ -951,7 +951,7 @@ export const POST = defineRoute({
         // transaction by the authorize hook, so a grant landing between this
         // transaction and the mint can never leak a takeover link.
         const target = await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-          const rows = (await db.execute<{
+          const rows = await db.execute<{
             id: string;
             email: string;
             name: string | null;
@@ -959,7 +959,7 @@ export const POST = defineRoute({
             password_hash: string;
           }>(sql`
             select id, email, name, is_active, password_hash from users
-             where id = ${userId} and org_id = ${actor.orgId} for update`)).rows;
+             where id = ${userId} and org_id = ${actor.orgId} for update`, "objects");
           const found = rows[0];
           if (!found) return NextResponse.json({ error: "user not found" }, { status: 404 });
           if (!found.is_active) {

@@ -8,8 +8,8 @@ import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from './org-feature
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
 export async function orgFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
-  const r = (await executor.execute<{ f: FeatureState | null }>(sql`select settings->'features' as f from orgs where id = ${orgId}`))
-  return r.rows[0]?.f ?? {}
+  const r = (await executor.execute<{ f: FeatureState | null }>(sql`select settings->'features' as f from orgs where id = ${orgId}`, 'objects'))
+  return r[0]?.f ?? {}
 }
 
 /** Server helper for route guards: is this feature on for the org? Resolves

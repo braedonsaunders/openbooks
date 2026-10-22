@@ -45,8 +45,8 @@ async function fixture(): Promise<Fixture> {
     await db.execute(sql`update orgs set settings = settings || '{"features": {"crm": true}}'::jsonb where id = ${org.orgId}`)
     await ensureCrmDefaults(org.orgId, state.actorId)
   })
-  const statuses = (await withBypassContext(() => db.execute<{ id: string; key: string; lifecycle_stage: string; is_default: boolean }>(sql`
-    select id, key, lifecycle_stage, is_default from crm_account_statuses where org_id = ${org.orgId} and is_active`))).rows
+  const statuses = await withBypassContext(() => db.execute<{ id: string; key: string; lifecycle_stage: string; is_default: boolean }>(sql`
+    select id, key, lifecycle_stage, is_default from crm_account_statuses where org_id = ${org.orgId} and is_active`, 'objects'))
   const leadStatusId = statuses.find((s) => s.lifecycle_stage === 'lead' && s.is_default)!.id
   const prospectDefaultId = statuses.find((s) => s.lifecycle_stage === 'prospect' && s.is_default)!.id
   const prospectOtherId = statuses.find((s) => s.lifecycle_stage === 'prospect' && !s.is_default)!.id
@@ -54,7 +54,7 @@ async function fixture(): Promise<Fixture> {
   const partyId = await withBypassContext(async () => {
     const pid = (await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, is_active)
-      values (${org.orgId}, 'company', 'Stagelead', true) returning id`)).rows[0]!.id
+      values (${org.orgId}, 'company', 'Stagelead', true) returning id`, 'objects'))[0]!.id
     await db.execute(sql`
       insert into crm_account_profiles (org_id, party_id, lifecycle_stage, status_id, is_active)
       values (${org.orgId}, ${pid}, 'lead', ${leadStatusId}, true)`)
@@ -90,14 +90,14 @@ async function profile(partyId: string) {
   return (await withBypassContext(() => db.execute<{ lifecycle_stage: string; status_id: string | null; status_key: string | null }>(sql`
     select cp.lifecycle_stage, cp.status_id, s.key as status_key
       from crm_account_profiles cp left join crm_account_statuses s on s.id = cp.status_id
-     where cp.party_id = ${partyId}`))).rows[0]!
+     where cp.party_id = ${partyId}`, 'objects')))[0]!
 }
 
 async function stageEvents(partyId: string) {
-  return (await withBypassContext(() => db.execute<{ from_stage: string | null; to_stage: string; source_kind: string }>(sql`
+  return await withBypassContext(() => db.execute<{ from_stage: string | null; to_stage: string; source_kind: string }>(sql`
     select e.from_stage, e.to_stage, e.source_kind from crm_account_stage_events e
      join crm_account_profiles cp on cp.id = e.account_profile_id
-     where cp.party_id = ${partyId} order by e.occurred_at`))).rows
+     where cp.party_id = ${partyId} order by e.occurred_at`, 'objects'))
 }
 
 
@@ -106,7 +106,7 @@ async function stageEvents(partyId: string) {
 async function revisionFor(partyId: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
-      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+      from crm_account_profiles where party_id = ${partyId}`, 'objects')))[0]!.revision
 }
 
 test('PATCH keeps a stage-only drawer save: stale lead status falls back to the prospect default', async () => {
@@ -214,7 +214,7 @@ test('draft refuses an uncreatable stage instead of silently creating a lead', a
 
 async function customerRoleActive(orgId: string, partyId: string): Promise<boolean> {
   return (await withBypassContext(() => db.execute(sql`
-    select 1 from customer_roles where org_id = ${orgId} and party_id = ${partyId} and is_active`))).rows.length > 0
+    select 1 from customer_roles where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects'))).length > 0
 }
 
 async function inCustomerPicker(orgId: string, partyId: string): Promise<boolean> {
@@ -222,7 +222,7 @@ async function inCustomerPicker(orgId: string, partyId: string): Promise<boolean
   // must vanish from them the moment the demotion commits.
   return (await withBypassContext(() => db.execute(sql`
     select 1 from parties p join customer_roles r on r.org_id = p.org_id and r.party_id = p.id and r.is_active
-     where p.org_id = ${orgId} and p.id = ${partyId}`))).rows.length > 0
+     where p.org_id = ${orgId} and p.id = ${partyId}`, 'objects'))).length > 0
 }
 
 test('PATCH demotion back to prospect deactivates the customer role in the same transaction', async () => {

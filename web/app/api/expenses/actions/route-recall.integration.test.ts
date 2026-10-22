@@ -69,19 +69,19 @@ async function post(body: unknown): Promise<{ status: number; json: Record<strin
 }
 
 async function revision(id: string): Promise<string> {
-  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${state.orgId}`)).rows[0]!.revision
+  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${state.orgId}`, 'objects'))[0]!.revision
 }
 
 async function statusOf(id: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from documents where id = ${id} and org_id = ${state.orgId}`)).rows[0]!.status
+  return (await db.execute<{ status: string }>(sql`select status from documents where id = ${id} and org_id = ${state.orgId}`, 'objects'))[0]!.status
 }
 
 async function gateStatus(id: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from flow_gates where id = ${id}`)).rows[0]!.status
+  return (await db.execute<{ status: string }>(sql`select status from flow_gates where id = ${id}`, 'objects'))[0]!.status
 }
 
 async function runStatus(id: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from flow_runs where id = ${id}`)).rows[0]!.status
+  return (await db.execute<{ status: string }>(sql`select status from flow_runs where id = ${id}`, 'objects'))[0]!.status
 }
 
 function as(actorId: string, roles: { key: string; name: string }[]) {
@@ -106,7 +106,7 @@ async function submittedReport(orgId: string, submitterId: string, scratch: { da
   const submitted = await submitAndReleaseIfUngated('expense_report', id, submitterId)
   assert.equal(submitted.gated, true)
   const gate = (await db.execute<{ id: string; run_id: string }>(sql`select id,run_id from flow_gates
-    where org_id=${orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+    where org_id=${orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
   const gateId=gate.id, runId=gate.run_id
   if (status === 'approved') await decideGate({ gateId, userId: submitterId, decision: 'approved' })
   return { id, runId, gateId }

@@ -21,20 +21,20 @@ export async function assertComponentServiceEligibility(executor: Pick<typeof db
       and (t.effective_to is null or t.effective_to>=${args.policyDate}::date)
       and (t.employer_subsidiary_id is null or t.employer_subsidiary_id=e.employer_subsidiary_id)
       and (c.system_key is not null or ${requested.length ? sql`c.id in (${sql.join(requested.map((id) => sql`${id}::uuid`), sql`, `)})` : sql`false`})
-  `);
-  const invalid = result.rows.find((row) => row.system_key != null);
+  `, 'objects');
+  const invalid = result.find((row) => row.system_key != null);
   if (invalid) throw new PayrollError(`${String(invalid.name)} is an engine-owned payroll component and cannot have a service gate; remove its component service tier and configure service eligibility only for employer-defined components.`);
-  if (result.rows.length === 0) return;
+  if (result.length === 0) return;
   const service = await resolveEmploymentServiceCredit(executor, { orgId: args.orgId, employmentId: args.employmentId, asOf: args.policyDate });
-  if (!service) throw new PayrollError(`${String(result.rows[0]!.name)} requires documented service; record the employment's service start or credited-service baseline before requesting this component.`);
-  const rows: ServiceTierRow[] = result.rows.map((row) => ({ id: String(row.id), planId: null,
+  if (!service) throw new PayrollError(`${String(result[0]!.name)} requires documented service; record the employment's service start or credited-service baseline before requesting this component.`);
+  const rows: ServiceTierRow[] = result.map((row) => ({ id: String(row.id), planId: null,
     componentId: String(row.component_id), afterMonths: Number(row.after_months), accrualValue: null,
     eligible: row.eligible === true, isActive: true,
     employerSubsidiaryId: row.employer_subsidiary_id == null ? null : String(row.employer_subsidiary_id) }));
-  const tiers = resolveServiceTiersFrom(rows, service.completedMonths, null, String(result.rows[0]!.employment_employer));
+  const tiers = resolveServiceTiersFrom(rows, service.completedMonths, null, String(result[0]!.employment_employer));
   for (const componentId of new Set(rows.map((row) => row.componentId!))) {
     if (tiers.componentEligibility.get(componentId) !== true) {
-      const component = result.rows.find((row) => row.component_id === componentId)!;
+      const component = result.find((row) => row.component_id === componentId)!;
       throw new PayrollError(`${String(component.name)} is not service-eligible at period end ${args.policyDate}; end the premature assignment or election, correct documented service if it is wrong, or request the component in an eligible pay period.`);
     }
   }

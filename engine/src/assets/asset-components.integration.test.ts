@@ -123,8 +123,8 @@ test(
       await refusedWith("component_draft", () => disposeCompoundAsset(org.orgId, {
         parentAssetId: truck, date: "2026-07-01", writeOff: true, reason: "Total loss", actorId: actors.adminId,
       }));
-      const statuses = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
-        select distinct status from fixed_assets where org_id = ${org.orgId} and id in (${truck}, ${engine})`))).rows;
+      const statuses = await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
+        select distinct status from fixed_assets where org_id = ${org.orgId} and id in (${truck}, ${engine})`, "objects"));
       assert.deepEqual(statuses, [{ status: "in_service" }], "a refusal disposes nothing");
 
       await detachAssetComponent(org.orgId, { componentAssetId: draft.id, reason: "Not part of the truck", actorId: actors.adminId });
@@ -134,7 +134,7 @@ test(
       assert.deepEqual(result.disposals.map((disposal) => disposal.status), ["written_off", "written_off"]);
       assert.equal(result.disposals.at(-1)?.assetId, truck, "the parent closes last");
       const vehiclesBalance = (await withOrgContext(org.orgId, () => db.execute<{ total: string }>(sql`
-        select coalesce(sum(amount), 0)::numeric(19,4)::text as total from journal_lines where org_id = ${org.orgId} and account_id = ${vehicles}`))).rows[0]!.total;
+        select coalesce(sum(amount), 0)::numeric(19,4)::text as total from journal_lines where org_id = ${org.orgId} and account_id = ${vehicles}`, "objects")))[0]!.total;
       assert.equal(vehiclesBalance, "-75000.0000", "both costs are derecognized from the vehicles account");
     } finally {
       await dropScratchOrg(org.orgId);

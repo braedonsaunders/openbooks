@@ -48,15 +48,15 @@ export async function assertItemsActive(
          sql`, `,
        )})
      order by id
-     for share`));
+     for share`, "objects"));
   // A write that matches zero rows is a failure, not a success: under RLS an
   // unscoped read resolves to nothing, so a short count refuses here rather
   // than posting against an item resolution cannot see.
-  if (rows.rows.length !== ids.length) {
+  if (rows.length !== ids.length) {
     throw new InventoryError(messages.outsideOrganization);
   }
-  for (const row of rows.rows) names.set(row.id, row.name ?? row.id);
-  for (const row of rows.rows) {
+  for (const row of rows) names.set(row.id, row.name ?? row.id);
+  for (const row of rows) {
     if (!row.is_active) {
       throw new InventoryError(
         `${names.get(row.id)} is inactive — ${messages.inactiveRemedy}`,

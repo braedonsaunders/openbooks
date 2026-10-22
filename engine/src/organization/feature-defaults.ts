@@ -30,15 +30,15 @@ export async function dataDependentFeatureDefault(
   if (key === "multiSubsidiary") {
     const r = await runner.execute<{ n: number }>(sql`
       select count(*)::int as n from subsidiaries
-       where org_id = ${orgId} and is_active and not is_elimination`);
-    return (r.rows[0]?.n ?? 0) > 1;
+       where org_id = ${orgId} and is_active and not is_elimination`, "objects");
+    return (r[0]?.n ?? 0) > 1;
   }
   const r = await runner.execute<{ on: boolean }>(sql`
     select (
       exists(select 1 from journal_lines where org_id = ${orgId} and fx_rate <> 1)
       or exists(select 1 from fx_rates where org_id = ${orgId})
-    ) as on`);
-  return Boolean(r.rows[0]?.on);
+    ) as on`, "objects");
+  return Boolean(r[0]?.on);
 }
 
 const DATA_DEPENDENT_FEATURE_KEYS: readonly DataDependentFeatureKey[] = ["multiSubsidiary", "multiCurrency"];

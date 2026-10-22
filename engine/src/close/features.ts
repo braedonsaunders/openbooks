@@ -39,8 +39,8 @@ export async function defaultCloseFeatureContext(
   const result = (await executor.execute<{ features: FeatureState | null }>(sql`
     select coalesce(o.settings->'features', '{}'::jsonb) as features
       from orgs o where o.id=${orgId}
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   if (!row) throw new CloseError("organization not found");
   const features = row.features ?? {};
   return {

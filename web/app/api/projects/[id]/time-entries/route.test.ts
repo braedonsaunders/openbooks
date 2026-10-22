@@ -59,14 +59,15 @@ stubModules({
       const state = globalThis[Symbol.for('openbooks.project-time-detail-route-test')]
       const sqlText = globalThis.openbooksProjectTimeSqlText
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
           if (text.includes('from projects')) {
             // Before the fix, this query had no subsidiary predicate. Return
             // the target project to model the UUID-guessing leak.
             if (state.allowedSubsidiaryIds !== null && !text.includes('subsidiary_id')) {
-              return Promise.resolve({ rows: [{ id: 'project-1' }] })
+              return Promise.resolve({ rows: [{ id: 'project-1' }] }).then(inMode)
             }
             // The fixed query is evaluated against the target project's
             // subsidiary. A restricted caller cannot open a denied entity.
@@ -74,18 +75,18 @@ stubModules({
               state.allowedSubsidiaryIds !== null &&
               (state.projectSubsidiary === null || !state.allowedSubsidiaryIds.has(state.projectSubsidiary))
             ) {
-              return Promise.resolve({ rows: [] })
+              return Promise.resolve({ rows: [] }).then(inMode)
             }
-            return Promise.resolve({ rows: [{ id: 'project-1' }] })
+            return Promise.resolve({ rows: [{ id: 'project-1' }] }).then(inMode)
           }
           if (text.includes('count(*)')) {
-            return Promise.resolve({ rows: [{ entries: 1, hours: '2.5', cost: '100.00', bill: '150.00' }] })
+            return Promise.resolve({ rows: [{ entries: 1, hours: '2.5', cost: '100.00', bill: '150.00' }] }).then(inMode)
           }
           if (text.includes('distinct employee_party_id')) {
-            return Promise.resolve({ rows: [{ id: 'employee-1' }] })
+            return Promise.resolve({ rows: [{ id: 'employee-1' }] }).then(inMode)
           }
           if (text.includes('from parties p')) {
-            return Promise.resolve({ rows: [{ id: 'employee-1', subsidiaryId: state.projectSubsidiary }] })
+            return Promise.resolve({ rows: [{ id: 'employee-1', subsidiaryId: state.projectSubsidiary }] }).then(inMode)
           }
           if (text.includes('from time_entries')) {
             return Promise.resolve({
@@ -103,9 +104,9 @@ stubModules({
                 memo: null,
                 field_ticket_number: null,
               }],
-            })
+            }).then(inMode)
           }
-          return Promise.resolve({ rows: [] })
+          return Promise.resolve({ rows: [] }).then(inMode)
         },
       }
       export const schema = {}

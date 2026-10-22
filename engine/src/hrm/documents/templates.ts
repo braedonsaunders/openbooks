@@ -172,12 +172,12 @@ export async function listTemplates(query: {
   includeInactive?: boolean;
 }): Promise<DocumentTemplateDTO[]> {
   await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  const rows = (await db.execute<TemplateRow>(sql`
+  const rows = await db.execute<TemplateRow>(sql`
     ${SELECT_COLS}
      where org_id = ${query.orgId}
        ${query.includeInactive ? sql`` : sql`and is_active`}
      order by name
-  `)).rows;
+  `, "objects");
   return rows.map(toDTO);
 }
 
@@ -220,7 +220,7 @@ export async function saveTemplate(input: {
          where org_id = ${input.orgId} and id = ${input.templateId}
         returning id, name, category_key, body_template, merge_fields, requires_signature,
                   signer_roles, acknowledgment_only, is_active
-      `)).rows[0];
+      `, "objects"))[0];
       // Zero matched rows is a failure: unknown id or another org's row.
       if (!updated) {
         throw new HrmDocumentsError(
@@ -240,7 +240,7 @@ export async function saveTemplate(input: {
               ${input.isActive ?? true}, ${input.actorId}, ${input.actorId})
       returning id, name, category_key, body_template, merge_fields, requires_signature,
                 signer_roles, acknowledgment_only, is_active
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw new HrmDocumentsError(
         "REFUSED",

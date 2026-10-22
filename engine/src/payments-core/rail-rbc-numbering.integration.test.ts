@@ -31,8 +31,8 @@ test("RBC numbering serializes payroll/AP allocations, isolates clients and tena
       error => String(error instanceof Error ? error.message : error).includes("exhausted"));
     const stored = await withOrgContext(first.orgId, () => db.execute<{ next_number: number }>(sql`
       select next_number from number_sequences where org_id=${first.orgId} and document_kind=${kind}
-    `));
-    assert.equal(Number(stored.rows[0]!.next_number), 9999);
+    `, "objects"));
+    assert.equal(Number(stored[0]!.next_number), 9999);
   } finally {
     await dropScratchOrgReporting(first.orgId);
     await dropScratchOrgReporting(second.orgId);

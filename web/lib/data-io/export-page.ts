@@ -26,10 +26,10 @@ export const transferLimit = (ctx: ReadCtx | undefined) => ctx?.page?.size ?? MA
  * Payloads keep PostgreSQL's native numeric decoding; a JSON envelope would
  * turn exact financial decimals into JavaScript numbers. */
 export async function readExportWindow<T extends Record<string, unknown> = Record<string, unknown>>(runner: SqlExecutor, query: SQL, ctx?: ReadCtx, identity = '__transferOrder'): Promise<{ rows: T[] }> {
-  if (!ctx?.page) return { rows: (await runner.execute<T>(query)).rows as T[] }
+  if (!ctx?.page) return { rows: (await runner.execute<T>(query, 'objects')) as T[] }
   const order = sql.identifier(identity)
-  const sizes = (await runner.execute<{ bytes: string }>(sql`select octet_length(transfer_window::text)::text as bytes
-    from (${query}) transfer_window order by ${order}`)).rows
+  const sizes = await runner.execute<{ bytes: string }>(sql`select octet_length(transfer_window::text)::text as bytes
+    from (${query}) transfer_window order by ${order}`, 'objects')
   let bytes = 0, count = 0
   for (const row of sizes) {
     const size = Number(row.bytes)
@@ -41,7 +41,7 @@ export async function readExportWindow<T extends Record<string, unknown> = Recor
     bytes += size; count++
   }
   ctx.page.truncated = count < sizes.length
-  return { rows: (await runner.execute<T>(sql`select * from (${query}) transfer_window order by ${order} limit ${count}`)).rows as T[] }
+  return { rows: (await runner.execute<T>(sql`select * from (${query}) transfer_window order by ${order} limit ${count}`, 'objects')) as T[] }
 }
 
 export function finishExportPage<T extends Record<string, unknown>>(rows: T[], label: string, ctx?: ReadCtx): T[] {

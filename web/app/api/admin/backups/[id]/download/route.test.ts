@@ -34,7 +34,7 @@ const mockSources = new Map<string, string>([
   ["mock:db", `
     export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
     const state = globalThis[Symbol.for('openbooks.stored-backup-download-route-test')]
-    export const db = { execute: async () => { state.queries += 1; return { rows: state.run ? [state.run] : [] } } }
+    export const db = { execute: async (_query, mode) => { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.queries += 1; return inMode({ rows: state.run ? [state.run] : [] }) } }
   `],
   ["mock:backup", `
     const state = globalThis[Symbol.for('openbooks.stored-backup-download-route-test')]

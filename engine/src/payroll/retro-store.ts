@@ -358,7 +358,7 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
        ${employeeFilter}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by p.display_name, r.period_end
-  `));
+  `, "objects"));
 
   // Omitted employees: the main query above starts FROM pay_stubs, so an
   // employee who was never paid for a period at all is invisible to it —
@@ -438,10 +438,10 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
            ${omittedEmployeeFilter}
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
       ) s2
-  `));
+  `, "objects"));
 
   const candidates: RetroCandidate[] = [];
-  for (const row of [...rows.rows.map((row) => ({ ...row, omitted_detail: null as string | null })), ...omitted.rows]) {
+  for (const row of [...rows.map((row) => ({ ...row, omitted_detail: null as string | null })), ...omitted]) {
     const reasons: RetroReason[] = [];
     if (row.omitted_detail) {
       reasons.push({ source: "omitted_from_run", detail: row.omitted_detail });
@@ -628,9 +628,9 @@ async function committedEarningLines(
      where l.org_id = ${orgId} and s.pay_run_document_id = ${sourceDocumentId}
        and l.kind = 'earning'
      order by s.employee_party_id, l.sequence
-  `));
+  `, "objects"));
   const byEmployee = new Map<string, RetroEarningLine[]>();
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const lines = byEmployee.get(row.employee_party_id) ?? [];
     lines.push({
       componentId: row.component_id,
@@ -670,9 +670,9 @@ async function previouslySettledBuckets(
      where st.org_id = ${orgId} and st.source_pay_run_document_id = ${sourceDocumentId}
        and rr.run_status = 'committed'
      group by st.employee_party_id, a.component_id, a.project_id, a.department_id
-  `));
+  `, "objects"));
   const byEmployee = new Map<string, RetroSettledBucket[]>();
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const buckets = byEmployee.get(row.employee_party_id) ?? [];
     buckets.push({
       componentId: row.component_id,
@@ -706,9 +706,9 @@ async function scheduleTaxYear(
          where s.org_id = sch.org_id and s.parent_id is null and s.is_active
          order by s.created_at limit 1) root on true
      where sch.org_id = ${orgId} and sch.id = ${payScheduleId}
-  `));
-  if (!rows.rows[0]) throw new RetroPayError("pay schedule not found");
-  const country = rows.rows[0].country;
+  `, "objects"));
+  if (!rows[0]) throw new RetroPayError("pay schedule not found");
+  const country = rows[0].country;
   if (!country) {
     throw new RetroPayError(
       "the pay schedule's legal entity has no country, so no statutory year can be resolved "
@@ -716,8 +716,8 @@ async function scheduleTaxYear(
     );
   }
   if (
-    !rows.rows[0].subsidiary_id
-    || (allowedSubsidiaryIds != null && !allowedSubsidiaryIds.has(rows.rows[0].subsidiary_id))
+    !rows[0].subsidiary_id
+    || (allowedSubsidiaryIds != null && !allowedSubsidiaryIds.has(rows[0].subsidiary_id))
   ) {
     throw new RetroPayError("pay schedule not found");
   }
@@ -894,7 +894,7 @@ async function createRetroPayRunLocked(
        and (st.employee_party_id::text || ':' || st.source_pay_run_document_id::text) = any(${`{${cells.join(",")}}`}::text[])
      order by d.document_number
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (held) {
     throw new RetroPayError(
       `retro run ${held.document_number ?? ""} already settles ${held.employee_name}'s period(s) and has not been committed `
@@ -958,8 +958,8 @@ async function createRetroPayRunLocked(
            ${JSON.stringify(period.candidate.reasons)}::jsonb, ${snapshot}::jsonb,
            ${actorId}, ${actorId})
         returning id
-      `));
-      const settlementId = settlement.rows[0]!.id;
+      `, "objects"));
+      const settlementId = settlement[0]!.id;
       for (const bucket of buckets) {
         await tx.execute(sql`
           insert into payroll_retro_allocations
@@ -1067,12 +1067,12 @@ export async function retroEarningLinesForStub(
        and st.employee_party_id = ${input.employeePartyId}
        ${payrollSubsidiaryScopeFilter(sql`ep.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by st.source_period_start, a.description
-  `));
-  if (rows.rows.length === 0) return [];
+  `, "objects"));
+  if (rows.length === 0) return [];
 
   const lines: RetroStubEarningLine[] = [];
   let sequence = 50;
-  for (const row of rows.rows) {
+  for (const row of rows) {
     if (!row.component_id || row.is_active !== true) {
       throw new RetroPayError(
         `the retroactive difference for ${input.employeeName} in `
@@ -1105,7 +1105,7 @@ export async function retroEarningLinesForStub(
   // the same days (an off-cycle bonus inside a regular period), and collapsing
   // them by date would silently drop one of the two deltas from the check.
   const settledTotal = sum([...new Map(
-    rows.rows.map((row) => [row.settlement_id, row.delta]),
+    rows.map((row) => [row.settlement_id, row.delta]),
   ).values()]);
   const lineTotal = sum(lines.map((line) => line.amount));
   if (cmp(lineTotal, settledTotal) !== 0) {
@@ -1187,8 +1187,8 @@ export async function retroRunReview(
        ${payrollSubsidiaryScopeFilter(sql`retro_doc.subsidiary_id`, allowedSubsidiaryIds)}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name, st.source_period_start
-  `));
-  if (settlements.rows.length === 0) {
+  `, "objects"));
+  if (settlements.length === 0) {
     return { documentId, settlements: [], employees: [], total: "0" };
   }
 
@@ -1205,9 +1205,9 @@ export async function retroRunReview(
       left join departments dept on dept.id = a.department_id and dept.org_id = a.org_id
      where a.org_id = ${orgId} and st.retro_pay_run_document_id = ${documentId}
      order by a.amount desc
-  `));
+  `, "objects"));
   const bySettlement = new Map<string, RetroReviewAllocation[]>();
-  for (const row of allocations.rows) {
+  for (const row of allocations) {
     const list = bySettlement.get(row.settlement_id) ?? [];
     list.push({
       componentName: row.component_name ?? null,
@@ -1226,7 +1226,7 @@ export async function retroRunReview(
     bySettlement.set(row.settlement_id, list);
   }
 
-  const rows: RetroReviewSettlement[] = settlements.rows.map((row) => ({
+  const rows: RetroReviewSettlement[] = settlements.map((row) => ({
     id: row.id,
     employeePartyId: row.employee_party_id,
     employeeName: row.employee_name,
@@ -1284,8 +1284,8 @@ export async function retroRunFindings(
   const runRows = (await executor.execute<{ run_type: string; tax_year: number }>(sql`
     select r.run_type, r.tax_year from pay_runs r
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `));
-  const run = runRows.rows[0];
+  `, "objects"));
+  const run = runRows[0];
   if (!run || run.run_type !== "retro") return findings;
 
   const rows = (await executor.execute<{

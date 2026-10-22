@@ -67,8 +67,8 @@ export async function requestConnectionRun(
              updated_at as "updatedAt"
         from connections
        where id = ${connectionId} and org_id = ${orgId}
-    `)
-    .then((loaded) => loaded.rows[0] ?? null)
+    `, "objects")
+    .then((loaded) => loaded[0] ?? null)
     .catch((e) => {
       if (storageIdentityError(e)) return null;
       throw e;
@@ -110,8 +110,8 @@ export async function requestConnectionRun(
          and updated_at is not distinct from ${conn.updatedAt}
          and config is not distinct from ${JSON.stringify(conn.config ?? {})}::jsonb
          and secrets is not distinct from ${conn.secrets}
-       limit 1`);
-    if (live.rows.length === 0) return { kind: "changed" as const };
+       limit 1`, "objects");
+    if (live.length === 0) return { kind: "changed" as const };
 
     const queue = getMigrationQueue();
     const jobId = `migration|${connectionId}|${mode}`;
@@ -121,8 +121,8 @@ export async function requestConnectionRun(
          where org_id = ${orgId} and connection_id = ${connectionId}
            and kind in ('incremental', 'full_migration', 'targeted_repair', 'project_financials', 'attachments')
            and status = 'running'
-         limit 1`);
-      if (running.rows.length > 0) return { kind: "active" as const };
+         limit 1`, "objects");
+      if (running.length > 0) return { kind: "active" as const };
 
       for (const queuedMode of MUTATING_MIGRATION_MODES) {
         const queued = await queue.getJob(`migration|${connectionId}|${queuedMode}`);

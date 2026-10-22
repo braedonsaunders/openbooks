@@ -387,7 +387,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
        where org_id = ${orgId}::uuid and is_active
          ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)}
        order by name
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
     dialogOpen ? listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds) : Promise.resolve([]),
   ])
   let drawer: WindowDrawerData | null = null
@@ -414,7 +414,7 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const pendingEnrollmentCount = enrolments.filter((e) => e.status === 'pending_approval').length
   const portfolio = await loadBenefitsPortfolio(authz, sp, { openCount, pendingEnrollments: pendingEnrollmentCount }, t)
   const subsidiaryOptions = dialogOpen
-    ? subsidiaryResult.rows.map((row) => ({ value: row.id, label: row.name }))
+    ? subsidiaryResult.map((row) => ({ value: row.id, label: row.name }))
     : portfolio.subsidiaryOptions
   const departmentOptions = dialogOpen
     ? departments.map((row) => ({ value: row.id, label: row.name }))

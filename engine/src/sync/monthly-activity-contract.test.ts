@@ -112,7 +112,7 @@ test("ERPNext exposes uncancelled account-month home-currency activity", async (
 });
 
 test("QuickBooks exposes transaction account-month home-currency activity", async (t) => {
-  t.mock.method(db, "execute", async () => ({ rows: [{ time_zone: "UTC" }] }));
+  t.mock.method(db, "execute", async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ time_zone: "UTC" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)));
   const client = {
     report: async (name: string, params: Record<string, string>) => {
       assert.equal(name, "GeneralLedger");
@@ -143,7 +143,7 @@ test("QuickBooks exposes transaction account-month home-currency activity", asyn
 
 test("Xero trial-balance month-ends follow the org calendar", async (t) => {
   const orgId = "00000000-0000-0000-0000-000000000000";
-  t.mock.method(db, "execute", async () => ({ rows: [{ time_zone: "Pacific/Auckland" }] }));
+  t.mock.method(db, "execute", async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ time_zone: "Pacific/Auckland" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)));
   const dates: string[] = [];
   const source = new XeroSource({
     get: async (path: string, params: Record<string, string> = {}) => {

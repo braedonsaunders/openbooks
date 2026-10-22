@@ -219,14 +219,14 @@ async function guardSubsidiaryAccess(
       typeof body.subsidiaryId === "string" ? body.subsidiaryId : null;
   } else if (["updateUnit", "deleteUnit"].includes(action)) {
     const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${authz.user.orgId} and u.id=${String(body.unitId ?? "")}`,
+      sql`select p.subsidiary_id as "subsidiaryId" from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${authz.user.orgId} and u.id=${String(body.unitId ?? "")}`, "objects",
     ));
-    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    subsidiaryId = result[0]?.subsidiaryId ?? null;
   } else if (action === "reverseDeposit") {
     const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where d.org_id=${authz.user.orgId} and d.id=${String(body.transactionId ?? "")}`,
+      sql`select p.subsidiary_id as "subsidiaryId" from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where d.org_id=${authz.user.orgId} and d.id=${String(body.transactionId ?? "")}`, "objects",
     ));
-    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    subsidiaryId = result[0]?.subsidiaryId ?? null;
   } else if (
     [
       "updateProperty",
@@ -240,9 +240,9 @@ async function guardSubsidiaryAccess(
     ].includes(action) && body.propertyId
   ) {
     const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${String(body.propertyId ?? "")}`,
+      sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${String(body.propertyId ?? "")}`, "objects",
     ));
-    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    subsidiaryId = result[0]?.subsidiaryId ?? null;
     if (
       action === "updateProperty" &&
       typeof body.subsidiaryId === "string" &&
@@ -269,17 +269,17 @@ async function guardSubsidiaryAccess(
     ].includes(action)
   ) {
     const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where l.org_id=${authz.user.orgId} and l.id=${String(body.leaseId ?? "")}`,
+      sql`select p.subsidiary_id as "subsidiaryId" from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where l.org_id=${authz.user.orgId} and l.id=${String(body.leaseId ?? "")}`, "objects",
     ));
-    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    subsidiaryId = result[0]?.subsidiaryId ?? null;
     if (action === "updateLease" && body.propertyId !== undefined) {
       // A draft lease may move to another property: the target must be
       // visible to the caller too, and a hidden target reads as missing.
       const targetId = String(body.propertyId ?? "");
       const target = isUuid(targetId)
         ? (await db.execute<{ subsidiaryId: string | null }>(
-            sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${targetId}`,
-          )).rows[0]?.subsidiaryId ?? null
+            sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${targetId}`, "objects",
+          ))[0]?.subsidiaryId ?? null
         : null;
       if (!target || !allowed.has(String(target)))
         return NextResponse.json(
@@ -289,16 +289,16 @@ async function guardSubsidiaryAccess(
     }
   } else if (action === "applyEscalation") {
     const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from lease_escalations e join property_leases l on l.id=e.lease_id and l.org_id=e.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where e.org_id=${authz.user.orgId} and e.id=${String(body.escalationId ?? "")}`,
+      sql`select p.subsidiary_id as "subsidiaryId" from lease_escalations e join property_leases l on l.id=e.lease_id and l.org_id=e.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where e.org_id=${authz.user.orgId} and e.id=${String(body.escalationId ?? "")}`, "objects",
     ));
-    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    subsidiaryId = result[0]?.subsidiaryId ?? null;
   } else if (
     ["updateCamPool", "cancelCamPool", "reopenCamPool", "finalizeCam", "billCam"].includes(action)
   ) {
     const result = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select p.subsidiary_id as "subsidiaryId" from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.id=${String(body.poolId ?? "")}`,
+      sql`select p.subsidiary_id as "subsidiaryId" from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.id=${String(body.poolId ?? "")}`, "objects",
     ));
-    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    subsidiaryId = result[0]?.subsidiaryId ?? null;
   }
   if (!subsidiaryId)
     return NextResponse.json(
@@ -334,9 +334,9 @@ async function refuseDisabledPropertyFixedAsset(
     const current = (await db.execute<{ fixed_asset_id: string | null }>(sql`
       select fixed_asset_id from managed_properties
        where org_id=${orgId} and id=${String(body.propertyId ?? "")}
-    `));
-    const currentId = current.rows[0]?.fixed_asset_id
-      ? String(current.rows[0].fixed_asset_id)
+    `, "objects"));
+    const currentId = current[0]?.fixed_asset_id
+      ? String(current[0].fixed_asset_id)
       : null;
     if (currentId === submitted) return null;
   }
@@ -371,8 +371,8 @@ async function refuseDisabledLeaseChargeInventory(
   if (itemId === undefined || itemId === null || itemId === "") return null;
   if (await isFeatureEnabled(orgId, "inventory")) return null;
   const item = (await db.execute<{ kind: string }>(sql`
-    select kind from items where id = ${String(itemId)} and org_id = ${orgId}`));
-  if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+    select kind from items where id = ${String(itemId)} and org_id = ${orgId}`, "objects"));
+  if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
     return notFound("record");
   }
   return null;

@@ -29,9 +29,9 @@ export const GET = defineRoute({
                  interval, interval_count
             from subscription_plans
            where org_id = ${authz.user.orgId} and is_active
-           order by name`),
+           order by name`, "objects"),
       );
-      return NextResponse.json({ plans: plans.rows });
+      return NextResponse.json({ plans });
     } catch (e) {
       return apiErrorResponse(e);
     }

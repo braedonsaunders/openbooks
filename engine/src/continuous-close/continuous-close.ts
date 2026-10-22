@@ -106,8 +106,8 @@ export async function getContinuousClosePolicies(orgId: string): Promise<Continu
              order by r.started_at desc limit 1) as last_run_status
       from ai_agent_policies p
      where p.org_id = ${orgId}
-  `));
-  const byKey = new Map(rows.rows.map((row) => [String(row.agent_key), row]));
+  `, "objects"));
+  const byKey = new Map(rows.map((row) => [String(row.agent_key), row]));
   return CONTINUOUS_CLOSE_AGENT_KEYS.map((agentKey) => {
     const row = byKey.get(agentKey);
     if (!row) return defaultContinuousClosePolicy(agentKey);
@@ -174,8 +174,8 @@ async function persistFinding(orgId: string, runId: string, finding: AgentFindin
       updated_at = now()
     where ai_work_items.org_id = ${orgId}
     returning id
-  `));
-  const itemId = result.rows[0]!.id;
+  `, "objects"));
+  const itemId = result[0]!.id;
   await db.execute(sql`delete from ai_work_item_evidence where org_id = ${orgId} and work_item_id = ${itemId}`);
   if (finding.evidence.length > 0) {
     await db.insert(schema.aiWorkItemEvidence).values(
@@ -358,13 +358,13 @@ export async function runContinuousCloseAgent(args: {
          where id = ${occurrence.policyId} and org_id = ${args.orgId}
            and next_run_at = ${occurrence.claimedNextRunAt}
         returning id
-      `));
-      if (!claim.rows.length) return { kind: "unclaimed" }; // another tick owns it
+      `, "objects"));
+      if (!claim.length) return { kind: "unclaimed" }; // another tick owns it
     }
     const lock = (await db.execute<{ acquired: boolean }>(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${`${args.orgId}:${args.agentKey}`}, 0)) as acquired
-    `));
-    if (!lock.rows[0]?.acquired) {
+    `, "objects"));
+    if (!lock[0]?.acquired) {
       const [skipped] = await db
         .insert(schema.aiAgentRuns)
         .values({
@@ -394,8 +394,8 @@ export async function runContinuousCloseAgent(args: {
        where org_id = ${args.orgId} and agent_key = ${args.agentKey}
          and status = 'running' and started_at > now() - interval '15 minutes'
        order by started_at desc limit 1
-    `));
-    if (active.rows[0]) {
+    `, "objects"));
+    if (active[0]) {
       const [skipped] = await db
         .insert(schema.aiAgentRuns)
         .values({
@@ -406,7 +406,7 @@ export async function runContinuousCloseAgent(args: {
           detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
           initiatedBy: args.initiatedBy ?? null,
           finishedAt: new Date(),
-          stats: { reason: "already_running", activeRunId: active.rows[0].id, ...occurrenceStats },
+          stats: { reason: "already_running", activeRunId: active[0].id, ...occurrenceStats },
         })
         .returning({ id: schema.aiAgentRuns.id });
       return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
@@ -426,7 +426,7 @@ export async function runContinuousCloseAgent(args: {
     const global = (await db.execute<{ enabled: boolean }>(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${args.orgId}
-    `));
+    `, "objects"));
     const policy = (await db.execute<{
         enabled: boolean;
         materiality_threshold: string;
@@ -435,8 +435,8 @@ export async function runContinuousCloseAgent(args: {
       }>(sql`
       select enabled, materiality_threshold::text, detector_settings, analysis_settings
         from ai_agent_policies where org_id = ${args.orgId} and agent_key = ${args.agentKey}
-    `));
-    const configured = policy.rows[0];
+    `, "objects"));
+    const configured = policy[0];
     const [run] = await db
       .insert(schema.aiAgentRuns)
       .values({
@@ -447,7 +447,7 @@ export async function runContinuousCloseAgent(args: {
         initiatedBy: args.initiatedBy ?? null,
       })
       .returning({ id: schema.aiAgentRuns.id });
-    if (!global.rows[0]?.enabled || !configured?.enabled) {
+    if (!global[0]?.enabled || !configured?.enabled) {
       await db.execute(sql`
         update ai_agent_runs set status = 'skipped', finished_at = now(), stats = ${JSON.stringify({ reason: "disabled", ...occurrenceStats })}::jsonb
          where id = ${run!.id} and org_id = ${args.orgId}
@@ -463,7 +463,7 @@ export async function runContinuousCloseAgent(args: {
       for (const finding of findings) findingIds.push(await persistFinding(args.orgId, run!.id, finding));
       const resolved =
         evaluatedDetectors.length === 0
-          ? { rows: [] as { id: string }[] }
+          ? [] as { id: string }[]
           : ((await db.execute<{ id: string }>(sql`
             update ai_work_items
                set status = 'resolved', resolved_at = now(), resolved_by = null, updated_at = now()
@@ -474,7 +474,7 @@ export async function runContinuousCloseAgent(args: {
                )})
                 and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
              returning id
-           `)));
+           `, "objects")));
       // Commit the measured stats INSIDE the claimed transaction together
       // with the cursor advance and every detection artifact above — but
       // leave the run 'running': the overlap guard above must stay held
@@ -483,7 +483,7 @@ export async function runContinuousCloseAgent(args: {
       // enrichment has appended its brief.
       const runStats = {
         detected: findings.length,
-        autoResolved: resolved.rows.length,
+        autoResolved: resolved.length,
         evaluatedDetectors,
         ...occurrenceStats,
       };
@@ -499,7 +499,7 @@ export async function runContinuousCloseAgent(args: {
         kind: "ready",
         runId: run!.id,
         detected: findings.length,
-        autoResolved: resolved.rows.length,
+        autoResolved: resolved.length,
         evaluatedDetectors,
         findingIds,
         analysis,
@@ -563,8 +563,8 @@ export async function runContinuousCloseAgent(args: {
       update ai_agent_runs set status = 'completed', finished_at = now(), stats = stats || ${JSON.stringify({ enrichment })}::jsonb
        where id = ${prepared.runId} and org_id = ${args.orgId} and status = 'running'
       returning id
-    `));
-  if (!completed.rows.length) {
+    `, "objects"));
+  if (!completed.length) {
     console.error(`[continuous-close] ${args.agentKey} run ${prepared.runId} completion matched zero rows`);
     throw new Error("continuous_close_completion_lost");
   }
@@ -607,8 +607,8 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
        -- default instead of throwing 22P02 like the previous ::boolean cast.
        and case (o.settings->'features'->>'continuousClose') when 'true' then true when 'false' then false else true end
      order by p.next_run_at
-  `));
-  for (const policy of due.rows) {
+  `, "objects"));
+  for (const policy of due) {
     // The occurrence claim now runs INSIDE the agent's own transaction (see
     // runContinuousCloseAgent): the cursor advance commits atomically with the
     // run row it justifies, so nothing between scan and execution can strand a

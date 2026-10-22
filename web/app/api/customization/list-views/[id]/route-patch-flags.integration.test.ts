@@ -93,8 +93,8 @@ function patchRequest(body: unknown): Request {
 async function storedFlags(orgId: string): Promise<{ isDefault: boolean; isActive: boolean }> {
   const r = await db.execute<{ isDefault: boolean; isActive: boolean }>(sql`
     select is_default as "isDefault", is_active as "isActive"
-      from list_views where id = ${VIEW_ID} and org_id = ${orgId}`);
-  return r.rows[0]!;
+      from list_views where id = ${VIEW_ID} and org_id = ${orgId}`, "objects");
+  return r[0]!;
 }
 
 test(

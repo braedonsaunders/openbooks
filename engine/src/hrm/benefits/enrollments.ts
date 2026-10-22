@@ -119,13 +119,11 @@ async function liveEmploymentVersions(
   orgId: string,
   employmentId: string,
 ): Promise<LiveVersion[]> {
-  const rows = (
-    await exec.execute<{ status: string; effective_from: string; effective_to: string | null }>(sql`
+  const rows = await exec.execute<{ status: string; effective_from: string; effective_to: string | null }>(sql`
       select status, effective_from::text as effective_from, effective_to::text as effective_to
         from worker_employment_versions
        where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-    `)
-  ).rows;
+    `, "objects");
   return rows.map((row) => ({
     status: row.status,
     effectiveFrom: row.effective_from.slice(0, 10),
@@ -175,13 +173,11 @@ async function lockEnrollmentWindowAdmission(
   windowId: string,
 ): Promise<void> {
   requireOneRow(
-    (
-      await exec.execute<{ id: string }>(sql`
+    await exec.execute<{ id: string }>(sql`
         select id from hrm_enrollment_windows
          where org_id = ${orgId} and id = ${windowId}
          for share
-      `)
-    ).rows,
+      `, "objects"),
     "enrollment window",
   );
 }
@@ -220,15 +216,13 @@ async function liveDepartmentIds(
   orgId: string,
   employmentId: string,
 ): Promise<string[]> {
-  const rows = (
-    await exec.execute<{ department_id: string | null }>(sql`
+  const rows = await exec.execute<{ department_id: string | null }>(sql`
       select v.department_id
         from employment_assignment_versions v
         join employment_assignments s on s.org_id = v.org_id and s.id = v.assignment_id
        where v.org_id = ${orgId} and s.employment_id = ${employmentId}
          and v.recorded_until is null and v.department_id is not null
-    `)
-  ).rows;
+    `, "objects");
   return [...new Set(rows.map((row) => String(row.department_id)))];
 }
 
@@ -247,15 +241,13 @@ async function checkEntry(
 ): Promise<EntryCheck> {
   if (windowId !== null) {
     const row = requireOneRow(
-      (
-        await exec.execute<Record<string, unknown>>(sql`
+      await exec.execute<Record<string, unknown>>(sql`
           select status, opens_on::text as "opensOn", closes_on::text as "closesOn",
                  applies_to as "appliesTo", name
             from hrm_enrollment_windows
            where org_id = ${orgId} and id = ${windowId}
            for share
-        `)
-      ).rows,
+        `, "objects"),
       "enrollment window",
     );
     if (String(row.status) !== "open") {
@@ -332,7 +324,7 @@ async function requireActivePlanInScope(
 async function requireContributionSubject(exec: SqlExecutor, orgId: string, planId: string, classKey: string | null | undefined, matchEligible: boolean | null | undefined): Promise<void> {
   if (matchEligible != null && typeof matchEligible !== 'boolean') throw new BenefitsError('INVALID_INPUT','Matching eligibility must be explicitly yes, no, or unknown');
   if (classKey != null) {
-    const exists = (await exec.execute(sql`select id from hrm_benefit_contribution_classes where org_id=${orgId} and plan_id=${planId} and class_key=${classKey}`)).rows;
+    const exists = await exec.execute(sql`select id from hrm_benefit_contribution_classes where org_id=${orgId} and plan_id=${planId} and class_key=${classKey}`, "objects");
     if (!exists.length) throw new BenefitsError('REFUSED','The selected contribution class is not on this plan — choose a class declared in its Contributions');
   }
 }
@@ -343,7 +335,7 @@ async function requireWaitingSatisfied(
   effectiveFrom: string,
 ): Promise<void> {
   if (plan.waitingPeriodDays <= 0 && !(plan.waitingPeriodMonths && plan.waitingPeriodMonths > 0)) return;
-  const subject=requireOneRow((await exec.execute<{service_start:string|null}>(sql`select service_start::text from worker_employments where org_id=${orgId} and id=${employmentId}`)).rows,'Benefit employment');
+  const subject=requireOneRow(await exec.execute<{service_start:string|null}>(sql`select service_start::text from worker_employments where org_id=${orgId} and id=${employmentId}`, "objects"),'Benefit employment');
   if (subject.service_start === null) throw new BenefitsError('REFUSED',`Plan ${plan.code} has a service waiting period, but the original employment service start is unknown — record the supported employment service date before electing coverage`);
   const start=subject.service_start;
   const eligible = plan.waitingPeriodMonths ? addMonthsClamped(start, plan.waitingPeriodMonths) : addCalendarDays(start, plan.waitingPeriodDays);
@@ -363,16 +355,14 @@ async function requireNoOverlappingElection(
   effectiveFrom: string,
   effectiveTo: string | null,
 ): Promise<void> {
-  const rows = (
-    await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
       select id from hrm_benefit_enrollments
        where org_id = ${orgId} and employment_id = ${employmentId} and plan_id = ${planId}
          and status in ('elected', 'pending_approval', 'active', 'ended')
          and effective_from <= ${effectiveTo ?? "9999-12-31"}
          and (effective_to is null or effective_to >= ${effectiveFrom})
        limit 1
-    `)
-  ).rows;
+    `, "objects");
   if (rows.length > 0) {
     throw new BenefitsError(
       "REFUSED",
@@ -461,8 +451,7 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
     const status = "elected";
     let insertedRows: Record<string, unknown>[];
     try {
-      insertedRows = (
-        await db.execute<Record<string, unknown>>(sql`
+      insertedRows = await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_enrollments
             (org_id, employment_id, plan_id, window_id, coverage_level_key, status,
              effective_from, effective_to, employee_amount_per_period,
@@ -472,8 +461,7 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
                   null, null,
                   ${plan.currency}, ${actorId}, ${actorId}, ${actorId})
           returning ${ENROLLMENT_COLUMNS}
-        `)
-      ).rows;
+        `, "objects");
     } catch (error) {
       if (isElectionRangeConflict(error)) throw electionRangeConflict();
       throw error;
@@ -489,7 +477,7 @@ export async function electEnrollment(query: ElectEnrollmentQuery): Promise<Enro
     await requireContributionSubject(db, orgId, planId, query.classKey, query.matchEligible);
     await recordEnrollmentContributionTerms(db, orgId, actorId, dto.id, effectiveFrom, effectiveTo, query.contributionTerms);
     if (query.classKey !== undefined || query.matchEligible !== undefined) {
-      const updated = (await db.execute(sql`update hrm_benefit_enrollments set class_key=${query.classKey ?? null},match_eligible=${query.matchEligible ?? null},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${dto.id} returning id`)).rows;
+      const updated = await db.execute(sql`update hrm_benefit_enrollments set class_key=${query.classKey ?? null},match_eligible=${query.matchEligible ?? null},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${dto.id} returning id`, "objects");
       requireOneRow(updated, "Recording benefit contribution class and matching eligibility");
     }
     await appendEvent(db, orgId, actorId, dto.id, eventKind, eventReason);
@@ -540,16 +528,14 @@ export async function waiveEnrollment(query: WaiveEnrollmentQuery): Promise<Enro
     await requireNoOverlappingElection(db, orgId, employmentId, planId, effectiveFrom, null);
     let insertedRows: Record<string, unknown>[];
     try {
-      insertedRows = (
-        await db.execute<Record<string, unknown>>(sql`
+      insertedRows = await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_enrollments
             (org_id, employment_id, plan_id, window_id, status,
              effective_from, currency, elected_by, created_by, updated_by)
           values (${orgId}, ${employmentId}, ${planId}, ${entry.windowId}, 'waived',
                   ${effectiveFrom}::date, ${plan.currency}, ${actorId}, ${actorId}, ${actorId})
           returning ${ENROLLMENT_COLUMNS}
-        `)
-      ).rows;
+        `, "objects");
     } catch (error) {
       if (isElectionRangeConflict(error)) throw electionRangeConflict();
       throw error;
@@ -567,12 +553,10 @@ async function loadEnrollment(
   enrollmentId: string,
 ): Promise<EnrollmentDTO> {
   const row = requireOneRow(
-    (
-      await exec.execute<Record<string, unknown>>(sql`
+    await exec.execute<Record<string, unknown>>(sql`
         select ${ENROLLMENT_COLUMNS} from hrm_benefit_enrollments
          where org_id = ${orgId} and id = ${enrollmentId}
-      `)
-    ).rows,
+      `, "objects"),
     "benefit enrollment",
   );
   return toEnrollmentDTO(row);
@@ -585,17 +569,17 @@ async function activateBenefitEnrollment(
   enrollmentId: string,
   decision: Record<string, unknown>,
 ): Promise<void> {
-  const enrollment = requireOneRow((await db.execute<Record<string, unknown>>(sql`select * from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId} for update`)).rows,'Activating benefit coverage');
+  const enrollment = requireOneRow(await db.execute<Record<string, unknown>>(sql`select * from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId} for update`, "objects"),'Activating benefit coverage');
   if (enrollment.replaces_enrollment_id != null) {
     const predecessorId = String(enrollment.replaces_enrollment_id);
     const endedDay = addCalendarDays(String(enrollment.effective_from).slice(0,10),-1);
-    requireOneRow((await db.execute(sql`update hrm_benefit_enrollments set status='ended',effective_to=${endedDay}::date,
+    requireOneRow(await db.execute(sql`update hrm_benefit_enrollments set status='ended',effective_to=${endedDay}::date,
       ended_reason='Replaced by an authorized contribution election',updated_by=${actorId},updated_at=now()
-      where org_id=${orgId} and id=${predecessorId} and employment_id=${String(enrollment.employment_id)} and plan_id=${String(enrollment.plan_id)} and status='active' returning id`)).rows,'Ending predecessor coverage');
+      where org_id=${orgId} and id=${predecessorId} and employment_id=${String(enrollment.employment_id)} and plan_id=${String(enrollment.plan_id)} and status='active' returning id`, "objects"),'Ending predecessor coverage');
     await appendEvent(db,orgId,actorId,predecessorId,'ended','Replaced by an authorized contribution election');
   }
-  requireOneRow((await db.execute(sql`update hrm_benefit_enrollments set status='active',decision_snapshot=${JSON.stringify(decision)}::jsonb,
-    updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${enrollmentId} and status in ('elected','pending_approval') returning id`)).rows,'Activating authorized benefit coverage');
+  requireOneRow(await db.execute(sql`update hrm_benefit_enrollments set status='active',decision_snapshot=${JSON.stringify(decision)}::jsonb,
+    updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${enrollmentId} and status in ('elected','pending_approval') returning id`, "objects"),'Activating authorized benefit coverage');
   await appendEvent(
     db,
     orgId,
@@ -636,10 +620,10 @@ async function submitBenefitEnrollment(
     BENEFIT_ENROLLMENT_SUBJECT_KIND,
     enrollmentId,
   );
-  const snapshot = requireOneRow((await db.execute<{source:Record<string,unknown>}>(sql`select public.benefit_enrollment_submission_source(${orgId}::uuid,${enrollmentId}::uuid) as source`)).rows,'Pinning benefit contribution submission').source;
+  const snapshot = requireOneRow(await db.execute<{source:Record<string,unknown>}>(sql`select public.benefit_enrollment_submission_source(${orgId}::uuid,${enrollmentId}::uuid) as source`, "objects"),'Pinning benefit contribution submission').source;
   if (!snapshot) throw new BenefitsError('REFUSED','The enrollment is not an editable election — reopen its current record');
-  requireOneRow((await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${actorId},submitted_at=now(),submission_snapshot=${JSON.stringify(snapshot)}::jsonb,
-    updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${enrollmentId} and status='elected' returning id`)).rows,'Recording contribution submission');
+  requireOneRow(await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${actorId},submitted_at=now(),submission_snapshot=${JSON.stringify(snapshot)}::jsonb,
+    updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${enrollmentId} and status='elected' returning id`, "objects"),'Recording contribution submission');
   const { routeSubjectSubmission } =
     await import("../../flows/submission-policy.ts");
   const { policy, dispatch, submissionId } = await routeSubjectSubmission({
@@ -664,8 +648,8 @@ async function submitBenefitEnrollment(
       "REFUSED",
       "The enrollment has no native gate; review its submitted Flow.",
     );
-  requireOneRow((await db.execute(sql`update hrm_benefit_enrollments set status='pending_approval',flow_run_id=${run.runId},updated_by=${actorId},updated_at=now()
-    where org_id=${orgId} and id=${enrollmentId} and status='elected' returning id`)).rows,'Submitting enrollment to native Flows');
+  requireOneRow(await db.execute(sql`update hrm_benefit_enrollments set status='pending_approval',flow_run_id=${run.runId},updated_by=${actorId},updated_at=now()
+    where org_id=${orgId} and id=${enrollmentId} and status='elected' returning id`, "objects"),'Submitting enrollment to native Flows');
 }
 
 /** Finish only the submitted elections carried by this completed automatic run. */
@@ -680,8 +664,8 @@ export async function completeBenefitEnrollmentSubmission(query:{orgId:string;ac
       BENEFIT_ENROLLMENT_SUBJECT_KIND,
       enrollmentId,
     );
-    const row=requireOneRow((await db.execute<Record<string,unknown>>(sql`select * from hrm_benefit_enrollments
-      where org_id=${orgId} and id=${enrollmentId} for update`)).rows,'Loading the original contribution submission');
+    const row=requireOneRow(await db.execute<Record<string,unknown>>(sql`select * from hrm_benefit_enrollments
+      where org_id=${orgId} and id=${enrollmentId} for update`, "objects"),'Loading the original contribution submission');
     const enrollment=await loadEnrollment(db,orgId,enrollmentId);
     const subject=await requireHrmBenefitsManageOnEmployment(db,orgId,actorId,enrollment.employmentId);
     const run=await requireCompletedSubmissionRouting({orgId,actorId,subjectKind:BENEFIT_ENROLLMENT_SUBJECT_KIND,subjectId:enrollmentId,runId});
@@ -697,8 +681,8 @@ export async function completeBenefitEnrollmentSubmission(query:{orgId:string;ac
     if(enrollment.status==='active'&&prior?.mode==='ungated'&&prior.submissionId===run.submissionId)return {status:'active'};
     if(enrollment.status!=='pending_approval'||prior!==null)throw new BenefitsError('BAD_STATE','Only this election’s pending original submission can finish automatically');
     await requireActivePlanInScope(db,orgId,subject,enrollment.planId,enrollment.effectiveFrom);
-    const runs=(await db.execute<{id:string;status:string;context:Record<string,unknown>}>(sql`select id,status,context from flow_runs
-      where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} and trigger='on_submit' order by created_at,id`)).rows;
+    const runs=await db.execute<{id:string;status:string;context:Record<string,unknown>}>(sql`select id,status,context from flow_runs
+      where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} and trigger='on_submit' order by created_at,id`, "objects");
     await activateBenefitEnrollment(orgId,actorId,enrollmentId,{outcome:'approved',mode:'ungated',submissionId:run.submissionId,policy:run.policy,runId,runs,gates:[]});
     return {status:(await loadEnrollment(db,orgId,enrollmentId)).status};
   });
@@ -739,11 +723,11 @@ export async function releaseBenefitEnrollmentApproval(query: {
     const enrollment=await loadEnrollment(db,orgId,enrollmentId);
     const subject=await requireHrmBenefitsManageOnEmployment(db,orgId,actorId,enrollment.employmentId);
     if (enrollment.status!=='pending_approval') return;
-    const gates=(await db.execute<{id:string;status:string;decided_by:string|null;decided_at:string|null}>(sql`select id,status,decided_by,decided_at::text from flow_gates
-      where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} order by created_at,id`)).rows;
+    const gates=await db.execute<{id:string;status:string;decided_by:string|null;decided_at:string|null}>(sql`select id,status,decided_by,decided_at::text from flow_gates
+      where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} order by created_at,id`, "objects");
     if (gates.some(g=>g.status==='pending'||g.status==='escalated')) throw new BenefitsError('REFUSED','Benefit approval stages remain open — complete the assigned decisions in Approvals');
     if (!gates.some(g=>g.status===query.outcome && g.decided_by===actorId)) throw new BenefitsError('REFUSED','No matching native workflow decision authorizes this enrollment — decide its assigned gate in Approvals');
-    const runs=(await db.execute<{id:string;status:string;context:Record<string,unknown>}>(sql`select id,status,context from flow_runs where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} and trigger='on_submit' order by created_at,id`)).rows;
+    const runs=await db.execute<{id:string;status:string;context:Record<string,unknown>}>(sql`select id,status,context from flow_runs where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} and trigger='on_submit' order by created_at,id`, "objects");
     if (!enrollment.flowRunId || !runs.some(r=>r.id===enrollment.flowRunId) || runs.some(r=>r.status==='failed')) throw new BenefitsError('REFUSED','The enrollment workflow evidence is missing or failed — review its execution in Flows');
     const decision={outcome:query.outcome,mode:'human',runId:enrollment.flowRunId,runs,gates};
     if (query.outcome==='approved') {
@@ -752,8 +736,8 @@ export async function releaseBenefitEnrollmentApproval(query: {
       await db.execute(sql`select set_config('openbooks.hrm_benefit_release',${`${orgId}:${enrollmentId}:${actorId}`},true)`);
       await activateBenefitEnrollment(orgId,actorId,enrollmentId,decision);
     } else {
-      requireOneRow((await db.execute(sql`update hrm_benefit_enrollments set status='cancelled',decision_snapshot=${JSON.stringify(decision)}::jsonb,updated_by=${actorId},updated_at=now()
-        where org_id=${orgId} and id=${enrollmentId} and status='pending_approval' returning id`)).rows,'Rejecting proposed contribution elections');
+      requireOneRow(await db.execute(sql`update hrm_benefit_enrollments set status='cancelled',decision_snapshot=${JSON.stringify(decision)}::jsonb,updated_by=${actorId},updated_at=now()
+        where org_id=${orgId} and id=${enrollmentId} and status='pending_approval' returning id`, "objects"),'Rejecting proposed contribution elections');
       await appendEvent(db,orgId,actorId,enrollmentId,'cancelled',query.comment?.trim() || 'Rejected by the native approval workflow');
     }
   });
@@ -823,12 +807,11 @@ export async function changeEnrollment(query: ChangeEnrollmentQuery): Promise<En
     coveringVersion(versions, changeDate);
     const plan = await requireActivePlanInScope(db, orgId, subject, current.planId, changeDate);
     await lockEnrollmentPlanAdmission(db,orgId,current.employmentId,current.planId);
-    const otherProposal=(await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and employment_id=${current.employmentId}
-      and plan_id=${current.planId} and status in ('elected','pending_approval') limit 1`)).rows;
+    const otherProposal=await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and employment_id=${current.employmentId}
+      and plan_id=${current.planId} and status in ('elected','pending_approval') limit 1`, "objects");
     if (otherProposal.length) throw new BenefitsError('REFUSED','A contribution change already awaits submission or approval — complete or cancel that proposal before creating another');
     const inserted = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_enrollments
             (org_id, employment_id, plan_id, window_id, coverage_level_key, status,
              effective_from, effective_to, employee_amount_per_period,
@@ -839,16 +822,15 @@ export async function changeEnrollment(query: ChangeEnrollmentQuery): Promise<En
                   null, null,
                   ${plan.currency}, ${actorId}, ${actorId}, ${actorId},${enrollmentId})
           returning ${ENROLLMENT_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "opening the changed enrolment",
     );
     const dto = toEnrollmentDTO(inserted);
-    const priorTerms = (await db.execute<EnrollmentContributionInput>(sql`select rule_id as "ruleId",election_mode as "electionMode",elected_rate::text as "electedRate",declared_periods_per_year as "declaredPeriodsPerYear",source_decimal as "sourceDecimal",provenance from hrm_benefit_enrollment_terms where org_id=${orgId} and enrollment_id=${enrollmentId} and effective_from<=${changeDate}::date and (effective_to is null or effective_to>=${changeDate}::date)`)).rows;
+    const priorTerms = await db.execute<EnrollmentContributionInput>(sql`select rule_id as "ruleId",election_mode as "electionMode",elected_rate::text as "electedRate",declared_periods_per_year as "declaredPeriodsPerYear",source_decimal as "sourceDecimal",provenance from hrm_benefit_enrollment_terms where org_id=${orgId} and enrollment_id=${enrollmentId} and effective_from<=${changeDate}::date and (effective_to is null or effective_to>=${changeDate}::date)`, "objects");
     await recordEnrollmentContributionTerms(db, orgId, actorId, dto.id, changeDate, current.effectiveTo, query.contributionTerms ?? priorTerms);
-    const subjectConfiguration = (await db.execute<{ class_key: string | null; match_eligible: boolean | null }>(sql`select class_key,match_eligible from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId}`)).rows[0]!;
+    const subjectConfiguration = (await db.execute<{ class_key: string | null; match_eligible: boolean | null }>(sql`select class_key,match_eligible from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId}`, "objects"))[0]!;
     await requireContributionSubject(db, orgId, current.planId, query.classKey === undefined ? subjectConfiguration.class_key : query.classKey, query.matchEligible === undefined ? subjectConfiguration.match_eligible : query.matchEligible);
-    requireOneRow((await db.execute(sql`update hrm_benefit_enrollments set class_key=${query.classKey === undefined ? subjectConfiguration.class_key : query.classKey},match_eligible=${query.matchEligible === undefined ? subjectConfiguration.match_eligible : query.matchEligible} where org_id=${orgId} and id=${dto.id} returning id`)).rows, "Recording replacement contribution class");
+    requireOneRow(await db.execute(sql`update hrm_benefit_enrollments set class_key=${query.classKey === undefined ? subjectConfiguration.class_key : query.classKey},match_eligible=${query.matchEligible === undefined ? subjectConfiguration.match_eligible : query.matchEligible} where org_id=${orgId} and id=${dto.id} returning id`, "objects"), "Recording replacement contribution class");
     await appendEvent(db, orgId, actorId, dto.id, "elected", `changed from ${changeDate}: ${reason}`);
     await appendEvent(db, orgId, actorId, dto.id, "changed", `continues enrolment ${enrollmentId} from ${changeDate}`);
     await submitBenefitEnrollment(orgId,actorId,dto.id);
@@ -899,16 +881,14 @@ export async function endEnrollment(query: EndEnrollmentQuery): Promise<Enrollme
       current.effectiveTo !== null && current.effectiveTo < endedOn ? current.effectiveTo : endedOn;
     if (current.status !== "active") return cancelEnrollment({orgId,actorId,enrollmentId,reason});
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_enrollments
              set status = 'ended', effective_to = ${effectiveTo}::date,
                  ended_reason = ${reason}, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${enrollmentId}
              and status in ('active', 'elected', 'pending_approval')
           returning ${ENROLLMENT_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "ending the enrolment",
     );
     await appendEvent(db, orgId, actorId, enrollmentId, "ended", reason);
@@ -927,7 +907,7 @@ export async function cancelEnrollmentFlows(
     BENEFIT_ENROLLMENT_SUBJECT_KIND,
     enrollmentId,
   );
-  const runs=(await db.execute<{id:string}>(sql`select id from flow_runs where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId}`)).rows;
+  const runs=await db.execute<{id:string}>(sql`select id from flow_runs where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId}`, "objects");
   await cancelDispatchRuns(orgId,runs.map(r=>r.id),{actorId});
 }
 
@@ -959,16 +939,14 @@ export async function cancelEnrollment(query: {
     }
     await cancelEnrollmentFlows(orgId,actorId,enrollmentId);
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_enrollments
              set status = 'cancelled', ended_reason = ${reason},
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${enrollmentId}
              and status in ('elected', 'pending_approval')
           returning ${ENROLLMENT_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "cancelling the enrolment",
     );
     await appendEvent(db, orgId, actorId, enrollmentId, "cancelled", reason);
@@ -996,16 +974,16 @@ export async function withdrawUnusedEnrollment(query: {
     await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and id=${enrollmentId} for update`);
     const current = await loadEnrollment(db, orgId, enrollmentId);
     if (current.status !== "active" && current.status !== "ended") throw new BenefitsError("BAD_STATE", "Only active or ended unused coverage can be withdrawn — reload the enrollment and choose its current record action");
-    const used = (await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`)).rows;
+    const used = await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`, "objects");
     if (used.length) throw new BenefitsError("REFUSED", "This coverage has payroll allocation history — preserve it and use a dated successor; discard or recalculate editable payroll before withdrawing unused coverage");
-    const legacy = (await db.execute(sql`select id from hrm_benefit_payroll_inputs where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`)).rows;
+    const legacy = await db.execute(sql`select id from hrm_benefit_payroll_inputs where org_id=${orgId} and enrollment_id=${enrollmentId} limit 1`, "objects");
     if (legacy.length) throw new BenefitsError("REFUSED", "This coverage has legacy payroll input history — preserve it and use a dated successor election");
-    const proposals = (await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and replaces_enrollment_id=${enrollmentId} and status in ('elected','pending_approval') limit 1`)).rows;
+    const proposals = await db.execute(sql`select id from hrm_benefit_enrollments where org_id=${orgId} and replaces_enrollment_id=${enrollmentId} and status in ('elected','pending_approval') limit 1`, "objects");
     if (proposals.length) throw new BenefitsError("REFUSED", "A successor election awaits approval — complete or cancel that proposal before withdrawing unused coverage");
     await db.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal',${`${orgId}:${enrollmentId}:${actorId}`},true)`);
-    const updated = requireOneRow((await db.execute<Record<string, unknown>>(sql`update hrm_benefit_enrollments
+    const updated = requireOneRow(await db.execute<Record<string, unknown>>(sql`update hrm_benefit_enrollments
       set status='cancelled',ended_reason=${reason},updated_by=${actorId},updated_at=now()
-      where org_id=${orgId} and id=${enrollmentId} and status=${current.status} returning ${ENROLLMENT_COLUMNS}`)).rows, "Withdrawing unused benefit coverage");
+      where org_id=${orgId} and id=${enrollmentId} and status=${current.status} returning ${ENROLLMENT_COLUMNS}`, "objects"), "Withdrawing unused benefit coverage");
     await db.execute(sql`select set_config('openbooks.hrm_benefit_withdrawal','',true)`);
     await appendEvent(db, orgId, actorId, enrollmentId, "cancelled", `Unused ${current.status} coverage withdrawn: ${reason}`);
     return toEnrollmentDTO(updated);
@@ -1032,21 +1010,18 @@ export async function endEnrollmentsForTermination(
   const lastCovered = addCalendarDays(terminatedOn, -1);
   // Only rows still covering at termination: already-lapsed rows keep
   // their history untouched.
-  const live = (
-    await exec.execute<{ id: string; effective_from: string; status: string }>(sql`
+  const live = await exec.execute<{ id: string; effective_from: string; status: string }>(sql`
       select id, status, effective_from::text as effective_from
         from hrm_benefit_enrollments
        where org_id = ${orgId} and employment_id = ${employmentId}
          and status in ('elected', 'pending_approval', 'active')
          and (effective_to is null or effective_to >= ${terminatedOn}::date)
-    `)
-  ).rows;
+    `, "objects");
   for (const row of live) {
     const startsAfter = row.effective_from.slice(0, 10) > lastCovered;
     if (startsAfter || row.status!=="active") {
       if (row.status!=="active") await cancelEnrollmentFlows(orgId,actorId,row.id);
-      const cancelled = (
-        await exec.execute(sql`
+      const cancelled = await exec.execute(sql`
           update hrm_benefit_enrollments
              set status = 'cancelled',
                  ended_reason = ${`employment terminated ${terminatedOn} before coverage began`},
@@ -1054,8 +1029,7 @@ export async function endEnrollmentsForTermination(
            where org_id = ${orgId} and id = ${row.id}
              and status in ('elected', 'pending_approval', 'active')
           returning id
-        `)
-      ).rows;
+        `, "objects");
       if (cancelled.length !== 1) {
         throw new BenefitsError(
           "REFUSED",
@@ -1072,8 +1046,7 @@ export async function endEnrollmentsForTermination(
       );
       continue;
     }
-    const ended = (
-      await exec.execute(sql`
+    const ended = await exec.execute(sql`
         update hrm_benefit_enrollments
            set status = 'ended',
                effective_to = least(coalesce(effective_to, '9999-12-31'::date), ${lastCovered}::date),
@@ -1082,8 +1055,7 @@ export async function endEnrollmentsForTermination(
          where org_id = ${orgId} and id = ${row.id}
            and status in ('elected', 'pending_approval', 'active')
         returning id
-      `)
-    ).rows;
+      `, "objects");
     if (ended.length !== 1) {
       throw new BenefitsError(
         "REFUSED",

@@ -11,7 +11,7 @@ const state = {
 stubModules({ extra: {
   '@/lib/api/route': `export function defineRoute(options){return options.handler}`,
   '../../../../lib/feature-gates': '',
-  '@openbooks/engine/platform/db': `const state=globalThis[Symbol.for('openbooks.payroll-work-locations-route-test')];export const db={execute:async(query)=>{state.queries.push(query);return state.results.shift()??{rows:[]}}};export async function withOrgTransaction(_orgId,work){return work()}`,
+  '@openbooks/engine/platform/db': `const state=globalThis[Symbol.for('openbooks.payroll-work-locations-route-test')];export const db={execute:async(query, mode)=>{ const inMode = (result) => (mode === 'objects' ? result.rows : result);state.queries.push(query);return inMode(await (state.results.shift()??{rows:[]}))}};export async function withOrgTransaction(_orgId,work){return work()}`,
 } })
 
 const route = await import('./route')

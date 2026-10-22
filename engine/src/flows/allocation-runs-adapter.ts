@@ -121,8 +121,8 @@ async function loadRun(subjectId: string): Promise<AllocationRunRow | null> {
       left join accounting_books b
         on b.id = r.book_id and b.org_id = r.org_id
      where r.id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const allocationRunsFlowAdapter: FlowSubjectAdapter =
@@ -138,8 +138,7 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter =
       // Allocation visibility depends on the full stored computation (pin
       // plus every source, target, and line), not just the run pin.
       async subsidiaryOf(orgId, ids, allowed, lock) {
-        const runs = (
-          await db.execute<{
+        const runs = await db.execute<{
             id: string;
             subsidiaryId: string | null;
             computation: unknown;
@@ -148,8 +147,7 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter =
          where org_id = ${orgId}
            and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
          ${lock ? sql`for share` : sql``}
-      `)
-        ).rows;
+      `, "objects");
         return new Map(
           runs.map((run) => [
             run.id,
@@ -261,7 +259,7 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter =
          and status = 'pending_approval'
        order by created_at desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

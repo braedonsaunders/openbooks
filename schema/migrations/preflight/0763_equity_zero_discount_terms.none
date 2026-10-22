@@ -1,1 +1,0 @@
-Only check constraints widen and every existing row satisfies them, so there is no precondition to probe.

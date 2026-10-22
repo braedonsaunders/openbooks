@@ -186,7 +186,7 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
        and d.open_balance <> 0
      group by d.party_id, p.display_name
     having count(*) filter (where d.kind = 'customer_invoice' and d.due_date < ${today}) > 0
-  `));
+  `, "objects"));
   const late = (await db.execute<{ party_id: string | null; late_count: number; worst_days: number }>(sql`
     select jl.party_id, count(*)::int as late_count,
            max(x.applied_on - jl.due_date)::int as worst_days
@@ -199,11 +199,11 @@ async function loadOverdueCustomers(orgId: string, today: string): Promise<Overd
        and jl.due_date is not null
        and x.applied_on > jl.due_date
      group by jl.party_id
-  `));
+  `, "objects"));
   const lateByParty = new Map<string, { late_count: number; worst_days: number }>(
-    late.rows.map((row) => [partyKey(row.party_id), { late_count: Number(row.late_count), worst_days: Number(row.worst_days) }]),
+    late.map((row) => [partyKey(row.party_id), { late_count: Number(row.late_count), worst_days: Number(row.worst_days) }]),
   );
-  return aggregates.rows.map((row) => ({
+  return aggregates.map((row) => ({
     partyId: row.party_id,
     partyName: row.party_name,
     email: row.email,
@@ -239,8 +239,8 @@ async function loadOverdueInvoices(orgId: string, today: string, limitPerParty: 
          and d.open_balance <> 0
          and d.due_date < ${today}
     ) ranked where position <= ${limitPerParty}
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     partyId: row.party_id,
     docId: row.doc_id,
     docNumber: row.doc_number,
@@ -276,8 +276,8 @@ async function loadBrokenPromises(orgId: string, cutoff: string): Promise<Broken
        and d.expected_pay_date <= ${cutoff}
      order by d.expected_pay_date, abs(d.open_balance) desc
      limit 200
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     partyId: row.party_id,
     partyName: row.party_name,
     docId: row.doc_id,

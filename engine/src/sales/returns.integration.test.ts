@@ -21,8 +21,8 @@ const postingDeps = (org: ScratchOrg) => ({ control: { ar: org.accounts.ar, ap: 
 async function enableReturns(orgId: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || '{"warehousing": true, "fulfillment": true, "returnAuthorizations": true}'::jsonb) where id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1)
+      || '{"warehousing": true, "fulfillment": true, "returnAuthorizations": true}'::jsonb) where id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1)
 }
 
 async function postedSale(org: ScratchOrg, quantity: string): Promise<{ documentId: string; issueId: string }> {
@@ -40,11 +40,11 @@ async function postedSale(org: ScratchOrg, quantity: string): Promise<{ document
                                 stock_location_id, custom, tax_overridden)
     values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, ${quantity},
             '10', ${amount}, '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`)
-  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`)
-  assert.equal(approved.rows.length, 1)
+  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`, 'objects')
+  assert.equal(approved.length, 1)
   await postDocument(documentId, postingDeps(org))
   const issue = (await db.execute<{ id: string }>(sql`
-    select id from inventory_movements where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0]
+    select id from inventory_movements where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, 'objects'))[0]
   assert.ok(issue)
   return { documentId, issueId: issue.id }
 }
@@ -88,8 +88,8 @@ async function fullyReturnSale(org: ScratchOrg, issueId: string, quantity: strin
     values (${lineId}, ${org.orgId}, ${id}, 1, ${org.items.fifo}, ${org.accounts.revenue}, ${quantity}, '10',
             ${amount}, '0', false, '0', '0', ${org.stockLocationId},
             ${JSON.stringify({ inventoryReturn: { sourceIssueMovementId: issueId } })}::jsonb, false)`)
-  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId} returning id`)
-  assert.equal(approved.rows.length, 1)
+  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${id} and org_id = ${org.orgId} returning id`, 'objects')
+  assert.equal(approved.length, 1)
   await postDocument(id, postingDeps(org))
   return number
 }
@@ -125,7 +125,7 @@ test('return authorizations enforce source limits, lifecycle and organization sc
       select d.status,d.voided_at,d.voided_by,d.void_reason,r.rejection_reason
       from documents d join rma_documents r on r.org_id=d.org_id and r.document_id=d.id
       where d.org_id=${org.orgId} and d.id=${rejected.id}
-    `))).rows[0]!
+    `, 'objects')))[0]!
     assert.equal(rejection.status, 'voided')
     assert.ok(rejection.voided_at)
     assert.equal(rejection.voided_by, actorId)

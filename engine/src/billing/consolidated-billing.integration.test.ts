@@ -26,8 +26,8 @@ async function grantConsolidationOperator(orgId: string, actorId: string): Promi
       subsidiary_restriction='{"mode":"all"}'::jsonb
     where org_id=${orgId} and id in
       (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id
-  `);
-  assert.equal(result.rows.length, 1);
+  `, "objects");
+  assert.equal(result.length, 1);
 }
 
 
@@ -134,7 +134,7 @@ test(
           (select count(*)::int from flow_runs where org_id = d.org_id) as flows,
           (select count(*)::int from document_links where org_id = d.org_id) as links
         from documents d where d.org_id = ${org.orgId} and d.id = ${sourceId}
-      `)).rows[0]);
+      `, "objects"))[0]);
       const refuseSourceCommands = async (message: RegExp) => {
         const before = await snapshot();
         await assert.rejects(withOrgTransaction(org.orgId, async () => {
@@ -172,7 +172,7 @@ test(
           (select count(*)::int from journal_entries where org_id = ${org.orgId}) as journals
         from documents source join documents invoice on invoice.org_id = source.org_id
          where source.org_id = ${org.orgId} and source.id = ${sourceId} and invoice.id = ${run.invoiceId}
-      `)).rows[0]!);
+      `, "objects"))[0]!);
       assert.equal(totals.source_status, "draft");
       assert.equal(totals.total, "100.0000");
       assert.equal(totals.journals, 1, "only the payer invoice books the source charge");
@@ -208,7 +208,7 @@ test(
         const row = (await db.execute<{ pid: number }>(sql`
           select pg_backend_pid() as pid from documents
            where org_id = ${org.orgId} and id = ${sourceId} for update
-        `)).rows[0];
+        `, "objects"))[0];
         assert.ok(row);
         reportLocked(row.pid);
         await released;
@@ -228,7 +228,7 @@ test(
              where datname = current_database() and ${holderPid} = any(pg_blocking_pids(pid))
                and query like '%locked_drafts%'
           ) as blocked
-        `)).rows[0]!.blocked);
+        `, "objects"))[0]!.blocked);
         if (copyingBlocked) break;
         await new Promise((resolve) => setTimeout(resolve, 10));
       } while (Date.now() < deadline);
@@ -250,7 +250,7 @@ test(
           (select count(*)::int from document_links where org_id = d.org_id
             and from_document_id = d.id and link_type = 'created_from') as links
         from documents d where d.org_id = ${org.orgId} and d.id = ${sourceId}
-      `)).rows[0]!);
+      `, "objects"))[0]!);
       assert.deepEqual(standing, { status: "draft", journals: 1, links: 1 });
     } finally {
       releaseSource();
@@ -282,7 +282,7 @@ test(
         const sub = await seedSubscription(org, actorId, planId, child, org.date);
         const gen = await billSubscriptionNow(org.orgId, sub, { actorId }, null);
         const draft = (await db.execute<{ party: string; status: string; custom: Record<string, unknown> }>(sql`
-          select party_id as party, status, custom from documents where id = ${gen.invoiceId}`)).rows[0]!;
+          select party_id as party, status, custom from documents where id = ${gen.invoiceId}`, "objects"))[0]!;
         assert.equal(draft.party, payer, "the child charge is AR of the payer");
         assert.equal(draft.status, "draft", "a grouped charge stays draft for the run");
         assert.equal(draft.custom["consolidationStatus"], "pending_consolidation");
@@ -293,15 +293,15 @@ test(
       assert.equal(run.total, "300.0000");
       const invoice = (await db.execute<{ party: string; status: string; subtotal: string; total: string; custom: Record<string, unknown> }>(sql`
         select party_id as party, status, subtotal::text as subtotal, total::text as total, custom
-          from documents where id = ${run.invoiceId}`)).rows[0]!;
+          from documents where id = ${run.invoiceId}`, "objects"))[0]!;
       assert.equal(invoice.party, payer, "AR lives on the payer");
       assert.equal(invoice.status, "draft");
       assert.equal(invoice.custom["template"], "Parent consolidated", "the group's template designation travels on the invoice");
       assert.equal(invoice.subtotal, "300.0000");
       assert.equal(invoice.total, "300.0000");
-      const lines = (await db.execute<{ service: string; amount: string }>(sql`
+      const lines = await db.execute<{ service: string; amount: string }>(sql`
         select service_party_id as service, amount::text as amount from document_lines
-         where document_id = ${run.invoiceId} order by line_number`)).rows;
+         where document_id = ${run.invoiceId} order by line_number`, "objects");
       assert.deepEqual(
         lines.map((l) => [l.service, l.amount]),
         children.map((c) => [c, "100.0000"]),
@@ -309,21 +309,21 @@ test(
       );
       const links = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_links
-         where org_id = ${org.orgId} and to_document_id = ${run.invoiceId} and link_type = 'created_from'`)).rows[0]!;
+         where org_id = ${org.orgId} and to_document_id = ${run.invoiceId} and link_type = 'created_from'`, "objects"))[0]!;
       assert.equal(links.n, 3, "every superseded draft links to the consolidated invoice");
       const live = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-           and custom->>'consolidationStatus' = 'pending_consolidation'`)).rows[0]!;
+           and custom->>'consolidationStatus' = 'pending_consolidation'`, "objects"))[0]!;
       assert.equal(live.n, 0, "no pending draft survives its consolidation");
 
       const before = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from documents where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from documents where org_id = ${org.orgId}`, "objects"))[0]!.n;
       const [replay] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
       assert.ok(replay?.replayed, "re-running a completed bucket replays instead of re-billing");
       assert.equal(replay.invoiceId, run.invoiceId);
       const after = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from documents where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from documents where org_id = ${org.orgId}`, "objects"))[0]!.n;
       assert.equal(after, before, "the replay writes no second invoice");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -352,8 +352,8 @@ test(
       const june = await billSubscriptionNow(org.orgId, sub, { actorId }, null);
       await db.execute(sql`update subscriptions set next_bill_on = '2026-07-20' where id = ${sub}`);
       const july = await billSubscriptionNow(org.orgId, sub, { actorId }, null);
-      const parties = (await db.execute<{ id: string; party: string }>(sql`
-        select id, party_id as party from documents where id in (${june.invoiceId}, ${july.invoiceId})`)).rows;
+      const parties = await db.execute<{ id: string; party: string }>(sql`
+        select id, party_id as party from documents where id in (${june.invoiceId}, ${july.invoiceId})`, "objects");
       assert.equal(parties.find((p) => p.id === june.invoiceId)?.party, first, "the June charge follows the June payer");
       assert.equal(parties.find((p) => p.id === july.invoiceId)?.party, second, "the July charge follows the July payer");
     } finally {
@@ -401,11 +401,11 @@ test(
       });
       assert.ok(run?.posted, "the consolidated invoice posts");
       const entry = (await db.execute<{ entry: string }>(sql`
-        select posted_entry_id as entry from documents where id = ${run.invoiceId}`)).rows[0]!.entry;
+        select posted_entry_id as entry from documents where id = ${run.invoiceId}`, "objects"))[0]!.entry;
       assert.ok(entry, "posting records its journal entry");
-      const legs = (await db.execute<{ account: string; subsidiary: string; amount: string }>(sql`
+      const legs = await db.execute<{ account: string; subsidiary: string; amount: string }>(sql`
         select account_id as account, subsidiary_id as subsidiary, amount::text as amount
-          from journal_lines where org_id = ${org.orgId} and entry_id = ${entry}`)).rows;
+          from journal_lines where org_id = ${org.orgId} and entry_id = ${entry}`, "objects");
       const total = legs.reduce((sum, leg) => sum + BigInt(leg.amount.replace(".", "")), 0n);
       assert.equal(total, 0n, "the cross-entity journal balances overall");
       const bySub = new Map<string, bigint>();
@@ -447,20 +447,20 @@ test(
       const julyInvoice = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-           and custom->>'consolidationStatus' = 'consolidated'`)).rows[0]!.n;
+           and custom->>'consolidationStatus' = 'consolidated'`, "objects"))[0]!.n;
       assert.equal(julyInvoice, 1);
       const augustPending = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-           and custom->>'consolidationStatus' = 'pending_consolidation'`)).rows[0]!.n;
+           and custom->>'consolidationStatus' = 'pending_consolidation'`, "objects"))[0]!.n;
       assert.equal(augustPending, 1, "the still-open August bucket keeps collecting");
       const before = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from documents where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from documents where org_id = ${org.orgId}`, "objects"))[0]!.n;
       const replay = await runDueConsolidations("2026-08-05");
       assert.equal(replay.consolidated, 0, "a second scan cuts no second invoice");
       assert.equal(replay.replayed, 0, "the scan never revisits a bucket with nothing pending");
       const after = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from documents where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from documents where org_id = ${org.orgId}`, "objects"))[0]!.n;
       assert.equal(after, before, "the replay writes nothing new");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -490,12 +490,12 @@ test(
       const scan = await runDueConsolidations("2026-08-05");
       assert.equal(scan.failed, 0, `the scan takes no org down: ${JSON.stringify(scan.orgErrors)}`);
       const runs = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from consolidation_runs where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from consolidation_runs where org_id = ${org.orgId}`, "objects"))[0]!.n;
       assert.equal(runs, 0, "no run is recorded while the feature is off");
       const pending = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-           and custom->>'consolidationStatus' = 'pending_consolidation'`)).rows[0]!.n;
+           and custom->>'consolidationStatus' = 'pending_consolidation'`, "objects"))[0]!.n;
       assert.equal(pending, 1, "switching off keeps the pending draft, never consolidates it");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -523,11 +523,11 @@ test("consolidation rechecks current unrestricted operator and posting authority
         (select count(*)::int from document_links where org_id=${org.orgId}) as links,
         (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
         (select count(*)::int from flow_runs where org_id=${org.orgId}) as flows
-    `)).rows[0]);
+    `, "objects"))[0]);
     const changeAuthority = async (permissions: readonly string[], restriction: {mode:"all"} | {mode:"list";subsidiaryIds:string[]}) => {
       const changed = await db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb,
-        subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='admin' returning id`);
-      assert.equal(changed.rows.length, 1);
+        subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='admin' returning id`, "objects");
+      assert.equal(changed.length, 1);
     };
     const refuse = async (options: Parameters<typeof runConsolidationGroup>[4]) => {
       const before = await snapshot();
@@ -626,7 +626,7 @@ test("consolidation retains inclusive tax inputs and resolves the invoice curren
                where c.org_id = l.org_id and c.document_line_id = l.id) as "componentOverridden"
         from documents d join document_lines l on l.org_id = d.org_id and l.document_id = d.id
        where d.org_id = ${org.orgId} and d.id = ${run.invoiceId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(invoice, {
       fxRate: "1.3500000000",
       amount: "100.0000",

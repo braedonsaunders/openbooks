@@ -117,8 +117,8 @@ export async function resolveAsOfCutoff(
       from accounting_periods p
       join fiscal_calendars fc
         on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-     where p.id = ${periodId} and p.org_id = ${productionOrgId}`);
-  const row = res.rows[0];
+     where p.id = ${periodId} and p.org_id = ${productionOrgId}`, "objects");
+  const row = res[0];
   if (!row) throw new Error("as-of cutoff period must belong to the production organization");
   return {
     periodId: row.id,
@@ -151,8 +151,8 @@ async function readSourceOrgConfig(productionOrgId: string): Promise<SourceOrgCo
     country: string; tax_ids: unknown; settings: Record<string, unknown> | null;
   }>(sql`
     select legal_name, base_currency, country, tax_ids, settings
-      from orgs where id = ${productionOrgId}`);
-  const row = res.rows[0];
+      from orgs where id = ${productionOrgId}`, "objects");
+  const row = res[0];
   if (!row) throw new Error(`production org not found: ${productionOrgId}`);
   return {
     legalName: row.legal_name,
@@ -176,7 +176,7 @@ async function applySandboxOrgConfig(
   masked: boolean,
   settingsOverlay: Record<string, unknown> = {},
 ): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update orgs
        set legal_name = ${source.legalName},
            base_currency = ${source.baseCurrency},
@@ -256,17 +256,17 @@ export function validateVendorRetainageSourceAllocations(
 /** Run after documents have been copied, inside the same clone snapshot.
  * Original bill status may have changed since release; its ownership does not. */
 async function validateVendorRetainageSourcesForClone(opts: CloneOptions): Promise<void> {
-  const releases = (await db.execute<{ id: string; subcontract_id: string; amount: string; source_bill_allocations: unknown }>(sql`
+  const releases = await db.execute<{ id: string; subcontract_id: string; amount: string; source_bill_allocations: unknown }>(sql`
     select id, subcontract_id, amount::text as amount, source_bill_allocations
-      from vendor_retainage_releases where org_id = ${opts.productionOrgId}`)).rows;
+      from vendor_retainage_releases where org_id = ${opts.productionOrgId}`, "objects");
   if (!releases.some((row) => row.source_bill_allocations !== null)) return;
-  const bills = (await db.execute<{ subcontract_id: string; document_id: string }>(sql`
+  const bills = await db.execute<{ subcontract_id: string; document_id: string }>(sql`
     select application.subcontract_id, original.id as document_id
       from vendor_pay_applications application
       join documents original on original.org_id = application.org_id and original.id = application.vendor_bill_document_id
       join documents copied on copied.org_id = ${opts.sandboxOrgId}
         and copied.id = ob_rebase(original.id, ${opts.seed}::uuid)
-     where application.org_id = ${opts.productionOrgId}`)).rows;
+     where application.org_id = ${opts.productionOrgId}`, "objects");
   const ids = new Map<string, Set<string>>();
   for (const bill of bills) {
     const scoped = ids.get(bill.subcontract_id) ?? new Set<string>();
@@ -794,7 +794,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           from journal_entries je
          where je.org_id = ${opts.productionOrgId}
            and je.status in ('posted', 'reversed')
-           and je.posting_date > ${cutoff.endsOn}`)).rows[0]?.count;
+           and je.posting_date > ${cutoff.endsOn}`, "objects"))[0]?.count;
       if (beyond !== "0") {
         throw new Error(
           `as-of sandbox to period ${cutoff.periodName} ending ${cutoff.endsOn} ` +
@@ -837,7 +837,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
         }
         await validateVendorRetainageSourcesForClone(opts);
       }
-        const res = await db.execute(sql.raw(stmt));
+        const res = await db.execute<Record<string, unknown>>(sql.raw(stmt));
       const n = res.rowCount ?? 0;
       perTable.push({ table: t.name, rows: n });
       rowsCopied += n;
@@ -921,7 +921,7 @@ export async function copyClonedFileObjects(opts: {
   // so they must provably be values, not statements.
   const seed = assertUuid(opts.seed);
   const prod = assertUuid(opts.productionOrgId);
-  const pairs = (await db.execute<{ prodVersionId: string; sandboxVersionId: string }>(sql`
+  const pairs = await db.execute<{ prodVersionId: string; sandboxVersionId: string }>(sql`
     select fv.id as "prodVersionId", ob_rebase(fv.id, ${seed}) as "sandboxVersionId"
       from file_versions fv
       join files f on f.id = fv.file_id
@@ -931,7 +931,7 @@ export async function copyClonedFileObjects(opts: {
          select 1 from file_versions sv
           where sv.id = ob_rebase(fv.id, ${seed}) and sv.storage_kind = 's3'
        )
-  `)).rows;
+  `, "objects");
   const copied: string[] = [];
   try {
     for (const pair of pairs) {
@@ -965,11 +965,11 @@ export async function copyClonedFileObjects(opts: {
  */
 export async function listSandboxS3VersionIds(sandboxOrgId: string): Promise<string[]> {
   const org = assertUuid(sandboxOrgId);
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select fv.id as id
       from file_versions fv
       join files f on f.id = fv.file_id
      where f.org_id = ${org} and fv.storage_kind = 's3'
-  `)).rows;
+  `, "objects");
   return rows.map((row) => row.id);
 }

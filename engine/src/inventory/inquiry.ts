@@ -113,16 +113,12 @@ export async function inventoryInquiry(
         where subject.org_id=${orgId} and subject.id=${query.layerId} ${scope}`;
     }
     const filtered = sql`select inquiry.*,(select name from subsidiaries entity where entity.org_id=${orgId} and entity.id=inquiry.subsidiary_id) as entity from (${source}) inquiry ${query.search ? sql`where inquiry::text ilike ${`%${query.search}%`}` : sql``}`;
-    const count = (
-      await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from (${filtered}) counted`,
-      )
-    ).rows[0]!.n;
-    const rows = (
-      await db.execute<Record<string, unknown>>(
-        sql`${filtered} order by id limit 50 offset ${page * 50}`,
-      )
-    ).rows;
+    const count = (await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from (${filtered}) counted`, "objects",
+      ))[0]!.n;
+    const rows = await db.execute<Record<string, unknown>>(
+        sql`${filtered} order by id limit 50 offset ${page * 50}`, "objects",
+      );
     return {
       rows,
       totalCount: count,

@@ -81,6 +81,6 @@ export async function validateSigningRequest(
        and email.status = 'sent'
        and (${options.allowResponded === true}
             or request.responded_at is null)
-  `))
-  return result.rows.length === 1
+  `, 'objects'))
+  return result.length === 1
 }

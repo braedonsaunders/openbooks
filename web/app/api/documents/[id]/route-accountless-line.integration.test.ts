@@ -40,7 +40,7 @@ async function makeDraftInvoice(org: { orgId: string; subsidiaryId: string; date
 }
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`))).rows[0]!.revision
+  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`, 'objects')))[0]!.revision
 }
 
 async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
@@ -60,8 +60,8 @@ async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ sta
 }
 
 async function storedTotals(orgId: string, id: string): Promise<{ total: string; subtotal: string; lines: { n: number; amounts: string[] } }> {
-  const doc = (await withOrgContext(orgId, () => db.execute<{ total: string; subtotal: string }>(sql`select total::text as total, subtotal::text as subtotal from documents where id=${id} and org_id=${orgId}`))).rows[0]!
-  const lines = (await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`select amount::text as amount from document_lines where document_id=${id} and org_id=${orgId} order by line_number`))).rows
+  const doc = (await withOrgContext(orgId, () => db.execute<{ total: string; subtotal: string }>(sql`select total::text as total, subtotal::text as subtotal from documents where id=${id} and org_id=${orgId}`, 'objects')))[0]!
+  const lines = await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`select amount::text as amount from document_lines where document_id=${id} and org_id=${orgId} order by line_number`, 'objects'))
   return { total: doc.total, subtotal: doc.subtotal, lines: { n: lines.length, amounts: lines.map((l) => l.amount) } }
 }
 

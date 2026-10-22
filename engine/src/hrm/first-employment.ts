@@ -155,7 +155,7 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
     const subsidiary = (await db.execute<{ id: string; isActive: boolean }>(sql`
       select id, is_active as "isActive" from subsidiaries
        where org_id = ${orgId} and id = ${employerSubsidiaryId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!subsidiary || !subsidiary.isActive) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -176,7 +176,7 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
               and v.recorded_until is null and v.status <> 'terminated'
          )
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (duplicate) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -196,7 +196,7 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
             where v.org_id = e.org_id and v.employment_id = e.id
          )
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     let employmentId = shell?.id ?? null;
     if (employmentId === null) {
       employmentId = randomUUID();
@@ -204,14 +204,14 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
         insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision, created_by, updated_by)
         values (${employmentId}, ${orgId}, ${workerPartyId}, ${employerSubsidiaryId}, 1, ${actorId}, ${actorId})
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!reserved) {
         throw new HrmChangeRequestError(
           "REFUSED",
           "the employment was not stored — no row was written; retry the hire",
         );
       }
-      const audited = (await db.execute<{ id: string }>(sql`
+      const audited = await db.execute<{ id: string }>(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'worker_employments', ${employmentId}, 'insert',
                 ${JSON.stringify({
@@ -220,7 +220,7 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
                   reason,
                 })}::jsonb, ${actorId})
         returning id
-      `)).rows;
+      `, "objects");
       if (audited.length !== 1) {
         throw new HrmChangeRequestError(
           "REFUSED",
@@ -234,7 +234,7 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
            and status in ('draft', 'pending_approval')
            and payload ->> 'kind' = 'hire'
          limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (openProposal) {
         throw new HrmChangeRequestError(
           "BAD_STATE",

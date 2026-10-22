@@ -36,9 +36,9 @@ test('reviewed extension projects navigation, dated settings and grantable permi
       assert.equal(await hasShortcut((permission) => permission !== 'sample.read'), false, 'navigation enforces the declared permission');
 
       assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Original');
-      const nav = (await db.execute<{ config: {groups: {items: {href?: string; hidden?: boolean}[]}[]} }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`)).rows[0]!.config;
+      const nav = (await db.execute<{ config: {groups: {items: {href?: string; hidden?: boolean}[]}[]} }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`, 'objects'))[0]!.config;
       assert.equal(nav.groups.flatMap((group) => group.items).filter((item) => item.href === '/module-sample' && !item.hidden).length, 1);
-      const beforeChange = new Date((await db.execute<{ at: string }>(sql`select date_trunc('milliseconds', clock_timestamp())::text as at`)).rows[0]!.at);
+      const beforeChange = new Date((await db.execute<{ at: string }>(sql`select date_trunc('milliseconds', clock_timestamp())::text as at`, 'objects'))[0]!.at);
       await db.execute(sql`select pg_sleep(0.01)`);
       await updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Custom', reason: 'Customize caption', effectivePermissions: ['*'] });
       assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
@@ -48,9 +48,9 @@ test('reviewed extension projects navigation, dated settings and grantable permi
       await assert.rejects(() => installTestExtension({orgId:org.orgId,actorId,
         manifest:{...manifest,version:'1.1.0',contributions:contributions.map(c=>c.kind==='setting'?{...c,valueType:'boolean',defaultValue:false}:c)}}), /defaultValue must be a boolean/);
       assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
-      assert.equal((await db.execute<{ count:number }>(sql`select count(*)::int as count from app_versions where org_id=${org.orgId}`)).rows[0]!.count,1,'failed projection appends no version');
+      assert.equal((await db.execute<{ count:number }>(sql`select count(*)::int as count from app_versions where org_id=${org.orgId}`, 'objects'))[0]!.count,1,'failed projection appends no version');
       await assert.rejects(() => installTestExtension({orgId:org.orgId,actorId,manifest:{key:'second-extension',name:'Second',version:'1.0.0',permissions:['admin.customization.manage'],contributions:[{kind:'nav',href:'/module-sample',label:'Conflicting shortcut',group:'insights'}]}}),/already has an owner/);
-      assert.equal((await db.execute(sql`select id from apps where org_id=${org.orgId} and key='second-extension'`)).rows.length,0,'failed projection leaves no package');
+      assert.equal((await db.execute(sql`select id from apps where org_id=${org.orgId} and key='second-extension'`, 'objects')).length,0,'failed projection leaves no package');
       await installTestExtension({orgId:org.orgId,actorId,manifest:{...manifest,version:'2.0.0',contributions:contributions.map(c=>c.kind==='setting'?{...c,defaultValue:'Changed default'}:c)}});
       assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
       await assert.rejects(() => updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Stale version', expectedValue: 'Custom', expectedExtensionVersionId: approved.versionId!, reason: 'Refuse stale schema', effectivePermissions: ['*'] }), /Extension version changed/);
@@ -61,7 +61,7 @@ test('reviewed extension projects navigation, dated settings and grantable permi
       assert.equal(await hasShortcut(() => true), false, 'uninstalled shortcuts are hidden even from wildcard readers');
       assert.equal((await getExtensionSettings(org.orgId))['sample-module']!.caption, 'Custom');
       await assert.rejects(() => updateExtensionSetting({ orgId: org.orgId, actorId, extensionKey: manifest.key, key: 'caption', value: 'Dormant write', reason: 'Refused', effectivePermissions: ['*'] }), /Active extension setting/);
-      const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`select changes, actor_id from audit_log where org_id = ${org.orgId} and changes->>'event' like 'extension_projection%'`)).rows;
+      const audits = await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`select changes, actor_id from audit_log where org_id = ${org.orgId} and changes->>'event' like 'extension_projection%'`, 'objects');
       assert.ok(audits.length >= 5);
       for (const row of audits) { assert.equal(row.actor_id, actorId); assert.ok(row.changes.reason); assert.ok('before' in row.changes && 'after' in row.changes); }
     } finally { await dropScratchOrg(org.orgId); }
@@ -147,7 +147,7 @@ test('reapRetiredNavLinks treats unstamped legacy retirements as oldest', () => 
 type NavProbeItem = { href?: string; hidden?: boolean; extensionKey?: string };
 
 async function navItemsAt(orgId: string, href: string): Promise<NavProbeItem[]> {
-  const nav = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`)).rows[0]!.config;
+  const nav = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`, 'objects'))[0]!.config;
   return nav.groups.flatMap((group) => group.items).filter((item) => item.href === href);
 }
 
@@ -193,7 +193,7 @@ test('retired hidden links do not count toward the 256-item navigation cap', { s
         on conflict (org_id) do update set config = excluded.config, updated_by = excluded.updated_by, updated_at = now()`);
       // 300+ stored rows but only a handful visible: a new install still succeeds.
       await installTestExtension({ orgId: org.orgId, actorId, manifest: { key: 'fresh-extension', name: 'Fresh', version: '1.0.0', permissions: ['admin.customization.manage'], contributions: [{ kind: 'nav', href: '/module-fresh', label: 'Fresh', group: 'insights' }] } });
-      const stored = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`)).rows[0]!.config;
+      const stored = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`, 'objects'))[0]!.config;
       const items = stored.groups.flatMap((entry) => entry.items);
       assert.equal(items.filter((item) => item.href === '/module-fresh' && !item.hidden).length, 1);
       assert.equal(items.filter((item) => item.hidden).length, 300);
@@ -202,7 +202,7 @@ test('retired hidden links do not count toward the 256-item navigation cap', { s
 });
 
 async function navItemCount(orgId: string): Promise<number> {
-  const config = (await db.execute<{ config: { groups: { items: unknown[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`)).rows[0]!.config;
+  const config = (await db.execute<{ config: { groups: { items: unknown[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`, 'objects'))[0]!.config;
   return config.groups.reduce((n, group) => n + group.items.length, 0);
 }
 
@@ -251,8 +251,8 @@ test('upgrade/uninstall churn keeps the stored nav item count bounded without ev
 
       // The reaped rows survive as history in this write's audit snapshot:
       // retired-0 was present before the first churn install and absent after.
-      const audits = (await db.execute<{ changes: { event?: string; before?: unknown; after?: unknown } }>(sql`
-        select changes from audit_log where org_id = ${org.orgId} and table_name = 'org_nav_configs'`)).rows;
+      const audits = await db.execute<{ changes: { event?: string; before?: unknown; after?: unknown } }>(sql`
+        select changes from audit_log where org_id = ${org.orgId} and table_name = 'org_nav_configs'`, 'objects');
       assert.ok(audits.some((row) =>
         row.changes.event === 'extension_projection' &&
         JSON.stringify(row.changes.before).includes('/retired-0') &&

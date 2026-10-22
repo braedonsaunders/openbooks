@@ -50,12 +50,12 @@ test('updateSov refuses a change-order-controlled schedule line', async () => {
       values (${co},${org.orgId},${project},'CO-1','Extra scope','5000','draft',${org.accounts.revenue},${actor},${actor})`)
     const released = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: co, approvedOn: org.date })
     assert.equal(released.status, 200, await released.clone().text())
-    const releasedLine = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and change_order_id=${co}`)).rows[0]!
+    const releasedLine = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and change_order_id=${co}`, 'objects'))[0]!
 
     const refused = await post(construction.POST, org.orgId, { action: 'updateSov', id: releasedLine.id, description: 'Repriced', scheduledValue: '10000' })
     assert.equal(refused.status, 422)
     assert.match((await refused.json()).error, /change order/i)
-    assert.equal((await db.execute<{ v: string }>(sql`select scheduled_value::text as v from sov_lines where id=${releasedLine.id}`)).rows[0]!.v, '5000.0000')
+    assert.equal((await db.execute<{ v: string }>(sql`select scheduled_value::text as v from sov_lines where id=${releasedLine.id}`, 'objects'))[0]!.v, '5000.0000')
 
     // Ordinary lines stay editable before billing begins.
     const allowed = await post(construction.POST, org.orgId, { action: 'updateSov', id: plain, description: 'Renamed', scheduledValue: '1200' })
@@ -90,11 +90,11 @@ test('a voided draft application no longer locks contract value or its schedule 
     const created = await post(construction.POST, org.orgId, { action: 'createPayApp', projectId: project, periodEnd: org.date })
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()))
     const payApplicationId = (await created.json() as { id: string }).id
-    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_application_lines where org_id=${org.orgId} and pay_application_id=${payApplicationId}`)).rows[0]!.count, 1)
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_application_lines where org_id=${org.orgId} and pay_application_id=${payApplicationId}`, 'objects'))[0]!.count, 1)
 
     const voided = await post(construction.POST, org.orgId, { action: 'voidPayApp', payApplicationId })
     assert.equal(voided.status, 200, JSON.stringify(await voided.clone().json()))
-    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_application_lines where org_id=${org.orgId} and pay_application_id=${payApplicationId}`)).rows[0]!.count, 1)
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_application_lines where org_id=${org.orgId} and pay_application_id=${payApplicationId}`, 'objects'))[0]!.count, 1)
     const page = await get(construction.GET, org.orgId, project)
     assert.equal(page.status, 200, JSON.stringify(await page.clone().json()))
     const pageBody = await page.json() as { sovLines: Array<{ id: string; usedByApplication: boolean }> }
@@ -139,12 +139,12 @@ test('approving a targeted change order controls the repriced schedule line', as
     assert.equal(approved.status, 200)
     assert.deepEqual((await db.execute<{ change_order_id: string | null; scheduled_value: string }>(sql`
       select change_order_id, scheduled_value::text from sov_lines where org_id=${org.orgId} and id=${target}
-    `)).rows[0], { change_order_id: co, scheduled_value: '1500.0000' })
+    `, 'objects'))[0], { change_order_id: co, scheduled_value: '1500.0000' })
 
     const refused = await post(construction.POST, org.orgId, { action: 'updateSov', id: target, description: 'Unauthorized reprice', scheduledValue: '1600' })
     assert.equal(refused.status, 422)
     assert.match((await refused.json()).error, /change order/i)
-    assert.equal((await db.execute<{ scheduled_value: string }>(sql`select scheduled_value::text from sov_lines where org_id=${org.orgId} and id=${target}`)).rows[0]!.scheduled_value, '1500.0000')
+    assert.equal((await db.execute<{ scheduled_value: string }>(sql`select scheduled_value::text from sov_lines where org_id=${org.orgId} and id=${target}`, 'objects'))[0]!.scheduled_value, '1500.0000')
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
@@ -182,7 +182,7 @@ test('SOV writes refuse a malformed income account with a domain error', async (
     })
     assert.equal(updateRefused.status, 422)
     assert.match((await updateRefused.json()).error, /Income account/)
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from sov_lines where org_id=${org.orgId} and project_id=${project}`)).rows[0]!.n, 1)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from sov_lines where org_id=${org.orgId} and project_id=${project}`, 'objects'))[0]!.n, 1)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
@@ -214,7 +214,7 @@ test('addChangeOrder refuses a duplicate change-order number', async () => {
     })
     assert.equal(refused.status, 422)
     assert.match((await refused.json()).error, /already exists/)
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from change_orders where org_id=${org.orgId} and project_id=${project}`)).rows[0]!.n, 1)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from change_orders where org_id=${org.orgId} and project_id=${project}`, 'objects'))[0]!.n, 1)
 
     // Simultaneous double submit: the unique index serializes the pair, so
     // exactly one insert wins and the loser fails closed (422 pre-check or
@@ -227,7 +227,7 @@ test('addChangeOrder refuses a duplicate change-order number', async () => {
     const statuses = raced.map((response) => response.status).sort()
     assert.equal(statuses[0], 201)
     assert.ok(statuses[1] === 422 || statuses[1] === 409, `loser fails closed, got ${statuses[1]}`)
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from change_orders where org_id=${org.orgId} and project_id=${project} and number='CO-RACE'`)).rows[0]!.n, 1)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from change_orders where org_id=${org.orgId} and project_id=${project} and number='CO-RACE'`, 'objects'))[0]!.n, 1)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
@@ -254,8 +254,8 @@ test('SOV values and change-order amounts wider than numeric(19,4) fail closed',
     assert.equal(huge.status, 422, await huge.clone().text())
     const hugeCo = await post(construction.POST, org.orgId, { action: 'addChangeOrder', projectId: project, number: 'CO-HUGE', amount: '99999999999999999999' })
     assert.equal(hugeCo.status, 422, await hugeCo.clone().text())
-    assert.equal((await db.execute<{ n: string }>(sql`select count(*) as n from sov_lines where org_id=${org.orgId}`)).rows[0]!.n, '0')
-    assert.equal((await db.execute<{ n: string }>(sql`select count(*) as n from change_orders where org_id=${org.orgId}`)).rows[0]!.n, '0')
+    assert.equal((await db.execute<{ n: string }>(sql`select count(*) as n from sov_lines where org_id=${org.orgId}`, 'objects'))[0]!.n, '0')
+    assert.equal((await db.execute<{ n: string }>(sql`select count(*) as n from change_orders where org_id=${org.orgId}`, 'objects'))[0]!.n, '0')
 
     // The column maximum itself still saves through both actions.
     const ok = await post(construction.POST, org.orgId, { action: 'addSov', projectId: project, description: 'Max line', scheduledValue: '999999999999999.9999' })
@@ -291,7 +291,7 @@ test('approving an unallocated change order carries the pinned income account', 
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
       values (${project},${org.orgId},${org.subsidiaryId},'CO-CARRY','CO carry job',${org.customerId},${typeId},'active',true)`)
     await db.execute(sql`update projects set contract_value='0' where org_id=${org.orgId} and id=${project}`)
-    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`)).rows[0]!.id
+    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`, 'objects'))[0]!.id
 
     session.user = user(preparer, 'CO preparer', 'preparer@scratch.test')
     const malformed = await post(construction.POST, org.orgId, {
@@ -307,14 +307,14 @@ test('approving an unallocated change order carries the pinned income account', 
     const coId = (await created.json()).id as string
     assert.equal((await db.execute<{ income_account_id: string | null }>(sql`
       select income_account_id from change_orders where org_id=${org.orgId} and id=${coId}
-    `)).rows[0]!.income_account_id, revenue)
+    `, 'objects'))[0]!.income_account_id, revenue)
 
     session.user = user(approver, 'CO approver', 'approver@scratch.test')
     const approved = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: coId, approvedOn: org.date })
     assert.equal(approved.status, 200, await approved.clone().text())
     assert.deepEqual((await db.execute<{ income_account_id: string | null; scheduled_value: string }>(sql`
       select income_account_id, scheduled_value::text from sov_lines where org_id=${org.orgId} and change_order_id=${coId}
-    `)).rows[0], { income_account_id: revenue, scheduled_value: '500.0000' })
+    `, 'objects'))[0], { income_account_id: revenue, scheduled_value: '500.0000' })
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })
 
@@ -340,7 +340,7 @@ test('change orders use configured Project Revenue and refuse missing configurat
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active)
       values (${project},${org.orgId},${org.subsidiaryId},'CO-POLICY','Project revenue policy job',${org.customerId},${typeId},'active',true)`)
     await db.execute(sql`update projects set contract_value='0' where org_id=${org.orgId} and id=${project}`)
-    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`)).rows[0]!.id
+    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${org.orgId} and number='4000'`, 'objects'))[0]!.id
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', ${JSON.stringify(revenue)}::jsonb) where id=${org.orgId}`)
 
     session.user = user(preparer, 'CO preparer', 'preparer@scratch.test')
@@ -355,7 +355,7 @@ test('change orders use configured Project Revenue and refuse missing configurat
     assert.equal(approved.status, 200, await approved.clone().text())
     assert.equal((await db.execute<{ income_account_id: string | null }>(sql`
       select income_account_id from sov_lines where org_id=${org.orgId} and change_order_id=${coId}
-    `)).rows[0]!.income_account_id, revenue)
+    `, 'objects'))[0]!.income_account_id, revenue)
 
     // Removing the policy cannot release an unconfigured change order.
     await db.execute(sql`update orgs set settings = settings #- '{controlAccounts,projectRevenue}' where id=${org.orgId}`)
@@ -369,8 +369,8 @@ test('change orders use configured Project Revenue and refuse missing configurat
     const approvedBare = await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: bareId, approvedOn: org.date })
     assert.equal(approvedBare.status, 422, await approvedBare.clone().text())
     assert.match((await approvedBare.json()).error, /income account|Project Revenue/)
-    assert.equal((await db.execute(sql`select id from sov_lines where org_id=${org.orgId} and change_order_id=${bareId}`)).rows.length, 0)
-    assert.equal((await db.execute<{ status: string }>(sql`select status from change_orders where org_id=${org.orgId} and id=${bareId}`)).rows[0]!.status, 'draft')
-    assert.equal((await db.execute<{ value: string }>(sql`select contract_value::text as value from projects where org_id=${org.orgId} and id=${project}`)).rows[0]!.value, '500.0000')
+    assert.equal((await db.execute(sql`select id from sov_lines where org_id=${org.orgId} and change_order_id=${bareId}`, 'objects')).length, 0)
+    assert.equal((await db.execute<{ status: string }>(sql`select status from change_orders where org_id=${org.orgId} and id=${bareId}`, 'objects'))[0]!.status, 'draft')
+    assert.equal((await db.execute<{ value: string }>(sql`select contract_value::text as value from projects where org_id=${org.orgId} and id=${project}`, 'objects'))[0]!.value, '500.0000')
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })

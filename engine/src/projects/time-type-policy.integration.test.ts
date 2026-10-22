@@ -22,8 +22,8 @@ async function fixture() {
     await seedPayrollPerson(org.orgId, employeeId, 'Hourly worker', { subsidiaryId: org.subsidiaryId });
     const inserted = await db.execute(sql`insert into time_types
       (id,org_id,name,classification,cost_multiplier,bill_multiplier,exclude_from_wages,created_by,updated_by)
-      values (${typeId},${org.orgId},'Overtime at standard billing','overtime',1.5,1,false,${actor},${actor}) returning id`);
-    assert.equal(inserted.rows.length, 1);
+      values (${typeId},${org.orgId},'Overtime at standard billing','overtime',1.5,1,false,${actor},${actor}) returning id`, 'objects');
+    assert.equal(inserted.length, 1);
     return actor;
   });
   return { org, typeId, employeeId, actorId,
@@ -42,8 +42,8 @@ test('recorded time preserves wage and billing semantics across policy edits whi
       await assert.rejects(db.execute(sql`update time_types set classification='regular'
         where org_id=${f.org.orgId} and id=${f.typeId}`), policyRefusal);
       const approved = await db.execute(sql`update time_entries set status='approved',approved_by=${f.actorId},approved_at=clock_timestamp()
-        where org_id=${f.org.orgId} and employee_party_id=${f.employeeId} returning id`);
-      assert.equal(approved.rows.length, 1);
+        where org_id=${f.org.orgId} and employee_party_id=${f.employeeId} returning id`, 'objects');
+      assert.equal(approved.length, 1);
       const input = { orgId: f.org.orgId, employeePartyIds: [f.employeeId], periodStart: f.org.date,
         periodEnd: f.org.date, documentId: randomUUID() };
       const before = await loadWageTimeEntries(db, input);
@@ -57,17 +57,17 @@ test('recorded time preserves wage and billing semantics across policy edits whi
       }
       await assert.rejects(db.execute(sql`delete from time_types where org_id=${f.org.orgId} and id=${f.typeId}`), policyRefusal);
       assert.deepEqual(await loadWageTimeEntries(db, input), before);
-      const pricing = (await db.execute(sql`select cost_rate::text,bill_rate::text,status from time_entries
-        where org_id=${f.org.orgId} and employee_party_id=${f.employeeId}`)).rows;
+      const pricing = await db.execute(sql`select cost_rate::text,bill_rate::text,status from time_entries
+        where org_id=${f.org.orgId} and employee_party_id=${f.employeeId}`, 'objects');
       assert.deepEqual(pricing, [{ cost_rate: '63.0000', bill_rate: '125.0000', status: 'approved' }]);
       const renamed = await db.execute(sql`update time_types set name='Retired overtime',is_active=false
-        where org_id=${f.org.orgId} and id=${f.typeId} returning id`);
-      assert.equal(renamed.rows.length, 1);
+        where org_id=${f.org.orgId} and id=${f.typeId} returning id`, 'objects');
+      assert.equal(renamed.length, 1);
       const future = randomUUID();
       await db.execute(sql`insert into time_types(id,org_id,name) values(${future},${f.org.orgId},'Future policy')`);
       const changed = await db.execute(sql`update time_types set classification='double_time',cost_multiplier=2,bill_multiplier=1
-        where org_id=${f.org.orgId} and id=${future} returning id`);
-      assert.equal(changed.rows.length, 1);
+        where org_id=${f.org.orgId} and id=${future} returning id`, 'objects');
+      assert.equal(changed.length, 1);
     });
   } finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)); }
 });
@@ -81,11 +81,11 @@ test('a financial document line binds its time policy even without atomic time a
       await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
         values(${docId},${f.org.orgId},'sales_order','draft',${docId},${f.org.subsidiaryId},${f.org.date},'CAD',125,0,125)`);
       const line = await db.execute(sql`insert into document_lines(org_id,document_id,line_number,time_type_id,account_id,quantity,unit_price,amount)
-        values(${f.org.orgId},${docId},1,${f.typeId},${f.org.accounts.revenue},1,125,125) returning id`).catch((error: unknown) => {
+        values(${f.org.orgId},${docId},1,${f.typeId},${f.org.accounts.revenue},1,125,125) returning id`, 'objects').catch((error: unknown) => {
           const cause = (error as { cause?: unknown }).cause;
           throw cause instanceof Error ? cause : error;
         });
-      assert.equal(line.rows.length, 1);
+      assert.equal(line.length, 1);
       await assert.rejects(db.execute(sql`update time_types set classification='regular'
         where org_id=${f.org.orgId} and id=${f.typeId}`), policyRefusal);
     });

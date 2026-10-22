@@ -123,15 +123,15 @@ test("stock-location deletion names stock and pick blockers before cascading unu
         insert into putaway_rules (org_id, warehouse_id, sequence, strategy, target_location_id)
         values (${org.orgId}, ${unusedWarehouse}, 1, 'fixed-bin', ${unusedWarehouse})`);
       assert.deepEqual(await deleteSetupRecord(actor, "stock-locations", unusedWarehouse, { auditReason: "  Retire the unused warehouse configuration  " }), { status: 200, body: { ok: true } });
-      const deletionAudit = (await db.execute<{ changes: { reason: string; before: { id: string } } }>(sql`
+      const deletionAudit = await db.execute<{ changes: { reason: string; before: { id: string } } }>(sql`
         select changes from audit_log where org_id=${org.orgId} and table_name='stock_locations'
           and row_id=${unusedWarehouse} and action='delete' and changes->>'reason'='Retire the unused warehouse configuration'
-      `)).rows;
+      `, "objects");
       assert.equal(deletionAudit.length, 1);
       assert.equal(deletionAudit[0]!.changes.before.id, unusedWarehouse);
       const cascaded = (await db.execute<{ warehouses: number; rules: number }>(sql`
         select (select count(*)::int from warehouses where org_id = ${org.orgId} and stock_location_id = ${unusedWarehouse}) as warehouses,
-               (select count(*)::int from putaway_rules where org_id = ${org.orgId} and warehouse_id = ${unusedWarehouse}) as rules`)).rows[0]!;
+               (select count(*)::int from putaway_rules where org_id = ${org.orgId} and warehouse_id = ${unusedWarehouse}) as rules`, "objects"))[0]!;
       assert.deepEqual(cascaded, { warehouses: 0, rules: 0 });
     });
   } finally {

@@ -49,8 +49,8 @@ async function billedToDate(world: SimOrg, projectId: string): Promise<number> {
      -- Live entries only: a voided invoice no longer bills the job.
      where d.org_id = ${world.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
        and (d.custom->'sim'->>'projectId' = ${projectId}
-            or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = ${projectId}))`));
-  return Number(r.rows[0]?.billed ?? "0");
+            or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = ${projectId}))`, "objects"));
+  return Number(r[0]?.billed ?? "0");
 }
 
 /** Distinct field-ticket days of unbilled crew time on a job (for equipment days). */
@@ -58,8 +58,8 @@ async function unbilledCrewDays(world: SimOrg, projectId: string): Promise<numbe
   const r = (await db.execute<{ days: string }>(sql`
     select count(distinct worked_on)::text as days from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and billing_status = 'unbilled'`));
-  return Number(r.rows[0]?.days ?? "0");
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`, "objects"));
+  return Number(r[0]?.days ?? "0");
 }
 
 /** Actual posted job cost this month, from the ledger (project-tagged journal lines). */
@@ -76,10 +76,10 @@ async function jobPostedCost(
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${world.orgId} and l.project_id = ${projectId}
        and to_char(e.posting_date, 'YYYY-MM') = ${month}
-     group by l.account_id`));
+     group by l.account_id`, "objects"));
   let lab = 0;
   let pur = 0;
-  for (const row of r.rows) {
+  for (const row of r) {
     const amt = Number(row.amt);
     if (labor.has(row.acct)) lab += amt;
     else if (purchase.has(row.acct)) pur += amt;
@@ -154,8 +154,8 @@ export async function autopilotConstruction(
         // AIA progress draw sized to this month's posted cost × markup.
         const sovTotal = (await db.execute<{ t: string }>(sql`
           select coalesce(sum(scheduled_value), 0)::text as t from sov_lines
-           where org_id = ${world.orgId} and project_id = ${job.id}`));
-        const sov = Number(sovTotal.rows[0]?.t ?? "0");
+           where org_id = ${world.orgId} and project_id = ${job.id}`, "objects"));
+        const sov = Number(sovTotal[0]?.t ?? "0");
         const billed = await billedToDate(world, job.id);
         if (sov > 0 && billed < sov * 0.9) {
           const fraction = Math.min((cost.total * POC_MARKUP) / sov, 0.9 - billed / sov);
@@ -168,8 +168,8 @@ export async function autopilotConstruction(
           const ret = (await db.execute<{ bal: string }>(sql`
             select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
               join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-             where l.org_id = ${world.orgId} and l.account_id = ${world.accounts.retainageReceivable}`));
-          const retBal = Number(ret.rows[0]?.bal ?? "0");
+             where l.org_id = ${world.orgId} and l.account_id = ${world.accounts.retainageReceivable}`, "objects"));
+          const retBal = Number(ret[0]?.bal ?? "0");
           if (retBal > 1) {
             const inv = await releaseProjectRetainage(world, job.id, today, retBal.toFixed(2), world.actors.controller);
             await stampCollectible(world, inv.invoiceId, today);

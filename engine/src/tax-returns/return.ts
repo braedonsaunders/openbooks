@@ -60,11 +60,11 @@ export async function filterTaxReturnFormsByFeatures<T extends { code: string }>
   runner: TaxReturnRunner = db,
 ): Promise<T[]> {
   if (forms.length === 0) return [];
-  const rows = (await runner.execute<{ report_code: string; input_key: string }>(sql`
+  const rows = await runner.execute<{ report_code: string; input_key: string }>(sql`
     select distinct report_code, input_key
       from tax_report_lines
      where org_id = ${orgId} and input_key is not null
-  `)).rows;
+  `, "objects");
   const disabled = new Set<string>();
   for (const key of new Set(rows.map((row) => row.input_key.split(".", 1)[0]!))) {
     if (!returnInputProviders.has(key) || !(await orgFeatureEnabled(orgId, key, runner))) {
@@ -689,17 +689,17 @@ async function resolveReturnScope(
     id: string; name: string; base_currency: string; is_elimination: boolean; parent_id: string | null;
   }>(sql`
     select id, name, base_currency, is_elimination, parent_id
-      from subsidiaries where org_id = ${orgId}`));
-  const currencyById = new Map(subRes.rows.map((r) => [r.id, r.base_currency]));
-  const nameById = new Map(subRes.rows.map((r) => [r.id, r.name]));
-  const rootId = subRes.rows.find((r) => r.parent_id === null)?.id ?? null;
-  if (subRes.rows.length === 0) {
+      from subsidiaries where org_id = ${orgId}`, "objects"));
+  const currencyById = new Map(subRes.map((r) => [r.id, r.base_currency]));
+  const nameById = new Map(subRes.map((r) => [r.id, r.name]));
+  const rootId = subRes.find((r) => r.parent_id === null)?.id ?? null;
+  if (subRes.length === 0) {
     return { ids: [], currencyById, nameById, rootId, legacy: true, explicit: false };
   }
   const requested = filingEntity?.subsidiaryIds;
   if (!requested || (requested.length === 0 && filingEntity?.registrationId)) {
     return {
-      ids: subRes.rows.map((r) => r.id),
+      ids: subRes.map((r) => r.id),
       currencyById,
       nameById,
       rootId,
@@ -725,7 +725,7 @@ async function resolveReturnScope(
     );
   }
   const elimination = ids.filter(
-    (id) => subRes.rows.find((r) => r.id === id)?.is_elimination,
+    (id) => subRes.find((r) => r.id === id)?.is_elimination,
   );
   if (elimination.length > 0) {
     const names = elimination.map((id) => nameById.get(id) ?? id);
@@ -813,20 +813,20 @@ async function findReturnContributors(
        and d.subsidiary_id is not null
        and d.subsidiary_id = any(${scopeIds}::uuid[])
        and (${basePredicate})
-  `));
+  `, "objects"));
   // Journal lines always carry a subsidiary; only the taxable-base document
   // branch can meet unattributed legacy documents.
   const nullDocs =
     baseCodeIds.length === 0 || (explicitScope && !(scope.rootId && scope.ids.includes(scope.rootId)))
-      ? { rows: [] as { one: number }[] }
+      ? [] as { one: number }[]
       : await runner.execute<{ one: number }>(sql`
         select 1 as one from documents d
           ${documentReturnActivity(window)}
          where d.org_id = ${orgId}
            and d.subsidiary_id is null
            and (${basePredicate})
-         limit 1`);
-  return { ids: rows.rows.map((r) => r.id), nullSubsidiaryDocs: nullDocs.rows.length > 0 };
+         limit 1`, "objects");
+  return { ids: rows.map((r) => r.id), nullSubsidiaryDocs: nullDocs.length > 0 };
 }
 
 async function clampTaxReturnWindowInSnapshot(
@@ -858,8 +858,8 @@ async function clampTaxReturnWindowInSnapshot(
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
      where r.org_id = ${orgId} and r.is_active and r.return_form_code = ${formCode}
        ${subsidiaryIds?.length ? sql`and (r.subsidiary_id is null or r.subsidiary_id = any(${uuidArray(subsidiaryIds)}))` : sql``}
-  `);
-  const regs = registrations.rows.map((r) => ({
+  `, "objects");
+  const regs = registrations.map((r) => ({
     id: r.id,
     jurisdictionId: r.jurisdiction_id,
     jurisdictionName: r.jurisdiction_name,
@@ -1048,8 +1048,8 @@ async function sumReturnGlRaw(
                )
                and l.account_id = coalesce(${acctCol}, ${orgFallback})
              )
-           )`));
-      total = r.rows[0]?.total ?? "0";
+           )`, "objects"));
+      total = r[0]?.total ?? "0";
     } else if (src.basis === "tax_amount") {
       const r = (await runner.execute<{ total: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as total
@@ -1071,8 +1071,8 @@ async function sumReturnGlRaw(
                 and mc.tax_code_id = l.tax_code_id
                 and mc.collected_by = 'marketplace'
                 and mf.clearing_account_id = l.account_id
-           )`));
-      total = r.rows[0]?.total ?? "0";
+           )`, "objects"));
+      total = r[0]?.total ?? "0";
     } else if (src.basis === "marketplace_tax" || src.basis === "marketplace_sales") {
       // The facilitator share states deduct: marketplace-collected component
       // tax, and the taxable sales it was collected on. Read from the
@@ -1090,8 +1090,8 @@ async function sumReturnGlRaw(
          where mc.org_id = ${orgId} and mc.tax_code_id = ${src.taxCodeId}
            and mc.collected_by = 'marketplace'
            and d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
-           ${docScope}`));
-      total = r.rows[0]?.total ?? "0";
+           ${docScope}`, "objects"));
+      total = r[0]?.total ?? "0";
     } else {
       continue; // taxable_base sources are summed once per box below.
     }
@@ -1102,8 +1102,8 @@ async function sumReturnGlRaw(
   if (allBaseCodes.length > 0) {
     const codeRows = (await runner.execute<{ id: string; applies_to: string }>(sql`
       select id, applies_to from tax_codes
-       where org_id = ${orgId} and id = any(${uuidArray(allBaseCodes)}::uuid[])`));
-    for (const row of codeRows.rows) appliesToByCode.set(row.id, row.applies_to);
+       where org_id = ${orgId} and id = any(${uuidArray(allBaseCodes)}::uuid[])`, "objects"));
+    for (const row of codeRows) appliesToByCode.set(row.id, row.applies_to);
   }
   for (const [lineCode, codes] of baseCodesByLineCode) {
     const declared = taxReturnPackBox(formCode, lineCode)?.glMap ?? null;
@@ -1148,8 +1148,8 @@ async function sumReturnGlRaw(
                )
              )
            )
-         )`));
-    glRaw.set(lineCode, add(glRaw.get(lineCode) ?? "0", r.rows[0]?.total ?? "0"));
+         )`, "objects"));
+    glRaw.set(lineCode, add(glRaw.get(lineCode) ?? "0", r[0]?.total ?? "0"));
   }
   return glRaw;
 }
@@ -1265,8 +1265,8 @@ async function resolveReturnRegistration(
              r.effective_from::text, r.effective_to::text, j.code as jurisdiction_code, r.subsidiary_id
         from tax_registrations r
         join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
-       where r.id = ${pinnedId} and r.org_id = ${orgId} and r.is_active`));
-    const row = pin.rows[0];
+       where r.id = ${pinnedId} and r.org_id = ${orgId} and r.is_active`, "objects"));
+    const row = pin[0];
     if (!row) {
       throw new TaxReturnError(
         `tax registration "${pinnedId}" was not found in this organization`,
@@ -1303,7 +1303,7 @@ async function resolveReturnRegistration(
        ${subsidiaryIds?.length ? sql`and (r.subsidiary_id is null or r.subsidiary_id = any(${uuidArray(subsidiaryIds)}))` : sql``}
        and (r.effective_from is null or r.effective_from <= ${to})
        and (r.effective_to is null or r.effective_to >= ${from})
-     order by r.effective_from desc nulls last, r.id`));
+     order by r.effective_from desc nulls last, r.id`, "objects"));
   // The form match alone is not the identity: a catalog-known form belongs
   // to one jurisdiction, so a registration from another jurisdiction (a
   // legacy mismatched row saved before the write-time check) must refuse by
@@ -1311,10 +1311,10 @@ async function resolveReturnRegistration(
   // Tenant-defined forms carry no catalog rule and keep the historical pick.
   const expectedJurisdiction = taxReturnPack(formCode)?.jurisdiction.code ?? null;
   const inJurisdiction = expectedJurisdiction
-    ? regRes.rows.filter((row) => row.jurisdiction_code === expectedJurisdiction)
-    : regRes.rows;
-  if (inJurisdiction.length === 0 && regRes.rows.length > 0) {
-    const legacy = regRes.rows[0]!;
+    ? regRes.filter((row) => row.jurisdiction_code === expectedJurisdiction)
+    : regRes;
+  if (inJurisdiction.length === 0 && regRes.length > 0) {
+    const legacy = regRes[0]!;
     throw new TaxReturnError(
       taxRegistrationFormProblem({
         registrationLabel: legacy.registration_number ?? legacy.id,
@@ -1378,11 +1378,11 @@ async function assertNoUnmappedActivity(
             ${journalActivity}
             ${nettedReversalPairExcluded({ from, to })}
        )
-     order by tc.code`));
-  if (rows.rows.length === 0) return;
-  const codes = rows.rows.map((r) => `"${r.code}"`).join(", ");
+     order by tc.code`, "objects"));
+  if (rows.length === 0) return;
+  const codes = rows.map((r) => `"${r.code}"`).join(", ");
   throw new TaxReturnError(
-    `tax return "${formCode}" understates: tax code${rows.rows.length === 1 ? "" : "s"} ${codes} ` +
+    `tax return "${formCode}" understates: tax code${rows.length === 1 ? "" : "s"} ${codes} ` +
     `has activity in ${from} to ${to} but maps to no box — map each code to a box ` +
     `(reinstall the "${formCode}" library form after assigning its jurisdiction), ` +
     `otherwise the filed return omits that activity`,
@@ -1401,8 +1401,8 @@ async function computeTaxReturnInSnapshot(
   const formRes = (await runner.execute<{ name: string; submission_channel: string; watermark: string | null; jurisdiction_id: string | null }>(sql`
     select name, submission_channel, watermark, jurisdiction_id
       from tax_return_forms
-     where org_id = ${orgId} and code = ${formCode} and is_active limit 1`));
-  const form = formRes.rows[0];
+     where org_id = ${orgId} and code = ${formCode} and is_active limit 1`, "objects"));
+  const form = formRes[0];
   if (!form) throw new TaxReturnError(`tax return form "${formCode}" is not configured`);
 
   // A pinned registration clamps to ITS own filing obligation first (never a
@@ -1469,9 +1469,9 @@ async function computeTaxReturnInSnapshot(
   const ctrlRes = (await runner.execute<{ tax_collected: string | null; tax_paid: string | null }>(sql`
     select settings->'controlAccounts'->>'taxCollected' as tax_collected,
            settings->'controlAccounts'->>'taxPaid' as tax_paid
-      from orgs where id = ${orgId}`));
-  const orgTaxCollected = ctrlRes.rows[0]?.tax_collected ?? null;
-  const orgTaxPaid = ctrlRes.rows[0]?.tax_paid ?? null;
+      from orgs where id = ${orgId}`, "objects"));
+  const orgTaxCollected = ctrlRes[0]?.tax_collected ?? null;
+  const orgTaxPaid = ctrlRes[0]?.tax_paid ?? null;
 
   const boxRes = (await runner.execute<{
       line_code: string; label: string; sign: number; sequence: number;
@@ -1482,13 +1482,13 @@ async function computeTaxReturnInSnapshot(
            tax_code_id, basis, input_key, formula, pdf_field
       from tax_report_lines
      where org_id = ${orgId} and report_code = ${formCode}
-     order by sequence, line_code`));
-  if (boxRes.rows.length === 0) {
+     order by sequence, line_code`, "objects"));
+  if (boxRes.length === 0) {
     throw new TaxReturnError(`tax return form "${formCode}" has no boxes configured`);
   }
 
   const { boxes: boxDefs, glSources } = planReturn(
-    boxRes.rows.map((r) => ({
+    boxRes.map((r) => ({
       lineCode: r.line_code,
       label: r.label,
       sign: Number(r.sign),
@@ -1614,8 +1614,8 @@ async function computeTaxReturnInSnapshot(
         functionalCurrency = [...scopeCurrencies][0]!;
       } else {
         const orgRow = (await runner.execute<{ base_currency: string }>(sql`
-          select base_currency from orgs where id = ${orgId}`));
-        const orgBase = orgRow.rows[0]?.base_currency;
+          select base_currency from orgs where id = ${orgId}`, "objects"));
+        const orgBase = orgRow[0]?.base_currency;
         if (!orgBase) throw new TaxReturnError("organization has no base currency");
         functionalCurrency = orgBase;
       }

@@ -99,7 +99,7 @@ async function seed(): Promise<Fixture> {
         values (${orgId}, ${key}, ${key}, false,
                 ${JSON.stringify(permissions)}::jsonb, ${JSON.stringify(restriction)}::jsonb)
         returning id
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
     const heldId = await mk(`held_${tag}`, ["admin.roles.manage", "gl.read"], { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
     const leafHeldId = await mk(`leafheld_${tag}`, ["admin.roles.manage", "gl.read"], { mode: "list", subsidiaryIds: [subB.toLowerCase()] });
     const wideId = await mk(`wide_${tag}`, [], { mode: "all" });
@@ -270,9 +270,9 @@ test("DELETE into an all-scope replacement refuses; into an in-lens one succeeds
     const refused = await call("DELETE", { id: f.victimId, replacementRoleId: f.wideId });
     assert.equal(refused.status, 403, await refused.text());
     const victim = await withBypass(() => db.execute(
-      sql`select id from app_roles where id = ${f.victimId}`,
+      sql`select id from app_roles where id = ${f.victimId}`, "objects",
     ));
-    assert.ok(victim.rows[0], "refused deletion kept the role");
+    assert.ok(victim[0], "refused deletion kept the role");
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     const ok = await call("DELETE", { id: f.victimId, replacementRoleId: f.narrowId });
     assert.equal(ok.status, 200, await ok.text());
@@ -324,19 +324,19 @@ test("PATCH widening scope within the lens still refuses permissions the actor d
         values (${f.orgId}, ${`broad_${tag}`}, ${`broad ${tag}`}, false,
                 '["admin.roles.manage", "gl.read"]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA, f.subB] })}::jsonb)
-        returning id`)).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
       const victimId = (await db.execute<{ id: string }>(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${f.orgId}, ${`victim_${tag}`}, ${`victim ${tag}`}, false,
                 '["gl.post"]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
-        returning id`)).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
       const heldId = (await db.execute<{ id: string }>(sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${f.orgId}, ${`held_${tag}`}, ${`held ${tag}`}, false,
                 '["gl.read"]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
-        returning id`)).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
       const broadActor = randomUUID();
       await db.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)

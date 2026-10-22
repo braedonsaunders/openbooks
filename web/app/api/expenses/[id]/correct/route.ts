@@ -71,8 +71,8 @@ export const POST = defineRoute({
                document_date as "documentDate"
           from documents
          where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
-      `))
-    const source = found.rows[0]
+      `, 'objects'))
+    const source = found[0]
     if (!source) return notFound("record")
     const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
     if (denied) return denied

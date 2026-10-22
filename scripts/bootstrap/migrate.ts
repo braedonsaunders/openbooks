@@ -1,8 +1,7 @@
 /** Tracked migration apply, preflight gate, upgrade check, and the payment-link seal. Split from scripts/bootstrap.ts (pure moves only). */
 import { repoRoot, migrationsDir, sha256 } from "../bootstrap-paths"
 import { applyRowLevelSecurity } from "./database-roles"
-import { ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME, executeOrderQuantityProgressMigration } from "./governed-views"
-import { generatedMigrationFiles, assertMigrationFilenameTransitionTargets, convergeMigrationFilenames, APPROVED_MIGRATION_TRANSITIONS } from "./migration-transitions"
+import { generatedMigrationFiles } from "./migration-files"
 import { readFileSync, readdirSync } from "node:fs"
 import pg from "pg"
 import { join } from "node:path"
@@ -11,13 +10,9 @@ import { requireDataKey } from "@openbooks/engine/platform/secrets"
 import { sql } from "drizzle-orm"
 import { db, env, pool } from "@openbooks/engine/platform/db"
 import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigrationAttempt, executeMigrationBody, isLockNotAvailable, migrationLockConfig, migrationRetryDelayMs, migrationRunsWithoutTransaction, releaseMigrationClient, sanitizeMigrationContent } from "../bootstrap-migration-client.ts"
-import { PREFLIGHT_MIN_ORDINAL, assertReadOnlyPreflight, earlierPendingCreatesObject, evaluatePreflight, formatFinding, ordinalOf as preflightOrdinalOf, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, validateFindingRows, type PreflightFinding } from "../migration-preflight.ts"
-import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
-import { publishedMigrationSessionPrelude } from "../migration-session-headers.mjs"
+import { assertReadOnlyPreflight, earlierPendingCreatesObject, evaluatePreflight, formatFinding, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, validateFindingRows, type PreflightFinding } from "../migration-preflight.ts"
+import { assertBaselineHistory, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
 import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
-import { migrationExecutionCompatibility } from "../migration-execution-compatibility.ts"
-import { preflightNeedsPendingPrerequisite, preflightNeedsRecordedGuardTransition, RECORDED_INSTRUCTION_GUARD_SIGNATURE } from "../migration-preflight-transitions.ts"
-import { baselineTransitionCandidate, verifyBaselineTransitionCatalog } from "../migration-baseline-transitions.ts"
 import { migrationBusinessOwnerRole, migrationRequiresMaintenanceAuthority } from "../migration-owner-authority.ts"
 
 /** Business DDL retains the installation's restricted owner. Catalog and
@@ -49,7 +44,6 @@ async function executeTrackedMigration(
   filename: string,
   content: string,
   digest: string,
-  recordedDigest?: string,
   deferredPreflight?: DeferredPreflight,
 ): Promise<void> {
   // Long DDL rides the timeout-free maintenance pool: the request pool's 120s
@@ -71,10 +65,7 @@ async function executeTrackedMigration(
   // a half-applied non-idempotent migration would run its body twice.
   const started = Date.now();
   const lock = migrationLockConfig(env);
-  // The ledger digest still identifies the original immutable file. Supply
-  // only its reviewed session settings before applying the bounded lock policy.
-  const executable = migrationExecutionCompatibility(filename, content);
-  const body = sanitizeMigrationContent(publishedMigrationSessionPrelude(filename, content) + executable.content);
+  const body = sanitizeMigrationContent(content);
   const transactional = !migrationRunsWithoutTransaction(content);
   let attempt = 0;
   for (;;) {
@@ -92,8 +83,6 @@ async function executeTrackedMigration(
         transactional,
         lock,
         digest,
-        recordedDigest,
-        executionCorrection: executable.correction && { ...executable.correction, executedSha256: sha256(body) },
         beforeBody: deferredPreflight ? async migrationClient => {
           assertReadOnlyPreflight(deferredPreflight.filename, deferredPreflight.sql);
           await migrationClient.query(`set local statement_timeout = ${preflightStatementTimeoutMs(env)}`);
@@ -105,11 +94,7 @@ async function executeTrackedMigration(
           await migrationClient.query("set local statement_timeout = 0");
         } : undefined,
         schemaOwnerRole: migrationBusinessOwnerRole(filename,digest,await provisionedSchemaOwnerRole(client)),
-        executeBody:
-          filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME
-            ? (migrationClient, migrationBody) =>
-                executeOrderQuantityProgressMigration(migrationClient, migrationBody, digest)
-            : executeMigrationBody,
+        executeBody: executeMigrationBody,
       });
       return;
     } catch (err) {
@@ -143,39 +128,15 @@ async function applyTracked(
   `));
   const recordedRow = seen.rows[0];
   if (recordedRow) {
-    const recorded = recordedRow.sha256;
-    if (recorded !== digest) {
-      const transition = APPROVED_MIGRATION_TRANSITIONS.find(
-        (entry) =>
-          entry.filename === filename
-          && entry.from === recorded
-          && entry.to === digest,
+    if (recordedRow.sha256 !== digest) {
+      throw new Error(
+        `[bootstrap] ${filename} changed after it was applied; published migrations are immutable`,
       );
-      if (!transition) {
-        throw new Error(
-          `[bootstrap] ${filename} changed after it was applied; published migrations are immutable`,
-        );
-      }
-      console.log(
-        `[bootstrap] ${filename} has an approved ${transition.strategy} transition (`
-        + `${recorded.slice(0, 12)} -> ${digest.slice(0, 12)})`,
-      );
-      console.log(`[bootstrap]   ${transition.reason}`);
-      if (transition.strategy === "reapply") {
-        await executeTrackedMigration(filename, content, digest, recorded, deferredPreflight);
-        return true;
-      }
-      await db.execute(sql`
-        update public._applied_migrations
-           set sha256 = ${digest}
-         where filename = ${filename} and sha256 = ${recorded}
-      `);
-      return false;
     }
     return false;
   }
   console.log(`[bootstrap] applying ${label}: ${filename}`);
-  await executeTrackedMigration(filename, content, digest, undefined, deferredPreflight);
+  await executeTrackedMigration(filename, content, digest, deferredPreflight);
   return true;
 }
 
@@ -225,7 +186,6 @@ function pendingMigrationItems(
     const f = filename.split("/").at(-1)!;
     if (applied.has(filename)) continue;
     if (!filename.startsWith("generated/")) continue;
-    if ((preflightOrdinalOf(f) ?? -1) < PREFLIGHT_MIN_ORDINAL) continue;
     pending.push({
       file: f,
       filename,
@@ -237,11 +197,9 @@ function pendingMigrationItems(
 }
 
 /**
- * Contents of every migration without a ledger row, in prerequisite order. The
- * preflight floor (PREFLIGHT_MIN_ORDINAL) scopes which preflights run, but
- * a deferred preflight can only be explained by ANY earlier migration that
- * is still unapplied — including one below the floor, like the employment
- * column an old HR migration adds for a newer guard's preflight.
+ * Contents of every migration without a ledger row, in prerequisite order. A
+ * deferred preflight can only be explained by an earlier migration that is
+ * still unapplied.
  */
 function readUnappliedContents(
   filenames: readonly string[],
@@ -289,8 +247,6 @@ async function evaluatePendingMigrations(
   const timeoutMs = preflightStatementTimeoutMs(env);
   const preflightDir = preflightDirFor(repoRoot);
   const client = await connectMigrationClient();
-  let verifiedBaseline: boolean | undefined;
-  let recordedPrerequisites: Map<string, string> | undefined;
   try {
     for (let index = 0; index < pending.length; index += 1) {
       const item = pending[index]!;
@@ -342,52 +298,6 @@ async function evaluatePendingMigrations(
             + `pending migration creates, so it runs at apply time (${evaluation.reason})`,
         );
         continue;
-      }
-      if (evaluation.status === "ready" && evaluation.findings.length) {
-        const published = new Map(generatedMigrationFiles().map(file => {
-          const filename = `generated/${file}`;
-          return [filename, readFileSync(join(migrationsDir, filename), "utf8")] as const;
-        }));
-        recordedPrerequisites ??= new Map((await client.query<{ filename: string; sha256: string }>(
-          "select filename,sha256 from public._applied_migrations order by filename"
-        )).rows.map(row => [row.filename, row.sha256]));
-        if (preflightNeedsPendingPrerequisite({ migration: item.filename, consumerSql: sqlText, recordedPrerequisites,
-          findings: evaluation.findings, published,
-          pendingBeforeConsumer: new Set(pending.slice(0,index).map(row => row.filename)) })) {
-          report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
-          console.log(`[bootstrap] migration preflight ${item.filename} is deferred until its exact earlier pending prerequisite publishers are recorded; its strict query runs again at apply time`);
-          continue;
-        }
-        if (baselineTransitionCandidate({ migration: item.filename, consumerSql: sqlText,
-          findings: evaluation.findings, published,
-          pendingBeforeConsumer: new Set(pending.slice(0,index).map(row => row.filename)) })) {
-          verifiedBaseline ??= await verifyBaselineTransitionCatalog(client,migrationsDir,timeoutMs);
-          if (verifiedBaseline) {
-            report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
-            console.log(`[bootstrap] migration preflight ${item.filename} is deferred from the verified complete baseline until its pinned publishers apply; its unchanged strict query runs at apply time`);
-            continue;
-          }
-        }
-      }
-      if (evaluation.status === "ready" && evaluation.findings.some(finding =>
-        finding.code === "0700.instruction_guard_definition" || finding.code === "0702.instruction_guard_definition"
-        || finding.code === "0703.instruction_guard_definition")) {
-        const recorded = await client.query<{ filename: string; sha256: string }>("select filename,sha256 from public._applied_migrations order by filename");
-        const published = new Map<string, string>();
-        for (const filename of generatedMigrationFiles().map(file => `generated/${file}`)) {
-          published.set(filename, readFileSync(join(migrationsDir, filename), "utf8"));
-        }
-        const current = await client.query<{ body: string }>("select prosrc as body from pg_proc where oid=to_regprocedure($1)", [RECORDED_INSTRUCTION_GUARD_SIGNATURE]);
-        if (preflightNeedsRecordedGuardTransition({
-          migration: item.filename, consumerSql: sqlText, findings: evaluation.findings, published,
-          recorded: new Map(recorded.rows.map(row => [row.filename, row.sha256])),
-          pendingBeforeConsumer: new Set(pending.slice(0, index).map(prerequisite => prerequisite.filename)),
-          currentBody: current.rows[0]?.body ?? null,
-        })) {
-          report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
-          console.log(`[bootstrap] migration preflight ${item.filename} is deferred until its exact pending guard publisher is recorded; its strict query runs again at apply time`);
-          continue;
-        }
       }
       report.evaluated.push(item.filename);
       report.findings.push(...evaluation.findings);
@@ -506,7 +416,7 @@ async function runDeferredPreflight(
  *
  * Usage: node --import tsx scripts/bootstrap.ts --check [--json]
  */
-export async function runUpgradeCheckMain(json: boolean, historicalMigrations = false): Promise<number> {
+export async function runUpgradeCheckMain(json: boolean): Promise<number> {
   // Fail closed before touching the database: without a valid data key no
   // sealed credential can open, so an upgrade check must not report healthy.
   try {
@@ -514,17 +424,8 @@ export async function runUpgradeCheckMain(json: boolean, historicalMigrations = 
   } catch (error) {
     throw new Error(`[bootstrap] ${error instanceof Error ? error.message : String(error)}`);
   }
-  const generated = generatedMigrationFiles();
-  assertMigrationFilenameTransitionTargets(generated);
-  const activePlan = releaseMigrationPlan(migrationsDir, generated);
+  const plan = releaseMigrationPlan(migrationsDir, generatedMigrationFiles());
   const ledgerPreexisted = await appliedMigrationsTableExists();
-  if (historicalMigrations) {
-    if (!ledgerPreexisted) throw new Error("--historical-migrations requires an existing migration ledger; use ordinary bootstrap for a fresh install");
-    if (activePlan.baseline && (await readAppliedMigrationFilenames()).has(activePlan.baseline.filename)) throw new Error("this database already uses the release baseline; run ordinary bootstrap without --historical-migrations");
-  }
-  const plan = historicalMigrations
-    ? historicalMigrationPlan(migrationsDir, generated)
-    : activePlan;
   const freshInstall = await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
   const result = {
     freshInstall,
@@ -607,17 +508,9 @@ export async function runUpgradeCheckMain(json: boolean, historicalMigrations = 
   return 0;
 }
 
-export async function migrate(historicalMigrations = false): Promise<void> {
-  const generated = generatedMigrationFiles();
-  assertMigrationFilenameTransitionTargets(generated);
-  const activePlan = releaseMigrationPlan(migrationsDir, generated);
+export async function migrate(): Promise<void> {
+  const plan = releaseMigrationPlan(migrationsDir, generatedMigrationFiles());
   const ledgerPreexisted = await appliedMigrationsTableExists();
-  if (historicalMigrations) {
-    if (!ledgerPreexisted) throw new Error("--historical-migrations requires an existing migration ledger; use ordinary bootstrap for a fresh install");
-    if (activePlan.baseline && (await readAppliedMigrationFilenames()).has(activePlan.baseline.filename)) throw new Error("this database already uses the release baseline; run ordinary bootstrap without --historical-migrations");
-  }
-  const historical = historicalMigrations ? historicalMigrationPlan(migrationsDir, generated) : null;
-  const plan = historical ?? activePlan;
   // A legacy database must prove adoption before role refresh, preflights or
   // schema writes can reinterpret its installation history.
   const freshInstall = await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
@@ -641,7 +534,6 @@ export async function migrate(historicalMigrations = false): Promise<void> {
       if (owner) await client.query(`alter table public._applied_migrations owner to ${pg.escapeIdentifier(owner)}`);
     } finally { await releaseMigrationClient(client); }
   }
-  await convergeMigrationFilenames();
 
   const applied = await readAppliedMigrationFilenames();
   const pending = pendingMigrationItems(plan.filenames, applied);
@@ -660,21 +552,15 @@ export async function migrate(historicalMigrations = false): Promise<void> {
     const transactional = !migrationRunsWithoutTransaction(content);
     if (deferredPreflight && !transactional) await runDeferredPreflight(deferredPreflight, appliedThisRun);
     if (await applyTracked("migration", filename, content, transactional ? deferredPreflight : undefined)) appliedThisRun.push(filename);
-    if (filename === "generated/0626_tenant_retirement.sql" || filename === "generated/0619_operating_profiles_production_extensions.sql") {
-      await ensureRetirementAuthorityOwnership();
-    }
+    // The baseline is applied with maintenance authority; every business
+    // object then passes to the business owner before forward migrations run.
+    if (filename === plan.baseline?.filename) await ensureRetirementAuthorityOwnership();
   }
-  if (await isPaymentLinkSealApplicable(plan.baseline)) {
-    await sealLegacyPaymentLinkTokens();
-  } else {
-    console.log(
-      "[bootstrap] skipping payment-link at-rest seal: 0251 is not applied to this schema",
-    );
-  }
-  // A historical replay reproduces the baseline's own policy environment so
-  // adoption compares like with like; ordinary bootstrap then applies the
-  // current one.
-  await applyRowLevelSecurity(historical?.environment);
+  // Payment-link tokens are hashed and sealed here rather than in SQL because
+  // the data key never enters a migration. The seal is idempotent and also
+  // covers rows written by the previous release during a rolling deploy.
+  await sealLegacyPaymentLinkTokens();
+  await applyRowLevelSecurity();
   await ensureRetirementAuthorityOwnership();
 }
 
@@ -696,44 +582,3 @@ async function assertReleaseBaselineReady(baseline: ReturnType<typeof releaseMig
   if (baseline) assertBaselineHistory(baseline, recorded, schemaHasObjects);
   return recorded.length === 0 && !schemaHasObjects;
 }
-
-/**
- * The at-rest seal is the second half of 0251: it must run only where 0251
- * ran or is covered by an adopted release baseline. The effective ledger is
- * checked first as a matter of principle — but the ledger
- * alone can lie, because migration-replay fixtures fake _applied_migrations
- * on historical schemas (the 0064 suite holds a pre-0064 catalog with the
- * full tail marked applied). The column check is the structural guard that
- * saves those fixtures from a 42703 on the seal's SELECT.
- */
-const PAYMENT_LINK_SEAL_MIGRATION = "generated/0251_payment_link_token_at_rest.sql";
-
-async function isPaymentLinkSealApplicable(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"]): Promise<boolean> {
-  const ledger = await pool.query("select filename,sha256 from _applied_migrations where filename in ($1,$2)", [
-    PAYMENT_LINK_SEAL_MIGRATION,
-    baseline?.filename ?? PAYMENT_LINK_SEAL_MIGRATION,
-  ]);
-  if (!migrationIdentityIsApplied(PAYMENT_LINK_SEAL_MIGRATION, ledger.rows, baseline)) return false;
-  const columns = await pool.query<{ n: number }>(
-    `select count(*)::int as n from information_schema.columns
-      where table_schema = 'public' and table_name = 'payment_links'
-        and column_name in ('token_hash', 'token_sealed')`,
-  );
-  return columns.rows[0]?.n === 2;
-}
-
-/**
- * 0251 stores the pay-link lookup hash and display seal, but the seal half
- * cannot run in SQL because the data key never enters a migration. This
- * step, in the same bootstrap invocation that applies 0251, seals AND hashes
- * each hash-less row (including rows written by code still serving during a
- * rolling deploy) and heals rows an older bootstrap sealed without hashing,
- * then NULLs the plaintext column, so no window exists where a link is
- * undisplayable, unresolvable, or a raw secret persists. Idempotent: rows
- * already carrying a hash are untouched.
- *
- * Implemented in engine/src/payments/payment-link-seal.ts so the hash
- * encoding stays byte-identical to the engine lookup by construction:
- * sealing a row without hashing it orphans the link, because the engine
- * resolves by hash only.
- */

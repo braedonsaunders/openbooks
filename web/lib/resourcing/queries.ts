@@ -94,7 +94,7 @@ export async function loadStaffablePeople(
     ? await isFeatureEnabled(orgId, "hrmCertifications")
     : false;
   if (certificationsOn && options.qualificationTypeId) {
-    const qualifications = (await db.execute<QualificationRow>(sql`
+    const qualifications = await db.execute<QualificationRow>(sql`
       select e.worker_party_id as party_id, q.status, q.issued_on::text as issued_on,
              q.expires_on::text as expires_on, t.renewal_lead_days
         from hrm_worker_qualifications q
@@ -102,7 +102,7 @@ export async function loadStaffablePeople(
         join hrm_qualification_types t on t.org_id = q.org_id and t.id = q.type_id
        where q.org_id = ${orgId} and q.type_id = ${options.qualificationTypeId}
          and t.is_active
-    `)).rows;
+    `, "objects");
     const qualifiedPeople = new Set<string>();
     for (const row of qualifications) {
       const status = projectDerivedStatus({

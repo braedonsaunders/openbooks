@@ -38,16 +38,16 @@ export async function importNetSuiteEmployeePhotos(options: {
           update sync_runs set status=${failed ? 'failed' : 'ok'}, finished_at=now(),
             stats=${JSON.stringify({ employeePhotos: summary })}::jsonb,
             error_message=${failed ? `${summary.errors} photo errors; ${summary.unmatched} unmatched source employee identities` : null}
-          where org_id=${options.orgId} and id=${runId} returning id`)
-        if (saved.rows.length !== 1) throw new Error('Employee photo import completion did not persist')
+          where org_id=${options.orgId} and id=${runId} returning id`, 'objects')
+        if (saved.length !== 1) throw new Error('Employee photo import completion did not persist')
       }
       return { runId, ...summary }
     } catch (error) {
       if (runId) {
         const saved = await db.execute(sql`
           update sync_runs set status='failed', finished_at=now(), error_message=${(error instanceof Error ? error.message : 'Employee photo import failed').slice(0, 2000)}
-          where org_id=${options.orgId} and id=${runId} returning id`)
-        if (saved.rows.length !== 1) throw new Error('Employee photo import failure did not persist', { cause: error })
+          where org_id=${options.orgId} and id=${runId} returning id`, 'objects')
+        if (saved.length !== 1) throw new Error('Employee photo import failure did not persist', { cause: error })
       }
       throw error
     }

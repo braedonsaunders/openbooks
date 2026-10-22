@@ -19,10 +19,10 @@ export async function lockSubcontractCustodyAuthority(
   tx:SqlExecutor,orgId:string,actorId:string|null,subsidiaryId:string,locationId:string,
 ) {
   const custody=(await tx.execute<{vendorId:string}>(sql`select custodian_party_id as "vendorId" from stock_locations
-    where org_id=${orgId} and id=${locationId} and kind='subcontract' for share`)).rows[0];
+    where org_id=${orgId} and id=${locationId} and kind='subcontract' for share`, "objects"))[0];
   if (!custody) return null;
   if (!actorId || !isUuid(actorId) || !(await tx.execute(sql`select id from users
-    where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new InventoryNotFoundError("not_found");
+    where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`, "objects")).length) throw new InventoryNotFoundError("not_found");
   let scope:ReadonlySet<string>|null=null;
   for (const permission of ["items.post","manufacturing.manage"]) {
     const granted=await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,permission);
@@ -39,7 +39,7 @@ export async function lockSubcontractCustodyAuthority(
     join parties vendor on vendor.org_id=stock.org_id and vendor.id=stock.custodian_party_id
     where stock.org_id=${orgId} and stock.id=${locationId}
       ${subsidiaryVisibleFilter(sql`location.subsidiary_id`,scope,{orgWideNull:true})}
-      ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`,scope,{orgWideNull:true})}`)).rows.length) throw new InventoryNotFoundError("not_found");
+      ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`,scope,{orgWideNull:true})}`, "objects")).length) throw new InventoryNotFoundError("not_found");
   await assertSubcontractCustodyFeature(tx,orgId);
   await assertCustodianVendor(tx,orgId,custody.vendorId,subsidiaryId);
   return custody;
@@ -50,7 +50,7 @@ export async function assertCustodianVendor(tx:SqlExecutor,orgId:string,vendorId
   const vendor=(await tx.execute(sql`select party.id from parties party
     where party.org_id=${orgId} and party.id=${vendorId} and party.is_active
       and (party.kind='vendor' or exists(select 1 from vendor_roles role where role.org_id=party.org_id and role.party_id=party.id))
-    for share of party`)).rows[0];
+    for share of party`, "objects"))[0];
   if (!vendor) throw new InventoryError("Choose an active vendor for the custody location.");
   await tx.execute(sql`select party_id from vendor_roles where org_id=${orgId} and party_id=${vendorId} for share`);
   if (subsidiaryId) await validateSubsidiaryRestrictions(tx,{
@@ -63,14 +63,14 @@ export async function validateSubcontractLocationConfiguration(
   tx:SqlExecutor,orgId:string,actorId:string,input:Record<string,unknown>,locationId?:string,
 ) {
   const previous=locationId?(await tx.execute<Record<string,unknown>>(sql`select kind,custodian_party_id,inventory_ownership,parent_id
-    from stock_locations where org_id=${orgId} and id=${locationId} for update`)).rows[0]:undefined;
+    from stock_locations where org_id=${orgId} and id=${locationId} for update`, "objects"))[0]:undefined;
   const kind=input.kind??previous?.kind??"bin";
   const custodian=input.custodianPartyId===undefined?previous?.custodian_party_id??null:input.custodianPartyId;
   const ownership=input.inventoryOwnership??previous?.inventory_ownership??"owned";
   const parentId=input.parentId===undefined?previous?.parent_id??null:input.parentId;
   if (kind!=="subcontract" && previous?.kind!=="subcontract" && custodian==null && parentId==null) return;
   const parent=parentId?(await tx.execute<{kind:string;vendorId:string|null}>(sql`select kind,custodian_party_id as "vendorId"
-    from stock_locations where org_id=${orgId} and id=${String(parentId)} for share`)).rows[0]:undefined;
+    from stock_locations where org_id=${orgId} and id=${String(parentId)} for share`, "objects"))[0]:undefined;
   if (kind!=="subcontract" && previous?.kind!=="subcontract" && custodian==null && parent?.kind!=="subcontract") return;
   const actor=await lockActorIdentity(tx, orgId, actorId);
   if (!actor) throw new InventoryNotFoundError("not_found");

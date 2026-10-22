@@ -26,13 +26,11 @@ export async function allocationCandidates(
   subsidiaryId: string,
   unit: string | null,
 ): Promise<PhysicalAllocation[]> {
-  const profile = (
-    await runner.execute<{
+  const profile = (await runner.execute<{
       base_unit: string;
       unit_conversions: Record<string, number>;
     }>(sql`select base_unit,unit_conversions from item_inventory_profiles
-    where org_id=${orgId} and item_id=${itemId}`)
-  ).rows[0];
+    where org_id=${orgId} and item_id=${itemId}`, "objects"))[0];
   if (!profile)
     throw new InventoryError("Allocation requires an inventory profile");
   const factor = toUnits(
@@ -44,8 +42,7 @@ export async function allocationCandidates(
       "Pick allocation",
     ),
   );
-  const rows = (
-    await runner.execute<PhysicalAllocation>(sql`
+  const rows = await runner.execute<PhysicalAllocation>(sql`
     select sl.id as "binId",sl.code as "binCode",source.lot_id as "lotId",lot.lot_number as "lotNumber",
       source.serial_id as "serialId",serial.serial_number as "serialNumber",lot.expires_on::text as "expiresOn",sum(layer.remaining_quantity)::text as quantity
     from cost_layers layer join inventory_movements source on source.org_id=layer.org_id and source.id=layer.source_movement_id
@@ -57,8 +54,7 @@ export async function allocationCandidates(
       and stock_location_warehouse(sl.org_id,sl.id)=${warehouseId}
       and ${saleableLocation(sql`sl.org_id`, sql`sl.id`)} and ${unheldTracking(sql`source.org_id`, sql`source.lot_id`, sql`source.serial_id`)}
     group by sl.id,sl.code,source.lot_id,lot.lot_number,source.serial_id,serial.serial_number,lot.expires_on
-    order by lot.expires_on asc nulls last,min(layer.received_at),min(source.created_at),sl.code,source.lot_id nulls first,source.serial_id nulls first`)
-  ).rows;
+    order by lot.expires_on asc nulls last,min(layer.received_at),min(source.created_at),sl.code,source.lot_id nulls first,source.serial_id nulls first`, "objects");
   const reserved = await activePickReservations(runner, orgId, {
     itemId,
     subsidiaryId,

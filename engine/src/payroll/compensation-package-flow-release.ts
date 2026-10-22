@@ -13,7 +13,7 @@ export async function releaseCompensationPackageFlowApproval(args: FlowApprovalR
   const table = version ? "payroll_compensation_versions" : "payroll_compensation_assignments";
   const row = (await db.execute<{ package_id: string; revision: number }>(sql`
     select package_id,revision from ${sql.identifier(table)} where org_id=${args.ctx.orgId} and id=${args.subjectId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new PayrollError("This compensation proposal is unavailable in the acting organization.");
   const query = { orgId: args.ctx.orgId, actorId: args.ctx.userId, packageId: row.package_id,
     expectedRevision: row.revision, approvalRunId: args.approvalRunId,

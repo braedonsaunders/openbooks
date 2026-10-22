@@ -38,18 +38,18 @@ async function itemPlanningTab(
   const itemId = String(props.payload.item.id)
   const stocked = (await db.execute<{ id: string }>(sql`
     select item_id as id from item_inventory_profiles
-     where org_id = ${authz.user.orgId} and item_id = ${itemId} limit 1`)).rows[0]
+     where org_id = ${authz.user.orgId} and item_id = ${itemId} limit 1`, 'objects'))[0]
   if (!stocked) return null
   if (pickString(sp.itemSetup) !== 'planning') {
     const t = await getTranslations('planning')
     return { key: 'planning', label: t('itemTab.title'), content: null }
   }
   const t = await getTranslations('planning')
-  const subsidiaries = (await db.execute<{ id: string }>(sql`
+  const subsidiaries = await db.execute<{ id: string }>(sql`
     select s.id from subsidiaries s
      where s.org_id = ${authz.user.orgId} and s.is_active and not s.is_elimination
        ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
-     order by s.name limit 1`)).rows
+     order by s.name limit 1`, 'objects')
   if (subsidiaries.length === 0) return null
   const vendors = await partyOptions('vendor', authz.user.orgId, authz.allowedSubsidiaryIds)
   return {
@@ -215,7 +215,7 @@ async function assemblyRecipeSection(
   const name = String(props.payload.item.name ?? '').trim()
   const profiled = (await db.execute(sql`
     select item_id from item_inventory_profiles
-     where org_id = ${orgId} and item_id = ${itemId} limit 1`)).rows.length > 0
+     where org_id = ${orgId} and item_id = ${itemId} limit 1`, 'objects')).length > 0
   const tabHref = `/items?item=${encodeURIComponent(itemId)}&itemSetup=recipe`
   return {
     key: 'recipe',

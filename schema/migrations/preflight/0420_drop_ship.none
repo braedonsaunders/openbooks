@@ -1,1 +1,0 @@
-The new tenant tables hold only drop-ship routing and order snapshots. They do not reinterpret existing records or require any data repair.

@@ -43,7 +43,7 @@ export async function listApplicationInventoryLevels(
   let where = sql`l.org_id = ${context.authz.user.orgId} and l.remaining_quantity > 0 ${scope}`;
   if (input.itemId) where = sql`${where} and l.item_id = ${input.itemId}`;
   if (input.stockLocationId) where = sql`${where} and l.stock_location_id = ${input.stockLocationId}`;
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(sql`
     select i.id as item_id, i.code as item_code, i.name as item_name,
            sl.id as stock_location_id, sl.code as stock_location_code,
            coalesce(sum(l.remaining_quantity), 0)::text as quantity,
@@ -55,7 +55,7 @@ export async function listApplicationInventoryLevels(
      group by i.id, i.code, i.name, sl.id, sl.code
     having coalesce(sum(l.remaining_quantity), 0) <> 0
      order by i.name, sl.code
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   const totals = (await db.execute<{ lines: number; quantity: string; value: string }>(sql`
     select count(*)::int as lines,
            coalesce(sum(sub.quantity), 0)::text as quantity,
@@ -66,7 +66,7 @@ export async function listApplicationInventoryLevels(
          where ${where}
          group by l.item_id, l.stock_location_id
         having coalesce(sum(l.remaining_quantity), 0) <> 0
-      ) sub`)).rows[0];
+      ) sub`, "objects"))[0];
   return {
     total: Number(totals?.lines ?? 0),
     sumQuantity: totals?.quantity ?? "0",
@@ -178,9 +178,9 @@ export async function listAvailableApplicationInventory(
 
   // Names ride one query each, never per row.
   if (rows.length > 0) {
-    const itemNames = (await db.execute<{ id: string; code: string | null; name: string }>(sql`
+    const itemNames = await db.execute<{ id: string; code: string | null; name: string }>(sql`
       select id, code, name from items
-       where org_id = ${orgId} and id in (${sql.join([...new Set(rows.map((row) => row.itemId))].map((id) => sql`${id}::uuid`), sql`, `)})`)).rows;
+       where org_id = ${orgId} and id in (${sql.join([...new Set(rows.map((row) => row.itemId))].map((id) => sql`${id}::uuid`), sql`, `)})`, "objects");
     const byItem = new Map(itemNames.map((item) => [item.id, item]));
     const warehouseIds = [...new Set(rows.map((row) => row.warehouseId).filter((id) => id !== null))];
     const byWarehouse =
@@ -190,7 +190,7 @@ export async function listAvailableApplicationInventory(
               select sl.id, coalesce(w.name, sl.code, sl.id::text) as name
                 from stock_locations sl
                 left join warehouses w on w.stock_location_id = sl.id and w.org_id = sl.org_id
-               where sl.org_id = ${orgId} and sl.id in (${sql.join(warehouseIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows.map(
+               where sl.org_id = ${orgId} and sl.id in (${sql.join(warehouseIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects")).map(
               (warehouse) => [warehouse.id, warehouse.name] as const,
             ),
           )
@@ -224,11 +224,11 @@ async function resolveAvailableSubsidiary(
   if (allowed && allowed.size === 0) {
     throw invalidInput("this API key cannot see any subsidiary — widen its scope first");
   }
-  const operating = (await db.execute<{ id: string }>(sql`
+  const operating = await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${orgId} and not is_elimination and is_active
        ${allowed ? sql`and id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
-     order by id`)).rows;
+     order by id`, "objects");
   if (operating.length === 1 && operating[0]) return operating[0].id;
   throw invalidInput(
     operating.length === 0
@@ -266,14 +266,14 @@ async function resolveAvailableItems(
   // Existence first, independent of the date bound: an unknown id or code
   // is refused by name, while a date that narrows everything out is an
   // honest empty list.
-  const matched = (await db.execute<{ id: string; code: string | null }>(sql`
+  const matched = await db.execute<{ id: string; code: string | null }>(sql`
     select i.id, i.code from items i
      where i.org_id = ${orgId}
        ${ids.length > 0 || codes.length > 0 ? sql`and (` : sql``}
        ${ids.length > 0 ? sql`i.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
        ${ids.length > 0 && codes.length > 0 ? sql`or ` : sql``}
        ${codes.length > 0 ? sql`i.code in (${sql.join(codes.map((code) => sql`${code}`), sql`, `)})` : sql``}
-       ${ids.length > 0 || codes.length > 0 ? sql`)` : sql``}`)).rows;
+       ${ids.length > 0 || codes.length > 0 ? sql`)` : sql``}`, "objects");
   for (const id of ids) {
     if (!matched.some((row) => row.id === id)) {
       throw invalidInput(`item id "${id}" not found in this organization — check the id or sync the item first`);
@@ -290,7 +290,7 @@ async function resolveAvailableItems(
     select id from items
      where org_id = ${orgId}
        and id in (${sql.join(matched.map((row) => sql`${row.id}::uuid`), sql`, `)})
-       and updated_at >= ${since}::timestamptz`)).rows.map((row) => row.id);
+       and updated_at >= ${since}::timestamptz`, "objects")).map((row) => row.id);
   return fresh;
 }
 

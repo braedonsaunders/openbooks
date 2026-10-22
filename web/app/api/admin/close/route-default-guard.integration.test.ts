@@ -36,15 +36,15 @@ async function setup() {
     db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
   );
   const calendar = await withBypassContext(() => db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${org.orgId} and is_default`));
-  assert.ok(calendar.rows[0]?.id, "fixture needs a default calendar");
-  return { org, defaultCalendarId: calendar.rows[0].id };
+    select id from fiscal_calendars where org_id = ${org.orgId} and is_default`, "objects"));
+  assert.ok(calendar[0]?.id, "fixture needs a default calendar");
+  return { org, defaultCalendarId: calendar[0].id };
 }
 
 async function defaults(orgId: string) {
   const rows = await withBypassContext(() => db.execute<{ id: string; is_active: boolean }>(sql`
-    select id, is_active from fiscal_calendars where org_id = ${orgId} and is_default`));
-  return rows.rows;
+    select id, is_active from fiscal_calendars where org_id = ${orgId} and is_default`, "objects"));
+  return rows;
 }
 
 test("save-calendar refuses to unset the default while periods exist, and rolls back", async () => {
@@ -82,8 +82,8 @@ test("save-calendar refuses to deactivate the default while periods exist", asyn
     if (response.status !== 422) assert.fail(`expected 422, got ${response.status}: ${await response.text()}`);
     assert.match(((await response.json()) as { error: string }).error, /no active default fiscal calendar/);
     const rows = await withBypassContext(() => db.execute<{ is_active: boolean; is_default: boolean }>(sql`
-      select is_active, is_default from fiscal_calendars where id = ${defaultCalendarId}`));
-    assert.deepEqual(rows.rows[0], { is_active: true, is_default: true });
+      select is_active, is_default from fiscal_calendars where id = ${defaultCalendarId}`, "objects"));
+    assert.deepEqual(rows[0], { is_active: true, is_default: true });
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);
@@ -116,8 +116,8 @@ test("switching the default is a single atomic swap", async () => {
     assert.equal(rows.length, 1, "exactly one default survives the swap");
     assert.equal(rows[0]!.id, secondId);
     const old = await withBypassContext(() => db.execute<{ is_default: boolean }>(sql`
-      select is_default from fiscal_calendars where id = ${defaultCalendarId}`));
-    assert.equal(old.rows[0]?.is_default, false);
+      select is_default from fiscal_calendars where id = ${defaultCalendarId}`, "objects"));
+    assert.equal(old[0]?.is_default, false);
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);
@@ -137,8 +137,8 @@ test("generate-periods refuses while the org has no active default, minting noth
     if (response.status !== 422) assert.fail(`expected 422, got ${response.status}: ${await response.text()}`);
     assert.match(((await response.json()) as { error: string }).error, /no active default fiscal calendar/);
     const minted = await withBypassContext(() => db.execute<{ count: number }>(sql`
-      select count(*)::int as count from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2031`));
-    assert.equal(minted.rows[0]?.count, 0, "the refused generation must mint no periods");
+      select count(*)::int as count from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2031`, "objects"));
+    assert.equal(minted[0]?.count, 0, "the refused generation must mint no periods");
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);

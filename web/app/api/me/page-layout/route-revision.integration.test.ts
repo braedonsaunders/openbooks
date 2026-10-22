@@ -91,9 +91,9 @@ async function storedLayout(orgId: string, actorId: string): Promise<{ layout: u
            to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
       from user_page_layouts
      where org_id = ${orgId} and user_id = ${actorId} and page = ${PAGE}
-  `);
-  assert.equal(r.rows.length, 1, "exactly one layout row must be stored");
-  return { layout: r.rows[0]!.layout, revision: r.rows[0]!.revision };
+  `, "objects");
+  assert.equal(r.length, 1, "exactly one layout row must be stored");
+  return { layout: r[0]!.layout, revision: r[0]!.revision };
 }
 
 test(

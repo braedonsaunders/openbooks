@@ -113,8 +113,8 @@ async function requireDriverRevision(
   if (expected === undefined) return;
   const rows = await tx.execute<{ match: boolean }>(sql`
     select (${documentRevisionSql(sql`updated_at`)} = ${expected}) as match
-      from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`);
-  if (!rows.rows[0]?.match) fail("stale", `${what} changed since you read it; reload and retry`);
+      from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`, "objects");
+  if (!rows[0]?.match) fail("stale", `${what} changed since you read it; reload and retry`);
 }
 
 /** Bind a uuid array for `= any(...::uuid[])` (drizzle has no array params). */
@@ -350,8 +350,8 @@ async function assertAccountScopeOrg(tx: SqlExecutor, orgId: string, scope: Acco
   if (scope.kind === "accounts") {
     const found = await tx.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${orgId} and id = any(${uuidArray(scope.accountIds)})
-    `);
-    if (found.rows.length !== scope.accountIds.length) {
+    `, "objects");
+    if (found.length !== scope.accountIds.length) {
       fail("validation", "accountScope.accountIds must reference accounts in this org");
     }
   }
@@ -366,8 +366,8 @@ async function assertStatisticalAccountsOrg(
   const ids = config.accountIds as string[];
   const found = await tx.execute<{ id: string }>(sql`
     select id from accounts where org_id = ${orgId} and id = any(${uuidArray(ids)})
-  `);
-  if (found.rows.length !== ids.length) {
+  `, "objects");
+  if (found.length !== ids.length) {
     fail("validation", "config.accountIds must reference accounts in this org");
   }
 }
@@ -380,11 +380,11 @@ export async function listDrivers(
   const rows = opts?.includeInactive
     ? await ex.execute<Record<string, unknown>>(sql`
         select *, ${documentRevisionSql(sql`updated_at`)} as revision
-          from allocation_drivers where org_id = ${orgId} order by name, key`)
+          from allocation_drivers where org_id = ${orgId} order by name, key`, "objects")
     : await ex.execute<Record<string, unknown>>(sql`
         select *, ${documentRevisionSql(sql`updated_at`)} as revision
-          from allocation_drivers where org_id = ${orgId} and is_active order by name, key`);
-  const drivers = rows.rows.map(mapDriver);
+          from allocation_drivers where org_id = ${orgId} and is_active order by name, key`, "objects");
+  const drivers = rows.map(mapDriver);
   return projectDriverAccountReferences(orgId, drivers, opts?.allowedSubsidiaryIds, ex);
 }
 
@@ -398,8 +398,8 @@ export async function getDriver(
   const ex = executor ?? db;
   const rows = await ex.execute<Record<string, unknown>>(sql`
     select *, ${documentRevisionSql(sql`updated_at`)} as revision
-      from allocation_drivers where org_id = ${orgId} and id = ${id}`);
-  const row = rows.rows[0];
+      from allocation_drivers where org_id = ${orgId} and id = ${id}`, "objects");
+  const row = rows[0];
   if (!row) return null;
   const [driver] = await projectDriverAccountReferences(orgId, [mapDriver(row)], allowedSubsidiaryIds, ex);
   return driver ?? null;
@@ -425,8 +425,8 @@ async function projectDriverAccountReferences(
   if (!ids.length) return drivers;
   const visible = await executor.execute<{ id: string }>(sql`
     select id from accounts a where a.org_id = ${orgId} and a.id = any(${uuidArray(ids)}::uuid[])
-      ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`);
-  const visibleIds = new Set(visible.rows.map(({ id }) => id));
+      ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects");
+  const visibleIds = new Set(visible.map(({ id }) => id));
   return drivers.map((driver) => {
     const config = { ...driver.config };
     const accountScope = config.accountScope;
@@ -468,8 +468,8 @@ export async function createDriver(
           (${orgId}, ${key}, ${name}, ${input.description ?? null}, ${input.unit ?? null},
            ${dimension}, ${input.sourceKind}, ${JSON.stringify(config)}::jsonb,
            ${input.isActive ?? true}, ${actorId}, ${actorId})
-        returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
-      row = inserted.rows[0]!;
+        returning *, ${documentRevisionSql(sql`updated_at`)} as revision`, "objects");
+      row = inserted[0]!;
     } catch (error) {
       if (isUniqueViolation(error, "allocation_drivers_org_key")) {
         fail("conflict", `driver key already exists: ${key}`);
@@ -490,8 +490,8 @@ export async function updateDriver(
   if (!isUuid(id)) fail("not_found", "driver not found");
   return db.transaction(async (tx) => {
     const current = await tx.execute<Record<string, unknown>>(sql`
-      select * from allocation_drivers where org_id = ${orgId} and id = ${id} for update`);
-    const before = current.rows[0];
+      select * from allocation_drivers where org_id = ${orgId} and id = ${id} for update`, "objects");
+    const before = current[0];
     if (!before) fail("not_found", "driver not found");
     await requireDriverRevision(tx, "allocation_drivers", orgId, id, patch.expectedUpdatedAt, "driver");
     const nextSourceKind = patch.sourceKind ?? (String(before.source_kind) as AllocationDriverSourceKind);
@@ -503,8 +503,8 @@ export async function updateDriver(
     const nextDimension = patch.dimension !== undefined ? parseAllocationDimension(patch.dimension) : String(before.dimension);
     if (nextDimension !== String(before.dimension)) {
       const values = await tx.execute<{ n: string }>(sql`
-        select count(*) as n from allocation_driver_values where org_id = ${orgId} and driver_id = ${id}`);
-      if (Number(values.rows[0]?.n ?? 0) > 0) {
+        select count(*) as n from allocation_driver_values where org_id = ${orgId} and driver_id = ${id}`, "objects");
+      if (Number(values[0]?.n ?? 0) > 0) {
         fail("conflict", "dimension cannot change while manual values exist");
       }
     }
@@ -526,8 +526,8 @@ export async function updateDriver(
              is_active = ${patch.isActive ?? Boolean(before.is_active)},
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${id}
-       returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
-    const after = updated.rows[0]!;
+       returning *, ${documentRevisionSql(sql`updated_at`)} as revision`, "objects");
+    const after = updated[0]!;
     await audit(tx, orgId, "allocation_drivers", id, "update", { before, after }, actorId);
     return mapDriver(after);
   });
@@ -541,12 +541,12 @@ export async function deleteDriver(
   if (!isUuid(id)) fail("not_found", "driver not found");
   await db.transaction(async (tx) => {
     const current = await tx.execute<Record<string, unknown>>(sql`
-      select * from allocation_drivers where org_id = ${orgId} and id = ${id} for update`);
-    const before = current.rows[0];
+      select * from allocation_drivers where org_id = ${orgId} and id = ${id} for update`, "objects");
+    const before = current[0];
     if (!before) fail("not_found", "driver not found");
     const refs = await tx.execute<{ n: string }>(sql`
-      select count(*) as n from allocation_rule_versions where org_id = ${orgId} and driver_id = ${id}`);
-    if (Number(refs.rows[0]?.n ?? 0) > 0) {
+      select count(*) as n from allocation_rule_versions where org_id = ${orgId} and driver_id = ${id}`, "objects");
+    if (Number(refs[0]?.n ?? 0) > 0) {
       fail("referenced", "driver is used by a rule version and cannot be deleted");
     }
     await tx.execute(sql`delete from allocation_driver_values where org_id = ${orgId} and driver_id = ${id}`);
@@ -569,14 +569,14 @@ export async function listDriverValues(
        where org_id = ${orgId} and driver_id = ${driverId}
          and effective_from <= ${opts.onDate}
          and (effective_to is null or effective_to >= ${opts.onDate})
-       order by dimension_value_id`);
-    return rows.rows.map(mapDriverValue);
+       order by dimension_value_id`, "objects");
+    return rows.map(mapDriverValue);
   }
   const rows = await ex.execute<Record<string, unknown>>(sql`
     select * from allocation_driver_values
      where org_id = ${orgId} and driver_id = ${driverId}
-     order by dimension_value_id, effective_from`);
-  return rows.rows.map(mapDriverValue);
+     order by dimension_value_id, effective_from`, "objects");
+  return rows.map(mapDriverValue);
 }
 
 async function assertNoValueOverlap(
@@ -592,12 +592,12 @@ async function assertNoValueOverlap(
         select effective_from::text as effective_from, effective_to::text as effective_to
           from allocation_driver_values
          where org_id = ${orgId} and driver_id = ${driverId} and dimension_value_id = ${dimensionValueId}
-           and id <> ${ignoreId}`)
+           and id <> ${ignoreId}`, "objects")
     : await tx.execute<{ effective_from: string; effective_to: string | null }>(sql`
         select effective_from::text as effective_from, effective_to::text as effective_to
           from allocation_driver_values
-         where org_id = ${orgId} and driver_id = ${driverId} and dimension_value_id = ${dimensionValueId}`);
-  for (const row of existing.rows) {
+         where org_id = ${orgId} and driver_id = ${driverId} and dimension_value_id = ${dimensionValueId}`, "objects");
+  for (const row of existing) {
     if (driverValueWindowsOverlap(window, { from: String(row.effective_from).slice(0, 10), to: row.effective_to ? String(row.effective_to).slice(0, 10) : null })) {
       fail("conflict", "effective window overlaps an existing value for this dimension value");
     }
@@ -625,14 +625,14 @@ async function assertActiveDimensionValue(
       join segment_definitions sd on sd.org_id = sv.org_id and sd.id = sv.segment_id
       where sv.org_id = ${orgId} and sv.id = ${dimensionValueId}
         and sv.is_active and sd.is_active and sd.key = ${segmentKey}
-    `)).rows.length === 1;
+    `, "objects")).length === 1;
   } else {
     const table = tableByDimension[dimension];
     if (!table) fail("validation", "driver has an unsupported dimension");
     found = (await tx.execute<{ id: string }>(sql`
       select id from ${sql.raw(table)}
       where org_id = ${orgId} and id = ${dimensionValueId} and is_active
-    `)).rows.length === 1;
+    `, "objects")).length === 1;
   }
   if (!found) fail("validation", "Choose an active value from the driver's dimension.");
 }
@@ -651,8 +651,8 @@ export async function createDriverValue(
   const value = validateDriverValueDecimal(input.value);
   return db.transaction(async (tx) => {
     const driver = await tx.execute<{ dimension: AllocationDimension }>(sql`
-      select dimension from allocation_drivers where org_id = ${orgId} and id = ${driverId}`);
-    const driverRow = driver.rows[0];
+      select dimension from allocation_drivers where org_id = ${orgId} and id = ${driverId}`, "objects");
+    const driverRow = driver[0];
     if (!driverRow) fail("not_found", "driver not found");
     await assertActiveDimensionValue(tx, orgId, driverRow.dimension, input.dimensionValueId);
     await assertNoValueOverlap(tx, orgId, driverId, input.dimensionValueId, { from, to });
@@ -663,8 +663,8 @@ export async function createDriverValue(
           (org_id, driver_id, dimension_value_id, effective_from, effective_to, value, note, created_by, updated_by)
         values
           (${orgId}, ${driverId}, ${input.dimensionValueId}, ${from}, ${to}, ${value}, ${input.note ?? null}, ${actorId}, ${actorId})
-        returning *, ${documentRevisionSql(sql`updated_at`)} as revision`);
-      row = inserted.rows[0]!;
+        returning *, ${documentRevisionSql(sql`updated_at`)} as revision`, "objects");
+      row = inserted[0]!;
     } catch (error) {
       if (isExclusionViolation(error, "allocation_driver_values_no_overlap")) {
         fail("conflict", "effective window overlaps an existing value for this dimension value");
@@ -688,8 +688,8 @@ export async function updateDriverValue(
   if (!isUuid(id)) fail("not_found", "driver value not found");
   return db.transaction(async (tx) => {
     const current = await tx.execute<Record<string, unknown>>(sql`
-      select * from allocation_driver_values where org_id = ${orgId} and id = ${id} for update`);
-    const before = current.rows[0];
+      select * from allocation_driver_values where org_id = ${orgId} and id = ${id} for update`, "objects");
+    const before = current[0];
     if (!before) fail("not_found", "driver value not found");
     await requireDriverRevision(tx, "allocation_driver_values", orgId, id, patch.expectedUpdatedAt, "driver value");
     // effectiveFrom is immutable: the unique key is (driver, value, from), so
@@ -732,8 +732,8 @@ export async function deleteDriverValue(
   if (!isUuid(id)) fail("not_found", "driver value not found");
   await db.transaction(async (tx) => {
     const current = await tx.execute<Record<string, unknown>>(sql`
-      select * from allocation_driver_values where org_id = ${orgId} and id = ${id} for update`);
-    const before = current.rows[0];
+      select * from allocation_driver_values where org_id = ${orgId} and id = ${id} for update`, "objects");
+    const before = current[0];
     if (!before) fail("not_found", "driver value not found");
     await tx.execute(sql`delete from allocation_driver_values where org_id = ${orgId} and id = ${id}`);
     await audit(tx, orgId, "allocation_driver_values", id, "delete", { before }, actorId);
@@ -763,8 +763,8 @@ export async function getDimensionValueLabels(
   const ex = executor ?? db;
   const rows = await ex.execute<{ id: string; name: string }>(sql`
     select id::text as id, name from ${sql.raw(table)}
-     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`);
-  for (const row of rows.rows) labels.set(row.id, row.name);
+     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
+  for (const row of rows) labels.set(row.id, row.name);
   return labels;
 }
 

@@ -90,8 +90,8 @@ export type TaxFramework = "asc740" | "ias12";
 export async function orgTaxFramework(orgId: string): Promise<TaxFramework> {
   const r = (await db.execute<{ f: string | null }>(sql`
     select settings->>'taxFramework' as f from orgs where id = ${orgId}
-  `));
-  return r.rows[0]?.f === "ias12" ? "ias12" : "asc740";
+  `, "objects"));
+  return r[0]?.f === "ias12" ? "ias12" : "asc740";
 }
 
 /** Framework-aware name for the DTA-reduction input. */
@@ -444,8 +444,8 @@ async function applicableRateRows(
        and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
        and subsidiary_id is not distinct from ${subsidiaryId}
      order by jurisdiction, rate_percent
-  `));
-  return r.rows.map((row) => ({
+  `, "objects"));
+  return r.map((row) => ({
     jurisdiction: row.jurisdiction,
     ratePercent: row.rate,
     scope: subsidiaryId === null ? "org" : "subsidiary",
@@ -600,9 +600,9 @@ async function pretaxBookIncomeBySubsidiary(
        and ${excludePeriodEndJournals(sql`e.origin`)}
      group by l.subsidiary_id
      order by l.subsidiary_id
-  `));
+  `, "objects"));
   const out: Record<string, string> = {};
-  for (const row of r.rows) {
+  for (const row of r) {
     // A net-zero entity contributes nothing to measure; keeping it out also
     // keeps the lineage stable when offsetting entries are added later.
     if (!isZero(row.pretax)) out[row.sid] = row.pretax;
@@ -657,9 +657,9 @@ export async function computeFixedAssetDifferences(
       ) a
      group by a.subsidiary_id, a.subsidiary_name
      order by a.subsidiary_id
-  `));
+  `, "objects"));
   const out: DifferenceInput[] = [];
-  for (const row of r.rows) {
+  for (const row of r) {
     const difference = fromUnits(toUnits(row.tax_dep) - toUnits(row.book_dep));
     if (isZero(difference)) continue;
     out.push({
@@ -691,8 +691,8 @@ async function applicableRateFingerprintRows(
   }
   const subs = (await db.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${orgId} order by id
-  `));
-  for (const { id } of subs.rows) {
+  `, "objects"));
+  for (const { id } of subs) {
     for (const row of await applicableRateRows(orgId, id, onDate)) {
       rows.push({ jurisdiction: row.jurisdiction, ratePercent: row.ratePercent, subsidiaryId: id });
     }
@@ -749,8 +749,8 @@ async function latestPostedBaselines(
       from tax_provision_runs
      where org_id = ${orgId} and status = 'posted' and fiscal_year < ${beforeFiscalYear}
      order by fiscal_year desc, version desc limit 1
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   if (!row) {
     return { runId: null, snapshotHash: null, bySubsidiaryId: {} };
   }
@@ -793,11 +793,9 @@ async function captureProvisionSources(
   );
   const rateRows = await applicableRateFingerprintRows(orgId, range.to);
   const rootSubsidiaryId =
-    (
-      (await db.execute<{ id: string | null }>(sql`
+    (await db.execute<{ id: string | null }>(sql`
         select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1
-      `))
-    ).rows[0]?.id ?? null;
+      `, "objects"))[0]?.id ?? null;
   const prior = await latestPostedBaselines(
     orgId,
     fiscalYear,
@@ -842,9 +840,9 @@ export async function listProvisionRuns(
            journal_entry_id as "journalEntryId", created_at as "createdAt"
       from tax_provision_runs where org_id = ${orgId}
      order by fiscal_year desc, version desc
-  `));
+  `, "objects"));
   const out: ProvisionRunRow[] = [];
-  for (const { payload, ...row } of r.rows) {
+  for (const { payload, ...row } of r) {
     if (allowedSubsidiaryIds == null) {
       out.push(row);
       continue;
@@ -890,8 +888,8 @@ async function scopedProvisionJournalEntryId(
     select id, entry_number from journal_entries
      where org_id = ${orgId} and origin = 'tax_provision'
        and entry_number in (${sql.join(numbers.map((n) => sql`${n}`), sql`, `)})
-  `));
-  const byNumber = new Map(found.rows.map((row) => [row.entry_number, row.id]));
+  `, "objects"));
+  const byNumber = new Map(found.map((row) => [row.entry_number, row.id]));
   for (const n of numbers) {
     const id = byNumber.get(n);
     if (id) return id;
@@ -1073,8 +1071,8 @@ export async function getProvisionRun(
            journal_entry_id as "journalEntryId", created_at as "createdAt",
            snapshot_hash as "snapshotHash", payload
       from tax_provision_runs where org_id = ${orgId} and id = ${runId}
-  `));
-  const run = runs.rows[0];
+  `, "objects"));
+  const run = runs[0];
   if (!run) return null;
   if (allowedSubsidiaryIds != null) {
     const projected = projectProvisionPayload(run.payload, allowedSubsidiaryIds);
@@ -1121,8 +1119,8 @@ export async function getProvisionRun(
      where td.org_id = ${orgId} and td.run_id = ${runId}
        ${differenceScope}
      order by td.category, td.description
-  `));
-  run.differences = diffs.rows;
+  `, "objects"));
+  run.differences = diffs;
   return run;
 }
 
@@ -1270,12 +1268,12 @@ async function fiscalYearRange(
     select min(starts_on)::text as "from", max(ends_on)::text as "to"
       from accounting_periods
      where org_id = ${orgId} and fiscal_year = ${fiscalYear} and not is_adjustment
-  `));
-  if (!r.rows[0]?.from || !r.rows[0].to)
+  `, "objects"));
+  if (!r[0]?.from || !r[0].to)
     throw new IncomeTaxProvisionError(
       `no accounting periods for fiscal year ${fiscalYear}`,
     );
-  return { from: r.rows[0].from, to: r.rows[0].to };
+  return { from: r[0].from, to: r[0].to };
 }
 
 interface SubsidiaryRow {
@@ -1298,8 +1296,8 @@ async function loadSubsidiaries(orgId: string): Promise<SubsidiaryRow[]> {
            control_accounts as "control_accounts"
       from subsidiaries where org_id = ${orgId}
      order by id
-  `));
-  return r.rows.map((row) => ({
+  `, "objects"));
+  return r.map((row) => ({
     id: row.id,
     name: row.name,
     currency: row.currency,
@@ -1338,8 +1336,8 @@ export async function spotRateToPresentation(
          and to_currency = ${fromCurrency} and rate_type = ${rateType}
          and as_of <= ${onDate}
     ) candidates order by as_of desc limit 1
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   if (!row?.rate) {
     throw new IncomeTaxProvisionError(
       `no ${rateType} FX rate for ${fromCurrency}→${toCurrency} on or before ${onDate} — configure exchange rates before computing a multi-currency provision`,
@@ -1427,10 +1425,10 @@ export async function computeProvisionRun(
 
     const orgRow = (await db.execute<{ base_currency: string | null }>(sql`
       select base_currency from orgs where id = ${orgId}
-    `));
+    `, "objects"));
     const presentationCurrency =
       opts.presentationCurrency ??
-      orgRow.rows[0]?.base_currency ??
+      orgRow[0]?.base_currency ??
       root?.currency;
 
     // Capture the ENTIRE source surface once; both the measurement and the
@@ -1651,8 +1649,8 @@ export async function computeProvisionRun(
          and status = 'draft'
        order by version desc
        for update
-    `));
-    const identical = priorDrafts.rows.find(
+    `, "objects"));
+    const identical = priorDrafts.find(
       (draft) => draft.snapshot_hash === snapshotHash,
     );
     if (identical) {
@@ -1660,11 +1658,11 @@ export async function computeProvisionRun(
     }
     const versionRow = (await db.execute<{ v: number }>(sql`
       select coalesce(max(version), 0)::int as v from tax_provision_runs where org_id = ${orgId} and fiscal_year = ${fiscalYear}
-    `));
-    const version = (versionRow.rows[0]?.v ?? 0) + 1;
+    `, "objects"));
+    const version = (versionRow[0]?.v ?? 0) + 1;
 
     const runId = randomUUID();
-    for (const draft of priorDrafts.rows) {
+    for (const draft of priorDrafts) {
       await db.execute(sql`
         update tax_provision_runs
            set status = 'discarded', updated_at = now(), updated_by = ${actorId}
@@ -1775,14 +1773,14 @@ export async function postProvisionRun(
       select fiscal_year
         from tax_provision_runs
        where org_id = ${orgId} and id = ${runId}
-    `));
-    if (!scope.rows[0]) {
+    `, "objects"));
+    if (!scope[0]) {
       throw new IncomeTaxProvisionError("provision run not found");
     }
     await db.execute(sql`
       select pg_advisory_xact_lock(
         hashtextextended(
-          ${`income-tax-provision:${orgId}:${scope.rows[0].fiscal_year}`},
+          ${`income-tax-provision:${orgId}:${scope[0].fiscal_year}`},
           0
         )
       )
@@ -1804,9 +1802,9 @@ export async function postProvisionRun(
            and status in ('posted', 'draft')
          order by case status when 'posted' then 0 else 1 end, version desc
          limit 1
-      `));
-      const remedy = current.rows[0]
-        ? `use the current run ${current.rows[0].id}`
+      `, "objects"));
+      const remedy = current[0]
+        ? `use the current run ${current[0].id}`
         : `recompute the provision for FY${run.fiscalYear}`;
       throw new IncomeTaxProvisionError(
         `provision run ${runId} is ${run.status} — ${remedy}`,
@@ -1819,8 +1817,8 @@ export async function postProvisionRun(
     const later = (await db.execute(sql`
       select 1 from tax_provision_runs
        where org_id = ${orgId} and status = 'posted' and fiscal_year > ${run.fiscalYear} limit 1
-    `));
-    if (later.rows.length > 0) {
+    `, "objects"));
+    if (later.length > 0) {
       throw new IncomeTaxProvisionError(
         `a posted provision already exists for a later fiscal year — recompute and repost the later year after changing FY${run.fiscalYear}`,
       );
@@ -1868,11 +1866,9 @@ export async function postProvisionRun(
     }
 
     const c =
-      (
-        (await db.execute<{ c: IncomeTaxControlAccounts | null }>(sql`
+      (await db.execute<{ c: IncomeTaxControlAccounts | null }>(sql`
       select settings->'controlAccounts' as c from orgs where id = ${orgId}
-    `))
-      ).rows[0]?.c ?? {};
+    `, "objects"))[0]?.c ?? {};
     const subsidiaries = await loadSubsidiaries(orgId);
     const accountFor = (
       key: keyof IncomeTaxControlAccounts,
@@ -1892,11 +1888,9 @@ export async function postProvisionRun(
       return account;
     };
 
-    const bookId = (
-      (await db.execute<{ id: string }>(sql`
+    const bookId = (await db.execute<{ id: string }>(sql`
       select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share
-    `))
-    ).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!bookId)
       throw new IncomeTaxProvisionError("no active primary posting book");
     // Ordinary posting: shared covering-period resolver (default calendar,
@@ -2008,10 +2002,10 @@ export async function postProvisionRun(
       select id, journal_entry_id, version from tax_provision_runs
        where org_id = ${orgId} and fiscal_year = ${run.fiscalYear} and status = 'posted' and id <> ${runId}
        order by version desc limit 1
-    `));
+    `, "objects"));
     const reversalEntryIds: string[] = [];
-    if (priorPosted.rows[0]) {
-      const priorRun = priorPosted.rows[0];
+    if (priorPosted[0]) {
+      const priorRun = priorPosted[0];
       const prefix = `ITX-FY${run.fiscalYear}-v${priorRun.version}`;
       const priorEntries = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
         select id, subsidiary_id from journal_entries
@@ -2019,13 +2013,13 @@ export async function postProvisionRun(
          where org_id = ${orgId} and origin = 'tax_provision' and status = 'posted'
            and (entry_number = ${prefix} or entry_number like ${`${prefix}-%`})
          order by entry_number
-      `));
-      for (const priorEntry of priorEntries.rows) {
+      `, "objects"));
+      for (const priorEntry of priorEntries) {
         // Mirror-copy negates each line in place: subsidiary, currency and
         // functional amounts carry over exactly as originally posted. The
         // reversal posts through the ONE ledger API; the prior entry is then
         // marked reversed — never edited.
-        const mirrorSource = (await db.execute<{
+        const mirrorSource = await db.execute<{
           line_number: number;
           account_id: string;
           subsidiary_id: string;
@@ -2039,7 +2033,7 @@ export async function postProvisionRun(
                  currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo
             from journal_lines where org_id = ${orgId} and entry_id = ${priorEntry.id}
             order by line_number
-        `)).rows;
+        `, "objects");
         const reversalEntryId = randomUUID();
         const postedReversal = await postEntry(db, {
           id: reversalEntryId,

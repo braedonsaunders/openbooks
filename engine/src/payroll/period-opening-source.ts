@@ -20,7 +20,7 @@ export async function payrollPeriodOpeningPriors(tx: SqlExecutor, input: {
   const result = new Map<string, PayPeriodPriors>();
   if (!input.employeePartyIds.length) return result;
   const columns = sql.join(OPENING_BALANCE_FIELDS.flatMap((field) => [sql`${field.column}::text`, sql`${sql.identifier('b')}.${sql.identifier(field.column)}::text`]), sql`, `);
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     record: PayrollPeriodOpeningRecord; employee_name: string; annual_columns: Record<string, string>;
     programs: Record<string, string>; minor_units: number; annual_id: string | null;
   }>(sql`select jsonb_build_object('id',o.id,'employeePartyId',o.employee_party_id,'annualOpeningBalanceId',o.annual_opening_balance_id,
@@ -36,7 +36,7 @@ export async function payrollPeriodOpeningPriors(tx: SqlExecutor, input: {
     left join currencies c on c.code=o.currency
     where o.org_id=${input.orgId} and o.tax_year=${input.run.taxYear}
      and o.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.employeePartyIds)}::jsonb)::uuid)
-    order by o.employee_party_id`)).rows;
+    order by o.employee_party_id`, 'objects');
   for (const row of rows) {
     try {
       const opening = row.record;

@@ -10,8 +10,8 @@ import type { OrgNavConfig } from './registry'
 export const readNavigationConfig = cache(async (orgId: string) => {
   const result = await db.execute<{ config: OrgNavConfig; updated_at: Date }>(sql`
     select config, updated_at from org_nav_configs where org_id = ${orgId} limit 1
-  `)
-  return result.rows[0] ?? null
+  `, 'objects')
+  return result[0] ?? null
 })
 
 /**

@@ -202,17 +202,17 @@ export async function RecordListView({
        where ${where}
        order by ${listOrderClause(orderExpr, params.dir)}
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `)),
+    `, 'objects')),
     (db.execute(sql`
       select d.status, count(*) as n from ${fromClause}
        where ${statusCountWhere}
-       group by d.status`)),
+       group by d.status`, 'objects')),
     db.execute<{ n: string }>(sql`
       select count(*) as n from ${fromClause}
-       where ${where}`),
+       where ${where}`, 'objects'),
   ])
-  const rows = rowsRes.rows as Record<string, unknown>[]
-  const filteredTotal = Number(totalRow.rows[0]?.n ?? 0)
+  const rows = rowsRes as Record<string, unknown>[]
+  const filteredTotal = Number(totalRow[0]?.n ?? 0)
   // The genuinely-empty list teaches; a filtered one keeps the shared generic.
   const filtersActive = hasActiveListFilters({
     q: params.q,
@@ -220,7 +220,7 @@ export async function RecordListView({
     savedViewFilterCount: view.filters.length,
   })
 
-  const countByStatus = new Map(statusCounts.rows.map(row => [String(row.status), Number(row.n)]))
+  const countByStatus = new Map(statusCounts.map(row => [String(row.status), Number(row.n)]))
   const statusValues = [...new Set([
     ...(meta.listFilters.find(filter => filter.key === 'status')?.options ?? []).map(option => option.value),
     ...countByStatus.keys(),
@@ -246,8 +246,8 @@ export async function RecordListView({
     const kindCounts = ((await db.execute(sql`
       select d.kind, count(*) as n from ${fromClause}
        where ${kindCountWhere}
-       group by d.kind`)))
-    const countByKind = new Map(kindCounts.rows.map((r) => [r.kind, Number(r.n)]))
+       group by d.kind`, 'objects')))
+    const countByKind = new Map(kindCounts.map((r) => [r.kind, Number(r.n)]))
     kindOptions = source.kinds.map((k) => ({
       value: k,
       label: tCommon(`transactionTypes.${docTypeMeta(k).labelKey}` as never),

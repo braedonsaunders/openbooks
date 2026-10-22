@@ -72,10 +72,8 @@ const put = (body: object) =>
   );
 
 async function flags(orgId: string): Promise<Record<string, boolean>> {
-  return withBypassContext(async () => (
-    await db.execute<{ features: Record<string, boolean> }>(sql`
-      select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgId}`)
-  ).rows[0]!.features ?? {});
+  return withBypassContext(async () => (await db.execute<{ features: Record<string, boolean> }>(sql`
+      select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgId}`, "objects"))[0]!.features ?? {});
 }
 
 test("disabling REST API with MCP access on is refused with the typed dependents body", async () => {

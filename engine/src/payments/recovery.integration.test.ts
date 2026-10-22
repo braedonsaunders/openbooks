@@ -102,7 +102,7 @@ async function seedMethod(
   opts?: { providerMethodId?: string; isDefault?: boolean; priority?: number; last4?: string },
 ): Promise<string> {
   const { org, userId } = fixture;
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     insert into customer_payment_methods
       (org_id, party_id, provider, provider_customer_id, provider_method_id,
        brand, last4, exp_month, exp_year, is_default, fallback_priority, status, created_by, updated_by)
@@ -110,14 +110,14 @@ async function seedMethod(
             'visa', ${opts?.last4 ?? "4242"}, 12, 2030, ${opts?.isDefault ?? true}, ${opts?.priority ?? 0},
             'active', ${userId}, ${userId})
     returning id
-  `)).rows;
+  `, "objects");
   return rows[0]!.id;
 }
 
 async function openBalance(orgId: string, invoiceId: string): Promise<string> {
   return (await db.execute<{ open_balance: string }>(sql`
     select open_balance from documents where id = ${invoiceId} and org_id = ${orgId}
-  `)).rows[0]!.open_balance;
+  `, "objects"))[0]!.open_balance;
 }
 
 test("an insufficient-funds decline retries on the payday ladder, not the generic cadence", { skip: !DB }, async () => {
@@ -135,7 +135,7 @@ test("an insufficient-funds decline retries on the payday ladder, not the generi
     const attempt = (await db.execute<{ decline_kind: string | null; next_retry_on: string | null }>(sql`
       select decline_kind, next_retry_on::text as "next_retry_on" from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId} and retry_position = 0
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(attempt.decline_kind, "insufficient_funds");
     // The default payday ladder is [3, 7, 14]: position 0 lands 2026-07-18,
     // while the generic [1, 3] ladder would have landed 2026-07-16.
@@ -165,7 +165,7 @@ test("a hard decline on the primary charges the ordered backup method", { skip: 
     assert.equal(run.succeeded, 1);
     assert.equal(await openBalance(org.orgId, invoiceId), "0.0000");
 
-    const attempts = (await db.execute<{
+    const attempts = await db.execute<{
       retry_position: number;
       status: string;
       decline_kind: string | null;
@@ -176,7 +176,7 @@ test("a hard decline on the primary charges the ordered backup method", { skip: 
         from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId}
        order by retry_position
-    `)).rows;
+    `, "objects");
     assert.equal(attempts.length, 2);
     assert.equal(attempts[0]!.status, "failed");
     assert.equal(attempts[0]!.decline_kind, "hard");
@@ -215,7 +215,7 @@ test("an authentication-required charge keeps the link and waits for the custome
     }>(sql`
       select status, decline_kind, auth_url, next_retry_on::text as "next_retry_on" from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId} and retry_position = 0
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(attempt.status, "failed");
     assert.equal(attempt.decline_kind, "needs_authentication");
     assert.equal(attempt.auth_url, "https://pay.example/verify/pi_3ds");
@@ -248,7 +248,7 @@ test("a card updater event refreshes the stored method", { skip: !DB }, async ()
       select brand, last4, exp_month, exp_year,
              last_updater_refresh_at::text as "refreshed_at"
         from customer_payment_methods where id = ${methodId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.brand, "mastercard");
     assert.equal(row.last4, "9999");
     assert.equal(row.exp_month, 5);
@@ -374,7 +374,7 @@ test("expiring card reads and outreach writes enforce subsidiary visibility", { 
     const untouched = (await db.execute<{ expiry_notified_on: string | null }>(sql`
       select expiry_notified_on::text as expiry_notified_on from customer_payment_methods
        where org_id = ${org.orgId} and id = ${methodId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(untouched?.expiry_notified_on, null);
 
     await assert.rejects(
@@ -386,7 +386,7 @@ test("expiring card reads and outreach writes enforce subsidiary visibility", { 
     const stamped = (await db.execute<{ expiry_notified_on: string | null }>(sql`
       select expiry_notified_on::text as expiry_notified_on from customer_payment_methods
        where org_id = ${org.orgId} and id = ${methodId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(stamped?.expiry_notified_on, "2026-06-01");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -408,7 +408,7 @@ test("operator retries authorize the invoice entity and fresh grants before any 
     });
     const attemptId = (await db.execute<{ id: string }>(sql`
       select id from collection_attempts where org_id = ${org.orgId} and invoice_id = ${invoiceId} and retry_position = 0
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const childId = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
@@ -419,15 +419,15 @@ test("operator retries authorize the invoice entity and fresh grants before any 
       const changed = await db.execute(sql`
         update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb,
           subsidiary_restriction = ${JSON.stringify(scope)}::jsonb
-         where org_id = ${org.orgId} and key = 'retry_collector' returning id`);
-      assert.equal(changed.rows.length, 1);
+         where org_id = ${org.orgId} and key = 'retry_collector' returning id`, "objects");
+      assert.equal(changed.length, 1);
     };
     await rolePolicy(["autopay.manage"], { mode: "list", subsidiaryIds: [childId] });
     const snapshot = async () => (await db.execute(sql`
       select (select count(*)::text from collection_attempts where org_id = ${org.orgId}) as attempts,
              (select count(*)::text from documents where org_id = ${org.orgId}) as documents,
              (select count(*)::text from audit_log where org_id = ${org.orgId}) as audits
-    `)).rows[0];
+    `, "objects"))[0];
     const before = await snapshot();
     let charges = 0;
     const charge: ChargeFn = async () => { charges += 1; return { status: "processing", providerRef: "ch_retry_scoped" }; };
@@ -445,10 +445,10 @@ test("operator retries authorize the invoice entity and fresh grants before any 
     const result = await retryAttemptNow(org.orgId, attemptId, collector, new Set([org.subsidiaryId]), charge);
     assert.equal(result.charged, 1);
     assert.equal(charges, 1);
-    const rows = (await db.execute<{ status: string; created_by: string | null; retry_position: number }>(sql`
+    const rows = await db.execute<{ status: string; created_by: string | null; retry_position: number }>(sql`
       select status, created_by, retry_position from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId} order by retry_position
-    `)).rows;
+    `, "objects");
     assert.deepEqual(rows.map(row => row.status), ["failed", "processing"]);
     assert.equal(rows[1]!.created_by, collector);
   } finally {

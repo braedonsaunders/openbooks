@@ -10,14 +10,15 @@ const stateKey = Symbol.for('openbooks.locale-tenant-scope-test')
 const queries: { sql: string; params: unknown[] }[] = []
 const dialect = new PgDialect()
 const state = { orgReads: 0, userReads: 0, orgScopes: [] as string[], activeUser: null as { id: string; orgId: string; envKind: 'production' | 'sandbox' | 'preview'; homeUserId: string; homeOrgId: string } | null, locale: null as string | null, preferenceLocale: null as string | null, navMode: null as string | null, timeZone: null as string | null,
-  execute(query: SQL) {
+  execute(query: SQL, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const compiled = dialect.sqlToQuery(query)
     queries.push(compiled)
     state.orgReads++
-    if (compiled.sql.includes('current_setting')) return { rows: [{ org_id: null }] }
-    if (compiled.sql.includes('user_mode')) return { rows: [{ user_mode: state.navMode, org_default: 'sidebar' }] }
-    if (compiled.sql.includes('select locale from users')) return { rows: [{ locale: state.preferenceLocale }] }
-    return { rows: [{ user_locale: state.locale, org_default: 'fr', time_zone: state.timeZone }] }
+    if (compiled.sql.includes('current_setting')) return Promise.resolve({ rows: [{ org_id: null }] }).then(inMode)
+    if (compiled.sql.includes('user_mode')) return Promise.resolve({ rows: [{ user_mode: state.navMode, org_default: 'sidebar' }] }).then(inMode)
+    if (compiled.sql.includes('select locale from users')) return Promise.resolve({ rows: [{ locale: state.preferenceLocale }] }).then(inMode)
+    return Promise.resolve({ rows: [{ user_locale: state.locale, org_default: 'fr', time_zone: state.timeZone }] }).then(inMode)
   },
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
@@ -25,7 +26,7 @@ const state = { orgReads: 0, userReads: 0, orgScopes: [] as string[], activeUser
 const mocks = new Map([
   ['mock:headers', `export async function cookies() { throw new Error('no request context') }`],
   ['mock:auth', `export async function currentSession(){return null}; export async function currentUser(){const state=globalThis[Symbol.for('openbooks.locale-tenant-scope-test')];state.userReads++;return state.activeUser}`],
-  ['mock:db', `const state=globalThis[Symbol.for('openbooks.locale-tenant-scope-test')]; export async function withBypassContext(work){return work()}; export async function withOrgContext(orgId,work){state.orgScopes.push(orgId);return work()}; export const db={async execute(query){return state.execute(query)}}`],
+  ['mock:db', `const state=globalThis[Symbol.for('openbooks.locale-tenant-scope-test')]; export async function withBypassContext(work){return work()}; export async function withOrgContext(orgId,work){state.orgScopes.push(orgId);return work()}; export const db={async execute(query, mode){return state.execute(query, mode)}}`],
 ])
 
 registerHooks({

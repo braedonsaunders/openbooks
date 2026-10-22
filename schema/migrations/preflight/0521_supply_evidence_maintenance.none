@@ -1,3 +1,0 @@
-Replaces the supply-evidence guard function to add the governed-maintenance
-escape hatch. No table is created or altered and no row is read, rewritten,
-or deleted.

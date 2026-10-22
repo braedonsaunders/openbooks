@@ -25,7 +25,7 @@ export async function employeeWriteScopeError(
   if (scope == null) return null
   const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
-     where org_id = ${orgId} and id = ${employeePartyId}`)).rows[0]
+     where org_id = ${orgId} and id = ${employeePartyId}`, 'objects'))[0]
   // An unresolved employee is indistinguishable from an out-of-scope one.
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiaryId)) {
     return "employee is outside the caller's subsidiary scope"

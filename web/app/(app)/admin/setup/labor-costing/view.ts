@@ -156,27 +156,27 @@ export async function loadLaborCosting(
 
   const [settings, ratesRes, rateCountRes, selectedRateRes, tradesRes, departmentsRes, subsidiariesRes, jobTitlesRes, accountsRes, orgRes, coverageRes] = await Promise.all([
     laborCostingSettings(orgId),
-    db.execute(sql`${rateSelect} ${rateFilter}
+    db.execute<RateRow>(sql`${rateSelect} ${rateFilter}
       order by case when r.job_title is not null then 0 when r.trade_id is not null then 1
                     when r.department_id is not null then 2 when r.subsidiary_id is not null then 3 else 4 end,
                coalesce(r.job_title, tr.name, dep.name, sub.name, ''), r.effective_from desc
-      limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-    db.execute(sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id and tr.org_id = r.org_id left join departments dep on dep.id = r.department_id and dep.org_id = r.org_id left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id ${rateFilter}`),
+      limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from labor_cost_rates r left join trades tr on tr.id = r.trade_id and tr.org_id = r.org_id left join departments dep on dep.id = r.department_id and dep.org_id = r.org_id left join subsidiaries sub on sub.id = r.subsidiary_id and sub.org_id = r.org_id ${rateFilter}`, 'objects'),
     rateParam && rateParam !== 'new' && isUuid(rateParam)
-      ? db.execute(sql`${rateSelect}
+      ? db.execute<RateRow>(sql`${rateSelect}
           where r.org_id = ${orgId} and r.id = ${rateParam} and r.is_active and r.employee_party_id is null
             ${subsidiaryUiEnabled ? sql`` : sql`and r.subsidiary_id is null`}
-          limit 1`)
-      : Promise.resolve({ rows: [] }),
-    db.execute(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by parent_id nulls first, name`),
-    db.execute(sql`select distinct job_title as name from employee_roles where org_id = ${orgId} and is_active and nullif(trim(job_title), '') is not null order by job_title`),
-    db.execute(sql`
+          limit 1`, 'objects')
+      : Promise.resolve([]),
+    db.execute<Record<string, unknown>>(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`, 'objects'),
+    db.execute<Record<string, unknown>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`, 'objects'),
+    db.execute<Record<string, unknown>>(sql`select id, name, base_currency as currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by parent_id nulls first, name`, 'objects'),
+    db.execute<{ name: string }>(sql`select distinct job_title as name from employee_roles where org_id = ${orgId} and is_active and nullif(trim(job_title), '') is not null order by job_title`, 'objects'),
+    db.execute<Record<string, unknown>>(sql`
       select id, number, name, type from accounts
-       where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
-    db.execute(sql`select settings->'controlAccounts' as c, base_currency from orgs where id = ${orgId}`),
-    db.execute(sql`
+       where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`, 'objects'),
+    db.execute<{ c: Record<string, string> | null; base_currency: string }>(sql`select settings->'controlAccounts' as c, base_currency from orgs where id = ${orgId}`, 'objects'),
+    db.execute<{ employees: number; covered: number; has_org_default: boolean }>(sql`
       with active_emp as (
         select p.id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id from parties p
         join employee_roles er on er.party_id = p.id and er.org_id = ${orgId} and er.is_active
@@ -197,7 +197,7 @@ export async function loadLaborCosting(
            or exists (select 1 from current_rates r where r.employee_party_id is null and r.subsidiary_id = e.subsidiary_id and r.subsidiary_id is not null)
            or exists (select 1 from current_rates r where num_nonnulls(r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id) = 0)
         ) as covered,
-        exists (select 1 from current_rates where num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0) as has_org_default`),
+        exists (select 1 from current_rates where num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) = 0) as has_org_default`, 'objects'),
   ])
 
   // The catch-up preview is period-scoped by its through date, which lives in
@@ -208,25 +208,17 @@ export async function loadLaborCosting(
     ? await previewUnpostedLaborCost(orgId, { through: catchUpThrough })
     : null
 
-  const org = (
-    orgRes as unknown as {
-      rows: { c: Record<string, string> | null; base_currency: string }[]
-    }
-  ).rows[0] ?? {
+  const org = orgRes[0] ?? {
     c: null,
     base_currency: 'CAD',
   }
   const control = (org.c ?? {}) as Record<string, string>
-  const coverageRow = (
-    coverageRes as unknown as {
-      rows: { employees: number; covered: number; has_org_default: boolean }[]
-    }
-  ).rows[0] ?? { employees: 0, covered: 0, has_org_default: false }
+  const coverageRow = coverageRes[0] ?? { employees: 0, covered: 0, has_org_default: false }
   const opt = (r: Record<string, unknown>) => ({
     id: String(r.id),
     name: String(r.name ?? ''),
   })
-  const allSubsidiaryOptions = (subsidiariesRes as unknown as { rows: Record<string, unknown>[] }).rows.map((row) => ({
+  const allSubsidiaryOptions = subsidiariesRes.map((row) => ({
     id: String(row.id),
     name: String(row.name),
     currency: String(row.currency),
@@ -254,19 +246,19 @@ export async function loadLaborCosting(
     currentParams: sp,
     view,
     settings,
-    rates: (ratesRes as unknown as { rows: RateRow[] }).rows,
-    selectedRate: (selectedRateRes as unknown as { rows: RateRow[] }).rows[0] ?? null,
+    rates: ratesRes,
+    selectedRate: selectedRateRes[0] ?? null,
     creatingRate,
     guideOpen: projectsEnabled && pickString(sp.guide) === 'setup',
-    totalRates: Number((rateCountRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0),
+    totalRates: Number(rateCountRes[0]?.n ?? 0),
     ratePage: list.page,
     ratePerPage: list.perPage,
-    trades: (tradesRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt),
-    departments: (departmentsRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt),
+    trades: tradesRes.map(opt),
+    departments: departmentsRes.map(opt),
     subsidiaries: subsidiaryOptions,
     defaultSubsidiary: allSubsidiaryOptions[0] ?? null,
-    jobTitles: (jobTitlesRes as unknown as { rows: { name: string }[] }).rows.map((row) => row.name),
-    accounts: (accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
+    jobTitles: jobTitlesRes.map((row) => row.name),
+    accounts: accountsRes.map((r) => ({
       id: String(r.id),
       label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
       roles: LABOR_CONTROL_ROLES.filter((role) => (CONTROL_ACCOUNT_TYPE_POLICY[role] as readonly string[]).includes(String(r.type))),

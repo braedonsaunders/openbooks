@@ -86,7 +86,7 @@ test('overhead lifecycle shares one native model read while published rates, fea
         const authz = await resolveAuthzByUserId(org.orgId, actor)
         assert.ok(authz)
         assert.ok(authz.permissions.has('admin.setup.manage'))
-        const history = async () => (await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`)).rows
+        const history = async () => await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`, 'objects')
         const before = await history()
         assert.equal(before.length, 2)
         state.modelReads = 0

@@ -34,7 +34,7 @@ test("a negative-stock receipt trues up each shortfall on the account its issue 
     await issueInventory(org.orgId, null, { ...position, quantity: "6", offsetAccountId: org.accounts.adjustment });
     const offsets = (await db.execute<{ offset_account_id: string | null }>(sql`
       select offset_account_id from inventory_provisional_costs
-       where org_id=${org.orgId} and item_id=${org.items.fifo} order by created_at,id`)).rows.map((row) => row.offset_account_id);
+       where org_id=${org.orgId} and item_id=${org.items.fifo} order by created_at,id`, "objects")).map((row) => row.offset_account_id);
     assert.deepEqual(offsets, [org.accounts.cogs, org.accounts.adjustment]);
 
     const receipt = await receiveInventory(org.orgId, null, {
@@ -43,7 +43,7 @@ test("a negative-stock receipt trues up each shortfall on the account its issue 
     const trueUps = new Map((await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, sum(amount)::text as amount from journal_lines
        where org_id=${org.orgId} and entry_id=${receipt.entryId} and memo='Negative inventory receipt cost true-up'
-       group by account_id`)).rows.map((row) => [row.account_id, row.amount]));
+       group by account_id`, "objects")).map((row) => [row.account_id, row.amount]));
     assert.deepEqual(trueUps, new Map([[org.accounts.cogs, "2.0000"], [org.accounts.adjustment, "3.0000"]]));
   } finally {
     await dropScratchOrg(org.orgId);
@@ -91,17 +91,17 @@ test("a receipt refuses to settle a shortfall whose charged account was never re
     assert.deepEqual(await listUnattributedDeficits(org.orgId, org.items.fifo), []);
     await assert.rejects(attributeDeficitAccount({ orgId: org.orgId, actorId: adminId, deficitId: shortfall.id,
       accountId: org.accounts.cogs, reason: "Attempting to replace a recorded account" }), /already records the account/);
-    const audit = (await db.execute<{ changes: { before: unknown; after: unknown; reason: string } }>(sql`
-      select changes from audit_log where org_id=${org.orgId} and table_name='inventory_provisional_costs' and row_id=${shortfall.id}`)).rows;
+    const audit = await db.execute<{ changes: { before: unknown; after: unknown; reason: string } }>(sql`
+      select changes from audit_log where org_id=${org.orgId} and table_name='inventory_provisional_costs' and row_id=${shortfall.id}`, "objects");
     assert.deepEqual(audit.map((row) => [row.changes.before, row.changes.after]),
       [[{ offset_account_id: null }, { offset_account_id: org.accounts.adjustment }]]);
 
     const receipt = await receiveInventory(org.orgId, null, {
       ...position, quantity: "4", unitCost: "3.00", offsetAccountId: org.accounts.clearing,
     });
-    const trueUp = (await db.execute<{ account_id: string; amount: string }>(sql`
+    const trueUp = await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text from journal_lines
-       where org_id=${org.orgId} and entry_id=${receipt.entryId} and memo='Negative inventory receipt cost true-up'`)).rows;
+       where org_id=${org.orgId} and entry_id=${receipt.entryId} and memo='Negative inventory receipt cost true-up'`, "objects");
     assert.deepEqual(trueUp.map((row) => [row.account_id, row.amount]), [[org.accounts.adjustment, "2.0000"]]);
   } finally {
     await dropScratchOrg(org.orgId);

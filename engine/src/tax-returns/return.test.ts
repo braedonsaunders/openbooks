@@ -285,7 +285,7 @@ test("computeTaxReturn resolves declared input boxes and refuses a missing provi
       [{ tax_collected: null, tax_paid: null }],
       [{ line_code: "SOURCE", label: "Source amount", sign: 1, sequence: 1, tax_code_id: null, basis: null, input_key: inputKey, formula: null, pdf_field: null }],
     ];
-    return { execute: (async () => ({ rows: responses.shift() ?? [], rowCount: 1 })) as unknown as TaxReturnRunner["execute"] };
+    return { execute: (async (_query: unknown, mode?: string) => Promise.resolve({ rows: responses.shift() ?? [], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as TaxReturnRunner["execute"] };
   };
   const missingRunner = makeRunner();
   await assert.rejects(

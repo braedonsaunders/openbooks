@@ -73,7 +73,7 @@ async function readReversalLineDimensions(
      where org_id = ${orgId}
        and entry_id = ${reversalEntryId}
        and line_number = 1
-  `);
+  `, "objects");
 }
 
 test(
@@ -145,7 +145,7 @@ test(
       assert.ok(result.reversalEntryId);
 
       const reversal = await readReversalLineDimensions(org.orgId, result.reversalEntryId!);
-      assert.deepEqual(reversal.rows[0], {
+      assert.deepEqual(reversal[0], {
         quantity: "-10.0000",
         unit: "hours",
         custom: { lot: "A" },
@@ -232,12 +232,12 @@ test(
           from journal_entries
          where org_id = ${org.orgId}
            and reverses_entry_id = ${sourceEntryId}
-      `);
+      `, "objects");
       const reversal = await readReversalLineDimensions(
         org.orgId,
-        reversalEntry.rows[0]!.id,
+        reversalEntry[0]!.id,
       );
-      assert.deepEqual(reversal.rows[0], {
+      assert.deepEqual(reversal[0], {
         quantity: "-4.5000",
         unit: "tonnes",
         custom: { batch: "B-17" },

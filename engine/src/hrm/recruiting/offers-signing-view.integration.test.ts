@@ -60,12 +60,10 @@ test("signing view serves the sealed terms and letter with the hash the signatur
       assert.match(view.letter, /120000/);
       assert.match(view.letter, /Employment is at will\./);
       // The served hash is the seal over the stored payload, proved from storage.
-      const stored = (
-        await db.execute<{ payload: unknown }>(sql`
+      const stored = (await db.execute<{ payload: unknown }>(sql`
       select payload from hrm_offer_versions
        where org_id = ${h.org.orgId} and offer_id = ${offerId} order by version desc limit 1
-    `)
-      ).rows[0]!.payload;
+    `, "objects"))[0]!.payload;
       assert.deepEqual(view.terms, stored);
       assert.equal(
         view.documentHash,

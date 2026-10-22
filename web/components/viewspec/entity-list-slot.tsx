@@ -52,9 +52,9 @@ async function bankRuleFormatValue(orgId: string) {
   const accounts = await db.execute<{ id: string; number: string | null; name: string }>(sql`
     select id, number, name from accounts
      where org_id = ${orgId} and is_active and not is_summary
-     order by number nulls last, name`)
+     order by number nulls last, name`, 'objects')
   const accountLabel = new Map(
-    accounts.rows.map((account) => [
+    accounts.map((account) => [
       account.id,
       [account.number, account.name].filter(Boolean).join(' · '),
     ]),
@@ -173,7 +173,7 @@ export async function EntityListSlot({
     const productionVisible = can(authz,'manufacturing.read') && await isFeatureEnabled(authz.user.orgId,'manufacturing')
     const ownEmployee = selfOnly
       ? (await db.execute<{ partyId: string | null }>(sql`
-          select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`)).rows[0]?.partyId ?? null
+          select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`, 'objects'))[0]?.partyId ?? null
       : null
     const ownWeeks = selfOnly ? sql`tw.employee_party_id = ${ownEmployee} and ` : sql``
     timeScope = sql`${ownWeeks}not exists(select 1 from time_entries entry where entry.org_id=tw.org_id and entry.employee_party_id=tw.employee_party_id

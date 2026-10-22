@@ -47,7 +47,7 @@ test(
         select period_module_blocks_write(
           ${org.orgId}::uuid, ${org.periodId}::uuid, ${org.bookId}::uuid,
           ${childId}::uuid, 'gl', false) as blocked
-      `)).rows[0]!.blocked;
+      `, "objects"))[0]!.blocked;
       assert.equal(blocked, true);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -75,13 +75,13 @@ test(
         orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, module: "gl",
         state: "soft_closed", actorId: actors.adminId, reason: "Month-end soft close",
       });
-      const children = (await db.execute<{ subsidiary_id: string; state: string; blocked: boolean; audited: boolean }>(sql`
+      const children = await db.execute<{ subsidiary_id: string; state: string; blocked: boolean; audited: boolean }>(sql`
         select l.subsidiary_id, l.state,
                period_module_blocks_write(${org.orgId}::uuid, ${org.periodId}::uuid, ${org.bookId}::uuid, l.subsidiary_id, 'gl', false) as blocked,
                exists (select 1 from audit_log a where a.org_id = l.org_id and a.table_name = 'period_locks'
                         and a.row_id = l.id and a.action = 'update') as audited
           from period_locks l
-         where l.org_id = ${org.orgId} and l.period_id = ${org.periodId} and l.subsidiary_id is not null`)).rows;
+         where l.org_id = ${org.orgId} and l.period_id = ${org.periodId} and l.subsidiary_id is not null`, "objects");
       const byId = new Map(children.map((row) => [row.subsidiary_id, row]));
       assert.deepEqual(byId.get(openChild), { subsidiary_id: openChild, state: "soft_closed", blocked: true, audited: true });
       assert.deepEqual(byId.get(closedChild), { subsidiary_id: closedChild, state: "closed", blocked: true, audited: false });

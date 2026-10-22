@@ -157,15 +157,15 @@ function validOwnershipBody(f: Fixture): Record<string, unknown> {
 
 async function persistedInterestCount(orgId: string): Promise<number> {
   const r = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from subsidiary_ownership_interests where org_id = ${orgId}`);
-  return r.rows[0]!.n;
+    select count(*)::int as n from subsidiary_ownership_interests where org_id = ${orgId}`, "objects");
+  return r[0]!.n;
 }
 
 async function persistedAuditCount(orgId: string): Promise<number> {
   const r = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'subsidiary_ownership_interests'`);
-  return r.rows[0]!.n;
+     where org_id = ${orgId} and table_name = 'subsidiary_ownership_interests'`, "objects");
+  return r[0]!.n;
 }
 
 test("a valid ownership write persists the interest with audit evidence", async () => {
@@ -184,9 +184,9 @@ test("a valid ownership write persists the interest with audit evidence", async 
     const { id } = (await res.json()) as { id: string };
     assert.ok(id);
 
-    const row = ((await db.execute(sql`
+    const row = (await db.execute(sql`
       select method, ownership_percent as "ownershipPercent", investment_account_id as "investmentAccountId"
-        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`))).rows[0];
+        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`, "objects"))[0];
     assert.ok(row);
     assert.equal(row.method, "proportionate");
     assert.equal(Number(row.ownershipPercent), 100);
@@ -195,8 +195,8 @@ test("a valid ownership write persists the interest with audit evidence", async 
     const audits = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${f.orgId} and table_name = 'subsidiary_ownership_interests'
-         and row_id = ${id} and action = 'insert'`);
-    assert.equal(audits.rows[0]!.n, 1);
+         and row_id = ${id} and action = 'insert'`, "objects");
+    assert.equal(audits[0]!.n, 1);
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
@@ -215,7 +215,7 @@ test("a malformed or hostile ownership account id is a contract 400 that writes 
     const beforeInterests = await persistedInterestCount(f.orgId);
     const beforeAudits = await persistedAuditCount(f.orgId);
     const beforeAccounts = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from accounts where org_id = ${f.orgId}`);
+      select count(*)::int as n from accounts where org_id = ${f.orgId}`, "objects");
 
     // Malformed uuid, SQL syntax, and an empty value that would form a
     // malformed array literal if it ever reached a cast.
@@ -238,8 +238,8 @@ test("a malformed or hostile ownership account id is a contract 400 that writes 
     assert.equal(await persistedInterestCount(f.orgId), beforeInterests);
     assert.equal(await persistedAuditCount(f.orgId), beforeAudits);
     const afterAccounts = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from accounts where org_id = ${f.orgId}`);
-    assert.equal(afterAccounts.rows[0]!.n, beforeAccounts.rows[0]!.n);
+      select count(*)::int as n from accounts where org_id = ${f.orgId}`, "objects");
+    assert.equal(afterAccounts[0]!.n, beforeAccounts[0]!.n);
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
@@ -335,9 +335,9 @@ test("blank keepDefault ownership fields fall through to database defaults", asy
     assert.equal(res.status, 200, `blank-keepDefault create failed: ${JSON.stringify(created)}`);
     const id = String(created.id);
     assert.ok(created.id);
-    const row = ((await db.execute(sql`
+    const row = (await db.execute(sql`
       select acquisition_rate as "acquisitionRate", nci_measurement as "nciMeasurement"
-        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`))).rows[0];
+        from subsidiary_ownership_interests where id = ${id} and org_id = ${f.orgId}`, "objects"))[0];
     assert.ok(row);
     assert.equal(Number(row.acquisitionRate), 1);
     assert.equal(row.nciMeasurement, "proportionate");
@@ -409,8 +409,8 @@ function segmentValueBody(f: SegmentFixture, id: string, name: string, parentId:
 async function segmentAuditCount(orgId: string): Promise<number> {
   const result = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'segment_values'`);
-  return result.rows[0]!.n;
+     where org_id = ${orgId} and table_name = 'segment_values'`, "objects");
+  return result[0]!.n;
 }
 
 test("segment value PATCH preflights cycles and preserves the audited valid path", async () => {
@@ -439,8 +439,8 @@ test("segment value PATCH preflights cycles and preserves the audited valid path
     );
     assert.equal(accepted.status, 200);
     const stored = await db.execute<{ parent_id: string | null }>(sql`
-      select parent_id from segment_values where id = ${f.grandchildId} and org_id = ${f.orgId}`);
-    assert.equal(stored.rows[0]?.parent_id, f.rootId);
+      select parent_id from segment_values where id = ${f.grandchildId} and org_id = ${f.orgId}`, "objects");
+    assert.equal(stored[0]?.parent_id, f.rootId);
     assert.equal(await segmentAuditCount(f.orgId), beforeAudits + 1);
   } finally {
     routeState.authz = null;
@@ -484,13 +484,13 @@ test("segment value imports inherit storage scope enforcement and audit valid wr
     );
     const imported = await db.execute<{ id: string }>(sql`
       select id from segment_values
-       where org_id = ${f.orgId} and segment_id = ${f.segmentId} and code = 'IMPORTED'`);
-    assert.ok(imported.rows[0]);
+       where org_id = ${f.orgId} and segment_id = ${f.segmentId} and code = 'IMPORTED'`, "objects");
+    assert.ok(imported[0]);
     const audit = await db.execute<{ source: string | null }>(sql`
       select changes->>'source' as source from audit_log
        where org_id = ${f.orgId} and table_name = 'segment_values'
-         and row_id = ${imported.rows[0]!.id} and action = 'insert'`);
-    assert.deepEqual(audit.rows, [{ source: "import" }]);
+         and row_id = ${imported[0]!.id} and action = 'insert'`, "objects");
+    assert.deepEqual(audit, [{ source: "import" }]);
   } finally {
     await dropScratchOrgReporting(f.orgId);
   }

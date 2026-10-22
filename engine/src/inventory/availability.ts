@@ -122,7 +122,7 @@ export async function stockedItems(
     : itemIds.length === 0
       ? sql`and false`
       : sql`and p.item_id in (${sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `)})`;
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     item_id: string;
     label: string;
     kind: string;
@@ -138,7 +138,7 @@ export async function stockedItems(
       from item_inventory_profiles p
       join items i on i.id = p.item_id and i.org_id = p.org_id
      where p.org_id = ${orgId} ${itemFilter}
-     order by 2, 1`)).rows;
+     order by 2, 1`, "objects");
   const out = new Map<string, StockedItem>();
   for (const row of rows) {
     const conversions = row.unit_conversions ?? {};
@@ -209,7 +209,7 @@ export async function warehouseLocationSet(
   warehouseId: string,
 ): Promise<Set<string>> {
   const warehouse = (await runner.execute(sql`
-    select 1 from warehouses where org_id = ${orgId} and stock_location_id = ${warehouseId}`)).rows[0];
+    select 1 from warehouses where org_id = ${orgId} and stock_location_id = ${warehouseId}`, "objects"))[0];
   if (!warehouse) {
     throw new AvailabilityRefusal(
       "warehouse not found in this organization",
@@ -235,7 +235,7 @@ async function stockPositions(
 ): Promise<Array<{ itemId: string; stockLocationId: string }>> {
   if (itemIds.length === 0) return [];
   const items = sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `);
-  return (await runner.execute<{ itemId: string; stockLocationId: string }>(sql`
+  return await runner.execute<{ itemId: string; stockLocationId: string }>(sql`
     select distinct p.item_id as "itemId", p.stock_location_id as "stockLocationId"
       from (
         select item_id, stock_location_id from cost_layers
@@ -248,7 +248,7 @@ async function stockPositions(
          where pc.org_id = ${orgId} and mv.subsidiary_id = ${subsidiaryId}
            and pc.remaining_quantity <> 0 and pc.item_id in (${items})
       ) p
-     order by 1, 2`)).rows;
+     order by 1, 2`, "objects");
 }
 
 /** On-hand quantity per item over the locations in scope (null = every location). */
@@ -361,14 +361,14 @@ async function kitBomForDemand(
   kitItemId: string,
   date: string,
 ): Promise<{ componentItemId: string; quantityPer: string }[]> {
-  const rows = (await runner.execute<{ component_item_id: string; quantity_per: string }>(sql`
+  const rows = await runner.execute<{ component_item_id: string; quantity_per: string }>(sql`
     select component_item_id, quantity_per::text as quantity_per
       from bom_components
      where org_id = ${orgId} and assembly_item_id = ${kitItemId}
        and operation_seq is null and is_byproduct = false
        and (effective_from is null or effective_from <= ${date}::date)
        and (effective_to is null or ${date}::date < effective_to)
-     order by sort_order, component_item_id`)).rows;
+     order by sort_order, component_item_id`, "objects");
   return rows.map((row) => ({ componentItemId: row.component_item_id, quantityPer: row.quantity_per }));
 }
 
@@ -654,7 +654,7 @@ export async function releasableBackorders(
     ? new Map<string, string>()
     : new Map((await runner.execute<{ id: string; name: string }>(sql`
         select id, display_name as name from parties
-         where org_id = ${orgId} and id in (${sql.join(customerIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows
+         where org_id = ${orgId} and id in (${sql.join(customerIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects"))
         .map((row) => [row.id, row.name]));
   return releasable.map((line) => ({ ...line, customerName: line.customerId ? names.get(line.customerId) ?? null : null }));
 }

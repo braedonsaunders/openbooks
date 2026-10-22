@@ -15,12 +15,12 @@ type NoticeRow = { title: string; body: string | null; href: string | null };
 
 async function unreadFailureNotices(orgId: string, userId: string): Promise<NoticeRow[]> {
   return withOrgContext(orgId, async () =>
-    (await db.execute<NoticeRow>(sql`
+    await db.execute<NoticeRow>(sql`
       select title, body, href from notifications
        where org_id = ${orgId} and user_id = ${userId}
          and kind = ${OVERHEAD_PUBLISH_FAILED_NOTICE_KIND} and read_at is null
        order by created_at
-    `)).rows,
+    `, "objects"),
   );
 }
 

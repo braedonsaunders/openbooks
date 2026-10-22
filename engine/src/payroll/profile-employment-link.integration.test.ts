@@ -94,7 +94,7 @@ async function profile(fx: Fixture, tag: string, partyId: string, employmentId: 
 async function employmentOf(fx: Fixture, partyId: string): Promise<string | null> {
   const row = (await db.execute<{ employment_id: string | null }>(sql`
     select employment_id from employee_payroll_profiles
-     where org_id = ${fx.orgId} and employee_party_id = ${partyId}`)).rows[0];
+     where org_id = ${fx.orgId} and employee_party_id = ${partyId}`, "objects"))[0];
   return row?.employment_id ?? null;
 }
 
@@ -180,12 +180,12 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       assert.equal(applied.linked.length, 1);
       const stored = (await db.execute<{ employment_id: string | null }>(sql`
         select employment_id from employee_payroll_profiles
-         where org_id = ${fx.orgId} and employee_party_id = ${solo}`)).rows[0]!.employment_id;
+         where org_id = ${fx.orgId} and employee_party_id = ${solo}`, "objects"))[0]!.employment_id;
       assert.ok(stored);
       const audit = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${fx.orgId} and table_name = 'employee_payroll_profiles'
-           and action = 'update'`)).rows[0]!.n;
+           and action = 'update'`, "objects"))[0]!.n;
       assert.equal(audit, 1);
       // Second run finds nothing left to link.
       const again = await resolvePayrollProfileEmploymentLinks({
@@ -243,7 +243,7 @@ describe("hire-links-payroll-profile", { skip: !DB }, () => {
       const audit = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${fx.orgId} and table_name = 'employee_payroll_profiles'
-           and action = 'update'`)).rows[0]!.n;
+           and action = 'update'`, "objects"))[0]!.n;
       assert.equal(audit, 1);
     } finally {
       await dropScratchOrgReporting(fx.orgId);

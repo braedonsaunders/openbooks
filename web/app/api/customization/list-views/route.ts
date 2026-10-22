@@ -59,8 +59,8 @@ export const GET = defineRoute({
      where org_id = ${user.orgId} and record_type = ${recordType} and is_active
        and (scope = 'org' or owner_id = ${user.id})
      order by scope asc, is_default desc, name
-  `);
-    return NextResponse.json({ rows: r.rows });
+  `, "objects");
+    return NextResponse.json({ rows: r });
   },
 });
 
@@ -145,14 +145,12 @@ export const POST = defineRoute({
         };
         if (body.isDefault === true)
           await claimListViewDefaultSlot(tx, defaultScope);
-        const inserted = (
-          await tx.execute<{ id: string; name: string }>(sql`
+        const inserted = (await tx.execute<{ id: string; name: string }>(sql`
         insert into list_views (org_id, record_type, name, scope, owner_id, is_default, is_active,
                                 config, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${scope}, ${ownerId},
                 ${body.isDefault === true}, true, ${config}, ${user.id}, ${user.id})
-        returning id, name`)
-        ).rows[0]!;
+        returning id, name`, "objects"))[0]!;
         if (body.isDefault === true)
           await assertSingleListViewDefault(tx, defaultScope);
         await tx.execute(sql`

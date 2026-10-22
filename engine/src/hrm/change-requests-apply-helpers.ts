@@ -41,7 +41,7 @@ export async function positionLinkWarnings(
 ): Promise<string[]> {
   if (args.target === null) return [];
   try {
-    const versions = (await exec.execute<{
+    const versions = await exec.execute<{
       title: string;
       department_id: string | null;
       location_id: string | null;
@@ -59,7 +59,7 @@ export async function positionLinkWarnings(
        where org_id = ${args.orgId} and position_id = ${args.target.id}
          and recorded_until is null
        order by version_no
-    `)).rows;
+    `, "objects");
     // resolveAsOf, NoRevisionError and parseCivilDate are the static
     // temporal imports at the top of this file — the same primitives the
     // employment paths resolve through.
@@ -137,7 +137,7 @@ export async function issueAssignmentSlot(
     insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
     values (${orgId}, ${request.employment_id}, ${payload.assignmentKey}, ${actorId}, ${actorId})
     returning id
-  `)).rows[0]?.id;
+  `, "objects"))[0]?.id;
   if (!slotId) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -185,7 +185,7 @@ export async function liveAssignmentVersions(
   orgId: string,
   slotId: string,
 ): Promise<AssignmentSlotVersion[]> {
-  const rows = (await exec.execute<AssignmentSlotVersion & { before: unknown }>(sql`
+  const rows = await exec.execute<AssignmentSlotVersion & { before: unknown }>(sql`
     select id, version_no, position_id::text as position_id,
            job_title, department_id, location_id, fte::text as fte,
            is_primary, effective_from::text as effective_from,
@@ -195,7 +195,7 @@ export async function liveAssignmentVersions(
      where org_id = ${orgId} and assignment_id = ${slotId}
        and recorded_until is null
      order by version_no
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -233,7 +233,7 @@ export async function insertRetainedAssignmentPortions(
   }).sort((left, right) => left.from.localeCompare(right.from));
   for (const [offset, portion] of portions.entries()) {
     const { version } = portion;
-    const inserted = (await exec.execute(sql`
+    const inserted = await exec.execute(sql`
       insert into employment_assignment_versions
         (org_id, assignment_id, employment_id, position_id, version_no, job_title, department_id,
          location_id, fte, is_primary, effective_from, effective_to,
@@ -244,7 +244,7 @@ export async function insertRetainedAssignmentPortions(
               ${portion.from}::date, ${portion.to}::date,
               ${recordedAt}, ${actorId}, ${actorId})
       returning id
-    `)).rows;
+    `, "objects");
     if (inserted.length !== 1) {
       throw new HrmChangeRequestError("REFUSED", "The retained assignment interval was not saved; nothing applied.");
     }
@@ -265,7 +265,7 @@ export async function assertAssignmentRefs(
   if (payload.departmentId) {
     const found = (await exec.execute(sql`
       select 1 as one from departments where org_id = ${orgId} and id = ${payload.departmentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -276,7 +276,7 @@ export async function assertAssignmentRefs(
   if (payload.locationId) {
     const found = (await exec.execute(sql`
       select 1 as one from locations where org_id = ${orgId} and id = ${payload.locationId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -293,7 +293,7 @@ export async function assertAssignmentRefs(
     }
     const found = (await exec.execute(sql`
       select 1 as one from worker_employments where org_id = ${orgId} and id = ${payload.managerEmploymentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -320,7 +320,7 @@ export async function assertNoPrimaryConflict(
   },
 ): Promise<void> {
   if (!args.isPrimary) return;
-  const rows = (await exec.execute<{ assignment_key: string }>(sql`
+  const rows = await exec.execute<{ assignment_key: string }>(sql`
     select a.assignment_key
       from employment_assignment_versions av
       join employment_assignments a on a.id = av.assignment_id and a.org_id = av.org_id
@@ -330,7 +330,7 @@ export async function assertNoPrimaryConflict(
        and daterange(av.effective_from, coalesce(av.effective_to, 'infinity'::date), '[)')
            && daterange(${args.windowStart}::date, coalesce(${args.windowEnd}::date, 'infinity'::date), '[)')
      limit 1
-  `)).rows;
+  `, "objects");
   const clash = rows[0];
   if (clash) {
     throw new HrmChangeRequestError(
@@ -393,7 +393,7 @@ export async function planLineManagerChange(
        and kind = 'line' and recorded_until is null
      order by version_no desc
      limit 1
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
   if (live && live.manager_employment_id === args.managerId) {
     return { change: false };
   }
@@ -453,13 +453,13 @@ export async function closeLineManagerChange(
       return;
     }
     const successorNo = reporting.live.version_no + 1;
-    const closed = (await exec.execute(sql`
+    const closed = await exec.execute(sql`
       update reporting_relationships
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${reporting.live.id} and recorded_until is null
       returning id
-    `)).rows;
+    `, "objects");
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",

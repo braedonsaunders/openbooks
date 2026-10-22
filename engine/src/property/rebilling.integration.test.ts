@@ -36,9 +36,9 @@ for (const mode of ['void','delete'] as const) {
    assert.equal(result.status,'voided');
    assert.ok(result.reversalEntryId);
   } else await withOrgTransaction(org.orgId,()=>deleteDocument(invoice,actor,org.orgId,{reason:'Correct rent billing source',allowedSubsidiaryIds:null}));
-  const released=(await db.execute<{status:string;invoice_document_id:string|null}>(sql`select status,invoice_document_id from lease_schedule_lines where org_id=${org.orgId} and id=${schedule}`)).rows[0]!;
+  const released=(await db.execute<{status:string;invoice_document_id:string|null}>(sql`select status,invoice_document_id from lease_schedule_lines where org_id=${org.orgId} and id=${schedule}`, 'objects'))[0]!;
   assert.deepEqual(released,{status:'scheduled',invoice_document_id:null});
-  const audit=(await db.execute<{actor_id:string;changes:{before:{invoice_document_id:string};after:{invoice_document_id:null}}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='lease_schedule_lines' and row_id=${schedule} and action='billing_released'`)).rows;
+  const audit=await db.execute<{actor_id:string;changes:{before:{invoice_document_id:string};after:{invoice_document_id:null}}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='lease_schedule_lines' and row_id=${schedule} and action='billing_released'`, 'objects');
   assert.equal(audit.length,1);
   assert.equal(audit[0]!.actor_id,actor);
   assert.equal(audit[0]!.changes.before.invoice_document_id,invoice);
@@ -53,9 +53,9 @@ for (const mode of ['void','delete'] as const) {
    const third=await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease);
    assert.equal(third.billed,1);
    assert.notEqual(third.invoices[0],replacement);
-   const history=(await db.execute<{custom:{propertyManagement:{predecessorInvoiceId:string}}}>(sql`select custom from documents where id=${third.invoices[0]} and org_id=${org.orgId}`)).rows[0]!;
+   const history=(await db.execute<{custom:{propertyManagement:{predecessorInvoiceId:string}}}>(sql`select custom from documents where id=${third.invoices[0]} and org_id=${org.orgId}`, 'objects'))[0]!;
    assert.equal(history.custom.propertyManagement.predecessorInvoiceId,replacement);
-   assert.equal((await db.execute<{status:string}>(sql`select status from documents where id=${invoice} and org_id=${org.orgId}`)).rows[0]!.status,'voided','posted predecessor remains historical evidence');
+   assert.equal((await db.execute<{status:string}>(sql`select status from documents where id=${invoice} and org_id=${org.orgId}`, 'objects'))[0]!.status,'voided','posted predecessor remains historical evidence');
   }
  }));
 }
@@ -63,7 +63,7 @@ for (const mode of ['void','delete'] as const) {
 test('voiding a generated invoice releases time and billed-line provenance with actor and reason evidence',{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,lease,_charge,_schedule)=>{
  await db.execute(sql`update property_leases set auto_post=true where org_id=${org.orgId} and id=${lease}`);
  const invoice=(await billDueLeaseCharges(org.orgId,actor,null,'2026-07-31',lease)).invoices[0]!;
- const invoiceLine=(await db.execute<{id:string}>(sql`select id from document_lines where org_id=${org.orgId} and document_id=${invoice} order by line_number limit 1`)).rows[0]!.id;
+ const invoiceLine=(await db.execute<{id:string}>(sql`select id from document_lines where org_id=${org.orgId} and document_id=${invoice} order by line_number limit 1`, 'objects'))[0]!.id;
  const employee=randomUUID(),entry=randomUUID(),sourceDocument=randomUUID(),sourceLine=randomUUID();
  await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
    values(${employee},${org.orgId},'employee','Released billable worker',${org.subsidiaryId})`);
@@ -76,10 +76,10 @@ test('voiding a generated invoice releases time and billed-line provenance with 
 
  const result=await requestDocumentVoid({orgId:org.orgId,actorId:actor,documentId:invoice,reason:'Correct generated invoice provenance',reversalDate:'2026-07-31'});
  assert.equal(result.status,'voided');
- assert.deepEqual((await db.execute(sql`select billing_status,invoiced_by_line_id from time_entries where org_id=${org.orgId} and id=${entry}`)).rows[0],{billing_status:'unbilled',invoiced_by_line_id:null});
- assert.equal((await db.execute(sql`select billed_by_line_id from document_lines where org_id=${org.orgId} and id=${sourceLine}`)).rows[0]?.billed_by_line_id,null);
- const evidence=(await db.execute<{table_name:string;row_id:string;actor_id:string;changes:{before:Record<string,unknown>;after:Record<string,unknown>;reason:string}}>(sql`select table_name,row_id,actor_id,changes from audit_log
-   where org_id=${org.orgId} and action='billing_released' and row_id in (${entry},${sourceLine}) order by table_name`)).rows;
+ assert.deepEqual((await db.execute(sql`select billing_status,invoiced_by_line_id from time_entries where org_id=${org.orgId} and id=${entry}`, 'objects'))[0],{billing_status:'unbilled',invoiced_by_line_id:null});
+ assert.equal((await db.execute(sql`select billed_by_line_id from document_lines where org_id=${org.orgId} and id=${sourceLine}`, 'objects'))[0]?.billed_by_line_id,null);
+ const evidence=await db.execute<{table_name:string;row_id:string;actor_id:string;changes:{before:Record<string,unknown>;after:Record<string,unknown>;reason:string}}>(sql`select table_name,row_id,actor_id,changes from audit_log
+   where org_id=${org.orgId} and action='billing_released' and row_id in (${entry},${sourceLine}) order by table_name`, 'objects');
  assert.equal(evidence.length,2);
  assert.deepEqual(evidence.map(row=>[row.table_name,row.row_id,row.actor_id,row.changes.reason]),[
    ['document_lines',sourceLine,actor,'Correct generated invoice provenance'],
@@ -96,11 +96,11 @@ test('rent source release and audit roll back together and respect organization 
  const invoice=first.invoices[0]!;
  await assert.rejects(withOrgTransaction(org.orgId,async()=>{
   await releaseBillingProvenance(db,org.orgId,invoice,{actorId:actor,reason:'Rolled back correction'});
-  assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where org_id=${org.orgId} and id=${schedule}`)).rows[0]!.status,'scheduled');
+  assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where org_id=${org.orgId} and id=${schedule}`, 'objects'))[0]!.status,'scheduled');
   throw new Error('rollback proof');
  }),/rollback proof/);
  const foreign=randomUUID();
  await withOrgTransaction(foreign,()=>releaseBillingProvenance(db,foreign,invoice,{actorId:actor,reason:'Foreign release attempt'}));
- assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where org_id=${org.orgId} and id=${schedule}`)).rows[0]!.status,'invoiced');
- assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='lease_schedule_lines' and row_id=${schedule} and action='billing_released'`)).rows.length,0);
+ assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where org_id=${org.orgId} and id=${schedule}`, 'objects'))[0]!.status,'invoiced');
+ assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='lease_schedule_lines' and row_id=${schedule} and action='billing_released'`, 'objects')).length,0);
 }));

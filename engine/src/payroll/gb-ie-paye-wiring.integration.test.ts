@@ -106,12 +106,12 @@ test(
 
       // Defect C: IE seeds its own PAYE component — distinct code and system
       // key from the GB row, owned by the IE pack.
-      const components = (await db.execute<{
+      const components = await db.execute<{
         id: string; code: string; country: string | null; system_key: string | null; kind: string;
         liability_account_id: string | null;
       }>(sql`
         select id, code, country, system_key, kind, liability_account_id from pay_components
-         where org_id = ${org.orgId} and country in ('GB', 'IE') order by code, kind`)).rows;
+         where org_id = ${org.orgId} and country in ('GB', 'IE') order by code, kind`, "objects");
       const gbPayeRow = components.find((c) => c.code === "PAYE");
       const iePayeRow = components.find((c) => c.code === "IEPAYE");
       assert.ok(gbPayeRow, "GB PAYE component seeded");
@@ -167,19 +167,19 @@ test(
       });
       const gbCalc = await calculatePayRun({ orgId: org.orgId, actorId, documentId: gbRun.documentId });
       assert.deepEqual(gbCalc.errors, []);
-      const gbStubRows = (await db.execute<{ id: string; gross: string }>(sql`
+      const gbStubRows = await db.execute<{ id: string; gross: string }>(sql`
         select id, gross::text as gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${gbRun.documentId}
-           and employee_party_id = ${gbEmployee}`)).rows;
+           and employee_party_id = ${gbEmployee}`, "objects");
       assert.equal(gbStubRows.length, 1);
       assert.equal(gbStubRows[0]!.gross, "3000.0000");
-      const gbStubLines = (await db.execute<{
+      const gbStubLines = await db.execute<{
         component_id: string | null; system_key: string | null; kind: string; amount: string;
       }>(sql`
         select l.component_id, c.system_key, l.kind, l.amount::text as amount
           from pay_stub_lines l join pay_components c on c.id = l.component_id
          where l.org_id = ${org.orgId} and l.stub_id = ${gbStubRows[0]!.id}
-         order by l.sequence`)).rows;
+         order by l.sequence`, "objects");
       const gbPayeLine = gbStubLines.find((line) => line.system_key === "paye" && line.kind === "deduction");
       const gbNicEeLine = gbStubLines.find((line) => line.system_key === "nic" && line.kind === "deduction");
       const gbNicErLine = gbStubLines.find((line) => line.system_key === "nic" && line.kind === "employer_contribution");
@@ -195,10 +195,10 @@ test(
       assert.equal(Number(gbNicEeLine.amount).toFixed(2), "156.16");
       assert.equal(Number(gbNicErLine.amount).toFixed(2), "387.45");
       await commitPayRun({ orgId: org.orgId, documentId: gbRun.documentId, actorId });
-      const gbLines = (await db.execute<{ account_id: string; number: string; amount: string }>(sql`
+      const gbLines = await db.execute<{ account_id: string; number: string; amount: string }>(sql`
         select l.account_id, a.number, l.amount::text as amount from document_lines l
           join accounts a on a.id = l.account_id
-         where l.org_id = ${org.orgId} and l.document_id = ${gbRun.documentId}`)).rows;
+         where l.org_id = ${org.orgId} and l.document_id = ${gbRun.documentId}`, "objects");
       const gbTotalCents = gbLines.reduce((sum, line) => sum + Math.round(Number(line.amount) * 100), 0);
       assert.equal(gbTotalCents, 0);
       // Credits (negative legs) are the only money the run owes anyone: net
@@ -250,19 +250,19 @@ test(
       });
       const ieCalc = await calculatePayRun({ orgId: org.orgId, actorId, documentId: ieRun.documentId });
       assert.deepEqual(ieCalc.errors, []);
-      const ieStubRows = (await db.execute<{ id: string; gross: string }>(sql`
+      const ieStubRows = await db.execute<{ id: string; gross: string }>(sql`
         select id, gross::text as gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${ieRun.documentId}
-           and employee_party_id = ${ieEmployee}`)).rows;
+           and employee_party_id = ${ieEmployee}`, "objects");
       assert.equal(ieStubRows.length, 1);
       assert.equal(ieStubRows[0]!.gross, "850.0000");
-      const ieStubLines = (await db.execute<{
+      const ieStubLines = await db.execute<{
         component_id: string | null; system_key: string | null; kind: string; amount: string;
       }>(sql`
         select l.component_id, c.system_key, l.kind, l.amount::text as amount
           from pay_stub_lines l join pay_components c on c.id = l.component_id
          where l.org_id = ${org.orgId} and l.stub_id = ${ieStubRows[0]!.id}
-         order by l.sequence`)).rows;
+         order by l.sequence`, "objects");
       const iePayeLine = ieStubLines.find((line) => line.system_key === "ie_paye" && line.kind === "deduction");
       const iePrsiEeLine = ieStubLines.find((line) => line.system_key === "prsi" && line.kind === "deduction");
       const iePrsiErLine = ieStubLines.find((line) => line.system_key === "prsi" && line.kind === "employer_contribution");
@@ -281,9 +281,9 @@ test(
       assert.equal(Number(iePrsiErLine.amount).toFixed(2), "95.63");
       assert.ok(Number(ieUscLine.amount) > 0, "USC assessed");
       await commitPayRun({ orgId: org.orgId, documentId: ieRun.documentId, actorId });
-      const ieLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const ieLines = await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount::text as amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${ieRun.documentId}`)).rows;
+         where org_id = ${org.orgId} and document_id = ${ieRun.documentId}`, "objects");
       const ieTotalCents = ieLines.reduce((sum, line) => sum + Math.round(Number(line.amount) * 100), 0);
       assert.equal(ieTotalCents, 0);
       const ieCredits = ieLines.filter((line) => Number(line.amount) < 0);
@@ -337,7 +337,7 @@ test(
       // Install wired the slot from the role (no hand mapping involved).
       const wired = (await db.execute<{ liability_account_id: string | null }>(sql`
         select liability_account_id from pay_components
-         where org_id = ${org.orgId} and code = 'PAYE'`)).rows[0]!.liability_account_id;
+         where org_id = ${org.orgId} and code = 'PAYE'`, "objects"))[0]!.liability_account_id;
       assert.equal(wired, deductionsId);
 
       // The operator re-points the slot; later ensures must not move it.
@@ -345,7 +345,7 @@ test(
       await ensurePackSlotRoleAccounts(db, org.orgId, actorId, "GB");
       const kept = (await db.execute<{ liability_account_id: string | null }>(sql`
         select liability_account_id from pay_components
-         where org_id = ${org.orgId} and code = 'PAYE'`)).rows[0]!.liability_account_id;
+         where org_id = ${org.orgId} and code = 'PAYE'`, "objects"))[0]!.liability_account_id;
       assert.equal(kept, otherId);
       const state = await packSlotState(org.orgId, ["GB"]);
       assert.equal(state.find((p) => p.country === "GB")!.slots.find((s) => s.key === "paye")!.accountId, otherId);

@@ -23,7 +23,7 @@ test(
           select code from tax_jurisdictions
            where org_id = ${target.orgId} and code in ('US', 'US-WA')
            order by code
-        `)).rows as Array<{ code: string }>;
+        `, "objects")) as Array<{ code: string }>;
         const codes = (await db.execute(sql`
           select code.code,
                  coalesce(
@@ -44,7 +44,7 @@ test(
                                'US-WA-BO-SVC', 'US-WA-BO-SVC1M', 'US-WA-BO-SVC5M')
            group by code.id, code.code
            order by code.code
-        `)).rows as Array<{
+        `, "objects")) as Array<{
           code: string;
           rates: Array<{ rate: string; from: string; to: string | null }>;
         }>;
@@ -53,12 +53,12 @@ test(
             from tax_group_members member
             join tax_groups grp on grp.id = member.tax_group_id and grp.org_id = ${target.orgId}
            where grp.code = 'US-WA-TAX'
-        `)).rows as Array<{ count: string }>;
+        `, "objects")) as Array<{ count: string }>;
         const forms = (await db.execute(sql`
           select code from tax_return_forms
            where org_id = ${target.orgId} and code in ('US_WA_CET', 'US_SALES_TAX_WORKPAPER')
            order by code
-        `)).rows as Array<{ code: string }>;
+        `, "objects")) as Array<{ code: string }>;
         const boxes = (await db.execute(sql`
           select line_code as "lineCode", formula,
                  count(tax_code_id)::text as "mappedCodes"
@@ -66,7 +66,7 @@ test(
            where org_id = ${target.orgId} and report_code = 'US_WA_CET'
            group by line_code, formula
            order by min(sequence)
-        `)).rows as Array<{ lineCode: string; formula: string | null; mappedCodes: string }>;
+        `, "objects")) as Array<{ lineCode: string; formula: string | null; mappedCodes: string }>;
         const registrations = (await db.execute(sql`
           select registration.is_active as "isActive",
                  registration.filing_frequency as "filingFrequency",
@@ -76,7 +76,7 @@ test(
               on jurisdiction.id = registration.jurisdiction_id
              and jurisdiction.org_id = registration.org_id
            where registration.org_id = ${target.orgId} and jurisdiction.code = 'US-WA'
-        `)).rows as Array<{ isActive: boolean; filingFrequency: string; returnFormCode: string | null }>;
+        `, "objects")) as Array<{ isActive: boolean; filingFrequency: string; returnFormCode: string | null }>;
         return { jurisdictions, codes, groupMembers, forms, boxes, registrations };
       });
 

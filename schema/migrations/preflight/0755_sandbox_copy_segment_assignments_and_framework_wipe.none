@@ -1,1 +1,0 @@
-Replaces two function bodies; it changes no stored row, so there is no precondition to probe.

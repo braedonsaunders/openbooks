@@ -70,13 +70,13 @@ const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 function installDb() {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
     db: {
-      execute: () => Promise<{ rows: unknown[] }>
+      execute: (query: unknown, mode?: string) => Promise<unknown>
       transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>
     }
   }
   state.statements = []
   state.db = {
-    execute: async () => ({ rows: [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
     transaction: async () => {
       state.statements.push('write')
       return { id: '33333333-3333-4333-8333-333333333333', name: 'Hidden' }

@@ -52,11 +52,9 @@ export async function loadSalesWorkspace(
     employeeId: dimensionId("salesRep"),
   };
   await ensureReportDefinitions(orgId);
-  const reportRows = (
-    await db.execute<{ id: string; slug: string }>(
-      sql`select id,slug from report_definitions where org_id=${orgId} and slug in ('sales-evidence','sales-quota-attainment') and archived_at is null`,
-    )
-  ).rows;
+  const reportRows = await db.execute<{ id: string; slug: string }>(
+      sql`select id,slug from report_definitions where org_id=${orgId} and slug in ('sales-evidence','sales-quota-attainment') and archived_at is null`, "objects",
+    );
   const reports = {
     quota:
       "/reports/custom/run/" +
@@ -69,13 +67,11 @@ export async function loadSalesWorkspace(
     reports.quota = "/reports";
   if (!reportRows.some((r) => r.slug === "sales-evidence"))
     reports.evidence = "/reports";
-  const quotaOptions = (
-    await db.execute<
+  const quotaOptions = await db.execute<
       SalesOption & { lifecycle: string; sales_team_id: string | null }
     >(
-      sql`select id,name,subsidiary_id,lifecycle,sales_team_id from crm_sales_quotas where org_id=${orgId} and lifecycle in ('draft','approved') and ${salesScopeWhere(scope, sql`subsidiary_id`)} order by name,id`,
-    )
-  ).rows;
+      sql`select id,name,subsidiary_id,lifecycle,sales_team_id from crm_sales_quotas where org_id=${orgId} and lifecycle in ('draft','approved') and ${salesScopeWhere(scope, sql`subsidiary_id`)} order by name,id`, "objects",
+    );
   const today = await businessToday(orgId);
   const periodStart =
     params.periodStart && isIsoCalendarDate(params.periodStart)
@@ -94,36 +90,24 @@ export async function loadSalesWorkspace(
     allowedSorts: ["name"],
     dir: "asc",
   });
-  const organization = (
-    await db.execute<{ base_currency: string }>(
-      sql`select base_currency from orgs where id=${orgId}`,
-    )
-  ).rows[0]!;
-  const employees = (
-    await db.execute<SalesOption & { is_sales_rep: boolean }>(
-      sql`select p.id,p.display_name as name,p.subsidiary_id,e.is_sales_rep from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id where e.org_id=${orgId} and e.is_active and p.is_active and ${salesScopeWhere(scope, sql`p.subsidiary_id`)} order by p.display_name,p.id`,
-    )
-  ).rows;
-  const teams = (
-    await db.execute<SalesOption>(
-      sql`select id,name,subsidiary_id from crm_sales_teams where org_id=${orgId} and is_active and ${salesScopeWhere(scope, sql`subsidiary_id`)} order by name,id`,
-    )
-  ).rows;
-  const subsidiaries = (
-    await db.execute<SalesOption>(
-      sql`select id,name,id as subsidiary_id from subsidiaries where org_id=${orgId} and is_active and ${salesScopeWhere(scope, sql`id`)} order by name,id`,
-    )
-  ).rows;
-  const departments = (
-    await db.execute<SalesOption>(
-      sql`select d.id,d.name,d.subsidiary_id from departments d where d.org_id=${orgId} and d.is_active and (d.subsidiary_id is null or ${salesScopeWhere(scope, sql`d.subsidiary_id`)}) order by d.name,d.id`,
-    )
-  ).rows;
-  const currencies = (
-    await db.execute<{ code: string; name: string }>(
-      sql`select code,name from currencies order by code`,
-    )
-  ).rows;
+  const organization = (await db.execute<{ base_currency: string }>(
+      sql`select base_currency from orgs where id=${orgId}`, "objects",
+    ))[0]!;
+  const employees = await db.execute<SalesOption & { is_sales_rep: boolean }>(
+      sql`select p.id,p.display_name as name,p.subsidiary_id,e.is_sales_rep from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id where e.org_id=${orgId} and e.is_active and p.is_active and ${salesScopeWhere(scope, sql`p.subsidiary_id`)} order by p.display_name,p.id`, "objects",
+    );
+  const teams = await db.execute<SalesOption>(
+      sql`select id,name,subsidiary_id from crm_sales_teams where org_id=${orgId} and is_active and ${salesScopeWhere(scope, sql`subsidiary_id`)} order by name,id`, "objects",
+    );
+  const subsidiaries = await db.execute<SalesOption>(
+      sql`select id,name,id as subsidiary_id from subsidiaries where org_id=${orgId} and is_active and ${salesScopeWhere(scope, sql`id`)} order by name,id`, "objects",
+    );
+  const departments = await db.execute<SalesOption>(
+      sql`select d.id,d.name,d.subsidiary_id from departments d where d.org_id=${orgId} and d.is_active and (d.subsidiary_id is null or ${salesScopeWhere(scope, sql`d.subsidiary_id`)}) order by d.name,d.id`, "objects",
+    );
+  const currencies = await db.execute<{ code: string; name: string }>(
+      sql`select code,name from currencies order by code`, "objects",
+    );
   const relation =
     page === "representatives"
       ? sql`employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id`
@@ -160,27 +144,21 @@ export async function loadSalesWorkspace(
     page === "overview"
       ? 0
       : Number(
-          (
-            await db.execute<{ n: number }>(
-              sql`select count(*)::int as n from ${relation} where ${where}`,
-            )
-          ).rows[0]?.n ?? 0,
+          (await db.execute<{ n: number }>(
+              sql`select count(*)::int as n from ${relation} where ${where}`, "objects",
+            ))[0]?.n ?? 0,
         );
   const rows =
     page === "overview"
       ? []
-      : (
-          await db.execute<SalesRecord>(
-            sql`select ${fields} from ${relation} where ${where} order by ${name},e.id limit ${perPage} offset ${(currentPage - 1) * perPage}`,
-          )
-        ).rows;
+      : (await db.execute<SalesRecord>(
+            sql`select ${fields} from ${relation} where ${where} order by ${name},e.id limit ${perPage} offset ${(currentPage - 1) * perPage}`, "objects",
+          ));
   const mapTerritories =
     page === "territories" && params.view === "map" && mapEnabled
-      ? (
-          await db.execute<SalesRecord>(
-            sql`select ${fields} from ${relation} where ${where} order by ${name},e.id limit 500`,
-          )
-        ).rows
+      ? (await db.execute<SalesRecord>(
+            sql`select ${fields} from ${relation} where ${where} order by ${name},e.id limit 500`, "objects",
+          ))
       : [];
   const customerMap =
     page === "territories" && mapEnabled && can(authz, "parties.read")
@@ -192,15 +170,12 @@ export async function loadSalesWorkspace(
     if (!isUuid(requestedRecord) || page === "overview") notFound();
     const identity = page === "representatives" ? sql`e.party_id` : sql`e.id`;
     selected =
-      (
-        await db.execute<SalesRecord>(
-          sql`select ${fields} from ${relation} where e.org_id=${orgId} and ${salesScopeWhere(scope, entity)} and ${identity}=${requestedRecord}`,
-        )
-      ).rows[0] ?? null;
+      (await db.execute<SalesRecord>(
+          sql`select ${fields} from ${relation} where e.org_id=${orgId} and ${salesScopeWhere(scope, entity)} and ${identity}=${requestedRecord}`, "objects",
+        ))[0] ?? null;
     if (!selected) notFound();
     if (page === "representatives") {
-      const summary = (
-        await db.execute<{
+      const summary = (await db.execute<{
           customers: number;
           openOpportunities: number;
           teams: number;
@@ -209,8 +184,7 @@ export async function loadSalesWorkspace(
         (select count(*)::int from customer_roles c join parties customer on customer.org_id=c.org_id and customer.id=c.party_id where c.org_id=${orgId} and c.sales_rep_id=${selected.id} and c.is_active and customer.is_active and ${salesScopeWhere(scope, sql`customer.subsidiary_id`)}) as customers,
         (select count(*)::int from crm_opportunities opportunity join crm_opportunity_statuses status on status.org_id=opportunity.org_id and status.id=opportunity.status_id where opportunity.org_id=${orgId} and opportunity.sales_rep_id=${selected.id} and opportunity.is_active and not status.is_closed and ${salesScopeWhere(scope, sql`opportunity.subsidiary_id`)}) as "openOpportunities",
         (select count(distinct member.team_id)::int from crm_sales_team_members member join crm_sales_teams team on team.org_id=member.org_id and team.id=member.team_id where member.org_id=${orgId} and member.employee_id=${selected.id} and member.is_active and team.is_active and member.valid_from<=${today}::date and (member.valid_to is null or member.valid_to>=${today}::date) and ${salesScopeWhere(scope, sql`team.subsidiary_id`)}) as teams,
-        (select count(*)::int from crm_sales_quotas quota where quota.org_id=${orgId} and quota.employee_id=${selected.id} and quota.lifecycle in ('draft','pending_approval','approved') and quota.period_end>=${today}::date and ${salesScopeWhere(scope, sql`quota.subsidiary_id`)}) as quotas`)
-      ).rows[0]!;
+        (select count(*)::int from crm_sales_quotas quota where quota.org_id=${orgId} and quota.employee_id=${selected.id} and quota.lifecycle in ('draft','pending_approval','approved') and quota.period_end>=${today}::date and ${salesScopeWhere(scope, sql`quota.subsidiary_id`)}) as quotas`, "objects"))[0]!;
       if (
         selected.is_sales_rep &&
         can(authz, "crm.forecasts.read") &&
@@ -231,16 +205,14 @@ export async function loadSalesWorkspace(
       };
     }
     if (page === "teams")
-      selected.members = (
-        await db.execute<{
+      selected.members = await db.execute<{
           employeeId: string;
           role: "manager" | "member";
           validFrom: string;
           validTo: string | null;
         }>(
-          sql`select employee_id as "employeeId",role,valid_from::text as "validFrom",valid_to::text as "validTo" from crm_sales_team_members where org_id=${orgId} and team_id=${selected.id} and is_active order by employee_id`,
-        )
-      ).rows;
+          sql`select employee_id as "employeeId",role,valid_from::text as "validFrom",valid_to::text as "validTo" from crm_sales_team_members where org_id=${orgId} and team_id=${selected.id} and is_active order by employee_id`, "objects",
+        );
   }
   if (page === "territories") {
     // Masked sandbox coverage has no published version and must be reviewed
@@ -257,20 +229,16 @@ export async function loadSalesWorkspace(
       )
         record.geography = EMPTY_TERRITORY_GEOGRAPHY;
   }
-  const counts = (
-    await db.execute<SalesWorkspaceData["counts"]>(sql`select
+  const counts = (await db.execute<SalesWorkspaceData["counts"]>(sql`select
     (select count(*)::int from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${orgId} and e.is_sales_rep and e.is_active and p.is_active and ${salesScopeWhere(scope, sql`p.subsidiary_id`)}) as representatives,
     (select count(*)::int from crm_sales_teams where org_id=${orgId} and is_active and ${salesScopeWhere(scope, sql`subsidiary_id`)}) as teams,
     (select count(*)::int from crm_sales_territories where org_id=${orgId} and is_active and ${salesScopeWhere(scope, sql`subsidiary_id`)}) as territories,
     (select count(*)::int from crm_sales_quotas where org_id=${orgId} and lifecycle in ('draft','pending_approval') and ${salesScopeWhere(scope, sql`subsidiary_id`)}) as "draftQuotas",
     (select count(*)::int from crm_sales_evidence where org_id=${orgId} and employee_id is null and ${salesScopeWhere(scope, sql`subsidiary_id`)}) as unattributed,
-    (select count(*)::int from crm_sales_evidence where org_id=${orgId} and effective_date is null and ${salesScopeWhere(scope, sql`subsidiary_id`)}) as undated`)
-  ).rows[0]!;
-  const summary = (
-    await db.execute<SalesWorkspaceData["summary"][number]>(
-      sql`with q as (select currency,metric,sum(amount) as quota from crm_sales_quotas where org_id=${orgId} and lifecycle='approved' and parent_quota_id is null and period_start=${periodStart}::date and period_end=${periodEnd}::date and ${salesScopeWhere(scope, sql`subsidiary_id`)} group by currency,metric), a as (select currency,metric,sum(amount) as actual from crm_sales_evidence where org_id=${orgId} and effective_date between ${periodStart}::date and ${periodEnd}::date and ${salesScopeWhere(scope, sql`subsidiary_id`)} group by currency,metric) select coalesce(q.currency,a.currency) as currency,coalesce(q.metric,a.metric) as metric,coalesce(q.quota,0)::text as quota,coalesce(a.actual,0)::text as actual from q full join a using(currency,metric) order by currency,metric`,
-    )
-  ).rows;
+    (select count(*)::int from crm_sales_evidence where org_id=${orgId} and effective_date is null and ${salesScopeWhere(scope, sql`subsidiary_id`)}) as undated`, "objects"))[0]!;
+  const summary = await db.execute<SalesWorkspaceData["summary"][number]>(
+      sql`with q as (select currency,metric,sum(amount) as quota from crm_sales_quotas where org_id=${orgId} and lifecycle='approved' and parent_quota_id is null and period_start=${periodStart}::date and period_end=${periodEnd}::date and ${salesScopeWhere(scope, sql`subsidiary_id`)} group by currency,metric), a as (select currency,metric,sum(amount) as actual from crm_sales_evidence where org_id=${orgId} and effective_date between ${periodStart}::date and ${periodEnd}::date and ${salesScopeWhere(scope, sql`subsidiary_id`)} group by currency,metric) select coalesce(q.currency,a.currency) as currency,coalesce(q.metric,a.metric) as metric,coalesce(q.quota,0)::text as quota,coalesce(a.actual,0)::text as actual from q full join a using(currency,metric) order by currency,metric`, "objects",
+    );
   return {
     departments,
     customerLocations: customerMap.locations,

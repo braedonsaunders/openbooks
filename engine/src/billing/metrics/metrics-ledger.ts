@@ -441,8 +441,8 @@ function validatedHistoryCurrency(args: {
 async function monthEndFor(executor: SqlExecutor, monthStart: string): Promise<string> {
   const bounds = await executor.execute<{ month_end: string }>(sql`
     select (${monthStart}::date + interval '1 month - 1 day')::date::text as month_end
-  `);
-  return bounds.rows[0]!.month_end;
+  `, "objects");
+  return bounds[0]!.month_end;
 }
 
 async function monthCloseState(
@@ -453,9 +453,9 @@ async function monthCloseState(
 ): Promise<{ open: boolean; periodIds: string[] }> {
   const monthData = await executor.execute<{ month_end: string }>(sql`
     select (${month}::date + interval '1 month - 1 day')::date::text as month_end
-  `);
-  const monthEnd = monthData.rows[0]!.month_end;
-  const periodBooks = (await executor.execute<PeriodBookRow>(sql`
+  `, "objects");
+  const monthEnd = monthData[0]!.month_end;
+  const periodBooks = await executor.execute<PeriodBookRow>(sql`
     select p.id as period_id, b.id as book_id
       from accounting_periods p
       join fiscal_calendars c on c.org_id = p.org_id and c.id = p.fiscal_calendar_id
@@ -463,7 +463,7 @@ async function monthCloseState(
      where p.org_id = ${orgId} and c.is_default and c.is_active and not p.is_adjustment
        and p.starts_on <= ${monthEnd}::date and p.ends_on >= ${month}::date
      order by p.id, b.id
-  `)).rows;
+  `, "objects");
   const periodIds = [...new Set(periodBooks.map((row) => row.period_id))];
   for (const pair of periodBooks) {
     const open = await arePeriodModulesOpen(executor, {
@@ -507,18 +507,18 @@ async function readSources(
   const bounds = await executor.execute<{ month_end: string; previous_month: string }>(sql`
     select (${month}::date + interval '1 month - 1 day')::date::text as month_end,
            (${month}::date - interval '1 month')::date::text as previous_month
-  `);
-  const monthEnd = bounds.rows[0]!.month_end;
-  const previousMonth = bounds.rows[0]!.previous_month;
+  `, "objects");
+  const monthEnd = bounds[0]!.month_end;
+  const previousMonth = bounds[0]!.previous_month;
   const org = (await executor.execute<{ base_currency: string; settings: unknown }>(sql`
     select base_currency, settings from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!org) throw refusal("saas_metrics_org_missing", "The organization no longer exists.", "Select an active organization and run the metrics recompute again.");
   const definitions = saasMetricsDefinitions(orgId, org.settings);
-  const subsidiaries = (await executor.execute<SubsidiaryRow>(sql`
+  const subsidiaries = await executor.execute<SubsidiaryRow>(sql`
     select id, base_currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
-  `)).rows;
-  const subscriptions = (await executor.execute<SubscriptionSource>(sql`
+  `, "objects");
+  const subscriptions = await executor.execute<SubscriptionSource>(sql`
     select s.id, s.customer_id,
            (select trusted.id from subsidiaries trusted
              where trusted.org_id = s.org_id and trusted.id = c.subsidiary_id and trusted.is_active) as trusted_subsidiary_id,
@@ -538,24 +538,24 @@ async function readSources(
       left join subscription_plan_versions pv on pv.org_id = lifecycle.org_id and pv.id = lifecycle.plan_version_id
      where s.org_id = ${orgId} and s.start_on <= ${monthEnd}::date
      order by s.id
-  `)).rows;
+  `, "objects");
   const subscriptionIds = subscriptions.map((row) => row.id);
   let history: HistoryRow[] = [];
   if (subscriptionIds.length > 0) {
-    history = (await executor.execute<HistoryRow>(sql`
+    history = await executor.execute<HistoryRow>(sql`
       select subscription_id, customer_id, subsidiary_id, month::text, cohort_month::text, mrr_end::text,
              reporting_currency, denomination_version
         from saas_metrics_monthly
        where org_id = ${orgId} and month < ${month}::date
          and subscription_id in (${sql.join(subscriptionIds.map((id) => sql`${id}::uuid`), sql`, `)})
        order by subscription_id, month
-    `)).rows;
+    `, "objects");
   }
   const revenueRecognitionEnabled = await orgFeatureEnabled(orgId, "revenueRecognition", executor);
   // Journal amounts below are subsidiary-functional, never org-base: each
   // bucket keeps its functional currency so translation happens per legal
   // entity against month evidence, before any sum.
-  const revenueBuckets = (await executor.execute<RevenueBucket>(sql`
+  const revenueBuckets = await executor.execute<RevenueBucket>(sql`
     with source_documents as (
       select d.id, d.posted_entry_id, d.reversal_entry_id, s.id as subscription_id
         from documents d
@@ -594,8 +594,8 @@ async function readSources(
        and je.posting_date < (${month}::date + interval '1 month')
      group by e.subscription_id, l.subsidiary_id, sub.base_currency
      order by e.subscription_id, l.subsidiary_id
-  `)).rows;
-  const deferredBuckets = (await executor.execute<DeferredBucket>(sql`
+  `, "objects");
+  const deferredBuckets = await executor.execute<DeferredBucket>(sql`
     with subscription_obligations as (
       select distinct s.id as subscription_id, po.id as obligation_id,
              coalesce(po.deferred_account_id, rr.deferred_account_id) as deferred_account_id
@@ -644,8 +644,8 @@ async function readSources(
      where je.posting_date < (${month}::date + interval '1 month')
      group by e.subscription_id, l.subsidiary_id, sub.base_currency
      order by e.subscription_id, l.subsidiary_id
-  `)).rows;
-  const ledgerBuckets = (await executor.execute<LedgerBucket>(sql`
+  `, "objects");
+  const ledgerBuckets = await executor.execute<LedgerBucket>(sql`
     select l.subsidiary_id, sub.base_currency as functional_currency,
            coalesce(sum(-l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as revenue,
            coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs
@@ -659,7 +659,7 @@ async function readSources(
        and e.posting_date >= ${month}::date and e.posting_date < (${month}::date + interval '1 month')
      group by l.subsidiary_id, sub.base_currency
      order by l.subsidiary_id
-  `)).rows;
+  `, "objects");
   const billingsBaseAmount = definitions.billingsUsePreTaxSubtotal ? sql`d.subtotal` : sql`d.total`;
   const billingsAmount = definitions.customerCreditsReduceBillings
     ? sql`case when d.kind in ('customer_credit', 'cash_refund') then -${billingsBaseAmount} else ${billingsBaseAmount} end`
@@ -668,7 +668,7 @@ async function readSources(
   // carrying the document's stored posting FX. Translation multiplies each
   // leg through its own stored rate first, so distinct document rates are
   // never grouped away before conversion.
-  const billingLegs = (await executor.execute<BillingLeg>(sql`
+  const billingLegs = await executor.execute<BillingLeg>(sql`
     with billing_legs as (
       select d.id as document_id, d.org_id, d.subsidiary_id, d.currency as txn_currency,
              d.fx_rate::text as stored_fx_rate, ${billingsAmount} as txn_amount,
@@ -700,11 +700,11 @@ async function readSources(
      where scoped.effective_date >= ${month}::date
        and scoped.effective_date < (${month}::date + interval '1 month')
      order by scoped.document_id, scoped.leg
-  `)).rows;
+  `, "objects");
   // The month being computed supplies its own cohort opening from current
   // subscription facts. Only earlier openings are persisted inputs; reading
   // this month's output would change its hash on an unchanged recompute.
-  const cohortStartRows = (await executor.execute<{
+  const cohortStartRows = await executor.execute<{
     subsidiary_id: string;
     cohort_month: string;
     start_mrr: string;
@@ -717,7 +717,7 @@ async function readSources(
       from saas_metrics_cohort_monthly
      where org_id = ${orgId} and month = cohort_month and cohort_month < ${month}::date
      order by subsidiary_id, cohort_month
-  `)).rows;
+  `, "objects");
   return {
     monthEnd,
     previousMonth,
@@ -766,8 +766,8 @@ async function computeRows(
   const previousMonthStart = sources.previousMonth;
   const previousBounds = await executor.execute<{ previous_month_end: string }>(sql`
     select (${previousMonthStart}::date + interval '1 month - 1 day')::date::text as previous_month_end
-  `);
-  const previousMonthEnd = previousBounds.rows[0]!.previous_month_end;
+  `, "objects");
+  const previousMonthEnd = previousBounds[0]!.previous_month_end;
   const rows: MonthlySubscriptionFact[] = [];
   const monthlyEvidence: MonthlyNormalization["monthlyEvidence"] = {};
   const deferredBalanceBySubscription = new Map<string, string>();
@@ -1369,8 +1369,8 @@ async function writeMonthlyRow(
       normalization_evidence = excluded.normalization_evidence,
       computed_at = excluded.computed_at
     returning id
-  `);
-  if (result.rows.length !== 1) throw refusal("saas_metrics_subscription_write_missing", `Metrics for subscription ${row.subscriptionId} were not stored.`, "Retry the recompute after confirming that the subscription remains in the organization.");
+  `, "objects");
+  if (result.length !== 1) throw refusal("saas_metrics_subscription_write_missing", `Metrics for subscription ${row.subscriptionId} were not stored.`, "Retry the recompute after confirming that the subscription remains in the organization.");
 }
 
 async function writeFactsRow(
@@ -1414,8 +1414,8 @@ async function writeFactsRow(
       normalization_evidence = excluded.normalization_evidence,
       computed_at = excluded.computed_at
     returning id
-  `);
-  if (result.rows.length !== 1) throw refusal("saas_metrics_facts_write_missing", `Monthly facts for subsidiary ${row.subsidiaryId} were not stored.`, "Retry the recompute after confirming that the subsidiary remains active.");
+  `, "objects");
+  if (result.length !== 1) throw refusal("saas_metrics_facts_write_missing", `Monthly facts for subsidiary ${row.subsidiaryId} were not stored.`, "Retry the recompute after confirming that the subsidiary remains active.");
 }
 
 async function writeCohortRow(
@@ -1444,8 +1444,8 @@ async function writeCohortRow(
       normalization_evidence = excluded.normalization_evidence,
       computed_at = excluded.computed_at
     returning id
-  `);
-  if (result.rows.length !== 1) throw refusal("saas_metrics_cohort_write_missing", `Cohort facts for subsidiary ${row.subsidiaryId} and cohort ${row.cohortMonth} were not stored.`, "Retry the recompute after confirming that the cohort remains in the organization.");
+  `, "objects");
+  if (result.length !== 1) throw refusal("saas_metrics_cohort_write_missing", `Cohort facts for subsidiary ${row.subsidiaryId} and cohort ${row.cohortMonth} were not stored.`, "Retry the recompute after confirming that the cohort remains in the organization.");
 }
 
 /**
@@ -1675,7 +1675,7 @@ export async function readStoredMetricsMonth(
   orgId: string,
   month: string,
 ): Promise<StoredMetricsMonth> {
-  const monthly = (await executor.execute<StoredMonthlyRow>(sql`
+  const monthly = await executor.execute<StoredMonthlyRow>(sql`
     select id::text as id, subsidiary_id::text as "subsidiaryId", customer_id::text as "customerId",
            subscription_id::text as "subscriptionId", month::text as month, cohort_month::text as "cohortMonth",
            mrr_start::text as "mrrStart", mrr_end::text as "mrrEnd",
@@ -1688,8 +1688,8 @@ export async function readStoredMetricsMonth(
       from saas_metrics_monthly
      where org_id = ${orgId} and month = ${month}::date
      order by subscription_id
-  `)).rows;
-  const facts = (await executor.execute<StoredFactsRow>(sql`
+  `, "objects");
+  const facts = await executor.execute<StoredFactsRow>(sql`
     select id::text as id, subsidiary_id::text as "subsidiaryId", month::text as month,
            mrr_start::text as "mrrStart", mrr_end::text as "mrrEnd",
            new_mrr::text as "newMrr", expansion_mrr::text as "expansionMrr",
@@ -1708,8 +1708,8 @@ export async function readStoredMetricsMonth(
       from saas_metrics_facts_monthly
      where org_id = ${orgId} and month = ${month}::date
      order by subsidiary_id
-  `)).rows;
-  const cohorts = (await executor.execute<StoredCohortRow>(sql`
+  `, "objects");
+  const cohorts = await executor.execute<StoredCohortRow>(sql`
     select id::text as id, subsidiary_id::text as "subsidiaryId",
            cohort_month::text as "cohortMonth", month::text as month,
            months_since_start as "monthsSinceStart",
@@ -1720,7 +1720,7 @@ export async function readStoredMetricsMonth(
       from saas_metrics_cohort_monthly
      where org_id = ${orgId} and month = ${month}::date
      order by subsidiary_id, cohort_month
-  `)).rows;
+  `, "objects");
   return { monthly, facts, cohorts };
 }
 
@@ -1776,8 +1776,8 @@ async function legacySpotRate(
        where org_id = ${orgId} and from_currency = ${toCurrency}
          and to_currency = ${fromCurrency} and rate_type = 'spot' and as_of <= ${onDate}
     ) rates order by as_of desc, priority asc limit 1
-  `);
-  const rate = result.rows[0]?.rate;
+  `, "objects");
+  const rate = result[0]?.rate;
   if (!rate) {
     throw refusal(
       "saas_metrics_fx_rate_missing",
@@ -2053,7 +2053,7 @@ async function legacyPriorProvenance(
   priorMonth: string,
   month: string,
 ): Promise<ValidatedPriorMonth> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     table: string;
     row_id: string;
     request_key: string | null;
@@ -2067,7 +2067,7 @@ async function legacyPriorProvenance(
        and table_name in ('saas_metrics_monthly', 'saas_metrics_facts_monthly', 'saas_metrics_cohort_monthly')
        and changes->>'month' = ${priorMonth}
      order by at
-  `)).rows;
+  `, "objects");
   const label = `prior month ${priorMonth}`;
   if (rows.length === 0) throw provenanceRefusal("missing", label, month);
   const requestIds = [...new Set(rows.map((row) => row.changes.requestId).filter((id) => typeof id === "string"))] as string[];
@@ -2088,7 +2088,7 @@ async function legacyPriorProvenance(
            result as result
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and id = ${requestUuid}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!stored) throw provenanceRefusal("tampered", `${label} request ${requestUuid}`, month);
   const request: ProvenanceRequest = {
     id: stored.id,
@@ -2201,18 +2201,18 @@ async function legacyReadSources(
   const bounds = await executor.execute<{ month_end: string; previous_month: string }>(sql`
     select (${month}::date + interval '1 month - 1 day')::date::text as month_end,
            (${month}::date - interval '1 month')::date::text as previous_month
-  `);
-  const monthEnd = bounds.rows[0]!.month_end;
-  const previousMonth = bounds.rows[0]!.previous_month;
+  `, "objects");
+  const monthEnd = bounds[0]!.month_end;
+  const previousMonth = bounds[0]!.previous_month;
   const org = (await executor.execute<{ base_currency: string; settings: unknown }>(sql`
     select base_currency, settings from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!org) throw refusal("saas_metrics_org_missing", "The organization no longer exists.", "Select an active organization and run the metrics recompute again.");
   const definitions = saasMetricsDefinitions(orgId, org.settings);
-  const subsidiaries = (await executor.execute<{ id: string }>(sql`
+  const subsidiaries = await executor.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
-  `)).rows;
-  const subscriptions = (await executor.execute<SubscriptionSource>(sql`
+  `, "objects");
+  const subscriptions = await executor.execute<SubscriptionSource>(sql`
     select s.id, s.customer_id,
            (select trusted.id from subsidiaries trusted
              where trusted.org_id = s.org_id and trusted.id = c.subsidiary_id and trusted.is_active) as trusted_subsidiary_id,
@@ -2232,18 +2232,18 @@ async function legacyReadSources(
       left join subscription_plan_versions pv on pv.org_id = lifecycle.org_id and pv.id = lifecycle.plan_version_id
      where s.org_id = ${orgId} and s.start_on <= ${monthEnd}::date
      order by s.id
-  `)).rows;
+  `, "objects");
   const subscriptionIds = subscriptions.map((row) => row.id);
   let history: LegacyHistoryRow[] = [];
   if (subscriptionIds.length > 0) {
-    history = (await executor.execute<LegacyHistoryRow>(sql`
+    history = await executor.execute<LegacyHistoryRow>(sql`
       select subscription_id, customer_id, subsidiary_id, month::text, cohort_month::text, mrr_end::text,
              reporting_currency
         from saas_metrics_monthly
        where org_id = ${orgId} and month < ${month}::date
          and subscription_id in (${sql.join(subscriptionIds.map((id) => sql`${id}::uuid`), sql`, `)})
        order by subscription_id, month
-    `)).rows;
+    `, "objects");
     // Prior months already corrected to v1 no longer carry v0 openings:
     // the reproduction consumes their preserved audit before-images as a
     // complete request-joined set, and refuses when no reproducible v0
@@ -2280,7 +2280,7 @@ async function legacyReadSources(
     }
   }
   const revenueRecognitionEnabled = await orgFeatureEnabled(orgId, "revenueRecognition", executor);
-  const revenueRows = (await executor.execute<LegacyRevenueRow>(sql`
+  const revenueRows = await executor.execute<LegacyRevenueRow>(sql`
     with source_documents as (
       select d.id, d.posted_entry_id, d.reversal_entry_id, s.id as subscription_id
         from documents d
@@ -2315,8 +2315,8 @@ async function legacyReadSources(
      where je.posting_date >= ${month}::date
        and je.posting_date < (${month}::date + interval '1 month')
      group by e.subscription_id
-  `)).rows;
-  const deferredRows = (await executor.execute<LegacyDeferredRow>(sql`
+  `, "objects");
+  const deferredRows = await executor.execute<LegacyDeferredRow>(sql`
     with subscription_obligations as (
       select distinct s.id as subscription_id, po.id as obligation_id,
              coalesce(po.deferred_account_id, rr.deferred_account_id) as deferred_account_id
@@ -2362,8 +2362,8 @@ async function legacyReadSources(
       join journal_lines l on l.org_id = je.org_id and l.entry_id = je.id and l.account_id = e.deferred_account_id
      where je.posting_date < (${month}::date + interval '1 month')
      group by e.subscription_id
-  `)).rows;
-  const ledgerRows = (await executor.execute<LegacyLedgerRow>(sql`
+  `, "objects");
+  const ledgerRows = await executor.execute<LegacyLedgerRow>(sql`
     select l.subsidiary_id,
            coalesce(sum(-l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as revenue,
            coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs
@@ -2375,12 +2375,12 @@ async function legacyReadSources(
        and ${excludePeriodEndJournals(sql`e.origin`)}
        and e.posting_date >= ${month}::date and e.posting_date < (${month}::date + interval '1 month')
      group by l.subsidiary_id
-  `)).rows;
+  `, "objects");
   const billingsBaseAmount = definitions.billingsUsePreTaxSubtotal ? sql`d.subtotal` : sql`d.total`;
   const billingsAmount = definitions.customerCreditsReduceBillings
     ? sql`case when d.kind in ('customer_credit', 'cash_refund') then -${billingsBaseAmount} else ${billingsBaseAmount} end`
     : billingsBaseAmount;
-  const billingRows = (await executor.execute<LegacyBillingRow>(sql`
+  const billingRows = await executor.execute<LegacyBillingRow>(sql`
     with billing_entries as (
       select d.org_id, d.subsidiary_id, d.document_date as effective_date, ${billingsAmount} as amount
         from documents d
@@ -2401,12 +2401,12 @@ async function legacyReadSources(
      where billing.effective_date >= ${month}::date
        and billing.effective_date < (${month}::date + interval '1 month')
      group by 1
-  `)).rows;
-  const storedStarts = (await executor.execute<LegacyCohortStartRow>(sql`
+  `, "objects");
+  const storedStarts = await executor.execute<LegacyCohortStartRow>(sql`
     select subsidiary_id, cohort_month::text, start_mrr::text, start_customers, reporting_currency
       from saas_metrics_cohort_monthly
      where org_id = ${orgId} and month = cohort_month and cohort_month <= ${month}::date
-  `)).rows;
+  `, "objects");
   // A cohort opening already corrected to v1 no longer carries its v0
   // start: the reproduction consumes the preserved audit before-image as
   // a complete request-joined set, and refuses when no reproducible v0
@@ -2469,8 +2469,8 @@ async function legacyComputeRows(
   const previousMonthStart = sources.previousMonth;
   const previousBounds = await executor.execute<{ previous_month_end: string }>(sql`
     select (${previousMonthStart}::date + interval '1 month - 1 day')::date::text as previous_month_end
-  `);
-  const previousMonthEnd = previousBounds.rows[0]!.previous_month_end;
+  `, "objects");
+  const previousMonthEnd = previousBounds[0]!.previous_month_end;
   const rows: MonthlySubscriptionFact[] = [];
   for (const source of sources.subscriptions) {
     if (source.customer_subsidiary_id !== null && source.trusted_subsidiary_id === null) {
@@ -2777,7 +2777,7 @@ export async function recomputeSaasMetrics(
           union all
           select inputs_hash from saas_metrics_cohort_monthly where org_id = ${orgId} and month = ${month}::date
         ) stored
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if (!closeState.open && storedState.row_count > 0 && storedState.changed) {
       throw refusal(
         "saas_metrics_closed_month_changed",
@@ -2806,7 +2806,7 @@ export async function listSaasMetricsMonths(orgId: string): Promise<SaasMetricsM
     throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
   }
   return withOrgTransaction(orgId, async () => {
-    const rows = (await db.execute<{ month: string; computedAt: string }>(sql`
+    const rows = await db.execute<{ month: string; computedAt: string }>(sql`
       select month, max(computed_at)::text as "computedAt"
         from (
           select month::text as month, computed_at from saas_metrics_monthly where org_id = ${orgId}
@@ -2815,9 +2815,9 @@ export async function listSaasMetricsMonths(orgId: string): Promise<SaasMetricsM
           union all
           select month::text as month, computed_at from saas_metrics_cohort_monthly where org_id = ${orgId}
         ) facts
-       group by month order by month desc`)).rows;
-    const subsidiaries = (await db.execute<SubsidiaryRow>(sql`
-      select id, base_currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`)).rows;
+       group by month order by month desc`, "objects");
+    const subsidiaries = await db.execute<SubsidiaryRow>(sql`
+      select id, base_currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`, "objects");
     const result: SaasMetricsMonth[] = [];
     for (const row of rows) {
       const close = await monthCloseState(db, orgId, row.month, subsidiaries.map((subsidiary) => subsidiary.id));
@@ -2830,7 +2830,7 @@ export async function listSaasMetricsMonths(orgId: string): Promise<SaasMetricsM
 export async function saasMetricsScanTargets(): Promise<SaasMetricsScanTargets> {
   // bypass: scheduler-tick — the metrics pass lists every organization before checking each one's feature gate.
   const orgIds = await withBypassContext(async () =>
-    (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map((row) => row.id));
+    (await db.execute<{ id: string }>(sql`select id from orgs order by id`, "objects")).map((row) => row.id));
   const enabledOrgIds: string[] = [];
   const skippedFeatureOffOrgIds: string[] = [];
   for (const orgId of orgIds) {
@@ -2842,9 +2842,9 @@ export async function saasMetricsScanTargets(): Promise<SaasMetricsScanTargets> 
 
 async function monthIsOpenForAr(orgId: string, month: string): Promise<boolean> {
   return withOrgTransaction(orgId, async () => {
-    const subsidiaries = (await db.execute<SubsidiaryRow>(sql`
+    const subsidiaries = await db.execute<SubsidiaryRow>(sql`
       select id, base_currency from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
-    `)).rows;
+    `, "objects");
     return (await monthCloseState(db, orgId, month, subsidiaries.map((row) => row.id))).open;
   });
 }
@@ -2859,8 +2859,8 @@ async function monthHasStoredMetrics(orgId: string, month: string): Promise<bool
         union all
         select 1 from saas_metrics_cohort_monthly where org_id = ${orgId} and month = ${month}::date
       ) as has_rows
-    `);
-    return result.rows[0]!.has_rows;
+    `, "objects");
+    return result[0]!.has_rows;
   });
 }
 
@@ -2877,11 +2877,11 @@ export async function recomputeOpenSaasMetrics(orgId: string): Promise<{
     const existingMonths = (await db.execute<{ month: string }>(sql`
       select distinct month::text from saas_metrics_facts_monthly
        where org_id = ${orgId} and month <= ${currentMonth}::date order by month
-    `)).rows.map((row) => row.month.slice(0, 10));
+    `, "objects")).map((row) => row.month.slice(0, 10));
     const firstSubscriptionMonth = (await db.execute<{ month: string | null }>(sql`
       select date_trunc('month', min(start_on))::date::text as month
         from subscriptions where org_id = ${orgId}
-    `)).rows[0]?.month?.slice(0, 10) ?? null;
+    `, "objects"))[0]?.month?.slice(0, 10) ?? null;
     return { existingMonths, firstSubscriptionMonth };
   });
   const generatedMonths = firstSubscriptionMonth === null
@@ -2972,10 +2972,10 @@ export async function readRetentionStrip(orgId: string): Promise<RetentionStrip>
   return withOrgTransaction(orgId, async () => {
     const month = (await db.execute<{ month: string }>(sql`
       select month::text as month from saas_metrics_facts_monthly
-       where org_id = ${orgId} group by month order by month desc limit 1`)).rows[0]?.month ?? null;
+       where org_id = ${orgId} group by month order by month desc limit 1`, "objects"))[0]?.month ?? null;
     if (!month) return { month: null, baseCurrency: null, rows: [] };
     const baseCurrency = (await db.execute<{ baseCurrency: string }>(sql`
-      select base_currency as "baseCurrency" from orgs where id = ${orgId}`)).rows[0]?.baseCurrency ?? null;
+      select base_currency as "baseCurrency" from orgs where id = ${orgId}`, "objects"))[0]?.baseCurrency ?? null;
     const { base, formulas } = retentionStripMeasures();
     const sums = (await db.execute<Record<string, string | null>>(sql`
       select reporting_currency as currency,
@@ -2988,7 +2988,7 @@ export async function readRetentionStrip(orgId: string): Promise<RetentionStrip>
              sum(customers_churned)::int::text as customers_churned
         from saas_metrics_facts_monthly
        where org_id = ${orgId} and month = ${month}::date
-       group by reporting_currency order by reporting_currency`)).rows as Array<Record<string, string | null> & { currency: string }>;
+       group by reporting_currency order by reporting_currency`, "objects")) as Array<Record<string, string | null> & { currency: string }>;
     const ordered = [...sums].sort((a, b) =>
       a.currency === baseCurrency ? -1 : b.currency === baseCurrency ? 1 : a.currency.localeCompare(b.currency));
     return {

@@ -56,7 +56,7 @@ export async function loadSandboxes(): Promise<SandboxesData> {
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id
      where p.org_id = ${authz.user.productionOrgId}
-     order by p.ends_on desc, fc.name, p.period_number desc, p.id`))
+     order by p.ends_on desc, fc.name, p.period_number desc, p.id`, 'objects'))
 
   return {
     title: 'Environments',
@@ -76,7 +76,7 @@ export async function loadSandboxes(): Promise<SandboxesData> {
       lastRefreshAt: s.lastRefreshAt == null ? null : new Date(s.lastRefreshAt).toISOString(),
       createdAt: new Date(s.createdAt).toISOString(),
     })),
-    periods: periodsRes.rows,
+    periods: periodsRes,
   }
 }
 

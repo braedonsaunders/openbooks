@@ -77,8 +77,7 @@ async function loadAward(id: string): Promise<AwardContext | null> {
   // Gate preflight resolves subject identity before entering its organization
   // transaction. RLS controls visibility there; the gate's table scope then
   // validates the employer entity before the decision transaction begins.
-  const rows = (
-    await db.execute<AwardContext>(sql`
+  const rows = await db.execute<AwardContext>(sql`
     select a.id, a.org_id, a.program_id, a.employment_id, a.value::text,
       a.currency, a.status, a.period_from::text, a.period_to::text,
       a.created_by, a.submitted_by, a.flow_run_id, a.program_snapshot,
@@ -93,8 +92,7 @@ async function loadAward(id: string): Promise<AwardContext | null> {
       order by effective_from desc, id desc limit 1
     ) v on true
     where a.id = ${id}
-  `)
-  ).rows;
+  `, "objects");
   return rows[0] ?? null;
 }
 
@@ -113,11 +111,9 @@ export const benefitAwardsFlowAdapter: FlowSubjectAdapter =
       const award = await loadAward(id);
       if (!award) return null;
       const pinned = award.flow_run_id
-        ? (
-            await db.execute<{ context: Record<string, unknown> }>(
-              sql`select context from flow_runs where org_id = ${award.org_id} and id = ${award.flow_run_id} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${id}`,
-            )
-          ).rows[0]?.context
+        ? (await db.execute<{ context: Record<string, unknown> }>(
+              sql`select context from flow_runs where org_id = ${award.org_id} and id = ${award.flow_run_id} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${id}`, "objects",
+            ))[0]?.context
         : null;
       if (award.flow_run_id && !pinned)
         throw new Error(
@@ -181,10 +177,8 @@ export const benefitAwardsFlowAdapter: FlowSubjectAdapter =
         throw new Error(
           "Benefits reward candidates require an ambient organization context.",
         );
-      return (
-        await db.execute<{ id: string }>(
-          sql`select id from hrm_benefit_awards where org_id = ${orgId} and status in ('draft', 'pending') order by created_at desc, id limit ${limit}`,
-        )
-      ).rows.map((row) => row.id);
+      return (await db.execute<{ id: string }>(
+          sql`select id from hrm_benefit_awards where org_id = ${orgId} and status in ('draft', 'pending') order by created_at desc, id limit ${limit}`, "objects",
+        )).map((row) => row.id);
     },
   });

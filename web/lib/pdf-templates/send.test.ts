@@ -51,7 +51,8 @@ const state = {
 
 const harness = {
   state,
-  async execute(query: { text?: string; values?: unknown[] }) {
+  async execute(query: { text?: string; values?: unknown[] }, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const text = String(query.text ?? '')
     if (text.includes('insert into email_log')) {
       const columns = text
@@ -59,7 +60,7 @@ const harness = {
         ?.split(',')
         .map((column) => column.trim()) ?? []
       state.inserts.push({ columns, values: query.values ?? [], text })
-      return { rows: [{ id: `log-${state.inserts.length}` }] }
+      return inMode({ rows: [{ id: `log-${state.inserts.length}` }] })
     }
     if (text.includes('update email_log')) {
       state.updates.push({ text, values: query.values ?? [] })
@@ -75,25 +76,25 @@ const harness = {
         // write in ONE statement, so a protected row (status outside the
         // allowed set) is distinguishable from a lost write without a
         // follow-up read. existingEmailLogStatus is what a reader still sees.
-        return {
+        return inMode({
           rows: [{
             status: state.auditUpdateMatches ? 'queued' : state.existingEmailLogStatus,
             written: state.auditUpdateMatches ? 1 : 0,
           }],
-        }
+        })
       }
-      if (!state.auditUpdateMatches) return { rows: [] }
-      return { rows: [{ id: `updated-${state.updates.length}` }] }
+      if (!state.auditUpdateMatches) return inMode({ rows: [] })
+      return inMode({ rows: [{ id: `updated-${state.updates.length}` }] })
     }
     if (text.includes('from email_log') && text.includes('select')) {
-      return {
+      return inMode({
         rows: state.existingEmailLogStatus ? [{ status: state.existingEmailLogStatus }] : [],
-      }
+      })
     }
     // readOrgEmailConfig: no stored provider config; the mocked transport
     // package resolves one regardless so the send pipeline proceeds.
     if (text.includes('from orgs') && text.includes('settings')) {
-      return { rows: [{ email: null }] }
+      return inMode({ rows: [{ email: null }] })
     }
     throw new Error(`unexpected query in attribution test: ${text}`)
   },
@@ -114,7 +115,7 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       const harness = globalThis[Symbol.for('openbooks.pdf-send-attribution-test')]
-      export const db = { execute: (query) => harness.execute(query) }
+      export const db = { execute: (query, mode) => harness.execute(query, mode) }
       export async function withOrgTransaction(_orgId, work) { return work() }
     `,
   ],

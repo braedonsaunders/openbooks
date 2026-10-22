@@ -35,11 +35,11 @@ export async function postDrawerJournal(
   const book = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books
      where org_id = ${input.orgId} and is_primary and is_active and posts_gl
-     limit 1 for share`)).rows[0];
+     limit 1 for share`, "objects"))[0];
   const subsidiary = (await runner.execute<{ currency: string | null }>(sql`
     select nullif(trim(base_currency), '') as currency from subsidiaries
      where org_id = ${input.orgId} and id = ${input.subsidiaryId} and is_active
-     for share`)).rows[0];
+     for share`, "objects"))[0];
   const period = await resolveCoveringPeriod(runner, input.orgId, input.postingDate, input.subsidiaryId);
   if (!book || !subsidiary?.currency || !period) {
     throw posRefusal(

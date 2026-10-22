@@ -85,8 +85,8 @@ export const GET = defineRoute({
        where a.org_id = ${orgId} and a.is_active and not a.is_summary
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
        order by a.number nulls last, a.name limit 5000
-    `);
-      return NextResponse.json({ options: r.rows });
+    `, "objects");
+      return NextResponse.json({ options: r });
     }
 
     if (source === "parties" || table === "parties") {
@@ -115,9 +115,9 @@ export const GET = defineRoute({
        where p.org_id = ${orgId} and p.is_active ${roleFilter}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
        order by p.display_name limit 5000
-    `);
+    `, "objects");
       return NextResponse.json({
-        options: r.rows.map((row) => ({ ...row, hint: row.hint ?? undefined })),
+        options: r.map((row) => ({ ...row, hint: row.hint ?? undefined })),
       });
     }
 
@@ -127,15 +127,15 @@ export const GET = defineRoute({
        where p.org_id = ${orgId} and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by p.name limit 5000
-    `);
-      return NextResponse.json({ options: r.rows });
+    `, "objects");
+      return NextResponse.json({ options: r });
     }
     if (table === "items") {
       const r = await db.execute<{ value: string; label: string }>(sql`
       select id as value, name as label from items
        where org_id = ${orgId} and is_active order by name limit 5000
-    `);
-      return NextResponse.json({ options: r.rows });
+    `, "objects");
+      return NextResponse.json({ options: r });
     }
     return NextResponse.json({ error: "unknown source" }, { status: 400 });
   },

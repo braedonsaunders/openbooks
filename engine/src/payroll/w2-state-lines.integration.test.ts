@@ -116,8 +116,8 @@ async function suiAccount(fx: Fixture, state: string, accountNumber: string): Pr
     insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
                                          subsidiary_id, state_code, is_default, created_by, updated_by)
     values (${filingAccountId}, ${fx.orgId}, 'US', 'us_state_sui', ${accountNumber}, ${`${state} SUI`},
-            ${fx.subsidiaryId}, ${state}, false, ${fx.actorId}, ${fx.actorId}) returning id`);
-  assert.equal(inserted.rows.length, 1, "the declared numbered state registration must be created");
+            ${fx.subsidiaryId}, ${state}, false, ${fx.actorId}, ${fx.actorId}) returning id`, "objects");
+  assert.equal(inserted.length, 1, "the declared numbered state registration must be created");
   await seedUsSuiAccount(fx.orgId, fx.actorId, state, {
     filingAccountId, federalAccountId: fx.einAccountId, subsidiaryId: fx.subsidiaryId,
     effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: `${state} original employer registration`,
@@ -196,7 +196,7 @@ async function runAndCommit(fx: Fixture, periodStart: string, periodEnd: string)
 
 /** Every deduction line on committed stubs, by component system key. */
 async function committedDeductions(fx: Fixture, systemKey: string, province?: string) {
-  return (await db.execute<{ amount: string; description: string; province: string }>(sql`
+  return await db.execute<{ amount: string; description: string; province: string }>(sql`
     select l.amount::text as amount, l.description, s.province
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
@@ -204,7 +204,7 @@ async function committedDeductions(fx: Fixture, systemKey: string, province?: st
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${fx.orgId} and r.run_status = 'committed'
        and c.system_key = ${systemKey}
-       and (${province ?? null}::text is null or s.province = ${province ?? null})`)).rows;
+       and (${province ?? null}::text is null or s.province = ${province ?? null})`, "objects");
 }
 
 async function w2SlipFor(fx: Fixture, employeeName: string) {
@@ -225,7 +225,7 @@ test(
       // The employer's EIN: the profile names the New York SUI account, yet
       // the W-2 is the EIN's slip while box 15 keeps the New York number.
       const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
         .subsidiary_id;
       // New York City reaches residents only: without the IT-2104 answer the
       // city tax is silently zero and boxes 18-20 would prove nothing.
@@ -285,7 +285,7 @@ test(
       await suiAccount(fx, "AZ", "AZ-0011223");
       // No SUI account for California: its box 15 names the state with no ID.
       const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
         .subsidiary_id;
       const employee = await usEmployee(fx, subsidiary, "Mover Max", { state: "AZ" });
       await runAndCommit(fx, "2026-07-05", "2026-07-18");
@@ -331,7 +331,7 @@ test(
       // Texas levies no wage income tax: the stub withholds nothing at either
       // level, so there is nothing to file in boxes 15-20.
       const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
         .subsidiary_id;
       await usEmployee(fx, subsidiary, "Lone Star Lou", { state: "TX" });
       await runAndCommit(fx, "2026-07-05", "2026-07-18");
@@ -360,7 +360,7 @@ test(
     try {
       await suiAccount(fx, "CA", "CA-0011223");
       const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
         .subsidiary_id;
       await usEmployee(fx, subsidiary, "Stateless Sam", { state: "CA" });
       await runAndCommit(fx, "2026-07-05", "2026-07-18");
@@ -368,7 +368,7 @@ test(
       assert.equal(stateLines.length, 1);
       assert.ok(Number(stateLines[0]!.amount) > 0, "California tax is withheld on the stub");
       const stubId = (await db.execute<{ id: string }>(sql`
-        select id from pay_stubs where org_id = ${fx.orgId}`)).rows[0]!.id;
+        select id from pay_stubs where org_id = ${fx.orgId}`, "objects"))[0]!.id;
       await db.execute(sql`update pay_stubs set province = '' where id = ${stubId}`);
 
       await assert.rejects(
@@ -397,7 +397,7 @@ test(
     const fx = await usPayrollOrg();
     try {
       const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
-        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
+        select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`, "objects"))[0]!
         .subsidiary_id;
       await usEmployee(fx, subsidiary, "Nowhere Nora", { state: "TX" });
       await runAndCommit(fx, "2026-07-05", "2026-07-18");

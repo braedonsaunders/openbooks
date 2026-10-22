@@ -41,10 +41,10 @@ async function seedTenants(): Promise<{ ids: string[]; cleanup: () => Promise<vo
   // Deterministic tenant order for the assertions. The teardown guard only
   // drops orgs still named 'Scratch %', so the original names are restored
   // before the drop — a renamed org must never leak.
-  const before = (await withBypass(() =>
-    db.execute<{ id: string; name: string }>(sql`select id, name from orgs where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`),
-  )) as { rows: { id: string; name: string }[] }
-  const original = new Map(before.rows.map((row) => [row.id, row.name]))
+  const before = await withBypass(() =>
+    db.execute<{ id: string; name: string }>(sql`select id, name from orgs where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`, 'objects'),
+  )
+  const original = new Map(before.map((row) => [row.id, row.name]))
   await withBypass(async () => {
     for (const [i, id] of ids.entries()) await db.execute(sql`update orgs set name = ${orgName(i)} where id = ${id}`)
   })

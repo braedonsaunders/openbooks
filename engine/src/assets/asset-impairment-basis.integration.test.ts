@@ -11,7 +11,7 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } fro
 async function seed(org: ScratchOrg, opts: { method?: DepreciationMethod; customFormula?: string; salvage?: string; julyDepreciation?: string; bookLifeMonths?: number; postJuly?: boolean } = {}) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const categoryId = randomUUID(), assetId = randomUUID();
-  const calendarId = (await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`)).rows[0]!.id;
+  const calendarId = (await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`, 'objects'))[0]!.id;
   for (let i = 1; i < 10; i++) {
     const start = new Date(Date.UTC(2026, 6+i, 1));
     const end = new Date(Date.UTC(2026, 7+i, 0));
@@ -51,13 +51,13 @@ function bookPolicyRefusal(error: unknown): boolean {
 async function accumulated(org: ScratchOrg) {
   return toUnits((await db.execute<{total:string}>(sql`select coalesce(sum(l.amount),0)::text as total from journal_lines l
     join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-    where l.org_id=${org.orgId} and l.account_id=${org.accounts.clearing} and e.status in ('posted','reversed')`)).rows[0]!.total);
+    where l.org_id=${org.orgId} and l.account_id=${org.accounts.clearing} and e.status in ('posted','reversed')`, 'objects'))[0]!.total);
 }
 async function scheduleRows(org: ScratchOrg, assetId: string, bookId = org.bookId) {
-  return (await db.execute<{id:string; sequence:number; planned:string; posted:string|null; journal_entry_id:string|null}>(sql`
+  return await db.execute<{id:string; sequence:number; planned:string; posted:string|null; journal_entry_id:string|null}>(sql`
     select l.id, l.sequence, l.planned_amount::text as planned, l.posted_amount::text as posted, l.journal_entry_id
       from depreciation_schedule_lines l join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-     where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${bookId} order by l.sequence`)).rows;
+     where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${bookId} order by l.sequence`, 'objects');
 }
 
 for (const rebuild of ['reverse latest impairment', 'explicit rebuild'] as const) {
@@ -74,7 +74,7 @@ test(`asset schedule ${rebuild} preserves retained impairment and other books`, 
     await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'750'});
     if (rebuild === 'reverse latest impairment') {
       const second = await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'600'});
-      const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${second.entryId}`)).rows[0]!.id;
+      const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${second.entryId}`, 'objects'))[0]!.id;
       await reverseAssetLifecycleEvent(org.orgId,eventId,{actorId,date:'2026-07-31',reason:'Correct duplicate impairment assessment'});
     } else {
       await buildSchedule(assetId,org.orgId,actorId,org.bookId);
@@ -93,7 +93,7 @@ test(`asset schedule ${rebuild} preserves retained impairment and other books`, 
     assert.deepEqual(posted.problems,[]);
     assert.equal(posted.totalAmount,'750.0000');
     assert.equal(toUnits('1000')+await accumulated(org),0n,'remaining depreciation must consume 750, preserving zero salvage');
-    assert.equal((await db.execute<{status:string}>(sql`select status from fixed_assets where org_id=${org.orgId} and id=${assetId}`)).rows[0]!.status,
+    assert.equal((await db.execute<{status:string}>(sql`select status from fixed_assets where org_id=${org.orgId} and id=${assetId}`, 'objects'))[0]!.status,
       'fully_depreciated','asset lifecycle must agree with primary-book carrying value at salvage');
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -132,12 +132,12 @@ test(`IFRS restoration after depreciation honors ${policy.name} carrying ceiling
     assert.equal((await runDepreciation(org.orgId,'2026-08-31',actorId,assetId)).totalAmount,policy.august);
     const before = await scheduleRows(org,assetId);
     const balanceBefore = await accumulated(org);
-    const eventsBefore = (await db.execute(sql`select * from asset_events where org_id=${org.orgId} order by id`)).rows;
+    const eventsBefore = await db.execute(sql`select * from asset_events where org_id=${org.orgId} order by id`, 'objects');
     await assert.rejects(remeasureAsset(org.orgId,assetId,{actorId,date:'2026-08-31',newCarryingValue:policy.refused}), /caps.*net of depreciation/i,
       'restoration cannot exceed carrying amount under the original depreciation policy');
     assert.deepEqual(await scheduleRows(org,assetId),before);
     assert.equal(await accumulated(org),balanceBefore);
-    assert.deepEqual((await db.execute(sql`select * from asset_events where org_id=${org.orgId} order by id`)).rows,eventsBefore);
+    assert.deepEqual(await db.execute(sql`select * from asset_events where org_id=${org.orgId} order by id`, 'objects'),eventsBefore);
     await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-08-31',newCarryingValue:policy.ceiling});
     assert.equal(toUnits('1000')+await accumulated(org),toUnits(policy.ceiling),'exact ceiling is permitted');
   } finally { await dropScratchOrg(org.orgId); }
@@ -154,7 +154,7 @@ for (const method of ['manual','units_of_production'] as const) {
         values (${folderId},${org.orgId},'Asset evidence','fixed_assets',${assetId},${actorId},${actorId})`);
       const evidenceFileId = (await db.execute<{id:string}>(sql`insert into files
         (org_id,folder_id,name,file_type,content_type,size_bytes,created_by,updated_by)
-        values (${org.orgId},${folderId},'Asset evidence.pdf','pdf','application/pdf',1,${actorId},${actorId}) returning id`)).rows[0]!.id;
+        values (${org.orgId},${folderId},'Asset evidence.pdf','pdf','application/pdf',1,${actorId},${actorId}) returning id`, 'objects'))[0]!.id;
       await db.execute(sql`insert into file_attachments (org_id,file_id,target_table,target_id,created_by)
         values (${org.orgId},${evidenceFileId},'fixed_assets',${assetId},${actorId})`);
       const record = (date:string,value:string) => recordDepreciationInput({
@@ -239,7 +239,7 @@ test('lifecycle history alone fixes book policy, including a reversed impairment
   try {
     const {actorId,assetId} = await seed(org,{bookLifeMonths:10,postJuly:false});
     const impaired = await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'450'});
-    const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${impaired.entryId}`)).rows[0]!.id;
+    const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${impaired.entryId}`, 'objects'))[0]!.id;
     await assert.rejects(db.execute(sql`delete from depreciation_book_policies where org_id=${org.orgId}`),bookPolicyRefusal);
     await reverseAssetLifecycleEvent(org.orgId,eventId,{actorId,date:'2026-07-31',reason:'Correct impairment assessment before depreciation'});
     await assert.rejects(db.execute(sql`update depreciation_book_policies set life_months=20 where org_id=${org.orgId}`),bookPolicyRefusal);
@@ -275,7 +275,7 @@ test('first depreciation serializes a waiting policy update without a tuple-lock
     await withOrgTransaction(org.orgId,async () => {
       await db.execute(sql`select id from fixed_assets where org_id=${org.orgId} and id=${assetId} for update`);
       await db.execute(sql`select id from asset_categories where org_id=${org.orgId} and id=${categoryId} for update`);
-      const holderPid = (await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+      const holderPid = (await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid;
       edit = writer.query('update depreciation_book_policies set life_months=20 where org_id=$1 and book_id=$2',[org.orgId,org.bookId]).then(() => null,error => error);
       let blocked = false;
       for (let attempt=0;attempt<200;attempt++) {
@@ -288,7 +288,7 @@ test('first depreciation serializes a waiting policy update without a tuple-lock
       assert.equal((await runDepreciation(org.orgId,'2026-07-31',actorId,assetId)).totalAmount,'100.0000');
     });
     assert.equal(bookPolicyRefusal(await edit),true,'writer observes newly committed financial history');
-    assert.equal((await db.execute<{life:number}>(sql`select life_months as life from depreciation_book_policies where org_id=${org.orgId}`)).rows[0]!.life,10);
+    assert.equal((await db.execute<{life:number}>(sql`select life_months as life from depreciation_book_policies where org_id=${org.orgId}`, 'objects'))[0]!.life,10);
   } finally {
     if (edit) await edit;
     await writer.query('rollback');
@@ -301,9 +301,9 @@ test('asset status follows primary carrying value through full impairment, rever
   const org = await createScratchOrg();
   try {
     const {actorId,assetId} = await seed(org);
-    const status = async () => (await db.execute<{status:string}>(sql`select status from fixed_assets where org_id=${org.orgId} and id=${assetId}`)).rows[0]!.status;
+    const status = async () => (await db.execute<{status:string}>(sql`select status from fixed_assets where org_id=${org.orgId} and id=${assetId}`, 'objects'))[0]!.status;
     const reverse = async (entryId:string,date:string) => {
-      const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+      const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${entryId}`, 'objects'))[0]!.id;
       return reverseAssetLifecycleEvent(org.orgId,eventId,{actorId,date,reason:'Correct the asset carrying value assessment'});
     };
     const alternateBookId = randomUUID();
@@ -331,7 +331,7 @@ test('reversing the sole impairment after depreciation consumes the restored rem
     const {actorId,assetId} = await seed(org);
     const impaired = await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'450'});
     assert.equal((await runDepreciation(org.orgId,'2026-08-31',actorId,assetId)).totalAmount,'50.0000');
-    const sourceEventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${impaired.entryId}`)).rows[0]!.id;
+    const sourceEventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${impaired.entryId}`, 'objects'))[0]!.id;
     const postedBefore = (await scheduleRows(org,assetId)).filter(line => line.posted !== null);
     await reverseAssetLifecycleEvent(org.orgId,sourceEventId,{actorId,date:'2026-08-31',reason:'Correct impairment assessment after August depreciation'});
     assert.equal(toUnits('1000')+await accumulated(org),toUnits('850'));
@@ -348,9 +348,9 @@ test('derived asset status records both transitions exactly once with primary ca
   const org = await createScratchOrg();
   try {
     const {actorId,assetId} = await seed(org);
-    const evidence = async () => (await db.execute<{actor_id:string;at:Date;changes:{before:{status:string};after:{status:string};reason:string;bookId:string;carryingValue:string}}>(sql`
+    const evidence = async () => await db.execute<{actor_id:string;at:Date;changes:{before:{status:string};after:{status:string};reason:string;bookId:string;carryingValue:string}}>(sql`
       select actor_id,at,changes from audit_log where org_id=${org.orgId} and row_id=${assetId}
-      and changes->>'reason'='Reconcile asset lifecycle with primary-book carrying value' order by at,id`)).rows;
+      and changes->>'reason'='Reconcile asset lifecycle with primary-book carrying value' order by at,id`, 'objects');
     assert.equal((await evidence()).length,0);
     const impaired = await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'0'});
     const first = (await evidence())[0]!;
@@ -362,7 +362,7 @@ test('derived asset status records both transitions exactly once with primary ca
     assert.equal(toUnits(first.changes.carryingValue),0n);
     await withOrgTransaction(org.orgId,() => reconcileAssetDepreciationStatusWithRunner(db,org.orgId,actorId,assetId));
     assert.equal((await evidence()).length,1,'a no-op adds no lifecycle audit');
-    const eventId=(await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${impaired.entryId}`)).rows[0]!.id;
+    const eventId=(await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${impaired.entryId}`, 'objects'))[0]!.id;
     await reverseAssetLifecycleEvent(org.orgId,eventId,{actorId,date:'2026-07-31',reason:'Correct zero carrying assessment'});
     const rows=await evidence();
     assert.equal(rows.length,2);
@@ -380,11 +380,11 @@ test('failure to audit derived asset status rolls back the financial transaction
   try {
     const {actorId,assetId}=await seed(org);
     const snapshot=async()=>({
-      assets:(await db.execute(sql`select * from fixed_assets where org_id=${org.orgId}`)).rows,
-      entries:(await db.execute(sql`select * from journal_entries where org_id=${org.orgId} order by id`)).rows,
-      events:(await db.execute(sql`select * from asset_events where org_id=${org.orgId} order by id`)).rows,
+      assets:await db.execute(sql`select * from fixed_assets where org_id=${org.orgId}`, 'objects'),
+      entries:await db.execute(sql`select * from journal_entries where org_id=${org.orgId} order by id`, 'objects'),
+      events:await db.execute(sql`select * from asset_events where org_id=${org.orgId} order by id`, 'objects'),
       schedule:await scheduleRows(org,assetId),
-      audit:(await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`)).rows,
+      audit:await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`, 'objects'),
     });
     const before=await snapshot();
     await db.execute(sql.raw(`create function public."${trigger}"() returns trigger language plpgsql as $$ begin
@@ -419,6 +419,6 @@ test('a convention change after posting refuses rebuild without rewriting histor
     // rebuild, which restamps the header it compared.
     await db.execute(sql`update depreciation_schedules set convention='full_month' where org_id=${org.orgId} and asset_id=${assetId}`);
     await buildSchedule(assetId,org.orgId,actorId,org.bookId);
-    assert.equal((await db.execute<{convention:string|null}>(sql`select convention from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId}`)).rows[0]!.convention,'full_month');
+    assert.equal((await db.execute<{convention:string|null}>(sql`select convention from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId}`, 'objects'))[0]!.convention,'full_month');
   } finally { await dropScratchOrg(org.orgId); }
 });

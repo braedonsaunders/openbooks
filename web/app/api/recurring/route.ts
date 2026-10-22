@@ -86,9 +86,9 @@ export const GET = defineRoute({
      where rs.org_id = ${authz.user.orgId}
        ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
      order by rs.is_active desc, rs.next_run_on
-  `));
+  `, "objects"));
   return NextResponse.json({
-    schedules: rows.rows.filter((row) => !hidden.has(String(row.templateKind))),
+    schedules: rows.filter((row) => !hidden.has(String(row.templateKind))),
   });
   },
 });
@@ -152,19 +152,19 @@ export const POST = defineRoute({
         and ${body.templateDocumentId ? sql`d.id = ${body.templateDocumentId}` : sql`d.document_number = ${body.templateDocumentNumber}`}
         ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
       order by d.id limit 2 for share of d
-    `);
+    `, "objects");
     // Recheck line scope after the template locks: a concurrent line edit
     // may have committed while the candidate statement waited for its parent.
-    if (!candidates.rows.length) return null;
+    if (!candidates.length) return null;
     const tpl = await tx.execute<{ id: string; kind: string }>(sql`
       select d.id, d.kind from documents d where d.org_id = ${authz.user.orgId}
-        and d.id = any(${`{${candidates.rows.map(row => row.id).join(",")}}`}::uuid[])
+        and d.id = any(${`{${candidates.map(row => row.id).join(",")}}`}::uuid[])
         ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
       order by d.id
-    `);
-    if (!tpl.rows.length || !(await isDocKindEnabled(authz.user.orgId, tpl.rows[0]!.kind))) return null;
-    if (tpl.rows.length > 1) return "ambiguous" as const;
-    const templateDocumentId = tpl.rows[0]!.id;
+    `, "objects");
+    if (!tpl.length || !(await isDocKindEnabled(authz.user.orgId, tpl[0]!.kind))) return null;
+    if (tpl.length > 1) return "ambiguous" as const;
+    const templateDocumentId = tpl[0]!.id;
     // Unknown period tokens refuse at save with their names, so a misspelled
     // token can never reach a customer invoice.
     await assertTemplateTokensKnown(tx, authz.user.orgId, templateDocumentId);
@@ -181,17 +181,17 @@ export const POST = defineRoute({
               ${autoPost}, ${body.name ?? null}, ${anchorDay},
               ${authz.user.id}, ${authz.user.id})
       returning *
-    `));
+    `, "objects"));
     // A schedule mints real documents on every due date, so its creation is
     // recorded in the same transaction.
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
-        (${authz.user.orgId}, 'recurring_schedules', ${row.rows[0]!.id}, 'insert',
-         ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${authz.user.id})
+        (${authz.user.orgId}, 'recurring_schedules', ${row[0]!.id}, 'insert',
+         ${JSON.stringify({ after: row[0] })}::jsonb, ${authz.user.id})
     `);
-    return row.rows[0]!;
+    return row[0]!;
   });
   if (!created) return notFound("record");
   if (created === "ambiguous") return NextResponse.json({ error: "document number is ambiguous; select a template ID" }, { status: 400 });

@@ -127,7 +127,7 @@ async function governingDraft(orgId: string, externalId: string): Promise<{ id: 
   const row = (await withOrgContext(orgId, () => db.execute<{ id: string; status: string }>(sql`
     select id, status from documents
      where org_id = ${orgId} and kind = 'sales_order'
-       and external_ref = ${`channel-sales-order:${externalId}`}`))).rows[0];
+       and external_ref = ${`channel-sales-order:${externalId}`}`, "objects")))[0];
   return row ?? null;
 }
 
@@ -136,7 +136,7 @@ async function closeAudit(orgId: string, documentId: string): Promise<{ outcome:
     select changes, actor_id from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${documentId}
        and action = 'update' and changes->>'event' = 'governing_order_closed'
-     order by at desc, id desc limit 1`))).rows[0];
+     order by at desc, id desc limit 1`, "objects")))[0];
   return row ? { outcome: row.changes.outcome, actor: row.actor_id } : null;
 }
 
@@ -163,7 +163,7 @@ test("a fulfilled and settled order closes its governing draft with audit", { sk
     assert.equal(audit.outcome, "fulfilled_settled");
     assert.equal(audit.actor, actor);
     const cash = (await withOrgContext(org.orgId, () => db.execute<{ posting_status: string }>(sql`
-      select posting_status from channel_orders where id = ${stored.id} and org_id = ${org.orgId}`))).rows[0]!;
+      select posting_status from channel_orders where id = ${stored.id} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(cash.posting_status, "posted");
   } finally {
     await dropScratchOrg(org.orgId);

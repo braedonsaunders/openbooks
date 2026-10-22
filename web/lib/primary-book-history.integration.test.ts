@@ -82,7 +82,7 @@ function post(org: ScratchOrg, id: string) {
 }
 async function entryBook(org: ScratchOrg, id: string) {
   return withOrgContext(org.orgId, async () =>
-    (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where org_id=${org.orgId} and id=${id}`)).rows[0]!.book_id);
+    (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where org_id=${org.orgId} and id=${id}`, 'objects'))[0]!.book_id);
 }
 async function waitBlocked(pid: number) {
   for (let n = 0; n < 500; n++) {
@@ -98,8 +98,8 @@ test('primary book reassignment refuses posted history but preserves harmless me
   await withOrgTransaction(org.orgId, () => saveSetupBook(entity, org.orgId, actor,
     { name: 'Renamed primary', isPrimary: true, isActive: true }, db, { id: org.bookId }));
   await withOrgContext(org.orgId, async () => {
-    assert.equal((await db.execute(sql`select name from accounting_books where id=${org.bookId}`)).rows[0]!.name, 'Renamed primary');
-    assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]!.id, org.bookId);
+    assert.equal((await db.execute(sql`select name from accounting_books where id=${org.bookId}`, 'objects'))[0]!.name, 'Renamed primary');
+    assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`, 'objects'))[0]!.id, org.bookId);
   });
 }));
 
@@ -126,8 +126,8 @@ for (const flag of ['is_active', 'posts_gl'] as const) {
     await withBypassContext(() => db.execute(sql`update accounting_books set ${sql.raw(flag)}=false where id=${org.bookId}`));
     await assert.rejects(post(org, id), /active primary posting book/);
     await withOrgContext(org.orgId, async () => {
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`)).rows.length, 0);
-      assert.equal((await db.execute(sql`select status from documents where id=${id}`)).rows[0]!.status, 'approved');
+      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, 'objects')).length, 0);
+      assert.equal((await db.execute(sql`select status from documents where id=${id}`, 'objects'))[0]!.status, 'approved');
     });
   }));
 }
@@ -140,7 +140,7 @@ test('setup first: a waiting first post resolves the newly committed primary', e
   const gate = new Promise<void>(resolve => { release = resolve; });
   const editing = withOrgTransaction(org.orgId, async () => {
     await promote(org, actor, next);
-    entered((await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
+    entered((await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid);
     await gate;
   });
   let posting: ReturnType<typeof post> | undefined;
@@ -202,7 +202,7 @@ test('in-transit inventory cannot switch accounting representations between ship
   assert.equal(await entryBook(org, shipped.entryId), org.bookId);
   assert.equal(await entryBook(org, received.entryId), org.bookId);
   await withOrgContext(org.orgId, async () => {
-    assert.equal((await db.execute<{ amount: string }>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and account_id=${inTransitAccountId} and entry_id in (${shipped.entryId},${received.entryId})`)).rows[0]!.amount, '0.0000');
+    assert.equal((await db.execute<{ amount: string }>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and account_id=${inTransitAccountId} and entry_id in (${shipped.entryId},${received.entryId})`, 'objects'))[0]!.amount, '0.0000');
   });
 }));
 
@@ -232,7 +232,7 @@ test('trusted migration retains its explicit book-copy exemption', enabled, asyn
     await tx.execute(sql`update accounting_books set is_primary=(id=${next}) where org_id=${org.orgId}`);
   }));
   await withOrgContext(org.orgId, async () => {
-    assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]!.id, next);
+    assert.equal((await db.execute(sql`select id from accounting_books where org_id=${org.orgId} and is_primary`, 'objects'))[0]!.id, next);
   });
   await restorePrimary(org);
 }));
@@ -241,7 +241,7 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
   const billId = await bill(org);
   const entry = await post(org, billId);
   const lineId = await withOrgContext(org.orgId, async () =>
-    (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`)).rows[0]!.id);
+    (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`, 'objects'))[0]!.id);
   const payment = await withOrgTransaction(org.orgId, () => createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId, kind: 'vendor_payment', createdBy: actor,
     partyId: org.vendorId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency: 'CAD' }));
   if (path === 'service') {
@@ -252,7 +252,7 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
   // post-with-applications fences its draft save on the exact document
   // revision: read the token the same lossless way the API surface does.
   const paymentRevision = await withOrgContext(org.orgId, async () =>
-    (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${payment.id}`)).rows[0]!.revision);
+    (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${payment.id}`, 'objects'))[0]!.revision);
 
   let entered!: (pid: number) => void;
   let release!: () => void;
@@ -260,7 +260,7 @@ for (const path of ['service', 'HTTP draft'] as const) test(`${path} payment pos
   const gate = new Promise<void>(resolve => { release = resolve; });
   const editing = withOrgTransaction(org.orgId, async () => {
     await db.execute(sql`select id from orgs where id=${org.orgId} for share`);
-    entered((await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
+    entered((await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid);
     await gate;
     return saveSetupBook(entity, org.orgId, actor, { name: 'Promoted', isPrimary: true, isActive: true }, db, { id: next });
   }).then(value => ({ status: 'fulfilled' as const, value }), (reason: unknown) => ({ status: 'rejected' as const, reason }));

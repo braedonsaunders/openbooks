@@ -83,8 +83,8 @@ test('a restricted manual agent run is refused by name and persists nothing', as
     assert.deepEqual(await res.json(), { error: 'requires unrestricted subsidiary access' })
     const runs = await db.execute<{ n: string }>(sql`
       select count(*) as n from ai_agent_runs where org_id = ${org.orgId}
-    `)
-    assert.equal(Number(runs.rows[0]!.n), 0, 'a refused scan leaves no run row behind')
+    `, 'objects')
+    assert.equal(Number(runs[0]!.n), 0, 'a refused scan leaves no run row behind')
   } finally {
     routeState.gate = null
     await dropScratchOrg(org.orgId)

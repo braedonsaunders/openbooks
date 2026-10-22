@@ -231,8 +231,7 @@ async function loadRelease(
   lock = false,
 ): Promise<FundReleaseRow> {
   const lockClause = lock ? sql`for update` : sql``;
-  const row = (
-    await executor.execute<FundReleaseRow>(sql`
+  const row = (await executor.execute<FundReleaseRow>(sql`
     select id, org_id, release_number, from_fund_id, to_fund_id,
            release_account_id, release_date::text, amount::text, purpose,
            satisfaction_ref, status, submitted_by::text, submitted_at::text,
@@ -241,8 +240,7 @@ async function loadRelease(
       from fund_releases
      where org_id = ${orgId} and id = ${releaseId}
      ${lockClause}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw refusal({
       message: `Fund release ${releaseId} was not found in this organization.`,
@@ -260,15 +258,13 @@ async function loadFund(
   fundId: string,
   field: "fromFundId" | "toFundId",
 ): Promise<FundDetail> {
-  const row = (
-    await executor.execute<FundDetail>(sql`
+  const row = (await executor.execute<FundDetail>(sql`
     select f.id, f.kind, f.restriction_class, sv.code, sv.name, sv.is_active
       from funds f
       join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
      where f.org_id = ${orgId} and f.id = ${fundId}
      for share
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row || !row.is_active) {
     throw refusal({
       message: `Fund ${fundId} is not an active fund in this organization.`,
@@ -285,14 +281,12 @@ async function loadReleaseAccount(
   orgId: string,
   accountId: string,
 ): Promise<void> {
-  const account = (
-    await executor.execute<{ id: string; type: string }>(sql`
+  const account = (await executor.execute<{ id: string; type: string }>(sql`
     select id, type from accounts
      where org_id = ${orgId} and id = ${accountId}
        and is_active and not is_summary
      for share
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!account) {
     throw refusal({
       message:
@@ -344,8 +338,7 @@ async function assertEndowmentAppropriation(
   reference: string,
 ): Promise<void> {
   if (fund.kind !== "endowment") return;
-  const entry = (
-    await executor.execute<{ id: string }>(sql`
+  const entry = (await executor.execute<{ id: string }>(sql`
     select je.id
       from journal_entries je
      where je.org_id = ${orgId}
@@ -360,8 +353,7 @@ async function assertEndowmentAppropriation(
             and jl.extra_dims->>'fund' = ${fund.id}
        )
      limit 1
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!entry) {
     throw endowmentRefusal(
       fund.code ?? fund.name,
@@ -392,8 +384,7 @@ async function releaseCapacity(
   fundId: string,
   asOf: string,
 ): Promise<ReleaseCapacity> {
-  const row = (
-    await executor.execute<{
+  const row = (await executor.execute<{
       at_date: string;
       later_low: string | null;
       later_low_date: string | null;
@@ -424,8 +415,7 @@ async function releaseCapacity(
       coalesce((select sum(amount) from daily where day <= ${asOf}), 0)::text as at_date,
       (select balance::text from lowest_later) as later_low,
       (select day::text from lowest_later) as later_low_date
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   const atReleaseDate = parseMoney(row?.at_date ?? "0");
   if (!row?.later_low || !row.later_low_date) {
     return { available: atReleaseDate, atReleaseDate, laterLow: null };
@@ -434,15 +424,13 @@ async function releaseCapacity(
   if (cmpMoney(laterBalance, atReleaseDate) >= 0) {
     return { available: atReleaseDate, atReleaseDate, laterLow: null };
   }
-  const releases = (
-    await executor.execute<{ release_number: string }>(sql`
+  const releases = await executor.execute<{ release_number: string }>(sql`
     select release_number from fund_releases
      where org_id = ${orgId} and from_fund_id = ${fundId}
        and status = 'posted'
        and release_date > ${asOf} and release_date <= ${row.later_low_date}
      order by release_date, release_number
-  `)
-  ).rows;
+  `, "objects");
   return {
     available: laterBalance,
     atReleaseDate,
@@ -577,13 +565,11 @@ async function nextFundReleaseNumber(
       RELEASE_NUMBER_KIND,
       RELEASE_NUMBER_PREFIX,
     );
-    const taken = (
-      await executor.execute<{ id: string }>(sql`
+    const taken = (await executor.execute<{ id: string }>(sql`
       select id from fund_releases
        where org_id = ${orgId} and release_number = ${number}
        limit 1
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!taken) return number;
   }
   throw refusal({
@@ -670,8 +656,7 @@ export async function createFundRelease(input: {
         lockAvailability: false,
       });
       const releaseNumber = await nextFundReleaseNumber(tx, input.orgId);
-      const inserted = (
-        await tx.execute<FundReleaseRow>(sql`
+      const inserted = (await tx.execute<FundReleaseRow>(sql`
         insert into fund_releases
           (org_id, release_number, from_fund_id, to_fund_id, release_account_id,
            release_date, amount, purpose, satisfaction_ref, status, custom,
@@ -686,8 +671,7 @@ export async function createFundRelease(input: {
                   satisfaction_ref, status, submitted_by::text, submitted_at::text,
                   flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                   created_by::text, updated_by::text
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!inserted) {
         throw refusal({
           message: `Fund release ${releaseNumber} was not created.`,
@@ -771,8 +755,7 @@ async function selectedPostingContext(
   executor: SqlExecutor,
   orgId: string,
 ): Promise<{ bookId: string; subsidiaryId: string; currency: string }> {
-  const row = (
-    await executor.execute<{
+  const row = (await executor.execute<{
       book_id: string;
       subsidiary_id: string;
       currency: string;
@@ -786,8 +769,7 @@ async function selectedPostingContext(
      order by b.created_at, b.id, s.created_at, s.id
      limit 1
      for share of b, s
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw refusal({
       message:
@@ -877,8 +859,7 @@ async function postRelease(
     throw error;
   }
 
-  const updated = (
-    await executor.execute<FundReleaseRow>(sql`
+  const updated = (await executor.execute<FundReleaseRow>(sql`
     update fund_releases
        set status = 'posted', posted_entry_id = ${postedEntryId},
            submitted_by = coalesce(submitted_by, ${actorId}),
@@ -891,8 +872,7 @@ async function postRelease(
                satisfaction_ref, status, submitted_by::text, submitted_at::text,
                flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                created_by::text, updated_by::text
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!updated) {
     throw refusal({
       message: `Fund release ${release.releaseNumber} changed before its posting was recorded.`,
@@ -951,15 +931,13 @@ export async function submitFundRelease(input: {
       });
       const beforeSubmitter = release.submittedBy;
 
-      const markedForSubmission = (
-        await tx.execute<{ id: string }>(sql`
+      const markedForSubmission = (await tx.execute<{ id: string }>(sql`
         update fund_releases
            set submitted_by = ${input.actorId}, submitted_at = now(),
                updated_at = now(), updated_by = ${input.actorId}
          where org_id = ${input.orgId} and id = ${release.id} and status = 'draft'
          returning id
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!markedForSubmission) {
         throw refusal({
           message: `Fund release ${release.releaseNumber} changed before submission began.`,
@@ -1055,8 +1033,7 @@ export async function submitFundRelease(input: {
         );
         throw error;
       }
-      const pending = (
-        await tx.execute<FundReleaseRow>(sql`
+      const pending = (await tx.execute<FundReleaseRow>(sql`
         update fund_releases
            set status = 'pending_approval', submitted_by = ${input.actorId},
                submitted_at = now(), flow_run_id = ${gatingRun.runId},
@@ -1067,8 +1044,7 @@ export async function submitFundRelease(input: {
                    satisfaction_ref, status, submitted_by::text, submitted_at::text,
                    flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                    created_by::text, updated_by::text
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!pending) {
         await cancelDispatchRuns(
           input.orgId,
@@ -1143,16 +1119,14 @@ export async function releaseFundReleaseApproval(input: {
       }
       if (input.outcome === "rejected") {
         const comment = input.comment?.trim() || "Approval was rejected.";
-        const rejected = (
-          await tx.execute<{ id: string }>(sql`
+        const rejected = (await tx.execute<{ id: string }>(sql`
           update fund_releases
              set status = 'draft', submitted_by = null, submitted_at = null,
                  flow_run_id = null, updated_at = now(), updated_by = ${input.ctx.userId}
            where org_id = ${input.ctx.orgId} and id = ${release.id}
              and status = 'pending_approval'
            returning id
-        `)
-        ).rows[0];
+        `, "objects"))[0];
         if (!rejected) {
           throw refusal({
             message: `Fund release ${release.releaseNumber} could not be returned to draft after rejection.`,
@@ -1216,8 +1190,7 @@ export async function voidFundRelease(input: {
           status: 409,
         });
       }
-      const original = (
-        await tx.execute<{
+      const original = (await tx.execute<{
           id: string;
           entry_number: string;
           status: string;
@@ -1229,8 +1202,7 @@ export async function voidFundRelease(input: {
           from journal_entries
          where org_id = ${input.orgId} and id = ${release.postedEntryId}
          for update
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!original || original.status !== "posted") {
         throw refusal({
           message: `Fund release ${release.releaseNumber} does not reference a posted journal entry that can be reversed.`,
@@ -1240,8 +1212,7 @@ export async function voidFundRelease(input: {
           status: 409,
         });
       }
-      const lines = (
-        await tx.execute<ReversalLine>(sql`
+      const lines = await tx.execute<ReversalLine>(sql`
         select line_number as "lineNumber", account_id as "accountId", amount::text as amount,
                subsidiary_id as "subsidiaryId", currency, txn_amount::text as "txnAmount",
                fx_rate::text as "fxRate", memo, party_id as "partyId",
@@ -1253,8 +1224,7 @@ export async function voidFundRelease(input: {
           from journal_lines
          where org_id = ${input.orgId} and entry_id = ${original.id}
          order by line_number
-      `)
-      ).rows;
+      `, "objects");
       if (lines.length === 0) {
         throw refusal({
           message: `Posted journal entry ${original.entry_number} has no lines to reverse.`,
@@ -1338,8 +1308,7 @@ export async function voidFundRelease(input: {
         throw error;
       }
 
-      const updated = (
-        await tx.execute<FundReleaseRow>(sql`
+      const updated = (await tx.execute<FundReleaseRow>(sql`
         update fund_releases
            set status = 'void', void_entry_id = ${reversalEntryId},
                updated_at = now(), updated_by = ${input.actorId}
@@ -1349,8 +1318,7 @@ export async function voidFundRelease(input: {
                    satisfaction_ref, status, submitted_by::text, submitted_at::text,
                    flow_run_id::text, posted_entry_id::text, void_entry_id::text,
                    created_by::text, updated_by::text
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!updated) {
         throw refusal({
           message: `Fund release ${release.releaseNumber} changed before its void was recorded.`,
@@ -1537,13 +1505,13 @@ export async function listFundReleases(
      where ${where}
      order by r.release_date desc, r.release_number desc, r.id
      limit ${limit} offset ${offset}
-  `);
+  `, "objects");
   const counted = await runner.execute<{ n: string }>(sql`
     select count(*) as n from fund_releases r where ${where}
-  `);
+  `, "objects");
   return {
-    releases: rows.rows.map(mapFundReleaseRead),
-    total: Number(counted.rows[0]?.n ?? 0),
+    releases: rows.map(mapFundReleaseRead),
+    total: Number(counted[0]?.n ?? 0),
   };
 }
 
@@ -1560,8 +1528,7 @@ export async function getFundRelease(
   if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner)))
     throw fundFeatureOff();
   if (!isUuid(input.releaseId)) return null;
-  const row = (
-    await runner.execute<FundReleaseReadRow>(sql`
+  const row = (await runner.execute<FundReleaseReadRow>(sql`
     select r.id::text as id, r.release_number, r.release_date::text as release_date,
            r.amount::text as amount, r.purpose, r.satisfaction_ref, r.status,
            r.from_fund_id::text as from_fund_id, r.to_fund_id::text as to_fund_id,
@@ -1576,7 +1543,6 @@ export async function getFundRelease(
       join segment_values ff on ff.org_id = r.org_id and ff.id = r.from_fund_id
       join segment_values tf on tf.org_id = r.org_id and tf.id = r.to_fund_id
      where r.org_id = ${input.orgId} and r.id = ${input.releaseId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   return row ? mapFundReleaseRead(row) : null;
 }

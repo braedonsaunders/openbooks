@@ -25,12 +25,12 @@ function deferred<T>() {
 
 async function requireAccountWait(blockerPid: number): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt++) {
-    const waiting = (await db.execute(sql`
+    const waiting = await db.execute(sql`
       select pid from pg_stat_activity
        where datname = current_database()
          and ${blockerPid} = any(pg_blocking_pids(pid))
          and query like '%pg_advisory_xact_lock(%'
-    `)).rows;
+    `, "objects");
     if (waiting.length > 0) return;
     await delay(20);
   }
@@ -54,7 +54,7 @@ for (const scenario of ["new session", "cutoff extension"] as const) {
         }, ctx);
         const statementLineId = (await db.execute<{ id: string }>(sql`
           select id from bank_statement_lines where org_id = ${org.orgId}
-        `)).rows[0]!.id;
+        `, "objects"))[0]!.id;
         await excludeStatementLine(statementLineId, "Duplicate bank evidence", ctx);
         const earlierDate = new Date(Date.parse(`${org.date}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
         let recon = scenario === "cutoff extension"
@@ -69,7 +69,7 @@ for (const scenario of ["new session", "cutoff extension"] as const) {
         // The request's transaction remains open after its real banking
         // service has run, providing a deterministic pause before commit.
         const leading = withOrgTransaction(org.orgId, async () => {
-          const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+          const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
           if (first === "restore") await restoreStatementLine(statementLineId, ctx);
           else {
             await coverLine();
@@ -106,15 +106,15 @@ for (const scenario of ["new session", "cutoff extension"] as const) {
           select r.status, l.match_status, l.exclusion_reason
             from reconciliations r join bank_statement_lines l on l.account_id = r.account_id and l.org_id = r.org_id
            where r.org_id = ${org.orgId} and r.id = ${recon.id}
-        `)).rows[0]!;
-        const approvals = (await db.execute<{ changes: { excludedStatementLines: number } }>(sql`
+        `, "objects"))[0]!;
+        const approvals = await db.execute<{ changes: { excludedStatementLines: number } }>(sql`
           select changes from audit_log where org_id = ${org.orgId} and row_id = ${recon.id}
             and changes->>'operation' = 'sign_off'
-        `)).rows;
-        const restores = (await db.execute<{ changes: { priorReason: string; before: { matchStatus: string }; after: { matchStatus: string } } }>(sql`
+        `, "objects");
+        const restores = await db.execute<{ changes: { priorReason: string; before: { matchStatus: string }; after: { matchStatus: string } } }>(sql`
           select changes from audit_log where org_id = ${org.orgId} and row_id = ${statementLineId}
             and changes->>'operation' = 'restore_exclusion'
-        `)).rows;
+        `, "objects");
         if (first === "restore") {
           assert.notEqual(state.status, "signed_off");
           assert.equal(state.match_status, "unmatched");

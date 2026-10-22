@@ -68,15 +68,15 @@ export async function loadInvoicingSetup(): Promise<InvoicingSetupData> {
                  and invoicing_profile->>'billingProcedure' = 'application_for_payment'
              )::int as applications
         from project_types
-       where org_id = ${orgId}`),
+       where org_id = ${orgId}`, 'objects'),
     db.execute<{ active: number; paused: number }>(sql`
       select count(*) filter (where status = 'active')::int as active,
              count(*) filter (where status = 'paused')::int as paused
         from subscriptions
-       where org_id = ${orgId}`),
+       where org_id = ${orgId}`, 'objects'),
   ])
-  const typeCounts = projectTypes.rows[0]
-  const subscriptions = subscriptionCounts.rows[0]
+  const typeCounts = projectTypes[0]
+  const subscriptions = subscriptionCounts[0]
 
   return {
     subscriptionBillingEnabled,

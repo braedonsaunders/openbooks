@@ -163,7 +163,7 @@ async function loadAssetPayload(
       left join parties customer on customer.org_id = a.org_id and customer.id = a.customer_party_id
       left join parties rep on rep.org_id = a.org_id and rep.id = a.rep_party_id
      where a.org_id = ${orgId} and a.id = ${assetId}
-       ${contractCostAssetVisibility("a", allowedSubsidiaryIds)}`)).rows[0];
+       ${contractCostAssetVisibility("a", allowedSubsidiaryIds)}`, "objects"))[0];
   if (!row) return null;
   // The asset prices in its own currency through the shared ISO exponent:
   // a missing registry row refuses by name (the registry is read-only, so
@@ -174,14 +174,14 @@ async function loadAssetPayload(
   const periodNames = new Map(
     (await db.execute<{ id: string; name: string }>(sql`
       select p.id, ${periodDisplayLabelSql(locale, "p")} as name
-        from accounting_periods p where p.org_id = ${orgId}`)).rows.map((p) => [p.id, p.name]),
+        from accounting_periods p where p.org_id = ${orgId}`, "objects")).map((p) => [p.id, p.name]),
   );
   const postedByPeriod = new Map(
     (await db.execute<{ period_id: string; entry_id: string }>(sql`
       select period_id, journal_entry_id as entry_id from contract_cost_amortization
-       where org_id = ${orgId} and asset_id = ${assetId}`)).rows.map((r) => [r.period_id, r.entry_id]),
+       where org_id = ${orgId} and asset_id = ${assetId}`, "objects")).map((r) => [r.period_id, r.entry_id]),
   );
-  const entries = (await db.execute<{ id: string; origin: string; posting_date: string; period_name: string }>(sql`
+  const entries = await db.execute<{ id: string; origin: string; posting_date: string; period_name: string }>(sql`
     select distinct je.id, je.origin, je.posting_date::text, ${periodDisplayLabelSql(locale, "p")} as period_name
       from journal_entries je
       join journal_lines jl on jl.org_id = je.org_id and jl.entry_id = je.id
@@ -192,7 +192,7 @@ async function loadAssetPayload(
        and jl.contributor_ref = ${assetId}
       and je.status in ('posted', 'reversed')
       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, allowedSubsidiaryIds)}
-     order by je.posting_date`)).rows;
+     order by je.posting_date`, "objects");
   return {
     asset: {
       id: row.id,
@@ -240,7 +240,7 @@ export async function loadContractCosts(
   const canManage = can(authz, "contract_costs.manage");
   const canApprove = can(authz, "contract_costs.approve");
 
-  const periods = (await db.execute<{
+  const periods = await db.execute<{
     id: string;
     fiscal_year: number;
     period_number: number;
@@ -256,14 +256,14 @@ export async function loadContractCosts(
           where s.org_id = p.org_id and s.fiscal_calendar_id = p.fiscal_calendar_id
             ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
        )`}
-     order by p.starts_on desc`)).rows;
+     order by p.starts_on desc`, "objects");
   const selectedPeriodId =
     typeof sp.period === "string" && isUuid(sp.period) && periods.some((p) => p.id === sp.period)
       ? sp.period
       : (periods[0]?.id ?? null);
 
   const org = (await db.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${orgId}`)).rows[0];
+    select base_currency from orgs where id = ${orgId}`, "objects"))[0];
   // The workspace totals in the organization's own base currency — never a
   // USD guess. The column is NOT NULL, so an empty read means this account
   // cannot see the organization at all (missing or out of scope), not that
@@ -290,7 +290,7 @@ export async function loadContractCosts(
      where jl.org_id = ${orgId}
        and jl.contributor_kind = 'contract_cost_asset'
        and je.status in ('posted', 'reversed')
-       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, authz.allowedSubsidiaryIds)}`)).rows[0];
+       ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, authz.allowedSubsidiaryIds)}`, "objects"))[0];
   const amortized = selectedPeriodId
     ? (await db.execute<{ total: string }>(sql`
         select coalesce(sum(amort.amount_minor), 0)::text as total
@@ -303,14 +303,14 @@ export async function loadContractCosts(
               where a.org_id = amort.org_id
                 and a.id = amort.asset_id
                 ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}
-           )`)).rows[0]
+           )`, "objects"))[0]
     : null;
 
   const activeAssets = Number(
     (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from contract_cost_assets a
        where a.org_id = ${orgId} and a.status = 'active'
-         ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}`)).rows[0]?.n ?? "0",
+         ${contractCostAssetVisibility("a", authz.allowedSubsidiaryIds)}`, "objects"))[0]?.n ?? "0",
   );
 
   const attention: ContractCostAttentionRow[] = (
@@ -323,13 +323,13 @@ export async function loadContractCosts(
     capitalizedOn: item.capitalizedOn,
   }));
 
-  const contracts = (await db.execute<{ id: string; number: string; customer: string }>(sql`
+  const contracts = await db.execute<{ id: string; number: string; customer: string }>(sql`
     select c.id, c.contract_number as number, coalesce(p.display_name, '') as customer
       from revenue_contracts c
       left join parties p on p.org_id = c.org_id and p.id = c.customer_id
      where c.org_id = ${orgId} and c.status = 'active'
        ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-     order by c.contract_number`)).rows;
+     order by c.contract_number`, "objects");
 
   // The capitalize and import pickers offer the same postable accounts every
   // company-settings picker offers, narrowed to the expense and liability
@@ -353,7 +353,7 @@ export async function loadContractCosts(
       left join accounts expense_account on expense_account.org_id = policy.org_id and expense_account.id = policy.amortization_expense_account_id
        ${subsidiaryVisibleFilter(sql`expense_account.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
      where policy.org_id = ${orgId} and policy.effective_from <= current_date
-     order by policy.effective_from desc limit 1`)).rows[0] ?? null;
+     order by policy.effective_from desc limit 1`, "objects"))[0] ?? null;
 
   const assetId = typeof sp.asset === "string" ? sp.asset : undefined;
   const payload = assetId && isUuid(assetId)

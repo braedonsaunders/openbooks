@@ -63,18 +63,18 @@ for (const action of ["add-adjustment", "delete-adjustment", "exclude-employee",
         await db.execute(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
       });
       const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));
-      const componentId = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`))).rows[0]!.id;
+      const componentId = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`, "objects")))[0]!.id;
       let adjustmentId: string | undefined;
       if (action === "delete-adjustment" || action === "include-employee" || action === "set-scope" || action === "read-adjustments") {
         await withOrgContext(fx.orgId, () => mutatePayRunAdjustment({ ...input, mutation: { action: "exclude", employeePartyId: fx.employeeId } }));
-        adjustmentId = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`select id from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`))).rows[0]!.id;
+        adjustmentId = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`select id from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`, "objects")))[0]!.id;
       }
       state.gate = { user: { orgId: fx.orgId, id: fx.actorId }, permissions: new Set(["payroll.run"]), allowedSubsidiaryIds: new Set([fx.subsidiaryId]) } as Authz;
       const snapshot = async () => (await withOrgContext(fx.orgId, () => db.execute<{ state: unknown }>(sql`select jsonb_build_object(
         'run',(select to_jsonb(r) from pay_runs r where org_id=${fx.orgId} and document_id=${input.documentId}),
         'stubs',(select jsonb_agg(to_jsonb(s) order by id) from pay_stubs s where org_id=${fx.orgId}),
         'adjustments',(select jsonb_agg(to_jsonb(a) order by id) from pay_run_adjustments a where org_id=${fx.orgId})
-        ) as state`))).rows[0]!.state;
+        ) as state`, "objects")))[0]!.state;
       const before = await snapshot();
       const body = action === "add-adjustment"
         ? { action, employeePartyId: fx.employeeId, componentId, amount: "10" }
@@ -421,7 +421,7 @@ const consolidatedRows = [
                 join pay_components c on c.id = l.component_id and c.org_id = l.org_id
                where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${documentId}
                  and s.employee_party_id = ${fx.employeeId}
-                 and c.system_key = 'stat_holiday_premium'`)).rows[0]!.total);
+                 and c.system_key = 'stat_holiday_premium'`, "objects"))[0]!.total);
             assert.equal(Number(denied), 0);
             // Refile the durable decision, then calculate from that source.
             await fileAbsence(fx, documentId, fx.employeeId, fx.employeeName, "ON", false);
@@ -436,7 +436,7 @@ const consolidatedRows = [
                 join pay_components c on c.id = l.component_id and c.org_id = l.org_id
                where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${documentId}
                  and s.employee_party_id = ${fx.employeeId}
-                 and c.system_key = 'stat_holiday_premium'`)).rows[0]!.total);
+                 and c.system_key = 'stat_holiday_premium'`, "objects"))[0]!.total);
             assert.ok(Number(paid) > 0, `expected the worked-holiday premium, got ${paid}`);
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
@@ -726,7 +726,7 @@ const consolidatedRows = [
             'run',(select to_jsonb(r) from pay_runs r where org_id=${orgId} and document_id=${documentId}),
             'adjustments',(select jsonb_agg(to_jsonb(a) order by employee_party_id, adjustment_type)
                              from pay_run_adjustments a where org_id=${orgId} and pay_run_document_id=${documentId})
-            ) as state`))).rows[0]!.state;
+            ) as state`, "objects")))[0]!.state;
         }
 
         function send(fx: Pick<ScopeFixture, "orgId" | "documentId">, body: Record<string, unknown>): Promise<Response> {
@@ -761,8 +761,8 @@ const consolidatedRows = [
             const excluded = await withOrgContext(fx.orgId, () => db.execute<{ employee_party_id: string }>(sql`
               select employee_party_id from pay_run_adjustments
                where org_id = ${fx.orgId} and pay_run_document_id = ${fx.documentId}
-                 and adjustment_type = 'exclude'`));
-            assert.deepEqual(excluded.rows, [{ employee_party_id: fx.deactivatedId }]);
+                 and adjustment_type = 'exclude'`, "objects"));
+            assert.deepEqual(excluded, [{ employee_party_id: fx.deactivatedId }]);
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
 
@@ -961,17 +961,17 @@ const payrollRunRouteCases = [
         async function opaqueFixture() {
           const fx = await withBypassContext(() => seedAdoption());
           const restored = await withBypassContext(() => db.execute<{ id: string }>(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
-            where org_id = ${fx.orgId} and id = ${fx.employeeId} returning id`));
-          assert.deepEqual(restored.rows.map(row => row.id), [fx.employeeId], 'bank-file fixture restores one employee owner');
+            where org_id = ${fx.orgId} and id = ${fx.employeeId} returning id`, "objects"));
+          assert.deepEqual(restored.map(row => row.id), [fx.employeeId], 'bank-file fixture restores one employee owner');
           const { input } = await withBypassContext(() => calculatedRun(fx));
           await withOrgContext(fx.orgId, () => commitPayRun(input));
           const hidden = randomUUID();
           const employer = await withBypassContext(() => db.execute<{ id: string }>(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-            values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden payroll employer', 'CAD', 'CA') returning id`));
-          assert.deepEqual(employer.rows.map(row => row.id), [hidden], 'bank-file fixture stores one hidden employer');
+            values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden payroll employer', 'CAD', 'CA') returning id`, "objects"));
+          assert.deepEqual(employer.map(row => row.id), [hidden], 'bank-file fixture stores one hidden employer');
           const moved = await withBypassContext(() => db.execute<{ id: string }>(sql`update parties set subsidiary_id = ${hidden}
-            where org_id = ${fx.orgId} and id = ${fx.employeeId} returning id`));
-          assert.deepEqual(moved.rows.map(row => row.id), [fx.employeeId], 'bank-file fixture moves one employee to the hidden employer');
+            where org_id = ${fx.orgId} and id = ${fx.employeeId} returning id`, "objects"));
+          assert.deepEqual(moved.map(row => row.id), [fx.employeeId], 'bank-file fixture moves one employee to the hidden employer');
           return { fx, documentId: input.documentId };
         }
 
@@ -1019,7 +1019,7 @@ const payrollRunRouteCases = [
             assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
             const artifacts = (await withOrgContext(fx.orgId, () => db.execute<{ count: string }>(sql`
               select count(*) as count from pay_run_bank_files
-               where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}`))).rows[0]!.count;
+               where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}`, "objects")))[0]!.count;
             assert.equal(artifacts, "0", "a refused generate must not leave a bank-file artifact behind");
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
@@ -1087,25 +1087,25 @@ const payrollRunRouteCases = [
               const childScheduleId = randomUUID();
               await withBypassContext(async () => {
                 const employer = await db.execute<{ id: string }>(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-                  values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden picker owner','CAD','CA') returning id`);
-                assert.deepEqual(employer.rows.map(row => row.id), [childId], 'picker fixture stores one hidden employer');
-                const moved = await db.execute<{ id: string }>(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId} returning id`);
-                assert.deepEqual(moved.rows.map(row => row.id), [fx.employeeId], 'picker fixture moves one employee');
-                const terminated = await db.execute<{ party_id: string }>(sql`update employee_roles set terminated_on='2026-07-18' where org_id=${fx.orgId} and party_id=${fx.employeeId} returning party_id`);
-                assert.deepEqual(terminated.rows.map(row => row.party_id), [fx.employeeId], 'picker fixture records one employment termination');
+                  values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden picker owner','CAD','CA') returning id`, "objects");
+                assert.deepEqual(employer.map(row => row.id), [childId], 'picker fixture stores one hidden employer');
+                const moved = await db.execute<{ id: string }>(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId} returning id`, "objects");
+                assert.deepEqual(moved.map(row => row.id), [fx.employeeId], 'picker fixture moves one employee');
+                const terminated = await db.execute<{ party_id: string }>(sql`update employee_roles set terminated_on='2026-07-18' where org_id=${fx.orgId} and party_id=${fx.employeeId} returning party_id`, "objects");
+                assert.deepEqual(terminated.map(row => row.party_id), [fx.employeeId], 'picker fixture records one employment termination');
                 const schedule = await db.execute<{ id: string }>(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id,is_active)
                   select ${childScheduleId},org_id,'Hidden schedule',frequency,periods_per_year,anchor_period_end,pay_date_offset_days,${childId},true
-                  from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId} returning id`);
-                assert.deepEqual(schedule.rows.map(row => row.id), [childScheduleId], 'picker fixture creates one hidden schedule');
-                const assigned = await db.execute<{ employee_party_id: string }>(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
-                assert.deepEqual(assigned.rows.map(row => row.employee_party_id), [fx.employeeId], 'picker fixture assigns one employee to the hidden schedule');
+                  from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId} returning id`, "objects");
+                assert.deepEqual(schedule.map(row => row.id), [childScheduleId], 'picker fixture creates one hidden schedule');
+                const assigned = await db.execute<{ employee_party_id: string }>(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, "objects");
+                assert.deepEqual(assigned.map(row => row.employee_party_id), [fx.employeeId], 'picker fixture assigns one employee to the hidden schedule');
                 const sealed = await db.execute<{ employee_party_id: string }>(sql`update employee_payroll_profiles
                   set sin_encrypted='SEALED-PAYROLL-SIN-TEST-SENTINEL', sin_last3='789',
                       federal_claim_amount='123456789012345.6789', additional_tax_per_period='9876.5432'
-                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
-                assert.deepEqual(sealed.rows.map(row => row.employee_party_id), [fx.employeeId], 'picker fixture seals one employee profile');
-                const enabled = await db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId} returning id`);
-                assert.deepEqual(enabled.rows.map(row => row.id), [fx.orgId], 'picker fixture enables payroll for one organization');
+                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, "objects");
+                assert.deepEqual(sealed.map(row => row.employee_party_id), [fx.employeeId], 'picker fixture seals one employee profile');
+                const enabled = await db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId} returning id`, "objects");
+                assert.deepEqual(enabled.map(row => row.id), [fx.orgId], 'picker fixture enables payroll for one organization');
               });
               const gate = { user: { orgId: fx.orgId, id: fx.actorId }, permissions: new Set(["payroll.read", "payroll.run"]) } as Authz;
               const read = async (scope: Set<string> | null, scheduleIds: string[], employeeVisible: boolean) => {
@@ -1152,8 +1152,8 @@ const payrollRunRouteCases = [
             const disabled = await withBypassContext(() => db.execute<{ id: string }>(sql`
               update orgs set settings=jsonb_set(settings,'{features}',
                 coalesce(settings->'features','{}'::jsonb)||'{"payroll":false}'::jsonb,true)
-               where id=${fx.orgId} returning id`));
-            assert.deepEqual(disabled.rows.map(row => row.id), [fx.orgId], 'feature-off refusal fixture updates one organization');
+               where id=${fx.orgId} returning id`, "objects"));
+            assert.deepEqual(disabled.map(row => row.id), [fx.orgId], 'feature-off refusal fixture updates one organization');
             const context: ApplicationContext = {
               authz: {
                 user: { orgId: fx.orgId, id: fx.actorId } as ApplicationContext["authz"]["user"],
@@ -1355,7 +1355,7 @@ const payrollPopulationCases = [{ label: "payroll run population scope", registe
                   assert.equal(rows.some((row) => row.document_id === input.documentId), visible);
                 } else if (surface === "record list") {
                   const where = payRunWhere(["pay_run"], { filters: [] } as unknown as ListViewConfig, {}, fx.orgId, populationState.gate!.allowedSubsidiaryIds);
-                  const rows = (await db.execute<{ id: string }>(sql`select d.id from documents d where ${where}`)).rows;
+                  const rows = await db.execute<{ id: string }>(sql`select d.id from documents d where ${where}`, "objects");
                   assert.equal(rows.some((row) => row.id === input.documentId), visible);
                 } else if (surface === "wizard") {
                   const page = () => loadPayRunWizard(input.documentId, {});

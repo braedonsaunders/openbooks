@@ -99,7 +99,7 @@ export async function dimensionOptions(orgId?: string, selectedProjectId?: strin
   const locationScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
   const classScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
   const [depts, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active${deptScope} order by name`),
+    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active${deptScope} order by name`, "objects"),
     db.execute(sql`
       with listed as (
         select p.id, p.name
@@ -115,16 +115,16 @@ export async function dimensionOptions(orgId?: string, selectedProjectId?: strin
         from projects p
        where p.org_id = ${resolvedOrgId}${projectScope}
          and p.id = ${selectedProjectId ?? null}::uuid
-      order by name`),
-    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active${locationScope} order by name`),
-    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active${classScope} order by name`),
+      order by name`, "objects"),
+    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active${locationScope} order by name`, "objects"),
+    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active${classScope} order by name`, "objects"),
     segmentRegistry(resolvedOrgId, allowedSubsidiaryIds),
   ]);
   return {
-    departments: depts.rows as { id: string; name: string }[],
-    projects: projects.rows as { id: string; name: string }[],
-    locations: locations.rows as { id: string; name: string }[],
-    classes: classes.rows as { id: string; name: string }[],
+    departments: depts as { id: string; name: string }[],
+    projects: projects as { id: string; name: string }[],
+    locations: locations as { id: string; name: string }[],
+    classes: classes as { id: string; name: string }[],
     segments: registry.filter((segment) => segment.sourceKind === 'custom'),
     builtinSegments: registry.filter((segment) => segment.sourceKind === 'builtin'),
   };

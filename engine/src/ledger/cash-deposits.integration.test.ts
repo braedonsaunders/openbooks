@@ -111,13 +111,13 @@ test("a till drop posts a transfer from till cash to the bank", { skip: !DB }, a
     );
     assert.equal(drop.posted, true);
     assert.ok(drop.entryId);
-    const legs = (await db.execute<{ number: string | null; amount: string }>(sql`
+    const legs = await db.execute<{ number: string | null; amount: string }>(sql`
       select a.number, l.amount::text as amount
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.source_document_id = ${drop.transferId}
-       order by l.line_number`)).rows;
+       order by l.line_number`, "objects");
     assert.deepEqual(
       legs.map((leg) => [leg.number, leg.amount]),
       [
@@ -127,7 +127,7 @@ test("a till drop posts a transfer from till cash to the bank", { skip: !DB }, a
     );
     const link = (await db.execute<{ link: unknown }>(sql`
       select custom->'cashSaleDeposit' as link from documents
-       where org_id = ${org.orgId} and id = ${drop.transferId}`)).rows[0]?.link;
+       where org_id = ${org.orgId} and id = ${drop.transferId}`, "objects"))[0]?.link;
     assert.deepEqual(link, { saleId, slipNumber: "SLIP-1" });
     // The lifetime cap counts the posted drop: 40.00 remains.
     await assert.rejects(
@@ -169,7 +169,7 @@ test("a replayed drop key returns the same posted transfer", { skip: !DB }, asyn
     assert.equal(second.posted, true);
     const count = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
-       where org_id = ${org.orgId} and kind = 'transfer' and status <> 'voided'`)).rows[0]?.n;
+       where org_id = ${org.orgId} and kind = 'transfer' and status <> 'voided'`, "objects"))[0]?.n;
     assert.equal(count, "1");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -321,7 +321,7 @@ test("till deposits enforce the operator's native permission and the Cash Sales 
     await assert.rejects(recordCashDeposit(org.orgId, actorId, input, { key: randomUUID() }),
       (error: unknown) => error instanceof CashDepositError && error.status === 404);
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents
-      where org_id=${org.orgId} and kind='transfer'`)).rows[0]!.count, 0);
+      where org_id=${org.orgId} and kind='transfer'`, "objects"))[0]!.count, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -338,19 +338,19 @@ test("a till deposit waits for every tenant-configured Flow and posts once after
     const key = randomUUID();
     const pending = await recordCashDeposit(org.orgId, actorId, input, { key });
     assert.equal(pending.posted, false);
-    const gates = (await db.execute<{ id: string; assignee_user_id: string }>(sql`select id,assignee_user_id from flow_gates
-      where org_id=${org.orgId} and subject_kind='transfer' and subject_id=${pending.transferId} and status='pending' order by id`)).rows;
+    const gates = await db.execute<{ id: string; assignee_user_id: string }>(sql`select id,assignee_user_id from flow_gates
+      where org_id=${org.orgId} and subject_kind='transfer' and subject_id=${pending.transferId} and status='pending' order by id`, "objects");
     assert.equal(gates.length, 2);
     await decideGate({ gateId: gates[0]!.id, userId: gates[0]!.assignee_user_id, decision: "approved" });
     assert.equal((await db.execute<{ status: string }>(sql`select status from documents
-      where org_id=${org.orgId} and id=${pending.transferId}`)).rows[0]!.status, "pending_approval");
+      where org_id=${org.orgId} and id=${pending.transferId}`, "objects"))[0]!.status, "pending_approval");
     await decideGate({ gateId: gates[1]!.id, userId: gates[1]!.assignee_user_id, decision: "approved" });
     const posted = await recordCashDeposit(org.orgId, actorId, input, { key });
     assert.equal(posted.posted, true);
     assert.equal(posted.transferId, pending.transferId);
     assert.equal((await recordCashDeposit(org.orgId, actorId, input, { key })).transferId, pending.transferId);
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries
-      where org_id=${org.orgId} and source_document_id=${pending.transferId} and status='posted'`)).rows[0]!.count, 1);
+      where org_id=${org.orgId} and source_document_id=${pending.transferId} and status='posted'`, "objects"))[0]!.count, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }

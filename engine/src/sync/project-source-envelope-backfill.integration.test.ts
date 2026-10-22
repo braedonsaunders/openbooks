@@ -24,7 +24,7 @@ async function projectCustom(orgId: string, ref: string) {
   return withOrg(orgId, () =>
     db.execute<{ custom: unknown }>(sql`
       select custom from projects where org_id = ${orgId} and custom->>'migrationTest' = ${ref}
-    `),
+    `, "objects"),
   );
 }
 
@@ -54,7 +54,7 @@ test(
       );
       assert.equal(stats.projects?.updated, 1);
       assert.equal(stats.projects?.created, 0);
-      const rows = (await projectCustom(org.orgId, "PRJ-1")).rows;
+      const rows = await projectCustom(org.orgId, "PRJ-1");
       assert.equal(rows.length, 1, "re-migration updates instead of duplicating");
       assert.deepEqual((rows[0]!.custom as Record<string, unknown>).source, {
         system: "migration-test",
@@ -68,9 +68,9 @@ test(
       const name = await withOrg(org.orgId, () =>
         db.execute<{ name: string }>(sql`
           select name from projects where org_id = ${org.orgId} and custom->>'migrationTest' = 'PRJ-1'
-        `),
+        `, "objects"),
       );
-      assert.equal(name.rows[0]?.name, "Backfilled project");
+      assert.equal(name[0]?.name, "Backfilled project");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -100,7 +100,7 @@ test(
           },
         ]),
       );
-      const rows = (await projectCustom(org.orgId, "PRJ-2")).rows;
+      const rows = await projectCustom(org.orgId, "PRJ-2");
       assert.equal(rows.length, 1);
       assert.deepEqual((rows[0]!.custom as Record<string, unknown>).source, {
         system: "other",

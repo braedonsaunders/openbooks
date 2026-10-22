@@ -598,8 +598,8 @@ export async function loadBoxRules(
   const r = (await runner.execute<{ account_id: string; box: string }>(sql`
     select account_id, box from information_return_box_rules
      where org_id = ${orgId} and form_type = ${formType} and is_active
-  `));
-  return new Map(r.rows.map((row) => [row.account_id, row.box]));
+  `, "objects"));
+  return new Map(r.map((row) => [row.account_id, row.box]));
 }
 
 /**
@@ -694,10 +694,10 @@ export async function loadPaymentTraces(args: {
        where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
      ), 0) > 0
      order by d.document_date, d.document_number
-  `));
-  if (payments.rows.length === 0) return new Map();
+  `, "objects"));
+  if (payments.length === 0) return new Map();
 
-  const paymentIds = payments.rows.map((p) => p.id);
+  const paymentIds = payments.map((p) => p.id);
   // What each payment settled, and each settled bill's expense composition.
   // `applications.amount` is base currency, matching the cash figure above.
   const settled = (await runner.execute<{
@@ -729,9 +729,9 @@ export async function loadPaymentTraces(args: {
       join documents bill on bill.id = bje.source_document_id and bill.org_id = bje.org_id
      where a.org_id = ${args.orgId}
      group by paid.payment_id, bill.id, bje.id
-  `));
+  `, "objects"));
 
-  const billIds = [...new Set(settled.rows.map((r) => r.bill_id))];
+  const billIds = [...new Set(settled.map((r) => r.bill_id))];
   const lines = billIds.length
     ? ((await runner.execute<{ id: string; document_id: string; account_id: string | null; weight: string }>(sql`
         select dl.id, dl.document_id, dl.account_id,
@@ -740,17 +740,17 @@ export async function loadPaymentTraces(args: {
           from document_lines dl
          where dl.org_id = ${args.orgId} and dl.document_id = any(${`{${billIds.join(',')}}`}::uuid[])
          order by dl.document_id, dl.line_number
-      `)))
-    : { rows: [] };
+      `, "objects")))
+    : [];
 
   const linesByBill = new Map<string, SettledLine[]>();
-  for (const row of lines.rows) {
+  for (const row of lines) {
     const list = linesByBill.get(row.document_id) ?? [];
     list.push({ documentLineId: row.id, accountId: row.account_id, weight: row.weight });
     linesByBill.set(row.document_id, list);
   }
   const billsByPayment = new Map<string, SettledBill[]>();
-  for (const row of settled.rows) {
+  for (const row of settled) {
     const list = billsByPayment.get(row.payment_id) ?? [];
     list.push({
       documentId: row.bill_id,
@@ -765,7 +765,7 @@ export async function loadPaymentTraces(args: {
   }
 
   const byParty = new Map<string, PaymentTrace[]>();
-  for (const p of payments.rows) {
+  for (const p of payments) {
     if (cmp(p.backup_liability_transaction ?? "0", p.backup_deduction_transaction ?? "0") !== 0) {
       throw new InformationReturnError(`Payment ${p.document_number} backup deductions do not match the posted withholding liability.`);
     }
@@ -833,9 +833,9 @@ export async function loadRecipientProfiles(args: {
          limit 1
       ) a on true
      where p.org_id = ${args.orgId} and p.id = any(${`{${[...args.partyIds].join(',')}}`}::uuid[])
-  `));
+  `, "objects"));
   return new Map(
-    r.rows.map((row) => [
+    r.map((row) => [
       row.id,
       {
         partyId: row.id,
@@ -934,8 +934,8 @@ export async function computeFiling(args: {
         const named = (await runner.execute<{ id: string; label: string }>(sql`
           select id, coalesce(number || ' · ' || name, name) as label
             from accounts where org_id = ${args.orgId} and id = any(${`{${missing.join(',')}}`}::uuid[])
-        `));
-        for (const row of named.rows) accountNames.set(row.id, row.label);
+        `, "objects"));
+        for (const row of named) accountNames.set(row.id, row.label);
       }
     }
 
@@ -1207,7 +1207,7 @@ async function assertCurrentFilingSourceEvidence(args: {
        and action = 'compute'
      order by at desc, id desc
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (
     !computedEvidence?.source_fingerprint ||
     computedEvidence.source_fingerprint !== args.sourceFingerprint
@@ -1215,7 +1215,7 @@ async function assertCurrentFilingSourceEvidence(args: {
     throw staleFilingSourceError();
   }
 
-  const stored = (await args.runner.execute<{
+  const stored = await args.runner.execute<{
     party_id: string;
     recipient_snapshot: Record<string, unknown>;
     tin_last4: string | null;
@@ -1229,7 +1229,7 @@ async function assertCurrentFilingSourceEvidence(args: {
      where org_id = ${args.orgId} and filing_id = ${args.filing.id}
        and status <> 'void'
      order by party_id
-  `)).rows;
+  `, "objects");
   if (stored.length !== args.computation.recipients.length) {
     throw staleFilingSourceError();
   }
@@ -1270,22 +1270,22 @@ export async function resolveInformationReturnCurrency(args: {
   if (args.subsidiaryId) {
     const sub = (await runner.execute<{ base_currency: string }>(sql`
       select base_currency from subsidiaries
-       where id = ${args.subsidiaryId} and org_id = ${args.orgId} and is_active`));
-    const row = sub.rows[0];
+       where id = ${args.subsidiaryId} and org_id = ${args.orgId} and is_active`, "objects"));
+    const row = sub[0];
     if (!row) throw new InformationReturnError("information return subsidiary not found", 404);
     return row.base_currency;
   }
   const mixed = (await runner.execute<{ base_currency: string }>(sql`
     select distinct base_currency from subsidiaries
-     where org_id = ${args.orgId} and is_active and not is_elimination`));
-  const currencies = mixed.rows.map((row) => row.base_currency);
+     where org_id = ${args.orgId} and is_active and not is_elimination`, "objects"));
+  const currencies = mixed.map((row) => row.base_currency);
   if (currencies.length === 1) return currencies[0]!;
   if (currencies.length === 0) {
     // Degenerate org with no active legal filer: the org base is the only
     // denomination available, and every amount still sums in one currency.
     const org = (await runner.execute<{ base_currency: string }>(sql`
-      select base_currency from orgs where id = ${args.orgId}`));
-    const base = org.rows[0]?.base_currency;
+      select base_currency from orgs where id = ${args.orgId}`, "objects"));
+    const base = org[0]?.base_currency;
     if (!base) throw new InformationReturnError("organization has no base currency");
     return base;
   }
@@ -1332,8 +1332,8 @@ export async function ensureFiling(args: {
     on conflict do nothing
     returning id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
               status, threshold, currency
-  `));
-  if (inserted.rows[0]) return inserted.rows[0];
+  `, "objects"));
+  if (inserted[0]) return inserted[0];
   const existing = (await runner.execute<FilingRow>(sql`
     select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
            status, threshold, currency
@@ -1341,8 +1341,8 @@ export async function ensureFiling(args: {
      where org_id = ${args.orgId} and tax_year = ${args.taxYear} and form_type = ${args.formType}
        and subsidiary_id is not distinct from ${subsidiaryId}::uuid
        and status <> 'void'
-  `));
-  const winner = existing.rows[0];
+  `, "objects"));
+  const winner = existing[0];
   if (!winner) {
     throw new InformationReturnError(
       "the filing was created concurrently but cannot be read — retry the open",
@@ -1448,8 +1448,8 @@ export async function recomputeFiling(args: {
        where org_id = ${args.orgId} and id = ${filing.id}
          and status in ('draft', 'computed')
       returning id
-    `));
-    if (!moved.rows[0]) {
+    `, "objects"));
+    if (!moved[0]) {
       throw new InformationReturnError(
         "the filing was frozen while it was being recomputed — open a corrected filing instead",
       );
@@ -1490,8 +1490,8 @@ async function lockFilingRow(
       from information_return_filings
      where org_id = ${orgId} and id = ${filingId}
      for update
-  `));
-  const row = rows.rows[0];
+  `, "objects"));
+  const row = rows[0];
   if (!row) throw new InformationReturnError("information return filing not found", 404);
   return row;
 }
@@ -1577,14 +1577,12 @@ export async function assertNoBlockingFilingExceptions(args: {
 }): Promise<void> {
   const autoReason = automaticBelowThresholdReason(args.filing.threshold, args.filing.currency);
   const documented = new Set(
-    (
-      await args.runner.execute<{ party_id: string }>(sql`
+    (await args.runner.execute<{ party_id: string }>(sql`
         select party_id from information_return_recipients
          where org_id = ${args.orgId} and filing_id = ${args.filing.id}
            and status = 'excluded'
            and exclusion_reason is not null
-           and exclusion_reason <> ${autoReason}`)
-    ).rows.map((row) => row.party_id),
+           and exclusion_reason <> ${autoReason}`, "objects")).map((row) => row.party_id),
   );
   for (const exception of args.computation.exceptions) {
     if (informationReturnExceptionSeverity(exception.kind) !== "blocking") continue;
@@ -1666,8 +1664,8 @@ export async function finalizeFiling(args: {
         join orgs o on o.id = f.org_id
         left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
        where f.org_id = ${args.orgId} and f.id = ${args.filingId}
-    `));
-    const gate = gates.rows[0]!;
+    `, "objects"));
+    const gate = gates[0]!;
     if (gate.included === 0) throw new InformationReturnError("the filing has no recipients to file");
     if (gate.missing_tin > 0) {
       throw new InformationReturnError(
@@ -1696,8 +1694,8 @@ export async function finalizeFiling(args: {
                where r.filing_id = information_return_filings.id
                  and r.status = 'included' and r.tin_last4 is null) = 0
       returning id
-    `));
-    if (!moved.rows[0]) {
+    `, "objects"));
+    if (!moved[0]) {
       throw new InformationReturnError("the filing changed while it was being finalized");
     }
     await runner.execute(sql`
@@ -1727,8 +1725,8 @@ export async function markFilingFiled(args: {
              updated_at = now(), updated_by = ${args.actorId}
        where org_id = ${args.orgId} and id = ${args.filingId} and status = 'finalized'
       returning id
-    `));
-    if (!moved.rows[0]) {
+    `, "objects"));
+    if (!moved[0]) {
       throw new InformationReturnError("only a finalized filing can be recorded as filed");
     }
     await db.execute(sql`
@@ -1775,8 +1773,8 @@ export async function voidFiling(args: {
              updated_at = now(), updated_by = ${args.actorId}
        where org_id = ${args.orgId} and id = ${args.filingId} and status <> 'void'
       returning id
-    `));
-    if (!moved.rows[0]) {
+    `, "objects"));
+    if (!moved[0]) {
       throw new InformationReturnError("the filing changed while it was being voided");
     }
     await db.execute(sql`
@@ -1845,8 +1843,8 @@ export async function updateFilingRecipient(args: {
         from information_return_recipients r
        where r.org_id = ${args.orgId} and r.id = ${args.recipientId}
          and r.filing_id = ${args.filingId}
-    `));
-    const recipient = rows.rows[0];
+    `, "objects"));
+    const recipient = rows[0];
     if (!recipient) {
       throw new InformationReturnError("information return recipient not found", 404);
     }
@@ -1903,8 +1901,8 @@ export async function updateFilingRecipient(args: {
             where f.id = r.filing_id and f.org_id = r.org_id
          ) in ('draft', 'computed')
       returning id
-    `));
-    if (!updated.rows[0]) {
+    `, "objects"));
+    if (!updated[0]) {
       throw new InformationReturnError(
         `a ${filing.status} filing is frozen — open a corrected filing instead`,
       );
@@ -1952,22 +1950,19 @@ export async function stampRecipientCopiesPrinted(args: {
         `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies`,
       );
     }
-    const before = (
-      await db.execute<{ id: string; printed_at: string | null }>(sql`
+    const before = await db.execute<{ id: string; printed_at: string | null }>(sql`
         select id, printed_at::text as printed_at
           from information_return_recipients
          where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
            and (${args.recipientId ?? null}::uuid is null or id = ${args.recipientId ?? null}::uuid)
-      `)
-    ).rows;
+      `, "objects");
     if (before.length === 0) {
       throw new InformationReturnError(
         args.recipientId ? "not found" : "no included recipients to mark furnished",
         args.recipientId ? 404 : 422,
       );
     }
-    const stamped = (
-      await db.execute<{ id: string; printed_at: string }>(sql`
+    const stamped = await db.execute<{ id: string; printed_at: string }>(sql`
         update information_return_recipients
            set printed_at = now(), updated_at = now(), updated_by = ${args.actorId}
          where org_id = ${args.orgId} and filing_id = ${args.filingId} and status = 'included'
@@ -1979,8 +1974,7 @@ export async function stampRecipientCopiesPrinted(args: {
                 and f.status in ('finalized', 'filed')
            )
         returning id, printed_at::text as printed_at
-      `)
-    ).rows;
+      `, "objects");
     if (stamped.length === 0) {
       const current = await lockFilingRow(args.orgId, args.filingId);
       throw new InformationReturnError(

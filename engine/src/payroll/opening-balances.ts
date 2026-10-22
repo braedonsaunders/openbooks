@@ -621,8 +621,8 @@ export async function openingComponentFields(
                where oc.org_id = ${orgId} and oc.component_id = c.id
                  and (${taxYear}::int is null or b.tax_year = ${taxYear}::int)))
      order by c.code
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     componentId: String(row.id),
     code: String(row.code),
     name: String(row.name),
@@ -662,9 +662,9 @@ export async function openingBalanceLocks(
        ${employeePartyIds === undefined ? sql`` : sql`and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by s.employee_party_id, s.pay_date
-  `));
+  `, "objects"));
   return new Map(
-    rows.rows.map((r) => [r.employee_party_id, { documentNumber: r.document_number, payDate: r.pay_date }]),
+    rows.map((r) => [r.employee_party_id, { documentNumber: r.document_number, payDate: r.pay_date }]),
   );
 }
 
@@ -684,9 +684,9 @@ export async function openingProgramBasesByEmployee(
     select employee_party_id, program_key, insurable_ytd
       from payroll_opening_program_bases
      where org_id = ${orgId} and tax_year = ${taxYear}
-  `));
+  `, "objects"));
   const byEmployee = new Map<string, OpeningProgramAmounts>();
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const amounts = byEmployee.get(row.employee_party_id) ?? {};
     amounts[row.program_key] = normalizeMoney(String(row.insurable_ytd));
     byEmployee.set(row.employee_party_id, amounts);
@@ -723,7 +723,7 @@ export async function openingBalancesForYear(
      where prof.org_id = ${orgId} and prof.is_active and p.is_active
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name
-  `));
+  `, "objects"));
 
   // Rows for people who no longer have an active profile still exist and still
   // feed the engine, so surface them rather than pretending they are gone.
@@ -741,7 +741,7 @@ export async function openingBalancesForYear(
        and (prof.id is null or not prof.is_active or not p.is_active)
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name
-  `));
+  `, "objects"));
 
   const years = (await db.execute<{ tax_year: number }>(sql`
     select distinct tax_year from payroll_opening_balances
@@ -751,7 +751,7 @@ export async function openingBalancesForYear(
           where p.org_id = ${orgId}
             ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)})
      order by tax_year desc
-  `));
+  `, "objects"));
 
   const components = await openingComponentFields(orgId, year);
 
@@ -763,9 +763,9 @@ export async function openingBalancesForYear(
       left join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
      where oc.org_id = ${orgId} and b.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
+  `, "objects"));
   const componentsByRow = new Map<string, OpeningComponentAmounts>();
-  for (const row of componentRows.rows) {
+  for (const row of componentRows) {
     const amounts = componentsByRow.get(row.opening_balance_id) ?? {};
     amounts[row.component_id] = normalizeMoney(String(row.ytd_amount));
     componentsByRow.set(row.opening_balance_id, amounts);
@@ -779,9 +779,9 @@ export async function openingBalancesForYear(
       left join parties p on p.id = pb.employee_party_id and p.org_id = pb.org_id
      where pb.org_id = ${orgId} and pb.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
+  `, "objects"));
   const programsByEmployee = new Map<string, OpeningProgramAmounts>();
-  for (const row of programRows.rows) {
+  for (const row of programRows) {
     const amounts = programsByEmployee.get(row.employee_party_id) ?? {};
     amounts[row.program_key] = normalizeMoney(String(row.insurable_ytd));
     programsByEmployee.set(row.employee_party_id, amounts);
@@ -796,9 +796,9 @@ export async function openingBalancesForYear(
       left join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
      where sw.org_id = ${orgId} and b.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
+  `, "objects"));
   const suiStatesByRow = new Map<string, OpeningSuiStateAmounts>();
-  for (const row of suiRows.rows) {
+  for (const row of suiRows) {
     const amounts = suiStatesByRow.get(row.opening_balance_id) ?? {};
     amounts[row.state] = normalizeMoney(String(row.insurable_ytd));
     suiStatesByRow.set(row.opening_balance_id, amounts);
@@ -812,9 +812,9 @@ export async function openingBalancesForYear(
       left join parties p on p.id = ab.employee_party_id and p.org_id = ab.org_id
      where ab.org_id = ${orgId} and ab.tax_year = ${year}
        ${openingSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `);
+  `, "objects");
   const accountBasesByEmployee = new Map<string, OpeningAccountBase[]>();
-  for (const row of accountBaseRows.rows) {
+  for (const row of accountBaseRows) {
     const bases = accountBasesByEmployee.get(row.employee_party_id) ?? [];
     bases.push({
       programKey: row.program_key,
@@ -853,12 +853,12 @@ export async function openingBalancesForYear(
     };
   };
 
-  const all = [...rows.rows.map(toRow), ...orphans.rows.map(toRow)];
+  const all = [...rows.map(toRow), ...orphans.map(toRow)];
   return {
     taxYear: year,
     rows: all,
     entered: all.filter((r) => r.amounts !== null).length,
-    years: years.rows.map((r) => Number(r.tax_year)),
+    years: years.map((r) => Number(r.tax_year)),
     components,
   };
 }
@@ -940,8 +940,8 @@ async function openingBalanceAuditRecord(runner: Pick<typeof db, "execute">, org
       'children', public.payroll_opening_source_children(b.org_id, b.id, b.employee_party_id, b.tax_year)
     ) image from payroll_opening_balances b
     where b.org_id=${orgId} and b.employee_party_id=${employeeId} and b.tax_year=${year}
-  `);
-  return rows.rows[0]?.image ?? null;
+  `, "objects");
+  return rows[0]?.image ?? null;
 }
 
 /**
@@ -1011,20 +1011,20 @@ export async function saveOpeningBalances(input: {
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
          )}::jsonb) as value)
-    `));
-    const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
-    const subsidiaryById = new Map(names.rows.map((r) => [r.id, r.subsidiary_id]));
-    const countryById = new Map(names.rows.map((r) => [r.id, r.country]));
+    `, "objects"));
+    const nameById = new Map(names.map((r) => [r.id, r.display_name]));
+    const subsidiaryById = new Map(names.map((r) => [r.id, r.subsidiary_id]));
+    const countryById = new Map(names.map((r) => [r.id, r.country]));
 
     const existing = (await tx.execute<{ id: string; employee_party_id: string; updated_at: string | null }>(sql`
       select id, employee_party_id, updated_at::text as updated_at from payroll_opening_balances
        where org_id = ${input.orgId} and tax_year = ${year}
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `));
-    const hasRow = new Set(existing.rows.map((r) => r.employee_party_id));
+    `, "objects"));
+    const hasRow = new Set(existing.map((r) => r.employee_party_id));
     // The stored version per row, for the lost-update guard below. Compared
     // as the same `::text` the loader serves, so a client echo is exact.
-    const storedVersion = new Map(existing.rows.map((r) => [r.employee_party_id, r.updated_at]));
+    const storedVersion = new Map(existing.map((r) => [r.employee_party_id, r.updated_at]));
 
     // Component descriptors resolve names/codes and enforce the annual cap;
     // stored amounts are what a caller that says nothing about components keeps.
@@ -1035,9 +1035,9 @@ export async function saveOpeningBalances(input: {
         join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
        where oc.org_id = ${input.orgId} and b.tax_year = ${year}
          and b.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `));
+    `, "objects"));
     const storedByEmployee = new Map<string, OpeningComponentAmounts>();
-    for (const row of storedComponents.rows) {
+    for (const row of storedComponents) {
       const amounts = storedByEmployee.get(row.employee_party_id) ?? {};
       amounts[row.component_id] = normalizeMoney(String(row.ytd_amount));
       storedByEmployee.set(row.employee_party_id, amounts);
@@ -1052,9 +1052,9 @@ export async function saveOpeningBalances(input: {
         from payroll_opening_program_bases
        where org_id = ${input.orgId} and tax_year = ${year}
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `));
+    `, "objects"));
     const storedProgramsByEmployee = new Map<string, OpeningProgramAmounts>();
-    for (const row of storedPrograms.rows) {
+    for (const row of storedPrograms) {
       const amounts = storedProgramsByEmployee.get(row.employee_party_id) ?? {};
       amounts[row.program_key] = normalizeMoney(String(row.insurable_ytd));
       storedProgramsByEmployee.set(row.employee_party_id, amounts);
@@ -1067,9 +1067,9 @@ export async function saveOpeningBalances(input: {
         from payroll_opening_account_bases
        where org_id = ${input.orgId} and tax_year = ${year}
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)
-    `);
+    `, "objects");
     const storedAccountBasesByEmployee = new Map<string, OpeningAccountBase[]>();
-    for (const row of storedAccountBases.rows) {
+    for (const row of storedAccountBases) {
       const bases = storedAccountBasesByEmployee.get(row.employee_party_id) ?? [];
       bases.push({
         programKey: row.program_key,
@@ -1087,7 +1087,7 @@ export async function saveOpeningBalances(input: {
     const accountIds = new Set([
       ...input.rows.flatMap((row) => row.accountBases ?? []).map((base) =>
         typeof base.filingAccountId === "string" ? base.filingAccountId : ""),
-      ...storedAccountBases.rows.map((base) => base.filing_account_id),
+      ...storedAccountBases.map((base) => base.filing_account_id),
     ]);
     for (const accountId of accountIds) {
       if (!isUuid(accountId)
@@ -1099,8 +1099,8 @@ export async function saveOpeningBalances(input: {
         select country, program_type, state_code, subsidiary_id, is_active
           from payroll_filing_accounts
          where org_id = ${input.orgId} and id = ${accountId}::uuid
-      `);
-      if (found.rows[0]) accountInfo.set(accountId, found.rows[0]);
+      `, "objects");
+      if (found[0]) accountInfo.set(accountId, found[0]);
     }
 
     // Stored per-state SUI carry-ins ride the same keep-on-silence contract:
@@ -1110,9 +1110,9 @@ export async function saveOpeningBalances(input: {
         from payroll_opening_sui_wages sw
         join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
        where sw.org_id = ${input.orgId} and b.tax_year = ${year}
-    `));
+    `, "objects"));
     const storedSuiByRow = new Map<string, OpeningSuiStateAmounts>();
-    for (const row of storedSui.rows) {
+    for (const row of storedSui) {
       const amounts = storedSuiByRow.get(row.opening_balance_id) ?? {};
       amounts[row.state] = normalizeMoney(String(row.insurable_ytd));
       storedSuiByRow.set(row.opening_balance_id, amounts);
@@ -1203,7 +1203,7 @@ export async function saveOpeningBalances(input: {
         const programs = row.programs === undefined
           ? storedPrograms
           : normalizeOpeningProgramBases(row.programs, declaredPrograms);
-        const storedRowId = existing.rows.find((r) => r.employee_party_id === row.employeePartyId)?.id;
+        const storedRowId = existing.find((r) => r.employee_party_id === row.employeePartyId)?.id;
         const storedSuiStates = (storedRowId === undefined ? undefined : storedSuiByRow.get(storedRowId)) ?? {};
         const suiStates = row.suiStates === undefined
           ? storedSuiStates
@@ -1298,16 +1298,16 @@ export async function saveOpeningBalances(input: {
            where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
              and tax_year = ${year}
            returning id
-        `));
-        if (deleted.rows.length > 1 || (beforeRecord !== null && deleted.rows.length !== 1)) throw new PayrollError("The opening carry-in changed while it was being cleared");
-        if (deleted.rows.length > 0) {
+        `, "objects"));
+        if (deleted.length > 1 || (beforeRecord !== null && deleted.length !== 1)) throw new PayrollError("The opening carry-in changed while it was being cleared");
+        if (deleted.length > 0) {
           result.deleted++;
           // The children cascade with the parent. Naming what they held is the
           // audit evidence: a component year-to-date that vanishes without a
           // record of its value cannot be reconstructed from the trail — and
           // the same holds for a program base.
           await auditOpeningBalance(tx, {
-            orgId: input.orgId, actorId: input.actorId, rowId: deleted.rows[0]!.id,
+            orgId: input.orgId, actorId: input.actorId, rowId: deleted[0]!.id,
             action: "delete",
             changes: {
               employeePartyId: row.employeePartyId, taxYear: year,
@@ -1316,7 +1316,7 @@ export async function saveOpeningBalances(input: {
               ...(auditContext.sourceReference === null ? {} : { sourceReference: auditContext.sourceReference }),
               beforeComponents: storedByEmployee.get(row.employeePartyId) ?? {},
               beforePrograms: storedProgramsByEmployee.get(row.employeePartyId) ?? {},
-              beforeSuiStates: storedSuiByRow.get(deleted.rows[0]!.id) ?? {},
+              beforeSuiStates: storedSuiByRow.get(deleted[0]!.id) ?? {},
               beforeAccountBases: storedAccountBasesByEmployee.get(row.employeePartyId) ?? [],
             },
           });
@@ -1340,9 +1340,9 @@ export async function saveOpeningBalances(input: {
                updated_at = now()
         where payroll_opening_balances.org_id = ${input.orgId}
         returning id
-      `));
-      if (saved.rows.length !== 1) throw new PayrollError("The opening carry-in did not persist");
-      const rowId = saved.rows[0]!.id;
+      `, "objects"));
+      if (saved.length !== 1) throw new PayrollError("The opening carry-in did not persist");
+      const rowId = saved[0]!.id;
 
       // Component openings are REPLACED as a set, in the same transaction and
       // against the same row id. Anything not named is gone: a re-load of the
@@ -1444,8 +1444,8 @@ export async function saveOpeningBalances(input: {
           values (${input.orgId}, ${row.employeePartyId}, ${year}, ${base.programKey},
             ${base.filingAccountId}::uuid, ${base.region}, ${base.insurableYtd}, ${input.actorId}, ${input.actorId})
           returning id
-        `);
-        if (!inserted.rows[0]) {
+        `, "objects");
+        if (!inserted[0]) {
           throw new PayrollError(`${base.programKey} account opening was not saved — insert returned no row`);
         }
       }
@@ -1492,8 +1492,8 @@ async function auditOpeningBalance(
   const written = await runner.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, 'payroll_opening_balances', ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId}) returning id`);
-  if (written.rows.length !== 1) throw new PayrollError("The opening carry-in audit did not persist");
+            ${JSON.stringify(args.changes)}, ${args.actorId}) returning id`, "objects");
+  if (written.length !== 1) throw new PayrollError("The opening carry-in audit did not persist");
 }
 
 /** Field descriptor by key, for callers that map an import column onto one. */
@@ -1552,11 +1552,11 @@ export async function componentYearToDate(
            and r.run_status = 'committed' and d.status <> 'voided'
            and (${exclude}::uuid is null or s.pay_run_document_id <> ${exclude}::uuid)
       ), 0)::text as ytd
-  `));
-  if (r.rows.length !== 1) throw new PayrollError("The committed component year-to-date could not be resolved uniquely");
-  const committed = canonicalDecimal(r.rows[0]!.ytd, 4);
+  `, "objects"));
+  if (r.length !== 1) throw new PayrollError("The committed component year-to-date could not be resolved uniquely");
+  const committed = canonicalDecimal(r[0]!.ytd, 4);
   if (committed === null) {
-    throw new PayrollError(decimalNullRefusal("Committed component year-to-date", "an amount", r.rows[0]!.ytd, 4));
+    throw new PayrollError(decimalNullRefusal("Committed component year-to-date", "an amount", r[0]!.ytd, 4));
   }
   return add(committed, carryIn);
 }
@@ -1662,8 +1662,8 @@ export async function employerLevyOpeningsForYear(
       from payroll_employer_levy_opening
      where org_id = ${orgId} and tax_year = ${year}
      order by country, levy_key, region nulls first
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     country: row.country,
     levyKey: row.levy_key,
     region: row.region,
@@ -1744,8 +1744,8 @@ export async function saveEmployerLevyOpening(input: {
              and (${row.region}::text is null or s.province = ${row.region})
              and r.run_status = 'committed' and d.status <> 'voided'
         ) as locked
-      `));
-      if (locked.rows[0]!.locked) {
+      `, "objects"));
+      if (locked[0]!.locked) {
         fail("a committed run already consumed this scope point's room; void that run before changing it");
         continue;
       }
@@ -1775,8 +1775,8 @@ export async function saveEmployerLevyOpening(input: {
            and country = ${row.country} and levy_key = ${row.levyKey}
            and region is not distinct from ${row.region}
          for update
-      `));
-      const before = existing.rows[0];
+      `, "objects"));
+      const before = existing[0];
       if (before && input.mode === "insert") {
         result.errors.push({
           levyKey: row.levyKey,
@@ -1812,10 +1812,10 @@ export async function saveEmployerLevyOpening(input: {
           values (${input.orgId}, ${year}, ${row.country}, ${row.levyKey}, ${row.region},
                   ${row.base}, ${input.actorId}, ${input.actorId})
           returning id
-        `));
+        `, "objects"));
         result.created++;
         await auditEmployerLevyOpening(tx, {
-          orgId: input.orgId, actorId: input.actorId, rowId: saved.rows[0]!.id,
+          orgId: input.orgId, actorId: input.actorId, rowId: saved[0]!.id,
           action: "insert",
           changes: {
             country: row.country, levyKey: row.levyKey, region: row.region,

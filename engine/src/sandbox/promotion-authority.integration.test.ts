@@ -43,7 +43,7 @@ for (const scenario of ["no sandbox authority", "no role authority", "outside ce
         await db.execute(sql`update app_roles set permissions=${JSON.stringify(scenario === "within ceiling" ? ["gl.read"] : ["gl.post", "gl.read"])}::jsonb where org_id=${org.orgId} and key='target'`);
       }
       const key = scenario === "remove higher grant" || scenario === "within ceiling" ? "target" : "manager";
-      const before = (await db.execute<{ permissions: string[] }>(sql`select permissions from app_roles where org_id=${org.orgId} and key=${key}`)).rows[0]!.permissions;
+      const before = (await db.execute<{ permissions: string[] }>(sql`select permissions from app_roles where org_id=${org.orgId} and key=${key}`, "objects"))[0]!.permissions;
       sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Promotion authority", tier: "full", masked: false });
       const requested = scenario === "remove higher grant" ? ["gl.read"]
         : scenario === "within ceiling" ? ["gl.read", "gl.post"]
@@ -55,15 +55,15 @@ for (const scenario of ["no sandbox authority", "no role authority", "outside ce
       const allowed = ["within ceiling", "remove higher grant", "super admin"].includes(scenario);
       if (allowed) {
         await applyChangeSet(change.changeSetId, applier);
-        assert.deepEqual((await db.execute(sql`select permissions from app_roles where org_id=${org.orgId} and key=${key}`)).rows[0]!.permissions, [...new Set(requested)]);
+        assert.deepEqual((await db.execute(sql`select permissions from app_roles where org_id=${org.orgId} and key=${key}`, "objects"))[0]!.permissions, [...new Set(requested)]);
       } else {
         const expected = scenario === "no sandbox authority" ? /requires admin.sandboxes.manage/
           : scenario === "no role authority" ? /requires admin.roles.manage/
           : scenario === "restricted subsidiary scope" ? /requires unrestricted subsidiary access/
           : scenario === "invalid key" ? /valid permission keys/ : /cannot grant permissions you do not hold/;
         await assert.rejects(applyChangeSet(change.changeSetId, applier), expected);
-        assert.deepEqual((await db.execute(sql`select permissions from app_roles where org_id=${org.orgId} and key=${key}`)).rows[0]!.permissions, before);
-        assert.equal((await db.execute(sql`select status from change_sets where org_id=${org.orgId} and id=${change.changeSetId}`)).rows[0]!.status, "approved");
+        assert.deepEqual((await db.execute(sql`select permissions from app_roles where org_id=${org.orgId} and key=${key}`, "objects"))[0]!.permissions, before);
+        assert.equal((await db.execute(sql`select status from change_sets where org_id=${org.orgId} and id=${change.changeSetId}`, "objects"))[0]!.status, "approved");
         assert.equal(await actorHasPermission(db, org.orgId, applier, "gl.post"), false);
       }
     } finally {
@@ -89,7 +89,7 @@ test("role promotion checks the actor's raw subsidiary grant coverage", enabled,
       where org_id=${org.orgId} and key='manager'`);
     sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Role grant coverage", tier: "full", masked: false });
     const sandboxRoot = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id=${sandbox.sandboxOrgId} and parent_id is null`)).rows[0]!.id;
+      select id from subsidiaries where org_id=${sandbox.sandboxOrgId} and parent_id is null`, "objects"))[0]!.id;
     await db.execute(sql`
       update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [sandboxRoot] })}::jsonb
        where org_id=${sandbox.sandboxOrgId} and key='manager'`);
@@ -102,11 +102,11 @@ test("role promotion checks the actor's raw subsidiary grant coverage", enabled,
     const allRole = (await db.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
       values (${org.orgId}, 'scope_all', 'Scope all', false, '[]'::jsonb, '{"mode":"all"}'::jsonb)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     const unknownRole = (await db.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
       values (${org.orgId}, 'scope_unknown', 'Scope unknown', false, '[]'::jsonb, '{"mode":"unknown"}'::jsonb)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into role_assignments (org_id, user_id, role_id)
       values (${org.orgId}, ${applier}, ${allRole}), (${org.orgId}, ${applier}, ${unknownRole})`);
@@ -115,7 +115,7 @@ test("role promotion checks the actor's raw subsidiary grant coverage", enabled,
       applyChangeSet(change.changeSetId, applier),
       /cannot grant subsidiary access beyond your scope/,
     );
-    assert.deepEqual((await db.execute(sql`select subsidiary_restriction from app_roles where org_id=${org.orgId} and key='manager'`)).rows[0]!.subsidiary_restriction,
+    assert.deepEqual((await db.execute(sql`select subsidiary_restriction from app_roles where org_id=${org.orgId} and key='manager'`, "objects"))[0]!.subsidiary_restriction,
       { mode: "list", subsidiaryIds: [] });
   } finally {
     if (sandbox) await deleteSandbox(sandbox.sandboxId);

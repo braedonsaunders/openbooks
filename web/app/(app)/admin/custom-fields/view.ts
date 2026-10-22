@@ -167,23 +167,23 @@ export async function loadCustomFields(
       select id, target_table, target_kind, key, label, field_type, config, is_required, is_active, sort_order
         from custom_field_defs where ${where}
        order by target_table, target_kind nulls first, sort_order, label
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
     db.execute<{ target_table: string; n: string }>(sql`
       select target_table, count(*) as n from custom_field_defs
-       where org_id = ${orgId} and ${kindHide} and ${tableHide} group by 1`),
+       where org_id = ${orgId} and ${kindHide} and ${tableHide} group by 1`, 'objects'),
     db.execute<{ n: string }>(
-      sql`select count(*) as n from custom_field_defs where ${where}`,
+      sql`select count(*) as n from custom_field_defs where ${where}`, 'objects',
     ),
     fieldId && fieldId !== 'new'
       ? db.execute(sql`
           select custom_field_defs.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
-            from custom_field_defs where id = ${fieldId} and org_id = ${orgId}`)
+            from custom_field_defs where id = ${fieldId} and org_id = ${orgId}`, 'objects')
       : null,
     db.execute<{ key: string; name: string }>(sql`
-      select key, name from app_roles where org_id = ${orgId} order by name, key`),
+      select key, name from app_roles where org_id = ${orgId} order by name, key`, 'objects'),
   ])
 
-  const openRow = (open?.rows[0] as Record<string, unknown> | undefined) ?? null
+  const openRow = (open?.[0] as Record<string, unknown> | undefined) ?? null
   if (fieldId && fieldId !== 'new' && !openRow) notFound()
   if (
     openRow &&
@@ -201,7 +201,7 @@ export async function loadCustomFields(
     backLabel: tHub('title'),
     searchPlaceholder: t('searchPlaceholder'),
     targetFilterLabel: t('targetFilter'),
-    targetOptions: counts.rows.map((r) => ({
+    targetOptions: counts.map((r) => ({
       value: String(r.target_table),
       label: targetLabel(String(r.target_table)),
       count: Number(r.n),
@@ -214,7 +214,7 @@ export async function loadCustomFields(
     columnType: t('table.type'),
     columnRequired: t('table.required'),
     columnStatus: t('table.status'),
-    rows: defs.rows.map((d) => ({
+    rows: defs.map((d) => ({
       id: String(d.id),
       label: String(d.label),
       href: buildListDrawerHref(
@@ -235,14 +235,14 @@ export async function loadCustomFields(
       statusLabel: d.is_active ? t('statusActive') : t('statusArchived'),
       statusVariant: d.is_active ? 'success' : 'outline',
     })),
-    total: Number(totalRow.rows[0]?.n ?? 0),
+    total: Number(totalRow[0]?.n ?? 0),
     currentPage: params.page,
     perPage: params.perPage,
     drawerOpen: Boolean(fieldId),
     drawerDef: openRow,
     hiddenKinds: hidden.kinds,
     hiddenTables: hidden.tables,
-    roleOptions: roleRows.rows.map((role) => {
+    roleOptions: roleRows.map((role) => {
       const builtInLabel = `drawer.role${role.key
         .split('_')
         .map((part) => part[0]!.toUpperCase() + part.slice(1))

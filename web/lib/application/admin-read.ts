@@ -49,12 +49,12 @@ export async function listApplicationUsers(
        group by u.id
        order by lower(u.name) asc, lower(u.email) asc
        limit ${limit}
-    `),
-    db.execute<{ n: string }>(sql`select count(*) as n from users u where ${where}`),
+    `, "objects"),
+    db.execute<{ n: string }>(sql`select count(*) as n from users u where ${where}`, "objects"),
   ]);
   return {
-    total: Number(count.rows[0]?.n ?? 0),
-    users: rows.rows.map((user) => ({
+    total: Number(count[0]?.n ?? 0),
+    users: rows.map((user) => ({
       id: user.id,
       name: user.name,
       email: user.email,
@@ -93,12 +93,12 @@ export async function listApplicationRoles(
        where ${where}
        order by r.is_built_in desc, lower(r.name) asc
        limit ${limit}
-    `),
-    db.execute<{ n: string }>(sql`select count(*) as n from app_roles r where ${where}`),
+    `, "objects"),
+    db.execute<{ n: string }>(sql`select count(*) as n from app_roles r where ${where}`, "objects"),
   ]);
   return {
-    total: Number(count.rows[0]?.n ?? 0),
-    roles: rows.rows.map((role) => ({
+    total: Number(count[0]?.n ?? 0),
+    roles: rows.map((role) => ({
       id: role.id,
       key: role.key,
       name: role.name,
@@ -168,12 +168,12 @@ export async function listApplicationAuditEvents(
        where ${where}
        order by a.at desc
        limit ${limit}
-    `),
-    db.execute<{ n: string }>(sql`select count(*) as n ${auditFrom} where ${where}`),
+    `, "objects"),
+    db.execute<{ n: string }>(sql`select count(*) as n ${auditFrom} where ${where}`, "objects"),
   ]);
   return {
-    total: Number(count.rows[0]?.n ?? 0),
-    events: rows.rows.map((event) => ({
+    total: Number(count[0]?.n ?? 0),
+    events: rows.map((event) => ({
       id: event.id,
       rowId: event.row_id,
       recordType: event.rtype,

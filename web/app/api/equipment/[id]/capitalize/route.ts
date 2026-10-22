@@ -86,8 +86,8 @@ export const POST = defineRoute({
       }>(sql`
       select id, subsidiary_id, name, description, purchase_price::text, acquired_on::text,
              in_service_on::text, serial_number, fixed_asset_id
-        from equipment_units where id = ${id} and org_id = ${orgId} limit 1`))
-    const unit = unitRes.rows[0]
+        from equipment_units where id = ${id} and org_id = ${orgId} limit 1`, 'objects'))
+    const unit = unitRes[0]
     if (!unit) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
     if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(unit.subsidiary_id)) {
       return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
@@ -96,8 +96,8 @@ export const POST = defineRoute({
     const ownedSub = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries
        where org_id = ${orgId} and id = ${unit.subsidiary_id}
-         and is_active and not is_elimination`))
-    if (!ownedSub.rows[0]) {
+         and is_active and not is_elimination`, 'objects'))
+    if (!ownedSub[0]) {
       return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
     }
     const acquisitionCostRaw = canonicalDecimal(unit.purchase_price || '0', 4)
@@ -127,8 +127,8 @@ export const POST = defineRoute({
                  in_service_on::text, serial_number, fixed_asset_id
             from equipment_units
            where id = ${id} and org_id = ${orgId}
-           for update`))
-        const lockedUnit = lockedRes.rows[0]
+           for update`, 'objects'))
+        const lockedUnit = lockedRes[0]
         if (!lockedUnit) return { kind: 'not_found' }
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(lockedUnit.subsidiary_id)) {
           return { kind: 'not_found' }
@@ -138,8 +138,8 @@ export const POST = defineRoute({
         const lockedOwnedSub = (await tx.execute<{ id: string }>(sql`
           select id from subsidiaries
            where org_id = ${orgId} and id = ${lockedUnit.subsidiary_id}
-             and is_active and not is_elimination`))
-        if (!lockedOwnedSub.rows[0]) return { kind: 'invalid_subsidiary' }
+             and is_active and not is_elimination`, 'objects'))
+        if (!lockedOwnedSub[0]) return { kind: 'invalid_subsidiary' }
 
         const lockedAcquisitionCostRaw = canonicalDecimal(lockedUnit.purchase_price || '0', 4)
         if (lockedAcquisitionCostRaw === null) return { kind: 'acquisition_cost_invalid' }
@@ -153,7 +153,7 @@ export const POST = defineRoute({
         const asset = await createDraftAsset(tx, {
           orgId,
           actorId: userId,
-          subsidiaryId: lockedOwnedSub.rows[0]!.id,
+          subsidiaryId: lockedOwnedSub[0]!.id,
           categoryId,
           name: lockedUnit.name,
           description: lockedUnit.description,
@@ -173,7 +173,7 @@ export const POST = defineRoute({
           }>(sql`
             select depreciation_method, depreciation_method_id, useful_life_months,
                    depreciation_units_total::text as depreciation_units_total
-              from fixed_assets where org_id = ${orgId} and id = ${asset.id}`)).rows[0]
+              from fixed_assets where org_id = ${orgId} and id = ${asset.id}`, 'objects'))[0]
           if (!defaults) throw new Error('new equipment asset was not available for service placement')
           const hasUsefulLife = defaults.useful_life_months !== null && defaults.useful_life_months > 0
           const isManualWithoutFormula = !defaults.depreciation_method_id && defaults.depreciation_method === 'manual'
@@ -190,11 +190,11 @@ export const POST = defineRoute({
           update equipment_units
              set fixed_asset_id = ${asset.id}, revision = revision + 1, updated_at = now(), updated_by = ${userId}
            where id = ${id} and org_id = ${orgId} and fixed_asset_id is null
-           returning fixed_asset_id`))
+           returning fixed_asset_id`, 'objects'))
         // The row lock above makes this path unreachable for a normal race, but
         // keep the invariant explicit: never commit an asset without its source
         // linkage if a trigger/RLS rule causes the CAS to affect zero rows.
-        if (!linked.rows[0]) throw new CapitalizationLinkConflict()
+        if (!linked[0]) throw new CapitalizationLinkConflict()
 
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

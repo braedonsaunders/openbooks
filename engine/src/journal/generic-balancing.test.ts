@@ -45,7 +45,7 @@ test("custom balancing defaults are used to detect imbalance and label clearing 
   [{id:"clearing"}],
  ];
  let calls=0;
- const runner={execute:async()=>({rows:responses[calls++]??[]})} as unknown as SqlExecutor;
+ const runner={execute:async(_query: unknown, mode?: string)=>Promise.resolve({rows:responses[calls++]??[]}).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))} as unknown as SqlExecutor;
  const legs=await genericSegmentBalancingProvider(runner,context,[line("5",{fund:"restricted-fund"}),line("-5",{})]);
  assert.equal(legs.length,2);
  assert.deepEqual(legs.map(leg=>leg.extraDims.fund).sort(),["default-fund","restricted-fund"]);
@@ -53,12 +53,13 @@ test("custom balancing defaults are used to detect imbalance and label clearing 
 
 test("every unbalanced custom segment requires its own clearing policy",async()=>{
  let calls=0;
- const runner={execute:async()=>{
+ const runner={execute:async(_query: unknown, mode?: string)=>{
+  const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
   calls+=1;
-  return {rows:[
+  return inMode({rows:[
    {key:"department",storage_column:"department_id",default_value_id:null,account_id:"clearing",priority:1},
    {key:"region",storage_column:null,default_value_id:null,account_id:null,priority:2},
-  ]};
+  ]});
  }} as unknown as SqlExecutor;
  const failure=await genericSegmentBalancingProvider(runner,context,[
   line("5",{region:"north"},{departmentId:"sales"}),

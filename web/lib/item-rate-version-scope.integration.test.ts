@@ -322,8 +322,8 @@ const consolidatedRows = [
               values (${org.orgId}, ${version}, ${org.items.service}, 'hour', 'Hour', 1, 40, 140)`)
             await db.execute(sql`insert into labor_rate_version_scopes (org_id, version_id, scope_type, scope_value_id)
               values (${org.orgId}, ${version}, 'location', ${location})`)
-            const activated = await db.execute<{ id: string }>(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId} returning id`)
-            assert.deepEqual(activated.rows.map(row => row.id), [version], 'location-scoped rate version is activated')
+            const activated = await db.execute<{ id: string }>(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId} returning id`, 'objects')
+            assert.deepEqual(activated.map(row => row.id), [version], 'location-scoped rate version is activated')
             await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, location_id, date_basis, is_active)
               values (${org.orgId}, ${book}, ${location}, 'usage_date', true)`)
             })
@@ -363,8 +363,8 @@ const consolidatedRows = [
               values (${org.orgId}, ${version}, 'location', ${parent}, true)`)
             await db.execute(sql`insert into labor_rate_adjustments (org_id, version_id, code, name, category, calculation, value, presentation)
               values (${org.orgId}, ${version}, 'SITE', 'Site premium', 'surcharge', 'percent', 5, 'separate')`)
-            const activated = await db.execute<{ id: string }>(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId} returning id`)
-            assert.deepEqual(activated.rows.map(row => row.id), [version], 'child-location rate version is activated')
+            const activated = await db.execute<{ id: string }>(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId} returning id`, 'objects')
+            assert.deepEqual(activated.map(row => row.id), [version], 'child-location rate version is activated')
             await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, date_basis, is_active)
               values (${org.orgId}, ${book}, 'usage_date', true)`)
             })
@@ -493,8 +493,8 @@ const rateBookDefaultCases = [{ label: 'item rate book default controls', regist
       await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`)
     })
   };
-  const readRow = async (id: string) => (await withBypassContext(() => db.execute(sql`select * from item_rate_books where id=${id}`))).rows[0];
-  const responseEvidence = async (id: string) => (await withBypassContext(() => db.execute<{ changes: Record<string, unknown> }>(sql`select changes from audit_log where row_id=${id} and action='delete' order by at desc limit 1`))).rows[0]!;
+  const readRow = async (id: string) => (await withBypassContext(() => db.execute(sql`select * from item_rate_books where id=${id}`, 'objects')))[0];
+  const responseEvidence = async (id: string) => (await withBypassContext(() => db.execute<{ changes: Record<string, unknown> }>(sql`select changes from audit_log where row_id=${id} and action='delete' order by at desc limit 1`, 'objects')))[0]!;
   const json = (value: unknown) => JSON.parse(JSON.stringify(value));
   const { waitForLockWaiter } = await import('@openbooks/engine/testing/lock-wait');
   const pg = (await import('pg')).default;
@@ -522,7 +522,7 @@ const rateBookDefaultCases = [{ label: 'item rate book default controls', regist
       const pendingDelete = send('DELETE', { id: nextId }); pending = pendingDelete; void pendingDelete.catch(() => {});
       await waitForLockWaiter(writer, { label: 'the rate-book deletion' }); await writer.query('commit');
       assert.equal((await pendingDelete).status, 409); assert.equal((await readRow(nextId))?.is_default, true);
-      assert.equal((await db.execute(sql`select id from audit_log where row_id=${nextId} and action='delete'`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select id from audit_log where row_id=${nextId} and action='delete'`, 'objects')).length, 0);
     } finally {
       if (writerConnected) await writer.query('rollback').catch(() => {})
       await pending?.catch(() => {})
@@ -539,7 +539,7 @@ const rateBookDefaultCases = [{ label: 'item rate book default controls', regist
       const prior = await send('POST', { code: 'PRIOR', name: 'Prior book', isDefault: true, isActive: true }); assert.equal(prior.status, 200);
       const created = await send('POST', { code: 'TARGET', name: 'Target book', isDefault, isActive: true }); assert.equal(created.status, 200); const { id } = await created.json(); const before = await readRow(id);
       const response = await send('DELETE', { id }); assert.equal(response.status, isDefault ? 409 : 200);
-      if (isDefault) { assert.deepEqual(await readRow(id), before); assert.equal((await db.execute(sql`select id from audit_log where row_id=${id} and action='delete'`)).rows.length, 0); }
+      if (isDefault) { assert.deepEqual(await readRow(id), before); assert.equal((await db.execute(sql`select id from audit_log where row_id=${id} and action='delete'`, 'objects')).length, 0); }
       else { assert.equal(await readRow(id), undefined); assert.deepEqual((await responseEvidence(id)).changes, json({ before })); }
     } finally { state.gate = null; routeSession.user = null; await withBypassContext(() => dropScratchOrg(org.orgId)); }
   });
@@ -549,10 +549,10 @@ const rateBookDefaultCases = [{ label: 'item rate book default controls', regist
     try {
       await authenticate(org); const prior = await send('POST', { code: 'PRIOR', name: 'Prior default', isDefault: true, isActive: true }); assert.equal(prior.status, 200); await prior.json();
       const next = await send('POST', { code: 'TARGET', name: 'Target book', isDefault: false, isActive: true }); assert.equal(next.status, 200); const { id } = await next.json();
-      deleting = withOrgTransaction(org.orgId, async () => { const response = await send('DELETE', { id }); assert.equal(response.status, 200); ready((await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid); await gate; });
+      deleting = withOrgTransaction(org.orgId, async () => { const response = await send('DELETE', { id }); assert.equal(response.status, 200); ready((await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid); await gate; });
       const pid = await started; const promotion = send('PATCH', { id, name: 'Target book', isDefault: true, isActive: true }); promoting = promotion; void promotion.catch(() => {});
       let blocked = false; const deadline = Date.now() + 10000;
-      while (Date.now() < deadline) { if ((await db.execute(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as blocked`)).rows[0]!.blocked) { blocked = true; break; } await new Promise(resolve => setTimeout(resolve, 25)); }
+      while (Date.now() < deadline) { if ((await db.execute(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as blocked`, 'objects'))[0]!.blocked) { blocked = true; break; } await new Promise(resolve => setTimeout(resolve, 25)); }
       assert.ok(blocked, 'promotion shares the deletion lock'); release(); await deleting; assert.equal((await promotion).status, 404); assert.equal(await readRow(id), undefined);
     } finally { release(); await deleting?.catch(() => {}); await promoting?.catch(() => {}); state.gate = null; routeSession.user = null; await withBypassContext(() => dropScratchOrg(org.orgId)); }
   });
@@ -596,7 +596,7 @@ const itemPricingAsOfRows = [
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD', 'Gold price', 'explicit', false, true)`)
               const baseId = (await db.execute<{ id: string }>(sql`
-                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
               await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
                 values (${org.orgId}, ${customerId}, ${goldId}, '2026-01-01', true)`)
               const goldSchedule = randomUUID()
@@ -623,7 +623,7 @@ const itemPricingAsOfRows = [
                where org_id = ${org.orgId} and customer_id = ${customerId}`)
               const membership = (await db.execute<{ is_active: boolean; effective_to: string | null }>(sql`
                 select is_active, effective_to::text as effective_to from customer_price_level_assignments
-                 where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
+                 where org_id = ${org.orgId} and customer_id = ${customerId}`, 'objects'))[0]!
               assert.equal(membership.is_active, false)
               assert.ok(membership.effective_to !== null && membership.effective_to < '2026-01-15' === false,
                 `deactivation must end-date, not erase, the window (got ${membership.effective_to})`)
@@ -667,7 +667,7 @@ const itemPricingAsOfRows = [
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD3', 'Gold price', 'explicit', false, true)`)
               const baseId = (await db.execute<{ id: string }>(sql`
-                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
               await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
                 values (${org.orgId}, ${customerId}, ${goldId}, '2026-01-01', true)`)
               const goldSchedule = randomUUID()
@@ -698,7 +698,7 @@ const itemPricingAsOfRows = [
               }
               const assignment = (await db.execute<{ is_active: boolean; effective_to: string | null }>(sql`
                 select is_active, effective_to::text as effective_to from customer_price_level_assignments
-                 where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
+                 where org_id = ${org.orgId} and customer_id = ${customerId}`, 'objects'))[0]!
               assert.equal(assignment.is_active, true)
               assert.equal(assignment.effective_to, null)
 
@@ -736,7 +736,7 @@ const itemPricingAsOfRows = [
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD4', 'Gold price', 'explicit', false, true)`)
               const baseId = (await db.execute<{ id: string }>(sql`
-                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
               await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
                 values (${org.orgId}, ${customerId}, ${goldId}, '2026-01-01', true)`)
               const goldSchedule = randomUUID()
@@ -807,7 +807,7 @@ const itemPricingAsOfRows = [
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD5', 'Gold price', 'explicit', false, true)`)
               const baseId = (await db.execute<{ id: string }>(sql`
-                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
               const today = new Date().toISOString().slice(0, 10)
               await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
                 values (${org.orgId}, ${customerId}, ${goldId}, ${today}, true)`)
@@ -836,7 +836,7 @@ const itemPricingAsOfRows = [
                where org_id = ${org.orgId} and customer_id = ${customerId}`)
               const membership = (await db.execute<{ is_active: boolean; revoked_epoch: number | null }>(sql`
                 select is_active, extract(epoch from revoked_at)::float8 as revoked_epoch from customer_price_level_assignments
-                 where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
+                 where org_id = ${org.orgId} and customer_id = ${customerId}`, 'objects'))[0]!
               assert.equal(membership.is_active, false)
               assert.ok(membership.revoked_epoch, 'the revoke instant must be stamped')
               const revokedAt = Math.round(membership.revoked_epoch! * 1000)
@@ -844,7 +844,7 @@ const itemPricingAsOfRows = [
 
               // Level and schedule were never touched.
               const level = (await db.execute<{ is_active: boolean }>(sql`
-                select is_active from price_levels where org_id = ${org.orgId} and id = ${goldId}`)).rows[0]!
+                select is_active from price_levels where org_id = ${org.orgId} and id = ${goldId}`, 'objects'))[0]!
               assert.equal(level.is_active, true)
 
               // A lookup running now (at or after the revoke) falls to the base.
@@ -868,7 +868,7 @@ const itemPricingAsOfRows = [
                where org_id = ${org.orgId} and customer_id = ${customerId}`)
               const revived = (await db.execute<{ revoked_at: string | null }>(sql`
                 select revoked_at from customer_price_level_assignments
-                 where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
+                 where org_id = ${org.orgId} and customer_id = ${customerId}`, 'objects'))[0]!
               assert.equal(revived.revoked_at, null)
               const again = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(again?.unitPrice, '100.0000')
@@ -897,7 +897,7 @@ const itemPricingAsOfRows = [
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD6', 'Gold price', 'explicit', false, true)`)
               const baseId = (await db.execute<{ id: string }>(sql`
-                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
               await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
                 values (${org.orgId}, ${customerId}, ${goldId}, '2026-01-01', true)`)
               const goldSchedule = randomUUID()
@@ -920,7 +920,7 @@ const itemPricingAsOfRows = [
               const yesterday = new Date(Date.parse(`${today}T00:00:00Z`) - 86400000).toISOString().slice(0, 10)
               const membership = (await db.execute<{ is_active: boolean; effective_to: string | null }>(sql`
                 select is_active, effective_to::text as effective_to from customer_price_level_assignments
-                 where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
+                 where org_id = ${org.orgId} and customer_id = ${customerId}`, 'objects'))[0]!
               assert.equal(membership.is_active, false)
               assert.equal(membership.effective_to, yesterday)
 
@@ -955,7 +955,7 @@ const itemPricingAsOfRows = [
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD7', 'Gold price', 'explicit', false, true)`)
               const baseId = (await db.execute<{ id: string }>(sql`
-                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
               const today = new Date().toISOString().slice(0, 10)
               const starts = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10)
               const inside = new Date(Date.parse(`${today}T00:00:00Z`) + 40 * 86400000).toISOString().slice(0, 10)
@@ -978,19 +978,19 @@ const itemPricingAsOfRows = [
               // Revoked before it ever started: no error, no row left behind.
               const assignmentId = (await db.execute<{ id: string }>(sql`
                 select id from customer_price_level_assignments
-                 where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.id
+                 where org_id = ${org.orgId} and customer_id = ${customerId}`, 'objects'))[0]!.id
               await db.execute(sql`update customer_price_level_assignments set is_active = false
                where org_id = ${org.orgId} and customer_id = ${customerId}`)
               const remaining = (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from customer_price_level_assignments
-                 where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.n
+                 where org_id = ${org.orgId} and customer_id = ${customerId}`, 'objects'))[0]!.n
               assert.equal(remaining, 0)
 
               // The removal is audited with the row's before-image, never silent.
-              const audits = (await db.execute<{ action: string; before_customer: string | null }>(sql`
+              const audits = await db.execute<{ action: string; before_customer: string | null }>(sql`
                 select action, changes->'before'->>'customer_id' as before_customer from audit_log
                  where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments'
-                   and row_id = ${assignmentId}`)).rows
+                   and row_id = ${assignmentId}`, 'objects')
               assert.equal(audits.length, 1)
               assert.equal(audits[0]!.action, 'delete')
               assert.equal(audits[0]!.before_customer, customerId)
@@ -1027,7 +1027,7 @@ const itemPricingAsOfRows = [
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD8', 'Gold price', 'explicit', false, true)`)
               const baseId = (await db.execute<{ id: string }>(sql`
-                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+                select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
               // Created inactive: never offered, window open.
               await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
                 values (${org.orgId}, ${customerId}, ${goldId}, '2026-01-01', false)`)
@@ -1075,28 +1075,28 @@ const itemPricingAsOfRows = [
               const goldId = randomUUID()
               await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
                 values (${goldId}, ${org.orgId}, 'GOLD2', 'Gold price', 'explicit', false, true)`)
-              const opened = (await db.execute<{ active_from: string; active_to: string | null }>(sql`
+              const opened = await db.execute<{ active_from: string; active_to: string | null }>(sql`
                 select active_from::text as active_from, active_to::text as active_to
-                  from price_level_activation_history where org_id = ${org.orgId} and price_level_id = ${goldId}`)).rows
+                  from price_level_activation_history where org_id = ${org.orgId} and price_level_id = ${goldId}`, 'objects')
               assert.equal(opened.length, 1)
               // Standing offer: creation never ends coverage of backdated schedules.
               assert.equal(opened[0]!.active_from, '-infinity')
               assert.equal(opened[0]!.active_to, null)
 
               await db.execute(sql`update price_levels set is_active = false where org_id = ${org.orgId} and id = ${goldId}`)
-              const closed = (await db.execute<{ active_from: string; active_to: string | null }>(sql`
+              const closed = await db.execute<{ active_from: string; active_to: string | null }>(sql`
                 select active_from::text as active_from, active_to::text as active_to
-                  from price_level_activation_history where org_id = ${org.orgId} and price_level_id = ${goldId}`)).rows
+                  from price_level_activation_history where org_id = ${org.orgId} and price_level_id = ${goldId}`, 'objects')
               assert.equal(closed.length, 1)
               const today = new Date().toISOString().slice(0, 10)
               assert.equal(closed[0]!.active_to, today)
 
               // Reactivation opens a new period; the dark gap stays dark.
               await db.execute(sql`update price_levels set is_active = true where org_id = ${org.orgId} and id = ${goldId}`)
-              const periods = (await db.execute<{ active_from: string; active_to: string | null }>(sql`
+              const periods = await db.execute<{ active_from: string; active_to: string | null }>(sql`
                 select active_from::text as active_from, active_to::text as active_to
                   from price_level_activation_history
-                 where org_id = ${org.orgId} and price_level_id = ${goldId} order by active_from`)).rows
+                 where org_id = ${org.orgId} and price_level_id = ${goldId} order by active_from`, 'objects')
               assert.equal(periods.length, 2)
               assert.equal(periods[1]!.active_from, today)
               assert.equal(periods[1]!.active_to, null)

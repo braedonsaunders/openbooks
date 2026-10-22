@@ -75,7 +75,7 @@ async function countRows(orgId: string): Promise<Record<string, number>> {
   for (const table of tables) {
     const n = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from ${sql.identifier(table)} where org_id = ${orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     out[table] = n;
   }
   return out;
@@ -113,12 +113,12 @@ test("idempotency: the same trigger twice collapses onto one run row", { skip: !
     assert.equal(second.runId, first.runId, "a re-fired trigger returns the existing run, never a double-run");
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(runs, 1);
     const notes = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
        where org_id = ${h.org.orgId} and kind = 'automation' and user_id = ${h.adminId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(notes, 1, "the notification fired exactly once");
   }, { bypass: true });
 });
@@ -152,7 +152,7 @@ test("run-now: distinct invocation keys each run; a repeated key returns the fir
     assert.equal(retried.runId, secondClick.runId, "a replayed invocation key returns its own run");
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(runs, 2, "two invocations, two run rows, no double-run on replay");
   }, { bypass: true });
 });
@@ -185,16 +185,16 @@ test("a failed step rolls the run's writes back and surfaces the error as a run 
     const rolledBack = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
        where org_id = ${h.org.orgId} and kind = 'automation' and body = 'rolled back'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(rolledBack, 0, "the run's notification rolled back with the failed step");
     const row = (await db.execute<{ status: string; error: unknown; steps: unknown }>(sql`
       select status, error, steps from automation_runs where id = ${result.runId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "failed");
     assert.ok(row.error, "the error is stored on the run row the inbox shows");
     const recipeRow = (await db.execute<{ status: string }>(sql`
       select status from automations where id = ${recipe.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(recipeRow.status, "error", "the recipe surfaces its breakage until fixed");
   }, { bypass: true });
 });
@@ -256,7 +256,7 @@ test("webhook actions publish, and the run refuses by name while the gate is off
     assert.match(result.steps[result.steps.length - 1]!.error ?? "", /Company Settings → Features/);
     const events = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from webhook_events where org_id = ${h.org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(events, 0, "a gate-refused webhook stores no event");
   }, { bypass: true });
 });
@@ -272,7 +272,7 @@ test("a webhook action enqueues a targeted delivery to its named endpoint", { sk
               ${sealSecret("test-secret", { orgId: h.org.orgId, purpose: "webhook.endpoint.secret" })},
               ${h.adminId}, ${h.adminId})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const recipe = await createAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -292,11 +292,11 @@ test("a webhook action enqueues a targeted delivery to its named endpoint", { sk
     });
     assert.equal(result.status, "succeeded");
     assert.equal(result.steps[0]!.output, "webhook→crm");
-    const events = (await db.execute<{ eventType: string; endpointId: string }>(sql`
+    const events = await db.execute<{ eventType: string; endpointId: string }>(sql`
       select e.event_type as "eventType", d.endpoint_id as "endpointId"
         from webhook_events e join webhook_deliveries d on d.event_id = e.id and d.org_id = e.org_id
        where e.org_id = ${h.org.orgId}
-    `)).rows;
+    `, "objects");
     assert.equal(events.length, 1, "one event with one targeted delivery");
     assert.equal(events[0]!.eventType, "automation.fired");
     assert.equal(events[0]!.endpointId, endpointId);
@@ -359,7 +359,7 @@ test("deferred actions refuse at publish; a legacy delay fails the run and runs 
               '[{"kind":"delay","days":2},{"kind":"send_notification","to":"initiator","body":"after delay"}]'::jsonb,
               ${h.adminId}, ${h.adminId})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const result = await executeAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -372,7 +372,7 @@ test("deferred actions refuse at publish; a legacy delay fails the run and runs 
     const afterDelay = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
        where org_id = ${h.org.orgId} and kind = 'automation' and body = 'after delay'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(afterDelay, 0, "the action after a refused delay never runs");
     const simulations = await simulateAutomation({
       orgId: h.org.orgId,
@@ -409,7 +409,7 @@ test("send_email renders the registered template into the outbox payload", { ski
       select payload from scheduler_outbox
        where org_id = ${h.org.orgId} and kind = 'flow_email' and subject_id = ${result.runId}
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(row, "the rendered email is deferred through the outbox");
     const payload = row.payload as { to: string[]; subject: string; html: string; text: string; meta: { category: string } };
     assert.equal(payload.to.length, 1);
@@ -445,7 +445,7 @@ test("send_email with an unknown template refuses at publish and in legacy runs"
               '[{"kind":"send_email","templateKey":"nope","to":"initiator"}]'::jsonb,
               ${h.adminId}, ${h.adminId})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const result = await executeAutomation({
       orgId: h.org.orgId,
       actorId: h.adminId,
@@ -478,7 +478,7 @@ test("feature-off: triggers must not fire", { skip: !DB }, async () => {
     );
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(runs, 0, "no run row exists for a refused firing");
   }, { bypass: true });
 });
@@ -544,7 +544,7 @@ test("rescind reverses versions exactly: as-of reads equal the pre-change state"
     assert.equal(await asOfStatus(), "active", "as-of after rescind equals the pre-change state");
     const verb = (await db.execute<{ verb: string; reverses: string | null }>(sql`
       select verb, reverses_change_id as reverses from employment_changes where id = ${changeId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(verb.verb, "rescind");
     assert.equal(verb.reverses, target.changeId);
   }, { bypass: true });
@@ -589,7 +589,7 @@ test("a rescind refuses instead of filing null evidence when the pre-rescind sna
     const filed = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from employment_changes
        where org_id = ${h.org.orgId} and reverses_change_id = ${target.changeId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(filed, 0, "a refused rescind files no event");
   }, { bypass: true });
 });
@@ -629,7 +629,7 @@ test(
           throw new Error("The zero-gate correction did not apply.");
         const verb = (await db.execute<{ verb: string; corrected: string | null }>(sql`
       select verb, corrected_change_id as corrected from employment_changes where id = ${direct.changeId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
         assert.equal(verb.verb, "correct");
         assert.equal(verb.corrected, directTarget.changeId);
         const scopedId = await createScratchUser(h.org.orgId, "Scoped corrector", "scoped_corrector");

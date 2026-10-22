@@ -37,7 +37,7 @@ async function setFeature(orgId: string, enabled: boolean): Promise<void> {
 
 async function builtinSegment(orgId: string, key: string, storage: string): Promise<string> {
   const existing = (await db.execute<{ id: string }>(sql`
-    select id from segment_definitions where org_id = ${orgId} and key = ${key}`)).rows[0];
+    select id from segment_definitions where org_id = ${orgId} and key = ${key}`, "objects"))[0];
   if (existing) return existing.id;
   const id = randomUUID();
   await db.execute(sql`

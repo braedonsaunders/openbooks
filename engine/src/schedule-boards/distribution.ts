@@ -260,11 +260,9 @@ async function preview(
           `Native role ${role} has no active recipients.`,
           "Review the native role assignments or remove this additional recipient rule.",
         );
-      const contacts = (
-        await db.execute<{ id: string; userId: string }>(
-          sql`select p.id,u.id as "userId" from users u join parties p on p.org_id=u.org_id and p.id=u.party_id join role_assignments ra on ra.org_id=u.org_id and ra.user_id=u.id join app_roles ar on ar.org_id=ra.org_id and ar.id=ra.role_id where u.org_id=${actor.orgId} and ar.key=${role} and u.id in(select jsonb_array_elements_text(${JSON.stringify(users.map((user) => user.id))}::jsonb)::uuid) and u.is_active and p.is_active and p.kind='person' ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} order by u.id,p.id for share of u,p,ra,ar`,
-        )
-      ).rows;
+      const contacts = await db.execute<{ id: string; userId: string }>(
+          sql`select p.id,u.id as "userId" from users u join parties p on p.org_id=u.org_id and p.id=u.party_id join role_assignments ra on ra.org_id=u.org_id and ra.user_id=u.id join app_roles ar on ar.org_id=ra.org_id and ar.id=ra.role_id where u.org_id=${actor.orgId} and ar.key=${role} and u.id in(select jsonb_array_elements_text(${JSON.stringify(users.map((user) => user.id))}::jsonb)::uuid) and u.is_active and p.is_active and p.kind='person' ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} order by u.id,p.id for share of u,p,ra,ar`, 'objects',
+        );
       if (new Set(contacts.map(contact => contact.userId)).size !== users.length)
         throw refused(
           `Native role ${role} contains a user without a visible active People contact.`,
@@ -329,11 +327,9 @@ async function preview(
   const rows = [...window.rows.filter((row) => ids.includes(row.subjectId))];
   const missing = ids.filter((id) => !rows.some((row) => row.subjectId === id));
   if (board.rowKind === "people" && missing.length && mode !== "selected") {
-    const contacts = (
-      await db.execute<{ id: string; name: string }>(
-        sql`select id,display_name as name from parties where org_id=${actor.orgId} and is_active and kind='person' and id in(select jsonb_array_elements_text(${JSON.stringify(missing)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}`,
-      )
-    ).rows;
+    const contacts = await db.execute<{ id: string; name: string }>(
+        sql`select id,display_name as name from parties where org_id=${actor.orgId} and is_active and kind='person' and id in(select jsonb_array_elements_text(${JSON.stringify(missing)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}`, 'objects',
+      );
     rows.push(
       ...contacts.map((person) => ({
         subjectId: person.id,
@@ -356,25 +352,21 @@ async function preview(
   const bindings =
     board.rowKind === 'people'
       ? rows.map((r) => ({ subjectId: r.subjectId, partyId: r.subjectId }))
-      : (
-          await db.execute<{ subjectId: string; partyId: string }>(
-            sql`select coalesce(equipment_unit_id,resource_location_id)::text as "subjectId",party_id as "partyId" from schedule_resource_recipients where org_id=${actor.orgId} and board_id=${board.id} and is_active and coalesce(equipment_unit_id,resource_location_id) in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`,
-          )
-        ).rows;
+      : (await db.execute<{ subjectId: string; partyId: string }>(
+            sql`select coalesce(equipment_unit_id,resource_location_id)::text as "subjectId",party_id as "partyId" from schedule_resource_recipients where org_id=${actor.orgId} and board_id=${board.id} and is_active and coalesce(equipment_unit_id,resource_location_id) in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`, 'objects',
+          ));
   const partyIds = [
     ...new Set([...bindings.map((binding) => binding.partyId), ...extras]),
   ];
   const parties = partyIds.length
-    ? (
-        await db.execute<{
+    ? (await db.execute<{
           id: string;
           name: string;
           email: string | null;
           subsidiaryId: string | null;
         }>(
-          sql`select id,display_name as name,email,subsidiary_id as "subsidiaryId" from parties where org_id=${actor.orgId} and is_active and id in (select jsonb_array_elements_text(${JSON.stringify(partyIds)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} order by id for share`,
-        )
-      ).rows
+          sql`select id,display_name as name,email,subsidiary_id as "subsidiaryId" from parties where org_id=${actor.orgId} and is_active and id in (select jsonb_array_elements_text(${JSON.stringify(partyIds)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} order by id for share`, 'objects',
+        ))
     : [];
   const recipients: ScheduleRecipientDraft[] = [];
   const refusals: string[] = [];
@@ -431,15 +423,13 @@ async function preview(
       });
   }
   if (audience.visibility === 'board') {
-    const subjectEntities = (
-      await db.execute<{ id: string; subsidiaryId: string | null }>(
+    const subjectEntities = await db.execute<{ id: string; subsidiaryId: string | null }>(
         board.rowKind === 'people'
           ? sql`select id,subsidiary_id as "subsidiaryId" from parties where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`
           : board.resourceKind === 'equipment'
             ? sql`select id,subsidiary_id as "subsidiaryId" from equipment_units where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`
-            : sql`select id,subsidiary_id as "subsidiaryId" from locations where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`,
-      )
-    ).rows;
+            : sql`select id,subsidiary_id as "subsidiaryId" from locations where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`, 'objects',
+      );
     if (
       subjectEntities.length !== relevant.size ||
       subjectEntities.some((s) => s.subsidiaryId !== board.subsidiaryId) ||
@@ -526,11 +516,9 @@ async function preview(
   const provider = await readOrgEmailConfigView(actor.orgId);
   const transport = await resolveOrgEmailTransportDetailed(actor.orgId);
   if (transport.state !== 'ready') refusals.push(emailDeliveryBlockedMessage(transport));
-  const organizationName = (
-    await db.execute<{ name: string }>(
-      sql`select name from orgs where id=${actor.orgId}`,
-    )
-  ).rows[0]!.name;
+  const organizationName = (await db.execute<{ name: string }>(
+      sql`select name from orgs where id=${actor.orgId}`, 'objects',
+    ))[0]!.name;
   const version = digest({
     organizationName,
     board: {
@@ -625,11 +613,9 @@ async function persist(
   await db.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-distribution:${actor.orgId}:${p.boardId}:${p.version}`},0))`,
   );
-  const existing = (
-    await db.execute<RequestRow>(
-      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and (replay_key=${key} or (board_id=${p.boardId} and version=${p.version} and status='queued' and replay_key not like 'automatic:%' and ${key} not like 'automatic:%')) for update`,
-    )
-  ).rows[0];
+  const existing = (await db.execute<RequestRow>(
+      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and (replay_key=${key} or (board_id=${p.boardId} and version=${p.version} and status='queued' and replay_key not like 'automatic:%' and ${key} not like 'automatic:%')) for update`, 'objects',
+    ))[0];
   if (existing) {
     if (
       existing.version !== p.version ||
@@ -643,11 +629,9 @@ async function persist(
     return existing;
   }
   const id = randomUUID();
-  const inserted = (
-    await db.execute(
-      sql`insert into schedule_distributions(id,org_id,board_id,subsidiary_id,from_date,through_date,version,audience,reason,replay_key,created_by) select ${id},${actor.orgId},b.id,b.subsidiary_id,${p.from}::date,${p.through}::date,${p.version},${JSON.stringify(p.audience)}::jsonb,${reason},${key},${actor.actorId} from schedule_boards b where b.org_id=${actor.orgId} and b.id=${p.boardId} returning id`,
-    )
-  ).rows;
+  const inserted = await db.execute(
+      sql`insert into schedule_distributions(id,org_id,board_id,subsidiary_id,from_date,through_date,version,audience,reason,replay_key,created_by) select ${id},${actor.orgId},b.id,b.subsidiary_id,${p.from}::date,${p.through}::date,${p.version},${JSON.stringify(p.audience)}::jsonb,${reason},${key},${actor.actorId} from schedule_boards b where b.org_id=${actor.orgId} and b.id=${p.boardId} returning id`, 'objects',
+    );
   if (inserted.length !== 1)
     throw refused(
       'The board changed while creating the report.',
@@ -711,11 +695,9 @@ async function persist(
         to: recipient.email ?? "missing@example.invalid",
         ...report,
       });
-      const written = (
-        await db.execute(
-          sql`insert into schedule_distribution_recipients(org_id,distribution_id,party_id,worker_party_id,equipment_unit_id,resource_location_id,email,report) values(${actor.orgId},${id},${contactId},${subject?.kind === "person" ? subject.id : null},${subject?.kind === "equipment" ? subject.id : null},${subject?.kind === "location" ? subject.id : null},${recipient.email},${JSON.stringify(report)}::jsonb) returning id`,
-        )
-      ).rows;
+      const written = await db.execute(
+          sql`insert into schedule_distribution_recipients(org_id,distribution_id,party_id,worker_party_id,equipment_unit_id,resource_location_id,email,report) values(${actor.orgId},${id},${contactId},${subject?.kind === "person" ? subject.id : null},${subject?.kind === "equipment" ? subject.id : null},${subject?.kind === "location" ? subject.id : null},${recipient.email},${JSON.stringify(report)}::jsonb) returning id`, 'objects',
+        );
       if (written.length !== 1)
         throw new Error('The schedule recipient snapshot was not recorded.');
     }
@@ -736,11 +718,9 @@ async function persist(
   };
 }
 async function deliveryReceipt(orgId: string, id: string, replayed: boolean) {
-  const row = (
-    await db.execute<{ runId: string; flowId: string }>(
-      sql`select d.flow_run_id as "runId",r.flow_id as "flowId" from schedule_distributions d join flow_runs r on r.org_id=d.org_id and r.id=d.flow_run_id where d.org_id=${orgId} and d.id=${id} and d.status='queued'`,
-    )
-  ).rows[0];
+  const row = (await db.execute<{ runId: string; flowId: string }>(
+      sql`select d.flow_run_id as "runId",r.flow_id as "flowId" from schedule_distributions d join flow_runs r on r.org_id=d.org_id and r.id=d.flow_run_id where d.org_id=${orgId} and d.id=${id} and d.status='queued'`, 'objects',
+    ))[0];
   if (!row) throw new Error('The queued schedule has no native delivery run.');
   return { id, status: 'queued' as const, replayed, ...row };
 }
@@ -770,11 +750,9 @@ export async function sendScheduleDistribution(
       await db.execute(
         sql`select id from schedule_boards where org_id=${actor.orgId} and id=${board.id} for update`,
       );
-      const prior = (
-        await db.execute<RequestRow>(
-          sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and replay_key=${input.key} for update`,
-        )
-      ).rows[0];
+      const prior = (await db.execute<RequestRow>(
+          sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and replay_key=${input.key} for update`, 'objects',
+        ))[0];
       if (prior) {
         if (
           prior.createdBy !== actor.actorId ||
@@ -823,11 +801,9 @@ export async function sendScheduleDistribution(
         requestId: request.id,
         actor,
       });
-      const stored = (
-        await db.execute<{ status: string }>(
-          sql`select status from schedule_distributions where org_id=${actor.orgId} and id=${request.id}`,
-        )
-      ).rows[0];
+      const stored = (await db.execute<{ status: string }>(
+          sql`select status from schedule_distributions where org_id=${actor.orgId} and id=${request.id}`, 'objects',
+        ))[0];
       if (result.failed || !result.runs || stored?.status !== 'queued')
         throw refused(
           result.error ??
@@ -849,11 +825,9 @@ export async function enqueueReviewedSchedule(input: {
   requestId: string;
   runId: string;
 }): Promise<number> {
-  const row = (
-    await db.execute<RequestRow>(
-      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${input.orgId} and id=${input.requestId} for update`,
-    )
-  ).rows[0];
+  const row = (await db.execute<RequestRow>(
+      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${input.orgId} and id=${input.requestId} for update`, 'objects',
+    ))[0];
   if (!row || row.createdBy !== input.actorId)
     throw refused(
       'The reviewed schedule does not belong to this actor.',
@@ -873,18 +847,15 @@ export async function enqueueReviewedSchedule(input: {
       'Preview and explicitly send the current version.',
     );
   if (row.status === 'queued') return 0;
-  const lineage = (
-    await db.execute(
-      sql`select id from flow_runs where org_id=${input.orgId} and id=${input.runId} and ((subject_kind='schedule_distribution' and subject_id=${row.id}) or (subject_kind='schedule_board' and subject_id=${row.boardId} and trigger='scheduled' and occurrence_key=${row.reason.startsWith("Automatic schedule occurrence ") ? row.reason.slice("Automatic schedule occurrence ".length) : ""})) and created_by=${input.actorId} for share`,
-    )
-  ).rows;
+  const lineage = await db.execute(
+      sql`select id from flow_runs where org_id=${input.orgId} and id=${input.runId} and ((subject_kind='schedule_distribution' and subject_id=${row.id}) or (subject_kind='schedule_board' and subject_id=${row.boardId} and trigger='scheduled' and occurrence_key=${row.reason.startsWith("Automatic schedule occurrence ") ? row.reason.slice("Automatic schedule occurrence ".length) : ""})) and created_by=${input.actorId} for share`, 'objects',
+    );
   if (lineage.length !== 1)
     throw refused(
       'The delivery run does not own this schedule review.',
       'Send through its native Schedule distribution flow.',
     );
-  const recipients = (
-    await db.execute<{
+  const recipients = await db.execute<{
       id: string;
       email: string;
       partyId: string;
@@ -899,9 +870,8 @@ export async function enqueueReviewedSchedule(input: {
         }[];
       };
     }>(
-      sql`select id,email,party_id as "partyId",report from schedule_distribution_recipients where org_id=${input.orgId} and distribution_id=${row.id} order by id`,
-    )
-  ).rows;
+      sql`select id,email,party_id as "partyId",report from schedule_distribution_recipients where org_id=${input.orgId} and distribution_id=${row.id} order by id`, 'objects',
+    );
   if (!recipients.length)
     throw new Error('The reviewed report has no recipients.');
   const distinct = new Map(
@@ -922,11 +892,9 @@ export async function enqueueReviewedSchedule(input: {
         },
       },
     });
-  const updated = (
-    await db.execute(
-      sql`update schedule_distributions set status='queued',queued_at=now(),flow_run_id=${input.runId} where org_id=${input.orgId} and id=${row.id} and status='previewed' returning id`,
-    )
-  ).rows;
+  const updated = await db.execute(
+      sql`update schedule_distributions set status='queued',queued_at=now(),flow_run_id=${input.runId} where org_id=${input.orgId} and id=${row.id} and status='previewed' returning id`, 'objects',
+    );
   if (updated.length !== 1)
     throw new Error('The reviewed schedule was not marked queued.');
   await db.execute(
@@ -984,18 +952,16 @@ export async function deliverAutomaticSchedule(input: {
 }) {
   return withOrgTransaction(input.orgId, async () => {
     const actor = { orgId: input.orgId, actorId: input.operatorId };
-    const active = (
-      await db.execute(
-        sql`select id from users where org_id=${input.orgId} and id=${input.operatorId} and is_active for share`,
-      )
-    ).rows;
+    const active = await db.execute(
+        sql`select id from users where org_id=${input.orgId} and id=${input.operatorId} and is_active for share`, 'objects',
+      );
     if (active.length !== 1)
       throw refused(
         "The automatic delivery operator is inactive or unavailable.",
         "Configure an active authorized operator in Board Settings.",
       );
     // Serialize issuance with board policy changes before resolving current recipients.
-    const lockedBoard = (await db.execute(sql`select id from schedule_boards where org_id=${input.orgId} and id=${input.boardId} for update`)).rows;
+    const lockedBoard = await db.execute(sql`select id from schedule_boards where org_id=${input.orgId} and id=${input.boardId} for update`, 'objects');
     if (lockedBoard.length !== 1) throw refused("The schedule board is unavailable.", "Choose an active board in your organization.");
     const board = await getBoard(actor, input.boardId);
     if (!board.isActive)
@@ -1027,11 +993,9 @@ export async function deliverAutomaticSchedule(input: {
         "The Flow timer and report use different time zones.",
         "Set the Flow trigger timezone to the board delivery policy timezone.",
       );
-    const lineage = (
-      await db.execute(
-        sql`select r.id from flow_runs r join flows f on f.org_id=r.org_id and f.id=r.flow_id where r.org_id=${input.orgId} and r.id=${input.runId} and r.subject_kind='schedule_board' and r.subject_id=${board.id} and r.trigger='scheduled' and r.occurrence_key=${input.occurrence.key} and r.created_by=${input.operatorId} and r.context->>'deliveryPolicyVersion'=${digest(board.automaticDeliveryPolicy)} and r.context->'scheduledOccurrence'=${JSON.stringify(input.occurrence)}::jsonb and f.enabled for share of r,f`,
-      )
-    ).rows;
+    const lineage = await db.execute(
+        sql`select r.id from flow_runs r join flows f on f.org_id=r.org_id and f.id=r.flow_id where r.org_id=${input.orgId} and r.id=${input.runId} and r.subject_kind='schedule_board' and r.subject_id=${board.id} and r.trigger='scheduled' and r.occurrence_key=${input.occurrence.key} and r.created_by=${input.operatorId} and r.context->>'deliveryPolicyVersion'=${digest(board.automaticDeliveryPolicy)} and r.context->'scheduledOccurrence'=${JSON.stringify(input.occurrence)}::jsonb and f.enabled for share of r,f`, 'objects',
+      );
     if (lineage.length !== 1)
       throw refused(
         "This report does not belong to the native timer run.",
@@ -1063,11 +1027,9 @@ export async function deliverAutomaticSchedule(input: {
       );
     const through = addCalendarDays(from, policy.days - 1);
     const key = `automatic:${digest(input.occurrence.key)}`;
-    const prior = (
-      await db.execute<{ id: string; status: string }>(
-        sql`select id,status from schedule_distributions where org_id=${input.orgId} and replay_key=${key} for update`,
-      )
-    ).rows[0];
+    const prior = (await db.execute<{ id: string; status: string }>(
+        sql`select id,status from schedule_distributions where org_id=${input.orgId} and replay_key=${key} for update`, 'objects',
+      ))[0];
     if (prior?.status === "queued") return 0;
     const p = await preview(actor, board.id, from, through, {
       visibility: policy.visibility,
@@ -1109,22 +1071,18 @@ export async function searchScheduleContacts(
   return withOrgTransaction(actor.orgId, async () => {
     const board = await getBoard(actor, boardId);
     const allowed = await boardAuthority(actor, board, "manage");
-    const contacts = (
-      await db.execute<{ id: string; name: string; email: string | null }>(
-        sql`select id,display_name as name,email from parties where org_id=${actor.orgId} and kind='person' and is_active and display_name ilike ${`%${query.replace(/[\\%_]/g, "\\$&")}%`} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} ${board.subsidiaryId ? sql`and subsidiary_id=${board.subsidiaryId}` : sql``} order by display_name,id limit 101`,
-      )
-    ).rows;
+    const contacts = await db.execute<{ id: string; name: string; email: string | null }>(
+        sql`select id,display_name as name,email from parties where org_id=${actor.orgId} and kind='person' and is_active and display_name ilike ${`%${query.replace(/[\\%_]/g, "\\$&")}%`} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} ${board.subsidiaryId ? sql`and subsidiary_id=${board.subsidiaryId}` : sql``} order by display_name,id limit 101`, 'objects',
+      );
     const roles = (await actorHasPermission(
       db,
       actor.orgId,
       actor.actorId,
       "flows.manage",
     ))
-      ? (
-          await db.execute<{ key: string; name: string }>(
-            sql`select key,name from app_roles where org_id=${actor.orgId} order by name,key`,
-          )
-        ).rows
+      ? (await db.execute<{ key: string; name: string }>(
+            sql`select key,name from app_roles where org_id=${actor.orgId} order by name,key`, 'objects',
+          ))
       : [];
     return {
       contacts: contacts.slice(0, 100),

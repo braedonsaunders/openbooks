@@ -60,7 +60,7 @@ async function loadDocumentReferenceDefs(
   orgId: string,
   docKind: string | null,
 ): Promise<ReferenceDef[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     key: string;
     label: string;
     referenceTable: string;
@@ -70,7 +70,7 @@ async function loadDocumentReferenceDefs(
      where org_id = ${orgId} and target_table = 'documents'
        and (target_kind is null or target_kind = ${docKind})
        and field_type = 'reference'
-  `)).rows;
+  `, "objects");
   return rows.filter(
     (row) =>
       typeof row.referenceTable === "string" &&
@@ -166,11 +166,9 @@ export async function assertDocumentMutationRefsOwned(
   for (const [table, refs] of wanted) {
     const ids = [...new Set(refs.map((r) => r.value))];
     const owned = new Set(
-      (
-        await db.execute<{ id: string }>(sql`
+      (await db.execute<{ id: string }>(sql`
           select id from ${sql.raw(`"${table}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)
-      ).rows.map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects")).map((r) => r.id),
     );
     for (const ref of refs) {
       if (!owned.has(ref.value)) throw new DocumentMutationReferenceError(ref.field);

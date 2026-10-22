@@ -45,7 +45,7 @@ test(
       const draft = (await db.execute<{ status: string }>(sql`
         select status from psp_settlement_batches
          where id = ${first.batchId} and org_id = ${org.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(draft?.status, "draft");
 
       await assert.rejects(
@@ -76,7 +76,7 @@ test(
         select bank_account_id, fee_account_id, clearing_account_id, subsidiary_id, line_count
           from psp_settlement_batches
          where id = ${first.batchId} and org_id = ${org.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(repaired?.bank_account_id, org.accounts.bank);
       assert.equal(repaired?.fee_account_id, org.accounts.freight);
       assert.equal(repaired?.clearing_account_id, org.accounts.clearing);
@@ -90,15 +90,15 @@ test(
            and row_id = ${first.batchId}
            and action = 'update'
          order by id desc limit 1
-      `)).rows[0]?.changes as { mode?: string } | undefined;
+      `, "objects"))[0]?.changes as { mode?: string } | undefined;
       assert.equal(audits?.mode, "draft_configuration_repair");
 
       const { entryId } = await postSettlementBatch(org.orgId, first.batchId, actor, null);
       const balance = (await db.execute<{ amount: string }>(sql`
         select coalesce(sum(amount), 0)::text as amount
           from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId}
-      `));
-      assert.equal(balance.rows[0]?.amount, "0.0000");
+      `, "objects"));
+      assert.equal(balance[0]?.amount, "0.0000");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -146,7 +146,7 @@ test(
       const kept = (await db.execute<{ status: string; gross_amount: string }>(sql`
         select status, gross_amount::text from psp_settlement_batches
          where id = ${first.batchId} and org_id = ${org.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(kept?.status, "draft");
       assert.equal(kept?.gross_amount, "100.0000");
     } finally {

@@ -157,8 +157,8 @@ export const POST = defineRoute({
         -- A retry resolves the existing audited payload below; conflicting input is refused.
         on conflict (id) do nothing
         returning id, slug
-      `))
-      if (!inserted.rows[0]) {
+      `, 'objects'))
+      if (!inserted[0]) {
         return {
           kind: 'replay' as const,
           result: await resolveIdempotentReplay(tx, {
@@ -181,7 +181,7 @@ export const POST = defineRoute({
         },
         tx,
       )
-      return { kind: 'created' as const, result: inserted.rows[0] }
+      return { kind: 'created' as const, result: inserted[0] }
     })
     if (outcome.kind === 'replay') {
       if (outcome.result === 'conflict') {
@@ -190,11 +190,11 @@ export const POST = defineRoute({
       const existing = (await db.execute<{ id: string; slug: string }>(sql`
         select id, slug from saved_views
          where id = ${requestId} and org_id = ${user.orgId}
-      `))
-      if (!existing.rows[0]) {
+      `, 'objects'))
+      if (!existing[0]) {
         return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
       }
-      return NextResponse.json({ id: existing.rows[0].id, slug: existing.rows[0].slug }, { status: 200 })
+      return NextResponse.json({ id: existing[0].id, slug: existing[0].slug }, { status: 200 })
     }
     return NextResponse.json({ id: outcome.result.id, slug: outcome.result.slug }, { status: 201 })
   },

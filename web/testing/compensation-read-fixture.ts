@@ -50,7 +50,7 @@ export function installCompensationReadFixture() {
     '@openbooks/engine/hrm/compensation/pay-transparency': state + 'export async function latestGapSnapshot(){f.gapReads++;if(f.snapshot?.error)throw f.snapshot.error;return f.snapshot?.snapshot??null}',
     '@openbooks/engine/organization/currencies': state + 'export async function organizationCurrencyOptions(){return [{value:f.baseCurrency,label:f.baseCurrency,scopeValue:null}]}',
     '../setup/ref-options': 'export async function loadEntityOptions(){return []}',
-    '@openbooks/engine/platform/db': state + `export const db={execute:async(query)=>({rows:JSON.stringify(query).includes('select distinct p.custom')?[{value:'A',label:'A'},{value:'B',label:'B'}]:[{base_currency:f.baseCurrency}]})}`,
+    '@openbooks/engine/platform/db': state + `export const db={execute:async(query, mode)=>Promise.resolve({rows:JSON.stringify(query).includes('select distinct p.custom')?[{value:'A',label:'A'},{value:'B',label:'B'}]:[{base_currency:f.baseCurrency}]}).then((result) => (mode === 'objects' ? result.rows : result))}`,
   }
   registerHooks({ resolve(specifier, context, next) {
     if (specifier === '../features') return virtual(state + 'export async function isFeatureEnabled(org,key){return f.features[key]??true}')

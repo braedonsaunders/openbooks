@@ -82,7 +82,7 @@ async function recognizeProportional(
             and reversal.kind = 'reversal'
             and reversal.idempotency_key = 'stored-value:void-reversal:' || e.id::text
        )
-  `)).rows[0];
+  `, "objects"))[0];
   const redeemedMinor = BigInt(redemption?.redeemed ?? "0");
   if (!program.breakageIncomeAccountId) {
     throw storedValueRefusal({
@@ -125,7 +125,7 @@ async function recognizeProportional(
     partyId: account.customerPartyId,
     auditChanges: { accountId: account.id, policy: "proportional" },
   });
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update stored_value_accounts
        set balance_minor = (balance_minor - ${amount.toString()})::bigint,
            breakage_recognized_minor = (breakage_recognized_minor + ${amount.toString()})::bigint,
@@ -134,7 +134,7 @@ async function recognizeProportional(
      where org_id = ${orgId} and id = ${account.id} and status = 'active'
        and balance_minor = ${account.balanceMinor.toString()}
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} changed while recognizing breakage.`,
@@ -213,7 +213,7 @@ async function recognizeRemote(
     partyId: account.customerPartyId,
     auditChanges: { accountId: account.id, policy: "remote" },
   });
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update stored_value_accounts
        set balance_minor = '0',
            breakage_recognized_minor = (breakage_recognized_minor + ${account.balanceMinor.toString()})::bigint,
@@ -223,7 +223,7 @@ async function recognizeRemote(
      where org_id = ${orgId} and id = ${account.id} and status = 'active'
        and balance_minor = ${account.balanceMinor.toString()}
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} changed while recognizing breakage.`,
@@ -255,9 +255,9 @@ type ScanCandidate = {
  * page uses. */
 export async function storedValueBreakageTargets(): Promise<string[]> {
   // bypass: scheduler-tick — the breakage scan finds due stored-value work across every organization.
-  const rows = (await withBypassContext(() => db.execute<{ id: string; settings: unknown }>(sql`
+  const rows = await withBypassContext(() => db.execute<{ id: string; settings: unknown }>(sql`
     select id, settings from orgs
-  `))).rows;
+  `, "objects"));
   return rows.filter((row) => storedValueEnabledFor((row.settings as Record<string, unknown> | null)?.["features"])).map((row) => row.id);
 }
 
@@ -267,14 +267,14 @@ async function processOrgBreakage(orgId: string): Promise<number> {
   const period = today.slice(0, 7);
   let recognized = 0;
 
-  const expired = (await db.execute<ScanCandidate>(sql`
+  const expired = await db.execute<ScanCandidate>(sql`
     select a.id
       from stored_value_accounts a
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.status = 'active'
        and ${storedValueExpiredSql(sql`a.expires_on`, today)}
      order by a.id
-  `)).rows;
+  `, "objects");
   for (const row of expired) {
     // The scheduled scan acts on every entity: explicit null is the
     // unrestricted grant named outright.
@@ -282,7 +282,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
     recognized++;
   }
 
-  const remote = (await db.execute<ScanCandidate>(sql`
+  const remote = await db.execute<ScanCandidate>(sql`
     select a.id
       from stored_value_accounts a
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
@@ -290,7 +290,7 @@ async function processOrgBreakage(orgId: string): Promise<number> {
        and p.breakage_policy = 'remote' and a.balance_minor > 0
        and a.last_activity_on < ${today}::date - make_interval(months => p.inactivity_months)
      order by a.id
-  `)).rows;
+  `, "objects");
   for (const row of remote) {
     // The row lock serializes a concurrent redemption: the winner moves the
     // balance first and the loser re-reads it.
@@ -303,14 +303,14 @@ async function processOrgBreakage(orgId: string): Promise<number> {
     if (await recognizeRemote(orgId, account, today)) recognized++;
   }
 
-  const proportional = (await db.execute<ScanCandidate>(sql`
+  const proportional = await db.execute<ScanCandidate>(sql`
     select a.id
       from stored_value_accounts a
       join stored_value_programs p on p.org_id = a.org_id and p.id = a.program_id
      where a.org_id = ${orgId} and a.status = 'active'
        and p.breakage_policy = 'proportional' and a.balance_minor > 0
      order by a.id
-  `)).rows;
+  `, "objects");
   for (const row of proportional) {
     const account = await lockStoredValueAccount(orgId, row.id, null);
     if (account.status !== "active" || account.balanceMinor <= 0n) continue;

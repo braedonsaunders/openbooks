@@ -277,7 +277,7 @@ export async function loadCurrentClosingFxEvidence(
          select 1 from fx_revaluation_rate_evidence successor
           where successor.org_id = e.org_id and successor.supersedes_id = e.id
        )
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   return row ? toRecord(row) : null;
 }
 
@@ -287,13 +287,13 @@ export async function listClosingFxEvidenceVersions(
   orgId: string,
   key: ClosingFxEvidencePositionKey,
 ): Promise<ClosingFxRateEvidenceRecord[]> {
-  const rows = (await runner.execute<EvidenceRow>(sql`
+  const rows = await runner.execute<EvidenceRow>(sql`
     select ${EVIDENCE_COLUMNS}
       from fx_revaluation_rate_evidence e
      where e.org_id = ${orgId} and e.book_id = ${key.bookId}
        and e.subsidiary_id = ${key.subsidiaryId} and e.period_id = ${key.periodId}
        and e.account_id = ${key.accountId} and e.transaction_currency = ${key.transactionCurrency}
-     order by e.version asc`)).rows;
+     order by e.version asc`, "objects");
   return rows.map(toRecord);
 }
 
@@ -354,7 +354,7 @@ export async function recordClosingFxRateEvidence(args: {
     // recorded quote even if the position has since gained a successor.
     const replay = (await db.execute<EvidenceRow>(sql`
       select ${EVIDENCE_COLUMNS} from fx_revaluation_rate_evidence
-       where org_id = ${orgId} and request_id = ${input.requestId}`)).rows[0];
+       where org_id = ${orgId} and request_id = ${input.requestId}`, "objects"))[0];
     if (replay) {
       if (replay.request_sha256 !== requestSha256 || replay.created_by !== actorId) {
         throw new ClosingFxEvidenceError(
@@ -369,7 +369,7 @@ export async function recordClosingFxRateEvidence(args: {
     // before the quote commits.
     const book = (await db.execute<{ is_active: boolean; posts_gl: boolean }>(sql`
       select is_active, posts_gl from accounting_books
-       where org_id = ${orgId} and id = ${input.bookId} for share`)).rows[0];
+       where org_id = ${orgId} and id = ${input.bookId} for share`, "objects"))[0];
     if (!book || !book.is_active || !book.posts_gl) {
       throw new ClosingFxEvidenceError(
         "record the closing rate on an active posting book; choose the book this close runs on",
@@ -377,7 +377,7 @@ export async function recordClosingFxRateEvidence(args: {
     }
     const subsidiary = (await db.execute<{ is_active: boolean; is_elimination: boolean }>(sql`
       select is_active, is_elimination from subsidiaries
-       where org_id = ${orgId} and id = ${input.subsidiaryId} for share`)).rows[0];
+       where org_id = ${orgId} and id = ${input.subsidiaryId} for share`, "objects"))[0];
     if (!subsidiary || !subsidiary.is_active || subsidiary.is_elimination) {
       throw new ClosingFxEvidenceError(
         "record the closing rate for an active legal entity in this organization",
@@ -385,7 +385,7 @@ export async function recordClosingFxRateEvidence(args: {
     }
     const period = (await db.execute<{ ends_on: string }>(sql`
       select ends_on::text as ends_on from accounting_periods
-       where org_id = ${orgId} and id = ${input.periodId} for share`)).rows[0];
+       where org_id = ${orgId} and id = ${input.periodId} for share`, "objects"))[0];
     if (!period) {
       throw new ClosingFxEvidenceError(
         "record the closing rate for an assigned accounting period in this organization",
@@ -399,7 +399,7 @@ export async function recordClosingFxRateEvidence(args: {
     const account = (await db.execute<{ is_active: boolean; is_summary: boolean; is_monetary: boolean }>(sql`
       select a.is_active, a.is_summary, ${MONETARY_ACCOUNT_SQL} as is_monetary
         from accounts a
-       where a.org_id = ${orgId} and a.id = ${input.accountId} for share`)).rows[0];
+       where a.org_id = ${orgId} and a.id = ${input.accountId} for share`, "objects"))[0];
     if (!account || !account.is_active || account.is_summary || !account.is_monetary) {
       throw new ClosingFxEvidenceError(
         "record the closing rate for an active monetary account — a bank, receivable, payable or monetary balance-sheet account",
@@ -424,13 +424,13 @@ export async function recordClosingFxRateEvidence(args: {
       }
       throw error;
     }
-    const currencies = (await db.execute<{ code: string }>(sql`
-      select code from currencies where code in (${input.transactionCurrency}, ${input.measurementCurrency}) for share`)).rows;
+    const currencies = await db.execute<{ code: string }>(sql`
+      select code from currencies where code in (${input.transactionCurrency}, ${input.measurementCurrency}) for share`, "objects");
     if (currencies.length !== 2) {
       throw new ClosingFxEvidenceError("name registered transaction and measurement currencies");
     }
     const measured = (await db.execute<{ currency: string | null }>(sql`
-      select public.accounting_book_currency(${orgId}, ${input.bookId}, ${input.subsidiaryId}) as currency`)).rows[0]?.currency;
+      select public.accounting_book_currency(${orgId}, ${input.bookId}, ${input.subsidiaryId}) as currency`, "objects"))[0]?.currency;
     if (!measured) throw new ScopeNotFoundError();
     if (measured !== input.measurementCurrency) {
       throw new ClosingFxEvidenceError(
@@ -459,8 +459,8 @@ export async function recordClosingFxRateEvidence(args: {
         ${input.accountId}, ${input.transactionCurrency}, ${measured}, ${period.ends_on}, ${input.rate},
         ${input.source}, ${input.reason}, ${current ? current.version + 1 : 1},
         ${currentId}, ${input.requestId}, ${requestSha256}, ${actorId})
-      returning ${EVIDENCE_COLUMNS}`);
-    const row = inserted.rows[0];
+      returning ${EVIDENCE_COLUMNS}`, "objects");
+    const row = inserted[0];
     if (!row) {
       throw new ClosingFxEvidenceError("the closing rate was not recorded; reload the position and record again");
     }

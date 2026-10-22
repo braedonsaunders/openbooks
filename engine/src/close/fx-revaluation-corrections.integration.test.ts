@@ -56,7 +56,7 @@ async function fixture() {
   const total = async (periodId = org.periodId) => (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id
     where e.org_id=${org.orgId} and e.period_id=${periodId} and e.origin='fx_revaluation'
-      and e.status in ('posted','reversed') and l.account_id=${org.accounts.ar}`)).rows[0]!.amount;
+      and e.status in ('posted','reversed') and l.account_id=${org.accounts.ar}`, "objects"))[0]!.amount;
   return { ...org, actorId, nextPeriodId, seed, adjustment, run, readiness, total };
 }
 
@@ -72,7 +72,7 @@ async function nativeInvoice(f: Awaited<ReturnType<typeof fixture>>, currency: "
   await db.execute(sql`update documents set status='approved' where org_id=${f.orgId} and id=${invoiceId}`);
   const invoiceEntryId = await postDocument(invoiceId, { control: { ar: f.accounts.ar, ap: f.accounts.ap, bank: f.accounts.bank } });
   const target = (await db.execute<{ id: string }>(sql`select id from journal_lines
-    where entry_id=${invoiceEntryId} and account_id=${f.accounts.ar}`)).rows[0]!;
+    where entry_id=${invoiceEntryId} and account_id=${f.accounts.ar}`, "objects"))[0]!;
   if (currency === "EUR") await db.execute(sql`insert into fx_rates(org_id,from_currency,to_currency,as_of,rate_type,rate)
     values(${f.orgId},'EUR','CAD','2026-07-31','spot',1.5)`);
   return async (partial = false, date = f.date, periodId = f.periodId) => {
@@ -100,7 +100,7 @@ for (const currency of ["USD", "EUR"] as const) {
       await (await nativeInvoice(f, currency))();
       const before = (await db.execute<{ amount: string }>(sql`select sum(l.amount)::text as amount
         from journal_lines l join journal_entries e on e.id=l.entry_id
-        where l.org_id=${f.orgId} and l.account_id=${f.accounts.ar} and e.status='posted'`)).rows[0]!;
+        where l.org_id=${f.orgId} and l.account_id=${f.accounts.ar} and e.status='posted'`, "objects"))[0]!;
       assert.equal(before.amount, "0.0000");
       const result = await f.run();
       assert.deepEqual(result.problems, []);
@@ -179,13 +179,13 @@ test("FX reruns correct changed source balances and rates without rewriting prio
     assert.equal(await f.total(), "4.0000");
     assert.equal((await f.run()).posted.length, 0);
     assert.equal((await f.readiness()).unrevaluedPositions, 0);
-    const originals = (await db.execute<{ amount: string }>(sql`select l.amount::text as amount from journal_lines l
-      where l.entry_id=${first.posted[0]!.entryId} and l.account_id=${f.accounts.ar}`)).rows;
+    const originals = await db.execute<{ amount: string }>(sql`select l.amount::text as amount from journal_lines l
+      where l.entry_id=${first.posted[0]!.entryId} and l.account_id=${f.accounts.ar}`, "objects");
     assert.equal(originals[0]?.amount, "1.0000", "the first posted generation is immutable");
     assert.equal(await f.total(f.nextPeriodId), "-4.0000", "every correction has its own next-period mirror");
     const evidence = (await db.execute<{ actor_id: string; changes: { positions: unknown[]; effectiveAdjustments: unknown[]; reversalEntryId: string } }>(sql`
       select actor_id,changes from audit_log where org_id=${f.orgId} and row_id=${second.posted[0]!.entryId}
-      and request_id='fx_revaluation'`)).rows[0]!;
+      and request_id='fx_revaluation'`, "objects"))[0]!;
     assert.equal(evidence.actor_id, f.actorId);
     assert.equal(evidence.changes.positions.length, 1);
     assert.equal(evidence.changes.effectiveAdjustments.length, 1);
@@ -233,7 +233,7 @@ for (const matchingCalendarPeriod of [true, false]) {
       if (matchingCalendarPeriod) {
         assert.deepEqual(result.problems, []);
         const reversal = (await db.execute<{ period_id: string }>(sql`select period_id from journal_entries
-          where org_id=${f.orgId} and id=${result.posted[0]!.reversalEntryId}`)).rows[0]!;
+          where org_id=${f.orgId} and id=${result.posted[0]!.reversalEntryId}`, "objects"))[0]!;
         assert.equal(reversal.period_id, next, "an earlier period in an unrelated calendar is not a reversal destination");
       } else {
         assert.equal(result.posted.length, 0);
@@ -321,7 +321,7 @@ test("FX reads its basis after waiting for the exclusive ledger-setup fence", { 
       observedWait = (await db.execute<{ waiting: boolean }>(sql`select exists (
         select 1 from pg_stat_activity where datname=current_database()
           and wait_event_type='Lock' and query like '%pg_advisory_xact_lock%'
-      ) as waiting`)).rows[0]!.waiting;
+      ) as waiting`, "objects"))[0]!.waiting;
       if (observedWait) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }

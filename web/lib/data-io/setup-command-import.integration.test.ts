@@ -13,16 +13,16 @@ const DB = { skip: !process.env.OPENBOOKS_DB_URL }
 
 /** A zero-row feature update must fail instead of testing unchanged defaults. */
 async function setImportFeatures(orgId: string, flags: Record<string, boolean>): Promise<void> {
-  const updated = await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(flags)}::jsonb, true) where id = ${orgId} returning id`)
-  assert.equal(updated.rows.length, 1, 'the feature fixture must update its organization')
+  const updated = await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(flags)}::jsonb, true) where id = ${orgId} returning id`, 'objects')
+  assert.equal(updated.length, 1, 'the feature fixture must update its organization')
 }
 
 async function seedChannel(orgId: string, actorId: string, name: string): Promise<string> {
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into sales_channels (org_id, kind, name, status, currency, external_account, settings, created_by, updated_by)
     values (${orgId}, 'shopify', ${name}, 'active', 'USD', ${`${name}.myshopify.com`}, '{}'::jsonb, ${actorId}, ${actorId})
-    returning id`))
-  const id = inserted.rows[0]?.id
+    returning id`, 'objects'))
+  const id = inserted[0]?.id
   assert.ok(id)
   return id
 }
@@ -69,19 +69,19 @@ test('account map imports close the prior open row through the command and audit
     assert.deepEqual({ created: outcome.created, updated: outcome.updated, failed: outcome.failed }, { created: 0, updated: 1, failed: 0 })
     // The prior open row closes the day before the successor starts; the new
     // row carries the imported account. A raw insert could never close it.
-    const rows = (await db.execute<{ account_id: string; effective_from: string; effective_to: string | null }>(sql`
+    const rows = await db.execute<{ account_id: string; effective_from: string; effective_to: string | null }>(sql`
       select account_id, effective_from::text as effective_from, effective_to::text as effective_to
         from sales_channel_account_maps
        where org_id = ${org.orgId} and role = 'revenue' and key = ''
-       order by effective_from`)).rows
+       order by effective_from`, 'objects')
     assert.deepEqual(rows.map((row) => [row.account_id, row.effective_from, row.effective_to]), [
       [org.accounts.revenue, '2026-01-01', '2026-05-31'],
       [org.accounts.bank, '2026-06-01', null],
     ])
     // Both the close-out and the new row carry audit evidence for the actor.
-    const audits = (await db.execute<{ action: string; actor_id: string }>(sql`
+    const audits = await db.execute<{ action: string; actor_id: string }>(sql`
       select action, actor_id from audit_log
-       where org_id = ${org.orgId} and table_name = 'sales_channel_account_maps'`)).rows
+       where org_id = ${org.orgId} and table_name = 'sales_channel_account_maps'`, 'objects')
     assert.deepEqual(audits.map((row) => row.action).sort(), ['insert', 'insert', 'update'])
     assert.ok(audits.every((row) => row.actor_id === actorId))
   } finally {
@@ -105,7 +105,7 @@ test('account map imports refuse while Sales Channels is off and store nothing',
     assert.equal(outcome.failed, 1)
     assert.match(outcome.errors[0]?.message ?? '', /not available/i)
     const stored = (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from sales_channel_account_maps where org_id = ${org.orgId}`)).rows[0]?.count
+      select count(*)::int as count from sales_channel_account_maps where org_id = ${org.orgId}`, 'objects'))[0]?.count
     assert.equal(stored, 0)
   } finally {
     await dropScratchOrgReporting(org.orgId)
@@ -149,15 +149,15 @@ test('location imports refresh the mapping in place through the command and audi
     )
     assert.deepEqual({ created: second.created, updated: second.updated, failed: second.failed }, { created: 0, updated: 1, failed: 0 })
     // A re-sync refreshes the one mapping instead of stacking a duplicate.
-    const rows = (await db.execute<{ id: string; external_name: string; buffer_quantity: string }>(sql`
+    const rows = await db.execute<{ id: string; external_name: string; buffer_quantity: string }>(sql`
       select id, external_name, buffer_quantity::text as buffer_quantity
-        from sales_channel_locations where org_id = ${org.orgId}`)).rows
+        from sales_channel_locations where org_id = ${org.orgId}`, 'objects')
     assert.equal(rows.length, 1)
     assert.equal(rows[0]?.external_name, 'Toronto flagship')
     assert.equal(rows[0]?.buffer_quantity, '2.0000')
-    const audits = (await db.execute<{ action: string }>(sql`
+    const audits = await db.execute<{ action: string }>(sql`
       select action from audit_log
-       where org_id = ${org.orgId} and table_name = 'sales_channel_locations' order by id`)).rows
+       where org_id = ${org.orgId} and table_name = 'sales_channel_locations' order by id`, 'objects')
     assert.deepEqual(audits.map((row) => row.action), ['insert', 'update'])
   } finally {
     await dropScratchOrgReporting(org.orgId)
@@ -188,9 +188,9 @@ test('barred configuration is refused by name on import and stores nothing', DB,
       assert.ok(message.includes(entity.key), `${entity.key} refusal must name the entity: ${message}`)
       assert.match(message, /cannot be imported/, `${entity.key} refusal must say import is barred`)
       if (entity.key === 'dunning-policies') {
-        const seeded = (await db.execute<{ id: string }>(sql`
+        const seeded = await db.execute<{ id: string }>(sql`
           insert into dunning_policies (org_id, name, is_active, autopay_retry_offsets_days, autopay_insufficient_funds_offsets_days)
-          values (${org.orgId}, 'Complete policy export', false, '{2,7}', '{4}') returning id`)).rows
+          values (${org.orgId}, 'Complete policy export', false, '{2,7}', '{4}') returning id`, 'objects')
         assert.equal(seeded.length, 1)
         const policy = seeded[0]!
         await db.execute(sql`insert into dunning_stages
@@ -227,7 +227,7 @@ test('command imports preview without persisting', DB, async () => {
     )
     assert.deepEqual({ created: outcome.created, updated: outcome.updated, failed: outcome.failed }, { created: 1, updated: 0, failed: 0 })
     const stored = (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from sales_channel_account_maps where org_id = ${org.orgId}`)).rows[0]?.count
+      select count(*)::int as count from sales_channel_account_maps where org_id = ${org.orgId}`, 'objects'))[0]?.count
     assert.equal(stored, 0)
   } finally {
     await dropScratchOrgReporting(org.orgId)
@@ -241,13 +241,13 @@ test('worker enrollment and contribution-term imports refuse preview and commit 
     for (const key of ['benefit-enrollment-configuration', 'benefit-enrollment-terms']) {
       const entity = SETUP_ENTITY_BY_KEY.get(key)!
       assert.equal(setupDescriptor(entity).supportsImport, false)
-      const before = (await db.execute(sql`select count(*)::int n from ${sql.raw(entity.table)} where org_id=${org.orgId}`)).rows[0]!.n
+      const before = (await db.execute(sql`select count(*)::int n from ${sql.raw(entity.table)} where org_id=${org.orgId}`, 'objects'))[0]!.n
       for (const dryRun of [true, false]) for (const mode of ['insert', 'upsert'] as const) {
         const outcome = await setupResource(entity, org.orgId).write([{}], mode, { orgId: org.orgId, actorId, dryRun, permissions: new Set(['hrm.benefits.manage']) })
         assert.deepEqual([outcome.created, outcome.updated, outcome.failed], [0, 0, 1])
         assert.match(outcome.errors[0]!.message, /POST \/api\/hrm\/enrollments/)
       }
-      const after = (await db.execute(sql`select count(*)::int n from ${sql.raw(entity.table)} where org_id=${org.orgId}`)).rows[0]!.n
+      const after = (await db.execute(sql`select count(*)::int n from ${sql.raw(entity.table)} where org_id=${org.orgId}`, 'objects'))[0]!.n
       assert.equal(after, before)
     }
   } finally { await dropScratchOrgReporting(org.orgId) }

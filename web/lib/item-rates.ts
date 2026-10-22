@@ -95,8 +95,8 @@ export async function resolveItemRate(input: {
   const profile = (await db.execute<{ base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
     select base_unit, pricing_policy, invoice_presentation from item_rate_profiles
      where org_id = ${input.orgId} and item_id = ${input.itemId} and is_active
-  `))
-  const p = profile.rows[0]
+  `, 'objects'))
+  const p = profile[0]
   if (!p) return null
 
   const context = (await db.execute<{ customer_id: string | null; starts_on: string | null; subsidiary_id: string | null; target_currency:string; unit_rate_book_id: string | null }>(sql`
@@ -106,8 +106,8 @@ export async function resolveItemRate(input: {
              where id = ${input.equipmentUnitId ?? null} and org_id = ${input.orgId}) as unit_rate_book_id
       from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-  `))
-  const ctx = context.rows[0]
+  `, 'objects'))
+  const ctx = context[0]
   if (!ctx) return null
   const projectStart = ctx.starts_on ?? input.onDate
 
@@ -144,9 +144,9 @@ export async function resolveItemRate(input: {
     select rate_book_id, rate_version_id, priority
       from scoped where rate_book_id is not null
      order by priority, dimension_specificity desc, effective_from desc nulls last, rate_book_id
-  `))
+  `, 'objects'))
 
-  for (const candidate of candidates.rows) {
+  for (const candidate of candidates) {
     const version = (await db.execute<{ id: string;currency:string }>(sql`
       select v.id,b.currency
         from item_rate_versions v
@@ -172,15 +172,15 @@ export async function resolveItemRate(input: {
                })})
         )
        order by v.effective_from desc limit 1
-    `))
-    const rateVersionId = version.rows[0]?.id
+    `, 'objects'))
+    const rateVersionId = version[0]?.id
     // Only the absence of a matching item/version falls through to a
     // lower-priority card. Once a card is selected, its currency is the
     // agreement: without FX coverage the resolver must refuse naming
     // source, target and date — silently billing a cheaper card's rates in
     // another currency reports success for numbers nobody agreed.
     if (!rateVersionId) continue
-    const sourceCurrency=version.rows[0]!.currency
+    const sourceCurrency=version[0]!.currency
     const fxRate=await billRateFx(input.orgId,sourceCurrency,ctx.target_currency,input.onDate)
     if(!fxRate) {
       throw new ItemRateResolutionError(`No spot rate for ${sourceCurrency}→${ctx.target_currency} on or before ${input.onDate} — the selected rate card prices in ${sourceCurrency}`)
@@ -196,7 +196,7 @@ export async function resolveItemRate(input: {
     const pin = (await db.execute<{ id: string; base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
       select id, base_unit, pricing_policy, invoice_presentation from item_rate_version_profiles
        where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}
-    `)).rows[0]
+    `, 'objects'))[0]
     const behavior = pin ?? p
     const policyProvenance: ResolvedItemRate['policyProvenance'] = pin
       ? (await isLegacyProvenance(db, input.orgId, 'item_rate_version_profiles', pin.id, { fallback: true }))
@@ -208,8 +208,8 @@ export async function resolveItemRate(input: {
         from item_rate_lines
        where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}
        order by base_quantity, sort_order
-    `))
-    const tiers: RateTier[] = lines.rows.map((r) => ({
+    `, 'objects'))
+    const tiers: RateTier[] = lines.map((r) => ({
       id: r.id, unitCode: r.unit_code, unitName: r.unit_name,
       baseQuantity: String(r.base_quantity), costRate: r.cost_rate == null ? null : convertBillRate(String(r.cost_rate),fxRate),
       billRate: r.bill_rate == null ? null : convertBillRate(String(r.bill_rate),fxRate),
@@ -299,8 +299,8 @@ export async function snapshotTimeBillRates(
       left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=te.org_id
       join orgs o on o.id=te.org_id
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
-       and te.bill_rate is null and te.is_billable and te.item_id is not null`))
-  for (const te of rows.rows) {
+       and te.bill_rate is null and te.is_billable and te.item_id is not null`, 'objects'))
+  for (const te of rows) {
     const line = (await db.execute<{ rate_line_id:string; bill_rate: string | null; time_type_bill_rates: Record<string, string> | null; rate_version_id:string; rate_book_id:string; source_currency:string }>(sql`
       with candidates as (
         -- Time entries carry department and inherit subsidiary from the
@@ -374,8 +374,8 @@ export async function snapshotTimeBillRates(
         join item_rate_books b on b.id=c.rate_book_id and b.org_id = ${orgId} and b.is_active
        order by c.priority, c.dimension_specificity desc, c.effective_from desc nulls last, v.effective_from desc,
                 case when l.unit_code = 'hour' then 0 else 1 end, l.base_quantity
-       limit 1`))
-    const hit = line.rows[0]
+       limit 1`, 'objects'))
+    const hit = line[0]
     const explicit = te.time_type_id ? hit?.time_type_bill_rates?.[te.time_type_id] : undefined
     let sourceRate: string | null = null
     let sourceCurrency: string | null = null
@@ -425,6 +425,6 @@ async function billRateFx(orgId:string,from:string,to:string,onDate:string):Prom
       select rate,as_of,0 priority from fx_rates where org_id=${orgId} and from_currency=${from} and to_currency=${to} and rate_type='spot' and as_of<=${onDate}
       union all
       select (1/rate)::numeric(19,10),as_of,1 from fx_rates where org_id=${orgId} and from_currency=${to} and to_currency=${from} and rate_type='spot' and as_of<=${onDate}
-    ) x order by as_of desc,priority limit 1`))
-  return result.rows[0]?.rate??null
+    ) x order by as_of desc,priority limit 1`, 'objects'))
+  return result[0]?.rate??null
 }

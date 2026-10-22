@@ -203,9 +203,9 @@ async function scheduleState(
 ): Promise<{ isActive: boolean } | null> {
   return withBypass(async () => {
     const r = await db.execute<{ is_active: boolean }>(
-      sql`select is_active from sftp_import_schedules where id = ${scheduleId}`,
+      sql`select is_active from sftp_import_schedules where id = ${scheduleId}`, "objects",
     );
-    const row = r.rows[0];
+    const row = r[0];
     return row ? { isActive: row.is_active } : null;
   });
 }
@@ -501,8 +501,8 @@ test(
       assert.deepEqual(bound.body, { ok: true });
       const stored = await withBypass(async () =>
         (await db.execute<{ expected_external_account_id: string | null }>(
-          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`,
-        )).rows[0]!.expected_external_account_id,
+          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`, "objects",
+        ))[0]!.expected_external_account_id,
       );
       assert.equal(stored, "BR001-77");
       // A non-string binding refuses before any write.
@@ -515,8 +515,8 @@ test(
       assert.equal(cleared.status, 200);
       const clearedStored = await withBypass(async () =>
         (await db.execute<{ expected_external_account_id: string | null }>(
-          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`,
-        )).rows[0]!.expected_external_account_id,
+          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`, "objects",
+        ))[0]!.expected_external_account_id,
       );
       assert.equal(clearedStored, null);
       // A missing id refuses instead of reporting success.
@@ -551,7 +551,7 @@ test(
         (await db.execute<{ expected_external_account_id: string | null; run_claim_token: string | null }>(sql`
           select expected_external_account_id, run_claim_token
             from sftp_import_schedules where id = ${scheduleId} and org_id = ${fixture.orgId}
-        `)).rows[0]!,
+        `, "objects"))[0]!,
       );
       assert.equal(stored.expected_external_account_id, null);
       assert.equal(stored.run_claim_token, claim);
@@ -581,13 +581,13 @@ test(
         select action, actor_id, request_id, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'sftp_import_schedules' and row_id = ${scheduleId}
          order by at
-      `));
-      assert.equal(audits.rows.length, 2);
-      assert.ok(audits.rows.every((row) => row.action === "update" && row.actor_id === fixture.actorId && row.request_id));
-      assert.equal(audits.rows[0]!.changes.before?.expected_external_account_id ?? null, null);
-      assert.equal(audits.rows[0]!.changes.after?.expected_external_account_id, "BR001-77");
-      assert.equal(audits.rows[1]!.changes.before?.is_active, true);
-      assert.equal(audits.rows[1]!.changes.after?.is_active, false);
+      `, "objects"));
+      assert.equal(audits.length, 2);
+      assert.ok(audits.every((row) => row.action === "update" && row.actor_id === fixture.actorId && row.request_id));
+      assert.equal(audits[0]!.changes.before?.expected_external_account_id ?? null, null);
+      assert.equal(audits[0]!.changes.after?.expected_external_account_id, "BR001-77");
+      assert.equal(audits[1]!.changes.before?.is_active, true);
+      assert.equal(audits[1]!.changes.after?.is_active, false);
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }
@@ -615,7 +615,7 @@ test(
             select count(*)::int as n from notifications
              where org_id = ${fixture.orgId} and user_id = ${fixture.actorId}
                and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND} and href = ${href} and read_at is null
-          `)).rows[0]!.n,
+          `, "objects"))[0]!.n,
         );
       await seedNotice();
       assert.equal(await unreadCount(), 1);

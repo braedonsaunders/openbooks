@@ -63,8 +63,8 @@ async function ownedId(
     return { ok: true, id }
   }
   const found = await db.execute(sql`
-    select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`)
-  return found.rows[0] ? { ok: true, id } : { ok: false }
+    select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`, 'objects')
+  return found[0] ? { ok: true, id } : { ok: false }
 }
 
 /**

@@ -48,7 +48,7 @@ export interface BudgetSegment {
 
 /** Active custom segments and their active values, in display order. */
 export async function loadBudgetSegments(runner: SqlExecutor, orgId: string): Promise<BudgetSegment[]> {
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     key: string; name: string; defaultValueId: string | null;
     valueId: string | null; valueCode: string | null; valueName: string | null;
   }>(sql`
@@ -59,7 +59,7 @@ export async function loadBudgetSegments(runner: SqlExecutor, orgId: string): Pr
         on sv.org_id = sd.org_id and sv.segment_id = sd.id and sv.is_active
      where sd.org_id = ${orgId} and sd.source_kind = 'custom' and sd.is_active
      order by sd.sort_order, sd.key, sv.code nulls last, sv.name, sv.id
-  `)).rows;
+  `, "objects");
   const segments = new Map<string, BudgetSegment>();
   for (const row of rows) {
     let segment = segments.get(row.key);

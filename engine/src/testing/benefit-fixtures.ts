@@ -60,7 +60,7 @@ export async function approveBenefitFixture(query: { orgId: string; actorId: str
   const gate = (await db.execute<{ id: string }>(sql`
     select id from flow_gates where org_id=${query.orgId} and subject_kind='hrm_benefit_award'
       and subject_id=${query.awardId} and status='pending'
-  `)).rows[0];
+  `, "objects"))[0];
   assert.ok(gate, message);
   await decideGate({ gateId: gate.id, userId: query.actorId, decision: "approved" });
   return getBenefitAward(db, query.orgId, query.actorId, query.awardId);
@@ -75,11 +75,11 @@ export async function seedCommittedBenefitRunWithoutStubs(orgId: string, documen
     assert.deepEqual(source, [], "the missing-delivery fixture must have no employee stub source");
     assert.equal((await db.execute<{ count: number }>(sql`
       select count(*)::int as count from pay_run_benefit_allocations
-      where org_id=${orgId} and pay_run_document_id=${documentId}`)).rows[0]!.count, 0);
-    const updated = (await db.execute<{ document_id: string }>(sql`
+      where org_id=${orgId} and pay_run_document_id=${documentId}`, "objects"))[0]!.count, 0);
+    const updated = await db.execute<{ document_id: string }>(sql`
       update pay_runs set benefit_source_snapshot=${JSON.stringify(source)}::jsonb, run_status='committed'
       where org_id=${orgId} and document_id=${documentId} and run_status='draft'
-      returning document_id`)).rows;
+      returning document_id`, "objects");
     assert.deepEqual(updated.map(row => row.document_id), [documentId]);
   });
 }

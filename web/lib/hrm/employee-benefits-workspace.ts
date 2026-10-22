@@ -24,10 +24,10 @@ export async function loadEmployeeBenefitAssignments(authz: Authz, employeeParty
 
 /** Employee policy reads are fenced by the legal employers the actor can access. */
 export async function loadEmployeeBenefitsData(authz: Authz, employeePartyId: string): Promise<EmployeeBenefitsData | null> {
-  const employments = (await db.execute<{ id: string; employer: string; subsidiaryId: string }>(sql`
+  const employments = await db.execute<{ id: string; employer: string; subsidiaryId: string }>(sql`
     select w.id,s.name as employer,w.employer_subsidiary_id as "subsidiaryId" from worker_employments w
     join subsidiaries s on s.org_id=w.org_id and s.id=w.employer_subsidiary_id
-    where w.org_id=${authz.user.orgId} and w.worker_party_id=${employeePartyId}`)).rows
+    where w.org_id=${authz.user.orgId} and w.worker_party_id=${employeePartyId}`, 'objects')
   const visible = employments.filter(row => guardSubsidiaryScope(authz, row.subsidiaryId) === null)
   if (!visible.length) return null
   const ids = visible.map(row => row.id)

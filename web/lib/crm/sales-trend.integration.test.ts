@@ -22,11 +22,9 @@ test(
     const org = await withBypassContext(() => createScratchOrg());
     try {
       await withOrgContext(org.orgId, async () => {
-        const rep = (
-          await db.execute<{ id: string }>(
-            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Sales trend representative',${org.subsidiaryId}) returning id`,
-          )
-        ).rows[0]!.id;
+        const rep = (await db.execute<{ id: string }>(
+            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Sales trend representative',${org.subsidiaryId}) returning id`, "objects",
+          ))[0]!.id;
         await db.execute(
           sql`insert into employee_roles(org_id,party_id,is_sales_rep) values(${org.orgId},${rep},true)`,
         );
@@ -37,11 +35,9 @@ test(
           metric = "closed_won",
           employeeId: string | null = rep,
         ) {
-          return (
-            await db.execute<{ id: string }>(
-              sql`insert into crm_sales_evidence(org_id,source_kind,source_id,source_number,event_kind,metric,employee_id,subsidiary_id,currency,amount,effective_date) values(${org.orgId},'opportunity',${randomUUID()},'TREND-TEST','credit',${metric},${employeeId},${org.subsidiaryId},${currency},${amount}::numeric,${date}::date) returning id`,
-            )
-          ).rows[0]!.id;
+          return (await db.execute<{ id: string }>(
+              sql`insert into crm_sales_evidence(org_id,source_kind,source_id,source_number,event_kind,metric,employee_id,subsidiary_id,currency,amount,effective_date) values(${org.orgId},'opportunity',${randomUUID()},'TREND-TEST','credit',${metric},${employeeId},${org.subsidiaryId},${currency},${amount}::numeric,${date}::date) returning id`, "objects",
+            ))[0]!.id;
         }
         const first = await credit("USD", "100.0001", "2026-09-12");
         await credit("USD", "0.0002", "2026-09-30");

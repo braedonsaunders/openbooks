@@ -30,9 +30,6 @@ const { resolveHomeDashboard } = await import('./_lib.ts')
 hooks.deregister()
 
 const databaseUrl = process.env.OPENBOOKS_DB_URL
-const migrationSql = await import('node:fs').then(({ readFileSync }) =>
-  readFileSync('schema/migrations/generated/0067_insights_home_uniqueness.sql', 'utf8'),
-)
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
@@ -111,50 +108,6 @@ test('live PostgreSQL partial indexes enforce their predicates', { skip: !databa
     )
   } finally {
     await client.query('delete from insight_dashboards where id = any($1::uuid[])', [ids]).catch(() => {})
-    await client.end()
-  }
-})
-
-test('live PostgreSQL migration repairs duplicate pointers and replays without changing the result', { skip: !databaseUrl }, async () => {
-  const client = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? databaseUrl })
-  await client.connect()
-  await client.query("select set_config('app.bypass_rls','on',false)")
-  const idPrefix = randomUUID().slice(0, 24)
-  const ids = Array.from({ length: 5 }, (_, index) => `${idPrefix}${String(index + 1).padStart(12, '0')}`)
-  let transactionOpen = false
-  try {
-    const org = (await client.query<{ id: string }>('select id from orgs order by id limit 1')).rows[0]
-    assert.ok(org, 'the bootstrapped test database must contain an organization')
-    await client.query('begin')
-    transactionOpen = true
-    await client.query('drop index public.insight_dashboards_org_home')
-    await client.query('drop index public.insight_dashboards_org_role_home')
-    await client.query(
-      `insert into insight_dashboards (id, org_id, name, status, is_home, home_for_role, updated_at)
-       values ($1, $6, 'legacy-system-old', 'draft', true, null, '2026-08-01T00:00:00Z'),
-              ($2, $6, 'legacy-system-new', 'draft', true, null, '2026-08-02T00:00:00Z'),
-              ($3, $6, 'legacy-role-old', 'draft', false, 'manager', '2026-08-03T00:00:00Z'),
-              ($4, $6, 'legacy-role-new', 'draft', false, 'manager', '2026-08-03T00:00:00Z'),
-              ($5, $6, 'legacy-ordinary', 'draft', false, null, '2026-08-01T00:00:00Z')`,
-      [...ids, org.id],
-    )
-
-    await client.query(migrationSql)
-    const query = 'select id, is_home, home_for_role from insight_dashboards where id = any($1::uuid[]) order by id'
-    const once = await client.query(query, [ids])
-    assert.deepEqual(once.rows, [
-      { id: ids[0], is_home: false, home_for_role: null },
-      { id: ids[1], is_home: true, home_for_role: null },
-      { id: ids[2], is_home: false, home_for_role: null },
-      { id: ids[3], is_home: false, home_for_role: 'manager' },
-      { id: ids[4], is_home: false, home_for_role: null },
-    ])
-
-    await client.query(migrationSql)
-    const twice = await client.query(query, [ids])
-    assert.deepEqual(twice.rows, once.rows)
-  } finally {
-    if (transactionOpen) await client.query('rollback').catch(() => {})
     await client.end()
   }
 })

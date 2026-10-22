@@ -19,7 +19,7 @@ export const validateAccountLocalizationWrite: SetupEntityValidationHook = async
       select context_id as "contextId", account_id as "accountId", subsidiary_id as "subsidiaryId",
              localized_number as "localizedNumber", localized_name as "localizedName",
              effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
-        from account_localizations where org_id = ${orgId} and id = ${rowId}`)).rows[0]
+        from account_localizations where org_id = ${orgId} and id = ${rowId}`, 'objects'))[0]
     if (!current) return 'Localization not found'
     values = { ...current, ...body }
   }
@@ -42,7 +42,7 @@ export const validateSegmentDependencyWrite: SetupEntityValidationHook = async (
     const current = (await executor.execute<Record<string, unknown>>(sql`
       select segment_id as "segmentId", value_id as "valueId", controlling_segment_id as "controllingSegmentId",
              allowed_value_id as "allowedValueId", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
-        from segment_value_dependencies where org_id = ${orgId} and id = ${rowId}`)).rows[0]
+        from segment_value_dependencies where org_id = ${orgId} and id = ${rowId}`, 'objects'))[0]
     if (!current) return 'Dependency not found'
     values = { ...current, ...body }
   }
@@ -57,7 +57,7 @@ export const validateSegmentDependencyWrite: SetupEntityValidationHook = async (
   if (from && to && to < from) return 'The end date must be on or after the start date.'
   const owned = (await executor.execute<{ value_ok: boolean; allowed_ok: boolean }>(sql`
     select public.segment_definition_has_value(${orgId}, ${segmentId}::uuid, ${valueId}::uuid) as value_ok,
-           public.segment_definition_has_value(${orgId}, ${controllingId}::uuid, ${allowedId}::uuid) as allowed_ok`)).rows[0]
+           public.segment_definition_has_value(${orgId}, ${controllingId}::uuid, ${allowedId}::uuid) as allowed_ok`, 'objects'))[0]
   if (!owned?.value_ok) return 'Choose a value of the segment this dependency restricts.'
   if (!owned.allowed_ok) return 'Choose an allowed value of the controlling segment.'
   return null

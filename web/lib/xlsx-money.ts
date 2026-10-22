@@ -15,8 +15,8 @@ import { orgInfo } from './data'
 export async function xlsxMoneyContext(orgId: string, currency?: string | null): Promise<XlsxMoneyContext> {
   const resolved = currency?.trim() || (await orgInfo(orgId))?.base_currency?.trim()
   if (!resolved) throw new Error('A spreadsheet export needs the organization base currency')
-  const rows = (await db.execute<{ code: string; minor_units: number | string }>(sql`
-    select code, minor_units from currencies`)).rows
+  const rows = await db.execute<{ code: string; minor_units: number | string }>(sql`
+    select code, minor_units from currencies`, 'objects')
   return {
     currency: resolved.toUpperCase(),
     minorUnits: Object.fromEntries(rows.map((row) => [row.code.toUpperCase(), Number(row.minor_units)])),

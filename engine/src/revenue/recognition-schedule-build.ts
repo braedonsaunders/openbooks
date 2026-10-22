@@ -22,7 +22,7 @@ export async function lockRevenueContract(runner:SqlExecutor,orgId:string,contra
   await runner.execute(sql`select pg_advisory_xact_lock(hashtext(${orgId}),hashtext(${`revenue-contract:${contractId}`}))`);
 }
 export async function lockObligationContract(runner:SqlExecutor,orgId:string,obligationId:string):Promise<void> {
-  const row=(await runner.execute<{contract_id:string}>(sql`select contract_id from performance_obligations where org_id=${orgId} and id=${obligationId}`)).rows[0];
+  const row=(await runner.execute<{contract_id:string}>(sql`select contract_id from performance_obligations where org_id=${orgId} and id=${obligationId}`, "objects"))[0];
   if(row)await lockRevenueContract(runner,orgId,row.contract_id);
 }
 
@@ -111,7 +111,7 @@ export async function legacyRebuildBlock(
            o.legacy_reconciled_at::text as reconciled_at
       from performance_obligations o
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
-     where o.id = ${obligationId} and o.org_id = ${orgId}`)).rows[0];
+     where o.id = ${obligationId} and o.org_id = ${orgId}`, "objects"))[0];
   if (!o) throw new Error("obligation not found");
   if (o.reconciled_at) return null;
   const legacy = await isLegacyProvenance(runner, orgId, "recognition_rules", o.recognition_rule_id, {
@@ -124,7 +124,7 @@ export async function legacyRebuildBlock(
     select count(*)::text as n
       from recognition_schedule_lines l
       join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-     where s.obligation_id = ${obligationId} and s.org_id = ${orgId}`)).rows[0];
+     where s.obligation_id = ${obligationId} and s.org_id = ${orgId}`, "objects"))[0];
   const lineCount = Number(lines?.n ?? "0");
   if (lineCount === 0) return null;
   return {
@@ -167,7 +167,7 @@ export async function obligationAttribution(
       left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
       left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
       left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
-     where o.id = ${obligationId} and o.org_id = ${orgId}${lock}`)).rows[0];
+     where o.id = ${obligationId} and o.org_id = ${orgId}${lock}`, "objects"))[0];
   return row ? { reconciledAt: row.reconciled_at, subsidiaryId: row.subsidiary_id } : null;
 }
 
@@ -186,7 +186,7 @@ export async function revenueContractAttribution(
     select coalesce(c.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId}) as subsidiary_id
       from revenue_contracts c
       left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
-     where c.id = ${contractId} and c.org_id = ${orgId}`)).rows[0];
+     where c.id = ${contractId} and c.org_id = ${orgId}`, "objects"))[0];
   return row ? { subsidiaryId: row.subsidiary_id } : null;
 }
 
@@ -231,13 +231,13 @@ export async function reconcileLegacyObligationProvenance(
     );
   }
   // A write that matches zero rows is a failure, not a success.
-  const updated = (await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(sql`
     update performance_obligations
        set legacy_reconciled_at = now(), legacy_reconciled_by = ${actorId},
            legacy_reconciliation_reason = ${clean},
            updated_at = now(), updated_by = coalesce(${actorId}, updated_by)
      where id = ${obligationId} and org_id = ${orgId}
-     returning id`)).rows;
+     returning id`, "objects");
   if (updated.length !== 1) throw new Error("the reconciliation could not be recorded");
 }
 
@@ -286,8 +286,8 @@ export async function buildRecognitionScheduleOn(
       join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
      where o.id = ${obligationId} and o.org_id = ${orgId}
-     for update of o`));
-  const o = oblRes.rows[0];
+     for update of o`, "objects"));
+  const o = oblRes[0];
   if (!o) throw new Error("obligation not found");
   if (o.status === "cancelled") throw new RevenueRecognitionError("cancelled obligations cannot be rebuilt");
 
@@ -302,7 +302,7 @@ export async function buildRecognitionScheduleOn(
       join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
       left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
       left join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-     where o.id = ${obligationId} and o.org_id = ${orgId}`)).rows[0];
+     where o.id = ${obligationId} and o.org_id = ${orgId}`, "objects"))[0];
   const txCurrency = txMoney?.tx_currency ?? undefined;
   const txFxRate = txMoney?.tx_fx_rate ?? "1";
 
@@ -312,13 +312,13 @@ export async function buildRecognitionScheduleOn(
 
   const existing = (await runner.execute<{ id: string; revision: number; change_basis: RevenueChangeBasis | null }>(sql`
     select id,revision,change_basis from recognition_schedules
-     where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`));
-  const basis = existing.rows[0]?.change_basis;
+     where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`, "objects"));
+  const basis = existing[0]?.change_basis;
   const method = basis?.method ?? o.method;
   const isPercentComplete = method === "percent_complete";
-  const revision = existing.rows[0]?.revision ?? 1;
+  const revision = existing[0]?.revision ?? 1;
   const scheduleTotal = basis?.totalAmount ?? o.allocated_price;
-  if (basis?.retired) return {scheduleId:existing.rows[0]!.id,lineCount:0,skippedMonths:[]};
+  if (basis?.retired) return {scheduleId:existing[0]!.id,lineCount:0,skippedMonths:[]};
   // Legacy provenance (0326/0328): a pre-versioning rule edited in place
   // cannot be trusted to re-time this obligation's existing lines. Refuse
   // before any line is destroyed; the remedy is a per-obligation
@@ -326,8 +326,8 @@ export async function buildRecognitionScheduleOn(
   const block = await legacyRebuildBlock(runner, orgId, obligationId);
   if (block) throw new RevenueRecognitionError(block.message);
   let scheduleId: string;
-  if (existing.rows[0]) {
-    scheduleId = existing.rows[0].id;
+  if (existing[0]) {
+    scheduleId = existing[0].id;
     await runner.execute(sql`
       update recognition_schedules
          set total_amount = ${scheduleTotal},
@@ -343,25 +343,25 @@ export async function buildRecognitionScheduleOn(
         values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${txCurrency ?? null}, ${txFxRate}, ${actorId}, ${actorId})
         -- Concurrent schedule creation adopts the same obligation-book schedule selected below.
         on conflict do nothing
-        returning id`));
+        returning id`, "objects"));
       scheduleId =
-        ins.rows[0]?.id ??
+        ins[0]?.id ??
         (await runner.execute<{ id: string }>(sql`
           select id from recognition_schedules
-           where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`)).rows[0]!.id;
+           where obligation_id = ${obligationId} and org_id = ${orgId} and book_id = ${bookId} limit 1`, "objects"))[0]!.id;
     }
 
   const posted = (await runner.execute<{ period_id: string; planned_amount: string; sequence: number; revision: number; modification_adjustment: boolean }>(sql`
     select period_id, case when reversal_journal_entry_id is null then coalesce(recognized_amount,0) else 0 end::text as planned_amount, sequence, revision, modification_adjustment from recognition_schedule_lines
-     where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`));
-  const currentPosted = basis ? posted.rows.filter(r=>r.revision === revision && !r.modification_adjustment) : posted.rows;
+     where org_id = ${orgId} and schedule_id = ${scheduleId} and journal_entry_id is not null`, "objects"));
+  const currentPosted = basis ? posted.filter(r=>r.revision === revision && !r.modification_adjustment) : posted;
   const postedPeriods = new Set(currentPosted.map((r) => r.period_id));
   const postedByPeriod = new Map<string, string>();
   for (const row of currentPosted) {
     postedByPeriod.set(row.period_id, add(postedByPeriod.get(row.period_id) ?? "0", row.planned_amount));
   }
-  const postedToDate = sum(posted.rows.map((r) => r.planned_amount));
-  const nextSequence = posted.rows.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
+  const postedToDate = sum(posted.map((r) => r.planned_amount));
+  const nextSequence = posted.reduce((a, r) => Math.max(a, r.sequence + 1), 0);
 
   // Milestone and usage methods recognize from recorded events rather than
   // a term. Load the obligation's persisted events so computeRecognitionSchedule
@@ -373,8 +373,8 @@ export async function buildRecognitionScheduleOn(
       select period_month, amount from recognition_events
        where org_id = ${orgId} and obligation_id = ${obligationId}
        ${basis ? sql`and id not in (select jsonb_array_elements_text(${JSON.stringify(basis.excludedEventIds)}::jsonb)::uuid)` : sql``}
-       order by period_month`));
-    events = eventRes.rows.map((e) => ({ periodMonth: e.period_month, amount: e.amount }));
+       order by period_month`, "objects"));
+    events = eventRes.map((e) => ({ periodMonth: e.period_month, amount: e.amount }));
   }
 
   // Percent-complete: the catch-up delta lands in the as-of month (clamped to
@@ -458,7 +458,7 @@ export async function buildRecognitionScheduleOn(
   }
   if (lineCount > 0) {
     await runner.execute(sql`
-      update recognition_schedules set status = ${posted.rows.length ? "in_progress" : "planned"},
+      update recognition_schedules set status = ${posted.length ? "in_progress" : "planned"},
         updated_at = now(), updated_by = ${actorId} where id = ${scheduleId} and org_id = ${orgId}`);
     await runner.execute(sql`
       update performance_obligations set status = 'open', updated_at = now(), updated_by = ${actorId}
@@ -494,9 +494,9 @@ export async function buildAllRecognitionSchedulesOn(
 ): Promise<BuildRecognitionResult[]> {
   const books = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_active and posts_gl
-     order by is_primary desc, code`));
+     order by is_primary desc, code`, "objects"));
   const results: BuildRecognitionResult[] = [];
-  for (const b of books.rows) {
+  for (const b of books) {
     results.push(await buildRecognitionScheduleOn(runner, obligationId, orgId, actorId, b.id, asOfDate));
   }
   return results;

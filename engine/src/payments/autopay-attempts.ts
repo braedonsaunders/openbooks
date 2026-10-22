@@ -91,7 +91,7 @@ async function collectionChain(
 ): Promise<ChainLink[] | null> {
   const invoice = (await db.execute<{ status: string; open_balance: string }>(sql`
     select status, open_balance from documents where id = ${candidate.invoiceId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!invoice) {
     result.skipped += 1;
     result.notices.push({ invoiceId: candidate.invoiceId, attemptId: null, status: "skipped", detail: "invoice is gone; nothing to collect" });
@@ -114,7 +114,7 @@ async function collectionChain(
             and dd.status = 'active' and dd.is_default limit 1))
      where e.id = ${candidate.enrollmentId} and e.org_id = ${orgId} and e.status = 'active'
        and m.org_id = ${orgId} and m.status = 'active'
-  `)).rows[0];
+  `, "objects"))[0];
   if (!live) {
     result.skipped += 1;
     result.notices.push({
@@ -125,7 +125,7 @@ async function collectionChain(
     });
     return null;
   }
-  const backups = (await db.execute<{
+  const backups = await db.execute<{
     methodId: string;
     provider: AcceptanceProvider;
     providerCustomerId: string | null;
@@ -139,7 +139,7 @@ async function collectionChain(
        and status = 'active' and id <> ${candidate.methodId}
      order by fallback_priority asc, created_at asc
      limit 3
-  `)).rows;
+  `, "objects");
   return [{
     methodId: candidate.methodId,
     provider: candidate.provider,
@@ -175,7 +175,7 @@ async function claimAttempt(
     select status, open_balance, currency, document_number, subsidiary_id
       from documents where id = ${candidate.invoiceId} and org_id = ${orgId}
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!invoice) return { skip: "invoice is gone; nothing to collect" };
   await lockAutopayEnrollmentAuthority(orgId, candidate.enrollmentId, invoice.subsidiary_id);
   if (actorId !== null) await lockCollectionRetryAuthority(orgId, actorId, invoice.subsidiary_id, requestedScope);
@@ -229,8 +229,8 @@ async function recordChargeOutcome(
           update collection_attempts set provider_ref = ${outcome.providerRef}, updated_at = now()
            where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
            returning id
-        `);
-        if (!kept.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+        `, "objects");
+        if (!kept[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
       });
       collectedRef = outcome.providerRef;
     } else if (outcome.status === "processing") {
@@ -240,8 +240,8 @@ async function recordChargeOutcome(
              set status = 'processing', provider_ref = ${outcome.providerRef}, updated_at = now()
            where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
            returning id
-        `);
-        if (!kept.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+        `, "objects");
+        if (!kept[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
       });
       result.notices.push({ invoiceId: candidate.invoiceId, attemptId: attempt.id, status: "processing", detail: "provider is still collecting; the webhook settles this attempt" });
       return "done";
@@ -263,8 +263,8 @@ async function recordChargeOutcome(
                    next_retry_on = null, updated_at = now()
              where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated'
              returning id
-          `);
-          if (!parked.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+          `, "objects");
+          if (!parked[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
         });
         result.failed += 1;
         result.notices.push({
@@ -305,11 +305,11 @@ export async function resumeInterruptedAttempts(
   charge: ChargeFn,
   result: AutopayRunResult,
 ): Promise<void> {
-  const open = (await db.execute<{ id: string; invoice_id: string }>(sql`
+  const open = await db.execute<{ id: string; invoice_id: string }>(sql`
     select id, invoice_id from collection_attempts
      where org_id = ${orgId} and (status='initiated' or (status='processing' and receipt_document_id is not null))
      order by created_at, id
-  `)).rows;
+  `, "objects");
   for (const row of open) {
     const claimed = await withCollectionClaim(orgId, row.invoice_id, () =>
       resumeAttempt(orgId, row.id, today, policy, charge, result),
@@ -373,7 +373,7 @@ async function resumeAttempt(
       left join customer_payment_methods m on m.id = a.payment_method_id and m.org_id = a.org_id
      where a.id = ${attemptId} and a.org_id = ${orgId}
        and (a.status='initiated' or (a.status='processing' and a.receipt_document_id is not null))
-  `)).rows[0];
+  `, "objects"))[0];
   // Settled since it was listed: a provider webhook or another run got there first.
   if (!row) return;
   const attempt: OpenAttempt = {
@@ -444,8 +444,8 @@ async function closeInterruptedAttempt(
          set status = 'canceled', decline_code = 'outcome_unknown', next_retry_on = null, updated_at = now()
        where id = ${attempt.id} and org_id = ${orgId} and status = 'initiated' and provider_ref is null
        returning id
-    `);
-    if (!closed.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+    `, "objects");
+    if (!closed[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
     await auditAutopay(orgId, "collection_attempts", attempt.id, {
       event: "interrupted_attempt_closed",
       before: { status: "initiated" },
@@ -494,7 +494,7 @@ export async function retryAttemptNow(
           join documents d on d.org_id = a.org_id and d.id = a.invoice_id
          where a.id = ${attemptId} and a.org_id = ${orgId}
          for update of d
-      `)).rows[0];
+      `, "objects"))[0];
       if (!attempt) throw new ScopeNotFoundError();
       await lockCollectionRetryAuthority(orgId, actorId, attempt.subsidiary_id, allowedSubsidiaryIds);
       if (attempt.status !== 'failed') throw new AutopayError("only a failed attempt can be retried; this one already settled or never failed");
@@ -513,7 +513,7 @@ export async function retryAttemptNow(
           join autopay_enrollments e on e.id = ${attempt.enrollment_id} and e.org_id = ${orgId} and e.status = 'active'
           join customer_payment_methods m on m.id = ${attempt.method_id} and m.org_id = ${orgId} and m.status = 'active'
          where d.id = ${attempt.invoice_id} and d.org_id = ${orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!candidate) {
         throw new AutopayError("the enrollment or method is no longer active; link a payment method first");
       }

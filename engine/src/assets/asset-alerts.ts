@@ -22,8 +22,8 @@ export async function notifyAssetOperators(
     href: string;
   },
 ): Promise<number> {
-  const users = (await tx.execute<{ id: string }>(sql`
-    select id::text as id from users where org_id = ${args.orgId} and is_active order by id`)).rows;
+  const users = await tx.execute<{ id: string }>(sql`
+    select id::text as id from users where org_id = ${args.orgId} and is_active order by id`, "objects");
   let written = 0;
   for (const user of users) {
     if (!(await actorHasPermission(tx, args.orgId, user.id, args.permission))) continue;
@@ -33,12 +33,12 @@ export async function notifyAssetOperators(
       select 1 from notifications
        where org_id = ${args.orgId} and user_id = ${user.id}::uuid and kind = ${args.kind}
          and title = ${args.title} and read_at is null
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (unread) continue;
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into notifications (org_id, user_id, kind, title, body, href)
       values (${args.orgId}, ${user.id}::uuid, ${args.kind}, ${args.title}, ${args.body}, ${args.href})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!inserted) throw new Error("the asset alert notification was not stored; no row was written");
     written += 1;
   }
@@ -52,5 +52,5 @@ export async function orgsWithAssetFeature(feature: "assetMaintenance" | "assetI
     select id::text as id from orgs
      where case (settings->'features'->>${feature}) when 'true' then true else false end
        and case (settings->'features'->>'fixedAssets') when 'false' then false else true end
-     order by id`)).rows.map((row) => row.id));
+     order by id`, "objects")).map((row) => row.id));
 }

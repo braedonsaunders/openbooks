@@ -165,12 +165,12 @@ export async function loadFlows(
        where ${where}
        order by f.name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `),
+    `, 'objects'),
     db.execute<{ subject_kind: string; n: string }>(sql`
       select subject_kind, count(*) as n from flows f
-       where f.org_id = ${orgId} group by 1 order by 1`),
+       where f.org_id = ${orgId} group by 1 order by 1`, 'objects'),
     db.execute<{ n: string }>(
-      sql`select count(*) as n from flows f where ${where}`,
+      sql`select count(*) as n from flows f where ${where}`, 'objects',
     ),
   ])
 
@@ -185,7 +185,7 @@ export async function loadFlows(
     const key = subjectLabel.get(kind) ?? kind
     return tSubjects.has(key as never) ? tSubjects(key as never) : key
   }
-  const total = Number(totalRow.rows[0]?.n ?? 0)
+  const total = Number(totalRow[0]?.n ?? 0)
 
   return {
     title: t('title'),
@@ -194,7 +194,7 @@ export async function loadFlows(
     backLabel: tHub('title'),
     searchPlaceholder: t('searchPlaceholder'),
     subjectLabel: t('subjectFilter'),
-    subjectOptions: subjects.rows.map((r) => ({
+    subjectOptions: subjects.map((r) => ({
       value: r.subject_kind,
       label: subjectName(String(r.subject_kind)),
       count: Number(r.n),
@@ -210,7 +210,7 @@ export async function loadFlows(
     columnLastRun: t('table.lastRun'),
     columnUpdated: t('table.updated'),
     columnStatus: t('table.status'),
-    rows: flows.rows.map((f) => {
+    rows: flows.map((f) => {
       // Fire-readiness in the list's own words: the stored enabled flag is
       // the single source, and an enabled flow whose graph cannot fire reads
       // "Incomplete: <reason>" instead of a clean "enabled".

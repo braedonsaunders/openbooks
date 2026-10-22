@@ -61,8 +61,8 @@ function postDraft(post: Post, path: string, key: string | null) {
 async function kindCount(orgId: string, kind: string): Promise<number> {
   const r = await withBypassContext(() => db.execute<{ n: string }>(sql`
     select count(*)::text as n from documents
-     where org_id = ${orgId} and kind = ${kind}`))
-  return Number(r.rows[0]?.n ?? 0)
+     where org_id = ${orgId} and kind = ${kind}`, 'objects'))
+  return Number(r[0]?.n ?? 0)
 }
 
 for (const [kind, path, post, prefix] of [

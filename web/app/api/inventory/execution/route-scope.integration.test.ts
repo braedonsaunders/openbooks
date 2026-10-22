@@ -81,13 +81,11 @@ test(
           }),
         );
         await native(() => startStockCount(org.orgId, actor, count.id));
-        return (
-          await native(() =>
+        return (await native(() =>
             db.execute<{ id: string }>(
-              sql`select id from stock_count_lines where org_id=${org.orgId} and stock_count_id=${count.id}`,
+              sql`select id from stock_count_lines where org_id=${org.orgId} and stock_count_id=${count.id}`, "objects",
             ),
-          )
-        ).rows[0]!.id;
+          ))[0]!.id;
       };
       const visible = await makeCount(org.subsidiaryId),
         invisible = await makeCount(hidden);
@@ -155,24 +153,20 @@ test(
       const done = await post({ action: "confirm", taskId: payload.task.id });
       assert.equal(done.status, 200);
       assert.equal((await done.json()).status, "done");
-      const before = (
-        await native(() =>
+      const before = await native(() =>
           db.execute(
-            sql`select id from inventory_movements where org_id=${org.orgId}`,
+            sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
           ),
-        )
-      ).rows;
+        );
       const replay = await post({ action: "confirm", taskId: payload.task.id });
       assert.equal(replay.status, 200);
       assert.equal((await replay.json()).replayed, true);
       assert.deepEqual(
-        (
-          await native(() =>
+        await native(() =>
             db.execute(
-              sql`select id from inventory_movements where org_id=${org.orgId}`,
+              sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
             ),
-          )
-        ).rows,
+          ),
         before,
       );
     } catch (error) {

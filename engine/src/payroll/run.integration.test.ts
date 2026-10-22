@@ -52,8 +52,8 @@ async function seedUsSui(orgId: string, actorId: string, employeeId: string, sta
     sourceCitation: "Test rate notice", reason: "test fixture rate",
     region: state, filingAccountId, taxYear: 2026, values: { rate, wageBase } });
   const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-    where org_id=${orgId} and employee_party_id=${employeeId} returning employee_party_id`);
-  if (profile.rows.length !== 1) throw new Error(`expected a payroll profile for ${employeeId}`);
+    where org_id=${orgId} and employee_party_id=${employeeId} returning employee_party_id`, "objects");
+  if (profile.length !== 1) throw new Error(`expected a payroll profile for ${employeeId}`);
   return filingAccountId;
 }
 
@@ -111,7 +111,7 @@ test(
         values(${org.orgId},${otherEmployment},'actual_365','2026-07-18','1825','2026-07-01','Reviewed other employment service',${actorId},${actorId})`);
       const otherTerms = await resolveServiceTier(db,org.orgId,otherEmployee,'2026-07-18',otherEmployment);
       assert.deepEqual([...otherTerms.planAccrualValues.values()], ['5.0000'], 'another employer keeps the explicit default ladder');
-      const vacationPlanId = (await db.execute<{ id: string }>(sql`select id from entitlement_plans where org_id=${org.orgId} and system_key='vacation'`)).rows[0]!.id;
+      const vacationPlanId = (await db.execute<{ id: string }>(sql`select id from entitlement_plans where org_id=${org.orgId} and system_key='vacation'`, "objects"))[0]!.id;
       await db.execute(sql`insert into entitlement_plan_limits(org_id,plan_id,subsidiary_id,max_balance,notify_balance,effective_from,created_by,updated_by)
         values(${org.orgId},${vacationPlanId},${org.subsidiaryId},4000,3500,'2026-07-01',${actorId},${actorId}),
           (${org.orgId},${vacationPlanId},${otherEmployer},2000,1500,'2026-07-01',${actorId},${actorId})`);
@@ -130,7 +130,7 @@ test(
       assert.deepEqual(await nativeMilestones([org.subsidiaryId]), [{employee_id:employeeId,milestone_date:'2026-07-19',accrual_value:'6.0000'}]);
       assert.deepEqual((await nativeMilestones([otherEmployer])).map((row) => [row.employee_id,row.accrual_value]), [[otherEmployee,'5.0000']]);
       assert.deepEqual(await nativeMilestones([]), []);
-      const tier = (await db.execute<{ id: string }>(sql`select id from entitlement_service_tiers where org_id=${org.orgId} and employer_subsidiary_id=${org.subsidiaryId} and after_months=60`)).rows[0]!;
+      const tier = (await db.execute<{ id: string }>(sql`select id from entitlement_service_tiers where org_id=${org.orgId} and employer_subsidiary_id=${org.subsidiaryId} and after_months=60`, "objects"))[0]!;
       await assert.rejects(() => validateEntitlementServiceTierConfiguration(db,org.orgId,{annualDays:'-1'},tier.id), /Annual days cannot be negative; enter a nonnegative/);
       await assert.rejects(() => validateEntitlementServiceTierConfiguration(db,org.orgId,{employerSubsidiaryId:randomUUID()},tier.id), /Select a legal employer in this organization/);
 
@@ -158,7 +158,7 @@ test(
       assert.equal(premature.employees,0);
       assert.match(premature.errors[0]!.message,/Service match is not service-eligible at period end 2026-07-18; end the premature assignment or election/);
       await db.execute(sql`update employee_pay_components set effective_to='2026-07-04' where org_id=${org.orgId} and component_id=${serviceComponent}`);
-      const statutory = (await db.execute<{id:string}>(sql`select id from pay_components where org_id=${org.orgId} and system_key='cpp' and kind='deduction'`)).rows[0]!;
+      const statutory = (await db.execute<{id:string}>(sql`select id from pay_components where org_id=${org.orgId} and system_key='cpp' and kind='deduction'`, "objects"))[0]!;
       await assert.rejects(()=>validateEntitlementServiceTierConfiguration(db,org.orgId,{componentId:statutory.id,afterMonths:1,eligible:true,effectiveFrom:'2026-07-01'}),/Engine-owned payroll components cannot have service gates/);
 
       // Calculate twice — recalculation must be idempotent (one stub, same totals)
@@ -169,9 +169,9 @@ test(
 
       const stubs = (await db.execute<Record<string, string>>(sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `));
-      assert.equal(stubs.rows.length, 1);
-      const stub = stubs.rows[0]!;
+      `, "objects"));
+      assert.equal(stubs.length, 1);
+      const stub = stubs[0]!;
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
       // The stub must match the T4127 engine called directly with the same facts
@@ -211,7 +211,7 @@ test(
                (select count(*)::text from document_lines where org_id = r.org_id and document_id = r.document_id) as line_count,
                (select count(*)::text from time_entries where org_id = r.org_id and payroll_batch_ref = r.document_id::text) as claimed_count
           from pay_runs r join documents d on d.org_id = r.org_id and d.id = r.document_id
-         where r.org_id = ${org.orgId} and r.document_id = ${run.documentId}`)).rows[0]!;
+         where r.org_id = ${org.orgId} and r.document_id = ${run.documentId}`, "objects"))[0]!;
       assert.equal(afterRefusal.run_status, "calculated");
       assert.equal(afterRefusal.documents_status, "draft");
       assert.equal(afterRefusal.line_count, "0", "the gate refusal leaves the GL projection untouched");
@@ -240,18 +240,18 @@ test(
       const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `));
-      assert.ok(lines.rows.length >= 5);
-      assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
-      const netLeg = lines.rows.find((l) => l.party_id === employeeId);
+      `, "objects"));
+      assert.ok(lines.length >= 5);
+      assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
+      const netLeg = lines.find((l) => l.party_id === employeeId);
       assert.ok(netLeg, "net pay leg carries the employee party");
       assert.equal(netLeg!.amount, neg(stub.net_pay));
 
       const claimed = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref = ${run.documentId}
-      `));
-      assert.equal(claimed.rows[0]!.n, 4);
+      `, "objects"));
+      assert.equal(claimed[0]!.n, 4);
 
       const entitlement = await payRunBankFileEntitlement(org.orgId, run.documentId);
       assert.equal(entitlement.entitled, true);
@@ -263,9 +263,9 @@ test(
       });
       const r2 = (await db.execute<{ period_start: string; period_end: string }>(sql`
         select period_start, period_end from pay_runs where document_id = ${run2.documentId}
-      `));
-      assert.equal(r2.rows[0]!.period_start, "2026-07-19"); // derived next period
-      assert.equal(r2.rows[0]!.period_end, "2026-08-01");
+      `, "objects"));
+      assert.equal(r2[0]!.period_start, "2026-07-19"); // derived next period
+      assert.equal(r2[0]!.period_end, "2026-08-01");
       await seedPayrollTime(org.orgId, employeeId, actorId, {
         workedOn: '2026-07-22', hours: 20, status: 'approved', isBillable: false, billingStatus: 'unbilled',
         costingBasis: 'actual',
@@ -281,7 +281,7 @@ test(
         const stub2 = (await db.execute<{ factors: Record<string, string>; gross: string; vacation_accrued: string }>(sql`
           select factors,gross,vacation_accrued from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
-        `));
+        `, "objects"));
         const expected2 = calculateT4127(assessedCanadianWages({
           payDate: "2026-08-04", province: "ON", periodsPerYear: 26,
           income: gross, federalClaimCode: 1, provincialClaimCode: 1,
@@ -290,16 +290,16 @@ test(
             pensionable: "2400.00",
           },
         }));
-        assert.equal(stub2.rows[0]!.gross, gross);
-        assert.equal(stub2.rows[0]!.vacation_accrued, "0.0000");
-        assert.equal(stub2.rows[0]!.factors.C, expected2.cpp);
-        assert.equal(stub2.rows[0]!.factors.EI, expected2.ei);
-        const paidMatch = (await db.execute<{amount:string}>(sql`select l.amount from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-          where s.org_id=${org.orgId} and s.pay_run_document_id=${run2.documentId} and l.component_id=${serviceComponent}`)).rows;
+        assert.equal(stub2[0]!.gross, gross);
+        assert.equal(stub2[0]!.vacation_accrued, "0.0000");
+        assert.equal(stub2[0]!.factors.C, expected2.cpp);
+        assert.equal(stub2[0]!.factors.EI, expected2.ei);
+        const paidMatch = await db.execute<{amount:string}>(sql`select l.amount from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+          where s.org_id=${org.orgId} and s.pay_run_document_id=${run2.documentId} and l.component_id=${serviceComponent}`, "objects");
         assert.deepEqual(paidMatch.map((row)=>row.amount),['10.0000']);
       }
-      const bank = await db.execute<{ balance: string }>(sql`select sum(amount)::text as balance from entitlement_ledger where org_id=${org.orgId} and employee_party_id=${employeeId}`);
-      assert.equal(bank.rows[0]!.balance, "96.0000", "paid leave preserves the previously committed money bank");
+      const bank = await db.execute<{ balance: string }>(sql`select sum(amount)::text as balance from entitlement_ledger where org_id=${org.orgId} and employee_party_id=${employeeId}`, "objects");
+      assert.equal(bank[0]!.balance, "96.0000", "paid leave preserves the previously committed money bank");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -379,17 +379,17 @@ test(
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
 
-      const stub = ((await db.execute<Record<string, string>>(sql`
+      const stub = (await db.execute<Record<string, string>>(sql`
         select * from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stub.gross, "1920.0000"); // 40h × $48
       const factors = stub.factors as unknown as Record<string, string>;
 
-      const stubLines = ((await db.execute<Record<string, string | null>>(sql`
+      const stubLines = await db.execute<Record<string, string | null>>(sql`
         select l.description, l.kind, l.amount, l.hours, l.project_id
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} order by l.sequence
-      `))).rows;
+      `, "objects");
 
       // Dues: 2.5% × 1920 = 48.00, deduction, feeds U1
       const dues = stubLines.find((l) => l.description === "Working dues");
@@ -419,10 +419,10 @@ test(
 
       // Commit: fringe expense legs carry the project split
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = ((await db.execute<Record<string, string | null>>(sql`
+      const glLines = await db.execute<Record<string, string | null>>(sql`
         select account_id, amount, project_id from document_lines
          where document_id = ${run.documentId}
-      `))).rows;
+      `, "objects");
       assert.equal(cmp(sum(glLines.map((l) => l.amount!)), "0"), 0);
       const fringeLegs = glLines.filter((l) => l.account_id === fringeExpense && l.project_id);
       assert.equal(fringeLegs.length, 2);
@@ -513,11 +513,11 @@ test(
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
 
-      const fringeLines = ((await db.execute<{ amount: string }>(sql`
+      const fringeLines = await db.execute<{ amount: string }>(sql`
         select l.amount from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} and l.description = 'Penny fund'
          order by l.amount
-      `))).rows;
+      `, "objects");
       // Two zero shares are correctly emitted as no line at all; the two
       // leftover cents land on later jobs. No job is ever paid a negative cent.
       assert.deepEqual(fringeLines.map((l) => l.amount), ["0.0100", "0.0100"]);
@@ -661,9 +661,9 @@ test(
       const stubs = (await db.execute<Record<string, string>>(sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
           and employee_party_id = ${employeeId}
-      `));
-      assert.equal(stubs.rows.length, 1);
-      const stub = stubs.rows[0]!;
+      `, "objects"));
+      assert.equal(stubs.length, 1);
+      const stub = stubs[0]!;
       assert.equal(stub.gross, "4000.0000"); // 104,000 / 26
       assert.equal(stub.province, "TX");
 
@@ -701,9 +701,9 @@ test(
       const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `));
-      assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
-      const sutaLegs = lines.rows.filter((l) => l.account_id === sutaPayable);
+      `, "objects"));
+      assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
+      const sutaLegs = lines.filter((l) => l.account_id === sutaPayable);
       assert.ok(sutaLegs.length > 0, "SUI liability posts to its slot account");
       // Both employees accrue to the one SUI payable: the Texan's 108.00 plus
       // the Californian's 8.16 (8h × $30 = 240 at 3.4%, under the base).
@@ -716,9 +716,9 @@ test(
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
            and employee_party_id = ${employeeId}
-      `));
-      assert.equal(stub2.rows[0]!.factors.FUTA, "18.0000"); // min(4,000, 7,000 − 4,000) × 0.6%
-      assert.equal(stub2.rows[0]!.factors.SS, "248.0000"); // far from the wage base
+      `, "objects"));
+      assert.equal(stub2[0]!.factors.FUTA, "18.0000"); // min(4,000, 7,000 − 4,000) × 0.6%
+      assert.equal(stub2[0]!.factors.SS, "248.0000"); // far from the wage base
 
       // Uninstall guards: an active US profile AND committed stubs both block.
       await assert.rejects(
@@ -743,12 +743,12 @@ test(
       assert.equal(removed.componentsRemoved, 15);
       const caLeft = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_components
-         where org_id = ${org.orgId} and country = 'CA'`));
-      assert.equal(caLeft.rows[0]!.n, 0);
+         where org_id = ${org.orgId} and country = 'CA'`, "objects"));
+      assert.equal(caLeft[0]!.n, 0);
       const markers = (await db.execute<{ countries: unknown }>(sql`
         select settings#>'{payroll,countries}' as countries from orgs where id = ${org.orgId}
-      `));
-      assert.ok(!(markers.rows[0]!.countries as string[] | null ?? []).includes("CA"));
+      `, "objects"));
+      assert.ok(!(markers[0]!.countries as string[] | null ?? []).includes("CA"));
       // W-2 and Form 941 are filed by the legal employer's EIN: both
       // employees' state SUI accounts belong to the US entity, so its EIN
       // carries both slips and every 941 quarter.
@@ -756,8 +756,8 @@ test(
       const historical941 = await form941Worksheet(org.orgId, 2026);
       assert.equal(historicalW2.length, 2);
       assert.ok(historical941.length > 0);
-      const countryEvidence = (await db.execute(sql`select country,country_source from pay_stubs
-        where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+      const countryEvidence = await db.execute(sql`select country,country_source from pay_stubs
+        where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`, "objects");
       assert.deepEqual(countryEvidence,[{country:'US',country_source:'calculation'},{country:'US',country_source:'calculation'}]);
       assert.deepEqual([...new Set(historicalW2.map((slip) => slip.filingAccountId))], [usEin]);
       assert.deepEqual([...new Set(historical941.map((quarter) => quarter.filingAccountId))], [usEin]);
@@ -767,7 +767,7 @@ test(
       assert.equal((await db.execute(sql`insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
         values(${nextEmployerId},${org.orgId},${org.subsidiaryId},'Next US employer','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
-        returning id`)).rows.length, 1);
+        returning id`, "objects")).length, 1);
       const nextFilingAccountId = await seedUsEinAccount(org.orgId, actorId, nextEmployerId, "98-7654321");
       await db.execute(sql`update employee_payroll_profiles set filing_account_id=${nextFilingAccountId}
         where org_id=${org.orgId}`);
@@ -872,9 +872,9 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       // The run document carries the schedule's entity and its currency
-      const doc = ((await db.execute<{ subsidiary_id: string; currency: string }>(sql`
+      const doc = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
         select subsidiary_id, currency from documents where id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(doc.subsidiary_id, usSubId);
       assert.equal(doc.currency, "USD");
 
@@ -895,9 +895,9 @@ test(
         !refused.errors[0]!.message.includes("Scoped Sam"),
         "the name rides errors[].employee — repeating it in the message prints it twice",
       );
-      const noStubs = ((await db.execute<{ n: number }>(sql`
+      const noStubs = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(noStubs.n, 0, "nothing wrong was written");
 
       // Configure the employee honestly — a US employee, in a state the US
@@ -920,11 +920,11 @@ test(
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
-      const stubs = ((await db.execute<{ employee_party_id: string; currency_code: string; province: string;
+      const stubs = await db.execute<{ employee_party_id: string; currency_code: string; province: string;
                 factors: Record<string, string> }>(sql`
         select employee_party_id, currency_code, province, factors
           from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows;
+      `, "objects");
       assert.deepEqual(stubs.map((s) => s.employee_party_id), [usEmployee]);
       // The whole chain agrees: US pack, US state, USD, and Pub 15-T factors
       // (SS/Medicare) rather than T4127's CPP/EI.
@@ -969,36 +969,36 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const baseline = ((await db.execute<{ gross: string; net_pay: string }>(sql`
+      const baseline = (await db.execute<{ gross: string; net_pay: string }>(sql`
         select gross, net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(baseline.gross, "3000.0000"); // 78,000 / 26
 
       // One-off bonus: taxed with the non-periodic method (TB), gross +500
-      const bonusComponent = ((await db.execute<{ id: string }>(sql`
+      const bonusComponent = (await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${org.orgId} and code = 'BONUS'
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, note, created_by, updated_by)
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${bonusComponent.id},
                 '500', 'Spot bonus', ${actorId}, ${actorId})`);
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const adjusted = ((await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
+      const adjusted = (await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
         select gross, factors from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(adjusted.gross, "3500.0000");
       assert.ok(Number(adjusted.factors.TB) > 0, "bonus method tax applies");
-      const bonusLine = ((await db.execute<{ description: string }>(sql`
+      const bonusLine = await db.execute<{ description: string }>(sql`
         select l.description from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
          where s.pay_run_document_id = ${run.documentId} and l.component_id = ${bonusComponent.id}
-      `))).rows;
+      `, "objects");
       assert.deepEqual(bonusLine.map((l) => l.description), ["Spot bonus"]);
 
       // Replace: override the salary-derived base pay line entirely
-      const baseComponent = ((await db.execute<{ id: string }>(sql`
+      const baseComponent = (await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${org.orgId} and code = 'BASE'
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       await db.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, component_id, amount, replace_component,
@@ -1006,9 +1006,9 @@ test(
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${baseComponent.id},
                 '2000', true, 'Unpaid leave proration', ${actorId}, ${actorId})`);
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const replaced = ((await db.execute<{ gross: string }>(sql`
+      const replaced = (await db.execute<{ gross: string }>(sql`
         select gross from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(replaced.gross, "2500.0000"); // 2,000 replaced base + 500 bonus
 
       // Exclude: employee drops out of the run entirely
@@ -1018,9 +1018,9 @@ test(
         values (${org.orgId}, ${run.documentId}, ${employeeId}, 'exclude', ${actorId}, ${actorId})`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.equal(result.employees, 0);
-      const stubCount = ((await db.execute<{ n: number }>(sql`
+      const stubCount = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stubCount.n, 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -1068,7 +1068,7 @@ test(
         const incomeTaxComponent = (await db.execute<{ id: string }>(sql`
           select id::text from pay_components
            where org_id=${org.orgId} and country='CA' and system_key='income_tax' and is_active
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         await db.execute(sql`update pay_components set is_active=false where org_id=${org.orgId} and id=${incomeTaxComponent.id}`);
         await assert.rejects(
           mutatePayRunAdjustment({
@@ -1095,7 +1095,7 @@ test(
         assert.deepEqual(saved, { changed: true, replayed: false });
         const invalidated = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         assert.equal(invalidated.n, 0, "saving an override invalidates the prior calculated snapshot");
 
         const replay = await mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason });
@@ -1136,7 +1136,7 @@ test(
             join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
             join pay_components c on c.org_id=l.org_id and c.id=l.component_id
            where s.pay_run_document_id=${run.documentId} and c.system_key='income_tax'
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         assert.equal(firstEvidence.amount, "120.1500");
         assert.equal(firstEvidence.description,
           "Income tax override — Record the operator-entered cheque withholding; source payroll-card:fixture-1");
@@ -1147,7 +1147,7 @@ test(
         const calculatedSource = (await db.execute<{ calculation_source_snapshot: unknown }>(sql`
           select calculation_source_snapshot from pay_runs
            where org_id=${org.orgId} and document_id=${run.documentId}
-        `)).rows[0]!.calculation_source_snapshot;
+        `, "objects"))[0]!.calculation_source_snapshot;
         const sourceSnapshot = (typeof calculatedSource === "string" ? JSON.parse(calculatedSource) : calculatedSource) as {
           incomeTaxOverrides?: unknown[];
         };
@@ -1165,7 +1165,7 @@ test(
         await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason });
         const correctionInvalidated = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         assert.equal(correctionInvalidated.n, 0, "correcting an override invalidates the previous snapshot");
         assert.deepEqual(
           await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason }),
@@ -1186,7 +1186,7 @@ test(
               where audit.org_id=r.org_id and audit.table_name='pay_run_adjustments'
                 and audit.row_id=${first.idempotencyKey})
           ) as state from pay_runs r where r.org_id=${org.orgId} and r.document_id=${run.documentId}
-        `)).rows[0]!.state;
+        `, "objects"))[0]!.state;
         const correctedInputState = await readCurrentOverrideState();
         await assert.rejects(
           mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason }),
@@ -1195,7 +1195,7 @@ test(
         );
         assert.deepEqual(await readCurrentOverrideState(), correctedInputState,
           "refusing an overwritten request preserves the corrected native input and audit history");
-        const audit = (await db.execute<{
+        const audit = await db.execute<{
           action: string; before_amount: string | null; after_amount: string | null;
         }>(sql`
           select action, changes->'before'->>'amount' as before_amount,
@@ -1204,7 +1204,7 @@ test(
            where org_id=${org.orgId} and table_name='pay_run_adjustments'
              and row_id=${first.idempotencyKey}
            order by at, id
-        `)).rows;
+        `, "objects");
         assert.equal(audit.length, 2);
         assert.deepEqual(audit.map(({ action, before_amount, after_amount }) => ({ action, before_amount, after_amount })), [
           { action: "insert", before_amount: null, after_amount: "120.1500" },
@@ -1216,7 +1216,7 @@ test(
             join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
             join pay_components c on c.org_id=l.org_id and c.id=l.component_id
            where s.pay_run_document_id=${run.documentId} and c.system_key='income_tax'
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         assert.equal(correctedLine.amount, "180.2500");
         const calculatedCorrectionState = await readCurrentOverrideState();
         await assert.rejects(mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason }),
@@ -1237,7 +1237,7 @@ test(
             where l.org_id=s.org_id and l.stub_id=s.id and c.system_key='income_tax'),0)::text as tax
           from pay_stubs s where s.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
             and s.employee_party_id=${employeeId}
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         assert.equal(zeroStub.factors.CA_TAX_OVERRIDE, "0.0000");
         assert.equal(zeroStub.factors.T, "0.0000");
         assert.equal(cmp(zeroStub.tax, "0"), 0, "explicit zero replaces computed withholding");
@@ -1268,7 +1268,7 @@ test(
           select id::text as id from pay_run_adjustments
            where org_id=${org.orgId} and pay_run_document_id=${run.documentId}
              and employee_party_id=${employeeId} and replace_component
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         await assert.rejects(
           mutatePayRunAdjustment({
             ...baseMutation, actorId: actors.outsiderId,
@@ -1378,14 +1378,14 @@ test(
         /inputs changed after it was last calculated \(wages\)/,
       );
       // And nothing was written: the run is still calculated, still empty of GL legs.
-      const refusedStatus = ((await db.execute<{ run_status: string }>(sql`
+      const refusedStatus = (await db.execute<{ run_status: string }>(sql`
         select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!.run_status;
+      `, "objects"))[0]!.run_status;
       assert.equal(refusedStatus, "calculated");
-      const refusedLines = ((await db.execute<{ n: number }>(sql`
+      const refusedLines = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(refusedLines, 0);
 
       // Recalculate and the SAME sequence commits: the gate tracks the inputs,
@@ -1393,9 +1393,9 @@ test(
       await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       await assertPayRunNotStale(org.orgId, run.documentId);
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const committedStatus = ((await db.execute<{ run_status: string }>(sql`
+      const committedStatus = (await db.execute<{ run_status: string }>(sql`
         select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!.run_status;
+      `, "objects"))[0]!.run_status;
       assert.equal(committedStatus, "committed");
 
       // Division of labour with the commit engine's own guards: a
@@ -1467,7 +1467,7 @@ test(
       const first = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(first.errors, []);
       assert.equal(first.gross, "1200.0000"); // 40h × $30
-      const source = ((await db.execute<{
+      const source = (await db.execute<{
           snapshot: { timeEntries: unknown[]; claimEntryIds: string[] };
           digest: string;
         }>(sql`
@@ -1475,7 +1475,7 @@ test(
                calculation_source_digest as digest
           from pay_runs
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(source.snapshot.timeEntries.length, 2);
       assert.equal(source.snapshot.claimEntryIds.length, 2);
       assert.match(source.digest, /^[0-9a-f]{64}$/);
@@ -1504,7 +1504,7 @@ test(
         "the new time registers as staleness",
       );
 
-      const effectsBefore = ((await db.execute<{
+      const effectsBefore = (await db.execute<{
           stubs: number; audit: number; entitlements: number;
         }>(sql`
         select (select count(*)::int from pay_stubs
@@ -1514,7 +1514,7 @@ test(
                (select count(*)::int from entitlement_ledger
                  where org_id = ${org.orgId}
                    and pay_run_document_id = ${run.documentId}) as entitlements
-      `))).rows[0]!;
+      `, "objects"))[0]!;
 
       // The ENGINE refuses on its own — no route gate, no disabled button.
       await assert.rejects(
@@ -1523,21 +1523,21 @@ test(
       );
       // And the refusal wrote nothing: no hour marked paid, the run still
       // calculated, the document still empty of GL legs.
-      const claimedAfterRefusal = ((await db.execute<{ n: number }>(sql`
+      const claimedAfterRefusal = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref is not null
-      `))).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(claimedAfterRefusal, 0, "no time was marked paid by the refused commit");
-      const statusAfterRefusal = ((await db.execute<{ run_status: string }>(sql`
+      const statusAfterRefusal = (await db.execute<{ run_status: string }>(sql`
         select run_status from pay_runs where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!.run_status;
+      `, "objects"))[0]!.run_status;
       assert.equal(statusAfterRefusal, "calculated");
-      const glAfterRefusal = ((await db.execute<{ n: number }>(sql`
+      const glAfterRefusal = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(glAfterRefusal, 0);
-      const effectsAfter = ((await db.execute<{
+      const effectsAfter = (await db.execute<{
           stubs: number; audit: number; entitlements: number;
         }>(sql`
         select (select count(*)::int from pay_stubs
@@ -1547,7 +1547,7 @@ test(
                (select count(*)::int from entitlement_ledger
                  where org_id = ${org.orgId}
                    and pay_run_document_id = ${run.documentId}) as entitlements
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(
         effectsAfter,
         effectsBefore,
@@ -1561,27 +1561,27 @@ test(
       assert.equal(second.gross, "2400.0000"); // 80h × $30
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
-      const claimed = ((await db.execute<{ n: number; distinct_n: number }>(sql`
+      const claimed = (await db.execute<{ n: number; distinct_n: number }>(sql`
         select count(*)::int as n, count(distinct te.id)::int as distinct_n from time_entries te
          where te.org_id = ${org.orgId}
            and te.worked_on between ${"2026-07-05"} and ${"2026-07-18"}
            and te.payroll_batch_ref = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(claimed.n, 4, "every eligible entry was claimed");
       assert.equal(claimed.distinct_n, 4, "each eligible entry exactly once");
-      const unclaimed = ((await db.execute<{ n: number }>(sql`
+      const unclaimed = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and status = 'approved'
            and worked_on between ${"2026-07-05"} and ${"2026-07-18"}
            and payroll_batch_ref is null
-      `))).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(unclaimed, 0, "no approved hour in the period was left behind");
       const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null }>(sql`
         select account_id, amount, party_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `));
-      assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
-      const netLeg = lines.rows.find((l) => l.party_id === employeeId);
+      `, "objects"));
+      assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
+      const netLeg = lines.find((l) => l.party_id === employeeId);
       assert.ok(netLeg, "the net pay leg carries the employee party");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -1605,8 +1605,8 @@ async function ytdFenceHalves(
   key: string,
 ): Promise<{ classid: bigint; objid: bigint }> {
   const r = (await db.execute<{ key: string }>(sql`
-    select hashtextextended(${key}, 0)::text as key`));
-  const wide = BigInt.asUintN(64, BigInt(r.rows[0]!.key));
+    select hashtextextended(${key}, 0)::text as key`, "objects"));
+  const wide = BigInt.asUintN(64, BigInt(r[0]!.key));
   return { classid: wide >> 32n, objid: wide & 0xffffffffn };
 }
 
@@ -1659,8 +1659,8 @@ async function parkedSelectionBackends(): Promise<string[]> {
      where datname = current_database()
        and state = 'active' and wait_event_type = 'Lock'
        and query like '%stub_employees%'
-       and pid <> pg_backend_pid()`));
-  return claims.rows.map((r) => String(r.pid));
+       and pid <> pg_backend_pid()`, "objects"));
+  return claims.map((r) => String(r.pid));
 }
 
 /** A backend queued on the declared financial source fence. */
@@ -1668,8 +1668,8 @@ async function ytdFenceQueued(fence: { classid: bigint; objid: bigint }): Promis
   const queued = (await db.execute(sql`
     select 1 from pg_locks
      where locktype = 'advisory' and granted = false
-       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`));
-  return queued.rows.length > 0;
+       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`, "objects"));
+  return queued.length > 0;
 }
 
 async function waitForInterleaving(what: string, probe: () => Promise<boolean>): Promise<void> {
@@ -1679,8 +1679,8 @@ async function waitForInterleaving(what: string, probe: () => Promise<boolean>):
   }
   const activity = await db.execute(sql`
     select pid, state, wait_event_type, left(query, 160) as query
-      from pg_stat_activity where datname = current_database()`);
-  assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity.rows)}`);
+      from pg_stat_activity where datname = current_database()`, "objects");
+  assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity)}`);
 }
 
 /**
@@ -1855,9 +1855,9 @@ test(
         select document_id, run_status from pay_runs
          where org_id = ${org.orgId}
            and (document_id = ${runA.documentId} or document_id = ${runB.documentId})
-      `));
+      `, "objects"));
       assert.deepEqual(
-        new Map(statuses.rows.map((r) => [r.document_id, r.run_status])),
+        new Map(statuses.map((r) => [r.document_id, r.run_status])),
         new Map([[winner, "committed"], [loser, "calculated"]]),
       );
       // ...money moved once: GL legs exist only for the winner...
@@ -1865,20 +1865,20 @@ test(
         select distinct document_id from document_lines
          where org_id = ${org.orgId}
            and (document_id = ${runA.documentId} or document_id = ${runB.documentId})
-      `));
-      assert.deepEqual(glRuns.rows.map((r) => r.document_id), [winner]);
+      `, "objects"));
+      assert.deepEqual(glRuns.map((r) => r.document_id), [winner]);
       const stubs = (await db.execute<{ gross: string }>(sql`
         select gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${winner}
-      `));
-      assert.deepEqual(stubs.rows.map((s) => s.gross), ["1200.0000"]); // 40h × $30
+      `, "objects"));
+      assert.deepEqual(stubs.map((s) => s.gross), ["1200.0000"]); // 40h × $30
       // ...and only the winner's hours are claimed as paid.
       const claims = (await db.execute<{ batch: string; n: number }>(sql`
         select payroll_batch_ref as batch, count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref is not null
         group by payroll_batch_ref
-      `));
-      assert.deepEqual(claims.rows, [{ batch: winner, n: 2 }]);
+      `, "objects"));
+      assert.deepEqual(claims, [{ batch: winner, n: 2 }]);
 
       // The refusal must be recoverable, not poisoning: the loser recalculates
       // — now pricing the year WITH the winner's stubs — and commits cleanly,
@@ -1964,20 +1964,20 @@ test(
 
       // Nothing was written by the refused commit: no terminal state, no GL
       // legs, no hour marked paid.
-      const status = ((await db.execute<{ run_status: string }>(sql`
+      const status = (await db.execute<{ run_status: string }>(sql`
         select run_status from pay_runs
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!.run_status;
+      `, "objects"))[0]!.run_status;
       assert.equal(status, "calculated");
-      const glLines = ((await db.execute<{ n: number }>(sql`
+      const glLines = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `))).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(glLines, 0);
-      const claimed = ((await db.execute<{ n: number }>(sql`
+      const claimed = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
          where org_id = ${org.orgId} and payroll_batch_ref is not null
-      `))).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(claimed, 0);
       // The edit itself survived — it was never inside the rolled-back
       // transaction — and still names the refusal reason.

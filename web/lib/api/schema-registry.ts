@@ -86,10 +86,10 @@ export async function loadApiSchema(
     select table_name, column_name, data_type, is_nullable, column_default, is_generated
       from information_schema.columns
      where table_schema = 'public' and table_name = any(${tableArray})
-     order by table_name, ordinal_position`);
+     order by table_name, ordinal_position`, "objects");
 
   const byTable = new Map<string, ColumnRow[]>();
-  for (const row of cols.rows) {
+  for (const row of cols) {
     const arr = byTable.get(row.table_name) ?? [];
     arr.push(row);
     byTable.set(row.table_name, arr);
@@ -102,10 +102,10 @@ export async function loadApiSchema(
     select target_table, target_kind, key, label, field_type, is_required, config
       from custom_field_defs
      where org_id = ${orgId} and is_active
-     order by sort_order, label`);
+     order by sort_order, label`, "objects");
 
   const cfByTargetKind = new Map<string, CustomFieldRow[]>();
-  for (const row of cfDefs.rows) {
+  for (const row of cfDefs) {
     const k = `${row.target_table}::${row.target_kind ?? ""}`;
     const arr = cfByTargetKind.get(k) ?? [];
     arr.push(row);
@@ -177,9 +177,9 @@ export async function loadApiSchema(
     select key, name, description, fields, allowed_roles
       from custom_record_types
      where org_id = ${orgId} and status = 'published'
-     order by sort_order, name`);
+     order by sort_order, name`, "objects");
 
-  for (const row of custom.rows) {
+  for (const row of custom) {
     if (roleKeys !== null && !inTypeAudience(roleKeys, row.allowed_roles)) continue;
     // Flatten the canonical FormSection[] definition into the API field list.
     const sections = normalizeSectionsInput(row.fields) as Array<{ fields?: StoredFormField[] }>;
@@ -228,8 +228,8 @@ export async function resolveApiType(
 
   const r = (await db.execute(sql`
     select key from custom_record_types
-     where org_id = ${orgId} and key = ${typeKey} and status = 'published'`));
-  if (!r.rows[0]) return null;
+     where org_id = ${orgId} and key = ${typeKey} and status = 'published'`, "objects"));
+  if (!r[0]) return null;
   return {
     key: typeKey,
     table: "custom_records",

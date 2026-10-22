@@ -50,13 +50,13 @@ async function loadAssignedRoleDefault(
      where org_id = ${authz.user.orgId} and role_key in (${roleMembership})
      order by case ${rolePriority} else ${roleKeys.length} end
      limit 1
-  `)
-  if (!res.rows[0]) return null
-  if (isShippedRoleLayout(res.rows[0].role_key, res.rows[0].layout)) return null
+  `, 'objects')
+  if (!res[0]) return null
+  if (isShippedRoleLayout(res[0].role_key, res[0].layout)) return null
   return {
     isSystemDefault: false,
-    layout: res.rows[0].layout,
-    sourceKey: dashboardSourceKeyForRole(res.rows[0].role_key),
+    layout: res[0].layout,
+    sourceKey: dashboardSourceKeyForRole(res[0].role_key),
   }
 }
 
@@ -65,8 +65,8 @@ export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDe
   if (roleDefault) return roleDefault
   const role = getUserRoleTier(authz)
   if (hasFinancialWorkspace(authz)) {
-    const result = await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${authz.user.orgId}`)
-    const settings = result.rows[0]?.settings ?? {}
+    const result = await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${authz.user.orgId}`, 'objects')
+    const settings = result[0]?.settings ?? {}
     const profile = settings.workspaceProfile as Record<string, unknown> | undefined
     const industry = INDUSTRIES.find((candidate) => candidate.key === settings.industry)
     const layout = financialDefaultLayout(role, {
@@ -140,7 +140,7 @@ export async function loadDashboardLayout(
       from user_dashboard_layouts
      where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
      limit 1
-  `)
+  `, 'objects')
 
-  return { ...selectStoredDashboardLayout(fallback, res.rows[0]), role, hiddenQuickActionIds }
+  return { ...selectStoredDashboardLayout(fallback, res[0]), role, hiddenQuickActionIds }
 }

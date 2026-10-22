@@ -65,15 +65,15 @@ async function fixture() {
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, class_id, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', ${classId}, 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const priorId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_records (org_id, party_id, requirement_id, status, effective_from, expires_on, created_by, updated_by)
     values (${org.orgId}, ${partyId}, ${requirementId}, 'active', '2026-01-01', '2026-12-31', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const otherPriorId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_records (org_id, party_id, requirement_id, status, effective_from, expires_on, created_by, updated_by)
     values (${org.orgId}, ${otherPartyId}, ${requirementId}, 'active', '2026-01-01', '2026-12-31', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { org, partyId, requirementId, priorId, otherPriorId };
 }
 
@@ -87,14 +87,14 @@ const post = (body: unknown) =>
   );
 
 async function recordCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_records where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_records where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 
 async function recordStatus(id: string): Promise<string> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ status: string }>(sql`select status from compliance_records where id = ${id}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ status: string }>(sql`select status from compliance_records where id = ${id}`, "objects"));
   return rows[0]!.status;
 }
 
@@ -162,8 +162,8 @@ test("a renewal files as pending and leaves the prior certificate in force", asy
     assert.equal(await recordStatus(priorId), "active");
     const link = (await withBypassContext(() =>
       db.execute<{ supersedes_id: string | null }>(
-        sql`select supersedes_id from compliance_records where id = ${json!.id!}`,
-      ))).rows[0]!.supersedes_id;
+        sql`select supersedes_id from compliance_records where id = ${json!.id!}`, "objects",
+      )))[0]!.supersedes_id;
     assert.equal(link, priorId);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -195,8 +195,8 @@ test("verifying the renewal supersedes the prior certificate", async () => {
     assert.equal(await recordStatus(created.id), "active");
     const forward = (await withBypassContext(() =>
       db.execute<{ superseded_by_id: string | null }>(
-        sql`select superseded_by_id from compliance_records where id = ${priorId}`,
-      ))).rows[0]!.superseded_by_id;
+        sql`select superseded_by_id from compliance_records where id = ${priorId}`, "objects",
+      )))[0]!.superseded_by_id;
     assert.equal(forward, created.id);
   } finally {
     await dropScratchOrg(org.orgId);

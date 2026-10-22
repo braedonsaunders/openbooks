@@ -115,20 +115,21 @@ function storedConfigs(statements: unknown[]): Record<string, unknown>[] {
 
 function installDb(loadRow: Record<string, unknown> | null) {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
   }
   state.loadRow = loadRow
   state.statements = []
   state.db = {
-    execute: async () => ({ rows: state.loadRow ? [state.loadRow] : [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: state.loadRow ? [state.loadRow] : [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
     transaction: async (fn) => {
       const tx = {
-        execute: async (query: unknown) => {
+        execute: async (query: unknown, mode?: string) => {
+          const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
           state.statements.push(query)
           // The route decides concurrent default+deactivate and locked-column
           // edits from the locked row, so the stub returns the stored row
           // (with its config), not a bare id.
-          return { rows: [state.loadRow ? { ...state.loadRow } : { id: VIEW_ID, name: 'Default view' }] }
+          return inMode({ rows: [state.loadRow ? { ...state.loadRow } : { id: VIEW_ID, name: 'Default view' }] })
         },
       }
       return fn(tx)
@@ -214,13 +215,14 @@ test('PATCH refuses deactivating a personal view that stays default', async () =
 test('PATCH of a vanished view is a named zero-row failure', async () => {
   installDb(activePersonal)
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
   }
   state.db.transaction = async (fn) => {
     const tx = {
-      execute: async (query: unknown) => {
+      execute: async (query: unknown, mode?: string) => {
+        const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
         state.statements.push(query)
-        return { rows: [] }
+        return inMode({ rows: [] })
       },
     }
     return fn(tx)
@@ -236,16 +238,17 @@ test('PATCH of a vanished view is a named zero-row failure', async () => {
 test('PATCH refuses overlapping personal defaults by name', async () => {
   installDb(activePersonal)
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
   }
   let txCalls = 0
   state.db.transaction = async (fn) => {
     const tx = {
-      execute: async (query: unknown) => {
+      execute: async (query: unknown, mode?: string) => {
+        const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
         state.statements.push(query)
         txCalls += 1
         if (txCalls === 1) {
-          return {
+          return inMode({
             rows: [{
               id: VIEW_ID,
               recordType: 'employee',
@@ -254,9 +257,9 @@ test('PATCH refuses overlapping personal defaults by name', async () => {
               isDefault: false,
               isActive: true,
             }],
-          }
+          })
         }
-        return { rows: [{ id: VIEW_ID, n: 2 }] }
+        return inMode({ rows: [{ id: VIEW_ID, n: 2 }] })
       },
     }
     return fn(tx)

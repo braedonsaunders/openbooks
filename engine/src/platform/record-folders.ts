@@ -13,14 +13,14 @@ export async function ensureAttachmentsRoot(orgId: string, executor?: SqlExecuto
     const existing = (await tx.execute<{ id: string }>(sql`
       select id from folders
        where org_id = ${orgId} and system_kind = 'attachments'
-    `))
-    if (existing.rows.length > 0) return existing.rows[0]!.id
+    `, "objects"))
+    if (existing.length > 0) return existing[0]!.id
     const ins = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
       values (${orgId}, 'Attachments', true, 'attachments', now(), now())
       returning id
-    `))
-    return ins.rows[0]!.id
+    `, "objects"))
+    return ins[0]!.id
   }
   return executor ? work(executor) : inDbTransaction(work)
 }
@@ -47,14 +47,14 @@ async function ensureGroupFolder(
       select id from folders
        where org_id = ${orgId} and parent_folder_id = ${rootId}
          and record_id is null and name = ${label}
-    `))
-    if (existing.rows[0]) return existing.rows[0]!.id
+    `, "objects"))
+    if (existing[0]) return existing[0]!.id
     const ins = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
       values (${orgId}, ${rootId}, ${label}, true, ${recordTable}, now(), now())
       returning id
-    `))
-    return ins.rows[0]!.id
+    `, "objects"))
+    return ins[0]!.id
   }
   return executor ? work(executor) : inDbTransaction(work)
 }
@@ -65,8 +65,8 @@ async function groupLabelFor(orgId: string, recordTable: string, recordId: strin
   if (recordTable !== 'documents') return titleizeKind(recordTable)
   const r = (await (executor ?? db).execute<{ kind: string | null }>(sql`
     select kind from documents where id = ${recordId} and org_id = ${orgId}
-  `))
-  const kind = r.rows[0]?.kind
+  `, "objects"))
+  const kind = r[0]?.kind
   return kind ? titleizeKind(kind) : 'Documents'
 }
 
@@ -91,8 +91,8 @@ export async function ensureRecordFolder(
        where org_id = ${orgId} and record_table = ${recordTable} and record_id = ${recordId}
          and record_id is not null
        for share
-    `))
-    if (existing.rows.length > 0) return existing.rows[0]!.id
+    `, "objects"))
+    if (existing.length > 0) return existing[0]!.id
     const rootId = await ensureAttachmentsRoot(orgId, tx)
     const label = await groupLabelFor(orgId, recordTable, recordId, tx)
     const groupId = await ensureGroupFolder(orgId, rootId, recordTable, label, tx)
@@ -101,8 +101,8 @@ export async function ensureRecordFolder(
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
       values (${orgId}, ${groupId}, ${name}, true, ${recordTable}, ${recordId}, now(), now())
       returning id
-    `))
-    return ins.rows[0]!.id
+    `, "objects"))
+    return ins[0]!.id
   }
   return executor ? work(executor) : inDbTransaction(work)
 }

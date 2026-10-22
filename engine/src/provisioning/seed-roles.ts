@@ -32,13 +32,13 @@ export async function seedRolesForOrg(orgId: string): Promise<SeedRolesForOrgRes
 }
 
 async function main(): Promise<void> {
-  const orgs = (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`));
-  if (orgs.rows.length === 0) {
+  const orgs = (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`, "objects"));
+  if (orgs.length === 0) {
     console.error("no orgs found — seed an org before seeding roles");
     process.exit(1);
   }
 
-  for (const org of orgs.rows) {
+  for (const org of orgs) {
     const done = await seedRolesForOrg(org.id);
     console.log(
       `org "${org.name}": ${done.roles} built-in roles ensured ` +

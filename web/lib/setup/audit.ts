@@ -20,13 +20,13 @@ export async function loadSetupAuditRow(
      where ${sql.raw(entity.idColumn ?? 'id')} = ${rowId}
        ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
        ${lock ? sql`for update` : sql``}
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!row) return undefined
   if (entity.key === 'tax-groups') {
     const members = await runner.execute<{ tax_code_id: string }>(sql`
       select tax_code_id from tax_group_members where tax_group_id = ${rowId}
-       order by sequence, tax_code_id`)
-    return { ...row, members: members.rows.map(member => member.tax_code_id) }
+       order by sequence, tax_code_id`, 'objects')
+    return { ...row, members: members.map(member => member.tax_code_id) }
   }
   if (entity.key === 'pay-components') {
     const classification = await runner.execute<{
@@ -35,8 +35,8 @@ export async function loadSetupAuditRow(
     }>(sql`
       select supplemental_wage_category, statutory_reporting_category, statutory_exemption_category
         from pay_component_earning_classifications
-       where org_id = ${orgId} and pay_component_id = ${rowId}`)
-    const value = classification.rows[0]
+       where org_id = ${orgId} and pay_component_id = ${rowId}`, 'objects')
+    const value = classification[0]
     if (!value) throw new Error('pay component classification is missing')
     return { ...row, earningClassification: {
       supplementalWageCategory: value.supplemental_wage_category,
@@ -70,6 +70,6 @@ export async function auditSetupChange(
   const written = await runner.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId}, ${args.requestId ?? null}) returning id`)
-  if (written.rows.length !== 1) throw new Error('The configuration audit event was not recorded')
+            ${JSON.stringify(args.changes)}, ${args.actorId}, ${args.requestId ?? null}) returning id`, 'objects')
+  if (written.length !== 1) throw new Error('The configuration audit event was not recorded')
 }

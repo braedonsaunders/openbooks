@@ -86,7 +86,7 @@ export async function listPlanSuggestions(
     : status === "open"
       ? sql`and s.status in ('suggested', 'confirmed')`
       : sql`and s.status = ${status}`;
-  const rows = (await tx.execute<SuggestionRow>(sql`
+  const rows = await tx.execute<SuggestionRow>(sql`
     select s.id, s.run_id, r.number as run_number, r.status as run_status, r.ran_at::text,
            s.item_id, i.code as item_code, i.name as item_name, p.base_unit,
            s.stock_location_id, sl.code as stock_location_code, s.action,
@@ -104,7 +104,7 @@ export async function listPlanSuggestions(
      where s.org_id = ${orgId} and r.parameters->>'subsidiaryId' = ${entity.subsidiaryId}
        and r.status = 'complete'
        ${statusFilter}
-     order by s.due_date, i.code, s.id`)).rows;
+     order by s.due_date, i.code, s.id`, "objects");
   const policies = await listDemandPolicies(tx, orgId);
   const vendors = await lastReceiptVendors(
     tx as Runner,
@@ -117,7 +117,7 @@ export async function listPlanSuggestions(
   if (supplierIds.length > 0) {
     for (const row of (await tx.execute<{ id: string; name: string }>(sql`
       select id, display_name as name from parties
-       where org_id = ${orgId} and id in (${sql.join(supplierIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows) {
+       where org_id = ${orgId} and id in (${sql.join(supplierIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects"))) {
       names.set(row.id, row.name);
     }
   }
@@ -181,13 +181,13 @@ export async function listDemandRuns(
 ): Promise<DemandPlanRun[]> {
   await assertDemandPlanningFeature(tx as Runner, orgId);
   const entity = await availabilityEntity(tx as Runner, orgId, subsidiaryId);
-  const rows = (await tx.execute<DemandPlanRun>(sql`
+  const rows = await tx.execute<DemandPlanRun>(sql`
     select id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
            status, parameters, ran_at::text as "ranAt"
       from demand_forecast_runs
      where org_id = ${orgId} and parameters->>'subsidiaryId' = ${entity.subsidiaryId}
      order by ran_at desc nulls last, created_at desc
-     limit ${Math.max(1, Math.min(limit, 100))}`)).rows;
+     limit ${Math.max(1, Math.min(limit, 100))}`, "objects");
   return rows.map((row) => ({ ...row, replayed: false }));
 }
 
@@ -210,9 +210,9 @@ export async function getDemandRun(
            status, parameters, ran_at::text as "ranAt"
       from demand_forecast_runs
      where org_id = ${orgId} and id = ${id}
-       and parameters->>'subsidiaryId' = ${entity.subsidiaryId}`)).rows[0];
+       and parameters->>'subsidiaryId' = ${entity.subsidiaryId}`, "objects"))[0];
   if (!run) throw new DemandPlanningNotFoundError();
-  const forecasts = (await tx.execute(sql`
+  const forecasts = await tx.execute(sql`
     select s.id, s.item_id as "itemId", i.code as "itemCode", s.stock_location_id as "stockLocationId",
            sl.code as "stockLocationCode", s.period_start::text as "periodStart",
            s.forecast_qty::text as "quantity", s.lower_qty::text as "lower",
@@ -221,7 +221,7 @@ export async function getDemandRun(
       join items i on i.org_id = s.org_id and i.id = s.item_id
       join stock_locations sl on sl.org_id = s.org_id and sl.id = s.stock_location_id
      where s.org_id = ${orgId} and s.run_id = ${id}
-     order by s.period_start, i.code, sl.code`)).rows;
+     order by s.period_start, i.code, sl.code`, "objects");
   // The drawer's chart re-reads the run's own grid through the same history
   // reader the run used, so the drawing and the stored forecast agree.
   const parameters = run.parameters as { asOf?: string; historyWeeks?: number };
@@ -272,7 +272,7 @@ async function lockSuggestion(tx: SqlExecutor, orgId: string, id: string) {
       join items i on i.org_id = s.org_id and i.id = s.item_id
       left join item_inventory_profiles p on p.org_id = s.org_id and p.item_id = s.item_id
       left join demand_item_policies p0 on p0.org_id = s.org_id and p0.item_id = s.item_id
-     where s.org_id = ${orgId} and s.id = ${id} for update of s`)).rows[0];
+     where s.org_id = ${orgId} and s.id = ${id} for update of s`, "objects"))[0];
   if (!row) throw new DemandPlanningNotFoundError();
   return row;
 }
@@ -293,8 +293,8 @@ export async function confirmPlanSuggestion(tx: SqlExecutor, orgId: string, acto
     refuse("Only a suggested planning row can be confirmed.", "suggestion_not_suggested", "select a suggested planning row", 409);
   }
   const updated = await tx.execute(sql`update demand_plan_suggestions set status = 'confirmed', updated_at = now(), updated_by = ${actorId}
-    where org_id = ${orgId} and id = ${id} and status = 'suggested' returning id`);
-  if (updated.rows.length !== 1) refuse("The suggestion was not confirmed.", "planning_write_failed", "reload the suggestion and retry");
+    where org_id = ${orgId} and id = ${id} and status = 'suggested' returning id`, "objects");
+  if (updated.length !== 1) refuse("The suggestion was not confirmed.", "planning_write_failed", "reload the suggestion and retry");
   await auditPlanningChange(tx, { orgId, actorId, table: "demand_plan_suggestions", rowId: id, action: "update", before, after: { ...before, status: "confirmed" } });
   return { ...before, status: "confirmed" };
 }
@@ -312,8 +312,8 @@ export async function dismissPlanSuggestion(tx: SqlExecutor, orgId: string, acto
   }
   const updated = await tx.execute(sql`update demand_plan_suggestions
     set status = 'dismissed', dismiss_reason = ${text}, updated_at = now(), updated_by = ${actorId}
-    where org_id = ${orgId} and id = ${id} and status = 'suggested' returning id`);
-  if (updated.rows.length !== 1) refuse("The suggestion was not dismissed.", "planning_write_failed", "reload the suggestion and retry");
+    where org_id = ${orgId} and id = ${id} and status = 'suggested' returning id`, "objects");
+  if (updated.length !== 1) refuse("The suggestion was not dismissed.", "planning_write_failed", "reload the suggestion and retry");
   await auditPlanningChange(tx, { orgId, actorId, table: "demand_plan_suggestions", rowId: id, action: "update", before, after: { ...before, status: "dismissed", dismiss_reason: text } });
   return { ...before, status: "dismissed", dismiss_reason: text };
 }
@@ -334,8 +334,8 @@ function assertConvertible(row: Awaited<ReturnType<typeof lockSuggestion>>) {
 async function markConverted(tx: SqlExecutor, orgId: string, actorId: string, row: Awaited<ReturnType<typeof lockSuggestion>>, targetId: string) {
   const updated = await tx.execute(sql`update demand_plan_suggestions
     set status = 'converted', converted_ref_id = ${targetId}, updated_at = now(), updated_by = ${actorId}
-    where org_id = ${orgId} and id = ${row.id} and status = 'confirmed' returning id`);
-  if (updated.rows.length !== 1) refuse("The suggestion conversion was not recorded.", "planning_write_failed", "reload the suggestion before converting it");
+    where org_id = ${orgId} and id = ${row.id} and status = 'confirmed' returning id`, "objects");
+  if (updated.length !== 1) refuse("The suggestion conversion was not recorded.", "planning_write_failed", "reload the suggestion before converting it");
   await auditPlanningChange(tx, { orgId, actorId, table: "demand_plan_suggestions", rowId: row.id, action: "update", before: row, after: { ...row, status: "converted", converted_ref_id: targetId } });
 }
 

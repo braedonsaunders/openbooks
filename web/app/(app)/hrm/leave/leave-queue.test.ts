@@ -133,7 +133,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) };",
+        url: "data:text/javascript,export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) };",
       };
     }
     return nextResolve(specifier, context);

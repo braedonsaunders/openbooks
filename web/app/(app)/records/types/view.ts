@@ -148,10 +148,8 @@ export async function loadRecordTypes(
     fence === null
       ? null
       : subsidiaryDeclaredTypeIds(
-          (
-            await db.execute<{ id: string; name: string; fields: unknown }>(sql`
-              select id, name, fields from custom_record_types where org_id = ${authz.user.orgId}`)
-          ).rows,
+          await db.execute<{ id: string; name: string; fields: unknown }>(sql`
+              select id, name, fields from custom_record_types where org_id = ${authz.user.orgId}`, 'objects'),
         )
   const countScope =
     fence === null || scopedTypeIds === null
@@ -174,28 +172,26 @@ export async function loadRecordTypes(
         from custom_record_types t
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
     db.execute<{ status: string; n: string }>(sql`
       select t.status, count(*) as n from custom_record_types t
        where t.org_id = ${authz.user.orgId}
-       group by t.status`),
+       group by t.status`, 'objects'),
     typeId && !isCreate
       ? loadRecordTypeById(authz.user.orgId, typeId)
       : Promise.resolve(null),
     typeId
       ? db.execute<{ key: string; name: string }>(sql`
-          select key, name from app_roles where org_id = ${authz.user.orgId} order by name`)
+          select key, name from app_roles where org_id = ${authz.user.orgId} order by name`, 'objects')
       : null,
   ])
-  const total = counts.rows.reduce((a: number, r) => a + Number(r.n), 0)
+  const total = counts.reduce((a: number, r) => a + Number(r.n), 0)
   const filteredTotal =
     status || params.q
       ? Number(
-          (
-            await db.execute<{ n: string }>(
-              sql`select count(*) as n from custom_record_types t where ${where}`,
-            )
-          ).rows[0]!.n,
+          (await db.execute<{ n: string }>(
+              sql`select count(*) as n from custom_record_types t where ${where}`, 'objects',
+            ))[0]!.n,
         )
       : total
 
@@ -211,7 +207,7 @@ export async function loadRecordTypes(
     backLabel: tHub('title'),
     searchPlaceholder: t('types.searchPlaceholder'),
     statusLabel: tc('labels.status'),
-    statusOptions: counts.rows.map((r) => ({
+    statusOptions: counts.map((r) => ({
       value: String(r.status),
       label: statusText(String(r.status)),
       count: Number(r.n),
@@ -228,7 +224,7 @@ export async function loadRecordTypes(
     columnInNav: t('types.columns.inNav'),
     columnStatus: tc('labels.status'),
     columnUpdated: tc('labels.updated'),
-    rows: types.rows.map((row) => ({
+    rows: types.map((row) => ({
       id: String(row.id),
       name: String(row.name),
       href: buildListDrawerHref('/records/types', sp, 'type', String(row.id)),
@@ -252,12 +248,12 @@ export async function loadRecordTypes(
     drawerProps: openType
       ? {
           type: serializeType(openType),
-          roles: (roles?.rows ?? []) as { key: string; name: string }[],
+          roles: (roles ?? []) as { key: string; name: string }[],
         }
       : isCreate
         ? {
             type: BLANK_TYPE,
-            roles: (roles?.rows ?? []) as { key: string; name: string }[],
+            roles: (roles ?? []) as { key: string; name: string }[],
             createMode: true,
           }
         : null,

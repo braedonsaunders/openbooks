@@ -279,7 +279,7 @@ async function qualifyOriginalOpening(fx: AdoptionFixture, options: {
     ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
     { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
   ]);
-  const original = (await db.execute<{ report: string }>(sql`
+  const original = await db.execute<{ report: string }>(sql`
     select jsonb_build_object('legalEmployerId', ${fx.subsidiaryId}::text,
       'originalOpening', to_jsonb(b),
       'openingChildren', public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year),
@@ -287,7 +287,7 @@ async function qualifyOriginalOpening(fx: AdoptionFixture, options: {
       from payroll_opening_balances b
      where b.org_id = ${fx.orgId} and b.employee_party_id = ${fx.employeeId}
        and b.tax_year = 2026
-  `)).rows;
+  `, "objects");
   assert.equal(original.length, 1);
   const bytes = Buffer.from(original[0]!.report);
   const sha = createHash('sha256').update(bytes).digest('hex');
@@ -405,11 +405,10 @@ test(
       });
       assert.deepEqual(result.errors, []);
 
-      const stub = ((await db.execute<{ gross: string; net_pay: string; factors: Record<string, string> }>(sql`
+      const stub = (await db.execute<{ gross: string; net_pay: string; factors: Record<string, string> }>(sql`
         select gross, net_pay, factors from pay_stubs
          where org_id = ${fx.orgId} and pay_run_document_id = ${run.documentId}
-      `)))
-        .rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stub.gross, "2400.0000"); // 80h × $30
 
       // The T4127 engine, called directly with the SAME carry-in, is the oracle.
@@ -554,8 +553,8 @@ test(
       const stub = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${fx.orgId} and pay_run_document_id = ${run.documentId}
-      `));
-      const factors = stub.rows[0]!.factors;
+      `, "objects"));
+      const factors = stub[0]!.factors;
       assert.equal(factors.QPIP_ER, "0.0000");
       // A reached ceiling retains a known zero basis for later history reads.
       assert.equal(cmp(factors.WCB_EARN!, "0"), 0, "the capped assessable base is explicitly zero");
@@ -671,7 +670,7 @@ test(
         "23000.0000",
       );
       assert.equal((await db.execute(sql`update documents set status='voided', void_reason='Retired annual-room fixture', voided_at=now(), voided_by=${fx.actorId}
-        where org_id=${fx.orgId} and id=${documentId} returning id`)).rows.length, 1);
+        where org_id=${fx.orgId} and id=${documentId} returning id`, "objects")).length, 1);
       assert.equal(await componentYearToDate(db, {
         orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
       }), "23000.0000", "voided documents do not consume annual room");
@@ -694,18 +693,18 @@ test("a sealed GB component-only original remains in the employee-year cap after
     await assert.rejects(read(componentId), /opening payer is not source-qualified/);
     await assert.rejects(read(otherComponentId), /opening payer is not source-qualified/);
     assert.equal((await db.execute(sql`update subsidiaries set country='GB',base_currency='GBP'
-      where org_id=${fx.orgId} and id=${fx.subsidiaryId} returning id`)).rows.length, 1);
+      where org_id=${fx.orgId} and id=${fx.subsidiaryId} returning id`, "objects")).length, 1);
     await qualifyOriginalOpening(fx, { completeSource: true, originalCountry: 'GB' });
     assert.equal(await read(componentId), '12345.6789');
     assert.equal(await read(otherComponentId), '0.0000', 'carry-in belongs to the exact configured component');
     const successor = randomUUID();
     assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-      values(${successor},${fx.orgId},${fx.subsidiaryId},'Successor legal employer','CAD','CA') returning id`)).rows.length, 1);
+      values(${successor},${fx.orgId},${fx.subsidiaryId},'Successor legal employer','CAD','CA') returning id`, "objects")).length, 1);
     await seedWorkerEmployment(fx.orgId, fx.employeeId, successor);
     assert.equal((await db.execute(sql`update parties set subsidiary_id=${successor}
-      where org_id=${fx.orgId} and id=${fx.employeeId} returning id`)).rows.length, 1);
+      where org_id=${fx.orgId} and id=${fx.employeeId} returning id`, "objects")).length, 1);
     assert.equal((await db.execute(sql`delete from employee_payroll_profiles
-      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`)).rows.length, 1);
+      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, "objects")).length, 1);
     assert.equal(await read(componentId), '12345.6789');
     assert.equal(await read(otherComponentId), '0.0000');
   } finally {
@@ -717,13 +716,13 @@ test("an unsigned retained all-zero opening and component child consume no annua
   const fx = await seedAdoption();
   try {
     const componentId = await seedCappedComponent(fx);
-    const opening = (await db.execute<{ id: string }>(sql`insert into payroll_opening_balances
+    const opening = await db.execute<{ id: string }>(sql`insert into payroll_opening_balances
       (org_id,employee_party_id,tax_year,created_by,updated_by)
-      values(${fx.orgId},${fx.employeeId},2026,${fx.actorId},${fx.actorId}) returning id`)).rows;
+      values(${fx.orgId},${fx.employeeId},2026,${fx.actorId},${fx.actorId}) returning id`, "objects");
     assert.equal(opening.length, 1);
     assert.equal((await db.execute(sql`insert into payroll_opening_balance_components
       (org_id,opening_balance_id,component_id,ytd_amount,created_by,updated_by)
-      values(${fx.orgId},${opening[0]!.id},${componentId},'0',${fx.actorId},${fx.actorId}) returning component_id`)).rows.length, 1);
+      values(${fx.orgId},${opening[0]!.id},${componentId},'0',${fx.actorId},${fx.actorId}) returning component_id`, "objects")).length, 1);
     assert.equal(await componentYearToDate(db, {
       orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
     }), '0.0000');
@@ -768,8 +767,8 @@ test(
       assert.deepEqual(after.rows[0]!.componentAmounts, {});
       const orphans = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from payroll_opening_balance_components
-         where org_id = ${fx.orgId}`));
-      assert.equal(orphans.rows[0]!.n, 0, "the child rows must cascade with their parent");
+         where org_id = ${fx.orgId}`, "objects"));
+      assert.equal(orphans[0]!.n, 0, "the child rows must cascade with their parent");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -1234,8 +1233,8 @@ test(
       const columns = (await db.execute<{ column_name: string }>(sql`
         select column_name from information_schema.columns
          where table_schema = 'public' and table_name = 'worker_comp_groups'
-      `));
-      const present = new Set(columns.rows.map((r) => r.column_name));
+      `, "objects"));
+      const present = new Set(columns.map((r) => r.column_name));
       for (const column of ["created_at", "created_by", "updated_at", "updated_by"]) {
         assert.ok(present.has(column), `worker_comp_groups is missing ${column}`);
       }
@@ -1376,12 +1375,12 @@ test(
       );
 
       const deduction = async (documentId: string) =>
-        ((await db.execute<{ amount: string }>(sql`
+        (await db.execute<{ amount: string }>(sql`
           select l.amount from pay_stub_lines l
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${documentId}
              and l.component_id = ${componentId}
-        `))).rows[0]?.amount ?? null;
+        `, "objects"))[0]?.amount ?? null;
 
       // 5% of $2,400 is $120; only $100 of annual room remains.
       assert.equal(await deduction(run.documentId), "100.0000");
@@ -1646,8 +1645,8 @@ test(
       assert.equal(after.entered, 0);
       const orphans = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from payroll_opening_program_bases
-         where org_id = ${fx.orgId}`));
-      assert.equal(orphans.rows[0]!.n, 0, "the sidecar rows must cascade with their parent");
+         where org_id = ${fx.orgId}`, "objects"));
+      assert.equal(orphans[0]!.n, 0, "the sidecar rows must cascade with their parent");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

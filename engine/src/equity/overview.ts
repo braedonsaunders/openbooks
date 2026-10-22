@@ -160,11 +160,11 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
     const posted = (await db.execute<{ amount: string | null }>(sql`
       select sum(total_amount)::text as amount from equity_compensation_runs
        where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
-         and through_date between ${input.yearStart}::date and ${asOf}::date`)).rows[0]?.amount ?? null;
+         and through_date between ${input.yearStart}::date and ${asOf}::date`, "objects"))[0]?.amount ?? null;
 
     const periodEnd = (await db.execute<{ ends_on: string | null }>(sql`
       select max(ends_on)::text as ends_on from accounting_periods
-       where org_id = ${orgId} and not is_adjustment and ends_on <= ${asOf}::date`)).rows[0]?.ends_on ?? null;
+       where org_id = ${orgId} and not is_adjustment and ends_on <= ${asOf}::date`, "objects"))[0]?.ends_on ?? null;
     const postings = periodEnd && issued.length > 0 ? await equityPostingsDue(orgId, subsidiaryId, entity.currency, periodEnd) : null;
 
     const holderIds = [...new Set(book.securities.map((row) => row.holderPartyId))];
@@ -173,10 +173,10 @@ export async function loadEquityOverview(input: { orgId: string; actorId: string
     if (holderIds.length > 0) {
       const list = `{${holderIds.join(",")}}`;
       for (const row of (await db.execute<{ id: string; display_name: string }>(sql`
-        select id, display_name from parties where org_id = ${orgId} and id = any(${list}::uuid[])`)).rows) names.set(row.id, row.display_name);
+        select id, display_name from parties where org_id = ${orgId} and id = any(${list}::uuid[])`, "objects"))) names.set(row.id, row.display_name);
       for (const row of (await db.execute<{ party_id: string; terminated_on: string }>(sql`
         select party_id, terminated_on::text as terminated_on from employee_roles
-         where org_id = ${orgId} and party_id = any(${list}::uuid[]) and terminated_on is not null and terminated_on <= ${asOf}::date`)).rows) {
+         where org_id = ${orgId} and party_id = any(${list}::uuid[]) and terminated_on is not null and terminated_on <= ${asOf}::date`, "objects"))) {
         departures.set(row.party_id, row.terminated_on);
       }
     }

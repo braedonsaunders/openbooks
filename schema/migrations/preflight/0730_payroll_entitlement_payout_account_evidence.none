@@ -1,1 +1,0 @@
-The constraint only adds an allowed evidence source. Every row accepted by the existing constraint remains valid; no historical stamp or amount is changed.

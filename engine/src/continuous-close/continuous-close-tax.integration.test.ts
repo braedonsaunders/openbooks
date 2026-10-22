@@ -180,11 +180,11 @@ test(
       // Restore the mapping and close the tax lock for the latest completed
       // period: full readiness, the pack goes quiet.
       const book = (await withBypassContext(() =>
-        db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`),
-      )).rows[0]!;
+        db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`, "objects"),
+      ))[0]!;
       await withBypassContext(async () => {
         const codeId = (await db.execute<{ id: string }>(sql`
-          select id from tax_codes where org_id = ${org.orgId} and code = 'TAX-READY' limit 1`)).rows[0]!;
+          select id from tax_codes where org_id = ${org.orgId} and code = 'TAX-READY' limit 1`, "objects"))[0]!;
         await db.execute(sql`
           insert into tax_report_lines
             (id, org_id, report_code, line_code, label, tax_code_id, basis, sign, sequence)
@@ -226,11 +226,11 @@ test(
       const result = await withSimClock("2026-08-01T12:00:00.000Z", () => runContinuousCloseAgent({ orgId: org.orgId, agentKey: "tax", trigger: "manual", allowedSubsidiaryIds: null }));
       assert.equal((result as { status: string }).status, "completed");
       assert.ok((result as { detected: number }).detected >= 1, "the run detects the untaxed bill");
-      const persisted = (await withBypassContext(() =>
+      const persisted = await withBypassContext(() =>
         db.execute<{ finding_type: string; fingerprint: string }>(sql`
           select finding_type, fingerprint from ai_work_items
            where org_id = ${org.orgId} and agent_key = 'tax'
-        `))).rows;
+        `, "objects"));
       assert.ok(
         persisted.some((row) => row.fingerprint === "tax-missing-codes:vendor_bill"),
         `the finding persists with a stable fingerprint, got ${JSON.stringify(persisted)}`,

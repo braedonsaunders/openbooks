@@ -47,14 +47,14 @@ async function partyName(orgId: string, partyId: string): Promise<string | null>
   const row = (await db.execute<{ name: string }>(sql`
     select coalesce(display_name, legal_name, 'Unnamed') as name
       from parties where org_id = ${orgId} and id = ${partyId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.name ?? null;
 }
 
 async function orgName(orgId: string): Promise<string> {
   const row = (await db.execute<{ name: string }>(sql`
     select name from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.name ?? "Your organization";
 }
 

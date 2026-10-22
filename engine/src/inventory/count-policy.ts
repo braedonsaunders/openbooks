@@ -21,8 +21,7 @@ export async function countTolerance(
   subsidiaryId: string,
   date: string,
 ): Promise<string> {
-  const row = (
-    await runner.execute<{
+  const row = (await runner.execute<{
       abc_class: string | null;
       variance_tolerance: string | null;
     }>(sql`
@@ -30,8 +29,7 @@ export async function countTolerance(
     left join inventory_count_policies policy on policy.org_id=profile.org_id and policy.abc_class=profile.abc_class
       and policy.subsidiary_id=${subsidiaryId} and policy.effective_from<=${date}::date
       and (policy.effective_to is null or policy.effective_to>${date}::date)
-    where profile.org_id=${orgId} and profile.item_id=${itemId}`)
-  ).rows[0];
+    where profile.org_id=${orgId} and profile.item_id=${itemId}`, "objects"))[0];
   if (!row) throw new InventoryError("Item has no inventory profile");
   if (row.abc_class && row.variance_tolerance === null)
     throw new InventoryError(
@@ -45,19 +43,15 @@ export async function assertSecondCounts(
   orgId: string,
   countId: string,
 ): Promise<void> {
-  const firstMissing = (
-    await runner.execute(sql`select id from stock_count_lines where org_id=${orgId} and stock_count_id=${countId}
-    and variance_tolerance is not null and counted_quantity is not null and first_counted_quantity is null limit 1`)
-  ).rows;
+  const firstMissing = await runner.execute(sql`select id from stock_count_lines where org_id=${orgId} and stock_count_id=${countId}
+    and variance_tolerance is not null and counted_quantity is not null and first_counted_quantity is null limit 1`, "objects");
   if (firstMissing.length)
     throw new InventoryError(
       "First count observation is missing — record the first quantity before submitting or posting",
     );
-  const missing = (
-    await runner.execute(sql`select id from stock_count_lines where org_id=${orgId} and stock_count_id=${countId}
+  const missing = await runner.execute(sql`select id from stock_count_lines where org_id=${orgId} and stock_count_id=${countId}
     and variance_tolerance is not null and abs(first_counted_quantity-expected_quantity)>variance_tolerance
-    and (second_counted_quantity is null or second_counted_quantity<>counted_quantity or second_counted_at is null)`)
-  ).rows;
+    and (second_counted_quantity is null or second_counted_quantity<>counted_quantity or second_counted_at is null)`, "objects");
   if (missing.length)
     throw new InventoryError(
       `${missing.length} count lines exceed their tolerance — record a second blind count before submitting or posting`,

@@ -107,7 +107,7 @@ async function billedCustomerVisibility(
     select p.subsidiary_id as "subsidiaryId"
       from parties p
      where p.org_id = ${orgId} and p.id = ${customerId}
-     for share of p`)).rows[0]
+     for share of p`, 'objects'))[0]
   if (!party) return 'missing'
   return guardSubsidiaryScope(gate, party.subsidiaryId, { orgWideNull: true }) ? 'hidden' : 'visible'
 }
@@ -130,7 +130,7 @@ export const GET = defineRoute({
     const child = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select p.subsidiary_id as "subsidiaryId"
         from parties p
-       where p.org_id = ${orgId} and p.id = ${childPartyId}`)).rows[0]
+       where p.org_id = ${orgId} and p.id = ${childPartyId}`, 'objects'))[0]
     if (!child) return scopeNotFound()
     if (gate.allowedSubsidiaryIds !== null
       && guardSubsidiaryScope(gate, child.subsidiaryId, { orgWideNull: true })) {
@@ -151,7 +151,7 @@ export const GET = defineRoute({
          ${subsidiaryVisibleFilter(sql`b.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
          ${subsidiaryVisibleFilter(sql`g.billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-       order by r.effective_from desc`)
+       order by r.effective_from desc`, 'objects')
     const children = await db.execute(sql`
       select r.child_party_id as "childPartyId", c.display_name as "childName",
              r.bill_to_party_id as "billToPartyId", r.payer_party_id as "payerPartyId",
@@ -168,7 +168,7 @@ export const GET = defineRoute({
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
          ${subsidiaryVisibleFilter(sql`g.billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        order by c.display_name, r.effective_from desc
-       limit 200`)
+       limit 200`, 'objects')
     const groups = await db.execute(sql`
       select g.id, g.code, g.name, g.payer_party_id as "payerPartyId",
              g.cadence, g.cutoff_day as "cutoffDay", g.grouping,
@@ -179,23 +179,23 @@ export const GET = defineRoute({
        where g.org_id = ${orgId} and g.is_active
          ${subsidiaryVisibleFilter(sql`g.billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
          ${subsidiaryVisibleFilter(sql`payer.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-       order by g.code`)
+       order by g.code`, 'objects')
     const parties = await listScopedPartyOptions(orgId, gate.allowedSubsidiaryIds, { role: 'customer', activeOnly: true })
     let summary: Record<string, unknown>
     try {
       const parties0 = await resolveEffectiveBillingParties(orgId, childPartyId, today, null)
       const targetPartyIds = [...new Set([parties0.billToPartyId, parties0.payerPartyId])]
-      const names = (await db.execute<{ id: string; name: string }>(sql`
+      const names = await db.execute<{ id: string; name: string }>(sql`
         select p.id, p.display_name as name from parties p
          where p.org_id = ${orgId} and p.id in (${parties0.billToPartyId}, ${parties0.payerPartyId})
-           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}`)).rows
+           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}`, 'objects')
       if (names.length !== targetPartyIds.length) return scopeNotFound()
       const byId = new Map(names.map((n) => [n.id, n.name]))
       const group = parties0.consolidationGroupId
         ? (await db.execute<{ code: string; name: string; cadence: string }>(sql`
             select code, name, cadence from consolidation_groups
              where org_id = ${orgId} and id = ${parties0.consolidationGroupId}
-               ${subsidiaryVisibleFilter(sql`billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0]
+               ${subsidiaryVisibleFilter(sql`billing_subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}`, 'objects'))[0]
         : null
       if (parties0.consolidationGroupId && !group) return scopeNotFound()
       summary = {
@@ -214,9 +214,9 @@ export const GET = defineRoute({
     }
     return NextResponse.json({
       summary,
-      relationships: relationships.rows,
-      children: children.rows,
-      groups: groups.rows,
+      relationships,
+      children,
+      groups,
       parties: parties.map((p) => ({ id: p.id, name: p.display_name })),
       canManage: can(gate, 'documents.manage'),
     })
@@ -241,7 +241,7 @@ async function normalizedInput(
   if (rowId && !lockChild) {
     const current = (await tx.execute<{ childPartyId: string }>(sql`
       select child_party_id as "childPartyId"
-        from customer_billing_relationships where id = ${rowId} and org_id = ${orgId}`)).rows[0]
+        from customer_billing_relationships where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
     if (!current) return { errorCode: 'save' } as const
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'billing-relationship:' + orgId + ':' + current.childPartyId}, 0))`)
   } else if (lockChild) {
@@ -257,14 +257,14 @@ async function normalizedInput(
              payer_party_id as "payerPartyId",
              effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
              consolidation_group_id as "consolidationGroupId"
-        from customer_billing_relationships where id = ${rowId} and org_id = ${orgId} for update`)))
-    if (!current.rows[0]) return { errorCode: 'save' } as const
-    values = { ...current.rows[0], ...body }
+        from customer_billing_relationships where id = ${rowId} and org_id = ${orgId} for update`, 'objects')))
+    if (!current[0]) return { errorCode: 'save' } as const
+    values = { ...current[0], ...body }
     // The stored row's own customer must already be visible — a restricted
     // caller alters only their own subsidiaries' billing, and the uniform
     // 'save' answers exactly like a missing row.
     const stored = await billedCustomerVisibility(
-      tx, orgId, gate, String(current.rows[0].childPartyId),
+      tx, orgId, gate, String(current[0].childPartyId),
     )
     if (stored !== 'visible') return { errorCode: 'save' } as const
   }
@@ -303,7 +303,7 @@ async function normalizedInput(
     const group = (await tx.execute<{ billingSubsidiaryId: string | null }>(sql`
       select billing_subsidiary_id as "billingSubsidiaryId"
         from consolidation_groups where id = ${consolidationGroupId} and org_id = ${orgId}
-       for share`)).rows[0]
+       for share`, 'objects'))[0]
     if (!group && !unrestricted) return { errorCode: 'notFound' } as const
     if (group && guardSubsidiaryScope(gate, group.billingSubsidiaryId, { orgWideNull: true })) {
       return { errorCode: 'notFound' } as const
@@ -323,11 +323,11 @@ async function normalizedInput(
         ? sql`exists(select 1 from consolidation_groups
                       where id = ${consolidationGroupId} and org_id = ${orgId}
                         and is_active and payer_party_id = ${payerPartyId})`
-        : sql`true`} as group_ok`)))
-  if (!refs.rows[0]?.child_ok || !refs.rows[0]?.bill_to_ok
-    || !refs.rows[0]?.payer_ok || !refs.rows[0]?.group_ok) {
-    return { errorCode: consolidationGroupId && refs.rows[0]?.child_ok
-      && refs.rows[0]?.bill_to_ok && refs.rows[0]?.payer_ok ? 'group' : 'references' } as const
+        : sql`true`} as group_ok`, 'objects')))
+  if (!refs[0]?.child_ok || !refs[0]?.bill_to_ok
+    || !refs[0]?.payer_ok || !refs[0]?.group_ok) {
+    return { errorCode: consolidationGroupId && refs[0]?.child_ok
+      && refs[0]?.bill_to_ok && refs[0]?.payer_ok ? 'group' : 'references' } as const
   }
   const overlap = ((await tx.execute(sql`
     select 1 from customer_billing_relationships
@@ -335,8 +335,8 @@ async function normalizedInput(
        and child_party_id = ${childPartyId}
        and daterange(effective_from, effective_to, '[]') &&
            daterange(${effectiveFrom}::date, ${effectiveTo}::date, '[]')
-     limit 1`)))
-  if (overlap.rows.length) return { errorCode: 'overlap' } as const
+     limit 1`, 'objects')))
+  if (overlap.length) return { errorCode: 'overlap' } as const
   return { values: { childPartyId, billToPartyId, payerPartyId, effectiveFrom, effectiveTo, consolidationGroupId } } as const
 }
 
@@ -357,8 +357,8 @@ export const POST = defineRoute({
          effective_from, effective_to, consolidation_group_id, created_by, updated_by)
       values (${gate.user.orgId}, ${v.childPartyId}, ${v.billToPartyId}, ${v.payerPartyId},
               ${v.effectiveFrom}, ${v.effectiveTo}, ${v.consolidationGroupId}, ${gate.user.id}, ${gate.user.id})
-      returning *`)
-    const after = inserted.rows[0]
+      returning *`, 'objects')
+    const after = inserted[0]
     if (!after) throw new Error('billing relationship insert returned no row')
     const id = String(after.id)
     await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -393,7 +393,7 @@ export const PATCH = defineRoute({
     if ('errorCode' in parsed) return parsed
     const v = parsed.values
     const before = (await tx.execute(sql`
-      select * from customer_billing_relationships where id = ${id} and org_id = ${gate.user.orgId} for update`)).rows[0]
+      select * from customer_billing_relationships where id = ${id} and org_id = ${gate.user.orgId} for update`, 'objects'))[0]
     if (!before) return { errorCode: 'save' } as const
     const updated = (await tx.execute(sql`update customer_billing_relationships
          set child_party_id = ${v.childPartyId}, bill_to_party_id = ${v.billToPartyId},
@@ -401,7 +401,7 @@ export const PATCH = defineRoute({
              consolidation_group_id = ${v.consolidationGroupId},
              updated_at = now(), updated_by = ${gate.user.id}
        where id = ${id} and org_id = ${gate.user.orgId}
-       returning *`)).rows[0]
+       returning *`, 'objects'))[0]
     if (!updated) throw new Error('billing relationship update returned no row')
     await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${gate.user.orgId}, 'customer_billing_relationships', ${id}, 'update',
@@ -436,7 +436,7 @@ export const DELETE = defineRoute({
       return { errorCode: 'featureOff' } as const
     }
     const before = (await tx.execute(sql`
-      select * from customer_billing_relationships where id = ${id} and org_id = ${gate.user.orgId} for update`)).rows[0] as
+      select * from customer_billing_relationships where id = ${id} and org_id = ${gate.user.orgId} for update`, 'objects'))[0] as
       | { child_party_id: string | null }
       | undefined
     if (!before) return { errorCode: 'save' } as const
@@ -447,7 +447,7 @@ export const DELETE = defineRoute({
     )
     if (stored !== 'visible') return { errorCode: 'save' } as const
     const removed = (await tx.execute(sql`delete from customer_billing_relationships
-      where id = ${id} and org_id = ${gate.user.orgId} returning id`)).rows[0]
+      where id = ${id} and org_id = ${gate.user.orgId} returning id`, 'objects'))[0]
     if (!removed) throw new Error('billing relationship delete returned no row')
     await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${gate.user.orgId}, 'customer_billing_relationships', ${id}, 'delete',

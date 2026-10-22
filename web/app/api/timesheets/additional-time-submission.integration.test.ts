@@ -23,10 +23,10 @@ async function fixture() {
   const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Time reviewer', 'additional-time-reviewer'))
   await withBypassContext(async () => {
     assert.equal((await db.execute(sql`update app_roles set permissions='["time.read","time.manage","time.approve"]'::jsonb
-      where org_id=${org.orgId} and key='additional-time-reviewer' returning id`)).rows.length, 1)
+      where org_id=${org.orgId} and key='additional-time-reviewer' returning id`, 'objects')).length, 1)
     assert.equal((await db.execute(sql`update orgs set settings=settings ||
       '{"features":{"projects":false,"timeTracking":true}}'::jsonb
-      where id=${org.orgId} returning id`)).rows.length, 1)
+      where id=${org.orgId} returning id`, 'objects')).length, 1)
     await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
       values(${employee},${org.orgId},'employee','Additional time worker',${org.subsidiaryId},true,'{}'::jsonb)`)
     await db.execute(sql`insert into employee_roles(id,org_id,party_id,is_active)
@@ -51,8 +51,8 @@ async function fixture() {
     return resolved
   })
   const read = () => withOrgContext(org.orgId, () => loadWeek(org.orgId,employee,WEEK))
-  const snapshot = () => withOrgContext(org.orgId, async () => (await db.execute<{ id: string; value: string }>(sql`
-    select id,to_jsonb(te)::text as value from time_entries te where org_id=${org.orgId} order by id`)).rows)
+  const snapshot = () => withOrgContext(org.orgId, async () => await db.execute<{ id: string; value: string }>(sql`
+    select id,to_jsonb(te)::text as value from time_entries te where org_id=${org.orgId} order by id`, 'objects'))
   const post = async (selections: Selection[], held?: Authz) => {
     const authority = held ?? await auth()
     return withOrgContext(org.orgId, () => withAuthzContext(authority, () => submit(new Request(
@@ -91,10 +91,10 @@ test('withdrawn selected time can be reviewed and resubmitted without submitting
     assert.equal((await f.read()).status,'submitted')
     const repeated = await f.post(choice)
     assert.equal(repeated.status,409,await repeated.clone().text())
-    const audits = await withOrgContext(f.org.orgId,async () => (await db.execute<{
+    const audits = await withOrgContext(f.org.orgId,async () => await db.execute<{
       changes:{before:{status:string};entries:Selection[]}
     }>(sql`select changes from audit_log where org_id=${f.org.orgId} and row_id=${f.header}
-      and changes->>'event'='additional_time_submitted'`)).rows)
+      and changes->>'event'='additional_time_submitted'`, 'objects'))
     assert.equal(audits.length,2)
     const recalled = audits.find(row=>row.changes.before.status==='draft')
     assert.ok(recalled,'the new audit records the actual withdrawn draft state')
@@ -114,7 +114,7 @@ test('selective submission and native approval preserve earlier approved time an
   try {
     const before = await f.snapshot()
     const journalCount = () => withOrgContext(f.org.orgId,async () => (await db.execute<{count:number}>(sql`
-      select count(*)::int as count from journal_entries where org_id=${f.org.orgId}`)).rows[0]!.count)
+      select count(*)::int as count from journal_entries where org_id=${f.org.orgId}`, 'objects'))[0]!.count)
     const journalsBefore = await journalCount()
     const choice = await f.selections()
     assert.equal(choice.length,1)
@@ -126,10 +126,10 @@ test('selective submission and native approval preserve earlier approved time an
     const afterSubmit = await f.snapshot()
     for (const id of [f.prior,f.untouched]) assert.equal(afterSubmit.find(row=>row.id===id)?.value,
       before.find(row=>row.id===id)?.value,'unselected financial/approval/source fields are immutable under this command')
-    const audit = await withOrgContext(f.org.orgId,async () => (await db.execute<{ changes: {
+    const audit = await withOrgContext(f.org.orgId,async () => await db.execute<{ changes: {
       entries: {id:string;updatedAt:string}[]; before:{approval:{actorId:string}}; reason:string
     } }>(sql`select changes from audit_log where org_id=${f.org.orgId} and row_id=${f.header}
-      and changes->>'event'='additional_time_submitted'`)).rows)
+      and changes->>'event'='additional_time_submitted'`, 'objects'))
     assert.equal(audit.length,1)
     assert.deepEqual(audit[0]!.changes.entries.map(({id,updatedAt})=>({id,updatedAt})),choice)
     assert.equal(audit[0]!.changes.before.approval.actorId,f.actor)
@@ -205,7 +205,7 @@ test('consumed time and a disabled workspace refuse the additional submission wi
     assert.equal(disabled.status,404,await disabled.clone().text())
     assert.deepEqual(await f.snapshot(),before)
     const header = await withOrgContext(f.org.orgId,async () => (await db.execute<{status:string}>(sql`
-      select status from timesheet_weeks where org_id=${f.org.orgId} and id=${f.header}`)).rows[0])
+      select status from timesheet_weeks where org_id=${f.org.orgId} and id=${f.header}`, 'objects'))[0])
     assert.equal(header?.status,'approved')
   } finally { await f.close() }
 })
@@ -218,7 +218,7 @@ test('concurrent additional submissions converge on one native lifecycle and one
     assert.deepEqual(responses.map(response=>response.status).sort(),[200,409])
     const audit = await withOrgContext(f.org.orgId,async () => (await db.execute<{count:number}>(sql`
       select count(*)::int as count from audit_log where org_id=${f.org.orgId} and row_id=${f.header}
-        and changes->>'event'='additional_time_submitted'`)).rows[0]!.count)
+        and changes->>'event'='additional_time_submitted'`, 'objects'))[0]!.count)
     assert.equal(audit,1)
     assert.deepEqual((await f.read()).pendingEntries!.map(entry=>entry.id),[f.untouched])
   } finally { await f.close() }

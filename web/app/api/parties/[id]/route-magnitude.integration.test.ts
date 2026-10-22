@@ -35,10 +35,10 @@ async function fixture() {
   const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Magnitude Customer', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   const revision = (await withBypassContext(() => db.execute<{ updated_at: string }>(sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
-      from parties where id = ${partyId}`))).rows[0]!.updated_at
+      from parties where id = ${partyId}`, 'objects')))[0]!.updated_at
   return { org, partyId, revision }
 }
 
@@ -59,8 +59,8 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 }
 
 async function roleCount(partyId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from customer_roles where party_id = ${partyId}`)).rows
+  const rows = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from customer_roles where party_id = ${partyId}`, 'objects')
   return rows[0]!.n
 }
 
@@ -86,8 +86,8 @@ test('PATCH still saves a column-maximum credit limit with identical read-back',
       roles: { customer: { enabled: true, creditLimit: '999999999999999.9999' } },
     })
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    const rows = (await db.execute<{ credit_limit: string }>(sql`
-      select credit_limit::text as credit_limit from customer_roles where party_id = ${partyId}`)).rows
+    const rows = await db.execute<{ credit_limit: string }>(sql`
+      select credit_limit::text as credit_limit from customer_roles where party_id = ${partyId}`, 'objects')
     assert.equal(rows[0]!.credit_limit, '999999999999999.9999')
   } finally {
     await dropScratchOrg(org.orgId)
@@ -106,7 +106,7 @@ test('PATCH refuses a foreign reference custom value instead of storing it', asy
     `))
     const refused = await patch(partyId, { expectedUpdatedAt: revision, custom: { ref_party: foreign.vendorId } })
     assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refused.json)}`)
-    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from parties where id = ${partyId}`)).rows[0]?.custom
+    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from parties where id = ${partyId}`, 'objects'))[0]?.custom
     assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused references store nothing')
     const saved = await patch(partyId, { expectedUpdatedAt: revision, custom: { ref_party: org.vendorId } })
     assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(saved.json)}`)

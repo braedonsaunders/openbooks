@@ -31,14 +31,14 @@ async function seedActivatedRateChildren(org: Awaited<ReturnType<typeof createSc
 }
 
 async function activatedRateSnapshot(orgId: string) {
-  return Promise.all(rateChildren.map(async table => ({ table, rows: (await db.execute(sql`
+  return Promise.all(rateChildren.map(async table => ({ table, rows: await db.execute(sql`
     select v.status, to_jsonb(c)-'id'-'org_id'-'version_id'-'item_id' as evidence,
            (c.id<>source.id and c.version_id<>source.version_id) as rebased
       from ${sql.identifier(table)} c join item_rate_versions v on v.id=c.version_id and v.org_id=c.org_id
       left join ${sql.identifier(table)} source on source.org_id=(select sandbox_of from orgs where id=${orgId})
         and to_jsonb(source)-'id'-'org_id'-'version_id'-'item_id'=to_jsonb(c)-'id'-'org_id'-'version_id'-'item_id'
         and exists(select 1 from item_rate_versions sv where sv.id=source.version_id and sv.status=v.status)
-     where c.org_id=${orgId} order by v.status`)).rows })));
+     where c.org_id=${orgId} order by v.status`, "objects") })));
 }
 
 async function seedHistoricalPayrollProfiles(org: Awaited<ReturnType<typeof createScratchOrg>>, actorId: string) {
@@ -69,24 +69,24 @@ async function seedHistoricalPayrollProfiles(org: Awaited<ReturnType<typeof crea
   await assertDedicatedFixtureDatabase();
   await withMaintenanceTransaction(null, async () => {
     const marker = (await db.execute<{ marker: string | null }>(sql`
-      select shobj_description(oid,'pg_database') as marker from pg_database where datname=current_database()`)).rows[0]?.marker;
+      select shobj_description(oid,'pg_database') as marker from pg_database where datname=current_database()`, "objects"))[0]?.marker;
     assert.equal(hasEphemeralDatabaseMarker(marker, process.env.OPENBOOKS_TEST_DB_MARKER), true);
     await db.execute(sql`alter table employee_payroll_profiles disable trigger payroll_profile_vacation_evidence`);
     for (const [index, profile] of profiles.entries()) {
       const changed = await db.execute(sql`update employee_payroll_profiles
         set vacation_percent=${profile.percent},vacation_method=${profile.method}
-        where org_id=${org.orgId} and id=${ids[index]} returning id`);
-      assert.equal(changed.rows.length, 1);
+        where org_id=${org.orgId} and id=${ids[index]} returning id`, "objects");
+      assert.equal(changed.length, 1);
     }
     await db.execute(sql`alter table employee_payroll_profiles enable trigger payroll_profile_vacation_evidence`);
   });
 }
 
 async function historicalProfileSnapshot(orgId: string) {
-  return (await db.execute<{ id: string; employee_party_id: string; employment_id: string; pay_schedule_id: string;
+  return await db.execute<{ id: string; employee_party_id: string; employment_id: string; pay_schedule_id: string;
     vacation_percent: string | null; vacation_method: string | null; evidence: Record<string, unknown> }>(sql`
     select id,employee_party_id,employment_id,pay_schedule_id,vacation_percent::text,vacation_method,to_jsonb(p) as evidence
-      from employee_payroll_profiles p where org_id=${orgId} order by id`)).rows;
+      from employee_payroll_profiles p where org_id=${orgId} order by id`, "objects");
 }
 
 test("a clean-schema full sandbox clones tenant evidence without pre-seed collisions or residue", { skip: !DB }, async () => {
@@ -117,22 +117,22 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
       select sandbox.status, sandbox.storage_rows, org.env_kind, org.sandbox_of
         from sandboxes sandbox
         join orgs org on org.id = sandbox.org_id
-       where sandbox.id = ${sandboxId}`));
-    assert.equal(state.rows[0]?.status, "ready");
-    assert.ok(Number(state.rows[0]?.storage_rows) > 0);
-    assert.equal(state.rows[0]?.env_kind, "sandbox");
-    assert.equal(state.rows[0]?.sandbox_of, org.orgId);
+       where sandbox.id = ${sandboxId}`, "objects"));
+    assert.equal(state[0]?.status, "ready");
+    assert.ok(Number(state[0]?.storage_rows) > 0);
+    assert.equal(state[0]?.env_kind, "sandbox");
+    assert.equal(state[0]?.sandbox_of, org.orgId);
     const assertRates = async () => {
       const copied = await activatedRateSnapshot(sandboxOrgId);
       const evidence = (snapshot: typeof copied) => snapshot.map(r => ({ table: r.table,
         rows: r.rows.map(row => ({ status: row.status, evidence: row.evidence })) }));
       assert.deepEqual(evidence(copied), evidence(sourceRates));
       assert.ok(copied.every(r => r.rows.length === 2 && r.rows.every(row => row.rebased === true)));
-      assert.equal((await db.execute(sql`select 1 from item_rate_lines l where l.org_id=${sandboxOrgId} and not exists(select 1 from items i where i.id=l.item_id and i.org_id=l.org_id)`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select 1 from item_rate_lines l where l.org_id=${sandboxOrgId} and not exists(select 1 from items i where i.id=l.item_id and i.org_id=l.org_id)`, "objects")).length, 0);
     };
     await assertRates();
     const assertProfiles = async () => {
-      const copied = (await db.execute<{ matched: boolean }>(sql`
+      const copied = await db.execute<{ matched: boolean }>(sql`
         select (copied.id<>original.id and copied.org_id<>original.org_id
           and copied.employee_party_id=ob_rebase(original.employee_party_id,target.sandbox_seed)
           and copied.employment_id=ob_rebase(original.employment_id,target.sandbox_seed)
@@ -141,7 +141,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
           and copied.vacation_method is not distinct from original.vacation_method) as matched
         from employee_payroll_profiles original join orgs target on target.id=${sandboxOrgId}
         join employee_payroll_profiles copied on copied.org_id=target.id and copied.id=ob_rebase(original.id,target.sandbox_seed)
-        where original.org_id=${org.orgId}`)).rows;
+        where original.org_id=${org.orgId}`, "objects");
       assert.equal(originalProfiles.length, 3);
       assert.equal((await historicalProfileSnapshot(sandboxOrgId)).length, 3);
       assert.equal(copied.length, 3);
@@ -170,7 +170,7 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     ] as const) {
       const write = async () => {
         await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-        if (replace) assert.equal((await db.execute(sql`delete from employee_payroll_profiles where org_id=${sandboxOrgId} and id=${first.id} returning id`)).rows.length, 1);
+        if (replace) assert.equal((await db.execute(sql`delete from employee_payroll_profiles where org_id=${sandboxOrgId} and id=${first.id} returning id`, "objects")).length, 1);
         await db.execute(query);
       };
       await assert.rejects(privileged ? withMaintenanceTransaction(null, write) : withOrgTransaction(scope, write),
@@ -183,8 +183,8 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     }), error => errorChainMatches(error, /vacation fields preserve historical evidence/));
     await assertProfiles();
     for (const status of ["active", "retired"]) {
-      const version = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${sandboxOrgId} and status=${status}`)).rows[0]!.id;
-      const sourceVersion = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${org.orgId} and status=${status}`)).rows[0]!.id;
+      const version = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${sandboxOrgId} and status=${status}`, "objects"))[0]!.id;
+      const sourceVersion = (await db.execute<{ id: string }>(sql`select id from item_rate_versions where org_id=${org.orgId} and status=${status}`, "objects"))[0]!.id;
       for (const [query, pattern, privileged] of [
         [sql`insert into labor_rate_terms(org_id,version_id,code,label,content) values(${sandboxOrgId},${version},'EXTRA','Extra','Unreviewed')`, /immutable/i, false],
         [sql`update labor_rate_terms set content='Changed' where org_id=${sandboxOrgId} and version_id=${version}`, /immutable/i, true],
@@ -214,10 +214,10 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
         left join accounts account on account.id = control.value::uuid
        where sandbox.id = ${sandboxOrgId}
        order by control.key
-    `));
-    assert.ok(controls.rows.length >= 3);
+    `, "objects"));
+    assert.ok(controls.length >= 3);
     assert.ok(
-      controls.rows.every(
+      controls.every(
         (row) =>
           row.org_id === sandboxOrgId &&
           !Object.values(org.accounts).includes(row.account_id),
@@ -225,8 +225,8 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     );
     const audit = await withOrgContext(created.sandboxOrgId, () => db.execute<{ actor_id: string }>(sql`
       select actor_id from audit_log where org_id = ${created.sandboxOrgId}
-        and row_id = ${created.sandboxOrgId} and changes ->> 'mode' = 'sandbox_control_account_rebase'`));
-    assert.deepEqual(audit.rows, [{ actor_id: actorId }]);
+        and row_id = ${created.sandboxOrgId} and changes ->> 'mode' = 'sandbox_control_account_rebase'`, "objects"));
+    assert.deepEqual(audit, [{ actor_id: actorId }]);
 
     const segments = (await db.execute<{ key: string; source_id: string; clone_id: string }>(sql`
       select source.key,
@@ -237,28 +237,28 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
           on clone.key = source.key
          and clone.org_id = ${sandboxOrgId}
        where source.org_id = ${org.orgId}
-       order by source.key`));
+       order by source.key`, "objects"));
     const sourceSegmentCount = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count
         from segment_definitions
-       where org_id = ${org.orgId}`));
-    assert.equal(segments.rows.length, sourceSegmentCount.rows[0]?.count);
-    assert.equal(new Set(segments.rows.map((row) => row.key)).size, segments.rows.length);
-    assert.ok(segments.rows.every((row) => row.source_id !== row.clone_id));
+       where org_id = ${org.orgId}`, "objects"));
+    assert.equal(segments.length, sourceSegmentCount[0]?.count);
+    assert.equal(new Set(segments.map((row) => row.key)).size, segments.length);
+    assert.ok(segments.every((row) => row.source_id !== row.clone_id));
 
     const addedItem = randomUUID();
     assert.equal((await db.execute(sql`insert into items(id,org_id,kind,code,name)
       values(${addedItem},${org.orgId},'service',${`REFRESH-${addedItem}`},
-        'Refreshed service item') returning id`)).rows.length, 1);
+        'Refreshed service item') returning id`, "objects")).length, 1);
     await refreshSandbox(sandboxId, { keepCustomizations: false });
     const refreshed = (await db.execute<{ status: string; last_error: string | null; storage_rows: number }>(sql`
-      select status, last_error, storage_rows from sandboxes where id = ${sandboxId}`));
-    assert.equal(refreshed.rows[0]?.status, "ready");
-    assert.equal(refreshed.rows[0]?.last_error, null);
-    assert.ok(Number(refreshed.rows[0]?.storage_rows) > Number(state.rows[0]?.storage_rows),
+      select status, last_error, storage_rows from sandboxes where id = ${sandboxId}`, "objects"));
+    assert.equal(refreshed[0]?.status, "ready");
+    assert.equal(refreshed[0]?.last_error, null);
+    assert.ok(Number(refreshed[0]?.storage_rows) > Number(state[0]?.storage_rows),
       "a proven refresh publishes the fresh copied-row count instead of retaining the creation count");
     assert.equal((await db.execute(sql`select item.id from items item join orgs target on target.id=item.org_id
-      where item.org_id=${sandboxOrgId} and item.id=ob_rebase(${addedItem}::uuid,target.sandbox_seed)`)).rows.length, 1);
+      where item.org_id=${sandboxOrgId} and item.id=ob_rebase(${addedItem}::uuid,target.sandbox_seed)`, "objects")).length, 1);
     await assertRates();
     await assertProfiles();
     const refreshedControls = await db.execute(sql`
@@ -271,10 +271,10 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
           on account.id = control.value::uuid
          and account.org_id = sandbox.id
        where sandbox.id = ${sandboxOrgId}
-    `);
+    `, "objects");
     assert.equal(
-      Number((refreshedControls.rows[0] as { count: number }).count),
-      controls.rows.length,
+      Number((refreshedControls[0] as { count: number }).count),
+      controls.length,
     );
 
     await deleteSandbox(sandboxId);
@@ -282,8 +282,8 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
       select
         (select count(*)::int from orgs where id = ${sandboxOrgId}) as orgs,
         (select count(*)::int from segment_definitions where org_id = ${sandboxOrgId}) as segments,
-        (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as entries`));
-    assert.deepEqual(residue.rows, [{ orgs: 0, segments: 0, entries: 0 }]);
+        (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as entries`, "objects"));
+    assert.deepEqual(residue, [{ orgs: 0, segments: 0, entries: 0 }]);
   });
 });
 
@@ -334,17 +334,17 @@ test("refresh rebuilds maintained aggregates instead of accumulating cloned rows
     const sandboxId = created.sandboxId;
 
     const aggregateSnapshot = async (): Promise<{ gl: unknown[]; payments: unknown[] }> => ({
-      gl: (await db.execute(sql`
+      gl: await db.execute(sql`
         select account_id::text, book_id::text, month::text, subsidiary_id::text,
                debit_total::text, credit_total::text, line_count::text
           from gl_month_activity
          where org_id = ${created.sandboxOrgId}
-         order by account_id, book_id, month, subsidiary_id`)).rows,
-      payments: (await db.execute(sql`
+         order by account_id, book_id, month, subsidiary_id`, "objects"),
+      payments: await db.execute(sql`
         select party_id::text, account_type, settled_on::text, n::text, sum_days::text, sum_days_sq::text
           from party_payment_stats
          where org_id = ${created.sandboxOrgId}
-         order by party_id, account_type, settled_on`)).rows,
+         order by party_id, account_type, settled_on`, "objects"),
     });
     const before = await aggregateSnapshot();
     assert.ok(before.gl.length >= 3, "the initial clone must maintain GL aggregates from posted lines");
@@ -364,7 +364,7 @@ test("an as-of sandbox refuses posted activity after its cutoff instead of faili
   const sandboxName = `As-of cutoff ${randomUUID()}`;
   await withSandboxCleanup(org, sandboxName, async () => {
     const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!.fiscal_calendar_id;
+      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`, "objects"))[0]!.fiscal_calendar_id;
     const laterPeriodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -423,8 +423,8 @@ test("an as-of sandbox rejects missing or foreign cutoff periods", { skip: !DB }
     );
   } finally {
     const failed = (await db.execute<{ id: string }>(sql`
-      select id from sandboxes where production_org_id = ${production.orgId} and name in (${foreignName}, ${missingName})`));
-    for (const row of failed.rows) await deleteSandbox(row.id).catch(() => undefined);
+      select id from sandboxes where production_org_id = ${production.orgId} and name in (${foreignName}, ${missingName})`, "objects"));
+    for (const row of failed) await deleteSandbox(row.id).catch(() => undefined);
     await dropScratchOrg(production.orgId);
     await dropScratchOrg(external.orgId);
   }
@@ -443,10 +443,10 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
     });
     const { sandboxId, sandboxOrgId } = created;
     try {
-      const before = (await db.execute<{ accounts: number; journal_entries: number }>(sql`
+      const before = await db.execute<{ accounts: number; journal_entries: number }>(sql`
         select
           (select count(*)::int from accounts where org_id = ${sandboxOrgId}) as accounts,
-          (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as journal_entries`)).rows;
+          (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as journal_entries`, "objects");
       assert.ok(Number(before[0]?.accounts) > 0);
 
       // Fail on the first clone INSERT, after refresh has already entered the
@@ -475,20 +475,20 @@ test("a failed refresh rolls back the wipe instead of leaving a partial sandbox"
         },
       );
 
-      const after = (await db.execute<{ accounts: number; journal_entries: number }>(sql`
+      const after = await db.execute<{ accounts: number; journal_entries: number }>(sql`
         select
           (select count(*)::int from accounts where org_id = ${sandboxOrgId}) as accounts,
-          (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as journal_entries`)).rows;
+          (select count(*)::int from journal_entries where org_id = ${sandboxOrgId}) as journal_entries`, "objects");
       assert.deepEqual(after, before, "a failed refresh must preserve every pre-refresh tenant row");
 
       const status = (await db.execute<{ status: string; last_error: string | null }>(sql`
-        select status, last_error from sandboxes where id = ${sandboxId}`)).rows[0];
+        select status, last_error from sandboxes where id = ${sandboxId}`, "objects"))[0];
       assert.equal(status?.status, "failed");
       assert.equal(status?.last_error, "forced sandbox refresh clone failure");
-      const failureAudit = (await db.execute<{ last_error: string }>(sql`
+      const failureAudit = await db.execute<{ last_error: string }>(sql`
         select changes->'after'->>'last_error' as last_error from audit_log
         where org_id=${org.orgId} and row_id=${sandboxId} and changes->>'operation'='refresh_failed'
-        order by at desc, id desc limit 1`)).rows;
+        order by at desc, id desc limit 1`, "objects");
       assert.deepEqual(failureAudit, [{ last_error: "forced sandbox refresh clone failure" }]);
     } finally {
       await db.execute(sql.raw(`drop trigger if exists "${fault}_trg" on accounts`));
@@ -508,8 +508,8 @@ async function withSandboxCleanup(
   } finally {
     // Cleanup failures are surfaced, not swallowed: a sandbox that cannot be
     // deleted would also block the production org teardown behind it.
-    const rows = (await db.execute<{ id: string }>(sql`
-      select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`)).rows;
+    const rows = await db.execute<{ id: string }>(sql`
+      select id from sandboxes where production_org_id = ${org.orgId} and name = ${sandboxName}`, "objects");
     for (const row of rows) await deleteSandbox(row.id);
     await dropScratchOrg(org.orgId);
   }
@@ -534,14 +534,14 @@ test("a sandbox never holds production API keys or SFTP logins (global credentia
       select (select status from sandboxes where id = ${created.sandboxId}) as status,
              (select count(*)::int from api_keys where org_id = ${created.sandboxOrgId}) as api_keys,
              (select count(*)::int from sftp_servers where org_id = ${created.sandboxOrgId}) as sftp_servers,
-             (select count(*)::int from sftp_import_schedules where org_id = ${created.sandboxOrgId}) as schedules`)).rows[0]!;
+             (select count(*)::int from sftp_import_schedules where org_id = ${created.sandboxOrgId}) as schedules`, "objects"))[0]!;
     assert.deepEqual(state, { status: "ready", api_keys: 0, sftp_servers: 0, schedules: 0 });
 
     await refreshSandbox(created.sandboxId);
     const refreshed = (await db.execute<{ status: string; api_keys: number; sftp_servers: number }>(sql`
       select (select status from sandboxes where id = ${created.sandboxId}) as status,
              (select count(*)::int from api_keys where org_id = ${created.sandboxOrgId}) as api_keys,
-             (select count(*)::int from sftp_servers where org_id = ${created.sandboxOrgId}) as sftp_servers`)).rows[0]!;
+             (select count(*)::int from sftp_servers where org_id = ${created.sandboxOrgId}) as sftp_servers`, "objects"))[0]!;
     assert.deepEqual(refreshed, { status: "ready", api_keys: 0, sftp_servers: 0 });
   });
 });
@@ -569,7 +569,7 @@ test("refresh and reset leave a sandbox as credential-free and inert as create d
                (select count(*)::int from bank_feed_connections where org_id = ${created.sandboxOrgId}
                  and (is_active or credentials is not null or status <> 'disconnected' or next_sync_at is not null)) as live_feeds,
                (select settings ? 'email' from orgs where id = ${created.sandboxOrgId}) as email_configured,
-               (select status from sandboxes where id = ${created.sandboxId}) as status`)).rows[0] as Record<string, unknown>;
+               (select status from sandboxes where id = ${created.sandboxId}) as status`, "objects"))[0] as Record<string, unknown>;
 
     assert.deepEqual(await inert(), { live_psp: 0, live_feeds: 0, email_configured: false, status: "ready" });
 
@@ -662,7 +662,7 @@ test("a masked sandbox carries no bank routing, taxpayer ids or org tax ids", { 
                (select count(*)::int from information_return_filings where org_id = ${created.sandboxOrgId}
                  and (payer_snapshot ? 'taxIds' or payer_snapshot::text like '%123456789RT0001%')) as identified_payer_snapshots,
                (select count(*)::int from information_return_filings where org_id = ${created.sandboxOrgId}) as filings,
-               (select status from sandboxes where id = ${created.sandboxId}) as status`)).rows[0] as Record<string, unknown>;
+               (select status from sandboxes where id = ${created.sandboxId}) as status`, "objects"))[0] as Record<string, unknown>;
 
     const expected = {
       org_tax_ids: {}, identified_parties: 0, identified_vendors: 0, identified_subsidiaries: 0,
@@ -701,7 +701,7 @@ test("a masked sandbox scrubs custom JSON and copied user credentials", { skip: 
             and custom::text like any (array['%123-45-6789%', '%person@example.com%'])) as custom_leaks,
         (select count(*)::int from users
           where org_id = ${created.sandboxOrgId}
-            and (email = 'person@example.com' or name = 'Production Operator' or password_hash = 'production-password-hash')) as user_leaks`)).rows[0]!;
+            and (email = 'person@example.com' or name = 'Production Operator' or password_hash = 'production-password-hash')) as user_leaks`, "objects"))[0]!;
     assert.deepEqual(leaked, { custom_leaks: 0, user_leaks: 0 });
   });
 });
@@ -729,10 +729,10 @@ test("a full sandbox clones an org with live posted documents and lines", { skip
       select (select count(*)::int from documents where org_id = ${created.sandboxOrgId}) as documents,
              (select count(*)::int from document_lines where org_id = ${created.sandboxOrgId}) as lines,
              (select count(*)::int from journal_entries where org_id = ${created.sandboxOrgId}) as entries
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(counts, { documents: 1, lines: 1, entries: 1 });
-    const evidence = async (orgId: string) => (await db.execute(sql`
-      select * from crm_sales_evidence where org_id=${orgId} order by id`)).rows;
+    const evidence = async (orgId: string) => await db.execute(sql`
+      select * from crm_sales_evidence where org_id=${orgId} order by id`, "objects");
     const productionEvidence = await evidence(org.orgId);
     assert.ok(productionEvidence.length > 0, "posting must produce actual sales evidence for the immutable guard");
     for (const [target, operation, privileged] of [
@@ -811,7 +811,7 @@ test("a full sandbox clones payroll opening program bases with their rebased par
          and clone.tax_year = source.tax_year
        where source.org_id = ${org.orgId}
          and source.program_key = 'qpip'
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(cloned, "the full clone must include the source opening program base");
     assert.notEqual(cloned.cloned_id, cloned.source_id);
     assert.notEqual(cloned.cloned_employee, cloned.source_employee);
@@ -827,9 +827,9 @@ test("a sandbox holding posted documents can be deleted without stranding its or
     const created = await createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false });
     const sandboxId = created.sandboxId;
     const accountByNumber = async (number: string): Promise<string> =>
-      (await db.execute<{ id: string }>(sql`select id::text as id from accounts where org_id = ${created.sandboxOrgId} and number = ${number}`)).rows[0]!.id;
-    const customer = (await db.execute<{ id: string }>(sql`select id::text as id from parties where org_id = ${created.sandboxOrgId} and display_name = 'Acme Customer'`)).rows[0]!.id;
-    const subsidiary = (await db.execute<{ id: string }>(sql`select id::text as id from subsidiaries where org_id = ${created.sandboxOrgId}`)).rows[0]!.id;
+      (await db.execute<{ id: string }>(sql`select id::text as id from accounts where org_id = ${created.sandboxOrgId} and number = ${number}`, "objects"))[0]!.id;
+    const customer = (await db.execute<{ id: string }>(sql`select id::text as id from parties where org_id = ${created.sandboxOrgId} and display_name = 'Acme Customer'`, "objects"))[0]!.id;
+    const subsidiary = (await db.execute<{ id: string }>(sql`select id::text as id from subsidiaries where org_id = ${created.sandboxOrgId}`, "objects"))[0]!.id;
     const userId = await createScratchUser(created.sandboxOrgId, `SbxPost ${randomUUID()}`, "accountant");
     const invoiceId = randomUUID();
     await db.execute(sql`insert into documents
@@ -850,12 +850,12 @@ test("a sandbox holding posted documents can be deleted without stranding its or
       select (select count(*)::int from orgs where id = ${created.sandboxOrgId}) as orgs,
              (select count(*)::int from documents where org_id = ${created.sandboxOrgId}) as documents,
              (select count(*)::int from journal_entries where org_id = ${created.sandboxOrgId}) as entries
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(residue, { orgs: 0, documents: 0, entries: 0 });
     const prod = (await db.execute<{ orgs: number; documents: number }>(sql`
       select (select count(*)::int from orgs where id = ${org.orgId}) as orgs,
              (select count(*)::int from documents where org_id = ${org.orgId}) as documents
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(prod, { orgs: 1, documents: 0 });
   });
 });
@@ -883,10 +883,10 @@ test("deleteSandbox records delete_completed in the production org when the dele
 
     const residue = (await db.execute<{ orgs: number }>(sql`
       select (select count(*)::int from orgs where id = ${created.sandboxOrgId}) as orgs
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(residue, { orgs: 0 });
 
-    const completions = (await db.execute<{
+    const completions = await db.execute<{
       actor_id: string | null; reason: string | null; before_status: string | null; after_status: string | null;
     }>(sql`
       select actor_id::text as actor_id,
@@ -898,7 +898,7 @@ test("deleteSandbox records delete_completed in the production org when the dele
          and table_name = 'sandbox_lifecycle'
          and row_id = ${created.sandboxId}
          and changes->>'operation' = 'delete_completed'
-    `)).rows;
+    `, "objects");
     assert.equal(completions.length, 1, "exactly one delete_completed audit row must exist in the production org");
     assert.deepEqual(completions[0], {
       actor_id: null,
@@ -917,7 +917,7 @@ test("deleteSandbox records delete_completed in the production org when the dele
          and table_name = 'sandbox_lifecycle'
          and row_id = ${created.sandboxId}
          and changes->>'operation' = 'delete_completed'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(again, { count: 1 });
   });
 });

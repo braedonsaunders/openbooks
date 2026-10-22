@@ -168,7 +168,7 @@ async function runDraft(fx: Fixture, periodStart: string, periodEnd: string): Pr
  * gross and net from the stub columns, PAS from the pas lines.
  */
 async function independentTieout(fx: Fixture) {
-  return (await db.execute<{
+  return await db.execute<{
     employee_party_id: string; month: string; gross: string; net: string; pas: string;
   }>(sql`
     select s.employee_party_id, to_char(s.pay_date, 'YYYY-MM') as month,
@@ -187,7 +187,7 @@ async function independentTieout(fx: Fixture) {
            and l.kind = 'deduction' and pc.system_key = 'pas'
       ) pas on true
      where s.org_id = ${fx.orgId} and s.tax_year = 2026 and s.country = 'FR'
-     group by s.employee_party_id, to_char(s.pay_date, 'YYYY-MM')`)).rows;
+     group by s.employee_party_id, to_char(s.pay_date, 'YYYY-MM')`, "objects");
 }
 
 test(
@@ -200,8 +200,7 @@ test(
       await runAndCommit(fx, "2026-06-01", "2026-06-26");
       const draftId = await runDraft(fx, "2026-07-01", "2026-07-25");
       const draftStubs = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${draftId}`))
-        .rows[0]!.n;
+        select count(*)::int as n from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${draftId}`, "objects"))[0]!.n;
       assert.ok(draftStubs > 0, "the draft run really calculated stubs that must be excluded");
 
       const filing = yearEndFiling("FR", "recapitulatif-annuel");

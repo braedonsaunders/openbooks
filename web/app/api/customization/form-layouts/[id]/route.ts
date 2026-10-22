@@ -41,8 +41,8 @@ async function loadOwn(orgId: string, id: string) {
     select id, record_type as "recordType", name, description, is_default as "isDefault",
            is_active as "isActive", allowed_roles as "allowedRoles", layout
       from form_layouts where org_id = ${orgId} and id = ${id}
-  `);
-  return r.rows[0] ?? null;
+  `, "objects");
+  return r[0] ?? null;
 }
 
 /** GET — one form layout. */
@@ -215,8 +215,7 @@ export const PATCH = defineRoute({
       // db.execute goes through the pool (each statement may land on a different
       // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
       const updated = await db.transaction(async (tx) => {
-        const locked = (
-          await tx.execute<{
+        const locked = (await tx.execute<{
             id: string;
             recordType: string;
             isDefault: boolean;
@@ -229,8 +228,7 @@ export const PATCH = defineRoute({
                to_jsonb(form_layouts) as snapshot, layout
           from form_layouts
          where id = ${id} and org_id = ${user.orgId}
-         for update`)
-        ).rows[0];
+         for update`, "objects"))[0];
         if (!locked) return { kind: "not_found" as const };
         if (proposedLayout) {
           const currentLayout = parseFormLayout(locked.layout);
@@ -260,16 +258,14 @@ export const PATCH = defineRoute({
              and is_default and id <> ${id}`);
         // Next-state default+inactive must match zero rows even if the JS
         // refusal is skipped — refuse by name, never {ok:true}.
-        const written = (
-          await tx.execute<{
+        const written = (await tx.execute<{
             id: string;
             snapshot: Record<string, unknown>;
           }>(sql`
         update form_layouts set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
            and not (${nextDefaultSql} and not ${nextActiveSql})
-         returning id, to_jsonb(form_layouts) as snapshot`)
-        ).rows[0];
+         returning id, to_jsonb(form_layouts) as snapshot`, "objects"))[0];
         if (!written) {
           return {
             kind: "inactive_default" as const,
@@ -333,8 +329,8 @@ export const DELETE = defineRoute({
     const deleted = await db.transaction(async (tx) => {
       const r = await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
       delete from form_layouts where id = ${id} and org_id = ${user.orgId}
-        returning to_jsonb(form_layouts) as snapshot`);
-      const row = r.rows[0];
+        returning to_jsonb(form_layouts) as snapshot`, "objects");
+      const row = r[0];
       if (!row) return null;
       await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

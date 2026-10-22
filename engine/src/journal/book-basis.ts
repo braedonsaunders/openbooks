@@ -39,7 +39,7 @@ export async function loadBookProfile(runner: SqlExecutor, orgId: string, bookId
   }>(sql`
     select id, code, name, is_primary, replication_mode, replication_from::text as replication_from,
            currency_difference_account_id
-      from accounting_books where org_id = ${orgId} and id = ${bookId}`)).rows[0];
+      from accounting_books where org_id = ${orgId} and id = ${bookId}`, "objects"))[0];
   if (!row) return null;
   return {
     id: row.id,
@@ -63,9 +63,9 @@ export async function resolveBookBases(
   const ids = [...new Set(args.subsidiaryIds)];
   const out = new Map<string, BookSubsidiaryBasis>();
   if (ids.length === 0) return out;
-  const subs = (await runner.execute<{ id: string; name: string; base_currency: string }>(sql`
+  const subs = await runner.execute<{ id: string; name: string; base_currency: string }>(sql`
     select id, name, base_currency from subsidiaries
-     where org_id = ${args.orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
+     where org_id = ${args.orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
   const byId = new Map(subs.map((sub) => [sub.id, sub]));
   const configured = args.book.isPrimary ? [] : (await runner.execute<{
     subsidiary_id: string; currency: string; rate_type: string; covers: boolean;
@@ -75,7 +75,7 @@ export async function resolveBookBases(
              and (effective_to is null or effective_to >= ${args.postingDate}::date)) as covers
       from accounting_book_currencies
      where org_id = ${args.orgId} and book_id = ${args.book.id}
-       and subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
+       and subsidiary_id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects"));
   for (const id of ids) {
     const sub = byId.get(id);
     if (!sub) throw new BookTranslationError(`subsidiary ${id} does not exist in this organization`);

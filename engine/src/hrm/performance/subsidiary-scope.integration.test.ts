@@ -85,9 +85,9 @@ async function openedCycle(w: World, templateId: string, name: string, appliesTo
 async function submitManagerReview(orgId: string, cycleId: string, subject: Side): Promise<string> {
   const reviewId = (await db.execute<{ id: string }>(sql`
     select id from hrm_reviews
-     where org_id = ${orgId} and cycle_id = ${cycleId} and employment_id = ${subject.employmentId} and kind = 'manager'`)).rows[0]!.id;
+     where org_id = ${orgId} and cycle_id = ${cycleId} and employment_id = ${subject.employmentId} and kind = 'manager'`, "objects"))[0]!.id;
   const answerId = (await db.execute<{ id: string }>(sql`
-    select id from hrm_review_answers where org_id = ${orgId} and review_id = ${reviewId} order by position limit 1`)).rows[0]!.id;
+    select id from hrm_review_answers where org_id = ${orgId} and review_id = ${reviewId} order by position limit 1`, "objects"))[0]!.id;
   const submitted = await submitReview({
     orgId, actorId: subject.managerUserId, reviewId, answers: [{ answerId, rating: "3", text: "meets expectations" }], overallRating: "3",
   });
@@ -96,7 +96,7 @@ async function submitManagerReview(orgId: string, cycleId: string, subject: Side
 }
 
 async function statusOf(table: "hrm_reviews" | "hrm_review_cycles" | "hrm_calibration_sessions", orgId: string, id: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from ${sql.identifier(table)} where org_id = ${orgId} and id = ${id}`)).rows[0]!.status;
+  return (await db.execute<{ status: string }>(sql`select status from ${sql.identifier(table)} where org_id = ${orgId} and id = ${id}`, "objects"))[0]!.status;
 }
 
 /** Both sides plus an open A-scoped cycle holding A's submitted manager review. */
@@ -143,11 +143,11 @@ async function mkChange(orgId: string, employmentId: string, kind: string, actor
   const revision = await countRows(sql`from employment_changes where org_id = ${orgId} and employment_id = ${employmentId}`) + 1;
   return (await db.execute<{ id: string }>(sql`
     insert into employment_changes (org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_by)
-    values (${orgId}, ${employmentId}, ${revision}, ${kind}, '{}'::jsonb, 'test change', ${actorId}) returning id`)).rows[0]!.id;
+    values (${orgId}, ${employmentId}, ${revision}, ${kind}, '{}'::jsonb, 'test change', ${actorId}) returning id`, "objects"))[0]!.id;
 }
 
 const department = async (orgId: string, name: string, subsidiaryId: string) => (await db.execute<{ id: string }>(sql`
-  insert into departments (org_id, name, subsidiary_id) values (${orgId}, ${name}, ${subsidiaryId}) returning id`)).rows[0]!.id;
+  insert into departments (org_id, name, subsidiary_id) values (${orgId}, ${name}, ${subsidiaryId}) returning id`, "objects"))[0]!.id;
 
 async function oneOnOnes(w: World) {
   const people = await sides(w);
@@ -382,7 +382,7 @@ scopeMatrix([
       assert.match(changed.message, /write a new feedback entry instead/);
       await refused(fulfil(a.managerUserId, "They led the launch", "manager_only"), "REFUSED");
       await refused(fulfil(w.hrFull, "They led the launch"), "REFUSED");
-      const stored = (await db.execute<{ body: string }>(sql`select body ${fulfilments(orgId, request.id)}`)).rows;
+      const stored = await db.execute<{ body: string }>(sql`select body ${fulfilments(orgId, request.id)}`, "objects");
       assert.deepEqual([first.body, ...stored.map((row) => row.body)], ["They led the launch", "They led the launch"], "the first answer stands alone and unchanged");
     },
   }),
@@ -450,9 +450,9 @@ scopeMatrix([
       assert.deepEqual([cleared.notes, cleared.destination, cleared.revision], [null, "Competition", 2]);
       await refused(updateExitRecord({ orgId, actorId: w.hrFull, exitId: exit.id, expectedRevision: 1, destination: "Elsewhere" }), "BAD_STATE", /at revision 2, not 1 — re-read it/);
 
-      const events = (await db.execute<{ kind: string; actor: string | null; reason: string | null; before: { notes?: string | null }; after: { notes?: string | null } }>(sql`
+      const events = await db.execute<{ kind: string; actor: string | null; reason: string | null; before: { notes?: string | null }; after: { notes?: string | null } }>(sql`
         select kind, actor_user_id::text as actor, reason, before_snapshot as before, after_snapshot as after
-          from hrm_exit_record_events where org_id = ${orgId} and exit_record_id = ${exit.id} order by recorded_at`)).rows;
+          from hrm_exit_record_events where org_id = ${orgId} and exit_record_id = ${exit.id} order by recorded_at`, "objects");
       assert.deepEqual(events.map((e) => e.kind), ["recorded", "corrected"]);
       const correction = events[1]!;
       assert.deepEqual([correction.actor, correction.reason, correction.before.notes, correction.after.notes], [w.hrFull, "notes were speculation", "Left for growth", null]);
@@ -468,7 +468,7 @@ scopeMatrix([
       const people = await sides(w);
       const templateId = await mkReviewTemplate(orgId, w.hrFull, { name: "Annual", scaleLabels: [] });
       const sectionId = (await db.execute<{ id: string }>(sql`
-        select id from hrm_review_template_sections where org_id = ${orgId} and template_id = ${templateId}`)).rows[0]!.id;
+        select id from hrm_review_template_sections where org_id = ${orgId} and template_id = ${templateId}`, "objects"))[0]!.id;
       const framework = await createFramework({ orgId, actorId: w.hrFull, name: "Engineering", appliesTo: entity(w.subB) });
       const competency = await createCompetency({ orgId, actorId: w.hrFull, frameworkId: framework.id, code: "IMPACT", name: "Customer impact" });
       await addCompetencyLevel({ orgId, actorId: w.hrFull, competencyId: competency.id, levelRank: 1, label: "Meets", expectation: "Ships working software" });
@@ -477,8 +477,8 @@ scopeMatrix([
         update hrm_review_template_sections
            set competency_id = ${competency.id}, updated_by = ${w.hrFull}, updated_at = now()
          where org_id = ${orgId} and id = ${sectionId}
-        returning id`);
-      assert.equal(linkedLegacySection.rows.length, 1, "the historical template section exists for the profile snapshot");
+        returning id`, "objects");
+      assert.equal(linkedLegacySection.length, 1, "the historical template section exists for the profile snapshot");
       // An org-wide cycle, so both sides hold a calibrated, shared manager review.
       const cycleId = await openedCycle(w, templateId, "FY26 profile scope");
       for (const subject of [people.a, people.b]) {
@@ -522,10 +522,10 @@ scopeMatrix([
       });
       const jobLevel = (await db.execute<{ id: string }>(sql`
         insert into hrm_job_levels (org_id, code, name, rank, created_by, updated_by)
-        values (${orgId}, 'SCOPE-LEVEL', 'Scope test level', 1, ${w.hrFull}, ${w.hrFull}) returning id`)).rows[0]!.id;
+        values (${orgId}, 'SCOPE-LEVEL', 'Scope test level', 1, ${w.hrFull}, ${w.hrFull}) returning id`, "objects"))[0]!.id;
       const templateId = await mkReviewTemplate(orgId, w.hrFull, { name: "Scope template", scaleLabels: [] });
       const sectionId = (await db.execute<{ id: string }>(sql`
-        select id from hrm_review_template_sections where org_id = ${orgId} and template_id = ${templateId}`)).rows[0]!.id;
+        select id from hrm_review_template_sections where org_id = ${orgId} and template_id = ${templateId}`, "objects"))[0]!.id;
       return {
         frameworkA: frameworkA.id, frameworkB: frameworkB.id, departmentOnlyB: departmentOnlyB.id,
         frameworkWide: frameworkWide.id, competencyA: competencyA.id, competencyB: competencyB.id, competencyWide: competencyWide.id,
@@ -561,7 +561,7 @@ scopeMatrix([
       await linkCompetency({ orgId, actorId: w.hrFull, competencyId: competencyWide, targetKind: "review_template_section", targetId: sectionId });
       await setSectionCompetency({ orgId, actorId: w.hrFull, sectionId, competencyId: competencyWide });
       const storedSection = (await db.execute<{ competencyId: string | null }>(sql`
-        select competency_id as "competencyId" from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}`)).rows[0];
+        select competency_id as "competencyId" from hrm_review_template_sections where org_id = ${orgId} and id = ${sectionId}`, "objects"))[0];
       assert.equal(storedSection?.competencyId, competencyWide, "an unrestricted framework can serve organization-wide review sections");
     },
   }),
@@ -650,7 +650,7 @@ scopeMatrix([
       });
       await skipOneOnOne({ orgId, actorId: w.hrFull, id: scheduled.id, reason: "reschedule" });
       const next = (await db.execute<{ scheduled_at: string }>(sql`
-        select scheduled_at::text from hrm_one_on_ones where org_id = ${orgId} and series_id = ${scheduled.id} and status = 'scheduled'`)).rows[0];
+        select scheduled_at::text from hrm_one_on_ones where org_id = ${orgId} and series_id = ${scheduled.id} and status = 'scheduled'`, "objects"))[0];
       assert.ok(next, "skipping a recurring occurrence creates its next occurrence");
       assert.equal(new Date(next.scheduled_at).toISOString(), "2026-03-18T20:30:00.000Z");
     },
@@ -672,8 +672,8 @@ scopeMatrix([
       assert.equal((await listTalentReviews({ orgId, actorId: w.hrFull })).length, 2);
       const directory = (await listTalentDirectory({ orgId, actorId: w.hrA })).employments.map((e) => e.id);
       assert.ok(directory.includes(empA) && !directory.includes(empB), "the other entity's people stay hidden");
-      const retired = (await db.execute(sql`update parties set is_active = false
-        where org_id = ${orgId} and id = (select worker_party_id from worker_employments where org_id = ${orgId} and id = ${empA}) returning id`)).rows;
+      const retired = await db.execute(sql`update parties set is_active = false
+        where org_id = ${orgId} and id = (select worker_party_id from worker_employments where org_id = ${orgId} and id = ${empA}) returning id`, "objects");
       assert.equal(retired.length, 1);
       assert.ok(!(await listTalentDirectory({ orgId, actorId: w.hrA, activeOnly: true })).employments.some((employment) => employment.id === empA), "new assignments exclude inactive people");
       assert.ok((await listTalentDirectory({ orgId, actorId: w.hrA })).employments.some((employment) => employment.id === empA), "historical assessments keep their existing employment available");
@@ -755,7 +755,7 @@ scopeMatrix([
       // A session stored before the rule existed cannot open either, and the refusal enters nothing.
       const legacyId = (await db.execute<{ id: string }>(sql`
         insert into hrm_calibration_sessions (org_id, cycle_id, name, created_by, updated_by)
-        values (${orgId}, ${draft.id}, 'Legacy draft session', ${w.hrFull}, ${w.hrFull}) returning id`)).rows[0]!.id;
+        values (${orgId}, ${draft.id}, 'Legacy draft session', ${w.hrFull}, ${w.hrFull}) returning id`, "objects"))[0]!.id;
       await refused(openCalibrationSession({ orgId, actorId: w.hrFull, id: legacyId }), "BAD_STATE", early);
       assert.equal(await statusOf("hrm_calibration_sessions", orgId, legacyId), "draft");
       assert.equal(await countRows(sql`from hrm_calibration_entries where org_id = ${orgId} and session_id = ${legacyId}`), 0);
@@ -774,7 +774,7 @@ scopeMatrix([
       assert.deepEqual(opened.entries.map((e) => e.employmentId), [a.employmentId], "only the allowed entity's reviews enter");
       assert.ok(!opened.missing.some((m) => m.employmentId === b.employmentId), "the missing list never names the other entity's review");
       const workerName = (await db.execute<{ name: string }>(sql`
-        select display_name as name from parties where org_id = ${w.orgId} and id = ${a.partyId}`)).rows[0]!.name;
+        select display_name as name from parties where org_id = ${w.orgId} and id = ${a.partyId}`, "objects"))[0]!.name;
       assert.ok(opened.missing.length > 0, "the in-scope self review remains listed as missing");
       assert.ok(
         opened.missing.some((m) => m.subjectName === workerName) && opened.missing.every((m) => m.subjectName !== m.reviewId.slice(0, 8)),

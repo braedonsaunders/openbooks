@@ -146,7 +146,8 @@ test("drafting writes nowhere except ai_decisions", async () => {
     }).join(" ");
   };
   const fake = {
-    execute: async (query: unknown) => {
+    execute: async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const text = textOf(query);
       const verb = text.trim().split(/\s+/)[0]?.toLowerCase() ?? "";
       if (verb === "insert" && !text.includes("ai_decisions")) {
@@ -157,10 +158,10 @@ test("drafting writes nowhere except ai_decisions", async () => {
       }
       if (text.includes("ai_decisions")) {
         writes.push(text);
-        return { rows: [{ id: "decision-1" }] };
+        return inMode({ rows: [{ id: "decision-1" }] });
       }
       if (text.includes("hrm_requisitions")) {
-        return { rows: [{
+        return inMode({ rows: [{
           id: "req-1", title: "Support Engineer", employmentKind: "full_time",
           compensationMin: "90000", compensationMax: "110000",
           compensationCurrency: "CAD", compensationBasis: "annual",
@@ -168,21 +169,21 @@ test("drafting writes nowhere except ai_decisions", async () => {
           // The subject gate reads the requisition's owning
           // subsidiary: the stubbed subject lives in the actor's scope.
           employerSubsidiaryId: "sub-1",
-        }] };
+        }] });
       }
       if (text.includes("subsidiary_restriction")) {
         // The configured role explicitly permits every subsidiary.
-        return { rows: [{ restriction: {mode: "all"} }] };
+        return inMode({ rows: [{ restriction: {mode: "all"} }] });
       }
       if (text.includes("from orgs")) {
-        return { rows: [{ features: { hrm: true, hrmRecruiting: true } }] };
+        return inMode({ rows: [{ features: { hrm: true, hrmRecruiting: true } }] });
       }
-      if (text.includes("from users")) return { rows: [{ isSuperAdmin: false, isActive: true }] };
+      if (text.includes("from users")) return inMode({ rows: [{ isSuperAdmin: false, isActive: true }] });
       if (text.includes("app_role") || text.includes("role.permissions")) {
-        return { rows: [{ permissions: ["hrm.recruiting.read"] }] };
+        return inMode({ rows: [{ permissions: ["hrm.recruiting.read"] }] });
       }
-      if (text.includes("ai_rails_settings")) return { rows: [] };
-      return { rows: [] };
+      if (text.includes("ai_rails_settings")) return inMode({ rows: [] });
+      return inMode({ rows: [] });
     },
   };
   const draft = await draftFromEvidence(fake as never, {

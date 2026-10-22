@@ -127,7 +127,7 @@ export async function electMfnTerms(input: ElectMfnInput): Promise<{ amendmentId
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; security_number: string; currency: string; holder_name: string | null; amount: string | null }>(sql`
     select s.subsidiary_id, s.security_number, s.currency, p.display_name as holder_name, s.consideration_amount::text as amount
       from equity_securities s left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
-     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
+     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`, "objects"))[0]);
   if (!located) throw equityError("safeUnknown");
   const { orgId: _org, actorId: _actor, ...payload } = input;
   const outcome = await governEquityAction({
@@ -147,12 +147,12 @@ export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmen
   const unknown = () => equityError("safeUnknown");
   if (!isUuid(input.securityId)) throw unknown();
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
+    select subsidiary_id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`, "objects"))[0]);
   if (!located) throw unknown();
   return inEquityCommand({ ...input, subsidiaryId: located.subsidiary_id }, "equity.manage", async ({ book }) => {
     if (idempotencyKey) {
       const existing = (await db.execute<{ id: string; security_id: string; source_security_id: string }>(sql`
-        select id, security_id, source_security_id from equity_security_amendments where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
+        select id, security_id, source_security_id from equity_security_amendments where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`, "objects"))[0];
       if (existing) {
         if (existing.security_id !== input.securityId || existing.source_security_id !== input.sourceSecurityId) {
           throw equityError("idempotencyConflict", { subject: fig.choice("election") });
@@ -177,12 +177,12 @@ export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmen
     if (!candidate) throw notBetter(book, security, input.sourceSecurityId, effectiveOn);
     const { terms: before } = effectiveConvertibleTerms(book, security, effectiveOn);
     const id = await newEquityId(db);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equity_security_amendments (id, org_id, subsidiary_id, security_id, kind, effective_on, source_security_id,
         valuation_cap, discount_percent, safe_type, reason, idempotency_key, created_by)
       values (${id}, ${input.orgId}, ${located.subsidiary_id}, ${security.id}, 'mfn_election', ${effectiveOn}::date, ${candidate.sourceSecurityId},
         ${candidate.valuationCap}::numeric, ${candidate.discountPercent}::numeric, ${candidate.safeType}, ${reason}, ${idempotencyKey}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("election") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_securities", rowId: security.id, action: "equity.mfn.elect", actorId: input.actorId,
@@ -252,7 +252,7 @@ export async function reverseMfnElection(input: ReverseMfnInput): Promise<{ amen
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; security_number: string; currency: string; holder_name: string | null; amount: string | null }>(sql`
     select s.subsidiary_id, s.security_number, s.currency, p.display_name as holder_name, s.consideration_amount::text as amount
       from equity_securities s left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
-     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
+     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`, "objects"))[0]);
   if (!located) throw equityError("safeUnknown");
   const { orgId: _org, actorId: _actor, ...payload } = input;
   const outcome = await governEquityAction({
@@ -272,12 +272,12 @@ export async function applyMfnReversal(input: ReverseMfnInput): Promise<{ amendm
   const unknown = () => equityError("safeUnknown");
   if (!isUuid(input.securityId)) throw unknown();
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
+    select subsidiary_id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`, "objects"))[0]);
   if (!located) throw unknown();
   return inEquityCommand({ ...input, subsidiaryId: located.subsidiary_id }, "equity.manage", async ({ book }) => {
     if (idempotencyKey) {
       const existing = (await db.execute<{ id: string; security_id: string; reverses_amendment_id: string | null }>(sql`
-        select id, security_id, reverses_amendment_id from equity_security_amendments where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
+        select id, security_id, reverses_amendment_id from equity_security_amendments where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`, "objects"))[0];
       if (existing) {
         if (existing.security_id !== input.securityId || existing.reverses_amendment_id !== input.amendmentId) {
           throw equityError("idempotencyConflict", { subject: fig.choice("reversal") });
@@ -316,12 +316,12 @@ export async function applyMfnReversal(input: ReverseMfnInput): Promise<{ amendm
     const { terms: before } = effectiveConvertibleTerms(book, security, effectiveOn);
     const after = effectiveConvertibleTerms({ ...book, securityAmendments: [...book.securityAmendments, { ...election, id: "pending", kind: "mfn_reversal", effectiveOn, reversesAmendmentId: election.id }] }, security, effectiveOn).terms;
     const id = await newEquityId(db);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equity_security_amendments (id, org_id, subsidiary_id, security_id, kind, effective_on, source_security_id,
         valuation_cap, discount_percent, safe_type, reverses_amendment_id, reason, idempotency_key, created_by)
       values (${id}, ${input.orgId}, ${located.subsidiary_id}, ${security.id}, 'mfn_reversal', ${effectiveOn}::date, ${election.sourceSecurityId},
         ${after.valuationCap}::numeric, ${after.discountPercent}::numeric, ${after.safeType ?? "pre_money"}, ${election.id}, ${reason}, ${idempotencyKey}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("reversal") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_securities", rowId: security.id, action: "equity.mfn.reverse", actorId: input.actorId,

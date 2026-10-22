@@ -107,13 +107,13 @@ export async function setSettlementLineDocument(
     const batch = (await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(sql`
       select id, subsidiary_id, external_ref from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     const line = (await db.execute<SettlementLineLock>(sql`
       select id, kind, document_id, amount::text, currency from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and link the line again`,
@@ -125,7 +125,7 @@ export async function setSettlementLineDocument(
     const doc = (await db.execute<{ id: string; kind: string; status: string; document_number: string | null; subsidiary_id: string | null }>(sql`
       select id, kind, status, document_number, subsidiary_id from documents
        where id = ${documentId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!doc) {
       throw new PspSettlementError(
         "the linked record does not belong to this organization; choose a posted sales document in this organization",
@@ -147,7 +147,7 @@ export async function setSettlementLineDocument(
     }
     const before = line.document_id;
     if (before === documentId) return { lineId, documentId };
-    const updated = await db.execute(sql`
+    const updated = await db.execute<never>(sql`
       update psp_settlement_lines set document_id = ${documentId}, updated_at = now(), updated_by = ${actorId}
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
     `);
@@ -175,20 +175,20 @@ export async function clearSettlementLineDocument(
     const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
       select id, subsidiary_id from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
     const line = (await db.execute<SettlementLineLock>(sql`
       select id, kind, document_id, amount::text, currency from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
       );
     }
     if (line.document_id === null) return { lineId };
-    const updated = await db.execute(sql`
+    const updated = await db.execute<never>(sql`
       update psp_settlement_lines set document_id = null, updated_at = now(), updated_by = ${actorId}
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
     `);
@@ -228,13 +228,13 @@ export async function markSettlementLineJournal(
     const batch = (await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(sql`
       select id, subsidiary_id, external_ref from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     const line = (await db.execute<SettlementLineLock & { meta: unknown }>(sql`
       select id, kind, document_id, amount::text, currency, meta from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and mark the line again`,
@@ -248,7 +248,7 @@ export async function markSettlementLineJournal(
     const entry = (await db.execute<{ id: string; entry_number: string; status: string; subsidiary_id: string | null }>(sql`
       select id, entry_number, status, subsidiary_id from journal_entries
        where id = ${journalEntryId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!entry) {
       throw new PspSettlementError(
         "the journal entry does not belong to this organization; choose a posted journal entry in this organization",
@@ -275,7 +275,7 @@ export async function markSettlementLineJournal(
     if (before !== null && (before as Record<string, unknown>)["id"] === journalEntryId) {
       return { lineId, journalEntryId, journalEntryNumber: entry.entry_number };
     }
-    const updated = await db.execute(sql`
+    const updated = await db.execute<never>(sql`
       update psp_settlement_lines
          set meta = coalesce(meta, '{}'::jsonb) || ${JSON.stringify({ recognizedByJournalEntry: after })}::jsonb,
              updated_at = now(), updated_by = ${actorId}
@@ -305,13 +305,13 @@ export async function clearSettlementLineJournal(
     const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
       select id, subsidiary_id from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
     const line = (await db.execute<SettlementLineLock & { meta: unknown }>(sql`
       select id, kind, document_id, amount::text, currency, meta from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
@@ -319,7 +319,7 @@ export async function clearSettlementLineJournal(
     }
     const before = (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
     if (before === null) return { lineId };
-    const updated = await db.execute(sql`
+    const updated = await db.execute<never>(sql`
       update psp_settlement_lines
          set meta = coalesce(meta, '{}'::jsonb) - 'recognizedByJournalEntry',
              updated_at = now(), updated_by = ${actorId}
@@ -370,7 +370,7 @@ export async function markSettlementBatchJournal(
     const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null; external_ref: string }>(sql`
       select id, status, subsidiary_id, external_ref from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     if (batch.status === "void") {
@@ -381,7 +381,7 @@ export async function markSettlementBatchJournal(
     const entry = (await db.execute<{ id: string; entry_number: string; status: string; subsidiary_id: string | null }>(sql`
       select id, entry_number, status, subsidiary_id from journal_entries
        where id = ${journalEntryId} and org_id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!entry) {
       throw new PspSettlementError(
         "the journal entry does not belong to this organization; choose a posted journal entry in this organization",
@@ -399,12 +399,12 @@ export async function markSettlementBatchJournal(
       );
     }
     const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
-    const lines = (await db.execute<{ id: string; document_id: string | null; meta: unknown }>(sql`
+    const lines = await db.execute<{ id: string; document_id: string | null; meta: unknown }>(sql`
       select id, document_id, meta from psp_settlement_lines
        where org_id = ${orgId} and batch_id = ${batchId}
          and kind = any(${matchableList}::text[])
        order by line_number for update
-    `)).rows;
+    `, "objects");
     const after = {
       id: journalEntryId,
       number: entry.entry_number,
@@ -424,7 +424,7 @@ export async function markSettlementBatchJournal(
         skippedMarked += 1;
         continue;
       }
-      const updated = await db.execute(sql`
+      const updated = await db.execute<never>(sql`
         update psp_settlement_lines
            set meta = coalesce(meta, '{}'::jsonb) || ${JSON.stringify({ recognizedByJournalEntry: after })}::jsonb,
                updated_at = now(), updated_by = ${actorId}

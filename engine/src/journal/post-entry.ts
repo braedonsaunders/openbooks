@@ -280,7 +280,7 @@ async function writeEntry(
   // ledger data, never a success and never a replay in progress — it is
   // refused by name instead of returned with zero lines.
   const readKeyedEntry = async (idempotencyKey: string): Promise<PostEntryResult | null> => {
-    const rows = (await executor.execute<{
+    const rows = await executor.execute<{
       entry_id: string; id: string | null; line_number: number | null;
       request_hash: string | null; status: string;
       request_basis?: { amountBasis: BookAmountBasis; accountBasis: BookAccountBasis } | null;
@@ -293,7 +293,7 @@ async function writeEntry(
         left join journal_lines jl
           on jl.org_id = je.org_id and jl.entry_id = je.id
        where je.org_id = ${orgId} and je.custom->>'idempotencyKey' = ${idempotencyKey}
-       order by jl.line_number`)).rows;
+       order by jl.line_number`, "objects");
     if (rows.length === 0) return null;
     const entryId = rows[0]!.entry_id;
     const replayed = rows.flatMap((row) =>
@@ -328,7 +328,7 @@ async function writeEntry(
            currency_difference_account_id
       from accounting_books
      where org_id = ${orgId} and id = ${input.bookId} and is_active and posts_gl
-     for share`)).rows[0];
+     for share`, "objects"))[0];
   if (!bookRow)
     fail(`journal entry ${input.entryNumber}: book ${input.bookId} is not an active posting book of this organization`);
   const book: BookProfile = {
@@ -351,7 +351,7 @@ async function writeEntry(
   }>(sql`
     select is_adjustment, fiscal_year,
            window_start::text as window_start, window_end::text as window_end
-      from accounting_period_posting_window(${orgId}, ${input.periodId})`)).rows[0];
+      from accounting_period_posting_window(${orgId}, ${input.periodId})`, "objects"))[0];
   if (!period)
     fail(`journal entry ${input.entryNumber}: accounting period ${input.periodId} does not exist in this organization`);
   // An adjustment period is one fiscal year's close bucket: a posting dated
@@ -365,7 +365,7 @@ async function writeEntry(
   const calendarBasis=(await executor.execute<{calendar:string|null;provided:string;historical:boolean}>(sql`
     select public.subsidiary_posting_calendar(${orgId},${input.subsidiaryId},${input.postingDate}::date) as calendar,
       p.fiscal_calendar_id as provided,public.connector_historical_replay_authorized(${orgId}) as historical
-    from accounting_periods p where p.org_id=${orgId} and p.id=${input.periodId}`)).rows[0];
+    from accounting_periods p where p.org_id=${orgId} and p.id=${input.periodId}`, "objects"))[0];
   if(!calendarBasis?.historical && calendarBasis?.calendar!==calendarBasis?.provided){
     if(period!.is_adjustment)fail("An adjustment period must belong to the entity's effective fiscal calendar. Choose its own adjustment period.");
     const entityPeriod=await resolveCoveringPeriod(executor,orgId,input.postingDate,input.subsidiaryId);
@@ -375,7 +375,7 @@ async function writeEntry(
 
   const resolvedWindow = (await executor.execute<{ window_start: string; window_end: string }>(sql`
     select window_start::text as window_start, window_end::text as window_end
-      from accounting_period_posting_window(${orgId}, ${input.periodId})`)).rows[0];
+      from accounting_period_posting_window(${orgId}, ${input.periodId})`, "objects"))[0];
   if (!resolvedWindow || input.postingDate < resolvedWindow.window_start || input.postingDate > resolvedWindow.window_end) {
     fail(`journal entry ${input.entryNumber}: posting date must fall within its accounting period — choose the period covering ${input.postingDate}`);
   }
@@ -391,14 +391,14 @@ async function writeEntry(
     const target = (await executor.execute<{ id: string; status: string; book_id: string }>(sql`
       select id, status, book_id from journal_entries
        where org_id = ${orgId} and id = ${input.reversesEntryId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!target)
       fail(`journal entry ${input.entryNumber}: reversed entry ${input.reversesEntryId} does not exist in this organization`);
     if (target!.status !== "posted")
       fail(`journal entry ${input.entryNumber}: only a posted entry can be reversed; preserve existing reversal history`);
     const existingReversal = (await executor.execute<{ id: string }>(sql`
       select id from journal_entries where org_id=${orgId} and reverses_entry_id=${input.reversesEntryId}
-        and status in ('posted','reversed') limit 1`)).rows[0];
+        and status in ('posted','reversed') limit 1`, "objects"))[0];
     if (existingReversal) fail(`journal entry ${input.entryNumber}: this target already has a retained reversal; correct through the existing reversal chain instead of reversing it again`);
     if (target!.book_id !== input.bookId)
       fail(`journal entry ${input.entryNumber}: a reversal must remain in the original accounting book`);
@@ -408,7 +408,7 @@ async function writeEntry(
     const source = (await executor.execute<{ id: string }>(sql`
       select id from documents
        where org_id = ${orgId} and id = ${input.sourceDocumentId}
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (!source)
       fail(`journal entry ${input.entryNumber}: source document ${input.sourceDocumentId} does not exist in this organization`);
   }
@@ -429,10 +429,8 @@ async function writeEntry(
   // The triggers re-validate the token again at write time.
   // The policy state comes from the same transaction-local predicate used
   // by the closed-period check. Integrity providers still run on replay.
-  const replayAuthorized = (
-    await executor.execute<{ allowed: boolean }>(sql`
-      select connector_historical_replay_authorized(${orgId}) as allowed`)
-  ).rows[0]?.allowed === true;
+  const replayAuthorized = (await executor.execute<{ allowed: boolean }>(sql`
+      select connector_historical_replay_authorized(${orgId}) as allowed`, "objects"))[0]?.allowed === true;
   // A non-primary book carries the posting through its account mappings
   // and, where it measures a subsidiary in another currency, translates it.
   let bookEvidence: BookPostingEvidence | null = null;
@@ -508,9 +506,9 @@ async function writeEntry(
 
   // Entity guards: the entry and every leg reference subsidiaries of this org.
   const subsidiaryIds = [...new Set([input.subsidiaryId, ...lines.map((line) => line.subsidiaryId!)])];
-  const foundSubs = (await executor.execute<{ id: string; base_currency: string }>(sql`
+  const foundSubs = await executor.execute<{ id: string; base_currency: string }>(sql`
     select id, base_currency from subsidiaries
-     where org_id = ${orgId} and id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`)).rows;
+     where org_id = ${orgId} and id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`, "objects");
   if (foundSubs.length !== subsidiaryIds.length) {
     const found = new Set(foundSubs.map((row) => row.id));
     const missing = subsidiaryIds.find((id) => !found.has(id));
@@ -536,7 +534,7 @@ async function writeEntry(
   // same rules the jl_check_account storage trigger enforces, refused here
   // with names instead of a raw driver error at insert time.
   const accountIds = [...new Set(lines.map((line) => line.accountId))];
-  const accounts = (await executor.execute<{
+  const accounts = await executor.execute<{
     id: string;
     is_active: boolean;
     is_summary: boolean;
@@ -545,7 +543,7 @@ async function writeEntry(
   }>(sql`
     select id, is_active, is_summary, currency_restriction, type from accounts
      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])
-     for share`)).rows;
+     for share`, "objects");
   const byAccount = new Map(accounts.map((row) => [row.id, row]));
   for (const line of lines) {
     const account = byAccount.get(line.accountId);
@@ -664,8 +662,8 @@ async function writeEntry(
                 ${input.origin}, ${input.reversesEntryId ?? null}, ${input.sourceDocumentId ?? null},
                 ${custom === null ? "{}" : JSON.stringify(custom)}::jsonb,
                 ${input.actorId ?? null}, ${input.actorId ?? null})
-        ${keyConflict} returning id`,
-  )).rows[0];
+        ${keyConflict} returning id`, "objects",
+  ))[0];
   if (!inserted && !input.idempotencyKey)
     fail(`journal entry ${input.entryNumber} was not created`);
   if (!inserted) {
@@ -698,13 +696,13 @@ async function writeEntry(
     // The storage guard admits inactive accounts only for this transaction-local historical posting.
     await executor.execute(sql`select set_config('openbooks.migration', 'on', true)`);
   }
-  const insertedLines = (await executor.execute<{ id: string; line_number: number }>(sql`
+  const insertedLines = await executor.execute<{ id: string; line_number: number }>(sql`
     insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
        memo, party_id, department_id, project_id, location_id, class_id, equipment_unit_id, payment_card_id,
        extra_dims, quantity, unit, eliminate, is_currency_adjustment, due_date, is_open_item, tax_code_id, custom, contributor_kind, contributor_ref)
     values ${sql.join(tuples, sql`, `)}
-    returning id, line_number`)).rows;
+    returning id, line_number`, "objects");
   if (input.allowInactiveAccounts) {
     await executor.execute(sql`select set_config('openbooks.migration', 'off', true)`);
   }
@@ -728,7 +726,7 @@ async function writeEntry(
     update journal_entries
        set status = 'posted', posted_by = ${input.actorId ?? null}, updated_by = ${input.actorId ?? null}
      where org_id = ${orgId} and id = ${entryId} and status = 'draft'
-     returning id`)).rows[0];
+     returning id`, "objects"))[0];
   if (!flipped)
     fail(`journal entry ${input.entryNumber} could not be posted`);
 
@@ -797,7 +795,7 @@ export async function markEntryReversed(
          set status = 'reversed', updated_at = now(), updated_by = ${input.actorId ?? null}
        -- Live entries only: an entry already reversed cannot be marked again.
        where org_id = ${input.orgId} and id = ${input.entryId} and status = 'posted'
-       returning id`)).rows[0];
+       returning id`, "objects"))[0];
     if (!updated)
       throw new LedgerPostError(
         `journal entry ${input.entryId} is not a posted entry of this organization — only a posted entry can be marked reversed; corrections append a reversal through the ledger API instead of editing history`,
@@ -821,13 +819,13 @@ export async function repointDraftProjectLines(
   executor: SqlExecutor,
   input: { orgId: string; fromId: string; toId: string },
 ): Promise<number> {
-  const moved = (await executor.execute<{ id: string }>(sql`
+  const moved = await executor.execute<{ id: string }>(sql`
     update journal_lines jl set project_id = ${input.toId}
      where jl.org_id = ${input.orgId} and jl.project_id = ${input.fromId}
        and exists (
          select 1 from journal_entries e
           where e.id = jl.entry_id and e.org_id = jl.org_id and e.status = 'draft'
        )
-    returning jl.id`)).rows;
+    returning jl.id`, "objects");
   return moved.length;
 }

@@ -27,7 +27,7 @@ async function history(org: ScratchOrg): Promise<unknown> {
     'lines',(select jsonb_agg(to_jsonb(l) order by l.id) from journal_lines l where l.org_id=${org.orgId}),
     'audit',(select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a
       where a.org_id=${org.orgId} and a.table_name='journal_entries')
-  ) as state`)).rows[0]!.state;
+  ) as state`, "objects"))[0]!.state;
 }
 
 async function financialEntry(org: ScratchOrg, entryId: string): Promise<unknown> {
@@ -36,7 +36,7 @@ async function financialEntry(org: ScratchOrg, entryId: string): Promise<unknown
       where e.org_id=${org.orgId} and e.id=${entryId}),
     'lines',(select jsonb_agg(to_jsonb(l) order by l.line_number) from journal_lines l
       where l.org_id=${org.orgId} and l.entry_id=${entryId})
-  ) as state`)).rows[0]!.state;
+  ) as state`, "objects"))[0]!.state;
 }
 
 test("a retained reversal prevents another reversal while exact keyed replay preserves the full child", { skip: !DB }, async () => {
@@ -60,10 +60,10 @@ test("a retained reversal prevents another reversal while exact keyed replay pre
       await assert.rejects(() => postEntry(db, request(org, "REVERSED-TARGET", original.entryId)), /only a posted entry can be reversed/);
       await assert.rejects(() => markEntryReversed(db, { orgId: org.orgId, entryId: original.entryId }), /only a posted entry can be marked reversed/);
       assert.deepEqual(await history(org), retained);
-      const rows = (await db.execute<{ id: string; status: string; balance: string }>(sql`
+      const rows = await db.execute<{ id: string; status: string; balance: string }>(sql`
         select e.id,e.status,sum(l.amount)::text as balance from journal_entries e
         join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id
-        where e.org_id=${org.orgId} group by e.id order by e.id`)).rows;
+        where e.org_id=${org.orgId} group by e.id order by e.id`, "objects");
       assert.equal(rows.length, 2);
       assert.equal(rows.find(row => row.id === original.entryId)!.status, "reversed");
       assert.equal(rows.find(row => row.id === reversal.entryId)!.status, "posted");
@@ -83,10 +83,10 @@ test("concurrent different reversal keys serialize on the target and retain one 
     const rejected = outcomes.find(result => result.status === "rejected") as PromiseRejectedResult;
     assert.match(String(rejected.reason), /already has a retained reversal/);
     await withOrgContext(org.orgId, async () => {
-      const children = (await db.execute<{ id: string; status: string; legs: number }>(sql`
+      const children = await db.execute<{ id: string; status: string; legs: number }>(sql`
         select e.id,e.status,count(l.id)::int as legs from journal_entries e
         join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id
-        where e.org_id=${org.orgId} and e.reverses_entry_id=${original.entryId} group by e.id`)).rows;
+        where e.org_id=${org.orgId} and e.reverses_entry_id=${original.entryId} group by e.id`, "objects");
       assert.equal(children.length, 1);
       assert.equal(children[0]!.status, "posted");
       assert.equal(children[0]!.legs, 2);
@@ -120,13 +120,13 @@ test("reversals honor the effective entity posting-date policy without changing 
       const old = await postEntry(db, request(org, "PRE-CUTOVER"));
       const backdatedTarget = await postEntry(db, request(org, "BACKDATED-TARGET"));
       const futureTarget = await postEntry(db, request(org, "FUTURE-TARGET"));
-      if ((await db.execute(sql`select id from fx_rate_types where org_id=${org.orgId} and key='spot'`)).rows.length === 0) {
+      if ((await db.execute(sql`select id from fx_rate_types where org_id=${org.orgId} and key='spot'`, "objects")).length === 0) {
         assert.equal((await db.execute(sql`insert into fx_rate_types(org_id,key,name,is_active)
-          values(${org.orgId},'spot','Spot rate',true) returning id`)).rows.length, 1);
+          values(${org.orgId},'spot','Spot rate',true) returning id`, "objects")).length, 1);
       }
       assert.equal((await db.execute(sql`insert into subsidiary_accounting_preferences
         (org_id,subsidiary_id,effective_from,allow_backdated_posting,allow_future_posting,reason)
-        values(${org.orgId},${org.subsidiaryId},'2026-07-16',false,false,'Prospective posting-date policy') returning id`)).rows.length, 1);
+        values(${org.orgId},${org.subsidiaryId},'2026-07-16',false,false,'Prospective posting-date policy') returning id`, "objects")).length, 1);
       await withSimClock("2026-07-17T12:00:00Z", async () => {
         await postEntry(db, request(org, "PRE-CUTOVER-REVERSAL", old.entryId));
         const retained = await history(org);

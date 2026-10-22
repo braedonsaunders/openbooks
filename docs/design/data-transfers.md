@@ -81,8 +81,8 @@ status. All child tables enforce organization isolation and composite job
 ownership. Original source, staged record content and lifecycle evidence
 have database immutability guards.
 
-Rollout requires forward migration `0472_durable_data_transfers.sql` followed
-by an updated web application and worker. Existing synchronous APIs remain
+Rollout requires the release schema, which carries the durable transfer
+tables, followed by an updated web application and worker. Existing synchronous APIs remain
 available with their documented small-file limits. A stopped transfer worker
 leaves work queued and visible. Operational rollback should stop new transfer
 submissions and roll back application code while retaining the additive

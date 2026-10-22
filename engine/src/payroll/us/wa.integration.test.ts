@@ -180,7 +180,7 @@ async function priceWashingtonRun(
     value: employerSize, changeReason: "recorded employer size",
   });
   const payable = (await db.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${fx.orgId} and number = '2330'`)).rows[0]!.id;
+    select id from accounts where org_id = ${fx.orgId} and number = '2330'`, "objects"))[0]!.id;
   await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_pfml", payable);
   await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_cares", payable);
   const run = await createPayRun({
@@ -190,12 +190,12 @@ async function priceWashingtonRun(
   const result = await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
   assert.deepEqual(result.errors, []);
   assert.equal(result.employees, 1);
-  return (await db.execute<{ system_key: string | null; amount: string }>(sql`
+  return await db.execute<{ system_key: string | null; amount: string }>(sql`
     select c.system_key, l.amount::text as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-     where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`)).rows;
+     where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`, "objects");
 }
 
 describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
@@ -285,7 +285,7 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
         value: "fifty_or_more", changeReason: "fifty-plus employer",
       });
       const payable = (await db.execute<{ id: string }>(sql`
-        select id from accounts where org_id = ${fx.orgId} and number = '2330'`)).rows[0]!.id;
+        select id from accounts where org_id = ${fx.orgId} and number = '2330'`, "objects"))[0]!.id;
       await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_pfml", payable);
       await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_cares", payable);
       const run = await createPayRun({
@@ -296,12 +296,12 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       assert.equal(result.employees, 1);
       assert.deepEqual(result.errors, []);
       // $2,000 of wages: PFML totals $22.60 (1.13%), split $16.14/$6.46; Cares $11.60 (0.58%).
-      const lines = (await db.execute<{ system_key: string | null; amount: string }>(sql`
+      const lines = await db.execute<{ system_key: string | null; amount: string }>(sql`
         select c.system_key, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-         where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`)).rows;
+         where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`, "objects");
       const amount = (key: string) => lines.find((line) => line.system_key === key)?.amount;
       assert.equal(amount("wa_pfml_employee"), "16.1400");
       assert.equal(amount("wa_pfml_employer"), "6.4600");

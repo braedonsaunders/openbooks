@@ -35,7 +35,7 @@ export async function readEmployeeCanadianOpeningReportingSource(tx: SqlExecutor
     authority: null, annualAmounts: null, children: null, allocations: [],
   };
   if (!original.authority || !original.facts || original.facts.originalCountry !== 'CA') return empty;
-  const rows = (await tx.execute<CanadianOpeningReportingAuthority & {
+  const rows = await tx.execute<CanadianOpeningReportingAuthority & {
     matches: boolean; annualAmounts: Record<string, string>; children: OriginalOpeningSourceChildren;
     allocationSnapshot: CanadianOpeningReportingAllocation[];
   }>(sql`
@@ -68,7 +68,7 @@ export async function readEmployeeCanadianOpeningReportingSource(tx: SqlExecutor
       join payroll_opening_balances b on b.org_id=r.org_id and b.id=r.opening_balance_id
      where r.org_id=${input.orgId} and r.levy_authority_id=${original.authority.authorityId}
      for share of r,h,b
-  `)).rows;
+  `, 'objects');
   if (!rows.length && !original.hasMaterialHistory) return empty;
   if (rows.length !== 1 || !rows[0]!.matches) throw new PayrollError(`The current Canadian original reporting source is missing or no longer matches retained history. ${rows.length ? RETAINED_REFUSAL : REFUSAL}`);
   const row = rows[0]!;

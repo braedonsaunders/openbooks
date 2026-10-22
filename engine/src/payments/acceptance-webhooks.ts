@@ -29,15 +29,15 @@ export async function handleProviderWebhook(
 ): Promise<ProviderWebhookResult | null> {
   // bypass: connector-token — an inbound provider webhook is verified against every organization's signing secret.
   const configs = await withBypassContext(async () =>
-    db.execute(sql`
+    db.execute<ProviderConfigRow & { org_id: string }>(sql`
       select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
              publishable_key, settings, surcharge_rule_id, secrets, org_id
         from psp_provider_configs
        where provider = ${provider} and is_enabled and acceptance_enabled
-    `)) as unknown as { rows: (ProviderConfigRow & { org_id: string })[] };
+    `, "objects"));
   const adapter = ACCEPTANCE_ADAPTERS[provider];
   const verified: { orgId: string; events: WebhookEvent[] }[] = [];
-  for (const config of configs.rows) {
+  for (const config of configs) {
     const delivery = adapter.verifyWebhookDelivery(headers, rawBody, configSecrets(config, config.org_id));
     if (delivery.signatureValid) verified.push({ orgId: config.org_id, events: delivery.events });
   }
@@ -204,8 +204,8 @@ export async function consumePendingClawback(
      where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
        and consumed_at is null
      returning event_payload, event_status
-  `));
-  const row = consumed.rows[0];
+  `, "objects"));
+  const row = consumed[0];
   if (!row) return null;
   const detail = ((row.event_payload ?? {}).normalized ?? {}) as Record<string, unknown>;
   return {
@@ -526,7 +526,7 @@ export async function peekPendingClawback(
     select id from payment_pending_clawbacks
      where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
        and consumed_at is null
-  `)).rows[0];
+  `, "objects"))[0];
   return !!row;
 }
 

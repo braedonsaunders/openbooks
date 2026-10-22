@@ -288,8 +288,8 @@ export async function transactionDetail(opts: {
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')${cashJoins}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where ${where}
-  `))
-  const totals = agg.rows[0] ?? { n: 0, debit: '0', credit: '0', net: '0', pair_n: 0 }
+  `, "objects"))
+  const totals = agg[0] ?? { n: 0, debit: '0', credit: '0', net: '0', pair_n: 0 }
 
   const r = (await db.execute<{
       line_id: string; entry_id: string; entry_number: string | null; date: string
@@ -323,7 +323,7 @@ export async function transactionDetail(opts: {
        ? sql`e.posting_date desc, e.entry_number desc, l.line_number desc`
        : sql`e.posting_date, e.entry_number, l.line_number`}
      limit ${limit} offset ${offset}
-  `))
+  `, "objects"))
   // Confidentiality collapses BEFORE shaping below; the totals above are over
   // the same posted set, so net/debit/credit tie out exactly. Without
   // payroll.read the collapsed line keeps the account and the summed amount
@@ -332,8 +332,8 @@ export async function transactionDetail(opts: {
   // total is the same reader rule applied to the summed amount.
   const signTotal = (acctType: string, total: ExactDecimal): ExactDecimal =>
     opts.profitSigned || CREDIT_NORMAL.has(acctType) ? decimalNeg(total) : total
-  const confidential = opts.canSeePayroll === true ? r.rows : collapseRestrictedPayrollLines(
-    r.rows.map((x) => ({
+  const confidential = opts.canSeePayroll === true ? r : collapseRestrictedPayrollLines(
+    r.map((x) => ({
       ...x,
       entryId: x.entry_id,
       accountId: x.acct_id,

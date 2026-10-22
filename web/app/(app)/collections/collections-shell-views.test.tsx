@@ -17,7 +17,7 @@ stubModules({
       `export default function Link(p){return globalThis.React.createElement('a',{href:p.href,'aria-current':p['aria-current'],className:p.className},p.children)}`,
     'server-only': `export {}`,
     '@openbooks/engine/platform/db':
-      `export const db = { execute: async () => ({ rows: [] }) }`,
+      `export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }`,
     '@openbooks/engine/payments/autopay':
       `export async function findCardsExpiringSoon(){return []}` +
       `export async function getRecoveryMetrics(){return {}}` +

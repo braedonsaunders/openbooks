@@ -19,7 +19,7 @@ async function seedAsset(org: ScratchOrg) {
 }
 
 async function eventFor(orgId: string, entryId: string) {
-  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`, 'objects'))[0]!.id;
 }
 
 for (const scenario of ['redisposal', 'reverse earlier impairment'] as const) {
@@ -34,7 +34,7 @@ for (const scenario of ['redisposal', 'reverse earlier impairment'] as const) {
         const second = await disposeAsset(org.orgId, assetId, { ...opts, proceeds: '300', proceedsAccountId: org.accounts.bank });
         assert.equal(second.status, 'disposed');
         assert.notEqual(first.entryId, second.entryId);
-        const entries = (await db.execute<{ entry_number: string }>(sql`select entry_number from journal_entries where org_id=${org.orgId} and id in (${first.entryId},${second.entryId})`)).rows;
+        const entries = await db.execute<{ entry_number: string }>(sql`select entry_number from journal_entries where org_id=${org.orgId} and id in (${first.entryId},${second.entryId})`, 'objects');
         assert.equal(new Set(entries.map(row => row.entry_number)).size, 2);
       } else {
         const first = await remeasureAsset(org.orgId, assetId, { ...opts, newCarryingValue: '800' });
@@ -44,7 +44,7 @@ for (const scenario of ['redisposal', 'reverse earlier impairment'] as const) {
         await reverseAssetLifecycleEvent(org.orgId, secondEvent, { ...opts, reason: 'Reverse newest impairment before earlier one' });
         const earlier = await reverseAssetLifecycleEvent(org.orgId, firstEvent, { ...opts, reason: 'Reverse earlier impairment after latest reversal' });
         assert.equal(earlier.created, true);
-        const net = (await db.execute<{ net: string }>(sql`select sum(l.amount)::text as net from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${org.orgId} and l.account_id=${org.accounts.clearing} and e.status in ('posted','reversed')`)).rows[0]!.net;
+        const net = (await db.execute<{ net: string }>(sql`select sum(l.amount)::text as net from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${org.orgId} and l.account_id=${org.accounts.clearing} and e.status in ('posted','reversed')`, 'objects'))[0]!.net;
         assert.equal(net, '0.0000');
       }
     } finally { await dropScratchOrg(org.orgId); }

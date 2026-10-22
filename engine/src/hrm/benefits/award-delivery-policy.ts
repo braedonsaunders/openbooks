@@ -22,8 +22,8 @@ export function awardDeliveryPolicy(program:unknown,source:unknown):AwardDeliver
 
 /** Callers hold the award/run locks; authorization applies to the retained issuance entity. */
 export async function readAwardDeliveryPolicy(exec:SqlExecutor,orgId:string,actorId:string,awardId:string):Promise<AwardDeliveryPolicy> {
-  const rows=(await exec.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
-    from hrm_benefit_awards where org_id=${orgId} and id=${awardId}`)).rows;
+  const rows=await exec.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
+    from hrm_benefit_awards where org_id=${orgId} and id=${awardId}`, 'objects');
   if(rows.length!==1)throw new BenefitsError('NOT_FOUND','Benefit award is unavailable in this organization');
   const policy=awardDeliveryPolicy(rows[0]!.program,rows[0]!.source);
   const scope=await actorAllowedSubsidiaryIds(exec,orgId,actorId);

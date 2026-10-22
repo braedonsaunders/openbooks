@@ -88,8 +88,8 @@ async function loadBudget(subjectId: string): Promise<BudgetRow | null> {
       from budget_scenarios bs
       join accounting_books b on b.id = bs.book_id and b.org_id = bs.org_id
      where bs.id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const budgetScenariosFlowAdapter: FlowSubjectAdapter =
@@ -115,13 +115,13 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter =
         from budget_lines bl
        where bl.scenario_id = ${subjectId} and bl.org_id = ${budget.org_id}
        order by bl.created_at, bl.id
-    `);
+    `, "objects");
       const total = await db.execute<{ total: string }>(sql`
       select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
         from budget_lines bl
         join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
        where bl.scenario_id = ${subjectId} and bl.org_id = ${budget.org_id}
-    `);
+    `, "objects");
       return {
         values: {
           id: budget.id,
@@ -133,11 +133,11 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter =
           kind: budget.kind,
           status: budget.status,
           revision: budget.revision,
-          total: total.rows[0]?.total ?? "0.0000",
-          lineCount: lines.rows.length,
+          total: total[0]?.total ?? "0.0000",
+          lineCount: lines.length,
           createdBy: budget.created_by,
         },
-        rows: { lines: lines.rows },
+        rows: { lines },
         submitterUserId: budget.created_by,
       };
     },
@@ -198,7 +198,7 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter =
        where org_id = ${orgId} and status <> 'archived'
        order by created_at desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

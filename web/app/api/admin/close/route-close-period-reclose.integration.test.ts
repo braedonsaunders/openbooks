@@ -90,10 +90,10 @@ test('close-period re-closes reopened modules through the route with audit', asy
       db.execute<{ module: string; state: string }>(sql`
       select module, state from period_locks
        where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}
-         and subsidiary_id is null`),
+         and subsidiary_id is null`, 'objects'),
     )
     const byModule = Object.fromEntries(
-      states.rows.map((row) => [row.module, row.state]),
+      states.map((row) => [row.module, row.state]),
     )
     assert.equal(byModule.banking, 'closed', 'Banking stands closed again')
     assert.equal(byModule.gl, 'closed', 'General ledger stands closed again')
@@ -101,10 +101,10 @@ test('close-period re-closes reopened modules through the route with audit', asy
       db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
        where org_id = ${org.orgId} and table_name = 'period_locks' and action = 'update'
-         and changes->'after'->>'state' = 'closed'`),
+         and changes->'after'->>'state' = 'closed'`, 'objects'),
     )
     assert.ok(
-      Number(audits.rows[0]?.n ?? 0) >= 2,
+      Number(audits[0]?.n ?? 0) >= 2,
       'both re-closed modules leave audit entries',
     )
   } finally {

@@ -97,12 +97,12 @@ export async function recordPayRunHolidayHours(input: {
     const components = await tx.execute<{ id: string }>(sql`
       select id from pay_components where org_id=${input.orgId}
         and system_key='stat_holiday' and kind='earning' and is_active
-    `);
-    if (components.rows.length !== 1) throw new PayrollError("Configure one active statutory holiday earning component before recording paid holiday hours.");
+    `, "objects");
+    if (components.length !== 1) throw new PayrollError("Configure one active statutory holiday earning component before recording paid holiday hours.");
     const amount = await priceRunHolidayHours(tx, input);
     return mutatePayRunAdjustment({ orgId: input.orgId, documentId: input.documentId,
       actorId: input.actorId, reason: input.reason, allowedSubsidiaryIds: input.allowedSubsidiaryIds,
-      mutation: { action: "add", employeePartyId: input.employeePartyId, componentId: components.rows[0]!.id,
+      mutation: { action: "add", employeePartyId: input.employeePartyId, componentId: components[0]!.id,
         amount, hours: input.hours, earnedFrom: input.earnedOn, earnedTo: input.earnedOn, replaceComponent: true, note: input.note, idempotencyKey: input.idempotencyKey } });
   });
 }
@@ -147,8 +147,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run || !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id)) {
       throw new PayrollError("pay run not found");
     }
@@ -163,7 +163,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
             from pay_run_adjustments a
             left join pay_components c on c.org_id=a.org_id and c.id=a.component_id
            where a.org_id=${orgId} and a.pay_run_document_id=${documentId} and a.id=${mutation.adjustmentId}
-           for update of a`)).rows[0]
+           for update of a`, "objects"))[0]
       : undefined;
     const target = mutation.action === "delete" ? deletedAdjustment?.employee_party_id : mutation.employeePartyId;
     if (mutation.action === "delete" && !target) throw new PayrollError("pay run adjustment not found");
@@ -221,8 +221,8 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
            and prof.pay_schedule_id = ${run.pay_schedule_id}
          where p.org_id = ${orgId} and p.id = ${employeeId}
          limit 1
-      `));
-      const member = membership.rows[0];
+      `, "objects"));
+      const member = membership[0];
       // A validity precondition belongs on the state being moved TOWARD, not
       // the state being moved AWAY FROM. Adding someone (include, or a line
       // adjustment for them) moves toward paying them, so a configured active
@@ -317,7 +317,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
                  component_id::text, amount::text as amount, hours::text as hours,
                  replace_component, note, earned_from::text, earned_to::text
             from pay_run_adjustments where id = ${key}
-        `)).rows[0];
+        `, "objects"))[0];
         if (prior) {
           if (prior.org_id !== orgId) throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
           const same = prior.pay_run_document_id === documentId
@@ -338,22 +338,22 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
          where org_id = ${orgId} and id = ${mutation.componentId} and is_active
            and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout','stat_holiday','income_tax'))
          limit 1
-      `));
-      if (component.rows.length === 0) throw new PayrollError("component cannot be adjusted");
-      if (earnedFrom !== null && component.rows[0]!.kind !== "earning") {
+      `, "objects"));
+      if (component.length === 0) throw new PayrollError("component cannot be adjusted");
+      if (earnedFrom !== null && component[0]!.kind !== "earning") {
         throw new PayrollError("Earned dates apply only to earning adjustments.");
       }
       // An employee may ask for extra income tax on one cheque. It is withheld
       // through the statutory income-tax line, never as a separate deduction.
-      if (component.rows[0]!.system_key === "income_tax"
+      if (component[0]!.system_key === "income_tax"
         && (replaceComponent || hours !== null || earnedFrom !== null || cmp(amount, "0") <= 0 || !(input.reason ?? note)?.trim())) {
         throw new PayrollError("Additional income tax for this run must be a positive amount added to the calculated tax, without hours or dates, with a supporting reason.");
       }
-      if (component.rows[0]!.system_key === "stat_holiday") {
+      if (component[0]!.system_key === "stat_holiday") {
         if (earnedFrom !== null && (earnedFrom !== earnedTo || earnedFrom < run.period_start || earnedFrom > run.period_end)) {
           throw new PayrollError("Record holiday hours on one date within this pay period.");
         }
-        if (component.rows[0]!.kind !== "earning" || component.rows[0]!.payment_kind !== "cash"
+        if (component[0]!.kind !== "earning" || component[0]!.payment_kind !== "cash"
           || !replaceComponent || !hours || !(input.reason ?? note)?.trim()) {
           throw new PayrollError("Recorded holiday pay requires a cash earning component, non-negative paid hours, component replacement and a supporting reason.");
         }
@@ -377,7 +377,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
              ${mutation.componentId}, ${amount}, ${hours}, ${earnedFrom}, ${earnedTo},
              ${replaceComponent}, ${note}, ${actorId}, ${actorId})
           returning *
-        `)).rows[0];
+        `, "objects"))[0];
         if (!inserted) throw new PayrollError("pay run adjustment was not saved");
         auditChanges.push({ id: inserted.id, before: null, after: inserted });
       } else {
@@ -390,7 +390,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
              ${mutation.componentId}, ${amount}, ${hours}, ${earnedFrom}, ${earnedTo},
              ${replaceComponent}, ${mutation.note ?? null}, ${actorId}, ${actorId})
           returning *
-        `)).rows[0];
+        `, "objects"))[0];
         if (!inserted) throw new PayrollError("pay run adjustment was not saved");
         auditChanges.push({ id: inserted.id, before: null, after: inserted });
       }
@@ -401,9 +401,9 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
          where org_id = ${orgId} and pay_run_document_id = ${documentId}
            and id = ${mutation.adjustmentId}
          returning *
-      `));
-      if (deleted.rows.length === 0) throw new PayrollError("pay run adjustment not found");
-      for (const row of deleted.rows) auditChanges.push({ id: row.id, before: row, after: null });
+      `, "objects"));
+      if (deleted.length === 0) throw new PayrollError("pay run adjustment not found");
+      for (const row of deleted) auditChanges.push({ id: row.id, before: row, after: null });
       changed = true;
     } else if (mutation.action === "exclude") {
       const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
@@ -415,29 +415,29 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
           where adjustment_type = 'exclude'
         do nothing
         returning *
-      `));
-      changed = inserted.rows.length > 0;
-      for (const row of inserted.rows) auditChanges.push({ id: row.id, before: null, after: row });
+      `, "objects"));
+      changed = inserted.length > 0;
+      for (const row of inserted) auditChanges.push({ id: row.id, before: null, after: row });
     } else {
       const deleted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
         delete from pay_run_adjustments
          where org_id = ${orgId} and pay_run_document_id = ${documentId}
            and employee_party_id = ${mutation.employeePartyId} and adjustment_type = 'exclude'
          returning *
-      `));
-      changed = deleted.rows.length > 0;
-      for (const row of deleted.rows) auditChanges.push({ id: row.id, before: row, after: null });
+      `, "objects"));
+      changed = deleted.length > 0;
+      for (const row of deleted) auditChanges.push({ id: row.id, before: row, after: null });
     }
 
     if (changed) {
       // Record each actual row change before invalidating the derived result.
       // Replays and previews return earlier and leave no duplicate audit event.
       for (const row of auditChanges) {
-        const recordedAudit = (await tx.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+        const recordedAudit = await tx.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
           values (${orgId},'pay_run_adjustments',${row.id},${row.after ? (row.before ? 'update' : 'insert') : 'delete'},
             ${JSON.stringify({ before: row.before, after: row.after, source: input.source ?? 'payroll',
               reason: mutation.action === "override_income_tax" || mutation.action === "declared_vacation_accrual" || mutation.action === "employer_levy_adjustment" ? mutation.reason.trim()
-                : input.reason ?? row.after?.note ?? row.before?.note ?? null })}::jsonb,${actorId}) returning id`)).rows;
+                : input.reason ?? row.after?.note ?? row.before?.note ?? null })}::jsonb,${actorId}) returning id`, "objects");
         if (recordedAudit.length !== 1) throw new PayrollError("The adjustment audit event was not retained; no payroll input was saved.");
       }
       // Calculated stubs are a derived snapshot. Invalidate them through the

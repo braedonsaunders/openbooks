@@ -19,7 +19,7 @@ test('component reasons remain audited through create, replay, update and dated 
     const create = (input: Record<string, unknown>) => withBypass(() => createSetupRecord(actor, 'pay-components', input, { requestId }))
     const evidence = async (id: string, action: string) => (await withBypass(() => db.execute<{ changes: Record<string, unknown> }>(sql`
       select changes from audit_log where org_id = ${org.orgId} and row_id = ${id} and action = ${action} order by at desc limit 1
-    `))).rows[0]!.changes
+    `, 'objects')))[0]!.changes
 
     const created = await create(body)
     assert.equal(created.status, 200, JSON.stringify(created.body))
@@ -33,7 +33,7 @@ test('component reasons remain audited through create, replay, update and dated 
 
     const treatment = (await withBypass(() => db.execute<{ id: string }>(sql`
       select id from pay_component_statutory_treatments where org_id = ${org.orgId} and pay_component_id = ${componentId}
-    `))).rows[0]!
+    `, 'objects')))[0]!
     assert.equal((await evidence(treatment.id, 'insert')).reason, 'Initial statutory treatment created with the pay component.')
 
     const updated = await withBypass(() => updateSetupRecord(actor, 'pay-components', {
@@ -85,17 +85,17 @@ test('component imports retain audit reasons and create the same dated vacation 
     assert.deepEqual({ created: write.created, updated: write.updated, failed: write.failed }, { created: 1, updated: 0, failed: 0 }, JSON.stringify(write))
     const component = (await withBypass(() => db.execute<{ id: string }>(sql`
       select id from pay_components where org_id=${org.orgId} and code=${body.code}
-    `))).rows[0]!
-    const policy = (await withBypass(() => db.execute<{ id: string; vacationable: boolean }>(sql`
+    `, 'objects')))[0]!
+    const policy = await withBypass(() => db.execute<{ id: string; vacationable: boolean }>(sql`
       select id,vacationable from pay_component_statutory_treatments
       where org_id=${org.orgId} and pay_component_id=${component.id}
-    `))).rows
+    `, 'objects'))
     assert.equal(policy.length, 1)
     assert.equal(policy[0]!.vacationable, false)
-    const audit = (await withBypass(() => db.execute<{ actor_id: string; changes: { reason: string; after: Record<string, unknown> } }>(sql`
+    const audit = await withBypass(() => db.execute<{ actor_id: string; changes: { reason: string; after: Record<string, unknown> } }>(sql`
       select actor_id,changes from audit_log where org_id=${org.orgId}
         and table_name='pay_components' and row_id=${component.id} and action='insert'
-    `))).rows
+    `, 'objects'))
     assert.equal(audit.length, 1)
     assert.equal(audit[0]!.actor_id, user)
     assert.equal(audit[0]!.changes.reason, body.reason.trim())
@@ -104,10 +104,10 @@ test('component imports retain audit reasons and create the same dated vacation 
     assert.equal(refused.failed, 1)
     assert.equal(refused.updated, 0)
     assert.match(refused.errors[0]!.message, /creation-only.*dated component statutory treatment/)
-    assert.deepEqual((await withBypass(() => db.execute(sql`
+    assert.deepEqual(await withBypass(() => db.execute(sql`
       select id,vacationable from pay_component_statutory_treatments
       where org_id=${org.orgId} and pay_component_id=${component.id}
-    `))).rows, policy)
+    `, 'objects')), policy)
     const treatmentResource = setupResource(SETUP_ENTITY_BY_KEY.get('pay-component-statutory-treatments')!, org.orgId)
     assert.equal((await withBypass(() => treatmentResource.fields())).find(field => field.key === 'reason')?.required, true)
     assert.equal((await withBypass(() => treatmentResource.columns())).some(column => column.key === 'reason'), false)
@@ -135,12 +135,12 @@ test('setup imports separate adoption audit reasons from stored service history'
     assert.equal(result.failed, 0, JSON.stringify(result))
     const stored = (await withBypass(() => db.execute<{ id: string; reason: string }>(sql`
       select id,reason from payroll_service_credits where org_id=${org.orgId} and employment_id=${person.employmentId}
-    `))).rows[0]!
+    `, 'objects')))[0]!
     assert.equal(stored.reason, body.reason)
-    const evidence = (await withBypass(() => db.execute<{ changes: { reason: string; after: { reason: string } } }>(sql`
+    const evidence = await withBypass(() => db.execute<{ changes: { reason: string; after: { reason: string } } }>(sql`
       select changes from audit_log where org_id=${org.orgId} and table_name='payroll_service_credits'
         and row_id=${stored.id} and actor_id=${actorId} and action='insert'
-    `))).rows
+    `, 'objects'))
     const adoption = evidence.filter(row => row.changes.reason === body.auditReason.trim())
     assert.equal(adoption.length, 1)
     assert.equal(adoption[0]!.changes.after.reason, body.reason)
@@ -150,7 +150,7 @@ test('setup imports separate adoption audit reasons from stored service history'
       assert.equal(refused.created, 0)
       assert.match(refused.errors[0]!.message, /change reason/)
     }
-    assert.equal((await withBypass(() => db.execute(sql`select id from payroll_service_credits where org_id=${org.orgId}`))).rows.length, 1)
+    assert.equal((await withBypass(() => db.execute(sql`select id from payroll_service_credits where org_id=${org.orgId}`, 'objects'))).length, 1)
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }

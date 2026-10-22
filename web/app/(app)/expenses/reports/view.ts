@@ -135,7 +135,7 @@ export async function loadExpenseReports(
              ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
              ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
            order by pc.label
-        `).then((r) => r.rows.map((card) => ({
+        `, 'objects').then((r) => r.map((card) => ({
           id: card.id,
           label: card.label,
           display_name: card.last_four ? `${card.network ?? ''} •••• ${card.last_four} — ${card.holder ?? ''}`.trim() : card.label,

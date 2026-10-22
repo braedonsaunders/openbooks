@@ -69,7 +69,7 @@ test("payment-link API rejects a malformed bank reference before any link write"
 
     const before = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from payment_links where org_id = ${org.orgId}
-    `);
+    `, "objects");
     const response = await POST(request({
       provider: "stripe",
       documentId: randomUUID(),
@@ -78,8 +78,8 @@ test("payment-link API rejects a malformed bank reference before any link write"
     assert.equal(response.status, 400);
     const after = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from payment_links where org_id = ${org.orgId}
-    `);
-    assert.equal(after.rows[0]!.count, before.rows[0]!.count);
+    `, "objects");
+    assert.equal(after[0]!.count, before[0]!.count);
   } finally {
     const state = (globalThis as typeof globalThis & Record<symbol, unknown>)[routeState] as {
       authz: { user: { orgId: string; id: string } } | null;

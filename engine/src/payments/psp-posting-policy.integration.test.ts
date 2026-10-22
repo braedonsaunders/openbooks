@@ -40,7 +40,7 @@ for (const policy of ["restricted account", "inactive subsidiary", "inactive boo
       });
       const state = (await withOrgContext(org.orgId, () => db.execute<{ status: string; journal_entry_id: string | null; journals: number }>(sql`
         select status,journal_entry_id,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals
-        from psp_settlement_batches where org_id=${org.orgId} and id=${batchId}`))).rows[0]!;
+        from psp_settlement_batches where org_id=${org.orgId} and id=${batchId}`, "objects")))[0]!;
       assert.deepEqual(state, { status: "draft", journal_entry_id: null, journals: 0 });
       await withBypassContext(() => db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${org.accounts.bank}`));
@@ -95,7 +95,7 @@ test("PSP posting rechecks an account restriction committed while it waits", { s
     assert.match(result.reason.message, /restricted to another subsidiary/);
     const state = (await withOrgContext(org.orgId, () => db.execute<{ status: string; journals: number }>(sql`
       select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals
-      from psp_settlement_batches where org_id=${org.orgId} and id=${batchId}`))).rows[0]!;
+      from psp_settlement_batches where org_id=${org.orgId} and id=${batchId}`, "objects")))[0]!;
     assert.deepEqual(state, { status: "draft", journals: 0 });
   } finally {
     await writer.query("rollback");

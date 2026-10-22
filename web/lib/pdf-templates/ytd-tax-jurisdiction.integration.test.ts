@@ -64,8 +64,8 @@ async function ytdOracle(orgId: string, employeeId: string, taxYear: number, pay
      where s.org_id = ${orgId} and s.employee_party_id = ${employeeId}
        and s.tax_year = ${taxYear} and s.pay_date <= ${payDate}
        and s.currency_code = ${currency}
-  `)))
-  return r.rows[0]!
+  `, 'objects')))
+  return r[0]!
 }
 
 async function incomeTaxLines(orgId: string, stubId: string) {
@@ -75,8 +75,8 @@ async function incomeTaxLines(orgId: string, stubId: string) {
       from pay_stub_lines l join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId} and l.stub_id = ${stubId}
        and c.system_key in (${keys})
-  `)))
-  return r.rows
+  `, 'objects')))
+  return r
 }
 
 interface CaFixture {
@@ -185,9 +185,9 @@ async function caEmployee(fx: CaFixture, name: string, province: string): Promis
 async function stubIdFor(orgId: string, documentId: string, employeeId: string): Promise<string> {
   const r = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
     select id from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
-     and employee_party_id = ${employeeId}`)))
-  assert.ok(r.rows[0], 'engine-generated stub exists')
-  return r.rows[0]!.id
+     and employee_party_id = ${employeeId}`, 'objects')))
+  assert.ok(r[0], 'engine-generated stub exists')
+  return r[0]!.id
 }
 
 test('printed YTD income tax counts every jurisdiction the engine actually withheld', { skip: !DB }, async () => {

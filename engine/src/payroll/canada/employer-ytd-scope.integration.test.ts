@@ -39,7 +39,7 @@ async function setup(){
  assert.equal((await db.execute(sql`insert into pay_schedules(id,org_id,subsidiary_id,name,frequency,periods_per_year,
    anchor_period_end,pay_date_offset_days,is_active,created_by,updated_by)
   values(${scheduleB},${f.orgId},${other},'Second employer biweekly','biweekly',26,'2026-07-18',3,true,${f.actorId},${f.actorId})
-  returning id`)).rows.length,1);
+  returning id`, 'objects')).length,1);
  return {...f,other,employmentB,scheduleB};
 }
 type Fixture=Awaited<ReturnType<typeof setup>>;
@@ -51,14 +51,14 @@ async function run(f:Fixture,owner:string,status:'draft'|'committed',amount='0',
  const id=created.documentId;
  let calculationWarnings:PayRunCalculationError[]=[];
  assert.equal((await db.execute<{id:string}>(sql`select subsidiary_id as id from documents
-   where org_id=${f.orgId} and id=${id}`)).rows[0]?.id,owner,'The run pays from its schedule owner');
+   where org_id=${f.orgId} and id=${id}`, 'objects'))[0]?.id,owner,'The run pays from its schedule owner');
  if(status==='committed'){
   assert.ok(account,'A native calculation retains its actual employer filing account');
   assert.equal((await db.execute(sql`update parties set subsidiary_id=${owner}
-   where org_id=${f.orgId} and id=${f.employeeId} returning id`)).rows.length,1);
+   where org_id=${f.orgId} and id=${f.employeeId} returning id`, 'objects')).length,1);
   assert.equal((await db.execute(sql`update employee_payroll_profiles set employment_id=${employment},filing_account_id=${account},pay_schedule_id=${schedule}
-   where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length,1);
-  const base=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`)).rows;
+   where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`, 'objects')).length,1);
+  const base=await db.execute<{id:string}>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`, 'objects');
   assert.equal(base.length,1);
   await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:id,reason:'Declared supplemental wage for the selected employment',
    mutation:{action:'add',employeePartyId:f.employeeId,componentId:base[0]!.id,amount,hours:'100',replaceComponent:true,
@@ -66,16 +66,16 @@ async function run(f:Fixture,owner:string,status:'draft'|'committed',amount='0',
   const input={orgId:f.orgId,actorId:f.actorId,documentId:id};
   const calculation=await calculatePayRun(input);
   const parsed=parsePayRunCalculationErrors(calculation.errors);assert.ok(parsed,'Native calculation outcomes must be well formed');
-  const stored=(await db.execute<{errors:unknown}>(sql`select calculation_errors as errors from pay_runs
-    where org_id=${f.orgId} and document_id=${id}`)).rows;
+  const stored=await db.execute<{errors:unknown}>(sql`select calculation_errors as errors from pay_runs
+    where org_id=${f.orgId} and document_id=${id}`, 'objects');
   assert.equal(stored.length,1);
   const retainedOutcomes=parsePayRunCalculationErrors(stored[0]!.errors);assert.ok(retainedOutcomes);
   assert.equal(canonicalJson(retainedOutcomes),canonicalJson(parsed),'Every native warning remains in retained calculation evidence');
   assert.deepEqual(parsed.filter(entry=>entry.kind!=='warning'),[],'No refusal, out-of-scope or unknown outcome may be waived');
   calculationWarnings=parsed.filter(entry=>entry.kind==='warning');
   await commitPayRun(input);
-  const retained=(await db.execute<{employmentId:string;account:string;gross:string}>(sql`select employment_id as "employmentId",
-    filing_account_id as account,gross::text as gross from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${id}`)).rows;
+  const retained=await db.execute<{employmentId:string;account:string;gross:string}>(sql`select employment_id as "employmentId",
+    filing_account_id as account,gross::text as gross from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${id}`, 'objects');
   assert.equal(retained.length,1);assert.equal(retained[0]!.employmentId,employment);assert.equal(retained[0]!.account,account);
   assert.equal(cmp(retained[0]!.gross,amount),0);
  }
@@ -93,7 +93,7 @@ async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'1
  await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes})`);
  await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file}`);
  const expectedOpeningChildrenSha256=(await db.execute<{sha:string}>(sql`select encode(public.digest(public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year)::text,'sha256'),'hex') as sha
-   from payroll_opening_balances b where b.org_id=${f.orgId} and b.employee_party_id=${f.employeeId} and b.tax_year=2026`)).rows[0]!.sha;
+   from payroll_opening_balances b where b.org_id=${f.orgId} and b.employee_party_id=${f.employeeId} and b.tax_year=2026`, 'objects'))[0]!.sha;
  return {...facts,expectedOpeningChildrenSha256,sourceFileId:file,sourceVersionId:version,sourceSha256:sha,sourceReference:'Original employer A employee opening report',reason:'Qualify original employer ownership'};
 }
 function caLevyAllocations(wcb='0',eht='0',cnt='0'){
@@ -119,13 +119,13 @@ test('different employers retain independent annual contribution room while same
   const second=await run(f,f.subsidiaryId,'committed','100000',rehire,accountB);
   const accountOther=randomUUID();
   assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
-   values(${accountOther},${f.orgId},${f.other},'CA','ca_rp','987654321RP0001','Second employer payroll',true) returning id`)).rows.length,1);
+   values(${accountOther},${f.orgId},${f.other},'CA','ca_rp','987654321RP0001','Second employer payroll',true) returning id`, 'objects')).length,1);
   await seedVacationTerms(f.orgId,f.employmentB,f.actorId);
   const third=await run(f,f.other,'committed','100000',f.employmentB,accountOther);
   t.diagnostic(JSON.stringify([first,second,third].map(run=>({documentId:run.documentId,warnings:run.calculationWarnings}))));
   const contributions=async(documentId:string)=>(await db.execute<{cpp:string;cpp2:string;ei:string}>(sql`
    select factors->>'C' as cpp,factors->>'C2' as cpp2,factors->>'EI' as ei from pay_stubs
-   where org_id=${f.orgId} and pay_run_document_id=${documentId}`)).rows[0]!;
+   where org_id=${f.orgId} and pay_run_document_id=${documentId}`, 'objects'))[0]!;
   const original=await contributions(first.documentId),rehired=await contributions(second.documentId),other=await contributions(third.documentId);
   for(const key of ['cpp','cpp2','ei'] as const){
    assert.ok(cmp(original[key],'0')>0,'The first native wage consumes each annual contribution limit');
@@ -136,24 +136,24 @@ test('different employers retain independent annual contribution room while same
   const currentB=await run(f,f.other,'draft');const b=await employeeYtd(currentB);
   const scopeA=await resolveStatutoryHistoryScope(db,{...currentA,country:'CA'});
   const scopeB=await resolveStatutoryHistoryScope(db,{...currentB,country:'CA'});
-  const history=async(scope:typeof scopeA)=>(await db.execute<{id:string;employmentId:string}>(sql`select s.id,s.employment_id as "employmentId"
-    from ${employerScopedStatutoryStubs(scope,{employeePartyId:f.employeeId})} s order by s.id`)).rows;
+  const history=async(scope:typeof scopeA)=>await db.execute<{id:string;employmentId:string}>(sql`select s.id,s.employment_id as "employmentId"
+    from ${employerScopedStatutoryStubs(scope,{employeePartyId:f.employeeId})} s order by s.id`, 'objects');
   const retainedA=await history(scopeA),retainedB=await history(scopeB);
   assert.equal(retainedA.length,2);assert.equal(retainedB.length,1);
   assert.deepEqual(new Set(retainedA.map(row=>row.employmentId)),new Set([f.employmentId,rehire]),'Employer-wide annual room retains same-payer rehires');
   assert.equal(retainedB[0]!.employmentId,f.employmentB,'A current party reassignment cannot reinterpret earlier payer history');
-  const employmentOnly=(await db.execute<{employmentId:string}>(sql`select s.employment_id as "employmentId"
-    from ${employerScopedStatutoryStubs(scopeA,{employeePartyId:f.employeeId,employmentId:rehire})} s`)).rows;
+  const employmentOnly=await db.execute<{employmentId:string}>(sql`select s.employment_id as "employmentId"
+    from ${employerScopedStatutoryStubs(scopeA,{employeePartyId:f.employeeId,employmentId:rehire})} s`, 'objects');
   assert.deepEqual(employmentOnly,[{employmentId:rehire}],'Pack-declared employment priors do not double count a previous spell already certified as prior pay');
   await assert.rejects(resolveStatutoryHistoryScope(db,{...currentB,country:'CA',subsidiaryId:f.subsidiaryId}),/actual pay-run legal employer/);
   assert.deepEqual(await history(scopeA),retainedA);assert.deepEqual(await history(scopeB),retainedB);
   const identity=(await db.execute<{createdAt:string;documentNumber:string}>(sql`select r.created_at::text as "createdAt",d.document_number as "documentNumber"
-    from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id where r.org_id=${f.orgId} and r.document_id=${currentB.documentId}`)).rows[0]!;
+    from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id where r.org_id=${f.orgId} and r.document_id=${currentB.documentId}`, 'objects'))[0]!;
   const siblings=await listPeriodSiblings(db,f.orgId,{documentId:currentB.documentId,...identity,payScheduleId:f.scheduleB,
     periodStart:'2026-05-31',periodEnd:'2026-06-13',payDate:'2026-06-15',runType:'supplemental'});
   assert.equal(siblings.length,2,'another employer cannot share period exemptions or sequencing');
-  const ownerRows=(await db.execute<{subsidiaryId:string}>(sql`select subsidiary_id as "subsidiaryId" from documents
-    where org_id=${f.orgId} and id=any(${`{${siblings.map(sibling=>sibling.document_id).join(',')}}`}::uuid[])`)).rows;
+  const ownerRows=await db.execute<{subsidiaryId:string}>(sql`select subsidiary_id as "subsidiaryId" from documents
+    where org_id=${f.orgId} and id=any(${`{${siblings.map(sibling=>sibling.document_id).join(',')}}`}::uuid[])`, 'objects');
   assert.ok(ownerRows.every(row=>row.subsidiaryId===f.other));
   for(const key of ['cpp','cpp2','ei'] as const){
    assert.equal(cmp(a[key],add(original[key],rehired[key])),0);
@@ -161,18 +161,18 @@ test('different employers retain independent annual contribution room while same
   }
   assert.deepEqual(await contributions(first.documentId),original,'Later employment and employer assignments preserve earlier committed factors');
   const originalRegion=(await db.execute<{province:string}>(sql`select province from pay_stubs
-    where org_id=${f.orgId} and pay_run_document_id=${first.documentId} and employee_party_id=${f.employeeId}`)).rows[0]!.province;
-  const byOriginalRegion=async()=> (await db.execute<{documentId:string}>(sql`
+    where org_id=${f.orgId} and pay_run_document_id=${first.documentId} and employee_party_id=${f.employeeId}`, 'objects'))[0]!.province;
+  const byOriginalRegion=async()=> await db.execute<{documentId:string}>(sql`
     select s.pay_run_document_id as "documentId"
       from ${employerScopedStatutoryStubs(scopeA,{employeePartyId:f.employeeId,region:originalRegion})} s
-     order by s.pay_run_document_id`)).rows;
+     order by s.pay_run_document_id`, 'objects');
   assert.equal((await byOriginalRegion()).length,2,'Levy history follows each retained assessment province');
   const changedCurrentRegion=originalRegion==='BC'?'ON':'BC';
   assert.equal((await db.execute(sql`update employee_payroll_profiles set province=${changedCurrentRegion}
-    where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length,1);
+    where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`, 'objects')).length,1);
   assert.equal((await byOriginalRegion()).length,2,'A current province change cannot relabel original levy assessments');
   assert.equal((await db.execute(sql`update pay_runs set run_status='voided'
-    where org_id=${f.orgId} and document_id=${first.documentId} returning document_id`)).rows.length,1);
+    where org_id=${f.orgId} and document_id=${first.documentId} returning document_id`, 'objects')).length,1);
   assert.deepEqual(await byOriginalRegion(),[{documentId:second.documentId}],
     'A voided WCB/EHT/CNT assessment releases its original province history');
   await assert.rejects(employeeYtd({...await run(f,f.other,'draft'),subsidiaryId:f.subsidiaryId}),/actual pay-run legal employer/);
@@ -184,7 +184,7 @@ test('unqualified opening payer refuses, exact source qualification replays, and
  try{await withOrgContext(f.orgId,async()=>{
   await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts:{cppYtd:'100',pensionableYtd:'10000',insurableYtd:'10000'}}]});
   const current=await run(f,f.subsidiaryId,'draft');await assert.rejects(employeeYtd(current),/opening payer is not source-qualified/);
-  const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows;
+  const before=await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`, 'objects');
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);
   const input={orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,subsidiaryId:f.subsidiaryId,
    expectedOpeningSha256:context.record.openingSha256,...await source(f,
@@ -193,12 +193,12 @@ test('unqualified opening payer refuses, exact source qualification replays, and
   await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
     values(${unrelated},${f.orgId},${f.subsidiaryId},'Unrelated legal employer','CAD','CA')`);
   await assert.rejects(qualifyOpeningEmployerAuthority({...input,subsidiaryId:unrelated}),/retained native employment/);
-  assert.equal((await db.execute(sql`select id from payroll_opening_employer_authorities where org_id=${f.orgId}`)).rows.length,0);
-  const packetFolder=(await db.execute<{id:string}>(sql`select folder_id as id from files where org_id=${f.orgId} and id=${input.sourceFileId}`)).rows[0]!.id;
-  assert.equal((await db.execute(sql`update folders set owner_id=null where org_id=${f.orgId} and id=${packetFolder} returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`select id from payroll_opening_employer_authorities where org_id=${f.orgId}`, 'objects')).length,0);
+  const packetFolder=(await db.execute<{id:string}>(sql`select folder_id as id from files where org_id=${f.orgId} and id=${input.sourceFileId}`, 'objects'))[0]!.id;
+  assert.equal((await db.execute(sql`update folders set owner_id=null where org_id=${f.orgId} and id=${packetFolder} returning id`, 'objects')).length,1);
   await assert.rejects(qualifyOpeningEmployerAuthority(input),error=>errorChainMatches(error,/Source file is unavailable to this operator/));
-  assert.equal((await db.execute(sql`select id from payroll_opening_employer_authorities where org_id=${f.orgId}`)).rows.length,0,'Uploading a source version does not bypass its current Cabinet privacy boundary');
-  assert.equal((await db.execute(sql`update folders set owner_id=${f.actorId} where org_id=${f.orgId} and id=${packetFolder} returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`select id from payroll_opening_employer_authorities where org_id=${f.orgId}`, 'objects')).length,0,'Uploading a source version does not bypass its current Cabinet privacy boundary');
+  assert.equal((await db.execute(sql`update folders set owner_id=${f.actorId} where org_id=${f.orgId} and id=${packetFolder} returning id`, 'objects')).length,1);
   await assert.rejects(qualifyOpeningEmployerAuthority({...input,expectedOpeningSha256:'f'.repeat(64)}),/source changed/);
   const qualified=await qualifyOpeningEmployerAuthority(input);assert.deepEqual(await qualifyOpeningEmployerAuthority(input),qualified);
   await assert.rejects(employeeYtd(current),/no complete statutory levy source allocation/);
@@ -208,8 +208,8 @@ test('unqualified opening payer refuses, exact source qualification replays, and
   await assert.rejects(qualifyOpeningEmployerAuthority({...input,allowedSubsidiaryIds:new Set([f.other])}),/outside your payroll authority/);
   await assert.rejects(db.execute(sql`update payroll_opening_balances set cpp_ytd=0 where org_id=${f.orgId}`),
    error=>errorChainMatches(error,/Source-qualified opening amounts must be preserved/));
-  assert.deepEqual((await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows,before);
-  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${f.orgId} and table_name='payroll_opening_employer_authorities'`)).rows[0]!.n,1);
+  assert.deepEqual(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`, 'objects'),before);
+  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${f.orgId} and table_name='payroll_opening_employer_authorities'`, 'objects'))[0]!.n,1);
  });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });
 
@@ -223,14 +223,14 @@ test('Canadian openings retain exact board, province, CNT, payer and sealed sour
   const sourceEvidence=await source(f,{wcbAssessableYtd:'123.45',ehtRemunerationYtd:'234.56'},f.subsidiaryId,caLevyAllocations('123.45','234.56','15.00'));
   await qualifyOpeningEmployerAuthority({orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
    subsidiaryId:f.subsidiaryId,expectedOpeningSha256:context.record.openingSha256,...sourceEvidence,allowedSubsidiaryIds:null});
-  const packetFolder=(await db.execute<{id:string}>(sql`select folder_id as id from files where org_id=${f.orgId} and id=${sourceEvidence.sourceFileId}`)).rows[0]!.id;
-  assert.equal((await db.execute(sql`update folders set owner_id=null where org_id=${f.orgId} and id=${packetFolder} returning id`)).rows.length,1);
+  const packetFolder=(await db.execute<{id:string}>(sql`select folder_id as id from files where org_id=${f.orgId} and id=${sourceEvidence.sourceFileId}`, 'objects'))[0]!.id;
+  assert.equal((await db.execute(sql`update folders set owner_id=null where org_id=${f.orgId} and id=${packetFolder} returning id`, 'objects')).length,1);
   await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:caLevyAllocations('123.45','234.56','15.00'),reason:'Retain the exact Canadian levy allocation',allowedSubsidiaryIds:null}),
    error=>errorChainMatches(error,/Source file is unavailable to this operator/));
-  assert.equal((await db.execute(sql`select id from payroll_opening_levy_source_authorities where org_id=${f.orgId}`)).rows.length,0);
-  assert.equal((await db.execute(sql`update folders set owner_id=${f.actorId} where org_id=${f.orgId} and id=${packetFolder} returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`select id from payroll_opening_levy_source_authorities where org_id=${f.orgId}`, 'objects')).length,0);
+  assert.equal((await db.execute(sql`update folders set owner_id=${f.actorId} where org_id=${f.orgId} and id=${packetFolder} returning id`, 'objects')).length,1);
   const allocations=caLevyAllocations('123.45','234.56','15.00');
   await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
@@ -252,10 +252,10 @@ test('Canadian openings retain exact board, province, CNT, payer and sealed sour
   assert.equal(await requireEmployerOpeningLevySources(db,{orgId:f.orgId,subsidiaryId:f.other,taxYear:2026,programKey:'ca_eht',region:'ON'}),'0',
    'Another legal employer with no opening history carries no prior EHT remuneration');
   const audit=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log
-   where org_id=${f.orgId} and table_name='payroll_opening_levy_source_authorities' and row_id=${qualified.id}`)).rows[0]!.n;
+   where org_id=${f.orgId} and table_name='payroll_opening_levy_source_authorities' and row_id=${qualified.id}`, 'objects'))[0]!.n;
   assert.equal(audit,1,'the source qualification and complete allocation snapshot have one native audit record');
   const allocationId=(await db.execute<{id:string}>(sql`select id from payroll_opening_levy_source_allocations
-   where org_id=${f.orgId} and authority_id=${qualified.id} limit 1`)).rows[0]!.id;
+   where org_id=${f.orgId} and authority_id=${qualified.id} limit 1`, 'objects'))[0]!.id;
   await assert.rejects(db.execute(sql`update payroll_opening_levy_source_allocations set amount=0
    where org_id=${f.orgId} and id=${allocationId}`),error=>errorChainMatches(error,/Payroll opening levy allocation rows are immutable/));
   await assert.rejects(db.execute(sql`delete from payroll_opening_levy_source_authorities
@@ -268,13 +268,13 @@ test('US openings retain original EIN and state scope after the account becomes 
  try{await withOrgContext(f.orgId,async()=>{
   const usEmployer=randomUUID();
   assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-    values(${usEmployer},${f.orgId},${f.subsidiaryId},'US legal employer','USD','US') returning id`)).rows.length,1);
+    values(${usEmployer},${f.orgId},${f.subsidiaryId},'US legal employer','USD','US') returning id`, 'objects')).length,1);
   await seedWorkerEmployment(f.orgId,f.employeeId,usEmployer);
   const einA=randomUUID();
   for(const [id,number,name] of [[einA,'33-3333333','US employer original EIN']]){
    assert.equal((await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,subsidiary_id,country,program_type,account_number,name,is_default,is_active,created_by,updated_by)
-    values(${id},${f.orgId},${usEmployer},'US','us_ein',${number},${name},false,true,${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+    values(${id},${f.orgId},${usEmployer},'US','us_ein',${number},${name},false,true,${f.actorId},${f.actorId}) returning id`, 'objects')).length,1);
   }
   await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts:{insurableYtd:'10000'}}]});
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});
@@ -300,7 +300,7 @@ test('US openings retain original EIN and state scope after the account becomes 
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:allocations.filter(row=>row.programKey!=='us_sui'),
    reason:'Retain original US wage bases by EIN and state',allowedSubsidiaryIds:null}),/SUI jurisdiction allocations/);
-  assert.equal((await db.execute(sql`update payroll_filing_accounts set is_active=false where org_id=${f.orgId} and id=${einA} returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`update payroll_filing_accounts set is_active=false where org_id=${f.orgId} and id=${einA} returning id`, 'objects')).length,1);
   const qualified=await qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,allocations,
    reason:'Retain original US wage bases by EIN and state',allowedSubsidiaryIds:null});
@@ -331,23 +331,23 @@ test('qualifying employer source after calculation makes unchanged opening amoun
    assert.equal(refused.errors[0]!.employeePartyId,f.employeeId);assert.equal(refused.errors[0]!.kind,'refusal');
    assert.match(refused.errors[0]!.message,/opening.*(source|legal-employer|qualif)/i);
    assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${f.orgId}
-    and pay_run_document_id=${input.documentId}`)).rows.length,0,'A source refusal leaves no partial employee stub');
+    and pay_run_document_id=${input.documentId}`, 'objects')).length,0,'A source refusal leaves no partial employee stub');
    await assert.rejects(commitPayRun(input),/refused|no calculated stubs/);
   };
   await calculateSourceRefusal();
-  const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows;
+  const before=await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`, 'objects');
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);
   const sourceEvidence=await source(f,amounts,f.subsidiaryId,allocations);
   const qualified=await qualifyOpeningEmployerAuthority({orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,subsidiaryId:f.subsidiaryId,
    expectedOpeningSha256:context.record.openingSha256,...sourceEvidence,allowedSubsidiaryIds:null});
-  assert.deepEqual((await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows,before);
+  assert.deepEqual(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`, 'objects'),before);
   assert.ok((await payRunStaleness(f.orgId,input.documentId)).reasons.includes('openingBalances'));
   await assert.rejects(commitPayRun(input),/openingBalances/);
   await calculateSourceRefusal();
   assert.deepEqual((await payRunStaleness(f.orgId,input.documentId)).reasons,[]);
-  const retained=(await db.execute<{snapshot:PayRunCalculationSourceSnapshot;digest:string}>(sql`
+  const retained=await db.execute<{snapshot:PayRunCalculationSourceSnapshot;digest:string}>(sql`
     select calculation_source_snapshot as snapshot,calculation_source_digest as digest
-    from pay_runs where org_id=${f.orgId} and document_id=${input.documentId}`)).rows;
+    from pay_runs where org_id=${f.orgId} and document_id=${input.documentId}`, 'objects');
   assert.equal(retained.length,1);
   assert.equal(payRunCalculationSourceDigest(retained[0]!.snapshot),retained[0]!.digest);
   assert.deepEqual(retained[0]!.snapshot.openingEmployerAuthorities,[],'A refused employee consumes no opening history');
@@ -357,9 +357,9 @@ test('qualifying employer source after calculation makes unchanged opening amoun
   assert.ok((await payRunStaleness(f.orgId,input.documentId)).reasons.includes('openingBalances'));
   await assert.rejects(commitPayRun(input),/openingBalances/);
   assert.deepEqual((await calculatePayRun(input)).errors,[]);
-  const calculated=(await db.execute<{snapshot:PayRunCalculationSourceSnapshot;digest:string}>(sql`
+  const calculated=await db.execute<{snapshot:PayRunCalculationSourceSnapshot;digest:string}>(sql`
     select calculation_source_snapshot as snapshot,calculation_source_digest as digest
-    from pay_runs where org_id=${f.orgId} and document_id=${input.documentId}`)).rows;
+    from pay_runs where org_id=${f.orgId} and document_id=${input.documentId}`, 'objects');
   assert.equal(calculated.length,1);
   const levySnapshot=calculated[0]!.snapshot;
   assert.equal(payRunCalculationSourceDigest(levySnapshot),calculated[0]!.digest);
@@ -432,7 +432,7 @@ test('employer-premium-only history requires original source facts and preserves
   const before=await read();assert.equal(before.hasMaterialHistory,true);assert.equal(before.hasWageHistory,false);
   assert.equal(before.openingSnapshot?.qpip_employer_ytd,'12.3456');
   assert.equal(before.facts?.originalCountry,'CA');assert.equal(before.facts?.originalCurrency,'CAD');
-  assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD' where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD' where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`, 'objects')).length,1);
   assert.deepEqual(await read(),before,'current employer configuration cannot reinterpret source-qualified original country or amounts');
   const other=await readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,subsidiaryId:f.other});
   assert.equal(other.hasOpening,false);
@@ -460,14 +460,14 @@ test('original SUI and PA LST allocations can be explicitly split between multip
  try{await withOrgContext(f.orgId,async()=>{
   const employer=randomUUID(),einA=randomUUID(),einB=randomUUID(),stateAccount=randomUUID();
   assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-    values(${employer},${f.orgId},${f.subsidiaryId},'Original US payer','USD','US') returning id`)).rows.length,1);
+    values(${employer},${f.orgId},${f.subsidiaryId},'Original US payer','USD','US') returning id`, 'objects')).length,1);
   await seedWorkerEmployment(f.orgId,f.employeeId,employer);
   for(const [id,number] of [[einA,'11-1111111'],[einB,'22-2222222']]){
    assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_default,is_active,created_by,updated_by)
-    values(${id},${f.orgId},${employer},'US','us_ein',${number},'Original EIN',false,true,${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+    values(${id},${f.orgId},${employer},'US','us_ein',${number},'Original EIN',false,true,${f.actorId},${f.actorId}) returning id`, 'objects')).length,1);
   }
   assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,state_code,account_number,name,is_default,is_active,created_by,updated_by)
-    values(${stateAccount},${f.orgId},${employer},'US','us_state_sui','PA','PA-original','Original Pennsylvania account',false,true,${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+    values(${stateAccount},${f.orgId},${employer},'US','us_state_sui','PA','PA-original','Original Pennsylvania account',false,true,${f.actorId},${f.actorId}) returning id`, 'objects')).length,1);
   const amounts={insurableYtd:'10000'};
   await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts}]});
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);

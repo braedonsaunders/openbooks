@@ -69,15 +69,15 @@ async function setupWorkspaceHarness() {
 }
 
 async function reviewRows(orgId: string, cycleId: string): Promise<Array<{ id: string; kind: string; status: string; reviewer: string; subject: string }>> {
-  return (await db.execute<{ id: string; kind: string; status: string; reviewer: string; subject: string }>(sql`
+  return await db.execute<{ id: string; kind: string; status: string; reviewer: string; subject: string }>(sql`
     select id, kind, status,
            reviewer_party_id as reviewer, subject_party_id as subject
-      from hrm_reviews where org_id = ${orgId} and cycle_id = ${cycleId}`)).rows;
+      from hrm_reviews where org_id = ${orgId} and cycle_id = ${cycleId}`, "objects");
 }
 
 async function answerIds(reviewId: string): Promise<string[]> {
   return (await db.execute<{ id: string }>(sql`
-    select id from hrm_review_answers where review_id = ${reviewId} order by position`)).rows.map((r) => r.id);
+    select id from hrm_review_answers where review_id = ${reviewId} order by position`, "objects")).map((r) => r.id);
 }
 
 test("an unlinked login gets the named NO_LINK refusal on every entry, never an empty list", { skip: !DB }, async () => {
@@ -140,7 +140,7 @@ test("a shared manager review reaches the subject with calibration stripped", { 
     await calibrateReview({ orgId: h.org.orgId, actorId: h.hrId, reviewId: managerReview.id, calibratedRating: "5", reason: "calibration round" });
     await shareReview({ orgId: h.org.orgId, actorId: h.managerId, reviewId: managerReview.id });
     const stored = (await db.execute<{ status: string; calibrated: string | null }>(sql`
-      select status, calibrated_rating::text as calibrated from hrm_reviews where id = ${managerReview.id}`)).rows[0]!;
+      select status, calibrated_rating::text as calibrated from hrm_reviews where id = ${managerReview.id}`, "objects"))[0]!;
     assert.equal(stored.status, "shared");
     assert.equal(stored.calibrated, "5.0000");
     const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
@@ -166,7 +166,7 @@ test("submit and acknowledge ride the existing services with storage proof", { s
     });
     assert.equal(submitted.status, "submitted");
     const storedSelf = (await db.execute<{ status: string; overall: string | null }>(sql`
-      select status, overall_rating::text as overall from hrm_reviews where id = ${selfReview.id}`)).rows[0]!;
+      select status, overall_rating::text as overall from hrm_reviews where id = ${selfReview.id}`, "objects"))[0]!;
     assert.equal(storedSelf.status, "submitted");
     assert.equal(storedSelf.overall, "4.0000");
     // Another person's review never submits: the service's reviewer
@@ -195,7 +195,7 @@ test("submit and acknowledge ride the existing services with storage proof", { s
     const acknowledged = await acknowledgeMyReview({ orgId: h.org.orgId, actorId: h.workerId, reviewId: managerReview.id });
     assert.equal(acknowledged.status, "acknowledged");
     const storedAck = (await db.execute<{ status: string }>(sql`
-      select status from hrm_reviews where id = ${managerReview.id}`)).rows[0]!;
+      select status from hrm_reviews where id = ${managerReview.id}`, "objects"))[0]!;
     assert.equal(storedAck.status, "acknowledged");
     // Acknowledging a review shared with someone else refuses by identity.
     await assert.rejects(
@@ -217,7 +217,7 @@ test("goal progress rides the existing service; another person's goal refuses", 
     const stored = (await db.execute<{ progress: number; notes: string }>(sql`
       select progress_percent as progress,
              (select count(*)::text from hrm_goal_updates where goal_id = ${goal.id}) as notes
-        from hrm_goals where id = ${goal.id}`)).rows[0]!;
+        from hrm_goals where id = ${goal.id}`, "objects"))[0]!;
     assert.equal(stored.progress, 50);
     assert.equal(stored.notes, "2", "creation plus the progress write both leave evidence");
     const workspace = await getMyReviewWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
@@ -231,7 +231,7 @@ test("goal progress rides the existing service; another person's goal refuses", 
       },
     );
     const untouched = (await db.execute<{ progress: number }>(sql`
-      select progress_percent as progress from hrm_goals where id = ${outsiderGoal.id}`)).rows[0]!;
+      select progress_percent as progress from hrm_goals where id = ${outsiderGoal.id}`, "objects"))[0]!;
     assert.equal(untouched.progress, 0, "the refused write moved nothing");
   });
 });
@@ -266,7 +266,7 @@ test("self-service elects inside an open window on the self keys alone, with fix
     const stored = (await db.execute<{ employee: string; employer: string; currency: string }>(sql`
       select employee_amount_per_period::text as employee,
              employer_amount_per_period::text as employer, currency
-        from hrm_benefit_enrollments where id = ${elected.id}`)).rows[0]!;
+        from hrm_benefit_enrollments where id = ${elected.id}`, "objects"))[0]!;
     assert.deepEqual([stored.employee, stored.employer, stored.currency], [null, null, "USD"]);
     const workspace = await getMyBenefitsWorkspace({ orgId: h.org.orgId, actorId: h.workerId });
     assert.ok(!(await listInbox({ orgId: h.org.orgId, actorId: h.workerId, asOf: new Date().toISOString() }, { kinds: ["hrm_benefit_enrollment_window"] })).some((item) => item.source.id === outOfScopeWindowId));
@@ -326,7 +326,7 @@ test("a closed window refuses elect and change by name; another employment id re
       },
     );
     const none = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_benefit_enrollments where org_id = ${h.org.orgId}`)).rows[0]!.n;
+      select count(*)::text as n from hrm_benefit_enrollments where org_id = ${h.org.orgId}`, "objects"))[0]!.n;
     assert.equal(none, "0", "every refused elect wrote nothing");
     // A live election changes inside the window and refuses outside it.
     const elected = await electMyBenefit({
@@ -350,7 +350,7 @@ test("a closed window refuses elect and change by name; another employment id re
     assert.equal(changed.status, "active");
     const chain = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_benefit_enrollments
-       where org_id = ${h.org.orgId} and employment_id = ${h.workerEmployment}`)).rows[0]!.n;
+       where org_id = ${h.org.orgId} and employment_id = ${h.workerEmployment}`, "objects"))[0]!.n;
     assert.equal(chain, "2", "the change ends the old row and opens the new one");
     // Another person's enrollment never changes through this path.
     await assert.rejects(

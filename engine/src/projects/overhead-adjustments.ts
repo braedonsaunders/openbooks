@@ -68,8 +68,8 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
          and source_system = ${sourceSystem}
          and source_ref = ${sourceRef}
        for update
-    `));
-    const existing = prior.rows[0];
+    `, "objects"));
+    const existing = prior[0];
     if (existing) {
       const equivalent =
         existing.project_id === input.projectId &&
@@ -101,8 +101,8 @@ async function recordProjectOverheadAdjustmentWithinTransaction(
       ${input.actorId ?? null}, ${input.actorId ?? null}
     )
     returning id
-  `));
-  const id = inserted.rows[0]!.id;
+  `, "objects"));
+  const id = inserted[0]!.id;
   await tx.execute(sql`
     insert into audit_log (
       org_id, table_name, row_id, action, changes, actor_id
@@ -212,8 +212,8 @@ export async function reverseProjectOverheadAdjustment(input: {
         from project_overhead_adjustments
        where org_id = ${input.orgId} and id = ${input.adjustmentId}
        for update
-    `));
-    const row = original.rows[0];
+    `, "objects"));
+    const row = original[0];
     if (!row) throw new Error("overhead adjustment not found");
 
     const reversalAmount = neg(row.amount);
@@ -238,7 +238,7 @@ export async function reverseProjectOverheadAdjustment(input: {
        where org_id = ${input.orgId}
          and reverses_adjustment_id = ${input.adjustmentId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (existing) {
       const equivalent =
         existing.project_id === row.project_id &&

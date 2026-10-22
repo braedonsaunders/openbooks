@@ -284,11 +284,11 @@ test(
 
 test("a client-side timeout names the timer and the remedy", () => {
   const message = describeBootstrapMigrationFailure(
-    "generated/0001_baseline.sql",
+    "baselines/example.sql",
     new Error("Query read timeout"),
     121_000,
   );
-  assert.ok(message.includes("generated/0001_baseline.sql"));
+  assert.ok(message.includes("baselines/example.sql"));
   assert.ok(message.includes("client-side") && message.includes("query_timeout"));
   assert.ok(message.includes("not a schema error"));
   assert.ok(message.includes("pg_stat_activity"));
@@ -306,13 +306,13 @@ test("a server-side statement timeout is reported as the server refusing", () =>
 
 test("an ordinary failure still carries the file, the elapsed time, and the cause", () => {
   const message = describeBootstrapMigrationFailure(
-    "generated/0002_kernel_hardening.sql",
+    "generated/0001_example.sql",
     new Error("duplicate key value violates unique constraint"),
     4_200,
   );
   assert.equal(
     message,
-    "[bootstrap] generated/0002_kernel_hardening.sql failed after 4.2s: "
+    "[bootstrap] generated/0001_example.sql failed after 4.2s: "
       + "duplicate key value violates unique constraint",
   );
 });

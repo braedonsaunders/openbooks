@@ -135,10 +135,10 @@ export async function transitionCrmAccountStage(
   const existing = (await executor.execute<{ id: string; lifecycle_stage: CrmLifecycleStage }>(sql`
     select id, lifecycle_stage from crm_account_profiles
      where org_id = ${input.orgId} and party_id = ${input.partyId} for update
-  `));
+  `, "objects"));
 
-  let profileId = existing.rows[0]?.id;
-  const fromStage = existing.rows[0]?.lifecycle_stage;
+  let profileId = existing[0]?.id;
+  const fromStage = existing[0]?.lifecycle_stage;
   if (!profileId) {
     if (!crmOn) {
       // No profile without CRM — but a new customer still needs its AR role.
@@ -151,14 +151,14 @@ export async function transitionCrmAccountStage(
     const status = (await executor.execute<{ id: string }>(sql`
       select id from crm_account_statuses
        where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage} and is_default and is_active
-       order by sequence limit 1`));
+       order by sequence limit 1`, "objects"));
     const inserted = (await executor.execute<{ id: string }>(sql`
       insert into crm_account_profiles
         (org_id, party_id, lifecycle_stage, status_id, converted_at, created_by, updated_by)
-      values (${input.orgId}, ${input.partyId}, ${input.toStage}, ${status.rows[0]?.id ?? null},
+      values (${input.orgId}, ${input.partyId}, ${input.toStage}, ${status[0]?.id ?? null},
               ${input.toStage === "customer" ? sql`now()` : null}, ${input.actorId}, ${input.actorId})
-      returning id`));
-    profileId = inserted.rows[0]!.id;
+      returning id`, "objects"));
+    profileId = inserted[0]!.id;
   } else if (fromStage === input.toStage) {
     // No stage movement — but a customer call still converges the role
     // (rows created while CRM was off, or by AR writers, may lack one).
@@ -176,13 +176,13 @@ export async function transitionCrmAccountStage(
           select id from crm_account_statuses
            where id = ${input.statusId} and org_id = ${input.orgId}
              and lifecycle_stage = ${input.toStage} and is_active
-           for share`)
+           for share`, "objects")
       : await executor.execute<{ id: string }>(sql`
           select id from crm_account_statuses
            where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage}
              and is_default and is_active
-           order by sequence limit 1 for share`);
-    if (!status.rows[0]) {
+           order by sequence limit 1 for share`, "objects");
+    if (!status[0]) {
       throw new CrmLifecycleRefusalError(
         input.statusId
           ? `choose an active status for ${input.toStage} before changing this account's stage`
@@ -200,7 +200,7 @@ export async function transitionCrmAccountStage(
            where org_id = ${input.orgId} and party_id = ${input.partyId}
              and (status in ('pending_approval', 'approved')
                   or (status = 'posted' and coalesce(open_balance, 0) <> 0))
-        ) as blocked`)).rows[0]?.blocked;
+        ) as blocked`, "objects"))[0]?.blocked;
       if (blocked) {
         throw new CrmLifecycleRefusalError(
           `cannot demote this customer back to ${input.toStage} while documents are in flight or carry an open balance — resolve in-flight transactions and open balances before changing the stage`,
@@ -208,19 +208,19 @@ export async function transitionCrmAccountStage(
       }
       const role = (await executor.execute<{ id: string }>(sql`
         select id from customer_roles
-         where org_id = ${input.orgId} and party_id = ${input.partyId} and is_active for update`));
-      if (role.rows[0]) {
+         where org_id = ${input.orgId} and party_id = ${input.partyId} and is_active for update`, "objects"));
+      if (role[0]) {
         const deactivated = (await executor.execute<{ id: string }>(sql`
           update customer_roles set is_active = false, updated_at = now(), updated_by = ${input.actorId}
-           where id = ${role.rows[0].id} and org_id = ${input.orgId} and is_active returning id`));
-        if (!deactivated.rows[0]) {
+           where id = ${role[0].id} and org_id = ${input.orgId} and is_active returning id`, "objects"));
+        if (!deactivated[0]) {
           throw new Error("customer role changed during demotion — retry the demotion");
         }
       }
     }
     await executor.execute(sql`
       update crm_account_profiles set lifecycle_stage = ${input.toStage},
-             status_id = ${status.rows[0].id},
+             status_id = ${status[0].id},
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${profileId} and org_id = ${input.orgId}`);
     await executor.execute(sql`
@@ -240,9 +240,9 @@ export async function transitionCrmAccountStage(
     const status = (await executor.execute<{ id: string }>(sql`
       select id from crm_account_statuses
        where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage} and is_default and is_active
-       order by sequence limit 1`));
+       order by sequence limit 1`, "objects"));
     await executor.execute(sql`
-      update crm_account_profiles set lifecycle_stage = ${input.toStage}, status_id = ${status.rows[0]?.id ?? null},
+      update crm_account_profiles set lifecycle_stage = ${input.toStage}, status_id = ${status[0]?.id ?? null},
              qualified_at = case when ${input.toStage} = 'prospect' and qualified_at is null then now() else qualified_at end,
              converted_at = case when ${input.toStage} = 'customer' and converted_at is null then now() else converted_at end,
              updated_at = now(), updated_by = ${input.actorId}
@@ -293,7 +293,7 @@ export async function promoteCrmAccount(
     select lifecycle_stage from crm_account_profiles
      where org_id = ${input.orgId} and party_id = ${input.partyId}
      for update
-  `)).rows[0]?.lifecycle_stage;
+  `, "objects"))[0]?.lifecycle_stage;
   if (current && current !== input.toStage && !shouldPromoteLifecycle(current, input.toStage)) {
     // Backward: already converged. With CRM off the lifecycle is frozen, the
     // same idle the transition answers; with CRM on the stage stands and the
@@ -304,7 +304,7 @@ export async function promoteCrmAccount(
     const role = (await executor.execute<{ id: string }>(sql`
       select id from customer_roles
        where org_id = ${input.orgId} and party_id = ${input.partyId} and is_active
-    `)).rows[0];
+    `, "objects"))[0];
     return { customerRoleActive: Boolean(role), lifecycleApplied: true, transitioned: false };
   }
   return transitionCrmAccountStage(executor, input);
@@ -325,7 +325,7 @@ export async function nextOpportunityNumber(orgId: string): Promise<string> {
     do update set next_number = number_sequences.next_number + 1
     where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
-  `));
-  const row = seq.rows[0]!;
+  `, "objects"));
+  const row = seq[0]!;
   return `${row.prefix}${String(row.next_number).padStart(row.padding, "0")}`;
 }

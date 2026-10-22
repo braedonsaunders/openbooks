@@ -18,8 +18,8 @@ test('ledger activity buckets preserve partial-month boundaries and statutory jo
            period_id, memo, status, origin)
         values
           (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
-           ${`SPLIT-BOUNDARY-${tag}`}, ${date}, ${org.periodId}, ${tag}, 'draft', ${origin}) returning id`);
-      assert.equal(entry.rows.length, 1);
+           ${`SPLIT-BOUNDARY-${tag}`}, ${date}, ${org.periodId}, ${tag}, 'draft', ${origin}) returning id`, 'objects');
+      assert.equal(entry.length, 1);
       const lines = await db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id,
@@ -28,13 +28,13 @@ test('ledger activity buckets preserve partial-month boundaries and statutory jo
           (${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId},
            ${amount}, 'CAD', ${amount}, '1'),
           (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId},
-           ${`-${amount}`}, 'CAD', ${`-${amount}`}, '1') returning id`);
-      assert.equal(lines.rows.length, 2);
+           ${`-${amount}`}, 'CAD', ${`-${amount}`}, '1') returning id`, 'objects');
+      assert.equal(lines.length, 2);
       if (isPosted) {
         const posted = await db.execute(sql`
           update journal_entries set status = 'posted', posted_at = now()
-           where id = ${entryId} and org_id = ${org.orgId} returning id`);
-        assert.equal(posted.rows.length, 1);
+           where id = ${entryId} and org_id = ${org.orgId} returning id`, 'objects');
+        assert.equal(posted.length, 1);
       }
     };
 
@@ -57,8 +57,8 @@ test('ledger activity buckets preserve partial-month boundaries and statutory jo
         select coalesce(sum(b.amount), 0)::text as amount
           from ${buckets} b
          where b.account_id = ${org.accounts.revenue}
-           and b.subsidiary_id = ${org.subsidiaryId}`);
-      assert.equal(result.rows[0]?.amount, "-100.0000");
+           and b.subsidiary_id = ${org.subsidiaryId}`, 'objects');
+      assert.equal(result[0]?.amount, "-100.0000");
       for (const [from, to, statementAmount, ledgerAmount] of [
         ['2026-07-01', '2026-07-10', '-100.0000', '-115.0000'],
         ['2026-07-01', '2026-07-31', '-150.0000', '-165.0000'],
@@ -70,8 +70,8 @@ test('ledger activity buckets preserve partial-month boundaries and statutory jo
           });
           const actual = await db.execute<{ amount: string }>(sql`
             select coalesce(sum(b.amount), 0)::text as amount from ${activity} b
-             where b.account_id = ${org.accounts.revenue} and b.subsidiary_id = ${org.subsidiaryId}`);
-          assert.equal(actual.rows[0]?.amount, includePeriodEndJournals ? ledgerAmount : statementAmount);
+             where b.account_id = ${org.accounts.revenue} and b.subsidiary_id = ${org.subsidiaryId}`, 'objects');
+          assert.equal(actual[0]?.amount, includePeriodEndJournals ? ledgerAmount : statementAmount);
         }
         const ledger = await generalLedger(from, to, {
           orgId: org.orgId, bookId: org.bookId, accountId: org.accounts.bank,

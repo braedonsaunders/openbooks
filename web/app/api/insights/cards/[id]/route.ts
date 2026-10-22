@@ -189,9 +189,9 @@ export const PATCH = defineRoute({
       and org_id = ${user.orgId}
       and updated_at = ${body.expectedUpdatedAt}::timestamptz
     returning *, ${cardRevisionSql(sql.raw("updated_at"))} as updated_at
-  `);
-          if (!updated.rows[0]) throw new CardRevisionConflictError();
-          return NextResponse.json(updated.rows[0]);
+  `, "objects");
+          if (!updated[0]) throw new CardRevisionConflictError();
+          return NextResponse.json(updated[0]);
         },
       );
       return outcome;
@@ -232,17 +232,17 @@ export const DELETE = defineRoute({
       select id, to_jsonb(d) as snapshot from insight_dashboards d
       where org_id = ${user.orgId} and layout @> ${JSON.stringify([{ cardId: id }])}::jsonb
       order by id for update
-    `);
+    `, "objects");
       await tx.execute(
         sql`delete from insight_cards where id = ${id} and org_id = ${user.orgId}`,
       );
-      for (const board of boards.rows) {
+      for (const board of boards) {
         const updated = await tx.execute(sql`
         update insight_dashboards set layout = coalesce((
           select jsonb_agg(elem) from jsonb_array_elements(layout) elem where elem->>'cardId' <> ${id}
         ), '[]'::jsonb), updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
         where id = ${board.id} and org_id = ${user.orgId} returning *
-      `);
+      `, "objects");
         await auditSetupChange(
           {
             orgId: user.orgId,
@@ -252,7 +252,7 @@ export const DELETE = defineRoute({
             actorId: user.id,
             changes: {
               before: board.snapshot,
-              after: updated.rows[0],
+              after: updated[0],
               reason: "Referenced card deleted",
             },
           },

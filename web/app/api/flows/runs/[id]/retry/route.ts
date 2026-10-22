@@ -36,7 +36,7 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: str
     select subject_kind as "subjectKind", subject_id as "subjectId"
       from flow_runs
      where id = ${id} and org_id = ${orgId}
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!run) return notFound("record")
 
   const subsidiaryDenied = guardSubsidiaryScope(

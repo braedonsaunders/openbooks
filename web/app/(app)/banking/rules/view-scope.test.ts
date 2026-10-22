@@ -20,7 +20,7 @@ const hooks = registerHooks({
     `);
     if (specifier === "@openbooks/engine/platform/db") return virtual(`
       const state = globalThis.__bankRuleViewScopeState;
-      export const db = { execute: async () => { state.queries += 1; return { rows: [] }; } };
+      export const db = { execute: async (_query, mode) => { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.queries += 1; return inMode({ rows: [] }); } };
       export async function withBypassContext(work) { return work(); }
       export async function ambientTenantOrgId() { return null; }
     `);

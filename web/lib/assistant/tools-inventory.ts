@@ -57,18 +57,18 @@ const searchItems: AssistantToolDef = {
        where ${where}
        order by i.name
        limit ${limit}
-    `));
+    `, "objects"));
     const total = (await db.execute<{ n: string }>(sql`
       select count(*) as n from items i where ${where}
-    `)).rows[0];
+    `, "objects"))[0];
     const count = Number(total?.n ?? 0);
     return {
       ok: true,
       data: {
         total: count,
-        returned: rows.rows.length,
-        truncated: count > rows.rows.length,
-        items: rows.rows.map((r) => ({
+        returned: rows.length,
+        truncated: count > rows.length,
+        items: rows.map((r) => ({
           ...(r as Record<string, unknown>),
           defaultRate: (r as Record<string, unknown>).defaultRate === null
             ? null : money((r as Record<string, unknown>).defaultRate),
@@ -131,7 +131,7 @@ const inventoryLevels: AssistantToolDef = {
     let where = sql`m.org_id = ${authz.user.orgId} and m.status = 'posted' ${scope}`;
     if (a.itemId) where = sql`${where} and m.item_id = ${a.itemId}`;
     if (a.stockLocationId) where = sql`${where} and m.stock_location_id = ${a.stockLocationId}`;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(sql`
       select i.id as item_id, i.code as item_code, i.name as item_name,
              sl.id as stock_location_id, sl.code as stock_location_code,
              coalesce(sum(m.quantity), 0) as quantity,
@@ -144,7 +144,7 @@ const inventoryLevels: AssistantToolDef = {
       having coalesce(sum(m.quantity), 0) <> 0
        order by i.name, sl.code
        limit ${limit + 1}
-    `)).rows;
+    `, "objects");
     const totals = (await db.execute<{ lines: string; quantity: string; value: string }>(sql`
       select count(*)::int as lines, coalesce(sum(sub.quantity), 0) as quantity,
              coalesce(sum(sub.value), 0) as value
@@ -155,7 +155,7 @@ const inventoryLevels: AssistantToolDef = {
            group by m.item_id, m.stock_location_id
           having coalesce(sum(m.quantity), 0) <> 0
         ) sub
-    `)).rows[0];
+    `, "objects"))[0];
     const page = assistantListPage(rows, limit, Number(totals?.lines ?? 0));
     return {
       ok: true,
@@ -208,7 +208,7 @@ const inventoryMovements: AssistantToolDef = {
     if (a.kind) where = sql`${where} and m.kind = ${a.kind}`;
     if (a.fromDate) where = sql`${where} and m.moved_at >= ${a.fromDate}::timestamptz`;
     if (a.toDate) where = sql`${where} and m.moved_at <= (${a.toDate}::date + interval '1 day')`;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(sql`
       select m.id, m.kind, m.moved_at as "movedAt", m.quantity, m.unit_cost as "unitCost",
              m.total_value as "totalValue", m.status, m.memo,
              m.reversal_reason as "reversalReason",
@@ -220,13 +220,13 @@ const inventoryMovements: AssistantToolDef = {
        where ${where}
        order by m.moved_at desc, m.created_at desc
        limit ${limit}
-    `)).rows;
+    `, "objects");
     const totals = (await db.execute<{ n: string; quantity: string; value: string }>(sql`
       select count(*) as n, coalesce(sum(m.quantity), 0) as quantity,
              coalesce(sum(m.total_value), 0) as value
         from inventory_movements m
        where ${where}
-    `)).rows[0];
+    `, "objects"))[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,
@@ -280,7 +280,7 @@ const inventoryWritedowns: AssistantToolDef = {
     if (a.stockLocationId) where = sql`${where} and w.stock_location_id = ${a.stockLocationId}`;
     if (a.fromDate) where = sql`${where} and w.date >= ${a.fromDate}`;
     if (a.toDate) where = sql`${where} and w.date <= ${a.toDate}`;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(sql`
       select w.id, w.date, w.kind, w.framework, w.quantity, w.previous_value as "previousValue",
              w.new_value as "newValue", w.amount, w.reversed_amount as "reversedAmount", w.memo,
              i.code as "itemCode", i.name as "itemName",
@@ -291,12 +291,12 @@ const inventoryWritedowns: AssistantToolDef = {
        where ${where}
        order by w.date desc, w.created_at desc
        limit ${limit}
-    `)).rows;
+    `, "objects");
     const totals = (await db.execute<{ n: string; amount: string }>(sql`
       select count(*) as n, coalesce(sum(w.amount), 0) as amount
         from inventory_writedowns w
        where ${where}
-    `)).rows[0];
+    `, "objects"))[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,

@@ -85,22 +85,6 @@ const connectorPaths = [
   /^engine\/src\/harness\/differential\//,
   /^integrations\//,
   /^schema\/src\/(?:extension|qbd)\.ts$/,
-  /^schema\/migrations\/generated\/0045_canonical_customer_parties\.sql$/,
-  // Connector configuration adoption must identify the adapter owning its saved fields.
-  /^schema\/migrations\/generated\/0788_connection_mapping_authority\.sql$/,
-  // Connector identity adoption names the persisted source metadata namespace.
-  /^schema\/migrations\/(?:generated|preflight)\/0795_crm_native_source_identity\.sql$/,
-  /^schema\/migrations\/generated\/0109_schema_convergence_and_legacy_evidence\.sql$/,
-  // 0246's header explains that the soft-close posting fence has to hold the
-  // same line a competitor's period-lock date does — connector-mapping
-  // rationale, in a file whose bytes are immutable once applied. A published
-  // migration cannot be reworded: bootstrap re-verifies its digest and
-  // refuses any change without an approved transition, so correcting the
-  // comment would break every database that already ran it. Scope is the
-  // only honest lever here, and it is why 0045 and 0109 are listed above.
-  // NEW migrations must still be vendor-neutral — this list may only be
-  // extended for one that has already been applied somewhere.
-  /^schema\/migrations\/generated\/0246_soft_close_posting_fence\.sql$/,
   // The perf-1m rehearsal seeder writes functional connector-branch rows:
   // its qbd_requests hang off a qbd connection, the stable source key the
   // connector reads. Display copy in the seeder stays vendor-neutral; only

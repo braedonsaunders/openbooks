@@ -25,9 +25,9 @@ export const GET = defineRoute({
 
   // Party record boundary (null-subsidiary parties are org-wide).
   const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from parties where id=${id} and org_id=${gate.user.orgId} limit 1`))
-  if (!party.rows[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+    select subsidiary_id as "subsidiaryId" from parties where id=${id} and org_id=${gate.user.orgId} limit 1`, 'objects'))
+  if (!party[0]) return notFound("record")
+  const scopeDenied = guardSubsidiaryScope(gate, party[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
   const url = new URL(request.url)
@@ -58,22 +58,22 @@ export const GET = defineRoute({
       select a.id,a.kind,a.status,a.subject,coalesce(a.starts_at,a.due_at,a.created_at) activity_date
         from crm_activities a where ${where}
        order by coalesce(a.starts_at,a.due_at,a.created_at) desc,a.created_at desc
-       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`),
-    db.execute<Record<string, unknown>>(sql`select count(*)::int count from crm_activities a where ${where}`),
+       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`, 'objects'),
+    db.execute<Record<string, unknown>>(sql`select count(*)::int count from crm_activities a where ${where}`, 'objects'),
     db.execute<Record<string, unknown>>(sql`
       select array_remove(array_agg(distinct a.kind order by a.kind),null) kinds,
              array_remove(array_agg(distinct a.status order by a.status),null) statuses
         from crm_activities a
-       where ${scoped}`),
+       where ${scoped}`, 'objects'),
   ]))
 
   return NextResponse.json({
-    rows: rows.rows,
-    total: Number(total.rows[0]?.count ?? 0),
+    rows,
+    total: Number(total[0]?.count ?? 0),
     page,
     perPage: PAGE_SIZE,
-    kinds: filters.rows[0]?.kinds ?? [],
-    statuses: filters.rows[0]?.statuses ?? [],
+    kinds: filters[0]?.kinds ?? [],
+    statuses: filters[0]?.statuses ?? [],
   })
   },
 })

@@ -58,11 +58,11 @@ export async function installCapTable(c: DemoContext): Promise<void> {
   const party = (key: string) => scenarioRecordId(c, "parties", key);
   const cash = account("financing-bank");
   const key = (name: string) => `industry-demo:${c.orgId}:equity:${name}`;
-  const one = async <T extends Record<string, unknown>>(query: ReturnType<typeof sql>): Promise<T | undefined> => (await db.execute(query)).rows[0] as T | undefined;
+  const one = async <T extends Record<string, unknown>>(query: ReturnType<typeof sql>): Promise<T | undefined> => (await db.execute(query, "objects"))[0] as T | undefined;
   const awaitingApproval = (what: string) => new SampleCompanyError(`The demonstration ${what} awaits approval; review the Equity action Flow before preparing the master.`);
 
-  const policies = (await db.execute<{ effective_from: string }>(sql`
-    select effective_from::text as effective_from from equity_account_policies where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId}`)).rows;
+  const policies = await db.execute<{ effective_from: string }>(sql`
+    select effective_from::text as effective_from from equity_account_policies where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId}`, "objects");
   if (policies.length && !policies.some((row) => row.effective_from === start)) {
     throw new SampleCompanyError(`This master carries an earlier cap table demonstration whose equity accounts take effect after ${start}. Prepare a fresh synthetic master to install the current cap table history.`);
   }
@@ -278,7 +278,7 @@ async function accountingPeriodOpen(c: DemoContext, date: string): Promise<boole
     select 1 from accounting_periods p
      where p.org_id = ${c.orgId} and not p.is_adjustment and ${date}::date between p.starts_on and p.ends_on
        and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${c.orgId} and is_default and is_active)
-       and not exists (select 1 from period_locks l where l.org_id = p.org_id and l.period_id = p.id and l.state <> 'open')`)).rows.length > 0;
+       and not exists (select 1 from period_locks l where l.org_id = p.org_id and l.period_id = p.id and l.state <> 'open')`, "objects")).length > 0;
 }
 
 /**
@@ -290,7 +290,7 @@ async function openPreLedgerYears(c: DemoContext, start: string): Promise<string
   const calendar = (await db.execute<{ id: string; year_start_month: number; first_year: number | null }>(sql`
     select c.id, c.year_start_month,
            (select min(p.fiscal_year) from accounting_periods p where p.org_id = c.org_id and p.fiscal_calendar_id = c.id) as first_year
-      from fiscal_calendars c where c.org_id = ${c.orgId} and c.is_default and c.is_active`)).rows[0];
+      from fiscal_calendars c where c.org_id = ${c.orgId} and c.is_default and c.is_active`, "objects"))[0];
   if (!calendar) throw new SampleCompanyError("The demonstration needs an active default fiscal calendar before its equity history can be recorded.");
   const firstYear = calendar.first_year ?? c.year;
   const years: number[] = [];
@@ -301,11 +301,11 @@ async function openPreLedgerYears(c: DemoContext, start: string): Promise<string
   }
   const generated: string[] = [];
   for (const year of years) {
-    const existing = (await db.execute(sql`select 1 from accounting_periods where org_id = ${c.orgId} and fiscal_calendar_id = ${calendar.id} and fiscal_year = ${year} limit 1`)).rows;
+    const existing = await db.execute(sql`select 1 from accounting_periods where org_id = ${c.orgId} and fiscal_calendar_id = ${calendar.id} and fiscal_year = ${year} limit 1`, "objects");
     if (existing.length) continue;
     await generateAccountingPeriods(c.orgId, calendar.id, year, c.actorId);
-    const periods = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${c.orgId} and fiscal_calendar_id = ${calendar.id} and fiscal_year = ${year} order by starts_on, is_adjustment`)).rows;
+    const periods = await db.execute<{ id: string }>(sql`
+      select id from accounting_periods where org_id = ${c.orgId} and fiscal_calendar_id = ${calendar.id} and fiscal_year = ${year} order by starts_on, is_adjustment`, "objects");
     if (!periods.length) throw new SampleCompanyError(`Fiscal year ${year} could not be generated for the equity history; review the default calendar in Period Close.`);
     generated.push(...periods.map((row) => row.id));
   }
@@ -315,7 +315,7 @@ async function openPreLedgerYears(c: DemoContext, start: string): Promise<string
 /** Close the generated pre-operating periods in every active book, every module, GL last. */
 async function closePreLedgerYears(c: DemoContext, periodIds: readonly string[]): Promise<void> {
   if (!periodIds.length) return;
-  const books = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${c.orgId} and is_active order by id`)).rows;
+  const books = await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${c.orgId} and is_active order by id`, "objects");
   for (const periodId of periodIds) {
     for (const book of books) {
       const banking = await evaluateBankingModuleClose(c.orgId, { periodId, bookId: book.id, actorId: c.actorId, acknowledgement: PRE_LEDGER_BANKING_ACKNOWLEDGEMENT });
@@ -340,7 +340,7 @@ async function monthlyRun(c: DemoContext, kind: "compensation" | "interest", thr
   const table = kind === "compensation" ? sql`equity_compensation_runs` : sql`equity_interest_runs`;
   const runs = (await db.execute<{ last: string | null; recorded: boolean }>(sql`
     select max(through_date)::text as last, bool_or(through_date = ${through}::date) as recorded
-      from ${table} where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId}`)).rows[0];
+      from ${table} where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId}`, "objects"))[0];
   if (runs?.recorded || (runs?.last && runs.last >= through) || !await periodOpen(through)) return;
   const input = { orgId: c.orgId, actorId: c.actorId, subsidiaryId: c.subsidiaryId, throughDate: through };
   const due = kind === "compensation"

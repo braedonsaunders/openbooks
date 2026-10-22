@@ -46,15 +46,16 @@ stubModules({
         backup_profile: {}, financial_profile: { marker: 'old' },
       }
       export const db = {
-        async execute() { return { rows: [] } },
+        async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) },
         async transaction(work) {
           return work({
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
-              if (text.includes('from project_types')) return { rows: [structuredClone(before)] }
-              if (text.includes('is distinct from')) return { rows: [{ changed: true }] }
-              if (text.includes('returning key')) return { rows: [{ key: 'custom' }] }
-              return { rows: [] }
+              if (text.includes('from project_types')) return inMode({ rows: [structuredClone(before)] })
+              if (text.includes('is distinct from')) return inMode({ rows: [{ changed: true }] })
+              if (text.includes('returning key')) return inMode({ rows: [{ key: 'custom' }] })
+              return inMode({ rows: [] })
             },
           })
         },

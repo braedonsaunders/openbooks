@@ -10,8 +10,8 @@ type Handler = (request: Request, context: { params: Promise<{ entity: string }>
 export async function seedSetupActor(org: ScratchOrg, state: SetupSession): Promise<string> {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   state.gate = { user: { orgId: org.orgId, id: actorId } };
-  const updated = await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":true}'::jsonb) where id=${org.orgId} returning id`);
-  if (updated.rows.length !== 1) throw new Error("Setup fixture organization was not updated");
+  const updated = await db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":true}'::jsonb) where id=${org.orgId} returning id`, "objects");
+  if (updated.length !== 1) throw new Error("Setup fixture organization was not updated");
   return actorId;
 }
 

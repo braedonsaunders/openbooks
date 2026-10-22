@@ -103,7 +103,7 @@ async function itemProfile(
   const row = (await runner.execute<{ base_unit: string; unit_conversions: unknown }>(sql`
     select base_unit, unit_conversions
       from item_inventory_profiles
-     where org_id = ${orgId} and item_id = ${itemId}`)).rows[0];
+     where org_id = ${orgId} and item_id = ${itemId}`, "objects"))[0];
   if (!row) return null;
   return {
     baseUnit: row.base_unit,
@@ -131,10 +131,10 @@ export async function livePurchaseOrderLineReceipts(
 ): Promise<{ quantity: string; value: string }> {
   const source = (await runner.execute<{ item_id: string }>(sql`
     select item_id from document_lines
-     where org_id = ${orgId} and id = ${purchaseOrderLineId}`)).rows[0];
+     where org_id = ${orgId} and id = ${purchaseOrderLineId}`, "objects"))[0];
   if (!source) return { quantity: "0", value: "0" };
   const profile = await itemProfile(runner, orgId, source.item_id);
-  const receipts = (await runner.execute<{ id: string }>(sql`
+  const receipts = await runner.execute<{ id: string }>(sql`
     select m.id
       from inventory_movements m
       join document_lines rl on rl.id = m.document_line_id and rl.org_id = m.org_id
@@ -142,7 +142,7 @@ export async function livePurchaseOrderLineReceipts(
      where m.org_id = ${orgId} and m.kind = 'receipt' and m.status = 'posted'
        and rd.kind = 'purchase_receipt'
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
-  `)).rows;
+  `, "objects");
   // One movement per receipt line in practice; each nets its own reversals
   // through the helper the vendor-return guard shares, so both readers
   // agree on what "received" means.
@@ -170,10 +170,10 @@ export async function livePurchaseOrderLineReceipts(
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
        and (c.idempotency_key like 'receipt-remainder-%'
             or c.idempotency_key like 'receipt-quantity-%')
-  `)).rows[0];
+  `, "objects"))[0];
   quantity = fromQuantityUnits(toQuantityUnits(quantity) + toQuantityUnits(corrections?.quantity ?? "0"));
   value = add(value, corrections?.value ?? "0");
-  const dropShipConfirmations = (await runner.execute<{ quantity: string; value: string; fx_rate: string; unit: string | null }>(sql`
+  const dropShipConfirmations = await runner.execute<{ quantity: string; value: string; fx_rate: string; unit: string | null }>(sql`
     select rl.quantity::text as quantity, rl.amount::text as value, rd.fx_rate::text as fx_rate, rl.unit as unit
       from document_lines rl
       join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
@@ -182,7 +182,7 @@ export async function livePurchaseOrderLineReceipts(
        and rd.status in ('approved', 'posted')
        and rd.custom ? 'dropShipConfirmation'
        and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
-  `)).rows;
+  `, "objects");
   for (const confirmation of dropShipConfirmations) {
     value = add(value, mulRate(confirmation.value, confirmation.fx_rate));
     // Receipt lines copy the order line's unit; convert to base so this
@@ -254,7 +254,7 @@ export async function liveLinkedBillReceipts(
   orgId: string,
   purchaseOrderLineId: string,
 ): Promise<LinkedBillReceipt[]> {
-  const movements = (await runner.execute<{ id: string; bill_id: string; bill_number: string }>(sql`
+  const movements = await runner.execute<{ id: string; bill_id: string; bill_number: string }>(sql`
     select m.id, bill.id as bill_id, bill.document_number as bill_number
       from inventory_movements m
       join document_lines bl on bl.id = m.document_line_id and bl.org_id = m.org_id
@@ -264,7 +264,7 @@ export async function liveLinkedBillReceipts(
        and (bl.custom->>'purchaseOrderLineId' = ${purchaseOrderLineId}
             or bl.custom->'convertedFrom'->>'lineId' = ${purchaseOrderLineId})
      order by bill.document_number, m.id
-  `)).rows;
+  `, "objects");
   const byBill = new Map<string, LinkedBillReceipt>();
   for (const movement of movements) {
     const live = await liveReceiptQuantity(runner, orgId, movement.id);
@@ -402,7 +402,7 @@ export async function matchablePurchaseOrderLines(
   // but never a non-root entity.
   const rootId = (await loadSubsidiaryContext(runner, orgId)).rootId;
   const entityId = scope.subsidiaryId ?? rootId;
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     purchase_order_id: string;
     purchase_order_number: string;
     purchase_order_line_id: string;
@@ -431,7 +431,7 @@ export async function matchablePurchaseOrderLines(
        and dl.item_id = ${scope.itemId}
        and (d.party_id is not distinct from ${scope.partyId})
        and coalesce(d.subsidiary_id, ${rootId}) = ${entityId}
-     order by d.document_number, dl.line_number`)).rows;
+     order by d.document_number, dl.line_number`, "objects");
   const baseUnit = (await itemProfile(runner, orgId, scope.itemId))?.baseUnit ?? null;
   const result: MatchablePurchaseOrderLine[] = [];
   for (const row of rows) {

@@ -56,7 +56,7 @@ export const STORED_VISIT_JOINS = sql`from service_visits v
 export async function lockVisit(orgId: string, visitId: unknown): Promise<StoredVisit> {
   const id = requireUuid(visitId, "Visit");
   const row = (await db.execute<StoredVisit>(sql`select ${STORED_VISIT_COLUMNS} ${STORED_VISIT_JOINS}
-    where v.org_id = ${orgId} and v.id = ${id} for update of v`)).rows[0];
+    where v.org_id = ${orgId} and v.id = ${id} for update of v`, "objects"))[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
@@ -67,10 +67,10 @@ export function checkVisitRevision(visit: StoredVisit, expected: unknown): void 
 
 /** Technicians holding a live booking on the visit. */
 export async function visitTechnicians(orgId: string, visitId: string): Promise<{ entryId: string; revision: number; workerPartyId: string; boardId: string; startsAt: string; endsAt: string }[]> {
-  return (await db.execute<{ entryId: string; revision: number; workerPartyId: string; boardId: string; startsAt: string; endsAt: string }>(sql`select e.id as "entryId", e.revision,
+  return await db.execute<{ entryId: string; revision: number; workerPartyId: string; boardId: string; startsAt: string; endsAt: string }>(sql`select e.id as "entryId", e.revision,
       e.worker_party_id as "workerPartyId", e.board_id as "boardId", ${INSTANT(sql`e.starts_at`)} as "startsAt", ${INSTANT(sql`e.ends_at`)} as "endsAt"
     from schedule_entries e where e.org_id = ${orgId} and e.service_visit_id = ${visitId} and e.status = 'published'
-    order by e.starts_at, e.id`)).rows;
+    order by e.starts_at, e.id`, "objects");
 }
 
 export interface VisitAuthority {
@@ -128,25 +128,25 @@ export async function moveVisitStatus(actor: ServiceActor, visit: StoredVisit, c
     : change.to === "en_route" ? sql`, en_route_at = now()`
       : change.to === "on_site" ? sql`, arrived_at = coalesce(arrived_at, now())`
         : sql``;
-  const updated = (await db.execute<{ revision: number }>(sql`update service_visits set status = ${change.to}, revision = revision + 1,
+  const updated = await db.execute<{ revision: number }>(sql`update service_visits set status = ${change.to}, revision = revision + 1,
       updated_at = now(), updated_by = ${actorRef(actor)} ${stamp} ${change.set ? sql`, ${change.set}` : sql``}
-    where org_id = ${actor.orgId} and id = ${visit.id} and revision = ${visit.revision} returning revision`)).rows;
+    where org_id = ${actor.orgId} and id = ${visit.id} and revision = ${visit.revision} returning revision`, "objects");
   if (updated.length !== 1) throw stale("This visit");
   const revision = updated[0]!.revision;
-  requireOne((await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, worker_party_id, reason)
-    values (${actor.orgId}, ${visit.id}, ${visit.status}, ${change.to}, ${revision}, ${actorRef(actor)}, ${change.workerPartyId ?? null}, ${change.reason ?? null}) returning id`)).rows, "The visit history");
+  requireOne(await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, worker_party_id, reason)
+    values (${actor.orgId}, ${visit.id}, ${visit.status}, ${change.to}, ${revision}, ${actorRef(actor)}, ${change.workerPartyId ?? null}, ${change.reason ?? null}) returning id`, "objects"), "The visit history");
   return revision;
 }
 
 /** Bump a visit's revision for a change that keeps its status (a reschedule), recording it in the history. */
 export async function touchVisit(actor: ServiceActor, visit: StoredVisit, reason: string | null, set?: ReturnType<typeof sql>): Promise<number> {
-  const updated = (await db.execute<{ revision: number }>(sql`update service_visits set revision = revision + 1, updated_at = now(), updated_by = ${actorRef(actor)}
+  const updated = await db.execute<{ revision: number }>(sql`update service_visits set revision = revision + 1, updated_at = now(), updated_by = ${actorRef(actor)}
       ${set ? sql`, ${set}` : sql``}
-    where org_id = ${actor.orgId} and id = ${visit.id} and revision = ${visit.revision} returning revision`)).rows;
+    where org_id = ${actor.orgId} and id = ${visit.id} and revision = ${visit.revision} returning revision`, "objects");
   if (updated.length !== 1) throw stale("This visit");
   const revision = updated[0]!.revision;
-  requireOne((await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, reason)
-    values (${actor.orgId}, ${visit.id}, ${visit.status}, ${visit.status}, ${revision}, ${actorRef(actor)}, ${reason}) returning id`)).rows, "The visit history");
+  requireOne(await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, reason)
+    values (${actor.orgId}, ${visit.id}, ${visit.status}, ${visit.status}, ${revision}, ${actorRef(actor)}, ${reason}) returning id`, "objects"), "The visit history");
   return revision;
 }
 
@@ -185,19 +185,19 @@ export async function insertVisit(actor: ServiceActor, input: {
 }): Promise<string> {
   const parentFilter = input.jobId ? sql`job_id = ${input.jobId}` : sql`request_id = ${input.requestId}`;
   const sequence = (await db.execute<{ next: number }>(sql`select coalesce(max(sequence), 0) + 1 as next from service_visits
-    where org_id = ${actor.orgId} and ${parentFilter}`)).rows[0]!.next;
+    where org_id = ${actor.orgId} and ${parentFilter}`, "objects"))[0]!.next;
   const v = input.visit;
-  const row = requireOne((await db.execute<{ id: string }>(sql`insert into service_visits
+  const row = requireOne(await db.execute<{ id: string }>(sql`insert into service_visits
       (id, org_id, subsidiary_id, kind, request_id, job_id, sequence, agreement_id, agreement_version_id, occurs_on, status, priority,
        required_qualification_type_ids, estimated_minutes, preferred_on, window_starts_at, window_ends_at, sla_due_at, instructions, created_by, updated_by)
     values (${input.id ?? sql`public.uuid_generate_v7()`}, ${actor.orgId}, ${input.subsidiaryId}, ${input.kind}, ${input.requestId}, ${input.jobId}, ${sequence},
       ${input.agreement?.agreementId ?? null}, ${input.agreement?.versionId ?? null}, ${input.agreement?.occursOn ?? null}, 'unscheduled', ${v.priority},
       ${`{${v.requiredQualificationTypeIds.join(",")}}`}::uuid[], ${v.estimatedMinutes}, ${v.preferredOn}, ${v.windowStartsAt}, ${v.windowEndsAt}, ${input.slaDueAt},
       ${v.instructions}, ${actorRef(actor)}, ${actorRef(actor)})
-    returning id`)).rows, "The visit");
-  requireOne((await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, reason)
+    returning id`, "objects"), "The visit");
+  requireOne(await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, reason)
     values (${actor.orgId}, ${row.id}, null, 'unscheduled', 1, ${actorRef(actor)},
-      ${input.agreement ? `Generated from the agreement for ${input.agreement.occursOn}` : null}) returning id`)).rows, "The visit history");
+      ${input.agreement ? `Generated from the agreement for ${input.agreement.occursOn}` : null}) returning id`, "objects"), "The visit history");
   return row.id;
 }
 
@@ -275,9 +275,9 @@ export async function cancelVisitInTransaction(actor: ServiceActor, visit: Store
     throw new ServiceError(`A visit that is ${visit.status.replace(/_/g, " ")} cannot be cancelled.`, { status: 409, code: "service_invalid_transition", remedy: "Record it as unable to complete instead, or complete it." });
   }
   for (const booking of await visitTechnicians(actor.orgId, visit.id)) {
-    const cancelled = (await db.execute(sql`update schedule_entries set status = 'cancelled', revision = revision + 1, reason = ${reason},
+    const cancelled = await db.execute(sql`update schedule_entries set status = 'cancelled', revision = revision + 1, reason = ${reason},
         updated_at = now(), updated_by = ${actor.actorId === SYSTEM_ACTOR ? sql`updated_by` : actor.actorId}
-      where org_id = ${actor.orgId} and id = ${booking.entryId} and revision = ${booking.revision} and status = 'published' returning id`)).rows;
+      where org_id = ${actor.orgId} and id = ${booking.entryId} and revision = ${booking.revision} and status = 'published' returning id`, "objects");
     if (cancelled.length !== 1) throw stale("A booking of this visit");
   }
   return moveVisitStatus(actor, visit, { to: "cancelled", reason, set: sql`cancel_kind = ${kind}, outcome_reason = ${reason}` });

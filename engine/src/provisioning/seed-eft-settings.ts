@@ -32,9 +32,9 @@ const placeholders = {
 };
 
 export async function seedEftSettings(orgIdArg: string | undefined): Promise<{ id: string; name: string }> {
-  const orgs = (await db.execute<{ id: string; name: string }>(sql`
+  const orgs = await db.execute<{ id: string; name: string }>(sql`
     select id, name from orgs order by created_at
-  `)).rows;
+  `, "objects");
   const orgId = requireExplicitOrgId(orgIdArg, orgs, "seed-eft-settings.ts");
   const org = orgs.find((candidate) => candidate.id.toLowerCase() === orgId.toLowerCase());
   if (!org) {

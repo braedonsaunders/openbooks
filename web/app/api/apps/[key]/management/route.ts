@@ -26,19 +26,19 @@ export const GET = defineRoute({
     const orgId = gate.user.orgId
     const result =
         section === 'versions'
-          ? await db.execute(sql`
+          ? await db.execute<Record<string, unknown>>(sql`
         select id, version, status, created_at as at, created_by as actor_id
         from app_versions where org_id=${orgId} and app_id=${app.id} order by created_at desc,id desc limit 26 offset ${offset}`)
           : section === 'runs'
-            ? await db.execute(sql`
+            ? await db.execute<Record<string, unknown>>(sql`
         select id,version_id,endpoint,status,units,logs,error_message,duration_ms,actor_id,at
         from app_runs where org_id=${orgId} and app_id=${app.id} order by at desc,id desc limit 26 offset ${offset}`)
             : section === 'audit'
-              ? await db.execute(sql`
+              ? await db.execute<Record<string, unknown>>(sql`
         select id,action,changes,actor_id,at from audit_log where org_id=${orgId} and ((table_name='apps' and row_id=${app.id}) or (table_name='app_listings' and row_id in (select id from app_listings where publisher_org_id=${orgId} and key=${key})) or (table_name='extension_drafts' and row_id in (select id from extension_drafts where org_id=${orgId} and extension_key=${key})))
         order by at desc,id desc limit 26 offset ${offset}`)
               : section === 'storage'
-                ? await db.execute(sql`
+                ? await db.execute<Record<string, unknown>>(sql`
         select id,namespace,key,value,updated_at as at,updated_by as actor_id from app_storage
         where org_id=${orgId} and app_id=${app.id} order by namespace,key,id limit 26 offset ${offset}`)
                 : null

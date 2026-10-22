@@ -34,20 +34,17 @@ resume workers after checking authorization and delivery behavior. The worker
 must reach the web application's internal render endpoint using the configured
 internal URL and token, including the new authorization-only request.
 
-- `0086_report_authorization_evidence.sql` adds evidence columns and prevents
-  changing a run's original authorization snapshot. Existing report bytes and
-  schedules remain stored. Historical artifacts without evidence are denied;
-  regenerate them under an authorized user. Existing schedules require an
-  authorized edit before they can execute. Do not infer old scope from today's
-  mutable report definition or backfill invented authorization evidence.
-- `0087_charge_rate_fraction_evidence.sql` widens component display quantities
-  to eight decimals and adds an exact numerator/denominator snapshot. It
-  preserves historical money and legacy components with SQL NULL evidence.
-  The governed query view is recreated transactionally with its existing
-  projection, owner, options, grants and comments. Unexpected dependent views
-  stop the migration without a cascading drop.
+- Report runs carry authorization evidence, and the database refuses changes
+  to a run's original authorization snapshot. Artifacts without evidence are
+  denied; regenerate them under an authorized user. A schedule without an
+  authorization snapshot requires an authorized edit before it can execute.
+  Do not infer old scope from today's mutable report definition or backfill
+  invented authorization evidence.
+- Charge-rate components store display quantities to eight decimals with an
+  exact numerator/denominator snapshot. Components recorded without that
+  evidence keep SQL NULL evidence and their historical money unchanged.
 
-The migrations are forward-only. An older application restores the original
+Schema changes are forward-only. An older application restores the original
 security defects and is not a supported application-only rollback. Follow the
 recovery-set rollback procedure if the deployment must be reverted.
 

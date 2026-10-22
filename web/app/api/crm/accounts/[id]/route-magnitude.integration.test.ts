@@ -49,7 +49,7 @@ async function fixture() {
   const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Magnitude Account', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   await withBypassContext(() => db.execute(sql`
     insert into crm_account_profiles (org_id, party_id, lifecycle_stage, annual_revenue, employee_count)
     values (${org.orgId}, ${partyId}, 'lead', '100.0000', 10)`))
@@ -73,9 +73,9 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 }
 
 async function profile(partyId: string) {
-  const rows = (await withOrgContext(state.orgId, () => db.execute<{ annual_revenue: string | null; employee_count: number | null }>(sql`
+  const rows = await withOrgContext(state.orgId, () => db.execute<{ annual_revenue: string | null; employee_count: number | null }>(sql`
     select annual_revenue::text as annual_revenue, employee_count
-      from crm_account_profiles where party_id = ${partyId}`))).rows
+      from crm_account_profiles where party_id = ${partyId}`, 'objects'))
   return rows[0]!
 }
 
@@ -85,7 +85,7 @@ async function profile(partyId: string) {
 async function revisionFor(partyId: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
-      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+      from crm_account_profiles where party_id = ${partyId}`, 'objects')))[0]!.revision
 }
 
 test('PATCH refuses an employee count outside int32 without writing', async () => {

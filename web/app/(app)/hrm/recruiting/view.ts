@@ -553,8 +553,7 @@ export async function loadRecruitingPage(
       // Panel candidates: employees (parties holding an employment) inside
       // the viewer's subsidiary scope — ids, never labels; out-of-scope
       // holders stay absent rather than leaking existence.
-      const employeeRows = (
-        await db.execute<{ id: string; name: string }>(sql`
+      const employeeRows = await db.execute<{ id: string; name: string }>(sql`
         select p.id::text as id, p.display_name as name
           from worker_employments e
           join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
@@ -569,17 +568,14 @@ export async function loadRecruitingPage(
                  )})`
                : sql``
            }
-         order by p.display_name limit 200`)
-      ).rows
+         order by p.display_name limit 200`, 'objects')
       // The offer draft inherits the opening's legal entity: resolve its
       // display name (never the raw id) plus the authorized employers the
       // caller may instead choose. The POST route stays authoritative.
-      const offerEmployerName = (
-        await db.execute<{ name: string }>(sql`
+      const offerEmployerName = (await db.execute<{ name: string }>(sql`
         select name from subsidiaries
          where org_id = ${authz.user.orgId}::uuid and id = ${detail.employerSubsidiaryId}
-         limit 1`)
-      ).rows[0]?.name
+         limit 1`, 'objects'))[0]?.name
       if (!offerEmployerName) {
         throw new Error(
           `requisition ${detail.requisitionNumber} names an employer outside this organization`,
@@ -805,12 +801,10 @@ export async function loadRecruitingPage(
       // The saved offer's legal entity: resolve the persisted employer's
       // display name (never the raw id) so the reviewer sees which entity
       // employs the candidate. Fail closed like the requisition branch.
-      const offerEmployerName = (
-        await db.execute<{ name: string }>(sql`
+      const offerEmployerName = (await db.execute<{ name: string }>(sql`
         select name from subsidiaries
          where org_id = ${authz.user.orgId}::uuid and id = ${detail.employerSubsidiaryId}
-         limit 1`)
-      ).rows[0]?.name
+         limit 1`, 'objects'))[0]?.name
       if (!offerEmployerName) {
         throw new Error(
           `offer ${offerId} names an employer outside this organization`,
@@ -964,12 +958,10 @@ export async function loadRecruitingPage(
         employerRefusal = t('recruiting.create.noEmployer')
       }
     }
-    const departmentRows = (
-      await db.execute<{ id: string; name: string }>(sql`
+    const departmentRows = await db.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from departments
        where org_id = ${authz.user.orgId}::uuid and is_active
-       order by name`)
-    ).rows
+       order by name`, 'objects')
     const jobDescriptions = await listActiveJobDescriptions({
       orgId: authz.user.orgId,
       actorId: authz.user.id,

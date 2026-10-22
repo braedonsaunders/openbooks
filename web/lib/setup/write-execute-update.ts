@@ -261,8 +261,8 @@ export async function updateSetupRecord(
         const currentRes = ((await tx.execute(sql`
           select * from pay_derived_rules
            where id = ${id} and org_id = ${orgId}
-           for update`)))
-        const current = currentRes.rows[0] as Record<string, unknown> | undefined
+           for update`, 'objects')))
+        const current = currentRes[0] as Record<string, unknown> | undefined
         if (!current) throw new Error('not found')
 
         const valueFor = (column: string) => builtByColumn.has(column)
@@ -277,8 +277,8 @@ export async function updateSetupRecord(
               ${sql.join(built.cols.map(column => sql`${sql.raw(column.column)} = ${bindSetupValue(column.value)}`), sql`, `)},
               updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${orgId}
-            returning id`)))
-          if (!updated.rows.length) throw new Error('not found')
+            returning id`, 'objects')))
+          if (!updated.length) throw new Error('not found')
           await audit({
             orgId,
             table: entity.table,
@@ -334,9 +334,9 @@ export async function updateSetupRecord(
         const inserted = ((await tx.execute(sql`
           insert into pay_derived_rules (${sql.raw(successorColumns.join(', '))})
           values (${sql.join(successorValues, sql`, `)})
-          returning id`)))
-        if (inserted.rows.length !== 1) throw new Error('a successor derived rule version could not be created')
-        const successorId = String(inserted.rows[0]!.id)
+          returning id`, 'objects')))
+        if (inserted.length !== 1) throw new Error('a successor derived rule version could not be created')
+        const successorId = String(inserted[0]!.id)
 
         // Request match image for the successor insert audit, mirroring the
         // POST path: the exact coerced columns the insert stores (actor
@@ -409,8 +409,8 @@ export async function updateSetupRecord(
         const currentRes = ((await tx.execute(sql`
           select * from recognition_rules
            where id = ${id} and org_id = ${orgId}
-           for update`)))
-        const current = currentRes.rows[0] as Record<string, unknown> | undefined
+           for update`, 'objects')))
+        const current = currentRes[0] as Record<string, unknown> | undefined
         if (!current) throw new Error('not found')
 
         // Omission is not a change: buildRow materializes unsubmitted
@@ -425,10 +425,10 @@ export async function updateSetupRecord(
         }
         const changedPolicy = policyColumns.some((column) =>
           comparableSetupValue(valueFor(column)) !== comparableSetupValue(current[column]))
-        const used = ((await tx.execute(sql`
+        const used = (await tx.execute(sql`
           select 1 from performance_obligations
            where org_id = ${orgId} and recognition_rule_id = ${id}
-           limit 1`))).rows.length > 0
+           limit 1`, 'objects')).length > 0
 
         if (!changedPolicy || !used) {
           const slotted = applyRuleSlotColumns(entity.key, body, built.cols)
@@ -451,8 +451,8 @@ export async function updateSetupRecord(
           const updated = ((await tx.execute(sql`
             update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
              where ${sql.raw(idColumn(entity))} = ${id} and org_id = ${orgId}
-            returning ${sql.raw(idColumn(entity))} as id`)))
-          if (updated.rows.length === 0) throw new Error('not found')
+            returning ${sql.raw(idColumn(entity))} as id`, 'objects')))
+          if (updated.length === 0) throw new Error('not found')
           const members = multirefField(entity)
           if (members && Array.isArray(body[members.key])) {
             await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
@@ -501,8 +501,8 @@ export async function updateSetupRecord(
         const inserted = ((await tx.execute(sql`
           insert into recognition_rules (${sql.raw(successorColumns.join(', '))})
           values (${sql.join(successorValues, sql`, `)})
-          returning id`)))
-        if (inserted.rows.length !== 1) throw new Error('a successor rule version could not be created')
+          returning id`, 'objects')))
+        if (inserted.length !== 1) throw new Error('a successor rule version could not be created')
         await tx.execute(sql`
           update items
              set recognition_rule_id = ${successorId},
@@ -633,8 +633,8 @@ export async function updateSetupRecord(
       const updated = ((await tx.execute(sql`
         update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
          where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
-        returning ${sql.raw(idColumn(entity))} as id`)))
-      if (updated.rows.length === 0) {
+        returning ${sql.raw(idColumn(entity))} as id`, 'objects')))
+      if (updated.length === 0) {
         // customer-price-level-assignments: deactivating a never-effective
         // future-start assignment removes the row in
         // customer_price_level_end_date_on_deactivate instead of leaving a

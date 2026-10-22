@@ -81,8 +81,8 @@ async function seedBeforeVoidScript(
          '{features,queryConsole}', 'true'::jsonb, true)
      where id = ${org.orgId}
      returning id
-  `);
-  if (!enabled.rows[0]) {
+  `, "objects");
+  if (!enabled[0]) {
     throw new Error(`scripts/queryConsole feature write matched 0 rows for org ${org.orgId}`);
   }
   // The probe calls ob.query AND ob.journal.create, and those are separate
@@ -96,8 +96,8 @@ async function seedBeforeVoidScript(
      where org_id = ${org.orgId}
        and id in (select role_id from role_assignments where org_id = ${org.orgId} and user_id = ${actorId})
      returning id
-  `);
-  if (!granted.rows[0]) {
+  `, "objects");
+  if (!granted[0]) {
     throw new Error(`sql.execute/gl.post grant matched 0 roles for actor ${actorId}`);
   }
   await db.execute(sql`
@@ -113,8 +113,8 @@ async function seedBeforeVoidScript(
 }
 
 async function countRows(query: ReturnType<typeof sql>): Promise<number> {
-  const result = await db.execute<{ count: number }>(query);
-  return Number(result.rows[0]!.count);
+  const result = await db.execute<{ count: number }>(query, "objects");
+  return Number(result[0]!.count);
 }
 
 /** Poll until the expected number of document lifecycle commands waits on a row lock. */
@@ -131,8 +131,8 @@ async function waitForDocumentLockWaiters(holderPid: number, expected: number): 
         select activity.pid from pg_stat_activity activity join waiting parent
           on parent.pid=any(pg_blocking_pids(activity.pid))
          where activity.datname=current_database()
-      ) select count(*)::int as count from waiting`);
-    if (Number(waiting.rows[0]?.count ?? 0) >= expected) return;
+      ) select count(*)::int as count from waiting`, "objects");
+    if (Number(waiting[0]?.count ?? 0) >= expected) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   assert.fail(`timed out waiting for ${expected} document lock waiter(s)`);
@@ -252,8 +252,8 @@ test("a check void shares the source AP lock and leaves no effects when it is cl
          and source_entry.org_id = document.org_id
        where document.id = ${lockedCheck.documentId}
          and document.org_id = ${org.orgId}
-    `);
-    assert.deepEqual(refused.rows[0], {
+    `, "objects");
+    assert.deepEqual(refused[0], {
       document_status: "posted",
       void_requested_at: null,
       reversal_entry_id: null,
@@ -335,8 +335,8 @@ test("controlled void preserves the source and posts an exact open-period revers
              void_reason, void_requested_at
         from documents
        where id = ${documentId}
-    `));
-    assert.deepEqual(document.rows[0], {
+    `, "objects"));
+    assert.deepEqual(document[0], {
       status: "voided",
       posted_entry_id: sourceEntryId,
       reversal_entry_id: result.reversalEntryId,
@@ -383,8 +383,8 @@ test("controlled void preserves the source and posts an exact open-period revers
       from journal_entries source
       join journal_entries reversal on reversal.id = ${result.reversalEntryId}
      where source.id = ${sourceEntryId}
-    `));
-    assert.deepEqual(accounting.rows[0], {
+    `, "objects"));
+    assert.deepEqual(accounting[0], {
       source_status: "reversed",
       reversal_status: "posted",
       reverses_entry_id: sourceEntryId,
@@ -403,8 +403,8 @@ test("controlled void preserves the source and posts an exact open-period revers
          and action = 'void'
        order by at desc
        limit 1
-    `));
-    assert.deepEqual(audit.rows[0], {
+    `, "objects"));
+    assert.deepEqual(audit[0], {
       mode: "transaction_void",
       reason: "Duplicate vendor invoice entered in error",
     });
@@ -483,8 +483,8 @@ test("a void naming an adjustment-period reversal posts the reversal there", { s
     assert.equal(withOverride.status, "voided");
     const overridePeriod = (await db.execute<{ period_id: string }>(sql`
       select period_id from journal_entries where id = ${withOverride.reversalEntryId}
-    `));
-    assert.equal(overridePeriod.rows[0]!.period_id, adjustmentPeriodId);
+    `, "objects"));
+    assert.equal(overridePeriod[0]!.period_id, adjustmentPeriodId);
 
     // ... while omitting the override keeps the date-resolved regular period.
     const plain = await seedPostedBill("BILL-VOID-REG");
@@ -499,8 +499,8 @@ test("a void naming an adjustment-period reversal posts the reversal there", { s
     assert.equal(withoutOverride.status, "voided");
     const regularPeriod = (await db.execute<{ period_id: string }>(sql`
       select period_id from journal_entries where id = ${withoutOverride.reversalEntryId}
-    `));
-    assert.equal(regularPeriod.rows[0]!.period_id, org.periodId);
+    `, "objects"));
+    assert.equal(regularPeriod[0]!.period_id, org.periodId);
 
     // A regular period, an unknown id, and a malformed reference all refuse
     // by name instead of posting somewhere unasked.
@@ -524,8 +524,8 @@ test("a void naming an adjustment-period reversal posts the reversal there", { s
     }
     const untouched = (await db.execute<{ status: string; reversal_entry_id: string | null }>(sql`
       select status, reversal_entry_id from documents where id = ${refused.documentId}
-    `));
-    assert.deepEqual(untouched.rows[0], { status: "posted", reversal_entry_id: null });
+    `, "objects"));
+    assert.deepEqual(untouched[0], { status: "posted", reversal_entry_id: null });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -556,7 +556,7 @@ test("delete and submit serialize on the document row before approval gates comm
       releaseHolder = resolve;
     });
     holder = withOrgTransaction(org.orgId, async () => {
-      holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`)).rows[0]!.pid;
+      holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`, "objects"))[0]!.pid;
       await db.execute(sql`
         select id
           from documents
@@ -655,8 +655,8 @@ test("approval release rechecks the locked document against the deciding actor's
       select status, void_requested_at, reversal_entry_id
         from documents
        where org_id = ${org.orgId} and id = ${documentId}
-    `);
-    assert.deepEqual([persisted.rows[0]?.status, Boolean(persisted.rows[0]?.void_requested_at), persisted.rows[0]?.reversal_entry_id], ["approved", true, null]);
+    `, "objects");
+    assert.deepEqual([persisted[0]?.status, Boolean(persisted[0]?.void_requested_at), persisted[0]?.reversal_entry_id], ["approved", true, null]);
     await completeRequestedDocumentVoid(documentId, org.orgId, null);
     await assert.rejects(rejectRequestedDocumentVoid(documentId, org.orgId, actors.approver1Id, "rejected after completion"), /no pending void request/);
   } finally {
@@ -706,8 +706,8 @@ test("concurrent void contenders commit one before_void journal from the claimed
       select status, void_requested_at
         from documents
        where id = ${documentId} and org_id = ${org.orgId}
-    `);
-    assert.deepEqual(source.rows[0], { status: "voided", void_requested_at: null });
+    `, "objects");
+    assert.deepEqual(source[0], { status: "voided", void_requested_at: null });
     assert.equal(
       await countRows(sql`
         select count(*)::int as count
@@ -770,13 +770,11 @@ test("a stale exact-revision token refuses the void before any before_void effec
     const documentId = await seedApprovedQuote(org, actorId, "QUOTE-VOID-FENCE-1");
     await seedBeforeVoidScript(org, actorId, journalScriptSource(org, `void-fence-${randomUUID()}`));
 
-    const storedUpdatedAt = (
-      await db.execute<{ updated_at: string }>(sql`
+    const storedUpdatedAt = (await db.execute<{ updated_at: string }>(sql`
         select (revision_seq)::text as updated_at
           from documents
          where id = ${documentId} and org_id = ${org.orgId}
-      `)
-    ).rows[0]!.updated_at;
+      `, "objects"))[0]!.updated_at;
     const exactToken = storedUpdatedAt;
     // A counter token goes stale by advancing one revision past it.
     const staleToken = String(Number(exactToken) + 1);
@@ -804,8 +802,8 @@ test("a stale exact-revision token refuses the void before any before_void effec
       select status, void_requested_at
         from documents
        where id = ${documentId} and org_id = ${org.orgId}
-    `));
-    assert.deepEqual(refused.rows[0], { status: "approved", void_requested_at: null });
+    `, "objects"));
+    assert.deepEqual(refused[0], { status: "approved", void_requested_at: null });
     assert.equal(
       await countRows(sql`
         select count(*)::int as count
@@ -891,8 +889,8 @@ test("a failed before_void effect rolls back its claim and journal before a safe
              void_reversal_date::text as void_reversal_date
         from documents
        where id = ${documentId} and org_id = ${org.orgId}
-    `);
-    assert.deepEqual(afterFailure.rows[0], {
+    `, "objects");
+    assert.deepEqual(afterFailure[0], {
       status: "approved",
       void_requested_at: null,
       void_requested_by: null,
@@ -1005,9 +1003,9 @@ test("voiding a quote with a live sales order is fenced without mutation", { ski
     }>(sql`
       select status, void_requested_at from documents
        where id = ${quoteId} and org_id = ${org.orgId}
-    `);
-    assert.equal(fenced.rows[0]!.status, "approved");
-    assert.equal(fenced.rows[0]!.void_requested_at, null);
+    `, "objects");
+    assert.equal(fenced[0]!.status, "approved");
+    assert.equal(fenced[0]!.void_requested_at, null);
 
     // With the downstream order voided, the quote itself voids cleanly.
     const orderVoided = await requestDocumentVoid({
@@ -1120,7 +1118,7 @@ test("a posted document cannot regress to draft in storage", { skip: !DB }, asyn
         return true;
       },
     );
-    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`)).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`, "objects"))[0]!.status;
     assert.equal(status, "posted");
     // The sanctioned exit still works: the controlled void voids the check.
     const control = await requestDocumentVoid({
@@ -1159,7 +1157,7 @@ test("a raw sandbox-wipe session setting does not open posted -> draft", { skip:
         return true;
       },
     );
-    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`)).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`, "objects"))[0]!.status;
     assert.equal(status, "posted");
   } finally {
     await dropScratchOrg(org.orgId);

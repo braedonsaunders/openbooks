@@ -81,18 +81,18 @@ test("transfer-order in-transit legs post each location balance exactly once", {
     });
 
     const dims = async (): Promise<Map<string, string>> => {
-      const rows = (await db.execute<{ stock: string; dim: string }>(sql`
+      const rows = await db.execute<{ stock: string; dim: string }>(sql`
         select id as stock, location_id as dim from stock_locations
          where org_id = ${org.orgId}
-           and id in (${org.stockLocationId}, ${transitId}, ${org.stockLocationId2})`)).rows;
+           and id in (${org.stockLocationId}, ${transitId}, ${org.stockLocationId2})`, "objects");
       return new Map(rows.map((row) => [row.stock, row.dim]));
     };
     const glByDim = async (accountId: string): Promise<Map<string, string>> => {
-      const rows = (await db.execute<{ dim: string | null; balance: string }>(sql`
+      const rows = await db.execute<{ dim: string | null; balance: string }>(sql`
         select l.location_id as dim, sum(l.amount)::text as balance
           from journal_lines l
          where l.org_id = ${org.orgId} and l.account_id = ${accountId}
-         group by l.location_id`)).rows;
+         group by l.location_id`, "objects");
       return new Map(rows.map((row) => [row.dim ?? "", row.balance]));
     };
     const tie = async (label: string) => {
@@ -130,7 +130,7 @@ test("transfer-order in-transit legs post each location balance exactly once", {
     const entries = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from journal_entries
        where org_id = ${org.orgId} and origin = 'inventory'
-         and memo like ${`Transfer ${order.documentNumber}%`}`)).rows[0]!.count;
+         and memo like ${`Transfer ${order.documentNumber}%`}`, "objects"))[0]!.count;
     assert.equal(entries, 2, "ship and receive post one entry each");
   } finally {
     await dropScratchOrg(org.orgId);

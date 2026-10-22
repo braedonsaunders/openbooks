@@ -131,7 +131,7 @@ async function assertOpenProject(
   await lockProjectForScope(tx, input.orgId, input.projectId, input.allowedSubsidiaryIds, "share");
   const project = (await tx.execute<{ status: string }>(sql`
     select status from projects where org_id = ${input.orgId} and id = ${input.projectId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!project) throw new Error("a project disappeared while its scope lock was held");
   if (project.status === "closed" || project.status === "cancelled") {
     refuse(
@@ -190,7 +190,7 @@ async function assertValidSubject(
      where org_id = ${input.orgId} and job_title is not null
        and lower(btrim(job_title)) = lower(${jobTitle})
     limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!title) {
     refuse(
       "assignment_job_title_unknown",
@@ -209,7 +209,7 @@ async function assertReferences(
   if (input.billItemId) {
     const item = (await tx.execute<{ id: string }>(sql`
       select id from items where org_id = ${input.orgId} and id = ${input.billItemId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!item) {
       refuse(
         "assignment_bill_item_unknown",
@@ -225,7 +225,7 @@ async function assertReferences(
       join projects project on project.org_id = task.org_id and project.id = task.project_id
       where task.org_id = ${input.orgId} and task.id = ${input.projectTaskId}
         and task.project_id = ${input.projectId} and project.org_id = ${input.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!task) {
       refuse(
         "assignment_project_task_unknown",
@@ -249,7 +249,7 @@ async function assertReferences(
       select id from res_requests
        where org_id = ${input.orgId} and id = ${input.requestId}
          and project_id = ${input.projectId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!request) {
       refuse(
         "assignment_request_unknown",
@@ -330,11 +330,11 @@ async function readWeeklyTotals(
   const subjectFilter = input.employeePartyId
     ? sql`employee_party_id = ${input.employeePartyId}`
     : sql`lower(job_title) = lower(${input.jobTitle!.trim()})`;
-  const rows = (await tx.execute<{ booking: Booking; planned_hours: string }>(sql`
+  const rows = await tx.execute<{ booking: Booking; planned_hours: string }>(sql`
     select booking, planned_hours::text as planned_hours from res_assignments
      where org_id = ${input.orgId} and week_start = ${input.weekStart}
        and state = 'active' and ${subjectFilter}
-  `)).rows;
+  `, "objects");
   const hardHours = sum(rows.filter((row) => row.booking === "hard").map((row) => row.planned_hours));
   const softHours = sum(rows.filter((row) => row.booking === "soft").map((row) => row.planned_hours));
   return {
@@ -403,7 +403,7 @@ async function lockAssignment(
 ): Promise<AssignmentRow> {
   const initial = (await tx.execute<{ project_id: string }>(sql`
     select project_id from res_assignments where org_id = ${input.orgId} and id = ${input.assignmentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!initial) {
     refuse("assignment_unknown", `assignment ${input.assignmentId} does not exist`, "reload the assignment list", "assignmentId");
   }
@@ -413,7 +413,7 @@ async function lockAssignment(
      where org_id = ${input.orgId} and id = ${input.assignmentId}
        and project_id = ${initial.project_id}
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!locked) {
     refuse(
       "assignment_changed",
@@ -489,7 +489,7 @@ export async function deleteAssignment(input: AssignmentIdInput): Promise<void> 
            and worked_on >= ${current.weekStart} and worked_on <= ${saturday}
            and status = 'approved'
          limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (actual) {
         refuse(
           "assignment_has_approved_time",
@@ -500,7 +500,7 @@ export async function deleteAssignment(input: AssignmentIdInput): Promise<void> 
         );
       }
     }
-    const deleted = await tx.execute(sql`
+    const deleted = await tx.execute<never>(sql`
       delete from res_assignments where org_id = ${input.orgId} and id = ${input.assignmentId}
     `);
     if ((deleted.rowCount ?? 0) !== 1) {

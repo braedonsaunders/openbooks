@@ -121,7 +121,7 @@ function scaleLabels(scale: unknown): string[] {
 }
 
 export async function listReviewTemplates(orgId: string): Promise<ReviewTemplateSummary[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; name: string; isActive: boolean; ratingScale: unknown
     sectionCount: number; questionCount: number; cycleCount: number
   }>(sql`
@@ -135,7 +135,7 @@ export async function listReviewTemplates(orgId: string): Promise<ReviewTemplate
              where c.org_id = t.org_id and c.template_id = t.id) as "cycleCount"
       from hrm_review_templates t
      where t.org_id = ${orgId}
-     order by t.is_active desc, t.name`)).rows
+     order by t.is_active desc, t.name`, 'objects')
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -155,25 +155,25 @@ export async function loadReviewTemplate(orgId: string, templateId: string): Pro
            (select count(*)::int from hrm_review_cycles c
              where c.org_id = t.org_id and c.template_id = t.id) as "cycleCount"
       from hrm_review_templates t
-     where t.org_id = ${orgId} and t.id = ${templateId}`)).rows[0]
+     where t.org_id = ${orgId} and t.id = ${templateId}`, 'objects'))[0]
   if (!template) return null
   const [sections, questions] = await Promise.all([
     db.execute<{ id: string; position: number; title: string; kind: ReviewSectionKind; weight: string | null; competencyId: string | null }>(sql`
       select id, position, title, kind, weight::text as weight, competency_id as "competencyId"
         from hrm_review_template_sections
        where org_id = ${orgId} and template_id = ${templateId}
-       order by position`),
+       order by position`, 'objects'),
     db.execute<{ id: string; sectionId: string; position: number; prompt: string; answerKind: ReviewAnswerKind; required: boolean }>(sql`
       select q.id, q.section_id as "sectionId", q.position, q.prompt, q.answer_kind as "answerKind", q.required
         from hrm_review_template_questions q
         join hrm_review_template_sections s on s.org_id = q.org_id and s.id = q.section_id
        where q.org_id = ${orgId} and s.template_id = ${templateId}
-       order by q.position`),
+       order by q.position`, 'objects'),
   ])
-  const nodes: ReviewSectionNode[] = sections.rows.map((section) => ({
+  const nodes: ReviewSectionNode[] = sections.map((section) => ({
     ...section,
     weight: section.weight === null ? null : trimDecimal(section.weight),
-    questions: questions.rows.filter((question) => question.sectionId === section.id),
+    questions: questions.filter((question) => question.sectionId === section.id),
   }))
   return {
     id: template.id,
@@ -199,12 +199,12 @@ export interface CompetencyOption {
 }
 
 export async function listCompetencyOptions(orgId: string): Promise<CompetencyOption[]> {
-  const rows = (await db.execute<{ id: string; code: string; name: string; framework: string }>(sql`
+  const rows = await db.execute<{ id: string; code: string; name: string; framework: string }>(sql`
     select c.id, c.code, c.name, f.name as framework
       from hrm_competencies c
       join hrm_competency_frameworks f on f.org_id = c.org_id and f.id = c.framework_id
      where c.org_id = ${orgId} and f.is_active
-     order by f.name, c.position, c.name`)).rows
+     order by f.name, c.position, c.name`, 'objects')
   return rows.map((row) => ({ id: row.id, label: `${row.code} · ${row.name}`, framework: row.framework }))
 }
 
@@ -230,19 +230,19 @@ export async function orderReviewTemplateOutline(
     if (new Set(questionIds).size !== questionIds.length) refuse(400, 'questionIds lists a question twice', 'invalid')
 
     const template = (await tx.execute(sql`
-      select id,draft_document as draft,published_document as published from hrm_review_templates where org_id = ${actor.orgId} and id = ${templateId} for update`)).rows[0]
+      select id,draft_document as draft,published_document as published from hrm_review_templates where org_id = ${actor.orgId} and id = ${templateId} for update`, 'objects'))[0]
     if (!template) refuse(404, 'not_found')
     if(template.draft||template.published)refuse(409,'Use Performance → Templates to reorder this published document and save its draft.','managed-document')
-    const storedSections = (await tx.execute<{ id: string; position: number }>(sql`
+    const storedSections = await tx.execute<{ id: string; position: number }>(sql`
       select id, position from hrm_review_template_sections
        where org_id = ${actor.orgId} and template_id = ${templateId}
-       for update`)).rows
-    const storedQuestions = (await tx.execute<{ id: string; sectionId: string; position: number }>(sql`
+       for update`, 'objects')
+    const storedQuestions = await tx.execute<{ id: string; sectionId: string; position: number }>(sql`
       select q.id, q.section_id as "sectionId", q.position
         from hrm_review_template_questions q
         join hrm_review_template_sections s on s.org_id = q.org_id and s.id = q.section_id
        where q.org_id = ${actor.orgId} and s.template_id = ${templateId}
-       for update of q`)).rows
+       for update of q`, 'objects')
     if (!sameSet(sectionIds, storedSections.map((row) => row.id))) refuse(409, STALE, 'stale')
     if (!sameSet(questionIds, storedQuestions.map((row) => row.id))) refuse(409, STALE, 'stale')
 
@@ -316,16 +316,16 @@ export async function listPipelineTemplates(orgId: string): Promise<PipelineTemp
                where r.org_id = t.org_id and r.pipeline_template_id = t.id) as "requisitionCount"
         from hrm_pipeline_templates t
        where t.org_id = ${orgId}
-       order by t.is_default desc, t.is_active desc, t.name`),
+       order by t.is_default desc, t.is_active desc, t.name`, 'objects'),
     db.execute<{ id: string; templateId: string; name: string; kind: PipelineStageKind }>(sql`
       select id, template_id as "templateId", name, kind
         from hrm_pipeline_stages
        where org_id = ${orgId}
-       order by template_id, position`),
+       order by template_id, position`, 'objects'),
   ])
-  return templates.rows.map((template) => ({
+  return templates.map((template) => ({
     ...template,
-    stages: stages.rows
+    stages: stages
       .filter((stage) => stage.templateId === template.id)
       .map(({ id, name, kind }) => ({ id, name, kind })),
   }))
@@ -338,7 +338,7 @@ export async function loadPipelineTemplateNode(orgId: string, templateId: string
            (select count(*)::int from hrm_requisitions r
              where r.org_id = t.org_id and r.pipeline_template_id = t.id) as "requisitionCount"
       from hrm_pipeline_templates t
-     where t.org_id = ${orgId} and t.id = ${templateId}`)).rows[0]
+     where t.org_id = ${orgId} and t.id = ${templateId}`, 'objects'))[0]
   if (!template) return null
   const [stages, kits] = await Promise.all([
     db.execute<Omit<PipelineStageNode, 'kits'>>(sql`
@@ -349,19 +349,19 @@ export async function loadPipelineTemplateNode(orgId: string, templateId: string
                where a.org_id = s.org_id and a.stage_id = s.id) as "totalApplications"
         from hrm_pipeline_stages s
        where s.org_id = ${orgId} and s.template_id = ${templateId}
-       order by s.position`),
+       order by s.position`, 'objects'),
     db.execute<{ id: string; name: string; isActive: boolean; stageId: string }>(sql`
       select k.id, k.name, k.is_active as "isActive", k.pipeline_stage_id as "stageId"
         from hrm_interview_kits k
         join hrm_pipeline_stages s on s.org_id = k.org_id and s.id = k.pipeline_stage_id
        where k.org_id = ${orgId} and s.template_id = ${templateId}
-       order by k.name`),
+       order by k.name`, 'objects'),
   ])
   return {
     ...template,
-    stages: stages.rows.map((stage) => ({
+    stages: stages.map((stage) => ({
       ...stage,
-      kits: kits.rows.filter((kit) => kit.stageId === stage.id).map(({ id, name, isActive }) => ({ id, name, isActive })),
+      kits: kits.filter((kit) => kit.stageId === stage.id).map(({ id, name, isActive }) => ({ id, name, isActive })),
     })),
   }
 }
@@ -376,12 +376,12 @@ export async function orderPipelineStages(
   return runCommand(actor, async (tx) => {
     const stageIds = uniqueIds((body as { stageIds?: unknown } | null)?.stageIds, 'stageIds')
     const template = (await tx.execute(sql`
-      select id from hrm_pipeline_templates where org_id = ${actor.orgId} and id = ${templateId} for update`)).rows[0]
+      select id from hrm_pipeline_templates where org_id = ${actor.orgId} and id = ${templateId} for update`, 'objects'))[0]
     if (!template) refuse(404, 'not_found')
-    const stored = (await tx.execute<{ id: string; position: number }>(sql`
+    const stored = await tx.execute<{ id: string; position: number }>(sql`
       select id, position from hrm_pipeline_stages
        where org_id = ${actor.orgId} and template_id = ${templateId}
-       for update`)).rows
+       for update`, 'objects')
     if (!sameSet(stageIds, stored.map((row) => row.id))) refuse(409, STALE, 'stale')
     await tx.execute(sql`
       update hrm_pipeline_stages set position = position + ${LIFT}
@@ -411,10 +411,10 @@ export async function orderPipelineStages(
 export async function makeDefaultPipeline(actor: SetupActor, templateId: string): Promise<SetupWriteResult> {
   if (!isUuid(templateId)) return { status: 404, body: { error: 'not_found' } }
   return runCommand(actor, async (tx) => {
-    const rows = (await tx.execute<{ id: string; isDefault: boolean; isActive: boolean }>(sql`
+    const rows = await tx.execute<{ id: string; isDefault: boolean; isActive: boolean }>(sql`
       select id, is_default as "isDefault", is_active as "isActive"
         from hrm_pipeline_templates where org_id = ${actor.orgId}
-       for update`)).rows
+       for update`, 'objects')
     const target = rows.find((row) => row.id === templateId)
     if (!target) refuse(404, 'not_found')
     if (target.isDefault) return

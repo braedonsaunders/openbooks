@@ -112,8 +112,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
        -- jurisdiction context on the nullable side of an outer join, and
        -- Postgres refuses FOR UPDATE there.
        for update of r, d
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.doc_subsidiary_id)) {
       throw new PayrollError("pay run not found");
@@ -136,8 +136,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // org-wide schedule keeps everyone (the historical behaviour).
     const scheduleScope = (await tx.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id} for share
-    `));
-    const scopedSubsidiaryId = scheduleScope.rows[0]?.subsidiary_id ?? null;
+    `, "objects"));
+    const scopedSubsidiaryId = scheduleScope[0]?.subsidiary_id ?? null;
     // The run froze its paying entity at creation; the schedule may have been
     // scoped (or re-scoped) since. An UNCOMMITTED run follows its schedule —
     // entity and currency move together inside the helper, and the stale
@@ -161,8 +161,8 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           join documents d on d.id = r.document_id and d.org_id = r.org_id
           left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
          where r.org_id = ${orgId} and r.document_id = ${documentId}
-      `));
-      Object.assign(run, refreshed.rows[0]);
+      `, "objects"));
+      Object.assign(run, refreshed[0]);
     }
 
     // ---- The run's jurisdiction, resolved ONCE -----------------------------
@@ -284,12 +284,12 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       -- order is deterministic down to the uuid — two employees sharing a
       -- display name must still consume room in a stable order.
       order by roster.display_name, roster.party_id
-    `));
+    `, "objects"));
 
     // Authorize the complete selected roster and the snapshot we replace.
     // A scoped filter here would silently drop employees and rewrite totals.
     await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds,
-      employees.rows.map((employee) => ({ id: employee.party_id!, subsidiaryId: employee.employee_subsidiary_id ?? null })));
+      employees.map((employee) => ({ id: employee.party_id!, subsidiaryId: employee.employee_subsidiary_id ?? null })));
 
     // Run ownership authorizes consumption of the applicable policy. Shared
     // configuration maintenance additionally requires the organization root.
@@ -317,9 +317,9 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       await ensurePackSlotRoleAccounts(tx, orgId, actorId, runContext.country);
     }
 
-    const componentRows = (await tx.execute<Record<string, unknown>>(sql`
+    const componentRows = await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
-    `)).rows;
+    `, "objects");
     if (!canMaintainConfiguration) {
       assertPayRunCalculationComponents(runContext.country, statHolidayPay, componentRows);
     }
@@ -359,9 +359,9 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // and every one of these employees' YTD inputs are read on this pass.
     await takeEmployeeTaxYearFences(
       tx,
-      employees.rows.map((e) => employeeTaxYearFenceKey(orgId, e.party_id, runContext.taxYear)),
+      employees.map((e) => employeeTaxYearFenceKey(orgId, e.party_id, runContext.taxYear)),
     );
-    await lockEmployerAssignmentProfiles(tx, orgId, employees.rows.map(e => e.party_id!));
+    await lockEmployerAssignmentProfiles(tx, orgId, employees.map(e => e.party_id!));
 
     // Preserve the result this calculation is about to replace, after the
     // run, roster, population and employee-year fences above have settled
@@ -408,19 +408,19 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       select employee_party_id from pay_run_adjustments
        where org_id = ${orgId} and pay_run_document_id = ${documentId}
          and adjustment_type = 'exclude'
-    `));
-    const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
-    await applyEmployeeEmployerAssignmentHistory(tx, orgId, run.pay_date!, employees.rows.filter(e => !excluded.has(e.party_id!)));
+    `, "objects"));
+    const excluded = new Set(excludedRows.map((r) => r.employee_party_id));
+    await applyEmployeeEmployerAssignmentHistory(tx, orgId, run.pay_date!, employees.filter(e => !excluded.has(e.party_id!)));
     const holidayEligibility = statHolidayPay
       ? holidayEligibilityFromStoredFacts(await loadStoredHolidayFacts(tx, {
           orgId, documentId,
-          employeePartyIds: employees.rows.filter(employee => !excluded.has(employee.party_id!)).map(employee => employee.party_id!),
+          employeePartyIds: employees.filter(employee => !excluded.has(employee.party_id!)).map(employee => employee.party_id!),
         }))
       : {};
 
 
     const openingPriors = await payrollPeriodOpeningPriors(tx, { orgId, pack: calcPack,
-      employeePartyIds: employees.rows.filter((employee) => !excluded.has(employee.party_id!)).map((employee) => employee.party_id!), periodic: PERIODIC_RUN_TYPES.has(runType),
+      employeePartyIds: employees.filter((employee) => !excluded.has(employee.party_id!)).map((employee) => employee.party_id!), periodic: PERIODIC_RUN_TYPES.has(runType),
       run: { payScheduleId: periodIdentity.payScheduleId, periodStart: periodIdentity.periodStart, periodEnd: periodIdentity.periodEnd,
         payDate: runContext.payDate, taxYear: runContext.taxYear, country: runContext.country, currency: runContext.currency,
         subsidiaryId: runContext.subsidiaryId, label: periodIdentity.documentNumber },
@@ -462,7 +462,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       await releaseAllowancePayrollInputs(tx, { orgId, runDocumentId: documentId });
     }
 
-    for (const emp of employees.rows) {
+    for (const emp of employees) {
       if (excluded.has(emp.party_id!)) continue;
       const name = emp.display_name ?? emp.party_id!;
       // Second half of the final-pay scope guard. createPayRun writes the
@@ -586,7 +586,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     }
 
     if (!canMaintainConfiguration) {
-      const liabilities = (await tx.execute<{ system_key: string; country: string | null; liability_account_id: string | null }>(sql`
+      const liabilities = await tx.execute<{ system_key: string; country: string | null; liability_account_id: string | null }>(sql`
         select distinct c.system_key, c.country, c.liability_account_id
           from pay_stub_lines l
           join pay_stubs s on s.org_id = l.org_id and s.id = l.stub_id
@@ -594,7 +594,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
          where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
            and l.kind in ('deduction', 'employer_contribution') and l.amount <> 0
            and c.system_key is not null
-      `)).rows;
+      `, "objects");
       for (const liability of liabilities) {
         const slot = calcPack.statutorySlots.find((candidate) => candidate.components.some(
           (component) => component.systemKey === liability.system_key,
@@ -631,7 +631,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       const stored = (await tx.execute<{ errors: unknown; acknowledgement: unknown }>(sql`
         select calculation_errors as errors, refusal_acknowledgement as acknowledgement
           from pay_runs where org_id = ${orgId} and document_id = ${documentId}
-      `)).rows[0];
+      `, "objects"))[0];
       const storedRefusals = payRunCalculationRefusals(
         parsePayRunCalculationErrors(stored?.errors) ?? [],
       );
@@ -661,7 +661,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // what they see is what this calculate saw: the first calculate's
     // exceptions survive the response that carried them instead of living in
     // the caller's memory alone.
-    const storedCalculation = (await tx.execute<{ document_id: string }>(sql`
+    const storedCalculation = await tx.execute<{ document_id: string }>(sql`
       update pay_runs set run_status = 'calculated', calculated_at = now(),
              gross_total = ${grossTotal}, net_total = ${netTotal},
              employer_cost_total = ${employerTotal}, employee_count = ${count},
@@ -672,7 +672,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
        returning document_id
-    `)).rows;
+    `, "objects");
     if (storedCalculation.length !== 1) {
       throw new PayrollError(
         "the calculated pay run could not be stored — the calculation has been rolled back; retry the calculation",
@@ -699,7 +699,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         (await tx.execute<{ acknowledgement: unknown }>(sql`
           select refusal_acknowledgement as acknowledgement from pay_runs
            where org_id = ${orgId} and document_id = ${documentId}
-        `)).rows[0]?.acknowledgement,
+        `, "objects"))[0]?.acknowledgement,
       );
       result.refusalsAcknowledged = result.refusalAcknowledgement != null
         && result.refusalAcknowledgement.errorsDigest === payRunRefusalDigest(refusalsNow);

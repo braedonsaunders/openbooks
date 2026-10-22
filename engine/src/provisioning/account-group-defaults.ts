@@ -54,13 +54,11 @@ export async function ensureAccountGroupDefaults(
   executor: SqlExecutor = db,
 ): Promise<AccountGroupDefaultsReport> {
   const authoritative = new Set(
-    (
-      await executor.execute<{ dimension: string }>(sql`
+    (await executor.execute<{ dimension: string }>(sql`
         select distinct dimension
           from account_groups
          where org_id = ${orgId} and is_catch_all and is_active
-      `)
-    ).rows.map((row) => row.dimension),
+      `, "objects")).map((row) => row.dimension),
   );
   const skippedCatchAllDimensions: string[] = [];
   for (const group of DEFAULT_ACCOUNT_GROUPS) {

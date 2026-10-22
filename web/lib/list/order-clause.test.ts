@@ -16,7 +16,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        url: "data:text/javascript,export const db={execute:async()=>({rows:[]})};export const withBypassContext=(org,fn)=>fn();export function withOrgContext(org,fn){return fn()};export function ambientTenantOrgId(){return null};export function currentRequestOrgResolver(){return null};export function registerRequestOrgResolver(){};export function withBypass(fn){return fn()}",
+        url: "data:text/javascript,export const db={execute:async(_query, mode)=>Promise.resolve({rows:[]}).then((result) => (mode === 'objects' ? result.rows : result))};export const withBypassContext=(org,fn)=>fn();export function withOrgContext(org,fn){return fn()};export function ambientTenantOrgId(){return null};export function currentRequestOrgResolver(){return null};export function registerRequestOrgResolver(){};export function withBypass(fn){return fn()}",
       };
     }
     return nextResolve(specifier, context);

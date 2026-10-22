@@ -56,16 +56,16 @@ async function basis(tx:SqlExecutor,orgId:string,actorId:string,interestId:strin
   if(!isUuid(interestId))throw new NetInvestmentError('Select a valid native ownership interest')
   const allowed=await lockActorCommandAuthority(tx,orgId,actorId,null,'close.run');await features(tx,orgId)
   const interest=(await tx.execute<Interest>(sql`select id,subsidiary_id,parent_subsidiary_id,method,ownership_percent::text,effective_from::text,effective_to::text
-    from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId} and is_active for update`)).rows[0]
+    from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId} and is_active for update`, 'objects'))[0]
   if(!interest || (allowed && [interest.subsidiary_id,interest.parent_subsidiary_id].some(id=>!allowed.has(id))))throw new ScopeNotFoundError()
   if(interest.method!=='full' || cmp(interest.ownership_percent,'100')!==0 || interest.effective_from>input.effectiveOn || (interest.effective_to && interest.effective_to<input.effectiveOn))
     throw new NetInvestmentError('Select an effective wholly owned, fully consolidated foreign operation; ownership with non-controlling interests requires its attributable OCI assessment before using this loan review')
-  const pair=(await tx.execute<Pair>(sql`select id,from_subsidiary_id,to_subsidiary_id,due_from_account_id,due_to_account_id from intercompany_pairs where org_id=${orgId} and id=${input.pairId} and is_active for share`)).rows[0]
+  const pair=(await tx.execute<Pair>(sql`select id,from_subsidiary_id,to_subsidiary_id,due_from_account_id,due_to_account_id from intercompany_pairs where org_id=${orgId} and id=${input.pairId} and is_active for share`, 'objects'))[0]
   if(!pair || ![pair.from_subsidiary_id,pair.to_subsidiary_id].includes(interest.subsidiary_id))throw new ScopeNotFoundError()
   const ids=[...new Set([interest.parent_subsidiary_id,interest.subsidiary_id,pair.from_subsidiary_id,pair.to_subsidiary_id,input.eliminationSubsidiaryId])].sort()
   if(allowed && ids.some(id=>!allowed.has(id)))throw new ScopeNotFoundError()
-  const entities=(await tx.execute<Entity>(sql`select id,base_currency,is_elimination from subsidiaries where org_id=${orgId}
-    and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) and is_active order by id for share`)).rows
+  const entities=await tx.execute<Entity>(sql`select id,base_currency,is_elimination from subsidiaries where org_id=${orgId}
+    and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) and is_active order by id for share`, 'objects')
   if(entities.length!==ids.length)throw new ScopeNotFoundError()
   const elimination=entities.find(entity=>entity.id===input.eliminationSubsidiaryId)!
   const foreign=entities.find(entity=>entity.id===interest.subsidiary_id)!,parent=entities.find(entity=>entity.id===interest.parent_subsidiary_id)!
@@ -74,14 +74,14 @@ async function basis(tx:SqlExecutor,orgId:string,actorId:string,interestId:strin
   const other=[pair.from_subsidiary_id,pair.to_subsidiary_id].find(id=>id!==interest.subsidiary_id)!
   if(other!==parent.id && !(await tx.execute(sql`select id from subsidiary_ownership_interests where org_id=${orgId} and subsidiary_id=${other}
     and parent_subsidiary_id=${parent.id} and is_active and method='full' and ownership_percent=100 and effective_from<=${input.effectiveOn}::date
-    and (effective_to is null or effective_to>=${input.effectiveOn}::date) for share`)).rows.length)
+    and (effective_to is null or effective_to>=${input.effectiveOn}::date) for share`, 'objects')).length)
     throw new NetInvestmentError('The loan counterparty must be the consolidating parent or its effective wholly owned group subsidiary; reconcile the ownership scope before assessing it')
-  const book=(await tx.execute<{id:string}>(sql`select id from accounting_books where org_id=${orgId} and id=${input.bookId} and is_active and posts_gl and is_primary for share`)).rows[0]
+  const book=(await tx.execute<{id:string}>(sql`select id from accounting_books where org_id=${orgId} and id=${input.bookId} and is_active and posts_gl and is_primary for share`, 'objects'))[0]
   if(!book)throw new ScopeNotFoundError()
   const period=await resolveCoveringPeriod(tx,orgId,input.effectiveOn)
   if(!period)throw new NetInvestmentError('Create an accounting period for the assessment date in the selected book before proposing this review')
-  const accountRows=(await tx.execute<{id:string;type:string;monetary:boolean|null}>(sql`select id,type,monetary from accounts where org_id=${orgId}
-    and id in (${input.ociAccountId},${input.profitLossAccountId},${pair.due_from_account_id},${pair.due_to_account_id}) and is_active and not is_summary order by id for share`)).rows
+  const accountRows=await tx.execute<{id:string;type:string;monetary:boolean|null}>(sql`select id,type,monetary from accounts where org_id=${orgId}
+    and id in (${input.ociAccountId},${input.profitLossAccountId},${pair.due_from_account_id},${pair.due_to_account_id}) and is_active and not is_summary order by id for share`, 'objects')
   if(accountRows.find(a=>a.id===input.ociAccountId)?.type!=='equity' || !['income_other','expense_other'].includes(accountRows.find(a=>a.id===input.profitLossAccountId)?.type ?? ''))
     throw new NetInvestmentError('Choose an active OCI equity reserve and an active FX profit-or-loss posting account')
   for(const id of [pair.due_from_account_id,pair.due_to_account_id]) {
@@ -89,7 +89,7 @@ async function basis(tx:SqlExecutor,orgId:string,actorId:string,interestId:strin
     if(!a || a.monetary!==true || !['asset_current_other','asset_other','liability_current_other','liability_long_term'].includes(a.type))
       throw new NetInvestmentError('Configure dedicated non-trade monetary loan accounts on the intercompany pair; trade AR and AP cannot qualify as a net investment')
     if((await tx.execute(sql`select 1 from intercompany_pairs where org_id=${orgId} and is_active and id<>${pair.id}
-      and (due_from_account_id=${id} or due_to_account_id=${id}) for share`)).rows.length)
+      and (due_from_account_id=${id} or due_to_account_id=${id}) for share`, 'objects')).length)
       throw new NetInvestmentError('This loan account is shared with another intercompany counterparty — use a dedicated account before attributing its FX difference')
   }
   try {await validateSubsidiaryRestrictions(tx,{orgId,ctx:await loadSubsidiaryContext(tx,orgId),lines:[input.ociAccountId,input.profitLossAccountId].map(accountId=>({accountId,amount:'0',subsidiaryId:elimination.id})),docSubsidiaryId:elimination.id})}
@@ -100,28 +100,28 @@ async function basis(tx:SqlExecutor,orgId:string,actorId:string,interestId:strin
     const row=(await tx.execute<Omit<Source,'positions'|'gainLossAccountId'|'averageRate'|'translated'>>(sql`select line.id,line.entry_id,line.account_id,line.subsidiary_id,line.amount::text,
       entry.period_id,entry.posting_date::text,entry.reverses_entry_id from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
       where line.org_id=${orgId} and line.id=${id} and entry.book_id=${book.id} and entry.origin='fx_revaluation' and entry.status in ('posted','reversed')
-        and entry.period_id=${period.id} and entry.posting_date<=${input.effectiveOn}::date for share of line,entry`)).rows[0]
+        and entry.period_id=${period.id} and entry.posting_date<=${input.effectiveOn}::date for share of line,entry`, 'objects'))[0]
     if(!row || !((row.subsidiary_id===pair.from_subsidiary_id && row.account_id===pair.due_from_account_id)
       || (row.subsidiary_id===pair.to_subsidiary_id && row.account_id===pair.due_to_account_id)))
       throw new NetInvestmentError('Select only the paired loan’s posted native FX monetary lines in this book and assessment period')
-    if((await tx.execute(sql`select 1 from net_investment_sources where org_id=${orgId} and source_line_id=${id} and reversed_by_change_id is null`)).rows.length)
+    if((await tx.execute(sql`select 1 from net_investment_sources where org_id=${orgId} and source_line_id=${id} and reversed_by_change_id is null`, 'objects')).length)
       throw new NetInvestmentError('This FX line already has an approved OCI attribution — review the recorded assessment instead of classifying the same exchange difference twice')
     const rootId=row.reverses_entry_id ?? row.entry_id
     const evidence=(await tx.execute<{changes:{positions?:Source['positions'];lines?:{accountId:string;amount:string}[];gainLossAccountId?:string}}>(sql`select changes from audit_log where org_id=${orgId}
-      and table_name='journal_entries' and row_id=${rootId} and changes->>'mode'='fx_revaluation_incremental' order by at,id limit 1`)).rows[0]?.changes
+      and table_name='journal_entries' and row_id=${rootId} and changes->>'mode'='fx_revaluation_incremental' order by at,id limit 1`, 'objects'))[0]?.changes
     const positions=evidence?.positions?.filter(position=>position.accountId===row.account_id) ?? []
     if(!positions.length || new Set(positions.map(position=>position.currency)).size!==1)
       throw new NetInvestmentError('The native FX audit must prove one dedicated loan currency; reconcile mixed-currency exposure before attributing it to OCI')
     const holder=entities.find(entity=>entity.id===row.subsidiary_id)!
-    const accounts=(await tx.execute<{id:string;type:string}>(sql`select id,type from accounts where org_id=${orgId}
-      and id in (select jsonb_array_elements_text(${JSON.stringify((evidence?.lines ?? []).map(line=>line.accountId))}::jsonb)::uuid)`)).rows
+    const accounts=await tx.execute<{id:string;type:string}>(sql`select id,type from accounts where org_id=${orgId}
+      and id in (select jsonb_array_elements_text(${JSON.stringify((evidence?.lines ?? []).map(line=>line.accountId))}::jsonb)::uuid)`, 'objects')
     const pnl=accounts.filter(a=>['income_other','expense_other'].includes(a.type))
     if((evidence?.gainLossAccountId ?? (pnl.length===1 ? pnl[0]!.id : null))!==input.profitLossAccountId)
       throw new NetInvestmentError('Select the native revaluation’s gain-or-loss account so the consolidation adjustment cancels the actual standalone FX result')
     let averageRate='1'
     if(holder.base_currency!==elimination.base_currency) {
       const rate=(await tx.execute<{average_rate:string}>(sql`select average_rate::text from consolidated_fx_rates where org_id=${orgId} and period_id=${period.id}
-        and from_currency=${holder.base_currency} and to_currency=${elimination.base_currency} for share`)).rows[0]
+        and from_currency=${holder.base_currency} and to_currency=${elimination.base_currency} for share`, 'objects'))[0]
       if(!rate || cmp(rate.average_rate,'0')<=0)throw new NetInvestmentError('Derive the period’s consolidated average FX rate before translating its standalone profit-or-loss reclassification')
       averageRate=rate.average_rate
     }
@@ -133,7 +133,7 @@ export async function proposeNetInvestmentAssessment(orgId:string,interestId:str
   return withOrgTransaction(orgId,async()=>{
     validate(input)
     const allowed=await lockActorCommandAuthority(db,orgId,actorId,null,'close.run');await features(db,orgId)
-    const old=(await db.execute<{payload:Record<string,unknown>}>(sql`select payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`)).rows[0]
+    const old=(await db.execute<{payload:Record<string,unknown>}>(sql`select payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`, 'objects'))[0]
     if(old) {
       const required=old.payload.requiredSubsidiaryIds as string[]
       if(!Array.isArray(required) || (allowed && required.some(id=>!allowed.has(id))))throw new ScopeNotFoundError()
@@ -150,7 +150,7 @@ export async function proposeNetInvestmentAssessment(orgId:string,interestId:str
 export async function applyNetInvestmentAssessment(orgId:string,id:string,actorId:string) {
   return withOrgTransaction(orgId,async()=>{
     await lockActorCommandAuthority(db,orgId,actorId,null,'close.run');await features(db,orgId)
-    if(!(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${id} and domain='consolidation' and operation='net_investment_oci' for update`)).rows.length)throw new ScopeNotFoundError()
+    if(!(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${id} and domain='consolidation' and operation='net_investment_oci' for update`, 'objects')).length)throw new ScopeNotFoundError()
     const change=await loadFinancialChange(db,orgId,id)
     const allowed=await lockActorCommandAuthority(db,orgId,actorId,change.subsidiary_id,'close.run')
     const required=change.payload.requiredSubsidiaryIds as string[]
@@ -169,12 +169,12 @@ export async function applyNetInvestmentAssessment(orgId:string,id:string,actorI
       currency:beforeState.elimination.base_currency,idempotencyKey:`net-investment:${change.id}`,memo:'Qualifying net-investment exchange differences — consolidated OCI',
       lines:[{accountId:input.profitLossAccountId,amount:delta},{accountId:input.ociAccountId,amount:neg(delta)}],auditChanges:{changeId:change.id,interestId:change.subject_id,sources:beforeState.sources}})
     const recorded=await db.execute(sql`insert into net_investment_entries(org_id,change_id,interest_id,journal_entry_id,book_id,period_id,elimination_subsidiary_id)
-      values(${orgId},${change.id},${change.subject_id},${entry?.entryId ?? null},${input.bookId},${beforeState.periodId},${input.eliminationSubsidiaryId}) returning change_id`)
-    if(recorded.rows.length!==1)throw new NetInvestmentError('The assessment journal linkage could not be recorded — reload the approved assessment before retrying')
+      values(${orgId},${change.id},${change.subject_id},${entry?.entryId ?? null},${input.bookId},${beforeState.periodId},${input.eliminationSubsidiaryId}) returning change_id`, 'objects')
+    if(recorded.length!==1)throw new NetInvestmentError('The assessment journal linkage could not be recorded — reload the approved assessment before retrying')
     for(const source of beforeState.sources) {
       const inserted=await db.execute(sql`insert into net_investment_sources(org_id,source_line_id,change_id,amount,translated_amount,average_rate)
-        values(${orgId},${source.id},${change.id},${source.amount},${source.translated},${source.averageRate}) returning source_line_id`)
-      if(inserted.rows.length!==1)throw new NetInvestmentError('The source FX attribution could not be recorded — reload the approved assessment before retrying')
+        values(${orgId},${source.id},${change.id},${source.amount},${source.translated},${source.averageRate}) returning source_line_id`, 'objects')
+      if(inserted.length!==1)throw new NetInvestmentError('The source FX attribution could not be recorded — reload the approved assessment before retrying')
     }
     const result={entryIds:entry ? [entry.entryId] : [],ociMovement:delta,consolidationProfitLossOffset:delta,sourceLineIds:input.sourceLineIds}
     await completeFinancialChange(db,orgId,id,actorId,result);return result
@@ -184,22 +184,22 @@ export async function applyNetInvestmentAssessment(orgId:string,id:string,actorI
 export interface NetInvestmentReversal {effectiveOn:string;reason:string;idempotencyKey:string}
 async function reversalBasis(tx:SqlExecutor,orgId:string,actorId:string,sourceChangeId:string) {
   const allowed=await lockActorCommandAuthority(tx,orgId,actorId,null,'close.run')
-  if(!isUuid(sourceChangeId) || !(await tx.execute(sql`select id from financial_changes where org_id=${orgId} and id=${sourceChangeId} and domain='consolidation' and operation='net_investment_oci' for update`)).rows.length)throw new ScopeNotFoundError()
+  if(!isUuid(sourceChangeId) || !(await tx.execute(sql`select id from financial_changes where org_id=${orgId} and id=${sourceChangeId} and domain='consolidation' and operation='net_investment_oci' for update`, 'objects')).length)throw new ScopeNotFoundError()
   const source=await loadFinancialChange(tx,orgId,sourceChangeId)
   if(source.domain!=='consolidation' || source.operation!=='net_investment_oci' || source.status!=='applied')throw new ScopeNotFoundError()
   const required=source.payload.requiredSubsidiaryIds as string[]
   if(!Array.isArray(required) || (allowed && required.some(id=>!allowed.has(id))))throw new ScopeNotFoundError()
   const record=(await tx.execute<{journal_entry_id:string|null;reversed_by_change_id:string|null;book_id:string;interest_id:string}>(sql`select journal_entry_id,reversed_by_change_id,book_id,interest_id
-    from net_investment_entries where org_id=${orgId} and change_id=${sourceChangeId} for update`)).rows[0]
+    from net_investment_entries where org_id=${orgId} and change_id=${sourceChangeId} for update`, 'objects'))[0]
   if(!record || record.reversed_by_change_id)throw new NetInvestmentError('This assessment has already been corrected — review its recorded reversal in Accounting changes')
   await tx.execute(sql`select id from subsidiary_ownership_interests where org_id=${orgId} and id=${record.interest_id} for update`)
-  if((await tx.execute(sql`select 1 from consolidation_control_losses where org_id=${orgId} and interest_id=${record.interest_id} and reversed_by_change_id is null`)).rows.length)
+  if((await tx.execute(sql`select 1 from consolidation_control_losses where org_id=${orgId} and interest_id=${record.interest_id} and reversed_by_change_id is null`, 'objects')).length)
     throw new NetInvestmentError('This reserve supports an approved disposal — correct that loss-of-control event in Accounting changes before reversing the underlying OCI assessment')
-  const lines=record.journal_entry_id ? (await tx.execute<{account_id:string;amount:string;currency:string}>(sql`select account_id,amount::text,currency from journal_lines where org_id=${orgId} and entry_id=${record.journal_entry_id} order by line_number for share`)).rows : []
+  const lines=record.journal_entry_id ? (await tx.execute<{account_id:string;amount:string;currency:string}>(sql`select account_id,amount::text,currency from journal_lines where org_id=${orgId} and entry_id=${record.journal_entry_id} order by line_number for share`, 'objects')) : []
   if(record.journal_entry_id && !(await tx.execute(sql`select 1 from journal_entries e where e.org_id=${orgId} and e.id=${record.journal_entry_id} and e.status='posted' -- Live entries only: a reversed assessment authorizes no second reversal, so the guard reads the live journal
-    and not exists(select 1 from journal_entries reversal where reversal.org_id=e.org_id and reversal.reverses_entry_id=e.id and reversal.status in ('posted','reversed')) for update of e`)).rows.length)
+    and not exists(select 1 from journal_entries reversal where reversal.org_id=e.org_id and reversal.reverses_entry_id=e.id and reversal.status in ('posted','reversed')) for update of e`, 'objects')).length)
     throw new NetInvestmentError('The source assessment journal is already reversed — review its recorded correction before proposing another reversal')
-  const sources=(await tx.execute<{source_line_id:string}>(sql`select source_line_id from net_investment_sources where org_id=${orgId} and change_id=${sourceChangeId} order by source_line_id for update`)).rows
+  const sources=await tx.execute<{source_line_id:string}>(sql`select source_line_id from net_investment_sources where org_id=${orgId} and change_id=${sourceChangeId} order by source_line_id for update`, 'objects')
   return {sourceChangeId,interestId:source.subject_id,subsidiaryId:source.subsidiary_id,sourceDate:source.effective_on,requiredSubsidiaryIds:required,record,lines,sources}
 }
 export async function proposeNetInvestmentReversal(orgId:string,sourceChangeId:string,actorId:string,input:NetInvestmentReversal) {
@@ -207,7 +207,7 @@ export async function proposeNetInvestmentReversal(orgId:string,sourceChangeId:s
     throw new NetInvestmentError('Provide a valid correction date, an 8–1,000 character reason and a request key')
   return withOrgTransaction(orgId,async()=>{
     const allowed=await lockActorCommandAuthority(db,orgId,actorId,null,'close.run')
-    const old=(await db.execute<{subject_id:string;subsidiary_id:string;payload:{requiredSubsidiaryIds:string[]}}>(sql`select subject_id,subsidiary_id,payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`)).rows[0]
+    const old=(await db.execute<{subject_id:string;subsidiary_id:string;payload:{requiredSubsidiaryIds:string[]}}>(sql`select subject_id,subsidiary_id,payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`, 'objects'))[0]
     if(old) {
       const required=old.payload.requiredSubsidiaryIds
       if(!Array.isArray(required) || (allowed && required.some(id=>!allowed.has(id))))throw new ScopeNotFoundError()
@@ -224,7 +224,7 @@ export async function proposeNetInvestmentReversal(orgId:string,sourceChangeId:s
 export async function applyNetInvestmentReversal(orgId:string,id:string,actorId:string) {
   return withOrgTransaction(orgId,async()=>{
     const allowed=await lockActorCommandAuthority(db,orgId,actorId,null,'close.run')
-    if(!isUuid(id) || !(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${id} and domain='consolidation' and operation='net_investment_oci_reversal' for update`)).rows.length)throw new ScopeNotFoundError()
+    if(!isUuid(id) || !(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${id} and domain='consolidation' and operation='net_investment_oci_reversal' for update`, 'objects')).length)throw new ScopeNotFoundError()
     const change=await loadFinancialChange(db,orgId,id)
     if(change.domain!=='consolidation' || change.operation!=='net_investment_oci_reversal')throw new ScopeNotFoundError()
     const required=change.payload.requiredSubsidiaryIds as string[]
@@ -243,9 +243,9 @@ export async function applyNetInvestmentReversal(orgId:string,id:string,actorId:
       reversesEntryId:beforeState.record.journal_entry_id,idempotencyKey:`net-investment-reversal:${change.id}`,
       lines:beforeState.lines.map(line=>({accountId:line.account_id,amount:neg(line.amount),currency:line.currency})),auditChanges:{changeId:id,sourceChangeId:beforeState.sourceChangeId}}) : null
     if(beforeState.record.journal_entry_id)await markEntryReversed(db,{orgId,entryId:beforeState.record.journal_entry_id,actorId})
-    if((await db.execute(sql`update net_investment_entries set reversed_by_change_id=${id} where org_id=${orgId} and change_id=${beforeState.sourceChangeId} and reversed_by_change_id is null returning change_id`)).rows.length!==1)
+    if((await db.execute(sql`update net_investment_entries set reversed_by_change_id=${id} where org_id=${orgId} and change_id=${beforeState.sourceChangeId} and reversed_by_change_id is null returning change_id`, 'objects')).length!==1)
       throw new NetInvestmentError('The source assessment could not be marked corrected — reload it before retrying')
-    if((await db.execute(sql`update net_investment_sources set reversed_by_change_id=${id} where org_id=${orgId} and change_id=${beforeState.sourceChangeId} and reversed_by_change_id is null returning source_line_id`)).rows.length!==beforeState.sources.length)
+    if((await db.execute(sql`update net_investment_sources set reversed_by_change_id=${id} where org_id=${orgId} and change_id=${beforeState.sourceChangeId} and reversed_by_change_id is null returning source_line_id`, 'objects')).length!==beforeState.sources.length)
       throw new NetInvestmentError('The corrected source attributions could not be released — reload the assessment before retrying')
     const result={entryIds:entry ? [entry.entryId] : [],sourceChangeId:beforeState.sourceChangeId}
     await completeFinancialChange(db,orgId,id,actorId,result);return result
@@ -257,17 +257,17 @@ export async function applyNetInvestmentReversal(orgId:string,id:string,actorId:
 export async function loadNetInvestmentOptions(orgId:string,interestId:string,actorId:string) {
   return withOrgTransaction(orgId,async()=>{
     const allowed=await lockActorCommandAuthority(db,orgId,actorId,null,'close.run');await features(db,orgId)
-    const interest=(await db.execute<Pick<Interest,'subsidiary_id'|'parent_subsidiary_id'>>(sql`select subsidiary_id,parent_subsidiary_id from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId} and is_active for share`)).rows[0]
+    const interest=(await db.execute<Pick<Interest,'subsidiary_id'|'parent_subsidiary_id'>>(sql`select subsidiary_id,parent_subsidiary_id from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId} and is_active for share`, 'objects'))[0]
     if(!interest || (allowed && [interest.subsidiary_id,interest.parent_subsidiary_id].some(id=>!allowed.has(id))))throw new ScopeNotFoundError()
-    const entities=(await db.execute<Entity & {name:string}>(sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`)).rows.filter(entity=>allowed===null || allowed.has(entity.id))
+    const entities=(await db.execute<Entity & {name:string}>(sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`, 'objects')).filter(entity=>allowed===null || allowed.has(entity.id))
     const pairs=(await db.execute<Pair & {label:string}>(sql`select p.id,p.from_subsidiary_id,p.to_subsidiary_id,p.due_from_account_id,p.due_to_account_id,
       creditor.name || ' → ' || debtor.name as label from intercompany_pairs p join subsidiaries creditor on creditor.org_id=p.org_id and creditor.id=p.from_subsidiary_id
-      join subsidiaries debtor on debtor.org_id=p.org_id and debtor.id=p.to_subsidiary_id where p.org_id=${orgId} and p.is_active and ${interest.subsidiary_id} in(p.from_subsidiary_id,p.to_subsidiary_id) order by p.id`)).rows.filter(pair=>allowed===null || [pair.from_subsidiary_id,pair.to_subsidiary_id].every(id=>allowed.has(id)))
-    const books=(await db.execute<{id:string;name:string}>(sql`select id,name from accounting_books where org_id=${orgId} and is_active and posts_gl and is_primary order by name`)).rows
-    const accounts=(await db.execute<{id:string;number:string;name:string;type:string;subsidiary_id:string|null;subsidiary_include_children:boolean}>(sql`select id,number,name,type,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and is_active and not is_summary and type in('equity','income_other','expense_other') order by number`)).rows
+      join subsidiaries debtor on debtor.org_id=p.org_id and debtor.id=p.to_subsidiary_id where p.org_id=${orgId} and p.is_active and ${interest.subsidiary_id} in(p.from_subsidiary_id,p.to_subsidiary_id) order by p.id`, 'objects')).filter(pair=>allowed===null || [pair.from_subsidiary_id,pair.to_subsidiary_id].every(id=>allowed.has(id)))
+    const books=await db.execute<{id:string;name:string}>(sql`select id,name from accounting_books where org_id=${orgId} and is_active and posts_gl and is_primary order by name`, 'objects')
+    const accounts=await db.execute<{id:string;number:string;name:string;type:string;subsidiary_id:string|null;subsidiary_include_children:boolean}>(sql`select id,number,name,type,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and is_active and not is_summary and type in('equity','income_other','expense_other') order by number`, 'objects')
     const context=await loadSubsidiaryContext(db,orgId)
     const admissible=accounts.filter(account=>entities.filter(entity=>entity.is_elimination).some(entity=>restrictionAdmits(context,account.subsidiary_id,account.subsidiary_include_children,entity.id)))
-    const sources=(await db.execute<{id:string;pairId:string;bookId:string;label:string;postingDate:string}>(sql`select line.id,p.id as "pairId",entry.book_id as "bookId",entry.posting_date::text as "postingDate",
+    const sources=await db.execute<{id:string;pairId:string;bookId:string;label:string;postingDate:string}>(sql`select line.id,p.id as "pairId",entry.book_id as "bookId",entry.posting_date::text as "postingDate",
       entry.entry_number || ' — ' || holder.name || ' — ' || account.name || ' ' || line.amount::text || ' ' || holder.base_currency as label
       from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
       join subsidiaries holder on holder.org_id=line.org_id and holder.id=line.subsidiary_id join accounts account on account.org_id=line.org_id and account.id=line.account_id
@@ -275,7 +275,7 @@ export async function loadNetInvestmentOptions(orgId:string,interestId:string,ac
       where line.org_id=${orgId} and entry.origin='fx_revaluation' and entry.status in ('posted','reversed') and p.is_active
         and p.id in (select jsonb_array_elements_text(${JSON.stringify(pairs.map(pair=>pair.id))}::jsonb)::uuid)
         and not exists(select 1 from net_investment_sources used where used.org_id=line.org_id and used.source_line_id=line.id and used.reversed_by_change_id is null)
-      order by entry.posting_date desc,entry.entry_number,line.line_number limit 1000`)).rows
+      order by entry.posting_date desc,entry.entry_number,line.line_number limit 1000`, 'objects')
     return {pairs,books,accounts:admissible.map(({id,number,name,type})=>({id,number,name,type})),eliminations:entities.filter(entity=>entity.is_elimination),sources}
   })
 }

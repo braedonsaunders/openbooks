@@ -76,7 +76,7 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
   const canManageKiosks = can(authz, 'time.kiosk.manage')
   const canEditPolicy = authz.allowedSubsidiaryIds === null
   const settings = (await db.execute<{ settings: unknown }>(sql`
-    select settings->'fieldTime' as settings from orgs where id = ${orgId}`)).rows[0]?.settings as Record<string, unknown> | null
+    select settings->'fieldTime' as settings from orgs where id = ${orgId}`, 'objects'))[0]?.settings as Record<string, unknown> | null
   const employees = canManageKiosks
     ? (await listKioskWorkersInScope(orgId, authz.allowedSubsidiaryIds)).map((worker) => ({ value: worker.id, label: worker.name }))
     : []
@@ -93,7 +93,7 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
           where p.org_id = time_kiosks.org_id and p.id = time_kiosks.project_id
             and ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
        )`}
-     order by name`)).rows
+     order by name`, 'objects'))
   return {
     title: t('field.setupTitle'),
     description: t('field.setupDescription'),

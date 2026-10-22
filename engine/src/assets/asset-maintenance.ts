@@ -41,7 +41,7 @@ async function lockAsset(
     select id, asset_number, subsidiary_id, status from fixed_assets
      where org_id = ${orgId} and id = ${assetId}
        ${allowed ? sql`and subsidiary_id = any(${uuidArray([...allowed])}::uuid[])` : sql``}
-     ${mode === "update" ? sql`for update` : sql`for share`}`)).rows[0];
+     ${mode === "update" ? sql`for update` : sql`for share`}`, "objects"))[0];
   if (!row) refuse("asset_not_found", "asset not found", { status: 404 });
   return row;
 }
@@ -57,7 +57,7 @@ function exactNonNegative(value: string | null | undefined, label: string): stri
 
 async function assertVendor(tx: SqlExecutor, orgId: string, partyId: string | null): Promise<void> {
   if (!partyId) return;
-  const party = (await tx.execute(sql`select 1 from parties where org_id = ${orgId} and id = ${partyId}`)).rows[0];
+  const party = (await tx.execute(sql`select 1 from parties where org_id = ${orgId} and id = ${partyId}`, "objects"))[0];
   if (!party) refuse("vendor_invalid", "the vendor does not exist in this organization");
 }
 
@@ -122,7 +122,7 @@ export async function createMaintenanceSchedule(
         (${orgId}, ${asset.id}, ${schedule.name}, ${schedule.description}, ${schedule.intervalMonths}, ${schedule.intervalUsage},
          ${schedule.usageUnit}, ${schedule.startsOn}, ${due.nextDueOn}, ${due.nextDueUsage}, ${schedule.vendorPartyId},
          ${schedule.estimatedCost}, ${schedule.leadDays}, ${options.actorId}, ${options.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw new Error("the maintenance schedule was not stored");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -144,7 +144,7 @@ export async function updateMaintenanceSchedule(
     const tx: SqlExecutor = db;
     const before = (await tx.execute<Record<string, unknown> & { asset_id: string; last_performed_on: string | null; last_performed_usage: string | null }>(sql`
       select *, last_performed_on::text as last_performed_on, last_performed_usage::text as last_performed_usage
-        from asset_maintenance_schedules where org_id = ${orgId} and id = ${scheduleId} for update`)).rows[0];
+        from asset_maintenance_schedules where org_id = ${orgId} and id = ${scheduleId} for update`, "objects"))[0];
     if (!before) refuse("schedule_not_found", "maintenance schedule not found", { status: 404 });
     const asset = await lockAsset(tx, orgId, before.asset_id, options.allowedSubsidiaryIds);
     await assertAssetAccess(tx, { orgId, actorId: options.actorId, permission: "assets.maintain", feature: "assetMaintenance", subsidiaryIds: [asset.subsidiary_id] });
@@ -158,7 +158,7 @@ export async function updateMaintenanceSchedule(
              estimated_cost = ${schedule.estimatedCost}, lead_days = ${schedule.leadDays}, is_active = ${input.isActive},
              updated_at = clock_timestamp(), updated_by = ${options.actorId}
        where org_id = ${orgId} and id = ${scheduleId}
-       returning *`)).rows[0];
+       returning *`, "objects"))[0];
     if (!after) throw new Error("the maintenance schedule was not updated; no row changed");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -180,7 +180,7 @@ async function insertReading(
     select (select max(reading)::text from asset_usage_readings
              where org_id = ${args.orgId} and asset_id = ${args.assetId} and lower(unit) = lower(${args.unit}) and read_on <= ${args.readOn}) as before,
            (select min(reading)::text from asset_usage_readings
-             where org_id = ${args.orgId} and asset_id = ${args.assetId} and lower(unit) = lower(${args.unit}) and read_on > ${args.readOn}) as after`)).rows[0];
+             where org_id = ${args.orgId} and asset_id = ${args.assetId} and lower(unit) = lower(${args.unit}) and read_on > ${args.readOn}) as after`, "objects"))[0];
   if (bounds?.before && cmp(args.reading, bounds.before) < 0) {
     refuse("reading_decreases", `the reading ${args.reading} is below an earlier reading of ${bounds.before} ${args.unit}`);
   }
@@ -190,7 +190,7 @@ async function insertReading(
   const row = (await tx.execute<{ id: string }>(sql`
     insert into asset_usage_readings (org_id, asset_id, read_on, reading, unit, memo, created_by)
     values (${args.orgId}, ${args.assetId}, ${args.readOn}, ${args.reading}, ${args.unit}, ${args.memo}, ${args.actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!row) throw new Error("the meter reading was not stored");
   return row.id;
 }
@@ -220,16 +220,16 @@ async function refreshScheduleFromRecords(tx: SqlExecutor, orgId: string, schedu
     interval_months: number | null; interval_usage: string | null; starts_on: string;
   }>(sql`
     select interval_months, interval_usage::text as interval_usage, starts_on::text as starts_on
-      from asset_maintenance_schedules where org_id = ${orgId} and id = ${scheduleId} for update`)).rows[0];
+      from asset_maintenance_schedules where org_id = ${orgId} and id = ${scheduleId} for update`, "objects"))[0];
   if (!schedule) return;
   const last = (await tx.execute<{ performed_on: string; usage_reading: string | null }>(sql`
     select performed_on::text as performed_on, usage_reading::text as usage_reading
       from asset_maintenance_records
      where org_id = ${orgId} and schedule_id = ${scheduleId} and status = 'recorded'
-     order by performed_on desc, created_at desc limit 1`)).rows[0];
+     order by performed_on desc, created_at desc limit 1`, "objects"))[0];
   const lastUsage = (await tx.execute<{ usage: string | null }>(sql`
     select max(usage_reading)::text as usage from asset_maintenance_records
-     where org_id = ${orgId} and schedule_id = ${scheduleId} and status = 'recorded'`)).rows[0]?.usage ?? null;
+     where org_id = ${orgId} and schedule_id = ${scheduleId} and status = 'recorded'`, "objects"))[0]?.usage ?? null;
   const due = nextMaintenanceDue({
     intervalMonths: schedule.interval_months,
     intervalUsage: schedule.interval_usage,
@@ -243,7 +243,7 @@ async function refreshScheduleFromRecords(tx: SqlExecutor, orgId: string, schedu
            next_due_on = ${due.nextDueOn}, next_due_usage = ${due.nextDueUsage},
            updated_at = clock_timestamp(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${scheduleId}
-     returning id`)).rows[0];
+     returning id`, "objects"))[0];
   if (!updated) throw new Error("the maintenance schedule was not refreshed; no row changed");
 }
 
@@ -292,7 +292,7 @@ export async function recordMaintenance(
     if (input.scheduleId) {
       schedule = (await tx.execute<{ id: string; usage_unit: string | null }>(sql`
         select id, usage_unit from asset_maintenance_schedules
-         where org_id = ${orgId} and id = ${input.scheduleId} and asset_id = ${asset.id} for update`)).rows[0] ?? null;
+         where org_id = ${orgId} and id = ${input.scheduleId} and asset_id = ${asset.id} for update`, "objects"))[0] ?? null;
       if (!schedule) refuse("schedule_not_found", "the maintenance schedule does not belong to this asset", { status: 404 });
     }
     let sourceDocumentId: string | null = null;
@@ -301,7 +301,7 @@ export async function recordMaintenance(
       const source = (await tx.execute<{ document_id: string; kind: string; status: string; subsidiary_id: string | null }>(sql`
         select d.id as document_id, d.kind, d.status, d.subsidiary_id
           from document_lines dl join documents d on d.org_id = dl.org_id and d.id = dl.document_id
-         where dl.org_id = ${orgId} and dl.id = ${input.sourceDocumentLineId}`)).rows[0];
+         where dl.org_id = ${orgId} and dl.id = ${input.sourceDocumentLineId}`, "objects"))[0];
       if (!source) refuse("source_line_not_found", "the bill line was not found", { status: 404 });
       if (source.status !== "posted") refuse("source_not_posted", "link a line of a posted bill or expense report");
       if (source.subsidiary_id !== null && source.subsidiary_id !== asset.subsidiary_id) {
@@ -331,7 +331,7 @@ export async function recordMaintenance(
         (${orgId}, ${asset.id}, ${schedule?.id ?? null}, ${input.performedOn}, ${usage}, ${description},
          ${input.vendorPartyId || null}, ${cost}, ${input.treatment}, ${sourceDocumentId}, ${input.sourceDocumentLineId ?? null},
          ${proposalId}, ${options.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw new Error("the maintenance record was not stored");
     if (schedule) await refreshScheduleFromRecords(tx, orgId, schedule.id, options.actorId);
     await tx.execute(sql`
@@ -353,7 +353,7 @@ export async function cancelMaintenanceRecord(
     const tx: SqlExecutor = db;
     const record = (await tx.execute<{ asset_id: string; schedule_id: string | null; status: string }>(sql`
       select asset_id, schedule_id, status from asset_maintenance_records
-       where org_id = ${orgId} and id = ${args.recordId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${args.recordId} for update`, "objects"))[0];
     if (!record) refuse("record_not_found", "maintenance record not found", { status: 404 });
     const asset = await lockAsset(tx, orgId, record.asset_id, args.allowedSubsidiaryIds);
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.maintain", feature: "assetMaintenance", subsidiaryIds: [asset.subsidiary_id] });
@@ -362,7 +362,7 @@ export async function cancelMaintenanceRecord(
       update asset_maintenance_records
          set status = 'cancelled', cancelled_at = clock_timestamp(), cancelled_by = ${args.actorId}, cancel_reason = ${reason}
        where org_id = ${orgId} and id = ${args.recordId} and status = 'recorded'
-       returning id`)).rows[0];
+       returning id`, "objects"))[0];
     if (!updated) throw new Error("the maintenance record was not cancelled; no row changed");
     if (record.schedule_id) await refreshScheduleFromRecords(tx, orgId, record.schedule_id, args.actorId);
     await tx.execute(sql`
@@ -393,7 +393,7 @@ export async function maintenanceQueue(
   orgId: string,
   args: { today: string; allowedSubsidiaryIds?: readonly string[] | null; scheduleIds?: readonly string[] },
 ): Promise<MaintenanceQueueRow[]> {
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     id: string; asset_id: string; asset_number: string; asset_name: string; subsidiary_id: string; name: string;
     next_due_on: string | null; next_due_usage: string | null; usage_unit: string | null; current_usage: string | null; lead_days: number;
   }>(sql`
@@ -407,7 +407,7 @@ export async function maintenanceQueue(
        and a.status = any(${`{${LIVE_ASSET_STATUSES.join(",")}}`}::text[])
        ${args.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray([...args.allowedSubsidiaryIds])}::uuid[])` : sql``}
        ${args.scheduleIds ? sql`and s.id = any(${uuidArray([...args.scheduleIds])}::uuid[])` : sql``}
-     order by s.next_due_on nulls last, a.asset_number`)).rows;
+     order by s.next_due_on nulls last, a.asset_number`, "objects");
   return rows.map((row) => ({
     scheduleId: row.id,
     assetId: row.asset_id,
@@ -450,7 +450,7 @@ export async function runMaintenanceAlertScan(_now: Date): Promise<{ orgId: stri
           values (${orgId}, ${row.scheduleId}, ${maintenanceDueKey(row.nextDueOn, row.nextDueUsage)}, ${row.standing})
           -- Each due point notifies once per stage; a repeat scan finds the row and stays quiet.
           on conflict (org_id, schedule_id, due_key, stage) do nothing
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
         if (!inserted) continue;
         const when = [row.nextDueOn, row.nextDueUsage && row.usageUnit ? `${row.nextDueUsage} ${row.usageUnit}` : null].filter(Boolean).join(" / ");
         count += await notifyAssetOperators(tx, {

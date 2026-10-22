@@ -100,8 +100,8 @@ async function loadOrderTimeline(orgId: string, orderId: string): Promise<Channe
   const docIds = [...new Set(events.map((event) => event.postingDocumentId).filter((id): id is string => !!id))]
   const docs = docIds.length > 0
     ? (await db.execute<{ id: string; kind: string; document_number: string | null }>(
-        sql`select id, kind, document_number from documents where org_id = ${orgId} and id = any(${docIds}::uuid[])`,
-      )).rows
+        sql`select id, kind, document_number from documents where org_id = ${orgId} and id = any(${docIds}::uuid[])`, 'objects',
+      ))
     : []
   const docById = new Map(docs.map((doc) => [doc.id, doc]))
   return events.map((event) => {
@@ -184,20 +184,20 @@ export async function loadChannelOrderDrawer(
   const order = await loadChannelOrder(orgId, orderId)
   if (!order) return null
   const [channelRow, docRow, summaryRow] = await Promise.all([
-    db.execute<{ name: string }>(sql`select name from sales_channels where org_id = ${orgId} and id = ${order.channelId}`),
+    db.execute<{ name: string }>(sql`select name from sales_channels where org_id = ${orgId} and id = ${order.channelId}`, 'objects'),
     order.postingDocumentId
       ? db.execute<{ kind: string; document_number: string | null; status: string }>(
-          sql`select kind, document_number, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`,
+          sql`select kind, document_number, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`, 'objects',
         )
-      : Promise.resolve({ rows: [] as { kind: string; document_number: string | null; status: string }[] }),
+      : Promise.resolve([] as { kind: string; document_number: string | null; status: string }[]),
     order.summaryId
       ? db.execute<{ summary_date: string; document_number: string | null }>(
           sql`select s.summary_date::text as summary_date, d.document_number
                 from channel_daily_summaries s
                 left join documents d on d.org_id = s.org_id and d.id = s.posting_document_id
-               where s.org_id = ${orgId} and s.id = ${order.summaryId}`,
+               where s.org_id = ${orgId} and s.id = ${order.summaryId}`, 'objects',
         )
-      : Promise.resolve({ rows: [] as { summary_date: string; document_number: string | null }[] }),
+      : Promise.resolve([] as { summary_date: string; document_number: string | null }[]),
   ])
   const policy = await getPostingPolicy(orgId, order.channelId, isoDateOf(new Date())).catch(() => null)
   // Margin facts may predate this drawer (orders posted before margin
@@ -209,25 +209,25 @@ export async function loadChannelOrderDrawer(
   // authoritative registry; a missing row refuses at render, never guesses.
   const unitCodes = new Set<string>([order.shopCurrency])
   for (const component of economics?.components ?? []) unitCodes.add(component.currency)
-  const unitRows = (await db.execute<{ code: string; minor_units: number | null }>(sql`
+  const unitRows = await db.execute<{ code: string; minor_units: number | null }>(sql`
     select code, minor_units from currencies
      where code in (${sql.join([...unitCodes].map((code) => sql`${code}`), sql`, `)})
-  `)).rows
+  `, 'objects')
   const currencyUnits: Record<string, number | null> = {}
   for (const code of unitCodes) {
     currencyUnits[code] = unitRows.find((row) => row.code === code)?.minor_units ?? null
   }
-  const doc = order.postingDocumentId && docRow.rows[0]
-    ? { id: order.postingDocumentId, kind: docRow.rows[0].kind, number: docRow.rows[0].document_number, status: docRow.rows[0].status }
+  const doc = order.postingDocumentId && docRow[0]
+    ? { id: order.postingDocumentId, kind: docRow[0].kind, number: docRow[0].document_number, status: docRow[0].status }
     : null
-  const summary = order.summaryId && summaryRow.rows[0]
-    ? { id: order.summaryId, summaryDate: summaryRow.rows[0].summary_date, documentNumber: summaryRow.rows[0].document_number }
+  const summary = order.summaryId && summaryRow[0]
+    ? { id: order.summaryId, summaryDate: summaryRow[0].summary_date, documentNumber: summaryRow[0].document_number }
     : null
   return {
     id: order.id,
     orderNumber: order.externalNumber,
     channelId: order.channelId,
-    channelName: channelRow.rows[0]?.name ?? '',
+    channelName: channelRow[0]?.name ?? '',
     externalId: order.externalId,
     status: order.postingStatus,
     orderedAt: order.orderedAt,
@@ -305,7 +305,7 @@ async function loadOrderEconomics(
   const tenders = postingDocumentId
     ? await db.execute<{ total: string }>(sql`
         select coalesce(sum(amount_minor), 0)::text as total from document_tenders
-         where org_id = ${orgId} and document_id = ${postingDocumentId} and kind = 'stored_value'`)
+         where org_id = ${orgId} and document_id = ${postingDocumentId} and kind = 'stored_value'`, 'objects')
     : null
   return {
     currency: facts.currency,
@@ -316,7 +316,7 @@ async function loadOrderEconomics(
     marginPct: facts.marginPct,
     estimatedAny: facts.estimatedAny,
     mixedCurrency: facts.mixedCurrency,
-    storedValueMinor: tenders?.rows[0]?.total ?? '0',
+    storedValueMinor: tenders?.[0]?.total ?? '0',
     components: [...grouped.values()].map((row) => ({
       component: row.component,
       sourceKind: row.sourceKind,

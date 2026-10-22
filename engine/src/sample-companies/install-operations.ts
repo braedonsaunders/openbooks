@@ -15,9 +15,9 @@ export async function installOperatingDocuments(c: DemoContext, insertedDraftIds
   const control = await loadRequiredControlAccounts(c.orgId);
   for (const spec of operatingDocuments(c)) {
     let key = scenarioRecordId(c, "documents", spec.key);
-    const matches = (await db.execute<{ id: string; kind: string; status: string }>(sql`
+    const matches = await db.execute<{ id: string; kind: string; status: string }>(sql`
       select id,kind,status from documents where org_id=${c.orgId} and (id=${key} or (external_source='industry_demo' and external_ref=${spec.key}))
-    `)).rows;
+    `, "objects");
     if (matches.length > 1) throw new SampleCompanyError(`The demonstration identity ${spec.key} is ambiguous; review duplicate external references before refreshing.`);
     const existing = matches[0];
     if (existing && existing.kind !== spec.kind) throw new SampleCompanyError(`The demonstration identity ${spec.key} belongs to a different transaction type; review its provenance before refreshing.`);
@@ -61,11 +61,11 @@ export async function verifyOperatingDocuments(c: DemoContext): Promise<string[]
     select d.id,d.kind,d.status,d.party_id as "partyId",d.currency,d.external_ref as "externalRef",d.posted_entry_id as "postedEntryId",
       (select count(*)::int from document_lines l where l.org_id=d.org_id and l.document_id=d.id) as lines
     from documents d where d.org_id=${c.orgId} and d.external_source='industry_demo' and d.external_ref in (${sql.join(specs.map(spec => sql`${spec.key}`), sql`, `)})
-  `);
-  const byId = new Map(result.rows.map(row => [row.externalRef, row]));
+  `, "objects");
+  const byId = new Map(result.map(row => [row.externalRef, row]));
   for (const spec of specs) {
     const row = byId.get(spec.key);
-    if (result.rows.filter(candidate => candidate.externalRef === spec.key).length > 1) missing.push(`ambiguous operating identity: ${spec.key}`);
+    if (result.filter(candidate => candidate.externalRef === spec.key).length > 1) missing.push(`ambiguous operating identity: ${spec.key}`);
     if (!row || row.kind !== spec.kind || row.lines < 1 || row.currency !== c.currency) missing.push(`operating transaction: ${spec.key}`);
     else if (!c.memberSample && !["transfer", "card_charge", "card_refund", "deposit"].includes(spec.kind) && row.partyId !== spec.partyId) missing.push(`operating counterparty: ${spec.key}`);
     else if (!c.memberSample && spec.post && (row.status !== "posted" || !row.postedEntryId)) missing.push(`posted operating transaction: ${spec.key}`);

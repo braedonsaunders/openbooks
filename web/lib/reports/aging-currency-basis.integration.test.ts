@@ -56,8 +56,8 @@ test('aging converts from base or transaction currency at the as-of spot', { ski
         values (${scratch.orgId}, ${pay}, 1, ${scratch.accounts.bank}, ${scratch.subsidiaryId}, ${scratch.customerId}, '49.3827', 'EUR', '40', '1.2345678901', false),
                (${scratch.orgId}, ${pay}, 2, ${scratch.accounts.ar}, ${scratch.subsidiaryId}, ${scratch.customerId}, '-49.3827', 'EUR', '-40', '1.2345678901', true)`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${pay}`)
-      const invLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = (select posted_entry_id from documents where id = ${eur}) and is_open_item`)).rows[0]!.id
-      const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`)).rows[0]!.id
+      const invLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = (select posted_entry_id from documents where id = ${eur}) and is_open_item`, 'objects'))[0]!.id
+      const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`, 'objects'))[0]!.id
       await db.execute(sql`insert into applications
         (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
          source_transaction_currency, target_transaction_amount, target_transaction_currency,
@@ -70,8 +70,8 @@ test('aging converts from base or transaction currency at the as-of spot', { ski
         values (${scratch.orgId}, 'EUR', 'CAD', ${scratch.date}, 'spot', '1.5')`)
     })
     await withOrgContext(scratch.orgId, async () => {
-      const live = (await db.execute<{ id: string; open_balance: string }>(sql`
-        select id::text as id, open_balance::text as open_balance from documents where id in (${eur}, ${cad})`)).rows
+      const live = await db.execute<{ id: string; open_balance: string }>(sql`
+        select id::text as id, open_balance::text as open_balance from documents where id in (${eur}, ${cad})`, 'objects')
       assert.equal(live.find((d) => d.id === eur)?.open_balance, '60.0000')
 
       // Default is the base basis in the org base: the numbers booked to date.

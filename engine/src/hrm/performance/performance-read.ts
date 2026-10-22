@@ -90,22 +90,22 @@ async function readableReviewIds(
 ): Promise<Set<string> | null> {
   if (granted && allowed === null) return null;
   if (granted) {
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       select r.id from hrm_reviews r
       join worker_employments e
         on e.org_id = r.org_id and e.id = r.employment_id
      where r.org_id = ${orgId} and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}
-    `)).rows;
+    `, "objects");
     return new Set(rows.map((row) => row.id));
   }
   const person = await loadApprovalPerson(db, orgId, actorId);
   if (!person.partyId) return new Set();
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from hrm_reviews
      where org_id = ${orgId}
        and (reviewer_party_id = ${person.partyId}
             or (subject_party_id = ${person.partyId} and status in ('shared', 'acknowledged')))
-  `)).rows;
+  `, "objects");
   return new Set(rows.map((row) => row.id));
 }
 
@@ -131,7 +131,7 @@ async function cycleProgress(
   }>(sql`
     select id, kind, status from hrm_reviews
      where org_id = ${orgId} and cycle_id = ${cycleId}
-  `)).rows.filter((row) => visible === null || visible.has(row.id));
+  `, "objects")).filter((row) => visible === null || visible.has(row.id));
   const submitted = new Set(["submitted", "calibrated", "shared", "acknowledged"]);
   return {
     totalSelf: rows.filter((r) => r.kind === "self").length,
@@ -183,7 +183,7 @@ async function loadCycleRow(db: SqlExecutor, orgId: string, cycleId: string): Pr
       join hrm_review_templates t
         on t.org_id = c.org_id and t.id = c.template_id
      where c.org_id = ${orgId} and c.id = ${cycleId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -223,7 +223,7 @@ async function cycleScopeForHr(
     const department = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from departments
        where org_id = ${orgId} and id = ${cycle.appliesTo.departmentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!department) return { visible: false, orgWide: false };
     if (subsidiaryId !== null && department.subsidiaryId !== null && subsidiaryId !== department.subsidiaryId) {
       return { visible: false, orgWide: false };
@@ -255,11 +255,11 @@ export async function listCycleProgress(args: {
     const granted = await hasPerformanceGrant(db, orgId, actorId);
     const allowed = granted ? await actorAllowedSubsidiaryIds(db, orgId, actorId) : null;
     const visible = await readableReviewIds(db, orgId, actorId, granted, allowed);
-    const cycles = (await db.execute<{ id: string }>(sql`
+    const cycles = await db.execute<{ id: string }>(sql`
       select id from hrm_review_cycles
        where org_id = ${orgId}
        order by period_end_on desc, created_at desc
-    `)).rows;
+    `, "objects");
     const out: CycleProgressDTO[] = [];
     for (const { id } of cycles) {
       const cycle = await loadCycleRow(db, orgId, id);
@@ -319,7 +319,7 @@ export async function getCycleDetail(args: {
       select id from hrm_reviews
        where org_id = ${orgId} and cycle_id = ${cycleId}
        order by created_at
-    `)).rows
+    `, "objects"))
       .map((row) => row.id)
       .filter((id) => visible === null || visible.has(id));
     const person = await loadApprovalPerson(db, orgId, actorId);
@@ -400,7 +400,7 @@ export async function getReviewDetail(args: {
           join worker_employments e
             on e.org_id = r.org_id and e.id = r.employment_id
          where r.org_id = ${orgId} and r.id = ${reviewId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!scope || !allowed.has(scope.employerSubsidiaryId)) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
@@ -416,7 +416,7 @@ export async function getReviewDetail(args: {
     // subject-safe projection, never in the UI alone.
     const person = await loadApprovalPerson(db, orgId, actorId);
     const review = projectReviewForReader(stored, { granted, actorPartyId: person.partyId });
-    const cycle=(await db.execute<{scale:unknown;instructions:string|null}>(sql`select rating_scale_snapshot as scale,template_document_snapshot->>'instructions' as instructions from hrm_review_cycles where org_id=${orgId} and id=${review.cycleId}`)).rows[0];
+    const cycle=(await db.execute<{scale:unknown;instructions:string|null}>(sql`select rating_scale_snapshot as scale,template_document_snapshot->>'instructions' as instructions from hrm_review_cycles where org_id=${orgId} and id=${review.cycleId}`, "objects"))[0];
     const ratingScale=mathRefusal('REFUSED',()=>parseRatingScale(cycle?.scale));
     return { review, answers,ratingScale,instructions:cycle?.instructions??'' };
   });
@@ -436,7 +436,7 @@ export async function listMyReviews(args: { orgId: string; actorId: string }): P
     const granted = await hasPerformanceGrant(db, orgId, actorId);
     const person = await loadApprovalPerson(db, orgId, actorId);
     if (!person.partyId) return { asSubject: [], asReviewer: [] };
-    const rows = (await db.execute<{ id: string; subjectPartyId: string }>(sql`
+    const rows = await db.execute<{ id: string; subjectPartyId: string }>(sql`
       select r.id, r.subject_party_id as "subjectPartyId"
         from hrm_reviews r
         join hrm_review_cycles c on c.org_id = r.org_id and c.id = r.cycle_id
@@ -444,7 +444,7 @@ export async function listMyReviews(args: { orgId: string; actorId: string }): P
          and (r.reviewer_party_id = ${person.partyId}
               or (r.subject_party_id = ${person.partyId} and r.status in ('shared', 'acknowledged')))
        order by c.period_end_on desc, r.created_at desc
-    `)).rows;
+    `, "objects");
     const asSubject: ReviewDTO[] = [];
     const asReviewer: ReviewDTO[] = [];
     for (const row of rows) {
@@ -503,10 +503,10 @@ export async function listGoals(args: {
         const scopeFilter = allowed === null
           ? sql``
           : sql`and ${employerSubsidiaryScope(allowed, "employer_subsidiary_id")}`;
-        const rows = (await db.execute<{ id: string }>(sql`
+        const rows = await db.execute<{ id: string }>(sql`
           select id from worker_employments where org_id = ${orgId}
           ${scopeFilter}
-        `)).rows;
+        `, "objects");
         employments = [...new Set([...rows.map((r) => r.id), ...own, ...managed])];
       } else {
         employments = [...new Set([...own, ...managed])];
@@ -514,7 +514,7 @@ export async function listGoals(args: {
     }
     if (employments.length === 0) return [];
     const params = employments.map((id) => sql`${id}::uuid`);
-    const rows = (await db.execute<GoalListDTO>(sql`
+    const rows = await db.execute<GoalListDTO>(sql`
       select id,
              employment_id as "employmentId",
              title,
@@ -525,7 +525,7 @@ export async function listGoals(args: {
         from hrm_goals
        where org_id = ${orgId} and employment_id in (${sql.join(params, sql`, `)})
        order by due_on nulls last, created_at desc
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }
@@ -706,7 +706,7 @@ async function loadLeavers(
   // first service date spans ALL versions: the opening version is
   // superseded by definition, and reading only live rows would tenure
   // every leaver at zero days.
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     employmentId: string;
     terminatedFrom: string;
     firstFrom: string;
@@ -724,7 +724,7 @@ async function loadLeavers(
        and t.effective_from > ${start}::date
        and t.effective_from <= ${end}::date
        ${retentionScopeCondition(allowed)}
-  `)).rows;
+  `, "objects");
   const out: LeaverRow[] = [];
   for (const row of rows) {
     if (!row.firstFrom) continue;
@@ -742,14 +742,14 @@ async function loadLeavers(
          and (av.effective_to is null or av.effective_to > ${row.terminatedFrom}::date)
        order by av.version_no desc
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     const departmentId_ = dept?.departmentId ?? null;
     if (departmentId !== null && departmentId_ !== departmentId) continue;
     const exit = (await db.execute<{ isVoluntary: boolean; isRegrettable: boolean | null }>(sql`
       select is_voluntary as "isVoluntary", is_regrettable as "isRegrettable"
         from hrm_exit_records
        where org_id = ${orgId} and employment_id = ${row.employmentId}
-    `)).rows[0];
+    `, "objects"))[0];
     out.push({
       employmentId: row.employmentId,
       departmentId: departmentId_,
@@ -769,10 +769,10 @@ async function departmentNames(
 ): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
   const params = ids.map((id) => sql`${id}::uuid`);
-  const rows = (await db.execute<{ id: string; name: string }>(sql`
+  const rows = await db.execute<{ id: string; name: string }>(sql`
     select id::text as id, name from departments
      where org_id = ${orgId} and id in (${sql.join(params, sql`, `)})
-  `)).rows;
+  `, "objects");
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
@@ -878,7 +878,7 @@ export async function getRetentionOverview(args: {
        where e.org_id = ${orgId} and x.id is null
          ${retentionScopeCondition(allowed)}
        order by v.effective_from desc
-    `)).rows;
+    `, "objects"));
     const noInterview = (allowed !== null && allowed.size === 0)
       ? []
       : (await db.execute<{ exitId: string; employmentId: string; workerName: string }>(sql`
@@ -890,7 +890,7 @@ export async function getRetentionOverview(args: {
        where x.org_id = ${orgId} and x.interview_held_on is null
          ${retentionScopeCondition(allowed)}
        order by x.recorded_at desc
-    `)).rows;
+    `, "objects"));
     return {
       trailingTwelveMonths: {
         periodStart: start,
@@ -922,7 +922,7 @@ export async function listReviewWorklist(args:{orgId:string;actorId:string}) {
     const allowed=granted?await actorAllowedSubsidiaryIds(db,orgId,actorId):null;
     const visible=await readableReviewIds(db,orgId,actorId,granted,allowed);
     const person=await loadApprovalPerson(db,orgId,actorId);
-    const rows=(await db.execute<{isReviewer:boolean;isSubject:boolean;id:string;cycleId:string;employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string|null}>(sql`
+    const rows=await db.execute<{isReviewer:boolean;isSubject:boolean;id:string;cycleId:string;employee:string;reviewer:string;cycle:string;kind:string;status:string;due:string|null}>(sql`
       select r.id,r.reviewer_party_id=${person.partyId}::uuid as "isReviewer",r.subject_party_id=${person.partyId}::uuid as "isSubject",r.cycle_id as "cycleId",p.display_name as employee,m.display_name as reviewer,c.name as cycle,
         r.kind,r.status,case when r.kind='self' then c.self_due_on else c.manager_due_on end::text as due
       from hrm_reviews r join hrm_review_cycles c on c.org_id=r.org_id and c.id=r.cycle_id
@@ -930,7 +930,7 @@ export async function listReviewWorklist(args:{orgId:string;actorId:string}) {
       join parties m on m.org_id=r.org_id and m.id=r.reviewer_party_id
       where r.org_id=${orgId} ${visible===null?sql``:visible.size?sql`and r.id in (${sql.join([...visible].map(id=>sql`${id}::uuid`),sql`,`)})`:sql`and false`}
       order by case when r.status='pending' then 0 else 1 end, c.manager_due_on nulls last, p.display_name,r.id
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }

@@ -27,7 +27,7 @@ export interface ServiceLinkDelivery {
 export async function deliverServiceQuote(input: { orgId: string; actorId: string; request: Request; sent: SentServiceQuote; quoteDocumentId: string; message?: string | null }): Promise<ServiceLinkDelivery> {
   const link = `${appBaseUrl(input.request)}/sign/service-quotes/${input.sent.token}`
   const names = (await db.execute<{ orgName: string; memo: string | null }>(sql`select o.name as "orgName", d.memo from orgs o
-    left join documents d on d.org_id = o.id and d.id = ${input.quoteDocumentId} where o.id = ${input.orgId}`)).rows[0]
+    left join documents d on d.org_id = o.id and d.id = ${input.quoteDocumentId} where o.id = ${input.orgId}`, 'objects'))[0]
   const orgName = names?.orgName ?? ''
   const email = serviceQuoteEmail({
     orgName, recipientName: input.sent.signerName, quoteNumber: input.sent.quoteNumber, title: names?.memo?.trim() || input.sent.quoteNumber,

@@ -45,22 +45,23 @@ const mockSources = new Map<string, string>([
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
       const executor = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           if (text.includes('update payment_mandates')) state.updates.push('mandates')
           if (text.includes('update payment_schedules')) state.updates.push('schedules')
           if (text.includes('select * from payment_mandates')) {
-            return { rows: [{ id: 'mandate-1', party_id: 'party-1', status: 'active' }] }
+            return inMode({ rows: [{ id: 'mandate-1', party_id: 'party-1', status: 'active' }] })
           }
-          if (text.includes('select party_id from payment_mandates')) return { rows: [{ party_id: 'party-1' }] }
-          if (text.includes('select p.id from parties')) return { rows: [{ id: 'party-1' }] }
+          if (text.includes('select party_id from payment_mandates')) return inMode({ rows: [{ party_id: 'party-1' }] })
+          if (text.includes('select p.id from parties')) return inMode({ rows: [{ id: 'party-1' }] })
           if (text.includes('select cron, timezone')) {
-            return { rows: [{ cron: '0 9 * * *', timezone: 'UTC' }] }
+            return inMode({ rows: [{ cron: '0 9 * * *', timezone: 'UTC' }] })
           }
           if (text.includes('select * from payment_schedules')) {
-            return { rows: [{ id: 'schedule-1' }] }
+            return inMode({ rows: [{ id: 'schedule-1' }] })
           }
-          return { rows: [{ id: 'row-1' }] }
+          return inMode({ rows: [{ id: 'row-1' }] })
         },
       }
       export const db = {

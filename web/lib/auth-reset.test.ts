@@ -21,7 +21,7 @@ interface ResetHarnessState {
   uncertainMarks: Array<Record<string, unknown>>;
   passwordHashes: number;
   networkResetCount: number;
-  execute(query: Query): Promise<{ rows: unknown[] }>;
+  execute(query: Query, mode?: string): Promise<unknown>;
 }
 
 const state: ResetHarnessState = {
@@ -37,24 +37,25 @@ const state: ResetHarnessState = {
   uncertainMarks: [],
   passwordHashes: 0,
   networkResetCount: 0,
-  async execute(query) {
+  async execute(query, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     this.queries.push(query);
     if (query.text.includes("from users u")) {
-      return { rows: this.user ? [this.user] : [] };
+      return inMode({ rows: this.user ? [this.user] : [] });
     }
     if (query.text.includes("network_hash")) {
-      return { rows: [{ n: this.networkResetCount }] };
+      return inMode({ rows: [{ n: this.networkResetCount }] });
     }
     if (query.text.includes("select count(*)::int as n")) {
-      return { rows: [{ n: 0 }] };
+      return inMode({ rows: [{ n: 0 }] });
     }
     // Delivery re-checks, under its per-user lock, that the token it is about
     // to email is still the user's current one. A token this test just
     // minted is current (nothing superseded or consumed it).
     if (query.text.includes("from auth_password_resets cur")) {
-      return { rows: [{ id: "reset-current" }] };
+      return inMode({ rows: [{ id: "reset-current" }] });
     }
-    return { rows: [] };
+    return inMode({ rows: [] });
   },
 };
 
@@ -74,7 +75,7 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.auth-reset-test')]
-      export const db = { execute: (query) => state.execute(query) }
+      export const db = { execute: (query, mode) => state.execute(query, mode) }
       export async function withBypass(callback) { return callback() }
     `,
   ],

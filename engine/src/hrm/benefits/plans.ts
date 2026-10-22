@@ -55,12 +55,10 @@ export async function loadBenefitPlan(
   orgId: string,
   planId: string,
 ): Promise<BenefitPlanRow> {
-  const row = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const row = (await exec.execute<Record<string, unknown>>(sql`
       select ${PLAN_COLUMNS} from hrm_benefit_plans
        where org_id = ${orgId} and id = ${planId}
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
     throw new BenefitsError(
       "NOT_FOUND",

@@ -38,8 +38,8 @@ async function fixture() {
     const sub = await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)
-    secondSub = sub.rows[0]!.id
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, 'objects')
+    secondSub = sub[0]!.id
     await db.execute(sql`
       update app_roles set permissions='["documents.manage"]'::jsonb,
         subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [secondSub] })}::jsonb
@@ -65,7 +65,7 @@ async function fixture() {
       method: 'DELETE',
     }) as never, { params: Promise.resolve({ id }) }))
   const policyCount = async (): Promise<number> =>
-    Number((await db.execute<{ n: string }>(sql`select count(*) as n from dunning_policies where org_id=${org.orgId}`)).rows[0]!.n)
+    Number((await db.execute<{ n: string }>(sql`select count(*) as n from dunning_policies where org_id=${org.orgId}`, 'objects'))[0]!.n)
   const close = async () => {
     session.user = null
     await dropScratchOrg(org.orgId)
@@ -123,7 +123,7 @@ test('a subsidiary-restricted caller cannot change or delete the policy', async 
     assert.equal(patchDenied.status, 403)
     const deleteDenied = await f.remove(id)
     assert.equal(deleteDenied.status, 403)
-    const name = (await db.execute<{ name: string }>(sql`select name from dunning_policies where id=${id}`)).rows[0]!.name
+    const name = (await db.execute<{ name: string }>(sql`select name from dunning_policies where id=${id}`, 'objects'))[0]!.name
     assert.equal(name, 'Standard ladder', 'the refused writes changed nothing')
     assert.equal(await f.policyCount(), 1)
 

@@ -46,11 +46,11 @@ async function currentCalendarVersion(
   orgId: string,
   rowId: string,
 ): Promise<CalendarVersion | null> {
-  const rows = (await executor.execute<CalendarVersion>(sql`
+  const rows = await executor.execute<CalendarVersion>(sql`
     select subsidiary_id, week_starts_on, weekend_days, holiday_country, holiday_region, effective_from, effective_to
       from org_business_calendars
      where id = ${rowId} and org_id = ${orgId}
-  `)).rows
+  `, 'objects')
   return rows[0] ?? null
 }
 
@@ -180,7 +180,7 @@ export const validateBusinessCalendarWrite: SetupEntityValidationHook = async ({
   if (subsidiaryId) {
     const subsidiary = (await executor.execute<{ name: string; country: string }>(sql`
       select name, country from subsidiaries where id = ${subsidiaryId} and org_id = ${orgId}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!subsidiary) return 'Select a subsidiary in this organization, or leave it empty for the org-wide calendar'
     subsidiaryCountry = subsidiary.country
     subsidiaryName = subsidiary.name
@@ -227,7 +227,7 @@ export const validateAgingBucketPolicyWrite: SetupEntityValidationHook = async (
   const current = rowId
     ? (await executor.execute<{ boundaries: unknown; effective_from: string | Date; effective_to: string | Date | null }>(sql`
         select boundaries, effective_from, effective_to from aging_bucket_policies where id = ${rowId} and org_id = ${orgId}
-      `)).rows[0] ?? null
+      `, 'objects'))[0] ?? null
     : null
   if (rowId && !current) return `Aging bucket policy no longer exists; reopen ${AGING_POLICIES_PATH}`
   if (body.boundaries !== undefined || !rowId) {

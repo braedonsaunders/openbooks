@@ -50,7 +50,7 @@ test(
 
       async function setProjectsEnabled(enabled: boolean): Promise<void> {
         const row = (await db.execute<{ settings: unknown }>(sql`
-          select settings from orgs where id = ${org.orgId}`)).rows[0];
+          select settings from orgs where id = ${org.orgId}`, "objects"))[0];
         const current = (row?.settings ?? {}) as Record<string, unknown>;
         const features = { ...((current.features ?? {}) as Record<string, unknown>), projects: enabled };
         await db.execute(sql`

@@ -53,33 +53,33 @@ export async function saveRoeSubsequentService(scope: RoeEmployeeScope,input: Ro
       ||value.firstDayWorked<=(event.salaryContinuanceEndOn??event.lastInsurableEarningsOn))
       throw new PayrollError('Confirm the earlier event and record a genuine later return to work; payment, observation and current hire dates cannot supply it');
     const original=(await db.execute<RoeSubsequentService>(sql`select ${columns} from payroll_roe_subsequent_service_sources
-      where org_id=${scope.orgId} and preceding_event_id=${event.id} for update`)).rows[0]??null;
+      where org_id=${scope.orgId} and preceding_event_id=${event.id} for update`, 'objects'))[0]??null;
     if(original && (value.expectedId===null||value.expectedId===original.id)
       && original.firstDayWorked===value.firstDayWorked && original.sourceFileId===value.sourceFileId
       && original.sourceVersionId===value.sourceVersionId && original.sourceSha256===value.sourceSha256
       && original.sourceReference===value.sourceReference && original.reason===value.reason) return original;
     if((original?.id??null)!==value.expectedId||(original?.updatedAt??null)!==value.expectedUpdatedAt)
       throw new PayrollError('Return-to-service evidence changed — reload it before saving');
-    const source=(await db.execute(sql`select v.id from files f join file_versions v on v.file_id=f.id
+    const source=await db.execute(sql`select v.id from files f join file_versions v on v.file_id=f.id
       where f.org_id=${scope.orgId} and f.id=${value.sourceFileId} and not f.is_inactive and v.id=${value.sourceVersionId}
-        and v.content_hash=${value.sourceSha256} and v.created_by=${scope.actorId} for share of f,v`)).rows;
+        and v.content_hash=${value.sourceSha256} and v.created_by=${scope.actorId} for share of f,v`, 'objects');
     if(source.length!==1)throw new PayrollError('Choose the active original return-to-work source uploaded to File Cabinet by the importing operator, with its retained version and hash');
     const rows=original?(await db.execute<RoeSubsequentService>(sql`update payroll_roe_subsequent_service_sources
       set first_day_worked=${value.firstDayWorked},source_file_id=${value.sourceFileId},source_version_id=${value.sourceVersionId},
         source_sha256=${value.sourceSha256},source_reference=${value.sourceReference},change_reason=${value.reason},
         updated_by=${scope.actorId},updated_at=greatest(clock_timestamp(),updated_at+interval '1 microsecond')
-      where org_id=${scope.orgId} and id=${original.id} and updated_at::text=${value.expectedUpdatedAt} returning ${columns}`)).rows
+      where org_id=${scope.orgId} and id=${original.id} and updated_at::text=${value.expectedUpdatedAt} returning ${columns}`, 'objects'))
       :(await db.execute<RoeSubsequentService>(sql`insert into payroll_roe_subsequent_service_sources
       (org_id,preceding_event_id,employee_party_id,employment_id,subsidiary_id,first_day_worked,
         source_file_id,source_version_id,source_sha256,source_reference,change_reason,created_by,updated_by)
       values(${scope.orgId},${event.id},${scope.employeePartyId},${event.employmentId},${event.subsidiaryId},${value.firstDayWorked},
         ${value.sourceFileId},${value.sourceVersionId},${value.sourceSha256},${value.sourceReference},${value.reason},${scope.actorId},${scope.actorId})
-      returning ${columns}`)).rows;
+      returning ${columns}`, 'objects'));
     if(rows.length!==1)throw new PayrollError('The return-to-service source was not saved — reload and retry');
     const after=rows[0]!;
-    const audit=(await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    const audit=await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${scope.orgId},'payroll_roe_subsequent_service_sources',${after.id},${original?'update':'insert'},
-        ${JSON.stringify({before:original,after,reason:value.reason})}::jsonb,${scope.actorId}) returning id`)).rows;
+        ${JSON.stringify({before:original,after,reason:value.reason})}::jsonb,${scope.actorId}) returning id`, 'objects');
     if(audit.length!==1)throw new PayrollError('The return-to-service source audit was not saved; nothing was changed');
     return after;
   });
@@ -93,7 +93,7 @@ export async function readRoeSubsequentService(scope: RoeEmployeeScope,preceding
       throw new PayrollError('Choose the original event and its actual native employment and legal employer');
     await authorizeRoeReportingEmployee({...scope,employmentId:event.employmentId,subsidiaryId:event.subsidiaryId},'payroll.read');
     return (await db.execute<RoeSubsequentService>(sql`select ${columns} from payroll_roe_subsequent_service_sources
-      where org_id=${scope.orgId} and preceding_event_id=${event.id}`)).rows[0]??null;
+      where org_id=${scope.orgId} and preceding_event_id=${event.id}`, 'objects'))[0]??null;
   });
 }
 
@@ -107,7 +107,7 @@ export async function readRoeSubsequentServiceContext(scope: RoeEmployeeScope, p
       select f.id,v.id as "versionId",v.content_hash as sha256,f.name from files f
       join file_versions v on v.file_id=f.id and v.id=f.current_version_id
       where f.org_id=${scope.orgId} and f.id=${sourceFileId} and not f.is_inactive
-        and v.created_by=${scope.actorId}`)).rows[0] ?? null : null;
+        and v.created_by=${scope.actorId}`, 'objects'))[0] ?? null : null;
     if (sourceFileId && (!source || !/^[a-f0-9]{64}$/.test(source.sha256)))
       throw new PayrollError('Select the original return-to-work file uploaded to Cabinet by the qualifying operator');
     return {record,source};

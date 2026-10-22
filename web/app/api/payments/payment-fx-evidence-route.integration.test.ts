@@ -148,8 +148,8 @@ test("public create and patch record a manual payment rate with zero global rate
     assert.equal(clearedDoc.doc.document_fx_rate_evidence, null, "patch null clears the recorded rate");
     assert.equal(clearedDoc.doc.fx_rate, "1.0000000000", "clearing returns the header rate to unset");
 
-    const fxRows = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from fx_rates where org_id = ${org.orgId}`)).rows;
+    const fxRows = await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from fx_rates where org_id = ${org.orgId}`, "objects");
     assert.equal(fxRows[0]!.count, "0", "no global rate row was seeded, resolved or invented");
   } finally {
     await dropScratchOrg(org.orgId);

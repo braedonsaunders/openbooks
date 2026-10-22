@@ -86,8 +86,8 @@ async function legacyGET(req: Request, { params }: { params: Promise<{ code: str
     if (format === 'official') {
       const f = (await db.execute<{ official_pdf_file_id: string | null }>(sql`
         select official_pdf_file_id from tax_return_forms
-         where org_id = ${gate.user.orgId} and code = ${code} limit 1`))
-      const fileId = f.rows[0]?.official_pdf_file_id
+         where org_id = ${gate.user.orgId} and code = ${code} limit 1`, 'objects'))
+      const fileId = f[0]?.official_pdf_file_id
       if (!fileId) return NextResponse.json({ error: 'no official PDF uploaded for this form' }, { status: 422 })
       let blob: Awaited<ReturnType<typeof getFileBlob>>
       try {

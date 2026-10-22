@@ -401,7 +401,7 @@ export async function flowSubjectProfileForOrg(
 
   const roleResult = await db.execute<{ key: string }>(sql`
     select key from app_roles where org_id = ${orgId} order by name
-  `);
+  `, "objects");
 
   // Pay runs live in the documents table, so their custom header fields come
   // from the same catalog as every other document kind.
@@ -409,7 +409,7 @@ export async function flowSubjectProfileForOrg(
     DOCUMENT_FLOW_KINDS.includes(subjectKind) ||
     subjectKind === PAY_RUN_SUBJECT_KIND;
   if (!isDocumentKind) {
-    return { ...base, roles: roleResult.rows.map((role) => role.key) };
+    return { ...base, roles: roleResult.map((role) => role.key) };
   }
 
   const fieldResult = await db.execute<CustomFlowFieldRow>(sql`
@@ -418,9 +418,9 @@ export async function flowSubjectProfileForOrg(
      where org_id = ${orgId} and target_table = 'documents'
        and (target_kind is null or target_kind = ${subjectKind}) and is_active
      order by sort_order, label
-  `);
+  `, "objects");
   const existing = new Set(base.fields.map((field) => field.key));
-  const customFields = fieldResult.rows
+  const customFields = fieldResult
     .filter((field) => !existing.has(field.key))
     .map((field) => ({
       key: field.key,
@@ -450,6 +450,6 @@ export async function flowSubjectProfileForOrg(
   return {
     ...base,
     fields: [...base.fields, ...customFields],
-    roles: roleResult.rows.map((role) => role.key),
+    roles: roleResult.map((role) => role.key),
   };
 }

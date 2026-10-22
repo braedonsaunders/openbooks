@@ -42,11 +42,11 @@ async function makeDraftBill(orgId: string, subsidiaryId: string, date: string):
 }
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`))).rows[0]!.revision
+  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`, 'objects')))[0]!.revision
 }
 
 async function auditCount(orgId: string, id: string): Promise<number> {
-  return Number((await withBypassContext(() => db.execute<{ n: string }>(sql`select count(*) as n from audit_log where org_id=${orgId} and table_name='documents' and row_id=${id} and action='update'`))).rows[0]!.n)
+  return Number((await withBypassContext(() => db.execute<{ n: string }>(sql`select count(*) as n from audit_log where org_id=${orgId} and table_name='documents' and row_id=${id} and action='update'`, 'objects')))[0]!.n)
 }
 
 async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
@@ -76,7 +76,7 @@ test('a no-change PATCH writes no audit row; a real change writes exactly one', 
     const changed = await patchDoc(org.orgId, id, { expectedUpdatedAt: await revision(org.orgId, id), memo: 'audited change' })
     assert.equal(changed.status, 200, JSON.stringify(changed.json))
     assert.equal(await auditCount(org.orgId, id), 1, 'a save that changes the memo must record its evidence')
-    const latest = (await withBypassContext(() => db.execute<{ changes: { mode: string } }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='documents' and row_id=${id} and action='update' order by id desc limit 1`))).rows[0]!
+    const latest = (await withBypassContext(() => db.execute<{ changes: { mode: string } }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='documents' and row_id=${id} and action='update' order by id desc limit 1`, 'objects')))[0]!
     assert.equal(latest.changes.mode, 'record_update')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))

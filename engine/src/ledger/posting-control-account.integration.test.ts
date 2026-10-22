@@ -83,28 +83,28 @@ function post(org: Org, documentId: string): Promise<string> {
 }
 
 async function controlLegs(entryId: string) {
-  return (await db.execute<{ id: string; account_id: string; amount: string; is_open_item: boolean; party_id: string | null }>(sql`
+  return await db.execute<{ id: string; account_id: string; amount: string; is_open_item: boolean; party_id: string | null }>(sql`
     select id, account_id, amount::text as amount, is_open_item, party_id
       from journal_lines where entry_id = ${entryId} and is_open_item
-     order by id`)).rows;
+     order by id`, "objects");
 }
 
 async function storedChoice(documentId: string): Promise<string | null> {
   return (await db.execute<{ choice: string | null }>(sql`
-    select custom->>'controlAccountId' as choice from documents where id = ${documentId}`)).rows[0]!.choice;
+    select custom->>'controlAccountId' as choice from documents where id = ${documentId}`, "objects"))[0]!.choice;
 }
 
 async function accountBalance(org: Org, accountId: string): Promise<string> {
   return (await db.execute<{ balance: string }>(sql`
     select coalesce(sum(jl.amount), 0)::text as balance
       from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`)).rows[0]!.balance;
+     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`, "objects"))[0]!.balance;
 }
 
 async function unposted(documentId: string) {
   return (await db.execute<{ status: string; entries: number }>(sql`
     select status, (select count(*)::int from journal_entries where source_document_id = ${documentId}) as entries
-      from documents where id = ${documentId}`)).rows[0]!;
+      from documents where id = ${documentId}`, "objects"))[0]!;
 }
 
 async function expectRefusal(promise: Promise<unknown>, ...patterns: RegExp[]): Promise<void> {
@@ -157,7 +157,7 @@ test(
         assert.equal(await accountBalance(org, org.accounts.ar), "0");
         const applied = (await db.execute<{ applied: string }>(sql`
           select coalesce(sum(amount), 0)::text as applied from applications
-           where to_line_id = ${legs[0]!.id} and unapplied_at is null`)).rows[0]!;
+           where to_line_id = ${legs[0]!.id} and unapplied_at is null`, "objects"))[0]!;
         assert.equal(applied.applied, "1000.0000");
 
         // Changing the customer's default never reinterprets posted history.

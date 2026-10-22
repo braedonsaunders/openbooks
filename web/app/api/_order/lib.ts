@@ -82,7 +82,7 @@ async function purchaseOrderEntryLag(id: string, orgId: string, orderDate: strin
     select to_char(d.created_at at time zone ${timeZone}, 'YYYY-MM-DD') as entered_on
       from documents d
      where d.id = ${id} and d.org_id = ${orgId}
-  `)).rows[0]
+  `, 'objects'))[0]
   return entered ? enteredAfterOrderDays(orderDate, entered.entered_on) : null
 }
 
@@ -106,10 +106,10 @@ export async function loadOrder(
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${kind}
        ${orderScope}
-  `))
-  if (!doc.rows[0]) return null
+  `, 'objects'))
+  if (!doc[0]) return null
 
-  const orderDate = doc.rows[0].document_date
+  const orderDate = doc[0].document_date
   const enteredAfterOrder = kind === 'purchase_order' && typeof orderDate === 'string'
     ? await purchaseOrderEntryLag(id, orgId, orderDate)
     : null
@@ -129,7 +129,7 @@ export async function loadOrder(
       left join promotions pr on pr.id = l.promotion_id and pr.org_id = l.org_id
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `))
+  `, 'objects'))
 
   // Origin (this doc was created from …) and converted-into (this doc → …) edges.
   const links = (await db.execute<Record<string, unknown>>(sql`
@@ -145,7 +145,7 @@ export async function loadOrder(
      where dl.from_document_id = ${id} and dl.org_id = ${orgId}
        ${linkScope}
     order by 1
-  `))
+  `, 'objects'))
 
-  return { doc: doc.rows[0], lines: lines.rows, links: links.rows, enteredAfterOrderDays: enteredAfterOrder }
+  return { doc: doc[0], lines, links, enteredAfterOrderDays: enteredAfterOrder }
 }

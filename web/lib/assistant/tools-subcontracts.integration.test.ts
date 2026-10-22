@@ -43,7 +43,7 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
     const operator = await createWorkOperator(org.orgId, "Subcontract author", ["ap.create"]);
     const contractId = await withOrgTransaction(org.orgId, async () => {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":true,"preBilling":true}'::jsonb) where id=${org.orgId}`);
-      assert.equal((await db.execute(sql`insert into vendor_roles(org_id,party_id,currency,is_active)
+      assert.equal((await db.execute<never>(sql`insert into vendor_roles(org_id,party_id,currency,is_active)
         values(${org.orgId},${org.vendorId},'CAD',true)`)).rowCount,1);
       await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)

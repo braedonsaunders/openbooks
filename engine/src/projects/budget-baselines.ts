@@ -152,13 +152,11 @@ async function requireProject(
   lock: "none" | "update",
 ): Promise<{ id: string; name: string; contract_value: string | null }> {
   if (!isUuid(projectId)) throw new BudgetBaselineError("Project not found", 404);
-  const row = (
-    await runner.execute<{ id: string; name: string; contract_value: string | null }>(sql`
+  const row = (await runner.execute<{ id: string; name: string; contract_value: string | null }>(sql`
       select id, name, contract_value::text as contract_value from projects
        where id = ${projectId} and org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
-       ${lock === "update" ? sql`for update` : sql``}`)
-  ).rows[0];
+       ${lock === "update" ? sql`for update` : sql``}`, "objects"))[0];
   if (!row) throw new BudgetBaselineError("Project not found", 404);
   return row;
 }
@@ -176,8 +174,7 @@ function nonNegativeMoney(value: string, what: string): string {
 
 /** The current work breakdown as baseline components, one per task. */
 async function snapshotTaskLines(runner: SqlExecutor, orgId: string, projectId: string): Promise<BaselineLineInput[]> {
-  const rows = (
-    await runner.execute<{
+  const rows = await runner.execute<{
       id: string; code: string | null; name: string;
       estimated_hours: string | null; estimated_cost: string | null; estimated_price: string | null;
       budget_quantity: string | null; budget_unit: string | null;
@@ -189,8 +186,7 @@ async function snapshotTaskLines(runner: SqlExecutor, orgId: string, projectId: 
         from project_tasks
        where org_id = ${orgId} and project_id = ${projectId}
        order by code nulls last, name, id
-       for share`)
-  ).rows;
+       for share`, "objects");
   return rows.map((row) => ({
     projectTaskId: row.id,
     taskCode: row.code,
@@ -224,11 +220,9 @@ export async function captureBudgetBaselineInTransaction(
   await requireProject(runner, ctx.orgId, input.projectId, ctx.allowedSubsidiaryIds, "update");
 
   const sequence = Number(
-    (
-      await runner.execute<{ next: number }>(sql`
+    (await runner.execute<{ next: number }>(sql`
         select coalesce(max(sequence), 0) + 1 as next from project_budget_baselines
-         where org_id = ${ctx.orgId} and project_id = ${input.projectId}`)
-    ).rows[0]?.next ?? 1,
+         where org_id = ${ctx.orgId} and project_id = ${input.projectId}`, "objects"))[0]?.next ?? 1,
   );
   const kind = sequence === 1 ? "original" : "revised";
 
@@ -238,12 +232,10 @@ export async function captureBudgetBaselineInTransaction(
   }
   const taskIds = [...new Set(lines.map((line) => line.projectTaskId))];
   if (taskIds.some((id) => !isUuid(id))) throw new BudgetBaselineError("A baseline line names an unknown task", 422, "lines");
-  const owned = (
-    await runner.execute<{ id: string }>(sql`
+  const owned = (await runner.execute<{ id: string }>(sql`
       select id from project_tasks
        where org_id = ${ctx.orgId} and project_id = ${input.projectId}
-         and id = any(${`{${taskIds.join(",")}}`}::uuid[])`)
-  ).rows.length;
+         and id = any(${`{${taskIds.join(",")}}`}::uuid[])`, "objects")).length;
   if (owned !== taskIds.length) throw new BudgetBaselineError("A baseline line names a task outside this project", 422, "lines");
 
   const normalized = lines.map((line, index) => {
@@ -275,21 +267,19 @@ export async function captureBudgetBaselineInTransaction(
   const sourceDocumentId = input.sourceDocumentId ?? null;
   if (sourceDocumentId !== null) {
     const source = await runner.execute(sql`
-      select 1 from documents where id = ${sourceDocumentId} and org_id = ${ctx.orgId}`);
-    if (!source.rows[0]) throw new BudgetBaselineError("The source quote was not found", 404);
+      select 1 from documents where id = ${sourceDocumentId} and org_id = ${ctx.orgId}`, "objects");
+    if (!source[0]) throw new BudgetBaselineError("The source quote was not found", 404);
   }
 
-  const header = (
-    await runner.execute<{ id: string }>(sql`
+  const header = (await runner.execute<{ id: string }>(sql`
       insert into project_budget_baselines
         (org_id, project_id, kind, sequence, label, reason, source_document_id,
          total_hours, total_cost, total_price, created_by, updated_by)
       values (${ctx.orgId}, ${input.projectId}, ${kind}, ${sequence}, ${resolvedLabel}, ${reason},
               ${sourceDocumentId}, ${totals.hours}, ${totals.cost}, ${totals.price}, ${ctx.actorId}, ${ctx.actorId})
-      returning id`)
-  ).rows[0];
+      returning id`, "objects"))[0];
   if (!header) throw new BudgetBaselineError("The baseline was not recorded", 409);
-  const inserted = await runner.execute(sql`
+  const inserted = await runner.execute<never>(sql`
     insert into project_budget_baseline_lines
       (org_id, baseline_id, project_id, project_task_id, sequence, task_code, task_name,
        source_line_id, item_id, description, hours, quantity, unit, cost, price, created_by)
@@ -323,13 +313,11 @@ export async function captureBudgetBaselineInTransaction(
               reason,
             })}::jsonb, ${ctx.actorId})`);
 
-  const row = (
-    await runner.execute<SummaryRow>(sql`
+  const row = (await runner.execute<SummaryRow>(sql`
       select ${SUMMARY_COLUMNS}
         from project_budget_baselines b
         left join documents d on d.id = b.source_document_id and d.org_id = b.org_id
-       where b.org_id = ${ctx.orgId} and b.id = ${header.id}`)
-  ).rows[0];
+       where b.org_id = ${ctx.orgId} and b.id = ${header.id}`, "objects"))[0];
   if (!row) throw new BudgetBaselineError("The baseline was not recorded", 409);
   return summary(row);
 }
@@ -343,14 +331,12 @@ export async function captureBudgetBaseline(
 }
 
 async function baselineSummaries(runner: SqlExecutor, orgId: string, projectId: string): Promise<BudgetBaselineSummary[]> {
-  return (
-    await runner.execute<SummaryRow>(sql`
+  return (await runner.execute<SummaryRow>(sql`
       select ${SUMMARY_COLUMNS}
         from project_budget_baselines b
         left join documents d on d.id = b.source_document_id and d.org_id = b.org_id
        where b.org_id = ${orgId} and b.project_id = ${projectId}
-       order by b.sequence`)
-  ).rows.map(summary);
+       order by b.sequence`, "objects")).map(summary);
 }
 
 /**
@@ -394,8 +380,7 @@ export async function readBudgetBaseline(
     await requireProject(db, orgId, projectId, allowedSubsidiaryIds, "none");
     const header = (await baselineSummaries(db, orgId, projectId)).find((b) => b.id === baselineId);
     if (!header) throw new BudgetBaselineError("Baseline not found", 404);
-    const lines = (
-      await db.execute<{
+    const lines = await db.execute<{
         id: string; sequence: number; project_task_id: string; task_code: string | null; task_name: string;
         source_line_id: string | null; item_id: string | null; description: string | null;
         hours: string; quantity: string | null; unit: string | null; cost: string; price: string;
@@ -404,8 +389,7 @@ export async function readBudgetBaseline(
                hours::text as hours, quantity::text as quantity, unit, cost::text as cost, price::text as price
           from project_budget_baseline_lines
          where org_id = ${orgId} and baseline_id = ${baselineId}
-         order by sequence`)
-    ).rows;
+         order by sequence`, "objects");
     return {
       baseline: header,
       lines: lines.map((line) => ({
@@ -551,8 +535,7 @@ export async function projectBudgetComparison(
     const original = baselines.find((b) => b.sequence === 1) ?? null;
     const latest = baselines.length > 1 ? baselines[baselines.length - 1]! : null;
 
-    const tasks = (
-      await db.execute<{
+    const tasks = await db.execute<{
         id: string; code: string | null; name: string; status: string;
         estimated_hours: string | null; estimated_cost: string | null; estimated_price: string | null;
       }>(sql`
@@ -560,34 +543,28 @@ export async function projectBudgetComparison(
                estimated_cost::text as estimated_cost, estimated_price::text as estimated_price
           from project_tasks
          where org_id = ${orgId} and project_id = ${projectId}
-         order by code nulls last, name, id`)
-    ).rows;
+         order by code nulls last, name, id`, "objects");
     const originalByTask = new Map<string, BudgetFigures>();
     if (original) {
-      const rows = (
-        await db.execute<{ task_id: string; hours: string; cost: string; price: string }>(sql`
+      const rows = await db.execute<{ task_id: string; hours: string; cost: string; price: string }>(sql`
           select project_task_id as task_id, sum(hours)::text as hours,
                  sum(cost)::text as cost, sum(price)::text as price
             from project_budget_baseline_lines
            where org_id = ${orgId} and baseline_id = ${original.id}
-           group by project_task_id`)
-      ).rows;
+           group by project_task_id`, "objects");
       for (const row of rows) {
         originalByTask.set(row.task_id, { hours: hours4(row.hours), cost: normalizeMoney(row.cost), price: normalizeMoney(row.price) });
       }
     }
-    const labor = (
-      await db.execute<{ task_id: string | null; hours: string; cost: string }>(sql`
+    const labor = await db.execute<{ task_id: string | null; hours: string; cost: string }>(sql`
         select te.project_task_id as task_id,
                coalesce(sum(te.hours), 0)::text as hours,
                coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0)::text as cost
           from time_entries te
          where te.org_id = ${orgId} and te.project_id = ${projectId}
            and te.status = 'approved' and ${sourceTimeAvailableSql(sql`te.custom`, sql`${asOf}`)} and te.worked_on <= ${asOf}::date
-         group by te.project_task_id`)
-    ).rows;
-    const other = (
-      await db.execute<{ task_id: string | null; cost: string }>(sql`
+         group by te.project_task_id`, "objects");
+    const other = await db.execute<{ task_id: string | null; cost: string }>(sql`
         select dl.project_task_id as task_id,
                coalesce(sum(round(
                  (case when d.kind = 'project_charge' then coalesce(dl.cost_amount, dl.amount)
@@ -600,8 +577,7 @@ export async function projectBudgetComparison(
            and d.kind in (${sql.join(COST_DOCUMENT_KINDS.map((kind) => sql`${kind}`), sql`, `)})
            and dl.time_entry_id is null
            and coalesce(d.posting_date, d.document_date) <= ${asOf}::date
-         group by dl.project_task_id`)
-    ).rows;
+         group by dl.project_task_id`, "objects");
 
     const taskIds = new Set(tasks.map((task) => task.id));
     const actualByTask = new Map<string, ActualFigures>();

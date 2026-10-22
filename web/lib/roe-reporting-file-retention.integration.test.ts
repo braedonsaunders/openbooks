@@ -22,21 +22,21 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
         const hash = createHash('sha256').update(bytes).digest('hex')
         const accounts = await db.execute(sql`insert into payroll_filing_accounts
           (id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
-          values(${account},${f.orgId},${f.subsidiaryId},'CA','ca_rp','123456789RP0001','Employer payroll account','regular',true,true,${f.actorId},${f.actorId}) returning id`)
-        assert.equal(accounts.rows.length, 1)
+          values(${account},${f.orgId},${f.subsidiaryId},'CA','ca_rp','123456789RP0001','Employer payroll account','regular',true,true,${f.actorId},${f.actorId}) returning id`, 'objects')
+        assert.equal(accounts.length, 1)
         const folders = await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-          values(${folder},${f.orgId},'Original reporting evidence',true,${f.actorId},${f.actorId},${f.actorId}) returning id`)
-        assert.equal(folders.rows.length, 1)
+          values(${folder},${f.orgId},'Original reporting evidence',true,${f.actorId},${f.actorId},${f.actorId}) returning id`, 'objects')
+        assert.equal(folders.length, 1)
         const files = await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-          values(${file},${f.orgId},${folder},'original-period.txt','text/plain',${bytes.length},${f.actorId},${f.actorId}) returning id`)
-        assert.equal(files.rows.length, 1)
+          values(${file},${f.orgId},${folder},'original-period.txt','text/plain',${bytes.length},${f.actorId},${f.actorId}) returning id`, 'objects')
+        assert.equal(files.length, 1)
         const versions = await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-          values(${version},${file},1,${bytes.length},'text/plain',${hash},${f.actorId}) returning id`)
-        assert.equal(versions.rows.length, 1)
-        const blobs = await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`)
-        assert.equal(blobs.rows.length, 1)
-        const current = await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file} returning id`)
-        assert.equal(current.rows.length, 1)
+          values(${version},${file},1,${bytes.length},'text/plain',${hash},${f.actorId}) returning id`, 'objects')
+        assert.equal(versions.length, 1)
+        const blobs = await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`, 'objects')
+        assert.equal(blobs.length, 1)
+        const current = await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file} returning id`, 'objects')
+        assert.equal(current.length, 1)
         const viewer = { userId: f.actorId, isAdmin: true as const, baseline: 'manager' as const, allowedSubsidiaryIds: null }
         const audit = { actorId: f.actorId, viewer }
         assert.equal(await isRetainedFileEvidence(f.orgId, file), false)
@@ -63,8 +63,8 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
         const retained = await getFileBlob(f.orgId, file, viewer, version)
         assert.ok(retained)
         assert.deepEqual(retained.bytes, bytes)
-        const rows = (await db.execute<{ id: string; sourceSha256: string }>(sql`select id,source_sha256 as "sourceSha256"
-          from payroll_roe_historical_periods where org_id=${f.orgId} and id=${evidence.id}`)).rows
+        const rows = await db.execute<{ id: string; sourceSha256: string }>(sql`select id,source_sha256 as "sourceSha256"
+          from payroll_roe_historical_periods where org_id=${f.orgId} and id=${evidence.id}`, 'objects')
         assert.deepEqual(rows, [{ id: evidence.id, sourceSha256: hash }])
         const subject = { orgId: f.orgId, actorId: f.actorId, employeePartyId: f.employeeId,
           employmentId: f.employmentId, subsidiaryId: f.subsidiaryId, allowedSubsidiaryIds: null }
@@ -75,9 +75,9 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
         const returnBytes = Buffer.from('Original returned-work declaration: first day worked 2026-07-19')
         const returned = await createFile({ orgId: f.orgId, folderId: folder, filename: 'returned-work.txt',
           contentType: 'text/plain', bytes: returnBytes, createdBy: f.actorId, audit })
-        const returnVersions = (await db.execute<{ id: string; hash: string }>(sql`select v.id,v.content_hash as hash
+        const returnVersions = await db.execute<{ id: string; hash: string }>(sql`select v.id,v.content_hash as hash
           from files f join file_versions v on v.file_id=f.id and v.id=f.current_version_id
-          where f.org_id=${subject.orgId} and f.id=${returned.id}`)).rows
+          where f.org_id=${subject.orgId} and f.id=${returned.id}`, 'objects')
         assert.equal(returnVersions.length, 1)
         const certificate = { precedingEventId: event.id, firstDayWorked: '2026-07-19', sourceFileId: returned.id,
           sourceVersionId: returnVersions[0]!.id, sourceSha256: returnVersions[0]!.hash, sourceReference: 'Original returned-work record',

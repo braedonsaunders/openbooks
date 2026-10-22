@@ -33,13 +33,13 @@ export default async function KioskPage({ params }: { params: Promise<{ deviceTo
   const { projectName, projects } = await withOrgTransaction(kiosk.orgId, async () => {
     const projectName = kiosk.projectId
       ? ((await db.execute<{ name: string }>(sql`
-        select name from projects where org_id = ${kiosk.orgId} and id = ${kiosk.projectId}`)).rows[0]?.name ?? null)
+        select name from projects where org_id = ${kiosk.orgId} and id = ${kiosk.projectId}`, 'objects'))[0]?.name ?? null)
       : null
     const projects = kiosk.projectId
       ? []
       : (await db.execute<{ id: string; name: string }>(sql`
         select id::text as id, name from projects
-         where org_id = ${kiosk.orgId} and is_active order by name limit 200`)).rows
+         where org_id = ${kiosk.orgId} and is_active order by name limit 200`, 'objects'))
     return { projectName, projects }
   })
   return (

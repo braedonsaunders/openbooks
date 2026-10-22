@@ -69,7 +69,7 @@ function post(org: Org, documentId: string): Promise<string> {
 
 async function entries(documentId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where source_document_id = ${documentId}`)).rows[0]!.n;
+    select count(*)::int as n from journal_entries where source_document_id = ${documentId}`, "objects"))[0]!.n;
 }
 
 test(
@@ -115,7 +115,7 @@ test(
         const open = (await db.execute<{ is_open_item: boolean }>(sql`
           select jl.is_open_item from journal_lines jl
             join journal_entries je on je.id = jl.entry_id
-           where je.source_document_id = ${named} and jl.account_id = ${org.accounts.ar}`)).rows[0]!;
+           where je.source_document_id = ${named} and jl.account_id = ${org.accounts.ar}`, "objects"))[0]!;
         assert.equal(open.is_open_item, true);
       });
     } finally {
@@ -152,7 +152,7 @@ test(
         await post(org, opening);
         assert.equal(await entries(opening), 1);
         const held = async () => String((await db.execute<{ held: string }>(
-          projectRetainageHeldSql(org.orgId, projectId, retainage))).rows[0]!.held);
+          projectRetainageHeldSql(org.orgId, projectId, retainage), "objects"))[0]!.held);
         assert.equal(await held(), "500.0000");
 
         // Naming the customer makes the line a receivable open item, which is

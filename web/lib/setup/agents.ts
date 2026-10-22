@@ -149,17 +149,17 @@ export async function getAgentsOverview(orgId: string): Promise<AgentOverviewRow
         from ai_agent_runs
        where org_id = ${orgId}
        order by agent_key, started_at desc, id desc
-    `),
+    `, 'objects'),
     db.execute<{ agent_key: string; n: number }>(sql`
       select agent_key, count(*)::int as n
         from ai_work_items
        where org_id = ${orgId} and status in ('open', 'in_review')
        group by agent_key
-    `),
+    `, 'objects'),
     isFeatureEnabled(orgId, AGENT_PACK_FEATURE_KEY),
   ])
-  const lastRunByKey = new Map(runs.rows.map((row) => [row.agent_key, toLastRun(row)]))
-  const openByKey = new Map(counts.rows.map((row) => [row.agent_key, Number(row.n)]))
+  const lastRunByKey = new Map(runs.map((row) => [row.agent_key, toLastRun(row)]))
+  const openByKey = new Map(counts.map((row) => [row.agent_key, Number(row.n)]))
   return policies.map((policy) => ({
     agentKey: policy.agentKey,
     policy,
@@ -186,8 +186,8 @@ export async function getAgentRunStats(orgId: string): Promise<AgentRunStats> {
            count(*) filter (where status = 'failed')::int as failed7d
       from ai_agent_runs
      where org_id = ${orgId} and started_at >= now() - interval '7 days'
-  `)
-  const row = res.rows[0]
+  `, 'objects')
+  const row = res[0]
   return { runs7d: Number(row?.runs7d ?? 0), failed7d: Number(row?.failed7d ?? 0) }
 }
 
@@ -261,7 +261,7 @@ export async function listAgentRuns(
     db.execute<{ n: number }>(sql`
       select count(*)::int as n from ai_agent_runs
        where org_id = ${orgId} ${agentFilter} ${statusFilter} ${sinceFilter}
-    `),
+    `, 'objects'),
     db.execute<LastRunRow & { agent_key: ContinuousCloseAgentKey; detector_version: string; error_code: string | null }>(sql`
       select agent_key, id::text as id, status, trigger, started_at, finished_at,
              stats, detector_version, error_code
@@ -269,12 +269,12 @@ export async function listAgentRuns(
        where org_id = ${orgId} ${agentFilter} ${statusFilter} ${sinceFilter}
        order by ${order}
        limit ${limit + 1} offset ${offset}
-    `),
+    `, 'objects'),
   ])
-  const total = Number(totalRes.rows[0]?.n ?? 0)
-  const truncated = runRes.rows.length > limit
+  const total = Number(totalRes[0]?.n ?? 0)
+  const truncated = runRes.length > limit
   return {
-    runs: runRes.rows.slice(0, limit).map((row) => ({
+    runs: runRes.slice(0, limit).map((row) => ({
       ...toLastRun(row),
       agentKey: row.agent_key,
       detectorVersion: String(row.detector_version),
@@ -337,12 +337,10 @@ export async function getSetupAgentNotification(
   agentKey: string,
 ): Promise<AgentNotificationSettings | null> {
   if (!isContinuousCloseAgentKey(agentKey)) throw new Error('invalid_agent')
-  const row = (
-    await db.execute<{ notification_settings: unknown }>(sql`
+  const row = (await db.execute<{ notification_settings: unknown }>(sql`
       select notification_settings from ai_agent_policies
        where org_id = ${orgId} and agent_key = ${agentKey}
-    `)
-  ).rows[0]
+    `, 'objects'))[0]
   try {
     return normalizeAgentNotificationSettings(row?.notification_settings ?? undefined) ?? null
   } catch {
@@ -366,21 +364,21 @@ export async function listAgentNotificationTargets(orgId: string): Promise<{
       select id::text as id, name from app_roles
        where org_id = ${orgId}
        order by name
-    `),
+    `, 'objects'),
     db.execute<{ id: string; name: string; email: string }>(sql`
       select id::text as id, name, email from users
        where org_id = ${orgId} and is_active
        order by name
        limit 201
-    `),
+    `, 'objects'),
   ])
   return {
-    roles: rolesRes.rows.map((row) => ({ id: String(row.id), name: String(row.name) })),
-    users: usersRes.rows.slice(0, 200).map((row) => ({
+    roles: rolesRes.map((row) => ({ id: String(row.id), name: String(row.name) })),
+    users: usersRes.slice(0, 200).map((row) => ({
       id: String(row.id),
       name: String(row.name),
       email: String(row.email),
     })),
-    truncatedUsers: usersRes.rows.length > 200,
+    truncatedUsers: usersRes.length > 200,
   }
 }

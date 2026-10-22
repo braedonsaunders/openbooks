@@ -144,8 +144,7 @@ test("S3: lineage anchors refuse hidden subsidiaries", { skip: !DB }, async () =
              (${org.orgId}, ${entryA}, 2, ${org.accounts.bank}, ${org.subsidiaryId},
               '-100.0000', 'CAD', '-100.0000', '1')`);
     const lineA = (await db.execute<{ id: string }>(sql`
-      select id from journal_lines where org_id = ${org.orgId} and entry_id = ${entryA} and line_number = 1`))
-      .rows[0]!.id;
+      select id from journal_lines where org_id = ${org.orgId} and entry_id = ${entryA} and line_number = 1`, "objects"))[0]!.id;
     // Entry B lives entirely in the hidden subsidiary. (The GL kernel
     // refuses per-subsidiary-imbalanced entries, so a header-visible entry
     // with hidden lines cannot be written; the line check in the drill is
@@ -281,9 +280,9 @@ test("restricted subsidiary scope hides org-wide runs", { skip: !DB }, async () 
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
     const rule = (await db.execute<{ id: string }>(sql`
-      select id from allocation_rules where org_id = ${org.orgId} limit 1`)).rows[0]!;
+      select id from allocation_rules where org_id = ${org.orgId} limit 1`, "objects"))[0]!;
     const version = (await db.execute<{ id: string }>(sql`
-      select id from allocation_rule_versions where org_id = ${org.orgId} and rule_id = ${rule.id} limit 1`)).rows[0]!;
+      select id from allocation_rule_versions where org_id = ${org.orgId} and rule_id = ${rule.id} limit 1`, "objects"))[0]!;
     const visibleRun = randomUUID();
     const visibleComputation = {
       sources: [{ subsidiaryId: org.subsidiaryId }], targets: [{ coordinate: { subsidiaryId: org.subsidiaryId } }], lines: [],

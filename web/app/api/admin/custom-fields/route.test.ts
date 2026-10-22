@@ -54,13 +54,14 @@ const mockSources = new Map<string, string>([
       export const withBypassContext = (fn) => fn()
       export const db = {
         async transaction(run) { return run(db) },
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.executed.push(text)
           if (text.includes('from custom_field_defs')) {
-            return { rows: state.existing ? [state.existing] : [] }
+            return inMode({ rows: state.existing ? [state.existing] : [] })
           }
-          return { rows: text.includes('update custom_field_defs') ? [state.existing] : [] }
+          return inMode({ rows: text.includes('update custom_field_defs') ? [state.existing] : [] })
         },
       }
     `,

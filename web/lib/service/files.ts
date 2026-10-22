@@ -58,7 +58,7 @@ export async function readVisitFile(authz: Authz, visitId: string, fileId: strin
      where org_id = ${authz.user.orgId} and target_table = ${SERVICE_VISIT_TARGET} and target_id = ${detail.visit.id} and file_id = ${fileId}
      union all
     select 1 from service_visit_signatures where org_id = ${authz.user.orgId} and visit_id = ${detail.visit.id} and signature_file_id = ${fileId}
-     limit 1`)).rows[0]
+     limit 1`, 'objects'))[0]
   if (!linked) return null
   return getFileBlob(authz.user.orgId, fileId, { userId: authz.user.id, isAdmin: false, baseline: 'viewer', allowedSubsidiaryIds: authz.allowedSubsidiaryIds })
 }

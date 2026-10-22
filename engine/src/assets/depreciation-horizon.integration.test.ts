@@ -33,24 +33,24 @@ async function seed(org: ScratchOrg, periods = 10, salvage = '0') {
   return { actorId, assetId };
 }
 async function rows(org: ScratchOrg, assetId: string, bookId = org.bookId) {
-  return (await db.execute<{id:string;sequence:number;planned:string;posted:string|null;journal_entry_id:string|null}>(sql`
+  return await db.execute<{id:string;sequence:number;planned:string;posted:string|null;journal_entry_id:string|null}>(sql`
     select l.id,l.sequence,l.planned_amount::text as planned,l.posted_amount::text as posted,l.journal_entry_id
     from depreciation_schedule_lines l join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-    where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${bookId} order by l.sequence`)).rows;
+    where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${bookId} order by l.sequence`, 'objects');
 }
 async function reverse(org: ScratchOrg, actorId: string, entryId: string) {
-  const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+  const eventId = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and journal_entry_id=${entryId}`, 'objects'))[0]!.id;
   return reverseAssetLifecycleEvent(org.orgId,eventId,{actorId,date:'2026-08-01',reason:'Correct the dated impairment assessment'});
 }
 async function snapshot(org: ScratchOrg) {
-  return (await db.execute(sql`select
+  return await db.execute(sql`select
     (select jsonb_agg(to_jsonb(t) order by id) from fixed_assets t where org_id=${org.orgId}) as assets,
     (select jsonb_agg(to_jsonb(t) order by id) from asset_events t where org_id=${org.orgId}) as events,
     (select jsonb_agg(to_jsonb(t) order by id) from journal_entries t where org_id=${org.orgId}) as entries,
     (select jsonb_agg(to_jsonb(t) order by id) from journal_lines t where org_id=${org.orgId}) as journals,
     (select jsonb_agg(to_jsonb(t) order by id) from depreciation_schedules t where org_id=${org.orgId}) as schedules,
     (select jsonb_agg(to_jsonb(t) order by id) from depreciation_schedule_lines t where org_id=${org.orgId}) as lines,
-    (select jsonb_agg(to_jsonb(t) order by id) from audit_log t where org_id=${org.orgId}) as audit`)).rows;
+    (select jsonb_agg(to_jsonb(t) order by id) from audit_log t where org_id=${org.orgId}) as audit`, 'objects');
 }
 
 for (const postJuly of [false,true]) {
@@ -71,7 +71,7 @@ for (const postJuly of [false,true]) {
         toUnits(postJuly ? '900' : '800'), 'rounding cannot change the total impaired depreciable basis');
       for (const [org,{actorId,assetId}] of fixtures) {
         const july = (await rows(org,assetId))[0]!;
-        const impairment = (await db.execute<{journal_entry_id:string}>(sql`select journal_entry_id from asset_events where org_id=${org.orgId} and asset_id=${assetId} and kind='impaired'`)).rows[0]!;
+        const impairment = (await db.execute<{journal_entry_id:string}>(sql`select journal_entry_id from asset_events where org_id=${org.orgId} and asset_id=${assetId} and kind='impaired'`, 'objects'))[0]!;
         await reverse(org,actorId,impairment.journal_entry_id);
         assert.deepEqual((await rows(org,assetId))[0],july,'a later reversal preserves the earlier row, including its unposted state');
         for(let i=0;i<2;i++) {
@@ -204,11 +204,11 @@ for(const existing of [false,true]) {
       await buildSchedule(assetId,org.orgId,actorId,org.bookId);
       const planned=(await rows(org,assetId)).map(r=>r.planned);
       assert.deepEqual(planned,['100.0000','200.0000'],'July bears one month; the stretched period bears August+September');
-      const dup=(await db.execute<{extra:string}>(sql`
+      const dup=await db.execute<{extra:string}>(sql`
         select count(*)::text as extra from depreciation_schedule_lines l
         join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
         where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${org.bookId}
-        group by l.period_id having count(*) > 1`)).rows;
+        group by l.period_id having count(*) > 1`, 'objects');
       assert.equal(dup.length,0,'one line per period');
       // Rebuilding is idempotent: no drift, no duplicate rows.
       await buildSchedule(assetId,org.orgId,actorId,org.bookId);

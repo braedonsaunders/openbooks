@@ -47,20 +47,21 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]
       const sqlText = globalThis.openbooksAnalyticsConfigSqlText
-      const execute = async (query) => {
+      const execute = async (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         state.executed.push(text)
         if (text.includes('for update')) {
-          return { rows: [{ cfg: null, rev: 0, currency: null }], rowCount: 1 }
+          return inMode({ rows: [{ cfg: null, rev: 0, currency: null }], rowCount: 1 })
         }
         if (text.includes('base_currency')) {
-          return { rows: [{ baseCurrency: 'EUR' }], rowCount: 1 }
+          return inMode({ rows: [{ baseCurrency: 'EUR' }], rowCount: 1 })
         }
         if (text.includes('update orgs')) {
-          return { rows: [], rowCount: state.updateRowCount }
+          return inMode({ rows: [], rowCount: state.updateRowCount })
         }
         if (text.includes('insert into audit_log')) {
-          return { rows: [], rowCount: 1 }
+          return inMode({ rows: [], rowCount: 1 })
         }
         throw new Error('unexpected database query: ' + text)
       }

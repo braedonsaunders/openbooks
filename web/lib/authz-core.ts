@@ -29,18 +29,18 @@ export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = 
       select r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-       where a.user_id = ${user.id} and a.org_id = ${user.orgId}`)
+       where a.user_id = ${user.id} and a.org_id = ${user.orgId}`, "objects")
   const overrides = await runner.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
       select permission, effect
         from user_permission_overrides
-       where user_id = ${user.id} and org_id = ${user.orgId}`)
+       where user_id = ${user.id} and org_id = ${user.orgId}`, "objects")
   const allowedSubs = await allowedSubsidiaryIds(user.id, user.orgId, runner)
   const permissions = resolveEffectivePermissions({
     additionalKnownPermissions: modulePermissions.active,
-    rolePermissionSets: assignments.rows.map((r) =>
+    rolePermissionSets: assignments.map((r) =>
       Array.isArray(r.permissions) ? r.permissions : [],
     ),
-    overrides: overrides.rows,
+    overrides,
   });
   denyInactiveExtensionPermissions(permissions, inactivePermissions);
   return { user, permissions, allowedSubsidiaryIds: allowedSubs };

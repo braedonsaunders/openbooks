@@ -113,38 +113,38 @@ async function accountMergeDrawerProps(
           select id, number, name from accounts
            where org_id = ${input.orgId} and id <> ${id} and type = ${String(account.type ?? '')}
              and is_active and not is_summary and merged_into_id is null
-           order by number nulls last, name`)
-      : Promise.resolve({ rows: [] as { id: string; number: string | null; name: string }[] }),
+           order by number nulls last, name`, 'objects')
+      : Promise.resolve([] as { id: string; number: string | null; name: string }[]),
     mergedIntoId
       ? db.execute<{ label: string }>(sql`
-          select concat_ws(' ', number, name) as label from accounts where org_id = ${input.orgId} and id = ${mergedIntoId}`)
-      : Promise.resolve({ rows: [] as { label: string }[] }),
+          select concat_ws(' ', number, name) as label from accounts where org_id = ${input.orgId} and id = ${mergedIntoId}`, 'objects')
+      : Promise.resolve([] as { label: string }[]),
     db.execute<{ id: string; status: string; effective_on: string; target_label: string | null }>(sql`
       select f.id, f.status, f.effective_on::text as effective_on, concat_ws(' ', t.number, t.name) as target_label
         from financial_changes f
         left join accounts t on t.org_id = f.org_id and t.id::text = f.payload ->> 'targetAccountId'
        where f.org_id = ${input.orgId} and f.domain = 'ledger' and f.operation = 'account_merge'
          and f.subject_id = ${id} and f.status in ('draft', 'pending', 'approved')
-       order by f.created_at desc limit 1`),
+       order by f.created_at desc limit 1`, 'objects'),
   ])
   const mergedAt = account.merged_at instanceof Date
     ? account.merged_at.toISOString().slice(0, 10)
     : typeof account.merged_at === 'string' ? account.merged_at.slice(0, 10) : ''
   return {
     canMerge: input.canMerge && !mergedIntoId,
-    targets: targets.rows.map((row) => ({ value: row.id, label: `${row.number ?? ''} ${row.name}`.trim() })),
+    targets: targets.map((row) => ({ value: row.id, label: `${row.number ?? ''} ${row.name}`.trim() })),
     today: input.today,
-    proposal: proposal.rows[0]
+    proposal: proposal[0]
       ? {
-          changeId: proposal.rows[0].id,
-          status: proposal.rows[0].status as 'draft' | 'pending' | 'approved',
-          targetLabel: proposal.rows[0].target_label ?? '',
-          effectiveDate: proposal.rows[0].effective_on,
+          changeId: proposal[0].id,
+          status: proposal[0].status as 'draft' | 'pending' | 'approved',
+          targetLabel: proposal[0].target_label ?? '',
+          effectiveDate: proposal[0].effective_on,
         }
       : null,
     mergedInto: mergedIntoId
       ? {
-          label: survivor.rows[0]?.label ?? mergedIntoId,
+          label: survivor[0]?.label ?? mergedIntoId,
           date: mergedAt,
           reason: typeof account.merge_reason === 'string' ? account.merge_reason : null,
           href: `/accounts?account=${mergedIntoId}`,

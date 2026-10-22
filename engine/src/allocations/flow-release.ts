@@ -16,8 +16,8 @@ async function loadReleaseGuard(
   subjectId: string,
 ): Promise<{ org_id: string; status: string } | null> {
   const result = await db.execute<{ org_id: string; status: string }>(sql`
-    select org_id, status from allocation_runs where id = ${subjectId}`);
-  return result.rows[0] ?? null;
+    select org_id, status from allocation_runs where id = ${subjectId}`, "objects");
+  return result[0] ?? null;
 }
 
 /**

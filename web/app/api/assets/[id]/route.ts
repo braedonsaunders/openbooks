@@ -303,8 +303,8 @@ export const PATCH = defineRoute({
            opening_accumulated_depreciation, opening_accumulated_as_of
       from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-  `);
-    const existing = existRes.rows[0];
+  `, "objects");
+    const existing = existRes[0];
     if (!existing)
       return notFound("record");
 
@@ -327,8 +327,8 @@ export const PATCH = defineRoute({
         return bad("invalid_subsidiary");
       const valid = await db.execute(sql`
       select 1 from subsidiaries
-       where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`);
-      if (!valid.rows[0]) return bad("invalid_subsidiary");
+       where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`, "objects");
+      if (!valid[0]) return bad("invalid_subsidiary");
       subsidiaryId = value;
     }
 
@@ -338,9 +338,9 @@ export const PATCH = defineRoute({
       const c = strOrNull(body.categoryId);
       if (!c || !isUuid(c)) return bad("Invalid category");
       const r = await db.execute(
-        sql`select 1 from asset_categories where id = ${c} and org_id = ${user.orgId}`,
+        sql`select 1 from asset_categories where id = ${c} and org_id = ${user.orgId}`, "objects",
       );
-      if (!r.rows[0]) return bad("Category not found");
+      if (!r[0]) return bad("Category not found");
       categoryId = c.toLowerCase();
     }
 
@@ -598,9 +598,9 @@ export const PATCH = defineRoute({
     select 1 from depreciation_schedules s
     join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
-     limit 1`);
+     limit 1`, "objects");
     const basisConflict = postedAssetBasisEditRefusal(
-      !!postedRes.rows[0],
+      !!postedRes[0],
       existing,
       requestedBasis,
     );
@@ -620,7 +620,7 @@ export const PATCH = defineRoute({
                 where al.org_id = a.org_id and al.asset_id = a.id and al.cip_cost_id is null)
        or exists (select 1 from asset_cip_capitalization_lines cl
                  join asset_cip_capitalizations k on k.org_id = cl.org_id and k.id = cl.capitalization_id and k.status = 'posted'
-                where cl.org_id = a.org_id and cl.asset_id = a.id))`)).rows[0];
+                where cl.org_id = a.org_id and cl.asset_id = a.id))`, "objects"))[0];
     if (
       capitalized &&
       ((cost !== undefined && cmp(cost, existing.acquisition_cost) !== 0) ||
@@ -648,8 +648,8 @@ export const PATCH = defineRoute({
       select 1 from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
       where s.org_id = ${user.orgId} and s.asset_id = ${id} and l.source <> 'formula'
-      limit 1`);
-      if (inputEvidence.rows[0])
+      limit 1`, "objects");
+      if (inputEvidence[0])
         return bad(
           "Depreciation method cannot change after manual or production evidence exists",
         );
@@ -666,8 +666,8 @@ export const PATCH = defineRoute({
                ${documentRevisionSql(sql`created_at`)} as created_at from fixed_assets
          where id = ${id} and org_id = ${user.orgId}
            ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-         for update`);
-        const lockedExisting = lockedRes.rows[0];
+         for update`, "objects");
+        const lockedExisting = lockedRes[0];
         if (!lockedExisting) throw new AssetNotFoundError("asset not found");
         await refuseFixedAssetRehomeWithEquipment(
           tx,
@@ -696,15 +696,15 @@ export const PATCH = defineRoute({
         select 1 from depreciation_schedules s
         join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
          where s.asset_id = ${id} and s.org_id = ${user.orgId} and l.posted_amount is not null
-         limit 1`);
+         limit 1`, "objects");
         const lifecycleHistory = await tx.execute(sql`
         select 1 from asset_events event
         join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
         where event.org_id = ${user.orgId} and event.asset_id = ${id}
           and entry.status in ('posted', 'reversed') limit 1
-      `);
+      `, "objects");
         const hasHistory =
-          !!lockedPostedRes.rows[0] || !!lifecycleHistory.rows[0];
+          !!lockedPostedRes[0] || !!lifecycleHistory[0];
         const lockedBasisConflict = postedAssetBasisEditRefusal(
           hasHistory,
           lockedExisting,
@@ -731,13 +731,11 @@ export const PATCH = defineRoute({
                 ? strOrNull(body.acquiredOn)
                 : undefined,
           };
-          const defaults = (
-            await tx.execute<Record<string, unknown>>(sql`
+          const defaults = (await tx.execute<Record<string, unknown>>(sql`
           select asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id
             from asset_categories where id = ${lockedExisting.category_id} and org_id = ${user.orgId}
             for share
-        `)
-          ).rows[0];
+        `, "objects"))[0];
           const accountChanges: Record<string, string | null | undefined> = {
             asset_account_id: assetAccountId,
             accumulated_depreciation_account_id: accumulatedAccountId,
@@ -767,8 +765,7 @@ export const PATCH = defineRoute({
         const custom = { ...(lockedExisting.custom ?? {}) };
         for (const key of customKeys) delete custom[key];
         Object.assign(custom, customUpdates);
-        const updated = (
-          await tx.execute<ExistingAsset>(sql`
+        const updated = (await tx.execute<ExistingAsset>(sql`
         update fixed_assets set
       name = ${body.name !== undefined ? body.name.trim() || "New asset" : sql`name`},
       asset_number = ${body.assetNumber !== undefined ? (strOrNull(body.assetNumber) ?? sql`asset_number`) : sql`asset_number`},
@@ -796,8 +793,7 @@ export const PATCH = defineRoute({
       updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
         returning fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at,
-                  ${documentRevisionSql(sql`created_at`)} as created_at`)
-        ).rows[0];
+                  ${documentRevisionSql(sql`created_at`)} as created_at`, "objects"))[0];
         if (!updated) throw new AssetNotFoundError("asset not found");
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -871,17 +867,17 @@ export const DELETE = defineRoute({
     const visible = await db.execute<{ status: string }>(sql`
     select status from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-  `);
-    if (!visible.rows[0])
+  `, "objects");
+    if (!visible[0])
       return notFound("record");
     // Only a draft that was never placed in service may be hard-deleted. Any
     // other status — in service, fully depreciated, disposed, written off —
     // owns financial meaning and leaves only through the lifecycle
     // (dispose/write-off with their journals), never through deletion.
-    if (visible.rows[0].status !== "draft") {
+    if (visible[0].status !== "draft") {
       return NextResponse.json(
         {
-          error: `Only draft assets can be deleted (status: ${visible.rows[0].status}). Dispose of or write off the asset instead.`,
+          error: `Only draft assets can be deleted (status: ${visible[0].status}). Dispose of or write off the asset instead.`,
         },
         { status: 409 },
       );
@@ -895,8 +891,8 @@ export const DELETE = defineRoute({
     // linked to their event evidence either way.
     const lifecycle = await db.execute(sql`
     select 1 from asset_events where asset_id = ${id} and org_id = ${user.orgId}
-     limit 1`);
-    if (lifecycle.rows[0]) {
+     limit 1`, "objects");
+    if (lifecycle[0]) {
       return NextResponse.json(
         {
           error:
@@ -913,8 +909,8 @@ export const DELETE = defineRoute({
     select 1 from asset_proposal_allocations where org_id = ${user.orgId} and asset_id = ${id}
     union all
     select 1 from asset_cip_capitalization_lines where org_id = ${user.orgId} and asset_id = ${id}
-     limit 1`);
-    if (capitalized.rows[0]) {
+     limit 1`, "objects");
+    if (capitalized[0]) {
       return NextResponse.json(
         {
           error:
@@ -930,8 +926,8 @@ export const DELETE = defineRoute({
       join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where s.asset_id = ${id} and s.org_id = ${user.orgId}
        and (l.posted_amount is not null or l.input_id is not null or l.source = 'imported')
-     limit 1`);
-    if (evidence.rows[0]) {
+     limit 1`, "objects");
+    if (evidence[0]) {
       return NextResponse.json(
         {
           error: "This asset has depreciation evidence and cannot be deleted.",
@@ -955,10 +951,10 @@ export const DELETE = defineRoute({
       select status from fixed_assets where id = ${id} and org_id = ${user.orgId}
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
         for update
-    `);
-        if (!locked.rows[0]) return null;
-        if (locked.rows[0].status !== "draft") {
-          statusConflict = locked.rows[0].status;
+    `, "objects");
+        if (!locked[0]) return null;
+        if (locked[0].status !== "draft") {
+          statusConflict = locked[0].status;
           return null;
         }
         await tx.execute(sql`
@@ -973,9 +969,9 @@ export const DELETE = defineRoute({
         );
         const gone = await tx.execute<{ id: string }>(sql`
       delete from fixed_assets where id = ${id} and org_id = ${user.orgId} returning id
-    `);
-        if (gone.rows.length !== 1) throw new AssetDeleteNotFoundError();
-        return gone.rows[0]!.id;
+    `, "objects");
+        if (gone.length !== 1) throw new AssetDeleteNotFoundError();
+        return gone[0]!.id;
       })
       .catch((error: unknown) => {
         if (error instanceof AssetDeleteNotFoundError) return null;

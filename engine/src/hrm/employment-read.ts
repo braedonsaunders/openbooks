@@ -398,7 +398,7 @@ async function loadEmploymentSnapshot(
   // protocol (update or lock the stable row on every version write).
   const locked = (await exec.execute<{ one: number }>(sql`
     select 1 as one from worker_employments
-     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid for share`)).rows[0] ?? null;
+     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid for share`, "objects"))[0] ?? null;
   if (locked === null) {
     throw new EmploymentReadError(
       `employment not found: the authorized employment has no worker_employments row; refusing to assemble versions without their aggregate`,
@@ -437,7 +437,7 @@ async function loadEmploymentSnapshot(
           join employment_assignments a
             on a.id = av.assignment_id and a.org_id = av.org_id
          where av.org_id = ${orgId}::uuid and av.employment_id = ${employmentId}::uuid
-         order by av.assignment_id, av.version_no) a), '[]'::json) as assignment_versions`)).rows[0];
+         order by av.assignment_id, av.version_no) a), '[]'::json) as assignment_versions`, "objects"))[0];
   if (!snapshot || snapshot.revision === null) {
     throw new EmploymentReadError(
       `employment snapshot missing: the locked aggregate returned no revision; refusing a version read without its aggregate`,
@@ -661,7 +661,7 @@ export async function loadEmploymentChangeRequests(
   await requireEmploymentOrTeamSubject(exec, orgId, actorId, employmentId);
   // No arbitrary SQL identifiers: every value is a bound parameter, every
   // column list is explicit, stamps are microsecond UTC text, uuids are text.
-  const rows = (await exec.execute<ChangeRequestJson>(sql`
+  const rows = await exec.execute<ChangeRequestJson>(sql`
     select r.id::text as id, r.status,
            r.request_revision, r.expected_employment_revision,
            r.payload_schema_version, r.reason, r.action, r.reason_code,
@@ -677,7 +677,7 @@ export async function loadEmploymentChangeRequests(
            to_char(r.updated_at at time zone 'UTC', ${RECORDED_TEXT}) as updated_at
       from hrm_employment_change_requests r
      where r.org_id = ${orgId}::uuid and r.employment_id = ${employmentId}::uuid
-     order by r.created_at desc, r.id desc`)).rows;
+     order by r.created_at desc, r.id desc`, "objects");
   return rows.map((row) => ({
     id: requireText("hrm_employment_change_requests.id", row.id),
     status: requireText("hrm_employment_change_requests.status", row.status),
@@ -722,11 +722,11 @@ export async function loadEmploymentsByParty(
   const actorId = requireId(query.actorId, "actorId");
   const workerPartyId = requireId(query.workerPartyId, "workerPartyId");
   const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
-  const rows = (await exec.execute<{ id: string; employerSubsidiaryId: string | null }>(sql`
+  const rows = await exec.execute<{ id: string; employerSubsidiaryId: string | null }>(sql`
     select id::text as id, employer_subsidiary_id::text as "employerSubsidiaryId"
       from worker_employments
      where org_id = ${orgId}::uuid and worker_party_id = ${workerPartyId}::uuid
-     order by id`)).rows;
+     order by id`, "objects");
   // A null employer is invisible — authorization refuses such subjects, so
   // the list twin excludes them rather than leaking their ids.
   return rows
@@ -941,7 +941,7 @@ async function loadHeadcountTemporalSource(
            revision
       from worker_employments
      where org_id = ${orgId}::uuid
-     order by id`)).rows.filter(
+     order by id`, "objects")).filter(
     (row) => row.employerSubsidiaryId !== null && (allowed === null || allowed.has(row.employerSubsidiaryId)),
   );
   if (employments.length === 0) {
@@ -955,7 +955,7 @@ async function loadHeadcountTemporalSource(
   // Bare JS arrays must never be interpolated into ANY() (they bind as row
   // constructors); each id is its own parameter in these two batched reads.
   const ids = employments.map((row) => sql`${row.id}::uuid`);
-  const versionRows = (await exec.execute<BatchedEmploymentVersionJson>(sql`
+  const versionRows = await exec.execute<BatchedEmploymentVersionJson>(sql`
     select ev.id::text as id, ev.employment_id::text as employment_id, ev.version_no,
            ev.status,
            ev.effective_from::text as effective_from,
@@ -964,8 +964,8 @@ async function loadHeadcountTemporalSource(
            to_char(ev.recorded_until at time zone 'UTC', ${RECORDED_TEXT}) as recorded_until
       from worker_employment_versions ev
      where ev.org_id = ${orgId}::uuid and ev.employment_id in (${sql.join(ids, sql`, `)})
-     order by ev.employment_id, ev.version_no`)).rows;
-  const assignmentRows = (await exec.execute<BatchedAssignmentVersionJson>(sql`
+     order by ev.employment_id, ev.version_no`, "objects");
+  const assignmentRows = await exec.execute<BatchedAssignmentVersionJson>(sql`
     select av.id::text as id,
            av.employment_id::text as employment_id,
            av.assignment_id::text as assignment_id, a.assignment_key,
@@ -981,7 +981,7 @@ async function loadHeadcountTemporalSource(
       join employment_assignments a
         on a.id = av.assignment_id and a.org_id = av.org_id
      where av.org_id = ${orgId}::uuid and av.employment_id in (${sql.join(ids, sql`, `)})
-     order by av.employment_id, av.assignment_id, av.version_no`)).rows;
+     order by av.employment_id, av.assignment_id, av.version_no`, "objects");
 
   const versionsByEmployment = new Map<string, EmploymentVersionRow[]>();
   for (const row of versionRows) {
@@ -1082,7 +1082,7 @@ async function headcountFromTemporalSource(
   const subsidiaryNames = new Map(
     (await exec.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from subsidiaries
-       where org_id = ${orgId}::uuid and id in (${sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows.map(
+       where org_id = ${orgId}::uuid and id in (${sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects")).map(
       (row) => [row.id, row.name] as const,
     ),
   );
@@ -1091,7 +1091,7 @@ async function headcountFromTemporalSource(
     : new Map(
         (await exec.execute<{ id: string; name: string }>(sql`
           select id::text as id, name from departments
-           where org_id = ${orgId}::uuid and id in (${sql.join(departmentIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows.map(
+           where org_id = ${orgId}::uuid and id in (${sql.join(departmentIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects")).map(
           (row) => [row.id, row.name] as const,
         ),
       );
@@ -1324,7 +1324,7 @@ export async function loadEmploymentOptions(
     : allowed.size === 0
       ? sql`and false`
       : sql`and e.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
-  const page = (await exec.execute<EmploymentOptionRow>(sql`
+  const page = await exec.execute<EmploymentOptionRow>(sql`
     select e.id::text as "employmentId",
            e.employer_subsidiary_id::text as "employerSubsidiaryId",
            p.display_name as "personName",
@@ -1349,7 +1349,7 @@ export async function loadEmploymentOptions(
        ${query.activeOnly !== false ? ACTIVE_WORKER_OPTIONS : sql``}
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by p.display_name, e.id
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   // The pinned draft value is read by id, never by page position: it leads
   // even when it falls outside the bounded page. An unknown or out-of-scope
   // id stays absent rather than leaking existence.
@@ -1377,7 +1377,7 @@ export async function loadEmploymentOptions(
          and e.id = ${includeId}::uuid
          and e.employer_subsidiary_id is not null
          ${employerScope}
-         ${query.activeOnly === true ? ACTIVE_WORKER_OPTIONS : sql``}`)).rows[0] ?? null
+         ${query.activeOnly === true ? ACTIVE_WORKER_OPTIONS : sql``}`, "objects"))[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)] : page;
 
@@ -1451,7 +1451,7 @@ export async function loadPeopleOptions(
     : allowed.size === 0
       ? sql`false`
       : sql`e.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
-  const page = (await exec.execute<PeopleOptionRow>(sql`
+  const page = await exec.execute<PeopleOptionRow>(sql`
     select p.id::text as "partyId",
            p.display_name as "personName"
       from parties p
@@ -1463,7 +1463,7 @@ export async function loadPeopleOptions(
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      group by p.id, p.display_name
      order by p.display_name
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   // The pinned stored value is read by id, never by page position: it
   // leads even when it falls outside the bounded page. An unknown or
   // out-of-scope id stays absent rather than leaking existence.
@@ -1478,7 +1478,7 @@ export async function loadPeopleOptions(
          and p.id = ${includeId}::uuid
          and e.employer_subsidiary_id is not null
          ${query.activeOnly === true ? ACTIVE_WORKER_OPTIONS : sql``}
-       group by p.id, p.display_name`)).rows[0] ?? null
+       group by p.id, p.display_name`, "objects"))[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.partyId !== pinned.partyId)] : page;
 
@@ -1559,7 +1559,7 @@ export async function loadHireablePeopleOptions(
       select 1 from worker_employments w
        where w.org_id = p.org_id and w.worker_party_id = p.id
     )`;
-  const page = (await exec.execute<HireableRow>(sql`
+  const page = await exec.execute<HireableRow>(sql`
     select p.id::text as "partyId",
            p.display_name as "personName"
       from parties p
@@ -1568,7 +1568,7 @@ export async function loadHireablePeopleOptions(
        and ${hireable}
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by p.display_name, p.id
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   // The pinned stored value is read by id, never by page position: it
   // leads even when it falls outside the bounded page. An unknown,
   // out-of-scope, or since-hired id stays absent rather than leaking
@@ -1581,7 +1581,7 @@ export async function loadHireablePeopleOptions(
        where p.org_id = ${orgId}::uuid
          and p.id = ${includeId}::uuid
          and ${partyScope}
-         and ${hireable}`)).rows[0] ?? null
+         and ${hireable}`, "objects"))[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.partyId !== pinned.partyId)] : page;
 
@@ -1650,7 +1650,7 @@ export async function loadEmployerSubsidiaryOptions(
     : allowed.size === 0
       ? sql`false`
       : sql`s.id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
-  const page = (await exec.execute<SubsidiaryRow>(sql`
+  const page = await exec.execute<SubsidiaryRow>(sql`
     select s.id::text as "subsidiaryId", s.name
       from subsidiaries s
      where s.org_id = ${orgId}::uuid
@@ -1658,7 +1658,7 @@ export async function loadEmployerSubsidiaryOptions(
        and ${scope}
        ${fragment ? sql`and s.name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by s.name, s.id
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   // The pinned stored value is read by id, never by page position: it
   // leads even when it falls outside the bounded page. An unknown,
   // inactive, or out-of-scope id stays absent rather than leaking
@@ -1670,7 +1670,7 @@ export async function loadEmployerSubsidiaryOptions(
        where s.org_id = ${orgId}::uuid
          and s.id = ${includeId}::uuid
          and s.is_active
-         and ${scope}`)).rows[0] ?? null
+         and ${scope}`, "objects"))[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.subsidiaryId !== pinned.subsidiaryId)] : page;
 
@@ -1757,7 +1757,7 @@ export async function loadEmployablePeopleOptions(
        where e.org_id = p.org_id and e.worker_party_id = p.id
          and v.recorded_until is null and v.status <> 'terminated'
     )`;
-  const page = (await exec.execute<EmployableRow>(sql`
+  const page = await exec.execute<EmployableRow>(sql`
     select p.id::text as "partyId",
            p.display_name as "personName",
            exists (
@@ -1770,7 +1770,7 @@ export async function loadEmployablePeopleOptions(
        and ${employable}
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by p.display_name, p.id
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   // The pinned stored value is read by id, never by page position: it
   // leads even when it falls outside the bounded page. An unknown,
   // out-of-scope, or since-hired id stays absent rather than leaking
@@ -1787,7 +1787,7 @@ export async function loadEmployablePeopleOptions(
        where p.org_id = ${orgId}::uuid
          and p.id = ${includeId}::uuid
          and ${partyScope}
-         and ${employable}`)).rows[0] ?? null
+         and ${employable}`, "objects"))[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.partyId !== pinned.partyId)] : page;
 
@@ -1860,7 +1860,7 @@ export async function loadLocationOptions(
     : allowed.size === 0
       ? sql`and subsidiary_id is null`
       : sql`and (subsidiary_id is null or subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)}))`;
-  const page = (await exec.execute<LocationOptionRow>(sql`
+  const page = await exec.execute<LocationOptionRow>(sql`
     select id::text as "locationId", code, name, subsidiary_id::text as "subsidiaryId"
       from locations
      where org_id = ${orgId}::uuid
@@ -1868,7 +1868,7 @@ export async function loadLocationOptions(
        ${locationScope}
        ${fragment ? sql`and name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by name, id
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   // The pinned draft value is read by id, never by page position: it leads
   // even when it falls outside the bounded page. An unknown, inactive, or
   // out-of-scope id stays absent rather than leaking existence.
@@ -1879,7 +1879,7 @@ export async function loadLocationOptions(
        where org_id = ${orgId}::uuid
          and id = ${includeId}::uuid
          and is_active
-         ${locationScope}`)).rows[0] ?? null
+         ${locationScope}`, "objects"))[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.locationId !== pinned.locationId)] : page;
 

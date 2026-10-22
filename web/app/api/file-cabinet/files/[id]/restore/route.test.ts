@@ -76,11 +76,9 @@ function gate(orgId: string, userId: string, permissions: string[]) {
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
 
 async function fileActive(orgId: string, fileId: string): Promise<boolean | null> {
-  const rows = (
-    await db.execute<{ is_inactive: boolean }>(
-      sql`select is_inactive from files where id = ${fileId} and org_id = ${orgId}`,
+  const rows = await db.execute<{ is_inactive: boolean }>(
+      sql`select is_inactive from files where id = ${fileId} and org_id = ${orgId}`, 'objects',
     )
-  ).rows
   if (rows.length === 0) return null
   return rows[0]!.is_inactive === false
 }
@@ -90,11 +88,9 @@ test('a restore flips a trashed file back to active with actor audit', { skip: !
   const userId = randomUUID()
   try {
     gate(org.orgId, userId, ['documents.manage'])
-    const folder = (
-      await db.execute<{ id: string }>(
-        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`,
-      )
-    ).rows[0]!.id
+    const folder = (await db.execute<{ id: string }>(
+        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`, 'objects',
+      ))[0]!.id
     const meta = await createFile({
       orgId: org.orgId,
       folderId: folder,
@@ -116,11 +112,9 @@ test('a restore flips a trashed file back to active with actor audit', { skip: !
     assert.equal(response.status, 200)
     assert.deepEqual(await response.json(), { ok: true })
     assert.equal(await fileActive(org.orgId, meta.id), true)
-    const audits = (
-      await db.execute<{ actor_id: string; event: string }>(
-        sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${org.orgId} and table_name = 'files' and row_id = ${meta.id} order by at`,
+    const audits = await db.execute<{ actor_id: string; event: string }>(
+        sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${org.orgId} and table_name = 'files' and row_id = ${meta.id} order by at`, 'objects',
       )
-    ).rows
     assert.deepEqual(
       audits.map((a) => a.event),
       ['restore'],
@@ -156,11 +150,9 @@ test('restoring an active file is a named not-found, not a duplicate audit', { s
   const userId = randomUUID()
   try {
     gate(org.orgId, userId, ['documents.manage'])
-    const folder = (
-      await db.execute<{ id: string }>(
-        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`,
-      )
-    ).rows[0]!.id
+    const folder = (await db.execute<{ id: string }>(
+        sql`insert into folders (org_id, parent_folder_id, name) values (${org.orgId}, null, 'F') returning id`, 'objects',
+      ))[0]!.id
     const meta = await createFile({
       orgId: org.orgId,
       folderId: folder,
@@ -178,11 +170,9 @@ test('restoring an active file is a named not-found, not a duplicate audit', { s
     )
 
     assert.equal(response.status, 404)
-    const audits = (
-      await db.execute<{ n: string }>(
-        sql`select count(*)::text as n from audit_log where org_id = ${org.orgId} and table_name = 'files' and row_id = ${meta.id} and changes->>'event' = 'restore'`,
+    const audits = await db.execute<{ n: string }>(
+        sql`select count(*)::text as n from audit_log where org_id = ${org.orgId} and table_name = 'files' and row_id = ${meta.id} and changes->>'event' = 'restore'`, 'objects',
       )
-    ).rows
     assert.equal(Number(audits[0]?.n ?? 0), 0)
   } finally {
     state.authz = null

@@ -26,7 +26,7 @@ export async function seedPeriodOpeningEmployee(org: ScratchOrg, authorId: strin
   await saveOpeningBalances({ orgId: org.orgId, actorId: authorId, taxYear: 2026,
     rows: [{ employeePartyId: worker.workerPartyId, amounts: { pensionableYtd: '262.77', insurableYtd: '262.77', taxableYtd: '262.77', cppYtd: '11.63', eiYtd: '4.28' } }], allowedSubsidiaryIds: null });
   const annual = (await db.execute<{ updated_at: string }>(sql`select updated_at::text as updated_at from payroll_opening_balances
-    where org_id=${org.orgId} and employee_party_id=${worker.workerPartyId} and tax_year=2026`)).rows[0]!;
+    where org_id=${org.orgId} and employee_party_id=${worker.workerPartyId} and tax_year=2026`, 'objects'))[0]!;
   const amounts = Object.fromEntries(CA_PERIOD_OPENING_TREATMENT.fields.map((field) => [field.key, '0']));
   Object.assign(amounts, { pensionable: '262.77', insurable: '262.77', periodicIncome: '262.77', cpp: '11.63', ei: '4.28', enhancedCppPeriodic: '1.95' });
   return { ...worker, annualVersion: annual.updated_at, amounts };

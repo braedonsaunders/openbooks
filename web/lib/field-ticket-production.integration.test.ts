@@ -13,11 +13,11 @@ const { addTicketQuantity, removeTicketQuantity } = await import('./field-ticket
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
 async function progressRows(orgId: string, ticketId: string) {
-  return (await db.execute<{ quantity: string; unit: string; entry_date: string; reverses_entry_id: string | null }>(sql`
+  return await db.execute<{ quantity: string; unit: string; entry_date: string; reverses_entry_id: string | null }>(sql`
     select quantity::text as quantity, unit, entry_date::text as entry_date, reverses_entry_id
       from project_progress_entries
      where org_id = ${orgId} and source = 'field_ticket' and source_document_id = ${ticketId}
-     order by created_at, id`)).rows
+     order by created_at, id`, 'objects')
 }
 
 test('approved field-ticket production becomes progress exactly once and voiding the ticket reverses it', enabled, async () => {
@@ -97,7 +97,7 @@ test('approved field-ticket production becomes progress exactly once and voiding
       assert.ok(rows[1]!.reverses_entry_id)
       const net = (await db.execute<{ net: string }>(sql`
         select coalesce(sum(quantity), 0)::text as net from project_progress_entries
-         where org_id = ${org.orgId} and project_task_id = ${taskId}`)).rows[0]!.net
+         where org_id = ${org.orgId} and project_task_id = ${taskId}`, 'objects'))[0]!.net
       assert.equal(Number(net), 0)
     } finally {
       await dropScratchOrg(org.orgId)

@@ -103,16 +103,16 @@ async function seedTaxFixture(): Promise<TaxFixture> {
 
 async function taxRateRows(orgId: string): Promise<{ id: string; rate: string }[]> {
   const result = await db.execute<{ id: string; rate: string }>(sql`
-    select id, rate_percent::text as rate from tax_rates where org_id = ${orgId} order by effective_from`);
-  return result.rows;
+    select id, rate_percent::text as rate from tax_rates where org_id = ${orgId} order by effective_from`, "objects");
+  return result;
 }
 
 async function auditCount(orgId: string, table: string, rowId?: string): Promise<number> {
   const result = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = ${table}
-       ${rowId ? sql`and row_id = ${rowId}` : sql``}`);
-  return result.rows[0]!.n;
+       ${rowId ? sql`and row_id = ${rowId}` : sql``}`, "objects");
+  return result[0]!.n;
 }
 
 interface DerivedRuleFixture {
@@ -183,8 +183,8 @@ test("derived-rule edits close the old window and create a successor", { skip: !
   const f = await seedDerivedRuleFixture();
   try {
     const current = await db.execute<{ code: string }>(sql`
-      select code from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`);
-    const code = current.rows[0]!.code;
+      select code from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`, "objects");
+    const code = current[0]!.code;
     const edited = await PATCH(
       patchRequest("pay-derived-rules", {
         id: f.ruleId,
@@ -214,8 +214,8 @@ test("derived-rule edits close the old window and create a successor", { skip: !
              effective_to::text as to_date
         from pay_derived_rules
        where org_id = ${f.orgId} and code = ${code}
-       order by effective_from`);
-    assert.deepEqual(rows.rows, [
+       order by effective_from`, "objects");
+    assert.deepEqual(rows, [
       { id: f.ruleId, name: "Original rule", rate: "10.0000", from_date: "2026-01-01", to_date: "2026-06-30" },
       { id: successorId, name: "Successor rule", rate: "25.0000", from_date: "2026-07-01", to_date: null },
     ]);
@@ -248,8 +248,8 @@ test("derived-rule edits close the old window and create a successor", { skip: !
     const { id: appendedId } = (await appended.json()) as { id: string };
     const finalRows = await db.execute<{ id: string; to_date: string | null }>(sql`
       select id, effective_to::text as to_date from pay_derived_rules
-       where org_id = ${f.orgId} and code = ${code} order by effective_from`);
-    assert.deepEqual(finalRows.rows.map((row) => [row.id, row.to_date]), [
+       where org_id = ${f.orgId} and code = ${code} order by effective_from`, "objects");
+    assert.deepEqual(finalRows.map((row) => [row.id, row.to_date]), [
       [f.ruleId, "2026-06-30"], [successorId, "2026-12-31"], [appendedId, null],
     ]);
   } finally {
@@ -262,7 +262,7 @@ test("setup deletes write their audit event in the same transaction", { skip: !D
   const f = await seedDerivedRuleFixture();
   try {
     assert.equal((await DELETE(deleteRequest("pay-derived-rules", f.ruleId), call("pay-derived-rules"))).status, 200);
-    assert.equal((await db.execute(sql`select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`, "objects")).length, 0);
     assert.equal(await auditCount(f.orgId, "pay_derived_rules", f.ruleId), 2, "insert and delete each leave audit evidence");
 
     const pinnedGroupId = randomUUID();
@@ -270,22 +270,22 @@ test("setup deletes write their audit event in the same transaction", { skip: !D
     await db.execute(sql`insert into account_group_members (org_id, group_id, account_id, dimension, created_by) values (${f.orgId}, ${pinnedGroupId}, (select id from accounts where org_id = ${f.orgId} limit 1), 'delete-test', ${f.actorId})`);
     const refused = await DELETE(deleteRequest("account-groups", pinnedGroupId), call("account-groups"));
     assert.deepEqual([refused.status, (await refused.json() as { error: string }).error], [409, 'account group still has pinned accounts — unpin or reassign them before deleting the group']);
-    assert.equal((await db.execute(sql`select 1 from account_group_members where group_id = ${pinnedGroupId}`)).rows.length, 1);
+    assert.equal((await db.execute(sql`select 1 from account_group_members where group_id = ${pinnedGroupId}`, "objects")).length, 1);
     await assert.rejects(db.execute(sql`delete from account_groups where id = ${pinnedGroupId} and org_id = ${f.orgId}`));
 
     await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"multiSubsidiary":true}'::jsonb, true) where id = ${f.orgId}`);
-    const main = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${f.orgId} order by created_at limit 1`)).rows[0]!.id;
+    const main = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${f.orgId} order by created_at limit 1`, "objects"))[0]!.id;
     const [foreign, segment] = [randomUUID(), randomUUID()];
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${foreign}, ${f.orgId}, ${main}, 'Entity B', 'CAD', 'CA')`);
     await db.execute(sql`insert into segment_definitions (id, org_id, key, name, plural_name) values (${segment}, ${f.orgId}, ${`scope_${randomUUID().replaceAll('-', '').slice(0, 12)}`}, 'Scope test', 'Scope tests')`);
     authenticate(f, new Set([main]));
     const orgWide = await POST(postRequest("account-groups", {}), call("account-groups")); assert.deepEqual([orgWide.status, await orgWide.json()], [403, { error: "requires unrestricted subsidiary access" }]);
     const scoped = await POST(postRequest("segment-values", { segmentId: segment, name: "Foreign", subsidiaryId: foreign }), call("segment-values")); assert.equal(scoped.status, 403);
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from segment_values where segment_id = ${segment}`)).rows[0]!.n, 0);
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from segment_values where segment_id = ${segment}`, "objects"))[0]!.n, 0);
     const groupId = randomUUID();
     await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name) values (${groupId}, ${f.orgId}, 'class', 'scope_test', 'Restricted group')`);
     const accountGroups = SETUP_ENTITY_BY_KEY.get("account-groups")!;
-    assert.equal((await db.execute(sql`select count(*)::int as n from account_groups where id = ${groupId} ${setupEntitySubsidiaryFilter(accountGroups, new Set([main]))}`)).rows[0]!.n, 0);
+    assert.equal((await db.execute(sql`select count(*)::int as n from account_groups where id = ${groupId} ${setupEntitySubsidiaryFilter(accountGroups, new Set([main]))}`, "objects"))[0]!.n, 0);
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,equipment}', 'true'::jsonb) where id = ${f.orgId}`);
     const unitId = randomUUID(); await db.execute(sql`insert into equipment_units (id,org_id,subsidiary_id,unit_number,name,status,purchase_price) values (${unitId},${f.orgId},${foreign},'FOREIGN','Foreign unit','active','1')`);
     assert.deepEqual(await loadEntityOptions("equipment-units", f.orgId, new Set([main])), []);
@@ -460,8 +460,8 @@ test("direct writes cannot persist negative tax rates: storage fails closed", { 
        where conname in ('tax_rates_rate_percent_domain', 'tax_codes_org_code_unique',
                          'tax_groups_org_code_unique', 'classes_org_code_unique',
                          'departments_org_code_unique', 'locations_org_code_unique',
-                         'worker_comp_groups_org_code_unique')`);
-    assert.equal(constraints.rows.length, 7, "every 0042 constraint exists in the live catalog");
+                         'worker_comp_groups_org_code_unique')`, "objects");
+    assert.equal(constraints.length, 7, "every 0042 constraint exists in the live catalog");
 
     const codeId = randomUUID();
     await db.execute(sql`
@@ -491,8 +491,8 @@ test("direct writes cannot persist negative tax rates: storage fails closed", { 
       "an update to a negative rate must be unrepresentable",
     );
     const stored = await db.execute<{ rate: string }>(sql`
-      select rate_percent::text as rate from tax_rates where org_id = ${org.orgId}`);
-    assert.deepEqual(stored.rows, [{ rate: "0.0000" }]);
+      select rate_percent::text as rate from tax_rates where org_id = ${org.orgId}`, "objects");
+    assert.deepEqual(stored, [{ rate: "0.0000" }]);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -515,11 +515,11 @@ test("two concurrent Setup creates cannot duplicate an authoritative code", { sk
 
     const rows = await db.execute<{ id: string; n: number }>(sql`
       select id, count(*) over ()::int as n from tax_codes
-       where org_id = ${org.orgId} and code = ${code}`);
-    assert.equal(rows.rows[0]!.n, 1, "storage holds exactly one authoritative code");
+       where org_id = ${org.orgId} and code = ${code}`, "objects");
+    assert.equal(rows[0]!.n, 1, "storage holds exactly one authoritative code");
     // The insert and its audit share one transaction: the losing request
     // leaves no row and no orphan audit evidence.
-    assert.equal(await auditCount(org.orgId, "tax_codes", rows.rows[0]!.id), 1);
+    assert.equal(await auditCount(org.orgId, "tax_codes", rows[0]!.id), 1);
     assert.equal(await auditCount(org.orgId, "tax_codes"), 1);
 
     // An edit that moves a row onto an occupied natural key has no preflight
@@ -602,8 +602,8 @@ test("storage decides two-session create/create races for every authoritative se
         await b.query("rollback");
         const stored = await db.execute<{ n: number }>(sql`
           select count(*)::int as n from ${sql.raw(table)}
-           where org_id = ${org.orgId} and code = ${code}`);
-        assert.equal(stored.rows[0]!.n, 1, `${table}: exactly one authoritative row`);
+           where org_id = ${org.orgId} and code = ${code}`, "objects");
+        assert.equal(stored[0]!.n, 1, `${table}: exactly one authoritative row`);
       } finally {
         await a.end().catch(() => {});
         await b.end().catch(() => {});

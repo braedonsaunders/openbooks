@@ -93,11 +93,9 @@ test(
         code: "FLOW_BONUS",
         kind: "earning",
       });
-      const account = (
-        await db.execute<{ id: string }>(
-          sql`insert into accounts (org_id,number,name,type,is_active,is_summary) values (${org.orgId},'6050','Benefits expense','expense',true,false) returning id`,
-        )
-      ).rows[0]!.id;
+      const account = (await db.execute<{ id: string }>(
+          sql`insert into accounts (org_id,number,name,type,is_active,is_summary) values (${org.orgId},'6050','Benefits expense','expense',true,false) returning id`, "objects",
+        ))[0]!.id;
       program = (
         await seedPayrollBenefitProgram(
           {
@@ -174,15 +172,13 @@ test(
       );
     }
     async function gates(id: string) {
-      return (
-        await db.execute<{
+      return await db.execute<{
           id: string;
           status: string;
           decided_by: string | null;
         }>(
-          sql`select id,status,decided_by from flow_gates where org_id=${org.orgId} and subject_kind='hrm_benefit_award' and subject_id=${id} order by created_at,id`,
-        )
-      ).rows;
+          sql`select id,status,decided_by from flow_gates where org_id=${org.orgId} and subject_kind='hrm_benefit_award' and subject_id=${id} order by created_at,id`, "objects",
+        );
     }
     async function pendingGate(id: string) {
       const rows = (await gates(id)).filter((g) => g.status === "pending");
@@ -209,10 +205,8 @@ test(
         assert.ok(pending.flowRunId);
         const before = await read(draft.id),
           priorGates = await gates(draft.id);
-        const history = (
-          await db.execute(sql`select to_jsonb(a) as snapshot from audit_log a where org_id=${org.orgId}
-        and table_name='hrm_benefit_awards' and row_id=${draft.id} order by id`)
-        ).rows;
+        const history = await db.execute(sql`select to_jsonb(a) as snapshot from audit_log a where org_id=${org.orgId}
+        and table_name='hrm_benefit_awards' and row_id=${draft.id} order by id`, "objects");
         const complete = (runId: string, actorId = author) =>
           completeBenefitAwardSubmission({
             orgId: org.orgId,
@@ -230,19 +224,15 @@ test(
         assert.deepEqual(await read(draft.id), before);
         assert.deepEqual(await gates(draft.id), priorGates);
         assert.deepEqual(
-          (
-            await db.execute(sql`select to_jsonb(a) as snapshot from audit_log a where org_id=${org.orgId}
-        and table_name='hrm_benefit_awards' and row_id=${draft.id} order by id`)
-          ).rows,
+          await db.execute(sql`select to_jsonb(a) as snapshot from audit_log a where org_id=${org.orgId}
+        and table_name='hrm_benefit_awards' and row_id=${draft.id} order by id`, "objects"),
           history,
         );
         assert.equal(
-          (
-            await db.execute<{
+          (await db.execute<{
               n: number;
             }>(sql`select count(*)::int as n from flow_runs where org_id=${org.orgId}
-        and flow_id=${policyId} and subject_id=${draft.id}`)
-          ).rows[0]!.n,
+        and flow_id=${policyId} and subject_id=${draft.id}`, "objects"))[0]!.n,
           1,
           "refusals do not create another run",
         );
@@ -260,7 +250,7 @@ test(
         assert.equal(refused.submittedBy, null);
         assert.equal(refused.flowRunId, null);
         assert.equal((await gates(draft.id)).length, 0);
-        assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${draft.id}`)).rows.length, 0);
+        assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${draft.id}`, "objects")).length, 0);
         await db.execute(sql`update flows set graph=${JSON.stringify({schemaVersion:1,nodes:[trigger],edges:[]})}::jsonb
           where org_id=${org.orgId} and id=${flowId}`);
         const ready = await submit(draft.id);
@@ -268,8 +258,8 @@ test(
         assert.equal(ready.approvedBy, null);
         assert.equal(ready.decisionSnapshot?.mode, "ungated");
         const evidence = async () => ({
-          receipts: (await db.execute(sql`select id,policy,graphs from flow_submissions where org_id=${org.orgId} and subject_id=${draft.id}`)).rows,
-          events: (await db.execute(sql`select id from hrm_benefit_award_events where org_id=${org.orgId} and award_id=${draft.id}`)).rows,
+          receipts: await db.execute(sql`select id,policy,graphs from flow_submissions where org_id=${org.orgId} and subject_id=${draft.id}`, "objects"),
+          events: await db.execute(sql`select id from hrm_benefit_award_events where org_id=${org.orgId} and award_id=${draft.id}`, "objects"),
         });
         const once = await evidence();
         assert.equal(once.receipts.length, 1);
@@ -317,7 +307,7 @@ test(
         assert.equal(ready.decisionSnapshot?.mode, "ungated");
         const receipt = (await db.execute<{policy:{flowIds:string[];runIds:string[]}}>(sql`
           select policy from flow_submissions where org_id=${org.orgId} and subject_id=${draft.id}
-        `)).rows[0];
+        `, "objects"))[0];
         assert.deepEqual(receipt?.policy.flowIds, []);
         assert.deepEqual(receipt?.policy.runIds, []);
       },
@@ -335,16 +325,14 @@ test(
         assert.equal(ready.flowRunId, null);
         const receipt = (await db.execute<{graphs:Array<{id:string}>;policy:{runIds:string[]}}>(sql`
           select graphs,policy from flow_submissions where org_id=${org.orgId} and id=${ready.decisionSnapshot?.submissionId}
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         assert.equal(receipt.graphs[0]?.id, policyId);
         assert.equal(receipt.policy.runIds.length, 1);
         assert.deepEqual(await submit(draft.id), ready);
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from flow_runs where subject_id=${draft.id}`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from flow_runs where subject_id=${draft.id}`, "objects",
+            )).length,
           1,
         );
       },
@@ -415,11 +403,9 @@ test(
       "large exact amount thresholds cannot lose the cent that requires approval",
       async () => {
         const highValue = "999999999999900.02";
-        const account = (
-          await db.execute<{ id: string }>(
-            sql`select id from accounts where org_id=${org.orgId} and number='6050'`,
-          )
-        ).rows[0]!.id;
+        const account = (await db.execute<{ id: string }>(
+            sql`select id from accounts where org_id=${org.orgId} and number='6050'`, "objects",
+          ))[0]!.id;
         const largeProgram = await seedPayrollBenefitProgram(
           {
             orgId: org.orgId,
@@ -627,11 +613,9 @@ test(
         assert.equal((await gates(draft.id)).length, 0);
         assert.equal((await read(draft.id)).submittedBy, null);
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from flow_runs where subject_id=${draft.id}`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from flow_runs where subject_id=${draft.id}`, "objects",
+            )).length,
           0,
         );
       },
@@ -718,19 +702,15 @@ test(
         assert.equal(ready.approvedBy, null);
         assert.equal(ready.submittedBy, author);
         assert.equal(ready.decisionSnapshot?.mode, "ungated");
-        const receipt = (
-          await db.execute<{ program_id: string; policy: { kind: string } }>(
-            sql`select context->>'programId' as program_id,policy from flow_submissions where org_id=${org.orgId} and id=${ready.decisionSnapshot?.submissionId}`,
-          )
-        ).rows[0];
+        const receipt = (await db.execute<{ program_id: string; policy: { kind: string } }>(
+            sql`select context->>'programId' as program_id,policy from flow_submissions where org_id=${org.orgId} and id=${ready.decisionSnapshot?.submissionId}`, "objects",
+          ))[0];
         assert.equal(receipt?.program_id, created.id);
         assert.equal(receipt?.policy.kind, "ungated");
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from flow_runs where org_id=${org.orgId} and subject_id=${draft.id}`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from flow_runs where org_id=${org.orgId} and subject_id=${draft.id}`, "objects",
+            )).length,
           0,
         );
         await singleGate();
@@ -775,11 +755,9 @@ test(
           2,
         );
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from hrm_benefit_award_events where org_id=${org.orgId} and award_id=${draft.id} and kind='approved'`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from hrm_benefit_award_events where org_id=${org.orgId} and award_id=${draft.id} and kind='approved'`, "objects",
+            )).length,
           1,
         );
       },
@@ -815,11 +793,9 @@ test(
           0,
         );
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from hrm_benefit_award_events where org_id=${org.orgId} and award_id=${draft.id} and kind='voided'`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from hrm_benefit_award_events where org_id=${org.orgId} and award_id=${draft.id} and kind='voided'`, "objects",
+            )).length,
           1,
         );
       },

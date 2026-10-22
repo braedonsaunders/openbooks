@@ -111,8 +111,8 @@ async function postUsdGiftInvoice(
   const entryId = await withBypass(() =>
     postDocument(documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }),
   );
-  const accounts = (await withBypass(() => db.execute<{ id: string }>(sql`
-    select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${documentId}`))).rows;
+  const accounts = await withBypass(() => db.execute<{ id: string }>(sql`
+    select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${documentId}`, "objects"));
   assert.equal(accounts.length, 1);
   return { documentId, entryId, accountId: accounts[0]!.id };
 }
@@ -162,12 +162,12 @@ type JournalLeg = {
 };
 
 async function entryLegs(orgId: string, entryId: string): Promise<JournalLeg[]> {
-  return (await withBypass(() => db.execute<JournalLeg>(sql`
+  return await withBypass(() => db.execute<JournalLeg>(sql`
     select account_id as account, amount::text as amount, currency,
            txn_amount::text as txn, fx_rate::text as rate
       from journal_lines
      where org_id = ${orgId} and entry_id = ${entryId}
-     order by line_number`))).rows;
+     order by line_number`, "objects"));
 }
 
 // Functional carrying value inside one close scope: the revaluation's
@@ -178,7 +178,7 @@ async function liabilityFunctional(
   subsidiaryId: string,
   scopeEndsOn = "2026-07-31",
 ): Promise<string> {
-  const rows = (await withBypass(() => db.execute<{ total: string }>(sql`
+  const rows = await withBypass(() => db.execute<{ total: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as total
       from journal_lines l
       join journal_entries je on je.id = l.entry_id and je.org_id = l.org_id
@@ -186,16 +186,16 @@ async function liabilityFunctional(
      where l.org_id = ${orgId} and l.account_id = ${liability}
        and l.subsidiary_id = ${subsidiaryId}
        and je.status in ('posted', 'reversed')
-       and ep.ends_on <= ${scopeEndsOn}::date`))).rows;
+       and ep.ends_on <= ${scopeEndsOn}::date`, "objects"));
   return rows[0]!.total;
 }
 
 async function subledgerFunctional(orgId: string, subsidiaryId: string): Promise<string> {
-  const rows = (await withBypass(() => db.execute<{ total: string }>(sql`
+  const rows = await withBypass(() => db.execute<{ total: string }>(sql`
     select coalesce(sum(e.functional_amount_minor), 0)::text as total
       from stored_value_entries e
       join stored_value_accounts a on a.id = e.account_id and a.org_id = e.org_id
-     where e.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}`))).rows;
+     where e.org_id = ${orgId} and a.subsidiary_id = ${subsidiaryId}`, "objects"));
   return rows[0]!.total;
 }
 
@@ -219,7 +219,7 @@ test("a USD card issued in a CAD subsidiary posts USD 50 with the CAD equivalent
              e.functional_amount_minor::text as functional, e.fx_rate::text as rate
         from stored_value_accounts a
         join stored_value_entries e on e.org_id = a.org_id and e.account_id = a.id
-       where a.org_id = ${org.orgId} and a.id = ${accountId} and e.kind = 'issue'`))).rows[0]!;
+       where a.org_id = ${org.orgId} and a.id = ${accountId} and e.kind = 'issue'`, "objects")))[0]!;
     assert.equal(account.subsidiary, org.subsidiaryId);
     assert.equal(account.currency, "USD");
     assert.equal(account.balance, "500000");
@@ -242,17 +242,17 @@ test("redemption at a weaker rate books realized FX and the subledger still ties
       select amount_minor::text as amount, functional_amount_minor::text as functional,
              fx_rate::text as rate, journal_entry_id as journal
         from stored_value_entries
-       where org_id = ${org.orgId} and account_id = ${accountId} and kind = 'redeem'`))).rows[0]!;
+       where org_id = ${org.orgId} and account_id = ${accountId} and kind = 'redeem'`, "objects")))[0]!;
     // The subledger relieves the redeemed slice at its carrying rate (1.36):
     // 30 USD relieves 40.80 CAD of liability, not the 42.00 the till converted at.
     assert.equal(redeem.amount, "-300000");
     assert.equal(redeem.functional, "-408000");
     assert.equal(redeem.rate, "1.3600000000");
     // The 1.20 CAD repricing between carrying and redemption is a realized loss.
-    const realized = (await withBypass(() => db.execute<{ id: string }>(sql`
+    const realized = await withBypass(() => db.execute<{ id: string }>(sql`
       select id from journal_entries
        where org_id = ${org.orgId} and origin = 'stored_value'
-         and memo like 'Realized FX%'`))).rows;
+         and memo like 'Realized FX%'`, "objects"));
     assert.equal(realized.length, 1);
     const legs = await entryLegs(org.orgId, realized[0]!.id);
     // The restatement pair nets on the liability: +40.80 at the 1.36 carrying
@@ -267,11 +267,11 @@ test("redemption at a weaker rate books realized FX and the subledger still ties
         ["USD", "-30.0000", "-42.0000", "1.4000000000"],
       ],
     );
-    const totals = (await withBypass(() => db.execute<{ account: string; total: string }>(sql`
+    const totals = await withBypass(() => db.execute<{ account: string; total: string }>(sql`
       select account_id as account, sum(amount)::text as total
         from journal_lines
        where org_id = ${org.orgId} and entry_id = ${realized[0]!.id}
-       group by account_id`))).rows;
+       group by account_id`, "objects"));
     const byAccount = new Map(totals.map((row) => [row.account, row.total]));
     assert.equal(byAccount.get(fx.liability), "-1.2000");
     assert.equal(byAccount.get(fx.gainLoss), "1.2000");
@@ -292,7 +292,7 @@ test("voiding a redeeming sale restores the card and reverses its realized FX", 
     const saleId = await postUsdCashSaleRedeeming(fx, { accountId, amount: "30.0000", rate: "1.40", number: "CS-FX-VOID" });
     const spent = (await withBypass(() => db.execute<{ balance: string }>(sql`
       select balance_minor::text as balance from stored_value_accounts
-       where org_id = ${org.orgId} and id = ${accountId}`))).rows[0]!;
+       where org_id = ${org.orgId} and id = ${accountId}`, "objects")))[0]!;
     assert.equal(spent.balance, "200000");
     const requested = await withOrg(org.orgId, () =>
       requestDocumentVoid({ documentId: saleId, orgId: org.orgId, actorId: fx.actorId, reason: "till error", reversalDate: org.date, source: "api" }));
@@ -301,28 +301,28 @@ test("voiding a redeeming sale restores the card and reverses its realized FX", 
     // The card is whole again: the void appends a reversal, never edits the redeem entry.
     const restored = (await withBypass(() => db.execute<{ balance: string }>(sql`
       select balance_minor::text as balance from stored_value_accounts
-       where org_id = ${org.orgId} and id = ${accountId}`))).rows[0]!;
+       where org_id = ${org.orgId} and id = ${accountId}`, "objects")))[0]!;
     assert.equal(restored.balance, "500000");
-    const reversal = (await withBypass(() => db.execute<{
+    const reversal = await withBypass(() => db.execute<{
       amount: string; functional: string; rate: string; redeem: string;
     }>(sql`
       select amount_minor::text as amount, functional_amount_minor::text as functional,
              fx_rate::text as rate, document_id as redeem
         from stored_value_entries
-       where org_id = ${org.orgId} and account_id = ${accountId} and kind = 'reversal'`))).rows;
+       where org_id = ${org.orgId} and account_id = ${accountId} and kind = 'reversal'`, "objects"));
     assert.equal(reversal.length, 1);
     assert.equal(reversal[0]!.amount, "300000");
     assert.equal(reversal[0]!.functional, "408000");
     assert.equal(reversal[0]!.rate, "1.3600000000");
     // The repricing never happened either: the realized entry is reversed by a mirror.
-    const realized = (await withBypass(() => db.execute<{ id: string; status: string }>(sql`
+    const realized = await withBypass(() => db.execute<{ id: string; status: string }>(sql`
       select id, status from journal_entries
-       where org_id = ${org.orgId} and origin = 'stored_value' and memo like 'Realized FX%'`))).rows;
+       where org_id = ${org.orgId} and origin = 'stored_value' and memo like 'Realized FX%'`, "objects"));
     assert.equal(realized.length, 1);
     assert.equal(realized[0]!.status, "reversed");
-    const mirror = (await withBypass(() => db.execute<{ id: string }>(sql`
+    const mirror = await withBypass(() => db.execute<{ id: string }>(sql`
       select id from journal_entries
-       where org_id = ${org.orgId} and reverses_entry_id = ${realized[0]!.id}`))).rows;
+       where org_id = ${org.orgId} and reverses_entry_id = ${realized[0]!.id}`, "objects"));
     assert.equal(mirror.length, 1);
     // A retried unwind finds the first reversal instead of restoring twice.
     const again = await withBypass(() =>
@@ -454,7 +454,7 @@ test("concurrent document issue retries leave one funded account for the idempot
   try {
     const { documentId, entryId } = await postUsdGiftInvoice(fx, { amount: "50.0000", rate: "1.36", number: "INV-FX-RACE" });
     const sourceLineId = (await db.execute<{ id: string }>(sql`
-      select id from document_lines where org_id=${org.orgId} and document_id=${documentId} and line_number=1`)).rows[0]!.id;
+      select id from document_lines where org_id=${org.orgId} and document_id=${documentId} and line_number=1`, "objects"))[0]!.id;
     const idempotencyKey = `document-issue-race-${randomUUID()}`;
     const input = {
       orgId: org.orgId,
@@ -478,8 +478,8 @@ test("concurrent document issue retries leave one funded account for the idempot
              count(distinct a.id)::text as accounts
         from stored_value_entries e
         join stored_value_accounts a on a.org_id=e.org_id and a.id=e.account_id
-       where e.org_id=${org.orgId} and e.idempotency_key=${`stored-value:issue-entry:${idempotencyKey}`}`);
-    assert.deepEqual(stored.rows[0], { entries: "1", accounts: "1" });
+       where e.org_id=${org.orgId} and e.idempotency_key=${`stored-value:issue-entry:${idempotencyKey}`}`, "objects");
+    assert.deepEqual(stored[0], { entries: "1", accounts: "1" });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

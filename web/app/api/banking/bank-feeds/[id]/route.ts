@@ -45,7 +45,7 @@ async function lockScopedConnection(
 ): Promise<Record<string, unknown> | NextResponse> {
   const reference = (await tx.execute<{ account_id: string }>(sql`
     select account_id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!reference) return notFound("record");
   try {
     await lockScopeRow(tx, authz.user.orgId, "account", reference.account_id, authz.allowedSubsidiaryIds, "share");
@@ -56,7 +56,7 @@ async function lockScopedConnection(
   const connection = (await tx.execute<Record<string, unknown>>(sql`
     select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId} and account_id = ${reference.account_id}
      ${lockConnection ? sql`for update` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   return connection ?? notFound("record");
 }
 
@@ -130,11 +130,11 @@ export const PATCH = defineRoute({
           update bank_feed_connections set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
            where id = ${id} and org_id = ${authz.user.orgId}
            returning *
-        `));
-        if (!updated.rows[0]) throw new Error("bank_feed_connection_changed");
+        `, "objects"));
+        if (!updated[0]) throw new Error("bank_feed_connection_changed");
         await audit(tx, authz.user.orgId, id, "update", {
           before: withoutCredentials(before),
-          after: withoutCredentials(updated.rows[0]),
+          after: withoutCredentials(updated[0]),
           ...(rotating ? { credentialsRotated: true } : {}),
         }, authz.user.id, req.headers.get("X-Request-Id"));
         return null;
@@ -160,8 +160,8 @@ export const DELETE = defineRoute({
         const deleted = (await tx.execute<{ id: string }>(sql`
           delete from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
            returning id
-        `));
-        if (!deleted.rows[0]) return notFound("record");
+        `, "objects"));
+        if (!deleted[0]) return notFound("record");
         await audit(tx, authz.user.orgId, id, "delete", {
           before: withoutCredentials(before),
         }, authz.user.id, req.headers.get("X-Request-Id"));
@@ -204,11 +204,11 @@ export const POST = defineRoute({
              where id = ${id} and org_id = ${authz.user.orgId}
                and credentials is not distinct from ${credentialRevision}
              returning id
-          `)).rows[0];
+          `, "objects"))[0];
           if (!updated) {
             const current = (await tx.execute<{ id: string }>(sql`
               select id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
-            `)).rows[0];
+            `, "objects"))[0];
             return NextResponse.json(
               { error: current ? "stale probe" : "deleted while testing" },
               { status: 409 },

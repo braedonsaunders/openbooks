@@ -166,11 +166,11 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        execute: (query) => Promise.resolve(respond('execute', query)),
+        execute: (query, mode) => Promise.resolve(respond('execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: async (work) => {
           state.txDepth += 1
           try {
-            const result = await work({ execute: (query) => respond('tx-execute', query) })
+            const result = await work({ execute: (query, mode) => Promise.resolve(respond('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) })
             // Commit: staged writes become visible to everyone.
             if (state.stagedProfile) state.committedProfiles.set(state.itemId, state.stagedProfile)
             state.committedAudits.push(...state.pendingAudits)

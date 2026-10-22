@@ -161,7 +161,7 @@ export async function drainStorageCleanupOutbox(limit: number = DRAIN_BATCH_LIMI
   const summary: StorageCleanupDrainSummary = { claimed: 0, deleted: 0, deferred: 0 };
   // bypass: scheduler-tick — the drain claims due cleanup intents across every organization.
   await withBypassContext(async () => {
-    const due = (await db.execute<{
+    const due = await db.execute<{
       id: string;
       object_key: string;
       owner_kind: string;
@@ -181,7 +181,7 @@ export async function drainStorageCleanupOutbox(limit: number = DRAIN_BATCH_LIMI
           for update skip locked
        )
        returning id, object_key, owner_kind, owner_id, attempts
-    `)).rows;
+    `, "objects");
     summary.claimed = due.length;
     for (const row of due) {
       try {

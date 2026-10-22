@@ -21,13 +21,13 @@ async function setup(
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Map tester", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: opts.feature !== false })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: opts.feature !== false })}::jsonb, true) where id = ${org.orgId}`);
       assert.equal(result.rowCount, 1);
     });
     const channelId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       insert into sales_channels (org_id, kind, name, status, currency, external_account, settings, created_by, updated_by)
       values (${org.orgId}, 'shopify', 'Maple Shop', 'active', 'USD', 'maple.myshopify.com', '{}'::jsonb, ${actor}, ${actor})
-      returning id`))).rows[0]!.id;
+      returning id`, "objects")))[0]!.id;
     await run(org, actor, channelId);
   } finally {
     await dropScratchOrgReporting(org.orgId);

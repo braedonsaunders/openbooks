@@ -22,8 +22,8 @@ async function snapshotOrg(orgId: string): Promise<Record<string, unknown>> {
       const rows = await db.execute(sql`
         select to_jsonb(t)::text as row from ${sql.raw(`public."${table}"`)} t
         where ${sql.raw(table === "orgs" ? "id" : "org_id")} = ${orgId}
-        order by to_jsonb(t)::text`);
-      if (rows.rows.length) snapshot[table] = rows.rows;
+        order by to_jsonb(t)::text`, "objects");
+      if (rows.length) snapshot[table] = rows;
     }
     return snapshot;
   });

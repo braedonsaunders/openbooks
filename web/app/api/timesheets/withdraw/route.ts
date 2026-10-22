@@ -90,15 +90,13 @@ export const POST = defineRoute({
       // passed it before the winner committed observes the decided status
       // here and is refused instead of writing a second 'withdrawn' audit
       // over a week that is no longer submitted.
-      const header = (
-        await db.execute<{ id: string; status: string }>(sql`
+      const header = (await db.execute<{ id: string; status: string }>(sql`
       select id, status from timesheet_weeks
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and week_start = ${week}::date
        for update
-    `)
-      ).rows[0];
+    `, "objects"))[0];
       if (!header || header.status !== "submitted") {
         return bad(withdrawRefusal(header?.status));
       }
@@ -130,7 +128,7 @@ export const POST = defineRoute({
          and subject_kind = ${TIMESHEET_WEEK_SUBJECT_KIND}
          and subject_id = ${header.id}
          and status in ('running', 'waiting')
-    `)).rows.map((row) => row.id);
+    `, "objects")).map((row) => row.id);
       await cancelDispatchRuns(orgId, openRuns, { actorId: user.id });
 
       // Durable recall evidence, part of the same atomic unit: withdrawing a

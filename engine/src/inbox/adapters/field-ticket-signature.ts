@@ -51,7 +51,7 @@ export const fieldTicketSignatureAdapter: InboxAdapter = {
   kind: "field_ticket_signature",
   async list(ctx: InboxListContext, page?: InboxPage): Promise<InboxItem[]> {
     const source = signatureSource(ctx);
-    const rows = (await db.execute<TicketRow>(sql`
+    const rows = await db.execute<TicketRow>(sql`
       select distinct t.document_id::text as ticket_id,
              coalesce(p.name, 'field ticket') as project_name,
              t.period_start::text as period_start,
@@ -64,7 +64,7 @@ export const fieldTicketSignatureAdapter: InboxAdapter = {
        ${source.where}
        order by period_start, ticket_id
        limit ${page?.limit ?? 20} offset ${page?.offset ?? 0}
-    `)).rows;
+    `, "objects");
     return rows.map((row) => ({
       id: inboxItemId("field_ticket_signature", `${row.ticket_id}:${row.role}`),
       kind: "field_ticket_signature",
@@ -82,8 +82,8 @@ export const fieldTicketSignatureAdapter: InboxAdapter = {
     const source = signatureSource(ctx);
     const result = await db.execute<{ n: string }>(sql`
       select count(distinct t.document_id) as n ${source.joins} ${source.where}
-    `);
-    return Number(result.rows[0]?.n ?? 0);
+    `, "objects");
+    return Number(result[0]?.n ?? 0);
   },
   async act(): Promise<void> {
     throw new Error(

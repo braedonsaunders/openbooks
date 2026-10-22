@@ -119,8 +119,8 @@ test('information-return by-id routes fail closed on another entity\'s filing', 
         // Nothing happened to the hidden filing: no compute evidence was written.
         const audits = await db.execute<{ n: number }>(sql`
           select count(*)::int as n from audit_log
-           where org_id=${org.orgId} and table_name='information_return_filings' and row_id=${id} and action='compute'`)
-        assert.equal(audits.rows[0]!.n, 0)
+           where org_id=${org.orgId} and table_name='information_return_filings' and row_id=${id} and action='compute'`, 'objects')
+        assert.equal(audits[0]!.n, 0)
       }
 
       // The caller's own entity passes the gate and reaches the engine.

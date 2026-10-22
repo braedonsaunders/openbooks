@@ -69,9 +69,9 @@ test(
         assert.equal(refused.created, 0)
         assert.match(refused.errors[0]!.message, /not found/)
         const stored = await withBypass(() =>
-          db.execute<{ n: number }>(sql`select count(*)::int as n from custom_records where org_id = ${orgA.orgId} and type_key = ${typeKey}`),
+          db.execute<{ n: number }>(sql`select count(*)::int as n from custom_records where org_id = ${orgA.orgId} and type_key = ${typeKey}`, 'objects'),
         )
-        assert.equal(stored.rows[0]!.n, 0)
+        assert.equal(stored[0]!.n, 0)
 
         // A repeating row pointing at an own-org party still imports.
         const accepted = await resource.write(
@@ -89,10 +89,10 @@ test(
           `expected 1 created, got ${JSON.stringify(accepted)}`,
         )
         const data = await withBypass(() =>
-          db.execute<{ data: unknown }>(sql`select data from custom_records where org_id = ${orgA.orgId} and type_key = ${typeKey}`),
+          db.execute<{ data: unknown }>(sql`select data from custom_records where org_id = ${orgA.orgId} and type_key = ${typeKey}`, 'objects'),
         )
         assert.equal(
-          (data.rows[0]!.data as { lines: { billto: string }[] }).lines[0]!.billto,
+          (data[0]!.data as { lines: { billto: string }[] }).lines[0]!.billto,
           orgA.vendorId,
         )
       })

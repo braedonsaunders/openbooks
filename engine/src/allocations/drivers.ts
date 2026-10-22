@@ -105,11 +105,11 @@ function monthWindow(date: string): ResolvedWindow {
 
 async function resolveWindow(orgId: string, asOf: DriverAsOf): Promise<ResolvedWindow> {
   if ("periodId" in asOf) {
-    const rows = (await db.execute<PeriodRow>(sql`
+    const rows = await db.execute<PeriodRow>(sql`
       select starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods
       where id = ${asOf.periodId} and org_id = ${orgId}
-    `)).rows;
+    `, "objects");
     const period = rows[0];
     if (!period) throw notFound(`accounting period ${asOf.periodId} not found`);
     return { from: period.starts_on.slice(0, 10), to: period.ends_on.slice(0, 10) };
@@ -124,11 +124,11 @@ async function resolveValueDate(orgId: string, asOf: DriverAsOf): Promise<string
 }
 
 async function primaryPostingBookId(orgId: string): Promise<string> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from accounting_books
     where org_id = ${orgId} and is_primary and is_active and posts_gl
     limit 1
-  `)).rows;
+  `, "objects");
   const bookId = rows[0]?.id;
   if (!bookId) throw notFound("no active primary posting book");
   return bookId;
@@ -204,8 +204,8 @@ async function resolveScopeAccountIds(
   const visible = await db.execute<{ id: string }>(sql`
     select id from accounts where org_id = ${orgId}
       and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-      and subsidiary_id in (${sql.join([...allowedSubsidiaryIds].map((id) => sql`${id}`), sql`, `)})`);
-  return visible.rows.map((row) => row.id);
+      and subsidiary_id in (${sql.join([...allowedSubsidiaryIds].map((id) => sql`${id}`), sql`, `)})`, "objects");
+  return visible.map((row) => row.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,7 +322,7 @@ async function resolveStatistical(
     : (accountIds as unknown[]).filter((v): v is string => typeof v === "string" && v.length > 0);
   if (accountList !== undefined && accountList.length === 0) return new Map();
   const dim = journalDimExpr(driver.dimension);
-  const rows = (await db.execute<VectorRow>(sql`
+  const rows = await db.execute<VectorRow>(sql`
     select ${dim} as dim, coalesce(sum(l.quantity), 0) as total
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -337,7 +337,7 @@ async function resolveStatistical(
       and ${dim} is not null
       ${lineageExclusion(orgId, opts.excludeRuleIds)}
     group by 1
-  `)).rows;
+  `, "objects");
   return toVector(rows);
 }
 
@@ -394,7 +394,7 @@ async function resolveGlAggregate(
 ): Promise<DriverVector> {
   if (scopeAccountIds !== null && scopeAccountIds.length === 0) return new Map();
   const month = `${window.from.slice(0, 7)}-01`;
-  const rows = (await db.execute<VectorRow>(sql`
+  const rows = await db.execute<VectorRow>(sql`
     select g.subsidiary_id::text as dim, coalesce(sum(g.debit_total - g.credit_total), 0) as total
     from ${statementMonthActivity(orgId)} g
     where g.org_id = ${orgId}
@@ -404,7 +404,7 @@ async function resolveGlAggregate(
       ${opts.subsidiaryId ? sql`and g.subsidiary_id = ${opts.subsidiaryId}` : sql``}
       ${subsidiaryFence(sql`g.subsidiary_id`, opts.allowedSubsidiaryIds)}
     group by 1
-  `)).rows;
+  `, "objects");
   return toVector(rows);
 }
 
@@ -419,7 +419,7 @@ async function resolveGlLines(
 ): Promise<DriverVector> {
   if (scopeAccountIds !== null && scopeAccountIds.length === 0) return new Map();
   const dim = journalDimExpr(driver.dimension);
-  const rows = (await db.execute<VectorRow>(sql`
+  const rows = await db.execute<VectorRow>(sql`
     select ${dim} as dim, coalesce(sum(l.amount), 0) as total
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -435,7 +435,7 @@ async function resolveGlLines(
       and ${dim} is not null
       ${lineageExclusion(orgId, opts.excludeRuleIds)}
     group by 1
-  `)).rows;
+  `, "objects");
   return toVector(rows);
 }
 
@@ -488,7 +488,7 @@ async function resolveHeadcount(
   if (allowedSubsidiaryIds?.size === 0) return new Map();
   // Employee roles active at any point in the window (the payroll-side
   // headcount, not time-entry presence — someone on leave still counts).
-  const rows = (await db.execute<VectorRow>(sql`
+  const rows = await db.execute<VectorRow>(sql`
     select er.department_id::text as dim, count(*) as total
     from employee_roles er
     join parties p on p.id = er.party_id and p.org_id = er.org_id
@@ -500,7 +500,7 @@ async function resolveHeadcount(
       ${subsidiaryId ? sql`and p.subsidiary_id = ${subsidiaryId}` : sql``}
       ${subsidiaryFence(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
     group by 1
-  `)).rows;
+  `, "objects");
   return toVector(rows);
 }
 
@@ -516,7 +516,7 @@ async function resolveTimeHours(
   // Approved time only: draft, submitted, and rejected hours are not worked
   // reality (the same approved-only rule as utilization and project costing).
   const dim = driver.dimension === "project" ? sql`t.project_id` : sql`t.department_id`;
-  const rows = (await db.execute<VectorRow>(sql`
+  const rows = await db.execute<VectorRow>(sql`
     select ${dim}::text as dim, coalesce(sum(t.hours), 0) as total
     from time_entries t
     ${subsidiaryId || allowedSubsidiaryIds != null ? sql`join parties p on p.id = t.employee_party_id and p.org_id = t.org_id` : sql``}
@@ -528,7 +528,7 @@ async function resolveTimeHours(
       ${subsidiaryFence(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
       and ${dim} is not null
     group by 1
-  `)).rows;
+  `, "objects");
   return toVector(rows);
 }
 
@@ -551,7 +551,7 @@ async function resolveNativeGl(
         ? sql`and a.type in ('income', 'income_other')`
         : sql`and a.type = 'cogs'`;
   const sign = measure === "revenue" ? sql`-` : sql``;
-  const rows = (await db.execute<VectorRow>(sql`
+  const rows = await db.execute<VectorRow>(sql`
     select ${dim} as dim, coalesce(${sign}sum(l.amount), 0) as total
     from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -568,7 +568,7 @@ async function resolveNativeGl(
       and ${dim} is not null
       ${lineageExclusion(orgId, opts.excludeRuleIds)}
     group by 1
-  `)).rows;
+  `, "objects");
   return toVector(rows);
 }
 
@@ -580,7 +580,7 @@ async function resolveRentableArea(
   if (allowedSubsidiaryIds?.size === 0) return new Map();
   // Rentable area is a point-in-time attribute of live units, not a flow:
   // every unit of an active property counts, whatever the period.
-  const rows = (await db.execute<VectorRow>(sql`
+  const rows = await db.execute<VectorRow>(sql`
     select mp.location_id::text as dim, coalesce(sum(pu.rentable_area), 0) as total
     from property_units pu
     join managed_properties mp on mp.id = pu.property_id and mp.org_id = pu.org_id
@@ -591,7 +591,7 @@ async function resolveRentableArea(
       ${subsidiaryId ? sql`and mp.subsidiary_id = ${subsidiaryId}` : sql``}
       ${subsidiaryFence(sql`mp.subsidiary_id`, allowedSubsidiaryIds)}
     group by 1
-  `)).rows;
+  `, "objects");
   return toVector(rows);
 }
 

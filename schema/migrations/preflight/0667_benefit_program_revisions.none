@@ -1,1 +1,0 @@
-Additive: a new append-only revisions table, a helper function and relaxed guards that admit active-program edits only alongside a revision; existing rows are untouched.

@@ -404,7 +404,7 @@ export interface AccountReferenceColumn {
  * schema, excluding the organization half of composite keys.
  */
 export async function discoverAccountReferenceColumns(executor: SqlExecutor): Promise<AccountReferenceColumn[]> {
-  const rows = (await executor.execute<{ table_name: string; column_name: string }>(sql`
+  const rows = await executor.execute<{ table_name: string; column_name: string }>(sql`
     select distinct cls.relname::text as table_name, a.attname::text as column_name
       from pg_constraint c
       join pg_class cls on cls.oid = c.conrelid
@@ -416,7 +416,7 @@ export async function discoverAccountReferenceColumns(executor: SqlExecutor): Pr
        and a.attname <> 'org_id'
        -- The merge writes redirected references; a generated column is computed, never written.
        and a.attgenerated = ''
-     order by 1, 2`)).rows;
+     order by 1, 2`, "objects");
   return rows.map((row) => ({ table: row.table_name, column: row.column_name }));
 }
 

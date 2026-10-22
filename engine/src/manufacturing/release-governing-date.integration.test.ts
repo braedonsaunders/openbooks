@@ -34,7 +34,7 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
         where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly} and component_item_id = ${org.items.component}`);
     });
     const departmentId = String(
-      (await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`))).rows[0]!.id,
+      (await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`, "objects")))[0]!.id,
     );
     return { org, actorId, departmentId };
   } catch (error) {
@@ -46,7 +46,7 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
 async function rate(f: { org: ScratchOrg; actorId: string; departmentId: string }, from: string, to: string | null, value: string): Promise<string> {
   return String((await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
     (org_id, department_id, currency, rate, basis, annual_hours, effective_from, effective_to, is_active, created_by, updated_by)
-    values (${f.org.orgId}, ${f.departmentId}, 'CAD', ${value}, 'hour', '2080', ${from}, ${to}, true, ${f.actorId}, ${f.actorId}) returning id`))).rows[0]!.id);
+    values (${f.org.orgId}, ${f.departmentId}, 'CAD', ${value}, 'hour', '2080', ${from}, ${to}, true, ${f.actorId}, ${f.actorId}) returning id`, "objects")))[0]!.id);
 }
 
 async function routeWithBareCenter(
@@ -80,9 +80,9 @@ test("back-dated release resolves the rates and routing effective on the order d
     }));
     const released = await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
     assert.equal(released.status, "released");
-    const operation = (await withBypassContext(async () => (await db.execute<{ wageId: string; wageFrom: string }>(sql`
+    const operation = (await withBypassContext(async () => await db.execute<{ wageId: string; wageFrom: string }>(sql`
       select standard_labor_wage_id as "wageId", standard_labor_effective_from::text as "wageFrom"
-        from mfg_wo_operations where org_id = ${f.org.orgId} and work_order_id = ${draft.id}`)).rows))[0]!;
+        from mfg_wo_operations where org_id = ${f.org.orgId} and work_order_id = ${draft.id}`, "objects")))[0]!;
     assert.equal(operation.wageId, oldRateId, "the frozen snapshot must carry the then-effective rate");
     assert.equal(operation.wageFrom, "2025-01-01");
   } finally {

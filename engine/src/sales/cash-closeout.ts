@@ -271,7 +271,7 @@ async function resolveControlAccount(
 ): Promise<string> {
   const mapping = (await runner.execute<{ account_id: string | null }>(sql`
     select settings->'controlAccounts'->>${role}::text as account_id
-      from orgs where id = ${orgId}`)).rows[0]?.account_id ?? null;
+      from orgs where id = ${orgId}`, "objects"))[0]?.account_id ?? null;
   if (!mapping) {
     throw closeoutError(
       `This sale records ${label}, but no ${label} account is configured.`,
@@ -280,7 +280,7 @@ async function resolveControlAccount(
   }
   const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
     select type, is_active, is_summary from accounts
-     where org_id = ${orgId} and id = ${mapping}::uuid`)).rows[0];
+     where org_id = ${orgId} and id = ${mapping}::uuid`, "objects"))[0];
   if (!row || !row.is_active || row.is_summary || !allowedTypes.includes(row.type)) {
     throw closeoutError(
       `The configured ${label} account is not a usable posting account.`,
@@ -342,7 +342,7 @@ export async function assertCloseoutServer(
 ): Promise<void> {
   if (!serverPartyId) return;
   const row = (await runner.execute<{ id: string }>(sql`
-    select id from parties where org_id = ${orgId} and id = ${serverPartyId} and is_active`)).rows[0];
+    select id from parties where org_id = ${orgId} and id = ${serverPartyId} and is_active`, "objects"))[0];
   if (!row) {
     throw closeoutError(
       "Cash sale close-out names a server who is not an active party in this organization.",
@@ -401,9 +401,9 @@ export async function readTipsPayableExposure(
 ): Promise<TipsPayableExposureRow[]> {
   const mapping = (await runner.execute<{ account_id: string | null }>(sql`
     select settings->'controlAccounts'->>'tipsPayable' as account_id
-      from orgs where id = ${orgId}`)).rows[0]?.account_id ?? null;
+      from orgs where id = ${orgId}`, "objects"))[0]?.account_id ?? null;
   if (!mapping) return [];
-  const rows = (await runner.execute<TipsPayableExposureRow>(sql`
+  const rows = await runner.execute<TipsPayableExposureRow>(sql`
     select l.party_id as "partyId", p.display_name as "partyName",
            d.document_date::text as day, d.document_number as "documentNumber",
            sum(round(l.amount * 10000))::bigint::text as "amountMinor"
@@ -420,6 +420,6 @@ export async function readTipsPayableExposure(
        and (${options.to ?? null}::date is null or d.document_date <= (${options.to ?? null})::date)
      group by l.party_id, p.display_name, d.document_date, d.document_number
     having sum(round(l.amount * 10000)) <> 0
-     order by d.document_date, d.document_number`)).rows;
+     order by d.document_date, d.document_number`, "objects");
   return rows;
 }

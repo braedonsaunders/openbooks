@@ -67,19 +67,19 @@ test("course delivery creates pending qualification evidence once, preserves aud
     const finished = await completeTrainingParticipant(complete);
     assert.equal(finished.status, "completed"); assert.ok(finished.qualificationId);
     assert.equal(finished.qualificationCreated, true);
-    const held = (await db.execute<{ status: string; expires: string }>(sql`select status,expires_on::text as expires from hrm_worker_qualifications where org_id=${f.org.orgId} and id=${finished.qualificationId}`)).rows[0]!;
+    const held = (await db.execute<{ status: string; expires: string }>(sql`select status,expires_on::text as expires from hrm_worker_qualifications where org_id=${f.org.orgId} and id=${finished.qualificationId}`, "objects"))[0]!;
     assert.equal(held.status, "pending_verification", "attendance completion cannot authorize a credential for dispatch");
     assert.equal(held.expires, "2027-01-09");
     assert.equal((await completeTrainingParticipant(complete)).id, finished.id);
-    assert.equal((await db.execute(sql`select id from hrm_worker_qualifications where org_id=${f.org.orgId} and employment_id=${f.employmentId}`)).rows.length, 1);
-    const audit = (await db.execute<{ changes: { before: { status: string }; after: { status: string }; reason: string }; actorId: string }>(sql`select changes,actor_id as "actorId" from audit_log
-      where org_id=${f.org.orgId} and table_name='hrm_training_participants' and row_id=${participant.id} and action='update'`)).rows;
+    assert.equal((await db.execute(sql`select id from hrm_worker_qualifications where org_id=${f.org.orgId} and employment_id=${f.employmentId}`, "objects")).length, 1);
+    const audit = await db.execute<{ changes: { before: { status: string }; after: { status: string }; reason: string }; actorId: string }>(sql`select changes,actor_id as "actorId" from audit_log
+      where org_id=${f.org.orgId} and table_name='hrm_training_participants' and row_id=${participant.id} and action='update'`, "objects");
     assert.equal(audit.length, 1); assert.equal(audit[0]!.changes.before.status, "invited"); assert.equal(audit[0]!.changes.after.status, "completed"); assert.equal(audit[0]!.actorId, f.authorId);
     await transitionTrainingSession({ ...f.actor, sessionId: session.id, expectedRevision: session.revision, action: "complete", reason: "Delivered and assessed" });
     await withOrgTransaction(f.org.orgId, () => verifyQualification(db, { ...f.actor, actorId: f.reviewerId, qualificationId: finished.qualificationId! }));
     const voided = await voidTrainingOutcome({ ...f.actor, participantId: participant.id, expectedRevision: finished.revision, reason: "Instructor corrected the attendance evidence" });
     assert.equal(voided.status, "voided"); assert.equal(voided.attendanceSeconds, 3600);
-    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_worker_qualifications where org_id=${f.org.orgId} and id=${finished.qualificationId}`)).rows[0]!.status, "revoked");
+    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_worker_qualifications where org_id=${f.org.orgId} and id=${finished.qualificationId}`, "objects"))[0]!.status, "revoked");
     await assert.rejects(completeTrainingParticipant({ ...complete, expectedRevision: voided.revision }), /completed outcomes can only be voided/);
   });
 });
@@ -98,11 +98,9 @@ test(
       });
       assert.equal(approved.status, "approved");
       assert.equal(approved.decidedBy, f.authorId);
-      const receipt = (
-        await db.execute<{ kind: string }>(
-          sql`select policy->>'kind' as kind from flow_submissions where org_id=${f.org.orgId} and subject_kind='training_course' and subject_id=${f.course.id}`,
-        )
-      ).rows;
+      const receipt = await db.execute<{ kind: string }>(
+          sql`select policy->>'kind' as kind from flow_submissions where org_id=${f.org.orgId} and subject_kind='training_course' and subject_id=${f.course.id}`, "objects",
+        );
       assert.deepEqual(receipt, [{ kind: "ungated" }]);
       await assert.rejects(
         createTrainingCourse({ ...f.request, id: randomUUID(), version: 2 }).then((row) =>
@@ -140,11 +138,9 @@ test(
         reason: "Publish reviewed training policy",
       });
       assert.equal(pending.status, "draft");
-      const gates = (
-        await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='training_course' and subject_id=${f.course.id} order by id`,
-        )
-      ).rows;
+      const gates = await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='training_course' and subject_id=${f.course.id} order by id`, "objects",
+        );
       assert.equal(gates.length, 10);
       await assert.rejects(
         decideGate({
@@ -214,11 +210,9 @@ test(
         action: "submit",
         reason: "Publish authored course policy",
       });
-      const gate = (
-        await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${f.course.id} and status='pending'`,
-        )
-      ).rows[0]!;
+      const gate = (await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${f.course.id} and status='pending'`, "objects",
+        ))[0]!;
       await decideGate({
         gateId: gate.id,
         userId: f.authorId,
@@ -305,7 +299,7 @@ test("approved course expiry remains exact after the native taxonomy changes, in
     const { participant } = await delivery(qualified);
     await withOrgTransaction(f.org.orgId, () => updateQualificationType(db, { ...f.actor, typeId: f.type.id, validityMonths: 24 }));
     const completed = await completeTrainingParticipant(resultInput(qualified, participant.id, participant.revision));
-    assert.equal((await db.execute<{ expiresOn: string | null }>(sql`select expires_on::text as "expiresOn" from hrm_worker_qualifications where org_id=${f.org.orgId} and id=${completed.qualificationId}`)).rows[0]!.expiresOn, null);
+    assert.equal((await db.execute<{ expiresOn: string | null }>(sql`select expires_on::text as "expiresOn" from hrm_worker_qualifications where org_id=${f.org.orgId} and id=${completed.qualificationId}`, "objects"))[0]!.expiresOn, null);
   });
 });
 
@@ -314,7 +308,7 @@ test("failed attendance records the failed result and creates no qualification; 
     const { participant } = await delivery(f);
     const failed = await completeTrainingParticipant({ ...resultInput(f, participant.id, participant.revision), attendanceSeconds: 3239 });
     assert.equal(failed.status, "failed"); assert.equal(failed.qualificationId, null);
-    assert.equal((await db.execute(sql`select id from hrm_worker_qualifications where org_id=${f.org.orgId} and employment_id=${f.employmentId}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from hrm_worker_qualifications where org_id=${f.org.orgId} and employment_id=${f.employmentId}`, "objects")).length, 0);
     const other = await createTrainingCourse({ ...f.request, id: randomUUID(), code: "OTHER" });
     assert.deepEqual((await getTrainingCourse({ ...f.actor, courseId: other.id })).sessions, []);
     assert.equal((await getTrainingCourse({ ...f.actor, courseId: f.course.id })).sessions.length, 1);
@@ -330,7 +324,7 @@ test("feature-off and altered retries refuse by name while preserving all existi
     assert.equal((await createTrainingCourse({ ...f.request, id: randomUUID(), code: "DELIVERY", qualificationTypeId: null })).qualificationTypeId, null);
     await setFeatures(f.org.orgId, { hrmTraining: false });
     await assert.rejects(listTrainingCourses(f.actor), /Training delivery is disabled.*Company Settings.*Features/);
-    assert.equal((await db.execute(sql`select id from hrm_training_courses where org_id=${f.org.orgId}`)).rows.length, 2);
+    assert.equal((await db.execute(sql`select id from hrm_training_courses where org_id=${f.org.orgId}`, "objects")).length, 2);
   });
 });
 
@@ -346,8 +340,8 @@ test("a caught participant failure rolls back newly issued qualification and aud
       await withOrgTransaction(f.org.orgId, async () => {
       await db.execute(sql`update parties set display_name='Earlier caller work' where org_id=${f.org.orgId} and id=${f.workerPartyId}`);
       await assert.rejects(completeTrainingParticipant(resultInput(f, participant.id, participant.revision)), error => String((error as { cause?: unknown }).cause).includes("Synthetic outcome write failure"));
-      assert.equal((await db.execute(sql`select id from hrm_worker_qualifications where org_id=${f.org.orgId} and employment_id=${f.employmentId}`)).rows.length, 0);
-      assert.equal((await db.execute<{ name: string }>(sql`select display_name as name from parties where org_id=${f.org.orgId} and id=${f.workerPartyId}`)).rows[0]!.name, "Earlier caller work");
+      assert.equal((await db.execute(sql`select id from hrm_worker_qualifications where org_id=${f.org.orgId} and employment_id=${f.employmentId}`, "objects")).length, 0);
+      assert.equal((await db.execute<{ name: string }>(sql`select display_name as name from parties where org_id=${f.org.orgId} and id=${f.workerPartyId}`, "objects"))[0]!.name, "Earlier caller work");
       });
     } finally {
       await admin.query(`drop trigger if exists ${name} on hrm_training_participants`);

@@ -156,11 +156,9 @@ for (const boundary of [
           assert.deepEqual([...authz.allowedSubsidiaryIds!], [org.subsidiaryId])
           if (boundary.startsWith('CRM')) {
             await ensureCrmDefaults(org.orgId, actor)
-            const status = (
-              await db.execute<{ id: string }>(
-                sql`select id from crm_opportunity_statuses where org_id=${org.orgId} and is_default and is_active limit 1`,
-              )
-            ).rows[0]!.id
+            const status = (await db.execute<{ id: string }>(
+                sql`select id from crm_opportunity_statuses where org_id=${org.orgId} and is_default and is_active limit 1`, 'objects',
+              ))[0]!.id
             const id = randomUUID()
             const target =
               boundary === 'CRM opportunity detail and edit' ||
@@ -299,11 +297,9 @@ for (const boundary of [
               // Authorized saves speak the revision contract; the out-of-scope
               // save above stays tokenless to prove a missing token never
               // upgrades a scope 404 into information.
-              const revision = (
-                await db.execute<{ revision: string }>(
-                  sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${org.orgId} and id=${id}`,
-                )
-              ).rows[0]!.revision
+              const revision = (await db.execute<{ revision: string }>(
+                  sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${org.orgId} and id=${id}`, 'objects',
+                ))[0]!.revision
               const edited = await opportunityEdit(
                 request({ title: 'Authorized', expectedUpdatedAt: revision }),
                 params,
@@ -398,11 +394,9 @@ for (const boundary of [
               assert.equal(denied.status, 404)
               assert.deepEqual(await denied.json(), { error: 'not_found' })
               assert.equal(
-                (
-                  await db.execute(
-                    sql`select 1 from crm_opportunities where id=${id} and org_id=${org.orgId}`,
-                  )
-                ).rows.length,
+                (await db.execute(
+                    sql`select 1 from crm_opportunities where id=${id} and org_id=${org.orgId}`, 'objects',
+                  )).length,
                 1,
                 'a restricted caller must not delete a hidden opportunity',
               )
@@ -418,11 +412,9 @@ for (const boundary of [
               // Polymorphic links must not dangle: a link to a deleted subject
               // would hide the activity from every restricted reader forever.
               assert.deepEqual(
-                (
-                  await db.execute(
-                    sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_kind='opportunity' and subject_id=${id}`,
-                  )
-                ).rows,
+                await db.execute(
+                    sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_kind='opportunity' and subject_id=${id}`, 'objects',
+                  ),
                 [],
               )
               await restrict(org.orgId, [org.subsidiaryId])
@@ -431,11 +423,9 @@ for (const boundary of [
                 200,
               )
               assert.ok(
-                (
-                  await db.execute(
-                    sql`select 1 from audit_log where org_id=${org.orgId} and table_name='crm_opportunities' and row_id=${id} and action='delete'`,
-                  )
-                ).rows.length >= 1,
+                (await db.execute(
+                    sql`select 1 from audit_log where org_id=${org.orgId} and table_name='crm_opportunities' and row_id=${id} and action='delete'`, 'objects',
+                  )).length >= 1,
                 'deleting an opportunity leaves audit evidence',
               )
             } else if (boundary === 'CRM estimate permission') {
@@ -466,19 +456,15 @@ for (const boundary of [
               const forbidden = await keyedEstimate()
               assert.equal(forbidden.status, 403)
               assert.deepEqual(
-                (
-                  await db.execute(
-                    sql`select 1 from crm_opportunity_documents where org_id=${org.orgId} and opportunity_id=${id}`,
-                  )
-                ).rows,
+                await db.execute(
+                    sql`select 1 from crm_opportunity_documents where org_id=${org.orgId} and opportunity_id=${id}`, 'objects',
+                  ),
                 [],
               )
               assert.deepEqual(
-                (
-                  await db.execute(
-                    sql`select 1 from documents where org_id=${org.orgId} and kind='quote'`,
-                  )
-                ).rows,
+                await db.execute(
+                    sql`select 1 from documents where org_id=${org.orgId} and kind='quote'`, 'objects',
+                  ),
                 [],
                 'no quote may be created without crm.opportunities.manage',
               )

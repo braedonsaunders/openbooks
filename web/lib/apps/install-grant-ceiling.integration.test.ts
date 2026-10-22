@@ -29,7 +29,7 @@ test('an administrator cannot grant an App permissions they do not hold', { skip
       (error: unknown) => error instanceof AppError && error.status === 403 && /do not hold: gl\.post/.test(error.message),
     )
     const apps = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from apps where org_id = ${org.orgId}`))).rows[0]!.n
+      select count(*)::int as n from apps where org_id = ${org.orgId}`, 'objects')))[0]!.n
     assert.equal(apps, 0)
     await withOrgContext(org.orgId, () => installApp(org.orgId, installer, bundle(['records.read'])))
   } finally {

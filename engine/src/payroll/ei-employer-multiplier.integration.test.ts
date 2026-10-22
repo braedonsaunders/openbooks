@@ -136,9 +136,9 @@ test(
       const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
         select employee_party_id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `));
+      `, "objects"));
       const stubFor = (employeeId: string) =>
-        stubs.rows.find((row) => row.employee_party_id === employeeId)!;
+        stubs.find((row) => row.employee_party_id === employeeId)!;
 
       // 1,227.00 insurable prices EI 20.00; the account multiple prices
       // the employer share: 23.34 reduced, 28.00 standard.

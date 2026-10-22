@@ -44,12 +44,12 @@ async function seedPublishedPosting(org: ScratchOrg, recruiterId: string, title:
 }
 
 async function consentRows(orgId: string, candidateId: string): Promise<{ purpose: string; grantedAt: string; withdrawnAt: string | null }[]> {
-  return (await db.execute<{ purpose: string; grantedAt: string; withdrawnAt: string | null }>(sql`
+  return await db.execute<{ purpose: string; grantedAt: string; withdrawnAt: string | null }>(sql`
     select purpose, granted_at as "grantedAt", withdrawn_at as "withdrawnAt"
       from hrm_candidate_consents
      where org_id = ${orgId} and candidate_id = ${candidateId}
      order by purpose
-  `)).rows;
+  `, "objects");
 }
 
 test("anonymous apply never reinstates a withdrawn consent", async () => {
@@ -126,7 +126,7 @@ test("concurrent public applications with the same email reuse one candidate row
     const candidates = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from hrm_candidates
        where org_id = ${h.org.orgId} and lower(email) = lower(${email})
-    `);
-    assert.equal(candidates.rows[0]?.count, 1);
+    `, "objects");
+    assert.equal(candidates[0]?.count, 1);
   });
 });

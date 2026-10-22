@@ -33,8 +33,7 @@ export async function findSupplyEvidenceConflicts(
   runner: SqlExecutor,
   orgId: string,
 ): Promise<SupplyEvidenceConflict[]> {
-  const rows = (
-    await runner.execute<{
+  const rows = await runner.execute<{
       documentId: string;
       documentNumber: string;
       kind: string;
@@ -72,8 +71,7 @@ export async function findSupplyEvidenceConflicts(
         from documents d
         join conflicted c on c.document_id = d.id
        where d.org_id = ${orgId}
-       order by d.document_date, d.document_number`)
-  ).rows;
+       order by d.document_date, d.document_number`, "objects");
   return rows.map((row) => ({
     documentId: row.documentId,
     documentNumber: row.documentNumber,
@@ -129,19 +127,18 @@ export async function computeDistanceTurnover(
     throw new CrossBorderTaxError("assess the distance-sales threshold for a four-digit calendar year");
   }
   const windowEnd = today < `${year}-12-31` && today >= `${year}-01-01` ? today : `${year}-12-31`;
-  const registrations = (await runner.execute<{ subsidiaryId: string | null }>(sql`
+  const registrations = await runner.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId"
       from tax_oss_registrations
      where org_id = ${orgId} and scheme = 'union' and is_active
-  `)).rows;
+  `, "objects");
   if (registrations.length !== 1) {
     throw new CrossBorderTaxError(
       "configure exactly one active Union OSS registration in Tax setup before assessing the distance-sales threshold",
     );
   }
   const subsidiaryId = registrations[0]!.subsidiaryId;
-  const rows = (
-    await runner.execute<{ currency: string; base: string }>(sql`
+  const rows = await runner.execute<{ currency: string; base: string }>(sql`
       select d.currency as currency,
              sum(case when d.kind = 'customer_credit' then -component.taxable_amount
                       else component.taxable_amount end)::text as base
@@ -157,8 +154,7 @@ export async function computeDistanceTurnover(
          and d.document_date between ${`${year}-01-01`}::date and ${windowEnd}::date
          and d.custom -> 'crossBorderSupply' ->> 'outcome' = 'customer_country'
          and component.calculation_type = 'standard'
-       group by d.currency`)
-  ).rows;
+       group by d.currency`, "objects");
   const translated: DistanceTurnoverTranslation[] = [];
   const uncovered: string[] = [];
   let total = "0.0000";

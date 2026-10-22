@@ -112,13 +112,13 @@ async function seedType(
 
 test("migration 0225 bootstrap: six tables, forced RLS, events append-only", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(QUALIFICATIONS_SPEC), async (h) => {
-    const tables = (await db.execute<{ table: string; rls: boolean }>(sql`
+    const tables = await db.execute<{ table: string; rls: boolean }>(sql`
       select tablename as table, rowsecurity as rls
         from pg_tables where schemaname = 'public'
          and tablename in ('hrm_qualification_types', 'hrm_worker_qualifications',
                            'hrm_qualification_events', 'hrm_qualification_requirements',
                            'hrm_qualification_alerts', 'hrm_qualification_settings')
-    `)).rows;
+    `, "objects");
     assert.deepEqual(
       tables.map((t) => t.table).sort(),
       [
@@ -131,13 +131,13 @@ test("migration 0225 bootstrap: six tables, forced RLS, events append-only", { s
       ],
     );
     for (const t of tables) assert.equal(t.rls, true);
-    const policies = (await db.execute<{ tablename: string }>(sql`
+    const policies = await db.execute<{ tablename: string }>(sql`
       select tablename from pg_policies where schemaname = 'public'
        and policyname = 'org_isolation'
        and tablename in ('hrm_qualification_types', 'hrm_worker_qualifications',
                          'hrm_qualification_events', 'hrm_qualification_requirements',
                          'hrm_qualification_alerts', 'hrm_qualification_settings')
-    `)).rows;
+    `, "objects");
     assert.equal(policies.length, 6);
     // Append-only events: an update is refused by storage, not by the service.
     // The driver wraps the Postgres refusal, so the proof reads the cause.
@@ -199,7 +199,7 @@ test("record refuses by name: window, undeclared type, missing evidence, retired
     assert.equal(stored.storedStatus, "pending_verification");
     const reread = (await db.execute<{ expires_on: string }>(sql`
       select expires_on::text from hrm_worker_qualifications where id = ${stored.id}::uuid
-    `)).rows[0]?.expires_on;
+    `, "objects"))[0]?.expires_on;
     assert.equal(reread, stored.expiresOn);
   });
 });
@@ -227,7 +227,7 @@ test("verify, renew-as-new-row, revoke: hostile loops refused", { skip: !DB }, a
     assert.equal(renewedEvent.relatedQualificationId, q.id);
     const oldStillThere = (await db.execute<{ id: string }>(sql`
       select id::text as id from hrm_worker_qualifications where id = ${q.id}::uuid
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     assert.equal(oldStillThere, q.id);
     // Revoke needs a reason; then the row is frozen.
     await assert.rejects(
@@ -291,7 +291,7 @@ test("evidence: in-org file attaches, another org's file refused", { skip: !DB }
       );
       const reread = (await db.execute<{ evidence_file_id: string }>(sql`
         select evidence_file_id::text from hrm_worker_qualifications where id = ${q.id}::uuid
-      `)).rows[0]?.evidence_file_id;
+      `, "objects"))[0]?.evidence_file_id;
       assert.equal(reread, fileId);
     } finally {
       await dropScratchOrg(other.orgId);
@@ -342,7 +342,7 @@ test("derived status projects at read: expiring, expired, pending, valid", { ski
     // Storage never holds derived state.
     const stored = (await db.execute<{ status: string }>(sql`
       select distinct status from hrm_worker_qualifications where org_id = ${h.org.orgId}
-    `)).rows.map((r) => r.status);
+    `, "objects")).map((r) => r.status);
     // Anchor the loop: an empty result set would let every assertion inside
     // it pass vacuously, so the count is asserted before anything iterates.
     assert.ok(stored.length > 0, "the fixture must have stored qualification rows to check");
@@ -749,9 +749,9 @@ test("alerts: due rows written once, second run changes nothing", { skip: !DB },
     assert.equal(alerts.length, 1);
     assert.equal(alerts[0]?.leadDays, 30);
     assert.ok(alerts[0]?.sentAt);
-    const notices = (await db.execute<{ title: string }>(sql`
+    const notices = await db.execute<{ title: string }>(sql`
       select title from notifications where org_id = ${h.org.orgId} and kind = 'hrm_qualification_expiry'
-    `)).rows;
+    `, "objects");
     assert.ok(notices.length >= 1);
     assert.ok(notices[0]?.title.includes("OSHA 30"));
     // Second run: idempotent — no new alert rows, no new notices.
@@ -768,7 +768,7 @@ test("alerts: due rows written once, second run changes nothing", { skip: !DB },
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from notifications
          where org_id = ${h.org.orgId} and kind = 'hrm_qualification_expiry'
-      `)).rows[0]?.n,
+      `, "objects"))[0]?.n,
       String(noticeCount),
     );
   });
@@ -835,7 +835,7 @@ test("expiry alerts resolve managers from the exact holder employment", { skip: 
     const recipients = (await db.execute<{ user_id: string }>(sql`
       select distinct user_id::text from notifications
        where org_id = ${h.org.orgId} and kind = 'hrm_qualification_expiry'
-    `)).rows.map((row) => row.user_id);
+    `, "objects")).map((row) => row.user_id);
     assert.ok(recipients.includes(managerBUserId), "the manager for the alerted employment receives its alert");
     assert.ok(!recipients.includes(managerAUserId), "another employment of the same party does not receive the alert");
   });
@@ -901,12 +901,12 @@ test("alert scan catches up crossed thresholds instead of skipping them", { skip
     // one holder login exists, so one notice means exactly one row.
     const holderUsers = Number((await db.execute<{ n: string }>(sql`
       select count(*) as n from users where org_id = ${h.org.orgId} and party_id = ${worker.partyId}
-    `)).rows[0]!.n);
+    `, "objects"))[0]!.n);
     assert.ok(holderUsers >= 1);
     const notices = async (): Promise<number> => Number((await db.execute<{ n: string }>(sql`
       select count(*) as n from notifications
        where org_id = ${h.org.orgId} and kind = 'hrm_qualification_expiry'
-    `)).rows[0]!.n);
+    `, "objects"))[0]!.n);
     assert.equal(await notices(), holderUsers);
     assert.equal(mine.notificationsWritten, holderUsers);
     // A re-run is silent: every crossed threshold was already sent.

@@ -35,22 +35,22 @@ for (const table of ["saved_views", "list_views", "saved_reports"] as const) {
           values(${view},${org.orgId},'Private audit','/reports/pnl',${owner})`);
         sandbox = await createSandbox({ productionOrgId: org.orgId, name: "View owner regression", tier: "full", masked: false });
         const field = table === "saved_reports" ? "created_by_user_id" : "owner_id";
-        const sandboxView = (await db.execute<{ id: string; owner: string }>(sql`select id,${sql.identifier(field)} as owner from ${sql.identifier(table)} where org_id=${sandbox.sandboxOrgId}`)).rows[0]!;
+        const sandboxView = (await db.execute<{ id: string; owner: string }>(sql`select id,${sql.identifier(field)} as owner from ${sql.identifier(table)} where org_id=${sandbox.sandboxOrgId}`, "objects"))[0]!;
         assert.notEqual(sandboxView.owner, owner);
         const unchanged = await buildChangeSet(sandbox.sandboxId, "Unchanged views", actors[0]);
-        assert.equal((await db.execute(sql`select id from change_set_items where change_set_id=${unchanged.changeSetId} and table_name=${table}`)).rows.length, 0);
+        assert.equal((await db.execute(sql`select id from change_set_items where change_set_id=${unchanged.changeSetId} and table_name=${table}`, "objects")).length, 0);
         if (scenario === "legacy owner repair") {
           await db.execute(sql`update ${sql.identifier(table)} set ${sql.identifier(field)}=${sandboxView.owner} where org_id=${org.orgId} and id=${view}`);
         } else await db.execute(sql`update ${sql.identifier(table)} set name='Reviewed view' where org_id=${sandbox.sandboxOrgId} and id=${sandboxView.id}`);
         const change = await buildChangeSet(sandbox.sandboxId, "Reviewed owner mapping", actors[0]);
-        const items = (await db.execute<{ payload: Record<string, unknown> }>(sql`select payload from change_set_items where change_set_id=${change.changeSetId} and table_name=${table}`)).rows;
+        const items = await db.execute<{ payload: Record<string, unknown> }>(sql`select payload from change_set_items where change_set_id=${change.changeSetId} and table_name=${table}`, "objects");
         assert.equal(items.length, 1);
         assert.equal(items[0]!.payload[field], owner);
         await reviewChangeSet(change.changeSetId, actors[1]);
         await applyChangeSet(change.changeSetId, actors[3]);
         await deleteSandbox(sandbox.sandboxId);
         sandbox = undefined;
-        const retained = (await db.execute<{ owner: string; name: string }>(sql`select ${sql.identifier(field)} as owner,name from ${sql.identifier(table)} where org_id=${org.orgId} and id=${view}`)).rows;
+        const retained = await db.execute<{ owner: string; name: string }>(sql`select ${sql.identifier(field)} as owner,name from ${sql.identifier(table)} where org_id=${org.orgId} and id=${view}`, "objects");
         assert.deepEqual(retained, [{ owner, name: scenario === "legacy owner repair" ? "Private audit" : "Reviewed view" }]);
       } finally {
         if (sandbox) await deleteSandbox(sandbox.sandboxId);
@@ -70,13 +70,13 @@ test("a previously captured sandbox owner is refused at application without chan
     const view = randomUUID();
     await db.execute(sql`insert into saved_views(id,org_id,slug,name,query,scope,owner_id) values(${view},${org.orgId},'owner-guard','Owner guard','{}'::jsonb,'private',${actors[0]})`);
     sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Stale owner payload", tier: "full", masked: false });
-    const copied = (await db.execute<{ owner_id: string }>(sql`update saved_views set name='Changed' where org_id=${sandbox.sandboxOrgId} returning owner_id`)).rows[0]!;
+    const copied = (await db.execute<{ owner_id: string }>(sql`update saved_views set name='Changed' where org_id=${sandbox.sandboxOrgId} returning owner_id`, "objects"))[0]!;
     const change = await buildChangeSet(sandbox.sandboxId, "Old payload", actors[0]);
     await db.execute(sql`update change_set_items set payload=jsonb_set(payload,'{owner_id}',to_jsonb(${copied.owner_id}::text)) where change_set_id=${change.changeSetId} and table_name='saved_views'`);
     await reviewChangeSet(change.changeSetId, actors[1]);
     await assert.rejects(applyChangeSet(change.changeSetId, actors[3]), /user reference must belong to production/);
-    assert.deepEqual((await db.execute(sql`select owner_id,name from saved_views where org_id=${org.orgId} and id=${view}`)).rows, [{ owner_id: actors[0], name: "Owner guard" }]);
-    assert.equal((await db.execute(sql`select status from change_sets where org_id=${org.orgId} and id=${change.changeSetId}`)).rows[0]!.status, "approved");
+    assert.deepEqual(await db.execute(sql`select owner_id,name from saved_views where org_id=${org.orgId} and id=${view}`, "objects"), [{ owner_id: actors[0], name: "Owner guard" }]);
+    assert.equal((await db.execute(sql`select status from change_sets where org_id=${org.orgId} and id=${change.changeSetId}`, "objects"))[0]!.status, "approved");
   } finally {
     if (sandbox) await deleteSandbox(sandbox.sandboxId);
     await dropScratchOrgReporting(org.orgId);

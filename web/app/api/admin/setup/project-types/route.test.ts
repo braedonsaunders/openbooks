@@ -149,13 +149,13 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        execute: async (_query) => ({ rows: [] }),
+        execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: async (work) => {
           state.txCalls = 0
           state.stagedVersions = clone(state.versions)
           state.stagedAudits = []
           try {
-            const result = await work({ execute: async (query) => txExecute(query) })
+            const result = await work({ execute: async (query, mode) => Promise.resolve(txExecute(query)).then((result) => (mode === 'objects' ? result.rows : result)) })
             state.versions = state.stagedVersions
             state.audits.push(...state.stagedAudits)
             return result

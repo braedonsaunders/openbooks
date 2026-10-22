@@ -314,8 +314,8 @@ export async function hiddenReportEntityKeys(authz: Authz): Promise<string[]> {
   }
   const custom = await customRecordReportCatalog(authz)
   const stored = await db.execute<{ entity: string }>(sql`select distinct query->>'entity' as entity from report_definitions
-    where org_id=${authz.user.orgId} and query->>'entity' like 'custom:%'`)
-  out.push(...stored.rows.filter(r => !Object.hasOwn(custom, r.entity)).map(r => r.entity))
+    where org_id=${authz.user.orgId} and query->>'entity' like 'custom:%'`, 'objects')
+  out.push(...stored.filter(r => !Object.hasOwn(custom, r.entity)).map(r => r.entity))
   return out
 }
 

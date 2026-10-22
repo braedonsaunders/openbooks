@@ -140,14 +140,12 @@ test("API bill create explodes a matching line and retaxes the children", { skip
       loaded: unknown,
     ): string => (loaded as { doc: { id: string } }).doc.id;
     const id = docId(result.body);
-    const lines = (
-      await withOrgContext(f.org.orgId, () => db.execute<{ amount: string; taxAmount: string; departmentId: string | null; groupId: string | null }>(sql`
+    const lines = await withOrgContext(f.org.orgId, () => db.execute<{ amount: string; taxAmount: string; departmentId: string | null; groupId: string | null }>(sql`
         select amount::text as amount, tax_amount::text as "taxAmount",
                department_id as "departmentId", distribution_group_id as "groupId"
           from document_lines where document_id = ${id} and org_id = ${f.org.orgId}
          order by line_number
-      `))
-    ).rows;
+      `, "objects"));
     assert.equal(lines.length, 3);
     assert.deepEqual(lines.map((l) => l.amount).sort(), ["3.3333", "3.3333", "3.3334"]);
     assert.ok(lines.every((l) => l.groupId !== null));
@@ -156,12 +154,10 @@ test("API bill create explodes a matching line and retaxes the children", { skip
     // preflight. The engine rounds every line's tax to cents, so the
     // children are taxed exactly like hand-entered lines.
     assert.deepEqual(lines.map((l) => l.taxAmount).sort(), ["0.3300", "0.3300", "0.3300"]);
-    const totals = (
-      await withOrgContext(f.org.orgId, () => db.execute<{ subtotal: string; taxTotal: string; total: string }>(sql`
+    const totals = (await withOrgContext(f.org.orgId, () => db.execute<{ subtotal: string; taxTotal: string; total: string }>(sql`
         select subtotal::text as subtotal, tax_total::text as "taxTotal", total::text as total
           from documents where id = ${id} and org_id = ${f.org.orgId}
-      `))
-    ).rows[0];
+      `, "objects")))[0];
     assert.deepEqual(totals, { subtotal: "10.0000", taxTotal: "0.9900", total: "10.9900" });
   } finally {
     await dropScratchOrg(f.org.orgId);

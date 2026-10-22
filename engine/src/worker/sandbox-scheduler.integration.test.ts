@@ -36,14 +36,14 @@ async function seedDueSandbox(productionOrgId: string): Promise<{ sandboxId: str
     insert into sandboxes (org_id, production_org_id, name, tier, masked, status, refresh_schedule, last_refresh_at)
     values (${sandboxOrgId}, ${productionOrgId}, 'sched-test', 'masked', true,
             'ready', 'hourly', now() - interval '2 hours')
-    returning id`)).rows[0]!;
+    returning id`, "objects"))[0]!;
   return { sandboxId: row.id, sandboxOrgId };
 }
 
 async function sandboxState(sandboxId: string): Promise<{ status: string; last_error: string | null }> {
   const res = (await db.execute<{ status: string; last_error: string | null }>(sql`
-    select status, last_error from sandboxes where id = ${sandboxId}`));
-  return res.rows[0]!;
+    select status, last_error from sandboxes where id = ${sandboxId}`, "objects"));
+  return res[0]!;
 }
 
 async function seedShell(

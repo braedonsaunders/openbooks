@@ -20,7 +20,7 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
     periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
     programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     // A payer running its payroll here since January, five months of 8 000 zł committed.
-    tx: { execute: async () => ({ rows: [{ dochod: "33265.0000", podstawa: "40000.0000", payer_first_pay: "2026-01-15", payer_first_period: "2026-01-01" }] }) },
+    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ dochod: "33265.0000", podstawa: "40000.0000", payer_first_pay: "2026-01-15", payer_first_period: "2026-01-01" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) },
     orgId: "org",
     subsidiaryId: "payer",
     documentId: "doc",

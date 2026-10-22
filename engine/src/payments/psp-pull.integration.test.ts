@@ -77,7 +77,7 @@ test("a pulled payout imports once, posts, and advances the cursor", { skip: !DB
       assert.ok(posted.entryId);
 
       const cursor = (await db.execute<{ last_pull_at: string | null }>(sql`
-        select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`)).rows[0];
+        select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`, "objects"))[0];
       assert.ok(cursor!.last_pull_at, "pull cursor advances after import");
     } finally {
       await dropScratchOrg(org.orgId);

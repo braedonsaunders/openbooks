@@ -21,7 +21,7 @@ test("the search expression renders exactly the label the list shows, in every l
         select ${periodDisplayLabelSql(locale)} as label
           from (select ${period.fiscalYear}::int as fiscal_year, ${period.periodNumber}::int as period_number,
                        ${period.adjustment}::boolean as is_adjustment,
-                       ${period.startsOn}::date as starts_on, ${period.endsOn}::date as ends_on) p`)).rows[0]?.label;
+                       ${period.startsOn}::date as starts_on, ${period.endsOn}::date as ends_on) p`, "objects"))[0]?.label;
       assert.equal(rendered, periodDisplayLabel(period, locale), `${locale} ${period.startsOn}`);
     }
   }
@@ -31,7 +31,7 @@ test("a search for the shown month text finds the period", { skip: !DB }, async 
   const match = (await db.execute<{ matched: boolean }>(sql`
     select ${periodDisplayLabelSql("en")} ilike ${"%dec 2026%"} as matched
       from (select 2026 as fiscal_year, 12 as period_number, false as is_adjustment,
-                   '2026-12-01'::date as starts_on, '2026-12-31'::date as ends_on) p`)).rows[0]?.matched;
+                   '2026-12-01'::date as starts_on, '2026-12-31'::date as ends_on) p`, "objects"))[0]?.matched;
   assert.equal(match, true);
 });
 
@@ -41,13 +41,13 @@ test("the locale-free SQL label matches the TypeScript label under any alias and
       select ${canonicalPeriodLabelSql("cp")} as label, ${periodDisplayLabelSql("en", "cp")} as display
         from (select ${period.fiscalYear}::int as fiscal_year, ${period.periodNumber}::int as period_number,
                      ${period.adjustment}::boolean as is_adjustment,
-                     ${period.startsOn}::date as starts_on, ${period.endsOn}::date as ends_on) cp`)).rows[0];
+                     ${period.startsOn}::date as starts_on, ${period.endsOn}::date as ends_on) cp`, "objects"))[0];
     assert.equal(rendered?.label, canonicalPeriodLabel(period));
     assert.equal(rendered?.display, periodDisplayLabel(period, "en"));
   }
   const missing = (await db.execute<{ label: string | null }>(sql`
     select ${canonicalPeriodLabelSql()} as label
       from (select 1) anchor
-      left join (select null::int as fiscal_year, null::int as period_number, null::boolean as is_adjustment) p on false`)).rows[0];
+      left join (select null::int as fiscal_year, null::int as period_number, null::boolean as is_adjustment) p on false`, "objects"))[0];
   assert.equal(missing?.label, null);
 });

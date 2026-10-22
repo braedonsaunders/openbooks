@@ -189,8 +189,7 @@ export const POST = defineRoute({
             days[0]!,
             days[6]!,
           )
-          const audited = (
-            await db.execute<{ id: string }>(sql`
+          const audited = (await db.execute<{ id: string }>(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify(
               {
@@ -207,8 +206,7 @@ export const POST = defineRoute({
               },
             )}::jsonb, ${user.id})
             returning id
-          `)
-          ).rows[0]
+          `, 'objects'))[0]
           if (!audited)
             throw new Error(
               'the no-hours declaration was not recorded — nothing was submitted',
@@ -224,8 +222,7 @@ export const POST = defineRoute({
           gate.allowedSubsidiaryIds,
         )
         if (additional) {
-          const audited = (
-            await db.execute<{ id: string }>(sql`
+          const audited = (await db.execute<{ id: string }>(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'timesheet_weeks', ${additional.headerId}, 'update',
               ${JSON.stringify({
@@ -239,8 +236,7 @@ export const POST = defineRoute({
                 entries: additional.entries,
                 unchangedEarlierApprovedTime: true,
               })}::jsonb, ${user.id}) returning id
-          `)
-          ).rows[0]
+          `, 'objects'))[0]
           if (!audited)
             throw new Error(
               'Additional-time submission evidence was not recorded.',

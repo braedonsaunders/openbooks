@@ -22,33 +22,33 @@ for (const reversalDate of ["2026-07-31", "2026-08-15"]) {
         await withOrgTransaction(org.orgId, async () => {
           const enabled = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
             coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling":true,"usageBilling":true}'::jsonb)
-            where id = ${org.orgId} returning id`);
-          assert.equal(enabled.rows.length, 1, "usage billing must be enabled for the fixture organization");
+            where id = ${org.orgId} returning id`, "objects");
+          assert.equal(enabled.length, 1, "usage billing must be enabled for the fixture organization");
           const item = await db.execute(sql`insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
-            values (${itemId}, ${org.orgId}, 'service', 'Metered requests', ${org.accounts.recognized}, true, '{}'::jsonb) returning id`);
-          assert.equal(item.rows.length, 1, "usage must post directly to its configured revenue account");
+            values (${itemId}, ${org.orgId}, 'service', 'Metered requests', ${org.accounts.recognized}, true, '{}'::jsonb) returning id`, "objects");
+          assert.equal(item.length, 1, "usage must post directly to its configured revenue account");
           const plan = await db.execute(sql`insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count)
-            values (${planId}, ${org.orgId}, 'Metered service', '0', 'CAD', 'monthly', 1) returning id`);
-          assert.equal(plan.rows.length, 1, "the subscription plan must exist");
+            values (${planId}, ${org.orgId}, 'Metered service', '0', 'CAD', 'monthly', 1) returning id`, "objects");
+          assert.equal(plan.length, 1, "the subscription plan must exist");
           const subscription = await db.execute(sql`insert into subscriptions (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on)
-            values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, 1, 'active', ${org.date}, ${org.date}) returning id`);
-          assert.equal(subscription.rows.length, 1, "the customer must have an active subscription");
+            values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, 1, 'active', ${org.date}, ${org.date}) returning id`, "objects");
+          assert.equal(subscription.length, 1, "the customer must have an active subscription");
           const period = await db.execute(sql`insert into accounting_periods
             (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
             select org_id, fiscal_calendar_id, 2026, 8, 'August 2026', '2026-08-01', '2026-08-31', false
-              from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId} returning id`);
-          assert.equal(period.rows.length, 1, "August must be available for a dated reversal");
+              from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId} returning id`, "objects");
+          assert.equal(period.length, 1, "August must be available for a dated reversal");
           // A balanced draft journal contains real lines but is not accounting evidence.
           const draftId = randomUUID();
           const draft = await db.execute(sql`insert into journal_entries
             (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-            values (${draftId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'UNPOSTED-USAGE', ${org.date}, ${org.periodId}, 'draft', 'manual') returning id`);
-          assert.equal(draft.rows.length, 1, "the unposted journal must be stored");
+            values (${draftId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'UNPOSTED-USAGE', ${org.date}, ${org.periodId}, 'draft', 'manual') returning id`, "objects");
+          assert.equal(draft.length, 1, "the unposted journal must be stored");
           for (const [lineNumber, accountId, amount] of [[1, org.accounts.bank, "99"], [2, org.accounts.recognized, "-99"]] as const) {
             const line = await db.execute(sql`insert into journal_lines
               (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
-              values (${org.orgId}, ${draftId}, ${lineNumber}, ${accountId}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1) returning id`);
-            assert.equal(line.rows.length, 1, "each balanced draft line must be observable");
+              values (${org.orgId}, ${draftId}, ${lineNumber}, ${accountId}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1) returning id`, "objects");
+            assert.equal(line.length, 1, "each balanced draft line must be observable");
           }
         });
         const meter = await createUsageMeter(org.orgId, actor, { key: "accounting-requests", name: "Requests", unit: "request", aggregation: "sum", itemId });
@@ -64,27 +64,27 @@ for (const reversalDate of ["2026-07-31", "2026-08-15"]) {
         assert.deepEqual(await saasUsageMonthInvariant(org.orgId), [], "neither an unposted usage invoice nor draft journal lines count");
         const approve = async (invoiceId: string) => {
           const approved = await db.execute(sql`update documents set status = 'approved'
-            where org_id = ${org.orgId} and id = ${invoiceId} and status = 'draft' returning id`);
-          assert.equal(approved.rows.length, 1, "the invoice must enter the approved but unposted state");
+            where org_id = ${org.orgId} and id = ${invoiceId} and status = 'draft' returning id`, "objects");
+          assert.equal(approved.length, 1, "the invoice must enter the approved but unposted state");
         };
         await approve(first.invoiceId);
         assert.deepEqual(await saasUsageMonthInvariant(org.orgId), [], "approval alone is not posted accounting evidence");
         await postDocument(first.invoiceId, { control: await loadRequiredControlAccounts(org.orgId) }, { audit: { actorId: actor, source: "usage-accounting-test" } });
         assert.deepEqual(await saasUsageMonthInvariant(org.orgId), [], "the posted invoice and its real journal must tie");
         const original = (await db.execute<{ id: string }>(sql`select posted_entry_id as id from documents
-          where org_id = ${org.orgId} and id = ${first.invoiceId}`)).rows[0];
+          where org_id = ${org.orgId} and id = ${first.invoiceId}`, "objects"))[0];
         assert.ok(original?.id);
         const voided = await requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: first.invoiceId,
           reversalDate, reason: "Correct the metered service invoice", allowedSubsidiaryIds: null });
         assert.equal(voided.status, "voided");
         assert.ok(voided.reversalEntryId);
-        const history = (await db.execute<{ id: string; status: string; posting_date: string; revenue: string; balance: string }>(sql`
+        const history = await db.execute<{ id: string; status: string; posting_date: string; revenue: string; balance: string }>(sql`
           select e.id, e.status, e.posting_date::text,
                  sum(l.amount) filter (where l.account_id = ${org.accounts.recognized})::text as revenue,
                  sum(l.amount)::text as balance
             from journal_entries e join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
            where e.org_id = ${org.orgId} and e.id in (${original.id}, ${voided.reversalEntryId})
-           group by e.id order by e.status`)).rows;
+           group by e.id order by e.status`, "objects");
         assert.deepEqual(history, [
           { id: voided.reversalEntryId, status: "posted", posting_date: reversalDate, revenue: "20.0000", balance: "0.0000" },
           { id: original.id, status: "reversed", posting_date: "2026-07-31", revenue: "-20.0000", balance: "0.0000" },

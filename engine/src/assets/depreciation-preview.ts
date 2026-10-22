@@ -165,10 +165,10 @@ export async function previewDepreciation(
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}
        ${input.bookId ? sql`and s.book_id = ${input.bookId}` : sql``}
        ${input.periodId ? sql`and l.period_id = ${input.periodId}` : sql``}
-     order by a.asset_number, p.ends_on, l.sequence`));
+     order by a.asset_number, p.ends_on, l.sequence`, "objects"));
 
   const accountIds = new Set<string>();
-  const resolved = due.rows.map((row) => {
+  const resolved = due.map((row) => {
     const accounts = resolveAssetAccounts(
       {
         assetAccountId: row.asset_account,
@@ -196,9 +196,9 @@ export async function previewDepreciation(
     accountIds.size > 0
       ? await db.execute<{ id: string; number: string | null; name: string | null }>(sql`
         select id, number, name from accounts
-         where org_id = ${orgId} and id = any(${uuidArray([...accountIds])}::uuid[])`)
-      : { rows: [] as { id: string; number: string | null; name: string | null }[] };
-  const metaById = new Map(accountMeta.rows.map((account) => [String(account.id), account]));
+         where org_id = ${orgId} and id = any(${uuidArray([...accountIds])}::uuid[])`, "objects")
+      : [] as { id: string; number: string | null; name: string | null }[];
+  const metaById = new Map(accountMeta.map((account) => [String(account.id), account]));
 
   // One balanced pair per line: debits and credits accumulate independently
   // and the equality is asserted, not assumed, before the fingerprint.
@@ -286,8 +286,8 @@ export async function previewDepreciation(
                 join accounting_periods pp on pp.id = l.period_id and pp.org_id = l.org_id
                where l.org_id = s.org_id and l.schedule_id = s.id
             ), date '0001-01-01')
-       )`));
-  const staleAssets = stale.rows.map((row) => ({
+       )`, "objects"));
+  const staleAssets = stale.map((row) => ({
     assetId: String(row.asset_id),
     assetNumber: String(row.asset_number),
     assetName: String(row.asset_name),
@@ -355,9 +355,9 @@ export async function previewDepreciation(
          and not exists (
                select 1 from depreciation_schedule_lines linked
                 where linked.org_id = ${orgId} and linked.journal_entry_id = e.id)
-    `);
+    `, "objects");
     const rowById = new Map(rows.map((row) => [row.lineId, row]));
-    for (const match of matched.rows) {
+    for (const match of matched) {
       const line = rowById.get(String(match.line_id));
       if (!line) continue;
       manualEntryCandidates.push({

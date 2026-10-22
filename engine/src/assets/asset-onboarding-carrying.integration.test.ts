@@ -22,7 +22,7 @@ async function seedMonthlyPeriods(
   months: { n: number; name: string; from: string; to: string }[],
 ): Promise<void> {
   const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`)).rows[0]!.id;
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
   for (const m of months) {
     await db.execute(sql`
       insert into accounting_periods
@@ -88,7 +88,7 @@ async function seedEvidence(orgId: string, assetId: string, actorId: string): Pr
       values (${folderId}, ${orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
     const fileId = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-      values (${orgId}, ${folderId}, 'meter.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`)).rows[0]!.id;
+      values (${orgId}, ${folderId}, 'meter.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
     await tx.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
       values (${orgId}, ${fileId}, 'fixed_assets', ${assetId}, ${actorId})`);
@@ -174,7 +174,7 @@ test("an asset fully depreciated by its opening figure flips to fully_depreciate
     const run = await runDepreciation(org.orgId, "2026-03-31", actorId, assetId);
     assert.equal(run.posted, 0, "nothing remains to post");
     const status = (await db.execute<{ status: string }>(sql`
-      select status from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`)).rows[0]!.status;
+      select status from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`, "objects"))[0]!.status;
     assert.equal(status, "fully_depreciated", `opening-consumed basis must flip status (got ${status})`);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -191,10 +191,10 @@ test("reversing a disposal restores the continued carrying status", { skip: !DB 
       asOf: "2025-12-31",
     });
     await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-    const pending = (await db.execute<{ amount: string }>(sql`
+    const pending = await db.execute<{ amount: string }>(sql`
       select l.planned_amount::text as amount from depreciation_schedule_lines l
       join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-      where s.org_id=${org.orgId} and s.asset_id=${assetId} and l.posted_amount is null`)).rows;
+      where s.org_id=${org.orgId} and s.asset_id=${assetId} and l.posted_amount is null`, "objects");
     assert.ok(pending.length > 0, "zero-charge projections remain as schedule evidence");
     assert.ok(pending.every((line) => isZero(line.amount)), "the opening figure consumes every planned charge");
     const disposal = await disposeAsset(org.orgId, assetId, {
@@ -207,7 +207,7 @@ test("reversing a disposal restores the continued carrying status", { skip: !DB 
     assert.equal(disposal.gainLoss, "5000.0000");
     const eventId = (await db.execute<{ id: string }>(sql`
       select id from asset_events
-       where org_id = ${org.orgId} and asset_id = ${assetId} and kind = 'disposed' limit 1`)).rows[0]!.id;
+       where org_id = ${org.orgId} and asset_id = ${assetId} and kind = 'disposed' limit 1`, "objects"))[0]!.id;
     const reversal = await reverseAssetLifecycleEvent(org.orgId, eventId, {
       date: "2026-04-15",
       actorId,

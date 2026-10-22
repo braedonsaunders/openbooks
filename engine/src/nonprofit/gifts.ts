@@ -124,8 +124,8 @@ async function readGift(orgId: string, id: string, lock = false): Promise<GiftRo
       kind, fair_value_basis, tribute_kind, tribute_name, tribute_notify_party_id, receipt_number,
       received_on::text as received_on, status, posted_entry_id
       from gifts where org_id = ${orgId} and id = ${id}
-      ${sql.raw(lock ? "for update" : "")}`);
-  return row.rows[0] ?? null;
+      ${sql.raw(lock ? "for update" : "")}`, "objects");
+  return row[0] ?? null;
 }
 async function postGiftEntry(input: {
   gift: GiftRow; postingDate: string; debitAccountId: string; contributionsAccountId: string;
@@ -139,7 +139,7 @@ async function postGiftEntry(input: {
   const book = (await db.execute<{ id: string; currency: string }>(sql`
     select b.id, s.base_currency as currency from accounting_books b
     join subsidiaries s on s.org_id = b.org_id and s.id = ${input.gift.subsidiary_id}
-     where b.org_id = ${input.gift.org_id} and b.is_primary and b.is_active and b.posts_gl limit 1`)).rows[0];
+     where b.org_id = ${input.gift.org_id} and b.is_primary and b.is_active and b.posts_gl limit 1`, "objects"))[0];
   if (!book) throw fail({
     message: "The gift's subsidiary has no active primary GL book.",
     status: 409, code: "gift_book_unavailable",
@@ -242,8 +242,8 @@ export async function createGift(input: CreateGiftInput): Promise<{
          and (${input.donorPartyId ?? null}::uuid is null or exists (
            select 1 from parties p where p.org_id = s.org_id and p.id = ${input.donorPartyId ?? null}))
          and (${notifyPartyId}::uuid is null or exists (
-           select 1 from parties p where p.org_id = s.org_id and p.id = ${notifyPartyId}))`);
-    if (references.rows.length !== 1) throw fail({
+           select 1 from parties p where p.org_id = s.org_id and p.id = ${notifyPartyId}))`, "objects");
+    if (references.length !== 1) throw fail({
       message: "The fund, subsidiary, donor, or tribute contact is not in this organization.",
       code: "gift_reference_not_found",
       remedy: "Choose active gift references from this organization.",
@@ -258,8 +258,8 @@ export async function createGift(input: CreateGiftInput): Promise<{
         ${input.fundId}, ${amount}, ${input.kind}, ${input.fairValueBasis ?? null},
         ${tributeKind}, ${tributeName}, ${notifyPartyId}, ${input.receivedOn}, 'draft',
         ${JSON.stringify(input.custom ?? {})}::jsonb, ${input.actorId ?? null}, ${input.actorId ?? null}
-      ) returning id`);
-    const id = inserted.rows[0]?.id;
+      ) returning id`, "objects");
+    const id = inserted[0]?.id;
     if (!id) throw fail({
       message: "The gift record was not created.", status: 409,
       code: "gift_write_missing", remedy: "Retry the gift after checking its organization references.",
@@ -294,7 +294,7 @@ export async function receiptGift(input: {
       update gifts set receipt_number = ${receiptNumber}, status = 'receipted',
         updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${gift.id} and status = 'draft' and receipt_number is null
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "The gift receipt number was not saved.", status: 409,
       code: "gift_receipt_write_missing", remedy: "Refresh the gift and retry receipting.",
@@ -339,7 +339,7 @@ export async function postGift(input: {
       update gifts set posted_entry_id = ${posted.entryId}, status = 'posted',
         updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${gift.id} and status = 'receipted'
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "Gift changed before its posting could be recorded.", status: 409,
       code: "gift_post_write_missing", remedy: "Refresh the gift and retry posting.",
@@ -375,7 +375,7 @@ export async function voidGift(input: {
         id: string; book_id: string; subsidiary_id: string; entry_number: string; status: string;
       }>(sql`
         select id, book_id, subsidiary_id, entry_number, status from journal_entries
-         where org_id = ${input.orgId} and id = ${gift.posted_entry_id} for update`)).rows[0];
+         where org_id = ${input.orgId} and id = ${gift.posted_entry_id} for update`, "objects"))[0];
       if (!source || source.status !== "posted") throw fail({
         message: "The gift's journal entry is not posted and cannot be reversed.",
         status: 409, code: "gift_posting_not_reversible", remedy: "Use the journal correction workflow.",
@@ -418,7 +418,7 @@ export async function voidGift(input: {
     const updated = (await db.execute<{ id: string }>(sql`
       update gifts set status = 'void', updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${gift.id} and status = ${gift.status}
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "Gift changed before voiding could be recorded.", status: 409,
       code: "gift_void_write_missing", remedy: "Refresh the gift and retry voiding.",

@@ -33,7 +33,7 @@ test('employment references preserve exact episodes and vacation imports remain 
     const snapshot = async () => (await db.execute(sql`select jsonb_build_object(
       'terms',(select jsonb_agg(to_jsonb(t)) from payroll_vacation_terms t where org_id=${org.orgId}),
       'employment',(select jsonb_agg(to_jsonb(e) order by e.id) from worker_employments e where org_id=${org.orgId}),
-      'audit',(select jsonb_agg(to_jsonb(a)) from audit_log a where org_id=${org.orgId})) as state`)).rows[0]!.state
+      'audit',(select jsonb_agg(to_jsonb(a)) from audit_log a where org_id=${org.orgId})) as state`, 'objects'))[0]!.state
     const before = await snapshot()
     const preview = await resource.write([row], 'insert', context)
     assert.equal(preview.failed, 0, JSON.stringify(preview.errors))
@@ -48,9 +48,9 @@ test('employment references preserve exact episodes and vacation imports remain 
     const result = await resource.write([row], 'insert', { ...context, dryRun: false })
     assert.equal(result.failed, 0, JSON.stringify(result.errors))
     assert.equal(result.created, 1)
-    const saved = (await db.execute(sql`select employment_id,plan_id,method,percent_floor::text,effective_from::text,effective_to::text,reason from payroll_vacation_terms where org_id=${org.orgId}`)).rows
+    const saved = await db.execute(sql`select employment_id,plan_id,method,percent_floor::text,effective_from::text,effective_to::text,reason from payroll_vacation_terms where org_id=${org.orgId}`, 'objects')
     assert.deepEqual(saved, [{ employment_id: employmentId, plan_id: planId, method: 'accrue', percent_floor: '6.0000', effective_from: row.effectiveFrom, effective_to: row.effectiveTo, reason: row.reason }])
-    const audit = (await db.execute<{ actor_id: string; action: string; changes: { after?: { reason?: string } } }>(sql`select actor_id,action,changes from audit_log where org_id=${org.orgId} and table_name='payroll_vacation_terms'`)).rows
+    const audit = await db.execute<{ actor_id: string; action: string; changes: { after?: { reason?: string } } }>(sql`select actor_id,action,changes from audit_log where org_id=${org.orgId} and table_name='payroll_vacation_terms'`, 'objects')
     const attributed = audit.filter(entry => entry.actor_id === actorId && entry.action === 'insert')
     assert.ok(attributed.length > 0, 'the import records an actor-attributed creation')
     assert.ok(attributed.some(entry => entry.changes.after?.reason === row.reason), 'the audit preserves the reason for the dated election')

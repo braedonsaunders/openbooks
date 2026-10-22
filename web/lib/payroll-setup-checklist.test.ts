@@ -25,7 +25,7 @@ const checklistHooks = registerHooks({
       return { shortCircuit: true, url: 'data:text/javascript,export async function businessToday() { return "2026-09-24" }' }
     }
     if (specifier === '@openbooks/engine/platform/db') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const db = { async execute() { return { rows: [] } } }' }
+      return { shortCircuit: true, url: 'data:text/javascript,export const db = { async execute(_query, mode) { const inMode = (result) => (mode === "objects" ? result.rows : result); return inMode({ rows: [] }) } }' }
     }
     if (specifier === '@openbooks/engine/payroll/readiness') {
       return {

@@ -114,18 +114,18 @@ function recipe(assemblyItemId: string, componentItemId: string) {
 }
 
 async function bomRows(orgId: string, assemblyItemId: string) {
-  return (await db.execute<{ componentItemId: string; quantityPer: string }>(sql`
+  return await db.execute<{ componentItemId: string; quantityPer: string }>(sql`
     select component_item_id as "componentItemId", quantity_per::text as "quantityPer"
       from bom_components
      where org_id = ${orgId} and assembly_item_id = ${assemblyItemId}
-     order by sort_order, component_item_id`)).rows;
+     order by sort_order, component_item_id`, "objects");
 }
 
 async function bomAudits(orgId: string, assemblyItemId: string) {
-  return (await db.execute<{ changes: unknown }>(sql`
+  return await db.execute<{ changes: unknown }>(sql`
     select changes from audit_log
      where org_id = ${orgId} and table_name = 'bom_components' and row_id = ${assemblyItemId}
-     order by id`)).rows;
+     order by id`, "objects");
 }
 
 async function emptyBom(orgId: string, assemblyItemId: string) {
@@ -240,7 +240,7 @@ test("a manufacturing planner reads the revision context with every operating en
       insert into subsidiaries (org_id, parent_id, name, base_currency, country, is_elimination, is_active)
       select org_id, id, 'Group eliminations', base_currency, country, true, true
         from subsidiaries where org_id = ${org.orgId} and id = ${org.subsidiaryId}
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     const context = await GET(new Request("http://localhost/api/inventory/bom"));
     assert.equal(context.status, 200);
     const contextBody = await context.json() as { canProposeRevision: boolean; subsidiaries: { id: string }[] };

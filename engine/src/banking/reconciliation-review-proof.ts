@@ -35,7 +35,7 @@ async function hashRows(
   let after: string | null = null, count = 0
   while (true) {
     if (Date.now()>deadline) throw new BankingError('The evidence review exceeded its interactive time budget. Retry the same review when database capacity is available; nothing was changed.')
-    const rows: EvidenceHashRow[] = (await tx.execute<EvidenceHashRow>(page(after))).rows
+    const rows: EvidenceHashRow[] = await tx.execute<EvidenceHashRow>(page(after), 'objects')
     if (rows.length === 0) break
     for (const row of rows) {
       hash.update(row.id).update('\0').update(row.value).update('\n')
@@ -194,7 +194,7 @@ export async function currentSignOffRevalidation(
      where org_id=${subject.orgId} and table_name='reconciliations' and row_id=${subject.id}
        and action='update' and changes->>'operation'='revalidate_sign_off'
      order by at desc,id desc limit 1
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!row || row.changes.originalSignedOffAt!==subject.signedOffAt
     || row.changes.proof?.digest!==proof.digest || typeof row.changes.reason!=='string'
     || !row.actorId || row.actorId===subject.signedOffBy) return null
@@ -216,7 +216,7 @@ export async function applicableSignOffRevalidation(
   if (proof.reversedMatches>0 || proof.lateEntries===0
     || proof.neutralBasis===null) return null
   type Candidate = {id:string;throughDate:string;statementBalance:string;signedOffAt:string;signedOffBy:string}
-  const candidates = (await tx.execute<Candidate>(sql`
+  const candidates = await tx.execute<Candidate>(sql`
     select r.id,r.through_date::text as "throughDate",r.statement_balance::text as "statementBalance",
       r.signed_off_at::text as "signedOffAt",r.signed_off_by as "signedOffBy"
       from reconciliations r where r.org_id=${subject.orgId} and r.account_id=${subject.accountId}
@@ -227,7 +227,7 @@ export async function applicableSignOffRevalidation(
          and al.changes->>'operation'='revalidate_sign_off'
          and al.changes->'proof'->>'ledgerDigest'=${proof.ledgerDigest})
      order by r.through_date desc,r.id limit 25 for share of r
-  `)).rows
+  `, 'objects')
   const deadline = Date.now()+120_000
   for (const candidate of candidates) {
     const original: SignedReviewSubject = {...subject,id:candidate.id,throughDate:candidate.throughDate,
@@ -247,18 +247,18 @@ export async function applicableSignOffRevalidation(
 export async function originalSignOffProofAgrees(
   tx: SqlExecutor, subject: SignedReviewSubject, proof: ReconciliationReviewProof,
 ): Promise<boolean> {
-  const approvals = (await tx.execute<{changes:{bookId?:unknown;throughDate?:unknown;currency?:unknown;
+  const approvals = await tx.execute<{changes:{bookId?:unknown;throughDate?:unknown;currency?:unknown;
     statementBalance?:unknown;difference?:unknown;matchedJournalLines?:unknown;excludedStatementLines?:unknown}}>(sql`
     select changes from audit_log where org_id=${subject.orgId} and table_name='reconciliations'
       and row_id=${subject.id} and action='approve' and actor_id=${subject.signedOffBy}
       and at=${subject.signedOffAt}::timestamptz and changes->>'operation'='sign_off' limit 2
-  `)).rows
+  `, 'objects')
   const audit = approvals[0]?.changes
   const excluded = (await tx.execute<{count:number}>(sql`
     select count(*)::int as count from bank_statement_lines where org_id=${subject.orgId}
       and account_id=${subject.accountId} and currency=${subject.currency}
       and posted_on<=${subject.throughDate}::date and match_status='excluded'
-  `)).rows[0]?.count
+  `, 'objects'))[0]?.count
   return approvals.length===1 && !!audit && audit.bookId===subject.bookId && audit.throughDate===subject.throughDate
     && audit.currency===subject.currency && audit.statementBalance===subject.statementBalance
     && audit.difference==='0.0000' && audit.matchedJournalLines===proof.journalLines

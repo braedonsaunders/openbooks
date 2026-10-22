@@ -9,10 +9,11 @@ const dialect = new PgDialect();
 Object.assign(globalThis, { __healthQuery: (query: Parameters<PgDialect["sqlToQuery"]>[0]) => dialect.sqlToQuery(query).sql });
 const mocks: Record<string, string> = {
   "server-only": "export {}",
-  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query){
+  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query, mode){
+    const inMode = (result) => (mode === 'objects' ? result.rows : result);
     const s=globalThis.__healthFailures;const text=globalThis.__healthQuery(query);s.queries.push(text);
     if(s.fail && text.includes(s.fail))throw new Error('injected ledger read failure');
-    return {rows:[]};}}`,
+    return inMode({rows:[]});}}`,
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return globalThis.__healthFailures.budgets}",
   "./config": "export async function analyticsConfig(){return {insightCriticalPercent:50,insightWarningPercent:75,revenueDeclineAlertPercent:15,revenueTrendAlertPercent:10,marginCompressionPoints:3,breakevenSafetyPercent:10,breakevenComfortPercent:30,budgetOnTrackPercent:10,budgetWatchPercent:25,segmentHhiWarning:1500,segmentHhiCritical:2500,operatingMarginTarget:15,forecastMethod:\"ets\",forecastHorizon:\"6\",forecastConfidence:\"90\",forecastSeasonality:\"auto\",forecastAdjustment:\"zero\",forecastEtsAlpha:0.3,forecastEtsBeta:0.1,forecastEtsGamma:0.2,forecastDampedPhi:0.9,forecastMa1:0.3,forecastSeasonalityMinCorr:0.3,forecastSeasonalityMinPeriods:24,anomalySigma:2}}",

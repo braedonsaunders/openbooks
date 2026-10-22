@@ -161,13 +161,13 @@ export async function loadAssets(
     getLocale(),
     isMultiSubsidiary(orgId),
     subsidiaryOptions(),
-    db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active order by is_primary desc, code`),
-    db.execute<DepreciationPeriodRow>(sql`select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods where org_id=${orgId} and not is_adjustment order by starts_on desc`),
+    db.execute<AssetBookRow>(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active order by is_primary desc, code`, 'objects'),
+    db.execute<DepreciationPeriodRow>(sql`select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods where org_id=${orgId} and not is_adjustment order by starts_on desc`, 'objects'),
     // Picker rows for the review drawer: live depreciable register only.
     // Reader-scoped like the drawer payload — never the whole tenant.
     db.execute<DepreciationCandidateRow>(authz.allowedSubsidiaryIds
       ? sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(",")}}`}::uuid[]) order by asset_number`
-      : sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') order by asset_number`),
+      : sql`select id, asset_number, name, status from fixed_assets where org_id=${orgId} and custom->'sourceManaged' is distinct from 'true'::jsonb and status in ('in_service','fully_depreciated') order by asset_number`, 'objects'),
   ])
   const subsidiaries = authz.allowedSubsidiaryIds
     ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
@@ -341,7 +341,7 @@ export async function loadAssets(
         currentFormId: resolvedForm.row?.id ?? null,
         fieldDefs: fieldDefs as AssetDrawerProps['fieldDefs'],
         depreciationMethods: pickers[3].rows,
-        periods: depreciationPeriods.rows.map((row) => depreciationPeriodOption(row, locale)),
+        periods: depreciationPeriods.map((row) => depreciationPeriodOption(row, locale)),
         closeHref: editRequestedReturn?.startsWith('/assets') ? editRequestedReturn : '/assets',
         componentsEnabled,
       }
@@ -351,14 +351,14 @@ export async function loadAssets(
   return {
     ...base,
     showActions: canManage,
-    books: depreciationBooks.rows as AssetsData['books'],
-    candidates: depreciationCandidates.rows.map((row) => ({
+    books: depreciationBooks as AssetsData['books'],
+    candidates: depreciationCandidates.map((row) => ({
       id: row.id,
       number: row.asset_number,
       name: row.name,
       status: row.status,
     })),
-    periods: depreciationPeriods.rows.map((row) => depreciationPeriodOption(row, locale)),
+    periods: depreciationPeriods.map((row) => depreciationPeriodOption(row, locale)),
     drawer,
   }
 }

@@ -123,8 +123,8 @@ export const GET = defineRoute({
           join documents d on d.id = r.document_id and d.org_id = r.org_id
           left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
          where r.org_id = ${orgId} and r.document_id = ${id}
-           for share of r,d`))
-      const run = runs.rows[0]
+           for share of r,d`, 'objects'))
+      const run = runs[0]
       if (!run) return notFound("record")
       const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
       if (denied) return denied
@@ -146,7 +146,7 @@ export const GET = defineRoute({
             from pay_stubs st
             join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
            where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
-           order by p.display_name`)
+           order by p.display_name`, 'objects')
       const lines = await tx.execute<Record<string, unknown>>(sql`
           select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
                  c.code as component_code, pr.name as project_name, dep.name as department_name
@@ -156,10 +156,10 @@ export const GET = defineRoute({
             left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
             left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
            where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
-           order by l.stub_id, l.sequence`)
+           order by l.stub_id, l.sequence`, 'objects')
 
       const linesByStub = new Map<string, Record<string, unknown>[]>()
-      for (const line of lines.rows) {
+      for (const line of lines) {
         const stubId = String(line.stub_id)
         const list = linesByStub.get(stubId)
         if (list) list.push(line)
@@ -172,7 +172,7 @@ export const GET = defineRoute({
             join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
             left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
            where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
-           order by p.display_name, a.created_at`)
+           order by p.display_name, a.created_at`, 'objects')
       const adjustableComponents = await tx.execute<Record<string, unknown>>(sql`
           select component.id, component.code, component.name, component.kind,
                  exists(select 1 from entitlement_plans vacation_plan
@@ -193,19 +193,19 @@ export const GET = defineRoute({
                  where plan.org_id=component.org_id and plan.is_active and plan.unit in ('hours','money')
                    and component.kind='earning' and component.payment_kind='cash'
                    and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)))
-           order by component.sequence, component.code`)
+           order by component.sequence, component.code`, 'objects')
 
       return NextResponse.json({
         run,
-        stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
-        adjustments: adjustments.rows.map((row) => {
+        stubs: stubs.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
+        adjustments: adjustments.map((row) => {
           const evidence = parseBankCashInputEvidence(typeof row.note === 'string' ? row.note : null)
           const declaredVacation = parseDeclaredVacationAccrualEvidence(typeof row.note === 'string' ? row.note : null)
           return evidence
             ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}${evidence.outsideBankAmount ? ` · ${evidence.outsideBankAmount} paid outside bank` : ''}` }
             : declaredVacation ? { ...row, note: `${declaredVacation.reason} · ${declaredVacation.sourceReference}` } : row
         }),
-        adjustableComponents: adjustableComponents.rows,
+        adjustableComponents,
       })
     })
 
@@ -257,7 +257,7 @@ export const POST = defineRoute({
       select d.subsidiary_id as "subsidiaryId"
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`, 'objects'))[0]
     if (!owned) return notFound("record")
     const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
     if (denied) return denied
@@ -333,7 +333,7 @@ export const POST = defineRoute({
           // Batch-level replay gate: a committed batch is all-or-nothing, so a
           // partial match means the key was reused for a different batch —
           // refuse rather than top it up.
-          const existing = (await db.execute<{
+          const existing = await db.execute<{
             id: string; employee_party_id: string; component_id: string | null;
             amount: string | null; hours: string | null; replace_component: boolean; note: string | null;
           }>(sql`
@@ -344,7 +344,7 @@ export const POST = defineRoute({
              where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
                and adjustment_type = 'line'
                and id = any(${`{${requestIds.join(',')}}`}::uuid[])
-          `)).rows
+          `, 'objects')
           if (existing.length > 0) {
             const byId = new Map(existing.map((row) => [row.id, row]))
             const replay = existing.length === requestIds.length
@@ -679,8 +679,8 @@ export const POST = defineRoute({
             select employee_party_id from pay_run_adjustments
              where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
                and adjustment_type = 'exclude'
-          `))
-          const excluded = new Set(excludedRows.rows.map((row) => row.employee_party_id))
+          `, 'objects'))
+          const excluded = new Set(excludedRows.map((row) => row.employee_party_id))
           for (const employeePartyId of roster as string[]) {
             const wanted = keep.has(employeePartyId) ? 'include' : 'exclude'
             const current = excluded.has(employeePartyId) ? 'exclude' : 'include'
@@ -837,7 +837,7 @@ export const POST = defineRoute({
           select d.subsidiary_id as "subsidiaryId"
             from pay_runs r
             join documents d on d.id = r.document_id and d.org_id = r.org_id
-           where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+           where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`, 'objects'))[0]
         if (!owned) return notFound("record")
         const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
         if (denied) return denied
@@ -892,7 +892,7 @@ export const DELETE = defineRoute({
       select d.subsidiary_id as "subsidiaryId"
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`, 'objects'))[0]
     if (!owned) return notFound("record")
     const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
     if (denied) return denied

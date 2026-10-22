@@ -321,7 +321,7 @@ export async function reconciliationEvidence(
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
          ${subsidiaryScopeSql(ctx.allowedSubsidiaryIds, sql`a.subsidiary_id`)}
-    `)).rows[0];
+    `, "objects"))[0];
     // Missing and out-of-scope sessions refuse identically.
     if (!session) throw new ScopeNotFoundError();
 
@@ -332,7 +332,7 @@ export async function reconciliationEvidence(
          and through_date < ${session.through_date}::date
        order by through_date desc, created_at desc, id desc
        limit 1
-    `)).rows[0]?.through_date ?? null;
+    `, "objects"))[0]?.through_date ?? null;
 
     const scope = {
       orgId: ctx.orgId,
@@ -343,7 +343,7 @@ export async function reconciliationEvidence(
     };
     const windowLines = windowLinesCte(scope);
 
-    const statements = (await db.execute<StatementRow>(sql`
+    const statements = await db.execute<StatementRow>(sql`
       with ${windowLines},
       session_statements as (
         select distinct l.statement_id
@@ -368,9 +368,9 @@ export async function reconciliationEvidence(
        where s.org_id = ${ctx.orgId} and s.account_id = ${session.account_id}
          and (c.window_lines > 0 or exists (select 1 from session_statements ss where ss.statement_id = s.id))
        order by s.statement_date asc, s.imported_at asc, s.id asc
-    `)).rows;
+    `, "objects");
 
-    const excluded = (await db.execute<ExcludedRow>(sql`
+    const excluded = await db.execute<ExcludedRow>(sql`
       with ${windowLines}
       select w.id, w.statement_id, w.posted_on::text as posted_on, w.amount::text as amount,
              w.description, w.exclusion_reason,
@@ -382,12 +382,12 @@ export async function reconciliationEvidence(
         left join users u on u.id = w.excluded_by and u.org_id = ${ctx.orgId}
        where w.match_status = 'excluded'
        order by w.posted_on asc, w.statement_id asc, w.line_number asc
-    `)).rows;
+    `, "objects");
 
     // Sign-offs, withdrawals, discards, confirmations and adjustments. A
     // discard is keyed to the deleted session, so discards are matched by the
     // account they released; the account is already scope-checked above.
-    const history = (await db.execute<HistoryRow>(sql`
+    const history = await db.execute<HistoryRow>(sql`
       select to_char(al.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at,
              al.changes, actor.name as actor_name, prior.name as prior_signer_name
         from audit_log al
@@ -403,7 +403,7 @@ export async function reconciliationEvidence(
                and al.changes->'before'->>'accountId' = ${session.account_id}::text)
          )
        order by al.at asc, al.id asc
-    `)).rows;
+    `, "objects");
 
     return {
       reconciliation: {

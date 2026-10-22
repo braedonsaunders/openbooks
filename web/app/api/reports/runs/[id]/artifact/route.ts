@@ -25,8 +25,8 @@ export const GET = defineRoute({
           join report_runs r on r.id=a.run_id and r.org_id=a.org_id
           join report_definitions def on def.id = r.definition_id and def.org_id = r.org_id
          where r.id=${id} and r.org_id=${gate.user.orgId}
-      `))
-    const row = result.rows[0]
+      `, 'objects'))
+    const row = result[0]
     if (!row) return notFound("record")
     // The render that produced these bytes answers for what they hold.
     const access = await reportArtifactAccessDetail(gate, row.authorization_snapshot, { contentHash: row.content_hash })

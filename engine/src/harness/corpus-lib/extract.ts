@@ -20,9 +20,9 @@ export async function trialBalanceByKey(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id`));
+     group by l.account_id`, "objects"));
   const out: Record<string, string> = {};
-  for (const r of rows.rows) {
+  for (const r of rows) {
     const key = keyById.get(r.account_id);
     if (!key) throw new Error(`posted line on account ${r.account_id} outside the corpus account set`);
     if (toUnits(r.bal) !== 0n) out[key] = fromUnits(toUnits(r.bal));
@@ -51,9 +51,9 @@ export async function openBalancesByParty(
       join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
      -- Live entries only: a voided document is not owed today, so it carries no open balance.
      where d.org_id = ${orgId} and d.status = 'posted'
-     group by d.party_id, d.kind`));
+     group by d.party_id, d.kind`, "objects"));
   const out: Record<string, { ar?: string; ap?: string }> = {};
-  for (const r of rows.rows) {
+  for (const r of rows) {
     const key = keyById.get(r.party_id);
     if (!key) throw new Error(`open item for party ${r.party_id} outside the corpus party set`);
     const side = r.kind.startsWith("customer") ? "ar" : "ap";
@@ -91,9 +91,9 @@ export async function projectRollups(
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id
      where l.org_id = ${orgId} and l.project_id is not null
-     group by l.project_id`));
+     group by l.project_id`, "objects"));
   const out: Record<string, ProjectRollup> = {};
-  for (const r of rows.rows) {
+  for (const r of rows) {
     const key = keyById.get(r.project_id);
     if (!key) throw new Error(`project-tagged line for project ${r.project_id} outside the corpus project set`);
     out[key] = {

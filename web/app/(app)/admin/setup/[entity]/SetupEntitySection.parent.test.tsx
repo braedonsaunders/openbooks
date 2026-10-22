@@ -11,7 +11,7 @@ stubModules({
     '../authz': 'export async function getAuthz() { return { user: { id: "actor", orgId: "11111111-1111-4111-8111-111111111111" } } }',
     '@openbooks/engine/hrm/benefits': 'export async function benefitCurrencyOptions() { return [] }',
 
-    '@openbooks/engine/platform/db': 'export const db = { execute(query) { return globalThis.__setupParentExecute(query) } }; export function ambientTenantOrgId() { return null }; export function withBypassContext(fn) { return fn() }; export function currentRequestOrgResolver() { return null }; export function registerRequestOrgResolver() {}',
+    '@openbooks/engine/platform/db': 'export const db = { execute(query, mode) { const inMode = (result) => (mode === "objects" ? result.rows : result); return Promise.resolve(globalThis.__setupParentExecute(query)).then(inMode) } }; export function ambientTenantOrgId() { return null }; export function withBypassContext(fn) { return fn() }; export function currentRequestOrgResolver() { return null }; export function registerRequestOrgResolver() {}',
   },
 })
 

@@ -169,10 +169,11 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.search-permission-test')]
 
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.queries.push({ text: query.text, values: [...query.values] })
           if (query.text.includes('select id, code, name from projects')) {
-            return { rows: state.projectRows }
+            return inMode({ rows: state.projectRows })
           }
           if (query.text.includes('from journal_entries')) {
             let rows = state.entries
@@ -185,7 +186,7 @@ const mockSources = new Map<string, string>([
             if (query.text.includes('journal_lines visible') && subsidiaryIds.size > 0) {
               rows = rows.filter((row) => row.lineSubsidiaryIds.some((id) => subsidiaryIds.has(id)))
             }
-            return { rows }
+            return inMode({ rows })
           }
           // Recently opened documents re-resolve by id through the same
           // kind allowlist and subsidiary fence as a search.
@@ -202,9 +203,9 @@ const mockSources = new Map<string, string>([
             if (query.text.includes('d.subsidiary_id') && subsidiaryIds.size > 0) {
               rows = rows.filter((row) => subsidiaryIds.has(row.subsidiary_id))
             }
-            return { rows }
+            return inMode({ rows })
           }
-          if (!query.text.includes('with cand as')) return { rows: [] }
+          if (!query.text.includes('with cand as')) return inMode({ rows: [] })
 
           const knownKinds = new Set(state.documents.map((row) => row.kind))
           const boundKinds = new Set(query.values.filter((value) => knownKinds.has(value)))
@@ -221,7 +222,7 @@ const mockSources = new Map<string, string>([
           if (query.text.includes('d.subsidiary_id') && subsidiaryIds.size > 0) {
             rows = rows.filter((row) => subsidiaryIds.has(row.subsidiary_id))
           }
-          return { rows }
+          return inMode({ rows })
         },
       }
 

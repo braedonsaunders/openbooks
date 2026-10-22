@@ -80,14 +80,14 @@ function postRequest(body: unknown): Request {
 
 async function viewCount(orgId: string): Promise<number> {
   const r = await db.execute<{ c: number }>(sql`
-    select count(*)::int as c from list_views where org_id = ${orgId}`);
-  return Number(r.rows[0]?.c ?? 0);
+    select count(*)::int as c from list_views where org_id = ${orgId}`, "objects");
+  return Number(r[0]?.c ?? 0);
 }
 
 async function defaultNames(orgId: string): Promise<string[]> {
   const r = await db.execute<{ name: string }>(sql`
-    select name from list_views where org_id = ${orgId} and is_default order by name`);
-  return r.rows.map((row) => row.name);
+    select name from list_views where org_id = ${orgId} and is_default order by name`, "objects");
+  return r.map((row) => row.name);
 }
 
 test(

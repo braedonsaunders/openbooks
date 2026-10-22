@@ -18,17 +18,17 @@ test("every engine-written change kind passes the employment_changes CHECK", asy
     const userId = await createScratchUser(org.orgId, "Kind Guard", "kind_guard");
     const subsidiary = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries where org_id = ${org.orgId} order by id limit 1
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const party = (await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name)
       values (${org.orgId}, 'employee', 'Kind Guard')
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const employment = (await db.execute<{ id: string }>(sql`
       insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
       values (${org.orgId}, ${party}, ${subsidiary})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     let revision = 1;
     for (const kind of EMPLOYMENT_CHANGE_KINDS) {
       const inserted = await db.execute<{ id: string }>(sql`
@@ -38,8 +38,8 @@ test("every engine-written change kind passes the employment_changes CHECK", asy
         values (${org.orgId}, ${employment}, ${revision}, ${kind}, '{}'::jsonb,
                 'kind vocabulary guard', 'user', ${userId}, '[]'::jsonb)
         returning id
-      `);
-      assert.equal(inserted.rows.length, 1, `kind ${kind} must pass the employment_changes CHECK`);
+      `, "objects");
+      assert.equal(inserted.length, 1, `kind ${kind} must pass the employment_changes CHECK`);
       revision += 1;
     }
     assert.equal(revision - 1, EMPLOYMENT_CHANGE_KINDS.length, "one row per engine-written kind");

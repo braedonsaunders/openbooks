@@ -155,7 +155,7 @@ test('statement picker rows open that customer statement for the period', { skip
   try {
     const invoiceId = randomUUID()
     await withBypassContext(async () => {
-      const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id as string
+      const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, 'objects'))[0]!.id as string
       await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${randomUUID()}, ${org.orgId}, 2026, 1, '2026-01', '2026-01-01', '2026-01-31', false, ${calendarId})`)
       await db.execute(sql`insert into documents

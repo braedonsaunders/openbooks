@@ -26,11 +26,9 @@ async function seedDueId(org: Org, actorId: string, value: string): Promise<stri
 }
 
 async function readRow(org: Org, id: string): Promise<{ status: string; revalidateAfter: string | null }> {
-  const rows = (
-    await db.execute<{ status: string; revalidateAfter: string | null }>(sql`
+  const rows = await db.execute<{ status: string; revalidateAfter: string | null }>(sql`
       select status, revalidate_after::text as "revalidateAfter" from party_tax_ids
-       where org_id = ${org.orgId} and id = ${id}`)
-  ).rows;
+       where org_id = ${org.orgId} and id = ${id}`, "objects");
   return { status: rows[0]!.status, revalidateAfter: rows[0]!.revalidateAfter };
 }
 

@@ -103,8 +103,8 @@ export const POST = defineRoute({
         select i.kind
           from crm_opportunity_lines line
           join items i on i.id = line.item_id and i.org_id = line.org_id
-         where line.org_id = ${user.orgId} and line.opportunity_id = ${id}`))
-      if (lineItems.rows.some((row) => INVENTORY_ITEM_KINDS.has(row.kind))) {
+         where line.org_id = ${user.orgId} and line.opportunity_id = ${id}`, 'objects'))
+      if (lineItems.some((row) => INVENTORY_ITEM_KINDS.has(row.kind))) {
         return notFound("record")
       }
     }
@@ -115,8 +115,8 @@ export const POST = defineRoute({
       await tx.execute(sql`
         select pg_advisory_xact_lock(hashtextextended(${draftId}, 0))`)
       const opportunity = (await tx.execute(sql`
-        select o.* from crm_opportunities o where o.id = ${id} and o.org_id = ${user.orgId} and o.is_active${crmOpportunityScope(gate.allowedSubsidiaryIds)} for update of o`))
-      const op = opportunity.rows[0]
+        select o.* from crm_opportunities o where o.id = ${id} and o.org_id = ${user.orgId} and o.is_active${crmOpportunityScope(gate.allowedSubsidiaryIds)} for update of o`, 'objects'))
+      const op = opportunity[0]
       if (!op) return notFound("record")
       if (!op?.party_id) {
         return NextResponse.json({ error: t('opportunities.estimateNeedsAccount') }, { status: 422 })
@@ -128,7 +128,7 @@ export const POST = defineRoute({
       const claim = await claimSetupCreate(tx, { orgId: user.orgId, table: 'documents', key: draftId, match })
       if (claim.kind === 'replay') {
         const live = (await tx.execute<{ id: string; document_number: string }>(sql`
-          select id, document_number from documents where id = ${draftId} and org_id = ${user.orgId}`)).rows[0]
+          select id, document_number from documents where id = ${draftId} and org_id = ${user.orgId}`, 'objects'))[0]
         if (live) return { replay: true as const, id: live.id, documentNumber: live.document_number }
       }
       // Every source line must be represented on the quote: document lines
@@ -138,10 +138,10 @@ export const POST = defineRoute({
       // name, listing the lines, before the number is consumed or anything is
       // written. (A non-null item_id always joins: the line FK is composite on
       // (org_id, item_id), so the item exists in this org by construction.)
-      const lines = (await tx.execute(sql`
+      const lines = await tx.execute(sql`
         select * from crm_opportunity_lines
          where org_id = ${user.orgId} and opportunity_id = ${id}
-         order by line_number`)).rows
+         order by line_number`, 'objects')
       if (!lines.length) {
         return NextResponse.json({ error: t('opportunities.estimateNeedsLines') }, { status: 422 })
       }
@@ -160,8 +160,8 @@ export const POST = defineRoute({
         values (${draftId}, ${user.orgId}, 'quote', ${number}, ${op.party_id}, ${op.subsidiary_id}, ${today},
                 ${op.expected_close_date}, ${op.currency}, 'draft', ${op.department_id}, ${op.location_id},
                 ${op.class_id}, ${JSON.stringify(op.extra_dims ?? {})}::jsonb, ${op.title}, ${projected},
-                0, ${projected}, ${user.id}, ${user.id}) returning id`))
-      const docId = document.rows[0]!.id
+                0, ${projected}, ${user.id}, ${user.id}) returning id`, 'objects'))
+      const docId = document[0]!.id
       for (const line of lines) await tx.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, item_id, account_id, description, quantity, unit, unit_price,

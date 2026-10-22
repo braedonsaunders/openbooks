@@ -33,7 +33,7 @@ const request = (body: unknown) => new Request('http://audit.local/api/documents
 async function documentState(orgId: string, id: string) {
   return withBypassContext(async () =>
     (await db.execute<{ status: string; postedEntryId: string | null }>(sql`
-      select status, posted_entry_id as "postedEntryId" from documents where id = ${id} and org_id = ${orgId}`)).rows[0]!,
+      select status, posted_entry_id as "postedEntryId" from documents where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!,
   )
 }
 
@@ -161,7 +161,7 @@ test('documents/actions submit evidences the transition in the audit trail', asy
       assert.equal(submitted.status, 200, JSON.stringify(await submitted.clone().json()))
     })
     const trail = (await withBypassContext(() => db.execute<{ action: string }>(sql`
-      select action from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${invoiceId} order by action`))).rows.map((r) => r.action)
+      select action from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${invoiceId} order by action`, 'objects'))).map((r) => r.action)
     assert.ok(trail.includes('submit'), `audit trail evidences submit, got [${trail}]`)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -222,14 +222,14 @@ test('documents/actions submit with refused routing commits no script effects', 
       assert.match(body.error ?? '', /Flow .+ has an invalid graph\. Open Flows to correct it before submitting this record\./)
     })
     const after = (await withBypassContext(() => db.execute<{ status: string; memo: string | null }>(sql`
-      select status, memo from documents where id = ${invoiceId} and org_id = ${org.orgId}`))).rows[0]!
+      select status, memo from documents where id = ${invoiceId} and org_id = ${org.orgId}`, 'objects')))[0]!
     assert.equal(after.status, 'draft')
     assert.equal(after.memo, null, 'the refused submission must not commit its script mutation')
-    const runs = (await withBypassContext(() => db.execute(sql`
-      select id from flow_runs where subject_id = ${invoiceId}`))).rows
+    const runs = await withBypassContext(() => db.execute(sql`
+      select id from flow_runs where subject_id = ${invoiceId}`, 'objects'))
     assert.equal(runs.length, 0, 'the refused dispatch must not commit its failed run')
-    const scriptRuns = (await withBypassContext(() => db.execute(sql`
-      select id from script_runs where org_id = ${org.orgId}`))).rows
+    const scriptRuns = await withBypassContext(() => db.execute(sql`
+      select id from script_runs where org_id = ${org.orgId}`, 'objects'))
     assert.equal(scriptRuns.length, 0, 'the refused submission must not commit its script run rows')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))

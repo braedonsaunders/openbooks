@@ -207,7 +207,7 @@ export async function provisionResourcingPlan(ctx: ProvisionResourcingPlanContex
   const capacity = (await db.execute<{ annual_hours: string | null }>(sql`
     select settings->'laborCosting'->>'annualHours' as annual_hours
       from orgs where id = ${ctx.world.orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!capacity?.annual_hours) {
     throw new Error("resourcing plans require the organization's labor-costing standard hours");
   }

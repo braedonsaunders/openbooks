@@ -106,8 +106,8 @@ async function firstYearRule(
        and (acquired_from is null or acquired_from <= ${onDate})
        and (acquired_to is null or acquired_to >= ${onDate})
      order by class_code nulls last, acquired_from desc nulls last
-     limit 1`));
-  const row = r.rows[0];
+     limit 1`, "objects"));
+  const row = r[0];
   if (!row) return { firstYearFraction: defaultFraction };
   return { firstYearFraction: row.fraction, enhancedMultiplier: row.mult ?? undefined };
 }
@@ -116,8 +116,8 @@ async function firstYearRule(
  *  An org regime row can override it; Canadian configurations use "ca_cca_class". */
 async function regimeClassAttribute(tx: SqlExecutor, orgId: string, regime: string): Promise<string> {
   const r = (await tx.execute<{ class_attribute: string }>(sql`
-    select class_attribute from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`));
-  return r.rows[0]?.class_attribute ?? TAX_DEPRECIATION_REGIMES[regime]?.classAttribute ?? "tax_pool_class";
+    select class_attribute from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`, "objects"));
+  return r[0]?.class_attribute ?? TAX_DEPRECIATION_REGIMES[regime]?.classAttribute ?? "tax_pool_class";
 }
 
 /** Per-asset regime elections take precedence over the category assignment in
@@ -129,8 +129,8 @@ function effectiveAssetClassExpression(regime: string, attribute: string) {
 
 async function regimeModel(tx: SqlExecutor, orgId: string, regime: string): Promise<"pool" | "macrs"> {
   const r = (await tx.execute<{ calculation_model: "pool" | "macrs" }>(sql`
-    select calculation_model from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`));
-  return r.rows[0]?.calculation_model ?? TAX_DEPRECIATION_REGIMES[regime]?.calculationModel ?? "pool";
+    select calculation_model from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`, "objects"));
+  return r[0]?.calculation_model ?? TAX_DEPRECIATION_REGIMES[regime]?.calculationModel ?? "pool";
 }
 
 /** Effective class definitions for a regime: built-in defaults with org
@@ -142,8 +142,8 @@ async function effectiveClasses(tx: SqlExecutor, orgId: string, regime: string):
     select class_code, name, rate::text as rate, method, first_year_fraction::text as fyf,
            allow_recapture, allow_terminal_loss, cost_cap::text as cost_cap,
            depreciation_system, macrs_method, recovery_period_years::text as recovery_period_years, convention
-      from tax_pool_classes where org_id = ${orgId} and regime = ${regime} and is_active`));
-  for (const r of rows.rows) {
+      from tax_pool_classes where org_id = ${orgId} and regime = ${regime} and is_active`, "objects"));
+  for (const r of rows) {
     const builtIn = TAX_DEPRECIATION_REGIMES[regime]?.classes[r.class_code];
     map.set(r.class_code, {
       ...builtIn,
@@ -165,16 +165,16 @@ async function effectiveClasses(tx: SqlExecutor, orgId: string, regime: string):
 /** Regimes available for a run/picker: company-country built-ins plus matching
  * tenant-defined regimes. An inactive tenant row can explicitly hide a built-in. */
 export async function listTaxRegimes(orgId: string): Promise<{ code: string; name: string; countryCode: string | null; calculationModel: "pool" | "macrs" }[]> {
-  const org = (await db.execute<{ country: string }>(sql`select upper(country) as country from orgs where id = ${orgId}`));
-  const country = org.rows[0]?.country ?? "";
+  const org = (await db.execute<{ country: string }>(sql`select upper(country) as country from orgs where id = ${orgId}`, "objects"));
+  const country = org[0]?.country ?? "";
   const byCode = new Map<string, { code: string; name: string; countryCode: string | null; calculationModel: "pool" | "macrs" }>();
   for (const r of Object.values(TAX_DEPRECIATION_REGIMES)) {
     if (r.countryCode === country) byCode.set(r.code, { code: r.code, name: r.name, countryCode: r.countryCode, calculationModel: r.calculationModel });
   }
   const rows = (await db.execute<{ code: string; name: string; country_code: string | null; calculation_model: "pool" | "macrs"; is_active: boolean }>(sql`
     select code, name, upper(country_code) as country_code, calculation_model, is_active
-      from tax_regimes where org_id = ${orgId}`));
-  for (const r of rows.rows) {
+      from tax_regimes where org_id = ${orgId}`, "objects"));
+  for (const r of rows) {
     if (!r.is_active) { byCode.delete(r.code); continue; }
     // Explicitly installed tenant regimes remain available even when they are
     // for a country other than the company default (multi-jurisdiction groups).
@@ -226,7 +226,7 @@ export async function runTaxPool(
           )
           or exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id
             and t.effective_on<=${opts.yearEnd} and (t.reversed_on is null or t.reversed_on>${opts.yearEnd}))
-        ) order by a.asset_number limit 1`)).rows[0];
+        ) order by a.asset_number limit 1`, "objects"))[0];
     if (unpricedLifecycle) throw new TaxPoolError(
       `Tax depreciation for asset ${unpricedLifecycle.asset_number} requires native statutory basis treatment of its approved disposal or intercompany transfer. ` +
       `That lifecycle is not yet integrated with the ${regime} calculation, so no tax result has been produced. ` +
@@ -289,8 +289,8 @@ async function latestComputedTaxYear(
       from tax_pool_periods pp
       join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
      where tp.org_id = ${orgId} and tp.book_id = ${bookId}
-       and tp.subsidiary_id = ${subsidiaryId} and tp.regime = ${regime}`));
-  return r.rows[0]?.latest ?? null;
+       and tp.subsidiary_id = ${subsidiaryId} and tp.regime = ${regime}`, "objects"));
+  return r[0]?.latest ?? null;
 }
 
 async function runPools(
@@ -332,9 +332,9 @@ async function runPools(
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
        and coalesce(${assetClass}, '') <> ''
-     order by class_code, a.id`));
+     order by class_code, a.id`, "objects"));
 
-  const unknownClasses = [...new Set(assetRows.rows
+  const unknownClasses = [...new Set(assetRows
     .map((row) => row.class_code)
     .filter((classCode) => !classes.has(classCode)))].sort();
   if (unknownClasses.length > 0) {
@@ -365,7 +365,7 @@ async function runPools(
     return cap;
   };
 
-  for (const row of assetRows.rows) {
+  for (const row of assetRows) {
     const classDef = classes.get(row.class_code)!;
     const aggregate = addAggregate(row.class_code);
     const capitalCost = cappedCost(row.acquisition_cost, classDef, row.acquired_on);
@@ -392,8 +392,8 @@ async function runPools(
        and e.kind in ('disposed', 'written_off')
        and e.occurred_on between ${run.yearStart} and ${run.yearEnd}
        and coalesce(${assetClass}, '') <> ''
-       `));
-  for (const row of dispRows.rows) {
+       `, "objects"));
+  for (const row of dispRows) {
     const classDef = classes.get(row.class_code)!;
     const aggregate = addAggregate(row.class_code);
     const capitalCost = cappedCost(row.acquisition_cost, classDef, row.acquired_on);
@@ -414,7 +414,7 @@ async function runPools(
   // carried pool has a nonzero latest balance, omitting that class would make
   // the next run appear complete while dropping the carry-forward. Keep every
   // open prior pool represented by at least one currently classified asset.
-  const openPools = (await tx.execute<{ class_code: string; closing_balance: string }>(sql`
+  const openPools = await tx.execute<{ class_code: string; closing_balance: string }>(sql`
     select tp.class_code, latest.closing_balance::text
       from tax_depreciation_pools tp
       join lateral (
@@ -427,7 +427,7 @@ async function runPools(
      where tp.org_id = ${orgId} and tp.book_id = ${run.bookId}
        and tp.subsidiary_id = ${run.subsidiaryId} and tp.regime = ${run.regime}
        and latest.closing_balance <> 0
-     order by tp.class_code`)).rows;
+     order by tp.class_code`, "objects");
   const representedClasses = new Set(classRows.map(({ class_code }) => class_code));
   const omittedOpenPool = openPools.find(({ class_code }) => !representedClasses.has(class_code));
   if (omittedOpenPool) {
@@ -548,9 +548,9 @@ async function runMacrs(
      where a.org_id = ${orgId} and a.subsidiary_id = ${run.subsidiaryId}
        and not exists(select 1 from asset_transfer_bases t where t.org_id=a.org_id and t.receiving_asset_id=a.id and t.reversed_on<=${run.yearEnd})
        and coalesce(a.in_service_on, a.acquired_on) is not null
-       and coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`));
+       and coalesce(a.custom->'taxDepreciation'->${run.regime}->>'classCode', c.tax_attributes->>${attr}, '') <> ''`, "objects"));
 
-  const unknownClasses = [...new Set(assets.rows
+  const unknownClasses = [...new Set(assets
     .map((asset) => asset.class_code)
     .filter((classCode) => !classes.has(classCode)))].sort();
   if (unknownClasses.length > 0) {
@@ -563,7 +563,7 @@ async function runMacrs(
   // same Section 179 and business-use elections as each asset's MACRS schedule
   // and excludes bonus depreciation from the test basis (IRS Pub. 946).
   const vintageAssets = new Map<number, MacrsMidQuarterTestAsset[]>();
-  for (const asset of assets.rows) {
+  for (const asset of assets) {
     const year = Number(asset.placed_on.slice(0, 4));
     const config = taxAssetConfig(asset.custom, run.regime);
     const vintage = vintageAssets.get(year) ?? [];
@@ -580,7 +580,7 @@ async function runMacrs(
     [year, macrsVintageUsesMidQuarter(vintage, year)]));
 
   const grouped = new Map<string, { def: PoolClassDef; assets: MacrsAssetRow[] }>();
-  for (const asset of assets.rows) {
+  for (const asset of assets) {
     const def = classes.get(asset.class_code);
     if (!def) throw new TaxPoolError(`unknown tax class code "${asset.class_code}"`);
     if (!def.recoveryPeriodYears || !def.macrsMethod || !def.convention) {
@@ -689,14 +689,14 @@ async function openingForTaxYear(tx: SqlExecutor, orgId: string, poolId: string,
     select opening_balance::text as opening
       from tax_pool_periods
      where org_id=${orgId} and pool_id=${poolId} and tax_year = ${taxYear}
-     limit 1`));
-  if (rerun.rows[0]) return rerun.rows[0].opening;
+     limit 1`, "objects"));
+  if (rerun[0]) return rerun[0].opening;
   const prior = (await tx.execute<{ closing: string }>(sql`
     select closing_balance::text as closing
       from tax_pool_periods
      where org_id=${orgId} and pool_id=${poolId} and tax_year < ${taxYear}
-     order by tax_year desc limit 1`));
-  return prior.rows[0]?.closing ?? fallback;
+     order by tax_year desc limit 1`, "objects"));
+  return prior[0]?.closing ?? fallback;
 }
 
 async function ensurePool(
@@ -708,13 +708,13 @@ async function ensurePool(
     select id, opening_balance::text as opening from tax_depreciation_pools
      where org_id = ${run.orgId} and book_id = ${run.bookId} and subsidiary_id = ${run.subsidiaryId}
        and regime = ${run.regime} and class_code = ${classDef.code} and is_separate_class = false
-     limit 1`));
-  if (existing.rows[0]) return { id: existing.rows[0].id, openingBalance: existing.rows[0].opening };
+     limit 1`, "objects"));
+  if (existing[0]) return { id: existing[0].id, openingBalance: existing[0].opening };
   // Under the scope's advisory lock no concurrent run can be inserting the
   // same pool, so this check-then-insert cannot race.
   const ins = (await tx.execute<{ id: string }>(sql`
     insert into tax_depreciation_pools (org_id, book_id, subsidiary_id, regime, class_code, rate, method, created_by, updated_by)
     values (${run.orgId}, ${run.bookId}, ${run.subsidiaryId}, ${run.regime}, ${classDef.code}, ${normalizeDecimal(classDef.rate, 10)}, ${classDef.method}, ${run.actorId}, ${run.actorId})
-    returning id`));
-  return { id: ins.rows[0]!.id, openingBalance: "0" };
+    returning id`, "objects"));
+  return { id: ins[0]!.id, openingBalance: "0" };
 }

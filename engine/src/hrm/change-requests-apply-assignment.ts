@@ -47,11 +47,11 @@ export async function applyAssignmentChange(
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
   await assertAssignmentRefs(exec, { orgId, employmentId: request.employment_id, payload });
 
-  const slotRows = (await exec.execute<{ id: string }>(sql`
+  const slotRows = await exec.execute<{ id: string }>(sql`
     select id from employment_assignments
      where org_id = ${orgId} and employment_id = ${request.employment_id}
        and assignment_key = ${payload.assignmentKey}
-  `)).rows;
+  `, "objects");
   const slotId = slotRows[0]?.id ?? null;
 
   if (slotId === null) {
@@ -177,13 +177,13 @@ export async function applyAssignmentChange(
     actorId,
   });
   for (const version of overlapping) {
-    const closed = (await exec.execute(sql`
+    const closed = await exec.execute(sql`
       update employment_assignment_versions
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${version.id} and recorded_until is null
       returning id
-    `)).rows;
+    `, "objects");
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -275,7 +275,7 @@ export async function applyPositionAssignment(
     const found = (await exec.execute<{ id: string; position_code: string; revision: number }>(sql`
       select id, position_code, revision from positions
        where org_id = ${orgId} and id = ${payload.positionId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -285,11 +285,11 @@ export async function applyPositionAssignment(
     target = found;
   }
 
-  const slotRows = (await exec.execute<{ id: string }>(sql`
+  const slotRows = await exec.execute<{ id: string }>(sql`
     select id from employment_assignments
      where org_id = ${orgId} and employment_id = ${request.employment_id}
        and assignment_key = ${payload.assignmentKey}
-  `)).rows;
+  `, "objects");
   const slotId = slotRows[0]?.id ?? null;
 
   if (slotId === null) {
@@ -314,7 +314,7 @@ export async function applyPositionAssignment(
       insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
       values (${orgId}, ${request.employment_id}, ${payload.assignmentKey}, ${actorId}, ${actorId})
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!issuedId) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -468,13 +468,13 @@ export async function applyPositionAssignment(
     actorId,
   });
   for (const version of overlapping) {
-    const closed = (await exec.execute(sql`
+    const closed = await exec.execute(sql`
       update employment_assignment_versions
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${version.id} and recorded_until is null
       returning id
-    `)).rows;
+    `, "objects");
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",

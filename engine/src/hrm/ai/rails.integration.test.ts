@@ -52,8 +52,8 @@ async function grant(orgId: string, userId: string, permission: string): Promise
 }
 
 async function decisionCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from ai_decisions where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ n: string }>(sql`
+    select count(*)::text as n from ai_decisions where org_id = ${orgId}`, "objects");
   return Number(rows[0]?.n ?? 0);
 }
 
@@ -77,14 +77,14 @@ test("native workforce policy provisioning retains saved thresholds and refuses 
     await db.execute(sql`update ai_rails_settings set z_threshold=4.25, retro_threshold=725, bias_terms=array['sample phrase']::text[], review_months=6 where org_id=${org.orgId}`);
     await ensureAiRailsSettingsForOrg(org.orgId, adminId);
     const saved = (await db.execute<{ z: string; retro: string; terms: string[]; months: number }>(sql`
-      select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`)).rows[0]!;
+      select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`, "objects"))[0]!;
     assert.equal(Number(saved.z), 4.25);
     assert.equal(Number(saved.retro), 725);
     assert.deepEqual(saved.terms, ['sample phrase']);
     assert.equal(saved.months, 6);
     const denied = await createScratchUser(org.orgId, 'Policy reader', 'policy_reader');
     await assert.rejects(ensureAiRailsSettingsForOrg(org.orgId, denied), (error) => error instanceof ScopeNotFoundError);
-    const unchanged = (await db.execute(sql`select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`)).rows[0];
+    const unchanged = (await db.execute(sql`select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`, "objects"))[0];
     assert.deepEqual(unchanged, saved);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -96,13 +96,13 @@ test("migration tables exist with org isolation RLS", { skip: !DB }, async () =>
       "ai_capabilities", "ai_decisions", "payroll_anomaly_flags",
       "anomaly_baselines", "nl_report_drafts", "ai_rails_settings",
     ]) {
-      const rows = (await db.execute<{ rls: boolean; policy: boolean }>(sql`
+      const rows = await db.execute<{ rls: boolean; policy: boolean }>(sql`
         select c.relrowsecurity as rls,
                exists(select 1 from pg_policies
                        where schemaname = 'public' and tablename = ${table}
                          and policyname = 'org_isolation') as policy
           from pg_class c join pg_namespace n on n.oid = c.relnamespace
-         where n.nspname = 'public' and c.relname = ${table}`)).rows;
+         where n.nspname = 'public' and c.relname = ${table}`, "objects");
       assert.equal(rows[0]?.rls, true, `${table} must force RLS`);
       assert.equal(rows[0]?.policy, true, `${table} needs the org_isolation policy`);
     }
@@ -146,8 +146,8 @@ test("ai_decisions is append-only: UPDATE and DELETE refuse", { skip: !DB }, asy
       db.execute(sql`delete from ai_decisions where id = ${id}::uuid`),
       /append-only/,
     );
-    const rows = (await db.execute<{ outcome: string }>(sql`
-      select outcome from ai_decisions where id = ${id}::uuid`)).rows;
+    const rows = await db.execute<{ outcome: string }>(sql`
+      select outcome from ai_decisions where id = ${id}::uuid`, "objects");
     assert.equal(rows[0]?.outcome, "shown");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -168,9 +168,9 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
     assert.equal(await decisionCount(org.orgId), beforeDecisions + 1, "each committed capability change has its governance row");
     const reseeded = await syncCapabilities(db, org.orgId, adminId);
     assert.deepEqual(reseeded, []);
-    const rows = (await db.execute<{ autonomy: string }>(sql`
+    const rows = await db.execute<{ autonomy: string }>(sql`
       select autonomy from ai_capabilities
-       where org_id = ${org.orgId} and key = 'hrmPayrollAnomalies'`)).rows;
+       where org_id = ${org.orgId} and key = 'hrmPayrollAnomalies'`, "objects");
     assert.equal(rows[0]?.autonomy, "read_only");
     // The rule is a CEILING, not a ratchet. hrmPayrollAnomalies declares
     // maxAutonomy "propose", so an org that lowered to read_only may
@@ -209,7 +209,7 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${workerPartyId}, ${orgId}, 'person', 'Terminated Worker', true, '{}'::jsonb)`);
   const subsidiary = (await db.execute<{ id: string }>(sql`
-    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`)).rows[0]?.id;
+    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`, "objects"))[0]?.id;
   assert.ok(subsidiary, "scratch org needs a subsidiary");
   const employmentId = randomUUID();
   await db.execute(sql`
@@ -242,7 +242,7 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
     values (${orgId}, ${workerPartyId}, ${employmentId}, ${leaveType}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
   const seeded = (await db.execute<{ n: string }>(sql`
     select count(*)::text as n from hrm_payroll_inputs
-     where org_id = ${orgId} and employment_id = ${employmentId} and status = 'pending'`)).rows[0]?.n;
+     where org_id = ${orgId} and employment_id = ${employmentId} and status = 'pending'`, "objects"))[0]?.n;
   assert.equal(seeded, "1", "the fixture must actually leave a pending pay input behind");
   const scheduleId = randomUUID();
   await seedPayrollSchedule(orgId, scheduleId, decidedBy, {
@@ -446,7 +446,7 @@ test("hours baseline compares each pay period once across a worker rehire", { sk
     assert.deepEqual(baselineWindow.windowPayDates.sort(), ["2026-01-14", "2026-01-21"]);
     const computedHoursMean = (await db.execute<{ mean: string; stddev: string }>(sql`
       select mean::text as mean, stddev::text as stddev from anomaly_baselines
-       where org_id = ${org.orgId} and cohort_key = 'unassigned' and metric = 'hours'`)).rows[0];
+       where org_id = ${org.orgId} and cohort_key = 'unassigned' and metric = 'hours'`, "objects"))[0];
     assert.equal(Number(computedHoursMean?.mean), 6);
     assert.equal(Number(computedHoursMean?.stddev), 2,
       "the trailing two pay periods contribute one 8-hour and one 4-hour observation despite the rehire");
@@ -515,7 +515,7 @@ test("explain-pay trace carries lines, treatments, inputs and the diff", { skip:
     const { employmentId } = await seedTerminatedWithInput(org.orgId, adminId);
     const party = (await db.execute<{ partyId: string }>(sql`
       select worker_party_id::text as "partyId" from worker_employments
-       where org_id = ${org.orgId} and id = ${employmentId}`)).rows[0]?.partyId;
+       where org_id = ${org.orgId} and id = ${employmentId}`, "objects"))[0]?.partyId;
     // A pay stub needs the WHOLE run to exist first, and the chain is
     // three rows deep: pay_schedules <- pay_runs <- pay_stubs, with the
     // document beside the run. pay_stubs.pay_run_document_id points at
@@ -671,14 +671,14 @@ test("flag reads and transitions see only the flag employment's employer", { ski
     const empA = await seedEmployment(org.subsidiaryId, "Entity A Worker");
     const empB = await seedEmployment(subB, "Entity B Worker");
     const seedFlag = async (employmentId: string | null, kind: string, severity: string): Promise<string> => {
-      const rows = (await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
         insert into payroll_anomaly_flags
           (org_id, pay_period_from, pay_period_to, employment_id, kind, severity,
            detail, explanation, status, created_by)
         values (${org.orgId}, '2026-09-01', '2026-09-30', ${employmentId},
                 ${kind}, ${severity}, '{"key":"scope-probe"}'::jsonb,
                 ${`${kind} explanation with entity pay detail`}, 'open', ${adminId})
-        returning id::text as id`)).rows;
+        returning id::text as id`, "objects");
       return rows[0]!.id;
     };
     // Flag visibility splits by family and capability: the
@@ -754,22 +754,22 @@ test("flag reads and transitions see only the flag employment's employer", { ski
     installEngineSeams();
     await grant(org.orgId, adminId, "parties.manage");
     await withOrgTransaction(org.orgId, async () => {
-      const accounts = (await db.execute<{id:string}>(sql`
+      const accounts = await db.execute<{id:string}>(sql`
         insert into party_bank_accounts (org_id, party_id, routing, account_last_four, is_active, approval_status, submitted_by, submitted_at, created_by)
         select ${org.orgId}, e.worker_party_id, '{"institution":"scope-test"}'::jsonb, '4242', false, 'pending', ${adminId}, now(), ${adminId}
           from worker_employments e
-         where e.org_id=${org.orgId} and e.id in (${empA}::uuid,${empB}::uuid) returning id`)).rows;
+         where e.org_id=${org.orgId} and e.id in (${empA}::uuid,${empB}::uuid) returning id`, "objects");
       assert.equal(accounts.length, 2);
       for (const account of accounts) {
         const receipt = await routeSubjectSubmission({ orgId:org.orgId, actorId:adminId,
           subjectKind:"party_bank_account", subjectId:account.id, event:{kind:"on_create",source:"api"} });
         assert.equal(receipt.policy.kind,"ungated");
-        assert.equal((await db.execute(sql`update party_bank_accounts set approval_status='approved',is_active=true,
+        assert.equal((await db.execute<never>(sql`update party_bank_accounts set approval_status='approved',is_active=true,
           approved_at=${await businessToday(org.orgId)},approved_by=${adminId} where org_id=${org.orgId} and id=${account.id}`)).rowCount,1);
       }
     });
     const flagsBeforeScan = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;
+      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`, "objects"))[0]?.count;
     await assert.rejects(runAnomalyScan({
       orgId: org.orgId, actorId: scopedPayrollA, periodFrom: "2026-09-01", periodTo: "2026-09-30",
     }), /unrestricted subsidiary access/);
@@ -782,7 +782,7 @@ test("flag reads and transitions see only the flag employment's employer", { ski
       options: { timeOnly: true },
     }), /unrestricted subsidiary access/);
     const flagsAfterScan = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;
+      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`, "objects"))[0]?.count;
     assert.equal(flagsAfterScan, flagsBeforeScan, "a restricted scan refuses before creating cross-entity duplicate-bank flags");
     const inboxCtx = (actorId: string) => ({ orgId: org.orgId, actorId, asOf: "2026-09-30T00:00:00Z" });
     assert.deepEqual(await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollA)), []);
@@ -808,23 +808,23 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${partyId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-      const rows = (await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
         insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
         values (${randomUUID()}, ${org.orgId}, ${partyId}, ${subsidiary}, 1)
-        returning id::text as id`)).rows;
+        returning id::text as id`, "objects");
       return rows[0]!.id;
     };
     const empA = await seedEmployment(org.subsidiaryId, "Entity A Worker");
     const empB = await seedEmployment(subB, "Entity B Worker");
     const seedFlag = async (employmentId: string | null): Promise<string> => {
-      const rows = (await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
         insert into payroll_anomaly_flags
           (org_id, pay_period_from, pay_period_to, employment_id, kind, severity,
            detail, explanation, status, created_by)
         values (${org.orgId}, '2026-09-01', '2026-09-30', ${employmentId},
                 'terminated_with_pay', 'block', '{"key":"ledger-probe"}'::jsonb,
                 'ledger probe flag', 'open', ${adminId})
-        returning id::text as id`)).rows;
+        returning id::text as id`, "objects");
       return rows[0]!.id;
     };
     const flagA = await seedFlag(empA);
@@ -904,7 +904,7 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
     // ids, line count — never the gross, net, or line amounts.
     const partyA = (await db.execute<{ partyId: string }>(sql`
       select worker_party_id::text as "partyId" from worker_employments
-       where org_id = ${org.orgId} and id = ${empA}`)).rows[0]?.partyId;
+       where org_id = ${org.orgId} and id = ${empA}`, "objects"))[0]?.partyId;
     const scheduleId = randomUUID();
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -928,7 +928,7 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
         'ON', 26, '2026-09-30', 2026, 'CAD', 7123.45, 5401.67, 800)`);
     assert.equal((await db.execute<{ nullable: string }>(sql`
       select is_nullable as nullable from information_schema.columns
-       where table_schema = 'public' and table_name = 'pay_stubs' and column_name = 'employment_id'`)).rows[0]?.nullable, "NO");
+       where table_schema = 'public' and table_name = 'pay_stubs' and column_name = 'employment_id'`, "objects"))[0]?.nullable, "NO");
     await assert.rejects(explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empB, stubId }),
       /matched no row for this employment/);
     const trace = await explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empA });

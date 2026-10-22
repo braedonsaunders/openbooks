@@ -49,8 +49,8 @@ export async function strandedWorkFindings(orgId: string, staleOnOrBefore: strin
      where org_id = ${orgId} and status in ('pending','enqueued','sending','failed') and (
        terminal_failed_at is not null or
        (updated_at < ${staleOnOrBefore}::date and next_attempt_at <= now()))
-  `);
-  return rows.rows.map((row) => ({
+  `, "objects");
+  return rows.map((row) => ({
     agentKey: "accounting",
     findingType: "stranded_background_work",
     fingerprint: `stranded-work:${row.surface}:${row.id}`,

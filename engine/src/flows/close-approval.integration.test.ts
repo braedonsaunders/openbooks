@@ -46,7 +46,7 @@ async function withCloseRun(
     `);
     const defaults = await ensureCloseDefaults(fixture.orgId, actors.submitterId);
     assert.equal((await db.execute(sql`select id from flows where org_id=${fixture.orgId}
-      and subject_kind='close_run'`)).rows.length, 0, "close provisioning does not author a tenant workflow");
+      and subject_kind='close_run'`, "objects")).length, 0, "close provisioning does not author a tenant workflow");
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into close_runs
         (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
@@ -55,8 +55,8 @@ async function withCloseRun(
               ${defaults.reportingPackageId}, 'in_progress', 'review', '2026-08-05',
               '{}'::jsonb, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
       returning id
-    `));
-    await fn(fixture, actors, inserted.rows[0]!.id);
+    `, "objects"));
+    await fn(fixture, actors, inserted[0]!.id);
   } finally {
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local openbooks.sandbox_wipe = 'on'`);
@@ -93,8 +93,8 @@ async function closeStatus(runId: string): Promise<{
   const result = (await db.execute<{ status: string; approvedBy: string | null; approvedAt: Date | null }>(sql`
     select status, approved_by as "approvedBy", approved_at as "approvedAt"
       from close_runs where id = ${runId}
-  `));
-  return result.rows[0]!;
+  `, "objects"));
+  return result[0]!;
 }
 
 test("close approval is flow-routed, forbids the initiator, and reopens after ledger change", { skip: !DB }, async () => {
@@ -117,10 +117,10 @@ test("close approval is flow-routed, forbids the initiator, and reopens after le
     const gates = (await db.execute<{ id: string; assigneeUserId: string }>(sql`
       select id, assignee_user_id as "assigneeUserId" from flow_gates
        where subject_kind = 'close_run' and subject_id = ${runId} and status = 'pending'
-    `));
-    assert.equal(gates.rows.some((gate) => gate.assigneeUserId === actors.submitterId), false);
+    `, "objects"));
+    assert.equal(gates.some((gate) => gate.assigneeUserId === actors.submitterId), false);
 
-    const independentGate = gates.rows.find((gate) => gate.assigneeUserId === actors.approver1Id)!;
+    const independentGate = gates.find((gate) => gate.assigneeUserId === actors.approver1Id)!;
     await decideGate({ gateId: independentGate.id, decision: "approved", userId: actors.approver1Id });
     const approved = await closeStatus(runId);
     assert.equal(approved.status, "approved");
@@ -130,8 +130,8 @@ test("close approval is flow-routed, forbids the initiator, and reopens after le
     const signoffs = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from close_signoffs
        where run_id = ${runId} and decision = 'approved'
-    `));
-    assert.equal(signoffs.rows[0]!.count, 1);
+    `, "objects"));
+    assert.equal(signoffs[0]!.count, 1);
 
     await seedDraftDocument(fixture.orgId, {
       kind: "journal",
@@ -150,13 +150,13 @@ test("a frozen solo close gate releases with a ledger fingerprint and signoff", 
   await withCloseRun(async (fixture, actors, runId) => {
     const { flowId } = await seedApprovalFlow(fixture.orgId, { subjectKind: "close_run",
       assignees: [{ type: "user", userId: actors.submitterId }], mode: "any", preventSelfApproval: false });
-    const before = (await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and id=${flowId}`)).rows;
+    const before = await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and id=${flowId}`, "objects");
     await ensureCloseDefaults(fixture.orgId, actors.submitterId);
-    assert.deepEqual((await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and subject_kind='close_run'`)).rows, before);
+    assert.deepEqual(await db.execute(sql`select id,graph from flows where org_id=${fixture.orgId} and subject_kind='close_run'`, "objects"), before);
     assert.equal((await requestCloseApproval(fixture.orgId, runId, actors.submitterId)).approvals, 1);
-    const [gate] = (await db.execute<{ id: string; run_id: string }>(sql`
+    const [gate] = await db.execute<{ id: string; run_id: string }>(sql`
       select id,run_id from flow_gates where org_id=${fixture.orgId} and subject_kind='close_run'
-        and subject_id=${runId} and status='pending'`)).rows;
+        and subject_id=${runId} and status='pending'`, "objects");
     assert.ok(gate);
     await assert.rejects(finalizeCloseFlowApproval({ orgId: fixture.orgId, runId,
       actorId: actors.submitterId, outcome: "approved", approvalRunId: gate.run_id }), /Complete the configured close Flow gates/);
@@ -164,9 +164,9 @@ test("a frozen solo close gate releases with a ledger fingerprint and signoff", 
       where org_id=${fixture.orgId} and id=${flowId}`);
     await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
     assert.equal((await closeStatus(runId)).approvedBy, actors.submitterId);
-    const signoffs = (await db.execute<{ signed_by: string; data_fingerprint: string | null }>(sql`
+    const signoffs = await db.execute<{ signed_by: string; data_fingerprint: string | null }>(sql`
       select signed_by,data_fingerprint from close_signoffs where org_id=${fixture.orgId}
-        and run_id=${runId} and decision='approved'`)).rows;
+        and run_id=${runId} and decision='approved'`, "objects");
     assert.equal(signoffs.length, 1);
     assert.equal(signoffs[0]!.signed_by, actors.submitterId);
     assert.ok(signoffs[0]!.data_fingerprint);
@@ -184,9 +184,9 @@ test("an unconfigured close releases under the tenant zero-gate policy without c
     assert.deepEqual(await requestCloseApproval(fixture.orgId, runId, actors.submitterId), { approvals: 0 });
     assert.equal((await closeStatus(runId)).status, "approved");
     assert.equal((await db.execute(sql`select id from flow_gates where org_id=${fixture.orgId}
-      and subject_kind='close_run' and subject_id=${runId}`)).rows.length, 0);
+      and subject_kind='close_run' and subject_id=${runId}`, "objects")).length, 0);
     assert.equal((await db.execute(sql`select id from flows where org_id=${fixture.orgId}
-      and subject_kind='close_run'`)).rows.length, 0);
+      and subject_kind='close_run'`, "objects")).length, 0);
   });
 });
 
@@ -206,9 +206,9 @@ test("a close flow can require four independent approvals", { skip: !DB }, async
     const gates = (await db.execute<{ id: string; assigneeUserId: string }>(sql`
       select id, assignee_user_id as "assigneeUserId" from flow_gates
        where subject_kind = 'close_run' and subject_id = ${runId} and status = 'pending'
-    `));
+    `, "objects"));
     for (const approverId of approvers) {
-      const gate = gates.rows.find((row) => row.assigneeUserId === approverId)!;
+      const gate = gates.find((row) => row.assigneeUserId === approverId)!;
       await decideGate({ gateId: gate.id, decision: "approved", userId: approverId });
     }
     assert.equal((await closeStatus(runId)).status, "approved");

@@ -161,7 +161,7 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
          where s.org_id = ${orgId} ${statusClause}
            ${subsidiaryFilter(sql`s.subsidiary_id`, allowed)}
          order by s.schedule_number desc
-         limit 2000`)).rows
+         limit 2000`, 'objects'))
     : []
   const schedules: AmortizationScheduleRow[] = scheduleRows.map((row) => {
     return {
@@ -209,7 +209,7 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
     select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods
      where org_id = ${orgId} and not is_adjustment
      order by starts_on desc
-     limit 60`)).rows.map((row) => ({
+     limit 60`, 'objects')).map((row) => ({
       id: row.id,
       name: periodDisplayLabel({
         fiscalYear: Number(row.fiscal_year),
@@ -237,7 +237,7 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
            and l.period_end <= ${selectedPeriod.endsOn}
            ${subsidiaryFilter(sql`s.subsidiary_id`, allowed)}
          order by s.schedule_number, l.period_start
-         limit 2000`)).rows.map((row) => ({
+         limit 2000`, 'objects')).map((row) => ({
           id: row.id,
           scheduleNumber: row.schedule_number,
           scheduleHref: mergeHref(BASE, {}, { schedule: row.schedule_id }),
@@ -269,19 +269,19 @@ export async function loadAmortization(sp: Record<string, string | string[] | un
 
   const newSchedule: AmortizationNewScheduleData | null = canManage
     ? {
-        books: (await db.execute<{ id: string; label: string; currencies: Record<string, string> }>(sql`
+        books: await db.execute<{ id: string; label: string; currencies: Record<string, string> }>(sql`
           select b.id, concat_ws(' · ', b.code, b.name) as label,
                  coalesce((select jsonb_object_agg(s.id::text, public.accounting_book_currency(${orgId}, b.id, s.id)) from subsidiaries s
                    where s.org_id = b.org_id and s.is_active and not s.is_elimination ${subsidiaryFilter(sql`s.id`, allowed)}), '{}'::jsonb) as currencies
           from accounting_books b where b.org_id = ${orgId} and b.is_active and b.posts_gl
             ${await isFeatureEnabled(orgId, 'multiBookAccounting') ? sql`` : sql`and b.is_primary`}
-          order by b.is_primary desc, b.code`)).rows,
+          order by b.is_primary desc, b.code`, 'objects'),
         templates: (await listCurrentTemplates(db, orgId, today)).map((template) => ({ id: template.id, label: `${template.code} · ${template.name}` })),
         subsidiaries: (await db.execute<{ id: string; name: string }>(sql`
           select id, name from subsidiaries
            where org_id = ${orgId} and is_active and not coalesce(is_elimination, false)
              ${subsidiaryFilter(sql`id`, allowed)}
-           order by name`)).rows.map((row) => ({ id: row.id, label: row.name })),
+           order by name`, 'objects')).map((row) => ({ id: row.id, label: row.name })),
         destinationAccounts,
       }
     : null
@@ -327,16 +327,16 @@ async function referenceNames(orgId: string, rows: { bookId: string; subsidiaryI
   if (rows.length === 0) return { books: new Map<string, string>(), subsidiaries: new Map<string, string>(), accounts: new Map<string, string>() }
   const [books, subsidiaries, accounts] = await Promise.all([
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from accounting_books where org_id = ${orgId} and id = any(${ids(rows.map((r) => r.bookId))}::uuid[])`),
+      select id, name from accounting_books where org_id = ${orgId} and id = any(${ids(rows.map((r) => r.bookId))}::uuid[])`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from subsidiaries where org_id = ${orgId} and id = any(${ids(rows.map((r) => r.subsidiaryId))}::uuid[])`),
+      select id, name from subsidiaries where org_id = ${orgId} and id = any(${ids(rows.map((r) => r.subsidiaryId))}::uuid[])`, 'objects'),
     db.execute<{ id: string; label: string }>(sql`
-      select id, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and id = any(${ids(rows.map((r) => r.accountId))}::uuid[])`),
+      select id, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and id = any(${ids(rows.map((r) => r.accountId))}::uuid[])`, 'objects'),
   ])
   return {
-    books: new Map(books.rows.map((row) => [row.id, row.name])),
-    subsidiaries: new Map(subsidiaries.rows.map((row) => [row.id, row.name])),
-    accounts: new Map(accounts.rows.map((row) => [row.id, row.label])),
+    books: new Map(books.map((row) => [row.id, row.name])),
+    subsidiaries: new Map(subsidiaries.map((row) => [row.id, row.name])),
+    accounts: new Map(accounts.map((row) => [row.id, row.label])),
   }
 }
 

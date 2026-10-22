@@ -69,11 +69,11 @@ export async function listInternalBillingRules(
   orgId: string,
   runner: SqlExecutor = db,
 ): Promise<InternalBillingRuleRow[]> {
-  return (await runner.execute<InternalBillingRuleRow & Record<string, unknown>>(sql`
+  return await runner.execute<InternalBillingRuleRow & Record<string, unknown>>(sql`
     select ${RULE_COLUMNS}
       from internal_billing_rules
      where org_id = ${orgId}
-     order by code, effective_from desc, created_at desc`)).rows;
+     order by code, effective_from desc, created_at desc`, "objects");
 }
 
 /** The active version of `code` governing `date`, or null when none does. */
@@ -89,7 +89,7 @@ export async function internalBillingRuleInEffect(
      where org_id = ${orgId} and code = ${code} and is_active
        and effective_from <= ${date}::date
        and (effective_to is null or effective_to >= ${date}::date)
-     limit 1`)).rows[0] ?? null;
+     limit 1`, "objects"))[0] ?? null;
 }
 
 /** Account facts for the policy; null when the account is not in this org. */
@@ -103,7 +103,7 @@ export async function loadInternalBillingAccount(
     id: string; number: string | null; name: string; type: string; eliminate: boolean; is_active: boolean; is_summary: boolean;
   }>(sql`
     select id, number, name, type, eliminate, is_active, is_summary
-      from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+      from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
   if (!row) return null;
   return {
     id: row.id,
@@ -164,7 +164,7 @@ async function committedDocumentsOutside(
        -- Live entries only: a voided document no longer depends on this version's window.
        and status in ('pending_approval', 'approved', 'posted')
        and (document_date < ${window.from}::date
-            ${window.to ? sql`or document_date > ${window.to}::date` : sql``})`)).rows[0];
+            ${window.to ? sql`or document_date > ${window.to}::date` : sql``})`, "objects"))[0];
   return row?.n ?? 0;
 }
 
@@ -249,11 +249,11 @@ export async function createInternalBillingRuleVersion(args: {
       }
       // Serialize versioning of one code.
       await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:internal-billing-rule:${args.orgId}:${code}`}, 0))`);
-      const versions = (await db.execute<InternalBillingRuleRow & Record<string, unknown>>(sql`
+      const versions = await db.execute<InternalBillingRuleRow & Record<string, unknown>>(sql`
         select ${RULE_COLUMNS} from internal_billing_rules
          where org_id = ${args.orgId} and code = ${code} and is_active
          order by effective_from
-         for update`)).rows;
+         for update`, "objects");
       const later = versions.find((version) => version.effectiveFrom >= effectiveFrom);
       if (later) {
         throw new InternalBillingError(
@@ -262,7 +262,7 @@ export async function createInternalBillingRuleVersion(args: {
       }
       const prior = versions.find((version) => version.effectiveTo == null || version.effectiveTo >= effectiveFrom);
       if (prior) {
-        const closeTo = (await db.execute<{ d: string }>(sql`select (${effectiveFrom}::date - 1)::text as d`)).rows[0]!.d;
+        const closeTo = (await db.execute<{ d: string }>(sql`select (${effectiveFrom}::date - 1)::text as d`, "objects"))[0]!.d;
         const blocked = await committedDocumentsOutside(args.orgId, prior.id, { from: prior.effectiveFrom, to: closeTo });
         if (blocked > 0) {
           throw new InternalBillingError(
@@ -273,7 +273,7 @@ export async function createInternalBillingRuleVersion(args: {
           update internal_billing_rules
              set effective_to = ${closeTo}::date, updated_at = now(), updated_by = ${args.actorId}
            where org_id = ${args.orgId} and id = ${prior.id}
-           returning ${RULE_COLUMNS}`)).rows[0];
+           returning ${RULE_COLUMNS}`, "objects"))[0];
         if (!closed) throw new InternalBillingError("this rule changed while you were saving; reload and try again", 409);
         await audit(args.orgId, args.actorId, prior.id, "update", prior, closed, reason);
       }
@@ -284,7 +284,7 @@ export async function createInternalBillingRuleVersion(args: {
         values (${args.orgId}, ${code}, ${name}, ${method}, ${debit.id}, ${credit.id},
                 ${billableByDefault}, ${description}, ${effectiveFrom}::date, ${effectiveTo}::date,
                 ${args.actorId}, ${args.actorId})
-        returning ${RULE_COLUMNS}`)).rows[0];
+        returning ${RULE_COLUMNS}`, "objects"))[0];
       if (!created) throw new Error("internal billing rule insert returned no row");
       await audit(args.orgId, args.actorId, created.id, "insert", null, created, reason);
       return created;
@@ -316,7 +316,7 @@ export async function updateInternalBillingRuleVersion(args: {
       const before = (await db.execute<InternalBillingRuleRow & Record<string, unknown>>(sql`
         select ${RULE_COLUMNS} from internal_billing_rules
          where org_id = ${args.orgId} and id = ${args.id}
-         for update`)).rows[0];
+         for update`, "objects"))[0];
       if (!before) throw new InternalBillingError("rule not found", 404);
       const patch = args.patch;
       const name = patch.name === undefined ? before.name : (typeof patch.name === "string" ? patch.name.trim() : "");
@@ -346,7 +346,7 @@ export async function updateInternalBillingRuleVersion(args: {
           select count(*)::int as n from documents
            where org_id = ${args.orgId} and kind = 'internal_billing' and internal_billing_rule_id = ${before.id}
              -- Live entries only: a voided document no longer depends on this version.
-             and status in ('pending_approval', 'approved', 'posted')`)).rows[0]?.n ?? 0;
+             and status in ('pending_approval', 'approved', 'posted')`, "objects"))[0]?.n ?? 0;
         if (committed > 0) {
           throw new InternalBillingError(
             `${committed} committed document(s) use this version; close its window with an end date instead of deactivating it`,
@@ -359,7 +359,7 @@ export async function updateInternalBillingRuleVersion(args: {
                effective_to = ${effectiveTo}::date, is_active = ${isActive},
                updated_at = now(), updated_by = ${args.actorId}
          where org_id = ${args.orgId} and id = ${before.id}
-         returning ${RULE_COLUMNS}`)).rows[0];
+         returning ${RULE_COLUMNS}`, "objects"))[0];
       if (!after) throw new InternalBillingError("this rule changed while you were saving; reload and try again", 409);
       await audit(args.orgId, args.actorId, before.id, "update", before, after, reason);
       return after;

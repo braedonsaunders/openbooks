@@ -25,7 +25,7 @@ const hooks = registerHooks({
     const resolved = next(specifier, context)
     if (resolved.url.endsWith('/platform/db.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
       export * from ${JSON.stringify(new URL('../platform/db.ts?native', import.meta.url).href)};
-      export const db = { execute: query => globalThis.__changeQueueExecute(query) };
+      export const db = { execute: (query, mode) => Promise.resolve(globalThis.__changeQueueExecute(query)).then((result) => (mode === 'objects' ? result.rows : result)) };
       export async function withOrgTransaction(_org, run) { return run(db) }
     `) }
     return resolved

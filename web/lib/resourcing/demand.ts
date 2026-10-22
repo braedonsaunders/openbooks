@@ -117,7 +117,7 @@ export async function loadDemandWeeks(
 
   const departmentFilter = window.departmentId ? sql`and dl.department_id = ${window.departmentId}` : sql``
   const jobTitleFilter = window.jobTitle ? sql`and dl.job_title = ${window.jobTitle}` : sql``
-  const rows = (await db.execute<DemandLineRow>(sql`
+  const rows = await db.execute<DemandLineRow>(sql`
     select dl.id as line_id, dl.department_id, dl.job_title,
            dl.first_week::text as first_week, dl.last_week::text as last_week,
            dl.hours_per_week::text as hours_per_week, dl.opportunity_id,
@@ -143,7 +143,7 @@ export async function loadDemandWeeks(
        and dl.last_week >= ${window.firstSunday}::date
        ${departmentFilter}${jobTitleFilter}
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `)).rows
+  `, 'objects')
 
   const demand: DemandWeek[] = []
   for (const row of rows) {

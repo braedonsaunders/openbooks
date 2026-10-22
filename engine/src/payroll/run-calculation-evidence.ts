@@ -242,10 +242,10 @@ export async function payRunCalculationSource(
              select jsonb_agg(to_jsonb(entry.id::text) order by entry.id)
                from locked_entries entry where entry.claimable
            ), '[]'::jsonb) as claim_entry_ids
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   if (!row?.run_exists) return null;
-  const incomeTaxOverrideRows = (await executor.execute<{
+  const incomeTaxOverrideRows = await executor.execute<{
     adjustmentId: string;
     employeePartyId: string;
     componentId: string;
@@ -261,7 +261,7 @@ export async function payRunCalculationSource(
        and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
      order by a.employee_party_id, a.id
      ${lockSources ? sql`for share of a, c` : sql``}
-  `)).rows;
+  `, "objects");
   const incomeTaxOverrides: IncomeTaxOverrideSource[] = incomeTaxOverrideRows.map((override) => {
     let note: unknown;
     try { note = JSON.parse(override.note ?? "null"); } catch { note = null; }
@@ -282,7 +282,7 @@ export async function payRunCalculationSource(
     }
     return source;
   });
-  const employerLevyAdjustmentRows = (await executor.execute<{
+  const employerLevyAdjustmentRows = await executor.execute<{
     adjustmentId: string;
     employeePartyId: string;
     componentId: string;
@@ -301,7 +301,7 @@ export async function payRunCalculationSource(
        and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
      order by a.employee_party_id, a.id
      ${lockSources ? sql`for share of a, c` : sql``}
-  `)).rows;
+  `, "objects");
   const employerLevyAdjustments: EmployerLevyAdjustmentSource[] = employerLevyAdjustmentRows.map((adjustment) => {
     const evidence = parseEmployerLevyAdjustmentEvidence(adjustment.note);
     const source: EmployerLevyAdjustmentSource = {
@@ -322,7 +322,7 @@ export async function payRunCalculationSource(
     }
     return source;
   });
-  const bankCashRows = (await executor.execute<{
+  const bankCashRows = await executor.execute<{
     adjustmentId: string;
     employeePartyId: string;
     componentId: string | null;
@@ -373,7 +373,7 @@ export async function payRunCalculationSource(
        and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
      order by a.employee_party_id, a.id
      ${lockSources ? sql`for share of a` : sql``}
-  `)).rows;
+  `, "objects");
   const bankCashInputs: BankCashInputSource[] = [];
   for (const input of bankCashRows) {
     if (!isBankCashInputEvidenceCandidate(input.note)) continue;
@@ -432,7 +432,7 @@ export async function payRunCalculationSource(
     }
     bankCashInputs.push(source);
   }
-  const declaredAccrualRows = (await executor.execute<{
+  const declaredAccrualRows = await executor.execute<{
     adjustmentId: string; employeePartyId: string; componentId: string | null; amount: string; note: string | null;
     componentActive: boolean | null; componentKind: string | null; planCount: string;
     planId: string | null; planUnit: string | null; planDirection: string | null;
@@ -459,7 +459,7 @@ export async function payRunCalculationSource(
        and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
        and a.note ~ '"kind"[[:space:]]*:[[:space:]]*"declared_vacation_accrual"'
      order by a.employee_party_id,a.id
-  `)).rows;
+  `, "objects");
   const declaredVacationAccruals: DeclaredVacationAccrualSource[] = declaredAccrualRows.map((input) => {
     const evidence = parseDeclaredVacationAccrualEvidence(input.note);
     const amount = canonicalDecimal(input.amount, 4);
@@ -482,7 +482,7 @@ export async function payRunCalculationSource(
     }
     return source;
   });
-  const assignmentRunPolicies = (await executor.execute<NonNullable<PayRunCalculationSourceSnapshot['assignmentRunPolicies']>[number]>(sql`
+  const assignmentRunPolicies = await executor.execute<NonNullable<PayRunCalculationSourceSnapshot['assignmentRunPolicies']>[number]>(sql`
     select a.id::text, a.employee_party_id::text as "employeePartyId", a.employment_id::text as "employmentId",
       a.component_id::text as "componentId", a.run_applicability as policy,
       a.effective_from::text as "from", a.effective_to::text as "to"
@@ -491,8 +491,8 @@ export async function payRunCalculationSource(
       and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
       and a.effective_from <= r.period_end and (a.effective_to is null or a.effective_to >= r.period_start)
     order by a.id
-  `)).rows;
-  const payComponentStatutoryTreatments = (await executor.execute<ComponentStatutoryTreatmentSource>(sql`
+  `, "objects");
+  const payComponentStatutoryTreatments = await executor.execute<ComponentStatutoryTreatmentSource>(sql`
     select treatment.id::text as id,
       treatment.pay_component_id::text as "componentId",
       treatment.worker_comp_group_id::text as "workerCompGroupId",
@@ -522,11 +522,11 @@ export async function payRunCalculationSource(
       (public.payroll_worker_comp_group_at(stub.org_id, stub.employee_party_id, r.pay_date))::text,
       treatment.effective_from::text, treatment.effective_to::text, treatment.program_exclusions, treatment.vacationable
      order by "componentId", "workerCompGroupId" nulls first, "effectiveFrom", id
-  `)).rows;
+  `, "objects");
   if (payComponentStatutoryTreatments.some((row) => typeof row.vacationable !== 'boolean')) {
     throw new PayrollError('A pay component statutory treatment has no vacation eligibility — review the component treatment before calculating');
   }
-  const uncoveredEarningComponents = (await executor.execute<{ component_id: string }>(sql`
+  const uncoveredEarningComponents = await executor.execute<{ component_id: string }>(sql`
     select distinct line.component_id::text as component_id
     from pay_runs r
       join pay_stubs stub on stub.org_id=r.org_id and stub.pay_run_document_id=r.document_id
@@ -543,11 +543,11 @@ export async function payRunCalculationSource(
                 public.payroll_worker_comp_group_at(stub.org_id, stub.employee_party_id, r.pay_date))
        )
      order by component_id
-  `)).rows;
+  `, "objects");
   if (uncoveredEarningComponents.length) {
     throw new PayrollError(`No effective statutory treatment covers earning component ${uncoveredEarningComponents[0]!.component_id} on this pay date; add a dated treatment in Payroll Setup before calculating.`);
   }
-  const openingRows = (await executor.execute<OpeningEmployerAuthoritySource & { matches: boolean }>(sql`
+  const openingRows = await executor.execute<OpeningEmployerAuthoritySource & { matches: boolean }>(sql`
     select a.id::text,a.opening_balance_id::text as "openingBalanceId",a.employee_party_id::text as "employeePartyId",
       a.tax_year as "taxYear",a.subsidiary_id::text as "subsidiaryId",a.source_file_id::text as "sourceFileId",
       a.source_version_id::text as "sourceVersionId",a.source_sha256 as "sourceSha256",a.opening_sha256 as "openingSha256",
@@ -561,14 +561,14 @@ export async function payRunCalculationSource(
       and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
     order by a.employee_party_id,a.id
     ${lockSources ? sql`for share of a,b` : sql``}
-  `)).rows;
+  `, "objects");
   const openingEmployerAuthorities: OpeningEmployerAuthoritySource[] = openingRows.map(({ matches, ...source }) => {
     if (!matches || !isOpeningEmployerAuthoritySource(source)) {
       throw new PayrollError('The original opening employer source no longer matches its retained amounts — preserve its evidence and review the native opening qualification before calculating or committing');
     }
     return source;
   });
-  const openingLevyRows = (await executor.execute<OpeningLevySourceAuthoritySource & { matches: boolean }>(sql`
+  const openingLevyRows = await executor.execute<OpeningLevySourceAuthoritySource & { matches: boolean }>(sql`
     select h.id::text,h.opening_balance_id::text as "openingBalanceId",h.employee_party_id::text as "employeePartyId",
       h.tax_year as "taxYear",h.subsidiary_id::text as "subsidiaryId",h.source_file_id::text as "sourceFileId",
       h.source_version_id::text as "sourceVersionId",h.source_sha256 as "sourceSha256",h.opening_sha256 as "openingSha256",
@@ -597,14 +597,14 @@ export async function payRunCalculationSource(
      where h.org_id=${orgId} and h.tax_year=r.tax_year and h.subsidiary_id=d.subsidiary_id
      order by h.employee_party_id,h.id
      ${lockSources ? sql`for share of h,b,a` : sql``}
-  `)).rows;
+  `, "objects");
   const openingLevySourceAuthorities: OpeningLevySourceAuthoritySource[] = openingLevyRows.map(({ matches, ...source }) => {
     if (!matches || !isOpeningLevySourceAuthoritySource(source)) {
       throw new PayrollError('The original statutory levy opening allocations no longer match their retained legal employer, source version and exact allocation — preserve the evidence and review Payroll → Opening balances → Levy source');
     }
     return source;
   });
-  const openingBalanceSources = (await executor.execute<OpeningBalanceSourceState>(sql`
+  const openingBalanceSources = await executor.execute<OpeningBalanceSourceState>(sql`
     select b.id::text as "openingBalanceId",
       encode(public.digest(jsonb_build_object(
         'opening',to_jsonb(b),
@@ -628,9 +628,9 @@ export async function payRunCalculationSource(
        and (a.id is null or a.subsidiary_id=d.subsidiary_id)
      order by b.id
      ${lockSources ? sql`for share of b` : sql``}
-  `)).rows;
+  `, "objects");
   const historicalEmploymentRoster = await historicalEmploymentRosterSource(executor, orgId, documentId, allowedSubsidiaryIds);
-  const holidaySubjects=(await executor.execute<{orgId:string;employeePartyId:string;employmentId:string;subsidiaryId:string;employeeName:string}>(sql`
+  const holidaySubjects=await executor.execute<{orgId:string;employeePartyId:string;employmentId:string;subsidiaryId:string;employeeName:string}>(sql`
     select s.org_id as "orgId",s.employee_party_id as "employeePartyId",s.employment_id as "employmentId",
       d.subsidiary_id as "subsidiaryId",p.display_name as "employeeName"
     from pay_stubs s join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
@@ -640,7 +640,7 @@ export async function payRunCalculationSource(
       and o.settings#>>'{payroll,statutoryHolidayPay}'='true'
       and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
     order by s.employee_party_id,s.employment_id
-  `)).rows;
+  `, "objects");
   const holidayEmployments:StatutoryHolidayEmploymentSource[]=[];
   for(const subject of holidaySubjects) {
     if(lockSources) await executor.execute(sql`select id from worker_employments where org_id=${orgId} and id=${subject.employmentId} for share`);
@@ -653,7 +653,7 @@ export async function payRunCalculationSource(
   // Calculate supplies the exact identities used by its successful statutory
   // passes. Commit/readiness re-resolve them through the same authoritative
   // service so a different selected history row changes the protected digest.
-  const bonusSubjects = (await executor.execute<CaBonusIncomeReferenceScope & { income: string }>(sql`
+  const bonusSubjects = await executor.execute<CaBonusIncomeReferenceScope & { income: string }>(sql`
     select s.org_id as "orgId",r.document_id as "documentId",
       s.employee_party_id as "employeePartyId",s.employment_id as "employmentId",
       d.subsidiary_id as "subsidiaryId",s.filing_account_id as "filingAccountId",
@@ -666,7 +666,7 @@ export async function payRunCalculationSource(
       and s.factors ? 'CA_BONUS_I_REFERENCE'
       and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
     order by s.employee_party_id
-  `)).rows;
+  `, "objects");
   const bonusIncomeReferences: CaBonusIncomeReferenceSource[] = [];
   if (calculatedBonusReferences && calculatedBonusReferences.length !== bonusSubjects.length) {
     throw new PayrollError('Canadian bonus calculation source identities do not cover the calculated employee population — recalculate the pay run');
@@ -683,7 +683,7 @@ export async function payRunCalculationSource(
     }
     bonusIncomeReferences.push(source);
   }
-  const usFilingAccountLineages = (await executor.execute<UsFilingAccountLineageSource>(sql`
+  const usFilingAccountLineages = await executor.execute<UsFilingAccountLineageSource>(sql`
     select affiliation.id::text as id, affiliation.filing_account_id::text as "filingAccountId",
       affiliation.federal_account_id::text as "federalAccountId", affiliation.subsidiary_id::text as "subsidiaryId",
       affiliation.effective_from::text as "effectiveFrom", affiliation.effective_to::text as "effectiveTo",
@@ -707,14 +707,14 @@ export async function payRunCalculationSource(
             and prior_run.run_status='committed' and prior_run.document_id<>run.document_id
             and prior_stub.pay_date between affiliation.effective_from and coalesce(affiliation.effective_to,'infinity'::date)))
     order by affiliation.id for share of affiliation
-  `)).rows;
+  `, "objects");
   if (usFilingAccountLineages.some(source => !isUsFilingAccountLineageSource(source))) {
     throw new PayrollError('US filing-account affiliation evidence is malformed — qualify the original employer registration before calculating');
   }
   // Mirrors the settlement stamp's reads: the plan's activity and liability,
   // and its accrual component's credited liability while that component is
   // active. Only plans this run's in-scope employees actually settle appear.
-  const entitlementSettlementPlans = (await executor.execute<EntitlementSettlementPlanSource>(sql`
+  const entitlementSettlementPlans = await executor.execute<EntitlementSettlementPlanSource>(sql`
     select plan.id::text as "planId", plan.is_active as "planActive",
            plan.liability_account_id::text as "liabilityAccountId",
            plan.accrual_component_id::text as "accrualComponentId",
@@ -728,7 +728,7 @@ export async function payRunCalculationSource(
            and movement.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid))
      order by plan.id
      ${lockSources ? sql`for share of plan` : sql``}
-  `)).rows;
+  `, "objects");
   if (entitlementSettlementPlans.some(source => !isEntitlementSettlementPlanSource(source))) {
     throw new PayrollError('Entitlement settlement evidence is malformed — review the plan configuration and recalculate');
   }

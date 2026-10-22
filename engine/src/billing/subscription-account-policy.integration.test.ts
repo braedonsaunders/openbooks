@@ -29,7 +29,7 @@ async function snapshot(f: Fixture) {
     (select jsonb_agg(to_jsonb(l) order by id) from document_lines l where org_id=${f.org.orgId}) as lines,
     (select jsonb_agg(to_jsonb(n) order by id) from number_sequences n where org_id=${f.org.orgId}) as numbers,
     (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${f.org.orgId}) as audit,
-    (select jsonb_agg(to_jsonb(j) order by id) from journal_entries j where org_id=${f.org.orgId}) as journal`)).rows[0];
+    (select jsonb_agg(to_jsonb(j) order by id) from journal_entries j where org_id=${f.org.orgId}) as journal`, "objects"))[0];
 }
 function spec(f: Fixture, changes: Partial<InvoiceSpec> = {}): InvoiceSpec {
   return { orgId: f.org.orgId, actorId: f.actor, customerId: f.org.customerId, subsidiaryId: f.org.subsidiaryId,
@@ -68,9 +68,9 @@ test('component account validation does not fall back to the scalar plan account
 }));
 test('configured subscription preserves precise amount and period provenance', enabled, () => fixture(async f => {
   const generated = await billSubscriptionNow(f.org.orgId, f.subscriptionId, { actorId: f.actor }, null);
-  assert.deepEqual((await db.execute(sql`select account_id,amount::text from document_lines where document_id=${generated.invoiceId}`)).rows,
+  assert.deepEqual(await db.execute(sql`select account_id,amount::text from document_lines where document_id=${generated.invoiceId}`, "objects"),
     [{ account_id: f.org.accounts.revenue, amount: '100.1234' }]);
-  assert.equal((await db.execute(sql`select invoice_id from subscription_period_invoices where subscription_id=${f.subscriptionId}`)).rows[0]?.invoice_id, generated.invoiceId);
+  assert.equal((await db.execute(sql`select invoice_id from subscription_period_invoices where subscription_id=${f.subscriptionId}`, "objects"))[0]?.invoice_id, generated.invoiceId);
 }));
 test('explicit non-income account, native credit, and configured zero component retain their values', enabled, () => fixture(async f => {
   const generated = await createSubscriptionInvoice(spec(f, { documentKind: 'customer_credit', incomeAccountId: f.org.accounts.deferred,
@@ -79,8 +79,8 @@ test('explicit non-income account, native credit, and configured zero component 
       { description: 'Included service', quantity: '1', unitPrice: '0', incomeAccountId: f.org.accounts.revenue, itemId: null, taxCodeId: null },
     ] }));
   assert.equal(generated.total, '100.1234');
-  assert.equal((await db.execute(sql`select kind from documents where id=${generated.invoiceId}`)).rows[0]?.kind, 'customer_credit');
-  assert.deepEqual((await db.execute(sql`select account_id,amount::text from document_lines where document_id=${generated.invoiceId} order by line_number`)).rows,
+  assert.equal((await db.execute(sql`select kind from documents where id=${generated.invoiceId}`, "objects"))[0]?.kind, 'customer_credit');
+  assert.deepEqual(await db.execute(sql`select account_id,amount::text from document_lines where document_id=${generated.invoiceId} order by line_number`, "objects"),
     [{ account_id: f.org.accounts.deferred, amount: '100.1234' }, { account_id: f.org.accounts.revenue, amount: '0.0000' }]);
 }));
 test('zero charge requires configuration instead of generating an unpostable null-account row', enabled, () => fixture(async f => {

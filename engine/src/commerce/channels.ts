@@ -123,7 +123,7 @@ const CHANNEL_COLUMNS = sql`id, kind, name, status, subsidiary_id, currency, ext
 async function loadChannel(orgId: string, channelId: string): Promise<ChannelDbRow> {
   const row = (await db.execute<ChannelDbRow>(sql`
     select ${CHANNEL_COLUMNS} from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -188,7 +188,7 @@ export async function createChannel(
   const settings = checkSettings(kind, input.settings ?? {});
   if (input.subsidiaryId) {
     const subsidiary = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`))).rows[0];
+      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`, "objects")))[0];
     if (!subsidiary) {
       refuse("channel_subsidiary_unavailable", "The subsidiary does not belong to this organization.", "Choose a subsidiary in this organization.", "subsidiaryId");
     }
@@ -210,9 +210,9 @@ export async function createChannel(
           ${input.secrets ? sealJson(input.secrets, { orgId, purpose: "sales_channel.secrets" }) : null},
           ${sealJson({ secret: webhookSecret }, { orgId, purpose: "sales_channel.webhook_secret" })},
           ${JSON.stringify(settings)}::jsonb, ${actor}, ${actor})
-        returning id`);
-      if (inserted.rows.length !== 1) throw new Error("Channel insert returned an unexpected row count");
-      id = inserted.rows[0]!.id;
+        returning id`, "objects");
+      if (inserted.length !== 1) throw new Error("Channel insert returned an unexpected row count");
+      id = inserted[0]!.id;
     } catch (error) {
       if (error instanceof CommerceError) throw error;
       const candidate = pgCause(error);
@@ -256,7 +256,7 @@ export async function updateChannel(
     if (input.subsidiaryId !== undefined) {
       if (input.subsidiaryId) {
         const subsidiary = (await db.execute<{ id: string }>(sql`
-          select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`)).rows[0];
+          select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`, "objects"))[0];
         if (!subsidiary) {
           refuse("channel_subsidiary_unavailable", "The subsidiary does not belong to this organization.", "Choose a subsidiary in this organization.", "subsidiaryId");
         }
@@ -294,11 +294,11 @@ export async function updateChannel(
              settings = ${patch.settings !== undefined ? JSON.stringify(patch.settings) : JSON.stringify(before.settings)}::jsonb,
              updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+       returning ${CHANNEL_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       throw new Error("Channel update matched no row; the channel is no longer in this organization");
     }
-    const after = toRow(updated.rows[0]!);
+    const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", actor, before, after, null);
     return after;
   });
@@ -341,11 +341,11 @@ async function transitionChannel(
       update sales_channels
          set status = ${target}, updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+       returning ${CHANNEL_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       throw new Error("Channel transition matched no row; the channel is no longer in this organization");
     }
-    const after = toRow(updated.rows[0]!);
+    const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", actor, before, after, why);
     return after;
   });
@@ -384,11 +384,11 @@ export async function markChannelActive(orgId: string, actor: string, channelId:
       update sales_channels
          set status = 'active', updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+       returning ${CHANNEL_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       throw new Error("Channel activation matched no row; the channel is no longer in this organization");
     }
-    const after = toRow(updated.rows[0]!);
+    const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", actor, before, after, "Connection verified");
     return after;
   });
@@ -422,20 +422,20 @@ export async function disconnectChannelByProvider(
       update sales_channels
          set status = 'disconnected', updated_at = now()
        where org_id = ${orgId} and id = ${channelId}
-       returning ${CHANNEL_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+       returning ${CHANNEL_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       throw new Error("Channel provider disconnect matched no row; the channel is no longer in this organization");
     }
-    const after = toRow(updated.rows[0]!);
+    const after = toRow(updated[0]!);
     await writeAudit(orgId, channelId, "update", null, before, after, detail);
     return after;
   });
 }
 
 export async function listChannels(orgId: string): Promise<ChannelRow[]> {
-  const rows = (await withOrgContext(orgId, () => db.execute<ChannelDbRow>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<ChannelDbRow>(sql`
     select ${CHANNEL_COLUMNS} from sales_channels
-     where org_id = ${orgId} order by name`))).rows;
+     where org_id = ${orgId} order by name`, "objects"));
   return rows.map(toRow);
 }
 
@@ -453,7 +453,7 @@ export async function countChannelOrdersForBusinessDay(
      where o.org_id = ${orgId}
        and o.ordered_at >= (${businessDay}::date::timestamp at time zone ${timeZone})
        and o.ordered_at < ((${businessDay}::date + 1)::timestamp at time zone ${timeZone})
-       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}`))).rows[0];
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}`, "objects")))[0];
   return row?.count ?? "0";
 }
 

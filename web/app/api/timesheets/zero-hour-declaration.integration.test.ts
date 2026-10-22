@@ -65,8 +65,8 @@ async function fixture() {
       body: JSON.stringify({ employee, week: WEEK, rows, expectedRevision: revision }),
     }))
   })
-  const entries = () => withOrgContext(org.orgId, async () => (await db.execute<{ hours: string; memo: string | null; worked_on: string; status: string }>(sql`
-    select hours::text as hours, memo, worked_on::text as worked_on, status from time_entries where org_id = ${org.orgId} order by worked_on, id`)).rows)
+  const entries = () => withOrgContext(org.orgId, async () => await db.execute<{ hours: string; memo: string | null; worked_on: string; status: string }>(sql`
+    select hours::text as hours, memo, worked_on::text as worked_on, status from time_entries where org_id = ${org.orgId} order by worked_on, id`, 'objects'))
   const close = async () => {
     session.user = null
     await withBypassContext(async () => { await db.execute(sql`delete from time_entries where org_id = ${org.orgId}`) })
@@ -126,7 +126,7 @@ test('the saved declaration submits through the normal submit', async () => {
     assert.equal(stored.length, 1)
     assert.equal(stored[0]!.status, 'submitted')
     const header = await withOrgContext(f.org.orgId, async () => (await db.execute<{ status: string }>(sql`
-      select status from timesheet_weeks where org_id = ${f.org.orgId} and employee_party_id = ${f.employee}`)).rows[0])
+      select status from timesheet_weeks where org_id = ${f.org.orgId} and employee_party_id = ${f.employee}`, 'objects'))[0])
     assert.equal(header!.status, 'submitted')
   } finally {
     await f.close()
@@ -143,8 +143,8 @@ test('a saved declaration does not block the declare-no-hours submit', async () 
       body: JSON.stringify({ employee: f.employee, week: WEEK, noHours: true, reason: 'On vacation all week' }),
     })))
     assert.equal(res.status, 200, await res.text())
-    const rows = await withOrgContext(f.org.orgId, async () => (await db.execute<{ changes: unknown }>(sql`
-      select changes from audit_log where org_id = ${f.org.orgId} and table_name = 'timesheet_weeks' and changes->>'event' = 'no_hours_declared'`)).rows)
+    const rows = await withOrgContext(f.org.orgId, async () => await db.execute<{ changes: unknown }>(sql`
+      select changes from audit_log where org_id = ${f.org.orgId} and table_name = 'timesheet_weeks' and changes->>'event' = 'no_hours_declared'`, 'objects'))
     assert.equal(rows.length, 1, 'the declaration leaves exactly one audit row')
     const changes = rows[0]!.changes as { reason: string; leaveRequests: { requestId: string }[] }
     assert.equal(changes.reason, 'On vacation all week')
@@ -174,14 +174,14 @@ test('approving a zero-hour declaration needs no wage row and posts no journals'
       await db.execute(sql`update users set party_id = ${approver} where id = ${f.actor} and org_id = ${f.org.orgId}`)
     })
     const journalsBefore = await withOrgContext(f.org.orgId, async () => (await db.execute<{ n: string }>(sql`
-      select count(*) as n from journal_entries where org_id = ${f.org.orgId}`)).rows[0]!.n)
+      select count(*) as n from journal_entries where org_id = ${f.org.orgId}`, 'objects'))[0]!.n)
     const res = await withOrgContext(f.org.orgId, () => decideTimesheetFixture({orgId:f.org.orgId,...{ employee: f.employee, week: WEEK },decision:'approved'}))
     assert.equal(res.status, 200, await res.text())
     const journalsAfter = await withOrgContext(f.org.orgId, async () => (await db.execute<{ n: string }>(sql`
-      select count(*) as n from journal_entries where org_id = ${f.org.orgId}`)).rows[0]!.n)
+      select count(*) as n from journal_entries where org_id = ${f.org.orgId}`, 'objects'))[0]!.n)
     assert.equal(journalsAfter, journalsBefore, 'a zero-hour declaration posts no journals')
     const header = await withOrgContext(f.org.orgId, async () => (await db.execute<{ status: string }>(sql`
-      select status from timesheet_weeks where org_id = ${f.org.orgId} and employee_party_id = ${f.employee}`)).rows[0])
+      select status from timesheet_weeks where org_id = ${f.org.orgId} and employee_party_id = ${f.employee}`, 'objects'))[0])
     assert.equal(header!.status, 'approved')
   } finally {
     await f.close()

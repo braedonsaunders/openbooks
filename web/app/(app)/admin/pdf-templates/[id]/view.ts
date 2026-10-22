@@ -68,7 +68,7 @@ export async function loadPdfTemplateEditor(id: string): Promise<PdfTemplateEdit
     where p.org_id=${authz.user.orgId} and p.is_active
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds??null)}
       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`,authz.allowedSubsidiaryIds??null)} order by p.name
-  `)).rows : []
+  `, 'objects')) : []
   return {
     chequeBankProfiles,
     template: {

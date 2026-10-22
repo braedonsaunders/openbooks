@@ -28,15 +28,15 @@ export type ActorPrincipal = {
 export async function actorPrincipal(exec: SqlExecutor, orgId: string, actorId: string): Promise<ActorPrincipal | undefined> {
   const local = (await exec.execute<ActorPrincipal>(sql`
     select id,org_id as "orgId",name,email,is_super_admin as "isSuperAdmin",is_active as "isActive"
-      from users where id=${actorId} and org_id=${orgId}`)).rows[0];
+      from users where id=${actorId} and org_id=${orgId}`, "objects"))[0];
   if (local) return local;
   const member = (await exec.execute<{present:boolean}>(sql`
     select exists(select 1 from role_assignments a join app_roles r on r.org_id=a.org_id and r.id=a.role_id
-      where a.org_id=${orgId} and a.user_id=${actorId}) as present`)).rows[0]?.present === true;
+      where a.org_id=${orgId} and a.user_id=${actorId}) as present`, "objects"))[0]?.present === true;
   // bypass: user-keyed-lookup — only a platform superadmin or established target membership can resolve a foreign home identity.
   return (await withBypassContext(()=>db.execute<ActorPrincipal>(sql`
     select id,org_id as "orgId",name,email,is_super_admin as "isSuperAdmin",is_active as "isActive"
-      from users where id=${actorId} and (is_super_admin or ${member})`))).rows[0];
+      from users where id=${actorId} and (is_super_admin or ${member})`, "objects")))[0];
 }
 
 export async function actorIdentity(exec: SqlExecutor, orgId: string, actorId: string) {
@@ -62,7 +62,7 @@ export async function lockActorIdentity(tx: SqlExecutor, orgId: string, actorId:
   if (!isUuid(orgId) || !isUuid(actorId)) return undefined;
   const local=(await tx.execute<ActorPrincipal>(sql`
     select id,org_id as "orgId",name,email,is_super_admin as "isSuperAdmin",is_active as "isActive"
-      from users where org_id=${orgId} and id=${actorId} for share`)).rows[0];
+      from users where org_id=${orgId} and id=${actorId} for share`, "objects"))[0];
   if(local) return local.isActive ? local : undefined;
   const foreign=await actorPrincipal(tx,orgId,actorId);
   if(!foreign?.isActive)return undefined;
@@ -152,7 +152,7 @@ async function actorPermissionGrants(exec: SqlExecutor, orgId: string, actorId: 
       join app_roles role
         on role.id = assignment.role_id and role.org_id = assignment.org_id
      where assignment.user_id = ${actorId} and assignment.org_id = ${orgId}
-  `));
+  `, "objects"));
   const overrides = (await exec.execute<{
     permission: string;
     effect: "grant" | "deny";
@@ -160,9 +160,9 @@ async function actorPermissionGrants(exec: SqlExecutor, orgId: string, actorId: 
     select permission, effect
       from user_permission_overrides
      where user_id = ${actorId} and org_id = ${orgId}
-  `));
+  `, "objects"));
   return {
-    rolePermissionSets: assignments.rows.map(r => Array.isArray(r.permissions) ? r.permissions : []),
-    overrides: overrides.rows,
+    rolePermissionSets: assignments.map(r => Array.isArray(r.permissions) ? r.permissions : []),
+    overrides,
   };
 }

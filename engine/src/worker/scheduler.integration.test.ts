@@ -53,9 +53,9 @@ test(
             left join report_runs r on r.schedule_id = s.id
            where s.id = ${scheduleId}
            group by s.id, s.next_run_at
-        `));
-        assert.equal(skipped.rows[0]?.runs, 0);
-        assert.equal(new Date(skipped.rows[0]!.next_run_at).toISOString(), dueAt.toISOString());
+        `, "objects"));
+        assert.equal(skipped[0]?.runs, 0);
+        assert.equal(new Date(skipped[0]!.next_run_at).toISOString(), dueAt.toISOString());
 
         await replica.query("select pg_advisory_unlock(hashtextextended($1, 0))", [WORKER_TICK_LOCK_KEY]);
         released = true;
@@ -120,7 +120,7 @@ test(
               on r.script_id = s.id and r.target_kind = 'scheduled_occurrence'
            where s.id = ${scriptId}
            group by s.id, s.next_run_at
-        `);
+        `, "objects");
 
       // Another web replica holds the web tick claim on its own connection —
       // the same session-level lock the whole scan set now runs under.
@@ -138,8 +138,8 @@ test(
         // The losing replica must not touch any global scan: the occurrence
         // stays due and no durable ledger row appears for it.
         const skipped = await occurrenceState();
-        assert.equal(skipped.rows[0]?.occurrences, 0);
-        assert.equal(new Date(skipped.rows[0]!.nextRunAt!).toISOString(), dueAt.toISOString());
+        assert.equal(skipped[0]?.occurrences, 0);
+        assert.equal(new Date(skipped[0]!.nextRunAt!).toISOString(), dueAt.toISOString());
 
         await replica.query("select pg_advisory_unlock(hashtextextended($1, 0))", [WEB_TICK_LOCK_KEY]);
         released = true;
@@ -152,8 +152,8 @@ test(
       // and claims the due occurrence exactly once (cursor advanced, one ledger row).
       await webTick();
       const claimed = await occurrenceState();
-      assert.equal(claimed.rows[0]?.occurrences, 1);
-      const advancedTo = claimed.rows[0]!.nextRunAt!;
+      assert.equal(claimed[0]?.occurrences, 1);
+      const advancedTo = claimed[0]!.nextRunAt!;
       assert.notEqual(new Date(advancedTo).toISOString(), dueAt.toISOString());
     } finally {
       await dropScratchOrg(org.orgId);

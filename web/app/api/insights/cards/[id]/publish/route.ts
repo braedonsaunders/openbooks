@@ -105,9 +105,9 @@ export const POST = defineRoute({
   `);
 
         const updated = await tx.execute(
-          sql`select *, to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at from insight_cards where id = ${id} and org_id = ${user.orgId}`,
+          sql`select *, to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at from insight_cards where id = ${id} and org_id = ${user.orgId}`, "objects",
         );
-        return NextResponse.json(updated.rows[0]);
+        return NextResponse.json(updated[0]);
       },
     );
   },

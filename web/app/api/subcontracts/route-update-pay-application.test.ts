@@ -58,13 +58,14 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.subcontracts-route-test')]
       const sqlText = globalThis.openbooksSqlTextSubcontracts
       export const db = {
-        execute: (query) => {
+        execute: (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.dbCalls.push(text)
           if (/from vendor_pay_applications/i.test(text) || /join projects p on p\\.id = s\\.project_id/i.test(text)) {
-            return Promise.resolve({ rows: [{ subsidiary_id: state.subsidiaryId }] })
+            return Promise.resolve({ rows: [{ subsidiary_id: state.subsidiaryId }] }).then(inMode)
           }
-          return Promise.resolve({ rows: [] })
+          return Promise.resolve({ rows: [] }).then(inMode)
         },
         transaction: async (fn) => fn({ execute: db.execute }),
       }

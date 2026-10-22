@@ -153,7 +153,7 @@ export async function loadTimesheets(
            ${selfOnly ? sql`and p.id = ${ownEmployeeId}` : sql``}
            and p.kind in ('person', 'employee')
            and (p.kind = 'person' or exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active))
-         order by p.display_name`)
+         order by p.display_name`, 'objects')
 
   // "New timesheet" opens the current user's own week when the login is
   // linked to an in-scope employee. Only someone who manages other people's
@@ -169,7 +169,7 @@ export async function loadTimesheets(
     linkedEmployeeId: ownEmployeeId,
     pinInScope: (employeeId) =>
       pinTimekeeper(orgId, employeeId, authz.allowedSubsidiaryIds),
-    firstActiveEmployeeId: employees.rows[0]?.id ?? null,
+    firstActiveEmployeeId: employees[0]?.id ?? null,
   })
   const newHref = timesheetStart.employeeId
     ? (`${basePath}?timesheet=${timesheetStart.employeeId}:${await currentWeekStart(orgId)}` as const)

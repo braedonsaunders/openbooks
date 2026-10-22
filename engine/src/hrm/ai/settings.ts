@@ -57,7 +57,7 @@ export async function loadAiRailsSettings(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<AiRailsSettings> {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     zThreshold: string;
     retroThreshold: string;
     cohortKey: string;
@@ -69,7 +69,7 @@ export async function loadAiRailsSettings(
            cohort_key as "cohortKey", bias_terms as "biasTerms",
            review_months as "reviewMonths"
       from ai_rails_settings
-     where org_id = ${orgId}::uuid`)).rows;
+     where org_id = ${orgId}::uuid`, "objects");
   const row = rows[0];
   if (!row) return { ...DEFAULT_AI_RAILS_SETTINGS };
   const cohort = ["subsidiary", "department", "pay_schedule", "job_level"].includes(row.cohortKey)

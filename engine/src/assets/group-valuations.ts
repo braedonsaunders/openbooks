@@ -83,8 +83,7 @@ async function subject(
   input: AssetGroupValuationInput,
 ) {
   await lockAssetRow(tx, orgId, assetId);
-  const row = (
-    await tx.execute<{
+  const row = (await tx.execute<{
       id: string;
       book_id: string;
       amount: string;
@@ -95,16 +94,13 @@ async function subject(
       kind: string;
     }>(
       // Live entries only: a reversed remeasurement is not a valuation source.
-      sql`select v.id,e.book_id,v.amount::text,a.subsidiary_id,a.acquisition_cost::text,s.base_currency as currency,v.occurred_on::text,v.kind from asset_events v join fixed_assets a on a.org_id=v.org_id and a.id=v.asset_id join subsidiaries s on s.org_id=a.org_id and s.id=a.subsidiary_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and v.id=${input.sourceEventId} and v.kind in('impaired','revalued') and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) for share of v,e,s`,
-    )
-  ).rows[0];
+      sql`select v.id,e.book_id,v.amount::text,a.subsidiary_id,a.acquisition_cost::text,s.base_currency as currency,v.occurred_on::text,v.kind from asset_events v join fixed_assets a on a.org_id=v.org_id and a.id=v.asset_id join subsidiaries s on s.org_id=a.org_id and s.id=a.subsidiary_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and v.id=${input.sourceEventId} and v.kind in('impaired','revalued') and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) for share of v,e,s`, "objects",
+    ))[0];
   if (!row)
     throw new AssetValidationError("select an unreversed posted valuation of this asset");
-  const transfer = (
-    await tx.execute<Transfer>(
-      sql`select * from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and book_id=${row.book_id} and reversed_by_change_id is null for share`,
-    )
-  ).rows[0];
+  const transfer = (await tx.execute<Transfer>(
+      sql`select * from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and book_id=${row.book_id} and reversed_by_change_id is null for share`, "objects",
+    ))[0];
   if (!transfer)
     throw new AssetValidationError(
       "the asset has no active group transfer basis in this book",
@@ -161,11 +157,9 @@ async function snapshot(
     assetId,
     s.row.book_id,
   );
-  const periods = (
-    await tx.execute<{ id: string; starts_on: string; ends_on: string }>(
-      sql`select id,starts_on::text,ends_on::text from accounting_periods where org_id=${orgId} and fiscal_calendar_id=${calendar} and not is_adjustment order by starts_on for share`,
-    )
-  ).rows;
+  const periods = await tx.execute<{ id: string; starts_on: string; ends_on: string }>(
+      sql`select id,starts_on::text,ends_on::text from accounting_periods where org_id=${orgId} and fiscal_calendar_id=${calendar} and not is_adjustment order by starts_on for share`, "objects",
+    );
   const period = periods.find(
     (p) => p.starts_on <= input.effectiveOn && p.ends_on >= input.effectiveOn,
   );
@@ -179,30 +173,24 @@ async function snapshot(
     periodId: period.id,
     subsidiaryIds: s.required,
   });
-  const later = (
-    await tx.execute(
+  const later = await tx.execute(
       // Live entries only: only live later activity blocks a backdated valuation.
-      sql`select 1 from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${s.row.book_id} and effective_on>${input.effectiveOn} union all select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${s.row.book_id} and v.occurred_on>${input.effectiveOn} and v.kind in('impaired','revalued','disposed','written_off') and e.status='posted' union all select 1 from asset_transfer_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.transfer_id=${s.transfer.id} and e.posting_date>${input.effectiveOn} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`,
-    )
-  ).rows;
+      sql`select 1 from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${s.row.book_id} and effective_on>${input.effectiveOn} union all select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${s.row.book_id} and v.occurred_on>${input.effectiveOn} and v.kind in('impaired','revalued','disposed','written_off') and e.status='posted' union all select 1 from asset_transfer_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.transfer_id=${s.transfer.id} and e.posting_date>${input.effectiveOn} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`, "objects",
+    );
   if (later.length)
     throw new AssetValidationError(
       "correct later asset or consolidation postings before changing this earlier group valuation",
     );
-  const changes = (
-    await tx.execute<{ cost: string }>(
-      sql`select coalesce(sum(cost_delta),0)::text as cost from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${s.row.book_id} and effective_on<=${input.effectiveOn}`,
-    )
-  ).rows[0]!;
+  const changes = (await tx.execute<{ cost: string }>(
+      sql`select coalesce(sum(cost_delta),0)::text as cost from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${s.row.book_id} and effective_on<=${input.effectiveOn}`, "objects",
+    ))[0]!;
   const held = add(s.row.acquisition_cost, changes.cost);
   if (cmp(held, "0") <= 0)
     throw new AssetValidationError("a disposed asset has no remaining group valuation");
-  const earlierMissing = (
-    await tx.execute(
+  const earlierMissing = await tx.execute(
       // Live entries only: a reversed remeasurement needs no transfer measurement.
-      sql`select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${s.row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and v.occurred_on<${input.effectiveOn} and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) and not exists(select 1 from asset_transfer_measurements m where m.org_id=v.org_id and m.source_event_id=v.id) limit 1`,
-    )
-  ).rows;
+      sql`select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${s.row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and v.occurred_on<${input.effectiveOn} and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) and not exists(select 1 from asset_transfer_measurements m where m.org_id=v.org_id and m.source_event_id=v.id) limit 1`, "objects",
+    );
   if (earlierMissing.length)
     throw new AssetValidationError(
       "approve the earlier source valuation group assessment first; group service history must be measured in order",
@@ -218,11 +206,9 @@ async function snapshot(
     valuations,
     s.transfer.basis.groupUnimpaired,
   );
-  const postedThrough = (
-    await tx.execute<{ date: string | null }>(
-      sql`select max(p.ends_on)::text as date from depreciation_schedules schedule join depreciation_schedule_lines l on l.org_id=schedule.org_id and l.schedule_id=schedule.id join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id where schedule.org_id=${orgId} and schedule.asset_id=${assetId} and schedule.book_id=${s.row.book_id} and l.posted_amount is not null and p.ends_on<=${input.effectiveOn}`,
-    )
-  ).rows[0]!.date;
+  const postedThrough = (await tx.execute<{ date: string | null }>(
+      sql`select max(p.ends_on)::text as date from depreciation_schedules schedule join depreciation_schedule_lines l on l.org_id=schedule.org_id and l.schedule_id=schedule.id join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id where schedule.org_id=${orgId} and schedule.asset_id=${assetId} and schedule.book_id=${s.row.book_id} and l.posted_amount is not null and p.ends_on<=${input.effectiveOn}`, "objects",
+    ))[0]!.date;
   const serviceFrom =
     postedThrough === input.effectiveOn
       ? new Date(Date.parse(input.effectiveOn + "T00:00:00Z") + 86400000)
@@ -372,14 +358,12 @@ export async function proposeAssetGroupValuation(
       // An identical retry still resolves after the source valuation has been
       // corrected. Authorize against the frozen workpaper first; only a NEW
       // proposal needs the source event to remain active.
-      const replay = (
-        await db.execute<{
+      const replay = (await db.execute<{
           subsidiary_id: string;
           payload: Record<string, unknown>;
         }>(
-          sql`select subsidiary_id,payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`,
-        )
-      ).rows[0];
+          sql`select subsidiary_id,payload from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey}`, "objects",
+        ))[0];
       if (replay) {
         // A frozen idempotency payload cannot authorize a retry after its
         // asset has moved. Recheck the current owner under the asset lock.
@@ -472,11 +456,11 @@ export async function applyAssetGroupValuation(
           "the independent approver no longer covers the asset and elimination company; obtain a new approval",
         );
       const result = await db.execute<{ id: string }>(
-        sql`insert into asset_transfer_measurements(org_id,transfer_id,source_event_id,change_id,effective_on,measurement,created_by) values(${orgId},${state.transfer.id},${input.sourceEventId},${changeId},${input.effectiveOn},${JSON.stringify(state.measurement)}::jsonb,${actorId}) returning id`,
+        sql`insert into asset_transfer_measurements(org_id,transfer_id,source_event_id,change_id,effective_on,measurement,created_by) values(${orgId},${state.transfer.id},${input.sourceEventId},${changeId},${input.effectiveOn},${JSON.stringify(state.measurement)}::jsonb,${actorId}) returning id`, "objects",
       );
-      if (result.rows.length !== 1)
+      if (result.length !== 1)
         throw new Error("group asset valuation was not recorded");
-      const outcome = { measurementId: result.rows[0]!.id, ...state.preview };
+      const outcome = { measurementId: result[0]!.id, ...state.preview };
       await completeFinancialChange(db, orgId, changeId, actorId, outcome);
       return outcome;
     }),

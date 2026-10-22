@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -13,30 +12,11 @@ import {
 import { previewRevenueRecognition, runRevenueRecognition } from "./recognition.ts";
 import type { ScratchOrg } from "../testing/fixtures.ts";
 
-// Foreign-currency revenue recognition (0256): a schedule never amended
-// used to convert its plan at FX rate 1 in the functional currency, while
-// the invoice credited deferred revenue at the invoice's own rate —
-// stranding the difference in deferred revenue forever. Deferred revenue
-// is a non-monetary liability, so recognition drains it at the historical
-// deferral rate stamped on the schedule at creation, with no revaluation.
-
-const MIGRATION_URL = new URL(
-  "../../../schema/migrations/generated/0256_recognition_schedule_transaction_rate.sql",
-  import.meta.url,
-);
-
-async function runMigration(): Promise<void> {
-  // Execute the shipped migration bytes verbatim, minus the runner-owned
-  // SET header: those session GUCs belong to the migration runner, and
-  // running them here would leak onto this pooled test connection. The
-  // statement is re-runnable (ADD COLUMN IF NOT EXISTS, backfill fills
-  // only unstamped schedules), so it is a no-op once the template ships it.
-  const body = readFileSync(MIGRATION_URL, "utf8")
-    .split("\n")
-    .filter((line) => !line.startsWith("SET "))
-    .join("\n");
-  await db.execute(sql.raw(body));
-}
+// Foreign-currency revenue recognition: deferred revenue is a non-monetary
+// liability, so recognition drains it at the historical deferral rate
+// stamped on the schedule at creation, with no revaluation. Converting the
+// plan at FX rate 1 in the functional currency while the invoice credited
+// deferred revenue at its own rate would strand the difference forever.
 
 async function postForeignInvoice(
   org: ScratchOrg,
@@ -97,7 +77,6 @@ test("a euro invoice recognizes out its full dollar-deferred balance at the hist
   const org = await createScratchOrg();
   const actors = await seedFlowActors(org.orgId);
   try {
-    await runMigration();
     await db.execute(sql`
       insert into currencies (code, name, minor_units)
       values ('EUR', 'Euro', 2) on conflict (code) do nothing`);
@@ -156,7 +135,7 @@ test("a euro invoice recognizes out its full dollar-deferred balance at the hist
     const run = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
     assert.equal(run.posted, 1);
 
-    // The full deferred balance drains: before the fix recognition posted
+    // The full deferred balance drains: recognizing at rate 1 would post
     // CAD 1,000 against CAD 1,100 deferred, stranding CAD 100 forever.
     assert.equal(await glBalance(org.orgId, org.accounts.deferred), "0.0000");
     assert.equal(await glBalance(org.orgId, org.accounts.recognized), "-1100.0000");
@@ -176,7 +155,6 @@ test("a mixed-currency run totals the posted base amounts, like the preview", { 
   const org = await createScratchOrg();
   const actors = await seedFlowActors(org.orgId);
   try {
-    await runMigration();
     await db.execute(sql`
       insert into currencies (code, name, minor_units)
       values ('EUR', 'Euro', 2) on conflict (code) do nothing`);

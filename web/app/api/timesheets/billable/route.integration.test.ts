@@ -80,8 +80,8 @@ async function fixture() {
     method: 'POST', body: JSON.stringify({ employee: mate, week: WEEK, line, isBillable }),
   })))
   const approve = () => withOrgContext(org.orgId, () => decideTimesheetFixture({orgId:org.orgId,...{ employee: mate, week: WEEK },decision:'approved'}))
-  const entries = async () => (await db.execute<{ status: string; is_billable: boolean; billing_status: string }>(sql`
-    select status, is_billable, billing_status from time_entries where org_id=${org.orgId} and employee_party_id=${mate}`)).rows
+  const entries = async () => await db.execute<{ status: string; is_billable: boolean; billing_status: string }>(sql`
+    select status, is_billable, billing_status from time_entries where org_id=${org.orgId} and employee_party_id=${mate}`, 'objects')
   const close = async () => { session.user = null; await dropScratchOrg(org.orgId) }
   return { org, mate, mateUser, supervisor, projectId, line, as, save, submit, billable, approve, entries, close }
 }
@@ -101,11 +101,11 @@ test('an approver marks a submitted line non-billable with per-entry audit, and 
     const audit = await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
       select action, actor_id, changes from audit_log
        where org_id=${f.org.orgId} and table_name='time_entries'
-    `)
-    assert.equal(audit.rows.length, 1, 'the flag change leaves exactly one audit row for the entry')
-    assert.equal(audit.rows[0]!.action, 'update')
-    assert.equal(audit.rows[0]!.actor_id, f.supervisor, 'the audit names the approver, not the timekeeper')
-    const changes = audit.rows[0]!.changes as { event: string; before: { is_billable: boolean }; after: { is_billable: boolean } }
+    `, 'objects')
+    assert.equal(audit.length, 1, 'the flag change leaves exactly one audit row for the entry')
+    assert.equal(audit[0]!.action, 'update')
+    assert.equal(audit[0]!.actor_id, f.supervisor, 'the audit names the approver, not the timekeeper')
+    const changes = audit[0]!.changes as { event: string; before: { is_billable: boolean }; after: { is_billable: boolean } }
     assert.equal(changes.event, 'billable_changed')
     assert.deepEqual([changes.before.is_billable, changes.after.is_billable], [true, false])
     const approved = await f.approve()

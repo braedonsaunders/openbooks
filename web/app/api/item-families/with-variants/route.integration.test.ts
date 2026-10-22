@@ -86,7 +86,7 @@ test('two options of 2x3 create six variants and one family in one request', asy
     assert.equal(body.variants.length, 6)
     const counts = await withBypassContext(async () => (await db.execute<{ families: string; items: string }>(sql`
       select (select count(*)::text from item_families where org_id = ${f.orgId} and code = 'TEE') as families,
-             (select count(*)::text from items where org_id = ${f.orgId} and family_id = ${body.family.id}) as items`)).rows[0])
+             (select count(*)::text from items where org_id = ${f.orgId} and family_id = ${body.family.id}) as items`, 'objects'))[0])
     assert.equal(counts?.families, '1')
     assert.equal(counts?.items, '6')
   } finally {
@@ -106,7 +106,7 @@ test('creation hides when the variants gate is off and keeps the data', async ()
     const response = await post(f)
     assert.equal(response.status, 404)
     const rows = await withBypassContext(async () =>
-      (await db.execute<{ count: string }>(sql`select count(*)::text as count from item_families where org_id = ${f.orgId}`)).rows[0])
+      (await db.execute<{ count: string }>(sql`select count(*)::text as count from item_families where org_id = ${f.orgId}`, 'objects'))[0])
     assert.equal(rows?.count, '0')
   } finally {
     await withBypassContext(() => dropScratchOrgReporting(f.orgId))

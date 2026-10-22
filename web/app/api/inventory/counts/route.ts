@@ -144,9 +144,9 @@ export const POST = defineRoute({
 
   async function countSubsidiary(countId: string): Promise<string | null> {
     const r = await db.execute<{ subsidiary_id: string }>(
-      sql`select subsidiary_id from stock_counts where id = ${countId} and org_id = ${user.orgId}`,
+      sql`select subsidiary_id from stock_counts where id = ${countId} and org_id = ${user.orgId}`, 'objects',
     )
-    return r.rows[0]?.subsidiary_id ?? null
+    return r[0]?.subsidiary_id ?? null
   }
 
   async function fenceCount(countId: string): Promise<NextResponse | null> {
@@ -167,9 +167,9 @@ export const POST = defineRoute({
    */
   async function lockedCountFence(countId: string): Promise<void> {
     const r = await db.execute<{ subsidiary_id: string }>(
-      sql`select subsidiary_id from stock_counts where id = ${countId} and org_id = ${user.orgId} for update`,
+      sql`select subsidiary_id from stock_counts where id = ${countId} and org_id = ${user.orgId} for update`, 'objects',
     )
-    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null
+    const subsidiaryId = r[0]?.subsidiary_id ?? null
     if (!subsidiaryId) throw new InventoryNotFoundError('not_found')
     if (allowedSubsidiaryIds && !allowedSubsidiaryIds.has(subsidiaryId)) {
       throw new InventoryNotFoundError('not_found')

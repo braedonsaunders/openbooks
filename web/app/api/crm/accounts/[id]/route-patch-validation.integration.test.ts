@@ -46,11 +46,11 @@ async function fixture() {
   const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Validation Account', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   const profileId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into crm_account_profiles (org_id, party_id, lifecycle_stage, industry, qualification_score, is_active)
     values (${org.orgId}, ${partyId}, 'lead', 'Software', 10, true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   return { org, partyId, profileId }
 }
 
@@ -74,7 +74,7 @@ async function patch(id: string, body: unknown): Promise<PatchResult> {
 
 async function profileState(profileId: string) {
   return (await withBypassContext(() => db.execute<{ is_active: boolean; industry: string | null; qualification_score: number | null }>(sql`
-    select is_active, industry, qualification_score from crm_account_profiles where id = ${profileId}`))).rows[0]!
+    select is_active, industry, qualification_score from crm_account_profiles where id = ${profileId}`, 'objects')))[0]!
 }
 
 // The revision token PATCH mandates (F3-97): every pre-existing call below
@@ -82,7 +82,7 @@ async function profileState(profileId: string) {
 async function revisionFor(partyId: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
-      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+      from crm_account_profiles where party_id = ${partyId}`, 'objects')))[0]!.revision
 }
 
 for (const malformed of ['true', 1, null]) {
@@ -142,7 +142,7 @@ test('PATCH audits the actual before/after row, not the request', async () => {
     const audit = (await withBypassContext(() => db.execute<{ changes: Record<string, unknown> }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'crm_account_profiles' and row_id = ${profileId}
-       order by at desc, id desc limit 1`))).rows[0]!.changes as {
+       order by at desc, id desc limit 1`, 'objects')))[0]!.changes as {
       before: { is_active: boolean; industry: string };
       after: { is_active: boolean; industry: string };
       requested?: unknown;
@@ -164,7 +164,7 @@ test('PATCH stores custom values only after validating them against the account 
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
       values (${org.orgId}, 'crm_account_profiles', 'tier', 'Tier', 'select', '{"options":["gold","silver"]}'::jsonb)`))
     const stored = async () => (await withBypassContext(() => db.execute<{ custom: unknown }>(sql`
-      select custom from crm_account_profiles where id = ${profileId}`))).rows[0]!.custom
+      select custom from crm_account_profiles where id = ${profileId}`, 'objects')))[0]!.custom
     for (const [custom, status, refusal] of [
       [{ tier: 'gold' }, 200, null],
       [{ tier: 'bronze' }, 422, /Tier: invalid option/],

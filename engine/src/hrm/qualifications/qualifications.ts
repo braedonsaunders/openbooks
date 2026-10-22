@@ -148,7 +148,7 @@ async function writeEvent(
             ${args.relatedQualificationId ?? null}::uuid, ${args.kind},
             ${args.actorId}::uuid, ${args.reason ?? null})
     returning id
-  `)).rows[0]?.id;
+  `, "objects"))[0]?.id;
   if (!inserted) {
     throw new HrmQualificationError("The qualification event was not stored — no row was written; retry the action.");
   }
@@ -159,13 +159,13 @@ async function loadLedgerRow(
   orgId: string,
   qualificationId: string,
 ): Promise<LedgerRow | null> {
-  const rows = (await exec.execute<LedgerRow>(sql`
+  const rows = await exec.execute<LedgerRow>(sql`
     select ${LEDGER_COLS}
       from hrm_worker_qualifications q
       join hrm_qualification_types t
         on t.org_id = q.org_id and t.id = q.type_id
      where q.org_id = ${orgId}::uuid and q.id = ${qualificationId}::uuid
-  `)).rows;
+  `, "objects");
   return rows[0] ?? null;
 }
 
@@ -183,7 +183,7 @@ async function loadTypeRow(
     }
   | null
 > {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     code: string;
     validity_months: number | null;
@@ -193,7 +193,7 @@ async function loadTypeRow(
     select id, code, validity_months, requires_evidence, is_active
       from hrm_qualification_types
      where org_id = ${orgId}::uuid and id = ${typeId}::uuid
-  `)).rows;
+  `, "objects");
   return rows[0] ?? null;
 }
 
@@ -202,9 +202,9 @@ async function assertEvidenceInOrg(
   orgId: string,
   fileId: string,
 ): Promise<void> {
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select id from files where org_id = ${orgId}::uuid and id = ${fileId}::uuid
-  `)).rows;
+  `, "objects");
   if (!rows[0]) {
     throw new HrmQualificationError(
       "The evidence file is not in this organization — upload it to this org's File Cabinet first, then attach it.",
@@ -222,11 +222,11 @@ async function loadEmploymentEmployer(
   orgId: string,
   employmentId: string,
 ): Promise<string | null> {
-  const rows = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+  const rows = await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
     select employer_subsidiary_id as "employerSubsidiaryId"
       from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `)).rows;
+  `, "objects");
   return rows[0]?.employerSubsidiaryId ?? null;
 }
 
@@ -274,7 +274,7 @@ async function loadLedgerRowForScopedMutation(
     select employment_id
       from hrm_worker_qualifications
      where org_id = ${orgId}::uuid and id = ${qualificationId}::uuid
-  `)).rows[0];
+  `, "objects"))[0];
   if (!identity) return null;
   try {
     await lockEmploymentsForScope(exec, [identity.employment_id], { orgId, actorId, outOfScope });
@@ -360,7 +360,7 @@ export async function recordQualification(
     const identifier = input.identifier?.trim() ? input.identifier.trim() : null;
     const notes = input.notes?.trim() ? input.notes.trim() : null;
     try {
-      const rows = (await tx.execute<LedgerRow>(sql`
+      const rows = await tx.execute<LedgerRow>(sql`
         insert into hrm_worker_qualifications
           (org_id, employment_id, type_id, identifier, issued_on, expires_on,
            status, evidence_file_id, notes, created_by, updated_by)
@@ -369,7 +369,7 @@ export async function recordQualification(
                 'pending_verification', ${evidenceFileId}::uuid, ${notes},
                 ${actorId}::uuid, ${actorId}::uuid)
         returning id
-      `)).rows;
+      `, "objects");
       const createdId = rows[0]?.id;
       if (!createdId) throw new HrmQualificationError("The qualification was not stored — no row was written; retry the action.");
       await writeEvent(tx, {
@@ -426,14 +426,14 @@ export async function verifyQualification(
     if (current.status === "valid") {
       throw new HrmQualificationError("The qualification is already verified — no second verification is recorded.");
     }
-    const rows = (await tx.execute<{ id: string }>(sql`
+    const rows = await tx.execute<{ id: string }>(sql`
       update hrm_worker_qualifications
          set status = 'valid', verified_by = ${actorId}::uuid, verified_at = now(),
              updated_by = ${actorId}::uuid, updated_at = now()
        where org_id = ${orgId}::uuid and id = ${qualificationId}::uuid
          and status = 'pending_verification'
        returning id
-    `)).rows;
+    `, "objects");
     if (!rows[0]) {
       throw new HrmQualificationError("The qualification changed under you — refresh the ledger and try again.");
     }
@@ -539,13 +539,13 @@ export async function revokeQualification(
     if (current.status === "revoked") {
       throw new HrmQualificationError("The qualification is already revoked — a second revocation is not recorded.");
     }
-    const rows = (await tx.execute<{ id: string }>(sql`
+    const rows = await tx.execute<{ id: string }>(sql`
       update hrm_worker_qualifications
          set status = 'revoked', updated_by = ${actorId}::uuid, updated_at = now()
        where org_id = ${orgId}::uuid and id = ${qualificationId}::uuid
          and status <> 'revoked'
        returning id
-    `)).rows;
+    `, "objects");
     if (!rows[0]) {
       throw new HrmQualificationError("The qualification changed under you — refresh the ledger and try again.");
     }
@@ -606,13 +606,13 @@ export async function attachEvidence(
       );
     }
     await assertEvidenceInOrg(tx, orgId, fileId);
-    const rows = (await tx.execute<{ id: string }>(sql`
+    const rows = await tx.execute<{ id: string }>(sql`
       update hrm_worker_qualifications
          set evidence_file_id = ${fileId}::uuid,
              updated_by = ${actorId}::uuid, updated_at = now()
        where org_id = ${orgId}::uuid and id = ${qualificationId}::uuid
        returning id
-    `)).rows;
+    `, "objects");
     if (!rows[0]) {
       throw new HrmQualificationError("The qualification changed under you — refresh the ledger and try again.");
     }
@@ -670,7 +670,7 @@ export async function listQualifications(
         // employment keeps the not-found refusal.
         const exists = (await exec.execute<{ id: string }>(sql`
           select id from worker_employments where org_id = ${orgId} and id = ${wanted}
-        `)).rows[0];
+        `, "objects"))[0];
         if (!exists) throw error;
         employmentIds = [];
       }
@@ -694,7 +694,7 @@ export async function listQualifications(
   // reads nothing rather than everything.
   const hrScopeIds = hrScope instanceof Set ? `{${[...hrScope].join(",")}}` : null;
   const hrRestricted = employmentIds === null && hrScopeIds !== null;
-  const rows = (await exec.execute<LedgerRow>(sql`
+  const rows = await exec.execute<LedgerRow>(sql`
     select ${LEDGER_COLS}
       from hrm_worker_qualifications q
       join hrm_qualification_types t
@@ -710,7 +710,7 @@ export async function listQualifications(
          : sql``}
        and (${input.typeId ?? null}::uuid is null or q.type_id = ${input.typeId ?? null}::uuid)
      order by q.expires_on nulls last, q.issued_on desc
-  `)).rows;
+  `, "objects");
   const today = await businessToday(orgId);
   const projected = rows.map((row) => toQualification(row, today));
   if (!input.status) return projected;
@@ -806,7 +806,7 @@ export async function listQualificationEvents(
       );
     }
   }
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     qualification_id: string;
     related_qualification_id: string | null;
@@ -820,7 +820,7 @@ export async function listQualificationEvents(
       from hrm_qualification_events
      where org_id = ${orgId}::uuid and qualification_id = ${qualificationId}::uuid
      order by recorded_at, id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     qualificationId: row.qualification_id,

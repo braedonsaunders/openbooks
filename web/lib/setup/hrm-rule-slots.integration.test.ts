@@ -66,7 +66,7 @@ test("a leave policy's scope, accrual and carryover slots persist as its rules a
       carryover_hours: string | null;
     }>(sql`
       select applies_to, accrual_rule, carryover_rule, applies_department_id, accrual_kind, carryover_hours
-        from hrm_leave_policies where id = ${policyId} and org_id = ${org.orgId}`)).rows[0]!;
+        from hrm_leave_policies where id = ${policyId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.deepEqual(stored.applies_to, {
       employer_subsidiary_id: org.subsidiaryId,
       department_id: org.departmentId,
@@ -101,7 +101,7 @@ test("a leave policy's scope, accrual and carryover slots persist as its rules a
     assert.equal(edited.status, 200, `edit refused: ${JSON.stringify(edited.body)}`);
     const after = (await db.execute<{ applies_to: unknown; accrual_rule: unknown; carryover_rule: unknown; minimum_notice_days: number }>(sql`
       select applies_to, accrual_rule, carryover_rule, minimum_notice_days
-        from hrm_leave_policies where id = ${policyId} and org_id = ${org.orgId}`)).rows[0]!;
+        from hrm_leave_policies where id = ${policyId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.deepEqual(after.applies_to, {
       employer_subsidiary_id: null,
       department_id: org.departmentId,
@@ -120,7 +120,7 @@ test("a leave policy's scope, accrual and carryover slots persist as its rules a
     assert.equal(refused.status, 400, `a per_year rule without hours must be refused: ${JSON.stringify(refused.body)}`);
     assert.match(JSON.stringify(refused.body), /per_year accrual rule must carry hours/);
     const untouched = (await db.execute<{ accrual_rule: unknown }>(sql`
-      select accrual_rule from hrm_leave_policies where id = ${policyId}`)).rows[0]!;
+      select accrual_rule from hrm_leave_policies where id = ${policyId}`, "objects"))[0]!;
     assert.deepEqual(untouched.accrual_rule, { kind: "per_period", hours: "8", periods_per_year: 26 });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -134,14 +134,14 @@ test("a process template's applies-to slots persist and an edit no longer writes
       kind: "onboarding", name: "Field onboarding", appliesEmployerSubsidiaryId: "", appliesDepartmentId: org.departmentId, isActive: true,
     }));
     const stored = (await db.execute<{ applies_to: unknown }>(sql`
-      select applies_to from hrm_process_templates where id = ${templateId} and org_id = ${org.orgId}`)).rows[0]!;
+      select applies_to from hrm_process_templates where id = ${templateId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.deepEqual(stored.applies_to, { employer_subsidiary_id: null, department_id: org.departmentId }, "the folded filter reaches the row on create");
     const edited = await updateSetupRecord(org.actor, "hrm-process-templates", {
       id: templateId, kind: "onboarding", name: "Field onboarding v2", appliesEmployerSubsidiaryId: "", appliesDepartmentId: org.departmentId, isActive: true,
     });
     assert.equal(edited.status, 200, `edit refused: ${JSON.stringify(edited.body)}`);
     const after = (await db.execute<{ name: string; applies_to: unknown }>(sql`
-      select name, applies_to from hrm_process_templates where id = ${templateId}`)).rows[0]!;
+      select name, applies_to from hrm_process_templates where id = ${templateId}`, "objects"))[0]!;
     assert.equal(after.name, "Field onboarding v2");
     assert.deepEqual(after.applies_to, { employer_subsidiary_id: null, department_id: org.departmentId }, "the filter survives an edit");
   } finally {

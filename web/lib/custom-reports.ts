@@ -215,8 +215,8 @@ export async function builtInReportDefinitionId(
        and coalesce(report_type, 'query') = 'query'
        and slug = ${slug}
      limit 1
-  `))
-  return r.rows[0]?.id ?? null
+  `, 'objects'))
+  return r[0]?.id ?? null
 }
 
 /**
@@ -238,7 +238,7 @@ export async function builtInReportDefinitionIds(
        and coalesce(report_type, 'query') = 'query'
        and slug = any(${`{${wanted.join(',')}}`}::text[])
      order by slug, id
-  `)).rows.map((row) => [row.slug, row.id]))
+  `, 'objects')).map((row) => [row.slug, row.id]))
   const found = await read()
   if (wanted.every((slug) => found.has(slug))) return found
   await ensureReportDefinitions(orgId)
@@ -260,8 +260,8 @@ export async function loadReportDefinition(
     select id, org_id, kind, report_type, slug, name, description, query, statement, system, layout, created_at, updated_at
       from report_definitions
      where id = ${id} and org_id = ${orgId} and archived_at is null
-  `))
-  return r.rows[0] ?? null
+  `, 'objects'))
+  return r[0] ?? null
 }
 
 /**
@@ -768,10 +768,10 @@ export async function resolveCustomReportBookScope(
   const entity = REPORT_ENTITY_MAP[query.entity]
   if (!entity?.bookScope) return undefined
   if (customQueryReferencesBook(query)) return null
-  const { rows } = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active
-  `)
+  `, 'objects')
   if (rows.length !== 1) {
     throw new ReportQueryValidationError(
       'This report needs exactly one active primary accounting book. Choose a book filter to run it against a specific book instead.',
@@ -920,8 +920,8 @@ export async function recordReportRun(args: {
     values (${args.orgId}, ${args.definitionId}, ${args.scheduleId ?? null}, ${args.trigger},
             'running', ${started}, ${args.userId}, ${JSON.stringify(authorization_snapshot)}::jsonb)
     returning id
-  `))
-  const runId = inserted.rows[0]!.id
+  `, 'objects'))
+  const runId = inserted[0]!.id
 
   try {
     const result = await withReportAuthz(authz, () => executeReport(args.orgId, args.query, args.maxRows))
@@ -973,8 +973,8 @@ export async function uniqueReportSlug(
        where org_id = ${orgId} and slug = ${slug}
          ${excludeId ? sql`and id <> ${excludeId}` : sql``}
        limit 1
-    `))
-    if (clash.rows.length === 0) return slug
+    `, 'objects'))
+    if (clash.length === 0) return slug
     slug = `${desired}-${n}`
   }
   return `${desired}-${Date.now()}`

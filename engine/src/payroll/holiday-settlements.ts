@@ -41,8 +41,8 @@ export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
       const inserted = await tx.execute(sql`insert into pay_run_holiday_allocations
         (id,org_id,obligation_id,pay_run_document_id,component_id,amount,hours,rate,currency,source_snapshot,created_by,updated_by)
         values(${allocationId},${input.orgId},${source.id},${input.documentId},${String(component.id)},${priced.amount},${priced.hours},${priced.rate},
-          ${source.wage.resolved.currency},${JSON.stringify({ obligation: source.evidence, wage: source.wage })}::jsonb,${input.actorId},${input.actorId}) returning id`);
-      if (inserted.rows.length !== 1) throw new PayrollError("The unpaid holiday entitlement could not claim its native payroll settlement.");
+          ${source.wage.resolved.currency},${JSON.stringify({ obligation: source.evidence, wage: source.wage })}::jsonb,${input.actorId},${input.actorId}) returning id`, "objects");
+      if (inserted.length !== 1) throw new PayrollError("The unpaid holiday entitlement could not claim its native payroll settlement.");
     }
     input.lines.push({
       componentId: String(component.id), kind: "earning", description: "Approved unpaid holiday entitlement",

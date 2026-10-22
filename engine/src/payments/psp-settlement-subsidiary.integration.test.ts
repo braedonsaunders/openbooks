@@ -39,7 +39,7 @@ function stripeParsed(externalRef: string, settlementDate: string) {
 }
 
 async function batchState(orgId: string, batchId: string) {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     status: string;
     subsidiaryId: string | null;
     journalEntryId: string | null;
@@ -48,7 +48,7 @@ async function batchState(orgId: string, batchId: string) {
            journal_entry_id as "journalEntryId"
       from psp_settlement_batches
      where id = ${batchId} and org_id = ${orgId}
-  `)).rows;
+  `, "objects");
   return rows[0]!;
 }
 
@@ -133,7 +133,7 @@ test(
       const entry = (await db.execute<{ subsidiaryId: string }>(sql`
         select subsidiary_id as "subsidiaryId" from journal_entries
          where id = ${entryId} and org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(entry.subsidiaryId, org.subsidiaryId);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -228,12 +228,12 @@ test(
         select subsidiary_id as "subsidiaryId", gross_amount::text as "grossAmount",
                memo, source_payload as "sourcePayload"
           from psp_settlement_batches where id = ${batchId} and org_id = ${org.orgId}
-      `)).rows[0]!;
-      const beforeLines = (await db.execute(sql`
+      `, "objects"))[0]!;
+      const beforeLines = await db.execute(sql`
         select line_number, kind, external_ref, description, amount::text as amount, currency, meta
           from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId}
          order by line_number
-      `)).rows;
+      `, "objects");
       const changed = {
         ...original,
         memo: "replacement from subsidiary A",
@@ -252,12 +252,12 @@ test(
         select subsidiary_id as "subsidiaryId", gross_amount::text as "grossAmount",
                memo, source_payload as "sourcePayload"
           from psp_settlement_batches where id = ${batchId} and org_id = ${org.orgId}
-      `)).rows[0];
-      const afterLines = (await db.execute(sql`
+      `, "objects"))[0];
+      const afterLines = await db.execute(sql`
         select line_number, kind, external_ref, description, amount::text as amount, currency, meta
           from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId}
          order by line_number
-      `)).rows;
+      `, "objects");
       assert.deepEqual(after, before);
       assert.deepEqual(afterLines, beforeLines);
     } finally {

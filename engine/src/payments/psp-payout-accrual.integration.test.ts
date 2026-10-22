@@ -114,7 +114,7 @@ test("deposit tie-out follows the bank reconciliation match, with the gap", { sk
     const statementLineId = (await db.execute<{ id: string }>(sql`
       select id from bank_statement_lines
        where org_id = ${org.orgId} and bank_transaction_id = 'tieout-deposit-1'
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const recon = await startReconciliation(
       { accountId: org.accounts.bank, throughDate: "2026-07-10", statementBalance: net },
       ctx,
@@ -123,7 +123,7 @@ test("deposit tie-out follows the bank reconciliation match, with the gap", { sk
       select jl.id from journal_lines jl
         join psp_settlement_batches b on b.journal_entry_id = jl.entry_id and b.org_id = jl.org_id
        where jl.org_id = ${org.orgId} and b.id = ${batchId} and jl.account_id = ${org.accounts.bank}
-    `)).rows.map((row) => row.id);
+    `, "objects")).map((row) => row.id);
     assert.ok(bankLegs.length > 0, "the posted batch carries a bank leg");
     await createMatch({ reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: bankLegs }, ctx);
 
@@ -153,12 +153,12 @@ test("in-transit accrual posts a balanced reclass and reverses it next period", 
     assert.equal(first.reversed.length, 0);
     assert.equal(first.accrued[0]!.batchId, batchId);
 
-    const legs = (await db.execute<{ amount: string }>(sql`
+    const legs = await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount from journal_lines l
         join journal_entries e on e.id = l.entry_id
        where l.org_id = ${org.orgId} and e.origin = 'accrual'
          and e.status in ('posted', 'reversed')
-    `)).rows;
+    `, "objects");
     assert.ok(legs.length >= 2, "the accrual posts journal legs");
     const total = legs.reduce((sum, leg) => sum + units4(leg.amount), 0n);
     assert.equal(total, 0n, "accrual legs balance");
@@ -174,16 +174,16 @@ test("in-transit accrual posts a balanced reclass and reverses it next period", 
     const row = (await db.execute<{ status: string; reversal_entry_id: string | null }>(sql`
       select status, reversal_entry_id from psp_payout_accruals
        where org_id = ${org.orgId} and batch_id = ${batchId} and accrual_date = '2026-07-15'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "reversed");
     assert.ok(row.reversal_entry_id);
 
-    const combined = (await db.execute<{ amount: string }>(sql`
+    const combined = await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount from journal_lines l
         join journal_entries e on e.id = l.entry_id
        where l.org_id = ${org.orgId} and e.origin = 'accrual'
          and e.status in ('posted', 'reversed')
-    `)).rows;
+    `, "objects");
     const combinedTotal = combined.reduce((sum, leg) => sum + units4(leg.amount), 0n);
     assert.equal(combinedTotal, 0n, "accrual plus reversal nets to zero");
   } finally {
@@ -216,7 +216,7 @@ test("month-end accruals reverse on their stored date and do not overlap the nex
     const february = await accruePayoutsInTransit(org.orgId, "2026-02-28", actor, null);
     assert.equal(february.reversed.length, 1);
     assert.equal(february.accrued.length, 1);
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       accrual_date: string;
       reversal_date: string;
       status: string;
@@ -230,7 +230,7 @@ test("month-end accruals reverse on their stored date and do not overlap the nex
         left join journal_entries reversal on reversal.id = a.reversal_entry_id and reversal.org_id = a.org_id
        where a.org_id = ${org.orgId} and a.batch_id = ${batchId}
        order by a.accrual_date
-    `)).rows;
+    `, "objects");
     assert.deepEqual(rows.map((row) => [row.accrual_date, row.reversal_date, row.status, row.accrual_status, row.reversal_posting_date]), [
       ["2026-01-31", "2026-02-01", "reversed", "reversed", "2026-02-01"],
       ["2026-02-28", "2026-03-01", "accrued", "posted", null],
@@ -241,7 +241,7 @@ test("month-end accruals reverse on their stored date and do not overlap the nex
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.clearing}
          and je.origin = 'accrual' and je.posting_date <= '2026-02-28'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(balance.amount, "97.1000", "only February's single payout reclass remains at month end");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -279,7 +279,7 @@ test("reversing a settlement also reverses its outstanding payout accrual", { sk
         from psp_payout_accruals a
         join journal_entries source on source.id = a.accrual_entry_id and source.org_id = a.org_id
        where a.org_id = ${org.orgId} and a.batch_id = ${batchId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "reversed");
     assert.equal(row.accrual_status, "reversed");
     assert.ok(row.reversal_entry_id);

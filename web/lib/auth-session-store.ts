@@ -22,7 +22,7 @@ export async function isSessionRecordActive(token: string, parsed: ParsedSession
            and session.revoked_at is null
            and session.expires_at > now()
       ) as active
-    `));
-    return result.rows[0]?.active === true;
+    `, "objects"));
+    return result[0]?.active === true;
   });
 }

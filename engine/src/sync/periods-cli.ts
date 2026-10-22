@@ -24,10 +24,10 @@ const result = (await db.execute<ConnectionRow>(sql`
    where status = 'active'
      ${requestedId ? sql`and id = ${requestedId}` : sql``}
    order by created_at
-`));
+`, "objects"));
 
-if (result.rows.length === 0) throw new Error("no active source connection matched");
-for (const connection of result.rows) {
+if (result.length === 0) throw new Error("no active source connection matched");
+for (const connection of result) {
   const stats = await syncSourceAccountingPeriods(buildSource(connection), connection.orgId);
   console.log(`${connection.displayName}: ${stats.created} created, ${stats.updated} updated, ${stats.skipped} skipped`);
 }

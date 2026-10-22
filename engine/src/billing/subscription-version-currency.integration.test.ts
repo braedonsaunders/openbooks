@@ -69,8 +69,8 @@ async function seedVersion(org: ScratchOrg, actor: string, planId: string, curre
 
 async function invoiceCurrency(orgId: string, invoiceId: string): Promise<string> {
   return (await db.execute<{ currency: string }>(
-    sql`select currency from documents where id = ${invoiceId} and org_id = ${orgId}`,
-  )).rows[0]!.currency;
+    sql`select currency from documents where id = ${invoiceId} and org_id = ${orgId}`, "objects",
+  ))[0]!.currency;
 }
 
 async function withOrg(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {
@@ -118,8 +118,8 @@ test("a mid-term currency change on a billed subscription is refused at activati
       /cannot change mid-contract/,
     );
     const lifecycles = (await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from subscription_lifecycles where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`,
-    )).rows[0]!.n;
+      sql`select count(*)::int as n from subscription_lifecycles where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`, "objects",
+    ))[0]!.n;
     assert.equal(lifecycles, 0);
   });
 });

@@ -81,7 +81,7 @@ async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: s
         from custom_record_types
        where id = ${id} and org_id = ${user.orgId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!locked) return { kind: 'not_found' as const }
     if (locked.status !== 'draft') {
       return {
@@ -94,8 +94,8 @@ async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: s
     }
     const records = await db.execute(sql`
       select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id} limit 1
-    `)
-    if (records.rows.length > 0) {
+    `, 'objects')
+    if (records.length > 0) {
       return {
         kind: 'response' as const,
         response: NextResponse.json(
@@ -111,12 +111,12 @@ async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: s
            select 1 from custom_records where org_id = ${user.orgId} and type_id = ${id}
          )
       returning id
-    `)
-    if (deleted.rows.length === 0) {
+    `, 'objects')
+    if (deleted.length === 0) {
       const live = (await db.execute<{ status: string }>(sql`
         select status from custom_record_types
          where id = ${id} and org_id = ${user.orgId}
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!live) return { kind: 'not_found' as const }
       if (live.status !== 'draft') {
         return {
@@ -233,8 +233,8 @@ export const PATCH = defineRoute({
       if (keyIssue) return NextResponse.json({ error: keyIssue }, { status: 422 })
       const clash = ((await db.execute(sql`
         select 1 from custom_record_types where org_id = ${user.orgId} and key = ${body.key} and id <> ${id}
-      `)))
-      if (clash.rows.length > 0) {
+      `, 'objects')))
+      if (clash.length > 0) {
         return NextResponse.json({ error: `A record type with key "${body.key}" already exists` }, { status: 409 })
       }
       key = body.key
@@ -280,7 +280,7 @@ export const PATCH = defineRoute({
           from custom_record_types
          where id = ${id} and org_id = ${user.orgId}
          for update
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!locked) return { kind: 'not_found' as const }
       if (locked.updated_at !== expectedRevision) return { kind: 'conflict' as const }
       if (
@@ -316,8 +316,8 @@ export const PATCH = defineRoute({
         where id = ${id} and org_id = ${user.orgId}
           and ${TYPE_REVISION_SQL} = ${expectedRevision}
         returning to_jsonb(custom_record_types) as snapshot
-      `)
-      if (updated.rows.length === 0) return { kind: 'conflict' as const }
+      `, 'objects')
+      if (updated.length === 0) return { kind: 'conflict' as const }
       // Immutable configuration audit in the SAME transaction: a committed
       // builder save without its before/after evidence is a lost refusal
       // surface, so the audit write failing rolls the save back with it.
@@ -326,7 +326,7 @@ export const PATCH = defineRoute({
         table: 'custom_record_types',
         rowId: id,
         action: 'update',
-        changes: { before: locked.snapshot, after: updated.rows[0]!.snapshot },
+        changes: { before: locked.snapshot, after: updated[0]!.snapshot },
         actorId: user.id,
       })
       return { kind: 'ok' as const }

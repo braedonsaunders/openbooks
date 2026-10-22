@@ -82,7 +82,7 @@ export async function cancelDispatchRuns(
        select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid
      ) and org_id = ${orgId} and status in ('pending', 'escalated')
     returning subject_kind, subject_id::text as subject_id
-  `);
+  `, "objects");
   await db.execute(sql`
     update flow_runs set status = 'cancelled', finished_at = now(), updated_at = now()
       ${actorId ? sql`, updated_by = ${actorId}` : sql``}
@@ -92,7 +92,7 @@ export async function cancelDispatchRuns(
   `);
   // Cancelled requests no longer wait on anyone: resolve their notices.
   const subjects = new Map(
-    cancelled.rows.map((row) => [`${row.subject_kind}:${row.subject_id}`, row]),
+    cancelled.map((row) => [`${row.subject_kind}:${row.subject_id}`, row]),
   );
   for (const row of subjects.values()) {
     await resolveApprovalRequestNotices(

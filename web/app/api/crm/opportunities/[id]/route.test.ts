@@ -146,12 +146,13 @@ stubModules({
       else lockHeld = false
     }
     export const db = {
-      execute: (query) => Promise.resolve(respondExecute(query)),
+      execute: (query, mode) => Promise.resolve(respondExecute(query)).then((result) => (mode === 'objects' ? result.rows : result)),
       transaction: async (work) => {
         state.transactionCount += 1
         let ownsLock = false
         const tx = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push({ kind: 'tx-execute', text })
           if (text.includes('for update of o')) {
@@ -170,21 +171,21 @@ stubModules({
               await acquireLock()
             }
             ownsLock = true
-            return { rows: state.opportunity ? [state.opportunity] : [] }
+            return inMode({ rows: state.opportunity ? [state.opportunity] : [] })
           }
           if (text.includes('count(*)') && text.includes('crm_opportunity_lines')) {
-            return { rows: [{ count: state.storedLines }] }
+            return inMode({ rows: [{ count: state.storedLines }] })
           }
           if (text.includes('from contacts') && text.includes('party_id')) {
             const matches = state.lockedContactMatches.shift() ?? true
-            return { rows: matches ? [{ ok: 1 }] : [] }
+            return inMode({ rows: matches ? [{ ok: 1 }] : [] })
           }
           if (text.includes('from crm_opportunity_statuses')) {
-            return { rows: state.txStatusValid ? [state.txStatusClosed ? { is_closed: true, is_won: false, probability: 0, default_forecast_category: 'most_likely', ...state.statusPolicy } : { is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely', ...state.statusPolicy }] : [] }
+            return inMode({ rows: state.txStatusValid ? [state.txStatusClosed ? { is_closed: true, is_won: false, probability: 0, default_forecast_category: 'most_likely', ...state.statusPolicy } : { is_closed: false, is_won: false, probability: 20, default_forecast_category: 'most_likely', ...state.statusPolicy }] : [] })
           }
           if (text.includes('from parties') || text.includes('from contacts') || text.includes('from users') || text.includes('from crm_sales_teams') || text.includes('from crm_lead_sources') || text.includes('from currencies') || text.includes('from items')) {
-            if (state.txInvalidReference && text.includes('from ' + state.txInvalidReference)) return { rows: [] }
-            return { rows: [{ ok: 1, is_active: true }] }
+            if (state.txInvalidReference && text.includes('from ' + state.txInvalidReference)) return inMode({ rows: [] })
+            return inMode({ rows: [{ ok: 1, is_active: true }] })
           }
           if (text.includes('update crm_opportunities')) {
             const before = { ...(state.opportunity || {}) }
@@ -206,20 +207,20 @@ stubModules({
             state.updateBefores.push(before)
             state.lastUpdateBefore = before
             state.txWrites += 1
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
           if (text.includes('insert into crm_opportunity_stage_events')) {
             state.stageWrites += 1
             state.stageBefores.push({ before: state.lastUpdateBefore || {}, after: { ...(state.opportunity || {}) } })
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
           if (text.includes('insert into audit_log')) {
             state.auditWrites += 1
             const before = state.updateBefores[state.auditWrites - 1]
             if (before) state.auditBefores.push(before)
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
         }
         try { return await work(tx) }

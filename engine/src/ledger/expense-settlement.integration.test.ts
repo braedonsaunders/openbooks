@@ -129,8 +129,8 @@ async function postedLegs(docId: string, orgId: string): Promise<PostedLeg[]> {
       from documents d
       join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.org_id = d.org_id
      where d.id = ${docId} and d.org_id = ${orgId}
-     order by jl.amount::numeric desc, jl.account_id`);
-  return r.rows;
+     order by jl.amount::numeric desc, jl.account_id`, "objects");
+  return r;
 }
 
 async function dropOrg(s: SettlementOrg): Promise<void> {
@@ -231,9 +231,9 @@ test("a reimbursement run over a three-settlement report selects only the out-of
       paymentBankProfileId: profileId,
       billDocumentIds: [docId],
     });
-    const items = (await db.execute<{ kind: string; payment_amount: string }>(sql`
+    const items = await db.execute<{ kind: string; payment_amount: string }>(sql`
       select kind, payment_amount::text as payment_amount
-        from payment_run_items where payment_run_id = ${run.id} and org_id = ${s.orgId}`)).rows;
+        from payment_run_items where payment_run_id = ${run.id} and org_id = ${s.orgId}`, "objects");
     assert.equal(items.length, 1);
     assert.equal(items[0]!.kind, "expense");
     assert.equal(items[0]!.payment_amount, "500.0000");

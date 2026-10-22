@@ -95,10 +95,11 @@ test("an unparseable subject id loads no context instead of throwing", async () 
 
 test("mixed-department weeks do not route under an arbitrary department", async (t) => {
   const queries: string[] = [];
-  t.mock.method(db, "execute", async (query: unknown) => {
+  t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     queries.push(sqlText(query));
     if (queries.length === 1) {
-      return {
+      return inMode({
         rows: [
           {
             org_id: ORG_ID,
@@ -116,14 +117,14 @@ test("mixed-department weeks do not route under an arbitrary department", async 
             submitted_by: null,
           },
         ],
-      };
+      });
     }
-    return {
+    return inMode({
       rows: [
         { workedOn: "2026-03-30", departmentId: DEPARTMENT_A },
         { workedOn: "2026-03-31", departmentId: DEPARTMENT_B },
       ],
-    };
+    });
   });
 
   const context = await timesheetWeeksFlowAdapter.loadContext(WEEK_ID);
@@ -139,9 +140,10 @@ test("mixed-department weeks do not route under an arbitrary department", async 
 });
 
 test("a week with one department still exposes that department for routing", async (t) => {
-  t.mock.method(db, "execute", async (query: unknown) => {
+  t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     if (sqlText(query).includes("case when count(distinct te.department_id)")) {
-      return {
+      return inMode({
         rows: [
           {
             org_id: ORG_ID,
@@ -158,9 +160,9 @@ test("a week with one department still exposes that department for routing", asy
             submitted_by: null,
           },
         ],
-      };
+      });
     }
-    return { rows: [] };
+    return inMode({ rows: [] });
   });
 
   const context = await timesheetWeeksFlowAdapter.loadContext(WEEK_ID);

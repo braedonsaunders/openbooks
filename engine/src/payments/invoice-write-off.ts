@@ -266,16 +266,14 @@ export async function writeOffInvoiceInTransaction(
       sql`select pg_advisory_xact_lock(hashtextextended(${input.idempotencyKey}, 0))`,
     );
 
-    const invoice = (
-      await db.execute<InvoiceRow>(sql`
+    const invoice = (await db.execute<InvoiceRow>(sql`
       select d.id, d.kind, d.status, d.document_number as "documentNumber",
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
              d.currency, d.document_date::text as "documentDate",
              d.posted_entry_id as "entryId"
         from documents d
        where d.org_id = ${orgId} and d.id = ${input.invoiceId}
-       for update`)
-    ).rows[0];
+       for update`, "objects"))[0];
     if (
       !invoice ||
       (invoice.subsidiaryId !== null &&
@@ -316,16 +314,14 @@ export async function writeOffInvoiceInTransaction(
     }
     const foreign = invoice.currency !== functionalCurrency;
 
-    const openItems = (
-      await db.execute<{ id: string; amount: string; txnAmount: string }>(sql`
+    const openItems = await db.execute<{ id: string; amount: string; txnAmount: string }>(sql`
       select jl.id, abs(jl.amount)::text as amount, abs(jl.txn_amount)::text as "txnAmount"
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.id = ${invoice.entryId} and je.status = 'posted' -- Live entries only: only a current invoice open item authorizes a write-off.
          and jl.is_open_item
        order by jl.id
-       for update of jl`)
-    ).rows;
+       for update of jl`, "objects");
     if (openItems.length !== 1) {
       throw new PaymentError(
         `${invoice.documentNumber} has ${openItems.length} open items; an invoice write-off settles a single open item, so resolve the invoice's open items before writing it off`,
@@ -334,14 +330,12 @@ export async function writeOffInvoiceInTransaction(
     const openLine = openItems[0]!;
     // The remaining receivable in both frames: what is still owed in the
     // invoice's currency, and the functional amount it is carried at.
-    const applied = (
-      await db.execute<{ applied: string; applied_txn: string }>(sql`
+    const applied = (await db.execute<{ applied: string; applied_txn: string }>(sql`
       select coalesce(sum(${appliedLegAmountExpr("a", sql`${openLine.id}`, "base")}), 0)::text as applied,
              coalesce(sum(${appliedLegAmountExpr("a", sql`${openLine.id}`, "transaction")}), 0)::text as applied_txn
         from applications a
        where a.org_id = ${orgId} and a.unapplied_at is null
-         and (a.to_line_id = ${openLine.id} or a.from_line_id = ${openLine.id})`)
-    ).rows[0]!;
+         and (a.to_line_id = ${openLine.id} or a.from_line_id = ${openLine.id})`, "objects"))[0]!;
     const openCarrying = fromUnits(
       toUnits(openLine.amount) - toUnits(applied.applied),
     );
@@ -357,10 +351,8 @@ export async function writeOffInvoiceInTransaction(
       invoice.documentNumber,
       invoice.documentDate,
     );
-    const priorCredit = (
-      await db.execute<{ id: string }>(sql`
-      select id from documents where org_id = ${orgId} and id = ${input.idempotencyKey}`)
-    ).rows[0];
+    const priorCredit = (await db.execute<{ id: string }>(sql`
+      select id from documents where org_id = ${orgId} and id = ${input.idempotencyKey}`, "objects"))[0];
     if (!priorCredit) {
       assertInvoiceWriteOffWithinOpenBalance(
         amount,
@@ -468,10 +460,8 @@ export async function writeOffInvoiceInTransaction(
         audit: { actorId: userId, source: "invoice_write_off" },
       });
     } else {
-      const status = (
-        await db.execute<{ status: string }>(sql`
-        select status from documents where org_id = ${orgId} and id = ${created.id}`)
-      ).rows[0]?.status;
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from documents where org_id = ${orgId} and id = ${created.id}`, "objects"))[0]?.status;
       if (status !== "posted") {
         throw new PaymentError(
           `This write-off was already recorded as ${created.documentNumber} and is ${status ?? "missing"}; ` +

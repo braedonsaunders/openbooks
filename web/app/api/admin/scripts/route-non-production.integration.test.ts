@@ -92,7 +92,7 @@ async function scriptCount(orgId: string): Promise<number> {
   return Number(
     (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from user_scripts where org_id = ${orgId}
-    `)).rows[0]!.n,
+    `, "objects"))[0]!.n,
   );
 }
 
@@ -176,7 +176,7 @@ test("activating an inactive schedule in a sandbox org refuses; deactivation pas
     assert.equal((await activate.json() as { code: string }).code, "SCHEDULED_SCRIPT_NON_PRODUCTION");
     const row = (await db.execute<{ is_active: boolean }>(sql`
       select is_active from user_scripts where id = ${created.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.is_active, false);
     // A name-only edit to the inactive row is not an activation: it passes.
     const rename = await PATCH(patchReq({

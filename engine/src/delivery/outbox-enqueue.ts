@@ -147,8 +147,8 @@ export async function enqueueFlowEmail(input: {
     -- The existing occurrence already owns this email; false reports that no new delivery was queued.
     on conflict (kind, occurrence_key) do nothing
     returning id
-  `));
-  return inserted.rows.length > 0;
+  `, "objects"));
+  return inserted.length > 0;
 }
 export function schedulerOutboxBackoffMs(attemptCount: number): number {
   return Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, attemptCount - 1));
@@ -176,6 +176,6 @@ export async function enqueueApprovalEscalation(input: {
     -- The existing gate occurrence already owns its escalation; null reports a duplicate enqueue.
     on conflict (kind, occurrence_key) do nothing
     returning id
-  `));
-  return inserted.rows[0]?.id ?? null;
+  `, "objects"));
+  return inserted[0]?.id ?? null;
 }

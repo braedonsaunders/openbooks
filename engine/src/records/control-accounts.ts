@@ -335,8 +335,8 @@ export async function loadControlAccounts(
   const configured = await executor.execute<{ control: unknown }>(sql`
     select settings->'controlAccounts' as control
       from orgs
-     where id = ${orgId}`);
-  const mappings = parseStoredControlAccounts(configured.rows[0]?.control);
+     where id = ${orgId}`, "objects");
+  const mappings = parseStoredControlAccounts(configured[0]?.control);
   const ids = [...new Set(Object.values(mappings))];
   if (ids.length === 0) return mappings;
 
@@ -347,8 +347,8 @@ export async function loadControlAccounts(
        and id in (${sql.join(
          ids.map((id) => sql`${id}`),
          sql`, `,
-       )})`);
-  assertValidControlAccountMappings(mappings, records.rows);
+       )})`, "objects");
+  assertValidControlAccountMappings(mappings, records);
   return mappings;
 }
 
@@ -371,12 +371,12 @@ export async function resolveReceivedNotBilledAccount(
   const profile = (await executor.execute<{ accountId: string | null }>(sql`
     select received_not_billed_account_id as "accountId"
       from item_inventory_profiles
-     where org_id = ${orgId} and item_id = ${itemId}`)).rows[0]?.accountId;
+     where org_id = ${orgId} and item_id = ${itemId}`, "objects"))[0]?.accountId;
   if (profile) {
     const account = (await executor.execute<ControlAccountRecord>(sql`
       select id, type, is_active as "isActive", is_summary as "isSummary"
         from accounts
-       where org_id = ${orgId} and id = ${profile}`)).rows[0];
+       where org_id = ${orgId} and id = ${profile}`, "objects"))[0];
     if (account?.isActive && !account.isSummary) {
       return { accountId: account.id, source: "profile" };
     }
@@ -403,7 +403,7 @@ export async function loadControlAccountsForRoles(
   const stored = (await executor.execute<{ control: unknown }>(sql`
     select settings->'controlAccounts' as control
       from orgs
-     where id = ${orgId}`)).rows[0]?.control;
+     where id = ${orgId}`, "objects"))[0]?.control;
   const raw =
     stored && typeof stored === "object"
       ? (stored as Record<string, unknown>)
@@ -425,8 +425,8 @@ export async function loadControlAccountsForRoles(
        and id in (${sql.join(
          ids.map((id) => sql`${id}`),
          sql`, `,
-       )})`);
-  assertValidControlAccountMappings(mappings, records.rows);
+       )})`, "objects");
+  assertValidControlAccountMappings(mappings, records);
   return mappings;
 }
 

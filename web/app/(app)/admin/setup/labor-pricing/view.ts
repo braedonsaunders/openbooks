@@ -111,7 +111,7 @@ export async function loadLaborPricing(
     txnTypesRes,
     orgRes,
   ] = await Promise.all([
-    db.execute(sql`
+    db.execute<BillCardRow>(sql`
       select v.id, v.rate_book_id, b.code, b.name, b.currency, v.effective_from::text,
              v.effective_to::text, v.status, p.derivation_policy,
              (select count(*)::int from item_rate_lines l where l.version_id=v.id and l.org_id=v.org_id) as line_count,
@@ -123,16 +123,16 @@ export async function loadLaborPricing(
          ${effectiveFilter} ${scopeFilter}
          ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}
        order by v.effective_from desc,b.name
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-    db.execute(sql`
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
+    db.execute<{ n: number }>(sql`
       select count(*)::int n from item_rate_versions v
       join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
       join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
       where v.org_id=${orgId}
         ${effectiveFilter} ${scopeFilter}
-        ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}`),
+        ${list.q ? sql`and (b.name ilike ${`%${list.q}%`} or b.code ilike ${`%${list.q}%`} or b.currency ilike ${`%${list.q}%`})` : sql``}`, 'objects'),
     selectedId
-      ? db.execute(sql`
+      ? db.execute<BillCardDetail>(sql`
       select v.id,v.rate_book_id,b.code,b.name,b.currency,v.effective_from::text,v.effective_to::text,
              v.status,p.derivation_policy,v.custom,
         coalesce((select jsonb_agg(jsonb_build_object(
@@ -170,8 +170,8 @@ export async function loadLaborPricing(
       from item_rate_versions v
       join item_rate_books b on b.id=v.rate_book_id and b.org_id=v.org_id
       join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
-      where v.id=${selectedId} and v.org_id=${orgId}`)
-      : Promise.resolve({ rows: [] }),
+      where v.id=${selectedId} and v.org_id=${orgId}`, 'objects')
+      : Promise.resolve([]),
     drawerQuery(
       sql`select id,name,kind,category from items where org_id=${orgId} and is_active order by name`,
     ),
@@ -181,7 +181,7 @@ export async function loadLaborPricing(
     drawerQuery(
       sql`select id,name from departments where org_id=${orgId} and is_active order by name`,
     ),
-    db.execute(
+    db.execute<Record<string, unknown>>(
       sql`select id,name,base_currency as currency from subsidiaries where org_id=${orgId} and is_active and not is_elimination order by name`,
     ),
     drawerQuery(
@@ -211,13 +211,13 @@ export async function loadLaborPricing(
     drawerQuery(
       sql`select distinct kind value from documents where org_id=${orgId} order by value`,
     ),
-    db.execute(
-      sql`select base_currency, settings->'currencies' as currencies from orgs where id=${orgId}`,
+    db.execute<{ base_currency: string; currencies: string[] | null }>(
+      sql`select base_currency, settings->'currencies' as currencies from orgs where id=${orgId}`, 'objects',
     ),
   ])
 
   const selected =
-    (selectedRes as unknown as { rows: BillCardDetail[] }).rows[0] ?? null
+    selectedRes[0] ?? null
   const headerDefs = selected ? await loadFieldDefs('item_rate_versions') : []
   const resolvedForm = selected
     ? await resolveFormLayout({
@@ -232,11 +232,7 @@ export async function loadLaborPricing(
     : null
   const named = (rows: unknown) =>
     (rows as { rows: { id: string; name: string }[] }).rows
-  const org = (
-    orgRes as unknown as {
-      rows: { base_currency: string; currencies: string[] | null }[]
-    }
-  ).rows[0]
+  const org = orgRes[0]
   const subsidiaryRows = (
     subsidiariesRes as unknown as {
       rows: { id: string; name: string; currency: string }[]
@@ -264,11 +260,11 @@ export async function loadLaborPricing(
       docsLabel: t('docs'),
     },
     view: {
-      cards: (cardsRes as unknown as { rows: BillCardRow[] }).rows,
+      cards: cardsRes,
       selected,
       creating: cardParam === 'new',
       total: Number(
-        (countRes as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0,
+        countRes[0]?.n ?? 0,
       ),
       page: list.page,
       perPage: list.perPage,

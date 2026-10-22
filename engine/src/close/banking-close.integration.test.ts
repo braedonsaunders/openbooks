@@ -95,7 +95,7 @@ async function periodEndsOn(org: ScratchOrg): Promise<{ startsOn: string; endsOn
   const row = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
     select starts_on::text as starts_on, ends_on::text as ends_on
       from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   return { startsOn: row.starts_on, endsOn: row.ends_on };
 }
 
@@ -188,7 +188,7 @@ test(
         select payload from close_events
          where org_id = ${org.orgId} and event_type = 'period.banking_close_acknowledged'
          order by at desc limit 1
-      `)).rows[0]?.payload as
+      `, "objects"))[0]?.payload as
         | { acknowledgement?: string; accounts?: Array<{ status?: string }> }
         | undefined;
       assert.equal(
@@ -278,7 +278,7 @@ test(
       const statementLineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = ${`gate-signed-deposit-${org.orgId}`}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: endsOn, statementBalance: "130" },
         ctx,
@@ -340,7 +340,7 @@ test("source-evidenced sign-offs stop covering close when their policy is disabl
     await makeReconcilable(org);
     const lineIds = await postBankJournal(org, actor, ["100"], "source-policy", org.date);
     const entryId = (await db.execute<{ entry_id: string }>(sql`
-      select entry_id from journal_lines where org_id=${org.orgId} and id=${lineIds[0]}`)).rows[0]!.entry_id;
+      select entry_id from journal_lines where org_id=${org.orgId} and id=${lineIds[0]}`, "objects"))[0]!.entry_id;
     await applySourceLineEvidence(org.orgId, "test-connector", [{
       entryId,
       lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: endsOn }],
@@ -442,7 +442,7 @@ test(
       const excludedId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = ${`m41-open-two-${org.orgId}`}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       await excludeStatementLine(excludedId, "duplicate of an earlier import", ctx);
       assert.equal(await bankingUnmatchedStatementLines(org.orgId, scope), 1);
     } finally {

@@ -133,22 +133,22 @@ export async function listBillingImportMappingOptions(orgId: string): Promise<Bi
   return withOrg(orgId, async () => {
     const [plans, customers, incomeAccounts, clearingAccounts, taxCodes] = await Promise.all([
       db.execute<{ value: string; label: string }>(sql`select id as value, name as label from subscription_plans
-        where org_id = ${orgId} order by name, id`),
+        where org_id = ${orgId} order by name, id`, "objects"),
       db.execute<{ value: string; label: string }>(sql`select p.id as value, p.display_name as label from parties p
-        where p.org_id = ${orgId} and p.kind = 'customer' order by p.display_name, p.id`),
+        where p.org_id = ${orgId} and p.kind = 'customer' order by p.display_name, p.id`, "objects"),
       db.execute<{ value: string; label: string }>(sql`select id as value, concat_ws(' · ', nullif(number, ''), name) as label from accounts
-        where org_id = ${orgId} and is_active and not is_summary and type in ('income', 'income_other') order by number nulls last, name, id`),
+        where org_id = ${orgId} and is_active and not is_summary and type in ('income', 'income_other') order by number nulls last, name, id`, "objects"),
       db.execute<{ value: string; label: string }>(sql`select id as value, concat_ws(' · ', nullif(number, ''), name) as label from accounts
-        where org_id = ${orgId} and is_active and not is_summary and type in ('asset_bank', 'asset_current_other') order by number nulls last, name, id`),
+        where org_id = ${orgId} and is_active and not is_summary and type in ('asset_bank', 'asset_current_other') order by number nulls last, name, id`, "objects"),
       db.execute<{ value: string; label: string }>(sql`select id as value, concat_ws(' · ', nullif(code, ''), name) as label from tax_codes
-        where org_id = ${orgId} and is_active order by code nulls last, name, id`),
+        where org_id = ${orgId} and is_active order by code nulls last, name, id`, "objects"),
     ]);
     return {
-      plans: plans.rows,
-      customers: customers.rows,
-      incomeAccounts: incomeAccounts.rows,
-      clearingAccounts: clearingAccounts.rows,
-      taxCodes: taxCodes.rows,
+      plans,
+      customers,
+      incomeAccounts,
+      clearingAccounts,
+      taxCodes,
     };
   });
 }
@@ -215,8 +215,8 @@ export async function recordBillingLink(
       select native_id, native_table from external_links
        where org_id = ${orgId} and provider = ${provider} and external_account = ${externalAccount}
          and object_type = ${objectType} and external_id = ${externalId}
-    `);
-    const found = existing.rows[0];
+    `, "objects");
+    const found = existing[0];
     if (found) {
       if (found.native_id !== nativeId || found.native_table !== nativeTable) {
         refuse(
@@ -230,7 +230,7 @@ export async function recordBillingLink(
     }
     // A retried insert for the same external object is an expected unique-key
     // collision, never a second link: re-read to confirm the target.
-    const inserted = await db.execute(sql`
+    const inserted = await db.execute<never>(sql`
       insert into external_links
         (org_id, provider, external_account, object_type, external_id, native_table, native_id, external_updated_at, last_synced_at)
       values (${orgId}, ${provider}, ${externalAccount}, ${objectType}, ${externalId}, ${nativeTable}, ${nativeId},
@@ -242,12 +242,12 @@ export async function recordBillingLink(
       select native_id, native_table from external_links
        where org_id = ${orgId} and provider = ${provider} and external_account = ${externalAccount}
          and object_type = ${objectType} and external_id = ${externalId}
-    `);
-    if (!verify.rows[0]) {
+    `, "objects");
+    if (!verify[0]) {
       refuse("billing_import_link_unrecorded", `${provider} ${objectType} ${externalId} was not linked to an OpenBooks record.`,
         "Retry the import; no observable link was saved.", 409);
     }
-    if (verify.rows[0].native_id !== nativeId || verify.rows[0].native_table !== nativeTable) {
+    if (verify[0].native_id !== nativeId || verify[0].native_table !== nativeTable) {
       refuse(
         "billing_import_link_conflict",
         `${provider} ${objectType} ${externalId} is already linked to a different OpenBooks record.`,
@@ -270,8 +270,8 @@ export async function findBillingLink(
     select native_id from external_links
      where org_id = ${orgId} and provider = ${provider} and external_account = ${externalAccount}
        and object_type = ${objectType} and external_id = ${externalId}
-  `));
-  return found.rows[0]?.native_id ?? null;
+  `, "objects"));
+  return found[0]?.native_id ?? null;
 }
 
 // --- Credentials ---------------------------------------------------------------
@@ -625,7 +625,7 @@ function beforeEarliest(earliestOn: string | null, date: string): boolean {
 }
 
 async function writeAudit(orgId: string, actorId: string, table: string, rowId: string, action: string, changes: unknown): Promise<void> {
-  const done = await db.execute(sql`
+  const done = await db.execute<never>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, ${table}, ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
   `);
@@ -641,8 +641,8 @@ async function ensureCustomerParty(ctx: PersistContext, customer: { externalId: 
       select p.id from parties p
         join customer_roles r on r.org_id = p.org_id and r.party_id = p.id and r.is_active
        where p.id = ${mapped} and p.org_id = ${ctx.orgId}
-    `));
-    if (!found.rows[0]) {
+    `, "objects"));
+    if (!found[0]) {
       refuse("billing_import_customer_missing", `Mapped customer ${customer.externalId} is not an OpenBooks customer.`, "Map the customer to an existing OpenBooks customer on the preflight list, then run the import again.");
     }
     await recordBillingLink(ctx.orgId, ctx.provider, ctx.externalAccount, "customer", customer.externalId, "parties", mapped, null);
@@ -659,14 +659,14 @@ async function ensureCustomerParty(ctx: PersistContext, customer: { externalId: 
     values (${ctx.orgId}, 'customer', ${customer.name}, true, ${customer.email},
             ${JSON.stringify({ billingImport: { provider: ctx.provider, account: ctx.externalAccount, externalId: customer.externalId } })}::jsonb)
     returning id
-  `));
-  const partyId = inserted.rows[0]?.id;
+  `, "objects"));
+  const partyId = inserted[0]?.id;
   if (!partyId) {
     refuse("billing_import_customer_failed", `Customer ${customer.externalId} could not be created.`, "Run the import again — completed objects replay idempotently.");
   }
   // A re-run meets its own role row: refresh the currency in place. The
   // conflict-target WHERE keeps the write on this tenant's role row.
-  const role = await (db.execute(sql`
+  const role = await (db.execute<never>(sql`
     insert into customer_roles (org_id, party_id, currency, is_active)
     values (${ctx.orgId}, ${partyId}, ${customer.currency}, true)
     on conflict (party_id) do update set currency = excluded.currency
@@ -688,8 +688,8 @@ async function ensureNativePlan(
   if (mapped) {
     const found = await (db.execute<{ id: string }>(sql`
       select id from subscription_plans where id = ${mapped} and org_id = ${ctx.orgId}
-    `));
-    if (!found.rows[0]) {
+    `, "objects"));
+    if (!found[0]) {
       refuse("billing_import_plan_missing", `Mapped plan ${plan.externalId} is not an OpenBooks plan.`, "Map the plan to an existing OpenBooks plan on the preflight list, then run the import again.");
     }
     if (ctx.advancedOn) await ensurePlanVersion(ctx, mapped, plan);
@@ -701,10 +701,10 @@ async function ensureNativePlan(
     // Price links point at the plan version; recover the plan through it.
     const owner = await (db.execute<{ plan_id: string }>(sql`
       select plan_id from subscription_plan_versions where id = ${linked} and org_id = ${ctx.orgId}
-    `));
-    if (owner.rows[0]) {
-      ctx.planByExternal.set(plan.externalId, owner.rows[0].plan_id);
-      return owner.rows[0].plan_id;
+    `, "objects"));
+    if (owner[0]) {
+      ctx.planByExternal.set(plan.externalId, owner[0].plan_id);
+      return owner[0].plan_id;
     }
   }
   // A re-run — or an operator who created the plan by hand — meets the
@@ -712,9 +712,9 @@ async function ensureNativePlan(
   // with a published version, because activation needs one.
   const sameName = await (db.execute<{ id: string }>(sql`
     select id from subscription_plans where org_id = ${ctx.orgId} and name = ${plan.name} limit 1
-  `));
-  if (sameName.rows[0]) {
-    const planId = sameName.rows[0].id;
+  `, "objects"));
+  if (sameName[0]) {
+    const planId = sameName[0].id;
     ctx.planByExternal.set(plan.externalId, planId);
     await ensurePlanVersion(ctx, planId, plan);
     return planId;
@@ -726,8 +726,8 @@ async function ensureNativePlan(
             ${plan.currency}, ${plan.interval}, ${plan.intervalCount},
             ${ctx.incomeAccountId}, ${ctx.taxCodeId}, ${ctx.actorId}, ${ctx.actorId})
     returning id
-  `));
-  const planId = created.rows[0]?.id;
+  `, "objects"));
+  const planId = created[0]?.id;
   if (!planId) {
     refuse("billing_import_plan_failed", `Plan ${plan.externalId} could not be created.`, "Run the import again — completed objects replay idempotently.");
   }
@@ -773,8 +773,8 @@ async function lifecycleVersionId(ctx: PersistContext, planId: string): Promise<
     select id from subscription_plan_versions
      where org_id = ${ctx.orgId} and plan_id = ${planId} and status = 'published'
      order by effective_from desc limit 1
-  `));
-  return found.rows[0]?.id ?? null;
+  `, "objects"));
+  return found[0]?.id ?? null;
 }
 
 /** Live provider pull with the sealed credential bundle, incremental by the run cursor. */
@@ -817,8 +817,8 @@ async function importSubscription(ctx: PersistContext, sub: CanonicalSubscriptio
             ${sub.startOn}, ${sub.currentTermEndOn ?? sub.startOn}, ${sub.startOn}, false,
             ${`Imported from ${ctx.provider} subscription ${sub.externalId}`}, ${anchorDay}, ${ctx.actorId}, ${ctx.actorId})
     returning id
-  `));
-  const subscriptionId = created.rows[0]?.id;
+  `, "objects"));
+  const subscriptionId = created[0]?.id;
   if (!subscriptionId) {
     refuse("billing_import_subscription_failed", `Subscription ${sub.externalId} could not be created.`, "Run the import again — completed objects replay idempotently.");
   }
@@ -869,7 +869,7 @@ async function applyTerminalStatus(
   sub: CanonicalSubscription,
 ): Promise<void> {
   const status = sub.status === "trial" ? "active" : sub.status;
-  const done = await (db.execute(sql`
+  const done = await (db.execute<never>(sql`
     update subscriptions set status = ${status}, canceled_on = ${sub.status === "canceled" ? sub.canceledOn : null},
            updated_at = now(), updated_by = ${ctx.actorId}
      where id = ${subscriptionId} and org_id = ${ctx.orgId}
@@ -905,7 +905,7 @@ async function applySubscriptionChange(
         unitPrice: unitPrice ?? undefined,
       });
       if (planId) {
-        const moved = await (db.execute(sql`
+        const moved = await (db.execute<never>(sql`
           update subscriptions set plan_id = ${planId}, updated_at = now(), updated_by = ${ctx.actorId}
            where id = ${subscriptionId} and org_id = ${ctx.orgId}
         `));
@@ -917,7 +917,7 @@ async function applySubscriptionChange(
     }
     case "pause":
     case "resume": {
-      const done = await (db.execute(sql`
+      const done = await (db.execute<never>(sql`
         update subscriptions set status = ${change.kind === "pause" ? "paused" : "active"}, updated_at = now(), updated_by = ${ctx.actorId}
          where id = ${subscriptionId} and org_id = ${ctx.orgId}
       `));
@@ -955,8 +955,8 @@ async function applySubscriptionChange(
 async function nativePlanAmount(ctx: PersistContext, planId: string): Promise<string | null> {
   const found = await (db.execute<{ amount: string }>(sql`
     select amount::text as amount from subscription_plans where id = ${planId} and org_id = ${ctx.orgId}
-  `));
-  return found.rows[0]?.amount ?? null;
+  `, "objects"));
+  return found[0]?.amount ?? null;
 }
 
 async function importInvoice(ctx: PersistContext, invoice: {
@@ -1092,9 +1092,9 @@ async function importPayment(ctx: PersistContext, payment: {
          -- Live entries only: receipts allocate only to live open items; a reversed invoice authorizes no allocation
          and je.status = 'posted' and jl.is_open_item
        limit 1
-    `));
-    if (!line.rows[0]) continue;
-    allocations.push(sameCurrencyAllocation(line.rows[0].id, application.amountMajor));
+    `, "objects"));
+    if (!line[0]) continue;
+    allocations.push(sameCurrencyAllocation(line[0].id, application.amountMajor));
   }
   await updateDraftPayment(receipt.id, {
     bankAccountId: ctx.clearingAccountId,
@@ -1114,20 +1114,20 @@ async function importUsageRecord(ctx: PersistContext, usage: {
   }
   const meter = await (db.execute<{ id: string; is_active: boolean }>(sql`
     select id, is_active from usage_meters where org_id = ${ctx.orgId} and key = ${usage.meterKey}
-  `));
-  if (!meter.rows[0]) {
+  `, "objects"));
+  if (!meter[0]) {
     refuse("billing_import_meter_missing", `Usage ${usage.externalId} names meter "${usage.meterKey}", which does not exist.`, "Create the usage meter first, or map the source metric to an existing meter key, then run the import again.");
   }
-  if (!meter.rows[0].is_active) {
+  if (!meter[0].is_active) {
     refuse("billing_import_meter_inactive", `Usage ${usage.externalId} names meter "${usage.meterKey}", which is deactivated.`, "Reactivate the meter or map the source metric to an active meter key, then run the import again.");
   }
   const subscriptionLink = await findBillingLink(ctx.orgId, ctx.provider, ctx.externalAccount, "subscription", usage.subscriptionExternalId);
   const subscription = subscriptionLink
     ? await (db.execute<{ customer_id: string }>(sql`
         select customer_id from subscriptions where id = ${subscriptionLink} and org_id = ${ctx.orgId}
-      `))
+      `, "objects"))
     : null;
-  const customerId = subscription?.rows[0]?.customer_id;
+  const customerId = subscription?.[0]?.customer_id;
   if (!customerId) {
     refuse("billing_import_subscription_missing", `Usage ${usage.externalId} names subscription ${usage.subscriptionExternalId}, which was not imported.`, "Import the subscription first, then run the import again.");
   }
@@ -1215,19 +1215,19 @@ async function readNativeSubscriptionStates(
       from external_links l join subscriptions s on s.org_id = l.org_id and s.id = l.native_id
      where l.org_id = ${orgId} and l.provider = ${provider} and l.external_account = ${externalAccount}
        and l.native_table = 'subscriptions' and l.object_type = 'subscription'
-  `));
+  `, "objects"));
   const planRows = await (db.execute<{
     id: string; amount: string; interval: string; interval_count: number;
   }>(sql`
     select id, amount::text as amount, interval, interval_count from subscription_plans where org_id = ${orgId}
-  `));
-  const plans = new Map(planRows.rows.map((row) => [row.id, {
+  `, "objects"));
+  const plans = new Map(planRows.map((row) => [row.id, {
     amountMajor: row.amount,
     interval: row.interval as CanonicalPlan["interval"],
     intervalCount: row.interval_count,
   }]));
   const subscriptions: CanonicalSubscription[] = [];
-  for (const sub of subs.rows) {
+  for (const sub of subs) {
     const components = await (db.execute<{
       quantity: string; unit_price: string; effective_from: string; effective_to: string | null;
     }>(sql`
@@ -1235,12 +1235,12 @@ async function readNativeSubscriptionStates(
              effective_from::text as effective_from, effective_to::text as effective_to
         from subscription_components where org_id = ${orgId} and subscription_id = ${sub.id}
        order by effective_from
-    `));
+    `, "objects"));
     const amendments = await (db.execute<NativeAmendmentRow>(sql`
       select amendment_type, effective_on::text as effective_on, request, after_snapshot
         from subscription_amendments where org_id = ${orgId} and subscription_id = ${sub.id}
        order by amendment_number
-    `));
+    `, "objects"));
     const pauses = await (db.execute<{ effective_on: string; status: string }>(sql`
       select changes->'source'->>'effectiveOn' as effective_on,
              changes->'after'->>'status' as status
@@ -1249,10 +1249,10 @@ async function readNativeSubscriptionStates(
          and changes->'source'->>'provider' = ${provider}
          and changes->'source'->>'change' in ('pause', 'resume')
        order by changes->'source'->>'effectiveOn'
-    `));
+    `, "objects"));
     const changes: CanonicalSubscription["changes"] = [];
     let seq = 0;
-    for (const amendment of amendments.rows) {
+    for (const amendment of amendments) {
       const after = (amendment.after_snapshot?.components ?? []).find((component) =>
         (component.componentKey ?? component.component_key) === (amendment.request?.componentKey ?? "base")
         && (component.effectiveFrom ?? component.effective_from) === amendment.effective_on,
@@ -1273,7 +1273,7 @@ async function readNativeSubscriptionStates(
         changes.push({ seq: seq++, effectiveOn: amendment.effective_on, kind: "renew", planExternalId: null, quantity: null, unitAmountMajor: null, derived: false });
       }
     }
-    for (const pause of pauses.rows) {
+    for (const pause of pauses) {
       if (!pause.effective_on) continue;
       changes.push({
         seq: seq++,
@@ -1285,7 +1285,7 @@ async function readNativeSubscriptionStates(
         derived: false,
       });
     }
-    const firstWindow = components.rows[0];
+    const firstWindow = components[0];
     subscriptions.push({
       externalId: sub.external_id,
       customerExternalId: "",
@@ -1328,11 +1328,11 @@ async function readNativeOpenAr(
      where l.org_id = ${orgId} and l.provider = ${provider} and l.external_account = ${externalAccount}
        and l.native_table = 'documents' and l.object_type in ('invoice', 'credit_note')
        and d.status <> 'voided'
-  `));
+  `, "objects"));
   const open = new Map<string, string>();
   const add = (customer: string, amount: string) => open.set(customer, addCanonical(open.get(customer) ?? "0.0000", amount));
   const sub = (customer: string, amount: string) => open.set(customer, subCanonical(open.get(customer) ?? "0.0000", amount));
-  for (const row of rows.rows) {
+  for (const row of rows) {
     // Posted documents carry live open balances; draft opening documents
     // carry their totals until cut-over close posts them.
     const amount = row.status === "posted" ? (row.open_balance ?? "0.0000") : row.total;
@@ -1382,9 +1382,9 @@ async function readNativeDeferred(orgId: string, cutoverOn: string): Promise<str
          order by effective_from desc limit 1
       ) c on true
      where l.org_id = ${orgId} and s.status = 'active' and l.term_ends_on > ${cutoverOn}::date
-  `));
+  `, "objects"));
   let total = "0.0000";
-  for (const row of rows.rows) {
+  for (const row of rows) {
     // Whole months strictly after the cut-over month through the term-end
     // month; a term ending inside the cut-over month leaves no backlog.
     if (row.term_ends_on.slice(0, 7) <= afterMonth) continue;
@@ -1456,8 +1456,8 @@ async function insertRunRow(
     values (${orgId}, ${provider}, ${externalAccount}, ${status}, ${config.mode}, ${config.cutoverOn},
             ${JSON.stringify(config)}::jsonb, ${actorId}, ${actorId})
     returning id
-  `));
-  const id = inserted.rows[0]?.id;
+  `, "objects"));
+  const id = inserted[0]?.id;
   if (!id) {
     refuse("billing_import_run_failed", "The import run could not be recorded.", "Run the import again.");
   }
@@ -1469,7 +1469,7 @@ async function updateRunRow(
   runId: string,
   patch: { status?: string; config?: unknown; counts?: unknown; cursor?: unknown; reconciliation?: unknown; lastError?: string | null; finished?: boolean },
 ): Promise<void> {
-  const done = await (db.execute(sql`
+  const done = await (db.execute<never>(sql`
     update billing_import_runs
        set status = coalesce(${patch.status ?? null}, status),
            config = coalesce(${patch.config === undefined ? null : JSON.stringify(patch.config)}::jsonb, config),
@@ -1492,8 +1492,8 @@ async function loadRunRow(orgId: string, runId: string): Promise<BillingRunRecor
   }>(sql`
     select id, provider, external_account, status, config, cursor
       from billing_import_runs where id = ${runId} and org_id = ${orgId}
-  `));
-  const row = found.rows[0];
+  `, "objects"));
+  const row = found[0];
   if (!row || (row.provider !== "chargebee" && row.provider !== "recurly" && row.provider !== "maxio" && row.provider !== "zuora")) {
     refuse("billing_import_run_missing", "The import run does not exist in this organization.", "Start a new import from the billing history console.");
   }
@@ -1523,8 +1523,8 @@ export async function listBillingImportRuns(orgId: string, provider?: BillingHis
       from billing_import_runs where org_id = ${orgId}
        ${provider ? sql`and provider = ${provider}` : sql``}
       order by created_at desc limit 50
-  `));
-  return found.rows.map((row) => ({
+  `, "objects"));
+  return found.map((row) => ({
     id: row.id,
     provider: row.provider as BillingHistoryProvider,
     externalAccount: row.external_account,
@@ -1543,22 +1543,22 @@ export async function listBillingImportRuns(orgId: string, provider?: BillingHis
 async function loadPreflightCatalog(orgId: string, taxCodeId: string | null): Promise<PreflightCatalog> {
   const org = await (db.execute<{ base_currency: string }>(sql`
     select base_currency from orgs where id = ${orgId}
-  `));
-  const baseCurrency = org.rows[0]?.base_currency ?? "USD";
+  `, "objects"));
+  const baseCurrency = org[0]?.base_currency ?? "USD";
   const multiCurrency = await (orgFeatureEnabled(orgId, "multiCurrency"));
   const plans = await (db.execute<{
     id: string; name: string; amount: string; currency: string | null; interval: string;
   }>(sql`
     select id, name, amount::text as amount, currency_code as currency, interval
       from subscription_plans where org_id = ${orgId} and is_active
-  `));
+  `, "objects"));
   const taxCode = taxCodeId
     ? await (db.execute<{ id: string; name: string }>(sql`
         select id, name from tax_codes where id = ${taxCodeId} and org_id = ${orgId}
-      `))
+      `, "objects"))
     : null;
   return {
-    plans: plans.rows.map((row) => ({
+    plans: plans.map((row) => ({
       id: row.id,
       name: row.name,
       amountMajor: row.amount,
@@ -1567,7 +1567,7 @@ async function loadPreflightCatalog(orgId: string, taxCodeId: string | null): Pr
     })),
     baseCurrency,
     multiCurrency,
-    defaultTaxCode: taxCode?.rows[0] ? { id: taxCode.rows[0].id, name: taxCode.rows[0].name } : null,
+    defaultTaxCode: taxCode?.[0] ? { id: taxCode[0].id, name: taxCode[0].name } : null,
   };
 }
 
@@ -1950,8 +1950,8 @@ export async function acceptBillingImportRun(
       refuse("billing_import_feature_off", "Billing history import is turned off for this organization.", FEATURE_REMEDY, 409);
     }
     for (const [externalId, planId] of Object.entries(merged.planMap)) {
-      const found = await db.execute(sql`select 1 from subscription_plans where id = ${planId} and org_id = ${orgId}`);
-      if (!found.rows.length) {
+      const found = await db.execute(sql`select 1 from subscription_plans where id = ${planId} and org_id = ${orgId}`, "objects");
+      if (!found.length) {
         refuse("billing_import_plan_missing", `Plan mapping for ${externalId} names an OpenBooks plan that does not exist.`, "Map the plan to an existing OpenBooks plan on the preflight list, then accept again.");
       }
     }
@@ -1959,8 +1959,8 @@ export async function acceptBillingImportRun(
       const found = await db.execute(sql`
         select 1 from parties p
           join customer_roles r on r.org_id = p.org_id and r.party_id = p.id and r.is_active
-         where p.id = ${partyId} and p.org_id = ${orgId}`);
-      if (!found.rows.length) {
+         where p.id = ${partyId} and p.org_id = ${orgId}`, "objects");
+      if (!found.length) {
         refuse("billing_import_customer_missing", `Customer mapping for ${externalId} names an OpenBooks customer that does not exist.`, "Map the customer to an existing OpenBooks customer on the preflight list, then accept again.");
       }
     }
@@ -1970,8 +1970,8 @@ export async function acceptBillingImportRun(
       ["tax code", "tax_codes", merged.taxCodeId],
     ] as const) {
       if (!id) continue;
-      const found = await db.execute(sql`select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`);
-      if (!found.rows.length) {
+      const found = await db.execute(sql`select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`, "objects");
+      if (!found.length) {
         refuse("billing_import_account_missing", `The mapped ${label} does not exist in this organization.`, "Choose an existing record in the import settings, then accept again.");
       }
     }
@@ -1982,7 +1982,7 @@ export async function acceptBillingImportRun(
 
 /** Atomically claim a run for execution: only one worker runs a connection at a time. */
 async function claimRunRow(orgId: string, runId: string): Promise<void> {
-  const done = await db.execute(sql`
+  const done = await db.execute<never>(sql`
     update billing_import_runs set status = 'running', updated_at = now()
      where id = ${runId} and org_id = ${orgId} and status in ('ready', 'failed', 'preflight')
   `);
@@ -2046,9 +2046,9 @@ export async function runDueBillingImports(
      where status = 'ready'
        and (config->>'autoSync')::boolean is true
      order by updated_at limit 20
-  `);
+  `, "objects");
   const runs: BillingSyncScanResult["runs"] = [];
-  for (const row of due.rows) {
+  for (const row of due) {
     const provider = row.provider as BillingHistoryProvider;
     const runConfig = configFromRow({ config: row.config });
     if (!runConfig.sealedCredentials) {
@@ -2058,8 +2058,8 @@ export async function runDueBillingImports(
     try {
       const users = await db.execute<{ id: string }>(sql`
         select created_by as id from billing_import_runs where id = ${row.id}
-      `);
-      const actorId = users.rows[0]?.id;
+      `, "objects");
+      const actorId = users[0]?.id;
       if (!actorId) {
         runs.push({ runId: row.id, orgId: row.org_id, provider, externalAccount: row.external_account, completed: false, error: "No recorded operator" });
         continue;

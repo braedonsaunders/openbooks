@@ -32,15 +32,15 @@ async function storeArtifactFile(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`payment-files:${orgId}`}, 0))`);
     const existing = (await tx.execute<{ id: string }>(sql`
       select id from folders where org_id = ${orgId} and system_kind = 'payment_files' limit 1
-    `));
-    let folderId = existing.rows[0]?.id;
+    `, "objects"));
+    let folderId = existing[0]?.id;
     if (!folderId) {
       const created = (await tx.execute<{ id: string }>(sql`
         insert into folders (org_id, name, is_system, system_kind, created_by, updated_by)
         values (${orgId}, 'Payment files', true, 'payment_files', ${userId}, ${userId})
         returning id
-      `));
-      folderId = created.rows[0]?.id;
+      `, "objects"));
+      folderId = created[0]?.id;
     }
     if (!folderId) throw new PaymentError("could not create the payment file cabinet folder");
     const extension = filename.includes(".") ? filename.split(".").pop()!.toLowerCase() : null;
@@ -84,8 +84,8 @@ async function findLiveRunArtifact(
       left join file_blobs fb on fb.version_id = fv.id
      where pf.payment_run_id = ${runId} and pf.org_id = ${orgId} and pf.status not in ('superseded', 'voided', 'rejected')
      order by pf.sequence_number desc limit 1
-  `));
-  const row = existing.rows[0];
+  `, "objects"));
+  const row = existing[0];
   // Masked-clone tombstone: refuse by name. The left join keeps the row
   // visible so the tombstone (not a missing blob) decides the outcome.
   if (row) refuseMaskedStorageKind(row.storage_kind);
@@ -129,7 +129,7 @@ export async function allocateNachaRunModifier(input: {
     const pinned = (await db.execute<{ modifier: string | null }>(sql`
       select file_id_modifier as "modifier" from payment_runs
        where id = ${input.runId} and org_id = ${input.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!pinned) throw new PaymentError("payment run not found");
     if (pinned.modifier) {
       if (!/^[A-Z0-9]$/.test(pinned.modifier)) {
@@ -143,11 +143,11 @@ export async function allocateNachaRunModifier(input: {
       select id from payment_bank_profiles
        where id = ${input.bankProfileId} and org_id = ${input.orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!profile) {
       throw new PaymentError("the run's bank profile is gone — reassign a bank profile before generating its file");
     }
-    const siblings = (await db.execute<{ runNumber: string; modifier: string | null }>(sql`
+    const siblings = await db.execute<{ runNumber: string; modifier: string | null }>(sql`
       select run_number as "runNumber", file_id_modifier as "modifier"
         from payment_runs
        where org_id = ${input.orgId} and payment_bank_profile_id = ${input.bankProfileId}
@@ -155,12 +155,12 @@ export async function allocateNachaRunModifier(input: {
          and file_created_at is not null
          and (file_created_at at time zone ${input.timeZone})::date = ${input.creationDay}::date
          and id <> ${input.runId}
-    `)).rows;
+    `, "objects");
     const letter = lowestFreeNachaModifier(
       siblings.map((sibling) => sibling.modifier ?? nachaFileIdModifierForRunNumber(sibling.runNumber)),
     );
     if (!letter) throw new PaymentError(nachaModifierExhaustionRefusal(input.creationDay));
-    const stamped = (await db.execute(sql`
+    const stamped = (await db.execute<never>(sql`
       update payment_runs set file_id_modifier = ${letter}
        where id = ${input.runId} and org_id = ${input.orgId} and file_id_modifier is null
     `)).rowCount ?? 0;
@@ -169,7 +169,7 @@ export async function allocateNachaRunModifier(input: {
     const reread = (await db.execute<{ modifier: string | null }>(sql`
       select file_id_modifier as "modifier" from payment_runs
        where id = ${input.runId} and org_id = ${input.orgId}
-    `)).rows[0]?.modifier;
+    `, "objects"))[0]?.modifier;
     if (!reread) throw new PaymentError("payment run not found");
     return reread;
   });
@@ -180,14 +180,14 @@ export async function allocateNachaRunModifier(input: {
 async function paymentFileCommandScope(tx: SqlExecutor, orgId: string, runId: string, userId: string,
   requested: ReadonlySet<string> | null | undefined) {
   const run = (await tx.execute<{ direction: string }>(sql`select direction from payment_runs
-    where org_id = ${orgId} and id = ${runId}`)).rows[0];
+    where org_id = ${orgId} and id = ${runId}`, "objects"))[0];
   if (!run || !["outbound", "inbound"].includes(run.direction)) throw new ScopeNotFoundError();
   const live = await lockActorCommandAuthority(tx, orgId, userId, null, run.direction === "inbound" ? "ar.pay" : "ap.pay");
   if (!(await lockAndCheckOrgFeature(tx, orgId, "banking"))) throw new PaymentError("Enable Banking in Company Settings → Features before generating or downloading a payment bank file.");
   await assertNotSandbox(orgId, "generate or download a payment bank file");
   const scope = requested == null ? live : live === null ? requested : new Set([...requested].filter(id => live.has(id)));
   const visible = (await tx.execute(sql`select id from payment_runs r where id = ${runId}
-    and ${paymentRunVisibleSql(orgId, scope)}`)).rows[0];
+    and ${paymentRunVisibleSql(orgId, scope)}`, "objects"))[0];
   if (!visible) throw new ScopeNotFoundError();
   return scope;
 }
@@ -196,8 +196,8 @@ async function paymentFileCommandScope(tx: SqlExecutor, orgId: string, runId: st
  * after any profile lock, matching native run creation's ownership order. */
 async function lockPaymentFileSources(tx: SqlExecutor, orgId: string, runId: string, scope: ReadonlySet<string> | null) {
   if (scope !== null) {
-    const sources = (await tx.execute<{ id: string }>(sql`select distinct source_document_id as id
-      from payment_run_items where org_id = ${orgId} and payment_run_id = ${runId}`)).rows;
+    const sources = await tx.execute<{ id: string }>(sql`select distinct source_document_id as id
+      from payment_run_items where org_id = ${orgId} and payment_run_id = ${runId}`, "objects");
     await lockScopeRows(tx, orgId, sources.map(row => ({ kind: "document" as const, id: row.id })), scope, "share");
   }
 }
@@ -230,7 +230,7 @@ export async function generatePaymentFileArtifact(
       update payment_runs set file_created_at = coalesce(file_created_at, ${now})
        where id = ${runId} and org_id = ${orgId}
       returning file_created_at
-    `)).rows[0]?.file_created_at;
+    `, "objects"))[0]?.file_created_at;
   });
   if (fileCreatedAtRaw == null) throw new PaymentError("payment run not found");
   // node-postgres returns timestamptz as a string; the renderers need a real
@@ -259,13 +259,13 @@ export async function generatePaymentFileArtifact(
     : null;
   const rbcIdentity = ctx.format.rail === "rbc_std152_credit" ? await withOrgTransaction(orgId, async () => {
     await paymentFileCommandScope(db, orgId, runId, userId, opts?.allowedSubsidiaryIds);
-    const locked = (await db.execute<{ id: string }>(sql`select id from payment_runs where org_id=${orgId} and id=${runId} and status in ('approved','generated','delivered','partially_failed') and payment_bank_profile_id=${ctx.profile.id} for update`)).rows[0];
+    const locked = (await db.execute<{ id: string }>(sql`select id from payment_runs where org_id=${orgId} and id=${runId} and status in ('approved','generated','delivered','partially_failed') and payment_bank_profile_id=${ctx.profile.id} for update`, "objects"))[0];
     if (!locked) throw new PaymentError("payment run not found");
-    const prior = (await db.execute<{ details: { fileCreationNumber?: number; clientDigest?: string; settingsDigest?: string } }>(sql`select details from payment_events where org_id=${orgId} and payment_run_id=${runId} and event_type='rbc_file_number_allocated' and (details->>'parentFileId') is not distinct from ${opts?.reprocessFileId ?? null}::text order by created_at limit 1`)).rows[0];
+    const prior = (await db.execute<{ details: { fileCreationNumber?: number; clientDigest?: string; settingsDigest?: string } }>(sql`select details from payment_events where org_id=${orgId} and payment_run_id=${runId} and event_type='rbc_file_number_allocated' and (details->>'parentFileId') is not distinct from ${opts?.reprocessFileId ?? null}::text order by created_at limit 1`, "objects"))[0];
     const checked = validateRbcStd152Settings(ctx.profile.secrets as Partial<RbcStd152Settings>);
     if (!checked.ok) throw new PaymentError(`RBC STD152 profile is incomplete: ${checked.missing.join(", ")}`);
     const settingsDigest = rbcStd152SettingsDigest(checked.settings);
-    const profile = (await db.execute<{ sealed: string | null; currency: string }>(sql`select originator_secrets_encrypted as sealed,currency from payment_bank_profiles where org_id=${orgId} and id=${ctx.profile.id} and is_active for share`)).rows[0];
+    const profile = (await db.execute<{ sealed: string | null; currency: string }>(sql`select originator_secrets_encrypted as sealed,currency from payment_bank_profiles where org_id=${orgId} and id=${ctx.profile.id} and is_active for share`, "objects"))[0];
     const live = validateRbcStd152Settings(profile?.sealed ? unsealJson<Partial<RbcStd152Settings>>(profile.sealed,{orgId,purpose:"payment.originator.secrets"}) : {});
     if (!live.ok || profile?.currency !== "CAD" || live.settings.serviceCurrency !== "CAD" || rbcStd152SettingsDigest(live.settings) !== settingsDigest) throw new PaymentError("RBC profile changed while generating the file — reload the run and try again");
     const clientDigest = createHash("sha256").update(checked.settings.clientNumber).digest("hex");
@@ -311,14 +311,14 @@ export async function generatePaymentFileArtifact(
        where id = ${runId} and org_id = ${orgId}
          and status in ('approved', 'generated', 'delivered', 'partially_failed')
        for update
-    `));
-    const liveStatus = gate.rows[0]?.status;
+    `, "objects"));
+    const liveStatus = gate[0]?.status;
     if (!liveStatus) throw new PaymentError("approve the payment run before generating its file");
     await paymentFileCommandScope(db, orgId, runId, userId, scope);
     await assertRunPayeesInScope(orgId, runId, scope);
     if (rbcIdentity) {
-      if (gate.rows[0]?.payment_bank_profile_id !== ctx.profile.id) throw new PaymentError("RBC run profile changed after rendering — reload the run before generating its file");
-      const profile = (await db.execute<{ sealed: string | null; currency: string; format_id: string }>(sql`select originator_secrets_encrypted as sealed,currency,payment_format_id as format_id from payment_bank_profiles where org_id=${orgId} and id=${ctx.profile.id} and is_active for share`)).rows[0];
+      if (gate[0]?.payment_bank_profile_id !== ctx.profile.id) throw new PaymentError("RBC run profile changed after rendering — reload the run before generating its file");
+      const profile = (await db.execute<{ sealed: string | null; currency: string; format_id: string }>(sql`select originator_secrets_encrypted as sealed,currency,payment_format_id as format_id from payment_bank_profiles where org_id=${orgId} and id=${ctx.profile.id} and is_active for share`, "objects"))[0];
       const live = validateRbcStd152Settings(profile?.sealed ? unsealJson<Partial<RbcStd152Settings>>(profile.sealed,{orgId,purpose:"payment.originator.secrets"}) : {});
       if (!live.ok || profile?.currency !== "CAD" || profile.format_id !== ctx.format.id || rbcStd152SettingsDigest(live.settings) !== rbcIdentity.settingsDigest) throw new PaymentError("RBC profile changed after rendering — preserve the allocated file identity and restore the original profile or create a new governed run");
     }
@@ -347,13 +347,13 @@ export async function generatePaymentFileArtifact(
         select id, status from payment_files
          where id = ${opts.reprocessFileId} and payment_run_id = ${runId} and org_id = ${orgId}
          for update
-      `)).rows[0];
+      `, "objects"))[0];
       if (!parent) throw new PaymentError("payment file not found in this run");
       const latest = (await db.execute<{ id: string; parent_id: string | null; status: string }>(sql`
         select id, parent_payment_file_id as parent_id, status from payment_files
          where payment_run_id = ${runId} and org_id = ${orgId}
          order by sequence_number desc limit 1
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       if (latest.parent_id === parent.id && !["superseded", "voided", "rejected"].includes(latest.status)) {
         const live = await findLiveRunArtifact(runId, orgId);
         if (live?.id === latest.id) return live;
@@ -372,7 +372,7 @@ export async function generatePaymentFileArtifact(
       }
     }
     const stored = await storeArtifactFile(orgId, userId, safeFilename, rendered.contentType, content, hash);
-    const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`));
+    const seq = (await db.execute<{ n: number }>(sql`select coalesce(max(sequence_number), 0) + 1 as n from payment_files where payment_run_id = ${runId} and org_id = ${orgId}`, "objects"));
     const parentId = opts?.reprocessFileId ?? null;
     // The file renders a run its approval flow already released, so it is
     // deliverable as generated; there is no second, file-level approval.
@@ -383,7 +383,7 @@ export async function generatePaymentFileArtifact(
       paymentBankProfileId: ctx.profile.id,
       paymentFormatId: ctx.format.id,
       parentPaymentFileId: parentId,
-      sequenceNumber: Number(seq.rows[0]?.n ?? 1),
+      sequenceNumber: Number(seq[0]?.n ?? 1),
       filename: safeFilename,
       contentType: rendered.contentType,
       contentHash: hash,
@@ -408,8 +408,8 @@ export async function generatePaymentFileArtifact(
          where id = ${parentId} and payment_run_id = ${runId} and org_id = ${orgId}
            and status not in ('superseded', 'voided', 'delivering', 'delivery_uncertain')
         returning id
-      `));
-      if (!superseded.rows[0]) throw new PaymentError("only the latest non-voided payment file can be reprocessed");
+      `, "objects"));
+      if (!superseded[0]) throw new PaymentError("only the latest non-voided payment file can be reprocessed");
     }
     // Predicated on the same generable statuses judged under the lock above
     // (belt and braces — the row is already locked): a run rolled back before
@@ -421,8 +421,8 @@ export async function generatePaymentFileArtifact(
       where id = ${runId} and org_id = ${orgId}
         and status in ('approved', 'generated', 'delivered', 'partially_failed')
       returning status
-    `));
-    if (!transitioned.rows[0]) throw new PaymentError("approve the payment run before generating its file");
+    `, "objects"));
+    if (!transitioned[0]) throw new PaymentError("approve the payment run before generating its file");
     await event({ orgId, runId, fileId: artifact.id, actorId: userId, eventType: parentId ? "file_reprocessed" : "file_generated", fromStatus: liveStatus, toStatus: "generated", details: { hash, filename: safeFilename } });
     return { id: artifact.id, filename: safeFilename, contentType: rendered.contentType, content };
   });
@@ -432,11 +432,11 @@ export async function recordPaymentFileDownload(fileId: string, orgId: string, u
   await withOrgTransaction(orgId, async () => {
     const file = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files where id = ${fileId} and org_id = ${orgId} and status in ('approved', 'delivered')
-    `));
-    if (!file.rows[0]) throw new PaymentError("payment file is not approved for delivery");
-    const runId = file.rows[0].payment_run_id;
+    `, "objects"));
+    if (!file[0]) throw new PaymentError("payment file is not approved for delivery");
+    const runId = file[0].payment_run_id;
     const scope = await paymentFileCommandScope(db, orgId, runId, userId, null);
-    const lockedRun = (await db.execute(sql`select id from payment_runs where org_id = ${orgId} and id = ${runId} for update`)).rows[0];
+    const lockedRun = (await db.execute(sql`select id from payment_runs where org_id = ${orgId} and id = ${runId} for update`, "objects"))[0];
     if (!lockedRun) throw new ScopeNotFoundError();
     await paymentFileCommandScope(db, orgId, runId, userId, scope);
     await assertRunPayeesInScope(orgId, runId, scope);
@@ -460,28 +460,28 @@ export async function recordPaymentFileDownload(fileId: string, orgId: string, u
       update payment_files set status = 'delivered', updated_at = now(), updated_by = ${userId}
        where id = ${fileId} and org_id = ${orgId} and status in ('approved', 'delivered')
        returning id
-    `));
-    if (!delivered.rows[0]) throw new PaymentError("payment file is not approved for delivery");
+    `, "objects"));
+    if (!delivered[0]) throw new PaymentError("payment file is not approved for delivery");
     // Re-downloading an already-delivered run is idempotent (the file update
     // above accepts 'delivered'), but any OTHER zero-row outcome means the
     // run moved on while its file was marked delivered — that divergence
     // must not record silently behind an unobserved update.
     const runDelivered = (await db.execute<{ id: string }>(sql`
       update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId}
-       where id = ${file.rows[0].payment_run_id} and org_id = ${orgId} and status = 'generated'
+       where id = ${file[0].payment_run_id} and org_id = ${orgId} and status = 'generated'
        returning id
-    `));
-    if (!runDelivered.rows[0]) {
+    `, "objects"));
+    if (!runDelivered[0]) {
       const runState = (await db.execute<{ status: string }>(sql`
         select status from payment_runs
-         where id = ${file.rows[0].payment_run_id} and org_id = ${orgId}
-      `)).rows[0];
+         where id = ${file[0].payment_run_id} and org_id = ${orgId}
+      `, "objects"))[0];
       if (runState?.status !== "delivered") {
         throw new PaymentError(
           `payment run is ${runState?.status ?? "no longer present"} and cannot be marked delivered; reload the run before recording the delivery`,
         );
       }
     }
-    await event({ orgId, runId: file.rows[0].payment_run_id, fileId, actorId: userId, eventType: "file_downloaded", fromStatus: "approved", toStatus: "delivered" });
+    await event({ orgId, runId: file[0].payment_run_id, fileId, actorId: userId, eventType: "file_downloaded", fromStatus: "approved", toStatus: "delivered" });
   });
 }

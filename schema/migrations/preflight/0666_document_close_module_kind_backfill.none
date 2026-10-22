@@ -1,1 +1,0 @@
-Five-row registry INSERT with an in-migration pair check; no schema, constraint, index, or existing-row change, and a rerun inserts nothing.

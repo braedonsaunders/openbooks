@@ -83,10 +83,10 @@ async function readProjectProgress(actor: ScheduleActor & { boardId: string; pro
   if (board.projectId && board.projectId !== actor.projectId) throw new ScopeNotFoundError();
   const allowed = await lockActorCommandAuthority(db, actor.orgId, actor.actorId, null, "projects.read");
   const project = (await db.execute<{ id: string; name: string }>(sql`select id, name from projects
-    where org_id = ${actor.orgId} and id = ${actor.projectId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}`)).rows[0];
+    where org_id = ${actor.orgId} and id = ${actor.projectId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}`, "objects"))[0];
   if (!project) throw new ScopeNotFoundError();
 
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; parentId: string | null; code: string | null; name: string; phase: string | null; outlineLevel: number;
     scheduleStatus: string; startDate: string | null; endDate: string | null; budgetHours: string | null; percent: string;
     actualHours: string; pendingHours: string;
@@ -101,7 +101,7 @@ async function readProjectProgress(actor: ScheduleActor & { boardId: string; pro
      where t.org_id = ${actor.orgId} and t.project_id = ${actor.projectId} and t.status <> 'cancelled'
      group by t.id
      order by t.schedule_order, t.code nulls last, t.name, t.id
-  `)).rows;
+  `, "objects");
 
   const tasks: TaskProgress[] = rows.map((row) => {
     const measures = taskMeasures(row.budgetHours, row.actualHours, row.percent);

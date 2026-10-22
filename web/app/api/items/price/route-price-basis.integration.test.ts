@@ -61,7 +61,7 @@ async function seedPricing(): Promise<Fixture> {
     await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
       values (${goldId}, ${org.orgId}, 'GOLDP', 'Gold price', 'explicit', false, true)`);
     const baseId = (await db.execute<{ id: string }>(sql`
-      select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id;
+      select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, "objects"))[0]!.id;
     const today = new Date().toISOString().slice(0, 10);
     await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
       values (${org.orgId}, ${customerId}, ${goldId}, ${today}, true)`);
@@ -77,7 +77,7 @@ async function seedPricing(): Promise<Fixture> {
     }
     const assignmentId = (await db.execute<{ id: string }>(sql`
       select id from customer_price_level_assignments
-       where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.id;
+       where org_id = ${org.orgId} and customer_id = ${customerId}`, "objects"))[0]!.id;
     return {
       orgId: org.orgId, actorId: "00000000-0000-0000-0000-000000000000",
       customerId, itemId: org.items.service, goldId, assignmentId, goldScheduleId: goldSchedule,
@@ -185,7 +185,7 @@ test(
         select active_to::text as active_to, (closed_at is not null) as closed
           from price_level_activation_history
          where org_id = ${fixture.orgId} and price_level_id = ${fixture.goldId}
-         order by active_from desc limit 1`)).rows[0]!);
+         order by active_from desc limit 1`, "objects"))[0]!);
       assert.equal(period.active_to, today);
       assert.equal(period.closed, true);
 

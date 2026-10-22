@@ -10,9 +10,10 @@ const dialect = new PgDialect()
 test('purging a file records an immutable delete event with its reason', async () => {
   let statement: { sql: string; params: unknown[] } | undefined
   const executor = {
-    async execute(query: Parameters<typeof dialect.sqlToQuery>[0]) {
+    async execute(query: Parameters<typeof dialect.sqlToQuery>[0], mode?: string) {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
       statement = dialect.sqlToQuery(query)
-      return { rows: [{ id: 'audit-1' }] }
+      return inMode({ rows: [{ id: 'audit-1' }] })
     },
   }
 
@@ -57,5 +58,5 @@ test('an audit insert failure rejects the file operation', async () => {
 
 test('a file mutation cannot succeed when its required audit writes zero rows', async () => {
   await assert.rejects(recordFileEvent({ orgId: 'org-1',actorId: 'user-1',table: 'files',rowId: 'file-1',action: 'upload',
-    executor: { execute: async () => ({ rows: [] }) } as unknown as SqlExecutor }),/did not persist/)
+    executor: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)) } as unknown as SqlExecutor }),/did not persist/)
 })

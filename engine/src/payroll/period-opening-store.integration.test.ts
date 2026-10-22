@@ -19,7 +19,7 @@ async function counts(orgId: string) {
     (select count(*)::int from payroll_period_openings where org_id=${orgId}) as openings,
     (select count(*)::int from audit_log where org_id=${orgId} and table_name='payroll_period_openings') as audits,
     (select count(*)::int from pay_stubs where org_id=${orgId}) as stubs,
-    (select count(*)::int from journal_lines where org_id=${orgId}) as ledger`)).rows[0]!;
+    (select count(*)::int from journal_lines where org_id=${orgId}) as ledger`, 'objects'))[0]!;
 }
 
 test('preview performs identical checks without a period row, audit, payment or ledger write', { skip: !DB }, async () => {
@@ -51,7 +51,7 @@ test('apply retains exact source amounts and one complete audit while replay cre
     assert.equal(after.openings, before.openings + 1); assert.equal(after.audits, before.audits + 1);
     assert.equal(after.stubs, before.stubs); assert.equal(after.ledger, before.ledger);
     const audit = (await db.execute<{ actor_id: string; changes: { before: unknown; after: { amounts: Record<string, string> }; sourceReference: string; reason: string } }>(sql`
-      select actor_id,changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_period_openings' and row_id=${saved.record.id}`)).rows[0]!;
+      select actor_id,changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_period_openings' and row_id=${saved.record.id}`, 'objects'))[0]!;
     assert.equal(audit.actor_id, f.authorId); assert.equal(audit.changes.before, null);
     assert.equal(audit.changes.after.amounts.cpp, '11.6300');
     assert.equal(audit.changes.sourceReference, input(f).sourceReference); assert.equal(audit.changes.reason, input(f).reason);
@@ -65,7 +65,7 @@ test('annual amounts cannot subsequently be reduced beneath their admitted perio
     const saved = await savePayrollPeriodOpening(input(f)); assert.ok(saved.record);
     await assert.rejects(saveOpeningBalances({ orgId: f.org.orgId, actorId: f.authorId, taxYear: 2026,
       rows: [{ employeePartyId: f.workerPartyId, amounts: { pensionableYtd: '262.77', insurableYtd: '262.77', taxableYtd: '262.77', cppYtd: '11.62', eiYtd: '4.28' } }], allowedSubsidiaryIds: null }), /annual|Annual|period payments/);
-    const amount = (await db.execute<{ cpp: string }>(sql`select cpp_ytd::text as cpp from payroll_opening_balances where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`)).rows[0]!;
+    const amount = (await db.execute<{ cpp: string }>(sql`select cpp_ytd::text as cpp from payroll_opening_balances where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`, 'objects'))[0]!;
     assert.equal(amount.cpp, '11.6300');
     assert.equal((await counts(f.org.orgId)).audits, 1);
   });
@@ -130,9 +130,9 @@ for (const first of ['annual', 'period'] as const) test(`concurrent ${first} sav
     assert.equal(settled[1].status, 'fulfilled');
     const refusal = settled[1].status === 'fulfilled' ? settled[1].value : null; assert.ok(refusal instanceof Error);
     assert.match(refusal.message, first === 'annual' ? /annual opening balance changed/ : /below.*same-period payments/);
-    const rows = (await db.execute<{ cpp: string; periods: number }>(sql`select cpp_ytd::text as cpp,
+    const rows = await db.execute<{ cpp: string; periods: number }>(sql`select cpp_ytd::text as cpp,
       (select count(*)::int from payroll_period_openings where org_id=${f.org.orgId}) as periods
-      from payroll_opening_balances where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId}`)).rows;
+      from payroll_opening_balances where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId}`, 'objects');
     assert.deepEqual(rows, [{ cpp: first === 'annual' ? '11.6200' : '11.6300', periods: first === 'annual' ? 0 : 1 }]);
   });
 });
@@ -146,12 +146,12 @@ test('explicit zero period amounts retain a readable annual parent and complete 
     assert.ok(cleared.record); assert.equal(cleared.record.revision, 2);
     assert.equal(cleared.annualUpdatedAt, saved.annualUpdatedAt);
     const audit = (await db.execute<{ changes: { before: { amounts: Record<string, string> }; after: { amounts: Record<string, string> } } }>(sql`
-      select changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_period_openings' and action='update'`)).rows[0]!;
+      select changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_period_openings' and action='update'`, 'objects'))[0]!;
     assert.equal(audit.changes.before.amounts.cpp, '11.6300'); assert.equal(audit.changes.after.amounts.cpp, '0.0000');
     await saveOpeningBalances({ orgId: f.org.orgId, actorId: f.authorId, taxYear: 2026,
       rows: [{ employeePartyId: f.workerPartyId, amounts: {} }], allowedSubsidiaryIds: null });
-    const parent = (await db.execute<{ id: string; cpp: string }>(sql`select id,cpp_ytd::text as cpp from payroll_opening_balances
-      where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`)).rows;
+    const parent = await db.execute<{ id: string; cpp: string }>(sql`select id,cpp_ytd::text as cpp from payroll_opening_balances
+      where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`, 'objects');
     assert.deepEqual(parent, [{ id: cleared.record.annualOpeningBalanceId, cpp: '0.0000' }]);
     assert.deepEqual(await counts(f.org.orgId), { openings: 1, audits: 2, stubs: 0, ledger: 0 });
   });
@@ -163,7 +163,7 @@ test('program replacement retains admitted balances and direct reassignment cann
       rows: [{ employeePartyId: f.workerPartyId, amounts: {}, programs: { qpip: '262.77' } }], allowedSubsidiaryIds: null });
     await annual();
     const version = (await db.execute<{ version: string }>(sql`select updated_at::text as version from payroll_opening_balances
-      where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`)).rows[0]!.version;
+      where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`, 'objects'))[0]!.version;
     await savePayrollPeriodOpening({ ...input(f), expectedAnnualUpdatedAt: version,
       amounts: { ...Object.fromEntries(CA_PERIOD_OPENING_TREATMENT.fields.map(field => [field.key, '0'])), qpipPeriodicEarnings: '262.77' } });
     await annual();
@@ -173,8 +173,8 @@ test('program replacement retains admitted balances and direct reassignment cann
       where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026 and program_key='qpip'`), error => {
         assert.match((error as { cause: Error }).cause.message, /Payroll opening programme source identity is immutable/); return true;
       });
-    const programs = (await db.execute<{ program: string; amount: string }>(sql`select program_key as program,insurable_ytd::text as amount
-      from payroll_opening_program_bases where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`)).rows;
+    const programs = await db.execute<{ program: string; amount: string }>(sql`select program_key as program,insurable_ytd::text as amount
+      from payroll_opening_program_bases where org_id=${f.org.orgId} and employee_party_id=${f.workerPartyId} and tax_year=2026`, 'objects');
     assert.deepEqual(programs, [{ program: 'qpip', amount: '262.7700' }]);
   });
 });
@@ -187,8 +187,8 @@ test('foreign employee, actor and schedule references refuse and tenant reads ca
       [{ actorId: other.authorId }, /Payroll manage permission/],
       [{ payScheduleId: other.scheduleId }, /active payroll schedule/],
     ] as const) await assert.rejects(savePayrollPeriodOpening({ ...input(f), ...change }), refusal);
-    const hidden = await withOrgTransaction(other.org.orgId, () => db.execute(sql`select id from payroll_period_openings where id=${saved.record!.id}`));
-    assert.deepEqual(hidden.rows, []);
+    const hidden = await withOrgTransaction(other.org.orgId, () => db.execute(sql`select id from payroll_period_openings where id=${saved.record!.id}`, 'objects'));
+    assert.deepEqual(hidden, []);
     assert.deepEqual(await counts(f.org.orgId), { openings: 1, audits: 1, stubs: 0, ledger: 0 });
     assert.deepEqual(await counts(other.org.orgId), { openings: 0, audits: 0, stubs: 0, ledger: 0 });
     const otherSaved = await savePayrollPeriodOpening(input(other)); assert.ok(otherSaved.record);

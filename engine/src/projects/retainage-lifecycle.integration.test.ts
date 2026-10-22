@@ -92,9 +92,7 @@ async function customerSetup(): Promise<{
     values(${project},${org.orgId},${org.subsidiaryId},'LIFE','Lifecycle job',${org.customerId},${type},'active')`);
   await db.execute(sql`insert into sov_lines(org_id,project_id,description,scheduled_value,sort_order,income_account_id)
     values(${org.orgId},${project},'Work','10000',1,${org.accounts.revenue})`);
-  const sovId = (
-    await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`)
-  ).rows[0]!.id;
+  const sovId = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`, "objects"))[0]!.id;
   void sov;
   const draw = async (work: string, date: string, retainage = "10") => {
     const app = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, date, retainage, null));
@@ -153,7 +151,7 @@ test("customer draw void refuses while a draft release depends on it, then succe
     await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.invoiceId, f.actor, f.org.orgId, { reason: "Discard draft release", allowedSubsidiaryIds: null }));
     await voidDoc(f.org.orgId, f.actor, draw.invoiceId, f.org.date);
     // The draw application reopens for regeneration and capacity is restored.
-    const reopened = (await db.execute<{ id: string; status: string }>(sql`select id, status from pay_applications where org_id=${f.org.orgId} and kind = 'progress'`)).rows[0]!;
+    const reopened = (await db.execute<{ id: string; status: string }>(sql`select id, status from pay_applications where org_id=${f.org.orgId} and kind = 'progress'`, "objects"))[0]!;
     assert.equal(reopened.status, "approved");
     const regenerated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, reopened.id, null));
     assert.equal(regenerated.retainage, "100.0000");
@@ -171,7 +169,7 @@ test("customer partial release reversed first permits the supporting draw void",
     await postCustomerInvoice(f.org, f.actor, f.approver, rel.invoiceId);
     await voidDoc(f.org.orgId, f.actor, rel.invoiceId, f.org.date);
     await voidDoc(f.org.orgId, f.actor, draw.invoiceId, f.org.date);
-    const held = (await db.execute<{ held: string }>(sql`select coalesce(sum(amount),0)::text as held from journal_lines where org_id=${f.org.orgId}`)).rows[0]!.held;
+    const held = (await db.execute<{ held: string }>(sql`select coalesce(sum(amount),0)::text as held from journal_lines where org_id=${f.org.orgId}`, "objects"))[0]!.held;
     assert.equal(cmp(held, "0"), 0);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });
@@ -179,7 +177,7 @@ test("customer partial release reversed first permits the supporting draw void",
 test("vendor draw-bill void refuses while a draft release depends on it, then succeeds after the release is discarded", enabled, async () => {
   const f = await vendorSetup();
   try {
-    const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.id;
+    const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`, "objects"))[0]!.id;
     const rel = await f.release("60");
     await assert.rejects(voidDoc(f.org.orgId, f.actor, bill, f.org.date), /retainage release/);
     await withOrgTransaction(f.org.orgId, () => deleteDocument(rel.vendorBillDocumentId, f.actor, f.org.orgId, { reason: "Discard draft release", allowedSubsidiaryIds: null }));
@@ -190,12 +188,12 @@ test("vendor draw-bill void refuses while a draft release depends on it, then su
 test("vendor partial release reversed first permits the supporting draw-bill void", enabled, async () => {
   const f = await vendorSetup();
   try {
-    const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.id;
+    const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`, "objects"))[0]!.id;
     const rel = await f.release("40");
     await postVendorBill(f.org, f.actor, f.approver, rel.vendorBillDocumentId);
     await voidDoc(f.org.orgId, f.actor, rel.vendorBillDocumentId, f.org.date);
     await voidDoc(f.org.orgId, f.actor, bill, f.org.date);
-    const status = (await db.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id=${f.org.orgId}`, "objects"))[0]!.status;
     assert.equal(status, "approved");
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });
@@ -206,18 +204,18 @@ test("vendor draw-bill void writes an audited application release", enabled, asy
   // evidence the customer-side release writes — instead of a silent flip.
   const f = await vendorSetup();
   try {
-    const app = (await db.execute<{ id: string }>(sql`select id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!;
-    const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.id;
+    const app = (await db.execute<{ id: string }>(sql`select id from vendor_pay_applications where org_id=${f.org.orgId}`, "objects"))[0]!;
+    const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`, "objects"))[0]!.id;
     await voidDoc(f.org.orgId, f.actor, bill, f.org.date);
     const released = (await db.execute<{ status: string; vendor_bill_document_id: string | null; updated_by: string | null }>(sql`
-      select status, vendor_bill_document_id, updated_by from vendor_pay_applications where org_id=${f.org.orgId} and id=${app.id}`)).rows[0]!;
+      select status, vendor_bill_document_id, updated_by from vendor_pay_applications where org_id=${f.org.orgId} and id=${app.id}`, "objects"))[0]!;
     assert.equal(released.status, "approved");
     assert.equal(released.vendor_bill_document_id, null);
     assert.equal(released.updated_by, f.actor);
     const audit = (await db.execute<{ action: string; changes: unknown; actor_id: string | null }>(sql`
       select action, changes, actor_id from audit_log
        where org_id=${f.org.orgId} and table_name='vendor_pay_applications' and row_id=${app.id} and action='billing_released'
-       order by at desc limit 1`)).rows[0]!;
+       order by at desc limit 1`, "objects"))[0]!;
     assert.equal(audit.action, "billing_released");
     assert.equal(audit.actor_id, f.actor);
     const changes = audit.changes as { before: { status: string; vendor_bill_document_id: string }; after: { status: string; vendor_bill_document_id: null }; reason: string };
@@ -234,7 +232,7 @@ test("customer release posting refuses shrunken capacity instead of over-releasi
   try {
     const draw = await f.draw("1000", f.org.date);
     const rel = await f.release("60");
-    const entry = (await db.execute<{ id: string }>(sql`select posted_entry_id as id from documents where org_id=${f.org.orgId} and id=${draw.invoiceId}`)).rows[0]!.id;
+    const entry = (await db.execute<{ id: string }>(sql`select posted_entry_id as id from documents where org_id=${f.org.orgId} and id=${draw.invoiceId}`, "objects"))[0]!.id;
     await reverseProjectGlEntry(f.org.orgId, f.actor, entry, "Correct retained amount", f.org.date);
     await assert.rejects(postCustomerInvoice(f.org, f.actor, f.approver, rel.invoiceId), /retainage/i);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
@@ -247,8 +245,8 @@ test("vendor release posting refuses capacity consumed by a bypass reservation",
     // A second reservation that bypassed creation-time capacity (legacy/state
     // repair): a draft bill with its own release row consuming 50 of the 100 held.
     const billId = randomUUID(), releaseId = randomUUID();
-    const control = (await db.execute<{ id: string }>(sql`select settings->'controlAccounts'->>'retainagePayable' as id from orgs where id=${f.org.orgId}`)).rows[0]!.id;
-    const subcontract = (await db.execute<{ project_id: string; vendor_id: string }>(sql`select project_id, vendor_id from subcontracts where org_id=${f.org.orgId} and id=${f.subcontract}`)).rows[0]!;
+    const control = (await db.execute<{ id: string }>(sql`select settings->'controlAccounts'->>'retainagePayable' as id from orgs where id=${f.org.orgId}`, "objects"))[0]!.id;
+    const subcontract = (await db.execute<{ project_id: string; vendor_id: string }>(sql`select project_id, vendor_id from subcontracts where org_id=${f.org.orgId} and id=${f.subcontract}`, "objects"))[0]!;
     await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,status,project_id,subsidiary_id,memo,subtotal,tax_total,total,custom,created_by,updated_by)
       values(${billId},${f.org.orgId},'vendor_bill',${`BILL-${billId.slice(0, 8)}`},${subcontract.vendor_id},${f.org.date},'CAD','draft',${subcontract.project_id},${f.org.subsidiaryId},'Bypass reservation','50','0','50',${JSON.stringify({ subcontractId: f.subcontract, kind: "retainage_release" })}::jsonb,${f.actor},${f.actor})`);
     await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount,project_id,party_id,is_billable,created_by,updated_by)
@@ -266,19 +264,19 @@ test("customer multi-currency draw void refuses while a release depends on it", 
     const subsidiary = randomUUID(), project = randomUUID();
     await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${subsidiary},${f.org.orgId},${f.org.subsidiaryId},'US entity','USD','US')`);
     await db.execute(sql`insert into party_subsidiaries(id,org_id,party_id,subsidiary_id) values(${randomUUID()},${f.org.orgId},${f.org.customerId},${subsidiary})`);
-    const type = (await db.execute<{ id: string }>(sql`select project_type_id as id from projects where org_id=${f.org.orgId} and id=${f.project}`)).rows[0]!.id;
+    const type = (await db.execute<{ id: string }>(sql`select project_type_id as id from projects where org_id=${f.org.orgId} and id=${f.project}`, "objects"))[0]!.id;
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status)
       values(${project},${f.org.orgId},${subsidiary},'LIFE-USD','Lifecycle USD job',${f.org.customerId},${type},'active')`);
     await db.execute(sql`insert into sov_lines(org_id,project_id,description,scheduled_value,sort_order,income_account_id)
       values(${f.org.orgId},${project},'Work','10000',1,${f.org.accounts.revenue})`);
-    const sovId = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${f.org.orgId} and project_id=${project}`)).rows[0]!.id;
+    const sovId = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${f.org.orgId} and project_id=${project}`, "objects"))[0]!.id;
     const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, project, f.org.date, "10", null));
     await withOrgTransaction(f.org.orgId, () =>
       submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: "1000", materialsStored: "0" }], null));
     const generated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, app.id, null));
     assert.equal(generated.retainage, "100.0000");
     await postCustomerInvoice(f.org, f.actor, f.approver, generated.invoiceId);
-    const currency = (await db.execute<{ currency: string }>(sql`select currency from documents where org_id=${f.org.orgId} and id=${generated.invoiceId}`)).rows[0]!.currency;
+    const currency = (await db.execute<{ currency: string }>(sql`select currency from documents where org_id=${f.org.orgId} and id=${generated.invoiceId}`, "objects"))[0]!.currency;
     assert.equal(currency, "USD");
     const rel = await withOrgTransaction(f.org.orgId, () => releaseRetainage(f.org.orgId, f.actor, project, f.org.date, "60", null));
     await assert.rejects(voidDoc(f.org.orgId, f.actor, generated.invoiceId, f.org.date), /retainage release/);
@@ -296,8 +294,8 @@ function refusal(expected: string): (error: unknown) => true {
 }
 
 async function payAppIds(orgId: string, table: "pay_applications" | "vendor_pay_applications"): Promise<Map<number, string>> {
-  const rows = (await db.execute<{ id: string; n: number }>(sql`
-    select id, application_number as n from ${sql.identifier(table)} where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ id: string; n: number }>(sql`
+    select id, application_number as n from ${sql.identifier(table)} where org_id = ${orgId}`, "objects");
   return new Map(rows.map((row) => [Number(row.n), row.id]));
 }
 
@@ -316,7 +314,7 @@ test("a posted customer draw cannot be un-billed under a later draw; unwinding n
     await withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, ids.get(2)!, null));
     await voidDoc(f.org.orgId, f.actor, first.invoiceId, dayAfter(f.org.date));
     await withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, ids.get(1)!, null));
-    const statuses = (await db.execute<{ status: string }>(sql`select status from pay_applications where org_id=${f.org.orgId} order by application_number`)).rows;
+    const statuses = await db.execute<{ status: string }>(sql`select status from pay_applications where org_id=${f.org.orgId} order by application_number`, "objects");
     assert.deepEqual(statuses.map((row) => row.status), ["void", "void"]);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });
@@ -324,7 +322,7 @@ test("a posted customer draw cannot be un-billed under a later draw; unwinding n
 test("deleting an earlier draw's draft invoice, or voiding the draw, is refused while a later draw exists", enabled, async () => {
   const f = await customerSetup();
   try {
-    const sovId = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${f.org.orgId} and project_id=${f.project}`)).rows[0]!.id;
+    const sovId = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${f.org.orgId} and project_id=${f.project}`, "objects"))[0]!.id;
     const app = await withOrgTransaction(f.org.orgId, () => createPayApplication(f.org.orgId, f.actor, f.project, f.org.date, "10", null));
     await withOrgTransaction(f.org.orgId, () =>
       submitPayApplication(f.org.orgId, f.actor, app.id, [{ sovLineId: sovId, thisPeriodCompleted: "1000", materialsStored: "0" }], null));
@@ -334,7 +332,7 @@ test("deleting an earlier draw's draft invoice, or voiding the draw, is refused 
     const discard = () => withOrgTransaction(f.org.orgId, () =>
       deleteDocument(invoice.invoiceId, f.actor, f.org.orgId, { reason: "Discard draft draw invoice", allowedSubsidiaryIds: null }));
     await assert.rejects(discard, /This invoice bills application #1, which cannot return to approved while later application #2 is not void — void the later applications first/);
-    assert.equal((await db.execute<{ status: string }>(sql`select status from pay_applications where id=${app.id}`)).rows[0]!.status, "invoiced");
+    assert.equal((await db.execute<{ status: string }>(sql`select status from pay_applications where id=${app.id}`, "objects"))[0]!.status, "invoiced");
     await withOrgTransaction(f.org.orgId, () => voidPayApplication(f.org.orgId, f.actor, later.id, null));
     await discard();
     // A draw already returned to approved beneath an invoiced later draw
@@ -352,8 +350,8 @@ test("deleting an earlier draw's draft invoice, or voiding the draw, is refused 
 test("a billed subcontract draw cannot be un-billed under later draws; unwinding newest first succeeds", enabled, async () => {
   const f = await vendorSetup();
   try {
-    const sov = (await db.execute<{ id: string }>(sql`select id from subcontract_sov_lines where org_id=${f.org.orgId}`)).rows[0]!.id;
-    const bill1 = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.id;
+    const sov = (await db.execute<{ id: string }>(sql`select id from subcontract_sov_lines where org_id=${f.org.orgId}`, "objects"))[0]!.id;
+    const bill1 = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`, "objects"))[0]!.id;
     const create = (periodEnd: string) => withOrgTransaction(f.org.orgId, () =>
       createVendorPayApplication({ orgId: f.org.orgId, userId: f.actor, subcontractId: f.subcontract, periodEnd }));
     await assert.rejects(create(f.org.date), /Period ending must follow the last billed application/);
@@ -377,7 +375,7 @@ test("a billed subcontract draw cannot be un-billed under later draws; unwinding
     await voidDoc(f.org.orgId, f.actor, bill1, f.org.date);
     const ids = await payAppIds(f.org.orgId, "vendor_pay_applications");
     await withOrgTransaction(f.org.orgId, () => voidVendorPayApplication(f.org.orgId, f.actor, ids.get(1)!));
-    const statuses = (await db.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id=${f.org.orgId} order by application_number`)).rows;
+    const statuses = await db.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id=${f.org.orgId} order by application_number`, "objects");
     assert.deepEqual(statuses.map((row) => row.status), ["void", "void", "void"]);
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });

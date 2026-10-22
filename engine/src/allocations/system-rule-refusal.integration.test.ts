@@ -90,11 +90,11 @@ test("tenant rules delete with their drafts but never with published history", {
     const draft = await createDraftVersion(created.rule.id, { orgId: s.orgId, effectiveFrom: "2026-01-01", allowedSubsidiaryIds: null }, AUDIT);
     await deleteRule(created.rule.id, { orgId: s.orgId }, AUDIT);
     const gone = await db.execute<{ n: string }>(sql`select count(*) as n from allocation_rules
-      where org_id = ${s.orgId} and id = ${created.rule.id}`);
-    assert.equal(gone.rows[0]?.n, "0");
+      where org_id = ${s.orgId} and id = ${created.rule.id}`, "objects");
+    assert.equal(gone[0]?.n, "0");
     const draftsGone = await db.execute<{ n: string }>(sql`select count(*) as n from allocation_rule_versions
-      where org_id = ${s.orgId} and id = ${draft.version.id}`);
-    assert.equal(draftsGone.rows[0]?.n, "0");
+      where org_id = ${s.orgId} and id = ${draft.version.id}`, "objects");
+    assert.equal(draftsGone[0]?.n, "0");
 
     const kept = await createRule({ orgId: s.orgId, key: "tenant-history", name: "Tenant", mode: "period" }, AUDIT);
     const keptDraft = await createDraftVersion(kept.rule.id, { orgId: s.orgId, effectiveFrom: "2026-01-01", allowedSubsidiaryIds: null }, AUDIT);

@@ -72,13 +72,11 @@ export async function createRatioRule(
     // one) refuses a restricted actor before anything is validated.
     const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await lockScheduleScopeForWrite(exec, orgId, actorId, scheduleId, allowed);
-    const apprentice = (
-      await exec.execute<{ isApprentice: boolean; journeyId: string | null }>(sql`
+    const apprentice = (await exec.execute<{ isApprentice: boolean; journeyId: string | null }>(sql`
         select is_apprentice as "isApprentice", journey_classification_id::text as "journeyId"
           from hrm_work_classifications
          where org_id = ${orgId}::uuid and id = ${apprenticeClassificationId}::uuid
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!apprentice) {
       throw new HrmConstructionError(
         `Apprentice classification ${apprenticeClassificationId} does not exist in this organization.`,
@@ -94,8 +92,7 @@ export async function createRatioRule(
         `Classification ${apprenticeClassificationId} counts against journey class ${apprentice.journeyId ?? "none"} — the ratio must name the same journey class.`,
       );
     }
-    const created = (
-      await exec.execute<{ id: string }>(sql`
+    const created = (await exec.execute<{ id: string }>(sql`
         insert into hrm_apprentice_ratio_rules
           (org_id, schedule_id, journey_classification_id, apprentice_classification_id,
            ratio_journey, ratio_apprentice, measured, effective_from, effective_to, created_by, updated_by)
@@ -104,8 +101,7 @@ export async function createRatioRule(
                 ${input.measured}, ${effectiveFrom}::date, ${input.effectiveTo ?? null}::date,
                 ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!created) throw new HrmConstructionError("The apprentice ratio rule was not written — no row was created.");
     return {
       id: String(created.id),
@@ -158,12 +154,10 @@ async function checkDayInScope(
   // schedule that applies to this project on this date — the same
   // scopeScore precedence the wage resolver uses — so another
   // jurisdiction's rule cannot price this project's apprentices.
-  const project = (
-    await exec.execute<{ subsidiaryId: string | null; custom: Record<string, unknown> | null }>(sql`
+  const project = (await exec.execute<{ subsidiaryId: string | null; custom: Record<string, unknown> | null }>(sql`
       select subsidiary_id::text as "subsidiaryId", custom
         from projects where org_id = ${orgId}::uuid and id = ${projectId}::uuid
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   const projectLocationRaw = (project?.custom as Record<string, unknown> | null)?.location_id;
   const projectLocation = typeof projectLocationRaw === "string" ? projectLocationRaw : null;
   const projectSubsidiary = project?.subsidiaryId ?? null;
@@ -173,25 +167,21 @@ async function checkDayInScope(
     departmentId: null,
     subsidiaryId: projectSubsidiary,
   };
-  const schedules = (
-    await exec.execute<{ id: string; appliesTo: AppliesTo }>(sql`
+  const schedules = await exec.execute<{ id: string; appliesTo: AppliesTo }>(sql`
       select id::text as id, applies_to as "appliesTo"
         from hrm_rate_schedules
        where org_id = ${orgId}::uuid and is_active
          and effective_from <= ${workedOn}::date
          and (effective_to is null or effective_to >= ${workedOn}::date)
-    `)
-  ).rows;
+    `, "objects");
   // Approved hours per employment for the day, resolved to as-of classifications.
-  const rawHours = (
-    await exec.execute<{ partyId: string; hours: string }>(sql`
+  const rawHours = await exec.execute<{ partyId: string; hours: string }>(sql`
       select te.employee_party_id::text as "partyId", sum(te.hours)::text as hours
         from time_entries te
        where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
          and te.worked_on = ${workedOn}::date and te.status = 'approved'
        group by te.employee_party_id
-    `)
-  ).rows;
+    `, "objects");
   const hours: Array<{ employmentId: string; hours: string }> = [];
   // Per-employment scope targets (the same shape the wage resolver
   // prices under): a department-scoped schedule still covers a day when
@@ -221,8 +211,7 @@ async function checkDayInScope(
   // No applicable schedule means no rule can fire for this project day —
   // an empty candidate set checks nothing, never every rule.
   if (applicableScheduleIds.length === 0) return [];
-  const rules = (
-    await exec.execute<{
+  const rules = await exec.execute<{
       id: string;
       scheduleId: string;
       journeyClassificationId: string;
@@ -243,8 +232,7 @@ async function checkDayInScope(
            applicableScheduleIds.map((id) => sql`${id}::uuid`),
            sql`, `,
          )})
-    `)
-  ).rows;
+    `, "objects");
   const byClass = new Map<string, { journey: string; apprentice: string }>();
   const journeyOf = new Map<string, string>();
   // Apprentice hours per employment per apprentice class: a breaching day

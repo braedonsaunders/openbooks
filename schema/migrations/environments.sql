@@ -166,7 +166,7 @@ declare
   expected_using text;
   expected_check text;
   policy_matches boolean;
-  -- Bypass arm calls the role-gated predicate (0399), never the raw GUC: a SET
+  -- Bypass arm calls the role-gated predicate, never the raw GUC: a SET
   -- on the runtime role must not widen this policy. The
   -- openbooks:org_isolation:v1 comment is kept so the drift check stays
   -- quiet; v1 now MEANS the predicate form.
@@ -233,7 +233,7 @@ begin
       and (coalesce(p.qual, '') like '%app.bypass_rls%' or coalesce(p.with_check, '') like '%app.bypass_rls%')
     order by p.tablename, p.policyname limit 1;
   if t is not null then
-    raise exception 'Tenant policy % still trusts app.bypass_rls directly; apply the forward tenant-policy repair migration before starting the application', t;
+    raise exception 'Tenant policy % still trusts app.bypass_rls directly; with the database owner, drop it or replace its bypass with public.app_bypass_rls_active(), then rerun bootstrap before starting the application', t;
   end if;
 end $$;
 

@@ -314,12 +314,10 @@ export async function sourceIdMap(
 ): Promise<Map<string, string>> {
   // Only the closed table-name union is an SQL identifier. Tenant identity
   // remains a bound value; duplicate external identities refuse closed.
-  const rows = (
-    await db.execute(sql`
+  const rows = await db.execute(sql`
       select custom->>'nsId' k, id from ${sql.raw(`"${table}"`)}
        where org_id = ${orgId} and custom->>'nsId' is not null order by id for share
-    `)
-  ).rows;
+    `, "objects");
   const mapped = new Map<string, string>();
   for (const row of rows) {
     const ref = String(row.k);
@@ -381,7 +379,7 @@ export async function importFieldTickets(input: {
     const parties = await sourceIdMap("parties", orgId);
     const customers = new Set((await db.execute<{party_id: string}>(sql`
       select party_id::text from customer_roles where org_id = ${orgId} order by party_id for share
-    `)).rows.map(row => row.party_id));
+    `, "objects")).map(row => row.party_id));
     const items = charges.length ? await sourceIdMap("items", orgId) : new Map<string, string>();
     const seenChargeIds = new Set<string>();
     for (const charge of charges) {
@@ -408,15 +406,12 @@ export async function importFieldTickets(input: {
         throw new Error(`refusing import: billable-timesheet ${charge.sourceId} item ${charge.itemRef} is not mapped to a native item`);
       }
     }
-    const org = (
-      await db.execute(sql`select base_currency from orgs where id = ${orgId}`)
-    ).rows[0] as { base_currency?: string } | undefined;
+    const org = (await db.execute(sql`select base_currency from orgs where id = ${orgId}`, "objects"))[0] as { base_currency?: string } | undefined;
     const baseCurrency = org?.base_currency?.trim();
     if (!baseCurrency) throw new Error("target organization has no base currency");
 
     const existingTickets = new Map<string, ExistingTicket>(
-      (
-        await db.execute<{
+      (await db.execute<{
           n: string;
           id: string;
           source_system: string | null;
@@ -431,8 +426,7 @@ export async function importFieldTickets(input: {
                  custom->'source'->>'system' as source_system,
                  custom->'source'->>'externalId' as source_external_id,
                  custom->'source'->>'jobRef' as source_job_ref
-            from documents where org_id = ${orgId} and kind = 'field_ticket'`)
-      ).rows.map(
+            from documents where org_id = ${orgId} and kind = 'field_ticket'`, "objects")).map(
         (row): [string, ExistingTicket] => [
           String(row.n),
           {
@@ -500,7 +494,7 @@ export async function importFieldTickets(input: {
                custom ? 'source' has_source_metadata
           from documents where org_id = ${orgId} and kind = 'field_ticket'
            and id = any(${sql.param(candidateIds)}::uuid[])
-      `)).rows : [];
+      `, "objects")) : [];
       const lockedByNumber = new Map(lockedCandidates.map(row => [row.document_number, {
         id: row.id, sourceSystem: row.source_system, sourceExternalId: row.source_external_id,
         hasSourceMetadata: row.has_source_metadata, projectId: row.project_id, subsidiaryId: row.subsidiary_id,
@@ -577,18 +571,17 @@ export async function importFieldTickets(input: {
       await db.execute(sql`
         select pg_advisory_xact_lock(hashtextextended(${"field-ticket-import:" + orgId + ":" + ticket.number}, 0))
       `);
-      const sourceMatches = (await db.execute<{ id: string; document_number: string }>(sql`
+      const sourceMatches = await db.execute<{ id: string; document_number: string }>(sql`
         select id, document_number from documents
          where org_id = ${orgId} and kind = 'field_ticket'
            and custom->'source'->>'system' = ${sourceSystem}
            and custom->'source'->>'externalId' = ${ticket.sourceId}
          order by id for update
-      `)).rows;
+      `, "objects");
       if (sourceMatches.length > 1 || sourceMatches.some(row => row.document_number !== ticket.number)) {
         throw new Error(`refusing import: source ticket ${ticket.sourceId} already has a different or ambiguous native number`);
       }
-      const current = (
-        await db.execute<{
+      const current = (await db.execute<{
           id: string;
           source_system: string | null;
           source_external_id: string | null;
@@ -604,8 +597,7 @@ export async function importFieldTickets(input: {
             from documents
            where org_id = ${orgId} and kind = 'field_ticket' and document_number = ${ticket.number}
            for update
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       const rechecked: ExistingTicket | undefined = current
         ? {
             id: String(current.id),
@@ -642,16 +634,14 @@ export async function importFieldTickets(input: {
             approval: ticket.approval,
           },
         };
-        const inserted = (
-          await db.execute<{ id: string }>(sql`
+        const inserted = await db.execute<{ id: string }>(sql`
             insert into documents (org_id, kind, document_number, party_id, project_id, subsidiary_id, document_date, currency,
                                    status, memo, subtotal, tax_total, total, reference_number, created_by, custom)
             values (${orgId}, 'field_ticket', ${ticket.number}, ${parties.get(ticket.customerRef) ?? null}, ${projectId}, ${projectEntities.get(projectId)},
                     ${ticket.end}, ${baseCurrency}, 'draft', ${ticket.description},
                     '0', '0', '0', ${ticket.po}, ${actor},
                     ${JSON.stringify(sourceMetadata)}::jsonb)
-            returning id`)
-        ).rows;
+            returning id`, "objects");
         if (inserted.length !== 1) {
           throw new Error(
             `refusing import: writing source ticket ${ticket.sourceId} (number ${ticket.number}) matched ${inserted.length} rows; re-run the import`,
@@ -664,8 +654,8 @@ export async function importFieldTickets(input: {
           values (${orgId}, 'documents', ${ticketDocId}, 'insert',
             ${JSON.stringify({ reason: "source_field_ticket_import", ...sourceMetadata, after: {projectId, subsidiaryId: projectEntities.get(projectId), status: "draft"} })}::jsonb,
             ${actor}, ${requestId}) returning id
-        `);
-        if (documentAudit.rows.length !== 1) throw new Error(`refusing import: source ticket ${ticket.sourceId} document was not audited`);
+        `, "objects");
+        if (documentAudit.length !== 1) throw new Error(`refusing import: source ticket ${ticket.sourceId} document was not audited`);
         existingTickets.set(ticket.number, {
           id: ticketDocId,
           sourceSystem,
@@ -687,7 +677,7 @@ export async function importFieldTickets(input: {
       }>(sql`
         select period_start::text, period_end::text, foreman_party_id::text, superintendent_party_id::text
           from field_tickets where org_id = ${orgId} and document_id = ${ticketDocId} for update
-      `)).rows[0];
+      `, "objects"))[0];
       const targetSuperintendent = ticket.superintendentRef === undefined
         ? previous?.superintendent_party_id ?? null
         : ticket.superintendentRef ? parties.get(ticket.superintendentRef)! : null;
@@ -703,8 +693,8 @@ export async function importFieldTickets(input: {
         values (${ticketDocId}, ${orgId}, 'weekly', ${ticket.begin}, ${ticket.end},
                 ${targetForeman}, ${targetSuperintendent}, ${actor}, ${actor})
         returning document_id
-      `);
-        if (native.rows.length !== 1) {
+      `, "objects");
+        if (native.length !== 1) {
           throw new Error(`refusing import: native header for source ticket ${ticket.sourceId} was not created`);
         }
         const headerAudit = await db.execute(sql`
@@ -713,8 +703,8 @@ export async function importFieldTickets(input: {
             ${JSON.stringify({reason: "source_field_ticket_import", sourceSystem, sourceExternalId: ticket.sourceId,
               after: {periodStart: ticket.begin, periodEnd: ticket.end, foremanPartyId: targetForeman, superintendentPartyId: targetSuperintendent}})}::jsonb,
             ${actor}, ${requestId}) returning id
-        `);
-        if (headerAudit.rows.length !== 1) throw new Error(`refusing import: source ticket ${ticket.sourceId} header was not audited`);
+        `, "objects");
+        if (headerAudit.length !== 1) throw new Error(`refusing import: source ticket ${ticket.sourceId} header was not audited`);
         nativeCreated++;
       } else {
         const changed = previous.period_start !== ticket.begin || previous.period_end !== ticket.end ||
@@ -731,9 +721,9 @@ export async function importFieldTickets(input: {
                    updated_by = ${actor}, updated_at = now()
              where org_id = ${orgId} and document_id = ${ticketDocId}
             returning document_id
-          `);
-          if (update.rows.length !== 1) {
-            throw new Error(`refusing import: source ticket ${ticket.sourceId} role update matched ${update.rows.length} native headers`);
+          `, "objects");
+          if (update.length !== 1) {
+            throw new Error(`refusing import: source ticket ${ticket.sourceId} role update matched ${update.length} native headers`);
           }
           const audit = await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -756,8 +746,8 @@ export async function importFieldTickets(input: {
                 },
               })}::jsonb, ${actor}, ${requestId})
             returning id
-          `);
-          if (audit.rows.length !== 1) {
+          `, "objects");
+          if (audit.length !== 1) {
             throw new Error(`refusing import: source ticket ${ticket.sourceId} header change was not audited`);
           }
           nativeUpdated++;
@@ -767,13 +757,13 @@ export async function importFieldTickets(input: {
     if (charges.length > 0) {
       const ticketDocumentBySourceRef = new Map<string, string>();
       const ticketJobBySourceRef = new Map<string, string>();
-      const sourceTickets = (await db.execute<{id: string; source_external_id: string; source_job_ref: string | null}>(sql`
+      const sourceTickets = await db.execute<{id: string; source_external_id: string; source_job_ref: string | null}>(sql`
         select id::text id, custom->'source'->>'externalId' source_external_id, custom->'source'->>'jobRef' source_job_ref
           from documents where org_id = ${orgId} and kind = 'field_ticket'
            and custom->'source'->>'system' = ${sourceSystem}
            and custom->'source'->>'externalId' = any(${sql.param(charges.map(charge => charge.ticketRef))}::text[])
          order by id for update
-      `)).rows;
+      `, "objects");
       for (const row of sourceTickets) {
         if (ticketDocumentBySourceRef.has(row.source_external_id)) throw new Error(`refusing import: source ticket ${row.source_external_id} has multiple native documents`);
         ticketDocumentBySourceRef.set(row.source_external_id, row.id);
@@ -783,15 +773,14 @@ export async function importFieldTickets(input: {
       const sourceDocumentRefs = [...new Set(charges.flatMap((charge) => charge.sourceDocumentRef ? [charge.sourceDocumentRef] : []))];
       const sourceItemRefs = [...new Set(charges.map((charge) => charge.itemRef))];
       if (sourceDocumentRefs.length) {
-        const ambiguousOrders = (await db.execute(sql`
+        const ambiguousOrders = await db.execute(sql`
           select custom->>'nsId' from documents where org_id = ${orgId} and kind = 'sales_order'
            and custom->>'nsId' = any(${sql.param(sourceDocumentRefs)}::text[])
            group by custom->>'nsId' having count(*) <> 1
-        `)).rows;
+        `, "objects");
         if (ambiguousOrders.length) throw new Error("refusing import: a sales-order source identity resolves to multiple native documents");
       }
-      const nativeLines = sourceDocumentRefs.length === 0 ? [] : (
-        await db.execute<{
+      const nativeLines = sourceDocumentRefs.length === 0 ? [] : (await db.execute<{
           id: string;
           source_document_ref: string;
           item_ref: string;
@@ -815,8 +804,7 @@ export async function importFieldTickets(input: {
              and doc.custom->>'nsId' = any(${sql.param(sourceDocumentRefs)}::text[])
              and item.custom->>'nsId' = any(${sql.param(sourceItemRefs)}::text[])
            order by doc.id, line.id for update of doc, line
-        `)
-      ).rows.map((row) => ({
+        `, "objects")).map((row) => ({
         id: String(row.id),
         sourceDocumentRef: String(row.source_document_ref),
         itemRef: String(row.item_ref),
@@ -875,7 +863,7 @@ export async function importFieldTickets(input: {
           from document_lines
          where org_id = ${orgId} and document_id = any(${sql.param(ticketDocumentIds)}::uuid[])
          group by document_id
-      `)).rows;
+      `, "objects"));
       for (const row of existingMaxLineNumbers) nextLineNumberByDocument.set(row.document_id, row.next_line_number);
       for (const documentId of ticketDocumentIds) if (!nextLineNumberByDocument.has(documentId)) nextLineNumberByDocument.set(documentId, 1);
       for (const charge of charges) {
@@ -893,7 +881,7 @@ export async function importFieldTickets(input: {
             from documents doc join field_tickets ft on ft.org_id = doc.org_id and ft.document_id = doc.id
            where doc.org_id = ${orgId} and doc.id = ${ticketDocumentId} and doc.kind = 'field_ticket'
            for update of doc
-        `)).rows[0];
+        `, "objects"))[0];
         if (!ticketRow) throw new Error(`refusing import: native field-ticket header for source ${charge.ticketRef} is missing`);
         if (charge.occurredOn < ticketRow.period_start || charge.occurredOn > ticketRow.period_end) {
           throw new Error(`refusing import: billable-timesheet ${charge.sourceId} occurs outside native ticket ${charge.ticketRef}'s work period`);
@@ -933,15 +921,15 @@ export async function importFieldTickets(input: {
                     '0', true, ${ticketRow.project_id}, ${ticketDocumentId}, ${charge.amount}, ${charge.occurredOn}, ${charge.occurredOn},
                     ${JSON.stringify({ sourceLineRef, sourceSystem, sourceTransactionId: charge.sourceId, sourceTicketRef: charge.ticketRef })}::jsonb)
             returning id::text id
-          `);
-          if (inserted.rows.length !== 1) throw new Error(`refusing import: billable-timesheet ${charge.sourceId} line was not inserted`);
+          `, "objects");
+          if (inserted.length !== 1) throw new Error(`refusing import: billable-timesheet ${charge.sourceId} line was not inserted`);
           const audit = await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
-            values (${orgId}, 'document_lines', ${String(inserted.rows[0]!.id)}, 'insert',
+            values (${orgId}, 'document_lines', ${String(inserted[0]!.id)}, 'insert',
                     ${JSON.stringify({ reason: "source_billable_timesheet_import", sourceSystem, sourceTransactionId: charge.sourceId, sourceTicketRef: charge.ticketRef, after })}::jsonb,
                     ${actor}, ${requestId}) returning id
-          `);
-          if (audit.rows.length !== 1) throw new Error(`refusing import: billable-timesheet ${charge.sourceId} line was not audited`);
+          `, "objects");
+          if (audit.length !== 1) throw new Error(`refusing import: billable-timesheet ${charge.sourceId} line was not audited`);
           nextLineNumberByDocument.set(ticketDocumentId, lineNumber + 1);
           billableChargesCreated++;
           affectedTicketDocuments.add(ticketDocumentId);
@@ -974,15 +962,15 @@ export async function importFieldTickets(input: {
                      updated_at = now()
                where org_id = ${orgId} and id = ${existingLine.id} and document_id = ${ticketDocumentId}
               returning id
-            `);
-            if (updated.rows.length !== 1) throw new Error(`refusing import: source billable-timesheet ${charge.sourceId} correction matched ${updated.rows.length} lines`);
+            `, "objects");
+            if (updated.length !== 1) throw new Error(`refusing import: source billable-timesheet ${charge.sourceId} correction matched ${updated.length} lines`);
             const audit = await db.execute(sql`
               insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
               values (${orgId}, 'document_lines', ${existingLine.id}, 'update',
                       ${JSON.stringify({ reason: "source_billable_timesheet_import", sourceSystem, sourceTransactionId: charge.sourceId, sourceTicketRef: charge.ticketRef, before, after })}::jsonb,
                       ${actor}, ${requestId}) returning id
-            `);
-            if (audit.rows.length !== 1) throw new Error(`refusing import: billable-timesheet ${charge.sourceId} correction was not audited`);
+            `, "objects");
+            if (audit.length !== 1) throw new Error(`refusing import: billable-timesheet ${charge.sourceId} correction was not audited`);
             billableChargesUpdated++;
             affectedTicketDocuments.add(ticketDocumentId);
           } else billableChargesUnchanged++;
@@ -993,7 +981,7 @@ export async function importFieldTickets(input: {
         const line = nativeLines.find(row => row.id === link.nativeLineId)!;
         const ticketRow = (await db.execute<{project_id: string | null; subsidiary_id: string | null}>(sql`
           select project_id::text, subsidiary_id::text from documents where org_id = ${orgId} and id = ${link.ticketDocumentId} for share
-        `)).rows[0];
+        `, "objects"))[0];
         if (!ticketRow || line.projectId !== ticketRow.project_id || line.subsidiaryId !== ticketRow.subsidiary_id || !line.subsidiaryId || !subsidiaryScopeAllows(allowed, line.subsidiaryId)) {
           throw new Error(`refusing import: sales-order line ${line.id} and ticket do not share an authorized project and legal entity`);
         }
@@ -1015,8 +1003,8 @@ export async function importFieldTickets(input: {
             from jsonb_to_recordset(${linkPayload}::jsonb) as source(line_id uuid, ticket_document_id uuid, source_transaction_id text, ticket_ref text)
            where line.org_id = ${orgId} and line.id = source.line_id and line.field_ticket_id is null
           returning line.id::text id
-        `);
-        if (updated.rows.length !== linksToWrite.length) throw new Error(`refusing import: expected to link ${linksToWrite.length} source sales-order lines, updated ${updated.rows.length}`);
+        `, "objects");
+        if (updated.length !== linksToWrite.length) throw new Error(`refusing import: expected to link ${linksToWrite.length} source sales-order lines, updated ${updated.length}`);
         const audit = await db.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
           select ${orgId}, 'document_lines', source.line_id, 'update',
@@ -1026,15 +1014,15 @@ export async function importFieldTickets(input: {
                  ${actor}, ${requestId}
             from jsonb_to_recordset(${linkPayload}::jsonb) as source(line_id uuid, ticket_document_id uuid, source_transaction_id text, ticket_ref text)
           returning id
-        `);
-        if (audit.rows.length !== linksToWrite.length) throw new Error(`refusing import: expected ${linksToWrite.length} sales-order ticket-link audit rows, wrote ${audit.rows.length}`);
-        salesOrderLinesLinked = updated.rows.length;
+        `, "objects");
+        if (audit.length !== linksToWrite.length) throw new Error(`refusing import: expected ${linksToWrite.length} sales-order ticket-link audit rows, wrote ${audit.length}`);
+        salesOrderLinesLinked = updated.length;
       }
       for (const documentId of affectedTicketDocuments) {
         const before = (await db.execute<{ subtotal: string; tax_total: string; total: string }>(sql`
           select subtotal::text subtotal, tax_total::text tax_total, total::text total
             from documents where org_id = ${orgId} and id = ${documentId} for update
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         const updated = await db.execute<{ subtotal: string; tax_total: string; total: string }>(sql`
           update documents doc set
                  subtotal = totals.subtotal, tax_total = totals.tax_total, total = totals.subtotal + totals.tax_total,
@@ -1043,17 +1031,17 @@ export async function importFieldTickets(input: {
                     from document_lines where org_id = ${orgId} and document_id = ${documentId}) totals
            where doc.org_id = ${orgId} and doc.id = ${documentId}
           returning doc.subtotal::text subtotal, doc.tax_total::text tax_total, doc.total::text total
-        `);
-        if (updated.rows.length !== 1) throw new Error(`refusing import: source field-ticket ${documentId} financial totals were not refreshed`);
-        const after = updated.rows[0]!;
+        `, "objects");
+        if (updated.length !== 1) throw new Error(`refusing import: source field-ticket ${documentId} financial totals were not refreshed`);
+        const after = updated[0]!;
         if (toUnits(before.subtotal) !== toUnits(after.subtotal) || toUnits(before.tax_total) !== toUnits(after.tax_total) || toUnits(before.total) !== toUnits(after.total)) {
           const audit = await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
             values (${orgId}, 'documents', ${documentId}, 'update',
                     ${JSON.stringify({ reason: "source_billable_timesheet_import", sourceSystem, before, after })}::jsonb,
                     ${actor}, ${requestId}) returning id
-          `);
-          if (audit.rows.length !== 1) throw new Error(`refusing import: field-ticket ${documentId} line totals were not audited`);
+          `, "objects");
+          if (audit.length !== 1) throw new Error(`refusing import: field-ticket ${documentId} line totals were not audited`);
         }
       }
     }
@@ -1062,15 +1050,15 @@ export async function importFieldTickets(input: {
       const approved = await db.execute(sql`
         update documents set status = 'approved', updated_at = now()
          where org_id = ${orgId} and id = ${documentId} and status = 'draft' returning id
-      `);
-      if (approved.rows.length !== 1) throw new Error(`refusing import: source field-ticket ${documentId} approval was not recorded`);
+      `, "objects");
+      if (approved.length !== 1) throw new Error(`refusing import: source field-ticket ${documentId} approval was not recorded`);
       const audit = await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${orgId}, 'documents', ${documentId}, 'update',
           ${JSON.stringify({reason: "source_field_ticket_import", sourceSystem, before: {status: "draft"}, after: {status: "approved"}})}::jsonb,
           ${actor}, ${requestId}) returning id
-      `);
-      if (audit.rows.length !== 1) throw new Error(`refusing import: source field-ticket ${documentId} approval was not audited`);
+      `, "objects");
+      if (audit.length !== 1) throw new Error(`refusing import: source field-ticket ${documentId} approval was not audited`);
     }
     return {
       created, nativeCreated, nativeUpdated, existing,
@@ -1086,17 +1074,17 @@ export function assertChargeWriteAllowed(status: string, sourceId: string): void
 }
 
 async function refuseUsedSourceLine(orgId: string, lineId: string): Promise<void> {
-  const used = (await db.execute(sql`
+  const used = await db.execute(sql`
     select 1 from hrm_benefit_awards a
      where a.org_id = ${orgId}
        and jsonb_path_exists(a.source_snapshot, '$.measurement.settlement.transaction.source.lines[*] ? (@.sourceId == $lineId)', jsonb_build_object('lineId', ${lineId}::text))
      limit 1
-  `)).rows;
+  `, "objects");
   if (used.length) throw new Error(`refusing import: native source line ${lineId} is retained by an award; preserve its source facts and record an adjusting award`);
 }
 
 async function refuseUsedTicket(orgId: string, documentId: string): Promise<void> {
-  const used = (await db.execute(sql`
+  const used = await db.execute(sql`
     select 1 where exists (
       select 1 from hrm_benefit_awards a where a.org_id = ${orgId}
        and (jsonb_path_exists(a.source_snapshot, '$.measurement.settlement.transaction.source.lines[*] ? (@.documentId == $documentId)', jsonb_build_object('documentId', ${documentId}::text))
@@ -1114,6 +1102,6 @@ async function refuseUsedTicket(orgId: string, documentId: string): Promise<void
     ) or exists (
       select 1 from billing_request_field_tickets b where b.org_id = ${orgId} and b.field_ticket_id = ${documentId}
     )
-  `)).rows;
+  `, "objects");
   if (used.length) throw new Error(`refusing import: native ticket ${documentId} is retained by issued work or financial evidence; preserve its work facts and use the native correction workflow`);
 }

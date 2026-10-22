@@ -267,8 +267,8 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name
      order by p.display_name
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new ItFilingRefusal(
       `no committed IT pay stubs for tax year ${taxYear}: the Certificazione Unica reports committed pay runs, `
       + "so an empty slip would be a wrong slip. Calculate and commit the year's IT pay runs first.",
@@ -291,9 +291,9 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
        and s.country = 'IT'
        and s.factors ? 'CONG_ADDREG_ANNUAL'
      order by s.employee_party_id, s.pay_date desc, s.created_at desc
-  `));
+  `, "objects"));
   const assessedByEmployee = new Map(
-    assessedRows.rows.map((row) => [String(row.employee_party_id), String(row.assessed)]),
+    assessedRows.map((row) => [String(row.employee_party_id), String(row.assessed)]),
   );
   const declaration = itDetrazioniDeclaration();
   const certRows = (await db.execute<{ employee_party_id: string; answers: Record<string, string | null> }>(sql`
@@ -303,13 +303,13 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
        and c.superseded_on is null
        and (c.effective_from is null or c.effective_from <= ${`${taxYear}-12-31`}::date)
      order by c.employee_party_id, c.effective_from desc nulls last
-  `));
+  `, "objects"));
   const certByEmployee = new Map(
-    certRows.rows.map((row) => [String(row.employee_party_id), row.answers as Record<string, string | null>]),
+    certRows.map((row) => [String(row.employee_party_id), row.answers as Record<string, string | null>]),
   );
   const regionName = (code: string | null): string | null =>
     IT_REGIONS.find((region) => region.code === code)?.name ?? null;
-  return rows.rows.map((row) => {
+  return rows.map((row) => {
     const employeePartyId = String(row.employee_party_id);
     const answers = certByEmployee.get(employeePartyId) ?? {};
     const resolved: ResolvedCertificate = {

@@ -56,8 +56,8 @@ export const GET = defineRoute({
          where c.org_id = ${authz.user.orgId}
            ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
          order by c.created_at desc
-      `));
-    return NextResponse.json({ connections: rows.rows });
+      `, "objects"));
+    return NextResponse.json({ connections: rows });
   },
 });
 
@@ -105,9 +105,9 @@ export const POST = defineRoute({
     const acct = (await db.execute<{ subsidiary_id: string | null }>(sql`
         select a.subsidiary_id from accounts a where a.id = ${body.accountId} and a.org_id = ${authz.user.orgId}
           and ${reconcilableBankMembership()}
-      `));
-    if (!acct.rows.length) return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
-    const scoped = guardSubsidiaryScope(authz, acct.rows[0]!.subsidiary_id);
+      `, "objects"));
+    if (!acct.length) return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
+    const scoped = guardSubsidiaryScope(authz, acct[0]!.subsidiary_id);
     if (scoped) return scoped;
     const isApi = API_PROVIDERS.has(body.provider);
     const sealed = isApi && body.credentials ? sealCredentials(authz.user.orgId, body.credentials) : null;
@@ -122,16 +122,16 @@ export const POST = defineRoute({
                   ${sealed}, ${status},
                   ${authz.user.id}, ${authz.user.id})
           returning *
-        `));
+        `, "objects"));
         await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values
-            (${authz.user.orgId}, 'bank_feed_connections', ${created.rows[0]!.id}, 'insert',
-             ${JSON.stringify({ after: withoutCredentials(created.rows[0]!) })}::jsonb,
+            (${authz.user.orgId}, 'bank_feed_connections', ${created[0]!.id}, 'insert',
+             ${JSON.stringify({ after: withoutCredentials(created[0]!) })}::jsonb,
              ${authz.user.id}, ${req.headers.get("X-Request-Id")})
         `);
-        return created.rows[0]!.id;
+        return created[0]!.id;
       });
     return NextResponse.json({ id }, { status: 201 });
   },

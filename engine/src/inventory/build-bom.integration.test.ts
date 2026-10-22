@@ -31,8 +31,8 @@ test(
         update bom_components
            set quantity_per = '2', scrap_pct = '5'
          where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}
-         returning component_item_id`);
-      assert.equal(updated.rows.length, 1, "the fixture BOM line must be present");
+         returning component_item_id`, "objects");
+      assert.equal(updated.length, 1, "the fixture BOM line must be present");
       await receiveInventory(org.orgId, null, {
         itemId: org.items.component, stockLocationId: org.stockLocationId, quantity: "21", unitCost: "1",
         subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
@@ -42,10 +42,10 @@ test(
         assemblyItemId: org.items.assembly, quantity: "10", stockLocationId: org.stockLocationId,
         subsidiaryId: org.subsidiaryId, date: org.date,
       });
-      const consumed = (await db.execute<{ quantity: string }>(sql`
+      const consumed = await db.execute<{ quantity: string }>(sql`
         select quantity::text as quantity from inventory_movements
          where org_id = ${org.orgId} and journal_entry_id = ${built.entryId} and kind = 'assembly_consume'
-      `)).rows;
+      `, "objects");
       assert.deepEqual(consumed.map((row) => row.quantity), ["-21.0000"]);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -63,8 +63,8 @@ test(
         update bom_components
            set quantity_per = '5', operation_seq = 10
          where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}
-         returning component_item_id`);
-      assert.equal(updated.rows.length, 1, "the fixture BOM line must be present");
+         returning component_item_id`, "objects");
+      assert.equal(updated.length, 1, "the fixture BOM line must be present");
       await db.execute(sql`
         insert into bom_components
           (org_id, assembly_item_id, component_item_id, quantity_per, sort_order, operation_seq)
@@ -94,7 +94,7 @@ test(
       assert.equal(
         (await db.execute<{ count: number }>(sql`
           select count(*)::int as count from inventory_movements
-           where org_id = ${org.orgId} and kind = 'assembly_consume'`)).rows[0]!.count,
+           where org_id = ${org.orgId} and kind = 'assembly_consume'`, "objects"))[0]!.count,
         0,
       );
     } finally {
@@ -265,7 +265,7 @@ test(
                and mode = 'ShareLock'
                and granted = false
           ) as waiting
-        `)).rows[0]?.waiting;
+        `, "objects"))[0]?.waiting;
         queuedOnBom = waiting === true;
         if (!queuedOnBom) await new Promise((resolve) => setTimeout(resolve, 25));
       }
@@ -299,7 +299,7 @@ test(
            and entry.id = movement.journal_entry_id
          where layer.org_id = ${org.orgId}
            and layer.source_movement_id = ${built.movementId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.ok(operation, "the finished layer must resolve to its build operation");
       assert.equal(operation.consumed_quantity, "-6.0000");
       assert.deepEqual(operation.custom.assemblyBuild, {
@@ -363,7 +363,7 @@ test(
         select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from cost_layers where org_id = ${org.orgId}) as layers
-      `)).rows[0]!;
+      `, "objects"))[0]!;
 
       await db.execute(sql`update bom_components set is_byproduct = true where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
       await assert.rejects(
@@ -408,7 +408,7 @@ test(
         select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from cost_layers where org_id = ${org.orgId}) as layers
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(afterCounts, beforeCounts);
       assert.deepEqual(
         await getOnHand(org.orgId, org.items.component, org.stockLocationId),

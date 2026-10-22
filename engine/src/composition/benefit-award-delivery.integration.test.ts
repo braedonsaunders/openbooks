@@ -74,11 +74,9 @@ for (const transaction of [false, true])
           mode: "any",
           preventSelfApproval: true,
         });
-        const component = (
-          await db.execute<{ id: string }>(sql`
+        const component = (await db.execute<{ id: string }>(sql`
       select id from pay_components where org_id = ${fx.orgId} and system_key = 'bonus' and (country = 'CA' or country is null) order by country nulls last
-    `)
-        ).rows[0]!;
+    `, "objects"))[0]!;
         assert.ok(
           component,
           "the native payroll fixture has its Canadian bonus component",
@@ -107,11 +105,9 @@ for (const transaction of [false, true])
             : {}),
         });
         if (transaction) {
-          const item = (
-            await db.execute<{ id: string }>(
-              sql`select id from items where org_id=${fx.orgId} order by id limit 1`,
-            )
-          ).rows[0];
+          const item = (await db.execute<{ id: string }>(
+              sql`select id from items where org_id=${fx.orgId} order by id limit 1`, "objects",
+            ))[0];
           assert.ok(
             item,
             "the native fixture includes a commercial source item",
@@ -224,12 +220,10 @@ for (const transaction of [false, true])
           runDocumentId: input.documentId,
         });
         assert.equal(replay.award.status, "delivered");
-        const lines = (
-          await db.execute<{ amount: string }>(sql`
+        const lines = await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
        where s.org_id=${fx.orgId} and s.pay_run_document_id=${input.documentId} and l.description=${`Benefit award ${award.id} (${program.code} 2026-07-05..2026-07-18)`}
-    `)
-        ).rows;
+    `, "objects");
         assert.deepEqual(lines, [{ amount: "25.0000" }]);
         const statement = await employmentBenefitStatement({
           orgId: fx.orgId,
@@ -246,11 +240,9 @@ for (const transaction of [false, true])
           "265.0000",
           "the award is already in payroll gross, never added to it twice",
         );
-        const accounts = (
-          await db.execute<{ id: string; type: string }>(
-            sql`select id, type from accounts where org_id=${fx.orgId}`,
-          )
-        ).rows;
+        const accounts = await db.execute<{ id: string; type: string }>(
+            sql`select id, type from accounts where org_id=${fx.orgId}`, "objects",
+          );
         const account = (type: string) => {
           const found = accounts.find((a) => a.type === type)?.id;
           assert.ok(found, `fixture has ${type} control account`);
@@ -268,11 +260,9 @@ for (const transaction of [false, true])
         });
         const revenueAccount = accounts.find((a) => a.type === "income")?.id;
         assert.ok(revenueAccount, "the native fixture has a revenue account");
-        const expenseAccount = (
-          await db.execute<{ id: string }>(
-            sql`select settings#>>'{payroll,wageExpenseAccountId}' as id from orgs where id=${fx.orgId}`,
-          )
-        ).rows[0]!.id;
+        const expenseAccount = (await db.execute<{ id: string }>(
+            sql`select settings#>>'{payroll,wageExpenseAccountId}' as id from orgs where id=${fx.orgId}`, "objects",
+          ))[0]!.id;
         const measure = () =>
           measureMoneySource(db, fx.orgId, fx.actorId, {
             metric: "net_profit",

@@ -41,10 +41,7 @@
  * Deliberately out of scope, and why:
  *   - comments are stripped before scanning: prose naming the old shape
  *     (history notes, this file's own docs) validates nothing;
- *   - schema/migrations/generated/** is skipped: those tests mirror the
- *     immutable published migration bytes, so the mirror must match the
- *     migration, not the house rule;
- *   - `.sql` is not scanned: migration and preflight SQL is an immutable
+ *   - `.sql` is not scanned: baseline and migration SQL is an immutable
  *     published contract and cannot import the TypeScript validators;
  *   - handle-shaped patterns (`prefix:<uuid tail>`, query-param extracts)
  *     claim "contains/extracts", not "is a uuid" — a different defect class;
@@ -222,8 +219,7 @@ export function scanTree(root = ROOT) {
       (file) =>
         (tracked === null || tracked.has(file)) &&
         !file.includes("node_modules") &&
-        !SELF_FILES.has(basename(file)) &&
-        !file.startsWith("schema/migrations/generated/"),
+        !SELF_FILES.has(basename(file)),
     )
     .sort();
   const violations = [];

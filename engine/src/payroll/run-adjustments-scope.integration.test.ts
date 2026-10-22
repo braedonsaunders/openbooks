@@ -97,9 +97,9 @@ test("pay-run scope guard: native membership rules for include and exclude", { s
       select employee_party_id from pay_run_adjustments
        where org_id = ${fx.orgId} and pay_run_document_id = ${fx.documentId}
          and adjustment_type = 'exclude'
-    `));
+    `, "objects"));
     assert.deepEqual(
-      excluded.rows.map((r) => r.employee_party_id).sort(),
+      excluded.map((r) => r.employee_party_id).sort(),
       [fx.activeId, fx.deactivatedId, fx.profileOffId].sort(),
     );
     const repeat = await mutatePayRunAdjustment({
@@ -124,10 +124,10 @@ test('historical adjustments retain a former employee’s inactive status and re
       mutation: { action: 'add' as const, employeePartyId: f.deactivatedId, componentId: f.componentId,
         amount: '100', note: 'Original historical payroll source' } };
     assert.equal((await mutatePayRunAdjustment(input)).changed, true);
-    assert.equal((await db.execute<{ is_active: boolean }>(sql`select is_active from parties where org_id=${f.orgId} and id=${f.deactivatedId}`)).rows[0]!.is_active, false);
+    assert.equal((await db.execute<{ is_active: boolean }>(sql`select is_active from parties where org_id=${f.orgId} and id=${f.deactivatedId}`, "objects"))[0]!.is_active, false);
     await db.execute(sql`update employee_roles set terminated_on='2026-07-04' where org_id=${f.orgId} and party_id=${f.deactivatedId}`);
     await assert.rejects(mutatePayRunAdjustment(input), /Deactivated Member.*ended 2026-07-04.*review/i);
     assert.equal((await db.execute<{ count: string }>(sql`select count(*)::text from pay_run_adjustments
-      where org_id=${f.orgId} and pay_run_document_id=${f.documentId} and adjustment_type='line'`)).rows[0]!.count, '1');
+      where org_id=${f.orgId} and pay_run_document_id=${f.documentId} and adjustment_type='line'`, "objects"))[0]!.count, '1');
   } finally { await dropScratchOrgReporting(f.orgId); }
 });

@@ -106,7 +106,7 @@ async function runRow(runId: string): Promise<{
   error: string | null;
   requestedBy: string | null;
 }> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     status: string;
     journal_entry_id: string | null;
     flow_run_id: string | null;
@@ -114,7 +114,7 @@ async function runRow(runId: string): Promise<{
     requested_by: string | null;
   }>(sql`
     select status, journal_entry_id, flow_run_id::text, error, requested_by::text as requested_by
-      from allocation_runs where id = ${runId}`)).rows;
+      from allocation_runs where id = ${runId}`, "objects");
   const row = rows[0];
   assert.ok(row);
   return {
@@ -127,22 +127,22 @@ async function runRow(runId: string): Promise<{
 }
 
 async function lineageCount(orgId: string, runId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(sql`
     select count(*)::text as count from allocation_lineage
-     where org_id = ${orgId} and run_id = ${runId}`)).rows;
+     where org_id = ${orgId} and run_id = ${runId}`, "objects");
   return Number(rows[0]?.count ?? 0);
 }
 
 async function pendingGateForRun(runId: string): Promise<{ id: string; assigneeUserId: string } | null> {
-  const rows = (await db.execute<{ id: string; assigneeUserId: string }>(sql`
+  const rows = await db.execute<{ id: string; assigneeUserId: string }>(sql`
     select id, assignee_user_id as "assigneeUserId" from flow_gates
-     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`)).rows;
+     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`, "objects");
   return rows[0] ?? null;
 }
 
 async function journalCreator(entryId: string): Promise<string | null> {
-  const rows = (await db.execute<{ created_by: string | null }>(sql`
-    select created_by::text from journal_entries where id = ${entryId}`)).rows;
+  const rows = await db.execute<{ created_by: string | null }>(sql`
+    select created_by::text from journal_entries where id = ${entryId}`, "objects");
   return rows[0]?.created_by ?? null;
 }
 
@@ -355,13 +355,13 @@ test("scheduler auto_post with a flow waits in pending_approval, never posts", {
       payload: { ruleId, versionId, periodId: org.periodId, bookId: org.bookId },
     });
     assert.equal(outcome.outcome, "ran");
-    const posted = (await db.execute<{ count: string }>(sql`
+    const posted = await db.execute<{ count: string }>(sql`
       select count(*)::text as count from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows;
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects");
     assert.equal(Number(posted[0]?.count ?? 0), 0);
-    const waiting = (await db.execute<{ id: string }>(sql`
+    const waiting = await db.execute<{ id: string }>(sql`
       select id from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'pending_approval'`)).rows;
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'pending_approval'`, "objects");
     assert.equal(waiting.length, 1);
     assert.ok(await pendingGateForRun(waiting[0]!.id));
   } finally {

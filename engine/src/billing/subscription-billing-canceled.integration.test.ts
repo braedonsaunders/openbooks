@@ -48,18 +48,18 @@ async function mutationSnapshot(orgId: string, subscriptionId: string) {
   const docs = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from documents
      where org_id = ${orgId} and kind in ('customer_invoice', 'customer_credit')
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   const journals = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   const guards = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   const sub = (await db.execute<{ runCount: number; lastInvoiceId: string | null }>(sql`
     select run_count as "runCount", last_invoice_id as "lastInvoiceId"
       from subscriptions where id = ${subscriptionId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   return { docs: Number(docs), journals: Number(journals), guards: Number(guards), runCount: Number(sub.runCount), lastInvoiceId: sub.lastInvoiceId };
 }
 

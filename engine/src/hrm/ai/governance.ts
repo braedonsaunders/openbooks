@@ -84,7 +84,7 @@ export async function logDecision(exec: SqlExecutor, input: LogDecisionInput): P
   if (input.outputSummary.trim().length === 0) {
     throw new AiRailsError("ai_invalid_input", "outputSummary must be a one-line PII-free summary");
   }
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     insert into ai_decisions (
       org_id, capability_key, actor_user_id, subject_kind, subject_id,
       input_digest, output_digest, output_summary, sources, outcome,
@@ -95,7 +95,7 @@ export async function logDecision(exec: SqlExecutor, input: LogDecisionInput): P
       ${digest(input.input)}, ${digest(input.output)}, ${input.outputSummary},
       ${JSON.stringify(input.sources.map((s) => ({ kind: s.kind, id: s.id })))}::jsonb,
       ${input.outcome}, ${input.humanReviewer ?? null}::uuid, ${input.model}
-  ) returning id::text as id`)).rows;
+  ) returning id::text as id`, "objects");
   // A write matching zero rows is a failure, not a success.
   if (!rows[0]) {
     throw new AiRailsError(
@@ -124,7 +124,7 @@ export type CapabilityRow = {
 async function orgFeatureState(exec: SqlExecutor, orgId: string): Promise<FeatureState> {
   return (await exec.execute<{ features: FeatureState | null }>(sql`
     select settings->'features' as features from orgs where id = ${orgId}::uuid
-  `)).rows[0]?.features ?? {};
+  `, "objects"))[0]?.features ?? {};
 }
 
 function withSwitchboardStatus(rows: CapabilityRow[], features: FeatureState): CapabilityRow[] {
@@ -151,7 +151,7 @@ export async function syncCapabilities(
   await assertLedgerOn(exec, orgId);
   const seeded: string[] = [];
   for (const def of AI_CAPABILITIES.values()) {
-    const rows = (await exec.execute<{ id: string }>(sql`
+    const rows = await exec.execute<{ id: string }>(sql`
       insert into ai_capabilities (
         org_id, key, name, purpose, data_scope, autonomy,
         reviewer_role, notice_required
@@ -162,7 +162,7 @@ export async function syncCapabilities(
       )
       -- Provisioning preserves the existing capability and the organization's lowered autonomy.
       on conflict do nothing
-      returning id::text as id`)).rows;
+      returning id::text as id`, "objects");
     // The conflict target is the rescan-style (org, key) unique: a conflict
     // means this org already owns the row, which is expected and benign —
     // sync must never overwrite the org's lowered autonomy.
@@ -174,7 +174,7 @@ export async function syncCapabilities(
 /** List the org's capability rows (ledger read). */
 export async function listCapabilities(exec: SqlExecutor, orgId: string): Promise<CapabilityRow[]> {
   const features = await orgFeatureState(exec, orgId);
-  const rows = (await exec.execute<CapabilityRow>(sql`
+  const rows = await exec.execute<CapabilityRow>(sql`
     select id::text as id, key, name, purpose, data_scope as "dataScope",
            autonomy, reviewer_role as "reviewerRole",
            notice_required as "noticeRequired", enabled,
@@ -182,7 +182,7 @@ export async function listCapabilities(exec: SqlExecutor, orgId: string): Promis
            reviewed_by::text as "reviewedBy"
       from ai_capabilities
      where org_id = ${orgId}::uuid
-     order by key`)).rows;
+     order by key`, "objects");
   return withSwitchboardStatus(rows, features);
 }
 
@@ -215,7 +215,7 @@ export async function updateCapability(
   const reviewedBy = input.markReviewed ? sql`${actorId}::uuid` : sql`reviewed_by`;
   // Explicit null clears the reviewer; undefined leaves it alone.
   const hasReviewer = input.reviewerRole !== undefined;
-  const rows = (await exec.execute<CapabilityRow>(sql`
+  const rows = await exec.execute<CapabilityRow>(sql`
     update ai_capabilities
        set autonomy = coalesce(${input.autonomy ?? null}, autonomy),
            reviewer_role = case when ${hasReviewer} then ${input.reviewerRole ?? null} else reviewer_role end,
@@ -228,7 +228,7 @@ export async function updateCapability(
            autonomy, reviewer_role as "reviewerRole",
            notice_required as "noticeRequired", enabled,
            last_reviewed_at::text as "lastReviewedAt",
-           reviewed_by::text as "reviewedBy"`)).rows;
+           reviewed_by::text as "reviewedBy"`, "objects");
   const row = rows[0];
   if (!row) {
     throw new AiRailsError(
@@ -347,7 +347,7 @@ function decisionWindow(input: { limit?: number; offset?: number }) {
 }
 
 async function decisionRows(exec: SqlExecutor, scope: Awaited<ReturnType<typeof decisionReadScope>>, window: { limit: number; offset: number }): Promise<DecisionRow[]> {
-  return (await exec.execute<DecisionRow>(sql`
+  return await exec.execute<DecisionRow>(sql`
     select d.id::text as id, d.capability_key as "capabilityKey",
            d.actor_user_id::text as "actorUserId", d.subject_kind as "subjectKind",
            d.subject_id::text as "subjectId", d.output_summary as "outputSummary",
@@ -356,7 +356,7 @@ async function decisionRows(exec: SqlExecutor, scope: Awaited<ReturnType<typeof 
            d.recorded_at::text as "recordedAt"
       ${scope.from} ${scope.where}
      order by d.recorded_at desc, d.id desc
-     limit ${window.limit} offset ${window.offset}`)).rows;
+     limit ${window.limit} offset ${window.offset}`, "objects");
 }
 
 export async function listDecisions(exec: SqlExecutor, input: DecisionReadInput & { readonly limit?: number; readonly offset?: number }): Promise<DecisionRow[]> {
@@ -370,9 +370,9 @@ export async function listDecisionsPage(exec: SqlExecutor, input: DecisionReadIn
   const scope = await decisionReadScope(exec, input);
   const [decisions, count] = await Promise.all([
     decisionRows(exec, scope, window),
-    exec.execute<{ total: number }>(sql`select count(*)::int as total ${scope.from} ${scope.where}`),
+    exec.execute<{ total: number }>(sql`select count(*)::int as total ${scope.from} ${scope.where}`, "objects"),
   ]);
-  return { decisions, total: count.rows[0]?.total ?? 0 };
+  return { decisions, total: count[0]?.total ?? 0 };
 }
 
 /** Capabilities whose last review is older than the org's declared months. */
@@ -382,7 +382,7 @@ export async function overdueReviews(
   olderThanMonths: number,
 ): Promise<CapabilityRow[]> {
   const features = await orgFeatureState(exec, orgId);
-  const rows = (await exec.execute<CapabilityRow>(sql`
+  const rows = await exec.execute<CapabilityRow>(sql`
     select id::text as id, key, name, purpose, data_scope as "dataScope",
            autonomy, reviewer_role as "reviewerRole",
            notice_required as "noticeRequired", enabled,
@@ -392,7 +392,7 @@ export async function overdueReviews(
      where org_id = ${orgId}::uuid
        and (last_reviewed_at is null
             or last_reviewed_at < now() - (${olderThanMonths}::int * interval '1 month'))
-     order by key`)).rows;
+     order by key`, "objects");
   return withSwitchboardStatus(rows, features);
 }
 
@@ -477,7 +477,7 @@ async function assertDraftReviewerAccess(
       select employer_subsidiary_id as "employerSubsidiaryId"
        from hrm_requisitions
        where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
-       for share`)).rows[0];
+       for share`, "objects"))[0];
     if (!req) throw denied();
     if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), req.employerSubsidiaryId)) {
       throw denied();
@@ -494,7 +494,7 @@ async function assertDraftReviewerAccess(
       select kind, employment_id::text as "employmentId",
              reviewer_party_id::text as "reviewerPartyId"
         from hrm_reviews
-       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`, "objects"))[0];
     // The decision's kind must match the review it cites, and only the
     // assigned manager (or HR, via the retention read) reviews it — the
     // same audience drafting required.
@@ -519,13 +519,13 @@ async function assertDraftReviewerAccess(
     if (!(await has("hrm.process.read"))) throw denied();
     const template = (await exec.execute<{ one: number }>(sql`
       select 1 as one from hrm_process_templates
-       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`, "objects"))[0];
     // Templates are org-wide configuration with no entity lineage, so the
     // grant alone suffices; a process subject scopes by its employment.
     if (template) return;
     const process = (await exec.execute<{ employmentId: string }>(sql`
       select employment_id::text as "employmentId" from hrm_processes
-       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`)).rows[0];
+       where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`, "objects"))[0];
     if (!process) throw denied();
     await lockEmployment(process.employmentId);
     return;
@@ -536,7 +536,7 @@ async function assertDraftReviewerAccess(
       select employer_subsidiary_id as "employerSubsidiaryId"
        from hrm_offers
        where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
-       for share`)).rows[0];
+       for share`, "objects"))[0];
     if (!offer) throw denied();
     if (!employerInScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId), offer.employerSubsidiaryId)) {
       throw denied();
@@ -590,7 +590,7 @@ export async function markDecision(
            output_digest as "outputDigest", output_summary as "outputSummary",
            sources, model
       from ai_decisions
-     where org_id = ${orgId}::uuid and id = ${input.decisionId}::uuid`)).rows[0];
+     where org_id = ${orgId}::uuid and id = ${input.decisionId}::uuid`, "objects"))[0];
   if (!original) {
     throw markDenied(input.decisionId);
   }

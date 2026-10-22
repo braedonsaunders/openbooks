@@ -41,7 +41,7 @@ test('equipment GET answers an out-of-scope unit exactly like a missing one', as
       (await db.execute<{ id: string }>(sql`
         insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
         values (${org.orgId}, ${number}, ${number}, 'draft', ${subsidiaryId}, '100.0000')
-        returning id`)).rows[0]!.id
+        returning id`, 'objects'))[0]!.id
     const unitA = await unit('VIS-UNIT-1', org.subsidiaryId)
     const unitB = await unit('HID-UNIT-1', hidden)
     state.scope = new Set([org.subsidiaryId])
@@ -70,7 +70,7 @@ test('equipment GET waits on a unit rehome in flight instead of racing it', asyn
     const unitId = (await db.execute<{ id: string }>(sql`
       insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
       values (${org.orgId}, 'Moving unit', 'MOV-UNIT-1', 'draft', ${org.subsidiaryId}, '100.0000')
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     state.scope = new Set([org.subsidiaryId])
     await writer.query('begin')
     await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")

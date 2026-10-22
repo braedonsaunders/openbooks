@@ -145,8 +145,7 @@ function getReceive(orderId: string): Promise<Response> {
 }
 
 async function receiptFacts(orgId: string, lineId: string) {
-  return (
-    await db.execute<{
+  return (await db.execute<{
       received: string;
       receipts: number;
       moved: string;
@@ -159,8 +158,7 @@ async function receiptFacts(orgId: string, lineId: string) {
                where org_id = ${orgId} and status = 'posted') as moved,
              (select document_date::text from documents where org_id = ${orgId} and kind = 'purchase_receipt' limit 1) as "receiptDate",
              (select posting_date::text from journal_entries where org_id = ${orgId} limit 1) as "postingDate"
-    `)
-  ).rows[0]!;
+    `, "objects"))[0]!;
 }
 
 test("receive prefill excludes cancelled purchase-order quantity", { skip: !DB }, async () => {
@@ -283,14 +281,14 @@ test("a two-line receipt skips a zero line and converts the later line", { skip:
       ],
     });
     assert.equal(partial.status, 200, await partial.clone().text());
-    const fulfilled = (await db.execute<{ line: number; received: string }>(sql`
+    const fulfilled = await db.execute<{ line: number; received: string }>(sql`
       select line_number as line, quantity_fulfilled::text as received from document_lines
-       where id in (${lineIds[0]}, ${lineIds[1]}) order by line_number`)).rows;
+       where id in (${lineIds[0]}, ${lineIds[1]}) order by line_number`, "objects");
     assert.equal(toUnits(fulfilled[0]!.received), toUnits("3"), "the entered line advances");
     assert.equal(toUnits(fulfilled[1]!.received), toUnits("0"), "the zero line waits untouched");
     const moved = (await db.execute<{ moved: string }>(sql`
       select coalesce(sum(quantity), 0)::text as moved from inventory_movements
-       where org_id = ${org.orgId} and status = 'posted'`)).rows[0]!.moved;
+       where org_id = ${org.orgId} and status = 'posted'`, "objects"))[0]!.moved;
     assert.equal(toUnits(moved), toUnits("3"), "only the entered line moves stock");
 
     const rest = await postReceive(orderId, randomUUID(), {
@@ -300,7 +298,7 @@ test("a two-line receipt skips a zero line and converts the later line", { skip:
     assert.equal(rest.status, 200, await rest.clone().text());
     const after = (await db.execute<{ moved: string }>(sql`
       select coalesce(sum(quantity), 0)::text as moved from inventory_movements
-       where org_id = ${org.orgId} and status = 'posted'`)).rows[0]!.moved;
+       where org_id = ${org.orgId} and status = 'posted'`, "objects"))[0]!.moved;
     assert.equal(toUnits(after), toUnits("27"), "the box line converts at 12 base units each");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -27,9 +27,9 @@ export async function readWorkListFilters(tx:SqlExecutor,orgId:string,actorId:st
   if(!await lockActorIdentity(tx,orgId,actorId))throw new ScopeNotFoundError();
   if(!await lockAndCheckOrgFeature(tx,orgId,family==='project'?'projects':'manufacturing'))throw new ScopeNotFoundError();
   const scope=await lockActorCommandAuthority(tx,orgId,actorId,null,family==='project'?'projects.read':'manufacturing.read');
-  const profiles=(await tx.execute<{value:string;label:string}>(sql`select profile.id as value,profile.name as label from operating_profiles profile
-    where profile.org_id=${orgId} and profile.family=${family} order by profile.name,profile.id`)).rows;
-  const departments=(await tx.execute<{value:string;label:string}>(sql`select department.id as value,department.name as label from departments department
-    where department.org_id=${orgId} ${subsidiaryVisibleFilter(sql`department.subsidiary_id`,scope,{orgWideNull:true})} order by department.name,department.id`)).rows;
+  const profiles=await tx.execute<{value:string;label:string}>(sql`select profile.id as value,profile.name as label from operating_profiles profile
+    where profile.org_id=${orgId} and profile.family=${family} order by profile.name,profile.id`, 'objects');
+  const departments=await tx.execute<{value:string;label:string}>(sql`select department.id as value,department.name as label from departments department
+    where department.org_id=${orgId} ${subsidiaryVisibleFilter(sql`department.subsidiary_id`,scope,{orgWideNull:true})} order by department.name,department.id`, 'objects');
   return {profiles,departments};
 }

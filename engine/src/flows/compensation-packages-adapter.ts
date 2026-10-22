@@ -81,8 +81,7 @@ async function loadSubject(
   if (!isUuid(id)) return null;
   const orgId = ambientTenantOrgId();
   return (
-    (
-      await db.execute<SubjectRow>(sql`
+    (await db.execute<SubjectRow>(sql`
     select s.org_id,s.package_id,s.revision,s.status,s.submitted_by,s.created_by,
       s.effective_from::text,s.effective_to::text,p.subsidiary_id,p.name as package_name,
       ${table === "payroll_compensation_assignments" ? sql`s.employment_id` : sql`null::uuid`} as employment_id,
@@ -90,22 +89,19 @@ async function loadSubject(
     from ${sql.identifier(table)} s join payroll_compensation_packages p
       on p.org_id=s.org_id and p.id=s.package_id
     where s.id=${id} ${orgId ? sql`and s.org_id=${orgId}` : sql``}
-  `)
-    ).rows[0] ?? null
+  `, "objects"))[0] ?? null
   );
 }
 
 const versionScope: FlowSubjectScope = {
   via: "custom",
   async subsidiaryOf(orgId, ids, allowed, lock) {
-    const rows = (
-      await db.execute<{ id: string; subsidiary_id: string }>(sql`
+    const rows = await db.execute<{ id: string; subsidiary_id: string }>(sql`
       select s.id,p.subsidiary_id from payroll_compensation_versions s
       join payroll_compensation_packages p on p.org_id=s.org_id and p.id=s.package_id
       where s.org_id=${orgId} and s.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) ids(value))
       ${lock ? sql`for share of s,p` : sql``}
-    `)
-    ).rows;
+    `, "objects");
     return new Map(
       rows.map((row) => [
         row.id,
@@ -177,12 +173,10 @@ function adapter(
         throw new Error(
           "Compensation Flow candidates require an organization context.",
         );
-      return (
-        await db.execute<{
+      return (await db.execute<{
           id: string;
         }>(sql`select id from ${sql.identifier(table)}
-        where org_id=${orgId} and status='submitted' order by submitted_at desc,id limit ${limit}`)
-      ).rows.map((row) => row.id);
+        where org_id=${orgId} and status='submitted' order by submitted_at desc,id limit ${limit}`, "objects")).map((row) => row.id);
     },
     async releaseApproval(subjectId, outcome, ctx, detail, run) {
       await releaseFlowApproval({

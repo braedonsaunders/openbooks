@@ -32,8 +32,8 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
     const actorId = await withBypass(() => createScratchUser(org.orgId, "Feature Controller", "admin"));
     installEngineSeams();
     await withOrgContext(org.orgId, async () => {
-      const saved = await db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"nonprofit":true,"fundAccounting":true,"grantManagement":true,"pledges":true,"encumbrances":true,"budgets":true,"functionalExpenses":true,"form990":true}'::jsonb,true) where id=${org.orgId} returning id`);
-      assert.equal(saved.rows.length, 1);
+      const saved = await db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"nonprofit":true,"fundAccounting":true,"grantManagement":true,"pledges":true,"encumbrances":true,"budgets":true,"functionalExpenses":true,"form990":true}'::jsonb,true) where id=${org.orgId} returning id`, "objects");
+      assert.equal(saved.length, 1);
     });
     const funds = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "OPERATING", name: "Operating" }, classifications: { OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" } }, actorId });
     const restricted = await createFund({ orgId: org.orgId, code: "RESTRICTED", name: "Restricted", kind: "restricted", restrictionClass: "with_donor_restrictions", actorId });
@@ -48,10 +48,10 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
     const release = await createFundRelease({ orgId: org.orgId, fromFundId: restricted.id, toFundId: funds.defaultFundId, releaseAccountId: org.accounts.revenue, releaseDate: org.date, amount: "10.0000", purpose: "Meet program costs", satisfactionRef: "Program costs incurred", actorId });
     await submitFundRelease({ orgId: org.orgId, releaseId: release.id, actorId });
     const group = await withOrgContext(org.orgId, async () => {
-      const row = await db.execute<{ id: string }>(sql`insert into account_groups (org_id,dimension,key,name,match,is_catch_all,is_active,created_by,updated_by) values (${org.orgId},'grant_allowable_costs','costs','Allowable costs','{}'::jsonb,false,true,${actorId},${actorId}) returning id`);
-      assert.equal(row.rows.length, 1);
-      await db.execute(sql`insert into account_group_members (org_id,group_id,account_id,dimension,created_by,updated_by) values (${org.orgId},${row.rows[0]!.id},${org.accounts.cogs},'grant_allowable_costs',${actorId},${actorId})`);
-      return row.rows[0]!.id;
+      const row = await db.execute<{ id: string }>(sql`insert into account_groups (org_id,dimension,key,name,match,is_catch_all,is_active,created_by,updated_by) values (${org.orgId},'grant_allowable_costs','costs','Allowable costs','{}'::jsonb,false,true,${actorId},${actorId}) returning id`, "objects");
+      assert.equal(row.length, 1);
+      await db.execute(sql`insert into account_group_members (org_id,group_id,account_id,dimension,created_by,updated_by) values (${org.orgId},${row[0]!.id},${org.accounts.cogs},'grant_allowable_costs',${actorId},${actorId})`);
+      return row[0]!.id;
     });
     const grant = await createGrant({ orgId: org.orgId, code: "AWARD", name: "Program award", sponsorPartyId: org.customerId, sponsorKind: "foundation", determination: "contribution_unconditional", awardAmount: "40.0000", periodFrom: "2026-01-01", periodTo: "2026-12-31", fundId: restricted.id, allowableAccountGroupId: group, actorId });
     const grantAccounts: GrantPostingAccounts = { bankAccountId: org.accounts.bank, grantsReceivableAccountId: org.accounts.ar, refundableAdvanceAccountId: org.accounts.ap, grantRevenueAccountId: org.accounts.revenue, exchangeReceivableAccountId: org.accounts.ar, exchangeRevenueAccountId: org.accounts.revenue };
@@ -63,7 +63,7 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
     await withOrgTransaction(org.orgId, () => postEntry(db, { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, entryNumber: `COST-${randomUUID()}`, postingDate: org.date, periodId: org.periodId, currency: "CAD", actorId, origin: "journal", lines: [{ accountId: org.accounts.cogs, amount: "3.0000", departmentId, extraDims: { fund: funds.defaultFundId } }, { accountId: org.accounts.bank, amount: "-3.0000", extraDims: { fund: funds.defaultFundId } }] }));
     await withBypassContext(() => installTaxReturnPacks(org.orgId, ["US_990"], actorId));
     await ensureReportDefinitions(org.orgId);
-    const forms = await withOrgContext(org.orgId, async () => (await db.execute<{ code: string }>(sql`select code from tax_return_forms where org_id=${org.orgId} and is_active order by code`)).rows);
+    const forms = await withOrgContext(org.orgId, async () => await db.execute<{ code: string }>(sql`select code from tax_return_forms where org_id=${org.orgId} and is_active order by code`, "objects"));
     const statements = () => loadNonprofitStatements({ orgId: org.orgId, asOf: org.date, periodFrom: "2026-01-01", periodTo: org.date });
     const snapshot = async () => withOrgContext(org.orgId, async () => (await db.execute<{ data: unknown }>(sql`
       select jsonb_build_object(
@@ -81,7 +81,7 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
         'frameworks',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from nonprofit_frameworks where org_id=${org.orgId}) x),
         'pairs',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from fund_pairs where org_id=${org.orgId}) x),
         'mappings',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from functional_mappings where org_id=${org.orgId}) x)
-      ) as data`)).rows[0]?.data);
+      ) as data`, "objects"))[0]?.data);
     const before = await snapshot();
     const beforeStatements = await statements();
     const refusal = (key: string) => (error: unknown) => error instanceof Error &&
@@ -99,13 +99,13 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
       ["form990", () => computeForm990Workpaper(org.orgId, org.date, org.date)],
     ] as const;
     for (const [key, attempt] of cases) {
-      const changed = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',settings->'features'||jsonb_build_object(${key}::text,false),true) where id=${org.orgId} returning id`));
-      assert.equal(changed.rows.length, 1);
+      const changed = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',settings->'features'||jsonb_build_object(${key}::text,false),true) where id=${org.orgId} returning id`, "objects"));
+      assert.equal(changed.length, 1);
       await assert.rejects(attempt(), refusal(key));
       if (key === "form990") assert.deepEqual(await withOrgContext(org.orgId, () => filterTaxReturnFormsByFeatures(org.orgId, forms, db)), []);
       if (key === "fundAccounting" || key === "functionalExpenses" || key === "grantManagement") {
-        const definitions = await withOrgContext(org.orgId, () => db.execute<{ query: { entity?: string } | null }>(sql`select query from report_definitions where org_id=${org.orgId} and slug in ('statement-of-financial-position','statement-of-activities','functional-expense-matrix','cash-flow-reconciliation','grant-pipeline') order by slug`));
-        const gated = definitions.rows.map((row) => REPORT_ENTITY_MAP[row.query?.entity ?? ""]?.featureKey).filter((feature) => feature === key);
+        const definitions = await withOrgContext(org.orgId, () => db.execute<{ query: { entity?: string } | null }>(sql`select query from report_definitions where org_id=${org.orgId} and slug in ('statement-of-financial-position','statement-of-activities','functional-expense-matrix','cash-flow-reconciliation','grant-pipeline') order by slug`, "objects"));
+        const gated = definitions.map((row) => REPORT_ENTITY_MAP[row.query?.entity ?? ""]?.featureKey).filter((feature) => feature === key);
         assert.ok(gated.length, `${key} must hide its nonprofit built-ins`);
         for (const feature of gated) assert.equal(await orgFeatureEnabled(org.orgId, feature!), false);
       }
@@ -115,13 +115,13 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
       }
       if (key === "fundAccounting") await assert.rejects(withOrgTransaction(org.orgId, () => postEntry(db, { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, entryNumber: `OFF-${randomUUID()}`, postingDate: org.date, periodId: org.periodId, currency: "CAD", actorId, origin: "journal", lines: [{ accountId: org.accounts.bank, amount: "1.0000", extraDims: { fund: restricted.id } }, { accountId: org.accounts.revenue, amount: "-1.0000", extraDims: { fund: restricted.id } }] })), refusal("fundAccounting"));
       if (key === "encumbrances") assert.deepEqual(await withOrgContext(org.orgId, () => budgetaryControlWarnings(db, org.orgId, giftPost.entryId)), []);
-      const restored = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',settings->'features'||jsonb_build_object(${key}::text,true),true) where id=${org.orgId} returning id`));
-      assert.equal(restored.rows.length, 1);
+      const restored = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',settings->'features'||jsonb_build_object(${key}::text,true),true) where id=${org.orgId} returning id`, "objects"));
+      assert.equal(restored.length, 1);
       assert.deepEqual(await snapshot(), before, `${key} changed stored nonprofit or journal data`);
       assert.deepEqual(await statements(), beforeStatements, `${key} changed nonprofit statement figures`);
     }
-    const parentDisabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',settings->'features'||'{"nonprofit":false,"form990":true,"pledges":true}'::jsonb,true) where id=${org.orgId} returning id`));
-    assert.equal(parentDisabled.rows.length, 1);
+    const parentDisabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',settings->'features'||'{"nonprofit":false,"form990":true,"pledges":true}'::jsonb,true) where id=${org.orgId} returning id`, "objects"));
+    assert.equal(parentDisabled.length, 1);
     assert.equal(await orgFeatureEnabled(org.orgId, "form990"), false);
     assert.equal(await orgFeatureEnabled(org.orgId, "pledges"), false);
     await assert.rejects(computeForm990Workpaper(org.orgId, org.date, org.date), refusal("form990"));

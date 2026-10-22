@@ -43,7 +43,7 @@ test("asset lifecycle reversal rechecks current posting scope before copying sou
     });
     const sourceEventId = (await db.execute<{ id: string }>(sql`
       select id from asset_events where org_id = ${org.orgId} and journal_entry_id = ${source.entryId}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     // The source was posted while the adjustment account was valid. A later
     // entity-policy edit must also fence the compensating reversal.
@@ -85,7 +85,7 @@ test("asset lifecycle reversal rechecks current posting scope before copying sou
         (select count(*)::int from journal_entries where org_id = ${org.orgId} and origin = 'revaluation') as entries,
         (select count(*)::int from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}) as events,
         (select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}) as status
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(evidence, { entries: 1, events: 1, status: "in_service" });
   } finally {
     await dropScratchOrg(org.orgId);

@@ -149,7 +149,7 @@ async function retainCalculationSource(run: PayRunFixture): Promise<void> {
   assert.equal((await db.execute(sql`update pay_runs
     set calculation_source_snapshot=${JSON.stringify(source)}::jsonb,
         calculation_source_digest=${payRunCalculationSourceDigest(source)}
-    where org_id=${run.orgId} and document_id=${run.documentId} returning document_id`)).rows.length, 1);
+    where org_id=${run.orgId} and document_id=${run.documentId} returning document_id`, "objects")).length, 1);
 }
 
 /* ------------------------------------------------------------------ */
@@ -406,8 +406,8 @@ test("an employee's pay bank terms stale only the runs that pay that employee", 
 
     const edited = await db.execute(sql`
       update payroll_vacation_terms set percent_floor = '6', updated_by = ${run.actorId}, updated_at = now()
-       where org_id = ${run.orgId} and employment_id = ${run.employmentId} returning id`);
-    assert.equal(edited.rows.length, 1);
+       where org_id = ${run.orgId} and employment_id = ${run.employmentId} returning id`, "objects");
+    assert.equal(edited.length, 1);
     assert.ok(
       (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("entitlements"),
       "the run's own employee's vacation terms move their accrual",
@@ -455,8 +455,8 @@ test(
         update pay_runs set calculated_at = now() where document_id = ${run.documentId}`);
       const planEdit = await db.execute(sql`
         update entitlement_plans set accrual_value='5', updated_by=${run.actorId}, updated_at=now()
-        where org_id=${run.orgId} and system_key='vacation' returning id`);
-      assert.equal(planEdit.rows.length, 1, 'the staleness proof changes the configured vacation program');
+        where org_id=${run.orgId} and system_key='vacation' returning id`, "objects");
+      assert.equal(planEdit.length, 1, 'the staleness proof changes the configured vacation program');
       assert.ok(
         (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("entitlements"),
         "an entitlement plan moves accrual and payout amounts on the stub",

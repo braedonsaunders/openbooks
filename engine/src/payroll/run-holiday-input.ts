@@ -19,9 +19,9 @@ export async function priceRunHolidayHours(tx: SqlExecutor, input: {
     select r.period_start::text, r.period_end::text, d.currency
       from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
      where r.org_id=${input.orgId} and r.document_id=${input.documentId}
-  `);
-  const run = runs.rows[0];
-  if (runs.rows.length !== 1 || !run?.currency) throw new PayrollError("The holiday input requires a pay run with a resolved currency.");
+  `, "objects");
+  const run = runs[0];
+  if (runs.length !== 1 || !run?.currency) throw new PayrollError("The holiday input requires a pay run with a resolved currency.");
   if (input.earnedOn !== undefined && (!isIsoCalendarDate(input.earnedOn)
     || input.earnedOn < run.period_start || input.earnedOn > run.period_end)) {
     throw new PayrollError("Record holiday hours on one valid YYYY-MM-DD date within this pay period.");

@@ -129,8 +129,8 @@ export const POST = defineRoute({
     if (parsed.truncated) return NextResponse.json({ error: 'too_many_rows' }, { status: 422 })
     const scenarioResult = (await db.execute<{ fiscal_year: number; status: string; revision: number }>(sql`
         select fiscal_year, status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId}
-      `))
-    const scenario = scenarioResult.rows[0]
+      `, 'objects'))
+    const scenario = scenarioResult[0]
     if (!scenario) return notFound("record")
     if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
     const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
@@ -143,7 +143,7 @@ export const POST = defineRoute({
           select a.id, coalesce(a.number, '') as key, a.name, a.type
             from accounts a
            where a.org_id = ${user.orgId} and a.is_active and not a.is_summary
-             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
         // Periods resolve within the budget's pinned calendar only: the line
         // guard admits default-calendar periods, so resolving a same-named
         // period from another calendar would write a line the worksheet hides.
@@ -152,45 +152,45 @@ export const POST = defineRoute({
             from accounting_periods p
             join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
            where p.org_id = ${user.orgId} and p.fiscal_year = ${scenario.fiscal_year}
-             and not p.is_adjustment and fc.is_default`),
+             and not p.is_adjustment and fc.is_default`, 'objects'),
         db.execute<Lookup & { parentId: string | null }>(sql`
           select id, name as key, name, parent_id as "parentId"
             from subsidiaries
            where org_id = ${user.orgId} and is_active and not is_elimination
-             ${subsidiaryVisibleFilter(sql`id`, gate.allowedSubsidiaryIds)}`),
+             ${subsidiaryVisibleFilter(sql`id`, gate.allowedSubsidiaryIds)}`, 'objects'),
         db.execute<Lookup>(sql`
           select d.id, coalesce(d.code, '') as key, d.name
             from departments d
            where d.org_id = ${user.orgId} and d.is_active
-             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
         db.execute<Lookup>(sql`
           select p.id, coalesce(p.code, '') as key, p.name
             from projects p
            where p.org_id = ${user.orgId} and p.is_active
-             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
         db.execute<Lookup>(sql`
           select l.id, coalesce(l.code, '') as key, l.name
             from locations l
            where l.org_id = ${user.orgId} and l.is_active
-             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
         db.execute<Lookup>(sql`
           select c.id, coalesce(c.code, '') as key, c.name
             from classes c
            where c.org_id = ${user.orgId} and c.is_active
-             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'),
       ]))
-    const resolveAccount = buildResolver(accountsResult.rows)
-    const resolveAccountNumber = buildResolver(accountsResult.rows.map((row) => ({ ...row, name: '' })))
-    const accountTypes = new Map(accountsResult.rows.map((row) => [row.id, row.type ?? '']))
+    const resolveAccount = buildResolver(accountsResult)
+    const resolveAccountNumber = buildResolver(accountsResult.map((row) => ({ ...row, name: '' })))
+    const accountTypes = new Map(accountsResult.map((row) => [row.id, row.type ?? '']))
     const accountDisplays = new Map(
-        accountsResult.rows.map((row) => [row.id, row.key ? `${row.name} (${row.key})` : row.name]),
+        accountsResult.map((row) => [row.id, row.key ? `${row.name} (${row.key})` : row.name]),
       )
-    const creditAccounts = new Set(accountsResult.rows.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
-    const resolvePeriod = buildResolver(periodsResult.rows)
-    const subsidiaryIds = new Map(subsidiariesResult.rows.map((row) => [row.id.toLowerCase(), row.id]))
+    const creditAccounts = new Set(accountsResult.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
+    const resolvePeriod = buildResolver(periodsResult)
+    const subsidiaryIds = new Map(subsidiariesResult.map((row) => [row.id.toLowerCase(), row.id]))
     const subsidiaryExactNames = new Map<string, string>()
     const subsidiaryFoldedIds = new Map<string, Set<string>>()
-    for (const row of subsidiariesResult.rows) {
+    for (const row of subsidiariesResult) {
         const name = row.name.trim()
         if (!subsidiaryExactNames.has(name)) subsidiaryExactNames.set(name, row.id)
         const folded = norm(name)
@@ -198,12 +198,12 @@ export const POST = defineRoute({
         ids.add(row.id)
         subsidiaryFoldedIds.set(folded, ids)
       }
-    const rootSubsidiary = subsidiariesResult.rows.find((row) => row.parentId === null)?.id ?? null
+    const rootSubsidiary = subsidiariesResult.find((row) => row.parentId === null)?.id ?? null
     const dimensions = {
-        departmentId: buildResolver(departmentsResult.rows),
-        projectId: buildResolver(projectsResult.rows),
-        locationId: buildResolver(locationsResult.rows),
-        classId: buildResolver(classesResult.rows),
+        departmentId: buildResolver(departmentsResult),
+        projectId: buildResolver(projectsResult),
+        locationId: buildResolver(locationsResult),
+        classId: buildResolver(classesResult),
       }
     // Custom segments (fund included) import from a column named for the
     // segment (its name or key), resolved by value code or name. A row that
@@ -359,8 +359,8 @@ export const POST = defineRoute({
         const result = await db.transaction(async (tx) => {
           const locked = (await tx.execute<{ status: string; revision: number }>(sql`
             select status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-          `))
-          const current = locked.rows[0]
+          `, 'objects'))
+          const current = locked[0]
           if (!current) throw new BudgetMutationError('not_found', 404)
           if (current.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
           if (Number(current.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)

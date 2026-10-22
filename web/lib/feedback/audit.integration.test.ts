@@ -161,8 +161,8 @@ async function reportRows(orgId: string, reportId: string): Promise<AuditRow[]> 
     from audit_log
     where org_id = ${orgId} and table_name = 'feedback_report' and row_id = ${reportId}
     order by at asc
-  `);
-  return rows.rows;
+  `, "objects");
+  return rows;
 }
 
 test("intent first, then exactly one row with the issue id; reconcile closes a gap", async (t) => {

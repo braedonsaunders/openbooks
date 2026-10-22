@@ -136,8 +136,8 @@ async function seedComputedFiling(
     const recipients = await db.execute<{ id: string }>(sql`
       select id from information_return_recipients
        where org_id = ${org.orgId} and filing_id = ${filing.id}
-       order by party_id`);
-    return { filingId: filing.id, recipientIds: recipients.rows.map((row) => row.id) };
+       order by party_id`, "objects");
+    return { filingId: filing.id, recipientIds: recipients.map((row) => row.id) };
   });
 }
 
@@ -229,32 +229,32 @@ async function recipientRow(
   const r = await withOrgContext(orgId, () => db.execute<{ status: string; adjustments: Record<string, string>; exclusion_reason: string | null; updated_at: Date | string }>(sql`
     select status, adjustments, exclusion_reason, updated_at
       from information_return_recipients
-     where org_id = ${orgId} and id = ${recipientId}`));
-  const row = r.rows[0]!;
+     where org_id = ${orgId} and id = ${recipientId}`, "objects"));
+  const row = r[0]!;
   // Raw drizzle SQL hands timestamptz back as a string.
   return { ...row, updated_at: new Date(row.updated_at as unknown as string) };
 }
 
 async function filingStatus(orgId: string, filingId: string): Promise<string> {
   const r = await withOrgContext(orgId, () => db.execute<{ status: string }>(sql`
-    select status from information_return_filings where org_id = ${orgId} and id = ${filingId}`));
-  return r.rows[0]!.status;
+    select status from information_return_filings where org_id = ${orgId} and id = ${filingId}`, "objects"));
+  return r[0]!.status;
 }
 
 async function recipientAuditCount(orgId: string, recipientId: string): Promise<number> {
   const r = await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'information_return_recipients'
-       and row_id = ${recipientId}`));
-  return r.rows[0]!.n;
+       and row_id = ${recipientId}`, "objects"));
+  return r[0]!.n;
 }
 
 async function filingAudits(orgId: string, filingId: string): Promise<string[]> {
   const r = await withOrgContext(orgId, () => db.execute<{ action: string }>(sql`
     select action from audit_log
      where org_id = ${orgId} and table_name = 'information_return_filings' and row_id = ${filingId}
-     order by at, id`));
-  return r.rows.map((row) => row.action);
+     order by at, id`, "objects"));
+  return r.map((row) => row.action);
 }
 
 function patchRequest(body: unknown): Request {
@@ -311,8 +311,8 @@ async function waitForRouteBlockedOnFilingRow(): Promise<void> {
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
-         and query ilike '%information_return%'`);
-    if ((r.rows[0]?.n ?? 0) > 0) return;
+         and query ilike '%information_return%'`, "objects");
+    if ((r[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(

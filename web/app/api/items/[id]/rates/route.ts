@@ -40,11 +40,11 @@ const PRESENTATIONS = ['summary', 'rate_components'] as const
 
 export const GET = defineRoute({ permission: 'items.read', feature: 'projects', params: itemParams, handler: async ({ params: { id }, authz: gate }) => {
   if (!isUuid(id)) return notFound("record")
-  const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
-  if (!item.rows[0]) return notFound("record")
+  const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`, 'objects')))
+  if (!item[0]) return notFound("record")
   const [books, profile, versions, timeTypes] = await Promise.all([
-    (db.execute(sql`select id, code, name, currency, is_default from item_rate_books where org_id = ${gate.user.orgId} and is_active order by is_default desc, name`)),
-    (db.execute(sql`select base_unit, pricing_policy, invoice_presentation from item_rate_profiles where org_id = ${gate.user.orgId} and item_id = ${id}`)),
+    (db.execute(sql`select id, code, name, currency, is_default from item_rate_books where org_id = ${gate.user.orgId} and is_active order by is_default desc, name`, 'objects')),
+    (db.execute(sql`select base_unit, pricing_policy, invoice_presentation from item_rate_profiles where org_id = ${gate.user.orgId} and item_id = ${id}`, 'objects')),
     (db.execute(sql`
       select v.id, v.rate_book_id, b.name as rate_book_name, v.effective_from, v.effective_to, v.status,
              coalesce(jsonb_agg(jsonb_build_object(
@@ -58,10 +58,10 @@ export const GET = defineRoute({ permission: 'items.read', feature: 'projects', 
        where v.org_id = ${gate.user.orgId}
        group by v.id, b.name
        order by v.effective_from desc
-    `)),
-    (db.execute(sql`select id, name, bill_multiplier from time_types where org_id = ${gate.user.orgId} and is_active order by bill_multiplier, name`)),
+    `, 'objects')),
+    (db.execute(sql`select id, name, bill_multiplier from time_types where org_id = ${gate.user.orgId} and is_active order by bill_multiplier, name`, 'objects')),
   ])
-  return NextResponse.json({ books: books.rows, profile: profile.rows[0] ?? null, versions: versions.rows, timeTypes: timeTypes.rows })
+  return NextResponse.json({ books, profile: profile[0] ?? null, versions, timeTypes })
 } })
 
 interface TierInput { unitCode?: string; unitName?: string; baseQuantity?: string; costRate?: string; billRate?: string; timeTypeBillRates?: Record<string, string> }
@@ -75,8 +75,8 @@ export const POST = defineRoute({
   // persist new rates on an inventory / assembly / kit item.
   if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
     const existing = (await db.execute<{ kind: string }>(sql`
-      select kind from items where id = ${id} and org_id = ${gate.user.orgId}`))
-    if (existing.rows[0] && INVENTORY_ITEM_KINDS.has(existing.rows[0].kind)) {
+      select kind from items where id = ${id} and org_id = ${gate.user.orgId}`, 'objects'))
+    if (existing[0] && INVENTORY_ITEM_KINDS.has(existing[0].kind)) {
       return notFound("record")
     }
   }
@@ -84,8 +84,8 @@ export const POST = defineRoute({
   // persist new rates on an equipment_charge item.
   if (!(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
     const existing = (await db.execute<{ kind: string }>(sql`
-      select kind from items where id = ${id} and org_id = ${gate.user.orgId}`))
-    if (existing.rows[0] && existing.rows[0].kind === 'equipment_charge') {
+      select kind from items where id = ${id} and org_id = ${gate.user.orgId}`, 'objects'))
+    if (existing[0] && existing[0].kind === 'equipment_charge') {
       return notFound("record")
     }
   }
@@ -149,8 +149,8 @@ export const POST = defineRoute({
 
   try {
     const result = await db.transaction(async (tx) => {
-      const item = ((await tx.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
-      if (!item.rows[0]) throw new ItemRatesRefusal('Item not found')
+      const item = ((await tx.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`, 'objects')))
+      if (!item[0]) throw new ItemRatesRefusal('Item not found')
       // First version creation must serialize with rate-book currency edits:
       // take the same advisory fence and row lock the Setup writer takes,
       // before this transaction reads the book. A concurrent currency PATCH
@@ -159,27 +159,27 @@ export const POST = defineRoute({
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${gate.user.orgId}`}, 0))`)
       let rateBookId = body.rateBookId
       if (rateBookId) {
-        const book = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active for update`)))
-        if (!book.rows[0]) throw new ItemRatesRefusal('Rate book not found')
+        const book = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active for update`, 'objects')))
+        if (!book[0]) throw new ItemRatesRefusal('Rate book not found')
       } else {
-        const existing = (await tx.execute<{ id: string }>(sql`select id from item_rate_books where org_id = ${gate.user.orgId} and is_default and is_active limit 1 for update`))
-        rateBookId = existing.rows[0]?.id
+        const existing = (await tx.execute<{ id: string }>(sql`select id from item_rate_books where org_id = ${gate.user.orgId} and is_default and is_active limit 1 for update`, 'objects'))
+        rateBookId = existing[0]?.id
         if (!rateBookId) {
-          const org = ((await tx.execute(sql`select base_currency from orgs where id = ${gate.user.orgId}`)))
+          const org = ((await tx.execute(sql`select base_currency from orgs where id = ${gate.user.orgId}`, 'objects')))
           const created = (await tx.execute<{ id: string }>(sql`
             insert into item_rate_books (org_id, code, name, currency, is_default, created_by, updated_by)
-            values (${gate.user.orgId}, 'STANDARD', 'Standard', ${org.rows[0]?.base_currency ?? 'CAD'}, true, ${gate.user.id}, ${gate.user.id}) returning id
-          `))
-          rateBookId = created.rows[0]!.id
+            values (${gate.user.orgId}, 'STANDARD', 'Standard', ${org[0]?.base_currency ?? 'CAD'}, true, ${gate.user.id}, ${gate.user.id}) returning id
+          `, 'objects'))
+          rateBookId = created[0]!.id
         }
       }
-      const duplicate = ((await tx.execute(sql`select 1 from item_rate_versions where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from = ${body.effectiveFrom}`)))
-      if (duplicate.rows[0]) throw new ItemRatesRefusal('A rate version already starts on that date')
+      const duplicate = ((await tx.execute(sql`select 1 from item_rate_versions where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from = ${body.effectiveFrom}`, 'objects')))
+      if (duplicate[0]) throw new ItemRatesRefusal('A rate version already starts on that date')
       const nextVersion = ((await tx.execute(sql`
         select effective_from from item_rate_versions
          where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId} and effective_from > ${body.effectiveFrom}
          order by effective_from limit 1
-      `)))
+      `, 'objects')))
       // Versions are snapshots for the whole rate book, not just this item.
       // Keep the latest earlier snapshot so changing one item does not erase
       // every other item's rates from the replacement version.
@@ -188,7 +188,7 @@ export const POST = defineRoute({
          where org_id = ${gate.user.orgId} and rate_book_id = ${rateBookId}
            and effective_from < ${body.effectiveFrom} and status = 'active'
          order by effective_from desc limit 1
-      `)))
+      `, 'objects')))
       await tx.execute(sql`
         insert into item_rate_profiles (org_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
         values (${gate.user.orgId}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})
@@ -204,28 +204,28 @@ export const POST = defineRoute({
       const version = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_versions (org_id, rate_book_id, effective_from, effective_to, status, created_by, updated_by)
         values (${gate.user.orgId}, ${rateBookId}, ${body.effectiveFrom},
-                ${nextVersion.rows[0]?.effective_from ? sql`(${nextVersion.rows[0].effective_from}::date - interval '1 day')::date` : null},
+                ${nextVersion[0]?.effective_from ? sql`(${nextVersion[0].effective_from}::date - interval '1 day')::date` : null},
                 'draft', ${gate.user.id}, ${gate.user.id}) returning id
-      `))
-      if (previousVersion.rows[0]?.id) {
+      `, 'objects'))
+      if (previousVersion[0]?.id) {
         await tx.execute(sql`
           insert into item_rate_lines (
             org_id, version_id, item_id, unit_code, unit_name, base_quantity,
             cost_rate, bill_rate, time_type_bill_rates, sort_order, created_by, updated_by
           )
-          select org_id, ${version.rows[0]!.id}, item_id, unit_code, unit_name, base_quantity,
+          select org_id, ${version[0]!.id}, item_id, unit_code, unit_name, base_quantity,
                  cost_rate, bill_rate, time_type_bill_rates, sort_order, ${gate.user.id}, ${gate.user.id}
             from item_rate_lines
-           where org_id = ${gate.user.orgId} and version_id = ${previousVersion.rows[0].id}
+           where org_id = ${gate.user.orgId} and version_id = ${previousVersion[0].id}
              and item_id <> ${id}
         `)
         // Pins travel with the lines they describe: every other item keeps
         // the policy it was saved with, exactly like its tiers.
         await tx.execute(sql`
           insert into item_rate_version_profiles (org_id, version_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
-          select org_id, ${version.rows[0]!.id}, item_id, base_unit, pricing_policy, invoice_presentation, ${gate.user.id}, ${gate.user.id}
+          select org_id, ${version[0]!.id}, item_id, base_unit, pricing_policy, invoice_presentation, ${gate.user.id}, ${gate.user.id}
             from item_rate_version_profiles
-           where org_id = ${gate.user.orgId} and version_id = ${previousVersion.rows[0].id}
+           where org_id = ${gate.user.orgId} and version_id = ${previousVersion[0].id}
              and item_id <> ${id}
         `)
       }
@@ -234,27 +234,27 @@ export const POST = defineRoute({
       // this pin, so a later policy switch cannot reprice this version.
       await tx.execute(sql`
         insert into item_rate_version_profiles (org_id, version_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
-        values (${gate.user.orgId}, ${version.rows[0]!.id}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})
+        values (${gate.user.orgId}, ${version[0]!.id}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})
       `)
       let sort = 0
       for (const [index, tier] of tiers.entries()) {
         await tx.execute(sql`
           insert into item_rate_lines (org_id, version_id, item_id, unit_code, unit_name, base_quantity, cost_rate, bill_rate, time_type_bill_rates, sort_order, created_by, updated_by)
-          values (${gate.user.orgId}, ${version.rows[0]!.id}, ${id}, ${tier.unitCode}, ${tier.unitName},
+          values (${gate.user.orgId}, ${version[0]!.id}, ${id}, ${tier.unitCode}, ${tier.unitName},
                   ${tier.baseQuantity}, ${tier.costRate}, ${tier.billRate}, ${JSON.stringify(validatedPremiums.rates[index] ?? {})}::jsonb, ${sort++}, ${gate.user.id}, ${gate.user.id})
         `)
       }
       await tx.execute(sql`
         update item_rate_versions set status = 'active', updated_at = now(), updated_by = ${gate.user.id}
-         where id = ${version.rows[0]!.id} and org_id = ${gate.user.orgId}
+         where id = ${version[0]!.id} and org_id = ${gate.user.orgId}
       `)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${gate.user.orgId}, 'item_rate_versions', ${version.rows[0]!.id}, 'insert',
+        values (${gate.user.orgId}, 'item_rate_versions', ${version[0]!.id}, 'insert',
                 ${JSON.stringify({ itemId: id, rateBookId, effectiveFrom: body.effectiveFrom, baseUnit, pricingPolicy: body.pricingPolicy, invoicePresentation: body.invoicePresentation ?? 'rate_components', tiers })}::jsonb,
                 ${gate.user.id})
       `)
-      return { id: version.rows[0]!.id, rateBookId }
+      return { id: version[0]!.id, rateBookId }
     })
     return NextResponse.json(result)
   } catch (error) {

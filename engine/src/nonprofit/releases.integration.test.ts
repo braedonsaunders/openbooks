@@ -38,8 +38,8 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
            )
          where id = ${org.orgId}
         returning id
-      `);
-      assert.equal(enabled.rows.length, 1);
+      `, "objects");
+      assert.equal(enabled.length, 1);
     });
     const setup = await provisionFundAccounting({
       orgId: org.orgId,
@@ -97,14 +97,14 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
       (await db.execute<{ id: string; assignee: string }>(sql`
         select id, assignee_user_id::text as assignee from flow_gates
          where org_id = ${org.orgId} and subject_id = ${gatedDraft.id} and status = 'pending'
-      `)).rows[0],
+      `, "objects"))[0],
     );
     assert.equal(gate?.assignee, approver, "Flows must exclude the drafter from the approval gate");
     await withOrgContext(org.orgId, () => decideGate({ gateId: gate!.id, decision: "approved", userId: approver }));
     const gatedStatus = await withOrgContext(org.orgId, async () =>
       (await db.execute<{ status: string; posted_entry_id: string }>(sql`
         select status, posted_entry_id::text from fund_releases where org_id = ${org.orgId} and id = ${gatedDraft.id}
-      `)).rows[0],
+      `, "objects"))[0],
     );
     assert.equal(gatedStatus?.status, "posted", "approval must post the release entry");
     assert.ok(gatedStatus?.posted_entry_id);
@@ -275,12 +275,12 @@ test("fund release readers return the drawer projection with same-org isolation"
   t.after(() => dropScratchOrg(org.orgId));
   const actor = await withBypass(() => createScratchUser(org.orgId, "Release Reader", "accountant"));
   assert.equal((await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`))).rows.length, 1);
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`, "objects"))).length, 1);
   const foreign = await withBypass(() => createScratchOrg());
   t.after(() => dropScratchOrg(foreign.orgId));
   const foreignEnabled = await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`));
-  assert.equal(foreignEnabled.rows.length, 1);
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`, "objects"));
+  assert.equal(foreignEnabled.length, 1);
   const setup = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "U", name: "U Fund" },
     classifications: { U: { kind: "operating", restrictionClass: "without_donor_restrictions" } }, actorId: actor });
   const restricted = await createFund({ orgId: org.orgId, code: "R", name: "R",
@@ -289,8 +289,8 @@ test("fund release readers return the drawer projection with same-org isolation"
   const release = await createFundRelease({ orgId: org.orgId, fromFundId: restricted.id, toFundId: setup.defaultFundId, actorId: actor,
     releaseAccountId: org.accounts.revenue, releaseDate: org.date, amount: "50.0000", purpose: "Award", satisfactionRef: "Terms" });
   const customized = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update fund_releases set custom = '{"reader":"releases"}'::jsonb where org_id = ${org.orgId} and id = ${release.id} returning id`));
-  assert.equal(customized.rows.length, 1);
+    update fund_releases set custom = '{"reader":"releases"}'::jsonb where org_id = ${org.orgId} and id = ${release.id} returning id`, "objects"));
+  assert.equal(customized.length, 1);
   const later = await createFundRelease({ orgId: org.orgId, fromFundId: restricted.id, toFundId: setup.defaultFundId, actorId: actor,
     releaseAccountId: org.accounts.revenue, releaseDate: org.date, amount: "25.0000", purpose: "Later", satisfactionRef: "Terms" });
   const found = await withOrgContext(org.orgId, () => getFundRelease({ orgId: org.orgId, releaseId: release.id }));
@@ -309,8 +309,8 @@ test("fund release readers return the drawer projection with same-org isolation"
   assert.equal(await withOrgContext(foreign.orgId, () => getFundRelease({ orgId: foreign.orgId, releaseId: release.id })), null);
   assert.equal(await withOrgContext(org.orgId, () => getFundRelease({ orgId: org.orgId, releaseId: randomUUID() })), null);
   const disabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`));
-  assert.equal(disabled.rows.length, 1);
+    update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`, "objects"));
+  assert.equal(disabled.length, 1);
   await assert.rejects(withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId })), /fundAccounting/);
   await assert.rejects(withOrgContext(org.orgId, () => getFundRelease({ orgId: org.orgId, releaseId: release.id })), /fundAccounting/);
 });

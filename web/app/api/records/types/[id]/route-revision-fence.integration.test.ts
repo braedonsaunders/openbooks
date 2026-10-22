@@ -124,7 +124,7 @@ test(
         assert.match(body.error ?? '', /Keep the subsidiary_id field/)
         const stored = (await db.execute<{ fields: unknown }>(sql`
           select fields from custom_record_types where id = ${typeId} and org_id = ${org.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(
           fieldsStillDeclareSubsidiary(stored?.fields),
           true,
@@ -174,7 +174,7 @@ test(
 
         const live = (await db.execute<{ name: string }>(sql`
           select name from custom_record_types where id = ${typeId} and org_id = ${org.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(live?.name, 'Tab A', 'the stale writer must not persist')
 
         const tokenless = await patch(typeId, { name: 'Autosave' })
@@ -184,7 +184,7 @@ test(
         assert.match(tokenlessBody.error ?? '', /reload/i)
         const afterTokenless = (await db.execute<{ name: string }>(sql`
           select name from custom_record_types where id = ${typeId} and org_id = ${org.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(afterTokenless?.name, 'Tab A', 'a tokenless full-state PATCH must not persist')
 
         const [winner, loser] = await Promise.all([
@@ -253,7 +253,7 @@ test(
 
         const stored = (await db.execute<{ fields: unknown }>(sql`
           select fields from custom_record_types where id = ${typeId} and org_id = ${org.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(
           fieldsStillDeclareSubsidiary(stored?.fields),
           true,

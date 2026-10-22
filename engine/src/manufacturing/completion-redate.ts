@@ -152,19 +152,19 @@ type OrderRow = { id: string; number: string; status: string; subsidiary_id: str
 async function loadOrder(tx: SqlExecutor, orgId: string, workOrderId: string): Promise<OrderRow> {
   const row = (await tx.execute<OrderRow>(sql`
     select id, number, status, subsidiary_id, started_at::date::text as started_on
-      from mfg_work_orders where org_id=${orgId} and id=${workOrderId} for update`)).rows[0];
+      from mfg_work_orders where org_id=${orgId} and id=${workOrderId} for update`, "objects"))[0];
   if (!row) throw new ManufacturingNotFoundError();
   return row;
 }
 
 /** Live completion entries (posted, not reversed) with their completion evidence. */
 async function liveCompletionEntries(tx: SqlExecutor, orgId: string, workOrderNumber: string): Promise<CompletionEntry[]> {
-  return (await tx.execute<CompletionEntry>(sql`
+  return await tx.execute<CompletionEntry>(sql`
     select id, entry_number, posting_date::text as posting_date, book_id, subsidiary_id, custom
       from journal_entries
      where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=${workOrderNumber}
        and custom ? 'completion_quantity' and status='posted' and reverses_entry_id is null -- Live entries only: only current postings constrain or authorize completion correction.
-     order by posting_date, created_at, id`)).rows;
+     order by posting_date, created_at, id`, "objects");
 }
 
 function idList(ids: string[]) {
@@ -174,7 +174,7 @@ function idList(ids: string[]) {
 /** Live finished-goods receipts produced by the given completion entries. */
 async function loadReceipts(tx: SqlExecutor, orgId: string, entryIds: string[], lock = false): Promise<Receipt[]> {
   if (entryIds.length === 0) return [];
-  return (await tx.execute<Receipt>(sql`
+  return await tx.execute<Receipt>(sql`
     select movement.id, movement.org_id, movement.subsidiary_id, movement.item_id, movement.kind,
            movement.moved_at::text as moved_at, movement.moved_at::date::text as moved_date,
            movement.stock_location_id, movement.lot_id, movement.serial_id, serial.serial_number,
@@ -188,7 +188,7 @@ async function loadReceipts(tx: SqlExecutor, orgId: string, entryIds: string[], 
        and not exists (select 1 from inventory_movements reversal
              where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id and reversal.status='posted')
      order by movement.moved_at, movement.created_at, movement.id
-     ${lock ? sql`for update of movement` : sql``}`)).rows;
+     ${lock ? sql`for update of movement` : sql``}`, "objects");
 }
 
 /** Work that must precede the completion: operation days and non-completion postings. */
@@ -200,16 +200,16 @@ async function correctionFloor(tx: SqlExecutor, orgId: string, order: OrderRow, 
              where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=${order.number}
                and status='posted' and reverses_entry_id is null -- Live entries only: only current postings constrain or authorize completion correction.
                -- Completions are the dates being corrected; a short-close variance is period-end WIP, not production.
-               and not (custom ? 'completion_quantity') and not (custom ? 'shortCloseReason')) as posting_floor`)).rows[0];
+               and not (custom ? 'completion_quantity') and not (custom ? 'shortCloseReason')) as posting_floor`, "objects"))[0];
   return latestDate([row?.last_operation ?? null, order.started_on, row?.posting_floor ?? null]);
 }
 
 async function correctionReplay(tx: SqlExecutor, orgId: string, key: string): Promise<Array<{ id: string; entry_number: string }>> {
-  return (await tx.execute<{ id: string; entry_number: string }>(sql`
+  return await tx.execute<{ id: string; entry_number: string }>(sql`
     select id, entry_number from journal_entries
      where org_id=${orgId} and origin='manufacturing' and custom->>'completion_redate_key'=${key}
        and status='posted' and reverses_entry_id is null -- Live entries only: only current postings constrain or authorize completion correction.
-     order by created_at, id`)).rows;
+     order by created_at, id`, "objects");
 }
 
 function describeMovement(row: { entry_number: string | null; kind: string; moved_date: string; quantity: string }): string {
@@ -284,7 +284,7 @@ export async function correctWorkOrderCompletionDate(
   // are copied with their frozen policy when the receipt is replaced.
   const inspected = (await tx.execute<{ id: string }>(sql`
     select id from inventory_inspections where org_id=${orgId} and receipt_movement_id in (${idList(moverIds)})
-      and status <> 'pending' limit 1`)).rows[0];
+      and status <> 'pending' limit 1`, "objects"))[0];
   if (inspected) {
     refuse(
       `A receipt of work order ${order.number} has a recorded quality inspection decision, which stays bound to the original receipt.`,
@@ -292,7 +292,7 @@ export async function correctWorkOrderCompletionDate(
     );
   }
   const custody = (await tx.execute<{ id: string }>(sql`
-    select id from consignment_events where org_id=${orgId} and receipt_movement_id in (${idList(moverIds)}) limit 1`)).rows[0];
+    select id from consignment_events where org_id=${orgId} and receipt_movement_id in (${idList(moverIds)}) limit 1`, "objects"))[0];
   if (custody) {
     refuse(
       `A receipt of work order ${order.number} has custody evidence, so its external stock cannot be restored by a date correction.`,
@@ -301,7 +301,7 @@ export async function correctWorkOrderCompletionDate(
   }
 
   // Stock from these receipts may not have been drawn by any live movement.
-  const consumers = (await tx.execute<{ kind: string; moved_date: string; quantity: string; entry_number: string | null }>(sql`
+  const consumers = await tx.execute<{ kind: string; moved_date: string; quantity: string; entry_number: string | null }>(sql`
     select issue.kind, issue.moved_at::date::text as moved_date, (-issue.quantity)::text as quantity, entry.entry_number
       from cost_layer_consumptions consumption
       join cost_layers layer on layer.org_id=consumption.org_id and layer.id=consumption.cost_layer_id
@@ -310,7 +310,7 @@ export async function correctWorkOrderCompletionDate(
      where consumption.org_id=${orgId} and layer.source_movement_id in (${idList(moverIds)})
        and not exists (select 1 from inventory_movements reversal
              where reversal.org_id=issue.org_id and reversal.reverses_movement_id=issue.id and reversal.status='posted')
-     order by issue.moved_at, issue.id limit ${CONFLICT_LIMIT}`)).rows;
+     order by issue.moved_at, issue.id limit ${CONFLICT_LIMIT}`, "objects");
   if (consumers.length) {
     refuse(
       `Stock from work order ${order.number}'s receipt has been consumed by ${consumers.map(describeMovement).join("; ")}.`,
@@ -321,7 +321,7 @@ export async function correctWorkOrderCompletionDate(
   for (const row of movers) {
     if (!row.serial_id) continue;
     const serial = (await tx.execute<{ status: string; current_stock_location_id: string | null }>(sql`
-      select status, current_stock_location_id from serials where org_id=${orgId} and id=${row.serial_id}`)).rows[0];
+      select status, current_stock_location_id from serials where org_id=${orgId} and id=${row.serial_id}`, "objects"))[0];
     if (!serial || serial.status !== "in_stock" || serial.current_stock_location_id !== row.stock_location_id) {
       refuse(
         `Serial ${row.serial_number ?? "evidence"} has moved since its receipt, so its receipt cannot be re-dated.`,
@@ -345,7 +345,7 @@ export async function correctWorkOrderCompletionDate(
   }
   const conflicts: Array<{ entry_number: string | null; kind: string; moved_date: string; quantity: string }> = [];
   for (const group of groups.values()) {
-    const rows = (await tx.execute<{ entry_number: string | null; kind: string; moved_date: string; quantity: string }>(sql`
+    const rows = await tx.execute<{ entry_number: string | null; kind: string; moved_date: string; quantity: string }>(sql`
       select entry.entry_number, movement.kind, movement.moved_at::date::text as moved_date, movement.quantity::text as quantity
         from inventory_movements movement left join journal_entries entry
           on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
@@ -353,7 +353,7 @@ export async function correctWorkOrderCompletionDate(
          and movement.subsidiary_id=${group.subsidiary} and movement.status='posted'
          and movement.moved_at::date >= ${correctedOn}::date and movement.moved_at::date <= ${group.latest}::date
          and movement.id not in (${idList(receiptIds)})
-       order by movement.moved_at, movement.created_at, movement.id limit ${CONFLICT_LIMIT}`)).rows;
+       order by movement.moved_at, movement.created_at, movement.id limit ${CONFLICT_LIMIT}`, "objects");
     conflicts.push(...rows);
   }
   if (conflicts.length) {
@@ -414,11 +414,11 @@ async function redateCompletionEntry(
   tx: SqlExecutor, orgId: string, actorId: string, order: OrderRow, entry: CompletionEntry,
   movers: Receipt[], correction: { correctedOn: string; reason: string; key: string },
 ): Promise<CompletionDateCorrectionResult["corrections"][number]> {
-  const lineRows = (await tx.execute<{
+  const lineRows = await tx.execute<{
     account_id: string; amount: string; location_id: string | null; department_id: string | null; project_id: string | null; memo: string | null;
   }>(sql`
     select account_id, amount::text as amount, location_id, department_id, project_id, memo
-      from journal_lines where org_id=${orgId} and entry_id=${entry.id} order by line_number`)).rows;
+      from journal_lines where org_id=${orgId} and entry_id=${entry.id} order by line_number`, "objects");
   const lines: JournalLineInput[] = lineRows.map((row) => ({
     accountId: row.account_id, amount: row.amount, locationId: row.location_id,
     departmentId: row.department_id, projectId: row.project_id, memo: row.memo,
@@ -444,7 +444,7 @@ async function redateCompletionEntry(
         ${row.unit_cost}, ${row.total_value === null ? null : neg(row.total_value)},
         ${reversalEntryId}, ${row.id}, ${correction.reason}, 'posted',
         ${"Reversal of work order " + order.number + " completion for date correction: " + correction.reason},
-        ${actorId}, ${actorId}) returning id`)).rows[0];
+        ${actorId}, ${actorId}) returning id`, "objects"))[0];
     if (!reversal) throw new InventoryError("The completion receipt reversal was not recorded.");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -455,8 +455,8 @@ async function redateCompletionEntry(
       const serial = await tx.execute<{ id: string }>(sql`
         update serials set status='registered', current_stock_location_id=null, updated_at=now(), updated_by=${actorId}
          where org_id=${orgId} and id=${row.serial_id} and status='in_stock' and current_stock_location_id=${row.stock_location_id}
-         returning id`);
-      if (serial.rows.length !== 1) throw new InventoryError("Serial " + (row.serial_number ?? "evidence") + " changed before the completion date correction.");
+         returning id`, "objects");
+      if (serial.length !== 1) throw new InventoryError("Serial " + (row.serial_number ?? "evidence") + " changed before the completion date correction.");
     }
   }
 
@@ -487,9 +487,9 @@ async function redateCompletionEntry(
     },
   });
 
-  const reposted = (await tx.execute<{ account_id: string; amount: string; location_id: string | null; department_id: string | null; project_id: string | null; memo: string | null }>(sql`
+  const reposted = await tx.execute<{ account_id: string; amount: string; location_id: string | null; department_id: string | null; project_id: string | null; memo: string | null }>(sql`
     select account_id, amount::text as amount, location_id, department_id, project_id, memo
-      from journal_lines where org_id=${orgId} and entry_id=${redatedEntryId} order by line_number`)).rows;
+      from journal_lines where org_id=${orgId} and entry_id=${redatedEntryId} order by line_number`, "objects");
   const repostedLines: JournalLineInput[] = reposted.map((row) => ({
     accountId: row.account_id, amount: row.amount, locationId: row.location_id,
     departmentId: row.department_id, projectId: row.project_id, memo: row.memo,
@@ -509,8 +509,8 @@ async function redateCompletionEntry(
         ${row.total_value}, ${redatedEntryId}, 'posted',
         ${"Work order " + order.number + " completion re-dated from " + entry.posting_date + " to " + correction.correctedOn},
         ${"mfg-completion-redate:" + correction.key + ":" + row.id}, ${actorId}, ${actorId})
-      returning id`);
-    const newMovementId = inserted.rows[0]?.id;
+      returning id`, "objects");
+    const newMovementId = inserted[0]?.id;
     if (!newMovementId) throw new InventoryError("The re-dated completion receipt was not recorded.");
     if (row.total_value === null) throw new InventoryError("A completion receipt without value cannot be re-dated.");
     await addLayerAtCost(tx as Runner, orgId, row.subsidiary_id, row.item_id, row.stock_location_id,
@@ -524,8 +524,8 @@ async function redateCompletionEntry(
       const serial = await tx.execute<{ id: string }>(sql`
         update serials set status='in_stock', current_stock_location_id=${row.stock_location_id}, updated_at=now(), updated_by=${actorId}
          where org_id=${orgId} and id=${row.serial_id} and status='registered' and current_stock_location_id is null
-         returning id`);
-      if (serial.rows.length !== 1) throw new InventoryError("Serial " + (row.serial_number ?? "evidence") + " changed before the completion date correction.");
+         returning id`, "objects");
+      if (serial.length !== 1) throw new InventoryError("Serial " + (row.serial_number ?? "evidence") + " changed before the completion date correction.");
     }
     await createReceiptInspection(tx, orgId, actorId, newMovementId, row.id);
     movementIds.push(newMovementId);

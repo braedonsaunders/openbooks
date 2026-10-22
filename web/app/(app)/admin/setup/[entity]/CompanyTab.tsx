@@ -52,12 +52,12 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
   ] = await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, tax_ids, settings
-        from orgs where id = ${orgId}`),
+        from orgs where id = ${orgId}`, 'objects'),
     db.execute(sql`
       select id, number, name, type from accounts
        where org_id = ${orgId} and not is_summary and is_active
-       order by number nulls last, name`),
-    db.execute(sql`select code, name from currencies order by code`),
+       order by number nulls last, name`, 'objects'),
+    db.execute(sql`select code, name from currencies order by code`, 'objects'),
     subsidiaryFeatureEnabled(orgId),
     isFeatureEnabled(orgId, 'revenueRecognition'),
     isFeatureEnabled(orgId, 'revenueContracts'),
@@ -70,18 +70,18 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
            select 1 from customer_roles cr
             where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
          )
-       order by p.display_name limit 2000`),
+       order by p.display_name limit 2000`, 'objects'),
     db.execute(sql`
       select id, name, net_days from payment_terms
        where org_id = ${orgId} and is_active
-       order by name`),
+       order by name`, 'objects'),
   ])
 
-  const row = org.rows[0]
+  const row = org[0]
   const settings = (row?.settings ?? {}) as Record<string, unknown>
   const control = (settings.controlAccounts ?? {}) as Record<string, string>
 
-  const accountOptions: AccountOption[] = accounts.rows.map((a) => ({
+  const accountOptions: AccountOption[] = accounts.map((a) => ({
     id: a.id as string,
     label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
     type: a.type as string,
@@ -179,7 +179,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         controlAccountRoles={CONTROL_ACCOUNT_ROLES}
         controlAccountPolicy={CONTROL_ACCOUNT_TYPE_POLICY}
         accounts={accountOptions}
-        currencies={currencies.rows as { code: string; name: string }[]}
+        currencies={currencies as { code: string; name: string }[]}
         timeZones={listCanonicalTimeZones()}
         multiSubsidiary={multiSubsidiary}
         revenueRecognition={revenueRecognition}
@@ -187,12 +187,12 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         saasMetricsEnabled={saasMetricsEnabled}
         cashSalesEnabled={cashSalesEnabled}
         customers={(
-          customers.rows as { id: string; display_name: string }[]
+          customers as { id: string; display_name: string }[]
         ).map((c) => ({
           id: c.id,
           label: c.display_name,
         }))}
-        paymentTerms={(paymentTerms.rows as { id: string; name: string }[]).map(
+        paymentTerms={(paymentTerms as { id: string; name: string }[]).map(
           (pt) => ({
             id: pt.id,
             label: pt.name,

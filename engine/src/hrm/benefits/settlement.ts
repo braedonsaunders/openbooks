@@ -251,7 +251,7 @@ async function requireFinanceManage(orgId: string, actorId: string): Promise<voi
 async function currencyMinorUnits(orgId: string, currency: string): Promise<number> {
   const row = (await db.execute<{ minor_units: number }>(sql`
     select minor_units from currencies where code = ${currency}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new BenefitsError(
       "REFUSED",
@@ -351,7 +351,7 @@ async function loadSettlementContext(
          and customer_id = any (${`{${program.scopeCustomerIds.join(",")}}`}::uuid[])
          and (subsidiary_id is null or subsidiary_id = ${program.legalEntityId}::uuid)
        order by id
-    `)).rows.map((r) => r.id);
+    `, "objects")).map((r) => r.id);
     for (const id of customerProjects) if (!projectIds.includes(id)) projectIds.push(id);
     if (projectIds.length === 0) {
       throw new BenefitsError(
@@ -367,10 +367,10 @@ async function loadSettlementContext(
     );
   }
   if (program.metricScope === "department") {
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       select id::text as id from departments
        where org_id = ${orgId} and id = any (${`{${departmentIds.join(",")}}`}::uuid[])
-    `)).rows;
+    `, "objects");
     const found = new Set(rows.map((r) => r.id));
     const missing = departmentIds.filter((id) => !found.has(id));
     if (missing.length > 0) {
@@ -391,12 +391,12 @@ async function loadSettlementContext(
     }
     // Keep completion facts fixed through settlement. Project record edits
     // take these same row locks, so reopening cannot race an obligation.
-    const projects = (await db.execute<{id: string; status: string; updated_at: string}>(sql`
+    const projects = await db.execute<{id: string; status: string; updated_at: string}>(sql`
       select id::text as id, status, updated_at::text as updated_at from projects
        where org_id = ${orgId} and subsidiary_id = ${program.legalEntityId}
          and id = any (${`{${projectIds.join(",")}}`}::uuid[])
        order by id for share
-    `)).rows;
+    `, "objects");
     if (projects.length !== new Set(projectIds).size) {
       throw new BenefitsError("NOT_FOUND", "a completion project is not visible in the program's legal entity — review the selected project scope before settling");
     }
@@ -433,7 +433,7 @@ async function loadSettlementContext(
   const accountRows = accountIds.length > 0 ? (await db.execute<{ id: string; type: string }>(sql`
     select id::text as id, type from accounts
      where org_id = ${orgId} and id = any (${`{${accountIds.join(",")}}`}::uuid[])
-  `)).rows : [];
+  `, "objects")) : [];
   const typeById = new Map(accountRows.map((r) => [r.id, r.type]));
   const revenueAccountIds: string[] = [];
   const expenseAccountIds: string[] = [];
@@ -462,7 +462,7 @@ async function loadSettlementContext(
   if (program.payComponentId !== null) {
     const component = (await db.execute<{ expense_account_id: string | null }>(sql`
       select expense_account_id from pay_components where org_id = ${orgId} and id = ${program.payComponentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!component) {
       throw new BenefitsError(
         "REFUSED",
@@ -521,7 +521,7 @@ async function employerWideMembers(
   // Named inclusions and exclusions touching the period both take the
   // employment out of the employer-wide set.
   const namedIds = new Set(named.filter((m) => m.effectiveFrom <= periodTo && (m.effectiveTo === null || m.effectiveTo >= periodFrom)).map((m) => m.employmentId));
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select w.id::text as id from worker_employments w
      where w.org_id = ${orgId} and w.employer_subsidiary_id = ${program.legalEntityId}
        -- A payroll-delivered program covers only employees payroll pays.
@@ -535,7 +535,7 @@ async function employerWideMembers(
                       and v.effective_from <= ${periodTo}::date
                       and (v.effective_to is null or v.effective_to > ${periodFrom}::date))
      order by w.id
-  `)).rows;
+  `, "objects");
   return rows.filter((r) => !namedIds.has(r.id)).map((r) => ({
     id: `employer:${r.id}`, programId: program.id, employmentId: r.id,
     effectiveFrom: periodFrom, effectiveTo: periodTo, weight: "1", role: null, excluded: false,
@@ -834,7 +834,7 @@ export async function reconcileIncentivePeriod(
          and a.period_from = ${periodFrom}::date and a.period_to = ${periodTo}::date
          and a.status = 'delivered' and ${awardPayrollProcessedSql}
          ${scopeFilter}
-    `)).rows[0];
+    `, "objects"))[0];
     const obligationHistory = (await db.execute<{ nativeTotal: string; sourceEvidenceTotal: string }>(sql`
       select coalesce(sum(a.value) filter (where a.source_key like 'settle:%'), 0)::text as "nativeTotal",
              coalesce(sum(a.value) filter (where a.source_key like 'source-first:%'), 0)::text as "sourceEvidenceTotal"
@@ -843,7 +843,7 @@ export async function reconcileIncentivePeriod(
          and a.adjusts_award_id is null and a.status <> 'voided'
          and a.period_from = ${periodFrom}::date and a.period_to = ${periodTo}::date
          ${scopeFilter}
-    `)).rows[0];
+    `, "objects"))[0];
     const native = fromUnits(preview?.visibleRecipients.reduce((sum, recipient) => sum + toUnits(recipient.value), 0n) ?? 0n);
     const processedPayrollTotal = normalizeMoney(processed?.total ?? "0");
     const payrollMinusCurrentMeasurement = fromUnits(toUnits(processedPayrollTotal) - toUnits(native));
@@ -932,11 +932,11 @@ async function fenceRecipients(
 ): Promise<IncentiveComputation["recipients"]> {
   if (computation.recipients.length === 0) return [];
   const ids = computation.recipients.map((r) => r.employmentId);
-  const rows = (await db.execute<{ id: string; employer_subsidiary_id: string }>(sql`
+  const rows = await db.execute<{ id: string; employer_subsidiary_id: string }>(sql`
     select id::text as id, employer_subsidiary_id::text as employer_subsidiary_id
       from worker_employments
      where org_id = ${orgId} and id = any (${`{${ids.join(",")}}`}::uuid[])
-  `)).rows;
+  `, "objects");
   const entityById = new Map(rows.map((r) => [r.id, r.employer_subsidiary_id]));
   return computation.recipients.filter((r) => {
     const entity = entityById.get(r.employmentId);
@@ -1096,11 +1096,11 @@ export async function recordSourceEvidencedFirstIncentiveAward(
     }
     const scope = await requireAggregateBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const lockedProgram = requireOneRow((await db.execute<{ revision: number }>(sql`
+    const lockedProgram = requireOneRow(await db.execute<{ revision: number }>(sql`
       select revision from hrm_benefit_programs
        where org_id = ${orgId} and id = ${programId}
        for update
-    `)).rows, "locking the benefit program");
+    `, "objects"), "locking the benefit program");
     const currentProgramRevision = Number(lockedProgram.revision);
     await db.execute(sql`
       select pg_advisory_xact_lock(hashtext(${"benefit_settle:" + programId + ":" + periodFrom + ":" + periodTo}))
@@ -1122,7 +1122,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
           left join file_blobs blob on blob.version_id = fv.id
          where fi.org_id = ${orgId} and fi.id = ${selection.fileId} and fv.id = ${selection.versionId}
          for share of fi, fv
-      `)).rows[0];
+      `, "objects"))[0];
       if (!retained || retained.isInactive) {
         throw new BenefitsError("REFUSED", "the retained Cabinet source file is unavailable or inactive");
       }
@@ -1156,7 +1156,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
     const ctx = await loadSettlementContext(orgId, actorId, programId, scope, true, periodFrom, periodTo);
     let currencyEvidence: Record<string, unknown> | undefined;
     if (nativeCurrencyReview) {
-      const basis = (await db.execute<{ payerCurrency: string; profileId: string; scheduleId: string }>(sql`
+      const basis = await db.execute<{ payerCurrency: string; profileId: string; scheduleId: string }>(sql`
         select s.base_currency as "payerCurrency", p.id::text as "profileId", cal.id::text as "scheduleId"
           from worker_employments w
           join subsidiaries s on s.org_id=w.org_id and s.id=w.employer_subsidiary_id
@@ -1166,7 +1166,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
            and p.is_active and cal.is_active and s.is_active and not s.is_elimination
            and (cal.subsidiary_id is null or cal.subsidiary_id=s.id)
          for share of w,s,p,cal
-      `)).rows;
+      `, "objects");
       if (basis.length !== 1 || basis[0]!.payerCurrency !== ctx.program.currency || currency !== ctx.program.currency || ctx.program.deliveryMethod !== "payroll") {
         throw new BenefitsError("REFUSED", "native currency evidence requires one active payroll profile and matching program and legal-payer currency; review the actual configuration");
       }
@@ -1217,9 +1217,9 @@ export async function recordSourceEvidencedFirstIncentiveAward(
     const governingDecision = isAboveNativeMeasure
       ? {
           actorId,
-          attestedAt: requireOneRow((await db.execute<{ attestedAt: string }>(sql`
+          attestedAt: requireOneRow(await db.execute<{ attestedAt: string }>(sql`
             select now()::text as "attestedAt"
-          `)).rows, "stamping the governing decision").attestedAt,
+          `, "objects"), "stamping the governing decision").attestedAt,
           basis: governingBasis,
           reason: governingReason,
         }
@@ -1345,7 +1345,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
         from hrm_benefit_awards
        where org_id = ${orgId} and program_id = ${programId} and source_key = ${sourceKey}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (existing) {
       const storedSnapshot = existing.sourceSnapshot as Record<string, unknown> | null;
       const storedEvidence = (storedSnapshot?.sourceEvidence ?? {}) as Record<string, unknown>;
@@ -1394,7 +1394,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
         from worker_employments
        where org_id = ${orgId} and id = ${employmentId}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!targetEmployment || targetEmployment.employerSubsidiaryId !== ctx.program.legalEntityId) {
       throw new BenefitsError("REFUSED", "the selected employment is not in this program's legal payer");
     }
@@ -1410,7 +1410,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
         from worker_employment_versions
        where org_id = ${orgId} and employment_id = ${employmentId}
          and status = 'active' and recorded_until is null
-    `)).rows[0]?.covered === true;
+    `, "objects"))[0]?.covered === true;
     if (!activeCoverage) {
       throw new BenefitsError("REFUSED", "the selected employment has no active service during the source period");
     }
@@ -1432,7 +1432,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
        where org_id = ${orgId} and program_id = ${programId}
          and source_snapshot #>> '{sourceEvidence,requestKey}' = ${requestKey}
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (reusedRequest) throw new BenefitsError("REFUSED", "requestKey is already bound to another retained source row; review the source selection and use a new request key");
 
     const overlap = (await db.execute<{ id: string }>(sql`
@@ -1444,7 +1444,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
              and period_from <= ${periodTo}::date
              and (period_to is null or period_to >= ${periodFrom}::date)))
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (overlap) {
       throw new BenefitsError("REFUSED", ctx.program.frequency === "project_complete"
         ? "this project completion already has a nonvoid original award — correct its history through a linked adjusting award"
@@ -1454,7 +1454,7 @@ export async function recordSourceEvidencedFirstIncentiveAward(
       const spent = (await db.execute<{ total: string | null }>(sql`
         select sum(value)::text as total from hrm_benefit_awards
          where org_id = ${orgId} and program_id = ${programId} and status <> 'voided'
-      `)).rows[0]?.total ?? null;
+      `, "objects"))[0]?.total ?? null;
       if ((spent === null ? 0n : toUnits(spent)) + toUnits(sourceValue) > toUnits(ctx.program.budgetAmount)) {
         throw new BenefitsError("REFUSED", "the source amount would exceed the program's remaining budget");
       }
@@ -1540,11 +1540,11 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
     // concurrent edit waits and a revision bump cannot slip between the
     // measure and the writes.
     const locked = requireOneRow(
-      (await db.execute<{ revision: number }>(sql`
+      await db.execute<{ revision: number }>(sql`
         select revision from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `)).rows,
+      `, "objects"),
       "locking the benefit program",
     );
     void locked;
@@ -1586,7 +1586,7 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
     // 501st award must never slip past the check. Any non-voided award
     // whose span touches this span overlaps; only the exact same span may
     // retry, and only when the frozen facts still match bit for bit.
-    const overlapping = (await db.execute<Record<string, unknown>>(sql`
+    const overlapping = await db.execute<Record<string, unknown>>(sql`
       select a.id as id, a.employment_id as "employmentId",
              a.period_from::text as "periodFrom", a.period_to::text as "periodTo",
              a.value::text as "value", a.source_key as "sourceKey",
@@ -1597,7 +1597,7 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
          and (${ctx.program.frequency === "project_complete"}
            or (a.period_from <= ${query.periodTo}::date
              and (a.period_to is null or a.period_to >= ${query.periodFrom}::date)))
-    `)).rows;
+    `, "objects");
     const exact = overlapping.filter(
       (row) => String(row.periodFrom).slice(0, 10) === query.periodFrom &&
         (row.periodTo != null ? String(row.periodTo).slice(0, 10) : null) === query.periodTo,
@@ -1922,9 +1922,9 @@ export async function createAdjustingAward(query: {
     await requireAggregateBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const original = await getBenefitAward(db, orgId, actorId, awardId);
-    requireOneRow((await db.execute(sql`
+    requireOneRow(await db.execute(sql`
       select id from hrm_benefit_programs where org_id = ${orgId} and id = ${original.programId} for update
-    `)).rows, "locking the adjustment program");
+    `, "objects"), "locking the adjustment program");
     if (original.status === "voided") {
       throw new BenefitsError(
         "REFUSED",
@@ -1959,7 +1959,7 @@ export async function createAdjustingAward(query: {
     const prior = (await db.execute<{ id: string }>(sql`
       select id from hrm_benefit_awards
        where org_id = ${orgId} and program_id = ${original.programId} and source_key = ${sourceKey}
-    `)).rows[0];
+    `, "objects"))[0];
     if (prior) {
       const recorded = await getBenefitAward(db, orgId, actorId, String(prior.id));
       if (recorded.value !== delta || recorded.adjustsAwardId !== original.id || recorded.evidence?.reason !== reason ||
@@ -2033,13 +2033,13 @@ export async function queueAwardForPayRun(
     // The native run lock precedes the award lock, matching payroll commit
     // and the award queue/delivery services. No run can commit between
     // adding an input and persisting its award linkage.
-    requireOneRow((await db.execute(sql`
+    requireOneRow(await db.execute(sql`
       select r.document_id from pay_runs r join documents d on d.org_id = r.org_id and d.id = r.document_id
        where r.org_id = ${orgId} and r.document_id = ${runDocumentId} for update of r, d
-    `)).rows, "locking the pay run");
-    requireOneRow((await db.execute(sql`
+    `, "objects"), "locking the pay run");
+    requireOneRow(await db.execute(sql`
       select id from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId} for update
-    `)).rows, "locking the award");
+    `, "objects"), "locking the award");
     const award = await getBenefitAward(db, orgId, actorId, awardId);
     if (normalizeMoney(award.value) === "0.0000") {
       throw new BenefitsError("REFUSED", award.adjustsAwardId === null
@@ -2065,11 +2065,11 @@ export async function queueAwardForPayRun(
       );
     }
     const employment = requireOneRow(
-      (await db.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
+      await db.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
         select worker_party_id::text as worker_party_id,
                employer_subsidiary_id::text as employer_subsidiary_id
           from worker_employments where org_id = ${orgId} and id = ${award.employmentId}
-      `)).rows,
+      `, "objects"),
       "the award employment",
     );
     // Component gate mirrors the run-adjustment seam (which enforces it
@@ -2077,12 +2077,12 @@ export async function queueAwardForPayRun(
     // the component's own statutory flags on the run — the check here
     // refuses a wrong-country component before the run does.
     const component = requireOneRow(
-      (await db.execute<{
+      await db.execute<{
         kind: string; is_active: boolean; system_key: string | null; country: string | null; payment_kind: string;
       }>(sql`
         select kind, is_active, system_key, country, payment_kind from pay_components
          where org_id = ${orgId} and id = ${program.payComponentId}
-      `)).rows,
+      `, "objects"),
       "the program pay component",
     );
     if (component.kind !== "earning" || !component.is_active) {
@@ -2103,7 +2103,7 @@ export async function queueAwardForPayRun(
       select country from employee_payroll_profiles
        where org_id = ${orgId} and employment_id = ${award.employmentId}
        order by created_at desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!profile) {
       throw new BenefitsError(
         "REFUSED",
@@ -2120,7 +2120,7 @@ export async function queueAwardForPayRun(
       select r.run_status, d.status as document_status, r.pay_date::text as pay_date
         from pay_runs r join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${runDocumentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!run) {
       throw new BenefitsError("NOT_FOUND", "pay run not found in this organization — queue the award onto an open run");
     }
@@ -2169,7 +2169,7 @@ export async function queueAwardForPayRun(
     const queued = await queueBenefitAward({ orgId, actorId, awardId, payRunDocumentId: runDocumentId, payRunAdjustmentId: key });
     const stored = (await db.execute<{ id: string }>(sql`
       select id from pay_run_adjustments where org_id = ${orgId} and id = ${key}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!stored) {
       throw new BenefitsError(
         "REFUSED",

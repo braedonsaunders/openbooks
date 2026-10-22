@@ -315,8 +315,8 @@ test("the definitions export route streams paged CSV/XLSX and keeps PDF buffered
     const inserted = await withOrgContext(fx.org.orgId, () => db.execute<{ id: string }>(sql`
       insert into report_definitions (org_id, slug, name, query)
       values (${fx.org.orgId}, 'recall-stream', 'Recall', ${JSON.stringify(plan())}::jsonb)
-      returning id`));
-    const defId = inserted.rows[0]!.id;
+      returning id`, "objects"));
+    const defId = inserted[0]!.id;
     const params = { params: Promise.resolve({ id: defId }) };
     const run = <T>(action: () => Promise<T>): Promise<T> =>
       withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, action));

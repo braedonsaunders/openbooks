@@ -59,7 +59,7 @@ test('native payment effect retry enforces current receipt duty, entity and feat
       (select count(*)::int from applications where org_id=${org.orgId}) as applications,
       (select count(*)::int from document_links where org_id=${org.orgId}) as links
       from documents d join posting_effects pe on pe.org_id=d.org_id and pe.document_id=d.id
-      where d.org_id=${org.orgId} and d.id=${payment.id}`)).rows[0]!)
+      where d.org_id=${org.orgId} and d.id=${payment.id}`, 'objects'))[0]!)
     const original = await evidence()
     assert.equal(original.status, 'terminal_failed')
     const reason = 'Receipt projection cause reviewed and resolved before resuming the return'
@@ -107,7 +107,7 @@ test('native payment effect retry enforces current receipt duty, entity and feat
     assert.equal((await retry()).status, 422, 'a queued effect cannot be reset a second time')
     const audit = await withOrgTransaction(org.orgId, () => db.execute<{ actor_id: string; reason: string }>(sql`
       select actor_id, changes->>'reason' as reason from audit_log where org_id=${org.orgId}
-        and row_id=${original.effect} and changes->>'event'='posting_effects_replay_authorized'`))
-    assert.deepEqual(audit.rows, [{ actor_id: actorId, reason }])
+        and row_id=${original.effect} and changes->>'event'='posting_effects_replay_authorized'`, 'objects'))
+    assert.deepEqual(audit, [{ actor_id: actorId, reason }])
   } finally { await dropScratchOrg(org.orgId); await dropScratchOrg(other.orgId) }
 })

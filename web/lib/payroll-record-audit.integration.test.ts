@@ -31,10 +31,10 @@ test('payroll record history follows live payroll permission, feature and the co
   const fx = await withBypassContext(() => seedAdoption())
   try {
     const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx))
-    const calculationEvent = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`
+    const calculationEvent = await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`
       select id from audit_log where org_id=${fx.orgId} and table_name='pay_runs'
         and row_id=${input.documentId} and changes->>'operation'='calculate_pay_run'
-    `))).rows
+    `, 'objects'))
     assert.equal(calculationEvent.length, 1, 'the native calculation retains its actual event')
     const eventId = randomUUID()
     const evidenceText = '{"before":{"document":{"kind":"pay_run","total":999999999999998.99}},"after":{"document":{"kind":"pay_run","total":999999999999999.00}},"reason":"Review the retained payroll transition"}'
@@ -56,7 +56,7 @@ test('payroll record history follows live payroll permission, feature and the co
     const read = (id = input.documentId) => withOrgContext(fx.orgId, () => GET(new Request(`http://localhost/api/audit/record?table=documents&id=${id}`)))
     const auditCount = async () => (await withOrgContext(fx.orgId, () => db.execute<{ n: string }>(sql`
       select count(*)::text n from audit_log where org_id=${fx.orgId}
-    `))).rows[0]!.n
+    `, 'objects')))[0]!.n
     const before = await auditCount()
 
     for (const permissions of [['ap.read'], ['gl.read'], ['ar.read'], []]) {

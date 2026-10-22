@@ -9,7 +9,7 @@ import test from "node:test";
 
 const mocks: Record<string, string> = {
   "server-only": "export {}",
-  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(){return {rows:[]}}}`,
+  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(_query, mode){ const inMode = (result) => (mode === 'objects' ? result.rows : result);return inMode({rows:[]})}}`,
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return true}",
   "./config": "export async function analyticsConfig(){return {}}",

@@ -50,7 +50,7 @@ test("script configuration promotion preserves live production execution timesta
     await db.execute(sql`update user_scripts set name='Promoted',last_run_at='2026-02-01T12:00:00Z',next_run_at='2031-01-01T12:00:00Z' where org_id=${f.sandboxOrgId}`);
     const id = await f.approve();
     await applyChangeSet(id, f.applier);
-    const row = (await db.execute(sql`select name,last_run_at::text,next_run_at::text from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+    const row = (await db.execute(sql`select name,last_run_at::text,next_run_at::text from user_scripts where org_id=${f.orgId}`, "objects"))[0]!;
     assert.equal(row.name, "Promoted");
     assert.match(String(row.last_run_at), /^2026-01-01 /);
     assert.match(String(row.next_run_at), /^2030-01-01 /);
@@ -63,7 +63,7 @@ test("production execution after capture does not invalidate a script configurat
     const id = await f.approve();
     await db.execute(sql`update user_scripts set last_run_at='2026-03-01T12:00:00Z',next_run_at='2032-01-01T12:00:00Z' where org_id=${f.orgId}`);
     await applyChangeSet(id, f.applier);
-    const row = (await db.execute(sql`select name,last_run_at::text,next_run_at::text from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+    const row = (await db.execute(sql`select name,last_run_at::text,next_run_at::text from user_scripts where org_id=${f.orgId}`, "objects"))[0]!;
     assert.equal(row.name, "Promoted");
     assert.match(String(row.last_run_at), /^2026-03-01 /);
     assert.match(String(row.next_run_at), /^2032-01-01 /);
@@ -76,7 +76,7 @@ test("a promoted cron change derives a fresh production schedule instead of copy
     const id = await f.approve();
     const from = Date.now();
     await applyChangeSet(id, f.applier);
-    const row = (await db.execute(sql`select cron,next_run_at from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+    const row = (await db.execute(sql`select cron,next_run_at from user_scripts where org_id=${f.orgId}`, "objects"))[0]!;
     assert.equal(row.cron, "0 13 * * *");
     assert.ok(row.next_run_at, "active schedule must have a due cursor");
     const next = new Date(String(row.next_run_at));
@@ -92,7 +92,7 @@ test("promoting a new scheduled script starts a production cursor without sandbo
     const id = await f.approve();
     const from = Date.now();
     await applyChangeSet(id, f.applier);
-    const row = (await db.execute(sql`select next_run_at,last_run_at from user_scripts where org_id=${f.orgId} and name='New scheduled script'`)).rows[0]!;
+    const row = (await db.execute(sql`select next_run_at,last_run_at from user_scripts where org_id=${f.orgId} and name='New scheduled script'`, "objects"))[0]!;
     assert.equal(row.last_run_at, null);
     assert.ok(row.next_run_at);
     const next = new Date(String(row.next_run_at));
@@ -108,7 +108,7 @@ for (const transition of ["disable", "event"] as const) {
       else await db.execute(sql`update user_scripts set trigger_point='before_submit',cron=null where org_id=${f.sandboxOrgId}`);
       const id = await f.approve();
       await applyChangeSet(id, f.applier);
-      const row = (await db.execute(sql`select next_run_at,last_run_at::text from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+      const row = (await db.execute(sql`select next_run_at,last_run_at::text from user_scripts where org_id=${f.orgId}`, "objects"))[0]!;
       assert.equal(row.next_run_at, null);
       assert.match(String(row.last_run_at), /^2026-01-01 /);
     });
@@ -121,7 +121,7 @@ test("script execution isolation does not bypass production configuration confli
     const id = await f.approve();
     await db.execute(sql`update user_scripts set source='function main(ctx) { return 42; }' where org_id=${f.orgId}`);
     await assert.rejects(applyChangeSet(id, f.applier), /changed since capture/);
-    const row = (await db.execute(sql`select source,name from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+    const row = (await db.execute(sql`select source,name from user_scripts where org_id=${f.orgId}`, "objects"))[0]!;
     assert.equal(row.source, "function main(ctx) { return 42; }");
     assert.equal(row.name, "Scheduled configuration");
   });
@@ -132,11 +132,11 @@ test("promotion refuses invalid scheduled policy without applying configuration 
     await db.execute(sql`update user_scripts set cron='not a cron',name='Invalid' where org_id=${f.sandboxOrgId}`);
     const id = await f.approve();
     await assert.rejects(applyChangeSet(id, f.applier), /cron/i);
-    const row = (await db.execute(sql`select cron,name from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+    const row = (await db.execute(sql`select cron,name from user_scripts where org_id=${f.orgId}`, "objects"))[0]!;
     assert.equal(row.cron, "0 12 * * *");
     assert.equal(row.name, "Scheduled configuration");
-    assert.equal((await db.execute(sql`select status from change_sets where id=${id}`)).rows[0]!.status, "approved");
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select status from change_sets where id=${id}`, "objects"))[0]!.status, "approved");
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`, "objects")).length, 0);
   });
 });
 
@@ -152,8 +152,8 @@ for (const [label, updates, error] of [
       await db.execute(sql`update user_scripts set ${sql.join(Object.entries(updates).map(([key,value]) => sql`${sql.identifier(key)}=${value}`),sql`, `)} where org_id=${f.sandboxOrgId}`);
       const id = await f.approve();
       await assert.rejects(applyChangeSet(id, f.applier), error);
-      assert.equal((await db.execute(sql`select status from change_sets where id=${id}`)).rows[0]!.status, "approved");
-      assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select status from change_sets where id=${id}`, "objects"))[0]!.status, "approved");
+      assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`, "objects")).length, 0);
     });
   });
 }
@@ -164,12 +164,12 @@ test("promotion refuses script deletion with run history and preserves the appro
     const id = await f.approve();
     // Execution occurring after approval must not turn a deletion into an FK
     // failure or discard the historical record.
-    const script = (await db.execute<{ id: string }>(sql`select id from user_scripts where org_id=${f.orgId}`)).rows[0]!;
+    const script = (await db.execute<{ id: string }>(sql`select id from user_scripts where org_id=${f.orgId}`, "objects"))[0]!;
     await db.execute(sql`insert into script_runs(org_id,script_id,status,created_by) values(${f.orgId},${script.id},'ok',${f.applier})`);
     await assert.rejects(applyChangeSet(id, f.applier), /has run history.*Deactivate.*preserve/);
-    assert.equal((await db.execute(sql`select id from user_scripts where org_id=${f.orgId} and id=${script.id}`)).rows.length, 1);
-    assert.equal((await db.execute(sql`select id from script_runs where org_id=${f.orgId} and script_id=${script.id}`)).rows.length, 1);
-    assert.equal((await db.execute(sql`select status from change_sets where id=${id}`)).rows[0]!.status, "approved");
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from user_scripts where org_id=${f.orgId} and id=${script.id}`, "objects")).length, 1);
+    assert.equal((await db.execute(sql`select id from script_runs where org_id=${f.orgId} and script_id=${script.id}`, "objects")).length, 1);
+    assert.equal((await db.execute(sql`select status from change_sets where id=${id}`, "objects"))[0]!.status, "approved");
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${f.orgId} and changes->>'changeSetId'=${id}`, "objects")).length, 0);
   });
 });

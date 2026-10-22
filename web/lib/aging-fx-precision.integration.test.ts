@@ -36,7 +36,7 @@ test('foreign-currency aging rounds translated opens to 4dp and ties out', { ski
     // explicit scope (pooled RLS), so a bare read sees zero rows.
     await withOrgContext(scratch.orgId, async () => {
       const doc = (await db.execute<{ open_balance: string; fx_rate: string }>(sql`
-        select open_balance::text, fx_rate::text from documents where id = ${id}`)).rows[0]!
+        select open_balance::text, fx_rate::text from documents where id = ${id}`, 'objects'))[0]!
       assert.equal(doc.open_balance, '100.0000')
       assert.equal(doc.fx_rate, '1.2345678901')
 

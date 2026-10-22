@@ -41,9 +41,9 @@ test("native typed residual insertion and registered historical copy preserve bo
     // The destination headers are already posted when their lines are copied:
     // this INSERT executes the statement trigger's authoritative two-argument guard.
     sandbox = await withBypassContext(() => createSandbox({productionOrgId:org.orgId,name:"Scratch typed FX history",tier:"full",masked:false}));
-    const rows = (await db.execute<{amount:string;txn:string;tagged:boolean}>(sql`select l.amount::text,l.txn_amount::text as txn,l.is_currency_adjustment as tagged
+    const rows = await db.execute<{amount:string;txn:string;tagged:boolean}>(sql`select l.amount::text,l.txn_amount::text as txn,l.is_currency_adjustment as tagged
       from journal_lines l join orgs o on o.id=l.org_id where l.org_id=${sandbox.sandboxOrgId}
-        and l.entry_id=ob_rebase(${entryId}::uuid,o.sandbox_seed) order by l.line_number`)).rows;
+        and l.entry_id=ob_rebase(${entryId}::uuid,o.sandbox_seed) order by l.line_number`, "objects");
     assert.deepEqual(rows,[{amount:"1.0000",txn:"0.0000",tagged:true},{amount:"-1.0000",txn:"-1.0000",tagged:false}]);
     await deleteSandbox(sandbox.sandboxId);
     sandbox = undefined;
@@ -61,7 +61,7 @@ test("a typed flag cannot exempt ordinary nonzero foreign exposure", { skip: !DB
       lines:[{accountId:org.accounts.bank,amount:"1",currency:"USD",txnAmount:"1",fxRate:"1",isCurrencyAdjustment:true},
         {accountId:org.accounts.fxGainLoss,amount:"-1",currency:"CAD"}],
     })),error=>errorChainMatches(error,/Typed currency adjustments carry only a base amount and zero foreign transaction value/));
-    assert.equal((await db.execute<{count:number}>(sql`select count(*)::int from journal_entries where org_id=${org.orgId}`)).rows[0]?.count,0);
+    assert.equal((await db.execute<{count:number}>(sql`select count(*)::int from journal_entries where org_id=${org.orgId}`, "objects"))[0]?.count,0);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -75,7 +75,7 @@ test("ordinary FX excess retains bounded membership, repeated selectors and dist
       lines:[{accountId:org.accounts.bank,amount:"10",txnAmount:"10",currency:"CAD",fxRate:"1"},
         {accountId:org.accounts.cogs,amount:"-10",txnAmount:"-10",currency:"CAD",fxRate:"1"}],
     }));
-    const before = (await db.execute(sql`select * from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} order by line_number`)).rows;
+    const before = await db.execute(sql`select * from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} order by line_number`, "objects");
     const rollback = new Error("rollback disposable historical anomaly");
     await assert.rejects(()=>withMaintenanceTransaction(null,async()=>{
       // A legacy anomaly is constructed only in a marked, dedicated fixture database.
@@ -108,7 +108,7 @@ test("ordinary FX excess retains bounded membership, repeated selectors and dist
       assert.ok(errorChainMatches(wrapperRefusal,/posted lines cannot be amended/));
       throw rollback;
     }),error=>error===rollback);
-    const after = (await db.execute(sql`select * from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} order by line_number`)).rows;
+    const after = await db.execute(sql`select * from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} order by line_number`, "objects");
     assert.deepEqual(after,before);
   } finally { await dropScratchOrg(org.orgId); }
 });

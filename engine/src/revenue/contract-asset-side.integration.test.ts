@@ -23,11 +23,9 @@ test("a contract recognized ahead of billing reports a contract asset", { skip: 
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
-    const calendar = (
-      await db.execute<{ id: string }>(sql`
+    const calendar = (await db.execute<{ id: string }>(sql`
         select fiscal_calendar_id as id from accounting_periods
-         where org_id = ${org.orgId} and id = ${org.periodId}`)
-    ).rows[0]!.id;
+         where org_id = ${org.orgId} and id = ${org.periodId}`, "objects"))[0]!.id;
     for (const [month, last] of [["07", "31"], ["08", "31"], ["09", "30"]] as const) {
       await db.execute(sql`
         insert into accounting_periods
@@ -73,14 +71,12 @@ test("a contract recognized ahead of billing reports a contract asset", { skip: 
 
     // The asset is earned revenue awaiting its invoice: the primary book
     // holds one posted recognition journal for July's slice.
-    const journals = (
-      await db.execute<{ entries: number }>(sql`
+    const journals = (await db.execute<{ entries: number }>(sql`
         select count(distinct l.journal_entry_id)::int as entries
           from recognition_schedule_lines l
           join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.obligation_id = ${obligationId}
-           and l.journal_entry_id is not null and l.reversal_journal_entry_id is null`)
-    ).rows[0];
+           and l.journal_entry_id is not null and l.reversal_journal_entry_id is null`, "objects"))[0];
     assert.equal(journals?.entries, 1);
   } finally {
     await dropScratchOrg(org.orgId);

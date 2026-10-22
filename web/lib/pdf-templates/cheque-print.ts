@@ -20,8 +20,8 @@ export async function printIssuedCheque(orgId:string, stubId:string, actorId:str
     const audit=await tx.execute<{id:string}>(sql`
       insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${orgId},'pay_stubs',${stubId},'update',${JSON.stringify({event:'cheque_printed',chequeNumber:issued.chequeNumber,template:template.provenance,contentHash:createHash('sha256').update(pdf).digest('hex')})}::jsonb,${actorId}) returning id
-    `)
-    if(audit.rows.length!==1) throw new PayrollError('Cheque print audit was not recorded')
+    `, 'objects')
+    if(audit.length!==1) throw new PayrollError('Cheque print audit was not recorded')
   })
   return pdf
 }

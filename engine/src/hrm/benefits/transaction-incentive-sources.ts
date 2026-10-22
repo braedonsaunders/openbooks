@@ -101,15 +101,15 @@ export async function measureTransactionIncentiveSources(
       throw new BenefitsError("REFUSED", `reading this incentive's transaction evidence requires ${permission} — ask an administrator to grant source access in Roles`);
     }
     if (scope !== null && !scope.has(legalEntityId)) throw new BenefitsError("NOT_FOUND", "transaction sources are not visible in this organization and legal-entity scope");
-    const entity = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and id = ${legalEntityId} for share`)).rows[0];
+    const entity = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and id = ${legalEntityId} for share`, "objects"))[0];
     if (!entity) throw new BenefitsError("NOT_FOUND", "transaction sources are not visible in this organization and legal-entity scope");
     const sourceFeature = DOC_KIND_FEATURE[query.documentKind];
     if (sourceFeature && !(await lockAndCheckOrgFeature(db, orgId, sourceFeature))) {
       throw new BenefitsError("REFUSED", `${sourceFeature} is off — enable the source capability in Company Settings → Features before measuring transactions`);
     }
-    const knownItems = (await db.execute<{ id: string }>(sql`
+    const knownItems = await db.execute<{ id: string }>(sql`
       select id from items where org_id = ${orgId} and id = any(${`{${itemIds.join(",")}}`}::uuid[]) order by id for share
-    `)).rows;
+    `, "objects");
     if (knownItems.length !== itemIds.length) throw new BenefitsError("NOT_FOUND", "one or more selected items are not available in this organization — reselect the program items");
 
     let grouping: TransactionIncentiveSourceSnapshot["grouping"] = null;
@@ -119,7 +119,7 @@ export async function measureTransactionIncentiveSources(
       const segment = (await db.execute<{ id: string; key: string; source_kind: string; storage_column: string | null; feature_key: string | null }>(sql`
         select id, key, source_kind, storage_column, feature_key from segment_definitions
          where org_id = ${orgId} and id = ${segmentId} for share
-      `)).rows[0];
+      `, "objects"))[0];
       if (!segment) throw new BenefitsError("NOT_FOUND", "the grouping dimension is not available in this organization — reselect the native dimension");
       const feature = segment.storage_column === "project_id" ? "projects" : segment.feature_key;
       if (feature && !(await lockAndCheckOrgFeature(db, orgId, feature))) {
@@ -134,7 +134,7 @@ export async function measureTransactionIncentiveSources(
       } else throw new BenefitsError("REFUSED", "the selected dimension has no supported native storage mapping — correct its definition before measuring");
       grouping = { id: segment.id, key: segment.key, sourceKind: segment.source_kind, storageColumn: segment.storage_column };
     }
-    const rows = (await db.execute<TransactionIncentiveSourceLine & Record<string, unknown>>(sql`
+    const rows = await db.execute<TransactionIncentiveSourceLine & Record<string, unknown>>(sql`
       select l.id::text as "sourceId", d.id::text as "documentId", d.document_number as "documentNumber",
              d.revision_seq::text as "documentRevision", d.document_date::text as "documentDate", d.status,
              l.item_id::text as "itemId", l.amount::text as amount, l.quantity::text as quantity,
@@ -143,7 +143,7 @@ export async function measureTransactionIncentiveSources(
        where d.org_id = ${orgId} and d.subsidiary_id = ${legalEntityId} and d.kind = ${query.documentKind}
          and l.id = any(${`{${lineIds.join(",")}}`}::uuid[])
        order by d.id, l.id for share of d, l
-    `)).rows;
+    `, "objects");
     if (rows.length !== lineIds.length) throw new BenefitsError("NOT_FOUND", "one or more transaction lines are missing or outside the selected organization, legal entity or document kind — reselect the source set");
     const requiredStatus = query.documentKind === "customer_invoice" ? "posted" : "approved";
     for (const row of rows) {
@@ -154,10 +154,10 @@ export async function measureTransactionIncentiveSources(
     }
     if (grouping?.sourceKind === "custom") {
       const groupIds = [...new Set(rows.map((row) => row.groupId))];
-      const values = (await db.execute<{ id: string }>(sql`
+      const values = await db.execute<{ id: string }>(sql`
         select id from segment_values where org_id = ${orgId} and segment_id = ${grouping.id}
           and id = any(${`{${groupIds.join(",")}}`}::uuid[]) order by id for share
-      `)).rows;
+      `, "objects");
       // Inactive historical values still identify their recorded group. The
       // active editor registry is not a reason to erase old transaction facts.
       if (values.length !== groupIds.length) throw new BenefitsError("REFUSED", "a recorded grouping value belongs to another dimension or organization — reconcile the original source assignment before settlement");

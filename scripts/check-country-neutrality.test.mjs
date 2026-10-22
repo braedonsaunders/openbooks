@@ -195,7 +195,8 @@ test('the audit rejects a country branch inside the tax layer', () => {
 
 test('isScopedPath is unscoped', () => {
   assert.equal(isScopedPath('scripts/check-country-neutrality.mjs'), false)
-  assert.equal(isScopedPath('schema/migrations/generated/0147_gst34_box_basis_heal.sql'), false)
+  assert.equal(isScopedPath('schema/migrations/baselines/alpha35.sql'), false)
+  assert.equal(isScopedPath('schema/migrations/generated/0001_tax_form_rows.sql'), false)
 })
 
 test('withholding line UI without the enrollment gate fails Rule 3', () => {

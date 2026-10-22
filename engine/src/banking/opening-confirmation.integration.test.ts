@@ -186,7 +186,7 @@ test(
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${recon.id}
            and action = 'update' and changes->>'operation' = 'confirm_opening'
-      `)).rows[0]!.changes;
+      `, "objects"))[0]!.changes;
       assert.equal(confirmAudit.operation, "confirm_opening");
       assert.equal(confirmAudit.reason, CONFIRM_REASON);
       assert.equal(confirmAudit.bookBalance, "63412.5500");
@@ -196,7 +196,7 @@ test(
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${recon.id}
            and action = 'approve'
-      `)).rows[0]!.changes;
+      `, "objects"))[0]!.changes;
       assert.equal(signoff.openingCarriedForward, "63412.5500");
       assert.equal(signoff.openingCarryStartDate, FIRST_LINE_DATE);
 
@@ -209,7 +209,7 @@ test(
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.bank}
            and jl.reconciliation_id is null and je.posting_date < ${FIRST_LINE_DATE}
-      `)).rows[0]!.count;
+      `, "objects"))[0]!.count;
       assert.equal(carriedStillOpen, 1);
       const period2 = await postBankJournal(org, actor, ["20"], "period-2", "2026-07-20");
       await importStatement(
@@ -232,7 +232,7 @@ test(
       const statement2Id = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'confirmed-opening-second-deposit'
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const recon2 = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: "2026-07-20", statementBalance: "67958.46" },
         ctx,
@@ -330,7 +330,7 @@ test(
       const lineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'confirm-gated-period-deposit'
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const first = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "130" },
         ctx,

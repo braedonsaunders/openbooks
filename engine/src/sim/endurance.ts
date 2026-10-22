@@ -170,8 +170,8 @@ async function tbFingerprint(orgId: string): Promise<string> {
            count(distinct l.account_id)::text as accounts
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${orgId}`));
-  const row = r.rows[0]!;
+     where l.org_id = ${orgId}`, "objects"));
+  const row = r[0]!;
   return `${row.debits}|${row.credits}|${row.accounts}`;
 }
 
@@ -186,13 +186,13 @@ export async function regenSweep(orgId: string): Promise<RegenSweepResult> {
     select d.id, d.kind, e.status as entry_status from documents d
       join journal_entries e on e.id = d.posted_entry_id
      where d.org_id = ${orgId} and d.status = 'posted'
-     order by d.created_at`));
+     order by d.created_at`, "objects"));
 
   const before = await tbFingerprint(orgId);
   const changed: RegenSweepResult["changed"] = [];
   const failures: RegenSweepResult["failures"] = [];
   let reversedSkipped = 0;
-  for (const doc of docs.rows) {
+  for (const doc of docs) {
     if (doc.entry_status === "reversed") {
       reversedSkipped++;
       continue;
@@ -207,7 +207,7 @@ export async function regenSweep(orgId: string): Promise<RegenSweepResult> {
   const after = await tbFingerprint(orgId);
 
   return {
-    documents: docs.rows.length,
+    documents: docs.length,
     reversedSkipped,
     changed,
     failures,

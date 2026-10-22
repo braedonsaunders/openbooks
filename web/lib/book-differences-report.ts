@@ -48,10 +48,10 @@ export async function bookDifferenceSelection(orgId: string, requested: string |
   options: BookOption[]
 }> {
   if (requested != null && !isReportUuidParam(requested)) throw new BookDifferenceSelectionError('Choose an active secondary accounting book to compare.')
-  const books = (await db.execute<BookOption>(sql`
+  const books = await db.execute<BookOption>(sql`
     select id, code, name, is_primary as "isPrimary" from accounting_books
      where org_id = ${orgId} and is_active
-     order by is_primary desc, code, id`)).rows
+     order by is_primary desc, code, id`, 'objects')
   const primary = books.find((book) => book.isPrimary)
   const options = books.filter((book) => !book.isPrimary)
   if (!primary || options.length === 0) {

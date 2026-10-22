@@ -37,8 +37,8 @@ export async function partylessControlLines(orgId: string, entryId: string): Pro
        and a.id::text is distinct from nullif(o.settings->'controlAccounts'->>'retainagePayable', '')
        and l.party_id is null
      order by a.number nulls last, l.line_number
-  `);
-  return r.rows.map((row) => ({
+  `, "objects");
+  return r.map((row) => ({
     accountId: row.account_id,
     accountNumber: row.account_number,
     accountName: row.account_name,

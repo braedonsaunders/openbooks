@@ -39,7 +39,7 @@ export async function compensationPackageComponentSources(tx: SqlExecutor, orgId
   if (!ids.length) return [];
   const sources = (await tx.execute<{ source: CompensationPackageComponentSource }>(sql`select ${COMPENSATION_PACKAGE_COMPONENT_SOURCE} as source
     from pay_components c left join pay_component_earning_classifications ec on ec.org_id=c.org_id and ec.pay_component_id=c.id
-    where c.org_id=${orgId} and c.id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)}) order by c.id for share of c`)).rows.map(row => row.source);
+    where c.org_id=${orgId} and c.id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)}) order by c.id for share of c`, 'objects')).map(row => row.source);
   return sources;
 }
 
@@ -49,8 +49,8 @@ export async function lockCompensationPackageComponents(tx: SqlExecutor, orgId: 
   const ids = [...new Set(sources.flatMap(source => source.components.map(component => component.id)))].sort();
   if (!ids.length) return;
   const list = sql.join(ids.map(id => sql`${id}::uuid`), sql`, `);
-  const locked = await tx.execute(sql`select id from pay_components where org_id=${orgId} and id in (${list}) order by id for update`);
-  if (locked.rows.length !== ids.length) throw new PayrollError('A compensation payroll component is no longer available — reload the package and choose its current native components before recalculating.');
+  const locked = await tx.execute(sql`select id from pay_components where org_id=${orgId} and id in (${list}) order by id for update`, 'objects');
+  if (locked.length !== ids.length) throw new PayrollError('A compensation payroll component is no longer available — reload the package and choose its current native components before recalculating.');
   await tx.execute(sql`select pay_component_id from pay_component_earning_classifications
     where org_id=${orgId} and pay_component_id in (${list}) order by pay_component_id for update`);
 }

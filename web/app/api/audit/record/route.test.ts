@@ -35,22 +35,23 @@ stubModules({
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export const db = {
         async transaction(work) { return work(this) },
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.reads++; const text = new PgDialect().sqlToQuery(query).sql
-          if (text.includes('from pay_runs r join documents d')) return state.recordExists ? {rows:[{subsidiaryId:'employer-1'}]} : {rows:[]}
-          if (['payroll_compensation_packages','payroll_compensation_versions','payroll_compensation_assignments'].some(table=>text.includes('from '+table))) return state.recordExists ? {rows:[{kind:'compensation',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
-          if (['hrm_training_courses','hrm_training_sessions','hrm_training_participants'].some(table=>text.includes('from "'+table+'"'))) return state.recordExists ? {rows:[{kind:'training',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
+          if (text.includes('from pay_runs r join documents d')) return inMode(await (state.recordExists ? {rows:[{subsidiaryId:'employer-1'}]} : {rows:[]}))
+          if (['payroll_compensation_packages','payroll_compensation_versions','payroll_compensation_assignments'].some(table=>text.includes('from '+table))) return inMode(await (state.recordExists ? {rows:[{kind:'compensation',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}))
+          if (['hrm_training_courses','hrm_training_sessions','hrm_training_participants'].some(table=>text.includes('from "'+table+'"'))) return inMode(await (state.recordExists ? {rows:[{kind:'training',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}))
           if (text.includes('from documents')) {
-            return state.recordExists
+            return inMode(await (state.recordExists
               ? { rows: [{ org_id: 'org-1', kind: state.documentKind ?? 'vendor_bill', created_at: new Date(), created_by: null,
                            updated_at: new Date(), updated_by: null, subsidiaryId: null }] }
-              : { rows: [] }
+              : { rows: [] }))
           }
-          if (['hrm_benefit_programs','hrm_benefit_plans','entitlement_plans'].some(table=>text.includes('from '+table))) return state.recordExists ? { rows:[{kind:'benefit_program',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}] } : {rows:[]}
-          if (text.includes('from hrm_benefit_enrollments')) return state.recordExists ? { rows: [{ kind: 'benefit_enrollment', created_at: new Date(), created_by: null, subsidiaryId: 'employer-1' }] } : { rows: [] }
-          if (text.includes('count(*)')) return { rows: [{ n: 0 }] }
-          if (text.includes('select e.id') && state.changesText !== undefined) return { rows: [{id:'event-1',action:'update',changes:state.changesText,at:new Date(),request_id:null,actor_name:null}] }
-          return { rows: [] }
+          if (['hrm_benefit_programs','hrm_benefit_plans','entitlement_plans'].some(table=>text.includes('from '+table))) return inMode(await (state.recordExists ? { rows:[{kind:'benefit_program',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}] } : {rows:[]}))
+          if (text.includes('from hrm_benefit_enrollments')) return inMode(await (state.recordExists ? { rows: [{ kind: 'benefit_enrollment', created_at: new Date(), created_by: null, subsidiaryId: 'employer-1' }] } : { rows: [] }))
+          if (text.includes('count(*)')) return inMode({ rows: [{ n: 0 }] })
+          if (text.includes('select e.id') && state.changesText !== undefined) return inMode({ rows: [{id:'event-1',action:'update',changes:state.changesText,at:new Date(),request_id:null,actor_name:null}] })
+          return inMode({ rows: [] })
         },
       }
     `,

@@ -98,12 +98,12 @@ async function promoteWorker(
 ): Promise<void> {
   const slot = (await db.execute<{ assignment_id: string }>(sql`
     select id as assignment_id from employment_assignments
-     where org_id = ${orgId} and employment_id = ${employmentId}`)).rows[0];
+     where org_id = ${orgId} and employment_id = ${employmentId}`, "objects"))[0];
   assert.ok(slot, "primary assignment slot exists");
   const first = (await db.execute<{ effective_to: string | null }>(sql`
     select effective_to::text as effective_to from employment_assignment_versions
      where org_id = ${orgId} and assignment_id = ${slot.assignment_id}
-       and is_primary and recorded_until is null and version_no = 1`)).rows[0];
+       and is_primary and recorded_until is null and version_no = 1`, "objects"))[0];
   assert.equal(first?.effective_to, effectiveFrom, "the first slice was seeded ending at the promotion date");
   const positionId = randomUUID();
   await db.execute(sql`
@@ -153,7 +153,7 @@ async function storedRequest(
 ): Promise<{ status: string; response_snapshot_id: string | null; reason: string | null }> {
   const row = (await db.execute<{ status: string; response_snapshot_id: string | null; reason: string | null }>(sql`
     select status, response_snapshot_id::text as response_snapshot_id, reason
-      from hrm_pay_information_requests where org_id = ${orgId} and id = ${requestId}`)).rows[0];
+      from hrm_pay_information_requests where org_id = ${orgId} and id = ${requestId}`, "objects"))[0];
   assert.ok(row, "request row is readable from storage");
   return row;
 }

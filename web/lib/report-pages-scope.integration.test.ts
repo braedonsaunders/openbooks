@@ -244,7 +244,7 @@ test('native report loaders refuse incomplete custom periods in place without br
     await withBypassContext(() => db.execute(sql`update app_roles set permissions='["reports.read","gl.read","ar.read","ap.read"]'::jsonb where org_id=${org.orgId} and key='report_date_reader'`))
     state.user = principal(org, uid)
     await withOrgContext(org.orgId, async () => {
-      const before = (await db.execute<{ count: string }>(sql`select count(*)::text as count from journal_entries where org_id=${org.orgId}`)).rows[0]!.count
+      const before = (await db.execute<{ count: string }>(sql`select count(*)::text as count from journal_entries where org_id=${org.orgId}`, 'objects'))[0]!.count
       for (const params of [
         { period: 'custom' },
         { period: 'custom', from: '2026-02-01' },
@@ -268,7 +268,7 @@ test('native report loaders refuse incomplete custom periods in place without br
       const valid = { period: 'custom', from: org.date, to: org.date }
       assert.equal((await loadBalanceSheet(valid)).periodRefusal, null, 'a valid range keeps the native resolution path')
       assert.equal((await loadAging(valid)).periodRefusal, null)
-      const after = (await db.execute<{ count: string }>(sql`select count(*)::text as count from journal_entries where org_id=${org.orgId}`)).rows[0]!.count
+      const after = (await db.execute<{ count: string }>(sql`select count(*)::text as count from journal_entries where org_id=${org.orgId}`, 'objects'))[0]!.count
       assert.equal(after, before, 'report refusal and recovery do not change financial history')
     })
   } finally {

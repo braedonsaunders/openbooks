@@ -203,31 +203,31 @@ async function seedSourceEntry(
 }
 
 async function accountTotals(orgId: string): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ account_id: string; total: string }>(sql`
+  const rows = await db.execute<{ account_id: string; total: string }>(sql`
     select l.account_id, sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id`)).rows;
+     group by l.account_id`, "objects");
   return new Map(rows.map((row) => [row.account_id, row.total]));
 }
 
 async function coordinateTotals(orgId: string): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ account_id: string; department_id: string | null; total: string }>(sql`
+  const rows = await db.execute<{ account_id: string; department_id: string | null; total: string }>(sql`
     select l.account_id, l.department_id, sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id, l.department_id`)).rows;
+     group by l.account_id, l.department_id`, "objects");
   return new Map(
     rows.map((row) => [`${row.account_id}|${row.department_id ?? ""}`, row.total]),
   );
 }
 
 async function postedRunCount(orgId: string, ruleId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(sql`
     select count(*)::text as count from allocation_runs
-     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows;
+     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects");
   return Number(rows[0]?.count ?? 0);
 }
 
@@ -238,8 +238,7 @@ test(
     const { org, actorId } = await newAllocationOrg();
     try {
       const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`))
-        .rows[0]!.fiscal_calendar_id;
+        select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
       const adjustmentId = randomUUID(), augustId = randomUUID();
       await db.execute(sql`
         insert into accounting_periods
@@ -299,14 +298,14 @@ test(
       const posted = await postAllocationRun(run.id, actorId, "Post adjustment allocation");
       const allocationEntry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
         select period_id, posting_date::text as posting_date from journal_entries
-         where org_id = ${org.orgId} and id = ${posted.journalEntryId}`)).rows[0];
+         where org_id = ${org.orgId} and id = ${posted.journalEntryId}`, "objects"))[0];
       assert.equal(allocationEntry?.period_id, adjustmentId);
       assert.equal(allocationEntry?.posting_date, "2026-07-31");
 
       const reversed = await reverseAllocationRun(run.id, actorId, "Reverse adjustment allocation");
       const reversalEntry = (await db.execute<{ period_id: string; posting_date: string }>(sql`
         select period_id, posting_date::text as posting_date from journal_entries
-         where org_id = ${org.orgId} and id = ${reversed.reversalEntryId}`)).rows[0];
+         where org_id = ${org.orgId} and id = ${reversed.reversalEntryId}`, "objects"))[0];
       assert.equal(reversalEntry?.period_id, adjustmentId);
       assert.equal(reversalEntry?.posting_date, "2026-07-31");
     } finally {
@@ -394,13 +393,13 @@ test(
       // `{{period.name}}` line memo substitutes it; the system entry memo
       // names the period by its canonical fiscal label.
       const ruleKey = (await db.execute<{ key: string }>(sql`
-        select key from allocation_rules where id = ${ruleId}`)).rows[0]!.key;
+        select key from allocation_rules where id = ${ruleId}`, "objects"))[0]!.key;
       const header = (await db.execute<{ entry_number: string; memo: string }>(sql`
-        select entry_number, memo from journal_entries where id = ${posted.journalEntryId}`)).rows[0]!;
+        select entry_number, memo from journal_entries where id = ${posted.journalEntryId}`, "objects"))[0]!;
       assert.ok(header.entry_number.startsWith(`ALLOC-${ruleKey}-2026-07-`), header.entry_number);
       assert.equal(header.memo, `Allocation ${ruleKey} — P07 FY2026`);
       const lineMemos = (await db.execute<{ memo: string | null }>(sql`
-        select distinct memo from journal_lines where entry_id = ${posted.journalEntryId}`)).rows.map((row) => row.memo);
+        select distinct memo from journal_lines where entry_id = ${posted.journalEntryId}`, "objects")).map((row) => row.memo);
       assert.deepEqual(lineMemos, [`Allocation Rule ${ruleKey} for 2026-07`]);
 
       const after = await accountTotals(org.orgId);
@@ -703,9 +702,9 @@ test(
       const oldRun = await getRun(org.orgId, preview.id);
       assert.equal(oldRun.status, "reversed");
       // Chain links live on the run rows (A8 summaries omit them).
-      const chain = (await db.execute<{ id: string; superseded_by_run_id: string | null; reverses_run_id: string | null }>(sql`
+      const chain = await db.execute<{ id: string; superseded_by_run_id: string | null; reverses_run_id: string | null }>(sql`
         select id, superseded_by_run_id, reverses_run_id from allocation_runs
-         where org_id = ${org.orgId} and id in (${preview.id}::uuid, ${rerun.run.id}::uuid)`)).rows;
+         where org_id = ${org.orgId} and id in (${preview.id}::uuid, ${rerun.run.id}::uuid)`, "objects");
       const byId = new Map(chain.map((row) => [row.id, row]));
       assert.equal(byId.get(preview.id)?.superseded_by_run_id, rerun.run.id);
       assert.equal(byId.get(rerun.run.id)?.reverses_run_id, preview.id);
@@ -1034,9 +1033,9 @@ test(
       const posted = await postAllocationRun(preview.id, actorId, "Post statistical attribution");
       assert.equal(posted.status, "posted");
       assert.equal(posted.journalEntryId, null);
-      const lineage = (await db.execute<{ driver_value: string | null; amount: string }>(sql`
+      const lineage = await db.execute<{ driver_value: string | null; amount: string }>(sql`
         select driver_value::text as driver_value, amount::text as amount from allocation_lineage
-         where org_id = ${org.orgId} and run_id = ${preview.id}`)).rows;
+         where org_id = ${org.orgId} and run_id = ${preview.id}`, "objects");
       assert.equal(lineage.length, 2);
       assert.deepEqual(
         lineage.map((row) => row.driver_value).sort(),
@@ -1095,7 +1094,7 @@ test(
         targets: [{ departmentId: dept, subsidiaryId: subB, fixedPercent: "100.0000", label: "Branch" }],
       });
       const runCount = async (): Promise<number> => Number((await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`)).rows[0]?.count ?? 0);
+        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`, "objects"))[0]?.count ?? 0);
       const before = await runCount();
       // Pinned to A with a B target: refused by name, nothing persisted.
       await assert.rejects(
@@ -1137,7 +1136,7 @@ test(
         (error: unknown) =>
           error instanceof AllocationRunError && /outside the pinned subsidiary/.test(error.message));
       const kept = (await db.execute<{ status: string }>(sql`
-        select status from allocation_runs where org_id = ${org.orgId} and id = ${crossedId}`)).rows[0];
+        select status from allocation_runs where org_id = ${org.orgId} and id = ${crossedId}`, "objects"))[0];
       assert.equal(kept?.status, "previewed");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -1164,7 +1163,7 @@ test(
         targets: [{ departmentId: dept, fixedPercent: "100.0000", label: "Dept" }],
       });
       const runCount = async (): Promise<number> => Number((await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`)).rows[0]?.count ?? 0);
+        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`, "objects"))[0]?.count ?? 0);
       const before = await runCount();
       // Pinned to A under a B-only rule: the pin/filter intersection is
       // empty, so refuse by name instead of allocating A's books.

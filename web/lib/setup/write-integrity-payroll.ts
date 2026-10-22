@@ -32,7 +32,7 @@ export async function validatePayrollIntegrity(
         subsidiary_id as "subsidiaryId", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
         source_reference as "sourceReference", change_reason as "changeReason"
       from payroll_us_filing_account_employer_lineage where org_id = ${orgId} and id = ${rowId}
-    `)).rows[0] : undefined
+    `, 'objects'))[0] : undefined
     if (rowId && !current) return 'not found'
     const input = { ...current, ...body, effectiveTo: body.effectiveTo === undefined
       ? current?.effectiveTo ?? null : body.effectiveTo || null } as UsFilingAccountLineageInput
@@ -46,9 +46,9 @@ export async function validatePayrollIntegrity(
     // the declaration (engine/src/payroll/filing-registry.ts) is asked here,
     // at the API boundary, for creates and edits alike.
     const current = rowId
-      ? (((await executor.execute(sql`
+      ? (await executor.execute(sql`
           select country, program_type, state_code from payroll_filing_accounts
-           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
       : null
     if (rowId && !current) return 'not found'
     const country = String(body.country ?? current?.country ?? '')
@@ -68,14 +68,14 @@ export async function validatePayrollIntegrity(
     // boundary, for creates and edits alike — and the refusal names the
     // treatments the scope declares rather than surfacing a constraint name.
     const currentComponent = rowId
-      ? (((await executor.execute(sql`
+      ? (await executor.execute(sql`
           select c.country, c.tax_treatment, c.kind, c.non_periodic, c.payment_kind, c.non_cash_account_id, c.system_key,
                  c.basis, c.unit_of_measure,
                  ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
             from pay_components c
             join pay_component_earning_classifications ec
               on ec.org_id = c.org_id and ec.pay_component_id = c.id
-           where c.id = ${rowId} and c.org_id = ${orgId}`)))).rows[0]
+           where c.id = ${rowId} and c.org_id = ${orgId}`, 'objects'))[0]
       : null
     if (rowId && !currentComponent) return 'not found'
     const componentCountry = body.country !== undefined
@@ -108,7 +108,7 @@ export async function validatePayrollIntegrity(
       if (!nonCashAccount || !isUuid(String(nonCashAccount))) return 'Choose a prepaid asset, a provider clearing liability, or a contra-expense account for the non-cash earning'
       const account = (await executor.execute<{ type: string }>(sql`
         select type from accounts where org_id = ${orgId} and id = ${String(nonCashAccount)} and is_active and not is_summary
-      `)).rows[0]
+      `, 'objects'))[0]
       const expenseAccount = body.expenseAccountId === undefined
         ? (currentComponent?.expense_account_id as string | null | undefined) ?? null
         : (body.expenseAccountId ? String(body.expenseAccountId) : null)
@@ -182,11 +182,11 @@ export async function validatePayrollIntegrity(
     // date, the periods-per-year assumption the statutory engines annualize
     // with, and the period-overlap guard.
     const current = rowId
-      ? (((await executor.execute(sql`
+      ? (await executor.execute(sql`
           select frequency, periods_per_year, anchor_period_end::text as anchor_period_end,
                  subsidiary_id::text as subsidiary_id
             from pay_schedules
-           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
       : null
     if (rowId && !current) return 'not found'
     // A schedule with no subsidiary pays from the root entity. In a tenant

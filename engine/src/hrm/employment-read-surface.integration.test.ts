@@ -41,7 +41,7 @@ async function mkAssignment(
 ): Promise<void> {
   const slot = (await db.execute<{ id: string }>(sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, 'primary') returning id`)).rows[0]!.id;
+    values (${orgId}, ${employmentId}, 'primary') returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, version_no, job_title, department_id, fte, is_primary,
@@ -56,7 +56,7 @@ async function mkDraftRequest(orgId: string, employmentId: string): Promise<stri
       (org_id, employment_id, expected_employment_revision, payload, payload_digest,
        payload_schema_version, created_by)
     values (${orgId}, ${employmentId}, 1, '{"title":"Cashier"}'::jsonb, ${"0".repeat(64)}, 'v1', null)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
 }
 
 test("headcount groups live employments by subsidiary and department", { skip }, async () => {

@@ -24,7 +24,8 @@ stubModules({
   extra: {
     "@openbooks/engine/platform/database": `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
      export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
-     export const db = { execute: async (query) => {
+     export const db = { execute: async (query, mode) => {
+       const inMode = (result) => (mode === 'objects' ? result.rows : result);
        const flatten = (value) => {
          if (typeof value === "string") return value
          if (!value || typeof value !== "object") return ""
@@ -39,10 +40,10 @@ stubModules({
        // whose projection aliases it as "baseCurrency".)
        try {
          if (JSON.stringify(query?.queryChunks ?? "").includes("baseCurrency")) {
-           return { rows: [{ baseCurrency: "CAD" }] };
+           return inMode({ rows: [{ baseCurrency: "CAD" }] });
          }
        } catch { /* fall through to entry rows */ }
-       return { rows: state.rows };
+       return inMode({ rows: state.rows });
      } }`,
   },
 });

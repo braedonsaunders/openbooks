@@ -145,8 +145,8 @@ async function ownershipEntryBalances(entryIds: string[]): Promise<{ number: str
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `));
-  return balances.rows;
+    `, "objects"));
+  return balances;
 }
 
 const settleTreeUpdate = (promise: Promise<QueryResult>): Promise<TreeUpdateResult> =>
@@ -338,9 +338,9 @@ test(
       select id::text as id, parent_id::text as parent_id
         from subsidiaries
        where org_id = ${org.orgId}
-         and id in (${twoA}, ${twoB}, ${longA}, ${longC}, ${validA}, ${validC})`);
+         and id in (${twoA}, ${twoB}, ${longA}, ${longC}, ${validA}, ${validC})`, "objects");
       assert.deepEqual(
-        new Map(parents.rows.map((row) => [row.id, row.parent_id])),
+        new Map(parents.map((row) => [row.id, row.parent_id])),
         new Map([
           [twoA, twoB],
           [twoB, org.subsidiaryId],
@@ -368,8 +368,8 @@ test(
       const root = await db.execute<{ parent_id: string | null; is_active: boolean }>(sql`
       select parent_id::text as parent_id, is_active
         from subsidiaries
-       where org_id = ${org.orgId} and id = ${org.subsidiaryId}`);
-      assert.deepEqual(root.rows[0], { parent_id: null, is_active: true });
+       where org_id = ${org.orgId} and id = ${org.subsidiaryId}`, "objects");
+      assert.deepEqual(root[0], { parent_id: null, is_active: true });
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -380,8 +380,8 @@ test(
 async function waitForAdvisoryWait(): Promise<boolean> {
   for (let attempt = 0; attempt < 400; attempt++) {
     const waiting = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`));
-    if ((waiting.rows[0]?.n ?? 0) > 0) return true;
+      select count(*)::int as n from pg_locks where locktype = 'advisory' and not granted`, "objects"));
+    if ((waiting[0]?.n ?? 0) > 0) return true;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   return false;
@@ -435,15 +435,15 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       select a.number, l.amount, l.eliminate
         from journal_lines l join accounts a on a.id = l.account_id
        where l.entry_id = ${first.entryId}
-       order by a.number`));
-    assert.deepEqual(firstLines.rows, [
+       order by a.number`, "objects"));
+    assert.deepEqual(firstLines, [
       { number: "1100", amount: "-120.0000", eliminate: true },
       { number: "2000", amount: "120.0000", eliminate: true },
     ]);
     // The entry number keys on the stored period name; the memo names the
     // period by its canonical fiscal label.
     const firstHeader = (await db.execute<{ entry_number: string; memo: string }>(sql`
-      select entry_number, memo from journal_entries where id = ${first.entryId}`)).rows[0];
+      select entry_number, memo from journal_entries where id = ${first.entryId}`, "objects"))[0];
     assert.deepEqual(firstHeader, { entry_number: "ELIM-2026-07", memo: "Auto-elimination P07 FY2026" });
 
     const second = await runAutoElimination(org.orgId, org.periodId, actorId);
@@ -458,8 +458,8 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       from journal_entries e
       join journal_lines l on l.entry_id = e.id
       where e.org_id = ${org.orgId} and e.subsidiary_id = ${eliminationSubsidiaryId}
-        and e.status in ('posted', 'reversed') and e.origin = 'intercompany'`));
-    assert.deepEqual(proof.rows[0], {
+        and e.status in ('posted', 'reversed') and e.origin = 'intercompany'`, "objects"));
+    assert.deepEqual(proof[0], {
       reversals: 1,
       effective_balance: "0.0000",
       ar_elimination: "-120.0000",
@@ -489,8 +489,8 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
     const afterFailure = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and subsidiary_id = ${eliminationSubsidiaryId}
-         and origin = 'intercompany' and status in ('posted', 'reversed')`));
-    assert.equal(afterFailure.rows[0]!.n, 3);
+         and origin = 'intercompany' and status in ('posted', 'reversed')`, "objects"));
+    assert.equal(afterFailure[0]!.n, 3);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -519,7 +519,7 @@ test("rate derivation refuses a period with no quotes instead of averaging the c
       (error: unknown) => error instanceof ConsolidationError && error.code === 'rates-missing'
         && /USD→CAD.*2026-07-01.*30 days old.*7-day limit for average/.test(error.message)
         && error.message.includes('Setup → FX Rate Age Policies'));
-    assert.equal((await db.execute(sql`select id from consolidated_fx_rates where org_id=${org.orgId} and period_id=${org.periodId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`select id from consolidated_fx_rates where org_id=${org.orgId} and period_id=${org.periodId}`, "objects")).length,0);
     await db.execute(sql`insert into fx_rate_age_policies (org_id,rate_kind,max_age_days,effective_from)
       values (${org.orgId},'average',45,'2026-07-15')`);
     assert.equal(await deriveConsolidatedRates(org.orgId,org.periodId,actorId),1);
@@ -548,7 +548,7 @@ test("intercompany balances stay eliminated when the rate moves between periods"
       insert into accounting_periods (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on)
       select org_id, fiscal_calendar_id, 2026, 8, '2026-08', '2026-08-01', '2026-08-31'
         from accounting_periods where id = ${org.periodId}
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into consolidated_fx_rates (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
       values (${org.orgId}, ${org.periodId}, 'USD', 'CAD', '1.3000000000', '1.3000000000', '1.3000000000', 'manual'),
@@ -577,12 +577,12 @@ test("intercompany balances stay eliminated when the rate moves between periods"
     await runAutoElimination(org.orgId, august, actorId);
     // Consolidated at August's rate: each IC account's translated balance
     // plus every standing elimination is zero, and the 10 sits in equity.
-    const consolidated = (await db.execute<{ account_id: string; amount: string }>(sql`
+    const consolidated = await db.execute<{ account_id: string; amount: string }>(sql`
       select l.account_id, sum(case when l.subsidiary_id = ${usd} then round(l.amount * 1.4, 4) else l.amount end)::text as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id
        where e.org_id = ${org.orgId} and e.status in ('posted', 'reversed')
          and l.account_id in (${org.accounts.ar}, ${org.accounts.ap}, ${cta})
-       group by l.account_id`)).rows;
+       group by l.account_id`, "objects");
     assert.deepEqual(new Map(consolidated.map((row) => [row.account_id, row.amount])), new Map([
       [org.accounts.ar, "0.0000"], [org.accounts.ap, "0.0000"], [cta, "10.0000"],
     ]));
@@ -636,7 +636,7 @@ test("intercompany activity agreeing in its shared transaction currency eliminat
       select l.account_id, sum(l.amount)::text as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.id = ${run.entryId}
-       group by l.account_id`)).rows.map((row) => [row.account_id, row.amount]));
+       group by l.account_id`, "objects")).map((row) => [row.account_id, row.amount]));
     assert.deepEqual(lines, new Map([
       [org.accounts.ar, "-130.0000"], [org.accounts.ap, "135.0000"], [cta, "-5.0000"],
     ]));
@@ -700,14 +700,14 @@ test("an elimination rerun with emptied activity reports a reversal, never an el
     assert.equal(second.status, "reversed");
     assert.equal(second.reversalEntryIds?.length, 1, "the posted reversal is reported separately");
     const reversal = (await db.execute<{ status: string; reverses_entry_id: string }>(sql`
-      select status, reverses_entry_id from journal_entries where id = ${second.reversalEntryIds![0]}`));
-    assert.deepEqual(reversal.rows[0], {
+      select status, reverses_entry_id from journal_entries where id = ${second.reversalEntryIds![0]}`, "objects"));
+    assert.deepEqual(reversal[0], {
       status: "posted",
       reverses_entry_id: first.entryId,
     });
     const firstStatus = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where id = ${first.entryId}`));
-    assert.equal(firstStatus.rows[0]!.status, "reversed", "the prior elimination is reversed");
+      select status from journal_entries where id = ${first.entryId}`, "objects"));
+    assert.equal(firstStatus[0]!.status, "reversed", "the prior elimination is reversed");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -757,8 +757,8 @@ test("auto-elimination translates intercompany P&L activity at the average FX ra
       select a.number, l.amount::text as amount
         from journal_lines l join accounts a on a.id = l.account_id
        where l.entry_id = ${result.entryId}
-       order by a.number`));
-    assert.deepEqual(lines.rows, [
+       order by a.number`, "objects"));
+    assert.deepEqual(lines, [
       { number: "4000", amount: "110.0000" },
       { number: "5000", amount: "-110.0000" },
     ], "P&L activity uses the average rate so translated intercompany activity nets");
@@ -803,8 +803,8 @@ test("a full-method partial interest without NCI accounts refuses before posting
     const posted = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and memo like 'Ownership consolidation%'
-    `);
-    assert.equal(posted.rows[0]!.n, 0, "a refused generation must post nothing");
+    `, "objects");
+    assert.equal(posted[0]!.n, 0, "a refused generation must post nothing");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -849,7 +849,7 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
       select fiscal_calendar_id
         from accounting_periods
        where id = ${org.periodId}
-    `));
+    `, "objects"));
     const adjustmentPeriodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods
@@ -857,7 +857,7 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
          starts_on, ends_on, is_adjustment, custom)
       values (
         ${adjustmentPeriodId}, ${org.orgId},
-        ${calendar.rows[0]!.fiscal_calendar_id},
+        ${calendar[0]!.fiscal_calendar_id},
         2026, 13, 'FY26 Adjustment', '2026-07-01', '2026-07-31', true,
         '{}'::jsonb
       )
@@ -911,8 +911,8 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${first.entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `));
-    assert.deepEqual(firstBalances.rows, [
+    `, "objects"));
+    assert.deepEqual(firstBalances, [
       { number: "1400", amount: "-900.0000" },
       { number: "1500", amount: "100.0000" },
       { number: "3000", amount: "1000.0000" },
@@ -922,8 +922,8 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
     const firstUnbalanced = (await db.execute(sql`
       select entry_id from journal_lines where entry_id=any(${`{${first.entryIds.join(",")}}`}::uuid[])
        group by entry_id having sum(amount)<>0
-    `));
-    assert.equal(firstUnbalanced.rows.length, 0);
+    `, "objects"));
+    assert.equal(firstUnbalanced.length, 0);
 
     const second = await runOwnershipConsolidation(
       org.orgId,
@@ -940,8 +940,8 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
        join journal_entries e on e.id=oce.journal_entry_id
        join journal_lines l on l.entry_id=e.id
       where oce.run_id=${second.runId}
-    `));
-    assert.deepEqual(rerun.rows[0], { reversals: 2, replacements: 2, balance: "0.0000" });
+    `, "objects"));
+    assert.deepEqual(rerun[0], { reversals: 2, replacements: 2, balance: "0.0000" });
 
     await assert.rejects(
       db.execute(sql`
@@ -984,8 +984,8 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
       /no spot rate for EUR→CAD/,
     );
     const partial = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from consolidated_fx_rates where org_id = ${org.orgId} and period_id = ${org.periodId}`));
-    assert.equal(partial.rows[0]!.n, 0);
+      select count(*)::int as n from consolidated_fx_rates where org_id = ${org.orgId} and period_id = ${org.periodId}`, "objects"));
+    assert.equal(partial[0]!.n, 0);
 
     // With every needed pair covered, the same wrapped call commits the whole
     // period at once. USD has one in-period quote, while EUR's two observations exercise
@@ -1023,8 +1023,8 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
       select from_currency, current_rate, average_rate, historical_rate
         from consolidated_fx_rates
        where org_id = ${org.orgId} and period_id = ${org.periodId}
-       order by from_currency`));
-    assert.deepEqual(firstPass.rows, expected);
+       order by from_currency`, "objects"));
+    assert.deepEqual(firstPass, expected);
 
     // A newer USD spot arrives, but a controller pins USD→CAD to 'manual':
     // the rerun refreshes derived pairs only and never touches pinned rows.
@@ -1052,8 +1052,8 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
       select from_currency, current_rate, average_rate, historical_rate
         from consolidated_fx_rates
        where org_id = ${org.orgId} and period_id = ${org.periodId}
-       order by from_currency`));
-    assert.deepEqual(secondPass.rows, expected);
+       order by from_currency`, "objects"));
+    assert.deepEqual(secondPass, expected);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1085,8 +1085,8 @@ test("derived average rate counts one quote per date when both directions quote 
     assert.equal(written, 1);
     const rows = (await db.execute<{ from_currency: string; average_rate: string }>(sql`
       select from_currency, average_rate::text as average_rate from consolidated_fx_rates
-       where org_id = ${org.orgId} and period_id = ${org.periodId}`));
-    assert.deepEqual(rows.rows, [{ from_currency: "EUR", average_rate: "0.6600000000" }]);
+       where org_id = ${org.orgId} and period_id = ${org.periodId}`, "objects"));
+    assert.deepEqual(rows, [{ from_currency: "EUR", average_rate: "0.6600000000" }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1133,21 +1133,21 @@ test("auto-elimination aggregates only the destination book's own activity", { s
     const result = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(result.lineCount, 2);
     const entry = (await db.execute<{ book_id: string }>(sql`
-      select book_id from journal_entries where id = ${result.entryId}`));
-    assert.equal(entry.rows[0]!.book_id, org.bookId, "the elimination lands in the primary book");
+      select book_id from journal_entries where id = ${result.entryId}`, "objects"));
+    assert.equal(entry[0]!.book_id, org.bookId, "the elimination lands in the primary book");
     const lines = (await db.execute<{ number: string; amount: string }>(sql`
       select a.number, l.amount::text as amount
         from journal_lines l join accounts a on a.id = l.account_id
        where l.entry_id = ${result.entryId}
-       order by a.number`));
-    assert.deepEqual(lines.rows, [
+       order by a.number`, "objects"));
+    assert.deepEqual(lines, [
       { number: "1100", amount: "-100.0000" },
       { number: "2000", amount: "100.0000" },
     ]);
     const secondaryEliminations = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${org.orgId} and book_id = ${secondaryBookId} and origin = 'intercompany'`));
-    assert.equal(secondaryEliminations.rows[0]!.n, 0, "the secondary book keeps its own ledger");
+       where org_id = ${org.orgId} and book_id = ${secondaryBookId} and origin = 'intercompany'`, "objects"));
+    assert.equal(secondaryEliminations[0]!.n, 0, "the secondary book keeps its own ledger");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1229,16 +1229,16 @@ test("ownership consolidation reads activity and acquisition equity from the pri
     const run = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
     assert.equal(run.entryIds.length, 2);
     const books = (await db.execute<{ book_id: string }>(sql`
-      select distinct book_id from journal_entries where id = any(${`{${run.entryIds.join(",")}}`}::uuid[])`));
-    assert.deepEqual(books.rows, [{ book_id: org.bookId }], "every adjustment lands in the primary book");
+      select distinct book_id from journal_entries where id = any(${`{${run.entryIds.join(",")}}`}::uuid[])`, "objects"));
+    assert.deepEqual(books, [{ book_id: org.bookId }], "every adjustment lands in the primary book");
     const balances = (await db.execute<{ number: string; amount: string }>(sql`
       select a.number,coalesce(sum(l.amount),0)::text amount
         from journal_lines l join journal_entries e on e.id=l.entry_id
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${run.entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `));
-    assert.deepEqual(balances.rows, [
+    `, "objects"));
+    assert.deepEqual(balances, [
       { number: "1400", amount: "-900.0000" },
       { number: "1500", amount: "100.0000" },
       { number: "3000", amount: "1000.0000" },
@@ -1428,8 +1428,8 @@ test("a source posting committing mid-run stays out of the generation and is abs
       select a.number, l.amount::text as amount
         from journal_lines l join accounts a on a.id = l.account_id
        where l.entry_id = ${first.entryId}
-       order by a.number`));
-    assert.deepEqual(firstLines.rows, [
+       order by a.number`, "objects"));
+    assert.deepEqual(firstLines, [
       { number: "1100", amount: "-100.0000" },
       { number: "2000", amount: "100.0000" },
     ], "the mid-run commit is excluded wholesale from this generation");
@@ -1443,15 +1443,15 @@ test("a source posting committing mid-run stays out of the generation and is abs
         join journal_entries e on e.id = l.entry_id
         join accounts a on a.id = l.account_id
        where e.id = ${second.entryId}
-       group by a.number order by a.number`));
-    assert.deepEqual(retryTotals.rows, [
+       group by a.number order by a.number`, "objects"));
+    assert.deepEqual(retryTotals, [
       { number: "1100", total: "-150.0000" },
       { number: "2000", total: "150.0000" },
     ]);
     const reversals = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where reverses_entry_id = ${first.entryId} and status = 'posted'`));
-    assert.equal(reversals.rows[0]!.n, 1, "the stale generation is reversed exactly once");
+       where reverses_entry_id = ${first.entryId} and status = 'posted'`, "objects"));
+    assert.equal(reversals[0]!.n, 1, "the stale generation is reversed exactly once");
   } finally {
     if (clientB) {
       await clientB
@@ -1510,20 +1510,20 @@ test("a fault after the prior reversal rolls back entries and evidence together"
     );
 
     const gen1 = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where id = ${first.entryId}`));
-    assert.equal(gen1.rows[0]!.status, "posted", "the prior generation was never marked reversed");
+      select status from journal_entries where id = ${first.entryId}`, "objects"));
+    assert.equal(gen1[0]!.status, "posted", "the prior generation was never marked reversed");
     const strayReversals = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where reverses_entry_id = ${first.entryId}`));
-    assert.equal(strayReversals.rows[0]!.n, 0, "no half-applied reversal survived the fault");
+      select count(*)::int as n from journal_entries where reverses_entry_id = ${first.entryId}`, "objects"));
+    assert.equal(strayReversals[0]!.n, 0, "no half-applied reversal survived the fault");
     const elimEntries = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and subsidiary_id = ${eliminationSubsidiaryId}
-         and origin = 'intercompany' and status in ('posted', 'reversed')`));
-    assert.equal(elimEntries.rows[0]!.n, 1, "the failed run left exactly the pre-fault evidence");
+         and origin = 'intercompany' and status in ('posted', 'reversed')`, "objects"));
+    assert.equal(elimEntries[0]!.n, 1, "the failed run left exactly the pre-fault evidence");
     const auditRows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
-       where org_id = ${org.orgId} and request_id = 'auto_elimination'`));
-    assert.equal(auditRows.rows[0]!.n, 1, "audit evidence matches the committed generations only");
+       where org_id = ${org.orgId} and request_id = 'auto_elimination'`, "objects"));
+    assert.equal(auditRows[0]!.n, 1, "audit evidence matches the committed generations only");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1646,24 +1646,24 @@ test("an ownership fault after the prior reversal rolls back entries, run status
     const runs = (await db.execute<{ status: string; error: string | null }>(sql`
       select status, error from ownership_consolidation_runs
        where org_id = ${org.orgId} and period_id = ${org.periodId}
-       order by started_at, id`));
-    assert.equal(runs.rows.length, 2);
-    assert.deepEqual(runs.rows[0], { status: "posted", error: null });
-    assert.equal(runs.rows[1]!.status, "failed", "the aborted attempt lands terminal-failed");
-    assert.ok(runs.rows[1]!.error, "the failed run records its error — never stuck 'running'");
+       order by started_at, id`, "objects"));
+    assert.equal(runs.length, 2);
+    assert.deepEqual(runs[0], { status: "posted", error: null });
+    assert.equal(runs[1]!.status, "failed", "the aborted attempt lands terminal-failed");
+    assert.ok(runs[1]!.error, "the failed run records its error — never stuck 'running'");
     const evidence = (await db.execute<{ kind: string; run_id: string }>(sql`
-      select kind, run_id from ownership_consolidation_entries where org_id = ${org.orgId} order by kind`));
-    assert.deepEqual(evidence.rows, [
+      select kind, run_id from ownership_consolidation_entries where org_id = ${org.orgId} order by kind`, "objects"));
+    assert.deepEqual(evidence, [
       { kind: "acquisition", run_id: first.runId },
       { kind: "nci_income", run_id: first.runId },
     ], "evidence carries the committed generation only");
     const priorStatus = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where id = any(${`{${first.entryIds.join(",")}}`}::uuid[]) and status = 'posted'`));
-    assert.equal(priorStatus.rows[0]!.n, 2, "prior entries were never marked reversed");
+       where id = any(${`{${first.entryIds.join(",")}}`}::uuid[]) and status = 'posted'`, "objects"));
+    assert.equal(priorStatus[0]!.n, 2, "prior entries were never marked reversed");
     const strayReversals = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where reverses_entry_id = any(${`{${first.entryIds.join(",")}}`}::uuid[])`));
-    assert.equal(strayReversals.rows[0]!.n, 0, "no half-applied reversal survived the fault");
+      select count(*)::int as n from journal_entries where reverses_entry_id = any(${`{${first.entryIds.join(",")}}`}::uuid[])`, "objects"));
+    assert.equal(strayReversals[0]!.n, 0, "no half-applied reversal survived the fault");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1744,9 +1744,9 @@ test("a first-use policy edit inside the consolidation window waits and is rejec
       { number: "6100", amount: "20.0000" },
     ], "the committed generation was calculated from the pinned 80% terms");
     const live = (await db.execute<{ ownership_percent: string }>(sql`
-      select ownership_percent::text from subsidiary_ownership_interests where id = ${interestId}`));
+      select ownership_percent::text from subsidiary_ownership_interests where id = ${interestId}`, "objects"));
     assert.equal(
-      live.rows[0]!.ownership_percent,
+      live[0]!.ownership_percent,
       "80.0000000000",
       "the live policy still records the terms the evidence was calculated from",
     );
@@ -1804,15 +1804,15 @@ test("a policy edit committing before the run's snapshot fails the run closed an
     );
     const failedRuns = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from ownership_consolidation_runs
-       where org_id = ${org.orgId} and status = 'failed'`));
-    assert.equal(failedRuns.rows[0]!.n, 1, "the aborted attempt is recorded terminal-failed");
+       where org_id = ${org.orgId} and status = 'failed'`, "objects"));
+    assert.equal(failedRuns[0]!.n, 1, "the aborted attempt is recorded terminal-failed");
     const evidence = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from ownership_consolidation_entries where org_id = ${org.orgId}`));
-    assert.equal(evidence.rows[0]!.n, 0, "no evidence survives the aborted run");
+      select count(*)::int as n from ownership_consolidation_entries where org_id = ${org.orgId}`, "objects"));
+    assert.equal(evidence[0]!.n, 0, "no evidence survives the aborted run");
     const strayJournals = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${org.orgId} and origin = 'translation'`));
-    assert.equal(strayJournals.rows[0]!.n, 0, "no half-posted ownership journals survive the aborted run");
+       where org_id = ${org.orgId} and origin = 'translation'`, "objects"));
+    assert.equal(strayJournals[0]!.n, 0, "no half-posted ownership journals survive the aborted run");
 
     // The retry consolidates the committed 60% generation.
     const retry = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
@@ -1825,8 +1825,8 @@ test("a policy edit committing before the run's snapshot fails the run closed an
       { number: "6100", amount: "40.0000" },
     ], "the retry adopts the committed 60% terms");
     const live = (await db.execute<{ ownership_percent: string }>(sql`
-      select ownership_percent::text from subsidiary_ownership_interests where id = ${interestId}`));
-    assert.equal(live.rows[0]!.ownership_percent, "60.0000000000");
+      select ownership_percent::text from subsidiary_ownership_interests where id = ${interestId}`, "objects"));
+    assert.equal(live[0]!.ownership_percent, "60.0000000000");
   } finally {
     if (holder) {
       await holder
@@ -1935,8 +1935,8 @@ test("ownership adjustments translate a foreign subsidiary's period activity at 
     ]);
     const currencies = (await db.execute<{ currency: string; fx_rate: string }>(sql`
       select distinct l.currency, l.fx_rate::text as fx_rate from journal_lines l
-       where l.entry_id = any(${`{${run.entryIds.join(",")}}`}::uuid[])`));
-    assert.deepEqual(currencies.rows, [{ currency: "CAD", fx_rate: "1.0000000000" }],
+       where l.entry_id = any(${`{${run.entryIds.join(",")}}`}::uuid[])`, "objects"));
+    assert.deepEqual(currencies, [{ currency: "CAD", fx_rate: "1.0000000000" }],
       "adjustments are denominated in the elimination subsidiary's currency");
 
     // A foreign entity with no consolidated rate for the period is refused —
@@ -1949,8 +1949,8 @@ test("ownership adjustments translate a foreign subsidiary's period activity at 
     );
     const intact = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where id = any(${`{${run.entryIds.join(",")}}`}::uuid[]) and status = 'posted'`));
-    assert.equal(intact.rows[0]!.n, 3, "the refused rerun reversed nothing");
+       where id = any(${`{${run.entryIds.join(",")}}`}::uuid[]) and status = 'posted'`, "objects"));
+    assert.equal(intact[0]!.n, 3, "the refused rerun reversed nothing");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -2004,8 +2004,8 @@ test("a successor ownership policy for the same acquisition does not re-post the
 
     const august = await runOwnershipConsolidation(org.orgId, augustPeriodId, actorId);
     const kinds = (await db.execute<{ kind: string }>(sql`
-      select kind from ownership_consolidation_entries where run_id = ${august.runId} order by kind`));
-    assert.deepEqual(kinds.rows.map((row) => row.kind), ["nci_income"],
+      select kind from ownership_consolidation_entries where run_id = ${august.runId} order by kind`, "objects"));
+    assert.deepEqual(kinds.map((row) => row.kind), ["nci_income"],
       "the successor policy allocates August profit only; the acquisition was eliminated in July");
     assert.deepEqual(await ownershipEntryBalances(august.entryIds), [
       { number: "3100", amount: "-20.0000" },
@@ -2017,15 +2017,15 @@ test("a successor ownership policy for the same acquisition does not re-post the
       select count(*)::int as n
         from ownership_consolidation_entries oce
         join journal_entries je on je.id = oce.journal_entry_id and je.status = 'posted'
-       where oce.org_id = ${org.orgId} and oce.kind = 'acquisition'`));
-    assert.equal(acquisitions.rows[0]!.n, 1, "one acquisition elimination per acquired subsidiary");
+       where oce.org_id = ${org.orgId} and oce.kind = 'acquisition'`, "objects"));
+    assert.equal(acquisitions[0]!.n, 1, "one acquisition elimination per acquired subsidiary");
 
     // Re-running August reverses and replaces its own generation but still
     // does not touch the acquisition.
     const rerun = await runOwnershipConsolidation(org.orgId, augustPeriodId, actorId);
     const rerunKinds = (await db.execute<{ kind: string }>(sql`
-      select kind from ownership_consolidation_entries where run_id = ${rerun.runId} order by kind`));
-    assert.deepEqual(rerunKinds.rows.map((row) => row.kind), ["nci_income", "reversal"]);
+      select kind from ownership_consolidation_entries where run_id = ${rerun.runId} order by kind`, "objects"));
+    assert.deepEqual(rerunKinds.map((row) => row.kind), ["nci_income", "reversal"]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -2072,8 +2072,8 @@ test("derived historical rates carry into an adjustment period from the period i
     const derived = (await db.execute<{ name: string; historical_rate: string; current_rate: string }>(sql`
       select p.name, cf.historical_rate::text as historical_rate, cf.current_rate::text as current_rate
         from consolidated_fx_rates cf join accounting_periods p on p.id = cf.period_id
-       where cf.org_id = ${org.orgId} and cf.period_id <> ${historicalPeriodId} order by p.period_number`));
-    assert.deepEqual(derived.rows, [
+       where cf.org_id = ${org.orgId} and cf.period_id <> ${historicalPeriodId} order by p.period_number`, "objects"));
+    assert.deepEqual(derived, [
       { name: "2026-07", historical_rate: "1.3000000000", current_rate: "1.3000000000" },
       { name: "2026-08", historical_rate: "1.3200000000", current_rate: "1.3500000000" },
       { name: "FY2026 adjustment", historical_rate: "1.3200000000", current_rate: "1.3500000000" },
@@ -2099,9 +2099,9 @@ test("derived consolidated rates are audited, invalidate close evidence, and are
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
       values (${org.orgId}, 'USD', 'CAD', '2026-07-10', 'spot', '1.3000000000')`);
-    const auditRows = async () => (await db.execute<{ action: string; actor_id: string | null; changes: Record<string, unknown> }>(sql`
+    const auditRows = async () => await db.execute<{ action: string; actor_id: string | null; changes: Record<string, unknown> }>(sql`
       select action, actor_id, changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'consolidated_fx_rates' and changes->>'periodId' = ${org.periodId} order by at, id`)).rows;
+       where org_id = ${org.orgId} and table_name = 'consolidated_fx_rates' and changes->>'periodId' = ${org.periodId} order by at, id`, "objects");
 
     // Open period: the derive writes the row and audits it to the actor.
     assert.equal(await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)), 1);
@@ -2155,8 +2155,8 @@ test("derived consolidated rates are audited, invalidate close evidence, and are
     assert.equal(closedErr.code, "period-closed");
     const pinned = (await db.execute<{ current_rate: string }>(sql`
       select current_rate::text as current_rate from consolidated_fx_rates
-       where org_id = ${org.orgId} and period_id = ${org.periodId}`));
-    assert.deepEqual(pinned.rows, [{ current_rate: "1.3100000000" }], "closed-period rates are untouched");
+       where org_id = ${org.orgId} and period_id = ${org.periodId}`, "objects"));
+    assert.deepEqual(pinned, [{ current_rate: "1.3100000000" }], "closed-period rates are untouched");
     assert.equal((await auditRows()).length, 2, "a refused derive leaves no audit trace");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -2178,12 +2178,12 @@ for (const phase of ["ownership", "elimination"] as const) {
         await assert.rejects(run(),/active primary (posting|accounting) book/);
         const state=(await db.execute<{journals:number;runs:number}>(sql`
           select (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
-            (select count(*)::int from ownership_consolidation_runs where org_id=${org.orgId} and status<>'failed') as runs`)).rows[0]!;
+            (select count(*)::int from ownership_consolidation_runs where org_id=${org.orgId} and status<>'failed') as runs`, "objects"))[0]!;
         assert.deepEqual(state,{journals:2,runs:0});
         await db.execute(sql`update accounting_books set ${sql.raw(flag)}=true where org_id=${org.orgId} and id=${org.bookId}`);
         if (phase === "elimination") {
           await assert.rejects(run(), /no approved historical contribution basis/);
-          const retained = (await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!;
+          const retained = (await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!;
           assert.equal(retained.n, 2, "an active book still cannot substitute for approved historical evidence");
         } else {
           const posted = await run();
@@ -2231,8 +2231,8 @@ test("historical consolidated FX stays within its fiscal calendar", { skip: !DB 
     assert.equal(await deriveConsolidatedRates(org.orgId,targetPeriodId,actorId),1);
     const rates = await db.execute<{ historical_rate: string; current_rate: string }>(sql`
       select historical_rate::text,current_rate::text from consolidated_fx_rates
-       where org_id=${org.orgId} and period_id=${targetPeriodId}`);
-    assert.deepEqual(rates.rows,[{ historical_rate: '1.3000000000',current_rate: '1.4000000000' }]);
+       where org_id=${org.orgId} and period_id=${targetPeriodId}`, "objects");
+    assert.deepEqual(rates,[{ historical_rate: '1.3000000000',current_rate: '1.4000000000' }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -2254,32 +2254,32 @@ for (const adjustment of [false,true]) {
         from accounting_periods where id=${org.periodId}`);
     const august = await runOwnershipConsolidation(org.orgId,augustId,actorId);
     const original = await db.execute<{ kind: string }>(sql`
-      select kind from ownership_consolidation_entries where run_id=${august.runId}`);
-    assert.deepEqual(original.rows,[{kind:'acquisition'}]);
+      select kind from ownership_consolidation_entries where run_id=${august.runId}`, "objects");
+    assert.deepEqual(original,[{kind:'acquisition'}]);
     await assert.rejects(runOwnershipConsolidation(org.orgId,org.periodId,actorId),
       (error: unknown) => /acquisition.*later period/.test(errorText(error)));
     const julyPosted = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from ownership_consolidation_runs
-       where org_id=${org.orgId} and period_id=${org.periodId} and status='posted'`);
-    assert.equal(julyPosted.rows[0]!.n,0,'an incomplete earlier close must not report a posted generation');
+       where org_id=${org.orgId} and period_id=${org.periodId} and status='posted'`, "objects");
+    assert.equal(julyPosted[0]!.n,0,'an incomplete earlier close must not report a posted generation');
     const originalStatus = await db.execute<{status: string}>(sql`
-      select status from journal_entries where id=${august.entryIds[0]}`);
-    assert.deepEqual(originalStatus.rows,[{status:'posted'}],'refusal preserves the later posted acquisition');
+      select status from journal_entries where id=${august.entryIds[0]}`, "objects");
+    assert.deepEqual(originalStatus,[{status:'posted'}],'refusal preserves the later posted acquisition');
     if (!adjustment) {
       await reverseProjectGlEntry(org.orgId,actorId,august.entryIds[0]!,
         'Correct acquisition consolidation chronology','2026-08-31');
       const july = await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
       const julyKinds = await db.execute<{kind: string}>(sql`
-        select kind from ownership_consolidation_entries where run_id=${july.runId} order by kind`);
-      assert.deepEqual(julyKinds.rows,[{kind:'acquisition'},{kind:'nci_income'}]);
+        select kind from ownership_consolidation_entries where run_id=${july.runId} order by kind`, "objects");
+      assert.deepEqual(julyKinds,[{kind:'acquisition'},{kind:'nci_income'}]);
       const correctedAugust = await runOwnershipConsolidation(org.orgId,augustId,actorId);
       assert.equal(correctedAugust.entryIds.length,0,'the chronological rerun carries July acquisition without duplication');
       const acquisitionNet = await db.execute<{amount: string}>(sql`
         select sum(l.amount)::text as amount from journal_lines l
         join journal_entries e on e.id=l.entry_id and e.status in ('posted','reversed')
         join accounts a on a.id=l.account_id
-        where e.org_id=${org.orgId} and e.origin='translation' and a.number='1400'`);
-      assert.equal(acquisitionNet.rows[0]!.amount,'-900.0000','the controlled recovery preserves exactly one cumulative investment elimination');
+        where e.org_id=${org.orgId} and e.origin='translation' and a.number='1400'`, "objects");
+      assert.equal(acquisitionNet[0]!.amount,'-900.0000','the controlled recovery preserves exactly one cumulative investment elimination');
     }
 
   } finally {
@@ -2339,8 +2339,8 @@ for (const phase of ["ownership","combined"] as const) {
     const evidence = await db.execute<{n: number}>(sql`
       select count(*)::int as n from ownership_consolidation_entries oce
       join journal_entries e on e.id=oce.journal_entry_id and e.status='posted'
-      where oce.org_id=${org.orgId} and oce.kind='acquisition'`);
-    assert.equal(evidence.rows[0]!.n,1,'the once-per-acquisition ledger invariant survives concurrent periods');
+      where oce.org_id=${org.orgId} and oce.kind='acquisition'`, "objects");
+    assert.equal(evidence[0]!.n,1,'the once-per-acquisition ledger invariant survives concurrent periods');
   } finally {
     await park.client.query('rollback').catch(() => undefined);
     if (pending) await pending;
@@ -2363,8 +2363,8 @@ for (const phase of ["ownership","combined"] as const) {
       }),
       /requires a serializable source snapshot/);
       const posted = await db.execute<{n: number}>(sql`
-        select count(*)::int as n from ownership_consolidation_runs where org_id=${org.orgId}`);
-      assert.equal(posted.rows[0]!.n,0,'the refused caller owns rollback of all attempted consolidation evidence');
+        select count(*)::int as n from ownership_consolidation_runs where org_id=${org.orgId}`, "objects");
+      assert.equal(posted[0]!.n,0,'the refused caller owns rollback of all attempted consolidation evidence');
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
@@ -2391,7 +2391,7 @@ for (const originalMonth of [7,8]) {
       const original = await runOwnershipConsolidation(org.orgId,originalMonth === 7 ? org.periodId : augustId,actorId);
       const acquisition = (await db.execute<{id: string}>(sql`
         select journal_entry_id as id from ownership_consolidation_entries
-         where run_id=${original.runId} and kind='acquisition'`)).rows[0]!;
+         where run_id=${original.runId} and kind='acquisition'`, "objects"))[0]!;
       await reverseProjectGlEntry(org.orgId,actorId,acquisition.id,
         'Correct acquisition in a later open period','2026-09-15');
       if (originalMonth === 8) {
@@ -2401,16 +2401,16 @@ for (const originalMonth of [7,8]) {
         const july = await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
         const newAcquisitions = await db.execute<{n: number}>(sql`
           select count(*)::int as n from ownership_consolidation_entries
-           where run_id=${july.runId} and kind='acquisition'`);
-        assert.equal(newAcquisitions.rows[0]!.n,0,'September reversal does not erase acquisition evidence at the July cutoff');
+           where run_id=${july.runId} and kind='acquisition'`, "objects");
+        assert.equal(newAcquisitions[0]!.n,0,'September reversal does not erase acquisition evidence at the July cutoff');
       }
       const augustNet = await db.execute<{amount: string}>(sql`
         select sum(l.amount)::text as amount from journal_lines l
         join journal_entries e on e.id=l.entry_id and e.status in ('posted','reversed')
         join accounting_periods p on p.id=e.period_id
         join accounts a on a.id=l.account_id
-        where e.org_id=${org.orgId} and e.origin='translation' and a.number='1400' and p.ends_on<='2026-08-31'`);
-      assert.equal(augustNet.rows[0]!.amount,'-900.0000','July recomputation must never double historical August acquisition');
+        where e.org_id=${org.orgId} and e.origin='translation' and a.number='1400' and p.ends_on<='2026-08-31'`, "objects");
+      assert.equal(augustNet[0]!.amount,'-900.0000','July recomputation must never double historical August acquisition');
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
@@ -2436,13 +2436,13 @@ test("ownership preserves cutoff balances across a later reversal and restoratio
     const original = await runOwnershipConsolidation(org.orgId,org.periodId,actorId);
     const acquisition = (await db.execute<{id: string}>(sql`
       select journal_entry_id as id from ownership_consolidation_entries
-       where run_id=${original.runId} and kind='acquisition'`)).rows[0]!;
+       where run_id=${original.runId} and kind='acquisition'`, "objects"))[0]!;
     const reversalId = await reverseProjectGlEntry(org.orgId,actorId,acquisition.id,
       'Reverse acquisition for controlled correction','2026-08-15');
     assert.ok(reversalId);
     await reverseProjectGlEntry(org.orgId,actorId,reversalId,
       'Restore acquisition by reversing the correction','2026-09-15');
-    const cutoffBalances = async () => (await db.execute<{end: string; amount: string}>(sql`
+    const cutoffBalances = async () => await db.execute<{end: string; amount: string}>(sql`
       select cutoff.ends_on::text as "end",coalesce(sum(l.amount),0)::text as amount
       from accounting_periods cutoff
       join accounting_periods p on p.org_id=cutoff.org_id and p.ends_on<=cutoff.ends_on
@@ -2450,7 +2450,7 @@ test("ownership preserves cutoff balances across a later reversal and restoratio
       join journal_lines l on l.entry_id=e.id and l.org_id=e.org_id
       join accounts a on a.id=l.account_id and a.number='1400'
       where cutoff.org_id=${org.orgId} and e.origin='translation'
-      group by cutoff.ends_on order by cutoff.ends_on`)).rows;
+      group by cutoff.ends_on order by cutoff.ends_on`, "objects");
     const expected = [
       {end:'2026-07-31',amount:'-900.0000'},
       {end:'2026-08-31',amount:'0.0000'},
@@ -2512,7 +2512,7 @@ test("a later asset-transfer period eliminates the outstanding intercompany bala
     `);
     const calendar = (await db.execute<{ id: string }>(sql`
       select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     for (const [month, last] of [["08", "31"], ["09", "30"]] as const) {
       await db.execute(sql`
         insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,custom)
@@ -2594,16 +2594,16 @@ test("a later asset-transfer period eliminates the outstanding intercompany bala
     await submitFinancialChange(org.orgId, changeId, submitterId);
     const gate = (await db.execute<{ id: string }>(sql`
       select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: "approved" });
     const applied = await applyAssetChange(org.orgId, changeId, submitterId);
     assert.equal((applied.entryIds as string[]).length, 2);
     const received = String(applied.receivingAssetId);
     const periods = (await db.execute<{ name: string; id: string }>(sql`
       select name, id from accounting_periods where org_id=${org.orgId} and name in ('2026-08','2026-09')
-    `));
-    const august = periods.rows.find((row) => row.name === "2026-08")!.id;
-    const september = periods.rows.find((row) => row.name === "2026-09")!.id;
+    `, "objects"));
+    const august = periods.find((row) => row.name === "2026-08")!.id;
+    const september = periods.find((row) => row.name === "2026-09")!.id;
     const augustAssets = await db.transaction((tx) =>
       consolidateAssetTransfers(tx, org.orgId, august, adminId),
     );
@@ -2616,22 +2616,22 @@ test("a later asset-transfer period eliminates the outstanding intercompany bala
     const elimination = await runAutoElimination(org.orgId, september, adminId);
     assert.ok(elimination.entryId);
     assert.equal(elimination.status, "eliminated");
-    const balanceLines = (await db.execute<{account_id:string; amount:string}>(sql`
+    const balanceLines = await db.execute<{account_id:string; amount:string}>(sql`
       select account_id,amount::text from journal_lines
-       where org_id=${org.orgId} and entry_id=${elimination.entryId}`)).rows;
+       where org_id=${org.orgId} and entry_id=${elimination.entryId}`, "objects");
     assert.deepEqual(balanceLines.map(line=>[line.account_id,line.amount]).sort(),
       [[dueFrom,'-2400.0000'],[dueTo,'2400.0000']].sort());
     assert.equal(elimination.assetEntryIds?.length, 1);
     const assetJournal = await db.execute<{ id: string; origin: string }>(sql`
       select id, origin from journal_entries
        where org_id=${org.orgId} and period_id=${september} and id=${elimination.assetEntryIds![0]}
-    `);
-    assert.equal(assetJournal.rows[0]?.origin, "translation");
+    `, "objects");
+    assert.equal(assetJournal[0]?.origin, "translation");
     const intercompany = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id=${org.orgId} and period_id=${september} and origin='intercompany'
-    `);
-    assert.equal(intercompany.rows[0]!.n, 1);
+    `, "objects");
+    assert.equal(intercompany[0]!.n, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -2654,9 +2654,9 @@ test("historical inception refuses spot inference and preserves an explicit manu
         && /no preceding accounting period.*historical basis/.test(error.message)
         && /Setup → Consolidated FX rates/.test(error.remedy ?? ''));
     assert.equal((await db.execute(sql`
-      select id from consolidated_fx_rates where org_id=${org.orgId}`)).rows.length,0);
+      select id from consolidated_fx_rates where org_id=${org.orgId}`, "objects")).length,0);
     assert.equal((await db.execute(sql`
-      select id from audit_log where org_id=${org.orgId} and table_name='consolidated_fx_rates'`)).rows.length,0);
+      select id from audit_log where org_id=${org.orgId} and table_name='consolidated_fx_rates'`, "objects")).length,0);
 
     await db.execute(sql`
       insert into consolidated_fx_rates
@@ -2664,9 +2664,9 @@ test("historical inception refuses spot inference and preserves an explicit manu
       values (${org.orgId},${org.periodId},'USD','CAD','1.4','1.35','1.2345678901','manual')`);
     await db.execute(sql`delete from fx_rates where org_id=${org.orgId}`);
     assert.equal(await deriveConsolidatedRates(org.orgId,org.periodId,actorId),0);
-    assert.deepEqual((await db.execute<{ historical: string; source: string }>(sql`
+    assert.deepEqual(await db.execute<{ historical: string; source: string }>(sql`
       select historical_rate::text as historical,source from consolidated_fx_rates
-       where org_id=${org.orgId} and period_id=${org.periodId}`)).rows,
+       where org_id=${org.orgId} and period_id=${org.periodId}`, "objects"),
     [{historical:'1.2345678901',source:'manual'}]);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -2701,22 +2701,22 @@ test("historical derivation cannot skip missing predecessor rates when periods a
         (error: unknown) => error instanceof ConsolidationError && error.code === 'rates-missing'
           && error.message.includes(`immediately preceding period ${predecessor} has no consolidated historical rate`));
     }
-    assert.deepEqual((await db.execute<{ id: string }>(sql`
-      select period_id as id from consolidated_fx_rates where org_id=${org.orgId}`)).rows,[{id:seedPeriodId}],
+    assert.deepEqual(await db.execute<{ id: string }>(sql`
+      select period_id as id from consolidated_fx_rates where org_id=${org.orgId}`, "objects"),[{id:seedPeriodId}],
     'refused out-of-order requests preserve only the supplied seed');
     for (const id of [org.periodId,augustId,septemberId])
       assert.equal(await deriveConsolidatedRates(org.orgId,id,actorId),1);
-    assert.deepEqual((await db.execute<{ historical: string; current: string }>(sql`
+    assert.deepEqual(await db.execute<{ historical: string; current: string }>(sql`
       select cf.historical_rate::text as historical,cf.current_rate::text as current
         from consolidated_fx_rates cf join accounting_periods p on p.org_id=cf.org_id and p.id=cf.period_id
-       where cf.org_id=${org.orgId} and cf.period_id<>${seedPeriodId} order by p.ends_on`)).rows,[
+       where cf.org_id=${org.orgId} and cf.period_id<>${seedPeriodId} order by p.ends_on`, "objects"),[
       {historical:'1.1234567891',current:'1.2000000000'},
       {historical:'1.1234567891',current:'1.3000000000'},
       {historical:'1.1234567891',current:'1.4000000000'},
     ]);
-    const evidence=(await db.execute<{ basis: { historical: string; historicalPeriodId: string; historicalSource: string } }>(sql`
+    const evidence=await db.execute<{ basis: { historical: string; historicalPeriodId: string; historicalSource: string } }>(sql`
       select changes->'basis' as basis from audit_log
-       where org_id=${org.orgId} and table_name='consolidated_fx_rates' and changes->>'periodId'=${org.periodId}`)).rows;
+       where org_id=${org.orgId} and table_name='consolidated_fx_rates' and changes->>'periodId'=${org.periodId}`, "objects");
     assert.equal(evidence.length,1);
     assert.equal(evidence[0]!.basis.historical,'carried_forward');
     assert.equal(evidence[0]!.basis.historicalPeriodId,seedPeriodId);
@@ -2729,6 +2729,6 @@ test("historical derivation cannot skip missing predecessor rates when periods a
     assert.equal(await deriveConsolidatedRates(org.orgId,septemberId,actorId),1);
     assert.equal((await db.execute<{ historical: string }>(sql`
       select historical_rate::text as historical from consolidated_fx_rates
-       where org_id=${org.orgId} and period_id=${septemberId}`)).rows[0]!.historical,'1.2500000000');
+       where org_id=${org.orgId} and period_id=${septemberId}`, "objects"))[0]!.historical,'1.2500000000');
   } finally { await dropScratchOrg(org.orgId); }
 });

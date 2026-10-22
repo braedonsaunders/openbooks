@@ -133,5 +133,5 @@ test("pick lists hold bins by name, release through Flows, and stay in their org
 
 async function statusOf(orgId: string, documentId: string): Promise<string> {
   return withBypassContext(async () => (await db.execute<{ status: string }>(sql`
-    select status from documents where org_id = ${orgId} and id = ${documentId}`)).rows[0]!.status);
+    select status from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0]!.status);
 }

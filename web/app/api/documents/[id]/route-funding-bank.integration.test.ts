@@ -43,7 +43,7 @@ const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/tes
 installTrustedTestDatabaseBypass()
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`)).rows[0]!.revision
+  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`, 'objects'))[0]!.revision
 }
 
 async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
@@ -59,7 +59,7 @@ async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ sta
 }
 
 async function storedCustom(orgId: string, id: string): Promise<Record<string, unknown>> {
-  return (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${orgId}`)).rows[0]!.custom
+  return (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${orgId}`, 'objects'))[0]!.custom
 }
 
 async function fixture(): Promise<{ orgId: string; checkId: string; bankId: string; cleanup: () => Promise<void> }> {

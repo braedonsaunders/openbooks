@@ -190,8 +190,8 @@ export async function generateAccountingPeriods(
 ): Promise<{ created: number; updated: number; periods: GeneratedPeriod[] }> {
   const calendarRes = (await db.execute<CalendarRow>(sql`
     select id, cadence, year_start_month, anchor_date, adjustment_period_enabled, config
-      from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`));
-  const calendar = calendarRes.rows[0];
+      from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`, "objects"));
+  const calendar = calendarRes[0];
   if (!calendar) throw new CloseError("active fiscal calendar not found");
   // Periods that can never receive postings are stranded rows:
   // date-derived resolution only reads the org's ACTIVE DEFAULT calendar.
@@ -200,8 +200,8 @@ export async function generateAccountingPeriods(
   // living on another calendar is fine: secondary calendars stay legal.
   const defaultRes = await db.execute(sql`
     select 1 from fiscal_calendars
-     where org_id = ${orgId} and is_default and is_active limit 1`);
-  if (!defaultRes.rows[0])
+     where org_id = ${orgId} and is_default and is_active limit 1`, "objects");
+  if (!defaultRes[0])
     throw new CloseError(
       "cannot generate periods: the organization has no active default fiscal calendar, so these periods could never receive postings; save one active calendar with the default flag switched on first",
     );
@@ -221,8 +221,8 @@ export async function generateAccountingPeriods(
              exists(select 1 from journal_entries e where e.period_id = p.id) as has_entries
         from accounting_periods p
        where p.org_id = ${orgId} and p.fiscal_calendar_id = ${calendarId}
-         and p.fiscal_year = ${fiscalYear} and p.period_number = ${number}`)
-      .then((found) => found.rows[0]);
+         and p.fiscal_year = ${fiscalYear} and p.period_number = ${number}`, "objects")
+      .then((found) => found[0]);
 
   // Phase 1 — extend forward: missing months are created (with open locks)
   // in their own transaction so a blocked re-date below can never roll them
@@ -237,14 +237,14 @@ export async function generateAccountingPeriods(
            is_adjustment, created_by, updated_by)
         values (${orgId}, ${calendarId}, ${fiscalYear}, ${period.number}, ${period.name},
                 ${period.startsOn}, ${period.endsOn}, ${period.adjustment}, ${actorId}, ${actorId})
-        returning id`));
+        returning id`, "objects"));
       const books = (await tx.execute<{ id: string }>(sql`
-        select id from accounting_books where org_id = ${orgId} and is_active`));
-      for (const book of books.rows) {
+        select id from accounting_books where org_id = ${orgId} and is_active`, "objects"));
+      for (const book of books) {
         for (const module of CLOSE_MODULES) {
           await tx.execute(sql`
             insert into period_locks (org_id, period_id, book_id, module, state, created_by, updated_by)
-            values (${orgId}, ${inserted.rows[0]!.id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
+            values (${orgId}, ${inserted[0]!.id}, ${book.id}, ${module}, 'open', ${actorId}, ${actorId})
             `);
         }
       }
@@ -271,8 +271,8 @@ export async function generateAccountingPeriods(
     }
 
     if (candidates.length > 0) {
-      const books = (await tx.execute<{ id: string }>(sql`
-        select id from accounting_books where org_id = ${orgId} and is_active order by id`)).rows;
+      const books = await tx.execute<{ id: string }>(sql`
+        select id from accounting_books where org_id = ${orgId} and is_active order by id`, "objects");
       for (const candidate of [...candidates].sort((a, b) => a.id.localeCompare(b.id))) {
         for (const book of books) {
           await periodScopeAdvisoryLock(tx, orgId, candidate.id, book.id);
@@ -304,8 +304,8 @@ export async function generateAccountingPeriods(
              set name = ${period.name}, starts_on = ${period.startsOn}, ends_on = ${period.endsOn},
                  is_adjustment = ${period.adjustment}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.id} and org_id = ${orgId}
-          returning id`);
-        if (!result.rows[0]) {
+          returning id`, "objects");
+        if (!result[0]) {
           throw new CloseError(
             `${label} disappeared while regenerating its dates; no calendar change was saved`,
           );

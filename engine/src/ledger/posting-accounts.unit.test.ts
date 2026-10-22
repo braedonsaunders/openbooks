@@ -51,7 +51,8 @@ const scripted = (
   let index = 0;
   const calls: string[] = [];
   const runner = {
-    execute: async (query: Parameters<typeof db.execute>[0]) => {
+    execute: async (query: Parameters<typeof db.execute>[0], mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const built = dialect.sqlToQuery(query);
       const step = steps[index];
       index += 1;
@@ -59,7 +60,7 @@ const scripted = (
       calls.push(built.sql);
       assert.match(built.sql, step.sql, `read #${index} hit the expected statement`);
       step.check?.({ sql: built.sql, params: built.params });
-      return { rows: step.rows };
+      return inMode({ rows: step.rows });
     },
   } as unknown as Runner;
   return {

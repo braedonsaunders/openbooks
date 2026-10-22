@@ -420,7 +420,7 @@ export async function linkStripeCustomer(
      where p.org_id = ${orgId} and p.id = ${customerId} and p.is_active
        and exists (select 1 from customer_roles cr
          where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-       ${customerScope}`))).rows[0];
+       ${customerScope}`, "objects")))[0];
   if (!customer) throw new ScopeNotFoundError();
   await saveStripeLink(orgId, actor, stripe.id, "customer", requiredString(stripeCustomerId, "customer id"), customer.id);
 }
@@ -441,7 +441,7 @@ export async function linkStripeSubscription(
     select s.id from subscriptions s
       join parties c on c.org_id = s.org_id and c.id = s.customer_id
      where s.org_id = ${orgId} and s.id = ${subscriptionId}
-       ${subscriptionScope}`))).rows[0];
+       ${subscriptionScope}`, "objects")))[0];
   if (!subscription) throw new ScopeNotFoundError();
   await saveStripeLink(orgId, actor, stripe.id, "subscription", requiredString(stripeSubscriptionId, "subscription id"), subscription.id);
 }
@@ -465,9 +465,9 @@ async function beginRun(orgId: string, actor: string): Promise<string> {
     const inserted = await db.execute<{ id: string }>(sql`
       insert into sync_runs (org_id, source, kind, status, connection_id, triggered_by, stats, progress)
       values (${orgId}, 'stripe', 'stripe_billing', 'running', null, 'ui', ${JSON.stringify({ actor })}::jsonb, ${JSON.stringify({ phase: "starting" })}::jsonb)
-      returning id`);
-    if (inserted.rows.length !== 1) throw new Error("Stripe Billing sync run insert returned an unexpected row count");
-    return inserted.rows[0]!.id;
+      returning id`, "objects");
+    if (inserted.length !== 1) throw new Error("Stripe Billing sync run insert returned an unexpected row count");
+    return inserted[0]!.id;
   });
 }
 
@@ -479,7 +479,7 @@ async function finishRun(
   errorMessage: string | null = null,
 ): Promise<void> {
   await withOrg(orgId, async () => {
-    const updated = await db.execute(sql`
+    const updated = await db.execute<never>(sql`
       update sync_runs set status = ${status}, finished_at = now(), stats = ${JSON.stringify(report)}::jsonb,
         progress = ${JSON.stringify({ phase: "complete", message: "Stripe Billing import finished" })}::jsonb,
         error_message = ${errorMessage}
@@ -553,12 +553,12 @@ async function attemptObject<T>(
 }
 
 async function customerEmailSuggestions(orgId: string): Promise<Map<string, string[]>> {
-  const rows = (await db.execute<{ id: string; email: string | null }>(sql`
+  const rows = await db.execute<{ id: string; email: string | null }>(sql`
     select p.id, lower(btrim(p.email)) as email from parties p
      where p.org_id = ${orgId} and p.is_active
        and exists (select 1 from customer_roles cr
          where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-       and p.email is not null and btrim(p.email) <> ''`)).rows;
+       and p.email is not null and btrim(p.email) <> ''`, "objects");
   const map = new Map<string, string[]>();
   for (const row of rows) {
     const ids = map.get(row.email!) ?? [];
@@ -588,7 +588,7 @@ async function importMeters(
       const existing = await findStripeLink(orgId, stripeAccountId, linkType("meter"), validStripeId);
       if (existing) {
         const local = (await db.execute<{ id: string; key: string; aggregation: string }>(sql`
-          select id, key, aggregation from usage_meters where org_id = ${orgId} and id = ${existing.openbooks_id}`)).rows[0];
+          select id, key, aggregation from usage_meters where org_id = ${orgId} and id = ${existing.openbooks_id}`, "objects"))[0];
         if (!local || local.key !== eventName || local.aggregation !== aggregation) {
           refuse("stripe_meter_mapping_changed", `Stripe meter ${validStripeId} no longer matches its immutable OpenBooks meter mapping.`, "Review the existing meter and create a new Stripe or OpenBooks meter for changed aggregation terms.", "meter_id", 409);
         }
@@ -613,7 +613,7 @@ async function importMeters(
 async function planForProductCurrency(orgId: string, actor: string, product: string, currency: string): Promise<string> {
   const name = `Stripe ${product} ${currency}`;
   const existing = (await db.execute<{ id: string }>(sql`
-    select id from usage_rating_plans where org_id = ${orgId} and name = ${name}`)).rows[0];
+    select id from usage_rating_plans where org_id = ${orgId} and name = ${name}`, "objects"))[0];
   if (existing) return existing.id;
   return (await createUsageRatingPlan(orgId, actor, { name, currency })).id;
 }
@@ -647,7 +647,7 @@ async function importPrices(
       const existing = await findStripeLink(orgId, stripeAccountId, linkType("price"), validStripeId);
       if (existing) {
         const status = (await db.execute<{ status: string }>(sql`
-          select status from usage_rating_plan_versions where org_id = ${orgId} and id = ${existing.openbooks_id}`)).rows[0]?.status;
+          select status from usage_rating_plan_versions where org_id = ${orgId} and id = ${existing.openbooks_id}`, "objects"))[0]?.status;
         if (!status) refuse("stripe_price_mapping_missing_local", `Stripe price ${validStripeId} maps to a missing OpenBooks rating-plan version.`, "Restore or recreate the OpenBooks draft version before importing this price again.", "plan_version_id", 409);
         versions.set(validStripeId, existing.openbooks_id);
         if (status === "draft") report.prices.awaitingPublication.push({ stripeId: validStripeId, versionId: existing.openbooks_id });
@@ -702,7 +702,7 @@ async function importCustomers(
           select p.id from parties p
            where p.org_id=${orgId} and p.id=${existing.openbooks_id} and p.is_active
              and exists (select 1 from customer_roles cr
-               where cr.org_id=p.org_id and cr.party_id=p.id and cr.is_active)`)).rows[0];
+               where cr.org_id=p.org_id and cr.party_id=p.id and cr.is_active)`, "objects"))[0];
         if (!local) {
           refuse(
             "stripe_customer_mapping_missing_local",
@@ -806,20 +806,20 @@ async function importSubscriptions(
         const versionId = priceVersions.get(stripePriceId) ?? (await findStripeLink(orgId, stripeAccountId, linkType("price"), stripePriceId))?.openbooks_id;
         if (!versionId) refuse("stripe_subscription_price_unlinked", `Stripe subscription item ${validStripeItemId} refers to price ${stripePriceId}, which has no imported version.`, "Import the metered Stripe price before linking its subscription item.", "price");
         const version = (await db.execute<{ status: string }>(sql`
-          select status from usage_rating_plan_versions where org_id = ${orgId} and id = ${versionId}`)).rows[0];
+          select status from usage_rating_plan_versions where org_id = ${orgId} and id = ${versionId}`, "objects"))[0];
         if (!version || version.status !== "published") {
           refuse("stripe_subscription_price_unpublished", `Stripe price ${stripePriceId} is still an unpublished OpenBooks draft.`, "Review and publish the imported usage rating-plan version before linking this subscription item.", "plan_version_id", 409);
         }
         const prior = await findStripeLink(orgId, stripeAccountId, linkType("subscription_item"), validStripeItemId);
         if (prior) {
           const local = (await db.execute<{ id: string }>(sql`
-            select id from subscription_usage_links where org_id = ${orgId} and id = ${prior.openbooks_id}`)).rows[0];
+            select id from subscription_usage_links where org_id = ${orgId} and id = ${prior.openbooks_id}`, "objects"))[0];
           if (!local) refuse("stripe_subscription_item_mapping_missing_local", `Stripe subscription item ${validStripeItemId} maps to a missing OpenBooks usage link.`, "Restore or recreate the usage link before importing this subscription item again.", "subscription_item", 409);
           return;
         }
-        const bands = (await db.execute<{ meterId: string }>(sql`
+        const bands = await db.execute<{ meterId: string }>(sql`
           select distinct meter_id as "meterId" from usage_rating_bands
-           where org_id = ${orgId} and plan_version_id = ${versionId} order by meter_id`)).rows;
+           where org_id = ${orgId} and plan_version_id = ${versionId} order by meter_id`, "objects");
         if (bands.length === 0) refuse("stripe_subscription_price_bands_missing", `Published Stripe price ${stripePriceId} has no OpenBooks rating bands.`, "Define and publish the price's usage bands before linking the subscription item.", "plan_version_id");
         const periodStart = exactIntegerText(subscription.current_period_start ?? subscription.start_date, "subscription.current_period_start");
         const effectiveFrom = new Date(Number(periodStart) * 1000).toISOString().slice(0, 10);
@@ -869,7 +869,7 @@ async function importUsage(
     .map((link) => ({ stripeId: link.externalId, openbooksId: link.nativeId }));
   for (const meter of meters) {
     const localMeter = (await db.execute<{ key: string }>(sql`
-      select key from usage_meters where org_id = ${orgId} and id = ${meter.openbooksId}`)).rows[0];
+      select key from usage_meters where org_id = ${orgId} and id = ${meter.openbooksId}`, "objects"))[0];
     if (!localMeter) {
       addRefusal(report, "meter", meter.stripeId, new UsageBillingError(
         "stripe_meter_mapping_missing_local",
@@ -891,7 +891,7 @@ async function importUsage(
             const validSummaryId = requiredString(summary.id, "meter event summary id");
             const existed = (await db.execute<{ id: string }>(sql`
               select id from usage_records where org_id = ${orgId} and meter_id = ${meter.openbooksId}
-                and idempotency_key = ${`stripe:${validSummaryId}`}`)).rows[0];
+                and idempotency_key = ${`stripe:${validSummaryId}`}`, "objects"))[0];
             const occurredOn = Number.isSafeInteger(summary.start_time)
               ? new Date((summary.start_time as number) * 1000).toISOString().slice(0, 10)
               : day;
@@ -975,9 +975,9 @@ function skipObjectType(value: unknown): StripeSkipObjectType {
 }
 
 async function skippedStripeIds(orgId: string, stripeAccountId: string, objectType: StripeSkipObjectType): Promise<Set<string>> {
-  const rows = (await db.execute<{ stripeId: string }>(sql`
+  const rows = await db.execute<{ stripeId: string }>(sql`
     select stripe_id as "stripeId" from stripe_billing_link_skips
-     where org_id = ${orgId} and stripe_account = ${stripeAccountId} and object_type = ${objectType}`)).rows;
+     where org_id = ${orgId} and stripe_account = ${stripeAccountId} and object_type = ${objectType}`, "objects");
   return new Set(rows.map((row) => row.stripeId));
 }
 
@@ -1024,7 +1024,7 @@ export async function skipStripeObject(
     const stored = (await db.execute<{ id: string }>(sql`
       select id from stripe_billing_link_skips
        where org_id = ${orgId} and stripe_account = ${account}
-         and object_type = ${objectType} and stripe_id = ${stripeId}`)).rows[0];
+         and object_type = ${objectType} and stripe_id = ${stripeId}`, "objects"))[0];
     if (!stored) throw new Error("the Stripe skip was not stored — no row was written; retry the action");
     // Attributable evidence in the SAME transaction as the skip: a forced
     // audit failure rolls the decision back with it.
@@ -1058,11 +1058,11 @@ export async function unskipStripeObject(
     if (!(await lockAndCheckOrgFeature(db, orgId, "usageBilling"))) {
       refuse("feature_off", "Usage billing is turned off for this organization.", "Enable Usage Billing in Company Settings → Features.");
     }
-    const removed = (await db.execute<{ id: string }>(sql`
+    const removed = await db.execute<{ id: string }>(sql`
       delete from stripe_billing_link_skips
        where org_id = ${orgId} and stripe_account = ${account}
          and object_type = ${objectType} and stripe_id = ${stripeId}
-       returning id`)).rows;
+       returning id`, "objects");
     if (removed.length !== 1) {
       refuse("stripe_skip_missing", `Stripe ${objectType} ${stripeId} is not skipped.`, "Run the import again to refresh the unlinked list under Setup → Payment providers.", "stripe_id");
     }
@@ -1085,13 +1085,13 @@ export async function unskipStripeObject(
 export async function listStripeSkips(orgId: string): Promise<StripeBillingLinkSkip[]> {
   return withOrg(orgId, async () => {
     await requireUsageFeature(orgId);
-    return (await db.execute<StripeBillingLinkSkip>(sql`
+    return await db.execute<StripeBillingLinkSkip>(sql`
       select id, stripe_account as "stripeAccount", object_type as "objectType",
              stripe_id as "stripeId", reason, created_by as "createdBy",
              created_at::text as "createdAt"
         from stripe_billing_link_skips
        where org_id = ${orgId}
-       order by object_type, stripe_id`)).rows;
+       order by object_type, stripe_id`, "objects");
   });
 }
 
@@ -1124,11 +1124,11 @@ export async function runDueStripeBillingImports(
   // bypass: scheduler-tick — the unscoped scan finds due import schedules
   // across every production organization.
   const schedules = await withBypass(async () =>
-    (await db.execute<StripeScheduleRow>(sql`
+    await db.execute<StripeScheduleRow>(sql`
       select s.org_id as "orgId", s.cadence
         from stripe_billing_import_schedules s
        where s.cadence in ('hourly', 'daily') ${orgScope}
-       order by s.org_id`)).rows);
+       order by s.org_id`, "objects"));
   for (const schedule of schedules) {
     const gated = await withOrg(schedule.orgId, () => orgFeatureEnabled(schedule.orgId, "usageBilling"));
     if (!gated) {
@@ -1150,12 +1150,12 @@ export async function runDueStripeBillingImports(
 }
 
 async function stripeScheduleDue(orgId: string, cadence: string, today: string, now: Date): Promise<boolean> {
-  const runs = (await db.execute<{ status: string; startedEpoch: string; finishedDay: string | null }>(sql`
+  const runs = await db.execute<{ status: string; startedEpoch: string; finishedDay: string | null }>(sql`
     select status, extract(epoch from started_at)::text as "startedEpoch",
            finished_at::date::text as "finishedDay"
       from sync_runs
      where org_id = ${orgId} and kind = 'stripe_billing'
-     order by started_at desc limit 5`)).rows;
+     order by started_at desc limit 5`, "objects");
   const inFlight = runs.some((run) =>
     run.status === "running" && Number(run.startedEpoch) * 1000 > now.getTime() - 30 * 60_000);
   if (inFlight) return false;
@@ -1171,7 +1171,7 @@ async function stripeHourlyDue(orgId: string, now: Date): Promise<boolean> {
     select extract(epoch from max(finished_at))::text as "finishedEpoch"
       from sync_runs
      where org_id = ${orgId} and kind = 'stripe_billing'
-       and status in ('ok', 'ok_with_errors') and finished_at is not null`)).rows[0];
+       and status in ('ok', 'ok_with_errors') and finished_at is not null`, "objects"))[0];
   if (last?.finishedEpoch === null || last?.finishedEpoch === undefined) return true;
   return Number(last.finishedEpoch) * 1000 <= now.getTime() - 60 * 60_000;
 }
@@ -1302,7 +1302,7 @@ export async function getStripeBillingOverview(orgId: string): Promise<StripeBil
   return withOrg(orgId, async () => {
     await requireUsageFeature(orgId);
     const schedule = (await db.execute<{ cadence: string }>(sql`
-      select cadence from stripe_billing_import_schedules where org_id = ${orgId}`)).rows[0];
+      select cadence from stripe_billing_import_schedules where org_id = ${orgId}`, "objects"))[0];
     const runs = (await db.execute<{
       id: string; status: string; startedAt: string; finishedAt: string | null;
       stats: unknown; errorMessage: string | null;
@@ -1311,22 +1311,22 @@ export async function getStripeBillingOverview(orgId: string): Promise<StripeBil
              stats, error_message as "errorMessage"
         from sync_runs
        where org_id = ${orgId} and kind = 'stripe_billing'
-       order by started_at desc limit 10`)).rows.map(summarizeStripeRun);
+       order by started_at desc limit 10`, "objects")).map(summarizeStripeRun);
     const lastStats = (await db.execute<{ stats: unknown }>(sql`
       select stats from sync_runs
        where org_id = ${orgId} and kind = 'stripe_billing'
-       order by started_at desc limit 1`)).rows[0]?.stats;
+       order by started_at desc limit 1`, "objects"))[0]?.stats;
     const rawUnlinked = reportSection(lastStats, "customers").unlinked;
     const entries = Array.isArray(rawUnlinked) ? rawUnlinked.filter(isUnlinkedEntry) : [];
     const suggestedIds = [...new Set(entries.map((entry) => entry.suggestedCustomerId).filter((id): id is string => id !== null))];
     const names = new Map<string, string>();
     if (suggestedIds.length > 0) {
-      const nameRows = (await db.execute<{ id: string; name: string }>(sql`
+      const nameRows = await db.execute<{ id: string; name: string }>(sql`
         select p.id, coalesce(nullif(p.display_name, ''), p.email, p.id) as name from parties p
          where p.org_id = ${orgId} and p.is_active
            and exists (select 1 from customer_roles cr
              where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-           and p.id = any(${`{${suggestedIds.join(",")}}`}::uuid[])`)).rows;
+           and p.id = any(${`{${suggestedIds.join(",")}}`}::uuid[])`, "objects");
       for (const nameRow of nameRows) names.set(nameRow.id, nameRow.name);
     }
     const unlinked: StripeBillingUnlinkedCustomer[] = entries.map((entry) => ({
@@ -1369,7 +1369,7 @@ export async function saveStripeBillingSchedule(
       insert into stripe_billing_import_schedules (id, org_id, cadence, created_by, updated_by)
       values (gen_random_uuid(), ${orgId}, ${cadence}, ${actorId}, ${actorId})
       on conflict (org_id) do update set cadence = ${cadence}, updated_at = now(), updated_by = ${actorId}
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!saved) throw new Error("the Stripe import schedule was not stored — no row was written; retry the action");
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

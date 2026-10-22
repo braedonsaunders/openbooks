@@ -164,9 +164,8 @@ function intCell(label: string, raw: string, opts?: { required?: boolean; min?: 
 async function resolveCategory(orgId: string, raw: string): Promise<string> {
   const name = raw.trim()
   if (!name) throw new Error('Category (name) is required')
-  const matches = (await db.execute<{ id: string }>(sql`
-    select id from asset_categories where org_id = ${orgId} and lower(name) = lower(${name}) limit 2`))
-    .rows
+  const matches = await db.execute<{ id: string }>(sql`
+    select id from asset_categories where org_id = ${orgId} and lower(name) = lower(${name}) limit 2`, 'objects')
   if (matches.length === 0) {
     throw new Error(`unknown asset category "${name}" — create it under Fixed assets first`)
   }
@@ -178,7 +177,7 @@ async function rootSubsidiaryId(orgId: string): Promise<string> {
   const found = (await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${orgId} and parent_id is null and not is_elimination and is_active
-     order by name limit 1`)).rows[0]
+     order by name limit 1`, 'objects'))[0]
   if (!found) throw new Error('no active root subsidiary exists to own the asset')
   return found.id
 }
@@ -434,18 +433,18 @@ async function findMatches(
   assetNumber: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
 ): Promise<StoredAsset[]> {
-  return (await runner.execute<StoredAsset>(sql`
+  return await runner.execute<StoredAsset>(sql`
     select ${STORED_ASSET_COLUMNS}
       from fixed_assets
      where org_id = ${orgId} and lower(asset_number) = lower(${assetNumber})
        ${subsidiaryReadFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-     order by id limit 3 for update`)).rows
+     order by id limit 3 for update`, 'objects')
 }
 
 /** Posted lines or lifecycle events fix the figures a re-import may touch. */
 async function readStoredAsset(runner: SqlExecutor, orgId: string, assetId: string): Promise<StoredAsset> {
   const row = (await runner.execute<StoredAsset>(sql`
-    select ${STORED_ASSET_COLUMNS} from fixed_assets where org_id = ${orgId} and id = ${assetId}`)).rows[0]
+    select ${STORED_ASSET_COLUMNS} from fixed_assets where org_id = ${orgId} and id = ${assetId}`, 'objects'))[0]
   if (!row) throw new Error('fixed asset mutation did not return a row')
   return row
 }
@@ -494,12 +493,12 @@ async function auditAssetImport(
 }
 
 async function assetHasHistory(runner: SqlExecutor, orgId: string, assetId: string): Promise<boolean> {
-  const rows = (await runner.execute<{ n: string }>(sql`
+  const rows = await runner.execute<{ n: string }>(sql`
     select count(*)::text as n from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
      where s.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is not null
     union all
-    select count(*)::text as n from asset_events where org_id = ${orgId} and asset_id = ${assetId}`)).rows
+    select count(*)::text as n from asset_events where org_id = ${orgId} and asset_id = ${assetId}`, 'objects')
   return rows.some((r) => r.n !== '0')
 }
 
@@ -618,8 +617,8 @@ export function fixedAssetsResource(orgId: string): DataResource {
                       ${parsed.expenseAccountId},
                       ${parsed.openingAccumulated}, ${parsed.openingAsOf},
                       ${parsed.serialNumber}, '{}'::jsonb, ${ctx.actorId}, ${ctx.actorId})
-              returning id`)
-            if (!inserted.rows[0]) throw new Error('fixed asset insert did not create a row')
+              returning id`, 'objects')
+            if (!inserted[0]) throw new Error('fixed asset insert did not create a row')
             if (parsed.status === 'in_service') {
               try {
                 await buildAllSchedulesWithRunner(tx, assetId, ctx.orgId, ctx.actorId, allowedSubsidiaries)
@@ -700,8 +699,8 @@ export function fixedAssetsResource(orgId: string): DataResource {
                    serial_number = ${parsed.serialNumber},
                    updated_by = ${ctx.actorId}
              where id = ${stored.id} and org_id = ${ctx.orgId}
-             returning id`)
-          if (!updated.rows[0]) throw new Error('fixed asset update did not affect a row')
+             returning id`, 'objects')
+          if (!updated[0]) throw new Error('fixed asset update did not affect a row')
           if (parsed.status === 'in_service' && !history) {
             try {
               await buildAllSchedulesWithRunner(tx, stored.id, ctx.orgId, ctx.actorId, allowedSubsidiaries)

@@ -34,7 +34,7 @@ export const GET = defineRoute({
     const outOfScope = await guardAutopayPartyScope(authz, partyId)
     if (outOfScope) return outOfScope
     // Plans carry their display name; subscriptions link to them by plan id.
-    const rows = (await db.execute(sql`
+    const rows = await db.execute(sql`
       select e.id, e.party_id as "partyId", e.subscription_id as "subscriptionId",
              e.payment_method_id as "paymentMethodId", e.status,
              e.charge_on_issue as "chargeOnIssue", sp.name as "subscriptionName"
@@ -43,7 +43,7 @@ export const GET = defineRoute({
         left join subscription_plans sp on sp.id = s.plan_id and sp.org_id = s.org_id
        where e.org_id = ${authz.user.orgId} and e.party_id = ${partyId} and e.status <> 'canceled'
        order by e.created_at desc
-    `)).rows
+    `, 'objects')
     return NextResponse.json({ enrollments: rows })
   },
 })

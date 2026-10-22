@@ -50,8 +50,8 @@ test("equipment charge posts balanced job cost and recovery with unit attributio
     const result = (await db.execute(sql`
       select account_id, amount, project_id, equipment_unit_id
         from journal_lines where entry_id = ${entryId} order by line_number
-    `));
-    assert.deepEqual(result.rows.map((row) => ({
+    `, "objects"));
+    assert.deepEqual(result.map((row) => ({
       account: row.account_id,
       amount: String(row.amount),
       project: row.project_id,
@@ -60,8 +60,8 @@ test("equipment charge posts balanced job cost and recovery with unit attributio
       { account: org.accounts.cogs, amount: "125.3750", project: projectId, equipment: equipmentId },
       { account: org.accounts.adjustment, amount: "-125.3750", project: null, equipment: equipmentId },
     ]);
-    const balance = (await db.execute<{ amount: string | null }>(sql`select sum(amount) as amount from journal_lines where entry_id = ${entryId}`));
-    assert.equal(String(balance.rows[0]!.amount), "0.0000");
+    const balance = (await db.execute<{ amount: string | null }>(sql`select sum(amount) as amount from journal_lines where entry_id = ${entryId}`, "objects"));
+    assert.equal(String(balance[0]!.amount), "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }

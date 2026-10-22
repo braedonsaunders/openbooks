@@ -75,9 +75,9 @@ export async function loadProject(
         select * from projects where id = ${id} and org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
           for share
-      `))
-      if (!proj.rows[0]) return null
-      const row = proj.rows[0]
+      `, 'objects'))
+      if (!proj[0]) return null
+      const row = proj[0]
       const partyName = (partyId: unknown) =>
         partyId
           ? db.execute<Record<string, unknown>>(sql`

@@ -24,7 +24,7 @@ const mockSources = new Map<string, string>([
       export const orgContext = { getStore: () => undefined }
       export function pinnedTransactionExecutor() { throw new Error('unexpected pinned transaction in boundary test') }
       export const db = {
-        execute: () => Promise.reject(new Error("unexpected database read")),
+        execute: (_query, mode) => Promise.resolve(Promise.reject(new Error("unexpected database read"))).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: () => Promise.reject(new Error("unexpected database transaction")),
       }
       export const schema = {}

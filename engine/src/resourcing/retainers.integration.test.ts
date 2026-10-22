@@ -16,8 +16,8 @@ beforeEach(async () => {
       coalesce(settings->'features', '{}'::jsonb)
         || '{"projects":true,"resourcing":true,"retainerBilling":true,"revenueRecognition":true}'::jsonb,
       true) where id = ${org.orgId} returning id
-  `));
-  assertWriteRows(rows.rows, 1, "test feature setup");
+  `, "objects"));
+  assertWriteRows(rows, 1, "test feature setup");
 });
 afterEach(async () => { if (org) await withBypassContext(() => dropScratchOrg(org.orgId)); });
 
@@ -42,8 +42,8 @@ test("hours drawdown selects only approved, billable, in-window, undrawn entries
   assert.equal(draft.amount, "200.0000");
   const claimed = await withBypassContext(() => db.execute<{ billing_status: string; invoiced_by_line_id: string | null }>(sql`
     select billing_status, invoiced_by_line_id from time_entries where org_id = ${org.orgId} and id = ${selected}
-  `));
-  assert.deepEqual(claimed.rows, [{ billing_status: "billed", invoiced_by_line_id: null }]);
+  `, "objects"));
+  assert.deepEqual(claimed, [{ billing_status: "billed", invoiced_by_line_id: null }]);
 });
 
 test("a second draft for the same retainer week refuses without duplicating evidence", async () => {
@@ -65,17 +65,17 @@ test("a second draft for the same retainer week refuses without duplicating evid
     select (select count(*)::int from res_retainer_drawdowns where org_id = ${org.orgId} and retainer_id = ${fx.retainerId}) as drafts,
            (select count(*)::int from res_retainer_drawdown_entries where org_id = ${org.orgId} and drawdown_id in
              (select id from res_retainer_drawdowns where org_id = ${org.orgId} and retainer_id = ${fx.retainerId})) as links
-  `));
-  assert.deepEqual(counts.rows[0], { drafts: 1, links: 1 });
+  `, "objects"));
+  assert.deepEqual(counts[0], { drafts: 1, links: 1 });
 });
 
 test("a zero-row update is raised as a write failure", async () => {
   const rows = await withOrgTransaction(org.orgId, async () => db.execute<{ id: string }>(sql`
     update res_retainers set ends_on = '2026-12-31'
      where org_id = ${org.orgId} and id = ${randomUUID()} returning id
-  `));
-  assert.equal(rows.rows.length, 0);
-  assert.throws(() => assertWriteRows(rows.rows, 1, "retainer extension"), /wrote 0 rows/);
+  `, "objects"));
+  assert.equal(rows.length, 0);
+  assert.throws(() => assertWriteRows(rows, 1, "retainer extension"), /wrote 0 rows/);
 });
 
 type TimeSeed = {
@@ -93,14 +93,14 @@ async function fixture(
       insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
       values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, ${projectCode}, ${projectCode}, ${org.customerId}, 'active', true, '{}'::jsonb)
       returning id
-    `);
-    assertWriteRows(project.rows, 1, "test project setup");
+    `, "objects");
+    assertWriteRows(project, 1, "test project setup");
     const employee = await db.execute<{ id: string }>(sql`
       insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
       values (${employeeId}, ${org.orgId}, 'employee', ${projectCode}, ${org.subsidiaryId}, true, '{}'::jsonb)
       returning id
-    `);
-    assertWriteRows(employee.rows, 1, "test employee setup");
+    `, "objects");
+    assertWriteRows(employee, 1, "test employee setup");
   });
   const retainer = await createHoursRetainer(projectId, terms.startsOn ?? "2026-06-01", terms.endsOn ?? "2026-06-30");
   const claimRetainer = terms.preclaim
@@ -114,21 +114,21 @@ async function fixture(
     const inserted = await db.execute<{ id: string }>(sql`
       insert into time_entries (id, org_id, employee_party_id, project_id, worked_on, hours, status,
         is_billable, billing_status, created_by, updated_by) values ${sql.join(values, sql`, `)} returning id
-    `);
-    assertWriteRows(inserted.rows, entries.length, "test time-entry setup");
+    `, "objects");
+    assertWriteRows(inserted, entries.length, "test time-entry setup");
     if (claimRetainer && terms.preclaim) {
       const drawdownId = randomUUID();
       const drawdown = await db.execute<{ id: string }>(sql`
         insert into res_retainer_drawdowns (id, org_id, retainer_id, week_start, hours, amount, state, created_by, updated_by)
         values (${drawdownId}, ${org.orgId}, ${claimRetainer.id}, '2026-05-31', '3.0000', '300.0000', 'draft', ${actorId}, ${actorId})
         returning id
-      `);
-      assertWriteRows(drawdown.rows, 1, "test prior drawdown setup");
+      `, "objects");
+      assertWriteRows(drawdown, 1, "test prior drawdown setup");
       const link = await db.execute<{ id: string }>(sql`
         insert into res_retainer_drawdown_entries (org_id, drawdown_id, time_entry_id, created_by, updated_by)
         values (${org.orgId}, ${drawdownId}, ${terms.preclaim}, ${actorId}, ${actorId}) returning id
-      `);
-      assertWriteRows(link.rows, 1, "test prior evidence setup");
+      `, "objects");
+      assertWriteRows(link, 1, "test prior evidence setup");
     }
   });
   return { retainerId: retainer.id };
@@ -141,7 +141,7 @@ async function createHoursRetainer(projectId: string, startsOn: string, endsOn: 
   });
   const activated = await withBypassContext(() => db.execute<{ id: string }>(sql`
     update res_retainers set state = 'active' where org_id = ${org.orgId} and id = ${retainer.id} returning id
-  `));
-  assertWriteRows(activated.rows, 1, "test retainer activation");
+  `, "objects"));
+  assertWriteRows(activated, 1, "test retainer activation");
   return retainer;
 }

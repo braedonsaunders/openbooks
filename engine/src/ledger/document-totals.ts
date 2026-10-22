@@ -66,7 +66,7 @@ export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string): P
            and (effective_to is null or effective_to >= ${date})
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active
-  `))
+  `, 'objects'))
   const config = (row: TaxCodeProfileRow, sequence: number, inclusive?: boolean): TaxComponentConfig => ({
     taxCodeId: String(row.id),
     code: String(row.code),
@@ -87,7 +87,7 @@ export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string): P
   // A map may contain unrelated setup still awaiting its first rate. Omit
   // unusable profiles here; computeBillTotals refuses one only when selected.
   // A real zero-percent row remains usable.
-  const codes = new Map<string, TaxComponentConfig[]>(codeRows.rows
+  const codes = new Map<string, TaxComponentConfig[]>(codeRows
     .filter((row) => row.effective_rate != null)
     .map((row) => [String(row.id), [config(row, 1)]]))
 
@@ -107,10 +107,10 @@ export async function taxProfileMap(resolvedOrgId: string, asOfDate?: string): P
          order by effective_from desc limit 1) tr on true
      where tg.org_id = ${resolvedOrgId} and tg.is_active
      order by tg.id, tgm.sequence
-  `))
+  `, 'objects'))
   const groups = new Map<string, TaxComponentConfig[]>()
   const unusableGroups = new Set<string>()
-  for (const row of groupRows.rows) {
+  for (const row of groupRows) {
     const id = String(row.group_id)
     if (row.code_active !== true || row.effective_rate == null) {
       unusableGroups.add(id)
@@ -394,8 +394,8 @@ export async function nextDocumentNumber(orgId: string, kind: string, prefix: st
         from subsidiaries
        where id = ${subsidiaryId} and org_id = ${orgId}
        limit 1
-    `)
-    if (!subsidiary.rows[0]) throw new Error('subsidiary does not belong to organization')
+    `, 'objects')
+    if (!subsidiary[0]) throw new Error('subsidiary does not belong to organization')
   }
   return allocateDocumentNumber(db, orgId, kind, prefix)
 }

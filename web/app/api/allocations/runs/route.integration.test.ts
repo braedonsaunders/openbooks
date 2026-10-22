@@ -239,8 +239,8 @@ test("S1: restricted preview without a pin is refused and persists nothing", asy
   const s = await setup();
   try {
     const runCount = async (): Promise<number> => {
-      const rows = (await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`)).rows;
+      const rows = await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`, "objects");
       return Number(rows[0]?.count ?? 0);
     };
     const before = await runCount();
@@ -273,7 +273,7 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", asy
   const s = await setup();
   const postedId = randomUUID();
   const versionId = (await db.execute<{ id: string }>(sql`
-    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`)).rows[0]!.id;
+    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into allocation_runs
       (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
@@ -282,11 +282,11 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", asy
       (${postedId}, ${s.orgId}, ${s.ruleId}, ${versionId}, 'hash-r', ${s.periodId}, ${s.bookId}, ${s.subsidiaryId},
        'posted', 'manual', '10.00', '10.00', '0.00', '{}'::jsonb, ${s.actorId}, ${s.actorId}, ${s.actorId})`);
   const runState = async (id: string): Promise<{ status: string; journals: number; runs: number }> => {
-    const rows = (await db.execute<{ status: string; journal_entry_id: string | null; reversal_entry_id: string | null }>(sql`
+    const rows = await db.execute<{ status: string; journal_entry_id: string | null; reversal_entry_id: string | null }>(sql`
       select status, journal_entry_id, reversal_entry_id from allocation_runs
-       where org_id = ${s.orgId} and id = ${id}`)).rows;
-    const counted = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`)).rows;
+       where org_id = ${s.orgId} and id = ${id}`, "objects");
+    const counted = await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`, "objects");
     return {
       status: rows[0]!.status,
       journals: [rows[0]!.journal_entry_id, rows[0]!.reversal_entry_id].filter(Boolean).length,
@@ -317,7 +317,7 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", asy
     // Nothing changed: no post, no reversal, no fresh run.
     assert.deepEqual(await runState(postedId), before);
     const previewed = (await db.execute<{ status: string }>(sql`
-      select status from allocation_runs where org_id = ${s.orgId} and id = ${s.runId}`)).rows[0];
+      select status from allocation_runs where org_id = ${s.orgId} and id = ${s.runId}`, "objects"))[0];
     assert.equal(previewed?.status, "previewed");
   } finally {
     routeState.authz = null;
@@ -333,7 +333,7 @@ test("S4: a pinned run with foreign targets is invisible to the pin holder", asy
     values (${subB}, ${s.orgId}, ${s.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
   const crossedId = randomUUID();
   const versionId = (await db.execute<{ id: string }>(sql`
-    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`)).rows[0]!.id;
+    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into allocation_runs
       (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,

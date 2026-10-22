@@ -28,10 +28,10 @@ export const GET = defineRoute({
   // its transaction rows are additionally narrowed to the caller's visible
   // subsidiaries, mirroring the documents lists.
   const scope = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`, 'objects',
   ))
-  if (!scope.rows[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (!scope[0]) return notFound("record")
+  const scopeDenied = guardSubsidiaryScope(gate, scope[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
   const documentScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)
 
@@ -76,8 +76,8 @@ export const GET = defineRoute({
                   else 'service' end as party_role
         from documents d where ${where}
        order by d.document_date desc, d.created_at desc
-       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`),
-    db.execute<Record<string, unknown>>(sql`select count(*)::int as count from documents d where ${where}`),
+       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`, 'objects'),
+    db.execute<Record<string, unknown>>(sql`select count(*)::int as count from documents d where ${where}`, 'objects'),
     db.execute<Record<string, unknown>>(sql`
       select array_remove(array_agg(distinct d.kind order by d.kind), null) as kinds,
              array_remove(array_agg(distinct d.status order by d.status), null) as statuses
@@ -86,16 +86,16 @@ export const GET = defineRoute({
          or exists (select 1 from document_lines l
                      where l.org_id = d.org_id and l.document_id = d.id and l.service_party_id = ${id})
          or d.custom ->> 'billToPartyId' = ${id}) ${hiddenKindFilter}
-        ${documentScope}`),
+        ${documentScope}`, 'objects'),
   ]))
 
   return NextResponse.json({
-    rows: rows.rows,
-    total: Number(total.rows[0]?.count ?? 0),
+    rows,
+    total: Number(total[0]?.count ?? 0),
     page,
     perPage: PAGE_SIZE,
-    kinds: filters.rows[0]?.kinds ?? [],
-    statuses: filters.rows[0]?.statuses ?? [],
+    kinds: filters[0]?.kinds ?? [],
+    statuses: filters[0]?.statuses ?? [],
   })
   },
 })

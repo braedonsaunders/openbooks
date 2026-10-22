@@ -56,8 +56,8 @@ export async function readOperatingSetupJourney(tx: SqlExecutor, orgId: string, 
   if (!input.subsidiaryId) findings.push({key:"entity",status:"choose",href:"/admin/setup/subsidiaries"});
   if (findings.length) return {choice,findings,nextHref:null,readyFor:null};
   if (!isUuid(input.itemId) || !isUuid(input.subsidiaryId)) throw new ManufacturingNotFoundError();
-  const entity=(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
-  const item=(await tx.execute<{id:string;name:string;base_unit:string|null}>(sql`select i.id,i.name,p.base_unit from items i left join item_inventory_profiles p on p.org_id=i.org_id and p.item_id=i.id where i.org_id=${orgId} and i.id=${input.itemId} and i.is_active for share of i`)).rows[0];
+  const entity=(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`, "objects"))[0];
+  const item=(await tx.execute<{id:string;name:string;base_unit:string|null}>(sql`select i.id,i.name,p.base_unit from items i left join item_inventory_profiles p on p.org_id=i.org_id and p.item_id=i.id where i.org_id=${orgId} and i.id=${input.itemId} and i.is_active for share of i`, "objects"))[0];
   if (!entity || !item) throw new ManufacturingNotFoundError();
   findings.push({key:"item",status:item.base_unit?"ready":"missing",href:"/items",...(item.base_unit?{}:{code:"item_profile_required"})});
   findings.push({key:"entity",status:"ready"});
@@ -65,15 +65,15 @@ export async function readOperatingSetupJourney(tx: SqlExecutor, orgId: string, 
     const explosion=await explodeBom(tx,orgId,item.id,quantity,today);
     for(const component of explosion.components) {
       const profile=await resolveProfile(orgId,component.itemId,tx,true);
-      if(!(await tx.execute(sql`select id from accounts where org_id=${orgId} and id=${profile.assetAccountId} and is_active and type like 'asset_%' for share`)).rows.length)
+      if(!(await tx.execute(sql`select id from accounts where org_id=${orgId} and id=${profile.assetAccountId} and is_active and type like 'asset_%' for share`, "objects")).length)
         throw new ManufacturingError(`Component ${component.itemCode} needs an active inventory asset account.`,{code:'component_asset_account_missing',remedy:'Review the component’s inventory costing profile in Items.'});
     }
   });
-  const routes=(await tx.execute<{id:string;version:number;effective_from:string;effective_to:string|null;default_issue_location_id:string|null;default_receipt_location_id:string|null;overheadBasis:string}>(sql`select id,version,effective_from::text,effective_to::text,default_issue_location_id,default_receipt_location_id,overhead_basis as "overheadBasis" from mfg_routings where org_id=${orgId} and produced_item_id=${item.id} and status='active' and effective_from<=${today}::date and (effective_to is null or ${today}::date<effective_to) order by version for share`)).rows;
+  const routes=await tx.execute<{id:string;version:number;effective_from:string;effective_to:string|null;default_issue_location_id:string|null;default_receipt_location_id:string|null;overheadBasis:string}>(sql`select id,version,effective_from::text,effective_to::text,default_issue_location_id,default_receipt_location_id,overhead_basis as "overheadBasis" from mfg_routings where org_id=${orgId} and produced_item_id=${item.id} and status='active' and effective_from<=${today}::date and (effective_to is null or ${today}::date<effective_to) order by version for share`, "objects");
   const route=routes.length===1?routes[0]:null;
   findings.push({key:"routing",status:route?"ready":"missing",href:route?"/manufacturing/routings?record="+route.id:"/manufacturing/routings"});
   if (route) {
-    const operations=(await tx.execute<{sequence:number;work_center_id:string;setup:string;run:string;labor:string|null;kind:string;code:string;absorbs:boolean;laborSource:string}>(sql`select operation.sequence,operation.work_center_id,operation.setup_minutes::text as setup,operation.run_minutes_per_unit::text as run,operation.labor_minutes_per_unit::text as labor,center.kind,center.code,center.absorbs_overhead as absorbs,operation.labor_time_source as "laborSource" from mfg_routing_operations operation join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id where operation.org_id=${orgId} and operation.routing_id=${route.id} order by operation.sequence for share of operation,center`)).rows;
+    const operations=await tx.execute<{sequence:number;work_center_id:string;setup:string;run:string;labor:string|null;kind:string;code:string;absorbs:boolean;laborSource:string}>(sql`select operation.sequence,operation.work_center_id,operation.setup_minutes::text as setup,operation.run_minutes_per_unit::text as run,operation.labor_minutes_per_unit::text as labor,center.kind,center.code,center.absorbs_overhead as absorbs,operation.labor_time_source as "laborSource" from mfg_routing_operations operation join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id where operation.org_id=${orgId} and operation.routing_id=${route.id} order by operation.sequence for share of operation,center`, "objects");
     if (!operations.length) findings.push({key:"operations",status:"missing",href:"/manufacturing/routings?record="+route.id});
     else await check("costing","/admin/setup/labor-costing",async()=>{
       const snapshots=await resolveOperationReleaseSnapshots(tx,orgId,{number:item.name,subsidiaryId:input.subsidiaryId!},operations,route,today,await subsidiaryCurrency(orgId,input.subsidiaryId!,tx));

@@ -65,7 +65,7 @@ test('PATCH refuses a book change once the budget has lines', async () => {
     assert.equal(body.error, 'budget_scope_has_lines')
 
     const scenario = (await db.execute<{ book_id: string; revision: number }>(sql`
-      select book_id, revision from budget_scenarios where id = ${scenarioId} and org_id = ${org.orgId}`)).rows[0]!
+      select book_id, revision from budget_scenarios where id = ${scenarioId} and org_id = ${org.orgId}`, 'objects'))[0]!
     assert.equal(scenario.book_id, org.bookId, 'the book is unchanged')
     assert.equal(scenario.revision, 1, 'the revision is unchanged')
   } finally {

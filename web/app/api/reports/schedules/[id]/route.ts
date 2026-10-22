@@ -82,7 +82,7 @@ export const PATCH = defineRoute({
           select * from report_schedules
            where id = ${id} and org_id = ${user.orgId}
            for update
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!existing) return notFound("record")
         const def = await loadReportDefinition(user.orgId, existing.definition_id)
         if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
@@ -135,7 +135,7 @@ export const PATCH = defineRoute({
             updated_at = now(), updated_by = ${user.id}
           where id = ${id} and org_id = ${user.orgId}
           returning *
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!updated) return notFound("record")
 
         await db.execute(sql`
@@ -173,7 +173,7 @@ export const DELETE = defineRoute({
           select * from report_schedules
            where id = ${id} and org_id = ${user.orgId}
            for update
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!existing) return notFound("record")
         const def = await loadReportDefinition(user.orgId, existing.definition_id)
         if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })

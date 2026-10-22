@@ -36,9 +36,9 @@ export async function validateTimeTypeBillRates(
   }
   const known = new Set<string>()
   if (keys.size > 0) {
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       select id from time_types
-       where org_id = ${orgId} and is_active and id = any(${`{${[...keys].join(',')}}`}::uuid[])`)).rows
+       where org_id = ${orgId} and is_active and id = any(${`{${[...keys].join(',')}}`}::uuid[])`, 'objects')
     for (const row of rows) known.add(row.id)
   }
   const rates: Record<string, string>[] = []

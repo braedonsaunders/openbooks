@@ -169,14 +169,14 @@ async function seedReferences(
        project_id, amount, created_by, updated_by)
     values (${orgId}, ${`ENC-${tag}`}, 'manual', ${accountId}, ${subsidiaryId},
             ${projectId}, '10.0000', ${actorId}, ${actorId})
-    returning id`);
-  assert.equal(encumbrance.rows.length, 1, "project-merge fixture must establish its commitment");
+    returning id`, "objects");
+  assert.equal(encumbrance.length, 1, "project-merge fixture must establish its commitment");
   const mapping = await db.execute<{ id: string }>(sql`
     insert into functional_mappings
       (org_id, project_id, function, effective_from, created_by, updated_by)
     values (${orgId}, ${projectId}, 'management_general', '2026-01-01', ${actorId}, ${actorId})
-    returning id`);
-  assert.equal(mapping.rows.length, 1, "project-merge fixture must establish its effective-dated mapping");
+    returning id`, "objects");
+  assert.equal(mapping.length, 1, "project-merge fixture must establish its effective-dated mapping");
 }
 
 test("duplicate projects merge every reference and deactivate with a pointer", { skip: !DB }, async () => {
@@ -241,31 +241,31 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     for (const table of ["documents", "document_lines", "time_entries", "change_orders", "sov_lines", "encumbrances", "functional_mappings", "hrm_benefit_program_scopes", "schedule_patterns"]) {
       const left = await db.execute<{ n: string }>(sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${duplicate}`);
-      assert.equal(left.rows[0]?.n, "0", table);
+         where org_id = ${org.orgId} and project_id = ${duplicate}`, "objects");
+      assert.equal(left[0]?.n, "0", table);
     }
     const movedPattern = await db.execute<{ project_id: string; revision: number }>(sql`
       select project_id, revision from schedule_patterns
-       where org_id = ${org.orgId} and code = 'MERGE-PATTERN'`);
-    assert.deepEqual(movedPattern.rows, [{ project_id: survivor, revision: 2 }]);
+       where org_id = ${org.orgId} and code = 'MERGE-PATTERN'`, "objects");
+    assert.deepEqual(movedPattern, [{ project_id: survivor, revision: 2 }]);
     const customLeft = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
-       where org_id = ${org.orgId} and custom ->> 'job_ref' = ${duplicate}`);
-    assert.equal(customLeft.rows[0]?.n, "0");
+       where org_id = ${org.orgId} and custom ->> 'job_ref' = ${duplicate}`, "objects");
+    assert.equal(customLeft[0]?.n, "0");
     const docs = await db.execute<{ project_id: string }>(sql`
-      select project_id from documents where org_id = ${org.orgId} and project_id = ${survivor}`);
-    assert.equal(docs.rows.length, 1);
+      select project_id from documents where org_id = ${org.orgId} and project_id = ${survivor}`, "objects");
+    assert.equal(docs.length, 1);
     const marker = await db.execute<{ is_active: boolean; custom: Record<string, unknown> }>(sql`
-      select is_active, custom from projects where id = ${duplicate} and org_id = ${org.orgId}`);
-    assert.equal(marker.rows[0]?.is_active, false);
+      select is_active, custom from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
+    assert.equal(marker[0]?.is_active, false);
     assert.deepEqual(
-      (marker.rows[0]?.custom?.["merged_into"] as Record<string, unknown>)?.["survivor"],
+      (marker[0]?.custom?.["merged_into"] as Record<string, unknown>)?.["survivor"],
       survivor,
     );
     const audit = await db.execute<{ action: string }>(sql`
       select action from audit_log
-       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate}`);
-    assert.deepEqual(audit.rows.map((row) => row.action), ["merge"]);
+       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate}`, "objects");
+    assert.deepEqual(audit.map((row) => row.action), ["merge"]);
 
     const again = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
     assert.equal(again.alreadyMerged, true);
@@ -299,7 +299,7 @@ test("project merge reconciles overlapping benefit scopes and preserves provisio
     );
     const scopeCount = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_benefit_program_scopes
-       where org_id = ${org.orgId} and program_id = ${programId}`)).rows[0]?.n;
+       where org_id = ${org.orgId} and program_id = ${programId}`, "objects"))[0]?.n;
     assert.equal(scopeCount, "2");
 
     const provisionProject = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PROV", "Provision owner");
@@ -317,7 +317,7 @@ test("project merge reconciles overlapping benefit scopes and preserves provisio
     );
     const retained = (await db.execute<{ project_id: string }>(sql`
       select project_id::text as project_id from provision_obligations
-       where org_id = ${org.orgId} and id = ${provisionId}`)).rows[0]?.project_id;
+       where org_id = ${org.orgId} and id = ${provisionId}`, "objects"))[0]?.project_id;
     assert.equal(retained, provisionProject);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -348,11 +348,11 @@ test("project merge refuses append-only financial evidence before moving referen
     );
     const adjustment = await db.execute<{ project_id: string }>(sql`
       select project_id from project_financial_adjustments
-       where org_id = ${org.orgId} and project_id = ${duplicate}`);
-    assert.equal(adjustment.rows.length, 1);
+       where org_id = ${org.orgId} and project_id = ${duplicate}`, "objects");
+    assert.equal(adjustment.length, 1);
     const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`);
-    assert.equal(marker.rows[0]?.is_active, true);
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
+    assert.equal(marker[0]?.is_active, true);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -370,8 +370,8 @@ test("project merge refuses overlapping functional mapping periods before moving
       values
         (${org.orgId}, ${survivor}, 'program', '2026-01-01', '2026-06-30', ${actorId}, ${actorId}),
         (${org.orgId}, ${duplicate}, 'fundraising', '2026-06-01', '2026-12-31', ${actorId}, ${actorId})
-      returning project_id`);
-    assert.equal(mappings.rows.length, 2, "overlapping project mappings must both exist before merge");
+      returning project_id`, "objects");
+    assert.equal(mappings.length, 2, "overlapping project mappings must both exist before merge");
 
     await assert.rejects(
       mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId }),
@@ -387,11 +387,11 @@ test("project merge refuses overlapping functional mapping periods before moving
     const unchanged = (await db.execute<{ project_id: string }>(sql`
       select project_id from functional_mappings
        where org_id = ${org.orgId} and project_id in (${survivor}, ${duplicate})
-       order by project_id`)).rows.map((row) => row.project_id);
+       order by project_id`, "objects")).map((row) => row.project_id);
     assert.deepEqual(unchanged, [duplicate, survivor].sort(), "a refused merge cannot rewrite either mapping");
-    const projects = (await db.execute<{ id: string; is_active: boolean }>(sql`
+    const projects = await db.execute<{ id: string; is_active: boolean }>(sql`
       select id, is_active from projects
-       where org_id = ${org.orgId} and id in (${survivor}, ${duplicate})`)).rows;
+       where org_id = ${org.orgId} and id in (${survivor}, ${duplicate})`, "objects");
     assert.equal(projects.length, 2);
     assert.ok(projects.every((row) => row.is_active), "a refused merge cannot deactivate either project");
   } finally {
@@ -422,8 +422,8 @@ test("a committing merge takes both project row locks before planning", async ()
         select exists(
           select 1 from pg_stat_activity
            where wait_event_type = 'Lock' and query ilike '%from projects%for update%'
-        ) as waiting`);
-      if (waiting.rows[0]?.waiting) break;
+        ) as waiting`, "objects");
+      if (waiting[0]?.waiting) break;
       if (Date.now() > deadline) throw new Error("merge never took the project row locks");
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
@@ -433,8 +433,8 @@ test("a committing merge takes both project row locks before planning", async ()
     assert.ok(result.auditId);
     const audits = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate} and action = 'merge'`);
-    assert.equal(audits.rows[0]?.n, "1");
+       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate} and action = 'merge'`, "objects");
+    assert.equal(audits[0]?.n, "1");
   } finally {
     try { await holder.query("ROLLBACK"); } catch { /* already committed */ }
     holder.release();
@@ -497,8 +497,8 @@ test("merge enforces the caller subsidiary scope inside the locked transaction",
       /outside the caller subsidiary scope/,
     );
     const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${d} and org_id = ${org.orgId}`);
-    assert.equal(marker.rows[0]?.is_active, true, "a refused merge deactivates nothing");
+      select is_active from projects where id = ${d} and org_id = ${org.orgId}`, "objects");
+    assert.equal(marker[0]?.is_active, true, "a refused merge deactivates nothing");
     // Unrestricted callers still merge.
     const unrestricted = await mergeProjects(org.orgId, {
       survivorId: c, duplicateId: d, actorId: actor, allowedSubsidiaryIds: null,
@@ -522,8 +522,8 @@ test("merge route forwards a scope that narrows after the precheck to the locked
            coalesce(settings->'features', '{}'::jsonb) || '{"projects":true}'::jsonb, true)
        where id = ${org.orgId}
        returning id
-    `);
-    assert.equal(featureWrite.rows.length, 1, "the route fixture enables Projects for its organization");
+    `, "objects");
+    assert.equal(featureWrite.length, 1, "the route fixture enables Projects for its organization");
 
     class ScopeThatNarrowsAfterRoutePrecheck extends Set<string> {
       checks = 0;
@@ -549,9 +549,9 @@ test("merge route forwards a scope that narrows after the precheck to the locked
     assert.equal(scope.checks, 3, "the route checks both rows, then the locked service rechecks the pair");
     const row = await db.execute<{ is_active: boolean; custom: Record<string, unknown> }>(sql`
       select is_active, custom from projects where id = ${duplicate} and org_id = ${org.orgId}
-    `);
-    assert.equal(row.rows[0]?.is_active, true, "the refused route request moves or deactivates nothing");
-    assert.equal(row.rows[0]?.custom?.["merged_into"], undefined);
+    `, "objects");
+    assert.equal(row[0]?.is_active, true, "the refused route request moves or deactivates nothing");
+    assert.equal(row[0]?.custom?.["merged_into"], undefined);
   } finally {
     routeState.gate = null;
     await dropScratchOrg(org.orgId);
@@ -597,23 +597,23 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
     // History stays on the duplicate: the reversed original plus its negation.
     const history = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from journal_lines
-       where org_id = ${org.orgId} and project_id = ${duplicate}`);
-    assert.equal(history.rows[0]?.n, "4");
+       where org_id = ${org.orgId} and project_id = ${duplicate}`, "objects");
+    assert.equal(history[0]?.n, "4");
     // The survivor holds the corrected, posted, balanced copy.
     const moved = await db.execute<{ n: string; status: string; balance: string }>(sql`
       select count(*)::text as n, max(e.status) as status,
              coalesce(sum(jl.amount), 0)::text as balance
         from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
-       where jl.org_id = ${org.orgId} and jl.project_id = ${survivor}`);
-    assert.equal(moved.rows[0]?.n, "2");
-    assert.equal(moved.rows[0]?.status, "posted");
-    assert.equal(moved.rows[0]?.balance, "0.0000");
+       where jl.org_id = ${org.orgId} and jl.project_id = ${survivor}`, "objects");
+    assert.equal(moved[0]?.n, "2");
+    assert.equal(moved[0]?.status, "posted");
+    assert.equal(moved[0]?.balance, "0.0000");
     // Explicit lineage: original reversed, reversal and copy posted.
     const lineage = await db.execute<{ entry_number: string; status: string }>(sql`
       select entry_number, status from journal_entries
        where org_id = ${org.orgId} and entry_number like 'JE-JOPEN%'
-       order by entry_number`);
-    assert.deepEqual(lineage.rows, [
+       order by entry_number`, "objects");
+    assert.deepEqual(lineage, [
       { entry_number: "JE-JOPEN", status: "reversed" },
       { entry_number: "JE-JOPEN-C", status: "posted" },
       { entry_number: "JE-JOPEN-R", status: "posted" },
@@ -623,9 +623,9 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
     }>(sql`
       select id, source_document_id::text, reverses_entry_id::text, custom->>'mergeMarker' as merge_marker
         from journal_entries where org_id = ${org.orgId} and entry_number = 'JE-JOPEN-C'
-    `);
-    assert.deepEqual(replacement.rows[0], {
-      id: replacement.rows[0]?.id,
+    `, "objects");
+    assert.deepEqual(replacement[0], {
+      id: replacement[0]?.id,
       source_document_id: sourceDocumentId,
       reverses_entry_id: null,
       merge_marker: "preserve",
@@ -635,17 +635,17 @@ test("merge moves posted journal lines in open periods by reversal plus repost",
     }>(sql`
       select cost_journal_entry_id::text, overhead_journal_entry_id::text from time_entries
        where org_id = ${org.orgId} and employee_party_id = ${employee}
-    `);
-    assert.deepEqual(timeEvidence.rows[0], {
-      cost_journal_entry_id: replacement.rows[0]?.id,
-      overhead_journal_entry_id: replacement.rows[0]?.id,
+    `, "objects");
+    assert.deepEqual(timeEvidence[0], {
+      cost_journal_entry_id: replacement[0]?.id,
+      overhead_journal_entry_id: replacement[0]?.id,
     });
     // The merge adds no money: posted entries still balance overall.
     const books = await db.execute<{ balance: string }>(sql`
       select coalesce(sum(jl.amount), 0)::text as balance
         from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
-       where jl.org_id = ${org.orgId} and e.status = 'posted'`);
-    assert.equal(books.rows[0]?.balance, "0.0000");
+       where jl.org_id = ${org.orgId} and e.status = 'posted'`, "objects");
+    assert.equal(books[0]?.balance, "0.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -674,8 +674,8 @@ test("merge refuses posted journal lines in a closed GL period", async () => {
       /closed GL period/,
     );
     const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`);
-    assert.equal(marker.rows[0]?.is_active, true, "a refused merge deactivates nothing");
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
+    assert.equal(marker[0]?.is_active, true, "a refused merge deactivates nothing");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -776,8 +776,8 @@ test("merge refuses while the projects feature is disabled", async () => {
       /projects feature is disabled/,
     );
     const marker = await db.execute<{ is_active: boolean }>(sql`
-      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`);
-    assert.equal(marker.rows[0]?.is_active, true, "a refused merge deactivates nothing");
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`, "objects");
+    assert.equal(marker[0]?.is_active, true, "a refused merge deactivates nothing");
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features,projects}', 'true'::jsonb, true)
        where id = ${org.orgId}`);
@@ -875,13 +875,13 @@ test("project merge refuses a second primary baseline and moves schedule rows", 
     for (const table of ["schedule_baselines", "schedule_calendars"]) {
       const left = await db.execute<{ n: string }>(sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${b}`);
-      assert.equal(left.rows[0]?.n, "0", table);
+         where org_id = ${org.orgId} and project_id = ${b}`, "objects");
+      assert.equal(left[0]?.n, "0", table);
     }
     const kept = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from schedule_baselines
-       where org_id = ${org.orgId} and project_id = ${a} and is_primary`);
-    assert.equal(kept.rows[0]?.n, "1");
+       where org_id = ${org.orgId} and project_id = ${a} and is_primary`, "objects");
+    assert.equal(kept[0]?.n, "1");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -896,7 +896,7 @@ test("project merge refuses pay-application collisions and moves revenue contrac
         subjectKind: 'customer_pay_application', subjectId: id, source: 'api' });
       assert.equal(receipt.policy.kind, 'ungated');
       assert.equal((await db.execute(sql`update pay_applications set status='approved',approved_by=${actor},
-        approved_at=now(),updated_by=${actor} where org_id=${org.orgId} and id=${id} returning id`)).rows.length, 1);
+        approved_at=now(),updated_by=${actor} where org_id=${org.orgId} and id=${id} returning id`, "objects")).length, 1);
     });
     const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-A", "Payapp Alpha");
     const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-PA-B", "Payapp Beta");
@@ -905,7 +905,7 @@ test("project merge refuses pay-application collisions and moves revenue contrac
       values (${org.orgId}, ${a}, 7, '2026-08-31', 'draft'),
              (${org.orgId}, ${b}, 7, '2026-08-31', 'draft')`);
     const closed = (await db.execute<{ id: string }>(sql`select id from pay_applications
-      where org_id=${org.orgId} and project_id=${b}`)).rows[0]!;
+      where org_id=${org.orgId} and project_id=${b}`, "objects"))[0]!;
     await approveApplication(closed.id);
     await db.execute(sql`update pay_applications set status='posted' where org_id=${org.orgId} and id=${closed.id}`);
     await assert.rejects(
@@ -925,7 +925,7 @@ test("project merge refuses pay-application collisions and moves revenue contrac
       /both projects hold an open pay application/,
     );
     // Closed applications and revenue contracts follow the merge.
-    const applications = (await db.execute<{ id: string }>(sql`select id from pay_applications where org_id=${org.orgId} and status='draft'`)).rows;
+    const applications = await db.execute<{ id: string }>(sql`select id from pay_applications where org_id=${org.orgId} and status='draft'`, "objects");
     for (const application of applications) await approveApplication(application.id);
     await db.execute(sql`update pay_applications set status = 'posted' where org_id = ${org.orgId}`);
     await db.execute(sql`
@@ -936,8 +936,8 @@ test("project merge refuses pay-application collisions and moves revenue contrac
     for (const table of ["pay_applications", "revenue_contracts"]) {
       const left = await db.execute<{ n: string }>(sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${b}`);
-      assert.equal(left.rows[0]?.n, "0", table);
+         where org_id = ${org.orgId} and project_id = ${b}`, "objects");
+      assert.equal(left[0]?.n, "0", table);
     }
   } finally {
     await dropScratchOrg(org.orgId);
@@ -1026,13 +1026,13 @@ test("project merge moves field-time and HRM rows but leaves filed certified run
     ]) {
       const left = await db.execute<{ n: string }>(sql`
         select count(*)::text as n from ${sql.identifier(table)}
-         where org_id = ${org.orgId} and project_id = ${b}`);
-      assert.equal(left.rows[0]?.n, "0", table);
+         where org_id = ${org.orgId} and project_id = ${b}`, "objects");
+      assert.equal(left[0]?.n, "0", table);
     }
     const stayed = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_certified_payroll_runs
-       where org_id = ${org.orgId} and project_id = ${b}`);
-    assert.equal(stayed.rows[0]?.n, "2");
+       where org_id = ${org.orgId} and project_id = ${b}`, "objects");
+    assert.equal(stayed[0]?.n, "2");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1070,15 +1070,11 @@ test("project merge refuses field-time and HRM day/kind collisions by name", { s
     // Same worker day for per-diem and travel pay on both sides.
     const g3 = await pair("JOB-G3", "Perdiem");
     await seedWorkerDay(org.orgId, org.subsidiaryId, g3.survivor, "Day Worker", "2026-08-05");
-    const employmentId = (
-      await db.execute<{ id: string }>(sql`
+    const employmentId = (await db.execute<{ id: string }>(sql`
         select e.id from worker_employments e join parties p on p.id = e.worker_party_id
-         where e.org_id = ${org.orgId} and p.display_name = 'Day Worker'`)
-    ).rows[0]!.id;
-    const policyId = (
-      await db.execute<{ id: string }>(sql`
-        select id from hrm_per_diem_policies where org_id = ${org.orgId} limit 1`)
-    ).rows[0]!.id;
+         where e.org_id = ${org.orgId} and p.display_name = 'Day Worker'`, "objects"))[0]!.id;
+    const policyId = (await db.execute<{ id: string }>(sql`
+        select id from hrm_per_diem_policies where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into hrm_per_diem_entries (org_id, employment_id, policy_id, project_id, worked_on, amount, currency)
       values (${org.orgId}, ${employmentId}, ${policyId}, ${g3.duplicate}, '2026-08-05', '18.5000', 'CAD')`);
@@ -1112,13 +1108,11 @@ test("project merge refuses field-time and HRM day/kind collisions by name", { s
 test("project merge covers every catalog project_id column or excludes it by review", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const columns = (
-      await db.execute<{ table_name: string; column_name: string }>(sql`
+    const columns = await db.execute<{ table_name: string; column_name: string }>(sql`
         select c.table_name, c.column_name
           from information_schema.columns c
          where c.table_schema = 'public' and c.column_name = 'project_id'
-         order by 1`)
-    ).rows;
+         order by 1`, "objects");
     assert.ok(columns.length > 30, "catalog enumeration returned a plausible project_id population");
     const refs = new Map(PROJECT_REFS.map(([table, column]) => [`${table}.${column}`, table]));
     const exclusions = new Map(PROJECT_MERGE_EXCLUSIONS);
@@ -1153,8 +1147,7 @@ test("project merge covers every catalog project_id column or excludes it by rev
     }
     // The FK derivation agrees: the only project-linked column outside the
     // project_id population is the hierarchy parent, handled separately.
-    const fkColumns = (
-      await db.execute<{ table_name: string; column_name: string }>(sql`
+    const fkColumns = await db.execute<{ table_name: string; column_name: string }>(sql`
         select t.relname::text as table_name, a.attname::text as column_name
           from pg_constraint c
           join pg_class t on t.oid = c.conrelid
@@ -1164,8 +1157,7 @@ test("project merge covers every catalog project_id column or excludes it by rev
           join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
           join pg_attribute fa on fa.attrelid = c.confrelid and fa.attnum = fk.attnum
          where n.nspname = 'public' and c.contype = 'f'
-           and c.confrelid = 'projects'::regclass and fa.attname = 'id'`)
-    ).rows;
+           and c.confrelid = 'projects'::regclass and fa.attname = 'id'`, "objects");
     const projectIdSet = new Set(columns.map((row) => `${row.table_name}.${row.column_name}`));
     const directForeignKeys = new Set(fkColumns.map((row) => `${row.table_name}.${row.column_name}`));
     const unhandledForeignKeys = fkColumns

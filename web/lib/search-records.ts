@@ -128,8 +128,8 @@ function listSourceLeg(config: ListSourceSearch): Leg {
           from ${tableSql} ${joins}
          where ${where}
          order by ${order}
-         limit ${PER_GROUP}`)
-      return r.rows.map((row): SearchHit => ({
+         limit ${PER_GROUP}`, 'objects')
+      return r.map((row): SearchHit => ({
         id: row.id,
         type: config.type,
         title: row.title ?? row.subtitle ?? '',
@@ -170,8 +170,8 @@ const subscriptionLeg: Leg = {
        where s.org_id = ${ctx.orgId}${customerScope}
          and ${predicate}
        order by c.display_name, s.created_at desc
-       limit ${PER_GROUP}`)
-    return r.rows.map((row): SearchHit => ({
+       limit ${PER_GROUP}`, 'objects')
+    return r.map((row): SearchHit => ({
       id: row.id,
       type: 'subscription',
       title: row.customer_name ?? row.plan_name,
@@ -213,8 +213,8 @@ const workOrderLeg: Leg = {
          ${orderResourcesVisible(scope, 'r')}
          and ${predicate}
        order by ${order}
-       limit ${PER_GROUP}`)
-    return r.rows.map((row): SearchHit => ({
+       limit ${PER_GROUP}`, 'objects')
+    return r.map((row): SearchHit => ({
       id: row.id,
       type: 'work_order',
       title: row.number,
@@ -246,10 +246,10 @@ const customRecordLeg: Leg = {
   validId: isUuid,
   async run(ctx, match) {
     if (!can(ctx.authz, 'records.read')) return []
-    const types = (await db.execute<RecordTypeRow>(sql`
+    const types = await db.execute<RecordTypeRow>(sql`
       select id, key, name, icon_key, fields, allowed_roles
         from custom_record_types
-       where org_id = ${ctx.orgId} and status = 'published'`)).rows
+       where org_id = ${ctx.orgId} and status = 'published'`, 'objects')
     const roleKeys = ctx.authz.user.roles.map(({ key }) => key)
     const visible = types.filter((type) => inTypeAudience(roleKeys, type.allowed_roles))
     if (visible.length === 0) return []
@@ -280,9 +280,9 @@ const customRecordLeg: Leg = {
          and (${sql.join(typeScopes, sql` or `)})
          and ${predicate}
        order by created_at desc
-       limit ${PER_GROUP}`)
+       limit ${PER_GROUP}`, 'objects')
     const typeById = new Map(visible.map((type) => [type.id, type]))
-    return r.rows.flatMap((row): SearchHit[] => {
+    return r.flatMap((row): SearchHit[] => {
       const type = typeById.get(row.type_id)
       if (!type) return []
       return [{
@@ -316,8 +316,8 @@ const fileLeg: Leg = {
        where ${visibility}
          and ${predicate}
        order by ${order}
-       limit ${PER_GROUP}`)
-    return r.rows.map((row): SearchHit => ({
+       limit ${PER_GROUP}`, 'objects')
+    return r.map((row): SearchHit => ({
       id: row.id,
       type: 'file',
       title: row.name,
@@ -344,8 +344,8 @@ const dashboardLeg: Leg = {
        where ${insightVisibilitySql(ctx.authz, 'd')}
          and ${predicate}
        order by d.name
-       limit ${PER_GROUP}`)
-    return r.rows.map((row): SearchHit => ({
+       limit ${PER_GROUP}`, 'objects')
+    return r.map((row): SearchHit => ({
       id: row.id,
       type: 'dashboard',
       title: row.name,
@@ -394,8 +394,8 @@ function setupRecordLeg(config: {
            ${setupEntitySubsidiaryFilter(entity, ctx.authz.allowedSubsidiaryIds)}
            and ${predicate}
          order by ${title}
-         limit ${PER_GROUP}`)
-      return r.rows.map((row): SearchHit => ({
+         limit ${PER_GROUP}`, 'objects')
+      return r.map((row): SearchHit => ({
         id: row.id,
         type: config.type,
         title: row.title,

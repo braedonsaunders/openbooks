@@ -57,7 +57,7 @@ async function createEvidence(org: ScratchOrg): Promise<Evidence> {
   const submitted = await withOrgContext(org.orgId, () => submitForApproval("vendor_bill", approvalId, actorId));
   assert.equal(submitted.gated, true);
   const gateId = await withOrgContext(org.orgId, async () => (await db.execute<{ id: string }>(sql`
-    select id from flow_gates where org_id=${org.orgId} and subject_id=${approvalId}`)).rows[0]!.id);
+    select id from flow_gates where org_id=${org.orgId} and subject_id=${approvalId}`, "objects"))[0]!.id);
   await withOrgContext(org.orgId, () => decideGate({ gateId, decision: "rejected", userId: reviewerId, comment: "Retain the independent review and original operator draft" }));
   const sessionId = randomUUID();
   // The session collection is web-owned; this fixture supplies only a native
@@ -97,7 +97,7 @@ async function createEvidence(org: ScratchOrg): Promise<Evidence> {
   await withOrgTransaction(org.orgId, async () => {
     assert.deepEqual(await readPinnedOperatingProfile(db, org.orgId, firstProfile.versionId, "project"), preset.definition);
     assert.equal((await db.execute<{ versionId: string }>(sql`select operating_profile_version_id as "versionId"
-      from projects where org_id=${org.orgId} and id=${projectId}`)).rows[0]?.versionId, firstProfile.versionId);
+      from projects where org_id=${org.orgId} and id=${projectId}`, "objects"))[0]?.versionId, firstProfile.versionId);
   });
   for (const command of [
     () => db.execute(sql`update operating_profile_versions set reason='Forbidden historical rewrite' where org_id=${org.orgId} and id=${firstProfile.versionId}`),
@@ -112,8 +112,8 @@ async function createEvidence(org: ScratchOrg): Promise<Evidence> {
 async function planFor(retireIds: string[]): Promise<Plan> {
   const { database, live } = await withMaintenanceTransaction(null, async () => ({
     database: (await db.execute<RetirementDatabaseIdentity & Record<string, unknown>>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
-      inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!,
-    live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
+      inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`, "objects"))[0]!,
+    live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`, "objects")).map(row => row.id),
   }));
   const plan = await sampleRetirementPlan({ version: 1, database, retainOrgIds: live.filter(id => !retireIds.includes(id)), retireOrgIds: retireIds,
     reason: "Retire only the exact disposable companies owned by this native lifecycle fixture" });
@@ -124,8 +124,8 @@ async function planFor(retireIds: string[]): Promise<Plan> {
 async function assertInitializedFence(orgId: string) {
   const result = await db.execute<{ state: string; initialized: number }>(sql`
     select f.state,(select count(*)::int from payroll_compensation_configuration where org_id=${orgId}) as initialized
-    from tenant_retirement.fences f where f.tenant_id=${orgId}`);
-  assert.deepEqual(result.rows, [{ state: "active", initialized: 1 }], "the new company fence permits its native AFTER INSERT child initializer");
+    from tenant_retirement.fences f where f.tenant_id=${orgId}`, "objects");
+  assert.deepEqual(result, [{ state: "active", initialized: 1 }], "the new company fence permits its native AFTER INSERT child initializer");
 }
 async function fingerprint(orgId: string, assertSequentialParity = false) {
   return withMaintenanceTransaction(null, async () => {
@@ -142,9 +142,9 @@ async function fingerprint(orgId: string, assertSequentialParity = false) {
         const result = await db.execute<{ count: string; digest: string }>(sql`
           select count(*)::text as count,encode(digest(coalesce(string_agg(row_hash,E'\n' order by row_hash),''),'sha256'),'hex') as digest
           from (select encode(digest(to_jsonb(owned_row)::text,'sha256'),'hex') as row_hash
-            from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`);
-        assert.equal(result.rows.length, 1);
-        tables.push({ table: table.name, ...result.rows[0]! });
+            from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`, "objects");
+        assert.equal(result.length, 1);
+        tables.push({ table: table.name, ...result[0]! });
       }
       assert.ok(tables.some(row => row.count === "0"), "empty native tables remain part of the preservation digest");
       assert.deepEqual(actual, { digest: retirementDigest(tables), tables }, "batching preserves every table count, full-content hash, output position and aggregate digest");
@@ -207,8 +207,8 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
       const remaining = await db.execute<{ orgs: number; fences: number; configuration: number }>(sql`
         select (select count(*)::int from orgs where id=${rolledBackOrgId}) as orgs,
           (select count(*)::int from tenant_retirement.fences where tenant_id=${rolledBackOrgId}) as fences,
-          (select count(*)::int from payroll_compensation_configuration where org_id=${rolledBackOrgId}) as configuration`);
-      assert.deepEqual(remaining.rows, [{ orgs: 0, fences: 0, configuration: 0 }], "failed organization creation leaves no parent, child or retirement fence");
+          (select count(*)::int from payroll_compensation_configuration where org_id=${rolledBackOrgId}) as configuration`, "objects");
+      assert.deepEqual(remaining, [{ orgs: 0, fences: 0, configuration: 0 }], "failed organization creation leaves no parent, child or retirement fence");
     });
     await assert.rejects(withMaintenanceTransaction(null, () => db.execute(sql`
       select tenant_retirement.openbooks_assert_tenant_available(${rolledBackOrgId}::uuid)`)), error => /retirement fence is missing/.test(nativeMessage(error)));
@@ -274,7 +274,7 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
         where org_id=${retainedOrg.orgId} and id=${retained.profileVersionId}`), /immutable/);
       await db.execute(sql`set constraints all deferred`);
       await deleteRetiredTenantRows(await loadCatalog(), targetOrg.orgId);
-      assert.equal((await db.execute(sql`select id from orgs where id=${targetOrg.orgId}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select id from orgs where id=${targetOrg.orgId}`, "objects")).length, 0);
       throw new Error("Roll back the complete native target deletion before commit");
     }), /Roll back the complete native target deletion/);
     await recordTenantRetirementFailure(runId, targetOrg.orgId, plan.digest, "fixture_rollback");
@@ -314,7 +314,7 @@ test("native tenant retirement rejects forged authority and preserves posted, dr
       await releaseTenantRetirement({ runId: active.runId, orgId: targetOrg.orgId, planDigest: active.plan.digest, actorId: anchorActor, reason: "Release the intact fixture before reviewed native cleanup" });
     }
     const remaining = await withMaintenanceTransaction(null, async () => (await db.execute<{ id: string }>(sql`
-      select id from orgs where id in (${targetOrg.orgId}::uuid,${retainedOrg.orgId}::uuid) order by id`)).rows.map(row => row.id));
+      select id from orgs where id in (${targetOrg.orgId}::uuid,${retainedOrg.orgId}::uuid) order by id`, "objects")).map(row => row.id));
     if (remaining.length) {
       await retireSampleFixtureCompanies(anchor.orgId, remaining);
     }

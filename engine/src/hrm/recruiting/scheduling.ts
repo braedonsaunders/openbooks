@@ -165,7 +165,7 @@ async function interviewChain(
       join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
       join hrm_candidates c on c.org_id = i.org_id and c.id = a.candidate_id
      where i.org_id = ${orgId} and i.id = ${interviewId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
   }
@@ -173,10 +173,10 @@ async function interviewChain(
 }
 
 async function panelParties(exec: SqlExecutor, orgId: string, interviewId: string): Promise<string[]> {
-  const rows = (await exec.execute<{ partyId: string }>(sql`
+  const rows = await exec.execute<{ partyId: string }>(sql`
     select party_id as "partyId" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} order by party_id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => row.partyId);
 }
 
@@ -204,7 +204,7 @@ export async function listInterviewerPools(query: {
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       id: string;
       name: string;
       kitId: string | null;
@@ -216,7 +216,7 @@ export async function listInterviewerPools(query: {
        where org_id = ${orgId}
          and (${query.includeInactive === true} or is_active)
        order by name
-    `)).rows;
+    `, "objects");
     return rows.map((row) => {
       let availability: readonly AvailabilityWindow[];
       try {
@@ -278,7 +278,7 @@ export async function proposeSlots(query: {
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
     const interview = (await db.execute<{ status: string }>(sql`
       select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!interview) throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     if (interview.status !== "scheduled") {
       throw new RecruitingError(
@@ -290,7 +290,7 @@ export async function proposeSlots(query: {
       select 1 as one from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (alreadyBooked) {
       throw new RecruitingError("REFUSED", "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time");
     }
@@ -319,7 +319,7 @@ export async function proposeSlots(query: {
         returning id, interview_id as "interviewId",
                   starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
                   expires_at as "expiresAt"
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) throw new RecruitingError("REFUSED", "the slot was not stored — no row was written; retry the request");
       slots.push(toSlotDTO(row));
     }
@@ -368,12 +368,12 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   // interview's org), then run everything else under that org.
   // bypass: connector-token — a candidate's booking token binds the interview but not its organization.
   const scope = await withBypassContext(async () => {
-    const found = (await db.execute<{ orgId: string; expiresAt: string | null }>(sql`
+    const found = await db.execute<{ orgId: string; expiresAt: string | null }>(sql`
       select org_id as "orgId", max(expires_at) as "expiresAt"
         from hrm_interview_slots
        where candidate_token_hash = ${tokenHash}
        group by org_id limit 2
-    `)).rows;
+    `, "objects");
     return found;
   });
   if (scope.length !== 1 || !scope[0]) {
@@ -391,7 +391,7 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
     // cancelled, never book a dead sitting.
     const interview = (await db.execute<{ status: string }>(sql`
       select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!interview) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }
@@ -411,7 +411,7 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
       select 1 as one from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (alreadyBooked) {
       throw new RecruitingError("REFUSED", "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time");
     }
@@ -424,7 +424,7 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
       select kind from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and id = ${slotId}
          and candidate_token_hash = ${tokenHash}
-    `)).rows[0];
+    `, "objects"))[0];
     if (wanted && wanted.kind !== "proposed") {
       throw new RecruitingError(
         "REFUSED",
@@ -435,7 +435,7 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
       select max(expires_at) as "expiresAt" from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId}
          and candidate_token_hash = ${tokenHash} and kind = 'proposed'
-    `)).rows[0];
+    `, "objects"))[0];
     if (!link?.expiresAt || Date.parse(link.expiresAt) <= Date.now()) {
       throw new RecruitingError(
         "REFUSED",
@@ -452,7 +452,7 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
       returning id, interview_id as "interviewId",
                 starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
                 expires_at as "expiresAt"
-    `)).rows[0];
+    `, "objects"))[0];
     if (!booked) {
       throw new RecruitingError(
         "REFUSED",
@@ -521,14 +521,14 @@ export async function readBookingLink(bookingToken: string): Promise<{
   const tokenHash = hashRecruitingToken(bookingToken);
   // bypass: connector-token — a candidate's booking token binds the slots but not their organization.
   const rows = await withBypassContext(async () => {
-    const found = (await db.execute<SlotRow & { orgId: string }>(sql`
+    const found = await db.execute<SlotRow & { orgId: string }>(sql`
       select org_id as "orgId", id, interview_id as "interviewId",
              starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
              expires_at as "expiresAt"
         from hrm_interview_slots
        where candidate_token_hash = ${tokenHash} and kind = 'proposed'
        order by starts_at
-    `)).rows;
+    `, "objects");
     return found;
   });
   if (rows.length === 0) {
@@ -582,7 +582,7 @@ export async function listUpcomingInterviews(query: {
     await requireDepthFeature(db, orgId);
     const { requireAggregateRecruitingRead } = await import("../authorization.ts");
     const allowed = await requireAggregateRecruitingRead(db, orgId, actorId);
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       id: string;
       kind: string;
       scheduledAt: string;
@@ -612,7 +612,7 @@ export async function listUpcomingInterviews(query: {
          and (${allowed === null} or r.employer_subsidiary_id = any(${allowed === null ? "{}" : pgUuidArray([...allowed])}::uuid[]))
        order by i.scheduled_at
        limit 200
-    `)).rows;
+    `, "objects");
     return rows.map((row) => ({
       id: row.id,
       kind: row.kind,
@@ -640,14 +640,14 @@ export async function listInterviewSlots(query: {
   return withOrgTransaction(orgId, async () => {
     const chain = await interviewChain(db, orgId, interviewId);
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
-    const rows = (await db.execute<SlotRow>(sql`
+    const rows = await db.execute<SlotRow>(sql`
       select id, interview_id as "interviewId",
              starts_at as "startsAt", ends_at as "endsAt", timezone, kind,
              expires_at as "expiresAt"
         from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId}
        order by starts_at
-    `)).rows;
+    `, "objects");
     return rows.map(toSlotDTO);
   });
 }

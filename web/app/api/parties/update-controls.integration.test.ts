@@ -46,10 +46,10 @@ test('impossible hired-on dates are refused with 422 and store nothing', async (
     await withOrgContext(org.orgId, async () => {
       const bad = await PATCH(patchRequest({ kind: 'person', roles: { employee: { enabled: true, hiredOn: '2026-02-30' } }, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
       assert.equal(bad.status, 422, await bad.clone().text())
-      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from employee_roles where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!.n, '0')
+      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from employee_roles where org_id=${org.orgId} and party_id=${org.customerId}`, 'objects'))[0]!.n, '0')
       const good = await PATCH(patchRequest({ kind: 'person', roles: { employee: { enabled: true, hiredOn: '2026-02-28' } }, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
       assert.equal(good.status, 200, await good.clone().text())
-      assert.equal((await db.execute<{ hired_on: string }>(sql`select hired_on::text from employee_roles where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!.hired_on, '2026-02-28')
+      assert.equal((await db.execute<{ hired_on: string }>(sql`select hired_on::text from employee_roles where org_id=${org.orgId} and party_id=${org.customerId}`, 'objects'))[0]!.hired_on, '2026-02-28')
     })
   } finally {
     session.user = null
@@ -74,7 +74,7 @@ test('an edit echoing a backed role kind persists instead of 422ing', async () =
       )
       assert.equal(res.status, 200, await res.clone().text())
       const stored = (await db.execute<{ kind: string; short_code: string }>(sql`
-        select kind, short_code from parties where id = ${org.customerId} and org_id = ${org.orgId}`)).rows[0]!
+        select kind, short_code from parties where id = ${org.customerId} and org_id = ${org.orgId}`, 'objects'))[0]!
       assert.equal(stored.kind, 'employee')
       assert.equal(stored.short_code, 'DE-001')
     })
@@ -99,10 +99,10 @@ test('an edit claiming an unbacked role kind is refused by name', async () => {
       assert.equal(res.status, 422, await res.clone().text())
       assert.match((await res.json() as { error: string }).error, /kind "vendor" needs the vendor role/)
       const stored = (await db.execute<{ kind: string; short_code: string | null }>(sql`
-        select kind, short_code from parties where id = ${org.customerId} and org_id = ${org.orgId}`)).rows[0]!
+        select kind, short_code from parties where id = ${org.customerId} and org_id = ${org.orgId}`, 'objects'))[0]!
       assert.equal(stored.kind, 'vendor')
       assert.equal(stored.short_code, null)
-      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from vendor_roles where org_id = ${org.orgId} and party_id = ${org.customerId}`)).rows[0]!.n, '0')
+      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from vendor_roles where org_id = ${org.orgId} and party_id = ${org.customerId}`, 'objects'))[0]!.n, '0')
     })
   } finally {
     session.user = null
@@ -117,7 +117,7 @@ test('routine party saves preserve the reserved source sync-identity bridge', as
       await db.execute(sql`update parties set custom='{"source":{"system":"fixture-source","externalId":"C-1"}}'::jsonb where id=${org.customerId} and org_id=${org.orgId}`)
       const res = await PATCH(patchRequest({ displayName: 'Renamed customer', custom: {}, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
       assert.equal(res.status, 200, await res.clone().text())
-      const custom = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from parties where id=${org.customerId}`)).rows[0]!.custom
+      const custom = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from parties where id=${org.customerId}`, 'objects'))[0]!.custom
       assert.deepEqual(custom, { source: { system: 'fixture-source', externalId: 'C-1' } })
     })
   } finally {
@@ -150,7 +150,7 @@ test('party PATCH preserves omitted required custom fields on a partial edit', a
       )
       assert.equal(response.status, 200, await response.clone().text())
       const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`
-        select custom from parties where id=${org.customerId} and org_id=${org.orgId}`)).rows[0]!.custom
+        select custom from parties where id=${org.customerId} and org_id=${org.orgId}`, 'objects'))[0]!.custom
       assert.deepEqual(stored, { required_code: 'R-1', optional_note: 'updated' })
     })
   } finally {
@@ -215,7 +215,7 @@ test('native employee create remains employee and hires through the canonical li
         join worker_employments e on e.org_id=p.org_id and e.worker_party_id=p.id
         join worker_employment_versions v on v.org_id=e.org_id and v.employment_id=e.id and v.recorded_until is null
         where p.org_id=${h.org.orgId} and p.id=${partyId}
-      `)).rows[0]
+      `, 'objects'))[0]
       assert.deepEqual(stored, { kind: 'employee', status: 'active', activeRole: true })
     } finally {
       session.user = null
@@ -234,7 +234,7 @@ test('company keeps its commercial roles and refuses employee role assignment', 
       assert.equal(rejected.status, 422, await rejected.clone().text())
       assert.match((await rejected.json() as { error: string }).error, /requires kind "person" or "employee"/)
       assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from employee_roles
-        where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!.n, '0')
+        where org_id=${org.orgId} and party_id=${org.customerId}`, 'objects'))[0]!.n, '0')
       const allowed = await PATCH(patchRequest({ roles: { vendor: { enabled: true } },
         expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
       assert.equal(allowed.status, 200, await allowed.clone().text())
@@ -243,7 +243,7 @@ test('company keeps its commercial roles and refuses employee role assignment', 
           exists(select 1 from customer_roles r where r.org_id=p.org_id and r.party_id=p.id and r.is_active) as customer,
           exists(select 1 from vendor_roles r where r.org_id=p.org_id and r.party_id=p.id and r.is_active) as vendor
         from parties p where p.org_id=${org.orgId} and p.id=${org.customerId}
-      `)).rows[0]
+      `, 'objects'))[0]
       assert.deepEqual(party, { kind: 'company', customer: true, vendor: true })
     })
   } finally {

@@ -24,8 +24,8 @@ export async function loadCustomerPulseTimeline(
   const party = await db.execute<{ id: string }>(sql`
     select p.id from parties p where p.org_id = ${orgId} and p.id = ${partyId}
     ${crmSharedScope(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `)
-  if (!party.rows.length) return null
+  `, 'objects')
+  if (!party.length) return null
   if (!effectiveSections.ar && !effectiveSections.crm) return { ...params, rows: [], total: 0 }
 
   const sources: SQL[] = []
@@ -74,8 +74,8 @@ export async function loadCustomerPulseTimeline(
            ) order by p.timestamp ${direction}, p.created_at ${direction}, p.type asc, p.id asc)
              filter (where p.id is not null), '[]'::jsonb) as rows
       from total left join page_rows p on true group by total.count
-  `)
-  const row = result.rows[0]
+  `, 'objects')
+  const row = result[0]
   if (!row) throw new Error('Customer interaction history could not be read.')
   const total = Number(row.total)
   if (!Number.isSafeInteger(total) || total < 0) throw new Error('Customer interaction history count is invalid.')

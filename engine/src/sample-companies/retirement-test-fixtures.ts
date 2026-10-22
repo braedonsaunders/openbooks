@@ -14,12 +14,12 @@ export async function drainSampleFixtureFlowEmails(orgId: string): Promise<numbe
   await assertFixtureDatabase();
   return withOrgTransaction(orgId, async () => {
     const posture = (await db.execute<{ restricted: boolean }>(sql`
-      select not rolsuper and not rolbypassrls as restricted from pg_roles where rolname=session_user`)).rows[0];
+      select not rolsuper and not rolbypassrls as restricted from pg_roles where rolname=session_user`, "objects"))[0];
     assert.equal(posture?.restricted, true, "fixture outbox processing requires the restricted tenant connection");
-    const pending = (await db.execute<{ id: string; kind: string; status: string; due: boolean; payload: { attachments?: unknown[] } }>(sql`
+    const pending = await db.execute<{ id: string; kind: string; status: string; due: boolean; payload: { attachments?: unknown[] } }>(sql`
       select id,kind,status,next_attempt_at<=now()+interval '1 second' as due,payload from scheduler_outbox
       where org_id=${orgId} and (status in ('pending','running') or (status='failed' and terminal_failed_at is null))
-      order by id`)).rows;
+      order by id`, "objects");
     assert.ok(pending.length <= 200, "the bounded fixture drain never silently leaves overflow work");
     for (const row of pending) {
       assert.equal(row.kind, "flow_email", "unrelated scheduler jobs need their own native lifecycle");
@@ -42,9 +42,9 @@ export async function drainSampleFixtureFlowEmails(orgId: string): Promise<numbe
     });
     assert.deepEqual(outcome, { processed: pending.length, succeeded: pending.length, failed: 0, fenced: 0 });
     assert.deepEqual(accepted.sort(), [...expected].sort());
-    const settled = (await db.execute<{ id: string; status: string; attempts: number }>(sql`
+    const settled = await db.execute<{ id: string; status: string; attempts: number }>(sql`
       select id,status,attempt_count as attempts from scheduler_outbox
-      where org_id=${orgId} and id=any(${sql.param([...expected])}::uuid[]) order by id`)).rows;
+      where org_id=${orgId} and id=any(${sql.param([...expected])}::uuid[]) order by id`, "objects");
     assert.deepEqual(settled, [...expected].sort().map(id => ({ id, status: "succeeded", attempts: 1 })), "native settlement retains the completed delivery evidence");
     return accepted.length;
   });
@@ -57,8 +57,8 @@ export async function retireSampleFixtureCompanies(homeOrgId: string, exactOrgId
   assert.ok(!selection.includes(homeOrgId), "the recovery actor's home company must be retained");
   const state = await withMaintenanceTransaction(null, async () => ({
     database: (await db.execute<RetirementDatabaseIdentity & Record<string, unknown>>(sql`select current_database() as database,inet_server_addr()::text as "serverAddress",
-      inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!,
-    live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id),
+      inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`, "objects"))[0]!,
+    live: (await db.execute<{ id: string }>(sql`select id from orgs order by id`, "objects")).map(row => row.id),
   }));
   const retireOrgIds = selection.filter(id => state.live.includes(id));
   if (!retireOrgIds.length) return;

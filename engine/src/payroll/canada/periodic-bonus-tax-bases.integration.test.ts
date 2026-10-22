@@ -17,16 +17,16 @@ async function fixture(option2 = false) {
   const fx = await withBypassContext(() => seedAdoption());
   await withBypassContext(async () => {
     const schedule = await db.execute(sql`update pay_schedules set frequency='monthly',periods_per_year=12,
-      anchor_period_end='2026-01-31',pay_date_offset_days=0 where org_id=${fx.orgId} and id=${fx.scheduleId} returning id`);
-    assert.equal(schedule.rows.length, 1);
+      anchor_period_end='2026-01-31',pay_date_offset_days=0 where org_id=${fx.orgId} and id=${fx.scheduleId} returning id`, 'objects');
+    assert.equal(schedule.length, 1);
     const accountId = randomUUID();
     await db.execute(sql`insert into payroll_filing_accounts
       (id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
       values(${accountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Canadian payroll account','regular',true,true,${fx.actorId},${fx.actorId})`);
     const profile = await db.execute(sql`update employee_payroll_profiles set cpp_exempt=true,ei_exempt=true,
       additional_tax_per_period=25,filing_account_id=${accountId}
-      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
-    assert.equal(profile.rows.length, 1);
+      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, 'objects');
+    assert.equal(profile.length, 1);
     if (option2) {
       await db.execute(sql`insert into employee_tax_certificates
         (org_id,employee_party_id,country,certificate_key,answers,effective_from,created_by,updated_by)
@@ -42,25 +42,25 @@ async function run(fx: AdoptionFixture, start: string, end: string, amount: stri
   const created = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
     periodStart: start, periodEnd: end, payDate: end, runType: type });
   const command = { orgId: fx.orgId, actorId: fx.actorId, documentId: created.documentId };
-  const components = (await db.execute<{ id: string }>(sql`select id from pay_components
-    where org_id=${fx.orgId} and system_key=${type === 'regular' ? 'base_pay' : 'bonus'}`)).rows;
+  const components = await db.execute<{ id: string }>(sql`select id from pay_components
+    where org_id=${fx.orgId} and system_key=${type === 'regular' ? 'base_pay' : 'bonus'}`, 'objects');
   assert.equal(components.length, 1);
   await mutatePayRunAdjustment({ ...command, mutation: { action: 'add', employeePartyId: fx.employeeId,
     componentId: components[0]!.id, amount, replaceComponent: true, idempotencyKey: randomUUID() } });
   const calculated = await calculatePayRun(command);
   assert.deepEqual(calculated.errors, []);
-  const stubs = (await db.execute<{ id: string; factors: Record<string, string>; gross: string; net_pay: string }>(sql`
+  const stubs = await db.execute<{ id: string; factors: Record<string, string>; gross: string; net_pay: string }>(sql`
     select id,factors,gross::text,net_pay::text from pay_stubs
-    where org_id=${fx.orgId} and pay_run_document_id=${created.documentId}`)).rows;
+    where org_id=${fx.orgId} and pay_run_document_id=${created.documentId}`, 'objects');
   assert.equal(stubs.length, 1);
-  const sources = (await db.execute<{ snapshot: PayRunCalculationSourceSnapshot; digest: string }>(sql`
+  const sources = await db.execute<{ snapshot: PayRunCalculationSourceSnapshot; digest: string }>(sql`
     select calculation_source_snapshot as snapshot,calculation_source_digest as digest from pay_runs
-    where org_id=${fx.orgId} and document_id=${created.documentId}`)).rows;
+    where org_id=${fx.orgId} and document_id=${created.documentId}`, 'objects');
   assert.equal(sources.length, 1);
   assert.equal(sources[0]!.digest, payRunCalculationSourceDigest(sources[0]!.snapshot));
   await commitPayRun(command);
   assert.equal((await db.execute<{ run_status: string }>(sql`select run_status from pay_runs
-    where org_id=${fx.orgId} and document_id=${created.documentId}`)).rows[0]!.run_status, 'committed');
+    where org_id=${fx.orgId} and document_id=${created.documentId}`, 'objects'))[0]!.run_status, 'committed');
   return { command, stub: stubs[0]!, source: sources[0]! };
 }
 
@@ -71,8 +71,8 @@ async function elect(fx: AdoptionFixture, effectiveFrom: string, method: 'option
     const retired = await db.execute(sql`update employee_tax_certificates
       set superseded_on=${effectiveFrom},updated_at=clock_timestamp(),updated_by=${fx.actorId}
       where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}
-        and certificate_key='ca_t4127_method' and superseded_on is null returning id`);
-    assert.equal(retired.rows.length, 1);
+        and certificate_key='ca_t4127_method' and superseded_on is null returning id`, 'objects');
+    assert.equal(retired.length, 1);
     await db.execute(sql`insert into employee_tax_certificates
       (org_id,employee_party_id,country,certificate_key,answers,effective_from,created_by,updated_by)
       values(${fx.orgId},${fx.employeeId},'CA','ca_t4127_method',
@@ -125,7 +125,7 @@ test('Option 1 regular pay remains unchanged after separate bonuses while native
       assert.equal(after.stub.factors.B1, '11000.0000');
       assert.equal(after.stub.net_pay, first.stub.net_pay);
       assert.deepEqual((await db.execute(sql`select id,factors,gross::text,net_pay::text from pay_stubs
-        where org_id=${fx.orgId} and id=${first.stub.id}`)).rows[0], first.stub);
+        where org_id=${fx.orgId} and id=${first.stub.id}`, 'objects'))[0], first.stub);
     });
   } finally { await withBypassContext(() => dropScratchOrgReporting(fx.orgId)); }
 });
@@ -157,7 +157,7 @@ test('Option 2 regular pay retains cumulative bonus income and subtracts paid bo
       assert.equal(third.stub.factors.CA_T_BASE, first.stub.factors.CA_T_BASE);
       assert.equal(third.stub.factors.TB, '0.0000');
       assert.deepEqual((await db.execute(sql`select id,factors,gross::text,net_pay::text from pay_stubs
-        where org_id=${fx.orgId} and id=${bonus.stub.id}`)).rows[0], bonus.stub);
+        where org_id=${fx.orgId} and id=${bonus.stub.id}`, 'objects'))[0], bonus.stub);
     });
   } finally { await withBypassContext(() => dropScratchOrgReporting(fx.orgId)); }
 });
@@ -192,7 +192,7 @@ test('prospective Option 2 and Option 1 transitions preserve original factors an
       assert.equal(reset.stub.factors.A_periodic, '60000.0000');
       assert.equal(reset.stub.factors.T, first.stub.factors.T);
       assert.deepEqual((await db.execute(sql`select id,factors,gross::text,net_pay::text from pay_stubs
-        where org_id=${fx.orgId} and id=${first.stub.id}`)).rows[0], first.stub);
+        where org_id=${fx.orgId} and id=${first.stub.id}`, 'objects'))[0], first.stub);
     });
   } finally { await withBypassContext(() => dropScratchOrgReporting(fx.orgId)); }
 });

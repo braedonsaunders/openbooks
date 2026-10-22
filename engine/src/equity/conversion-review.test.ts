@@ -31,7 +31,7 @@ const event = (overrides: Partial<SecurityEventRecord> & Pick<SecurityEventRecor
 });
 
 /** Only currency minor units are read; every instrument here is stated in the round's currency. */
-const runner = { execute: async () => ({ rows: [{ minor_units: 2 }] }) } as unknown as SqlExecutor;
+const runner = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ minor_units: 2 }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as unknown as SqlExecutor;
 
 function book(recordedPrice: string): EquityBook {
   const mfn = security({ id: "s-mfn", kind: "safe", considerationAmount: "100000.0000", safeType: "pre_money", mfn: true });

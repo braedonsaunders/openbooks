@@ -32,7 +32,7 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
          and (p.id is null or not p.is_inactive)
          and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
          and ${recordScopeFolderPredicate(orgId, viewer, sql`f.id`)}
-       order by f.updated_at desc`),
+       order by f.updated_at desc`, 'objects'),
     db.execute(sql`
       select fi.id, fi.name, fi.file_type as "fileType", fo.name as "folderName", fi.updated_at as "updatedAt"
         from files fi
@@ -42,10 +42,10 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
          and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
          and ${recordScopeFolderPredicate(orgId, viewer, sql`fo.id`)}
          and ${recordScopeFilePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
-       order by fi.updated_at desc`),
+       order by fi.updated_at desc`, 'objects'),
   ])
-  const folderRows = folders.rows as unknown as Array<{ id: string; name: string; updatedAt: string }>
-  const fileRows = files.rows as unknown as Array<{
+  const folderRows = folders as unknown as Array<{ id: string; name: string; updatedAt: string }>
+  const fileRows = files as unknown as Array<{
     id: string; name: string; fileType: string | null; folderName: string | null; updatedAt: string
   }>
   return [

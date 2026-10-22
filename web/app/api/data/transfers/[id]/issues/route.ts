@@ -19,10 +19,10 @@ export const GET = defineRoute({ authorize: authorizeTransfers, feature: transfe
         const rows = await withOrgContext(orgId, () => withOrgTransaction(orgId, async () => {
           await transferAuthority(await loadTransfer(orgId, params.id))
           // A row may have several findings; page complete row-number groups.
-          return (await db.execute<{ row: number; severity: string; field: string | null; message: string }>(sql`
+          return await db.execute<{ row: number; severity: string; field: string | null; message: string }>(sql`
             with page as (select distinct row_no from data_transfer_issues where org_id=${orgId} and job_id=${params.id} and phase=${phase} and row_no>${after} order by row_no limit 250)
             select i.row_no::float8 as row,i.severity,i.field,i.message from data_transfer_issues i join page on page.row_no=i.row_no
-            where i.org_id=${orgId} and i.job_id=${params.id} and i.phase=${phase} order by i.row_no,i.severity,i.field,i.message`)).rows
+            where i.org_id=${orgId} and i.job_id=${params.id} and i.phase=${phase} order by i.row_no,i.severity,i.field,i.message`, 'objects')
         }))
         if (!rows.length) { controller.close(); return }
         after = rows[rows.length - 1]!.row

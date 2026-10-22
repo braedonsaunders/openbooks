@@ -85,8 +85,8 @@ export async function defaultPartyAddress(
        case when ${shipping} then is_default_billing else is_default_shipping end desc,
        id asc
      limit 1
-  `);
-  return addressFromRow(result.rows[0]);
+  `, "objects");
+  return addressFromRow(result[0]);
 }
 
 function providerRequestForLine(

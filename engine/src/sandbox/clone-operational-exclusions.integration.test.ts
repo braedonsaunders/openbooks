@@ -87,23 +87,23 @@ test("cloning a template with scheduler and token rows succeeds and copies none 
     for (const table of NEVER_CLONED) {
       const copied = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from ${sql.identifier(table)} where org_id = ${created!.sandboxOrgId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(copied, 0, `sandbox must not carry ${table} rows`);
     }
     // The source rows are untouched by the clone.
     const sourceOutbox = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from scheduler_outbox where org_id = ${org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(sourceOutbox, 1);
-    const sourceReceipts = (await db.execute<{n:number}>(sql`select count(*)::int as n from application_idempotency_keys where org_id=${org.orgId}`)).rows[0]!.n;
+    const sourceReceipts = (await db.execute<{n:number}>(sql`select count(*)::int as n from application_idempotency_keys where org_id=${org.orgId}`, "objects"))[0]!.n;
     assert.equal(sourceReceipts, 1, 'the source environment retains its operation receipt');
   } finally {
     // A failed clone still commits its shell (org + sandbox row): remove
     // every sandbox of the scratch org before dropping it, so the shell
     // never masks the clone failure or strands the fixture.
-    const shells = (await db.execute<{ id: string }>(sql`
+    const shells = await db.execute<{ id: string }>(sql`
       select id from sandboxes where production_org_id = ${org.orgId}
-    `)).rows;
+    `, "objects");
     for (const shell of shells) {
       await deleteSandbox(shell.id).catch(() => undefined);
     }
@@ -140,19 +140,19 @@ test("flow run history is copied with its global dedup key cleared", { skip: !DB
     });
     const copied = (await db.execute<{ n: number; keys: (string | null)[] }>(sql`
       select count(*)::int as n, array_agg(occurrence_key) as keys from flow_runs where org_id = ${created.sandboxOrgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(copied.n, 1, "flow run history must survive the clone");
     assert.deepEqual(copied.keys, [null], "the copied run must not carry the source dedup key");
     // The source row keeps its key: the clone cleared its own copy, never
     // the template.
     const source = (await db.execute<{ occurrence_key: string | null }>(sql`
       select occurrence_key from flow_runs where org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(source.occurrence_key, occurrenceKey);
   } finally {
-    const shells = (await db.execute<{ id: string }>(sql`
+    const shells = await db.execute<{ id: string }>(sql`
       select id from sandboxes where production_org_id = ${org.orgId}
-    `)).rows;
+    `, "objects");
     for (const shell of shells) {
       await deleteSandbox(shell.id).catch(() => undefined);
     }

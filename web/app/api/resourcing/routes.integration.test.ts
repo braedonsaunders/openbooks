@@ -53,21 +53,21 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Resourcing route operator", "admin"));
     await withBypassContext(async () => {
-      written(await db.execute(sql`insert into departments (id, org_id, name, is_active) values (${departmentId}, ${org.orgId}, 'Delivery', true)`), "department setup");
-      written(await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employeeId}, ${org.orgId}, 'person', 'Consultant', ${org.subsidiaryId}, true, '{}'::jsonb)`), "employee setup");
-      written(await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, department_id, hired_on, is_active) values (${org.orgId}, ${employeeId}, 'Consultant', ${departmentId}, '2026-01-01', true)`), "employee role setup");
-      written(await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${unbookedEmployeeId}, ${org.orgId}, 'person', 'Unbooked consultant', ${org.subsidiaryId}, true, '{}'::jsonb)`), "unbooked employee setup");
-      written(await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, department_id, hired_on, is_active) values (${org.orgId}, ${unbookedEmployeeId}, 'Consultant', ${departmentId}, '2026-01-01', true)`), "unbooked employee role setup");
-      written(await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, ${`RS-${projectId.slice(0, 6)}`}, 'Route project', ${org.customerId}, 'active', true, '{}'::jsonb)`), "project setup");
+      written(await db.execute<never>(sql`insert into departments (id, org_id, name, is_active) values (${departmentId}, ${org.orgId}, 'Delivery', true)`), "department setup");
+      written(await db.execute<never>(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employeeId}, ${org.orgId}, 'person', 'Consultant', ${org.subsidiaryId}, true, '{}'::jsonb)`), "employee setup");
+      written(await db.execute<never>(sql`insert into employee_roles (org_id, party_id, job_title, department_id, hired_on, is_active) values (${org.orgId}, ${employeeId}, 'Consultant', ${departmentId}, '2026-01-01', true)`), "employee role setup");
+      written(await db.execute<never>(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${unbookedEmployeeId}, ${org.orgId}, 'person', 'Unbooked consultant', ${org.subsidiaryId}, true, '{}'::jsonb)`), "unbooked employee setup");
+      written(await db.execute<never>(sql`insert into employee_roles (org_id, party_id, job_title, department_id, hired_on, is_active) values (${org.orgId}, ${unbookedEmployeeId}, 'Consultant', ${departmentId}, '2026-01-01', true)`), "unbooked employee role setup");
+      written(await db.execute<never>(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, ${`RS-${projectId.slice(0, 6)}`}, 'Route project', ${org.customerId}, 'active', true, '{}'::jsonb)`), "project setup");
       const scheduleId = randomUUID();
-      written(await db.execute(sql`insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days, cycle_anchor, effective_from, is_active, created_by, updated_by) values (${scheduleId}, ${org.orgId}, 'Full time', ${employeeId}, 'cycle', 7, '2026-01-04', '2026-01-01', true, ${actorId}, ${actorId})`), "schedule setup");
+      written(await db.execute<never>(sql`insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days, cycle_anchor, effective_from, is_active, created_by, updated_by) values (${scheduleId}, ${org.orgId}, 'Full time', ${employeeId}, 'cycle', 7, '2026-01-04', '2026-01-01', true, ${actorId}, ${actorId})`), "schedule setup");
       for (const dayIndex of [1, 2, 3, 4, 5]) {
-        written(await db.execute(sql`insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by) values (${org.orgId}, ${scheduleId}, ${dayIndex}, '8', ${actorId}, ${actorId})`), "schedule day setup");
+        written(await db.execute<never>(sql`insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by) values (${org.orgId}, ${scheduleId}, ${dayIndex}, '8', ${actorId}, ${actorId})`), "schedule day setup");
       }
       const unbookedScheduleId = randomUUID();
-      written(await db.execute(sql`insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days, cycle_anchor, effective_from, is_active, created_by, updated_by) values (${unbookedScheduleId}, ${org.orgId}, 'Full time', ${unbookedEmployeeId}, 'cycle', 7, '2026-01-04', '2026-01-01', true, ${actorId}, ${actorId})`), "unbooked schedule setup");
+      written(await db.execute<never>(sql`insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days, cycle_anchor, effective_from, is_active, created_by, updated_by) values (${unbookedScheduleId}, ${org.orgId}, 'Full time', ${unbookedEmployeeId}, 'cycle', 7, '2026-01-04', '2026-01-01', true, ${actorId}, ${actorId})`), "unbooked schedule setup");
       for (const dayIndex of [1, 2, 3, 4, 5]) {
-        written(await db.execute(sql`insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by) values (${org.orgId}, ${unbookedScheduleId}, ${dayIndex}, '8', ${actorId}, ${actorId})`), "unbooked schedule day setup");
+        written(await db.execute<never>(sql`insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by) values (${org.orgId}, ${unbookedScheduleId}, ${dayIndex}, '8', ${actorId}, ${actorId})`), "unbooked schedule day setup");
       }
     });
 
@@ -92,17 +92,17 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     assert.deepEqual(off.json, { error: "not_found" });
     assert.doesNotMatch(JSON.stringify(off.json), /resourcing/i);
 
-    await withBypassContext(async () => written(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"resourceRequests":true,"retainerBilling":true,"revenueRecognition":true,"flows":true}'::jsonb) where id = ${org.orgId}`), "feature setup"));
+    await withBypassContext(async () => written(await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"resourceRequests":true,"retainerBilling":true,"revenueRecognition":true,"flows":true}'::jsonb) where id = ${org.orgId}`), "feature setup"));
     state.authz = authz(["resourcing.read"]);
     assert.equal((await call(postAssignment, "/api/resourcing/assignments", assignmentBody)).status, 403);
 
     state.authz = authz(["resourcing.manage"]);
-    await withBypassContext(async () => written(await db.execute(sql`update projects set status = 'closed' where org_id = ${org.orgId} and id = ${projectId}`), "project close"));
+    await withBypassContext(async () => written(await db.execute<never>(sql`update projects set status = 'closed' where org_id = ${org.orgId} and id = ${projectId}`), "project close"));
     const closed = await call(postAssignment, "/api/resourcing/assignments", assignmentBody);
     assert.equal(closed.status, 422);
     assert.equal(closed.json.code, "project_not_active");
     assert.equal(closed.json.remedy, "reopen the project (its status is editable on the project) or choose an active project");
-    await withBypassContext(async () => written(await db.execute(sql`update projects set status = 'active' where org_id = ${org.orgId} and id = ${projectId}`), "project reopen"));
+    await withBypassContext(async () => written(await db.execute<never>(sql`update projects set status = 'active' where org_id = ${org.orgId} and id = ${projectId}`), "project reopen"));
 
     state.authz = authz(["resourcing.manage"], new Set([randomUUID()]));
     const hidden = await call(postAssignment, "/api/resourcing/assignments", assignmentBody);
@@ -131,13 +131,13 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     const persisted = await withBypassContext(() => db.execute<{ rows: string; audits: string }>(sql`
       select (select count(*)::text from res_requests where org_id = ${org.orgId} and id = ${key}) as rows,
              (select count(*)::text from audit_log where org_id = ${org.orgId} and table_name = 'res_requests' and row_id = ${key} and request_id = ${key}) as audits
-    `));
-    assert.deepEqual(persisted.rows[0], { rows: "1", audits: "1" });
+    `, "objects"));
+    assert.deepEqual(persisted[0], { rows: "1", audits: "1" });
 
     await call(postAssignment, "/api/resourcing/assignments", assignmentBody);
     await call(postAssignment, "/api/resourcing/assignments", { projectId, jobTitle: "Consultant", weekStart, plannedHours: "4.0000" });
     const requiredCustomKey = "required_staffing_note";
-    await withBypassContext(async () => written(await db.execute(sql`
+    await withBypassContext(async () => written(await db.execute<never>(sql`
       insert into custom_field_defs
         (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
       values
@@ -175,7 +175,7 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     assert.equal(figure.employeePartyId, employeeId);
     assert.equal(typeof figure.capacity.hours, "string");
 
-    await withBypassContext(async () => written(await db.execute(sql`
+    await withBypassContext(async () => written(await db.execute<never>(sql`
       insert into custom_field_defs
         (id, org_id, target_table, target_kind, key, label, field_type, config,
          is_required, is_active, sort_order, created_by, updated_by)
@@ -240,7 +240,7 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     assert.equal(emptyPatch.status, 422);
     assert.match(String(emptyPatch.json.error), /Supply at least one retainer field/);
 
-    await withBypassContext(async () => written(await db.execute(sql`
+    await withBypassContext(async () => written(await db.execute<never>(sql`
       update res_retainers set custom = '{"required_scope":"Defined","retired_note":"keep me"}'::jsonb
        where org_id = ${org.orgId} and id = ${retainerId}
     `), "retired custom key setup"));

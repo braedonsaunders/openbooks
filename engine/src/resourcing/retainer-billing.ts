@@ -55,7 +55,7 @@ export async function generateRetainerInvoice(input: RetainerBillingInput): Prom
         select id, status from documents
          where org_id = ${input.orgId} and id = ${retainer.invoiceDocumentId}
          for update
-      `)).rows[0];
+      `, "objects"))[0];
       if (!linked) throw new Error("retainer invoice link points to a missing document");
       if (linked.status !== "voided") {
         throw new ResourcingRefusal(409, "retainer_invoice_already_linked", "this retainer already has a live invoice", "delete or void the linked invoice before generating another", "retainerId");
@@ -86,7 +86,7 @@ export async function generateRetainerInvoice(input: RetainerBillingInput): Prom
         join items i on i.org_id = p.org_id and i.id = ${retainer.retainerItemId}
        where p.org_id = ${input.orgId} and p.id = ${retainer.projectId}
        for share of p, i
-    `)).rows[0];
+    `, "objects"))[0];
     if (!setup) throw new Error("retainer invoice source project or item disappeared");
     if (setup.projectStatus === "closed" || setup.projectStatus === "cancelled") {
       throw new ResourcingRefusal(409, "project_not_open", `cannot invoice a retainer for a ${setup.projectStatus} project`, "reopen the project or choose an active one", "projectId");
@@ -99,7 +99,7 @@ export async function generateRetainerInvoice(input: RetainerBillingInput): Prom
           select deferred_account_id as "deferredAccountId", method, is_forecast as "isForecast"
             from recognition_rules where org_id = ${input.orgId} and id = ${setup.recognitionRuleId}
            for share
-        `)).rows[0] ?? null
+        `, "objects"))[0] ?? null
       : null;
     if (!setup.itemDeferredAccountId && !rule?.deferredAccountId) {
       throw new ResourcingRefusal(422, "retainer_deferred_account_required", "the retainer item and recognition rule have no deferred revenue account", "map a deferred revenue account on the item or its recognition rule", "retainerItemId");
@@ -125,9 +125,9 @@ export async function generateRetainerInvoice(input: RetainerBillingInput): Prom
               ${setup.subsidiaryId}, ${retainer.startsOn}, ${retainer.currency},
               'draft', ${retainer.projectId}, ${`Retainer ${documentNumber}`}, ${amount}, '0', ${amount}, ${input.actorId})
       returning id
-    `);
-    assertWriteRows(invoice.rows, 1, "retainer invoice creation");
-    const invoiceId = invoice.rows[0]!.id;
+    `, "objects");
+    assertWriteRows(invoice, 1, "retainer invoice creation");
+    const invoiceId = invoice[0]!.id;
     const quantity = retainer.kind === "hours" ? retainer.totalHours! : "1";
     const unitPrice = retainer.kind === "hours" ? retainer.unitRate! : amount;
     const line = await tx.execute<InvoiceWriteRow>(sql`
@@ -139,8 +139,8 @@ export async function generateRetainerInvoice(input: RetainerBillingInput): Prom
               ${JSON.stringify({ recognitionStartsOn: retainer.startsOn, recognitionEndsOn: retainer.endsOn })}::jsonb,
               true, ${input.actorId})
       returning id
-    `);
-    assertWriteRows(line.rows, 1, "retainer invoice line creation");
+    `, "objects");
+    assertWriteRows(line, 1, "retainer invoice line creation");
     const linked = await tx.update(resRetainers).set({
       invoiceDocumentId: invoiceId,
       updatedAt: new Date(),
@@ -174,12 +174,12 @@ export async function syncRetainerActivation(
            obligation_id as "obligationId", state, custom, created_at as "createdAt", created_by as "createdBy",
            updated_at as "updatedAt", updated_by as "updatedBy"
       from res_retainers where org_id = ${orgId} and id = ${retainerId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!retainer) return null;
   if (retainer.state !== "draft" || retainer.invoiceDocumentId === null) return retainer;
   const invoice = (await tx.execute<{ status: string }>(sql`
     select status from documents where org_id = ${orgId} and id = ${retainer.invoiceDocumentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!invoice || invoice.status !== "posted") return retainer;
 
   const obligations = await tx.execute<ActivationRow>(sql`
@@ -189,18 +189,18 @@ export async function syncRetainerActivation(
      where po.org_id = ${orgId} and dl.document_id = ${retainer.invoiceDocumentId}
        and dl.item_id = ${retainer.retainerItemId}
      order by dl.line_number
-  `);
+  `, "objects");
   const revRecCount = (await tx.execute<{ count: number }>(sql`
     select count(*)::int as count
       from performance_obligations po
       join document_lines dl on dl.org_id = po.org_id and dl.id = po.document_line_id
      where po.org_id = ${orgId} and dl.document_id = ${retainer.invoiceDocumentId}
-  `)).rows[0]?.count ?? 0;
-  const obligation = obligations.rows[0];
+  `, "objects"))[0]?.count ?? 0;
+  const obligation = obligations[0];
   if (!obligation) {
     throw new ResourcingRefusal(409, "retainer_obligation_missing", "the posted retainer invoice has no recognition obligation", "void the invoice, enable Revenue Recognition, and generate a replacement retainer invoice", "invoiceDocumentId");
   }
-  if (obligations.rows.length !== 1 || revRecCount !== 1 || cmp(obligation.allocated_price, retainer.totalAmount) !== 0) {
+  if (obligations.length !== 1 || revRecCount !== 1 || cmp(obligation.allocated_price, retainer.totalAmount) !== 0) {
     throw new ResourcingRefusal(409, "retainer_obligation_allocation_mismatch", "the retainer invoice must contain one recognition obligation allocated at the retainer total", "void the invoice, remove additional revenue-recognition lines, and generate a replacement retainer invoice", "invoiceDocumentId");
   }
   if (obligation.deferred_account_id === null) {
@@ -212,8 +212,8 @@ export async function syncRetainerActivation(
      where org_id = ${orgId} and id = ${retainerId} and state = 'draft'
        and invoice_document_id = ${retainer.invoiceDocumentId} and obligation_id is null
      returning id
-  `);
-  assertWriteRows(updated.rows, 1, "retainer activation");
+  `, "objects");
+  assertWriteRows(updated, 1, "retainer activation");
   await writeAudit(orgId, "res_retainers", retainerId, "update", {
     before: { state: "draft", obligationId: null },
     after: { state: "active", obligationId: obligation.id, invoiceDocumentId: retainer.invoiceDocumentId },
@@ -256,7 +256,7 @@ export async function postDrawdown(
          where org_id = ${input.orgId} and table_name = 'res_retainer_drawdowns'
            and row_id = ${drawdown.id} and action = 'insert'
          order by at desc, id desc limit 1
-      `)).rows[0]?.changes?.after;
+      `, "objects"))[0]?.changes?.after;
       const amounts = audit?.byMonth;
       const hours = audit?.hoursByMonth;
       if (!isStringMap(amounts) || !isStringMap(hours)) throw new Error("hours drawdown has no immutable monthly price snapshot");

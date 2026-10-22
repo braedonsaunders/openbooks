@@ -104,7 +104,7 @@ export async function foreignStockLocationOwner(
     select l.subsidiary_id, l.subsidiary_include_children as include_children
       from stock_locations sl
       join locations l on l.org_id = sl.org_id and l.id = sl.location_id
-     where sl.org_id = ${orgId} and sl.id = ${stockLocationId}`)).rows[0];
+     where sl.org_id = ${orgId} and sl.id = ${stockLocationId}`, "objects"))[0];
   if (!row?.subsidiary_id) return null;
   if (restrictionAdmits(ctx, row.subsidiary_id, row.include_children, sellingSubsidiaryId)) return null;
   return row.subsidiary_id;
@@ -127,6 +127,6 @@ export async function crossSubsidiaryShipment(
 ): Promise<{ sellingSubsidiaryId: string; fulfillingSubsidiaryId: string } | null> {
   const row = (await runner.execute<{ selling_subsidiary_id: string; fulfilling_subsidiary_id: string }>(sql`
     select selling_subsidiary_id, fulfilling_subsidiary_id from intercompany_fulfillment_charges
-     where org_id = ${orgId} and movement_id = ${issueMovementId} and kind = 'fulfillment'`)).rows[0];
+     where org_id = ${orgId} and movement_id = ${issueMovementId} and kind = 'fulfillment'`, "objects"))[0];
   return row ? { sellingSubsidiaryId: row.selling_subsidiary_id, fulfillingSubsidiaryId: row.fulfilling_subsidiary_id } : null;
 }

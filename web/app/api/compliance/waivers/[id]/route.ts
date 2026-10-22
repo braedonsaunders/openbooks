@@ -51,8 +51,7 @@ export const PATCH = defineRoute({
       )
     }
 
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         requestedBy: string | null
         createdBy: string | null
         approvedAt: string | null
@@ -67,8 +66,7 @@ export const PATCH = defineRoute({
         join parties party on party.id = w.party_id and party.org_id = w.org_id
         left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
        where w.org_id = ${orgId} and w.id = ${id}
-    `)
-    ).rows[0]
+    `, 'objects'))[0]
     if (!row) return notFound('record')
     const partyDenied = guardSubsidiaryScope(gate, row.partySubsidiaryId, {
       orgWideNull: true,
@@ -130,8 +128,7 @@ export const DELETE = defineRoute({
     // Subsidiary fence before the revocation: a hidden-entity exception reads
     // as 404 and is never touched. Missing and hidden are indistinguishable,
     // so the refusal never oracles which ids exist elsewhere.
-    const fenced = (
-      await db.execute<{
+    const fenced = (await db.execute<{
         partySubsidiaryId: string | null
         projectSubsidiaryId: string | null
       }>(sql`
@@ -140,8 +137,7 @@ export const DELETE = defineRoute({
         join parties party on party.id = w.party_id and party.org_id = w.org_id
         left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
        where w.org_id = ${orgId} and w.id = ${id}
-    `)
-    ).rows[0]
+    `, 'objects'))[0]
     if (!fenced) return notFound('record')
     const fencedPartyDenied = guardSubsidiaryScope(
       gate,
@@ -163,14 +159,14 @@ export const DELETE = defineRoute({
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${id} and revoked_at is null
         returning id
-      `)
-      if (updated.rows.length === 0) return null
+      `, 'objects')
+      if (updated.length === 0) return null
 
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'compliance_waivers', ${id}, 'update',
                 ${JSON.stringify({ after: { revoked: true, reason } })}::jsonb, ${actorId})`)
-      return updated.rows[0]!.id
+      return updated[0]!.id
     })
     if (revokedId === null) {
       return NextResponse.json(

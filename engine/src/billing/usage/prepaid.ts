@@ -128,7 +128,7 @@ export async function createPrepaidGrant(
     const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties p where org_id = ${orgId} and id = ${customerId}
         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-        for share`)).rows[0];
+        for share`, "objects"))[0];
     if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
     const sourceLineId = uuidText(input.sourceDocumentLineId, "source_document_line_id");
     const amount = exactMoney(input.amount, "amount");
@@ -155,7 +155,7 @@ export async function createPrepaidGrant(
           on o.org_id = dl.org_id and o.document_line_id = dl.id and o.recognition_rule_id = r.id
        where dl.org_id = ${orgId} and dl.id = ${sourceLineId}
          and d.kind = 'customer_invoice' and d.status = 'posted' and r.method = 'usage'
-       for update of d`)).rows[0];
+       for update of d`, "objects"))[0];
     if (!source) {
       refuse(
         "usage_prepaid_source_not_eligible",
@@ -173,7 +173,7 @@ export async function createPrepaidGrant(
     const alreadyGranted = (await db.execute<{ amount: string }>(sql`
       select coalesce(sum(amount), 0)::text as amount
         from usage_prepaid_grants
-       where org_id = ${orgId} and source_document_line_id = ${sourceLineId}`)).rows[0]?.amount ?? "0";
+       where org_id = ${orgId} and source_document_line_id = ${sourceLineId}`, "objects"))[0]?.amount ?? "0";
     const remainingLineAmount = subMoney(source.lineAmount, alreadyGranted);
     if (cmp(amount, remainingLineAmount) > 0) {
       refuse(
@@ -187,9 +187,9 @@ export async function createPrepaidGrant(
       insert into usage_prepaid_grants
         (org_id, customer_id, source_document_line_id, amount, currency_code, expires_on, created_by)
       values (${orgId}, ${customerId}, ${sourceLineId}, ${amount}, ${currency}, ${expiresOn}, ${actor})
-      returning ${GRANT_COLUMNS}`);
-    if (inserted.rows.length !== 1) throw new Error("prepaid grant insert returned an unexpected row count");
-    return inserted.rows[0]!;
+      returning ${GRANT_COLUMNS}`, "objects");
+    if (inserted.length !== 1) throw new Error("prepaid grant insert returned an unexpected row count");
+    return inserted[0]!;
   });
 }
 
@@ -212,13 +212,13 @@ async function readSnapshot(
     select g.amount::text as amount, g.expires_on::text as "expiresOn", c.subsidiary_id as "subsidiaryId"
       from usage_prepaid_grants g join parties c on c.org_id = g.org_id and c.id = g.customer_id
      where g.org_id = ${orgId} and g.id = ${grantId}
-       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects"))[0];
   if (!grant || !subsidiaryScopeAllows(allowedSubsidiaryIds, grant.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
   const drawn = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(amount), 0)::text as amount
       from usage_prepaid_draws
      where org_id = ${orgId} and grant_id = ${grantId}
-       ${includeFutureDraws ? sql`` : sql`and period_month <= ${asOf}`}`)).rows[0]?.amount ?? "0";
+       ${includeFutureDraws ? sql`` : sql`and period_month <= ${asOf}`}`, "objects"))[0]?.amount ?? "0";
   return { amount: grant.amount, expiresOn: grant.expiresOn, drawn };
 }
 
@@ -273,7 +273,7 @@ export async function listPrepaidGrants(orgId: string, asOf: string, allowedSubs
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
     const date = dateText(asOf, "as_of");
-    const rows = (await db.execute<UsagePrepaidGrant & { drawn: string; subsidiaryId: string | null }>(sql`
+    const rows = await db.execute<UsagePrepaidGrant & { drawn: string; subsidiaryId: string | null }>(sql`
       select ${LIST_GRANT_COLUMNS}, c.subsidiary_id as "subsidiaryId",
              coalesce(sum(d.amount), 0)::text as drawn
         from usage_prepaid_grants g
@@ -282,7 +282,7 @@ export async function listPrepaidGrants(orgId: string, asOf: string, allowedSubs
        where g.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        group by g.id, c.subsidiary_id
-       order by g.created_at, g.id`)).rows;
+       order by g.created_at, g.id`, "objects");
     return rows.map(({ drawn, subsidiaryId, ...grant }) => {
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
       const balance = subMoney(grant.amount, drawn);
@@ -319,7 +319,7 @@ export async function recordPrepaidDraw(
         join parties c on c.org_id = g.org_id and c.id = g.customer_id
        where g.org_id = ${orgId} and g.id = ${grantId}
          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       for update of g, c`)).rows[0];
+       for update of g, c`, "objects"))[0];
     if (!grant) {
       throw new ScopeNotFoundError();
     }
@@ -333,7 +333,7 @@ export async function recordPrepaidDraw(
     }
     const drawn = (await db.execute<{ amount: string }>(sql`
       select coalesce(sum(amount), 0)::text as amount
-        from usage_prepaid_draws where org_id = ${orgId} and grant_id = ${grantId}`)).rows[0]?.amount ?? "0";
+        from usage_prepaid_draws where org_id = ${orgId} and grant_id = ${grantId}`, "objects"))[0]?.amount ?? "0";
     const balance = subMoney(grant.amount, drawn);
     if (cmp(balance, amount) < 0) {
       refuse(
@@ -347,10 +347,10 @@ export async function recordPrepaidDraw(
       const inserted = await db.execute<typeof usagePrepaidDraws.$inferSelect>(sql`
         insert into usage_prepaid_draws (org_id, grant_id, run_id, period_month, amount)
         values (${orgId}, ${grantId}, ${runId}, ${periodMonth}, ${amount})
-        returning ${DRAW_COLUMNS}`);
-      if (inserted.rows.length !== 1) throw new Error("prepaid draw insert returned an unexpected row count");
+        returning ${DRAW_COLUMNS}`, "objects");
+      if (inserted.length !== 1) throw new Error("prepaid draw insert returned an unexpected row count");
       await refreshPrepaidBreakage(orgId,grantId,periodMonth)
-      return inserted.rows[0]!;
+      return inserted[0]!;
     } catch (error) {
       if (uniqueViolationFor(error, "usage_prepaid_draws_run_grant_period_unique")) {
         refuse("usage_prepaid_draw_duplicate", "This rating run already recorded a draw from the grant for this period.", "Reuse the existing draw for this run, or use a different run and period.", "run_id", 409);
@@ -369,7 +369,7 @@ export async function reversePrepaidDraw(
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const drawId = uuidText(drawIdInput, "draw_id");
-    const source = (await db.execute<{grant_id:string}>(sql`select grant_id from usage_prepaid_draws where org_id=${orgId} and id=${drawId}`)).rows[0]
+    const source = (await db.execute<{grant_id:string}>(sql`select grant_id from usage_prepaid_draws where org_id=${orgId} and id=${drawId}`, "objects"))[0]
     if (!source) throw new ScopeNotFoundError()
     await lockPrepaidRecognitionContract(orgId,source.grant_id)
     const original = (await db.execute<{
@@ -389,7 +389,7 @@ export async function reversePrepaidDraw(
         join parties c on c.org_id = g.org_id and c.id = g.customer_id
        where d.org_id = ${orgId} and d.id = ${drawId}
          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       for update of d, g, c`)).rows[0];
+       for update of d, g, c`, "objects"))[0];
     if (!original) {
       throw new ScopeNotFoundError();
     }
@@ -399,7 +399,7 @@ export async function reversePrepaidDraw(
     const priorReversal = (await db.execute<{ id: string }>(sql`
       select id from usage_prepaid_draws
        where org_id = ${orgId} and reverses_draw_id = ${drawId}
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (priorReversal) {
       refuse("usage_prepaid_draw_already_reversed", "This prepaid draw already has a reversal.", "Use the existing reversal entry; an original draw may be reversed only once.", "draw_id", 409);
     }
@@ -408,9 +408,9 @@ export async function reversePrepaidDraw(
       insert into usage_prepaid_draws
         (org_id, grant_id, run_id, period_month, amount, reverses_draw_id)
       values (${orgId}, ${original.grantId}, ${original.runId}, ${original.periodMonth}, ${amount}, ${original.id})
-      returning ${DRAW_COLUMNS}`);
-    if (inserted.rows.length !== 1) throw new Error("prepaid draw reversal insert returned an unexpected row count");
+      returning ${DRAW_COLUMNS}`, "objects");
+    if (inserted.length !== 1) throw new Error("prepaid draw reversal insert returned an unexpected row count");
     await refreshPrepaidBreakage(orgId,original.grantId,original.periodMonth)
-    return inserted.rows[0]!;
+    return inserted[0]!;
   });
 }

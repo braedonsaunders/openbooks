@@ -40,13 +40,13 @@ export async function candidateInScopeRequisitionIds(
   candidateId: string,
   allowed: Set<string> | null,
 ): Promise<string[]> {
-  const rows = (await exec.execute<{ requisitionId: string }>(sql`
+  const rows = await exec.execute<{ requisitionId: string }>(sql`
     select distinct a.requisition_id as "requisitionId"
       from hrm_applications a
       join hrm_requisitions r on r.org_id = a.org_id and r.id = a.requisition_id
      where a.org_id = ${orgId} and a.candidate_id = ${candidateId}
        ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)}
-  `)).rows;
+  `, "objects");
   return rows.map((row) => row.requisitionId);
 }
 
@@ -81,7 +81,7 @@ export async function requireCandidateOwnedInScope(
   if (allowed === null) {
     const exists = (await exec.execute<{ one: number }>(sql`
       select 1 as one from hrm_candidates where org_id = ${orgId} and id = ${candidateId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!exists) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
     }
@@ -104,7 +104,7 @@ export async function candidateSharedViaPool(
     select 1 as one from hrm_talent_pool_members
      where org_id = ${orgId} and candidate_id = ${candidateId}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   return !!row;
 }
 
@@ -117,6 +117,6 @@ export async function candidateApplicationCount(
   const row = (await exec.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_applications
      where org_id = ${orgId} and candidate_id = ${candidateId}
-  `)).rows[0];
+  `, "objects"))[0];
   return Number(row?.count ?? 0);
 }

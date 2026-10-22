@@ -20,8 +20,8 @@ async function pendingChangeGate(orgId: string, subsidiaryId: string, submitterI
   const { flowId } = await seedApprovalFlow(orgId, { subjectKind: 'customer_invoice', mode: 'any',
     assignees: assignee.userId ? [{ type: 'user', userId: assignee.userId }] : [{ type: 'role', role: assignee.role! }] })
   await withOrgTransaction(orgId, () => submitForApproval('customer_invoice', documentId, submitterId))
-  const gates = (await db.execute<{ id: string }>(sql`select id from flow_gates
-    where org_id=${orgId} and flow_id=${flowId} and subject_id=${documentId} and status='pending'`)).rows
+  const gates = await db.execute<{ id: string }>(sql`select id from flow_gates
+    where org_id=${orgId} and flow_id=${flowId} and subject_id=${documentId} and status='pending'`, 'objects')
   assert.equal(gates.length, 1)
   const gateId = gates[0]!.id
   return gateId

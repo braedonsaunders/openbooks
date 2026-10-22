@@ -193,7 +193,7 @@ test(
       assert.equal(draftErrors.length, 2);
       const stubs = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from pay_stubs s
-         where s.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'DE'`)).rows[0]!.n;
+         where s.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'DE'`, "objects"))[0]!.n;
       assert.equal(stubs, "0");
     } finally {
       await dropScratchOrgReporting(org.orgId);

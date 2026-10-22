@@ -62,7 +62,7 @@ async function fixture() {
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const waiverFor = async (partyId: string, projectId: string) =>
     (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into compliance_waivers
@@ -71,7 +71,7 @@ async function fixture() {
       values (${org.orgId}, ${partyId}, ${requirementId}, ${projectId},
               'filed bounded exception', '2026-06-01', '2026-08-01',
               ${actorId}, null, null, ${actorId}, ${actorId})
-      returning id`))).rows[0]!.id;
+      returning id`, "objects")))[0]!.id;
   return {
     org,
     hiddenWaiverId: await waiverFor(hiddenPartyId, visibleProjectId),
@@ -93,8 +93,8 @@ const revoke = (id: string) =>
   );
 
 async function revokedAt(id: string): Promise<string | null> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ revoked_at: string | null }>(sql`select revoked_at from compliance_waivers where id = ${id}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ revoked_at: string | null }>(sql`select revoked_at from compliance_waivers where id = ${id}`, "objects"));
   return rows[0]!.revoked_at;
 }
 

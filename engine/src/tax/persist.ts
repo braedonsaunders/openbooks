@@ -70,8 +70,8 @@ export async function loadTaxComponentConfig(
            and (effective_to is null or effective_to >= ${dateIso})
          order by effective_from desc limit 1) tr on true
      where tc.id = ${taxCodeId} and tc.org_id = ${orgId} and tc.is_active
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   if (!row) return [];
   return [
     {
@@ -111,13 +111,13 @@ export async function loadTaxProfileConfig(
   const group = (await runner.execute<{ inclusive: boolean }>(sql`
     select price_includes_tax as inclusive from tax_groups
      where id = ${profile.taxGroupId} and org_id = ${orgId} and is_active
-  `)).rows[0];
+  `, "objects"))[0];
   if (!group) throw new TaxCalculationError("selected tax group is inactive or missing");
-  const members = (await runner.execute<{ taxCodeId: string; sequence: number }>(sql`
+  const members = await runner.execute<{ taxCodeId: string; sequence: number }>(sql`
     select m.tax_code_id as "taxCodeId", m.sequence from tax_group_members m
       join tax_groups g on g.id = m.tax_group_id
      where g.id = ${profile.taxGroupId} and g.org_id = ${orgId} order by m.sequence
-  `)).rows;
+  `, "objects");
   if (!members.length) throw new TaxCalculationError("selected tax group has no components");
   const configs: TaxComponentConfig[] = [];
   for (const member of members) {
@@ -163,7 +163,7 @@ export async function persistLineTaxComponents(
   const line = (await runner.execute<{ marketplaceFacilitator: string | null }>(sql`
     select marketplace_facilitator as "marketplaceFacilitator"
       from document_lines where org_id = ${orgId} and id = ${documentLineId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!line) {
     throw new TaxCalculationError(
       "cannot persist tax evidence for an unknown document line — save the line before calculating its tax",

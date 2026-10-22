@@ -22,11 +22,11 @@ for (const timing of ["before source", "same day", "later day", "mixed future so
       await writeDownInventoryToNrv(org.orgId, actor, { ...common, date: "2026-07-16", nrvPerUnit: "6" });
       const date = timing === "before source" || timing === "mixed future source" ? "2026-07-15" : timing === "same day" ? "2026-07-16" : timing === "later day" ? "2026-07-17" : "2026-02-30";
       const reverse = () => reverseInventoryWritedown(org.orgId, actor, { ...common, date, nrvPerUnit: "10" });
-      const snapshot = async () => (await db.execute(sql`
+      const snapshot = async () => await db.execute(sql`
         select (select jsonb_agg(to_jsonb(w) order by id) from inventory_writedowns w where org_id=${org.orgId}) as writedowns,
                (select jsonb_agg(to_jsonb(l) order by id) from cost_layers l where org_id=${org.orgId}) as layers,
                (select jsonb_agg(to_jsonb(e) order by id) from journal_entries e where org_id=${org.orgId}) as entries
-      `)).rows;
+      `, "objects");
       if (timing === "same day" || timing === "later day") {
         const result = await reverse();
         assert.equal(result.amount, "40.0000");

@@ -40,11 +40,9 @@ async function fixture(fn: (f: Fixture) => Promise<void>, postJuly = true) {
     await db.execute(
       sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
     );
-    const calendar = (
-      await db.execute<{ id: string }>(
-        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
-      )
-    ).rows[0]!.id;
+    const calendar = (await db.execute<{ id: string }>(
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
+      ))[0]!.id;
     for (const [month, last] of [
       ["08", "31"],
       ["09", "30"],
@@ -124,11 +122,9 @@ function proposal(
 }
 async function approve(f: Fixture, id: string) {
   await submitFinancialChange(f.org.orgId, id, f.actors.submitterId);
-  const gate = (
-    await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`,
-    )
-  ).rows[0];
+  const gate = (await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`, "objects",
+    ))[0];
   assert.ok(gate);
   await decideGate({
     gateId: gate.id,
@@ -137,11 +133,9 @@ async function approve(f: Fixture, id: string) {
   });
 }
 async function earned(f: Fixture) {
-  const row = (
-    await db.execute<{ amount: string }>(
-      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.recognized} and e.status in('posted','reversed')`,
-    )
-  ).rows[0]!;
+  const row = (await db.execute<{ amount: string }>(
+      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.recognized} and e.status in('posted','reversed')`, "objects",
+    ))[0]!;
   return toUnits(row.amount);
 }
 test(
@@ -149,15 +143,13 @@ test(
   { skip: !DB },
   async () =>
     fixture(async (f) => {
-      const old = (
-        await db.execute<{
+      const old = await db.execute<{
           id: string;
           journal_entry_id: string | null;
           planned_amount: string;
         }>(
-          sql`select l.id,l.journal_entry_id,l.planned_amount::text from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} order by sequence`,
-        )
-      ).rows;
+          sql`select l.id,l.journal_entry_id,l.planned_amount::text from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} order by sequence`, "objects",
+        );
       const input = proposal(f),
         { changeId } = await proposeRevenueModification(
           f.org.orgId,
@@ -177,16 +169,14 @@ test(
       );
       assert.equal(applied.newTransactionPrice, "3600.0000");
       assert.equal(await earned(f), toUnits("1000"));
-      const retained = (
-        await db.execute<{
+      const retained = await db.execute<{
           id: string;
           journal_entry_id: string | null;
           planned_amount: string;
           superseded_by_change_id: string | null;
         }>(
-          sql`select id,journal_entry_id,planned_amount::text,superseded_by_change_id from recognition_schedule_lines where org_id=${f.org.orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(old.map((r) => r.id))}::jsonb)::uuid) order by sequence`,
-        )
-      ).rows;
+          sql`select id,journal_entry_id,planned_amount::text,superseded_by_change_id from recognition_schedule_lines where org_id=${f.org.orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(old.map((r) => r.id))}::jsonb)::uuid) order by sequence`, "objects",
+        );
       assert.deepEqual(
         retained.map(({ id, journal_entry_id, planned_amount }) => ({
           id,
@@ -277,11 +267,9 @@ for (const [delta, progress, expected] of [
           f.actors.submitterId,
         );
         assert.equal(await earned(f), toUnits(expected!));
-        const dates = (
-          await db.execute<{ posting_date: string }>(
-            sql`select posting_date::text from journal_entries where org_id=${f.org.orgId} and origin='revenue_recognition' order by posting_date`,
-          )
-        ).rows.map((r) => r.posting_date);
+        const dates = (await db.execute<{ posting_date: string }>(
+            sql`select posting_date::text from journal_entries where org_id=${f.org.orgId} and origin='revenue_recognition' order by posting_date`, "objects",
+          )).map((r) => r.posting_date);
         assert.deepEqual(dates, ["2026-07-31", "2026-08-01"]);
         const r = await runRevenueRecognition(
           f.org.orgId,
@@ -327,11 +315,9 @@ test(
       );
       assert.equal(r.newTransactionPrice, "3000.0000");
       assert.equal((r.separateContractIds as string[]).length, 1);
-      const remaining = (
-        await db.execute<{ amount: string }>(
-          sql`select sum(l.planned_amount)::text as amount from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} and l.journal_entry_id is null and l.superseded_by_change_id is null`,
-        )
-      ).rows[0]!;
+      const remaining = (await db.execute<{ amount: string }>(
+          sql`select sum(l.planned_amount)::text as amount from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} and l.journal_entry_id is null and l.superseded_by_change_id is null`, "objects",
+        ))[0]!;
       assert.equal(toUnits(remaining.amount), toUnits("2000"));
     }),
 );
@@ -420,11 +406,9 @@ test(
         );
       });
       assert.equal(await earned(f), toUnits("1000"));
-      const c = (
-        await db.execute<{ revision: number }>(
-          sql`select revision from revenue_contracts where org_id=${f.org.orgId} and id=${f.contractId}`,
-        )
-      ).rows[0]!;
+      const c = (await db.execute<{ revision: number }>(
+          sql`select revision from revenue_contracts where org_id=${f.org.orgId} and id=${f.contractId}`, "objects",
+        ))[0]!;
       assert.equal(c.revision, 1);
     }),
 );

@@ -18,13 +18,13 @@ async function seedAsset(orgId: string, subsidiaryId: string, accounts: { invAss
 }
 
 async function eventFor(orgId: string, entryId: string) {
-  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`, 'objects'))[0]!.id;
 }
 
 async function writeCounts(orgId: string, assetId: string) {
   const rows = (await db.execute<{ events: number; journals: number }>(sql`
     select (select count(*)::int from asset_events where org_id=${orgId} and asset_id=${assetId}) as events,
-           (select count(*)::int from journal_entries where org_id=${orgId}) as journals`)).rows[0]!;
+           (select count(*)::int from journal_entries where org_id=${orgId}) as journals`, 'objects'))[0]!;
   return rows;
 }
 

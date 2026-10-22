@@ -66,7 +66,7 @@ async function snapshot(f: Fixture) {
       (select jsonb_agg(to_jsonb(d) order by d.id) from documents d where d.org_id=${f.org.orgId}) as documents,
       (select jsonb_agg(to_jsonb(l) order by l.id) from document_lines l where l.org_id=${f.org.orgId}) as bill_lines,
       (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where a.org_id=${f.org.orgId}) as audit
-  `)).rows[0];
+  `, "objects"))[0];
 }
 
 async function refusedWithoutWrites(f: Fixture, message: RegExp) {
@@ -78,10 +78,10 @@ async function refusedWithoutWrites(f: Fixture, message: RegExp) {
 
 async function generatedWithAccount(f: Fixture, accountId: string) {
   const generated = await withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, f.app));
-  const lines = (await db.execute(sql`select account_id, amount::text, unit_price::text from document_lines where org_id=${f.org.orgId} and document_id=${generated.vendorBillDocumentId} order by line_number`)).rows;
+  const lines = await db.execute(sql`select account_id, amount::text, unit_price::text from document_lines where org_id=${f.org.orgId} and document_id=${generated.vendorBillDocumentId} order by line_number`, "objects");
   assert.deepEqual(lines, [{ account_id: accountId, amount: "1000.1234", unit_price: "1000.12340000" }]);
   assert.equal(generated.netDue, "1000.1234");
-  const source = (await db.execute(sql`select status, vendor_bill_document_id from vendor_pay_applications where org_id=${f.org.orgId} and id=${f.app}`)).rows[0];
+  const source = (await db.execute(sql`select status, vendor_bill_document_id from vendor_pay_applications where org_id=${f.org.orgId} and id=${f.app}`, "objects"))[0];
   assert.deepEqual(source, { status: "billed", vendor_bill_document_id: generated.vendorBillDocumentId });
   assert.deepEqual(await withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, f.app)), generated, "generation remains idempotent");
 }

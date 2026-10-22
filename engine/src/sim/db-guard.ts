@@ -139,8 +139,8 @@ export function assertSimEnabled(): void {
 export async function assertSimOrg(orgId: string): Promise<void> {
   const r = (await db.execute<{ name: string; tagged: boolean }>(sql`
     select name, coalesce((settings->>'simHarness')::boolean, false) as tagged
-      from orgs where id = ${orgId}`));
-  const row = r.rows[0];
+      from orgs where id = ${orgId}`, "objects"));
+  const row = r[0];
   if (!row) throw new Error(`org ${orgId} not found`);
   if (!row.tagged) {
     throw new Error(

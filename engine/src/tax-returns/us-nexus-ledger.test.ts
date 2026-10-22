@@ -56,15 +56,16 @@ const NO_MARKETPLACE_RULES = "marketplace_nexus_state_rules";
 test("restricted nexus aggregation excludes documents from other subsidiaries", async (t) => {
   const visibleSubsidiaryId = "00000000-0000-0000-0000-000000000001";
   let documentQuery = "";
-  t.mock.method(db, "execute", async (query: unknown) => {
+  t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const text = sqlText(query);
-    if (text.includes(NO_MARKETPLACE_RULES)) return { rows: [] };
+    if (text.includes(NO_MARKETPLACE_RULES)) return inMode({ rows: [] });
     documentQuery = text;
     // Model the database applying the generated predicate. Without it this
     // mock returns both legal entities, making the regression fail.
-    return {
+    return inMode({
       rows: documentQuery.includes("d.subsidiary_id in") ? [visibleSale] : [visibleSale, hiddenSale],
-    };
+    });
   });
 
   const result = await computeUsNexusStatus(
@@ -81,8 +82,8 @@ test("restricted nexus aggregation excludes documents from other subsidiaries", 
 });
 
 test("unrestricted nexus aggregation retains all organization sales", async (t) => {
-  t.mock.method(db, "execute", async (query: unknown) =>
-    ({ rows: sqlText(query).includes(NO_MARKETPLACE_RULES) ? [] : [visibleSale, hiddenSale] }));
+  t.mock.method(db, "execute", async (query: unknown, mode?: string) =>
+    Promise.resolve({ rows: sqlText(query).includes(NO_MARKETPLACE_RULES) ? [] : [visibleSale, hiddenSale] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)));
 
   const result = await computeUsNexusStatus("org-1", "2026-07-01", "2026-07-31");
 
@@ -100,12 +101,13 @@ test("marketplace-excluded rules omit fully facilitated invoices from the transa
     marketplace_invoice: 1,
     as_of: `2026-07-${String((index % 28) + 1).padStart(2, "0")}`,
   }));
-  t.mock.method(db, "execute", async (query: unknown) => {
+  t.mock.method(db, "execute", async (query: unknown, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const text = sqlText(query);
     if (text.includes(NO_MARKETPLACE_RULES)) {
-      return { rows: [{ state: "FL", includeInThreshold: false, needsReview: false, source: "verified" }] };
+      return inMode({ rows: [{ state: "FL", includeInThreshold: false, needsReview: false, source: "verified" }] });
     }
-    return { rows: marketplaceInvoices };
+    return inMode({ rows: marketplaceInvoices });
   });
 
   const result = await computeUsNexusStatus("org-1", "2026-07-01", "2026-07-31");

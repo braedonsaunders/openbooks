@@ -73,9 +73,9 @@ test(
       `));
       interface StoredRefs { income: string | null; rule: string | null }
       const stored = async (): Promise<StoredRefs | undefined> =>
-        (await withBypass(() => db.execute(
-          sql`select income_account_id as income, recognition_rule_id as rule from items where id = ${itemId}`,
-        )) as unknown as { rows: StoredRefs[] }).rows[0];
+        (await withBypass(() => db.execute<StoredRefs>(
+          sql`select income_account_id as income, recognition_rule_id as rule from items where id = ${itemId}`, "objects",
+        )))[0];
 
       // Malformed uuid fails closed with a typed field error, never SQL text.
       const malformed = await withOrgContext(orgA.orgId, () =>

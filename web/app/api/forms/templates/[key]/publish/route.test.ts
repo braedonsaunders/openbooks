@@ -95,19 +95,20 @@ const mockSources = new Map<string, string>([
         execute() { throw new Error('unexpected direct database write') },
         async transaction(work) {
           const tx = {
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               state.calls.push(text)
               if (text.includes('from form_templates') && text.includes('for update')) {
-                return { rows: [{ id: 'template-1' }] }
+                return inMode({ rows: [{ id: 'template-1' }] })
               }
               if (text.includes('from form_template_versions')) {
-                return { rows: state.latest ? [state.latest] : [] }
+                return inMode({ rows: state.latest ? [state.latest] : [] })
               }
               if (text.includes('update form_template_versions')) {
-                return { rows: state.stampKept ? [{ id: 'version-1' }] : [] }
+                return inMode({ rows: state.stampKept ? [{ id: 'version-1' }] : [] })
               }
-              return { rows: [] }
+              return inMode({ rows: [] })
             },
           }
           return work(tx)

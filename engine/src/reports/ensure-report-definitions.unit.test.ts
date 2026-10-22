@@ -10,7 +10,7 @@ const queries: SQL[] = []
 ;(globalThis as typeof globalThis & { reportCatalogQueries: SQL[] }).reportCatalogQueries = queries
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === '../platform/db.ts') return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
-    export const db={execute:async query=>{globalThis.reportCatalogQueries.push(query);return {rows:[]}}};
+    export const db={execute:async (query, mode)=>{ const inMode = (result) => (mode === 'objects' ? result.rows : result);globalThis.reportCatalogQueries.push(query);return inMode({rows:[]})}};
     export const withOrgTransaction=()=>{throw new Error('Disabled board reporting must not write a package')};
   `) }
   return next(specifier, context)

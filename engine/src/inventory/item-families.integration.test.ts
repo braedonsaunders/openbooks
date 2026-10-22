@@ -61,7 +61,7 @@ async function auditEvents(orgId: string, table: string, rowId: string): Promise
   return withBypassContext(async () =>
     (await db.execute<{ changes: { event: string } }>(sql`
       select changes from audit_log where org_id = ${orgId} and table_name = ${table} and row_id = ${rowId}
-       order by at`)).rows.map((row) => String(row.changes?.event ?? "")),
+       order by at`, "objects")).map((row) => String(row.changes?.event ?? "")),
   );
 }
 
@@ -80,9 +80,9 @@ test("generation creates one variant per combination with family codes and names
     assert.equal(first.name, "Classic Tee — S / Red");
     assert.deepEqual(first.optionValues, { Size: "S", Color: "Red" });
     const rows = await withBypassContext(async () =>
-      (await db.execute<{ kind: string; unit: string; default_rate: string; category: string }>(sql`
+      await db.execute<{ kind: string; unit: string; default_rate: string; category: string }>(sql`
         select kind, unit, default_rate::text, category from items
-         where org_id = ${org.orgId} and family_id = ${family.id}`)).rows);
+         where org_id = ${org.orgId} and family_id = ${family.id}`, "objects"));
     assert.equal(rows.length, 4);
     for (const row of rows) {
       assert.equal(row.kind, "inventory");
@@ -112,7 +112,7 @@ test("generation is idempotent: re-running creates only missing combinations", {
     );
     const count = await withBypassContext(async () =>
       (await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from items where org_id = ${org.orgId} and family_id = ${family.id}`)).rows[0]!.count);
+        select count(*)::text as count from items where org_id = ${org.orgId} and family_id = ${family.id}`, "objects"))[0]!.count);
     assert.equal(count, "4");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -132,7 +132,7 @@ test("generation refuses a code taken by another item, naming it, and creates no
     );
     const count = await withBypassContext(async () =>
       (await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from items where org_id = ${org.orgId} and family_id = ${family.id}`)).rows[0]!.count);
+        select count(*)::text as count from items where org_id = ${org.orgId} and family_id = ${family.id}`, "objects"))[0]!.count);
     assert.equal(count, "0");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -277,9 +277,9 @@ test("bulk edit sets price, cost, barcode and status in one audited transaction"
     assert.equal(result.familyId, family.id);
     assert.deepEqual(result.updated.sort(), ids.sort());
     const rows = await withBypassContext(async () =>
-      (await db.execute<{ default_rate: string; default_cost: string; is_active: boolean }>(sql`
+      await db.execute<{ default_rate: string; default_cost: string; is_active: boolean }>(sql`
         select default_rate::text, default_cost::text, is_active from items
-         where org_id = ${org.orgId} and family_id = ${family.id}`)).rows);
+         where org_id = ${org.orgId} and family_id = ${family.id}`, "objects"));
     assert.equal(rows.length, 4);
     for (const row of rows) {
       assert.equal(row.default_rate, "24.5000");
@@ -306,7 +306,7 @@ test("bulk edit sets price, cost, barcode and status in one audited transaction"
     const barcodes = await withBypassContext(async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from item_identifiers
-         where org_id = ${org.orgId} and kind = 'gtin' and value = '810055012345'`)).rows[0]!.count);
+         where org_id = ${org.orgId} and kind = 'gtin' and value = '810055012345'`, "objects"))[0]!.count);
     assert.equal(barcodes, "1");
     for (const id of ids) {
       const events = await auditEvents(org.orgId, "items", id);
@@ -337,7 +337,7 @@ test("bulk edit refuses a barcode taken by another item, naming it", { skip: !DB
     const barcodes = await withBypassContext(async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from item_identifiers
-         where org_id = ${org.orgId} and value = '810055099999'`)).rows[0]!.count);
+         where org_id = ${org.orgId} and value = '810055099999'`, "objects"))[0]!.count);
     assert.equal(barcodes, "1");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -394,10 +394,10 @@ test("bulk edit refuses mixed families and fences the route family before writes
       price: "10",
     }));
     assert.equal(mismatch, null);
-    const prices = await withBypassContext(async () => (await db.execute<{
+    const prices = await withBypassContext(async () => await db.execute<{
       id: string;
       default_rate: string;
-    }>(sql`select id, default_rate::text from items where org_id = ${org.orgId} and id in (${first.id}, ${other.id})`)).rows);
+    }>(sql`select id, default_rate::text from items where org_id = ${org.orgId} and id in (${first.id}, ${other.id})`, "objects"));
     assert.deepEqual(prices.map((row) => [row.id, row.default_rate]), [
       [first.id, "19.9900"],
       [other.id, "29.9900"],
@@ -425,7 +425,7 @@ test("clearing a variant barcode removes every supported identifier kind", { ski
       barcode: null,
     }));
     const count = await withBypassContext(async () => (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from item_identifiers where org_id = ${org.orgId} and item_id = ${variantId}`)).rows[0]!.count);
+      select count(*)::int as count from item_identifiers where org_id = ${org.orgId} and item_id = ${variantId}`, "objects"))[0]!.count);
     assert.equal(count, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -442,7 +442,7 @@ test("detach keeps the item and clears only its family membership", { skip: !DB 
     assert.equal(detached.familyId, family.id);
     const row = await withBypassContext(async () =>
       (await db.execute<{ code: string; name: string; family_id: string | null }>(sql`
-        select code, name, family_id from items where org_id = ${org.orgId} and id = ${target.id}`)).rows[0]!);
+        select code, name, family_id from items where org_id = ${org.orgId} and id = ${target.id}`, "objects"))[0]!);
     assert.equal(row.code, target.code);
     assert.equal(row.name, target.name);
     assert.equal(row.family_id, null);
@@ -468,7 +468,7 @@ test("convert makes a standalone item the first variant of its new family", { sk
     assert.equal(converted.options[0]!.name, "Tier");
     const row = await withBypassContext(async () =>
       (await db.execute<{ family_id: string; option_values: Record<string, string> }>(sql`
-        select family_id, option_values from items where org_id = ${org.orgId} and id = ${org.items.service}`)).rows[0]!);
+        select family_id, option_values from items where org_id = ${org.orgId} and id = ${org.items.service}`, "objects"))[0]!);
     assert.equal(row.family_id, converted.id);
     assert.deepEqual(row.option_values, { Tier: "Standard" });
     const generated = await withBypassContext(() =>
@@ -499,7 +499,7 @@ test("family writes refuse while the feature is off and leave nothing behind", {
     );
     const count = await withBypassContext(async () =>
       (await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from item_families where org_id = ${org.orgId}`)).rows[0]!.count);
+        select count(*)::text as count from item_families where org_id = ${org.orgId}`, "objects"))[0]!.count);
     assert.equal(count, "0");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

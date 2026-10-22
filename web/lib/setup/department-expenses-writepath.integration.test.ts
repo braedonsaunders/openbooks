@@ -20,7 +20,7 @@ test('department expense mappings create, audit, and refuse overlaps', { skip: !
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                             reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (gen_random_uuid(), ${org.orgId}, ${number}, ${number}, 'expense', false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true) returning id`))).rows[0]!.id
+              '[]'::jsonb, '{}'::jsonb, true) returning id`, 'objects')))[0]!.id
     const wages = await account('5110')
     const overhead = await account('8010')
     const componentId = (await withBypass(() => db.execute<{ id: string }>(sql`
@@ -28,10 +28,10 @@ test('department expense mappings create, audit, and refuse overlaps', { skip: !
                                   pensionable, insurable, vacationable, payment_kind, sequence,
                                   created_by, updated_by)
       values (gen_random_uuid(), ${org.orgId}, 'WAGES', 'Wages', 'earning', null, 'fixed_amount', '100',
-              true, true, true, false, 'cash', 10, ${actor}, ${actor}) returning id`))).rows[0]!.id
+              true, true, true, false, 'cash', 10, ${actor}, ${actor}) returning id`, 'objects')))[0]!.id
     const departmentId = (await withBypass(() => db.execute<{ id: string }>(sql`
       insert into departments (id, org_id, code, name, is_active)
-      values (gen_random_uuid(), ${org.orgId}, 'OVERHEAD', 'Overhead', true) returning id`))).rows[0]!.id
+      values (gen_random_uuid(), ${org.orgId}, 'OVERHEAD', 'Overhead', true) returning id`, 'objects')))[0]!.id
     const act = { orgId: org.orgId, id: actor } as never
 
     const created = await withBypass(() => createSetupRecord(act, 'pay-component-department-expenses', {
@@ -47,8 +47,8 @@ test('department expense mappings create, audit, and refuse overlaps', { skip: !
 
     const audits = await withBypass(() => db.execute<{ action: string }>(sql`
       select action from audit_log
-       where org_id = ${org.orgId} and table_name = 'pay_component_department_expenses' and row_id = ${createdId}`))
-    assert.ok(audits.rows.length > 0, 'mapping changes are audited')
+       where org_id = ${org.orgId} and table_name = 'pay_component_department_expenses' and row_id = ${createdId}`, 'objects'))
+    assert.ok(audits.length > 0, 'mapping changes are audited')
 
     const overlapping = await withBypass(() => createSetupRecord(act, 'pay-component-department-expenses', {
       payComponentId: componentId,
@@ -99,16 +99,16 @@ test('a department expense mapping saved with a blank end date is open-ended', {
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                             reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (gen_random_uuid(), ${org.orgId}, '6000', 'Office Salaries', 'expense', false, true, false, false,
-              '[]'::jsonb, '{}'::jsonb, true) returning id`))).rows[0]!.id
+              '[]'::jsonb, '{}'::jsonb, true) returning id`, 'objects')))[0]!.id
     const componentId = (await withBypass(() => db.execute<{ id: string }>(sql`
       insert into pay_components (id, org_id, code, name, kind, country, basis, value, taxable,
                                   pensionable, insurable, vacationable, payment_kind, sequence,
                                   created_by, updated_by)
       values (gen_random_uuid(), ${org.orgId}, 'BASE', 'Base pay', 'earning', null, 'fixed_amount', '100',
-              true, true, true, false, 'cash', 10, ${actor}, ${actor}) returning id`))).rows[0]!.id
+              true, true, true, false, 'cash', 10, ${actor}, ${actor}) returning id`, 'objects')))[0]!.id
     const departmentId = (await withBypass(() => db.execute<{ id: string }>(sql`
       insert into departments (id, org_id, code, name, is_active)
-      values (gen_random_uuid(), ${org.orgId}, 'OFFICE', 'Office', true) returning id`))).rows[0]!.id
+      values (gen_random_uuid(), ${org.orgId}, 'OFFICE', 'Office', true) returning id`, 'objects')))[0]!.id
     const act = { orgId: org.orgId, id: actor } as never
 
     const created = await withBypass(() => createSetupRecord(act, 'pay-component-department-expenses', {
@@ -122,8 +122,8 @@ test('a department expense mapping saved with a blank end date is open-ended', {
     assert.equal(created.status, 200, `blank end date refused: ${JSON.stringify(created.body)}`)
     const createdId = (created.body as { id: string }).id
     const stored = await withBypass(() => db.execute<{ effective_to: string | null }>(sql`
-      select effective_to::text as effective_to from pay_component_department_expenses where id = ${createdId}`))
-    assert.equal(stored.rows[0]?.effective_to ?? null, null, 'the blank end stores as open-ended')
+      select effective_to::text as effective_to from pay_component_department_expenses where id = ${createdId}`, 'objects'))
+    assert.equal(stored[0]?.effective_to ?? null, null, 'the blank end stores as open-ended')
 
     const later = await withBypass(() => createSetupRecord(act, 'pay-component-department-expenses', {
       payComponentId: componentId,

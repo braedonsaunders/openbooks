@@ -48,7 +48,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
 
   if(contextProjectId) {
     if(!kinds.tasks||!can(authz,'projects.read'))notFound()
-    const project=(await db.execute<{id:string;subsidiaryId:string|null}>(sql`select id,subsidiary_id as "subsidiaryId" from projects where org_id=${orgId} and id=${contextProjectId}`)).rows[0]
+    const project=(await db.execute<{id:string;subsidiaryId:string|null}>(sql`select id,subsidiary_id as "subsidiaryId" from projects where org_id=${orgId} and id=${contextProjectId}`, 'objects'))[0]
     if(!project||authz.allowedSubsidiaryIds!==null&&(project.subsidiaryId===null||!authz.allowedSubsidiaryIds.has(project.subsidiaryId)))notFound()
   }
   const t = await getTranslations('scheduling')
@@ -70,7 +70,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
   // with the roster on its requests, when the caller can read the board.
   const requestId = pickString(searchParams.request)
   const requestBoardId = requestId && isUuid(requestId) && !pickString(searchParams.board)
-    ? (await db.execute<{ boardId: string }>(sql`select board_id as "boardId" from schedule_entry_requests where org_id = ${orgId} and id = ${requestId}`)).rows[0]?.boardId
+    ? (await db.execute<{ boardId: string }>(sql`select board_id as "boardId" from schedule_entry_requests where org_id = ${orgId} and id = ${requestId}`, 'objects'))[0]?.boardId
     : undefined
   const requested = pickString(searchParams.board) ?? requestBoardId
   const requestedProjectId = pickString(searchParams.project)
@@ -92,9 +92,9 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
   type Option = { id: string; name: string }
   const none: Option[] = []
   const [subsidiaries, departments, locations] = canConfigure ? await Promise.all([
-    db.execute<Option>(sql`select id, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`id`, allowed)} order by name`).then((result) => result.rows),
-    db.execute<Option>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`).then((result) => result.rows),
-    db.execute<Option>(sql`select id, name from locations where org_id = ${orgId} and is_active order by name`).then((result) => result.rows),
+    db.execute<Option>(sql`select id, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`id`, allowed)} order by name`, 'objects'),
+    db.execute<Option>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`, 'objects'),
+    db.execute<Option>(sql`select id, name from locations where org_id = ${orgId} and is_active order by name`, 'objects'),
   ]) : [none, none, none]
 
   const base: Omit<SchedulingPageData, 'board' | 'view' | 'anchor' | 'from' | 'through' | 'rangeDays' | 'initialWindow' | 'projects' | 'selectedProjectId' | 'settingsHref'> = {
@@ -125,7 +125,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
   const settingsHref = canConfigure ? `${base.hostPath}?board=${encodeURIComponent(board.code)}&boardRow=${board.id}` : null
 
   if (board.rowKind === 'tasks') {
-    const projects = (await db.execute<{ id: string; code: string | null; name: string; customerName: string | null; startsOn: string | null; endsOn: string | null }>(sql`
+    const projects = await db.execute<{ id: string; code: string | null; name: string; customerName: string | null; startsOn: string | null; endsOn: string | null }>(sql`
       select p.id, p.code, p.name, c.display_name as "customerName", p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
         from projects p left join parties c on c.org_id = p.org_id and c.id = p.customer_id
        where p.org_id = ${orgId} and p.is_active and p.status = 'active'
@@ -135,7 +135,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })}
        order by p.name, p.id
        limit 500
-    `)).rows
+    `, 'objects')
     const selectedProjectId = projects.find((project) => project.id === requestedProjectId)?.id ?? projects[0]?.id ?? null
     return { ...base, board, view, anchor: today, from: today, through: today, rangeDays: board.rangeDays, initialWindow: null, projects, selectedProjectId, settingsHref }
   }

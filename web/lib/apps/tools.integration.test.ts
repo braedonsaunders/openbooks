@@ -165,8 +165,8 @@ test('repeating an identical read runs again instead of replaying stale app data
     select count(*)::text as n from application_idempotency_keys
      where org_id = ${fx.orgId} and source = 'app'
        and operation = ${`apps.assistant_tool.${READ_TOOL}`}
-  `))
-  assert.equal(Number(claims.rows[0]!.n), 2, 'each chat read has its own invocation identity')
+  `, 'objects'))
+  assert.equal(Number(claims[0]!.n), 2, 'each chat read has its own invocation identity')
 }))
 
 test('oversized app tool responses are refused before they reach the model', { skip: !DB }, async () => withFixture(async (fx) => {
@@ -208,8 +208,8 @@ test('installation refuses a tool outside the admin grant before creating the ap
   )
   const rows = await withBypass(() => db.execute<{ count: string }>(sql`
     select count(*)::text as count from apps where org_id = ${fx.orgId} and key = ${key}
-  `))
-  assert.equal(rows.rows[0]!.count, '0')
+  `, 'objects'))
+  assert.equal(rows[0]!.count, '0')
 }))
 
 test('registry exposes installed tools only to actors holding the grant intersection', { skip: !DB }, async () => withFixture(async (fx) => {
@@ -283,7 +283,7 @@ test('mutating tool proposes, commits, and replays the same outcome', { skip: !D
   const card = (proposed as { ok: true; data: { proposedApplicationCommand: { toolName: string; input: unknown; confirmToken: string } } }).data.proposedApplicationCommand
 
   await withBypass(async () => {
-    const version = (await db.execute<{ id: string }>(sql`insert into app_versions (org_id, app_id, version, manifest, status, created_by) select a.org_id, a.id, '2.0.0', jsonb_set(v.manifest, '{version}', '"2.0.0"'), 'active', a.updated_by from apps a join app_versions v on v.id = a.active_version_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} returning id`)).rows[0]!
+    const version = (await db.execute<{ id: string }>(sql`insert into app_versions (org_id, app_id, version, manifest, status, created_by) select a.org_id, a.id, '2.0.0', jsonb_set(v.manifest, '{version}', '"2.0.0"'), 'active', a.updated_by from apps a join app_versions v on v.id = a.active_version_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} returning id`, 'objects'))[0]!
     await db.execute(sql`insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by) select f.org_id, f.app_id, ${version.id}, f.path, f.kind, f.content_type, f.content, f.is_binary, f.size, f.created_by, f.updated_by from app_files f join apps a on a.org_id = f.org_id and a.id = f.app_id where a.org_id = ${fx.orgId} and a.key = ${APP_KEY} and f.version_id = a.active_version_id`)
     await db.execute(sql`update apps set active_version_id = ${version.id} where org_id = ${fx.orgId} and key = ${APP_KEY}`)
   })
@@ -316,7 +316,7 @@ test('tool invocations leave app_runs evidence', { skip: !DB }, async () => with
     assert.equal(result.ok, true, JSON.stringify(result))
   }
   const rows = await withOrgContext(orgId, () =>
-    db.execute<{ n: string }>(sql`select count(*) as n from app_runs where org_id = ${orgId}`),
+    db.execute<{ n: string }>(sql`select count(*) as n from app_runs where org_id = ${orgId}`, 'objects'),
   )
-  assert.ok(Number(rows.rows[0]!.n) >= 3, `expected tool invocation evidence, got ${rows.rows[0]!.n}`)
+  assert.ok(Number(rows[0]!.n) >= 3, `expected tool invocation evidence, got ${rows[0]!.n}`)
 }))

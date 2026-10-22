@@ -93,14 +93,14 @@ export async function loadWorkItemDetail(
       ${WORK_ITEM_SUBJECT_JOIN}
      where w.id = ${itemId} and w.org_id = ${orgId} and w.agent_key in ${readableSql}
        ${workItemSubjectScopePredicate(orgId, allowedSubsidiaryIds)}
-  `);
-  const row = detail.rows[0];
+  `, "objects");
+  const row = detail[0];
   if (!row || !workItemSubjectInScope(allowedSubsidiaryIds, row.subject_type, row.subject_subsidiary_id)) return null;
   const evidence = await db.execute<EvidenceRow>(sql`
     select id, kind, source_type, source_id, data
       from ai_work_item_evidence where work_item_id = ${itemId} and org_id = ${orgId}
      order by created_at, id
-  `);
+  `, "objects");
   return {
     id: row.id,
     agentKey: row.agent_key,
@@ -114,7 +114,7 @@ export async function loadWorkItemDetail(
     lastDetectedAt: new Date(row.last_detected_at).toISOString(),
     dismissalReason: row.dismissal_reason,
     feedback: row.rating ?? null,
-    evidence: evidence.rows.map((e) => ({
+    evidence: evidence.map((e) => ({
       id: e.id,
       kind: e.kind,
       sourceType: e.source_type,

@@ -6,8 +6,8 @@ import { applyEntityFieldMappings, decodeEntityMappings, mappingFieldValue, setM
 import type { EntityStream, MigrationSource, NativeChanges, SourceEntity } from './source.ts';
 
 async function customDefinitions(orgId: string, table: string): Promise<CustomFieldDef[]> {
-  return (await db.execute<CustomFieldDef>(sql`select id,target_table as "targetTable",target_kind as "targetKind",key,label,field_type as "fieldType",config,is_required as "isRequired",sort_order as "sortOrder"
-    from custom_field_defs where org_id=${orgId} and target_table=${table} and is_active order by sort_order,label`)).rows;
+  return await db.execute<CustomFieldDef>(sql`select id,target_table as "targetTable",target_kind as "targetKind",key,label,field_type as "fieldType",config,is_required as "isRequired",sort_order as "sortOrder"
+    from custom_field_defs where org_id=${orgId} and target_table=${table} and is_active order by sort_order,label`, 'objects');
 }
 function customTarget(def: CustomFieldDef): EntityMappingField | null {
   const kinds: Record<string, EntityMappingField['kind']> = { text: 'text', long_text: 'text', number: 'decimal', currency: 'decimal', date: 'date', boolean: 'boolean', select: 'choice', multi_select: 'multi-choice', reference: 'reference' };
@@ -53,29 +53,29 @@ function referenceTable(field: EntityMappingField): string {
 }
 async function linkedReference(source: MappingSource, orgId: string, field: EntityMappingField, value: unknown): Promise<string> {
   const table = referenceTable(field);
-  const rows = (await db.execute<{ ref: string }>(sql`select custom->>${source.refKey} as ref from ${sql.identifier(table)} where org_id=${orgId}
+  const rows = await db.execute<{ ref: string }>(sql`select custom->>${source.refKey} as ref from ${sql.identifier(table)} where org_id=${orgId}
     and (id::text=${String(value)} or custom->>${source.refKey}=${String(value)})
-    ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}`)).rows;
+    ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}`, 'objects');
   if (rows.length !== 1 || !rows[0]!.ref) throw new EntityMappingError(`Choose an eligible ${field.label} linked to this source in this organization`);
   return rows[0]!.ref;
 }
 export async function mappingReferenceChoices(orgId: string, field: EntityMappingField, source?: MappingSource, sourceValues = false, query = '', selected = ''): Promise<{ value: string; label: string }[]> {
   const table = referenceTable(field);
   // The native reference table whitelist supplies identifiers; configuration never supplies SQL identifiers.
-  const columns = (await db.execute<{ column_name: string }>(sql`select column_name from information_schema.columns where table_schema='public' and table_name=${table}`)).rows.map(row => row.column_name);
+  const columns = (await db.execute<{ column_name: string }>(sql`select column_name from information_schema.columns where table_schema='public' and table_name=${table}`, 'objects')).map(row => row.column_name);
   const label = ['display_name', 'name', 'document_number', 'code', 'number'].find(column => columns.includes(column));
   if (!label || !columns.includes('org_id')) throw new EntityMappingError('This native reference table has no supported organization-scoped display field');
   if (sourceValues && (!source || !field.sourceReference)) throw new EntityMappingError('This field has no source record picker');
-  const choices = (await db.execute<{ value: string; label: string }>(sql`select ${sourceValues ? sql`custom->>${source!.refKey}` : sql`id::text`} as value,${sql.identifier(label)}::text as label from ${sql.identifier(table)} where org_id=${orgId}
+  const choices = await db.execute<{ value: string; label: string }>(sql`select ${sourceValues ? sql`custom->>${source!.refKey}` : sql`id::text`} as value,${sql.identifier(label)}::text as label from ${sql.identifier(table)} where org_id=${orgId}
     ${field.sourceReference && source ? sql`and nullif(custom->>${source.refKey},'') is not null` : sql``}
     ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}
     and (${query === ''} or ${sql.identifier(label)}::text ilike ${'%' + query.replace(/[\\%_]/g, '\\$&') + '%'})
-    order by ${sql.identifier(label)},id limit 200`)).rows;
+    order by ${sql.identifier(label)},id limit 200`, 'objects');
   if (selected && !choices.some(option => option.value === selected)) {
-    const current = (await db.execute<{ value: string; label: string }>(sql`select ${sourceValues ? sql`custom->>${source!.refKey}` : sql`id::text`} as value,${sql.identifier(label)}::text as label from ${sql.identifier(table)} where org_id=${orgId}
+    const current = await db.execute<{ value: string; label: string }>(sql`select ${sourceValues ? sql`custom->>${source!.refKey}` : sql`id::text`} as value,${sql.identifier(label)}::text as label from ${sql.identifier(table)} where org_id=${orgId}
       and ${sourceValues ? sql`custom->>${source!.refKey}` : sql`id::text`}=${selected}
       ${field.sourceReference && source ? sql`and nullif(custom->>${source.refKey},'') is not null` : sql``}
-      ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}`)).rows;
+      ${field.allowedAccountTypes ? sql`and type=any(${field.allowedAccountTypes}::text[]) and is_active` : sql``}`, 'objects');
     if (current.length > 1) throw new EntityMappingError('The selected source record identity is ambiguous');
     choices.push(...current);
   }

@@ -31,8 +31,7 @@ export default async function CareersPage({
   if (!(await isFeatureEnabled(org.orgId, 'hrmRecruiting'))) notFound()
 
   const postings = await withOrgContext(org.orgId, async () => {
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         postingId: string
         requisitionNumber: string
         title: string
@@ -47,8 +46,7 @@ export default async function CareersPage({
           join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
          where p.org_id = ${org.orgId} and p.status = 'published' and r.status = 'open'
          order by p.published_at desc
-      `)
-    ).rows
+      `, 'objects')
     return rows
   })
 

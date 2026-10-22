@@ -41,7 +41,7 @@ async function fixture() {
   const itemId = (await db.execute<{ id: string }>(sql`
     insert into items (org_id, kind, name, is_active, default_rate, default_cost)
     values (${org.orgId}, 'service', 'Magnitude Item', true, '100.0000', '40.0000')
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   return { org, itemId }
 }
 
@@ -62,9 +62,9 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 }
 
 async function rates(itemId: string) {
-  const rows = (await db.execute<{ default_rate: string | null; default_cost: string | null }>(sql`
+  const rows = await db.execute<{ default_rate: string | null; default_cost: string | null }>(sql`
     select default_rate::text as default_rate, default_cost::text as default_cost
-      from items where id = ${itemId}`)).rows
+      from items where id = ${itemId}`, 'objects')
   return rows[0]!
 }
 
@@ -104,7 +104,7 @@ test('PATCH refuses a foreign reference custom value instead of storing it', asy
     `)
     const refused = await patch(itemId, { custom: { ref_party: foreign.vendorId } })
     assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refused.json)}`)
-    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from items where id = ${itemId}`)).rows[0]?.custom
+    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from items where id = ${itemId}`, 'objects'))[0]?.custom
     assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused references store nothing')
     const saved = await patch(itemId, { custom: { ref_party: org.vendorId } })
     assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(saved.json)}`)

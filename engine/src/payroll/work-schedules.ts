@@ -457,8 +457,8 @@ export async function loadWorkSchedules(
      where s.org_id = ${orgId}
        ${scheduleScopeFilter(allowedSubsidiaryIds)}
      order by s.effective_from, s.id
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     id: row.id,
     name: row.name,
     employeePartyId: row.employee_party_id,
@@ -505,8 +505,8 @@ export async function resolveWorkSchedule(
         join parties p on p.id = er.party_id and p.org_id = er.org_id
        where er.org_id = ${orgId} and er.party_id = ${employeePartyId}
        limit 1
-    `));
-    const found = employee.rows[0];
+    `, "objects"));
+    const found = employee[0];
     keys = {
       jobTitle: found?.job_title ?? null,
       tradeId: found?.trade_id ?? null,

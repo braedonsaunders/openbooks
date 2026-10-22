@@ -126,11 +126,9 @@ const send = (method: (req: Request) => Promise<Response>, body: unknown, id?: s
 };
 
 async function assignmentCount(orgId: string): Promise<number> {
-  const rows = (
-    await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from item_rate_book_assignments where org_id = ${orgId}`),
-    )
-  ).rows;
+  const rows = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from item_rate_book_assignments where org_id = ${orgId}`, "objects"),
+    );
   return rows[0]!.n;
 }
 
@@ -262,20 +260,20 @@ test("native pricing authors an explicit nondefault card and retains a selected 
         }),
       }), { params: Promise.resolve({ id: version }) })));
     assert.equal(activated.status, 200, await activated.clone().text());
-    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
-      select is_default from item_rate_books where org_id=${org.orgId} and id=${card}`))).rows,
+    assert.deepEqual(await withOrgContext(org.orgId, () => db.execute(sql`
+      select is_default from item_rate_books where org_id=${org.orgId} and id=${card}`, "objects")),
     [{ is_default: false }], 'explicit nondefault pricing never installs an organization fallback');
-    const originalVersions = (await withOrgContext(org.orgId, () => db.execute(sql`
-      select to_jsonb(v) as row from item_rate_versions v where org_id=${org.orgId} order by id`))).rows;
-    const originalLines = (await withOrgContext(org.orgId, () => db.execute(sql`
-      select to_jsonb(l) as row from item_rate_lines l where org_id=${org.orgId} order by id`))).rows;
+    const originalVersions = await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(v) as row from item_rate_versions v where org_id=${org.orgId} order by id`, "objects"));
+    const originalLines = await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(l) as row from item_rate_lines l where org_id=${org.orgId} order by id`, "objects"));
     const made = await send(POST, { rateBookId: card, rateVersionId: version, projectId: projA,
       effectiveFrom: null, effectiveTo: null, dateBasis: 'usage_date', isActive: true });
     assert.equal(made.status, 200, await made.clone().text());
     const assignmentId = (await made.json()).id as string;
     const read = async () => (await withOrgContext(org.orgId, () => db.execute(sql`
       select rate_book_id,rate_version_id,effective_from,effective_to,date_basis,is_active
-      from item_rate_book_assignments where org_id=${org.orgId} and id=${assignmentId}`))).rows[0];
+      from item_rate_book_assignments where org_id=${org.orgId} and id=${assignmentId}`, "objects")))[0];
     const expected = { rate_book_id: card, rate_version_id: version,
       effective_from: null, effective_to: null, date_basis: 'usage_date', is_active: true };
     assert.deepEqual(await read(), expected);
@@ -295,13 +293,13 @@ test("native pricing authors an explicit nondefault card and retains a selected 
     const audit = (await withOrgContext(org.orgId, () => db.execute<{ changes: { before: { rate_version_id: string }; after: { rate_version_id: string } }; actor_id: string }>(sql`
       select changes,actor_id from audit_log where org_id=${org.orgId}
         and table_name='item_rate_book_assignments' and row_id=${assignmentId}
-        and action='update' order by at desc,id desc limit 1`))).rows[0]!;
+        and action='update' order by at desc,id desc limit 1`, "objects")))[0]!;
     assert.equal(audit.actor_id, state.actorId);
     assert.equal(audit.changes.before.rate_version_id, version);
     assert.equal(audit.changes.after.rate_version_id, version);
     const beforeRefusals = await read();
     const auditCount = (await withOrgContext(org.orgId, () => db.execute(sql`
-      select id from audit_log where org_id=${org.orgId}`))).rows.length;
+      select id from audit_log where org_id=${org.orgId}`, "objects"))).length;
     for (const body of [
       { id: assignmentId, rateVersionId: versionId }, // Different card, draft policy.
       { id: assignmentId, rateBookId: bookId }, // Changing the card cannot discard its pin.
@@ -328,7 +326,7 @@ test("native pricing authors an explicit nondefault card and retains a selected 
       effectiveFrom: null, effectiveTo: null, dateBasis: 'usage_date', isActive: true });
     assert.equal(hidden.status, 404);
     assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`
-      select id from audit_log where org_id=${org.orgId}`))).rows.length, auditCount);
+      select id from audit_log where org_id=${org.orgId}`, "objects"))).length, auditCount);
     state.allowedSubsidiaryIds = null;
     const unpin = await send(PATCH, { id: assignmentId, rateVersionId: null });
     assert.equal(unpin.status, 200, await unpin.clone().text());
@@ -336,15 +334,15 @@ test("native pricing authors an explicit nondefault card and retains a selected 
     assert.equal(await resolveItemRate({ orgId: org.orgId, projectId: projA,
       itemId: org.items.service, onDate: '2026-01-08', baseQuantity: '1' }), null,
     'automatic lookup retains the unpriced gap instead of extending an expired contract');
-    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
-      select to_jsonb(v) as row from item_rate_versions v where org_id=${org.orgId} order by id`))).rows, originalVersions);
-    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
-      select to_jsonb(l) as row from item_rate_lines l where org_id=${org.orgId} order by id`))).rows, originalLines);
+    assert.deepEqual(await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(v) as row from item_rate_versions v where org_id=${org.orgId} order by id`, "objects")), originalVersions);
+    assert.deepEqual(await withOrgContext(org.orgId, () => db.execute(sql`
+      select to_jsonb(l) as row from item_rate_lines l where org_id=${org.orgId} order by id`, "objects")), originalLines);
     const automaticDefault = await send(saveBook, { code: 'AUTO', name: 'Default rates' });
     assert.equal(automaticDefault.status, 200, await automaticDefault.clone().text());
     const defaultId = (await automaticDefault.json()).id as string;
-    assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
-      select id,is_default from item_rate_books where org_id=${org.orgId} and is_default`))).rows,
+    assert.deepEqual(await withOrgContext(org.orgId, () => db.execute(sql`
+      select id,is_default from item_rate_books where org_id=${org.orgId} and is_default`, "objects")),
     [{ id: defaultId, is_default: true }], 'omitting the choice retains the first-book default behavior');
   } finally {
     state.allowedSubsidiaryIds = null;

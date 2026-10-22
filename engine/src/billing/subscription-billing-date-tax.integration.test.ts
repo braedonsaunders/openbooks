@@ -75,16 +75,16 @@ async function fixture(
 async function invoiceOf(orgId: string, invoiceId: string) {
   const doc = (await db.execute<{ document_date: string; subtotal: string; tax_total: string; total: string }>(sql`
     select document_date::text as document_date, subtotal::text as subtotal, tax_total::text as tax_total, total::text as total
-      from documents where id = ${invoiceId} and org_id = ${orgId}`)).rows[0]!;
-  const lines = (await db.execute<{ tax_code_id: string | null; tax_amount: string }>(sql`
+      from documents where id = ${invoiceId} and org_id = ${orgId}`, "objects"))[0]!;
+  const lines = await db.execute<{ tax_code_id: string | null; tax_amount: string }>(sql`
     select tax_code_id, tax_amount::text as tax_amount from document_lines
-     where document_id = ${invoiceId} and org_id = ${orgId} order by line_number`)).rows;
+     where document_id = ${invoiceId} and org_id = ${orgId} order by line_number`, "objects");
   return { doc, lines };
 }
 
 async function invoiceCount(orgId: string): Promise<number> {
   return Number((await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from documents where org_id = ${orgId} and kind = 'customer_invoice'`)).rows[0]?.n ?? 0);
+    select count(*)::text as n from documents where org_id = ${orgId} and kind = 'customer_invoice'`, "objects"))[0]?.n ?? 0);
 }
 
 test("bill-now dates the invoice at the scheduled bill date, never today", enabled, () => fixture(async (f) => {

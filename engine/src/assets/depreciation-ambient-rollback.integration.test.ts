@@ -47,19 +47,19 @@ test("depreciation rolls back a failed journal inside the caller transaction and
       await db.execute(sql`select 1 as usable`);
     });
     const caller = (await db.execute<{ name: string }>(sql`
-      select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`)).rows[0];
+      select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`, "objects"))[0];
     assert.equal(caller?.name, "Surviving depreciation caller");
     const entries = (await db.execute<{ n: number; drafts: number }>(sql`
       select count(*)::int as n, count(*) filter (where status='draft')::int as drafts
-        from journal_entries where org_id=${org.orgId} and origin='depreciation'`)).rows[0]!;
+        from journal_entries where org_id=${org.orgId} and origin='depreciation'`, "objects"))[0]!;
     assert.deepEqual(entries, { n: 1, drafts: 0 });
     const lines = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_lines jl join journal_entries j
         on j.org_id=jl.org_id and j.id=jl.entry_id
-       where j.org_id=${org.orgId} and j.origin='depreciation'`)).rows[0]!;
+       where j.org_id=${org.orgId} and j.origin='depreciation'`, "objects"))[0]!;
     assert.equal(lines.n, 2, "no debit from the failed journal remains");
-    const assets = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status from fixed_assets where org_id=${org.orgId} and id in (${failedAsset},${validAsset})`)).rows;
+    const assets = await db.execute<{ id: string; status: string }>(sql`
+      select id, status from fixed_assets where org_id=${org.orgId} and id in (${failedAsset},${validAsset})`, "objects");
     assert.equal(assets.find((asset) => asset.id === failedAsset)?.status, "in_service");
     assert.equal(assets.find((asset) => asset.id === validAsset)?.status, "fully_depreciated");
   } finally {

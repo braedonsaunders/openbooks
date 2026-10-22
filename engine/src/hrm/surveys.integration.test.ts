@@ -107,10 +107,10 @@ test("anonymous responses store no link and results aggregate", { skip: !DB }, a
       ],
     });
     // The anonymity guarantee is the COLUMN, asserted null for every row.
-    const links = (await db.execute<{ respondent_link_enc: Buffer | null; segment_snapshot: unknown }>(sql`
+    const links = await db.execute<{ respondent_link_enc: Buffer | null; segment_snapshot: unknown }>(sql`
       select respondent_link_enc, segment_snapshot from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${survey.id}
-    `)).rows;
+    `, "objects");
     assert.equal(links.length, 2);
     for (const row of links) {
       assert.equal(row.respondent_link_enc, null);
@@ -148,7 +148,7 @@ test("concurrent opens of one draft commit a single audience", { skip: !DB }, as
           on i.org_id = s.org_id and i.survey_id = s.id
        where s.org_id = ${h.org.orgId} and s.id = ${survey.id}
        group by s.id
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(persisted.status, "open");
     assert.equal(persisted.invitees, "1", "only the audience chosen by the winning open is committed");
   });
@@ -209,7 +209,7 @@ test("confidential links are sealed and named links are plain", { skip: !DB }, a
     const sealed = (await db.execute<{ respondent_link_enc: Buffer | null }>(sql`
       select respondent_link_enc from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${confidential.id}
-    `)).rows[0]!.respondent_link_enc;
+    `, "objects"))[0]!.respondent_link_enc;
     assert.ok(sealed);
     assert.ok(!Buffer.from(sealed).toString("utf8").includes(h.parties[0]!));
 
@@ -229,7 +229,7 @@ test("confidential links are sealed and named links are plain", { skip: !DB }, a
     const plain = (await db.execute<{ respondent_link_enc: Buffer | null }>(sql`
       select respondent_link_enc from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${named.id}
-    `)).rows[0]!.respondent_link_enc;
+    `, "objects"))[0]!.respondent_link_enc;
     assert.equal(Buffer.from(plain!).toString("utf8"), h.parties[0]!);
   });
 });
@@ -311,7 +311,7 @@ test("survey lifecycle and answer refusals fire by name", { skip: !DB }, async (
       select (select count(*)::text from hrm_survey_responses where org_id = ${h.org.orgId} and survey_id = ${survey.id}) as responses,
              responded_at::text as responded_at
         from hrm_survey_invitations where org_id = ${h.org.orgId} and id = ${opened.deliveries[0]!.invitationId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(untouched.responses, "0");
     assert.equal(untouched.responded_at, null);
     await assert.rejects(db.execute(sql`
@@ -382,7 +382,7 @@ test("a response waits for the close transition and refuses after it commits", {
     const responses = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from hrm_survey_responses
        where org_id = ${h.org.orgId} and survey_id = ${survey.id}
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     assert.equal(responses, "0");
   });
 });

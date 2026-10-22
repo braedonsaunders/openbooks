@@ -158,9 +158,9 @@ test('source-referenced opening replacement and clearing retain exact before/aft
     auditReason: '  Adopt the reviewed annual carry-in basis  ', sourceReference: '  source-register:annual-2026  ',
     rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: amount, insurableYtd: "0" }, components: {}, programs, suiStates: {}, accountBases: [] }],
   });
-  const events = async () => (await db.execute<{ action: string; actor_id: string; changes: { reason: string; sourceReference: string; beforeRecord: unknown; afterRecord: { balance: { pensionable_ytd: string }; children: { programBases: { id: string; insurable_ytd: string }[] } }; before: { pensionableYtd: string }; after: unknown } }>(sql`
+  const events = async () => await db.execute<{ action: string; actor_id: string; changes: { reason: string; sourceReference: string; beforeRecord: unknown; afterRecord: { balance: { pensionable_ytd: string }; children: { programBases: { id: string; insurable_ytd: string }[] } }; before: { pensionableYtd: string }; after: unknown } }>(sql`
     select action,actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='payroll_opening_balances' order by id
-  `)).rows;
+  `, "objects");
   try {
     await save('100.25');
     let audit = (await events()).at(-1)!;
@@ -201,7 +201,7 @@ test('source-referenced opening replacement and clearing retain exact before/aft
     assert.equal(audit.changes.after, null);
     assert.equal(audit.changes.afterRecord, null);
     assert.equal(audit.changes.reason, 'Adopt the reviewed annual carry-in basis');
-    assert.equal((await db.execute(sql`select id from payroll_opening_program_bases where org_id=${fx.orgId}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from payroll_opening_program_bases where org_id=${fx.orgId}`, "objects")).length, 0);
     await assert.rejects(saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, auditReason: ' ', rows: [] }), /audit reason/);
     await assert.rejects(saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, sourceReference: 'source', rows: [] }), /requires an audit reason/);
   } finally { await dropScratchOrgReporting(fx.orgId); }

@@ -47,8 +47,8 @@ async function resolveProject(gate: Gate, projectId: string | null): Promise<Pro
   }
   const project = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select id, subsidiary_id from projects
-     where id = ${projectId} and org_id = ${gate.user.orgId}`))
-  const row = project.rows[0]
+     where id = ${projectId} and org_id = ${gate.user.orgId}`, 'objects'))
+  const row = project[0]
   if (!row || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id)))) {
     return { error: notFound("record") }
   }

@@ -103,12 +103,12 @@ export async function bulkEditVariants(
   }
   return db.transaction(async (tx) => {
     await assertItemVariantsFeature(tx, orgId);
-    const rows = (await tx.execute<VariantRow & { family_id: string | null }>(sql`
+    const rows = await tx.execute<VariantRow & { family_id: string | null }>(sql`
       select id, code, name, option_values, kind, unit, default_rate, default_cost, is_active, family_id
         from items
        where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])
        order by id
-       for update`)).rows;
+       for update`, "objects");
     // A write that matches zero rows is a failure: under RLS an unscoped
     // read resolves to nothing, so a short count refuses here.
     if (rows.length !== ids.length) {
@@ -146,7 +146,7 @@ export async function bulkEditVariants(
         select i.id as item_id, i.code, i.name
           from item_identifiers ii
           join items i on i.id = ii.item_id and i.org_id = ii.org_id
-         where ii.org_id = ${orgId} and ii.value = ${barcode.value} and ii.item_id <> all(${uuidArray(ids)}::uuid[])`)).rows[0];
+         where ii.org_id = ${orgId} and ii.value = ${barcode.value} and ii.item_id <> all(${uuidArray(ids)}::uuid[])`, "objects"))[0];
       if (taken) {
         throw new ItemFamilyError(
           `barcode ${barcode.value} is already used by ${taken.code ?? taken.name}`,
@@ -166,7 +166,7 @@ export async function bulkEditVariants(
       if (input.isActive !== undefined && input.isActive !== null) assignments.push(sql`is_active = ${input.isActive}`);
       if (assignments.length > 0) {
         assignments.push(sql`updated_at = now()`, sql`updated_by = ${actorId}`);
-        const next = await tx.execute(sql`
+        const next = await tx.execute<never>(sql`
           update items set ${sql.join(assignments, sql`, `)} where org_id = ${orgId} and id = ${row.id}`);
         if ((next.rowCount ?? 0) !== 1) throw new InventoryError(`variant ${row.code ?? row.name} update matched no row`);
       }
@@ -177,9 +177,9 @@ export async function bulkEditVariants(
               and kind in (${sql.join(BARCODE_KINDS.map((kind) => sql`${kind}`), sql`, `)})`);
         } else {
           const identifier = (await tx.execute<{ id: string }>(sql`
-            select id from item_identifiers where org_id = ${orgId} and item_id = ${row.id} and kind = ${barcode.kind}`)).rows[0];
+            select id from item_identifiers where org_id = ${orgId} and item_id = ${row.id} and kind = ${barcode.kind}`, "objects"))[0];
           if (identifier) {
-            const moved = await tx.execute(sql`
+            const moved = await tx.execute<never>(sql`
               update item_identifiers set value = ${barcode.value}, updated_at = now(), updated_by = ${actorId}
                where org_id = ${orgId} and id = ${identifier.id}`);
             if ((moved.rowCount ?? 0) !== 1) throw new InventoryError(`variant ${row.code ?? row.name} barcode update matched no row`);
@@ -187,7 +187,7 @@ export async function bulkEditVariants(
             const added = (await tx.execute<{ id: string }>(sql`
               insert into item_identifiers (org_id, item_id, kind, value, created_by, updated_by)
               values (${orgId}, ${row.id}, ${barcode.kind}, ${barcode.value}, ${actorId}, ${actorId})
-              returning id`)).rows[0];
+              returning id`, "objects"))[0];
             if (!added) throw new InventoryError(`variant ${row.code ?? row.name} barcode was not created`);
           }
         }
@@ -223,7 +223,7 @@ export async function detachVariant(
       select id, code, name, family_id, option_values
         from items
        where org_id = ${orgId} and id = ${itemId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!row) {
       throw new ItemFamilyError(
         "the item is not in this organization",
@@ -240,7 +240,7 @@ export async function detachVariant(
         422,
       );
     }
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute<never>(sql`
       update items
          set family_id = null, option_values = null, updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${itemId}`);

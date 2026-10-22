@@ -17,8 +17,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
   const r = (await db.execute<{ bal: string }>(sql`
-    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
-  return r.rows[0]!.bal;
+    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`, "objects"));
+  return r[0]!.bal;
 }
 
 /** Provision the remaining months of the service item's 12-month term. */
@@ -27,8 +27,8 @@ async function seedRecognitionTermPeriods(org: ScratchOrg): Promise<void> {
     select fiscal_calendar_id
       from accounting_periods
      where id = ${org.periodId} and org_id = ${org.orgId}
-  `);
-  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+  `, "objects");
+  const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
     [2026, 8, "2026-08-01", "2026-08-31"],
@@ -206,8 +206,8 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
          and document_line_id in (
            select id from document_lines where document_id = ${subId}
          )
-    `));
-    assert.equal(obligations.rows[0]?.n, 1);
+    `, "objects"));
+    assert.equal(obligations[0]?.n, 1);
 
     // Only July has an accounting period in the fixture → one $100 schedule line.
     const concurrentRuns = await Promise.all([
@@ -229,8 +229,8 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
         join journal_lines jl on jl.entry_id = rsl.journal_entry_id
        where o.org_id = ${org.orgId} and o.document_line_id in (
          select id from document_lines where document_id = ${subId}
-       )`));
-    assert.deepEqual(recognitionDimensions.rows, [{
+       )`, "objects"));
+    assert.deepEqual(recognitionDimensions, [{
       project_id: projectId,
       location_id: org.locationId,
     }]);
@@ -250,8 +250,8 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
               'Revenue recognition override', ${org.customerId}, 'active', true, '{}'::jsonb)`);
     const secondLocation = (await db.execute<{ location_id: string }>(sql`
       select location_id from stock_locations
-       where id = ${org.stockLocationId2} and org_id = ${org.orgId}`));
-    const overrideLocationId = secondLocation.rows[0]!.location_id;
+       where id = ${org.stockLocationId2} and org_id = ${org.orgId}`, "objects"));
+    const overrideLocationId = secondLocation[0]!.location_id;
     const overrideInvoiceId = await draftDoc(org, "customer_invoice", "INV-3", {
       itemId: org.items.service,
       quantity: "1",
@@ -273,13 +273,13 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
            select id from document_lines where document_id = ${overrideInvoiceId}
          )
        limit 1
-    `));
-    assert.ok(overrideObligation.rows[0]?.id);
+    `, "objects"));
+    assert.ok(overrideObligation[0]?.id);
     const overrideRun = await runRevenueRecognition(
       org.orgId,
       "2026-07-31",
       null,
-      overrideObligation.rows[0]!.id,
+      overrideObligation[0]!.id,
     );
     assert.equal(overrideRun.posted, 1);
     const overrideDimensions = (await db.execute<{ project_id: string | null; location_id: string | null }>(sql`
@@ -287,16 +287,16 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
         from recognition_schedule_lines rsl
         join recognition_schedules s on s.id = rsl.schedule_id
         join journal_lines jl on jl.entry_id = rsl.journal_entry_id
-       where s.obligation_id = ${overrideObligation.rows[0]!.id}`));
-    assert.deepEqual(overrideDimensions.rows, [{
+       where s.obligation_id = ${overrideObligation[0]!.id}`, "objects"));
+    assert.deepEqual(overrideDimensions, [{
       project_id: overrideProjectId,
       location_id: overrideLocationId,
     }]);
 
     // Every posted entry balances.
     const bad = (await db.execute(sql`
-      select entry_id from journal_lines where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`));
-    assert.equal(bad.rows.length, 0);
+      select entry_id from journal_lines where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`, "objects"));
+    assert.equal(bad.length, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -341,7 +341,7 @@ test("standalone invoice with a lot-tracked line is refused by name before posti
              (select posted_entry_id from documents where id = ${invId} and org_id = ${org.orgId}) as posted_entry_id,
              (select count(*)::int from inventory_movements m
                join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
-              where l.document_id = ${invId} and m.org_id = ${org.orgId}) as movements`)).rows[0];
+              where l.document_id = ${invId} and m.org_id = ${org.orgId}) as movements`, "objects"))[0];
     assert.deepEqual(residue, { status: "approved", posted_entry_id: null, movements: 0 });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -395,7 +395,7 @@ test("standalone-invoice drain is atomic: a line-2 failure commits no line-1 COG
                join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
               where l.document_id = ${invId} and m.org_id = ${org.orgId}) as movements,
              (select coalesce(sum(quantity), 0)::text from inventory_movements
-               where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted') as on_hand`)).rows[0]!;
+               where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted') as on_hand`, "objects"))[0]!;
     assert.equal(residue.movements, 0);
     assert.equal(toUnits(residue.on_hand), toUnits("10"));
   } finally {
@@ -448,7 +448,7 @@ test("standalone-invoice COGS legs carry the line dimensions", { skip: !DB }, as
     assert.equal(replayed, 0);
     // Exactly one issue movement across both runs, and both COGS legs carry
     // the same department/project/location as the line.
-    const legs = (await db.execute<{ department_id: string | null; project_id: string | null; location_id: string | null; movements: number }>(sql`
+    const legs = await db.execute<{ department_id: string | null; project_id: string | null; location_id: string | null; movements: number }>(sql`
       select distinct jl.department_id, jl.project_id, jl.location_id,
              (select count(*)::int from inventory_movements m2
                join document_lines l2 on l2.id = m2.document_line_id and l2.org_id = m2.org_id
@@ -456,7 +456,7 @@ test("standalone-invoice COGS legs carry the line dimensions", { skip: !DB }, as
         from journal_lines jl
         join inventory_movements m on m.journal_entry_id = jl.entry_id and m.org_id = jl.org_id
         join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
-       where l.document_id = ${invId} and m.org_id = ${org.orgId} and m.kind = 'issue'`)).rows;
+       where l.document_id = ${invId} and m.org_id = ${org.orgId} and m.kind = 'issue'`, "objects");
     assert.equal(legs.length, 1);
     assert.equal(legs[0]!.movements, 1);
     assert.deepEqual(
@@ -527,8 +527,8 @@ test("percent-complete recognition posts current-period catch-ups and remains op
       select distinct jl.project_id
         from recognition_schedule_lines rsl
         join journal_lines jl on jl.entry_id = rsl.journal_entry_id
-       where rsl.schedule_id = ${scheduleId} and rsl.sequence = 1`));
-    assert.deepEqual(firstDimensions.rows, [{ project_id: projectId }]);
+       where rsl.schedule_id = ${scheduleId} and rsl.sequence = 1`, "objects"));
+    assert.deepEqual(firstDimensions, [{ project_id: projectId }]);
 
     await db.execute(sql`
       update performance_obligations set percent_complete = '100' where id = ${obligationId}`);
@@ -557,8 +557,8 @@ test("percent-complete recognition posts current-period catch-ups and remains op
     assert.equal(rerun.posted, 0);
     const unbalanced = (await db.execute(sql`
       select entry_id from journal_lines where org_id = ${org.orgId}
-       group by entry_id having sum(amount) <> 0`));
-    assert.equal(unbalanced.rows.length, 0);
+       group by entry_id having sum(amount) <> 0`, "objects"));
+    assert.equal(unbalanced.length, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }

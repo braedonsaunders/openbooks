@@ -50,8 +50,8 @@ export async function financeFindings(
        group by bs.id, bs.book_id, bs.name, bs.fiscal_year, bs.updated_at
        order by bs.fiscal_year desc, bs.updated_at desc
        limit 1
-    `));
-    const budget = scenario.rows[0];
+    `, "objects"));
+    const budget = scenario[0];
     if (!budget && missingBudgetPolicy?.enabled) {
       findings.push({
         agentKey: "finance",
@@ -107,8 +107,8 @@ export async function financeFindings(
        where a.org_id = ${orgId}
          and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
          and (b.account_id is not null or actual.account_id is not null)
-      `));
-      for (const row of variances.rows) {
+      `, "objects"));
+      for (const row of variances) {
         const classification = classifyBudgetVariance({
           budget: row.budget,
           actual: row.actual,
@@ -170,10 +170,10 @@ export async function financeFindings(
      where p.org_id = ${orgId} and fc.is_default and fc.is_active
        and not p.is_adjustment and p.ends_on < ${today}
      order by p.ends_on desc limit 2
-    `));
-    if (periods.rows.length === 2) {
-      const current = periods.rows[0]!;
-      const prior = periods.rows[1]!;
+    `, "objects"));
+    if (periods.length === 2) {
+      const current = periods[0]!;
+      const prior = periods[1]!;
       const metrics = async (period: { id: string }) => {
       const result = (await db.execute<{ revenue: string; cogs: string; opex: string }>(sql`
         select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0)::text as revenue,
@@ -185,8 +185,8 @@ export async function financeFindings(
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.period_id = ${period.id}
            and ${excludePeriodEndJournals(sql`e.origin`)}
-        `));
-        return result.rows[0] ?? { revenue: "0", cogs: "0", opex: "0" };
+        `, "objects"));
+        return result[0] ?? { revenue: "0", cogs: "0", opex: "0" };
       };
       const [currentMetrics, priorMetrics] = await Promise.all([metrics(current), metrics(prior)]);
       const revenueThreshold = revenuePolicy?.enabled ? effectiveDetectorMateriality(revenuePolicy, agentThreshold) : agentThreshold;

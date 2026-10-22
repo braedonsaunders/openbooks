@@ -1,31 +1,18 @@
 /// <reference types="node" />
 
 /**
- * Live storage-invariant cover for the behaviours formerly pinned as
- * migration-text assertions in schema/canonical-baseline.test.ts.
- *
- * Each test below drives the real interface — inserting a violating row (or
- * replaying a published data migration) against the migrated database — with
- * an independently derived expectation. Migration-internal mechanics (repair
- * ordering, preflight spellings, backfill semantics, mirror parity) are not
- * re-asserted here: the published bytes are protected by the bootstrap
- * digest check, and whole-corpus properties by the migration-headers gate
- * and the sanitizer tests. Where an engine or integration suite already
- * proves a behaviour, no test is added here at all (see the canonical
- * commit body for the per-pin cover map).
+ * Live storage invariants of the bootstrapped schema. Each test drives the
+ * real interface, inserting a violating row against the installed database,
+ * with an independently derived expectation, or reads the live catalog for a
+ * shape the product depends on. Where an engine or integration suite already
+ * proves a behaviour, no test is added here.
  *
  * Runs without a self-skip: the integration partition always provides a
  * database, so a missing one must fail loudly, never pass silently.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import {
-  executeMigrationBody,
-  migrationRunsWithoutTransaction,
-  sanitizeMigrationContent,
-} from "../scripts/bootstrap-migration-client.ts";
 import { pool } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
@@ -59,7 +46,7 @@ async function insertPaySchedule(orgId: string): Promise<string> {
 }
 
 test("overlapping active pay-derived windows for one rule identity are refused", async () => {
-  // 0083: concurrent effective windows for the same (org, code) must not
+  // Concurrent effective windows for the same (org, code) must not
   // both be active — payroll would price the same earnings twice.
   const org = await createScratchOrg();
   try {
@@ -101,7 +88,7 @@ test("overlapping active pay-derived windows for one rule identity are refused",
 });
 
 test("tax rates refuse negative percentages and setup codes refuse duplicates", async () => {
-  // 0042: a negative rate would post inverted tax; a duplicate setup code
+  // A negative rate would post inverted tax; a duplicate setup code
   // would make pack resolution ambiguous.
   const org = await createScratchOrg();
   try {
@@ -143,7 +130,7 @@ test("tax rates refuse negative percentages and setup codes refuse duplicates", 
 });
 
 test("subscription plans refuse negative amounts", async () => {
-  // 0041: a negative plan amount would bill customers to receive money.
+  // A negative plan amount would bill customers to receive money.
   const org = await createScratchOrg();
   try {
     const refused = await pool
@@ -165,13 +152,13 @@ test("subscription plans refuse negative amounts", async () => {
 });
 
 test("forecast snapshots take at most one target and commit org-wide", async () => {
-  // 0170: a snapshot forecasting for both an owner and a team double-counts
+  // A snapshot forecasting for both an owner and a team double-counts
   // the pipeline; an org-wide snapshot is the honest default.
   const org = await createScratchOrg();
   const userId = randomUUID();
   const teamId = randomUUID();
   try {
-    // An active user must carry a role assignment (0096); createScratchUser
+    // An active user must carry a role assignment; createScratchUser
     // inserts user and assignment atomically.
     await createScratchUser(org.orgId, "T8 owner", "t8_owner", userId);
     await pool.query(`insert into crm_sales_teams (id, org_id, key, name) values ($1, $2, 'T8', 'T8 team')`, [
@@ -203,7 +190,7 @@ test("forecast snapshots take at most one target and commit org-wide", async () 
 });
 
 test("payroll profiles refuse an omitted country instead of defaulting one", async () => {
-  // 0190: no country built-in exists, so an unset country must fail NOT NULL
+  // No country built-in exists, so an unset country must fail NOT NULL
   // rather than silently becoming Canada.
   const org = await createScratchOrg();
   try {
@@ -228,7 +215,7 @@ test("payroll profiles refuse an omitted country instead of defaulting one", asy
 });
 
 test("payroll pack facts refuse out-of-range values and accept unknown", async () => {
-  // 0191: pack-declared facts are nullable (null = unknown, never guessed)
+  // Pack-declared facts are nullable (null = unknown, never guessed)
   // but a present value outside the pack's bounds is refused.
   const org = await createScratchOrg();
   try {
@@ -261,7 +248,7 @@ test("payroll pack facts refuse out-of-range values and accept unknown", async (
 });
 
 test("sync runs detach from a deleted connection instead of vanishing", async () => {
-  // 0085: run history is evidence; deleting a connection must null the link
+  // Run history is evidence; deleting a connection must null the link
   // (ON DELETE SET NULL over a nullable column), not cascade the runs.
   const org = await createScratchOrg();
   try {
@@ -286,7 +273,7 @@ test("sync runs detach from a deleted connection instead of vanishing", async ()
 });
 
 test("sftp prefixes refuse escape shapes and accept tenant folders", async () => {
-  // 0030: a tenant names folders, never physical locations — dot segments,
+  // A tenant names folders, never physical locations — dot segments,
   // absolute paths, and backslashes must not reach storage.
   const org = await createScratchOrg();
   try {
@@ -312,58 +299,8 @@ test("sftp prefixes refuse escape shapes and accept tenant folders", async () =>
   }
 });
 
-test("the 0033 framework repair maps legacy values through the real migration", async () => {
-  // 0033 preserves each org's effective pre-migration rule once, in the
-  // settings document: ias12 meant IFRS, anything else meant US GAAP.
-  // Replayed through the real attempt path (sanitize, then the published
-  // body), not asserted from its text.
-  const org = await createScratchOrg();
-  try {
-    // One org driven through each legacy shape in turn: provisioning seeds
-    // builtin rows no raw org delete may remove, so no extra orgs are made.
-    // Merge, never clobber: the scratch row carries fixture keys the
-    // sandbox-wipe teardown path relies on.
-    const body = sanitizeMigrationContent(
-      readFileSync("schema/migrations/generated/0033_reporting_framework_policy.sql", "utf8"),
-    );
-    const replay = async (): Promise<void> => {
-      const client = await pool.connect();
-      try {
-        await executeMigrationBody(client, body, {
-          transactional: !migrationRunsWithoutTransaction(body),
-        });
-      } finally {
-        client.release();
-      }
-    };
-    const frameworkOf = async (): Promise<string | null> =>
-      (
-        (await pool.query(`select settings->>'reportingFramework' as framework from orgs where id = $1`, [
-          org.orgId,
-        ])).rows[0] as { framework: string | null }
-      ).framework;
-    const setTaxFramework = async (settings: string): Promise<void> => {
-      await pool.query(`update orgs set settings = settings || $2::jsonb where id = $1`, [org.orgId, settings]);
-    };
-    await setTaxFramework('{"taxFramework": "ias12"}');
-    await replay();
-    assert.equal(await frameworkOf(), "ifrs");
-    // Rerunnable: a second pass must change nothing.
-    await replay();
-    assert.equal(await frameworkOf(), "ifrs");
-    await setTaxFramework('{"taxFramework": "other", "reportingFramework": null}');
-    await replay();
-    assert.equal(await frameworkOf(), "us_gaap");
-    await setTaxFramework('{"taxFramework": "ias12", "reportingFramework": "ifrs"}');
-    await replay();
-    assert.equal(await frameworkOf(), "ifrs");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
 test("recognition rules refuse a second live version of one code", async () => {
-  // 0297: editing a rule in use must create a successor, never mutate the
+  // Editing a rule in use must create a successor, never mutate the
   // version obligations already pinned — so only one live row per code.
   const org = await createScratchOrg();
   try {
@@ -392,7 +329,7 @@ test("recognition rules refuse a second live version of one code", async () => {
 });
 
 test("delivery keys refuse malformed values and double-claimed identities", async () => {
-  // 0063/0059: the key is a fixed engine-minted shape, and one logical
+  // The key is a fixed engine-minted shape, and one logical
   // delivery owns exactly one canonical row.
   const org = await createScratchOrg();
   try {
@@ -435,7 +372,7 @@ test("delivery keys refuse malformed values and double-claimed identities", asyn
 });
 
 test("document revisions advance on every committed update", async () => {
-  // 0013/0167: two committed revisions must never share a token. The
+  // Two committed revisions must never share a token. The
   // collapse shape — an update storing updated_at byte-identical to the
   // row — is rewritten strictly forward by documents_revision_monotonic,
   // and openbooks_bump_revision_seq counts every UPDATE independently of
@@ -492,12 +429,11 @@ test("document revisions advance on every committed update", async () => {
 });
 
 test("bank-feed bookkeeping separates the attempt cursor from the success cursor", async () => {
-  // 0054: last_attempt_at records every finished attempt; last_sync_at is
+  // Last_attempt_at records every finished attempt; last_sync_at is
   // the success-only pull cursor the runner reads. The two must move
   // independently — recording an attempt (even a failed one) must not
   // advance the success cursor. (Runner-side attempt/success sequencing
-  // lives in engine banking tests; this is the storage half the old pin
-  // asserted as migration text.)
+  // lives in engine banking tests; this is the storage half.)
   const org = await createScratchOrg();
   try {
     const id = randomUUID();
@@ -531,11 +467,10 @@ test("bank-feed bookkeeping separates the attempt cursor from the success cursor
   }
 });
 
-test("the migrated catalog carries the canonical baseline shape", async () => {
-  // Replaces the baseline-text inventory pins (table/function/trigger/index
-  // presence, retired-model absence, adjustment RLS wiring, source-identity
-  // indexes) with the same facts read from the live catalog — no scratch
-  // org needed, nothing written.
+test("the installed catalog carries the canonical schema shape", async () => {
+  // Table/function/trigger/index presence, retired-model absence,
+  // adjustment RLS wiring and source-identity indexes, read from the live
+  // catalog: no scratch org needed, nothing written.
   const tables = await pool.query(
     `select tablename from pg_tables where schemaname = 'public' and tablename = any ($1)`,
     [
@@ -562,7 +497,7 @@ test("the migrated catalog carries the canonical baseline shape", async () => {
       ],
     ],
   );
-  assert.equal(tables.rows.length, 19, "every canonical table must exist in the migrated catalog");
+  assert.equal(tables.rows.length, 19, "every canonical table must exist in the installed catalog");
   const routines = await pool.query(
     `select proname from pg_proc where pronamespace = 'public'::regnamespace and proname = any ($1)`,
     [["posted_document_financial_guard"]],
@@ -610,15 +545,15 @@ test("the migrated catalog carries the canonical baseline shape", async () => {
   assert.equal(relkind.rows[0]?.relforcerowsecurity, true, "pay_run_adjustments must force row security");
 });
 
-test("the payroll opening-balances view exposes the rebuilt statutory columns", async () => {
-  // 0141 rebuilds the governed payroll opening-balances view; the statutory
-  // columns it adds are the view's interface to payroll reporting.
+test("the payroll opening-balances view exposes the statutory columns", async () => {
+  // The statutory columns of the governed payroll opening-balances view are
+  // its interface to payroll reporting.
   const columns = await pool.query(
     `select column_name from information_schema.columns
      where table_schema = 'openbooks_query' and table_name = 'payroll_opening_balances'`,
   );
   const names = new Set(columns.rows.map((row) => row.column_name));
   for (const column of ["cpp2_bonus_ytd", "qc_csb_ytd", "fica_withheld_ytd"]) {
-    assert.ok(names.has(column), `the rebuilt view must expose ${column}`);
+    assert.ok(names.has(column), `the view must expose ${column}`);
   }
 });

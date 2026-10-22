@@ -152,9 +152,9 @@ interface StandingRow extends Record<string, unknown> {
 }
 
 async function entityId(executor: SqlExecutor, orgId: string, subsidiaryId: string | null): Promise<string> {
-  const rows = (await executor.execute<{ id: string }>(sql`
+  const rows = await executor.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${orgId} and is_active
-    and (${subsidiaryId}::uuid is not null and id = ${subsidiaryId}::uuid or ${subsidiaryId}::uuid is null and parent_id is null)`)).rows;
+    and (${subsidiaryId}::uuid is not null and id = ${subsidiaryId}::uuid or ${subsidiaryId}::uuid is null and parent_id is null)`, "objects");
   if (rows.length !== 1) throw new ContractorWithholdingError("the payment has no unambiguous active legal entity");
   return rows[0]!.id;
 }
@@ -190,15 +190,15 @@ async function resolveSubjectScheme(
   if (input.lockStandings) {
     await executor.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`withholding:${input.orgId}:${input.entityId}:${input.partyId}`}, 0))`);
   }
-  const enrollments = (await executor.execute<EnrollmentRow>(sql`
+  const enrollments = await executor.execute<EnrollmentRow>(sql`
     select id, scheme_code, liability_account_id, threshold_basis, payer_scope, remittance_schedule_code, remittance_policy, return_frequency
       from withholding_enrollments
      where org_id = ${input.orgId} and subsidiary_id = ${input.entityId} and is_active
        and effective_from <= ${input.paymentDate}::date
-       and (effective_to is null or effective_to >= ${input.paymentDate}::date)`)).rows;
+       and (effective_to is null or effective_to >= ${input.paymentDate}::date)`, "objects");
   if (enrollments.length === 0) return null;
   const schemeCodes = enrollments.map((row) => row.scheme_code);
-  const standings = (await executor.execute<StandingRow>(sql`
+  const standings = await executor.execute<StandingRow>(sql`
     select
            s.id, s.subsidiary_id, p.display_name as payee_name, s.payee_reference, scheme_code, band_code, verification_reference, valid_from::text as valid_from,
            valid_to::text as valid_to, status, apply_from_first_payment
@@ -208,7 +208,7 @@ async function resolveSubjectScheme(
        and scheme_code in (${sql.join(schemeCodes.map((code) => sql`${code}`), sql`, `)})
        and valid_from <= ${input.paymentDate}::date
      order by scheme_code, s.subsidiary_id nulls last, valid_from desc, s.created_at desc
-     ${input.lockStandings ? sql`for share of s, p` : sql``}`)).rows;
+     ${input.lockStandings ? sql`for share of s, p` : sql``}`, "objects");
   const selectedStandings: StandingRow[] = [];
   for (const enrollment of enrollments) {
     if (schemeOf(enrollment.scheme_code).standingSource === "vendor_backup_withholding") continue;
@@ -217,12 +217,12 @@ async function resolveSubjectScheme(
     if (explicit) { selectedStandings.push(explicit); continue; }
     const legacy = candidates.find(row => row.subsidiary_id === null);
     if (!legacy) continue;
-    const eligible = (await executor.execute<{ subsidiary_id: string }>(sql`
+    const eligible = await executor.execute<{ subsidiary_id: string }>(sql`
       select distinct e.subsidiary_id from withholding_enrollments e
         join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id
        where e.org_id=${input.orgId} and e.scheme_code=${enrollment.scheme_code} and e.is_active and s.is_active
          and e.effective_from<=${input.paymentDate}::date
-         and (e.effective_to is null or e.effective_to>=${input.paymentDate}::date)`)).rows;
+         and (e.effective_to is null or e.effective_to>=${input.paymentDate}::date)`, "objects");
     if (eligible.length !== 1 || eligible[0]!.subsidiary_id !== input.entityId) {
       throw new ContractorWithholdingError("The subcontractor's withholding standing has no unambiguous paying legal entity.", "In Setup → Withholding standings, record an effective standing for this paying legal entity and its own verification reference.");
     }
@@ -231,7 +231,7 @@ async function resolveSubjectScheme(
   for (const enrollment of enrollments) {
     const scheme = schemeOf(enrollment.scheme_code);
     if (scheme.standingSource !== "vendor_backup_withholding") continue;
-    const vendor = (await executor.execute<{ backup_withholding: boolean; display_name: string; tin_last4: string | null }>(sql`select v.backup_withholding,p.display_name,v.tin_last4 from vendor_roles v join parties p on p.id=v.party_id and p.org_id=v.org_id where v.org_id=${input.orgId} and v.party_id=${input.partyId} and v.is_active ${input.lockStandings ? sql`for share of v,p` : sql``}`)).rows[0];
+    const vendor = (await executor.execute<{ backup_withholding: boolean; display_name: string; tin_last4: string | null }>(sql`select v.backup_withholding,p.display_name,v.tin_last4 from vendor_roles v join parties p on p.id=v.party_id and p.org_id=v.org_id where v.org_id=${input.orgId} and v.party_id=${input.partyId} and v.is_active ${input.lockStandings ? sql`for share of v,p` : sql``}`, "objects"))[0];
     if (vendor?.backup_withholding) selectedStandings.push({ id:null,subsidiary_id:input.entityId,payee_name:vendor.display_name,payee_reference:vendor.tin_last4,scheme_code:scheme.code,band_code:scheme.defaultBandCode,verification_reference:null,valid_from:input.paymentDate,valid_to:null,status:'active',apply_from_first_payment:true });
   }
   if (selectedStandings.length === 0) return null;
@@ -278,11 +278,11 @@ async function loadBill(
       join documents d on d.id = je.source_document_id and d.org_id = je.org_id
      -- Live entries only: a reversed entry's open item is already closed
      where jl.org_id = ${orgId} and jl.id = ${openLineId} and jl.is_open_item and je.status = 'posted'
-       and d.status = 'posted'`)).rows[0];
+       and d.status = 'posted'`, "objects"))[0];
   if (!bill || bill.kind !== "vendor_bill") throw new ContractorWithholdingError("the subcontractor payment does not reference a posted vendor bill", "Record and post the construction bill before paying it under the scheme.");
   if (bill.party_id !== subject.partyId || bill.subsidiary_id !== subject.entityId) throw new ContractorWithholdingError("the bill does not belong to this subcontractor and paying legal entity");
   const readLines = async (documentId: string, nativeRelease = false): Promise<WithholdingBillLine[]> => {
-    const lines = (await executor.execute<BillLineRow>(sql`
+    const lines = await executor.execute<BillLineRow>(sql`
     select dl.amount::text as amount,
            coalesce(sum(c.tax_amount) filter (where c.calculation_type = 'standard'),
                     case when count(c.id) = 0 then dl.tax_amount else 0 end, 0)::text as vat,
@@ -295,7 +295,7 @@ async function loadBill(
       left join document_line_tax_components c on c.document_line_id = dl.id and c.org_id = dl.org_id
      where dl.org_id = ${orgId} and dl.document_id = ${documentId}
      group by dl.id, i.kind, o.settings
-     order by dl.line_number`)).rows;
+     order by dl.line_number`, "objects");
   if (lines.some((line) => !isZero(line.withholding_tax))) {
     throw new ContractorWithholdingError(
       `bill ${bill.document_number} already withholds tax through a withholding tax code`,
@@ -315,7 +315,7 @@ async function loadBill(
   const release = (await executor.execute<{ id: string; subcontract_id: string; amount: string; sources: unknown }>(sql`
     select r.id, r.subcontract_id, r.amount::text, r.source_bill_allocations as sources
       from vendor_retainage_releases r where r.org_id=${orgId} and r.vendor_bill_document_id=${bill.id}
-  `)).rows[0];
+  `, "objects"))[0];
   let lines = await readLines(bill.id, Boolean(release));
   if (release) {
     const refuse = (): never => { throw new ContractorWithholdingError(
@@ -339,7 +339,7 @@ async function loadBill(
          where a.org_id=${orgId} and a.subcontract_id=${release.subcontract_id} and a.vendor_bill_document_id=${documentId}
            and a.status='billed' and d.status='posted' and d.kind='vendor_bill'
            and d.party_id=${subject.partyId} and d.subsidiary_id=${subject.entityId} and d.currency=${bill.currency}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!origin || cmp(origin.held, held) !== 0 || cmp(amount, "0") <= 0 || cmp(previous, "0") < 0 || cmp(add(previous, amount), held) > 0) refuse();
       expanded.push(...retainedBillLines(await readLines(documentId), amount, previous));
       reserved = add(reserved, amount);
@@ -359,7 +359,7 @@ async function thresholdHistory(
   const incompatible = (await executor.execute(sql`select 1 from withholding_deductions
     where org_id=${input.orgId} and subsidiary_id=${input.entityId} and party_id=${input.partyId} and scheme_code=${input.schemeCode}
       and status='posted' and payment_date between ${`${year}-01-01`}::date and ${input.paymentDate}::date
-      and payment_document_id is distinct from ${input.paymentDocumentId}::uuid and currency<>${input.currency} limit 1`)).rows[0];
+      and payment_document_id is distinct from ${input.paymentDocumentId}::uuid and currency<>${input.currency} limit 1`, "objects"))[0];
   if (incompatible) throw new ContractorWithholdingError("The withholding history is not denominated in the scheme's statutory currency.", "Review the original payment evidence and correct affected payments through governed reversals before continuing.");
   const row = (await executor.execute<{ consideration: string; pending: string }>(sql`
     select coalesce(sum(consideration_amount) filter (where rate_percent > 0), 0)::text as consideration,
@@ -368,7 +368,7 @@ async function thresholdHistory(
      where org_id = ${input.orgId} and subsidiary_id = ${input.entityId} and party_id = ${input.partyId} and scheme_code = ${input.schemeCode}
        and status = 'posted'
        and payment_date between ${`${year}-01-01`}::date and ${input.paymentDate}::date
-       and payment_document_id is distinct from ${input.paymentDocumentId}::uuid`)).rows[0];
+       and payment_document_id is distinct from ${input.paymentDocumentId}::uuid`, "objects"))[0];
   return { consideration: row?.consideration ?? "0", pendingBase: row?.pending ?? "0" };
 }
 
@@ -394,9 +394,9 @@ export async function computePaymentWithholdings(
   if (!input.partyId || input.allocations.length === 0) return [];
   const featureOn = await (input.lockStandings ? lockAndCheckOrgFeature(executor, input.orgId, CONTRACTOR_WITHHOLDING_FEATURE) : orgFeatureEnabled(input.orgId, CONTRACTOR_WITHHOLDING_FEATURE, executor));
   const entity = await entityId(executor, input.orgId, input.subsidiaryId);
-  const backup = (await executor.execute<{ subject: boolean }>(sql`select backup_withholding and (exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${entity} and country='US') or exists(select 1 from withholding_enrollments where org_id=${input.orgId} and subsidiary_id=${entity} and scheme_code='US_BACKUP_WITHHOLDING' and is_active and effective_from<=${input.paymentDate}::date and (effective_to is null or effective_to>=${input.paymentDate}::date))) as subject from vendor_roles where org_id=${input.orgId} and party_id=${input.partyId} and is_active`)).rows[0]?.subject === true;
+  const backup = (await executor.execute<{ subject: boolean }>(sql`select backup_withholding and (exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${entity} and country='US') or exists(select 1 from withholding_enrollments where org_id=${input.orgId} and subsidiary_id=${entity} and scheme_code='US_BACKUP_WITHHOLDING' and is_active and effective_from<=${input.paymentDate}::date and (effective_to is null or effective_to>=${input.paymentDate}::date))) as subject from vendor_roles where org_id=${input.orgId} and party_id=${input.partyId} and is_active`, "objects"))[0]?.subject === true;
   if (!featureOn) {
-    const enrolled = (await executor.execute(sql`select 1 from withholding_enrollments e where e.org_id=${input.orgId} and e.subsidiary_id=${entity} and e.is_active and e.effective_from <= ${input.paymentDate}::date and (e.effective_to is null or e.effective_to >= ${input.paymentDate}::date) and exists(select 1 from withholding_standings s where s.org_id=e.org_id and s.party_id=${input.partyId} and s.scheme_code=e.scheme_code and (s.subsidiary_id=e.subsidiary_id or s.subsidiary_id is null) and s.valid_from<=${input.paymentDate}::date) limit 1`)).rows[0];
+    const enrolled = (await executor.execute(sql`select 1 from withholding_enrollments e where e.org_id=${input.orgId} and e.subsidiary_id=${entity} and e.is_active and e.effective_from <= ${input.paymentDate}::date and (e.effective_to is null or e.effective_to >= ${input.paymentDate}::date) and exists(select 1 from withholding_standings s where s.org_id=e.org_id and s.party_id=${input.partyId} and s.scheme_code=e.scheme_code and (s.subsidiary_id=e.subsidiary_id or s.subsidiary_id is null) and s.valid_from<=${input.paymentDate}::date) limit 1`, "objects"))[0];
     if (backup || enrolled) throw new ContractorWithholdingError("This vendor has an active withholding obligation.", "Enable Contractor withholding in Company Settings → Features before making the payment.");
     return [];
   }
@@ -418,7 +418,7 @@ export async function computePaymentWithholdings(
         and l.withholding_treatment in ('labour','materials')
         and exists(select 1 from withholding_enrollments e where e.org_id = d.org_id and e.subsidiary_id = d.subsidiary_id and e.is_active
           and e.effective_from <= ${input.paymentDate}::date and (e.effective_to is null or e.effective_to >= ${input.paymentDate}::date))
-      limit 1`)).rows[0];
+      limit 1`, "objects"))[0];
     if (marked) throw new ContractorWithholdingError("the subcontractor has no withholding standing", "Record the subcontractor's scheme standing in Setup before saving its payment.");
     return [];
   }
@@ -428,7 +428,7 @@ export async function computePaymentWithholdings(
   if (scheme.threshold) {
     const later = (await executor.execute(sql`select 1 from withholding_deductions where org_id = ${input.orgId} and subsidiary_id = ${entity}
       and party_id = ${input.partyId} and scheme_code = ${scheme.code} and status = 'posted'
-      and payment_date > ${input.paymentDate}::date and payment_date <= ${`${input.paymentDate.slice(0,4)}-12-31`}::date limit 1`)).rows[0];
+      and payment_date > ${input.paymentDate}::date and payment_date <= ${`${input.paymentDate.slice(0,4)}-12-31`}::date limit 1`, "objects"))[0];
     if (later) throw new ContractorWithholdingError("a later payment already established this year's withholding threshold", "Use a current payment date or reverse and reprocess the affected payments in date order.");
   }
   const period = withholdingPeriod(scheme, input.paymentDate, enrollment.return_frequency ?? scheme.returnFrequency ?? "monthly");
@@ -449,7 +449,7 @@ export async function computePaymentWithholdings(
   );
   withholdingCurrencyRate(fx.rate);
   const reportingFx = { ...fx, rate: fx.rate };
-  const precision = (await executor.execute<{ minor_units: number | null }>(sql`select minor_units from currencies where code=${input.currency} for share`)).rows[0]?.minor_units;
+  const precision = (await executor.execute<{ minor_units: number | null }>(sql`select minor_units from currencies where code=${input.currency} for share`, "objects"))[0]?.minor_units;
   if (precision == null || !Number.isInteger(precision) || precision < 0 || precision > 4) throw new ContractorWithholdingError(
     `Currency ${input.currency} has no usable precision in the ISO currency registry.`,
     "Ask your system administrator to restore the supported ISO currency row through the platform currency seed before saving this payment.",
@@ -589,7 +589,7 @@ export async function recordPaymentWithholdings(
     subsidiary_id: string | null; party_id: string | null; document_date: string; currency: string; custom: Record<string, unknown> | null;
   }>(sql`
     select subsidiary_id, party_id, document_date::text as document_date, currency, custom
-      from documents where org_id = ${input.orgId} and id = ${input.paymentDocumentId} and kind = 'vendor_payment'`)).rows[0];
+      from documents where org_id = ${input.orgId} and id = ${input.paymentDocumentId} and kind = 'vendor_payment'`, "objects"))[0];
   if (!doc) return [];
   const custom = doc.custom ?? {};
   const stored = storedPaymentWithholdings(custom);
@@ -626,7 +626,7 @@ export async function recordPaymentWithholdings(
   if (current.length === 0) return current;
   const entity = await entityId(executor, input.orgId, doc.subsidiary_id);
   for (const row of current) {
-    const inserted = await executor.execute(sql`
+    const inserted = await executor.execute<never>(sql`
       insert into withholding_deductions (
         org_id, subsidiary_id, enrollment_id, standing_id, payee_name, payee_reference, verification_reference, scheme_code, party_id, payment_document_id,
         bill_document_id, bill_open_line_id, journal_entry_id, payment_date, period_start, period_end, currency,
@@ -653,12 +653,12 @@ export async function voidPaymentWithholdings(
   executor: SqlExecutor,
   input: { orgId: string; paymentDocumentId: string; actorId: string | null },
 ): Promise<number> {
-  const periods = (await executor.execute<{ enrollment_id: string; period_start: string }>(sql`select distinct enrollment_id, period_start::text as period_start from withholding_deductions where org_id = ${input.orgId} and payment_document_id = ${input.paymentDocumentId} and status = 'posted' order by enrollment_id, period_start`)).rows;
+  const periods = await executor.execute<{ enrollment_id: string; period_start: string }>(sql`select distinct enrollment_id, period_start::text as period_start from withholding_deductions where org_id = ${input.orgId} and payment_document_id = ${input.paymentDocumentId} and status = 'posted' order by enrollment_id, period_start`, "objects");
   for (const enrollmentId of [...new Set(periods.map(period => period.enrollment_id))].sort()) await lockDeposits(executor, input.orgId, enrollmentId);
   for (const period of periods) await lockPeriod(executor, input.orgId, period.enrollment_id, period.period_start);
-  const payment = (await executor.execute<{ custom: unknown }>(sql`select custom from documents where org_id=${input.orgId} and id=${input.paymentDocumentId}`)).rows[0];
+  const payment = (await executor.execute<{ custom: unknown }>(sql`select custom from documents where org_id=${input.orgId} and id=${input.paymentDocumentId}`, "objects"))[0];
   const expected = payment ? storedPaymentWithholdings(payment.custom).length : 0;
-  const result = await executor.execute(sql`
+  const result = await executor.execute<never>(sql`
     update withholding_deductions
        set status = 'voided', voided_at = now(), voided_by = ${input.actorId}
      where org_id = ${input.orgId} and payment_document_id = ${input.paymentDocumentId} and status = 'posted'`);
@@ -718,24 +718,24 @@ export async function saveWithholdingStanding(
   }
   const party = (await executor.execute<{ id: string }>(sql`
     select p.id from parties p join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id
-     where p.org_id = ${orgId} and p.id = ${input.partyId}`)).rows[0];
+     where p.org_id = ${orgId} and p.id = ${input.partyId}`, "objects"))[0];
   if (!party) {
     throw new ContractorWithholdingError("withholding standings belong to vendors", "Give the party a vendor role first.");
   }
   let subsidiaryId = input.subsidiaryId;
   if (!subsidiaryId) {
-    const eligible = (await executor.execute<{ subsidiary_id: string }>(sql`
+    const eligible = await executor.execute<{ subsidiary_id: string }>(sql`
       select distinct e.subsidiary_id from withholding_enrollments e
         join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id
        where e.org_id=${orgId} and e.scheme_code=${input.schemeCode} and e.is_active and s.is_active
-         and e.effective_from<=${input.validFrom}::date and (e.effective_to is null or e.effective_to>=${input.validFrom}::date)`)).rows;
+         and e.effective_from<=${input.validFrom}::date and (e.effective_to is null or e.effective_to>=${input.validFrom}::date)`, "objects");
     if (eligible.length !== 1) throw new ContractorWithholdingError("Select the paying legal entity for this withholding standing.", "Choose the legal entity whose verification or exemption supports this standing in Setup → Withholding standings.");
     subsidiaryId = eligible[0]!.subsidiary_id;
   }
   if (!isUuid(subsidiaryId)) throw new ContractorWithholdingError("withholding legal entity not found");
   await authorizeMutation(executor, orgId, actorId, "admin.setup.manage", subsidiaryId);
   const subsidiary = (await executor.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id=${orgId} and id=${subsidiaryId} and is_active for share`)).rows[0];
+    select id from subsidiaries where org_id=${orgId} and id=${subsidiaryId} and is_active for share`, "objects"))[0];
   if (!subsidiary) throw new ContractorWithholdingError("The withholding legal entity must be active and belong to this organization.", "Select the active paying legal entity registered under this scheme.");
   const values = {
     subsidiaryId,
@@ -751,24 +751,24 @@ export async function saveWithholdingStanding(
   };
   if (input.id) {
     const before = (await executor.execute<Record<string, unknown>>(sql`
-      select * from withholding_standings where org_id = ${orgId} and id = ${input.id} and party_id = ${input.partyId} for update`)).rows[0];
+      select * from withholding_standings where org_id = ${orgId} and id = ${input.id} and party_id = ${input.partyId} for update`, "objects"))[0];
     if (!before) throw new ContractorWithholdingError("withholding standing not found");
     if (before.scheme_code !== input.schemeCode) {
       throw new ContractorWithholdingError("a standing's scheme cannot change", "Revoke this standing and record one under the other scheme.");
     }
-    const used = (await executor.execute(sql`select 1 from withholding_deductions where org_id = ${orgId} and standing_id = ${input.id} limit 1`)).rows[0];
+    const used = (await executor.execute(sql`select 1 from withholding_deductions where org_id = ${orgId} and standing_id = ${input.id} limit 1`, "objects"))[0];
     if (used) {
       if (before.subsidiary_id !== subsidiaryId) {
         const otherEntity = before.subsidiary_id != null || (await executor.execute(sql`
-          select 1 from withholding_deductions where org_id=${orgId} and standing_id=${input.id} and subsidiary_id<>${subsidiaryId} limit 1`)).rows.length > 0;
+          select 1 from withholding_deductions where org_id=${orgId} and standing_id=${input.id} and subsidiary_id<>${subsidiaryId} limit 1`, "objects")).length > 0;
         if (otherEntity) throw new ContractorWithholdingError("This standing supports recorded payments and cannot move to another legal entity.", "Keep the recorded standing and create a separate effective standing for the paying legal entity.");
       }
       const protectedFields: Array<[string, unknown]> = [["band_code", values.bandCode], ["verification_reference", values.verificationReference], ["verified_on", values.verifiedOn], ["valid_from", values.validFrom], ["payee_reference", values.payeeReference], ["payee_tax_office", values.payeeTaxOffice], ["apply_from_first_payment", values.applyFromFirstPayment]];
       if (protectedFields.some(([key, value]) => String(before[key] ?? '') !== String(value ?? ''))) throw new ContractorWithholdingError("this standing supports recorded payments and cannot be reinterpreted", "End its validity window and record a new effective standing.");
-      const past = (await executor.execute<{ last: string }>(sql`select max(payment_date)::text as last from withholding_deductions where org_id = ${orgId} and standing_id = ${input.id}`)).rows[0]?.last;
+      const past = (await executor.execute<{ last: string }>(sql`select max(payment_date)::text as last from withholding_deductions where org_id = ${orgId} and standing_id = ${input.id}`, "objects"))[0]?.last;
       if (values.validTo && past && values.validTo < past) throw new ContractorWithholdingError("the standing must remain valid for its recorded payments");
     }
-    const updated = await executor.execute(sql`
+    const updated = await executor.execute<never>(sql`
       update withholding_standings set
         subsidiary_id = ${values.subsidiaryId}, band_code = ${values.bandCode}, verification_reference = ${values.verificationReference},
         verified_on = ${values.verifiedOn}::date, valid_from = ${values.validFrom}::date, valid_to = ${values.validTo}::date,
@@ -790,7 +790,7 @@ export async function saveWithholdingStanding(
     values (${orgId}, ${values.subsidiaryId}, ${input.partyId}, ${input.schemeCode}, ${values.bandCode}, ${values.verificationReference},
       ${values.verifiedOn}::date, ${values.validFrom}::date, ${values.validTo}::date, ${values.payeeReference},
       ${values.payeeTaxOffice}, ${values.applyFromFirstPayment}, ${values.notes}, ${actorId}, ${actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!created) throw new ContractorWithholdingError("withholding standing was not recorded");
   await executor.execute(sql`
     insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
@@ -809,7 +809,7 @@ export async function revokeWithholdingStanding(
   await authorizeMutation(executor, orgId, actorId, "admin.setup.manage");
   const reason = clean(input.reason);
   if (!reason) throw new ContractorWithholdingError("a revocation needs a reason", "Say why the standing no longer applies.");
-  const result = await executor.execute(sql`
+  const result = await executor.execute<never>(sql`
     update withholding_standings set status = 'revoked', revoked_reason = ${reason}, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${input.id} and status = 'active'`);
   if ((result.rowCount ?? 0) !== 1) throw new ContractorWithholdingError("no active withholding standing to revoke");
@@ -844,7 +844,7 @@ export async function listWithholdingStandings(
   orgId: string,
   partyId: string,
 ): Promise<WithholdingStandingView[]> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     id: string; subsidiary_id: string | null; entity_name: string | null; scheme_code: string; band_code: string; verification_reference: string | null; verified_on: string | null;
     valid_from: string; valid_to: string | null; payee_reference: string | null; payee_tax_office: string | null;
     apply_from_first_payment: boolean; status: "active" | "revoked"; revoked_reason: string | null; notes: string | null;
@@ -854,7 +854,7 @@ export async function listWithholdingStandings(
            apply_from_first_payment, status, revoked_reason, notes
       from withholding_standings w left join subsidiaries s on s.org_id=w.org_id and s.id=w.subsidiary_id
      where w.org_id = ${orgId} and party_id = ${partyId}
-     order by scheme_code, valid_from desc`)).rows;
+     order by scheme_code, valid_from desc`, "objects");
   return rows.map((row) => {
     const scheme = contractorWithholdingScheme(row.scheme_code);
     return {
@@ -909,13 +909,13 @@ async function loadEnrollment(executor: SqlExecutor, orgId: string, enrollmentId
     select id, subsidiary_id, scheme_code, contractor_reference, liability_account_id, authority_party_id,
            effective_from::text as effective_from, return_frequency
       from withholding_enrollments where org_id = ${orgId} and id = ${enrollmentId}
-      ${lock ? sql`for update` : sql``}`)).rows[0];
+      ${lock ? sql`for update` : sql``}`, "objects"))[0];
   if (!row) throw new ContractorWithholdingError("withholding enrollment not found");
   return row;
 }
 
 async function periodDeductions(executor: SqlExecutor, orgId: string, enrollmentId: string, periodStart: string): Promise<ReturnDeduction[]> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     party_id: string; payee_name: string; payee_reference: string | null; verification_reference: string | null;
     band_code: string; paid: string; net: string; materials: string; vat: string; consideration: string;
     base: string; deducted: string; uncollected: string; waived: string;
@@ -929,7 +929,7 @@ async function periodDeductions(executor: SqlExecutor, orgId: string, enrollment
       from withholding_deductions d
      where d.org_id = ${orgId} and d.enrollment_id = ${enrollmentId} and d.period_start = ${periodStart}::date
        and d.status = 'posted'
-     order by d.payment_date, d.id`)).rows;
+     order by d.payment_date, d.id`, "objects");
   return rows.map((row) => ({
     partyId: row.party_id,
     payeeName: row.payee_name,
@@ -952,19 +952,19 @@ function snapshotDigest(lines: readonly ReturnPayeeLine[], totals: ReturnTotals,
   return createHash("sha256").update(JSON.stringify({ lines, totals, ...(sourceEvidence===undefined ? {} : {sourceEvidence}) })).digest("hex");
 }
 async function periodSourceEvidence(executor:SqlExecutor,orgId:string,enrollmentId:string,periodStart:string):Promise<unknown[]> {
-  return (await executor.execute(sql`
+  return await executor.execute(sql`
     select w.id,w.payment_document_id,p.posted_entry_id,w.bill_open_line_id,w.currency,w.deducted_amount::text,
       coalesce((select jsonb_agg(jsonb_build_object('accountId',l.account_id,'currency',l.currency,'amount',l.amount::text,'txnAmount',l.txn_amount::text,'fxRate',l.fx_rate::text) order by l.line_number)
         from journal_lines l where l.org_id=w.org_id and l.entry_id=p.posted_entry_id and l.memo='Contractor withholding' and l.contributor_kind is null),'[]'::jsonb) as liability
      from withholding_deductions w join documents p on p.org_id=w.org_id and p.id=w.payment_document_id
-     where w.org_id=${orgId} and w.enrollment_id=${enrollmentId} and w.period_start=${periodStart}::date and w.status='posted' order by w.id`)).rows;
+     where w.org_id=${orgId} and w.enrollment_id=${enrollmentId} and w.period_start=${periodStart}::date and w.status='posted' order by w.id`, "objects");
 }
 async function currentReturnDigest(executor:SqlExecutor,orgId:string,returnId:string,enrollmentId:string,periodStart:string,lines:ReturnPayeeLine[],totals:ReturnTotals):Promise<string> {
-  const provenance=(await executor.execute(sql`select 1 from audit_log where org_id=${orgId} and table_name='withholding_returns' and row_id=${returnId} and action='insert' and changes ? 'sourceEvidence' limit 1`)).rows[0];
+  const provenance=(await executor.execute(sql`select 1 from audit_log where org_id=${orgId} and table_name='withholding_returns' and row_id=${returnId} and action='insert' and changes ? 'sourceEvidence' limit 1`, "objects"))[0];
   return snapshotDigest(lines,totals,provenance ? await periodSourceEvidence(executor,orgId,enrollmentId,periodStart) : undefined);
 }
 async function returnRemittanceSourcesChanged(executor:SqlExecutor,orgId:string,returnId:string,enrollmentId:string):Promise<boolean> {
-  const doc=(await executor.execute<{id:string;subsidiaryId:string;custom:{withholdingRemittance?:{carrying?:WithholdingCarryingSource;deductionIds?:string[]}}}>(sql`select d.id,d.subsidiary_id as "subsidiaryId",d.custom from documents d join withholding_returns r on r.org_id=d.org_id and r.remittance_document_id=d.id where r.org_id=${orgId} and r.id=${returnId} and d.status='posted'`)).rows[0];
+  const doc=(await executor.execute<{id:string;subsidiaryId:string;custom:{withholdingRemittance?:{carrying?:WithholdingCarryingSource;deductionIds?:string[]}}}>(sql`select d.id,d.subsidiary_id as "subsidiaryId",d.custom from documents d join withholding_returns r on r.org_id=d.org_id and r.remittance_document_id=d.id where r.org_id=${orgId} and r.id=${returnId} and d.status='posted'`, "objects"))[0];
   if(!doc) return false;
   const source=doc.custom?.withholdingRemittance;
   if(!source) return true;
@@ -974,7 +974,7 @@ async function returnRemittanceSourcesChanged(executor:SqlExecutor,orgId:string,
   } catch(error) { if(error instanceof ContractorWithholdingError) return true;throw error; }
 }
 async function priorSourceOnlyFiling(executor:SqlExecutor,orgId:string,input:{enrollmentId:string;periodStart:string;revision:number;schemeCode:string;currency:string;lines:ReturnPayeeLine[];totals:ReturnTotals}):Promise<string|null> {
-  const previous=(await executor.execute<{scheme_code:string;currency:string;lines:ReturnPayeeLine[];totals:ReturnTotals;filing_reference:string|null}>(sql`select scheme_code,currency,lines,totals,filing_reference from withholding_returns where org_id=${orgId} and enrollment_id=${input.enrollmentId} and period_start=${input.periodStart}::date and revision<${input.revision} and status in ('filed','superseded') order by revision desc limit 1`)).rows[0];
+  const previous=(await executor.execute<{scheme_code:string;currency:string;lines:ReturnPayeeLine[];totals:ReturnTotals;filing_reference:string|null}>(sql`select scheme_code,currency,lines,totals,filing_reference from withholding_returns where org_id=${orgId} and enrollment_id=${input.enrollmentId} and period_start=${input.periodStart}::date and revision<${input.revision} and status in ('filed','superseded') order by revision desc limit 1`, "objects"))[0];
   if(!previous?.filing_reference || previous.scheme_code!==input.schemeCode || previous.currency!==input.currency || canonicalEvidence(previous.lines)!==canonicalEvidence(input.lines) || canonicalEvidence(previous.totals)!==canonicalEvidence(input.totals)) return null;
   return previous.filing_reference;
 }
@@ -987,19 +987,19 @@ export async function listWithholdingPeriods(
 ): Promise<WithholdingPeriodSummary[]> {
   const enrollment = await loadEnrollment(executor, orgId, enrollmentId);
   const scheme = schemeOf(enrollment.scheme_code);
-  const rows = (await executor.execute<{ period_start: string; deduction_count: number; deducted: string }>(sql`
+  const rows = await executor.execute<{ period_start: string; deduction_count: number; deducted: string }>(sql`
     select period_start::text as period_start, count(*)::int as deduction_count, sum(deducted_amount)::text as deducted
       from withholding_deductions
      where org_id = ${orgId} and enrollment_id = ${enrollmentId} and status = 'posted'
-     group by period_start`)).rows;
-  const returns = (await executor.execute<{
+     group by period_start`, "objects");
+  const returns = await executor.execute<{
     id: string; period_start: string; revision: number; status: string; filed_at: string | null;
     filing_reference: string | null; remittance_document_id: string | null; snapshot_sha256: string;
   }>(sql`
     select distinct on (period_start) id, period_start::text as period_start, revision, status,
            filed_at::text as filed_at, filing_reference, remittance_document_id, snapshot_sha256
       from withholding_returns where org_id = ${orgId} and enrollment_id = ${enrollmentId}
-     order by period_start, revision desc`)).rows;
+     order by period_start, revision desc`, "objects");
   const starts = new Set([...rows.map((row) => row.period_start), ...returns.map((row) => row.period_start)]);
   const summaries: WithholdingPeriodSummary[] = [];
   for (const start of starts) {
@@ -1077,12 +1077,12 @@ export async function loadWithholdingReturn(executor: SqlExecutor, orgId: string
       join withholding_enrollments e on e.id = r.enrollment_id and e.org_id = r.org_id
       join subsidiaries s on s.id = r.subsidiary_id and s.org_id = r.org_id
       left join documents document on document.org_id=r.org_id and document.id=r.remittance_document_id
-     where r.org_id = ${orgId} and r.id = ${returnId}`)).rows[0];
+     where r.org_id = ${orgId} and r.id = ${returnId}`, "objects"))[0];
   if (!row) throw new ContractorWithholdingError("withholding return not found");
   const scheme = schemeOf(row.scheme_code);
   const period = withholdingPeriod(scheme, row.period_start, row.return_frequency ?? scheme.returnFrequency ?? "monthly");
   const priorFilingReference=await priorSourceOnlyFiling(executor,orgId,{enrollmentId:row.enrollment_id,periodStart:row.period_start,revision:row.revision,schemeCode:row.scheme_code,currency:row.currency,lines:row.lines,totals:row.totals});
-  const frozen=(await executor.execute<{evidence:{id:string}[]}>(sql`select changes->'sourceEvidence' as evidence from audit_log where org_id=${orgId} and table_name='withholding_returns' and row_id=${row.id} and action='insert' and changes ? 'sourceEvidence' order by at limit 1`)).rows[0]?.evidence;
+  const frozen=(await executor.execute<{evidence:{id:string}[]}>(sql`select changes->'sourceEvidence' as evidence from audit_log where org_id=${orgId} and table_name='withholding_returns' and row_id=${row.id} and action='insert' and changes ? 'sourceEvidence' order by at limit 1`, "objects"))[0]?.evidence;
   const deductionIds=Array.isArray(frozen) ? frozen.map(item=>item.id).filter(isUuid) : [];
   const sourcePayments=deductionIds.length ? (await executor.execute<NonNullable<WithholdingReturnView['sourcePayments']>[number]>(sql`
     select p.id as "documentId",p.document_number as "documentNumber",w.payment_date::text as "paymentDate",
@@ -1091,7 +1091,7 @@ export async function loadWithholdingReturn(executor: SqlExecutor, orgId: string
       case when count(distinct w.reporting_fx_rate)=1 then max(w.reporting_fx_rate)::text else null end as "reportingFxRate"
      from withholding_deductions w join documents p on p.org_id=w.org_id and p.id=w.payment_document_id and p.subsidiary_id=w.subsidiary_id
      where w.org_id=${orgId} and w.subsidiary_id=${row.subsidiary_id} and w.enrollment_id=${row.enrollment_id} and w.id in (${sql.join(deductionIds.map(id=>sql`${id}::uuid`),sql`,`)})
-     group by p.id,p.document_number,w.payment_date,coalesce(w.transaction_currency,w.currency),w.currency order by w.payment_date,p.document_number,p.id`)).rows : [];
+     group by p.id,p.document_number,w.payment_date,coalesce(w.transaction_currency,w.currency),w.currency order by w.payment_date,p.document_number,p.id`, "objects")) : [];
   return {
     id: row.id,
     enrollmentId: row.enrollment_id,
@@ -1158,13 +1158,13 @@ export async function prepareWithholdingReturn(
   const latest = (await executor.execute<{ id: string; revision: number; status: string; snapshot_sha256: string }>(sql`
     select id, revision, status, snapshot_sha256 from withholding_returns
      where org_id = ${orgId} and enrollment_id = ${enrollment.id} and period_start = ${period.start}::date
-     order by revision desc limit 1 for update`)).rows[0];
+     order by revision desc limit 1 for update`, "objects"))[0];
   if (latest?.status === "filed" && latest.snapshot_sha256 === await currentReturnDigest(executor,orgId,latest.id,enrollment.id,period.start,aggregate.lines,aggregate.totals) && !await returnRemittanceSourcesChanged(executor,orgId,latest.id,enrollment.id)) {
     return { id: latest.id, revision: latest.revision, unchanged: true };
   }
   let revision = 1;
   if (latest?.status === "prepared") {
-    const removed = await executor.execute(sql`delete from withholding_returns where org_id = ${orgId} and id = ${latest.id}`);
+    const removed = await executor.execute<never>(sql`delete from withholding_returns where org_id = ${orgId} and id = ${latest.id}`);
     if ((removed.rowCount ?? 0) !== 1) throw new ContractorWithholdingError("the unfiled return could not be replaced");
     revision = latest.revision;
   } else if (latest) {
@@ -1177,7 +1177,7 @@ export async function prepareWithholdingReturn(
     values (${orgId}, ${enrollment.subsidiary_id}, ${enrollment.id}, ${scheme.code}, ${period.start}::date,
       ${period.end}::date, ${revision}, 'prepared', ${scheme.currency}, ${JSON.stringify(aggregate.totals)}::jsonb,
       ${JSON.stringify(aggregate.lines)}::jsonb, ${digest}, ${actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!created) throw new ContractorWithholdingError("the withholding return was not prepared");
   await executor.execute(sql`
     insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
@@ -1193,7 +1193,7 @@ export async function fileWithholdingReturn(
   input: { returnId: string; filingReference: string; confirmed?: boolean },
   actorId: string,
 ): Promise<void> {
-  const identity = (await executor.execute<{ enrollment_id: string; period_start: string; subsidiary_id: string }>(sql`select enrollment_id, period_start::text as period_start, subsidiary_id from withholding_returns where org_id = ${orgId} and id = ${input.returnId}`)).rows[0];
+  const identity = (await executor.execute<{ enrollment_id: string; period_start: string; subsidiary_id: string }>(sql`select enrollment_id, period_start::text as period_start, subsidiary_id from withholding_returns where org_id = ${orgId} and id = ${input.returnId}`, "objects"))[0];
   if (!identity) throw new ContractorWithholdingError("withholding return not found");
   await authorizeMutation(executor, orgId, actorId, "ap.pay", identity.subsidiary_id);
   await lockDeposits(executor, orgId, identity.enrollment_id);
@@ -1203,7 +1203,7 @@ export async function fileWithholdingReturn(
   if (workpaper && input.confirmed !== true) throw new ContractorWithholdingError("Confirm that the workpaper was reviewed before freezing it.");
   const row = (await executor.execute<{ enrollment_id: string; period_start: string; status: string; snapshot_sha256: string; revision: number }>(sql`
     select enrollment_id, period_start::text as period_start, status, snapshot_sha256, revision
-      from withholding_returns where org_id = ${orgId} and id = ${input.returnId} for update`)).rows[0];
+      from withholding_returns where org_id = ${orgId} and id = ${input.returnId} for update`, "objects"))[0];
   if (!row) throw new ContractorWithholdingError("withholding return not found");
   if (row.status !== "prepared") throw new ContractorWithholdingError(`the return is ${row.status}, not prepared`);
   const aggregate = aggregateReturn(await periodDeductions(executor, orgId, row.enrollment_id, row.period_start));
@@ -1223,7 +1223,7 @@ export async function fileWithholdingReturn(
     update withholding_returns set status = 'superseded'
      where org_id = ${orgId} and enrollment_id = ${row.enrollment_id} and period_start = ${row.period_start}::date
        and status = 'filed' and revision < ${row.revision}`);
-  const filed = await executor.execute(sql`
+  const filed = await executor.execute<never>(sql`
     update withholding_returns set status = 'filed', filed_at = now(), filed_by = ${actorId}, filing_reference = ${reference}
      where org_id = ${orgId} and id = ${input.returnId} and status = 'prepared'`);
   if ((filed.rowCount ?? 0) !== 1) throw new ContractorWithholdingError("the withholding return was not marked filed");
@@ -1254,7 +1254,7 @@ export async function createWithholdingRemittance(
   const ret = await loadWithholdingReturn(executor, orgId, input.returnId);
   if (schemeOf(ret.schemeCode).remittanceSchedules?.length) throw new ContractorWithholdingError("This scheme remits through its configured deposit schedule.", "Draft the deposit bill from the enrollment to apply its statutory due date.");
   const live = aggregateReturn(await periodDeductions(executor, orgId, authority.id, ret.periodStart));
-  const storedDigest=(await executor.execute<{digest:string}>(sql`select snapshot_sha256 as digest from withholding_returns where org_id=${orgId} and id=${ret.id}`)).rows[0]?.digest;
+  const storedDigest=(await executor.execute<{digest:string}>(sql`select snapshot_sha256 as digest from withholding_returns where org_id=${orgId} and id=${ret.id}`, "objects"))[0]?.digest;
   if (storedDigest!==await currentReturnDigest(executor,orgId,ret.id,ret.enrollmentId,ret.periodStart,live.lines,live.totals)) throw new ContractorWithholdingError("this return no longer matches the posted deductions", "Prepare and file a revised return before remitting it.");
   if (ret.status !== "filed") {
     throw new ContractorWithholdingError("only a filed return is remitted", "File the return with the authority first.");
@@ -1269,29 +1269,29 @@ export async function createWithholdingRemittance(
       "Set the authority vendor on the withholding enrollment under Setup → Withholding enrollments.",
     );
   }
-  const stale = (await executor.execute<{ document_number: string }>(sql`select d.document_number from withholding_returns r join documents d on d.org_id=r.org_id and d.id=r.remittance_document_id where r.org_id=${orgId} and r.enrollment_id=${ret.enrollmentId} and r.period_start=${ret.periodStart}::date and r.revision<${ret.revision} and d.status not in ('posted','voided') limit 1`)).rows[0];
+  const stale = (await executor.execute<{ document_number: string }>(sql`select d.document_number from withholding_returns r join documents d on d.org_id=r.org_id and d.id=r.remittance_document_id where r.org_id=${orgId} and r.enrollment_id=${ret.enrollmentId} and r.period_start=${ret.periodStart}::date and r.revision<${ret.revision} and d.status not in ('posted','voided') limit 1`, "objects"))[0];
   if (stale) throw new ContractorWithholdingError(`The earlier authority document ${stale.document_number} is still unposted.`, "Discard or cancel that obsolete draft before drafting the revised remittance.");
   const earlier = (await executor.execute<{ remitted: string }>(sql`
     select coalesce(sum(case when d.kind='journal' then 0 when d.kind='vendor_credit' then -d.total else d.total end), 0)::text as remitted
       from withholding_returns r join documents d on d.org_id = r.org_id and d.id = r.remittance_document_id
      where r.org_id = ${orgId} and r.enrollment_id = ${ret.enrollmentId} and r.period_start = ${ret.periodStart}::date
-       and r.revision < ${ret.revision} and d.status <> 'voided'`)).rows[0];
+       and r.revision < ${ret.revision} and d.status <> 'voided'`, "objects"))[0];
   const signedAmount = fromUnits(toUnits(ret.totals.deducted) - toUnits(earlier?.remitted ?? "0"));
-  const previousDocumentIds=(await executor.execute<{id:string}>(sql`select d.id from withholding_returns r join documents d on d.org_id=r.org_id and d.id=r.remittance_document_id where r.org_id=${orgId} and r.enrollment_id=${ret.enrollmentId} and r.period_start=${ret.periodStart}::date and r.revision<${ret.revision} and d.status='posted' order by r.revision`)).rows.map(row=>row.id);
-  const deductionIds=(await executor.execute<{id:string}>(sql`select id from withholding_deductions where org_id=${orgId} and enrollment_id=${ret.enrollmentId} and period_start=${ret.periodStart}::date and status='posted' order by id`)).rows.map(row=>row.id);
+  const previousDocumentIds=(await executor.execute<{id:string}>(sql`select d.id from withholding_returns r join documents d on d.org_id=r.org_id and d.id=r.remittance_document_id where r.org_id=${orgId} and r.enrollment_id=${ret.enrollmentId} and r.period_start=${ret.periodStart}::date and r.revision<${ret.revision} and d.status='posted' order by r.revision`, "objects")).map(row=>row.id);
+  const deductionIds=(await executor.execute<{id:string}>(sql`select id from withholding_deductions where org_id=${orgId} and enrollment_id=${ret.enrollmentId} and period_start=${ret.periodStart}::date and status='posted' order by id`, "objects")).map(row=>row.id);
   const carrying=await captureWithholdingCarryingSource(executor,orgId,deductionIds,previousDocumentIds);
   const carried=await resolveWithholdingCarrying(executor,{orgId,subsidiaryId:enrollment.subsidiary_id,enrollmentId:enrollment.id,source:carrying});
   if (isZero(signedAmount) && !withholdingCarryingChanged(carried)) throw new ContractorWithholdingError("No further remittance, credit or functional carrying correction is due for this period.");
   const documentKind = isZero(signedAmount) ? "journal" : cmp(signedAmount, "0") < 0 ? "vendor_credit" : "vendor_bill";
   const amount = fromUnits(toUnits(signedAmount) < 0n ? -toUnits(signedAmount) : toUnits(signedAmount));
-  const destination = (await executor.execute(sql`select 1 from vendor_roles where org_id = ${orgId} and party_id = ${enrollment.authority_party_id} and is_active`)).rows[0];
+  const destination = (await executor.execute(sql`select 1 from vendor_roles where org_id = ${orgId} and party_id = ${enrollment.authority_party_id} and is_active`, "objects"))[0];
   if (!destination) throw new ContractorWithholdingError("the authority needs an active vendor role before a remittance bill can be drafted");
-  const account = (await executor.execute(sql`select 1 from accounts where org_id = ${orgId} and id = ${enrollment.liability_account_id} and is_active and not is_summary and type in ('liability_current_other','liability_long_term')`)).rows[0];
+  const account = (await executor.execute(sql`select 1 from accounts where org_id = ${orgId} and id = ${enrollment.liability_account_id} and is_active and not is_summary and type in ('liability_current_other','liability_long_term')`, "objects"))[0];
   if (!account) throw new ContractorWithholdingError("the enrolled withholding liability account is not active and postable");
   const covered = (await executor.execute<{ id: string }>(sql`
     select w.id from withholding_deductions w where w.org_id=${orgId} and w.enrollment_id=${enrollment.id} and w.period_start=${ret.periodStart}::date and w.status='posted'
       and not exists(select 1 from documents d where d.org_id=w.org_id and d.status <> 'voided'
-        and ((d.custom->'withholdingDeposit'->'deductionIds') ? w.id::text or (d.custom->'withholdingRemittance'->'deductionIds') ? w.id::text)) order by w.payment_date,w.id`)).rows.map(row => row.id);
+        and ((d.custom->'withholdingDeposit'->'deductionIds') ? w.id::text or (d.custom->'withholdingRemittance'->'deductionIds') ? w.id::text)) order by w.payment_date,w.id`, "objects")).map(row => row.id);
   const number = await allocateDocumentNumber(executor, orgId, documentKind, documentKind === 'journal' ? 'JE-' : documentKind === "vendor_credit" ? "VC-" : "BILL-");
   const documentDate = await businessToday(orgId);
   const sourceFX = await withholdingRemittanceFx(executor, orgId, enrollment.subsidiary_id, ret.currency, documentDate);
@@ -1304,11 +1304,11 @@ export async function createWithholdingRemittance(
             ${amount}, '0', ${amount},
             ${JSON.stringify({ withholdingRemittance: { returnId: ret.id, enrollmentId: enrollment.id, deductionIds: covered, carrying, signedAmount, schemeCode: ret.schemeCode, periodStart: ret.periodStart, revision: ret.revision, sourceFX } })}::jsonb,
             ${actorId}, ${actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!doc) throw new ContractorWithholdingError("the remittance bill was not created");
   if(documentKind==='journal') await insertWithholdingCarryingJournalLines(executor,orgId,doc.id,carried,memo,actorId);
   else {
-  const lineInserted = await executor.execute(sql`
+  const lineInserted = await executor.execute<never>(sql`
     insert into document_lines (org_id, document_id, line_number, account_id, description, quantity, unit_price, amount,
                                 withholding_treatment, created_by, updated_by)
     values (${orgId}, ${doc.id}, 1, ${enrollment.liability_account_id}, ${memo}, 1, ${amount}, ${amount}, 'excluded',
@@ -1316,7 +1316,7 @@ export async function createWithholdingRemittance(
   if (lineInserted.rowCount !== 1) throw new ContractorWithholdingError("the remittance bill line was not created");
   }
   await captureAuthoritySourceIntegrity(executor, orgId, doc.id, "withholdingRemittance", actorId);
-  const linked = await executor.execute(sql`
+  const linked = await executor.execute<never>(sql`
     update withholding_returns set remittance_document_id = ${doc.id}
      where org_id = ${orgId} and id = ${ret.id} and remittance_document_id is null`);
   if ((linked.rowCount ?? 0) !== 1) throw new ContractorWithholdingError("the remittance bill could not be linked to the return");
@@ -1407,7 +1407,7 @@ export async function validateWithholdingEnrollment(
   if (!scheme.payerScope && input.payerScope) throw new ContractorWithholdingError("This scheme has no condominium payer election.");
   if (scheme.remittanceSchedules?.length && !scheme.remittanceSchedules.some(schedule => schedule.code === input.remittanceScheduleCode)) throw new ContractorWithholdingError("Select a deposit schedule declared by this scheme.");
   const entity = (await executor.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId} and is_active for share`)).rows[0];
+    select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId} and is_active for share`, "objects"))[0];
   if (!entity) throw new ContractorWithholdingError("legal entity not found");
   if (input.thresholdBasis && !(scheme.thresholdBases ?? []).some((basis) => basis.code === input.thresholdBasis)) {
     throw new ContractorWithholdingError(
@@ -1418,7 +1418,7 @@ export async function validateWithholdingEnrollment(
     );
   }
   const account = (await executor.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${input.liabilityAccountId}`)).rows[0];
+    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${input.liabilityAccountId}`, "objects"))[0];
   if (!account || !account.is_active || account.is_summary || !['liability_current_other','liability_long_term'].includes(account.type)) {
     throw new ContractorWithholdingError(
       "the withholding liability account must be an active, postable liability account",
@@ -1427,7 +1427,7 @@ export async function validateWithholdingEnrollment(
   }
   if (input.authorityPartyId) {
     const vendor = (await executor.execute<{ id: string }>(sql`
-      select party_id as id from vendor_roles where org_id = ${orgId} and party_id = ${input.authorityPartyId} and is_active`)).rows[0];
+      select party_id as id from vendor_roles where org_id = ${orgId} and party_id = ${input.authorityPartyId} and is_active`, "objects"))[0];
     if (!vendor) {
       throw new ContractorWithholdingError("the authority must be a vendor", `Create ${scheme.authority} as a vendor and select it.`);
     }
@@ -1457,7 +1457,7 @@ export { ContractorWithholdingError, WITHHOLDING_LINE_TREATMENTS };
 
 /** Generated authority bills retain their source amount and owning identity. */
 export async function assertWithholdingRemittanceEdit(executor: SqlExecutor, orgId: string, documentId: string, lines: unknown[] | null, patch: Record<string, unknown>): Promise<boolean> {
-  const row = (await executor.execute(sql`select id from documents where org_id=${orgId} and id=${documentId} and (custom ? 'withholdingRemittance' or exists(select 1 from audit_log a where a.org_id=${orgId} and a.table_name='documents' and a.row_id=${documentId} and a.action='insert' and a.changes->>'reason'='authority_source_captured' and a.changes->>'sourceKey'='withholdingRemittance'))`)).rows[0];
+  const row = (await executor.execute(sql`select id from documents where org_id=${orgId} and id=${documentId} and (custom ? 'withholdingRemittance' or exists(select 1 from audit_log a where a.org_id=${orgId} and a.table_name='documents' and a.row_id=${documentId} and a.action='insert' and a.changes->>'reason'='authority_source_captured' and a.changes->>'sourceKey'='withholdingRemittance'))`, "objects"))[0];
   if (!row) return false;
   await assertAuthoritySourceEdit(executor, orgId, documentId, "withholdingRemittance", lines, patch);
   return true;
@@ -1468,8 +1468,8 @@ export async function assertWithholdingRemittanceCurrent(executor: SqlExecutor, 
   const row = (await executor.execute<{ return_id: string; enrollment_id: string; period_start: string; revision:number; status: string; snapshot_sha256: string; expected_amount: string; actual_amount: string; fx_rate: string; source_fx: { rate?: unknown; asOf?: unknown } | null; document_date: string; kind:string; carrying:WithholdingCarryingSource }>(sql`
     select r.revision,d.kind,d.custom->'withholdingRemittance'->'carrying' as carrying,r.id as return_id, r.enrollment_id, r.period_start::text as period_start, r.status, r.snapshot_sha256, d.custom->'withholdingRemittance'->>'signedAmount' as expected_amount, (case when d.kind='journal' then 0 when d.kind='vendor_credit' then -d.total else d.total end)::text as actual_amount, d.fx_rate::text as fx_rate, d.document_date::text as document_date, d.custom->'withholdingRemittance'->'sourceFX' as source_fx
     from documents d join withholding_returns r on r.org_id = d.org_id and r.id::text = d.custom->'withholdingRemittance'->>'returnId'
-    where d.org_id = ${orgId} and d.id = ${documentId} and d.custom ? 'withholdingRemittance' and r.remittance_document_id=d.id`)).rows[0];
-  const source = (await executor.execute(sql`select 1 from documents where org_id = ${orgId} and id = ${documentId} and (custom ? 'withholdingRemittance' or exists(select 1 from audit_log a where a.org_id=${orgId} and a.table_name='documents' and a.row_id=${documentId} and a.action='insert' and a.changes->>'reason'='authority_source_captured' and a.changes->>'sourceKey'='withholdingRemittance'))`)).rows[0];
+    where d.org_id = ${orgId} and d.id = ${documentId} and d.custom ? 'withholdingRemittance' and r.remittance_document_id=d.id`, "objects"))[0];
+  const source = (await executor.execute(sql`select 1 from documents where org_id = ${orgId} and id = ${documentId} and (custom ? 'withholdingRemittance' or exists(select 1 from audit_log a where a.org_id=${orgId} and a.table_name='documents' and a.row_id=${documentId} and a.action='insert' and a.changes->>'reason'='authority_source_captured' and a.changes->>'sourceKey'='withholdingRemittance'))`, "objects"))[0];
   if (!source) return;
   await assertAuthoritySourceCurrent(executor, orgId, documentId, "withholdingRemittance", input);
   if (!row || row.status !== 'filed' || canonicalDecimal(row.expected_amount,4) === null || cmp(row.expected_amount,row.actual_amount) !== 0) throw new ContractorWithholdingError('The remittance bill no longer represents a current filed return.', 'Delete or void it and generate the bill from the current filed return.');
@@ -1478,22 +1478,22 @@ export async function assertWithholdingRemittanceCurrent(executor: SqlExecutor, 
   await lockPeriod(executor, orgId, row.enrollment_id, row.period_start);
   const live = aggregateReturn(await periodDeductions(executor, orgId, row.enrollment_id, row.period_start));
   if (await currentReturnDigest(executor,orgId,row.return_id,row.enrollment_id,row.period_start,live.lines,live.totals) !== row.snapshot_sha256) throw new ContractorWithholdingError('Deductions changed after this remittance was prepared.', 'Prepare and file the amended return, then regenerate the remittance bill.');
-  const liveIds=(await executor.execute<{id:string}>(sql`select id from withholding_deductions where org_id=${orgId} and enrollment_id=${row.enrollment_id} and period_start=${row.period_start}::date and status='posted' order by id`)).rows.map(item=>item.id);
+  const liveIds=(await executor.execute<{id:string}>(sql`select id from withholding_deductions where org_id=${orgId} and enrollment_id=${row.enrollment_id} and period_start=${row.period_start}::date and status='posted' order by id`, "objects")).map(item=>item.id);
   if(!row.carrying || JSON.stringify(liveIds)!==JSON.stringify(row.carrying.deductionIds)) throw new ContractorWithholdingError("The remittance's posted deduction membership changed.","Prepare and file the amended return, then regenerate the authority document.");
   if (!(await lockAndCheckOrgFeature(executor, orgId, CONTRACTOR_WITHHOLDING_FEATURE))) throw new ContractorWithholdingError("Enable Contractor withholding in Company Settings → Features before posting this authority document.");
-  const earlier=(await executor.execute<{id:string;amount:string}>(sql`select d.id,(case when d.kind='vendor_credit' then -d.total when d.kind='journal' then 0 else d.total end)::text as amount from withholding_returns r join documents d on d.org_id=r.org_id and d.id=r.remittance_document_id where r.org_id=${orgId} and r.enrollment_id=${row.enrollment_id} and r.period_start=${row.period_start}::date and r.revision<${row.revision} and d.status='posted' order by d.id`)).rows;
+  const earlier=await executor.execute<{id:string;amount:string}>(sql`select d.id,(case when d.kind='vendor_credit' then -d.total when d.kind='journal' then 0 else d.total end)::text as amount from withholding_returns r join documents d on d.org_id=r.org_id and d.id=r.remittance_document_id where r.org_id=${orgId} and r.enrollment_id=${row.enrollment_id} and r.period_start=${row.period_start}::date and r.revision<${row.revision} and d.status='posted' order by d.id`, "objects");
   if(JSON.stringify(earlier.map(item=>item.id))!==JSON.stringify(row.carrying.previousDocumentIds) || cmp(fromUnits(toUnits(live.totals.deducted)-toUnits(sum(earlier.map(item=>item.amount)))),row.actual_amount)!==0) throw new ContractorWithholdingError("The earlier posted remittance sources changed.","Discard this draft and prepare the revised authority document again.");
 }
 
 /** Native draft discard or governed void releases the generated bill link, retaining a return audit. */
 export async function releaseWithholdingRemittance(executor: SqlExecutor, orgId: string, documentId: string, actorId: string | null): Promise<void> {
-  const sources = (await executor.execute<{ enrollment_id: string; period_start: string }>(sql`select enrollment_id, period_start::text as period_start from withholding_returns where org_id = ${orgId} and remittance_document_id = ${documentId} order by enrollment_id, period_start`)).rows;
+  const sources = await executor.execute<{ enrollment_id: string; period_start: string }>(sql`select enrollment_id, period_start::text as period_start from withholding_returns where org_id = ${orgId} and remittance_document_id = ${documentId} order by enrollment_id, period_start`, "objects");
   for (const enrollmentId of [...new Set(sources.map(source => source.enrollment_id))].sort()) await lockDeposits(executor, orgId, enrollmentId);
   for (const source of sources) await lockPeriod(executor, orgId, source.enrollment_id, source.period_start);
   if(sources.length) await assertWithholdingCarryingRelease(executor,orgId,documentId);
-  const released = (await executor.execute<{ id: string }>(sql`update withholding_returns set remittance_document_id = null where org_id = ${orgId} and remittance_document_id = ${documentId} returning id`)).rows;
+  const released = await executor.execute<{ id: string }>(sql`update withholding_returns set remittance_document_id = null where org_id = ${orgId} and remittance_document_id = ${documentId} returning id`, "objects");
   for (const row of released) {
-    const audit = await executor.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'withholding_returns',${row.id},'update',${JSON.stringify({ before: { remittanceDocumentId: documentId }, after: { remittanceDocumentId: null }, reason: 'generated_bill_released' })}::jsonb,${actorId})`);
+    const audit = await executor.execute<never>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'withholding_returns',${row.id},'update',${JSON.stringify({ before: { remittanceDocumentId: documentId }, after: { remittanceDocumentId: null }, reason: 'generated_bill_released' })}::jsonb,${actorId})`);
     if (audit.rowCount !== 1) throw new ContractorWithholdingError('The remittance release audit was not recorded.');
   }
 }

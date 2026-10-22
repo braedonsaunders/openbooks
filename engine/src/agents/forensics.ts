@@ -101,8 +101,8 @@ export async function forensicsFindings(
          and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
          and abs(coalesce(d.total, 0)) >= ${threshold}::numeric
        order by abs(d.total) desc limit 25
-    `));
-    for (const row of rows.rows) {
+    `, "objects"));
+    for (const row of rows) {
       const materiality = moneyAbs(row.total);
       findings.push(itemFinding("forensic_weekend_postings", `forensic-weekend:${row.id}`, row, materiality, threshold, weekendPolicy.parameters.criticalMaterialityMultiple, {
         dayOfWeek: row.day_of_week === 0 ? "sunday" : "saturday",
@@ -128,8 +128,8 @@ export async function forensicsFindings(
          and trunc(abs(coalesce(d.total, 0)))::bigint % 1000 = 0
          and abs(coalesce(d.total, 0)) >= ${threshold}::numeric
        order by abs(d.total) desc limit 25
-    `));
-    for (const row of rows.rows) {
+    `, "objects"));
+    for (const row of rows) {
       const materiality = moneyAbs(row.total);
       findings.push(itemFinding("forensic_round_dollar", `forensic-round-dollar:${row.id}`, row, materiality, threshold, roundPolicy.parameters.criticalMaterialityMultiple, {}));
     }
@@ -155,8 +155,8 @@ export async function forensicsFindings(
          and round((abs(coalesce(d.total, 0)) - trunc(abs(coalesce(d.total, 0)))) * 100) in (0, 99)
          and abs(coalesce(d.total, 0)) >= ${threshold}::numeric
        order by abs(d.total) desc limit 25
-    `));
-    for (const row of rows.rows) {
+    `, "objects"));
+    for (const row of rows) {
       const materiality = moneyAbs(row.total);
       findings.push(itemFinding("forensic_threshold_trap", `forensic-threshold-trap:${row.id}`, row, materiality, threshold, trapPolicy.parameters.criticalMaterialityMultiple, {
         trap: row.trap,
@@ -205,8 +205,8 @@ export async function forensicsFindings(
         left join parties p on p.id = d1.party_id and p.org_id = ${orgId}
        where abs(d2.ddate - d1.ddate) <= ${duplicatePolicy.parameters.duplicateDays!}
        order by d1.amt desc limit 25
-    `));
-    for (const pair of pairs.rows) {
+    `, "objects"));
+    for (const pair of pairs) {
       const materiality = moneyAbs(pair.amount);
       findings.push({
         agentKey: "forensics",

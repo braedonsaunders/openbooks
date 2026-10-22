@@ -87,8 +87,8 @@ async function selectFieldDefs(targetTable: string, targetKind: string | undefin
        and (target_kind is null or target_kind = ${targetKind ?? null})
        ${activeOnly ? sql`and is_active` : sql``}
      order by sort_order, label
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 export interface ValidationResult {
@@ -243,11 +243,9 @@ export async function findUnownedCustomReferences(
   for (const [table, refs] of wanted) {
     const ids = [...new Set(refs.map((r) => r.value))]
     const owned = new Set(
-      (
-        await db.execute<{ id: string }>(sql`
+      (await db.execute<{ id: string }>(sql`
           select id from ${sql.raw(`"${table}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)
-      ).rows.map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')).map((r) => r.id),
     )
     for (const ref of refs) {
       if (!owned.has(ref.value)) unowned.push(ref.def)

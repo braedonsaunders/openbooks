@@ -51,14 +51,14 @@ export async function payrollSettings(
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `)).rows[0]?.id ?? null;
+    `, "objects"))[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
       throw new PayrollError("payroll settings not found");
     }
   }
   const row = (await db.execute<{ p: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
-  )).rows[0];
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}`, "objects",
+  ))[0];
   if (!row) throw new PayrollError("payroll settings not found");
   return resolvePayrollSettings(row.p);
 }
@@ -88,7 +88,7 @@ export async function payrollConfigurationInScope(
     select id from subsidiaries
      where org_id = ${orgId} and parent_id is null and is_active
      order by created_at limit 1
-  `)).rows[0]?.id ?? null;
+  `, "objects"))[0]?.id ?? null;
   return payrollSubsidiaryInScope(allowedSubsidiaryIds, root);
 }
 
@@ -138,7 +138,7 @@ async function payrollPolicyForPayRun(
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new PayrollError("pay run not found");
   return row.p;
 }
@@ -254,15 +254,15 @@ export async function ensureComponents(
       -- The same country and statutory system key retain their existing component configuration.
       on conflict (org_id, country, system_key, kind) where system_key is not null do nothing
       returning id::text as id
-    `);
-    if (inserted.rows[0]) {
+    `, "objects");
+    if (inserted[0]) {
       const treatment = await executor.execute(sql`
         insert into pay_component_statutory_treatments
           (org_id, pay_component_id, effective_from, program_exclusions, vacationable, created_by, updated_by)
-        values (${orgId}, ${inserted.rows[0]!.id}, DATE '0001-01-01', '{}'::text[], ${c.vacationable ?? true}, ${actorId}, ${actorId})
+        values (${orgId}, ${inserted[0]!.id}, DATE '0001-01-01', '{}'::text[], ${c.vacationable ?? true}, ${actorId}, ${actorId})
         returning id
-      `);
-      if (treatment.rows.length !== 1) {
+      `, "objects");
+      if (treatment.length !== 1) {
         throw new PayrollError(`statutory treatment for seeded pay component ${c.systemKey ?? c.code} was not created`);
       }
     }
@@ -288,7 +288,7 @@ export async function seedPayrollComponents(
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `)).rows[0]?.id ?? null;
+    `, "objects"))[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
       throw new PayrollError("payroll settings not found");
     }
@@ -314,7 +314,7 @@ export async function provisionPayrollPackDefaults(
     const org = (await tx.execute<{ countries: string[] | null }>(sql`
       select settings#>'{payroll,countries}' as countries from orgs
        where id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!org) throw new PayrollError("payroll organization not found — defaults were not applied");
     for (const country of countries ?? org.countries ?? []) {
       await payrollPack(country).provisionDefaults?.({ tx, orgId, actorId });
@@ -337,7 +337,7 @@ export async function ensureStatutoryHolidayComponents(
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `)).rows[0]?.id ?? null;
+    `, "objects"))[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(allowedSubsidiaryIds, root)) {
       throw new PayrollError("payroll settings not found");
     }
@@ -372,15 +372,15 @@ export async function statutoryHolidayPayEnabled(
       select id from subsidiaries
        where org_id = ${orgId} and parent_id is null and is_active
        order by created_at limit 1
-    `)).rows[0]?.id ?? null;
+    `, "objects"))[0]?.id ?? null;
     if (!payrollSubsidiaryInScope(scope, root)) {
       throw new PayrollError("payroll settings not found");
     }
   }
   const r = (await executor.execute<{ enabled: string | null }>(sql`
     select settings#>>'{payroll,statutoryHolidayPay}' as enabled from orgs where id = ${orgId}
-  `));
-  return r.rows[0]?.enabled === "true";
+  `, "objects"));
+  return r[0]?.enabled === "true";
 }
 
 /**
@@ -418,8 +418,8 @@ async function seedVacationEntitlementPlan(
      group by percent_floor
      order by count(*) desc, percent_floor asc
      limit 1
-  `));
-  const accrualValue = roundMoney(modal.rows[0]?.percent ?? "4", 4);
+  `, "objects"));
+  const accrualValue = roundMoney(modal[0]?.percent ?? "4", 4);
 
   await db.execute(sql`
     insert into entitlement_plans (org_id, code, system_key, name, unit, direction, accrual_method,

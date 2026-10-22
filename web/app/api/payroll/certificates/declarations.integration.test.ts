@@ -127,12 +127,12 @@ test('certificates POST stores NL answers and a second save supersedes the first
         from employee_tax_certificates
        where org_id = ${org.orgId} and employee_party_id = ${employeeId}
          and certificate_key = 'nl_premies'
-       order by effective_from`))
-    assert.equal(rows.rows.length, 2)
-    assert.deepEqual(rows.rows[0]!.answers, { awf_laag: 'true', aof_hoog: 'false', whk_percent: '1.25' })
-    assert.equal(rows.rows[0]!.superseded_on, '2026-06-01')
-    assert.deepEqual(rows.rows[1]!.answers, { awf_laag: 'true', aof_hoog: 'false', whk_percent: '2.00' })
-    assert.equal(rows.rows[1]!.superseded_on, null)
+       order by effective_from`, 'objects'))
+    assert.equal(rows.length, 2)
+    assert.deepEqual(rows[0]!.answers, { awf_laag: 'true', aof_hoog: 'false', whk_percent: '1.25' })
+    assert.equal(rows[0]!.superseded_on, '2026-06-01')
+    assert.deepEqual(rows[1]!.answers, { awf_laag: 'true', aof_hoog: 'false', whk_percent: '2.00' })
+    assert.equal(rows[1]!.superseded_on, null)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -158,8 +158,8 @@ test('certificates POST refuses what the pack does not declare', async () => {
     assert.equal(region.status, 422, await region.clone().text())
     // Nothing was stored by any of the refusals.
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_tax_certificates where org_id = ${org.orgId}`))
-    assert.equal(rows.rows[0]!.count, '0')
+      select count(*) as count from employee_tax_certificates where org_id = ${org.orgId}`, 'objects'))
+    assert.equal(rows[0]!.count, '0')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }

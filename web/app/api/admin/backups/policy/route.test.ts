@@ -40,7 +40,8 @@ const mockSources = new Map<string, string>([
       export const currentRequestOrgResolver = () => null
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
-    export const db = { async execute(query) {
+    export const db = { async execute(query, mode) {
+      const inMode = (result) => (mode === 'objects' ? result.rows : result)
       const text = sqlText(query)
       state.calls.push(text)
       if (text.includes('insert into audit_log')) state.auditWasTransactional.push(state.transactionDepth > 0)
@@ -48,9 +49,9 @@ const mockSources = new Map<string, string>([
       // The route re-reads the upserted row and refuses on a zero-row
       // match, so the double answers the policy read with the stored row.
       if (text.includes('from backup_policies')) {
-        return { rows: [{ enabled: true, frequency: 'weekly', hour_utc: 3, day_of_week: 2, day_of_month: 15, max_keep: 4 }] }
+        return inMode({ rows: [{ enabled: true, frequency: 'weekly', hour_utc: 3, day_of_week: 2, day_of_month: 15, max_keep: 4 }] })
       }
-      return { rows: [] }
+      return inMode({ rows: [] })
     } }
     export async function withOrgTransaction(_orgId, fn) {
       state.transactionDepth += 1

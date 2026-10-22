@@ -1,1 +1,0 @@
-Existing earning-line evidence has non-null earned dates and retains the service default unchanged. New separation references start null, and payment organization/id uniqueness follows the existing globally unique primary key. New proof and reference guards apply to future explicit qualifications; no existing source or issued snapshot is rewritten.

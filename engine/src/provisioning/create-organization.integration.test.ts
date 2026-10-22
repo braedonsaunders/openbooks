@@ -30,9 +30,9 @@ async function platform(): Promise<Platform> {
   const superAdminId = await createScratchUser(home.orgId, "Platform operator", "admin");
   const memberId = await createScratchUser(home.orgId, "Ordinary member", "admin");
   const promoted = await db.execute<{ email: string }>(sql`
-    update users set is_super_admin = true where id = ${superAdminId} returning email`);
-  assert.equal(promoted.rows.length, 1);
-  return { homeOrgId: home.orgId, superAdminId, superAdminEmail: promoted.rows[0]!.email, memberId };
+    update users set is_super_admin = true where id = ${superAdminId} returning email`, "objects");
+  assert.equal(promoted.length, 1);
+  return { homeOrgId: home.orgId, superAdminId, superAdminEmail: promoted[0]!.email, memberId };
 }
 
 function spec(actorId: string, overrides: Partial<Parameters<typeof createOrganization>[0]> = {}) {
@@ -49,11 +49,11 @@ function spec(actorId: string, overrides: Partial<Parameters<typeof createOrgani
 }
 
 async function orgsNamed(name: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from orgs where name = ${name}`)).rows[0]!.n;
+  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from orgs where name = ${name}`, "objects"))[0]!.n;
 }
 
 async function count(query: ReturnType<typeof sql>): Promise<number> {
-  return (await db.execute<{ n: number }>(query)).rows[0]!.n;
+  return (await db.execute<{ n: number }>(query, "objects"))[0]!.n;
 }
 
 async function refusal(promise: Promise<unknown>, code: string, status: number): Promise<void> {
@@ -76,8 +76,8 @@ test("a created organization is complete, isolated, audited and its administrato
     const created = await createOrganization(input);
     orgId = created.orgId;
 
-    const org = (await db.execute<{ name: string; country: string; base_currency: string; env_kind: string; created_by: string }>(sql`
-      select name, country, base_currency, env_kind, created_by from orgs where id = ${orgId}`)).rows;
+    const org = await db.execute<{ name: string; country: string; base_currency: string; env_kind: string; created_by: string }>(sql`
+      select name, country, base_currency, env_kind, created_by from orgs where id = ${orgId}`, "objects");
     assert.deepEqual(org, [{
       name: input.name, country: "CA", base_currency: "CAD", env_kind: "production", created_by: p.superAdminId,
     }]);
@@ -85,11 +85,11 @@ test("a created organization is complete, isolated, audited and its administrato
     // Ledger foundation: one primary book, the default close calendar and
     // monthly periods two fiscal years back through five ahead, each with an
     // open close lock per module.
-    const books = (await db.execute<{ id: string }>(sql`
-      select id from accounting_books where org_id = ${orgId} and is_primary and is_active`)).rows;
+    const books = await db.execute<{ id: string }>(sql`
+      select id from accounting_books where org_id = ${orgId} and is_primary and is_active`, "objects");
     assert.deepEqual(books.map((row) => row.id), [created.bookId]);
-    const calendars = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active`)).rows;
+    const calendars = await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active`, "objects");
     assert.deepEqual(calendars.map((row) => row.id), [created.calendarId]);
     const thisYear = new Date().getUTCFullYear();
     assert.equal(created.firstFiscalYear, thisYear - INITIAL_FISCAL_YEARS_BACK);
@@ -98,7 +98,7 @@ test("a created organization is complete, isolated, audited and its administrato
     const periods = (await db.execute<{ n: number; first: number; last: number }>(sql`
       select count(*)::int as n, min(fiscal_year)::int as first, max(fiscal_year)::int as last
         from accounting_periods
-       where org_id = ${orgId} and fiscal_calendar_id = ${created.calendarId} and not is_adjustment`)).rows[0]!;
+       where org_id = ${orgId} and fiscal_calendar_id = ${created.calendarId} and not is_adjustment`, "objects"))[0]!;
     assert.deepEqual(periods, { n: years * 12, first: created.firstFiscalYear, last: created.lastFiscalYear });
     assert.equal(
       await count(sql`select count(*)::int as n from period_locks where org_id = ${orgId} and book_id = ${created.bookId} and state = 'open'`),
@@ -106,13 +106,13 @@ test("a created organization is complete, isolated, audited and its administrato
     );
 
     // Root legal entity mirrors the organization.
-    const roots = (await db.execute<{ id: string; base_currency: string; country: string }>(sql`
-      select id, base_currency, country from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows;
+    const roots = await db.execute<{ id: string; base_currency: string; country: string }>(sql`
+      select id, base_currency, country from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects");
     assert.deepEqual(roots, [{ id: created.subsidiaryId, base_currency: "CAD", country: "CA" }]);
 
     // Built-in roles carry the current catalogue grants.
-    const roles = (await db.execute<{ key: string; permissions: string[] }>(sql`
-      select key, permissions from app_roles where org_id = ${orgId} and is_built_in order by key`)).rows;
+    const roles = await db.execute<{ key: string; permissions: string[] }>(sql`
+      select key, permissions from app_roles where org_id = ${orgId} and is_built_in order by key`, "objects");
     assert.deepEqual(roles.map((row) => row.key), Object.keys(BUILT_IN_ROLES).sort());
     assert.ok(roles.length > 0, "the built-in role catalogue is seeded for the organization");
     for (const role of roles) assert.deepEqual(role.permissions, BUILT_IN_ROLES[role.key]!.permissions, role.key);
@@ -127,13 +127,13 @@ test("a created organization is complete, isolated, audited and its administrato
     // No payroll pack is installed on a new organization, so pack defaults
     // have nothing to apply until an administrator installs one.
     const payrollCountries = (await db.execute<{ countries: unknown }>(sql`
-      select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`)).rows[0]!.countries;
+      select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}`, "objects"))[0]!.countries;
     assert.equal(payrollCountries, null);
 
     // The first administrator: normalized address, no usable password, and
     // exactly the built-in admin role.
-    const users = (await db.execute<{ id: string; email: string; name: string; password_hash: string; is_active: boolean; is_super_admin: boolean }>(sql`
-      select id, email, name, password_hash, is_active, is_super_admin from users where org_id = ${orgId}`)).rows;
+    const users = await db.execute<{ id: string; email: string; name: string; password_hash: string; is_active: boolean; is_super_admin: boolean }>(sql`
+      select id, email, name, password_hash, is_active, is_super_admin from users where org_id = ${orgId}`, "objects");
     assert.equal(users.length, 1);
     const admin = users[0]!;
     assert.equal(admin.id, created.administrator.userId);
@@ -142,16 +142,16 @@ test("a created organization is complete, isolated, audited and its administrato
     assert.equal(admin.password_hash, UNUSABLE_PASSWORD_HASH);
     assert.equal(admin.is_active, true);
     assert.equal(admin.is_super_admin, false);
-    const assignments = (await db.execute<{ key: string; is_built_in: boolean }>(sql`
+    const assignments = await db.execute<{ key: string; is_built_in: boolean }>(sql`
       select r.key, r.is_built_in from role_assignments a join app_roles r on r.id = a.role_id
-       where a.org_id = ${orgId} and a.user_id = ${admin.id}`)).rows;
+       where a.org_id = ${orgId} and a.user_id = ${admin.id}`, "objects");
     assert.deepEqual(assignments, [{ key: "admin", is_built_in: true }]);
 
     // Audit evidence: the operator, the reason and the after-state for the
     // organization, the administrator and the role assignment.
-    const audit = (await db.execute<{ table_name: string; row_id: string; action: string; actor_id: string; changes: { reason: string; before: unknown; after: Record<string, unknown> } }>(sql`
+    const audit = await db.execute<{ table_name: string; row_id: string; action: string; actor_id: string; changes: { reason: string; before: unknown; after: Record<string, unknown> } }>(sql`
       select table_name, row_id, action, actor_id, changes from audit_log where org_id = ${orgId} and changes->>'source' = 'platform_admin'
-       order by table_name`)).rows;
+       order by table_name`, "objects");
     assert.deepEqual(audit.map((row) => row.table_name), ["orgs", "role_assignments", "users"]);
     for (const row of audit) {
       assert.equal(row.action, "insert");
@@ -201,8 +201,8 @@ test("refusals name the field and leave no organization behind", { skip: !DB }, 
     await refusal(createOrganization(notPlatform), "platform_authority_required", 403);
     assert.equal(await orgsNamed(notPlatform.name), 0);
 
-    const revoked = await db.execute(sql`update users set is_active = false where id = ${p.memberId} returning id`);
-    assert.equal(revoked.rows.length, 1);
+    const revoked = await db.execute(sql`update users set is_active = false where id = ${p.memberId} returning id`, "objects");
+    assert.equal(revoked.length, 1);
     await db.execute(sql`update users set is_super_admin = true where id = ${p.memberId}`);
     await refusal(createOrganization(spec(p.memberId)), "platform_authority_required", 403);
 

@@ -137,7 +137,7 @@ test(
 
         const stored = (await db.execute<{ data: { vendor: string; acct: string } }>(sql`
           select data from custom_records where id = ${recordId} and org_id = ${orgA.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(stored?.data.vendor, orgA.vendorId)
         assert.equal(stored?.data.acct, orgA.accounts.bank)
 

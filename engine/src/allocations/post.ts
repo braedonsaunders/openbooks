@@ -137,8 +137,8 @@ export async function loadPostingBooks(runner: PostRunner, orgId: string): Promi
     is_active: boolean;
     posts_gl: boolean;
   }>(sql`
-    select id, code, is_primary, is_active, posts_gl from accounting_books where org_id = ${orgId}`);
-  return r.rows.map((b) => ({
+    select id, code, is_primary, is_active, posts_gl from accounting_books where org_id = ${orgId}`, "objects");
+  return r.map((b) => ({
     id: b.id,
     code: b.code,
     isPrimary: b.is_primary,
@@ -305,7 +305,7 @@ async function measureDriver(
     ? vintage.asOf.date
     : ((await runner.execute<{ label: string }>(sql`
         select ${canonicalPeriodLabelSql("p")} as label from accounting_periods p
-         where p.org_id = ${doc.orgId} and p.id = ${vintage.asOf.periodId}`)).rows[0]?.label
+         where p.org_id = ${doc.orgId} and p.id = ${vintage.asOf.periodId}`, "objects"))[0]?.label
         ?? null);
   return { vector, dimension: driver.dimension, asOf };
 }
@@ -326,8 +326,8 @@ async function loadDriver(
     config: unknown;
   }>(sql`
     select id, key, name, unit, dimension, is_active, source_kind, config
-      from allocation_drivers where org_id = ${orgId} and id = ${driverId} limit 1`);
-  const row = r.rows[0];
+      from allocation_drivers where org_id = ${orgId} and id = ${driverId} limit 1`, "objects");
+  const row = r[0];
   if (!row) return null;
   const config = row.config;
   if (config != null && (typeof config !== "object" || Array.isArray(config))) {
@@ -416,8 +416,8 @@ async function resolveDynamicTargets(
   // Table and column names are allow-listed above; values stay parameterized.
   const r = await runner.execute<{ id: string }>(sql`
     select id from ${sql.raw(`public."${table.table}"`)}
-     where org_id = ${doc.orgId} and ${sql.raw(`"${table.activeColumn}"`)} = true`);
-  const activeIds = new Set(r.rows.map((row) => row.id));
+     where org_id = ${doc.orgId} and ${sql.raw(`"${table.activeColumn}"`)} = true`, "objects");
+  const activeIds = new Set(r.map((row) => row.id));
   const coords: AllocationRuleTarget[] = [];
   const weights: WeightedTarget[] = [];
   let sequence = 0;

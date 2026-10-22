@@ -190,13 +190,13 @@ test(
             join pay_components c on c.id = l.component_id
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-             and s.employee_party_id = ${employeeId} and c.system_key = 'wcb'`));
-        assert.equal(lines.rows.length, 1, "one WCB line on the stub");
+             and s.employee_party_id = ${employeeId} and c.system_key = 'wcb'`, "objects"));
+        assert.equal(lines.length, 1, "one WCB line on the stub");
         assert.deepEqual(
-          [lines.rows[0]!.sequence, lines.rows[0]!.kind, lines.rows[0]!.description],
+          [lines[0]!.sequence, lines[0]!.kind, lines[0]!.description],
           [260, "employer_contribution", "Workers' compensation"],
         );
-        assert.equal(lines.rows[0]!.amount, amount);
+        assert.equal(lines[0]!.amount, amount);
       }
 
       // Employer-side only: net pay is gross less withholdings, so the new
@@ -205,19 +205,19 @@ test(
         employee_party_id: string; gross: string; net_pay: string; employer_cost: string;
       }>(sql`
         select employee_party_id, gross, net_pay, employer_cost from pay_stubs
-         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`));
-      assert.equal(stubs.rows.length, 3);
-      for (const stub of stubs.rows) {
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+      assert.equal(stubs.length, 3);
+      for (const stub of stubs) {
         assert.equal(stub.gross, "2400.0000");
         const deductions = (await db.execute<{ total: string }>(sql`
           select coalesce(sum(l.amount), 0)::text as total
             from pay_stub_lines l
             join pay_stubs s on s.id = l.stub_id
            where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-             and s.employee_party_id = ${stub.employee_party_id} and l.kind = 'deduction'`));
+             and s.employee_party_id = ${stub.employee_party_id} and l.kind = 'deduction'`, "objects"));
         assert.equal(
           stub.net_pay,
-          sum([stub.gross, neg(deductions.rows[0]!.total)]),
+          sum([stub.gross, neg(deductions[0]!.total)]),
           "net is gross less withholdings — the WCB accrual does not touch it",
         );
         assert.equal(
@@ -232,9 +232,9 @@ test(
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${run.documentId}`));
-      assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
-      const wcbLegs = glLines.rows.filter((row) => row.account_id === wcbPayable);
+         where org_id = ${org.orgId} and document_id = ${run.documentId}`, "objects"));
+      assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
+      const wcbLegs = glLines.filter((row) => row.account_id === wcbPayable);
       assert.equal(sum(wcbLegs.map((row) => row.amount)), neg("99.4600"));
     } finally {
       await dropScratchOrgReporting(org.orgId);

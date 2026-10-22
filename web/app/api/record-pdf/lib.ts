@@ -19,30 +19,24 @@ export async function loadRecordSubsidiaryScope(
   id: string,
 ): Promise<{ subsidiaryId: string | null; partyId?: string | null } | null> {
   if (recordType === 'journal_entry') {
-    return (
-      await db.execute<{ subsidiaryId: string | null }>(
-        sql`select subsidiary_id as "subsidiaryId" from journal_entries where id = ${id} and org_id = ${orgId}`,
-      )
-    ).rows[0] ?? null
+    return (await db.execute<{ subsidiaryId: string | null }>(
+        sql`select subsidiary_id as "subsidiaryId" from journal_entries where id = ${id} and org_id = ${orgId}`, 'objects',
+      ))[0] ?? null
   }
   if (recordType === 'pay_stub' || recordType === 'payroll_cheque') {
-    return (
-      await db.execute<{ subsidiaryId: string | null }>(sql`
+    return (await db.execute<{ subsidiaryId: string | null }>(sql`
         select d.subsidiary_id as "subsidiaryId"
           from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
           join documents d on d.id = r.document_id and d.org_id = r.org_id and d.kind = 'pay_run'
          where s.id = ${id} and s.org_id = ${orgId}
-      `)
-    ).rows[0] ?? null
+      `, 'objects'))[0] ?? null
   }
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta?.docKind) return { subsidiaryId: null }
-  return (
-    await db.execute<{ subsidiaryId: string | null; partyId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = ${meta.docKind} and org_id = ${orgId}`,
-    )
-  ).rows[0] ?? null
+  return (await db.execute<{ subsidiaryId: string | null; partyId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = ${meta.docKind} and org_id = ${orgId}`, 'objects',
+    ))[0] ?? null
 }
 
 /**

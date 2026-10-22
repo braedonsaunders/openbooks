@@ -87,7 +87,7 @@ export async function technicianParty(actor: ServiceActor): Promise<string> {
   await lockServiceFeature(actor.orgId);
   await lockActorCommandAuthority(db, actor.orgId, actor.actorId, null, "service.self");
   const row = (await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users
-    where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active for share`)).rows[0];
+    where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active for share`, "objects"))[0];
   if (!row?.partyId) {
     throw new ServiceError("Your login is not linked to a person, so there are no visits to show.", {
       code: "service_no_person",
@@ -216,8 +216,8 @@ export function allocateServiceNumber(orgId: string, kind: keyof typeof NUMBER_P
 /** Record one material change with its actor, before and after state and reason. */
 export async function auditService(input: { orgId: string; table: string; rowId: string; action: "insert" | "update"; actorId: string | null; before?: unknown; after?: unknown; reason?: string | null }): Promise<void> {
   const changes = { before: input.before ?? null, after: input.after ?? null, reason: input.reason ?? null };
-  const rows = (await db.execute<{ id: string }>(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${input.orgId}, ${input.table}, ${input.rowId}, ${input.action}, ${JSON.stringify(changes)}::jsonb, ${input.actorId}) returning id`)).rows;
+  const rows = await db.execute<{ id: string }>(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${input.orgId}, ${input.table}, ${input.rowId}, ${input.action}, ${JSON.stringify(changes)}::jsonb, ${input.actorId}) returning id`, "objects");
   if (rows.length !== 1) throw new ServiceError("The change could not be audited.", { code: "service_not_saved", remedy: "Try again; nothing was saved." });
 }
 
@@ -244,12 +244,12 @@ export async function resolveServiceCustomer(orgId: string, allowed: ReadonlySet
   const customerPartyId = requireUuid(input.customerPartyId, "Customer");
   const party = (await db.execute<{ name: string; subsidiaryId: string | null }>(sql`select p.display_name as name, p.subsidiary_id as "subsidiaryId"
     from parties p join customer_roles c on c.org_id = p.org_id and c.party_id = p.id
-    where p.org_id = ${orgId} and p.id = ${customerPartyId} and p.is_active and c.is_active for share of p`)).rows[0];
+    where p.org_id = ${orgId} and p.id = ${customerPartyId} and p.is_active and c.is_active for share of p`, "objects"))[0];
   if (!party) throw new ServiceError("This customer is not available.", { code: "service_customer_unavailable", remedy: "Choose an active customer you have access to." });
   const requested = optionalUuid(input.subsidiaryId, "Legal entity");
   let subsidiaryId = requested ?? party.subsidiaryId;
   if (!subsidiaryId) {
-    const root = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows[0];
+    const root = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"))[0];
     if (!root) throw new ServiceError("The organization has no root legal entity.", { code: "service_configuration_missing", remedy: "Set up the organization's legal entity in Company Settings." });
     subsidiaryId = root.id;
   }
@@ -257,16 +257,16 @@ export async function resolveServiceCustomer(orgId: string, allowed: ReadonlySet
     throw new ServiceError("The customer belongs to another legal entity.", { code: "service_invalid", remedy: "Choose the customer's legal entity or another customer." });
   }
   if (allowed !== null && !allowed.has(subsidiaryId)) throw new ScopeNotFoundError();
-  const active = (await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`)).rows[0];
+  const active = (await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`, "objects"))[0];
   if (!active) throw new ServiceError("The legal entity is not available.", { code: "service_invalid", remedy: "Choose an active legal entity." });
   const serviceAddressId = optionalUuid(input.serviceAddressId, "Service location");
   if (serviceAddressId) {
-    const address = (await db.execute(sql`select 1 from addresses where org_id = ${orgId} and id = ${serviceAddressId} and party_id = ${customerPartyId}`)).rows[0];
+    const address = (await db.execute(sql`select 1 from addresses where org_id = ${orgId} and id = ${serviceAddressId} and party_id = ${customerPartyId}`, "objects"))[0];
     if (!address) throw new ServiceError("The service location is not one of this customer's addresses.", { code: "service_invalid", remedy: "Choose an address on the customer record or add one there first." });
   }
   const contactId = optionalUuid(input.contactId, "Site contact");
   if (contactId) {
-    const contact = (await db.execute(sql`select 1 from contacts where org_id = ${orgId} and id = ${contactId} and party_id = ${customerPartyId} and is_active`)).rows[0];
+    const contact = (await db.execute(sql`select 1 from contacts where org_id = ${orgId} and id = ${contactId} and party_id = ${customerPartyId} and is_active`, "objects"))[0];
     if (!contact) throw new ServiceError("The site contact is not an active contact of this customer.", { code: "service_invalid", remedy: "Choose a contact on the customer record or add one there first." });
   }
   return { customerPartyId, customerName: party.name, subsidiaryId, serviceAddressId, contactId };
@@ -276,8 +276,8 @@ export async function resolveServiceCustomer(orgId: string, allowed: ReadonlySet
 export async function requireQualificationTypes(orgId: string, value: unknown): Promise<string[]> {
   const ids = requireUuidList(value, "Required qualification");
   if (!ids.length) return ids;
-  const found = (await db.execute<{ id: string }>(sql`select id from hrm_qualification_types
-    where org_id = ${orgId} and is_active and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
+  const found = await db.execute<{ id: string }>(sql`select id from hrm_qualification_types
+    where org_id = ${orgId} and is_active and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
   if (found.length !== ids.length) {
     throw new ServiceError("A required qualification is not an active qualification type.", { code: "service_invalid", remedy: "Choose active qualification types from Setup → Qualification types." });
   }
@@ -289,7 +289,7 @@ export async function requireActiveItem(orgId: string, itemId: unknown, field = 
   const id = requireUuid(itemId, field);
   const row = (await db.execute<{ id: string; name: string; kind: string; inventoryProfiled: boolean }>(sql`select i.id, coalesce(nullif(i.code, '') || ' — ', '') || i.name as name, i.kind,
       exists (select 1 from item_inventory_profiles p where p.org_id = i.org_id and p.item_id = i.id) as "inventoryProfiled"
-    from items i where i.org_id = ${orgId} and i.id = ${id} and i.is_active`)).rows[0];
+    from items i where i.org_id = ${orgId} and i.id = ${id} and i.is_active`, "objects"))[0];
   if (!row) throw new ServiceError(`${field} is not an active item.`, { code: "service_invalid", remedy: "Choose an active item from the item list." });
   return row;
 }
@@ -298,7 +298,7 @@ export async function requireActiveItem(orgId: string, itemId: unknown, field = 
 export async function optionalTaxCode(orgId: string, value: unknown): Promise<string | null> {
   const id = optionalUuid(value, "Tax code");
   if (!id) return null;
-  const row = (await db.execute(sql`select 1 from tax_codes where org_id = ${orgId} and id = ${id} and is_active`)).rows[0];
+  const row = (await db.execute(sql`select 1 from tax_codes where org_id = ${orgId} and id = ${id} and is_active`, "objects"))[0];
   if (!row) throw new ServiceError("The tax code is not active.", { code: "service_invalid", remedy: "Choose an active tax code." });
   return id;
 }

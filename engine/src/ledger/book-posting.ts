@@ -35,7 +35,7 @@ export async function resolveDocumentPostingBook(
 ): Promise<DocumentPostingBook> {
   const targetId = doc.kind === "journal" ? doc.accountingBookId ?? null : null;
   const primaryCode = async (): Promise<string> =>
-    (await tx.execute<{ code: string }>(sql`select code from accounting_books where org_id = ${doc.orgId} and id = ${primary.id}`)).rows[0]?.code ?? "";
+    (await tx.execute<{ code: string }>(sql`select code from accounting_books where org_id = ${doc.orgId} and id = ${primary.id}`, "objects"))[0]?.code ?? "";
   if (!targetId) return { ...primary, code: await primaryCode(), isPrimary: true };
   // A book-specific journal adjusts one book only; posting one is its own duty.
   if (!actorId || !(await actorHasPermission(tx, doc.orgId, actorId, "gl.post_book_specific"))) {
@@ -47,7 +47,7 @@ export async function resolveDocumentPostingBook(
   const target = (await tx.execute<{ id: string; code: string; is_active: boolean; posts_gl: boolean; is_primary: boolean }>(sql`
     select id, code, is_active, posts_gl, is_primary from accounting_books
      where org_id = ${doc.orgId} and id = ${targetId}
-     for share`)).rows[0];
+     for share`, "objects"))[0];
   if (!target || !target.is_active || !target.posts_gl) {
     throw new PostingError(
       `journal ${doc.documentNumber} targets an accounting book that is not an active posting book — choose an active book or the primary book on the journal`,

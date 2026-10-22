@@ -45,11 +45,11 @@ const { PATCH } = await import('./route')
 
 const patch = (id: string, body: unknown) => withOrgContext(state.orgId, () => PATCH(new Request('http://expense.test', { method: 'PATCH', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
 async function revision(id: string) {
-  return (await withOrgContext(state.orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`))).rows[0]!.revision
+  return (await withOrgContext(state.orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`, 'objects')))[0]!.revision
 }
 async function storedState(orgId: string, id: string): Promise<{ total: string; n: number; amounts: string[] }> {
-  const doc = (await withOrgContext(orgId, () => db.execute<{ total: string }>(sql`select total::text as total from documents where id=${id} and org_id=${orgId}`))).rows[0]!
-  const lines = (await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`select amount::text as amount from document_lines where document_id=${id} and org_id=${orgId} order by line_number`))).rows
+  const doc = (await withOrgContext(orgId, () => db.execute<{ total: string }>(sql`select total::text as total from documents where id=${id} and org_id=${orgId}`, 'objects')))[0]!
+  const lines = await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`select amount::text as amount from document_lines where document_id=${id} and org_id=${orgId} order by line_number`, 'objects'))
   return { total: doc.total, n: lines.length, amounts: lines.map((l) => l.amount) }
 }
 

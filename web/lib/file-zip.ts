@@ -68,8 +68,8 @@ export async function folderZipManifest(orgId: string, folderId: string, viewer:
      where ${visible}
      order by path
      limit ${MAX_ZIP_FILES + 1}
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /** File ids + names for an explicit set of file ids (bulk selection). */
@@ -83,8 +83,8 @@ export async function filesZipManifest(orgId: string, fileIds: string[], viewer:
        and fi.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(fileIds)}::jsonb) as _f(value))
      order by fi.name
      limit ${MAX_ZIP_FILES + 1}
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /**

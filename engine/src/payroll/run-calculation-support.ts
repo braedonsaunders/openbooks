@@ -62,11 +62,11 @@ export async function employerEmployeeCount(
        and prof.is_active
        and p.is_active
        and p.subsidiary_id = ${subsidiaryId}
-  `);
-  const count = Number(result.rows[0]?.employee_count ?? 0);
+  `, "objects");
+  const count = Number(result[0]?.employee_count ?? 0);
   if (!Number.isSafeInteger(count) || count < 0) {
     throw new PayrollError(
-      `the paying employer's employee headcount is invalid (${String(result.rows[0]?.employee_count)})`,
+      `the paying employer's employee headcount is invalid (${String(result[0]?.employee_count)})`,
     );
   }
   return count;
@@ -95,8 +95,8 @@ export async function storedTaxCertificates(
            superseded_on::text as superseded_on
       from employee_tax_certificates
      where org_id = ${orgId} and employee_party_id = ${employeePartyId} and country = ${country}
-  `));
-  return r.rows.map((row) => ({
+  `, "objects"));
+  return r.map((row) => ({
     certificateKey: row.certificate_key,
     region: row.region,
     subRegion: row.sub_region,
@@ -175,8 +175,8 @@ export async function resolvePayrollFxSource(
                    then 0 else 1 end
      limit 1
      for update
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   return row ? {
     id: row.id,
     fromCurrency: row.from_currency,
@@ -203,8 +203,8 @@ export async function resolvePayRate(
       onDate: sql`${onDate}`,
       selectList: sql`w.id, w.basis, w.rate, w.annual_hours, w.currency, w.payroll_rate_scale, w.payroll_amount_rounding`,
     })} as rate
-  `));
-  const selected = r.rows[0];
+  `, "objects"));
+  const selected = r[0];
   if (!selected) return null;
   // Lock the exact version selected by the shared effective-rate rule. Under
   // the calculation's repeatable-read snapshot a concurrent edit either
@@ -217,8 +217,8 @@ export async function resolvePayRate(
       from labor_cost_rates
      where org_id = ${orgId} and id = ${selected.id}
      for update
-  `));
-  const row = locked.rows[0];
+  `, "objects"));
+  const row = locked[0];
   if (!row) return null;
   const resolved = {
     ...requirePayrollWageRounding(row.payroll_rate_scale, row.payroll_amount_rounding),

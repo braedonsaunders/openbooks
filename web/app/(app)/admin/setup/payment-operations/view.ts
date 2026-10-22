@@ -161,17 +161,17 @@ export async function loadPaymentOperations(
          where x.org_id = ${orgId} and (x.name ilike ${q} or f.name ilike ${q} or a.name ilike ${q})
            ${stateWhere}
          order by x.is_active desc, x.name
-         limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
+         limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
       db.execute(sql`select count(*)::int as n
           from payment_bank_profiles x
           join payment_formats f on f.id = x.payment_format_id and f.org_id = x.org_id
           join accounts a on a.id = x.bank_account_id and a.org_id = x.org_id
          where x.org_id = ${orgId} and (x.name ilike ${q} or f.name ilike ${q} or a.name ilike ${q})
-           ${stateWhere}`),
-      db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_bank_profiles where org_id = ${orgId} group by is_active`),
-      selectedId ? db.execute(sql`select * from payment_bank_profiles where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
+           ${stateWhere}`, 'objects'),
+      db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_bank_profiles where org_id = ${orgId} group by is_active`, 'objects'),
+      selectedId ? db.execute(sql`select * from payment_bank_profiles where id = ${selectedId} and org_id = ${orgId}`, 'objects') : Promise.resolve([]),
     ])
-    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as StateCount[]; selected = ((open.rows[0])) ?? null
+    rows = (data); total = Number(((count[0]))?.n ?? 0); stateCounts = counts as unknown as StateCount[]; selected = ((open[0])) ?? null
   } else if (view === 'formats') {
     const [data, count, counts, open] = await Promise.all([
       db.execute(sql`
@@ -179,39 +179,39 @@ export async function loadPaymentOperations(
                x.file_extension, x.content_type, x.formatter_script is not null as has_formatter, x.is_active
           from payment_formats x
          where x.org_id = ${orgId} and (x.code ilike ${q} or x.name ilike ${q} or x.rail ilike ${q}) ${stateWhere}
-         order by x.is_active desc, x.name limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
-      db.execute(sql`select count(*)::int as n from payment_formats x where x.org_id = ${orgId} and (x.code ilike ${q} or x.name ilike ${q} or x.rail ilike ${q}) ${stateWhere}`),
-      db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_formats where org_id = ${orgId} group by is_active`),
-      selectedId ? db.execute(sql`select * from payment_formats where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
+         order by x.is_active desc, x.name limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
+      db.execute(sql`select count(*)::int as n from payment_formats x where x.org_id = ${orgId} and (x.code ilike ${q} or x.name ilike ${q} or x.rail ilike ${q}) ${stateWhere}`, 'objects'),
+      db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_formats where org_id = ${orgId} group by is_active`, 'objects'),
+      selectedId ? db.execute(sql`select * from payment_formats where id = ${selectedId} and org_id = ${orgId}`, 'objects') : Promise.resolve([]),
     ])
-    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as StateCount[]; selected = ((open.rows[0])) ?? null
+    rows = (data); total = Number(((count[0]))?.n ?? 0); stateCounts = counts as unknown as StateCount[]; selected = ((open[0])) ?? null
   } else {
     const [data, count, counts, open] = await Promise.all([
       db.execute(sql`
         select x.*, p.name as profile_name
           from payment_schedules x join payment_bank_profiles p on p.id = x.payment_bank_profile_id and p.org_id = x.org_id
          where x.org_id = ${orgId} and (x.name ilike ${q} or p.name ilike ${q}) ${stateWhere}
-         order by x.is_active desc, x.name limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`),
+         order by x.is_active desc, x.name limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects'),
       db.execute(sql`select count(*)::int as n
           from payment_schedules x
           join payment_bank_profiles p on p.id = x.payment_bank_profile_id and p.org_id = x.org_id
          where x.org_id = ${orgId} and (x.name ilike ${q} or p.name ilike ${q})
-           ${stateWhere}`),
-      db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_schedules where org_id = ${orgId} group by is_active`),
-      selectedId ? db.execute(sql`select * from payment_schedules where id = ${selectedId} and org_id = ${orgId}`) : Promise.resolve({ rows: [] }),
+           ${stateWhere}`, 'objects'),
+      db.execute(sql`select case when is_active then 'active' else 'archived' end as value, count(*)::int as count from payment_schedules where org_id = ${orgId} group by is_active`, 'objects'),
+      selectedId ? db.execute(sql`select * from payment_schedules where id = ${selectedId} and org_id = ${orgId}`, 'objects') : Promise.resolve([]),
     ])
-    rows = (data.rows); total = Number(((count.rows[0]))?.n ?? 0); stateCounts = counts.rows as unknown as StateCount[]; selected = ((open.rows[0])) ?? null
+    rows = (data); total = Number(((count[0]))?.n ?? 0); stateCounts = counts as unknown as StateCount[]; selected = ((open[0])) ?? null
   }
 
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const [formats, bankAccounts, accountingAccounts, subsidiaries, sftpServers, profiles, currencies, subsidiaryUiEnabled] = await Promise.all([
-    db.execute(sql`select id, name, rail, currency from payment_formats where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary order by number nulls last, name`),
-    db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`),
-    db.execute(sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`select id, name from sftp_servers where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`select id, name from payment_bank_profiles where org_id = ${orgId} and is_active order by name`),
-    db.execute(sql`select code, name from currencies order by code`),
+    db.execute(sql`select id, name, rail, currency from payment_formats where org_id = ${orgId} and is_active order by name`, 'objects'),
+    db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary order by number nulls last, name`, 'objects'),
+    db.execute(sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`, 'objects'),
+    db.execute(sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`, 'objects'),
+    db.execute(sql`select id, name from sftp_servers where org_id = ${orgId} and is_active order by name`, 'objects'),
+    db.execute(sql`select id, name from payment_bank_profiles where org_id = ${orgId} and is_active order by name`, 'objects'),
+    db.execute(sql`select code, name from currencies order by code`, 'objects'),
     subsidiaryFeatureEnabled(orgId),
   ])
 
@@ -353,13 +353,13 @@ export async function loadPaymentOperations(
             row: selected,
             creating,
             options: {
-              formats: formats.rows as unknown as { id: string; name: string; rail: string; currency: string | null }[],
-              bankAccounts: bankAccounts.rows as unknown as { id: string; number: string | null; name: string }[],
-              accountingAccounts: accountingAccounts.rows as unknown as { id: string; number: string | null; name: string }[],
-              subsidiaries: subsidiaryUiEnabled ? subsidiaries.rows as unknown as { id: string; name: string }[] : [],
-              sftpServers: sftpServers.rows as unknown as { id: string; name: string }[],
-              profiles: profiles.rows as unknown as { id: string; name: string }[],
-              currencies: currencies.rows as unknown as { code: string; name: string }[],
+              formats: formats as unknown as { id: string; name: string; rail: string; currency: string | null }[],
+              bankAccounts: bankAccounts as unknown as { id: string; number: string | null; name: string }[],
+              accountingAccounts: accountingAccounts as unknown as { id: string; number: string | null; name: string }[],
+              subsidiaries: subsidiaryUiEnabled ? subsidiaries as unknown as { id: string; name: string }[] : [],
+              sftpServers: sftpServers as unknown as { id: string; name: string }[],
+              profiles: profiles as unknown as { id: string; name: string }[],
+              currencies: currencies as unknown as { code: string; name: string }[],
             },
             multiCurrency,
             closeHref,

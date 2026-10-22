@@ -152,7 +152,7 @@ async function loadTrueCostSnapshot(orgId: string): Promise<{
   const row = (await db.execute<TrueCostSnapshotRow>(sql`
     select settings -> 'analytics' -> 'trueCost' as cfg
       from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   const raw = row?.cfg;
   const profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw.profiles.length
     ? raw.profiles.map((p) => ({
@@ -381,8 +381,8 @@ export const PUT = defineRoute({
         from updated
       )
       select revision from updated
-    `);
-    if (!updated.rows.length) {
+    `, "objects");
+    if (!updated.length) {
       return NextResponse.json(
         { error: "this True Cost configuration changed after you opened it; reload and review the latest revision" },
         { status: 409 },

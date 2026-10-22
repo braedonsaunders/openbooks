@@ -19,8 +19,6 @@
  * bootstrap.ts runs main() on import; tests import this module directly.
  */
 import pg from "pg";
-import { createHash } from "node:crypto";
-import type { MigrationExecutionCorrection } from "./migration-execution-compatibility.ts";
 import { connectBypassLongClient, longPool } from "@openbooks/engine/platform/db";
 
 export async function connectMigrationClient(options?: { bypass?: boolean }): Promise<pg.PoolClient> {
@@ -471,8 +469,6 @@ export type MigrationAttempt = {
   transactional: boolean;
   lock: MigrationLockConfig;
   digest: string;
-  recordedDigest?: string;
-  executionCorrection?: MigrationExecutionCorrection;
   /** Deferred validation shares the applying transaction and its schema role. */
   beforeBody?: (client: pg.PoolClient) => Promise<void>;
   /** Business schema owner to apply as when this privileged session is not it. */
@@ -526,13 +522,7 @@ export async function executeMigrationAttempt(
   client: pg.PoolClient,
   attempt: MigrationAttempt,
 ): Promise<void> {
-  const { filename, body, transactional, lock, digest, recordedDigest, schemaOwnerRole, executeBody, executionCorrection, beforeBody } = attempt;
-  if (executionCorrection && (!transactional || executionCorrection.publishedSha256 !== digest)) {
-    throw new Error("migration execution correction requires its exact published identity and an atomic transaction");
-  }
-  if (executionCorrection && createHash("sha256").update(body).digest("hex") !== executionCorrection.executedSha256) {
-    throw new Error("migration executable differs from its correction identity");
-  }
+  const { filename, body, transactional, lock, digest, schemaOwnerRole, executeBody, beforeBody } = attempt;
   if (beforeBody && !transactional) throw new Error("atomic migration preflight requires a transactional migration");
   const ownerRole = schemaOwnerRole ? pg.escapeIdentifier(schemaOwnerRole) : null;
   if (transactional) {
@@ -551,43 +541,10 @@ export async function executeMigrationAttempt(
     // pooled session is returned to callers that execute reviewed SQL files.
     await client.query("set search_path = public, pg_catalog");
     await client.query("set row_security = on");
-    if (recordedDigest) {
-      const updated = await client.query(
-        `update public._applied_migrations
-            set sha256 = $1, applied_at = now()
-          where filename = $2 and sha256 = $3`,
-        [digest, filename, recordedDigest],
-      );
-      if (updated.rowCount !== 1) {
-        throw new Error("migration digest changed during approved revision");
-      }
-    } else {
-      await client.query(
-        "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
-        [filename, digest],
-      );
-    }
-    if (executionCorrection) {
-      await client.query(`create table if not exists public._migration_execution_corrections (
-        filename text primary key references public._applied_migrations(filename),
-        correction_id text not null,
-        published_sha256 text not null check (published_sha256 ~ '^[a-f0-9]{64}$'),
-        executed_sha256 text not null check (executed_sha256 ~ '^[a-f0-9]{64}$'),
-        applied_at timestamptz not null default now()
-      )`);
-      const recorded = await client.query(`insert into public._migration_execution_corrections
-        (filename,correction_id,published_sha256,executed_sha256) values ($1,$2,$3,$4)
-        -- Replay is benign only when every retained evidence field matches below.
-        on conflict (filename) do nothing returning filename`,
-      [filename, executionCorrection.id, executionCorrection.publishedSha256, executionCorrection.executedSha256]);
-      if (recorded.rowCount !== 1) {
-        // An approved replay may retain exactly the same execution evidence.
-        const prior = await client.query(`select filename from public._migration_execution_corrections
-          where filename=$1 and correction_id=$2 and published_sha256=$3 and executed_sha256=$4`,
-        [filename, executionCorrection.id, executionCorrection.publishedSha256, executionCorrection.executedSha256]);
-        if (prior.rowCount !== 1) throw new Error("migration execution correction conflicts with recorded evidence");
-      }
-    }
+    await client.query(
+      "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
+      [filename, digest],
+    );
     if (transactional) {
       await client.query("commit");
     }

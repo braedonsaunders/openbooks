@@ -87,9 +87,9 @@ async function orgsWithFeature(feature: string): Promise<string[]> {
     db.execute<{ id: string }>(sql`
       select id from orgs
        where ${sql.join(links, sql` and `)}
-    `),
+    `, "objects"),
   );
-  return rows.rows.map((r) => r.id);
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -228,14 +228,14 @@ export async function runReminderDuty(): Promise<void> {
         for (const signer of due) {
           const user = (await db.execute<{ id: string; email: string }>(sql`
             select id, email from users where org_id = ${orgId} and party_id = ${signer.partyId} limit 1
-          `)).rows[0];
+          `, "objects"))[0];
           const org = (await db.execute<{ name: string }>(sql`
             select name from orgs where id = ${orgId}
-          `)).rows[0];
+          `, "objects"))[0];
           const person = (await db.execute<{ name: string; email: string | null }>(sql`
             select coalesce(display_name, legal_name, 'Unnamed') as name, email
               from parties where org_id = ${orgId} and id = ${signer.partyId}
-          `)).rows[0];
+          `, "objects"))[0];
           const email = user?.email ?? person?.email ?? null;
           const appBase = (process.env.OPENBOOKS_APP_URL ?? "").trim().replace(/\/+$/, "");
           let delivered = false;

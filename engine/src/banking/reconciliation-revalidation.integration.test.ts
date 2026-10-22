@@ -23,12 +23,12 @@ async function fixture() {
   await withBypassContext(async()=>{
     assert.equal((await db.execute(sql`update app_roles set permissions=case when key='bank-review'
       then '["banking.read","banking.review_sign_off"]'::jsonb else '["banking.reconcile","gl.post"]'::jsonb end
-      where org_id=${org.orgId} and key in ('bank-sign-off','bank-review') returning id`)).rows.length,2)
+      where org_id=${org.orgId} and key in ('bank-sign-off','bank-review') returning id`, 'objects')).length,2)
     assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
       coalesce(settings->'features','{}'::jsonb)||'{"banking":true}'::jsonb)
-      where id=${org.orgId} returning id`)).rows.length,1)
+      where id=${org.orgId} returning id`, 'objects')).length,1)
     assert.equal((await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD',
-      subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${org.accounts.bank} returning id`)).rows.length,1)
+      subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${org.accounts.bank} returning id`, 'objects')).length,1)
   })
   const ctx = (userId=reviewer)=>({orgId:org.orgId,userId,allowedSubsidiaryIds:null})
   const inOrg = <T>(fn:()=>Promise<T>)=>withOrgContext(org.orgId,fn)
@@ -38,7 +38,7 @@ async function fixture() {
       lines:[{accountId:org.accounts.bank,amount,txnAmount:amount,fxRate:'1'},
         {accountId:org.accounts.adjustment,amount:fromUnits(-toUnits(amount)),txnAmount:fromUnits(-toUnits(amount)),fxRate:'1'}]})
     const row=(await db.execute<{id:string}>(sql`select id from journal_lines where org_id=${org.orgId}
-      and entry_id=${result.entryId} and account_id=${org.accounts.bank}`)).rows[0]
+      and entry_id=${result.entryId} and account_id=${org.accounts.bank}`, 'objects'))[0]
     assert.ok(row)
     return row.id
   }
@@ -53,7 +53,7 @@ async function fixture() {
         sourceEvidence:{content,filename:'bank.csv',contentType:'text/csv',
           csvMapping:{date:0,amount:1,description:2,bankTransactionId:3}}},ctx(signer))
       const statement=(await db.execute<{id:string}>(sql`select id from bank_statement_lines
-        where org_id=${org.orgId} and statement_id=${imported.statementId}`)).rows[0]
+        where org_id=${org.orgId} and statement_id=${imported.statementId}`, 'objects'))[0]
       assert.ok(statement)
       const recon=await startReconciliation({accountId:org.accounts.bank,throughDate:date,statementBalance:balance},ctx(signer))
       await createMatch({reconciliationId:recon.id,statementLineIds:[statement.id],journalLineIds:[line]},ctx(signer))
@@ -62,13 +62,13 @@ async function fixture() {
     })
   }
   const snapshot=()=>inOrg(async()=>({
-    sessions:(await db.execute(sql`select to_jsonb(r)::text as value from reconciliations r where org_id=${org.orgId} order by id`)).rows,
-    matches:(await db.execute(sql`select to_jsonb(m)::text as value from reconciliation_matches m where org_id=${org.orgId} order by id`)).rows,
-    statements:(await db.execute(sql`select to_jsonb(l)::text as value from bank_statement_lines l where org_id=${org.orgId} order by id`)).rows,
-    lines:(await db.execute(sql`select to_jsonb(l)::text as value from journal_lines l where org_id=${org.orgId} order by id`)).rows,
+    sessions:await db.execute(sql`select to_jsonb(r)::text as value from reconciliations r where org_id=${org.orgId} order by id`, 'objects'),
+    matches:await db.execute(sql`select to_jsonb(m)::text as value from reconciliation_matches m where org_id=${org.orgId} order by id`, 'objects'),
+    statements:await db.execute(sql`select to_jsonb(l)::text as value from bank_statement_lines l where org_id=${org.orgId} order by id`, 'objects'),
+    lines:await db.execute(sql`select to_jsonb(l)::text as value from journal_lines l where org_id=${org.orgId} order by id`, 'objects'),
   }))
   const auditCount=()=>inOrg(async()=>(await db.execute<{count:number}>(sql`select count(*)::int as count from audit_log
-    where org_id=${org.orgId} and table_name='reconciliations' and changes->>'operation'='revalidate_sign_off'`)).rows[0]!.count)
+    where org_id=${org.orgId} and table_name='reconciliations' and changes->>'operation'='revalidate_sign_off'`, 'objects'))[0]!.count)
   const close=()=>dropScratchOrgReporting(org.orgId)
   return {org,signer,reviewer,ctx,inOrg,post,postInTransaction,signed,snapshot,auditCount,close}
 }
@@ -187,7 +187,7 @@ test('a transaction that began before sign-off and commits after review invalida
        join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
        join reconciliations r on r.org_id=jl.org_id and r.id=${id}
        where jl.org_id=${f.org.orgId} and jl.id=${line}
-    `)).rows[0])
+    `, 'objects'))[0])
     assert.equal(oldTimestamp?.older,true)
     const changed=await f.inOrg(()=>reconciliationStaleness(id,f.ctx()))
     assert.equal(changed.lateEntries.length,2,'the legacy timestamp predicate alone does not identify this later commit')
@@ -256,7 +256,7 @@ test('a later sign-off cannot inherit an earlier review when an older transactio
        join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
        join reconciliations r on r.org_id=jl.org_id and r.id=${later}
        where jl.org_id=${f.org.orgId} and jl.id=${line}
-    `)).rows[0])
+    `, 'objects'))[0])
     assert.equal(timestamp?.older,true)
     assert.equal((await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))).stale,false,'the earlier cutoff evidence is unchanged')
     const changed=await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))
@@ -335,13 +335,13 @@ test('all tenant sign-off gates complete before the session and matched ledger e
   const id=await f.signed(f.org.date,'250.00','250.00');
   const read=()=>f.inOrg(()=>db.execute<{status:string;stamps:number}>(sql`select r.status,
     (select count(*)::int from journal_lines l where l.org_id=r.org_id and l.reconciliation_id=r.id and l.reconciled_at is not null) as stamps
-    from reconciliations r where r.org_id=${f.org.orgId} and r.id=${id}`));
-  const gates=await f.inOrg(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='bank_reconciliation_sign_off' and subject_id=${id} and status='pending' order by id`));
-  assert.equal(gates.rows.length,10);
-  for(const gate of gates.rows.slice(0,-1))await decideGate({gateId:gate.id,userId:f.signer,decision:'approved'});
-  assert.deepEqual((await read()).rows[0],{status:'balanced',stamps:0});
-  await decideGate({gateId:gates.rows.at(-1)!.id,userId:f.signer,decision:'approved'});
-  assert.deepEqual((await read()).rows[0],{status:'signed_off',stamps:1});
+    from reconciliations r where r.org_id=${f.org.orgId} and r.id=${id}`, 'objects'));
+  const gates=await f.inOrg(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='bank_reconciliation_sign_off' and subject_id=${id} and status='pending' order by id`, 'objects'));
+  assert.equal(gates.length,10);
+  for(const gate of gates.slice(0,-1))await decideGate({gateId:gate.id,userId:f.signer,decision:'approved'});
+  assert.deepEqual((await read())[0],{status:'balanced',stamps:0});
+  await decideGate({gateId:gates.at(-1)!.id,userId:f.signer,decision:'approved'});
+  assert.deepEqual((await read())[0],{status:'signed_off',stamps:1});
   assert.deepEqual(await f.inOrg(()=>markReconciled(id,f.ctx(f.signer))),{status:'signed_off',journalLinesReconciled:1});
  }finally{await f.close();}
 });
@@ -356,7 +356,7 @@ test('the original signer can submit and decide a neutral review when its tenant
   const before=await f.snapshot();
   assert.deepEqual(await f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx(f.signer))),{status:'pending_approval'});
   assert.equal(await f.auditCount(),0);
-  const gate=(await f.inOrg(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='bank_reconciliation_review' and subject_id=${id} and status='pending'`))).rows[0]!;
+  const gate=(await f.inOrg(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='bank_reconciliation_review' and subject_id=${id} and status='pending'`, 'objects')))[0]!;
   await decideGate({gateId:gate.id,userId:f.signer,decision:'approved'});
   assert.equal(await f.auditCount(),1);
   assert.deepEqual(await f.snapshot(),before,'review preserves signed financial evidence');

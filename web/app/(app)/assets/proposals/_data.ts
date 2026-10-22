@@ -103,24 +103,24 @@ export async function loadProposals(sp: Record<string, string | string[] | undef
          ${status === 'all' ? sql`` : sql`and p.status = ${status}`}
          ${scope(sql.raw('p.subsidiary_id'), allowed)}
        order by p.posting_date desc, p.id desc
-       limit 500`),
+       limit 500`, 'objects'),
     businessToday(orgId),
     isFeatureEnabled(orgId, 'assetComponents'),
     isFeatureEnabled(orgId, 'constructionInProgress'),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from asset_categories where org_id = ${orgId} and is_active and asset_account_id is not null order by name`),
+      select id, name from asset_categories where org_id = ${orgId} and is_active and asset_account_id is not null order by name`, 'objects'),
     db.execute<{ id: string; label: string; subsidiary_id: string }>(sql`
       select id, concat_ws(' · ', asset_number, name) as label, subsidiary_id from fixed_assets
        where org_id = ${orgId} and parent_asset_id is null and status in ('draft', 'in_service', 'fully_depreciated')
          ${scope(sql.raw('subsidiary_id'), allowed)}
-       order by asset_number limit 1000`),
+       order by asset_number limit 1000`, 'objects'),
     db.execute<{ id: string; label: string; subsidiary_id: string }>(sql`
       select id, concat_ws(' · ', asset_number, name) as label, subsidiary_id from fixed_assets
        where org_id = ${orgId} and status = 'construction' ${scope(sql.raw('subsidiary_id'), allowed)}
-       order by asset_number limit 500`),
-    db.execute<{ n: number }>(sql`select count(*)::int as n from asset_capitalization_rules where org_id = ${orgId} and is_active`),
+       order by asset_number limit 500`, 'objects'),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from asset_capitalization_rules where org_id = ${orgId} and is_active`, 'objects'),
   ])
-  const mapped: ProposalRow[] = rows.rows.map((row) => ({
+  const mapped: ProposalRow[] = rows.map((row) => ({
     id: row.id,
     status: row.status,
     origin: row.origin,
@@ -173,9 +173,9 @@ export async function loadProposals(sp: Record<string, string | string[] | undef
     canCapitalize: can(authz, 'assets.capitalize'),
     componentsEnabled,
     cipEnabled,
-    categories: categories.rows,
-    parents: parents.rows.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
-    cipRecords: cipRecords.rows.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
-    hasRules: (rules.rows[0]?.n ?? 0) > 0,
+    categories,
+    parents: parents.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
+    cipRecords: cipRecords.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
+    hasRules: (rules[0]?.n ?? 0) > 0,
   }
 }

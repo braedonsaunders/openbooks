@@ -37,15 +37,15 @@ async function fixture(lineBuilder: 'tm_actual' | 'cost_plus') {
     projectId:project,basis:'time_selection',selectedTimeEntryIds:[priced,missing],cutoffDate:org.date,backupRequired:false,
   }))
   const snapshot = () => inOrg(async () => ({
-    time:(await db.execute<{raw:string}>(sql`select to_jsonb(t)::text as raw from time_entries t
-      where org_id=${org.orgId} order by id`)).rows,
-    requests:(await db.execute<{raw:string}>(sql`select to_jsonb(r)::text as raw from billing_requests r
-      where org_id=${org.orgId} order by id`)).rows,
-    documents:(await db.execute<{raw:string}>(sql`select to_jsonb(d)::text as raw from documents d
-      where org_id=${org.orgId} order by id`)).rows,
-    sequences:(await db.execute<{raw:string}>(sql`select to_jsonb(n)::text as raw from number_sequences n
-      where org_id=${org.orgId} order by id`)).rows,
-    audits:(await db.execute<{count:number}>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId}`)).rows[0]!.count,
+    time:await db.execute<{raw:string}>(sql`select to_jsonb(t)::text as raw from time_entries t
+      where org_id=${org.orgId} order by id`, 'objects'),
+    requests:await db.execute<{raw:string}>(sql`select to_jsonb(r)::text as raw from billing_requests r
+      where org_id=${org.orgId} order by id`, 'objects'),
+    documents:await db.execute<{raw:string}>(sql`select to_jsonb(d)::text as raw from documents d
+      where org_id=${org.orgId} order by id`, 'objects'),
+    sequences:await db.execute<{raw:string}>(sql`select to_jsonb(n)::text as raw from number_sequences n
+      where org_id=${org.orgId} order by id`, 'objects'),
+    audits:(await db.execute<{count:number}>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId}`, 'objects'))[0]!.count,
   }))
   return {org,actor,project,priced,missing,request,inOrg,snapshot,cleanup:()=>dropScratchOrgReporting(org.orgId)}
 }
@@ -64,16 +64,16 @@ for (const lineBuilder of ['tm_actual','cost_plus'] as const) {
         : sql`update items set default_rate='0' where org_id=${f.org.orgId} and id=${f.org.items.service}`))
       const invoice = await f.inOrg(() => generateInvoiceFromBillingRequest(f.org.orgId,f.actor,f.request.id))
       await f.inOrg(async () => {
-        const lines = (await db.execute<{entryId:string;rate:string;amount:string}>(sql`
+        const lines = await db.execute<{entryId:string;rate:string;amount:string}>(sql`
           select time_entry_id as "entryId",unit_price::text as rate,amount::text as amount from document_lines
-          where org_id=${f.org.orgId} and document_id=${invoice.id} order by time_entry_id`)).rows
+          where org_id=${f.org.orgId} and document_id=${invoice.id} order by time_entry_id`, 'objects')
         assert.equal(lines.length,2)
         assert.deepEqual(lines.find(line=>line.entryId===f.missing),{entryId:f.missing,rate:'0.00000000',amount:'0.0000'})
         assert.deepEqual(lines.find(line=>line.entryId===f.priced),{entryId:f.priced,
           rate:lineBuilder==='cost_plus'?'33.00000000':'100.00000000',amount:lineBuilder==='cost_plus'?'66.0000':'200.0000'})
-        const sources = (await db.execute<{status:string;invoiceId:string}>(sql`
+        const sources = await db.execute<{status:string;invoiceId:string}>(sql`
           select billing_status as status,invoiced_by_line_id as "invoiceId" from time_entries
-          where org_id=${f.org.orgId} and id in (${f.priced},${f.missing})`)).rows
+          where org_id=${f.org.orgId} and id in (${f.priced},${f.missing})`, 'objects')
         assert.equal(sources.length,2)
         assert.ok(sources.every(source=>source.status==='billed' && source.invoiceId))
         await assert.rejects(generateInvoiceFromBillingRequest(f.org.orgId,f.actor,f.request.id),/already been invoiced/)
@@ -92,7 +92,7 @@ test('an explicit time billing snapshot outranks a configured item default, incl
     const invoice = await f.inOrg(() => generateInvoiceFromBillingRequest(f.org.orgId,f.actor,f.request.id))
     const line = await f.inOrg(async () => (await db.execute<{rate:string;amount:string}>(sql`
       select unit_price::text as rate,amount::text as amount from document_lines
-      where org_id=${f.org.orgId} and document_id=${invoice.id} and time_entry_id=${f.missing}`)).rows[0])
+      where org_id=${f.org.orgId} and document_id=${invoice.id} and time_entry_id=${f.missing}`, 'objects'))[0])
     assert.deepEqual(line,{rate:'0.00000000',amount:'0.0000'})
   } finally { await f.cleanup() }
 })
@@ -137,7 +137,7 @@ for (const [name,classification,expected] of [
       const invoice = await f.inOrg(() => generateInvoiceFromBillingRequest(f.org.orgId,f.actor,f.request.id))
       const measured = await f.inOrg(async () => (await db.execute<{amount:string;count:number}>(sql`
         select coalesce(sum(amount),0)::numeric(19,4)::text as amount,count(*)::int as count from document_lines
-        where org_id=${f.org.orgId} and document_id=${invoice.id} and description='Regular surcharge'`)).rows[0]!)
+        where org_id=${f.org.orgId} and document_id=${invoice.id} and description='Regular surcharge'`, 'objects'))[0]!)
       assert.deepEqual(measured,{amount:expected,count:classification==='regular'?1:0})
     } finally { await f.cleanup() }
   })

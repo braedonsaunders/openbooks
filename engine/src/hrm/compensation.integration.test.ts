@@ -157,7 +157,7 @@ test("HR-12 architecture preserves unconfigured criteria and refuses duplicate c
     const retired = await updateJobFamily({ orgId: org.orgId, actorId: h.hrId, familyId: family.id, isActive: false, reason: "retire" });
     assert.equal(retired.isActive, false);
     const stored = (await db.execute<{ is_active: boolean }>(sql`
-      select is_active from hrm_job_families where org_id = ${org.orgId} and id = ${family.id}`)).rows[0];
+      select is_active from hrm_job_families where org_id = ${org.orgId} and id = ${family.id}`, "objects"))[0];
     assert.equal(stored?.is_active, false);
   });
 });
@@ -230,7 +230,7 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
     await seedWage(org.orgId, h.hrId, emp.workerPartyId, "90000");
     // Manager holds the structural scope over the employee.
     const mgrParty = (await db.execute<{ party_id: string }>(sql`
-      select party_id from users where id = ${h.managerId} and org_id = ${org.orgId}`)).rows[0]?.party_id;
+      select party_id from users where id = ${h.managerId} and org_id = ${org.orgId}`, "objects"))[0]?.party_id;
     const mgrEmp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: mgrParty, levelId: level.id });
     await seedWage(org.orgId, h.hrId, mgrParty!, "120000");
     await seedManagerLink(org.orgId, emp.employmentId, mgrEmp.employmentId);
@@ -265,7 +265,7 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
       /outside the guideline 2%–4%.*need a reason/,
     );
     const untouched = (await db.execute<{ status: string }>(sql`
-      select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${empLine.id}`)).rows[0];
+      select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${empLine.id}`, "objects"))[0];
     assert.equal(untouched?.status, "pending");
     // Within guideline proposes cleanly.
     const proposed = await proposeLine({ orgId: org.orgId, actorId: h.managerId, lineId: empLine.id, proposedPct: "3" });
@@ -294,7 +294,7 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
       /non-blank reason is required/,
     );
     const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
-      where org_id=${org.orgId} and subject_kind='compensation_cycle_line' and subject_id=${empLine.id} and status='pending'`)).rows[0]!;
+      where org_id=${org.orgId} and subject_kind='compensation_cycle_line' and subject_id=${empLine.id} and status='pending'`, "objects"))[0]!;
     await decideGate({ gateId: gate.id, userId: h.managerId, decision: "rejected", comment: "over budget for the team" });
     assert.equal((await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }))
       .find(line => line.id === empLine.id)?.status, "rejected");
@@ -332,24 +332,24 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
     assert.equal(submitted.status, "in_review");
     assert.ok(submitted.flowRunId);
     const gate = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status from flow_gates where subject_id = ${cycle.id} order by created_at`)).rows[0]!;
+      select id, status from flow_gates where subject_id = ${cycle.id} order by created_at`, "objects"))[0]!;
     await decideGate({ gateId: gate.id, decision: "approved", userId: cycleApprover });
     const released = (await db.execute<{ status: string }>(sql`
-      select status from hrm_comp_cycles where org_id = ${org.orgId} and id = ${cycle.id}`)).rows[0];
+      select status from hrm_comp_cycles where org_id = ${org.orgId} and id = ${cycle.id}`, "objects"))[0];
     assert.equal(released?.status, "approved");
     await approveLine({ orgId: org.orgId, actorId: cycleApprover, lineId: line!.id });
     const pushed = await pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     assert.equal(pushed.pushed, 1);
     assert.equal(pushed.skipped, 0);
     // Exactly one wage row governs the date; the line links it.
-    const wages = (await db.execute<{ id: string; rate: string }>(sql`
+    const wages = await db.execute<{ id: string; rate: string }>(sql`
       select id, rate::text as rate from labor_cost_rates
        where org_id = ${org.orgId} and employee_party_id = ${emp.workerPartyId}
-         and effective_from = '2025-04-01'::date and is_active`)).rows;
+         and effective_from = '2025-04-01'::date and is_active`, "objects");
     assert.equal(wages.length, 1);
     assert.equal(wages[0]!.rate, "103000.0000");
     const link = (await db.execute<{ pushed_rate_id: string; status: string }>(sql`
-      select pushed_rate_id, status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${line!.id}`)).rows[0];
+      select pushed_rate_id, status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${line!.id}`, "objects"))[0];
     assert.equal(link?.pushed_rate_id, wages[0]!.id);
     assert.equal(link?.status, "pushed");
     // A second push of the round is refused (the round already moved payroll)...
@@ -360,7 +360,7 @@ test("HR-12 cycle approval runs through Flows and push writes each wage once", {
     await assert.rejects(pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }), /cannot push/);
     const wagesAfter = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from labor_cost_rates
-       where org_id = ${org.orgId} and employee_party_id = ${emp.workerPartyId} and is_active`)).rows[0];
+       where org_id = ${org.orgId} and employee_party_id = ${emp.workerPartyId} and is_active`, "objects"))[0];
     assert.equal(wagesAfter?.n, "2");
     // A pushed line never reopens.
     await assert.rejects(
@@ -402,15 +402,15 @@ test("HR-12 cancelling an in-review cycle closes its pending approval run", { sk
     assert.equal(submitted.status, "in_review");
     assert.ok(submitted.flowRunId);
     const gate = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status from flow_gates where org_id = ${org.orgId} and subject_id = ${cycle.id} order by created_at`)).rows[0]!;
+      select id, status from flow_gates where org_id = ${org.orgId} and subject_id = ${cycle.id} order by created_at`, "objects"))[0]!;
     assert.ok(["pending", "escalated"].includes(gate.status));
 
     await cancelCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id, reason: "round withdrawn" });
 
     assert.equal((await db.execute<{ status: string }>(sql`
-      select status from flow_gates where org_id = ${org.orgId} and id = ${gate.id}`)).rows[0]?.status, "cancelled");
+      select status from flow_gates where org_id = ${org.orgId} and id = ${gate.id}`, "objects"))[0]?.status, "cancelled");
     assert.equal((await db.execute<{ status: string }>(sql`
-      select status from flow_runs where org_id = ${org.orgId} and id = ${submitted.flowRunId}`)).rows[0]?.status, "cancelled");
+      select status from flow_runs where org_id = ${org.orgId} and id = ${submitted.flowRunId}`, "objects"))[0]?.status, "cancelled");
   });
 });
 
@@ -451,7 +451,7 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
     async function releaseCycle(cycleId: string): Promise<void> {
       await submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId });
       const gate = (await db.execute<{ id: string }>(sql`
-        select id from flow_gates where subject_id = ${cycleId} order by created_at`)).rows[0]!;
+        select id from flow_gates where subject_id = ${cycleId} order by created_at`, "objects"))[0]!;
       await decideGate({ gateId: gate.id, decision: "approved", userId: cycleApprover });
     }
     // Cycle A runs the whole lifecycle to pushed.
@@ -481,10 +481,10 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
       /decides no lines/,
       "rejecting after push refuses",
     );
-    const trail = (await db.execute<{ lineId: string | null; reason: string | null }>(sql`
+    const trail = await db.execute<{ lineId: string | null; reason: string | null }>(sql`
       select line_id as "lineId", reason from hrm_comp_events
        where org_id = ${org.orgId} and cycle_id = ${pushed.cycleId} and kind = 'pushed'
-       order by line_id nulls last`)).rows;
+       order by line_id nulls last`, "objects");
     assert.equal(trail.length, 2, "the push leaves the line event and the cycle event");
     assert.equal(trail[0]!.lineId, pushed.lineId, "the line event names its line");
     assert.equal(trail[1]!.lineId, null, "the cycle event closes the round");
@@ -503,7 +503,7 @@ test("HR-12 post-push line actions refuse, and push refuses approved lines with 
     const wages = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from labor_cost_rates
        where org_id = ${org.orgId} and employee_party_id = ${emp.workerPartyId}
-         and effective_from = '2025-04-01'::date`)).rows[0];
+         and effective_from = '2025-04-01'::date`, "objects"))[0];
     assert.equal(wages?.n, "1", "only cycle A wrote a wage row");
   });
 });
@@ -540,13 +540,13 @@ test("HR-12 cross-org wage link on a pushed line halts the push", { skip: !DB },
     const foreignRate: string = (await db.execute<{ id: string }>(sql`
       insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from)
       values (${foreignOrg.orgId}, ${foreignParty}, 'CAD', 1, 'year', 2080, '2025-04-01')
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     // approver_party_id is a PARTY, and this used to write h.hrId, which
     // is a USER id. It stored fine until 0241 gave the column its foreign
     // key; the service has always resolved users.party_id for it, so the
     // forge now does the same.
     const approverParty = (await db.execute<{ party_id: string | null }>(sql`
-      select party_id from users where id = ${h.hrId}`)).rows[0]?.party_id ?? null;
+      select party_id from users where id = ${h.hrId}`, "objects"))[0]?.party_id ?? null;
     await db.execute(sql`
       update hrm_comp_cycle_lines
          set pushed_rate_id = ${foreignRate}, status = 'pushed',
@@ -630,7 +630,7 @@ test("HR-12 headcount plan lines cost from bands and approve into requisitions",
     assert.equal(positionLine.departmentId, departmentB);
     assert.equal(positionLine.jobLevelId, level.id);
     const requisitionsBeforeStaleApprove = Number((await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_requisitions where org_id = ${org.orgId}`)).rows[0]?.n ?? "0");
+      select count(*)::text as n from hrm_requisitions where org_id = ${org.orgId}`, "objects"))[0]?.n ?? "0");
     await grantPermissions(org.orgId, h.hrId, ["hrm.position.manage"]);
     await revisePosition({
       orgId: org.orgId, actorId: h.hrId, positionId,
@@ -640,7 +640,7 @@ test("HR-12 headcount plan lines cost from bands and approve into requisitions",
     await assert.rejects(approvePlanLine({ orgId: org.orgId, actorId: h.hrId, lineId: positionLine.id }),
       /belongs to department none, not .* use the position's department/);
     assert.equal(Number((await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_requisitions where org_id = ${org.orgId}`)).rows[0]?.n ?? "0"), requisitionsBeforeStaleApprove);
+      select count(*)::text as n from hrm_requisitions where org_id = ${org.orgId}`, "objects"))[0]?.n ?? "0"), requisitionsBeforeStaleApprove);
     // A create line with a position is refused at the gate.
     await assert.rejects(
       createPlanLine({
@@ -663,7 +663,7 @@ test("HR-12 headcount plan lines cost from bands and approve into requisitions",
     // The employment still stands: terminate lines never end employments.
     const stillThere = (await db.execute<{ status: string }>(sql`
       select status from worker_employment_versions
-       where org_id = ${org.orgId} and employment_id = ${emp.employmentId} and recorded_until is null`)).rows[0];
+       where org_id = ${org.orgId} and employment_id = ${emp.employmentId} and recorded_until is null`, "objects"))[0];
     assert.equal(stillThere?.status, "active");
     const approved = await approvePlanLine({ orgId: org.orgId, actorId: h.hrId, lineId: line.id });
     assert.equal(approved.status, "opened");
@@ -671,7 +671,7 @@ test("HR-12 headcount plan lines cost from bands and approve into requisitions",
     // A hire against the requisition marks the line filled.
     await markPlanLineFilledForRequisition(org.orgId, approved.requisitionId!);
     const filled = (await db.execute<{ status: string }>(sql`
-      select status from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`)).rows[0];
+      select status from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`, "objects"))[0];
     assert.equal(filled?.status, "filled");
   });
 });
@@ -730,7 +730,7 @@ test("HR-12 pay information requests need a window and answer from snapshots", {
     const { org } = h;
     const { level } = await seedArchitecture(org.orgId, h.hrId);
     const empPartyRow = (await db.execute<{ party_id: string }>(sql`
-      select party_id from users where id = ${h.employeeId} and org_id = ${org.orgId}`)).rows[0];
+      select party_id from users where id = ${h.employeeId} and org_id = ${org.orgId}`, "objects"))[0];
     assert.ok(empPartyRow?.party_id);
     const empParty = empPartyRow.party_id;
     const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: empParty, levelId: level.id });
@@ -809,7 +809,7 @@ test("HR-12 compensation events are append-only and RLS-isolated", { skip: !DB }
     const other = await createScratchOrg();
     try {
       const seen = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from hrm_comp_cycles where org_id = ${other.orgId}`)).rows[0];
+        select count(*)::text as n from hrm_comp_cycles where org_id = ${other.orgId}`, "objects"))[0];
       assert.equal(seen?.n, "0");
     } finally {
       await dropScratchOrg(other.orgId);
@@ -1037,7 +1037,7 @@ test("HR-12 restricted proposers still face the whole-cycle budget control", { s
     assert.ok(!/takes the cycle to \d/.test(refusal), `refusal must not carry the hidden total: ${refusal}`);
     // Nothing was written by the refused proposal.
     const untouched = (await db.execute<{ status: string }>(sql`
-      select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${lineA.id}`)).rows[0];
+      select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${lineA.id}`, "objects"))[0];
     assert.equal(untouched?.status, "pending");
     // With a reason the same proposal lands.
     const proposed = await proposeLine({

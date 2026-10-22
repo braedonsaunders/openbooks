@@ -77,7 +77,7 @@ export const PUT = defineRoute({
        where id = ${id} and org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!live) return null
     const liveValue = live.override === null ? null : Number(live.override)
     const matches = (liveValue === null && expected === null)
@@ -92,8 +92,8 @@ export const PUT = defineRoute({
              updated_by = ${gate.user.id}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-       returning id`))
-    if (!updated.rows[0]) return null
+       returning id`, 'objects'))
+    if (!updated[0]) return null
     // The override drives revenue recognition, so the change carries the
     // same before/after audit row every other material project write does —
     // written before the contract sync, in the same transaction, so a sync

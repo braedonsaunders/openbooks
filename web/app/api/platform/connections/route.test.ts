@@ -58,7 +58,7 @@ const mockSources = new Map<string, string>([
       export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for("openbooks.connection-create-route-test")]
       export const db = {
-        async execute() { state.listReads += 1; return { rows: [] } },
+        async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.listReads += 1; return inMode({ rows: [] }) },
         async transaction() {
           state.persisted += 1
           throw new Error("create must not persist a refused connector URL")

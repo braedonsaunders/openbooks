@@ -42,8 +42,7 @@ export async function recoverUnenqueuedApCaptures(
   const summary: CaptureDispatchSummary = { candidates: 0, redispatched: 0, skippedDispatched: 0 };
   // bypass: scheduler-tick — unenqueued capture items are found across every organization.
   await withBypassContext(async () => {
-    const stale = (
-      await db.execute<{
+    const stale = await db.execute<{
         id: string;
         org_id: string;
         updated_by: string | null;
@@ -54,8 +53,7 @@ export async function recoverUnenqueuedApCaptures(
            and updated_at < now() - make_interval(mins => ${DISPATCH_GRACE_MINUTES})
          order by updated_at
          limit ${limit}
-      `)
-    ).rows;
+      `, "objects");
     summary.candidates = stale.length;
     if (stale.length === 0) return;
     const queue = getApCaptureQueue();

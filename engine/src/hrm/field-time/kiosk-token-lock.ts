@@ -13,7 +13,7 @@ export async function lockActiveKioskToken(input: {
     select id from time_kiosks
      where org_id = ${input.orgId} and id = ${input.kioskId}
        and device_token_hash = ${hashDeviceToken(input.deviceToken)} and is_active
-     for share`)).rows[0];
+     for share`, "objects"))[0];
   if (!row) {
     refuse("kiosk_unknown", "This kiosk link is unknown or retired — ask a manager for a current kiosk link");
   }

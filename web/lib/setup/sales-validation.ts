@@ -41,7 +41,7 @@ export const validatePromotionWrite: SetupEntityValidationHook = async ({ orgId,
         select code, name, description, kind, status, percent_value::text, amount_minor::text,
                currency, buy_quantity, get_quantity, starts_at::text as starts_at, ends_at::text as ends_at,
                usage_limit, discount_account_id
-          from promotions where id = ${rowId} and org_id = ${orgId}`)).rows[0]
+          from promotions where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
     : null
   if (rowId && !current) return 'not found'
   const value = <T>(key: string, fallback: T): T =>
@@ -95,7 +95,7 @@ export const validateRestockingFeeWrite: SetupEntityValidationHook = async ({ or
     ? (await executor.execute<CurrentFeePolicy>(sql`
         select item_category, item_id, kind, fee_percent::text, fee_amount_minor::text, currency,
                income_account_id, effective_from::text, effective_to::text
-          from restocking_fee_policies where id = ${rowId} and org_id = ${orgId}`)).rows[0]
+          from restocking_fee_policies where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
     : null
   if (rowId && !current) return 'not found'
   const merged = {

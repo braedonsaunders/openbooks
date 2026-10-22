@@ -65,8 +65,8 @@ const mockSources = new Map<string, string>([
       }
       export const db = {
         select(){const result=[{id:'${ACCOUNT_ID}',orgId:'00000000-0000-4000-8000-00000000b001',partyId:'${PARTY_ID}',approvalStatus:'pending',isActive:false,createdBy:'00000000-0000-4000-8000-00000000b002',routing:{}}];let selected;const query={from(table){selected=table;return query},where(){return Promise.resolve(selected===schema.partyBankAccounts?result:[])}};return query},
-        execute: (query) => Promise.resolve(respond('execute', query)),
-        transaction: async (work) => work({ execute: (query) => Promise.resolve(respond('tx-execute', query)) }),
+        execute: (query, mode) => Promise.resolve(respond('execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
+        transaction: async (work) => work({ execute: (query, mode) => Promise.resolve(respond('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) }),
       }
       import * as schema from '${import.meta.resolve('@openbooks/schema')}';export {schema}
       export function withOrgTransaction(orgId, work) { return transactionScope.run({orgId,executor:db},work) }

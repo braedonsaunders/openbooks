@@ -11,13 +11,11 @@ export async function resolveSodBlockedIds(
 ): Promise<ReadonlySet<string>> {
   const blocked = new Set([...sodBlockedIds(subject), ...additional]);
   if (blocked.size === 0) return blocked;
-  const aliases = (
-    await db.execute<{
+  const aliases = await db.execute<{
       id: string;
     }>(sql`select distinct u.id from users u join users maker
   on maker.org_id=u.org_id and maker.party_id=u.party_id and maker.party_id is not null
-  where u.org_id=${orgId} and maker.id in(select jsonb_array_elements_text(${JSON.stringify([...blocked])}::jsonb)::uuid)`)
-  ).rows;
+  where u.org_id=${orgId} and maker.id in(select jsonb_array_elements_text(${JSON.stringify([...blocked])}::jsonb)::uuid)`, "objects");
   for (const alias of aliases) blocked.add(alias.id);
   return blocked;
 }

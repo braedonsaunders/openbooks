@@ -218,7 +218,7 @@ async function loadCloseWizard(
           left join users approver on approver.id = r.approved_by
           left join users closer on closer.id = r.closed_by
           left join users publisher on publisher.id = r.published_by
-         where r.id = ${runId} and r.org_id = ${orgId}`),
+         where r.id = ${runId} and r.org_id = ${orgId}`, 'objects'),
       db.execute<CloseWizardTaskRow>(sql`
         select t.*, owner.name as owner_name, reviewer.name as reviewer_name,
                coalesce(jsonb_agg(distinct dep.key) filter (where dep.id is not null), '[]'::jsonb) as dependencies,
@@ -230,31 +230,31 @@ async function loadCloseWizard(
           left join close_run_tasks dep on dep.run_id = t.run_id and dep.blueprint_step_id = d.depends_on_step_id and dep.org_id = t.org_id
           left join close_task_evidence ev on ev.task_id = t.id and ev.org_id = t.org_id
          where t.run_id = ${runId} and t.org_id = ${orgId}
-         group by t.id, owner.name, reviewer.name order by t.sort_order`),
+         group by t.id, owner.name, reviewer.name order by t.sort_order`, 'objects'),
       db.execute<CloseExceptionRow>(
-        sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by status, case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end, created_at`,
+        sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by status, case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end, created_at`, 'objects',
       ),
       db.execute<CloseEvidenceRow>(
-        sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at desc`,
+        sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at desc`, 'objects',
       ),
       db.execute<CloseSignoffRow>(
-        sql`select s.*, u.name as signed_by_name from close_signoffs s join users u on u.id = s.signed_by where s.run_id = ${runId} and s.org_id = ${orgId} order by s.signed_at desc`,
+        sql`select s.*, u.name as signed_by_name from close_signoffs s join users u on u.id = s.signed_by where s.run_id = ${runId} and s.org_id = ${orgId} order by s.signed_at desc`, 'objects',
       ),
       db.execute<CloseEventRow>(
-        sql`select e.*, u.name as actor_name from close_events e left join users u on u.id = e.actor_id where e.run_id = ${runId} and e.org_id = ${orgId} order by e.at desc limit 100`,
+        sql`select e.*, u.name as actor_name from close_events e left join users u on u.id = e.actor_id where e.run_id = ${runId} and e.org_id = ${orgId} order by e.at desc limit 100`, 'objects',
       ),
       db.execute<CloseLockRow>(
-        sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId}) and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`,
+        sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId}) and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`, 'objects',
       ),
       db.execute<{ key: string; average_days: string }>(sql`
         select t.key,
                avg(extract(epoch from (t.completed_at - r.started_at)) / 86400.0)::numeric(10,1) as average_days
           from close_run_tasks t join close_runs r on r.id = t.run_id and r.org_id = t.org_id
          where t.org_id = ${orgId} and t.completed_at is not null and r.id <> ${runId}
-         group by t.key`),
+         group by t.key`, 'objects'),
     ])
 
-  const storedRun = runRes.rows[0]
+  const storedRun = runRes[0]
   if (!storedRun) return null
   // The run reads with the same period label as the close list that opened it.
   const run: CloseRunRow = {
@@ -272,7 +272,7 @@ async function loadCloseWizard(
   }
 
   const history = new Map(
-    historyRes.rows.map((row) => [row.key, Number(row.average_days)]),
+    historyRes.map((row) => [row.key, Number(row.average_days)]),
   )
   const [subsidiaryEnabled, featureState] = await Promise.all([
     subsidiaryFeatureEnabled(orgId),
@@ -284,15 +284,15 @@ async function loadCloseWizard(
     // absent, which is why dropping it looked harmless and was not.
     stage,
     run,
-    tasks: tasksRes.rows.map((task) => ({
+    tasks: tasksRes.map((task) => ({
       ...task,
       predicted_days: history.get(task.key) ?? null,
     })),
-    exceptions: exceptionsRes.rows,
-    evidence: evidenceRes.rows,
-    signoffs: signoffsRes.rows,
-    events: eventsRes.rows,
-    locks: locksRes.rows,
+    exceptions: exceptionsRes,
+    evidence: evidenceRes,
+    signoffs: signoffsRes,
+    events: eventsRes,
+    locks: locksRes,
     canRun: can(authz, 'close.run'),
     canApprove: can(authz, 'close.approve'),
     canReopen: can(authz, 'close.reopen'),
@@ -344,7 +344,7 @@ export async function loadClose(
   const taskId=pickString(sp.task)
   if(taskId){
     if(!isUuid(taskId))notFound()
-    const task=(await db.execute<{run_id:string}>(sql`select run_id from close_run_tasks where org_id=${orgId} and id=${taskId}`)).rows[0]
+    const task=(await db.execute<{run_id:string}>(sql`select run_id from close_run_tasks where org_id=${orgId} and id=${taskId}`, 'objects'))[0]
     if(!task || (runId && runId!==task.run_id))notFound()
     runId=task.run_id
   }
@@ -370,15 +370,15 @@ export async function loadClose(
   const pageNum = clamp(Number(pickString(sp.page) ?? 1), 1, 10_000)
   const offset = (pageNum - 1) * PER_PAGE
   const books = await db.execute<CloseBookRow>(
-    sql`select id, name, code, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`,
+    sql`select id, name, code, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`, 'objects',
   )
   const requestedBookId = pickString(sp.book)
-  const selectedBookId = books.rows.some(
+  const selectedBookId = books.some(
     (book) => book.id === requestedBookId,
   )
     ? requestedBookId!
-    : (books.rows.find((book) => book.is_primary)?.id ??
-      books.rows[0]?.id ??
+    : (books.find((book) => book.is_primary)?.id ??
+      books[0]?.id ??
       '')
   // Search matches the label the list shows in the viewer's locale as well as
   // the stored name, so a period listed as "P11 FY2025 · Nov 2025" is found by
@@ -405,23 +405,23 @@ export async function loadClose(
          ${periodSearch}
          ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}
        order by p.period_number
-       limit ${PER_PAGE} offset ${offset}`),
+       limit ${PER_PAGE} offset ${offset}`, 'objects'),
     db.execute(sql`
       select count(*) as count from accounting_periods p
       left join close_runs r on r.period_id = p.id and r.org_id = p.org_id
         and r.book_id = ${selectedBookId || null}
       where p.org_id = ${orgId} and p.fiscal_year = ${fy}
         ${periodSearch}
-        ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}`),
+        ${status && status !== 'all' ? sql`and coalesce(r.status, 'not_started') = ${status}` : sql``}`, 'objects'),
     db.execute(
-      sql`select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc`,
+      sql`select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc`, 'objects',
     ),
   ])))
   const canStartClose = can(authz, 'close.run')
   // Every row's locks belong to the selected book; name it so the lock line
   // answers which book is locked without a trip to the filter chips.
   const lockBookName =
-    (books.rows as { id: string; name: string }[]).find((book) => book.id === selectedBookId)?.name ?? ''
+    (books as { id: string; name: string }[]).find((book) => book.id === selectedBookId)?.name ?? ''
 
   return {
     title: t('title'),
@@ -430,18 +430,18 @@ export async function loadClose(
     canManageBooks: can(authz, 'admin.setup.manage'),
     searchPlaceholder: t('searchPlaceholder'),
     currentParams: sp,
-    showBookChips: books.rows.length > 1,
-    showSingleBook: books.rows.length <= 1 && Boolean(books.rows[0]),
+    showBookChips: books.length > 1,
+    showSingleBook: books.length <= 1 && Boolean(books[0]),
     bookLabel: t('filters.book'),
-    bookOptions: books.rows.map((row) => ({
+    bookOptions: books.map((row) => ({
       value: row.id,
       label: row.name,
     })),
     selectedBookId,
-    singleBookName: books.rows[0]?.name ?? '',
+    singleBookName: books[0]?.name ?? '',
     fyLabel: t('filters.fiscalYear'),
     fyDefault: String(currentFy),
-    fyOptions: fys.rows.map((row) => ({
+    fyOptions: fys.map((row) => ({
       value: String(row.fiscal_year),
       label: t('filters.fyOption', { year: String(row.fiscal_year) }),
     })),
@@ -456,11 +456,11 @@ export async function loadClose(
     columnAction: t('table.action'),
     resumeLabel: t('actions.resume'),
     actionLinkClassName: 'text-sm font-medium text-teal-700 hover:underline dark:text-teal-300',
-    startBooks: books.rows.map((row) => ({ id: row.id, name: row.name })),
+    startBooks: books.map((row) => ({ id: row.id, name: row.name })),
     onList,
     onRun,
     wizard,
-    rows: periods.rows.map((period) => {
+    rows: periods.map((period) => {
       const lockedModules = String(period.locked_modules ?? '')
         .split(',')
         .filter(Boolean)
@@ -518,7 +518,7 @@ export async function loadClose(
       startDefaultBookId: selectedBookId,
       }
     }),
-    total: Number(count.rows[0]?.count ?? 0),
+    total: Number(count[0]?.count ?? 0),
     currentPage: pageNum,
     perPage: PER_PAGE,
   }

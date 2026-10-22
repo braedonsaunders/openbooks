@@ -102,38 +102,39 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.openbooksSqlTextItem
       const sqlValues = globalThis.openbooksSqlValuesItem
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push({ text, inTransaction: state.inTransaction })
           const values = sqlValues(query)
           if (text.includes('select * from items') && text.includes('for update')) {
-            return { rows: [structuredClone(state.item)] }
+            return inMode({ rows: [structuredClone(state.item)] })
           }
           // The webhook item-updated emitter reads the saved row back in the same unit.
           if (text.includes('is_active as "isActive"') && text.includes('from items')) {
             const row = state.item
-            return { rows: [{ id: row.id, code: row.code, name: row.name, kind: row.kind, isActive: row.is_active }] }
+            return inMode({ rows: [{ id: row.id, code: row.code, name: row.name, kind: row.kind, isActive: row.is_active }] })
           }
-          if (text.includes('pg_current_xact_id')) return { rows: [{ xact: '1001' }] }
+          if (text.includes('pg_current_xact_id')) return inMode({ rows: [{ xact: '1001' }] })
           if (text.includes('select 1 from accounts')) {
             const id = values.find((value) => value === '${INCOME_ID}' || value === '${EXPENSE_ID}')
-            return { rows: id ? [{ id }] : [] }
+            return inMode({ rows: id ? [{ id }] : [] })
           }
           if (text.includes('select 1 from tax_codes') || text.includes('select 1 from recognition_rules')) {
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
           if (text.includes('update items set')) {
             state.item = structuredClone(state.nextItem)
-            return { rows: [structuredClone(state.item)] }
+            return inMode({ rows: [structuredClone(state.item)] })
           }
           if (text.includes('insert into audit_log')) {
             if (state.failAudit) throw new Error('audit writer unavailable')
             const encoded = values.find((value) => typeof value === 'string' && value.startsWith('{'))
             if (typeof encoded !== 'string') throw new Error('audit changes missing')
             state.audits.push({ changes: JSON.parse(encoded), actorId: '${ACTOR_ID}', at: new Date().toISOString() })
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
       }
       export async function withOrgTransaction(orgId, work) {

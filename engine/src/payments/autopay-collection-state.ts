@@ -277,8 +277,8 @@ export async function insertCollectionAttempt(
     -- The existing invoice retry position already owns its charge; null makes this attempt stand down.
     on conflict (org_id, invoice_id, retry_position) do nothing
     returning id
-  `));
-  return attempt.rows[0]?.id ?? null;
+  `, "objects"));
+  return attempt[0]?.id ?? null;
 }
 
 /** Operator retries authorize the locked invoice, independently of shared customer visibility. */
@@ -319,7 +319,7 @@ export async function uncollectibleReason(
         where ll.org_id = ${orgId} and ll.document_id = ${invoiceId}
           and later.status = 'succeeded' and later.created_at > a.created_at
       )
-  `)).rows[0]?.n;
+  `, "objects"))[0]?.n;
   if (disputed !== "0") return "invoice is under a provider dispute; resolve the dispute before collecting";
   // Disputed autopay money: an unconsumed chargeback marker parked by the
   // collection webhook against this invoice's own provider charge.
@@ -329,7 +329,7 @@ export async function uncollectibleReason(
        on pc.org_id = ca.org_id and pc.provider = ca.provider
       and pc.intent_ref = ca.provider_ref and pc.consumed_at is null
     where ca.org_id = ${orgId} and ca.invoice_id = ${invoiceId}
-  `)).rows[0]?.n;
+  `, "objects"))[0]?.n;
   if (clawback !== "0") return "a chargeback was reported against this collection; reverse the receipt via payments if funds were clawed back";
   return null;
 }
@@ -342,5 +342,5 @@ export async function scopeSubscriptionIds(
   return (await db.execute<{ id: string }>(sql`
     select id from subscriptions
      where org_id = ${orgId} and customer_id = ${candidate.partyId} and status = 'active'
-  `)).rows.map((r) => r.id);
+  `, "objects")).map((r) => r.id);
 }

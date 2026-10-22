@@ -68,8 +68,8 @@ test("a negative-total credit memo cannot post as a shadow invoice", { skip: !DB
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `);
-    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0 });
+    `, "objects");
+    assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -97,8 +97,8 @@ test("a negative-total vendor credit cannot post as a shadow bill", { skip: !DB 
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `);
-    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0 });
+    `, "objects");
+    assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -117,9 +117,9 @@ test("a mixed-sign credit memo with a positive total still posts", { skip: !DB }
     const legs = (await db.execute<{ accountId: string; amount: string }>(sql`
       select account_id as "accountId", amount::text as amount from journal_lines
        where entry_id = ${entryId} order by line_number
-    `));
+    `, "objects"));
     assert.deepEqual(
-      legs.rows.map((l) => [
+      legs.map((l) => [
         l.accountId === org.accounts.ar ? "ar" : "income",
         l.amount,
       ]),

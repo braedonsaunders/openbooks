@@ -49,14 +49,14 @@ async function readyYear(org: ScratchOrg, options: { incomeSummary?: boolean; ba
 }
 
 async function incomeStatementTotal(org: ScratchOrg, endsOn: string): Promise<string> {
-  const rows = (await db.execute<{ total: string }>(sql`
+  const rows = await db.execute<{ total: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounting_periods p on p.id = e.period_id and p.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${org.orgId} and e.book_id = ${org.bookId} and e.status in ('posted', 'reversed')
-       and p.ends_on <= ${endsOn}::date and a.type = any(${`{${PNL_TYPES.join(",")}}`}::text[])`)).rows;
+       and p.ends_on <= ${endsOn}::date and a.type = any(${`{${PNL_TYPES.join(",")}}`}::text[])`, "objects");
   return rows[0]!.total;
 }
 
@@ -86,9 +86,9 @@ test("generation closes every income-statement balance into retained earnings on
     assert.deepEqual(result.refused, []);
     const [generated] = result.generated;
 
-    const entries = (await db.execute<{ origin: string; period_id: string; posting_date: string; status: string }>(sql`
+    const entries = await db.execute<{ origin: string; period_id: string; posting_date: string; status: string }>(sql`
       select origin, period_id, posting_date::text as posting_date, status from journal_entries
-       where org_id = ${org.orgId} and id = any(${`{${generated!.entryIds.join(",")}}`}::uuid[])`)).rows;
+       where org_id = ${org.orgId} and id = any(${`{${generated!.entryIds.join(",")}}`}::uuid[])`, "objects");
     assert.deepEqual(entries.map((entry) => [entry.origin, entry.period_id, entry.posting_date, entry.status]),
       [["closing", december, "2026-12-31", "posted"]]);
 
@@ -98,22 +98,22 @@ test("generation closes every income-statement balance into retained earnings on
 
     const set = (await db.execute<{ status: string; generation: number; content_hash: string; fiscal_year_earnings: string; reason: string; generated_by: string }>(sql`
       select status, generation, content_hash, fiscal_year_earnings::text as fiscal_year_earnings, reason, generated_by
-        from period_end_journal_sets where org_id = ${org.orgId} and id = ${generated!.setId}`)).rows[0]!;
+        from period_end_journal_sets where org_id = ${org.orgId} and id = ${generated!.setId}`, "objects"))[0]!;
     assert.equal(set.status, "posted");
     assert.equal(set.generation, 1);
     assert.equal(set.fiscal_year_earnings, "500.1000");
     assert.equal(set.reason, REASON);
     assert.equal(set.generated_by, actors.adminId);
-    const audit = (await db.execute<{ action: string; actor_id: string; reason: string }>(sql`
+    const audit = await db.execute<{ action: string; actor_id: string; reason: string }>(sql`
       select action, actor_id, changes->>'reason' as reason from audit_log
-       where org_id = ${org.orgId} and table_name = 'period_end_journal_sets' and row_id = ${generated!.setId}`)).rows;
+       where org_id = ${org.orgId} and table_name = 'period_end_journal_sets' and row_id = ${generated!.setId}`, "objects");
     assert.deepEqual(audit.map((row) => [row.action, row.actor_id, row.reason]), [["generate", actors.adminId, REASON]]);
 
     const rerun = await generatePeriodEndJournals(org.orgId, actors.adminId, { periodId: december, reason: REASON });
     assert.deepEqual(rerun.generated, []);
     assert.deepEqual(rerun.unchanged, [{ subsidiaryId: org.subsidiaryId, setId: generated!.setId }]);
     assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'closing'`)).rows[0]!.n, 1);
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'closing'`, "objects"))[0]!.n, 1);
     assert.deepEqual(await periodEndJournalCloseCheck(org.orgId, { periodId: december, bookId: org.bookId, subsidiaryIds: [] }), { count: 0, details: undefined });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -148,10 +148,10 @@ test("balance-sheet closing zeroes the year-end balance sheet and the opening jo
     assert.equal(january.get(org.accounts.bank), before.get(org.accounts.bank));
     assert.equal(january.get(year.capitalId), before.get(year.capitalId));
     assert.equal(january.get(year.retainedEarningsId), "-550.1000");
-    const opening = (await db.execute<{ origin: string; period_id: string; posting_date: string }>(sql`
+    const opening = await db.execute<{ origin: string; period_id: string; posting_date: string }>(sql`
       select e.origin, e.period_id, e.posting_date::text as posting_date
         from period_end_journal_entries pe join journal_entries e on e.org_id = pe.org_id and e.id = pe.entry_id
-       where pe.org_id = ${org.orgId} and pe.kind = 'opening'`)).rows;
+       where pe.org_id = ${org.orgId} and pe.kind = 'opening'`, "objects");
     assert.deepEqual(opening, [{ origin: "opening", period_id: year.periods.get("2027-01"), posting_date: "2027-01-01" }]);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -219,10 +219,10 @@ test("the operator reverses a generation through the kernel before the year lock
     const reversal = await reversePeriodEndJournals(org.orgId, actors.adminId, { periodId: december, reason: "Late supplier invoice for December" });
     assert.equal(reversal.reversed.length, 1);
     const original = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where org_id = ${org.orgId} and id = ${first.entryIds[0]!}`)).rows[0]!;
+      select status from journal_entries where org_id = ${org.orgId} and id = ${first.entryIds[0]!}`, "objects"))[0]!;
     assert.equal(original.status, "reversed", "the original is marked reversed, never deleted");
-    const mirror = (await db.execute<{ origin: string; period_id: string }>(sql`
-      select origin, period_id from journal_entries where org_id = ${org.orgId} and reverses_entry_id = ${first.entryIds[0]!}`)).rows;
+    const mirror = await db.execute<{ origin: string; period_id: string }>(sql`
+      select origin, period_id from journal_entries where org_id = ${org.orgId} and reverses_entry_id = ${first.entryIds[0]!}`, "objects");
     assert.deepEqual(mirror, [{ origin: "closing", period_id: december }]);
     assert.equal(await incomeStatementTotal(org, "2026-12-31"), "-550.1000");
 
@@ -272,8 +272,8 @@ test(
         hours: 2,
       });
 
-      const set = (await db.execute<{ status: string; reversed_by: string; reopen_request_id: string; reversal_reason: string }>(sql`
-      select status, reversed_by, reopen_request_id, reversal_reason from period_end_journal_sets where org_id = ${org.orgId}`)).rows;
+      const set = await db.execute<{ status: string; reversed_by: string; reopen_request_id: string; reversal_reason: string }>(sql`
+      select status, reversed_by, reopen_request_id, reversal_reason from period_end_journal_sets where org_id = ${org.orgId}`, "objects");
       assert.deepEqual(set.map((row) => [row.status, row.reversed_by, row.reopen_request_id]), [["reversed", actors.approver1Id, requestId]]);
       assert.match(set[0]!.reversal_reason, /Auditor adjustment to fiscal year 2026/);
       assert.equal(await incomeStatementTotal(org, "2026-12-31"), "-550.1000");
@@ -314,7 +314,7 @@ test("generation refuses an unready year by name and posts nothing", { skip: !DB
     const drafts = await generatePeriodEndJournals(org.orgId, actors.adminId, { periodId: december, reason: REASON });
     assert.deepEqual(drafts.refused[0]!.problems.map((problem) => problem.code), ["drafts_open"]);
     assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin in ('closing', 'opening')`)).rows[0]!.n, 0);
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin in ('closing', 'opening')`, "objects"))[0]!.n, 0);
 
     // The feature switch governs the command.
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,periodEndJournals}', 'false'::jsonb) where id = ${org.orgId}`);
@@ -339,7 +339,7 @@ test("period-end readiness scopes unassigned documents by effective posting date
     const { actors, december } = await readyYear(org);
     const decemberEnd = (await db.execute<{ ends_on: string }>(sql`
       select ends_on::text as ends_on from accounting_periods
-       where org_id = ${org.orgId} and id = ${december}`)).rows[0]?.ends_on;
+       where org_id = ${org.orgId} and id = ${december}`, "objects"))[0]?.ends_on;
     assert.ok(decemberEnd);
     const id = randomUUID();
     await db.execute(sql`
@@ -407,7 +407,7 @@ test("concurrent generations of the same year post exactly one generation", { sk
     assert.equal(left.generated.length + right.generated.length, 1);
     assert.equal(left.unchanged.length + right.unchanged.length, 1);
     const sets = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from period_end_journal_sets where org_id = ${org.orgId}`)).rows[0]!.n;
+      select count(*)::int as n from period_end_journal_sets where org_id = ${org.orgId}`, "objects"))[0]!.n;
     assert.equal(sets, 1);
   } finally {
     await dropScratchOrg(org.orgId);

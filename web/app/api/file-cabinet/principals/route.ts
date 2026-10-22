@@ -22,14 +22,14 @@ export const GET = defineRoute({
       db.execute(sql`
       select id, coalesce(name, email) as name from users
        where org_id = ${orgId} and is_active order by coalesce(name, email)
-    `),
+    `, "objects"),
       db.execute(sql`
       select id, name from app_roles where org_id = ${orgId} order by name
-    `),
+    `, "objects"),
     ]);
     return NextResponse.json({
-      users: users.rows as { id: string; name: string }[],
-      roles: roles.rows as { id: string; name: string }[],
+      users: users as { id: string; name: string }[],
+      roles: roles as { id: string; name: string }[],
     });
   },
 });

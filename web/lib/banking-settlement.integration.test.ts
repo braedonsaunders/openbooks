@@ -58,7 +58,7 @@ async function postDocumentFor(org: Org, actorId: string, input: { kind: "custom
   const openLineId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     select jl.id from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-     where jl.org_id = ${org.orgId} and je.source_document_id = ${id} and jl.is_open_item`))).rows[0]!.id;
+     where jl.org_id = ${org.orgId} and je.source_document_id = ${id} and jl.is_open_item`, "objects")))[0]!.id;
   return { documentId: id, openLineId };
 }
 
@@ -132,20 +132,20 @@ async function openOf(f: Fixture, side: "ar" | "ap", partyId: string) {
 }
 
 async function paymentLegs(orgId: string, paymentId: string) {
-  return (await withBypassContext(() => db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(sql`
+  return await withBypassContext(() => db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(sql`
     select l.account_id, l.amount::text as amount, l.is_open_item
       from journal_lines l join documents d on d.org_id = l.org_id and d.posted_entry_id = l.entry_id
-     where d.org_id = ${orgId} and d.id = ${paymentId}`))).rows;
+     where d.org_id = ${orgId} and d.id = ${paymentId}`, "objects"));
 }
 
 async function lineStatus(orgId: string, lineId: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ match_status: string }>(sql`
-    select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}`))).rows[0]!.match_status;
+    select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}`, "objects")))[0]!.match_status;
 }
 
 async function paymentCount(orgId: string): Promise<number> {
   return (await withBypassContext(() => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from documents where org_id = ${orgId} and kind in ('customer_payment', 'vendor_payment')`))).rows[0]!.n;
+    select count(*)::int as n from documents where org_id = ${orgId} and kind in ('customer_payment', 'vendor_payment')`, "objects")))[0]!.n;
 }
 
 const sumOf = (legs: { amount: string }[]) => legs.reduce((total, leg) => total + toUnits(leg.amount), 0n);
@@ -185,7 +185,7 @@ test("a deposit larger than the invoice settles it in full and keeps the excess 
              coalesce((select sum(a.source_transaction_amount) from applications a
                         where a.org_id = l.org_id and a.from_line_id = l.id and a.unapplied_at is null), 0)::text as applied
         from journal_lines l join documents d on d.org_id = l.org_id and d.posted_entry_id = l.entry_id
-       where d.org_id = ${f.org.orgId} and d.id = ${result.paymentId} and l.is_open_item`))).rows[0]!;
+       where d.org_id = ${f.org.orgId} and d.id = ${result.paymentId} and l.is_open_item`, "objects")))[0]!;
     assert.equal(toUnits(credit.txn) - toUnits(credit.applied), toUnits("50"), "50 stays open on the receipt as the customer's credit");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
@@ -211,10 +211,10 @@ test("a short-paid invoice is written off through the governed write-off in the 
     assert.equal(result.writeOffDocuments.length, 1);
     assert.equal(await openOf(f, "ar", f.org.customerId), "0", "the invoice is settled by cash and the write-off");
     const expense = (await withBypassContext(() => db.execute<{ amount: string }>(sql`
-      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${badDebt}`))).rows[0]!;
+      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${badDebt}`, "objects")))[0]!;
     assert.equal(toUnits(expense.amount), toUnits("10"));
-    const audit = (await withBypassContext(() => db.execute<{ changes: { writeOff: { total: string; reason: string } } }>(sql`
-      select changes from audit_log where org_id = ${f.org.orgId} and row_id = ${f.lineId} and changes->>'operation' = 'record_payment_match'`))).rows;
+    const audit = await withBypassContext(() => db.execute<{ changes: { writeOff: { total: string; reason: string } } }>(sql`
+      select changes from audit_log where org_id = ${f.org.orgId} and row_id = ${f.lineId} and changes->>'operation' = 'record_payment_match'`, "objects"));
     assert.deepEqual([audit[0]!.changes.writeOff.total, audit[0]!.changes.writeOff.reason], ["10.0000", "Short-paid bank charge"]);
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
@@ -309,7 +309,7 @@ test("a foreign-currency deposit is measured at the evidenced rate and realizes 
     const legs = await paymentLegs(f.org.orgId, result.paymentId);
     assert.equal(toUnits(legs.find((leg) => leg.account_id === f.org.accounts.bank)!.amount), toUnits("135"), "the bank is measured at 1.35");
     const gain = (await withBypassContext(() => db.execute<{ amount: string }>(sql`
-      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.fxGainLoss}`))).rows[0]!;
+      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.fxGainLoss}`, "objects")))[0]!;
     assert.equal(toUnits(gain.amount), toUnits("-5"), "the 5 CAD difference is a realized gain");
     assert.equal(await lineStatus(f.org.orgId, f.lineId), "matched");
   } finally {
@@ -327,11 +327,11 @@ test("an operator-entered rate measures a foreign line with its source and reaso
     const legs = await paymentLegs(f.org.orgId, result.paymentId);
     assert.equal(toUnits(legs.find((leg) => leg.account_id === f.org.accounts.bank)!.amount), toUnits("75"));
     const evidence = (await withBypassContext(() => db.execute<{ fx_rate: string; evidence: { rate: string; source: string } | null }>(sql`
-      select fx_rate::text as fx_rate, document_fx_rate_evidence as evidence from documents where org_id = ${f.org.orgId} and id = ${result.paymentId}`))).rows[0]!;
+      select fx_rate::text as fx_rate, document_fx_rate_evidence as evidence from documents where org_id = ${f.org.orgId} and id = ${result.paymentId}`, "objects")))[0]!;
     assert.equal(evidence.evidence?.rate, "1.25");
     assert.equal(evidence.evidence?.source, "Bank advice");
     const loss = (await withBypassContext(() => db.execute<{ amount: string }>(sql`
-      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.fxGainLoss}`))).rows[0]!;
+      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.fxGainLoss}`, "objects")))[0]!;
     assert.equal(toUnits(loss.amount), toUnits("3"), "60 USD carried at 78 settles for 75: a 3 CAD loss");
     assert.equal(await openOf(f, "ar", f.org.customerId), "40.0000");
   } finally {
@@ -373,11 +373,11 @@ test("a CAD deposit settles a USD invoice at the recorded settlement rate and re
     const application = (await withBypassContext(() => db.execute<{ source: string; target: string; rate_source: string; fx_rate_id: string | null; fx_entry: string | null }>(sql`
       select source_transaction_amount::text as source, target_transaction_amount::text as target, settlement_rate_source as rate_source,
              settlement_fx_rate_id as fx_rate_id, fx_gain_loss_entry_id as fx_entry
-        from applications where org_id = ${f.org.orgId} and to_line_id = ${f.openLineId} and unapplied_at is null`))).rows[0]!;
+        from applications where org_id = ${f.org.orgId} and to_line_id = ${f.openLineId} and unapplied_at is null`, "objects")))[0]!;
     assert.deepEqual([application.source, application.target, application.rate_source, application.fx_rate_id], ["135.0000", "100.0000", "provider", rateId]);
     assert.ok(application.fx_entry, "the realized difference posts natively");
     const gain = (await withBypassContext(() => db.execute<{ amount: string }>(sql`
-      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.fxGainLoss}`))).rows[0]!;
+      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.fxGainLoss}`, "objects")))[0]!;
     assert.equal(toUnits(gain.amount), toUnits("-5"), "135 CAD received for an invoice carried at 130 CAD is a 5 CAD gain");
     assert.equal(await lineStatus(f.org.orgId, f.lineId), "matched");
     assert.equal(result.kind, "customer_payment");
@@ -409,7 +409,7 @@ test("a document in another currency with no recorded rate settles at a rate the
     assert.equal(await openOf(f, "ar", f.org.customerId), "55.0000", "60 CAD at 0.75 settles 45 of the 100 USD");
     const application = (await withBypassContext(() => db.execute<{ rate_source: string; reference: string }>(sql`
       select settlement_rate_source as rate_source, settlement_rate_reference as reference
-        from applications where org_id = ${f.org.orgId} and to_line_id = ${f.openLineId} and unapplied_at is null`))).rows[0]!;
+        from applications where org_id = ${f.org.orgId} and to_line_id = ${f.openLineId} and unapplied_at is null`, "objects")))[0]!;
     assert.equal(application.rate_source, "manual");
     assert.match(application.reference, /Bank advice/);
   } finally {
@@ -453,13 +453,13 @@ test("a CAD deposit short-pays a USD invoice and the remainder is written off at
     assert.equal(result.writeOffDocuments.length, 1);
     assert.equal(await openOf(f, "ar", f.org.customerId), "0", "80 USD by cash and 20 USD by write-off clear the invoice");
     const totals = async (accountId: string) => toUnits((await withBypassContext(() => db.execute<{ amount: string }>(sql`
-      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${accountId}`))).rows[0]!.amount)
+      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${accountId}`, "objects")))[0]!.amount)
     assert.equal(await totals(badDebt), toUnits("26"), "20 USD written off at its 1.30 carrying rate");
     assert.equal(await totals(f.org.accounts.fxGainLoss), toUnits("-4"), "108 CAD received for 80 USD carried at 104 CAD realizes 4");
     const residual = (await withBypassContext(() => db.execute<{ base: string }>(sql`
       select (abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0))::text as base
         from journal_lines jl left join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id
-       where jl.org_id = ${f.org.orgId} and jl.id = ${f.openLineId} group by jl.id`))).rows[0]!;
+       where jl.org_id = ${f.org.orgId} and jl.id = ${f.openLineId} group by jl.id`, "objects")))[0]!;
     assert.equal(toUnits(residual.base), 0n, "no carrying amount is left on the receivable");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));

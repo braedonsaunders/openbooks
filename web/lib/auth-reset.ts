@@ -45,8 +45,8 @@ async function networkOverCap(networkHash: string | null): Promise<boolean> {
   const recent = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from auth_password_resets
      where network_hash = ${networkHash} and created_at > now() - interval '1 hour'
-  `));
-  return recent.rows[0]!.n >= NETWORK_REQUESTS_PER_HOUR;
+  `, "objects"));
+  return recent[0]!.n >= NETWORK_REQUESTS_PER_HOUR;
 }
 
 function tokenHash(raw: string): string {
@@ -72,8 +72,8 @@ async function mintResetToken(
   const recent = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from auth_password_resets
      where user_id = ${userId} and created_at > now() - interval '1 hour'
-  `));
-  if (recent.rows[0]!.n >= REQUESTS_PER_HOUR) return null;
+  `, "objects"));
+  if (recent[0]!.n >= REQUESTS_PER_HOUR) return null;
 
   // A fresh issuance supersedes outstanding links.
   await db.execute(sql`
@@ -110,7 +110,7 @@ async function isResetTokenCurrent(userId: string, raw: string): Promise<boolean
           where newer.user_id = cur.user_id
             and (newer.created_at, newer.id) > (cur.created_at, cur.id)
        )
-  `)).rows[0];
+  `, "objects"))[0];
   return !!row;
 }
 
@@ -200,8 +200,8 @@ export async function requestPasswordReset(
        order by u.created_at, u.id
        limit 2
        for update of u
-    `));
-    const user = users.rows.length === 1 ? users.rows[0]! : null;
+    `, "objects"));
+    const user = users.length === 1 ? users[0]! : null;
     if (!user) return;
 
     // Fail closed before superseding an existing link or minting a new bearer
@@ -305,7 +305,7 @@ export async function completePasswordReset(
     select r.user_id from auth_password_resets r
       join users u on u.id = r.user_id and u.is_active
      where r.token_hash = ${hashedToken} and r.used_at is null and r.expires_at > now()
-  `)).rows[0]);
+  `, "objects"))[0]);
   if (!candidate) return { ok: false, reason: "invalid_token" };
 
   // Scrypt outside the transaction — never hold a lock across the KDF.
@@ -316,7 +316,7 @@ export async function completePasswordReset(
     // Keep the user → credential lock order shared by issuance and login.
     const user = (await db.execute<{ id: string }>(sql`
       select id from users where id = ${candidate.user_id} and is_active for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!user) return { ok: false, reason: "invalid_token" as const };
     const rows = (await db.execute<{ id: string; user_id: string }>(sql`
       select r.id, r.user_id
@@ -326,8 +326,8 @@ export async function completePasswordReset(
          and r.user_id = ${user.id}
          and r.used_at is null and r.expires_at > now()
        for update of r
-    `));
-    const reset = rows.rows[0];
+    `, "objects"));
+    const reset = rows[0];
     if (!reset) return { ok: false, reason: "invalid_token" as const };
 
     // now() is the transaction start, which may precede a long lock wait.
@@ -337,8 +337,8 @@ export async function completePasswordReset(
       update auth_password_resets set used_at = clock_timestamp()
        where id = ${reset.id} and used_at is null and expires_at > clock_timestamp()
        returning id
-    `);
-    if (!claimed.rows[0]) return { ok: false, reason: "invalid_token" as const };
+    `, "objects");
+    if (!claimed[0]) return { ok: false, reason: "invalid_token" as const };
 
     await db.execute(sql`
       update auth_password_resets set used_at = now()

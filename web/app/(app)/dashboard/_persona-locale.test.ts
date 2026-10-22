@@ -32,7 +32,7 @@ registerHooks({
       `)
     }
     if (specifier === './_persona-copy') return virtual('export const celebrationDetail = () => ""; export const teamNudgeTexts = () => []')
-    if (specifier === '@openbooks/engine/platform/db') return virtual(`export * from ${JSON.stringify(realPlatformDbUrl)}; export const db = { execute: async () => ({ rows: [] }) }`)
+    if (specifier === '@openbooks/engine/platform/db') return virtual(`export * from ${JSON.stringify(realPlatformDbUrl)}; export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }`)
     if (specifier === '@openbooks/engine/platform/business-date/module') return virtual('export const businessToday = async () => "2026-09-24"')
     if (specifier === '@openbooks/engine/inbox/runtime') return virtual('export const countInbox = async () => 0; export const listInbox = async () => [{id:"item-1"}];')
     if (specifier === '@openbooks/engine/inbox/adapters/hrm-qualification-alert') return virtual('export const qualificationSourceAvailable = async () => false')

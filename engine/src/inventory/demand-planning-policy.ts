@@ -75,8 +75,8 @@ export async function auditPlanningChange(
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
       ${JSON.stringify({ before: args.before, after: args.after })}::jsonb, ${args.actorId})
-    returning id`);
-  if (inserted.rows.length !== 1) {
+    returning id`, "objects");
+  if (inserted.length !== 1) {
     refuse("The planning change was not recorded in the audit history.", "planning_write_failed", "retry the change");
   }
 }
@@ -178,11 +178,11 @@ export async function listDemandPolicies(
   orgId: string,
 ): Promise<Map<string, DemandItemPolicy>> {
   await assertDemandPlanningFeature(tx as Runner, orgId);
-  const rows = (await tx.execute<PolicyRow>(sql`
+  const rows = await tx.execute<PolicyRow>(sql`
     select item_id, lead_time_days, review_cycle_days, service_level::text,
            moq_qty::text, case_pack_qty::text, preferred_supplier_id::text,
            forecast_method, history_weeks
-      from demand_item_policies where org_id = ${orgId}`)).rows;
+      from demand_item_policies where org_id = ${orgId}`, "objects");
   return new Map(rows.map((row) => [row.item_id, toPolicy(row)]));
 }
 
@@ -243,7 +243,7 @@ export async function saveDemandPolicy(
   }
   if (input.preferredSupplierId) {
     const supplier = (await tx.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${orgId} and id = ${input.preferredSupplierId}`)).rows[0];
+      select id from parties where org_id = ${orgId} and id = ${input.preferredSupplierId}`, "objects"))[0];
     if (!supplier) {
       refuse("The preferred supplier is not a party of this organization.", "invalid_planning_input", "choose a supplier from this organization's parties", 422);
     }
@@ -252,7 +252,7 @@ export async function saveDemandPolicy(
     select item_id, lead_time_days, review_cycle_days, service_level::text,
            moq_qty::text, case_pack_qty::text, preferred_supplier_id::text,
            forecast_method, history_weeks
-      from demand_item_policies where org_id = ${orgId} and item_id = ${input.itemId}`)).rows[0] ?? null;
+      from demand_item_policies where org_id = ${orgId} and item_id = ${input.itemId}`, "objects"))[0] ?? null;
   const saved = (await tx.execute<PolicyRow>(sql`
     insert into demand_item_policies
       (org_id, item_id, lead_time_days, review_cycle_days, service_level, moq_qty,
@@ -268,7 +268,7 @@ export async function saveDemandPolicy(
       updated_at = now(), updated_by = ${actorId}
     returning item_id, lead_time_days, review_cycle_days, service_level::text,
       moq_qty::text, case_pack_qty::text, preferred_supplier_id::text,
-      forecast_method, history_weeks`)).rows[0];
+      forecast_method, history_weeks`, "objects"))[0];
   // The upsert targets one item row, so anything but one saved row is a lost
   // write, never a merge into another item's policy.
   if (!saved) refuse("The planning policy was not saved.", "planning_write_failed", "retry saving the policy");

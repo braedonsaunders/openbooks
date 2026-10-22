@@ -153,8 +153,8 @@ const parseRows = (): Row[] =>
   if (APPLY) {
     const v = (await retry(() => db.execute(sql`
       select (select count(*) from documents where org_id = ${ORG} and kind = 'field_ticket')::int tickets,
-             (select count(*) from field_tickets where org_id = ${ORG})::int native_headers`)));
-    console.log("verify:", JSON.stringify(v.rows[0]));
+             (select count(*) from field_tickets where org_id = ${ORG})::int native_headers`, "objects")));
+    console.log("verify:", JSON.stringify(v[0]));
   }
   process.exit(0);
 })().catch((e) => {

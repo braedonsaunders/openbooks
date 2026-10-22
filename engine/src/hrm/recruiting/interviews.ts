@@ -64,10 +64,10 @@ const INTERVIEW_COLUMNS = sql`
 `;
 
 async function panelFor(exec: SqlExecutor, orgId: string, interviewId: string): Promise<string[]> {
-  const rows = (await exec.execute<{ partyId: string }>(sql`
+  const rows = await exec.execute<{ partyId: string }>(sql`
     select party_id as "partyId" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} order by party_id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => row.partyId);
 }
 
@@ -120,7 +120,7 @@ async function assertPanelVisible(
         from worker_employments
        where org_id = ${orgId} and worker_party_id = ${partyId}
        order by created_at limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row?.employerSubsidiaryId) {
       throw new RecruitingError(
         "REFUSED",
@@ -239,7 +239,7 @@ export async function scheduleInterview(query: ScheduleInterviewQuery): Promise<
               ${query.scheduledAt as string}::timestamptz, ${durationMinutes}, ${location},
               ${kitId}, 'scheduled', ${actorId}, ${actorId})
       returning ${INTERVIEW_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw new RecruitingError("REFUSED", "the interview was not stored — no row was written; retry the request");
     }
@@ -288,7 +288,7 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
         from hrm_interviews i
         join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
        where i.org_id = ${orgId} and i.id = ${interviewId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }
@@ -307,7 +307,7 @@ export async function completeInterview(query: CompleteInterviewQuery): Promise<
              completed_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${interviewId} and status = 'scheduled'
       returning ${INTERVIEW_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError("STALE_REVISION", "the interview changed while completing — reload it and try again");
     }
@@ -335,7 +335,7 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
         from hrm_interviews i
         join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
        where i.org_id = ${orgId} and i.id = ${interviewId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     }
@@ -351,7 +351,7 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
          set status = 'cancelled', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${interviewId} and status = 'scheduled'
       returning ${INTERVIEW_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError("STALE_REVISION", "the interview changed while cancelling — reload it and try again");
     }

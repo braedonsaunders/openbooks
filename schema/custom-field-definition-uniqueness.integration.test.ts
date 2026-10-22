@@ -1,11 +1,15 @@
+/**
+ * Custom-field definitions are unique per tenant, target table, normalized
+ * target kind (NULL and '' are the same scope) and key, including inactive
+ * definitions, so a retired definition can never be shadowed by a new one
+ * that silently re-binds its stored values.
+ */
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures';
 
-const migration = readFileSync(new URL('./migrations/generated/0088_custom_field_definition_uniqueness.sql', import.meta.url), 'utf8');
 function uniqueViolation(error: unknown): boolean {
   let current = error;
   for (let depth = 0; current && typeof current === 'object' && depth < 8; depth++) {
@@ -14,35 +18,49 @@ function uniqueViolation(error: unknown): boolean {
   }
   return false;
 }
-for (const collision of [false, true]) {
-  test(`custom-field uniqueness migration ${collision ? 'preserves and reports legacy collisions' : 'enforces normalized scopes on inserts and updates'}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const namespace = `review_custom_fields_${randomUUID().replaceAll('-', '')}`;
-    const table = sql`${sql.identifier(namespace)}.${sql.identifier('custom_field_defs')}`;
-    const orgId = randomUUID();
-    await db.execute(sql`create schema ${sql.identifier(namespace)}`);
-    try {
-      await db.execute(sql`create table ${table} (id uuid primary key default gen_random_uuid(), org_id uuid not null, target_table text not null, target_kind text, key text not null, is_active boolean not null default true, config jsonb not null default '{}'::jsonb)`);
-      await db.execute(sql`insert into ${table}(org_id,target_table,key,config) values (${orgId},'parties','review_note','{"evidence":"preserve"}'::jsonb)`);
-      if (collision) await db.execute(sql`insert into ${table}(org_id,target_table,target_kind,key,is_active) values (${orgId},'parties','','review_note',false)`);
-      const apply = () => db.transaction(tx => tx.execute(sql.raw(migration.replaceAll('public.', `${namespace}.`))));
-      const before = (await db.execute(sql`select * from ${table} order by id`)).rows;
-      if (collision) {
-        await assert.rejects(apply, uniqueViolation);
-        assert.deepEqual((await db.execute(sql`select * from ${table} order by id`)).rows, before, 'no historical row may be renamed, merged, deactivated or deleted');
-        assert.equal((await db.execute(sql`select 1 from pg_indexes where schemaname=${namespace} and indexname='custom_field_defs_scope_key_unique'`)).rows.length, 0);
-        return;
-      }
-      await apply();
-      await apply();
-      assert.deepEqual((await db.execute(sql`select * from ${table} order by id`)).rows, before, 'clean migration retains every value');
-      for (const kind of [null, '']) await assert.rejects(() => db.execute(sql`insert into ${table}(org_id,target_table,target_kind,key) values (${orgId},'parties',${kind},'review_note')`), uniqueViolation);
-      await db.execute(sql`update ${table} set is_active=false where key='review_note'`);
-      await assert.rejects(() => db.execute(sql`insert into ${table}(org_id,target_table,key) values (${orgId},'parties','review_note')`), uniqueViolation);
-      await db.execute(sql`insert into ${table}(org_id,target_table,target_kind,key) values (${orgId},'documents','vendor_bill','review_note'),(${orgId},'documents','invoice','review_note'),(${randomUUID()},'parties',null,'review_note'),(${orgId},'projects',null,'review_note'),(${orgId},'parties',null,'other_note')`);
-      await assert.rejects(() => db.execute(sql`update ${table} set key='review_note' where org_id=${orgId} and target_table='parties' and key='other_note'`), uniqueViolation);
-      const raced = await Promise.allSettled(Array.from({length:8}, () => db.execute(sql`insert into ${table}(org_id,target_table,key) values (${orgId},'parties','raced_note')`)));
-      assert.equal(raced.filter(result => result.status === 'fulfilled').length, 1);
-      assert.ok(raced.every(result => result.status === 'fulfilled' || uniqueViolation(result.reason)));
-    } finally { await db.execute(sql`drop schema ${sql.identifier(namespace)} cascade`); }
-  });
+
+async function define(orgId: string, targetTable: string, targetKind: string | null, key: string): Promise<void> {
+  await db.execute(sql`
+    insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type)
+    values (${orgId}, ${targetTable}, ${targetKind}, ${key}, ${key}, 'text')`);
 }
+
+test('custom-field definitions enforce one definition per normalized scope on inserts and updates', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  const otherOrg = await createScratchOrg();
+  try {
+    const index = await db.execute<{ definition: string }>(sql`
+      select indexdef as definition from pg_indexes
+       where schemaname = 'public' and tablename = 'custom_field_defs'
+         and indexname = 'custom_field_defs_scope_key_unique'`, 'objects');
+    assert.equal(index.length, 1, 'the scope uniqueness index exists');
+    assert.match(index[0]!.definition, /^CREATE UNIQUE INDEX .* \(org_id, target_table, COALESCE\(target_kind, ''::text\), key\)$/);
+
+    await define(org.orgId, 'parties', null, 'review_note');
+    for (const kind of [null, '']) {
+      await assert.rejects(() => define(org.orgId, 'parties', kind, 'review_note'), uniqueViolation, `target kind ${JSON.stringify(kind)} shares the unscoped definition`);
+    }
+
+    await db.execute(sql`update custom_field_defs set is_active = false where org_id = ${org.orgId} and key = 'review_note'`);
+    await assert.rejects(() => define(org.orgId, 'parties', null, 'review_note'), uniqueViolation, 'an inactive definition still owns its key');
+
+    await define(org.orgId, 'documents', 'vendor_bill', 'review_note');
+    await define(org.orgId, 'documents', 'invoice', 'review_note');
+    await define(otherOrg.orgId, 'parties', null, 'review_note');
+    await define(org.orgId, 'projects', null, 'review_note');
+    await define(org.orgId, 'parties', null, 'other_note');
+    await assert.rejects(
+      () => db.execute(sql`update custom_field_defs set key = 'review_note' where org_id = ${org.orgId} and target_table = 'parties' and key = 'other_note'`),
+      uniqueViolation,
+      'renaming onto an occupied scope is refused',
+    );
+
+    const raced = await Promise.allSettled(Array.from({ length: 8 }, () => define(org.orgId, 'parties', null, 'raced_note')));
+    assert.equal(raced.filter((result) => result.status === 'fulfilled').length, 1, 'concurrent definitions admit exactly one winner');
+    assert.ok(raced.every((result) => result.status === 'fulfilled' || uniqueViolation(result.reason)));
+  } finally {
+    await db.execute(sql`delete from custom_field_defs where org_id in (${org.orgId}, ${otherOrg.orgId})`);
+    await dropScratchOrg(otherOrg.orgId);
+    await dropScratchOrg(org.orgId);
+  }
+});

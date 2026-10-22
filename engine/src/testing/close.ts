@@ -15,17 +15,13 @@ export async function requestReviewedReopenFixture(
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${"fixture-reopen-review:" + input.orgId},0))`,
     );
-    const existing = (
-      await db.execute(
-        sql`select id from flows where org_id=${input.orgId} and subject_kind='close_reopen_request' and enabled`,
-      )
-    ).rows;
+    const existing = await db.execute(
+        sql`select id from flows where org_id=${input.orgId} and subject_kind='close_reopen_request' and enabled`, "objects",
+      );
     if (!existing.length) {
-      const users = (
-        await db.execute<{ id: string }>(
-          sql`select id from users where org_id=${input.orgId} and is_active and id<>${input.actorId} order by id`,
-        )
-      ).rows;
+      const users = await db.execute<{ id: string }>(
+          sql`select id from users where org_id=${input.orgId} and is_active and id<>${input.actorId} order by id`, "objects",
+        );
       const assignees: Array<{ type: "user"; userId: string }> = [];
       for (const user of users)
         if (await actorHasPermission(db, input.orgId, user.id, "close.reopen"))
@@ -54,14 +50,12 @@ export async function decideReopenFixture(input: {
   hours?: number;
   reason?: string;
 }) {
-  const gates = (
-    await db.execute<{
+  const gates = await db.execute<{
       id: string;
       flow_id: string;
       assignee_user_id: string | null;
     }>(sql`select id,flow_id,assignee_user_id from flow_gates
-    where org_id=${input.orgId} and subject_kind='close_reopen_request' and subject_id=${input.requestId} and status='pending' order by id`)
-  ).rows;
+    where org_id=${input.orgId} and subject_kind='close_reopen_request' and subject_id=${input.requestId} and status='pending' order by id`, "objects");
   const gate =
     gates.find((g) => g.assignee_user_id === input.actorId) ?? gates[0];
   if (!gate) throw new Error("pending reopen request not found");
@@ -85,12 +79,12 @@ export async function seedCloseRunApprovalFixture(orgId:string,runId:string,acto
   await withOrgTransaction(orgId,async()=>{
     await lockApprovalSubject(orgId,"close_run",runId);
     const staged=await db.execute(sql`update close_runs set status='review',current_stage='review',approved_at=null,approved_by=null,
-      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${runId} and status in('in_progress','review','approved') returning id`);
-    if(staged.rows.length!==1)throw new Error("The fixture close run is not available for review.");
+      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${runId} and status in('in_progress','review','approved') returning id`, "objects");
+    if(staged.length!==1)throw new Error("The fixture close run is not available for review.");
     const routing=await routeSubjectSubmission({orgId,subjectKind:"close_run",subjectId:runId,actorId,command:{action:"approve"}});
     if(routing.policy.kind!=="ungated")throw new Error("This fixture requires a zero-gate close policy; approval lifecycle tests must decide their configured gates.");
     const saved=await db.execute(sql`update close_runs set status='approved',current_stage='lock',approved_at=now(),approved_by=${actorId},
-      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${runId} and status='review' returning id`);
-    if(saved.rows.length!==1)throw new Error("The fixture close decision was not retained.");
+      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${runId} and status='review' returning id`, "objects");
+    if(saved.length!==1)throw new Error("The fixture close decision was not retained.");
   });
 }

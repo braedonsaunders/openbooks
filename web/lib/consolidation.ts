@@ -138,11 +138,11 @@ async function bookMeasurementCurrencies(
   subsidiaryIds: readonly string[],
 ): Promise<Map<string, string> | null> {
   if (!bookId || subsidiaryIds.length === 0) return null;
-  const rows = (await db.execute<{ id: string; currency: string | null; is_primary: boolean }>(sql`
+  const rows = await db.execute<{ id: string; currency: string | null; is_primary: boolean }>(sql`
     select s.id, public.accounting_book_currency(s.org_id, b.id, s.id) as currency, b.is_primary
       from subsidiaries s
       join accounting_books b on b.org_id = s.org_id and b.id = ${bookId}
-     where s.id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`)).rows;
+     where s.id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`, "objects");
   if (rows.length === 0 || rows[0]!.is_primary) return null;
   return new Map(rows.flatMap((row) => (row.currency ? [[row.id, row.currency] as const] : [])));
 }
@@ -191,8 +191,7 @@ export async function resolveSubsidiaryScope(
   let weights: StatementSubsidiaryContext["weights"];
   let controlLosses: StatementSubsidiaryContext["controlLosses"];
   if (consolidated) {
-    const losses = (
-      await db.execute<{
+    const losses = await db.execute<{
         subsidiary_id: string;
         effective_on: string;
         excluded_subsidiary_ids: string[];
@@ -201,9 +200,8 @@ export async function resolveSubsidiaryScope(
           factors: Record<string, string>;
         };
       }>(
-        sql`select subsidiary_id,effective_on::text,excluded_subsidiary_ids,measurement from consolidation_control_losses where reversed_by_change_id is null and parent_subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(members.map((m) => m.id))}::jsonb)::uuid) order by effective_on`,
-      )
-    ).rows;
+        sql`select subsidiary_id,effective_on::text,excluded_subsidiary_ids,measurement from consolidation_control_losses where reversed_by_change_id is null and parent_subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(members.map((m) => m.id))}::jsonb)::uuid) order by effective_on`, "objects",
+      );
     controlLosses = losses.flatMap((l) =>
       l.excluded_subsidiary_ids
         .filter((id) => members.some((m) => m.id === id))
@@ -243,9 +241,9 @@ export async function resolveSubsidiaryScope(
           ) interest on true
       )
       select id,factor::text from ownership_scope
-    `);
+    `, "objects");
     const factorById = new Map(
-      ownership.rows.map((row) => [row.id, row.factor]),
+      ownership.map((row) => [row.id, row.factor]),
     );
     for (const loss of controlLosses ?? [])
       if (loss.through <= periodTo)
@@ -281,8 +279,8 @@ export async function resolveSubsidiaryScope(
     // dates and is excluded — activity dated on that day translates through
     // the regular period's rates, whichever period_id the journal carries.
     const scope = await db.execute<{ org_id: string }>(sql`
-      select org_id from subsidiaries where id = ${node.id}`);
-    if (!scope.rows[0])
+      select org_id from subsidiaries where id = ${node.id}`, "objects");
+    if (!scope[0])
       throw new Error(
         `subsidiary ${node.id} not found while resolving consolidated rates`,
       );
@@ -298,7 +296,7 @@ export async function resolveSubsidiaryScope(
              cf.average_rate as "avg", cf.current_rate as "cur", cf.historical_rate as "hist"
         from consolidated_fx_rates cf
         join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
-       where cf.org_id = ${scope.rows[0].org_id} and p.org_id = ${scope.rows[0].org_id}
+       where cf.org_id = ${scope[0].org_id} and p.org_id = ${scope[0].org_id}
          and cf.to_currency = ${node.baseCurrency}
          and cf.from_currency = any(${`{${foreign.join(",")}}`}::text[])
          and p.starts_on <= ${periodTo}

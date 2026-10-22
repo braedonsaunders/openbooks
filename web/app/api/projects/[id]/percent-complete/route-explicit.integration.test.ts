@@ -38,7 +38,7 @@ test('an omitted percentComplete refuses instead of clearing the override', asyn
     }), { params: Promise.resolve({ id: project }) }))
     const liveOverride = async () => (await db.execute<{ override: string | null }>(sql`
       select nullif(custom->>'percentCompleteOverride', '') as override
-        from projects where org_id = ${org.orgId} and id = ${project}`)).rows[0]!.override
+        from projects where org_id = ${org.orgId} and id = ${project}`, 'objects'))[0]!.override
 
     // The exact shape that used to clear: a matching expected token, no value.
     const missing = await put({ expectedPercentComplete: 62 })
@@ -79,10 +79,10 @@ test('a percent-complete override writes a before/after audit row', async () => 
       method: 'PUT', body: JSON.stringify({ percentComplete: 70, expectedPercentComplete: 62 }),
     }), { params: Promise.resolve({ id: project }) }))
     assert.equal(res.status, 200, await res.clone().text())
-    const rows = (await db.execute<{ changes: { percentCompleteOverride: { before: unknown; after: unknown } }; actor_id: string }>(sql`
+    const rows = await db.execute<{ changes: { percentCompleteOverride: { before: unknown; after: unknown } }; actor_id: string }>(sql`
       select changes, actor_id from audit_log
        where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${project} and action = 'update'
-       order by id desc limit 1`)).rows
+       order by id desc limit 1`, 'objects')
     assert.equal(rows.length, 1)
     assert.deepEqual(rows[0]!.changes.percentCompleteOverride, { before: 62, after: 70 })
     assert.equal(rows[0]!.actor_id, actor)

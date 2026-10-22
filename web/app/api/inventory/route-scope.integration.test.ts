@@ -64,7 +64,7 @@ async function seedCount(orgId: string, actor: string, subsidiaryId: string, loc
 }
 
 async function countStatus(orgId: string, countId: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from stock_counts where org_id=${orgId} and id=${countId}`)).rows[0]!.status;
+  return (await db.execute<{ status: string }>(sql`select status from stock_counts where org_id=${orgId} and id=${countId}`, "objects"))[0]!.status;
 }
 
 const countsCall = (body: unknown) =>
@@ -150,7 +150,7 @@ test("transfer ship refuses an out-of-scope order and leaves it draft", async ()
     // Out-of-scope order hides as not found, same as counts above.
     assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from transfer_orders where id=${orderB}`)).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from transfer_orders where id=${orderB}`, "objects"))[0]!.status,
       "draft",
       "a refused ship leaves the order draft",
     );
@@ -158,7 +158,7 @@ test("transfer ship refuses an out-of-scope order and leaves it draft", async ()
     const accepted = await advancedCall({ action: "shipTransfer", id: orderA, date: org.date, idempotencyKey: randomUUID() });
     assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from transfer_orders where id=${orderA}`)).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from transfer_orders where id=${orderA}`, "objects"))[0]!.status,
       "in_transit",
     );
   } finally {

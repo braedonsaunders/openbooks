@@ -50,19 +50,19 @@ export async function qualifyCanadianOpeningReportingSource(input: CanadianOpeni
     if (!await actorHasPermission(db,input.orgId,input.actorId,'payroll.run')) {
       throw new PayrollError('Payroll run permission is required to qualify original Canadian reporting history');
     }
-    const initial = (await db.execute<{ employeePartyId: string; taxYear: number }>(sql`
+    const initial = await db.execute<{ employeePartyId: string; taxYear: number }>(sql`
       select employee_party_id as "employeePartyId",tax_year as "taxYear" from payroll_opening_balances
        where org_id=${input.orgId} and id=${input.openingBalanceId}
-    `)).rows;
+    `, 'objects');
     if (initial.length!==1) throw new PayrollError('The native original opening is unavailable');
     const identity = initial[0]!;
     await takeOpeningSourceYearFence(db,input.orgId,identity.taxYear);
     const commandScope = await lockActorCommandAuthority(db,input.orgId,input.actorId,null,'payroll.run');
     await takeEmployeeTaxYearFences(db,[employeeTaxYearFenceKey(input.orgId,identity.employeePartyId,identity.taxYear)]);
-    const locked = (await db.execute<{ employeePartyId: string; taxYear: number }>(sql`
+    const locked = await db.execute<{ employeePartyId: string; taxYear: number }>(sql`
       select employee_party_id as "employeePartyId",tax_year as "taxYear" from payroll_opening_balances
        where org_id=${input.orgId} and id=${input.openingBalanceId} for update
-    `)).rows;
+    `, 'objects');
     if (locked.length!==1 || locked[0]!.employeePartyId!==identity.employeePartyId || locked[0]!.taxYear!==identity.taxYear) {
       throw new PayrollError('The original opening identity changed; reload its reporting source');
     }
@@ -73,22 +73,22 @@ export async function qualifyCanadianOpeningReportingSource(input: CanadianOpeni
       || source.authority.openingSha256!==input.expectedOpeningSha256) {
       throw new PayrollError('Resolve the exact current Canadian CAD original levy certificate before qualifying reporting allocations');
     }
-    const parent = (await db.execute<{ levyAllocationSha256: string; openingChildrenSha256: string; employerSourceFileId: string }>(sql`
+    const parent = await db.execute<{ levyAllocationSha256: string; openingChildrenSha256: string; employerSourceFileId: string }>(sql`
       select h.allocation_sha256 as "levyAllocationSha256",h.opening_children_sha256 as "openingChildrenSha256",
         e.source_file_id as "employerSourceFileId"
        from payroll_opening_levy_source_authorities h
        join payroll_opening_employer_authorities e on e.org_id=h.org_id and e.id=h.employer_authority_id
        where h.org_id=${input.orgId} and h.id=${input.expectedLevyAuthorityId} and ${currentOpeningLevySourceSql('h')}
        for share of h,e
-    `)).rows;
+    `, 'objects');
     if (parent.length!==1 || parent[0]!.levyAllocationSha256!==input.expectedLevyAllocationSha256
       || parent[0]!.openingChildrenSha256!==input.expectedOpeningChildrenSha256) {
       throw new PayrollError('The current levy allocation or original child snapshot changed; reload before qualifying reporting history');
     }
-    const scoped = (await db.execute(sql`select id from subsidiaries
+    const scoped = await db.execute(sql`select id from subsidiaries
       where org_id=${input.orgId} and id=${source.authority.subsidiaryId}
         ${payrollSubsidiaryScopeFilter(sql`id`,input.allowedSubsidiaryIds)}
-        ${payrollSubsidiaryScopeFilter(sql`id`,commandScope)} for share`)).rows;
+        ${payrollSubsidiaryScopeFilter(sql`id`,commandScope)} for share`, 'objects');
     if (scoped.length!==1) throw new PayrollError('The source-qualified original legal employer is outside your payroll authority');
     for (const fileId of new Set([source.authority.sourceFileId,parent[0]!.employerSourceFileId,input.sourceFileId])) {
       await requireNativeFileReadAuthority({orgId: input.orgId,actorId: input.actorId,fileId},db);
@@ -111,14 +111,14 @@ export async function qualifyCanadianOpeningReportingSource(input: CanadianOpeni
       expectedOpeningSha256: input.expectedOpeningSha256,expectedOpeningChildrenSha256: input.expectedOpeningChildrenSha256,
       sourceFileId: input.sourceFileId,sourceVersionId: input.sourceVersionId,sourceSha256: input.sourceSha256,
       sourceReference,allocations,reason})).digest('hex');
-    const prior = (await db.execute<CanadianOpeningReportingSourceResult & { matches: boolean }>(sql`
+    const prior = await db.execute<CanadianOpeningReportingSourceResult & { matches: boolean }>(sql`
       select id,opening_balance_id as "openingBalanceId",levy_authority_id as "levyAuthorityId",subsidiary_id as "subsidiaryId",
         allocation_sha256 as "allocationSha256",
         (request_id=${input.requestId} and request_sha256=${requestSha256} and created_by=${input.actorId}
           and levy_authority_id=${input.expectedLevyAuthorityId} and sealed) as matches
        from payroll_ca_opening_reporting_authorities where org_id=${input.orgId}
         and (request_id=${input.requestId} or levy_authority_id=${input.expectedLevyAuthorityId}) for share
-    `)).rows;
+    `, 'objects');
     if (prior.length) {
       if (prior.length!==1 || !prior[0]!.matches) throw new PayrollError('This original reporting certificate or request already preserves different evidence; reload its retained result');
       const resolved=await readEmployeeCanadianOpeningReportingSource(db,{orgId: input.orgId,...identity,subsidiaryId: source.authority.subsidiaryId});
@@ -126,15 +126,15 @@ export async function qualifyCanadianOpeningReportingSource(input: CanadianOpeni
       const {matches: _matches,...result}=prior[0]!;
       return result;
     }
-    const file = (await db.execute(sql`select v.id from files f join file_versions v on v.file_id=f.id
+    const file = await db.execute(sql`select v.id from files f join file_versions v on v.file_id=f.id
       where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and not f.is_inactive
         and f.current_version_id=${input.sourceVersionId} and v.id=${input.sourceVersionId}
-        and v.content_hash=${input.sourceSha256} and v.created_by=${input.actorId} for share of f,v`)).rows;
+        and v.content_hash=${input.sourceSha256} and v.created_by=${input.actorId} for share of f,v`, 'objects');
     if (file.length!==1) throw new PayrollError('Select the current exact original Cabinet version uploaded by the qualifying operator');
     await requireUnconsumedOpeningLevySource(db,{orgId: input.orgId,taxYear: identity.taxYear,
       subsidiaryId: source.authority.subsidiaryId,employeePartyId: identity.employeePartyId,
       openingBalanceId: input.openingBalanceId,authorityId: input.expectedLevyAuthorityId});
-    const created = (await db.execute<{id:string}>(sql`
+    const created = await db.execute<{id:string}>(sql`
       insert into payroll_ca_opening_reporting_authorities
        (org_id,opening_balance_id,levy_authority_id,employer_authority_id,levy_allocation_sha256,
         employee_party_id,tax_year,subsidiary_id,original_country,original_currency,coverage_start,coverage_end,
@@ -147,26 +147,26 @@ export async function qualifyCanadianOpeningReportingSource(input: CanadianOpeni
         ${input.expectedOpeningChildrenSha256},public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year),
         ${JSON.stringify(annualAmounts)}::jsonb,'[]'::jsonb,repeat('0',64),${input.requestId},${requestSha256},${reason},false,${input.actorId}
        from payroll_opening_balances b where b.org_id=${input.orgId} and b.id=${input.openingBalanceId} returning id
-    `)).rows;
+    `, 'objects');
     if (created.length!==1) throw new PayrollError('The original Canadian reporting authority was not saved');
     const id=created[0]!.id;
     for (const allocation of allocations) {
-      const saved=(await db.execute(sql`insert into payroll_ca_opening_reporting_allocations
+      const saved=await db.execute(sql`insert into payroll_ca_opening_reporting_allocations
         (org_id,authority_id,filing_account_id,province,source_ordinal,first_covered_pay_date,annual_amounts,reportable_bases,children,created_by)
         values (${input.orgId},${id},${allocation.filingAccountId},${allocation.province},${allocation.sourceOrdinal},
-          ${allocation.firstCoveredPayDate}::date,${JSON.stringify(allocation.annualAmounts)}::jsonb,${JSON.stringify(allocation.reportableBases)}::jsonb,${JSON.stringify(allocation.children)}::jsonb,${input.actorId}) returning id`)).rows;
+          ${allocation.firstCoveredPayDate}::date,${JSON.stringify(allocation.annualAmounts)}::jsonb,${JSON.stringify(allocation.reportableBases)}::jsonb,${JSON.stringify(allocation.children)}::jsonb,${input.actorId}) returning id`, 'objects');
       if (saved.length!==1) throw new PayrollError('An exact original RP/province reporting slice was not saved');
     }
-    const sealed=(await db.execute<{allocationSha256:string}>(sql`update payroll_ca_opening_reporting_authorities h
+    const sealed=await db.execute<{allocationSha256:string}>(sql`update payroll_ca_opening_reporting_authorities h
       set allocation_snapshot=public.payroll_ca_opening_reporting_allocations_snapshot(h.org_id,h.id),
         allocation_sha256=encode(public.digest(public.payroll_ca_opening_reporting_allocations_snapshot(h.org_id,h.id)::text,'sha256'),'hex'),sealed=true
-      where h.org_id=${input.orgId} and h.id=${id} and not h.sealed returning allocation_sha256 as "allocationSha256"`)).rows;
+      where h.org_id=${input.orgId} and h.id=${id} and not h.sealed returning allocation_sha256 as "allocationSha256"`, 'objects');
     if (sealed.length!==1) throw new PayrollError('The original reporting allocations could not be sealed');
-    const audit=(await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    const audit=await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       select h.org_id,'payroll_ca_opening_reporting_authorities',h.id,'insert',
         jsonb_build_object('before',null,'after',to_jsonb(h),'allocations',h.allocation_snapshot,'reason',h.change_reason,
           'requestId',h.request_id,'requestSha256',h.request_sha256),${input.actorId}
-       from payroll_ca_opening_reporting_authorities h where h.org_id=${input.orgId} and h.id=${id} returning id`)).rows;
+       from payroll_ca_opening_reporting_authorities h where h.org_id=${input.orgId} and h.id=${id} returning id`, 'objects');
     if (audit.length!==1) throw new PayrollError('The original Canadian reporting source audit was not retained');
     const resolved=await readEmployeeCanadianOpeningReportingSource(db,{orgId: input.orgId,...identity,subsidiaryId: source.authority.subsidiaryId});
     if (resolved.authority?.id!==id || resolved.authority.allocationSha256!==sealed[0]!.allocationSha256) {
@@ -195,18 +195,18 @@ export async function readCanadianOpeningReportingSourceContext(input: {
     if (!original.authority || !original.facts || !original.openingChildren || original.facts.originalCountry!=='CA') {
       throw new PayrollError('Qualify the original Canadian opening legal employer and levy source before opening its reporting allocations');
     }
-    const scoped=(await db.execute(sql`select id from subsidiaries where org_id=${input.orgId} and id=${original.authority.subsidiaryId}
-      ${payrollSubsidiaryScopeFilter(sql`id`,input.allowedSubsidiaryIds)} ${payrollSubsidiaryScopeFilter(sql`id`,scope)} for share`)).rows;
+    const scoped=await db.execute(sql`select id from subsidiaries where org_id=${input.orgId} and id=${original.authority.subsidiaryId}
+      ${payrollSubsidiaryScopeFilter(sql`id`,input.allowedSubsidiaryIds)} ${payrollSubsidiaryScopeFilter(sql`id`,scope)} for share`, 'objects');
     if (scoped.length!==1) throw new PayrollError('The original opening legal employer is outside your payroll authority');
     await requireNativeFileReadAuthority({orgId:input.orgId,actorId:input.actorId,fileId:original.authority.sourceFileId},db);
-    const parent=(await db.execute<{levyAllocationSha256:string;openingChildrenSha256:string;employerSourceFileId:string}>(sql`
+    const parent=await db.execute<{levyAllocationSha256:string;openingChildrenSha256:string;employerSourceFileId:string}>(sql`
       select h.allocation_sha256 as "levyAllocationSha256",h.opening_children_sha256 as "openingChildrenSha256",e.source_file_id as "employerSourceFileId"
       from payroll_opening_levy_source_authorities h join payroll_opening_employer_authorities e on e.org_id=h.org_id and e.id=h.employer_authority_id
-      where h.org_id=${input.orgId} and h.id=${original.authority.authorityId} and ${currentOpeningLevySourceSql('h')} for share of h,e`)).rows;
+      where h.org_id=${input.orgId} and h.id=${original.authority.authorityId} and ${currentOpeningLevySourceSql('h')} for share of h,e`, 'objects');
     if (parent.length!==1) throw new PayrollError('The current original levy reporting parent is unavailable');
     await requireNativeFileReadAuthority({orgId:input.orgId,actorId:input.actorId,fileId:parent[0]!.employerSourceFileId},db);
-    const retained=(await db.execute<{sourceFileId:string}>(sql`select source_file_id as "sourceFileId" from payroll_ca_opening_reporting_authorities
-      where org_id=${input.orgId} and levy_authority_id=${original.authority.authorityId} for share`)).rows;
+    const retained=await db.execute<{sourceFileId:string}>(sql`select source_file_id as "sourceFileId" from payroll_ca_opening_reporting_authorities
+      where org_id=${input.orgId} and levy_authority_id=${original.authority.authorityId} for share`, 'objects');
     let reporting=null;
     if (retained.length) {
       reporting=await readEmployeeCanadianOpeningReportingSource(db,input);
@@ -218,7 +218,7 @@ export async function readCanadianOpeningReportingSourceContext(input: {
       await requireNativeFileReadAuthority({orgId:input.orgId,actorId:input.actorId,fileId:input.sourceFileId},db);
       selectedSource=(await db.execute<{id:string;versionId:string;sha256:string;name:string}>(sql`
         select f.id,v.id as "versionId",v.content_hash as sha256,f.name from files f join file_versions v on v.file_id=f.id and v.id=f.current_version_id
-         where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and not f.is_inactive and v.created_by=${input.actorId} for share of f,v`)).rows[0]??null;
+         where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and not f.is_inactive and v.created_by=${input.actorId} for share of f,v`, 'objects'))[0]??null;
       if (!selectedSource || !/^[a-f0-9]{64}$/.test(selectedSource.sha256)) throw new PayrollError('Select the current original source version uploaded to Cabinet by this operator');
     }
     const annualAmounts:Record<string,string>={};

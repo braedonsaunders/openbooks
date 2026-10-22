@@ -234,8 +234,8 @@ export async function lookupSpotRateWithEvidence(
   const r = await runner.execute<EvidenceRow>(sql`
     select id, as_of::text as as_of, source, stored_rate, updated_at, priority, derived_rate
       from (${candidates}) candidates
-     order by as_of desc, priority asc limit 1`);
-  const row = r.rows[0];
+     order by as_of desc, priority asc limit 1`, "objects");
+  const row = r[0];
   if (!row) {
     return {
       ...base,
@@ -290,9 +290,9 @@ async function selectWindowObservations(
     select id, as_of::text as as_of, source, stored_rate, updated_at, priority, derived_rate,
            (select avg(derived_rate::numeric)::numeric(19,10)::text from per_date) as average
       from per_date
-     order by as_of asc, id asc`);
-  const observations = r.rows.map(toObservation);
-  return { observations, average: observations.length === 0 ? null : (r.rows[0]!.average ?? null) };
+     order by as_of asc, id asc`, "objects");
+  const observations = r.map(toObservation);
+  return { observations, average: observations.length === 0 ? null : (r[0]!.average ?? null) };
 }
 
 /**

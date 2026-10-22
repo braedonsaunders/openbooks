@@ -100,7 +100,7 @@ function haystack(statements: unknown[]): string {
 
 function installDb() {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: () => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
   }
   state.loadRow = {
     id: VIEW_ID,
@@ -116,23 +116,24 @@ function installDb() {
   state.defaultCount = 1
   state.updateRows = [{ id: VIEW_ID }]
   state.db = {
-    execute: async () => ({ rows: state.loadRow ? [state.loadRow] : [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: state.loadRow ? [state.loadRow] : [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
     transaction: async (fn) => {
       const tx = {
-        execute: async (query: unknown) => {
+        execute: async (query: unknown, mode?: string) => {
+          const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
           state.statements.push(query)
           const text = haystack([query])
-          if (/count\(\*\)/.test(text)) return { rows: [{ n: state.defaultCount }] }
+          if (/count\(\*\)/.test(text)) return inMode({ rows: [{ n: state.defaultCount }] })
           // The target UPDATE (not the sibling-default clear) is the write
           // whose row count decides {ok:true}.
           if (/update list_views set/.test(text) && /returning/.test(text)) {
-            return { rows: state.updateRows }
+            return inMode({ rows: state.updateRows })
           }
           // FOR UPDATE and other reads must carry the locked row's flags.
           // A stub of {id, name} leaves isActive undefined, and
           // refuseInactiveDefault(isDefault && !isActive) then 400s an
           // isDefault-only PATCH of a live view.
-          return { rows: state.loadRow ? [{ ...state.loadRow }] : [] }
+          return inMode({ rows: state.loadRow ? [{ ...state.loadRow }] : [] })
         },
       }
       return fn(tx)

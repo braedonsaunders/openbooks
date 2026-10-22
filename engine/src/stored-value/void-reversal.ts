@@ -37,7 +37,7 @@ export async function reverseStoredValueForVoidedDocument(input: {
   actorId: string;
   reason: string;
 }): Promise<{ reversed: number }> {
-  const effects = (await db.execute<DocumentEffect>(sql`
+  const effects = await db.execute<DocumentEffect>(sql`
     select entry.id, entry.account_id as "accountId", entry.kind,
            entry.amount_minor::text as "amountMinor",
            entry.functional_amount_minor::text as "functionalAmountMinor",
@@ -46,7 +46,7 @@ export async function reverseStoredValueForVoidedDocument(input: {
      where entry.org_id = ${input.orgId} and entry.document_id = ${input.documentId}
        and entry.kind in ('issue', 'redeem', 'adjust')
      order by entry.account_id, entry.created_at, entry.id
-  `)).rows;
+  `, "objects");
   if (effects.length === 0) return { reversed: 0 };
   const byAccount = new Map<string, DocumentEffect[]>();
   for (const effect of effects) byAccount.set(effect.accountId, [...(byAccount.get(effect.accountId) ?? []), effect]);
@@ -93,7 +93,7 @@ export async function reverseStoredValueForVoidedDocument(input: {
     // A card this document minted dies with it once nothing is left on it.
     const closes = account.sourceDocumentId === input.documentId && balance === 0n
       && (account.status === "active" || account.status === "frozen");
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update stored_value_accounts
          set balance_minor = ${balance.toString()},
              issued_minor = ${(issued < 0n ? 0n : issued).toString()},
@@ -102,7 +102,7 @@ export async function reverseStoredValueForVoidedDocument(input: {
        where org_id = ${input.orgId} and id = ${accountId}
          and balance_minor = ${account.balanceMinor.toString()} and status = ${account.status}
       returning id
-    `)).rows;
+    `, "objects");
     if (updated.length !== 1) {
       throw storedValueRefusal({
         message: `Stored-value …${account.codeLast4} changed while ${input.documentNumber} was being voided.`,

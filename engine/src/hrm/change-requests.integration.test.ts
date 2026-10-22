@@ -67,36 +67,36 @@ const CHANGE_REQUESTS_SPEC = {
 /** A reserved employment identity: stable row at revision 1, no versions. */
 /** Append one live version (test-only canonical writer, same shape as apply). */
 async function requestStatus(requestId: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
+  const rows = await db.execute<{ status: string }>(sql`
     select status from hrm_employment_change_requests where id = ${requestId}
-  `)).rows;
+  `, "objects");
   return rows[0]!.status;
 }
 
 /** Storage-computed digest, recomputed with the canonical SQL expression. */
 async function canonicalDigest(requestId: string): Promise<string> {
-  const rows = (await db.execute<{ stored: string; computed: string }>(sql`
+  const rows = await db.execute<{ stored: string; computed: string }>(sql`
     select payload_digest as stored,
            encode(digest(convert_to(payload::text, 'UTF8'), 'sha256'), 'hex') as computed
       from hrm_employment_change_requests where id = ${requestId}
-  `)).rows;
+  `, "objects");
   assert.equal(rows[0]!.stored, rows[0]!.computed, "the stored digest equals the canonical recomputation");
   return rows[0]!.stored;
 }
 
 async function changeRows(employmentId: string): Promise<Array<{ id: string; revision: number; kind: string; closed: unknown }>> {
-  const rows = (await db.execute<{ id: string; revision: number; kind: string; closed: unknown }>(sql`
+  const rows = await db.execute<{ id: string; revision: number; kind: string; closed: unknown }>(sql`
     select id, revision, change_kind as kind, closed_versions as closed
       from employment_changes where employment_id = ${employmentId} order by revision
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
 async function decisionAuditCount(gateId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where table_name = 'flow_gates' and row_id = ${gateId} and action = 'update'
-  `)).rows;
+  `, "objects");
   return rows[0]?.n ?? 0;
 }
 
@@ -148,10 +148,10 @@ test("hire happy path: draft → submit → decide → applied with real 0184 ro
     assert.equal(gates[0]!.decision, "approved");
     await canonicalDigest(draft.id);
 
-    const versions = (await db.execute<{ version_no: number; status: string; recorded_until: Date | null }>(sql`
+    const versions = await db.execute<{ version_no: number; status: string; recorded_until: Date | null }>(sql`
       select version_no, status, recorded_until from worker_employment_versions
        where employment_id = ${employmentId} order by version_no
-    `)).rows;
+    `, "objects");
     assert.deepEqual(versions.map((v) => [v.version_no, v.status, v.recorded_until]), [[1, "active", null]]);
     const changes = await changeRows(employmentId);
     assert.equal(changes.length, 1);
@@ -160,7 +160,7 @@ test("hire happy path: draft → submit → decide → applied with real 0184 ro
     assert.equal(applied.appliedEmploymentChangeId, changes[0]!.id);
     const revision = (await db.execute<{ revision: number }>(sql`
       select revision from worker_employments where id = ${employmentId}
-    `)).rows[0]!.revision;
+    `, "objects"))[0]!.revision;
     assert.equal(revision, 2);
     assert.equal(await decisionAuditCount(gate.id), 1);
   });
@@ -184,10 +184,10 @@ test("status change closes the live version with its exact before-image", { skip
     await decideGate({ gateId: gate.id, decision: "approved", userId: h.approver1Id });
     assert.equal(await requestStatus(draft.id), "applied");
 
-    const versions = (await db.execute<{ version_no: number; status: string; superseded_by: number | null }>(sql`
+    const versions = await db.execute<{ version_no: number; status: string; superseded_by: number | null }>(sql`
       select version_no, status, superseded_by from worker_employment_versions
        where employment_id = ${employmentId} order by version_no
-    `)).rows;
+    `, "objects");
     assert.deepEqual(versions.map((v) => [v.version_no, v.status, v.superseded_by]), [
       [1, "active", 2],
       [2, "on_leave", null],
@@ -199,7 +199,7 @@ test("status change closes the live version with its exact before-image", { skip
         join worker_employment_versions s
           on s.employment_id = c.employment_id and s.version_no = c.superseded_by
        where c.id = ${first.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stamps.a, stamps.b);
 
     const changes = await changeRows(employmentId);
@@ -255,13 +255,13 @@ test("assignment issue then supersede, with department and location refs", { ski
     await decideGate({ gateId: (await gateOf(supersede.id)).id, decision: "approved", userId: h.approver1Id });
     assert.equal(await requestStatus(supersede.id), "applied");
 
-    const versions = (await db.execute<{ version_no: number; fte: string; superseded_by: number | null }>(sql`
+    const versions = await db.execute<{ version_no: number; fte: string; superseded_by: number | null }>(sql`
       select av.version_no, av.fte::text as fte, av.superseded_by
         from employment_assignment_versions av
         join employment_assignments a on a.id = av.assignment_id
        where a.employment_id = ${employmentId} and a.assignment_key = 'primary'
        order by av.version_no
-    `)).rows;
+    `, "objects");
     assert.deepEqual(versions.map((v) => [v.version_no, v.fte, v.superseded_by]), [
       [1, "1.0000", 2],
       [2, "0.8000", null],
@@ -290,12 +290,12 @@ test("termination applies and a second termination is refused", { skip: !DB }, a
     // History outside the termination window is preserved, never
     // rewritten: the active slice stays live beside the terminated one,
     // so as-of reads before the termination still resolve active.
-    const live = (await db.execute<{ status: string; from: string; to: string | null }>(sql`
+    const live = await db.execute<{ status: string; from: string; to: string | null }>(sql`
       select status, effective_from::text as from, effective_to::text as to
         from worker_employment_versions
        where employment_id = ${employmentId} and recorded_until is null
        order by effective_from
-    `)).rows;
+    `, "objects");
     assert.deepEqual(live, [
       { status: "active", from: "2026-01-01", to: "2026-10-31" },
       { status: "terminated", from: "2026-10-31", to: null },
@@ -351,11 +351,11 @@ test("manager repoint closes the reporting line in the same aggregate event", { 
     await decideGate({ gateId: (await gateOf(repoint.id)).id, decision: "approved", userId: h.approver1Id });
     assert.equal(await requestStatus(repoint.id), "applied");
 
-    const lines = (await db.execute<{ version_no: number; manager: string; closed: boolean }>(sql`
+    const lines = await db.execute<{ version_no: number; manager: string; closed: boolean }>(sql`
       select version_no, manager_employment_id as manager, recorded_until is not null as closed
         from reporting_relationships
        where employment_id = ${employmentId} and kind = 'line' order by version_no
-    `)).rows;
+    `, "objects");
     assert.deepEqual(lines.map((l) => [l.version_no, l.manager, l.closed]), [
       [1, managerA, true],
       [2, managerB, false],
@@ -405,14 +405,14 @@ test("stale revision is refused at apply with nothing written", { skip: !DB }, a
     assert.equal(await requestStatus(draft.id), "pending_approval");
     assert.equal(await decisionAuditCount(gate.id), 0);
     assert.deepEqual((await changeRows(employmentId)).map((c) => c.kind), ["corrected", "corrected"]);
-    const suspended = (await db.execute(sql`
+    const suspended = await db.execute(sql`
       select 1 as one from worker_employment_versions
        where employment_id = ${employmentId} and status = 'suspended'
-    `)).rows;
+    `, "objects");
     assert.equal(suspended.length, 0);
     const snapshot = (await db.execute<{ s: unknown }>(sql`
       select decision_snapshot as s from hrm_employment_change_requests where id = ${draft.id}
-    `)).rows[0]!.s;
+    `, "objects"))[0]!.s;
     assert.equal(snapshot, null);
   });
 });
@@ -443,7 +443,7 @@ test("a hire raced by a landed version rolls the whole decision back", { skip: !
     // second version and no 'created' event.
     const versions = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from worker_employment_versions where employment_id = ${employmentId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(versions, 1);
     assert.ok(!(await changeRows(employmentId)).some((c) => c.kind === "created"));
   });
@@ -474,10 +474,10 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
       "a blank withdrawal reason is refused",
     );
     const withdrawnPending = await withdrawChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: pending.id, reason: "hiring freeze" });
-    const withdrawalAudit = (await db.execute<{ changes: { event: string; reason: string; cancelledFlowRunId: string | null; before: { status: string } } }>(sql`
+    const withdrawalAudit = await db.execute<{ changes: { event: string; reason: string; cancelledFlowRunId: string | null; before: { status: string } } }>(sql`
       select changes from audit_log
        where org_id = ${h.org.orgId} and table_name = 'hrm_employment_change_requests'
-         and row_id = ${pending.id} and changes->>'event' = 'withdrawn'`)).rows;
+         and row_id = ${pending.id} and changes->>'event' = 'withdrawn'`, "objects");
     assert.equal(withdrawalAudit.length, 1, "withdrawal leaves exactly one audit row");
     assert.equal(withdrawalAudit[0]!.changes.reason, "hiring freeze");
     assert.equal(withdrawalAudit[0]!.changes.before.status, "pending_approval");
@@ -486,7 +486,7 @@ test("withdrawal rules: draft and pending withdraw, terminals refuse", { skip: !
     assert.ok(withdrawnPending.flowRunId, "the run is retained as evidence");
     const cancelledGate = (await db.execute<{ status: string }>(sql`
       select status from flow_gates where id = ${pendingGate.id}
-    `)).rows[0]!.status;
+    `, "objects"))[0]!.status;
     assert.equal(cancelledGate, "cancelled", "withdrawal cancels the dangling gate");
 
     // Terminal states never resurrect through withdraw.
@@ -551,7 +551,7 @@ test("identity separation: the submitter cannot decide their own submission", { 
     await grantPermissions(h.org.orgId,h.submitterId,["hrm.employment.approve"]);
     // Assignment changes cannot let an otherwise authorized maker evade the tenant policy.
     assert.equal((await db.execute(sql`update flow_gates set assignee_user_id=${h.submitterId}
-      where org_id=${h.org.orgId} and id=${gate.id} returning id`)).rows.length, 1);
+      where org_id=${h.org.orgId} and id=${gate.id} returning id`, "objects")).length, 1);
     await assert.rejects(
       decideGate({ gateId: gate.id, decision: "approved", userId: h.submitterId }),
       (e: unknown) => e instanceof GateError && /own submission/.test(e.message),
@@ -632,12 +632,12 @@ test("submit without a configured flow applies directly with automatic evidence"
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from flow_runs
        where subject_id = ${draft.id} and status <> 'cancelled'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(runs, 0, "direct application invents no flow run");
-    const versions = (await db.execute<{ version_no: number; status: string }>(sql`
+    const versions = await db.execute<{ version_no: number; status: string }>(sql`
       select version_no, status from worker_employment_versions
        where employment_id = ${employmentId} and recorded_until is null order by version_no
-    `)).rows;
+    `, "objects");
     assert.deepEqual(versions.map((v) => [v.version_no, v.status]), [[1, "active"]]);
   });
 });
@@ -739,12 +739,12 @@ test("draft change-request edits retain their original authoring kind", { skip: 
       }),
     );
 
-    const stored = (await db.execute<{ id: string; kind: string; request_revision: number }>(sql`
+    const stored = await db.execute<{ id: string; kind: string; request_revision: number }>(sql`
       select id::text, payload->>'kind' as kind, request_revision
         from hrm_employment_change_requests
        where org_id = ${h.org.orgId} and id in (${employmentDraft.id}, ${profileDraft.id})
        order by id
-    `)).rows;
+    `, "objects");
     assert.deepEqual(new Map(stored.map((row) => [row.id, [row.kind, row.request_revision]])), new Map([
       [employmentDraft.id, ["status_change", 1]],
       [profileDraft.id, ["profile_change", 1]],
@@ -950,10 +950,10 @@ test("concurrent two-session apply: exactly one wins", { skip: !DB }, async () =
     const appliedId = (await requestStatus(first.id)) === "applied" ? first.id : second.id;
     const applied = await getChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: appliedId });
     assert.equal(applied.appliedEmploymentRevision, 3);
-    const revisions = (await db.execute<{ revision: number }>(sql`
+    const revisions = await db.execute<{ revision: number }>(sql`
       select revision from employment_changes
        where employment_id = ${employmentId} and revision = 3
-    `)).rows;
+    `, "objects");
     assert.equal(revisions.length, 1, "exactly one canonical event claims the new revision");
     // The loser retried after the fact still loses: its proposal is stale.
     const loserGate = appliedId === first.id ? gateB : gateA;
@@ -985,7 +985,7 @@ test('explicit direct policy applies through the canonical writer with pinned ex
       from hrm_employment_change_requests r join worker_employments e on e.id = r.employment_id
       join worker_employment_versions v on v.employment_id = e.id and v.superseded_by is null
       where r.id = ${draft.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stored.status, 'active');
     assert.equal(stored.revision, 2);
     assert.equal(stored.snapshot.mode, 'automatic');
@@ -993,7 +993,7 @@ test('explicit direct policy applies through the canonical writer with pinned ex
     assert.equal(stored.snapshot.policy.kind, "ungated");
     assert.deepEqual(stored.snapshot.policy.flowIds, [flowId]);
     assert.equal((await changeRows(employmentId)).length, 1);
-    assert.equal((await db.execute(sql`select id from flow_gates where subject_id = ${draft.id}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from flow_gates where subject_id = ${draft.id}`, "objects")).length, 0);
     await assert.rejects(submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Retry' }), /draft/);
     assert.equal((await changeRows(employmentId)).length, 1, 'retry cannot apply a second time');
   });
@@ -1022,7 +1022,7 @@ test('a failed sibling workflow blocks direct application and leaves the canonic
     await assert.rejects(submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: 'Hire' }), /invalid graph.*Open Flows/i);
     assert.equal(await requestStatus(draft.id), 'draft');
     assert.equal((await changeRows(employmentId)).length, 0);
-    assert.equal((await db.execute(sql`select id from worker_employment_versions where employment_id = ${employmentId}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from worker_employment_versions where employment_id = ${employmentId}`, "objects")).length, 0);
   });
 });
 
@@ -1038,7 +1038,7 @@ test('four sequential approval layers keep the employee unchanged until the fina
     for (let index = 0; index < 4; index++) {
       assert.equal(await requestStatus(draft.id), 'pending_approval');
       assert.equal((await changeRows(employmentId)).length, 0);
-      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where subject_id = ${draft.id} and status = 'pending'`)).rows;
+      const gate = await db.execute<{ id: string }>(sql`select id from flow_gates where subject_id = ${draft.id} and status = 'pending'`, "objects");
       assert.equal(gate.length, 1);
       await decideGate({ gateId: gate[0]!.id, decision: 'approved', userId: h.approver1Id });
       if (index === 0) await db.execute(sql`update flows set graph = ${JSON.stringify({ schemaVersion: 1, nodes: [], edges: [] })}::jsonb where org_id = ${h.org.orgId}`);
@@ -1068,8 +1068,8 @@ test('automatic completion cannot replace a pending human decision or invent sub
     await assert.rejects(complete(h.submitterId, 'gated'), /automatic employment submission/);
     assert.deepEqual(await getChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id }), before);
     assert.equal((await changeRows(employmentId)).length, 0);
-    const gates = (await db.execute<{ status: string }>(sql`select status from flow_gates
-      where org_id=${h.org.orgId} and run_id=${pending.flowRunId}`)).rows;
+    const gates = await db.execute<{ status: string }>(sql`select status from flow_gates
+      where org_id=${h.org.orgId} and run_id=${pending.flowRunId}`, "objects");
     assert.ok(gates.length > 0);
     assert.ok(gates.every(gate => gate.status === 'pending'));
   });

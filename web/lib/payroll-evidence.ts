@@ -71,8 +71,8 @@ async function loadRun(
        -- must own the complete population, exactly as the run detail and
        -- the GL preview action require.
        ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
-  `))
-  const run = r.rows[0]
+  `, 'objects'))
+  const run = r[0]
   if (!run) throw new PayrollError('pay run not found')
   return run
 }
@@ -136,10 +136,10 @@ export async function assemblePayRunEvidence(
     select slug, id, name from report_definitions
      where org_id = ${orgId} and kind = 'built_in'
        and slug = any(${`{${EVIDENCE_SLUGS.join(',')}}`}::text[])
-  `))
+  `, 'objects'))
 
   const missingDefinitions = EVIDENCE_SLUGS.filter(
-    (slug) => !definitions.rows.some((row) => row.slug === slug),
+    (slug) => !definitions.some((row) => row.slug === slug),
   )
   if (missingDefinitions.length > 0) {
     throw new PayrollError(`required built-in payroll evidence reports are unavailable: ${missingDefinitions.join(', ')}`)
@@ -148,7 +148,7 @@ export async function assemblePayRunEvidence(
   const parts: string[] = []
   const pdfs: Buffer[] = []
   for (const slug of EVIDENCE_SLUGS) {
-    const definition = definitions.rows.find((row) => row.slug === slug)
+    const definition = definitions.find((row) => row.slug === slug)
     if (!definition) throw new PayrollError(`required built-in payroll evidence report is unavailable: ${slug}`)
     const data = await resolveDefinitionToExportData(orgId, definition.id, params, ctx, {
       // The exact run, not merely its period: an off-cycle run inside a period
@@ -183,7 +183,7 @@ export async function assemblePayRunEvidence(
         join pay_runs r on r.document_id = d.id and r.org_id = d.org_id
        where d.org_id = ${orgId} and d.id = ${documentId}
        for update of d
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!locked || !payrollSubsidiaryInScope(allowedSubsidiaryIds, locked.subsidiary_id)) {
       throw new PayrollError('pay run not found')
     }

@@ -36,7 +36,7 @@ export async function installServiceDispatch(c: DemoContext): Promise<void> {
   if (c.memberSample) return;
   const id = (table: string, key = "main") => scenarioRecordId(c, table, key);
   const actor = { orgId: c.orgId, actorId: c.actorId };
-  if ((await db.execute(sql`select id from service_requests where org_id = ${c.orgId} and id = ${id("service_requests", "no-heat")}`)).rows.length) return;
+  if ((await db.execute(sql`select id from service_requests where org_id = ${c.orgId} and id = ${id("service_requests", "no-heat")}`, "objects")).length) return;
 
   const timeZone = await businessTimeZoneInTx(db, c.orgId);
   const today = await businessTodayInTx(db, c.orgId);
@@ -63,8 +63,8 @@ export async function installServiceDispatch(c: DemoContext): Promise<void> {
       time_zone, publish_policy, day_starts, day_ends, day_break_minutes, created_by, updated_by)
     values (${boardId}, ${c.orgId}, 'DEMO-DISPATCH', 'Service dispatch', 'Technician day board for service, repair and maintenance visits.',
       'people', 'dispatch', ${c.subsidiaryId}, 'timed', '{dispatch,timeline}', 'dispatch', ${timeZone}, 'live', '07:00', '18:00', 0, ${c.actorId}, ${c.actorId})
-    returning id`);
-  if (board.rows.length !== 1) throw new SampleCompanyError("The demonstration dispatch board could not be created.");
+    returning id`, "objects");
+  if (board.length !== 1) throw new SampleCompanyError("The demonstration dispatch board could not be created.");
   await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,actor_id,changes) values(${c.orgId},'schedule_boards',${boardId},'insert',${c.actorId},
     ${JSON.stringify({ reason: "Dispatch board for the service desk", after: { code: "DEMO-DISPATCH", boardType: "dispatch", timeZone } })}::jsonb)`);
 
@@ -103,7 +103,7 @@ export async function installServiceDispatch(c: DemoContext): Promise<void> {
   const released = await submitAndReleaseIfUngated("customer_invoice", invoice.invoiceId, c.actorId);
   if (released.flowError || released.gated || !released.autoApproved) throw new SampleCompanyError("The service invoice needs approval before the demonstration can post it.");
   await postDocument(invoice.invoiceId, { control: await loadRequiredControlAccounts(c.orgId) }, { audit: { actorId: c.actorId, source: "industry_demo_installation" } });
-  const repairJob = (await db.execute<{ revision: number }>(sql`select revision from service_jobs where org_id = ${c.orgId} and id = ${repair.job.id}`)).rows[0];
+  const repairJob = (await db.execute<{ revision: number }>(sql`select revision from service_jobs where org_id = ${c.orgId} and id = ${repair.job.id}`, "objects"))[0];
   if (!repairJob) throw new SampleCompanyError("The repair job could not be read back.");
   await completeServiceJob({ ...actor, jobId: repair.job.id, expectedRevision: repairJob.revision });
 

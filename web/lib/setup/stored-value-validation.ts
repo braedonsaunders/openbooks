@@ -24,7 +24,7 @@ export const validateStoredValueProgramWrite: SetupEntityValidationHook = async 
     ? (await executor.execute<CurrentProgram>(sql`
         select name, kind, liability_account_id, breakage_income_account_id,
                breakage_policy, breakage_rate::text as breakage_rate, expiry_months
-          from stored_value_programs where id = ${rowId} and org_id = ${orgId}`)).rows[0]
+          from stored_value_programs where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
     : null
   if (rowId && !current) return 'not found'
   const str = (value: unknown, fallback: string | null): string | null => {

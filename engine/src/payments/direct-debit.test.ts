@@ -141,11 +141,11 @@ test("direct-debit source contention is a domain failure with durable evidence",
          and run.direction = 'inbound'
          and run.purpose = 'customer_collections'
        order by run.status, run.id
-    `));
+    `, "objects"));
 
-    assert.equal(runState.rows.length, 2, "the failed attempt remains as cancellation evidence");
-    const cancelled = runState.rows.find((run) => run.status === "cancelled");
-    const active = runState.rows.find((run) => run.status === "draft");
+    assert.equal(runState.length, 2, "the failed attempt remains as cancellation evidence");
+    const cancelled = runState.find((run) => run.status === "cancelled");
+    const active = runState.find((run) => run.status === "draft");
     assert.ok(cancelled);
     const { failure_message: failureMessage, ...cancelledState } = cancelled;
     assert.deepEqual(cancelledState, {
@@ -177,14 +177,14 @@ test("direct-debit source contention is a domain failure with durable evidence",
       select updated_by::text as updated_by
         from payment_runs
        where org_id = ${org.orgId} and id = ${cancelled.id}
-    `)).rows[0]!.updated_by;
+    `, "objects"))[0]!.updated_by;
     assert.equal(cancelledRunActor, PAYMENT_RUN_SYSTEM_ACTOR_ID);
-    const cleanupEvidence = (await db.execute<{ actor_id: string | null; from_status: string; to_status: string; details: Record<string, unknown> }>(sql`
+    const cleanupEvidence = await db.execute<{ actor_id: string | null; from_status: string; to_status: string; details: Record<string, unknown> }>(sql`
       select actor_id::text as actor_id, from_status, to_status, details
         from payment_events
        where org_id = ${org.orgId} and payment_run_id = ${cancelled.id}
          and event_type = 'run_cancelled'
-    `)).rows;
+    `, "objects");
     assert.deepEqual(cleanupEvidence, [{
       actor_id: null,
       from_status: "draft",
@@ -205,8 +205,8 @@ test("direct-debit source contention is a domain failure with durable evidence",
        where org_id = ${org.orgId}
          and source_document_id = ${invoiceId}
        order by created_at, id
-    `));
-    assert.deepEqual(sourceLifecycle.rows, [
+    `, "objects"));
+    assert.deepEqual(sourceLifecycle, [
       { run_id: successes[0]!.value.id, status: "excluded" },
       { run_id: replacement.id, status: "selected" },
     ]);

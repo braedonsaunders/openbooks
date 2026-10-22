@@ -148,7 +148,7 @@ export async function checkRestockingPolicyOverlap(
        and (cast(${input.ignoreId ?? null} as uuid) is null or id <> cast(${input.ignoreId ?? null} as uuid))
        and effective_from <= coalesce(${input.effectiveTo ?? null}::date, '9999-12-31'::date)
        and coalesce(effective_to, '9999-12-31'::date) >= ${input.effectiveFrom}::date
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (clash) {
     const until = clash.effective_to ?? "open ended";
     throw refusal(
@@ -292,7 +292,7 @@ export async function resolveRestockingFee(
 
 async function hasAnyPolicy(runner: SqlExecutor, orgId: string): Promise<boolean> {
   const row = (await runner.execute<{ exists: boolean }>(sql`
-    select exists(select 1 from restocking_fee_policies where org_id = ${orgId}) as exists`)).rows[0];
+    select exists(select 1 from restocking_fee_policies where org_id = ${orgId}) as exists`, "objects"))[0];
   return row?.exists ?? false;
 }
 
@@ -316,7 +316,7 @@ async function findPolicy(
             or (item_id is null and item_category is null))
      order by case when item_id is not null then 0 when item_category is not null then 1 else 2 end,
               effective_from desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
 }
 
 function feeForLine(policy: PolicyRow, line: RestockingFeeLineInput, currency: string, waived: boolean): ResolvedRestockingFeeLine {
@@ -409,6 +409,6 @@ export async function recordRestockingFeeWaiver(
     values (${orgId}, 'rma_documents', ${rmaDocumentId}, 'update',
             ${JSON.stringify({ event: "restocking_fee_waived", totalMinor: input.totalMinor, currency: input.currency, minorUnits: input.minorUnits, reason: input.reason })}::jsonb,
             ${actorId})
-    returning id`);
-  if (result.rows.length !== 1) throw new Error("restocking fee waiver was not audited");
+    returning id`, "objects");
+  if (result.length !== 1) throw new Error("restocking fee waiver was not audited");
 }

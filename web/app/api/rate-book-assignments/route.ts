@@ -105,14 +105,14 @@ export const GET = defineRoute({
             from parties p
            where p.org_id = ${orgId} and p.id = ${scopeId}
              and exists (select 1 from customer_roles
-                          where party_id = ${scopeId} and org_id = ${orgId} and is_active)`)).rows[0]
+                          where party_id = ${scopeId} and org_id = ${orgId} and is_active)`, 'objects'))[0]
         if (!party || guardSubsidiaryScope(gate, party.subsidiaryId, { orgWideNull: true })) {
           return scopeNotFound()
         }
       } else {
         const project = (await db.execute<{ subsidiaryId: string | null }>(sql`
           select subsidiary_id as "subsidiaryId"
-            from projects where org_id = ${orgId} and id = ${scopeId}`)).rows[0]
+            from projects where org_id = ${orgId} and id = ${scopeId}`, 'objects'))[0]
         if (!project || guardSubsidiaryScope(gate, project.subsidiaryId)) {
           return scopeNotFound()
         }
@@ -144,7 +144,7 @@ export const GET = defineRoute({
         from item_rate_books b
        where b.org_id = ${orgId} and b.is_active
          and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)
-       order by b.is_default desc, b.name`)
+       order by b.is_default desc, b.name`, 'objects')
     const assignments = await db.execute(sql`
       select a.id, a.rate_book_id, b.name as rate_book_name, b.currency,
              a.effective_from, a.effective_to, a.date_basis, a.is_active,
@@ -160,16 +160,16 @@ export const GET = defineRoute({
        where a.org_id = ${orgId} and ${scope} ${statusFilter} ${search}
          and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)
        order by a.is_active desc, a.effective_from desc nulls last, b.name
-       limit ${perPage} offset ${(page - 1) * perPage}`)
+       limit ${perPage} offset ${(page - 1) * perPage}`, 'objects')
     const count = await db.execute(sql`
       select count(*)::int as n
         from item_rate_book_assignments a join item_rate_books b on b.id = a.rate_book_id and b.org_id = a.org_id
        where a.org_id = ${orgId} and ${scope} ${statusFilter} ${search}
-         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)`)
+         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)`, 'objects')
     return NextResponse.json({
-      rateBooks: rateBooks.rows,
-      assignments: assignments.rows,
-      total: Number(count.rows[0]?.n ?? 0),
+      rateBooks,
+      assignments,
+      total: Number(count[0]?.n ?? 0),
       page,
       perPage,
       canManage: can(gate, 'projects.manage'),
@@ -214,7 +214,7 @@ async function assignmentParentVisibility(
       select p.subsidiary_id as "subsidiaryId"
         from parties p
        where p.org_id = ${orgId} and p.id = ${customerId}
-       for share of p`)).rows[0]
+       for share of p`, 'objects'))[0]
     if (!party) return 'missing'
     return guardSubsidiaryScope(gate, party.subsidiaryId, { orgWideNull: true }) ? 'hidden' : 'visible'
   }
@@ -249,9 +249,9 @@ async function normalizedInput(
       select rate_book_id as "rateBookId", rate_version_id as "rateVersionId", customer_id as "customerId", project_id as "projectId",
              effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis",
              is_active as "isActive"
-        from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId} for update`)))
-    if (!current.rows[0]) return { errorCode: 'save' } as const
-    values = { ...current.rows[0], ...body }
+        from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId} for update`, 'objects')))
+    if (!current[0]) return { errorCode: 'save' } as const
+    values = { ...current[0], ...body }
     // The stored row's own customer/project must already be visible — a
     // restricted caller alters only their own subsidiaries' pricing, and
     // the uniform 'save' answers exactly like a missing row. An
@@ -259,8 +259,8 @@ async function normalizedInput(
     // stored record that is gone or no longer an active customer.
     const stored = await assignmentParentVisibility(
       tx, orgId, gate, allowed,
-      current.rows[0].customerId ? String(current.rows[0].customerId) : null,
-      current.rows[0].projectId ? String(current.rows[0].projectId) : null,
+      current[0].customerId ? String(current[0].customerId) : null,
+      current[0].projectId ? String(current[0].projectId) : null,
     )
     if (stored === 'hidden') return { errorCode: 'save' } as const
     if (stored === 'missing') {
@@ -301,15 +301,15 @@ async function normalizedInput(
       exists(select 1 from item_rate_books b where b.id = ${rateBookId} and b.org_id = ${orgId}
         and exists (select 1 from item_rate_versions v join labor_rate_version_policies p on p.version_id = v.id and p.org_id = v.org_id where v.rate_book_id = b.id and v.org_id = b.org_id)) as book_ok,
       ${customerId ? sql`exists(select 1 from customer_roles where party_id = ${customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
-      ${projectId ? sql`exists(select 1 from projects where id = ${projectId} and org_id = ${orgId})` : sql`true`} as project_ok`)))
-  if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) return { errorCode: 'references' } as const
+      ${projectId ? sql`exists(select 1 from projects where id = ${projectId} and org_id = ${orgId})` : sql`true`} as project_ok`, 'objects')))
+  if (!refs[0]?.book_ok || !refs[0]?.customer_ok || !refs[0]?.project_ok) return { errorCode: 'references' } as const
   if (rateVersionId) {
     // An explicit version is a contract pin, not a date-window lookup. Validate
     // its real book and tenant without rewriting the assignment's date basis.
     const version = (await tx.execute(sql`select v.id from item_rate_versions v
       join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
       where v.org_id=${orgId} and v.id=${rateVersionId} and v.rate_book_id=${rateBookId}
-        and (${!isActive} or v.status='active') for share of v`)).rows[0]
+        and (${!isActive} or v.status='active') for share of v`, 'objects'))[0]
     if (!version) return { errorCode: 'version' } as const
   }
   const scope = projectId ? sql`project_id = ${projectId}` : sql`customer_id = ${customerId}`
@@ -318,8 +318,8 @@ async function normalizedInput(
      where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active and ${scope}
        and daterange(coalesce(effective_from, '-infinity'::date), effective_to, '[]') &&
            daterange(coalesce(${effectiveFrom}::date, '-infinity'::date), ${effectiveTo}::date, '[]')
-     limit 1`)))
-  if (isActive && overlap.rows.length) return { errorCode: 'overlap' } as const
+     limit 1`, 'objects')))
+  if (isActive && overlap.length) return { errorCode: 'overlap' } as const
   return { values: { rateBookId, rateVersionId, customerId, projectId, effectiveFrom, effectiveTo, dateBasis, isActive } } as const
 }
 
@@ -339,8 +339,8 @@ export const POST = defineRoute({
         insert into item_rate_book_assignments
           (org_id, rate_book_id, customer_id, project_id, effective_from, effective_to, date_basis, is_active, created_by, updated_by, rate_version_id)
         values (${gate.user.orgId}, ${v.rateBookId}, ${v.customerId}, ${v.projectId}, ${v.effectiveFrom}, ${v.effectiveTo}, ${v.dateBasis}, ${v.isActive}, ${gate.user.id}, ${gate.user.id}, ${v.rateVersionId})
-        returning *`)
-      const after = inserted.rows[0]
+        returning *`, 'objects')
+      const after = inserted[0]
       if (!after) throw new Error('rate-book assignment insert returned no row')
       const id = String(after.id)
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -376,12 +376,12 @@ export const PATCH = defineRoute({
       if ('errorCode' in parsed) return parsed
       const v = parsed.values
       const before = (await tx.execute(sql`
-        select * from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} for update`)).rows[0]
+        select * from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} for update`, 'objects'))[0]
       if (!before) return { errorCode: 'save' } as const
       const updated = (await tx.execute(sql`update item_rate_book_assignments set rate_book_id = ${v.rateBookId}, customer_id = ${v.customerId},
         project_id = ${v.projectId}, effective_from = ${v.effectiveFrom}, effective_to = ${v.effectiveTo}, date_basis = ${v.dateBasis},
         is_active = ${v.isActive}, rate_version_id=${v.rateVersionId}, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${gate.user.orgId}
-        returning *`)).rows[0]
+        returning *`, 'objects'))[0]
       if (!updated) throw new Error('rate-book assignment update returned no row')
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'update', ${JSON.stringify({ before, after: updated })}::jsonb, ${gate.user.id})`)
@@ -409,7 +409,7 @@ export const DELETE = defineRoute({
   if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
   const outcome = await db.transaction(async (tx) => {
     const before = (await tx.execute(sql`
-      select * from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} for update`)).rows[0] as
+      select * from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} for update`, 'objects'))[0] as
       | { customer_id: string | null; project_id: string | null }
       | undefined
     if (!before) return { errorCode: 'save' } as const
@@ -421,7 +421,7 @@ export const DELETE = defineRoute({
       before.project_id ? String(before.project_id) : null,
     )
     if (stored !== 'visible') return { errorCode: 'save' } as const
-    const removed = (await tx.execute(sql`delete from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} returning id`)).rows[0]
+    const removed = (await tx.execute(sql`delete from item_rate_book_assignments where id = ${id} and org_id = ${gate.user.orgId} returning id`, 'objects'))[0]
     if (!removed) throw new Error('rate-book assignment delete returned no row')
     await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${gate.user.orgId}, 'item_rate_book_assignments', ${id}, 'delete', ${JSON.stringify({ before, after: null })}::jsonb, ${gate.user.id})`)

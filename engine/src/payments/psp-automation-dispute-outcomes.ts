@@ -87,7 +87,7 @@ async function runDisputeWon(
        and (d.custom->'providerReturn' @> ${JSON.stringify({ disputeId, phase: "dispute-opened", role: "hold" })}::jsonb
             or d.memo = ${`PSP dispute hold ${row.provider_ref ?? event.dispute.id}`})
      for update of d
-  `)).rows : [];
+  `, "objects")) : [];
   if (holds.length !== 1) return parkDisputeForReview(orgId, disputeId, "dispute-won",
     { providerEventId: event.providerEventId, dispute: event.dispute, feeAmount: eventFee(event) }, "The posted hold receipt could not be uniquely resolved; reconcile its receipt identity before resuming.");
   const hold = holds[0]!;
@@ -103,7 +103,7 @@ async function runDisputeWon(
   return returnFinancialStage<RefundAutomationOutcome>(async () => {
     const reversalId = await reversePaymentForReturn(hold.id, orgId, `Dispute ${event.dispute.id} won; hold released`, PSP_AUTOMATION_SYSTEM_ACTOR_ID);
     await postReturnReceipt(orgId, issued.receiptId);
-    const relinked = await db.execute(sql`update payment_attempts set status = 'succeeded', payment_document_id = ${issued.receiptId}, updated_at = now()
+    const relinked = await db.execute<never>(sql`update payment_attempts set status = 'succeeded', payment_document_id = ${issued.receiptId}, updated_at = now()
       where id = ${ctx.attempt.id} and org_id = ${orgId}`);
     if (relinked.rowCount !== 1) throw new PspAutomationError("The payment attempt could not be linked to its re-collected receipt.");
     const documents = [...docs, reversalId, issued.receiptId];
@@ -166,7 +166,7 @@ async function runDisputeLost(
   // provider took the money — so the invoice settles from the hold.
   const invoice = (await db.execute<{ id: string; open_balance: string }>(sql`
     select id, open_balance::text from documents where id = ${row.invoice_document_id ?? ctx.invoice.id} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!invoice) throw new PspAutomationError("invoice is not in this organization");
   const holdLine = (await db.execute<{ id: string }>(sql`
     select jl.id
@@ -174,7 +174,7 @@ async function runDisputeLost(
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
      where jl.org_id = ${orgId} and je.source_document_id = ${holdId} and jl.is_open_item
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!holdLine) throw new PspAutomationError("dispute hold posted without an open item");
   const invoiceItems = await openItemsForParty(ctx.link.party_id, "ar", orgId);
   const invoiceItem = invoiceItems.find((i) => i.documentId === invoice.id);
@@ -186,7 +186,7 @@ async function runDisputeLost(
       select id from applications
        where org_id = ${orgId} and from_line_id = ${holdLine.id} and to_line_id = ${invoiceItem.lineId}
          and unapplied_at is null
-    `)).rows[0];
+    `, "objects"))[0];
     if (!settled) {
       await applyPaymentToOpenItem(orgId, {
         fromLineId: holdLine.id,
@@ -212,7 +212,7 @@ async function runDisputeLost(
     modules: ["banking"],
   });
   const fee = eventFee(event);
-  const feeWritten = await db.execute(sql`update payment_disputes set fee_amount = ${fee}
+  const feeWritten = await db.execute<never>(sql`update payment_disputes set fee_amount = ${fee}
     where org_id = ${orgId} and id = ${disputeId}`);
   if (feeWritten.rowCount !== 1) throw new PspAutomationError("The dispute's fee evidence could not be recorded.");
   // A dispute in a currency other than the subsidiary's functional currency
@@ -225,7 +225,7 @@ async function runDisputeLost(
       from documents d
       join subsidiaries s on s.id = ${ctx.link.subsidiary_id} and s.org_id = d.org_id
      where d.id = ${holdId} and d.org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!holdBasis) throw new PspAutomationError("dispute hold receipt is not in this organization");
   if (holdBasis.currency.toUpperCase() !== row.currency.toUpperCase()) {
     throw new PspAutomationError(

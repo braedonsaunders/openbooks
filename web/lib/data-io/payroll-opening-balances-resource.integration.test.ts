@@ -57,22 +57,22 @@ async function seedEmployee(
 
 async function openingCount(orgId: string): Promise<number> {
   const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from payroll_opening_balances where org_id = ${orgId}`));
-  return rows.rows[0]!.n;
+    select count(*)::int as n from payroll_opening_balances where org_id = ${orgId}`, "objects"));
+  return rows[0]!.n;
 }
 
 async function auditActions(orgId: string): Promise<string[]> {
   const rows = (await db.execute<{ action: string }>(sql`
     select action from audit_log
      where org_id = ${orgId} and table_name = 'payroll_opening_balances'
-     order by id`));
-  return rows.rows.map((r) => r.action);
+     order by id`, "objects"));
+  return rows.map((r) => r.action);
 }
 
 async function storedTaxable(orgId: string): Promise<string | null> {
   const rows = (await db.execute<{ taxable_ytd: string }>(sql`
-    select taxable_ytd from payroll_opening_balances where org_id = ${orgId}`));
-  return rows.rows[0]?.taxable_ytd ?? null;
+    select taxable_ytd from payroll_opening_balances where org_id = ${orgId}`, "objects"));
+  return rows[0]?.taxable_ytd ?? null;
 }
 
 function carryIn(employee: string, taxable: string, tax: string) {
@@ -348,7 +348,7 @@ test('opening imports retain adoption rationale and source reference while expor
     const ctx={orgId:org.orgId,actorId,dryRun:false,allowedSubsidiaryIds:null}
     const saved=await resource.write([row],'insert',ctx)
     assert.deepEqual(saved.errors,[])
-    const audit=(await db.execute<{changes:Record<string,unknown>}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='payroll_opening_balances' order by id desc limit 1`)).rows[0]!
+    const audit=(await db.execute<{changes:Record<string,unknown>}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='payroll_opening_balances' order by id desc limit 1`, "objects"))[0]!
     assert.equal(audit.changes.reason,row.auditReason)
     assert.equal(audit.changes.sourceReference,row.sourceReference)
     for(const dryRun of [true,false]) {

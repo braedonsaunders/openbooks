@@ -19,7 +19,7 @@ test('server renders share authority without retaining it across requests or ver
       const state = {reads: 0, user: null, error: null};
       globalThis[Symbol.for('openbooks.authority-render-test')] = state;
       const database = 'data:text/javascript,' + encodeURIComponent(
-        'export const db={execute:async()=>({rows:[]})};' +
+        'export const db={execute:async(_query, mode)=>Promise.resolve({rows:[]}).then((result) => (mode === "objects" ? result.rows : result))};' +
         'export const ambientTenantOrgId=()=>null;' +
         'export const pinnedTransactionExecutor=()=>undefined;' +
         'const unexpected=()=>{throw new Error("Unexpected database operation during authority rendering");};' +

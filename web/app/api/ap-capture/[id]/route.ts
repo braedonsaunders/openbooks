@@ -129,20 +129,20 @@ export const GET = defineRoute({
         left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
        ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-    `))
-    if (!result.rows[0]) return notFound("record")
+    `, 'objects'))
+    if (!result[0]) return notFound("record")
     const [fields, events] = await Promise.all([
       db.execute(sql`
         select af.* from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
          where af.org_id = ${gate.user.orgId} and ar.capture_item_id = ${id}
          order by ar.attempt desc, af.field_key, af.line_index nulls first
-      `),
+      `, 'objects'),
       db.execute(sql`
         select * from ap_capture_events where org_id = ${gate.user.orgId} and capture_item_id = ${id}
          order by at desc
-      `),
+      `, 'objects'),
     ])
-    return NextResponse.json({ item: result.rows[0], fields: ((fields)).rows, events: ((events)).rows })
+    return NextResponse.json({ item: result[0], fields, events })
     })
 
   },
@@ -179,24 +179,24 @@ export const PATCH = defineRoute({
         left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
        ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-    `))
-    if (!current.rows[0]) return notFound("record")
-    if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
+    `, 'objects'))
+    if (!current[0]) return notFound("record")
+    if (['materialized', 'rejected', 'extracting', 'queued'].includes(current[0].status)) {
       return NextResponse.json({ error: 'not_editable' }, { status: 409 })
     }
     // Stored captures stay when itemId is omitted. Re-sending the stored item
     // is allowed. A new inventory / assembly / kit item is Inventory configuration.
     if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
       const storedIds = new Set(
-        (current.rows[0].normalized.lines ?? [])
+        (current[0].normalized.lines ?? [])
           .map((line) => line.itemId)
           .filter((itemId): itemId is string => Boolean(itemId)),
       )
       for (const line of normalized.lines) {
         if (!line.itemId || storedIds.has(line.itemId)) continue
         const item = (await db.execute<{ kind: string }>(sql`
-          select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`, 'objects'))
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           return notFound("record")
         }
       }
@@ -205,22 +205,22 @@ export const PATCH = defineRoute({
     // 404 a write that would persist a new one of those kinds.
     if (!(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
       const storedIds = new Set(
-        (current.rows[0].normalized.lines ?? [])
+        (current[0].normalized.lines ?? [])
           .map((line) => line.itemId)
           .filter((itemId): itemId is string => Boolean(itemId)),
       )
       for (const line of normalized.lines) {
         if (!line.itemId || storedIds.has(line.itemId)) continue
         const item = (await db.execute<{ kind: string }>(sql`
-          select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
-        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`, 'objects'))
+        if (item[0] && item[0].kind === 'equipment_charge') {
           return notFound("record")
         }
       }
     }
     if (
       nextPurchaseOrderId
-      && nextPurchaseOrderId !== current.rows[0].purchase_order_id
+      && nextPurchaseOrderId !== current[0].purchase_order_id
       && !(await isDocKindEnabled(gate.user.orgId, 'purchase_order'))
     ) {
       return notFound("record")
@@ -239,8 +239,8 @@ export const PATCH = defineRoute({
            where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
            ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
            for update of ci
-        `))
-        const live = locked.rows[0]
+        `, 'objects'))
+        const live = locked[0]
         if (!live) throw new Error('capture_not_found')
         if (['materialized', 'rejected', 'extracting', 'queued'].includes(live.status)) throw new Error('capture_not_editable')
         // The row lock above serializes concurrent saves; the token decides the
@@ -264,7 +264,7 @@ export const PATCH = defineRoute({
           select subsidiary_id as "subsidiaryId" from parties
            where org_id = ${gate.user.orgId} and id = ${resolved.vendorId}
            for update
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!vendor || guardSubsidiaryScope(gate, vendor.subsidiaryId, { orgWideNull: true })) {
           throw new Error('capture_not_found')
         }
@@ -274,7 +274,7 @@ export const PATCH = defineRoute({
           select subsidiary_id as "subsidiaryId" from documents
            where org_id = ${gate.user.orgId} and id = ${resolved.purchaseOrderId}
            for update
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!purchaseOrder || guardSubsidiaryScope(gate, purchaseOrder.subsidiaryId, { orgWideNull: true })) {
           throw new Error('capture_not_found')
         }
@@ -335,8 +335,8 @@ export const PATCH = defineRoute({
            )
            and ${resolvedAssociationsInScope(gate.user.orgId, gate.allowedSubsidiaryIds, resolved.vendorId, resolved.purchaseOrderId)}
          returning id
-      `))
-      if (!savedRow.rows[0]) throw new Error('capture_not_found')
+      `, 'objects'))
+      if (!savedRow[0]) throw new Error('capture_not_found')
       await tx.execute(sql`
         insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
         values (${gate.user.orgId}, ${id}, 'review_saved',
@@ -365,7 +365,7 @@ export const PATCH = defineRoute({
     const fresh = (await db.execute<{ updatedAt: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt"
         from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id}
-    `)).rows[0]?.updatedAt ?? expectedRevision
+    `, 'objects'))[0]?.updatedAt ?? expectedRevision
     return NextResponse.json({
       normalized: resolved.normalized,
       validationIssues: resolved.issues,

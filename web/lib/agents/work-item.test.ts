@@ -83,10 +83,11 @@ const hooks = registerHooks({
               part + (index < (query.values?.length ?? 0) ? String(query.values[index]) : "")).join("");
           }
           export const db = {
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result);
               const text = statementText(query);
-              if (/ai_work_item_evidence/i.test(text)) return { rows: [] };
-              return { rows: [{ ...finding }] };
+              if (/ai_work_item_evidence/i.test(text)) return inMode({ rows: [] });
+              return inMode({ rows: [{ ...finding }] });
             },
           };
           export function ambientTenantOrgId() { return undefined; }

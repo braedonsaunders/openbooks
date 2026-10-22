@@ -241,8 +241,8 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
     const authz = readerAuthz(org.orgId, actorId);
     await withBypassContext(async () => {
       await grantScratchPermissions(org.orgId, authz.user.id, [...READER_PERMS]);
-      const item = await db.execute(sql`update items set code='CONTRACT-FIFO' where org_id=${org.orgId} and id=${org.items.fifo} returning id`);
-      assert.equal(item.rows.length, 1);
+      const item = await db.execute(sql`update items set code='CONTRACT-FIFO' where org_id=${org.orgId} and id=${org.items.fifo} returning id`, "objects");
+      assert.equal(item.length, 1);
     });
     await withOrgContext(org.orgId, async () => {
       // Resolve seed-dependent ids from the scratch org's own list tools.

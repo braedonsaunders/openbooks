@@ -106,10 +106,10 @@ async function namesById(
   if (ids.length === 0) return new Map();
   const params = ids.map((id) => sql`${id}::uuid`);
   const nameExpr = table === "parties" ? sql`display_name` : sql`name`;
-  const rows = (await exec.execute<{ id: string; name: string }>(sql`
+  const rows = await exec.execute<{ id: string; name: string }>(sql`
     select id::text as id, ${nameExpr} as name
       from ${table === "subsidiaries" ? sql`subsidiaries` : table === "departments" ? sql`departments` : sql`parties`}
-     where org_id = ${orgId}::uuid and id in (${sql.join(params, sql`, `)})`)).rows;
+     where org_id = ${orgId}::uuid and id in (${sql.join(params, sql`, `)})`, "objects");
   return new Map(rows.map((row) => [row.id, row.name] as const));
 }
 
@@ -145,7 +145,7 @@ async function loadRequisitionRows(
   allowed: Set<string> | null,
   status: string | null,
 ): Promise<RequisitionRow[]> {
-  const rows = (await exec.execute<RequisitionRow>(sql`
+  const rows = await exec.execute<RequisitionRow>(sql`
     select r.id, r.requisition_number as "requisitionNumber", r.title,
            r.position_id as "positionId", p.position_code as "positionCode",
            r.employer_subsidiary_id as "employerSubsidiaryId",
@@ -168,7 +168,7 @@ async function loadRequisitionRows(
        ${status ? sql`and r.status = ${status}` : sql``}
        ${allowed ? sql`and r.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
      order by r.created_at desc
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -247,7 +247,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
   const stages = template?.stages ?? [];
   const stageById = new Map(stages.map((stage) => [stage.id, stage] as const));
 
-  const applications = (await db.execute<{
+  const applications = await db.execute<{
     id: string;
     candidateId: string;
     stageId: string;
@@ -259,7 +259,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
       from hrm_applications
      where org_id = ${orgId} and requisition_id = ${requisitionId}
      order by applied_on, id
-  `)).rows;
+  `, "objects");
 
   const candidateIds = [...new Set(applications.map((application) => application.candidateId))];
   const candidateRows =
@@ -279,7 +279,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
                is_internal as "isInternal"
           from hrm_candidates
          where org_id = ${orgId} and id in (${sql.join(candidateIds.map((id) => sql`${id}::uuid`), sql`, `)})
-      `)).rows;
+      `, "objects"));
   const candidateById = new Map(candidateRows.map((candidate) => [candidate.id, candidate] as const));
 
   const applicationIds = applications.map((application) => application.id);
@@ -292,7 +292,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
           from hrm_application_events
          where org_id = ${orgId} and application_id in (${sql.join(applicationIds.map((id) => sql`${id}::uuid`), sql`, `)})
          order by application_id, recorded_at desc
-      `)).rows;
+      `, "objects"));
   const lastEventByApplication = new Map(lastEvents.map((event) => [event.applicationId, event] as const));
   const interviewCounts =
     applicationIds.length === 0
@@ -302,7 +302,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
           from hrm_interviews
          where org_id = ${orgId} and application_id in (${sql.join(applicationIds.map((id) => sql`${id}::uuid`), sql`, `)})
          group by application_id
-      `)).rows;
+      `, "objects"));
   const interviewCountByApplication = new Map(interviewCounts.map((entry) => [entry.applicationId, entry.count] as const));
   const today = await businessToday(orgId);
   const liveOffers =
@@ -313,7 +313,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
           from hrm_offers
          where org_id = ${orgId} and application_id in (${sql.join(applicationIds.map((id) => sql`${id}::uuid`), sql`, `)})
            and status in ('draft', 'sent')
-      `)).rows;
+      `, "objects"));
   const liveOfferByApplication = new Map(liveOffers.map((offer) => [offer.applicationId, offer] as const));
 
   const funnelRows: ApplicationFunnelRow[] = applications.map((application) => {
@@ -369,7 +369,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
         select recorded_at as "recordedAt" from hrm_application_events
          where org_id = ${orgId} and application_id in (${sql.join(applicationIds.map((id) => sql`${id}::uuid`), sql`, `)})
            and kind = 'hired' order by recorded_at limit 1
-      `)).rows;
+      `, "objects"));
   const timeToFill =
     row.openedOn && hiredEvents.length > 0
       ? timeToFillDays(row.openedOn, hiredEvents[0]!.recordedAt.slice(0, 10))
@@ -425,7 +425,7 @@ async function requisitionBandRange(
   const { resolveBandForScope } = await import("../compensation/bands.ts");
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.compensation.read"))) return null;
   const settings = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
-    select settings->'features' as features from orgs where id = ${orgId}`)).rows[0]?.features ?? {};
+    select settings->'features' as features from orgs where id = ${orgId}`, "objects"))[0]?.features ?? {};
   if (!featureEnabled(settings, "hrmCompensation")) return null;
   if (!row.positionId) return null;
   const position = (await exec.execute<{ level_id: string | null; location_id: string | null }>(sql`
@@ -434,10 +434,10 @@ async function requisitionBandRange(
      where org_id = ${orgId} and position_id = ${row.positionId}
        and recorded_until is null
      order by effective_from desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!position?.level_id) return null;
   const level = (await exec.execute<{ family_id: string | null; code: string }>(sql`
-    select family_id, code from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`)).rows[0];
+    select family_id, code from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`, "objects"))[0];
   if (!level) return null;
   const today = await businessToday(orgId);
   const band = await resolveBandForScope(
@@ -498,10 +498,10 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
   if (!holdsReadGrant) {
     // Without the grant, the only path in is managing one of the
     // candidate's requisitions.
-    const requisitions = (await db.execute<{ requisitionId: string }>(sql`
+    const requisitions = await db.execute<{ requisitionId: string }>(sql`
       select distinct requisition_id as "requisitionId" from hrm_applications
        where org_id = ${orgId} and candidate_id = ${candidateId}
-    `)).rows;
+    `, "objects");
     let admitted = false;
     for (const entry of requisitions) {
       try {
@@ -529,11 +529,11 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
            resume_attachment_id as "resumeAttachmentId",
            is_internal as "isInternal"
       from hrm_candidates where org_id = ${orgId} and id = ${candidateId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!candidate) {
     throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
   }
-  const applications = (await db.execute<{
+  const applications = await db.execute<{
     requisitionId: string;
     employerSubsidiaryId: string;
     requisitionNumber: string;
@@ -553,7 +553,7 @@ export async function getCandidateDetail(query: GetCandidateQuery): Promise<Cand
       left join hrm_pipeline_stages s on s.org_id = a.org_id and s.id = a.stage_id
      where a.org_id = ${orgId} and a.candidate_id = ${candidateId}
      order by a.applied_on
-  `)).rows;
+  `, "objects");
   if (!holdsReadGrant) {
     // The manager sees only the applications on their own requisitions.
     const own: typeof applications = [];
@@ -634,7 +634,7 @@ async function interviewsFor(
   applicationIds: Set<string>,
 ): Promise<CandidateDetail["interviews"]> {
   if (applicationIds.size === 0) return [];
-  return (await exec.execute<{
+  return await exec.execute<{
     id: string;
     applicationId: string;
     kind: string;
@@ -647,7 +647,7 @@ async function interviewsFor(
       from hrm_interviews
      where org_id = ${orgId} and application_id in (${sql.join([...applicationIds].map((id) => sql`${id}::uuid`), sql`, `)})
      order by scheduled_at
-  `)).rows;
+  `, "objects");
 }
 
 export interface GetInterviewForPanelistQuery {
@@ -694,7 +694,7 @@ export async function getInterviewForPanelist(query: GetInterviewForPanelistQuer
       join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
       join hrm_candidates c on c.org_id = i.org_id and c.id = a.candidate_id
      where i.org_id = ${orgId} and i.id = ${interviewId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
   }
@@ -724,21 +724,21 @@ export async function loadRecruitingOverview(query: LoadRecruitingOverviewQuery)
   const open = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_requisitions r
      where r.org_id = ${orgId} and r.status = 'open' ${scope}
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   const offers = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_offers o
       join hrm_applications a on a.org_id = o.org_id and a.id = o.application_id
       join hrm_requisitions r on r.org_id = o.org_id and r.id = a.requisition_id
      where o.org_id = ${orgId} and o.status = 'sent'
        and (o.expires_on is null or o.expires_on >= ${today}::date) ${scope}
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   const interviews = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_interviews i
       join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
       join hrm_requisitions r on r.org_id = i.org_id and r.id = a.requisition_id
      where i.org_id = ${orgId} and i.status = 'scheduled'
        and i.scheduled_at >= now() and i.scheduled_at < now() + interval '7 days' ${scope}
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   return { openRequisitions: open, offersAwaitingResponse: offers, interviewsThisWeek: interviews };
 }
 
@@ -803,7 +803,7 @@ export async function getOfferDetail(query: GetOfferQuery): Promise<OfferView> {
       from hrm_offers o
       left join hrm_applications a on a.org_id = o.org_id and a.id = o.application_id
      where o.org_id = ${orgId} and o.id = ${offerId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row || !row.requisitionId) {
     throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
   }

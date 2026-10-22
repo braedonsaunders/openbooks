@@ -44,8 +44,8 @@ test('discard refuses when its draft update affects no rows', { skip: !env.OPENB
     const audit = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from audit_log
        where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${draft.draftId}
-    `)
-    assert.equal(audit.rows[0]!.count, 0)
+    `, 'objects')
+    assert.equal(audit[0]!.count, 0)
   } finally {
     await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.extension_drafts`))
     await db.execute(sql.raw(`drop function if exists public.${trigger}()`))
@@ -64,7 +64,7 @@ test('platform administrators author tenant drafts using their real home identit
     const { example } = await describeExtensionVocabulary(context)
     const result = await draftExtension(context, { bundle: example, reason: 'Review cross-tenant administrative authoring' })
     const draft = await getExtensionDraft(context, result.draftId)
-    const stored = (await db.execute<{ created_by: string; org_id: string }>(sql`select created_by,org_id from extension_drafts where id=${result.draftId}`)).rows[0]!
+    const stored = (await db.execute<{ created_by: string; org_id: string }>(sql`select created_by,org_id from extension_drafts where id=${result.draftId}`, 'objects'))[0]!
     assert.equal(stored.created_by, home.context.authz.user.id)
     assert.equal(stored.org_id, target.org.orgId)
     assert.equal(draft.status, 'draft')
@@ -94,7 +94,7 @@ test('extension draft isolation, exact review, atomic activation and immutable r
     }, files: [...vocabulary.example.files, {path:'objects/inspection-note.json',content:JSON.stringify({type:'custom_field',targetTable:'parties',key:'inspection_note',label:'Inspection note',fieldType:'text'})}] }
     const proposal = await draftExtension(context, { bundle, reason: 'Add equipment checks' })
     assert.equal(await getAppByKey(org.orgId, bundle.manifest.key), null)
-    assert.equal((await db.execute(sql`select id from custom_record_types where org_id=${org.orgId} and key='equipment-check'`)).rows.length, 0)
+    assert.equal((await db.execute(sql`select id from custom_record_types where org_id=${org.orgId} and key='equipment-check'`, 'objects')).length, 0)
     const otherAuthor = { ...context, authz: { ...context.authz, user: { ...context.authz.user, id: approver1Id } } }
     await assert.rejects(() => getExtensionDraft(otherAuthor, proposal.draftId), /not found/)
     const foreignOrg = { ...context, authz: { ...context.authz, user: { ...context.authz.user, orgId: randomUUID() } } }
@@ -103,17 +103,17 @@ test('extension draft isolation, exact review, atomic activation and immutable r
     await assert.rejects(() => db.execute(sql`update extension_drafts set reason='changed' where id=${proposal.draftId}`), (error: unknown) => String((error as { cause?: Error }).cause).includes('immutable'))
     const preview = await previewExtensionPage(context,{draftId:proposal.draftId,route:'/admin'})
     assert.equal(preview.staged,true)
-    assert.equal((await db.execute(sql`select id from page_specs where org_id=${org.orgId} and extension_version_id is not null`)).rows.length,0)
+    assert.equal((await db.execute(sql`select id from page_specs where org_id=${org.orgId} and extension_version_id is not null`, 'objects')).length,0)
     const outcomes = await Promise.all([activateExtensionDraft(context, proposal), activateExtensionDraft(context, proposal)])
     assert.ok(outcomes.every(result => result.activated))
     await assert.rejects(() => activateExtensionDraft(context, proposal), /already activated/)
     const app = await getAppByKey(org.orgId, bundle.manifest.key)
     assert.equal(app?.manifest?.frontend.renderer, 'native')
-    assert.equal((await db.execute(sql`select id from custom_record_types where org_id=${org.orgId} and key='equipment-check' and status='published'`)).rows.length, 1)
-    assert.equal((await db.execute(sql`select id from apps where org_id=${org.orgId} and key=${bundle.manifest.key}`)).rows.length, 1)
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${proposal.draftId}`)).rows.length, 1)
+    assert.equal((await db.execute(sql`select id from custom_record_types where org_id=${org.orgId} and key='equipment-check' and status='published'`, 'objects')).length, 1)
+    assert.equal((await db.execute(sql`select id from apps where org_id=${org.orgId} and key=${bundle.manifest.key}`, 'objects')).length, 1)
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${proposal.draftId}`, 'objects')).length, 1)
     await assert.rejects(() => db.execute(sql`update app_files set content='{}' where org_id=${org.orgId} and version_id=${app!.activeVersionId} and path='frontend/ui.json'`), (error:unknown)=>String((error as {cause?:Error}).cause).includes('immutable'))
-    assert.equal((await db.execute(sql`select id from custom_field_defs where org_id=${org.orgId} and key='inspection_note'`)).rows.length,1)
+    assert.equal((await db.execute(sql`select id from custom_field_defs where org_id=${org.orgId} and key='inspection_note'`, 'objects')).length,1)
     const {listActiveExtensionContributions,getExtensionSettings}=await import('@openbooks/engine/extensions/projections')
     const {extensionPermissionAvailability}=await import('@openbooks/engine/testing/organization/extension-permission-availability')
     const {loadPageSpec}=await import('../page-specs')
@@ -176,11 +176,11 @@ test('draft revision replaces only its author proposal and failed object install
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"apps":true}'::jsonb) where id=${org.orgId}`)
     const discarded = await discardExtensionDraft(context, second)
     assert.equal(discarded.discarded, true)
-    const discardAudit = (await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`)).rows.length
+    const discardAudit = (await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`, 'objects')).length
     assert.equal(discardAudit, 1)
     await assert.rejects(() => discardExtensionDraft(context, second), /already discarded/)
     assert.equal((await getExtensionDraft(context, second.draftId)).status, 'discarded')
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`)).rows.length, discardAudit)
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${second.draftId}`, 'objects')).length, discardAudit)
     await assert.rejects(() => activateExtensionDraft(context, second), /no longer available/)
   } finally { await dropScratchOrg(org.orgId) }
 }))
@@ -197,7 +197,7 @@ test('native action shares governed records, storage and audit; retries replay a
     const request = { screenKey: 'new-check', versionId: app.activeVersionId!, invocationId: randomUUID(), input: { equipment: 'Pump', notes: 'Inspected' } }
     const counts = async () => (await db.execute<{ records: number; storage: number }>(sql`select
       (select count(*)::int from custom_records where org_id=${org.orgId}) as records,
-      (select count(*)::int from app_storage where org_id=${org.orgId} and app_id=${app.id}) as storage`)).rows[0]!
+      (select count(*)::int from app_storage where org_id=${org.orgId} and app_id=${app.id}) as storage`, 'objects'))[0]!
     await assert.rejects(() => runExtensionAction(context, app.key, { ...request, input: {} }), /required/i)
     await assert.rejects(() => runExtensionAction(context, app.key, { ...request, input: { ...request.input, arbitrary: 'not declared' } }), /unknown|Unknown/)
     await assert.rejects(() => runExtensionAction(context, app.key, { ...request, versionId: randomUUID() }), /changed/)
@@ -210,10 +210,10 @@ test('native action shares governed records, storage and audit; retries replay a
     const replay = await runExtensionAction(context, app.key, request)
     assert.deepEqual(replay, first)
     assert.deepEqual(await counts(), { records: 1, storage: 1 })
-    const record = (await db.execute<{ data: { equipment: string } }>(sql`select data from custom_records where org_id=${org.orgId}`)).rows[0]!
+    const record = (await db.execute<{ data: { equipment: string } }>(sql`select data from custom_records where org_id=${org.orgId}`, 'objects'))[0]!
     assert.equal(record.data.equipment, 'Pump')
-    const retained = (await db.execute<{ value: string }>(sql`select value from app_storage where org_id=${org.orgId} and app_id=${app.id} and key='last-check'`)).rows[0]!
-    assert.ok((await db.execute(sql`select id from custom_records where org_id=${org.orgId} and id=${retained.value}`)).rows.length === 1)
+    const retained = (await db.execute<{ value: string }>(sql`select value from app_storage where org_id=${org.orgId} and app_id=${app.id} and key='last-check'`, 'objects'))[0]!
+    assert.ok((await db.execute(sql`select id from custom_records where org_id=${org.orgId} and id=${retained.value}`, 'objects')).length === 1)
     assert.equal((await runExtensionAction(context, app.key, { ...request, invocationId: randomUUID() })).ok, true)
     assert.deepEqual(await counts(), { records: 2, storage: 1 })
     const broken = { ...example, manifest: { ...example.manifest, version: '2.0.0' }, files: example.files.map(file => file.path === 'backend/create-check.js' ? { ...file, content: "function handler(request) { ob.platform.create('equipment-check', {data: request.body.input, status: 'active'}); ob.storage.set('forbidden-partial', true); throw new Error('workflow failed'); }" } : file) }
@@ -223,7 +223,7 @@ test('native action shares governed records, storage and audit; retries replay a
     const failed = await runExtensionAction(context, app.key, { ...request, versionId: upgraded.activeVersionId, invocationId: randomUUID() })
     assert.equal(failed.ok, false)
     assert.deepEqual(await counts(), { records: 2, storage: 1 })
-    assert.ok((await db.execute(sql`select id from app_runs where org_id=${org.orgId} and app_id=${app.id} and status='error'`)).rows.length > 0, 'failed backend audit survives rollback')
+    assert.ok((await db.execute(sql`select id from app_runs where org_id=${org.orgId} and app_id=${app.id} and status='error'`, 'objects')).length > 0, 'failed backend audit survives rollback')
     await assert.rejects(() => runExtensionAction(context, app.key, request), /changed/)
     await db.execute(sql`update apps set granted_permissions='["records.read"]'::jsonb where org_id=${org.orgId} and id=${app.id}`)
     const ungranted = await runExtensionAction(context, app.key, { ...request, versionId: upgraded.activeVersionId, invocationId: randomUUID() })
@@ -269,7 +269,7 @@ test('management editor refuses stale installed versions and replaced drafts wit
     const staleBridge = await runBridgeMethod({ orgId: org.orgId, user: context.authz.user, key: current!.key, method: 'storage.set', payload: { key: 'stale-write', value: true }, expectedVersionId: randomUUID(), userCan: () => true, allowedSubsidiaryIds: null })
     assert.equal(staleBridge.ok, false)
     if (!staleBridge.ok) assert.equal(staleBridge.status, 409)
-    assert.equal((await db.execute(sql`select id from app_storage where org_id=${org.orgId} and app_id=${current!.id}`)).rows.length, 0)
+    assert.equal((await db.execute(sql`select id from app_storage where org_id=${org.orgId} and app_id=${current!.id}`, 'objects')).length, 0)
     const revision=await draftExtension(context,{bundle:{...bundle,manifest:{...current!.manifest,version:'1.0.1'}},reason:'Current editor',expectedBaseVersionId:current!.activeVersionId})
     assert.equal((await getExtensionDraft(context,revision.draftId)).status,'draft')
   } finally { await dropScratchOrg(org.orgId) }
@@ -309,7 +309,7 @@ test('library publication and withdrawal preserve package evidence and reject an
         return true
       },
     )
-    const evidence=(await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id} order by at,id`)).rows
+    const evidence=await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id} order by at,id`, 'objects')
     assert.equal(evidence.length,2)
     assert.ok(evidence.every(row=>row.actor_id===context.authz.user.id))
     assert.equal(evidence[0]!.changes.event,'app_listing_published')
@@ -346,7 +346,7 @@ test('concurrent library withdrawals serialize to one withdraw and one 409', { s
     const withdrawn = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
        where org_id=${org.orgId} and table_name='app_listings' and row_id=${listing.id}
-         and changes->>'event'='app_listing_withdrawn'`)).rows[0]
+         and changes->>'event'='app_listing_withdrawn'`, 'objects'))[0]
     assert.equal(withdrawn?.n, '1')
   } finally {
     await dropScratchOrg(org.orgId)

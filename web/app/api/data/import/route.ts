@@ -235,7 +235,7 @@ export const POST = defineRoute({
       },
       execute: async () => {
         const outcome = await resource.write(mappedRows, importMode, ctx)
-        const inserted = (await db.execute(sql`
+        const inserted = await db.execute<{ id: string }>(sql`
           insert into import_jobs
             (org_id, resource_key, resource_label, format, file_name, mode, status, mapping,
              total_rows, created_count, updated_count, failed_count, errors, created_by)
@@ -245,8 +245,8 @@ export const POST = defineRoute({
                   ${JSON.stringify(mapping)}::jsonb, ${mappedRows.length},
                   ${outcome.created}, ${outcome.updated}, ${outcome.failed},
                   ${JSON.stringify(outcome.errors)}::jsonb, ${authz.user.id})
-          returning id`)) as { rows: { id: string }[] }
-        return { outcome, jobId: inserted.rows[0]?.id }
+          returning id`, 'objects')
+        return { outcome, jobId: inserted[0]?.id }
       },
     })
   } catch (error) {

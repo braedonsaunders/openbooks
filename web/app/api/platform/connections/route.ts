@@ -84,7 +84,7 @@ async function listConnectionRoutes() {
     select id, connection_id as "connectionId", source, kind, status,
            started_at as "startedAt", finished_at as "finishedAt",
            synced_through as "syncedThrough", stats, progress, error_message as "errorMessage", triggered_by as "triggeredBy"
-      from sync_runs where org_id = ${orgId} order by started_at desc limit 200`));
+      from sync_runs where org_id = ${orgId} order by started_at desc limit 200`, "objects"));
   const latestRuns = (await db.execute<Record<string, unknown>>(sql`
     select distinct on (connection_id, kind)
            id, connection_id as "connectionId", source, kind, status,
@@ -93,10 +93,10 @@ async function listConnectionRoutes() {
            error_message as "errorMessage", triggered_by as "triggeredBy"
       from sync_runs
      where org_id = ${orgId} and connection_id is not null
-     order by connection_id, kind, started_at desc, id desc`));
+     order by connection_id, kind, started_at desc, id desc`, "objects"));
   // Configured currencies power any `optionsSource: 'currencies'` config field.
   const currencies = (await db.execute<{ code: string; name: string }>(sql`
-    select code, name from currencies order by code`));
+    select code, name from currencies order by code`, "objects"));
   const qbdStatuses = (await db.execute<{
       connectionId: string;
       heartbeat: Date | null;
@@ -111,15 +111,15 @@ async function listConnectionRoutes() {
         select status, progress from qbd_captures qc
          where qc.connection_id = c.id and qc.org_id = c.org_id order by qc.created_at desc limit 1
       ) capture on true
-     where c.org_id = ${orgId} and c.source = 'qbd'`));
+     where c.org_id = ${orgId} and c.source = 'qbd'`, "objects"));
   const qbdByConnection = new Map(
-    qbdStatuses.rows.map((row) => [row.connectionId, row]),
+    qbdStatuses.map((row) => [row.connectionId, row]),
   );
   const runHealth = new Map<
     string,
     { mirror?: Record<string, unknown>; attachments?: Record<string, unknown> }
   >();
-  for (const run of latestRuns.rows) {
+  for (const run of latestRuns) {
     const connectionId =
       typeof run.connectionId === "string" ? run.connectionId : null;
     if (!connectionId) continue;
@@ -136,9 +136,9 @@ async function listConnectionRoutes() {
   }
   const resolvedDeletions = (await db.execute<{ connectionId: string; sourceRef: string }>(sql`
     select connection_id as "connectionId", source_ref as "sourceRef"
-      from source_deletion_resolutions where org_id = ${orgId}`));
+      from source_deletion_resolutions where org_id = ${orgId}`, "objects"));
   const resolvedKeys = new Set(
-    resolvedDeletions.rows.map((row) => `${row.connectionId}:${row.sourceRef}`),
+    resolvedDeletions.map((row) => `${row.connectionId}:${row.sourceRef}`),
   );
   return NextResponse.json({
     connections: rows.map((row) => ({
@@ -154,8 +154,8 @@ async function listConnectionRoutes() {
           .filter((sourceRef) => !resolvedKeys.has(`${row.id}:${sourceRef}`));
       })(),
     })),
-    runs: runs.rows,
-    currencies: currencies.rows,
+    runs,
+    currencies,
     canManage,
     sourceTypes: SOURCE_TYPES.map((s) => ({
       source: s.source,

@@ -99,8 +99,8 @@ test("property creation waits for a concurrent feature disable and then refuses"
     await assert.rejects(request, (error: unknown) =>
       error instanceof PropertyManagementError && /feature is disabled/.test(error.message),
     );
-    const row = await db.execute(sql`select id from managed_properties where org_id=${org.orgId} and code='PROPERTY-GATE-RACE'`);
-    assert.equal(row.rows.length, 0);
+    const row = await db.execute(sql`select id from managed_properties where org_id=${org.orgId} and code='PROPERTY-GATE-RACE'`, "objects");
+    assert.equal(row.length, 0);
   } finally {
     await holder.query('rollback').catch(() => {});
     await pending?.catch(() => {});

@@ -61,7 +61,7 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
   const factors = await computeAuStatutory({
     programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    tx: { execute: async () => ({ rows: [{ qualifying: "0.0000" }] }) } as never,
+    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ qualifying: "0.0000" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as never,
     orgId: "org",
     subsidiaryId: "employer",
     documentId: "doc",

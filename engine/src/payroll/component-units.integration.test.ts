@@ -94,13 +94,13 @@ test("quantity-unit lines pay their amount and count zero hours", { skip: !DB },
     await adjust(tripsId, "150.00", "3");
     assert.deepEqual((await calculatePayRun({ orgId: org.orgId, actorId, documentId: run.documentId })).errors, []);
 
-    const lines = (await db.execute<{ code: string; amount: string; hours: string | null }>(sql`
+    const lines = await db.execute<{ code: string; amount: string; hours: string | null }>(sql`
       select c.code, l.amount::text as amount, l.hours::text as hours
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         join pay_components c on c.id = l.component_id and c.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-         and s.employee_party_id = ${worker} and l.kind = 'earning'`)).rows;
+         and s.employee_party_id = ${worker} and l.kind = 'earning'`, "objects");
     const trips = lines.find((l) => l.code === "TRIPS");
     assert.ok(trips, "trip allowance line exists");
     // The quantity pays in full but carries no hours.
@@ -113,7 +113,7 @@ test("quantity-unit lines pay their amount and count zero hours", { skip: !DB },
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-         and s.employee_party_id = ${worker} and l.kind = 'earning'`)).rows[0]!.total;
+         and s.employee_party_id = ${worker} and l.kind = 'earning'`, "objects"))[0]!.total;
     assert.equal(totalHours, "12.00");
     // The assigned per-hour premium still prices normally with a quantity
     // line in the run: 2.00 over the 10 worked hours known when assigned

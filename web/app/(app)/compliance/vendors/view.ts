@@ -102,7 +102,7 @@ export async function loadComplianceVendors(
               from parties p
               join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
              where p.org_id = ${orgId} and p.id = ${openVendor}
-               ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}`),
+               ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}`, 'objects'),
           loadVendorCertificates(orgId, openVendor, authz.allowedSubsidiaryIds),
           loadVendorWaivers(orgId, openVendor, authz.allowedSubsidiaryIds),
           loadRequirementPolicies(orgId),
@@ -111,9 +111,9 @@ export async function loadComplianceVendors(
             select id, coalesce(code || ' · ' || name, name) as label from projects
              where org_id = ${orgId} and is_active
                ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-             order by code nulls last, name limit 500`),
+             order by code nulls last, name limit 500`, 'objects'),
         ])
-        const row = vendor.rows[0]
+        const row = vendor[0]
         if (!row) return null
         return {
           vendor: row as never,
@@ -121,7 +121,7 @@ export async function loadComplianceVendors(
           exceptions,
           policies,
           classes,
-          projects: projects.rows,
+          projects,
           status: matrix.rows.find((r) => r.partyId === openVendor) ?? null,
         }
       })()

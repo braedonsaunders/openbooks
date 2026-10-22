@@ -210,13 +210,13 @@ test(
           (select status from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as asset_status,
           (select depreciation_method from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as depreciation_method,
           (select useful_life_months from fixed_assets where id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as useful_life_months,
-          (select count(*)::int from depreciation_schedules where asset_id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as schedule_count`);
-      assert.equal(state.rows[0]?.fixed_asset_id, winnerBody.assetId, "the winner's id remains linked");
-      assert.equal(state.rows[0]?.asset_count, 1, "the race must not duplicate the fixed asset");
-      assert.equal(state.rows[0]?.asset_status, "in_service");
-      assert.equal(state.rows[0]?.depreciation_method, "straight_line");
-      assert.equal(state.rows[0]?.useful_life_months, 60);
-      assert.ok((state.rows[0]?.schedule_count ?? 0) > 0, "an in-service asset must have depreciation schedules");
+          (select count(*)::int from depreciation_schedules where asset_id = ${winnerBody.assetId} and org_id = ${fixture.org.orgId}) as schedule_count`, "objects");
+      assert.equal(state[0]?.fixed_asset_id, winnerBody.assetId, "the winner's id remains linked");
+      assert.equal(state[0]?.asset_count, 1, "the race must not duplicate the fixed asset");
+      assert.equal(state[0]?.asset_status, "in_service");
+      assert.equal(state[0]?.depreciation_method, "straight_line");
+      assert.equal(state[0]?.useful_life_months, 60);
+      assert.ok((state[0]?.schedule_count ?? 0) > 0, "an in-service asset must have depreciation schedules");
       routeState.authz = { user: { orgId: fixture.org.orgId, id: fixture.actorId }, permissions: new Set(["*"]), allowedSubsidiaryIds: new Set() };
       const [hidden, missing] = await Promise.all([post(fixture), post(fixture, randomUUID())]);
       assert.deepEqual([hidden.status, missing.status, await hidden.json()], [404, 404, await missing.json()]);

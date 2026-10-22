@@ -40,15 +40,15 @@ export async function issueVisitSignatureLink(actor: ServiceActor & { visitId: s
     if (visit.status !== "on_site" && visit.status !== "completed") {
       throw new ServiceError("The customer signs off a visit on site or after it is completed.", { status: 409, code: "service_invalid_transition", remedy: "Mark the visit on site first." });
     }
-    const signed = (await db.execute(sql`select 1 from service_visit_signatures where org_id = ${actor.orgId} and visit_id = ${visit.id}`)).rows[0];
+    const signed = (await db.execute(sql`select 1 from service_visit_signatures where org_id = ${actor.orgId} and visit_id = ${visit.id}`, "objects"))[0];
     if (signed) throw new ServiceError("The customer already signed this visit.", { status: 409, code: "service_conflict" });
     await db.execute(sql`update service_visit_signature_requests set revoked_at = now()
       where org_id = ${actor.orgId} and visit_id = ${visit.id} and responded_at is null and revoked_at is null`);
     const requestId = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + days * 86_400_000);
     const token = mintPossessionToken(SIGNATURE_DOMAIN, actor.orgId, requestId, expiresAt);
-    requireOne((await db.execute(sql`insert into service_visit_signature_requests (id, org_id, visit_id, recipient, token_digest, expires_at, created_by)
-      values (${requestId}, ${actor.orgId}, ${visit.id}, ${recipient}, ${hashPossessionToken(token)}, ${expiresAt}, ${actor.actorId}) returning id`)).rows, "The signing link");
+    requireOne(await db.execute(sql`insert into service_visit_signature_requests (id, org_id, visit_id, recipient, token_digest, expires_at, created_by)
+      values (${requestId}, ${actor.orgId}, ${visit.id}, ${recipient}, ${hashPossessionToken(token)}, ${expiresAt}, ${actor.actorId}) returning id`, "objects"), "The signing link");
     await auditService({ orgId: actor.orgId, table: "service_visit_signature_requests", rowId: requestId, action: "insert", actorId: actor.actorId,
       after: { visitId: visit.id, recipient, expiresAt: expiresAt.toISOString() } });
     return { requestId, token, expiresAt: expiresAt.toISOString(), recipient };
@@ -68,7 +68,7 @@ export async function emailVisitSignatureLink(actor: ServiceActor & { requestId:
         left join service_requests r on r.org_id = v.org_id and r.id = v.request_id
         left join contacts c on c.org_id = v.org_id and c.id = coalesce(j.contact_id, r.contact_id)
         join orgs o on o.id = sr.org_id
-       where sr.org_id = ${actor.orgId} and sr.id = ${requireUuid(actor.requestId, "Signing link")} and sr.responded_at is null and sr.revoked_at is null`)).rows[0];
+       where sr.org_id = ${actor.orgId} and sr.id = ${requireUuid(actor.requestId, "Signing link")} and sr.responded_at is null and sr.revoked_at is null`, "objects"))[0];
     if (!row) throw new ScopeNotFoundError();
     if (!row.recipient) throw new ServiceError("The signing link has no recipient email.", { code: "service_invalid", remedy: "Open the link on this device to sign in person, or issue a link with the customer's email." });
     const delivery = await resolveOrgEmailTransportDetailed(actor.orgId);
@@ -79,8 +79,8 @@ export async function emailVisitSignatureLink(actor: ServiceActor & { requestId:
     const email = serviceVisitSignatureEmail({ orgName: row.orgName, recipientName: row.contactName, jobNumber: row.jobNumber, jobTitle: row.title, link: actor.link, expiresOn: row.expiresAt });
     const logId = await insertEmailLog({ orgId: actor.orgId, recipients: [row.recipient], subject: email.subject, status: "queued", categoryKey: "service",
       meta: { recordType: "service_visit", recordId: row.visitId, event: "signature_request" }, actor: { kind: "user", userId: actor.actorId } });
-    requireOne((await db.execute(sql`update service_visit_signature_requests set email_log_id = ${logId}
-      where org_id = ${actor.orgId} and id = ${actor.requestId} and responded_at is null and revoked_at is null returning id`)).rows, "The signing link email");
+    requireOne(await db.execute(sql`update service_visit_signature_requests set email_log_id = ${logId}
+      where org_id = ${actor.orgId} and id = ${actor.requestId} and responded_at is null and revoked_at is null returning id`, "objects"), "The signing link email");
     return { to: row.recipient, email, logId, transport: delivery.transport };
   }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
   try {
@@ -127,7 +127,7 @@ async function lockOpenLink(claims: VisitSignatureClaims, token: string): Promis
       left join addresses a on a.org_id = v.org_id and a.id = coalesce(j.service_address_id, r.service_address_id)
       join orgs o on o.id = sr.org_id
      where sr.org_id = ${claims.orgId} and sr.id = ${claims.requestId} and sr.token_digest = ${hashPossessionToken(token)}
-     for update of sr`)).rows[0];
+     for update of sr`, "objects"))[0];
   if (!row) throw new ServiceError("This signing link is invalid.", { status: 404, code: "service_link_invalid", remedy: "Ask for a new signing link." });
   if (row.revokedAt) throw new ServiceError("This signing link was replaced by a newer one.", { status: 410, code: "service_link_revoked", remedy: "Use the newest link you received." });
   if (row.respondedAt || row.signed) throw new ServiceError("This visit was already signed.", { status: 409, code: "service_link_used" });
@@ -155,10 +155,10 @@ export async function publicVisitSignatureView(token: string): Promise<PublicVis
   return withOrgTransaction(claims.orgId, async () => {
     await lockServiceFeature(claims.orgId);
     const link = await lockOpenLink(claims, token);
-    const parts = (await db.execute<{ name: string; quantity: string }>(sql`select i.name, sp.quantity::text from service_visit_parts sp
-      join items i on i.org_id = sp.org_id and i.id = sp.item_id where sp.org_id = ${claims.orgId} and sp.visit_id = ${link.visitId} order by sp.created_at`)).rows;
+    const parts = await db.execute<{ name: string; quantity: string }>(sql`select i.name, sp.quantity::text from service_visit_parts sp
+      join items i on i.org_id = sp.org_id and i.id = sp.item_id where sp.org_id = ${claims.orgId} and sp.visit_id = ${link.visitId} order by sp.created_at`, "objects");
     const technicians = (await db.execute<{ name: string }>(sql`select distinct p.display_name as name from schedule_entries e join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-      where e.org_id = ${claims.orgId} and e.service_visit_id = ${link.visitId} and e.status = 'published' order by 1`)).rows.map((row) => row.name);
+      where e.org_id = ${claims.orgId} and e.service_visit_id = ${link.visitId} and e.status = 'published' order by 1`, "objects")).map((row) => row.name);
     return { orgName: link.orgName, jobNumber: link.jobNumber, title: link.title, customerName: link.customerName, address: link.address, workNotes: link.workNotes, expiresAt: link.expiresAt, parts, technicians };
   }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
 }
@@ -174,10 +174,10 @@ export async function recordVisitSignature(input: { orgId: string; token: string
   const comment = optionalText(input.comment, "Comment", 2000);
   await lockServiceFeature(input.orgId);
   const link = await lockOpenLink(claims, input.token);
-  requireOne((await db.execute(sql`update service_visit_signature_requests set responded_at = now()
-    where org_id = ${input.orgId} and id = ${link.id} and responded_at is null and revoked_at is null returning id`)).rows, "The signing link");
-  const signature = requireOne((await db.execute<{ id: string }>(sql`insert into service_visit_signatures (org_id, visit_id, request_id, signer_name, comment, signature_file_id)
-    values (${input.orgId}, ${link.visitId}, ${link.id}, ${signerName}, ${comment}, ${requireUuid(input.signatureFileId, "Signature image")}) returning id`)).rows, "The signature");
+  requireOne(await db.execute(sql`update service_visit_signature_requests set responded_at = now()
+    where org_id = ${input.orgId} and id = ${link.id} and responded_at is null and revoked_at is null returning id`, "objects"), "The signing link");
+  const signature = requireOne(await db.execute<{ id: string }>(sql`insert into service_visit_signatures (org_id, visit_id, request_id, signer_name, comment, signature_file_id)
+    values (${input.orgId}, ${link.visitId}, ${link.id}, ${signerName}, ${comment}, ${requireUuid(input.signatureFileId, "Signature image")}) returning id`, "objects"), "The signature");
   await auditService({ orgId: input.orgId, table: "service_visit_signatures", rowId: signature.id, action: "insert", actorId: null,
     after: { visitId: link.visitId, signerName, comment, signatureFileId: input.signatureFileId } });
   return { visitId: link.visitId, signatureId: signature.id };

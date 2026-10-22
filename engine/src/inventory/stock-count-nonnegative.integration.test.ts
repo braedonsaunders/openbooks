@@ -22,9 +22,9 @@ for (const counted of ["-1", "-0.0001"]) {
     try {
       const { countId, lineId } = await openCountingLine(org);
       const movementsBefore = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n;
       const auditsBefore = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from audit_log where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::text as n from audit_log where org_id = ${org.orgId}`, "objects"))[0]!.n;
       await assert.rejects(
         recordCountedQuantity(org.orgId, null, { countId, lineId, countedQuantity: counted }),
         (e: unknown) => {
@@ -37,19 +37,19 @@ for (const counted of ["-1", "-0.0001"]) {
       assert.equal(
         (await db.execute<{ q: string | null }>(sql`
           select counted_quantity::text as q from stock_count_lines
-           where org_id = ${org.orgId} and id = ${lineId}`)).rows[0]!.q,
+           where org_id = ${org.orgId} and id = ${lineId}`, "objects"))[0]!.q,
         null,
         "the line keeps no observation",
       );
       assert.equal(
         (await db.execute<{ n: string }>(sql`
-          select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`)).rows[0]!.n,
+          select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n,
         movementsBefore,
         "no stock movement may be written",
       );
       assert.equal(
         (await db.execute<{ n: string }>(sql`
-          select count(*)::text as n from audit_log where org_id = ${org.orgId}`)).rows[0]!.n,
+          select count(*)::text as n from audit_log where org_id = ${org.orgId}`, "objects"))[0]!.n,
         auditsBefore,
         "no audit row may be written",
       );

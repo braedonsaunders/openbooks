@@ -22,7 +22,7 @@ test('layouts start empty, save with an audit record, and reject stale writes wi
     const saved = await saveOrgChartLayout({ orgId: h.org.orgId, actorId: h.editor, expectedRevision: 0, graph })
     assert.equal(saved.revision, 1)
     assert.deepEqual((await loadOrgChartWorkspace({ orgId: h.org.orgId, actorId: h.editor, asOf: '2026-09-30' })).layout, saved)
-    const audit = (await db.execute<{ changes: { before: unknown; after: unknown }; actor: string }>(sql`select changes, actor_id as actor from audit_log where org_id = ${h.org.orgId} and action = 'org_chart_layout_saved'`)).rows
+    const audit = await db.execute<{ changes: { before: unknown; after: unknown }; actor: string }>(sql`select changes, actor_id as actor from audit_log where org_id = ${h.org.orgId} and action = 'org_chart_layout_saved'`, 'objects')
     assert.equal(audit.length, 1); assert.equal(audit[0]!.actor, h.editor); assert.deepEqual(audit[0]!.changes.after, saved)
     await assert.rejects(saveOrgChartLayout({ orgId: h.org.orgId, actorId: h.editor, expectedRevision: 0, graph: { nodes: [], edges: [] } }), /another editor/)
     assert.deepEqual((await loadOrgChartWorkspace({ orgId: h.org.orgId, actorId: h.editor, asOf: '2026-09-30' })).layout, saved)

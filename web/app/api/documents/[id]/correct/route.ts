@@ -26,8 +26,8 @@ export const POST = defineRoute({
         select kind, status, subsidiary_id as "subsidiaryId"
           from documents
          where id = ${id} and org_id = ${authz.user.orgId}
-      `))
-    const source = found.rows[0]
+      `, 'objects'))
+    const source = found[0]
     if (!source) return notFound("record")
     const denied = guardSubsidiaryScope(authz, source.subsidiaryId)
     if (denied) return denied

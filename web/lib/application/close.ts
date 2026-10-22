@@ -111,8 +111,8 @@ async function closeRun(
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
      where r.id = ${runId} and r.org_id = ${context.authz.user.orgId}
      limit 1
-  `)
-  const row = result.rows[0]
+  `, "objects")
+  const row = result[0]
   if (!row) throw notFound('close run')
   return closeRunRow(row)
 }
@@ -153,8 +153,8 @@ export async function listCloseRuns(
        ${input.status ? sql`and r.status = ${input.status}` : sql``}
      order by p.ends_on desc, r.started_at desc
      limit ${limit}
-  `)
-  return result.rows.map(closeRunRow)
+  `, "objects")
+  return result.map(closeRunRow)
 }
 
 const LOCK_STATES = new Set(["open", "soft_closed", "closed"]);
@@ -193,12 +193,12 @@ export async function listPeriodLocks(
        where ${where}
        order by p.ends_on desc, l.subsidiary_id nulls first, l.module
        limit ${limit}
-    `),
-    db.execute<{ n: string }>(sql`select count(*) as n from period_locks l where ${where}`),
+    `, "objects"),
+    db.execute<{ n: string }>(sql`select count(*) as n from period_locks l where ${where}`, "objects"),
   ]);
   return {
-    total: Number(count.rows[0]?.n ?? 0),
-    locks: rows.rows.map((lock) => ({
+    total: Number(count[0]?.n ?? 0),
+    locks: rows.map((lock) => ({
       id: lock.id,
       period: lock.period_name,
       periodRef: periodRef(lock),
@@ -318,12 +318,12 @@ export async function listPeriodReopenRequests(
        where ${where}
        order by r.created_at desc
        limit ${limit} offset ${offset}
-    `),
-    db.execute<{ n: string }>(sql`select count(*) as n from close_reopen_requests r where ${where}`),
+    `, "objects"),
+    db.execute<{ n: string }>(sql`select count(*) as n from close_reopen_requests r where ${where}`, "objects"),
   ]);
   return {
-    total: Number(count.rows[0]?.n ?? 0),
-    requests: rows.rows.map((row) => ({
+    total: Number(count[0]?.n ?? 0),
+    requests: rows.map((row) => ({
       id: row.id,
       period: row.period_name,
       periodRef: periodRef(row),
@@ -600,11 +600,9 @@ export async function submitReopenRequest(
   result: { requestId: string; gated: boolean }
 }> {
   assertApplicationPermission(context, "close.reopen");
-  const scope = (
-    await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from close_reopen_requests where org_id=${context.authz.user.orgId} and id=${input.requestId}`,
-    )
-  ).rows[0]
+  const scope = (await db.execute<{ subsidiaryId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId" from close_reopen_requests where org_id=${context.authz.user.orgId} and id=${input.requestId}`, "objects",
+    ))[0]
   if (!scope) throw notFound('reopen request')
   assertSubsidiaryAccess(context, scope.subsidiaryId)
   const outcome = await executeIdempotent({

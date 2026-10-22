@@ -173,13 +173,13 @@ async function stagedNotice(invoiceId: string): Promise<{
 }> {
   const log = await db.execute(sql`
     select * from dunning_log where document_id = ${invoiceId}
-  `);
+  `, "objects");
   const outbox = await db.execute<{ occurrenceKey: string; payload: Record<string, unknown> }>(sql`
     select occurrence_key as "occurrenceKey", payload
       from scheduler_outbox
      where kind = 'flow_email' and occurrence_key like ${`dunning:${invoiceId}:%`}
-  `);
-  return { logRows: log.rows, outboxRows: outbox.rows };
+  `, "objects");
+  return { logRows: log, outboxRows: outbox };
 }
 
 /**
@@ -211,11 +211,9 @@ async function seedDunningEmailEvidence(
 }
 
 async function dunningClaim(invoiceId: string): Promise<{ id: string; status: string; detail: string | null }> {
-  const row = (
-    await db.execute<{ id: string; status: string; detail: string | null }>(sql`
+  const row = (await db.execute<{ id: string; status: string; detail: string | null }>(sql`
       select id, status, detail from dunning_log where document_id = ${invoiceId}
-    `)
-  ).rows[0]!;
+    `, "objects"))[0]!;
   return { id: row.id, status: row.status, detail: row.detail };
 }
 
@@ -531,13 +529,11 @@ test("a fully paid invoice never generates a reminder", { skip: !DB }, async () 
 
     // Settle the invoice in full the way the kernel does: a posted payment
     // entry whose open AR leg is applied against the invoice's open AR leg.
-    const openLine = (
-      await db.execute<{ id: string }>(sql`
+    const openLine = (await db.execute<{ id: string }>(sql`
         select jl.id from journal_lines jl
          join documents d on d.posted_entry_id = jl.entry_id
         where d.id = ${invoiceId} and jl.is_open_item
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
     const settlementEntryId = randomUUID();
     const settlementLineId = randomUUID();
     await db.execute(sql`
@@ -820,15 +816,13 @@ test("the dunning log guard enforces the delivery state machine", { skip: !DB },
     // (bypass off) so the guard — not the harness bypass — arbitrates.
     // Each claim takes its own stage slot: one row per (document, stage).
     const openClaim = async (status: string): Promise<string> =>
-      (
-        await withOrg(org.orgId, () =>
+      (await withOrg(org.orgId, () =>
           db.execute<{ id: string }>(sql`
             insert into dunning_log (org_id, document_id, policy_id, stage_id, status)
             values (${org.orgId}, ${seeded.invoiceId}, ${seeded.policyId}, ${randomUUID()}, ${status})
             returning id
-          `),
-        )
-      ).rows[0]!.id;
+          `, "objects"),
+        ))[0]!.id;
     const move = (id: string, status: string) =>
       withOrg(org.orgId, () =>
         db.execute(sql`update dunning_log set status = ${status} where id = ${id} and org_id = ${org.orgId}`),
@@ -959,9 +953,9 @@ test("the runner leaves the claim staged and stamps its id in the outbox meta", 
     assert.equal(first.sent, 1);
     assert.deepEqual(first.notices.map((n) => n.status), ["staged"]);
 
-    const claims = (await db.execute<{ id: string; status: string }>(sql`
+    const claims = await db.execute<{ id: string; status: string }>(sql`
       select id, status from dunning_log where document_id = ${invoiceId}
-    `)).rows;
+    `, "objects");
     assert.equal(claims.length, 1);
     assert.equal(claims[0]!.status, "staged");
 
@@ -1260,29 +1254,23 @@ test("provider acceptance settles a staged claim to sent and retires the rung", 
       email: "billing@acme.test",
     });
     await runDunningForOrg(org.orgId, "2026-07-10");
-    const claimId = (
-      await db.execute<{ id: string }>(sql`
+    const claimId = (await db.execute<{ id: string }>(sql`
         select id from dunning_log where document_id = ${invoiceId}
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
 
     // The staged claim carries no sent_at until the provider accepts.
-    const before = (
-      await db.execute<{ sent_at: Date | null }>(sql`
+    const before = (await db.execute<{ sent_at: Date | null }>(sql`
         select sent_at from dunning_log where id = ${claimId}
-      `)
-    ).rows[0]!;
+      `, "objects"))[0]!;
     assert.equal(before.sent_at, null);
 
     // The email worker's acceptance is the only writer that may move a
     // staged claim to sent — the runner never does — and it stamps sent_at:
     // a populated sent_at always means the customer got the letter.
     assert.equal(await markDunningClaimSent(org.orgId, claimId), true);
-    const settled = (
-      await db.execute<{ status: string; sent_at: Date | null }>(sql`
+    const settled = (await db.execute<{ status: string; sent_at: Date | null }>(sql`
         select status, sent_at from dunning_log where id = ${claimId}
-      `)
-    ).rows[0]!;
+      `, "objects"))[0]!;
     assert.equal(settled.status, "sent");
     assert.ok(settled.sent_at !== null && !Number.isNaN(new Date(settled.sent_at).getTime()), "a delivered letter stamps sent_at");
 
@@ -1317,11 +1305,9 @@ test("provider rejection settles a staged claim to failed and the next tick retr
     // The worker records the provider's rejection on the claim — the detail
     // names what the provider said, and the rung stays out of the fired set.
     assert.equal(await markDunningClaimFailed(org.orgId, claimId, "550 mailbox unavailable"), true);
-    const rejected = (
-      await db.execute<{ status: string; detail: string; sent_at: Date | null }>(sql`
+    const rejected = (await db.execute<{ status: string; detail: string; sent_at: Date | null }>(sql`
         select status, detail, sent_at from dunning_log where id = ${claimId}
-      `)
-    ).rows[0]!;
+      `, "objects"))[0]!;
     assert.equal(rejected.status, "failed");
     assert.equal(rejected.detail, "550 mailbox unavailable");
     // The rejection never stamps delivery evidence: sent_at stays NULL.
@@ -1365,7 +1351,7 @@ test("sent_at stays NULL until the letter is actually delivered", { skip: !DB },
     const stampOf = async () =>
       (await db.execute<{ sent_at: Date | null }>(sql`
         select sent_at from dunning_log where document_id = ${invoiceId}
-      `)).rows[0]!.sent_at;
+      `, "objects"))[0]!.sent_at;
 
     await runDunningForOrg(org.orgId, "2026-07-10");
     assert.equal((await dunningClaim(invoiceId)).status, "suppressed");

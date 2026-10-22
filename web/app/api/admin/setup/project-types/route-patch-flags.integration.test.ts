@@ -49,10 +49,10 @@ const patchJson = (body: unknown) =>
 async function typeRow(orgId: string, id: string) {
   const r = await withBypassContext(() =>
     db.execute<{ name: string; is_active: boolean; sort_order: number }>(
-      sql`select name, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`,
+      sql`select name, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`, "objects",
     ),
   );
-  return r.rows[0]!;
+  return r[0]!;
 }
 
 test("project-type PATCH refuses non-boolean isActive without writing", async () => {

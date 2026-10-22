@@ -59,11 +59,11 @@ async function fixture() {
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
      where id = ${org.orgId}`)
-  const statuses = (await db.execute<{ id: string; key: string }>(sql`
+  const statuses = await db.execute<{ id: string; key: string }>(sql`
     insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
     values (${org.orgId}, 'open', 'Open', 10, false, false, true),
            (${org.orgId}, 'closed_lost', 'Closed lost', 0, true, false, true)
-    returning id, key`)).rows
+    returning id, key`, 'objects')
   const openId = statuses.find((s) => s.key === 'open')!.id
   const closedLostId = statuses.find((s) => s.key === 'closed_lost')!.id
   return { org, openId, closedLostId }
@@ -73,13 +73,13 @@ async function seedOpp(orgId: string, number: string, title: string, statusId: s
   return (await db.execute<{ id: string }>(sql`
     insert into crm_opportunities (org_id, opportunity_number, title, status_id, currency, is_active)
     values (${orgId}, ${number}, ${title}, ${statusId}, 'CAD', false)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
 }
 
 async function revision(id: string): Promise<string> {
   const row = (await db.execute<{ revision: string }>(sql`
     select (revision_seq)::text as revision
-      from crm_opportunities where id = ${id}`)).rows[0]!
+      from crm_opportunities where id = ${id}`, 'objects'))[0]!
   return row.revision
 }
 
@@ -103,8 +103,8 @@ async function listedNumbers(orgId: string): Promise<string[]> {
     orgId,
     null,
   )
-  const rows = (await withOrgContext(orgId, () => db.execute<{ opportunity_number: string }>(sql`
-    select o.opportunity_number from crm_opportunities o ${OPPORTUNITY_BASE_JOINS} where ${where}`))).rows
+  const rows = await withOrgContext(orgId, () => db.execute<{ opportunity_number: string }>(sql`
+    select o.opportunity_number from crm_opportunities o ${OPPORTUNITY_BASE_JOINS} where ${where}`, 'objects'))
   return rows.map((r) => r.opportunity_number)
 }
 
@@ -120,7 +120,7 @@ test('closing an account-less titled opportunity activates it into the Status=Al
     const saved = await patch(oppId, { statusId: closedLostId, winLossReason: 'Lost on price' })
     assert.equal(saved.status, 200, saved.body)
     const active = (await db.execute<{ is_active: boolean }>(sql`
-      select is_active from crm_opportunities where id = ${oppId}`)).rows[0]!.is_active
+      select is_active from crm_opportunities where id = ${oppId}`, 'objects'))[0]!.is_active
     assert.equal(active, true, 'titled closed record activates without an account')
     assert.deepEqual(await listedNumbers(org.orgId), ['OPP-SIM-2'], 'activated record lists under Status=All')
   } finally {
@@ -137,7 +137,7 @@ test('a placeholder-titled stub stays hidden after an open save', async () => {
     const saved = await patch(oppId, { statusId: openId })
     assert.equal(saved.status, 200, saved.body)
     const active = (await db.execute<{ is_active: boolean }>(sql`
-      select is_active from crm_opportunities where id = ${oppId}`)).rows[0]!.is_active
+      select is_active from crm_opportunities where id = ${oppId}`, 'objects'))[0]!.is_active
     assert.equal(active, false, 'untitled stub must not leak into the list')
     assert.deepEqual(await listedNumbers(org.orgId), [])
   } finally {

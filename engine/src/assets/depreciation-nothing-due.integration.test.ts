@@ -79,7 +79,7 @@ test("a mid-period run names the next due line instead of an all-zero silence", 
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${org.orgId} and e.id = ${end.entries[0]!.entryId}
-       group by e.entry_number, e.memo`))).rows[0]!;
+       group by e.entry_number, e.memo`, "objects")))[0]!;
     assert.match(journal.entry_number, /^DEP-NEXTDUE-1-2026-07-/);
     assert.equal(journal.memo, "Depreciation — Mid-period asset (P07 FY2026)");
     assert.deepEqual(journal.line_memos, ["Depreciation P07 FY2026", "Depreciation P07 FY2026"]);

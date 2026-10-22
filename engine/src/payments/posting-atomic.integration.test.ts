@@ -65,9 +65,9 @@ test(
                  (select count(*)::int from journal_entries
                    where source_document_id = ${payment.id}) as entry_count
             from documents where id = ${payment.id}
-        `)),
+        `, "objects")),
       );
-      assert.deepEqual(state.rows[0], {
+      assert.deepEqual(state[0], {
         status: "draft",
         submitted_at: null,
         posted_entry_id: null,

@@ -41,14 +41,14 @@ async function packet(f: AdoptionFixture, amounts: Record<string, string>, facts
   const bytes = Buffer.from(JSON.stringify({ employeePartyId: f.employeeId, subsidiaryId, taxYear: 2026, amounts, ...facts, allocations }));
   const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
   assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-    values(${folderId},${f.orgId},'Original statutory report',true,${f.actorId},${f.actorId},${f.actorId}) returning id`)).rows.length, 1);
+    values(${folderId},${f.orgId},'Original statutory report',true,${f.actorId},${f.actorId},${f.actorId}) returning id`, 'objects')).length, 1);
   assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-    values(${sourceFileId},${f.orgId},${folderId},'original-opening.json','application/json',${bytes.length},${f.actorId},${f.actorId}) returning id`)).rows.length, 1);
+    values(${sourceFileId},${f.orgId},${folderId},'original-opening.json','application/json',${bytes.length},${f.actorId},${f.actorId}) returning id`, 'objects')).length, 1);
   assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-    values(${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${f.actorId}) returning id`)).rows.length, 1);
-  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${sourceVersionId},${bytes}) returning version_id`)).rows.length, 1);
+    values(${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${f.actorId}) returning id`, 'objects')).length, 1);
+  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${sourceVersionId},${bytes}) returning version_id`, 'objects')).length, 1);
   assert.equal((await db.execute(sql`update files set current_version_id=${sourceVersionId}
-    where org_id=${f.orgId} and id=${sourceFileId} returning id`)).rows.length, 1);
+    where org_id=${f.orgId} and id=${sourceFileId} returning id`, 'objects')).length, 1);
   const input = { orgId: f.orgId, actorId: f.actorId, employeePartyId: f.employeeId, taxYear: 2026, sourceFileId, allowedSubsidiaryIds: null };
   const employer = await readOpeningEmployerContext(input), levy = await readOpeningLevySourceContext(input);
   assert.ok(employer.record); assert.ok(levy.record);
@@ -75,7 +75,7 @@ for (const originalCountry of ['CA', 'US'] as const) {
       let allocations = caAllocations;
       if (originalCountry === 'US') {
         assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD'
-          where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length, 1);
+          where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`, 'objects')).length, 1);
         const ein = await seedUsEinAccount(f.orgId, f.actorId, f.subsidiaryId, '12-3456789');
         // The original US report states its unemployment wages for FUTA and
         // for the state that taxed them.
@@ -89,16 +89,16 @@ for (const originalCountry of ['CA', 'US'] as const) {
         taxYear: 2026, subsidiaryId: f.subsidiaryId }), /no complete statutory levy source allocation/);
       await qualifyOpeningLevySourceAuthority(certified);
       assert.equal((await db.execute(sql`update subsidiaries set country='CA',base_currency='CAD'
-        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length, 1);
+        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`, 'objects')).length, 1);
       const current = await currentRun(f);
       const expected = originalCountry === 'US' ? zero : { pensionable: '12345.6789', insurable: '9876.5432', cpp: '123.4567',
         cpp2: '11.0001', ei: '23.4567', qpip: '12.3456', qpip_employer: '17.0001', non_periodic: '123.4567',
         pension_deductions_bonus: '10.0001', f5b: '1.0001', qc_csb: '2.0001' };
       assert.deepEqual(await employeeYtd(current), expected);
       assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD'
-        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length, 1);
+        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`, 'objects')).length, 1);
       assert.equal((await db.execute(sql`delete from employee_payroll_profiles
-        where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length, 1);
+        where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`, 'objects')).length, 1);
       assert.deepEqual(await employeeYtd(current), expected, 'current country, currency and profile cannot reinterpret the original source');
       await assert.rejects(employeeYtd({ ...current, subsidiaryId: randomUUID() }), /actual pay-run legal employer/);
     }); } finally { await withBypassContext(() => dropScratchOrgReporting(f.orgId)); }
@@ -123,7 +123,7 @@ test('native Canadian opening for another original legal payer contributes no cu
   try { await withOrgContext(f.orgId, async () => {
     const other = randomUUID();
     assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-      values(${other},${f.orgId},${f.subsidiaryId},'Prior legal payer','CAD','CA') returning id`)).rows.length, 1);
+      values(${other},${f.orgId},${f.subsidiaryId},'Prior legal payer','CAD','CA') returning id`, 'objects')).length, 1);
     await seedWorkerEmployment(f.orgId, f.employeeId, other);
     const amounts = { pensionableYtd: '12345.6789', insurableYtd: '9876.5432', taxableYtd: '13000.0001', nonPeriodicYtd: '123.4567' };
     await save(f, amounts);
@@ -138,7 +138,7 @@ test('a retained unsigned all-zero native opening is inert for Canadian statutor
   const f = await withBypassContext(setup);
   try { await withOrgContext(f.orgId, async () => {
     assert.equal((await db.execute(sql`insert into payroll_opening_balances(org_id,employee_party_id,tax_year,created_by,updated_by)
-      values(${f.orgId},${f.employeeId},2026,${f.actorId},${f.actorId}) returning id`)).rows.length, 1);
+      values(${f.orgId},${f.employeeId},2026,${f.actorId},${f.actorId}) returning id`, 'objects')).length, 1);
     const original = await readEmployeeOpeningLevySources(db, { orgId: f.orgId, employeePartyId: f.employeeId, taxYear: 2026,
       subsidiaryId: f.subsidiaryId, beforeDate: '2026-06-15' });
     assert.equal(original.hasOpening, true); assert.equal(original.hasMaterialHistory, false); assert.equal(original.facts, null);

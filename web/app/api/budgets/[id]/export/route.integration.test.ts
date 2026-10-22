@@ -36,14 +36,14 @@ test('budget export carries the legal entity per line', async () => {
     state.allowed = null
     const subB = (await db.execute<{ id: string; name: string }>(
       sql`insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-          values (${org.orgId}, ${org.subsidiaryId}, 'Export Sub B', 'CAD', 'CA') returning id, name`,
-    )).rows[0]!
+          values (${org.orgId}, ${org.subsidiaryId}, 'Export Sub B', 'CAD', 'CA') returning id, name`, 'objects',
+    ))[0]!
     const rootName = (await db.execute<{ name: string }>(
-      sql`select name from subsidiaries where id = ${org.subsidiaryId}`,
-    )).rows[0]!.name
+      sql`select name from subsidiaries where id = ${org.subsidiaryId}`, 'objects',
+    ))[0]!.name
     const fy = (await db.execute<{ fiscal_year: number }>(
-      sql`select fiscal_year from accounting_periods where id = ${org.periodId}`,
-    )).rows[0]!.fiscal_year
+      sql`select fiscal_year from accounting_periods where id = ${org.periodId}`, 'objects',
+    ))[0]!.fiscal_year
     const scenarioId = randomUUID()
     await db.execute(sql`
       insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -78,11 +78,11 @@ test('budget export discloses only caller-visible entities', async () => {
     state.actorId = randomUUID()
     const subB = (await db.execute<{ id: string; name: string }>(
       sql`insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-          values (${org.orgId}, ${org.subsidiaryId}, 'Hidden Export Sub', 'CAD', 'CA') returning id, name`,
-    )).rows[0]!
+          values (${org.orgId}, ${org.subsidiaryId}, 'Hidden Export Sub', 'CAD', 'CA') returning id, name`, 'objects',
+    ))[0]!
     const fy = (await db.execute<{ fiscal_year: number }>(
-      sql`select fiscal_year from accounting_periods where id = ${org.periodId}`,
-    )).rows[0]!.fiscal_year
+      sql`select fiscal_year from accounting_periods where id = ${org.periodId}`, 'objects',
+    ))[0]!.fiscal_year
     const scenarioId = randomUUID()
     await db.execute(sql`
       insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)

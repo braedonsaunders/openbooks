@@ -101,9 +101,9 @@ async function loadWorkerCompGroups(
 ): Promise<{ rows: ElementOf<PartyDrawerProps['workerCompGroups']>[] }> {
   if (!(await isFeatureEnabled(orgId, 'payroll'))) return { rows: [] }
   const result = await db.execute<ElementOf<PartyDrawerProps['workerCompGroups']>>(
-    sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`,
+    sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`, 'objects',
   )
-  return { rows: result.rows }
+  return { rows: result }
 }
 
 // A party is classified only by its active canonical role row. A party with
@@ -260,7 +260,7 @@ export async function loadParties(
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `),
+    `, 'objects'),
     db.execute<PartyCounts>(sql`
       select count(*) as total,
              count(*) filter (where ${ROLE_CONDITIONS.customer}) as customers,
@@ -272,9 +272,9 @@ export async function loadParties(
         from parties p
        where p.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} ${showInactive ? sql`` : sql`and p.is_active`}
-    `),
+    `, 'objects'),
   ])
-  const c = counts.rows[0] ?? {
+  const c = counts[0] ?? {
     total: 0,
     customers: 0,
     vendors: 0,
@@ -287,11 +287,9 @@ export async function loadParties(
   const filteredTotal =
     params.q || role
       ? Number(
-          (
-            await db.execute<{ n: string | number }>(
-              sql`select count(*) as n from parties p where ${where}`,
-            )
-          ).rows[0]?.n ?? 0,
+          (await db.execute<{ n: string | number }>(
+              sql`select count(*) as n from parties p where ${where}`, 'objects',
+            ))[0]?.n ?? 0,
         )
       : total
 
@@ -367,8 +365,8 @@ export async function loadParties(
            where org_id = ${orgId} and customer_party_id = ${partyId}
              and status in ('active', 'frozen')
              ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-           group by currency`)
-      : { rows: [] as { currency: string; totalMinor: string }[] },
+           group by currency`, 'objects')
+      : [] as { currency: string; totalMinor: string }[],
     isFeatureEnabled(orgId, 'consolidatedBilling'),
   ])
   const resolvedPartyForm =
@@ -529,7 +527,7 @@ export async function loadParties(
           taxIdentityFormTypes: [...FORM_TYPES],
           storedValue: storedValueEnabled && can(authz, 'stored_value.read') && openParty?.customer != null
             ? {
-              balances: storeCreditBalances.rows.map((row) => ({
+              balances: storeCreditBalances.map((row) => ({
                 currency: String(row.currency),
                 total: fromUnits(BigInt(row.totalMinor)),
               })),
@@ -611,7 +609,7 @@ export async function loadParties(
     columnEmail: tc('labels.email'),
     columnPhone: t('list.phone'),
     columnStatus: tc('labels.status'),
-    rows: parties.rows.map((p) => ({
+    rows: parties.map((p) => ({
       id: String(p.id),
       name: p.display_name,
       href: buildListDrawerHref('/parties', sp, 'party', String(p.id)),

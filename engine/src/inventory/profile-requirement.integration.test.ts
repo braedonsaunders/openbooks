@@ -20,14 +20,14 @@ async function seedUnprofiledInventoryItem(orgId: string): Promise<string> {
   const itemId = randomUUID();
   const accounts = await db.execute<{ revenue: string; cogs: string }>(sql`
     select (select id from accounts where org_id = ${orgId} order by number limit 1) as revenue,
-           (select id from accounts where org_id = ${orgId} order by number limit 1) as cogs`);
+           (select id from accounts where org_id = ${orgId} order by number limit 1) as cogs`, "objects");
   await db.execute(sql`
     insert into items (id, org_id, kind, code, name, income_account_id, expense_account_id, is_active, custom)
     values (${itemId}, ${orgId}, 'inventory', ${`NOPROFILE-${itemId.slice(0, 8)}`}, 'Unprofiled widget',
-            ${accounts.rows[0]!.revenue}, ${accounts.rows[0]!.cogs}, true, '{}'::jsonb)`);
+            ${accounts[0]!.revenue}, ${accounts[0]!.cogs}, true, '{}'::jsonb)`);
   const profile = await db.execute(sql`
-    select 1 from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`);
-  assert.equal(profile.rows.length, 0, "the fixture item must have no costing profile");
+    select 1 from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`, "objects");
+  assert.equal(profile.length, 0, "the fixture item must have no costing profile");
   return itemId;
 }
 
@@ -74,8 +74,8 @@ test("a vendor bill for an inventory item without a costing profile cannot post"
                join document_lines line on line.id = movement.document_line_id
               where movement.org_id = ${org.orgId} and line.document_id = ${documentId}
                 and movement.kind = 'receipt') as receipts
-        from documents where id = ${documentId} and org_id = ${org.orgId}`);
-    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0, receipts: 0 });
+        from documents where id = ${documentId} and org_id = ${org.orgId}`, "objects");
+    assert.deepEqual(untouched[0], { status: "approved", entries: 0, receipts: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -120,8 +120,8 @@ test("a standalone invoice for an inventory item without a costing profile canno
                join document_lines line on line.id = movement.document_line_id
               where movement.org_id = ${org.orgId} and line.document_id = ${documentId}
                 and movement.kind = 'issue') as issues
-        from documents where id = ${documentId} and org_id = ${org.orgId}`);
-    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0, issues: 0 });
+        from documents where id = ${documentId} and org_id = ${org.orgId}`, "objects");
+    assert.deepEqual(untouched[0], { status: "approved", entries: 0, issues: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -171,8 +171,8 @@ test("a standalone invoice for a profiled inventory item without a resolvable st
                join document_lines line on line.id = movement.document_line_id
               where movement.org_id = ${org.orgId} and line.document_id = ${documentId}
                 and movement.kind = 'issue') as issues
-        from documents where id = ${documentId} and org_id = ${org.orgId}`);
-    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0, issues: 0 });
+        from documents where id = ${documentId} and org_id = ${org.orgId}`, "objects");
+    assert.deepEqual(untouched[0], { status: "approved", entries: 0, issues: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -228,8 +228,8 @@ test("an invoice governed by sales fulfillment posts without a line stock locati
                join document_lines line on line.id = movement.document_line_id
               where movement.org_id = ${org.orgId} and line.document_id = ${documentId}
                 and movement.kind = 'issue') as issues
-        from documents where id = ${documentId} and org_id = ${org.orgId}`);
-    assert.deepEqual(posted.rows[0], { status: "posted", entries: 1, issues: 0 });
+        from documents where id = ${documentId} and org_id = ${org.orgId}`, "objects");
+    assert.deepEqual(posted[0], { status: "posted", entries: 1, issues: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

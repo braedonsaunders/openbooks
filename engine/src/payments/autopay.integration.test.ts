@@ -121,14 +121,14 @@ async function seedInvoice(fixture: AutopayFixture, memo: string, total: string,
 /** Active default stripe method on file for the scratch customer. */
 async function seedMethod(fixture: AutopayFixture): Promise<string> {
   const { org, userId } = fixture;
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     insert into customer_payment_methods
       (org_id, party_id, provider, provider_customer_id, provider_method_id,
        brand, last4, exp_month, exp_year, is_default, status, created_by, updated_by)
     values (${org.orgId}, ${org.customerId}, 'stripe', 'cus_test', 'pm_test',
             'visa', '4242', 12, 2030, true, 'active', ${userId}, ${userId})
     returning id
-  `)).rows;
+  `, "objects");
   return rows[0]!.id;
 }
 
@@ -137,7 +137,7 @@ async function payManually(fixture: AutopayFixture, invoiceId: string): Promise<
   const { org, userId } = fixture;
   const invoice = (await db.execute<{ open_balance: string; currency: string; subsidiary_id: string }>(sql`
     select open_balance, currency, subsidiary_id from documents where id = ${invoiceId} and org_id = ${org.orgId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   const openItems = await openItemsForParty(org.customerId, "ar", org.orgId);
   const item = openItems.find((i) => i.documentId === invoiceId)!;
   const payment = await createPaymentDocument({
@@ -178,7 +178,7 @@ const succeedAll = () => ({ status: "succeeded" }) as FakeOutcome;
 async function openBalance(orgId: string, invoiceId: string): Promise<string> {
   return (await db.execute<{ open_balance: string }>(sql`
     select open_balance from documents where id = ${invoiceId} and org_id = ${orgId}
-  `)).rows[0]!.open_balance;
+  `, "objects"))[0]!.open_balance;
 }
 
 
@@ -201,7 +201,7 @@ test("a due invoice is charged once; success posts the receipt and closes the in
     const attempt = (await db.execute<{ status: string; receipt_document_id: string | null; amount: string }>(sql`
       select status, receipt_document_id, amount from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${invoiceId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(attempt.status, "succeeded");
     assert.ok(attempt.receipt_document_id);
     assert.equal(attempt.amount, "100.0000");
@@ -242,8 +242,8 @@ test("a collected autopay receipt waits for tenant gates and resumes without ano
     const again = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: fake.charge });
     assert.equal(again.succeeded, 0);
     assert.equal((await attemptFor(org.orgId, invoiceId)).receipt_document_id, attempt.receipt_document_id);
-    const gate = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId}
-      and subject_kind='customer_payment' and subject_id=${attempt.receipt_document_id} and status='pending'`)).rows;
+    const gate = await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId}
+      and subject_kind='customer_payment' and subject_id=${attempt.receipt_document_id} and status='pending'`, "objects");
     assert.equal(gate.length, 1);
     await decideGate({gateId:gate[0]!.id,userId:reviewer,decision:"approved"});
     const resumed = await runAutopayCollectionForOrg(org.orgId, { asOf: org.date, charge: fake.charge });
@@ -252,7 +252,7 @@ test("a collected autopay receipt waits for tenant gates and resumes without ano
     assert.equal((await attemptFor(org.orgId, invoiceId)).status, "succeeded");
     assert.equal(await openBalance(org.orgId, invoiceId), "0.0000");
     const receipts = (await db.execute<{count:number}>(sql`select count(*)::int as count from documents
-      where org_id=${org.orgId} and kind='customer_payment'`)).rows[0]!;
+      where org_id=${org.orgId} and kind='customer_payment'`, "objects"))[0]!;
     assert.equal(receipts.count, 1);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -273,7 +273,7 @@ test("revoked enrollment authority refuses autopay before the provider is charge
     assert.equal(fake.calls.length, 0);
     assert.ok(result.orgErrors.length || result.notices.some(notice => notice.status === "failed"));
     assert.equal(await openBalance(org.orgId, invoiceId), "100.0000");
-    assert.equal((await db.execute(sql`select id from collection_attempts where org_id=${org.orgId}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from collection_attempts where org_id=${org.orgId}`, "objects")).length, 0);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -281,7 +281,7 @@ async function attemptFor(orgId: string, invoiceId: string): Promise<ChargeAttem
   return (await db.execute<ChargeAttemptRow>(sql`
     select id, status, provider_ref, receipt_document_id, decline_code from collection_attempts
      where org_id = ${orgId} and invoice_id = ${invoiceId} and retry_position = 0
-  `)).rows[0]!;
+  `, "objects"))[0]!;
 }
 
 test("one invoice's failed outcome write cannot erase another's charge; the next tick replays it under the same key", { skip: !DB }, async () => {
@@ -411,7 +411,7 @@ test("a soft decline retries on schedule; a hard decline stops without retry", {
     const softAttempt = (await db.execute<{ status: string; decline_kind: string | null; next_retry_on: string | null }>(sql`
       select status, decline_kind, next_retry_on::text as "next_retry_on" from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${softId} and retry_position = 0
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(softAttempt.status, "failed");
     assert.equal(softAttempt.decline_kind, "soft");
     assert.equal(softAttempt.next_retry_on, "2026-07-16");
@@ -423,7 +423,7 @@ test("a soft decline retries on schedule; a hard decline stops without retry", {
     const hardAttempt = (await db.execute<{ status: string; decline_kind: string | null; next_retry_on: string | null }>(sql`
       select status, decline_kind, next_retry_on::text as "next_retry_on" from collection_attempts
        where org_id = ${org.orgId} and invoice_id = ${hardId} and retry_position = 0
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(hardAttempt.decline_kind, "hard");
     assert.equal(hardAttempt.next_retry_on, null);
 
@@ -435,7 +435,7 @@ test("a soft decline retries on schedule; a hard decline stops without retry", {
     // The hard invoice never retried: still exactly one attempt.
     const hardAttempts = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from collection_attempts where org_id = ${org.orgId} and invoice_id = ${hardId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(hardAttempts, "1");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -460,7 +460,7 @@ test("an invoice paid by another channel is never charged", { skip: !DB }, async
     assert.equal(fake.calls.length, 1);
     const paidAttempts = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from collection_attempts where org_id = ${org.orgId} and invoice_id = ${paidId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(paidAttempts, "0");
     assert.equal(await openBalance(org.orgId, openId), "0.0000");
   } finally {
@@ -497,12 +497,12 @@ test("exhausting the schedule suspends the subscription; a later success reactiv
     assert.equal(await openBalance(org.orgId, invoiceId), "70.0000");
     const suspended = (await db.execute<{ status: string }>(sql`
       select status from subscriptions where id = ${subscriptionId} and org_id = ${org.orgId}
-    `)).rows[0]!.status;
+    `, "objects"))[0]!.status;
     assert.equal(suspended, "suspended");
     const suspensionAudit = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
        where org_id = ${org.orgId} and table_name = 'subscriptions' and row_id = ${subscriptionId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(suspensionAudit, "1");
 
     // A later success on a new invoice reactivates billing.
@@ -513,7 +513,7 @@ test("exhausting the schedule suspends the subscription; a later success reactiv
     assert.equal(day2.reactivated, 1);
     const reactivated = (await db.execute<{ status: string }>(sql`
       select status from subscriptions where id = ${subscriptionId} and org_id = ${org.orgId}
-    `)).rows[0]!.status;
+    `, "objects"))[0]!.status;
     assert.equal(reactivated, "active");
     assert.equal(await openBalance(org.orgId, secondInvoiceId), "0.0000");
   } finally {
@@ -553,13 +553,13 @@ test("backup methods order by fallback priority with creation time breaking ties
   const { org, userId } = await seedAutopayOrg();
   try {
     const seedBackup = async (providerMethodId: string): Promise<string> => {
-      const rows = (await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
         insert into customer_payment_methods
           (org_id, party_id, provider, provider_customer_id, provider_method_id,
            brand, last4, exp_month, exp_year, is_default, status, created_by, updated_by)
         values (${org.orgId}, ${org.customerId}, 'stripe', 'cus_test', ${providerMethodId},
                 'visa', '4242', 12, 2030, false, 'active', ${userId}, ${userId})
-        returning id`)).rows;
+        returning id`, "objects");
       return rows[0]!.id;
     };
     // Charge order, as the collector reads it: the default first, then

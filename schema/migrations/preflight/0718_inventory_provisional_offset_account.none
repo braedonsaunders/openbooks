@@ -1,1 +1,0 @@
-The added column is nullable and every retained deficit keeps a null account, so the foreign key accepts every existing row; no deficit, settlement or journal evidence is rewritten.

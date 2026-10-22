@@ -71,14 +71,12 @@ test("a malformed allocation target id fails closed as 404, never a 500", async 
   try {
     const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     state.user = { orgId: org.orgId, id: adminId };
-    const subsidiaryId = (
-      await withBypassContext(
+    const subsidiaryId = (await withBypassContext(
         () =>
           db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`,
+            sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`, "objects",
           ),
-      )
-    ).rows[0]!.id;
+      ))[0]!.id;
     state.allowed = new Set([subsidiaryId]);
     const documentId = await withBypassContext(() =>
       seedDraftDocument(org.orgId, { kind: "vendor_payment", createdBy: adminId }),

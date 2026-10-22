@@ -67,11 +67,9 @@ async function put(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function preferenceRows(): Promise<Array<{ layoutId: string | null }>> {
-  return (
-    await db.execute<{ layoutId: string | null }>(sql`
+  return await db.execute<{ layoutId: string | null }>(sql`
     select layout_id as "layoutId" from user_form_preferences
-     where org_id = ${state.orgId} and user_id = ${state.actorId} and record_type = 'vendor_bill'`)
-  ).rows;
+     where org_id = ${state.orgId} and user_id = ${state.actorId} and record_type = 'vendor_bill'`, "objects");
 }
 
 test(
@@ -79,12 +77,10 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actorId = (
-        await db.execute<{ id: string }>(sql`
+      const actorId = (await db.execute<{ id: string }>(sql`
         insert into users (org_id, email, name, password_hash, is_active)
         values (${org.orgId}, 'formpref-guard@test.local', 'Form Pref Guard', 'x', false)
-        returning id`)
-      ).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
       state.orgId = org.orgId;
       state.actorId = actorId;
       state.roles = [{ key: "accountant", name: "Accountant" }];

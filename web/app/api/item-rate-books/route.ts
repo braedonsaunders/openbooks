@@ -117,14 +117,14 @@ export const POST = defineRoute({
          where org_id = ${gate.user.orgId} and rate_book_id = ${bookId} and status = 'active'
          order by effective_from desc
          limit 1
-         for update`)).rows[0]
+         for update`, 'objects'))[0]
       if (latest && effectiveFrom <= String(latest.effective_from).slice(0, 10)) {
         throw new Error(`The new rate version must start after ${String(latest.effective_from).slice(0, 10)}. Choose a later effective date.`)
       }
       const previousLaborPolicy = latest
         ? (await tx.execute<{ derivation_policy: 'explicit' | 'time_type_multipliers' }>(sql`
             select derivation_policy from labor_rate_version_policies
-             where org_id = ${gate.user.orgId} and version_id = ${latest.id}`)).rows[0]
+             where org_id = ${gate.user.orgId} and version_id = ${latest.id}`, 'objects'))[0]
         : undefined
       // Replacing prices retains the book's labor registration unless the
       // operator explicitly changes its policy on this new version.
@@ -135,13 +135,13 @@ export const POST = defineRoute({
         ? (await tx.execute<{ id: string; kind: string }>(sql`
             select id, kind from items
              where org_id = ${gate.user.orgId} and id in (${sql.join(itemIds.map((itemId) => sql`${itemId}`), sql`, `)})
-             for update`)).rows
+             for update`, 'objects'))
         : []
       if (itemRows.length !== itemIds.length) throw new Error('One or more selected items no longer exist in this organization. Remove them and save again.')
       const previousItemIds = latest
         ? new Set((await tx.execute<{ item_id: string }>(sql`
             select distinct item_id from item_rate_lines
-             where org_id = ${gate.user.orgId} and version_id = ${latest.id}`)).rows.map((row) => String(row.item_id)))
+             where org_id = ${gate.user.orgId} and version_id = ${latest.id}`, 'objects')).map((row) => String(row.item_id)))
         : new Set<string>()
       for (const item of itemRows) {
         if (!inventoryEnabled && INVENTORY_KINDS.has(item.kind) && !previousItemIds.has(String(item.id))) {
@@ -161,27 +161,27 @@ export const POST = defineRoute({
              set effective_to = (${effectiveFrom}::date - interval '1 day')::date,
                  updated_at = now(), updated_by = ${gate.user.id}
            where id = ${latest.id} and org_id = ${gate.user.orgId} and status = 'active'
-           returning id, effective_to::text`)
-        if (closed.rows.length !== 1) throw new Error('The current rate version changed while you were editing. Reload the rate book and try again.')
+           returning id, effective_to::text`, 'objects')
+        if (closed.length !== 1) throw new Error('The current rate version changed while you were editing. Reload the rate book and try again.')
         closedVersion = {
           id: latest.id,
           before: { effectiveTo: latest.effective_to === null ? null : String(latest.effective_to).slice(0, 10) },
-          after: { effectiveTo: closed.rows[0]!.effective_to },
+          after: { effectiveTo: closed[0]!.effective_to },
         }
       }
 
       const version = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_versions (org_id, rate_book_id, effective_from, effective_to, status, created_by, updated_by)
         values (${gate.user.orgId}, ${bookId}, ${effectiveFrom}, ${effectiveTo}, 'draft', ${gate.user.id}, ${gate.user.id})
-        returning id`)).rows[0]
+        returning id`, 'objects'))[0]
       if (!version) throw new Error('The new rate version was not created.')
 
       let laborPolicy: Record<string, unknown> | null = null
       if (laborDerivationPolicy !== undefined) {
-        const policies = (await tx.execute<Record<string, unknown>>(sql`
+        const policies = await tx.execute<Record<string, unknown>>(sql`
           insert into labor_rate_version_policies (org_id, version_id, derivation_policy, created_by, updated_by)
           values (${gate.user.orgId}, ${version.id}, ${laborDerivationPolicy}, ${gate.user.id}, ${gate.user.id})
-          returning *`)).rows
+          returning *`, 'objects')
         if (policies.length !== 1) throw new Error('The labor pricing policy was not saved. Reload the rate book and try again.')
         laborPolicy = policies[0]!
       }
@@ -203,16 +203,16 @@ export const POST = defineRoute({
                   updated_at = now(),
                   updated_by = excluded.updated_by
               where item_rate_profiles.org_id = ${gate.user.orgId}
-            returning id`)
-          if (profile.rows.length !== 1) throw new Error('An item rate profile was not saved. Reload the rate book and try again.')
+            returning id`, 'objects')
+          if (profile.length !== 1) throw new Error('An item rate profile was not saved. Reload the rate book and try again.')
           // Pin this item's behavior to the new version. The profile row
           // above keeps only the defaults for future versions; resolution
           // reads this pin, so a later policy switch cannot reprice it.
           const pinned = await tx.execute(sql`
             insert into item_rate_version_profiles (org_id, version_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
             values (${gate.user.orgId}, ${version.id}, ${line.itemId}, ${line.baseUnit}, ${line.pricingPolicy}, ${line.invoicePresentation}, ${gate.user.id}, ${gate.user.id})
-            returning id`)
-          if (pinned.rows.length !== 1) throw new Error('An item rate profile pin was not saved. Reload the rate book and try again.')
+            returning id`, 'objects')
+          if (pinned.length !== 1) throw new Error('An item rate profile pin was not saved. Reload the rate book and try again.')
           seenProfiles.add(line.itemId)
         }
         const inserted = await tx.execute(sql`
@@ -223,15 +223,15 @@ export const POST = defineRoute({
             ${gate.user.orgId}, ${version.id}, ${line.itemId}, ${line.unitCode}, ${line.unitName}, ${line.baseQuantity},
             ${line.costRate}, ${line.billRate}, ${JSON.stringify(line.timeTypeBillRates)}::jsonb,
             ${validated.lines.indexOf(line)}, ${gate.user.id}, ${gate.user.id}
-          ) returning id`)
-        if (inserted.rows.length !== 1) throw new Error('A rate line was not saved. Reload the rate book and try again.')
+          ) returning id`, 'objects')
+        if (inserted.length !== 1) throw new Error('A rate line was not saved. Reload the rate book and try again.')
       }
       const activated = await tx.execute(sql`
         update item_rate_versions
            set status = 'active', updated_at = now(), updated_by = ${gate.user.id}
          where id = ${version.id} and org_id = ${gate.user.orgId} and status = 'draft'
-         returning id`)
-      if (activated.rows.length !== 1) throw new Error('The new rate version could not be activated. Reload the rate book and try again.')
+         returning id`, 'objects')
+      if (activated.length !== 1) throw new Error('The new rate version could not be activated. Reload the rate book and try again.')
       const audited = await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (
@@ -239,8 +239,8 @@ export const POST = defineRoute({
           ${JSON.stringify({ rateBookId: bookId, effectiveFrom, effectiveTo, lineCount: validated.lines.length, closedVersion,
             ...(laborPolicy ? { laborPolicy: { before: null, after: laborPolicy } } : {}) })}::jsonb,
           ${gate.user.id}
-        ) returning id`)
-      if (audited.rows.length !== 1) throw new Error('The rate version audit was not saved. Reload the rate book and try again.')
+        ) returning id`, 'objects')
+      if (audited.length !== 1) throw new Error('The rate version audit was not saved. Reload the rate book and try again.')
       return { id: bookId, versionId: version.id }
     })
     return NextResponse.json(result)

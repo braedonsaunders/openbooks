@@ -267,13 +267,14 @@ function mockOpeningPopulations(t: TestContext, population: readonly MockPopulat
     [row.taxableYtd, row.taxYtd ?? "0", row.employerCppYtd ?? "0"].some(value => value !== "0");
   const amounts = (row: MockPopulationRow) => ({ ...zeroAnnual, taxable_ytd: row.taxableYtd,
     tax_ytd: row.taxYtd ?? "0", employer_cpp_ytd: row.employerCppYtd ?? "0", ...row.annualAmounts });
-  t.mock.method(runner, "execute", async (query: Parameters<typeof db.execute>[0]) => {
+  t.mock.method(runner, "execute", async (query: Parameters<typeof db.execute>[0], mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const built = dialect.sqlToQuery(query);
-    if (built.sql === "show transaction_isolation") return { rows: [{ transaction_isolation: "read committed" }] };
+    if (built.sql === "show transaction_isolation") return inMode({ rows: [{ transaction_isolation: "read committed" }] });
     if (built.sql.includes('as "openingSnapshot"')) {
       const row = population.find(row => built.params.includes(row.employeePartyId));
-      if (!row) return { rows: [] };
-      return { rows: [{
+      if (!row) return inMode({ rows: [] });
+      return inMode({ rows: [{
         id: row.employeePartyId, openingSnapshot: amounts(row),
         openingChildren: row.children ?? emptyChildren(),
         employerAuthorityId: row.employeePartyId, subsidiaryId: originalEmployer,
@@ -285,29 +286,29 @@ function mockOpeningPopulations(t: TestContext, population: readonly MockPopulat
         sourceReference: "Complete original employer YTD report", openingSha256: "b".repeat(64),
         hasMaterialHistory: material(row), hasWageHistory: row.taxableYtd !== "0",
         hasFutaWageHistory: false, hasSuiWageHistory: false,
-      }] };
+      }] });
     }
     if (built.sql.includes("from payroll_opening_levy_source_allocations")) {
       const source = population.find(row => built.params.includes(row.employeePartyId));
-      if (source?.originalCountry === "CA") return { rows: [
+      if (source?.originalCountry === "CA") return inMode({ rows: [
         ...["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map(region =>
           ({ programKey: "ca_wcb", region, subRegion: "", filingAccountId: null, federalAccountId: null, amount: "0" })),
         ...["BC","MB","NL","ON"].map(region =>
           ({ programKey: "ca_eht", region, subRegion: "", filingAccountId: null, federalAccountId: null, amount: "0" })),
         { programKey: "ca_cnt", region: "QC", subRegion: "", filingAccountId: null, federalAccountId: null, amount: "0" },
-      ] };
-      return { rows: [{ programKey: "us_futa", region: "US", subRegion: "",
-        filingAccountId: originalEin, federalAccountId: originalEin, amount: "0" }] };
+      ] });
+      return inMode({ rows: [{ programKey: "us_futa", region: "US", subRegion: "",
+        filingAccountId: originalEin, federalAccountId: originalEin, amount: "0" }] });
     }
     if (built.sql.includes("select distinct b.employee_party_id")) {
-      return { rows: population.filter(material).map(row => ({
+      return inMode({ rows: population.filter(material).map(row => ({
         employee_party_id: row.employeePartyId, display_name: row.employeeName,
-      })) };
+      })) });
     }
     if (built.sql.includes("from payroll_ca_opening_reporting_authorities r")) {
       const row = population.find(row => built.params.includes(row.employeePartyId));
-      if (!row?.reportingAllocations) return { rows: [] };
-      return { rows: [{ id: row.employeePartyId, openingBalanceId: row.employeePartyId,
+      if (!row?.reportingAllocations) return inMode({ rows: [] });
+      return inMode({ rows: [{ id: row.employeePartyId, openingBalanceId: row.employeePartyId,
         levyAuthorityId: row.employeePartyId, levyAllocationSha256: "c".repeat(64),
         employerAuthorityId: row.employeePartyId, employeePartyId: row.employeePartyId, taxYear: 2026,
         subsidiaryId: originalEmployer, originalCountry: "CA", originalCurrency: "CAD",
@@ -317,34 +318,34 @@ function mockOpeningPopulations(t: TestContext, population: readonly MockPopulat
         sourceVersionId: "00000000-0000-4000-8000-000000000011", sourceSha256: "a".repeat(64),
         sourceReference: "Original RP/province year-to-date report", matches: true,
         annualAmounts: amounts(row), children: row.children ?? emptyChildren(), allocationSnapshot: row.reportingAllocations,
-      }] };
+      }] });
     }
     if (built.sql.includes("select b.employee_party_id as id")) {
-      return { rows: population.map(row => ({ id: row.employeePartyId, name: row.employeeName })) };
+      return inMode({ rows: population.map(row => ({ id: row.employeePartyId, name: row.employeeName })) });
     }
     if (built.sql.includes("from payroll_opening_balances b")) {
       const country = requestedCountry(built.params);
-      return { rows: population.filter(row => material(row) && row.originalCountry === country).map(row => ({
+      return inMode({ rows: population.filter(row => material(row) && row.originalCountry === country).map(row => ({
         employee_party_id: row.employeePartyId, ...amounts(row),
-      })) };
+      })) });
     }
     if (built.sql.includes('program_type as "programType"')) {
-      return { rows: [originalRp, secondRp].map(id => ({ id, orgId: reportingOrg, subsidiaryId: originalEmployer,
-        country: "CA", programType: "ca_rp" })) };
+      return inMode({ rows: [originalRp, secondRp].map(id => ({ id, orgId: reportingOrg, subsidiaryId: originalEmployer,
+        country: "CA", programType: "ca_rp" })) });
     }
     if (built.sql.includes("from parties p")) {
       const country = requestedCountry(built.params);
-      return { rows: population.filter(row => built.params.includes(row.employeePartyId)).map(row => ({
+      return inMode({ rows: population.filter(row => built.params.includes(row.employeePartyId)).map(row => ({
         employee_party_id: row.employeePartyId, display_name: row.employeeName,
         province: row.profileCountry === country ? row.province : "", filing_account_id: null,
         subsidiary_id: "00000000-0000-4000-8000-000000000005",
-      })) };
+      })) });
     }
     if (built.sql.includes("from payroll_filing_accounts") && built.sql.includes("for share")) {
-      return { rows: [{ id: originalEin, name: "Original federal EIN", program_type: "us_ein",
-        subsidiary_id: originalEmployer, state_code: null, is_active: false, account_number: "12-3456789" }] };
+      return inMode({ rows: [{ id: originalEin, name: "Original federal EIN", program_type: "us_ein",
+        subsidiary_id: originalEmployer, state_code: null, is_active: false, account_number: "12-3456789" }] });
     }
-    return { rows: [] };
+    return inMode({ rows: [] });
   });
   return <Reader extends (orgId: string, taxYear: number) => Promise<unknown>>(read: Reader, orgId = reportingOrg): ReturnType<Reader> =>
     orgContext.run({ orgId, bypass: false, txDb: runner }, () => read(orgId, 2026)) as ReturnType<Reader>;

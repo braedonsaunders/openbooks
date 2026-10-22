@@ -187,9 +187,9 @@ async function readBoards(actor: ScheduleActor, options: { includeArchived?: boo
   const kinds = await enabledBoardKinds(actor.orgId);
   if (!kinds.people && !kinds.tasks) return [];
   const allowed = await actorAllowedSubsidiaryIds(db, actor.orgId, actor.actorId);
-  const rows = (await db.execute<ScheduleBoard>(sql`select ${BOARD_COLUMNS} ${BOARD_JOINS}
+  const rows = await db.execute<ScheduleBoard>(sql`select ${BOARD_COLUMNS} ${BOARD_JOINS}
     where b.org_id = ${actor.orgId} ${options.generalOnly ? sql`and b.row_kind <> 'tasks' and b.project_id is null` : sql``} ${options.projectId ? sql`and b.project_id=${options.projectId}` : sql``} ${options.includeArchived ? sql`` : sql`and b.is_active`}
-    order by b.sort_order, b.name, b.id`)).rows;
+    order by b.sort_order, b.name, b.id`, "objects");
   const canReadProjects =
     rows.some((board) => board.projectId) &&
     kinds.tasks &&
@@ -218,7 +218,7 @@ async function readBoards(actor: ScheduleActor, options: { includeArchived?: boo
 export async function getBoard(actor: ScheduleActor, idOrCode: string): Promise<ScheduleBoard> {
   const filter = isUuid(idOrCode) ? sql`b.id = ${idOrCode}` : sql`b.code = ${idOrCode}`;
   const board = (await db.execute<ScheduleBoard>(sql`select ${BOARD_COLUMNS} ${BOARD_JOINS}
-    where b.org_id = ${actor.orgId} and ${filter}`)).rows[0];
+    where b.org_id = ${actor.orgId} and ${filter}`, "objects"))[0];
   if (!board) throw new ScopeNotFoundError();
   const kinds = await enabledBoardKinds(actor.orgId);
   if (!(board.rowKind === "people" ? kinds.people : board.rowKind === "resources" ? kinds.resources : kinds.tasks)) throw new ScopeNotFoundError();

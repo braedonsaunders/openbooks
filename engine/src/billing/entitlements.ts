@@ -183,7 +183,7 @@ async function resolveMeterKey(orgId: string, meterKey: string, field: string): 
   const key = requiredText(meterKey, field, "entitlement_key_required");
   const meter = (await db.execute<{ id: string; isActive: boolean }>(sql`
     select id, is_active as "isActive" from usage_meters
-     where org_id = ${orgId} and key = ${key}`)).rows[0];
+     where org_id = ${orgId} and key = ${key}`, "objects"))[0];
   if (!meter) {
     refuse("entitlement_meter_unknown", `No usage meter has key ${key}.`, "Create the meter in Setup → Usage, or correct the meter key.", field);
   }
@@ -240,7 +240,7 @@ export async function createSaasFeature(
         returning id, org_id as "orgId", key, name, description,
                   feature_type as "featureType", unit,
                   meter_id as "meterId", null as "meterKey",
-                  is_active as "isActive"`)).rows[0];
+                  is_active as "isActive"`, "objects"))[0];
       if (!inserted) throw new Error("feature insert returned no row");
       await recordConfigAudit(orgId, "saas_features", inserted.id, "create", null, {
         key, name, type, unit, meterId, isActive: inserted.isActive,
@@ -258,11 +258,11 @@ export async function createSaasFeature(
 export async function listSaasFeatures(orgId: string, activeOnly = false): Promise<SaasFeature[]> {
   return withOrg(orgId, async () => {
     await requireEntitlementsRead(orgId);
-    return (await db.execute<SaasFeature>(sql`
+    return await db.execute<SaasFeature>(sql`
       select ${FEATURE_COLUMNS} from saas_features f
         left join usage_meters m on m.org_id = f.org_id and m.id = f.meter_id
        where f.org_id = ${orgId} and (${activeOnly}::boolean = false or f.is_active)
-       order by f.key`)).rows;
+       order by f.key`, "objects");
   });
 }
 
@@ -278,7 +278,7 @@ export async function updateSaasFeature(
     const current = (await db.execute<SaasFeature>(sql`
       select ${FEATURE_COLUMNS} from saas_features f
         left join usage_meters m on m.org_id = f.org_id and m.id = f.meter_id
-       where f.org_id = ${orgId} and f.id = ${safeId}::uuid for update of f`)).rows[0];
+       where f.org_id = ${orgId} and f.id = ${safeId}::uuid for update of f`, "objects"))[0];
     if (!current) {
       refuse("entitlement_feature_not_found", "The feature does not exist in this organization.", CATALOG_REMEDY, "feature_id", 404);
     }
@@ -311,7 +311,7 @@ export async function updateSaasFeature(
       returning id, org_id as "orgId", key, name, description,
                 feature_type as "featureType", unit,
                 meter_id as "meterId", null as "meterKey",
-                is_active as "isActive"`)).rows[0];
+                is_active as "isActive"`, "objects"))[0];
     if (!updated) throw new Error("feature update matched no row after locking it");
     await recordConfigAudit(orgId, "saas_features", updated.id, "update", {
       name: current.name, description: current.description, unit: current.unit,
@@ -375,7 +375,7 @@ async function loadVersionHead(orgId: string, versionId: string): Promise<Versio
   const version = (await db.execute<VersionHead>(sql`
     select id, plan_id as "planId", status, effective_from::text as "effectiveFrom"
       from subscription_plan_versions
-     where org_id = ${orgId} and id = ${safeId}::uuid`)).rows[0];
+     where org_id = ${orgId} and id = ${safeId}::uuid`, "objects"))[0];
   if (!version) {
     refuse("entitlement_plan_version_not_found", "The plan version does not exist in this organization.", "Choose a plan version from this organization.", "plan_version_id", 404);
   }
@@ -387,7 +387,7 @@ async function loadActiveFeature(orgId: string, featureKey: string): Promise<Saa
   const feature = (await db.execute<SaasFeature>(sql`
     select ${FEATURE_COLUMNS} from saas_features f
       left join usage_meters m on m.org_id = f.org_id and m.id = f.meter_id
-     where f.org_id = ${orgId} and f.key = ${key}`)).rows[0];
+     where f.org_id = ${orgId} and f.key = ${key}`, "objects"))[0];
   if (!feature) {
     refuse("entitlement_feature_not_found", `No feature has key ${key} in this organization.`, CATALOG_REMEDY, "feature_key", 404);
   }
@@ -472,7 +472,7 @@ async function closeSupersededRow(
   const overlapping = (await db.execute<{ id: string }>(sql`
     select id from ${sql.raw(table)}
      where org_id = ${orgId} and ${scopeFilter} and feature_id = ${scope.featureId}::uuid
-       and effective_to is null and effective_from > ${effectiveFrom}::date limit 1`)).rows[0];
+       and effective_to is null and effective_from > ${effectiveFrom}::date limit 1`, "objects"))[0];
   if (overlapping) {
     refuse(
       "entitlement_window_overlap",
@@ -490,8 +490,8 @@ async function closeSupersededRow(
 }
 
 async function refreshSnapshotsForPlan(orgId: string, planId: string, actor: string): Promise<string[]> {
-  const subs = (await db.execute<{ id: string }>(sql`
-    select id from subscriptions where org_id = ${orgId} and plan_id = ${planId}::uuid and status <> 'canceled'`)).rows;
+  const subs = await db.execute<{ id: string }>(sql`
+    select id from subscriptions where org_id = ${orgId} and plan_id = ${planId}::uuid and status <> 'canceled'`, "objects");
   for (const sub of subs) {
     await refreshEntitlementSnapshot(orgId, sub.id, actor);
   }
@@ -547,7 +547,7 @@ export async function savePlanVersionEntitlements(
                   feature_id as "featureId", ${feature.key} as "featureKey", ${feature.featureType} as "featureType",
                   enabled, limit_qty::text as "limitQty", custom_value as "customValue",
                   overage_policy as "overagePolicy", meter_id as "meterId", null as "meterKey",
-                  effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`)).rows[0];
+                  effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`, "objects"))[0];
       if (!inserted) throw new Error("plan version entitlement insert returned no row");
       inserted.limitQty = canonQty(inserted.limitQty);
       await recordConfigAudit(orgId, "subscription_plan_version_entitlements", inserted.id, "create", null, {
@@ -584,14 +584,14 @@ export async function listPlanVersionEntitlements(
     await requireEntitlementsRead(orgId);
     const version = await loadVersionHead(orgId, planVersionId);
     const asOf = at === undefined ? await businessToday(orgId) : dateText(at, "at");
-    const rows = (await db.execute<PlanVersionEntitlement>(sql`
+    const rows = await db.execute<PlanVersionEntitlement>(sql`
       select ${VERSION_ENTITLEMENT_COLUMNS}
         from subscription_plan_version_entitlements e
         join saas_features f on f.org_id = e.org_id and f.id = e.feature_id
         left join usage_meters m on m.org_id = e.org_id and m.id = e.meter_id
        where e.org_id = ${orgId} and e.plan_version_id = ${version.id}::uuid
          and e.effective_from <= ${asOf}::date and (e.effective_to is null or e.effective_to > ${asOf}::date)
-       order by f.key`)).rows;
+       order by f.key`, "objects");
     return rows.map((row) => ({ ...row, limitQty: canonQty(row.limitQty) }));
   });
 }
@@ -650,7 +650,7 @@ async function loadSubscriptionHead(
       join parties p on p.org_id = s.org_id and p.id = s.customer_id
      where s.org_id = ${orgId} and s.id = ${safeId}::uuid
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-     for share of s, p`)).rows[0];
+     for share of s, p`, "objects"))[0];
   if (!sub) {
     refuse("entitlement_subscription_not_found", "The subscription does not exist in this organization.", "Choose a subscription from this organization.", "subscription_id", 404);
   }
@@ -717,7 +717,7 @@ export async function saveSubscriptionOverride(
                 feature_id as "featureId", ${feature.key} as "featureKey",
                 enabled, limit_qty::text as "limitQty", custom_value as "customValue",
                 overage_policy as "overagePolicy", reason,
-                effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`)).rows[0];
+                effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`, "objects"))[0];
     if (!inserted) throw new Error("entitlement override insert returned no row");
     inserted.limitQty = canonQty(inserted.limitQty);
     await recordConfigAudit(orgId, "subscription_entitlement_overrides", inserted.id, "create", null, {
@@ -756,7 +756,7 @@ export async function expireSubscriptionOverride(
         from subscription_entitlement_overrides o
         join saas_features f on f.org_id = o.org_id and f.id = o.feature_id
        where o.org_id = ${orgId} and o.subscription_id = ${sub.id}::uuid and f.key = ${key}
-         and o.effective_to is null for update of o`)).rows[0];
+         and o.effective_to is null for update of o`, "objects"))[0];
     if (!open) {
       refuse(
         "entitlement_override_not_found",
@@ -777,7 +777,7 @@ export async function expireSubscriptionOverride(
                 feature_id as "featureId", ${open.featureKey} as "featureKey",
                 enabled, limit_qty::text as "limitQty", custom_value as "customValue",
                 overage_policy as "overagePolicy", reason,
-                effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`)).rows[0];
+                effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`, "objects"))[0];
     // The locked read above held the row: zero updated rows means a
     // concurrent writer closed it first, which is the same end state under
     // a different actor — report the conflict, never silent success.
@@ -816,13 +816,13 @@ export async function listSubscriptionOverrides(
     await requireEntitlementsRead(orgId);
     const sub = await loadSubscriptionHead(orgId, subscriptionId, options.allowedSubsidiaryIds);
     const asOf = options.at === undefined ? await businessToday(orgId) : dateText(options.at, "at");
-    const rows = (await db.execute<SubscriptionEntitlementOverride>(sql`
+    const rows = await db.execute<SubscriptionEntitlementOverride>(sql`
       select ${OVERRIDE_COLUMNS}
         from subscription_entitlement_overrides o
         join saas_features f on f.org_id = o.org_id and f.id = o.feature_id
        where o.org_id = ${orgId} and o.subscription_id = ${sub.id}::uuid
          and o.effective_from <= ${asOf}::date and (o.effective_to is null or o.effective_to > ${asOf}::date)
-       order by f.key`)).rows;
+       order by f.key`, "objects");
     return rows.map((row) => ({ ...row, limitQty: canonQty(row.limitQty) }));
   });
 }
@@ -875,7 +875,7 @@ async function latestPublishedVersionId(orgId: string, planId: string, asOf: str
       from subscription_plan_versions
      where org_id = ${orgId} and plan_id = ${planId}::uuid and status = 'published'
        and effective_from <= ${asOf}::date and (effective_to is null or effective_to >= ${asOf}::date)
-     order by effective_from desc, version_number desc limit 1`)).rows[0];
+     order by effective_from desc, version_number desc limit 1`, "objects"))[0];
   return row ?? null;
 }
 
@@ -897,13 +897,13 @@ async function resolveSubscription(
 ): Promise<{ resolved: ResolvedSubscriptionEntitlements; sourceHash: string }> {
   const lifecycle = (await db.execute<{ planVersionId: string }>(sql`
     select plan_version_id as "planVersionId" from subscription_lifecycles
-     where org_id = ${orgId} and subscription_id = ${sub.id}::uuid limit 1`)).rows[0];
+     where org_id = ${orgId} and subscription_id = ${sub.id}::uuid limit 1`, "objects"))[0];
   let version: { id: string; versionNumber: number | null } | null = null;
   const latest = await latestPublishedVersionId(orgId, sub.planId, asOf);
   if (lifecycle) {
     const pinned = (await db.execute<{ id: string; versionNumber: number | null }>(sql`
       select id, version_number as "versionNumber" from subscription_plan_versions
-       where org_id = ${orgId} and id = ${lifecycle.planVersionId}::uuid limit 1`)).rows[0];
+       where org_id = ${orgId} and id = ${lifecycle.planVersionId}::uuid limit 1`, "objects"))[0];
     if (!pinned) throw new Error("the subscription lifecycle names a plan version that is gone — data repair is required before entitlements can resolve");
     version = pinned;
   } else {
@@ -911,15 +911,15 @@ async function resolveSubscription(
     if (version && latest) {
       const numbered = (await db.execute<{ versionNumber: number }>(sql`
         select version_number as "versionNumber" from subscription_plan_versions
-         where org_id = ${orgId} and id = ${latest.id}::uuid limit 1`)).rows[0];
+         where org_id = ${orgId} and id = ${latest.id}::uuid limit 1`, "objects"))[0];
       version.versionNumber = numbered?.versionNumber ?? null;
     }
   }
   const grandfathered = lifecycle ? (latest?.id ?? null) !== lifecycle.planVersionId : false;
-  const features = (await db.execute<SaasFeature>(sql`
+  const features = await db.execute<SaasFeature>(sql`
     select ${FEATURE_COLUMNS} from saas_features f
       left join usage_meters m on m.org_id = f.org_id and m.id = f.meter_id
-     where f.org_id = ${orgId} and f.is_active order by f.key`)).rows;
+     where f.org_id = ${orgId} and f.is_active order by f.key`, "objects");
   const rawPlanRows = version
     ? (await db.execute<PlanRow & { featureId: string }>(sql`
       select e.feature_id as "featureId", e.enabled,
@@ -928,16 +928,16 @@ async function resolveSubscription(
         from subscription_plan_version_entitlements e
         left join usage_meters m on m.org_id = e.org_id and m.id = e.meter_id
        where e.org_id = ${orgId} and e.plan_version_id = ${version.id}::uuid
-         and e.effective_from <= ${asOf}::date and (e.effective_to is null or e.effective_to > ${asOf}::date)`)).rows
+         and e.effective_from <= ${asOf}::date and (e.effective_to is null or e.effective_to > ${asOf}::date)`, "objects"))
     : [];
   const planRows = rawPlanRows.map((row) => ({ ...row, limitQty: canonQty(row.limitQty) }));
-  const rawOverrideRows = (await db.execute<OverrideRow & { featureId: string }>(sql`
+  const rawOverrideRows = await db.execute<OverrideRow & { featureId: string }>(sql`
     select o.feature_id as "featureId", o.enabled,
            o.limit_qty::text as "limitQty", o.custom_value as "customValue",
            o.overage_policy as "overagePolicy"
       from subscription_entitlement_overrides o
      where o.org_id = ${orgId} and o.subscription_id = ${sub.id}::uuid
-       and o.effective_from <= ${asOf}::date and (o.effective_to is null or o.effective_to > ${asOf}::date)`)).rows;
+       and o.effective_from <= ${asOf}::date and (o.effective_to is null or o.effective_to > ${asOf}::date)`, "objects");
   const overrideRows = rawOverrideRows.map((row) => ({ ...row, limitQty: canonQty(row.limitQty) }));
   const planByFeature = new Map(planRows.map((row) => [row.featureId, row]));
   const overrideByFeature = new Map(overrideRows.map((row) => [row.featureId, row]));
@@ -994,15 +994,15 @@ export async function resolveEntitlements(
       const customer = (await db.execute<{ id: string }>(sql`
         select id from parties
          where org_id = ${orgId} and id = ${customerId}::uuid
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, options.allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, options.allowedSubsidiaryIds, { orgWideNull: true })}`, "objects"))[0];
       if (!customer) throw new ScopeNotFoundError();
-      subs = (await db.execute<SubscriptionHead>(sql`
+      subs = await db.execute<SubscriptionHead>(sql`
         select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.status
           from subscriptions s
           join parties p on p.org_id = s.org_id and p.id = s.customer_id
          where s.org_id = ${orgId} and s.customer_id = ${customerId}::uuid
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, options.allowedSubsidiaryIds, { orgWideNull: true })}
-         order by s.id`)).rows;
+         order by s.id`, "objects");
     }
     const out: ResolvedSubscriptionEntitlements[] = [];
     for (const sub of subs) {
@@ -1042,7 +1042,7 @@ export async function refreshEntitlementSnapshot(
          set snapshot = excluded.snapshot, source_hash = excluded.source_hash,
              resolved_at = now(), updated_at = now(), updated_by = excluded.updated_by
       returning snapshot as "snapshot", source_hash as "sourceHash",
-                resolved_at::text as "resolvedAt"`)).rows[0];
+                resolved_at::text as "resolvedAt"`, "objects"))[0];
     if (!stored) throw new Error("entitlement snapshot upsert returned no row");
     return {
       subscriptionId: sub.id,
@@ -1083,7 +1083,7 @@ export async function getEntitlementSnapshot(
     const cached = (await db.execute<{ snapshot: ResolvedEntitlement[]; sourceHash: string; resolvedAt: string }>(sql`
       select snapshot as "snapshot", source_hash as "sourceHash", resolved_at::text as "resolvedAt"
         from subscription_entitlement_snapshots
-       where org_id = ${orgId} and subscription_id = ${sub.id}::uuid limit 1`)).rows[0];
+       where org_id = ${orgId} and subscription_id = ${sub.id}::uuid limit 1`, "objects"))[0];
     if (cached && cached.sourceHash === sourceHash) {
       return {
         subscriptionId: sub.id,
@@ -1143,13 +1143,13 @@ async function notifyEntitlementOverage(
   },
 ): Promise<number> {
   const href = `/collections?subscription=${input.subscriptionId}&feature=${input.featureKey}`;
-  const recipients = (await db.execute<{ id: string }>(sql`
+  const recipients = await db.execute<{ id: string }>(sql`
     select distinct u.id::text as id
       from users u
       left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
       left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
      where u.org_id = ${orgId} and u.is_active
-       and (u.is_super_admin or (r.permissions ? 'ar.create'))`)).rows;
+       and (u.is_super_admin or (r.permissions ? 'ar.create'))`, "objects");
   const title = `${input.customerLabel} is over its ${input.featureKey} limit (${input.used} of ${input.limit} used)`;
   const body =
     `Subscription ${input.subscriptionId} used ${input.used} against an included limit of ${input.limit} ` +
@@ -1161,7 +1161,7 @@ async function notifyEntitlementOverage(
       select 1 as one from notifications
        where org_id = ${orgId} and user_id = ${recipient.id}::uuid
          and kind = ${OVERAGE_NOTICE_KIND} and href = ${href} and read_at is null
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (existing) continue;
     // Same columns as the shared writeNotification path (kind, title,
     // body, href, org + user scope) — see engine/src/inbox/adapters/
@@ -1173,7 +1173,7 @@ async function notifyEntitlementOverage(
       insert into notifications (org_id, user_id, kind, title, body, href, created_by, updated_by)
       values (${orgId}, ${recipient.id}::uuid, ${OVERAGE_NOTICE_KIND}, ${title}, ${body}, ${href},
               ${actor}::uuid, ${actor}::uuid)
-      returning id`)).rows[0]?.id;
+      returning id`, "objects"))[0]?.id;
     if (!inserted) throw new Error("the overage notice was not stored — no row was written; retry the action");
     written += 1;
   }
@@ -1228,7 +1228,7 @@ async function billEntitlementOverage(
        and r.subscription_id = ${input.sub.id}::uuid and r.source = 'api' and r.source_ref = ${base}
        and r.reverses_id is null
        and not exists (select 1 from usage_records v where v.org_id = r.org_id and v.reverses_id = r.id)
-     order by r.occurred_on desc, r.created_at desc limit 1`)).rows[0];
+     order by r.occurred_on desc, r.created_at desc limit 1`, "objects"))[0];
   if (live && compareDecimal(live.quantity, input.overage) === 0) {
     return { usageRecordId: live.id, replayed: true };
   }
@@ -1251,7 +1251,7 @@ async function billEntitlementOverage(
              and r.subscription_id = ${input.sub.id}::uuid and r.source = 'api' and r.source_ref = ${base}
              and r.reverses_id is null
              and not exists (select 1 from usage_records v where v.org_id = r.org_id and v.reverses_id = r.id)
-           order by r.occurred_on desc, r.created_at desc limit 1`)).rows[0];
+           order by r.occurred_on desc, r.created_at desc limit 1`, "objects"))[0];
         if (current) return { usageRecordId: current.id, replayed: true };
       }
       throw error;
@@ -1259,7 +1259,7 @@ async function billEntitlementOverage(
   }
   const prior = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from usage_records
-     where org_id = ${orgId} and meter_id = ${meterId}::uuid and source_ref = ${base}`)).rows[0]?.n ?? 0;
+     where org_id = ${orgId} and meter_id = ${meterId}::uuid and source_ref = ${base}`, "objects"))[0]?.n ?? 0;
   const inserted = await ingestUsageRecords(orgId, actor, [{
     meterKey: input.meterKey,
     customerId: input.sub.customerId,
@@ -1331,7 +1331,7 @@ export async function checkEntitlement(
       return { ...base, allowed: true, used, overage: "0" };
     }
     const rawOverage = (await db.execute<{ overage: string }>(sql`
-      select (${used}::numeric - ${feature.limit}::numeric)::text as overage`)).rows[0]?.overage;
+      select (${used}::numeric - ${feature.limit}::numeric)::text as overage`, "objects"))[0]?.overage;
     const overage = rawOverage == null ? null : canonQty(rawOverage);
     if (!overage) throw new Error("overage subtraction returned no row");
     if (feature.overagePolicy === "block") {
@@ -1340,7 +1340,7 @@ export async function checkEntitlement(
     if (feature.overagePolicy === "alert") {
       const customer = (await db.execute<{ label: string | null }>(sql`
         select display_name as label from parties
-         where org_id = ${orgId} and id = ${sub.customerId}::uuid`)).rows[0];
+         where org_id = ${orgId} and id = ${sub.customerId}::uuid`, "objects"))[0];
       await notifyEntitlementOverage(orgId, actor, {
         subscriptionId: sub.id,
         customerLabel: customer?.label ?? "A subscription",

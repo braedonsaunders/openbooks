@@ -23,8 +23,8 @@ export async function seedFeatureDisableBookScope(org: ScratchOrg) {
              (${org.orgId}, ${entryId}, 3, ${org.accounts.revenue}, ${org.subsidiaryId}, '50', 'CAD', '40', '1.25'),
              (${org.orgId}, ${entryId}, 4, ${org.accounts.bank}, ${org.subsidiaryId}, '-50', 'CAD', '-40', '1.25')`)
     const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
-      where id = ${entryId} and org_id = ${org.orgId} returning id`)
-    if (posted.rows.length !== 1) throw new Error('the secondary-book feature fixture did not post')
+      where id = ${entryId} and org_id = ${org.orgId} returning id`, 'objects')
+    if (posted.length !== 1) throw new Error('the secondary-book feature fixture did not post')
   })
 }
 
@@ -46,12 +46,12 @@ export async function seedExpensesDashboardBookScope(org: ScratchOrg) {
         values (${org.orgId}, ${entryId}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, '1'),
                (${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${'-' + amount}, 'CAD', ${'-' + amount}, '1')`)
       const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
-        where id = ${entryId} and org_id = ${org.orgId} returning id`)
-      if (posted.rows.length !== 1) throw new Error('an expense book fixture entry did not post')
+        where id = ${entryId} and org_id = ${org.orgId} returning id`, 'objects')
+      if (posted.length !== 1) throw new Error('an expense book fixture entry did not post')
     }
     const postedDocument = await db.execute(sql`update documents set status = 'posted', posted_entry_id = ${primaryEntryId}
-      where id = ${documentId} and org_id = ${org.orgId} returning id`)
-    if (postedDocument.rows.length !== 1) throw new Error('the expense book fixture document did not post')
+      where id = ${documentId} and org_id = ${org.orgId} returning id`, 'objects')
+    if (postedDocument.length !== 1) throw new Error('the expense book fixture document did not post')
   })
 }
 
@@ -73,10 +73,10 @@ export async function seedCustomerSecondaryBookReceivable(org: ScratchOrg, docum
       values (${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, true, '9000', 'CAD', '9000', '1'),
              (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '-9000', 'CAD', '-9000', '1')`)
     const posted = await db.execute(sql`update journal_entries set status='posted', posted_at=now()
-      where id=${entryId} and org_id=${org.orgId} returning id`)
-    if (posted.rows.length !== 1) throw new Error('the secondary-book receivable entry did not post')
+      where id=${entryId} and org_id=${org.orgId} returning id`, 'objects')
+    if (posted.length !== 1) throw new Error('the secondary-book receivable entry did not post')
     const postedDocument = await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId}
-      where id=${documentId} and org_id=${org.orgId} returning id`)
-    if (postedDocument.rows.length !== 1) throw new Error('the secondary-book receivable document did not post')
+      where id=${documentId} and org_id=${org.orgId} returning id`, 'objects')
+    if (postedDocument.length !== 1) throw new Error('the secondary-book receivable document did not post')
   })
 }

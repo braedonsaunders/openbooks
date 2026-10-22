@@ -28,11 +28,11 @@ export async function event(opts: {
 
 /** Lock the unsent composition shared by file generation and SFTP delivery. */
 export async function lockPendingPaymentInstructions(runId: string, orgId: string): Promise<string[]> {
-  const instructions = (await db.execute<{ id: string; status: string }>(sql`
+  const instructions = await db.execute<{ id: string; status: string }>(sql`
     select id, status from payment_instructions
      where payment_run_id = ${runId} and org_id = ${orgId}
      order by id for update
-  `)).rows;
+  `, "objects");
   const ineligible = instructions.find((instruction) =>
     instruction.status !== "pending" && instruction.status !== "cancelled");
   if (ineligible) {

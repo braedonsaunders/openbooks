@@ -329,11 +329,11 @@ export const GET = defineRoute({
       select settings -> 'analytics' -> 'cashflowCategories' as cats,
              coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
         from orgs where id = ${gate.user.orgId}
-    `)));
-    const raw = r.rows[0]?.cats;
+    `, "objects")));
+    const raw = r[0]?.cats;
     return NextResponse.json({
       categories: Array.isArray(raw) ? raw : [],
-      revision: typeof r.rows[0]?.rev === "number" ? r.rows[0].rev : 0,
+      revision: typeof r[0]?.rev === "number" ? r[0].rev : 0,
     });
 
   },
@@ -391,9 +391,9 @@ export const PUT = defineRoute({
         select settings -> 'analytics' -> 'cashflowCategories' as cats,
                coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
           from orgs where id = ${gate.user.orgId} for update
-      `);
-      if (!existing.rows[0]) return NextResponse.json({ error: "org not found" }, { status: 404 });
-      const currentRevision = typeof existing.rows[0].rev === "number" ? existing.rows[0].rev : 0;
+      `, "objects");
+      if (!existing[0]) return NextResponse.json({ error: "org not found" }, { status: 404 });
+      const currentRevision = typeof existing[0].rev === "number" ? existing[0].rev : 0;
       if (currentRevision !== expectedRevision) {
         return NextResponse.json(
           {
@@ -404,7 +404,7 @@ export const PUT = defineRoute({
           { status: 409 },
         );
       }
-      const rawBefore = existing.rows[0].cats;
+      const rawBefore = existing[0].cats;
       const before = Array.isArray(rawBefore) ? rawBefore : [];
       const nextRevision = currentRevision + 1;
       await tx.execute(sql`

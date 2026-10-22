@@ -53,8 +53,8 @@ type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : neve
 
 async function loadWorkerCompGroups(orgId: string, enabled: boolean): Promise<{ rows: ElementOf<PartyDrawerProps['workerCompGroups']>[] }> {
   if (!enabled) return { rows: [] }
-  const result = await db.execute<ElementOf<PartyDrawerProps['workerCompGroups']>>(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`)
-  return { rows: result.rows }
+  const result = await db.execute<ElementOf<PartyDrawerProps['workerCompGroups']>>(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`, 'objects')
+  return { rows: result }
 }
 
 export interface EntityRoleData {
@@ -181,8 +181,7 @@ export async function loadEntityRole(
   const openLifecycleStage = crmEnabled && openParty
     ? ((await db.execute<{ lifecycle_stage: string }>(sql`
         select lifecycle_stage from crm_account_profiles
-         where org_id = ${orgId} and party_id = ${String(openParty.party.id)} limit 1`))
-        .rows[0]?.lifecycle_stage ?? null)
+         where org_id = ${orgId} and party_id = ${String(openParty.party.id)} limit 1`, 'objects'))[0]?.lifecycle_stage ?? null)
     : null
 
   const resolvedPartyForm = (openParty || creating) && pickers

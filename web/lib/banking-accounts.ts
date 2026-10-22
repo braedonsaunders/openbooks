@@ -68,8 +68,8 @@ export async function bankAccount(orgId: string, accountId: string): Promise<(Re
     select a.id, a.number, a.name, a.type, a.currency_restriction as "currency", a.subsidiary_id as "subsidiaryId", a.reconcilable
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId} and ${bankAccountMembership()}
-  `)
-  return res.rows[0] ?? null
+  `, 'objects')
+  return res[0] ?? null
 }
 
 /** Every reconcilable bank/card account in the org, by number. */
@@ -79,8 +79,8 @@ export async function listReconcilableBankAccounts(orgId: string): Promise<Recon
       from accounts a
      where a.org_id = ${orgId} and ${reconcilableBankMembership()}
      order by a.number nulls last
-  `)
-  return res.rows.map((a) => ({ id: a.id, number: a.number, name: a.name, type: a.type, currency: a.currency, subsidiaryId: a.subsidiaryId }))
+  `, 'objects')
+  return res.map((a) => ({ id: a.id, number: a.number, name: a.name, type: a.type, currency: a.currency, subsidiaryId: a.subsidiaryId }))
 }
 
 /** Read a bank/card account eligible for reconciliation: null means ineligible. */
@@ -92,8 +92,8 @@ export async function reconcilableBankAccount(
     select a.id, a.number, a.name, a.type, a.currency_restriction as "currency", a.subsidiary_id as "subsidiaryId"
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId} and ${reconcilableBankMembership()}
-  `)
-  const a = res.rows[0]
+  `, 'objects')
+  const a = res[0]
   return a ? { id: a.id, number: a.number, name: a.name, type: a.type, currency: a.currency, subsidiaryId: a.subsidiaryId } : null
 }
 
@@ -128,6 +128,6 @@ export async function openingCarryStartDate(
        and (al.changes->>'openingCarryStartDate') is not null
      order by r.through_date asc, r.created_at asc, r.id asc
      limit 1
-  `)
-  return res.rows[0]?.start_date ?? null
+  `, 'objects')
+  return res[0]?.start_date ?? null
 }

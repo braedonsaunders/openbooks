@@ -70,7 +70,7 @@ const mockSources = new Map<string, string>([
     'mock:intl',
     `export async function getTranslations() { return (key) => key }`,
   ],
-  ['mock:db', `export const db = { async execute() { return { rows: [] } } }`],
+  ['mock:db', `export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) } }`],
   ['mock:gates', `export async function requireFeatureEnabled() {}`],
   [
     'mock:compliance',

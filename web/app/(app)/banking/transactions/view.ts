@@ -133,7 +133,7 @@ export async function loadBankingTransactions(
   const docSummary = docId && docId !== 'new'
     ? (await db.execute<{ kind: string; subsidiaryId: string }>(sql`
         select kind, subsidiary_id as "subsidiaryId" from documents
-         where id = ${docId} and org_id = ${authz.user.orgId}`)).rows[0]
+         where id = ${docId} and org_id = ${authz.user.orgId}`, 'objects'))[0]
     : undefined
   const docInScope = !!docSummary
     && (!authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(String(docSummary.subsidiaryId)))
@@ -173,7 +173,7 @@ export async function loadBankingTransactions(
                   where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                )
              )
-           order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
+           order by coalesce(code, name), name limit 2000`, 'objects'),
         cardOptions(),
         // A transfer's legs take any bank or credit-card account; deposits and
         // checks fund from reconcilable bank accounts only.

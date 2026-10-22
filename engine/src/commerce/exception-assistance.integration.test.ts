@@ -73,19 +73,19 @@ async function setup(): Promise<Fixture> {
   const clearingId = (await db.execute<{ id: string }>(sql`
     insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
     values (${org.orgId}, '1015', 'Shopify Clearing', 'asset_bank', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   const discountId = (await db.execute<{ id: string }>(sql`
     insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
     values (${org.orgId}, '4020', 'Sales Discounts', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   const shippingId = (await db.execute<{ id: string }>(sql`
     insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
     values (${org.orgId}, '4030', 'Shipping Income', 'income', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   const giftId = (await db.execute<{ id: string }>(sql`
     insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
     values (${org.orgId}, '2310', 'Gift Card Liability', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   for (const [role, key, accountId] of [
     ["gateway_clearing", "shopify_payments", clearingId],
     ["revenue", "", org.accounts.revenue],
@@ -184,10 +184,10 @@ test("unmapped SKU suggests deterministically; approval links the variant and po
     assert.equal(approved.replay.posted, 1);
     const link = await withBypass(() => db.execute<{ native_id: string }>(sql`
       select native_id from external_links
-       where org_id = ${fixture.org.orgId} and provider = 'shopify' and object_type = 'variant' and external_id = '999001'`));
-    assert.equal(link.rows[0]?.native_id, fixture.ghostItemId);
+       where org_id = ${fixture.org.orgId} and provider = 'shopify' and object_type = 'variant' and external_id = '999001'`, "objects"));
+    assert.equal(link[0]?.native_id, fixture.ghostItemId);
     const status = (await withOrgContext(fixture.org.orgId, () => db.execute<{ posting_status: string }>(sql`
-      select posting_status from channel_orders where id = ${orderId} and org_id = ${fixture.org.orgId}`))).rows[0]!;
+      select posting_status from channel_orders where id = ${orderId} and org_id = ${fixture.org.orgId}`, "objects")))[0]!;
     assert.equal(status.posting_status, "posted");
   } finally {
     await dropScratchOrg(fixture.org.orgId);
@@ -251,7 +251,7 @@ test("similar replay follows the unmapped line and stays in its source channel",
     const sibling = (await db.execute<{ posting_status: string }>(sql`
       select posting_status from channel_orders
        where org_id = ${fixture.org.orgId} and channel_id = ${otherChannel.channel.id}
-         and external_id = 'other-channel-order'`)).rows[0];
+         and external_id = 'other-channel-order'`, "objects"))[0];
     assert.equal(sibling?.posting_status, "exception");
   } finally {
     await dropScratchOrg(fixture.org.orgId);
@@ -309,12 +309,12 @@ test("rejection keeps the order parked and audits the reason", { skip: !DB }, as
     const orderId = await parkGhost(fixture, "9301");
     await withBypass(() => rejectExceptionSuggestion(fixture.org.orgId, fixture.actor, orderId, "Wrong item: the buyer ordered the blue variant."));
     const status = (await withOrgContext(fixture.org.orgId, () => db.execute<{ posting_status: string }>(sql`
-      select posting_status from channel_orders where id = ${orderId} and org_id = ${fixture.org.orgId}`))).rows[0]!;
+      select posting_status from channel_orders where id = ${orderId} and org_id = ${fixture.org.orgId}`, "objects")))[0]!;
     assert.equal(status.posting_status, "exception");
     const audit = (await withOrgContext(fixture.org.orgId, () => db.execute<{ reason: string }>(sql`
       select changes->>'reason' as reason from audit_log
        where org_id = ${fixture.org.orgId} and table_name = 'channel_orders' and row_id = ${orderId}
-       order by at desc limit 1`))).rows[0]!;
+       order by at desc limit 1`, "objects")))[0]!;
     assert.equal(audit.reason, "Wrong item: the buyer ordered the blue variant.");
     await assert.rejects(
       withBypass(() => rejectExceptionSuggestion(fixture.org.orgId, fixture.actor, orderId, "   ")),

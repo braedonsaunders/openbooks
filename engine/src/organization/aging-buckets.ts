@@ -90,7 +90,7 @@ export async function agingBucketPolicyFor(
   parseIsoDate(onDate);
   // The row shape is inline: drizzle's execute constrains its row type to a
   // record, which a named alias does not satisfy.
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     boundaries: unknown;
     effective_from: string | Date;
   }>(sql`
@@ -102,7 +102,7 @@ export async function agingBucketPolicyFor(
        and (effective_to is null or effective_to >= ${onDate}::date)
      order by effective_from desc
      limit 1
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   // A configured row that cannot be read refuses by name: falling back to the
   // default here would silently re-bucket history the organization laddered

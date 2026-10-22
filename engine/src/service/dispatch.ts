@@ -151,8 +151,8 @@ export function boardWorkingWindow(board: Pick<ScheduleBoard, "timeZone" | "dayS
 
 async function cardsFor(orgId: string, visitIds: readonly string[]): Promise<Map<string, DispatchVisitCard>> {
   if (!visitIds.length) return new Map();
-  const rows = (await db.execute<DispatchVisitCard>(sql`select ${CARD_COLUMNS} ${CARD_JOINS}
-    where v.org_id = ${orgId} and v.id = any(${`{${visitIds.join(",")}}`}::uuid[])`)).rows;
+  const rows = await db.execute<DispatchVisitCard>(sql`select ${CARD_COLUMNS} ${CARD_JOINS}
+    where v.org_id = ${orgId} and v.id = any(${`{${visitIds.join(",")}}`}::uuid[])`, "objects");
   return new Map(rows.map((row) => [row.visitId, row]));
 }
 
@@ -160,12 +160,12 @@ async function cardsFor(orgId: string, visitIds: readonly string[]): Promise<Map
 async function heldQualifications(orgId: string, partyIds: readonly string[], fromDate: string, throughDate: string): Promise<Map<string, Set<string>>> {
   const out = new Map<string, Set<string>>();
   if (!partyIds.length) return out;
-  const rows = (await db.execute<{ partyId: string; typeId: string }>(sql`select distinct e.worker_party_id as "partyId", q.type_id as "typeId"
+  const rows = await db.execute<{ partyId: string; typeId: string }>(sql`select distinct e.worker_party_id as "partyId", q.type_id as "typeId"
     from hrm_worker_qualifications q join worker_employments e on e.org_id = q.org_id and e.id = q.employment_id
     join hrm_qualification_types t on t.org_id = q.org_id and t.id = q.type_id and t.is_active
     where q.org_id = ${orgId} and e.worker_party_id = any(${`{${partyIds.join(",")}}`}::uuid[])
       and q.status = 'valid' and q.verified_by is not null and q.verified_at is not null
-      and q.issued_on <= ${fromDate} and (q.expires_on is null or q.expires_on >= ${throughDate})`)).rows;
+      and q.issued_on <= ${fromDate} and (q.expires_on is null or q.expires_on >= ${throughDate})`, "objects");
   for (const row of rows) {
     if (!out.has(row.partyId)) out.set(row.partyId, new Set());
     out.get(row.partyId)!.add(row.typeId);
@@ -229,19 +229,19 @@ export async function loadDispatchDay(actor: ServiceActor & { boardId: string; d
       visit: entry.serviceVisitId ? cards.get(entry.serviceVisitId) ?? null : null,
     }));
     const filters = actor.filters ?? {};
-    const queue = (await db.execute<DispatchVisitCard>(sql`select ${CARD_COLUMNS} ${CARD_JOINS}
+    const queue = await db.execute<DispatchVisitCard>(sql`select ${CARD_COLUMNS} ${CARD_JOINS}
       where v.org_id = ${actor.orgId} and v.status = 'unscheduled' ${subsidiaryFilter(allowed)} ${boardSubsidiaryFilter(actor.orgId, board)}
         and (v.job_id is null or j.status = 'open') and (v.request_id is null or r.status not in ('converted','declined','cancelled'))
         ${queueFilters(actor.orgId, filters)}
       order by case v.priority when 'urgent' then 0 when 'high' then 1 when 'normal' then 2 else 3 end,
         v.sla_due_at nulls last, v.preferred_on nulls last, v.created_at, v.id
-      limit 200`)).rows;
+      limit 200`, "objects");
     const areas = (await db.execute<{ area: string }>(sql`select distinct coalesce(nullif(a.city, ''), nullif(a.region, '')) as area ${CARD_JOINS}
       where v.org_id = ${actor.orgId} and v.status = 'unscheduled' ${subsidiaryFilter(allowed)} and coalesce(nullif(a.city, ''), nullif(a.region, '')) is not null
-      order by 1 limit 100`)).rows.map((row) => row.area);
+      order by 1 limit 100`, "objects")).map((row) => row.area);
     const workingWindow = boardWorkingWindow(board, date);
-    const qualificationTypes = (await db.execute<{ id: string; name: string }>(sql`select id, name from hrm_qualification_types
-      where org_id = ${actor.orgId} and is_active order by name limit 300`)).rows;
+    const qualificationTypes = await db.execute<{ id: string; name: string }>(sql`select id, name from hrm_qualification_types
+      where org_id = ${actor.orgId} and is_active order by name limit 300`, "objects");
     return {
       board, date, timeZone: board.timeZone, workingWindow, displayWindow: workingWindow ?? fallbackDisplayWindow(board.timeZone, date), technicians, bookings,
       queue: [...queue].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)),
@@ -265,7 +265,7 @@ function proposedSpan(board: ScheduleBoard, startsAtInput: unknown, minutes: num
 /** Everything the conflict rules need about one technician's day. */
 export async function technicianFacts(orgId: string, board: ScheduleBoard, partyId: string, span: ProposedSpan, ignoreEntryIds: readonly string[]): Promise<TechnicianDayFacts> {
   const ignore = ignoreEntryIds.length ? sql` and e.id <> all(${`{${ignoreEntryIds.join(",")}}`}::uuid[])` : sql``;
-  const bookings = (await db.execute<{ id: string; startsAt: string; endsAt: string; label: string }>(sql`select e.id,
+  const bookings = await db.execute<{ id: string; startsAt: string; endsAt: string; label: string }>(sql`select e.id,
       ${INSTANT(sql`e.starts_at`)} as "startsAt", ${INSTANT(sql`e.ends_at`)} as "endsAt",
       coalesce(sj.job_number, sr.request_number, cp.display_name, pr.name, sc.label, b.name) as label
     from schedule_entries e
@@ -278,12 +278,12 @@ export async function technicianFacts(orgId: string, board: ScheduleBoard, party
     left join schedule_codes sc on sc.org_id = e.org_id and sc.id = e.schedule_code_id
     where e.org_id = ${orgId} and e.worker_party_id = ${partyId} and e.status = 'published'
       and e.starts_on <= ${span.endsOn} and e.ends_on >= ${addCalendarDays(span.startsOn, -1)} ${ignore}
-    order by e.starts_at`)).rows;
-  const absences = (await db.execute<{ onDate: string; leaveTypeName: string }>(sql`select a.on_date::text as "onDate", t.name as "leaveTypeName"
+    order by e.starts_at`, "objects");
+  const absences = await db.execute<{ onDate: string; leaveTypeName: string }>(sql`select a.on_date::text as "onDate", t.name as "leaveTypeName"
     from hrm_absences a join worker_employments we on we.org_id = a.org_id and we.id = a.employment_id
     join hrm_leave_types t on t.org_id = a.org_id and t.id = a.leave_type_id
     where a.org_id = ${orgId} and we.worker_party_id = ${partyId} and a.on_date between ${span.startsOn} and ${span.lastDate}
-    group by a.on_date, t.name having sum(a.hours) <> 0 order by 1`)).rows;
+    group by a.on_date, t.name having sum(a.hours) <> 0 order by 1`, "objects");
   const held = (await heldQualifications(orgId, [partyId], span.startsOn, span.lastDate)).get(partyId) ?? new Set<string>();
   const day = await workDay(orgId, partyId, span.startsOn);
   return {
@@ -294,8 +294,8 @@ export async function technicianFacts(orgId: string, board: ScheduleBoard, party
 
 async function qualificationNames(orgId: string, ids: readonly string[]): Promise<Record<string, string>> {
   if (!ids.length) return {};
-  const rows = (await db.execute<{ id: string; name: string }>(sql`select id, name from hrm_qualification_types
-    where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
+  const rows = await db.execute<{ id: string; name: string }>(sql`select id, name from hrm_qualification_types
+    where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
   return Object.fromEntries(rows.map((row) => [row.id, row.name]));
 }
 
@@ -348,7 +348,7 @@ function visitBooking(board: ScheduleBoard, visit: StoredVisit, person: { partyI
 async function visitLabel(orgId: string, visit: StoredVisit): Promise<string> {
   const row = (await db.execute<{ label: string }>(sql`select coalesce(j.job_number, r.request_number) || ' · ' || coalesce(j.title, r.title) as label
     from service_visits v left join service_jobs j on j.org_id = v.org_id and j.id = v.job_id left join service_requests r on r.org_id = v.org_id and r.id = v.request_id
-    where v.org_id = ${orgId} and v.id = ${visit.id}`)).rows[0];
+    where v.org_id = ${orgId} and v.id = ${visit.id}`, "objects"))[0];
   return row?.label ?? "Service visit";
 }
 
@@ -379,7 +379,7 @@ export async function previewAssignment(actor: ServiceActor & { boardId: string;
   return withOrgTransaction(actor.orgId, async () => {
     const { board, allowed } = await dispatchAuthority(actor, actor.boardId);
     const stored = (await db.execute<StoredVisit>(sql`select ${STORED_VISIT_COLUMNS} ${STORED_VISIT_JOINS}
-      where v.org_id = ${actor.orgId} and v.id = ${requireUuid(actor.visitId, "Visit")}`)).rows[0];
+      where v.org_id = ${actor.orgId} and v.id = ${requireUuid(actor.visitId, "Visit")}`, "objects"))[0];
     if (!stored) throw new ScopeNotFoundError();
     visibleVisit(stored, allowed);
     await bookablePerson(actor.orgId, allowed, requireUuid(actor.workerPartyId, "Technician"));

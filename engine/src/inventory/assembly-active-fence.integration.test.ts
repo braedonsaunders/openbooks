@@ -128,7 +128,7 @@ test("a deactivation racing a build serializes to one refusal with no partial po
            where wait_event_type = 'Lock'
              and query ilike '%from items%'
         ) as waiting
-      `)).rows[0]?.waiting;
+      `, "objects"))[0]?.waiting;
       queuedOnItems = waiting === true;
       if (!queuedOnItems) await new Promise((resolve) => setTimeout(resolve, 25));
     }

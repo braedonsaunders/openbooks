@@ -77,12 +77,13 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.insight-card-route-test')]
       const sqlText = globalThis.openbooksSqlTextCard
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push({ text })
-          if (text.includes('update insight_cards')) return { rows: state.updateSucceeds ? [{ ...state.card, updated_at: state.currentRevision }] : [] }
-          if (text.includes('updatedAt')) return { rows: [{ updatedAt: state.currentRevision }] }
-          return { rows: [] }
+          if (text.includes('update insight_cards')) return inMode({ rows: state.updateSucceeds ? [{ ...state.card, updated_at: state.currentRevision }] : [] })
+          if (text.includes('updatedAt')) return inMode({ rows: [{ updatedAt: state.currentRevision }] })
+          return inMode({ rows: [] })
         },
       }
       export const schema = {}

@@ -74,8 +74,7 @@ export async function listPolicies(
   await assertConstructionFeature(exec, orgId, "Per-diem policies");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
-  const rows = (
-    await exec.execute<{
+  const rows = await exec.execute<{
       id: string;
       name: string;
       basis: PerDiemBasis;
@@ -91,8 +90,7 @@ export async function listPolicies(
         from hrm_per_diem_policies
        where org_id = ${orgId}::uuid
        order by name
-    `)
-  ).rows;
+    `, "objects");
   return rows;
 }
 
@@ -156,8 +154,7 @@ export async function createPolicy(
     if (input.payComponentId) {
       await assertAllowanceComponent(exec, orgId, input.payComponentId);
     }
-    const created = (
-      await exec.execute<{ id: string }>(sql`
+    const created = (await exec.execute<{ id: string }>(sql`
         insert into hrm_per_diem_policies
           (org_id, name, basis, rules, lodging_offset, weekly_rule,
            pay_component_id, currency, effective_from, effective_to, created_by, updated_by)
@@ -167,8 +164,7 @@ export async function createPolicy(
                 ${currency.toUpperCase()}, ${effectiveFrom}::date, ${input.effectiveTo ?? null}::date,
                 ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!created)
       throw new HrmConstructionError(
         `Per-diem policy ${name} was not created — no row was written.`,
@@ -264,12 +260,10 @@ export async function assertAllowanceComponent(
   orgId: string,
   payComponentId: string,
 ): Promise<{ kind: string; taxTreatment: string }> {
-  const row = (
-    await exec.execute<{ kind: string; taxTreatment: string }>(sql`
+  const row = (await exec.execute<{ kind: string; taxTreatment: string }>(sql`
       select kind, tax_treatment as "taxTreatment"
         from pay_components where org_id = ${orgId}::uuid and id = ${payComponentId}::uuid
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
     throw new HrmConstructionError(
       `Pay component ${payComponentId} does not exist in this organization — link the policy to an allowance or reimbursement component.`,
@@ -293,8 +287,7 @@ async function approvedWeekHours(
 ): Promise<
   ReadonlyArray<{ workedOn: string; projectId: string | null; hours: string }>
 > {
-  const raw = (
-    await exec.execute<{
+  const raw = await exec.execute<{
       workedOn: string;
       projectId: string | null;
       hours: string;
@@ -307,8 +300,7 @@ async function approvedWeekHours(
          and worked_on >= ${weekStart}::date and worked_on < (${weekStart}::date + interval '7 days')
        group by worked_on, project_id
        order by worked_on, project_id nulls first
-    `)
-  ).rows;
+    `, "objects");
   const rows: Array<{
     workedOn: string;
     projectId: string | null;
@@ -342,11 +334,9 @@ async function coordinatesForLocation(
   orgId: string,
   locationId: string,
 ): Promise<{ lat: number; lng: number } | null> {
-  const row = (
-    await exec.execute<{ custom: Record<string, unknown> }>(sql`
+  const row = (await exec.execute<{ custom: Record<string, unknown> }>(sql`
       select custom from locations where org_id = ${orgId}::uuid and id = ${locationId}::uuid
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   const custom = row?.custom;
   if (!custom) return null;
   const lat = Number(custom.latitude ?? custom.lat);
@@ -360,11 +350,9 @@ async function projectLocationId(
   orgId: string,
   projectId: string,
 ): Promise<string | null> {
-  const row = (
-    await exec.execute<{ custom: Record<string, unknown> }>(sql`
+  const row = (await exec.execute<{ custom: Record<string, unknown> }>(sql`
       select custom from projects where org_id = ${orgId}::uuid and id = ${projectId}::uuid
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   const locationId = row?.custom?.location_id;
   return typeof locationId === "string" ? locationId : null;
 }
@@ -424,12 +412,10 @@ async function employmentParty(
   orgId: string,
   employmentId: string,
 ): Promise<string> {
-  const row = (
-    await exec.execute<{ partyId: string }>(sql`
+  const row = (await exec.execute<{ partyId: string }>(sql`
       select worker_party_id::text as "partyId"
         from worker_employments where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
     throw new HrmConstructionError(
       `Employment ${employmentId} does not exist in this organization — compute per-diem for one of its employments.`,
@@ -452,15 +438,13 @@ async function policyForWeek(
     );
   }
   // Deterministic: first by name among policies whose window covers the week.
-  const rows = (
-    await exec.execute<{ id: string }>(sql`
+  const rows = (await exec.execute<{ id: string }>(sql`
       select id::text as id from hrm_per_diem_policies
        where org_id = ${orgId}::uuid and is_active
          and effective_from <= ${weekStart}::date
          and (effective_to is null or effective_to >= ${weekStart}::date)
        order by name limit 1
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!rows) {
     throw new HrmConstructionError(
       `No per-diem policy covers the week of ${weekStart} — declare or extend one before computing.`,
@@ -702,14 +686,12 @@ async function upsertEntry(
     basisInputs: Record<string, unknown>;
   },
 ): Promise<PerDiemEntry> {
-  const existing = (
-    await exec.execute<{ id: string; status: string }>(sql`
+  const existing = (await exec.execute<{ id: string; status: string }>(sql`
       select id::text as id, status from ${sql.raw(table)}
        where org_id = ${orgId}::uuid and employment_id = ${entry.employmentId}::uuid
          and project_id is not distinct from ${entry.projectId}::uuid
          and worked_on = ${entry.workedOn}::date
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (existing && existing.status !== "computed") {
     throw new HrmConstructionError(
       `The ${entry.workedOn} entry is ${existing.status} — void it with a reason before recomputing the day.`,
@@ -725,8 +707,7 @@ async function upsertEntry(
     `);
     return readEntry(exec, orgId, table, String(existing.id));
   }
-  const created = (
-    await exec.execute<{ id: string }>(sql`
+  const created = (await exec.execute<{ id: string }>(sql`
       insert into ${sql.raw(table)}
         (org_id, employment_id, project_id, worked_on, policy_id, amount, currency,
          basis_inputs, status, created_by, updated_by)
@@ -735,8 +716,7 @@ async function upsertEntry(
               ${entry.currency}, ${JSON.stringify(entry.basisInputs)}::jsonb, 'computed',
               ${actorId}::uuid, ${actorId}::uuid)
       returning id::text as id
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!created)
     throw new HrmConstructionError(
       `The ${entry.workedOn} entry was not written — no row was created.`,
@@ -750,8 +730,7 @@ async function readEntry(
   table: "hrm_per_diem_entries" | "hrm_travel_pay_entries",
   id: string,
 ): Promise<PerDiemEntry> {
-  const row = (
-    await exec.execute<{
+  const row = (await exec.execute<{
       id: string;
       employmentId: string;
       projectId: string | null;
@@ -766,8 +745,7 @@ async function readEntry(
              policy_id::text as "policyId", amount::text as amount, currency, status
         from ${sql.raw(table)}
        where org_id = ${orgId}::uuid and id = ${id}::uuid
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) throw new HrmConstructionError(`Entry ${id} cannot be read back.`);
   return row;
 }
@@ -790,8 +768,7 @@ export async function listEntries(
     "hrm.construction.read",
   );
   const statusFilter = status ? sql`and e.status = ${status}::text` : sql``;
-  const rows = (
-    await exec.execute<{
+  const rows = await exec.execute<{
       id: string;
       employmentId: string;
       projectId: string | null;
@@ -810,8 +787,7 @@ export async function listEntries(
          ${statusFilter}
          ${allowed === null ? sql`` : sql`and w.employer_subsidiary_id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
        order by e.worked_on desc
-    `)
-  ).rows;
+    `, "objects");
   return rows;
 }
 
@@ -854,8 +830,7 @@ export async function approveEntry(
       actorId,
       "hrm.construction.manage",
     );
-    const entry = (
-      await exec.execute<{
+    const entry = (await exec.execute<{
         id: string;
         employmentId: string;
         employerSubsidiaryId: string | null;
@@ -877,8 +852,7 @@ export async function approveEntry(
           join hrm_per_diem_policies p on p.org_id = e.org_id and p.id = e.policy_id
          where e.org_id = ${orgId}::uuid and e.id = ${entryId}::uuid
          for update of e
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (
       !entry ||
       (allowed !== null &&
@@ -969,8 +943,7 @@ export async function voidEntry(
       actorId,
       "hrm.construction.manage",
     );
-    const locked = (
-      await exec.execute<{
+    const locked = (await exec.execute<{
         employmentId: string;
         employerSubsidiaryId: string | null;
       }>(sql`
@@ -980,8 +953,7 @@ export async function voidEntry(
           left join worker_employments w on w.org_id = e.org_id and w.id = e.employment_id
          where e.org_id = ${orgId}::uuid and e.id = ${entryId}::uuid
          for update of e
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (
       !locked ||
       (allowed !== null &&
@@ -992,27 +964,23 @@ export async function voidEntry(
         `Entry ${entryId} cannot be voided — it does not exist here or is already voided or consumed.`,
       );
     }
-    const seam = (
-      await exec.execute<{ status: string | null; runId: string | null }>(sql`
+    const seam = (await exec.execute<{ status: string | null; runId: string | null }>(sql`
         select status, consumed_by_run_document_id::text as "runId"
           from hrm_allowance_payroll_inputs
          where org_id = ${orgId}::uuid and entry_kind = ${input.kind} and entry_id = ${entryId}::uuid
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (seam && seam.status === "consumed") {
       throw new HrmConstructionError(
         `Entry ${entryId} was consumed by pay run ${seam.runId} — recalculate the run instead of voiding it.`,
       );
     }
-    const updated = (
-      await exec.execute<{ id: string }>(sql`
+    const updated = (await exec.execute<{ id: string }>(sql`
         update ${sql.raw(table)}
            set status = 'voided', voided_at = now(), void_reason = ${reason},
                updated_by = ${actorId}::uuid, updated_at = now()
          where org_id = ${orgId}::uuid and id = ${entryId}::uuid and status in ('computed', 'approved')
         returning id::text as id
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!updated) {
       throw new HrmConstructionError(
         `Entry ${entryId} cannot be voided — it does not exist here or is already voided or consumed.`,
@@ -1183,8 +1151,7 @@ export async function listPendingSeam(
     coverageDate: string;
   }[]
 > {
-  const rows = (
-    await exec.execute<{
+  const rows = await exec.execute<{
       id: string;
       entryKind: string;
       amount: string;
@@ -1196,8 +1163,7 @@ export async function listPendingSeam(
         from hrm_allowance_payroll_inputs
        where org_id = ${orgId}::uuid and status = 'pending'
        order by coverage_date
-    `)
-  ).rows;
+    `, "objects");
   return rows;
 }
 
@@ -1207,14 +1173,12 @@ export async function markSeamConsumed(
   seamId: string,
   runDocumentId: string,
 ): Promise<void> {
-  const updated = (
-    await exec.execute<{ id: string }>(sql`
+  const updated = (await exec.execute<{ id: string }>(sql`
       update hrm_allowance_payroll_inputs
          set status = 'consumed', consumed_by_run_document_id = ${runDocumentId}::uuid, updated_at = now()
        where org_id = ${orgId}::uuid and id = ${seamId}::uuid and status = 'pending'
       returning id::text as id
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!updated) {
     throw new HrmConstructionError(
       `Allowance seam row ${seamId} cannot be consumed — it does not exist here or is no longer pending.`,

@@ -80,7 +80,7 @@ test("progress records in the budget unit, reverses exactly once, and history is
     assert.equal(history.length, 2);
     assert.equal(history.find((row) => row.id === entry.id)?.reversedByEntryId, reversal.id);
     const audits = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'project_progress_entries'`)).rows[0]!.n;
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'project_progress_entries'`, "objects"))[0]!.n;
     assert.equal(audits, 2);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -101,7 +101,7 @@ test("progress and forecasts refuse while Progress tracking is off", enabled, as
     );
     const rows = (await db.execute<{ n: number }>(sql`
       select (select count(*) from project_progress_entries where org_id = ${org.orgId})
-           + (select count(*) from project_forecasts where org_id = ${org.orgId}) as n`)).rows[0]!;
+           + (select count(*) from project_forecasts where org_id = ${org.orgId}) as n`, "objects"))[0]!;
     assert.equal(Number(rows.n), 0);
   } finally {
     await dropScratchOrg(org.orgId);

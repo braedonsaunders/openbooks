@@ -126,7 +126,7 @@ function independentHmac(secret: string, timestamp: string, body: string): strin
 async function deliveryCount(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from webhook_deliveries where org_id = ${orgId}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
 }
 
 test("restricted webhook managers cannot configure organization-wide endpoints", { skip: !DB }, async () => {
@@ -142,7 +142,7 @@ test("restricted webhook managers cannot configure organization-wide endpoints",
     );
     assert.equal((await db.execute<{ n: number }>(sql`
       select count(*)::int as n from webhook_endpoints where org_id = ${org.orgId}
-    `)).rows[0]!.n, 0);
+    `, "objects"))[0]!.n, 0);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -162,7 +162,7 @@ test("an event emitted in a rolled-back transaction is never delivered", { skip:
     );
     const events = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from webhook_events where org_id = ${org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(events, 0, "the rolled-back emit stored no event");
     const scan = await runWebhookDeliveryScan();
     assert.equal(scan.attempted, 0, "no delivery was queued");
@@ -200,9 +200,9 @@ test("delivery carries the documented signature, verifiable independently", { sk
     assert.ok(presented.includes(expected), "the header carries the independently computed HMAC");
     assert.equal(verifyWebhookSignature(endpoint.secret, signature, seen.body), true);
     assert.equal(verifyWebhookSignature(endpoint.secret, signature, `${seen.body} `), false, "a tampered body refuses");
-    const deliveries = (await db.execute<{ status: string; code: number }>(sql`
+    const deliveries = await db.execute<{ status: string; code: number }>(sql`
       select status, last_response_code as code from webhook_deliveries where org_id = ${org.orgId}
-    `)).rows;
+    `, "objects");
     assert.equal(deliveries.length, 1);
     assert.equal(deliveries[0]!.status, "delivered");
     assert.equal(deliveries[0]!.code, 200);
@@ -228,7 +228,7 @@ test("a failing endpoint retries with backoff, then goes dead after 3 days", { s
       select status, attempt_count as attempts, next_attempt_at as "nextAttempt",
              last_response_code as code
         from webhook_deliveries where org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(afterFirst.status, "pending", "a 500 stays queued");
     assert.equal(afterFirst.attempts, 1);
     assert.equal(afterFirst.code, 500);
@@ -246,7 +246,7 @@ test("a failing endpoint retries with backoff, then goes dead after 3 days", { s
     await runWebhookDeliveryScan();
     const terminal = (await db.execute<{ status: string; error: string }>(sql`
       select status, last_error as error from webhook_deliveries where org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(terminal.status, "dead");
     assert.match(terminal.error ?? "", /3 days/);
   } finally {
@@ -271,30 +271,30 @@ test("a 410 disables the endpoint with audit evidence and an admin notice", { sk
     assert.equal(goneScan.delivered, 0, "a 410 is not counted as delivered");
     const delivery = (await db.execute<{ status: string }>(sql`
       select status from webhook_deliveries where org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(delivery.status, "failed");
     const state = (await db.execute<{ status: string; reason: string }>(sql`
       select status, disabled_reason as reason from webhook_endpoints where id = ${endpoint.id}::uuid
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(state.status, "disabled");
     assert.match(state.reason ?? "", /410/);
     const audit = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${org.orgId} and table_name = 'webhook_endpoints'
          and row_id = ${endpoint.id} and changes->>'event' = 'endpoint_auto_disabled'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(audit, 1, "the auto-disable wrote audit evidence");
     const notices = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
        where org_id = ${org.orgId} and user_id = ${adminId}
          and kind = 'webhook_endpoint_disabled' and href = '/admin/webhooks' and read_at is null
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(notices, 1, "an admin was notified where they work");
     const wildcardNotices = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
        where org_id = ${org.orgId} and user_id = ${wildcardAdminId}
          and kind = 'webhook_endpoint_disabled' and href = '/admin/webhooks' and read_at is null
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(wildcardNotices, 1, "a wildcard role was notified");
   } finally {
     await stopCaptureServer(capture);
@@ -319,7 +319,7 @@ test("repeated failures auto-disable the endpoint at its threshold", { skip: !DB
     const first = (await db.execute<{ failures: number; status: string }>(sql`
       select e.consecutive_failures as failures, e.status
         from webhook_endpoints e where e.id = ${endpoint.id}::uuid
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(first.failures, 1);
     assert.equal(first.status, "active", "below the threshold the endpoint stays up");
     await db.execute(sql`
@@ -329,7 +329,7 @@ test("repeated failures auto-disable the endpoint at its threshold", { skip: !DB
     const second = (await db.execute<{ failures: number; status: string }>(sql`
       select e.consecutive_failures as failures, e.status
         from webhook_endpoints e where e.id = ${endpoint.id}::uuid
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(second.failures, 2);
     assert.equal(second.status, "disabled", "reaching the threshold disables the endpoint");
   } finally {
@@ -381,7 +381,7 @@ test("test pings and manual redeliveries run synchronously with audit", { skip: 
       select count(*)::int as n from audit_log
        where org_id = ${org.orgId} and table_name = 'webhook_deliveries'
          and changes->>'event' = 'test_ping'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(pingAudit, 1, "the test ping wrote audit evidence");
     // A refused ping fails terminally, then redelivers cleanly.
     capture.respondWith = { status: 400, body: "bad" };

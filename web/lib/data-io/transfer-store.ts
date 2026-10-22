@@ -31,9 +31,9 @@ const projection = sql.raw(`id, org_id as "orgId", actor_id as "actorId", kind, 
  scope, schema_hash as "schemaHash", source_hash as "sourceHash", claim_token as "claimToken", failed_phase as "failedPhase"`)
 
 export async function loadTransfer(orgId: string, id: string, lock = false): Promise<StoredTransfer> {
-  const result = await db.execute<StoredTransfer & Record<string, unknown>>(sql`select ${projection} from data_transfer_jobs where org_id=${orgId} and id=${id}${lock ? sql` for update` : sql``}`)
-  if (!result.rows[0]) throw new TransferRefusal('Transfer not found.', 404)
-  return result.rows[0]
+  const result = await db.execute<StoredTransfer & Record<string, unknown>>(sql`select ${projection} from data_transfer_jobs where org_id=${orgId} and id=${id}${lock ? sql` for update` : sql``}`, 'objects')
+  if (!result[0]) throw new TransferRefusal('Transfer not found.', 404)
+  return result[0]
 }
 export function publicTransfer(job: StoredTransfer): TransferJob {
   const { orgId: _org, actorId: _actor, scope: _scope, schemaHash: _schema, sourceHash: _source, claimToken: _claim, failedPhase: _phase, ...result } = job
@@ -77,14 +77,14 @@ export async function updateImportHistory(job: StoredTransfer, state: string, ou
   const result = await db.execute(sql`update import_jobs set status=${state},total_rows=${job.totalRows},
     created_count=${outcome.created},updated_count=${outcome.updated},failed_count=${outcome.failed},errors=${JSON.stringify(outcome.errors)}::jsonb,
     mapping=${JSON.stringify(job.options.mapping ?? {})}::jsonb,mode=${job.options.importMode ?? 'upsert'}
-    where org_id=${job.orgId} and id=${job.id} returning id`)
-  if (result.rows.length !== 1) throw new Error('Import history checkpoint did not persist')
+    where org_id=${job.orgId} and id=${job.id} returning id`, 'objects')
+  if (result.length !== 1) throw new Error('Import history checkpoint did not persist')
 }
 export async function createTransfer(authz: Authz, input: {
   requestKey: string; kind: 'import' | 'export'; resource: string; format: ExportFormat; filename: string; bytes: number; options?: TransferOptions
 }): Promise<TransferJob> {
   const requestHash = digest(canonical(input))
-  const prior = (await db.execute<{ id: string; request_hash: string }>(sql`select id,request_hash from data_transfer_jobs where org_id=${authz.user.orgId} and actor_id=${authz.user.id} and request_key=${input.requestKey}`)).rows[0]
+  const prior = (await db.execute<{ id: string; request_hash: string }>(sql`select id,request_hash from data_transfer_jobs where org_id=${authz.user.orgId} and actor_id=${authz.user.id} and request_key=${input.requestKey}`, 'objects'))[0]
   if (prior) {
     if (prior.request_hash !== requestHash) throw new TransferRefusal('This request key was already used with different transfer inputs — create a new request key.')
     const existing = await loadTransfer(authz.user.orgId, prior.id)
@@ -98,9 +98,9 @@ export async function createTransfer(authz: Authz, input: {
   if (input.kind === 'export' && (!input.options?.columns?.length || input.options.columns.some((key) => !columns.some((column) => column.key === key)))) throw new TransferRefusal('Select at least one available export column.', 422)
   const inserted = await db.execute<{ id: string }>(sql`insert into data_transfer_jobs
     (org_id,actor_id,kind,resource_key,format,file_name,state,byte_count,scope,options,fields,schema_hash,request_key,request_hash)
-    values (${job.orgId},${job.actorId},${input.kind},${input.resource},${input.format},${input.filename},${input.kind === 'import' ? 'uploading' : 'exporting'},${input.bytes},${JSON.stringify(job.scope)}::jsonb,${JSON.stringify(job.options)}::jsonb,${JSON.stringify(fields)}::jsonb,${digest(canonical({ fields, columns }))},${input.requestKey},${requestHash}) returning id`)
-  if (!inserted.rows[0]) throw new Error('Transfer creation did not persist')
-  const stored = await loadTransfer(job.orgId, inserted.rows[0].id)
+    values (${job.orgId},${job.actorId},${input.kind},${input.resource},${input.format},${input.filename},${input.kind === 'import' ? 'uploading' : 'exporting'},${input.bytes},${JSON.stringify(job.scope)}::jsonb,${JSON.stringify(job.options)}::jsonb,${JSON.stringify(fields)}::jsonb,${digest(canonical({ fields, columns }))},${input.requestKey},${requestHash}) returning id`, 'objects')
+  if (!inserted[0]) throw new Error('Transfer creation did not persist')
+  const stored = await loadTransfer(job.orgId, inserted[0].id)
   if (stored.kind === 'import') await db.execute(sql`insert into import_jobs (id,org_id,resource_key,resource_label,format,file_name,status,created_by)
     values (${stored.id},${stored.orgId},${stored.resource},${resource.descriptor.label},${stored.format},${stored.filename},'uploading',${stored.actorId})`)
   await recordTransferEvent(stored, 'created', stored.state, { requestHash, scope: stored.scope, options: stored.options, schemaHash: stored.schemaHash })
@@ -120,8 +120,8 @@ export async function updateTransfer(job: StoredTransfer, patch: Partial<Pick<St
   const jsonKeys = new Set(['headers', 'sample', 'outcome', 'preview'])
   const sets = Object.entries(patch).map(([key, value]) => sql`${sql.raw(names[key as keyof typeof patch])}=${jsonKeys.has(key) ? sql`${JSON.stringify(value)}::jsonb` : sql`${value}`}`)
   if (!sets.length) return
-  const result = await db.execute(sql`update data_transfer_jobs set ${sql.join(sets, sql`, `)},updated_at=now(),claim_until=now()+interval '10 minutes' where org_id=${job.orgId} and id=${job.id} and revision=${job.revision} returning id`)
-  if (result.rows.length !== 1) throw new TransferRefusal('The transfer changed concurrently — reload its current status before retrying.')
+  const result = await db.execute(sql`update data_transfer_jobs set ${sql.join(sets, sql`, `)},updated_at=now(),claim_until=now()+interval '10 minutes' where org_id=${job.orgId} and id=${job.id} and revision=${job.revision} returning id`, 'objects')
+  if (result.length !== 1) throw new TransferRefusal('The transfer changed concurrently — reload its current status before retrying.')
   if (patch.state) await updateImportHistory({ ...job, ...patch }, patch.state === 'completed' ? 'committed' : patch.state)
   if (event) await recordTransferEvent(job, event, patch.state ?? job.state, {
     ...patch,

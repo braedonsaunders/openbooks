@@ -44,7 +44,7 @@ const PAY_GAP_FX_SPEC = {
 
 async function setLaborCosting(orgId: string, patch: Record<string, unknown>): Promise<void> {
   const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`)).rows[0]?.settings ?? {};
+    select settings from orgs where id = ${orgId}`, "objects"))[0]?.settings ?? {};
   const next = {
     ...(current as Record<string, unknown>),
     laborCosting: { ...((current as Record<string, unknown>).laborCosting as Record<string, unknown> ?? {}), ...patch },
@@ -54,14 +54,14 @@ async function setLaborCosting(orgId: string, patch: Record<string, unknown>): P
 
 async function storedMetrics(orgId: string, snapshotId: string): Promise<Record<string, unknown>> {
   const row = (await db.execute<{ metrics: Record<string, unknown> }>(sql`
-    select metrics from hrm_pay_gap_snapshots where org_id = ${orgId} and id = ${snapshotId}`)).rows[0];
+    select metrics from hrm_pay_gap_snapshots where org_id = ${orgId} and id = ${snapshotId}`, "objects"))[0];
   assert.ok(row, "snapshot row is readable from storage");
   return row.metrics;
 }
 
 async function snapshotCount(orgId: string): Promise<number> {
   const row = (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from hrm_pay_gap_snapshots where org_id = ${orgId}`)).rows[0];
+    select count(*)::text as n from hrm_pay_gap_snapshots where org_id = ${orgId}`, "objects"))[0];
   return Number(row?.n ?? "0");
 }
 

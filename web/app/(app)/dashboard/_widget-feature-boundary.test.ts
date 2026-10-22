@@ -31,7 +31,7 @@ registerHooks({
       return wrap('web/app/(app)/dashboard/_metrics.ts', `export async function loadDashboardMetrics(authz,ids){globalThis.__dashboardFeatureBoundary.metrics.push(ids);return {}}`)
     }
     if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/dashboard/actions.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async transaction(fn){return fn({async execute(query){globalThis.__dashboardFeatureBoundary.writes.push(query);return {rows:[]}}})}}`) }
+      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async transaction(fn){return fn({async execute(query, mode){ const inMode = (result) => (mode === 'objects' ? result.rows : result);globalThis.__dashboardFeatureBoundary.writes.push(query);return inMode({rows:[]})}})}}`) }
     }
     if (s === 'next/cache') return { shortCircuit: true, url: 'data:text/javascript,export function revalidatePath(){}' }
     return resolveAppModule(s, c, next, root) ?? next(s, c)

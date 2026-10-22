@@ -61,10 +61,10 @@ async function guardParty(
   const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
      where id = ${partyId} and org_id = ${gate.user.orgId}
-  `))
-  if (!party.rows[0]) return notFound("record")
+  `, 'objects'))
+  if (!party[0]) return notFound("record")
   // Null-subsidiary parties are org-wide, like every other party reader here.
-  return guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+  return guardSubsidiaryScope(gate, party[0].subsidiaryId, { orgWideNull: true })
 }
 
 /**
@@ -90,12 +90,12 @@ async function getCreditApplications(req: Request) {
     select party_id as "partyId", subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and org_id = ${gate.user.orgId}
        and kind in ${side === 'ap' ? ['vendor_credit', 'vendor_payment'] : ['customer_credit', 'customer_payment']}
-  `))
-  if (!doc.rows[0]) return notFound("record")
-  const documentDenied = guardSubsidiaryScope(gate, doc.rows[0].subsidiaryId)
+  `, 'objects'))
+  if (!doc[0]) return notFound("record")
+  const documentDenied = guardSubsidiaryScope(gate, doc[0].subsidiaryId)
   if (documentDenied) return documentDenied
-  if (doc.rows[0].partyId) {
-    const denied = await guardParty(gate, doc.rows[0].partyId)
+  if (doc[0].partyId) {
+    const denied = await guardParty(gate, doc[0].partyId)
     if (denied) return denied
   }
   try {
@@ -169,8 +169,8 @@ async function releaseCredits(req: Request) {
       left join documents credit
         on credit.id = je.source_document_id and credit.org_id = a.org_id
      where a.id = ${applicationId} and a.org_id = ${gate.user.orgId}
-  `))
-  const row = settlement.rows[0]
+  `, 'objects'))
+  const row = settlement[0]
   const actualSide = row?.kind === 'vendor_credit' || row?.kind === 'vendor_payment' ? 'ap'
     : row?.kind === 'customer_credit' || row?.kind === 'customer_payment' ? 'ar' : null
   if (!row || actualSide !== side) {

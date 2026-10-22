@@ -1,249 +1,71 @@
-// source-pin-contract: the bootstrap publishes its migration-filename transition table and ledger convergence between named test-surface markers; the extracted code is executed against scratch ledgers, not matched
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import { generatedMigrationFiles } from "../scripts/bootstrap/migration-transitions.ts";
+import { generatedMigrationFiles } from "../scripts/bootstrap/migration-files.ts";
 
-const migrationsDirectory = "schema/migrations";
-const generatedDirectory = `${migrationsDirectory}/generated`;
-// ARCH-FILE-SPLIT: the transition table, convergence surface, and target
-// validation live in scripts/bootstrap/migration-transitions.ts (was scripts/bootstrap.ts).
-const bootstrapSource = readFileSync("scripts/bootstrap/migration-transitions.ts", "utf8");
-
-function publishedMigrationFiles() {
-  return readdirSync(generatedDirectory)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
+// The bootstrap discovers forward migrations by filename and records each in
+// the applied ledger under that name, so the ordinal is the apply order. The
+// rule is exercised against scratch directories because the published forward
+// set is whatever the current release carries above its baseline, and may be
+// empty.
+function forwardDirectory(context, files) {
+  const directory = mkdtempSync(join(tmpdir(), "openbooks-forward-migrations-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const file of files) writeFileSync(join(directory, file), "select 1;\n");
+  return directory;
 }
 
-function assertUniqueMigrationOrdinals(files) {
-  const seen = new Map();
-  let previousOrdinal = -1;
-  for (const file of files) {
-    const match = /^(\d{4})_[a-z0-9_]+\.sql$/.exec(file);
-    assert.ok(match, `${file} must start with a four-digit migration ordinal`);
-    const ordinal = Number(match[1]);
-    assert.ok(
-      !seen.has(ordinal),
-      `${seen.get(ordinal)} and ${file} share migration ordinal ${match[1]}`,
+test("forward migrations are discovered in ordinal order and non-SQL files are ignored", (context) => {
+  const directory = forwardDirectory(context, [
+    "0010_later.sql",
+    "0002_second.sql",
+    "0001_first.sql",
+    "README.md",
+    "0003_storage.integration.test.ts",
+  ]);
+  assert.deepEqual(generatedMigrationFiles(directory), [
+    "0001_first.sql",
+    "0002_second.sql",
+    "0010_later.sql",
+  ]);
+  assert.deepEqual(generatedMigrationFiles(forwardDirectory(context, ["README.md"])), []);
+});
+
+test("a forward migration without a four-digit snake_case ordinal is refused", (context) => {
+  for (const malformed of [
+    "001_short.sql",
+    "00001_long.sql",
+    "0004-dashes.sql",
+    "0004_Upper.sql",
+    "baseline.sql",
+  ]) {
+    const directory = forwardDirectory(context, ["0001_first.sql", malformed]);
+    assert.throws(
+      () => generatedMigrationFiles(directory),
+      (error) =>
+        error instanceof Error
+        && error.message.includes(`${malformed} does not have a four-digit ordinal`),
+      `${malformed} must be refused`,
     );
-    assert.ok(
-      ordinal > previousOrdinal,
-      `${file} must follow strictly increasing migration ordinals`,
-    );
-    seen.set(ordinal, file);
-    previousOrdinal = ordinal;
   }
-}
+});
 
-async function bootstrapTransitionModule() {
-  const transitionTable = bootstrapSource.match(
-    /export const APPROVED_MIGRATION_FILENAME_TRANSITIONS:[\s\S]*?\n\];/,
-  )?.[0];
-  const convergence = bootstrapSource.match(
-    /\/\/ BEGIN migration-filename-convergence-test-surface\n([\s\S]*?)\/\/ END migration-filename-convergence-test-surface/,
-  )?.[1];
-  const targetValidation = bootstrapSource.match(
-    /function assertMigrationFilenameTransitionTargets\([\s\S]*?\n}\n/,
-  )?.[0];
-  assert.ok(transitionTable, "bootstrap must publish exact migration filename transitions");
-  assert.ok(convergence, "bootstrap must expose its ledger convergence implementation");
-  assert.ok(targetValidation, "bootstrap must expose its transition target validation");
-  const javascript = `
-    import { createHash } from "node:crypto";
-    import { readFileSync } from "node:fs";
-    import { join } from "node:path";
-    const repoRoot = ${JSON.stringify(process.cwd())};
-    const migrationsDir = join(repoRoot, "schema", "migrations");
-    function sha256(value) {
-      return createHash("sha256").update(value).digest("hex");
-    }
-    ${transitionTable}
-    export ${targetValidation}
-    ${convergence}
-  `
-    .replace(
-      /: ReadonlyArray<MigrationFilenameTransition>/g,
-      "",
-    )
-    .replace(/generated: readonly string\[\]/, "generated")
-    .replace(/\): void \{/, ") {")
-    .replace(/client: MigrationLedgerClient/, "client")
-    .replace(/\): Promise<void> \{/, ") {")
-    .replace(
-      /client\.query<\{ filename: string; sha256: string \}>\(/,
-      "client.query(",
-    );
-  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
-}
-
-class MemoryMigrationLedger {
-  constructor(rows) {
-    this.rows = new Map(rows.map((row) => [row.filename, { ...row }]));
-    this.updateCount = 0;
-    this.migrationBodyExecutions = 0;
-  }
-
-  async query(statement, values = []) {
-    const normalized = statement.replaceAll(/\s+/g, " ").trim().toLowerCase();
-    if (normalized.startsWith("select filename, sha256")) {
-      const [legacyFilename, canonicalFilename] = values;
-      return {
-        rows: [legacyFilename, canonicalFilename]
-          .map((filename) => this.rows.get(filename))
-          .filter(Boolean)
-          .map((row) => ({ ...row })),
-        rowCount: 0,
-      };
-    }
-    if (normalized.startsWith("update public._applied_migrations")) {
-      const [canonicalFilename, legacyFilename, digest] = values;
-      const legacy = this.rows.get(legacyFilename);
-      if (!legacy || legacy.sha256 !== digest || this.rows.has(canonicalFilename)) {
-        return { rows: [], rowCount: 0 };
-      }
-      this.rows.delete(legacyFilename);
-      this.rows.set(canonicalFilename, {
-        filename: canonicalFilename,
-        sha256: legacy.sha256,
-      });
-      this.updateCount += 1;
-      return { rows: [], rowCount: 1 };
-    }
-    throw new Error(`unexpected ledger query: ${normalized}`);
-  }
-
-  snapshot() {
-    return [...this.rows.values()].sort((left, right) =>
-      left.filename.localeCompare(right.filename));
-  }
-}
-
-test("published migrations have unique, strictly increasing numeric ordinals", () => {
-  const files = publishedMigrationFiles();
-  assertUniqueMigrationOrdinals(files);
+test("two forward migrations sharing an ordinal are refused", (context) => {
+  const directory = forwardDirectory(context, [
+    "0001_first.sql",
+    "0002_first_claim.sql",
+    "0002_second_claim.sql",
+  ]);
   assert.throws(
-    () => assertUniqueMigrationOrdinals([
-      "0001_baseline.sql",
-      "0002_first.sql",
-      "0002_second.sql",
-    ]),
-    /share migration ordinal 0002/,
-    "the build contract must reject a future duplicate prefix",
+    () => generatedMigrationFiles(directory),
+    /0002_first_claim\.sql and 0002_second_claim\.sql share ordinal 0002/,
   );
 });
 
-test("bootstrap resolves renamed migrations to their published bodies and digests", async () => {
-  const files = new Set(publishedMigrationFiles());
-  const {
-    APPROVED_MIGRATION_FILENAME_TRANSITIONS: transitions,
-    assertMigrationFilenameTransitionTargets,
-  } = await bootstrapTransitionModule();
-  assert.equal(transitions.length, 4);
-  assert.deepEqual(
-    transitions.map((transition) => transition.to.filename),
-    [
-      "generated/0035_terminal_failure_surfacing.sql",
-      "generated/0036_bank_statement_source_idempotency.sql",
-      "generated/0052_durable_work_lease_fencing.sql",
-      "generated/0063_email_delivery_idempotency.sql",
-    ],
-  );
-  assert.doesNotThrow(() =>
-    assertMigrationFilenameTransitionTargets(publishedMigrationFiles()));
-
-  for (const transition of transitions) {
-    assert.equal(
-      transition.from.sha256,
-      transition.to.sha256,
-      `${transition.from.filename} must be a filename-only transition`,
-    );
-    assert.ok(!files.has(transition.from.filename.replace("generated/", "")));
-    const target = transition.to.filename.replace("generated/", "");
-    assert.ok(files.has(target), `${target} must be published`);
-    const digest = createHash("sha256")
-      .update(readFileSync(`${migrationsDirectory}/${transition.to.filename}`, "utf8"))
-      .digest("hex");
-    assert.equal(digest, transition.to.sha256);
+test("the published forward migration set satisfies the ordinal rule", () => {
+  for (const file of generatedMigrationFiles()) {
+    assert.match(file, /^\d{4}_[a-z0-9_]+\.sql$/);
   }
-});
-
-test("old applied history converges once without replaying migration bodies", async (context) => {
-  context.mock.method(console, "log", () => {});
-  const {
-    APPROVED_MIGRATION_FILENAME_TRANSITIONS: transitions,
-    reconcileMigrationFilenameTransitions,
-  } = await bootstrapTransitionModule();
-  const unrelated = {
-    filename: "generated/0005_posting_effects.sql",
-    sha256: "unrelated-digest",
-  };
-  const ledger = new MemoryMigrationLedger([
-    unrelated,
-    ...transitions.map((transition) => ({ ...transition.from })),
-  ]);
-
-  await reconcileMigrationFilenameTransitions(ledger, transitions);
-  assert.deepEqual(
-    ledger.snapshot(),
-    [
-      unrelated,
-      ...transitions.map((transition) => ({ ...transition.to })),
-    ].sort((left, right) => left.filename.localeCompare(right.filename)),
-  );
-  assert.equal(ledger.updateCount, transitions.length);
-  assert.equal(ledger.migrationBodyExecutions, 0);
-
-  const converged = ledger.snapshot();
-  await reconcileMigrationFilenameTransitions(ledger, transitions);
-  assert.deepEqual(ledger.snapshot(), converged, "a second bootstrap is a no-op");
-  assert.equal(ledger.updateCount, transitions.length, "canonical history must not be rewritten");
-  assert.equal(ledger.migrationBodyExecutions, 0);
-});
-
-test("digest mismatches and ambiguous old/new history fail closed", async () => {
-  const {
-    APPROVED_MIGRATION_FILENAME_TRANSITIONS: transitions,
-    reconcileMigrationFilenameTransitions,
-  } = await bootstrapTransitionModule();
-  const [transition] = transitions;
-  const mismatched = new MemoryMigrationLedger([
-    { ...transition.from, sha256: "changed-published-bytes" },
-  ]);
-  await assert.rejects(
-    reconcileMigrationFilenameTransitions(mismatched, transitions),
-    /changed after it was applied; refusing migration filename convergence/,
-  );
-  assert.deepEqual(mismatched.snapshot(), [
-    { ...transition.from, sha256: "changed-published-bytes" },
-  ]);
-
-  const ambiguous = new MemoryMigrationLedger([
-    { ...transition.from },
-    { ...transition.to },
-  ]);
-  await assert.rejects(
-    reconcileMigrationFilenameTransitions(ambiguous, [transition]),
-    /migration history contains both/,
-  );
-  assert.equal(ambiguous.updateCount, 0);
-});
-
-// The runner keys applied history by the discovered filename and body digest,
-// not by introductory prose. Keep published migration bytes immutable while
-// proving that the actual runner discovers the same catalog this test audits.
-test("bootstrap discovers every published migration by its ledger filename", () => {
-  const files = generatedMigrationFiles();
-  assert.deepEqual(files, publishedMigrationFiles());
-  assert.ok(files.includes("0449_manufacturing_release_snapshots.sql"));
-  const body = readFileSync(
-    `${generatedDirectory}/0449_manufacturing_release_snapshots.sql`,
-    "utf8",
-  );
-  assert.equal(
-    createHash("sha256").update(body).digest("hex"),
-    "f87f2d25591bb17fb2c347d50079074db9748b8235e80a557785392ee65f30d7",
-    "published migration 0449 must retain the body applied under its ledger filename",
-  );
 });

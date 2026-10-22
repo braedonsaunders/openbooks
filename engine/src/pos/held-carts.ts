@@ -48,10 +48,10 @@ export async function holdCart(input: {
   return withOrgTransaction(input.orgId, async () => {
     await assertRegisterFeature(db, input.orgId);
     const register = await loadRegisterForUse(db, input.orgId, input.registerId, { allowedSubsidiaryIds: input.allowedSubsidiaryIds });
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       insert into pos_held_carts (org_id, register_id, label, cart, created_by, updated_by)
       values (${input.orgId}, ${register.id}, ${label}, ${JSON.stringify(content)}::jsonb, ${input.actorId}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (rows.length !== 1) throw new Error("held cart insert returned an unexpected row count");
     return { id: rows[0]!.id };
   });
@@ -60,12 +60,12 @@ export async function holdCart(input: {
 export async function listHeldCarts(orgId: string, registerId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<Array<{ id: string; label: string; lineCount: number; heldAt: string; heldBy: string | null }>> {
   return withOrgTransaction(orgId, async () => {
     const register = await loadRegisterForUse(db, orgId, registerId, { allowedSubsidiaryIds });
-    return (await db.execute<{ id: string; label: string; lineCount: number; heldAt: string; heldBy: string | null }>(sql`
+    return await db.execute<{ id: string; label: string; lineCount: number; heldAt: string; heldBy: string | null }>(sql`
       select h.id, h.label, jsonb_array_length(h.cart->'lines')::int as "lineCount", h.created_at::text as "heldAt", u.name as "heldBy"
         from pos_held_carts h
         left join users u on u.org_id = h.org_id and u.id = h.created_by
        where h.org_id = ${orgId} and h.register_id = ${register.id}
-       order by h.created_at`)).rows;
+       order by h.created_at`, "objects");
   });
 }
 
@@ -82,19 +82,19 @@ export async function resumeHeldCart(orgId: string, registerId: string, heldCart
   return withOrgTransaction(orgId, async () => {
     await assertRegisterFeature(db, orgId);
     const register = await loadRegisterForUse(db, orgId, registerId, { allowedSubsidiaryIds });
-    const rows = (await db.execute<{ cart: HeldCartContent }>(sql`
+    const rows = await db.execute<{ cart: HeldCartContent }>(sql`
       delete from pos_held_carts where org_id = ${orgId} and register_id = ${register.id} and id = ${heldCartId}
-      returning cart`)).rows;
+      returning cart`, "objects");
     if (rows.length !== 1) {
       throw posRefusal("That held cart was already resumed or does not exist.", "held_cart_not_found", 404, "Reload the held carts.");
     }
     const cart = rows[0]!.cart;
     const itemIds = [...new Set(cart.lines.map((line) => line.itemId).filter((id) => isUuid(id)))];
     const items = itemIds.length === 0 ? [] : (await db.execute<{ id: string; name: string; code: string | null }>(sql`
-      select id, name, code from items where org_id = ${orgId} and id in (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`)).rows;
+      select id, name, code from items where org_id = ${orgId} and id in (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`, "objects"));
     const customerName = cart.customerId
       ? (await db.execute<{ name: string }>(sql`
-          select display_name as name from parties where org_id = ${orgId} and id = ${cart.customerId}`)).rows[0]?.name ?? null
+          select display_name as name from parties where org_id = ${orgId} and id = ${cart.customerId}`, "objects"))[0]?.name ?? null
       : null;
     return { ...cart, customerName, items: Object.fromEntries(items.map((item) => [item.id, { name: item.name, code: item.code }])) };
   });

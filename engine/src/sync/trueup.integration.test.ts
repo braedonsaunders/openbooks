@@ -142,8 +142,8 @@ test(
            and audit.changes->>'mode' = 'migration_gl_trueup'
          where entry.org_id = ${org.orgId}
            and entry.entry_number like 'TRUEUP-2026-07-%'
-      `));
-      assert.deepEqual(evidence.rows[0], {
+      `, "objects"));
+      assert.deepEqual(evidence[0], {
         entries: 3,
         lines: 6,
         net: "0.0000",
@@ -158,8 +158,8 @@ test(
           from journal_entries
          where org_id = ${org.orgId}
            and entry_number like 'TRUEUP-2026-07-%'
-      `));
-      assert.deepEqual(trueupNumbers.rows[0], { n: 3, distinct: 3 });
+      `, "objects"));
+      assert.deepEqual(trueupNumbers[0], { n: 3, distinct: 3 });
 
       sourceRows = [
         { accountRef: "A", month: "2026-07", amount: "151.0000" },
@@ -200,8 +200,8 @@ test(
           from journal_entries
          where org_id = ${org.orgId}
            and entry_number like 'TRUEUP-2026-07-%'
-      `));
-      assert.equal(afterFailures.rows[0]?.entries, 3);
+      `, "objects"));
+      assert.equal(afterFailures[0]?.entries, 3);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -296,8 +296,8 @@ test(
           from journal_entries
          where org_id = ${org.orgId}
            and entry_number like 'TRUEUP-2024-03-%'
-      `));
-      assert.equal(oldEntries.rows[0]?.entries, 0);
+      `, "objects"));
+      assert.equal(oldEntries[0]?.entries, 0);
       const oldBalances = (await db.execute<{ account: string; total: string }>(sql`
         select a.custom->>'parityRef' as account, sum(l.amount)::text as total
           from journal_lines l
@@ -307,8 +307,8 @@ test(
            and to_char(e.posting_date, 'YYYY-MM') = '2024-03'
          group by 1
          order by 1
-      `));
-      assert.deepEqual(oldBalances.rows, [
+      `, "objects"));
+      assert.deepEqual(oldBalances, [
         { account: "A", total: "50.0000" },
         { account: "B", total: "-50.0000" },
       ]);
@@ -365,8 +365,8 @@ test(
           from journal_entries
          where org_id = ${org.orgId}
            and entry_number like 'TRUEUP-2026-07-%'
-      `));
-      assert.equal(residuals.rows[0]?.entries, 0);
+      `, "objects"));
+      assert.equal(residuals[0]?.entries, 0);
     } finally {
       await dropScratchOrg(org.orgId);
     }

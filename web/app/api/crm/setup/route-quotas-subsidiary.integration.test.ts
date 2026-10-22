@@ -85,14 +85,14 @@ async function fixture() {
     const inserted = await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)
-    secondSub = inserted.rows[0]!.id
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, 'objects')
+    secondSub = inserted[0]!.id
     // The restricted role may manage setup but sees only the second entity.
     await db.execute(sql`
       update app_roles set permissions='["crm.setup.manage"]'::jsonb,
         subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [secondSub] })}::jsonb
        where org_id=${org.orgId} and key='scoped_setup'`)
-    const employee=(await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Quota representative',${org.subsidiaryId}) returning id`)).rows[0]!.id
+    const employee=(await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Quota representative',${org.subsidiaryId}) returning id`, 'objects'))[0]!.id
     await db.execute(sql`insert into employee_roles(org_id,party_id,is_sales_rep) values(${org.orgId},${employee},true)`)
     await db.execute(sql`
       insert into crm_sales_quotas (org_id, employee_id, sales_team_id, period_start, period_end, currency, amount, filters, created_by, updated_by)
@@ -111,11 +111,9 @@ async function fixture() {
   await withOrgContext(org.orgId, () => ensureCrmDefaults(org.orgId, owner))
   const quotaCount = async (): Promise<number> =>
     Number(
-      (
-        await db.execute<{ n: string }>(
-          sql`select count(*) as n from crm_sales_quotas where org_id=${org.orgId}`,
-        )
-      ).rows[0]!.n,
+      (await db.execute<{ n: string }>(
+          sql`select count(*) as n from crm_sales_quotas where org_id=${org.orgId}`, 'objects',
+        ))[0]!.n,
     )
   const close = async (): Promise<void> => {
     asUser(null)

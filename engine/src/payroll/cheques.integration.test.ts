@@ -19,7 +19,7 @@ test.before(()=>{if(DB)process.env.OPENBOOKS_DATA_KEY="00".repeat(32)});
 test.after(()=>{if(originalDataKey===undefined)delete process.env.OPENBOOKS_DATA_KEY;else process.env.OPENBOOKS_DATA_KEY=originalDataKey});
 async function seedChequeBank(fx:{orgId:string;actorId:string;subsidiaryId:string}) {
   const format=randomUUID(),profile=randomUUID();
-  const bank=(await db.execute<{id:string}>(sql`select id from accounts where org_id=${fx.orgId} and type='asset_bank' and is_active and not is_summary order by number limit 1`)).rows[0]!;
+  const bank=(await db.execute<{id:string}>(sql`select id from accounts where org_id=${fx.orgId} and type='asset_bank' and is_active and not is_summary order by number limit 1`, "objects"))[0]!;
   await db.execute(sql`insert into payment_formats(id,org_id,code,name,rail,direction,created_by,updated_by) values(${format},${fx.orgId},'CHEQUE','Cheque register','cheque','credit',${fx.actorId},${fx.actorId})`);
   await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,payment_format_id,subsidiary_id,currency,created_by,updated_by) values(${profile},${fx.orgId},'Preprinted cheque stock',${bank.id},${format},${fx.subsidiaryId},'CAD',${fx.actorId},${fx.actorId})`);
 }
@@ -67,7 +67,7 @@ test(
     const stamped = (await db.execute<{ count: string }>(sql`
       select count(*) as count from pay_stubs
        where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId}
-         and cheque_number is not null`)).rows[0]!.count;
+         and cheque_number is not null`, "objects"))[0]!.count;
     assert.equal(stamped, "0", "a refused issue must not burn cheque stock");
     // Unrestricted payroll still issues the complete batch.
     assert.equal(
@@ -90,7 +90,7 @@ test("cheque issuance and reprints keep numbering stable, record audit and refus
   const reprint = await issuePayRunCheques(request);
   assert.equal(reprint.issued, 0);
   assert.deepEqual(reprint.cheques, issued.cheques);
-  const audits = (await db.execute<{ n: string }>(sql`select count(*)::text n from audit_log where org_id=${fx.orgId} and row_id=${issued.cheques[0]!.stubId} and changes->>'event'='cheque_issued'`)).rows;
+  const audits = await db.execute<{ n: string }>(sql`select count(*)::text n from audit_log where org_id=${fx.orgId} and row_id=${issued.cheques[0]!.stubId} and changes->>'event'='cheque_issued'`, "objects");
   assert.equal(audits[0]!.n, '1');
   await db.execute(sql`update users set is_active=false where org_id=${fx.orgId} and id=${fx.actorId}`);
   await assert.rejects(issuePayRunCheques(request));
@@ -110,7 +110,7 @@ test("cheque bank identity is frozen at issuance and live print authority refuse
     await seedPayrollSettings(fx.orgId,{features:{payroll:true}});
     const format={id:randomUUID()};
     await db.execute(sql`insert into payment_formats(id,org_id,code,name,rail,direction,created_by,updated_by) values(${format.id},${fx.orgId},'CHEQUE','Cheque register','cheque','credit',${fx.actorId},${fx.actorId})`);
-    const bank=(await db.execute<{id:string}>(sql`select id from accounts where org_id=${fx.orgId} and type='asset_bank' and is_active and not is_summary order by number limit 1`)).rows[0]!;
+    const bank=(await db.execute<{id:string}>(sql`select id from accounts where org_id=${fx.orgId} and type='asset_bank' and is_active and not is_summary order by number limit 1`, "objects"))[0]!;
     const specification={bankName:'Sample bank',branchAddress:'1 Sample Street',institution:'003',transit:'01234',accountEncoding:'0012-345',effectiveFrom:'2026-01-01'};
     const profile={id:randomUUID()};
     await db.execute(sql`insert into payment_bank_profiles(id,org_id,name,bank_account_id,payment_format_id,subsidiary_id,currency,country,originator_secrets_encrypted,created_by,updated_by) values(${profile.id},${fx.orgId},'Cheque stock bank',${bank.id},${format.id},${fx.subsidiaryId},'CAD','CA',${sealJson(specification,{orgId:fx.orgId,purpose:'payment.originator.secrets'})},${fx.actorId},${fx.actorId})`);
@@ -128,7 +128,7 @@ test("cheque bank identity is frozen at issuance and live print authority refuse
     assert.equal((await payRunCheques(fx.orgId,input.documentId)).cheques[0]!.employeeName,first.cheques[0]!.employeeName);
     assert.equal((await issuedChequeBank(fx.orgId,first.cheques[0]!.stubId))!.bank!.accountEncoding,'0012-345');
     await assert.rejects(issuePayRunCheques({...request,bankProfileId:randomUUID()}),/original cheque bank profile/);
-    const audit=(await db.execute<{changes:Record<string,unknown>}>(sql`select changes from audit_log where org_id=${fx.orgId} and row_id=${first.cheques[0]!.stubId} and changes->>'event'='cheque_issued'`)).rows[0]!;
+    const audit=(await db.execute<{changes:Record<string,unknown>}>(sql`select changes from audit_log where org_id=${fx.orgId} and row_id=${first.cheques[0]!.stubId} and changes->>'event'='cheque_issued'`, "objects"))[0]!;
     assert.ok(!JSON.stringify(audit.changes).includes('0012-345'),'bank details stay encrypted in audit evidence');
     await db.execute(sql`update pay_runs set run_status='voided' where org_id=${fx.orgId} and document_id=${input.documentId}`);
     await assert.rejects(db.transaction(tx=>lockIssuedChequePrint(tx,{orgId:fx.orgId,stubId:first.cheques[0]!.stubId,actorId:fx.actorId})),/committed payroll/);

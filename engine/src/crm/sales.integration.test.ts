@@ -52,11 +52,9 @@ test(
         assignees: [{ type: 'user', userId: checker }], mode: 'any', preventSelfApproval: true }));
       await withBypassContext(() => ensureCrmDefaults(org.orgId, maker));
       const employee = await withOrg(org.orgId, async () => {
-        const p = (
-          await db.execute<{ id: string }>(
-            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Native employee without login',${org.subsidiaryId}) returning id`,
-          )
-        ).rows[0]!;
+        const p = (await db.execute<{ id: string }>(
+            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Native employee without login',${org.subsidiaryId}) returning id`, "objects",
+          ))[0]!;
         await db.execute(
           sql`insert into employee_roles(org_id,party_id,is_sales_rep,sales_rep_since) values(${org.orgId},${p.id},true,'2020-01-01')`,
         );
@@ -72,11 +70,11 @@ test(
           if (command.action === 'quota-transition' && command.lifecycle === 'approved') {
             const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
               where org_id=${org.orgId} and subject_kind='sales_quota' and subject_id=${command.id}
-                and status='pending'`)).rows[0];
+                and status='pending'`, "objects"))[0];
             assert.ok(gate, 'the quota decision requires its pending native Flow gate');
             await decideGate({ gateId: gate.id, userId: actorId, decision: 'approved', comment: command.reason });
             return (await db.execute<SalesRecord>(sql`select * from crm_sales_quotas
-              where org_id=${org.orgId} and id=${command.id}`)).rows[0]!;
+              where org_id=${org.orgId} and id=${command.id}`, "objects"))[0]!;
           }
           return writeSalesCommand({ ...scope, actorId }, command) as Promise<SalesRecord>;
         });
@@ -84,11 +82,9 @@ test(
         "inactive employees can be removed from Sales but cannot be newly designated",
         async () => {
           const retired = await withOrg(org.orgId, async () => {
-            const person = (
-              await db.execute<{ id: string }>(
-                sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Retired sales employee',${org.subsidiaryId}) returning id`,
-              )
-            ).rows[0]!.id;
+            const person = (await db.execute<{ id: string }>(
+                sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Retired sales employee',${org.subsidiaryId}) returning id`, "objects",
+              ))[0]!.id;
             await db.execute(
               sql`insert into employee_roles(org_id,party_id,is_active,is_sales_rep,sales_rep_since) values(${org.orgId},${person},false,true,'2020-01-01')`,
             );
@@ -97,11 +93,9 @@ test(
           const revision = await withOrg(
             org.orgId,
             async () =>
-              (
-                await db.execute<{ updated_at: string }>(
-                  sql`select updated_at::text from employee_roles where org_id=${org.orgId} and party_id=${retired}`,
-                )
-              ).rows[0]!.updated_at,
+              (await db.execute<{ updated_at: string }>(
+                  sql`select updated_at::text from employee_roles where org_id=${org.orgId} and party_id=${retired}`, "objects",
+                ))[0]!.updated_at,
           );
           await assert.rejects(
             () =>
@@ -124,11 +118,9 @@ test(
           const saved = await withOrg(
             org.orgId,
             async () =>
-              (
-                await db.execute<{ is_sales_rep: boolean }>(
-                  sql`select is_sales_rep from employee_roles where org_id=${org.orgId} and party_id=${retired}`,
-                )
-              ).rows[0]!,
+              (await db.execute<{ is_sales_rep: boolean }>(
+                  sql`select is_sales_rep from employee_roles where org_id=${org.orgId} and party_id=${retired}`, "objects",
+                ))[0]!,
           );
           assert.equal(saved.is_sales_rep, false);
         },
@@ -328,11 +320,11 @@ test(
           );
           const old = await withOrg(org.orgId, () =>
             db.execute<{ lifecycle: string; amount: string }>(
-              sql`select lifecycle,amount::text from crm_sales_quotas where id=${quota.id} and org_id=${org.orgId}`,
+              sql`select lifecycle,amount::text from crm_sales_quotas where id=${quota.id} and org_id=${org.orgId}`, "objects",
             ),
           );
-          assert.equal(old.rows[0]?.lifecycle, "superseded");
-          assert.equal(old.rows[0]?.amount, "1234.5678");
+          assert.equal(old[0]?.lifecycle, "superseded");
+          assert.equal(old[0]?.amount, "1234.5678");
         },
       );
       await t.test(
@@ -465,7 +457,7 @@ test(
         async () => {
           const before = await withOrg(org.orgId, () =>
             db.execute<{ count: number }>(
-              sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`,
+              sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`, "objects",
             ),
           );
           await withBypassContext(() =>
@@ -488,10 +480,10 @@ test(
             );
             const after = await withOrg(org.orgId, () =>
               db.execute<{ count: number }>(
-                sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`,
+                sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`, "objects",
               ),
             );
-            assert.equal(after.rows[0]?.count, before.rows[0]?.count);
+            assert.equal(after[0]?.count, before[0]?.count);
           } finally {
             await withBypassContext(() =>
               db.execute(
@@ -548,11 +540,11 @@ test(
           });
           const account = await withOrg(org.orgId, () =>
             db.execute<{ sales_rep_id: string; territory_id: string }>(
-              sql`select sales_rep_id,territory_id from crm_account_profiles where org_id=${org.orgId} and party_id=${org.customerId}`,
+              sql`select sales_rep_id,territory_id from crm_account_profiles where org_id=${org.orgId} and party_id=${org.customerId}`, "objects",
             ),
           );
-          assert.equal(account.rows[0]?.sales_rep_id, employee);
-          assert.equal(account.rows[0]?.territory_id, saved.id);
+          assert.equal(account[0]?.sales_rep_id, employee);
+          assert.equal(account[0]?.territory_id, saved.id);
           const another = { ...territory, name: "Overlapping coverage" };
           const conflict = await withOrg(org.orgId, () =>
             db.transaction((tx) => previewTerritory(tx, scope, another)),
@@ -569,17 +561,17 @@ test(
         async () => {
           const statuses = await withOrg(org.orgId, () =>
             db.execute<{ id: string; is_won: boolean }>(
-              sql`select id,is_won from crm_opportunity_statuses where org_id=${org.orgId} and key in ('closed_won','qualification') order by is_won`,
+              sql`select id,is_won from crm_opportunity_statuses where org_id=${org.orgId} and key in ('closed_won','qualification') order by is_won`, "objects",
             ),
           );
-          const won = statuses.rows.find((s) => s.is_won)!.id;
-          const open = statuses.rows.find((s) => !s.is_won)!.id;
+          const won = statuses.find((s) => s.is_won)!.id;
+          const open = statuses.find((s) => !s.is_won)!.id;
           const opportunity = await withOrg(org.orgId, () =>
             db.execute<{ id: string }>(
-              sql`insert into crm_opportunities(org_id,opportunity_number,title,status_id,sales_rep_id,sales_team_id,subsidiary_id,currency,projected_amount,closed_at,updated_by) values(${org.orgId},'OPP-SALES','Native attribution',${won},${employee},${salesTeam.id},${org.subsidiaryId},'CAD','10.1234','2026-09-10',${maker}) returning id`,
+              sql`insert into crm_opportunities(org_id,opportunity_number,title,status_id,sales_rep_id,sales_team_id,subsidiary_id,currency,projected_amount,closed_at,updated_by) values(${org.orgId},'OPP-SALES','Native attribution',${won},${employee},${salesTeam.id},${org.subsidiaryId},'CAD','10.1234','2026-09-10',${maker}) returning id`, "objects",
             ),
           );
-          const id = opportunity.rows[0]!.id;
+          const id = opportunity[0]!.id;
           await assert.rejects(
             () =>
               withOrg(org.orgId, () =>
@@ -600,15 +592,15 @@ test(
               employee_id: string;
               event_kind: string;
             }>(
-              sql`select amount::text,employee_id,event_kind from crm_sales_evidence where org_id=${org.orgId} and source_id=${id} order by created_at,id`,
+              sql`select amount::text,employee_id,event_kind from crm_sales_evidence where org_id=${org.orgId} and source_id=${id} order by created_at,id`, "objects",
             ),
           );
-          assert.equal(evidence.rows.length, 2);
+          assert.equal(evidence.length, 2);
           assert.deepEqual(
-            evidence.rows.map((e) => e.amount),
+            evidence.map((e) => e.amount),
             ["10.1234", "-10.1234"],
           );
-          assert.ok(evidence.rows.every((e) => e.employee_id === employee));
+          assert.ok(evidence.every((e) => e.employee_id === employee));
           await assert.rejects(
             () =>
               withOrg(org.orgId, () =>

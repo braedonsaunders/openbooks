@@ -65,19 +65,19 @@ export async function accruedToDate(orgId: string, securityId: string, asOf?: st
                      where e.org_id = ${orgId} and e.security_id = ${securityId}
                        ${asOf ? sql`and e.effective_on <= ${asOf}::date` : sql``}
                        and not exists (select 1 from equity_security_events r where r.org_id = e.org_id and r.kind = 'reverse' and r.reverses_event_id = e.id)
-                       and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)), 0)::text as events`)).rows[0];
+                       and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)), 0)::text as events`, "objects"))[0];
   return toUnits(row?.runs ?? "0") + toUnits(row?.events ?? "0");
 }
 
 /** The credit the issuance posted to the convertible instruments account of the policy in force on the issue date. */
 async function principalLine(orgId: string, subsidiaryId: string, security: SecurityRecord): Promise<{ accountId: string; currency: string; fxRate: string; units: bigint; txnUnits: bigint }> {
   const issuedUnder = await resolveAccountPolicy(db, orgId, subsidiaryId, security.issueDate);
-  const rows = (await db.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
+  const rows = await db.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
     select l.account_id, l.currency, l.fx_rate::text as fx_rate, l.amount::text as amount, l.txn_amount::text as txn_amount
       from equity_securities s
       join journal_lines l on l.org_id = s.org_id and l.entry_id = s.journal_entry_id
      where s.org_id = ${orgId} and s.id = ${security.id} and l.amount < 0
-       and l.account_id = ${issuedUnder.convertibleInstrumentsAccountId}`)).rows;
+       and l.account_id = ${issuedUnder.convertibleInstrumentsAccountId}`, "objects");
   if (rows.length !== 1) {
     throw equityError("issuanceEntryUnknown", { security: fig.text(security.securityNumber) });
   }

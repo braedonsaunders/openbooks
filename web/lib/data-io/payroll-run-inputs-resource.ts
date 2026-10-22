@@ -73,24 +73,24 @@ export function payrollRunInputsResource(orgId: string): DataResource {
           try {
             const runValue = String(row.run ?? '').trim()
             if (!runValue) throw new Error('Pay run number or ID is required')
-            const run = (await tx.execute<{ id: string }>(sql`select d.id::text as id from documents d
+            const run = await tx.execute<{ id: string }>(sql`select d.id::text as id from documents d
               join pay_runs r on r.document_id=d.id and r.org_id=d.org_id
               where d.org_id=${orgId} and (d.id::text=${runValue} or d.document_number=${runValue})
-                ${subsidiaryReadFilter(sql`d.subsidiary_id`, ctx.allowedSubsidiaryIds)} limit 2`)).rows
+                ${subsidiaryReadFilter(sql`d.subsidiary_id`, ctx.allowedSubsidiaryIds)} limit 2`, 'objects')
             if (run.length !== 1) throw new Error('Pay run not found or ambiguous — use the number or ID of an editable run in your legal entity')
             const employeeValue = String(row.employee ?? '').trim()
             if (!employeeValue) throw new Error('Employee is required — use a unique employee ID or payroll number')
-            const employee = (await tx.execute<{ id: string }>(sql`select distinct p.id::text as id from parties p
+            const employee = await tx.execute<{ id: string }>(sql`select distinct p.id::text as id from parties p
               join employee_payroll_profiles prof on prof.employee_party_id=p.id and prof.org_id=p.org_id
               left join employee_roles er on er.party_id=p.id and er.org_id=p.org_id
               where p.org_id=${orgId} and (p.id::text=${employeeValue} or p.short_code=${employeeValue}
                 or er.employee_number=${employeeValue} or p.display_name=${employeeValue})
-                ${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, ctx.allowedSubsidiaryIds)} limit 2`)).rows
+                ${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, ctx.allowedSubsidiaryIds)} limit 2`, 'objects')
             if (employee.length !== 1) throw new Error('Employee not found or ambiguous — use a unique employee ID or payroll number in your legal entity')
             const componentValue = String(row.component ?? '').trim()
             if (!componentValue) throw new Error('Pay component code or ID is required')
-            const component = (await tx.execute<{ id: string }>(sql`select id::text as id from pay_components
-              where org_id=${orgId} and (id::text=${componentValue} or code=${componentValue}) limit 2`)).rows
+            const component = await tx.execute<{ id: string }>(sql`select id::text as id from pay_components
+              where org_id=${orgId} and (id::text=${componentValue} or code=${componentValue}) limit 2`, 'objects')
             if (component.length !== 1) throw new Error('Pay component not found or ambiguous — use its component code or ID')
             const amount = canonicalDecimal(row.amount, 4)
             if (amount === null) throw new Error(decimalNullRefusal('Amount', 'an amount', row.amount, 4))

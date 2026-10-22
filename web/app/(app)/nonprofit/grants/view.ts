@@ -138,21 +138,21 @@ export async function loadGrants(
           from funds f
           join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
          where f.org_id = ${orgId} and sv.is_active
-         order by sv.code limit 200`),
+         order by sv.code limit 200`, 'objects'),
       loadGroupOptions(orgId),
       db.execute<{ id: string; display_name: string }>(sql`
         select id::text as id, display_name from parties
          where org_id = ${orgId} and is_active
-         order by display_name limit 200`),
+         order by display_name limit 200`, 'objects'),
     ])
     return {
       ...base,
       drawer: {
         mode: 'create',
         remountKey: 'new',
-        fundOptions: funds.rows,
+        fundOptions: funds,
         groupOptions: groups.rows,
-        sponsorOptions: sponsors.rows.map((row) => ({ id: row.id, displayName: row.display_name })),
+        sponsorOptions: sponsors.map((row) => ({ id: row.id, displayName: row.display_name })),
         canManage: can(authz, 'grants.manage'),
         closeHref: '/nonprofit/grants',
       },

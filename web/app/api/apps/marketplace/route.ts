@@ -47,11 +47,9 @@ export const POST = defineRoute({
           // already inactive, so a concurrent second withdraw cannot report
           // {ok:true} after this read. The route still names the key here
           // so a sequential second unpublish refuses before calling the helper.
-          const listing = (
-            await db.execute<{ is_active: boolean }>(
-              sql`select is_active from app_listings where key=${body.key} and publisher_org_id=${gate.user.orgId}`,
-            )
-          ).rows[0]
+          const listing = (await db.execute<{ is_active: boolean }>(
+              sql`select is_active from app_listings where key=${body.key} and publisher_org_id=${gate.user.orgId}`, 'objects',
+            ))[0]
           if (listing && !listing.is_active)
             throw new AppError(
               `Nothing was withdrawn: "${body.key}" is already inactive. Publish it again if you need to withdraw a live listing.`,
@@ -70,11 +68,9 @@ export const POST = defineRoute({
           typeof body.listingId === 'string' &&
           isUuid(body.listingId)
         ) {
-          const listing = (
-            await db.execute<{ manifest: unknown; files: unknown }>(
-              sql`select manifest,files from app_listings where id=${body.listingId} and is_active`,
-            )
-          ).rows[0]
+          const listing = (await db.execute<{ manifest: unknown; files: unknown }>(
+              sql`select manifest,files from app_listings where id=${body.listingId} and is_active`, 'objects',
+            ))[0]
           if (!listing)
             return notFound('record')
           const draft = await draftExtension(

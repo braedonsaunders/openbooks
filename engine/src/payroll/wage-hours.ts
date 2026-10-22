@@ -88,8 +88,8 @@ export async function loadWageTimeEntries(
        and te.worked_on between ${periodStart} and ${periodEnd}
        and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${input.documentId})
        and coalesce(tt.exclude_from_wages, false) = false
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     id: String(row.id),
     employeePartyId: String(row.employee_party_id),
     // Passed through untouched (the driver parses dates): the wage pricer

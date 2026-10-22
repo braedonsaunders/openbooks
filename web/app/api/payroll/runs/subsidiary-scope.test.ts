@@ -176,9 +176,9 @@ async function writeSnapshot(orgId: string): Promise<Record<string, number>> {
                 join files f on f.id = v.file_id where f.org_id = ${orgId})`
         : sql`where org_id = ${orgId}`;
     const r = await db.execute<{ n: string }>(
-      sql`select count(*)::text as n from ${sql.identifier(table)} ${where}`,
+      sql`select count(*)::text as n from ${sql.identifier(table)} ${where}`, "objects",
     );
-    out[table] = Number(r.rows[0]!.n);
+    out[table] = Number(r[0]!.n);
   }
   return out;
   });
@@ -361,7 +361,7 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
         const adjCount = (await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
           select count(*)::text as n from pay_run_adjustments
            where org_id = ${orgId} and pay_run_document_id = ${runA.documentId}
-             and adjustment_type = 'line'`))).rows[0]!.n;
+             and adjustment_type = 'line'`, "objects")))[0]!.n;
         assert.equal(adjCount, "1");
 
         // The PDF and bank-file surfaces reach their REAL logic (their own
@@ -476,7 +476,7 @@ const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle")
         // belongs to exactly the run it always did, untouched.
         const stubCount = (await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
           select count(*)::text as n from pay_stubs
-           where org_id = ${orgId} and pay_run_document_id = ${runB.documentId}`))).rows[0]!.n;
+           where org_id = ${orgId} and pay_run_document_id = ${runB.documentId}`, "objects")))[0]!.n;
         assert.equal(stubCount, "1");
       }
 

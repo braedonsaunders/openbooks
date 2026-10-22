@@ -22,15 +22,15 @@ async function main() {
   // The demo is only meaningful against one org: with several tenants,
   // taking whatever sorts first would post demo bills into an arbitrary org.
   const org = selectOnlyOrg(
-    (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`)).rows,
+    await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`, "objects"),
     "demo-e2e.ts",
   );
   const orgId = org.id;
 
   const acct = async (like: string) => {
     const r = await db.execute(sql`select id, number, name from accounts
-      where org_id=${orgId} and (name ilike ${"%" + like + "%"}) and is_summary=false and is_active order by number limit 1`);
-    const row = (r).rows[0];
+      where org_id=${orgId} and (name ilike ${"%" + like + "%"}) and is_summary=false and is_active order by number limit 1`, "objects");
+    const row = r[0];
     if (!row) throw new Error(`no account like "${like}"`);
     return row as { id: string; number: string; name: string };
   };
@@ -46,7 +46,7 @@ async function main() {
           where role.org_id = p.org_id and role.party_id = p.id and role.is_active
        )
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
 
   const deps: PostingDeps = { control: { ap: ap.id, ar: ap.id, bank: ap.id } };
 
@@ -155,9 +155,9 @@ async function main() {
     console.log(`  refused by Postgres itself: CTE write -> ${(e as Error).message.slice(0, 60)}`);
   }
 
-  const runs = await db.execute(sql`select status, error_message, logs from script_runs order by at desc limit 3`);
+  const runs = await db.execute(sql`select status, error_message, logs from script_runs order by at desc limit 3`, "objects");
   console.log("== script_runs audit:");
-  for (const r of (runs).rows) console.log(` ${r.status} ${r.error_message ?? ""} logs=${JSON.stringify(r.logs)}`);
+  for (const r of runs) console.log(` ${r.status} ${r.error_message ?? ""} logs=${JSON.stringify(r.logs)}`);
 
   await pool.end();
 }

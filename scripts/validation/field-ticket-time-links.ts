@@ -104,8 +104,8 @@ export async function resolveTimeTicketLinks(
           on target_ticket.org_id = ${orgId}
          and target_ticket.kind = 'field_ticket'
          and target_ticket.document_number = source."ticketNumber"
-    `);
-    for (const row of result.rows as Array<Record<string, unknown>>) {
+    `, "objects");
+    for (const row of result as Array<Record<string, unknown>>) {
       resolved.push({
         sourceRef: String(row.source_ref),
         ticketNumber: String(row.ticket_number),
@@ -235,7 +235,7 @@ export async function applyTimeTicketLinks(
   // Lock first on an inner join: FOR UPDATE cannot name the nullable side
   // of an outer join, and the lock — not the later read — is what excludes
   // concurrent writers for the rest of this transaction.
-  const lockedIds = (await db.execute(
+  const lockedIds = await db.execute<{ locked_entry_id: string }>(
     sql`
       with plan as (
         select *
@@ -247,9 +247,9 @@ export async function applyTimeTicketLinks(
         join plan on plan."timeEntryId" = te.id
        where te.org_id = ${orgId}
        for update of te
-    `,
-  )) as { rows: Array<{ locked_entry_id: string }> };
-  const lockedIdSet = new Set(lockedIds.rows.map((row) => String(row.locked_entry_id)));
+    `, "objects",
+  );
+  const lockedIdSet = new Set(lockedIds.map((row) => String(row.locked_entry_id)));
   for (const row of batch) {
     if (!lockedIdSet.has(row.timeEntryId)) {
       throw new Error(
@@ -259,7 +259,7 @@ export async function applyTimeTicketLinks(
   }
   // The locks above are held to commit, so this verification read cannot
   // observe a row a concurrent bill or post is about to change.
-  const locked = (await db.execute(
+  const locked = await db.execute<Record<string, unknown>>(
     sql`
       with plan as (
         select *
@@ -297,16 +297,16 @@ export async function applyTimeTicketLinks(
           on target_ticket.org_id = ${orgId}
          and target_ticket.kind = 'field_ticket'
          and target_ticket.document_number = plan."ticketNumber"
-    `,
-  )) as { rows: Array<Record<string, unknown>> };
-  if (locked.rows.length !== batch.length) {
+    `, "objects",
+  );
+  if (locked.length !== batch.length) {
     throw new Error(
-      `refusing apply: locked ${locked.rows.length} of ${batch.length} planned time entries; re-run the plan`,
+      `refusing apply: locked ${locked.length} of ${batch.length} planned time entries; re-run the plan`,
     );
   }
   const uuidOrNull = (value: unknown): string | null =>
     value ? String(value) : null;
-  for (const row of locked.rows) {
+  for (const row of locked) {
     const entryId = String(row.time_entry_id);
     const sourceRef = String(row.source_ref);
     if (row.protected_evidence) {
@@ -343,7 +343,7 @@ export async function applyTimeTicketLinks(
       );
     }
   }
-  const audit = await db.execute(sql`
+  const audit = await db.execute<Record<string, unknown>>(sql`
     with plan as (
       select *
         from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
@@ -390,7 +390,7 @@ export async function applyTimeTicketLinks(
       `refusing apply: recorded audit for ${audit.rowCount ?? 0} of ${batch.length} planned time entries; re-run the plan`,
     );
   }
-  const updated = await db.execute(sql`
+  const updated = await db.execute<Record<string, unknown>>(sql`
     with plan as (
       select *
         from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)

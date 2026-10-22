@@ -17,16 +17,16 @@ export async function voidScratchDocument(args: {
   await withBypassContext(async () => {
     const calendar = await db.execute<{ id: string }>(sql`
       select fiscal_calendar_id as id from accounting_periods where org_id = ${args.orgId} limit 1
-    `)
-    const calendarId = calendar.rows[0]?.id
+    `, 'objects')
+    const calendarId = calendar[0]?.id
     if (!calendarId) throw new Error('scratch organization has no fiscal calendar')
     const covering = await db.execute<{ id: string }>(sql`
       select id from accounting_periods
        where org_id = ${args.orgId} and fiscal_calendar_id = ${calendarId}
          and not is_adjustment and starts_on <= ${args.reversalDate} and ends_on >= ${args.reversalDate}
        limit 1
-    `)
-    if (covering.rows[0]) return
+    `, 'objects')
+    if (covering[0]) return
     const inserted = await db.execute<{ id: string }>(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -34,8 +34,8 @@ export async function voidScratchDocument(args: {
         (${randomUUID()}, ${args.orgId}, ${year}, ${month}, ${args.reversalDate.slice(0, 7)},
          ${startsOn}, ${endsOn}, false, ${calendarId})
       returning id
-    `)
-    if (inserted.rows.length !== 1) throw new Error('the reversal period was not created')
+    `, 'objects')
+    if (inserted.length !== 1) throw new Error('the reversal period was not created')
   })
   const actorId = await withBypassContext(() =>
     createScratchUser(args.orgId, args.actorName, 'admin'),
@@ -55,8 +55,8 @@ export async function voidScratchDocument(args: {
   const persisted = await withBypassContext(() => db.execute<{ voidedDate: string }>(sql`
     select voided_at::date::text as "voidedDate"
       from documents where org_id = ${args.orgId} and id = ${args.documentId}
-  `))
-  const voidedDate = persisted.rows[0]?.voidedDate
+  `, 'objects'))
+  const voidedDate = persisted[0]?.voidedDate
   if (!voidedDate) throw new Error('the controlled void did not persist its event date')
   return { actorId, reversalEntryId: result.reversalEntryId, voidedDate }
 }

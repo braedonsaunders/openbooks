@@ -130,20 +130,20 @@ async function statementLineIds(orgId: string, statementId: string): Promise<str
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
      order by line_number
-  `)).rows.map((row) => row.id);
+  `, "objects")).map((row) => row.id);
 }
 
 async function matchRows(orgId: string, reconId: string) {
-  return (await db.execute<{ statement_line_id: string; journal_line_id: string; group_id: string }>(sql`
+  return await db.execute<{ statement_line_id: string; journal_line_id: string; group_id: string }>(sql`
     select statement_line_id, journal_line_id, group_id from reconciliation_matches
      where org_id = ${orgId} and reconciliation_id = ${reconId}
-  `)).rows;
+  `, "objects");
 }
 
 async function lineStatus(orgId: string, lineId: string): Promise<string> {
   return (await db.execute<{ match_status: string }>(sql`
     select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}
-  `)).rows[0]!.match_status;
+  `, "objects"))[0]!.match_status;
 }
 
 test(
@@ -240,12 +240,12 @@ test(
       assert.equal(rows.length, 3, "one row per receipt leg");
       assert.equal(new Set(rows.map((row) => row.group_id)).size, 1, "one operation writes one group");
 
-      const audits = (await db.execute<{ changes: unknown }>(sql`
+      const audits = await db.execute<{ changes: unknown }>(sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'bank_statement_lines'
            and row_id = ${deposit!} and action = 'update'
          order by id
-      `)).rows;
+      `, "objects");
       assert.equal(audits.length, 1, "one audit row per grouped line");
       const changes = audits[0]!.changes as { operation: string; groupId: string; statementLineIds: string[]; journalLineIds: string[] };
       assert.equal(changes.operation, "match");

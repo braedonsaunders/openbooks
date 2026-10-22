@@ -178,9 +178,9 @@ test(
       const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
         select employee_party_id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `));
+      `, "objects"));
       const stubFor = (employeeId: string) =>
-        stubs.rows.find((row) => row.employee_party_id === employeeId)!;
+        stubs.find((row) => row.employee_party_id === employeeId)!;
 
       // 1,000.00 wages + 5.00 taxable group-life: the 70.00 per-diem and the
       // 90.00 health premium are excluded from both levies.
@@ -200,9 +200,9 @@ test(
       const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `));
-      assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
-      assert.equal(sum(glLines.rows.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)), "-19.3200");
+      `, "objects"));
+      assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
+      assert.equal(sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)), "-19.3200");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

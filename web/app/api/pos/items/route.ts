@@ -21,14 +21,14 @@ export const GET = defineRoute({
     const q = (new URL(request.url).searchParams.get('q') ?? '').trim().slice(0, 80)
     if (q === '') return NextResponse.json({ items: [] })
     const pattern = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`
-    const items = (await db.execute<{ id: string; code: string | null; name: string; kind: string; unit: string | null; exact: boolean }>(sql`
+    const items = await db.execute<{ id: string; code: string | null; name: string; kind: string; unit: string | null; exact: boolean }>(sql`
       select id, code, name, kind, unit, (lower(code) = lower(${q})) as exact
         from items
        where org_id = ${authz.user.orgId} and is_active
          and kind <> all(${sql.param(UNSELLABLE)}::text[])
          and (lower(code) = lower(${q}) or code ilike ${pattern} or name ilike ${pattern})
        order by (lower(code) = lower(${q})) desc, (code ilike ${`${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`}) desc, name
-       limit 24`)).rows
+       limit 24`, 'objects')
     return NextResponse.json({ items })
   },
 })

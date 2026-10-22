@@ -64,12 +64,12 @@ export async function loadInsightsDashboard(id: string): Promise<InsightsDashboa
      where org_id = ${orgId} and status = 'published' and ${insightVisibilitySql(authz)}
        and ${sourceFilter}
      order by name asc
-  `)
+  `, 'objects')
 
   const pinned = await db.execute(sql`
     select 1 from insight_dashboard_pins
      where org_id = ${orgId} and user_id = ${authz.user.id} and dashboard_id = ${id}
-  `)
+  `, 'objects')
 
   return {
     dashboard: {
@@ -81,8 +81,8 @@ export async function loadInsightsDashboard(id: string): Promise<InsightsDashboa
       layout: embed.layout,
     },
     cards: embed.cards,
-    availableCards: available.rows,
-    pinned: pinned.rows.length > 0,
+    availableCards: available,
+    pinned: pinned.length > 0,
     canCreate,
     canPublish,
   }

@@ -122,8 +122,8 @@ test('a superseded enrichment analysis is reported, never counted as applied', {
     });
     const found = await withBypassContext(async () =>
       await db.execute<{ id: string }>(sql`select id from ai_work_items
-         where org_id = ${org.orgId} and fingerprint = 'fp-superseded-1'`));
-    const findingId = found.rows[0]!.id;
+         where org_id = ${org.orgId} and fingerprint = 'fp-superseded-1'`, 'objects'));
+    const findingId = found[0]!.id;
     const analysis = {
       findingId,
       headline: 'stale analysis',
@@ -140,8 +140,8 @@ test('a superseded enrichment analysis is reported, never counted as applied', {
 
     const stored = await withBypassContext(async () =>
       await db.execute<{ summary: Record<string, unknown> }>(sql`select summary from ai_work_items
-         where id = ${findingId}`));
-    const summary = stored.rows[0]!.summary;
+         where id = ${findingId}`, 'objects'));
+    const summary = stored[0]!.summary;
     assert.equal('aiAnalysis' in summary, false, 'the lost update wrote nothing');
 
     // The owning run's analysis still applies exactly once.

@@ -273,7 +273,7 @@ export const CONSTRUCTION_CASES: readonly ConformanceCase[] = [
           construction:{remainingCost:'950000',terminationAvailable:false,terminationCost:null,relatedAssetsReviewed:true,impairmentEvidence:'Related contract assets have been reviewed and no further impairment is required.'},
         })
         await submitFinancialChange(ledger.orgId,id,actors.submitterId)
-        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
         await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
         let result:Record<string,unknown>={}
         const entry=await capture(ctx,'loss-provision',async()=>{result=await applyProvisionAssessment(ledger.orgId,id,actors.submitterId)})

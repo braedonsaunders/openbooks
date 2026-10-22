@@ -32,8 +32,8 @@ async function assertNoSharedSourceOverlap(
          select 1 from jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb) wanted(account)
           where account in (select shared from jsonb_array_elements_text(cp.expense_account_ids) shared)
        )
-     order by cp.created_at,cp.id limit 1`));
-  const conflict = conflicts.rows[0];
+     order by cp.created_at,cp.id limit 1`, "objects"));
+  const conflict = conflicts[0];
   if (conflict) {
     throw new PropertyManagementError("CAM pools cannot overlap periods while sharing any expense account: "
       + `pool "${conflict.name}" already bills these sources for this property over an overlapping window`);
@@ -80,14 +80,14 @@ export async function createCamPool(input: { orgId: string; actorId: string; all
     await assertEnabled(tx, input.orgId);
     await lockPropertyInScope(tx, input.orgId, input.propertyId, input.allowedSubsidiaryIds);
     const accounts = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
-      (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
-    if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
+      (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`, "objects"));
+    if (accounts[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
     await assertNoSharedSourceOverlap(tx, input.orgId, input.propertyId, startsOn, endsOn, expenseAccountIds);
     const result = (await tx.execute<{ id: string }>(sql`insert into cam_pools(org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,allocation_basis,vacancy_treatment,budget_amount,expense_account_ids,status,created_by,updated_by)
       select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${vacancyTreatment},${budgetAmount},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
-        from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id`));
-    if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
-    const id = result.rows[0].id;
+        from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id`, "objects"));
+    if (!result[0]) throw new PropertyManagementError("Active property not found");
+    const id = result[0].id;
     await audit(tx, input.orgId, "cam_pools", id, "insert", input.actorId, {
       propertyId: input.propertyId,
       before: null,
@@ -109,16 +109,16 @@ export async function updateCamPool(input: { orgId: string; actorId: string; all
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
     const accounts = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
-      (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`));
-    if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
+      (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`, "objects"));
+    if (accounts[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
     const editable = (await tx.execute<{
       propertyId: string; status: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string;
       allocationBasis: "rentable_area" | "equal" | "custom"; vacancyTreatment: CamVacancyTreatment; budgetAmount: string; expenseAccountIds: string[];
     }>(sql`select property_id as "propertyId",status,name,fiscal_year as "fiscalYear",period_starts_on::text as "periodStartsOn",
       period_ends_on::text as "periodEndsOn",allocation_basis as "allocationBasis",vacancy_treatment as "vacancyTreatment",budget_amount::text as "budgetAmount",
       expense_account_ids as "expenseAccountIds"
-      from cam_pools where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') for update`));
-    const before = editable.rows[0];
+      from cam_pools where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') for update`, "objects"));
+    const before = editable[0];
     if (!before) throw new PropertyManagementError("Editable CAM pool not found");
     const { propertyId: poolPropertyId, ...beforeSnapshot } = before;
     await lockPropertyInScope(tx, input.orgId, String(poolPropertyId), input.allowedSubsidiaryIds);
@@ -132,8 +132,8 @@ export async function updateCamPool(input: { orgId: string; actorId: string; all
         updated_at=now(),updated_by=${input.actorId}
       where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open')
       returning id
-    `);
-    if (!updated.rows[0]) throw new PropertyManagementError("Editable CAM pool not found");
+    `, "objects");
+    if (!updated[0]) throw new PropertyManagementError("Editable CAM pool not found");
     const snapshot = { status: beforeSnapshot.status, name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, vacancyTreatment, budgetAmount, expenseAccountIds };
     await audit(tx, input.orgId, "cam_pools", input.poolId, "update", input.actorId, {
       propertyId: poolPropertyId,
@@ -148,15 +148,15 @@ export async function cancelCamPool(orgId: string, actorId: string, allowedSubsi
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     const anchor = (await tx.execute<{ property_id: string }>(sql`
-      select property_id from cam_pools where org_id=${orgId} and id=${poolId} for update`)).rows[0];
+      select property_id from cam_pools where org_id=${orgId} and id=${poolId} for update`, "objects"))[0];
     if (!anchor) throw new PropertyManagementError("Open CAM pool not found");
     await lockPropertyInScope(tx, orgId, String(anchor.property_id), allowedSubsidiaryIds);
     const result = (await tx.execute<{ name: string }>(sql`
       update cam_pools set status='cancelled',updated_at=now(),updated_by=${actorId}
       where org_id=${orgId} and id=${poolId} and status in ('draft','open') returning name
-    `));
-    if (!result.rows[0]) throw new PropertyManagementError("Open CAM pool not found");
-    await audit(tx, orgId, "cam_pools", poolId, "cancel", actorId, { after: { status: "cancelled" }, name: result.rows[0].name });
+    `, "objects"));
+    if (!result[0]) throw new PropertyManagementError("Open CAM pool not found");
+    await audit(tx, orgId, "cam_pools", poolId, "cancel", actorId, { after: { status: "cancelled" }, name: result[0].name });
   });
 }
 export async function reopenFinalizedCamPool(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, poolId: string, reason: string): Promise<void> {
@@ -167,15 +167,15 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, all
     const result = (await tx.execute<{ name: string; status: string; property_id: string }>(sql`
       select cp.name,cp.status,cp.property_id
       from cam_pools cp where cp.org_id=${orgId} and cp.id=${poolId} for update
-    `));
-    const pool = result.rows[0];
+    `, "objects"));
+    const pool = result[0];
     if (!pool || pool.status !== "finalized") throw new PropertyManagementError("Finalized CAM pool not found");
     await lockPropertyInScope(tx, orgId, String(pool.property_id), allowedSubsidiaryIds);
     // A subquery evaluated before the pool lock wait can miss the biller that
     // just committed. Read dependencies in a new statement after owning the lock.
     const billed = (await tx.execute(sql`select id from cam_allocations
-      where org_id=${orgId} and pool_id=${poolId} and invoice_document_id is not null limit 1`));
-    if (billed.rows.length) throw new PropertyManagementError("An invoiced CAM pool is immutable; correct the tenant documents and create a supplemental pool");
+      where org_id=${orgId} and pool_id=${poolId} and invoice_document_id is not null limit 1`, "objects"));
+    if (billed.length) throw new PropertyManagementError("An invoiced CAM pool is immutable; correct the tenant documents and create a supplemental pool");
     await tx.execute(sql`delete from cam_allocations where org_id=${orgId} and pool_id=${poolId}`);
     await tx.execute(sql`update cam_pools set status='open',actual_amount=null,finalized_at=null,finalized_by=null,updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${poolId}`);
     await audit(tx, orgId, "cam_pools", poolId, "reopen", actorId, { reason: correctionReason, before: { status: "finalized" }, after: { status: "open" }, name: pool.name });
@@ -184,8 +184,8 @@ export async function reopenFinalizedCamPool(orgId: string, actorId: string, all
 export async function finalizeCamPool(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
   return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id,p.subsidiary_id,p.currency from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`));
-    const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
+    const poolResult = (await tx.execute<CamPoolDbRow>(sql`select cp.*,p.location_id,p.subsidiary_id,p.currency from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`, "objects"));
+    const pool = poolResult[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
     // The pool+property join above locks both rows: the subsidiary read is
     // current, so the scope recheck closes the rehome window.
     assertLockedSubsidiaryInScope(allowedSubsidiaryIds, pool.subsidiary_id);
@@ -194,16 +194,16 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
     // A tenant recovers one economic cost, irrespective of its parallel book
     // representations. The primary posting book is the authoritative CAM
     // basis; retain that identity through finalization and record it in audit.
-    const books = (await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+    const books = await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
       select id,is_active,posts_gl from accounting_books
-       where org_id=${orgId} and is_primary order by id for share`)).rows;
+       where org_id=${orgId} and is_primary order by id for share`, "objects");
     if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl) {
       throw new PropertyManagementError("CAM actuals require exactly one active primary posting book");
     }
     const bookId = books[0]!.id;
     const subsidiary = (await tx.execute<{ base_currency: string }>(sql`
       select base_currency from subsidiaries where org_id=${orgId} and id=${pool.subsidiary_id}
-        and is_active and not is_elimination for share`)).rows[0];
+        and is_active and not is_elimination for share`, "objects"))[0];
     if (!subsidiary || pool.currency !== subsidiary.base_currency) {
       throw new PropertyManagementError("CAM actuals require the property currency to match its active subsidiary's functional currency");
     }
@@ -227,9 +227,9 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       select p.id as period_id,b.id as book_id from accounting_periods p
         join accounting_books b on b.org_id=${orgId} and b.id=${bookId}
         where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
-        order by p.id,b.id`));
-    if (!coveredScopes.rows.length) throw new PropertyManagementError("No accounting periods overlap the CAM pool's dates");
-    for (const scope of coveredScopes.rows) {
+        order by p.id,b.id`, "objects"));
+    if (!coveredScopes.length) throw new PropertyManagementError("No accounting periods overlap the CAM pool's dates");
+    for (const scope of coveredScopes) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`period-lock:${orgId}:${scope.period_id}:${scope.book_id}`}, 0))`);
     }
     // 2. GATE - require those GL modules CLOSED at the property's subsidiary,
@@ -243,8 +243,8 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       select p.id as period_id,b.id as book_id,${canonicalPeriodLabelSql("p")} as label,b.code from accounting_periods p
         join accounting_books b on b.org_id=${orgId} and b.id=${bookId}
         where p.org_id=${orgId} and p.starts_on<=${pool.period_ends_on} and p.ends_on>=${pool.period_starts_on}
-        order by p.starts_on,p.is_adjustment,p.period_number,p.id,b.code`));
-    for (const scope of gateScopes.rows) {
+        order by p.starts_on,p.is_adjustment,p.period_number,p.id,b.code`, "objects"));
+    for (const scope of gateScopes) {
       if (await arePeriodModulesOpen(tx, {
         orgId, periodId: scope.period_id, bookId: scope.book_id,
         subsidiaryIds: [pool.subsidiary_id], modules: ["gl"],
@@ -303,8 +303,8 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       from property_leases l left join property_units u on u.id=l.unit_id and u.org_id=l.org_id where l.org_id=${orgId} and l.property_id=${pool.property_id}
         and l.cam_method='pro_rata' and l.status not in ('draft','cancelled') and l.starts_on<=${pool.period_ends_on}
         and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}
-      order by l.id`));
-    if (!leaseResult.rows.length) throw new PropertyManagementError("No pro-rata CAM leases overlap this period");
+      order by l.id`, "objects"));
+    if (!leaseResult.length) throw new PropertyManagementError("No pro-rata CAM leases overlap this period");
     // Each estimate day belongs to the first finalized pool covering that
     // day. Pending pools do not reserve credits, and a later pool cannot
     // take an estimate away from a finalized pool.
@@ -337,10 +337,10 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
         and l.starts_on<=target_pool.period_ends_on
         and coalesce(l.move_out_on,l.ends_on,target_pool.period_ends_on)>=target_pool.period_starts_on
       group by s.id,target_pool.id
-      order by s.lease_id,s.id`));
+      order by s.lease_id,s.id`, "objects"));
     const billedByLease = new Map<string, string>();
     const estimateSourcesByLease = new Map<string, Array<Record<string, unknown>>>();
-    for (const line of estimateLines.rows) {
+    for (const line of estimateLines) {
       if (line.attributed_dates.length === 0) continue;
       const billed = prorateCamEstimateByDays(line.amount, line.period_starts_on, line.period_ends_on, line.attributed_dates);
       billedByLease.set(line.lease_id, add(billedByLease.get(line.lease_id) ?? "0", billed));
@@ -356,7 +356,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       });
       estimateSourcesByLease.set(line.lease_id, evidence);
     }
-    const leases: CamLeaseRow[] = leaseResult.rows.map((lease) => ({
+    const leases: CamLeaseRow[] = leaseResult.map((lease) => ({
       ...lease,
       billed: billedByLease.get(lease.id) ?? "0.0000",
     }));
@@ -401,10 +401,10 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
     let totalRentableArea: string | null = null;
     let capacity: bigint | null = null;
     if (vacancyTreatment === "total_rentable_area") {
-      const units = (await tx.execute<{ id: string; code: string; rentable_area: string | null }>(sql`
+      const units = await tx.execute<{ id: string; code: string; rentable_area: string | null }>(sql`
         select u.id,u.code,u.rentable_area::text as rentable_area from property_units u
          where u.org_id=${orgId} and u.property_id=${pool.property_id}
-         order by u.id for share`)).rows;
+         order by u.id for share`, "objects");
       const unmeasured = units.filter((unit) => unit.rentable_area == null).map((unit) => unit.code).sort();
       if (unmeasured.length) {
         throw new PropertyManagementError(`CAM finalization with the vacant share left to the landlord needs the rentable area of every unit in the property; units without one: ${unmeasured.join(", ")} — set each unit's rentable area, or let occupied leases share the whole pool`);
@@ -516,13 +516,13 @@ export async function billCamReconciliation(orgId: string, actorId: string, allo
     join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id
     where a.org_id=${orgId} and a.pool_id=${poolId} and cp.status in ('finalized','invoiced')
       and a.invoice_document_id is null and a.reconciliation_amount<>0
-      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by a.id`));
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by a.id`, "objects"));
   const documents: string[] = [];
-  for (const candidate of allocations.rows) {
+  for (const candidate of allocations) {
     await withOrgTransaction(orgId, async () => {
       const pool = (await db.execute(sql`select id from cam_pools where org_id=${orgId} and id=${poolId}
-        and status in ('finalized','invoiced') for update`));
-      if (!pool.rows[0]) return;
+        and status in ('finalized','invoiced') for update`, "objects"));
+      if (!pool[0]) return;
       await assertEnabled(db, orgId);
       const locked = (await db.execute<CamAllocationDbRow>(sql`
         select a.id,a.reconciliation_amount as amount,a.lease_id,l.tenant_id,l.lease_number,l.payment_terms_days,
@@ -532,8 +532,8 @@ export async function billCamReconciliation(orgId: string, actorId: string, allo
         join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
         where a.org_id=${orgId} and a.pool_id=${poolId} and a.id=${candidate.id}
           and a.invoice_document_id is null and a.reconciliation_amount<>0
-        for update of a for share of l,p`));
-      const row = locked.rows[0];
+        for update of a for share of l,p`, "objects"));
+      const row = locked[0];
       if (!row) return;
       // The allocation read holds the pool FOR UPDATE and the lease and
       // property FOR SHARE: a concurrent rehome waits on the share lock,
@@ -570,14 +570,14 @@ export async function billCamReconciliation(orgId: string, actorId: string, allo
     // property first and the pool row at the update deadlocked against a
     // concurrent reopen.
     const anchor = (await tx.execute<{ property_id: string }>(sql`
-      select property_id from cam_pools where org_id=${orgId} and id=${poolId} for update`)).rows[0];
+      select property_id from cam_pools where org_id=${orgId} and id=${poolId} for update`, "objects"))[0];
     if (anchor) await lockPropertyInScope(tx, orgId, String(anchor.property_id), allowedSubsidiaryIds);
     const stamped = (await tx.execute<{ id: string }>(sql`
       update cam_pools cp set status='invoiced',updated_at=now(),updated_by=${actorId}
       where cp.org_id=${orgId} and cp.id=${poolId} and cp.status='finalized'
         and not exists(select 1 from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id and a.reconciliation_amount<>0 and a.invoice_document_id is null)
-      returning id`));
-    if (!stamped.rows[0]) return;
+      returning id`, "objects"));
+    if (!stamped[0]) return;
     await audit(tx, orgId, "cam_pools", poolId, "invoice", actorId, {
       before: { status: "finalized" },
       after: { status: "invoiced" },

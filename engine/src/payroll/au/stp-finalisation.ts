@@ -113,8 +113,8 @@ export async function auStpFinalisationRows(
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'AU'
      group by s.employee_party_id, p.display_name
      order by p.display_name, s.employee_party_id
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollPackError(
       `AU STP finalisation for ${auFinancialYearLabel(taxYear)} (taxYear ${taxYear}): `
       + "no committed AU pay runs — the finalisation declares year-to-date figures that were "
@@ -122,7 +122,7 @@ export async function auStpFinalisationRows(
       + "the year's pay runs before finalising.",
     );
   }
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     gross: num(row.gross),

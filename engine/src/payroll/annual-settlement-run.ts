@@ -111,8 +111,8 @@ async function committedPriorGross(
      where s.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
        and s.tax_year = ${input.taxYear} and s.country = ${input.country}
        and r.run_status = 'committed' and d.status <> 'voided'
-  `));
-  return rows.rows[0]!.prior;
+  `, "objects"));
+  return rows[0]!.prior;
 }
 
 /**
@@ -137,8 +137,8 @@ async function committedPriorWithheld(
        and l.kind in ('deduction', 'credit')
        and c.system_key is not null
      group by c.system_key
-  `));
-  return Object.fromEntries(rows.rows.map((row) => [row.key, row.total]));
+  `, "objects"));
+  return Object.fromEntries(rows.map((row) => [row.key, row.total]));
 }
 
 /**

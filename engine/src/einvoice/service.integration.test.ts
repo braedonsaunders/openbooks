@@ -39,7 +39,7 @@ async function postedInvoice(org: ScratchOrg, currency = 'CAD', taxCodeId: strin
         ${org.date},${org.date},${currency},${currency === 'USD' ? '2' : '1'},'draft','DOCUMENT-REFERENCE','Correction of invoiced services')`);
     const line = (await db.execute<{ id: string }>(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit,
       unit_price,amount,tax_code_id,tax_amount)
-      values(${org.orgId},${id},1,${org.accounts.revenue},'Professional services','1','EA','100','100',${taxCodeId},${taxCodeId ? '9' : '0'}) returning id`)).rows[0]!;
+      values(${org.orgId},${id},1,${org.accounts.revenue},'Professional services','1','EA','100','100',${taxCodeId},${taxCodeId ? '9' : '0'}) returning id`, 'objects'))[0]!;
     if (taxCodeId) {
       await db.execute(sql`insert into document_line_tax_components(org_id,document_line_id,tax_code_id,sequence,rate_percent,taxable_amount,tax_amount,recoverable_amount,nonrecoverable_amount,calculation_type,collected_account_id) values(${org.orgId},${line.id},${taxCodeId},1,'9','100','9','0','9','standard',${org.accounts.taxOutput})`);
     }
@@ -70,7 +70,7 @@ test('native issuance serializes retries, retains exact archives and rolls back 
     await withOrgTransaction(org.orgId, async () => {
       const counts = (await db.execute<{ archives: number; audits: number }>(sql`select
         (select count(*)::int from einvoice_documents where org_id=${org.orgId} and document_id=${id}) as archives,
-        (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='einvoice_documents' and row_id=${first.id}) as audits`)).rows[0];
+        (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='einvoice_documents' and row_id=${first.id}) as audits`, 'objects'))[0];
       assert.deepEqual(counts, { archives: 1, audits: 1 });
       await db.execute(sql`delete from einvoice_settings where org_id=${org.orgId}`);
     });
@@ -172,8 +172,8 @@ test('native seller instructions retain domestic payment accounts and provider i
     const id = await postedInvoice(org);
     await withBypassContext(() => db.execute(sql`update einvoice_settings set payment_means_code='30',payee_account_id='123-456789',payee_bic='021 000021' where org_id=${org.orgId} and subsidiary_id=${org.subsidiaryId}`));
     const issued = await issueNativeEInvoice(actor, id, { profile: 'en16931-ubl' }, noPdf);
-    const archive = await withBypassContext(() => db.execute<{ content: Uint8Array }>(sql`select content from einvoice_documents where org_id=${org.orgId} and id=${issued.id}`));
-    const xml = new TextDecoder().decode(archive.rows[0]!.content);
+    const archive = await withBypassContext(() => db.execute<{ content: Uint8Array }>(sql`select content from einvoice_documents where org_id=${org.orgId} and id=${issued.id}`, 'objects'));
+    const xml = new TextDecoder().decode(archive[0]!.content);
     assert.match(xml, /<cbc:ID>123456789<\/cbc:ID>/);
     assert.match(xml, /<cbc:ID>021000021<\/cbc:ID>/);
   } finally { await dropScratchOrg(org.orgId); }

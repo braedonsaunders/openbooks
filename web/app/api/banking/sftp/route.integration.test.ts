@@ -211,8 +211,8 @@ function auditsFor(fixture: Fixture): Promise<AuditRow[]> {
       select table_name, row_id, action, changes, actor_id, org_id, at
         from audit_log
        where org_id = ${fixture.orgId}
-         and table_name in ('sftp_servers', 'sftp_daemon')`);
-    return r.rows;
+         and table_name in ('sftp_servers', 'sftp_daemon')`, "objects");
+    return r;
   });
 }
 
@@ -276,8 +276,8 @@ test(
       });
       const before = await withOrgContext(fixture.orgId, async () => {
         const r = await db.execute<Record<string, unknown>>(sql`
-          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`);
-        return r.rows[0]!;
+          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`, "objects");
+        return r[0]!;
       });
       removeFailure = await installAuditFailure(fixture.actorId);
 
@@ -288,8 +288,8 @@ test(
       );
       const after = await withOrgContext(fixture.orgId, async () => {
         const r = await db.execute<Record<string, unknown>>(sql`
-          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`);
-        return r.rows[0]!;
+          select * from sftp_servers where id = ${serverId} and org_id = ${fixture.orgId}`, "objects");
+        return r[0]!;
       });
       assert.deepEqual(
         after,
@@ -342,8 +342,8 @@ test(
           authorized_keys: string;
         }>(sql`
           select password_encrypted, authorized_keys from sftp_servers
-           where id = ${creation.id} and org_id = ${fixture.orgId}`);
-        return r.rows[0]!;
+           where id = ${creation.id} and org_id = ${fixture.orgId}`, "objects");
+        return r[0]!;
       });
       assert.notEqual(serverRow.password_encrypted, creation.password);
 
@@ -371,8 +371,8 @@ test(
       const remaining = await withOrgContext(fixture.orgId, async () => {
         const r = await db.execute<{ count: number }>(sql`
           select count(*)::int as count from sftp_servers
-           where id = ${creation.id} and org_id = ${fixture.orgId}`);
-        return r.rows[0]!.count;
+           where id = ${creation.id} and org_id = ${fixture.orgId}`, "objects");
+        return r[0]!.count;
       });
       assert.equal(remaining, 0, "the login must actually be deleted");
 
@@ -402,8 +402,8 @@ test(
           updated_by: string;
           host_key: string;
         }>(sql`
-          select advertised_host, updated_by, host_key from sftp_daemon where id = 'default'`);
-        return r.rows[0]!;
+          select advertised_host, updated_by, host_key from sftp_daemon where id = 'default'`, "objects");
+        return r[0]!;
       });
       assert.equal(daemonRow.advertised_host, "sftp.openbooks.test");
       assert.equal(daemonRow.updated_by, fixture.actorId);
@@ -532,8 +532,8 @@ test(
 
       const rows = await withOrgContext(fixture.orgId, async () => {
         const r = await db.execute<{ count: number }>(sql`
-          select count(*)::int as count from sftp_servers where org_id = ${fixture.orgId}`);
-        return r.rows[0]!.count;
+          select count(*)::int as count from sftp_servers where org_id = ${fixture.orgId}`, "objects");
+        return r[0]!.count;
       });
       assert.equal(rows, 0, "a refused save must leave no login behind");
     } finally {

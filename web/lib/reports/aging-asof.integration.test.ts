@@ -46,9 +46,9 @@ async function applyLines(org: ScratchOrg, fromLine: string, toLine: string, amo
 }
 
 async function lineId(entryId: string, accountId: string): Promise<string> {
-  const r = await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and account_id = ${accountId}`)
-  assert.ok(r.rows[0], 'expected the line to exist')
-  return r.rows[0]!.id
+  const r = await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and account_id = ${accountId}`, 'objects')
+  assert.ok(r[0], 'expected the line to exist')
+  return r[0]!.id
 }
 
 /** July invoice 1000 settled across months, plus a separate invoice voided after July. */
@@ -57,7 +57,7 @@ async function seedArScenario(): Promise<{ org: ScratchOrg; voidDate: string }> 
   const voidedDoc = randomUUID()
   await withBypassContext(async () => {
     const july = org.periodId
-    const cal = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${july}`)).rows[0]!.id
+    const cal = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${july}`, 'objects'))[0]!.id
     const aug = randomUUID()
     await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${aug}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${cal})`)
@@ -94,7 +94,7 @@ test('AR aging as of July still shows the balance settled in August', { skip: !p
       // July GL truth: 1000 − 400 − 100 plus the invoice voided in August = 700.
       const gl = (await db.execute<{ bal: string }>(sql`select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.posting_date <= '2026-07-31' and e.book_id = ${org.bookId}
-        where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar}`)).rows[0]!.bal
+        where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar}`, 'objects'))[0]!.bal
       assert.equal(gl, '700.0000')
 
       const aging = await agingByParty('ar', '2026-07-31', undefined, org.orgId)
@@ -136,7 +136,7 @@ test('AP aging as of July still shows the bill paid in August', { skip: !process
   try {
     await withBypassContext(async () => {
       const july = org.periodId
-      const cal = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${july}`)).rows[0]!.id
+      const cal = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${july}`, 'objects'))[0]!.id
       const aug = randomUUID()
       await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${aug}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${cal})`)

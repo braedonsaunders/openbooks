@@ -82,8 +82,8 @@ test('native package API refuses malformed bodies, missing create identity and c
     const retry = await saved<{ id: string }>(await post(collection.POST, body, {}, key))
     assert.equal(first.id, key); assert.equal(retry.id, first.id)
     await refusal(await post(collection.POST, { ...body, name: 'Changed payload' }, {}, key), 422, /already saved with different details.*reopen/)
-    const rows = await withBypassContext(() => db.execute(sql`select id from payroll_compensation_packages where org_id=${f.org.orgId}`))
-    assert.equal(rows.rows.length, 1)
+    const rows = await withBypassContext(() => db.execute(sql`select id from payroll_compensation_packages where org_id=${f.org.orgId}`, 'objects'))
+    assert.equal(rows.length, 1)
     assert.ok(state.permissions.every((permission) => permission === 'payroll.manage'))
   }, { bypass: true })
 })
@@ -103,11 +103,11 @@ test('native package endpoints preserve independent decisions, exact previews an
     await refusal(await post(versionUpdate.PATCH, { definition, effectiveFrom: '2026-01-01', effectiveTo: null, expectedRevision: draftRevision, reason: 'Stale draft editor' }, params, null, 'PATCH'), 422, /revision changed.*reload/i)
     const submitted = await saved<{ revision: number }>(await post(submitRoute.POST, { expectedRevision: version.revision, reason: 'Review proposal' }, params))
     await refusal(await post(versionUpdate.PATCH, { definition, effectiveFrom: '2026-01-01', effectiveTo: null, expectedRevision: submitted.revision, reason: 'Rewrite submitted policy' }, params, null, 'PATCH'), 422, /draft|submitted.*immutable/i)
-    const gate=(await withOrgContext(f.org.orgId,()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${version.id} and status='pending'`))).rows[0]!
+    const gate=(await withOrgContext(f.org.orgId,()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${version.id} and status='pending'`, 'objects')))[0]!
     await assert.rejects(decideGate({gateId:gate.id,userId:f.authorId,decision:'approved'}),/not an approver|not assigned|own submission/)
     state.actorId = f.approverId
     await decideGate({gateId:gate.id,userId:f.approverId,decision:'approved',comment:'Review the employer policy terms'})
-    const approved=(await withOrgContext(f.org.orgId,()=>db.execute<{status:string}>(sql`select status from payroll_compensation_versions where org_id=${f.org.orgId} and id=${version.id}`))).rows[0]!
+    const approved=(await withOrgContext(f.org.orgId,()=>db.execute<{status:string}>(sql`select status from payroll_compensation_versions where org_id=${f.org.orgId} and id=${version.id}`, 'objects')))[0]!
     assert.equal(approved.status,'approved')
     const preview = await saved<{ coveredDays: number; lines: { amount: string }[] }>(await post(previewRoute.POST, { context: {
       periodStart: '2026-01-01', periodEnd: '2026-01-31', effectiveFrom: '2026-01-16', effectiveTo: null,
@@ -124,9 +124,9 @@ test('native package endpoints preserve independent decisions, exact previews an
     await refusal(await post(assignmentAction.PATCH, { ...employeeInput, inputs: { allowance: '310' }, expectedRevision: assignmentRevision, reason: 'Stale employee editor' }, employeeParams, null, 'PATCH'), 422, /revision changed.*reload/i)
     await saved<{ revision: number }>(await post(assignmentAction.POST, { expectedRevision: assignment.revision, action: 'submit', reason: 'Employee proposal review' }, employeeParams))
     state.actorId = f.approverId
-    const assignmentGate=(await withOrgContext(f.org.orgId,()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${assignment.id} and status='pending'`))).rows[0]!
+    const assignmentGate=(await withOrgContext(f.org.orgId,()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${assignment.id} and status='pending'`, 'objects')))[0]!
     await decideGate({gateId:assignmentGate.id,userId:f.approverId,decision:'approved',comment:'Review the employee assignment terms'})
-    const active=(await withOrgContext(f.org.orgId,()=>db.execute<{status:string}>(sql`select status from payroll_compensation_assignments where org_id=${f.org.orgId} and id=${assignment.id}`))).rows[0]!
+    const active=(await withOrgContext(f.org.orgId,()=>db.execute<{status:string}>(sql`select status from payroll_compensation_assignments where org_id=${f.org.orgId} and id=${assignment.id}`, 'objects')))[0]!
     assert.equal(active.status, 'active')
   }, { bypass: true })
 })

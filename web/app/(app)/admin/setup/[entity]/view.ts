@@ -269,23 +269,23 @@ export async function loadSetupEntity(
     ? (authz.allowedSubsidiaryIds !== null ? [] : await loadHomeAnnouncementRows(orgId)).filter((row) => !list.q || [row.title, row.body ?? ''].some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase())))
     : null
   const [rowsRes, countRes, refOptions, installedPackRows] = moduleRows
-    ? [{ rows: moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage) }, { rows: [{ n: moduleRows.length }] }, {}, { rows: [] }]
+    ? [moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage), [{ n: moduleRows.length }], {}, []]
     : announcementRows
-      ? [{ rows: announcementRows.slice((list.page - 1) * list.perPage, list.page * list.perPage) }, { rows: [{ n: announcementRows.length }] }, {}, { rows: [] }]
+      ? [announcementRows.slice((list.page - 1) * list.perPage, list.page * list.perPage), [{ n: announcementRows.length }], {}, []]
       : entity
     ? await Promise.all([
         (db.execute(sql`
       select ${setupReadProjection(entity)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderExpr(entity))}
-       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)),
-        (db.execute(sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`)),
+       limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects')),
+        (db.execute(sql`select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`, 'objects')),
         loadRefOptions(entity, orgId, authz.allowedSubsidiaryIds, locale),
         entity.key === 'tax-return-forms'
-          ? db.execute<{ code: string }>(sql`select code from tax_return_forms where org_id = ${orgId}`)
-          : Promise.resolve({ rows: [] as { code: string }[] }),
+          ? db.execute<{ code: string }>(sql`select code from tax_return_forms where org_id = ${orgId}`, 'objects')
+          : Promise.resolve([] as { code: string }[]),
       ])
-    : [{ rows: [] }, { rows: [] }, {}, { rows: [] }]
-  const rows: Record<string, unknown>[] = rowsRes.rows
+    : [[], [], {}, []]
+  const rows: Record<string, unknown>[] = rowsRes
 
   // Lookup maps for rendering ref columns.
   const refLabels: Record<string, Map<string, string>> = {}
@@ -325,7 +325,7 @@ export async function loadSetupEntity(
     showRecords: !onPayrollHolidays,
     showLibrary: entity?.key === 'tax-return-forms',
     libraryPacks: TAX_RETURN_PACKS.map(({ code, name, country }) => ({ code, name, country })),
-    libraryInstalled: installedPackRows.rows.map((row: { code: string }) => row.code),
+    libraryInstalled: installedPackRows.map((row: { code: string }) => row.code),
     libraryOpen: entity?.key === 'tax-return-forms' && pickString(sp.library) === 'true',
     libraryOpenHref: mergeHref('/admin/setup/tax-return-forms', sp, { library: 'true' }),
     libraryCloseHref: mergeHref('/admin/setup/tax-return-forms', sp, { library: undefined }),
@@ -354,7 +354,7 @@ export async function loadSetupEntity(
         })
       : [],
     emptyLabel: t('empty'),
-    total: Number((countRes.rows[0] as { n?: unknown } | undefined)?.n ?? 0),
+    total: Number((countRes[0] as { n?: unknown } | undefined)?.n ?? 0),
     currentPage: list.page,
     perPage: list.perPage,
     drawerOpen: isRegistryList && rowParam !== undefined && !onPayrollHolidays,

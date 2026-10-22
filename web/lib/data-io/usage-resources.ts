@@ -198,7 +198,7 @@ export function usageRecordsResource(orgId: string): DataResource {
                where r.org_id = ${orgId} and m.key = ${row.input.meterKey}
                  and r.idempotency_key = ${row.input.idempotencyKey}
                  ${subsidiaryReadFilterWithUnassigned(sql`c.subsidiary_id`, allowedSubsidiaryIds)}
-               limit 1`)).rows.length > 0
+               limit 1`, 'objects')).length > 0
           }
           if (alreadyStored) {
             continue

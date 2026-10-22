@@ -121,7 +121,7 @@ export async function resolveItSurtaxAssessed(
        and s.factors ? ${DECEMBER_ANNUAL_FACTORS.regionale}
        and s.factors ? ${DECEMBER_ANNUAL_FACTORS.comunale}
      order by s.pay_date desc, s.created_at desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (december?.regionale != null && december?.comunale != null) {
     return {
       regionale: String(december.regionale),
@@ -135,7 +135,7 @@ export async function resolveItSurtaxAssessed(
      where org_id = ${orgId}
        and employee_party_id = ${employeePartyId}
        and tax_year = ${taxYear}
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (carried?.regionale != null && carried?.comunale != null) {
     return {
       regionale: carried.regionale,
@@ -242,7 +242,7 @@ export async function itSurtaxInstallmentHistory(
        and s.country = 'IT'
        and s.tax_year = ${taxYear}
        and s.pay_date <= ${payDate}::date
-       and s.pay_run_document_id <> ${excludeDocumentId}`)).rows[0];
+       and s.pay_run_document_id <> ${excludeDocumentId}`, "objects"))[0];
   return {
     regionaleYtd: rows?.regionaleYtd ?? "0",
     comunaleYtd: rows?.comunaleYtd ?? "0",

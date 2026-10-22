@@ -347,8 +347,8 @@ interface OpenDocumentSource extends Record<string, unknown> {
 
 async function openDocuments(...args: Parameters<typeof openDocumentsSql>): Promise<OpenDocument[]> {
   const r = await db.execute<OpenDocumentSource>(sql`select * from (${openDocumentsSql(...args)}) document_rows
-    order by party_name nulls last, age_days desc, doc_id`);
-  return r.rows.map((x) => ({
+    order by party_name nulls last, age_days desc, doc_id`, "objects");
+  return r.map((x) => ({
     docId: x.doc_id,
     kind: x.kind,
     partyId: x.party_id,
@@ -395,8 +395,8 @@ async function missingSpotCoverage(
         where org_id = ${orgId} and rate_type = 'spot' and as_of <= ${asOf}::date
           and ((from_currency = c and to_currency = ${target})
             or (from_currency = ${target} and to_currency = c))
-     )`);
-  return r.rows.map((x) => x.ccy);
+     )`, "objects");
+  return r.map((x) => x.ccy);
 }
 
 export async function agingByParty(
@@ -564,8 +564,8 @@ async function controlResiduals(
      -- Ordinal, not a repeated expression: the SELECT's coalesce carries a
      -- different bind parameter per occurrence, which GROUP BY will not match.
      group by l.party_id, 2
-  `);
-  const residuals = control.rows.map((c) => ({ partyId: c.party_id, funcCcy: c.func_ccy, bal: c.bal }));
+  `, "objects");
+  const residuals = control.map((c) => ({ partyId: c.party_id, funcCcy: c.func_ccy, bal: c.bal }));
   // The journal-entry listing is read only once a reconciling balance is
   // known to exist (see foldControlResidual), so a tied subledger pays nothing.
   return {
@@ -632,8 +632,8 @@ async function unopenedControlLines(
      group by rm.party_id, p.display_name, rm.entry_id, rm.entry_number, rm.posting_date, rm.memo, rm.func_ccy
     having sum(rm.amount - (case when rm.amount < 0 then -1 else 1 end) * rm.consumed) <> 0
      order by rm.posting_date, rm.entry_number nulls last, rm.entry_id
-  `);
-  return r.rows.map((x) => ({
+  `, "objects");
+  return r.map((x) => ({
     partyId: x.party_id,
     partyName: x.party_name,
     entryId: x.entry_id,
@@ -694,8 +694,8 @@ async function foldControlResidual(
     const named = await db.execute<{ id: string; display_name: string | null }>(sql`
       select p.id, p.display_name from parties p
        where p.org_id = ${orgId} and p.id = any(${`{${partyIds.join(",")}}`}::uuid[])
-    `);
-    for (const n of named.rows) names.set(n.id, n.display_name);
+    `, "objects");
+    for (const n of named) names.set(n.id, n.display_name);
   }
   for (const [partyId, residual] of residualByParty) {
     if (decimalCmp(residual, ZERO) === 0) continue;
@@ -883,8 +883,8 @@ export async function agingDetailPage(
       (select array_agg(distinct source_currency order by source_currency)
         from presented where source_currency <> ${target} and presented_open is null) as missing
     from visible
-  `)
-  const data = result.rows[0]
+  `, "objects")
+  const data = result[0]
   if (!data) throw new Error('The aging query did not return its totals.')
   if (data.missing?.length) throw new AgingRatesUnavailableError(data.missing, target, asOf)
   const totals = Object.fromEntries(['current', 'b1', 'b2', 'b3', 'b4', 'total'].map((key) => [key, decimalAdd(ZERO, data.totals[key]!)])) as AgingDetailResult['totals']
@@ -1016,8 +1016,8 @@ export async function agingCurrenciesInScope(
        and coalesce(d.posting_date, d.document_date) <= ${asOf}
        and je.book_id in ${statementBookIdsExpr(resolvedOrgId)}
        and ${dimWhere(dims, sql`d`)}
-  `);
-  const inScope = [...new Set(r.rows.map((x) => x.ccy))].sort();
+  `, "objects");
+  const inScope = [...new Set(r.map((x) => x.ccy))].sort();
   return {
     baseCurrency,
     currencies: [baseCurrency, ...inScope.filter((c) => c !== baseCurrency)],

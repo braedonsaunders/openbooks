@@ -94,8 +94,8 @@ async function addLine(
 
 async function revisionOf(orgId: string, scenarioId: string): Promise<number> {
   const rows = (await withBypassContext(() => db.execute<{ revision: number }>(sql`
-    select revision from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}`)))
-  return Number(rows.rows[0]?.revision ?? 1)
+    select revision from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}`, 'objects')))
+  return Number(rows[0]?.revision ?? 1)
 }
 
 async function jsonResponse(response: Response) {
@@ -256,17 +256,17 @@ test('an A-scoped approver is refused on A+B but approves A-only', async () => {
       set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
       where org_id=${org.orgId} and key='checker'`))
     const gateFor = async (id: string) => (await withOrgContext(org.orgId, async () =>
-      (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId}
-        and subject_kind='budget_scenario' and subject_id=${id} and status='pending'`)).rows))[0]!.id
+      await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId}
+        and subject_kind='budget_scenario' and subject_id=${id} and status='pending'`, 'objects')))[0]!.id
     const crossGate = await gateFor(cross)
     await assert.rejects(decideGate({ gateId: crossGate, userId: approver, decision: 'approved',
       allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), /approval not found/)
     assert.equal((await withBypassContext(() => db.execute<{ status: string }>(sql`select status from budget_scenarios
-      where org_id=${org.orgId} and id=${cross}`))).rows[0]!.status, 'pending_approval')
+      where org_id=${org.orgId} and id=${cross}`, 'objects')))[0]!.status, 'pending_approval')
     assert.equal((await decideGate({ gateId: await gateFor(home), userId: approver, decision: 'approved',
       allowedSubsidiaryIds: new Set([org.subsidiaryId]) })).ok, true)
     assert.equal((await withBypassContext(() => db.execute<{ status: string }>(sql`select status from budget_scenarios
-      where org_id=${org.orgId} and id=${home}`))).rows[0]!.status, 'approved')
+      where org_id=${org.orgId} and id=${home}`, 'objects')))[0]!.status, 'approved')
   } finally {
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))

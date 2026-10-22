@@ -99,15 +99,15 @@ export async function buildAssembly(
          and (b.effective_to is null or ${input.date}::date < b.effective_to)
        order by b.sort_order, b.component_item_id, b.operation_seq nulls first,
                 b.is_byproduct, b.effective_from nulls first
-    `));
-    if (bom.rows.length === 0) {
+    `, "objects"));
+    if (bom.length === 0) {
       throw new InventoryError(`assembly has no bill of materials effective on ${input.date}`);
     }
-    if(bom.rows.some(component=>component.quantity_basis!=='per_unit')&&!await lockAndCheckOrgFeature(tx,orgId,'manufacturing')) throw new InventoryError("Formula and batch recipes require Manufacturing in Company Settings → Features.");
-    const byproduct = bom.rows.find((component) => component.is_byproduct);
+    if(bom.some(component=>component.quantity_basis!=='per_unit')&&!await lockAndCheckOrgFeature(tx,orgId,'manufacturing')) throw new InventoryError("Formula and batch recipes require Manufacturing in Company Settings → Features.");
+    const byproduct = bom.find((component) => component.is_byproduct);
     if (byproduct) {
       const assemblyName = (await tx.execute<{ code: string | null; name: string }>(sql`
-        select code, name from items where org_id = ${orgId} and id = ${input.assemblyItemId}`)).rows[0];
+        select code, name from items where org_id = ${orgId} and id = ${input.assemblyItemId}`, "objects"))[0];
       throw new InventoryError(
         `assembly ${assemblyName?.code?.trim() || assemblyName?.name || input.assemblyItemId} contains by-product ${byproduct.component_code?.trim() || byproduct.component_name}; build it through a work order`,
       );
@@ -116,7 +116,7 @@ export async function buildAssembly(
     const bomSnapshot = {
       format: "openbooks.inventory-bom.v1" as const,
       assemblyItemId: input.assemblyItemId,
-      components: bom.rows.map((component) => {
+      components: bom.map((component) => {
         const evidence: {
           componentItemId: string;
           quantityPer: string;
@@ -153,7 +153,7 @@ export async function buildAssembly(
     const profileByItemId = new Map<string, InventoryProfile>();
     const profileItemIds = [
       input.assemblyItemId,
-      ...bom.rows.map((component) => component.component_item_id),
+      ...bom.map((component) => component.component_item_id),
     ]
       .filter((itemId, index, all) => all.indexOf(itemId) === index)
       .sort();
@@ -183,7 +183,7 @@ export async function buildAssembly(
       reqQty: string;
       onHand?: { quantity: string; value: string; unitCost: string };
     }[] = [];
-    for (const component of bom.rows) {
+    for (const component of bom) {
       const profile = profileByItemId.get(component.component_item_id)!;
       if (profile.tracking !== "none") {
         throw new InventoryError(
@@ -379,13 +379,13 @@ export async function buildAssembly(
         values (${orgId}, ${input.subsidiaryId}, ${c.itemId}, 'assembly_consume', ${input.date}, ${input.stockLocationId},
                 ${neg(c.reqQty)}, ${isZero(c.reqQty) ? "0" : unitCostPerQuantity(pc.cost, c.reqQty)!},
                 ${neg(pc.cost)}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-        returning id`));
+        returning id`, "objects"));
       await recordConsumptions(
         tx,
         orgId,
         input.subsidiaryId,
         pc.consumptions,
-        mv.rows[0]!.id,
+        mv[0]!.id,
         actorId,
       );
     }
@@ -397,7 +397,7 @@ export async function buildAssembly(
         (org_id, subsidiary_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${input.subsidiaryId}, ${input.assemblyItemId}, 'assembly_build', ${input.date}, ${input.stockLocationId},
               ${buildQuantity}, ${fgUnitCost}, ${fgValue}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`));
+      returning id`, "objects"));
     await addLayerAtCost(
       tx,
       orgId,
@@ -407,14 +407,14 @@ export async function buildAssembly(
       input.quantity,
       fgValue,
       assembly.costingMethod,
-      buildMv.rows[0]!.id,
+      buildMv[0]!.id,
       input.date,
       actorId,
       fgUnitCost,
     );
 
     return {
-      movementId: buildMv.rows[0]!.id,
+      movementId: buildMv[0]!.id,
       entryId,
       value: fgValue,
       bomRevision,
@@ -450,11 +450,11 @@ export async function reverseAssemblyBuild(
     // commands. The posted source identity is immutable and is checked again
     // under row locks before any correction is written.
     const peek = (await tx.execute<{ journal_entry_id: string | null }>(sql`
-      select journal_entry_id from inventory_movements where org_id=${orgId} and id=${input.movementId}`)).rows[0];
+      select journal_entry_id from inventory_movements where org_id=${orgId} and id=${input.movementId}`, "objects"))[0];
     if (peek?.journal_entry_id) {
-      const positions = (await tx.execute<{ item_id: string; stock_location_id: string }>(sql`
+      const positions = await tx.execute<{ item_id: string; stock_location_id: string }>(sql`
         select distinct item_id,stock_location_id from inventory_movements
-        where org_id=${orgId} and journal_entry_id=${peek.journal_entry_id} order by item_id,stock_location_id`)).rows;
+        where org_id=${orgId} and journal_entry_id=${peek.journal_entry_id} order by item_id,stock_location_id`, "objects");
       for (const position of positions) await lockInventoryPosition(tx, position.item_id, position.stock_location_id);
     }
     const requested = (await tx.execute<ReversibleMovement>(sql`
@@ -464,8 +464,8 @@ export async function reverseAssemblyBuild(
         from inventory_movements
        where org_id = ${orgId} and id = ${input.movementId}
        for update
-    `));
-    let build = requested.rows[0];
+    `, "objects"));
+    let build = requested[0];
     if (!build || (build.kind !== "assembly_build" && build.kind !== "assembly_consume")) {
       throw new InventoryError("assembly build movement not found");
     }
@@ -485,11 +485,11 @@ export async function reverseAssemblyBuild(
            and journal_entry_id = ${build.journal_entry_id}
            and kind = 'assembly_build'
          for update
-      `));
-      if (operationBuild.rows.length !== 1) {
+      `, "objects"));
+      if (operationBuild.length !== 1) {
         throw new InventoryError("assembly build movement not found");
       }
-      build = operationBuild.rows[0]!;
+      build = operationBuild[0]!;
     }
     if (!build.journal_entry_id) {
       throw new InventoryError("assembly build is missing its source journal");
@@ -504,11 +504,11 @@ export async function reverseAssemblyBuild(
          and journal_entry_id = ${build.journal_entry_id}
        order by case when kind = 'assembly_build' then 0 else 1 end, id
        for update
-    `));
+    `, "objects"));
     if (
-      sources.rows.filter((row) => row.kind === "assembly_build").length !== 1 ||
-      sources.rows.filter((row) => row.kind === "assembly_consume").length === 0 ||
-      sources.rows.some(
+      sources.filter((row) => row.kind === "assembly_build").length !== 1 ||
+      sources.filter((row) => row.kind === "assembly_consume").length === 0 ||
+      sources.some(
         (row) =>
           !["assembly_build", "assembly_consume"].includes(row.kind) ||
           row.status !== "posted",
@@ -519,11 +519,11 @@ export async function reverseAssemblyBuild(
       );
     }
 
-    if (sources.rows.some((source) => input.reversalDate < source.moved_at.slice(0, 10))) {
+    if (sources.some((source) => input.reversalDate < source.moved_at.slice(0, 10))) {
       throw new InventoryError("reversal date cannot precede the source assembly movement");
     }
 
-    const sourceIds = sources.rows.map((row) => row.id);
+    const sourceIds = sources.map((row) => row.id);
     const prior = (await tx.execute<{ id: string; journal_entry_id: string | null }>(sql`
       select id, journal_entry_id
         from inventory_movements
@@ -533,32 +533,32 @@ export async function reverseAssemblyBuild(
            sql`, `,
          )})
        order by id
-    `));
-    if (prior.rows.length) {
-      if (prior.rows.length !== sources.rows.length) {
+    `, "objects"));
+    if (prior.length) {
+      if (prior.length !== sources.length) {
         throw new InventoryError(
           "assembly reversal evidence is incomplete",
         );
       }
       return {
-        movementIds: prior.rows.map((row) => row.id).sort(),
-        entryId: prior.rows[0]!.journal_entry_id,
+        movementIds: prior.map((row) => row.id).sort(),
+        entryId: prior[0]!.journal_entry_id,
         alreadyReversed: true,
       };
     }
 
-    const disassembled = (await tx.execute(sql`
+    const disassembled = await tx.execute(sql`
       select movement.id from inventory_movements movement
         join assembly_disassemblies operation on operation.org_id=movement.org_id and operation.id=movement.assembly_disassembly_id
        where movement.org_id=${orgId} and movement.kind='assembly_disassembly' and operation.build_movement_id=${build.id}
          and not exists(select 1 from inventory_movements reversal
            where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id)
-       limit 1`)).rows;
+       limit 1`, "objects");
     if (disassembled.length) throw new InventoryError('This build has physical disassemblies — reverse those disassembly operations through the inventory movement reversal before reversing the original build');
 
     for (const key of [
       ...new Set(
-        sources.rows.map(
+        sources.map(
           (row) => `${row.item_id}:${row.stock_location_id}`,
         ),
       ),
@@ -571,11 +571,11 @@ export async function reverseAssemblyBuild(
       );
     }
 
-    const finished = sources.rows.find(
+    const finished = sources.find(
       (row) => row.kind === "assembly_build",
     )!;
     await removeInboundLayer(tx, orgId, finished, actorId);
-    for (const component of sources.rows.filter(
+    for (const component of sources.filter(
       (row) => row.kind === "assembly_consume",
     )) {
       await restoreIssueLayers(tx, orgId, component, actorId);
@@ -590,7 +590,7 @@ export async function reverseAssemblyBuild(
       reason,
     );
     const reversalIds: string[] = [];
-    for (const source of sources.rows) {
+    for (const source of sources) {
       const reversalId = randomUUID();
       reversalIds.push(reversalId);
       await tx.execute(sql`

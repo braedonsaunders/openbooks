@@ -24,7 +24,7 @@ export async function createInitialComponentTreatment(
     values (${input.orgId}, ${input.componentId}, current_date,
       ${sql.param([...input.programExclusions])}, ${input.vacationable}, ${input.actorId}, ${input.actorId})
     returning *
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!treatment) throw new Error('The component statutory treatment was not created')
   await auditSetupChange({
     orgId: input.orgId,

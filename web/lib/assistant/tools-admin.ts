@@ -53,12 +53,12 @@ const listUsers: AssistantToolDef = {
          group by u.id
          order by lower(u.name) asc, lower(u.email) asc
          limit ${limit}
-      `),
-      db.execute<{ n: string }>(sql`select count(*) as n from users u where ${where}`),
+      `, "objects"),
+      db.execute<{ n: string }>(sql`select count(*) as n from users u where ${where}`, "objects"),
     ]);
-    const total = Number(count.rows[0]?.n ?? 0);
+    const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
-      rows.rows.map((u) => ({
+      rows.map((u) => ({
         id: u.id,
         name: u.name,
         email: u.email,
@@ -105,12 +105,12 @@ const listRoles: AssistantToolDef = {
          where ${where}
          order by r.is_built_in desc, lower(r.name) asc
          limit ${limit}
-      `),
-      db.execute<{ n: string }>(sql`select count(*) as n from app_roles r where ${where}`),
+      `, "objects"),
+      db.execute<{ n: string }>(sql`select count(*) as n from app_roles r where ${where}`, "objects"),
     ]);
-    const total = Number(count.rows[0]?.n ?? 0);
+    const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
-      rows.rows.map((r) => ({
+      rows.map((r) => ({
         id: r.id,
         key: r.key,
         name: r.name,
@@ -162,16 +162,16 @@ const listApiKeys: AssistantToolDef = {
          where ${where}
          order by k.created_at desc
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<{ n: string }>(sql`
         select count(*) as n from api_keys k
           join users u on u.id = k.user_id
          where ${where}
-      `),
+      `, "objects"),
     ]);
-    const total = Number(count.rows[0]?.n ?? 0);
+    const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
-      rows.rows.map((k) => ({
+      rows.map((k) => ({
         id: k.id,
         name: k.name,
         description: k.description,
@@ -250,12 +250,12 @@ const searchAuditLog: AssistantToolDef = {
          where ${where}
          order by a.at desc
          limit ${limit}
-      `),
-      db.execute<{ n: string }>(sql`select count(*) as n ${auditFrom} where ${where}`),
+      `, "objects"),
+      db.execute<{ n: string }>(sql`select count(*) as n ${auditFrom} where ${where}`, "objects"),
     ]);
-    const total = Number(count.rows[0]?.n ?? 0);
+    const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
-      rows.rows.map((e) => ({
+      rows.map((e) => ({
         id: e.id,
         rowId: e.row_id,
         recordType: e.rtype,
@@ -290,13 +290,13 @@ const getOutboxStatus: AssistantToolDef = {
           from scheduler_outbox
          where org_id = ${authz.user.orgId}
          group by status
-      `),
+      `, "objects"),
       db.execute<{ status: string; n: string; oldest_pending_at: string | null }>(sql`
         select status, count(*)::text as n, min(case when status = 'pending' then created_at end) as oldest_pending_at
           from report_delivery_outbox
          where org_id = ${authz.user.orgId}
          group by status
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         (select id as job_id, 'scheduler'::text as job_type, status, attempt_count, created_at, updated_at
            from scheduler_outbox
@@ -308,7 +308,7 @@ const getOutboxStatus: AssistantToolDef = {
           where org_id = ${authz.user.orgId} and status = 'failed'
           order by updated_at desc limit 5)
         order by updated_at desc limit 10
-      `),
+      `, "objects"),
     ]);
     const summarize = (rows: { status: string; n: string; oldest_pending_at: string | null }[]) => {
       const byStatus: Record<string, number> = {};
@@ -322,9 +322,9 @@ const getOutboxStatus: AssistantToolDef = {
     return {
       ok: true,
       data: {
-        scheduler: summarize(scheduled.rows),
-        deliveries: summarize(deliveries.rows),
-        recentFailures: failures.rows.map(projectOutboxFailure),
+        scheduler: summarize(scheduled),
+        deliveries: summarize(deliveries),
+        recentFailures: failures.map(projectOutboxFailure),
         href: "/admin/audit",
       },
     };

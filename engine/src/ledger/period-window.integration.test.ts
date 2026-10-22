@@ -21,7 +21,7 @@ test("an imported document dated outside its named period refuses by name", { sk
         insert into accounting_periods (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on)
         select ${org.orgId}, fiscal_calendar_id, 2027, 1, '2027-01', '2027-01-01', '2027-01-31'
           from accounting_periods where id = ${org.periodId}
-        returning id`)).rows[0]
+        returning id`, "objects"))[0]
     ))!;
     const docId = crypto.randomUUID();
     await withBypass(async () => {
@@ -62,7 +62,7 @@ test("an adjustment period refuses a posting dated outside its fiscal year, in t
         insert into accounting_periods (org_id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment)
         select ${org.orgId}, fiscal_calendar_id, 2026, 13, 'FY26 ADJ', '2026-12-31', '2026-12-31', true
           from accounting_periods where id = ${org.periodId}
-        returning id`)).rows[0]
+        returning id`, "objects"))[0]
     ))!;
     const post = (postingDate: string) => withOrgContext(org.orgId, () => postEntry(db, {
       orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,

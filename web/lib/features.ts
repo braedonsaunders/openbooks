@@ -88,8 +88,8 @@ export type FeatureImpact = { labelKey: string; count: number }
 export type FeatureDisableStatus = { blocked: boolean; impacts: FeatureImpact[] }
 
 async function countRows(query: SQL): Promise<number> {
-  const r = (await db.execute<{ n: number }>(query))
-  return Number(r.rows[0]?.n ?? 0)
+  const r = (await db.execute<{ n: number }>(query, 'objects'))
+  return Number(r[0]?.n ?? 0)
 }
 
 /**

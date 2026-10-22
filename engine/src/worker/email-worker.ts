@@ -298,7 +298,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
               join report_runs r on r.id = delivery.run_id and r.org_id = delivery.org_id
              where delivery.id = ${reportDeliveryId} and delivery.org_id = ${d.orgId}
                and delivery.recipient = ${d.to}
-          `)).rows[0];
+          `, "objects"))[0];
           if (!run) throw new Error('Report delivery evidence not found');
           await authorizeReportRun(d.orgId, run.definition_id, run.run_id);
         }

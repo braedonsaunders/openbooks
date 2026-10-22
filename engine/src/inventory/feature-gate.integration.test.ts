@@ -22,7 +22,7 @@ async function evidence(orgId: string) {
     'vouchers',(select jsonb_agg(to_jsonb(v) order by id) from landed_cost_vouchers v where org_id=${orgId}),
     'orders',(select jsonb_agg(to_jsonb(o) order by id) from transfer_orders o where org_id=${orgId}),
     'orderLines',(select jsonb_agg(to_jsonb(l) order by id) from transfer_order_lines l where org_id=${orgId})
-  ) as state`)).rows[0]!.state;
+  ) as state`, "objects"))[0]!.state;
 }
 
 for (const operation of ["receipt", "issue", "adjustment", "transfer", "build", "ship order", "receive order", "create order", "landed cost"] as const) {

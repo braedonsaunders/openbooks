@@ -56,11 +56,9 @@ async function fixture(): Promise<Fixture> {
   const o = await withBypassContext(() => (createScratchOrg()))
   // The data-io import above leaves the ambient scope RLS-enforced with no
   // tenant: seed writes go through the bypass, reads through the org.
-  const revenueNo = await withOrgContext(o.orgId, async () => (
-    await db.execute<{ number: string }>(
-      sql`select number from accounts where id = ${o.accounts.revenue} and org_id = ${o.orgId}`,
-    )
-  ).rows[0]?.number)
+  const revenueNo = await withOrgContext(o.orgId, async () => (await db.execute<{ number: string }>(
+      sql`select number from accounts where id = ${o.accounts.revenue} and org_id = ${o.orgId}`, 'objects',
+    ))[0]?.number)
   assert.ok(revenueNo)
   await withBypassContext(async () => {
     await db.execute(sql`update parties set short_code = 'ACME' where id = ${o.customerId}`)
@@ -69,12 +67,10 @@ async function fixture(): Promise<Fixture> {
 }
 
 async function addSubsidiary(fx: Fixture, name: string): Promise<string> {
-  const [row] = await withBypassContext(async () => (
-    await db.execute<{ id: string }>(sql`
+  const [row] = await withBypassContext(async () => await db.execute<{ id: string }>(sql`
       insert into subsidiaries (org_id, parent_id, name, base_currency, country)
       values (${fx.orgId}, ${fx.rootId}, ${name}, 'CAD', 'CA')
-      returning id`)
-  ).rows)
+      returning id`, 'objects'))
   assert.ok(row?.id)
   return row.id
 }
@@ -92,11 +88,9 @@ async function writeInvoice(fx: Fixture, row: Record<string, unknown>) {
 }
 
 async function storedSubsidiaryId(fx: Fixture, documentNumber: string): Promise<string | null> {
-  const [row] = await withOrgContext(fx.orgId, async () => (
-    await db.execute<{ subsidiary_id: string | null }>(sql`
+  const [row] = await withOrgContext(fx.orgId, async () => await db.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id from documents
-       where org_id = ${fx.orgId} and document_number = ${documentNumber}`)
-  ).rows)
+       where org_id = ${fx.orgId} and document_number = ${documentNumber}`, 'objects'))
   return row?.subsidiary_id ?? null
 }
 
@@ -213,12 +207,10 @@ test(
         { created: replay.created, failed: replay.failed, errors: replay.errors },
         { created: 1, failed: 0, errors: [] },
       )
-      const [copy] = await withOrgContext(fx.orgId, async () => (
-        await db.execute<{ subsidiary_id: string | null }>(sql`
+      const [copy] = await withOrgContext(fx.orgId, async () => await db.execute<{ subsidiary_id: string | null }>(sql`
           select subsidiary_id from documents
            where org_id = ${fx.orgId} and document_number <> 'SUB-4'
-             and kind = 'customer_invoice'`)
-      ).rows)
+             and kind = 'customer_invoice'`, 'objects'))
       assert.equal(copy?.subsidiary_id, westId)
     } finally {
       await dropScratchOrgReporting(fx.orgId)

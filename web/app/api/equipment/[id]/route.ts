@@ -115,8 +115,8 @@ export const PATCH = defineRoute({
           select *
             from equipment_units
            where id = ${id} and org_id = ${gate.user.orgId}
-           for update`)))
-        const current = locked.rows[0] as EquipmentUnitRow | undefined
+           for update`, 'objects')))
+        const current = locked[0] as EquipmentUnitRow | undefined
         if (!current) return notFound("record")
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(current.subsidiary_id))) {
           return notFound("record")
@@ -176,14 +176,14 @@ export const PATCH = defineRoute({
           return bad('charge_item_not_found')
         }
         if (body.chargeItemId !== undefined && chargeItemId) {
-          const item = ((await tx.execute(sql`select 1 from items where id = ${chargeItemId} and org_id = ${gate.user.orgId} and kind = 'equipment_charge' and is_active`)))
-          if (!item.rows[0]) return bad('charge_item_not_found')
+          const item = ((await tx.execute(sql`select 1 from items where id = ${chargeItemId} and org_id = ${gate.user.orgId} and kind = 'equipment_charge' and is_active`, 'objects')))
+          if (!item[0]) return bad('charge_item_not_found')
         }
         const subsidiaryId = body.subsidiaryId !== undefined ? text(body.subsidiaryId) : current.subsidiary_id
         if (body.subsidiaryId !== undefined) {
           if (subsidiaryId && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId))) return bad('invalid_subsidiary')
-          const sub = ((await tx.execute(sql`select 1 from subsidiaries where id = ${subsidiaryId} and org_id = ${gate.user.orgId} and is_active and not is_elimination`)))
-          if (!sub.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(subsidiaryId)))) {
+          const sub = ((await tx.execute(sql`select 1 from subsidiaries where id = ${subsidiaryId} and org_id = ${gate.user.orgId} and is_active and not is_elimination`, 'objects')))
+          if (!sub[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(subsidiaryId)))) {
             return bad('invalid_subsidiary')
           }
         }
@@ -203,8 +203,8 @@ export const PATCH = defineRoute({
                  join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
                 where jl.org_id = ${gate.user.orgId} and jl.equipment_unit_id = ${id}
                   and je.status in ('posted', 'reversed')
-             )`)
-          if (history.rows[0]) {
+             )`, 'objects')
+          if (history[0]) {
             return NextResponse.json({
               error: 'equipment_history_prevents_rehome',
               code: 'equipment_history_prevents_rehome',
@@ -234,8 +234,8 @@ export const PATCH = defineRoute({
           }
         }
         if (body.rateBookId !== undefined && rateBookId) {
-          const found = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`)))
-          if (!found.rows[0]) return bad('rate_book_not_found')
+          const found = ((await tx.execute(sql`select 1 from item_rate_books where id = ${rateBookId} and org_id = ${gate.user.orgId} and is_active`, 'objects')))
+          if (!found[0]) return bad('rate_book_not_found')
         }
         let purchasePrice = normalizeMoney(String(current.purchase_price))
         if (body.purchasePrice !== undefined) {
@@ -312,14 +312,14 @@ export const PATCH = defineRoute({
                sql`, `,
              )}
            where id = ${id} and org_id = ${gate.user.orgId} and revision = ${Number(current.revision)}
-           returning *`)
+           returning *`, 'objects')
         // The lock makes this unreachable for a normal race, but the count is
         // the claim: never report success for a write no read can observe.
-        if (updated.rows.length !== 1) return staleRevision()
+        if (updated.length !== 1) return staleRevision()
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${gate.user.orgId}, 'equipment_units', ${id}, 'update',
-                  ${JSON.stringify({ before: current, after: updated.rows[0] })}::jsonb, ${gate.user.id})
+                  ${JSON.stringify({ before: current, after: updated[0] })}::jsonb, ${gate.user.id})
         `)
         return NextResponse.json(await loadEquipmentInWrite(tx, id, gate.user.orgId, gate.allowedSubsidiaryIds))
       })
@@ -351,22 +351,22 @@ export const DELETE = defineRoute({
       const locked = ((await tx.execute(sql`
         select status, subsidiary_id from equipment_units
          where id = ${id} and org_id = ${gate.user.orgId}
-         for update`)))
-      const row = locked.rows[0] as { status: string; subsidiary_id: string } | undefined
+         for update`, 'objects')))
+      const row = locked[0] as { status: string; subsidiary_id: string } | undefined
       if (!row) return notFound("record")
       if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id))) {
         return notFound("record")
       }
       if (row.status !== 'draft') return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
-      const used = ((await tx.execute(sql`select 1 from document_lines where equipment_unit_id = ${id} and org_id = ${gate.user.orgId} limit 1`)))
-      if (used.rows[0]) return NextResponse.json({ error: 'charge_history_delete' }, { status: 409 })
+      const used = ((await tx.execute(sql`select 1 from document_lines where equipment_unit_id = ${id} and org_id = ${gate.user.orgId} limit 1`, 'objects')))
+      if (used[0]) return NextResponse.json({ error: 'charge_history_delete' }, { status: 409 })
       const deleted = await tx.execute(sql`
         delete from equipment_units
          where id = ${id} and org_id = ${gate.user.orgId} and status = 'draft'
-         returning id`)
-      if (deleted.rows.length !== 1) {
-        const again = ((await tx.execute(sql`select status from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)))
-        if (!again.rows[0]) return notFound("record")
+         returning id`, 'objects')
+      if (deleted.length !== 1) {
+        const again = ((await tx.execute(sql`select status from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`, 'objects')))
+        if (!again[0]) return notFound("record")
         return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
       }
       await tx.execute(sql`

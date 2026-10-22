@@ -93,7 +93,7 @@ test(
         effectiveFrom: "2026-01-01", eiEmployerMultiplier: "1.4",
       });
       assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-        where org_id=${org.orgId} and employee_party_id=${employeeId} returning id`)).rows.length, 1);
+        where org_id=${org.orgId} and employee_party_id=${employeeId} returning id`, "objects")).length, 1);
 
       // Three committed periods, 60 h on job A and 20 h on job B in each.
       const periods = [
@@ -184,8 +184,8 @@ test(
       const untouched = (await db.execute<{ gross: string }>(sql`
         select gross from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${sourceRuns[0]}
-      `));
-      assert.equal(untouched.rows[0]!.gross, "2400.0000", "recalculating a paid period changes nothing");
+      `, "objects"));
+      assert.equal(untouched[0]!.gross, "2400.0000", "recalculating a paid period changes nothing");
 
       // ---- Pay ---------------------------------------------------------------
       const retro = await createRetroPayRun({
@@ -270,8 +270,8 @@ test(
       const noVacation = (await db.execute<{ vacation_accrued: string }>(sql`
         select vacation_accrued from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}
-      `));
-      assert.equal(noVacation.rows[0]!.vacation_accrued, "0.0000");
+      `, "objects"));
+      assert.equal(noVacation[0]!.vacation_accrued, "0.0000");
       await db.execute(sql`
         update pay_component_statutory_treatments treatment set vacationable = true
          from pay_components component,pay_runs run
@@ -289,14 +289,14 @@ test(
       const stub = (await db.execute<{ gross: string; vacation_accrued: string; factors: Record<string, string> }>(sql`
         select gross, vacation_accrued, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}
-      `));
-      assert.equal(stub.rows[0]!.gross, "720.0000");
-      assert.equal(stub.rows[0]!.vacation_accrued, "28.8000", "4% of $720.00");
+      `, "objects"));
+      assert.equal(stub[0]!.gross, "720.0000");
+      assert.equal(stub[0]!.vacation_accrued, "28.8000", "4% of $720.00");
       // The CA pack declares retroactive pay non-periodic (T4127 Method 2), so
       // the whole amount arrives as factor B — the bonus path — rather than
       // being annualized as period income.
-      assert.equal(stub.rows[0]!.factors.B, "720.0000");
-      assert.equal(stub.rows[0]!.factors.I, "0.0000");
+      assert.equal(stub[0]!.factors.B, "720.0000");
+      assert.equal(stub[0]!.factors.I, "0.0000");
 
       // Job costing: the retro earning lines carry the projects.
       const stubLines = (await db.execute<{ project_id: string | null; amount: string; hours: string | null; description: string }>(sql`
@@ -305,18 +305,18 @@ test(
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${retro.documentId}
            and l.kind = 'earning'
-      `));
-      assert.equal(stubLines.rows.length, 6, "two jobs × three periods");
-      const jobATotal = sum(stubLines.rows.filter((l) => l.project_id === jobA).map((l) => l.amount));
-      const jobBTotal = sum(stubLines.rows.filter((l) => l.project_id === jobB).map((l) => l.amount));
+      `, "objects"));
+      assert.equal(stubLines.length, 6, "two jobs × three periods");
+      const jobATotal = sum(stubLines.filter((l) => l.project_id === jobA).map((l) => l.amount));
+      const jobBTotal = sum(stubLines.filter((l) => l.project_id === jobB).map((l) => l.amount));
       assert.equal(jobATotal, "540.0000", "3 × 60 h × $3.00");
       assert.equal(jobBTotal, "180.0000", "3 × 20 h × $3.00");
       assert.ok(
-        stubLines.rows.every((l) => l.hours === null),
+        stubLines.every((l) => l.hours === null),
         "no hours on a retro line: the source periods already paid every per-hour component",
       );
       assert.ok(
-        stubLines.rows.every((l) => /retro 2026-/.test(l.description)),
+        stubLines.every((l) => /retro 2026-/.test(l.description)),
         "each line names the period it makes good",
       );
 
@@ -363,10 +363,10 @@ test(
       const legs = (await db.execute<{ amount: string; project_id: string | null }>(sql`
         select amount, project_id from document_lines
          where org_id = ${org.orgId} and document_id = ${retro.documentId}
-      `));
-      assert.equal(cmp(sum(legs.rows.map((l) => l.amount)), "0"), 0, "the GL projection balances");
+      `, "objects"));
+      assert.equal(cmp(sum(legs.map((l) => l.amount)), "0"), 0, "the GL projection balances");
       assert.equal(
-        sum(legs.rows.filter((l) => l.project_id === jobA).map((l) => l.amount)),
+        sum(legs.filter((l) => l.project_id === jobA).map((l) => l.amount)),
         "540.0000",
         "job A's ledger carries its share of the retro wage",
       );

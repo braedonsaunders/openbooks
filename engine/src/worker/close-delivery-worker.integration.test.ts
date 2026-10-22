@@ -15,10 +15,10 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 async function seedPackage(orgId: string, recipients: unknown): Promise<{ packageId: string; periodId: string; bookId: string }> {
   const period = (await db.execute<{ id: string }>(sql`
     select id from accounting_periods where org_id = ${orgId} order by starts_on limit 1
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   const book = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} limit 1
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   assert.ok(period?.id && book?.id, "scratch org must carry a period and a book");
   const packageId = randomUUID();
   await db.execute(sql`
@@ -61,10 +61,10 @@ async function seedReportablePackage(orgId: string, senderId: string, delivery =
             '["ops@scratch.test"]'::jsonb, ${delivery}::jsonb, ${senderId})`);
   const period = (await db.execute<{ id: string }>(sql`
     select id from accounting_periods where org_id = ${orgId} order by starts_on limit 1
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   const book = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} limit 1
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   assert.ok(period?.id && book?.id, "scratch org must carry a period and a book");
   await grantScratchPermissions(orgId, senderId, ["close.run", "close.approve", "reports.read"]);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"continuousClose":true}'::jsonb) where id=${orgId}`);
@@ -109,7 +109,7 @@ test("close package renders through a minted report run and delivers", { skip: !
     assert.equal(renderedParams.length, 1);
     const reportRunId = renderedParams[0]!.runId;
     assert.match(reportRunId ?? "", UUID_RE, "the render must carry its report run id");
-    const runs = (await db.execute<{
+    const runs = await db.execute<{
       trigger: string; status: string; definition_id: string;
       snapshotUser: string | null; closePackageId: string | null; closeRunId: string | null;
     }>(sql`
@@ -117,7 +117,7 @@ test("close package renders through a minted report run and delivers", { skip: !
              authorization_snapshot->>'userId' as "snapshotUser",
              filters->'closePackage'->>'packageId' as "closePackageId",
              filters->'closePackage'->>'runId' as "closeRunId"
-        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`)).rows;
+        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`, "objects");
     assert.equal(runs.length, 1, "the render must mint its run row");
     assert.equal(runs[0]!.trigger, "close-package");
     assert.equal(runs[0]!.status, "succeeded");
@@ -129,9 +129,9 @@ test("close package renders through a minted report run and delivers", { skip: !
     // The bundle was handed to mail and the delivery recorded.
     assert.equal(enqueued.length, 1);
     assert.deepEqual((enqueued[0]!.data as { to: string[] }).to, ["ops@scratch.test"]);
-    const events = (await db.execute<{ event_type: string; payload: unknown }>(sql`
+    const events = await db.execute<{ event_type: string; payload: unknown }>(sql`
       select event_type, payload from close_events
-       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`)).rows;
+       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`, "objects");
     assert.equal(events.length, 1, "delivery must record its event");
     assert.equal((events[0]!.payload as { reports: number }).reports, 1);
   } finally {
@@ -218,9 +218,9 @@ test("close delivery without a sender falls back to the package author", { skip:
     );
     const reportRunId = seen[0]!.runId ?? "";
     assert.match(reportRunId, UUID_RE);
-    const rows = (await db.execute<{ snapshotUser: string | null }>(sql`
+    const rows = await db.execute<{ snapshotUser: string | null }>(sql`
       select authorization_snapshot->>'userId' as "snapshotUser"
-        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`)).rows;
+        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`, "objects");
     assert.equal(rows[0]?.snapshotUser, author);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -249,9 +249,9 @@ test("an enqueue failure records no delivery and fails the job (provable non-acc
       ),
       /redis outage at add/,
     );
-    const delivered = (await db.execute<{ id: string }>(sql`
+    const delivered = await db.execute<{ id: string }>(sql`
       select id from close_events
-       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`)).rows;
+       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`, "objects");
     assert.equal(delivered.length, 0, "a failed handoff must never read as delivered");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -280,9 +280,9 @@ test("an enqueue failure with an unreachable queue records no delivery and fails
       ),
       /redis outage at add/,
     );
-    const delivered = (await db.execute<{ id: string }>(sql`
+    const delivered = await db.execute<{ id: string }>(sql`
       select id from close_events
-       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`)).rows;
+       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`, "objects");
     assert.equal(delivered.length, 0, "a failed handoff must never read as delivered");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -303,10 +303,10 @@ async function seedMisconfiguredPackage(
             ${patch.delivery ?? '{}'}::jsonb, ${senderId})`);
   const period = (await db.execute<{ id: string }>(sql`
     select id from accounting_periods where org_id = ${orgId} order by starts_on limit 1
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   const book = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} limit 1
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   await grantScratchPermissions(orgId, senderId, ["close.run", "close.approve", "reports.read"]);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"continuousClose":true}'::jsonb) where id=${orgId}`);
   const runId = await startCloseRun({
@@ -318,12 +318,12 @@ async function seedMisconfiguredPackage(
 }
 
 async function deliveryFailures(orgId: string, runId: string | null): Promise<{ reason: string | null }[]> {
-  const rows = (await db.execute<{ reason: string | null }>(sql`
+  const rows = await db.execute<{ reason: string | null }>(sql`
     select payload->>'reason' as reason from close_events
      where org_id = ${orgId}
        and ((${runId}::uuid is null and run_id is null)
          or (${runId}::uuid is not null and run_id = ${runId}::uuid))
-       and event_type = 'package.delivery_failed'`)).rows;
+       and event_type = 'package.delivery_failed'`, "objects");
   return rows;
 }
 
@@ -380,10 +380,10 @@ test("a manual-cadence package skips quietly on cadence-driven ticks", { skip: !
 
     const period = (await db.execute<{ id: string }>(sql`
       select id from accounting_periods where org_id = ${org.orgId} order by starts_on limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const book = (await db.execute<{ id: string }>(sql`
       select id from accounting_books where org_id = ${org.orgId} limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const unmarkedSendNow = await processCloseDeliveryJobData(
       { orgId: org.orgId, packageId, periodId: period.id, bookId: book.id, senderId: sender }, {},
     ) as { skipped: string };
@@ -431,13 +431,13 @@ test("Send now on a manual-cadence package delivers", { skip: !DB }, async () =>
     assert.equal(renderedParams.length, 1);
     const reportRunId = renderedParams[0]!.runId;
     assert.match(reportRunId ?? "", UUID_RE, "the render must carry its report run id");
-    const runs = (await db.execute<{
+    const runs = await db.execute<{
       trigger: string; status: string; closePackageId: string | null; closeRunId: string | null;
     }>(sql`
       select trigger, status,
              filters->'closePackage'->>'packageId' as "closePackageId",
              filters->'closePackage'->>'runId' as "closeRunId"
-        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`)).rows;
+        from report_runs where id = ${reportRunId} and org_id = ${org.orgId}`, "objects");
     assert.equal(runs.length, 1, "the render must mint its run row");
     assert.equal(runs[0]!.trigger, "close-package");
     assert.equal(runs[0]!.status, "succeeded");
@@ -452,9 +452,9 @@ test("Send now on a manual-cadence package delivers", { skip: !DB }, async () =>
       `close-package|manual|${org.orgId}|${packageId}|${periodId}|${bookId}|${idempotencyKey}`,
       "the queued email identity must come from the request's idempotency key",
     );
-    const events = (await db.execute<{ event_type: string; payload: unknown }>(sql`
+    const events = await db.execute<{ event_type: string; payload: unknown }>(sql`
       select event_type, payload from close_events
-       where org_id = ${org.orgId} and run_id is null and event_type = 'package.delivered'`)).rows;
+       where org_id = ${org.orgId} and run_id is null and event_type = 'package.delivered'`, "objects");
     assert.equal(events.length, 1, "delivery must record its event");
     assert.equal((events[0]!.payload as { reports: number }).reports, 1);
   } finally {
@@ -506,10 +506,10 @@ test("close delivery without any principal refuses by name", { skip: !DB }, asyn
               '["ops@scratch.test"]'::jsonb, '{}'::jsonb, null)`);
     const period = (await db.execute<{ id: string }>(sql`
       select id from accounting_periods where org_id = ${org.orgId} order by starts_on limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const book = (await db.execute<{ id: string }>(sql`
       select id from accounting_books where org_id = ${org.orgId} limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     await assert.rejects(
       processCloseDeliveryJobData(
         { orgId: org.orgId, packageId, periodId: period.id, bookId: book.id },

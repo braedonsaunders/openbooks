@@ -30,7 +30,7 @@ test("createSubcontract refuses by name while Subcontracts is disabled and write
         error instanceof SubcontractError && error.message === "Subcontracts feature is disabled",
     );
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from subcontracts
-      where org_id=${org.orgId}`)).rows[0]!.n;
+      where org_id=${org.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "a refused subcontract must leave no subcontracts row");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -65,7 +65,7 @@ test("createSubcontract blocked on the fence loses to a committed Subcontracts d
         error instanceof SubcontractError && error.message === "Subcontracts feature is disabled",
     );
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from subcontracts
-      where org_id=${org.orgId}`)).rows[0]!.n;
+      where org_id=${org.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "the losing creator must leave no subcontracts row");
   } finally {
     await writer.query("rollback").catch(() => {});

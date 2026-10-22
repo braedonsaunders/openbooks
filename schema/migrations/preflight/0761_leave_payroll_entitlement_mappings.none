@@ -1,1 +1,0 @@
-The backfill joins each retained payroll input to its required source leave request; mapping rows start empty and no existing entitlement balance is rewritten.

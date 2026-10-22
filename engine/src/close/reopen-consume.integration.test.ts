@@ -26,7 +26,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 async function requestStatus(orgId: string, requestId: string): Promise<string> {
   return (await db.execute<{ status: string }>(sql`
     select status from close_reopen_requests where id = ${requestId} and org_id = ${orgId}
-  `)).rows[0]!.status;
+  `, "objects"))[0]!.status;
 }
 
 test(
@@ -62,8 +62,8 @@ test(
         select count(*)::int as n from close_events
          where org_id = ${org.orgId} and event_type = 'period.reopen_consumed_by_reclose'
            and payload->>'requestId' = ${first}
-      `);
-      assert.equal(events.rows[0]?.n, 1);
+      `, "objects");
+      assert.equal(events[0]?.n, 1);
 
       // A new reopen for the same scope is accepted once the old window ends.
       const second = await requestReviewedReopenFixture({ ...target, modules: ["gl"], actorId: actors.adminId, reason: "Follow-up correction work" });
@@ -184,7 +184,7 @@ test(
         hours: 2,
       });
       const before = (await db.execute<{ expires_at: Date; approved_by: string; modules: string[] }>(sql`
-        select expires_at, approved_by, modules from close_reopen_requests where id = ${requestId}`)).rows[0]!;
+        select expires_at, approved_by, modules from close_reopen_requests where id = ${requestId}`, "objects"))[0]!;
       const extension = await extendReopenRequest({
         orgId: org.orgId, requestId, actorId: actors.adminId,
         reason: "Correction needs five additional hours plus the AP module",
@@ -194,8 +194,8 @@ test(
       assert.equal(await requestStatus(org.orgId, extension.requestId), "requested");
       assert.equal(await requestStatus(org.orgId, requestId), "approved");
       assert.equal(new Date(extension.expiresAt).getTime(), new Date(before.expires_at).getTime() + 5 * 60 * 60 * 1000);
-      const pendingLocks = (await db.execute<{ module: string; state: string; expires_at: Date | null }>(sql`
-        select module, state, reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`)).rows;
+      const pendingLocks = await db.execute<{ module: string; state: string; expires_at: Date | null }>(sql`
+        select module, state, reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`, "objects");
       assert.equal(pendingLocks.find((lock) => lock.module === "ap")?.state, "closed");
       assert.ok(pendingLocks.filter((lock) => lock.module === "gl").every((lock) => new Date(lock.expires_at!).getTime() === new Date(before.expires_at).getTime()));
       await assert.rejects(
@@ -217,18 +217,18 @@ test(
       assert.equal(await requestStatus(org.orgId, extension.requestId), "approved");
       assert.equal(await requestStatus(org.orgId, requestId), "superseded");
       const original = (await db.execute<{ expires_at: Date; approved_by: string; modules: string[]; reclosed_at: Date | null }>(sql`
-        select expires_at, approved_by, modules, reclosed_at from close_reopen_requests where id = ${requestId}`)).rows[0]!;
+        select expires_at, approved_by, modules, reclosed_at from close_reopen_requests where id = ${requestId}`, "objects"))[0]!;
       assert.deepEqual(original.modules, before.modules);
       assert.equal(original.approved_by, before.approved_by);
       assert.equal(new Date(original.expires_at).getTime(), new Date(before.expires_at).getTime());
       assert.equal(original.reclosed_at, null, "superseding a window does not claim its locks were closed");
-      const changedLocks = (await db.execute<{ module: string; state: string; expires_at: Date }>(sql`
-        select module, state, reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`)).rows;
+      const changedLocks = await db.execute<{ module: string; state: string; expires_at: Date }>(sql`
+        select module, state, reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`, "objects");
       assert.equal(changedLocks.length, 3);
       assert.ok(changedLocks.every((lock) => lock.state === "open" && new Date(lock.expires_at).toISOString() === extension.expiresAt));
-      const audit = (await db.execute<{ action: string }>(sql`
+      const audit = await db.execute<{ action: string }>(sql`
         select action from audit_log where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-         and row_id = ${extension.requestId} order by at`)).rows;
+         and row_id = ${extension.requestId} order by at`, "objects");
       assert.deepEqual(audit.map((row) => row.action), ["request", "approve"]);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -254,7 +254,7 @@ test(
         decision: "approved",
         hours: 2,
       });
-      const before = (await db.execute<{ expires_at: Date }>(sql`select expires_at from close_reopen_requests where id = ${first}`)).rows[0]!;
+      const before = (await db.execute<{ expires_at: Date }>(sql`select expires_at from close_reopen_requests where id = ${first}`, "objects"))[0]!;
       await assert.rejects(extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "No actual scope or time change", additionalHours: 0, addModules: ["gl"] }), /must add time, modules, or both/);
       for (const additionalHours of [undefined, 0]) {
         const pending = await extendReopenRequest({ orgId: org.orgId, requestId: first, actorId: actors.adminId, reason: "Add AP without extending the window", addModules: ["ap"], additionalHours });
@@ -276,7 +276,7 @@ test(
         actorId: actors.approver1Id,
         decision: "approved",
       });
-      const locks = (await db.execute<{ expires_at: Date }>(sql`select reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`)).rows;
+      const locks = await db.execute<{ expires_at: Date }>(sql`select reopen_expires_at as expires_at from period_locks where org_id = ${org.orgId}`, "objects");
       assert.ok(locks.every((lock) => new Date(lock.expires_at).getTime() === new Date(before.expires_at).getTime()));
     } finally {
       await dropScratchOrg(org.orgId);
@@ -369,8 +369,8 @@ test(
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
            and row_id = ${first} and action = 'end'
-      `);
-      assert.equal(audits.rows[0]?.n, 1);
+      `, "objects");
+      assert.equal(audits[0]?.n, 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -393,7 +393,7 @@ test(
       const refusal = outcomes.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult;
       assert.ok(refusal.reason instanceof CloseError);
       assert.match(refusal.reason.message, /already awaiting a decision/);
-      const saved = (await db.execute<{ n: number }>(sql`select count(*)::int as n from close_reopen_requests where org_id = ${org.orgId} and status = 'requested'`)).rows[0]!;
+      const saved = (await db.execute<{ n: number }>(sql`select count(*)::int as n from close_reopen_requests where org_id = ${org.orgId} and status = 'requested'`, "objects"))[0]!;
       assert.equal(saved.n, 1);
     } finally {
       await dropScratchOrg(org.orgId);

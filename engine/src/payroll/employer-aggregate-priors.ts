@@ -345,8 +345,8 @@ async function employerPriorAmount(
        and (${region}::text is null or s.province = ${region})
        and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
        and d.status <> 'voided'
-  `));
-  return rows.rows[0]!.prior;
+  `, "objects"));
+  return rows[0]!.prior;
 }
 
 /** Employer base in scope: opening carry-in plus committed and own-document factors. */
@@ -378,8 +378,8 @@ async function employerPriorBase(
        and (${region}::text is null or s.province = ${region})
        and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
        and d.status <> 'voided'
-  `));
-  return rows.rows[0]!.prior;
+  `, "objects"));
+  return rows[0]!.prior;
 }
 
 /** This employee's base for a personal cap: factors plus the declared opening field. */
@@ -413,8 +413,8 @@ async function employeePriorBase(
        and s.tax_year = ${taxYear}
        and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
        and d.status <> 'voided'
-  `));
-  return rows.rows[0]!.prior;
+  `, "objects"));
+  return rows[0]!.prior;
 }
 
 /**

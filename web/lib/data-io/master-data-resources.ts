@@ -297,11 +297,11 @@ async function resolveMasterRefId(
   const value = String(human ?? '').trim()
   if (target.resource !== 'accounts' || !isUuid(value)) return id
 
-  const owned = (await db.execute(sql`
+  const owned = await db.execute<{ id: string }>(sql`
     select id from accounts
      where id = ${id} and org_id = ${orgId}
-     limit 1`)) as { rows: { id: string }[] }
-  return owned.rows[0]?.id ?? null
+     limit 1`, 'objects')
+  return owned[0]?.id ?? null
 }
 
 /**
@@ -317,11 +317,11 @@ async function exportMasterCell(
   if (field.kind === 'reference' && field.ref?.resource === 'accounts') {
     const id = String(value ?? '').trim()
     if (isUuid(id)) {
-      const owned = (await db.execute(sql`
+      const owned = await db.execute<{ label: string | null }>(sql`
         select number as label from accounts
          where id = ${id} and org_id = ${orgId}
-         limit 1`)) as { rows: { label: string | null }[] }
-      return owned.rows[0]?.label ?? id
+         limit 1`, 'objects')
+      return owned[0]?.label ?? id
     }
   }
   return exportCell(field, value, resolver)
@@ -408,15 +408,13 @@ export function masterResource(
         ]
         if (partyIds.length > 0) {
           const idList = sql.join(partyIds.map((id) => sql`${id}`), sql`, `)
-          const membership = (await db.execute(sql`
+          const membership = await db.execute<{ party_id: string; role: string }>(sql`
             select party_id, 'customer' as role from customer_roles where org_id = ${orgId} and is_active and party_id in (${idList})
             union all
             select party_id, 'vendor' as role from vendor_roles where org_id = ${orgId} and is_active and party_id in (${idList})
             union all
-            select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active and party_id in (${idList})`)) as {
-            rows: { party_id: string; role: string }[]
-          }
-          roleMembership = new Set(membership.rows.map((r) => `${r.party_id}:${r.role}`))
+            select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active and party_id in (${idList})`, 'objects')
+          roleMembership = new Set(membership.map((r) => `${r.party_id}:${r.role}`))
         }
       }
       const customDefs = fields.filter((f) => f.custom)
@@ -483,26 +481,22 @@ async function writeMaster(
   const needsPartyCodes = !ctx.recordKeys && m.key === 'parties' &&
     rows.some((r) => String(r[m.naturalKey] ?? '').trim() === '')
   const takenPartyCodes = needsPartyCodes
-    ? new Set((((await db.execute(sql`
-        select short_code from parties where org_id = ${ctx.orgId}`)) as {
-        rows: { short_code: string | null }[]
-      }).rows.map((r) => String(r.short_code ?? '').trim()).filter((s) => s !== '')))
+    ? new Set(((await db.execute<{ short_code: string | null }>(sql`
+        select short_code from parties where org_id = ${ctx.orgId}`, 'objects')).map((r) => String(r.short_code ?? '').trim()).filter((s) => s !== '')))
     : new Set<string>()
   // Bank-typed hygiene needs to know which accounts already back real bank
   // activity. One set per import — never a query per row.
   const statementAccountIds = m.key === 'accounts'
     ? new Set(
-      ((await db.execute(sql`
-        select distinct account_id as id from bank_statements where org_id = ${ctx.orgId}${ctx.recordKeys ? sql` and account_id in (select id from accounts where org_id=${ctx.orgId} and number in (${sql.join(rows.map((row) => sql`${String(row[m.naturalKey] ?? '').trim()}`), sql`, `)}))` : sql``}`)) as {
-        rows: { id: string }[]
-      }).rows.map((r) => r.id),
+      (await db.execute<{ id: string }>(sql`
+        select distinct account_id as id from bank_statements where org_id = ${ctx.orgId}${ctx.recordKeys ? sql` and account_id in (select id from accounts where org_id=${ctx.orgId} and number in (${sql.join(rows.map((row) => sql`${String(row[m.naturalKey] ?? '').trim()}`), sql`, `)}))` : sql``}`, 'objects')).map((r) => r.id),
     )
     : new Set<string>()
 
   const availablePartyCode = async (displayName: string) => {
     let code = nextPartyShortCode(displayName, takenPartyCodes)
     if (ctx.recordKeys) {
-      while ((await db.execute(sql`select id from parties where org_id=${ctx.orgId} and short_code=${code} limit 1`)).rows.length) code = nextPartyShortCode(displayName, takenPartyCodes)
+      while ((await db.execute(sql`select id from parties where org_id=${ctx.orgId} and short_code=${code} limit 1`, 'objects')).length) code = nextPartyShortCode(displayName, takenPartyCodes)
     }
     return code
   }
@@ -652,11 +646,9 @@ async function writeMaster(
       let identityLabel: string | null = null
       if (!nkVal && m.key === 'parties') {
         const displayName = String(src.displayName ?? '').trim()
-        const matches = displayName ? ((await db.execute(sql`
+        const matches = displayName ? (await db.execute<Record<string, unknown>>(sql`
           select * from parties
-           where org_id = ${ctx.orgId} and display_name = ${displayName} limit 2`)) as {
-          rows: Record<string, unknown>[]
-        }).rows : []
+           where org_id = ${ctx.orgId} and display_name = ${displayName} limit 2`, 'objects')) : []
         if (matches.length > 1) {
           outcome.failed++
           outcome.errors.push({ row: rowNo, message: `multiple parties named "${displayName}": supply shortCode to disambiguate` })
@@ -697,12 +689,10 @@ async function writeMaster(
       // The full stored row doubles as the update's audit before-image.
       let beforeRow: Record<string, unknown> | null = adoptedRow ?? null
       if (nkVal && !adoptedParty) {
-        const found = (await db.execute(sql`
+        const found = await db.execute<Record<string, unknown>>(sql`
           select * from ${sql.raw(m.table)}
-           where ${sql.raw(nkColumn)} = ${nkVal} and org_id = ${ctx.orgId} limit 1`)) as {
-          rows: Record<string, unknown>[]
-        }
-        beforeRow = (found.rows[0] ?? null) as Record<string, unknown> | null
+           where ${sql.raw(nkColumn)} = ${nkVal} and org_id = ${ctx.orgId} limit 1`, 'objects')
+        beforeRow = (found[0] ?? null) as Record<string, unknown> | null
         existingId = typeof beforeRow?.id === 'string' ? beforeRow.id : null
         existingCustom = (beforeRow?.custom as Record<string, unknown> | undefined) ?? {}
         storedKind = typeof beforeRow?.kind === 'string' ? beforeRow.kind : undefined
@@ -820,11 +810,11 @@ async function writeMaster(
           parts.push(sql`updated_by = ${ctx.actorId}`)
           parts.push(sql`updated_at = now()`)
           await persistMasterMutation(m.table, 'update', ctx, beforeRow, async (tx) => {
-            const written = (await tx.execute(sql`
+            const written = await tx.execute<Record<string, unknown>>(sql`
               update ${sql.raw(m.table)} set ${sql.join(parts, sql`, `)}
                where id = ${existingId} and org_id = ${ctx.orgId}
-               returning *`)) as { rows: Record<string, unknown>[] }
-            const after = written.rows[0] ?? null
+               returning *`, 'objects')
+            const after = written[0] ?? null
             if (!after) throw new Error('master-data mutation did not return a row')
             // A role-kind kind names its role row — keep the claim
             // backed in the same row transaction (see ensurePartyRoleRow).
@@ -869,11 +859,9 @@ async function writeMaster(
             sql`, `,
           )
           await persistMasterMutation(m.table, 'insert', ctx, null, async (tx) => {
-            const ins = (await tx.execute(sql`
-              insert into ${sql.raw(m.table)} (${names}) values (${values}) returning *`)) as {
-              rows: Record<string, unknown>[]
-            }
-            const after = ins.rows[0] ?? null
+            const ins = await tx.execute<Record<string, unknown>>(sql`
+              insert into ${sql.raw(m.table)} (${names}) values (${values}) returning *`, 'objects')
+            const after = ins[0] ?? null
             if (!after || typeof after.id !== 'string') {
               throw new Error('master-data mutation did not return a row')
             }

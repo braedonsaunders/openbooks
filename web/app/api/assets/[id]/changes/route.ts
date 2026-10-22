@@ -111,34 +111,26 @@ export const GET = defineRoute({
           gate.allowedSubsidiaryIds,
           "share",
         );
-        const subsidiaries = (
-          await tx.execute<{
+        const subsidiaries = (await tx.execute<{
             id: string;
             name: string;
             base_currency: string;
             is_elimination: boolean;
           }>(
-            sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`,
-          )
-        ).rows.filter(
+            sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`, "objects",
+          )).filter(
           (s) =>
             !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id),
         );
-        const books = (
-          await tx.execute<{ id: string; name: string }>(
-            sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`,
-          )
-        ).rows;
-        const groupBooks = (
-          await tx.execute<{ book_id: string; group_currency: string }>(
-            sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`,
-          )
-        ).rows;
-        const groupScope = (
-          await tx.execute<{ elimination_subsidiary_id: string }>(
-            sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`,
-          )
-        ).rows;
+        const books = await tx.execute<{ id: string; name: string }>(
+            sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`, "objects",
+          );
+        const groupBooks = await tx.execute<{ book_id: string; group_currency: string }>(
+            sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`, "objects",
+          );
+        const groupScope = await tx.execute<{ elimination_subsidiary_id: string }>(
+            sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`, "objects",
+          );
         if (
           gate.allowedSubsidiaryIds &&
           groupScope.some(

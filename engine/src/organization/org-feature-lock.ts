@@ -51,7 +51,7 @@ export async function lockAndCheckOrgFeature(
   key: string,
 ): Promise<boolean> {
   const row = (await runner.execute<{ features: FeatureState | null }>(sql`
-    select settings->'features' as features from orgs where id=${orgId} for share`)).rows[0];
+    select settings->'features' as features from orgs where id=${orgId} for share`, "objects"))[0];
   if (!row) return false;
   const stored = row.features ?? {};
   if (
@@ -92,7 +92,7 @@ export async function orgFeatureEnabled(
   executor: SqlExecutor = db,
 ): Promise<boolean> {
   const row = (await executor.execute<{ features: FeatureState | null }>(sql`
-    select settings->'features' as features from orgs where id = ${orgId}`)).rows[0];
+    select settings->'features' as features from orgs where id = ${orgId}`, "objects"))[0];
   const stored = row?.features ?? {};
   if (
     (key === "multiSubsidiary" || key === "multiCurrency") &&

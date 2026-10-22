@@ -88,7 +88,7 @@ async function canonicalPurchaseReceiptLines(
     const numbers = new Map((await tx.execute<{ id: string; line_number: number }>(sql`
       select id, line_number from document_lines
        where org_id = ${orgId} and document_id = ${sourceId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-    `)).rows.map((row) => [row.id, row.line_number]))
+    `, 'objects')).map((row) => [row.id, row.line_number]))
     if (numbers.size === 0) throw error
     throw new ConversionError(
       error.message.replace(/line ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi, (match, id: string) => {
@@ -149,7 +149,7 @@ export async function receivePurchaseOrderInTx(
         from documents
        where id = ${sourceId} and org_id = ${orgId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!source) throw new ConversionError('Purchase order not found')
     if (source.kind !== 'purchase_order') throw new ConversionError('Only a purchase order can be received')
     if (source.status === 'draft') throw new ConversionError('Issue the purchase order before receiving it')
@@ -159,7 +159,7 @@ export async function receivePurchaseOrderInTx(
     const dropShipOrder = (await tx.execute<{ sales_order_id: string }>(sql`
       select sales_order_id from drop_ship_orders
        where org_id = ${orgId} and purchase_order_id = ${sourceId}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (options.inventory === 'apply' && dropShipOrder) {
       throw new ConversionError(
         'This purchase order is routed for direct vendor shipment and cannot be received into stock',
@@ -187,7 +187,7 @@ export async function receivePurchaseOrderInTx(
          and link.link_type = 'fulfills' and target.kind = ${PURCHASE_RECEIPT_KIND}
          and target.custom->>'receiptIdempotencyKey' = ${idempotencyKey}
        limit 1
-    `)).rows[0]
+    `, 'objects'))[0]
     if (replay) {
       if (!replay.command_matches) {
         throw new ConversionError('Receipt idempotency key was already used with a different receipt', 409)
@@ -195,7 +195,7 @@ export async function receivePurchaseOrderInTx(
       return { id: replay.id, documentNumber: replay.document_number, kind: PURCHASE_RECEIPT_KIND, replayed: true }
     }
 
-    const sourceLines = (await tx.execute<PurchaseReceiptSourceLineRow>(sql`
+    const sourceLines = await tx.execute<PurchaseReceiptSourceLineRow>(sql`
       select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
              dl.quantity, dl.unit, dl.unit_price, dl.department_id, dl.project_id, dl.location_id,
              dl.class_id, dl.extra_dims, dl.stock_location_id, dl.quantity_fulfilled,
@@ -210,7 +210,7 @@ export async function receivePurchaseOrderInTx(
        where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
        order by dl.line_number
        for update of dl
-    `)).rows
+    `, 'objects')
     const sourceById = new Map(sourceLines.map((line) => [line.id, line]))
     // One authoritative clearing policy for the whole receipt: the item's
     // costing profile wins, otherwise the company control account. Resolved
@@ -324,11 +324,11 @@ export async function receivePurchaseOrderInTx(
     }
 
     if (options.inventory === 'none') {
-      const routed = (await tx.execute<{ purchase_order_line_id: string }>(sql`
+      const routed = await tx.execute<{ purchase_order_line_id: string }>(sql`
         select purchase_order_line_id from drop_ship_lines
          where org_id = ${orgId} and purchase_order_line_id in (
            ${sql.join(selected.map(({ line }) => sql`${line.id}`), sql`, `)}
-         )`)).rows
+         )`, 'objects')
       if (routed.length !== selected.length) {
         throw new ConversionError(
           'Every stockless receipt line must be paired to this drop-ship purchase order',
@@ -409,7 +409,7 @@ export async function receivePurchaseOrderInTx(
       update documents set status = 'draft', updated_by = ${userId}
        where id = ${sourceId} and org_id = ${orgId} and status = 'approved'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!reopened) throw new ConversionError('Purchase order changed while it was being received', 409)
 
     let lineNumber = 1
@@ -449,7 +449,7 @@ export async function receivePurchaseOrderInTx(
            and quantity_fulfilled + ${request.quantity} <= ${orderedNetOfCancelledSql('document_lines')}
              - ${fromQuantityUnits(billReceived)} + ${fromQuantityUnits(allowanceUnits)}
         returning id
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!advanced) {
         throw new ConversionError(`Purchase-order line ${line.line_number} changed while it was being received`, 409)
       }
@@ -460,14 +460,14 @@ export async function receivePurchaseOrderInTx(
       update documents set subtotal = ${subtotal}, tax_total = '0', total = ${subtotal}, updated_by = ${userId}
        where id = ${receiptId} and org_id = ${orgId} and kind = 'purchase_receipt' and status = 'draft'
       returning id
-    `)
-    if (totalled.rows.length !== 1) throw new ConversionError('Purchase receipt changed while its totals were saved', 409)
+    `, 'objects')
+    if (totalled.length !== 1) throw new ConversionError('Purchase receipt changed while its totals were saved', 409)
 
     const restored = (await tx.execute<{ id: string }>(sql`
       update documents set status = 'approved', updated_by = ${userId}
        where id = ${sourceId} and org_id = ${orgId} and status = 'draft'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!restored) throw new ConversionError('Purchase order changed while it was being received', 409)
 
     await tx.execute(sql`
@@ -494,7 +494,7 @@ export async function receivePurchaseOrderRemainder(
   sourceId: string,
 ): Promise<ConvertResult> {
   const receiptDate = await businessToday(orgId)
-  const rows = (await db.execute<{ id: string; open_quantity: string; item_id: string | null; unit: string | null; item_kind: string | null }>(sql`
+  const rows = await db.execute<{ id: string; open_quantity: string; item_id: string | null; unit: string | null; item_kind: string | null }>(sql`
     select line.id, ${openQuantitySql('line')}::text as open_quantity,
            line.item_id, line.unit, i.kind as item_kind
       from document_lines line
@@ -503,7 +503,7 @@ export async function receivePurchaseOrderRemainder(
      where line.org_id = ${orgId} and source.id = ${sourceId}
        and source.kind = 'purchase_order'
      order by line.id
-  `)).rows
+  `, 'objects')
   const lines: PurchaseReceiptLineInput[] = []
   for (const line of rows) {
     if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) continue
@@ -524,7 +524,7 @@ export async function receivePurchaseOrderRemainder(
          and link.link_type = 'fulfills' and target.kind = ${PURCHASE_RECEIPT_KIND}
        order by target.created_at desc, target.id desc
        limit 1
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!latest) throw new ConversionError('This purchase order has no stock lines left to receive')
     return { id: latest.id, documentNumber: latest.document_number, kind: PURCHASE_RECEIPT_KIND, replayed: true }
   }

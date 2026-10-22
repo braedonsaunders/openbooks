@@ -18,10 +18,8 @@ async function entryCount(
   orgId: string,
   viewFilters: { key: string; operator: string; value?: string | null; to?: string | null }[] = [],
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-      where ${journalEntryWhere({ ...defaultListView("journal"), filters: viewFilters as never }, {}, orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
+      where ${journalEntryWhere({ ...defaultListView("journal"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 

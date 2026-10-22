@@ -188,8 +188,8 @@ test(
                (select count(*)::int from audit_log where org_id = ${org.orgId}
                   and table_name = 'payment_surcharge_rules'
                   and changes->'rule'->1->>'effectiveFrom' = ${body.effectiveFrom}) as audits
-      `);
-      return stored.rows[0]!;
+      `, "objects");
+      return stored[0]!;
     };
     let scenario = 0;
     const reset = async () => {
@@ -279,8 +279,8 @@ test(
           const rows = await db.execute<{ id: string }>(sql`
             select id from payment_surcharge_rules where org_id = ${org.orgId}
               and effective_from = ${body.effectiveFrom}::date
-          `);
-          const id = rows.rows[0]!.id;
+          `, "objects");
+          const id = rows[0]!.id;
           synchronizeBeforeReads = true;
           secondBeforeReadStarted = new Promise<void>((resolve) => { releaseSecondBeforeRead = resolve; });
           let timedOut = false;
@@ -305,17 +305,17 @@ test(
           }>(sql`
             select changes->'rule'->0 as before, changes->'rule'->1 as after
               from audit_log where org_id = ${org.orgId} and row_id = ${id} and action in ('update', 'delete')
-          `);
-          assert.equal(audits.rows.length, 2);
-          const first = audits.rows.find((row) => row.before.name === body.name && row.before.isActive);
+          `, "objects");
+          assert.equal(audits.length, 2);
+          const first = audits.find((row) => row.before.name === body.name && row.before.isActive);
           assert.ok(first);
-          const second = audits.rows.find((row) => row !== first);
+          const second = audits.find((row) => row !== first);
           assert.ok(second);
           assert.deepEqual(second.before, first.after, "second audit before must be the first editor's committed row");
           const live = await db.execute<{ name: string; isActive: boolean }>(sql`
             select name, is_active as "isActive" from payment_surcharge_rules where org_id = ${org.orgId} and id = ${id}
-          `);
-          assert.deepEqual(live.rows[0], { name: second.after.name, isActive: second.after.isActive });
+          `, "objects");
+          assert.deepEqual(live[0], { name: second.after.name, isActive: second.after.isActive });
           assert.deepEqual(await storedState(), { rules: 1, audits: 3 });
         });
       }

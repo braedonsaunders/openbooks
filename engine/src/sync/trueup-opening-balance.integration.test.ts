@@ -71,11 +71,11 @@ test(
                memo, status
           from journal_entries
          where org_id = ${org.orgId} and memo like 'Migration opening balance%'
-      `));
-      assert.equal(journals.rows.length, 1);
-      assert.equal(journals.rows[0]?.postingDate, openingDate);
-      assert.equal(journals.rows[0]?.status, "posted");
-      assert.match(journals.rows[0]?.entryNumber ?? "", /^OPENING-/);
+      `, "objects"));
+      assert.equal(journals.length, 1);
+      assert.equal(journals[0]?.postingDate, openingDate);
+      assert.equal(journals[0]?.status, "posted");
+      assert.match(journals[0]?.entryNumber ?? "", /^OPENING-/);
 
       // The lines tie to the opening trial balance exactly.
       const lines = (await db.execute<{ ref: string; amount: string }>(sql`
@@ -85,8 +85,8 @@ test(
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${org.orgId} and e.memo like 'Migration opening balance%'
          group by 1 order by 1
-      `));
-      assert.deepEqual(lines.rows, [
+      `, "objects"));
+      assert.deepEqual(lines, [
         { ref: "A", amount: "100.0000" },
         { ref: "B", amount: "-100.0000" },
       ]);

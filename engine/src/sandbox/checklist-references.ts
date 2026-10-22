@@ -135,11 +135,9 @@ export async function rebaseChecklistReferences(args: {
   ].filter((table) => args.copiedTables.has(table));
   if (!tables.length) return;
   const counterpart = async (table: string): Promise<Map<string, string>> => {
-    const rows = (
-      await db.execute<{ source_id: string; target_id: string }>(
-        sql`select source.id as source_id,target.id as target_id from ${sql.identifier(table)} source join ${sql.identifier(table)} target on target.id=ob_rebase(source.id,${args.seed}::uuid) and target.org_id=${args.sandboxOrgId} where source.org_id=${args.productionOrgId}`,
-      )
-    ).rows;
+    const rows = await db.execute<{ source_id: string; target_id: string }>(
+        sql`select source.id as source_id,target.id as target_id from ${sql.identifier(table)} source join ${sql.identifier(table)} target on target.id=ob_rebase(source.id,${args.seed}::uuid) and target.org_id=${args.sandboxOrgId} where source.org_id=${args.productionOrgId}`, "objects",
+      );
     return new Map(rows.map((r) => [r.source_id, r.target_id]));
   };
   const ids: Maps = {
@@ -156,22 +154,18 @@ export async function rebaseChecklistReferences(args: {
         : table === "hrm_process_template_versions"
           ? "document"
           : "design";
-    const rows = (
-      await db.execute<{ id: string; payload: unknown; response?: Record<string, unknown> | null }>(
-        sql`select id,${sql.identifier(field)} as payload,${table === "hrm_process_steps" ? sql`response` : sql`null`} as response from ${sql.identifier(table)} where org_id=${args.sandboxOrgId} and ${sql.identifier(field)} is not null order by id for update`,
-      )
-    ).rows;
+    const rows = await db.execute<{ id: string; payload: unknown; response?: Record<string, unknown> | null }>(
+        sql`select id,${sql.identifier(field)} as payload,${table === "hrm_process_steps" ? sql`response` : sql`null`} as response from ${sql.identifier(table)} where org_id=${args.sandboxOrgId} and ${sql.identifier(field)} is not null order by id for update`, "objects",
+      );
     for (const row of rows) {
       let after: unknown;
       if (field === "design")
         after = remapChecklistDesign(checklistStepDesignSchema.parse(row.payload), ids);
       else {
         const document = checklistDocumentSchema.parse(row.payload);
-        const intrinsic = (
-          await db.execute<{ source_id: string; target_id: string }>(
-            sql`select value as source_id,ob_rebase(value::uuid,${args.seed}::uuid)::text as target_id from jsonb_array_elements_text(${JSON.stringify(document.steps.map((s) => s.id))}::jsonb) as ids(value)`,
-          )
-        ).rows;
+        const intrinsic = await db.execute<{ source_id: string; target_id: string }>(
+            sql`select value as source_id,ob_rebase(value::uuid,${args.seed}::uuid)::text as target_id from jsonb_array_elements_text(${JSON.stringify(document.steps.map((s) => s.id))}::jsonb) as ids(value)`, "objects",
+          );
         const steps = new Map([
           ...ids.steps,
           ...intrinsic.map((r) => [r.source_id, r.target_id] as const),
@@ -186,11 +180,9 @@ export async function rebaseChecklistReferences(args: {
               ids,
             )
           : null;
-      const updated = (
-        await db.execute(
-          sql`update ${sql.identifier(table)} set ${sql.identifier(field)}=${JSON.stringify(after)}::jsonb${table === "hrm_process_steps" ? sql`,response=${JSON.stringify(response)}::jsonb` : sql``} where org_id=${args.sandboxOrgId} and id=${row.id} returning id`,
-        )
-      ).rows;
+      const updated = await db.execute(
+          sql`update ${sql.identifier(table)} set ${sql.identifier(field)}=${JSON.stringify(after)}::jsonb${table === "hrm_process_steps" ? sql`,response=${JSON.stringify(response)}::jsonb` : sql``} where org_id=${args.sandboxOrgId} and id=${row.id} returning id`, "objects",
+        );
       if (updated.length !== 1)
         throw new Error(
           "The sandbox checklist definition changed during rebasing; retry the sandbox refresh.",

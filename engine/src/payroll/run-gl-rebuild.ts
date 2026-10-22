@@ -77,7 +77,7 @@ async function assertCompleteRunScope(tx: Pick<typeof db, "execute">, orgId: str
       from pay_stubs s
       left join parties p on p.org_id = s.org_id and p.id = s.employee_party_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-  `)).rows.filter((row) => row.subsidiary_id === null || !allowed.has(row.subsidiary_id));
+  `, "objects")).filter((row) => row.subsidiary_id === null || !allowed.has(row.subsidiary_id));
   if (outside.length > 0) throw new PayrollError("pay run not found");
 }
 
@@ -105,19 +105,19 @@ export async function readPayRunGlProjection(input: {
         from pay_runs r
         join documents d on d.org_id = r.org_id and d.id = r.document_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!run || run.kind !== "pay_run" || !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id)
         || (actorScope !== null && run.subsidiary_id !== null && !actorScope.has(run.subsidiary_id))) {
       throw new PayrollError("pay run not found");
     }
     await assertCompleteRunScope(db, orgId, documentId, actorScope);
     await assertCompleteRunScope(db, orgId, documentId, input.allowedSubsidiaryIds);
-    const lines = (await db.execute<ProjectionLine>(sql`
+    const lines = await db.execute<ProjectionLine>(sql`
       select account_id::text as account_id, amount::text as amount, description,
              party_id::text as party_id, project_id::text as project_id, department_id::text as department_id, custom
         from document_lines
        where org_id = ${orgId} and document_id = ${documentId}
-    `)).rows;
+    `, "objects");
     return {
       documentNumber: run.document_number, revision: run.revision, runStatus: run.run_status,
       documentStatus: run.doc_status, lineCount: lines.length, projectionHash: payRunGlProjectionHash(lines),
@@ -163,7 +163,7 @@ async function selectEntitlementRelief(tx: Pick<typeof db, "execute">, args: {
              payout_component_id::text as payout_component_id, deposit_component_id::text as deposit_component_id
         from entitlement_plans where org_id = ${orgId} and id = ${binding.planId}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!plan) throw new PayrollError("an entitlement relief binding names a plan that does not exist in this organization");
     if (plan.liability_account_id !== binding.liabilityAccountId) {
       throw new PayrollError(`the binding for entitlement plan ${plan.code} names a different liability account than the plan carries — review the plan's liability account and resubmit the binding`);
@@ -171,7 +171,7 @@ async function selectEntitlementRelief(tx: Pick<typeof db, "execute">, args: {
     const account = (await tx.execute<{ type: string; is_summary: boolean; is_active: boolean }>(sql`
       select type, is_summary, is_active from accounts where org_id = ${orgId} and id = ${binding.liabilityAccountId}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!account || !account.type.startsWith("liability") || account.is_summary || !account.is_active) {
       throw new PayrollError(`entitlement plan ${plan.code}'s bound account is not an active, postable liability account — correct the plan's liability account before relieving its bank`);
     }
@@ -180,7 +180,7 @@ async function selectEntitlementRelief(tx: Pick<typeof db, "execute">, args: {
       payoutComponentId: plan.payout_component_id, depositComponentId: plan.deposit_component_id,
     });
   }
-  const movements = (await tx.execute<{
+  const movements = await tx.execute<{
     id: string; plan_id: string; employee_party_id: string; kind: string; amount: string; stub_line_id: string | null;
   }>(sql`
     select id::text as id, plan_id::text as plan_id, employee_party_id::text as employee_party_id, kind,
@@ -189,8 +189,8 @@ async function selectEntitlementRelief(tx: Pick<typeof db, "execute">, args: {
      where org_id = ${orgId} and pay_run_document_id = ${documentId} and kind in ('payout', 'bank_in')
        and plan_id in (${sql.join([...plans.keys()].map((id) => sql`${id}::uuid`), sql`, `)})
      order by id
-  `)).rows;
-  const stubLines = (await tx.execute<{
+  `, "objects");
+  const stubLines = await tx.execute<{
     employee_party_id: string; stub_id: string; line_id: string; component_id: string | null; kind: string;
     amount: string; hours: string | null; expense_account_source: string;
   }>(sql`
@@ -200,7 +200,7 @@ async function selectEntitlementRelief(tx: Pick<typeof db, "execute">, args: {
       from pay_stubs s
       join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-  `)).rows;
+  `, "objects");
   const byEmployee = new Map<string, typeof stubLines>();
   for (const line of stubLines) byEmployee.set(line.employee_party_id, [...(byEmployee.get(line.employee_party_id) ?? []), line]);
   const relief = new Map<string, EntitlementReliefLine>();
@@ -328,7 +328,7 @@ export async function rebuildPayRunGlProjection(input: {
         join documents d on d.org_id = r.org_id and d.id = r.document_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `)).rows[0];
+    `, "objects"))[0];
     if (!run || run.kind !== "pay_run" || !payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id)) {
       throw new PayrollError("pay run not found");
     }
@@ -348,7 +348,7 @@ export async function rebuildPayRunGlProjection(input: {
     if (run.posted_entry_id || run.paid_at || run.paid_entry_id) {
       throw new PayrollError(`pay run ${number} has already reached the books or been paid — its GL projection cannot be rebuilt`);
     }
-    const references = (await tx.execute<{ reference: string }>(sql`
+    const references = await tx.execute<{ reference: string }>(sql`
       select 'journal entry ' || e.entry_number as reference from journal_entries e
        where e.org_id = ${orgId} and e.source_document_id = ${documentId}
       union all
@@ -371,12 +371,12 @@ export async function rebuildPayRunGlProjection(input: {
       select 'retro settlement' from payroll_retro_settlements st
        where st.org_id = ${orgId} and st.source_pay_run_document_id = ${documentId}
       limit 5
-    `)).rows;
+    `, "objects");
     if (references.length > 0) {
       throw new PayrollError(`pay run ${number} is already referenced (${references.map((row) => row.reference).join(", ")}) — its GL projection cannot be rebuilt`);
     }
 
-    const before = (await tx.execute<{
+    const before = await tx.execute<{
       id: string; line_number: number; account_id: string; amount: string; description: string | null;
       party_id: string | null; project_id: string | null; department_id: string | null;
       custom: Record<string, unknown> | null;
@@ -387,7 +387,7 @@ export async function rebuildPayRunGlProjection(input: {
        where org_id = ${orgId} and document_id = ${documentId}
        order by line_number
        for update
-    `)).rows;
+    `, "objects");
     if (before.length === 0) {
       throw new PayrollError(`pay run ${number} has no committed GL projection to rebuild`);
     }
@@ -528,9 +528,9 @@ export async function rebuildPayRunGlProjection(input: {
       legs = corrected.legs;
     }
 
-    const deleted = (await tx.execute<{ id: string }>(sql`
+    const deleted = await tx.execute<{ id: string }>(sql`
       delete from document_lines where org_id = ${orgId} and document_id = ${documentId} returning id::text as id
-    `)).rows;
+    `, "objects");
     if (deleted.length !== before.length) {
       throw new PayrollError(`pay run ${number}'s GL projection changed while it was being rebuilt — reload and try again`);
     }
@@ -538,14 +538,14 @@ export async function rebuildPayRunGlProjection(input: {
     const after: Record<string, unknown>[] = [];
     for (const leg of legs) {
       const custom = payRunGlLegCustom(leg);
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = await tx.execute<{ id: string }>(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     amount, party_id, project_id, department_id, custom, created_by, updated_by)
         values (${orgId}, ${documentId}, ${lineNumber}, ${leg.accountId}, ${leg.description},
                 ${leg.amount}, ${leg.partyId}, ${leg.projectId}, ${leg.departmentId},
                 ${JSON.stringify(custom)}::jsonb, ${actorId}, ${actorId})
         returning id::text as id
-      `)).rows;
+      `, "objects");
       if (inserted.length !== 1) throw new PayrollError(`pay run ${number}'s rebuilt GL line could not be written`);
       after.push({ id: inserted[0]!.id, line_number: lineNumber, account_id: leg.accountId, amount: leg.amount, description: leg.description,
         party_id: leg.partyId, project_id: leg.projectId, department_id: leg.departmentId, custom });
@@ -554,16 +554,16 @@ export async function rebuildPayRunGlProjection(input: {
     // The locked document passed OCC before any line changed. Its own line
     // triggers advance the revision during the rebuild; retain their final
     // value rather than comparing it with the pre-write revision again.
-    const revised = (await tx.execute<{ revision: string }>(sql`
+    const revised = await tx.execute<{ revision: string }>(sql`
       update documents set updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${documentId} and status = 'draft' and posted_entry_id is null
       returning revision_seq::text as revision
-    `)).rows;
+    `, "objects");
     if (revised.length !== 1) {
       throw new PayrollError(`pay run ${number}'s rebuilt projection revision could not be saved — reload and review the run`);
     }
     const projectionHash = payRunGlProjectionHash(after as ProjectionLine[]);
-    const audited = (await tx.execute<{ id: string }>(sql`
+    const audited = await tx.execute<{ id: string }>(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'documents', ${documentId}, 'update',
               ${JSON.stringify({ operation: "rebuild-pay-run-gl-projection", reason,
@@ -575,7 +575,7 @@ export async function rebuildPayRunGlProjection(input: {
                   : null,
                 before, after })}::jsonb, ${actorId})
       returning id::text as id
-    `)).rows;
+    `, "objects");
     if (audited.length !== 1) throw new PayrollError(`pay run ${number}'s GL projection rebuild could not be audited`);
     return {
       documentNumber: number, linesBefore: before.length, linesAfter: after.length, revision: revised[0]!.revision,

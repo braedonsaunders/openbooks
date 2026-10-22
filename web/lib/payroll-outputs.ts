@@ -80,8 +80,8 @@ async function runStubs(
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
      order by p.display_name
-  `))
-  const stubs: RunStub[] = r.rows.map((row) => {
+  `, 'objects'))
+  const stubs: RunStub[] = r.map((row) => {
     const [surname, ...given] = splitName(row.name)
     return {
       id: row.id,
@@ -115,8 +115,8 @@ function splitName(displayName: string): string[] {
 export async function stubPasswordPolicy(orgId: string): Promise<StubPasswordPolicy> {
   const r = (await db.execute<{ policy: { enabled?: unknown; expression?: unknown } | null }>(sql`
     select settings#>'{payroll,stubPassword}' as policy from orgs where id = ${orgId}
-  `))
-  const policy = r.rows[0]?.policy ?? {}
+  `, 'objects'))
+  const policy = r[0]?.policy ?? {}
   return {
     enabled: policy.enabled === true,
     expression: typeof policy.expression === 'string' ? policy.expression : '',
@@ -215,8 +215,8 @@ export async function mergedRunChequesPdf(
     insert into audit_log (org_id,table_name,row_id,action,changes,actor_id)
     values (${orgId},'pay_runs',${documentId},'update',${JSON.stringify({event:'cheque_batch_printed',count,issued:batch.issued,
       chequeNumbers:batch.cheques.map(cheque=>cheque.chequeNumber),template:template.provenance,contentHash:createHash('sha256').update(bytes).digest('hex')})}::jsonb,${actorId}) returning id
-  `)
-    if (audit.rows.length !== 1) throw new PayrollError('Cheque print audit was not recorded')
+  `, 'objects')
+    if (audit.length !== 1) throw new PayrollError('Cheque print audit was not recorded')
   })
   return { pdf: bytes, count, issued: batch.issued }
 }

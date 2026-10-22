@@ -101,7 +101,7 @@ export async function amendPurchaseOrder(
         from documents
        where id = ${input.orderId} and kind = 'purchase_order' and org_id = ${input.orgId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!locked) {
       throw new PurchaseOrderAmendError('purchase order not found in this organization', 404, 'not-found')
     }
@@ -137,7 +137,7 @@ export async function amendPurchaseOrder(
       throw new PurchaseOrderAmendError(`${name} is ${locked.status} — only an approved order is amended`)
     }
 
-    const stored = (await db.execute<{
+    const stored = await db.execute<{
       id: string
       lineNumber: number
       quantity: string
@@ -158,7 +158,7 @@ export async function amendPurchaseOrder(
        where org_id = ${input.orgId} and document_id = ${input.orderId}
        order by line_number
        for update
-    `)).rows
+    `, 'objects')
     const byId = new Map(stored.map((line) => [line.id, line]))
 
     const amendments: { line: (typeof stored)[number]; quantity: string; unitPrice: string }[] = []
@@ -220,7 +220,7 @@ export async function amendPurchaseOrder(
       update documents set status = 'draft', updated_at = now(), updated_by = ${input.actorId}
        where id = ${input.orderId} and org_id = ${input.orgId} and status = 'approved'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!parked) {
       throw new PurchaseOrderAmendError(
         `${name} changed while it was being amended; reload and try again`,
@@ -269,7 +269,7 @@ export async function amendPurchaseOrder(
                updated_by = ${input.actorId}
          where id = ${line.id} and org_id = ${input.orgId}
         returning id
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!flipped) {
         throw new PurchaseOrderAmendError(
           `${name} changed while it was being amended; reload and try again`,
@@ -292,7 +292,7 @@ export async function amendPurchaseOrder(
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${input.orderId} and org_id = ${input.orgId} and status = 'draft'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!header) {
       throw new PurchaseOrderAmendError(
         `${name} changed while it was being amended; reload and try again`,

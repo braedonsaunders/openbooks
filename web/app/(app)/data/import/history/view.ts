@@ -116,7 +116,7 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
   const count = await db.execute<{ total: string }>(sql`
     select count(*)::text as total from import_jobs j
     left join users u on u.id = j.created_by
-    where ${where}`)
+    where ${where}`, 'objects')
 
   const result = await db.execute<JobRow>(sql`
     select j.id, j.resource_key, j.resource_label, j.format, j.file_name, j.status,
@@ -128,7 +128,7 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
       left join data_transfer_jobs d on d.org_id=j.org_id and d.id=j.id and d.actor_id=${authz.user.id}
      where ${where}
      order by ${HISTORY_SORTS[params.sort]} ${sql.raw(params.dir)}, j.id ${sql.raw(params.dir)}
-     limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`)
+     limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects')
 
   return {
     title: t('history.title'),
@@ -144,14 +144,14 @@ export async function loadImportHistory(sp: Record<string, string | string[] | u
     columnStatus: t('history.status'),
     columnRows: t('history.rows'),
     columnBy: t('history.by'),
-    total: Number(count.rows[0]?.total ?? 0),
+    total: Number(count[0]?.total ?? 0),
     currentPage: params.page,
     perPage: params.perPage,
     sort: params.sort,
     dir: params.dir,
     search: { placeholder: tCatalog('ui.search.placeholder') },
     currentParams: sp,
-    rows: result.rows.map((j) => ({
+    rows: result.map((j) => ({
       id: j.id,
       when: dateTime(j.created_at, locale),
       resourceLabel: j.resource_label ?? j.resource_key,

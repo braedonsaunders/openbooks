@@ -90,8 +90,7 @@ export async function loadSubscriptionDrawer(
     allowed !== null && allowed.size === 0
       ? sql` and false`
       : subsidiaryVisibleFilter(column, allowed, { orgWideNull: true })
-  const rows = (
-    await db.execute<SubscriptionDrawerRow>(sql`
+  const rows = await db.execute<SubscriptionDrawerRow>(sql`
       select s.id, s.status, s.start_on::text as "startOn", s.next_bill_on::text as "nextBillOn",
              p.interval, p.interval_count as "intervalCount", s.quantity::text as quantity,
              coalesce(s.price_override, p.amount)::text as amount,
@@ -112,25 +111,22 @@ export async function loadSubscriptionDrawer(
         left join documents d on d.id = s.last_invoice_id and d.org_id = s.org_id
         left join revenue_contracts rc on rc.subscription_id = s.id and rc.org_id = s.org_id
        where s.org_id = ${orgId} and s.id = ${id}${customerScope(sql`c.subsidiary_id`)}
-       limit 1`)
-  ).rows
+       limit 1`, 'objects')
   const row = rows[0]
   if (!row) return { drawer: null }
   // The override editor shares the subscriptions write right (ar.create),
   // never a second gate: whoever edits subscriptions edits overrides.
   const canManage = can(authz, 'ar.create')
   const customers = canManage
-    ? (
-        await db.execute<{ id: string; name: string }>(sql`
+    ? (await db.execute<{ id: string; name: string }>(sql`
           select p.id, p.display_name as name from parties p
            where p.org_id = ${orgId} and p.is_active${customerScope(sql`p.subsidiary_id`)}
              and exists (select 1 from customer_roles cr
                           where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
-           order by p.display_name limit 500`)
-      ).rows
+           order by p.display_name limit 500`, 'objects'))
     : []
   const renewalEnabled=await isFeatureEnabled(orgId,'advancedSubscriptions');
-  const renewalDocument=renewalEnabled?(await db.execute<{documentId:string;kind:string}>(sql`select o.document_id as "documentId",d.kind from subscription_renewal_occurrences o join documents d on d.org_id=o.org_id and d.id=o.document_id where o.org_id=${orgId} and o.subscription_id=${row.id} and o.occurrence='document' and not exists(select 1 from subscription_renewal_occurrences accepted where accepted.org_id=o.org_id and accepted.subscription_id=o.subscription_id and accepted.term_ends_on=o.term_ends_on and accepted.occurrence='acceptance') order by o.term_ends_on desc limit 1`)).rows[0]??null:null;
+  const renewalDocument=renewalEnabled?(await db.execute<{documentId:string;kind:string}>(sql`select o.document_id as "documentId",d.kind from subscription_renewal_occurrences o join documents d on d.org_id=o.org_id and d.id=o.document_id where o.org_id=${orgId} and o.subscription_id=${row.id} and o.occurrence='document' and not exists(select 1 from subscription_renewal_occurrences accepted where accepted.org_id=o.org_id and accepted.subscription_id=o.subscription_id and accepted.term_ends_on=o.term_ends_on and accepted.occurrence='acceptance') order by o.term_ends_on desc limit 1`, 'objects'))[0]??null:null;
   return {
     drawer: {
       id: row.id,

@@ -52,14 +52,14 @@ test("sync provisions the system rule, driver and derived version", { skip: !DB 
     assert.ok(first.versionId);
     const head = (await db.execute<{ is_system: boolean; mode: string; current_version_id: string }>(sql`
       select is_system, mode, current_version_id from allocation_rules
-       where org_id = ${s.orgId} and key = ${OVERHEAD_SYSTEM_RULE_KEY}`)).rows[0]!;
+       where org_id = ${s.orgId} and key = ${OVERHEAD_SYSTEM_RULE_KEY}`, "objects"))[0]!;
     assert.deepEqual({ is_system: head.is_system, mode: head.mode }, { is_system: true, mode: "post" });
     assert.equal(head.current_version_id, first.versionId);
     const version = (await db.execute<{
       status: string; impact: string; basis_kind: string; target_kind: string;
       document_kinds: string[]; account_scope: { accountIds: string[] }; definition_hash: string | null;
     }>(sql`select status, impact, basis_kind, target_kind, document_kinds, account_scope, definition_hash
-      from allocation_rule_versions where org_id = ${s.orgId} and id = ${first.versionId}`)).rows[0]!;
+      from allocation_rule_versions where org_id = ${s.orgId} and id = ${first.versionId}`, "objects"))[0]!;
     assert.equal(version.status, "published");
     assert.equal(version.impact, "net_zero_pair");
     assert.equal(version.basis_kind, "driver");
@@ -69,7 +69,7 @@ test("sync provisions the system rule, driver and derived version", { skip: !DB 
     assert.ok(version.definition_hash && version.definition_hash.length === 64);
     const driver = (await db.execute<{ dimension: string; source_kind: string; config: { measure: string }; is_active: boolean }>(sql`
       select dimension, source_kind, config, is_active from allocation_drivers
-       where org_id = ${s.orgId} and key = ${OVERHEAD_SYSTEM_DRIVER_KEY}`)).rows[0]!;
+       where org_id = ${s.orgId} and key = ${OVERHEAD_SYSTEM_DRIVER_KEY}`, "objects"))[0]!;
     assert.deepEqual(
       { dimension: driver.dimension, source_kind: driver.source_kind, measure: driver.config.measure, is_active: driver.is_active },
       { dimension: "project", source_kind: "native_measure", measure: "labor_hours", is_active: true },
@@ -79,7 +79,7 @@ test("sync provisions the system rule, driver and derived version", { skip: !DB 
       ruleId: first.ruleId,
       versionId: first.versionId,
       definitionHash: version.definition_hash,
-      driverId: (await db.execute<{ id: string }>(sql`select id from allocation_drivers where org_id = ${s.orgId} and key = ${OVERHEAD_SYSTEM_DRIVER_KEY}`)).rows[0]!.id,
+      driverId: (await db.execute<{ id: string }>(sql`select id from allocation_drivers where org_id = ${s.orgId} and key = ${OVERHEAD_SYSTEM_DRIVER_KEY}`, "objects"))[0]!.id,
       accountId: s.accountId,
     });
   } finally {
@@ -102,9 +102,9 @@ test("sync is a no-op on an unchanged card and republishes on a new generation",
     const third = await syncOverheadSystemRule(s.orgId, s.actorId);
     assert.equal(third.action, "published");
     assert.notEqual(third.versionId, first.versionId);
-    const statuses = (await db.execute<{ id: string; status: string }>(sql`
+    const statuses = await db.execute<{ id: string; status: string }>(sql`
       select id, status from allocation_rule_versions
-       where org_id = ${s.orgId} and rule_id = ${third.ruleId} order by version_no`)).rows;
+       where org_id = ${s.orgId} and rule_id = ${third.ruleId} order by version_no`, "objects");
     assert.deepEqual(statuses.map((r) => r.status), ["retired", "published"]);
     const binding = await resolveOverheadRuleBinding(s.orgId, "2026-07-15");
     assert.equal(binding?.versionId, third.versionId);
@@ -125,8 +125,8 @@ test("concurrent first-use syncs provision exactly one rule and version", { skip
       select (select count(*) from allocation_rules where org_id = ${s.orgId} and key = 'overhead-net-zero-pair') as heads,
              (select count(*) from allocation_rule_versions v
                join allocation_rules r on r.org_id = v.org_id and r.id = v.rule_id
-              where v.org_id = ${s.orgId} and r.key = 'overhead-net-zero-pair' and v.status = 'published') as versions`);
-    assert.deepEqual(counts.rows[0], { heads: "1", versions: "1" });
+              where v.org_id = ${s.orgId} and r.key = 'overhead-net-zero-pair' and v.status = 'published') as versions`, "objects");
+    assert.deepEqual(counts[0], { heads: "1", versions: "1" });
   } finally {
     await dropScratchOrg(s.orgId);
   }

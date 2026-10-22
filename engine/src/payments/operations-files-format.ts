@@ -65,8 +65,8 @@ export async function loadFormatContext(runId: string, orgId: string): Promise<F
       join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id and p.is_active
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
      where r.id = ${runId} and r.org_id = ${orgId}
-  `));
-  const row = rows.rows[0];
+  `, "objects"));
+  const row = rows[0];
   if (!row) throw new PaymentError("payment run has no active bank profile and format");
   const payments = (await db.execute<{
     id: string;
@@ -91,7 +91,7 @@ export async function loadFormatContext(runId: string, orgId: string): Promise<F
       left join payment_mandates m on m.id = i.mandate_id and m.org_id = i.org_id and m.status = 'active'
      where i.payment_run_id = ${runId} and i.org_id = ${orgId} and i.status <> 'cancelled'
      order by p.display_name, i.id
-  `));
+  `, "objects"));
   return {
     run: row,
     businessDate: await businessToday(orgId),
@@ -115,7 +115,7 @@ export async function loadFormatContext(runId: string, orgId: string): Promise<F
       contentType: row.content_type,
       formatterScript: row.formatter_script,
     },
-    payments: payments.rows.map((p) => ({
+    payments: payments.map((p) => ({
       id: p.id,
       amount: p.amount,
       currency: p.currency,
@@ -395,11 +395,11 @@ export async function renderPaymentFile(ctx: FormatContext, orgId: string, now: 
   if (scoped.format.rail === "positive_pay") return { ...positivePayRegister(scoped), runNumber: String(scoped.run.run_number) };
   if (scoped.format.rail !== "custom") return { ...genericRegister(scoped), runNumber: String(scoped.run.run_number) };
   if (!scoped.format.formatterScript) throw new PaymentError("custom payment format has no formatter script");
-  const org = (await db.execute<{ id: string; name: string; base_currency: string }>(sql`select id, name, base_currency from orgs where id = ${orgId}`));
+  const org = (await db.execute<{ id: string; name: string; base_currency: string }>(sql`select id, name, base_currency from orgs where id = ${orgId}`, "objects"));
   const outcome = await runScript(scoped.format.formatterScript, {
     trigger: "payment_format",
     request: { run: scoped.run, profile: scoped.profile, payments: scoped.payments, now: now.toISOString() },
-    org: { id: orgId, name: org.rows[0]?.name ?? "", baseCurrency: org.rows[0]?.base_currency ?? "" },
+    org: { id: orgId, name: org[0]?.name ?? "", baseCurrency: org[0]?.base_currency ?? "" },
   }, 10_000);
   if (outcome.status !== "ok") throw new PaymentError(`custom payment format ${outcome.status}: ${outcome.abortReason ?? "no output"}`);
   const out = outcome.returned as { filename?: unknown; content?: unknown; contentType?: unknown } | null;

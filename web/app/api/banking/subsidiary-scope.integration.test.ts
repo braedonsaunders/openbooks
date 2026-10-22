@@ -120,8 +120,8 @@ async function fixture(): Promise<Fixture> {
       { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null },
     )
   }
-  const lines = (await db.execute<{ account_id: string; id: string }>(sql`
-    select account_id, id from bank_statement_lines where org_id = ${org.orgId}`)).rows
+  const lines = await db.execute<{ account_id: string; id: string }>(sql`
+    select account_id, id from bank_statement_lines where org_id = ${org.orgId}`, 'objects')
   const lineOf = (account: string) => lines.find((l) => l.account_id === account)!.id
   const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null }
   const sessionA = (await startReconciliation({ accountId: bankA, throughDate: org.date, statementBalance: '5' }, ctx)).id
@@ -314,7 +314,7 @@ test('rule data verbs refuse out-of-scope accounts', { skip: !enabled }, async (
     assert.equal(applyLine.status, 404)
     // The refused line is still unmatched.
     const status = (await db.execute<{ s: string }>(sql`
-      select match_status as s from bank_statement_lines where id = ${fx.lineB}`)).rows[0]!.s
+      select match_status as s from bank_statement_lines where id = ${fx.lineB}`, 'objects'))[0]!.s
     assert.equal(status, 'unmatched')
     // In-scope application still works.
     const applied = await rulesApply.POST(postJson(
@@ -368,7 +368,7 @@ test('import and statement-line verbs refuse out-of-scope accounts', { skip: !en
     )))
     assert.equal(bulk.status, 404)
     const bulkStatus = (await db.execute<{ s: string }>(sql`
-      select match_status as s from bank_statement_lines where id = ${fx.lineB}`)).rows[0]!.s
+      select match_status as s from bank_statement_lines where id = ${fx.lineB}`, 'objects'))[0]!.s
     assert.equal(bulkStatus, 'unmatched')
   } finally { state.gate = null; await dropScratchOrg(fx.orgId) }
 })
@@ -398,7 +398,7 @@ test('bank feeds hide and refuse out-of-scope connections', { skip: !enabled }, 
     assert.equal(removed.status, 404)
     // The refused connection is untouched.
     const row = (await db.execute<{ n: string }>(sql`
-      select name as n from bank_feed_connections where id = ${fx.feedB}`)).rows[0]!.n
+      select name as n from bank_feed_connections where id = ${fx.feedB}`, 'objects'))[0]!.n
     assert.equal(row, 'B feed')
     // In-scope connections still manage end to end.
     authorize(fx, 'all')

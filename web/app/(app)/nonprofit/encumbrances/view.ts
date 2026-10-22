@@ -96,17 +96,17 @@ export async function loadEncumbrances(
         select id::text as id, number, name from accounts
          where org_id = ${orgId} and is_active and not is_summary
            and type in ('cogs', 'expense', 'expense_other', 'expense_deferred')
-         order by number nulls last, name limit 200`),
+         order by number nulls last, name limit 200`, 'objects'),
       db.execute<{ id: string; name: string }>(sql`
         select id::text as id, name from subsidiaries
          where org_id = ${orgId} and is_active
-         order by name limit 200`),
+         order by name limit 200`, 'objects'),
       db.execute<{ id: string; code: string; name: string }>(sql`
         select sv.id::text as id, sv.code, sv.name
           from funds f
           join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
          where f.org_id = ${orgId} and sv.is_active
-         order by sv.code limit 200`),
+         order by sv.code limit 200`, 'objects'),
     ])
     // Creation offers only subsidiaries in the caller's scope: an
     // unrestricted caller sees every active subsidiary, a restricted caller
@@ -114,16 +114,16 @@ export async function loadEncumbrances(
     const allowedSubsidiaryIds = authz.allowedSubsidiaryIds
     const inScope =
       allowedSubsidiaryIds === null
-        ? subsidiaries.rows
-        : subsidiaries.rows.filter((row) => allowedSubsidiaryIds.has(row.id))
+        ? subsidiaries
+        : subsidiaries.filter((row) => allowedSubsidiaryIds.has(row.id))
     return {
       ...base,
       drawer: {
         mode: 'create',
         remountKey: 'new',
-        accountOptions: accounts.rows,
+        accountOptions: accounts,
         subsidiaryOptions: inScope,
-        fundOptions: funds.rows,
+        fundOptions: funds,
         canManage: can(authz, 'encumbrances.manage'),
         closeHref: '/nonprofit/encumbrances',
       },
@@ -157,15 +157,15 @@ export async function loadEncumbrances(
             where l.org_id = dl.org_id and l.document_line_id = dl.id
          )
        order by d.document_number, dl.id limit 50
-    `)
-    : { rows: [] as { document_line_id: string; document_number: string; amount: string }[] }
+    `, 'objects')
+    : [] as { document_line_id: string; document_number: string; amount: string }[]
   return {
     ...base,
     drawer: {
       mode: 'record',
       remountKey: detail.id,
       detail,
-      candidates: candidates.rows.map((row) => ({
+      candidates: candidates.map((row) => ({
         documentLineId: row.document_line_id,
         documentNumber: row.document_number,
         amount: row.amount,

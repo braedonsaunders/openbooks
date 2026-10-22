@@ -54,14 +54,14 @@ export async function loadSubsidiaryContext(
   const r = (await runner.execute<SubsidiaryRow>(sql`
     select id, parent_id as "parentId", name, base_currency as "baseCurrency",
            is_elimination as "isElimination", is_active as "isActive"
-      from subsidiaries where org_id = ${orgId}`));
-  const byId = new Map(r.rows.map((s) => [s.id, s]));
-  const root = r.rows.find((s) => s.parentId === null);
+      from subsidiaries where org_id = ${orgId}`, "objects"));
+  const byId = new Map(r.map((s) => [s.id, s]));
+  const root = r.find((s) => s.parentId === null);
   if (!root) throw new SubsidiaryError(`org ${orgId} has no root subsidiary`);
   return {
     byId,
     rootId: root.id,
-    multi: r.rows.filter((s) => s.isActive && !s.isElimination).length > 1,
+    multi: r.filter((s) => s.isActive && !s.isElimination).length > 1,
   };
 }
 
@@ -144,8 +144,8 @@ async function loadPartySubsidiaries(
         on ps.party_id = p.id and ps.org_id = p.org_id
      where p.org_id = ${orgId}
        and p.id = any(${uuidArray(partyIds)}::uuid[])
-     group by p.id`));
-  return new Map(r.rows.map((party) => [party.id, party]));
+     group by p.id`, "objects"));
+  return new Map(r.map((party) => [party.id, party]));
 }
 
 /**
@@ -200,8 +200,8 @@ export async function validateSubsidiaryRestrictions(
              subsidiary_include_children as "includeChildren"
         from accounts where id = any(${uuidArray(accountIds)}::uuid[])
          and org_id = ${opts.orgId}
-         and subsidiary_id is not null`));
-    const restricted = new Map(r.rows.map((a) => [a.id, a]));
+         and subsidiary_id is not null`, "objects"));
+    const restricted = new Map(r.map((a) => [a.id, a]));
     for (const l of lines) {
       const a = restricted.get(l.accountId);
       if (a && !restrictionAdmits(ctx, a.subsidiaryId, a.includeChildren, l.subsidiaryId)) {
@@ -249,8 +249,8 @@ export async function validateSubsidiaryRestrictions(
         from ${sql.raw(d.table)}
        where id = any(${uuidArray(ids)}::uuid[])
          and org_id = ${opts.orgId}
-         and subsidiary_id is not null`));
-    const restricted = new Map(r.rows.map((row) => [row.id, row]));
+         and subsidiary_id is not null`, "objects"));
+    const restricted = new Map(r.map((row) => [row.id, row]));
     for (const line of lines) {
       const id = line[d.key];
       const row = id ? restricted.get(id) : undefined;
@@ -434,11 +434,11 @@ export async function intercompanyBalancingLegs(
       from intercompany_pairs
      where org_id = ${opts.orgId} and is_active
        and ((from_subsidiary_id = ${originSubId} and to_subsidiary_id = any(${uuidArray(pairIds)}::uuid[]))
-         or (to_subsidiary_id = ${originSubId} and from_subsidiary_id = any(${uuidArray(pairIds)}::uuid[])))`));
+         or (to_subsidiary_id = ${originSubId} and from_subsidiary_id = any(${uuidArray(pairIds)}::uuid[])))`, "objects"));
 
   const legs: IntercompanyLeg[] = [];
   for (const [subId, total] of unbalanced) {
-    const pair = r.rows.find(
+    const pair = r.find(
       (p) =>
         (p.fromId === originSubId && p.toId === subId) ||
         (p.fromId === subId && p.toId === originSubId),

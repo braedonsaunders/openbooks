@@ -82,8 +82,8 @@ async function glBalanceBySubsidiary(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${accountId}
-       and e.subsidiary_id = ${subsidiaryId}`));
-  return toUnits(r.rows[0]!.bal);
+       and e.subsidiary_id = ${subsidiaryId}`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 /** Σ (remaining × unit_cost) across one entity's layers at a position. */
@@ -98,8 +98,8 @@ async function layerValueBySubsidiary(
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
        and stock_location_id = ${stockLocationId}
-       and subsidiary_id = ${subsidiaryId}`));
-  return toUnits(r.rows[0]!.v);
+       and subsidiary_id = ${subsidiaryId}`, "objects"));
+  return toUnits(r[0]!.v);
 }
 
 /** Everything a cross-entity attempt must leave byte-identical. */
@@ -115,8 +115,8 @@ async function mutationSnapshot(orgId: string) {
            (select count(*) from cost_layers where org_id = ${orgId})::int as layers,
            (select count(*) from cost_layer_consumptions where org_id = ${orgId})::int as consumptions,
            (select count(*) from journal_entries where org_id = ${orgId})::int as entries,
-           (select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text from cost_layers where org_id = ${orgId}) as layer_value`));
-  return r.rows[0]!;
+           (select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text from cost_layers where org_id = ${orgId}) as layer_value`, "objects"));
+  return r[0]!;
 }
 
 /** Every posted entry must balance WITHIN each legal entity. */
@@ -127,8 +127,8 @@ async function assertPerSubsidiaryLedgerBalances(orgId: string): Promise<void> {
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId}
      group by e.subsidiary_id, l.entry_id
-    having sum(l.amount) <> 0`));
-  assert.equal(r.rows.length, 0, "an entry is unbalanced inside a subsidiary");
+    having sum(l.amount) <> 0`, "objects"));
+  assert.equal(r.length, 0, "an entry is unbalanced inside a subsidiary");
 }
 
 test("cross-entity inventory access is refused with zero mutation", { skip: !DB }, async () => {
@@ -205,7 +205,7 @@ test("storage makes cross-entity inventory facts unrepresentable", { skip: !DB }
     // so any mismatch on either side violates storage.
     const bLayer = (await db.execute<{ id: string }>(sql`
       select id from cost_layers
-       where org_id = ${org.orgId} and source_movement_id = ${bReceipt.movementId}`)).rows[0]!.id;
+       where org_id = ${org.orgId} and source_movement_id = ${bReceipt.movementId}`, "objects"))[0]!.id;
 
     await rejectsStorageViolation(
       () =>
@@ -288,11 +288,11 @@ test("concurrent issues isolate per legal entity and the GL corroborates each su
         from cost_layer_consumptions c
         join inventory_movements im on im.id = c.issue_movement_id and im.org_id = c.org_id
         join cost_layers cl on cl.id = c.cost_layer_id and cl.org_id = c.org_id
-       where c.org_id = ${org.orgId}`));
+       where c.org_id = ${org.orgId}`, "objects"));
     // Exactly the two seeded issues (one per entity): the per-row
     // same-entity check below cannot pass over an empty set.
-    assert.equal(consumers.rows.length, 2);
-    for (const row of consumers.rows) {
+    assert.equal(consumers.length, 2);
+    for (const row of consumers) {
       assert.equal(row.issue_sub, row.layer_sub, "a consumption crossed legal entities");
     }
 
@@ -368,9 +368,9 @@ test("reversal lineage keeps the owning legal entity", { skip: !DB }, async () =
     const reversals = (await db.execute<{ subsidiary_id: string }>(sql`
       select subsidiary_id::text as "subsidiary_id"
         from inventory_movements
-       where org_id = ${org.orgId} and reverses_movement_id = ${receipt.movementId}`));
-    assert.equal(reversals.rows.length, 1);
-    assert.equal(reversals.rows[0]!.subsidiary_id, subB);
+       where org_id = ${org.orgId} and reverses_movement_id = ${receipt.movementId}`, "objects"));
+    assert.equal(reversals.length, 1);
+    assert.equal(reversals[0]!.subsidiary_id, subB);
     // B's books are exactly restored: no layer value, no net GL.
     assert.equal(
       await layerValueBySubsidiary(org.orgId, org.items.fifo, org.stockLocationId, subB),

@@ -70,16 +70,16 @@ async function seedPlainSubscription(org: ScratchOrg, actor: string, planId: str
 async function cursors(orgId: string, subscriptionId: string): Promise<{ nextBillOn: string; currentPeriodStart: string }> {
   const row = (await db.execute<{ nextBillOn: string; currentPeriodStart: string }>(
     sql`select next_bill_on as "nextBillOn", current_period_start as "currentPeriodStart"
-          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`,
-  )).rows[0]!;
+          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects",
+  ))[0]!;
   return { nextBillOn: row.nextBillOn, currentPeriodStart: row.currentPeriodStart };
 }
 
 async function guardedPeriods(orgId: string, subscriptionId: string): Promise<Array<{ startsOn: string; endsOn: string }>> {
-  return (await db.execute<{ startsOn: string; endsOn: string }>(sql`
+  return await db.execute<{ startsOn: string; endsOn: string }>(sql`
     select period_starts_on as "startsOn", period_ends_on as "endsOn" from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId} order by period_starts_on
-  `)).rows;
+  `, "objects");
 }
 
 async function withOrg(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {

@@ -68,8 +68,8 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 
 async function journalCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`));
-  return r.rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  return r[0]!.n;
 }
 
 async function enableProperty(org: ScratchOrg, straightLineRentAccountId?: string): Promise<void> {
@@ -321,7 +321,7 @@ test("deposit period refusal follows the property's subsidiary instead of the le
     assert.deepEqual(
       (await db.execute<{ journals: number; deposits: number }>(sql`
         select (select count(*)::int from journal_entries where org_id = ${org.orgId}) as journals,
-               (select count(*)::int from security_deposit_transactions where org_id = ${org.orgId}) as deposits`)).rows[0],
+               (select count(*)::int from security_deposit_transactions where org_id = ${org.orgId}) as deposits`, "objects"))[0],
       { journals: 0, deposits: 0 },
       "the property-scoped period refusal leaves no posting or subledger row",
     );

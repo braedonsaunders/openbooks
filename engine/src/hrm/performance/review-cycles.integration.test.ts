@@ -34,7 +34,7 @@ test("0196 migration exposes ten org-isolated tables with the review unique", { 
            'hrm_review_template_questions', 'hrm_review_cycles', 'hrm_reviews',
            'hrm_review_answers', 'hrm_review_events', 'hrm_goals',
            'hrm_goal_updates', 'hrm_exit_records')
-       order by 1`)).rows.map((row) => row.name);
+       order by 1`, "objects")).map((row) => row.name);
     assert.deepEqual(tables, [
       "hrm_exit_records",
       "hrm_goal_updates",
@@ -50,7 +50,7 @@ test("0196 migration exposes ten org-isolated tables with the review unique", { 
     const policies = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from pg_policies
        where schemaname = 'public' and policyname = 'org_isolation'
-         and tablename like 'hrm_review%' or tablename like 'hrm_goal%' or tablename = 'hrm_exit_records'`)).rows[0]!.n;
+         and tablename like 'hrm_review%' or tablename like 'hrm_goal%' or tablename = 'hrm_exit_records'`, "objects"))[0]!.n;
     assert.ok(Number(policies) >= 10, `all ten tables carry org_isolation, got ${policies}`);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -75,24 +75,24 @@ test("open instantiates self and manager reviews with snapshots in one transacti
     assert.equal(opened.managerReviews, 1);
     assert.equal(opened.gaps, 1);
     assert.equal(opened.cycle.managerGapCount, 1);
-    const reviews = (await db.execute<{ kind: string; status: string }>(sql`
+    const reviews = await db.execute<{ kind: string; status: string }>(sql`
       select kind, status from hrm_reviews
-       where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`)).rows;
+       where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`, "objects");
     assert.equal(reviews.length, 3);
     const answers = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_review_answers a
       join hrm_reviews r on r.org_id = a.org_id and r.id = a.review_id
-     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id}`)).rows[0]!.n;
+     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id}`, "objects"))[0]!.n;
     assert.equal(answers, "3", "each of the 3 reviews snapshots the 1 template question");
     const events = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_review_events e
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
-     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'instantiated'`)).rows[0]!.n;
+     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'instantiated'`, "objects"))[0]!.n;
     assert.equal(events, "3");
     const prompt = (await db.execute<{ prompt: string }>(sql`
       select a.question_prompt as prompt from hrm_review_answers a
       join hrm_reviews r on r.org_id = a.org_id and r.id = a.review_id
-     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} limit 1`)).rows[0]!.prompt;
+     where a.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} limit 1`, "objects"))[0]!.prompt;
     assert.equal(prompt, "Customer impact");
   });
 });
@@ -113,7 +113,7 @@ test("open refuses a template with no required question and an inverted period",
     const bareId = (await db.execute<{ id: string }>(sql`
       insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
       values (${h.org.orgId}, 'Bare', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     const cycle = await createCycle({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -134,7 +134,7 @@ test("open refuses a template with no required question and an inverted period",
     );
     // Nothing instantiated: the refusal precedes every write.
     const count = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_reviews where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`)).rows[0]!.n;
+      select count(*)::text as n from hrm_reviews where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}`, "objects"))[0]!.n;
     assert.equal(count, "0");
   });
 });
@@ -171,10 +171,10 @@ test("a second open is refused and a calibrating move needs pending reviews reso
     });
     assert.equal(moved.status, "calibrating");
     // The reason is recorded as a calibration event on the pending review.
-    const events = (await db.execute<{ reason: string }>(sql`
+    const events = await db.execute<{ reason: string }>(sql`
       select e.reason from hrm_review_events e
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
-     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'calibrated'`)).rows;
+     where e.org_id = ${h.org.orgId} and r.cycle_id = ${cycle.id} and e.kind = 'calibrated'`, "objects");
     assert.equal(events.length, 1);
     assert.match(events[0]!.reason, /manager on leave/);
     const closed = await closeCycle({ orgId: h.org.orgId, actorId: h.hrId, cycleId: cycle.id });

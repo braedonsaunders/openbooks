@@ -82,14 +82,14 @@ function postRequest(body: unknown): Request {
 
 async function layoutCount(orgId: string): Promise<number> {
   const r = await db.execute<{ c: number }>(sql`
-    select count(*)::int as c from form_layouts where org_id = ${orgId}`);
-  return Number(r.rows[0]?.c ?? 0);
+    select count(*)::int as c from form_layouts where org_id = ${orgId}`, "objects");
+  return Number(r[0]?.c ?? 0);
 }
 
 async function defaultNames(orgId: string): Promise<string[]> {
   const r = await db.execute<{ name: string }>(sql`
-    select name from form_layouts where org_id = ${orgId} and is_default order by name`);
-  return r.rows.map((row) => row.name);
+    select name from form_layouts where org_id = ${orgId} and is_default order by name`, "objects");
+  return r.map((row) => row.name);
 }
 
 test(
@@ -227,8 +227,8 @@ test(
     const body = (await res.json()) as { id?: string };
     const stored = await db.execute<{ allowedRoles: unknown }>(sql`
       select allowed_roles as "allowedRoles"
-        from form_layouts where org_id = ${f.orgId} and id = ${body.id}`);
-    assert.deepEqual(stored.rows[0]?.allowedRoles, [ROLE_ID]);
+        from form_layouts where org_id = ${f.orgId} and id = ${body.id}`, "objects");
+    assert.deepEqual(stored[0]?.allowedRoles, [ROLE_ID]);
   },
 );
 

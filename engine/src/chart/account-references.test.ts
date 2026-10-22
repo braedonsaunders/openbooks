@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { releaseSchemaFiles } from "../../../scripts/release-schema-sql.mjs";
 import {
   ACCOUNT_JSON_REFERENCES,
   ACCOUNT_REFERENCE_OWNED,
@@ -8,18 +10,20 @@ import {
   classifyAccountReference,
 } from "./account-references.ts";
 
-// source-pin-contract: merge reference classification — every foreign key into accounts that a published migration declares must be classified as configuration or history; subjects derived from the migrations, never hand-listed.
-const MIGRATIONS = new URL("../../../schema/migrations/generated/", import.meta.url);
+// source-pin-contract: merge reference classification — every foreign key into accounts that the release schema declares must be classified as configuration or history; subjects derived from the schema, never hand-listed.
+const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 /**
- * Every published foreign key into accounts, read from the migrations
- * themselves: `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY (org_id, col)
- * REFERENCES public.accounts` and inline table constraints alike.
+ * Every published foreign key into accounts, read from the release schema
+ * (baseline, then forward migrations in apply order):
+ * `ALTER TABLE [ONLY] ... ADD CONSTRAINT ... FOREIGN KEY (org_id, col)
+ * REFERENCES public.accounts(...)` and inline table constraints alike, with
+ * later table renames carried forward.
  */
 function publishedAccountForeignKeys(): Set<string> {
   const found = new Set<string>();
-  for (const file of readdirSync(MIGRATIONS).filter((name) => name.endsWith(".sql")).sort()) {
-    const source = readFileSync(new URL(file, MIGRATIONS), "utf8");
+  for (const { path } of releaseSchemaFiles(REPO_ROOT)) {
+    const source = readFileSync(path, "utf8");
     for (const rename of source.matchAll(/ALTER TABLE (?:ONLY )?(?:public\.)?([a-z_0-9]+)\s+RENAME TO ([a-z_0-9]+)\s*;/gi)) {
       for (const key of [...found]) {
         if (key.startsWith(`${rename[1]}.`)) {

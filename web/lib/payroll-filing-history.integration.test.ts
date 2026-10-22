@@ -431,11 +431,9 @@ const consolidatedRows = [
               await withBypassContext(() => db.execute(
                 sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Hidden filing entity','CAD','CA')`,
               ));
-              const account = (
-                await withBypassContext(() => db.execute<{ id: string }>(
-                  sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'CA','ca_rp','123456789RP0001','Native filing account',${hidden}) returning id`,
-                ))
-              ).rows[0]!.id;
+              const account = (await withBypassContext(() => db.execute<{ id: string }>(
+                  sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'CA','ca_rp','123456789RP0001','Native filing account',${hidden}) returning id`, "objects",
+                )))[0]!.id;
               assert.equal(
                 account[14],
                 "7",
@@ -504,11 +502,9 @@ const consolidatedRows = [
                   422,
                 );
               }
-              const employee = (
-                await withBypassContext(() => db.execute<{ id: string }>(
-                  sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${fx.orgId},'person','Native payroll employee',${fx.subsidiaryId}) returning id`,
-                ))
-              ).rows[0]!.id;
+              const employee = (await withBypassContext(() => db.execute<{ id: string }>(
+                  sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${fx.orgId},'person','Native payroll employee',${fx.subsidiaryId}) returning id`, "objects",
+                )))[0]!.id;
               assert.equal(employee[14], "7");
               for (const filing of ["roe", "rl1"])
                 assert.deepEqual(payrollRowScope("CA", filing, employee), {
@@ -571,11 +567,9 @@ const payrollFilingScopeCases = [
               await withBypassContext(() => db.execute(
                 sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Hidden Form 941 employer','CAD','US')`,
               ));
-              const account = (
-                await withBypassContext(() => db.execute<{ id: string }>(
-                  sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'US','us_ein','12-3456789','Hidden source EIN',${hidden}) returning id`,
-                ))
-              ).rows[0]!.id;
+              const account = (await withBypassContext(() => db.execute<{ id: string }>(
+                  sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'US','us_ein','12-3456789','Hidden source EIN',${hidden}) returning id`, "objects",
+                )))[0]!.id;
               await withBypassContext(() => db.execute(
                 sql`insert into documents(id,org_id,kind,document_number,subsidiary_id,document_date,currency,status) values(${doc},${fx.orgId},'pay_run','941-SOURCE',${hidden},'2026-07-15','USD','draft')`,
               ));
@@ -928,13 +922,11 @@ const payrollFilingScopeCases = [
                   sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status,custom) values(${invoice},${fx.orgId},'vendor_bill','HIDDEN-REMIT',${vendor},${hidden},'2026-07-31','CAD','draft',${JSON.stringify({ payrollRemittance: { ...range, partyId: vendor, filingAccountId: group.filingAccount.id } })}::jsonb)`,
                 ),
               );
-              const expense = (
-                await withBypassContext(() =>
+              const expense = (await withBypassContext(() =>
                   db.execute<{ id: string }>(
-                    sql`select id from accounts where org_id=${fx.orgId} and type='expense' and not is_summary limit 1`,
+                    sql`select id from accounts where org_id=${fx.orgId} and type='expense' and not is_summary limit 1`, "objects",
                   ),
-                )
-              ).rows[0]!.id;
+                ))[0]!.id;
               await withBypassContext(() =>
                 db.execute(
                   sql`insert into document_lines(org_id,document_id,line_number,account_id,subsidiary_id,description,quantity,unit_price,amount,tax_amount) values(${fx.orgId},${invoice},1,${expense},${hidden},'Other entity remittance',1,999,999,0)`,
@@ -1027,13 +1019,11 @@ const payrollFilingScopeCases = [
               assert.deepEqual(await refused.json(), {
                 error: "nothing to remit to this vendor for the period",
               });
-              const bills = (
-                await withOrgContext(fx.orgId, () =>
+              const bills = (await withOrgContext(fx.orgId, () =>
                   db.execute<{ count: number }>(
-                    sql`select count(*)::int as count from documents where org_id=${fx.orgId} and kind='vendor_bill'`,
+                    sql`select count(*)::int as count from documents where org_id=${fx.orgId} and kind='vendor_bill'`, "objects",
                   ),
-                )
-              ).rows[0]!.count;
+                ))[0]!.count;
               assert.equal(
                 bills,
                 1,
@@ -1113,9 +1103,9 @@ const payrollFilingScopeCases = [
                 assert.equal((await db.execute(sql`insert into payroll_filing_accounts
                   (id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
                   values (${filingAccountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp',
-                    '123456789RP0001','Retained employer payroll account',true) returning id`)).rows.length,1);
+                    '123456789RP0001','Retained employer payroll account',true) returning id`, "objects")).length,1);
                 assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`)).rows.length,1);
+                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, "objects")).length,1);
                 await seedRoeIssuanceFixture(fx.orgId, fx.employeeId);
                 // This scenario's only wages were earned on July 14 in the
                 // committed July 5–18 schedule, before the interruption.
@@ -1123,7 +1113,7 @@ const payrollFilingScopeCases = [
                   set first_day_worked='2026-07-14',last_insurable_earnings_on='2026-07-14',
                       interruption_on='2026-07-15'
                   where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}
-                    and status='confirmed' returning id`)).rows.length,1);
+                    and status='confirmed' returning id`, "objects")).length,1);
 
               });
               const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));
@@ -1269,11 +1259,9 @@ const payrollFilingScopeCases = [
                 await db.execute(
                   sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${accountOwner},${fx.orgId},${fx.subsidiaryId},'Hidden ROE account','CAD','CA')`,
                 );
-                const account = (
-                  await db.execute<{ id: string }>(
-                    sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id) values(${currentAccountId},${fx.orgId},'CA','ca_rp','123456789RP0002','Current profile payroll account',${accountOwner}) returning id`,
-                  )
-                ).rows[0]!.id;
+                const account = (await db.execute<{ id: string }>(
+                    sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id) values(${currentAccountId},${fx.orgId},'CA','ca_rp','123456789RP0002','Current profile payroll account',${accountOwner}) returning id`, "objects",
+                  ))[0]!.id;
                 await db.execute(
                   sql`update employee_payroll_profiles set filing_account_id=${account} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`,
                 );
@@ -1342,7 +1330,7 @@ const payrollFilingScopeCases = [
                   interruption_on='2026-08-01',last_insurable_earnings_on='2026-07-31' where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
               });
               const component=await withOrgContext(fx.orgId,async()=>{
-                const rows=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay'`)).rows;
+                const rows=await db.execute<{id:string}>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay'`, "objects");
                 assert.equal(rows.length,1);return rows[0]!.id;
               });
               // Retained monthly calendar, employee hours and dated earning evidence are coherent.

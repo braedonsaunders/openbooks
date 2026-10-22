@@ -52,9 +52,9 @@ import {
  * on the row (exactly once — later attempts cannot exist because claims require
  * attempt_count < ceiling) and writes one append-only evidence row into
  * scheduler_outbox_terminal_audit inside that same transaction, for crash
- * recovery of an at-ceiling stale row exactly like ordinary exhaustion (see
- * migration 0026_scheduler_outbox_terminal_audit.sql for the storage-side
- * immutability guards and backfill). In addition to that structured
+ * recovery of an at-ceiling stale row exactly like ordinary exhaustion (storage
+ * enforces this through scheduler_outbox_terminal_guard and
+ * scheduler_outbox_terminal_audit_append_only_guard). In addition to that structured
  * "scheduler.terminal_failure" log line plus the
  * `openbooks.terminal_failures` metric increment (see telemetry.ts), the
  * evidence table now IS the independent durable record: terminal-stamped rows
@@ -252,7 +252,7 @@ type TerminalEvidenceEvent = "terminal_failure" | "crash_recovery_terminal_failu
 
 /**
  * Append the independent durable record of one terminal transition. Must be
- * awaited inside the SAME transaction as the stamping UPDATE (migration 0026):
+ * awaited inside the SAME transaction as the stamping UPDATE:
  * storage refuses a second evidence row for one occurrence and refuses to let
  * terminalization commit without this insert.
  */
@@ -262,7 +262,7 @@ async function insertTerminalFailureEvidence(
   row: SchedulerOutboxEnvelope,
   fields: { statusBefore: string; reason: string; markedBy: string; at: Date },
 ): Promise<void> {
-  const recorded = await tx.execute(sql`
+  const recorded = await tx.execute<{ id: string }>(sql`
     insert into scheduler_outbox_terminal_audit
       (outbox_row_id, event, org_id, kind, subject_id, occurrence_key,
        attempt_count, reason, marked_by, at, detail, failure_generation)
@@ -851,7 +851,7 @@ async function markSucceeded(row: OutboxRow, now: Date): Promise<void> {
     row.kind === "flow_email" ||
     row.kind === ALLOCATION_RUN_OUTBOX_KIND
   ) {
-    const completed = await db.execute(sql`
+    const completed = await db.execute<never>(sql`
       update scheduler_outbox
          set status='succeeded', error=null, locked_at=null, lease_token=null, finished_at=${now},
              next_attempt_at=${now}, updated_at=now()
@@ -860,7 +860,7 @@ async function markSucceeded(row: OutboxRow, now: Date): Promise<void> {
     if (completed.rowCount !== 1) throw new SchedulerOutboxLeaseFencedError(row.id);
     return;
   }
-  const completed = await db.execute(sql`
+  const completed = await db.execute<never>(sql`
     update scheduler_outbox
        set status='pending', error=null, locked_at=null, lease_token=null, finished_at=${now},
            attempt_count=0, next_attempt_at=${new Date(now.getTime() + SCAN_REQUEUE_MS)},
@@ -876,7 +876,7 @@ async function markFailed(row: OutboxRow, error: unknown, now: Date): Promise<vo
   // the attempt that just failed. Reaching the ceiling here is the one and
   // only transition to terminal; stamp it in the same statement that records
   // the final failure so a crash between them is impossible — and write the
-  // append-only evidence row inside that same transaction (migration 0026):
+  // append-only evidence row inside that same transaction:
   // terminalization cannot commit without durable evidence.
   const tenantFailure = row.org_id === null
     && (SCHEDULER_OUTBOX_SCAN_KINDS as readonly string[]).includes(row.kind)
@@ -1149,7 +1149,7 @@ export async function replayTerminalSchedulerOutbox(input: {
     await tx.execute(sql`
       select set_config('openbooks.scheduler_outbox_replay_org', ${before.org_id ?? '__system__'}::text, true)
     `);
-    const reset = await tx.execute(sql`
+    const reset = await tx.execute<never>(sql`
       update scheduler_outbox
          set status='pending', attempt_count=0, next_attempt_at=${now},
              locked_at=null, lease_token=null, last_attempt_at=null,
@@ -1177,7 +1177,7 @@ async function insertSchedulerOutboxReplayAudit(
   },
   fields: { reason: string; actorId: string; at: Date; failureGeneration: number },
 ): Promise<void> {
-  const recorded = await tx.execute(sql`
+  const recorded = await tx.execute<{ id: string }>(sql`
     insert into scheduler_outbox_terminal_audit
       (outbox_row_id, event, org_id, kind, subject_id, occurrence_key,
        attempt_count, reason, marked_by, at, detail, failure_generation)

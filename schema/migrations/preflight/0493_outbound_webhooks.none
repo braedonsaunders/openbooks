@@ -1,1 +1,0 @@
-Creates the three outbound-webhook tables (endpoints, events, deliveries) empty. No existing tenant data is read, rewritten or deleted.

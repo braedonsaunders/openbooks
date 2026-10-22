@@ -64,13 +64,13 @@ async function postWithApplications(req: Request) {
     select kind, status, subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${authz.user.orgId}
-  `))
-  if (!r.rows[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
+  `, 'objects'))
+  if (!r[0]) return notFound("record")
+  const scopeDenied = guardSubsidiaryScope(authz, r[0].subsidiaryId)
   if (scopeDenied) return scopeDenied
   const targetsDenied = await assertAllocationTargetsInScope(authz, (allocations ?? []).map(item => item.openLineId))
   if (targetsDenied) return targetsDenied
-  const perm = paymentPermission(r.rows[0].kind)
+  const perm = paymentPermission(r[0].kind)
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
   }
@@ -104,8 +104,8 @@ async function postWithApplications(req: Request) {
          where id = ${documentId} and org_id = ${authz.user.orgId}
            and kind in ('vendor_payment', 'customer_payment')
          for update
-      `))
-      const payment = locked.rows[0]
+      `, 'objects'))
+      const payment = locked[0]
       if (!payment) return { kind: 'not_found' as const }
       // The earlier scope check is only a fast refusal. Recheck the locked
       // row so a concurrent rehome cannot authorize this save or post.

@@ -50,7 +50,7 @@ export function expenseAuthorityGrants(authority: ExpenseAuthority): string[] {
 export async function actorLinkedPartyId(executor: SqlExecutor, orgId: string, actorId: string): Promise<string | null> {
   const row = (await executor.execute<{ partyId: string | null }>(sql`
     select party_id as "partyId" from users where id = ${actorId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.partyId ?? null;
 }
 

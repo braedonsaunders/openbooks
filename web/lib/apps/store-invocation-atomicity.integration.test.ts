@@ -136,9 +136,9 @@ const committedCounts = async (
         (select count(*)::text from documents where org_id = ${orgId}) as documents,
         (select count(*)::text from journal_entries where org_id = ${orgId}) as entries,
         (select count(*)::text from custom_records where org_id = ${orgId}) as records,
-        (select count(*)::text from app_storage where org_id = ${orgId}) as storage`),
+        (select count(*)::text from app_storage where org_id = ${orgId}) as storage`, 'objects'),
   )
-  const row = r.rows[0]!
+  const row = r[0]!
   return {
     documents: Number(row.documents),
     entries: Number(row.entries),
@@ -148,8 +148,7 @@ const committedCounts = async (
 }
 
 const appRuns = async (orgId: string) =>
-  (
-    await withOrgContext(orgId, () =>
+  await withOrgContext(orgId, () =>
       db.execute<{
         endpoint: string;
         status: string;
@@ -159,9 +158,8 @@ const appRuns = async (orgId: string) =>
       }>(sql`
         select endpoint, status, error_message as "errorMessage", logs, units
           from app_runs where org_id = ${orgId}
-         order by at`),
+         order by at`, 'objects'),
     )
-  ).rows
 
 test(
   'repeated platform schema, list, and get reads receive independent invocation identities',
@@ -200,8 +198,8 @@ test(
            and operation in ('apps.platform_schema', 'apps.platform_list', 'apps.platform_get')
          group by operation
          order by operation
-      `))
-      assert.deepEqual(claims.rows, [
+      `, 'objects'))
+      assert.deepEqual(claims, [
         { operation: 'apps.platform_get', count: '2' },
         { operation: 'apps.platform_list', count: '2' },
         { operation: 'apps.platform_schema', count: '2' },
@@ -332,10 +330,10 @@ test(
       const refusedClaims = await withOrgContext(fx.org.orgId, () =>
         db.execute<{ n: string; completedAt: Date | null }>(sql`
           select count(*)::text as n, min(completed_at)::timestamptz as "completedAt"
-            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`),
+            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`, 'objects'),
       )
-      assert.equal(Number(refusedClaims.rows[0]!.n), 1)
-      assert.equal(refusedClaims.rows[0]!.completedAt, null)
+      assert.equal(Number(refusedClaims[0]!.n), 1)
+      assert.equal(refusedClaims[0]!.completedAt, null)
 
       // Recovery ships a FIXED bundle on the same app: zero effects survived
       // the failed invocation, so the corrected execution posts exactly one
@@ -354,9 +352,9 @@ test(
         db.execute<{ total: string; done: string }>(sql`
           select count(*)::text as total,
                  (count(*) filter (where completed_at is not null))::text as done
-            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`),
+            from application_idempotency_keys where org_id = ${fx.org.orgId} and source = 'app'`, 'objects'),
       )
-      assert.deepEqual(claimsAfterRecovery.rows[0], { total: '2', done: '1' })
+      assert.deepEqual(claimsAfterRecovery[0], { total: '2', done: '1' })
     } finally {
       await dropScratchOrg(fx.org.orgId)
     }
@@ -389,9 +387,9 @@ test(
       const timeoutClaims = await withBypass(() =>
         db.execute<{ open: string }>(sql`
           select count(*)::text as open from application_idempotency_keys
-           where org_id = ${fx.org.orgId} and source = 'app' and completed_at is null`),
+           where org_id = ${fx.org.orgId} and source = 'app' and completed_at is null`, 'objects'),
       )
-      assert.equal(Number(timeoutClaims.rows[0]!.open), 1)
+      assert.equal(Number(timeoutClaims[0]!.open), 1)
     } finally {
       await dropScratchOrg(fx.org.orgId)
     }
@@ -433,9 +431,9 @@ test(
         db.execute<{ n: string }>(sql`
           select count(*)::text as n from application_idempotency_keys
            where org_id = ${fx.org.orgId} and source = 'app'
-             and operation = 'apps.call_backend.financial'`),
+             and operation = 'apps.call_backend.financial'`, 'objects'),
       )
-      assert.equal(Number(claims.rows[0]!.n), 1)
+      assert.equal(Number(claims[0]!.n), 1)
 
       // The replay attempt is itself audited, distinctly marked.
       const runs = await appRuns(fx.org.orgId)
@@ -492,9 +490,9 @@ test(
       assert.notDeepEqual(repeat.result, first.result)
       const records = await withOrgContext(fx.org.orgId, () =>
         db.execute<{ n: string }>(sql`select count(*)::text as n from custom_records
-           where org_id = ${fx.org.orgId} and type_key = ${CUSTOM_TYPE_KEY}`),
+           where org_id = ${fx.org.orgId} and type_key = ${CUSTOM_TYPE_KEY}`, 'objects'),
       )
-      assert.equal(Number(records.rows[0]!.n), 2)
+      assert.equal(Number(records[0]!.n), 2)
 
       // Same key with a different body is key reuse, not a retry: 409.
       const mismatch = await create(keyA, { name: 'Different' })

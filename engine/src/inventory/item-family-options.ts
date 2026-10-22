@@ -138,7 +138,7 @@ export async function replaceFamilyOptions(
     // Apply: delete removed options, update kept ones, insert added ones.
     const removedIds = current.filter((option) => !matchedCurrentIds.has(option.id)).map((option) => option.id);
     if (removedIds.length > 0) {
-      const deleted = await tx.execute(sql`
+      const deleted = await tx.execute<never>(sql`
         delete from item_family_options
          where org_id = ${orgId} and family_id = ${familyId} and id = any(${uuidArray(removedIds)}::uuid[])`);
       if ((deleted.rowCount ?? 0) !== removedIds.length) {
@@ -151,7 +151,7 @@ export async function replaceFamilyOptions(
       position += 1;
       const valueList = option.values.map((entry) => entry.value);
       if (option.id !== null) {
-        const updated = await tx.execute(sql`
+        const updated = await tx.execute<never>(sql`
           update item_family_options
              set position = ${position}, name = ${option.name}, "values" = ${textArrayLiteral(valueList)}::text[],
                  updated_at = now(), updated_by = ${actorId}
@@ -164,7 +164,7 @@ export async function replaceFamilyOptions(
             (org_id, family_id, position, name, "values", created_by, updated_by)
           values
             (${orgId}, ${familyId}, ${position}, ${option.name}, ${textArrayLiteral(valueList)}::text[], ${actorId}, ${actorId})
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
         if (!inserted) throw new InventoryError(`family option ${option.name} was not created`);
         finalOptions.push({ id: inserted.id, name: option.name, position, values: valueList });
       }
@@ -203,7 +203,7 @@ export async function replaceFamilyOptions(
         const valuesChanged = nextValues !== JSON.stringify(variant.option_values ?? {});
         if (!nameChanged && !valuesChanged) continue;
         if (!nameChanged || canRenameVariantName(variant.name, family.name, currentValues)) {
-          const updated = await tx.execute(sql`
+          const updated = await tx.execute<never>(sql`
             update items
                set name = ${nextName}, option_values = ${nextValues}::jsonb,
                    updated_at = now(), updated_by = ${actorId}

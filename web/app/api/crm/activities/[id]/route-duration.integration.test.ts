@@ -51,7 +51,7 @@ async function fixture() {
     return (await db.execute<{ id: string }>(sql`
       insert into crm_activities (org_id, kind, status, subject, duration_minutes)
       values (${org.orgId}, 'call', 'open', 'Probe call', 30)
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
   })
   return { org, activityId }
 }
@@ -74,8 +74,8 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 
 async function duration(orgId: string, activityId: string): Promise<number | null> {
   return await withOrgContext(orgId, async () => {
-    const rows = (await db.execute<{ duration_minutes: number | null }>(sql`
-      select duration_minutes from crm_activities where id = ${activityId}`)).rows
+    const rows = await db.execute<{ duration_minutes: number | null }>(sql`
+      select duration_minutes from crm_activities where id = ${activityId}`, 'objects')
     return rows[0]!.duration_minutes
   })
 }

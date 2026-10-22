@@ -51,8 +51,8 @@ async function loadFlow(orgId: string, id: string) {
   if (!isUuid(id)) return null
   const r = await db.execute<Record<string, unknown>>(sql`
     select flows.*, ${documentRevisionSql(sql`updated_at`)} as updated_at from flows where id = ${id} and org_id = ${orgId}
-  `)
-  return r.rows[0] ?? null
+  `, 'objects')
+  return r[0] ?? null
 }
 
 async function legacyGET(_req: Request, { params }: Params) {
@@ -65,7 +65,7 @@ async function legacyGET(_req: Request, { params }: Params) {
     select id, subject_kind, subject_id, trigger, status, error, started_at, finished_at
       from flow_runs where flow_id = ${id} and org_id = ${gate.user.orgId}
      order by started_at desc limit 30
-  `)
+  `, 'objects')
   // A subsidiary-restricted flows.manage caller sees only runs whose
   // subject sits inside their scope — the same subject rule the retry
   // route enforces per run. Out-of-scope runs (and their subject UUIDs,
@@ -73,7 +73,7 @@ async function legacyGET(_req: Request, { params }: Params) {
   const visibleRuns = await filterFlowRunSubjectsToScope(
     gate.user.orgId,
     gate.allowedSubsidiaryIds,
-    runs.rows.map((row) => ({
+    runs.map((row) => ({
       kind: String(row.subject_kind),
       id: String(row.subject_id),
       row,
@@ -151,12 +151,10 @@ export const PATCH = defineRoute({
       )
     }
     return db.transaction(async (tx) => {
-      const flow = (
-        await tx.execute<Record<string, unknown>>(sql`
+      const flow = (await tx.execute<Record<string, unknown>>(sql`
         select flows.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
           from flows where id = ${id} and org_id = ${user.orgId} for update
-      `)
-      ).rows[0]
+      `, 'objects'))[0]
       if (!flow) return notFound('record')
       if (flow.updated_at !== expectedUpdatedAt) return revisionConflict()
       const sets = [
@@ -252,14 +250,14 @@ export const PATCH = defineRoute({
         update flows set ${sql.join(sets, sql`, `)}
          where id = ${id} and org_id = ${user.orgId}
          returning flows.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
-      `)
-      if (!updated.rows[0]) throw new Error('flow_changed')
+      `, 'objects')
+      if (!updated[0]) throw new Error('flow_changed')
       await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values
           (${user.orgId}, 'flows', ${id}, 'update',
-           ${JSON.stringify({ before: flow, after: updated.rows[0] })}::jsonb,
+           ${JSON.stringify({ before: flow, after: updated[0] })}::jsonb,
            ${user.id}, ${request.headers.get('X-Request-Id')})
       `)
       // The persisted flag rides back so the designer and list switches render
@@ -267,8 +265,8 @@ export const PATCH = defineRoute({
       return NextResponse.json({
         ok: true,
         warnings,
-        updatedAt: updated.rows[0].updated_at,
-        enabled: Boolean(updated.rows[0].enabled),
+        updatedAt: updated[0].updated_at,
+        enabled: Boolean(updated[0].enabled),
       })
     })
   },
@@ -295,20 +293,16 @@ export const DELETE = defineRoute({
     return db.transaction(async (tx) => {
       // Lock the parent before checking children. Run/gate inserts take a foreign-key
       // key-share lock, so approvals cannot arrive between the check and deletion.
-      const flow = (
-        await tx.execute<Record<string, unknown>>(sql`
+      const flow = (await tx.execute<Record<string, unknown>>(sql`
         select flows.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
           from flows where id = ${id} and org_id = ${orgId} for update
-      `)
-      ).rows[0]
+      `, 'objects'))[0]
       if (!flow) return notFound('record')
       if (flow.updated_at !== expectedUpdatedAt) return revisionConflict()
-      const history = (
-        await tx.execute<{ used: boolean }>(sql`
+      const history = (await tx.execute<{ used: boolean }>(sql`
         select exists(select 1 from flow_runs where flow_id = ${id} and org_id = ${orgId})
             or exists(select 1 from flow_gates where flow_id = ${id} and org_id = ${orgId}) as used
-      `)
-      ).rows[0]
+      `, 'objects'))[0]
       if (history?.used)
         return NextResponse.json(
           {

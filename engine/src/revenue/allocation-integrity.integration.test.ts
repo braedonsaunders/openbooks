@@ -37,12 +37,12 @@ for (const scenario of ['unit quantities', 'excluded allocation', 'mixed allocat
       }
       if (scenario === 'zero selling price') {
         await assert.rejects(createObligationsFromInvoice(documentId,org.orgId,actorId), /selling price|allocation/i);
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts where org_id=${org.orgId}`)).rows[0]!.n,0);
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts where org_id=${org.orgId}`, 'objects'))[0]!.n,0);
       } else {
         const first = await createObligationsFromInvoice(documentId,org.orgId,actorId);
         if (scenario === 'partial legacy replay') {
           // Reproduce a legacy partial commit: only the first allocation survived.
-          const missing = (await db.execute<{ id: string }>(sql`select id from performance_obligations where org_id=${org.orgId} and description='Line 2'`)).rows[0]!.id;
+          const missing = (await db.execute<{ id: string }>(sql`select id from performance_obligations where org_id=${org.orgId} and description='Line 2'`, 'objects'))[0]!.id;
           await db.transaction(async (tx) => {
             await tx.execute(sql`delete from recognition_schedule_lines where org_id=${org.orgId} and schedule_id in
               (select id from recognition_schedules where org_id=${org.orgId} and obligation_id=${missing})`);
@@ -51,17 +51,17 @@ for (const scenario of ['unit quantities', 'excluded allocation', 'mixed allocat
           });
           await db.execute(sql`update performance_obligations set allocated_price='600' where org_id=${org.orgId} and description='Line 1'`);
           await assert.rejects(createObligationsFromInvoice(documentId,org.orgId,actorId), /conflicts with existing obligations/i);
-          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from performance_obligations where org_id=${org.orgId}`)).rows[0]!.n,1);
+          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from performance_obligations where org_id=${org.orgId}`, 'objects'))[0]!.n,1);
           await db.execute(sql`update performance_obligations set allocated_price='500' where org_id=${org.orgId} and description='Line 1'`);
           await db.execute(sql`update revenue_contracts set total_transaction_price='900' where org_id=${org.orgId} and id=${first.contractId}`);
           await assert.rejects(createObligationsFromInvoice(documentId,org.orgId,actorId), /conflicts with the existing contract total/i);
-          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from performance_obligations where org_id=${org.orgId}`)).rows[0]!.n,1);
+          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from performance_obligations where org_id=${org.orgId}`, 'objects'))[0]!.n,1);
           await db.execute(sql`update revenue_contracts set total_transaction_price='1000' where org_id=${org.orgId} and id=${first.contractId}`);
           assert.equal((await createObligationsFromInvoice(documentId,org.orgId,actorId)).created,1);
         }
-        const allocations = (await db.execute<{ allocated_price: string }>(sql`select allocated_price from performance_obligations where org_id=${org.orgId} and contract_id=${first.contractId} order by description`)).rows;
+        const allocations = await db.execute<{ allocated_price: string }>(sql`select allocated_price from performance_obligations where org_id=${org.orgId} and contract_id=${first.contractId} order by description`, 'objects');
         assert.deepEqual(allocations.map(row=>row.allocated_price), scenario === 'fractional quantities' ? ['0.0009','0.0001'] : scenario === 'partial legacy replay' ? ['500.0000','500.0000'] : ['900.0000','100.0000']);
-        const total = (await db.execute<{ total: string }>(sql`select total_transaction_price::text as total from revenue_contracts where org_id=${org.orgId} and id=${first.contractId}`)).rows[0]!.total;
+        const total = (await db.execute<{ total: string }>(sql`select total_transaction_price::text as total from revenue_contracts where org_id=${org.orgId} and id=${first.contractId}`, 'objects'))[0]!.total;
         assert.equal(total, scenario === 'fractional quantities' ? '0.0010' : '1000.0000');
         assert.equal((await createObligationsFromInvoice(documentId,org.orgId,actorId)).created,0);
       }
@@ -99,7 +99,7 @@ test('invoice-scoped billing accumulates consideration without doubling transact
         from revenue_contracts contract join performance_obligations obligation
           on obligation.contract_id=contract.id and obligation.org_id=contract.org_id
         join document_lines line on line.id=obligation.document_line_id and line.org_id=obligation.org_id
-       where contract.org_id=${org.orgId} and line.document_id=${documentId} limit 1`)).rows[0];
+       where contract.org_id=${org.orgId} and line.document_id=${documentId} limit 1`, 'objects'))[0];
     const setFeature = async (enabled: boolean) => db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',
         coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ revenueContracts: enabled })}::jsonb)

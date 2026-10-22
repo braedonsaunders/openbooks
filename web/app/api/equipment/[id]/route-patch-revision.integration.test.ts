@@ -33,10 +33,10 @@ async function fixture(status = 'draft') {
     const org = await createScratchOrg()
     state.orgId = org.orgId
     state.actorId = randomUUID()
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
       values (${org.orgId}, 'Test Unit', 'TEST-001', ${status}, ${org.subsidiaryId}, '100.0000')
-      returning id`)).rows
+      returning id`, 'objects')
     assert.equal(inserted.length, 1, 'equipment revision fixture creates exactly one unit')
     return { org, unitId: inserted[0]!.id }
   })
@@ -61,13 +61,13 @@ async function call(id: string, body: unknown): Promise<{ status: number; json: 
 }
 
 async function unit(unitId: string, orgId: string) {
-  return (await withOrgContext(orgId, () => db.execute(sql`select * from equipment_units where id = ${unitId} and org_id = ${orgId}`))).rows[0] as
+  return (await withOrgContext(orgId, () => db.execute(sql`select * from equipment_units where id = ${unitId} and org_id = ${orgId}`, 'objects')))[0] as
     | Record<string, unknown>
     | undefined
 }
 
 async function audits(orgId: string, unitId: string, action: string) {
-  return (await withOrgContext(orgId, () => db.execute(sql`select changes from audit_log where org_id = ${orgId} and table_name = 'equipment_units' and row_id = ${unitId} and action = ${action} order by id`))).rows as { changes: { before: Record<string, unknown>; after?: Record<string, unknown> } }[]
+  return (await withOrgContext(orgId, () => db.execute(sql`select changes from audit_log where org_id = ${orgId} and table_name = 'equipment_units' and row_id = ${unitId} and action = ${action} order by id`, 'objects'))) as { changes: { before: Record<string, unknown>; after?: Record<string, unknown> } }[]
 }
 
 test('PATCH without a revision is refused without writing', async () => {

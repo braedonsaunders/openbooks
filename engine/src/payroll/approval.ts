@@ -64,8 +64,8 @@ export async function payRunApprovalState(
                and ${flowGraphAdmitsSubjectSql(sql`f.graph`, sql`d.subsidiary_id`)}) as policies
       from documents d
      where d.org_id = ${orgId} and d.id = ${documentId} and d.kind = 'pay_run'
-  `));
-  const row = rows.rows[0];
+  `, "objects"));
+  const row = rows[0];
   if (!row) throw new PayrollError("pay run not found");
   const outstandingGates = Number(row.open_gates ?? 0);
   const pending = row.status === "pending_approval" || outstandingGates > 0;
@@ -148,8 +148,8 @@ export async function payRunRejection(
       from documents d
       join pay_runs r on r.document_id = d.id and r.org_id = d.org_id
      where d.org_id = ${orgId} and d.id = ${documentId} and d.kind = 'pay_run'
-  `);
-  const run = state.rows[0];
+  `, "objects");
+  const run = state[0];
   if (!run) throw new PayrollError("pay run not found");
   if (run.status !== "draft" || run.run_status === "committed") return null;
   const rows = await executor.execute<{ decided_by_name: string | null; decided_at: Date | string | null; comment: string | null }>(sql`
@@ -159,8 +159,8 @@ export async function payRunRejection(
      where ${currentRejectionPredicate(sql`${orgId}`, sql`${documentId}`)}
      order by g.decided_at desc nulls last, g.id desc
      limit 1
-  `);
-  const row = rows.rows[0];
+  `, "objects");
+  const row = rows[0];
   if (!row) return null;
   const decidedAt = row.decided_at instanceof Date
     ? row.decided_at.toISOString()
@@ -258,7 +258,7 @@ export async function recalculateStaleApprovedPayRun(
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked || !payrollSubsidiaryInScope(allowedSubsidiaryIds, locked.subsidiary_id)) {
       throw new PayrollError("pay run not found");
     }

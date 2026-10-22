@@ -21,7 +21,7 @@ const authzSource = `export const can = (authz, perm) => authz.permissions.has('
 const featuresSource = `export async function isFeatureEnabled() { return true; }
              export async function requireFeatureEnabled() {}
              export async function subsidiaryFeatureEnabled() { return false; }`
-const databaseSource = "export const db = { execute: async (query) => ({ rows: globalThis.__benefitsExecute(query) }) }; export async function withBypass(work) { return work() } export async function withBypassContext(work) { return work() } export function ambientTenantOrgId() { return null } let resolver = null; export function currentRequestOrgResolver() { return resolver } export function registerRequestOrgResolver(fn) { resolver = fn } export async function withOrgContext(_orgId, work) { return work() } export async function withOrgTransaction(_orgId, work) { return work() }"
+const databaseSource = "export const db = { execute: async (query, mode) => Promise.resolve({ rows: globalThis.__benefitsExecute(query) }).then((result) => (mode === 'objects' ? result.rows : result)) }; export async function withBypass(work) { return work() } export async function withBypassContext(work) { return work() } export function ambientTenantOrgId() { return null } let resolver = null; export function currentRequestOrgResolver() { return resolver } export function registerRequestOrgResolver(fn) { resolver = fn } export async function withOrgContext(_orgId, work) { return work() } export async function withOrgTransaction(_orgId, work) { return work() }"
 stubModules({
   intl: `export async function getLocale() { return 'en'; }
         export async function getTranslations() { return globalThis.__benefitsTranslations; }`,

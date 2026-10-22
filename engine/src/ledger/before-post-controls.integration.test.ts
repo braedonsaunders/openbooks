@@ -20,8 +20,8 @@ async function fixture(body: (org: ScratchOrg, actorId: string) => Promise<void>
       await grantScratchPermissions(org.orgId, actorId, ["gl.post"]);
       const changed = await db.execute(sql`update orgs set settings = settings ||
         jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) ||
-        '{"scripts":true,"flows":true,"storedValue":true}'::jsonb) where id = ${org.orgId} returning id`);
-      assert.equal(changed.rows.length, 1);
+        '{"scripts":true,"flows":true,"storedValue":true}'::jsonb) where id = ${org.orgId} returning id`, "objects");
+      assert.equal(changed.length, 1);
       await body(org, actorId);
     });
   } finally {
@@ -51,8 +51,8 @@ async function document(org: ScratchOrg, actorId: string, kind: "journal" | "cas
     (org_id, document_id, position, kind, method_label, account_id, amount_minor, currency)
     values (${org.orgId}, ${id}, 1, 'card', 'Card', ${org.accounts.bank}, '1050000', 'CAD')`);
   const approved = await db.execute(sql`update documents set status = 'approved'
-    where org_id = ${org.orgId} and id = ${id} returning id`);
-  assert.equal(approved.rows.length, 1);
+    where org_id = ${org.orgId} and id = ${id} returning id`, "objects");
+  assert.equal(approved.length, 1);
   return id;
 }
 
@@ -98,7 +98,7 @@ async function evidence(org: ScratchOrg, id: string) {
     (select count(*)::int from audit_log where org_id = ${org.orgId}
       and table_name = 'documents' and row_id = ${id}) as audits,
     (select coalesce(jsonb_agg(to_jsonb(t) order by position), '[]'::jsonb)
-      from document_tenders t where org_id = ${org.orgId} and document_id = ${id}) as tenders`)).rows[0];
+      from document_tenders t where org_id = ${org.orgId} and document_id = ${id}) as tenders`, "objects"))[0];
   assert.ok(row);
   return { snapshot, ...row };
 }
@@ -109,9 +109,9 @@ function post(org: ScratchOrg, actorId: string, id: string) {
 }
 
 async function legs(org: ScratchOrg, id: string) {
-  return (await db.execute<{ account: string; amount: string }>(sql`select l.account_id as account, l.amount::text as amount
+  return await db.execute<{ account: string; amount: string }>(sql`select l.account_id as account, l.amount::text as amount
     from journal_entries e join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
-    where e.org_id = ${org.orgId} and e.source_document_id = ${id} order by l.line_number`)).rows;
+    where e.org_id = ${org.orgId} and e.source_document_id = ${id} order by l.line_number`, "objects");
 }
 
 test("before-post scripts refuse each protected custom mutation without document or automation effects", { skip: !DB }, async () => {
@@ -129,8 +129,8 @@ test("before-post scripts refuse each protected custom mutation without document
       assert.deepEqual(await evidence(org, id), before, key);
       assert.deepEqual(await evidence(org, source), retainedSource, "prior posted source stays byte-identical");
       const disabled = await db.execute(sql`update user_scripts set is_active = false
-        where org_id = ${org.orgId} and id = ${scriptId} returning id`);
-      assert.equal(disabled.rows.length, 1);
+        where org_id = ${org.orgId} and id = ${scriptId} returning id`, "objects");
+      assert.equal(disabled.length, 1);
     }
   });
 });
@@ -153,8 +153,8 @@ test("a before-post closeout flow rolls back earlier script and flow effects; op
     assert.deepEqual(await evidence(org, id), before, "script evidence, effects, tender identities and write revisions roll back");
     assert.deepEqual(await evidence(org, source), retainedSource);
     const disabled = await db.execute(sql`update flows set enabled = false
-      where org_id = ${org.orgId} and id = ${refusingFlow} returning id`);
-    assert.equal(disabled.rows.length, 1);
+      where org_id = ${org.orgId} and id = ${refusingFlow} returning id`, "objects");
+    assert.equal(disabled.length, 1);
     await flow(org, actorId, "cash_sale", [{ field: "memo", value: "flow metadata" }]);
     await post(org, actorId, id);
     const after = await evidence(org, id);
@@ -206,8 +206,8 @@ test("before-post flows preserve protected marketplace metadata independently of
       await assert.rejects(post(org, actorId, id), new RegExp(`before-post automation changed protected posting custom field.*${key}`));
       assert.deepEqual(await evidence(org, id), before, key);
       const disabled = await db.execute(sql`update flows set enabled = false
-        where org_id = ${org.orgId} and id = ${flowId} returning id`);
-      assert.equal(disabled.rows.length, 1);
+        where org_id = ${org.orgId} and id = ${flowId} returning id`, "objects");
+      assert.equal(disabled.length, 1);
     }
   });
 });

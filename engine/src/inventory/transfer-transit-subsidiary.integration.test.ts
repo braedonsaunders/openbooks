@@ -67,13 +67,13 @@ async function transitWarehouse(
 
 async function orderTransit(orgId: string, orderId: string): Promise<string | null> {
   return (await db.execute<{ transit_stock_location_id: string | null }>(sql`
-    select transit_stock_location_id from transfer_orders where org_id = ${orgId} and id = ${orderId}`)).rows[0]!
+    select transit_stock_location_id from transfer_orders where org_id = ${orgId} and id = ${orderId}`, "objects"))[0]!
     .transit_stock_location_id;
 }
 
 async function orderCount(orgId: string): Promise<string> {
   return (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from transfer_orders where org_id = ${orgId}`)).rows[0]!.n;
+    select count(*)::text as n from transfer_orders where org_id = ${orgId}`, "objects"))[0]!.n;
 }
 
 test("a B order skips A's older transit warehouse and ships through B's", async () => {

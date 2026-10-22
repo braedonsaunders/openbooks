@@ -52,14 +52,14 @@ async function fixture(): Promise<Fixture> {
   return withBypassContext(async () => {
     const org = await createScratchOrg()
     const actorId = (await seedFlowActors(org.orgId)).adminId
-    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`)).rows[0]
+    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`, 'objects'))[0]
     assert.ok(baseLevel, 'migration must seed one active base price level')
     return { orgId: org.orgId, actorId, itemId: org.items.service, priceLevelId: baseLevel.id }
   })
 }
 
 async function today(): Promise<string> {
-  return String((await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)
+  return String((await db.execute<{ today: string }>(sql`select current_date::text as today`, 'objects'))[0]!.today)
 }
 
 function shift(day: string, delta: number): string {
@@ -115,13 +115,13 @@ async function priceOn(f: Fixture, onDate: string) {
 }
 
 async function scheduleRows(f: Fixture) {
-  return (await db.execute<{ id: string; is_active: boolean; effective_from: string; effective_to: string | null; supersedes_id: string | null; change_reason: string | null }>(sql`
+  return await db.execute<{ id: string; is_active: boolean; effective_from: string; effective_to: string | null; supersedes_id: string | null; change_reason: string | null }>(sql`
     select id, is_active, effective_from::text as effective_from, effective_to::text as effective_to, supersedes_id, change_reason
-      from item_price_schedules where org_id=${f.orgId} and item_id=${f.itemId} order by effective_from, supersedes_id nulls first, id`)).rows
+      from item_price_schedules where org_id=${f.orgId} and item_id=${f.itemId} order by effective_from, supersedes_id nulls first, id`, 'objects')
 }
 
 async function breakPrices(f: Fixture, scheduleId: string) {
-  return (await db.execute<{ unit_price: string }>(sql`select unit_price::text from item_price_breaks where org_id=${f.orgId} and schedule_id=${scheduleId}`)).rows.map((row) => row.unit_price)
+  return (await db.execute<{ unit_price: string }>(sql`select unit_price::text from item_price_breaks where org_id=${f.orgId} and schedule_id=${scheduleId}`, 'objects')).map((row) => row.unit_price)
 }
 
 test.after(() => hooks.deregister())
@@ -186,7 +186,7 @@ test('a reasoned correction creates a version while the prior version is retaine
     ])
     assert.deepEqual(await breakPrices(f, scheduleId), ['100.0000'])
     assert.deepEqual(await breakPrices(f, versionId), ['70.0000'])
-    const audits = (await db.execute<{ changes: string }>(sql`select changes::text from audit_log where org_id=${f.orgId} and table_name='item_price_schedules' and row_id=${scheduleId} and action='update' order by id desc limit 1`)).rows
+    const audits = await db.execute<{ changes: string }>(sql`select changes::text from audit_log where org_id=${f.orgId} and table_name='item_price_schedules' and row_id=${scheduleId} and action='update' order by id desc limit 1`, 'objects')
     assert.match(audits[0]!.changes, /Supplier list price was entered net of discount/)
     // A correction applies to the period it corrects: a late transaction in
     // the corrected period reprices under the new version. (A prospective
@@ -261,7 +261,7 @@ test('DELETE of a never-effective schedule removes it, and of an ended schedule 
     assert.equal(deleted.status, 200)
     assert.deepEqual(await deleted.json(), { ok: true, endDated: false })
     assert.deepEqual(await scheduleRows(f), [])
-    const audits = (await db.execute<{ action: string }>(sql`select action from audit_log where org_id=${f.orgId} and table_name='item_price_schedules' and row_id=${futureId} order by id desc limit 1`)).rows
+    const audits = await db.execute<{ action: string }>(sql`select action from audit_log where org_id=${f.orgId} and table_name='item_price_schedules' and row_id=${futureId} order by id desc limit 1`, 'objects')
     assert.equal(audits[0]?.action, 'delete')
 
     routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, allowedSubsidiaryIds: null }

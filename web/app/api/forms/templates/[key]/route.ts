@@ -48,12 +48,12 @@ export const GET = defineRoute({
       from form_template_versions
      where org_id = ${user.orgId} and template_id = ${template.id}
      order by version desc
-  `);
+  `, "objects");
     const latest = await getLatestVersion(user.orgId, template.id);
 
     return NextResponse.json({
       template,
-      versions: versions.rows,
+      versions,
       // The designer edits the latest version's schema; whether that row is a
       // mutable draft or a published snapshot (⇒ save spawns version n+1).
       draft: latest
@@ -115,8 +115,8 @@ export const PUT = defineRoute({
           from form_templates
          where id = ${template.id} and org_id = ${user.orgId}
          for update
-      `);
-        const beforeTemplate = locked.rows[0] as
+      `, "objects");
+        const beforeTemplate = locked[0] as
           Record<string, unknown> | undefined;
         if (!beforeTemplate) return { kind: "not-found" as const };
 
@@ -184,8 +184,8 @@ export const PUT = defineRoute({
            where org_id = ${user.orgId} and template_id = ${template.id}
            order by version desc limit 1
            for update
-        `);
-          const latest = latestResult.rows[0] as
+        `, "objects");
+          const latest = latestResult[0] as
             | {
                 id: string;
                 version: number;
@@ -206,8 +206,8 @@ export const PUT = defineRoute({
                    updated_at = now(), updated_by = ${user.id}
              where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
              returning version
-          `);
-            const kept = (stamped.rows[0] as { version: number } | undefined)
+          `, "objects");
+            const kept = (stamped[0] as { version: number } | undefined)
               ?.version;
             if (kept !== undefined) {
               savedVersion = kept;
@@ -233,12 +233,12 @@ export const PUT = defineRoute({
               values (${user.orgId}, ${template.id}, ${next},
                       ${afterSchema}::jsonb, ${user.id}, ${user.id})
               returning id
-            `);
+            `, "objects");
               await auditSetupChange(
                 {
                   orgId: user.orgId,
                   table: "form_template_versions",
-                  rowId: (spawned.rows[0] as { id: string }).id,
+                  rowId: (spawned[0] as { id: string }).id,
                   action: "insert",
                   changes: {
                     version: next,
@@ -258,12 +258,12 @@ export const PUT = defineRoute({
             values (${user.orgId}, ${template.id}, ${next},
                     ${afterSchema}::jsonb, ${user.id}, ${user.id})
             returning id
-          `);
+          `, "objects");
             await auditSetupChange(
               {
                 orgId: user.orgId,
                 table: "form_template_versions",
-                rowId: (spawned.rows[0] as { id: string }).id,
+                rowId: (spawned[0] as { id: string }).id,
                 action: "insert",
                 changes: {
                   version: next,
@@ -311,8 +311,8 @@ export const DELETE = defineRoute({
         from form_templates
        where id = ${template.id} and org_id = ${user.orgId}
        for update
-    `);
-      const before = locked.rows[0] as Record<string, unknown> | undefined;
+    `, "objects");
+      const before = locked[0] as Record<string, unknown> | undefined;
       if (!before) return { kind: "not-found" as const };
       // Archiving is idempotent: a second request observes the archived row
       // and succeeds without writing a duplicate audit event.
@@ -322,8 +322,8 @@ export const DELETE = defineRoute({
          set status = 'archived', updated_at = now(), updated_by = ${user.id}
        where id = ${template.id} and org_id = ${user.orgId} and status <> 'archived'
        returning id
-    `);
-      if (archived.rows.length === 0) return { kind: "not-found" as const };
+    `, "objects");
+      if (archived.length === 0) return { kind: "not-found" as const };
       await auditSetupChange(
         {
           orgId: user.orgId,

@@ -23,10 +23,10 @@ test('dated withholding inputs restore the actual request, stale drafts and pres
       const run = await createPayRun({ orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
         periodStart: '2026-07-01', periodEnd: '2026-07-07', payDate: '2026-07-08' });
       const command = { orgId: f.orgId, actorId: f.actorId, documentId: run.documentId };
-      const base = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`)).rows[0]!;
+      const base = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`, 'objects'))[0]!;
       await mutatePayRunAdjustment({ ...command, mutation: { action: 'add', employeePartyId: f.employeeId, componentId: base.id, amount: '1000' } });
       const money = async () => (await db.execute<{ net_pay: string; factors: Record<string, string> }>(sql`
-        select net_pay::text, factors from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
+        select net_pay::text, factors from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`, 'objects'))[0]!;
       assert.deepEqual((await calculatePayRun(command)).errors, []);
       const before = await money();
       const input = { orgId: f.orgId, actorId: f.actorId, employeePartyId: f.employeeId, country: 'CA',
@@ -43,7 +43,7 @@ test('dated withholding inputs restore the actual request, stale drafts and pres
       assert.equal(after.factors.L, '50.0000');
       assert.equal(after.net_pay, add(before.net_pay, '25'));
       const profile = (await db.execute<Record<string, string | null>>(sql`select * from employee_payroll_profiles
-        where org_id=${f.orgId} and employee_party_id=${f.employeeId}`)).rows[0]!;
+        where org_id=${f.orgId} and employee_party_id=${f.employeeId}`, 'objects'))[0]!;
       assert.equal(profile.additional_tax_per_period, '75.0000');
       const stored = await storedTaxCertificates(db, f.orgId, f.employeeId, 'CA');
       for (const date of ['2026-07-07', '2026-07-09']) assert.equal(historicalWithholdingProfile({
@@ -61,13 +61,13 @@ test('dated withholding inputs restore the actual request, stale drafts and pres
       await mutatePayRunAdjustment({ ...nextCommand, mutation: { action: 'add', employeePartyId: f.employeeId, componentId: base.id, amount: '1000' } });
       assert.deepEqual((await calculatePayRun(nextCommand)).errors, []);
       const nextFactors = (await db.execute<{ factors: Record<string, string> }>(sql`select factors from pay_stubs
-        where org_id=${f.orgId} and pay_run_document_id=${next.documentId}`)).rows[0]!.factors;
+        where org_id=${f.orgId} and pay_run_document_id=${next.documentId}`, 'objects'))[0]!.factors;
       assert.equal(nextFactors.L, '75.0000');
       await commitPayRun(nextCommand);
       await assert.rejects(recordHistoricalWithholding({ ...input,
         effectiveFrom: '2026-07-15', effectiveTo: '2026-07-15' }), /committed.*controlled correction/);
-      const audit = (await db.execute<{ actor_id: string; changes: Record<string, unknown> }>(sql`select actor_id,changes from audit_log
-        where org_id=${f.orgId} and table_name='employee_tax_certificates' and row_id=${saved.id}`)).rows;
+      const audit = await db.execute<{ actor_id: string; changes: Record<string, unknown> }>(sql`select actor_id,changes from audit_log
+        where org_id=${f.orgId} and table_name='employee_tax_certificates' and row_id=${saved.id}`, 'objects');
       assert.equal(audit.length, 1); assert.equal(audit[0]!.actor_id, f.actorId);
       assert.equal(audit[0]!.changes.reason, input.reason);
       assert.equal(audit[0]!.changes.kind, 'historical_withholding_input');

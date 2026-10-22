@@ -53,7 +53,7 @@ export async function resolveReceiptFunding(
   if (!isUuid(input.accountId) || !isIsoCalendarDate(input.onDate)) throw new PaymentError("Receipt funding account or business date is invalid.");
   const account = (await tx.execute<{ id: string; type: string; currency_restriction: string | null }>(sql`
     select id, type, currency_restriction from accounts where org_id = ${input.orgId} and id = ${input.accountId}
-      and is_active and not is_summary ${input.lock ? sql`for share` : sql``}`)).rows[0];
+      and is_active and not is_summary ${input.lock ? sql`for share` : sql``}`, "objects"))[0];
   if (!account || (account.currency_restriction !== null && account.currency_restriction !== input.currency)) {
     throw new PaymentError("Receipt funding account is inactive or does not admit this currency.");
   }
@@ -71,9 +71,9 @@ export async function resolveReceiptFunding(
   if (input.kind !== "customer_payment" || account.type !== "asset_current_other" || !(await lockAndCheckOrgFeature(tx, input.orgId, "banking"))) {
     throw new PaymentError("This funding account requires an effective processor receipt policy in Payment Providers → Setup.");
   }
-  const configs = (await tx.execute<{ provider: string; default_clearing_account_id: string | null; settings: unknown }>(sql`
+  const configs = await tx.execute<{ provider: string; default_clearing_account_id: string | null; settings: unknown }>(sql`
     select provider, default_clearing_account_id, settings from psp_provider_configs where org_id = ${input.orgId} and is_enabled
-      order by provider ${input.lock ? sql`for share` : sql``}`)).rows;
+      order by provider ${input.lock ? sql`for share` : sql``}`, "objects");
   const matching = configs.flatMap(config => processorReceiptPolicies(config.settings)
     .filter(policy => policy.accountId === input.accountId && config.default_clearing_account_id === policy.accountId
       && policy.subsidiaryId === input.subsidiaryId && policy.currency === input.currency

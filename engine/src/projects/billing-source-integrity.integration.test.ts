@@ -93,13 +93,13 @@ async function edit(f: Fixture, id: string, patch: Parameters<typeof applyDocume
 }
 async function lines(f: Fixture, id: string) {
   return withOrgContext(f.org.orgId, async () =>
-    (await db.execute<NonNullable<Parameters<typeof applyDocumentEdit>[2]["lines"]>[number] & Record<string, unknown>>(sql`
+    await db.execute<NonNullable<Parameters<typeof applyDocumentEdit>[2]["lines"]>[number] & Record<string, unknown>>(sql`
       select account_id as "accountId", item_id as "itemId", description, quantity, unit,
         unit_price::numeric(19,4)::text as "unitPrice", amount, tax_code_id as "taxCodeId",
         party_id as "partyId", department_id as "departmentId", project_id as "projectId",
         location_id as "locationId", class_id as "classId", stock_location_id as "stockLocationId", extra_dims as "extraDims", custom
       from document_lines where org_id=${f.org.orgId} and document_id=${id} order by line_number
-    `)).rows);
+    `, "objects"));
 }
 async function snapshot(f: Fixture, id: string) {
   return withOrgContext(f.org.orgId, async () =>
@@ -111,7 +111,7 @@ async function snapshot(f: Fixture, id: string) {
       (select jsonb_agg(to_jsonb(a) order by id) from vendor_retainage_releases a where org_id=${f.org.orgId}) as vendor_releases,
       (select jsonb_agg(to_jsonb(a) order by id) from pay_applications a where org_id=${f.org.orgId}) as customer_apps,
       (select count(*) from journal_entries where org_id=${f.org.orgId}) as entries
-    `)).rows[0]);
+    `, "objects"))[0]);
 }
 async function refuseEdit(f: Fixture, id: string, patch: Parameters<typeof applyDocumentEdit>[2]) {
   const before = await snapshot(f, id);
@@ -170,16 +170,16 @@ for (const customer of [false, true]) {
     const scriptId = await beforePostScript(f, kind, dimensions);
     await withOrgTransaction(f.org.orgId, () => post(f, id, kind));
     const journal = await withOrgContext(f.org.orgId, async () =>
-      (await db.execute<{ departmentId: string; locationId: string; classId: string }>(sql`
+      await db.execute<{ departmentId: string; locationId: string; classId: string }>(sql`
         select l.department_id as "departmentId",l.location_id as "locationId",l.class_id as "classId"
         from journal_lines l join documents d on d.org_id=l.org_id and d.posted_entry_id=l.entry_id
         where d.org_id=${f.org.orgId} and d.id=${id}
-      `)).rows);
+      `, "objects"));
     assert.ok(journal.length > 0, 'the first posting attempt must create journal lines');
     for (const line of journal) assert.deepEqual(line, dimensions);
     const evidence = await withOrgContext(f.org.orgId, async () =>
-      (await db.execute<{ status: string }>(sql`select status from script_runs
-        where org_id=${f.org.orgId} and script_id=${scriptId} and target_id=${id}`)).rows);
+      await db.execute<{ status: string }>(sql`select status from script_runs
+        where org_id=${f.org.orgId} and script_id=${scriptId} and target_id=${id}`, "objects"));
     assert.deepEqual(evidence, [{ status: "ok" }], 'the real script must execute exactly once');
   }));
 
@@ -196,8 +196,8 @@ for (const customer of [false, true]) {
       { audit: { actorId: f.approver, source: "test" } })), /source billing workflow/);
     assert.deepEqual(await snapshot(f, id), before, 'posting must roll back the source-project mutation and all accounting writes');
     const evidence = await withOrgContext(f.org.orgId, async () =>
-      (await db.execute(sql`select id from script_runs
-        where org_id=${f.org.orgId} and script_id=${scriptId} and target_id=${id}`)).rows);
+      await db.execute(sql`select id from script_runs
+        where org_id=${f.org.orgId} and script_id=${scriptId} and target_id=${id}`, "objects"));
     assert.deepEqual(evidence, [], 'failed posting must roll back script execution evidence');
   }));
 }
@@ -249,19 +249,19 @@ for (const scenario of ["vendor release", "vendor application", "customer progre
     const editedHeader = await withOrgContext(f.org.orgId, async () =>
       (await db.execute<{ memo: string; reference_number: string; due_date: string }>(sql`
         select memo,reference_number,due_date::text from documents where org_id=${f.org.orgId} and id=${id}
-      `)).rows[0]!);
+      `, "objects"))[0]!);
     assert.deepEqual(editedHeader, { memo: "Memo permitted", reference_number: "SOURCE-REF", due_date: "2027-01-31" });
     await post(f, id, customer ? "customer_invoice" : "vendor_bill");
     const doc = await withOrgContext(f.org.orgId, async () =>
-      (await db.execute<{ status: string; memo: string; total: string }>(sql`select status,memo,total from documents where org_id=${f.org.orgId} and id=${id}`)).rows[0]!);
+      (await db.execute<{ status: string; memo: string; total: string }>(sql`select status,memo,total from documents where org_id=${f.org.orgId} and id=${id}`, "objects"))[0]!);
     assert.equal(doc.status, "posted"); assert.equal(doc.memo, "Memo permitted");
     assert.equal(doc.total, scenario === "vendor release" ? "100.0000" : scenario === "customer release" ? "50.0000" : "450.0000");
     const posted = await withOrgContext(f.org.orgId, async () =>
-      (await db.execute<{ account_id: string; amount: string }>(sql`
+      await db.execute<{ account_id: string; amount: string }>(sql`
         select l.account_id, sum(l.amount)::text as amount from journal_lines l
           join documents d on d.org_id=l.org_id and d.posted_entry_id=l.entry_id
         where d.org_id=${f.org.orgId} and d.id=${id} group by l.account_id
-      `)).rows);
+      `, "objects"));
     const heldAccount = customer ? f.org.accounts.taxInput : f.org.accounts.invAsset;
     assert.equal(cmp(posted.find(l => l.account_id === heldAccount)!.amount, scenario === "vendor release" ? "100" : scenario === "customer release" ? "-50" : customer ? "50" : "-50"), 0);
     const openItem = customer ? f.org.accounts.ar : f.org.accounts.ap;
@@ -318,7 +318,7 @@ test("vendor retainage billing refuses an inactive control account before creati
   const before = (await withOrgContext(f.org.orgId, () => db.execute<{ count: number }>(sql`
     select count(*)::int as count from documents
      where org_id = ${f.org.orgId} and kind = 'vendor_bill'
-  `))).rows[0]!.count;
+  `, "objects")))[0]!.count;
 
   await assert.rejects(
     withOrgTransaction(f.org.orgId, () => generateVendorPayApplicationBill(f.org.orgId, f.actor, app.id)),
@@ -337,7 +337,7 @@ test("vendor retainage billing refuses an inactive control account before creati
   const after = (await withOrgContext(f.org.orgId, () => db.execute<{ count: number }>(sql`
     select count(*)::int as count from documents
      where org_id = ${f.org.orgId} and kind = 'vendor_bill'
-  `))).rows[0]!.count;
+  `, "objects")))[0]!.count;
   assert.equal(after, before, "refusing the invalid control account must not create a bill");
 }));
 
@@ -412,7 +412,7 @@ test("full retainage and multiple gross lines preserve exact source allocation",
   await refuseEdit(f, id, { lines: original.map((l, i) => ({ ...l, amount: i === 0 ? "201" : i === 1 ? "299" : l.amount })) });
   await edit(f, id, { lines: original, memo: "Fully retained" });
   await post(f, id, "customer_invoice");
-  assert.equal((await withOrgContext(f.org.orgId, () => db.execute<{ total: string }>(sql`select total from documents where org_id=${f.org.orgId} and id=${id}`))).rows[0]!.total, "0.0000");
+  assert.equal((await withOrgContext(f.org.orgId, () => db.execute<{ total: string }>(sql`select total from documents where org_id=${f.org.orgId} and id=${id}`, "objects")))[0]!.total, "0.0000");
 }));
 
 test("explicit capitalization accounts remain valid on generated vendor bills", enabled, async () => fixture(async f => {
@@ -420,7 +420,7 @@ test("explicit capitalization accounts remain valid on generated vendor bills", 
   const id = await vendorBill(f);
   await post(f, id);
   assert.equal((await withOrgContext(f.org.orgId, () => db.execute<{ amount: string }>(sql`select l.amount from journal_lines l join documents d on d.org_id=l.org_id and d.posted_entry_id=l.entry_id
-    where d.org_id=${f.org.orgId} and d.id=${id} and l.account_id=${f.org.accounts.taxInput}`))).rows[0]!.amount, "500.0000");
+    where d.org_id=${f.org.orgId} and d.id=${id} and l.account_id=${f.org.accounts.taxInput}`, "objects")))[0]!.amount, "500.0000");
 }));
 
 test("legacy equal-total gross redistribution is rejected from frozen source amounts", enabled, async () => fixture(async f => {

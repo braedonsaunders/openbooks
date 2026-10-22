@@ -56,8 +56,8 @@ async function counts(orgId: string): Promise<Record<string, number>> {
     const out: Record<string, number> = {};
     for (const table of COUNT_TABLES) {
       const rows = await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from ${sql.raw(table)} where org_id = ${orgId}`);
-      out[table] = rows.rows[0]!.n;
+        select count(*)::int as n from ${sql.raw(table)} where org_id = ${orgId}`, "objects");
+      out[table] = rows[0]!.n;
     }
     return out;
   });
@@ -132,9 +132,9 @@ test(
       assert.match(second.payment_terms?.errors[0]?.message ?? "", /payment-term discount must be an exact decimal/);
       const kept = await withOrg(org.orgId, () =>
         db.execute<{ discount: string }>(sql`
-          select discount_percent::text as discount from payment_terms where org_id = ${org.orgId}`),
+          select discount_percent::text as discount from payment_terms where org_id = ${org.orgId}`, "objects"),
       );
-      assert.deepEqual(kept.rows.map((row) => row.discount), ["2.0000"]);
+      assert.deepEqual(kept.map((row) => row.discount), ["2.0000"]);
     } finally {
       await dropScratchOrg(org.orgId);
     }

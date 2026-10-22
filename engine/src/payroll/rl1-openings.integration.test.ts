@@ -56,15 +56,15 @@ async function retainOriginalFile(orgId: string, actorId: string, evidence: unkn
   const bytes = Buffer.from(JSON.stringify(evidence));
   const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
   assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-    values (${folderId},${orgId},'Original payroll evidence',true,${actorId},${actorId},${actorId}) returning id`)).rows.length, 1);
+    values (${folderId},${orgId},'Original payroll evidence',true,${actorId},${actorId},${actorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-    values (${sourceFileId},${orgId},${folderId},'original-payroll.json','application/json',${bytes.length},${actorId},${actorId}) returning id`)).rows.length, 1);
+    values (${sourceFileId},${orgId},${folderId},'original-payroll.json','application/json',${bytes.length},${actorId},${actorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-    values (${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${actorId}) returning id`)).rows.length, 1);
+    values (${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${actorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes)
-    values (${sourceVersionId},${bytes}) returning version_id`)).rows.length, 1);
+    values (${sourceVersionId},${bytes}) returning version_id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`update files set current_version_id=${sourceVersionId}
-    where org_id=${orgId} and id=${sourceFileId} returning id`)).rows.length, 1);
+    where org_id=${orgId} and id=${sourceFileId} returning id`, "objects")).length, 1);
   return { sourceFileId, sourceVersionId, sourceSha256 };
 }
 
@@ -112,11 +112,11 @@ async function seedQcYear(): Promise<QcFixture> {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   await seedPayrollSettings(org.orgId, { features: { payroll: true } });
   assert.equal((await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values (${org.orgId},${actorId},'payroll.read','grant'),(${org.orgId},${actorId},'payroll.run','grant') returning user_id`)).rows.length, 2);
+    values (${org.orgId},${actorId},'payroll.read','grant'),(${org.orgId},${actorId},'payroll.run','grant') returning user_id`, "objects")).length, 2);
   const filingAccountId = randomUUID();
   assert.equal((await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,country,program_type,account_number,name,subsidiary_id,created_by,updated_by)
-    values (${filingAccountId},${org.orgId},'CA','ca_rp','123456789RP0001','Original RP',${org.subsidiaryId},${actorId},${actorId}) returning id`)).rows.length, 1);
+    values (${filingAccountId},${org.orgId},'CA','ca_rp','123456789RP0001','Original RP',${org.subsidiaryId},${actorId},${actorId}) returning id`, "objects")).length, 1);
 
   // Employee elections reference the scenario's declared vacation program;
   // tax profiles do not provision organization policy implicitly.

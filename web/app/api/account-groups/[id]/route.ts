@@ -157,8 +157,8 @@ export const PATCH = defineRoute({
           select * from account_groups
            where id = ${id} and org_id = ${gate.user.orgId}
            for update
-        `);
-        const before = current.rows[0];
+        `, "objects");
+        const before = current[0];
         if (!before) return null;
 
         const result = await tx.execute<Record<string, unknown>>(sql`
@@ -166,8 +166,8 @@ export const PATCH = defineRoute({
              set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${gate.user.id}
            where id = ${id} and org_id = ${gate.user.orgId}
            returning *
-        `);
-        const after = result.rows[0];
+        `, "objects");
+        const after = result[0];
         if (!after) return null;
 
         await tx.execute(sql`

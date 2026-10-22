@@ -45,12 +45,12 @@ async function fixture(): Promise<DraftFixture> {
   state.actorId = randomUUID()
   state.allowed = null
   const fy = (await db.execute<{ fiscal_year: number }>(
-    sql`select fiscal_year from accounting_periods where id = ${org.periodId}`,
-  )).rows[0]!.fiscal_year
+    sql`select fiscal_year from accounting_periods where id = ${org.periodId}`, 'objects',
+  ))[0]!.fiscal_year
   const subB = (await db.execute<{ id: string }>(
     sql`insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-        values (${org.orgId}, ${org.subsidiaryId}, 'Draft Copy Sub B', 'CAD', 'CA') returning id`,
-  )).rows[0]!.id
+        values (${org.orgId}, ${org.subsidiaryId}, 'Draft Copy Sub B', 'CAD', 'CA') returning id`, 'objects',
+  ))[0]!.id
   const sourceId = randomUUID()
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -77,10 +77,10 @@ async function assertFieldRefusal(response: Response, error: string, path: strin
 }
 
 async function copiedLines(scenarioId: string, orgId: string) {
-  return (await db.execute<{ subsidiary_id: string; amount: string }>(
+  return await db.execute<{ subsidiary_id: string; amount: string }>(
     sql`select subsidiary_id, amount::text as amount from budget_lines
-        where org_id = ${orgId} and scenario_id = ${scenarioId} order by amount`,
-  )).rows
+        where org_id = ${orgId} and scenario_id = ${scenarioId} order by amount`, 'objects',
+  )
 }
 
 test('draft from source preserves each line legal entity', async () => {
@@ -126,12 +126,12 @@ test('draft from source refuses a scenario that includes an out-of-scope subsidi
   try {
     state.allowed = new Set([org.subsidiaryId])
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: fy, sourceScenarioId: sourceId })
     assert.equal(response.status, 403)
     assert.match(String((await response.json()).error), /Draft Copy Sub B/)
     const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(after, before, 'a restricted caller cannot create from a partially visible scenario')
   } finally {
     state.allowed = null
@@ -143,7 +143,7 @@ test('draft from source refuses unmapped periods and ignores adjustment periods'
   const { org, fy, sourceId } = await fixture()
   try {
     const calendarId = (await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id
+      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!.id
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -164,11 +164,11 @@ test('draft creation rejects a malformed explicit book id instead of defaulting'
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     const response = await post({ bookId: 'not-a-uuid', fiscalYear: fy })
     await assertFieldRefusal(response, 'invalid_book_id', 'bookId')
     const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(after, before, 'malformed book input must not create a default-book draft')
   } finally {
     state.allowed = null
@@ -180,11 +180,11 @@ test('draft creation rejects a malformed source scenario id instead of creating 
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: fy, sourceScenarioId: 'not-a-uuid' })
     await assertFieldRefusal(response, 'invalid_source_scenario_id', 'sourceScenarioId')
     const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(after, before, 'malformed source input must not create a blank draft')
   } finally {
     state.allowed = null
@@ -196,11 +196,11 @@ test('draft creation rejects a malformed explicit fiscal year instead of default
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: 'not-a-year' })
     await assertFieldRefusal(response, 'invalid_fiscal_year', 'fiscalYear')
     const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(after, before, 'malformed fiscal-year input must not create a default-year draft')
     assert.ok(fy)
   } finally {
@@ -213,11 +213,11 @@ test('draft creation rejects an unknown explicit kind instead of defaulting to b
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: fy, kind: 'not-a-kind' })
     await assertFieldRefusal(response, 'invalid_kind', 'kind')
     const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(after, before, 'unknown kind input must not create a budget draft')
   } finally {
     state.allowed = null
@@ -237,7 +237,7 @@ test('draft creation stores an explicit description for the unsaved-create Save'
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     const targetId = (await response.json() as { id: string }).id
     const stored = (await db.execute<{ description: string | null }>(sql`
-      select description from budget_scenarios where id = ${targetId} and org_id = ${org.orgId}`)).rows[0]
+      select description from budget_scenarios where id = ${targetId} and org_id = ${org.orgId}`, 'objects'))[0]
     assert.equal(stored?.description, 'Board-approved envelope')
   } finally {
     state.allowed = null
@@ -249,11 +249,11 @@ test('draft creation refuses a non-string description instead of coercing it', a
   const { org, fy } = await fixture()
   try {
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     const response = await post({ bookId: org.bookId, fiscalYear: fy, description: 42 })
     await assertFieldRefusal(response, 'invalid_description', 'description')
     const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(after, before, 'malformed description input must not create a draft')
   } finally {
     state.allowed = null

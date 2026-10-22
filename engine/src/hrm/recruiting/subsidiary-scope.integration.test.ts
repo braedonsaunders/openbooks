@@ -70,7 +70,7 @@ async function notFound(promise: Promise<unknown>, what: string): Promise<Recrui
 
 async function displayName(orgId: string, candidateId: string): Promise<string | null> {
   return (await db.execute<{ displayName: string }>(sql`
-    select display_name as "displayName" from hrm_candidates where org_id = ${orgId} and id = ${candidateId}`)).rows[0]?.displayName ?? null;
+    select display_name as "displayName" from hrm_candidates where org_id = ${orgId} and id = ${candidateId}`, "objects"))[0]?.displayName ?? null;
 }
 
 async function pooled(w: ScopeWorld) {

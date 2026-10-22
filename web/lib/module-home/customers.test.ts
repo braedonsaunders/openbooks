@@ -12,10 +12,11 @@ type DsoCall = { side: string; asOf: string; subIds: string[] | undefined; orgId
 const mocks = new Map([
   ['server-only', 'export {}'],
   ['@openbooks/engine/platform/db', `
-    export const db = { execute: async () => {
+    export const db = { execute: async (_query, mode) => {
+      const inMode = (result) => (mode === 'objects' ? result.rows : result)
       // One canned row satisfies the org-currency lookup every dashboard
       // call ends with.
-      return { rows: [{ baseCurrency: 'CAD' }] }
+      return inMode({ rows: [{ baseCurrency: 'CAD' }] })
     } }
   `],
   // The analytics query helper reads through the public database contract.

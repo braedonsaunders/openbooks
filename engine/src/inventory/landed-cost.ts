@@ -134,8 +134,7 @@ export async function postLandedCostVoucher(
       const receiptLayerFilter = receipt && profile.costingMethod !== "moving_average"
         ? sql`and source_movement_id in (${joinIds(receipt.movementIds)})`
         : sql``;
-      const layers = (
-        (await tx.execute<OpenLayer>(sql`
+      const layers = await tx.execute<OpenLayer>(sql`
         select id, subsidiary_id, source_movement_id, received_at::text, original_quantity,
                remaining_quantity, unit_cost, remaining_original_cost
           from cost_layers
@@ -145,8 +144,7 @@ export async function postLandedCostVoucher(
            and remaining_quantity > 0
            ${receiptLayerFilter}
          order by received_at, id
-         for update`))
-      ).rows;
+         for update`, "objects");
     if (receipt) {
       const onHand = sum(layers.map((layer) => layer.remaining_quantity));
       receipt.onHandQuantity = cmp(onHand, receipt.quantity) > 0 ? receipt.quantity : onHand;
@@ -188,8 +186,8 @@ export async function postLandedCostVoucher(
         weightsByLayer = new Map();
         const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
           select cost_layer_id, weight from cost_layer_weights
-           where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`));
-        for (const row of w.rows)
+           where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`, "objects"));
+        for (const row of w)
           weightsByLayer.set(row.cost_layer_id, row.weight);
         // Narrow once for the closure below: the map is fully loaded here.
         const loadedWeights = weightsByLayer;
@@ -277,8 +275,8 @@ export async function postLandedCostVoucher(
       values (${orgId}, ${documentNumber}, 'draft', ${voucherAmount}, ${input.basis}, ${input.freightAccountId},
               ${input.sourceDocumentLineId ?? null}, ${input.subsidiaryId}, ${input.voucherDate},
               ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`));
-    const voucherId = voucher.rows[0]!.id;
+      returning id`, "objects"));
+    const voucherId = voucher[0]!.id;
 
     const entryLines: JournalLineInput[] = [];
     const allocationIds: string[] = [];
@@ -485,8 +483,8 @@ export async function reverseLandedCostVoucher(
         from landed_cost_vouchers
        where id = ${input.voucherId} and org_id = ${orgId}
        for update
-    `));
-    const voucher = voucherResult.rows[0];
+    `, "objects"));
+    const voucher = voucherResult[0];
     if (!voucher) throw new InventoryError("landed-cost voucher not found");
     if (voucher.status === "void") {
       if (!voucher.reversal_journal_entry_id) {
@@ -499,12 +497,12 @@ export async function reverseLandedCostVoucher(
           from landed_cost_allocations
          where org_id = ${orgId} and voucher_id = ${voucher.id}
            and reverses_allocation_id is not null
-      `));
+      `, "objects"));
       return {
         voucherId: voucher.id,
         entryId: voucher.reversal_journal_entry_id,
         alreadyReversed: true,
-        reversedAllocations: count.rows[0]!.count,
+        reversedAllocations: count[0]!.count,
       };
     }
     if (voucher.status !== "posted" || !voucher.journal_entry_id) {
@@ -518,11 +516,11 @@ export async function reverseLandedCostVoucher(
         from landed_cost_voucher_targets
        where voucher_id = ${voucher.id} and org_id = ${orgId}
        order by item_id, stock_location_id
-    `));
-    if (!targets.rows.length) {
+    `, "objects"));
+    if (!targets.length) {
       throw new InventoryError("landed-cost voucher has no target evidence");
     }
-    for (const target of targets.rows) {
+    for (const target of targets) {
       await lockInventoryPosition(
         tx,
         target.item_id,
@@ -558,13 +556,13 @@ export async function reverseLandedCostVoucher(
          and allocation.reverses_allocation_id is null
        order by allocation.created_at desc, allocation.id desc
        for update of layer
-    `));
-    if (!allocations.rows.length) {
+    `, "objects"));
+    if (!allocations.length) {
       throw new InventoryError(
         "landed-cost voucher has no linked allocation evidence",
       );
     }
-    const allocated = sum(allocations.rows.map((row) => row.amount));
+    const allocated = sum(allocations.map((row) => row.amount));
     if (cmp(allocated, voucher.amount) !== 0) {
       throw new InventoryError(
         "landed-cost voucher allocation evidence does not equal its amount",
@@ -575,17 +573,17 @@ export async function reverseLandedCostVoucher(
         from landed_cost_allocations
        where org_id = ${orgId}
          and reverses_allocation_id in (${joinIds(
-           allocations.rows.map((row) => row.id),
+           allocations.map((row) => row.id),
          )})
        limit 1
-    `));
-    if (prior.rows.length) {
+    `, "objects"));
+    if (prior.length) {
       throw new InventoryError(
         "landed-cost voucher has partial reversal evidence",
       );
     }
 
-    for (const allocation of allocations.rows) {
+    for (const allocation of allocations) {
       if (allocation.basis === "standard_variance" || allocation.basis === "consumed") {
         // The voucher never embedded value in the layer (booked to variance
         // under standard costing), so there is no subledger value to remove:
@@ -618,7 +616,7 @@ export async function reverseLandedCostVoucher(
       input.reversalDate,
       reason,
     );
-    for (const allocation of allocations.rows) {
+    for (const allocation of allocations) {
       await tx.execute(sql`
         insert into landed_cost_allocations
           (org_id, voucher_id, source_document_line_id, target_cost_layer_id,
@@ -651,7 +649,7 @@ export async function reverseLandedCostVoucher(
            reason,
            reversalDate: input.reversalDate,
            reversalEntryId,
-           reversedAllocations: allocations.rows.length,
+           reversedAllocations: allocations.length,
          })}::jsonb,
          ${actorId})
     `);
@@ -659,7 +657,7 @@ export async function reverseLandedCostVoucher(
       voucherId: voucher.id,
       entryId: reversalEntryId,
       alreadyReversed: false,
-      reversedAllocations: allocations.rows.length,
+      reversedAllocations: allocations.length,
     };
   });
 }
@@ -682,7 +680,7 @@ async function sourceReceipt(
   tx: Parameters<typeof revalueLayerExactly>[0], orgId: string, sourceDocumentLineId: string,
   target: LandedCostVoucherTargetInput, subsidiaryId: string, profile: InventoryProfile,
 ): Promise<SourceReceipt> {
-  const receipts = (await tx.execute<{ id: string; quantity: string; total_value: string | null }>(sql`
+  const receipts = await tx.execute<{ id: string; quantity: string; total_value: string | null }>(sql`
     select movement.id, movement.quantity::text, movement.total_value::text
       from inventory_movements movement
      where movement.org_id = ${orgId} and movement.document_line_id = ${sourceDocumentLineId}
@@ -690,7 +688,7 @@ async function sourceReceipt(
        and movement.subsidiary_id = ${subsidiaryId} and movement.status = 'posted' and movement.quantity > 0
        and not exists (select 1 from inventory_movements reversal
           where reversal.org_id = movement.org_id and reversal.reverses_movement_id = movement.id)
-     order by movement.id`)).rows;
+     order by movement.id`, "objects");
   if (receipts.length === 0) {
     throw new InventoryError(
       `source line ${sourceDocumentLineId} received no item ${target.itemId} at location ${target.stockLocationId} — choose the receipt line that brought this stock in, or post the voucher without a source line`,
@@ -701,7 +699,7 @@ async function sourceReceipt(
     select id from cost_layers
      where org_id = ${orgId} and item_id = ${target.itemId} and stock_location_id = ${target.stockLocationId}
        and ${profile.costingMethod === "moving_average" ? sql`true` : sql`source_movement_id in (${joinIds(movementIds)})`}
-     order by received_at desc, id limit 1`)).rows[0];
+     order by received_at desc, id limit 1`, "objects"))[0];
   if (!evidence) {
     throw new InventoryError(
       `the receipt from source line ${sourceDocumentLineId} has no cost layer at location ${target.stockLocationId} to anchor landed cost on`,

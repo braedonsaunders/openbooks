@@ -94,8 +94,8 @@ export function normalizeStoredDocumentCapture(raw: unknown): DocumentCaptureSet
 async function readStored(orgId: string): Promise<{ globalEnabled: boolean; ai: StoredAi; capture: StoredDocumentCapture }> {
   const result = (await db.execute<{ ai: Record<string, unknown> | null }>(sql`
     select settings->'ai' as ai from orgs where id = ${orgId}
-  `));
-  const ai = (result.rows[0]?.ai ?? {}) as StoredAi;
+  `, "objects"));
+  const ai = (result[0]?.ai ?? {}) as StoredAi;
   const capture = ai.documentCapture;
   return {
     globalEnabled: ai.enabled !== false,

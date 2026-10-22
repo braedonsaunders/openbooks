@@ -223,12 +223,12 @@ type OccurrenceRow = {
 
 async function occurrences(orgId: string, scheduleId: string): Promise<OccurrenceRow[]> {
   return withBypassContext(async () =>
-    (await db.execute<OccurrenceRow>(sql`
+    await db.execute<OccurrenceRow>(sql`
       select id::text as id, status, payment_run_id::text as payment_run_id, attempt_count, result
         from payment_schedule_occurrences
        where org_id = ${orgId} and schedule_id = ${scheduleId}
        order by occurrence_at
-    `)).rows);
+    `, "objects"));
 }
 
 async function scheduleRow(orgId: string, scheduleId: string) {
@@ -242,7 +242,7 @@ async function scheduleRow(orgId: string, scheduleId: string) {
       select next_run_at, last_run_at, last_payment_run_id::text as last_payment_run_id, last_result
         from payment_schedules
        where id = ${scheduleId} and org_id = ${orgId}
-    `))).rows[0];
+    `, "objects")))[0];
   if (!row) return row;
   return {
     ...row,
@@ -264,12 +264,12 @@ async function runRow(orgId: string, runId: string) {
              updated_by::text as updated_by, source_schedule_id::text as source_schedule_id
         from payment_runs
        where id = ${runId} and org_id = ${orgId}
-    `)).rows[0]);
+    `, "objects"))[0]);
 }
 
 async function runEvents(orgId: string, runId: string) {
   return withBypassContext(async () =>
-    (await db.execute<{
+    await db.execute<{
       event_type: string;
       actor_id: string | null;
       details: Record<string, unknown>;
@@ -278,7 +278,7 @@ async function runEvents(orgId: string, runId: string) {
         from payment_events
        where org_id = ${orgId} and payment_run_id = ${runId}
        order by created_at, id
-    `)).rows);
+    `, "objects"));
 }
 
 async function instructionCount(orgId: string, runId: string): Promise<number> {
@@ -286,7 +286,7 @@ async function instructionCount(orgId: string, runId: string): Promise<number> {
     Number((await db.execute<{ n: number }>(sql`
       select count(*)::int as n from payment_instructions
        where org_id = ${orgId} and payment_run_id = ${runId}
-    `)).rows[0]!.n));
+    `, "objects"))[0]!.n));
 }
 
 async function runsForSchedule(orgId: string, scheduleId: string): Promise<string[]> {
@@ -294,7 +294,7 @@ async function runsForSchedule(orgId: string, scheduleId: string): Promise<strin
     (await db.execute<{ id: string }>(sql`
       select id::text as id from payment_runs
        where org_id = ${orgId} and source_schedule_id = ${scheduleId}
-    `)).rows.map((r) => r.id));
+    `, "objects")).map((r) => r.id));
 }
 
 /** Decide the run's open approval gate as `userId`. */
@@ -302,7 +302,7 @@ async function decideRunApproval(orgId: string, runId: string, userId: string): 
   const gate = (await withBypass(() => db.execute<{ id: string }>(sql`
     select id from flow_gates
      where org_id = ${orgId} and subject_id = ${runId} and status = 'pending'
-     order by (assignee_user_id = ${userId}) desc, created_at limit 1`))).rows[0];
+     order by (assignee_user_id = ${userId}) desc, created_at limit 1`, "objects")))[0];
   assert.ok(gate, "the run has an open approval gate");
   await decideGate({ gateId: gate.id, decision: "approved", userId });
 }

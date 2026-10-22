@@ -428,8 +428,8 @@ export async function payrollBankProfiles(orgId: string): Promise<
      where p.org_id = ${orgId} and p.is_active and f.is_active
        and f.rail = any(${`{${rails.join(",")}}`}::text[])
      order by p.name
-  `));
-  return rows.rows.map((row) => {
+  `, "objects"));
+  return rows.map((row) => {
     const format = formatForRail(row.rail)!;
     return {
       id: row.id,
@@ -863,8 +863,8 @@ export async function payrollOriginatorConfig(
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${paymentBankProfileId} and p.is_active and f.is_active
-  `));
-  const row = rows.rows[0];
+  `, "objects"));
+  const row = rows[0];
   if (!row) throw new PayrollError("payment bank profile not found or inactive");
   const format = formatForRail(row.rail);
   if (!format) {
@@ -1221,8 +1221,8 @@ export async function loadCredits(
          limit 1) b on true
      where p.org_id = ${orgId}
        and p.id = any(${`{${partyIds.join(",")}}`}::uuid[])
-  `));
-  const byParty = new Map(rows.rows.map((row) => [row.party_id, row]));
+  `, "objects"));
+  const byParty = new Map(rows.map((row) => [row.party_id, row]));
 
   const problems: string[] = [];
   const credits: PayRunBankFileCredit[] = [];
@@ -1723,7 +1723,7 @@ export async function lockPayRunBankFileAccounts(
     throw new PayrollError("payroll bank file has duplicate employee bank-account evidence");
   }
   const ids = [...expected.keys()];
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     id: string;
     party_id: string;
     updated_at: string;
@@ -1734,7 +1734,7 @@ export async function lockPayRunBankFileAccounts(
       from party_bank_accounts
      where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])
      order by id for update
-  `)).rows;
+  `, "objects");
   if (rows.length !== expected.size || rows.some((row) => {
     const credit = expected.get(row.id);
     return !credit || row.party_id !== credit.employeePartyId || !row.is_active ||

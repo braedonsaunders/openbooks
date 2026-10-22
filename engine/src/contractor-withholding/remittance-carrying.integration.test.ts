@@ -45,19 +45,19 @@ async function fixture(org:ScratchOrg,deposit=false) {
   };
   const settle=async()=>{
     const amount='625';
-    const functionalRate=(await db.execute<{rate:string}>(sql`select rate::text from fx_rates where org_id=${org.orgId} and from_currency='EUR' and to_currency='CAD' and rate_type='spot' order by as_of desc limit 1`)).rows[0]!.rate;
+    const functionalRate=(await db.execute<{rate:string}>(sql`select rate::text from fx_rates where org_id=${org.orgId} and from_currency='EUR' and to_currency='CAD' and rate_type='spot' order by as_of desc limit 1`, "objects"))[0]!.rate;
     const bill=randomUUID();
     await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate,subtotal,tax_total,total,created_by) values(${bill},${org.orgId},'vendor_bill','draft',${`BILL-${bill}`},${org.subsidiaryId},${org.vendorId},${org.date},'EUR',${functionalRate},${amount},0,${amount},${actor})`);
     await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,withholding_treatment) values(${org.orgId},${bill},1,${org.accounts.cogs},1,${amount},${amount},'labour')`);
     const entry=await post(bill);
-    const openLine=(await db.execute<{id:string}>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and account_id=${org.accounts.ap}`)).rows[0]!.id;
+    const openLine=(await db.execute<{id:string}>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and account_id=${org.accounts.ap}`, "objects"))[0]!.id;
     const payment=await createPaymentDocument({orgId:org.orgId,createdBy:actor,kind:'vendor_payment',partyId:org.vendorId,subsidiaryId:org.subsidiaryId,bankAccountId:org.accounts.bank,documentDate:org.date,currency:'EUR',fxRate:functionalRate,allowedSubsidiaryIds:null});
     await updateDraftPayment(payment.id,{allocations:[{openLineId:openLine,sourceTransactionAmount:amount,targetTransactionAmount:amount,settlementRate:'1',settlementRateSource:'same_currency',settlementRateReference:'Same transaction currency'}]},actor,org.orgId,{allowedSubsidiaryIds:null});
     const paymentEntry=await post(payment.id);
     return {paymentId:payment.id,entry:paymentEntry};
   };
   const initial=await settle();
-  const period=(await db.execute<{period:string}>(sql`select period_start::text as period from withholding_deductions where org_id=${org.orgId} and payment_document_id=${initial.paymentId}`)).rows[0]!.period;
+  const period=(await db.execute<{period:string}>(sql`select period_start::text as period from withholding_deductions where org_id=${org.orgId} and payment_document_id=${initial.paymentId}`, "objects"))[0]!.period;
   const prepareReturn=()=>withOrgTransaction(org.orgId,()=>prepareWithholdingReturn(db,org.orgId,{enrollmentId:enrollment,periodStart:period},actor));
   const remit=async(reference='AUTH-FILING')=>{
     const prepared=await prepareReturn();
@@ -65,8 +65,8 @@ async function fixture(org:ScratchOrg,deposit=false) {
     return withOrgTransaction(org.orgId,()=>createWithholdingRemittance(db,org.orgId,{returnId:prepared.id},actor));
   };
   const reverse=()=>requestDocumentVoid({documentId:initial.paymentId,orgId:org.orgId,actorId:actor,reason:'Correct contractor settlement',reversalDate:org.date,allowedSubsidiaryIds:null});
-  const legs=async(entry:string)=>(await db.execute<{accountId:string;amount:string;currency:string;txnAmount:string}>(sql`select account_id as "accountId",amount::text,currency,txn_amount::text as "txnAmount" from journal_lines where org_id=${org.orgId} and entry_id=${entry} order by line_number`)).rows;
-  const balance=async(account:string)=>(await db.execute<{amount:string}>(sql`select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and l.account_id=${account} and e.status in ('posted','reversed')`)).rows[0]!.amount;
+  const legs=async(entry:string)=>await db.execute<{accountId:string;amount:string;currency:string;txnAmount:string}>(sql`select account_id as "accountId",amount::text,currency,txn_amount::text as "txnAmount" from journal_lines where org_id=${org.orgId} and entry_id=${entry} order by line_number`, "objects");
+  const balance=async(account:string)=>(await db.execute<{amount:string}>(sql`select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and l.account_id=${account} and e.status in ('posted','reversed')`, "objects"))[0]!.amount;
   return {actor,enrollment,initial,statutoryCurrency,post,settle,prepareReturn,remit,reverse,legs,balance};
 }
 async function scenario(run:(org:ScratchOrg,f:Awaited<ReturnType<typeof fixture>>)=>Promise<void>,deposit=false) {
@@ -144,7 +144,7 @@ async function saveNativeAuthorityJournal(org: ScratchOrg, actor: string, docume
   assert.deepEqual(after.lines, before.lines);
   assert.deepEqual(after.doc.custom, before.doc.custom);
   assert.equal(after.doc.total, before.doc.total);
-  const storedHeader = (await db.execute<{ total: string }>(sql`select total::text from documents where org_id=${org.orgId} and id=${documentId}`)).rows[0]!;
+  const storedHeader = (await db.execute<{ total: string }>(sql`select total::text from documents where org_id=${org.orgId} and id=${documentId}`, "objects"))[0]!;
   assert.equal(storedHeader.total, before.doc.total);
   assert.equal(after.doc.memo, "Reviewed functional correction");
   const sourceKey = Object.hasOwn(before.doc.custom as object, "withholdingDeposit") ? "withholdingDeposit" : "withholdingRemittance";
@@ -174,7 +174,7 @@ test('authority remittance clears the original CAD carrying amount and recognize
   assert.equal(accountTotal(rows,org.accounts.fxGainLoss),'30.0000');
   assert.equal(await f.balance(org.accounts.withholding),'0.0000');
   assert.equal(fromUnits(rows.reduce((sum,row)=>sum+toUnits(row.amount),0n)),'0.0000');
-  const foreign=(await db.execute<{currency:string;amount:string}>(sql`select l.currency,sum(l.txn_amount)::text as amount from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and l.account_id=${org.accounts.withholding} and e.status='posted' group by l.currency`)).rows;
+  const foreign=await db.execute<{currency:string;amount:string}>(sql`select l.currency,sum(l.txn_amount)::text as amount from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and l.account_id=${org.accounts.withholding} and e.status='posted' group by l.currency`, "objects");
   assert.ok(foreign.every(row=>toUnits(row.amount)===0n));
   await assert.rejects(()=>f.post(remittance.documentId),/already posted/);
 }));
@@ -183,10 +183,10 @@ test('a missing realized FX account refuses atomically and leaves the authority 
   const remittance=await f.remit();
   await withBypassContext(() => db.execute(sql`update orgs set settings=settings #- '{controlAccounts,fxRealizedGainLoss}' where id=${org.orgId}`));
   await assert.rejects(()=>f.post(remittance.documentId),/realized FX gain\/loss account.*Configure/i);
-  const state=(await db.execute<{status:string;entry:string|null;count:number}>(sql`select status,posted_entry_id as entry,(select count(*)::int from journal_entries where org_id=d.org_id and source_document_id=d.id) as count from documents d where org_id=${org.orgId} and id=${remittance.documentId}`)).rows[0];
+  const state=(await db.execute<{status:string;entry:string|null;count:number}>(sql`select status,posted_entry_id as entry,(select count(*)::int from journal_entries where org_id=d.org_id and source_document_id=d.id) as count from documents d where org_id=${org.orgId} and id=${remittance.documentId}`, "objects"))[0];
   assert.deepEqual(state,{status:'approved',entry:null,count:0});
   assert.equal(await f.balance(org.accounts.withholding),'-120.0000');
-  assert.equal((await db.execute(sql`select 1 from withholding_deductions where org_id=${org.orgId} and payment_document_id=${f.initial.paymentId} and status='posted'`)).rows.length,1);
+  assert.equal((await db.execute(sql`select 1 from withholding_deductions where org_id=${org.orgId} and payment_document_id=${f.initial.paymentId} and status='posted'`, "objects")).length,1);
 }));
 
 test('a revised negative remittance credits the previous posted carrying amount rather than its current statutory quote',enabled,async()=>scenario(async(org,f)=>{

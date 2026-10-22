@@ -36,12 +36,12 @@ type StoredGroup = {
 };
 
 async function storedGroups(orgId: string): Promise<StoredGroup[]> {
-  return (await db.execute<StoredGroup>(sql`
+  return await db.execute<StoredGroup>(sql`
     select dimension, key, name, color, sort_order, match, is_catch_all, is_active
       from account_groups
      where org_id = ${orgId} and dimension in ('cost_pool', 'burden')
      order by dimension, sort_order
-  `)).rows;
+  `, "objects");
 }
 
 function keysOf(rows: StoredGroup[], dimension: string): string[] {

@@ -72,8 +72,8 @@ test("bounded native retirement keeps complete journal entries and restores all 
     const selection = await withMaintenanceTransaction(null, async () => {
       const identity = (await db.execute<RetirementDatabaseIdentity & Record<string, unknown>>(sql`
         select current_database() as database,inet_server_addr()::text as "serverAddress",
-          inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`)).rows[0]!;
-      const ids = (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map(row => row.id);
+          inet_server_port() as "serverPort",current_setting('cluster_name') as "clusterName"`, "objects"))[0]!;
+      const ids = (await db.execute<{ id: string }>(sql`select id from orgs order by id`, "objects")).map(row => row.id);
       return { version: 1 as const, database: identity, retainOrgIds: ids.filter(id => id !== target.orgId),
         retireOrgIds: [target.orgId], reason: "Verify whole-company rollback across bounded native deletion statements" };
     });
@@ -94,9 +94,9 @@ test("bounded native retirement keeps complete journal entries and restores all 
       await db.execute(sql`set constraints all deferred`);
       const removed = await deleteRetiredTenantRows(await loadCatalog(), target.orgId, { batchSize: 1 });
       assert.equal(removed.journal_lines, expectedLines, "complete entries pass the unchanged balance and FX statement guards");
-      assert.equal((await db.execute(sql`select id from depreciation_schedule_lines where org_id=${target.orgId}`)).rows.length, 0, "the exact retirement claim removes posted depreciation evidence, including cascaded rows");
+      assert.equal((await db.execute(sql`select id from depreciation_schedule_lines where org_id=${target.orgId}`, "objects")).length, 0, "the exact retirement claim removes posted depreciation evidence, including cascaded rows");
       assert.equal(removed.orgs, "1");
-      assert.equal((await db.execute(sql`select id from orgs where id=${target.orgId}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select id from orgs where id=${target.orgId}`, "objects")).length, 0);
       throw new Error("Roll back every completed deletion batch");
     }, { isolationLevel: "REPEATABLE READ" }), /Roll back every completed deletion batch/);
     assert.deepEqual(await snapshot(target.orgId), beforeTarget, "every posted, draft, configuration and audit row returns");

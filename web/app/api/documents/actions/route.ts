@@ -168,13 +168,13 @@ export const POST = defineRoute({
               select status, subsidiary_id as "subsidiaryId" from documents
                where id = ${doc.id} and org_id = ${user.orgId}
                for update
-            `)
+            `, 'objects')
           // Locked scope recheck: a rehome that landed after the precheck
           // must not let this transaction submit another subsidiary's record.
-          if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+          if (guardSubsidiaryScope(authz, locked[0]?.subsidiaryId)) {
               return { kind: 'scope_revoked' as const }
             }
-          const current = locked.rows[0]?.status
+          const current = locked[0]?.status
           if (current !== 'draft') {
               return { kind: 'invalid_status' as const, status: current ?? 'missing' }
             }
@@ -241,11 +241,11 @@ export const POST = defineRoute({
                 select status, subsidiary_id as "subsidiaryId" from documents
                  where id = ${doc.id} and org_id = ${user.orgId}
                  for update
-              `)
-            if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+              `, 'objects')
+            if (guardSubsidiaryScope(authz, locked[0]?.subsidiaryId)) {
               return { kind: 'scope_revoked' as const }
             }
-            if (!locked.rows[0]) return { kind: 'not_found' as const }
+            if (!locked[0]) return { kind: 'not_found' as const }
             const result = await returnDocumentToDraft({
                 documentId: doc.id,
                 orgId: user.orgId,
@@ -296,17 +296,17 @@ export const POST = defineRoute({
               select status, subsidiary_id as "subsidiaryId" from documents
                where id = ${doc.id} and org_id = ${user.orgId}
                for update
-            `)
-          if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+            `, 'objects')
+          if (guardSubsidiaryScope(authz, locked[0]?.subsidiaryId)) {
               return { kind: 'scope_revoked' as const }
             }
-          const current = locked.rows[0]
+          const current = locked[0]
           if (!current) return { kind: 'not_found' as const }
           if (current.status !== 'posted') return { kind: 'invalid_status' as const, status: current.status }
           const effect = (await db.execute<{ id: string; status: string }>(sql`
               select id, status from posting_effects
                where document_id = ${doc.id} and org_id = ${user.orgId}
-            `)).rows[0]
+            `, 'objects'))[0]
           if (!effect) return { kind: 'no_effect' as const }
           if (effect.status !== 'terminal_failed') {
               return { kind: 'not_terminal' as const, status: effect.status }
@@ -361,13 +361,13 @@ export const POST = defineRoute({
             select kind, status, subsidiary_id as "subsidiaryId" from documents
              where id = ${doc.id} and org_id = ${user.orgId}
              for update
-          `)
+          `, 'objects')
         // Locked scope recheck: a rehome that landed after the precheck
         // must not let this transaction post another subsidiary's record.
-        if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+        if (guardSubsidiaryScope(authz, locked[0]?.subsidiaryId)) {
               return { kind: 'scope_revoked' as const }
             }
-        const current = locked.rows[0]
+        const current = locked[0]
         if (!current) return { kind: 'not_found' as const }
         const previousStatus = current.status
         if (previousStatus === 'draft') {

@@ -53,8 +53,8 @@ test('vendor ledger aggregation preserves tiny-line totals, live labels and role
       assert.equal(scoped.totals.spend, '100.0020')
       assert.equal(scoped.monthly.find(row => row.month === '2026-07')?.spend, '100.0020')
       const renamed = await withBypass(() => db.execute(sql`update parties set display_name='Renamed supplier'
-        where id=${org.vendorId} and org_id=${org.orgId} returning id`))
-      assert.equal(renamed.rows.length, 1)
+        where id=${org.vendorId} and org_id=${org.orgId} returning id`, 'objects'))
+      assert.equal(renamed.length, 1)
       const fresh = await vendorData(P, org.orgId, new Set([org.subsidiaryId]))
       assert.equal(fresh.rows.find(row => row.id === org.vendorId)?.name, 'Renamed supplier')
       assert.equal(fresh.totals.spend, scoped.totals.spend)
@@ -144,8 +144,8 @@ async function seedTwoCurrencySpend() {
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual'),
              (${org.orgId},'USD','CAD','2025-07-14','spot',1.3,'manual')`)
-    const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`)
-    const calRow0 = calRow.rows[0]
+    const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, 'objects')
+    const calRow0 = calRow[0]
     if (!calRow0) throw new Error('scratch period has no fiscal calendar')
     const cal = String(calRow0.fiscal_calendar_id)
     const priorPeriod = randomUUID()

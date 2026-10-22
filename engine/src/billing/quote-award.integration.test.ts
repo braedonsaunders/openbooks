@@ -90,8 +90,8 @@ test("awarding a quote creates its project, tasks and original baseline exactly 
       awardQuote(ctx, seed.quoteId),
       (error: unknown) => error instanceof QuoteAwardError && /line 3 has a price but no cost/.test(error.message),
     );
-    const none = await db.execute(sql`select 1 from projects where org_id = ${org.orgId} and awarded_from_document_id = ${seed.quoteId}`);
-    assert.equal(none.rows.length, 0);
+    const none = await db.execute(sql`select 1 from projects where org_id = ${org.orgId} and awarded_from_document_id = ${seed.quoteId}`, "objects");
+    assert.equal(none.length, 0);
 
     const awarded = await awardQuote(ctx, seed.quoteId, {
       lineCosts: [{ lineId: seed.mobilizationLineId, cost: "300" }],
@@ -106,7 +106,7 @@ test("awarding a quote creates its project, tasks and original baseline exactly 
       select p.status, p.customer_id, p.contract_value::text as contract_value, p.customer_po_number,
              p.subsidiary_id, p.name, p.awarded_by, pt.key as type_key
         from projects p join project_types pt on pt.id = p.project_type_id
-       where p.id = ${awarded.projectId}`)).rows[0]!;
+       where p.id = ${awarded.projectId}`, "objects"))[0]!;
     assert.equal(project.status, "awarded");
     assert.equal(project.customer_id, org.customerId);
     assert.equal(project.subsidiary_id, org.subsidiaryId);
@@ -116,19 +116,19 @@ test("awarding a quote creates its project, tasks and original baseline exactly 
     assert.equal(project.name, "Warehouse electrical fit-out");
     assert.equal(project.awarded_by, actor);
 
-    const tasks = (await db.execute<{ code: string; hours: string; cost: string; price: string }>(sql`
+    const tasks = await db.execute<{ code: string; hours: string; cost: string; price: string }>(sql`
       select code, estimated_hours::text as hours, estimated_cost::text as cost, estimated_price::text as price
-        from project_tasks where project_id = ${awarded.projectId} order by code`)).rows;
+        from project_tasks where project_id = ${awarded.projectId} order by code`, "objects");
     assert.deepEqual(tasks, [
       { code: "01", hours: "24.0000", cost: "960.0000", price: "2280.0000" },
       { code: "02", hours: "0.0000", cost: "500.0000", price: "1200.0000" },
       { code: "03", hours: "0.0000", cost: "300.0000", price: "750.0000" },
     ]);
 
-    const baseline = (await db.execute<{ kind: string; sequence: number; source_document_id: string; total_hours: string; total_cost: string; total_price: string }>(sql`
+    const baseline = await db.execute<{ kind: string; sequence: number; source_document_id: string; total_hours: string; total_cost: string; total_price: string }>(sql`
       select kind, sequence, source_document_id, total_hours::text as total_hours,
              total_cost::text as total_cost, total_price::text as total_price
-        from project_budget_baselines where project_id = ${awarded.projectId}`)).rows;
+        from project_budget_baselines where project_id = ${awarded.projectId}`, "objects");
     assert.equal(baseline.length, 1);
     assert.deepEqual(baseline[0], {
       kind: "original", sequence: 1, source_document_id: seed.quoteId,
@@ -136,13 +136,13 @@ test("awarding a quote creates its project, tasks and original baseline exactly 
     });
     const sources = (await db.execute<{ source_line_id: string }>(sql`
       select source_line_id from project_budget_baseline_lines
-       where baseline_id = ${awarded.baselineId} order by sequence`)).rows.map((r) => r.source_line_id);
+       where baseline_id = ${awarded.baselineId} order by sequence`, "objects")).map((r) => r.source_line_id);
     assert.deepEqual(sources, [seed.laborLineId, seed.cableLineId, seed.mobilizationLineId]);
-    const tagged = (await db.execute<{ project_id: string }>(sql`select project_id from documents where id = ${seed.quoteId}`)).rows[0]!;
+    const tagged = (await db.execute<{ project_id: string }>(sql`select project_id from documents where id = ${seed.quoteId}`, "objects"))[0]!;
     assert.equal(tagged.project_id, awarded.projectId);
     const audit = await db.execute(sql`
-      select 1 from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${seed.quoteId}`);
-    assert.equal(audit.rows.length, 1);
+      select 1 from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${seed.quoteId}`, "objects");
+    assert.equal(audit.length, 1);
 
     // A repeat award (a double click, a retry) returns the same project and writes nothing.
     const replay = await awardQuote(ctx, seed.quoteId, { lineCosts: [{ lineId: seed.mobilizationLineId, cost: "300" }] });
@@ -151,7 +151,7 @@ test("awarding a quote creates its project, tasks and original baseline exactly 
     const counts = (await db.execute<{ projects: string; baselines: string; tasks: string }>(sql`
       select (select count(*) from projects where org_id = ${org.orgId} and awarded_from_document_id = ${seed.quoteId})::text as projects,
              (select count(*) from project_budget_baselines where org_id = ${org.orgId})::text as baselines,
-             (select count(*) from project_tasks where project_id = ${awarded.projectId})::text as tasks`)).rows[0]!;
+             (select count(*) from project_tasks where project_id = ${awarded.projectId})::text as tasks`, "objects"))[0]!;
     assert.deepEqual(counts, { projects: "1", baselines: "1", tasks: "3" });
     assert.equal((await previewQuoteAward(ctx, seed.quoteId)).awarded?.projectId, awarded.projectId);
   });
@@ -163,7 +163,7 @@ test("the sold budget stays fixed while the working budget is revised and actual
     const seed = await seedQuote(org, actor);
     const awarded = await awardQuote(ctx, seed.quoteId, { lineCosts: [{ lineId: seed.mobilizationLineId, cost: "300" }] });
     const crew = (await db.execute<{ id: string }>(sql`
-      select id from project_tasks where project_id = ${awarded.projectId} and code = '01'`)).rows[0]!.id;
+      select id from project_tasks where project_id = ${awarded.projectId} and code = '01'`, "objects"))[0]!.id;
 
     // Recorded baselines are evidence: the storage refuses edits outright.
     await assert.rejects(
@@ -238,8 +238,8 @@ test("only an issued quote with both features on can be awarded", DB, async () =
       awardQuote(ctx, draft.quoteId),
       (error: unknown) => error instanceof QuoteAwardError && error.status === 404 && /Company Settings → Features/.test(error.message),
     );
-    const none = await db.execute(sql`select 1 from projects where org_id = ${org.orgId}`);
-    assert.equal(none.rows.length, 0);
+    const none = await db.execute(sql`select 1 from projects where org_id = ${org.orgId}`, "objects");
+    assert.equal(none.length, 0);
   });
 });
 
@@ -293,8 +293,8 @@ test("releasing an awarded quote fixture clears its reference cycle and preserve
     const cycle = await db.execute(sql`
       select p.id from projects p join documents d
         on d.org_id = p.org_id and d.id = p.awarded_from_document_id and d.project_id = p.id
-       where p.org_id = ${org.orgId} and p.id = ${awarded.projectId}`);
-    assert.equal(cycle.rows.length, 1, "the native award establishes both references");
+       where p.org_id = ${org.orgId} and p.id = ${awarded.projectId}`, "objects");
+    assert.equal(cycle.length, 1, "the native award establishes both references");
     await dropScratchOrg(org.orgId);
     assert.deepEqual(await orgRowCounts(org.orgId), baseline);
     assert.deepEqual(await orgRowCounts(other.orgId), otherBaseline);

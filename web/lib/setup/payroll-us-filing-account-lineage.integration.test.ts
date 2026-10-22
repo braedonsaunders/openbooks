@@ -44,9 +44,9 @@ test('native Setup qualification replays exactly, audits evidence and refuses ch
     assert.equal((await withBypass(() => createSetupRecord(f.actor, entity, { ...f.body, sourceReference: '' }))).status, 400)
     const outOfScope = { ...f.actor, allowedSubsidiaryIds: new Set([randomUUID()]) }
     assert.equal((await withBypass(() => createSetupRecord(outOfScope, entity, { ...f.body, effectiveFrom: '2027-01-01' }))).status, 403)
-    const audit = (await withBypass(() => db.execute<{ actor_id: string; changes: { after: { source_reference: string; change_reason: string } } }>(sql`
+    const audit = await withBypass(() => db.execute<{ actor_id: string; changes: { after: { source_reference: string; change_reason: string } } }>(sql`
       select actor_id, changes from audit_log where org_id=${f.orgId} and table_name='payroll_us_filing_account_employer_lineage'
-    `))).rows
+    `, 'objects'))
     assert.equal(audit.length, 1)
     assert.equal(audit[0]!.actor_id, f.actor.id)
     assert.equal(audit[0]!.changes.after.source_reference, f.body.sourceReference)

@@ -31,19 +31,19 @@ async function insertTask(h: Harness, key: string): Promise<string> {
        status, sort_order, owner_id, reviewer_id, evidence_required, created_by, updated_by)
     values (${h.orgId}, ${h.runId}, ${key}, ${key}, 'execute', 'action',
             'manual', 'hard', 'ready', 10, ${h.submitterId}, null, false, ${h.adminId}, ${h.adminId})
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
 }
 
 async function taskOwner(h: Harness, taskId: string): Promise<string | null> {
   return (await db.execute<{ owner_id: string | null }>(sql`
-    select owner_id from close_run_tasks where id = ${taskId}`)).rows[0]?.owner_id ?? null;
+    select owner_id from close_run_tasks where id = ${taskId}`, "objects"))[0]?.owner_id ?? null;
 }
 
 async function taskAssignEvents(h: Harness, taskId: string) {
-  return (await db.execute<{ event_type: string; payload: unknown }>(sql`
+  return await db.execute<{ event_type: string; payload: unknown }>(sql`
     select event_type, payload from close_events
      where org_id = ${h.orgId} and run_id = ${h.runId} and task_id = ${taskId}
-       and event_type = 'task.assign'`)).rows;
+       and event_type = 'task.assign'`, "objects");
 }
 
 async function stabilize(h: Harness, ownerId: string): Promise<void> {

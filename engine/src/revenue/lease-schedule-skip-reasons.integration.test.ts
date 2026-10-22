@@ -51,10 +51,8 @@ async function seedLeaseAccounts(org: ScratchOrg) {
 }
 
 async function seedAugust(org: ScratchOrg): Promise<void> {
-  const cal = (
-    await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)
-  ).rows[0]!.id;
+  const cal = (await db.execute<{ id: string }>(sql`
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into accounting_periods
       (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -63,8 +61,8 @@ async function seedAugust(org: ScratchOrg): Promise<void> {
 
 async function journalCount(orgId: string): Promise<number> {
   const r = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`);
-  return r.rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects");
+  return r[0]!.n;
 }
 
 test(
@@ -132,8 +130,7 @@ test(
         2,
         "only the open August line posts (payment + amortization); the closed July line writes nothing",
       );
-      const july = (
-        await db.execute<{
+      const july = (await db.execute<{
           payment_posted_at: string | null;
           accrual_posted_at: string | null;
           payment_entry_id: string | null;
@@ -141,8 +138,7 @@ test(
         }>(sql`
         select payment_posted_at::text, accrual_posted_at::text, payment_entry_id, amortization_entry_id
           from lease_agreement_schedule_lines
-         where org_id = ${org.orgId} and lease_id = ${leaseId} and sequence = 1`)
-      ).rows[0]!;
+         where org_id = ${org.orgId} and lease_id = ${leaseId} and sequence = 1`, "objects"))[0]!;
       assert.equal(july.payment_posted_at, null);
       assert.equal(july.accrual_posted_at, null);
       assert.equal(july.payment_entry_id, null);

@@ -71,10 +71,10 @@ for (const operation of ['read', 'stale', 'current', 'missing', 'null-existing',
           assert.equal((await put()).status,409,'accepted token cannot be reused');
         }
       }
-      const audits=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and table_name='item_inventory_profiles' and row_id=${id}`)).rows[0]!.n;
+      const audits=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and table_name='item_inventory_profiles' and row_id=${id}`, 'objects'))[0]!.n;
       assert.equal(audits,['current','create-race','scope-all'].includes(operation)?1:0);
-      if(scoped) assert.deepEqual((await db.execute(sql`select unit_cost from cost_layers where item_id=${id}`)).rows.map(row=>row.unit_cost),[operation==='scope-all'?'3.0000':'2.0000']);
-      if(operation==='stale') assert.equal((await db.execute(sql`select base_unit from item_inventory_profiles where item_id=${id}`)).rows[0]?.base_unit,'case');
+      if(scoped) assert.deepEqual((await db.execute(sql`select unit_cost from cost_layers where item_id=${id}`, 'objects')).map(row=>row.unit_cost),[operation==='scope-all'?'3.0000':'2.0000']);
+      if(operation==='stale') assert.equal((await db.execute(sql`select base_unit from item_inventory_profiles where item_id=${id}`, 'objects'))[0]?.base_unit,'case');
     } finally { session.user=null; await dropScratchOrg(org.orgId); }
   });
 }

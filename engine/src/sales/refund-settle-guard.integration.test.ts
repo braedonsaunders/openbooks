@@ -88,16 +88,16 @@ async function insertTender(
 }
 
 async function tenderAccount(orgId: string, tenderId: string): Promise<string | null> {
-  const rows = (await withBypassContext(() => db.execute<{ accountId: string | null }>(sql`
+  const rows = await withBypassContext(() => db.execute<{ accountId: string | null }>(sql`
     select stored_value_account_id as "accountId" from document_tenders
-     where org_id = ${orgId} and id = ${tenderId}`))).rows;
+     where org_id = ${orgId} and id = ${tenderId}`, "objects"));
   return rows[0]?.accountId ?? null;
 }
 
 async function accountBalance(orgId: string, accountId: string): Promise<bigint> {
-  const rows = (await withBypassContext(() => db.execute<{ balance: string }>(sql`
+  const rows = await withBypassContext(() => db.execute<{ balance: string }>(sql`
     select balance_minor::text as balance from stored_value_accounts
-     where org_id = ${orgId} and id = ${accountId}`))).rows;
+     where org_id = ${orgId} and id = ${accountId}`, "objects"));
   return BigInt(rows[0]!.balance);
 }
 
@@ -155,7 +155,7 @@ test("settle refuses a refund that is not posted", { skip: !DB }, async () => {
     );
     assert.equal(
       (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from stored_value_accounts where org_id = ${org.orgId}`)).rows[0]!.n,
+        select count(*)::int as n from stored_value_accounts where org_id = ${org.orgId}`, "objects"))[0]!.n,
       1,
       "the refused settle mints nothing: only the seeded account exists",
     );
@@ -199,7 +199,7 @@ test("draft tenders refuse another customer's account before posting", { skip: !
     );
     assert.equal(
       (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from document_tenders where org_id = ${org.orgId} and document_id = ${refundId}`)).rows[0]!.n,
+        select count(*)::int as n from document_tenders where org_id = ${org.orgId} and document_id = ${refundId}`, "objects"))[0]!.n,
       0,
     );
   } finally {
@@ -234,9 +234,9 @@ test("a replayed settle fills the tender row instead of minting twice", { skip: 
     );
     assert.equal(settled.settled, 1);
     assert.equal(await tenderAccount(org.orgId, tenderId), crashed.accountId, "the retry records the first account");
-    const accounts = (await db.execute<{ n: number }>(sql`
+    const accounts = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from stored_value_accounts
-       where org_id = ${org.orgId} and source_document_id = ${refundId}`)).rows;
+       where org_id = ${org.orgId} and source_document_id = ${refundId}`, "objects");
     assert.equal(accounts[0]!.n, 1, "the retry mints no second account");
     assert.equal(await accountBalance(org.orgId, crashed.accountId), toUnits("25"));
   } finally {
@@ -300,9 +300,9 @@ test("concurrent refund loads with one idempotency key credit an account once", 
     const results = await Promise.all([load(), load()]);
     assert.deepEqual(results.map((result) => result.replayed).sort(), [false, true]);
     assert.equal(await accountBalance(org.orgId, setup.accountB), toUnits("75"));
-    const entries = (await withBypass(() => db.execute<{ count: number }>(sql`
+    const entries = await withBypass(() => db.execute<{ count: number }>(sql`
       select count(*)::int as count from stored_value_entries
-       where org_id = ${org.orgId} and idempotency_key = ${`stored-value:load-entry:${idempotencyKey}`}`))).rows;
+       where org_id = ${org.orgId} and idempotency_key = ${`stored-value:load-entry:${idempotencyKey}`}`, "objects"));
     assert.equal(entries[0]?.count, 1);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

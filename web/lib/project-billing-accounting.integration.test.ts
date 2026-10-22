@@ -62,10 +62,10 @@ async function snapshot(f: Fixture) {
     (select jsonb_agg(to_jsonb(l) order by l.id) from document_lines l where l.org_id=${f.org.orgId}) as lines,
     (select jsonb_agg(to_jsonb(r) order by r.id) from billing_requests r where r.org_id=${f.org.orgId}) as requests,
     (select jsonb_agg(to_jsonb(n) order by n.id) from number_sequences n where n.org_id=${f.org.orgId}) as numbers,
-    (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where a.org_id=${f.org.orgId}) as audit`)).rows[0]
+    (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where a.org_id=${f.org.orgId}) as audit`, 'objects'))[0]
 }
 async function accounts(f: Fixture, invoice: string) {
-  return (await db.execute<{ account_id: string; amount: string }>(sql`select account_id,sum(amount)::text as amount from document_lines where org_id=${f.org.orgId} and document_id=${invoice} group by account_id order by account_id`)).rows
+  return await db.execute<{ account_id: string; amount: string }>(sql`select account_id,sum(amount)::text as amount from document_lines where org_id=${f.org.orgId} and document_id=${invoice} group by account_id order by account_id`, 'objects')
 }
 
 for (const mode of ['missing', 'inactive', 'summary', 'foreign', 'nonexistent'] as const) {
@@ -132,10 +132,10 @@ test('project grouped presentation retains item accounts and source-to-invoice l
   const first = await source(f, f.org.accounts.revenue, '100')
   const second = await source(f, f.org.accounts.recognized, '200')
   const inv = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
-  const rows = (await db.execute<{ id: string; item_id: string; account_id: string; amount: string; source_id: string }>(sql`
+  const rows = await db.execute<{ id: string; item_id: string; account_id: string; amount: string; source_id: string }>(sql`
     select l.id,l.item_id,l.account_id,l.amount::text,s.id as source_id from document_lines l
     join document_lines s on s.org_id=l.org_id and s.billed_by_line_id=l.id
-    where l.org_id=${f.org.orgId} and l.document_id=${inv.id} order by s.id`)).rows
+    where l.org_id=${f.org.orgId} and l.document_id=${inv.id} order by s.id`, 'objects')
   const expected = [
     { item_id: first.item, account_id: f.org.accounts.revenue, amount: '100.0000', source_id: first.line },
     { item_id: second.item, account_id: f.org.accounts.recognized, amount: '200.0000', source_id: second.line },
@@ -156,18 +156,18 @@ test('project billing computes tax within the net contract cap and posts its fro
   const row = (await db.execute<{ subtotal: string; tax_total: string; total: string; tax_code_id: string; tax_amount: string }>(sql`
     select d.subtotal::text,d.tax_total::text,d.total::text,l.tax_code_id,l.tax_amount::text
     from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id
-    where d.org_id=${f.org.orgId} and d.id=${inv.id}`)).rows[0]
+    where d.org_id=${f.org.orgId} and d.id=${inv.id}`, 'objects'))[0]
   assert.deepEqual(row, { subtotal: '100.0000', tax_total: '5.0000', total: '105.0000', tax_code_id: tax, tax_amount: '5.0000' })
-  const components = (await db.execute(sql`select c.tax_code_id,c.rate_percent::text,c.taxable_amount::text,c.tax_amount::text,c.collected_account_id
+  const components = await db.execute(sql`select c.tax_code_id,c.rate_percent::text,c.taxable_amount::text,c.tax_amount::text,c.collected_account_id
     from document_line_tax_components c join document_lines l on l.id=c.document_line_id and l.org_id=c.org_id
-    where l.org_id=${f.org.orgId} and l.document_id=${inv.id}`)).rows
+    where l.org_id=${f.org.orgId} and l.document_id=${inv.id}`, 'objects')
   assert.deepEqual(components, [{ tax_code_id: tax, rate_percent: '5.0000', taxable_amount: '100.0000', tax_amount: '5.0000', collected_account_id: f.org.accounts.taxOutput }])
   const approver = await withBypassContext(() => (createScratchUser(f.org.orgId, 'Project invoice poster', 'admin')))
   assert.equal((await submitAndReleaseIfUngated('customer_invoice', inv.id, f.actor)).autoApproved, true)
   await postDocument(inv.id, { control: { ar: f.org.accounts.ar, ap: f.org.accounts.ap, bank: f.org.accounts.bank } }, { audit: { actorId: approver, source: 'test' } })
-  const ledger = (await db.execute<{ account_id: string; amount: string }>(sql`select l.account_id,sum(l.amount)::text as amount
+  const ledger = await db.execute<{ account_id: string; amount: string }>(sql`select l.account_id,sum(l.amount)::text as amount
     from journal_lines l join documents d on d.org_id=l.org_id and d.posted_entry_id=l.entry_id
-    where d.org_id=${f.org.orgId} and d.id=${inv.id} group by l.account_id order by l.account_id`)).rows
+    where d.org_id=${f.org.orgId} and d.id=${inv.id} group by l.account_id order by l.account_id`, 'objects')
   assert.deepEqual(ledger, [
     { account_id: f.org.accounts.ar, amount: '105.0000' },
     { account_id: f.org.accounts.revenue, amount: '-100.0000' },
@@ -238,7 +238,7 @@ test('competing project billing requests serialize their not-to-exceed capacity 
     await blocker.query('select pg_advisory_unlock($1)', [gate]); released = true
     const results = await done
     assert.equal(results.filter(r => r.status === 'fulfilled').length, 2, JSON.stringify(results))
-    const totals = (await db.execute<{ total: string }>(sql`select total::text from documents where org_id=${f.org.orgId} and project_id=${f.project} and kind='customer_invoice' order by total`)).rows
+    const totals = await db.execute<{ total: string }>(sql`select total::text from documents where org_id=${f.org.orgId} and project_id=${f.project} and kind='customer_invoice' order by total`, 'objects')
     assert.deepEqual(totals, [{ total: '20.0000' }, { total: '80.0000' }])
   } finally {
     if (!released) await blocker.query('select pg_advisory_unlock($1)', [gate])
@@ -258,7 +258,7 @@ async function fivePercentTax(f: Fixture, inclusive = false) {
   return tax
 }
 async function totals(f: Fixture, invoice: string) {
-  return (await db.execute(sql`select subtotal::text,tax_total::text,total::text from documents where org_id=${f.org.orgId} and id=${invoice}`)).rows[0]
+  return (await db.execute(sql`select subtotal::text,tax_total::text,total::text from documents where org_id=${f.org.orgId} and id=${invoice}`, 'objects'))[0]
 }
 for (const amount of ['105', '106.05']) {
   test(`tax-inclusive project charge ${amount} consumes its net value against a 100 cap`, enabled, async () => fixture(async f => {
@@ -302,8 +302,8 @@ test('untaxed lump-sum markup preserves each source revenue account and departme
     expected.push({ account_id: account, department_id: department, amount: '110.0000' })
   }
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
-  const actual = (await db.execute(sql`select account_id,department_id,sum(amount)::text as amount from document_lines
-    where org_id=${f.org.orgId} and document_id=${invoice.id} group by account_id,department_id order by account_id`)).rows
+  const actual = await db.execute(sql`select account_id,department_id,sum(amount)::text as amount from document_lines
+    where org_id=${f.org.orgId} and document_id=${invoice.id} group by account_id,department_id order by account_id`, 'objects')
   assert.deepEqual(actual, expected.sort((a,b) => a.account_id.localeCompare(b.account_id)))
 }))
 
@@ -328,11 +328,11 @@ test('rate-card surcharges measure cost before lump-sum markup', enabled, async 
 
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
   assert.deepEqual(await totals(f, invoice.id), { subtotal: '115.0000', tax_total: '0.0000', total: '115.0000' })
-  const surcharge = (await db.execute(sql`select amount::text from document_lines
-    where org_id=${f.org.orgId} and document_id=${invoice.id} and item_id=${surchargeItem}`)).rows
+  const surcharge = await db.execute(sql`select amount::text from document_lines
+    where org_id=${f.org.orgId} and document_id=${invoice.id} and item_id=${surchargeItem}`, 'objects')
   assert.deepEqual(surcharge, [{ amount: '5.0000' }])
-  const sourceAmount = (await db.execute(sql`select amount::text from document_lines
-    where org_id=${f.org.orgId} and document_id=${invoice.id} and id = (select billed_by_line_id from document_lines where id=${cost.line})`)).rows
+  const sourceAmount = await db.execute(sql`select amount::text from document_lines
+    where org_id=${f.org.orgId} and document_id=${invoice.id} and id = (select billed_by_line_id from document_lines where id=${cost.line})`, 'objects')
   assert.deepEqual(sourceAmount, [{ amount: '100.0000' }])
 }))
 
@@ -345,7 +345,7 @@ for (const grouping of ['per_source_line', 'per_item'] as const) {
     assert.deepEqual(await totals(f, invoice.id), { subtotal: '0.0200', tax_total: '0.0000', total: '0.0200' })
     const linked = (await db.execute(sql`select count(*)::text as count from document_lines s join document_lines i
       on i.org_id=s.org_id and i.id=s.billed_by_line_id where s.org_id=${f.org.orgId} and i.document_id=${invoice.id}
-      and s.id in (${first.line},${second.line})`)).rows[0]
+      and s.id in (${first.line},${second.line})`, 'objects'))[0]
     assert.deepEqual(linked, { count: '2' })
   }))
 }
@@ -360,7 +360,7 @@ test('per-item grouping retains eight-decimal project-charge quantities', enable
     await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)))
   }
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
-  const lines = (await db.execute(sql`select quantity::text,amount::text from document_lines where org_id=${f.org.orgId} and document_id=${invoice.id}`)).rows
+  const lines = await db.execute(sql`select quantity::text,amount::text from document_lines where org_id=${f.org.orgId} and document_id=${invoice.id}`, 'objects')
   assert.deepEqual(lines, [{ quantity: '0.24691356', amount: '2.0000' }])
 }))
 
@@ -390,10 +390,10 @@ for (const dimension of ['department', 'unit', 'equipment', 'rate_version'] as c
       expected.push({ source_id: charge.line, value })
     }
     const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
-    const rows = (await db.execute<{ id: string; source_id: string; department_id: string | null; unit: string | null; equipment_unit_id: string | null; rate_version_id: string | null }>(sql`
+    const rows = await db.execute<{ id: string; source_id: string; department_id: string | null; unit: string | null; equipment_unit_id: string | null; rate_version_id: string | null }>(sql`
       select i.id,s.id as source_id,i.department_id,i.unit,i.equipment_unit_id,i.rate_version_id from document_lines i
       join document_lines s on s.org_id=i.org_id and s.billed_by_line_id=i.id
-      where i.org_id=${f.org.orgId} and i.document_id=${invoice.id} order by s.id`)).rows
+      where i.org_id=${f.org.orgId} and i.document_id=${invoice.id} order by s.id`, 'objects')
     const column = dimension === 'department' ? 'department_id' : dimension === 'equipment' ? 'equipment_unit_id' : dimension === 'rate_version' ? 'rate_version_id' : 'unit'
     assert.deepEqual(rows.map(r => ({ source_id: r.source_id, value: r[column] })), expected.sort((a,b) => a.source_id.localeCompare(b.source_id)))
     assert.equal(new Set(rows.map(r => r.id)).size, 2)
@@ -425,8 +425,8 @@ test('per-item presentation prices each department under its own negotiated surc
   }
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
   assert.deepEqual(await totals(f, invoice.id), { subtotal: '230.0000', tax_total: '0.0000', total: '230.0000' })
-  const surcharges = (await db.execute(sql`select amount::text from document_lines where org_id=${f.org.orgId}
-    and document_id=${invoice.id} and item_id=${surchargeItem} order by amount`)).rows
+  const surcharges = await db.execute(sql`select amount::text from document_lines where org_id=${f.org.orgId}
+    and document_id=${invoice.id} and item_id=${surchargeItem} order by amount`, 'objects')
   assert.deepEqual(surcharges, [{ amount: '10.0000' }, { amount: '20.0000' }])
 }))
 
@@ -442,7 +442,7 @@ test('project-charge component billing preserves large exact decimals through JS
   await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)))
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
   assert.deepEqual(await totals(f, invoice.id), { subtotal: '123456789012345.1300', tax_total: '0.0000', total: '123456789012345.1300' })
-  const rows = (await db.execute(sql`select quantity::text,amount::text from document_lines where org_id=${f.org.orgId} and document_id=${invoice.id}`)).rows
+  const rows = await db.execute(sql`select quantity::text,amount::text from document_lines where org_id=${f.org.orgId} and document_id=${invoice.id}`, 'objects')
   assert.deepEqual(rows, [{ quantity: '1.00000000', amount: '123456789012345.1300' }])
 }))
 

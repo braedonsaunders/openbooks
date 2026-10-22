@@ -51,13 +51,13 @@ test("a foreign-currency payment run pays each vendor once and converts at its o
       scheduledFor: org.date,
     });
 
-    const instructions = (await db.execute<{ amount: string; payment_document_id: string }>(sql`
+    const instructions = await db.execute<{ amount: string; payment_document_id: string }>(sql`
       select amount::text as amount, payment_document_id from payment_instructions
-       where org_id = ${org.orgId} and payment_run_id = ${run.id}`)).rows;
+       where org_id = ${org.orgId} and payment_run_id = ${run.id}`, "objects");
     assert.deepEqual(instructions.map((row) => row.amount), ["200.0000"], "one transfer for the vendor's EUR bills");
     const payment = (await db.execute<{ fx_rate: string; allocations: Array<{ targetBaseAmount?: string }> }>(sql`
       select fx_rate::text as fx_rate, custom->'allocations' as allocations from documents
-       where org_id = ${org.orgId} and id = ${instructions[0]!.payment_document_id}`)).rows[0]!;
+       where org_id = ${org.orgId} and id = ${instructions[0]!.payment_document_id}`, "objects"))[0]!;
     assert.equal(payment.fx_rate, "1.0000000000", "the payment rate is left to its posting date, not copied from a bill");
     assert.deepEqual(payment.allocations.map((allocation) => allocation.targetBaseAmount).sort(), ["140.0000", "145.0000"],
       "each bill is relieved at its own carrying amount");

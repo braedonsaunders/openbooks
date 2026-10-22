@@ -67,14 +67,14 @@ async function seed(): Promise<{ org: ScratchOrg; restricted: string; lines: Rec
   const admin: string = await withBypassContext(() => createScratchUser(org.orgId, 'Payout owner', 'admin'))
   const restricted: string = await withBypassContext(() => createScratchUser(org.orgId, 'Payout viewer', 'payout-viewer'))
   await withBypassContext(async () => {
-    assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"banking":true}'::jsonb, true) where id = ${org.orgId} returning id`)).rows.length, 1)
-    assert.equal((await db.execute(sql`update app_roles set permissions = '["banking.read","banking.reconcile"]'::jsonb, subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id = ${org.orgId} and key = 'payout-viewer' returning key`)).rows.length, 1)
-    assert.equal((await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin' returning key`)).rows.length, 1)
+    assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"banking":true}'::jsonb, true) where id = ${org.orgId} returning id`, 'objects')).length, 1)
+    assert.equal((await db.execute(sql`update app_roles set permissions = '["banking.read","banking.reconcile"]'::jsonb, subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb where org_id = ${org.orgId} and key = 'payout-viewer' returning key`, 'objects')).length, 1)
+    assert.equal((await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin' returning key`, 'objects')).length, 1)
   })
   const subB = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
     values (gen_random_uuid(), ${org.orgId}, ${org.subsidiaryId}, 'Western Entity', 'CAD', 'CA')
-    returning id`)).rows[0]!.id))
+    returning id`, 'objects'))[0]!.id))
   const accounts = { bankAccountId: org.accounts.bank, feeAccountId: org.accounts.adjustment, clearingAccountId: org.accounts.clearing }
   const batchA = (await withBypassContext(() => importSettlementBatch(org.orgId, admin, {
     provider: "stripe", externalRef: "po_web_A", settlementDate: "2026-07-10", currency: "CAD",
@@ -92,7 +92,7 @@ async function seed(): Promise<{ org: ScratchOrg; restricted: string; lines: Rec
     lines: [{ kind: "charge", amount: "40.00", externalRef: "web-hidden-1", currency: "CAD", meta: {} }],
   }, { ...accounts, subsidiaryId: subB }, null))).batchId
   const lineOf = async (batchId: string, ref: string): Promise<string> => (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
-    select id from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId} and external_ref = ${ref}`)).rows[0]!.id))
+    select id from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId} and external_ref = ${ref}`, 'objects'))[0]!.id))
   const lines = {
     nullCurrency: await lineOf(batchA, "web-null-1"),
     cad: await lineOf(batchA, "web-cad-1"),

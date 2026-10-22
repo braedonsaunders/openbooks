@@ -36,9 +36,9 @@ async function suggestPaymentApplications(req: Request) {
   const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
      where id = ${body.partyId} and org_id = ${gate.user.orgId}
-  `))
-  if (!party.rows[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
+  `, 'objects'))
+  if (!party[0]) return notFound("record")
+  const scopeDenied = guardSubsidiaryScope(gate, party[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
   try {
     const suggestion = await suggestApplications(body.partyId, body.amount, body.side, {

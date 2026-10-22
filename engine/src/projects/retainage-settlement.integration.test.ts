@@ -61,7 +61,7 @@ async function customerProject(org: Org, subsidiaryId: string, code: string): Pr
     values(${project},${org.orgId},${subsidiaryId},${code},'Settlement job',${org.customerId},${type},'active')`);
   await db.execute(sql`insert into sov_lines(org_id,project_id,description,scheduled_value,sort_order,income_account_id)
     values(${org.orgId},${project},'Work','10000',1,${org.accounts.revenue})`);
-  const sov = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`)).rows[0]!.id;
+  const sov = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`, "objects"))[0]!.id;
   return { project, sov };
 }
 
@@ -77,9 +77,9 @@ async function customerDraw(
 }
 
 async function customerHeld(org: Org, project: string): Promise<string> {
-  const control = (await db.execute<{ id: string }>(sql`select settings->'controlAccounts'->>'retainageReceivable' as id from orgs where id=${org.orgId}`)).rows[0]!.id;
+  const control = (await db.execute<{ id: string }>(sql`select settings->'controlAccounts'->>'retainageReceivable' as id from orgs where id=${org.orgId}`, "objects"))[0]!.id;
   return (await db.execute<{ held: string }>(sql`select coalesce(sum(amount),0)::text as held from journal_lines
-    where org_id=${org.orgId} and project_id=${project} and account_id=${control}`)).rows[0]!.held;
+    where org_id=${org.orgId} and project_id=${project} and account_id=${control}`, "objects"))[0]!.held;
 }
 
 test("customer consecutive draws settle cumulative cents with the residual carried", enabled, async () => {
@@ -169,7 +169,7 @@ test("vendor consecutive draws settle cumulative cents with the residual carried
     assert.equal(await draw("333.33", "2026-07-16"), "33.3400");
     const held = (await db.execute<{ held: string }>(sql`select coalesce(sum(case when d.status = 'posted' then vpa.retainage_this_period else 0 end),0)::text as held
       from vendor_pay_applications vpa left join documents d on d.id = vpa.vendor_bill_document_id and d.org_id = vpa.org_id
-      where vpa.org_id = ${org.orgId} and vpa.subcontract_id = ${subcontract} and vpa.status = 'billed'`)).rows[0]!.held;
+      where vpa.org_id = ${org.orgId} and vpa.subcontract_id = ${subcontract} and vpa.status = 'billed'`, "objects"))[0]!.held;
     assert.equal(cmp(held, "66.67"), 0);
     await assert.rejects(
       withOrgTransaction(org.orgId, () => releaseVendorRetainage({ orgId: org.orgId, userId: actor, subcontractId: subcontract, periodEnd: "2026-07-17", amount: "10.005" })),

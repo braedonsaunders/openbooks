@@ -145,8 +145,8 @@ export const POST = defineRoute({
       -- A retry resolves the existing audited payload below; conflicting input is refused.
       on conflict (id) do nothing
       returning id
-    `);
-      if (!inserted.rows[0]) {
+    `, "objects");
+      if (!inserted[0]) {
         return resolveIdempotentReplay(tx, {
           orgId: user.orgId,
           table: "insight_cards",

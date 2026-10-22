@@ -42,16 +42,16 @@ export async function DerivedRulePreviewSection({
   const [rulesRes, lastRunRes] = (await Promise.all([
     db.execute<{ id: string; code: string; name: string; is_active: boolean }>(sql`
       select id, code, name, is_active from pay_derived_rules
-       where org_id = ${orgId} order by sequence, code`),
+       where org_id = ${orgId} order by sequence, code`, 'objects'),
     db.execute<{ period_start: string; period_end: string }>(sql`
       select period_start, period_end from pay_runs
-       where org_id = ${orgId} order by period_end desc limit 1`),
+       where org_id = ${orgId} order by period_end desc limit 1`, 'objects'),
   ]))
-  const rules = rulesRes.rows
+  const rules = rulesRes
 
   // Default to the period the last run covered — the operator is almost always
   // asking "what would this have paid last time?".
-  const lastRun = lastRunRes.rows[0]
+  const lastRun = lastRunRes[0]
   const today = await businessToday(orgId)
   const defaultFrom = lastRun ? String(lastRun.period_start).slice(0, 10) : `${today.slice(0, 7)}-01`
   const defaultTo = lastRun ? String(lastRun.period_end).slice(0, 10) : today

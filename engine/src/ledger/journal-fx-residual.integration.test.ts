@@ -51,8 +51,8 @@ test(
           from journal_entries e join journal_lines l on l.entry_id = e.id
          where e.org_id = ${org.orgId} and e.custom->>'idempotencyKey' = ${key}
            and l.subsidiary_id = ${org.subsidiaryId}
-         group by e.status`));
-      assert.deepEqual(state.rows, [{ status: "posted", lines: 5, sub: "0.0000" }]);
+         group by e.status`, "objects"));
+      assert.deepEqual(state, [{ status: "posted", lines: 5, sub: "0.0000" }]);
       const replay = await withOrgContext(org.orgId, () => postEntry(db, { ...baseInput(org, key), lines }));
       assert.equal(replay.entryId, first.entryId);
       assert.equal(replay.lines.length, 5);
@@ -83,8 +83,8 @@ test(
       );
       const remnant = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_entries
-         where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`));
-      assert.deepEqual(remnant.rows, [{ n: 0 }]);
+         where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`, "objects"));
+      assert.deepEqual(remnant, [{ n: 0 }]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -106,8 +106,8 @@ test(
       }));
       const selectors = [...Array.from({ length: 128 }, () => posted.entryId), randomUUID(), null];
       await withOrgContext(org.orgId, async () => {
-        const before = (await db.execute(sql`select * from journal_lines
-          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`)).rows;
+        const before = await db.execute(sql`select * from journal_lines
+          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`, "objects");
         // The repeated identities preserve the same lawful 0.0001 deviation
         // at the exact two-line boundary, in both posting-message contexts.
         for (const newPosting of [true, false]) {
@@ -118,8 +118,8 @@ test(
         }
         await db.execute(sql`select public.journal_lines_check_fx_residual_entries(
           ${sql.param(selectors)}::uuid[])`);
-        const after = (await db.execute(sql`select * from journal_lines
-          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`)).rows;
+        const after = await db.execute(sql`select * from journal_lines
+          where org_id=${org.orgId} and entry_id=${posted.entryId} order by id`, "objects");
         assert.deepEqual(after, before);
         assert.equal(after.length, 2);
       });

@@ -17,16 +17,16 @@ async function fixture() {
   const actorId = await createScratchUser(org.orgId, 'Photo operator', 'photo_operator')
   const rows = await withOrg(org.orgId, async () => {
     const grants = await db.execute(sql`update app_roles set permissions='["sync.run","parties.read","parties.manage"]'::jsonb
-      where org_id=${org.orgId} and key='photo_operator' returning id`)
-    assert.equal(grants.rows.length,1)
-    const principal = (await db.execute<{ is_active: boolean }>(sql`select is_active from users where org_id=${org.orgId} and id=${actorId}`)).rows[0]
+      where org_id=${org.orgId} and key='photo_operator' returning id`, 'objects')
+    assert.equal(grants.length,1)
+    const principal = (await db.execute<{ is_active: boolean }>(sql`select is_active from users where org_id=${org.orgId} and id=${actorId}`, 'objects'))[0]
     assert.equal(principal?.is_active,true)
     const connection = (await db.execute<{ id: string }>(sql`
       insert into connections (org_id,source,display_name,auth_kind,status,config)
-      values (${org.orgId},'netsuite','Photo source','token','active','{"account":"photo-account","baseCurrency":"CAD"}'::jsonb) returning id`)).rows[0]!
+      values (${org.orgId},'netsuite','Photo source','token','active','{"account":"photo-account","baseCurrency":"CAD"}'::jsonb) returning id`, 'objects'))[0]!
     const party = (await db.execute<{ id: string }>(sql`
       insert into parties (org_id,kind,display_name,custom)
-      values (${org.orgId},'person','Source employee','{"source":{"system":"netsuite","externalId":"100"},"nsId":"100"}'::jsonb) returning id`)).rows[0]!
+      values (${org.orgId},'person','Source employee','{"source":{"system":"netsuite","externalId":"100"},"nsId":"100"}'::jsonb) returning id`, 'objects'))[0]!
     await db.execute(sql`insert into employee_roles (org_id,party_id) values (${org.orgId},${party.id})`)
     return { connectionId: connection.id, partyId: party.id }
   })
@@ -36,8 +36,8 @@ async function fixture() {
 
 async function counts(orgId: string, partyId: string) {
   return withOrg(orgId, async () => {
-    const files = (await db.execute<{ n: number }>(sql`select count(*)::int as n from file_attachments where org_id=${orgId} and target_table='parties' and target_id=${partyId}`)).rows[0]!.n
-    const audit = (await db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log where org_id=${orgId} and table_name='parties' and row_id=${partyId} and changes->>'mode'='party_photo'`)).rows[0]!.n
+    const files = (await db.execute<{ n: number }>(sql`select count(*)::int as n from file_attachments where org_id=${orgId} and target_table='parties' and target_id=${partyId}`, 'objects'))[0]!.n
+    const audit = (await db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log where org_id=${orgId} and table_name='parties' and row_id=${partyId} and changes->>'mode'='party_photo'`, 'objects'))[0]!.n
     return { files, audit }
   })
 }
@@ -96,8 +96,8 @@ test('a removed connector photo pointer is preserved rather than silently reinst
   try {
     const first = await storePartyPhoto({ ...f,filename: 'source.png',bytes: PNG })
     const removed = await withOrg(f.orgId, () => db.execute(sql`update parties set photo_file_id=null
-      where org_id=${f.orgId} and id=${f.partyId} and photo_file_id=${first.photoFileId} returning id`))
-    assert.equal(removed.rows.length,1)
+      where org_id=${f.orgId} and id=${f.partyId} and photo_file_id=${first.photoFileId} returning id`, 'objects'))
+    assert.equal(removed.length,1)
     const before = await counts(f.orgId,f.partyId)
     const replay = await syncSourcePartyPhotos(adapter(),{ ...f,runId: null,execute: true })
     assert.equal(replay.conflicts,1)
@@ -203,7 +203,7 @@ test('scoped employee refresh lands source service dates and preserves other ina
   try {
     const inactive = await withOrg(f.orgId, async () => {
       const row = (await db.execute<{ id: string }>(sql`insert into parties(org_id,kind,display_name,is_active,custom)
-        values(${f.orgId},'person','Inactive source employee',false,'{"nsId":"101"}'::jsonb) returning id`)).rows[0]!
+        values(${f.orgId},'person','Inactive source employee',false,'{"nsId":"101"}'::jsonb) returning id`, 'objects'))[0]!
       await db.execute(sql`insert into employee_roles(org_id,party_id,is_active) values(${f.orgId},${row.id},false)`)
       return row.id
     })
@@ -214,8 +214,8 @@ test('scoped employee refresh lands source service dates and preserves other ina
       [{ resource: 'parties',records: [{ sourceRef: '100',fields: { displayName: 'Source employee',kind: 'person',isActive: true,employeeRole: { hiredOn: '2026-08-24',terminatedOn: null } } }] }],
       undefined,{ employeeRefs: ['100'] }))
     assert.equal(stats.parties!.failed,0)
-    const roles = await withOrg(f.orgId, async () => (await db.execute(sql`select p.id,p.is_active,e.hired_on::text,e.terminated_on::text,e.is_active as role_active
-      from parties p join employee_roles e on e.org_id=p.org_id and e.party_id=p.id where p.org_id=${f.orgId} and p.id in (${f.partyId},${inactive})`)).rows)
+    const roles = await withOrg(f.orgId, async () => await db.execute(sql`select p.id,p.is_active,e.hired_on::text,e.terminated_on::text,e.is_active as role_active
+      from parties p join employee_roles e on e.org_id=p.org_id and e.party_id=p.id where p.org_id=${f.orgId} and p.id in (${f.partyId},${inactive})`, 'objects'))
     assert.equal(roles.find(row => row.id===f.partyId)?.hired_on,'2026-08-24')
     assert.equal(roles.find(row => row.id===f.partyId)?.terminated_on,null)
     assert.equal(roles.find(row => row.id===inactive)?.is_active,false)

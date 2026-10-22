@@ -8,6 +8,6 @@ export const essentialsWorkspace = cache(async (orgId: string): Promise<boolean>
   const result = await db.execute<{ complexity: string | null }>(sql`
     select settings #>> '{workspaceProfile,complexity}' as complexity
       from orgs where id = ${orgId}
-  `)
-  return result.rows[0]?.complexity === 'essentials'
+  `, 'objects')
+  return result[0]?.complexity === 'essentials'
 })

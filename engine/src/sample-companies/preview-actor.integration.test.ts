@@ -21,8 +21,8 @@ type AuthoritySnapshot = Record<string, Array<{ id: string } & Record<string, un
 async function authoritySnapshot(orgId: string): Promise<AuthoritySnapshot> {
   return withOrgContext(orgId, async () => {
     const result: AuthoritySnapshot = {};
-    for (const table of authorityTables) result[table] = (await db.execute<{ id: string } & Record<string, unknown>>(sql`
-      select * from ${sql.identifier(table)} where org_id=${orgId} order by id`)).rows;
+    for (const table of authorityTables) result[table] = await db.execute<{ id: string } & Record<string, unknown>>(sql`
+      select * from ${sql.identifier(table)} where org_id=${orgId} order by id`, "objects");
     return result;
   });
 }
@@ -72,7 +72,7 @@ test("an ordinary member receives a fresh local preview administrator while inhe
     const orgId = previewId;
     const finalized = await withOrgContext(orgId, async () => (await db.execute<{ actorId: string; stage: string; access: number }>(sql`
       select settings->'sampleCompany'->>'finalizedBy' as "actorId",settings->'sampleCompany'->>'provisioningStage' as stage,
-        (select count(*)::int from user_org_access where org_id=${orgId} and is_active) as access from orgs where id=${orgId}`)).rows[0]!);
+        (select count(*)::int from user_org_access where org_id=${orgId} and is_active) as access from orgs where id=${orgId}`, "objects"))[0]!);
     assert.equal(finalized.stage, "finalized");
     assert.equal(finalized.access, 0, "unfinished company is not exposed to the member");
     const finalizedAuthority = await authoritySnapshot(orgId);
@@ -96,9 +96,9 @@ test("an ordinary member receives a fresh local preview administrator while inhe
     const resumed = await createSampleCompany(input, { prepareTemplate });
     assert.equal(resumed.orgId, orgId);
     assert.deepEqual(await authoritySnapshot(orgId), finalizedAuthority, "resuming finalized setup creates no user, role or grant");
-    const access = await withOrgContext(orgId, async () => (await db.execute<{ acting_user_id: string }>(sql`
+    const access = await withOrgContext(orgId, async () => await db.execute<{ acting_user_id: string }>(sql`
       select a.acting_user_id from user_org_access a join users u on u.org_id=a.org_id and u.id=a.acting_user_id and u.is_active
-      where a.org_id=${orgId} and a.member_user_id=${memberUserId} and a.is_active`)).rows);
+      where a.org_id=${orgId} and a.member_user_id=${memberUserId} and a.is_active`, "objects"));
     assert.deepEqual(access, [{ acting_user_id: actor.id }], "native member access resolves the dedicated actor independently of its role key");
     const again = await createSampleCompany(input, { prepareTemplate });
     assert.equal(again.created, false);
@@ -110,14 +110,14 @@ test("an ordinary member receives a fresh local preview administrator while inhe
       for (const permission of ["gl.post", "items.post", "hrm.certifications.manage", "admin.roles.manage"])
         assert.equal(await actorHasPermission(db, orgId, actor.id, permission), true);
       assert.equal(await actorAllowedSubsidiaryIds(db, orgId, actor.id), null);
-      const audit = (await db.execute<{ table_name: string; before: unknown; member: string }>(sql`
+      const audit = await db.execute<{ table_name: string; before: unknown; member: string }>(sql`
         select table_name,changes->'before' as before,changes->>'memberUserId' as member from audit_log
-        where org_id=${orgId} and actor_id=${actor.id} and changes->>'source'='sample_company_administrator_provisioning' order by table_name`)).rows;
+        where org_id=${orgId} and actor_id=${actor.id} and changes->>'source'='sample_company_administrator_provisioning' order by table_name`, "objects");
       assert.deepEqual(audit, ["app_roles", "parties", "role_assignments", "users"].map(table_name => ({ table_name, before: null, member: memberUserId })));
     });
     assert.equal(await withOrgContext(home.orgId, () => actorHasPermission(db, home.orgId, actor.id, "gl.post")), false, "preview authority grants no home-company access");
     const subsidiaryId = await withOrgContext(orgId, async () => (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id=${orgId} and parent_id is null and is_active`)).rows[0]!.id);
+      select id from subsidiaries where org_id=${orgId} and parent_id is null and is_active`, "objects"))[0]!.id);
     const courseInput = { orgId, actorId: actor.id, id: randomUUID(), subsidiaryId, code: "PREVIEW-TRAINING", version: 1,
       name: "Native preview training draft", description: "Synthetic training; grants no credential.", effectiveFrom: source.date, effectiveTo: null,
       qualificationTypeId: null, minimumAttendancePercent: 100, passingScore: 80, reason: "Exercise the ordinary member's new local administrator" };

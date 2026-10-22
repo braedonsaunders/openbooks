@@ -27,7 +27,7 @@ async function seedWorld() {
     (id,org_id,subsidiary_id,category_id,asset_number,name,status,acquired_on,in_service_on,acquisition_cost,salvage_value,depreciation_method,useful_life_months,depreciation_convention)
     values (${assetId},${org.orgId},${org.subsidiaryId},${categoryId},'FA-0001','Manual link mill','in_service','2026-07-01','2026-07-01',95,0,'straight_line',2,'full_month')`);
   await buildSchedule(assetId, org.orgId, actorId, org.bookId);
-  const august = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id=${org.orgId} and name='2026-08'`)).rows[0]!.id;
+  const august = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id=${org.orgId} and name='2026-08'`, 'objects'))[0]!.id;
   return { org, actorId, assetId, august };
 }
 
@@ -89,7 +89,7 @@ test('a hand-posted period warns, links, and never posts twice', { skip: !proces
     assert.deepEqual(resolved.manualEntryCandidates, []);
     const stored = (await db.execute<{ posted_amount: string | null; journal_entry_id: string | null }>(sql`
       select posted_amount::text as posted_amount, journal_entry_id::text as journal_entry_id
-        from depreciation_schedule_lines where org_id=${org.orgId} and id=${augustLine.lineId}`)).rows[0]!;
+        from depreciation_schedule_lines where org_id=${org.orgId} and id=${augustLine.lineId}`, 'objects'))[0]!;
     assert.equal(stored.posted_amount, '47.5000');
     assert.equal(stored.journal_entry_id, entryId);
 

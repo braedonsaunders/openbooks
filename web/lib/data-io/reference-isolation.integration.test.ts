@@ -38,15 +38,11 @@ test(
     const orgA = await createScratchOrg()
     const orgB = await createScratchOrg()
     try {
-      const victim = (
-        await db.execute<{ id: string; number: string }>(sql`
-          select id, number from accounts where org_id = ${orgB.orgId} and is_active limit 1`)
-      ).rows[0]
+      const victim = (await db.execute<{ id: string; number: string }>(sql`
+          select id, number from accounts where org_id = ${orgB.orgId} and is_active limit 1`, 'objects'))[0]
       assert.ok(victim)
-      const own = (
-        await db.execute<{ id: string; number: string }>(sql`
-          select id, number from accounts where org_id = ${orgA.orgId} and is_active limit 1`)
-      ).rows[0]
+      const own = (await db.execute<{ id: string; number: string }>(sql`
+          select id, number from accounts where org_id = ${orgA.orgId} and is_active limit 1`, 'objects'))[0]
       assert.ok(own)
 
       // resolveId: a foreign UUID is unresolvable; own UUIDs and natural keys
@@ -90,8 +86,8 @@ test(
       assert.match(outcome.errors[0]?.message ?? '', /not found/)
       const stored = await db.execute<{ count: number }>(sql`
         select count(*)::int as count from custom_records
-         where org_id = ${orgA.orgId} and type_key = ${typeKey}`)
-      assert.equal(stored.rows[0]?.count, 0)
+         where org_id = ${orgA.orgId} and type_key = ${typeKey}`, 'objects')
+      assert.equal(stored[0]?.count, 0)
 
       // Control: the same row with orgA's own account imports cleanly.
       const accepted = await resource.write(
@@ -150,9 +146,9 @@ test(
       await db.execute(sql`insert into trades (org_id, name) values (${orgB.orgId}, 'Victim Trade')`)
       await db.execute(sql`insert into trades (org_id, name) values (${orgA.orgId}, 'Own Trade')`)
       const ownPeriod = (await db.execute<{ id: string; name: string }>(sql`
-        select id, name from accounting_periods where org_id = ${orgA.orgId} limit 1`)).rows[0]
+        select id, name from accounting_periods where org_id = ${orgA.orgId} limit 1`, 'objects'))[0]
       const victimPeriod = (await db.execute<{ id: string; name: string }>(sql`
-        select id, name from accounting_periods where org_id = ${orgB.orgId} limit 1`)).rows[0]
+        select id, name from accounting_periods where org_id = ${orgB.orgId} limit 1`, 'objects'))[0]
       assert.ok(ownPeriod && victimPeriod)
 
       const resolverA = new RefResolver(orgA.orgId)
@@ -188,9 +184,9 @@ test(
 
       const tradeTarget = { resource: 'trades', by: 'name' }
       const victimTrade = (await db.execute<{ id: string }>(sql`
-        select id from trades where org_id = ${orgB.orgId} limit 1`)).rows[0]!.id
+        select id from trades where org_id = ${orgB.orgId} limit 1`, 'objects'))[0]!.id
       const ownTrade = (await db.execute<{ id: string }>(sql`
-        select id from trades where org_id = ${orgA.orgId} limit 1`)).rows[0]!.id
+        select id from trades where org_id = ${orgA.orgId} limit 1`, 'objects'))[0]!.id
       assert.equal(await resolverA.resolveId(tradeTarget, victimTrade), null)
       assert.equal(await resolverA.resolveId(tradeTarget, 'Victim Trade'), null)
       assert.equal(await resolverA.resolveId(tradeTarget, ownTrade), ownTrade)
@@ -270,8 +266,8 @@ test(
       assert.equal(refused.failed, 1)
       assert.match(refused.errors[0]?.message ?? '', /not found/)
       const stored = await db.execute<{ count: number }>(sql`
-        select count(*)::int as count from items where org_id = ${orgA.orgId} and code = ${code}`)
-      assert.equal(stored.rows[0]?.count, 0)
+        select count(*)::int as count from items where org_id = ${orgA.orgId} and code = ${code}`, 'objects')
+      assert.equal(stored[0]?.count, 0)
 
       const accepted = await resource.write(
         [{ code, name: 'Own widget', kind: 'non_inventory', [refKey]: 'OWN-P2' }],
@@ -283,7 +279,7 @@ test(
         { created: 1, failed: 0 },
       )
       const custom = (await db.execute<{ custom: { ownerproj?: string } & Record<string, unknown> }>(sql`
-        select custom from items where org_id = ${orgA.orgId} and code = ${code}`)).rows[0]?.custom
+        select custom from items where org_id = ${orgA.orgId} and code = ${code}`, 'objects'))[0]?.custom
       assert.equal(custom?.[refKey], ownProject)
 
       // Native clear semantics: a blank optional reference is omitted, never
@@ -298,7 +294,7 @@ test(
         { created: 0, updated: 1, failed: 0 },
       )
       const retained = (await db.execute<{ custom: Record<string, unknown> }>(sql`
-        select custom from items where org_id = ${orgA.orgId} and code = ${code}`)).rows[0]?.custom
+        select custom from items where org_id = ${orgA.orgId} and code = ${code}`, 'objects'))[0]?.custom
       assert.equal(retained?.[refKey], ownProject)
     } finally {
       await dropScratchOrgReporting(orgA.orgId)
@@ -334,7 +330,7 @@ test(
       assert.match(refused.errors[0]?.message ?? '', /not found/)
 
       const ownSubsidiary = (await db.execute<{ name: string }>(sql`
-        select name from subsidiaries where id = ${orgA.subsidiaryId}`)).rows[0]!.name
+        select name from subsidiaries where id = ${orgA.subsidiaryId}`, 'objects'))[0]!.name
       const preview = await resource.write(
         [{ code: 'PREVIEW', name: 'Preview', subsidiary: ownSubsidiary, propertyType: 'residential' }],
         'insert',
@@ -345,8 +341,8 @@ test(
         { created: 1, failed: 0 },
       )
       const persisted = await db.execute<{ count: number }>(sql`
-        select count(*)::int as count from managed_properties where org_id = ${orgA.orgId} and code = 'PREVIEW'`)
-      assert.equal(persisted.rows[0]?.count, 0)
+        select count(*)::int as count from managed_properties where org_id = ${orgA.orgId} and code = 'PREVIEW'`, 'objects')
+      assert.equal(persisted[0]?.count, 0)
     } finally {
       await dropScratchOrgReporting(orgA.orgId)
       await dropScratchOrgReporting(orgB.orgId)
@@ -365,7 +361,7 @@ test(
       const leaseId = randomUUID()
       const externalKey = `import-${randomUUID()}`
       const leaseNumber = `LEASE-${randomUUID().slice(0, 8)}`
-      const account = (await db.execute<{ number: string }>(sql`select number from accounts where org_id=${org.orgId} and id=${org.accounts.adjustment}`)).rows[0]
+      const account = (await db.execute<{ number: string }>(sql`select number from accounts where org_id=${org.orgId} and id=${org.accounts.adjustment}`, 'objects'))[0]
       assert.ok(account)
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"propertyManagement":true}'::jsonb) where id=${org.orgId}`)
       await db.execute(sql`insert into managed_properties
@@ -384,8 +380,8 @@ test(
       const changed = await resource.write([{ externalKey, leaseNumber, occurredOn: org.date, amount: '126', offsetAccount: account.number, memo: 'Opening deposit' }], 'upsert', context)
       assert.deepEqual({ created: changed.created, updated: changed.updated, failed: changed.failed }, { created: 0, updated: 0, failed: 1 })
       assert.match(changed.errors[0]?.message ?? '', new RegExp(externalKey))
-      const count = await db.execute<{ count: number }>(sql`select count(*)::int as count from security_deposit_transactions where org_id=${org.orgId} and import_key=${externalKey}`)
-      assert.equal(count.rows[0]?.count, 1)
+      const count = await db.execute<{ count: number }>(sql`select count(*)::int as count from security_deposit_transactions where org_id=${org.orgId} and import_key=${externalKey}`, 'objects')
+      assert.equal(count[0]?.count, 1)
     } finally {
       await dropScratchOrgReporting(org.orgId)
     }

@@ -72,12 +72,12 @@ async function fixture() {
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, class_id, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', ${classId}, 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const recordFor = async (partyId: string, projectId: string) =>
     (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into compliance_records (org_id, party_id, requirement_id, project_id, effective_from, coverage_amount, created_by, updated_by)
       values (${org.orgId}, ${partyId}, ${requirementId}, ${projectId}, '2026-01-01', '1000000.00', ${actorId}, ${actorId})
-      returning id`))).rows[0]!.id;
+      returning id`, "objects")))[0]!.id;
   return {
     org,
     hiddenRecordId: await recordFor(hiddenPartyId, visibleProjectId),
@@ -99,8 +99,8 @@ const patch = (recordId: string, body: unknown) =>
   );
 
 async function coverageOf(recordId: string): Promise<string> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ coverage_amount: string }>(sql`select coverage_amount from compliance_records where id = ${recordId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ coverage_amount: string }>(sql`select coverage_amount from compliance_records where id = ${recordId}`, "objects"));
   return rows[0]!.coverage_amount;
 }
 

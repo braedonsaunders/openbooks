@@ -228,14 +228,14 @@ async function resourceRows(board: ScheduleBoard, orgId: string, allowed: Readon
   const bookedColumn = board.resourceKind === "equipment" ? sql`x.equipment_unit_id` : sql`x.resource_location_id`;
   const inScope = sql`${board.subsidiaryId ? sql`r.subsidiary_id in ${treeIds("subsidiaries", orgId, board.subsidiaryId)}` : sql`true`}
     ${board.resourceKind === "location" && board.locationId ? sql`and r.id in ${treeIds("locations", orgId, board.locationId)}` : sql``}`;
-  return (await db.execute<BoardRow>(sql`select r.id as "subjectId", ${board.resourceKind} as "subjectKind", r.name,
+  return await db.execute<BoardRow>(sql`select r.id as "subjectId", ${board.resourceKind} as "subjectKind", r.name,
     ${board.resourceKind === "equipment" ? sql`r.unit_number` : sql`r.code`} as "shortCode", null::text as "jobTitle",
     null::uuid as "departmentId", null::text as "departmentName", null::text as "tradeName", (${inScope}) as "inScope"
     from ${sql.identifier(table)} r where r.org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, allowed, { orgWideNull: true })}
       and ((${board.resourceKind === "equipment" ? sql`r.status = 'active' and (r.in_service_on is null or r.in_service_on <= ${through})` : sql`r.is_active`} and (${inScope})) or exists (select 1 from schedule_entries x where x.org_id = r.org_id and x.board_id = ${board.id}
         and ${bookedColumn} = r.id and x.status <> 'cancelled' and x.starts_on <= ${through} and x.ends_on >= ${from}))
-    order by r.name, r.id`)).rows;
+    order by r.name, r.id`, "objects");
 }
 
 async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: string; through?: string }): Promise<BoardWindow> {
@@ -268,16 +268,16 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
            and h.worker_party_id=p.id and h.disposition='recorded' and h.on_date between ${from} and ${through}
            and not exists(select 1 from schedule_source_records n where n.org_id=h.org_id and n.supersedes_id=h.id)))
      order by p.display_name, p.id
-  `)).rows;
+  `, "objects"));
 
   const personIds = rows.map((person) => person.subjectId);
   const personFilter = personIds.length ? sql`= any(${`{${personIds.join(",")}}`}::uuid[])` : sql`is null and false`;
 
-  const rawEntries = (await db.execute<EntryRow>(sql`select ${ENTRY_COLUMNS} ${ENTRY_JOINS}
+  const rawEntries = await db.execute<EntryRow>(sql`select ${ENTRY_COLUMNS} ${ENTRY_JOINS}
     where e.org_id = ${orgId} and coalesce(e.worker_party_id,e.equipment_unit_id,e.resource_location_id) ${personFilter} and e.status <> 'cancelled'
       and e.starts_on <= ${through} and e.ends_on >= ${from}
       and (e.status = 'published' or e.board_id = ${board.id})
-    order by e.starts_at, e.id`)).rows;
+    order by e.starts_at, e.id`, "objects");
   const entries = rawEntries.map(shapeEntry);
   const replaced = entries.filter((entry) => entry.status === "draft" && entry.supersedesId).map((entry) => entry.supersedesId!);
 
@@ -291,10 +291,10 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
      group by we.worker_party_id, a.on_date, t.code, t.name
     having sum(a.hours) <> 0
      order by 2, 1
-  `)).rows;
+  `, "objects"));
 
-  const codes = (await db.execute<BoardCode>(sql`select id, code, label, category, color from schedule_codes
-    where org_id = ${orgId} and is_active order by sort_order, code`)).rows;
+  const codes = await db.execute<BoardCode>(sql`select id, code, label, category, color from schedule_codes
+    where org_id = ${orgId} and is_active order by sort_order, code`, "objects");
 
   let calendarNotice: string | null = null;
   let calendar: Awaited<ReturnType<typeof businessCalendarOver>> | null = null;
@@ -320,6 +320,6 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
   const sourceRecords = board.rowKind === 'people' ? await readBoardSourceHistory(actor, board.id, from, through) : [];
   const pending = (await db.execute<NonNullable<BoardWindow["pendingPublication"]>>(sql`select id,
       to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", flow_run_id is not null as "flowGated", entry_ids::text[] as "entryIds"
-    from schedule_publications where org_id = ${orgId} and board_id = ${board.id} and status = 'pending'`)).rows[0] ?? null;
+    from schedule_publications where org_id = ${orgId} and board_id = ${board.id} and status = 'pending'`, "objects"))[0] ?? null;
   return { board, from, through, days, calendarNotice, rows, entries, sourceRecords, replaced, absences, codes, pendingPublication: pending, canManage, canPublish };
 }

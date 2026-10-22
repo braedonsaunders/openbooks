@@ -50,25 +50,25 @@ export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
   const [flowRes, runsRes, usersRes, rolesRes, subsidiariesRes] = await Promise.all([
     db.execute(sql`
       select id, name, enabled, subject_kind, graph, ${documentRevisionSql(sql`updated_at`)} as updated_at
-        from flows where id = ${id} and org_id = ${authz.user.orgId}`),
+        from flows where id = ${id} and org_id = ${authz.user.orgId}`, 'objects'),
     db.execute(sql`
       select id, subject_kind, subject_id, trigger, status, error, started_at, finished_at
         from flow_runs where flow_id = ${id} and org_id = ${authz.user.orgId}
-       order by started_at desc limit 30`),
+       order by started_at desc limit 30`, 'objects'),
     db.execute(sql`
       select id, name, email from users
        where org_id = ${authz.user.orgId} and is_active
-       order by name`),
+       order by name`, 'objects'),
     db.execute(sql`
       select key, name from app_roles
        where org_id = ${authz.user.orgId}
-       order by name`),
+       order by name`, 'objects'),
     db.execute(sql`
       select id, name from subsidiaries
        where org_id = ${authz.user.orgId} and is_active and not is_elimination
-       order by name`),
+       order by name`, 'objects'),
   ])
-  const flow = flowRes.rows[0]
+  const flow = flowRes[0]
   if (!flow) notFound()
 
   const profile = await flowSubjectProfileForOrg(authz.user.orgId, String(flow.subject_kind))
@@ -82,19 +82,19 @@ export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
       updatedAt: String(flow.updated_at),
       graph: flow.graph as AutomationGraph,
     },
-    runs: runsRes.rows as FlowRunRow[],
+    runs: runsRes as FlowRunRow[],
     profile,
-    users: usersRes.rows.map((user) => ({
+    users: usersRes.map((user) => ({
       id: String(user.id),
       name: String(user.name),
       email: String(user.email),
     })),
-    roles: rolesRes.rows.map((role) => ({
+    roles: rolesRes.map((role) => ({
       key: String(role.key),
       name: String(role.name),
     })),
     permissions: [...PERMISSION_CATALOGUE],
-    subsidiaries: subsidiariesRes.rows.map((subsidiary) => ({
+    subsidiaries: subsidiariesRes.map((subsidiary) => ({
       id: String(subsidiary.id),
       name: String(subsidiary.name),
     })),

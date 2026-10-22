@@ -32,8 +32,8 @@ test('pay-components ref loader lists org-wide vendors for a subsidiary-scoped c
     // The scratch bootstrap already owns the org root: reuse it as the
     // out-of-scope sub and hang the scoped sub beneath it.
     const roots = await withBypass(() => db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`))
-    const rootId = roots.rows[0]?.id
+      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`, 'objects'))
+    const rootId = roots[0]?.id
     assert.ok(rootId, 'scratch org must bootstrap a root subsidiary')
     const subB = rootId
     await withBypass(() => db.execute(sql`

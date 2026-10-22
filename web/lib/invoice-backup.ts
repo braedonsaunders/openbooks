@@ -165,7 +165,7 @@ async function requireSourceDocumentPermission(orgId: string, documentId: string
   if (!authz) throw new InvoiceBackupNotFoundError()
   const source = (await db.execute<{ kind: string }>(sql`
     select kind from documents where id = ${documentId} and org_id = ${orgId}
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!source) throw new InvoiceBackupSourceAccessError(null)
   const permission = attachmentReadPermission('documents', source.kind)
   if (!permission || !can(authz, permission)) throw new InvoiceBackupSourceAccessError(permission)
@@ -326,10 +326,10 @@ async function customerLabourPdf(orgId: string, documentId: string, invoiceNumbe
       left join items i on i.id = te.item_id and i.org_id = te.org_id
      where dl.document_id = ${documentId} and te.org_id = ${orgId}
      order by te.worked_on, employee, te.id
-  `))
-  if (rows.rows.length === 0) return null
+  `, 'objects'))
+  if (rows.length === 0) return null
 
-  const html = customerLabourBackupHtml(rows.rows, invoiceNumber, projectName, title, format)
+  const html = customerLabourBackupHtml(rows, invoiceNumber, projectName, title, format)
   return renderHtmlDocumentPdf({ bodyHtml: html, paperSize: 'letter', orientation: 'landscape', marginMm: 12, headerHtml: null, footerHtml: null })
 }
 
@@ -351,20 +351,20 @@ export async function assembleInvoiceBackup(
       from documents d left join projects p on p.id = d.project_id and p.org_id = d.org_id
      where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
       ${backupScopeFilter(allowedSubsidiaryIds)}
-  `))
-  const inv = invRes.rows[0]
+  `, 'objects'))
+  const inv = invRes[0]
   if (!inv) throw new InvoiceBackupNotFoundError()
   const format = await getMoneyFormatter(orgId, inv.currency)
 
   const recipe = BACKUP_RECIPES[backupType] ?? BACKUP_RECIPES.costed_timesheets
   const attachmentContext = recipe.includes('attachments') ? await (async () => {
     const context = await backupViewer(orgId, userId)
-    const sources = (await db.execute<{ document_id: string }>(sql`
+    const sources = await db.execute<{ document_id: string }>(sql`
       select distinct src.document_id
         from document_lines inv_line
         join document_lines src on src.billed_by_line_id = inv_line.id and src.org_id = inv_line.org_id
        where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
-    `)).rows
+    `, 'objects')
     for (const source of sources) await requireSourceDocumentPermission(orgId, source.document_id, context.authz)
     return { viewer: context.viewer, sources }
   })() : null
@@ -397,11 +397,11 @@ export async function assembleInvoiceBackup(
           join time_entries te on te.invoiced_by_line_id = inv_line.id and te.org_id = inv_line.org_id
          where inv_line.document_id = ${documentId} and inv_line.org_id = ${orgId}
            and te.field_ticket_id is not null
-      `))
-      if (tickets.rows.length > 0) {
+      `, 'objects'))
+      if (tickets.length > 0) {
         const tpl = await resolvePdfTemplate(orgId, 'field_ticket', null)
         if (tpl) {
-          for (const tk of tickets.rows) {
+          for (const tk of tickets) {
             const record = await loadPdfRecordValues('field_ticket', orgId, tk.field_ticket_id, allowedSubsidiaryIds)
             if (!record) continue
             const buf = await mergeAndPrintPdf(tpl, record.values)
@@ -443,14 +443,14 @@ export async function assembleInvoiceBackup(
        where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
          ${backupScopeFilter(allowedSubsidiaryIds)}
        for update of d
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!invoice) throw new InvoiceBackupNotFoundError()
     if (invoice.project_id) {
       const project = await tx.execute(sql`select id from projects
         where id = ${invoice.project_id} and org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-        for share`)
-      if (!project.rows[0]) throw new InvoiceBackupNotFoundError()
+        for share`, 'objects')
+      if (!project[0]) throw new InvoiceBackupNotFoundError()
     }
 
     const prior = (await tx.execute<{
@@ -462,7 +462,7 @@ export async function assembleInvoiceBackup(
       select file_id, backup_type, page_count, component_manifest from invoice_backups
        where org_id = ${orgId} and document_id = ${documentId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     // Issued evidence is immutable: once the invoice is approved or posted,
     // its packet is frozen — regenerating would replace the file the customer
     // received and delete the old versions. A first packet for an issued
@@ -498,8 +498,8 @@ export async function assembleInvoiceBackup(
           from file_versions fv
           join files fi on fi.id = fv.file_id and fi.org_id = ${orgId}
          where fv.file_id = ${priorFileId} and fv.storage_kind = 's3'
-      `)
-      priorS3VersionIds.push(...priorVersions.rows.map((row) => row.id))
+      `, 'objects')
+      priorS3VersionIds.push(...priorVersions.map((row) => row.id))
       await tx.execute(sql`delete from file_attachments where org_id = ${orgId} and file_id = ${priorFileId}`)
       await tx.execute(sql`
         delete from file_blobs where version_id in (
@@ -592,7 +592,7 @@ export async function requireInvoiceBackup(
          select 1 from invoice_backups ib
           where ib.org_id = ${orgId} and ib.document_id = ${documentId}
        )
-  `)).rows[0]
+  `, 'objects'))[0]
   if (missing) throw new InvoiceBackupRequiredError()
 }
 
@@ -607,17 +607,17 @@ export async function loadInvoiceBackup(orgId: string, documentId: string, allow
     ) as can_read
       from invoice_backups ib join files fi on fi.id = ib.file_id and fi.org_id = ib.org_id
      where ib.org_id = ${orgId} and ib.document_id = ${documentId}
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   if (!row) return null
   // Refused existing artifacts must not be mistaken for a cache miss and
   // regenerated by a reader with narrower access to their original sources.
   if (!row.can_read) throw new InvoiceBackupNotFoundError()
-  const linkedSources = (await db.execute<{ document_id: string }>(sql`
+  const linkedSources = await db.execute<{ document_id: string }>(sql`
     select distinct src.document_id from document_lines invoice_line
       join document_lines src on src.billed_by_line_id = invoice_line.id and src.org_id = invoice_line.org_id
      where invoice_line.org_id = ${orgId} and invoice_line.document_id = ${documentId}
-  `)).rows
+  `, 'objects')
   for (const source of linkedSources) await requireSourceDocumentPermission(orgId, source.document_id, authz)
   const manifest = Array.isArray(row.component_manifest) ? row.component_manifest as BackupManifestEntry[] : []
   for (const component of manifest) {

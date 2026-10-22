@@ -94,7 +94,7 @@ stubModules({
       }
     `,
     "@openbooks/engine/platform/db": withPlatformDbTestSurface(`
-      export const db = { execute: async () => ({ rows: [] }) }
+      export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }
     `),
     "drizzle-orm": `
       export function sql() { return {} }

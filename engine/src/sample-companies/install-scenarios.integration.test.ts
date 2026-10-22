@@ -46,11 +46,11 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       try {
         const foreignActor = await withBypass(() => createScratchUser(home.orgId, "Explicit platform author", "operator"));
         await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${foreignActor}`));
-        const unchanged = () => withOrgContext(world.orgId, async () => (await db.execute(sql`
+        const unchanged = () => withOrgContext(world.orgId, async () => await db.execute(sql`
           select settings,(select count(*)::int from documents where org_id=${world.orgId}) as documents,
             (select count(*)::int from audit_log where org_id=${world.orgId}) as audits,
             (select count(*)::int from field_ticket_labor_snapshots where org_id=${world.orgId}) as labor_snapshots
-          from orgs where id=${world.orgId}`)).rows);
+          from orgs where id=${world.orgId}`, "objects"));
         const beforeRefusal = await unchanged();
         await assert.rejects(installDemoScenarios(world.orgId, profile.industryKey, { actorId: foreignActor }),
           (error: unknown) => error instanceof SampleLocalAuthorRequiredError && error.industryKey === profile.industryKey);
@@ -70,7 +70,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
     assert.equal(verified.ready, true);
     assert.deepEqual(await withOrgContext(world.orgId, () => verifySampleOperatingHistory(world.orgId, profile.industryKey)), [], "each industry meets posted volume, counterparties, months and settlement diversity");
     if (profile.industryKey === "general_business") await withOrgContext(world.orgId, async () => {
-      const versions = (await db.execute<{ version: string; manifest: Record<string, unknown> }>(sql`select version,manifest from app_versions where org_id=${world.orgId} and app_id=${demoRecordId(world.orgId,"apps","main")} order by version`)).rows;
+      const versions = await db.execute<{ version: string; manifest: Record<string, unknown> }>(sql`select version,manifest from app_versions where org_id=${world.orgId} and app_id=${demoRecordId(world.orgId,"apps","main")} order by version`, "objects");
       assert.equal(versions.length, 2, "package corrections append a new immutable revision");
       assert.deepEqual(versions[0]!.manifest, { name: "Earlier demonstration" });
       assert.equal(versions[1]!.version, "1.0.1");
@@ -80,7 +80,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
         select count(*)::int as snapshots,count(*) filter(where u.id is null or
           (s.superseded_by is not null and not exists(select 1 from users prior where prior.org_id=s.org_id and prior.id=s.superseded_by)))::int as foreign_authors
         from field_ticket_labor_snapshots s left join users u on u.org_id=s.org_id and u.id=s.captured_by
-        where s.org_id=${world.orgId}`)).rows[0]!;
+        where s.org_id=${world.orgId}`, "objects"))[0]!;
       assert.ok(snapshots.snapshots >= 3, "construction executes the native capture workflow for its site tickets");
       assert.equal(snapshots.foreign_authors, 0, "captured and superseded labor evidence keeps tenant-local authors");
     });
@@ -88,7 +88,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       select (select count(*)::int from audit_log where org_id=${world.orgId}) as audits,
              (select count(*)::int from journal_entries where org_id=${world.orgId}) as entries,
              (select count(*)::int from documents where org_id=${world.orgId}) as documents
-    `)).rows[0]);
+    `, "objects"))[0]);
     if (profile.industryKey === "it_software_saas") await assertNorthstarCapTable(world.orgId);
     const before = await snapshot();
     assert.ok(before, "installation snapshot must return its counts");
@@ -101,7 +101,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
                (select count(*)::int from equity_security_events where org_id=${world.orgId}) as events,
                (select count(*)::int from equity_compensation_runs where org_id=${world.orgId}) as runs,
                (select count(*)::int from journal_entries where org_id=${world.orgId} and origin='equity') as journals
-      `)).rows[0]);
+      `, "objects"))[0]);
       const recorded = await equity();
       await withOrgContext(world.orgId, () => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,equity}','false'::jsonb) where id=${world.orgId}`));
       assert.equal((await verifyDemoScenarios(world.orgId, profile.industryKey)).ready, false);
@@ -126,9 +126,9 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       assert.equal(repaired.audits, Number(before.audits) + 1, "configuration repair records its material change");
     }
     await withOrgContext(world.orgId, async () => {
-      const unbalanced = await db.execute(sql`select entry_id from journal_lines where org_id=${world.orgId} group by entry_id having sum(amount) <> 0`);
-      assert.equal(unbalanced.rows.length, 0, "every posted example must remain balanced");
-      const refunds = (await db.execute<{ id: string; detail: string; expense: string; liability: string }>(sql`
+      const unbalanced = await db.execute(sql`select entry_id from journal_lines where org_id=${world.orgId} group by entry_id having sum(amount) <> 0`, "objects");
+      assert.equal(unbalanced.length, 0, "every posted example must remain balanced");
+      const refunds = await db.execute<{ id: string; detail: string; expense: string; liability: string }>(sql`
         select d.id,
           (select sum(amount)::text from document_lines where org_id=d.org_id and document_id=d.id) as detail,
           (select sum(l.amount)::text from journal_lines l join accounts a on a.org_id=l.org_id and a.id=l.account_id
@@ -136,14 +136,14 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
           (select sum(l.amount)::text from journal_lines l join payment_cards c on c.org_id=l.org_id and c.liability_account_id=l.account_id
             where l.org_id=d.org_id and l.entry_id=d.posted_entry_id and c.id=d.payment_card_id) as liability
         from documents d where d.org_id=${world.orgId} and d.kind='card_refund' and d.status='posted' and d.external_source='industry_demo'
-      `)).rows;
+      `, "objects");
       assert.equal(refunds.length, 2, "two native card refunds must be posted");
       for (const refund of refunds) {
         assert.equal(cmp(refund.detail, "0"), -1, "refund detail is stored negative");
         assert.equal(cmp(refund.expense, "0"), -1, "refund reverses expense");
         assert.equal(cmp(refund.liability, "0"), 1, "refund reduces the card payable");
       }
-      const cash = (await db.execute<{ amount: string }>(sql`select coalesce(sum(amount),0)::text as amount from journal_lines where org_id=${world.orgId} and account_id=${demoRecordId(world.orgId,"accounts","bank")}`)).rows[0]!;
+      const cash = (await db.execute<{ amount: string }>(sql`select coalesce(sum(amount),0)::text as amount from journal_lines where org_id=${world.orgId} and account_id=${demoRecordId(world.orgId,"accounts","bank")}`, "objects"))[0]!;
       assert.equal(cmp(cash.amount, "99500.00"), 0, "bank statement balances must agree with the demonstration ledger");
       await db.execute(sql`delete from hrm_goals where org_id=${world.orgId}`);
     });
@@ -159,7 +159,7 @@ test("installer refuses an ordinary tenant before writing demo records", enabled
   try {
     await assert.rejects(installDemoScenarios(org.orgId, "general_business"), /matching synthetic master or a fully provisioned native exploration company/);
     await withOrgContext(org.orgId, async () => {
-      assert.equal((await db.execute(sql`select id from parties where org_id=${org.orgId} and id=${demoRecordId(org.orgId,"parties","employee")}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select id from parties where org_id=${org.orgId} and id=${demoRecordId(org.orgId,"parties","employee")}`, "objects")).length, 0);
     });
   } finally { await withBypass(() => dropScratchOrg(org.orgId)); }
 });
@@ -178,8 +178,8 @@ test("a refused scenario installation rolls back earlier records, settings, and 
                (select count(*)::int from documents where org_id=${world.orgId} and idempotency_key like 'industry-demo:%') as posted,
                (select count(*)::int from audit_log where org_id=${world.orgId} and changes->>'source'='industry_demo_installation') as audits,
                settings ? 'demoData' as registered from orgs where id=${world.orgId}
-      `);
-      assert.deepEqual(result.rows[0], { capital: 0, posted: 0, audits: 0, registered: false });
+      `, "objects");
+      assert.deepEqual(result[0], { capital: 0, posted: 0, audits: 0, registered: false });
     });
   } finally { await cleanupInstalledWorld(world.orgId); }
 });
@@ -198,11 +198,11 @@ test("demo preparation extends fully closed history without reopening it", enabl
         select count(*)::int as total, count(*) filter(where lock.state='closed')::int as closed
         from accounting_periods p join period_locks lock on lock.period_id=p.id and lock.org_id=p.org_id
         where p.org_id=${world.orgId} and p.fiscal_year=2026 and lock.module='gl'
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(old.total, 12); assert.equal(old.closed, old.total);
-      assert.equal((await db.execute(sql`select 1 from accounting_periods where org_id=${world.orgId} and fiscal_year=2027`)).rows.length, 12);
-      const future = await db.execute(sql`select 1 from documents where org_id=${world.orgId} and idempotency_key in (${`industry-demo:${world.orgId}:opening-cash`},${`industry-demo:${world.orgId}:bank-charge`}) and document_date >= '2027-01-01' and status='posted'`);
-      assert.equal(future.rows.length, 2);
+      assert.equal((await db.execute(sql`select 1 from accounting_periods where org_id=${world.orgId} and fiscal_year=2027`, "objects")).length, 12);
+      const future = await db.execute(sql`select 1 from documents where org_id=${world.orgId} and idempotency_key in (${`industry-demo:${world.orgId}:opening-cash`},${`industry-demo:${world.orgId}:bank-charge`}) and document_date >= '2027-01-01' and status='posted'`, "objects");
+      assert.equal(future.length, 2);
     });
   } finally { await cleanupInstalledWorld(world.orgId); }
 });
@@ -212,7 +212,7 @@ async function assertNorthstarCapTable(orgId: string): Promise<void> {
   const today = await businessToday(orgId);
   const year = Number(today.slice(0, 4));
   await withOrgContext(orgId, async () => {
-    const subsidiaryId = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${orgId} and parent_id is null`)).rows[0]!.id;
+    const subsidiaryId = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${orgId} and parent_id is null`, "objects"))[0]!.id;
     const counts = (await db.execute<Record<string, number>>(sql`
       select (select count(*)::int from equity_share_classes where org_id=${orgId}) as classes,
              (select count(*)::int from equity_class_amendments where org_id=${orgId}) as amendments,
@@ -228,36 +228,36 @@ async function assertNorthstarCapTable(orgId: string): Promise<void> {
              (select count(*)::int from equity_security_amendments where org_id=${orgId}) as "mfnElections",
              (select count(*)::int from equity_interest_runs where org_id=${orgId}) as "interestRuns",
              (select count(*)::int from equity_position_movements where org_id=${orgId}) > 0 as positions
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(counts, {
       classes: 3, amendments: 1, plans: 1, reserveChanges: 2, rounds: 2, policies: 2, options: 13, rsus: 2, convertibles: 3, warrants: 1,
       certificates: 11, mfnElections: 1, interestRuns: 5, positions: true,
     }, "founders, round investors, conversions and exercises each hold a certificate; every award and instrument is recorded once");
-    const events = (await db.execute<{ kind: string; n: number }>(sql`select kind, count(*)::int as n from equity_security_events where org_id=${orgId} group by kind order by kind`)).rows;
+    const events = await db.execute<{ kind: string; n: number }>(sql`select kind, count(*)::int as n from equity_security_events where org_id=${orgId} group by kind order by kind`, "objects");
     assert.deepEqual(Object.fromEntries(events.map((row) => [row.kind, row.n])), { convert: 3, election_83b: 3, exercise: 2, expire: 1, forfeit: 2, reverse: 1 });
 
     // Every month-end from the first grant through the business day carries a stock compensation run.
     let expectedRuns = 0;
     for (let monthEnd = `${year - 3}-07-31`; monthEnd <= today; monthEnd = endOfMonth(addMonthsClamped(`${monthEnd.slice(0, 7)}-01`, 1))) expectedRuns++;
-    const runs = (await db.execute<{ through_date: string; total_amount: string; journal_entry_id: string | null }>(sql`
-      select through_date::text as through_date, total_amount::text as total_amount, journal_entry_id from equity_compensation_runs where org_id=${orgId} order by through_date`)).rows;
+    const runs = await db.execute<{ through_date: string; total_amount: string; journal_entry_id: string | null }>(sql`
+      select through_date::text as through_date, total_amount::text as total_amount, journal_entry_id from equity_compensation_runs where org_id=${orgId} order by through_date`, "objects");
     assert.equal(runs.length, expectedRuns);
     assert.ok(runs.every((run) => run.journal_entry_id !== null), "every monthly run recognizes cost through the ledger");
 
     // The years before the operating ledger carry the equity history and are closed once it is recorded.
     const history = (await db.execute<{ periods: number; open: number }>(sql`
       select count(*)::int as periods, count(*) filter (where not exists (select 1 from period_locks l where l.org_id=p.org_id and l.period_id=p.id and l.module='gl' and l.state='closed'))::int as open
-        from accounting_periods p where p.org_id=${orgId} and p.fiscal_year between ${year - 3} and ${year - 1}`)).rows[0]!;
+        from accounting_periods p where p.org_id=${orgId} and p.fiscal_year between ${year - 3} and ${year - 1}`, "objects"))[0]!;
     assert.ok(history.periods >= 36);
     assert.equal(history.open, 0, "the pre-operating years are closed after their history is posted");
 
     // Equity journals balance, and the ledger agrees with the cap table's money.
     const unbalanced = await db.execute(sql`
       select e.id from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id
-       where e.org_id=${orgId} and e.origin='equity' group by e.id having sum(l.amount) <> 0`);
-    assert.equal(unbalanced.rows.length, 0, "every equity journal balances");
+       where e.org_id=${orgId} and e.origin='equity' group by e.id having sum(l.amount) <> 0`, "objects");
+    assert.equal(unbalanced.length, 0, "every equity journal balances");
     const balance = async (key: string) => (await db.execute<{ amount: string }>(sql`
-      select coalesce(sum(amount),0)::text as amount from journal_lines where org_id=${orgId} and account_id=${demoRecordId(orgId, "accounts", key)}`)).rows[0]!.amount;
+      select coalesce(sum(amount),0)::text as amount from journal_lines where org_id=${orgId} and account_id=${demoRecordId(orgId, "accounts", key)}`, "objects"))[0]!.amount;
     // Founders 810, SAFEs 1,250,000, note 500,000, Series Seed 3,600,000, Series A 14,000,000, exercises 34,560 + 3,000.
     assert.equal(cmp(await balance("financing-bank"), "19388370.00"), 0, "the financing account holds every cash consideration");
     assert.equal(cmp(await balance("convertible-instruments"), "0"), 0, "the SAFEs and the note are relieved on conversion");

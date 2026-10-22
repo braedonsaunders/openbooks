@@ -80,11 +80,11 @@ test("document and direct postings both append provider legs", { skip: !DB }, as
 
     assert.ok(seen.length >= 2 && seen.every((n) => n === 2), `each writer hands the provider its two caller lines: ${seen}`);
     assert.equal(direct.lines.length, 4, "postEntry returns the appended legs with their line numbers");
-    const rows = (await withOrgContext(org.orgId, () => db.execute<{ legs: number; total: string }>(sql`
+    const rows = await withOrgContext(org.orgId, () => db.execute<{ legs: number; total: string }>(sql`
       select count(*) filter (where l.memo = ${MEMO})::int as legs, sum(l.amount)::text as total
         from journal_lines l join journal_entries e on e.id = l.entry_id
        where e.org_id = ${org.orgId} and e.book_id = ${org.bookId}
-         and (e.source_document_id = ${documentId} or e.id = ${direct.entryId})`))).rows;
+         and (e.source_document_id = ${documentId} or e.id = ${direct.entryId})`, "objects"));
     assert.deepEqual(rows, [{ legs: 4, total: "0.0000" }]);
   } finally {
     clearBalancingLegProviders();

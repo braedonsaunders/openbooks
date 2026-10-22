@@ -43,7 +43,7 @@ test('cabinet reads hide record-folder files outside the caller fence', { skip: 
     assert.equal(listed.total, 0)
     assert.equal(await getFolder(org.orgId, folderId, restricted), null)
     const groupId: string = (await db.execute<{ parent: string }>(sql`
-      select parent_folder_id as "parent" from folders where id = ${folderId}`)).rows[0]!.parent
+      select parent_folder_id as "parent" from folders where id = ${folderId}`, 'objects'))[0]!.parent
     const drilled = await listFolderContents(org.orgId, restricted, { parentId: groupId })
     assert.ok(!drilled.folders.some((f) => f.recordId === hiddenDoc))
 
@@ -96,7 +96,7 @@ test('ZIP manifests apply record visibility before enforcing the file cap', { sk
 
     const viewer = { userId: actorId, isAdmin: false as const, baseline: 'viewer' as const, allowedSubsidiaryIds: new Set([subB]) }
     const folderEntries = await folderZipManifest(org.orgId, folderId, viewer)
-    const selectedIds = (await db.execute<{ id: string }>(sql`select id from files where org_id = ${org.orgId} and folder_id = ${folderId}`)).rows.map((row) => row.id)
+    const selectedIds = (await db.execute<{ id: string }>(sql`select id from files where org_id = ${org.orgId} and folder_id = ${folderId}`, 'objects')).map((row) => row.id)
     const selectedEntries = await filesZipManifest(org.orgId, selectedIds, viewer)
     assert.ok(folderEntries.some((entry) => entry.id === privateFileId && entry.path === 'evidence.pdf'))
     assert.ok(folderEntries.every((entry) => !entry.path.includes('Confidential folder')))
@@ -337,11 +337,11 @@ const consolidatedRows = [
             assert.ok(postedLink && draftLink && raceLink)
 
             assert.deepEqual(await detachAttachment(org.orgId, postedLink, { actorId }), { ok: false, reason: 'retained' })
-            assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id = ${org.orgId} and table_name = 'file_attachments' and row_id = ${postedLink}`)).rows[0]!.count, 0)
+            assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id = ${org.orgId} and table_name = 'file_attachments' and row_id = ${postedLink}`, 'objects'))[0]!.count, 0)
 
             assert.deepEqual(await detachAttachment(org.orgId, draftLink, { actorId }), { ok: true })
             assert.equal(await getAttachmentLink(org.orgId, draftLink), null)
-            const evidence = (await db.execute<{ actor_id: string | null; changes: Record<string, unknown> }>(sql`select actor_id, changes from audit_log where org_id = ${org.orgId} and table_name = 'file_attachments' and row_id = ${draftLink}`)).rows
+            const evidence = await db.execute<{ actor_id: string | null; changes: Record<string, unknown> }>(sql`select actor_id, changes from audit_log where org_id = ${org.orgId} and table_name = 'file_attachments' and row_id = ${draftLink}`, 'objects')
             assert.deepEqual(evidence.map((row) => [row.actor_id, row.changes.event, row.changes.before]), [[actorId, 'delete', { fileId, targetTable: 'documents', targetId: draftDoc }]])
 
             const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL })
@@ -404,14 +404,14 @@ const consolidatedRows = [
             assert.deepEqual(await deleteFolder(org.orgId, trashedChild, { actorId }), { ok: true })
             assert.deepEqual(await deleteFolder(org.orgId, root, { actorId }), { ok: true })
             assert.deepEqual(await deleteFolder(org.orgId, root, { actorId }), { ok: false, reason: 'inactive' })
-            assert.equal((await db.execute(sql`select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${root} and action = 'delete'`)).rows[0]!.n, 1)
+            assert.equal((await db.execute(sql`select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${root} and action = 'delete'`, 'objects'))[0]!.n, 1)
 
             assert.equal(await restoreFolder(org.orgId, root, { actorId }), true)
 
-            const state = (await db.execute<{ id: string; kind: string; inactive: boolean }>(sql`
+            const state = await db.execute<{ id: string; kind: string; inactive: boolean }>(sql`
               select id, 'folder' as kind, is_inactive as inactive from folders where org_id = ${org.orgId} and id in (${root}, ${child}, ${trashedChild})
               union all
-              select id, 'file' as kind, is_inactive as inactive from files where org_id = ${org.orgId} and id in (${rootFile}, ${childFile}, ${trashedFile})`)).rows
+              select id, 'file' as kind, is_inactive as inactive from files where org_id = ${org.orgId} and id in (${rootFile}, ${childFile}, ${trashedFile})`, 'objects')
             const inactive = Object.fromEntries(state.map((row) => [row.id, row.inactive]))
             assert.deepEqual(inactive, {
               [root]: false,
@@ -547,7 +547,7 @@ const consolidatedRows = [
             await deleteFolder(org.orgId, leafRId, { actorId: userA }).then((r) => assert.equal(r.ok, true))
             assert.equal(await restoreFolder(org.orgId, leafRId, auditB), false)
             assert.equal(
-              (await db.execute<{ isInactive: boolean }>(sql`select is_inactive as "isInactive" from folders where id = ${leafRId} and org_id = ${org.orgId}`)).rows[0]!.isInactive,
+              (await db.execute<{ isInactive: boolean }>(sql`select is_inactive as "isInactive" from folders where id = ${leafRId} and org_id = ${org.orgId}`, 'objects'))[0]!.isInactive,
               true,
             )
 
@@ -558,24 +558,24 @@ const consolidatedRows = [
             const grantId: string = (await db.execute<{ id: string }>(sql`
               select id from resource_grants
                where org_id = ${org.orgId} and resource_type = 'file' and resource_id = ${faId} and principal_id = ${userA}
-            `)).rows[0]!.id
+            `, 'objects'))[0]!.id
             assert.equal(await removeGrant(org.orgId, grantId, 'file', faId, auditB), false)
-            assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from resource_grants where id = ${grantId}`)).rows[0]!.n, 1)
+            assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from resource_grants where id = ${grantId}`, 'objects'))[0]!.n, 1)
 
             // Nothing moved: names, homes, and trash flags are exactly as seeded
             // (fcId stays trashed by its owner; everything else untouched).
             const files: Array<{ id: string; name: string; folderId: string; isInactive: boolean }> = (await db.execute(sql`
               select id, name, folder_id as "folderId", is_inactive as "isInactive"
                 from files where org_id = ${org.orgId} and id in (${faId}, ${fcId}, ${fpId}) order by id
-            `)).rows as Array<{ id: string; name: string; folderId: string; isInactive: boolean }>
+            `, 'objects')) as Array<{ id: string; name: string; folderId: string; isInactive: boolean }>
             assert.equal(files.find((f) => f.id === faId)?.name, 's19-fa.txt')
             assert.equal(files.find((f) => f.id === faId)?.folderId, leafAId)
             assert.equal(files.find((f) => f.id === faId)?.isInactive, false)
             assert.equal(files.find((f) => f.id === fcId)?.isInactive, true)
-            assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from files where org_id = ${org.orgId} and name = 's19-drop.txt'`)).rows[0]!.n, 0)
+            assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from files where org_id = ${org.orgId} and name = 's19-drop.txt'`, 'objects'))[0]!.n, 0)
             const leaf: { name: string; isInactive: boolean } = (await db.execute(sql`
               select name, is_inactive as "isInactive" from folders where id = ${leafAId} and org_id = ${org.orgId}
-            `)).rows[0] as { name: string; isInactive: boolean }
+            `, 'objects'))[0] as { name: string; isInactive: boolean }
             assert.equal(leaf.name, 'documents / fence-a')
             assert.equal(leaf.isInactive, false)
 

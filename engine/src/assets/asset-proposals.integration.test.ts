@@ -90,7 +90,7 @@ async function balance(org: Org, accountId: string): Promise<string> {
   const row = (await withOrgContext(org.orgId, () => db.execute<{ total: string }>(sql`
     select coalesce(sum(jl.amount), 0)::numeric(19,4)::text as total from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id and je.status in ('posted', 'reversed')
-     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId}`))).rows[0];
+     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId}`, "objects")))[0];
   return row!.total;
 }
 
@@ -108,8 +108,8 @@ test(
         generateAssetProposalsForEntries(db, { orgId: org.orgId, entryIds: [purchase.entryId], actorId: actors.adminId }));
       assert.equal(first, 1, "only the 5,000 line clears the 1,000 threshold");
       assert.equal(replay, 0, "a second run proposes nothing new");
-      const proposals = (await withOrgContext(org.orgId, () => db.execute<{ source_line_id: string; amount: string; status: string }>(sql`
-        select source_line_id, amount::text as amount, status from asset_proposals where org_id = ${org.orgId}`))).rows;
+      const proposals = await withOrgContext(org.orgId, () => db.execute<{ source_line_id: string; amount: string; status: string }>(sql`
+        select source_line_id, amount::text as amount, status from asset_proposals where org_id = ${org.orgId}`, "objects"));
       assert.deepEqual(proposals, [{ source_line_id: purchase.lineIds[0], amount: "5000.0000", status: "pending" }]);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -128,7 +128,7 @@ test(
       await withOrgTransaction(org.orgId, () =>
         generateAssetProposalsForEntries(db, { orgId: org.orgId, entryIds: [purchase.entryId], actorId: actors.adminId }));
       const proposalId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-        select id from asset_proposals where org_id = ${org.orgId}`))).rows[0]!.id;
+        select id from asset_proposals where org_id = ${org.orgId}`, "objects")))[0]!.id;
       const key = randomUUID();
       const request = {
         idempotencyKey: key,
@@ -154,10 +154,10 @@ test(
       assert.equal(await balance(org, equipment), "5000.0000", "a replay posts nothing");
       await refusedWith("idempotency_conflict", () => acceptAssetProposals(org.orgId, { ...request, reason: "different" }, { actorId: actors.adminId }));
 
-      const assets = (await withOrgContext(org.orgId, () => db.execute<{ status: string; acquisition_cost: string; category_id: string }>(sql`
+      const assets = await withOrgContext(org.orgId, () => db.execute<{ status: string; acquisition_cost: string; category_id: string }>(sql`
         select status, acquisition_cost::text as acquisition_cost, category_id from fixed_assets
          where org_id = ${org.orgId} and id = any(${`{${accepted.assets.map((asset) => asset.id).join(",")}}`}::uuid[])
-         order by acquisition_cost`))).rows;
+         order by acquisition_cost`, "objects"));
       assert.deepEqual(assets, [
         { status: "draft", acquisition_cost: "2000.0000", category_id: categoryId },
         { status: "draft", acquisition_cost: "3000.0000", category_id: categoryId },
@@ -180,7 +180,7 @@ test(
       assert.equal(await balance(org, equipment), "0.0000");
       assert.equal(await balance(org, clearing), "5000.0000");
       const status = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
-        select status from asset_proposals where org_id = ${org.orgId} and id = ${proposalId}`))).rows[0]!.status;
+        select status from asset_proposals where org_id = ${org.orgId} and id = ${proposalId}`, "objects")))[0]!.status;
       assert.equal(status, "pending", "the proposal returns to the queue");
       await refusedWith("acceptance_reversed", () => acceptAssetProposals(org.orgId, request, { actorId: actors.adminId }));
       const again = await reverseAssetProposalAcceptance(org.orgId, { acceptanceId: accepted.acceptanceId, date: org.date, reason: "repeat", actorId: actors.adminId });
@@ -267,7 +267,7 @@ test("capitalization result excludes appended department-balancing legs", { skip
     assert.ok(posted);
     assert.equal(posted.lines.length, 2, "the result contains the two requested lines only");
     const lineCount = (await withOrgContext(org.orgId, () => db.execute<{ count: number }>(sql`
-      select count(*)::int as count from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId}`))).rows[0]!.count;
+      select count(*)::int as count from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId}`, "objects")))[0]!.count;
     assert.equal(lineCount, 4, "the kernel also posts one balancing leg for each department");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -284,8 +284,8 @@ test(
       const purchase = await postPurchase(org, clearing, ["1500.00", "2500.00", "3000.00"]);
       await withOrgTransaction(org.orgId, () =>
         generateAssetProposalsForEntries(db, { orgId: org.orgId, entryIds: [purchase.entryId], actorId: actors.adminId }));
-      const ids = (await withOrgContext(org.orgId, () => db.execute<{ id: string; amount: string }>(sql`
-        select id, amount::text as amount from asset_proposals where org_id = ${org.orgId} order by amount`))).rows;
+      const ids = await withOrgContext(org.orgId, () => db.execute<{ id: string; amount: string }>(sql`
+        select id, amount::text as amount from asset_proposals where org_id = ${org.orgId} order by amount`, "objects"));
       assert.equal(ids.length, 3);
       await refusedWith("amount_mismatch", () => acceptAssetProposals(org.orgId, {
         idempotencyKey: randomUUID(), operation: "merge", proposalIds: [ids[0]!.id, ids[1]!.id], acceptedOn: org.date,
@@ -307,9 +307,9 @@ test(
       // the still-pending proposals on it are voided by the fence.
       await reverseAssetProposalAcceptance(org.orgId, { acceptanceId: merged.acceptanceId, date: org.date, reason: "Bill voided", actorId: actors.adminId });
       await withOrgTransaction(org.orgId, async () => {
-        const original = (await db.execute<{ account_id: string; amount: string; line_number: number }>(sql`
+        const original = await db.execute<{ account_id: string; amount: string; line_number: number }>(sql`
           select account_id, amount::text, line_number from journal_lines
-           where org_id = ${org.orgId} and entry_id = ${purchase.entryId} order by line_number`)).rows;
+           where org_id = ${org.orgId} and entry_id = ${purchase.entryId} order by line_number`, "objects");
         await postEntry(db, {
           orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
           entryNumber: `PUR-REV-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
@@ -319,7 +319,7 @@ test(
         await markEntryReversed(db, { orgId: org.orgId, entryId: purchase.entryId, actorId: actors.adminId });
       });
       const statuses = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
-        select distinct status from asset_proposals where org_id = ${org.orgId}`))).rows.map((row) => row.status);
+        select distinct status from asset_proposals where org_id = ${org.orgId}`, "objects"))).map((row) => row.status);
       assert.deepEqual(statuses, ["voided"]);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -341,7 +341,7 @@ test(
       await withOrgTransaction(org.orgId, () =>
         generateAssetProposalsForEntries(db, { orgId: org.orgId, entryIds: [purchase.entryId], actorId: actors.adminId }));
       const proposalId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-        select id from asset_proposals where org_id = ${org.orgId}`))).rows[0]!.id;
+        select id from asset_proposals where org_id = ${org.orgId}`, "objects")))[0]!.id;
       const request = (key: string) => ({
         idempotencyKey: key, operation: "asset" as const, proposalIds: [proposalId], acceptedOn: org.date,
         targets: [{ name: "Forklift", categoryId, amount: "5000.00" }],
@@ -357,7 +357,7 @@ test(
         return acceptAssetProposals(org.orgId, { ...request(randomUUID()), acceptedOn: "2026-07-01" }, { actorId: actors.adminId });
       });
       const pending = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
-        select status from asset_proposals where org_id = ${org.orgId} and id = ${proposalId}`))).rows[0]!.status;
+        select status from asset_proposals where org_id = ${org.orgId} and id = ${proposalId}`, "objects")))[0]!.status;
       assert.equal(pending, "pending", "every refusal leaves the proposal untouched");
     } finally {
       await dropScratchOrg(org.orgId);

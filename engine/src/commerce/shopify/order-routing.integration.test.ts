@@ -57,7 +57,7 @@ async function setupShop(org: ScratchOrg, actor: string): Promise<string> {
     accounts[key] = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
   }
   const maps: Array<[string, string, string]> = [
     ["gateway_clearing", "shopify_payments", accounts.clearing!],
@@ -142,9 +142,9 @@ test(
       const ref = first.resultRef as { postingStatus?: string; documentId?: string | null };
       assert.equal(ref.postingStatus, "posted");
       assert.ok(ref.documentId, "paid order posts its cash sale immediately");
-      const rows = (await db.execute<{ id: string; posting_status: string; posting_document_id: string | null }>(sql`
+      const rows = await db.execute<{ id: string; posting_status: string; posting_document_id: string | null }>(sql`
         select id, posting_status, posting_document_id from channel_orders
-         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`)).rows;
+         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`, "objects");
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.posting_status, "posted");
       assert.equal(rows[0]!.posting_document_id, ref.documentId);
@@ -152,7 +152,7 @@ test(
       assert.equal((repeat.resultRef as { documentId?: string }).documentId, ref.documentId);
       const again = (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from channel_orders
-         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`)).rows[0]!.count;
+         where org_id = ${org.orgId} and channel_id = ${channelId} and external_id = '7001'`, "objects"))[0]!.count;
       assert.equal(again, "1");
       const refund = await adapter.handleEvent(delivery(org.orgId, channelId, "refunds/create", {
         id: 8101, order_id: 7001, created_at: "2026-07-16T12:00:00Z",
@@ -165,7 +165,7 @@ test(
       assert.equal(refundRef.orderExternalId, "7001", "the refund id cannot replace its parent order id");
       const event = (await db.execute<{ order_id: string; payload: { shopCurrency?: string; totalMinor?: string } }>(sql`
         select order_id, payload from channel_order_events
-         where org_id = ${org.orgId} and id = ${refundRef.eventId}`)).rows[0];
+         where org_id = ${org.orgId} and id = ${refundRef.eventId}`, "objects"))[0];
       assert.equal(event?.order_id, rows[0]!.id);
       assert.equal(event?.payload.totalMinor, "6083");
       for (const topic of ["refunds/create", "fulfillments/create"]) {
@@ -228,14 +228,14 @@ test("unattended Shopify sync retains its source and waits for the tenant's conf
     const ref=pending.resultRef as {postingStatus:string;documentId:string};
     assert.equal(ref.postingStatus,"pending");assert.ok(ref.documentId);
     const receipt=(await db.execute<{actor_id:string|null;source:string}>(sql`select actor_id,context->>'event_source' as source
-      from flow_submissions where org_id=${org.orgId} and subject_id=${ref.documentId}`)).rows[0];
+      from flow_submissions where org_id=${org.orgId} and subject_id=${ref.documentId}`, "objects"))[0];
     assert.deepEqual(receipt,{actor_id:null,source:"sync"});
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`)).rows.length,0);
-    const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${ref.documentId} and status='pending'`)).rows[0];
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`, "objects")).length,0);
+    const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${ref.documentId} and status='pending'`, "objects"))[0];
     assert.ok(gate);await decideGate({gateId:gate.id,userId:reviewer,decision:"approved"});
     const posted=await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
     assert.equal((posted.resultRef as {postingStatus:string}).postingStatus,"posted");
     await adapter.handleEvent(delivery(org.orgId,channelId,"orders/create",shopifyOrder()));
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`)).rows.length,1);
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${ref.documentId}`, "objects")).length,1);
   } finally {await dropScratchOrg(org.orgId);}
 });

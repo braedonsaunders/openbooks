@@ -36,12 +36,12 @@ for (const scenario of scenarios) {
         { id: 'gate', position: { x: 1, y: 0 }, data: { kind: 'gate', gate: { title: 'Approval', assignees: [{ type: 'user', userId: actor }], mode: 'any' } } },
       ], edges: [{ id: 'edge', source: 'trigger', target: 'gate', sourceHandle: 'next' }] };
       await db.execute(sql`insert into flows(id,org_id,name,subject_kind,enabled,graph,updated_at) values (${id},${org.orgId},'Reviewed flow','vendor_bill',false,${JSON.stringify(graph)}::jsonb,date_trunc('second',now()+interval '1 day')+interval '123450 microseconds')`);
-      const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from flows where id=${id}`)).rows[0]!.revision;
+      const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from flows where id=${id}`, "objects"))[0]!.revision;
       const params = { params: Promise.resolve({ id }) };
       const request = (method: string, body: unknown) => new Request(`http://audit.local/api/admin/flows/${id}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const patch = (body: unknown) => withOrgContext(org.orgId, () => PATCH(request('PATCH', body), params));
       const remove = (body: unknown) => withOrgContext(org.orgId, () => DELETE(request('DELETE', body), params));
-      const snapshot = async () => (await db.execute(sql`select to_jsonb(f) as flow, (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='flows' and row_id=${id}) as audits from flows f where id=${id}`)).rows;
+      const snapshot = async () => await db.execute(sql`select to_jsonb(f) as flow, (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='flows' and row_id=${id}) as audits from flows f where id=${id}`, "objects");
       if (scenario === 'exact read') {
         const detail = await withOrgContext(org.orgId, () => GET(new Request('http://audit.local'), params));
         assert.equal((await detail.json()).flow.updated_at, revision);
@@ -69,9 +69,9 @@ for (const scenario of scenarios) {
         }
         const response = pending ? await pending : await remove({ expectedUpdatedAt: revision });
         assert.equal(response.status,409);
-        assert.equal((await db.execute(sql`select id from flow_runs where id=${runId}`)).rows.length,1);
-        assert.equal((await db.execute(sql`select id from flows where id=${id}`)).rows.length,1);
-        if (scenario !== 'execution history') assert.equal((await db.execute(sql`select id from flow_gates where run_id=${runId} and status='pending'`)).rows.length,1);
+        assert.equal((await db.execute(sql`select id from flow_runs where id=${runId}`, "objects")).length,1);
+        assert.equal((await db.execute(sql`select id from flows where id=${id}`, "objects")).length,1);
+        if (scenario !== 'execution history') assert.equal((await db.execute(sql`select id from flow_gates where run_id=${runId} and status='pending'`, "objects")).length,1);
         return;
       }
       if (scenario === 'enable race') {

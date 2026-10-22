@@ -215,7 +215,8 @@ const mockSources = new Map<string, string>([
         return []
       }
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.executed.push(text)
           if (state.failOnText && text.includes(state.failOnText)) {
@@ -225,7 +226,7 @@ const mockSources = new Map<string, string>([
             const ledger = state.inTx ? state.pending : state.committed
             ledger.push(text)
           }
-          return { rows: rowsFor(text) }
+          return inMode({ rows: rowsFor(text) })
         },
         transaction: async (work) => work({}),
       }

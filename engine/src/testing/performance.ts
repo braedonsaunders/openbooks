@@ -21,7 +21,7 @@ export async function calibrateReviewFixture(args: {
     await setCalibratedRating({ ...args, entryId: entry.id, justification: args.reason });
     const closed = await closeCalibrationSession({ ...args, id: session.id });
     if (closed.approvalPending) throw new Error("The calibration fixture must complete its configured Flow gates.");
-    const event = (await db.execute(sql`select id from hrm_calibration_events where org_id=${args.orgId} and session_id=${session.id}`)).rows;
+    const event = await db.execute(sql`select id from hrm_calibration_events where org_id=${args.orgId} and session_id=${session.id}`, "objects");
     if (!event.length) throw new Error("Native calibration publication did not retain its events.");
     return (await getReviewDetail(args)).review;
   });

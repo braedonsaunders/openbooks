@@ -33,7 +33,7 @@ async function loadSource(tx: SqlExecutor, orgId: string, lineId: string, lock =
     from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
     join accounts account on account.org_id=line.org_id and account.id=line.account_id
     where line.org_id=${orgId} and line.id=${lineId} ${lock ? sql`for share of line,entry,account` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new ScopeNotFoundError();
   if (![row.orgId,row.lineId,row.entryId,row.bookId,row.accountId,row.subsidiaryId].every(isUuid))
     throw new HistoricalTranslationEvidenceError("The physical equity source must retain its exact book, account and legal entity. Review the posted source; current organization defaults cannot supply its historical identity.");
@@ -53,7 +53,7 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, lineId: string): Pro
 async function basisRow(tx: SqlExecutor, orgId: string, lineId: string, currency: string, lock = true): Promise<BasisRow | null> {
   return (await tx.execute<BasisRow>(sql`select id,change_id as "changeId",evidence,evidence_hash as "evidenceHash"
     from historical_translation_contributions where org_id=${orgId} and source_line_id=${lineId}
-      and presentation_currency=${currency} ${lock ? sql`for share` : sql``}`)).rows[0] ?? null;
+      and presentation_currency=${currency} ${lock ? sql`for share` : sql``}`, "objects"))[0] ?? null;
 }
 async function sourceAuthority(tx: SqlExecutor, input: Authority, instruction: HistoricalTranslationInstruction): Promise<void> {
   for (const fileId of [...new Set(instruction.layers.map(layer => layer.source.fileId))].sort())
@@ -68,11 +68,11 @@ async function prepare(tx: SqlExecutor, input: Authority, instruction: Historica
   assertHistoricalTranslationSource(instruction, source);
   if ((await tx.execute(sql`select id from historical_translation_contributions
     where org_id=${input.orgId} and source_line_id=${instruction.sourceLineId}
-      and measurement_currency<>${instruction.measurementCurrency} for share`)).rows.length)
+      and measurement_currency<>${instruction.measurementCurrency} for share`, "objects")).length)
     throw new HistoricalTranslationEvidenceError("Another applied certificate proves a different measurement currency for this exact source. Preserve the source and review its approved assessment; currencies cannot vary by presentation pair.");
   // Currency references are registered identities; live book and subsidiary
   // policies never determine the documentary historical measurement basis.
-  if ((await tx.execute(sql`select code from currencies where code in (${instruction.measurementCurrency},${instruction.presentationCurrency}) for share`)).rows.length !== new Set([instruction.measurementCurrency,instruction.presentationCurrency]).size)
+  if ((await tx.execute(sql`select code from currencies where code in (${instruction.measurementCurrency},${instruction.presentationCurrency}) for share`, "objects")).length !== new Set([instruction.measurementCurrency,instruction.presentationCurrency]).size)
     throw new HistoricalTranslationEvidenceError("Choose registered measurement and presentation currencies.");
   const retainedSources: HistoricalTranslationEvidence["retainedSources"] = [];
   for (const layer of instruction.layers) {
@@ -83,7 +83,7 @@ async function prepare(tx: SqlExecutor, input: Authority, instruction: Historica
       join file_versions version on version.file_id=file.id
       where file.org_id=${input.orgId} and file.id=${layer.source.fileId} and version.id=${layer.source.versionId}
       for share of file,folder,version
-    `)).rows[0];
+    `, "objects"))[0];
     if (!retained || retained.fileInactive || retained.folderInactive || retained.contentHash !== layer.source.contentHash ||
         !Number.isSafeInteger(retained.versionNumber) || retained.versionNumber < 1)
       throw new HistoricalTranslationEvidenceError("Select the available tenant-owned Cabinet version matching the original historical source hash.");
@@ -115,7 +115,7 @@ async function assertCorrectionBindings(tx: SqlExecutor, orgId: string, evidence
         where correction.org_id=layer.org_id and correction.original_layer_id=layer.id) as consumed
       from historical_translation_layers layer join historical_translation_contributions basis on basis.org_id=layer.org_id and basis.id=layer.basis_id
       join financial_changes change on change.org_id=basis.org_id and change.id=basis.change_id
-      where layer.org_id=${orgId} and layer.id=${layer.originalLayerId} and change.status='applied' for share of layer,basis,change`)).rows[0];
+      where layer.org_id=${orgId} and layer.id=${layer.originalLayerId} and change.status='applied' for share of layer,basis,change`, "objects"))[0];
     assertHistoricalTranslationCorrectionParent(evidence.instruction, evidence.sourceFingerprint, layer,
       evidence.retainedSources[position]!.versionNumber, original);
     evidence.originalLayerStates.push({ originalLayerId: layer.originalLayerId!, consumedAmount: original.consumed });
@@ -130,7 +130,7 @@ export async function proposeHistoricalTranslationContribution(input: Authority 
     await sourceAuthority(db, input, instruction);
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${`financial-change:${input.orgId}:${input.idempotencyKey}`}))`);
     const replay = (await db.execute<{ payload: { evidence?: HistoricalTranslationEvidence } }>(sql`select payload from financial_changes
-      where org_id=${input.orgId} and idempotency_key=${input.idempotencyKey}`)).rows[0]?.payload.evidence;
+      where org_id=${input.orgId} and idempotency_key=${input.idempotencyKey}`, "objects"))[0]?.payload.evidence;
     const evidence = await prepare(db, input, instruction, replay && canonicalJson(replay.instruction) === canonicalJson(instruction) ? replay : undefined);
     const proposal = { orgId: input.orgId, actorId: input.actorId, subsidiaryId: evidence.sourceFingerprint.subsidiaryId,
       domain: "consolidation" as const, operation: HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION, subjectId: instruction.sourceLineId,
@@ -153,7 +153,7 @@ export async function applyHistoricalTranslationContribution(input: Authority & 
     // record lock. Cabinet authority has the first lock in native commands.
     const candidate = (await db.execute<{ evidence: HistoricalTranslationEvidence }>(sql`select payload->'evidence' as evidence from financial_changes
       where org_id=${input.orgId} and id=${input.changeId} and domain='consolidation'
-        and operation=${HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION}`)).rows[0];
+        and operation=${HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION}`, "objects"))[0];
     if (!candidate) throw new ScopeNotFoundError();
     const candidateInstruction = readHistoricalTranslationInstruction(candidate.evidence?.instruction);
     await sourceAuthority(db, input, candidateInstruction);
@@ -182,15 +182,15 @@ export async function applyHistoricalTranslationContribution(input: Authority & 
        presentation_currency,source_amount,posting_date,kind,evidence,evidence_hash,created_by)
       values(${basisId},${input.orgId},${change.id},${source.lineId},${source.entryId},${source.bookId},${source.accountId},${source.subsidiaryId},
         ${instruction.measurementCurrency},${instruction.presentationCurrency},${source.amount},${source.postingDate},${instruction.kind},
-        ${JSON.stringify(evidence)}::jsonb,${historicalTranslationEvidenceHash(evidence)},${input.actorId}) returning id`);
-    if (inserted.rows.length !== 1) throw new HistoricalTranslationEvidenceError("The approved historical contribution basis was not recorded.");
+        ${JSON.stringify(evidence)}::jsonb,${historicalTranslationEvidenceHash(evidence)},${input.actorId}) returning id`, "objects");
+    if (inserted.length !== 1) throw new HistoricalTranslationEvidenceError("The approved historical contribution basis was not recorded.");
     for (let position = 0; position < instruction.layers.length; position++) {
       const layer = instruction.layers[position]!, retained = evidence.retainedSources[position]!;
       const insertedLayer = await db.execute(sql`insert into historical_translation_layers
         (org_id,basis_id,layer_number,amount,translated_amount,rate,historical_date,provenance,source_file_id,source_version_id,source_hash,source_version_number,original_layer_id)
         values(${input.orgId},${basisId},${position + 1},${layer.amount},${evidence.translatedAmounts[position]},${layer.rate},${layer.historicalDate},${layer.provenance},
-          ${retained.fileId},${retained.versionId},${retained.contentHash},${retained.versionNumber},${layer.originalLayerId}) returning id`);
-      if (insertedLayer.rows.length !== 1) throw new HistoricalTranslationEvidenceError("Every approved historical layer must be recorded exactly once.");
+          ${retained.fileId},${retained.versionId},${retained.contentHash},${retained.versionNumber},${layer.originalLayerId}) returning id`, "objects");
+      if (insertedLayer.length !== 1) throw new HistoricalTranslationEvidenceError("Every approved historical layer must be recorded exactly once.");
     }
     await completeFinancialChange(db, input.orgId, change.id, input.actorId, { basisId });
     return { basisId };
@@ -221,20 +221,20 @@ export async function readHistoricalTranslationContribution(tx: SqlExecutor, arg
   const basis = await basisRow(tx, args.orgId, args.sourceLineId, args.presentationCurrency, false) ??
     (await tx.execute<BasisRow>(sql`select id,change_id as "changeId",evidence,evidence_hash as "evidenceHash"
       from historical_translation_contributions where org_id=${args.orgId} and source_line_id=${args.sourceLineId}
-        and measurement_currency=${args.presentationCurrency} order by id limit 1`)).rows[0] ?? null;
+        and measurement_currency=${args.presentationCurrency} order by id limit 1`, "objects"))[0] ?? null;
   if (!basis) throw new HistoricalTranslationEvidenceError(`Journal line ${args.sourceLineId} has no approved historical contribution basis for ${args.presentationCurrency}. Open its Journal entry → Historical translation tab, retain the exact original source and genuine layers, obtain an Accounting event approval, then Apply the assessment.`, source.entryId,source.lineId);
   const change = (await tx.execute<{ status: string; result: { basisId?: string } | null }>(sql`select status,result from financial_changes
-    where org_id=${args.orgId} and id=${basis.changeId} and domain='consolidation' and operation=${HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION}`)).rows[0];
+    where org_id=${args.orgId} and id=${basis.changeId} and domain='consolidation' and operation=${HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION}`, "objects"))[0];
   if (change?.status !== "applied" || change.result?.basisId !== basis.id || canonicalJson(source) !== canonicalJson(basis.evidence.sourceFingerprint) ||
       historicalTranslationEvidenceHash(basis.evidence) !== basis.evidenceHash ||
       (args.measurementCurrency !== undefined && args.measurementCurrency !== basis.evidence.instruction.measurementCurrency))
     throw new HistoricalTranslationEvidenceError("The historical contribution basis does not match the applied approval and exact physical source. Review its retained assessment.");
   const instruction = readHistoricalTranslationInstruction(basis.evidence.instruction);
   assertHistoricalTranslationSource(instruction, source);
-  const layers = (await tx.execute<RetainedHistoricalTranslationLayer>(sql`select id,amount::text,translated_amount::text as "translatedAmount",rate::text,historical_date::text as "historicalDate",provenance,
+  const layers = await tx.execute<RetainedHistoricalTranslationLayer>(sql`select id,amount::text,translated_amount::text as "translatedAmount",rate::text,historical_date::text as "historicalDate",provenance,
     jsonb_build_object('fileId',source_file_id::text,'versionId',source_version_id::text,'contentHash',source_hash) as source,
     source_version_number as "versionNumber",original_layer_id as "originalLayerId"
-    from historical_translation_layers where org_id=${args.orgId} and basis_id=${basis.id} order by layer_number`)).rows;
+    from historical_translation_layers where org_id=${args.orgId} and basis_id=${basis.id} order by layer_number`, "objects");
   if (layers.length !== instruction.layers.length || layers.some((layer, i) => {
     const { id: _id, versionNumber, translatedAmount, ...physical } = layer;
     return canonicalJson(physical) !== canonicalJson(instruction.layers[i]) || versionNumber !== basis.evidence.retainedSources[i]?.versionNumber ||
@@ -264,12 +264,12 @@ export async function readHistoricalTranslationAuthoringContext(input: Authority
 }): Promise<HistoricalTranslationAuthoringContext> {
   return withOrgTransaction(input.orgId, async () => {
     const candidate = await loadSource(db, input.orgId, input.sourceLineId, false);
-    const proposals = (await db.execute<HistoricalTranslationAuthoringContext["proposals"][number]>(sql`
+    const proposals = await db.execute<HistoricalTranslationAuthoringContext["proposals"][number]>(sql`
       select id as "changeId",status,reason,payload->'evidence' as evidence from financial_changes
       where org_id=${input.orgId} and domain='consolidation'
         and operation=${HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION} and subject_id=${input.sourceLineId}
-      order by created_at,id`)).rows;
-    const originalBases = (await db.execute<{ sourceLineId: string; presentationCurrency: string; evidence: HistoricalTranslationEvidence }>(sql`
+      order by created_at,id`, "objects");
+    const originalBases = await db.execute<{ sourceLineId: string; presentationCurrency: string; evidence: HistoricalTranslationEvidence }>(sql`
       select basis.source_line_id as "sourceLineId",basis.presentation_currency as "presentationCurrency",basis.evidence
       from historical_translation_contributions basis
       join financial_changes change on change.org_id=basis.org_id and change.id=basis.change_id
@@ -278,7 +278,7 @@ export async function readHistoricalTranslationAuthoringContext(input: Authority
         and basis.posting_date<=${candidate.postingDate}::date
         and (${candidate.reversesEntryId}::uuid is null or basis.source_entry_id=${candidate.reversesEntryId}::uuid)
         and sign(basis.source_amount)<>sign(${candidate.amount}::numeric)
-      order by basis.id`)).rows;
+      order by basis.id`, "objects");
     // Resolve Cabinet fences before taking any financial source or request
     // locks, matching the proposal, approval and application lock order.
     const fileIds = new Set<string>();
@@ -302,10 +302,10 @@ export async function readHistoricalTranslationAuthoringContext(input: Authority
     if (canonicalJson(source) !== canonicalJson(candidate))
       throw new HistoricalTranslationEvidenceError("The source changed while its workspace was opening. Reload the posted journal before authoring its assessment.");
     const certificates: ApprovedHistoricalTranslationContribution[] = [];
-    const currencies = (await db.execute<{ code: string }>(sql`select code from currencies order by code`)).rows.map(row => row.code);
-    const existing = (await db.execute<{ presentationCurrency: string }>(sql`
+    const currencies = (await db.execute<{ code: string }>(sql`select code from currencies order by code`, "objects")).map(row => row.code);
+    const existing = await db.execute<{ presentationCurrency: string }>(sql`
       select presentation_currency as "presentationCurrency" from historical_translation_contributions
-      where org_id=${input.orgId} and source_line_id=${input.sourceLineId} order by presentation_currency`)).rows;
+      where org_id=${input.orgId} and source_line_id=${input.sourceLineId} order by presentation_currency`, "objects");
     for (const row of existing) {
       const certificate = await readHistoricalTranslationContribution(db, { orgId: input.orgId, sourceLineId: input.sourceLineId,
         presentationCurrency: row.presentationCurrency, expectedSource: source });
@@ -318,7 +318,7 @@ export async function readHistoricalTranslationAuthoringContext(input: Authority
       for (const layer of certificate.layers) {
         const consumed = (await db.execute<{ amount: string }>(sql`
           select coalesce(sum(abs(amount)),0)::numeric(19,4)::text as amount from historical_translation_layers
-          where org_id=${input.orgId} and original_layer_id=${layer.id}`)).rows[0]?.amount;
+          where org_id=${input.orgId} and original_layer_id=${layer.id}`, "objects"))[0]?.amount;
         if (consumed === undefined) throw new HistoricalTranslationEvidenceError("The applied parent allocation could not be read. Reload its approved source.");
         const magnitude = layer.amount.startsWith("-") ? layer.amount.slice(1) : layer.amount;
         const remainingAmount = subtractDecimal(magnitude, consumed);

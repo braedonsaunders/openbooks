@@ -67,7 +67,7 @@ export async function seedPayrollInputsFixture(label: string, members: readonly 
   });
   const component = (await db.execute<{ id: string }>(sql`
     select id from pay_components where org_id = ${org.orgId} and code = 'BONUS'
-  `));
+  `, "objects"));
   return {
     orgId: org.orgId,
     actorId,
@@ -76,6 +76,6 @@ export async function seedPayrollInputsFixture(label: string, members: readonly 
     subsidiaryId: org.subsidiaryId,
     scheduleId,
     documentId: run.documentId,
-    componentId: component.rows[0]!.id,
+    componentId: component[0]!.id,
   };
 }

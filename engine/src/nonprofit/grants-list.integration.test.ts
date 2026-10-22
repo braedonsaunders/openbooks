@@ -18,8 +18,8 @@ test('grant lists map populated pages and preserve counts for empty, filtered an
         const enabled = await db.execute(sql`update orgs set settings = jsonb_set(
           coalesce(settings, '{}'::jsonb), '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"grantManagement":true}'::jsonb, true)
-          where id = ${orgId} returning id`);
-        assert.equal(enabled.rows.length, 1, 'grant register fixture enables its organization features');
+          where id = ${orgId} returning id`, 'objects');
+        assert.equal(enabled.length, 1, 'grant register fixture enables its organization features');
       });
     }
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Grant Register Reader', 'grant-register-reader'));
@@ -30,13 +30,13 @@ test('grant lists map populated pages and preserve counts for empty, filtered an
     });
     const groupId = await withOrgContext(org.orgId, async () => {
       const sponsor = await db.execute(sql`update parties set display_name = 'Community Foundation'
-        where org_id = ${org.orgId} and id = ${org.customerId} returning id`);
-      assert.equal(sponsor.rows.length, 1, 'grant register fixture names its sponsor');
+        where org_id = ${org.orgId} and id = ${org.customerId} returning id`, 'objects');
+      assert.equal(sponsor.length, 1, 'grant register fixture names its sponsor');
       const group = await db.execute<{ id: string }>(sql`insert into account_groups
         (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
-        values (${org.orgId}, 'grant_allowable_costs', 'register-costs', 'Grant Register Costs', '{}'::jsonb, false, true, ${actorId}, ${actorId}) returning id`);
-      assert.equal(group.rows.length, 1, 'grant register fixture creates its allowable account group');
-      return group.rows[0]!.id;
+        values (${org.orgId}, 'grant_allowable_costs', 'register-costs', 'Grant Register Costs', '{}'::jsonb, false, true, ${actorId}, ${actorId}) returning id`, 'objects');
+      assert.equal(group.length, 1, 'grant register fixture creates its allowable account group');
+      return group[0]!.id;
     });
     const expected: GrantListItem[] = [];
     for (const code of ['Z-AWARD', 'A-AWARD']) {

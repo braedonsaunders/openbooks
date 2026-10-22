@@ -171,7 +171,7 @@ export async function expensesDashboard(
       from documents
       where org_id = ${orgId} and kind = 'expense_report' and voided_at is null
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-    `),
+    `, 'objects'),
     // Top spenders — expense reports by employee, current vs prior window
     // (verbatim Spend Velocity query 7).
     db.execute<ExpenseSpenderRow>(sql`
@@ -189,7 +189,7 @@ export async function expensesDashboard(
       having sum(d.total) > 0
       order by 3 desc nulls last
       limit 50
-    `),
+    `, 'objects'),
     // Spender KPIs aggregate the full population; the display query above is
     // intentionally capped for the top-spenders table.
     db.execute(sql`
@@ -212,7 +212,7 @@ export async function expensesDashboard(
         group by d.party_id, p.display_name
         having sum(d.total) > 0
       ) s
-    `),
+    `, 'objects'),
     // Expense categories (accounts on expense-report lines), current vs prior.
     db.execute<ExpenseCategoryRow>(sql`
       select l.account_id as category_id, a.name as category_name,
@@ -231,7 +231,7 @@ export async function expensesDashboard(
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
       group by 1, 2
       order by 3 desc nulls last
-    `),
+    `, 'objects'),
     // Category KPI aggregates the full population; the display query above
     // also returns the full category population.
     db.execute(sql`
@@ -256,7 +256,7 @@ export async function expensesDashboard(
           and e.posting_date >= ${priorFrom} and e.posting_date <= ${to}
         group by l.account_id, a.name
       ) c
-    `),
+    `, 'objects'),
     // Monthly expense-report vs vendor-bill spend (the SV comparison chart).
     db.execute(sql`
       select to_char(e.posting_date, 'YYYY-MM') as month,
@@ -275,7 +275,7 @@ export async function expensesDashboard(
         and e.posting_date >= ${from} and e.posting_date <= ${to}
       group by 1
       order by 1
-    `),
+    `, 'objects'),
     // Approval queue — oldest unfinished reports first.
     db.execute<ExpenseQueueRow>(sql`
       select d.id, d.document_number, d.document_date::text as date, d.total, d.status,
@@ -289,11 +289,11 @@ export async function expensesDashboard(
       order by case d.status when 'pending_approval' then 0 when 'approved' then 1 else 2 end,
         d.document_date asc
       limit 8
-    `),
+    `, 'objects'),
   ]))
 
-  const pipe = pipeRes.rows[0] ?? {}
-  const topSpenders: ExpenseSpender[] = spenderRes.rows
+  const pipe = pipeRes[0] ?? {}
+  const topSpenders: ExpenseSpender[] = spenderRes
     .map((r) => {
       const current = toUnits(r.current_spend ?? 0)
       const prior = toUnits(r.prior_spend ?? 0)
@@ -308,7 +308,7 @@ export async function expensesDashboard(
     })
     .filter((s) => toUnits(s.totalSpend) > 0n || toUnits(s.priorSpend) > 0n)
 
-  const categories: ExpenseCategory[] = catRes.rows
+  const categories: ExpenseCategory[] = catRes
     .map((r) => {
       const current = toUnits(r.current_amount ?? 0)
       const prior = toUnits(r.prior_amount ?? 0)
@@ -323,13 +323,13 @@ export async function expensesDashboard(
     })
     .filter((c) => toUnits(c.currentAmount) > 0n || toUnits(c.priorAmount) > 0n)
 
-  const monthlyTrends = (trendRes.rows as ExpenseTrendRow[]).map((r) => ({
+  const monthlyTrends = (trendRes as ExpenseTrendRow[]).map((r) => ({
     month: String(r.month),
     expenseAmount: canonicalMoney(r.expense_amount),
     billAmount: canonicalMoney(r.bill_amount),
   }))
-  const spenderKpi = spenderKpiRes.rows[0] ?? {}
-  const categoryKpi = categoryKpiRes.rows[0] ?? {}
+  const spenderKpi = spenderKpiRes[0] ?? {}
+  const categoryKpi = categoryKpiRes[0] ?? {}
 
   return {
     period: { from, to, priorFrom },
@@ -352,7 +352,7 @@ export async function expensesDashboard(
     topSpenders,
     categories,
     monthlyTrends,
-    queue: queueRes.rows.map((r) => ({
+    queue: queueRes.map((r) => ({
       id: r.id,
       documentNumber: r.document_number ?? '',
       employee: r.employee ?? null,

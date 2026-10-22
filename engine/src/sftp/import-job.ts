@@ -208,14 +208,14 @@ export async function ensureUnboundScheduleNotice(s: ScheduleRow): Promise<numbe
   // decision, so wildcard/override grants are out of scope here; the author
   // plus setup managers cover every operable org, and the per-file refusal
   // plus the schedule badge keep naming the remedy regardless.
-  const recipients = (await db.execute<{ id: string }>(sql`
+  const recipients = await db.execute<{ id: string }>(sql`
     select distinct u.id::text as id
       from users u
       left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
       left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
      where u.org_id = ${s.org_id} and u.is_active
        and (u.id = ${s.created_by} or u.is_super_admin or (r.permissions ? 'admin.setup.manage'))
-  `)).rows;
+  `, "objects");
   const accountLabel = [s.account_number, s.account_name].filter(Boolean).join(" · ") || s.account_id;
   const title = `SFTP schedule /${s.folder} has no expected bank account — identified statements refuse`;
   const body =
@@ -230,7 +230,7 @@ export async function ensureUnboundScheduleNotice(s: ScheduleRow): Promise<numbe
        where org_id = ${s.org_id} and user_id = ${recipient.id}::uuid
          and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND} and href = ${href} and read_at is null
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (existing) continue;
     // Same columns as the shared writeNotification path (kind, title, body,
     // href, org + user scope) — see engine/src/inbox/adapters/notification.ts:
@@ -241,7 +241,7 @@ export async function ensureUnboundScheduleNotice(s: ScheduleRow): Promise<numbe
       insert into notifications (org_id, user_id, kind, title, body, href)
       values (${s.org_id}, ${recipient.id}::uuid, ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND}, ${title}, ${body}, ${href})
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!inserted) throw new Error("the unbound-schedule notice was not stored — no row was written; retry the action");
     written += 1;
   }
@@ -262,7 +262,7 @@ async function assertScheduleEffectAllowed(s: ScheduleRow, claimToken: string, t
       join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
      where sc.id = ${s.id} and sc.org_id = ${s.org_id}
      for share of sc, sv
-  `)).rows[0]?.active;
+  `, "objects"))[0]?.active;
   if (!active) throw new Error("The SFTP schedule or server was disabled before this import completed");
 }
 
@@ -374,7 +374,7 @@ export async function recordScheduleRunOutcome(
   s: Pick<ScheduleRow, "id" | "org_id">,
   run: ScheduleRun,
 ): Promise<ScheduleRun> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update sftp_import_schedules set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb where id = ${s.id} and org_id = ${s.org_id}
   `);
   if ((updated.rowCount ?? 0) > 0) return run;
@@ -454,7 +454,7 @@ async function runClaimedSchedule(
           join accounts a on a.org_id = sv.org_id and a.id = ${s.account_id}
          where sv.id = ${s.sftp_server_id} and sv.org_id = ${s.org_id}
          for share of sv, o, a
-      `)).rows[0];
+      `, "objects"))[0];
       // Each ineligibility names its own remedy: a single
       // "no longer active" message sends the operator to reactivate a
       // schedule that is already active when the server or switch is the
@@ -470,7 +470,7 @@ async function runClaimedSchedule(
           !allowedSubsidiaryIds.includes(eligibility.account_subsidiary_id ?? "")) {
         return { kind: "account-scope" };
       }
-      const siblings = (await tx.execute<{ id: string; folder: string; account_label: string }>(sql`
+      const siblings = await tx.execute<{ id: string; folder: string; account_label: string }>(sql`
         select sc.id, sc.folder,
                coalesce(nullif(a.number, ''), a.name, sc.account_id::text) as account_label
           from sftp_import_schedules sc
@@ -478,7 +478,7 @@ async function runClaimedSchedule(
          where sc.org_id = ${s.org_id} and sc.sftp_server_id = ${s.sftp_server_id}
            and sc.is_active and sc.id <> ${s.id}
          for update of sc
-      `)).rows;
+      `, "objects");
       try {
         normalizeSftpWatchFolder(s.folder);
       } catch (error) {
@@ -507,8 +507,8 @@ async function runClaimedSchedule(
            set run_claim_token = ${claimToken}, run_claimed_at = now()
          where id = ${s.id} and org_id = ${s.org_id} and is_active
          returning id
-      `);
-      if (!claimed.rows[0]) return { kind: "inactive", reason: `SFTP schedule '${s.id}' is inactive or no longer exists; reactivate it before running` };
+      `, "objects");
+      if (!claimed[0]) return { kind: "inactive", reason: `SFTP schedule '${s.id}' is inactive or no longer exists; reactivate it before running` };
       // Keep this read in the same transaction: UPDATE still holds the row
       // lock, so a concurrent API rebind cannot slip between claim and config
       // capture. SELECT is used instead of RETURNING because this runtime's
@@ -518,7 +518,7 @@ async function runClaimedSchedule(
           from sftp_import_schedules sc
           join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
          where sc.id = ${s.id} and sc.org_id = ${s.org_id}
-      `)).rows[0];
+      `, "objects"))[0];
       return current
         ? {
             kind: "claimed",
@@ -584,8 +584,8 @@ async function runClaimedSchedule(
              run_claim_token = null, run_claimed_at = null
        where id = ${s.id} and org_id = ${s.org_id} and run_claim_token = ${claimToken}
        returning id
-    `));
-    if (!saved.rows[0]) {
+    `, "objects"));
+    if (!saved[0]) {
       const message = `SFTP schedule '${s.id}' disappeared or its run claim changed before the outcome could be saved`;
       await withOrgContext(s.org_id, () => db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -644,9 +644,9 @@ export async function runDueSftpImports(
        and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
        ${orgId ? sql`and sc.org_id = ${orgId}` : sql``}
        ${scheduleId ? sql`and sc.id = ${scheduleId}` : sql``}
-  `));
+  `, "objects"));
   const runs: ScheduleRun[] = [];
-  for (const s of rows.rows) {
+  for (const s of rows) {
     let run: ScheduleRun;
     try { run = await runClaimedSchedule(s, options.allowedSubsidiaryIds); }
     catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] }; }
@@ -669,11 +669,11 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
       join sftp_servers s on s.id = ${sftpServerId} and s.org_id = r.org_id and s.is_active
      where r.id = ${runId} and r.org_id = ${orgId}
        and (p.sftp_server_id is null or p.sftp_server_id = s.id)
-  `));
-  if (!svr.rows[0]) throw new Error("SFTP server not found or inactive");
+  `, "objects"));
+  if (!svr[0]) throw new Error("SFTP server not found or inactive");
   const file = await generatePaymentFileArtifact(runId, orgId, userId, { now });
-  const backend = backendFor({ backend: svr.rows[0].backend, bucket: svr.rows[0].bucket, rootPrefix: svr.rows[0].root_prefix, orgId: svr.rows[0].org_id });
-  const folder = svr.rows[0].payment_folder.replace(/^\/+|\/+$/g, "");
+  const backend = backendFor({ backend: svr[0].backend, bucket: svr[0].bucket, rootPrefix: svr[0].root_prefix, orgId: svr[0].org_id });
+  const folder = svr[0].payment_folder.replace(/^\/+|\/+$/g, "");
   if (!folder || folder.split("/").some((part) => part === ".." || part === ".")) throw new Error("payment profile SFTP folder is invalid");
   // Defence in depth: the artifact name is validated at creation, but rows
   // stored before that guard must still fail closed at publish time — and the

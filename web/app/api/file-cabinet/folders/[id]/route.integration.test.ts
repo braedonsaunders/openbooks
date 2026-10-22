@@ -57,8 +57,8 @@ test('compound folder edits validate and audit as one transaction', async () => 
              (${destinationId}, ${org.orgId}, null, 'Destination', false),
              (${movableId}, ${org.orgId}, null, 'Movable', false)
       returning id
-    `))
-    assert.deepEqual(new Set(folders.rows.map((row) => row.id)), new Set([targetId, destinationId, movableId]),
+    `, 'objects'))
+    assert.deepEqual(new Set(folders.map((row) => row.id)), new Set([targetId, destinationId, movableId]),
       'the three folder fixtures must be created before testing compound edits')
 
     const response = await PATCH(
@@ -74,12 +74,12 @@ test('compound folder edits validate and audit as one transaction', async () => 
 
     const row = (await db.execute<{ parentId: string | null; name: string }>(sql`
       select parent_folder_id as "parentId", name from folders where id = ${targetId} and org_id = ${org.orgId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(row.parentId, null, 'the failed rename did not leave the move committed')
     assert.equal(row.name, 'Attachments')
     const audit = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${targetId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(audit.n, 0, 'a rejected compound edit leaves no activity evidence')
 
     const success = await PATCH(
@@ -93,12 +93,12 @@ test('compound folder edits validate and audit as one transaction', async () => 
     assert.equal(success.status, 200)
     const moved = (await db.execute<{ parentId: string | null; name: string }>(sql`
       select parent_folder_id as "parentId", name from folders where id = ${movableId} and org_id = ${org.orgId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(moved.parentId, destinationId)
     assert.equal(moved.name, 'Moved folder')
     const successAudit = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${movableId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(successAudit.n, 2, 'move and rename evidence commit with the compound edit')
 
     // An explicit move to the cabinet root publishes to every documents.read
@@ -108,16 +108,16 @@ test('compound folder edits validate and audit as one transaction', async () => 
       insert into folders (id, org_id, parent_folder_id, name, is_system)
       values (${scopedId}, ${org.orgId}, ${destinationId}, 'Scoped child', false)
       returning id
-    `))
-    assert.equal(scopedFolder.rows.length, 1, 'the scoped child folder must exist before testing root-move refusal')
-    assert.equal(scopedFolder.rows[0]?.id, scopedId)
+    `, 'objects'))
+    assert.equal(scopedFolder.length, 1, 'the scoped child folder must exist before testing root-move refusal')
+    assert.equal(scopedFolder[0]?.id, scopedId)
     const folderGrant = await withBypassContext(() => db.execute<{ resource_id: string }>(sql`
       insert into resource_grants (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
       values (${org.orgId}, 'folder', ${scopedId}, 'user', ${actorId}, 'manager', ${actorId})
       returning resource_id
-    `))
-    assert.equal(folderGrant.rows.length, 1, 'the manager grant must exist before testing root-move refusal')
-    assert.equal(folderGrant.rows[0]?.resource_id, scopedId)
+    `, 'objects'))
+    assert.equal(folderGrant.length, 1, 'the manager grant must exist before testing root-move refusal')
+    assert.equal(folderGrant[0]?.resource_id, scopedId)
     state.authz = {
       user: { id: actorId, orgId: org.orgId },
       permissions: new Set(['documents.read']),
@@ -134,7 +134,7 @@ test('compound folder edits validate and audit as one transaction', async () => 
     assert.equal(rooted.status, 403)
     const stayed = (await db.execute<{ parentId: string | null }>(sql`
       select parent_folder_id as "parentId" from folders where id = ${scopedId} and org_id = ${org.orgId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(stayed.parentId, destinationId, 'a refused root move leaves the folder parented')
     state.authz = {
       user: { id: actorId, orgId: org.orgId },
@@ -154,7 +154,7 @@ test('compound folder edits validate and audit as one transaction', async () => 
     assert.match((await cascadeRequired.json()).error, /use DELETE to trash the subtree/)
     const remainsActive = (await db.execute<{ isInactive: boolean }>(sql`
       select is_inactive as "isInactive" from folders where id = ${movableId} and org_id = ${org.orgId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(remainsActive.isInactive, false, 'PATCH must not trash just the root folder')
   } finally {
     state.authz = null

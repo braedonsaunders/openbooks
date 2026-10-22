@@ -81,23 +81,23 @@ export async function loadInsurance(sp: Record<string, string | string[] | undef
         join subsidiaries s on s.org_id = p.org_id and s.id = p.subsidiary_id
        where p.org_id = ${orgId} ${scoped(sql`p.subsidiary_id`, allowed)}
        order by p.status, p.coverage_ends_on, p.policy_number
-       limit 500`),
+       limit 500`, 'objects'),
     tab === 'values' ? insuredValueComparison(orgId, { asOf: today, allowedSubsidiaryIds: allowed ? [...allowed] : null }) : Promise.resolve([]),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination ${scoped(sql`id`, allowed)} order by name`),
+      select id, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination ${scoped(sql`id`, allowed)} order by name`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
         join vendor_roles v on v.org_id = p.org_id and v.party_id = p.id
        where p.org_id = ${orgId} and p.is_active and v.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })}
-       order by p.display_name limit 1000`),
+       order by p.display_name limit 1000`, 'objects'),
     db.execute<{ id: string; label: string; subsidiary_id: string }>(sql`
       select id, concat_ws(' · ', asset_number, name) as label, subsidiary_id from fixed_assets
        where org_id = ${orgId} and status in ('draft', 'in_service', 'fully_depreciated', 'construction')
          ${scoped(sql`subsidiary_id`, allowed)}
-       order by asset_number limit 2000`),
+       order by asset_number limit 2000`, 'objects'),
   ])
-  const mapped: PolicyRow[] = rows.rows.map((row) => ({
+  const mapped: PolicyRow[] = rows.map((row) => ({
     id: row.id,
     policyNumber: row.policy_number,
     insurerPartyId: row.insurer_party_id,
@@ -121,12 +121,12 @@ export async function loadInsurance(sp: Record<string, string | string[] | undef
   const selectedId = pickString(sp.policy)
   const policy = selectedId && isUuid(selectedId) ? mapped.find((row) => row.id === selectedId) : undefined
   if (policy) {
-    const coverages = (await db.execute<{ asset_id: string; asset_number: string; asset_name: string; insured_value: string; replacement_value: string | null }>(sql`
+    const coverages = await db.execute<{ asset_id: string; asset_number: string; asset_name: string; insured_value: string; replacement_value: string | null }>(sql`
       select c.asset_id, a.asset_number, a.name as asset_name, c.insured_value::text as insured_value, c.replacement_value::text as replacement_value
         from asset_insurance_coverages c
         join fixed_assets a on a.org_id = c.org_id and a.id = c.asset_id
        where c.org_id = ${orgId} and c.policy_id = ${policy.id}
-       order by a.asset_number`)).rows
+       order by a.asset_number`, 'objects')
     selected = {
       ...policy,
       coverages: coverages.map((row) => ({
@@ -154,8 +154,8 @@ export async function loadInsurance(sp: Record<string, string | string[] | undef
     selected,
     createMode: pickString(sp.policy) === 'new' && can(authz, 'assets.maintain'),
     canMaintain: can(authz, 'assets.maintain'),
-    subsidiaries: subsidiaries.rows,
-    insurers: insurers.rows,
-    assets: assets.rows.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
+    subsidiaries,
+    insurers,
+    assets: assets.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
   }
 }

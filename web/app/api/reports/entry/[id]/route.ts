@@ -68,8 +68,8 @@ export const GET = defineRoute({
           ) d on true
          where e.id = ${id} and e.org_id = ${authz.user.orgId}
            ${subsidiaryFilter}
-      `))
-    const entry = e.rows[0]
+      `, 'objects'))
+    const entry = e[0]
     if (!entry) return notFound("record")
     const lines = (await db.execute<Record<string, unknown>>(sql`
         select l.line_number, l.amount, l.memo, l.is_open_item,
@@ -97,7 +97,7 @@ export const GET = defineRoute({
          where l.entry_id = ${id} and l.org_id = ${authz.user.orgId}
            ${lineSubsidiaryFilter}
          order by l.line_number
-      `))
+      `, 'objects'))
     const canSeePayroll = can(authz, 'payroll.read')
     const restrictedPayroll = !canSeePayroll && (entry.origin === 'payroll' || entry.doc_kind === 'pay_run')
     type FlyoutLine = Record<string, unknown> & {
@@ -107,7 +107,7 @@ export const GET = defineRoute({
         partyId: string | null
         payrollOrigin: boolean
       }
-    const mapped: FlyoutLine[] = lines.rows.map((row) => ({
+    const mapped: FlyoutLine[] = lines.map((row) => ({
         ...row,
         amount: row.amount as string,
         entryId: id,

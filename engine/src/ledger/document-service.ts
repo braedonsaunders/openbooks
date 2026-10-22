@@ -55,8 +55,8 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       left join posting_effects pe on pe.document_id = d.id and pe.org_id = d.org_id
       ${documentBalanceDueLateral()}
      where d.id = ${id} and d.org_id = ${orgId}
-  `))
-  const loaded = doc.rows[0]
+  `, 'objects'))
+  const loaded = doc[0]
   if (!loaded) return null
   // node-postgres maps timestamptz to JavaScript Date, which discards the
   // microseconds PostgreSQL retains. Keep the public `updated_at` shape, but
@@ -103,7 +103,7 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       from document_tenders t
      where t.document_id = ${id} and t.org_id = ${orgId}
      order by t.position
-  `))
+  `, 'objects'))
   const visibleLines = lines.rows.map((line) => ({
     ...line,
     custom: redactHiddenCustomValues(
@@ -112,7 +112,7 @@ export async function loadDocument(id: string, orgId: string, customFieldViewer?
       line.custom as Record<string, unknown> | null,
     ),
   }))
-  return { doc: exactDocument, lines: visibleLines as typeof lines.rows, tenders: tenders.rows }
+  return { doc: exactDocument, lines: visibleLines as typeof lines.rows, tenders }
 }
 
 /**
@@ -133,6 +133,6 @@ export async function loadDocumentEditCurrent(
            ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
       from documents
      where id = ${id} and org_id = ${orgId}
-  `)
-  return result.rows[0] ?? null
+  `, 'objects')
+  return result[0] ?? null
 }

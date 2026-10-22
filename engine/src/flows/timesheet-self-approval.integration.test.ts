@@ -39,12 +39,12 @@ for (const preventSelfApproval of [true, false]) {
       }));
       if (preventSelfApproval) {
         await assert.rejects(submit(), error => error instanceof FlowDispatchError && /zero assignees/.test(error.message));
-        assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${f.week}`)).rows.length, 0);
-        assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${f.org.orgId} and subject_id=${f.week}`)).rows.length, 0);
+        assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${f.week}`, "objects")).length, 0);
+        assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${f.org.orgId} and subject_id=${f.week}`, "objects")).length, 0);
       } else {
         assert.equal((await submit()).policy.kind, "gated");
         const gate = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${f.org.orgId}
-          and subject_id=${f.week} and assignee_user_id=${f.submitter} and status='pending'`)).rows[0];
+          and subject_id=${f.week} and assignee_user_id=${f.submitter} and status='pending'`, "objects"))[0];
         assert.ok(gate);
         const capability=await withOrgTransaction(f.org.orgId,()=>gateDecisionCapability(gate.id,f.submitter));
         assert.equal(capability.canAct,true);

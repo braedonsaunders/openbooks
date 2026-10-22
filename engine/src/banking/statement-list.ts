@@ -87,10 +87,10 @@ export async function listAccountStatements(
        where ${where}
        order by ${SORT_EXPR[input.sort]} ${direction} nulls last, s.imported_at ${direction}, s.id ${direction}
        limit ${perPage} offset ${(page - 1) * perPage}
-    `);
+    `, "objects");
     const count = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from bank_statements s where ${where}
-    `);
-    return { rows: rows.rows, total: count.rows[0]?.n ?? 0 };
+    `, "objects");
+    return { rows, total: count[0]?.n ?? 0 };
   }, { readOnly: true, isolationLevel: "REPEATABLE READ" });
 }

@@ -196,9 +196,9 @@ export const GET = defineRoute({
     const url = new URL(req.url)
 
     const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(
-      sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+      sql`select settings->'payroll' as p from orgs where id = ${orgId}`, 'objects',
     ))
-    const installed = await installedPayrollCountries(orgId, blobRes.rows[0]?.p ?? {})
+    const installed = await installedPayrollCountries(orgId, blobRes[0]?.p ?? {})
     const requestedYear = Number(url.searchParams.get('year'))
     const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
       ? requestedYear

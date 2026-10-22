@@ -54,7 +54,7 @@ export async function markNotificationsRead(
     select count(*)::int as n from notifications
      where org_id = ${args.orgId} and user_id = ${args.userId}
        and id in (select jsonb_array_elements_text(${JSON.stringify([...args.ids])}::jsonb)::uuid)
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   if (own < args.ids.length) {
     return { flipped: 0, own };
   }
@@ -63,8 +63,8 @@ export async function markNotificationsRead(
      where org_id = ${args.orgId} and user_id = ${args.userId} and read_at is null
        and id in (select jsonb_array_elements_text(${JSON.stringify([...args.ids])}::jsonb)::uuid)
     returning id
-  `);
-  return { flipped: flipped.rows.length, own };
+  `, "objects");
+  return { flipped: flipped.length, own };
 }
 
 /**
@@ -80,7 +80,7 @@ export async function writeNotification(exec: SqlExecutor, write: NotificationWr
               ${write.body ?? null}, ${write.href ?? null},
               ${write.actorId ?? null}, ${write.actorId ?? null})
       returning id
-    `)).rows[0]
+    `, "objects"))[0]
   )?.id;
   if (!id) throw new Error("the notice was not stored — no row was written; retry the action");
   return id;
@@ -128,13 +128,13 @@ export const notificationAdapter: InboxAdapter = {
    */
   async lookup(ctx: InboxListContext, sourceId: string): Promise<InboxItem | null> {
     if (!isUuid(sourceId)) return null;
-    const rows = (await db.execute<NoticeRow>(sql`
+    const rows = await db.execute<NoticeRow>(sql`
       select id::text as id, kind, title, body, href, created_at::text as created_at
         from notifications
        where org_id = ${ctx.orgId} and user_id = ${ctx.actorId} and read_at is null
          and id = ${sourceId}::uuid
        limit 1
-    `)).rows;
+    `, "objects");
     const row = rows[0];
     if (!row) return null;
     return {
@@ -156,14 +156,14 @@ export const notificationAdapter: InboxAdapter = {
     // more page explicitly, and the badge counts through count() — never
     // through the list length.
     const { limit, offset } = clampWindow(page);
-    const rows = (await db.execute<NoticeRow>(sql`
+    const rows = await db.execute<NoticeRow>(sql`
       select id::text as id, kind, title, body, href, created_at::text as created_at
         from notifications
        where org_id = ${ctx.orgId} and user_id = ${ctx.actorId} and read_at is null
        order by created_at desc
        limit ${limit}
        ${offset === 0 ? sql`` : sql`offset ${offset}`}
-    `)).rows;
+    `, "objects");
     return rows.map((row) => ({
       id: inboxItemId("notification", row.id),
       kind: "notification",
@@ -182,7 +182,7 @@ export const notificationAdapter: InboxAdapter = {
       select count(*)::int as n
         from notifications
        where org_id = ${ctx.orgId} and user_id = ${ctx.actorId} and read_at is null
-    `)).rows[0];
+    `, "objects"))[0];
     return row?.n ?? 0;
   },
   async act(ctx, sourceId, actionKey): Promise<void> {

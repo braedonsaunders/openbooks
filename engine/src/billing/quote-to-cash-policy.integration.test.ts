@@ -57,21 +57,21 @@ test(
           at: string;
           changes: { before: unknown; after: unknown; reason?: string };
         }>(sql`
-      select action, actor_id, at::text, changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`),
+      select action, actor_id, at::text, changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`, "objects"),
       );
-      assert.equal(evidence.rows.length, 3);
+      assert.equal(evidence.length, 3);
       const storedFirst = { ...first };
       const storedSecond = { ...second };
       assert.deepEqual(
-        evidence.rows.map((r) => r.action),
+        evidence.map((r) => r.action),
         ["insert", "update", "delete"],
       );
       assert.deepEqual(
-        evidence.rows.map((r) => r.changes.before),
+        evidence.map((r) => r.changes.before),
         [null, storedFirst, storedSecond],
       );
       assert.deepEqual(
-        evidence.rows.map((r) => r.changes.after),
+        evidence.map((r) => r.changes.after),
         [
           storedFirst,
           storedSecond,
@@ -84,19 +84,19 @@ test(
           },
         ],
       );
-      assert.ok(evidence.rows.every((r) => r.actor_id === actor && r.at));
-      assert.equal(evidence.rows[2]!.changes.reason, "Reset to defaults");
+      assert.ok(evidence.every((r) => r.actor_id === actor && r.at));
+      assert.equal(evidence[2]!.changes.reason, "Reset to defaults");
       await assert.rejects(
         () => clearQuoteToCashSettings(org.orgId, actor),
         /No quote-to-cash policy is saved/,
       );
       const count = await withOrgContext(org.orgId, () =>
         db.execute<{ n: number }>(
-          sql`select count(*)::int n from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings'`,
+          sql`select count(*)::int n from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings'`, "objects",
         ),
       );
       assert.equal(
-        count.rows[0]!.n,
+        count[0]!.n,
         3,
         "refused reset cannot report a second successful deletion",
       );
@@ -130,13 +130,11 @@ test(
           }),
         ),
       );
-      const rows = (
-        await withOrgContext(org.orgId, () =>
+      const rows = await withOrgContext(org.orgId, () =>
           db.execute<{ changes: { before: unknown; after: unknown } }>(
-            sql`select changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`,
+            sql`select changes from audit_log where org_id=${org.orgId} and table_name='quote_to_cash_settings' order by at,id`, "objects",
           ),
-        )
-      ).rows;
+        );
       assert.equal(rows.length, 3);
       assert.equal(rows[0]!.changes.before, null);
       assert.deepEqual(rows[1]!.changes.before, rows[0]!.changes.after);

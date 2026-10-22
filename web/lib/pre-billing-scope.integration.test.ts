@@ -54,7 +54,7 @@ test('Pre-billing honours the caller subsidiary scope end to end', {skip:!proces
       assert.deepEqual(await wip.listPreBillingWorkspaceSources(org.orgId, new Set()), { projects: [], unbilled: [] })
       // Create
       await assert.rejects(wip.createPrebill(org.orgId, preparer, period, restricted), notFound)
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`, 'objects'))[0]!.n, 0)
       const prebill = await wip.createPrebill(org.orgId, preparer, period, visible)
       assert.equal(prebill.sourceCount, 1)
       // Lists and by-id loads
@@ -79,7 +79,7 @@ test('Pre-billing honours the caller subsidiary scope end to end', {skip:!proces
       await assert.rejects(wip.transitionPrebill(org.orgId, approver, prebill.id, 'reopen', 'Scope check', restricted), notFound)
       // Convert
       await assert.rejects(wip.convertPrebill(org.orgId, preparer, prebill.id, restricted), notFound)
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`, 'objects'))[0]!.n, 0)
       const converted = await wip.convertPrebill(org.orgId, preparer, prebill.id, visible)
       assert.equal(converted.idempotent, false)
       // The converted worksheet stays hidden too.
@@ -176,7 +176,7 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
                where datname = current_database() and wait_event_type = 'Lock'
                  and query ilike '%from projects p%' and query ilike '%for update%'
             ) as waiting
-          `)).rows[0]!.waiting
+          `, 'objects'))[0]!.waiting
           if (waiting) return
           await new Promise((resolve) => setTimeout(resolve, 10))
         }
@@ -207,12 +207,12 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
       // project after the project commits into B.
       const createRace = await raceRehome(other, () => wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Create race', [], restricted))
       assert.ok('error' in createRace && notFound(createRace.error))
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebill_holds where org_id = ${org.orgId} and source_id = ${entry} and released_at is null`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebill_holds where org_id = ${org.orgId} and source_id = ${entry} and released_at is null`, 'objects'))[0]!.n, 0)
       await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where id = ${project} and org_id = ${org.orgId}`)
       const hold = await wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Release race', [], restricted)
       const releaseRace = await raceRehome(other, () => wip.releasePrebillHold(org.orgId, preparer, hold.id, 'Release race', restricted))
       assert.ok('error' in releaseRace && notFound(releaseRace.error))
-      assert.equal((await db.execute<{ released_at: string | null }>(sql`select released_at from prebill_holds where org_id = ${org.orgId} and id = ${hold.id}`)).rows[0]!.released_at, null)
+      assert.equal((await db.execute<{ released_at: string | null }>(sql`select released_at from prebill_holds where org_id = ${org.orgId} and id = ${hold.id}`, 'objects'))[0]!.released_at, null)
       await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where id = ${project} and org_id = ${org.orgId}`)
       await wip.releasePrebillHold(org.orgId, preparer, hold.id, 'Restore test fixture', restricted)
       await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, restricted)
@@ -233,7 +233,7 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
       )
       await assert.rejects(wip.transitionPrebill(org.orgId, approver, prebill.id, 'reopen', 'Rehome check', restricted), notFound)
       await assert.rejects(wip.convertPrebill(org.orgId, preparer, prebill.id, restricted), notFound)
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`, 'objects'))[0]!.n, 0)
       // The locks do not break the legitimate flow: in-scope callers proceed.
       const converted = await wip.convertPrebill(org.orgId, preparer, prebill.id, both)
       assert.equal(converted.idempotent, false)
@@ -396,7 +396,7 @@ const consolidatedRows = [
                 wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, null),
                 (error: unknown) => error instanceof wip.PreBillingError,
               )
-              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, 0)
+              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`, 'objects'))[0]!.n, 0)
             } finally { await dropScratchOrg(org.orgId) }
           })
         })
@@ -461,7 +461,7 @@ const consolidatedRows = [
                 'PB-00001', 'PB-00002', 'PB-00003', 'PB-00004',
                 'PB-00005', 'PB-00006', 'PB-00007', 'PB-00008',
               ])
-              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n, WRITERS)
+              assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`, 'objects'))[0]!.n, WRITERS)
             } finally { await dropScratchOrg(org.orgId) }
           })
         })
@@ -495,7 +495,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
                 values (${project},${org.orgId},${org.subsidiaryId},'WIPROUND','Rounding Pre-billing job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
               await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${randomUUID()},${org.orgId},'employee','Rounding worker',${org.subsidiaryId})`)
-              const worker = (await db.execute<{id:string}>(sql`select id from parties where org_id=${org.orgId} and display_name='Rounding worker'`)).rows[0]!.id
+              const worker = (await db.execute<{id:string}>(sql`select id from parties where org_id=${org.orgId} and display_name='Rounding worker'`, 'objects'))[0]!.id
               // Two billable hours pricing just over half a cent each.
               for (let n = 0; n < 2; n++) {
                 await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
@@ -522,13 +522,13 @@ const consolidatedRows = [
               const invoice = (await db.execute<{ subtotal: string; tax_total: string; total: string }>(sql`
                 select subtotal::text as subtotal, tax_total::text as tax_total, total::text as total
                   from documents where org_id = ${org.orgId} and id = ${converted.id}
-              `)).rows[0]!
+              `, 'objects'))[0]!
               assert.equal(invoice.total, '0.0100', 'the invoice total equals the approved total')
               assert.equal(invoice.tax_total, '0.0000')
               const lines = (await db.execute<{ amount: string }>(sql`
                 select amount::text as amount from document_lines
                  where org_id = ${org.orgId} and document_id = ${converted.id} order by line_number
-              `)).rows.map((row) => row.amount)
+              `, 'objects')).map((row) => row.amount)
               assert.deepEqual(lines, ['0.0100', '0.0000'])
             } finally { await dropScratchOrg(org.orgId) }
           })
@@ -583,7 +583,7 @@ const consolidatedRows = [
             (select jsonb_agg(to_jsonb(n) order by n.id) from number_sequences n where n.org_id=${f.org.orgId}) as numbers,
             (select jsonb_agg(to_jsonb(e) order by e.id) from prebill_events e where e.org_id=${f.org.orgId}) as events,
             (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where a.org_id=${f.org.orgId}) as audit
-          `)).rows[0]
+          `, 'objects'))[0]
         }
 
         async function refused(f: Fixture, message: RegExp) {
@@ -596,14 +596,14 @@ const consolidatedRows = [
         async function convertedWith(f: Fixture, accountId: string) {
           const converted = await wip.convertPrebill(f.org.orgId, f.actor, f.prebill)
           assert.equal(converted.idempotent, false)
-          const lines = (await db.execute(sql`select id, account_id, amount::text, time_entry_id from document_lines
-            where org_id=${f.org.orgId} and document_id=${converted.id} order by line_number`)).rows
+          const lines = await db.execute(sql`select id, account_id, amount::text, time_entry_id from document_lines
+            where org_id=${f.org.orgId} and document_id=${converted.id} order by line_number`, 'objects')
           assert.equal(lines.length, 1)
           assert.equal(lines[0]!.account_id, accountId)
           assert.equal(lines[0]!.amount, '200.2500')
           assert.equal(lines[0]!.time_entry_id, f.entry)
           assert.deepEqual((await db.execute(sql`select billing_status, invoiced_by_line_id from time_entries
-            where org_id=${f.org.orgId} and id=${f.entry}`)).rows[0], { billing_status: 'billed', invoiced_by_line_id: lines[0]!.id })
+            where org_id=${f.org.orgId} and id=${f.entry}`, 'objects'))[0], { billing_status: 'billed', invoiced_by_line_id: lines[0]!.id })
           const beforeRetry = await snapshot(f)
           assert.deepEqual(await wip.convertPrebill(f.org.orgId, f.actor, f.prebill), { id: converted.id, documentNumber: converted.documentNumber, idempotent: true })
           assert.deepEqual(await snapshot(f), beforeRetry)
@@ -695,7 +695,7 @@ const consolidatedRows = [
                 (error: unknown) => error instanceof PreBillingError && error.status === 404 && /Pre-billing is turned off/i.test(error.message),
               )
               assert.equal(
-                (await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`)).rows[0]!.n,
+                (await db.execute<{ n: number }>(sql`select count(*)::int as n from prebills where org_id=${org.orgId}`, 'objects'))[0]!.n,
                 0,
               )
             } finally {
@@ -779,12 +779,12 @@ test('converting after a switch to NTE enforces the new ceiling', enabled, async
       ))
       assert.equal(switched.status, 200)
 
-      const invoicesBefore = (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n
+      const invoicesBefore = (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`, 'objects'))[0]!.n
       await assert.rejects(
         wip.convertPrebill(org.orgId, approver, prebill.id, null),
         /remaining not-to-exceed capacity/,
       )
-      const invoicesAfter = (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n
+      const invoicesAfter = (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`, 'objects'))[0]!.n
       assert.equal(invoicesAfter, invoicesBefore)
     } finally { session.user = null; await dropScratchOrg(org.orgId) }
   })

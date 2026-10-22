@@ -347,26 +347,26 @@ async function holderOptions(orgId: string, allowed: ReadonlySet<string> | null)
     select id, display_name as name from parties
      where org_id = ${orgId} and is_active
      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
-     order by display_name limit 2000`)).rows.map((row) => ({ value: row.id, label: row.name }))
+     order by display_name limit 2000`, 'objects')).map((row) => ({ value: row.id, label: row.name }))
 }
 
 async function currencyOptions(): Promise<Option[]> {
   return (await db.execute<{ code: string; name: string }>(sql`
-    select code, name from currencies order by code`)).rows.map((row) => ({ value: row.code, label: `${row.code} · ${row.name}` }))
+    select code, name from currencies order by code`, 'objects')).map((row) => ({ value: row.code, label: `${row.code} · ${row.name}` }))
 }
 
 async function considerationAccounts(orgId: string): Promise<Option[]> {
   return (await db.execute<{ id: string; label: string }>(sql`
     select id, concat_ws(' · ', number, name) as label from accounts
      where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${CONSIDERATION_ACCOUNT_TYPES.join(',')}}`}::text[])
-     order by number nulls last, name`)).rows.map((row) => ({ value: row.id, label: row.label }))
+     order by number nulls last, name`, 'objects')).map((row) => ({ value: row.id, label: row.label }))
 }
 
 async function partyNames(orgId: string, ids: readonly string[]): Promise<Record<string, string>> {
   const list = [...new Set(ids)].filter(isUuid)
   if (list.length === 0) return {}
-  const rows = (await db.execute<{ id: string; display_name: string }>(sql`
-    select id, display_name from parties where org_id = ${orgId} and id = any(${`{${list.join(',')}}`}::uuid[])`)).rows
+  const rows = await db.execute<{ id: string; display_name: string }>(sql`
+    select id, display_name from parties where org_id = ${orgId} and id = any(${`{${list.join(',')}}`}::uuid[])`, 'objects')
   return Object.fromEntries(rows.map((row) => [row.id, row.display_name]))
 }
 
@@ -706,7 +706,7 @@ async function classColorOrder(orgId: string, subsidiaryId: string): Promise<str
   return (await db.execute<{ id: string }>(sql`
     select id from equity_share_classes
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
-     order by effective_on, created_at, id`)).rows.map((row) => row.id)
+     order by effective_on, created_at, id`, 'objects')).map((row) => row.id)
 }
 
 /** The built-in reports the workspace links to, resolved together once per render. */
@@ -953,7 +953,7 @@ async function runsData(
       from accounting_periods p
      where p.org_id = ${orgId} and not p.is_adjustment
      order by p.starts_on desc
-     limit 60`)).rows.map((row): RunPeriod => {
+     limit 60`, 'objects')).map((row): RunPeriod => {
     const label = periodDisplayLabel({ fiscalYear: row.fiscal_year, periodNumber: row.period_number, adjustment: row.is_adjustment, startsOn: row.starts_on, endsOn: row.ends_on }, locale)
     return {
       id: row.id,

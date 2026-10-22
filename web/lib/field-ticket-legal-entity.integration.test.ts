@@ -109,7 +109,7 @@ test('field ticket header edits preserve foreman, crew, and equipment legal-enti
       )
       assert.equal((await loadFieldTicket(org.orgId, equipmentTicket.id)).projectId, sourceProjectId)
       const line = (await db.execute<{ project_id: string }>(sql`
-        select project_id from document_lines where org_id = ${org.orgId} and document_id = ${equipmentTicket.id}`)).rows[0]
+        select project_id from document_lines where org_id = ${org.orgId} and document_id = ${equipmentTicket.id}`, 'objects'))[0]
       assert.equal(line?.project_id, sourceProjectId)
     } finally {
       await dropScratchOrg(org.orgId)

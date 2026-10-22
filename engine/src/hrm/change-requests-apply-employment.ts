@@ -178,7 +178,7 @@ async function applyInitialAssignment(
     const found = (await exec.execute<{ id: string; position_code: string; revision: number }>(sql`
       select id, position_code, revision from positions
        where org_id = ${orgId} and id = ${assignment.positionId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -191,7 +191,7 @@ async function applyInitialAssignment(
     insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
     values (${orgId}, ${request.employment_id}, ${assignment.assignmentKey}, ${actorId}, ${actorId})
     returning id
-  `)).rows[0]?.id;
+  `, "objects"))[0]?.id;
   if (!slotId) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -268,7 +268,7 @@ async function nextEmploymentVersionNumber(exec: SqlExecutor, orgId: string, emp
   const next = (await exec.execute<{ next: number }>(sql`
     select coalesce(max(version_no),0)+1 as next from worker_employment_versions
     where org_id=${orgId} and employment_id=${employmentId}
-  `)).rows[0]?.next;
+  `, "objects"))[0]?.next;
   if (!next) throw new HrmChangeRequestError("REFUSED", "The employment version sequence is unavailable; reload the history.");
   return next;
 }
@@ -298,13 +298,13 @@ export async function applyHistoricalStatusObservation(
     values (${orgId},${request.employment_id},${sequence},${payload.status},${payload.effectiveFrom}::date,
       ${payload.effectiveTo}::date,${recordedAt},${actorId},${actorId})
     returning id,to_jsonb(worker_employment_versions) as after
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw new HrmChangeRequestError("REFUSED", "The historical status observation was not saved; nothing applied.");
-  const audited = (await exec.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+  const audited = await exec.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
     values (${orgId},'worker_employment_versions',${inserted.id},'insert',
       ${JSON.stringify({ before: null, after: inserted.after, kind: "historical_status_observation",
         sourceReference: payload.historicalObservation!.sourceReference, reason: request.reason,
-        employmentChangeId: changeId, requestId: request.id })}::jsonb,${actorId}) returning id`)).rows;
+        employmentChangeId: changeId, requestId: request.id })}::jsonb,${actorId}) returning id`, "objects");
   if (audited.length !== 1) throw new HrmChangeRequestError("REFUSED", "The historical status audit was not recorded; nothing applied.");
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
   await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
@@ -394,13 +394,13 @@ export async function applyEmploymentVersionChange(
     actorId,
   });
   for (const version of overlapping) {
-    const closed = (await exec.execute(sql`
+    const closed = await exec.execute(sql`
       update worker_employment_versions
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${version.id} and recorded_until is null
       returning id
-    `)).rows;
+    `, "objects");
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -410,7 +410,7 @@ export async function applyEmploymentVersionChange(
   }
   const successors = [{ status: successorStatus, from: windowStart, to: windowEnd }, ...retainedIntervals];
   for (const [offset, successor] of successors.entries()) {
-    const inserted = (await exec.execute(sql`
+    const inserted = await exec.execute(sql`
       insert into worker_employment_versions
         (org_id, employment_id, version_no, status, effective_from, effective_to,
          recorded_at, created_by, updated_by)
@@ -418,7 +418,7 @@ export async function applyEmploymentVersionChange(
               ${successor.from}::date, ${successor.to}::date,
               ${recordedAt}, ${actorId}, ${actorId})
       returning id
-    `)).rows;
+    `, "objects");
     if (inserted.length !== 1) {
       throw new HrmChangeRequestError("REFUSED", "The employment status interval was not saved; nothing applied.");
     }

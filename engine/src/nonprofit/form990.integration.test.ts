@@ -25,8 +25,8 @@ test("Form 990 workpaper ties to nonprofit statements and names unmapped expense
       const changed = await db.execute<{ id: string }>(sql`
         update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"functionalExpenses":true,"form990":true}'::jsonb, true)
-         where id = ${org.orgId} returning id`);
-      assert.equal(changed.rows.length, 1);
+         where id = ${org.orgId} returning id`, "objects");
+      assert.equal(changed.length, 1);
     });
     const operating = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "OPERATING", name: "Operating" }, classifications: { OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" } }, actorId });
     const restricted = await createFund({ orgId: org.orgId, code: "COMMUNITY", name: "Community", kind: "restricted", restrictionClass: "with_donor_restrictions", actorId });
@@ -41,12 +41,12 @@ test("Form 990 workpaper ties to nonprofit statements and names unmapped expense
     await setFunctionalMapping({ orgId: org.orgId, departmentId, functionKey: "program", effectiveFrom: org.date, actorId, reason: "Classify program expense" });
     await withOrgTransaction(org.orgId, () => postEntry(db, { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, entryNumber: `COST-${randomUUID()}`, postingDate: org.date, periodId: org.periodId, currency: "CAD", actorId, origin: "journal", memo: "Program cost", lines: [{ accountId: org.accounts.cogs, amount: "30.0000", departmentId }, { accountId: org.accounts.bank, amount: "-30.0000" }] }));
     await withBypassContext(() => installTaxReturnPacks(org.orgId, ["US_990"], actorId));
-    const disabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features,form990}','false'::jsonb,true) where id=${org.orgId} returning id`));
-    assert.equal(disabled.rows.length, 1);
+    const disabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features,form990}','false'::jsonb,true) where id=${org.orgId} returning id`, "objects"));
+    assert.equal(disabled.length, 1);
     await assert.rejects(computeForm990Workpaper(org.orgId, org.date, org.date), (error: unknown) =>
       error instanceof Error && (error as Error & { code?: string }).code === "feature_off" && error.message.includes("form990"));
-    const restored = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features,form990}','true'::jsonb,true) where id=${org.orgId} returning id`));
-    assert.equal(restored.rows.length, 1);
+    const restored = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features,form990}','true'::jsonb,true) where id=${org.orgId} returning id`, "objects"));
+    assert.equal(restored.length, 1);
     const workpaper = await computeForm990Workpaper(org.orgId, org.date, org.date);
     const value = (code: string) => workpaper.boxes.find((box) => box.lineCode === code)!.value;
     assert.equal(value("VIII12A"), "100.0000");

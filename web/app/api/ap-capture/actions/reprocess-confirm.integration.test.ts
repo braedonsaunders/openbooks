@@ -49,7 +49,7 @@ async function fixture() {
     values (${capture},${org.orgId},${file},'needs_review','review.pdf',${randomUUID()},'vendor_bill',${JSON.stringify(normalized)}::jsonb,${actor},${actor})`))
   const correct = async (total: string) => {
     const revision = (await withOrgContext(org.orgId, () => db.execute<{ updatedAt: string }>(sql`
-      select (revision_seq)::text as "updatedAt" from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`))).rows[0]!.updatedAt
+      select (revision_seq)::text as "updatedAt" from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`, 'objects')))[0]!.updatedAt
     return withOrgContext(org.orgId, () => PATCH(new Request('http://audit.local/api/ap-capture/' + capture, {
       method: 'PATCH', body: JSON.stringify({ normalized: { ...normalized, total }, expectedUpdatedAt: revision }),
     }), { params: Promise.resolve({ id: capture }) }))
@@ -62,7 +62,7 @@ async function fixture() {
     (select count(*)::int from ap_capture_corrections where org_id = ${org.orgId} and capture_item_id = ${capture}) as corrections,
     (select count(*)::int from ap_capture_events where org_id = ${org.orgId} and capture_item_id = ${capture} and event_kind = 'reprocess_queued') as queued,
     (select detail from ap_capture_events where org_id = ${org.orgId} and capture_item_id = ${capture} and event_kind = 'reprocess_queued' order by at desc limit 1) as discard
-    from ap_capture_items ci where ci.org_id = ${org.orgId} and ci.id = ${capture}`))).rows[0]!
+    from ap_capture_items ci where ci.org_id = ${org.orgId} and ci.id = ${capture}`, 'objects')))[0]!
   return { org, capture, correct, reprocess, state, close: async () => { session.user = null; await dropScratchOrg(org.orgId) } }
 }
 

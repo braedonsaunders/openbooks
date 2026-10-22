@@ -69,10 +69,10 @@ const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
 async function bomEvidence(orgId: string) {
   const components = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from bom_components where org_id = ${orgId}`)).rows[0]!.n;
+    select count(*)::int as n from bom_components where org_id = ${orgId}`, "objects"))[0]!.n;
   const audits = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'bom_components'`)).rows[0]!.n;
+     where org_id = ${orgId} and table_name = 'bom_components'`, "objects"))[0]!.n;
   return { components, audits };
 }
 

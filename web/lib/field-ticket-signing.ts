@@ -50,7 +50,7 @@ export async function sendTicketForSignature(args: {
     resolvePdfTemplate(args.orgId, 'field_ticket', null),
     loadPdfRecordValues('field_ticket', args.orgId, args.ticketId, args.allowedSubsidiaryIds),
     resolveOrgEmailTransportDetailed(args.orgId),
-    db.execute<{ name: string }>(sql`select name from orgs where id = ${args.orgId}`),
+    db.execute<{ name: string }>(sql`select name from orgs where id = ${args.orgId}`, 'objects'),
   ])
   if (!tpl || !record) throw new FieldTicketError('Could not render the ticket PDF')
   if (delivery.state !== 'ready') throw new FieldTicketError(emailDeliveryBlockedMessage(delivery))
@@ -60,7 +60,7 @@ export async function sendTicketForSignature(args: {
   const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
   const token = mintSigningToken(args.orgId, args.ticketId, requestId, expiresAt)
   const signUrl = `${args.appBaseUrl.replace(/\/$/, '')}/sign/field-tickets/${token}`
-  const orgName = org.rows[0]?.name ?? 'OpenBooks'
+  const orgName = org[0]?.name ?? 'OpenBooks'
   const subject = `${orgName} — timesheet ${row.document_number} for your approval`
   const messageHtml = args.message
     ? `<p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:1.6;">${args.message
@@ -101,8 +101,8 @@ export async function sendTicketForSignature(args: {
               ${args.message ?? null}, null, ${expiresAt.toISOString()},
               ${signingTokenDigest(token)}, ${logId}, ${args.userId})
       returning id
-    `)
-    if (request.rows.length !== 1) throw new FieldTicketError('The signature request was not saved; reload the ticket and retry')
+    `, 'objects')
+    if (request.length !== 1) throw new FieldTicketError('The signature request was not saved; reload the ticket and retry')
     return logId
   })
   let providerMessageId: string

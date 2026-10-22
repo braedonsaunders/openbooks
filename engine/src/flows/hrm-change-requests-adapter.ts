@@ -100,8 +100,8 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
            payload_digest, reason, status, submitted_by
       from hrm_employment_change_requests
      where id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter =
@@ -216,7 +216,7 @@ export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter =
        where org_id = ${orgId} and status in ('draft', 'pending_approval')
        order by created_at desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

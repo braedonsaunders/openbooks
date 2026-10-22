@@ -45,6 +45,6 @@ export async function recordFileEvent(input: {
     values (${input.orgId}, ${input.table}, ${input.rowId}, ${EVENT_ACTION[input.action]},
             ${JSON.stringify({ event: input.action, ...(input.changes ?? {}) })}::jsonb,
             ${input.actorId}, now()) returning id
-  `)
-  if (written.rows.length !== 1) throw new Error('File activity audit did not persist')
+  `, "objects")
+  if (written.length !== 1) throw new Error('File activity audit did not persist')
 }

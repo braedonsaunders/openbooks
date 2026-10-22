@@ -80,7 +80,7 @@ async function readSteps(ctx: InboxListContext, page?: InboxPage, sourceId?: str
      order by s.due_on, s.id
      limit ${sourceId === undefined ? page?.limit ?? 100 : 1}
      offset ${sourceId === undefined ? page?.offset ?? 0 : 0}
-  `)).rows.map(row => processStepItem(row, ctx));
+  `, "objects")).map(row => processStepItem(row, ctx));
 }
 
 export const hrmProcessStepAdapter: InboxAdapter = {
@@ -93,8 +93,8 @@ export const hrmProcessStepAdapter: InboxAdapter = {
   async count(ctx) {
     const source = await processStepSource(ctx);
     if (!source) return 0;
-    const result = await db.execute<{ n: number }>(sql`select count(*)::int as n ${source}`);
-    return result.rows[0]?.n ?? 0;
+    const result = await db.execute<{ n: number }>(sql`select count(*)::int as n ${source}`, "objects");
+    return result[0]?.n ?? 0;
   },
   async act(ctx, sourceId, actionKey, reason): Promise<void> {
     if (actionKey !== "complete") {

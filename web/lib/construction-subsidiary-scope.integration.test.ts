@@ -98,7 +98,7 @@ test('construction and subcontract routes enforce the caller subsidiary scope', 
       assert.equal(response.status, 404, `${body.action}: ${text}`)
       assert.deepEqual(JSON.parse(text), NOT_FOUND)
     }
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from sov_lines where org_id=${org.orgId}`)).rows[0]!.n, 1)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from sov_lines where org_id=${org.orgId}`, 'objects'))[0]!.n, 1)
     // Dates are refused as domain errors, never as a database failure.
     const badDate = await post(construction.POST, org.orgId, { action: 'releaseRetainage', projectId: visible, periodEnd: '2026-02-30', amount: '10' })
     assert.equal(badDate.status, 422); assert.match((await badDate.json()).error, /valid calendar date/)
@@ -124,7 +124,7 @@ test('construction and subcontract routes enforce the caller subsidiary scope', 
       assert.equal(response.status, 404, `${body.action}: ${text}`)
       assert.deepEqual(JSON.parse(text), NOT_FOUND)
     }
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from subcontracts where org_id=${org.orgId}`)).rows[0]!.n, 2)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from subcontracts where org_id=${org.orgId}`, 'objects'))[0]!.n, 2)
     const noDate = await post(subcontracts.POST, org.orgId, { action: 'approveChangeOrder', id: visibleChange })
     assert.equal(noDate.status, 422); assert.match((await noDate.json()).error, /valid calendar date/)
 

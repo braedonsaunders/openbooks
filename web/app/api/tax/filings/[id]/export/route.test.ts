@@ -79,17 +79,18 @@ stubModules({
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       const sqlText = globalThis.openbooksSqlTextFilingExport
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           // The old defect read the org's CURRENT base through a subquery.
           // Emulate that store: any query touching orgs answers the live base
           // (USD), while the filing read answers the frozen row. A route that
           // still relabels from orgs therefore reprints USD, never the frozen
           // EUR — and a route that selects the frozen columns gets them.
-          if (text.includes('select base_currency from orgs')) return { rows: [{ base_currency: 'USD' }] }
+          if (text.includes('select base_currency from orgs')) return inMode({ rows: [{ base_currency: 'USD' }] })
           if (text.includes('from tax_filings')) {
             state.filingReads += 1
-            return { rows: state.filingRow ? [state.filingRow] : [] }
+            return inMode({ rows: state.filingRow ? [state.filingRow] : [] })
           }
           throw new Error('unexpected database query: ' + text.slice(0, 120))
         },

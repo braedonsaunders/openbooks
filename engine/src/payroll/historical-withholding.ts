@@ -67,7 +67,7 @@ export async function recordHistoricalWithholding(input: {
     await lockScopeRows(tx, input.orgId, [{ kind: 'party', id: input.employeePartyId }], authority, 'share');
     if (input.effectiveTo >= await businessTodayInTx(tx, input.orgId)) throw new PayrollError('Historical inputs must end before today; edit the payroll profile for current or future withholding.');
     const profile = (await tx.execute<Record<string, unknown>>(sql`select * from employee_payroll_profiles
-      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} for update`)).rows[0];
+      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} for update`, 'objects'))[0];
     if (!profile || profile.country !== input.country) throw new PayrollError('Select this employee’s own payroll country and saved profile before importing historical withholding.');
     const region = certificate.scope.region ?? null;
     const subRegion = certificate.scope.subRegion ?? null;
@@ -83,19 +83,19 @@ export async function recordHistoricalWithholding(input: {
       }
     }
     const endExclusive = addCalendarDays(input.effectiveTo, 1);
-    const overlap = (await tx.execute<{ id: string; effective_from: string; superseded_on: string; answers: Record<string, string> }>(sql`
+    const overlap = await tx.execute<{ id: string; effective_from: string; superseded_on: string; answers: Record<string, string> }>(sql`
       select id, effective_from::text, superseded_on::text, answers from employee_tax_certificates
       where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and country=${input.country}
         and certificate_key=${certificate.key} and region is not distinct from ${region}
         and sub_region is not distinct from ${subRegion}
         and (effective_from is null or effective_from<=${input.effectiveTo}::date)
-        and (superseded_on is null or superseded_on>${input.effectiveFrom}::date) for update`)).rows;
+        and (superseded_on is null or superseded_on>${input.effectiveFrom}::date) for update`, 'objects');
     if (overlap.length) {
       const same = overlap.length === 1 && overlap[0]!.effective_from === input.effectiveFrom &&
         overlap[0]!.superseded_on === endExclusive && JSON.stringify(Object.entries(overlap[0]!.answers).sort()) === JSON.stringify(Object.entries(answers).sort());
       if (same && (await tx.execute(sql`select id from audit_log where org_id=${input.orgId}
         and table_name='employee_tax_certificates' and row_id=${overlap[0]!.id}
-        and changes->>'kind'='historical_withholding_input' limit 1`)).rows.length === 1) {
+        and changes->>'kind'='historical_withholding_input' limit 1`, 'objects')).length === 1) {
         return { changed: false, id: overlap[0]!.id };
       }
       throw new PayrollError('A withholding record already covers these dates — review its history; this import never overwrites overlapping evidence.');
@@ -105,13 +105,13 @@ export async function recordHistoricalWithholding(input: {
       join documents d on d.org_id=r.org_id and d.id=r.document_id
       where r.org_id=${input.orgId} and s.employee_party_id=${input.employeePartyId}
         and r.run_status='committed' and d.status<>'voided'
-        and r.pay_date between ${input.effectiveFrom}::date and ${input.effectiveTo}::date limit 1`)).rows[0];
+        and r.pay_date between ${input.effectiveFrom}::date and ${input.effectiveTo}::date limit 1`, 'objects'))[0];
     if (posted) throw new PayrollError(`Payroll dated ${posted.pay_date} is committed — preserve its withholding evidence and use a controlled correction run.`);
     if (input.dryRun) return { changed: true, id: null };
     const saved = (await tx.execute<{ id: string }>(sql`insert into employee_tax_certificates
       (org_id,employee_party_id,country,certificate_key,region,sub_region,answers,effective_from,superseded_on,created_by,updated_by)
       values (${input.orgId},${input.employeePartyId},${input.country},${certificate.key},${region},${subRegion},
-        ${JSON.stringify(answers)}::jsonb,${input.effectiveFrom}::date,${endExclusive}::date,${input.actorId},${input.actorId}) returning id`)).rows[0];
+        ${JSON.stringify(answers)}::jsonb,${input.effectiveFrom}::date,${endExclusive}::date,${input.actorId},${input.actorId}) returning id`, 'objects'))[0];
     if (!saved) throw new PayrollError('The historical withholding input was not saved — reload the employee and preview again.');
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values (${input.orgId},'employee_tax_certificates',${saved.id},'insert',

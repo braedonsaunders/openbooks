@@ -39,8 +39,8 @@ test('the projects list renders from page context and honours the viewer\'s save
   try {
     const userId = await withBypassContext(async () => {
       const id = await createScratchUser(org.orgId, 'project-reader', 'project-reader')
-      const updated = await db.execute(sql`update app_roles set permissions=${JSON.stringify(['projects.read'])}::jsonb where org_id=${org.orgId} and key='project-reader' returning key`)
-      assert.equal(updated.rows.length, 1, 'reader role setup updates one role')
+      const updated = await db.execute(sql`update app_roles set permissions=${JSON.stringify(['projects.read'])}::jsonb where org_id=${org.orgId} and key='project-reader' returning key`, 'objects')
+      assert.equal(updated.length, 1, 'reader role setup updates one role')
       await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,projects}', 'true'::jsonb, true) where id = ${org.orgId}`)
       return id
     })

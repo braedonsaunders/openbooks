@@ -244,11 +244,11 @@ async function insertScriptDraft(
     if (idempotencyKey !== undefined) {
       const existing = (await tx.execute<{ id: string; document_number: string }>(sql`
         select id, document_number from documents
-         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`));
-      if (existing.rows[0]) {
+         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"));
+      if (existing[0]) {
         return {
-          id: String(existing.rows[0].id),
-          documentNumber: String(existing.rows[0].document_number),
+          id: String(existing[0].id),
+          documentNumber: String(existing[0].document_number),
           deduped: true,
         };
       }
@@ -265,16 +265,16 @@ async function insertScriptDraft(
               ${JSON.stringify(actorId ? {} : SYSTEM_PROVENANCE)}::jsonb, ${idempotencyKey ?? null})
       -- An identical idempotent write reuses the winner selected and checked below.
       on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-      returning id`));
-    const won = ins.rows[0];
+      returning id`, "objects"));
+    const won = ins[0];
     if (!won) {
       // A concurrent identical write won the race: return its document rather
       // than a second numbered journal. The conflict above is the proof the
       // row exists — a zero-row read here is a failure, not a success.
       const raced = (await tx.execute<{ id: string; document_number: string }>(sql`
         select id, document_number from documents
-         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`));
-      const row = raced.rows[0];
+         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"));
+      const row = raced[0];
       if (!row) {
         throw new JournalWriteError(
           "journal.create collided on its idempotency key but the winning row is not visible; retry the script run",
@@ -293,8 +293,8 @@ async function insertScriptDraft(
         values (${orgId}, ${id}, ${i + 1}, ${accountId}, ${l.description},
                 '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
     }
-    const num = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`));
-    return { id, documentNumber: String(num.rows[0]!.document_number), deduped: false };
+    const num = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`, "objects"));
+    return { id, documentNumber: String(num[0]!.document_number), deduped: false };
   });
 }
 
@@ -346,7 +346,7 @@ async function resolveScriptJournalSubsidiary(
       select id, nullif(trim(base_currency), '') as base_currency
         from subsidiaries
        where org_id = ${orgId} and id = ${normalized}
-         and is_active and not is_elimination`)).rows[0];
+         and is_active and not is_elimination`, "objects"))[0];
     if (!explicit) throw new JournalWriteError("invalid subsidiary", "invalid_subsidiary");
     return pick(explicit);
   }
@@ -356,11 +356,11 @@ async function resolveScriptJournalSubsidiary(
     if (ids.length === 0) {
       throw new JournalWriteError("no available subsidiary", "no_available_subsidiary");
     }
-    const allowed = (await db.execute<{ id: string; base_currency: string | null }>(sql`
+    const allowed = await db.execute<{ id: string; base_currency: string | null }>(sql`
       select id, nullif(trim(base_currency), '') as base_currency
         from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination
-         and id in ${ids}`)).rows;
+         and id in ${ids}`, "objects");
     if (allowed.length === 0) {
       throw new JournalWriteError("no available subsidiary", "no_available_subsidiary");
     }
@@ -373,7 +373,7 @@ async function resolveScriptJournalSubsidiary(
     return pick(allowed[0]!);
   }
 
-  const company = ((await db.execute(sql`
+  const company = (await db.execute(sql`
     select s.id as subsidiary_id, nullif(trim(s.base_currency), '') as base_currency
       from orgs o
       left join lateral (
@@ -382,7 +382,7 @@ async function resolveScriptJournalSubsidiary(
          limit 1
       ) s on true
      where o.id = ${orgId}
-  `))).rows[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
+  `, "objects"))[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
   if (!company) throw new JournalWriteError("organization does not exist");
   if (!company.subsidiary_id) {
     throw new JournalWriteError("organization has no active root subsidiary");
@@ -416,8 +416,8 @@ async function findScriptJournalByKey(
 ): Promise<ScriptJournalResult | null> {
   const r = (await db.execute<{ id: string; document_number: string; status: string; posted_entry_id: string | null }>(sql`
     select id, document_number, status, posted_entry_id from documents
-     where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`));
-  const row = r.rows[0];
+     where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"));
+  const row = r[0];
   if (!row) return null;
   const base = { id: String(row.id), documentNumber: String(row.document_number) };
   if (row.posted_entry_id) return { ...base, entryId: String(row.posted_entry_id) };
@@ -463,8 +463,8 @@ export async function createScriptJournal(
   if (codes.length) {
     const r = (await db.execute<{ id: string; number: string; subsidiaryId: string | null }>(sql`
       select id, number, subsidiary_id as "subsidiaryId" from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`));
-    for (const row of r.rows) {
+       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`, "objects"));
+    for (const row of r) {
       if (accountFitsJournal(row.subsidiaryId)) byCode.set(String(row.number), String(row.id));
     }
     for (const c of codes) if (!byCode.has(c)) throw new JournalWriteError(`unknown, inactive, summary, or unavailable account code "${c}"`);
@@ -472,8 +472,8 @@ export async function createScriptJournal(
   if (ids.length) {
     const r = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
       select id, subsidiary_id as "subsidiaryId" from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`));
-    const found = new Set(r.rows
+       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${ids}`, "objects"));
+    const found = new Set(r
       .filter((row) => accountFitsJournal(row.subsidiaryId))
       .map((row) => String(row.id)));
     for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, summary, or unavailable accountId "${id}"`);
@@ -488,13 +488,13 @@ export async function createScriptJournal(
     if (refIds.length === 0) continue;
     let found: Set<string>;
     if (table === "projects") {
-      const projects = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      const projects = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
         select id, subsidiary_id as "subsidiaryId" from projects
-         where org_id = ${orgId} and id in ${refIds}`)).rows;
+         where org_id = ${orgId} and id in ${refIds}`, "objects");
       found = new Set(projects.filter((project) => accountFitsJournal(project.subsidiaryId)).map((project) => String(project.id)));
     } else {
-      const departments = (await db.execute<{ id: string }>(sql`
-        select id from departments where org_id = ${orgId} and id in ${refIds}`)).rows;
+      const departments = await db.execute<{ id: string }>(sql`
+        select id from departments where org_id = ${orgId} and id in ${refIds}`, "objects");
       found = new Set(departments.map((department) => String(department.id)));
     }
     const foreign = refIds.find((x) => !found.has(x));

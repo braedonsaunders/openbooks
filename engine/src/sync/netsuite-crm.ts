@@ -61,8 +61,8 @@ async function credentials(orgId: string, connectionId?: string): Promise<NetSui
   const row = (await db.execute<{ id: string; config: Record<string, unknown>; secrets: string }>(sql`
     select id, config, secrets from connections where org_id=${orgId} and source='netsuite'
       ${connectionId ? sql`and id=${connectionId}` : sql``}
-    order by status='active' desc, created_at desc limit 1`))
-  const connection = row.rows[0]
+    order by status='active' desc, created_at desc limit 1`, 'objects'))
+  const connection = row[0]
   if (!connection) throw new Error('No tenant NetSuite connection exists')
   const secret = connection.secrets == null
     ? null
@@ -107,7 +107,7 @@ async function importNativeActivities(orgId: string, actorId: string | null, cre
       const body = sourceText(record.message ?? record.note)
       if (!subject && !body) throw new Error(`Source ${source.type} ${nsId} has neither a title nor content`)
       const accountNsId = refId(record.company ?? record.entity)
-      const party = accountNsId ? (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${accountNsId} limit 1`)).rows[0] : null
+      const party = accountNsId ? (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${accountNsId} limit 1`, 'objects'))[0] : null
       if (accountNsId && !party) {
         report.missingParties++
         report.warnings.push(`Source ${source.type} ${nsId} requires missing party ${accountNsId}`)
@@ -116,16 +116,16 @@ async function importNativeActivities(orgId: string, actorId: string | null, cre
       const statusText = String(record.status ?? '').toLowerCase()
       const status = source.type === 'note' || /^(complete|completed)$/.test(statusText) ? 'completed' : /^(cancelled|canceled)$/.test(statusText) ? 'cancelled' : 'planned'
       const identity = sql`custom->'netsuite'->>'recordType'=${source.type}`
-      const existing = (await db.execute<{ id: string }>(sql`select id from crm_activities where org_id=${orgId} and custom->'netsuite'->>'id'=${nsId} and ${identity}`)).rows
+      const existing = await db.execute<{ id: string }>(sql`select id from crm_activities where org_id=${orgId} and custom->'netsuite'->>'id'=${nsId} and ${identity}`, 'objects')
       if (existing.length > 1) throw new Error(`Source ${source.type} ${nsId} has duplicate CRM activity identities`)
       const metadata = { id: nsId, recordType: source.type, noteType: record.notetype ?? null, transaction: record.transaction ?? null, activity: record.activity ?? null, lastModifiedAt: record.lastmodifieddate ?? null }
       const startsAt = date(record.startdate ?? record.notedate)
       const completedAt = status === 'completed' ? date(record.completeddate ?? record.notedate ?? record.enddate) : null
       const activityId = await mappings.write('crmActivities', `${source.type}:${nsId}`, { subject: subject ?? body!.slice(0,120), body }, sql`custom->'netsuite'->>'id'=${nsId} and ${identity}`, async mapped => {
         const result = existing[0]
-          ? await db.execute(sql`update crm_activities set kind=${source.kind},status=${status},subject=${String(mapped.subject)},body=${mapped.body ?? null},starts_at=${startsAt},ends_at=${date(record.enddate)},due_at=${date(record.duedate)},completed_at=${completedAt},custom=jsonb_set(coalesce(custom,'{}'::jsonb),'{netsuite}',${JSON.stringify(metadata)}::jsonb),updated_at=now(),updated_by=${actorId} where id=${existing[0].id} and org_id=${orgId} returning id`)
-          : await db.execute(sql`insert into crm_activities(org_id,kind,status,subject,body,starts_at,ends_at,due_at,completed_at,custom,created_by,updated_by) values(${orgId},${source.kind},${status},${String(mapped.subject)},${mapped.body ?? null},${startsAt},${date(record.enddate)},${date(record.duedate)},${completedAt},${JSON.stringify({ netsuite: metadata })}::jsonb,${actorId},${actorId}) returning id`)
-        const id = (result as unknown as { rows: { id: string }[] }).rows[0]?.id
+          ? await db.execute<{ id: string }>(sql`update crm_activities set kind=${source.kind},status=${status},subject=${String(mapped.subject)},body=${mapped.body ?? null},starts_at=${startsAt},ends_at=${date(record.enddate)},due_at=${date(record.duedate)},completed_at=${completedAt},custom=jsonb_set(coalesce(custom,'{}'::jsonb),'{netsuite}',${JSON.stringify(metadata)}::jsonb),updated_at=now(),updated_by=${actorId} where id=${existing[0].id} and org_id=${orgId} returning id`, 'objects')
+          : await db.execute<{ id: string }>(sql`insert into crm_activities(org_id,kind,status,subject,body,starts_at,ends_at,due_at,completed_at,custom,created_by,updated_by) values(${orgId},${source.kind},${status},${String(mapped.subject)},${mapped.body ?? null},${startsAt},${date(record.enddate)},${date(record.duedate)},${completedAt},${JSON.stringify({ netsuite: metadata })}::jsonb,${actorId},${actorId}) returning id`, 'objects')
+        const id = result[0]?.id
         if (!id) throw new Error('The imported CRM activity was not saved')
         return id
       })
@@ -147,8 +147,8 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
   const actorId = options.actorId ?? null
   if (actorId !== null) {
     if (!isUuid(actorId)) throw new Error('CRM import actor must be a valid user id')
-    const actor = await db.execute<{ id: string }>(sql`select id from users where id=${actorId} and org_id=${orgId} and is_active`)
-    if (!actor.rows[0]) throw new Error('CRM import actor must be an active user in the tenant')
+    const actor = await db.execute<{ id: string }>(sql`select id from users where id=${actorId} and org_id=${orgId} and is_active`, 'objects')
+    if (!actor[0]) throw new Error('CRM import actor must be an active user in the tenant')
   }
   const mappings = await netSuiteOperationalMappingWriter(orgId, creds.connectionId, actorId)
   await ensureCrmDefaults(orgId, actorId)
@@ -159,9 +159,9 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
   for (const source of statuses) {
     const lifecycle = stage(source.entitytype)
     const statusId = await mappings.write('crmAccountStatuses', source.key, { name: source.name }, sql`lifecycle_stage=${lifecycle} and key=${`netsuite_${source.key}`}`, async mapped => {
-      const saved = await db.execute<{ id: string }>(sql`insert into crm_account_statuses(org_id,lifecycle_stage,key,name,sequence,is_qualified,is_active,created_by,updated_by) values(${orgId},${lifecycle},${`netsuite_${source.key}`},${String(mapped.name)},100,${lifecycle !== 'lead'},${source.inactive !== 'T'},${actorId},${actorId}) on conflict(org_id,lifecycle_stage,key) do update set name=excluded.name,is_qualified=excluded.is_qualified,is_active=excluded.is_active,updated_at=now(),updated_by=${actorId} where crm_account_statuses.org_id=${orgId} returning id`)
-      if (!saved.rows[0]) throw new Error('The imported CRM account status was not saved')
-      return saved.rows[0].id
+      const saved = await db.execute<{ id: string }>(sql`insert into crm_account_statuses(org_id,lifecycle_stage,key,name,sequence,is_qualified,is_active,created_by,updated_by) values(${orgId},${lifecycle},${`netsuite_${source.key}`},${String(mapped.name)},100,${lifecycle !== 'lead'},${source.inactive !== 'T'},${actorId},${actorId}) on conflict(org_id,lifecycle_stage,key) do update set name=excluded.name,is_qualified=excluded.is_qualified,is_active=excluded.is_active,updated_at=now(),updated_by=${actorId} where crm_account_statuses.org_id=${orgId} returning id`, 'objects')
+      if (!saved[0]) throw new Error('The imported CRM account status was not saved')
+      return saved[0].id
     })
     statusIds.set(`${lifecycle}:${source.key}`, statusId)
     report.accountStatuses++
@@ -178,9 +178,9 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
   const customers = await suiteql<{ id:string; stage:string; entitystatus?:string; probability?:string; dateprospect?:string; dateclosed?:string; datecreated?:string }>(`select id,stage,entitystatus,probability${probCol}, dateprospect,dateclosed,datecreated from customer`, creds, 1000, transport)
   for (const customer of customers) {
     const lifecycle = stage(customer.stage)
-    const party = (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${customer.id} limit 1`))
-    if (!party.rows[0]) { report.missingParties++; continue }
-    const partyId = party.rows[0].id
+    const party = (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${customer.id} limit 1`, 'objects'))
+    if (!party[0]) { report.missingParties++; continue }
+    const partyId = party[0].id
     const scoreText = (probField ? (customer as Record<string, string | undefined>)[probField] : undefined) ?? customer.probability
     const score = scoreText == null || scoreText === '' ? null : Math.max(0, Math.min(100, Math.round(Number(scoreText))))
     const statusId = customer.entitystatus ? statusIds.get(`${lifecycle}:${customer.entitystatus}`) ?? null : null
@@ -191,21 +191,21 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
         select id,lifecycle_stage
          from crm_account_profiles
          where org_id=${orgId} and party_id=${partyId}
-         for update`)
-      const previousStage = existing.rows[0]?.lifecycle_stage ?? null
-      const profileExists = existing.rows.length > 0
+         for update`, 'objects')
+      const previousStage = existing[0]?.lifecycle_stage ?? null
+      const profileExists = existing.length > 0
       const stageChanged = previousStage !== lifecycle
       const fromStage = profileExists && stageChanged ? previousStage : null
-      const saved = (await tx.execute<{ id: string }>(sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,status_id,qualification_score,qualified_at,converted_at,acquired_on,is_active,custom,created_by,updated_by) values(${orgId},${partyId},${lifecycle},${statusId},${score},${lifecycle !== 'lead' ? date(customer.dateprospect ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},true,${JSON.stringify({ netsuite: { id: customer.id, stage: customer.stage, statusId: customer.entitystatus } })}::jsonb,${actorId},${actorId}) on conflict(party_id) do update set lifecycle_stage=excluded.lifecycle_stage,status_id=excluded.status_id,qualification_score=excluded.qualification_score,qualified_at=coalesce(crm_account_profiles.qualified_at,excluded.qualified_at),converted_at=coalesce(crm_account_profiles.converted_at,excluded.converted_at),acquired_on=coalesce(crm_account_profiles.acquired_on,excluded.acquired_on),is_active=true,custom=crm_account_profiles.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_account_profiles.org_id=${orgId} returning id`))
-      if (!saved.rows[0]) throw new Error('The imported CRM account profile was not saved')
+      const saved = (await tx.execute<{ id: string }>(sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,status_id,qualification_score,qualified_at,converted_at,acquired_on,is_active,custom,created_by,updated_by) values(${orgId},${partyId},${lifecycle},${statusId},${score},${lifecycle !== 'lead' ? date(customer.dateprospect ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},true,${JSON.stringify({ netsuite: { id: customer.id, stage: customer.stage, statusId: customer.entitystatus } })}::jsonb,${actorId},${actorId}) on conflict(party_id) do update set lifecycle_stage=excluded.lifecycle_stage,status_id=excluded.status_id,qualification_score=excluded.qualification_score,qualified_at=coalesce(crm_account_profiles.qualified_at,excluded.qualified_at),converted_at=coalesce(crm_account_profiles.converted_at,excluded.converted_at),acquired_on=coalesce(crm_account_profiles.acquired_on,excluded.acquired_on),is_active=true,custom=crm_account_profiles.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_account_profiles.org_id=${orgId} returning id`, 'objects'))
+      if (!saved[0]) throw new Error('The imported CRM account profile was not saved')
       // A new profile (or one created before import history existed) gets one
       // initial import event. Existing imported profiles append every stage
       // transition, including reversions reported by the source.
       const eventGuard = profileExists && stageChanged
         ? sql`true`
-        : sql`not exists(select 1 from crm_account_stage_events where org_id=${orgId} and account_profile_id=${saved.rows[0]!.id} and source_kind='import')`
-      await tx.execute(sql`insert into crm_account_stage_events(org_id,account_profile_id,from_stage,to_stage,source_kind,reason,occurred_at,created_by,updated_by) select ${orgId},${saved.rows[0]!.id},${fromStage},${lifecycle},'import','Imported lifecycle from source',coalesce(${date(customer.dateclosed ?? customer.dateprospect ?? customer.datecreated)}::timestamptz,now()),${actorId},${actorId} where ${eventGuard}`)
-      return saved.rows[0].id
+        : sql`not exists(select 1 from crm_account_stage_events where org_id=${orgId} and account_profile_id=${saved[0]!.id} and source_kind='import')`
+      await tx.execute(sql`insert into crm_account_stage_events(org_id,account_profile_id,from_stage,to_stage,source_kind,reason,occurred_at,created_by,updated_by) select ${orgId},${saved[0]!.id},${fromStage},${lifecycle},'import','Imported lifecycle from source',coalesce(${date(customer.dateclosed ?? customer.dateprospect ?? customer.datecreated)}::timestamptz,now()),${actorId},${actorId} where ${eventGuard}`)
+      return saved[0].id
     }))
     report.accounts++
   }
@@ -215,14 +215,14 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
 
   const opportunities = await suiteql<{ id:string; tranid:string; entity?:string; trandate?:string; duedate?:string; status?:string; probability?:string; currency?:string; foreigntotal?:string; memo?:string }>(`select id,tranid,entity,trandate,duedate,status,probability,currency,foreigntotal,memo from transaction where type='Opprtnty'`, creds, 1000, transport)
   const [defaultStatusResult, orgResult, configuredCurrencyResult] = await Promise.all([
-    db.execute<{ id: string; probability: number }>(sql`select id,probability from crm_opportunity_statuses where org_id=${orgId} and is_default order by sequence limit 1`),
-    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${orgId}`),
-    db.execute<{ code: string }>(sql`select code from currencies`),
+    db.execute<{ id: string; probability: number }>(sql`select id,probability from crm_opportunity_statuses where org_id=${orgId} and is_default order by sequence limit 1`, 'objects'),
+    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${orgId}`, 'objects'),
+    db.execute<{ code: string }>(sql`select code from currencies`, 'objects'),
   ])
-  const defaultStatus = defaultStatusResult.rows[0]
-  const baseCurrency = orgResult.rows[0]?.base_currency
+  const defaultStatus = defaultStatusResult[0]
+  const baseCurrency = orgResult[0]?.base_currency
   if (!baseCurrency) throw new Error('The tenant must have a configured base currency before CRM opportunities can be imported')
-  const configuredCurrencies = new Set(configuredCurrencyResult.rows.map((row) => row.code.toUpperCase()))
+  const configuredCurrencies = new Set(configuredCurrencyResult.map((row) => row.code.toUpperCase()))
   const sourceCurrencyById = new Map<string, string>()
   try {
     const sourceCurrencies = await suiteql<{ id: string; symbol?: string }>('select id,symbol from currency', creds, 1000, transport)
@@ -235,7 +235,7 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
     // currencies resolve to the tenant's configured base currency below.
   }
   for (const opportunity of opportunities) {
-    const party = opportunity.entity ? (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${opportunity.entity} limit 1`)).rows[0] : null
+    const party = opportunity.entity ? (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${opportunity.entity} limit 1`, 'objects'))[0] : null
     if (!defaultStatus) throw new Error('CRM import requires a default opportunity status in Company Setup')
     if (!party) { report.missingParties++; report.warnings.push(`Opportunity ${opportunity.tranid || opportunity.id} requires missing source party ${opportunity.entity ?? '(blank)'}`); continue }
     const currency = resolveNetSuiteCrmCurrency(opportunity.currency, baseCurrency, sourceCurrencyById, configuredCurrencies)
@@ -247,9 +247,9 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string, tr
     const projectedAmount = persistSyncLineMoney(opportunity.foreigntotal || '0', 'projected_amount')
     const weightedAmount = persistSyncLineMoney(weightAmount(projectedAmount, probability), 'weighted_amount')
     await mappings.write('crmOpportunities', opportunity.id, { title: opportunity.memo || opportunity.tranid || `NS-${opportunity.id}`, description: opportunity.memo ?? null }, sql`opportunity_number=${opportunity.tranid || `NS-${opportunity.id}`}`, async mapped => {
-      const saved = await db.execute<{ id: string }>(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,probability,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${String(mapped.title)},${party.id},${defaultStatus.id},${probability},${date(opportunity.duedate)},${currency},${projectedAmount},${weightedAmount},${mapped.description ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set probability=excluded.probability,title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,weighted_amount=excluded.weighted_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_opportunities.org_id=${orgId} returning id`)
-      if (!saved.rows[0]) throw new Error('The imported CRM opportunity was not saved')
-      return saved.rows[0].id
+      const saved = await db.execute<{ id: string }>(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,probability,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${String(mapped.title)},${party.id},${defaultStatus.id},${probability},${date(opportunity.duedate)},${currency},${projectedAmount},${weightedAmount},${mapped.description ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set probability=excluded.probability,title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,weighted_amount=excluded.weighted_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_opportunities.org_id=${orgId} returning id`, 'objects')
+      if (!saved[0]) throw new Error('The imported CRM opportunity was not saved')
+      return saved[0].id
     })
     report.opportunities++
   }

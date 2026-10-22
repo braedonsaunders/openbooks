@@ -110,36 +110,36 @@ test("sandbox copy stores cloned retainage source bills with exact historical fi
     for (const amount of ['0.13','9999999999999.99'])
       await transact(() => releaseVendorRetainage({orgId:org.orgId,userId:actorId,subcontractId,periodEnd:'2026-07-17',amount}));
     type Allocation = { documentId: string; held: string; previousAmount: string; amount: string };
-    const expected = (await db.execute<{amount:string;sources:Allocation[]}>(sql`select amount::text as amount,
-      source_bill_allocations as sources from vendor_retainage_releases where org_id=${org.orgId} order by amount desc`)).rows;
+    const expected = await db.execute<{amount:string;sources:Allocation[]}>(sql`select amount::text as amount,
+      source_bill_allocations as sources from vendor_retainage_releases where org_id=${org.orgId} order by amount desc`, "objects");
     assert.equal(expected.length,2);
     assert.deepEqual(expected[0],{amount:'9999999999999.9900',sources:[
       {documentId:bills[0]!,held:'10000000000000.0000',previousAmount:'0.1300',amount:'9999999999999.8700'},
       {documentId:bills[1]!,held:'0.1300',previousAmount:'0.0000',amount:'0.1200'},
     ]});
-    const original = (await db.execute(sql`select to_jsonb(r) as row from vendor_retainage_releases r where org_id=${org.orgId} order by id`)).rows;
+    const original = await db.execute(sql`select to_jsonb(r) as row from vendor_retainage_releases r where org_id=${org.orgId} order by id`, "objects");
     const sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Retainage coordinate copy", tier: "full", masked: false,
       createdBy: actorId, lifecycleAuthority: { actorId } });
-    const copied = (await db.execute<{ amount: string; sources: Allocation[] }>(sql`
-      select amount::text as amount,source_bill_allocations as sources from vendor_retainage_releases where org_id=${sandbox.sandboxOrgId} order by amount desc`)).rows;
+    const copied = await db.execute<{ amount: string; sources: Allocation[] }>(sql`
+      select amount::text as amount,source_bill_allocations as sources from vendor_retainage_releases where org_id=${sandbox.sandboxOrgId} order by amount desc`, "objects");
     assert.equal(copied.length, 2);
     const sourceToTarget = new Map((await db.execute<{ source_id: string; target_id: string }>(sql`
       select source.id as source_id, copied.id as target_id from documents source join orgs target on target.id=${sandbox.sandboxOrgId}
       join documents copied on copied.org_id=target.id and copied.id=ob_rebase(source.id,target.sandbox_seed)
-      where source.org_id=${org.orgId} and source.id in (${bills[0]!},${bills[1]!})`)).rows.map(row => [row.source_id, row.target_id]));
+      where source.org_id=${org.orgId} and source.id in (${bills[0]!},${bills[1]!})`, "objects")).map(row => [row.source_id, row.target_id]));
     assert.equal(sourceToTarget.size, 2, "both referenced bills have native sandbox counterparts");
     assert.deepEqual(copied,expected.map(row => ({...row,sources:row.sources.map(source =>
       ({...source,documentId:sourceToTarget.get(source.documentId.toLowerCase())!}))})));
     await assert.rejects(() => db.execute(sql`update vendor_retainage_releases set source_bill_allocations='[]'::jsonb
       where org_id=${sandbox.sandboxOrgId}`),
     error => errorChainMatches(error, /Retainage source allocations are immutable/));
-    assert.deepEqual((await db.execute(sql`select to_jsonb(r) as row from vendor_retainage_releases r where org_id=${org.orgId} order by id`)).rows, original);
+    assert.deepEqual(await db.execute(sql`select to_jsonb(r) as row from vendor_retainage_releases r where org_id=${org.orgId} order by id`, "objects"), original);
   } catch (error) {
     failure = error;
     throw error;
   } finally {
     try {
-      for (const sandbox of (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId}`)).rows) {
+      for (const sandbox of (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId}`, "objects"))) {
         await deleteSandbox(sandbox.id, { systemReason: "Remove retainage coordinate fixture" });
       }
       await dropScratchOrgReporting(org.orgId);

@@ -65,8 +65,8 @@ async function fixture() {
     method: 'POST', body: JSON.stringify({ employee: mate, week: WEEK }),
   })))
   const approve=()=>withOrgContext(org.orgId,()=>decideTimesheetFixture({orgId:org.orgId,employee:mate,week:WEEK,decision:'approved'}))
-  const entries = async () => (await db.execute<{ status: string }>(sql`
-    select status from time_entries where org_id=${org.orgId} and employee_party_id=${mate}`)).rows
+  const entries = async () => await db.execute<{ status: string }>(sql`
+    select status from time_entries where org_id=${org.orgId} and employee_party_id=${mate}`, 'objects')
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, partner, supervisor, mate, project, as, save, submit, approve, entries, close }
 }

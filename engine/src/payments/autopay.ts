@@ -82,7 +82,7 @@ export async function runAutopayCollectionForOrg(
 
     // Initial charges: due invoices (or issued ones for charge-on-issue
     // enrollments) with a live enrollment and method, and no attempt yet.
-    const initials = (await db.execute<CollectionCandidate>(sql`
+    const initials = await db.execute<CollectionCandidate>(sql`
       select d.id as "invoiceId", d.document_number as "documentNumber",
              d.open_balance as "openBalance", d.currency,
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
@@ -109,7 +109,7 @@ export async function runAutopayCollectionForOrg(
             where a.org_id = d.org_id and a.invoice_id = d.id and a.retry_position = 0
          )
        order by d.id
-    `)).rows;
+    `, "objects");
     for (const candidate of initials) {
       result.scanned += 1;
       await collectCandidate(orgId, candidate, 0, today, policy, charge, result)
@@ -123,7 +123,7 @@ export async function runAutopayCollectionForOrg(
     // the header payer, on the enrollment's method when it belongs to the
     // payer, else the payer's default method. Invoices an above enrollment
     // already covers stay out, so one invoice never collects twice.
-    const consolidated = (await db.execute<CollectionCandidate>(sql`
+    const consolidated = await db.execute<CollectionCandidate>(sql`
       select d.id as "invoiceId", d.document_number as "documentNumber",
              d.open_balance as "openBalance", d.currency,
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
@@ -163,7 +163,7 @@ export async function runAutopayCollectionForOrg(
                         and dd.status = 'active' and dd.is_default limit 1)) is not null
          )
        order by d.id
-    `)).rows;
+    `, "objects");
     for (const candidate of consolidated) {
       result.scanned += 1;
       await collectCandidate(orgId, candidate, 0, today, policy, charge, result)
@@ -173,7 +173,7 @@ export async function runAutopayCollectionForOrg(
     // Enrolled consolidated invoices with no usable payer method stay
     // uncollected by name: the operator adds a payment method for the payer
     // instead of discovering the gap from an unpaid invoice.
-    const methodless = (await db.execute<{ invoiceId: string; documentNumber: string; payerId: string }>(sql`
+    const methodless = await db.execute<{ invoiceId: string; documentNumber: string; payerId: string }>(sql`
       select d.id as "invoiceId", d.document_number as "documentNumber", d.party_id as "payerId"
         from documents d
        where d.org_id = ${orgId} and d.kind = 'customer_invoice'
@@ -196,7 +196,7 @@ export async function runAutopayCollectionForOrg(
             where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active'
          )
        order by d.id
-    `)).rows;
+    `, "objects");
     for (const row of methodless) {
       result.skipped += 1;
       result.notices.push({
@@ -209,7 +209,7 @@ export async function runAutopayCollectionForOrg(
     }
 
     // Retries: soft-declined attempts whose next retry day arrived.
-    const retries = (await db.execute<CollectionCandidate>(sql`
+    const retries = await db.execute<CollectionCandidate>(sql`
       select d.id as "invoiceId", d.document_number as "documentNumber",
              d.open_balance as "openBalance", d.currency,
              d.party_id as "partyId", d.subsidiary_id as "subsidiaryId",
@@ -230,7 +230,7 @@ export async function runAutopayCollectionForOrg(
               and later.retry_position = a.retry_position + 1
          )
        order by a.invoice_id
-    `)).rows;
+    `, "objects");
     for (const candidate of retries) {
       result.scanned += 1;
       const position = (candidate.failedPosition ?? 0) + 1;
@@ -246,13 +246,13 @@ export async function runAutopayCollectionForOrg(
  * since (approval flow posts later) closes its attempt and reactivates.
  */
 async function reconcileProcessingAttempts(orgId: string, result: AutopayRunResult): Promise<void> {
-  const rows = (await db.execute<{ id: string; invoice_id: string }>(sql`
+  const rows = await db.execute<{ id: string; invoice_id: string }>(sql`
     select a.id, a.invoice_id
       from collection_attempts a
       join documents payment on payment.id = a.receipt_document_id and payment.org_id = a.org_id
      where a.org_id = ${orgId} and a.status = 'processing'
        and a.receipt_document_id is not null and payment.status = 'posted'
-  `)).rows;
+  `, "objects");
   for (const row of rows) {
     await db.execute(sql`
       update collection_attempts set status = 'succeeded', updated_at = now()

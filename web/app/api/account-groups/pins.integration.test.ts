@@ -148,9 +148,9 @@ test(
             from account_group_members
            where org_id = ${fixture.orgId}
              and dimension = 'test_dimension'
-             and account_id = ${fixture.accountId}`);
+             and account_id = ${fixture.accountId}`, "objects");
         assert.ok(
-          rows.rows[0]?.group_id === fixture.groupA || rows.rows[0]?.group_id === fixture.groupB,
+          rows[0]?.group_id === fixture.groupA || rows[0]?.group_id === fixture.groupB,
           "the surviving pin must be one of the requested groups",
         );
       } finally {
@@ -186,8 +186,8 @@ test(
     // The scratch subsidiary id is not exposed by this fixture file's seed;
     // resolve the org root (the caller's own entity) directly.
     const root = await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`);
-    const entityA = root.rows[0]!.id;
+      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`, "objects");
+    const entityA = root[0]!.id;
     const accountA = await seedAccount('9201', entityA);
     const accountB = await seedAccount('9202', entityB);
     const sharedAccount = await seedAccount('9203', null);
@@ -226,20 +226,20 @@ test(
       assert.equal(allowed.status, 200);
       const members = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from account_group_members
-         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`);
-      assert.equal(members.rows[0]?.n ?? -1, 1, 'the in-scope pin persists');
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`, "objects");
+      assert.equal(members[0]?.n ?? -1, 1, 'the in-scope pin persists');
       const refused = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from account_group_members
-         where org_id = ${org.orgId} and group_id = ${groupId} and account_id in (${accountB}, ${sharedAccount})`);
-      assert.equal(refused.rows[0]?.n ?? -1, 0, 'refused pins store nothing');
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id in (${accountB}, ${sharedAccount})`, "objects");
+      assert.equal(refused[0]?.n ?? -1, 0, 'refused pins store nothing');
       // Unpinning follows the same account-subsidiary rule on both verbs.
       assert.equal((await unpin(accountB, scopeA)).status, 404);
       assert.equal((await unpin(sharedAccount, scopeA)).status, 403);
       assert.equal((await unpin(accountA, scopeA)).status, 200);
       const remaining = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from account_group_members
-         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`);
-      assert.equal(remaining.rows[0]?.n ?? -1, 0, 'the in-scope unpin removes the pin');
+         where org_id = ${org.orgId} and group_id = ${groupId} and account_id = ${accountA}`, "objects");
+      assert.equal(remaining[0]?.n ?? -1, 0, 'the in-scope unpin removes the pin');
     } finally {
       routeState.authz = null;
       await dropScratchOrgReporting(org.orgId);

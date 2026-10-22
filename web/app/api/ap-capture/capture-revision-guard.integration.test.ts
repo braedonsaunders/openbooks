@@ -48,7 +48,7 @@ test('a stale capture revision refuses instead of reverting a newer correction',
     })
     const revision = async () => withOrgContext(org.orgId, async () => (await db.execute<{ updatedAt: string }>(sql`
       select (revision_seq)::text as "updatedAt"
-        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!.updatedAt)
+        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`, 'objects'))[0]!.updatedAt)
     const patch = (body: object) => withOrgContext(org.orgId, () => PATCH(new Request('http://occ.local/api/ap-capture/' + capture, {
       method: 'PATCH', body: JSON.stringify({ normalized, vendorId: org.vendorId, ...body }),
     }), { params: Promise.resolve({ id: capture }) }))
@@ -63,7 +63,7 @@ test('a stale capture revision refuses instead of reverting a newer correction',
     // The live row is exactly what tab A wrote — no silent revert.
     const live = await withOrgContext(org.orgId, async () => (await db.execute<{ vendor: unknown; total: unknown }>(sql`
       select normalized->>'vendorName' as vendor, normalized->>'total' as total
-        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`)).rows[0]!)
+        from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`, 'objects'))[0]!)
     assert.equal(live.vendor, 'Tab A vendor')
     assert.equal(live.total, '100.0000')
     // A missing token is rejected before any work happens.

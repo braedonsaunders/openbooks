@@ -46,16 +46,16 @@ test('pay run input preview preserves calculated state; apply records exact inpu
     const snapshot = async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
       'run',(select to_jsonb(r) from pay_runs r where org_id=${fx.orgId} and document_id=${fx.documentId}),
       'inputs',(select jsonb_agg(to_jsonb(a)) from pay_run_adjustments a where org_id=${fx.orgId}),
-      'audit',(select jsonb_agg(to_jsonb(a)) from audit_log a where org_id=${fx.orgId})) as state`)).rows[0]!.state
+      'audit',(select jsonb_agg(to_jsonb(a)) from audit_log a where org_id=${fx.orgId})) as state`, 'objects'))[0]!.state
     const before = await snapshot()
     assert.deepEqual(await fx.resource.write([fx.row], 'insert', { ...fx.context, dryRun: true }), { created: 1, updated: 0, failed: 0, errors: [] })
     assert.deepEqual(await snapshot(), before, 'preview may not invalidate or write payroll')
     assert.deepEqual(await fx.resource.write([fx.row], 'insert', fx.context), { created: 1, updated: 0, failed: 0, errors: [] })
-    const saved = (await db.execute<{ amount: string; hours: string; replace_component: boolean }>(sql`select amount::text,hours::text,replace_component from pay_run_adjustments where org_id=${fx.orgId}`)).rows
+    const saved = await db.execute<{ amount: string; hours: string; replace_component: boolean }>(sql`select amount::text,hours::text,replace_component from pay_run_adjustments where org_id=${fx.orgId}`, 'objects')
     assert.deepEqual(saved, [{ amount: '125.2500', hours: '2.25', replace_component: true }])
-    const run = (await db.execute<{ run_status: string; gross_total: string; calculated_at: unknown }>(sql`select run_status,gross_total::text,calculated_at from pay_runs where org_id=${fx.orgId} and document_id=${fx.documentId}`)).rows[0]
+    const run = (await db.execute<{ run_status: string; gross_total: string; calculated_at: unknown }>(sql`select run_status,gross_total::text,calculated_at from pay_runs where org_id=${fx.orgId} and document_id=${fx.documentId}`, 'objects'))[0]
     assert.deepEqual(run, { run_status: 'draft', gross_total: '0.0000', calculated_at: null })
-    const audit = (await db.execute<{ changes: { before: unknown; after: { hours: string }; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${fx.orgId} and table_name='pay_run_adjustments'`)).rows
+    const audit = await db.execute<{ changes: { before: unknown; after: { hours: string }; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${fx.orgId} and table_name='pay_run_adjustments'`, 'objects')
     assert.equal(audit.length, 1); assert.equal(audit[0]!.actor_id, fx.actorId); assert.equal(audit[0]!.changes.before, null)
     assert.equal(audit[0]!.changes.after.hours, '2.25'); assert.equal(audit[0]!.changes.reason, fx.row.note)
     const applied = await snapshot()
@@ -95,7 +95,7 @@ test('pay run input preview and apply refuse the same invalid amounts, hours, po
       const hidden = await fx.resource.write([fx.row], 'insert', { ...fx.context, dryRun, allowedSubsidiaryIds: new Set() })
       assert.equal(hidden.failed, 1); assert.match(hidden.errors[0]!.message, /Pay run not found/)
     }
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_run_adjustments where org_id=${fx.orgId}`)).rows[0]!.n, 0)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_run_adjustments where org_id=${fx.orgId}`, 'objects'))[0]!.n, 0)
     await assert.rejects(preflightPayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: fx.documentId,
       mutation: { action: 'exclude', employeePartyId: fx.employeeId } as never }), /preflight only supports adding a line/)
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,payroll}','false'::jsonb) where id=${fx.orgId}`)
@@ -111,6 +111,6 @@ test('pay run input apply revalidates editability after a successful preview', {
     await db.execute(sql`update pay_runs set run_status='committed',benefit_source_snapshot=${JSON.stringify(benefitSource)}::jsonb where org_id=${fx.orgId} and document_id=${fx.documentId}`)
     const apply = await fx.resource.write([fx.row], 'insert', fx.context)
     assert.equal(apply.failed, 1); assert.match(apply.errors[0]!.message, /pay run is not editable/)
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_run_adjustments where org_id=${fx.orgId}`)).rows[0]!.n, 0)
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_run_adjustments where org_id=${fx.orgId}`, 'objects'))[0]!.n, 0)
   } finally { await dropScratchOrgReporting(fx.orgId) }
 }))

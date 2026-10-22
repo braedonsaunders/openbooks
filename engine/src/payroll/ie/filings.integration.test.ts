@@ -212,7 +212,7 @@ test(
                     and pc.system_key = 'prsi')::text as er
             from pay_stubs s join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run1.documentId}
-             and s.employee_party_id = ${aoife} and r.run_status = 'committed'`)).rows[0]!;
+             and s.employee_party_id = ${aoife} and r.run_status = 'committed'`, "objects"))[0]!;
         assert.equal(cmp(a.prsiEmployeePre, march.ee), 0);
         assert.equal(cmp(a.prsiEmployerPre, march.er), 0);
         assert.ok(cmp(a.prsiEmployeePost, "0") !== 0, "November PRSI posts post-October");
@@ -224,7 +224,7 @@ test(
           employee: string; gross: string; paye: string;
           pre_ee: string; post_ee: string; pre_er: string; post_er: string; usc: string;
         };
-        const oracle = (await db.execute<OracleRow>(sql`
+        const oracle = await db.execute<OracleRow>(sql`
           select s.employee_party_id as employee,
                  sum(case when l.kind = 'earning' then l.amount else 0 end)::text as gross,
                  sum(case when pc.system_key = 'ie_paye' and l.kind = 'deduction'
@@ -251,9 +251,9 @@ test(
             join documents d on d.id = r.document_id and d.org_id = r.org_id
               and d.status <> 'voided'
            where l.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'IE'
-           group by s.employee_party_id`)).rows;
+           group by s.employee_party_id`, "objects");
         assert.equal(oracle.length, 2, "the draft run is excluded from the oracle too");
-        const bases = (await db.execute<{ employee: string; taxable: string; reckonable: string }>(sql`
+        const bases = await db.execute<{ employee: string; taxable: string; reckonable: string }>(sql`
           select s.employee_party_id as employee,
                  sum(coalesce((s.factors->>'IE_TAXBASE')::numeric, 0))::text as taxable,
                  sum(s.pensionable_earnings)::text as reckonable
@@ -263,7 +263,7 @@ test(
             join documents d on d.id = r.document_id and d.org_id = r.org_id
               and d.status <> 'voided'
            where s.org_id = ${org.orgId} and s.tax_year = 2026 and s.country = 'IE'
-           group by s.employee_party_id`)).rows;
+           group by s.employee_party_id`, "objects");
         for (const row of rows) {
           const o = oracle.find((r) => r.employee === row.employeePartyId);
           const base = bases.find((r) => r.employee === row.employeePartyId);

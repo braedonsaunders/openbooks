@@ -8,8 +8,8 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function formNoticeKey(orgId: string, code: string): Promise<string | null | undefined> {
-  const rows = (await db.execute<{ notice_key: string | null }>(sql`
-    select notice_key from tax_return_forms where org_id = ${orgId} and code = ${code}`)).rows;
+  const rows = await db.execute<{ notice_key: string | null }>(sql`
+    select notice_key from tax_return_forms where org_id = ${orgId} and code = ${code}`, "objects");
   return rows[0]?.notice_key;
 }
 

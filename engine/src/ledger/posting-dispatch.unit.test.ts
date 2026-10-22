@@ -24,9 +24,10 @@ function reads(t: TestContext, results: unknown[][]) {
   });
   // The only direct read on these paths is the organization's feature
   // switches: asset proposals stay off, so capitalization is a no-op.
-  t.mock.method(db, "execute", async (query: SQL) => {
+  t.mock.method(db, "execute", async (query: SQL, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const text = new PgDialect().sqlToQuery(query).sql.trim();
-    if (/^select settings->'features' as features from orgs where id = \$1$/.test(text)) return { rows: [{ features: {} }] };
+    if (/^select settings->'features' as features from orgs where id = \$1$/.test(text)) return inMode({ rows: [{ features: {} }] });
     throw new Error(`unexpected execute: ${text}`);
   });
   return () => assert.equal(count, results.length, "all expected selects must occur");
@@ -42,10 +43,11 @@ for (const status of ["succeeded", "running", "terminal_failed"] as const) {
   test(`a ${status} durable claim cannot dispatch effects again`, async t => {
     const done = reads(t, []);
     let executions = 0;
-    t.mock.method(db, "execute", async () => {
+    t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       executions++;
       assert.ok(executions <= 2, "claim status must not trigger another write");
-      return { rows: executions === 1 ? [] : [{ status }] };
+      return inMode({ rows: executions === 1 ? [] : [{ status }] });
     });
     if (status === "terminal_failed") {
       await assert.rejects(runPostDocumentEffects("doc"), PostingEffectsTerminalFailureError);
@@ -78,10 +80,11 @@ test("missing organization refuses a claimed dispatch instead of acknowledging s
 test("a posted vendor bill without its entry refuses before inventory receipts", async t => {
   const done = reads(t, [[{ ...posted, kind: "vendor_bill", documentNumber: "BILL-17", postedEntryId: null }]]);
   let claimReads = 0;
-  t.mock.method(db, "execute", async () => {
+  t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     claimReads++;
     assert.ok(claimReads <= 2, "a missing claim must not produce an effects write");
-    return { rows: [] };
+    return inMode({ rows: [] });
   });
   await assert.rejects(runPostDocumentEffects("doc", "draft", { suppressAutomation: true }), /BILL-17.*no posted journal entry.*inventory receipts cannot run/);
   assert.equal(claimReads, 2, "both claim lookup paths establish that no durable claim exists");

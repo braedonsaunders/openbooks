@@ -1,1 +1,0 @@
-Data-only grant on built-in roles: every statement adds a catalogue permission a built-in role lacks and refuses nothing, so there is no precondition to probe.

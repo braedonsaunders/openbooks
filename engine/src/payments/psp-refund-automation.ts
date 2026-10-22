@@ -26,12 +26,12 @@ import { transitionDisputeOutcome, eventFee } from "./psp-automation-dispute-out
 const reviewedReturn = new AsyncLocalStorage<{orgId:string;id:string;action:PendingAction;fingerprint:string}>();
 
 async function reviewFingerprint(orgId:string,id:string):Promise<string> {
-  const row=(await db.execute<{fingerprint:string|null}>(sql`select public.provider_return_approval_fingerprint(${orgId},${id}) as fingerprint`)).rows[0];
+  const row=(await db.execute<{fingerprint:string|null}>(sql`select public.provider_return_approval_fingerprint(${orgId},${id}) as fingerprint`, "objects"))[0];
   if(!row?.fingerprint)throw new PspAutomationError("The provider return is unavailable. Reload its native review before retrying.");
   return row.fingerprint;
 }
 async function approvedReturnCommand(orgId:string,id:string,action:PendingAction):Promise<boolean> {
-  return (await db.execute<{approved:boolean}>(sql`select public.provider_return_command_approved(${orgId},${id},${action}) as approved`)).rows[0]?.approved===true;
+  return (await db.execute<{approved:boolean}>(sql`select public.provider_return_command_approved(${orgId},${id},${action}) as approved`, "objects"))[0]?.approved===true;
 }
 
 /** Automatic delivery and operator resumption submit the same native command.
@@ -104,7 +104,7 @@ export async function processProviderRefundEvent(
           (${source.refundId}::text is not null and attempt_id = ${event.attemptId}
             and status_history @> ${JSON.stringify([{ refundSource: { refundId: source.refundId } }])}::jsonb))
        order by created_at limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     const disputeId = identity?.id ?? (await insertDisputeRow(orgId, {
       provider: event.provider, providerEventId: event.providerEventId, kind: "refund", status: "pending_review",
       attemptId: event.attemptId, receiptDocumentId: ctx.receipt?.id ?? null, invoiceDocumentId: ctx.invoice.id,
@@ -127,7 +127,7 @@ export async function processProviderRefundEvent(
     }
     const evidence = completingEvidence ? source : (persistedSource ?? source);
     if (!persistedSource || completingEvidence) {
-      const recorded = await db.execute(sql`update payment_disputes
+      const recorded = await db.execute<never>(sql`update payment_disputes
         set status_history = status_history || ${JSON.stringify({ at: new Date().toISOString(), refundSource: source })}::jsonb
         where org_id = ${orgId} and id = ${disputeId}`);
       if (recorded.rowCount !== 1) throw new PspAutomationError("The refund's provider evidence could not be recorded.");
@@ -138,14 +138,14 @@ export async function processProviderRefundEvent(
     if (delta === null) return parkForReview(orgId, disputeId, "The provider did not report a refund amount; redeliver its confirmed refund event before approving this review.");
     if (delta === 0n) {
       await withdrawReturnReceipts(orgId, disputeId, PSP_AUTOMATION_SYSTEM_ACTOR_ID, "Refund total already represented by posted provider returns");
-      const observed = await db.execute(sql`update payment_disputes set amount = '0' where org_id = ${orgId} and id = ${disputeId}`);
+      const observed = await db.execute<never>(sql`update payment_disputes set amount = '0' where org_id = ${orgId} and id = ${disputeId}`);
       if (observed.rowCount !== 1) throw new PspAutomationError("The refund observation could not be recorded.");
       await transitionDisputeRow(orgId, disputeId, "posted", [], "Provider refund total already represented; no accounting movement");
       return { status: "duplicate", disputeId };
     }
     if (already + delta > toUnits(ctx.attempt.amount)) return parkForReview(orgId, disputeId, "The confirmed refund total exceeds the original collected amount; reconcile the provider charge before resuming.");
     const refundAmount = fromUnits(delta);
-    const amountWritten = await db.execute(sql`update payment_disputes set amount = ${refundAmount}
+    const amountWritten = await db.execute<never>(sql`update payment_disputes set amount = ${refundAmount}
       where org_id = ${orgId} and id = ${disputeId} and status = 'pending_review'`);
     if (amountWritten.rowCount !== 1) throw new PspAutomationError("The refund review changed before its amount could be recorded.");
     const receipt = ctx.receipt;
@@ -178,7 +178,7 @@ export async function processProviderRefundEvent(
         if (outcome.gated) return parkForReview(orgId, disputeId,
           `Approve replacement receipt ${outcome.remainderId}, then resume this provider review. The original receipt remains posted.`);
         if (outcome.remainderId) {
-          const relinked = await db.execute(sql`update payment_attempts set status = 'succeeded', payment_document_id = ${outcome.remainderId}, updated_at = now()
+          const relinked = await db.execute<never>(sql`update payment_attempts set status = 'succeeded', payment_document_id = ${outcome.remainderId}, updated_at = now()
             where id = ${ctx.attempt.id} and org_id = ${orgId}`);
           if (relinked.rowCount !== 1) throw new PspAutomationError("The payment attempt could not be linked to its remainder receipt.");
         } else await setAttemptRefunded(orgId, ctx.attempt.id, null);
@@ -489,11 +489,9 @@ export async function rejectDisputeReview(
       outcome: "rejected",
       approvalRunId,
     });
-    const proof = (
-      await db.execute<{ valid: boolean }>(
-        sql`select public.flow_subject_decision_authorized(d.org_id,'payment_dispute_review',d.id,${actorId},public.provider_return_approval_fingerprint(d.org_id,d.id),'rejected') as valid from payment_disputes d where d.org_id=${orgId} and d.id=${disputeId}`,
-      )
-    ).rows[0];
+    const proof = (await db.execute<{ valid: boolean }>(
+        sql`select public.flow_subject_decision_authorized(d.org_id,'payment_dispute_review',d.id,${actorId},public.provider_return_approval_fingerprint(d.org_id,d.id),'rejected') as valid from payment_disputes d where d.org_id=${orgId} and d.id=${disputeId}`, "objects",
+      ))[0];
     if (!decision || !proof?.valid)
       throw new PspAutomationError(
         "Reject this provider return through its configured native Flow gate.",
@@ -515,17 +513,17 @@ async function lockReviewAuthority(orgId: string, disputeId: string, actorId: st
   const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, "banking.reconcile");
   const candidate = (await db.execute<{ attempt_id: string | null }>(sql`
     select attempt_id from payment_disputes where org_id = ${orgId} and id = ${disputeId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!candidate) throw new ScopeNotFoundError();
   if (candidate.attempt_id) await db.execute(sql`select id from payment_attempts where org_id = ${orgId} and id = ${candidate.attempt_id} for update`);
   const row = await disputeRow(orgId, disputeId);
   const ids = [...new Set([row.invoice_document_id, row.receipt_document_id].filter((id): id is string => id !== null))];
   if (!ids.length) throw new ScopeNotFoundError();
-  const subjects = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const subjects = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select d.id, coalesce(d.subsidiary_id, entry.subsidiary_id) as subsidiary_id from documents d
       left join journal_entries entry on entry.org_id = d.org_id and entry.id = d.posted_entry_id
      where d.org_id = ${orgId} and d.id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)}) order by d.id for share of d
-  `)).rows;
+  `, "objects");
   if (subjects.length !== ids.length || subjects.some(subject =>
     !subject.subsidiary_id || !subsidiaryScopeAllows(allowed, subject.subsidiary_id) || !subsidiaryScopeAllows(requested, subject.subsidiary_id))) {
     throw new ScopeNotFoundError();
@@ -570,11 +568,9 @@ async function reviewHasPendingGates(
   id: string,
 ): Promise<boolean> {
   return (
-    (
-      await db.execute<{
+    (await db.execute<{
         open: boolean;
       }>(sql`select exists(select 1 from flow_gates where org_id=${orgId}
-  and subject_kind='payment_dispute_review' and subject_id=${id} and status in('pending','escalated')) as open`)
-    ).rows[0]?.open === true
+  and subject_kind='payment_dispute_review' and subject_id=${id} and status in('pending','escalated')) as open`, "objects"))[0]?.open === true
   );
 }

@@ -102,12 +102,17 @@ exact `pg_restore` command.
 
 ## Release gate: upgrade rehearsal
 
-Every install upgrades in place: bootstrap applies the pending migrations over
-whatever data that install holds. A release is therefore only as safe as its
-migrations are on data that earlier releases wrote. Proving that on a fresh
-database proves nothing about it. `upgrade-rehearsal.yml` is the release gate
-for it. It is deliberately NOT part of per-commit CI. The release default is
-two populated upgrades: the oldest and latest supported sources, each on the
+Every install upgrades in place. An installation of the release baseline's
+`upgradeFromRelease` (`schema/migrations/baseline.json`) takes a verified
+backup, adopts the baseline with `scripts/adopt-migration-baseline.mts`
+(see [the baseline cutover runbook](migration-baseline-cutover.md)), and then
+runs bootstrap, which applies the forward migrations above the baseline. An
+installation that already records the baseline runs bootstrap alone. Either
+way, a release is only as safe as its upgrade path is on data that earlier
+releases wrote. Proving that on a fresh database proves nothing about it.
+`upgrade-rehearsal.yml` is the release gate for it. It is deliberately NOT
+part of per-commit CI. The release default rehearses the oldest and latest
+supported sources (one cell when only one source is supported) on the
 multi-entity dataset (foreign currencies, intercompany activity,
 consolidation, and closed periods). Each also builds a fresh-install reference
 for catalog parity. Every preservation assertion below remains mandatory.
@@ -139,8 +144,19 @@ A cell runs `scripts/upgrade-rehearsal/rehearse.mjs`:
 3. Fingerprint the ledger with version-tolerant SQL. That covers the trial
    balance per book, account, and currency; document totals and open balances;
    applications; row counts; and unbalanced posted entries.
-4. Upgrade with the candidate's bootstrap and record each migration's time.
-5. Refuse unless every candidate migration is recorded as applied, a second
+4. When the source ledger lacks the candidate's baseline, take and verify a
+   `pg_dump -Fc` backup, then run the adoption tool's `--check` and `--apply`
+   (catalog equality, the exact previous-release ledger, an audited
+   adoption), exactly as an operator crosses the release cut.
+5. Run the candidate's read-only upgrade check (`bootstrap --check --json`,
+   `preflight.json` in the report). A refuse finding fails the cell unless
+   the dataset declares it in `expectFindings` with remedies; then the cell
+   also proves that plain bootstrap refuses without changing the ledger, that
+   the repo remedy files clear the check, and that the remedied data is
+   clean.
+6. Upgrade with the candidate's bootstrap and record each migration's time
+   and recorded ledger digest.
+7. Refuse unless every candidate migration is recorded as applied, a second
    bootstrap applies nothing, the ledger fingerprint is identical, the
    candidate's golden harness passes on every org with activity, the
    dataset's post-upgrade assertions pass (below), a verified `pg_dump -Fc`
@@ -149,9 +165,9 @@ A cell runs `scripts/upgrade-rehearsal/rehearse.mjs`:
    schema catalog equals a fresh install's. The snapshot rehearses the same
    dump-before-migrate discipline the production release enforces.
 
-**Post-upgrade assertions.** Some legacy handling is only observable on the
-upgraded install: a frozen-or-refused executed waiver, a paused unbound
-schedule, provenance rows. A dataset with such shapes carries
+**Post-upgrade assertions.** Some upgrade handling is only observable on the
+upgraded install: a frozen or refused artifact, a paused schedule, provenance
+rows a forward migration writes. A dataset with such shapes carries
 `scripts/upgrade-rehearsal/assertions/<dataset>.mjs`, which the rehearsal
 runs on the candidate runtime after the candidate harness (the upgraded
 install in `OPENBOOKS_DB_URL`, seeded orgs in `UPGRADE_SEEDED_ORGS` as a
@@ -160,12 +176,21 @@ JSON line shaped `{"assertions": [{"name", "ok", "detail"?}]}` and exits 0;
 any failed check — or a result declaring no checks — refuses the cell by
 check name. A dataset with no assertions file skips the phase.
 
-The job summary lists each cell's phases and slowest migrations. The artifact
-holds the before and after fingerprints and the catalog comparison.
+The job summary lists each cell's phases, the adopted baseline, and the
+slowest migrations with their recorded digests. The artifact holds the before
+and after fingerprints, the preflight reports, and the catalog comparison.
 
-**Sources.** After each release, add its tag to `sources` in
-`rehearsal.json`, ordered oldest first and newest last. Drop a source only when upgrading from it stops being
-supported, and say so in the release notes.
+**Sources.** `sources` in `rehearsal.json` lists exactly the releases an
+installation can upgrade from, oldest first and newest last: the candidate
+baseline's `upgradeFromRelease`, and any later release whose tree records the
+same baseline `filename` and `baselineSha256`. `plan.mjs` refuses any other
+source and a list without `upgradeFromRelease`. It reads `baseline.json` at
+each other source's tag, so the planning checkout needs those release tags.
+`rehearse.mjs` repeats the check against the checked-out source tree. After
+each release that keeps the same baseline, add its tag. When a release cuts a
+new baseline, its sources restart at that baseline's `upgradeFromRelease`.
+Installations on older releases upgrade to that release first, and the
+release notes say so.
 
 **Datasets.** Every class in `requiredDatasetClasses` must have a dataset, and
 the plan refuses otherwise. The classes are: `empty`, `small`, `perf-1m` (a
@@ -178,19 +203,11 @@ APIs present in every supported source release.
 
 ## Migration preflights
 
-Published SQL retains its original filename and digest. A reviewed native
-execution compatibility policy may adapt one exact published syntax form;
-it refuses changed source and records its policy identifier, published digest,
-and actual executable digest in `_migration_execution_corrections`, atomically
-with the original `_applied_migrations` row. It does not admit schema drift or
-alter financial validation. Preserve both metadata tables in installation
-backups and upgrade evidence.
-
-A guard preflight may defer an exact recorded function version to its exact
-earlier pending publisher. Such transitions require the matching recorded
-digest, current body, future published body and consumer query; other drift
-still refuses. Deferred transactional checks run again on the applying
-connection inside the migration transaction before its body or ledger write.
+Published SQL retains its original filename and digest. Preflights cover the
+forward migrations above the active release baseline. An installation older
+than the baseline's `upgradeFromRelease` upgrades to that release first (its
+own preflights run there) and then adopts the baseline; the baseline itself
+is adopted, never replayed, so it has no preflight.
 
 Every install can ask, read-only and before upgrading, "will these pending
 migrations work on MY data, and what do I need to do?"
@@ -229,9 +246,9 @@ that refuses stops before its own migration naming exactly which migrations
 already applied. A fresh install (no `_applied_migrations` table) has
 nothing to preflight.
 
-**Author contract.** Every generated migration with ordinal ≥ 0242 (the
-first after v0.1.0-alpha.23) must have EXACTLY ONE decision file in
-`schema/migrations/preflight/`:
+**Author contract.** Every forward migration
+(`schema/migrations/generated/<ordinal>_<name>.sql`) must have EXACTLY ONE
+decision file in `schema/migrations/preflight/`:
 
 - `<basename>.sql`: the preflight — exactly one read-only statement
   (`SELECT` or `WITH … SELECT`). Zero rows means the install is ready; each

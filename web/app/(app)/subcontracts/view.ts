@@ -101,22 +101,22 @@ export async function loadSubcontracts(sp: Record<string, string | string[] | un
     const projects = await db.execute<SubcontractOption>(sql`select id, name from projects
       where org_id = ${orgId} and is_active and status not in ('closed','cancelled')
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-      order by name`)
+      order by name`, 'objects')
     const vendors = multiCurrency
       ? await db.execute<SubcontractOption>(sql`select p.id, p.display_name as name, vr.currency from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id where p.org_id = ${orgId} and p.is_active and vr.is_active
           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-        order by p.display_name`)
+        order by p.display_name`, 'objects')
       : await db.execute<SubcontractOption>(sql`select p.id, p.display_name as name from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id where p.org_id = ${orgId} and p.is_active and vr.is_active
           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-        order by p.display_name`)
+        order by p.display_name`, 'objects')
     const accounts = await db.execute<SubcontractOption>(sql`select id, concat_ws(' · ', number, name) as name from accounts
       where org_id = ${orgId} and is_active and not is_summary and type in ('expense','cogs')
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-      order by number nulls last`)
+      order by number nulls last`, 'objects')
     const parties = await db.execute<SubcontractOption>(sql`select id, display_name as name from parties
       where org_id = ${orgId} and is_active
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-      order by display_name limit 2000`)
+      order by display_name limit 2000`, 'objects')
     const register = await listSubcontractRegister(db, {
       orgId,
       actorId: authz.user.id,
@@ -126,7 +126,7 @@ export async function loadSubcontracts(sp: Record<string, string | string[] | un
       page,
       perPage,
     })
-    return { projects: projects.rows, vendors: vendors.rows, accounts: accounts.rows, parties: parties.rows, register }
+    return { projects, vendors, accounts, parties, register }
   })
 
   return {

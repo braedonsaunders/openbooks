@@ -24,15 +24,13 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
   let current: Record<string, unknown> = {}
   if (rowId) {
     current =
-      (
-        await executor.execute<
+      (await executor.execute<
           Record<string, unknown>
         >(sql`select row_kind as "rowKind", views, default_view as "defaultView",
       resource_kind as "resourceKind", department_id as "departmentId", location_id as "locationId", range_days as "rangeDays", prefill_timesheets as "prefillTimesheets", prefill_crew_time as "prefillCrewTime",
       prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees", subsidiary_id as "subsidiaryId", distribution_visibility as "distributionVisibility",time_zone as "timeZone",automatic_delivery_policy as "automaticDeliveryPolicy",
       board_type as "boardType", publish_policy as "publishPolicy"
-      from schedule_boards where org_id = ${orgId} and id = ${rowId}`)
-      ).rows[0] ?? {};
+      from schedule_boards where org_id = ${orgId} and id = ${rowId}`, 'objects'))[0] ?? {};
   }
   if (body.automaticDeliveryPolicy != null) {
     const parsed = automaticScheduleDeliverySchema.safeParse(
@@ -63,21 +61,17 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
     if (!(await lockAndCheckOrgFeature(executor, orgId, "flows")))
       return "Enable Flows in Company Settings → Features before configuring automatic schedule delivery.";
     if (policy.data.additionalRoleKeys.length) {
-      const roles = (
-        await executor.execute<{ key: string }>(
-          sql`select key from app_roles where org_id=${orgId} and key in(select jsonb_array_elements_text(${JSON.stringify(policy.data.additionalRoleKeys)}::jsonb))`,
-        )
-      ).rows;
+      const roles = await executor.execute<{ key: string }>(
+          sql`select key from app_roles where org_id=${orgId} and key in(select jsonb_array_elements_text(${JSON.stringify(policy.data.additionalRoleKeys)}::jsonb))`, 'objects',
+        );
       if (roles.length !== policy.data.additionalRoleKeys.length)
         return "Choose existing native application roles for recipient groups.";
     }
     const ids = policy.data.additionalPartyIds;
     if (ids.length) {
-      const contacts = (
-        await executor.execute<{ id: string }>(
-          sql`select id from parties where org_id=${orgId} and kind='person' and is_active and subsidiary_id=${merged.subsidiaryId} and id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`,
-        )
-      ).rows;
+      const contacts = await executor.execute<{ id: string }>(
+          sql`select id from parties where org_id=${orgId} and kind='person' and is_active and subsidiary_id=${merged.subsidiaryId} and id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`, 'objects',
+        );
       if (contacts.length !== ids.length)
         return "Choose active native contacts within the board legal entity for additional whole-board recipients.";
     }

@@ -93,8 +93,8 @@ test(
       );
       const created = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from accounts where org_id = ${org.orgId} and name = 'Alien ref account'
-      `);
-      assert.equal(created.rows[0]?.n ?? -1, 0, "refused create stores nothing");
+      `, "objects");
+      assert.equal(created[0]?.n ?? -1, 0, "refused create stores nothing");
       // CREATE with an own-org reference still succeeds.
       const okCreate = await post(randomUUID(), {
         name: "Owned ref account",
@@ -121,9 +121,9 @@ test(
       );
       const stored = await db.execute<{ custom: Record<string, unknown> }>(sql`
         select custom from accounts where id = ${accountId}
-      `);
+      `, "objects");
       assert.equal(
-        (stored.rows[0]?.custom as Record<string, unknown> | undefined)?.ref_party,
+        (stored[0]?.custom as Record<string, unknown> | undefined)?.ref_party,
         org.vendorId,
         "refused update leaves the stored reference untouched",
       );

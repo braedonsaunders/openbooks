@@ -68,7 +68,7 @@ async function fixture(): Promise<{ orgId: string; subscriptionId: string; subsi
      where id = ${org.orgId}`));
   // The scratch spine opens only July 2026; September billing needs its period.
   const calendarId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id::text as id from accounting_periods where org_id = ${org.orgId} limit 1`))).rows[0]!.id;
+    select fiscal_calendar_id::text as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects")))[0]!.id;
   for (const month of [8, 9, 10]) {
     const startsOn = `2026-${String(month).padStart(2, "0")}-01`;
     const endsOn = new Date(Date.UTC(2026, month, 1) - 86_400_000).toISOString().slice(0, 10);
@@ -103,22 +103,22 @@ const post = (body: unknown) =>
   );
 
 async function guards(orgId: string, subscriptionId: string): Promise<{ startsOn: string; endsOn: string }[]> {
-  return (await withBypassContext(() => db.execute<{ startsOn: string; endsOn: string }>(sql`
+  return await withBypassContext(() => db.execute<{ startsOn: string; endsOn: string }>(sql`
     select period_starts_on as "startsOn", period_ends_on as "endsOn"
       from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
-     order by period_starts_on`))).rows;
+     order by period_starts_on`, "objects"));
 }
 
 async function cursor(orgId: string, subscriptionId: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ nextBillOn: string }>(sql`
-    select next_bill_on as "nextBillOn" from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`))).rows[0]!.nextBillOn;
+    select next_bill_on as "nextBillOn" from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")))[0]!.nextBillOn;
 }
 
 async function invoiceCount(orgId: string): Promise<number> {
   return (await withBypassContext(() => db.execute<{ n: number }>(sql`
     select count(*)::int as n from documents
-     where org_id = ${orgId} and kind = 'customer_invoice' and status <> 'voided'`))).rows[0]!.n;
+     where org_id = ${orgId} and kind = 'customer_invoice' and status <> 'voided'`, "objects")))[0]!.n;
 }
 
 test("an edit after the bill validates against fresh billed state, or refuses it", async () => {
@@ -197,7 +197,7 @@ test("add subscription rechecks customer scope after a concurrent rehome", async
     assert.equal(((await response.json()) as { error: string }).error, "not_found");
     const count = (await withBypassContext(() => db.execute<{ count: number }>(sql`
       select count(*)::int as count from subscriptions
-       where org_id = ${org.orgId} and customer_id = ${customerId}`))).rows[0]!.count;
+       where org_id = ${org.orgId} and customer_id = ${customerId}`, "objects")))[0]!.count;
     assert.equal(count, 0, "the scoped request must not commit a subscription after the customer leaves its scope");
   } finally {
     try { await holder.query("rollback"); } catch { /* already released */ }
@@ -243,7 +243,7 @@ test("an edit racing a concurrent bill validates under the row lock", async () =
     // turns the parked Oct 15 skip into a backward move into billed service.
     // Each guard needs its own invoice (one guard per invoice, by constraint).
     const customerId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select customer_id as "id" from subscriptions where id = ${subscriptionId}`))).rows[0]!.id;
+      select customer_id as "id" from subscriptions where id = ${subscriptionId}`, "objects")))[0]!.id;
     const octoberInvoiceId = randomUUID();
     await writer.query("begin");
     await writer.query("select set_config('app.bypass_rls', 'on', true)");
@@ -319,7 +319,7 @@ test("change and bill-now refuse after a customer rehome while waiting on its ro
     const holder = await pool.connect();
     try {
       const customerId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-        select customer_id as id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`))).rows[0]!.id;
+        select customer_id as id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")))[0]!.id;
       const subsidiaryB = randomUUID();
       await withBypassContext(() => db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
@@ -344,7 +344,7 @@ test("change and bill-now refuse after a customer rehome while waiting on its ro
       assert.deepEqual(await response.json(), { error: "not_found" });
       const after = (await withBypassContext(() => db.execute<{ quantity: string; runCount: number; lastInvoiceId: string | null }>(sql`
         select quantity::text as quantity, run_count as "runCount", last_invoice_id as "lastInvoiceId"
-          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`))).rows[0]!;
+          from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects")))[0]!;
       assert.equal(after.quantity, "1.0000", `${action} must not change subscription quantity`);
       assert.equal(after.runCount, 0, `${action} must not book an invoice`);
       assert.equal(after.lastInvoiceId, null);

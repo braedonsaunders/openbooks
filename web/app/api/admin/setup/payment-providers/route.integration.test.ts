@@ -143,16 +143,16 @@ async function seedForeignEntity(orgId: string, parentSubsidiaryId: string): Pro
 async function ownSubsidiaryId(orgId: string): Promise<string> {
   const rows = await db.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${orgId} order by created_at limit 1
-  `);
-  return rows.rows[0]!.id;
+  `, "objects");
+  return rows[0]!.id;
 }
 
 /** How much trace exists in this org: stored rules and audit rows. */
 async function trace(orgId: string): Promise<{ rules: number; audits: number }> {
   const rows = await db.execute<{ rules: number; audits: number }>(sql`
     select (select count(*)::int from payment_surcharge_rules where org_id = ${orgId}) as rules,
-           (select count(*)::int from audit_log where org_id = ${orgId} and table_name = 'payment_surcharge_rules') as audits`);
-  return rows.rows[0]!;
+           (select count(*)::int from audit_log where org_id = ${orgId} and table_name = 'payment_surcharge_rules') as audits`, "objects");
+  return rows[0]!;
 }
 
 async function storedRules(orgId: string): Promise<Record<string, unknown>[]> {
@@ -161,8 +161,8 @@ async function storedRules(orgId: string): Promise<Record<string, unknown>[]> {
            cap_amount::text as "capAmount", fee_income_account_id as "feeIncomeAccountId",
            provider, payment_method as "paymentMethod", effective_from::text as "effectiveFrom",
            effective_to::text as "effectiveTo", is_active as "isActive"
-      from payment_surcharge_rules where org_id = ${orgId} order by name`);
-  return rows.rows;
+      from payment_surcharge_rules where org_id = ${orgId} order by name`, "objects");
+  return rows;
 }
 
 type AuditRow = {
@@ -175,8 +175,8 @@ async function audits(orgId: string): Promise<AuditRow[]> {
   const rows = await db.execute<AuditRow>(sql`
     select action, actor_id, changes from audit_log
      where org_id = ${orgId} and table_name = 'payment_surcharge_rules'
-     order by at, id`);
-  return rows.rows;
+     order by at, id`, "objects");
+  return rows;
 }
 
 function baseRule(overrides: Record<string, unknown>): Record<string, unknown> {
@@ -229,8 +229,8 @@ test("provider acceptance configuration rejects invalid references before persis
     const stored = await db.execute<{ bank_account_id: string; acceptance_enabled: boolean }>(sql`
       select default_bank_account_id as bank_account_id, acceptance_enabled
         from psp_provider_configs where org_id = ${f.orgId} and provider = 'stripe'
-    `);
-    assert.deepEqual(stored.rows[0], { bank_account_id: f.bankAccount, acceptance_enabled: true });
+    `, "objects");
+    assert.deepEqual(stored[0], { bank_account_id: f.bankAccount, acceptance_enabled: true });
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
@@ -379,8 +379,8 @@ test("fee-income references must be real active non-summary income accounts", as
     ];
     // The fixture's bank account is real but is not an income account.
     const banks = await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${f.orgId} and type = 'asset_bank' limit 1`);
-    rejects.push(banks.rows[0]!.id);
+      select id from accounts where org_id = ${f.orgId} and type = 'asset_bank' limit 1`, "objects");
+    rejects.push(banks[0]!.id);
 
     for (const feeIncomeAccountId of rejects) {
       const res = await POST(postRequest(baseRule({ feeIncomeAccountId })));
@@ -616,8 +616,8 @@ test("a restricted caller cannot save org-wide provider config, and nothing pers
     const stored = await db.execute<{ bank_account_id: string | null }>(sql`
       select default_bank_account_id as bank_account_id
         from psp_provider_configs where org_id = ${f.orgId} and provider = 'stripe'
-    `);
-    assert.equal(stored.rows[0]!.bank_account_id, f.bankAccount);
+    `, "objects");
+    assert.equal(stored[0]!.bank_account_id, f.bankAccount);
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);

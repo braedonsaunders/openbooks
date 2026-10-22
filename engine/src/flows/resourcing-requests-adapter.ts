@@ -102,11 +102,9 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
     return {
       values: {
         id: subjectId,
-        approvalFingerprint: (
-          await db.execute<{ fingerprint: string }>(
-            sql`select public.resourcing_request_approval_fingerprint(r) as fingerprint from res_requests r where r.id=${subjectId}`,
-          )
-        ).rows[0]?.fingerprint,
+        approvalFingerprint: (await db.execute<{ fingerprint: string }>(
+            sql`select public.resourcing_request_approval_fingerprint(r) as fingerprint from res_requests r where r.id=${subjectId}`, "objects",
+          ))[0]?.fingerprint,
         requestId: subjectId,
         projectId: request.projectId,
         employeePartyId: request.employeePartyId,

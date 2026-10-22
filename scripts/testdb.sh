@@ -337,11 +337,10 @@ print_env() {
   # superuser password): psql -U openbooks -h 127.0.0.1 -p "$PORT" "$db".
   echo "export OPENBOOKS_DB_URL='$(runtime_url_for "$db")'"
   echo "export OPENBOOKS_RUNTIME_DB_URL='$(runtime_url_for "$db")'"
-  # Migration-replay and self-provisioning suites (bank-statement-source-
-  # evidence, order-quantity-progress-migration, recognition-event-tenant-
-  # integrity, hrm migration-cli-gate) need the privileged login and refuse
-  # by name without it. Emitting it here is what keeps a local run from
-  # ever reaching their refusal.
+  # Self-provisioning suites (host-managed roles, baseline adoption, isolated
+  # catalog probes) need the privileged login and refuse by name without it.
+  # Emitting it here is what keeps a local run from ever reaching their
+  # refusal.
   echo "export OPENBOOKS_TEST_ADMIN_DB_URL='$(admin_url_for "$db")'"
   # The ephemeral marker, read back from the database's own comment. The
   # fixtures refuse to touch a database whose comment does not carry the

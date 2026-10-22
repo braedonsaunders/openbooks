@@ -47,7 +47,7 @@ const hooks = registerHooks({
     if (resolved.url.endsWith('/platform/db.ts')) return {
       shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
         export * from ${JSON.stringify(new URL('../../../../../../engine/src/platform/db.ts?native', import.meta.url).href)};
-        export const db={execute:query=>globalThis.__laborPricingExecute(query)};
+        export const db={execute:(query, mode)=>Promise.resolve(globalThis.__laborPricingExecute(query)).then((result) => (mode === 'objects' ? result.rows : result))};
       `),
     }
     return resolved

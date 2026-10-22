@@ -59,8 +59,8 @@ async function draftApprovedDocument(
 async function movementCount(orgId: string, lineId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from inventory_movements
-     where org_id = ${orgId} and document_line_id = ${lineId}`));
-  return r.rows[0]!.n;
+     where org_id = ${orgId} and document_line_id = ${lineId}`, "objects"));
+  return r[0]!.n;
 }
 
 test("a negative-quantity invoice line is refused and points to the customer credit return flow", { skip: !DB }, async () => {
@@ -150,8 +150,8 @@ async function glBalance(org: ScratchOrg, accountId: string): Promise<bigint> {
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${org.orgId} and l.account_id = ${accountId}
-       and e.status = 'posted'`));
-  return toUnits(r.rows[0]!.bal);
+       and e.status = 'posted'`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 test("a bill line in boxes receives base units at the converted unit cost", { skip: !DB }, async () => {
@@ -167,13 +167,13 @@ test("a bill line in boxes receives base units at the converted unit cost", { sk
     await postDocument(documentId, depsFor(org));
     const movement = (await db.execute<{ quantity: string; unit_cost: string; total_value: string }>(sql`
       select quantity::text, unit_cost::text, total_value::text from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`)).rows[0]!;
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`, "objects"))[0]!;
     assert.equal(toUnits(movement.quantity), toUnits("24"), "2 box x 12 = 24 each");
     assert.equal(toUnits(movement.unit_cost), toUnits("10"), "$240 over 24 each");
     assert.equal(toUnits(movement.total_value), toUnits("240"));
     const layer = (await db.execute<{ remaining: string; unit_cost: string }>(sql`
       select remaining_quantity::text as remaining, unit_cost::text from cost_layers
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`)).rows[0]!;
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!;
     assert.equal(toUnits(layer.remaining), toUnits("24"));
     assert.equal(await glBalance(org, org.accounts.invAsset), toUnits("240"));
   } finally {
@@ -199,7 +199,7 @@ test("an invoice line in boxes issues base units", { skip: !DB }, async () => {
     await postDocument(documentId, depsFor(org));
     const movement = (await db.execute<{ quantity: string }>(sql`
       select quantity::text from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0]!;
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0]!;
     assert.equal(toUnits(movement.quantity), toUnits("-24"), "2 box x 12 = 24 each issued");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -219,7 +219,7 @@ test("a bill line in a differently-cased unit still converts", { skip: !DB }, as
     await postDocument(documentId, depsFor(org));
     const movement = (await db.execute<{ quantity: string }>(sql`
       select quantity::text from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`)).rows[0]!;
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`, "objects"))[0]!;
     assert.equal(toUnits(movement.quantity), toUnits("24"), "case and whitespace fold before conversion");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -242,7 +242,7 @@ test("a line in an unconvertible unit is refused, never assumed 1:1", { skip: !D
     );
     const count = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId}`)).rows[0]!.n;
+       where org_id = ${org.orgId} and document_line_id = ${lineId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "no stock may move on a refused line");
   } finally {
     await dropScratchOrg(org.orgId);

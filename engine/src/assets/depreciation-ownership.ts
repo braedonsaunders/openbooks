@@ -18,6 +18,6 @@ export async function assertLocalDepreciationSelection(
   const rows = await runner.execute<{ custom: unknown; asset_number: string }>(sql`
     select custom, asset_number from fixed_assets where org_id=${orgId}
       and id=any(${uuidArray([...assetIds])}::uuid[])
-      ${allowedSubsidiaryIds ? sql`and subsidiary_id=any(${uuidArray([...allowedSubsidiaryIds])}::uuid[])` : sql``}`);
-  for (const row of rows.rows) assertLocalDepreciation(row.custom, row.asset_number);
+      ${allowedSubsidiaryIds ? sql`and subsidiary_id=any(${uuidArray([...allowedSubsidiaryIds])}::uuid[])` : sql``}`, 'objects');
+  for (const row of rows) assertLocalDepreciation(row.custom, row.asset_number);
 }

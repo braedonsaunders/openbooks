@@ -27,31 +27,31 @@ type RoleRow = {
 };
 
 async function roleByKey(orgId: string, key: string): Promise<RoleRow> {
-  const rows = (await db.execute<RoleRow>(sql`
+  const rows = await db.execute<RoleRow>(sql`
     select key, name, description, is_built_in, permissions from app_roles
-     where org_id = ${orgId} and key = ${key}`)).rows;
+     where org_id = ${orgId} and key = ${key}`, "objects");
   assert.equal(rows.length, 1, `expected exactly one role ${key}`);
   return rows[0]!;
 }
 
 async function permissionsText(orgId: string, key: string): Promise<string> {
-  const rows = (await db.execute<{ p: string }>(sql`
+  const rows = await db.execute<{ p: string }>(sql`
     select permissions::text as p from app_roles
-     where org_id = ${orgId} and key = ${key}`)).rows;
+     where org_id = ${orgId} and key = ${key}`, "objects");
   assert.equal(rows.length, 1, `expected exactly one role ${key}`);
   return rows[0]!.p;
 }
 
 async function builtInCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: string }>(sql`
-    select count(*) as n from app_roles where org_id = ${orgId} and is_built_in`)).rows;
+  const rows = await db.execute<{ n: string }>(sql`
+    select count(*) as n from app_roles where org_id = ${orgId} and is_built_in`, "objects");
   return Number(rows[0]!.n);
 }
 
 async function roleSnapshot(orgId: string): Promise<string> {
-  const rows = (await db.execute<{ snapshot: string }>(sql`
+  const rows = await db.execute<{ snapshot: string }>(sql`
     select coalesce(jsonb_agg(to_jsonb(role_row) order by role_row.key), '[]'::jsonb)::text as snapshot
-      from app_roles role_row where org_id = ${orgId}`)).rows;
+      from app_roles role_row where org_id = ${orgId}`, "objects");
   assert.equal(rows.length, 1);
   return rows[0]!.snapshot;
 }
@@ -79,15 +79,15 @@ test("the engine seeder refreshes metadata but preserves customized grants on re
   const { orgId } = await createScratchOrg();
   try {
     await seedRolesForOrg(orgId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${orgId}, 'steward', 'Steward', false, '["gl.read"]'::jsonb)
-      returning id`)).rows;
+      returning id`, "objects");
     assert.equal(inserted.length, 1);
-    const customized = (await db.execute<{ id: string }>(sql`
+    const customized = await db.execute<{ id: string }>(sql`
       update app_roles set permissions = '["gl.read"]'::jsonb, description = 'Custom steward note'
        where org_id = ${orgId} and key = 'controller'
-      returning id`)).rows;
+      returning id`, "objects");
     assert.equal(customized.length, 1, "customize affected exactly one row");
     const before = await permissionsText(orgId, "controller");
 
@@ -182,10 +182,10 @@ test("the bootstrap step keeps a same-key custom role instead of refusing", { sk
 test("the engine seeder refuses a same-key custom role with a usable remedy and rolls back", { skip: !DB }, async () => {
   const { orgId } = await createScratchOrg();
   try {
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${orgId}, 'controller', 'Local controller', false, '["gl.read"]'::jsonb)
-      returning id`)).rows;
+      returning id`, "objects");
     assert.equal(inserted.length, 1);
     await assert.rejects(
       () => seedRolesForOrg(orgId),

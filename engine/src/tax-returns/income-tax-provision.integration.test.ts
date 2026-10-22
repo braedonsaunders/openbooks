@@ -157,14 +157,14 @@ test(
       const { entryId } = await postProvisionRun(org.orgId, runId, userId);
       const entry = (await db.execute<{ status: string; origin: string }>(sql`
       select status, origin from journal_entries where id = ${entryId}
-    `));
-      assert.equal(entry.rows[0]!.status, "posted");
-      assert.equal(entry.rows[0]!.origin, "tax_provision");
+    `, "objects"));
+      assert.equal(entry[0]!.status, "posted");
+      assert.equal(entry[0]!.origin, "tax_provision");
       const lines = (await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount from journal_lines where entry_id = ${entryId} order by line_number
-    `));
+    `, "objects"));
       const byAccount = new Map(
-        lines.rows.map((l) => [l.account_id, l.amount]),
+        lines.map((l) => [l.account_id, l.amount]),
       );
       assert.equal(byAccount.get(payable), "-233200.0000");
       assert.equal(byAccount.get(dta), "21200.0000");
@@ -172,7 +172,7 @@ test(
       assert.equal(byAccount.get(va), "-10000.0000");
       assert.equal(byAccount.get(expense), "275000.0000");
       assert.equal(
-        isZero(sum(lines.rows.map((line) => line.amount))),
+        isZero(sum(lines.map((line) => line.amount))),
         true,
         "provision journal balances",
       );
@@ -211,16 +211,16 @@ test(
       const states = (await db.execute<{ status: string; n: number }>(sql`
       select status, count(*)::int as n from tax_provision_runs
        where org_id = ${org.orgId} and fiscal_year = 2026 group by status
-    `));
-      const byStatus = new Map(states.rows.map((r) => [r.status, r.n]));
+    `, "objects"));
+      const byStatus = new Map(states.map((r) => [r.status, r.n]));
       assert.equal(byStatus.get("posted"), 1);
       assert.equal(byStatus.get("superseded"), 1);
       const reversal = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${entryId}
-    `));
+    `, "objects"));
       assert.equal(
-        reversal.rows[0]!.n,
+        reversal[0]!.n,
         1,
         "repost reversed the superseded entry",
       );
@@ -228,8 +228,8 @@ test(
       // The DTL movement between the two runs (53,000 → 79,500) shows in entry 2.
       const dtlLine = (await db.execute<{ amount: string }>(sql`
       select amount from journal_lines where entry_id = ${entryId2} and account_id = ${dtl}
-    `));
-      assert.equal(dtlLine.rows[0]!.amount, "-79500.0000");
+    `, "objects"));
+      assert.equal(dtlLine[0]!.amount, "-79500.0000");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -569,11 +569,11 @@ test("fixed-asset tax basis counts each equal-cost asset once across multi-line 
     const journalEntryId = (await db.execute<{ id: string }>(sql`
       select id from journal_entries
        where org_id = ${org.orgId} and entry_number = 'INV-FA-BASIS'
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
       select fiscal_calendar_id from accounting_periods where id = ${org.periodId}
-    `)).rows[0]!.fiscal_calendar_id;
+    `, "objects"))[0]!.fiscal_calendar_id;
     const secondPeriodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods
@@ -649,8 +649,8 @@ test("posting refuses a stale draft after ledger activity changes and zero rows 
     // Zero journal/status writes happened for the rejected post.
     const entries = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${org.orgId} and origin = 'tax_provision'`));
-    assert.equal(entries.rows[0]!.n, 0);
+       where org_id = ${org.orgId} and origin = 'tax_provision'`, "objects"));
+    assert.equal(entries[0]!.n, 0);
     const stillDraft = await getProvisionRun(org.orgId, draftId);
     assert.equal(stillDraft?.status, "draft");
 
@@ -659,8 +659,8 @@ test("posting refuses a stale draft after ledger activity changes and zero rows 
     assert.notEqual(freshId, draftId);
     const { entryId } = await postProvisionRun(org.orgId, freshId, userId);
     const posted = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where id = ${entryId}`));
-    assert.equal(posted.rows[0]!.status, "posted");
+      select status from journal_entries where id = ${entryId}`, "objects"));
+    assert.equal(posted[0]!.status, "posted");
     const payload = payloadOf((await getProvisionRun(org.orgId, freshId))!);
     assert.equal(payload.pretaxBookIncome, "1500000.0000");
   } finally {
@@ -692,9 +692,9 @@ test("equal-aggregate drafts with different temporary-difference detail get dist
     const discarded = await getProvisionRun(org.orgId, runA);
     assert.equal(discarded?.status, "discarded");
     const detail = (await db.execute<{ description: string }>(sql`
-      select description from temporary_differences where run_id = ${runB} order by description`));
+      select description from temporary_differences where run_id = ${runB} order by description`, "objects"));
     assert.deepEqual(
-      detail.rows.map((r) => r.description),
+      detail.map((r) => r.description),
       ["Rebate accrual", "Tooling lease timing"],
     );
 
@@ -779,9 +779,9 @@ test("multi-entity provisions calculate, post and translate per entity instead o
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${org.orgId} and e.origin = 'tax_provision' and e.status = 'posted'
-       group by e.id, e.subsidiary_id`));
-    assert.equal(journals.rows.length, 2, "one functional-currency journal per entity");
-    const bySub = new Map(journals.rows.map((j) => [j.subsidiary_id, j]));
+       group by e.id, e.subsidiary_id`, "objects"));
+    assert.equal(journals.length, 2, "one functional-currency journal per entity");
+    const bySub = new Map(journals.map((j) => [j.subsidiary_id, j]));
     const usJournal = bySub.get(usSub)!;
     const caJournal = bySub.get(org.subsidiaryId)!;
     assert.equal(usJournal.currency, "USD");
@@ -794,8 +794,8 @@ test("multi-entity provisions calculate, post and translate per entity instead o
       select l.amount from journal_lines l
        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.id = ${usJournal.id} and l.account_id = ${accounts.expense}
-        and l.subsidiary_id = ${usSub}`));
-    assert.equal(usExpense.rows[0]!.amount, "21000.0000");
+        and l.subsidiary_id = ${usSub}`, "objects"));
+    assert.equal(usExpense[0]!.amount, "21000.0000");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -859,12 +859,12 @@ test("third same-year repost writes a third distinct reversal without number col
       );
       const { entryId } = await postProvisionRun(org.orgId, runId, userId);
       const entryNumber = (await db.execute<{ entry_number: string }>(sql`
-        select entry_number from journal_entries where id = ${entryId}`)).rows[0]!.entry_number;
+        select entry_number from journal_entries where id = ${entryId}`, "objects"))[0]!.entry_number;
       mainNumbers.push(entryNumber);
       if (previousEntryId) {
-        const reversalRows: { entry_number: string }[] = (await db.execute<{ entry_number: string }>(sql`
+        const reversalRows: { entry_number: string }[] = await db.execute<{ entry_number: string }>(sql`
           select entry_number from journal_entries
-           where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${previousEntryId}`)).rows;
+           where org_id = ${org.orgId} and origin = 'tax_provision' and reverses_entry_id = ${previousEntryId}`, "objects");
         assert.equal(reversalRows.length, 1, "each superseded entry reversed exactly once");
         reversalNumbers.push(reversalRows[0]!.entry_number);
       }
@@ -879,15 +879,15 @@ test("third same-year repost writes a third distinct reversal without number col
 
     const statuses = (await db.execute<{ status: string; n: number }>(sql`
       select status, count(*)::int as n from tax_provision_runs
-       where org_id = ${org.orgId} and fiscal_year = 2026 group by status`));
-    const byStatus = new Map(statuses.rows.map((r) => [r.status, r.n]));
+       where org_id = ${org.orgId} and fiscal_year = 2026 group by status`, "objects"));
+    const byStatus = new Map(statuses.map((r) => [r.status, r.n]));
     assert.equal(byStatus.get("posted"), 1);
     assert.equal(byStatus.get("superseded"), 2);
 
     // Idempotent retry of the live run returns its own entry.
     const liveRun = (await db.execute<{ id: string; journal_entry_id: string }>(sql`
       select id, journal_entry_id from tax_provision_runs
-       where org_id = ${org.orgId} and fiscal_year = 2026 and status = 'posted'`)).rows[0]!;
+       where org_id = ${org.orgId} and fiscal_year = 2026 and status = 'posted'`, "objects"))[0]!;
     const retry = await postProvisionRun(org.orgId, liveRun.id, userId);
     assert.equal(retry.entryId, liveRun.journal_entry_id);
   } finally {
@@ -1059,7 +1059,7 @@ async function prepareFiling(
   const versions = (await db.execute<{ version: number }>(sql`
     select coalesce(max(version), 0)::int + 1 as version from tax_filings
      where org_id = ${org.orgId} and form_code = ${result.formCode}
-       and period_from = ${result.from} and period_to = ${result.to}`)).rows[0]!;
+       and period_from = ${result.from} and period_to = ${result.to}`, "objects"))[0]!;
   const storedScope =
     opts.storedSubsidiaryIds === undefined
       ? `{${result.subsidiaryIds.join(",")}}`
@@ -1092,13 +1092,13 @@ async function filingState(orgId: string, filingId: string) {
     snapshot_hash: string;
   }>(sql`
     select status, filed_at, filing_reference, snapshot_hash
-      from tax_filings where org_id = ${orgId} and id = ${filingId}`)).rows[0]!;
+      from tax_filings where org_id = ${orgId} and id = ${filingId}`, "objects"))[0]!;
 }
 
 function filingAudits(orgId: string, filingId: string) {
   return db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'tax_filings' and row_id = ${filingId} and action = 'update'`);
+     where org_id = ${orgId} and table_name = 'tax_filings' and row_id = ${filingId} and action = 'update'`, "objects");
 }
 
 function closeCoveredPeriod(org: ScratchOrg): Promise<void> {
@@ -1122,8 +1122,8 @@ async function waitForAdvisoryWaiter(key: string, expected = 1): Promise<boolean
          and classid::text = ((k.h >> 32) & 4294967295)::text
          and objid::text = (k.h & 4294967295)::text
          and not granted
-    `);
-    if (Number(rows.rows[0]?.n ?? 0) >= expected) return true;
+    `, "objects");
+    if (Number(rows[0]?.n ?? 0) >= expected) return true;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   return false;
@@ -1193,7 +1193,7 @@ test("period generation serializes its boundary rewrite with mark-filed", { skip
     const calendarId = (await db.execute<{ id: string }>(sql`
       select id from fiscal_calendars
        where org_id = ${org.orgId} and is_default and is_active
-       limit 1`)).rows[0]!.id;
+       limit 1`, "objects"))[0]!.id;
     const configured = [
       ["2026-01-01", "2026-01-31"],
       ["2026-02-01", "2026-02-28"],
@@ -1239,7 +1239,7 @@ test("period generation serializes its boundary rewrite with mark-filed", { skip
     assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
     const period = (await db.execute<{ ends_on: string }>(sql`
       select ends_on::text as ends_on from accounting_periods
-       where org_id = ${org.orgId} and id = ${org.periodId}`)).rows[0]!;
+       where org_id = ${org.orgId} and id = ${org.periodId}`, "objects"))[0]!;
     assert.equal(period.ends_on, "2026-08-01");
   } finally {
     if (holder) {
@@ -1284,7 +1284,7 @@ test("mark-filed rejects a filing whose source ledger moved after preparation", 
     assert.equal(row.status, "prepared");
     assert.equal(row.filed_at, null);
     assert.equal(row.filing_reference, null);
-    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
 
     // The fence forces re-preparation, not lockout: a new version prepared
     // against the moved ledger carries a different fingerprint.
@@ -1324,7 +1324,7 @@ test("mark-filed trips stale when the registration changes after preparation", {
       (error: unknown) => error instanceof TaxFilingError && error.code === "stale",
     );
     assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1385,7 +1385,7 @@ test("mark-filed refuses a filing while its covered period is not closed", { ski
       (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
     );
     assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1414,7 +1414,7 @@ test("mark-filed refuses a filing when one covered subsidiary is still open", { 
       (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
-           and book_id = ${org.bookId} and subsidiary_id = ${childId}`)).rows[0]!.n,
+           and book_id = ${org.bookId} and subsidiary_id = ${childId}`, "objects"))[0]!.n,
       0,
       "the uncovered child must remain visibly unlocked",
     );
@@ -1424,7 +1424,7 @@ test("mark-filed refuses a filing when one covered subsidiary is still open", { 
       (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
     );
     assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, prepared.id)).rows[0]!.n, 0);
+    assert.equal((await filingAudits(org.orgId, prepared.id))[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1475,7 +1475,7 @@ test("mark-filed accepts complete subsidiary closure without implying an org-wid
       (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
-           and book_id = ${org.bookId} and subsidiary_id is null and state = 'closed'`)).rows[0]!.n,
+           and book_id = ${org.bookId} and subsidiary_id is null and state = 'closed'`, "objects"))[0]!.n,
       0,
       "scoped closes must not imply an org-wide closed lock",
     );
@@ -1492,7 +1492,7 @@ test("mark-filed accepts complete subsidiary closure without implying an org-wid
       (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
     );
     assert.equal((await filingState(org.orgId, second.id)).status, "prepared");
-    assert.equal((await filingAudits(org.orgId, second.id)).rows[0]!.n, 0);
+    assert.equal((await filingAudits(org.orgId, second.id))[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1643,7 +1643,7 @@ test("a fingerprint-matching filing marks filed once its covered period is close
     const audits = (await db.execute<{ changes: Record<string, unknown> }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id}
-         and action = 'update'`)).rows[0]!;
+         and action = 'update'`, "objects"))[0]!;
     const after = audits.changes as { after: { status: string; snapshotHash: string; sourceVerified: boolean } };
     assert.equal(after.after.status, "filed");
     assert.equal(after.after.snapshotHash, prepared.snapshotHash);
@@ -1696,13 +1696,13 @@ for (const policy of ["account", "inactive subsidiary", "inactive book", "non-po
       });
       const state = (await db.execute<{ status: string; journals: number }>(sql`
         select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals
-        from tax_provision_runs where org_id=${org.orgId} and id=${runId}`)).rows[0]!;
+        from tax_provision_runs where org_id=${org.orgId} and id=${runId}`, "objects"))[0]!;
       assert.deepEqual(state,{status:"draft",journals:phase === "replacement" ? 1 : 0});
       if (priorRunId) {
         const original = (await db.execute<{ status: string; entry_status: string }>(sql`
           select r.status,e.status as entry_status from tax_provision_runs r
           join journal_entries e on e.id=r.journal_entry_id and e.org_id=r.org_id
-          where r.org_id=${org.orgId} and r.id=${priorRunId}`)).rows[0]!;
+          where r.org_id=${org.orgId} and r.id=${priorRunId}`, "objects"))[0]!;
         assert.deepEqual(original,{status:"posted",entry_status:"posted"},"refusal cannot supersede or reverse prior history");
       }
       await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
@@ -1769,11 +1769,11 @@ test("per-entity overrides keyed by an unknown or out-of-scope subsidiary refuse
     // Both rejections wrote nothing: exactly one run (the in-scope one) and
     // one audit row exist for this org's provision history.
     const runs = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`));
-    assert.equal(runs.rows[0]!.n, 1);
+      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`, "objects"));
+    assert.equal(runs[0]!.n, 1);
     const audits = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
-    assert.equal(audits.rows[0]!.n, 1);
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
+    assert.equal(audits[0]!.n, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1800,9 +1800,9 @@ test("reposting a superseded run refuses by status instead of returning its reve
     assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
 
     const ledgersBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`));
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`, "objects"));
     const auditsBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
 
     // Retrying the superseded run refuses by status and names the remedy —
     // it must NOT hand back v1's reversed entry as an effective posting.
@@ -1819,17 +1819,17 @@ test("reposting a superseded run refuses by status instead of returning its reve
 
     // No ledger or audit mutation, and v2 stays authoritative.
     const ledgersAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`));
-    assert.equal(ledgersAfter.rows[0]!.n, ledgersBefore.rows[0]!.n);
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`, "objects"));
+    assert.equal(ledgersAfter[0]!.n, ledgersBefore[0]!.n);
     const auditsAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
-    assert.equal(auditsAfter.rows[0]!.n, auditsBefore.rows[0]!.n);
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
+    assert.equal(auditsAfter[0]!.n, auditsBefore[0]!.n);
     assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
     const current = (await getProvisionRun(org.orgId, runId2))!;
     assert.equal(current.status, "posted");
     const live = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where id = ${current.journalEntryId}`));
-    assert.equal(live.rows[0]!.status, "posted");
+      select status from journal_entries where id = ${current.journalEntryId}`, "objects"));
+    assert.equal(live[0]!.status, "posted");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1867,11 +1867,11 @@ test("negative loss benefits and valuation allowances refuse by field name with 
 
     // Both refusals happened before any draft or audit row could exist.
     const runs = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`));
-    assert.equal(runs.rows[0]!.n, 0);
+      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`, "objects"));
+    assert.equal(runs[0]!.n, 0);
     const audits = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
-    assert.equal(audits.rows[0]!.n, 0);
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`, "objects"));
+    assert.equal(audits[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1894,10 +1894,10 @@ test("restricted reads expose only a visible entity's journal entry, never the h
     assert.ok(stored.journalEntryId);
     const entries = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
       select id, subsidiary_id from journal_entries
-       where org_id = ${org.orgId} and origin = 'tax_provision' and status = 'posted'`));
-    assert.equal(entries.rows.length, 2);
-    const entryOf = new Map(entries.rows.map((e) => [e.subsidiary_id, e.id]));
-    const storedEntrySub = entries.rows.find((e) => e.id === stored.journalEntryId)!.subsidiary_id;
+       where org_id = ${org.orgId} and origin = 'tax_provision' and status = 'posted'`, "objects"));
+    assert.equal(entries.length, 2);
+    const entryOf = new Map(entries.map((e) => [e.subsidiary_id, e.id]));
+    const storedEntrySub = entries.find((e) => e.id === stored.journalEntryId)!.subsidiary_id;
     const otherSub = storedEntrySub === org.subsidiaryId ? branch : org.subsidiaryId;
 
     // Hidden first entity, visible second: figures AND journal id are B-only.
@@ -1989,8 +1989,8 @@ test("restricted provision projections expose only allowlisted payload and linea
     assert.ok("priorPostedRunId" in fullLineage);
     assert.ok("priorPostedSnapshotHash" in fullLineage);
     const stored = (await db.execute<{ snapshot_hash: string }>(sql`
-      select snapshot_hash from tax_provision_runs where org_id = ${org.orgId} and id = ${runId}`));
-    assert.equal(full.snapshotHash, stored.rows[0]!.snapshot_hash);
+      select snapshot_hash from tax_provision_runs where org_id = ${org.orgId} and id = ${runId}`, "objects"));
+    assert.equal(full.snapshotHash, stored[0]!.snapshot_hash);
 
     // Restricted callers see exactly the allowlisted fields: adding a payload
     // or lineage field without updating this list fails here on purpose.
@@ -2068,7 +2068,7 @@ test("prepared adjustments preserve reasoned audit evidence through filing and l
     const prepared = await prepareTaxFiling(org.orgId, userId, result, inputs);
     const frozen = (await db.execute<{ adjustments: unknown[]; snapshot_hash: string; snapshot_version: number; boxes: unknown[] }>(sql`
       select adjustments, snapshot_hash, snapshot_version, boxes from tax_filings
-       where org_id = ${org.orgId} and id = ${prepared.id}`)).rows[0]!;
+       where org_id = ${org.orgId} and id = ${prepared.id}`, "objects"))[0]!;
     assert.equal(frozen.snapshot_version, 3);
     assert.equal(frozen.adjustments.length, 2);
     for (let index = 0; index < inputs.length; index++) {
@@ -2077,9 +2077,9 @@ test("prepared adjustments preserve reasoned audit evidence through filing and l
       assert.equal(entry.enteredBy, userId);
       assert.ok(!Number.isNaN(Date.parse(entry.enteredAt)));
     }
-    const audits = (await db.execute<{ actor_id: string; changes: { before?: unknown; after?: unknown; adjustment?: unknown } }>(sql`
+    const audits = await db.execute<{ actor_id: string; changes: { before?: unknown; after?: unknown; adjustment?: unknown } }>(sql`
       select actor_id, changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id} and action = 'insert'`)).rows;
+       where org_id = ${org.orgId} and table_name = 'tax_filings' and row_id = ${prepared.id} and action = 'insert'`, "objects");
     const adjustmentAudits = audits.filter((audit) => audit.changes.adjustment);
     assert.equal(adjustmentAudits.length, 2);
     for (const audit of adjustmentAudits) {
@@ -2096,7 +2096,7 @@ test("prepared adjustments preserve reasoned audit evidence through filing and l
     assert.equal(next.version, prepared.version + 1);
     const preserved = (await db.execute<{ adjustments: unknown[]; snapshot_hash: string; snapshot_version: number; boxes: unknown[] }>(sql`
       select adjustments, snapshot_hash, snapshot_version, boxes from tax_filings
-       where org_id = ${org.orgId} and id = ${prepared.id}`)).rows[0]!;
+       where org_id = ${org.orgId} and id = ${prepared.id}`, "objects"))[0]!;
     assert.deepEqual(preserved, frozen);
     // Earlier amount-map snapshots keep their own replay and fingerprint schema.
     const legacy = await prepareFiling(org, userId, { snapshotVersion: 2, adjustments: { "104": "3018.8400" } });

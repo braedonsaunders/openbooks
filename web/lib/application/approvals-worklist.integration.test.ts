@@ -80,8 +80,8 @@ async function seed(orgId: string, bankId: string, actors: { submitterId: string
 }
 
 async function docStatus(id: string): Promise<string | null> {
-  const r = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`));
-  return r.rows[0]?.status ?? null;
+  const r = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`, "objects"));
+  return r[0]?.status ?? null;
 }
 
 test("worklist unifies gates, gateless documents, and payment runs; vitals counts the same set", { skip: !DB }, async () => {
@@ -223,7 +223,7 @@ test("decide paths resolve each subject kind with separation of duties", { skip:
     await withOrgContext(org.orgId, () => decideApproval(approver, {
       gateId: runGate.id, decision: "approved", idempotencyKey: randomUUID(),
     }));
-    const runStatus = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`select status from payment_runs where id = ${ids.runId}`))).rows[0]?.status;
+    const runStatus = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`select status from payment_runs where id = ${ids.runId}`, "objects")))[0]?.status;
     assert.equal(runStatus, "approved");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -45,8 +45,7 @@ export async function lockPrebillForLifecycle(
   id: string,
   scope: SubsidiaryScope,
 ): Promise<LockedPrebillHeader> {
-  const header = (
-    await tx.execute<LockedPrebillHeader>(sql`
+  const header = (await tx.execute<LockedPrebillHeader>(sql`
     select worksheet.status, worksheet.submitted_by, worksheet.created_by, worksheet.project_id,
            worksheet.period_end::text as period_end, worksheet.custom
       from prebills worksheet
@@ -54,8 +53,7 @@ export async function lockPrebillForLifecycle(
      where worksheet.org_id = ${orgId} and worksheet.id = ${id}
        ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
      for update of worksheet
-  `)
-  ).rows[0]
+  `, 'objects'))[0]
   if (!header) throw new PreBillingError('Prebill not found', 404)
   try {
     await lockProjectForScope(tx, orgId, header.project_id, scope)
@@ -80,8 +78,7 @@ async function assertPrebillApprovable(
   header: LockedPrebillHeader,
   scope: SubsidiaryScope,
 ): Promise<void> {
-  const current = (
-    await tx.execute<{
+  const current = (await tx.execute<{
       bill_lines: number
       proposed_total: string
       unsupported_adjustments: number
@@ -96,8 +93,7 @@ async function assertPrebillApprovable(
            )::int as unsupported_adjustments
       from prebill_lines
      where org_id = ${orgId} and prebill_id = ${id}
-  `)
-  ).rows[0]!
+  `, 'objects'))[0]!
   if (current.bill_lines === 0)
     throw new PreBillingError(
       'A prebill must contain at least one billable line',
@@ -139,13 +135,11 @@ async function openApprovalGateCount(
   id: string,
 ): Promise<number> {
   return (
-    (
-      await tx.execute<{ n: number }>(sql`
+    (await tx.execute<{ n: number }>(sql`
     select count(*)::int as n from flow_gates
      where org_id = ${orgId} and subject_kind = ${PREBILL_SUBJECT_KIND}
        and subject_id = ${id} and status in ('pending', 'escalated')
-  `)
-    ).rows[0]?.n ?? 0
+  `, 'objects'))[0]?.n ?? 0
   )
 }
 
@@ -245,7 +239,7 @@ async function approvePrebillInTx(
   if (header.status !== 'review')
     throw new PreBillingError(`Cannot approve a ${header.status} prebill`)
   await assertPrebillApprovable(tx, orgId, id, header, scope)
-  const updated = await tx.execute(sql`
+  const updated = await tx.execute<never>(sql`
     update prebills
        set status = 'approved', approved_at = now(), approved_by = ${actorId},
            updated_at = now(), updated_by = ${actorId}
@@ -294,7 +288,7 @@ export async function releasePrebillApproval(
     if (header.status !== 'review')
       throw new PreBillingError(`Cannot return a ${header.status} prebill`)
     const reason = comment?.trim() || 'Returned in approval flow'
-    const returned = await tx.execute(sql`
+    const returned = await tx.execute<Record<string, unknown>>(sql`
       update prebills set status = 'draft', updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${id} and status='review' returning id
     `)

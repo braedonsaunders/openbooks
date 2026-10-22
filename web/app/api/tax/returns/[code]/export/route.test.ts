@@ -109,9 +109,10 @@ stubModules({
           .join('')
       }
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           if (sqlText(query).includes('official_pdf_file_id')) {
-            return { rows: [{ official_pdf_file_id: 'file-1' }] }
+            return inMode({ rows: [{ official_pdf_file_id: 'file-1' }] })
           }
           throw new Error('unexpected database query')
         },

@@ -105,7 +105,7 @@ async function interviewRequisition(
       from hrm_interviews i
       join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
      where i.org_id = ${orgId} and i.id = ${interviewId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
   }
@@ -113,10 +113,10 @@ async function interviewRequisition(
 }
 
 async function panelPartyIds(exec: SqlExecutor, orgId: string, interviewId: string): Promise<string[]> {
-  const rows = (await exec.execute<{ partyId: string }>(sql`
+  const rows = await exec.execute<{ partyId: string }>(sql`
     select party_id as "partyId" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} order by party_id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => row.partyId);
 }
 
@@ -129,7 +129,7 @@ async function panelFocusAttributeIds(
   const row = (await exec.execute<{ focusAttributeIds: string[] | null }>(sql`
     select focus_attribute_ids as "focusAttributeIds" from hrm_interview_panel
      where org_id = ${orgId} and interview_id = ${interviewId} and party_id = ${partyId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.focusAttributeIds ?? null;
 }
 
@@ -140,10 +140,10 @@ async function partyDisplayNames(
 ): Promise<Map<string, string>> {
   const names = new Map<string, string>();
   if (partyIds.length === 0) return names;
-  const rows = (await exec.execute<{ id: string; name: string }>(sql`
+  const rows = await exec.execute<{ id: string; name: string }>(sql`
     select id, display_name as name from parties
      where org_id = ${orgId} and id = any(${pgUuidArray(partyIds)}::uuid[])
-  `)).rows;
+  `, "objects");
   for (const row of rows) names.set(row.id, row.name);
   return names;
 }
@@ -193,7 +193,7 @@ export async function ensurePanelScorecards(query: {
         -- Rescheduling retains the existing interviewer scorecard, including any submitted verdict.
         on conflict do nothing
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       // on conflict do nothing is load-bearing here, not a dropped write:
       // ensure runs on every schedule/reschedule, and an existing
       // scorecard — especially a submitted verdict — must never be reset
@@ -247,7 +247,7 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
         from hrm_scorecards
        where org_id = ${orgId} and interview_id = ${interviewId}
          and interviewer_party_id = ${person.partyId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!card) {
       throw new RecruitingError(
         "NOT_FOUND",
@@ -319,7 +319,7 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
         on conflict (org_id, scorecard_id, attribute_id)
         do update set rating_key = excluded.rating_key, updated_by = excluded.updated_by, updated_at = now()
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!written) {
         throw new RecruitingError("REFUSED", "the rating was not stored — no row was written; retry the request");
       }
@@ -333,17 +333,17 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
       returning id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
                 overall, submitted_at as "submittedAt",
                 private_notes as "privateNotes", shared_notes as "sharedNotes"
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError(
         "REFUSED",
         "this scorecard was submitted concurrently — the first submission stands; reload and read the recorded verdict",
       );
     }
-    const allRatings = (await db.execute<RatingRow>(sql`
+    const allRatings = await db.execute<RatingRow>(sql`
       select scorecard_id as "scorecardId", attribute_id as "attributeId", rating_key as "ratingKey", note
         from hrm_scorecard_ratings where org_id = ${orgId} and scorecard_id = ${card.id}
-    `)).rows;
+    `, "objects");
     const names = await partyDisplayNames(db, orgId, [person.partyId]);
     return toDTO(updated, allRatings, names, true);
   });
@@ -401,21 +401,21 @@ export async function readScorecardsForInterview(query: ScorecardReadQuery): Pro
       // non-participants.
       return { mine: null, others: [], blinded: true };
     }
-    const cards = (await db.execute<ScorecardRow>(sql`
+    const cards = await db.execute<ScorecardRow>(sql`
       select id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
              overall, submitted_at as "submittedAt",
              private_notes as "privateNotes", shared_notes as "sharedNotes"
         from hrm_scorecards
        where org_id = ${orgId} and interview_id = ${interviewId}
        order by interviewer_party_id
-    `)).rows;
-    const ratings = (await db.execute<RatingRow>(sql`
+    `, "objects");
+    const ratings = await db.execute<RatingRow>(sql`
       select r.scorecard_id as "scorecardId", r.attribute_id as "attributeId",
              r.rating_key as "ratingKey", r.note
         from hrm_scorecard_ratings r
         join hrm_scorecards s on s.org_id = r.org_id and s.id = r.scorecard_id
        where r.org_id = ${orgId} and s.interview_id = ${interviewId}
-    `)).rows;
+    `, "objects");
     const names = await partyDisplayNames(
       db,
       orgId,
@@ -471,21 +471,21 @@ export async function scorecardSummary(query: ScorecardReadQuery): Promise<Score
     if (!privileged) {
       await requireHrmRecruitingRead(db, orgId, actorId, chain.requisitionId);
     }
-    const cards = (await db.execute<ScorecardRow>(sql`
+    const cards = await db.execute<ScorecardRow>(sql`
       select id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
              overall, submitted_at as "submittedAt",
              private_notes as "privateNotes", shared_notes as "sharedNotes"
         from hrm_scorecards
        where org_id = ${orgId} and interview_id = ${interviewId}
        order by interviewer_party_id
-    `)).rows;
-    const ratings = (await db.execute<RatingRow>(sql`
+    `, "objects");
+    const ratings = await db.execute<RatingRow>(sql`
       select r.scorecard_id as "scorecardId", r.attribute_id as "attributeId",
              r.rating_key as "ratingKey", r.note
         from hrm_scorecard_ratings r
         join hrm_scorecards s on s.org_id = r.org_id and s.id = r.scorecard_id
        where r.org_id = ${orgId} and s.interview_id = ${interviewId}
-    `)).rows;
+    `, "objects");
     const names = await partyDisplayNames(
       db,
       orgId,

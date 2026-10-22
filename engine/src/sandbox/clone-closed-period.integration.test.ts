@@ -45,7 +45,7 @@ async function ledgerCounts(orgId: string) {
     select (select count(*)::int from documents where org_id = ${orgId}) as documents,
            (select count(*)::int from document_lines where org_id = ${orgId}) as lines,
            (select count(*)::int from journal_entries where org_id = ${orgId}) as entries
-  `)).rows[0]!;
+  `, "objects"))[0]!;
 }
 
 /**
@@ -68,8 +68,8 @@ async function runTeardowns(...steps: Array<() => Promise<unknown>>): Promise<vo
 /** Delete every sandbox cut from a production org. Loud: a missed row leaks
  * an org behind orgs_sandbox_of_fkey, so failures propagate. */
 async function deleteSandboxesFor(productionOrgId: string): Promise<void> {
-  const rows = (await db.execute<{ id: string }>(sql`
-    select id from sandboxes where production_org_id = ${productionOrgId}`)).rows;
+  const rows = await db.execute<{ id: string }>(sql`
+    select id from sandboxes where production_org_id = ${productionOrgId}`, "objects");
   for (const row of rows) await deleteSandbox(row.id);
 }
 
@@ -101,19 +101,19 @@ test("a full sandbox clones posted history sitting in a closed GL period", { ski
     // every cloned line still belongs to a cloned entry.
     const locks = (await db.execute<{ states: string[] }>(sql`
       select array_agg(distinct state) as states from period_locks
-       where org_id = ${created.sandboxOrgId} and module = 'gl'`)).rows[0]!;
+       where org_id = ${created.sandboxOrgId} and module = 'gl'`, "objects"))[0]!;
     assert.ok(locks.states?.includes("closed"), "the clone carries the closed GL lock");
     const orphaned = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_lines l
        where l.org_id = ${created.sandboxOrgId}
-         and not exists (select 1 from journal_entries e where e.id = l.entry_id and e.org_id = l.org_id)`)).rows[0]!;
+         and not exists (select 1 from journal_entries e where e.id = l.entry_id and e.org_id = l.org_id)`, "objects"))[0]!;
     assert.equal(orphaned.n, 0);
 
     // The clone's existing audit evidence records the authority it ran under.
-    const evidence = (await db.execute<{ production: string; authority: string; scope: string }>(sql`
+    const evidence = await db.execute<{ production: string; authority: string; scope: string }>(sql`
       select changes->>'productionOrgId' as production, changes->>'authority' as authority, changes->>'scope' as scope
         from audit_log
-       where org_id = ${created.sandboxOrgId} and changes->>'mode' = 'sandbox_clone_authority'`)).rows;
+       where org_id = ${created.sandboxOrgId} and changes->>'mode' = 'sandbox_clone_authority'`, "objects");
     assert.equal(evidence.length, 1);
     assert.equal(evidence[0]!.production, org.orgId);
     assert.equal(evidence[0]!.authority, "openbooks.clone");
@@ -173,16 +173,16 @@ test("a clone carries recognized reporting-book history across a closed assets p
 
     const sourceStamp = (await db.execute<{ stamp: string }>(sql`
       select non_gl_recognized_at::text as stamp
-        from depreciation_schedule_lines where org_id = ${org.orgId} and id = ${lineId}`)).rows[0]!.stamp;
+        from depreciation_schedule_lines where org_id = ${org.orgId} and id = ${lineId}`, "objects"))[0]!.stamp;
 
     const created = await createSandbox({
       productionOrgId: org.orgId, name: `ClosedDepr ${randomUUID()}`, tier: "full", masked: false,
     });
     sandboxId = created.sandboxId;
-    const carried = (await db.execute<{ posted: string; recorded: boolean; stamp: string }>(sql`
+    const carried = await db.execute<{ posted: string; recorded: boolean; stamp: string }>(sql`
       select posted_amount::text as posted, non_gl_recognized_at is not null as recorded,
              non_gl_recognized_at::text as stamp
-        from depreciation_schedule_lines where org_id = ${created.sandboxOrgId}`)).rows;
+        from depreciation_schedule_lines where org_id = ${created.sandboxOrgId}`, "objects");
     assert.equal(carried.length, 1);
     assert.equal(carried[0]!.posted, "100.0000");
     assert.equal(carried[0]!.recorded, true);
@@ -204,7 +204,7 @@ test("cloned posted history stays immutable and the closed period stays closed",
     // One open period besides the closed one, so the control posting below
     // has somewhere legal to land inside the clone.
     const calendar = (await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id;
+      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!.id;
     const openPeriodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -218,7 +218,7 @@ test("cloned posted history stays immutable and the closed period stays closed",
     const clone = created.sandboxOrgId;
     const cloneActor = await createScratchUser(clone, `CloneWriter ${randomUUID()}`, "accountant");
     const line = (await db.execute<{ id: string; entry_id: string }>(sql`
-      select id, entry_id from journal_lines where org_id = ${clone} limit 1`)).rows[0]!;
+      select id, entry_id from journal_lines where org_id = ${clone} limit 1`, "objects"))[0]!;
 
     // UPDATE of a cloned posted line stays refused even though the clone ran
     // under the authority: the flag is transaction-local to the copy.
@@ -236,15 +236,15 @@ test("cloned posted history stays immutable and the closed period stays closed",
     // A normal posting into the carried closed period stays refused.
     const draftId = randomUUID();
     const clonePeriod = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${clone} and fiscal_year = 2026 and period_number = 7`)).rows[0]!.id;
+      select id from accounting_periods where org_id = ${clone} and fiscal_year = 2026 and period_number = 7`, "objects"))[0]!.id;
     const cloneBook = (await db.execute<{ id: string }>(sql`
-      select id from accounting_books where org_id = ${clone} and is_primary`)).rows[0]!.id;
+      select id from accounting_books where org_id = ${clone} and is_primary`, "objects"))[0]!.id;
     const cloneSub = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${clone} limit 1`)).rows[0]!.id;
+      select id from subsidiaries where org_id = ${clone} limit 1`, "objects"))[0]!.id;
     const cloneBank = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${clone} and number = '1000'`)).rows[0]!.id;
+      select id from accounts where org_id = ${clone} and number = '1000'`, "objects"))[0]!.id;
     const cloneRevenue = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${clone} and number = '4000'`)).rows[0]!.id;
+      select id from accounts where org_id = ${clone} and number = '4000'`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
       values (${draftId}, ${clone}, ${cloneBook}, ${cloneSub}, 'FENCE-DRAFT', '2026-07-15', ${clonePeriod}, 'draft', 'manual')`);
@@ -261,7 +261,7 @@ test("cloned posted history stays immutable and the closed period stays closed",
     // Control: the clone is an ordinary working org — an open-period posting
     // succeeds, proving the authority did not leak past the copy.
     const livePeriod = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${clone} and fiscal_year = 2026 and period_number = 8`)).rows[0]!.id;
+      select id from accounting_periods where org_id = ${clone} and fiscal_year = 2026 and period_number = 8`, "objects"))[0]!.id;
     const liveId = randomUUID();
     await db.execute(sql`
       insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
@@ -272,7 +272,7 @@ test("cloned posted history stays immutable and the closed period stays closed",
              (${clone}, ${liveId}, 2, ${cloneRevenue}, ${cloneSub}, '-50.0000', 'CAD', '-50.0000', '1', '')`);
     await db.execute(sql`update journal_entries set status = 'posted', posted_by = ${cloneActor} where id = ${liveId}`);
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${liveId}`)).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${liveId}`, "objects"))[0]!.status,
       "posted",
     );
   } finally {
@@ -290,7 +290,7 @@ test("the clone flag outside a clone transaction unlocks nothing", { skip: !DB }
     await postCustomerInvoice(org, actor, `SCOPE-${randomUUID()}`);
     await closeGl(org.orgId, org.periodId, org.bookId, actor, "OM-13: flag-scope probe");
     const entry = (await db.execute<{ id: string }>(sql`
-      select id from journal_entries where org_id = ${org.orgId} and status = 'posted' limit 1`)).rows[0]!.id;
+      select id from journal_entries where org_id = ${org.orgId} and status = 'posted' limit 1`, "objects"))[0]!.id;
     // Party-attribution moves are the posted-line writes the closed-period fence governs (0380 admits only these).
     const otherParty = randomUUID();
     await db.execute(sql`
@@ -331,7 +331,7 @@ test("a sample company cuts from a closed-period template and numbering continue
   // sample invoices sit in a closed GL period promotes, clones via
   // createSampleCompany, and the first live invoice continues past the
   // highest sample number instead of restarting at INV-00001.
-  const baselineOrgIds = new Set((await db.execute<{ id: string }>(sql`select id from orgs`)).rows.map((row) => row.id)); // recycled pool slots predate this test; their rows persist by design
+  const baselineOrgIds = new Set((await db.execute<{ id: string }>(sql`select id from orgs`, "objects")).map((row) => row.id)); // recycled pool slots predate this test; their rows persist by design
   const source = await createScratchOrg();
   const memberOrg = await createScratchOrg();
   let previewOrgId: string | null = null;
@@ -352,7 +352,7 @@ test("a sample company cuts from a closed-period template and numbering continue
         values (${randomUUID()}, ${source.orgId}, 'customer', ${name}, true, '{}'::jsonb)`);
     }
     const calendar = (await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where id = ${source.periodId}`)).rows[0]!.id;
+      select fiscal_calendar_id as id from accounting_periods where id = ${source.periodId}`, "objects"))[0]!.id;
     for (const [year, num, name, start, end] of [
       [2026, 6, "2026-06", "2026-06-01", "2026-06-30"],
       [2026, 8, "2026-08", "2026-08-01", "2026-08-31"],
@@ -388,10 +388,10 @@ test("a sample company cuts from a closed-period template and numbering continue
     assert.equal(promoted.coverage.postedEntries, 4);
 
     const posted = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${created.orgId} and status = 'posted'`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${created.orgId} and status = 'posted'`, "objects"))[0]!.n;
     assert.equal(posted, 4);
     const closedLocks = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from period_locks where org_id = ${created.orgId} and module = 'gl' and state = 'closed'`)).rows[0]!.n;
+      select count(*)::int as n from period_locks where org_id = ${created.orgId} and module = 'gl' and state = 'closed'`, "objects"))[0]!.n;
     assert.ok(closedLocks >= 1, "the sample carries the template's closed period");
 
     // OM-01 follow-through: the next live invoice continues the sample run.
@@ -416,10 +416,10 @@ test("a sample company cuts from a closed-period template and numbering continue
   // any org cloned from them (sample company, promoted template), nor their sandbox rows.
   const ownedOrgIds = [source.orgId, memberOrg.orgId, templateOrgId, previewOrgId]
     .filter((id): id is string => id !== null && !baselineOrgIds.has(id));
-  const leakedOrgs = (await db.execute<{ id: string; name: string }>(sql`
+  const leakedOrgs = await db.execute<{ id: string; name: string }>(sql`
     select id, name from orgs
      where id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])
-        or sandbox_of = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])`)).rows;
+        or sandbox_of = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])`, "objects");
   assert.deepEqual(
     leakedOrgs.map((row) => row.name).sort(),
     [],
@@ -428,6 +428,6 @@ test("a sample company cuts from a closed-period template and numbering continue
   const leakedSandboxes = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from sandboxes
      where org_id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])
-        or production_org_id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])`)).rows[0]!.n;
+        or production_org_id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])`, "objects"))[0]!.n;
   assert.equal(leakedSandboxes, 0, "teardown leaked sandbox rows");
 });

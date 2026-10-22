@@ -50,11 +50,9 @@ async function withGatedDocument(
       actors.submitterId,
     );
     assert.equal(res.gated, true, "submit created a gate");
-    const gate = (
-      await db.execute<{ id: string }>(sql`
+    const gate = (await db.execute<{ id: string }>(sql`
         select id from flow_gates where subject_id = ${docId} order by created_at
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
     await fn(org, actors, docId, gate);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -62,16 +60,14 @@ async function withGatedDocument(
 }
 
 async function decisionAudit(orgId: string, gateId: string) {
-  return (
-    await db.execute(sql`
+  return await db.execute(sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'flow_gates'
          and row_id = ${gateId}
        order by at, id
-    `)
-  ).rows;
+    `, "objects");
 }
 
 test(
@@ -167,11 +163,9 @@ test(
       );
       assert.equal((await decisionAudit(org.orgId, gateId)).length, 0);
       assert.equal(
-        (
-          await db.execute<{ status: string }>(
-            sql`select status from flow_gates where org_id=${org.orgId} and id=${gateId}`,
-          )
-        ).rows[0]?.status,
+        (await db.execute<{ status: string }>(
+            sql`select status from flow_gates where org_id=${org.orgId} and id=${gateId}`, "objects",
+          ))[0]?.status,
         "pending",
       );
     });

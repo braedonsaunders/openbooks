@@ -65,7 +65,7 @@ export async function applyBankCashInput(
   const entity = (await tx.execute<{ id: string; name: string; country: string | null; baseCurrency: string | null }>(sql`
     select id::text, name, country, base_currency as "baseCurrency" from subsidiaries
      where org_id=${orgId} and id=${run.subsidiary_id} and is_active for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!entity) throw new PayrollError("the pay run's legal entity is missing or inactive");
   const runContext = resolvePayrollRunContext({ payDate: run.pay_date, subsidiary: entity, runCurrency: run.currency });
   if (runContext.taxYear !== run.tax_year) {
@@ -93,7 +93,7 @@ export async function applyBankCashInput(
        and prof.pay_schedule_id=${run.pay_schedule_id} and prof.is_active
        and (p.subsidiary_id is null or p.subsidiary_id=${run.subsidiary_id})
      for share of prof, p, e, schedule
-  `)).rows[0];
+  `, "objects"))[0];
   if (!profile) {
     throw new PayrollError("this employee has no active payroll profile and employment on the run's legal entity and schedule — review the employment, legal entity and pay schedule before recording a bank cash input");
   }
@@ -105,7 +105,7 @@ export async function applyBankCashInput(
   if (!profile.eligible || profile.excluded) {
     throw new PayrollError("this employee is outside the pay run's payable roster — review employment dates and include the employee before recording a bank cash input");
   }
-  const bankPlans = (await tx.execute<{
+  const bankPlans = await tx.execute<{
     id: string; unit: string; kind: string; payment_kind: string; unit_of_measure: string | null; country: string | null;
     payout_component_id: string | null; deposit_component_id: string | null;
   }>(sql`
@@ -118,7 +118,7 @@ export async function applyBankCashInput(
        and (plan.payout_component_id=${mutation.componentId} or plan.deposit_component_id=${mutation.componentId})
      order by plan.id
      for share of plan, component
-  `)).rows;
+  `, "objects");
   const plan = bankPlans[0];
   const componentMatchesDirection = plan !== undefined && (cmp(hours, "0") < 0
     ? plan.deposit_component_id === mutation.componentId
@@ -142,7 +142,7 @@ export async function applyBankCashInput(
     select id::text, org_id::text, pay_run_document_id::text, employee_party_id::text,
            component_id::text, amount::text, hours::text, note, adjustment_type, replace_component, earned_from::text, earned_to::text
       from pay_run_adjustments where id=${requestId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (prior && prior.org_id !== orgId) throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
   if (prior) {
     const evidence = parseBankCashInputEvidence(prior.note);
@@ -163,7 +163,7 @@ export async function applyBankCashInput(
     select 1 from audit_log
      where org_id=${orgId} and table_name='pay_run_adjustments' and row_id=${requestId}
      limit 1
-  `)).rows.length > 0;
+  `, "objects")).length > 0;
   if (historicalUse) throw new PayRunAdjustmentIdempotencyConflict("corrected-request");
   const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
     insert into pay_run_adjustments
@@ -173,7 +173,7 @@ export async function applyBankCashInput(
       (${requestId}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
        ${mutation.componentId}, ${amount}, ${hours}, false, ${note}, ${actorId}, ${actorId})
     returning *
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw new PayrollError("bank cash input was not saved");
   changes.push({ id: inserted.id, before: null, after: inserted });
   return { changes };
@@ -219,7 +219,7 @@ export async function applyEmployerLevyAdjustment(
   const entity = (await tx.execute<{ id: string; name: string; country: string | null; baseCurrency: string | null }>(sql`
     select id::text, name, country, base_currency as "baseCurrency" from subsidiaries
      where org_id=${orgId} and id=${run.subsidiary_id} and is_active for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!entity) throw new PayrollError("the pay run's legal entity is missing or inactive");
   const runContext = resolvePayrollRunContext({ payDate: run.pay_date, subsidiary: entity, runCurrency: run.currency });
   if (runContext.country !== EMPLOYER_LEVY_PROGRAMS[mutation.programKey].country || runContext.taxYear !== run.tax_year) {
@@ -247,7 +247,7 @@ export async function applyEmployerLevyAdjustment(
        and prof.pay_schedule_id=${run.pay_schedule_id} and prof.is_active
        and (p.subsidiary_id is null or p.subsidiary_id=${run.subsidiary_id})
      for share of prof, p, e, schedule
-  `)).rows[0];
+  `, "objects"))[0];
   if (!profile) {
     throw new PayrollError("this employee has no active payroll profile and employment on the run's legal entity and schedule — review the employment, legal entity and pay schedule before recording a levy adjustment");
   }
@@ -272,23 +272,23 @@ export async function applyEmployerLevyAdjustment(
     const group = (await tx.execute<{ rate_percent: string | null; is_active: boolean }>(sql`
       select rate_percent::text, is_active from worker_comp_groups
        where org_id=${orgId} and id=${workerCompGroupId} for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!group || !group.is_active || group.rate_percent === null || cmp(group.rate_percent, "0") < 0) {
       throw new PayrollError("the named worker-compensation group is missing, inactive or has no configured rate — review it in Company Setup → Worker compensation groups before recording a WCB/WSIB adjustment");
     }
     const datedGroupId = (await tx.execute<{ id: string | null }>(sql`
       select public.payroll_worker_comp_group_at(${orgId}::uuid, ${mutation.employeePartyId}::uuid, ${run.pay_date}::date)::text as id
-    `)).rows[0]?.id ?? null;
+    `, "objects"))[0]?.id ?? null;
     if (datedGroupId !== workerCompGroupId) {
       throw new PayrollError("the named worker-compensation group is not this employee's group on the run's pay date — record the adjustment against the group that assessed the issued premium, on a run dated while the employee belonged to it");
     }
   }
-  const levyComponents = (await tx.execute<{ id: string }>(sql`
+  const levyComponents = await tx.execute<{ id: string }>(sql`
     select id::text from pay_components
      where org_id=${orgId} and country='CA' and system_key=${program.systemKey}
        and kind='employer_contribution' and is_active
      order by id for share
-  `)).rows;
+  `, "objects");
   if (levyComponents.length !== 1) {
     throw new PayrollError(`configure exactly one active Canadian ${program.label} employer-contribution component before recording a levy adjustment`);
   }
@@ -304,7 +304,7 @@ export async function applyEmployerLevyAdjustment(
        and note ~ '"kind"[[:space:]]*:[[:space:]]*"employer_levy_adjustment"'
        and strpos(note, ${JSON.stringify(sourceKey)}) > 0
      order by id for update
-  `)).rows.filter((row) => parseEmployerLevyAdjustmentEvidence(row.note)?.sourceKey === sourceKey);
+  `, "objects")).filter((row) => parseEmployerLevyAdjustmentEvidence(row.note)?.sourceKey === sourceKey);
   const foreignSource = sameSource.find((row) => row.id !== requestId);
   if (foreignSource) {
     throw new PayRunAdjustmentIdempotencyConflict("source-recorded");
@@ -318,7 +318,7 @@ export async function applyEmployerLevyAdjustment(
     select id::text, org_id::text, pay_run_document_id::text, employee_party_id::text,
            component_id::text, amount::text, hours::text, note, adjustment_type, replace_component, earned_from::text, earned_to::text
       from pay_run_adjustments where id=${requestId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (prior && prior.org_id !== orgId) throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
   if (prior) {
     const evidence = parseEmployerLevyAdjustmentEvidence(prior.note);
@@ -340,14 +340,14 @@ export async function applyEmployerLevyAdjustment(
     select 1 from audit_log
      where org_id=${orgId} and table_name='pay_run_adjustments' and row_id=${requestId}
      limit 1
-  `)).rows.length > 0;
+  `, "objects")).length > 0;
   if (historicalUse) throw new PayRunAdjustmentIdempotencyConflict("corrected-request");
-  const priorSourceEvents = (await tx.execute<{ note: string | null }>(sql`
+  const priorSourceEvents = await tx.execute<{ note: string | null }>(sql`
     select changes->'after'->>'note' as note from audit_log
      where org_id=${orgId} and table_name='pay_run_adjustments'
        and changes->'after'->>'note' ~ '"kind"[[:space:]]*:[[:space:]]*"employer_levy_adjustment"'
        and strpos(changes->'after'->>'note', ${JSON.stringify(sourceKey)}) > 0
-  `)).rows;
+  `, "objects");
   if (priorSourceEvents.some(row => parseEmployerLevyAdjustmentEvidence(row.note)?.sourceKey === sourceKey)) {
     throw new PayRunAdjustmentIdempotencyConflict("source-recorded");
   }
@@ -360,7 +360,7 @@ export async function applyEmployerLevyAdjustment(
       (${requestId}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
        ${componentId}, ${amount}, false, ${note}, ${actorId}, ${actorId})
     returning *
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw new PayrollError("employer levy adjustment was not saved");
   changes.push({ id: inserted.id, before: null, after: inserted });
   return { changes };
@@ -383,7 +383,7 @@ export async function applyDeclaredVacationAccrual(
   if (!sourceReference || sourceReference.length > 300) throw new PayrollError("declared vacation accrual source reference must contain 1 to 300 characters");
   if (!isUuid(mutation.idempotencyKey)) throw new PayrollError("declared vacation accrual needs a UUID Idempotency-Key; retry with a request key");
   const requestId = mutation.idempotencyKey.toLowerCase();
-  const planRows = (await tx.execute<{
+  const planRows = await tx.execute<{
     id: string; accrual_component_id: string | null; unit: string; direction: string;
     component_kind: string | null; component_active: boolean | null;
   }>(sql`
@@ -394,17 +394,17 @@ export async function applyDeclaredVacationAccrual(
         on component.org_id=plan.org_id and component.id=plan.accrual_component_id
      where plan.org_id=${orgId} and plan.system_key='vacation' and plan.is_active
      order by plan.id for share of plan
-  `)).rows;
+  `, "objects");
   if (planRows.length !== 1 || !planRows[0]!.accrual_component_id
     || planRows[0]!.unit !== "money" || planRows[0]!.direction !== "accrue"
     || planRows[0]!.component_kind !== "employer_contribution" || planRows[0]!.component_active !== true) {
     throw new PayrollError("configure one active money-denominated vacation accrual plan with an active employer contribution component before recording a declared accrual");
   }
   const componentId = planRows[0]!.accrual_component_id;
-  const lockedComponent = (await tx.execute(sql`
+  const lockedComponent = await tx.execute(sql`
     select id from pay_components where org_id=${orgId} and id=${componentId}
       and kind='employer_contribution' and is_active for share
-  `)).rows;
+  `, "objects");
   if (lockedComponent.length !== 1) {
     throw new PayrollError("the vacation accrual component changed — reload the active vacation plan before recording a declared accrual");
   }
@@ -417,7 +417,7 @@ export async function applyDeclaredVacationAccrual(
     select id::text, org_id::text, pay_run_document_id::text, employee_party_id::text,
            component_id::text, amount::text, note
       from pay_run_adjustments where id=${requestId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (prior && prior.org_id !== orgId) throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
   if (prior) {
     const evidence = parseDeclaredVacationAccrualEvidence(prior.note);
@@ -436,13 +436,13 @@ export async function applyDeclaredVacationAccrual(
        and employee_party_id=${mutation.employeePartyId} and adjustment_type='line'
        and note ~ '"kind"[[:space:]]*:[[:space:]]*"declared_vacation_accrual"'
      limit 1 for update
-  `)).rows.length > 0;
+  `, "objects")).length > 0;
   if (alreadyRecorded) throw new PayrollError("this cheque already has a declared vacation accrual — delete that audited input before recording a corrected amount");
   const historicalUse = (await tx.execute(sql`
     select 1 from audit_log
      where org_id=${orgId} and table_name='pay_run_adjustments' and row_id=${requestId}
      limit 1
-  `)).rows.length > 0;
+  `, "objects")).length > 0;
   if (historicalUse) throw new PayRunAdjustmentIdempotencyConflict("corrected-request");
   const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
     insert into pay_run_adjustments
@@ -452,7 +452,7 @@ export async function applyDeclaredVacationAccrual(
       (${requestId}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
        ${componentId}, ${amount}, false, ${note}, ${actorId}, ${actorId})
     returning *
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw new PayrollError("declared vacation accrual was not saved");
   changes.push({ id: inserted.id, before: null, after: inserted });
   return { changes };
@@ -493,7 +493,7 @@ export async function applyIncomeTaxOverride(
   const entity = (await tx.execute<{ id: string; name: string; country: string | null; baseCurrency: string | null }>(sql`
     select id::text, name, country, base_currency as "baseCurrency" from subsidiaries
      where org_id=${orgId} and id=${run.subsidiary_id} and is_active for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!entity) throw new PayrollError("the pay run's legal entity is missing or inactive");
   const runContext = resolvePayrollRunContext({ payDate: run.pay_date, subsidiary: entity, runCurrency: run.currency });
   if (runContext.country !== CA_ISSUED_INCOME_TAX_OVERRIDE.country || runContext.taxYear !== run.tax_year) {
@@ -521,7 +521,7 @@ export async function applyIncomeTaxOverride(
        and prof.pay_schedule_id=${run.pay_schedule_id} and prof.is_active
        and (p.subsidiary_id is null or p.subsidiary_id=${run.subsidiary_id})
      for share of prof, p, e, schedule
-  `)).rows[0];
+  `, "objects"))[0];
   if (!profile) {
     throw new PayrollError("this employee has no active payroll profile and employment on the run's legal entity and schedule — review the employment, legal entity and pay schedule before recording cheque withholding");
   }
@@ -536,12 +536,12 @@ export async function applyIncomeTaxOverride(
   if (!profile.eligible || profile.excluded) {
     throw new PayrollError("this employee is outside the pay run's payable roster — review employment dates and include the employee before recording cheque withholding");
   }
-  const taxComponents = (await tx.execute<{ id: string }>(sql`
+  const taxComponents = await tx.execute<{ id: string }>(sql`
     select id::text from pay_components
      where org_id=${orgId} and country='CA' and system_key='income_tax'
        and kind='deduction' and is_active
      order by id for share
-  `)).rows;
+  `, "objects");
   if (taxComponents.length !== 1) {
     throw new PayrollError("configure exactly one active Canadian income-tax withholding component before overriding this cheque");
   }
@@ -554,18 +554,18 @@ export async function applyIncomeTaxOverride(
   const keyRow = (await tx.execute<{ id: string; org_id: string }>(sql`
     select id::text, org_id
       from pay_run_adjustments where id=${requestId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (keyRow && keyRow.org_id !== orgId) {
     throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
   }
-  const overrides = (await tx.execute<Record<string, unknown> & { id: string; component_id: string; amount: string | null; note: string | null }>(sql`
+  const overrides = await tx.execute<Record<string, unknown> & { id: string; component_id: string; amount: string | null; note: string | null }>(sql`
     select a.* from pay_run_adjustments a
       join pay_components c on c.org_id=a.org_id and c.id=a.component_id
      where a.org_id=${orgId} and a.pay_run_document_id=${documentId}
        and a.employee_party_id=${mutation.employeePartyId} and a.adjustment_type='line'
        and a.replace_component and c.system_key='income_tax'
      order by a.id for update of a
-  `)).rows;
+  `, "objects");
   if (overrides.length > 1) {
     throw new PayrollError("this employee has multiple income-tax overrides on the run — remove the duplicate adjustment before recalculating");
   }
@@ -584,12 +584,12 @@ export async function applyIncomeTaxOverride(
   // Audit snapshots prove a request key was consumed. A corrected or
   // removed input cannot be replayed from historical evidence: success
   // must resolve to the current native adjustment and request identity.
-  const historicalKeys = (await tx.execute<{ changes: Record<string, unknown> }>(sql`
+  const historicalKeys = await tx.execute<{ changes: Record<string, unknown> }>(sql`
     select changes from audit_log
      where org_id=${orgId} and table_name='pay_run_adjustments'
        and changes::text like ${`%${requestId}%`}
      order by at, id
-  `)).rows;
+  `, "objects");
   let requestKeyFound = false;
   for (const event of historicalKeys) {
     const snapshots = [event.changes?.before, event.changes?.after];
@@ -612,7 +612,7 @@ export async function applyIncomeTaxOverride(
              note=${note}, updated_by=${actorId}, updated_at=now()
        where org_id=${orgId} and pay_run_document_id=${documentId} and id=${prior.id}
       returning *
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) throw new PayrollError("income-tax override was not updated");
     changes.push({ id: updated.id, before: prior, after: updated });
   } else {
@@ -624,7 +624,7 @@ export async function applyIncomeTaxOverride(
         (${requestId}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
          ${componentId}, ${amount}, true, ${note}, ${actorId}, ${actorId})
       returning *
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) throw new PayrollError("income-tax override was not saved");
     changes.push({ id: inserted.id, before: null, after: inserted });
   }

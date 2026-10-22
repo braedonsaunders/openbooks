@@ -65,10 +65,10 @@ function friendlyUnknownKind(kind: string): string {
 export async function loadNumberSequenceKindOptions(orgId: string, executor: SqlExecutor = db): Promise<NumberSequenceKindOption[]> {
   const customTypes = await executor.execute(sql`
       select key, name from custom_record_types
-       where org_id = ${orgId} order by name`)
+       where org_id = ${orgId} order by name`, 'objects')
   const configured = await executor.execute(sql`
       select distinct document_kind from number_sequences
-       where org_id = ${orgId} order by document_kind`)
+       where org_id = ${orgId} order by document_kind`, 'objects')
   const features = await orgFeatureState(orgId, executor)
 
   const options = new Map<string, NumberSequenceKindOption>()
@@ -77,11 +77,11 @@ export async function loadNumberSequenceKindOptions(orgId: string, executor: Sql
     if (featureKey && !featureEnabled(features, featureKey)) continue
     options.set(option.value, option)
   }
-  for (const row of customTypes.rows as { key: string; name: string }[]) {
+  for (const row of customTypes as { key: string; name: string }[]) {
     const value = `custrec:${row.key}`
     options.set(value, { value, label: `Custom record — ${row.name}` })
   }
-  for (const row of configured.rows as { document_kind: string }[]) {
+  for (const row of configured as { document_kind: string }[]) {
     if (!options.has(row.document_kind)) {
       options.set(row.document_kind, {
         value: row.document_kind,

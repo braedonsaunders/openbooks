@@ -235,26 +235,24 @@ export class RefResolver {
   /** Natural key (or UUID) → the party carrying the matching active role. */
   private async resolveRolePartyId(roleTable: string, value: string): Promise<string | null> {
     if (isUuid(value)) {
-      const owned = (await db.execute(sql`
+      const owned = await db.execute<{ id: string }>(sql`
         select p.id from parties p
           join ${sql.raw(roleTable)} r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
-         where p.id = ${value} and p.org_id = ${this.orgId} limit 1`)) as {
-        rows: { id: string }[]
-      }
-      return owned.rows[0]?.id ?? null
+         where p.id = ${value} and p.org_id = ${this.orgId} limit 1`, 'objects')
+      return owned[0]?.id ?? null
     }
     // Employees also answer to their payroll number; everyone answers to the
     // party code or display name.
     const employeeNumber =
       roleTable === 'employee_roles' ? sql` or er.employee_number = ${value}` : sql``
-    const r = (await db.execute(sql`
+    const r = await db.execute<{ id: string }>(sql`
       select p.id from parties p
         join ${sql.raw(roleTable)} r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
         left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
        where p.org_id = ${this.orgId}
          and (p.short_code = ${value} or p.display_name = ${value}${employeeNumber})
-       limit 1`)) as { rows: { id: string }[] }
-    return r.rows[0]?.id ?? null
+       limit 1`, 'objects')
+    return r[0]?.id ?? null
   }
 
   /** Natural key (or UUID) → the row's UUID. Returns null if not found. */
@@ -287,12 +285,10 @@ export class RefResolver {
       const uuidCacheKey = `${target.resource}\0${value}`
       if (this.toId.has(uuidCacheKey)) return this.toId.get(uuidCacheKey)!
       const tenantFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``
-      const owned = (await db.execute(sql`
+      const owned = await db.execute<{ id: string }>(sql`
         select ${sql.raw(spec.idCol)} as id from ${sql.raw(spec.table)}
-         where ${sql.raw(spec.idCol)} = ${value}${tenantFilter} limit 1`)) as {
-        rows: { id: string }[]
-      }
-      const ownedId = owned.rows[0]?.id ?? null
+         where ${sql.raw(spec.idCol)} = ${value}${tenantFilter} limit 1`, 'objects')
+      const ownedId = owned[0]?.id ?? null
       this.toId.set(uuidCacheKey, ownedId)
       return ownedId
     }
@@ -300,7 +296,7 @@ export class RefResolver {
     const cacheKey = `${target.resource}\0${value}`
     if (this.toId.has(cacheKey)) return this.toId.get(cacheKey)!
     const orgFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``
-    let r = (await db.execute(sql`
+    let r = (await db.execute<{ id: string }>(sql`
       select ${sql.raw(spec.idCol)} as id from ${sql.raw(spec.table)}
        where ${sql.raw(spec.keyCol)} = ${value}${orgFilter} limit 1`)) as { rows: { id: string }[] }
     if (r.rows.length === 0 && target.resource === 'parties') {
@@ -342,10 +338,10 @@ export class RefResolver {
     // Labels are tenant data too: never render another org's natural key into
     // this org's export. A foreign or deleted id falls back to the UUID.
     const labelOrgFilter = spec.orgScoped ? sql` and org_id = ${this.orgId}` : sql``
-    const r = (await db.execute(sql`
+    const r = await db.execute<{ label: string | null }>(sql`
       select ${sql.raw(spec.labelExpr)} as label from ${sql.raw(spec.table)}
-       where ${sql.raw(spec.idCol)} = ${uuid}${labelOrgFilter} limit 1`)) as { rows: { label: string | null }[] }
-    const label = r.rows[0]?.label ?? null
+       where ${sql.raw(spec.idCol)} = ${uuid}${labelOrgFilter} limit 1`, 'objects')
+    const label = r[0]?.label ?? null
     this.toLabel.set(cacheKey, label)
     return label ?? uuid
   }

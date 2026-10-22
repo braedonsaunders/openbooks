@@ -176,15 +176,13 @@ test('source-deletions binds void/retain to the path connection and the already-
       reversalEntryId: null,
     })
 
-    const statuses = (
-      await db.execute<{ id: string; status: string }>(sql`
+    const statuses = await db.execute<{ id: string; status: string }>(sql`
         select id, status
           from documents
          where org_id = ${org.orgId}
            and id in (${pathDocument}, ${otherDocument})
          order by document_number
-      `)
-    ).rows
+      `, 'objects')
     assert.deepEqual(statuses, [
       { id: otherDocument, status: 'voided' },
       { id: pathDocument, status: 'approved' },

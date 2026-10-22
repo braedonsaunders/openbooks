@@ -178,8 +178,8 @@ test(
       );
       // And nothing was accrued: no stub, no SUI line anywhere.
       const stubs = (await db.execute(sql`
-        select 1 from pay_stubs where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`));
-      assert.equal(stubs.rows.length, 0);
+        select 1 from pay_stubs where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+      assert.equal(stubs.length, 0);
     } finally {
       await dropScratchOrgReporting(h.orgId);
     }
@@ -197,7 +197,7 @@ test(
       assert.equal((await db.execute(sql`insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
         values(${otherEmployerId},${h.orgId},${h.subsidiaryId},'Other US employer','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
-        returning id`)).rows.length, 1);
+        returning id`, "objects")).length, 1);
       const otherEin = await seedUsEinAccount(h.orgId, h.actorId, otherEmployerId, "98-7654321");
       const otherTxSui = await seedUsSuiAccount(h.orgId, h.actorId, "TX", {
         federalAccountId: otherEin, subsidiaryId: otherEmployerId,
@@ -255,10 +255,10 @@ test(
 
       const stubs = (await db.execute<{ factors: Record<string, string>; gross: string }>(sql`
         select factors, gross from pay_stubs
-         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`));
-      assert.equal(stubs.rows.length, 1);
-      const factors = stubs.rows[0]!.factors;
-      assert.equal(stubs.rows[0]!.gross, "7200.0000");
+         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+      assert.equal(stubs.length, 1);
+      const factors = stubs[0]!.factors;
+      assert.equal(stubs[0]!.gross, "7200.0000");
       // The persona-tied arithmetic: 6.2% / 1.45% / 0.6% capped at 42.00 on
       // the first 7,000 of gross, plus 2.7% SUI under the 9,000 base.
       assert.equal(factors.SS, "446.4000");
@@ -277,9 +277,9 @@ test(
       await commitPayRun({ orgId: h.orgId, documentId: run.documentId, actorId: h.actorId });
       const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines
-         where org_id = ${h.orgId} and document_id = ${run.documentId}`));
-      assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
-      const sutaLeg = glLines.rows.find((row) => row.account_id === h.sutaPayable);
+         where org_id = ${h.orgId} and document_id = ${run.documentId}`, "objects"));
+      assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
+      const sutaLeg = glLines.find((row) => row.account_id === h.sutaPayable);
       assert.ok(sutaLeg, "SUI liability posts to its slot account");
       assert.equal(sutaLeg!.amount, neg("194.4000"));
     } finally {
@@ -324,20 +324,20 @@ test(
       assert.equal(result.employees, 1);
       const stubs = (await db.execute<{ factors: Record<string, string>; insurable_earnings: string }>(sql`
         select factors, insurable_earnings from pay_stubs
-         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`));
-      assert.equal(stubs.rows.length, 1);
+         where org_id = ${h.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+      assert.equal(stubs.length, 1);
       // No SUI priced on the stub …
-      assert.equal(stubs.rows[0]!.factors.SUTA, "0.0000");
+      assert.equal(stubs[0]!.factors.SUTA, "0.0000");
       // … but the wages still accrue to the quarterly wage reporting.
-      assert.equal(stubs.rows[0]!.insurable_earnings, "7200.0000");
+      assert.equal(stubs[0]!.insurable_earnings, "7200.0000");
       // And no SUI line lands anywhere on the stub.
       const sutaLines = (await db.execute(sql`
         select 1 from pay_stub_lines l
           join pay_components c on c.id = l.component_id
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${h.orgId} and s.pay_run_document_id = ${run.documentId}
-           and c.system_key = 'suta'`));
-      assert.equal(sutaLines.rows.length, 0);
+           and c.system_key = 'suta'`, "objects"));
+      assert.equal(sutaLines.length, 0);
     } finally {
       await dropScratchOrgReporting(h.orgId);
     }
@@ -416,13 +416,13 @@ test(
           join pay_components c on c.id = l.component_id
           join pay_stubs s on s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-           and c.system_key = 'hsf'`));
-      assert.equal(hsfLines.rows.length, 0);
+           and c.system_key = 'hsf'`, "objects"));
+      assert.equal(hsfLines.length, 0);
       const stubs = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
-         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`));
-      assert.ok(!("HSF" in stubs.rows[0]!.factors), "no HSF factor outside QC");
-      assert.equal(stubs.rows[0]!.factors.HSF_EARN, "0", "non-applicable remuneration is retained as zero");
+         where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`, "objects"));
+      assert.ok(!("HSF" in stubs[0]!.factors), "no HSF factor outside QC");
+      assert.equal(stubs[0]!.factors.HSF_EARN, "0", "non-applicable remuneration is retained as zero");
 
       // And no demand for the Quebec-only control accounts — neither in the
       // setup state nor in the run pre-flight.
@@ -444,8 +444,8 @@ test(
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       const glLines = (await db.execute<{ amount: string }>(sql`
         select amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${run.documentId}`));
-      assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
+         where org_id = ${org.orgId} and document_id = ${run.documentId}`, "objects"));
+      assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

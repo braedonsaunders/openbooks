@@ -109,9 +109,9 @@ export function payrollEmployerLevyOpeningsResource(orgId: string): DataResource
       }
       // Employer carry-ins are org-level facts; no employee scope applies.
       const years = (await db.execute<{ tax_year: number }>(sql`
-        select distinct tax_year from payroll_employer_levy_opening where org_id = ${orgId}`))
+        select distinct tax_year from payroll_employer_levy_opening where org_id = ${orgId}`, 'objects'))
       const rows: Record<string, CellValue>[] = []
-      for (const row of years.rows) {
+      for (const row of years) {
         const taxYear = Number(row.tax_year)
         const declared = await declaredEmployerLevyFields(taxYear)
         const byKey = new Map(declared.map((field) => [`${field.country} ${field.levyKey}`, field]))

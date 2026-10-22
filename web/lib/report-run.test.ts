@@ -103,24 +103,25 @@ const mockSources = new Map<string, string>([
      import { FEATURES } from '${new URL('../../engine/src/organization/feature-registry.ts', import.meta.url).href}'
      import { PgDialect } from 'drizzle-orm/pg-core'
      const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
-     export const db = { async execute(query) {
+     export const db = { async execute(query, mode) {
+       const inMode = (result) => (mode === 'objects' ? result.rows : result);
        const compiled = new PgDialect().sqlToQuery(query);
        if (/settings->'features' as (f|features) from orgs/.test(compiled.sql)) {
          if (compiled.params.length !== 1 || compiled.params[0] !== 'org-1') throw new Error('unexpected feature organization');
          const features = Object.fromEntries(FEATURES.map(feature => [feature.key, state.featuresOn.includes(feature.key)]));
-         return { rows: [{ f: features, features }] };
+         return inMode({ rows: [{ f: features, features }] });
        }
        const chunks = query?.queryChunks ?? [];
        const text = chunks.map((c) => typeof c === 'string' ? c : (Array.isArray(c?.value) ? c.value.join('') : '')).join(' ').slice(0, 200);
        // The selected book resolves to itself; this export has no book set.
        if (compiled.sql.includes('public.reporting_book_ids(')) {
-         return { rows: [{ id: compiled.params[1] }] };
+         return inMode({ rows: [{ id: compiled.params[1] }] });
        }
        if (text.includes('from accounting_books')) {
-         return { rows: [
+         return inMode({ rows: [
            { id: '11111111-1111-1111-8111-111111111111', code: 'PRIMARY', name: 'Primary book', is_primary: true },
            { id: '22222222-2222-2222-8222-222222222222', code: 'TAX', name: 'Tax book', is_primary: false },
-         ] };
+         ] });
        }
        throw new Error("unexpected SQL before the reader: " + text);
      } }`,

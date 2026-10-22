@@ -46,7 +46,7 @@ async function postInvoice(org: {
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
   }));
   const entry = (await withBypass(() => db.execute<{ d: string }>(sql`
-    select posting_date::text as d from journal_entries where id = ${entryId}`))).rows[0];
+    select posting_date::text as d from journal_entries where id = ${entryId}`, "objects")))[0];
   return entry?.d;
 }
 
@@ -74,7 +74,7 @@ test("an explicit posting date is honoured", { skip: !DB }, async () => {
     const window = (await withBypass(() => db.execute<{ s: string; e: string }>(sql`
       select starts_on::text as s, ends_on::text as e from accounting_periods
        where org_id = ${org.orgId} and starts_on <= ${org.date}::date and ends_on >= ${org.date}::date
-       order by starts_on limit 1`))).rows[0];
+       order by starts_on limit 1`, "objects")))[0];
     assert.ok(window, "the scratch period covers the scratch date");
     const explicit = window.s !== org.date ? window.s : window.e;
     assert.notEqual(explicit, org.date, "the scratch period spans more than one day");

@@ -79,8 +79,8 @@ async function loadApproval(subjectId: string): Promise<ApprovalRow | null> {
     select org_id, mapping_digest, status, requested_by::text as requested_by
       from hrm_employment_migration_approvals
      where id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const employmentMigrationFlowAdapter: FlowSubjectAdapter =
@@ -188,7 +188,7 @@ export const employmentMigrationFlowAdapter: FlowSubjectAdapter =
       // replayed release is a no-op instead of a second decision. A flip that
       // matches no row is a failure, never success: under RLS an unscoped
       // write silently matches nothing and reports success.
-      const flipped = (await db.execute<{ id: string }>(sql`
+      const flipped = await db.execute<{ id: string }>(sql`
       update hrm_employment_migration_approvals
          set status = ${outcome},
              updated_by = ${ctx.userId},
@@ -196,14 +196,14 @@ export const employmentMigrationFlowAdapter: FlowSubjectAdapter =
        where id = ${subjectId} and org_id=${ctx.orgId}
          and status = 'pending_approval'
       returning id::text as id
-    `)) as unknown as { rows: Array<{ id: string }> };
-      if (flipped.rows.length > 1) {
+    `, "objects");
+      if (flipped.length > 1) {
         throw new Error(
-          `employment migration approval ${subjectId} matched ${flipped.rows.length} rows; ` +
+          `employment migration approval ${subjectId} matched ${flipped.length} rows; ` +
             "refusing a release that is not exactly one row",
         );
       }
-      if (flipped.rows.length === 0) {
+      if (flipped.length === 0) {
         const current = await loadApproval(subjectId);
         if (!current)
           throw new Error(
@@ -239,7 +239,7 @@ export const employmentMigrationFlowAdapter: FlowSubjectAdapter =
          and status = 'pending_approval'
        order by created_at desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

@@ -34,8 +34,8 @@ async function setupOrg() {
 }
 
 async function assertNoFxRates(orgId: string) {
-  const rows = (await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from fx_rates where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ count: string }>(sql`
+    select count(*)::text as count from fx_rates where org_id = ${orgId}`, "objects");
   assert.equal(rows[0]!.count, "0", "no scenario may seed or invent an fx_rates row");
 }
 
@@ -124,18 +124,18 @@ async function openItemFor(orgId: string, partyId: string, side: "ar" | "ap", do
 }
 
 async function paymentEntryLines(orgId: string, paymentId: string) {
-  return (await db.execute<{ name: string; amount: string; entry_id: string }>(sql`
+  return await db.execute<{ name: string; amount: string; entry_id: string }>(sql`
     select a.name, jl.amount::text as amount, je.id as entry_id
       from documents d
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
       join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
      where d.org_id = ${orgId} and d.id = ${paymentId}
-     order by a.name`)).rows;
+     order by a.name`, "objects");
 }
 
 async function applicationsOf(orgId: string, paymentId: string) {
-  return (await db.execute<{
+  return await db.execute<{
     amount: string; source_amount: string; settlement_rate: string;
     settlement_rate_source: string; fx_gain_loss_entry_id: string | null; unapplied_at: string | null;
   }>(sql`
@@ -146,22 +146,22 @@ async function applicationsOf(orgId: string, paymentId: string) {
       join journal_lines jl on jl.id = a.from_line_id and jl.org_id = a.org_id
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
       join documents d on d.id = je.source_document_id and d.org_id = je.org_id
-     where a.org_id = ${orgId} and d.id = ${paymentId}`)).rows;
+     where a.org_id = ${orgId} and d.id = ${paymentId}`, "objects");
 }
 
 async function fxLinesOf(orgId: string, fxEntryId: string) {
-  return (await db.execute<{ name: string; amount: string }>(sql`
+  return await db.execute<{ name: string; amount: string }>(sql`
     select a.name, jl.amount::text as amount
       from journal_lines jl
       join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
      where jl.org_id = ${orgId} and jl.entry_id = ${fxEntryId}
-     order by a.name`)).rows;
+     order by a.name`, "objects");
 }
 
 async function storedEvidence(orgId: string, paymentId: string) {
   return (await db.execute<{ fx_rate: string; document_fx_rate_evidence: { rate: string; toCurrency: string } | null; status: string }>(sql`
     select fx_rate::text as fx_rate, document_fx_rate_evidence, status
-      from documents where org_id = ${orgId} and id = ${paymentId}`)).rows[0]!;
+      from documents where org_id = ${orgId} and id = ${paymentId}`, "objects"))[0]!;
 }
 
 test("a EUR 1000 receipt at a recorded 1.115 settles an invoice carried at 1.10 with a 15 gain", { skip: !DB }, async () => {
@@ -464,13 +464,13 @@ test("voiding a posted receipt reverses its exact original lines and preserves i
       reason: "Receipt recorded against the wrong deposit", reversalDate: org.date, source: "api",
     }));
     assert.equal(voided.status, "voided");
-    const reversal = (await db.execute<{ name: string; amount: string }>(sql`
+    const reversal = await db.execute<{ name: string; amount: string }>(sql`
       select a.name, jl.amount::text as amount
         from documents d
         join journal_lines jl on jl.entry_id = d.reversal_entry_id and jl.org_id = d.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
        where d.org_id = ${org.orgId} and d.id = ${receiptId}
-       order by a.name`)).rows;
+       order by a.name`, "objects");
     assert.deepEqual(
       reversal.map((line) => [line.name, line.amount]),
       original.map((line) => [line.name, line.amount.startsWith("-") ? line.amount.slice(1) : `-${line.amount}`]),

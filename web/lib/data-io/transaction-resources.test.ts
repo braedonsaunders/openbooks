@@ -143,8 +143,9 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        execute(query) {
-          return executeOnConnection(query, false)
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
+          return Promise.resolve(executeOnConnection(query, false)).then(inMode)
         },
         insert(target) {
           state.rootInsertCalls++
@@ -163,8 +164,9 @@ const mockSources = new Map<string, string>([
           }
           try {
             const result = await callback({
-              execute(query) {
-                return executeOnConnection(query, true)
+              execute(query, mode) {
+                const inMode = (result) => (mode === 'objects' ? result.rows : result)
+                return Promise.resolve(executeOnConnection(query, true)).then(inMode)
               },
               insert(target) {
                 state.transactionInsertTargets.push(insertTargetName(target))

@@ -129,7 +129,7 @@ async function lineIdByRef(orgId: string, statementId: string, ref: string): Pro
   const row = (await db.execute<{ id: string }>(sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId} and bank_transaction_id = ${ref}
-  `)).rows[0];
+  `, "objects"))[0];
   assert.ok(row, `imported line ${ref} must exist`);
   return row.id;
 }
@@ -145,7 +145,7 @@ async function lineIdByContent(
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
        and posted_on = ${postedOn} and amount = ${amount} and description = ${description}
-  `)).rows[0];
+  `, "objects"))[0];
   assert.ok(row, `imported line ${postedOn} ${amount} ${description} must exist`);
   return row.id;
 }
@@ -159,21 +159,21 @@ async function lineRow(lineId: string, orgId: string) {
   }>(sql`
     select amount::text as amount, posted_on::text as posted_on, description, match_status
       from bank_statement_lines where id = ${lineId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
 }
 
 async function auditRows(table: string, rowId: string, orgId: string) {
-  return (await db.execute<{ action: string; changes: unknown }>(sql`
+  return await db.execute<{ action: string; changes: unknown }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = ${table} and row_id = ${rowId}
      order by id
-  `)).rows;
+  `, "objects");
 }
 
 async function journalEntryCount(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
 }
 
 test(
@@ -353,12 +353,12 @@ test(
 
       const remaining = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statement_lines where org_id = ${org.orgId} and statement_id = ${statementId}
-      `);
-      assert.equal(remaining.rows[0]!.n, 0, "every imported line goes with the import");
+      `, "objects");
+      assert.equal(remaining[0]!.n, 0, "every imported line goes with the import");
       const header = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statements where org_id = ${org.orgId} and id = ${statementId}
-      `);
-      assert.equal(header.rows[0]!.n, 0, "the statement header goes too");
+      `, "objects");
+      assert.equal(header[0]!.n, 0, "the statement header goes too");
       assert.equal(await journalEntryCount(org.orgId), entriesBefore, "a delete posts nothing");
 
       const headerAudits = await auditRows("bank_statements", statementId, org.orgId);
@@ -436,7 +436,7 @@ test(
       const flaggedId = await lineIdByContent(org.orgId, later.statementId!, org.date, "33", "To match");
       const flag = (await db.execute<{ possible_duplicate_of: string | null }>(sql`
         select possible_duplicate_of from bank_statement_lines where id = ${flaggedId} and org_id = ${org.orgId}
-      `)).rows[0]!.possible_duplicate_of;
+      `, "objects"))[0]!.possible_duplicate_of;
       assert.equal(flag, matchedId, "the flag points at this import's line");
       await assert.rejects(
         deleteStatementImport(statementId, ctx),

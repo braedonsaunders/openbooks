@@ -149,8 +149,8 @@ async function resolveAllocationPeriodId(
   const rows = await db.execute<{ id: string }>(sql`
     select id::text as id from accounting_periods
      where org_id = ${orgId} and starts_on <= ${end} and ${end} <= ends_on
-     order by is_adjustment, starts_on desc limit 1`);
-  const found = rows.rows[0];
+     order by is_adjustment, starts_on desc limit 1`, "objects");
+  const found = rows[0];
   if (!found) return { ok: false, error: "period_not_found" };
   return found.id;
 }
@@ -619,8 +619,8 @@ const explainAllocation: AssistantToolDef = {
             from documents d
            where d.id = ${anchor.id} and d.org_id = ${authz.user.orgId}
              ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-           limit 1`);
-        if (!seen.rows[0]) return { ok: false, error: "document_not_found" };
+           limit 1`, "objects");
+        if (!seen[0]) return { ok: false, error: "document_not_found" };
       }
       const result = await queryLineage(
         authz.user.orgId,

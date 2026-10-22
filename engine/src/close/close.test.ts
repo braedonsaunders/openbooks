@@ -213,17 +213,18 @@ test("an explicitly disabled feature stays off in the close context even when it
       .join("");
   };
   const stubExecutor = {
-    execute: async (query: unknown) => {
+    execute: async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const text = textOf(query);
       const features = { fixedAssets: false, revenueRecognition: false, multiCurrency: false, salesChannels: true };
       if (/from orgs/.test(text)) {
-        return { rows: [{ features }] };
+        return inMode({ rows: [{ features }] });
       }
       // dataDependentFeatureDefault probes (fx lines / subsidiaries): return
       // data that WOULD enable the feature — the explicit false must beat it.
-      if (/journal_lines/.test(text)) return { rows: [{ on: true }] };
-      if (/subsidiaries/.test(text)) return { rows: [{ n: 4 }] };
-      return { rows: [] };
+      if (/journal_lines/.test(text)) return inMode({ rows: [{ on: true }] });
+      if (/subsidiaries/.test(text)) return inMode({ rows: [{ n: 4 }] });
+      return inMode({ rows: [] });
     },
   } as unknown as typeof db;
   const ctx = await defaultCloseFeatureContext(stubExecutor, "00000000-0000-4000-8000-000000000001");
@@ -294,8 +295,8 @@ async function storageBlocksWrite(
   const result = await db.execute<{ blocked: boolean }>(sql`
     select period_module_blocks_write(
              ${org.orgId}::uuid, ${org.periodId}::uuid, ${org.bookId}::uuid,
-             ${org.subsidiaryId}::uuid, ${module}, false) as blocked`);
-  return result.rows[0]!.blocked;
+             ${org.subsidiaryId}::uuid, ${module}, false) as blocked`, "objects");
+  return result[0]!.blocked;
 }
 
 async function lockChangeCounts(
@@ -311,8 +312,8 @@ async function lockChangeCounts(
       (select count(*)::int from close_events
         where org_id = ${org.orgId} and event_type = 'period.lock_changed') as events,
       (select count(*)::int from audit_log
-        where org_id = ${org.orgId} and table_name = 'period_locks') as audits`);
-  return result.rows[0]!;
+        where org_id = ${org.orgId} and table_name = 'period_locks') as audits`, "objects");
+  return result[0]!;
 }
 
 test(
@@ -439,8 +440,8 @@ test(
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'gl'`);
-      assert.equal(reopened.rows[0]!.state, "open");
+           and module = 'gl'`, "objects");
+      assert.equal(reopened[0]!.state, "open");
 
       await assert.rejects(
         setPeriodLockState({
@@ -484,8 +485,8 @@ test(
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'gl'`);
-      assert.equal(reclosed.rows[0]!.state, "closed");
+           and module = 'gl'`, "objects");
+      assert.equal(reclosed[0]!.state, "closed");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -608,10 +609,10 @@ test(
         select state, reopen_expires_at as expires from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'gl'`);
-      assert.equal(window.rows[0]!.state, "open");
-      assert.ok(window.rows[0]!.expires != null);
-      assert.ok(new Date(window.rows[0]!.expires!) > new Date());
+           and module = 'gl'`, "objects");
+      assert.equal(window[0]!.state, "open");
+      assert.ok(window[0]!.expires != null);
+      assert.ok(new Date(window[0]!.expires!) > new Date());
       assert.equal(await storageBlocksWrite(org, "gl"), false);
 
       const approvedEntry = await draftBalancedEntry("REOPENED-POST-B");
@@ -621,8 +622,8 @@ test(
            where id = ${approvedEntry}`);
       });
       const posted = await db.execute<{ status: string }>(sql`
-        select status from journal_entries where id = ${approvedEntry}`);
-      assert.equal(posted.rows[0]!.status, "posted");
+        select status from journal_entries where id = ${approvedEntry}`, "objects");
+      assert.equal(posted[0]!.status, "posted");
 
       // Other scopes stay governed by the org-wide close.
       assert.equal(await storageBlocksWrite(org, "ar"), true);
@@ -673,9 +674,9 @@ test(
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and subsidiary_id = ${org.subsidiaryId}::uuid
-           and module = 'ar'`);
+           and module = 'ar'`, "objects");
       assert.ok(
-        childRows.rows.length === 0 || childRows.rows.every((row) => row.state === "closed"),
+        childRows.length === 0 || childRows.every((row) => row.state === "closed"),
       );
     } finally {
       await dropScratchOrg(org.orgId);
@@ -932,7 +933,7 @@ test(
         select id from close_run_tasks
          where org_id = ${org.orgId} and run_id = ${runId}
          order by sort_order, id
-         limit 1`)).rows[0];
+         limit 1`, "objects"))[0];
       assert.ok(task, "the close run must materialize at least one task");
 
       // Fail only the audit half of the evidence operation. The evidence row
@@ -975,8 +976,8 @@ test(
             (select count(*)::int from close_events
               where org_id = ${org.orgId} and run_id = ${runId}
                 and event_type = 'task.evidence_added'
-                and payload->>'label' = 'INJECT-EVENT') as events`);
-        assert.deepEqual(rolledBack.rows[0], { evidence: 0, events: 0 });
+                and payload->>'label' = 'INJECT-EVENT') as events`, "objects");
+        assert.deepEqual(rolledBack[0], { evidence: 0, events: 0 });
       } finally {
         await db.execute(sql`
           drop trigger if exists close_evidence_event_inject on close_events`);
@@ -1003,8 +1004,8 @@ test(
                    and ce.event_type = 'task.evidence_added'
                    and ce.payload->>'evidenceId' = e.id::text) as events
           from close_task_evidence e
-         where e.id = ${evidenceId} and e.org_id = ${org.orgId}`);
-      assert.deepEqual(committed.rows[0], { evidence_id: evidenceId, events: 1 });
+         where e.id = ${evidenceId} and e.org_id = ${org.orgId}`, "objects");
+      assert.deepEqual(committed[0], { evidence_id: evidenceId, events: 1 });
     } finally {
       // The trigger is normally removed by the inner finally; this idempotent
       // cleanup also covers a setup failure before that block is entered.
@@ -1051,10 +1052,10 @@ test(
         decision: "approved",
       });
       // The approver owns an audit row: actor, action, scope and decision.
-      const audits = (await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
+      const audits = await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
         select action, actor_id, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-           and row_id = ${requestId} and action = 'approve'`)).rows;
+           and row_id = ${requestId} and action = 'approve'`, "objects");
       assert.equal(audits.length, 1);
       assert.equal(audits[0]!.action, "approve");
       assert.equal(audits[0]!.actor_id, actors.approver1Id);
@@ -1072,9 +1073,9 @@ test(
       assert.deepEqual(changes.scope.modules, ["gl"]);
       assert.equal(changes.requestedBy, actors.adminId);
       // ...and the close history names the approver with the same scope.
-      const events = (await db.execute<{ event_type: string; actor_id: string; payload: unknown }>(sql`
+      const events = await db.execute<{ event_type: string; actor_id: string; payload: unknown }>(sql`
         select event_type, actor_id, payload from close_events
-         where org_id = ${org.orgId} and event_type = 'period.reopen_decision'`)).rows;
+         where org_id = ${org.orgId} and event_type = 'period.reopen_decision'`, "objects");
       assert.equal(events.length, 1);
       assert.equal(events[0]!.actor_id, actors.approver1Id);
       const payload = events[0]!.payload as { decision: string; reason: string; scope: { modules: string[] }; requestedBy: string };
@@ -1115,10 +1116,10 @@ test(
         decision: "rejected",
         reason: "Window is broader than the correction needs",
       });
-      const rejection = (await db.execute<{ action: string; actor_id: string }>(sql`
+      const rejection = await db.execute<{ action: string; actor_id: string }>(sql`
         select action, actor_id from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-           and row_id = ${rejectedId} and action = 'reject'`)).rows;
+           and row_id = ${rejectedId} and action = 'reject'`, "objects");
       assert.equal(rejection.length, 1);
       assert.equal(rejection[0]!.action, "reject");
       assert.equal(rejection[0]!.actor_id, actors.approver1Id);
@@ -1149,13 +1150,13 @@ test(
       const none = await db.execute<{ count: number }>(sql`
         select count(*)::int as count from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
-           and row_id = ${ownId} and action in ('approve', 'self_approve')`);
-      assert.equal(none.rows[0]?.count, 0);
+           and row_id = ${ownId} and action in ('approve', 'self_approve')`, "objects");
+      assert.equal(none[0]?.count, 0);
       const noEvents = await db.execute<{ count: number }>(sql`
         select count(*)::int as count from close_events
          where org_id = ${org.orgId} and event_type = 'period.reopen_decision'
-           and payload->>'requestId' = ${ownId}`);
-      assert.equal(noEvents.rows[0]?.count, 0);
+           and payload->>'requestId' = ${ownId}`, "objects");
+      assert.equal(noEvents[0]?.count, 0);
     } finally {
       await dropScratchOrg(org.orgId);
     }

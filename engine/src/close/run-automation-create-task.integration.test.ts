@@ -26,8 +26,8 @@ async function seedCreateTaskRule(args: {
     values (${args.orgId}, ${args.name}, 'run_started', 'create_task',
             '{}'::jsonb, ${JSON.stringify(args.config)}::jsonb, true)
     returning id
-  `));
-  return inserted.rows[0]!.id;
+  `, "objects"));
+  return inserted[0]!.id;
 }
 
 async function withProbe(
@@ -51,8 +51,8 @@ async function withProbe(
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
       returning id
-    `));
-    await fn(fixture, actors, inserted.rows[0]!.id);
+    `, "objects"));
+    await fn(fixture, actors, inserted[0]!.id);
   } finally {
     await dropScratchOrg(fixture.orgId);
   }
@@ -69,8 +69,8 @@ async function executionStatus(
   }>(sql`
     select status, error from close_automation_executions
      where org_id = ${orgId} and rule_id = ${ruleId} and event_key = ${eventKey}
-  `));
-  return result.rows[0]!;
+  `, "objects"));
+  return result[0]!;
 }
 
 test(
@@ -111,8 +111,7 @@ test(
 
       // Exactly one row survives, with the FIRST rule's configuration: the
       // conflicting configuration was refused, never overwritten.
-      const rows = (
-        await db.execute<{
+      const rows = await db.execute<{
           title: string;
           description: string | null;
           workstream: string;
@@ -123,8 +122,7 @@ test(
         select title, description, workstream, evidence_required, status, completed_at
           from close_run_tasks
          where org_id = ${fixture.orgId} and run_id = ${runId} and key = ${key}
-      `)
-      ).rows;
+      `, "objects");
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.title, "Shared title A");
       assert.equal(rows[0]!.description, "A controls");
@@ -169,19 +167,15 @@ test(
       });
       assert.deepEqual(second, { completed: 1, failed: 0 });
 
-      const count = (
-        await db.execute<{ n: number }>(sql`
+      const count = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from close_run_tasks
          where org_id = ${fixture.orgId} and run_id = ${runId} and key = ${key}
-      `)
-      ).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(count, 1);
-      const executions = (
-        await db.execute<{ status: string }>(sql`
+      const executions = await db.execute<{ status: string }>(sql`
         select status from close_automation_executions
          where org_id = ${fixture.orgId} and rule_id = ${ruleId}
-      `)
-      ).rows;
+      `, "objects");
       assert.equal(executions.length, 2);
       assert.ok(executions.every((execution) => execution.status === "completed"));
     });
@@ -220,8 +214,7 @@ test(
       assert.deepEqual(result, { completed: 0, failed: 1 });
 
       // The computed survivor is unchanged — no overwrite, no completion.
-      const rows = (
-        await db.execute<{
+      const rows = await db.execute<{
           title: string;
           task_type: string;
           completion_mode: string;
@@ -231,8 +224,7 @@ test(
         select title, task_type, completion_mode, status, completed_at
           from close_run_tasks
          where org_id = ${fixture.orgId} and run_id = ${runId} and key = ${key}
-      `)
-      ).rows;
+      `, "objects");
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.title, "Computed title");
       assert.equal(rows[0]!.task_type, "system");

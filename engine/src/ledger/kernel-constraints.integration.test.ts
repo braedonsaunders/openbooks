@@ -127,8 +127,8 @@ test(
           count(*) filter (where id = ${rejectedLineId})::int as rejected_count
         from document_lines
         where org_id = ${owner.orgId}
-      `));
-      assert.deepEqual(state.rows[0], {
+      `, "objects"));
+      assert.deepEqual(state[0], {
         accepted_count: 1,
         rejected_count: 0,
       });
@@ -178,14 +178,14 @@ test(
         select description
           from document_lines
          where id = ${lineId} and org_id = ${org.orgId}
-      `));
-      assert.equal(draftControl.rows[0]?.description, "draft edit");
+      `, "objects"));
+      assert.equal(draftControl[0]?.description, "draft edit");
       const before = await withOrgContext(org.orgId, () => db.execute<{ document: unknown; line: unknown }>(sql`
         select to_jsonb(d) as document, to_jsonb(l) as line
           from documents d
           join document_lines l on l.document_id = d.id and l.org_id = d.org_id
          where d.id = ${documentId} and d.org_id = ${org.orgId} and l.id = ${lineId}
-      `));
+      `, "objects"));
 
       // RED before migration 0034: this direct write committed against an
       // approved parent. GREEN after 0034: the storage guard rejects it.
@@ -203,8 +203,8 @@ test(
           from documents d
           join document_lines l on l.document_id = d.id and l.org_id = d.org_id
          where d.id = ${documentId} and d.org_id = ${org.orgId} and l.id = ${lineId}
-      `));
-      assert.deepEqual(after.rows, before.rows, "approved document and line remain byte-for-byte unchanged");
+      `, "objects"));
+      assert.deepEqual(after, before, "approved document and line remain byte-for-byte unchanged");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -244,8 +244,8 @@ test("moving a line cannot strand its old entry unbalanced and then post it", { 
 
     const state = (await withOrgContext(org.orgId, () => db.execute<{ status: string; balance: string }>(sql`
       select status, (select sum(amount) from journal_lines where entry_id = ${a})::text as balance
-        from journal_entries where id = ${a}`)));
-    assert.deepEqual(state.rows[0], { status: "draft", balance: "0.0000" });
+        from journal_entries where id = ${a}`, "objects")));
+    assert.deepEqual(state[0], { status: "draft", balance: "0.0000" });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -362,8 +362,8 @@ test("ledger storage rejects cross-organization headers, lines, accounts, and re
           join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
          where e.id = ${controlEntryId} and e.org_id = ${org.orgId}
          group by e.status
-      `));
-      assert.deepEqual(control.rows, [{ status: "posted", lines: 2, balance: "0.0000" }]);
+      `, "objects"));
+      assert.deepEqual(control, [{ status: "posted", lines: 2, balance: "0.0000" }]);
     } finally {
       await dropScratchOrg(otherOrg.orgId);
     }
@@ -401,7 +401,7 @@ test(
         memo: string | null;
       }>(sql`
         select amount::text as amount, memo from journal_lines where id = ${originalDebit}
-      `));
+      `, "objects"));
 
       // Posted history is immutable in place, with or without the old amend flag.
       await assert.rejects(
@@ -465,8 +465,8 @@ test(
         select (select status from journal_entries where id = ${originalId}) as status,
                (select count(*)::int from journal_entries
                  where org_id = ${org.orgId} and entry_number = ${closedNumber}) as strays
-      `));
-      assert.deepEqual(untouched.rows, [{ status: "posted", strays: 0 }]);
+      `, "objects"));
+      assert.deepEqual(untouched, [{ status: "posted", strays: 0 }]);
 
       await withBypassContext(() => db.execute(sql`
         update period_locks
@@ -513,8 +513,8 @@ test(
                  where entry_id = je.id and org_id = je.org_id) as balance
           from journal_entries je
          where je.id in (${originalId}, ${posted.entryId}) and je.org_id = ${org.orgId}
-      `));
-      const byId = new Map(history.rows.map((row) => [row.id, row]));
+      `, "objects"));
+      const byId = new Map(history.map((row) => [row.id, row]));
       assert.deepEqual(byId.get(originalId), {
         id: originalId,
         status: "reversed",
@@ -530,8 +530,8 @@ test(
         memo: string | null;
       }>(sql`
         select amount::text as amount, memo from journal_lines where id = ${originalDebit}
-      `));
-      assert.deepEqual(after.rows, before.rows);
+      `, "objects"));
+      assert.deepEqual(after, before);
 
       // Reversed history is immutable in place too.
       await assert.rejects(
@@ -638,7 +638,7 @@ test(
 
       const locks = await withOrgContext(org.orgId, () => db.execute(sql`
         select * from period_locks where org_id = ${org.orgId} order by id
-      `));
+      `, "objects"));
       const unauthenticatedNumber = `SOURCE-REPLAY-UNAUTHENTICATED-${randomUUID().slice(0, 8)}`;
       await assert.rejects(
         withOrgContext(org.orgId, () => db.transaction(async (tx) => {
@@ -649,7 +649,7 @@ test(
       );
       assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`
         select id from journal_entries where org_id = ${org.orgId} and entry_number = ${unauthenticatedNumber}
-      `))).rows.length, 0);
+      `, "objects"))).length, 0);
 
       // The database validates the active run, owning connection and
       // attributable automatic policy before admitting append-only replay.
@@ -665,17 +665,17 @@ test(
       }));
       await withOrgContext(org.orgId, () =>
         markEntryReversed(db, { orgId: org.orgId, entryId: firstId, actorId: controllerId }));
-      assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
+      assert.deepEqual(await withOrgContext(org.orgId, () => db.execute(sql`
         select * from period_locks where org_id = ${org.orgId} order by id
-      `))).rows, locks.rows);
+      `, "objects")), locks);
       const replayed = await withOrgContext(org.orgId, () => db.execute<{
         id: string;
         status: string;
       }>(sql`
         select id, status from journal_entries
          where id in (${firstId}, ${replay.entryId}) and org_id = ${org.orgId}
-      `));
-      const replayedById = new Map(replayed.rows.map((row) => [row.id, row.status]));
+      `, "objects"));
+      const replayedById = new Map(replayed.map((row) => [row.id, row.status]));
       assert.equal(replayedById.get(firstId), "reversed");
       assert.equal(replayedById.get(replay.entryId), "posted");
 
@@ -706,8 +706,8 @@ test(
         select (select status from journal_entries where id = ${secondId}) as status,
                (select count(*)::int from journal_entries
                  where org_id = ${org.orgId} and entry_number = ${refusedNumber}) as strays
-      `));
-      assert.deepEqual(held.rows, [{ status: "posted", strays: 0 }]);
+      `, "objects"));
+      assert.deepEqual(held, [{ status: "posted", strays: 0 }]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -822,8 +822,8 @@ test("two organizations cannot hold the same global SFTP username", { skip: !DB 
       select array_agg(username order by username) as usernames
         from sftp_servers
        where org_id = ${first.orgId} or org_id = ${second.orgId}
-    `));
-    assert.deepEqual(state.rows[0]?.usernames, [secondUsername, username].sort());
+    `, "objects"));
+    assert.deepEqual(state[0]?.usernames, [secondUsername, username].sort());
   } finally {
     await dropScratchOrg(second.orgId);
     await dropScratchOrg(first.orgId);
@@ -838,7 +838,7 @@ test("api key scope sets must be non-empty at the storage boundary", { skip: !DB
     const roleId = (await withBypassContext(() => db.execute(sql`
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${org.orgId}, ${`key-owner-${userId.slice(0, 8)}`}, 'Key Owner', false, '[]'::jsonb)
-      returning id`))).rows[0]!.id as string;
+      returning id`, "objects")))[0]!.id as string;
     const keyId = randomUUID();
     await withBypassContext(async () => {
       await db.execute(sql`
@@ -879,8 +879,8 @@ test("api key scope sets must be non-empty at the storage boundary", { skip: !DB
     const state = await withOrgContext(org.orgId, () => db.execute<{ rows: number; min_scopes: number }>(sql`
       select count(*)::int as rows, min(jsonb_array_length(scopes))::int as min_scopes
         from api_keys
-       where org_id = ${org.orgId}`));
-    assert.deepEqual(state.rows[0], { rows: 1, min_scopes: 1 });
+       where org_id = ${org.orgId}`, "objects"));
+    assert.deepEqual(state[0], { rows: 1, min_scopes: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -914,8 +914,8 @@ test("posted status refuses an FX residual one unit beyond the group bound", { s
     const state = await withOrgContext(org.orgId, () => db.execute<{ status: string; lines: number }>(sql`
       select e.status, count(l.id)::int as lines
         from journal_entries e left join journal_lines l on l.entry_id = e.id
-       where e.id = ${entryId} group by e.status`));
-    assert.deepEqual(state.rows[0], { status: "draft", lines: 5 });
+       where e.id = ${entryId} group by e.status`, "objects"));
+    assert.deepEqual(state[0], { status: "draft", lines: 5 });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -961,8 +961,8 @@ test("draft UPDATEs and DELETEs cannot evade the FX group bound", { skip: !DB },
     }
     const state = await withOrgContext(org.orgId, () => db.execute<{ drafts: number }>(sql`
       select count(*)::int as drafts from journal_entries
-       where id in (${updated}, ${shrunk}) and status = 'draft'`));
-    assert.deepEqual(state.rows, [{ drafts: 2 }]);
+       where id in (${updated}, ${shrunk}) and status = 'draft'`, "objects"));
+    assert.deepEqual(state, [{ drafts: 2 }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

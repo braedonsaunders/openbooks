@@ -52,9 +52,9 @@ async function balances(orgId: string, asOf?: string): Promise<Map<string, bigin
       join journal_entries e on e.id = l.entry_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
        and (${asOf ?? null}::date is null or e.posting_date <= ${asOf ?? null}::date)
-     group by l.account_id`));
+     group by l.account_id`, "objects"));
   const map = new Map<string, bigint>();
-  for (const row of rows.rows) map.set(row.account_id, toUnits(row.balance));
+  for (const row of rows) map.set(row.account_id, toUnits(row.balance));
   return map;
 }
 
@@ -176,8 +176,8 @@ export async function periodFor(ledger: LedgerContext, date: string): Promise<st
   const rows = (await db.execute<{ id: string }>(sql`
     select id from accounting_periods
      where org_id = ${ledger.orgId} and not is_adjustment and starts_on <= ${date} and ends_on >= ${date}
-     limit 1`));
-  const id = rows.rows[0]?.id;
+     limit 1`, "objects"));
+  const id = rows[0]?.id;
   if (!id) throw new Error(`no accounting period covers ${date}`);
   return id;
 }

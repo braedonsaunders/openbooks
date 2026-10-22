@@ -105,11 +105,11 @@ test('a year-wide prepare refuses by name; one quarter stores and echoes its win
       const stored = await db.execute<{ id: string; period_from: string; period_to: string }>(sql`
         select id, period_from::text, period_to::text
           from tax_filings
-         where org_id = ${org.orgId} and form_code = ${formCode}`)
-      assert.equal(stored.rows.length, 1)
-      assert.equal(stored.rows[0]!.id, body.id)
-      assert.equal(stored.rows[0]!.period_from, body.from, 'response window matches the stored filing identity')
-      assert.equal(stored.rows[0]!.period_to, body.to, 'response window matches the stored filing identity')
+         where org_id = ${org.orgId} and form_code = ${formCode}`, 'objects')
+      assert.equal(stored.length, 1)
+      assert.equal(stored[0]!.id, body.id)
+      assert.equal(stored[0]!.period_from, body.from, 'response window matches the stored filing identity')
+      assert.equal(stored[0]!.period_to, body.to, 'response window matches the stored filing identity')
     })
   } finally {
     state.user = null

@@ -99,8 +99,7 @@ async function postBankLine(
     const offsetAmount = bankAmount.startsWith("-")
       ? bankAmount.slice(1)
       : `-${bankAmount}`;
-    const [bankLine] = (
-      await tx.execute<{ id: string }>(sql`
+    const [bankLine] = await tx.execute<{ id: string }>(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -112,8 +111,7 @@ async function postBankLine(
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD',
          ${offsetAmount}, 1, ${label})
       returning id
-    `)
-    ).rows;
+    `, "objects");
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -139,15 +137,13 @@ async function setup() {
 }
 
 async function storedBalances(orgId: string, statementId: string) {
-  return (
-    await db.execute<{
+  return (await db.execute<{
       opening_balance: string | null;
       closing_balance: string | null;
     }>(sql`
     select opening_balance::text as opening_balance, closing_balance::text as closing_balance
       from bank_statements where id = ${statementId} and org_id = ${orgId}
-  `)
-  ).rows[0]!;
+  `, "objects"))[0]!;
 }
 
 test(
@@ -192,14 +188,12 @@ test(
         opening_balance: "1000.0000",
         closing_balance: "1100.0000",
       });
-      const audits = (
-        await db.execute<{ n: number }>(sql`
+      const audits = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'bank_statements'
            and row_id = ${imported.statementId!} and action = 'update'
            and changes->>'operation' = 'correct_balances'
-      `)
-      ).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(
         audits,
         1,
@@ -239,12 +233,10 @@ test(
         },
         ctx,
       );
-      const [receipt] = (
-        await db.execute<{ id: string }>(sql`
+      const [receipt] = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)
-      ).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const recon = await startReconciliation(
         {
           accountId: org.accounts.bank,
@@ -323,12 +315,10 @@ test(
         },
         ctx,
       );
-      const [receiptLine] = (
-        await db.execute<{ id: string }>(sql`
+      const [receiptLine] = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)
-      ).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const recon = await startReconciliation(
         {
           accountId: org.accounts.bank,
@@ -403,13 +393,11 @@ test(
         },
         ctx,
       );
-      const lineIds = (
-        await db.execute<{ id: string }>(sql`
+      const lineIds = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
          order by line_number
-      `)
-      ).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const recon = await startReconciliation(
         {
           accountId: org.accounts.bank,
@@ -505,12 +493,10 @@ test(
         a.ctx,
       );
       const lineId = async (orgId: string, statementId: string) =>
-        (
-          await db.execute<{ id: string }>(sql`
+        (await db.execute<{ id: string }>(sql`
           select id from bank_statement_lines
            where org_id = ${orgId} and statement_id = ${statementId}
-        `)
-        ).rows[0]!.id;
+        `, "objects"))[0]!.id;
       const matchedLineId = await lineId(
         a.org.orgId,
         matchedImport.statementId!,
@@ -665,12 +651,10 @@ test(
         },
         ctx,
       );
-      const julyLineId = (
-        await db.execute<{ id: string }>(sql`
+      const julyLineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${julyImport.statementId!}
-      `)
-      ).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const julyRecon = await startReconciliation(
         {
           accountId: org.accounts.bank,
@@ -705,12 +689,10 @@ test(
         },
         ctx,
       );
-      const augustLineId = (
-        await db.execute<{ id: string }>(sql`
+      const augustLineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${augustImport.statementId!}
-      `)
-      ).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const correction = await correctStatementLine(
         augustLineId!,
         { postedOn: "2026-07-01" },
@@ -757,12 +739,10 @@ test(
         },
         ctx,
       );
-      const [receipt] = (
-        await db.execute<{ id: string }>(sql`
+      const [receipt] = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)
-      ).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const recon = await startReconciliation(
         {
           accountId: org.accounts.bank,
@@ -824,12 +804,10 @@ test(
         },
         ctx,
       );
-      const [julyLine] = (
-        await db.execute<{ id: string }>(sql`
+      const [julyLine] = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${july.statementId!}
-      `)
-      ).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const closed = await startReconciliation(
         {
           accountId: org.accounts.bank,
@@ -953,12 +931,10 @@ test(
         },
         ctx,
       );
-      const [juneLine] = (
-        await db.execute<{ id: string }>(sql`
+      const [juneLine] = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${june.statementId!}
-      `)
-      ).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const closed = await startReconciliation(
         {
           accountId: org.accounts.bank,

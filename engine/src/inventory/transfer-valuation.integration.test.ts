@@ -33,8 +33,8 @@ async function openMarch2026ForTransfers(orgId: string, periodId: string): Promi
 
 async function transferMovementCount(orgId: string, itemId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements
-    where org_id=${orgId} and item_id=${itemId} and kind in ('transfer_out','transfer_in')`));
-  return r.rows[0]!.n;
+    where org_id=${orgId} and item_id=${itemId} and kind in ('transfer_out','transfer_in')`, "objects"));
+  return r[0]!.n;
 }
 
 test("moving-average withdrawal after exhaustion and old issue reversal remains weighted", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -84,7 +84,7 @@ test(`inventory audit: a mixed-cost ${item} transfer preserves the exact source 
     const after = await getOnHand(org.orgId, org.items[item], org.stockLocationId2);
     const gl = (await db.execute<{ value: string }>(sql`
       select sum(amount)::text as value from journal_lines
-      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`)).rows[0]!.value;
+      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`, "objects"))[0]!.value;
     assert.equal(gl, before.value);
     assert.equal(moved.value, before.value);
     assert.equal(after.value, before.value, "a location transfer must preserve the exact source carrying value");
@@ -131,46 +131,46 @@ test(`inventory ${item}${legacy ? " legacy" : ""} transfer orders retain their o
     if (legacy) {
       // Pre-fix moving-average transit storage blended both native shipment
       // movements into the first layer: ten units @ 15, still worth exactly 150.
-      const layers = (await db.execute<{ id: string }>(sql`select id from cost_layers
+      const layers = await db.execute<{ id: string }>(sql`select id from cost_layers
         where org_id=${org.orgId} and stock_location_id=${transitId} and remaining_quantity>0
-        order by received_at,created_at,id`)).rows;
+        order by received_at,created_at,id`, "objects");
       assert.equal(layers.length, 2);
       await db.execute(sql`update cost_layers set original_quantity='10',remaining_quantity='10',unit_cost='15',remaining_original_cost=null
         where org_id=${org.orgId} and id=${layers[0]!.id}`);
       await db.execute(sql`update cost_layers set original_quantity='0',remaining_quantity='0',remaining_original_cost=null
         where org_id=${org.orgId} and id=${layers[1]!.id}`);
       await db.execute(sql`update cost_layers set unit_cost='15.0001' where org_id=${org.orgId} and id=${layers[0]!.id}`);
-      const before = (await db.execute(sql`select
+      const before = await db.execute(sql`select
         (select jsonb_agg(to_jsonb(l) order by l.id) from cost_layers l where org_id=${org.orgId}) as layers,
-        (select count(*) from journal_entries where org_id=${org.orgId}) as journals`)).rows;
+        (select count(*) from journal_entries where org_id=${org.orgId}) as journals`, "objects");
       await assert.rejects(receiveTransferOrder(org.orgId, actor, orders[1]!, org.date), /shipment layers have changed/);
-      assert.deepEqual((await db.execute(sql`select
+      assert.deepEqual(await db.execute(sql`select
         (select jsonb_agg(to_jsonb(l) order by l.id) from cost_layers l where org_id=${org.orgId}) as layers,
-        (select count(*) from journal_entries where org_id=${org.orgId}) as journals`)).rows, before);
+        (select count(*) from journal_entries where org_id=${org.orgId}) as journals`, "objects"), before);
       // Restore the intentionally perturbed fixture; only an exactly reconciling
       // historical pool qualifies for automatic provenance reconstruction.
       await db.execute(sql`update cost_layers set unit_cost='15' where org_id=${org.orgId} and id=${layers[0]!.id}`);
     }
     await receiveTransferOrder(org.orgId, actor, orders[1]!, org.date);
     if (legacy) {
-      const audit = (await db.execute<{ actor_id: string; changes: { reason: string } }>(sql`select actor_id,changes from audit_log
-        where org_id=${org.orgId} and table_name='cost_layers' and changes->>'reason' like 'Restore untouched legacy transit%'`)).rows;
+      const audit = await db.execute<{ actor_id: string; changes: { reason: string } }>(sql`select actor_id,changes from audit_log
+        where org_id=${org.orgId} and table_name='cost_layers' and changes->>'reason' like 'Restore untouched legacy transit%'`, "objects");
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.actor_id, actor);
       assert.match(audit[0]!.changes.reason, /immutable movement evidence/);
     }
     const secondDestination = await getOnHand(org.orgId, org.items[item], org.stockLocationId2);
     await receiveTransferOrder(org.orgId, actor, orders[0]!, org.date);
-    const evidence = (await db.execute<{ document_number: string; status: string; shipped_value: string; received_value: string }>(sql`
+    const evidence = await db.execute<{ document_number: string; status: string; shipped_value: string; received_value: string }>(sql`
       select o.document_number,o.status,(-ship.total_value)::text as shipped_value,received.total_value::text as received_value
       from transfer_orders o join transfer_order_lines l on l.transfer_order_id=o.id and l.org_id=o.org_id
       join inventory_movements ship on ship.id=l.ship_movement_id and ship.org_id=l.org_id
       join inventory_movements received on received.id=l.receive_movement_id and received.org_id=l.org_id
-      where o.org_id=${org.orgId} order by o.document_number`)).rows;
-    const balances = (await db.execute<{ number: string; balance: string }>(sql`
+      where o.org_id=${org.orgId} order by o.document_number`, "objects");
+    const balances = await db.execute<{ number: string; balance: string }>(sql`
       select a.number,sum(l.amount)::text as balance from accounts a join journal_lines l on l.account_id=a.id and l.org_id=a.org_id
       where a.org_id=${org.orgId} and a.id in (${transitAccounts[0]},${transitAccounts[1]})
-      group by a.number order by a.number`)).rows;
+      group by a.number order by a.number`, "objects");
     assert.ok(evidence.every((row) => row.status === "received" && row.shipped_value === row.received_value));
     await assert.rejects(receiveTransferOrder(org.orgId, actor, orders[0]!, org.date), /is received/);
     assert.equal(secondDestination.value, "100.0000", "order B must receive its own $100 shipment basis");
@@ -251,13 +251,13 @@ test("transfer receipt refuses a disabled shipment book despite an active altern
     await db.execute(sql`update accounting_books set is_active=true where org_id=${org.orgId} and id=${org.bookId}`);
     const received = await receiveTransferOrder(org.orgId, actor, order.id, org.date);
     const receiptBook = (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries
-      where org_id=${org.orgId} and id=${received.entryId}`)).rows[0]!.book_id;
+      where org_id=${org.orgId} and id=${received.entryId}`, "objects"))[0]!.book_id;
     assert.equal(receiptBook, org.bookId);
     const balance = (await db.execute<{ balance: string }>(sql`select sum(l.amount)::text as balance
       from journal_lines l join journal_entries j on j.id=l.entry_id and j.org_id=l.org_id
-      where l.org_id=${org.orgId} and l.account_id=${inTransitAccountId} and j.book_id=${org.bookId}`)).rows[0]!.balance;
+      where l.org_id=${org.orgId} and l.account_id=${inTransitAccountId} and j.book_id=${org.bookId}`, "objects"))[0]!.balance;
     assert.equal(balance, "0.0000");
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and book_id=${alternate}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and book_id=${alternate}`, "objects")).length, 0);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -294,11 +294,11 @@ test("transfer receipt refuses replacement transit stock and rolls back earlier 
       itemId: org.items.movingAvg, stockLocationId: transitId, quantity: "1", unitCost: "10",
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
     });
-    const snapshot = async () => (await db.execute(sql`select
+    const snapshot = async () => await db.execute(sql`select
       (select count(*) from journal_entries where org_id=${org.orgId}) as journals,
       (select count(*) from inventory_movements where org_id=${org.orgId}) as movements,
       (select jsonb_agg(to_jsonb(l) order by l.id) from cost_layers l where org_id=${org.orgId}) as layers,
-      (select jsonb_agg(to_jsonb(l) order by l.id) from transfer_order_lines l where org_id=${org.orgId}) as lines`)).rows;
+      (select jsonb_agg(to_jsonb(l) order by l.id) from transfer_order_lines l where org_id=${org.orgId}) as lines`, "objects");
     const before = await snapshot();
     for (let attempt = 0; attempt < 2; attempt++) {
       await assert.rejects(receiveTransferOrder(org.orgId, actor, order.id, org.date), /shipment layers have changed/);
@@ -327,7 +327,7 @@ test("fractional issue reversals refuse out-of-order rounding drift and succeed 
     await reverse(first.movementId);
     assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).value, "1.5002");
     const gl = (await db.execute<{ value: string }>(sql`select sum(amount)::text as value from journal_lines
-      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`)).rows[0]!.value;
+      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`, "objects"))[0]!.value;
     assert.equal(gl, "1.5002");
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -350,12 +350,12 @@ test("transfer-order shipment cannot be reversed independently of its lifecycle 
     });
     await shipTransferOrder(org.orgId, actor, order.id, org.date);
     const line = (await db.execute<{ ship_movement_id: string }>(sql`select ship_movement_id from transfer_order_lines
-      where org_id=${org.orgId} and transfer_order_id=${order.id}`)).rows[0]!;
-    const snapshot = async () => (await db.execute(sql`select
+      where org_id=${org.orgId} and transfer_order_id=${order.id}`, "objects"))[0]!;
+    const snapshot = async () => await db.execute(sql`select
       (select jsonb_agg(to_jsonb(o)) from transfer_orders o where org_id=${org.orgId}) as orders,
       (select count(*) from inventory_movements where org_id=${org.orgId}) as movements,
       (select count(*) from journal_entries where org_id=${org.orgId}) as journals,
-      (select jsonb_agg(to_jsonb(l) order by l.id) from cost_layers l where org_id=${org.orgId}) as layers`)).rows;
+      (select jsonb_agg(to_jsonb(l) order by l.id) from cost_layers l where org_id=${org.orgId}) as layers`, "objects");
     const before = await snapshot();
     await assert.rejects(reverseInventoryMovement(org.orgId, actor, {
       movementId: line.ship_movement_id, reversalDate: org.date, reason: "Attempt an incomplete shipment reversal",
@@ -424,12 +424,12 @@ test("single-fragment moving average partitions fractional basis exactly and ret
     });
     assert.equal(first.value, "-27025.9762");
     assert.equal((await getOnHand(org.orgId, org.items.movingAvg, org.stockLocationId)).value, "53166.8303");
-    const consumption = async () => (await db.execute(sql`select c.* from cost_layer_consumptions c
-      where org_id=${org.orgId} and issue_movement_id=${first.movementId} order by id`)).rows;
+    const consumption = async () => await db.execute(sql`select c.* from cost_layer_consumptions c
+      where org_id=${org.orgId} and issue_movement_id=${first.movementId} order by id`, "objects");
     const before = await consumption();
-    const audit = (await db.execute<{ actor_id: string; changes: { sourceMovementId: string; createdFragments: unknown[] } }>(sql`
+    const audit = await db.execute<{ actor_id: string; changes: { sourceMovementId: string; createdFragments: unknown[] } }>(sql`
       select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='cost_layers'
-        and changes->>'reason'='Partition remaining moving-average basis for an exact weighted withdrawal'`)).rows;
+        and changes->>'reason'='Partition remaining moving-average basis for an exact weighted withdrawal'`, "objects");
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.actor_id, actor);
     assert.equal(audit[0]!.changes.sourceMovementId, receipt.movementId);
@@ -452,7 +452,7 @@ test("single-fragment moving average partitions fractional basis exactly and ret
     assert.equal(onHand.quantity, "125.9114");
     assert.equal(onHand.value, "80892.8065");
     const gl = (await db.execute<{ value: string; journals: number }>(sql`select sum(l.amount)::text as value,count(distinct l.entry_id)::int as journals
-      from journal_lines l where l.org_id=${org.orgId} and l.account_id=${org.accounts.invAsset}`)).rows[0]!;
+      from journal_lines l where l.org_id=${org.orgId} and l.account_id=${org.accounts.invAsset}`, "objects"))[0]!;
     assert.equal(gl.value, onHand.value);
     assert.equal(gl.journals, 6, "pool representation changes must not post extra GL entries");
   } finally { await dropScratchOrg(org.orgId); }
@@ -483,7 +483,7 @@ test("fractional moving-average withdrawals remain reversible after a later exac
     assert.equal(onHand.quantity, "574.0536");
     assert.equal(onHand.value, "362092.1153");
     const gl = (await db.execute<{ value: string }>(sql`select sum(amount)::text as value from journal_lines
-      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`)).rows[0]!.value;
+      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`, "objects"))[0]!.value;
     assert.equal(gl, onHand.value);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -508,16 +508,16 @@ for (const exhaustPool of [false, true]) {
       await receive("10", "10");
       const first = await issue("1");
       assert.equal(first.value, "-10.0000");
-      const evidence = async () => (await db.execute(sql`select c.*,l.unit_cost as layer_unit_cost,
+      const evidence = async () => await db.execute(sql`select c.*,l.unit_cost as layer_unit_cost,
         l.source_movement_id from cost_layer_consumptions c join cost_layers l on l.id=c.cost_layer_id
-        and l.org_id=c.org_id where c.org_id=${org.orgId} and c.issue_movement_id=${first.movementId}`)).rows;
+        and l.org_id=c.org_id where c.org_id=${org.orgId} and c.issue_movement_id=${first.movementId}`, "objects");
       const before = await evidence();
       const laterReceipt = await receive("1", "20");
       assert.equal((await getOnHand(org.orgId, org.items.movingAvg, org.stockLocationId)).value, "110.0000");
       assert.deepEqual(await evidence(), before, "re-pooling must not rewrite a consumed layer rate");
-      const audit = (await db.execute<{ actor_id: string; changes: { incomingMovementId: string; createdFragments: unknown[]; before: { unit_cost: string }; after: { unit_cost: string } } }>(sql`
+      const audit = await db.execute<{ actor_id: string; changes: { incomingMovementId: string; createdFragments: unknown[]; before: { unit_cost: string }; after: { unit_cost: string } } }>(sql`
         select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='cost_layers'
-          and changes->>'reason'='Re-pool remaining moving-average basis without changing historical rates'`)).rows;
+          and changes->>'reason'='Re-pool remaining moving-average basis without changing historical rates'`, "objects");
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.actor_id, actor);
       assert.equal(audit[0]!.changes.incomingMovementId, laterReceipt.movementId);
@@ -528,8 +528,8 @@ for (const exhaustPool of [false, true]) {
         const snapshot = async () => {
           const result: Record<string, unknown[]> = {};
           for (const table of ["inventory_movements", "cost_layers", "cost_layer_consumptions", "journal_entries", "journal_lines", "audit_log"]) {
-            result[table] = (await db.execute(sql`select * from ${sql.identifier(table)}
-              where org_id=${org.orgId} order by id`)).rows;
+            result[table] = await db.execute(sql`select * from ${sql.identifier(table)}
+              where org_id=${org.orgId} order by id`, "objects");
           }
           return result;
         };
@@ -548,7 +548,7 @@ for (const exhaustPool of [false, true]) {
       assert.equal(onHand.quantity, "11.0000");
       assert.equal(onHand.value, "120.0000");
       const gl = (await db.execute<{ value: string }>(sql`select sum(amount)::text as value from journal_lines
-        where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`)).rows[0]!.value;
+        where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`, "objects"))[0]!.value;
       assert.equal(gl, onHand.value);
       await assertBlendedReceiptRefusal();
       assert.deepEqual(await getOnHand(org.orgId, org.items.movingAvg, org.stockLocationId), onHand);
@@ -570,9 +570,9 @@ test("a backdated transfer posts on its own date and moves only the stock held t
       itemId: item, fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2,
       quantity: "4", subsidiaryId: org.subsidiaryId, date: "2026-03-12",
     });
-    const legs = (await db.execute<{ moved_on: string }>(sql`
+    const legs = await db.execute<{ moved_on: string }>(sql`
       select moved_at::date::text as moved_on from inventory_movements
-       where org_id=${org.orgId} and id in (${moved.fromMovementId}, ${moved.toMovementId})`)).rows;
+       where org_id=${org.orgId} and id in (${moved.fromMovementId}, ${moved.toMovementId})`, "objects");
     assert.deepEqual(legs.map((leg) => leg.moved_on), ["2026-03-12", "2026-03-12"], "both legs carry the transfer date");
     assert.equal((await getOnHand(org.orgId, item, org.stockLocationId)).quantity, "6.0000");
     assert.equal((await getOnHand(org.orgId, item, org.stockLocationId2)).quantity, "4.0000");
@@ -619,7 +619,7 @@ test("a transfer dated in a GL-closed period refuses even when it posts no journ
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: "2026-03-10",
     });
     const marchId = (await db.execute<{ id: string }>(sql`select id from accounting_periods
-      where org_id=${org.orgId} and fiscal_year=2026 and period_number=3 and not is_adjustment`)).rows[0]!.id;
+      where org_id=${org.orgId} and fiscal_year=2026 and period_number=3 and not is_adjustment`, "objects"))[0]!.id;
     await setPeriodLockState({
       orgId: org.orgId, periodId: marchId, bookId: org.bookId, module: "gl", state: "closed",
       actorId: actor, reason: "Close March before the transfer",

@@ -25,7 +25,7 @@ async function postBalanced(
     (org_id, book_id, entry_number, posting_date, period_id, subsidiary_id, origin, status, memo)
     values (${org.orgId}, ${org.bookId}, ${entryNumber}, ${DATE}, ${org.periodId}, ${org.subsidiaryId},
       ${origin}, 'draft', ${entryNumber})
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   await db.execute(sql`insert into journal_lines
     (org_id, entry_id, line_number, account_id, amount, txn_amount, currency, subsidiary_id, posting_date)
     values (${org.orgId}, ${id}, 1, ${org.accounts.bank}, '100.00', '100.00', 'CAD', ${org.subsidiaryId}, ${DATE}),
@@ -47,18 +47,14 @@ async function linkDocument(
 }
 
 async function scopeCount(orgId: string): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-      where ${journalScopeWhere(orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
+      where ${journalScopeWhere(orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 
 async function listTotal(orgId: string): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-      where ${journalEntryWhere(defaultListView("journal"), {}, orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
+      where ${journalEntryWhere(defaultListView("journal"), {}, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 
@@ -90,7 +86,7 @@ test("guide, header, and list count one journal scope", { skip: !DB }, async () 
       assert.ok(page.rows.every((row) => row.line_count === '2' && row.total_debits === '100.0000'), "the returned page hydrates its ledger totals");
       const draft = (await db.execute<{ id: string }>(sql`insert into documents
         (org_id, kind, document_number, document_date, currency, subsidiary_id, status)
-        values (${org.orgId}, 'journal', 'JE-DRAFT', ${DATE}, 'CAD', ${org.subsidiaryId}, 'draft') returning id`)).rows[0]!.id;
+        values (${org.orgId}, 'journal', 'JE-DRAFT', ${DATE}, 'CAD', ${org.subsidiaryId}, 'draft') returning id`, "objects"))[0]!.id;
       await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, amount)
         values (${org.orgId}, ${draft}, 1, ${org.accounts.bank}, '95.00'),
                (${org.orgId}, ${draft}, 2, ${org.accounts.cogs}, '-95.00')`);

@@ -45,9 +45,10 @@ test('record, entity and property lists show the named overlapping-default refus
   const org = await withBypassContext(() => createScratchOrg())
   const originalExecute = db.execute.bind(db)
   let activeDefaults: Array<Record<string, unknown>> = []
-  db.execute = ((query: { queryChunks?: unknown[] }) => {
-    if (statementText(query).includes('from list_views')) return Promise.resolve({ rows: activeDefaults })
-    return originalExecute(query as never)
+  db.execute = ((query: { queryChunks?: unknown[] }, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
+    if (statementText(query).includes('from list_views')) return Promise.resolve({ rows: activeDefaults }).then(inMode)
+    return originalExecute(query as never, mode as never)
   }) as unknown as typeof db.execute
   try {
     const userId = await withBypassContext(() => createScratchUser(org.orgId, 'List view reviewer', 'reviewer'))

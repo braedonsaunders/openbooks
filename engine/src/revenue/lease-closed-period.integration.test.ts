@@ -43,7 +43,7 @@ async function seedLeaseAccounts(org: ScratchOrg) {
 
 async function seedAugust(org: ScratchOrg): Promise<void> {
   const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into accounting_periods
       (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -53,8 +53,8 @@ async function seedAugust(org: ScratchOrg): Promise<void> {
 async function unpostedCount(orgId: string, leaseId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from lease_agreement_schedule_lines
-     where org_id = ${orgId} and lease_id = ${leaseId} and payment_entry_id is null`));
-  return r.rows[0]!.n;
+     where org_id = ${orgId} and lease_id = ${leaseId} and payment_entry_id is null`, "objects"));
+  return r[0]!.n;
 }
 
 test("a lease schedule run skips GL-closed periods and posts the open ones", { skip: !DB }, async () => {

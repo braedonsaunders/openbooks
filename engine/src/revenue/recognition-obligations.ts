@@ -64,12 +64,12 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
   }
   const docRes = (await db.execute<{ id: string; document_number: string; party_id: string | null; currency: string | null; document_date: string; subsidiary_id: string | null }>(sql`
     select id, document_number, party_id, currency, document_date, subsidiary_id
-      from documents where id = ${documentId} and org_id = ${orgId} and kind in ('customer_invoice', 'cash_sale')`));
-  const doc = docRes.rows[0];
+      from documents where id = ${documentId} and org_id = ${orgId} and kind in ('customer_invoice', 'cash_sale')`, "objects"));
+  const doc = docRes[0];
   if (!doc) return { created: 0, contractId: null, obligationIds: [] };
   if (!doc.party_id) {
     if ((await db.execute(sql`select dl.id from document_lines dl join items i on i.org_id=dl.org_id and i.id=dl.item_id
-      where dl.org_id=${orgId} and dl.document_id=${documentId} and i.recognition_rule_id is not null limit 1`)).rows[0]) {
+      where dl.org_id=${orgId} and dl.document_id=${documentId} and i.recognition_rule_id is not null limit 1`, "objects"))[0]) {
       throw new RevenueRecognitionError('Deferred revenue requires a customer contract; select the customer before posting this sale');
     }
     return { created: 0, contractId: null, obligationIds: [] };
@@ -92,8 +92,8 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
   // for review; 'off' disables the check. Configured in Company & Accounting.
   const policyRes = (await db.execute<{ policy: string }>(sql`
     select coalesce(settings->'revenue'->>'fairValueRangePolicy', 'warn') as policy
-      from orgs where id = ${orgId}`));
-  const rangePolicy = policyRes.rows[0]?.policy === "off" ? "off" : "warn";
+      from orgs where id = ${orgId}`, "objects"));
+  const rangePolicy = policyRes[0]?.policy === "off" ? "off" : "warn";
 
   const currency = doc.currency ?? "";
   const lineRes = (await db.execute<{
@@ -122,16 +122,16 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
          order by f.effective_from desc nulls last limit 1 for share
       ) fv on true
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
-     order by dl.line_number for share of dl, it, r`));
-  if (lineRes.rows.length === 0) return { created: 0, contractId: null, obligationIds: [] };
+     order by dl.line_number for share of dl, it, r`, "objects"));
+  if (lineRes.length === 0) return { created: 0, contractId: null, obligationIds: [] };
 
   // Lines that already produced an obligation (idempotent replay).
   const existing = (await db.execute<{ id: string; document_line_id: string; allocated_price: string }>(sql`
     select id, document_line_id, allocated_price from performance_obligations
-     where org_id = ${orgId} and document_line_id = any(${`{${lineRes.rows.map((l) => l.line_id).join(",")}}`}::uuid[])`));
-  const already = new Set(existing.rows.map((r) => r.document_line_id));
-  const existingObligationIds = existing.rows.map((r) => r.id);
-  const lines = lineRes.rows.filter((l) => !already.has(l.line_id));
+     where org_id = ${orgId} and document_line_id = any(${`{${lineRes.map((l) => l.line_id).join(",")}}`}::uuid[])`, "objects"));
+  const already = new Set(existing.map((r) => r.document_line_id));
+  const existingObligationIds = existing.map((r) => r.id);
+  const lines = lineRes.filter((l) => !already.has(l.line_id));
 
   // A partial legacy replay still allocates against the WHOLE invoice bundle.
   // Existing allocations are immutable here; configuration drift must be
@@ -139,20 +139,20 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
   // A complete replay skips pricing and only repairs missing schedules.
   // Lines flagged
   // 'exclude' from allocation keep their booked amount and don't dilute others.
-  const sspByLine = new Map(lineRes.rows.map(l => [l.line_id, l.calculation_method && l.calculation_method !== 'fixed'
+  const sspByLine = new Map(lineRes.map(l => [l.line_id, l.calculation_method && l.calculation_method !== 'fixed'
     ? calculatedFairValue({ method: l.calculation_method, unitPrice: l.fair_value!, formulaPercent: l.formula_percent, listPrice: l.list_price, unitCost: l.unit_cost })
     : l.item_ssp ?? l.fair_value]));
-  const allocated = lines.length ? allocateRevenueBundle(lineRes.rows.map(l => ({ allocation: l.revenue_allocation, ssp: sspByLine.get(l.line_id) ?? null, booked: l.amount, quantity: l.quantity }))) : [];
-  const allocByLine = new Map(lineRes.rows.map((l, i) => [l.line_id, allocated[i]!]));
-  const softwareBundle = lineRes.rows.some(l => l.revenue_allocation === 'software');
+  const allocated = lines.length ? allocateRevenueBundle(lineRes.map(l => ({ allocation: l.revenue_allocation, ssp: sspByLine.get(l.line_id) ?? null, booked: l.amount, quantity: l.quantity }))) : [];
+  const allocByLine = new Map(lineRes.map((l, i) => [l.line_id, allocated[i]!]));
+  const softwareBundle = lineRes.some(l => l.revenue_allocation === 'software');
   if (softwareBundle && (await db.execute(sql`select dl.id from document_lines dl where dl.org_id=${orgId} and dl.document_id=${documentId} and dl.amount<>0
-      and not exists(select 1 from items i where i.org_id=dl.org_id and i.id=dl.item_id and i.recognition_rule_id is not null) limit 1`)).rows[0]) {
+      and not exists(select 1 from items i where i.org_id=dl.org_id and i.id=dl.item_id and i.recognition_rule_id is not null) limit 1`, "objects"))[0]) {
     throw new RevenueRecognitionError('Software bundles require a recognition rule and deferred account for every nonzero element; configure all bundle items before posting');
   }
-  if (lines.length > 0 && existing.rows.some((row) => cmp(row.allocated_price, allocByLine.get(row.document_line_id)!) !== 0)) {
+  if (lines.length > 0 && existing.some((row) => cmp(row.allocated_price, allocByLine.get(row.document_line_id)!) !== 0)) {
     throw new RevenueRecognitionError("Partial revenue allocation conflicts with existing obligations; reconcile the contract before retrying");
   }
-  const contractTotal = sum(lineRes.rows.map((l) => l.amount));
+  const contractTotal = sum(lineRes.map((l) => l.amount));
 
   const obligationIds: string[] = [];
   const contractId = await db.transaction(async (tx) => {
@@ -193,16 +193,16 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
           -- Repeated posting reuses the existing source-document contract selected below.
           on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
           returning id
-        `);
-        const existingContract = insertedContract.rows[0]
+        `, "objects");
+        const existingContract = insertedContract[0]
           ? null
           : await tx.execute<{ id: string; total_transaction_price: string }>(sql`
               select id, total_transaction_price from revenue_contracts
                where org_id=${orgId} and idempotency_key=${contractKey}
-            `);
-        cId = insertedContract.rows[0]?.id ?? existingContract?.rows[0]?.id ?? null;
+            `, "objects");
+        cId = insertedContract[0]?.id ?? existingContract?.[0]?.id ?? null;
         if (!cId) throw new Error("revenue contract idempotency winner was not visible");
-        if (existingContract?.rows[0] && cmp(existingContract.rows[0].total_transaction_price, contractTotal) !== 0) {
+        if (existingContract?.[0] && cmp(existingContract[0].total_transaction_price, contractTotal) !== 0) {
           throw new RevenueRecognitionError("Partial revenue allocation conflicts with the existing contract total; reconcile the contract before retrying");
         }
         if (contractFeatureActive) {
@@ -236,8 +236,8 @@ async function createObligationsOn(documentId: string, orgId: string, actorId: s
                   ${JSON.stringify({ method: softwareBundle ? 'residual_vsoe' : 'relative_ssp', fairValuePriceId: l.fair_value_id, calculationMethod: l.calculation_method, formulaPercent: l.formula_percent, listPrice: l.list_price, unitCost: l.unit_cost, unitSsp: sspByLine.get(l.line_id) ?? null, quantity: l.quantity, allocated })}::jsonb, 'open', ${actorId}, ${actorId})
           -- The existing line obligation already owns its recognition amounts and schedule.
           on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-          returning id`));
-        if (insObl.rows[0]) obligationIds.push(insObl.rows[0].id);
+          returning id`, "objects"));
+        if (insObl[0]) obligationIds.push(insObl[0].id);
       }
 
       // The schedules commit WITH the obligations they plan: a crash or a
@@ -294,9 +294,9 @@ async function repairMissingRecognitionSchedules(
          select count(*)::int from accounting_books b
           where b.org_id = ${orgId} and b.is_active and b.posts_gl
        )
-     order by o.created_at`));
+     order by o.created_at`, "objects"));
   const repaired: string[] = [];
-  for (const row of missing.rows) {
+  for (const row of missing) {
     await buildAllRecognitionSchedulesOn(runner, row.id, orgId, actorId);
     repaired.push(row.id);
   }

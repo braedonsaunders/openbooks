@@ -34,10 +34,10 @@ async function setupSuccessionRemoveHarness(): Promise<Harness> {
   const hrId = await createScratchUser(org.orgId, "Succession HR", "succession_hr");
   await grant(org.orgId, hrId, ["hrm.performance.manage", "hrm.position.manage"]);
   const partyId = (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name) values (${org.orgId}, 'person', 'Successor') returning id`)).rows[0]!.id;
+    insert into parties (org_id, kind, display_name) values (${org.orgId}, 'person', 'Successor') returning id`, "objects"))[0]!.id;
   const employmentId = (await db.execute<{ id: string }>(sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${org.orgId}, ${partyId}, ${org.subsidiaryId}) returning id`)).rows[0]!.id;
+    values (${org.orgId}, ${partyId}, ${org.subsidiaryId}) returning id`, "objects"))[0]!.id;
   const position = await createPosition({
     orgId: org.orgId,
     actorId: hrId,
@@ -63,7 +63,7 @@ async function setupSuccessionRemoveHarness(): Promise<Harness> {
 async function candidateCount(orgId: string, planId: string): Promise<string> {
   return (await db.execute<{ n: string }>(sql`
     select count(*)::text as n from hrm_succession_candidates
-     where org_id = ${orgId} and plan_id = ${planId}`)).rows[0]!.n;
+     where org_id = ${orgId} and plan_id = ${planId}`, "objects"))[0]!.n;
 }
 
 test("removing a candidate from an active or archived plan is refused", async () => {

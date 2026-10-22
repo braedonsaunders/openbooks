@@ -83,8 +83,8 @@ export const GET = defineRoute({
         join orgs o on o.id = f.org_id
         left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
        where f.org_id = ${orgId} and f.id = ${id}
-    `))
-    const filing = filings.rows[0]
+    `, 'objects'))
+    const filing = filings[0]
     if (!filing) return notFound("record")
     if (!canFurnishRecipientCopies(filing.status)) {
       return NextResponse.json(
@@ -113,8 +113,8 @@ export const GET = defineRoute({
        where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
          and (${recipientId ?? null}::uuid is null or r.id = ${recipientId ?? null}::uuid)
        order by name
-    `))
-    if (recipients.rows.length === 0) {
+    `, 'objects'))
+    if (recipients.length === 0) {
       return NextResponse.json({ error: 'no included recipients to print' }, { status: 422 })
     }
 
@@ -126,7 +126,7 @@ export const GET = defineRoute({
     const taxIds = filing.payer_snapshot?.taxIds ?? {}
     const payerTin = payerTaxIdentifier(taxIds)
 
-    const forms: RecipientFormData[] = recipients.rows.map((r) => ({
+    const forms: RecipientFormData[] = recipients.map((r) => ({
       formType: filing.form_type,
       taxYear: filing.tax_year,
       payerName: filing.payer_name,

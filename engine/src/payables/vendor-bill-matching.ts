@@ -123,9 +123,9 @@ export async function billMatchCandidates(
     subsidiary_id: string | null;
   }>(sql`
     select id, document_number, status, party_id, subsidiary_id from documents
-     where id = ${billId} and org_id = ${orgId} and kind = 'vendor_bill'`)).rows[0];
+     where id = ${billId} and org_id = ${orgId} and kind = 'vendor_bill'`, "objects"))[0];
   if (!bill) throw new BillMatchError("bill not found", 404);
-  const billLines = (await db.execute<{
+  const billLines = await db.execute<{
     id: string;
     line_number: number;
     item_id: string | null;
@@ -141,7 +141,7 @@ export async function billMatchCandidates(
       from document_lines dl
       left join items i on i.id = dl.item_id and i.org_id = dl.org_id
      where dl.org_id = ${orgId} and dl.document_id = ${billId}
-     order by dl.line_number`)).rows;
+     order by dl.line_number`, "objects");
   const lines: BillMatchCandidateLine[] = [];
   for (const billLine of billLines) {
     const base = {
@@ -159,7 +159,7 @@ export async function billMatchCandidates(
         select d.document_number, dl.line_number
           from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-         where dl.id = ${poLineId} and dl.org_id = ${orgId}`)).rows[0];
+         where dl.id = ${poLineId} and dl.org_id = ${orgId}`, "objects"))[0];
       lines.push({
         ...base,
         matched: matched
@@ -184,7 +184,7 @@ export async function billMatchCandidates(
     });
     const result: BillMatchCandidate[] = [];
     for (const candidate of candidates) {
-      const receipts = (await db.execute<PurchaseReceiptReference>(sql`
+      const receipts = await db.execute<PurchaseReceiptReference>(sql`
         select r.id, r.document_number as "documentNumber", r.document_date::text as "documentDate", r.status
           from document_links link
           join documents r on r.id = link.to_document_id and r.org_id = link.org_id
@@ -192,7 +192,7 @@ export async function billMatchCandidates(
            and link.from_document_id = ${candidate.purchaseOrderId}
            and link.link_type = 'fulfills'
            and r.kind = 'purchase_receipt'
-         order by r.document_date, r.document_number`)).rows;
+         order by r.document_date, r.document_number`, "objects");
       result.push({
         purchaseOrderId: candidate.purchaseOrderId,
         purchaseOrderNumber: candidate.purchaseOrderNumber,
@@ -266,7 +266,7 @@ export async function matchVendorBillLines(input: {
                ${documentRevisionCounterSql(sql`revision_seq`)} as revision
           from documents
          where id = ${billId} and org_id = ${orgId} and kind = 'vendor_bill'
-         for update`)).rows[0];
+         for update`, "objects"))[0];
       if (!bill) throw new BillMatchError("bill not found", 404);
       if (bill.status !== "draft" && bill.status !== "approved") {
         throw new BillMatchError(
@@ -276,7 +276,7 @@ export async function matchVendorBillLines(input: {
       if (input.expectedUpdatedAt !== undefined && input.expectedUpdatedAt !== bill.revision) {
         throw new BillMatchError("this bill changed after you opened it; reload and review the latest revision", 409);
       }
-      const billLines = (await tx.execute<{
+      const billLines = await tx.execute<{
         id: string;
         line_number: number;
         item_id: string | null;
@@ -295,7 +295,7 @@ export async function matchVendorBillLines(input: {
           left join item_inventory_profiles profile on profile.org_id = dl.org_id and profile.item_id = dl.item_id
          where dl.org_id = ${orgId} and dl.document_id = ${billId}
          order by dl.line_number
-         for update of dl`)).rows;
+         for update of dl`, "objects");
       const byBillLine = new Map(billLines.map((line) => [line.id, line]));
       for (const match of input.matches) {
         const billLine = byBillLine.get(match.billLineId);
@@ -321,15 +321,15 @@ export async function matchVendorBillLines(input: {
       const poLineIds = [...new Set(input.matches.map((match) => match.purchaseOrderLineId))].sort();
       const discoveredPoIds = (await tx.execute<{ document_id: string }>(sql`
         select distinct document_id from document_lines
-         where org_id = ${orgId} and id = any(${`{${poLineIds.join(",")}}`}::uuid[])`)).rows
+         where org_id = ${orgId} and id = any(${`{${poLineIds.join(",")}}`}::uuid[])`, "objects"))
         .map((row) => row.document_id)
         .sort();
-      const poHeaders = (await tx.execute<{ id: string; status: string }>(sql`
+      const poHeaders = await tx.execute<{ id: string; status: string }>(sql`
         select id, status from documents
          where org_id = ${orgId} and id = any(${`{${discoveredPoIds.join(",")}}`}::uuid[])
          order by id
-         for update`)).rows;
-      const poLines = (await tx.execute<{
+         for update`, "objects");
+      const poLines = await tx.execute<{
         id: string;
         document_id: string;
         document_number: string;
@@ -355,7 +355,7 @@ export async function matchVendorBillLines(input: {
           left join items i on i.id = l.item_id and i.org_id = l.org_id
          where l.org_id = ${orgId} and l.id = any(${`{${poLineIds.join(",")}}`}::uuid[])
          order by l.document_id, l.id
-         for update of l`)).rows;
+         for update of l`, "objects");
       if (poLines.length !== poLineIds.length) {
         throw new BillMatchError("a chosen purchase-order line is missing — reload and match again", 409);
       }
@@ -435,7 +435,7 @@ export async function matchVendorBillLines(input: {
         const reopenedRow = (await tx.execute<{ id: string }>(sql`
           update documents set status = 'draft', updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId} and status = 'approved'
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
         if (!reopenedRow) throw new BillMatchError(`${label} changed while it was being matched`, 409);
         reopened.push(id);
       };
@@ -454,7 +454,7 @@ export async function matchVendorBillLines(input: {
           update document_lines set quantity_billed = quantity_billed + ${cover}, updated_at = now(), updated_by = ${actorId}
            where id = ${poLine.id} and org_id = ${orgId}
              and quantity_billed + ${cover} <= ${orderedNetOfCancelledSql("document_lines")}
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
         if (!advanced) {
           throw new BillMatchError(
             `purchase order ${poLine.document_number} line ${poLine.line_number} changed while it was being matched`,
@@ -469,12 +469,12 @@ export async function matchVendorBillLines(input: {
         const stamped = (await tx.execute<{ id: string }>(sql`
           update document_lines set custom = ${JSON.stringify(bag)}::jsonb, updated_at = now(), updated_by = ${actorId}
            where id = ${billLine.id} and org_id = ${orgId}
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
         if (!stamped) throw new BillMatchError("a bill line changed while it was being matched", 409);
         const edge = (await tx.execute<{ id: string }>(sql`
           select id from document_links
            where org_id = ${orgId} and from_document_id = ${poLine.document_id}
-             and to_document_id = ${billId} and link_type = 'bills'`)).rows[0];
+             and to_document_id = ${billId} and link_type = 'bills'`, "objects"))[0];
         if (!edge) {
           await tx.execute(sql`
             insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by)
@@ -494,7 +494,7 @@ export async function matchVendorBillLines(input: {
         const restored = (await tx.execute<{ id: string }>(sql`
           update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId} and status = 'draft'
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
         if (!restored) throw new BillMatchError("a document changed while it was being matched", 409);
       }
       await tx.execute(sql`

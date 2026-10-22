@@ -48,8 +48,8 @@ test(
       assert.match(rejected.errors[0]?.message ?? '', /forced setup import audit failure/)
       const stranded = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from segment_definitions
-       where org_id = ${org.orgId} and key = ${rejectedKey}`)
-      assert.equal(stranded.rows[0]?.count, 0)
+       where org_id = ${org.orgId} and key = ${rejectedKey}`, 'objects')
+      assert.equal(stranded[0]?.count, 0)
 
       // A failed nested row rolls back without stranding the outer unit.
       const outerRejectedKey = `import_outer_${randomUUID().replaceAll('-', '').slice(0, 24)}`
@@ -70,8 +70,8 @@ test(
       assert.equal(outerRejected.failed, 1)
       const outerStranded = await db.execute<{ count: number }>(sql`
       select count(*)::int as count from segment_definitions
-       where org_id = ${org.orgId} and key = ${outerRejectedKey}`)
-      assert.equal(outerStranded.rows[0]?.count, 0)
+       where org_id = ${org.orgId} and key = ${outerRejectedKey}`, 'objects')
+      assert.equal(outerStranded[0]?.count, 0)
 
       await db.execute(sql.raw(`drop trigger ${triggerName} on audit_log`))
 
@@ -102,8 +102,8 @@ test(
         plural_name: string
       }>(sql`
       select id, key, name, plural_name from segment_definitions
-       where org_id = ${org.orgId} and key = ${acceptedKey}`)
-      const storedRow = stored.rows[0]
+       where org_id = ${org.orgId} and key = ${acceptedKey}`, 'objects')
+      const storedRow = stored[0]
       assert.ok(storedRow)
       const auditRows = await db.execute<{
         source: string
@@ -114,13 +114,13 @@ test(
              changes->'before' as before, changes->'after' as after
         from audit_log
        where org_id = ${org.orgId} and table_name = 'segment_definitions'
-         and row_id = ${storedRow.id} and action = 'insert'`)
-      assert.equal(auditRows.rows.length, 1)
-      assert.equal(auditRows.rows[0]?.source, 'import')
-      assert.equal(auditRows.rows[0]?.before, null)
-      assert.equal(auditRows.rows[0]?.after.key, acceptedKey)
-      assert.equal(auditRows.rows[0]?.after.name, 'Imported setup')
-      assert.equal(auditRows.rows[0]?.after.plural_name, 'Imported setups')
+         and row_id = ${storedRow.id} and action = 'insert'`, 'objects')
+      assert.equal(auditRows.length, 1)
+      assert.equal(auditRows[0]?.source, 'import')
+      assert.equal(auditRows[0]?.before, null)
+      assert.equal(auditRows[0]?.after.key, acceptedKey)
+      assert.equal(auditRows[0]?.after.name, 'Imported setup')
+      assert.equal(auditRows[0]?.after.plural_name, 'Imported setups')
 
       // Upsert atomicity: audit outage leaves neither commit nor false success.
       await db.execute(sql.raw(`create trigger ${triggerName} before insert on audit_log for each row execute function ${functionName}()`))
@@ -139,8 +139,8 @@ test(
       assert.equal(rejectedUpdate.failed, 1)
       const unchanged = await db.execute<{ name: string }>(sql`
       select name from segment_definitions
-       where org_id = ${org.orgId} and key = ${acceptedKey}`)
-      assert.equal(unchanged.rows[0]?.name, 'Imported setup')
+       where org_id = ${org.orgId} and key = ${acceptedKey}`, 'objects')
+      assert.equal(unchanged[0]?.name, 'Imported setup')
     } finally {
       await db.execute(sql.raw(`drop trigger if exists ${triggerName} on audit_log`)).catch(() => undefined)
       await db.execute(sql.raw(`drop function if exists ${functionName}()`)).catch(() => undefined)
@@ -269,8 +269,8 @@ test('setup imports refuse tax codes that violate domain invariants', { skip: !p
     const outcome = await setupResource(entity, org.orgId).write(
       [{ code, name: 'Import withholding', calculationType: 'withholding' }], 'insert', { orgId: org.orgId, actorId, dryRun: false })
     assert.deepEqual([outcome.created, outcome.failed, outcome.errors[0]?.message], [0, 1, 'withholding-account-required'])
-    const stored = await db.execute(sql`select count(*)::int as count from tax_codes where org_id = ${org.orgId} and code = ${code}`)
-    assert.equal(stored.rows[0]?.count, 0)
+    const stored = await db.execute(sql`select count(*)::int as count from tax_codes where org_id = ${org.orgId} and code = ${code}`, 'objects')
+    assert.equal(stored[0]?.count, 0)
   } finally {
     await dropScratchOrgReporting(org.orgId)
   }

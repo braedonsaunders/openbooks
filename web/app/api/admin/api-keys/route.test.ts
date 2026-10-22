@@ -101,7 +101,8 @@ const mockSources = new Map<string, string>([
         text.includes('insert into audit_log') ||
         text.includes('update api_keys')
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.executed.push(text)
           if (state.failOnText && text.includes(state.failOnText)) {
@@ -109,38 +110,38 @@ const mockSources = new Map<string, string>([
           }
           if (!isWrite(text)) {
             if (text.includes('from audit_log')) {
-              return { rows: state.revocationRecorded ? [{ one: 1 }] : [] }
+              return inMode({ rows: state.revocationRecorded ? [{ one: 1 }] : [] })
             }
             if (text.includes('from api_keys')) {
-              return { rows: state.keyRow ? [state.keyRow] : [] }
+              return inMode({ rows: state.keyRow ? [state.keyRow] : [] })
             }
             // Owner authority resolution (the same reads resolveApiKeyAuth
             // performs at use time): role permission sets, then overrides.
             // The subsidiary-restriction read is matched first — it shares
             // the role_assignments table with the permission read.
             if (text.includes('subsidiary_restriction')) {
-              return { rows: state.ownerRestrictions }
+              return inMode({ rows: state.ownerRestrictions })
             }
             if (text.includes('from role_assignments')) {
-              return { rows: state.ownerRoleRows }
+              return inMode({ rows: state.ownerRoleRows })
             }
             if (text.includes('from user_permission_overrides')) {
-              return { rows: state.ownerOverrides }
+              return inMode({ rows: state.ownerOverrides })
             }
             if (text.includes('from users')) {
               if (text.includes('select id from users')) {
-                return { rows: state.actorTenantLocalActive ? [{ id: '${USER_ID}' }] : [] }
+                return inMode({ rows: state.actorTenantLocalActive ? [{ id: '${USER_ID}' }] : [] })
               }
-              return { rows: [{ isSuperAdmin: state.ownerIdentity.isSuperAdmin, isActive: state.ownerIdentity.isActive }] }
+              return inMode({ rows: [{ isSuperAdmin: state.ownerIdentity.isSuperAdmin, isActive: state.ownerIdentity.isActive }] })
             }
             if (text.includes('from subsidiaries')) {
-              return { rows: state.subsidiaries }
+              return inMode({ rows: state.subsidiaries })
             }
           }
           const ledger = state.inTx ? state.pending : state.committed
           ledger.push(text)
-          if (text.includes('insert into api_keys')) return { rows: [{ id: '${KEY_ID}' }] }
-          return { rows: [] }
+          if (text.includes('insert into api_keys')) return inMode({ rows: [{ id: '${KEY_ID}' }] })
+          return inMode({ rows: [] })
         },
         transaction: async (work) => work({}),
       }

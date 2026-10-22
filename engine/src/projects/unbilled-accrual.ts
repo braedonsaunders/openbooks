@@ -327,7 +327,7 @@ async function loadAccrualPeriod(executor: SqlExecutor, orgId: string, ref: Unbi
       ) next on true
      where p.org_id = ${orgId} and ${match}
      order by p.starts_on, p.id
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!row) {
     throw new UnbilledAccrualError(
       ref.periodId
@@ -378,12 +378,12 @@ function accrualPeriod(row: AccrualPeriodRow): AccrualPeriod {
 async function primaryBookId(executor: SqlExecutor, orgId: string): Promise<string | null> {
   const row = (await executor.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   return row?.id ?? null;
 }
 
 async function loadSourceGroups(executor: SqlExecutor, orgId: string, periodEnd: string): Promise<UnbilledSourceGroup[]> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     project_id: string; project_code: string | null; project_name: string; project_subsidiary_id: string | null;
     source_currency: string | null; item_name: string | null; income_account_id: string | null;
     uses_project_revenue: boolean; amount: string; source_count: number;
@@ -399,7 +399,7 @@ async function loadSourceGroups(executor: SqlExecutor, orgId: string, periodEnd:
      where source.capped_available_value <> 0
      group by source.project_id, project.code, project.name, source.project_subsidiary_id, source.source_currency,
               source.item_name, source.income_account_id, source.invoicing_revenue_account
-     order by project.name, source.project_id`)).rows;
+     order by project.name, source.project_id`, "objects");
   return rows.map((row) => ({
     projectId: row.project_id,
     projectCode: row.project_code,
@@ -415,7 +415,7 @@ async function loadSourceGroups(executor: SqlExecutor, orgId: string, periodEnd:
 }
 
 async function loadAccrued(executor: SqlExecutor, orgId: string, periodId: string): Promise<{ accrued: AccruedKey[]; names: Map<string, { code: string | null; name: string }> }> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     project_id: string; subsidiary_id: string; revenue_account_id: string; currency_code: string; amount: string;
     project_code: string | null; project_name: string;
   }>(sql`
@@ -425,7 +425,7 @@ async function loadAccrued(executor: SqlExecutor, orgId: string, periodId: strin
       join projects project on project.org_id = accrual.org_id and project.id = accrual.project_id
      where accrual.org_id = ${orgId} and accrual.period_id = ${periodId}
      group by accrual.project_id, accrual.subsidiary_id, accrual.revenue_account_id, accrual.currency_code,
-              project.code, project.name`)).rows;
+              project.code, project.name`, "objects");
   return {
     accrued: rows.map((row) => ({
       projectId: row.project_id,
@@ -439,8 +439,8 @@ async function loadAccrued(executor: SqlExecutor, orgId: string, periodId: strin
 }
 
 async function loadMinorUnits(executor: SqlExecutor): Promise<Map<string, number>> {
-  const rows = (await executor.execute<{ code: string; minor_units: number }>(sql`
-    select code, minor_units from currencies`)).rows;
+  const rows = await executor.execute<{ code: string; minor_units: number }>(sql`
+    select code, minor_units from currencies`, "objects");
   return new Map(rows.map((row) => [row.code, Number(row.minor_units)]));
 }
 
@@ -533,7 +533,7 @@ async function featureEnabledFor(executor: SqlExecutor, orgId: string, lock: boo
       && (await lockAndCheckOrgFeature(executor, orgId, "unbilledRevenueAccrual"));
   }
   const row = (await executor.execute<{ features: FeatureState | null }>(sql`
-    select settings->'features' as features from orgs where id = ${orgId}`)).rows[0];
+    select settings->'features' as features from orgs where id = ${orgId}`, "objects"))[0];
   return !!row && featureEnabled(row.features ?? {}, "unbilledRevenueAccrual");
 }
 
@@ -711,7 +711,7 @@ export async function runUnbilledRevenueAccrual(
               sourceCount: line.sourceCount,
             })}::jsonb,
             ${actorId}
-          ) returning id`)).rows[0];
+          ) returning id`, "objects"))[0];
         if (!inserted) throw new UnbilledAccrualError("The accrual evidence was not recorded.", "posting_incomplete");
       }
       posted.push({ subsidiaryId, currency, accrualEntryId: accrual.entryId, reversalEntryId, amount });

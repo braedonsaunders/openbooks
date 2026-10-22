@@ -67,14 +67,15 @@ stubModules({
           .join('')
       }
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.executed.push(text)
-          if (text.includes('from contacts')) return { rows: state.contacts }
+          if (text.includes('from contacts')) return inMode({ rows: state.contacts })
           if (text.includes('from parties')) {
-            return { rows: state.party ? [state.party] : [] }
+            return inMode({ rows: state.party ? [state.party] : [] })
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
       }
     `,

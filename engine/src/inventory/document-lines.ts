@@ -47,8 +47,8 @@ async function defaultStockLocation(
   orgId: string,
 ): Promise<string | null> {
   const r = (await runner.execute<{ id: string }>(sql`
-    select id from stock_locations where org_id = ${orgId} and is_active`));
-  return r.rows.length === 1 ? r.rows[0]!.id : null;
+    select id from stock_locations where org_id = ${orgId} and is_active`, "objects"));
+  return r.length === 1 ? r[0]!.id : null;
 }
 
 const INBOUND_DOCUMENT_KINDS = new Set(["vendor_bill", "purchase_receipt", "customer_credit", "cash_refund"]);
@@ -122,13 +122,13 @@ export async function loadDocumentInventoryLines(
       join item_inventory_profiles p on p.item_id = dl.item_id and p.org_id = dl.org_id
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
        and dl.item_id is not null and dl.quantity <> 0
-     order by dl.line_number`));
-  if (r.rows.length === 0) return [];
+     order by dl.line_number`, "objects"));
+  if (r.length === 0) return [];
   const ctx = await loadSubsidiaryContext(runner, orgId);
-  const subsidiaryId = r.rows[0]!.document_subsidiary_id ?? defaultPostingSubsidiaryId(ctx);
+  const subsidiaryId = r[0]!.document_subsidiary_id ?? defaultPostingSubsidiaryId(ctx);
   assertMovementOwner(ctx, subsidiaryId);
   const out: DocumentInventoryLine[] = [];
-  for (const row of r.rows) {
+  for (const row of r) {
     const loc = row.stock_location_id ?? fallback;
     const lineLabel = `document line ${row.line_number} (item ${row.item_id})`;
     if (!loc) {
@@ -281,11 +281,11 @@ export async function loadItemLabels(
 ): Promise<Map<string, string>> {
   const ids = [...new Set(itemIds)];
   if (ids.length === 0) return new Map();
-  const rows = (await runner.execute<{ id: string; label: string }>(sql`
+  const rows = await runner.execute<{ id: string; label: string }>(sql`
     select item.id, coalesce(nullif(btrim(item.code), ''), item.name) as label
       from items item
      where item.org_id = ${orgId}
-       and item.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows;
+       and item.id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects");
   return new Map(rows.map((row) => [row.id, row.label]));
 }
 
@@ -300,7 +300,7 @@ export async function unprofiledInventoryLines(
   orgId: string,
   documentId: string,
 ): Promise<{ line_number: number; item_id: string }[]> {
-  return ((await runner.execute<{ line_number: number; item_id: string }>(sql`
+  return await runner.execute<{ line_number: number; item_id: string }>(sql`
     select dl.line_number, dl.item_id
       from document_lines dl
       join items i on i.id = dl.item_id and i.org_id = dl.org_id
@@ -311,7 +311,7 @@ export async function unprofiledInventoryLines(
          select 1 from item_inventory_profiles p
           where p.item_id = dl.item_id and p.org_id = dl.org_id
        )
-     order by dl.line_number`))).rows;
+     order by dl.line_number`, "objects");
 }
 
 /** Fail before the document transaction when an inventory line has no costing

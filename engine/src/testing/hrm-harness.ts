@@ -167,10 +167,8 @@ export async function setCompensationSettings(
   patch: Record<string, unknown>,
 ): Promise<void> {
   const current =
-    (
-      await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`)
-    ).rows[0]?.settings ?? {};
+    (await db.execute<{ settings: Record<string, unknown> }>(sql`
+    select settings from orgs where id = ${orgId}`, "objects"))[0]?.settings ?? {};
   const next = {
     ...(current as Record<string, unknown>),
     compensation: {
@@ -275,10 +273,8 @@ export async function mkDepartment(
   orgId: string,
   name: string,
 ): Promise<string> {
-  return (
-    await db.execute<{ id: string }>(sql`
-    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`)
-  ).rows[0]!.id;
+  return (await db.execute<{ id: string }>(sql`
+    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`, "objects"))[0]!.id;
 }
 
 /** Grant a role exactly the employment-read permission. */
@@ -325,11 +321,9 @@ export async function mkEmployment(
   subsidiaryId: string,
   version: EmploymentVersionSeed | null = null,
 ): Promise<string> {
-  const employmentId = (
-    await db.execute<{ id: string }>(sql`
+  const employmentId = (await db.execute<{ id: string }>(sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${workerPartyId}, ${subsidiaryId}) returning id`)
-  ).rows[0]!.id;
+    values (${orgId}, ${workerPartyId}, ${subsidiaryId}) returning id`, "objects"))[0]!.id;
   if (version) {
     await mkVersion(orgId, employmentId, version);
   }
@@ -387,11 +381,9 @@ export async function seedEmployment(
 
 /** Minimal person party; the RLS-scoped migration copy stays local there. */
 export async function mkParty(orgId: string, name: string): Promise<string> {
-  return (
-    await db.execute<{ id: string }>(sql`
+  return (await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name)
-    values (${orgId}, 'person', ${name}) returning id`)
-  ).rows[0]!.id;
+    values (${orgId}, 'person', ${name}) returning id`, "objects"))[0]!.id;
 }
 
 /**
@@ -552,18 +544,14 @@ export async function mkReviewTemplate(
           max: 5,
           labels: opts.scaleLabels ?? ["low", "high"],
         });
-  const templateId = (
-    await db.execute<{ id: string }>(sql`
+  const templateId = (await db.execute<{ id: string }>(sql`
     insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
     values (${orgId}, ${opts.name ?? "Annual"}, ${scale}::jsonb, ${actorId}, ${actorId})
-    returning id`)
-  ).rows[0]!.id;
-  const sectionId = (
-    await db.execute<{ id: string }>(sql`
+    returning id`, "objects"))[0]!.id;
+  const sectionId = (await db.execute<{ id: string }>(sql`
     insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
     values (${orgId}, ${templateId}, 0, 'Impact', 'competency', ${actorId}, ${actorId})
-    returning id`)
-  ).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into hrm_review_template_questions
       (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
@@ -906,13 +894,11 @@ export async function seededContributionTerms(
   orgId: string,
   planId: string,
 ): Promise<{ ruleId: string; electionMode: "fixed"; electedRate: string }[]> {
-  const rows = (
-    await db.execute<{
+  const rows = await db.execute<{
       ruleId: string;
       electedRate: string;
     }>(sql`select id as "ruleId",rate::text as "electedRate"
-    from hrm_benefit_contribution_rules where org_id=${orgId} and plan_id=${planId} order by position,rule_key`)
-  ).rows;
+    from hrm_benefit_contribution_rules where org_id=${orgId} and plan_id=${planId} order by position,rule_key`, "objects");
   return rows.map((row) => ({ ...row, electionMode: "fixed" }));
 }
 
@@ -973,12 +959,10 @@ export async function addLiveVersion(
   changeId: string;
   revision: number;
 }> {
-  const maxRow = (
-    await db.execute<{ n: number }>(sql`
+  const maxRow = (await db.execute<{ n: number }>(sql`
     select coalesce(max(version_no), 0)::int as n from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   const versionNo = (maxRow?.n ?? 0) + 1;
   // One transaction like the service: the deferred evidence guards prove at
   // commit, so the close, the successor, and the event must commit together
@@ -992,23 +976,18 @@ export async function addLiveVersion(
     // closure would hide the leaver from the start leg.
     const now =
       args.recordedAt ??
-      (await tx.execute<{ now: Date }>(sql`select now() as now`)).rows[0]!.now;
-    const prior = (
-      await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
+      (await tx.execute<{ now: Date }>(sql`select now() as now`, "objects"))[0]!.now;
+    const prior = await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
       select id, version_no, to_jsonb(worker_employment_versions) as before
         from worker_employment_versions
        where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
        order by version_no
-    `)
-    ).rows;
+    `, "objects");
     const newRevision =
-      (
-        await tx.execute<{ revision: number }>(sql`
+      (await tx.execute<{ revision: number }>(sql`
       select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}
-    `)
-      ).rows[0]!.revision + 1;
-    const newChangeId = (
-      await tx.execute<{ id: string }>(sql`
+    `, "objects"))[0]!.revision + 1;
+    const newChangeId = (await tx.execute<{ id: string }>(sql`
       insert into employment_changes
         (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
          recorded_source, recorded_source_ref, closed_versions)
@@ -1025,8 +1004,7 @@ export async function addLiveVersion(
                 })),
               )}::jsonb)
       returning id
-    `)
-    ).rows[0]!.id;
+    `, "objects"))[0]!.id;
     for (const row of prior) {
       await tx.execute(sql`
         update worker_employment_versions
@@ -1034,15 +1012,13 @@ export async function addLiveVersion(
          where id = ${row.id}
       `);
     }
-    const inserted = (
-      await tx.execute<{ id: string }>(sql`
+    const inserted = (await tx.execute<{ id: string }>(sql`
       insert into worker_employment_versions
         (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
       values (${orgId}, ${employmentId}, ${versionNo}, ${args.status},
               ${args.from}::date, ${args.to ?? null}::date, ${now})
       returning id
-    `)
-    ).rows[0]!.id;
+    `, "objects"))[0]!.id;
     await tx.execute(sql`
       update worker_employments set revision = ${newRevision}, updated_at = now()
        where org_id = ${orgId} and id = ${employmentId}
@@ -1276,12 +1252,10 @@ export function perfError(error: unknown): HrmPerformanceError {
 export async function gateOf(
   requestId: string,
 ): Promise<{ id: string; status: string; runId: string }> {
-  const rows = (
-    await db.execute<{ id: string; status: string; runId: string }>(sql`
+  const rows = await db.execute<{ id: string; status: string; runId: string }>(sql`
     select id, status, run_id as "runId" from flow_gates
      where subject_id = ${requestId} order by created_at
-  `)
-  ).rows;
+  `, "objects");
   assert.equal(rows.length, 1, "exactly one gate decides the request");
   return rows[0]!;
 }
@@ -1314,16 +1288,14 @@ export async function setupCloseAutomationHarness(
       coalesce(settings->'features', '{}'::jsonb) || '{"advancedClose":true}'::jsonb, true)
     where id = ${fixture.orgId}`);
   const defaults = await ensureCloseDefaults(fixture.orgId, actors.adminId);
-  const runId = (
-    await db.execute<{ id: string }>(sql`
+  const runId = (await db.execute<{ id: string }>(sql`
     insert into close_runs
       (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
        current_stage, target_close_date, scope, data_fingerprint, started_at, started_by, created_by, updated_by)
     values (${fixture.orgId}, ${fixture.periodId}, ${fixture.bookId}, ${defaults.blueprintId},
             ${defaults.reportingPackageId}, 'in_progress', 'execute', current_date + 30,
             '{}'::jsonb, ${fingerprint}, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
-    returning id`)
-  ).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   return {
     orgId: fixture.orgId,
     runId,
@@ -1563,11 +1535,9 @@ export async function setupPerformanceHarness(
     });
     await openCycle({ orgId: org.orgId, actorId: hrId, cycleId: cycle.id });
     cycleId = cycle.id;
-    const reviews = (
-      await db.execute<{ id: string; kind: string }>(
-        sql`select id,kind from hrm_reviews where org_id=${org.orgId} and cycle_id=${cycleId} and employment_id=${workerEmploymentId}`,
-      )
-    ).rows;
+    const reviews = await db.execute<{ id: string; kind: string }>(
+        sql`select id,kind from hrm_reviews where org_id=${org.orgId} and cycle_id=${cycleId} and employment_id=${workerEmploymentId}`, "objects",
+      );
     selfReviewId = reviews.find((r) => r.kind === "self")!.id;
     managerReviewId = reviews.find((r) => r.kind === "manager")!.id;
   }

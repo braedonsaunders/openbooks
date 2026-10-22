@@ -107,7 +107,7 @@ export async function loadCandidate(
   return (await exec.execute<CandidateRow>(sql`
     select ${CANDIDATE_COLUMNS} from hrm_candidates
      where org_id = ${orgId} and id = ${candidateId}
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
 }
 
 /** Case-insensitive email match within the org (the duplicate-email refusal). */
@@ -120,7 +120,7 @@ export async function findCandidateByEmail(
     select ${CANDIDATE_COLUMNS} from hrm_candidates
      where org_id = ${orgId} and lower(btrim(email)) = lower(btrim(${email}))
      order by created_at limit 1
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
 }
 
 export interface CreateCandidateQuery {
@@ -193,7 +193,7 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
     if (resumeAttachmentId) {
       const file = (await db.execute<{ one: number }>(sql`
         select 1 as one from files where org_id = ${orgId} and id = ${resumeAttachmentId} limit 1
-      `)).rows.length > 0;
+      `, "objects")).length > 0;
       if (!file) {
         throw new RecruitingError("NOT_FOUND", "resume attachment is not visible in this organization — check the reference");
       }
@@ -237,7 +237,7 @@ export async function createCandidate(query: CreateCandidateQuery): Promise<Crea
               ${typeof query.notes === "string" ? query.notes : null},
               ${actorId}, ${actorId})
       returning ${CANDIDATE_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw new RecruitingError("REFUSED", "the candidate was not stored — no row was written; retry the request");
     }
@@ -258,7 +258,7 @@ export async function linkCandidateParty(
        set party_id = ${args.partyId}, updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${args.candidateId} and party_id is null
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!updated) {
     throw new RecruitingError(
       "REFUSED",

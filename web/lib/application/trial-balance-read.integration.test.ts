@@ -38,7 +38,7 @@ test("application trial balance returns exact ledger amounts through the report 
 
     const result = await withOrgContext(org.orgId, () => listApplicationTrialBalance(context, { asOf: org.date }));
     const bank = (await withOrgContext(org.orgId, () => db.execute<{ number: string | null; name: string; type: string }>(sql`
-      select number, name, type from accounts where id = ${org.accounts.bank} and org_id = ${org.orgId}`))).rows[0]!;
+      select number, name, type from accounts where id = ${org.accounts.bank} and org_id = ${org.orgId}`, "objects")))[0]!;
     const bankRow = result.accounts.find((row) => row.number === bank.number && row.name === bank.name);
 
     assert.ok(bankRow, "the posted bank ledger activity is visible in the trial balance");

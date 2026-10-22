@@ -91,8 +91,8 @@ function patchRequest(body: unknown): Request {
 async function storedFlags(orgId: string): Promise<{ isDefault: boolean; isActive: boolean }> {
   const r = await db.execute<{ isDefault: boolean; isActive: boolean }>(sql`
     select is_default as "isDefault", is_active as "isActive"
-      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`);
-  return r.rows[0]!;
+      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`, "objects");
+  return r[0]!;
 }
 
 test(
@@ -151,8 +151,8 @@ test(
 async function storedRoles(orgId: string): Promise<unknown> {
   const r = await db.execute<{ allowedRoles: unknown }>(sql`
     select allowed_roles as "allowedRoles"
-      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`);
-  return r.rows[0]?.allowedRoles ?? null;
+      from form_layouts where id = ${LAYOUT_ID} and org_id = ${orgId}`, "objects");
+  return r[0]?.allowedRoles ?? null;
 }
 
 test(
@@ -208,14 +208,15 @@ test(
         set org_id = excluded.org_id, is_default = true, is_active = true`);
     const original = db.execute.bind(db);
     let deleted = false;
-    db.execute = (async (query: Parameters<typeof original>[0]) => {
-      const result = await original(query);
+    db.execute = (async (query: Parameters<typeof original>[0], mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const result = await original<Record<string, unknown>>(query);
       const row = result.rows[0] as { id?: string } | undefined;
       if (!deleted && row?.id === LAYOUT_ID) {
         deleted = true;
         await original(sql`delete from form_layouts where id = ${LAYOUT_ID} and org_id = ${f.orgId}`);
       }
-      return result;
+      return inMode(result);
     }) as typeof db.execute;
     try {
       const res = await PATCH(patchRequest({ isDefault: true }), {
@@ -226,8 +227,8 @@ test(
       assert.notEqual((body as { ok?: unknown }).ok, true);
       const def = await db.execute<{ isDefault: boolean }>(sql`
         select is_default as "isDefault"
-          from form_layouts where id = ${DEFAULT_ID} and org_id = ${f.orgId}`);
-      assert.equal(def.rows[0]?.isDefault, true, "org default must survive a zero-row PATCH");
+          from form_layouts where id = ${DEFAULT_ID} and org_id = ${f.orgId}`, "objects");
+      assert.equal(def[0]?.isDefault, true, "org default must survive a zero-row PATCH");
     } finally {
       db.execute = original;
     }

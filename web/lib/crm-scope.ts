@@ -72,24 +72,20 @@ export async function lockCrmLinkSubject(
 ): Promise<boolean> {
   if (!CRM_LINKABLE_SUBJECT_KINDS.has(kind)) return false
   if (kind === 'account') {
-    const profile = (
-      await tx.execute<{ party_id: string }>(sql`
+    const profile = (await tx.execute<{ party_id: string }>(sql`
         select party_id from crm_account_profiles
          where org_id = ${orgId} and party_id = ${id}
-         for share`)
-    ).rows[0]
+         for share`, 'objects'))[0]
     if (!profile) return false
     await tx.execute(sql`
       select 1 from parties where org_id = ${orgId} and id = ${id} for share`)
     return true
   }
   if (kind === 'contact') {
-    const contact = (
-      await tx.execute<{ party_id: string | null }>(sql`
+    const contact = (await tx.execute<{ party_id: string | null }>(sql`
         select party_id from contacts
          where org_id = ${orgId} and id = ${id}
-         for share`)
-    ).rows[0]
+         for share`, 'objects'))[0]
     if (!contact) return false
     if (contact.party_id) {
       await tx.execute(sql`
@@ -98,12 +94,10 @@ export async function lockCrmLinkSubject(
     return true
   }
   if (kind === 'opportunity') {
-    const opportunity = (
-      await tx.execute<{ party_id: string | null }>(sql`
+    const opportunity = (await tx.execute<{ party_id: string | null }>(sql`
         select party_id from crm_opportunities
          where org_id = ${orgId} and id = ${id}
-         for share`)
-    ).rows[0]
+         for share`, 'objects'))[0]
     if (!opportunity) return false
     if (opportunity.party_id) {
       await tx.execute(sql`
@@ -112,16 +106,12 @@ export async function lockCrmLinkSubject(
     return true
   }
   if (kind === 'document') {
-    const row = (
-      await tx.execute(sql`
-        select 1 from documents where org_id = ${orgId} and id = ${id} for share`)
-    ).rows[0]
+    const row = (await tx.execute(sql`
+        select 1 from documents where org_id = ${orgId} and id = ${id} for share`, 'objects'))[0]
     return !!row
   }
-  const project = (
-    await tx.execute(sql`
-      select 1 from projects where org_id = ${orgId} and id = ${id} for share`)
-  ).rows[0]
+  const project = (await tx.execute(sql`
+      select 1 from projects where org_id = ${orgId} and id = ${id} for share`, 'objects'))[0]
   return !!project
 }
 

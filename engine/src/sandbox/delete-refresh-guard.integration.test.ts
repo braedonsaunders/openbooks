@@ -20,13 +20,13 @@ async function readySandbox(orgId: string) {
 
 async function sandboxStatus(sandboxId: string): Promise<string | null> {
   const row = (await db.execute<{ status: string }>(sql`
-    select status from sandboxes where id = ${sandboxId}`)).rows[0];
+    select status from sandboxes where id = ${sandboxId}`, "objects"))[0];
   return row?.status ?? null;
 }
 
 async function orgExists(orgId: string): Promise<boolean> {
   const row = (await db.execute<{ id: string }>(sql`
-    select id from orgs where id = ${orgId}`)).rows[0];
+    select id from orgs where id = ${orgId}`, "objects"))[0];
   return !!row;
 }
 

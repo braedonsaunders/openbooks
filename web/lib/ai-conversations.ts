@@ -41,8 +41,8 @@ export async function listConversations(
      where org_id = ${authz.user.orgId} and user_id = ${authz.user.id} and scope = ${scope}
      order by updated_at desc, id desc
      ${limit === undefined ? sql`` : sql`limit ${limit}`}
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 /** True when the conversation exists, is in scope, and belongs to this user. */
@@ -55,8 +55,8 @@ export async function ownsConversation(
     select 1 from ai_conversations
      where id = ${conversationId} and org_id = ${authz.user.orgId}
        and user_id = ${authz.user.id} and scope = ${scope}
-  `));
-  return r.rows.length > 0;
+  `, "objects"));
+  return r.length > 0;
 }
 
 export async function createConversation(
@@ -70,8 +70,8 @@ export async function createConversation(
     values (${authz.user.orgId}, ${authz.user.id}, ${scope}, ${clean},
             ${authz.user.id}, ${authz.user.id})
     returning id
-  `));
-  return r.rows[0]!.id;
+  `, "objects"));
+  return r[0]!.id;
 }
 
 /** Owner-only append; also bumps the conversation's updated_at for ordering. */
@@ -89,8 +89,8 @@ export async function appendMessage(
       select 1 from ai_conversations
        where id = ${args.conversationId} and org_id = ${authz.user.orgId}
          and user_id = ${authz.user.id}
-    `));
-    if (owned.rows.length === 0) throw new Error("conversation not owned");
+    `, "objects"));
+    if (owned.length === 0) throw new Error("conversation not owned");
     await tx.execute(sql`
       insert into ai_messages (org_id, conversation_id, role, content, data, created_by, updated_by)
       values (${authz.user.orgId}, ${args.conversationId}, ${args.role}, ${args.content},
@@ -123,9 +123,9 @@ export async function olderMessages(
       join ai_conversations c on c.id = m.conversation_id
      where m.id = ${beforeId} and m.conversation_id = ${conversationId}
        and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
-  `);
-  if (anchor.rows.length === 0) return empty;
-  const { created_at, id } = anchor.rows[0]!;
+  `, "objects");
+  if (anchor.length === 0) return empty;
+  const { created_at, id } = anchor[0]!;
   const r = await db.execute<AiStoredMessage>(sql`
     select m.id, m.role, m.content, m.data, m.created_at as "createdAt"
       from ai_messages m
@@ -135,10 +135,10 @@ export async function olderMessages(
        and (m.created_at, m.id) < (${created_at}::timestamptz, ${id}::uuid)
      order by m.created_at desc, m.id desc
      limit ${safeLimit + 1}
-  `);
+  `, "objects");
   return {
-    messages: r.rows.slice(0, safeLimit).reverse(),
-    hasOlder: r.rows.length > safeLimit,
+    messages: r.slice(0, safeLimit).reverse(),
+    hasOlder: r.length > safeLimit,
   };
 }
 
@@ -156,8 +156,8 @@ export async function recentMessages(
        and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
      order by m.created_at desc, m.id desc
      limit ${limit}
-  `));
-  return r.rows.reverse();
+  `, "objects"));
+  return r.reverse();
 }
 
 export async function renameConversation(
@@ -173,8 +173,8 @@ export async function renameConversation(
      where id = ${conversationId} and org_id = ${authz.user.orgId}
        and user_id = ${authz.user.id} and scope = ${scope}
     returning id
-  `));
-  return r.rows.length > 0;
+  `, "objects"));
+  return r.length > 0;
 }
 
 export async function deleteConversation(
@@ -188,6 +188,6 @@ export async function deleteConversation(
      where id = ${conversationId} and org_id = ${authz.user.orgId}
        and user_id = ${authz.user.id} and scope = ${scope}
     returning id
-  `));
-  return r.rows.length > 0;
+  `, "objects"));
+  return r.length > 0;
 }

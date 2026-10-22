@@ -82,17 +82,17 @@ const BENEFITS_SPEC = {
 } as const;
 
 async function enrollmentsOf(orgId: string, employmentId: string): Promise<Array<{ id: string; status: string; effective_to: string | null }>> {
-  const rows = (await db.execute<{ id: string; status: string; effective_to: string | null }>(sql`
+  const rows = await db.execute<{ id: string; status: string; effective_to: string | null }>(sql`
     select id, status, effective_to::text as effective_to from hrm_benefit_enrollments
      where org_id = ${orgId} and employment_id = ${employmentId} order by effective_from
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
 async function eventsOf(enrollmentId: string): Promise<Array<{ kind: string; reason: string }>> {
-  const rows = (await db.execute<{ kind: string; reason: string }>(sql`
+  const rows = await db.execute<{ kind: string; reason: string }>(sql`
     select kind, reason from hrm_benefit_events where enrollment_id = ${enrollmentId} order by recorded_at
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -120,9 +120,9 @@ async function assertStorageRefusal(promise: Promise<unknown>, pattern: RegExp):
 }
 
 async function enrollmentCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_benefit_enrollments where org_id = ${orgId}
-  `)).rows;
+  `, "objects");
   return rows[0]!.n;
 }
 
@@ -141,35 +141,35 @@ test("migration 0197 bootstraps: eight tables, RLS forced, 0194 intact", { skip:
     for (const table of tables) {
       const reg = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pg_tables where schemaname = 'public' and tablename = ${table}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(reg, 1, `${table} exists`);
       const rls = (await db.execute<{ rowsecurity: boolean; forcerowsecurity: boolean }>(sql`
         select c.relrowsecurity as rowsecurity, c.relforcerowsecurity as forcerowsecurity
           from pg_class c join pg_namespace n on n.oid = c.relnamespace
          where n.nspname = 'public' and c.relname = ${table}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(rls.rowsecurity, true, `${table} has RLS`);
       assert.equal(rls.forcerowsecurity, true, `${table} forces RLS`);
     }
     const uniques = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from pg_constraint
        where conname = 'hrm_benefit_payroll_inputs_enrollment_kind_month_unique'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(uniques, 1, "monthly idempotency unique exists");
     const pcUnique = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from pg_constraint where conname = 'pay_components_org_id_id_unique'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(pcUnique, 1, "pay_components carries the additive tenant unique");
     // 0194 intact: its tables, kind check, and no amount column.
     const leaveTables = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from pg_tables where schemaname = 'public'
         and tablename in ('hrm_leave_types', 'hrm_leave_policies', 'hrm_leave_requests', 'hrm_absences', 'hrm_payroll_inputs')
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(leaveTables, 5, "0194 tables intact");
     const amountCol = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from information_schema.columns
        where table_schema = 'public' and table_name = 'hrm_payroll_inputs' and column_name = 'amount'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(amountCol, 0, "0194 inputs carry no amount column");
   });
 });
@@ -193,10 +193,10 @@ test("elect happy path stores fixed contribution terms and evidences activation"
     const stored = (await db.execute<{ employee: string; employer: string }>(sql`
       select employee_amount_per_period::text as employee, employer_amount_per_period::text as employer
         from hrm_benefit_enrollments where id = ${dto.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stored.employee, null);
     assert.equal(stored.employer, null);
-    const terms = (await db.execute<{ rate: string; mode: string }>(sql`select elected_rate::text as rate,election_mode as mode from hrm_benefit_enrollment_terms where enrollment_id=${dto.id} order by elected_rate`)).rows;
+    const terms = await db.execute<{ rate: string; mode: string }>(sql`select elected_rate::text as rate,election_mode as mode from hrm_benefit_enrollment_terms where enrollment_id=${dto.id} order by elected_rate`, "objects");
     assert.deepEqual(terms.map(t => [t.rate,t.mode]), [['250.0000000000','fixed'],['500.0000000000','fixed']]);
     assert.deepEqual((await eventsOf(dto.id)).map((e) => e.kind), ["elected", "activated"]);
   });
@@ -210,7 +210,7 @@ test("unused coverage withdrawal preserves approved evidence and permits a newly
     const first = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
       effectiveFrom: "2026-03-01", lifeEventReason: "Contribution election", contributionTerms: terms });
     const evidence = async () => (await db.execute(sql`select submission_snapshot,decision_snapshot,effective_from,effective_to
-      from hrm_benefit_enrollments where org_id=${h.org.orgId} and id=${first.id}`)).rows[0];
+      from hrm_benefit_enrollments where org_id=${h.org.orgId} and id=${first.id}`, "objects"))[0];
     const original = await evidence();
     await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollments set status='cancelled',ended_reason='Correction',updated_by=${h.adminId}
       where org_id=${h.org.orgId} and id=${first.id}`), /lifecycle transition/i);
@@ -243,11 +243,11 @@ test("unused coverage withdrawal preserves legacy pending and voided payroll inp
       const first = await electEnrollment({ orgId: h.org.orgId, actorId: h.adminId, employmentId, planId,
         effectiveFrom: "2026-03-01", lifeEventReason: "Contribution election", contributionTerms: await seededContributionTerms(h.org.orgId, planId) });
       const component = (await db.execute<{ id: string }>(sql`select pay_component_id as id from hrm_benefit_contribution_rules
-        where org_id=${h.org.orgId} and plan_id=${planId} and kind='employee_deduction' limit 1`)).rows[0]!;
+        where org_id=${h.org.orgId} and plan_id=${planId} and kind='employee_deduction' limit 1`, "objects"))[0]!;
       // Reconstruct pre-retirement evidence only in the disposable fixture transaction.
       // The exact trigger lock prevents other writers from observing its suspension.
       await db.transaction(async tx => {
-        const scratch = (await tx.execute(sql`select id from orgs where id=${h.org.orgId} and name like 'Scratch %' for update`)).rows;
+        const scratch = await tx.execute(sql`select id from orgs where id=${h.org.orgId} and name like 'Scratch %' for update`, "objects");
         assert.equal(scratch.length, 1);
         await tx.execute(sql`alter table public.hrm_benefit_payroll_inputs disable trigger benefit_monthly_queue_retired_trigger`);
         await tx.execute(sql`insert into hrm_benefit_payroll_inputs
@@ -256,7 +256,7 @@ test("unused coverage withdrawal preserves legacy pending and voided payroll inp
         await tx.execute(sql`set constraints all immediate`);
         await tx.execute(sql`alter table public.hrm_benefit_payroll_inputs enable trigger benefit_monthly_queue_retired_trigger`);
       });
-      const evidence = async () => (await db.execute(sql`select * from hrm_benefit_payroll_inputs where org_id=${h.org.orgId} and enrollment_id=${first.id}`)).rows;
+      const evidence = async () => await db.execute(sql`select * from hrm_benefit_payroll_inputs where org_id=${h.org.orgId} and enrollment_id=${first.id}`, "objects");
       const original = await evidence();
       await assert.rejects(withdrawUnusedEnrollment({ orgId: h.org.orgId, actorId: h.adminId, enrollmentId: first.id,
         reason: "Contribution correction" }), /legacy payroll input history/);
@@ -298,7 +298,7 @@ test("native Flows authorize a successor without interrupting prior coverage", {
     assert.equal(next.status,'pending_approval');
     assert.equal((await enrollmentsOf(h.org.orgId,employmentId)).find(e=>e.id===first.id)?.status,'active');
     await assertStorageRefusal(db.execute(sql`update hrm_benefit_enrollment_terms set elected_rate=400 where org_id=${h.org.orgId} and enrollment_id=${next.id}`),/submitted contribution elections are immutable/i);
-    const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_benefit_enrollment' and subject_id=${next.id} and status='pending'`)).rows[0]!;
+    const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_benefit_enrollment' and subject_id=${next.id} and status='pending'`, "objects"))[0]!;
     await assertStorageRefusal(db.transaction(async tx=>{
       await tx.execute(sql`update flow_gates set status='approved',decided_by=${h.adminId},decided_at=now() where org_id=${h.org.orgId} and id=${gate.id}`);
       await tx.execute(sql`update hrm_benefit_enrollments set status='ended',effective_to='2026-03-31' where org_id=${h.org.orgId} and id=${first.id}`);
@@ -459,7 +459,7 @@ test("change ends and opens anew; end and cancel hold their boundaries", { skip:
       contributionTerms: (await seededContributionTerms(h.org.orgId, planId)).map(t => ({...t,electedRate: t.electedRate.startsWith("250.") ? "600" : "900"})),
       reason: "new child",
     });
-    const changedTerms = (await db.execute<{ rate: string }>(sql`select elected_rate::text as rate from hrm_benefit_enrollment_terms where enrollment_id=${second.id} order by elected_rate`)).rows;
+    const changedTerms = await db.execute<{ rate: string }>(sql`select elected_rate::text as rate from hrm_benefit_enrollment_terms where enrollment_id=${second.id} order by elected_rate`, "objects");
     assert.deepEqual(changedTerms.map(t => t.rate), ['600.0000000000','900.0000000000']);
     assert.equal(second.effectiveFrom, "2026-04-01");
     const rows = await enrollmentsOf(h.org.orgId, employmentId);
@@ -658,9 +658,9 @@ test("termination ends live enrolments in the same transaction", { skip: !DB }, 
       payload: { kind: "termination", effectiveDate: "2026-10-31" },
     });
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.adminId, requestId: draft.id, reason: "resigned" });
-    const gates = (await db.execute<{ id: string }>(sql`
+    const gates = await db.execute<{ id: string }>(sql`
       select id from flow_gates where subject_id = ${draft.id} order by created_at
-    `)).rows;
+    `, "objects");
     await decideGate({ gateId: gates[0]!.id, decision: "approved", userId: deciderId });
     const rows = await enrollmentsOf(h.org.orgId, employmentId);
     assert.deepEqual(rows.map((r) => [r.status, r.effective_to]), [
@@ -773,7 +773,7 @@ test("storage guards refuse event rewrites and history deletes", { skip: !DB }, 
     });
     const eventId = (await db.execute<{ id: string }>(sql`
       select id from hrm_benefit_events where enrollment_id = ${dto.id} order by recorded_at limit 1
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     await assertStorageRefusal(
       db.execute(sql`update hrm_benefit_events set reason = 'rewritten' where id = ${eventId}`),
       /immutable evidence/,

@@ -132,16 +132,16 @@ async function resolveTimeNames(
   const uniq = (ids: (string | null)[]) => [...new Set(ids.filter((id): id is string => !!id))].slice(0, 100);
   const [projects, items, timeTypes] = await Promise.all([
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from projects where org_id = ${orgId} and id = any(${`{${uniq(projectIds).join(",")}}`}::uuid[])`),
+      select id, name from projects where org_id = ${orgId} and id = any(${`{${uniq(projectIds).join(",")}}`}::uuid[])`, "objects"),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from items where org_id = ${orgId} and id = any(${`{${uniq(itemIds).join(",")}}`}::uuid[])`),
+      select id, name from items where org_id = ${orgId} and id = any(${`{${uniq(itemIds).join(",")}}`}::uuid[])`, "objects"),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from time_types where org_id = ${orgId} and id = any(${`{${uniq(timeTypeIds).join(",")}}`}::uuid[])`),
+      select id, name from time_types where org_id = ${orgId} and id = any(${`{${uniq(timeTypeIds).join(",")}}`}::uuid[])`, "objects"),
   ]);
   return {
-    projects: new Map(projects.rows.map((r) => [r.id, r.name])),
-    items: new Map(items.rows.map((r) => [r.id, r.name])),
-    timeTypes: new Map(timeTypes.rows.map((r) => [r.id, r.name])),
+    projects: new Map(projects.map((r) => [r.id, r.name])),
+    items: new Map(items.map((r) => [r.id, r.name])),
+    timeTypes: new Map(timeTypes.map((r) => [r.id, r.name])),
   };
 }
 
@@ -197,7 +197,7 @@ const searchTimesheets: AssistantToolDef = {
          group by w.id, e.display_name
          order by w.week_start desc, e.display_name
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select count(distinct w.id)::int as weeks,
                coalesce(sum(te.hours), 0)::text as hours
@@ -207,18 +207,18 @@ const searchTimesheets: AssistantToolDef = {
             and te.employee_party_id = w.employee_party_id
             and te.worked_on >= w.week_start and te.worked_on < w.week_start + 7
          where w.org_id = ${authz.user.orgId}${filters}${scope}
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select w.status, count(*)::int as count
           from timesheet_weeks w
           join parties e on e.id = w.employee_party_id and e.org_id = w.org_id
          where w.org_id = ${authz.user.orgId}${filters}${scope}
          group by w.status order by w.status
-      `),
+      `, "objects"),
     ]);
-    const total = totals.rows[0] ?? {};
+    const total = totals[0] ?? {};
     const capped = capList(
-      page.rows.map((r) => ({
+      page.map((r) => ({
         weekId: r.id,
         employeePartyId: r.employee_party_id,
         employeeName: r.employee_name,
@@ -240,7 +240,7 @@ const searchTimesheets: AssistantToolDef = {
         totalHours: numberValue(total.hours),
         truncated: capped.truncated,
         weeks: capped.items,
-        byStatus: byStatus.rows.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
+        byStatus: byStatus.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
         href: "/timesheets",
       },
     };
@@ -316,8 +316,8 @@ const unbilledTime: AssistantToolDef = {
         : sql` and false`;
     const pinned = await db.execute(sql`
       select 1 from projects where id = ${a.projectId} and org_id = ${authz.user.orgId}${scope}
-    `);
-    if (!pinned.rows[0]) return { ok: false, error: "project_not_found" };
+    `, "objects");
+    if (!pinned[0]) return { ok: false, error: "project_not_found" };
     // projectUnbilled is the cockpit/billing-modal figure: approved billable
     // time plus billable cost lines, provenance-gated against re-billing.
     const unbilled = await projectUnbilled(authz.user.orgId, a.projectId, {
@@ -398,17 +398,17 @@ const listFieldTickets: AssistantToolDef = {
          where d.org_id = ${authz.user.orgId} and d.kind = 'field_ticket'${filters}${scope}
          order by d.document_date desc, d.created_at desc
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select d.status, count(*)::int as count
           from documents d
           join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.kind = 'field_ticket'${filters}${scope}
          group by d.status order by d.status
-      `),
+      `, "objects"),
     ]);
     const capped = capList(
-      page.rows.map((r) => ({
+      page.map((r) => ({
         ticketId: r.id,
         documentNumber: r.document_number,
         status: r.status,
@@ -431,10 +431,10 @@ const listFieldTickets: AssistantToolDef = {
       ok: true,
       data: {
         returned: capped.items.length,
-        total: byStatus.rows.reduce((n, r) => n + Number(r.count ?? 0), 0),
+        total: byStatus.reduce((n, r) => n + Number(r.count ?? 0), 0),
         truncated: capped.truncated,
         tickets: capped.items,
-        byStatus: byStatus.rows.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
+        byStatus: byStatus.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
         href: "/field-tickets",
       },
     };
@@ -458,9 +458,9 @@ const getFieldTicket: AssistantToolDef = {
     const owned = await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from documents
        where id = ${a.ticketId} and org_id = ${authz.user.orgId} and kind = 'field_ticket'
-    `);
-    const subsidiaryId = owned.rows[0]?.subsidiaryId ?? null;
-    if (!owned.rows[0] || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId)) {
+    `, "objects");
+    const subsidiaryId = owned[0]?.subsidiaryId ?? null;
+    if (!owned[0] || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId)) {
       return { ok: false, error: "field_ticket_not_found" };
     }
     // loadFieldTicket is the route's loader: it re-checks the feature flag

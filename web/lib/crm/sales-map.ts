@@ -33,15 +33,11 @@ export async function loadSalesMapCustomers(
     and (${filters.employeeId}::uuid is null or c.sales_rep_id=${filters.employeeId}::uuid)
     and (${filters.salesTeamId}::uuid is null or territory.sales_team_id=${filters.salesTeamId}::uuid)`;
   const located = sql`address.latitude is not null and address.longitude is not null and address.location_verified_at is not null`;
-  const stats = (
-    await tx.execute<{ total: number; located: number }>(
-      sql`select count(*)::int as total,count(*) filter(where ${located})::int as located from ${relation} where ${where}`,
-    )
-  ).rows[0] ?? { total: 0, located: 0 };
-  const locations = (
-    await tx.execute<SalesCustomerLocation>(
-      sql`select p.id,p.display_name as name,address.longitude::float8 as longitude,address.latitude::float8 as latitude,c.sales_rep_id as "employeeId",cp.territory_id as "territoryId" from ${relation} where ${where} and ${located} order by p.display_name,p.id limit 5000`,
-    )
-  ).rows;
+  const stats = (await tx.execute<{ total: number; located: number }>(
+      sql`select count(*)::int as total,count(*) filter(where ${located})::int as located from ${relation} where ${where}`, "objects",
+    ))[0] ?? { total: 0, located: 0 };
+  const locations = await tx.execute<SalesCustomerLocation>(
+      sql`select p.id,p.display_name as name,address.longitude::float8 as longitude,address.latitude::float8 as latitude,c.sales_rep_id as "employeeId",cp.territory_id as "territoryId" from ${relation} where ${where} and ${located} order by p.display_name,p.id limit 5000`, "objects",
+    );
   return { locations, stats };
 }

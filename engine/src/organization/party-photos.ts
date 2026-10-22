@@ -49,14 +49,14 @@ async function auditPhoto(orgId: string, actorId: string | null, partyId: string
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${orgId}, 'parties', ${partyId}, 'update',
       ${JSON.stringify({ mode: 'party_photo', reason, before, after, ...(source ? { source } : {}) })}::jsonb,
-      ${actorId}, ${source ? 'sync' : 'ui'}) returning id`)
-  if (event.rows.length !== 1) throw new Error('Party photo audit did not persist')
+      ${actorId}, ${source ? 'sync' : 'ui'}) returning id`, 'objects')
+  if (event.length !== 1) throw new Error('Party photo audit did not persist')
 }
 
 async function assertPhotoConnection(tx: SqlExecutor, orgId: string, source: ConnectorPhotoSource) {
   const connection = (await tx.execute<{ account: string }>(sql`
     select config->>'account' as account from connections
-    where org_id=${orgId} and id=${source.connectionId} and source=${source.system} for share`)).rows[0]
+    where org_id=${orgId} and id=${source.connectionId} and source=${source.system} for share`, 'objects'))[0]
   if (!connection || connection.account?.replaceAll('_', '-').toLowerCase() !== source.account.replaceAll('_', '-').toLowerCase()) {
     throw new PartyPhotoRefusal('The photo source does not match this organization’s connector account.', 403)
   }
@@ -68,7 +68,7 @@ async function authorizePhoto(tx: SqlExecutor, orgId: string, actorId: string | 
   }
   if (actorId) {
     const permission = source ? 'sync.run' : 'parties.manage'
-    const subsidiary = (await tx.execute<{ subsidiary_id: string | null }>(sql`select subsidiary_id from parties where org_id=${orgId} and id=${partyId}`)).rows[0]
+    const subsidiary = (await tx.execute<{ subsidiary_id: string | null }>(sql`select subsidiary_id from parties where org_id=${orgId} and id=${partyId}`, 'objects'))[0]
     if (!subsidiary) throw new ScopeNotFoundError()
     const scope = await lockActorCommandAuthority(tx, orgId, actorId, subsidiary.subsidiary_id, permission)
     if (!await actorHasPermission(tx, orgId, actorId, 'parties.manage')) throw new ScopeNotFoundError()
@@ -102,7 +102,7 @@ export async function storePartyPhoto(input: {
       await authorizePhoto(db, input.orgId, input.actorId, input.partyId, input.source)
       const party = (await db.execute<{ photo_file_id: string | null; ownership: Ownership | null; custom: Record<string, unknown> }>(sql`
         select photo_file_id::text, custom->'photoOwnership' as ownership, custom from parties
-        where org_id=${input.orgId} and id=${input.partyId} for update`)).rows[0]
+        where org_id=${input.orgId} and id=${input.partyId} for update`, 'objects'))[0]
       if (!party) throw new ScopeNotFoundError()
       const ownership = party.ownership
       if (input.source) {
@@ -113,7 +113,7 @@ export async function storePartyPhoto(input: {
           || (mappedRef == null && !(canonical?.system === source.system && canonical.externalId === source.externalId))) {
           throw new PartyPhotoRefusal('The employee’s stable connector identity changed; resolve its mapping before importing a photo.')
         }
-        const employee = (await db.execute(sql`select id from employee_roles where org_id=${input.orgId} and party_id=${input.partyId}`)).rows[0]
+        const employee = (await db.execute(sql`select id from employee_roles where org_id=${input.orgId} and party_id=${input.partyId}`, 'objects'))[0]
         if (!employee) throw new PartyPhotoRefusal('The mapped party is not an employee in this organization.', 404)
         const owned = ownership?.mode === 'connector' && ownership.system === source.system
           && ownership.connectionId === source.connectionId && ownership.externalId === source.externalId
@@ -127,7 +127,7 @@ export async function storePartyPhoto(input: {
         }
         if (owned && party.photo_file_id) {
           const stored = (await db.execute<{ content_hash: string | null; byte_length: string }>(sql`
-            select content_hash, size_bytes::text as byte_length from files where org_id=${input.orgId} and id=${party.photo_file_id} and not is_inactive`)).rows[0]
+            select content_hash, size_bytes::text as byte_length from files where org_id=${input.orgId} and id=${party.photo_file_id} and not is_inactive`, 'objects'))[0]
           if (!stored || stored.content_hash !== ownership?.contentHash) {
             return { status: 'conflict' as const, photoFileId: party.photo_file_id, reason: 'The source-owned photo was edited or removed in the File Cabinet; its current content is preserved.' }
           }
@@ -163,8 +163,8 @@ export async function storePartyPhoto(input: {
       const updated = await db.execute(sql`
         update parties set photo_file_id=${stored.id}, custom=jsonb_set(custom, '{photoOwnership}', ${JSON.stringify(afterOwnership)}::jsonb, true),
           updated_at=greatest(clock_timestamp(),updated_at + interval '1 microsecond')
-        where org_id=${input.orgId} and id=${input.partyId} returning id`)
-      if (updated.rows.length !== 1) throw new Error('Party photo did not persist')
+        where org_id=${input.orgId} and id=${input.partyId} returning id`, 'objects')
+      if (updated.length !== 1) throw new Error('Party photo did not persist')
       await auditPhoto(input.orgId, input.actorId, input.partyId,
         { photo_file_id: party.photo_file_id, ownership }, { photo_file_id: stored.id, ownership: afterOwnership },
         input.source ? 'employee photo synchronized from connector' : 'photo replaced', input.source)
@@ -178,14 +178,14 @@ export async function removePartyPhoto(input: { orgId: string; partyId: string; 
     await authorizePhoto(db, input.orgId, input.actorId, input.partyId)
     const before = (await db.execute<{ photo_file_id: string | null; ownership: Ownership | null }>(sql`
       select photo_file_id::text, custom->'photoOwnership' as ownership from parties
-      where org_id=${input.orgId} and id=${input.partyId} for update`)).rows[0]
+      where org_id=${input.orgId} and id=${input.partyId} for update`, 'objects'))[0]
     if (!before) throw new ScopeNotFoundError()
     if (before.photo_file_id === null && before.ownership?.mode === 'user') return { photoFileId: null }
     const updated = await db.execute(sql`
       update parties set photo_file_id=null, custom=jsonb_set(custom, '{photoOwnership}', '{"mode":"user"}'::jsonb, true),
         updated_at=greatest(clock_timestamp(),updated_at + interval '1 microsecond')
-      where org_id=${input.orgId} and id=${input.partyId} returning id`)
-    if (updated.rows.length !== 1) throw new Error('Party photo removal did not persist')
+      where org_id=${input.orgId} and id=${input.partyId} returning id`, 'objects')
+    if (updated.length !== 1) throw new Error('Party photo removal did not persist')
     await auditPhoto(input.orgId, input.actorId, input.partyId, before, { photo_file_id: null, ownership: { mode: 'user' } }, 'photo removed')
     return { photoFileId: null }
   })
@@ -211,7 +211,7 @@ export async function readPartyPhoto(input: { orgId: string; partyId: string; ac
       join file_versions v on v.file_id=f.id and v.id=f.current_version_id
       join file_attachments a on a.org_id=p.org_id and a.file_id=f.id and a.target_table='parties' and a.target_id=p.id
       left join file_blobs b on b.version_id=v.id
-      where p.org_id=${input.orgId} and p.id=${input.partyId}`)).rows[0]
+      where p.org_id=${input.orgId} and p.id=${input.partyId}`, 'objects'))[0]
     if (!row || !PARTY_PHOTO_CONTENT_TYPES.has(row.content_type)) return null
     refuseMaskedStorageKind(row.storage_kind)
     const bytes = row.storage_kind === 's3' ? await getS3Blob(row.version_id) : row.bytes

@@ -48,10 +48,10 @@ async function seedMemberWithGrants(): Promise<{ ids: string[]; memberId: string
   // drops orgs still named 'Scratch %', so the original names are restored
   // before the drop — a renamed org must never leak.
   const ids = [home.orgId, ...targetIds]
-  const before = (await withBypass(() =>
-    db.execute<{ id: string; name: string }>(sql`select id, name from orgs where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`),
-  )) as { rows: { id: string; name: string }[] }
-  const original = new Map(before.rows.map((row) => [row.id, row.name]))
+  const before = await withBypass(() =>
+    db.execute<{ id: string; name: string }>(sql`select id, name from orgs where id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`, 'objects'),
+  )
+  const original = new Map(before.map((row) => [row.id, row.name]))
   const actingIds: string[] = []
   for (const targetId of targetIds) {
     actingIds.push(await withBypass(() => createScratchUser(targetId, `${PREFIX} Acting`, 'w93d_acting')))

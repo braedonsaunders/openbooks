@@ -93,7 +93,7 @@ export async function expenseReportReachable(
   const row = (await executor.execute<{ partyId: string | null }>(sql`
     select party_id as "partyId" from documents
      where id = ${documentId} and org_id = ${authz.user.orgId} and kind = 'expense_report'
-  `)).rows[0]
+  `, 'objects'))[0]
   return row !== undefined && expenseAccessAllows(access, row.partyId)
 }
 

@@ -65,7 +65,7 @@ async function memberCount(exec: SqlExecutor, orgId: string, poolId: string): Pr
   const row = (await exec.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_talent_pool_members
      where org_id = ${orgId} and pool_id = ${poolId}
-  `)).rows[0];
+  `, "objects"))[0];
   return Number(row?.count ?? 0);
 }
 
@@ -77,9 +77,9 @@ export async function listTalentPools(query: {
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    const rows = (await db.execute<PoolRow>(sql`
+    const rows = await db.execute<PoolRow>(sql`
       select id, name, description from hrm_talent_pools where org_id = ${orgId} order by name
-    `)).rows;
+    `, "objects");
     return Promise.all(
       rows.map(async (row) => ({ ...row, memberCount: await memberCount(db, orgId, row.id) })),
     );
@@ -106,7 +106,7 @@ export async function createTalentPool(query: {
         insert into hrm_talent_pools (org_id, name, description, created_by, updated_by)
         values (${orgId}, ${name}, ${description}, ${actorId}, ${actorId})
         returning id, name, description
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) throw new RecruitingError("REFUSED", "the pool was not stored — no row was written; retry the request");
       return { ...row, memberCount: 0 };
     } catch (error) {
@@ -135,7 +135,7 @@ export async function deleteTalentPool(query: {
     // untouched — deleting a pool never deletes a person.
     const deleted = (await db.execute<{ id: string }>(sql`
       delete from hrm_talent_pools where org_id = ${orgId} and id = ${poolId} returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!deleted) {
       throw new RecruitingError("NOT_FOUND", "talent pool is not visible in this organization — it may belong to another org");
     }
@@ -167,12 +167,12 @@ export async function addPoolMember(query: {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     const pool = (await db.execute<{ one: number }>(sql`
       select 1 as one from hrm_talent_pools where org_id = ${orgId} and id = ${poolId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!pool) throw new RecruitingError("NOT_FOUND", "talent pool is not visible in this organization");
     const candidate = (await db.execute<{ displayName: string; tags: string[] }>(sql`
       select display_name as "displayName", tags from hrm_candidates
        where org_id = ${orgId} and id = ${candidateId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
     }
@@ -186,7 +186,7 @@ export async function addPoolMember(query: {
         insert into hrm_talent_pool_members (org_id, pool_id, candidate_id, added_by, note)
         values (${orgId}, ${poolId}, ${candidateId}, ${actorId}, ${note})
         returning added_at as "addedAt"
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) throw new RecruitingError("REFUSED", "the membership was not stored — no row was written; retry the request");
       return {
         candidateId,
@@ -226,7 +226,7 @@ export async function removePoolMember(query: {
       delete from hrm_talent_pool_members
        where org_id = ${orgId} and pool_id = ${poolId} and candidate_id = ${candidateId}
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!removed) {
       throw new RecruitingError("NOT_FOUND", "that membership does not exist — the candidate may already have been removed from the pool");
     }
@@ -245,21 +245,21 @@ export async function listPoolMembers(query: {
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
     const pool = (await db.execute<{ one: number }>(sql`
       select 1 as one from hrm_talent_pools where org_id = ${orgId} and id = ${poolId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!pool) throw new RecruitingError("NOT_FOUND", "talent pool is not visible in this organization");
     // Members render only for candidates owned through an in-scope
     // requisition: the pool shares names with its readers, but a scoped
     // reader must not enumerate another entity's benched candidates.
     const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
     const ownedExpression = candidateInScopePredicate(orgId, "c.id", allowed);
-    const rows = (await db.execute<PoolMemberDTO>(sql`
+    const rows = await db.execute<PoolMemberDTO>(sql`
       select m.candidate_id as "candidateId", c.display_name as "displayName",
              c.tags as tags, m.added_at as "addedAt", m.note as note
         from hrm_talent_pool_members m
         join hrm_candidates c on c.org_id = m.org_id and c.id = m.candidate_id
        where m.org_id = ${orgId} and m.pool_id = ${poolId} and (${ownedExpression})
        order by c.display_name
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }
@@ -284,7 +284,7 @@ export async function tagCandidate(query: {
          set tags = ${pgTextArray(tags)}::text[], updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${candidateId}
       returning tags
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — it may belong to another org");
     }
@@ -321,7 +321,7 @@ export async function rediscoverForRequisition(query: {
     }
     const requisition = (await db.execute<{ status: string }>(sql`
       select status from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!requisition) {
       throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
     }
@@ -341,9 +341,9 @@ export async function rediscoverForRequisition(query: {
     const ownedExpression = candidateInScopePredicate(orgId, "c.id", allowed);
     const pool = (await db.execute<{ one: number }>(sql`
       select 1 as one from hrm_talent_pools where org_id = ${orgId} and id = ${poolId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!pool) throw new RecruitingError("NOT_FOUND", "talent pool is not visible in this organization");
-    const members = (await db.execute<{
+    const members = await db.execute<{
       candidateId: string;
       displayName: string;
       tags: string[];
@@ -354,7 +354,7 @@ export async function rediscoverForRequisition(query: {
         from hrm_talent_pool_members m
         join hrm_candidates c on c.org_id = m.org_id and c.id = m.candidate_id
        where m.org_id = ${orgId} and m.pool_id = ${poolId} and (${ownedExpression})
-    `)).rows;
+    `, "objects");
     const wantedSet = new Set(wanted.map((tag) => tag.toLowerCase()));
     return members
       .map((member) => {

@@ -394,7 +394,7 @@ export const CONSOLIDATION_CASES: readonly ConformanceCase[] = [
       );
       const dividendLine = (await db.execute<{ id: string }>(sql`
         select id from journal_lines where org_id=${ledger.orgId} and entry_id=${dividendEntryId}
-          and account_id=${dividendsDeclaredId}`)).rows[0]!;
+          and account_id=${dividendsDeclaredId}`, "objects"))[0]!;
       await recordHistoricalContributionFixture({ orgId: ledger.orgId, actorId: ledger.actorId,
         sourceLineId: dividendLine.id, measurementCurrency: "CAD", presentationCurrency: "CAD",
         historicalDate: ledger.date, amount: "50", rate: "1" });

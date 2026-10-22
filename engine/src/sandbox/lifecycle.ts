@@ -73,8 +73,8 @@ export function startSandboxRefreshHeartbeat(
         update sandboxes set updated_at = now()
          where id = ${sandboxId} and org_id = ${orgId}
            and status = 'refreshing' and last_error = ${proofToken}
-         returning id`);
-      if (!renewed.rows[0]) throw new Error("sandbox refresh lease was lost");
+         returning id`, "objects");
+      if (!renewed[0]) throw new Error("sandbox refresh lease was lost");
     })().catch((error) => {
       // The session advisory lock remains the authoritative liveness fence;
       // a missed heartbeat can delay recovery but cannot overlap active work.
@@ -232,7 +232,7 @@ function resolveLifecycleAuthority(
 async function assertLifecycleActor(orgId: string, authority: ResolvedLifecycleAuthority): Promise<void> {
   if (authority.actorId) {
     const actor = (await db.execute<{ id: string }>(sql`
-      select id from users where id = ${authority.actorId} and org_id = ${orgId} and is_active for share`)).rows[0];
+      select id from users where id = ${authority.actorId} and org_id = ${orgId} and is_active for share`, "objects"))[0];
     if (!actor) throw new Error(`sandbox lifecycle actor ${authority.actorId} is not an active user of the production organization`);
   }
 }
@@ -299,7 +299,7 @@ export async function rebaseSandboxControlAccounts(args: {
           and control.production_org_id=target.sandbox_of
        where target.id = ${args.sandboxOrgId}
         and target.env_kind = 'sandbox' and target.sandbox_of = ${args.productionOrgId}
-        and target.sandbox_seed = ${args.seed}::uuid for update of target`)).rows[0];
+        and target.sandbox_seed = ${args.seed}::uuid for update of target`, "objects"))[0];
     if (!owned) throw new Error("sandbox control-account rebase requires the owning source organization and clone seed");
     // With an in-snapshot settings capture, the production half comes from the
     // caller and only the sandbox half is read; otherwise both halves are read
@@ -313,26 +313,22 @@ export async function rebaseSandboxControlAccounts(args: {
         | undefined;
       productionPayroll = args.productionSettings["payroll"];
     } else {
-      const prodRow = (
-        await db.execute(sql`
+      const prodRow = (await db.execute(sql`
         select production.settings -> 'controlAccounts' as production_controls,
                production.settings -> 'payroll' as production_payroll
           from orgs production
          where production.id = ${args.productionOrgId}
-      `)
-      ).rows[0] as { production_controls: Record<string, unknown> | null; production_payroll: unknown } | undefined;
+      `, "objects"))[0] as { production_controls: Record<string, unknown> | null; production_payroll: unknown } | undefined;
       if (prodRow === undefined) throw new Error("sandbox control-account rebase target not found");
       productionControls = prodRow.production_controls;
       productionPayroll = prodRow.production_payroll;
     }
-    const sandboxRow = (
-      await db.execute(sql`
+    const sandboxRow = (await db.execute(sql`
       select settings -> 'controlAccounts' as sandbox_controls,
              settings -> 'payroll' as sandbox_payroll
         from orgs
        where id = ${args.sandboxOrgId}
-    `)
-    ).rows[0] as { sandbox_controls: Record<string, unknown> | null; sandbox_payroll: unknown } | undefined;
+    `, "objects"))[0] as { sandbox_controls: Record<string, unknown> | null; sandbox_payroll: unknown } | undefined;
     if (!sandboxRow) throw new Error("sandbox control-account rebase target not found");
 
     const sourceControls = productionControls ?? {};
@@ -357,8 +353,8 @@ export async function rebaseSandboxControlAccounts(args: {
            and target.org_id = ${args.sandboxOrgId}
          where source.org_id = ${args.productionOrgId}
            and source.id in (${sql.join(sourceIds.map(id => sql`${id}::uuid`), sql`, `)})
-      `);
-      for (const account of result.rows as Array<{
+      `, "objects");
+      for (const account of result as Array<{
         source_id: string;
         sandbox_id: string;
       }>) {
@@ -374,12 +370,12 @@ export async function rebaseSandboxControlAccounts(args: {
       }),
     );
     const before = sandboxRow.sandbox_controls ?? {};
-    const vendors = (await db.execute<{ source_id: string; sandbox_id: string }>(sql`
+    const vendors = await db.execute<{ source_id: string; sandbox_id: string }>(sql`
       select source.party_id as source_id,target.party_id as sandbox_id
         from vendor_roles source join vendor_roles target
           on target.party_id=ob_rebase(source.party_id,${args.seed}::uuid)
          and target.org_id=${args.sandboxOrgId}
-       where source.org_id=${args.productionOrgId}`)).rows;
+       where source.org_id=${args.productionOrgId}`, "objects");
     const rebasedPayroll = remapPayrollSettingsReferences(productionPayroll,
       { accounts: mapped, vendors: new Map(vendors.map(row => [row.source_id.toLowerCase(), row.sandbox_id])) },
       owned.tier === "dev");
@@ -402,8 +398,8 @@ export async function rebaseSandboxControlAccounts(args: {
            and env_kind = 'sandbox' and sandbox_of = ${args.productionOrgId}
            and sandbox_seed = ${args.seed}::uuid
          returning id
-      `);
-      if (!updated.rows[0]) throw new Error("sandbox control-account rebase target changed before saving");
+      `, "objects");
+      if (!updated[0]) throw new Error("sandbox control-account rebase target changed before saving");
       await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -515,12 +511,12 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
                       and reversal.reverses_movement_id = movement.id
                  )
               returning 1
-              ) select count(*)::text as removed from removed`);
-            if (!removed.rows[0]) throw new Error("Sandbox inventory deletion did not return its affected count");
-            if (removed.rows[0].removed !== "0") continue;
+              ) select count(*)::text as removed from removed`, "objects");
+            if (!removed[0]) throw new Error("Sandbox inventory deletion did not return its affected count");
+            if (removed[0].removed !== "0") continue;
             const remaining = await db.execute(sql`
-              select id from inventory_movements where org_id = ${sandboxOrgId} limit 1`);
-            if (remaining.rows.length > 0) {
+              select id from inventory_movements where org_id = ${sandboxOrgId} limit 1`, "objects");
+            if (remaining.length > 0) {
               throw new Error("Sandbox inventory reversal references contain a cycle; preserve its evidence and repair the source lineage before deleting");
             }
             return;
@@ -561,8 +557,8 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   // stale between here and the copy (SBOX1 addendum).
   const prod = (await db.execute<{ env_kind: string; name: string; legal_name: string | null; base_currency: string; country: string; tax_ids: unknown; settings: Record<string, unknown> | null }>(sql`
     select env_kind, name, legal_name, base_currency, country, tax_ids, settings
-      from orgs where id = ${input.productionOrgId}`));
-  const p = prod.rows[0];
+      from orgs where id = ${input.productionOrgId}`, "objects"));
+  const p = prod[0];
   if (input.allowTemplateSource === true) assertTemplateSandboxSource(p, input.productionOrgId);
   else assertProductionSandboxSource(p, input.productionOrgId);
 
@@ -577,7 +573,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
     // The org's automatic tenant seeds use destination RLS only for its birth.
     const sb = await withOrg(input.productionOrgId, () => withTransactionSavepoint(db, async () => {
       const source = (await db.execute<{ env_kind: string; settings: Record<string, unknown> | null }>(sql`
-        select env_kind,settings from orgs where id=${input.productionOrgId} for share`)).rows[0];
+        select env_kind,settings from orgs where id=${input.productionOrgId} for share`, "objects"))[0];
       if (input.allowTemplateSource === true) assertTemplateSandboxSource(source,input.productionOrgId);
       else assertProductionSandboxSource(source,input.productionOrgId);
       await assertLifecycleActor(input.productionOrgId,authority);
@@ -586,7 +582,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       }
       const active = orgContext.getStore();
       const state = (await db.execute<{ org_id: string | null; bypass: string | null }>(sql`
-        select current_setting('app.current_org',true) as org_id,current_setting('app.bypass_rls',true) as bypass`)).rows[0];
+        select current_setting('app.current_org',true) as org_id,current_setting('app.bypass_rls',true) as bypass`, "objects"))[0];
       if (!active?.txDb || active.bypass || active.orgId !== input.productionOrgId ||
           state?.org_id !== input.productionOrgId || state.bypass !== 'off') {
         throw new Error("Sandbox birth requires the source organization's tenant transaction with RLS enforced.");
@@ -606,8 +602,8 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
               ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb,
               (${JSON.stringify(p.settings ?? {})}::jsonb || ${JSON.stringify(input.settingsOverlay ?? {})}::jsonb),
               'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
-            ) returning id`);
-          if (born.rows.length !== 1 || born.rows[0]?.id !== sandboxOrgId) throw new Error("Sandbox organization was not created.");
+            ) returning id`, "objects");
+          if (born.length !== 1 || born[0]?.id !== sandboxOrgId) throw new Error("Sandbox organization was not created.");
         }));
       } finally {
         await db.execute(sql`select set_config('app.current_org',${input.productionOrgId},true)`);
@@ -686,8 +682,8 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
          set status = 'ready', storage_rows = ${result.rowsCopied}, last_refresh_at = now(),
              last_error = null, updated_at = now()
        where id = ${sb.id} and org_id = ${sandboxOrgId} and status = 'provisioning'
-       returning id`);
-      if (!ready.rows[0]) throw new Error(`cannot mark sandbox ${sb.id} ready; provisioning state changed before clone completion`);
+       returning id`, "objects");
+      if (!ready[0]) throw new Error(`cannot mark sandbox ${sb.id} ready; provisioning state changed before clone completion`);
     } catch (err) {
       const failure = sandboxOperationFailure(err);
       const failed = await db.execute<{ id: string }>(sql`
@@ -695,8 +691,8 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
          set status = 'failed', last_error = ${String(failure instanceof Error ? failure.message : failure)},
              updated_at = now()
        where id = ${sb.id} and org_id = ${sandboxOrgId}
-       returning id`);
-      if (failed.rows[0]) {
+       returning id`, "objects");
+      if (failed[0]) {
         await withOrg(input.productionOrgId, () => auditSandboxLifecycle(input.productionOrgId, sb.id, "create_failed", authority,
           { status: "provisioning" }, { status: "failed", last_error: String(failure instanceof Error ? failure.message : failure) }));
       }
@@ -754,11 +750,11 @@ export async function refreshSandbox(
   const row = await db.execute<{
     org_id: string; production_org_id: string; tier: SandboxTier; masked: boolean; as_of_period_id: string | null;
   }>(sql`
-    select org_id, production_org_id, tier, masked, as_of_period_id from sandboxes where id = ${sandboxId}`);
-  const s = requireFoundSandbox(sandboxId, row.rows[0]);
+    select org_id, production_org_id, tier, masked, as_of_period_id from sandboxes where id = ${sandboxId}`, "objects");
+  const s = requireFoundSandbox(sandboxId, row[0]);
   const tier = validateSandboxTier(s.tier);
-  const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`));
-  const sandboxSeed = seed.rows[0]?.sandbox_seed as string;
+  const seed = (await db.execute(sql`select sandbox_seed from orgs where id = ${s.org_id}`, "objects"));
+  const sandboxSeed = seed[0]?.sandbox_seed as string;
   const proofToken = newRefreshCloneProofToken();
 
   await withSandboxRefreshLock(sandboxId, async () => {
@@ -770,7 +766,7 @@ export async function refreshSandbox(
       // rows, and the sandbox stays ready after a failed refresh.
       const marked = await withMaintenanceTransaction(null, async () => {
         const before = (await db.execute<{ status: string; last_error: string | null }>(sql`
-          select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${s.org_id} for update`)).rows[0];
+          select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${s.org_id} for update`, "objects"))[0];
         if (!before || before.status === "deleting") return null;
         const updated = await db.execute<{ id: string }>(sql`
           update sandboxes
@@ -786,7 +782,7 @@ export async function refreshSandbox(
         requireFoundSandbox(
           sandboxId,
           (await db.execute<{ status: string }>(sql`
-          select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0],
+          select status from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`, "objects"))[0],
         );
         throw new Error(`cannot refresh sandbox ${sandboxId} while it is being deleted`);
       }
@@ -886,7 +882,7 @@ export async function refreshSandbox(
       // flag with the same predicate the assertion uses; ordinary pairs
       // keep the production-only default.
       const sourceSettings = (await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-        select settings from orgs where id = ${s.production_org_id}`)).rows[0]?.settings;
+        select settings from orgs where id = ${s.production_org_id}`, "objects"))[0]?.settings;
       await verifyCloneRls({
         productionOrgId: s.production_org_id,
         sandboxOrgId: s.org_id,
@@ -909,7 +905,7 @@ export async function refreshSandbox(
       });
       if (!markedReady.rows[0]) {
         const current = (await db.execute<{ status: string; last_error: string | null }>(sql`
-          select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`)).rows[0];
+          select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${s.org_id}`, "objects"))[0];
         refuseUnprovenRefreshReady(
           current ? { status: current.status, lastError: current.last_error } : undefined,
           { sandboxId, proofToken },
@@ -983,7 +979,7 @@ async function pendingSandboxS3Cleanup(
               and consumed.changes->>'event' = 'consumed'
               and consumed.changes->>'manifest_id' = manifest.changes->>'manifest_id'
          )
-       order by manifest.at desc limit 1`)).rows[0];
+       order by manifest.at desc limit 1`, "objects"))[0];
     return row ? { id: row.id, versionIds: row.version_ids } : null;
   });
 }
@@ -1008,10 +1004,10 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
   const authority = resolveLifecycleAuthority(suppliedAuthority);
   const id = assertUuid(sandboxId);
   await withSandboxRefreshLock(id, async () => {
-  const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`));
-  const orgId = requireFoundSandbox(sandboxId, row.rows[0]?.org_id as string | undefined);
+  const row = (await db.execute(sql`select org_id from sandboxes where id = ${sandboxId}`, "objects"));
+  const orgId = requireFoundSandbox(sandboxId, row[0]?.org_id as string | undefined);
   const productionOrgId = (await db.execute<{ production_org_id: string }>(sql`
-    select production_org_id from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0]?.production_org_id;
+    select production_org_id from sandboxes where id = ${sandboxId} and org_id = ${orgId}`, "objects"))[0]?.production_org_id;
   if (!productionOrgId) throw new Error(`sandbox not found: ${sandboxId}`);
   // A refresh that already marked 'refreshing' owns this sandbox: wiping
   // under its clone unit corrupts the refresh and strands the status. A
@@ -1023,7 +1019,7 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
   // refuses loudly.
   const marked = await withMaintenanceTransaction(null, async () => {
     const before = (await db.execute<{ status: string; last_error: string | null }>(sql`
-      select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${orgId} for update`)).rows[0];
+      select status, last_error from sandboxes where id = ${sandboxId} and org_id = ${orgId} for update`, "objects"))[0];
     if (!before || ["refreshing", "deleting"].includes(before.status)) return null;
     const updated = await db.execute<{ id: string }>(sql`
       update sandboxes
@@ -1039,10 +1035,10 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
     requireFoundSandbox(
       sandboxId,
       (await db.execute<{ status: string }>(sql`
-      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0],
+      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`, "objects"))[0],
     );
     const status = (await db.execute<{ status: string }>(sql`
-      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`)).rows[0]?.status;
+      select status from sandboxes where id = ${sandboxId} and org_id = ${orgId}`, "objects"))[0]?.status;
     throw new Error(`cannot delete sandbox ${sandboxId} while it is ${status ?? "unavailable"} — retry once an active refresh has completed`);
   }
   try {
@@ -1084,8 +1080,8 @@ export async function deleteSandbox(sandboxId: string, suppliedAuthority?: Sandb
          set status = 'failed', last_error = ${String(failure instanceof Error ? failure.message : failure)},
              updated_at = now()
        where id = ${sandboxId} and org_id = ${orgId}
-       returning id`);
-    if (failed.rows[0]) {
+       returning id`, "objects");
+    if (failed[0]) {
       await withOrg(productionOrgId, () => auditSandboxLifecycle(productionOrgId, sandboxId, "delete_failed", authority,
         { status: "deleting" }, { status: "failed", last_error: String(failure instanceof Error ? failure.message : failure) }));
     }

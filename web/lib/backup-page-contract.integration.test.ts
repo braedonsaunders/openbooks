@@ -176,9 +176,9 @@ const backupRunCases = [
               db.execute<{ count: string }>(sql`
                 select count(*)::text as count from backup_runs
                  where org_id = ${scratch.orgId} and status in ('queued', 'running')
-              `),
+              `, "objects"),
             );
-            assert.equal(queued.rows[0]?.count, "1", "exactly one run stays in flight");
+            assert.equal(queued[0]?.count, "1", "exactly one run stays in flight");
           } finally {
             await withBypass(() => dropScratchOrg(scratch.orgId));
           }
@@ -209,9 +209,9 @@ const backupRunCases = [
             const queued = await withBypass(() =>
               db.execute<{ count: string }>(sql`
                 select count(*)::text as count from backup_runs where status = 'queued'
-              `),
+              `, "objects"),
             );
-            assert.equal(queued.rows[0]?.count, "2", "two orgs each hold one queued run");
+            assert.equal(queued[0]?.count, "2", "two orgs each hold one queued run");
           } finally {
             await withBypass(() => dropScratchOrg(first.orgId));
             await withBypass(() => dropScratchOrg(second.orgId));

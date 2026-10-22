@@ -155,8 +155,8 @@ export async function saveEntitlementOpenings(input: {
          select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
            input.rows.map((r) => ({ id: r.employeePartyId })),
          )}::jsonb) as value)
-    `));
-    const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
+    `, "objects"));
+    const nameById = new Map(names.map((r) => [r.id, r.display_name]));
 
     const existing = (await tx.execute<{ plan_id: string; employee_party_id: string; amount: string; before: Record<string, unknown> }>(sql`
       select plan_id, employee_party_id, amount::text as amount,
@@ -164,8 +164,8 @@ export async function saveEntitlementOpenings(input: {
         from entitlement_ledger
        where org_id = ${input.orgId} and kind = 'opening'
          and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.rows.map((row) => row.employeePartyId))}::jsonb)::uuid)
-    `));
-    const storedKeys = new Set(existing.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
+    `, "objects"));
+    const storedKeys = new Set(existing.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
     const employeeIds = input.rows.map((row) => row.employeePartyId);
     const locks = await entitlementOpeningLocks(input.orgId, tx, employeeIds);
@@ -290,13 +290,13 @@ export async function saveEntitlementOpenings(input: {
     for (const row of planned) {
       for (const [planId, amount] of row.amounts) {
         const stored = storedKeys.has(`${planId}:${row.employeePartyId}`);
-        const before = existing.rows.filter(entry => entry.plan_id === planId && entry.employee_party_id === row.employeePartyId).map(entry => entry.before);
+        const before = existing.filter(entry => entry.plan_id === planId && entry.employee_party_id === row.employeePartyId).map(entry => entry.before);
         if (stored) {
           // The trigger permits this exactly while no committed run has read it.
-          const deleted = (await tx.execute(sql`
+          const deleted = await tx.execute(sql`
             delete from entitlement_ledger
              where org_id = ${input.orgId} and plan_id = ${planId}
-               and employee_party_id = ${row.employeePartyId} and kind = 'opening' returning id`)).rows;
+               and employee_party_id = ${row.employeePartyId} and kind = 'opening' returning id`, "objects");
           if (deleted.length !== before.length) throw new PayrollError('The bank opening changed while it was being replaced — reload the bank carry-ins and try again');
         }
         if (amount === null) {

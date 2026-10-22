@@ -163,21 +163,23 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = statementText(query)
           if (/insert\\s+into\\s+audit_log\\b/i.test(text)) {
             state.auditInsertCalls++
             if (state.failAudit) throw new Error('forced audit insert failure')
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
-          return execute(query)
+          return inMode(await execute(query))
         },
         async transaction(callback) {
           state.transactionCalls++
           const pending = []
           try {
             const result = await callback({
-              async execute(query) {
+              async execute(query, mode) {
+                const inMode = (result) => (mode === 'objects' ? result.rows : result)
                 const text = statementText(query)
                 if (/^\\s*savepoint\\s/i.test(text)) state.savepointsOpened++
                 if (/^\\s*release\\s+savepoint\\s/i.test(text)) state.savepointReleases++
@@ -185,9 +187,9 @@ const mockSources = new Map<string, string>([
                 if (/insert\\s+into\\s+audit_log\\b/i.test(text)) {
                   state.auditInsertCalls++
                   if (state.failAudit) throw new Error('forced audit insert failure')
-                  return { rows: [] }
+                  return inMode({ rows: [] })
                 }
-                return execute(query, pending)
+                return inMode(await execute(query, pending))
               },
             })
             state.committedMutations.push(...pending)

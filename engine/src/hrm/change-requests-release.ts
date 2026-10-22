@@ -94,11 +94,9 @@ export async function releaseHrmChangeRequest(
     });
 
     const gates = await decidedGatesOfRequest(db, orgId, requestId);
-    const policies = (
-      await db.execute<{ policy: unknown }>(
-        sql`select context->'submissionPolicy' as policy from flow_runs where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId} order by started_at, id`,
-      )
-    ).rows
+    const policies = (await db.execute<{ policy: unknown }>(
+        sql`select context->'submissionPolicy' as policy from flow_runs where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId} order by started_at, id`, "objects",
+      ))
       .map((row) => row.policy)
       .filter(Boolean);
     const snapshot = {
@@ -110,16 +108,14 @@ export async function releaseHrmChangeRequest(
       mode: "approval",
       policies,
     };
-    const flipped = (
-      await db.execute<RequestRow>(sql`
+    const flipped = (await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = ${query.outcome},
              decision_snapshot = ${JSON.stringify(snapshot)}::jsonb,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'pending_approval'
       returning ${REQUEST_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!flipped) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -135,12 +131,10 @@ export async function releaseHrmChangeRequest(
       request: flipped,
       payload: validateChangePayload(flipped.payload),
     });
-    const applied = (
-      await db.execute<RequestRow>(sql`
+    const applied = (await db.execute<RequestRow>(sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests
        where org_id = ${orgId} and id = ${requestId}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!applied) {
       throw new HrmChangeRequestError(
         "REFUSED",

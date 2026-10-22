@@ -46,11 +46,11 @@ for (const [table, permission] of Object.entries(permissions)) {
       const change = await buildChangeSet(sandbox.sandboxId, "Domain authority", actors[0]);
       await reviewChangeSet(change.changeSetId, actors[1]);
       await assert.rejects(applyChangeSet(change.changeSetId, applier), new RegExp(`requires ${permission.replaceAll('.', '\\.')}`));
-      assert.equal((await db.execute(sql`select ${columnSql} as value from ${tableSql} where org_id=${org.orgId}`)).rows[0]!.value, "Original");
-      assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "approved");
+      assert.equal((await db.execute(sql`select ${columnSql} as value from ${tableSql} where org_id=${org.orgId}`, "objects"))[0]!.value, "Original");
+      assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`, "objects"))[0]!.status, "approved");
       await db.execute(sql`update app_roles set permissions=${JSON.stringify(["admin.sandboxes.manage", permission])}::jsonb where org_id=${org.orgId} and key='manager'`);
       await applyChangeSet(change.changeSetId, applier);
-      assert.equal((await db.execute(sql`select ${columnSql} as value from ${tableSql} where org_id=${org.orgId}`)).rows[0]!.value, "Promoted");
+      assert.equal((await db.execute(sql`select ${columnSql} as value from ${tableSql} where org_id=${org.orgId}`, "objects"))[0]!.value, "Promoted");
     } finally {
       if (sandbox) await deleteSandbox(sandbox.sandboxId);
       await dropScratchOrgReporting(org.orgId);

@@ -33,7 +33,7 @@ stubModules({
     '@openbooks/ui':
       "export function Button(p) { return globalThis.React.createElement('button', null, p.children) } export function PageHeader(p) { return globalThis.React.createElement('header', null, p.actions) }",
     '@openbooks/engine/platform/db':
-      'export const db = { execute: async () => ({ rows: globalThis.__inventoryViewPermissions.subsidiaries }) }; export function ambientTenantOrgId() { return globalThis.__inventoryViewPermissions.orgId }; export async function withBypassContext(fn) { return fn() }',
+      'export const db = { execute: async (_query, mode) => Promise.resolve({ rows: globalThis.__inventoryViewPermissions.subsidiaries }).then((result) => (mode === "objects" ? result.rows : result)) }; export function ambientTenantOrgId() { return globalThis.__inventoryViewPermissions.orgId }; export async function withBypassContext(fn) { return fn() }',
     '@openbooks/engine/inventory/stock-count-queries':
       'export async function listStockCounts() { return { counts: [], totalCount: 0, nextCursor: null } }',
     '../../../components/entity-list-view':

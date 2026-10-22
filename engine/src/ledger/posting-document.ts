@@ -103,10 +103,10 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
     prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>;
     entryId: string;
   }> => {
-    const identity=(await db.execute<{org_id:string;journal_mode:string}>(sql`select org_id,journal_mode from documents where id=${documentId}`)).rows[0];
+    const identity=(await db.execute<{org_id:string;journal_mode:string}>(sql`select org_id,journal_mode from documents where id=${documentId}`, "objects"))[0];
     if (identity) {
       await lockLedgerSetupFence(db,identity.org_id,identity.journal_mode==='currency_adjustment' ? 'exclusive' : 'shared');
-      const locked=(await db.execute<{journal_mode:string}>(sql`select journal_mode from documents where org_id=${identity.org_id} and id=${documentId} for update`)).rows[0];
+      const locked=(await db.execute<{journal_mode:string}>(sql`select journal_mode from documents where org_id=${identity.org_id} and id=${documentId} for update`, "objects"))[0];
       if (locked?.journal_mode==='currency_adjustment' && identity.journal_mode!=='currency_adjustment') throw new PostingError("The journal mode changed before posting. Reload the journal and post again.");
       await assertRebateSettlementTaxBeforePosting(identity.org_id, documentId);
     }
@@ -153,7 +153,7 @@ export async function postDocument(documentId: string, deps: PostingDeps, option
       const posted = (await db.execute<{ subsidiaryId: string | null; documentNumber: string | null; postingDate: string }>(sql`
         select subsidiary_id as "subsidiaryId", document_number as "documentNumber",
                coalesce(posting_date, document_date)::text as "postingDate"
-          from documents where id = ${documentId} and org_id = ${prepared.doc.orgId}`)).rows[0];
+          from documents where id = ${documentId} and org_id = ${prepared.doc.orgId}`, "objects"))[0];
       if (!posted) throw new PostingError(`document ${documentId} is not readable after posting`);
       await applyPostedInventoryEffects(
         { id: documentId, orgId: prepared.doc.orgId, kind: prepared.doc.kind, subsidiaryId: posted.subsidiaryId, documentNumber: posted.documentNumber },

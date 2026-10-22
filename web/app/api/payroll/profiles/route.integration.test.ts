@@ -118,8 +118,8 @@ test('profile POST refuses money fields wider than their columns', async () => {
     assert.match(((await sixteen.json()) as { error: string }).error, /limited to 15 digits before the decimal point — got 16/)
 
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`))
-    assert.equal(rows.rows[0]!.count, '0')
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`, 'objects'))
+    assert.equal(rows[0]!.count, '0')
     // The widened scale, both sides: the money columns are numeric(19,4), so a
     // three-decimal figure the old 2dp gate refused as malformed must SAVE
     // exactly, while five decimals still refuse naming the four-place limit.
@@ -127,16 +127,16 @@ test('profile POST refuses money fields wider than their columns', async () => {
     assert.equal(threeDp.status, 200, await threeDp.clone().text())
     const threeDpSaved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string }>(sql`
       select federal_claim_amount::text from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.deepEqual(threeDpSaved.rows[0], { federal_claim_amount: '1234.5670' })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.deepEqual(threeDpSaved[0], { federal_claim_amount: '1234.5670' })
     // In-range values, including the column maximums at the route's 4dp
     // contract, still save.
     const ok = await post({ ...base, federalClaimAmount: '999999999999999.99' })
     assert.equal(ok.status, 200, await ok.clone().text())
     const saved = await withOrgContext(org.orgId, () => db.execute<{ federal_claim_amount: string }>(sql`
       select federal_claim_amount::text from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.deepEqual(saved.rows[0], { federal_claim_amount: '999999999999999.9900' })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.deepEqual(saved[0], { federal_claim_amount: '999999999999999.9900' })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -279,8 +279,8 @@ test('US FUTA and SUI exemption facts save independently', async () => {
       futa_exempt: boolean; sui_exempt: boolean;
     }>(sql`
       select futa_exempt, sui_exempt from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.deepEqual(stored.rows[0], { futa_exempt: true, sui_exempt: false })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.deepEqual(stored[0], { futa_exempt: true, sui_exempt: false })
 
     const reverse = await post({
       employeePartyId: employeeId,
@@ -298,8 +298,8 @@ test('US FUTA and SUI exemption facts save independently', async () => {
       futa_exempt: boolean; sui_exempt: boolean;
     }>(sql`
       select futa_exempt, sui_exempt from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.deepEqual(updated.rows[0], { futa_exempt: false, sui_exempt: true })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.deepEqual(updated[0], { futa_exempt: false, sui_exempt: true })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -340,9 +340,9 @@ test('profile POST validates the sealed identifier against the pack declaration'
     const stored = await withOrgContext(org.orgId, () => db.execute<{ present: boolean; last3: string | null }>(sql`
       select (sin_encrypted is not null) as present, sin_last3 as "last3"
         from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.equal(stored.rows[0]!.present, true)
-    assert.equal(stored.rows[0]!.last3, '789')
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.equal(stored[0]!.present, true)
+    assert.equal(stored[0]!.last3, '789')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -361,9 +361,9 @@ test('profile POST saves an identifier-less employee where the pack does not req
     const stored = await withOrgContext(org.orgId, () => db.execute<{ present: boolean; last3: string | null }>(sql`
       select (sin_encrypted is not null) as present, sin_last3 as "last3"
         from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.equal(stored.rows[0]!.present, false)
-    assert.equal(stored.rows[0]!.last3, null)
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.equal(stored[0]!.present, false)
+    assert.equal(stored[0]!.last3, null)
     // Omitting the key entirely keeps the cleared state and still saves.
     const omitted = await post({ ...base, country: 'AU', province: 'NSW' })
     assert.equal(omitted.status, 200, await omitted.clone().text())
@@ -464,8 +464,8 @@ test('profile POST saves the same valid US profile concurrently without a 422', 
       assert.equal(response.status, 200, `cross-employee save ${i}: ${await response.clone().text()}`)
     }
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`))
-    assert.equal(rows.rows[0]!.count, String(1 + others.length))
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`, 'objects'))
+    assert.equal(rows[0]!.count, String(1 + others.length))
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -508,8 +508,8 @@ test('profile POST holds the employee row lock across the scope check and upsert
     assert.equal(response.status, 200, await response.clone().text())
     const saved = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*) as count from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.equal(saved.rows[0]!.count, '1')
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.equal(saved[0]!.count, '1')
   } finally {
     try { await holder.query('rollback') } catch { /* already settled above */ }
     holder.release()
@@ -563,8 +563,8 @@ test('profile POST validates pack-declared employee facts against the declaratio
     const stored = await withOrgContext(org.orgId, () => db.execute<{ dependentes: number; pensao: string }>(sql`
       select br_dependentes as dependentes, br_pensao_mensal::text as pensao
         from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`))
-    assert.deepEqual(stored.rows[0], { dependentes: 2, pensao: '1500.0000' })
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))
+    assert.deepEqual(stored[0], { dependentes: 2, pensao: '1500.0000' })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -580,7 +580,7 @@ test('profile POST derives the PL birth year from the PESEL and refuses contradi
     const base = { employeePartyId: employeeId, payScheduleId: scheduleId, payBasis: 'hourly', country: 'PL', province: 'PL' }
     const storedYear = () => withOrgContext(org.orgId, () => db.execute<{ rok: number | null }>(sql`
       select pl_rok_urodzenia as rok from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`)).then((rows) => rows.rows[0]?.rok ?? null)
+       where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects')).then((rows) => rows[0]?.rok ?? null)
     // A bare PESEL prefills the blank field at write: 1944, derived.
     const prefilled = await post({ ...base, sin: '44051401359' })
     assert.equal(prefilled.status, 200, await prefilled.clone().text())
@@ -639,10 +639,10 @@ test('profile save retains its native employment link and audits automatic linki
       const saved = await post({ ...base, additionalTaxPerPeriod })
       assert.equal(saved.status, 200, await saved.clone().text())
       await withBypassContext(async () => {
-        const row = (await db.execute<{ employment_id: string }>(sql`select employment_id from employee_payroll_profiles where org_id=${org.orgId}`)).rows[0]!
+        const row = (await db.execute<{ employment_id: string }>(sql`select employment_id from employee_payroll_profiles where org_id=${org.orgId}`, 'objects'))[0]!
         assert.equal(row.employment_id, employmentId)
         const audit = (await db.execute<{ changes: { after: { employment_id: string } } }>(sql`select changes from audit_log
-          where org_id=${org.orgId} and table_name='employee_payroll_profiles' order by at desc limit 1`)).rows[0]!
+          where org_id=${org.orgId} and table_name='employee_payroll_profiles' order by at desc limit 1`, 'objects'))[0]!
         assert.equal(audit.changes.after.employment_id, employmentId)
       })
     }
@@ -668,7 +668,7 @@ test('profile save returns the employment identity refusal without altering a co
     assert.equal(response.status, 422)
     assert.match((await response.json()).error, /does not belong to this employee and legal employer.*review/)
     await withBypassContext(async () => {
-      assert.equal((await db.execute<{ amount: string }>(sql`select additional_tax_per_period::text as amount from employee_payroll_profiles where org_id=${org.orgId}`)).rows[0]!.amount, '0.0000')
+      assert.equal((await db.execute<{ amount: string }>(sql`select additional_tax_per_period::text as amount from employee_payroll_profiles where org_id=${org.orgId}`, 'objects'))[0]!.amount, '0.0000')
     })
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
@@ -686,7 +686,7 @@ test('dated former employees can configure historical payroll without reactivati
       const flags = (await db.execute<{ party_active: boolean; role_active: boolean; terminated_on: string }>(sql`
         select p.is_active as party_active,e.is_active as role_active,e.terminated_on::text
         from parties p join employee_roles e on e.party_id=p.id and e.org_id=p.org_id
-        where p.org_id=${org.orgId} and p.id=${employeeId}`)).rows[0]!
+        where p.org_id=${org.orgId} and p.id=${employeeId}`, 'objects'))[0]!
       assert.deepEqual(flags, { party_active: false, role_active: false, terminated_on: '2026-05-08' })
     })
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
@@ -724,11 +724,11 @@ test('profile POST saves WCB coverage: rate class through the audited writer, ex
     await withOrgContext(org.orgId, async () => {
       const role = (await db.execute<{ worker_comp_group_id: string }>(sql`
         select worker_comp_group_id::text from employee_roles
-         where org_id = ${org.orgId} and party_id = ${employeeId}`)).rows[0]!
+         where org_id = ${org.orgId} and party_id = ${employeeId}`, 'objects'))[0]!
       assert.equal(role.worker_comp_group_id, groupId)
       const audit = (await db.execute<{ changes: unknown }>(sql`
         select changes from audit_log where org_id = ${org.orgId} and table_name = 'employee_roles'
-         order by at desc limit 1`)).rows[0]!
+         order by at desc limit 1`, 'objects'))[0]!
       assert.match(JSON.stringify(audit.changes), /employee payroll tab/)
     })
     // Clearing the class returns the employee to undecided; recording the
@@ -741,7 +741,7 @@ test('profile POST saves WCB coverage: rate class through the audited writer, ex
       const row = (await db.execute<{ wcb_exempt: boolean; wcb_exempt_reason: string; worker_comp_group_id: string | null }>(sql`
         select wcb_exempt, wcb_exempt_reason,
                (select worker_comp_group_id::text from employee_roles where org_id = ${org.orgId} and party_id = ${employeeId}) as worker_comp_group_id
-          from employee_payroll_profiles where org_id = ${org.orgId} and employee_party_id = ${employeeId}`)).rows[0]!
+          from employee_payroll_profiles where org_id = ${org.orgId} and employee_party_id = ${employeeId}`, 'objects'))[0]!
       assert.equal(row.wcb_exempt, true)
       assert.equal(row.wcb_exempt_reason, 'owner not covered by the employer account')
       assert.equal(row.worker_comp_group_id, null)
@@ -762,8 +762,8 @@ test('profile POST refuses a reasonless WCB exemption', async () => {
       assert.match(((await response.json()) as { error: string }).error, /exemption needs a reason/)
     }
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`))
-    assert.equal(rows.rows[0]!.count, '0')
+      select count(*) as count from employee_payroll_profiles where org_id = ${org.orgId}`, 'objects'))
+    assert.equal(rows[0]!.count, '0')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 
@@ -789,13 +789,13 @@ test('profile deactivation retains an explicit audit reason without altering exe
     assert.equal(saved.status, 200, await saved.clone().text())
     const stored = (await withBypassContext(() => db.execute<{ id: string; is_active: boolean; wcb_exempt_reason: string }>(sql`
       select id,is_active,wcb_exempt_reason from employee_payroll_profiles where org_id=${org.orgId} and employee_party_id=${employee.employeeId}
-    `))).rows[0]!
+    `, 'objects')))[0]!
     assert.equal(stored.is_active, false)
     assert.equal(stored.wcb_exempt_reason, body.wcbExemptReason)
-    const audit = (await withBypassContext(() => db.execute<{ actor_id: string; changes: { reason: string; before: { is_active: boolean }; after: { is_active: boolean; wcb_exempt_reason: string } } }>(sql`
+    const audit = await withBypassContext(() => db.execute<{ actor_id: string; changes: { reason: string; before: { is_active: boolean }; after: { is_active: boolean; wcb_exempt_reason: string } } }>(sql`
       select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='employee_payroll_profiles'
         and row_id=${stored.id} and changes->>'reason'=${body.auditReason.trim()}
-    `))).rows
+    `, 'objects'))
     assert.equal(audit.length, 1)
     assert.equal(audit[0]!.actor_id, state.actorId)
     assert.equal(audit[0]!.changes.before.is_active, true)

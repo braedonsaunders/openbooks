@@ -57,8 +57,8 @@ export async function auditChange(
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${input.orgId}, ${input.table}, ${input.rowId}, ${input.action},
       ${JSON.stringify(changes)}::jsonb, ${input.actorId}, ${input.requestId ?? null})
-    returning id`);
-  if (result.rows.length !== 1) {
+    returning id`, "objects");
+  if (result.length !== 1) {
     throw new ManufacturingError("The manufacturing change could not be recorded in the audit history.", {
       code: "audit_write_failed", remedy: "Retry the change; contact an administrator if it continues.",
     });

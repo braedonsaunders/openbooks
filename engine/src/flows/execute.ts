@@ -537,7 +537,7 @@ async function createGate(
       select created_by from flow_runs where org_id=${ctx.orgId} and id=${runId}
         and flow_id=${flow.id} and subject_kind=${adapter.subjectKind} and subject_id=${subjectId}
       for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!run) throw new Error("The gate has no retained native submission run.");
     const blocked = await resolveSodBlockedIds(
       ctx.orgId,

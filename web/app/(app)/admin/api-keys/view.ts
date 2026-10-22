@@ -104,11 +104,11 @@ export async function loadApiKeys(
         join users u on u.id = k.user_id
        where ${where}
        order by k.created_at desc
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
     db.execute<{ n: string }>(sql`
       select count(*) as n from api_keys k
         join users u on u.id = k.user_id
-       where ${where}`),
+       where ${where}`, 'objects'),
   ])
 
   // Org-scoped, UUID-validated lookup with an explicit column list — key_hash
@@ -121,7 +121,7 @@ export async function loadApiKeys(
                  u.name as owner_name, u.email as owner_email
             from api_keys k
             join users u on u.id = k.user_id
-           where k.id = ${keyId} and k.org_id = ${authz.user.orgId}`)
+           where k.id = ${keyId} and k.org_id = ${authz.user.orgId}`, 'objects')
       : null
 
   return {
@@ -137,7 +137,7 @@ export async function loadApiKeys(
     columnScopes: t('table.scopes'),
     columnLastUsed: t('table.lastUsed'),
     columnStatus: t('table.status'),
-    rows: keys.rows.map((k) => {
+    rows: keys.map((k) => {
       const scopes = k.scopes
       return {
         id: String(k.id),
@@ -158,11 +158,11 @@ export async function loadApiKeys(
         statusVariant: k.is_active ? 'success' : 'outline',
       }
     }),
-    total: Number(totalRow.rows[0]?.n ?? 0),
+    total: Number(totalRow[0]?.n ?? 0),
     currentPage: params.page,
     perPage: params.perPage,
     drawerOpen: Boolean(keyId),
-    drawerRow: (open?.rows[0] as Record<string, unknown> | undefined) ?? null,
+    drawerRow: (open?.[0] as Record<string, unknown> | undefined) ?? null,
   }
 }
 

@@ -73,7 +73,7 @@ export async function assertWarehouseAdmitsMovement(
       join stock_locations wl on wl.id = w.stock_location_id and wl.org_id = w.org_id
      where w.org_id = ${orgId}
        and w.stock_location_id = stock_location_warehouse(${orgId}::uuid, ${stockLocationId}::uuid)
-     for share of w`)).rows[0];
+     for share of w`, "objects"))[0];
   if (!warehouse || warehouseAdmits(warehouse.status, direction)) return;
   const featureOn = await orgFeatureEnabled(orgId, "warehousing", tx as SqlExecutor);
   const code = warehouse.code;

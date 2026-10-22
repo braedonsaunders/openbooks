@@ -74,8 +74,8 @@ async function fixture() {
   const declareNoHours = (employee: string, reason?: string) => withOrgContext(org.orgId, () => submitWeek(new Request('http://time.local/api/timesheets/submit', {
     method: 'POST', body: JSON.stringify({ employee, week: WEEK, noHours: true, ...(reason === undefined ? {} : { reason }) }),
   })))
-  const entries = async (employee: string) => (await db.execute<{ status: string }>(sql`
-    select status from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`)).rows
+  const entries = async (employee: string) => await db.execute<{ status: string }>(sql`
+    select status from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`, 'objects')
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, worker, supervisor, clocker, own, coworker, as, read, save, submit, withdraw, declareNoHours, entries, close }
 }

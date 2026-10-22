@@ -120,8 +120,8 @@ async function loadPrebill(subjectId: string): Promise<PrebillRow | null> {
       left join project_types t on t.id = p.project_type_id and t.org_id = p.org_id
       left join parties customer on customer.id = p.customer_id and customer.org_id = p.org_id
      where w.id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const prebillsFlowAdapter: FlowSubjectAdapter =
@@ -227,8 +227,8 @@ export const prebillsFlowAdapter: FlowSubjectAdapter =
          and exists (select 1 from prebill_lines l
                       where l.org_id = w.org_id and l.prebill_id = w.id and l.disposition = 'bill')
       returning w.id
-    `);
-      if (parked.rows[0]) {
+    `, "objects");
+      if (parked[0]) {
         // The trail always names an actor: the retrying user, else whoever
         // submitted or prepared the worksheet.
         await db.execute(sql`
@@ -267,7 +267,7 @@ export const prebillsFlowAdapter: FlowSubjectAdapter =
        where org_id = ${orgId} and status = 'review'
        order by submitted_at desc nulls last
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

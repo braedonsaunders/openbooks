@@ -85,12 +85,10 @@ async function legacyFixture() {
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`),
   );
-  const calId = (
-    (await withBypassContext(
+  const calId = (await withBypassContext(
       () => db.execute<{ id: string }>(sql`
-        select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`),
-    )) as { rows: { id: string }[] }
-  ).rows[0]!.id;
+        select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"),
+    ))[0]!.id;
   for (const [num, name, start, end] of MONTHS_2026.map(([name, start, end], i) => [i + 1, name, start, end] as const)) {
     if (num === 7) continue;
     await withBypassContext(
@@ -157,7 +155,7 @@ async function reconciledAt(orgId: string, obligationId: string): Promise<string
   return (
     ((await db.execute<{ at: string | null }>(sql`
       select legacy_reconciled_at::text as at from performance_obligations
-       where id = ${obligationId} and org_id = ${orgId}`)).rows[0]?.at ?? null)
+       where id = ${obligationId} and org_id = ${orgId}`, "objects"))[0]?.at ?? null)
   );
 }
 

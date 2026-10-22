@@ -27,9 +27,9 @@ test(
     try {
       const filingAccountId=randomUUID();
       assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
-        values(${filingAccountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Original payroll account',true) returning id`)).rows.length,1);
+        values(${filingAccountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Original payroll account',true) returning id`, "objects")).length,1);
       assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`)).rows.length,1);
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, "objects")).length,1);
       // No EHT insert here: seedAdoption already carries the decided ON EHT
       // rate, and a second row for the same key conflicts.
       await db.execute(sql`insert into addresses (org_id, party_id, line1, city, region, postal_code, country)
@@ -81,8 +81,8 @@ test(
         select sum(s.gross)::text as gross
           from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-         where s.org_id = ${fx.orgId} and r.run_status = 'committed'`));
-      const stubGross = agg.rows.reduce((a, r) => add(a, r.gross), "0");
+         where s.org_id = ${fx.orgId} and r.run_status = 'committed'`, "objects"));
+      const stubGross = agg.reduce((a, r) => add(a, r.gross), "0");
 
       const eventId = randomUUID();
       await db.execute(sql`
@@ -127,19 +127,19 @@ test(
       const sourceSha256=createHash('sha256').update(bytes).digest('hex');
       const folder=randomUUID(),file=randomUUID(),version=randomUUID();
       assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-        values(${folder},${fx.orgId},'Original separation reporting evidence',true,${fx.actorId},${fx.actorId},${fx.actorId}) returning id`)).rows.length,1);
+        values(${folder},${fx.orgId},'Original separation reporting evidence',true,${fx.actorId},${fx.actorId},${fx.actorId}) returning id`, "objects")).length,1);
       assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-        values(${file},${fx.orgId},${folder},'original-paid-hours.json','application/json',${bytes.length},${fx.actorId},${fx.actorId}) returning id`)).rows.length,1);
+        values(${file},${fx.orgId},${folder},'original-paid-hours.json','application/json',${bytes.length},${fx.actorId},${fx.actorId}) returning id`, "objects")).length,1);
       assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-        values(${version},${file},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId}) returning id`)).rows.length,1);
-      assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`)).rows.length,1);
-      assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${fx.orgId} and id=${file} returning id`)).rows.length,1);
-      const paidLines=(await db.execute<{id:string;documentId:string;key:string;amount:string;earnedFrom:string|null;earnedTo:string|null}>(sql`
+        values(${version},${file},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId}) returning id`, "objects")).length,1);
+      assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`, "objects")).length,1);
+      assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${fx.orgId} and id=${file} returning id`, "objects")).length,1);
+      const paidLines=await db.execute<{id:string;documentId:string;key:string;amount:string;earnedFrom:string|null;earnedTo:string|null}>(sql`
         select line.id,stub.pay_run_document_id as "documentId",component.system_key as key,line.amount::text as amount,line.earned_from::text as "earnedFrom",line.earned_to::text as "earnedTo"
         from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
         join pay_components component on component.org_id=line.org_id and component.id=line.component_id
         where line.org_id=${fx.orgId} and stub.employee_party_id=${fx.employeeId} and line.kind='earning'
-          and (line.amount<>0 or line.hours<>0)`)).rows;
+          and (line.amount<>0 or line.hours<>0)`, "objects");
       assert.equal(paidLines.length,sourceRows.length,JSON.stringify(paidLines));
       for(const source of sourceRows){
         const matches=paidLines.filter(line=>line.documentId===source.documentId&&line.key===source.key&&cmp(line.amount,source.amount)===0

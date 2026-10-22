@@ -49,8 +49,8 @@ function postScript(date: string): string {
 async function journalCounts(orgId: string): Promise<{ docs: number; entries: number }> {
   const r = (await db.execute<{ docs: string; entries: string }>(sql`
     select (select count(*) from documents where org_id = ${orgId} and kind = 'journal')::text as docs,
-           (select count(*) from journal_entries where org_id = ${orgId})::text as entries`));
-  return { docs: Number(r.rows[0]!.docs), entries: Number(r.rows[0]!.entries) };
+           (select count(*) from journal_entries where org_id = ${orgId})::text as entries`, "objects"));
+  return { docs: Number(r[0]!.docs), entries: Number(r[0]!.entries) };
 }
 
 /** The unattended run's accountable user: a saver holding gl.post. */

@@ -31,7 +31,7 @@ const setupReadHarness = () => setupPerformanceHarness({ prefix: "Read", hrRole:
 
 async function answerId(orgId: string, reviewId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
-    select id from hrm_review_answers where org_id = ${orgId} and review_id = ${reviewId} order by position limit 1`)).rows[0]!.id;
+    select id from hrm_review_answers where org_id = ${orgId} and review_id = ${reviewId} order by position limit 1`, "objects"))[0]!.id;
 }
 
 test("the subject reads only shared reviews, a peer reads nothing", { skip: !DB }, async () => {
@@ -211,11 +211,11 @@ test("turnover divides terminations by average headcount per period", { skip: !D
     const departmentId = (await db.execute<{ id: string }>(sql`
       insert into departments (org_id, name, subsidiary_id)
       values (${h.org.orgId}, 'Retention Department', ${h.org.subsidiaryId}) returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const assignmentId = (await db.execute<{ id: string }>(sql`
       insert into employment_assignments (org_id, employment_id, assignment_key)
       values (${h.org.orgId}, ${missingEmployment}, 'primary') returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     await db.execute(sql`
       insert into employment_assignment_versions
         (org_id, assignment_id, employment_id, version_no, department_id, is_primary, effective_from)

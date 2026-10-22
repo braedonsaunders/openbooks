@@ -141,7 +141,7 @@ async function allocateRequisitionNumber(exec: SqlExecutor, orgId: string): Prom
     do update set next_number = number_sequences.next_number + 1
     where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
-  `)).rows[0];
+  `, "objects"))[0];
   if (!seq) {
     throw new RecruitingError("REFUSED", "the requisition number was not allocated — no sequence row was written; retry the request");
   }
@@ -158,7 +158,7 @@ async function assertRefVisible(
   const found = (await exec.execute<{ one: number }>(sql`
     select 1 as one from ${table === "subsidiaries" ? sql`subsidiaries` : table === "departments" ? sql`departments` : table === "locations" ? sql`locations` : sql`parties`}
      where org_id = ${orgId} and id = ${id} limit 1
-  `)).rows.length > 0;
+  `, "objects")).length > 0;
   if (!found) {
     throw new RecruitingError("NOT_FOUND", `${label} is not visible in this organization — check the reference`);
   }
@@ -167,7 +167,7 @@ async function assertRefVisible(
 async function assertUserVisible(exec: SqlExecutor, orgId: string, userId: string): Promise<void> {
   const found = (await exec.execute<{ one: number }>(sql`
     select 1 as one from users where org_id = ${orgId} and id = ${userId} limit 1
-  `)).rows.length > 0;
+  `, "objects")).length > 0;
   if (!found) {
     throw new RecruitingError("NOT_FOUND", "recruiter is not visible in this organization — check the reference");
   }
@@ -330,7 +330,7 @@ export async function createRequisition(query: CreateRequisitionQuery): Promise<
               ${compensation?.currency ?? null}, ${compensation?.basis ?? null},
               'draft', ${pipelineTemplateId}, ${description}, ${jobDescriptionId}, ${actorId}, ${actorId})
       returning ${REQUISITION_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw new RecruitingError("REFUSED", "the requisition was not stored — no row was written; retry the request");
     }
@@ -346,7 +346,7 @@ async function loadRequisitionForUpdate(
   const row = (await exec.execute<RequisitionRow>(sql`
     select ${REQUISITION_COLUMNS} from hrm_requisitions
      where org_id = ${orgId} and id = ${requisitionId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
   }
@@ -396,7 +396,7 @@ export async function openRequisition(query: OpenRequisitionQuery): Promise<Requ
       const seed = await ensureDefaultPipelineTemplate(db, orgId, actorId);
       templateId = seed.id;
     }
-    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
     const updated = (await db.execute<RequisitionRow>(sql`
       update hrm_requisitions
          set status = 'open', opened_on = coalesce(opened_on, ${today}::date),
@@ -407,7 +407,7 @@ export async function openRequisition(query: OpenRequisitionQuery): Promise<Requ
        where org_id = ${orgId} and id = ${requisitionId}
          and status in ('draft', 'on_hold')
       returning ${REQUISITION_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -436,7 +436,7 @@ async function assertPositionOpenable(
      where v.org_id = ${orgId} and v.position_id = ${positionId}
        and v.recorded_until is null
      order by v.version_no desc limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!live) {
     throw new RecruitingError("NOT_FOUND", "the requisition's position has no live version — resolve the position before opening");
   }
@@ -446,7 +446,7 @@ async function assertPositionOpenable(
       "the requisition's position is closed — open a new position instead of recruiting against a retired establishment",
     );
   }
-  const asOf = targetStartOn ?? (await exec.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+  const asOf = targetStartOn ?? (await exec.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
   const vacancy = await loadVacancyAsOf(exec, {
     orgId,
     actorId,
@@ -505,7 +505,7 @@ async function transitionRequisition(
     const subject = await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
     const expected = action === "hold" ? "open" : action === "resume" ? "on_hold" : "open";
     const next = action === "hold" ? "on_hold" : action === "resume" ? "open" : "cancelled";
-    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
     const updated =
       action === "cancel"
         ? (await db.execute<RequisitionRow>(sql`
@@ -514,13 +514,13 @@ async function transitionRequisition(
                    updated_by = ${actorId}, updated_at = now()
              where org_id = ${orgId} and id = ${requisitionId} and status = ${expected}
             returning ${REQUISITION_COLUMNS}
-          `)).rows[0]
+          `, "objects"))[0]
         : (await db.execute<RequisitionRow>(sql`
             update hrm_requisitions
                set status = ${next}, updated_by = ${actorId}, updated_at = now()
              where org_id = ${orgId} and id = ${requisitionId} and status = ${expected}
             returning ${REQUISITION_COLUMNS}
-          `)).rows[0];
+          `, "objects"))[0];
     if (!updated) {
       const current = await loadRequisitionForUpdate(db, orgId, requisitionId);
       throw new RecruitingError(
@@ -613,7 +613,7 @@ export async function reviseRequisition(query: ReviseRequisitionQuery): Promise<
          and revision = ${expectedRevision}
          and status in ('draft', 'open', 'on_hold')
       returning ${REQUISITION_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -625,7 +625,7 @@ export async function reviseRequisition(query: ReviseRequisitionQuery): Promise<
       values (${orgId}, 'hrm_requisitions', ${requisitionId}, 'requisition_posting_revised',
               ${JSON.stringify({ before: prior, after: next })}::jsonb, ${actorId})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!audited) {
       throw new RecruitingError("REFUSED", "the posting edit was not audited — no audit row was written; retry the request");
     }
@@ -656,7 +656,7 @@ export async function bumpFillForHire(
        and status = 'open'
        and filled_count < headcount
     returning ${REQUISITION_COLUMNS}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!updated) {
     throw new RecruitingError(
       "REFUSED",

@@ -168,10 +168,8 @@ test(
         )
         assert.match(outcome.warnings?.[0]?.message ?? '', /Payroll Clearing/)
       }
-      const stored = (
-        await db.execute<{ number: string }>(sql`
-          select number from accounts where org_id = ${orgId} and number in ('1190', '1001')`)
-      ).rows.map((r) => r.number).sort()
+      const stored = (await db.execute<{ number: string }>(sql`
+          select number from accounts where org_id = ${orgId} and number in ('1190', '1001')`, 'objects')).map((r) => r.number).sort()
       assert.deepEqual(stored, ['1001', '1190'], 'a warning never blocks the write')
     } finally {
       harnessState.authz = null

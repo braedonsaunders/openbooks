@@ -117,8 +117,8 @@ test('posting a partyless control leg returns its typed warning with the entry i
 
     const posted = await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
       select status from documents where id = ${documentId} and org_id = ${org.orgId}
-    `))
-    assert.equal(posted.rows[0]?.status, 'posted', 'warning communicates the exposure without refusing legitimate GL posting')
+    `, 'objects'))
+    assert.equal(posted[0]?.status, 'posted', 'warning communicates the exposure without refusing legitimate GL posting')
   } finally {
     routeState.authz = null
     ;(globalThis as Record<string, unknown>).__journalActionsSession = null
@@ -152,7 +152,7 @@ test('posting fences on the revision the reviewer saw and refuses a stale one be
     assert.equal(createResponse.status, 201, await createResponse.text())
     const currentRevision = (await withOrgContext(org.orgId, () => db.execute<{ rev: string }>(sql`
       select revision_seq::text as rev from documents where id = ${documentId} and org_id = ${org.orgId}
-    `))).rows[0]?.rev
+    `, 'objects')))[0]?.rev
     assert.ok(currentRevision, 'the created journal carries its exact revision counter')
 
     const post = (expectedUpdatedAt: string) => withOrgContext(org.orgId, () => postJournal(new Request('http://localhost/api/journals/actions', {
@@ -165,15 +165,15 @@ test('posting fences on the revision the reviewer saw and refuses a stale one be
     assert.equal(stale.status, 409, 'a revision the row never held is refused')
     const afterStale = await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
       select status from documents where id = ${documentId} and org_id = ${org.orgId}
-    `))
-    assert.equal(afterStale.rows[0]?.status, 'draft', 'a refused post leaves the draft unposted')
+    `, 'objects'))
+    assert.equal(afterStale[0]?.status, 'draft', 'a refused post leaves the draft unposted')
 
     const accepted = await post(currentRevision)
     assert.equal(accepted.status, 200, await accepted.clone().text())
     const afterPost = await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
       select status from documents where id = ${documentId} and org_id = ${org.orgId}
-    `))
-    assert.equal(afterPost.rows[0]?.status, 'posted')
+    `, 'objects'))
+    assert.equal(afterPost[0]?.status, 'posted')
   } finally {
     routeState.authz = null
     ;(globalThis as Record<string, unknown>).__journalActionsSession = null
@@ -188,16 +188,16 @@ const ledgerRequest = (body: unknown) => new Request('http://localhost/api/ledge
 })
 const grantRole = async (orgId: string, key: string, permissions: unknown, restriction: unknown = { mode: 'all' }) => {
   const rows = await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb,
-    subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key} returning key`))
-  assert.equal(rows.rows.length, 1, `posting permission fixture updates the ${key} role`)
+    subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key} returning key`, 'objects'))
+  assert.equal(rows.length, 1, `posting permission fixture updates the ${key} role`)
 }
 const enableNpFeatures = async (orgId: string, extraId?: string) => {
   for (const id of extraId ? [orgId, extraId] : [orgId]) {
     const rows = await withOrgContext(id, () => db.execute(sql`update orgs set settings = jsonb_set(
       coalesce(settings, '{}'::jsonb), '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"grantManagement":true,"budgets":true,"encumbrances":true}'::jsonb, true)
-      where id = ${id} returning id`))
-    assert.equal(rows.rows.length, 1, 'nonprofit boundary fixture enables features in its own organization')
+      where id = ${id} returning id`, 'objects'))
+    assert.equal(rows.length, 1, 'nonprofit boundary fixture enables features in its own organization')
   }
 }
 
@@ -245,18 +245,18 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
     const { defaultFundId: fundId } = await provisionFundAccounting({ orgId: org.orgId, actorId: adminId,
       defaultFund: { code: '25NP', name: '-' }, classifications: { '25NP': { kind: 'operating', restrictionClass: 'unrestricted' } } })
     const seeded = await withOrgContext(org.orgId, async () => {
-      const fund = await db.execute(sql`update funds set budgetary_control = 'advisory' where org_id = ${org.orgId} and id = ${fundId} returning id`)
-      assert.equal(fund.rows.length, 1, 'advisory budget fixture updates its provisioned fund')
+      const fund = await db.execute(sql`update funds set budgetary_control = 'advisory' where org_id = ${org.orgId} and id = ${fundId} returning id`, 'objects')
+      assert.equal(fund.length, 1, 'advisory budget fixture updates its provisioned fund')
       const scenario = (await db.execute<{ id: string }>(sql`
         insert into budget_scenarios (org_id, book_id, name, fiscal_year, status, created_by, updated_by)
         values (${org.orgId}, ${org.bookId}, 'Primary 2026', 2026, 'draft', ${adminId}, ${adminId})
-        returning id`)).rows[0]!.id
+        returning id`, 'objects'))[0]!.id
       const dept = (await db.execute<{ id: string }>(sql`
-        insert into departments (id, org_id, name, is_active, custom) values (${randomUUID()}, ${org.orgId}, 'Programs', true, '{}'::jsonb) returning id`)).rows[0]!.id
+        insert into departments (id, org_id, name, is_active, custom) values (${randomUUID()}, ${org.orgId}, 'Programs', true, '{}'::jsonb) returning id`, 'objects'))[0]!.id
       const proj = (await db.execute<{ id: string }>(sql`
-        insert into projects (id, org_id, name) values (${randomUUID()}, ${org.orgId}, 'Harbor Outreach') returning id`)).rows[0]!.id
+        insert into projects (id, org_id, name) values (${randomUUID()}, ${org.orgId}, 'Harbor Outreach') returning id`, 'objects'))[0]!.id
       const classId = (await db.execute<{ id: string }>(sql`
-        insert into classes (id, org_id, name) values (${randomUUID()}, ${org.orgId}, 'Weekend Kitchen') returning id`)).rows[0]!.id
+        insert into classes (id, org_id, name) values (${randomUUID()}, ${org.orgId}, 'Weekend Kitchen') returning id`, 'objects'))[0]!.id
       await db.execute(sql`
         insert into budget_lines (org_id, scenario_id, period_id, account_id, subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, amount, created_by, updated_by)
         values (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, null, null, null, null, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId}),
@@ -264,11 +264,11 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
           (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, null, null, ${org.locationId}, ${classId}, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId})`)
       await approveBudgetScenarioFixture(org.orgId, scenario)
       assert.equal((await db.execute<{ status: string }>(sql`select status from budget_scenarios
-        where org_id=${org.orgId} and id=${scenario}`)).rows[0]!.status, 'approved')
+        where org_id=${org.orgId} and id=${scenario}`, 'objects'))[0]!.status, 'approved')
       const group = (await db.execute<{ id: string }>(sql`
         insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
         values (${org.orgId}, 'grant_allowable_costs', 'allowable', 'Allowable Costs', '{}'::jsonb, false, true, ${adminId}, ${adminId})
-        returning id`)).rows[0]!.id
+        returning id`, 'objects'))[0]!.id
       return { scenario, group, dept, proj, classId }
     })
     const grant = await createGrant({ orgId: org.orgId, code: 'GRANT-2026-1', name: 'Boundary probe',

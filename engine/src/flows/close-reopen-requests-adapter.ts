@@ -44,17 +44,14 @@ export const closeReopenRequestsFlowAdapter = defineTableSubjectAdapter({
   scope: tableScope("column", "close_reopen_requests", "subsidiary_id"),
   releaseViaHandler: true,
   async lockDecisionResources(orgId, id) {
-    const row = (
-      await db.execute<{ period_id: string; book_id: string }>(sql`
+    const row = (await db.execute<{ period_id: string; book_id: string }>(sql`
       select period_id,book_id from close_reopen_requests where org_id=${orgId} and id=${id}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!row) throw new Error("Period reopen request not found.");
     await periodScopeAdvisoryLock(db, orgId, row.period_id, row.book_id);
   },
   async loadContext(id) {
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         id: string;
         periodLabel: string;
         bookId: string;
@@ -68,8 +65,7 @@ export const closeReopenRequestsFlowAdapter = defineTableSubjectAdapter({
         r.subsidiary_id as "subsidiaryId",r.modules,r.reason,r.requested_by as "requestedBy",r.status
       from close_reopen_requests r join accounting_periods p on p.org_id=r.org_id and p.id=r.period_id
       where r.id=${id}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     return row
       ? {
           values: { ...row, modules: row.modules.join(", ") },
@@ -85,11 +81,9 @@ export const closeReopenRequestsFlowAdapter = defineTableSubjectAdapter({
   },
   async getStatus(id) {
     return (
-      (
-        await db.execute<{ status: string }>(
-          sql`select status from close_reopen_requests where id=${id}`,
-        )
-      ).rows[0]?.status ?? null
+      (await db.execute<{ status: string }>(
+          sql`select status from close_reopen_requests where id=${id}`, "objects",
+        ))[0]?.status ?? null
     );
   },
   async changeStatus() {

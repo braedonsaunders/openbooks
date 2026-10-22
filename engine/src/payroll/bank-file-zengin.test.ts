@@ -654,8 +654,8 @@ async function zenginProfileOrg(secrets: Record<string, unknown>) {
   // definition AP would originate supplier payments on.
   await ensureBuiltInPaymentFormats(org.orgId, actorId);
   const formats = await db.execute<{ id: string }>(sql`
-    select id from payment_formats where org_id = ${org.orgId} and rail = 'zengin_credit'`);
-  assert.equal(formats.rows.length, 1);
+    select id from payment_formats where org_id = ${org.orgId} and rail = 'zengin_credit'`, "objects");
+  assert.equal(formats.length, 1);
   const bankAccountId = randomUUID();
   await db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -667,7 +667,7 @@ async function zenginProfileOrg(secrets: Record<string, unknown>) {
     insert into payment_bank_profiles (id, org_id, name, bank_account_id, payment_format_id, currency,
                                        country, originator_secrets_encrypted, settings, is_active,
                                        created_by, updated_by)
-    values (${profileId}, ${org.orgId}, 'Payroll direct deposit (Zengin)', ${bankAccountId}, ${formats.rows[0]!.id},
+    values (${profileId}, ${org.orgId}, 'Payroll direct deposit (Zengin)', ${bankAccountId}, ${formats[0]!.id},
             'JPY', 'JP', ${sealJson(secrets, { orgId: org.orgId, purpose: "payment.originator.secrets" })}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, profileId };
 }

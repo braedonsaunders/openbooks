@@ -95,7 +95,7 @@ async function lineIdByContent(
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
        and posted_on = ${postedOn} and amount = ${amount} and description = ${description}
-  `)).rows[0];
+  `, "objects"))[0];
   assert.ok(row, `imported line ${postedOn} ${amount} ${description} must exist`);
   return row.id;
 }
@@ -104,7 +104,7 @@ async function statementAudit(orgId: string, statementId: string) {
   return (await db.execute<{ changes: { possibleDuplicatesExcluded?: { description: string; possibleDuplicateOf: string }[] } }>(sql`
     select changes from audit_log
      where org_id = ${orgId} and table_name = 'bank_statements' and row_id = ${statementId} and action = 'insert'
-  `)).rows[0]!.changes;
+  `, "objects"))[0]!.changes;
 }
 
 test(
@@ -156,8 +156,8 @@ test(
         select description from bank_statement_lines
          where statement_id = ${committed.statementId} and org_id = ${org.orgId}
          order by line_number
-      `);
-      assert.deepEqual(written.rows.map((row) => row.description), ["REFUND"]);
+      `, "objects");
+      assert.deepEqual(written.map((row) => row.description), ["REFUND"]);
       const committedAudit = await statementAudit(org.orgId, committed.statementId!);
       assert.deepEqual(
         committedAudit.possibleDuplicatesExcluded?.map((line) => ({
@@ -182,10 +182,10 @@ test(
       const flagged = await db.execute<{ possible_duplicate_of: string | null; bank_transaction_id: string | null }>(sql`
         select possible_duplicate_of, bank_transaction_id from bank_statement_lines
          where statement_id = ${optedIn.statementId!} and org_id = ${org.orgId}
-      `);
-      assert.equal(flagged.rows.length, 1);
-      assert.equal(flagged.rows[0]!.possible_duplicate_of, earlierCoffee);
-      assert.equal(flagged.rows[0]!.bank_transaction_id, null, "an ID-less line stores no synthetic bank key");
+      `, "objects");
+      assert.equal(flagged.length, 1);
+      assert.equal(flagged[0]!.possible_duplicate_of, earlierCoffee);
+      assert.equal(flagged[0]!.bank_transaction_id, null, "an ID-less line stores no synthetic bank key");
       const optedInAudit = await statementAudit(org.orgId, optedIn.statementId!);
       assert.equal(optedInAudit.possibleDuplicatesExcluded, undefined, "nothing was held out of an opted-in import");
     } finally {
@@ -220,7 +220,7 @@ test(
       const receiptId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where statement_id = ${statement.statementId!} and org_id = ${org.orgId} and bank_transaction_id = 'receipt-40'
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const duplicateId = await lineIdByContent(org.orgId, statement.statementId!, org.date, "-7.0000", "COFFEE SHOP");
 
       const receiptJournal = await postBankJournal(org, actor, "40.0000", "receipt");

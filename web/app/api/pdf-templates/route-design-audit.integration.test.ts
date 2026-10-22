@@ -71,11 +71,11 @@ async function seed(): Promise<{ orgId: string; actorId: string }> {
 }
 
 async function auditEvents(orgId: string, rowId: string) {
-  return (await withBypassContext(() => db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
+  return await withBypassContext(() => db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
     select action, changes, actor_id from audit_log
      where org_id = ${orgId} and table_name = 'pdf_templates' and row_id = ${rowId}
      order by at, id
-  `))).rows;
+  `, "objects"));
 }
 
 test(

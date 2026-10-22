@@ -31,7 +31,7 @@ for(const entity of ['asset-categories','item-rate-books','pay-derived-rules'] a
      ? {name:'Fenced category',assetAccountId:org.accounts.invAsset,accumulatedDepreciationAccountId:org.accounts.clearing,depreciationExpenseAccountId:org.accounts.adjustment,defaultMethod:'straight_line',defaultLifeMonths:10,isActive:true}
      : {code:'FENCED',name:'Fenced rate book',isDefault:false,isActive:true};
     if(entity==='pay-derived-rules'){
-     const component=(await db.execute(sql`insert into pay_components(org_id,code,name,kind,value,created_by,updated_by) values(${org.orgId},'FENCED','Fenced earning','earning','1',${actorId},${actorId}) returning id`)).rows[0]!;
+     const component=(await db.execute(sql`insert into pay_components(org_id,code,name,kind,value,created_by,updated_by) values(${org.orgId},'FENCED','Fenced earning','earning','1',${actorId},${actorId}) returning id`, 'objects'))[0]!;
      body={code:'FENCED',name:'Fenced rule',componentId:String(component.id),trigger:'distinct_day',effectiveFrom:'2026-01-01',effectiveTo:null,rateMode:'fixed_per_unit',rateValue:'10',quantityMode:'count',costingMode:'source',billableOnly:false,includedJobTitles:[],excludedJobTitles:[],sequence:50,isActive:true};
     }
     if(entity==='item-rate-books'){
@@ -40,7 +40,7 @@ for(const entity of ['asset-categories','item-rate-books','pay-derived-rules'] a
     if(method!=='POST'){
      const created=await send('POST',entity,body);assert.equal(created.status,200,JSON.stringify(await created.clone().json()));body.id=(await created.json()).id;
     }
-    const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
+    const before=await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`, 'objects');
     await writer.connect();await writer.query('begin');
     // 0399 gates the bypass GUC by session role, so the writer connects as the privileged test login above.
     await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
@@ -51,7 +51,7 @@ for(const entity of ['asset-categories','item-rate-books','pay-derived-rules'] a
     pending=send(method,entity,{...body,name:'Write after disable'});void pending.catch(()=>{});
     await waitForLockWaiter(writer,{label:'the fenced write'});await writer.query('commit');
     const response=await pending;assert.equal(response.status,404,JSON.stringify(await response.json()));
-    assert.deepEqual((await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows,before);
+    assert.deepEqual(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`, 'objects'),before);
    }finally{await writer.query('rollback').catch(()=>{});await pending?.catch(()=>{});await writer.end();state.gate=null;await dropScratchOrg(org.orgId);}
   });
  }
@@ -79,7 +79,7 @@ for(const capability of ['equipment trigger','subsidiary scope','currency','fiel
    const actorId=await authenticate(org);const entity=capability==='equipment trigger'?'pay-derived-rules':capability==='currency'?'item-rate-books':capability==='field ticket'?'time-types':'departments';const table=entity.replaceAll('-','_');const feature=capability==='equipment trigger'?'equipment':capability==='currency'?'multiCurrency':capability==='field ticket'?'fieldTickets':'multiSubsidiary';
    let body:Record<string,unknown>={code:'FIELD-FENCE',name:'Fenced scope',subsidiaryId:org.subsidiaryId,isActive:true};
    if(capability==='equipment trigger'){
-    const component=(await db.execute(sql`insert into pay_components(org_id,code,name,kind,value,created_by,updated_by) values(${org.orgId},'FIELD-FENCE','Fenced earning','earning','1',${actorId},${actorId}) returning id`)).rows[0]!;
+    const component=(await db.execute(sql`insert into pay_components(org_id,code,name,kind,value,created_by,updated_by) values(${org.orgId},'FIELD-FENCE','Fenced earning','earning','1',${actorId},${actorId}) returning id`, 'objects'))[0]!;
     body={code:'FIELD-FENCE',name:'Fenced equipment rule',componentId:String(component.id),trigger:'equipment_charge',effectiveFrom:'2026-01-01',effectiveTo:null,rateMode:'fixed_per_unit',rateValue:'10',quantityMode:'count',costingMode:'source',billableOnly:false,includedJobTitles:[],excludedJobTitles:[],sequence:50,isActive:true};
    }
    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object(${feature}::text,true)) where id=${org.orgId}`);
@@ -89,7 +89,7 @@ for(const capability of ['equipment trigger','subsidiary scope','currency','fiel
     const initial=capability==='equipment trigger'?{...body,trigger:'distinct_day'}:capability==='subsidiary scope'?{...body,subsidiaryId:null}:body;
     const created=await send('POST',entity,initial);assert.equal(created.status,200,JSON.stringify(await created.clone().json()));body.id=(await created.json()).id;
    }
-   const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
+   const before=await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`, 'objects');
    await writer.connect();await writer.query('begin');
    // 0399 gates the bypass GUC by session role, so the writer connects as the privileged test login above.
    await writer.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
@@ -99,7 +99,7 @@ for(const capability of ['equipment trigger','subsidiary scope','currency','fiel
    pending=send(method,entity,body);void pending.catch(()=>{});
    await waitForLockWaiter(writer,{label:'the fenced write'});await writer.query('commit');const response=await pending;
    assert.equal(response.status,capability==='subsidiary scope'?400:404,JSON.stringify(await response.json()));
-   assert.deepEqual((await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows,before);
+   assert.deepEqual(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`, 'objects'),before);
   }finally{await writer.query('rollback').catch(()=>{});await pending?.catch(()=>{});await writer.end();state.gate=null;await dropScratchOrg(org.orgId);}
  });
 }

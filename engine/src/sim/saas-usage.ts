@@ -75,7 +75,7 @@ function monthlyQuantity(spec: UsageSubscriptionSpec, startOn: string, today: st
 }
 
 async function linkedUsageSubscriptions(orgId: string): Promise<SubscriptionUsageRow[]> {
-  return (await db.execute<SubscriptionUsageRow>(sql`
+  return await db.execute<SubscriptionUsageRow>(sql`
     select s.id, s.customer_id as "customerId", customer.display_name as "customerName",
            s.start_on::text as "startOn", s.status, s.paused_on::text as "pausedOn",
            s.resume_on::text as "resumeOn", link.id as "linkId", meter.key as "productKey",
@@ -85,7 +85,7 @@ async function linkedUsageSubscriptions(orgId: string): Promise<SubscriptionUsag
       join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
       join usage_meters meter on meter.org_id = link.org_id and meter.id = any(link.meter_ids)
      where link.org_id = ${orgId}
-     order by customer.display_name, meter.key`)).rows;
+     order by customer.display_name, meter.key`, "objects");
 }
 
 async function applyProfileLifecycle(
@@ -114,8 +114,8 @@ async function applyProfileLifecycle(
       const paused = await db.execute(sql`
         update subscriptions set status = 'paused', paused_on = ${today}
          where org_id = ${world.orgId} and id = ${subscription.id} and status = 'active'
-        returning id`);
-      if (paused.rows.length !== 1) throw new Error(`Pausing ${spec.customer} did not update one active subscription`);
+        returning id`, "objects");
+      if (paused.length !== 1) throw new Error(`Pausing ${spec.customer} did not update one active subscription`);
       subscription.status = "paused";
       subscription.pausedOn = today;
     }
@@ -125,8 +125,8 @@ async function applyProfileLifecycle(
       const resumed = await db.execute(sql`
         update subscriptions set status = 'active', resume_on = ${today}
          where org_id = ${world.orgId} and id = ${subscription.id} and status = 'paused'
-        returning id`);
-      if (resumed.rows.length !== 1) throw new Error(`Resuming ${spec.customer} did not update one paused subscription`);
+        returning id`, "objects");
+      if (resumed.length !== 1) throw new Error(`Resuming ${spec.customer} did not update one paused subscription`);
       subscription.status = "active";
       subscription.resumeOn = today;
     }
@@ -242,9 +242,9 @@ export async function provisionSaasUsage(
           custom: { simPrepaidUsageProduct: product.key },
         });
         await issueInvoice(world, invoice.invoiceId);
-        const sourceLine = (await db.execute<{ id: string }>(sql`
+        const sourceLine = await db.execute<{ id: string }>(sql`
           select id from document_lines where org_id = ${world.orgId} and document_id = ${invoice.invoiceId}
-          order by line_number`)).rows;
+          order by line_number`, "objects");
         if (sourceLine.length !== 1) throw new Error(`Prepaid invoice ${invoice.documentNumber} must have exactly one source line`);
         await createPrepaidGrant(world.orgId, world.actors.controller, {
           customerId: customer.id,
@@ -305,7 +305,7 @@ export async function runSaasUsageDay(
     const result = await commitRateRun(world.orgId, world.actors.controller, row.linkId, start, today);
     if (!result.invoiceId) continue;
     const invoice = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${world.orgId} and id = ${result.invoiceId}`)).rows[0];
+      select status from documents where org_id = ${world.orgId} and id = ${result.invoiceId}`, "objects"))[0];
     if (!invoice) throw new Error(`Usage rating run ${result.run.id} points to a missing invoice`);
     if (invoice.status === "draft") await issueInvoice(world, result.invoiceId);
     else if (invoice.status !== "posted") throw new Error(`Usage invoice ${result.invoiceId} cannot post from status ${invoice.status}`);
@@ -325,10 +325,10 @@ export interface SaasUsageInvariantFailure {
 /** Verify that the latest rated month still replays and its 4010 credit ties to usage. */
 export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageInvariantFailure[]> {
   const latest = (await db.execute<{ periodEnd: string | null }>(sql`
-    select max(period_end)::text as "periodEnd" from usage_rating_runs where org_id = ${orgId} and status = 'active'`)).rows[0]?.periodEnd;
+    select max(period_end)::text as "periodEnd" from usage_rating_runs where org_id = ${orgId} and status = 'active'`, "objects"))[0]?.periodEnd;
   if (!latest) return [];
   const monthStart = `${latest.slice(0, 7)}-01`;
-  const runs = (await db.execute<{
+  const runs = await db.execute<{
     id: string;
     linkId: string;
     periodStart: string;
@@ -340,7 +340,7 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
            input_hash as "inputHash", output_hash as "outputHash"
       from usage_rating_runs
      where org_id = ${orgId} and status = 'active' and period_end = ${latest}::date
-     order by link_id`)).rows;
+     order by link_id`, "objects");
   const failures: SaasUsageInvariantFailure[] = [];
   for (const run of runs) {
     const preview = await previewRateRun(orgId, run.linkId, run.periodStart, run.periodEnd);
@@ -374,12 +374,12 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
          and reversal.status in ('posted', 'reversed')
     )
     select coalesce(sum(amount), 0)::text as amount from invoice_legs
-     where posting_date >= ${monthStart}::date and posting_date <= ${latest}::date`)).rows[0]?.amount ?? "0";
+     where posting_date >= ${monthStart}::date and posting_date <= ${latest}::date`, "objects"))[0]?.amount ?? "0";
   const drawAmount = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(amount), 0)::text as amount from usage_prepaid_draws
-     where org_id = ${orgId} and period_month = ${monthStart}::date`)).rows[0]?.amount ?? "0";
+     where org_id = ${orgId} and period_month = ${monthStart}::date`, "objects"))[0]?.amount ?? "0";
   const usageAccount = (await db.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${orgId} and number = '4010' and is_active`)).rows[0];
+    select id from accounts where org_id = ${orgId} and number = '4010' and is_active`, "objects"))[0];
   if (!usageAccount) {
     failures.push({ invariant: "saas-usage-revenue-tieout", detail: "usage revenue account 4010 is missing or inactive" });
     return failures;
@@ -390,7 +390,7 @@ export async function saasUsageMonthInvariant(orgId: string): Promise<SaasUsageI
       join journal_entries entry on entry.org_id = line.org_id and entry.id = line.entry_id
      where line.org_id = ${orgId} and line.account_id = ${usageAccount.id}
        and line.posting_date >= ${monthStart}::date and line.posting_date <= ${latest}::date
-       and entry.status in ('posted', 'reversed')`)).rows[0]?.amount ?? "0";
+       and entry.status in ('posted', 'reversed')`, "objects"))[0]?.amount ?? "0";
   const expected = add(invoiceAmount, drawAmount);
   const credited = neg(parseMoney(creditAmount));
   if (cmp(credited, expected) !== 0) {

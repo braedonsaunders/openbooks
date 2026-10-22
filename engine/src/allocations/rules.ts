@@ -353,8 +353,8 @@ async function requireRevision(
   if (expected === null || expected === undefined) return;
   const column = table === "allocation_rules" ? sql.raw("allocation_rules.updated_at") : sql.raw("allocation_rule_versions.updated_at");
   const rows = await db.execute<{ match: boolean }>(sql`select (${documentRevisionSql(sql`${column}`)} = ${expected}) as match
-    from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`);
-  const row = rows.rows[0];
+    from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`, "objects");
+  const row = rows[0];
   if (row === undefined) throw new AllocationRuleError("NOT_FOUND", `${table} row not found: ${id}`);
   if (!row.match) {
     throw new AllocationRuleError("STALE", `${table} row ${id} changed since the revision token was read; reload and retry`);
@@ -369,9 +369,9 @@ async function readRevision(
 ): Promise<string> {
   const column = table === "allocation_rules" ? sql.raw("allocation_rules.updated_at") : sql.raw("allocation_rule_versions.updated_at");
   const rows = await db.execute<{ revision: string }>(
-    sql`select ${documentRevisionSql(sql`${column}`)} as revision from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`,
+    sql`select ${documentRevisionSql(sql`${column}`)} as revision from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`, "objects",
   );
-  const row = rows.rows[0];
+  const row = rows[0];
   if (row === undefined) throw new AllocationRuleError("NOT_FOUND", `${table} row not found: ${id}`);
   return row.revision;
 }
@@ -484,18 +484,18 @@ const TARGET_COLS = sql`t.id as target_id, t.sequence as target_sequence,
 async function loadRuleHead(orgId: string, ruleId: string, forUpdate: boolean): Promise<AllocationRuleHead> {
   const lock = forUpdate ? sql` for update` : sql``;
   const rows = await db.execute<Prefixed>(
-    sql`select ${RULE_COLS} from allocation_rules r where r.org_id = ${orgId} and r.id = ${ruleId}${lock}`,
+    sql`select ${RULE_COLS} from allocation_rules r where r.org_id = ${orgId} and r.id = ${ruleId}${lock}`, "objects",
   );
-  const row = rows.rows[0];
+  const row = rows[0];
   if (row === undefined) throw new AllocationRuleError("NOT_FOUND", `allocation rule not found: ${ruleId}`);
   return mapRule(row, "rule_");
 }
 
 async function loadVersionRow(orgId: string, versionId: string): Promise<Prefixed> {
   const rows = await db.execute<Prefixed>(
-    sql`select ${VERSION_COLS} from allocation_rule_versions v where v.org_id = ${orgId} and v.id = ${versionId}`,
+    sql`select ${VERSION_COLS} from allocation_rule_versions v where v.org_id = ${orgId} and v.id = ${versionId}`, "objects",
   );
-  const row = rows.rows[0];
+  const row = rows[0];
   if (row === undefined) throw new AllocationRuleError("NOT_FOUND", `allocation rule version not found: ${versionId}`);
   return row;
 }
@@ -527,9 +527,9 @@ function assertRuleVisible(
 async function loadTargets(orgId: string, versionId: string): Promise<AllocationRuleTarget[]> {
   const rows = await db.execute<Prefixed>(
     sql`select ${TARGET_COLS} from allocation_rule_targets t
-        where t.org_id = ${orgId} and t.version_id = ${versionId} order by t.sequence`,
+        where t.org_id = ${orgId} and t.version_id = ${versionId} order by t.sequence`, "objects",
   );
-  return rows.rows.map((row) => mapTarget(row, "target_"));
+  return rows.map((row) => mapTarget(row, "target_"));
 }
 
 function checkedTargets(input: AllocationTargetInput[] | undefined, what: string): AllocationTargetInput[] {
@@ -583,9 +583,9 @@ export async function createRule(input: CreateRuleInput, audit: AllocationAudit)
   const description = input.description ?? null;
   return withOrgTransaction(orgId, async () => {
     const existing = await db.execute<{ id: string }>(
-      sql`select id from allocation_rules where org_id = ${orgId} and key = ${key}`,
+      sql`select id from allocation_rules where org_id = ${orgId} and key = ${key}`, "objects",
     );
-    if (existing.rows.length > 0) {
+    if (existing.length > 0) {
       throw new AllocationRuleError("INVALID", `allocation rule key is already taken in this organization: "${key}"`);
     }
     const id = randomUUID();
@@ -660,15 +660,15 @@ export async function deleteRule(
     refuseSystemRule(before, "deleted");
     await requireRevision("allocation_rules", orgId, id, input.expectedRevision);
     const versions = await db.execute<{ id: string; status: string }>(
-      sql`select id, status from allocation_rule_versions where org_id = ${orgId} and rule_id = ${id}`,
+      sql`select id, status from allocation_rule_versions where org_id = ${orgId} and rule_id = ${id}`, "objects",
     );
-    if (versions.rows.some((row) => row.status !== "draft")) {
+    if (versions.some((row) => row.status !== "draft")) {
       throw new AllocationRuleError(
         "INVALID",
         `allocation rule "${before.key}" has published history and cannot be deleted; retire its versions instead`,
       );
     }
-    for (const version of versions.rows) {
+    for (const version of versions) {
       await db.execute(sql`delete from allocation_rule_targets where org_id = ${orgId} and version_id = ${version.id}`);
       await db.execute(sql`delete from allocation_rule_versions where org_id = ${orgId} and id = ${version.id}`);
     }
@@ -695,7 +695,7 @@ export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: 
     // cannot reshape a rule whose drafts touch another entity.
     const versionIds = (await db.execute<{ id: string }>(sql`
       select id::text as id from allocation_rule_versions
-       where org_id = ${orgId} and rule_id = ${id}`)).rows.map((r) => r.id);
+       where org_id = ${orgId} and rule_id = ${id}`, "objects")).map((r) => r.id);
     for (const versionId of versionIds) {
       const version = mapVersion(await loadVersionRow(orgId, versionId), "version_");
       assertRuleVisible(
@@ -944,9 +944,9 @@ export async function createDraftVersion(
     const head = await loadRuleHead(orgId, id, true);
     refuseSystemRule(head, "edited");
     const maxRow = await db.execute<{ n: string }>(
-      sql`select coalesce(max(version_no), 0)::text as n from allocation_rule_versions where org_id = ${orgId} and rule_id = ${id}`,
+      sql`select coalesce(max(version_no), 0)::text as n from allocation_rule_versions where org_id = ${orgId} and rule_id = ${id}`, "objects",
     );
-    const versionNo = Number(maxRow.rows[0]?.n ?? "0") + 1;
+    const versionNo = Number(maxRow[0]?.n ?? "0") + 1;
     let def: ResolvedDefinition;
     let targets: AllocationTargetInput[];
     if (input.fromVersionId !== undefined) {
@@ -1181,34 +1181,34 @@ async function validationContext(
 ): Promise<{ siblings: { id: string; effectiveFrom: string; effectiveTo: string | null }[]; driver: KnownDriver | null; activePostingBookIds: string[]; periods: PeriodBoundary[] }> {
   const siblingRows = await db.execute<{ id: string; effective_from: unknown; effective_to: unknown }>(
     sql`select id, effective_from, effective_to from allocation_rule_versions
-        where org_id = ${orgId} and rule_id = ${ruleId} and status = 'published' and id <> ${version.id}`,
+        where org_id = ${orgId} and rule_id = ${ruleId} and status = 'published' and id <> ${version.id}`, "objects",
   );
   let driver: KnownDriver | null = null;
   if (version.driverId !== null) {
     const driverRows = await db.execute<{ id: string; dimension: string; is_active: boolean }>(
-      sql`select id, dimension, is_active from allocation_drivers where org_id = ${orgId} and id = ${version.driverId}`,
+      sql`select id, dimension, is_active from allocation_drivers where org_id = ${orgId} and id = ${version.driverId}`, "objects",
     );
-    const row = driverRows.rows[0];
+    const row = driverRows[0];
     driver = row === undefined ? null : { id: row.id, dimension: row.dimension, isActive: row.is_active };
   }
   const bookRows = await db.execute<{ id: string }>(
-    sql`select id from accounting_books where org_id = ${orgId} and is_active and posts_gl`,
+    sql`select id from accounting_books where org_id = ${orgId} and is_active and posts_gl`, "objects",
   );
   // Regular periods of every calendar: the period-mode boundary proof needs
   // the org's known calendar, not the version (which names no calendar).
   const periodRows = await db.execute<{ label: string; starts_on: unknown; ends_on: unknown }>(
     sql`select ${canonicalPeriodLabelSql()} as label, p.starts_on, p.ends_on from accounting_periods p
-        where p.org_id = ${orgId} and not p.is_adjustment order by p.starts_on`,
+        where p.org_id = ${orgId} and not p.is_adjustment order by p.starts_on`, "objects",
   );
   return {
-    siblings: siblingRows.rows.map((row) => ({
+    siblings: siblingRows.map((row) => ({
       id: row.id,
       effectiveFrom: asDate(row.effective_from),
       effectiveTo: row.effective_to === null ? null : asDate(row.effective_to),
     })),
     driver,
-    activePostingBookIds: bookRows.rows.map((row) => row.id),
-    periods: periodRows.rows.map((row) => ({
+    activePostingBookIds: bookRows.map((row) => row.id),
+    periods: periodRows.map((row) => ({
       label: row.label,
       startsOn: asDate(row.starts_on),
       endsOn: asDate(row.ends_on),
@@ -1249,22 +1249,22 @@ export async function publishVersion(
       }
       const expenseAccounts = [...new Set([...targets.map(target => target.targetAccountId), version.dynamicTarget?.targetAccountId, version.offsetAccountId].filter((id): id is string => !!id))];
       if (expenseAccounts.length) {
-        const accounts = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'expense_other', 'cogs') and id = any(${`{${expenseAccounts.join(",")}}`}::uuid[])`)).rows;
+        const accounts = await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'expense_other', 'cogs') and id = any(${`{${expenseAccounts.join(",")}}`}::uuid[])`, "objects");
         if (accounts.length !== expenseAccounts.length) throw new AllocationRuleError("INVALID", "Payroll expense allocations require active posting expense accounts — choose expense or cost-of-goods accounts for destinations and offsets; payroll liabilities must remain unchanged.");
       }
       const componentIds = version.dimensionFilters.payComponentIds ?? [];
       if (componentIds.length) {
-        const components = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') and id = any(${`{${componentIds.join(",")}}`}::uuid[])`)).rows;
+        const components = await db.execute<{ id: string }>(sql`select id from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') and id = any(${`{${componentIds.join(",")}}`}::uuid[])`, "objects");
         if (new Set(componentIds).size !== components.length) throw new AllocationRuleError("INVALID", "A selected pay component is missing, inactive, or does not create payroll expense — choose active earnings or employer contributions before publishing.");
       }
       const employeeIds = version.dimensionFilters.payrollEmployeeIds ?? [];
       if (employeeIds.length) {
-        const employees = (await db.execute<{ id: string }>(sql`select distinct party_id::text as id from employee_roles where org_id = ${orgId} and party_id = any(${`{${employeeIds.join(",")}}`}::uuid[])`)).rows;
+        const employees = await db.execute<{ id: string }>(sql`select distinct party_id::text as id from employee_roles where org_id = ${orgId} and party_id = any(${`{${employeeIds.join(",")}}`}::uuid[])`, "objects");
         if (new Set(employeeIds).size !== employees.length) throw new AllocationRuleError("INVALID", "A selected employee is not an employee of this organization — choose employees from the people directory before publishing.");
       }
       const timeTypeIds = version.dimensionFilters.timeTypeIds ?? [];
       if (timeTypeIds.length) {
-        const timeTypes = (await db.execute<{ id: string }>(sql`select id::text as id from time_types where org_id = ${orgId} and id = any(${`{${timeTypeIds.join(",")}}`}::uuid[])`)).rows;
+        const timeTypes = await db.execute<{ id: string }>(sql`select id::text as id from time_types where org_id = ${orgId} and id = any(${`{${timeTypeIds.join(",")}}`}::uuid[])`, "objects");
         if (new Set(timeTypeIds).size !== timeTypes.length) throw new AllocationRuleError("INVALID", "A selected time type does not belong to this organization — choose time types from Time setup before publishing.");
       }
     }
@@ -1373,9 +1373,9 @@ async function queryRulesInEffect(args: {
       and (v.effective_to is null or v.effective_to >= ${onDate}::date)
     left join allocation_rule_targets t on t.org_id = v.org_id and t.version_id = v.id
     where r.org_id = ${orgId} and r.is_active ${modeFilter} ${keyFilter} ${bookFilter}
-    order by r.sort_order, r.key, t.sequence`);
+    order by r.sort_order, r.key, t.sequence`, "objects");
   const grouped = new Map<string, RuleInEffect>();
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const ruleId = String(row["rule_id"]);
     let entry = grouped.get(ruleId);
     if (entry === undefined) {
@@ -1432,17 +1432,17 @@ export async function listRuleHeads(
       from allocation_rules r
       left join allocation_rule_versions v on v.org_id = r.org_id and v.id = r.current_version_id
       where r.org_id = ${id} ${modeFilter} ${activeFilter} ${payrollFilter}
-      order by r.sort_order, r.key`);
+      order by r.sort_order, r.key`, "objects");
     const result: RuleHeadSummary[] = [];
-    for (const row of rows.rows) {
+    for (const row of rows) {
       let currentVisible = true;
       if (opts.allowedSubsidiaryIds !== undefined && opts.allowedSubsidiaryIds !== null) {
         const versions = await db.execute<Prefixed>(sql`select ${VERSION_COLS}
           from allocation_rule_versions v where v.org_id = ${id} and v.rule_id = ${row["rule_id"]}
-          order by v.version_no`);
-        let anyVisible = versions.rows.length === 0;
+          order by v.version_no`, "objects");
+        let anyVisible = versions.length === 0;
         currentVisible = row["current_id"] === null || row["current_id"] === undefined;
-        for (const versionRow of versions.rows) {
+        for (const versionRow of versions) {
           const version = mapVersion(versionRow, "version_");
           const targets = await loadTargets(id, version.id);
           const visible = allocationRuleVisible(opts.allowedSubsidiaryIds, {
@@ -1494,12 +1494,12 @@ export async function getRuleDetail(
         where t.org_id = v.org_id and t.version_id = v.id) as target_count
       from allocation_rule_versions v
       where v.org_id = ${oid} and v.rule_id = ${rid}
-      order by v.version_no`);
+      order by v.version_no`, "objects");
     // The timeline shows only visible versions: a restricted caller never
     // learns another entity's versions exist. A rule with versions but none
     // visible answers the bare uniform not-found.
     const versions: RuleDetail["versions"] = [];
-    for (const row of versionRows.rows) {
+    for (const row of versionRows) {
       const version = mapVersion(row, "version_");
       const targets = await loadTargets(oid, version.id);
       if (
@@ -1519,7 +1519,7 @@ export async function getRuleDetail(
         targetCount: Number(row["target_count"]),
       });
     }
-    if (versionRows.rows.length > 0 && versions.length === 0) {
+    if (versionRows.length > 0 && versions.length === 0) {
       throw new AllocationRuleError("NOT_FOUND", "not found");
     }
     return { rule, revision, versions };

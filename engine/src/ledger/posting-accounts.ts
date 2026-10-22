@@ -22,9 +22,9 @@ export async function resolveDeferralAccounts(
       join recognition_rules r on r.id = it.recognition_rule_id and r.org_id = it.org_id
      where dl.document_id = ${documentId}
        and dl.org_id = ${orgId}
-       and coalesce(it.deferred_account_id, r.deferred_account_id) is not null`));
+       and coalesce(it.deferred_account_id, r.deferred_account_id) is not null`, "objects"));
   const map = new Map<string, string>();
-  for (const row of r.rows) map.set(row.line_id, row.deferred_account_id);
+  for (const row of r) map.set(row.line_id, row.deferred_account_id);
   return map;
 }
 
@@ -39,10 +39,10 @@ export async function resolveTaxAccounts(
       paid_account_id: string | null;
     }>(sql`
     select id, collected_account_id, paid_account_id from tax_codes
-     where org_id = ${orgId} and (collected_account_id is not null or paid_account_id is not null)`));
+     where org_id = ${orgId} and (collected_account_id is not null or paid_account_id is not null)`, "objects"));
   const collected = new Map<string, string>();
   const paid = new Map<string, string>();
-  for (const row of r.rows) {
+  for (const row of r) {
     if (row.collected_account_id)
       collected.set(row.id, row.collected_account_id);
     if (row.paid_account_id) paid.set(row.id, row.paid_account_id);
@@ -76,8 +76,8 @@ async function resolveEmployeeReceivable(
        and coalesce(o.settings->'controlAccounts'->>'employeeReceivable', '') ~
            '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
        and a.id = (o.settings->'controlAccounts'->>'employeeReceivable')::uuid
-     where o.id = ${orgId}`);
-  const row = r.rows[0];
+     where o.id = ${orgId}`, "objects");
+  const row = r[0];
   if (!row?.raw) return undefined;
   if (!row.id) {
     throw new PostingError("Employee receivable control account does not exist in this organization");
@@ -110,8 +110,8 @@ export async function resolveExpenseReceivableDeps(
     select 1 as one from document_lines
      where org_id = ${doc.orgId} and document_id = ${doc.id}
        and settlement_type = 'personal'
-     limit 1`);
-  if (!probe.rows[0]) return deps;
+     limit 1`, "objects");
+  if (!probe[0]) return deps;
   const employeeReceivable = await resolveEmployeeReceivable(runner, doc.orgId);
   return { ...deps, control: { ...deps.control, employeeReceivable } };
 }
@@ -129,10 +129,10 @@ export async function resolveOrgTaxAccounts(
     select settings->'controlAccounts'->>'taxCollected' as tax_collected,
            settings->'controlAccounts'->>'taxPaid' as tax_paid
       from orgs
-     where id = ${orgId}`);
+     where id = ${orgId}`, "objects");
   return {
-    taxCollected: r.rows[0]?.tax_collected ?? undefined,
-    taxPaid: r.rows[0]?.tax_paid ?? undefined,
+    taxCollected: r[0]?.tax_collected ?? undefined,
+    taxPaid: r[0]?.tax_paid ?? undefined,
   };
 }
 
@@ -181,9 +181,9 @@ export async function resolveTaxComponents(
      where dl.document_id = ${documentId}
        and dl.org_id = ${orgId}
      order by c.document_line_id, c.sequence
-  `));
+  `, "objects"));
   const byLine = new Map<string, TaxPostingComponent[]>();
-  for (const row of result.rows) {
+  for (const row of result) {
     const lineId = String(row.document_line_id);
     const components = byLine.get(lineId) ?? [];
     components.push({
@@ -230,8 +230,8 @@ export async function validateRequiredDimensions(
      where a.org_id = ${orgId}
        and a.id = any(${`{${accountIds.join(",")}}`}::uuid[])
      group by a.id
-  `));
-  const byAccount = new Map(rows.rows.map((row) => [row.id, row]));
+  `, "objects"));
+  const byAccount = new Map(rows.map((row) => [row.id, row]));
   const builtin: Record<string, keyof KernelLine> = {
     subsidiary: "subsidiaryId",
     department: "departmentId",
@@ -287,6 +287,6 @@ export async function resolveOpenItemAccounts(
     select (settings->'controlAccounts'->>'employeeReceivable')::uuid as id
       from orgs
      where id = ${orgId}
-       and settings->'controlAccounts'->>'employeeReceivable' is not null`));
-  return new Set(r.rows.map((x) => x.id));
+       and settings->'controlAccounts'->>'employeeReceivable' is not null`, "objects"));
+  return new Set(r.map((x) => x.id));
 }

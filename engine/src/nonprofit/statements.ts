@@ -260,7 +260,7 @@ async function resolveStatementBookId(orgId: string, requestedBookId?: string | 
        and s.is_active and not s.is_elimination and s.parent_id is null
      order by b.created_at, b.id, s.created_at, s.id
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new NonprofitError({
       message: requestedBookId
@@ -328,12 +328,12 @@ async function loadPositionData(scope: PositionScopeInput, runner: SqlExecutor):
     return label;
   };
 
-  const accounts = (await runner.execute<AccountRow>(sql`
+  const accounts = await runner.execute<AccountRow>(sql`
     select id, number, name, type
       from accounts
      where org_id = ${scope.orgId}
      order by number, id
-  `)).rows;
+  `, "objects");
   const lineRows = await runner.execute<StatementLineRow>(sql`
     select jl.id::text as line_id, jl.account_id::text as account_id,
            a.number as account_number, a.name as account_name, a.type as account_type,
@@ -355,8 +355,8 @@ async function loadPositionData(scope: PositionScopeInput, runner: SqlExecutor):
        and je.posting_date <= ${scope.asOf}::date
        and (${scope.fundId ?? null}::uuid is null or jl.extra_dims->>'fund' = ${scope.fundId ?? null})
      order by je.posting_date, jl.entry_id, jl.line_number, jl.id
-  `);
-  const rows = lineRows.rows;
+  `, "objects");
+  const rows = lineRows;
 
   const accountBalanceMap = new Map<string, Money>();
   const accountSnapshotMeta = new Map<string, StatementLineRow>();
@@ -463,7 +463,7 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
         from functional_mappings
        where org_id = ${input.orgId}
        order by effective_from, id
-    `)).rows.map(mapMapping);
+    `, "objects")).map(mapMapping);
     const periodRows = rows.filter((row) => row.posting_date >= input.periodFrom && row.posting_date <= input.periodTo);
     const releaseRows = (await runner.execute<ReleaseRow>(sql`
       select source_fund.restriction_class as from_class,
@@ -480,7 +480,7 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
          and release.release_date between ${input.periodFrom}::date and ${input.periodTo}::date
          and (${input.fundId ?? null}::uuid is null or release.from_fund_id = ${input.fundId ?? null}
               or release.to_fund_id = ${input.fundId ?? null})
-    `));
+    `, "objects"));
 
     const activityNet = new Map<string, Money>();
     const activitiesByClass = new Map<string, { revenue: Money; expenses: Money }>();
@@ -499,7 +499,7 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
       }
     }
     const releaseByClass = new Map<string, { from: Money; to: Money }>();
-    for (const release of releaseRows.rows) {
+    for (const release of releaseRows) {
       for (const [restrictionClass, side] of [[release.from_class, "from"], [release.to_class, "to"]] as const) {
         const key = `${restrictionClass ?? "∅"}\u0000${release.base_currency}`;
         const current = releaseByClass.get(key) ?? { from: ZERO_MONEY, to: ZERO_MONEY };
@@ -788,11 +788,11 @@ export function fundLedgerDrillScope(input: {
 }
 
 async function listInterfundPairAccountIds(orgId: string, runner: SqlExecutor): Promise<Set<string>> {
-  const rows = (await runner.execute<{ id: string }>(sql`
+  const rows = await runner.execute<{ id: string }>(sql`
     select due_from_account_id as id from fund_pairs where org_id = ${orgId} and is_active
      union
     select due_to_account_id as id from fund_pairs where org_id = ${orgId} and is_active
-  `)).rows;
+  `, "objects");
   return new Set(rows.map((row) => row.id));
 }
 

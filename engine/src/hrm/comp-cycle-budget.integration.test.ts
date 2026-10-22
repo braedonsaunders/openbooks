@@ -140,7 +140,7 @@ async function storedLine(orgId: string, lineId: string): Promise<Record<string,
            budget_fx_rate::text as budget_fx_rate,
            budget_fx_asof::text as budget_fx_asof, budget_fx_source,
            budget_fx_inverse::text as budget_fx_inverse
-      from hrm_comp_cycle_lines where org_id = ${orgId} and id = ${lineId}`)).rows[0];
+      from hrm_comp_cycle_lines where org_id = ${orgId} and id = ${lineId}`, "objects"))[0];
   return { ...(row as Record<string, string | null>) };
 }
 
@@ -276,7 +276,7 @@ test("F02 frozen evidence survives same-date rewrites, late rows, supersession",
        where org_id = ${org.orgId} and employee_party_id = ${hourly.workerPartyId} and is_active`);
     await seedWage(org.orgId, h.hrId, hourly.workerPartyId, "30", { basis: "hour", annualHours: "1500", from: "2025-02-01", reason: "budget test wage" });
     const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-      select settings from orgs where id = ${org.orgId}`)).rows[0]?.settings ?? {};
+      select settings from orgs where id = ${org.orgId}`, "objects"))[0]?.settings ?? {};
     await db.execute(sql`
       update orgs
          set settings = ${JSON.stringify({ ...(current as Record<string, unknown>), laborCosting: { mode: "off", hoursPerDay: 8, annualHours: 1000, components: [] } })}::jsonb
@@ -337,7 +337,7 @@ test("F02 inverse quotes freeze oriented; unconfigured currency fails the open",
     const draft = await getCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: eurCycle.id });
     assert.equal(draft.status, "draft");
     const lineCount = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_comp_cycle_lines where org_id = ${org.orgId} and cycle_id = ${eurCycle.id}`)).rows[0];
+      select count(*)::text as n from hrm_comp_cycle_lines where org_id = ${org.orgId} and cycle_id = ${eurCycle.id}`, "objects"))[0];
     assert.equal(lineCount?.n, "0");
     // A null-envelope cycle needs no unused FX to open.
     const freeCycle = await createCycle({
@@ -391,8 +391,8 @@ test("F02 legacy lines without frozen evidence refuse by name, history preserved
     assert.match(refusal, /no frozen budget evidence/);
     assert.match(refusal, /new cycle/);
     assert.ok(!/delete/i.test(refusal), `must not imply deleting history: ${refusal}`);
-    const rows = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status from hrm_comp_cycle_lines where org_id = ${org.orgId} and cycle_id = ${hourlyCycleId}`)).rows;
+    const rows = await db.execute<{ id: string; status: string }>(sql`
+      select id, status from hrm_comp_cycle_lines where org_id = ${org.orgId} and cycle_id = ${hourlyCycleId}`, "objects");
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.status, "proposed");
   });
@@ -688,7 +688,7 @@ test("per-line approval racing a cycle push returns only named outcomes", { skip
     });
     await submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const gate = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${cycle.id} order by created_at`)).rows[0]!;
+      select id from flow_gates where subject_id = ${cycle.id} order by created_at`, "objects"))[0]!;
     await decideGate({ gateId: gate.id, decision: "approved", userId: approver });
 
     const [decision, push] = await Promise.allSettled([
@@ -768,17 +768,17 @@ test("F11 proposal wages round once, exactly, and the push carries them", { skip
     });
     await submitCycleForApproval({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const gate = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${cycle.id} order by created_at`)).rows[0]!;
+      select id from flow_gates where subject_id = ${cycle.id} order by created_at`, "objects"))[0]!;
     await decideGate({ gateId: gate.id, decision: "approved", userId: approver });
     await approveLine({ orgId: org.orgId, actorId: approver, lineId: pennyLine.id });
     await approveLine({ orgId: org.orgId, actorId: approver, lineId: heavyLine.id });
     const pushed = await pushCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     assert.equal(pushed.pushed, 2);
-    const wages = (await db.execute<{ party: string; rate: string }>(sql`
+    const wages = await db.execute<{ party: string; rate: string }>(sql`
       select employee_party_id as party, rate::text as rate from labor_cost_rates
        where org_id = ${org.orgId}
          and employee_party_id in (${penny.workerPartyId}, ${heavy.workerPartyId})
-         and effective_from = '2025-04-01'::date and is_active`)).rows;
+         and effective_from = '2025-04-01'::date and is_active`, "objects");
     const byParty = new Map(wages.map((w) => [w.party, w.rate]));
     assert.equal(byParty.get(penny.workerPartyId), "101.0051");
     assert.equal(byParty.get(heavy.workerPartyId), "90000.0002");

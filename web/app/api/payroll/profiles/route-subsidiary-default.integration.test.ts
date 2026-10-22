@@ -43,7 +43,7 @@ async function fixture() {
     await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`))
     session.user = { id: actor, orgId: org.orgId, name: 'Clerk', email: 'clerk@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
     const rootSub = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`)).rows[0]!.id
+      select id from subsidiaries where org_id = ${org.orgId} and parent_id is null limit 1`, 'objects'))[0]!.id
     const ieSub = randomUUID()
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, is_elimination, is_active, created_by, updated_by)
@@ -101,7 +101,7 @@ test('a hire that records a non-root subsidiary defaults the profile to that sub
       )
       assert.equal(saved.status, 200, await saved.clone().text())
       const stored = (await db.execute<{ subsidiary_id: string | null; is_active: boolean }>(sql`
-        select subsidiary_id, is_active from parties where id = ${partyId} and org_id = ${org.orgId}`)).rows[0]!
+        select subsidiary_id, is_active from parties where id = ${partyId} and org_id = ${org.orgId}`, 'objects'))[0]!
       assert.equal(stored.subsidiary_id, ieSub)
       assert.equal(stored.is_active, true)
       const { status, country } = await defaultCountry(org.orgId, partyId)

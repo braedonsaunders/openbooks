@@ -33,8 +33,8 @@ const listTaxReturnForms: AssistantToolDef = {
         from tax_return_forms f
        where f.org_id = ${authz.user.orgId}
        order by f.is_active desc, f.country, f.code
-    `));
-    const visibleRows = await filterTaxReturnFormsByFeatures(authz.user.orgId, rows.rows);
+    `, "objects"));
+    const visibleRows = await filterTaxReturnFormsByFeatures(authz.user.orgId, rows);
     return {
       ok: true,
       data: {
@@ -173,7 +173,7 @@ const documentsMissingTaxCode: AssistantToolDef = {
         left join parties p on p.id = h.party_id and p.org_id = ${authz.user.orgId}
        order by h.untaxed_amount desc, h.document_date desc
        limit ${limit}
-    `));
+    `, "objects"));
     const byKind = (await db.execute<Record<string, unknown>>(sql`
       select d.kind, count(distinct d.id)::int as documents, coalesce(sum(dl.amount), 0) as untaxed_amount
         from documents d
@@ -182,8 +182,8 @@ const documentsMissingTaxCode: AssistantToolDef = {
          and dl.tax_code_id is null and dl.amount <> 0
        group by d.kind
        order by d.kind
-    `));
-    const total = Number(docs.rows[0]?.total_docs ?? 0);
+    `, "objects"));
+    const total = Number(docs[0]?.total_docs ?? 0);
     return {
       ok: true,
       data: {
@@ -193,10 +193,10 @@ const documentsMissingTaxCode: AssistantToolDef = {
         status,
         kinds,
         totalDocuments: total,
-        returned: docs.rows.length,
-        truncated: total > docs.rows.length,
-        byKind: byKind.rows.map((r) => ({ kind: r.kind, documents: r.documents, untaxedAmount: money(r.untaxed_amount) })),
-        documents: docs.rows.map((r) => ({
+        returned: docs.length,
+        truncated: total > docs.length,
+        byKind: byKind.map((r) => ({ kind: r.kind, documents: r.documents, untaxedAmount: money(r.untaxed_amount) })),
+        documents: docs.map((r) => ({
           id: r.id,
           kind: r.kind,
           documentNumber: r.document_number,

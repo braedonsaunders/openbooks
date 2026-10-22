@@ -39,14 +39,14 @@ export async function expenseFxPolicy(runner: SqlExecutor, orgId: string, onDate
      where org_id = ${orgId} and effective_from <= ${onDate}::date
      order by effective_from desc
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   return row ? { allowRateOverride: row.allowRateOverride === true, effectiveFrom: row.effectiveFrom } : { allowRateOverride: false, effectiveFrom: null };
 }
 
 async function entityRateType(runner: SqlExecutor, orgId: string, subsidiaryId: string | null, onDate: string): Promise<string> {
   const entity = subsidiaryId ?? (await runner.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1
-  `)).rows[0]?.id ?? null;
+  `, "objects"))[0]?.id ?? null;
   if (!entity) {
     throw new ExpenseFxRefusal(422, "expense_fx_entity_missing", "The organization has no legal entity whose rate type converts expense lines.", "Create the organization's root subsidiary before converting foreign-currency expenses.");
   }

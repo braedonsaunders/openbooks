@@ -29,8 +29,8 @@ async function orgWith(featured: boolean) {
   const org = await withBypassContext(() => createScratchOrg());
   const owner = await withBypassContext(() => createScratchUser(org.orgId, "Reader owner", "reader-owner"));
   await withBypassContext(async () => {
-    if (featured) assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId} returning id`)).rows.length, 1, "entity reader fixture feature setup updates one organization");
-    assert.equal((await db.execute(sql`update app_roles set permissions = '["resourcing.read","projects.read"]' where org_id = ${org.orgId} and key = 'reader-owner' returning key`)).rows.length, 1, "entity reader fixture permission setup updates reader-owner role");
+    if (featured) assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId} returning id`, "objects")).length, 1, "entity reader fixture feature setup updates one organization");
+    assert.equal((await db.execute(sql`update app_roles set permissions = '["resourcing.read","projects.read"]' where org_id = ${org.orgId} and key = 'reader-owner' returning key`, "objects")).length, 1, "entity reader fixture permission setup updates reader-owner role");
     if (featured) await seed(org.orgId, owner);
   });
   return { org, owner };
@@ -39,7 +39,7 @@ async function orgWith(featured: boolean) {
 async function scopedActor(orgId: string, name: string, key: string, restriction: unknown, perms = '["resourcing.read"]') {
   return withBypassContext(async () => {
     const actor = await createScratchUser(orgId, name, key);
-    assert.equal((await db.execute(sql`update app_roles set permissions = ${perms}::jsonb, subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key} returning key`)).rows.length, 1, `${key}: entity reader scoped actor setup updates one role`);
+    assert.equal((await db.execute(sql`update app_roles set permissions = ${perms}::jsonb, subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key} returning key`, "objects")).length, 1, `${key}: entity reader scoped actor setup updates one role`);
     return actor;
   });
 }
@@ -56,7 +56,7 @@ const query = (orgId: string, actor: string, over: Record<string, unknown> = {})
 test("refusal matrix fires every named refusal with a usable remedy", enabled, async () => {
   const { org, owner } = await orgWith(true);
   try {
-    const sub = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} limit 1`))).rows[0]!.id;
+    const sub = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} limit 1`, "objects")))[0]!.id;
     const cases: [string, Record<string, unknown>, RegExp][] = [
       ["record", { recordType: "nope" }, /unknown_record_type/],
       ["scope-missing", { allowedSubsidiaryIds: undefined }, /missing_scope/],
@@ -86,7 +86,7 @@ test("refusal matrix fires every named refusal with a usable remedy", enabled, a
 test("null, empty, and many scopes deliver at runtime", enabled, async () => {
   const { org, owner } = await orgWith(true);
   try {
-    const sub = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} limit 1`))).rows[0]!.id;
+    const sub = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} limit 1`, "objects")))[0]!.id;
     const all = await readEntityListPage(query(org.orgId, owner));
     assert.ok(all.ok && all.filteredTotal === 4, "null scope reads all rows");
     const emptyActor = await scopedActor(org.orgId, "Empty", "reader-empty", { mode: "list", subsidiaryIds: [] });

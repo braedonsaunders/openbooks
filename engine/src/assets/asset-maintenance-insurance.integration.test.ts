@@ -87,12 +87,12 @@ test(
       }, { actorId: actors.adminId });
       const after = (await withOrgContext(org.orgId, () => db.execute<{ next_due_on: string; next_due_usage: string }>(sql`
         select next_due_on::text as next_due_on, next_due_usage::text as next_due_usage
-          from asset_maintenance_schedules where org_id = ${org.orgId} and id = ${schedule.id}`))).rows[0]!;
+          from asset_maintenance_schedules where org_id = ${org.orgId} and id = ${schedule.id}`, "objects")))[0]!;
       assert.deepEqual(after, { next_due_on: "2027-01-14", next_due_usage: "555.0000" });
 
       await cancelMaintenanceRecord(org.orgId, { recordId: record.id, reason: "Entered against the wrong unit", actorId: actors.adminId });
       const reverted = (await withOrgContext(org.orgId, () => db.execute<{ next_due_on: string }>(sql`
-        select next_due_on::text as next_due_on from asset_maintenance_schedules where org_id = ${org.orgId} and id = ${schedule.id}`))).rows[0]!;
+        select next_due_on::text as next_due_on from asset_maintenance_schedules where org_id = ${org.orgId} and id = ${schedule.id}`, "objects")))[0]!;
       assert.equal(reverted.next_due_on, "2026-07-15", "cancelling the only record restores the schedule's first due point");
       await refusedWith("permission_required", () => createMaintenanceSchedule(org.orgId, {
         assetId, name: "Inspection", intervalMonths: 12, startsOn: "2026-01-01",
@@ -123,7 +123,7 @@ test(
         coverageEndsOn: new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10), renewalLeadDays: 365,
       }, { actorId: actors.adminId });
       const count = async (kind: string) => (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
-        select count(*)::int as n from notifications where org_id = ${org.orgId} and kind = ${kind}`))).rows[0]!.n;
+        select count(*)::int as n from notifications where org_id = ${org.orgId} and kind = ${kind}`, "objects")))[0]!.n;
       await runMaintenanceAlertScan(new Date());
       const firstMaintenance = await count("asset_maintenance_due");
       assert.ok(firstMaintenance >= 1, "the overdue inspection notifies the maintainers");
@@ -163,7 +163,7 @@ test(
       const rows = await insuredValueComparison(org.orgId, { asOf: "2026-07-15" });
       const policyCurrency = (await db.execute<{ currency: string }>(sql`
         select currency from asset_insurance_policies where org_id = ${org.orgId} and id = ${policy.id}
-      `)).rows[0]?.currency;
+      `, "objects"))[0]?.currency;
       assert.ok(policyCurrency)
       assert.equal(rows[0]?.currency, policyCurrency, 'comparison rows carry the policy subsidiary currency');
       assert.deepEqual(rows.map((row) => [row.policyNumber, row.insuredValue, row.netBookValue, row.gap, row.standing]), [
@@ -184,8 +184,8 @@ test(
       await refusedWith("coverage_cross_subsidiary", () => setInsuranceCoverage(org.orgId, { policyId: policy.id, assetId: foreignAsset, insuredValue: "1", actorId: actors.adminId }));
 
       const renewal = await renewInsurancePolicy(org.orgId, { policyId: policy.id, coverageStartsOn: "2027-01-01", coverageEndsOn: "2027-12-31", actorId: actors.adminId });
-      const carried = (await withOrgContext(org.orgId, () => db.execute<{ asset_id: string; insured_value: string }>(sql`
-        select asset_id, insured_value::text as insured_value from asset_insurance_coverages where org_id = ${org.orgId} and policy_id = ${renewal.id}`))).rows;
+      const carried = await withOrgContext(org.orgId, () => db.execute<{ asset_id: string; insured_value: string }>(sql`
+        select asset_id, insured_value::text as insured_value from asset_insurance_coverages where org_id = ${org.orgId} and policy_id = ${renewal.id}`, "objects"));
       assert.deepEqual(carried, [{ asset_id: assetId, insured_value: "40000.0000" }], "a renewal carries the covered assets forward");
       await refusedWith("policy_already_renewed", () => renewInsurancePolicy(org.orgId, { policyId: policy.id, coverageStartsOn: "2027-01-01", coverageEndsOn: "2027-12-31", actorId: actors.adminId }));
     } finally {

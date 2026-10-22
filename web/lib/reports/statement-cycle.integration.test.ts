@@ -29,9 +29,9 @@ async function seedCycle(orgId: string, revenueAccount: string): Promise<void> {
            (${b}, ${orgId}, 'P01-B', 'P01 cycle B', 'expense', true, ${a}),
            (${c}, ${orgId}, 'P01-C', 'P01 cycle leaf', 'expense', false, ${a})`)
   const entry = randomUUID()
-  const period = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${orgId} limit 1`)).rows[0]!.id
-  const book = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${orgId} and is_primary limit 1`)).rows[0]!.id
-  const sub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} limit 1`)).rows[0]!.id
+  const period = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${orgId} limit 1`, 'objects'))[0]!.id
+  const book = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${orgId} and is_primary limit 1`, 'objects'))[0]!.id
+  const sub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} limit 1`, 'objects'))[0]!.id
   await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
     values (${entry}, ${orgId}, ${book}, ${sub}, 'P01-CYC', '2026-07-05', ${period}, 'cycle probe', 'draft', 'manual')`)
   await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)

@@ -25,7 +25,7 @@ test('union component defaults cover initial historical pay dates, bound future 
     });
     const initial = await fringe('INITIAL');
     assert.equal((await db.execute<{ from: string }>(sql`select effective_from::text as "from"
-      from pay_component_statutory_treatments where org_id=${org.orgId} and pay_component_id=${initial.componentId}`)).rows[0]!.from,'0001-01-01');
+      from pay_component_statutory_treatments where org_id=${org.orgId} and pay_component_id=${initial.componentId}`, 'objects'))[0]!.from,'0001-01-01');
     for (const mode of ['FUTURE','EXPIRED','SCOPED']) {
       const componentId = randomUUID();
       await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,basis)
@@ -35,16 +35,16 @@ test('union component defaults cover initial historical pay dates, bound future 
         values(${org.orgId},${componentId},${mode==='SCOPED'?groupId:null},
           case when ${mode}='FUTURE' then ${today}::date+10 else ${today}::date-10 end,
           case when ${mode}='EXPIRED' then ${today}::date-5 else null end,array['wcb'],false)`);
-      const before = (await db.execute(sql`select id,effective_from,effective_to,program_exclusions,vacationable from pay_component_statutory_treatments
-        where org_id=${org.orgId} and pay_component_id=${componentId} order by effective_from`)).rows;
+      const before = await db.execute(sql`select id,effective_from,effective_to,program_exclusions,vacationable from pay_component_statutory_treatments
+        where org_id=${org.orgId} and pay_component_id=${componentId} order by effective_from`, 'objects');
       await fringe(mode);
-      const after = (await db.execute(sql`select id,effective_from,effective_to,program_exclusions,vacationable from pay_component_statutory_treatments
-        where org_id=${org.orgId} and pay_component_id=${componentId} order by effective_from`)).rows;
+      const after = await db.execute(sql`select id,effective_from,effective_to,program_exclusions,vacationable from pay_component_statutory_treatments
+        where org_id=${org.orgId} and pay_component_id=${componentId} order by effective_from`, 'objects');
       if (mode==='FUTURE') {
         assert.equal(after.length,2);
         assert.deepEqual(after[1],before[0]);
         const bound = (await db.execute<{ correct: boolean }>(sql`select effective_from=${today}::date and effective_to=${today}::date+9 as correct
-          from pay_component_statutory_treatments where org_id=${org.orgId} and pay_component_id=${componentId} and program_exclusions='{}'`)).rows[0]!;
+          from pay_component_statutory_treatments where org_id=${org.orgId} and pay_component_id=${componentId} and program_exclusions='{}'`, 'objects'))[0]!;
         assert.equal(bound.correct,true);
       } else assert.deepEqual(after,before);
     }

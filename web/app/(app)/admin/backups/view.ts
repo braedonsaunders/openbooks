@@ -64,8 +64,8 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
   }>(sql`
     select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep,
            last_run_at, next_run_at
-      from backup_policies where org_id = ${orgId}`)
-  const p = policyRes.rows[0]
+      from backup_policies where org_id = ${orgId}`, 'objects')
+  const p = policyRes[0]
   const policy: BackupManagerProps['policy'] = p
     ? {
         enabled: p.enabled,
@@ -101,8 +101,8 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
       from backup_runs
      where org_id = ${orgId}
      order by (status = 'completed' and purged_at is null) desc, created_at desc
-     limit 100`)
-  const runs: BackupManagerProps['runs'] = runsRes.rows.map((r) => ({
+     limit 100`, 'objects')
+  const runs: BackupManagerProps['runs'] = runsRes.map((r) => ({
     id: r.id,
     kind: r.kind as BackupManagerProps['runs'][number]['kind'],
     status: r.status as BackupManagerProps['runs'][number]['status'],
@@ -133,7 +133,7 @@ export async function loadAdminBackups(): Promise<AdminBackupsData> {
     description: t('backupsManager.pageDescription'),
     backHref: '/admin',
     backLabel: tHub('title'),
-    manager: { policy, runs, totalRuns: runsRes.rows[0]?.total_count ?? 0, s3Enabled, workerOnline },
+    manager: { policy, runs, totalRuns: runsRes[0]?.total_count ?? 0, s3Enabled, workerOnline },
   }
 }
 

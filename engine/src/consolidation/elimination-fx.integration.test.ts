@@ -139,7 +139,7 @@ test("rate derivation resolves a pair stored only as the inverse quote", { skip:
         from consolidated_fx_rates
        where org_id = ${org.orgId} and period_id = ${org.periodId}
          and from_currency = 'USD' and to_currency = 'CAD'
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(row?.current_rate, "1.2500000000");
     assert.equal(row?.average_rate, "1.2500000000");
   } finally {
@@ -176,7 +176,7 @@ test("rate derivation covers source currencies into the elimination entity", { s
     const rates = (await db.execute<{ from_currency: string; to_currency: string }>(sql`
       select from_currency, to_currency from consolidated_fx_rates
        where org_id=${org.orgId} and period_id=${org.periodId}
-    `)).rows.map((r) => `${r.from_currency}→${r.to_currency}`);
+    `, "objects")).map((r) => `${r.from_currency}→${r.to_currency}`);
     assert.ok(rates.includes("USD→EUR"), `derived pairs cover the elimination entity (got ${rates.join(", ")})`);
 
     // And the ownership run that consumes the pair completes: USD 1000 of
@@ -190,8 +190,8 @@ test("rate derivation covers source currencies into the elimination entity", { s
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${run.entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `));
-    assert.deepEqual(balances.rows, [
+    `, "objects"));
+    assert.deepEqual(balances, [
       { number: "1400", amount: "-2100.0000" },
       { number: "1500", amount: "100.0000" },
       { number: "3000", amount: "2000.0000" },

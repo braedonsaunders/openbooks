@@ -85,8 +85,8 @@ export const PATCH = defineRoute({
              and parent_id is null and is_active and not is_elimination
            order by created_at, id
            limit 1
-        `)
-        const rootId = root.rows[0]?.id
+        `, 'objects')
+        const rootId = root[0]?.id
         if (!rootId || !subsidiariesInScope(gate, [rootId])) {
           return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
         }

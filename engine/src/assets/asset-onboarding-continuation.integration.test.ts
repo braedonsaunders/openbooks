@@ -25,7 +25,7 @@ async function seedMonthlyPeriods(
   months: { n: number; name: string; from: string; to: string }[],
 ): Promise<void> {
   const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`)).rows[0]!.id;
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
   for (const m of months) {
     await db.execute(sql`
       insert into accounting_periods
@@ -75,14 +75,14 @@ async function seedOnboardedAsset(
 }
 
 async function plannedLines(orgId: string, assetId: string, bookId: string) {
-  return (await db.execute<{ month: string; planned: string; posted: string | null }>(sql`
+  return await db.execute<{ month: string; planned: string; posted: string | null }>(sql`
     select p.starts_on::text as month, l.planned_amount::text as planned,
            l.posted_amount::text as posted
       from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where s.org_id = ${orgId} and s.asset_id = ${assetId} and s.book_id = ${bookId}
-     order by p.starts_on`)).rows;
+     order by p.starts_on`, "objects");
 }
 
 test("an onboarded asset continues from its opening accumulated without catch-up", { skip: !DB }, async () => {

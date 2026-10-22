@@ -477,8 +477,8 @@ test("drivers: gl_balance accumulates through the period end", async () => {
   try {
     const deptA = await makeDept(org.orgId, "Dept A");
     const calendar = (await db.execute<{ fiscal_calendar_id: string }>(
-      sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
-    )).rows[0]?.fiscal_calendar_id;
+      sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects",
+    ))[0]?.fiscal_calendar_id;
     assert.ok(calendar);
     const junePeriodId = randomUUID();
     await db.execute(sql`

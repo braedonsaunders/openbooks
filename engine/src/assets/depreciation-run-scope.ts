@@ -200,14 +200,14 @@ export async function assertConfirmSetCurrent(
   const assets = (await tx.execute<{ id: string; category_id: string; custom: unknown; asset_number: string }>(sql`
     select id, category_id, custom, asset_number from fixed_assets
      where org_id = ${orgId} and id = any(${uuidArray(assetIds)}::uuid[])
-     order by id for update`));
-  const foundAssets = new Set(assets.rows.map((row) => String(row.id)));
+     order by id for update`, "objects"));
+  const foundAssets = new Set(assets.map((row) => String(row.id)));
   const missingAsset = assetIds.find((id) => !foundAssets.has(id));
   if (missingAsset) {
     throw new StalePreviewError(`asset ${missingAsset} left the confirmed scope; re-preview before confirming`);
   }
-  for (const asset of assets.rows) assertLocalDepreciation(asset.custom,asset.asset_number);
-  const categoryIds = [...new Set(assets.rows.map((row) => String(row.category_id)))].sort();
+  for (const asset of assets) assertLocalDepreciation(asset.custom,asset.asset_number);
+  const categoryIds = [...new Set(assets.map((row) => String(row.category_id)))].sort();
   await tx.execute(sql`
     select id from asset_categories
      where org_id = ${orgId} and id = any(${uuidArray(categoryIds)}::uuid[])
@@ -271,7 +271,7 @@ export async function assertConfirmSetCurrent(
        ${input.periodId ? sql`and l.period_id = ${input.periodId}` : sql``}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
      order by l.id
-     for update`));
+     for update`, "objects"));
 
   // Full-fingerprint comparison under the locks: every reloaded unposted
   // row is field-compared against its confirmed preview row (exactly the
@@ -279,7 +279,7 @@ export async function assertConfirmSetCurrent(
   // one when provided. The first difference throws with the row named.
   const seen = new Set<string>();
   const fingerprinted: FingerprintedDepreciationRow[] = [];
-  for (const row of reloaded.rows) {
+  for (const row of reloaded) {
     const id = String(row.line_id);
     seen.add(id);
     const assetNumber = String(row.asset_number);

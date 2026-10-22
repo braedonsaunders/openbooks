@@ -44,7 +44,7 @@ async function runDraftProductionEdit(
         join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
-    `)).rows[0] ?? null,
+    `, 'objects'))[0] ?? null,
     mutate: async (tx, locked) => {
       await acquireFeatureGateLock(orgId, tx)
       if (!(await lockAndCheckOrgFeature(tx, orgId, 'fieldTickets'))) {
@@ -94,7 +94,7 @@ export async function addTicketQuantity(
       insert into field_ticket_quantities
         (org_id, field_ticket_id, project_task_id, quantity, unit, note, created_by, updated_by)
       values (${orgId}, ${ticketId}, ${task.id}, ${quantity}, ${task.budgetUnit}, ${note}, ${userId}, ${userId})
-      returning id`)).rows[0]
+      returning id`, 'objects'))[0]
     if (!inserted) throw new Error('production insert returned no row')
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -117,7 +117,7 @@ export async function removeTicketQuantity(
     const removed = (await tx.execute<{ id: string; project_task_id: string; quantity: string; unit: string; note: string | null }>(sql`
       delete from field_ticket_quantities
        where id = ${quantityId} and field_ticket_id = ${ticketId} and org_id = ${orgId}
-      returning id, project_task_id, quantity::text as quantity, unit, note`)).rows[0]
+      returning id, project_task_id, quantity::text as quantity, unit, note`, 'objects'))[0]
     if (!removed) throw new FieldTicketError('Production line not found')
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

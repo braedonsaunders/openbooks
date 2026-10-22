@@ -32,8 +32,8 @@ export const GET = defineRoute({
     const r = (await db.execute(sql`
         select id, name, username, backend, bucket, root_prefix, is_active, last_connected_at, created_at
           from sftp_servers where org_id = ${gate.user.orgId} order by created_at desc
-      `))
-    return NextResponse.json({ servers: r.rows })
+      `, 'objects'))
+    return NextResponse.json({ servers: r })
   },
 });
 
@@ -132,10 +132,10 @@ export const POST = defineRoute({
           await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-roots:' + user.orgId}, 0))`)
           const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
             select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} for update
-          `))
+          `, 'objects'))
           const hit = findRootOverlap(
             rootPrefix,
-            siblings.rows.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
+            siblings.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
           )
           if (hit) {
             overlapRefusal = rootOverlapRefusal(rootPrefix, hit)
@@ -148,17 +148,17 @@ export const POST = defineRoute({
             -- A concurrent username collision causes the bounded loop to mint another suffix.
             on conflict (username) do nothing
             returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
-          `))
-          if (!row.rows[0]) return null // concurrent creator claimed the suffix — re-mint
+          `, 'objects'))
+          if (!row[0]) return null // concurrent creator claimed the suffix — re-mint
           await auditSetupChange({
             orgId: user.orgId,
             table: 'sftp_servers',
-            rowId: String(row.rows[0]!.id),
+            rowId: String(row[0]!.id),
             action: 'insert',
-            changes: { after: sftpServerAuditSnapshot(row.rows[0]!) },
+            changes: { after: sftpServerAuditSnapshot(row[0]!) },
             actorId: user.id,
           }, tx)
-          return row.rows[0]!
+          return row[0]!
         })
       }
     if (overlapRefusal) {

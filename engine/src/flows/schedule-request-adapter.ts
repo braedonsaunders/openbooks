@@ -82,8 +82,7 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
   if (!orgId)
     throw new Error("Shift requests require a native tenant context.");
   return (
-    (
-      await db.execute<RequestRow>(sql`
+    (await db.execute<RequestRow>(sql`
     select r.id, r.status, r.kind, r.board_id, b.code as board_code, b.name as board_name, w.display_name as worker_name,
            cp.display_name as counterpart_name, e.starts_on::text as shift_date, r.reason, r.created_by, r.counterpart_responded_by
       from schedule_entry_requests r
@@ -91,8 +90,7 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
       join schedule_entries e on e.org_id = r.org_id and e.id = r.entry_id
       join parties w on w.org_id = r.org_id and w.id = r.worker_party_id
       left join parties cp on cp.org_id = r.org_id and cp.id = r.counterpart_party_id
-     where r.org_id = ${orgId} and r.id = ${subjectId}`)
-    ).rows[0] ?? null
+     where r.org_id = ${orgId} and r.id = ${subjectId}`, "objects"))[0] ?? null
   );
 }
 
@@ -187,11 +185,9 @@ export const scheduleRequestsFlowAdapter: FlowSubjectAdapter =
         throw new Error(
           `findCandidateIds for "${SCHEDULE_REQUEST_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
         );
-      return (
-        await db.execute<{
+      return (await db.execute<{
           id: string;
         }>(sql`select id::text as id from schedule_entry_requests
-      where org_id = ${orgId} and status = 'pending' order by created_at desc limit ${limit}`)
-      ).rows.map((row) => row.id);
+      where org_id = ${orgId} and status = 'pending' order by created_at desc limit ${limit}`, "objects")).map((row) => row.id);
     },
   });

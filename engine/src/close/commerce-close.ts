@@ -75,12 +75,10 @@ async function activeChannels(
   subsidiaryIds: string[],
   fallbackSubsidiaryId: string,
 ): Promise<ChannelRow[]> {
-  const rows = (
-    await db.execute<ChannelRow & { subsidiary_id: string | null }>(sql`
+  const rows = await db.execute<ChannelRow & { subsidiary_id: string | null }>(sql`
       select c.id, c.name, c.kind, c.currency from sales_channels c
        where c.org_id = ${orgId} and c.status = 'active'
-         and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`)
-  ).rows;
+         and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`, "objects");
   return rows.map((row) => ({ id: row.id, name: row.name, kind: row.kind, currency: row.currency }));
 }
 
@@ -98,8 +96,7 @@ async function ingestedDayTotals(
   fallbackSubsidiaryId: string,
 ): Promise<IngestedDayRow[]> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
-  return (
-    await db.execute<IngestedDayRow>(sql`
+  return await db.execute<IngestedDayRow>(sql`
       select o.channel_id,
              (o.ordered_at at time zone 'UTC')::date::text as day,
              o.shop_currency,
@@ -111,8 +108,7 @@ async function ingestedDayTotals(
          and (o.ordered_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
          and o.posting_status <> 'excluded'
          and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
-       group by o.channel_id, ((o.ordered_at at time zone 'UTC')::date), o.shop_currency`)
-  ).rows;
+       group by o.channel_id, ((o.ordered_at at time zone 'UTC')::date), o.shop_currency`, "objects");
 }
 
 type UnpostedRow = {
@@ -126,8 +122,7 @@ async function unpostedCounts(
   fallbackSubsidiaryId: string,
 ): Promise<UnpostedRow> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
-  const rows = (
-    await db.execute<UnpostedRow>(sql`
+  const rows = await db.execute<UnpostedRow>(sql`
       select
         (select count(*)::text from channel_orders o
            join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
@@ -138,8 +133,7 @@ async function unpostedCounts(
            join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
            where e.org_id = ${orgId} and e.posting_status = 'pending'
              and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
-             and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_events`)
-  ).rows;
+             and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))) as pending_events`, "objects");
   return rows[0] ?? { pending_orders: "0", pending_events: "0" };
 }
 
@@ -297,20 +291,17 @@ type UnlinkedBatchRow = {
 async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
   const subsidiaryList = `{${subsidiaryIds.join(",")}}`;
-  const rows = (
-    await db.execute<PayoutRow>(sql`
+  const rows = await db.execute<PayoutRow>(sql`
       select provider, external_ref, settlement_date::text, currency, net_amount::text
         from psp_settlement_batches
        where org_id = ${orgId} and status = 'draft'
          and settlement_date between ${scope.startsOn}::date and ${scope.endsOn}::date
          and (${subsidiaryIds.length === 0} or subsidiary_id = any(${subsidiaryList}::uuid[]))
-       order by settlement_date, provider`)
-  ).rows;
+       order by settlement_date, provider`, "objects");
   // The matchable kinds stay C30's single source of truth; only the
   // literal form is inlined for the ANY() comparison.
   const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
-  const unlinked = (
-    await db.execute<UnlinkedBatchRow>(sql`
+  const unlinked = await db.execute<UnlinkedBatchRow>(sql`
       select b.provider, b.external_ref as batch_ref, b.settlement_date::text,
              b.currency, count(*)::text as unevidenced_lines,
              coalesce(sum(l.amount), 0)::text as unevidenced_total
@@ -326,8 +317,7 @@ async function payoutCheck(orgId: string, scope: CommerceCloseScope): Promise<Co
          -- entry carries its evidence in the marker, not in a document link.
          and (l.meta->>'recognizedByJournalEntry' is null)
        group by b.provider, b.external_ref, b.settlement_date, b.currency
-       order by b.settlement_date, b.provider`)
-  ).rows;
+       order by b.settlement_date, b.provider`, "objects");
   return {
     code: "commerce-payouts-unposted",
     taskKey: "commerce-complete",
@@ -397,8 +387,7 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
   const scopeAny = (column: ReturnType<typeof sql>) => subsidiaryIds.length === 0
     ? sql`true`
     : sql`${column} = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`;
-  const openItems = (
-    await db.execute<OpenPayoutRow>(sql`
+  const openItems = await db.execute<OpenPayoutRow>(sql`
       select 'batch' as kind, b.external_ref as ref, b.settlement_date::text as date,
              b.net_amount::text as amount, b.currency
         from psp_settlement_batches b
@@ -413,10 +402,8 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
        where a.org_id = ${orgId} and a.status = 'accrued'
          and a.accrual_date <= ${scope.endsOn}::date
          and ${scopeAny(sql`a.subsidiary_id`)}
-       order by date, ref`)
-  ).rows;
-  const rows = (
-    await db.execute<ClearingRow>(sql`
+       order by date, ref`, "objects");
+  const rows = await db.execute<ClearingRow>(sql`
       with clearing_accounts as (
         select distinct m.account_id
           from sales_channel_account_maps m
@@ -499,8 +486,7 @@ async function clearingCheck(orgId: string, scope: CommerceCloseScope): Promise<
         from joined j
         join accounts a on a.id = j.account_id and a.org_id = ${orgId}
        where j.residual <> j.expected
-       order by a.number nulls last, a.name, j.currency`)
-  ).rows;
+       order by a.number nulls last, a.name, j.currency`, "objects");
   return {
     code: "commerce-clearing-residual",
     taskKey: "commerce-complete",
@@ -567,8 +553,7 @@ type StoredValueBreakdownRow = {
  */
 async function storedValueCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
-  const rows = (
-    await db.execute<StoredValueTieRow>(sql`
+  const rows = await db.execute<StoredValueTieRow>(sql`
       with subledger as (
         -- The functional carrying total: every entry priced into the owing
         -- subsidiary's base currency at its own rate sums to what the
@@ -607,8 +592,7 @@ async function storedValueCheck(orgId: string, scope: CommerceCloseScope): Promi
         left join accounts a on a.org_id = ${orgId} and a.id = coalesce(s.account_id, g.account_id)
         left join subsidiaries sub on sub.org_id = ${orgId} and sub.id = coalesce(s.subsidiary_id, g.subsidiary_id)
        where coalesce(s.subtotal, 0) <> 0 or coalesce(g.ledger_sum, 0) <> 0 or s.account_id is null
-       order by sub.name nulls last, a.number nulls last, a.name`)
-  ).rows;
+       order by sub.name nulls last, a.number nulls last, a.name`, "objects");
   // A null gap means the tie is unmeasurable (no liability account) — it
   // fails closed.
   const gaps = rows.filter((row) => row.gap === null || Number(row.gap) !== 0);
@@ -616,8 +600,7 @@ async function storedValueCheck(orgId: string, scope: CommerceCloseScope): Promi
   if (gaps.length > 0) {
     const accountIds = gaps.map((row) => row.account_id).filter((id): id is string => id !== null);
     const gapSubs = gaps.map((row) => row.subsidiary_id).filter((id): id is string => id !== null);
-    breakdown = (
-      await db.execute<StoredValueBreakdownRow>(sql`
+    breakdown = await db.execute<StoredValueBreakdownRow>(sql`
         (select s.account_id::text as account_id, s.subsidiary_id::text as subsidiary_id,
                 'subledger' as side, s.currency as currency,
                 round(sum(s.balance_minor / 10000::numeric), 4)::text as amount
@@ -642,8 +625,7 @@ async function storedValueCheck(orgId: string, scope: CommerceCloseScope): Promi
             and l.account_id = any(${`{${accountIds.join(",")}}`}::uuid[])
             and (${subsidiaryIds.length === 0} or l.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))
           group by l.account_id, l.subsidiary_id, l.currency)
-        order by account_id, subsidiary_id, side, currency`)
-    ).rows;
+        order by account_id, subsidiary_id, side, currency`, "objects");
   }
   return {
     code: "commerce-stored-value-gap",
@@ -694,8 +676,7 @@ type DeferredTieRow = {
 async function deferredCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
   const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
-  const rows = (
-    await db.execute<DeferredTieRow>(sql`
+  const rows = await db.execute<DeferredTieRow>(sql`
       with scoped_obligations as (
         select o.id, coalesce(o.deferred_account_id, r.deferred_account_id) as account_id
           from performance_obligations o
@@ -746,8 +727,7 @@ async function deferredCheck(orgId: string, scope: CommerceCloseScope): Promise<
         full outer join ledger g on g.account_id = p.account_id
         join accounts a on a.org_id = ${orgId} and a.id = coalesce(p.account_id, g.account_id)
        where (coalesce(g.ledger_sum, 0) + coalesce(p.plan, 0)) <> 0
-       order by a.number nulls last, a.name`)
-  ).rows;
+       order by a.number nulls last, a.name`, "objects");
   return {
     code: "commerce-deferred-gap",
     taskKey: "commerce-complete",
@@ -793,8 +773,7 @@ type ContractCostTieRow = {
 async function contractCostCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
   const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
-  const rows = (
-    await db.execute<ContractCostTieRow>(sql`
+  const rows = await db.execute<ContractCostTieRow>(sql`
       with scoped_assets as (
         select c.*
           from contract_cost_assets c
@@ -835,14 +814,12 @@ async function contractCostCheck(orgId: string, scope: CommerceCloseScope): Prom
         left join amortized a on a.asset_id = c.id
         left join ledger g on g.asset_id = c.id and g.currency = c.currency
         left join currencies cur on cur.code = c.currency
-       order by c.currency, c.capitalized_on`)
-  ).rows;
+       order by c.currency, c.capitalized_on`, "objects");
   const gaps = rows.filter((row) => {
     if (row.status === "impaired") return Number(row.gap) > 0;
     return Number(row.gap) !== 0;
   });
-  const expensed = (
-    await db.execute<{ count: string }>(sql`
+  const expensed = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from contract_cost_assets c
         left join revenue_contracts rc on rc.org_id = c.org_id and rc.id = c.revenue_contract_id
         left join projects prj on prj.org_id = rc.org_id and prj.id = rc.project_id
@@ -850,8 +827,7 @@ async function contractCostCheck(orgId: string, scope: CommerceCloseScope): Prom
          and c.capitalized_on <= ${scope.endsOn}::date
          and (${subsidiaryIds.length === 0} or
            coalesce(rc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})
-             = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`)
-  ).rows[0];
+             = any(${`{${subsidiaryIds.join(",")}}`}::uuid[]))`, "objects"))[0];
   return {
     code: "commerce-contract-cost-gap",
     taskKey: "commerce-complete",
@@ -895,8 +871,7 @@ type ExceptionQueueRow = {
 async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise<CommerceCloseCheck> {
   const subsidiaryIds = scope.subsidiaryIds ?? [];
   const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
-  const rows = (
-    await db.execute<ExceptionQueueRow>(sql`
+  const rows = await db.execute<ExceptionQueueRow>(sql`
       (select 'order' as kind, o.channel_id, c.name as channel_name,
               o.external_number as reference, o.exception_code as code,
               o.exception_reason as reason,
@@ -917,8 +892,7 @@ async function exceptionCheck(orgId: string, scope: CommerceCloseScope): Promise
         where e.org_id = ${orgId} and e.posting_status = 'exception'
           and (e.occurred_at at time zone 'UTC')::date between ${scope.startsOn}::date and ${scope.endsOn}::date
           and (${subsidiaryIds.length === 0} or coalesce(c.subsidiary_id, ${fallbackSubsidiaryId}) = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])))
-      order by occurred_on, reference`)
-  ).rows;
+      order by occurred_on, reference`, "objects");
   return {
     code: "commerce-exceptions-open",
     taskKey: "commerce-complete",
@@ -962,8 +936,7 @@ export async function snapshotCommerceCloseEvidence(
   runId: string,
   actorId: string | undefined,
 ): Promise<string | null> {
-  const run = (
-    await db.execute<{
+  const run = (await db.execute<{
       period_id: string;
       book_id: string;
       data_fingerprint: string | null;
@@ -979,17 +952,14 @@ export async function snapshotCommerceCloseEvidence(
         from close_runs r
         join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
         left join close_run_tasks t on t.run_id = r.id and t.org_id = r.org_id and t.key = 'commerce-complete'
-       where r.id = ${runId} and r.org_id = ${orgId}`)
-  ).rows[0];
+       where r.id = ${runId} and r.org_id = ${orgId}`, "objects"))[0];
   // Evidence is signed work: a refresh with no actor cannot sign it.
   if (!run?.task_id || run.task_status !== "complete" || !run.data_fingerprint || !actorId) return null;
-  const existing = (
-    await db.execute<{ id: string }>(sql`
+  const existing = (await db.execute<{ id: string }>(sql`
       select id from close_task_evidence
        where org_id = ${orgId} and run_id = ${runId} and task_id = ${run.task_id}
          and evidence_type = 'report' and snapshot->>'fingerprint' = ${run.data_fingerprint}
-       limit 1`)
-  ).rows[0];
+       limit 1`, "objects"))[0];
   if (existing) return existing.id;
   const checks = await commerceCloseChecks(orgId, {
     startsOn: run.starts_on,

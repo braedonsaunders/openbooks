@@ -49,20 +49,20 @@ async function fixture(): Promise<ImportFixture> {
   state.allowed = null
   const sub = (await db.execute<{ id: string; name: string }>(
     sql`insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-        values (${org.orgId}, ${org.subsidiaryId}, 'Import Sub B', 'CAD', 'CA') returning id, name`,
-  )).rows[0]!
+        values (${org.orgId}, ${org.subsidiaryId}, 'Import Sub B', 'CAD', 'CA') returning id, name`, 'objects',
+  ))[0]!
   const rootName = (await db.execute<{ name: string }>(
-    sql`select name from subsidiaries where id = ${org.subsidiaryId}`,
-  )).rows[0]!.name
+    sql`select name from subsidiaries where id = ${org.subsidiaryId}`, 'objects',
+  ))[0]!.name
   const accountNumber = (await db.execute<{ number: string }>(
-    sql`select number from accounts where id = ${org.accounts.cogs}`,
-  )).rows[0]!.number
+    sql`select number from accounts where id = ${org.accounts.cogs}`, 'objects',
+  ))[0]!.number
   const periodName = (await db.execute<{ name: string }>(
-    sql`select name from accounting_periods where id = ${org.periodId}`,
-  )).rows[0]!.name
+    sql`select name from accounting_periods where id = ${org.periodId}`, 'objects',
+  ))[0]!.name
   const fy = (await db.execute<{ fiscal_year: number }>(
-    sql`select fiscal_year from accounting_periods where id = ${org.periodId}`,
-  )).rows[0]!.fiscal_year
+    sql`select fiscal_year from accounting_periods where id = ${org.periodId}`, 'objects',
+  ))[0]!.fiscal_year
   const scenarioId = randomUUID()
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -79,15 +79,15 @@ async function post(id: string, body: unknown) {
 }
 async function revision(scenarioId: string, orgId: string) {
   return (await db.execute<{ revision: number }>(
-    sql`select revision from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}`,
-  )).rows[0]!.revision
+    sql`select revision from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}`, 'objects',
+  ))[0]!.revision
 }
 async function lines(scenarioId: string, orgId: string) {
-  return (await db.execute<{ subsidiary: string; amount: string }>(
+  return await db.execute<{ subsidiary: string; amount: string }>(
     sql`select s.name as subsidiary, bl.amount::text as amount
         from budget_lines bl join subsidiaries s on s.id = bl.subsidiary_id
-        where bl.org_id = ${orgId} and bl.scenario_id = ${scenarioId} order by amount`,
-  )).rows
+        where bl.org_id = ${orgId} and bl.scenario_id = ${scenarioId} order by amount`, 'objects',
+  )
 }
 function csv(rows: string[][]) {
   return rows.map((cells) => cells.map((c) => `"${c.replaceAll('"', '""')}"`).join(',')).join('\n')

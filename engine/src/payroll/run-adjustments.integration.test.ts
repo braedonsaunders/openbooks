@@ -35,8 +35,8 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
     const reset = (await db.execute<Record<string, unknown>>(sql`
       select run_status, gross_total, net_total, employer_cost_total, employee_count, calculated_at
         from pay_runs where org_id = ${a.orgId} and document_id = ${a.documentId}
-    `));
-    assert.deepEqual(reset.rows[0], {
+    `, "objects"));
+    assert.deepEqual(reset[0], {
       run_status: "draft",
       gross_total: "0.0000",
       net_total: "0.0000",
@@ -109,21 +109,21 @@ test("pay-run adjustment mutations enforce tenant, schedule membership, and calc
     });
     const bAdjustment = (await db.execute<{ id: string }>(sql`
       select id from pay_run_adjustments where org_id = ${b.orgId} and pay_run_document_id = ${b.documentId}
-    `));
+    `, "objects"));
     await assert.rejects(
       mutatePayRunAdjustment({
         orgId: a.orgId,
         documentId: a.documentId,
         actorId: a.actorId,
-        mutation: { action: "delete", adjustmentId: bAdjustment.rows[0]!.id },
+        mutation: { action: "delete", adjustmentId: bAdjustment[0]!.id },
       }),
       /pay run adjustment not found/,
     );
     const preserved = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from pay_run_adjustments
-       where org_id = ${b.orgId} and id = ${bAdjustment.rows[0]!.id}
-    `));
-    assert.equal(preserved.rows[0]!.n, 1);
+       where org_id = ${b.orgId} and id = ${bAdjustment[0]!.id}
+    `, "objects"));
+    assert.equal(preserved[0]!.n, 1);
   } finally {
     await dropScratchOrgReporting(a.orgId);
     await dropScratchOrgReporting(b.orgId);
@@ -147,7 +147,7 @@ test("pay-run adjustment mutations serialize with commit and reject every post-c
     const adjustment = (await db.execute<{ id: string }>(sql`
       select id from pay_run_adjustments
        where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}
-    `));
+    `, "objects"));
 
     let signalLocked!: () => void;
     let releaseLock!: () => void;
@@ -180,7 +180,7 @@ test("pay-run adjustment mutations serialize with commit and reject every post-c
 
     const operations = [
       { action: "add", employeePartyId: fixture.employeeId, componentId: fixture.componentId, amount: "5.00" } as const,
-      { action: "delete", adjustmentId: adjustment.rows[0]!.id } as const,
+      { action: "delete", adjustmentId: adjustment[0]!.id } as const,
       { action: "exclude", employeePartyId: fixture.employeeId } as const,
       { action: "include", employeePartyId: fixture.employeeId } as const,
     ];
@@ -199,8 +199,8 @@ test("pay-run adjustment mutations serialize with commit and reject every post-c
       select adjustment_type from pay_run_adjustments
        where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}
        order by created_at
-    `));
-    assert.deepEqual(unchanged.rows, [{ adjustment_type: "line" }]);
+    `, "objects"));
+    assert.deepEqual(unchanged, [{ adjustment_type: "line" }]);
 
     await db.execute(sql`
       update pay_runs set run_status = 'draft'
@@ -250,8 +250,8 @@ test("pay-run adjustments refuse amounts and hours the ledger columns cannot hol
     }
     const rows = await db.execute<{ count: string }>(sql`
       select count(*) as count from pay_run_adjustments
-       where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}`);
-    assert.equal(rows.rows[0]!.count, "0");
+       where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}`, "objects");
+    assert.equal(rows[0]!.count, "0");
     // In-range values, including 2dp hours at the column scale, still save.
     await mutatePayRunAdjustment({
       orgId: fixture.orgId,
@@ -267,8 +267,8 @@ test("pay-run adjustments refuse amounts and hours the ledger columns cannot hol
     });
     const saved = await db.execute<{ amount: string; hours: string }>(sql`
       select amount::text as amount, hours::text as hours from pay_run_adjustments
-       where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}`);
-    assert.deepEqual(saved.rows[0], { amount: "100.0000", hours: "7.50" });
+       where org_id = ${fixture.orgId} and pay_run_document_id = ${fixture.documentId}`, "objects");
+    assert.deepEqual(saved[0], { amount: "100.0000", hours: "7.50" });
   } finally {
     await dropScratchOrgReporting(fixture.orgId);
   }

@@ -80,8 +80,8 @@ const versionBody = (planId: string, unitPrice: string) => ({
 });
 
 async function versionCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

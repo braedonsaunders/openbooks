@@ -60,11 +60,9 @@ async function line(
   return id;
 }
 async function sourceDocument(lineId: string): Promise<string> {
-  return (
-    await db.execute<{ id: string }>(
-      sql`select je.source_document_id as id from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id where jl.id=${lineId}`,
-    )
-  ).rows[0]!.id;
+  return (await db.execute<{ id: string }>(
+      sql`select je.source_document_id as id from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id where jl.id=${lineId}`, "objects",
+    ))[0]!.id;
 }
 async function postedCredit(
   org: ScratchOrg,
@@ -84,11 +82,9 @@ async function postedCredit(
       bank: org.accounts.bank,
     },
   });
-  return (
-    await db.execute<{ id: string }>(
-      sql`select id from journal_lines where entry_id=${entry} and account_id=${vendor ? org.accounts.ap : org.accounts.ar}`,
-    )
-  ).rows[0]!.id;
+  return (await db.execute<{ id: string }>(
+      sql`select id from journal_lines where entry_id=${entry} and account_id=${vendor ? org.accounts.ap : org.accounts.ar}`, "objects",
+    ))[0]!.id;
 }
 async function fixture() {
   const org = await createScratchOrg();
@@ -107,12 +103,10 @@ async function fixture() {
   return { org, actor, target, payment };
 }
 async function snapshot(org: ScratchOrg, payment: string) {
-  return (
-    await db.execute(sql`select status, custom, total, posted_entry_id,
+  return (await db.execute(sql`select status, custom, total, posted_entry_id,
     (select count(*) from applications where org_id=${org.orgId}) as applications,
     (select count(*) from journal_entries where source_document_id=${payment}) as entries
-    from documents where id=${payment}`)
-  ).rows[0];
+    from documents where id=${payment}`, "objects"))[0];
 }
 test(
   "payment selection excludes parallel books and refuses their draft and approved allocations",
@@ -503,11 +497,9 @@ test(
           },
         });
         lines.push(
-          (
-            await db.execute<{ id: string }>(
-              sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`,
-            )
-          ).rows[0]!.id,
+          (await db.execute<{ id: string }>(
+              sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, "objects",
+            ))[0]!.id,
         );
       }
       await db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by)
@@ -530,7 +522,7 @@ test(
         billDocumentIds: [bills[0]!],
         scheduledFor: org.date,
       });
-      const evidence = (await db.execute<{ amount: string; credits: string }>(sql`select pi.amount, d.custom->'creditAllocations'->0->>'amount' as credits from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`)).rows[0];
+      const evidence = (await db.execute<{ amount: string; credits: string }>(sql`select pi.amount, d.custom->'creditAllocations'->0->>'amount' as credits from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`, "objects"))[0];
       assert.deepEqual(evidence, { amount: "80.0000", credits: "20.0000" });
     } finally {
       await dropScratchOrg(org.orgId);
@@ -560,11 +552,9 @@ test(
           bank: org.accounts.bank,
         },
       });
-      const target = (
-        await db.execute<{ id: string }>(
-          sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`,
-        )
-      ).rows[0]!.id;
+      const target = (await db.execute<{ id: string }>(
+          sql`select id from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, "objects",
+        ))[0]!.id;
       const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId,
         kind: "vendor_payment",
@@ -607,11 +597,9 @@ test(
         billDocumentIds: [bill],
         scheduledFor: org.date,
       });
-      const generated = (
-        await db.execute<{ id: string; total: string; document_date: string }>(
-          sql`select d.id,d.total,d.document_date from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`,
-        )
-      ).rows[0]!;
+      const generated = (await db.execute<{ id: string; total: string; document_date: string }>(
+          sql`select d.id,d.total,d.document_date from payment_instructions pi join documents d on d.id=pi.payment_document_id and d.org_id=pi.org_id where pi.payment_run_id=${run.id}`, "objects",
+        ))[0]!;
       assert.equal(generated.total, "0.6667");
       assert.equal(generated.document_date, org.date);
       await db.execute(

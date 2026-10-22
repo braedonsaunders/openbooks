@@ -8,9 +8,10 @@ import { FEATURE_BY_KEY, featureEnabled } from "./feature-registry.ts";
 function subsidiaryCountRunner(active: number): SqlExecutor & { calls: number } {
   const runner = {
     calls: 0,
-    async execute() {
+    async execute(_query: unknown, mode?: string) {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       runner.calls += 1;
-      return { rows: [{ n: active }] };
+      return inMode({ rows: [{ n: active }] });
     },
   };
   return runner as unknown as SqlExecutor & { calls: number };

@@ -34,8 +34,7 @@ export const salesQuotaSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (
-      await db.execute<{
+    (await db.execute<{
         createdBy: string | null;
         submittedBy: string | null;
         status: string;
@@ -45,8 +44,7 @@ async function load(id: string) {
       employee_id as "employeeId",sales_team_id as "salesTeamId",subsidiary_id as "subsidiaryId",
       period_start::text as "periodStart",period_end::text as "periodEnd",reason,
       created_by as "createdBy",submitted_by as "submittedBy"
-    from crm_sales_quotas where id=${id}`)
-    ).rows[0] ?? null
+    from crm_sales_quotas where id=${id}`, "objects"))[0] ?? null
   );
 }
 export const salesQuotasFlowAdapter = defineTableSubjectAdapter({

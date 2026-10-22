@@ -39,7 +39,7 @@ for (const scenario of ["foreign view owner", "foreign report owner", "foreign l
         await db.execute(sql`insert into user_scripts(org_id,name,trigger_point,source,is_active) values(${org.orgId},'Original','before_submit','function main(ctx) { return true; }',true)`);
       }
       const tableSql = sql.identifier(table);
-      const before = (await db.execute(sql`select to_jsonb(r) as value from ${tableSql} r where org_id=${org.orgId}`)).rows;
+      const before = await db.execute(sql`select to_jsonb(r) as value from ${tableSql} r where org_id=${org.orgId}`, "objects");
       sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Record controls", tier: "full", masked: false });
       if (scenario === "built-in report delete") await db.execute(sql`delete from report_definitions where org_id=${sandbox.sandboxOrgId}`);
       else if (scenario === "built-in report identity") await db.execute(sql`update report_definitions set kind='custom' where org_id=${sandbox.sandboxOrgId}`);
@@ -47,8 +47,8 @@ for (const scenario of ["foreign view owner", "foreign report owner", "foreign l
       const change = await buildChangeSet(sandbox.sandboxId, "Record controls", actors[0]);
       await reviewChangeSet(change.changeSetId, actors[1]);
       await assert.rejects(applyChangeSet(change.changeSetId, applier), scenario === "disabled scripts" ? /scripts feature is disabled/ : scenario.startsWith("built-in") ? /built-in|report identity/i : /owner|own/i);
-      assert.deepEqual((await db.execute(sql`select to_jsonb(r) as value from ${tableSql} r where org_id=${org.orgId}`)).rows, before);
-      assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "approved");
+      assert.deepEqual(await db.execute(sql`select to_jsonb(r) as value from ${tableSql} r where org_id=${org.orgId}`, "objects"), before);
+      assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`, "objects"))[0]!.status, "approved");
     } finally {
       if (sandbox) await deleteSandbox(sandbox.sandboxId);
       await dropScratchOrgReporting(org.orgId);
@@ -84,18 +84,18 @@ for (const table of ["saved_views", "saved_reports", "list_views"] as const) {
           await db.execute(sql`update ${identifier} set ${field}=ob_rebase(${nextOwner}::uuid,o.sandbox_seed)
             from orgs o where o.id=${sandbox.sandboxOrgId} and org_id=o.id`);
         } else await db.execute(sql`update ${identifier} set name='Reviewed owner edit' where org_id=${sandbox.sandboxOrgId}`);
-        const before = (await db.execute(sql`select to_jsonb(r) as value from ${identifier} r where org_id=${org.orgId}`)).rows;
+        const before = await db.execute(sql`select to_jsonb(r) as value from ${identifier} r where org_id=${org.orgId}`, "objects");
         const change = await buildChangeSet(sandbox.sandboxId, scenario, actors[0]);
         assert.equal(change.itemCount, 1);
         await reviewChangeSet(change.changeSetId, actors[1]);
         if (scenario === "take ownership" || scenario === "give ownership") {
           await assert.rejects(applyChangeSet(change.changeSetId, applier), /record owner/);
-          assert.deepEqual((await db.execute(sql`select to_jsonb(r) as value from ${identifier} r where org_id=${org.orgId}`)).rows, before);
+          assert.deepEqual(await db.execute(sql`select to_jsonb(r) as value from ${identifier} r where org_id=${org.orgId}`, "objects"), before);
         } else {
           await applyChangeSet(change.changeSetId, applier);
-          const after = (await db.execute(sql`select name,${field} as owner from ${identifier} where org_id=${org.orgId}`)).rows;
+          const after = await db.execute(sql`select name,${field} as owner from ${identifier} where org_id=${org.orgId}`, "objects");
           assert.deepEqual(after, scenario === "owner delete" ? [] : [{ name: scenario === "owner update" ? "Reviewed owner edit" : "Original", owner: applier }]);
-          assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "applied");
+          assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`, "objects"))[0]!.status, "applied");
         }
       } finally {
         if (sandbox) await deleteSandbox(sandbox.sandboxId);
@@ -125,10 +125,10 @@ test("a later ownership denial rolls back earlier authorized changes and audit r
     await db.execute(sql`update change_set_items set created_at=case when table_name='custom_field_defs' then '2026-01-01'::timestamptz else '2026-01-02'::timestamptz end where change_set_id=${change.changeSetId}`);
     await reviewChangeSet(change.changeSetId, actors[1]);
     await assert.rejects(applyChangeSet(change.changeSetId, applier), /record owner/);
-    assert.equal((await db.execute(sql`select label from custom_field_defs where org_id=${org.orgId} and key='atomic_control'`)).rows[0]!.label, "Original");
-    assert.equal((await db.execute(sql`select name from saved_views where org_id=${org.orgId}`)).rows[0]!.name, "Original");
-    assert.equal((await db.execute(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and changes->>'changeSetId'=${change.changeSetId}`)).rows[0]!.n, 0);
-    assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "approved");
+    assert.equal((await db.execute(sql`select label from custom_field_defs where org_id=${org.orgId} and key='atomic_control'`, "objects"))[0]!.label, "Original");
+    assert.equal((await db.execute(sql`select name from saved_views where org_id=${org.orgId}`, "objects"))[0]!.name, "Original");
+    assert.equal((await db.execute(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and changes->>'changeSetId'=${change.changeSetId}`, "objects"))[0]!.n, 0);
+    assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`, "objects"))[0]!.status, "approved");
   } finally {
     if (sandbox) await deleteSandbox(sandbox.sandboxId);
     await dropScratchOrgReporting(org.orgId);

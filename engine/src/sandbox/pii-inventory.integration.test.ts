@@ -3113,8 +3113,8 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
   const ruleReadback = await db.execute<{
     rules: unknown;
   }>(sql`select ${sql.raw(expression!)} rules
-    from (values ('[{"field":"bookingLabel","match":"contains","value":"Production Person","color":"#123456"}]'::jsonb)) source(cell_color_rules)`);
-  assert.deepEqual(ruleReadback.rows[0]?.rules, []);
+    from (values ('[{"field":"bookingLabel","match":"contains","value":"Production Person","color":"#123456"}]'::jsonb)) source(cell_color_rules)`, "objects");
+  assert.deepEqual(ruleReadback[0]?.rules, []);
   const stale: string[] = [];
   for (const key of ALLOW_LISTED_NON_PERSONAL) {
     const udtName = live.get(key);
@@ -3180,18 +3180,14 @@ test("financial clone projections redact source prose and preserve rebased fair-
       column.udtName === "jsonb"
         ? sql`${JSON.stringify(value)}::jsonb`
         : sql`${value}::text`;
-    return (
-      await db.execute<{
+    return (await db.execute<{
         value: unknown;
       }>(sql`select ${sql.raw(expression)} as value
-      from (values (${supplied})) source(${sql.identifier(columnName)})`)
-    ).rows[0]!.value;
+      from (values (${supplied})) source(${sql.identifier(columnName)})`, "objects"))[0]!.value;
   }
-  const rebased = (
-    await db.execute<{ id: string }>(
-      sql`select ob_rebase(${fairValueId}::uuid,${seed}::uuid)::text as id`,
-    )
-  ).rows[0]!.id;
+  const rebased = (await db.execute<{ id: string }>(
+      sql`select ob_rebase(${fairValueId}::uuid,${seed}::uuid)::text as id`, "objects",
+    ))[0]!.id;
   const basis = {
     fairValuePriceId: fairValueId,
     quantity: "2.00000000",
@@ -3249,8 +3245,7 @@ test("financial clone projections redact source prose and preserve rebased fair-
 test("warehouse evidence masking removes arbitrary prose and preserves native dated movement values", async () => {
   const seed = "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130";
   const id = "65fa9dc7-228f-4e19-8bf1-17d52efeb78d";
-  const result = (
-    await db.execute<{
+  const result = (await db.execute<{
       request: Record<string, unknown>;
       movements: Record<string, unknown>[];
       rebased: string;
@@ -3261,8 +3256,7 @@ test("warehouse evidence masking removes arbitrary prose and preserves native da
       public.warehouse_execution_mask_json(
         ${JSON.stringify([{ shipmentLineId: id, fromMovementId: id, toMovementId: id, entryId: null, value: "12.3400", recipient: "Jane Smith" }])}::jsonb,
         ${seed}::uuid,'movements') as movements,
-      public.ob_rebase(${id}::uuid,${seed}::uuid)::text as rebased`)
-  ).rows[0]!;
+      public.ob_rebase(${id}::uuid,${seed}::uuid)::text as rebased`, "objects"))[0]!;
   assert.deepEqual(result.request, {
     toBinId: result.rebased,
     date: "2026-01-02",
@@ -3286,14 +3280,12 @@ test("warehouse evidence masking removes arbitrary prose and preserves native da
 
 test("every masking policy names a real schema column with a legal transform", async () => {
   const schemaCols = new Set(
-    (
-      await db.execute<{ table_name: string; column_name: string }>(sql`
+    (await db.execute<{ table_name: string; column_name: string }>(sql`
       select c.table_name, c.column_name
         from information_schema.columns c
         join information_schema.tables t
           on t.table_name = c.table_name and t.table_schema = c.table_schema
-       where c.table_schema = 'public' and t.table_type = 'BASE TABLE'`)
-    ).rows.map((r) => `${r.table_name}.${r.column_name}`),
+       where c.table_schema = 'public' and t.table_type = 'BASE TABLE'`, "objects")).map((r) => `${r.table_name}.${r.column_name}`),
   );
   const bad: string[] = [];
   for (const p of DEFAULT_POLICIES) {
@@ -3323,8 +3315,7 @@ test("every masking policy names a real schema column with a legal transform", a
     udtName: "jsonb",
     isNullable: true,
   };
-  const masked = (
-    await db.execute<{
+  const masked = await db.execute<{
       source_key: string | null;
       source_evidence: unknown;
     }>(sql`
@@ -3332,8 +3323,7 @@ test("every masking policy names a real schema column with a legal transform", a
            ${sql.raw(maskExpr("source_evidence", policies.get("source_evidence")!, "id", evidenceColumn))} as source_evidence
       from (values (${sourceKey}::text, '{"employee":{"name":"Production Employee","governmentId":"987654321"}}'::jsonb),
                    (null::text, null::jsonb)) as source(source_key, source_evidence)
-     order by source_key nulls last`)
-  ).rows;
+     order by source_key nulls last`, "objects");
   assert.match(masked[0]!.source_key!, /^[a-f0-9]{32}$/);
   assert.notEqual(masked[0]!.source_key, sourceKey);
   assert.deepEqual(masked[0]!.source_evidence, { redacted: true });
@@ -3369,9 +3359,9 @@ test("full and masked native clone projections clear schedule automatic policy r
       ?.split(' from "schedule_boards"')[0];
     assert.equal(policyExpression, "null::jsonb");
     const result = await db.execute<{ policy: unknown }>(
-      sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`,
+      sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`, "objects",
     );
-    assert.equal(result.rows[0]?.policy, null);
+    assert.equal(result[0]?.policy, null);
   }
 });
 
@@ -3417,11 +3407,9 @@ test("native production evidence refuses whole-column masking while embedded dis
     reason: "Private engineering discussion",
     reworkRoutingId: requestId,
   });
-  const result = (
-    await db.execute<{ evidence: { requestKey: string; intent: string } }>(
-      sql`select production_clone_safe_evidence(${JSON.stringify({ requestKey: requestId, intent: embedded })}::jsonb,${options.seed}::uuid,'',${options.sandboxOrgId}::uuid,true) as evidence`,
-    )
-  ).rows[0]!.evidence;
+  const result = (await db.execute<{ evidence: { requestKey: string; intent: string } }>(
+      sql`select production_clone_safe_evidence(${JSON.stringify({ requestKey: requestId, intent: embedded })}::jsonb,${options.seed}::uuid,'',${options.sandboxOrgId}::uuid,true) as evidence`, "objects",
+    ))[0]!.evidence;
   const intent = JSON.parse(result.intent) as {
     action: string;
     reason: string;

@@ -45,7 +45,7 @@ async function buildFxLegs(
   adjustment: string;
   realized: string;
 }> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     line_number: number;
     kind: SettlementLineKind;
     amount: string;
@@ -57,7 +57,7 @@ async function buildFxLegs(
       from psp_settlement_lines
      where batch_id = ${batchId} and org_id = ${orgId}
      order by line_number
-  `)).rows;
+  `, "objects");
   const bookedKinds = new Set(["charge", "refund", "dispute", "dispute_reversal", "adjustment", "transfer"]);
   let refund = 0n;
   let dispute = 0n;
@@ -93,7 +93,7 @@ async function buildFxLegs(
           select status, currency, total::text, fx_rate::text
             from documents
            where id = ${row.document_id} and org_id = ${orgId}
-        `)).rows[0];
+        `, "objects"))[0];
         if (!receipt) {
           throw new PspSettlementError(
             `settlement line ${row.line_number} links receipt ${row.document_id}, which is not in this organization; relink the line and import again`,
@@ -188,8 +188,8 @@ export async function postSettlementBatch(
         from psp_settlement_batches b
        where b.id = ${batchId} and b.org_id = ${orgId}
        for update of b
-    `));
-    const b = batch.rows[0];
+    `, "objects"));
+    const b = batch[0];
     if (!b) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(allowedSubsidiaryIds, b.subsidiary_id)) throw new ScopeNotFoundError();
     if (b.status === "posted") {
@@ -203,8 +203,8 @@ export async function postSettlementBatch(
     if (b.status === "void") throw new PspSettlementError("batch is void");
     const controls = (await db.execute<{ c: Record<string, string> | null }>(sql`
       select settings->'controlAccounts' as c from orgs where id = ${orgId} for share
-    `));
-    const c = controls.rows[0]?.c ?? {};
+    `, "objects"));
+    const c = controls[0]?.c ?? {};
     // Keep hierarchy and functional currency stable through validation and posting.
     await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
     const ctx = await loadSubsidiaryContext(db, orgId);
@@ -349,7 +349,7 @@ export async function postSettlementBatch(
       }
       // The realized plug is posting evidence: stamp it onto the batch so the
       // stored row shows the booked FX, not just the import-time fx legs.
-      const stamped = await db.execute(sql`
+      const stamped = await db.execute<never>(sql`
         update psp_settlement_batches set fx_amount = ${fxRealized}, updated_at = now(), updated_by = ${actorId}
          where id = ${batchId} and org_id = ${orgId}
       `);
@@ -433,11 +433,11 @@ export async function postSettlementBatch(
     const accountIds = [...new Set(jlines.map((line) => line.accountId))];
     const locked = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${orgId}
       and is_active and not is_summary
-      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`));
+      and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`, "objects"));
     // Accounts can leave the org (or postability) after import: re-resolve
     // every posting account under the batch lock so a stale reference fails
     // closed naming the account instead of escaping as a raw FK 500.
-    const lockedIds = new Set(locked.rows.map((r) => r.id.toLowerCase()));
+    const lockedIds = new Set(locked.map((r) => r.id.toLowerCase()));
     const stale = accountIds.find((id) => !lockedIds.has(id.toLowerCase()));
     if (stale) {
       throw new PspSettlementError(

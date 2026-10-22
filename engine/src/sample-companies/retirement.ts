@@ -56,8 +56,8 @@ export async function executeSampleRetirement(input: { runId: string; orgId: str
     const retainedBefore: Record<string, string> = {};
     for (const id of status.run.retain_ids) retainedBefore[id] = (await retirementFingerprint(catalog, id)).digest;
     const administrativeDeltas = {
-      removedSandboxRegistrations: (await db.execute(sql`select id,org_id,production_org_id,status from sandboxes where org_id=${input.orgId}::uuid`)).rows,
-      removedAccessCount: (await db.execute<{ count: string }>(sql`select count(*)::text as count from user_org_access where org_id=${input.orgId}::uuid`)).rows[0]?.count,
+      removedSandboxRegistrations: await db.execute(sql`select id,org_id,production_org_id,status from sandboxes where org_id=${input.orgId}::uuid`, "objects"),
+      removedAccessCount: (await db.execute<{ count: string }>(sql`select count(*)::text as count from user_org_access where org_id=${input.orgId}::uuid`, "objects"))[0]?.count,
       survivingAudit: { kind: "tenant_retirement", runId: input.runId, tenantId: input.orgId, planDigest: input.planDigest },
     };
     const s3VersionIds = (await listSandboxS3VersionIds(input.orgId)).sort();

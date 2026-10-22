@@ -17,11 +17,11 @@ export async function organizationCurrencyOptions(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<OrganizationCurrencyOption[]> {
   const multi = await orgFeatureEnabled(orgId, 'multiCurrency', exec);
-  if (multi) return (await exec.execute<OrganizationCurrencyOption>(sql`
+  if (multi) return await exec.execute<OrganizationCurrencyOption>(sql`
     select code as value, code || ' · ' || name as label, null::text as "scopeValue"
       from currencies order by code
-  `)).rows;
-  const rows = (await exec.execute<OrganizationCurrencyOption>(sql`
+  `, 'objects');
+  const rows = await exec.execute<OrganizationCurrencyOption>(sql`
     select c.code as value, c.code || ' · ' || c.name as label, '' as "scopeValue"
       from orgs o join currencies c on c.code = o.base_currency where o.id = ${orgId}
     union all
@@ -29,7 +29,7 @@ export async function organizationCurrencyOptions(
       from subsidiaries s join currencies c on c.code = s.base_currency
       where s.org_id = ${orgId} and s.is_active
     order by value, "scopeValue"
-  `)).rows;
+  `, 'objects');
   return rows.filter((row) => row.scopeValue === ''
     ? allowedSubsidiaryIds === null
     : allowedSubsidiaryIds === null || allowedSubsidiaryIds.has(row.scopeValue!));
@@ -48,5 +48,5 @@ export async function organizationCurrencyAvailable(
       or (${legalEntityId}::uuid is null and exists(select 1 from orgs where id = ${orgId} and base_currency = c.code))
       or exists(select 1 from subsidiaries where org_id = ${orgId} and id = ${legalEntityId}::uuid and is_active and base_currency = c.code)
     )
-  `)).rows.length === 1;
+  `, 'objects')).length === 1;
 }

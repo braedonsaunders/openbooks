@@ -217,14 +217,14 @@ test(
         const revision = (await db.execute<{ revision: string }>(sql`
           select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
             from custom_records where id = ${hiddenId}
-        `)).rows[0]!.revision
+        `, 'objects'))[0]!.revision
         await assert.rejects(
           platform.update(typeKey, hiddenId, { data: { title: 'smuggled' }, expectedUpdatedAt: revision }),
           (error: unknown) => error instanceof Error && /not found|outside the caller subsidiary scope/.test(error.message),
         )
         const stored = (await db.execute<{ title: string }>(sql`
           select data ->> 'title' as title from custom_records where id = ${hiddenId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(stored?.title, 'hidden')
       })
     } finally {

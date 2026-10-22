@@ -104,7 +104,7 @@ const HEADCOUNT_PLAN_COSTING_SPEC = {
 
 async function setLaborCostingComponents(orgId: string, components: Record<string, unknown>[]): Promise<void> {
   const current = (await db.execute<{ settings: Record<string, unknown> }>(sql`
-    select settings from orgs where id = ${orgId}`)).rows[0]?.settings ?? {};
+    select settings from orgs where id = ${orgId}`, "objects"))[0]?.settings ?? {};
   const next = {
     ...(current as Record<string, unknown>),
     laborCosting: { mode: "off", hoursPerDay: "8", annualHours: "2080", components },
@@ -165,7 +165,7 @@ test("F04: configured 14% burden costs end to end with audit evidence", async ()
     });
     const stored = (await db.execute<{ est_annual_cost: string; cost_basis: Record<string, unknown> }>(sql`
       select est_annual_cost::text as est_annual_cost, cost_basis
-        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`)).rows[0];
+        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`, "objects"))[0];
     assert.equal(stored?.est_annual_cost, "68400.0000");
     assert.deepEqual(stored?.cost_basis, line.costBasis);
     // Fractional FTE under the same burden.
@@ -213,7 +213,7 @@ test("F04: fallback labor-costing percents cost end to end, empty means zero", a
     });
     const stored = (await db.execute<{ est_annual_cost: string }>(sql`
       select est_annual_cost::text as est_annual_cost
-        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`)).rows[0];
+        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${line.id}`, "objects"))[0];
     assert.equal(stored?.est_annual_cost, "68400.0000");
     // No wage-percentage components: zero burden, unloaded base.
     await setLaborCostingComponents(org.orgId, []);
@@ -240,7 +240,7 @@ test("F04: fallback labor-costing percents cost end to end, empty means zero", a
     });
     const microStored = (await db.execute<{ est_annual_cost: string }>(sql`
       select est_annual_cost::text as est_annual_cost
-        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${micro.id}`)).rows[0];
+        from hrm_headcount_plan_lines where org_id = ${org.orgId} and id = ${micro.id}`, "objects"))[0];
     assert.equal(microStored?.est_annual_cost, "60003.0000");
   });
 });
@@ -262,9 +262,9 @@ test("F04: undeclared burden rate refuses by name and writes nothing", async () 
       }),
       /not a decimal fraction/,
     );
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       select id from hrm_headcount_plan_lines
-       where org_id = ${org.orgId} and plan_id = ${plan.id}`)).rows;
+       where org_id = ${org.orgId} and plan_id = ${plan.id}`, "objects");
     assert.equal(rows.length, 0);
   });
 });

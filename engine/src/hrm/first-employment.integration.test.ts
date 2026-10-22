@@ -71,33 +71,33 @@ async function seedEmployeeParty(orgId: string, displayName: string, kind: "pers
 
 /** Bind a login to the hired person, as Admin → Users → Link person does. */
 async function linkWorkerLogin(orgId: string, userId: string, partyId: string): Promise<void> {
-  const updated = (await db.execute(sql`
+  const updated = await db.execute(sql`
     update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId} returning id
-  `)).rows;
+  `, "objects");
   assert.equal(updated.length, 1, "the worker login links to the hired person");
 }
 
 async function employmentCount(orgId: string, partyId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
-  `)).rows;
+  `, "objects");
   return rows[0]?.n ?? 0;
 }
 
 async function hireRequestCount(orgId: string, partyId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_employment_change_requests r
       join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
      where r.org_id = ${orgId} and e.worker_party_id = ${partyId}
-  `)).rows;
+  `, "objects");
   return rows[0]?.n ?? 0;
 }
 
 async function liveVersions(employmentId: string): Promise<Array<{ no: number; status: string }>> {
-  const rows = (await db.execute<{ no: number; status: string }>(sql`
+  const rows = await db.execute<{ no: number; status: string }>(sql`
     select version_no as no, status from worker_employment_versions
      where employment_id = ${employmentId} and recorded_until is null order by version_no
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -110,10 +110,10 @@ async function seedDirectHirePolicy(orgId: string): Promise<string> {
 }
 
 async function identityAuditCount(orgId: string, employmentId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'worker_employments' and row_id = ${employmentId} and action = 'insert'
-  `)).rows;
+  `, "objects");
   return rows[0]?.n ?? 0;
 }
 
@@ -141,19 +141,19 @@ test("first hire under an apply-without-approval flow applies at once with an au
 
     // The first effective version is readable through storage, not just the return value.
     assert.deepEqual(await liveVersions(hire.employmentId), [{ no: 1, status: "active" }]);
-    const changes = (await db.execute<{ kind: string; revision: number }>(sql`
+    const changes = await db.execute<{ kind: string; revision: number }>(sql`
       select change_kind as kind, revision from employment_changes where employment_id = ${hire.employmentId}
-    `)).rows;
+    `, "objects");
     assert.deepEqual(changes, [{ kind: "created", revision: 2 }]);
     const revision = (await db.execute<{ revision: number }>(sql`
       select revision from worker_employments where id = ${hire.employmentId}
-    `)).rows[0]!.revision;
+    `, "objects"))[0]!.revision;
     assert.equal(revision, 2);
     // Direct application stays evidenced: the automatic snapshot pins the
     // permitting flow, plus the identity audit row with actor and reason.
     const snapshot = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { kind: string; flowIds: string[] } } }>(sql`
       select decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}
-    `)).rows[0]!.snapshot;
+    `, "objects"))[0]!.snapshot;
     assert.equal(snapshot.mode, "automatic");
     assert.deepEqual(snapshot.gates, []);
     assert.equal(snapshot.policy.kind, "ungated");
@@ -187,7 +187,7 @@ test("first hire with no configured flow applies directly through the governed a
     assert.deepEqual(await liveVersions(hire.employmentId), [{ no: 1, status: "active" }]);
     const snapshot = (await db.execute<{ snapshot: { mode: string; gates: unknown[]; policy: { kind: string } } }>(sql`
       select decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}
-    `)).rows[0]!.snapshot;
+    `, "objects"))[0]!.snapshot;
     assert.equal(snapshot.mode, "automatic");
     assert.deepEqual(snapshot.gates, []);
     assert.equal(snapshot.policy.kind, "ungated");
@@ -239,7 +239,7 @@ test("first hire carries its initial assignment and establishment link in the sa
     const locId = (await db.execute<{ id: string }>(sql`
       insert into locations (org_id, name, code, subsidiary_id, is_active)
       values (${h.org.orgId}, 'Headquarters', 'HQ', ${h.org.subsidiaryId}, true) returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const position = await createPosition({
       orgId: h.org.orgId,
       actorId: h.hrId,
@@ -276,18 +276,18 @@ test("first hire carries its initial assignment and establishment link in the sa
 
     // The slot and its first version carry the assignment content and the
     // establishment link over the hire's window.
-    const slots = (await db.execute<{ key: string }>(sql`
+    const slots = await db.execute<{ key: string }>(sql`
       select assignment_key as key from employment_assignments where employment_id = ${hire.employmentId}
-    `)).rows;
+    `, "objects");
     assert.deepEqual(slots.map((slot) => slot.key), ["primary"]);
-    const assignmentVersions = (await db.execute<{
+    const assignmentVersions = await db.execute<{
       title: string | null; department: string | null; location: string | null;
       fte: string; primary: boolean; position: string | null; no: number;
     }>(sql`
       select job_title as title, department_id::text as department, location_id::text as location,
              fte::text as fte, is_primary as primary, position_id::text as position, version_no as no
         from employment_assignment_versions where employment_id = ${hire.employmentId} and recorded_until is null
-    `)).rows;
+    `, "objects");
     assert.deepEqual(assignmentVersions, [{
       title: "Engineer", department: deptId, location: locId,
       fte: "1.0000", primary: true, position: position.id, no: 1,
@@ -295,10 +295,10 @@ test("first hire carries its initial assignment and establishment link in the sa
 
     // Two aggregate revisions — created, then assignment_issued — and the
     // request stamps the final one once.
-    const changes = (await db.execute<{ kind: string; revision: number }>(sql`
+    const changes = await db.execute<{ kind: string; revision: number }>(sql`
       select change_kind as kind, revision from employment_changes
        where employment_id = ${hire.employmentId} order by revision
-    `)).rows;
+    `, "objects");
     assert.deepEqual(changes, [
       { kind: "created", revision: 2 },
       { kind: "assignment_issued", revision: 3 },
@@ -306,11 +306,11 @@ test("first hire carries its initial assignment and establishment link in the sa
     const applied = (await db.execute<{ revision: number; change: string | null }>(sql`
       select applied_employment_revision as revision, applied_employment_change_id as change
         from hrm_employment_change_requests where id = ${hire.changeRequestId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(applied.revision, 3);
     const revision = (await db.execute<{ revision: number }>(sql`
       select revision from worker_employments where id = ${hire.employmentId}
-    `)).rows[0]!.revision;
+    `, "objects"))[0]!.revision;
     assert.equal(revision, 3);
   });
 });
@@ -345,10 +345,10 @@ test("later everyday changes apply directly with no flow: title change and termi
     assert.equal(titled.status, "applied");
     // The successor window carries the new title; the earlier slice keeps
     // its history beside it.
-    const titles = (await db.execute<{ title: string | null; from: string }>(sql`
+    const titles = await db.execute<{ title: string | null; from: string }>(sql`
       select job_title as title, effective_from::text as from from employment_assignment_versions
        where employment_id = ${hire.employmentId} and recorded_until is null order by effective_from
-    `)).rows;
+    `, "objects");
     assert.deepEqual(titles, [
       { title: "Engineer", from: "2026-09-01" },
       { title: "Senior Engineer", from: "2026-10-01" },
@@ -368,10 +368,10 @@ test("later everyday changes apply directly with no flow: title change and termi
       reason: "resigned",
     });
     assert.equal(terminated.status, "applied");
-    const episodes = (await db.execute<{ status: string; from: string }>(sql`
+    const episodes = await db.execute<{ status: string; from: string }>(sql`
       select status, effective_from::text as from from worker_employment_versions
        where employment_id = ${hire.employmentId} and recorded_until is null order by effective_from
-    `)).rows;
+    `, "objects");
     assert.deepEqual(episodes, [
       { status: "active", from: "2026-09-01" },
       { status: "terminated", from: "2026-12-01" },
@@ -391,7 +391,7 @@ test("a hand-flipped draft to approved refuses while a flow is configured", { sk
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision, created_by, updated_by)
       values (gen_random_uuid(), ${h.org.orgId}, ${partyId}, ${h.org.subsidiaryId}, 1, ${h.hrId}, ${h.hrId})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const draftId = (await db.execute<{ id: string }>(sql`
       insert into hrm_employment_change_requests
         (org_id, employment_id, expected_employment_revision, payload,
@@ -400,7 +400,7 @@ test("a hand-flipped draft to approved refuses while a flow is configured", { sk
               ${JSON.stringify({ kind: "hire", status: "active", effectiveFrom: "2026-09-01" })}::jsonb,
               ${"0".repeat(64)}, '1', ${h.hrId}, ${h.hrId})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const flip = await db.execute(sql`
       update hrm_employment_change_requests
          set status = 'approved',
@@ -427,7 +427,7 @@ test("a hand-flipped draft to approved refuses while a flow is configured", { sk
     assert.match(text, /draft must submit \(pending_approval\) or withdraw/);
     const status = (await db.execute<{ status: string }>(sql`
       select status from hrm_employment_change_requests where id = ${draftId}
-    `)).rows[0]!.status;
+    `, "objects"))[0]!.status;
     assert.equal(status, "draft", "the refused flip stores nothing");
   });
 });
@@ -513,7 +513,7 @@ test("an existing person gains the role and hires onto the same party, never a d
     const sameName = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from parties
        where org_id = ${h.org.orgId} and display_name = 'Vendor Val'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(sameName, 1, "no duplicate party is minted for the hire");
     assert.deepEqual(await findEmploymentsByParty({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId: stranger }), [hire.employmentId]);
   });
@@ -626,7 +626,7 @@ for (const kind of ["person", "employee"] as const) {
         select p.kind, r.is_active as "activeRole" from parties p
         join employee_roles r on r.org_id = p.org_id and r.party_id = p.id
         where p.org_id = ${h.org.orgId} and p.id = ${workerPartyId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.deepEqual(stored, { kind, activeRole: true });
     });
   });
@@ -683,7 +683,7 @@ for (const change of ["deactivate_role", "corporate_identity"] as const) {
       });
       assert.deepEqual(await liveVersions(hire.employmentId), []);
       const request = (await db.execute<{ status: string }>(sql`select status from hrm_employment_change_requests
-        where org_id = ${h.org.orgId} and id = ${hire.changeRequestId}`)).rows[0];
+        where org_id = ${h.org.orgId} and id = ${hire.changeRequestId}`, "objects"))[0];
       assert.equal(request?.status, "pending_approval");
     });
   });

@@ -140,54 +140,55 @@ const mockSources = new Map<string, string>([
       export const env = {}
       export const db = {
         select(){const result=[{id:state.insertedBankId??'00000000-0000-4000-8000-000000000002',orgId:'00000000-0000-4000-8000-00000000b001',partyId:'00000000-0000-4000-8000-000000000001',approvalStatus:'pending',isActive:false,createdBy:'00000000-0000-4000-8000-00000000b002',routing:{}}];let selected;const query={from(table){selected=table;return query},where(){return Promise.resolve(selected===schema.partyBankAccounts?result:[])}};return query},
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result);
           const text = queryText(query)
           state.queries.push(text)
-        if(text.includes('from users'))return {rows:[{id:'00000000-0000-4000-8000-00000000b002',orgId:'00000000-0000-4000-8000-00000000b001',isActive:true,isSuperAdmin:false}]};
-        if(text.includes('bank_approval_fingerprint'))return {rows:[{value:'bank-fingerprint'}]};
-        if(text.includes('insert into flow_submissions'))return {rows:[{id:'submission-1'}]};
-        if(text.includes('lock table flows')||text.includes('from flows')||text.includes('pg_advisory_xact_lock'))return {rows:[]};
+        if(text.includes('from users'))return inMode({rows:[{id:'00000000-0000-4000-8000-00000000b002',orgId:'00000000-0000-4000-8000-00000000b001',isActive:true,isSuperAdmin:false}]});
+        if(text.includes('bank_approval_fingerprint'))return inMode({rows:[{value:'bank-fingerprint'}]});
+        if(text.includes('insert into flow_submissions'))return inMode({rows:[{id:'submission-1'}]});
+        if(text.includes('lock table flows')||text.includes('from flows')||text.includes('pg_advisory_xact_lock'))return inMode({rows:[]});
 
           if (text.includes('from parties')) {
             const locked = /for update/i.test(text)
             const subsidiaryId = state.partySubsidiary
             if (!locked && state.rehomeAfterPreflight) state.partySubsidiary = 'sub-B'
             if (locked && state.allowedSubsidiaryIds && subsidiaryId && !state.allowedSubsidiaryIds.has(subsidiaryId)) {
-              return { rows: [] }
+              return inMode({ rows: [] })
             }
-            return { rows: [{ id: 'party-1', subsidiaryId }] }
+            return inMode({ rows: [{ id: 'party-1', subsidiaryId }] })
           }
           if (text.includes('select approval_status') && text.includes('from party_bank_accounts')) {
-            return { rows: [{ approvalStatus: 'approved', updatedAt: state.updatedAt }] }
+            return inMode({ rows: [{ approvalStatus: 'approved', updatedAt: state.updatedAt }] })
           }
           if (text.includes('from party_bank_accounts') && !text.includes('update party_bank_accounts')) {
-            return { rows: [{ updatedAt: state.updatedAt }] }
+            return inMode({ rows: [{ updatedAt: state.updatedAt }] })
           }
           if (text.includes('from payment_instructions') && text.includes('payment_mandates')) {
-            return { rows: [{ in_flight_payment: state.inFlightPayment, live_mandate: state.liveMandate }] }
+            return inMode({ rows: [{ in_flight_payment: state.inFlightPayment, live_mandate: state.liveMandate }] })
           }
-          if (text.includes('from payment_instructions')) return { rows: [{ inFlightPayment: state.inFlightPayment }] }
+          if (text.includes('from payment_instructions')) return inMode({ rows: [{ inFlightPayment: state.inFlightPayment }] })
           if (text.includes('insert into party_bank_accounts')) {
             state.insertedBankId='00000000-0000-4000-8000-000000000003';
-            return { rows: [{ id: '00000000-0000-4000-8000-000000000003' }] }
+            return inMode({ rows: [{ id: '00000000-0000-4000-8000-000000000003' }] })
           }
           if (text.includes('update party_bank_accounts')) {
             state.updateParams.push(queryParams(query))
             if (state.operation === 'delete') {
               const timestamp = queryParams(query).find((value) => value === state.updatedAt)
               if (timestamp === state.updatedAt) {
-                return { rows: [{ id: 'account-1' }] }
+                return inMode({ rows: [{ id: 'account-1' }] })
               }
-              return { rows: [] }
+              return inMode({ rows: [] })
             }
-            return { rows: [{ id: 'account-1' }] }
+            return inMode({ rows: [{ id: 'account-1' }] })
           }
           if (text.includes('insert into audit_log')) {
             state.auditCalls += 1
             state.auditParams.push(queryParams(query))
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
-          if (text.includes('update flow_gates') || text.includes('update flow_runs')) return { rows: [] }
+          if (text.includes('update flow_gates') || text.includes('update flow_runs')) return inMode({ rows: [] })
           throw new Error('unexpected database query: ' + text)
         },
       }

@@ -57,7 +57,7 @@ async function seedDocs(w: ScopeWorld) {
 
 async function docRow(w: ScopeWorld, id: string) {
   return (await db.execute<{ status: string; legal_hold: boolean }>(sql`
-    select status, legal_hold from hrm_documents where org_id = ${w.orgId} and id = ${id}`)).rows[0]!;
+    select status, legal_hold from hrm_documents where org_id = ${w.orgId} and id = ${id}`, "objects"))[0]!;
 }
 
 const docEvents = (w: ScopeWorld, id: string, kind?: string) =>
@@ -83,7 +83,7 @@ scopeMatrix([
     write: async (w, { a, b }) => {
       const orgId = w.orgId;
       const exportStatus = async (id: string) => (await db.execute<{ status: string }>(sql`
-        select status from hrm_data_subject_exports where org_id = ${orgId} and id = ${id}`)).rows[0]!.status;
+        select status from hrm_data_subject_exports where org_id = ${orgId} and id = ${id}`, "objects"))[0]!.status;
       await refusal(requestExport({ orgId, actorId: w.scoped, partyId: b.partyId }), Error, NOT_VISIBLE);
       assert.equal(await countRows(sql`from hrm_data_subject_exports where org_id = ${orgId} and party_id = ${b.partyId}`), 0, "the refused request queued nothing");
       assert.equal((await requestExport({ orgId, actorId: w.scoped, partyId: a.partyId })).partyId, a.partyId, "the in-scope subject still queues");
@@ -206,7 +206,7 @@ scopeMatrix([
       const stored = await upload(w, { partyId: s.a.partyId, categoryKey: "contract" });
       assert.equal(stored.categoryKey, "contract");
       assert.equal((await db.execute<{ category_key: string }>(sql`
-        select category_key from hrm_documents where org_id = ${w.orgId} and id = ${stored.id}`)).rows[0]!.category_key, "contract");
+        select category_key from hrm_documents where org_id = ${w.orgId} and id = ${stored.id}`, "objects"))[0]!.category_key, "contract");
     },
   }),
 ]);

@@ -102,8 +102,8 @@ test("component tax evidence posts exact recoverability, withholding, and revers
     });
     const gl = (await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount from journal_lines where entry_id = ${entryId} order by line_number
-    `));
-    assert.deepEqual(gl.rows, [
+    `, "objects"));
+    assert.deepEqual(gl, [
       { account_id: org.accounts.cogs, amount: "106.0000" },
       { account_id: org.accounts.taxInput, amount: "5.0000" },
       { account_id: org.accounts.withholding, amount: "-3.0000" },
@@ -259,8 +259,8 @@ test("taxable sales and purchases fail closed before journals or posting effects
       select
         (select count(*) from journal_entries where org_id = ${org.orgId} and source_document_id in (${sale.documentId}, ${purchase.documentId}))::text as journals,
         (select count(*) from posting_effects where org_id = ${org.orgId} and document_id in (${sale.documentId}, ${purchase.documentId}))::text as effects,
-        (select count(*) from documents where org_id = ${org.orgId} and id in (${sale.documentId}, ${purchase.documentId}) and status = 'approved')::text as approved`);
-    assert.deepEqual(counts.rows[0], { journals: "0", effects: "0", approved: "2" });
+        (select count(*) from documents where org_id = ${org.orgId} and id in (${sale.documentId}, ${purchase.documentId}) and status = 'approved')::text as approved`, "objects");
+    assert.deepEqual(counts[0], { journals: "0", effects: "0", approved: "2" });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -311,8 +311,8 @@ test("posted tax returns use immutable accounts and include grouped-line bases",
          paid_account_id, overridden)
       values (${org.orgId}, ${grouped.lineId}, ${taxB}, 2, '7.5', '100', '7.5000', '7.5000', '0',
               'standard', false, false, 2, null, null, false)
-      returning tax_code_id`);
-    assert.equal(groupedB.rows[0]?.tax_code_id, taxB);
+      returning tax_code_id`, "objects");
+    assert.equal(groupedB[0]?.tax_code_id, taxB);
     await db.execute(sql`update document_lines set tax_amount = '12.5000' where id = ${grouped.lineId}`);
     await db.execute(sql`update documents set tax_total = '12.5000', total = '112.5000', status = 'approved' where id = ${grouped.documentId}`);
 
@@ -514,7 +514,7 @@ test("provider posting fences config and every mapped tax code through commit", 
       const holding = db.transaction(async (tx) => {
         const config = await readTaxRateProviderConfigForPosting(org.orgId, tx);
         assert.equal(config?.id, configId);
-        const holder = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0];
+        const holder = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0];
         assert.ok(holder);
         holderReady(Number(holder.pid));
         await held;
@@ -541,7 +541,7 @@ test("provider posting fences config and every mapped tax code through commit", 
               select 1 from pg_stat_activity
                where ${holderPid} = any(pg_blocking_pids(pid))
             ) as blocked
-          `)).rows[0]!.blocked;
+          `, "objects"))[0]!.blocked;
           if (blocked) break;
           await new Promise((resolve) => setTimeout(resolve, 10));
         }
@@ -677,18 +677,18 @@ test("approved sales and purchases use the configured provider atomically and re
     await postDocument(purchase.id, deps, { deferEffects: true, suppressAutomation: true });
     assert.equal(calls, 2, "posting reuses the immutable draft quotes without provider calls");
 
-    const evidence = (await db.execute<{ document_line_id: string; tax_amount: string; external_ref: string | null }>(sql`
+    const evidence = await db.execute<{ document_line_id: string; tax_amount: string; external_ref: string | null }>(sql`
       select document_line_id, tax_amount::text, external_ref
         from tax_rate_quotes
        where org_id = ${org.orgId}
-       order by created_at, id`)).rows;
+       order by created_at, id`, "objects");
     assert.equal(evidence.length, 2);
     assert.deepEqual(evidence.map((row) => row.document_line_id), [sales.lineId, purchase.lineId]);
     assert.deepEqual(evidence.map((row) => row.tax_amount), ["9.5000", "9.5000"]);
     assert.deepEqual(evidence.map((row) => row.external_ref), ["QUOTE-1", "QUOTE-2"]);
 
     const salesLine = (await db.execute<{ amount: string; tax_amount: string }>(sql`
-      select amount::text, tax_amount::text from document_lines where id = ${sales.lineId}`)).rows[0]!;
+      select amount::text, tax_amount::text from document_lines where id = ${sales.lineId}`, "objects"))[0]!;
     assert.deepEqual(salesLine, { amount: "100.0000", tax_amount: "9.5000" });
 
     // A persisted line quote is the replay authority. Once it exists, a retry
@@ -733,7 +733,7 @@ test("approved sales and purchases use the configured provider atomically and re
     const local = await seedDocument("customer_invoice", "LOCAL-TAX");
     await postDocument(local.id, deps, { deferEffects: true, suppressAutomation: true });
     assert.equal(calls, 3);
-    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where org_id = ${org.orgId} and document_line_id = ${local.lineId}`)).rows[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where org_id = ${org.orgId} and document_line_id = ${local.lineId}`, "objects"))[0]?.count, "0");
 
     // An approved document without draft provider evidence fails closed before
     // the posting transaction starts: no endpoint call or journal is emitted.
@@ -750,10 +750,10 @@ test("approved sales and purchases use the configured provider atomically and re
     );
     assert.equal(calls, 3);
     const failedState = (await db.execute<{ status: string; posted_entry_id: string | null }>(sql`
-      select status, posted_entry_id from documents where id = ${failed.id}`)).rows[0]!;
+      select status, posted_entry_id from documents where id = ${failed.id}`, "objects"))[0]!;
     assert.deepEqual(failedState, { status: "approved", posted_entry_id: null });
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${failed.id}`)).rows[0]?.count, "0");
-    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where document_line_id = ${failed.lineId}`)).rows[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${failed.id}`, "objects"))[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where document_line_id = ${failed.lineId}`, "objects"))[0]?.count, "0");
   } finally {
     if (provider) await closeTaxServer(provider);
     await dropScratchOrg(org.orgId);
@@ -947,7 +947,7 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
       postDocument(legacy.id, deps, { deferEffects: true, suppressAutomation: true }),
       /booked 1 tax component\(s\) but the provider quote has 2.*recalculate the draft/,
     );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${legacy.id}`)).rows[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${legacy.id}`, "objects"))[0]?.count, "0");
 
     // Equal dollars with swapped codes add up fine but book every dollar to
     // the wrong jurisdiction liability: posting refuses instead of booking.
@@ -959,7 +959,7 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
       postDocument(swapped.id, deps, { deferEffects: true, suppressAutomation: true }),
       /component 1 books the wrong tax code for provider jurisdiction "STATE" \(mapped to "STATE"\).*re-quote the draft/,
     );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${swapped.id}`)).rows[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${swapped.id}`, "objects"))[0]?.count, "0");
 
     // The mapped shape posts state 7.00 and city 1.25 to their own accounts.
     const mapped = await seedSale("PROV-MAPPED", [
@@ -967,10 +967,10 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
       { taxCodeId: cityCode, sequence: 2, rate: "1.25", amount: "1.2500", collected: cityAccount },
     ]);
     const entryId = await postDocument(mapped.id, deps, { deferEffects: true, suppressAutomation: true });
-    const taxLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+    const taxLines = await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text as amount from journal_lines
        where entry_id = ${entryId} and account_id in (${org.accounts.taxOutput}, ${cityAccount})
-       order by account_id`)).rows;
+       order by account_id`, "objects");
     assert.equal(taxLines.length, 2);
     const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
     assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
@@ -1219,9 +1219,9 @@ test("a synthesized headline component is booked, approved, and posted under its
         taxCollected: org.accounts.taxOutput, taxPaid: org.accounts.taxInput,
       },
     }, { deferEffects: true, suppressAutomation: true });
-    const taxLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+    const taxLines = await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text as amount from journal_lines
-       where entry_id = ${entryId} and account_id = ${org.accounts.taxOutput}`)).rows;
+       where entry_id = ${entryId} and account_id = ${org.accounts.taxOutput}`, "objects");
     assert.deepEqual(taxLines.map((row) => row.amount), ["-8.2500"]);
   } finally {
     if (provider) await closeTaxServer(provider);
@@ -1283,7 +1283,7 @@ test("legacy evidence without a jurisdiction binding refuses instead of booking"
       }, { deferEffects: true, suppressAutomation: true }),
       /provider jurisdiction "CA" has no mapped tax code.*re-quote the draft/,
     );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${documentId}`)).rows[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${documentId}`, "objects"))[0]?.count, "0");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1411,10 +1411,10 @@ test("a party address edited after approval does not break posting; the document
       insert into addresses (id, org_id, party_id, line1, city, region, postal_code, country, is_default_shipping, is_default_billing)
       values (${randomUUID()}, ${org.orgId}, ${org.customerId}, '1 Main St', 'Austin', 'TX', '78701', 'US', true, true)`);
     const entryId = await postDocument(frozen.id, deps, { deferEffects: true, suppressAutomation: true });
-    const taxLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+    const taxLines = await db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text as amount from journal_lines
        where entry_id = ${entryId} and account_id in (${org.accounts.taxOutput}, ${cityAccount})
-       order by account_id`)).rows;
+       order by account_id`, "objects");
     assert.equal(taxLines.length, 2);
     const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
     assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
@@ -1429,7 +1429,7 @@ test("a party address edited after approval does not break posting; the document
       postDocument(moved.id, deps, { deferEffects: true, suppressAutomation: true }),
       /document tax location changed after the quote \(shipTo address changed after the quote\); recalculate the draft and re-approve/,
     );
-    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${moved.id}`)).rows[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${moved.id}`, "objects"))[0]?.count, "0");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1479,7 +1479,7 @@ test("providers that cannot quote as of the document date refuse; Avalara sends 
       quoteExternalTax(org.orgId, { ...backDated, documentLineId: refusedLine }, null, LOCAL_STUB),
       /TaxJar can't calculate tax as of 2024-03-01 — enter tax manually for this back-dated document/,
     );
-    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where document_line_id = ${refusedLine}`)).rows[0]?.count, "0");
+    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where document_line_id = ${refusedLine}`, "objects"))[0]?.count, "0");
 
     // Avalara takes the as-of date on the wire and the evidence records it.
     await saveTaxRateProviderConfig(
@@ -1493,7 +1493,7 @@ test("providers that cannot quote as of the document date refuse; Avalara sends 
     assert.equal(avalaraQuote.taxAmount, "8.2500");
     assert.deepEqual(seenDates, ["2024-03-01"]);
     const recorded = (await db.execute<{ quotedOn: string }>(sql`
-      select quoted_on as "quotedOn" from tax_rate_quotes where document_line_id = ${lineId}`)).rows[0];
+      select quoted_on as "quotedOn" from tax_rate_quotes where document_line_id = ${lineId}`, "objects"))[0];
     assert.equal(recorded?.quotedOn, "2024-03-01");
 
     // A custom hook is current-rates-only until it declares otherwise.

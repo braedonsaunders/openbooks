@@ -83,7 +83,7 @@ async function seedAssignment(
 ): Promise<string> {
   const slotId = (await db.execute<{ id: string }>(sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, ${key}) returning id`)).rows[0]!.id;
+    values (${orgId}, ${employmentId}, ${key}) returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, position_id, version_no,
@@ -96,9 +96,9 @@ async function seedAssignment(
 }
 
 async function positionChangeKinds(orgId: string, positionId: string): Promise<string[]> {
-  const rows = (await db.execute<{ change_kind: string }>(sql`
+  const rows = await db.execute<{ change_kind: string }>(sql`
     select change_kind from position_changes
-     where org_id = ${orgId} and position_id = ${positionId} order by revision`)).rows;
+     where org_id = ${orgId} and position_id = ${positionId} order by revision`, "objects");
   return rows.map((row) => row.change_kind);
 }
 
@@ -136,7 +136,7 @@ test("positions happy path: create, revise, fund, and vacancy with storage proof
     // The closure names the exact retired version with its before-image.
     const closures = (await db.execute<{ closed: unknown }>(sql`
       select closed_versions as closed from position_changes
-       where org_id = ${orgId} and position_id = ${created.id} and revision = 2`)).rows[0]!.closed as Array<{
+       where org_id = ${orgId} and position_id = ${created.id} and revision = 2`, "objects"))[0]!.closed as Array<{
       table: string;
       version_no: number;
       before: { planned_fte: number | string };
@@ -192,7 +192,7 @@ test("duplicate position codes are refused with nothing written", { skip: !DB },
       reason: "first",
     });
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from positions where org_id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from positions where org_id = ${orgId}`, "objects"))[0]!.n;
     let code = "";
     try {
       await createPosition({
@@ -209,7 +209,7 @@ test("duplicate position codes are refused with nothing written", { skip: !DB },
     }
     assert.equal(code, "BAD_STATE");
     const after = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from positions where org_id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from positions where org_id = ${orgId}`, "objects"))[0]!.n;
     assert.equal(after, before);
   });
 });
@@ -342,7 +342,7 @@ test("close is refused while a live primary assignment names the position", { sk
     // Zero partial effects: no closed version, no closed event, revision still 1.
     const live = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from position_versions
-       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`)).rows[0]!.n;
+       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`, "objects"))[0]!.n;
     assert.equal(live, 1);
     assert.deepEqual(await positionChangeKinds(orgId, position.id), ["created"]);
 
@@ -395,7 +395,7 @@ test("funding preflights are reported, committed, and evidenced", { skip: !DB },
     assert.match(over.preflight!.message, /ENG-1042/);
     const stored = (await db.execute<{ funded_fte: string }>(sql`
       select funded_fte::text as funded_fte from position_funding
-       where org_id = ${orgId} and position_id = ${position.id}`)).rows[0]!.funded_fte;
+       where org_id = ${orgId} and position_id = ${position.id}`, "objects"))[0]!.funded_fte;
     assert.equal(stored, "1.5000");
     const under = await writePositionFunding({
       orgId,
@@ -407,10 +407,10 @@ test("funding preflights are reported, committed, and evidenced", { skip: !DB },
     });
     assert.equal(under.preflight?.code, "UNDER_FUNDED");
     // The rewrite is evidenced with the prior row, not a silent second plan.
-    const snapshots = (await db.execute<{ prior_snapshot: unknown }>(sql`
+    const snapshots = await db.execute<{ prior_snapshot: unknown }>(sql`
       select prior_snapshot from position_changes
        where org_id = ${orgId} and position_id = ${position.id} and change_kind = 'funded'
-       order by revision`)).rows;
+       order by revision`, "objects");
     assert.equal(snapshots.length, 2);
     assert.equal((snapshots[0]!.prior_snapshot as { prior: unknown }).prior, null);
     assert.equal(
@@ -464,7 +464,7 @@ test("funding refuses half-written cost plans and foreign periods", { skip: !DB 
     }
     const rows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from position_funding
-       where org_id = ${orgId} and position_id = ${position.id}`)).rows[0]!.n;
+       where org_id = ${orgId} and position_id = ${position.id}`, "objects"))[0]!.n;
     assert.equal(rows, 0);
   });
 });
@@ -518,19 +518,19 @@ test("concurrent revises leave no partial effects", { skip: !DB }, async () => {
       }
     }
     const revision = (await db.execute<{ revision: number }>(sql`
-      select revision from positions where org_id = ${orgId} and id = ${position.id}`)).rows[0]!.revision;
+      select revision from positions where org_id = ${orgId} and id = ${position.id}`, "objects"))[0]!.revision;
     assert.equal(revision, 1 + winners.length);
     const revised = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from position_changes
-       where org_id = ${orgId} and position_id = ${position.id} and change_kind = 'revised'`)).rows[0]!.n;
+       where org_id = ${orgId} and position_id = ${position.id} and change_kind = 'revised'`, "objects"))[0]!.n;
     assert.equal(revised, winners.length, "one revised event per applied revision");
     const totalVersions = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from position_versions
-       where org_id = ${orgId} and position_id = ${position.id}`)).rows[0]!.n;
+       where org_id = ${orgId} and position_id = ${position.id}`, "objects"))[0]!.n;
     assert.equal(totalVersions, revision, "no orphaned successor version survives a lost race");
     const live = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from position_versions
-       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`)).rows[0]!.n;
+       where org_id = ${orgId} and position_id = ${position.id} and recorded_until is null`, "objects"))[0]!.n;
     assert.equal(live, 1);
   });
 });
@@ -592,7 +592,7 @@ test("position as-of reads authorize the resolved version's employer scope", { s
     const beforeChange = (await db.execute<{ knownAt: string }>(sql`
       select to_char(recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "knownAt"
         from position_versions where org_id = ${orgId} and position_id = ${position.id}
-    `)).rows[0]!.knownAt;
+    `, "objects"))[0]!.knownAt;
     await revisePosition({
       orgId,
       actorId: h.managerId,
@@ -711,29 +711,29 @@ test("position_assignment rides the change-request path with warnings in both le
     const decided = await decideGate({ gateId: gate.id, decision: "approved", userId: h.approverId });
     assert.equal(decided.ok, true);
 
-    const versions = (await db.execute<{ position_id: string | null; version_no: number }>(sql`
+    const versions = await db.execute<{ position_id: string | null; version_no: number }>(sql`
       select position_id::text as position_id, version_no
         from employment_assignment_versions
        where org_id = ${orgId} and employment_id = ${employmentId}
-       order by version_no`)).rows;
+       order by version_no`, "objects");
     assert.deepEqual(
       versions.map((v) => v.version_no),
       [1, 2],
     );
     assert.equal(versions[1]!.position_id, position.id);
     // Employment evidence is assignment_superseded with the warnings.
-    const employmentEvents = (await db.execute<{ change_kind: string; prior_snapshot: unknown }>(sql`
+    const employmentEvents = await db.execute<{ change_kind: string; prior_snapshot: unknown }>(sql`
       select change_kind, prior_snapshot from employment_changes
-       where org_id = ${orgId} and employment_id = ${employmentId} order by revision`)).rows;
+       where org_id = ${orgId} and employment_id = ${employmentId} order by revision`, "objects");
     const applied = employmentEvents[employmentEvents.length - 1]!;
     assert.equal(applied.change_kind, "assignment_superseded");
     const warnings = (applied.prior_snapshot as { positionWarnings: string[] }).positionWarnings;
     assert.ok(warnings.length >= 1, "title disagreement warns");
     assert.match(warnings[0]!, /keeps its own title/);
     // Position evidence carries the same warnings plus the holder.
-    const positionEvents = (await db.execute<{ change_kind: string; prior_snapshot: unknown }>(sql`
+    const positionEvents = await db.execute<{ change_kind: string; prior_snapshot: unknown }>(sql`
       select change_kind, prior_snapshot from position_changes
-       where org_id = ${orgId} and position_id = ${position.id} order by revision`)).rows;
+       where org_id = ${orgId} and position_id = ${position.id} order by revision`, "objects");
     const assigned = positionEvents[positionEvents.length - 1]!;
     assert.equal(assigned.change_kind, "assigned");
     assert.equal((assigned.prior_snapshot as { employmentId: string }).employmentId, employmentId);
@@ -792,7 +792,7 @@ test("unassignment clears the link and evidences both sides", { skip: !DB }, asy
     const latest = (await db.execute<{ position_id: string | null }>(sql`
       select position_id::text as position_id from employment_assignment_versions
        where org_id = ${orgId} and employment_id = ${employmentId}
-       order by version_no desc limit 1`)).rows[0]!.position_id;
+       order by version_no desc limit 1`, "objects"))[0]!.position_id;
     assert.equal(latest, null);
     const kinds = await positionChangeKinds(orgId, position.id);
     assert.deepEqual(kinds, ["created", "unassigned"]);

@@ -189,17 +189,17 @@ export const resolveFormLayout = cache(
         from form_layouts
        where org_id = ${orgId} and record_type = ${recordType} and is_active
        order by is_default desc, name
-    `));
+    `, "objects"));
 
     const held = (await db.execute<{ id: string }>(sql`
       select r.id
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.org_id = ${orgId} and a.user_id = ${userId}
-    `));
-    const heldRoleIds = new Set(held.rows.map((r) => r.id.toLowerCase()));
+    `, "objects"));
+    const heldRoleIds = new Set(held.map((r) => r.id.toLowerCase()));
 
-    const accessible = rows.rows.filter((r) => {
+    const accessible = rows.filter((r) => {
       // Admin still sees every well-formed form; a malformed gate is
       // inaccessible to everyone — that is the value that used to throw.
       if (storedAllowedRoles(r.allowedRoles) === "malformed") return false;
@@ -218,24 +218,24 @@ export const resolveFormLayout = cache(
     const pref = (await db.execute<{ layoutId: string | null }>(sql`
       select layout_id as "layoutId" from user_form_preferences
        where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
-    `));
-    const prefId = pref.rows[0]?.layoutId;
+    `, "objects"));
+    const prefId = pref[0]?.layoutId;
 
     let chosen: (FormLayoutRow & { layout: unknown }) | undefined;
     // 0. explicit ?form=<id>
     if (explicitLayoutId && isUuid(explicitLayoutId)) {
-      chosen = rows.rows.find((r) => r.id === explicitLayoutId);
+      chosen = rows.find((r) => r.id === explicitLayoutId);
       if (chosen && !accessible.includes(chosen)) chosen = undefined;
     }
     // 1. user preference
     if (!chosen && prefId && isUuid(prefId)) {
-      chosen = rows.rows.find((r) => r.id === prefId);
+      chosen = rows.find((r) => r.id === prefId);
       if (chosen && !accessible.includes(chosen)) chosen = undefined;
     }
     // 2. an accessible entity default, preserving explicit and user choices
     if (!chosen && args.subsidiaryDefaultLayoutId) chosen = accessible.find(row => row.id === args.subsidiaryDefaultLayoutId);
     // 3. org default
-    if (!chosen) chosen = rows.rows.find((r) => r.isDefault && accessible.includes(r));
+    if (!chosen) chosen = rows.find((r) => r.isDefault && accessible.includes(r));
     // 4. first accessible — never leave a user formless
     if (!chosen) chosen = accessible[0];
 
@@ -324,9 +324,9 @@ export const resolveListView = cache(
        where org_id = ${orgId} and record_type = ${recordType} and is_active
          and (scope = 'org' or owner_id = ${userId})
        order by scope asc, is_default desc, name
-    `));
+    `, "objects"));
 
-    const available: ListViewRow[] = rows.rows.map((r) => ({
+    const available: ListViewRow[] = rows.map((r) => ({
       id: r.id,
       name: r.name,
       recordType: r.recordType,
@@ -338,12 +338,12 @@ export const resolveListView = cache(
       updatedAt: r.updatedAt,
     }));
 
-    const byId = (id: string) => rows.rows.find((r) => r.id === id);
+    const byId = (id: string) => rows.find((r) => r.id === id);
 
     // Leftover duplicate personal defaults are overlapping configuration.
     // Writes already 409 a second default; falling through to org/system
     // would leave those stored flags unobserved.
-    const personalDefaults = rows.rows.filter((r) => r.scope === "user" && r.isDefault);
+    const personalDefaults = rows.filter((r) => r.scope === "user" && r.isDefault);
     if (personalDefaults.length > 1) throw new AmbiguousListViewDefaultError();
 
     // 1. explicit ?view=<id>
@@ -357,8 +357,8 @@ export const resolveListView = cache(
       const pref = (await db.execute<{ viewId: string | null; selectionExplicit: boolean }>(sql`
         select view_id as "viewId", view_selection_explicit as "selectionExplicit" from user_list_preferences
          where org_id = ${orgId} and user_id = ${userId} and record_type = ${recordType}
-      `));
-      const prefRow = pref.rows[0];
+      `, "objects"));
+      const prefRow = pref[0];
       if (prefRow && prefRow.selectionExplicit !== false) {
         const pid = prefRow.viewId;
         if (pid && isUuid(pid)) chosen = byId(pid);
@@ -368,7 +368,7 @@ export const resolveListView = cache(
       }
     }
     // 4. org default
-    if (!chosen) chosen = rows.rows.find((r) => r.scope === "org" && r.isDefault);
+    if (!chosen) chosen = rows.find((r) => r.scope === "org" && r.isDefault);
     // 5. no saved default wins over the system default: a first-available
     // non-default view must never outrank the registry (it is how a stale
     // Z→A snapshot kept winning after the registry declared A→Z).

@@ -77,7 +77,7 @@ async function setupDraft(): Promise<{
 async function revisionOf(orgId: string, appId: string): Promise<number> {
   const row = (await db.execute<{ revision: number }>(sql`
     select revision from vendor_pay_applications where org_id = ${orgId} and id = ${appId}
-  `)).rows[0];
+  `, "objects"))[0];
   return Number(row!.revision);
 }
 
@@ -85,7 +85,7 @@ async function workOf(orgId: string, appId: string, sov: string): Promise<string
   const row = (await db.execute<{ work: string }>(sql`
     select work_completed_this_period::text as work from vendor_pay_application_lines
      where org_id = ${orgId} and pay_application_id = ${appId} and sov_line_id = ${sov}
-  `)).rows[0];
+  `, "objects"))[0];
   return row!.work;
 }
 
@@ -162,18 +162,18 @@ test("change orders wait for open vendor applications and approval revalidates t
 
     await db.execute(sql`update subcontract_sov_lines set scheduled_value = '800'
       where org_id = ${f.orgId} and id = ${f.sov}`);
-    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
-      where org_id=${f.orgId} and subject_kind='vendor_pay_application' and subject_id=${f.appId} and status='pending'`)).rows;
+    const gate = await db.execute<{ id: string }>(sql`select id from flow_gates
+      where org_id=${f.orgId} and subject_kind='vendor_pay_application' and subject_id=${f.appId} and status='pending'`, "objects");
     assert.equal(gate.length, 1);
     await assert.rejects(
       decideGate({ gateId: gate[0]!.id, userId: f.other, decision: "approved" }),
       /exceeds the revised SOV value/,
     );
-    assert.equal((await db.execute<{ status: string }>(sql`select status from flow_gates where id=${gate[0]!.id}`)).rows[0]!.status,
+    assert.equal((await db.execute<{ status: string }>(sql`select status from flow_gates where id=${gate[0]!.id}`, "objects"))[0]!.status,
       "pending", "failed release rolls back the tenant's gate decision");
     const application = (await db.execute<{ status: string }>(sql`
       select status from vendor_pay_applications where org_id = ${f.orgId} and id = ${f.appId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(application?.status, "submitted", "an invalid application remains unapproved");
   } finally {
     await dropScratchOrgReporting(f.orgId);

@@ -45,7 +45,7 @@ const navModeSettings = cache(async (user: PreferenceUser) => {
       select u.nav_mode as user_mode, o.settings ->> 'defaultNavMode' as org_default
         from users u
         left join orgs o on o.id = ${user.orgId}
-       where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active`));
-    return r.rows[0];
+       where u.id = ${preferenceUser.id} and u.org_id = ${preferenceUser.orgId} and u.is_active`, "objects"));
+    return r[0];
   },
 );

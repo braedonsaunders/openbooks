@@ -110,8 +110,8 @@ async function seedFlow(orgId: string, graph: AutomationGraph): Promise<string> 
 }
 
 async function countRows(query: ReturnType<typeof sql>): Promise<number> {
-  const r = await db.execute<{ n: number }>(query);
-  return Number(r.rows[0]!.n);
+  const r = await db.execute<{ n: number }>(query, "objects");
+  return Number(r[0]!.n);
 }
 
 async function countNotifications(orgId: string): Promise<number> {
@@ -127,8 +127,7 @@ async function countRuns(orgId: string): Promise<number> {
 }
 
 async function loadOccurrences(orgId: string) {
-  return (
-    await db.execute<{
+  return await db.execute<{
       id: string;
       status: string;
       attempt_count: number;
@@ -138,16 +137,13 @@ async function loadOccurrences(orgId: string) {
         from flow_scheduled_occurrences
        where org_id = ${orgId}
        order by node_id
-    `)
-  ).rows;
+    `, "objects");
 }
 
 async function flowCursor(orgId: string, flowId: string): Promise<Date | null> {
-  const row = (
-    await db.execute<{ last: Date | string | null }>(sql`
+  const row = (await db.execute<{ last: Date | string | null }>(sql`
       select last_scheduled_run_at as "last" from flows where id = ${flowId} and org_id = ${orgId}
-    `)
-  ).rows[0]!;
+    `, "objects"))[0]!;
   return row.last === null ? null : new Date(row.last);
 }
 

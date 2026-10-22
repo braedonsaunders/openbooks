@@ -36,10 +36,10 @@ test('project header edits write an audit row with before and after', async () =
       { params: Promise.resolve({ id: project }) },
     ))
     assert.equal(res.status, 200)
-    const rows = (await db.execute<{ changes: { contract_value: { before: unknown; after: unknown } } }>(sql`
+    const rows = await db.execute<{ changes: { contract_value: { before: unknown; after: unknown } } }>(sql`
       select changes from audit_log
        where org_id=${org.orgId} and table_name='projects' and row_id=${project} and action='update'
-       order by id desc limit 1`)).rows
+       order by id desc limit 1`, 'objects')
     assert.equal(rows.length, 1)
     assert.deepEqual(rows[0]!.changes.contract_value, { before: null, after: '25000.0000' })
   } finally { session.user = null; await dropScratchOrg(org.orgId) }

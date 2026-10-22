@@ -53,8 +53,8 @@ test("driver CRUD round trip with audit + slug conflict", { skip: !DB }, async (
     const audits = await db.execute<{ action: string }>(sql`
       select action from audit_log
        where org_id = ${org.orgId} and table_name = 'allocation_drivers' and row_id = ${created.id}
-       order by at`);
-    assert.deepEqual(audits.rows.map((r) => r.action), ["insert", "update"]);
+       order by at`, "objects");
+    assert.deepEqual(audits.map((r) => r.action), ["insert", "update"]);
 
     await deleteDriver(org.orgId, actorId, created.id);
     assert.equal(await getDriver(org.orgId, created.id), null);

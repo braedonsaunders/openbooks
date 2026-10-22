@@ -91,11 +91,11 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
     const runs = (await db.execute<{ id: string; status: string; scheduled_for: Date; recipient_emails: string[]; filters: Record<string, unknown>; attempt_count: number }>(sql`
       select id, status, scheduled_for, recipient_emails, filters, attempt_count
         from report_runs where schedule_id=${scheduleId}
-    `));
-    assert.equal(runs.rows.length, 1);
-    assert.equal(runs.rows[0]!.status, "queued");
-    assert.equal(new Date(runs.rows[0]!.scheduled_for).toISOString(), dueAt.toISOString());
-    assert.deepEqual(runs.rows[0]!.filters, { combinator: "and", rules: [] });
+    `, "objects"));
+    assert.equal(runs.length, 1);
+    assert.equal(runs[0]!.status, "queued");
+    assert.equal(new Date(runs[0]!.scheduled_for).toISOString(), dueAt.toISOString());
+    assert.deepEqual(runs[0]!.filters, { combinator: "and", rules: [] });
 
     const queueJobs: string[] = [];
     // next_attempt_at is written by PostgreSQL with microsecond precision,
@@ -111,9 +111,9 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
       /queue unavailable/,
     );
     const afterQueueFailure = (await db.execute<{ status: string; dispatch_count: number }>(sql`
-      select status, dispatch_count from report_runs where id=${runs.rows[0]!.id}
-    `));
-    assert.deepEqual(afterQueueFailure.rows[0], { status: "queued", dispatch_count: 0 });
+      select status, dispatch_count from report_runs where id=${runs[0]!.id}
+    `, "objects"));
+    assert.deepEqual(afterQueueFailure[0], { status: "queued", dispatch_count: 0 });
     await dispatchQueuedReportRuns(
       async (_data, options) => {
         queueJobs.push(String(options?.jobId));
@@ -121,7 +121,7 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
       },
       queueDispatchAsOf,
     );
-    assert.deepEqual(queueJobs, [`report-run|${runs.rows[0]!.id}|0`]);
+    assert.deepEqual(queueJobs, [`report-run|${runs[0]!.id}|0`]);
 
     const pdf = Buffer.from("%PDF-1.7\nimmutable report evidence");
     let renderCalls = 0;
@@ -130,8 +130,8 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
       return pdf;
     };
     const processed = await Promise.all([
-      processScheduledReportRun(runs.rows[0]!.id, renderOnce),
-      processScheduledReportRun(runs.rows[0]!.id, renderOnce),
+      processScheduledReportRun(runs[0]!.id, renderOnce),
+      processScheduledReportRun(runs[0]!.id, renderOnce),
     ]);
     assert.equal(renderCalls, 1);
     assert.equal(processed.filter((value) => value.deliveries === 2).length, 1);
@@ -141,16 +141,16 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
         from report_runs r
         join report_run_artifacts a on a.run_id=r.id
         left join report_delivery_outbox d on d.run_id=r.id
-       where r.id=${runs.rows[0]!.id}
+       where r.id=${runs[0]!.id}
        group by r.id, a.id
-    `));
+    `, "objects"));
     assert.deepEqual(
-      { status: evidence.rows[0]!.status, attempts: evidence.rows[0]!.attempt_count, size: evidence.rows[0]!.size_bytes, deliveries: evidence.rows[0]!.deliveries },
+      { status: evidence[0]!.status, attempts: evidence[0]!.attempt_count, size: evidence[0]!.size_bytes, deliveries: evidence[0]!.deliveries },
       { status: "succeeded", attempts: 1, size: pdf.length, deliveries: 2 },
     );
-    assert.equal(evidence.rows[0]!.filename, `delivery-contract-${await businessToday(org.orgId)}.pdf`);
-    assert.equal(evidence.rows[0]!.content_hash, createHash("sha256").update(pdf).digest("hex"));
-    assert.deepEqual(Buffer.from(evidence.rows[0]!.bytes), pdf);
+    assert.equal(evidence[0]!.filename, `delivery-contract-${await businessToday(org.orgId)}.pdf`);
+    assert.equal(evidence[0]!.content_hash, createHash("sha256").update(pdf).digest("hex"));
+    assert.deepEqual(Buffer.from(evidence[0]!.bytes), pdf);
 
     const emailJobs: { id: string; recipient: string }[] = [];
     const dispatchAsOf = new Date(Date.now() + 60_000);
@@ -162,21 +162,21 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
     assert.deepEqual(emailJobs.map((job) => job.recipient).sort(), ["audit@example.com", "controller@example.com"]);
 
     const delivery = (await db.execute<{ id: string }>(sql`
-      select id from report_delivery_outbox where run_id=${runs.rows[0]!.id} order by recipient limit 1
-    `));
+      select id from report_delivery_outbox where run_id=${runs[0]!.id} order by recipient limit 1
+    `, "objects"));
     const log = (await db.execute<{ id: string }>(sql`
       insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
       values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Delivery contract', 'sent', 'report')
       returning id
-    `));
-    await markReportDeliveryStarted(org.orgId, delivery.rows[0]!.id, "contract-job");
-    await markReportDeliverySent(org.orgId, delivery.rows[0]!.id, log.rows[0]!.id, "provider-123");
+    `, "objects"));
+    await markReportDeliveryStarted(org.orgId, delivery[0]!.id, "contract-job");
+    await markReportDeliverySent(org.orgId, delivery[0]!.id, log[0]!.id, "provider-123");
     const sent = (await db.execute<Record<string, unknown>>(sql`
       select status, attempt_count, email_log_id, provider_message_id, sent_at is not null as has_sent_at
-        from report_delivery_outbox where id=${delivery.rows[0]!.id}
-    `));
-    assert.deepEqual(sent.rows[0], {
-      status: "sent", attempt_count: 1, email_log_id: log.rows[0]!.id,
+        from report_delivery_outbox where id=${delivery[0]!.id}
+    `, "objects"));
+    assert.deepEqual(sent[0], {
+      status: "sent", attempt_count: 1, email_log_id: log[0]!.id,
       provider_message_id: "provider-123", has_sent_at: true,
     });
 
@@ -196,16 +196,16 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
              exists(select 1 from report_run_artifacts a where a.run_id=r.id) as has_artifact,
              exists(select 1 from report_delivery_outbox d where d.run_id=r.id) as has_delivery
         from report_runs r where r.id=${retryRunId}
-    `));
-    assert.deepEqual(failed.rows[0], { status: "failed", attempt_count: 1, has_artifact: false, has_delivery: false });
+    `, "objects"));
+    assert.deepEqual(failed[0], { status: "failed", attempt_count: 1, has_artifact: false, has_delivery: false });
     await processScheduledReportRun(retryRunId, async () => pdf);
     const retried = (await db.execute<Record<string, unknown>>(sql`
       select r.status, r.attempt_count, count(a.id)::int as artifacts, count(d.id)::int as deliveries
         from report_runs r left join report_run_artifacts a on a.run_id=r.id
         left join report_delivery_outbox d on d.run_id=r.id
        where r.id=${retryRunId} group by r.id
-    `));
-    assert.deepEqual(retried.rows[0], { status: "succeeded", attempt_count: 2, artifacts: 1, deliveries: 1 });
+    `, "objects"));
+    assert.deepEqual(retried[0], { status: "succeeded", attempt_count: 2, artifacts: 1, deliveries: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -243,7 +243,7 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
       emissions = emissions.concat(terminalEvents(captured.lines).filter((event) => event.id === runId));
       const state = (await db.execute<{ attempt_count: number; terminal_failed_at: Date | null; terminal_failed_by: string | null }>(sql`
         select attempt_count, terminal_failed_at, terminal_failed_by from report_runs where id=${runId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(state.attempt_count, attempt);
       if (attempt < MAX_RUN_ATTEMPTS) {
         assert.equal(emissions.length, 0, "no terminal signal before the ceiling");
@@ -263,7 +263,7 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
       insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
       values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Terminal contract', 'failed', 'report')
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     // A queue giveup only strands the row once attempts are also exhausted.
     const deliveryId = randomUUID();
@@ -278,7 +278,7 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
     early.restore();
     const notTerminal = (await db.execute<{ status: string; terminal_failed_at: Date | null }>(sql`
       select status, terminal_failed_at from report_delivery_outbox where id=${deliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(notTerminal.status, "failed");
     assert.equal(notTerminal.terminal_failed_at, null);
     assert.equal(terminalEvents(early.lines).length, 0, "a giveup below the ceiling is retryable, not poison");
@@ -294,7 +294,7 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
     const stamped = (await db.execute<{ status: string; attempt_count: number; terminal_failed_at: Date | null; terminal_failed_by: string | null }>(sql`
       select status, attempt_count, terminal_failed_at, terminal_failed_by
         from report_delivery_outbox where id=${deliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stamped.status, "failed");
     assert.ok(stamped.terminal_failed_at, "delivery at the ceiling must be stamped terminal");
     assert.equal(stamped.terminal_failed_by, EMAIL_DELIVERY_WORKER_IDENTITY);
@@ -308,7 +308,7 @@ test("exhausted report runs and deliveries are stamped terminal exactly once", {
     repeat.restore();
     const afterRepeat = (await db.execute<{ terminal_failed_at: Date | null }>(sql`
       select terminal_failed_at from report_delivery_outbox where id=${deliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(afterRepeat.terminal_failed_at, stamped.terminal_failed_at);
     assert.equal(terminalEvents(repeat.lines).length, 0);
   } finally {
@@ -338,7 +338,7 @@ test("stale suppression cannot rewrite a sent report delivery; a live suppressio
       insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
       values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Suppress guard', 'sent', 'report')
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     // An already-sent row carries delivered evidence; a stale retry's
     // provider-suppress callback must be a no-op against it.
@@ -351,7 +351,7 @@ test("stale suppression cannot rewrite a sent report delivery; a live suppressio
     await markReportDeliverySuppressed(org.orgId, sentDeliveryId, log, "stale retry suppression");
     const afterStale = (await db.execute<{ status: string; email_log_id: string; sent_at: Date | null; error: string | null }>(sql`
       select status, email_log_id, sent_at, error from report_delivery_outbox where id=${sentDeliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(
       { status: afterStale.status, log: afterStale.email_log_id, sent: afterStale.sent_at !== null, error: afterStale.error },
       { status: "sent", log, sent: true, error: null },
@@ -367,7 +367,7 @@ test("stale suppression cannot rewrite a sent report delivery; a live suppressio
     await markReportDeliverySuppressed(org.orgId, enqueuedDeliveryId, log, "sandbox environment — email egress blocked");
     const afterLive = (await db.execute<{ status: string; email_log_id: string; error: string | null }>(sql`
       select status, email_log_id, error from report_delivery_outbox where id=${enqueuedDeliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(
       { status: afterLive.status, log: afterLive.email_log_id, error: afterLive.error },
       { status: "suppressed", log, error: "sandbox environment — email egress blocked" },
@@ -399,12 +399,12 @@ test("stale failure cannot rewrite a sent report delivery; a live failure still 
       insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
       values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Failure guard', 'sent', 'report')
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const staleFailureLogId = (await db.execute<{ id: string }>(sql`
       insert into email_log (org_id, recipients, recipient_primary, subject, status, category_key)
       values (${org.orgId}, '["audit@example.com"]'::jsonb, 'audit@example.com', 'Failure guard', 'failed', 'report')
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     // A sent row carries immutable delivery evidence; a delayed failure
     // callback must not replace it with retry or terminal-failure state.
@@ -429,7 +429,7 @@ test("stale failure cannot rewrite a sent report delivery; a live failure still 
       select status, email_log_id, provider_message_id, sent_at, error,
              terminal_failed_at, terminal_failed_by
         from report_delivery_outbox where id=${sentDeliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(
       {
         status: afterStale.status,
@@ -462,7 +462,7 @@ test("stale failure cannot rewrite a sent report delivery; a live failure still 
     const afterLive = (await db.execute<{ status: string; email_log_id: string; error: string | null; sent_at: Date | null }>(sql`
       select status, email_log_id, error, sent_at
         from report_delivery_outbox where id=${liveDeliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(
       { status: afterLive.status, log: afterLive.email_log_id, error: afterLive.error, sent: afterLive.sent_at !== null },
       { status: "enqueued", log: staleFailureLogId, error: "provider unavailable", sent: false },
@@ -503,7 +503,7 @@ test("provider-accepted uncertain outcome blocks blind re-send and resists markE
     // Verify the row is in uncertain status.
     const afterUncertain = (await db.execute<{ status: string }>(sql`
       select status from email_log where id = ${canonical.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(afterUncertain.status, "uncertain");
 
     // Re-reclaim: the same delivery key must return the same canonical row.
@@ -532,7 +532,7 @@ test("provider-accepted uncertain outcome blocks blind re-send and resists markE
     await markEmailFailed(org.orgId, canonical.id, "retry also failed");
     const afterMarkFailed = (await db.execute<{ status: string }>(sql`
       select status from email_log where id = ${canonical.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(afterMarkFailed.status, "uncertain",
       "markEmailFailed must not overwrite an uncertain status");
 
@@ -541,7 +541,7 @@ test("provider-accepted uncertain outcome blocks blind re-send and resists markE
     assert.ok(confirmed);
     const afterConfirm = (await db.execute<{ status: string; provider_message_id: string }>(sql`
       select status, provider_message_id from email_log where id = ${canonical.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(afterConfirm.status, "sent");
     assert.equal(afterConfirm.provider_message_id, "re_abc123");
   } finally {
@@ -579,7 +579,7 @@ test("happy pre-accept retry succeeds after definite failure", { skip: !DB }, as
     // Verify the row is in failed status.
     const afterFailed = (await db.execute<{ status: string }>(sql`
       select status from email_log where id = ${canonical.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(afterFailed.status, "failed");
 
     // Re-reclaim: same delivery key returns the same canonical row.
@@ -609,7 +609,7 @@ test("happy pre-accept retry succeeds after definite failure", { skip: !DB }, as
     // Verify the row is in sent status with the provider message id.
     const afterSent = (await db.execute<{ status: string; provider_message_id: string }>(sql`
       select status, provider_message_id from email_log where id = ${canonical.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(afterSent.status, "sent");
     assert.equal(afterSent.provider_message_id, "re_success_456");
 
@@ -695,8 +695,8 @@ test("an undeliverable recipient quarantines without stalling the delivery scan"
     }>(sql`
       select id, recipient, status, attempt_count, error, terminal_failed_at, terminal_failed_by
         from report_delivery_outbox where run_id = ${runId} order by recipient
-    `));
-    const poisonRow = rows.rows.find((row) => row.id === poisonId)!;
+    `, "objects"));
+    const poisonRow = rows.find((row) => row.id === poisonId)!;
     assert.equal(poisonRow.status, "failed");
     assert.equal(poisonRow.attempt_count, MAX_DELIVERY_ATTEMPTS);
     assert.match(poisonRow.error ?? "", /invalid recipient/i);
@@ -708,7 +708,7 @@ test("an undeliverable recipient quarantines without stalling the delivery scan"
     assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 120_000)), 0);
     const after = (await db.execute<{ status: string; attempt_count: number }>(sql`
       select status, attempt_count from report_delivery_outbox where id = ${poisonId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(after, { status: "failed", attempt_count: MAX_DELIVERY_ATTEMPTS });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -789,7 +789,7 @@ test("a stuck enqueued delivery rebuilds: orphan job removed, row redispatched",
     }
     const row = (await db.execute<{ status: string; dispatch_count: number; error: string | null }>(sql`
       select status, dispatch_count, error from report_delivery_outbox where id = ${logId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     // The normal scan never takes 'enqueued' rows, so a new generation here
     // proves the rebuild sweep reset it.
     assert.equal(row.status, "enqueued");
@@ -824,7 +824,7 @@ test("a stuck enqueued delivery with a sent outcome reconciles to sent", { skip:
     assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
     const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id = ${logId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "sent");
     assert.equal(row.dispatch_count, 1);
   } finally {
@@ -856,7 +856,7 @@ test("a stuck enqueued delivery with a live job is left alone", { skip: !DB }, a
     assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
     const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id = ${logId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(row, { status: "enqueued", dispatch_count: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -887,7 +887,7 @@ test("a stuck sending delivery rebuilds for redispatch after its worker dies", a
     assert.deepEqual(enqueued, ["sending-lost@example.com"]);
     const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id = ${logId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     // Recovered to failed, then redispatched by the normal scan to enqueued
     // with a new generation — idempotent against the delivery key.
     assert.equal(row.status, "enqueued");
@@ -922,7 +922,7 @@ test("a stuck sending delivery with a sent outcome reconciles to sent", async ()
     assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
     const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id = ${logId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "sent");
     assert.equal(row.dispatch_count, 1);
   } finally {
@@ -954,7 +954,7 @@ test("a stuck sending delivery with a live attempt is left alone", async () => {
     assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
     const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id = ${logId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(row, { status: "sending", dispatch_count: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -1002,16 +1002,16 @@ test("a superseded renderer's late failure cannot overwrite another renderer's s
     assert.deepEqual(outcome, { skipped: true });
     const row = (await db.execute<{ status: string; error: string | null; attempt_count: number }>(sql`
       select status, error, attempt_count from report_runs where id=${runId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "succeeded", "the late failure must not overwrite success");
     assert.equal(row.error, null);
     assert.equal(row.attempt_count, 2);
-    const owned = (await db.execute<{ content_hash: string; bytes: Buffer; recipients: string[] }>(sql`
+    const owned = await db.execute<{ content_hash: string; bytes: Buffer; recipients: string[] }>(sql`
       select a.content_hash, a.bytes,
              array(select d.recipient from report_delivery_outbox d
                     where d.run_id=${runId} order by d.recipient) as recipients
         from report_run_artifacts a where a.run_id=${runId}
-    `)).rows;
+    `, "objects");
     assert.equal(owned.length, 1, "exactly the live renderer's artifact is stored");
     assert.equal(owned[0]!.content_hash, createHash("sha256").update(live).digest("hex"));
     assert.deepEqual(Buffer.from(owned[0]!.bytes), live);
@@ -1041,13 +1041,13 @@ test("a superseded renderer's bytes are never stored; the live renderer owns the
     assert.deepEqual(outcome, { skipped: true });
     const liveOutcome = await processScheduledReportRun(runId, async () => live);
     assert.deepEqual(liveOutcome, { deliveries: 1 });
-    const owned = (await db.execute<{ status: string; attempt_count: number; content_hash: string; bytes: Buffer; recipients: string[] }>(sql`
+    const owned = await db.execute<{ status: string; attempt_count: number; content_hash: string; bytes: Buffer; recipients: string[] }>(sql`
       select r.status, r.attempt_count, a.content_hash, a.bytes,
              array(select d.recipient from report_delivery_outbox d
                     where d.run_id=${runId} order by d.recipient) as recipients
         from report_runs r join report_run_artifacts a on a.run_id=r.id
        where r.id=${runId}
-    `)).rows;
+    `, "objects");
     assert.equal(owned.length, 1);
     assert.equal(owned[0]!.status, "succeeded");
     assert.equal(owned[0]!.attempt_count, 2);
@@ -1106,7 +1106,7 @@ test("concurrent dispatchers claim each delivery once: one stage, one enqueue, o
     );
     const state = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id=${deliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(state, { status: "enqueued", dispatch_count: 1 });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -1144,7 +1144,7 @@ test("a fenced-out run dispatch is not counted (B-DLV-02/B2-DLV-1)", { skip: !DB
     assert.equal(counted, 0);
     const row = (await db.execute<{ dispatch_count: number }>(sql`
       select dispatch_count from report_runs where id=${runId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.dispatch_count, 1);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -1176,7 +1176,7 @@ test("a fenced-out delivery dispatch is not counted (B-DLV-02)", { skip: !DB }, 
     assert.equal(counted, 0);
     const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
       select status, dispatch_count from report_delivery_outbox where id=${deliveryId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(row, { status: "sent", dispatch_count: 1 });
   } finally {
     await dropScratchOrg(org.orgId);

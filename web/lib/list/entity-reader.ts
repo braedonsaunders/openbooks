@@ -578,10 +578,10 @@ async function executeEntityListPage(
   const exportPage: ExportPage | undefined = input.cursor ? { size: perPage, after: input.cursor.afterId, next: null, done: false } : undefined;
   const [rowsRes, totalRow] = await Promise.all([
     readExportWindow(db, rowQuery, exportPage ? { page: exportPage, allowedSubsidiaryIds: input.allowedSubsidiaryIds, actorId: input.actorId } : undefined, 'id'),
-    input.cursor ? Promise.resolve({ rows: [{ n: "0" }] }) : db.execute<{ n: string }>(sql`
+    input.cursor ? Promise.resolve([{ n: "0" }]) : db.execute<{ n: string }>(sql`
       select count(*) as n from ${tableSql}
         ${countJoins}
-       where ${where}`),
+       where ${where}`, "objects"),
   ]);
   const rows = rowsRes.rows as EntityReaderRow[];
   // Server-computed display values run only on returned page rows; SQL serves
@@ -590,7 +590,7 @@ async function executeEntityListPage(
   return {
     ok: true,
     rows,
-    filteredTotal: Number(totalRow.rows[0]?.n ?? 0),
+    filteredTotal: Number(totalRow[0]?.n ?? 0),
     totalKnown: !input.cursor,
     ...(exportPage ? { cursorHasMore: !!exportPage.truncated || rows.length === perPage } : {}),
     page,

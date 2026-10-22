@@ -356,15 +356,15 @@ export async function provisionOrg(
       await db.transaction(async (tx) => {
         const assignedRole = (await tx.execute<{ id: string }>(sql`
           select id from app_roles where org_id=${orgId} and key=${role} and is_built_in for share
-        `));
-        if (assignedRole.rows.length !== 1) throw new Error(`Native simulation role ${role} is unavailable`);
+        `, "objects"));
+        if (assignedRole.length !== 1) throw new Error(`Native simulation role ${role} is unavailable`);
         await tx.execute(sql`
           insert into users (id, org_id, email, name, password_hash, is_active)
           values (${id}, ${orgId}, ${`${role}-${id.slice(0, 8)}@sim.test`}, ${name}, 'x', true)
         `);
         await tx.execute(sql`
           insert into role_assignments (org_id, user_id, role_id)
-          values (${orgId}, ${id}, ${assignedRole.rows[0]!.id})
+          values (${orgId}, ${id}, ${assignedRole[0]!.id})
         `);
       });
       return id;
@@ -417,8 +417,8 @@ export async function provisionOrg(
     const perCustomer = profile.engagementsPerCustomer ?? 0;
     if (accounts.laborWip && accounts.laborClearing && perCustomer > 0) {
       const tmTypeRow = (await db.execute<{ id: string }>(sql`
-        select id from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`));
-      const tmType = tmTypeRow.rows[0];
+        select id from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`, "objects"));
+      const tmType = tmTypeRow[0];
       let n = 0;
       if (tmType) {
         for (const c of customers) {
@@ -443,8 +443,8 @@ export async function provisionOrg(
     if (accounts.laborWip && accounts.laborClearing && profile.jobPortfolio?.length) {
       const custByName = new Map(customers.map((c) => [c.name, c]));
       const typeByKey = new Map(
-        ((await db.execute<{ id: string; key: string }>(sql`
-          select id, key from project_types where org_id = ${orgId} and is_active`))).rows.map((t) => [t.key, t.id]),
+        (await db.execute<{ id: string; key: string }>(sql`
+          select id, key from project_types where org_id = ${orgId} and is_active`, "objects")).map((t) => [t.key, t.id]),
       );
       for (const spec of profile.jobPortfolio) {
         const customer = custByName.get(spec.customer);
@@ -593,8 +593,8 @@ export async function provisionOrg(
          and settings->'simProvisioningAttempt'->>'id' = ${attemptId}
          and settings->'simProvisioningAttempt'->>'status' = 'opening_balances'
       returning id
-    `));
-    if (finalized.rows.length !== 1) throw new Error(`SIM provisioning attempt ${attemptId} lost org ${world.orgId} before completion`);
+    `, "objects"));
+    if (finalized.length !== 1) throw new Error(`SIM provisioning attempt ${attemptId} lost org ${world.orgId} before completion`);
   } catch (error) {
     try {
       await wipeSimOrg(world.orgId);
@@ -620,8 +620,8 @@ async function reconcileIncompleteSimProvisioning(): Promise<void> {
         from orgs
        where settings->'simProvisioningAttempt'->>'status' = 'opening_balances'
          and created_at < now() - interval '30 minutes'
-       order by created_at asc`);
-    return result.rows;
+       order by created_at asc`, "objects");
+    return result;
   });
   for (const { id } of stale) await wipeSimOrg(id);
 }

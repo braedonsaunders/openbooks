@@ -391,11 +391,9 @@ test("retirement preserves history, blocks legacy mutations and requires a new p
     });
     assert.equal(live.isActive, true);
     assert.equal(live.publishedVersion, 2);
-    const audits = (
-      await db.execute<{ changes: { event?: string; reason?: string } }>(
-        sql`select changes from audit_log where org_id=${h.org.orgId} and row_id=${ctx.templateId}`,
-      )
-    ).rows;
+    const audits = await db.execute<{ changes: { event?: string; reason?: string } }>(
+        sql`select changes from audit_log where org_id=${h.org.orgId} and row_id=${ctx.templateId}`, "objects",
+      );
     assert.ok(
       audits.some(
         (a) =>

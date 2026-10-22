@@ -18,7 +18,7 @@ export async function resolveCliActor(args: string[]): Promise<string> {
   } catch {
     throw new Error(`invalid actor ${actorId}: --actor must be a valid existing user id`);
   }
-  const actor = (await db.execute<{ id: string }>(sql`select id from users where id = ${actorId}`)).rows[0];
+  const actor = (await db.execute<{ id: string }>(sql`select id from users where id = ${actorId}`, "objects"))[0];
   if (!actor) throw new Error(`unknown actor ${actorId}: --actor must be an existing user id`);
   return actor.id;
 }

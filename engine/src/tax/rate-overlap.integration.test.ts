@@ -118,8 +118,8 @@ test("concurrent tax-rate writes may not commit overlapping effective windows", 
              (${randomUUID()}, ${org.orgId}, 'OV-UC', 'Update-then-create probe'),
              (${randomUUID()}, ${org.orgId}, 'OV-UA', 'Abort-releases-loser probe'),
              (${randomUUID()}, ${org.orgId}, 'OV-TRG', 'Preflight-message probe')
-      returning code, id`);
-    const laneByCode = new Map(laneRows.rows.map((row) => [row.code, row.id]));
+      returning code, id`, "objects");
+    const laneByCode = new Map(laneRows.map((row) => [row.code, row.id]));
     function lane(code: string): string {
       const taxCodeId = laneByCode.get(code);
       assert.ok(taxCodeId, `identity lane ${code} was seeded`);

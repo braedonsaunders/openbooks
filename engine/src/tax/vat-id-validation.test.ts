@@ -21,11 +21,12 @@ function stubExecutor(routes: Array<{ match: RegExp; rows: Record<string, unknow
 } {
   const queries: RecordedQuery[] = [];
   const tx = {
-    execute: async (query: SQL) => {
+    execute: async (query: SQL, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const compiled = dialect.sqlToQuery(query);
       queries.push({ sql: compiled.sql, params: compiled.params });
       for (const route of routes) {
-        if (route.match.test(compiled.sql)) return { rows: route.rows };
+        if (route.match.test(compiled.sql)) return inMode({ rows: route.rows });
       }
       throw new Error(`unstubbed query: ${compiled.sql.slice(0, 120)}`);
     },

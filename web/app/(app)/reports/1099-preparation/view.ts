@@ -118,7 +118,7 @@ type CardPaymentRow = {
 async function loadCardPaidPayments(orgId: string, taxYear: number): Promise<CardPaymentRow[]> {
   const from = `${taxYear}-01-01`
   const to = `${taxYear}-12-31`
-  const rows = (await db.execute<CardPaymentRow>(sql`
+  const rows = await db.execute<CardPaymentRow>(sql`
     select d.id as "paymentId", d.document_number as "documentNumber",
            d.document_date as "paymentDate", d.party_id as "partyId",
            p.display_name as "vendorName",
@@ -140,7 +140,7 @@ async function loadCardPaidPayments(orgId: string, taxYear: number): Promise<Car
        where jl.amount < 0 and not jl.is_open_item and funding.type = 'liability_card'
      ), 0) > 0
      order by d.document_date, d.document_number
-  `)).rows
+  `, 'objects')
   return rows
 }
 
@@ -150,13 +150,13 @@ async function loadCardPaidPayments(orgId: string, taxYear: number): Promise<Car
  * worksheet names them instead of restating that nothing traced.
  */
 async function loadUnpostedPaymentTotal(orgId: string, taxYear: number): Promise<{ count: number; total: string } | null> {
-  const rows = (await db.execute<{ count: number; total: string }>(sql`
+  const rows = await db.execute<{ count: number; total: string }>(sql`
     select count(*)::int as count, coalesce(sum(total), 0)::text as total
       from documents
      where org_id = ${orgId} and kind = 'vendor_payment'
        and status in ('draft', 'approved')
        and document_date between ${`${taxYear}-01-01`} and ${`${taxYear}-12-31`}
-  `)).rows
+  `, 'objects')
   const [row] = rows
   if (!row || row.count === 0) return null
   return { count: row.count, total: row.total }

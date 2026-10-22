@@ -229,8 +229,8 @@ export const POST = defineRoute({
            and type in ('income', 'income_other') and is_active and not is_summary
            ${feeScope}
          limit 1
-      `);
-      if (!feeAccount.rows[0]) {
+      `, "objects");
+      if (!feeAccount[0]) {
         return NextResponse.json({ error: "fee income account not found" }, { status: 422 });
       }
 
@@ -263,14 +263,12 @@ export const POST = defineRoute({
           try {
             await withOrgTransaction(orgId, async () => {
               const beforeRow = id
-                ? ((
-                    await db.execute<SurchargeRuleSnapshot>(sql`
+                ? ((await db.execute<SurchargeRuleSnapshot>(sql`
                       select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
                         from payment_surcharge_rules
                        where org_id = ${orgId} and id = ${id}
                        for update
-                    `)
-                  ).rows[0] ?? null)
+                    `, "objects"))[0] ?? null)
                 : null
               if (id && !beforeRow) throw new SurchargeRuleMissing();
 
@@ -289,8 +287,8 @@ export const POST = defineRoute({
                    and not ((payment_method = 'card' and ${values.paymentMethod} = 'bank_debit')
                          or (payment_method = 'bank_debit' and ${values.paymentMethod} = 'card'))
                  limit 1
-              `);
-              if (clash.rows[0]) throw new SurchargeRuleDatingConflict(values.effectiveFrom);
+              `, "objects");
+              if (clash[0]) throw new SurchargeRuleDatingConflict(values.effectiveFrom);
 
               if (id) {
                 const updated = await db.execute<SurchargeRuleSnapshot>(sql`
@@ -302,8 +300,8 @@ export const POST = defineRoute({
                     effective_to = ${values.effectiveTo}, updated_at = now(), updated_by = ${gate.user.id}
                   where org_id = ${orgId} and id = ${id}
                   returning ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-                `);
-                const afterRow = updated.rows[0];
+                `, "objects");
+                const afterRow = updated[0];
                 if (!afterRow) throw new SurchargeRuleMissing();
                 await db.execute(sql`
                   insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -319,8 +317,8 @@ export const POST = defineRoute({
                           ${values.capAmount}, ${values.feeIncomeAccountId}, ${values.provider}, ${values.paymentMethod},
                           ${values.effectiveFrom}, ${values.effectiveTo}, ${gate.user.id}, ${gate.user.id})
                   returning id, ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-                `);
-                const afterRow = inserted.rows[0]!;
+                `, "objects");
+                const afterRow = inserted[0]!;
                 await db.execute(sql`
                   insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
                   values (${orgId}, 'payment_surcharge_rules', ${afterRow.id}, 'insert',
@@ -371,8 +369,8 @@ export const POST = defineRoute({
               from payment_surcharge_rules
              where org_id = ${orgId} and id = ${body.id}
              for update
-          `);
-          const beforeRow = before.rows[0];
+          `, "objects");
+          const beforeRow = before[0];
           if (!beforeRow || !beforeRow.isActive) throw new SurchargeRuleMissing();
           // Deactivation is a real state change: re-deleting an inactive rule
           // must fail loudly rather than fabricate another audit entry.
@@ -380,8 +378,8 @@ export const POST = defineRoute({
             update payment_surcharge_rules set is_active = false, updated_at = now(), updated_by = ${gate.user.id}
              where org_id = ${orgId} and id = ${body.id} and is_active
             returning id
-          `);
-          if (!deactivated.rows[0]) throw new SurchargeRuleMissing();
+          `, "objects");
+          if (!deactivated[0]) throw new SurchargeRuleMissing();
           await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'payment_surcharge_rules', ${body.id}, 'delete',
@@ -412,11 +410,11 @@ export const POST = defineRoute({
                publishable_key, settings, surcharge_rule_id, secrets
           from psp_provider_configs
          where org_id = ${orgId} and provider = ${provider} limit 1
-      `)
-      if (!config.rows[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
+      `, "objects")
+      if (!config[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
       let result: { ok: boolean; detail: string };
       try {
-        result = await testAcceptanceConnection(provider, configSecrets(config.rows[0], orgId));
+        result = await testAcceptanceConnection(provider, configSecrets(config[0], orgId));
       } catch (e) {
         result = { ok: false, detail: e instanceof Error ? e.message : String(e) };
       }

@@ -68,11 +68,12 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.saved-reports-route-test')]
       const sqlText = globalThis.openbooksSavedReportsSqlText
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.queries.push(query)
           const text = sqlText(query)
-          if (text.includes('delete from saved_reports')) return { rows: state.deleteRows }
-          return { rows: [] }
+          if (text.includes('delete from saved_reports')) return inMode({ rows: state.deleteRows })
+          return inMode({ rows: [] })
         },
       }
     `,

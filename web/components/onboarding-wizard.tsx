@@ -16,8 +16,8 @@ import { onboardingStatus } from '@/lib/onboarding'
 export async function OnboardingWizard({ authz }: { authz: Authz }) {
   const org = (await db.execute<OnboardingOrg>(sql`
     select name, legal_name, base_currency, country, settings
-      from orgs where id = ${authz.user.orgId}`))
-  const row = org.rows[0]
+      from orgs where id = ${authz.user.orgId}`, 'objects'))
+  const row = org[0]
   if (onboardingStatus(row?.settings ?? {}) !== 'required') return null
   const { OnboardingSetupWizard } = await import('./onboarding-setup-wizard')
   return <OnboardingSetupWizard authz={authz} org={row} />

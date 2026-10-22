@@ -141,8 +141,8 @@ const stubOf = async (fx: Fixture, documentId: string, employeePartyId: string) 
     select id, gross::text as gross, factors from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
        and employee_party_id = ${employeePartyId}
-  `));
-  return r.rows[0] ?? null;
+  `, "objects"));
+  return r[0] ?? null;
 };
 
 const deductionsOf = async (fx: Fixture, stubId: string) => {
@@ -151,8 +151,8 @@ const deductionsOf = async (fx: Fixture, stubId: string) => {
       from pay_stub_lines l join pay_components c on c.id = l.component_id
      where l.org_id = ${fx.orgId} and l.stub_id = ${stubId} and l.kind = 'deduction'
      order by l.sequence
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 };
 
 test(

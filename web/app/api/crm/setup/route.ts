@@ -118,42 +118,42 @@ export const GET = defineRoute({
       users,
     ] = ((await Promise.all([
       db.execute(
-        sql`select * from crm_account_statuses where org_id = ${gate.user.orgId} order by lifecycle_stage, sequence, name`,
+        sql`select * from crm_account_statuses where org_id = ${gate.user.orgId} order by lifecycle_stage, sequence, name`, "objects",
       ),
       db.execute(
-        sql`select * from crm_opportunity_statuses where org_id = ${gate.user.orgId} order by sequence, name`,
+        sql`select * from crm_opportunity_statuses where org_id = ${gate.user.orgId} order by sequence, name`, "objects",
       ),
       db.execute(
-        sql`select t.*, mu.name as manager_name, ou.name as owner_name from crm_sales_territories t left join users mu on mu.id=t.manager_user_id left join users ou on ou.id=t.default_owner_user_id where t.org_id=${gate.user.orgId} order by t.priority,t.name`,
+        sql`select t.*, mu.name as manager_name, ou.name as owner_name from crm_sales_territories t left join users mu on mu.id=t.manager_user_id left join users ou on ou.id=t.default_owner_user_id where t.org_id=${gate.user.orgId} order by t.priority,t.name`, "objects",
       ),
       db.execute(
-        sql`select * from crm_lead_sources where org_id=${gate.user.orgId} order by name`,
+        sql`select * from crm_lead_sources where org_id=${gate.user.orgId} order by name`, "objects",
       ),
       db.execute(
-        sql`select t.*, u.name as manager_name from crm_sales_teams t left join users u on u.id=t.manager_user_id where t.org_id=${gate.user.orgId} order by t.name`,
+        sql`select t.*, u.name as manager_name from crm_sales_teams t left join users u on u.id=t.manager_user_id where t.org_id=${gate.user.orgId} order by t.name`, "objects",
       ),
       db.execute(
-        sql`select m.*,u.name as user_name from crm_sales_team_members m join users u on u.id=m.user_id where m.org_id=${gate.user.orgId} order by u.name`,
+        sql`select m.*,u.name as user_name from crm_sales_team_members m join users u on u.id=m.user_id where m.org_id=${gate.user.orgId} order by u.name`, "objects",
       ),
       quotasRestricted
-        ? Promise.resolve({ rows: [] })
+        ? Promise.resolve([])
         : db.execute(
-            sql`select q.*,u.name as owner_name,t.name as team_name from crm_sales_quotas q left join users u on u.id=q.owner_user_id left join crm_sales_teams t on t.id=q.sales_team_id where q.org_id=${gate.user.orgId} order by q.period_start desc`,
+            sql`select q.*,u.name as owner_name,t.name as team_name from crm_sales_quotas q left join users u on u.id=q.owner_user_id left join crm_sales_teams t on t.id=q.sales_team_id where q.org_id=${gate.user.orgId} order by q.period_start desc`, "objects",
           ),
       db.execute(
-        sql`select id,name,email from users where org_id=${gate.user.orgId} and is_active order by name`,
+        sql`select id,name,email from users where org_id=${gate.user.orgId} and is_active order by name`, "objects",
       ),
     ])));
     const t = await getTranslations("crm");
     return NextResponse.json({
-      accountStatuses: accountStatuses.rows,
-      opportunityStatuses: opportunityStatuses.rows,
-      territories: territories.rows,
-      sources: sources.rows,
-      teams: teams.rows,
-      members: members.rows,
-      quotas: quotas.rows,
-      users: users.rows,
+      accountStatuses,
+      opportunityStatuses,
+      territories,
+      sources,
+      teams,
+      members,
+      quotas,
+      users,
       quotasNotice: quotasRestricted ? t("forecasts.quotasRestrictedNotice") : null,
     });
 
@@ -285,11 +285,9 @@ export const POST = defineRoute({
           if (
             typeof id !== "string" ||
             !isUuid(id) ||
-            !(
-              ((await db.execute(
-                sql`select 1 from users where id=${id} and org_id=${user.orgId}`,
-              )))
-            ).rows[0]
+            !(await db.execute(
+                sql`select 1 from users where id=${id} and org_id=${user.orgId}`, "objects",
+              ))[0]
           )
             return NextResponse.json(
               { error: "invalid territory user" },
@@ -328,21 +326,19 @@ export const POST = defineRoute({
           if (
             !isUuid(member.userId) ||
             !["manager", "member"].includes(member.role ?? "member") ||
-            !(
-              ((await db.execute(
-                sql`select 1 from users where id=${member.userId} and org_id=${user.orgId}`,
-              )))
-            ).rows[0]
+            !(await db.execute(
+                sql`select 1 from users where id=${member.userId} and org_id=${user.orgId}`, "objects",
+              ))[0]
           )
             return NextResponse.json(
               { error: "invalid team member" },
               { status: 422 },
             );
         const team = recordId
-          ? await db.execute(
+          ? await db.execute<Record<string, unknown>>(
               sql`update crm_sales_teams set name=${name},manager_user_id=${body.managerUserId || null},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
             )
-          : await db.execute(
+          : await db.execute<Record<string, unknown>>(
               sql`insert into crm_sales_teams (org_id,key,name,manager_user_id,is_active,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.managerUserId || null},${body.isActive !== false},${user.id},${user.id}) returning *`,
             );
         const teamRow = team.rows[0];
@@ -419,29 +415,25 @@ export const POST = defineRoute({
         const amount = normalizeMoney(amountRaw);
         if (
           currency !== undefined &&
-          !(
-            ((await db.execute(
-              sql`select 1 from currencies where code=${currency}`,
-            )))
-          ).rows[0]
+          !(await db.execute(
+              sql`select 1 from currencies where code=${currency}`, "objects",
+            ))[0]
         )
           return NextResponse.json({ error: "invalid currency" }, { status: 422 });
         let createCurrency = currency;
         if (createCurrency === undefined && !recordId) {
           const org = (await db.execute<{ base_currency: string }>(
-            sql`select base_currency from orgs where id=${user.orgId}`,
+            sql`select base_currency from orgs where id=${user.orgId}`, "objects",
           ));
-          createCurrency = org.rows[0]?.base_currency;
+          createCurrency = org[0]?.base_currency;
           if (!createCurrency)
           return NextResponse.json({ error: "invalid currency" }, { status: 422 });
         }
         if (
           ownerUserId &&
-          !(
-            ((await db.execute(
-              sql`select 1 from users where id=${ownerUserId} and org_id=${user.orgId}`,
-            )))
-          ).rows[0]
+          !(await db.execute(
+              sql`select 1 from users where id=${ownerUserId} and org_id=${user.orgId}`, "objects",
+            ))[0]
         )
           return NextResponse.json(
             { error: "invalid quota owner" },
@@ -449,11 +441,9 @@ export const POST = defineRoute({
           );
         if (
           salesTeamId &&
-          !(
-            ((await db.execute(
-              sql`select 1 from crm_sales_teams where id=${salesTeamId} and org_id=${user.orgId}`,
-            )))
-          ).rows[0]
+          !(await db.execute(
+              sql`select 1 from crm_sales_teams where id=${salesTeamId} and org_id=${user.orgId}`, "objects",
+            ))[0]
         )
           return NextResponse.json(
             { error: "invalid quota team" },

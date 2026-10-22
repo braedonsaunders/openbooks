@@ -33,7 +33,7 @@ async function matrixOrg(): Promise<string> {
       'fixedAssets', true, 'projects', true, 'projectBilling', true,
       'revenueRecognition', true, 'timeTracking', true, 'multiSubsidiary', true,
       'subscriptionBilling', true, 'usageBilling', true, 'saasMetrics', true
-    )) where id = ${o.orgId} returning id`))).rows.length, 1, 'resource matrix fixture feature setup updates one organization')
+    )) where id = ${o.orgId} returning id`, 'objects'))).length, 1, 'resource matrix fixture feature setup updates one organization')
   return o.orgId
 }
 
@@ -81,7 +81,7 @@ async function matrixActor(orgId: string): Promise<string> {
   return withOrgContext(orgId, async () => {
     const actorId = await createScratchUser(orgId, 'Resource Import Admin', 'resource-import-admin')
     assert.equal((await db.execute(sql`insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${actorId}, '*', 'grant') returning id`)).rows.length, 1)
+      values (${orgId}, ${actorId}, '*', 'grant') returning id`, 'objects')).length, 1)
     return actorId
   })
 }
@@ -117,8 +117,8 @@ async function writeAll(
         components.push(row)
         recipes.set(assemblyCode, components)
       }
-      const items = (await db.execute<{ id: string; code: string }>(sql`
-        select id, code from items where org_id = ${orgId}`)).rows
+      const items = await db.execute<{ id: string; code: string }>(sql`
+        select id, code from items where org_id = ${orgId}`, 'objects')
       const ids = new Map(items.map((item) => [item.code, item.id]))
       const { PUT } = await import('../../app/api/inventory/bom/route.ts')
       const outcome: { created: number; updated: number; failed: number; errors: { message: string }[] } =
@@ -213,14 +213,10 @@ test(
         { created: stock.created, failed: stock.failed, errors: stock.errors },
         { created: 1, failed: 0, errors: [] },
       )
-      const assetNo = (
-        await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
-          select number from accounts where org_id = ${orgA} and number like '1%' order by number limit 1`))
-      ).rows[0]?.number
-      const cogsNo = (
-        await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
-          select number from accounts where org_id = ${orgA} and number like '5%' order by number limit 1`))
-      ).rows[0]?.number
+      const assetNo = (await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
+          select number from accounts where org_id = ${orgA} and number like '1%' order by number limit 1`, 'objects')))[0]?.number
+      const cogsNo = (await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
+          select number from accounts where org_id = ${orgA} and number like '5%' order by number limit 1`, 'objects')))[0]?.number
       assert.ok(assetNo, 'bootstrap CoA carries a 1xxx account')
       assert.ok(cogsNo, 'bootstrap CoA carries a 5xxx account')
       const prof = await writeAll(orgA, actorId, 'item-inventory-profiles', [
@@ -293,10 +289,8 @@ test(
         { created: fa.created, failed: fa.failed, errors: fa.errors },
         { created: 1, failed: 0, errors: [] },
       )
-      const revenueNo = (
-        await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
-          select number from accounts where org_id = ${orgA} and number like '4%' order by number limit 1`))
-      ).rows[0]?.number
+      const revenueNo = (await withOrgContext(orgA, () => db.execute<{ number: string }>(sql`
+          select number from accounts where org_id = ${orgA} and number like '4%' order by number limit 1`, 'objects')))[0]?.number
       assert.ok(revenueNo)
       const invDate = '2026-07-15'
       const inv = await writeAll(orgA, actorId, 'txn:customer_invoice', [
@@ -431,8 +425,8 @@ test('resourcing resources are discoverable and resolvable under effective featu
       for (const disabled of [null, 'projects', 'resourcing', 'retainerBilling', 'revenueRecognition']) {
         const flags = { projects: true, resourcing: true, retainerBilling: true, revenueRecognition: true,
           ...(disabled === null ? {} : { [disabled]: false }) }
-        const updated = await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', ${JSON.stringify(flags)}::jsonb, true) where id = ${org.orgId} returning id`)
-        assert.equal(updated.rows.length, 1, 'feature configuration must update the scratch organization')
+        const updated = await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', ${JSON.stringify(flags)}::jsonb, true) where id = ${org.orgId} returning id`, 'objects')
+        assert.equal(updated.length, 1, 'feature configuration must update the scratch organization')
         const expected = disabled === 'projects' || disabled === 'resourcing' ? [] : disabled === null ? keys : [keys[0]]
         const listed = (await listResources(org.orgId)).filter((descriptor) => keys.includes(descriptor.key))
         assert.deepEqual(listed.map((descriptor) => descriptor.key), expected, disabled ?? 'all enabled')

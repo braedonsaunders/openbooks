@@ -175,7 +175,7 @@ test('entity field and value mappings support custom targets, defaults, drafts, 
   await click('Apply mapping'); await click('Remove')
   await fill('Entity', 'Items'); await click('Edit'); await fill('Native value', 'Services'); await click('Apply mapping')
   await click('Save changes')
-  assert.ok(saved, errorMessages().at(-1))
+  assert.ok(saved, errorMessages().at(-1) ?? 'Connection save must complete')
   assert.deepEqual(readSaved()!.config.entityMappings, { version: 1, entities: {
     items: [{ source: 'kind', target: 'custom.category', missing: 'default', values: [{ source: 'inventory', target: 'Services' }], defaultValue: 'Services' }], customers: [],
   } })

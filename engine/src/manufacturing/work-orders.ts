@@ -117,9 +117,9 @@ function rowOrNotFound<T>(rows: T[]): T {
 }
 
 async function loadOrder(tx: SqlExecutor, orgId: string, id: string, lock = false): Promise<WorkOrderRow> {
-  return rowOrNotFound((await tx.execute<WorkOrderRow>(sql`
+  return rowOrNotFound(await tx.execute<WorkOrderRow>(sql`
     select ${workOrderColumns} from mfg_work_orders
-     where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`)).rows);
+     where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`, "objects"));
 }
 
 async function itemDetails(tx: SqlExecutor, orgId: string, itemId: string) {
@@ -130,7 +130,7 @@ async function itemDetails(tx: SqlExecutor, orgId: string, itemId: string) {
     select i.id, i.code, i.name, i.is_active, profile.base_unit
       from items i left join item_inventory_profiles profile
         on profile.org_id=i.org_id and profile.item_id=i.id
-     where i.org_id=${orgId} and i.id=${itemId}`)).rows[0];
+     where i.org_id=${orgId} and i.id=${itemId}`, "objects"))[0];
   if (!row) throw new ManufacturingNotFoundError();
   return row;
 }
@@ -172,7 +172,7 @@ async function validateSource(
   }
   if (!sourceRefId) refuse("A sales-order work order needs its source order.", "invalid_source_reference", "Choose the sales order this work order will fulfill.");
   const sourceRow = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from documents where org_id=${orgId} and id=${sourceRefId} and kind='sales_order'`)).rows[0];
+    select subsidiary_id from documents where org_id=${orgId} and id=${sourceRefId} and kind='sales_order'`, "objects"))[0];
   if (!sourceRow || (sourceRow.subsidiary_id && sourceRow.subsidiary_id !== subsidiaryId)) {
     throw new ManufacturingNotFoundError();
   }
@@ -186,16 +186,16 @@ async function hasPendingApproval(
   return (
     (await tx.execute(sql`
     select 1 from flow_gates where org_id=${orgId} and subject_kind='work_order'
-      and subject_id=${id} and status in ('pending','escalated') limit 1`)).rows.length > 0
+      and subject_id=${id} and status in ('pending','escalated') limit 1`, "objects")).length > 0
   );
 }
 
 type PendingWorkOrderGate = { id: string; run_id: string; status: string };
 
 async function lockPendingApprovals(tx: SqlExecutor, orgId: string, id: string): Promise<PendingWorkOrderGate[]> {
-  return (await tx.execute<PendingWorkOrderGate>(sql`
+  return await tx.execute<PendingWorkOrderGate>(sql`
     select id, run_id, status from flow_gates where org_id=${orgId} and subject_kind='work_order'
-      and subject_id=${id} and status in ('pending','escalated') order by id for update`)).rows;
+      and subject_id=${id} and status in ('pending','escalated') order by id for update`, "objects");
 }
 
 async function cancelPendingApprovals(tx: SqlExecutor, orgId: string, gates: PendingWorkOrderGate[], actorId: string, reason: string): Promise<void> {
@@ -205,8 +205,8 @@ async function cancelPendingApprovals(tx: SqlExecutor, orgId: string, gates: Pen
   const cancelledGates = await tx.execute(sql`
     update flow_gates set status='cancelled', comment=${reason}, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(gateIds)}::jsonb)::uuid)
-       and status in ('pending','escalated') returning id`);
-  if (cancelledGates.rows.length !== gateIds.length) {
+       and status in ('pending','escalated') returning id`, "objects");
+  if (cancelledGates.length !== gateIds.length) {
     refuse("A pending work-order approval changed while the order was being cancelled.", "work_order_approval_changed", "Reload the work order and retry the cancellation.", 409);
   }
   for (const gate of gates) {
@@ -218,18 +218,18 @@ async function cancelPendingApprovals(tx: SqlExecutor, orgId: string, gates: Pen
   const runStates = await tx.execute<{ id: string; status: string }>(sql`
     select id, status from flow_runs where org_id=${orgId}
       and id in (select jsonb_array_elements_text(${JSON.stringify(runIds)}::jsonb)::uuid)
-      and status in ('running','waiting') order by id for update`);
-  if (runStates.rows.length !== runIds.length) {
+      and status in ('running','waiting') order by id for update`, "objects");
+  if (runStates.length !== runIds.length) {
     refuse("A work-order approval run changed while the order was being cancelled.", "work_order_approval_changed", "Reload the work order and retry the cancellation.", 409);
   }
   const cancelledRuns = await tx.execute(sql`
     update flow_runs set status='cancelled', finished_at=now(), updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(runIds)}::jsonb)::uuid)
-       and status in ('running','waiting') returning id`);
-  if (cancelledRuns.rows.length !== runIds.length) {
+       and status in ('running','waiting') returning id`, "objects");
+  if (cancelledRuns.length !== runIds.length) {
     refuse("A work-order approval run changed while the order was being cancelled.", "work_order_approval_changed", "Reload the work order and retry the cancellation.", 409);
   }
-  for (const run of runStates.rows) {
+  for (const run of runStates) {
     await auditChange(tx, {
       orgId, actorId, table: "flow_runs", rowId: run.id, action: "update",
       before: { status: run.status }, after: { status: "cancelled", reason },
@@ -284,7 +284,7 @@ async function insertDraft(
   if (input.routingId) {
     const routing = (await tx.execute<{ id: string }>(sql`
       select r.id from mfg_routings r where r.org_id=${orgId} and r.id=${input.routingId}
-        and r.produced_item_id=${input.producedItemId} ${routingResourcesVisible(scope)}`)).rows[0];
+        and r.produced_item_id=${input.producedItemId} ${routingResourcesVisible(scope)}`, "objects"))[0];
     if (!routing) refuse("The selected routing is for a different produced item.", "routing_item_mismatch", "Choose a routing version for the produced item.");
   }
   const number = await allocateDocumentNumber(tx, orgId, "work_order", "WO-");
@@ -298,8 +298,8 @@ async function insertDraft(
       ${input.routingId ?? null}, ${quantity}, ${item.base_unit}, 'draft', ${input.priority ?? "normal"}, ${input.source},
       ${input.sourceRefId}, ${opts.parentWoId ?? null}, ${input.subsidiaryId}, ${input.issueLocationId ?? null},
       ${input.receiptLocationId ?? null}, ${start}, ${end}, ${run.productionMode},${run.campaignReference},${operating.versionId}, ${operating.departmentId}, ${actorId}, ${actorId})
-    returning ${workOrderColumns}`);
-  const after = rowOrNotFound(inserted.rows);
+    returning ${workOrderColumns}`, "objects");
+  const after = rowOrNotFound(inserted);
   await auditChange(tx, {
     orgId, actorId, table: "mfg_work_orders", rowId: after.id, action: "insert", before: null,
     after: { status: "draft", reason: "Created as a draft work order.", order: after },
@@ -348,7 +348,7 @@ export async function getWorkOrder(tx: SqlExecutor, orgId: string, id: string, l
           and gate.subject_kind='work_order' and gate.subject_id=mfg_work_orders.id
           and gate.status in ('pending','escalated')
       )) as "pendingApproval"
-      from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`)).rows[0];
+      from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`, "objects"))[0];
   if (!row) return null;
   if (!lock) row.costCollected = await workOrderCostCollected(tx, orgId, row);
   return row;
@@ -378,7 +378,7 @@ async function workOrderCostCollected(tx: SqlExecutor, orgId: string, order: Wor
        -- Live entries only: a reversed charge and its reversal are not cost collected.
        and entry.status = 'posted' and entry.reverses_entry_id is null
        and line.account_id = ${wipId}
-  `)).rows[0];
+  `, "objects"))[0];
   return collected?.amount ?? "0";
 }
 
@@ -415,7 +415,7 @@ export async function updateDraftWorkOrder(
   const routingId = patch.routingId === undefined ? before.routingId : patch.routingId;
   if (routingId) {
     await lockManufacturingRoutingAuthority(tx,orgId,actorId,routingId);
-    const routing = (await tx.execute(sql`select 1 from mfg_routings where org_id=${orgId} and id=${routingId} and produced_item_id=${before.producedItemId}`)).rows;
+    const routing = await tx.execute(sql`select 1 from mfg_routings where org_id=${orgId} and id=${routingId} and produced_item_id=${before.producedItemId}`, "objects");
     if (!routing.length) refuse("The selected routing is for a different produced item.", "routing_item_mismatch", "Choose a routing version for the produced item.");
   }
   const definition=before.operatingProfileVersionId?await checkPinnedOperatingProfileCommand(tx,orgId,actorId,{versionId:before.operatingProfileVersionId,family:'production',subsidiaryId:before.subsidiaryId}):null;
@@ -424,8 +424,8 @@ export async function updateDraftWorkOrder(
     update mfg_work_orders set quantity_ordered=${quantity}, planned_start=${start}, planned_end=${end},production_mode=${run.productionMode},campaign_reference=${run.campaignReference},
       issue_location_id=${issueLocationId ?? null}, receipt_location_id=${receiptLocationId ?? null},
       routing_id=${routingId ?? null}, updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`);
-  const after = rowOrNotFound(updated.rows);
+     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after });
   return { ...after, pendingApproval: false };
 }
@@ -452,11 +452,11 @@ async function activeRouting(
      where org_id=${orgId} and produced_item_id=${itemId} and status='active'
        and effective_from <= ${asOf}::date and (effective_to is null or ${asOf}::date < effective_to)
        and (${selectedId}::uuid is null or id=${selectedId})
-     order by version desc for share`);
-  if (matches.rows.length !== 1) {
+     order by version desc for share`, "objects");
+  if (matches.length !== 1) {
     refuse(`No active routing version for ${code} is effective on ${asOf}.`, "routing_not_effective", `Activate a routing version for ${code}.`);
   }
-  return matches.rows[0]!;
+  return matches[0]!;
 }
 
 type BomRow = {
@@ -467,7 +467,7 @@ type BomRow = {
 };
 
 async function effectiveBomRows(tx: SqlExecutor, orgId: string, itemId: string, asOf: string): Promise<BomRow[]> {
-  return (await tx.execute<BomRow>(sql`
+  return await tx.execute<BomRow>(sql`
     select b.component_item_id, component.code as component_code, b.quantity_per::text as quantity_per,
            b.sort_order, b.effective_from::text as effective_from, b.effective_to::text as effective_to,
            b.operation_seq,b.quantity_basis,b.formula_output_quantity::text,b.scrap_pct::text as scrap_pct, b.is_byproduct,b.output_cost_weight::text
@@ -476,7 +476,7 @@ async function effectiveBomRows(tx: SqlExecutor, orgId: string, itemId: string, 
        and (b.effective_from is null or b.effective_from <= ${asOf}::date)
        and (b.effective_to is null or ${asOf}::date < b.effective_to)
      order by b.sort_order, b.component_item_id, b.operation_seq nulls first,
-              b.is_byproduct, b.effective_from nulls first`)).rows;
+              b.is_byproduct, b.effective_from nulls first`, "objects");
 }
 
 function bomRevision(itemId: string, rows: BomRow[]): string {
@@ -511,7 +511,7 @@ async function materialReservations(tx: SqlExecutor, orgId: string, subsidiaryId
       from mfg_wo_materials material join mfg_work_orders order_row
         on order_row.org_id=material.org_id and order_row.id=material.work_order_id
      where material.org_id=${orgId} and material.component_item_id=${itemId}
-       and order_row.subsidiary_id=${subsidiaryId} and order_row.status in ('released','in_progress')`)).rows[0];
+       and order_row.subsidiary_id=${subsidiaryId} and order_row.status in ('released','in_progress')`, "objects"))[0];
   return row?.reserved ?? "0";
 }
 
@@ -524,7 +524,7 @@ async function releaseMaterials(
   repair?:{receiptMovementId:string|null;lotId:string|null;serialId:string|null},
 ): Promise<Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string; quantityPer: string;quantityBasis:BomQuantityBasis;formulaOutputQuantity:string; scrapPct: string | null }>> {
   const warehouse = (await tx.execute<{ warehouse_id: string | null }>(sql`
-    select stock_location_warehouse(${orgId}::uuid, ${issueLocationId}::uuid) as warehouse_id`)).rows[0]?.warehouse_id ?? null;
+    select stock_location_warehouse(${orgId}::uuid, ${issueLocationId}::uuid) as warehouse_id`, "objects"))[0]?.warehouse_id ?? null;
   const itemIds = [...new Set(lines.map((line) => line.itemId))].sort();
   for (const itemId of itemIds) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-release:${order.subsidiaryId}:${itemId}`}, 0))`);
@@ -544,7 +544,7 @@ async function releaseMaterials(
     const profile = await resolveProfile(orgId, itemId, tx as Runner, true);
     const account = (await tx.execute<{ id: string }>(sql`
       select id from accounts where org_id=${orgId} and id=${profile.assetAccountId}
-        and is_active and type like 'asset_%'`)).rows[0];
+        and is_active and type like 'asset_%'`, "objects"))[0];
     if (!account) {
       refuse(`Component ${line.itemCode} has no active inventory asset account.`, "component_asset_account_missing", `Map accounts for ${line.itemCode} in item setup.`);
     }
@@ -883,9 +883,9 @@ async function defaultReleaseDepartmentId(
   opLabel: string,
 ): Promise<{ id: string; subsidiaryId: string | null; includeChildren: boolean }> {
   if (!order.subsidiaryId) refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release.");
-  const rows = (await tx.execute<{ id: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
+  const rows = await tx.execute<{ id: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
     select id, subsidiary_id as "subsidiaryId", subsidiary_include_children as "includeChildren"
-      from departments where org_id = ${orgId} and is_active order by id for share`)).rows;
+      from departments where org_id = ${orgId} and is_active order by id for share`, "objects");
   if (rows.length === 1) {
     const only = rows[0]!;
     if (!restrictionAdmits(entityContext, only.subsidiaryId, only.includeChildren, order.subsidiaryId)) {
@@ -927,7 +927,7 @@ export async function resolveOperationReleaseSnapshots(
   // The stored department id carries no foreign key, so the department is
   // never trusted by UUID alone: the join admits only a same-organization
   // department row, and both activity flags are frozen per operation.
-  const centers = (await tx.execute<{
+  const centers = await tx.execute<{
     id: string; code: string | null; is_active: boolean; subsidiary_id:string|null;
     department_id: string | null; department_active: boolean | null; department_subsidiary_id:string|null; department_include_children:boolean|null;
   }>(sql`
@@ -937,8 +937,8 @@ export async function resolveOperationReleaseSnapshots(
       left join departments department
         on department.org_id = center.org_id and department.id = center.department_id
      where center.org_id=${orgId}
-       and center.id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid) order by center.id for share of center`)).rows;
-  const departments=centerIds.length?(await tx.execute<{id:string;active:boolean;subsidiaryId:string|null;includeChildren:boolean}>(sql`select id,is_active as active,subsidiary_id as "subsidiaryId",subsidiary_include_children as "includeChildren" from departments where org_id=${orgId} and id in (select department_id from mfg_work_centers where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid)) order by id for share`)).rows:[];
+       and center.id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid) order by center.id for share of center`, "objects");
+  const departments=centerIds.length?(await tx.execute<{id:string;active:boolean;subsidiaryId:string|null;includeChildren:boolean}>(sql`select id,is_active as active,subsidiary_id as "subsidiaryId",subsidiary_include_children as "includeChildren" from departments where org_id=${orgId} and id in (select department_id from mfg_work_centers where org_id=${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid)) order by id for share`, "objects")):[];
   const departmentById=new Map(departments.map(row=>[row.id,row]));
   const entityContext=await loadSubsidiaryContext(tx,orgId);
   const centerById = new Map(centers.map((center) => [center.id, center]));
@@ -1002,7 +1002,7 @@ async function releaseOne(
   }
   const pendingGate = (await tx.execute(sql`
     select 1 from flow_gates where org_id=${orgId} and subject_kind='work_order'
-      and subject_id=${id} and status in ('pending','escalated') limit 1`)).rows.length > 0;
+      and subject_id=${id} and status in ('pending','escalated') limit 1`, "objects")).length > 0;
   if (pendingGate && !options.fromApproval) {
     refuse(`Work order ${order.number} is awaiting approval.`, "work_order_pending_approval", "Resolve the pending work-order approval before releasing it.", 409);
   }
@@ -1041,14 +1041,14 @@ async function releaseOne(
            backflush_at, quality_gate,labor_minutes_per_unit::text,labor_time_source
       from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
        ${repair?sql`and sequence=${repair.sequence}`:sql``}
-     order by sequence for share`);
-  if (!operations.rows.length) refuse(`Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`, "routing_operations_required", "Add an operation to the active routing version.");
+     order by sequence for share`, "objects");
+  if (!operations.length) refuse(`Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`, "routing_operations_required", "Add an operation to the active routing version.");
 
   const directMake = new Set<string>();
   for (const row of directRows) {
     if (row.is_byproduct) continue;
     const policy = (await tx.execute<{ supply_method: string }>(sql`
-      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`)).rows[0];
+      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`, "objects"))[0];
     if (policy?.supply_method !== "make") continue;
     const code = row.component_code?.trim() || row.component_item_id;
     await activeRouting(tx, orgId, row.component_item_id, code, releaseDate, null);
@@ -1064,21 +1064,21 @@ async function releaseOne(
   const preparedMaterials = await releaseMaterials(tx, orgId, order, repair?[{itemId:repair.itemId,itemCode:produced.code??produced.name,required:repair.quantity,operationSeq:null,quantityPer:'1',quantityBasis:'per_unit',formulaOutputQuantity:'1',scrapPct:'0'}]:rootMaterialLines, issueLocationId,repair??undefined);
   const producedProfile = (await tx.execute<{ costing_method: string; standard_cost: string | null }>(sql`
     select costing_method, standard_cost::text from item_inventory_profiles
-     where org_id=${orgId} and item_id=${order.producedItemId} for share`)).rows[0];
+     where org_id=${orgId} and item_id=${order.producedItemId} for share`, "objects"))[0];
   const standardCost = producedProfile?.costing_method === "standard" ? producedProfile.standard_cost : null;
   // Every operation snapshot resolves and freezes BEFORE the release status
   // mutation below: any refusal throws here and rolls the whole release
   // back, so operations are only ever inserted with complete coherent
   // values. There is no draft/null insert-then-fill path.
   const functionalCurrency = await releaseFunctionalCurrency(tx, orgId, order);
-  const snapshots = await resolveOperationReleaseSnapshots(tx, orgId, order, operations.rows, routing, releaseDate, functionalCurrency);
+  const snapshots = await resolveOperationReleaseSnapshots(tx, orgId, order, operations, routing, releaseDate, functionalCurrency);
   const before = order;
   const released = await tx.execute<WorkOrderRow>(sql`
     update mfg_work_orders set routing_id=${routing.id}, routing_version=${routing.version}, bom_revision=${revision},
       standard_cost_snapshot=${standardCost}, issue_location_id=${issueLocationId}, receipt_location_id=${receiptLocationId},
       status='released', released_at=now(), updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`);
-  const after = rowOrNotFound(released.rows);
+     where org_id=${orgId} and id=${id} and status='draft' returning ${workOrderColumns}`, "objects");
+  const after = rowOrNotFound(released);
   await auditChange(tx, {
     orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update",
     before: options.fromApproval ? { ...before, status: "pending_approval" } : before,
@@ -1104,7 +1104,7 @@ async function releaseOne(
     },
   });
 
-  for (const [index, operation] of operations.rows.entries()) {
+  for (const [index, operation] of operations.entries()) {
     const snapshot = snapshots[index]!;
     const inspectionPlan=repair?{...repair.planSnapshot,point:"operation" as const,operationSequence:operation.sequence}:await resolveInspectionPlan(tx,orgId,order.producedItemId,"operation",releaseDate,operation.sequence);
     const plannedRunMinutes = decimalValue(mul(operation.run_minutes_per_unit, order.quantityOrdered), "plannedRunMinutes", "Reduce the order quantity or revise the routing run time so the planned minutes fit the supported range.");
@@ -1128,8 +1128,8 @@ async function releaseOne(
         ${snapshot.fxClass}, ${snapshot.fxRate}, ${snapshot.fxRowId}, ${snapshot.fxDate},
         ${snapshot.fxSource}, ${snapshot.fxDirection},
         ${JSON.stringify(snapshot.overhead)}::jsonb, ${snapshot.overheadHash},
-        ${actorId}, ${actorId}) returning id`);
-    const operationId = inserted.rows[0]?.id;
+        ${actorId}, ${actorId}) returning id`, "objects");
+    const operationId = inserted[0]?.id;
     if (!operationId) refuse("A work-order operation snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
     await auditChange(tx, {
       orgId, actorId, table: "mfg_wo_operations", rowId: String(operationId), action: "insert", before: null,
@@ -1146,8 +1146,8 @@ async function releaseOne(
         operation_seq, lot_serial_policy, shortage_qty, quantity_per, scrap_pct,quantity_basis,formula_output_quantity, created_by, updated_by)
       values (${orgId}, ${id}, ${material.itemId}, ${material.required}, ${material.operationSeq},
         ${material.tracking}, ${material.shortage}, ${material.quantityPer}, ${material.scrapPct ?? "0"},${material.quantityBasis},${material.formulaOutputQuantity},
-        ${actorId}, ${actorId}) returning id`);
-    const materialId = inserted.rows[0]?.id;
+        ${actorId}, ${actorId}) returning id`, "objects");
+    const materialId = inserted[0]?.id;
     if (!materialId) refuse("A work-order material snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
     await auditChange(tx, {
       orgId, actorId, table: "mfg_wo_materials", rowId: String(materialId), action: "insert", before: null,
@@ -1174,8 +1174,8 @@ async function releaseOne(
     const outputStandard=outputProfile?.costingMethod==='standard'?outputProfile.standardCost:null;
     if(outputProfile?.costingMethod==='standard'&&outputStandard===null)refuse('A joint output has no configured standard cost.','joint_output_standard_missing','Govern its item standard before releasing this production order.');
     const inserted=await tx.execute<{id:string}>(sql`insert into mfg_wo_byproducts(org_id,work_order_id,item_id,quantity_per,quantity_basis,formula_output_quantity,output_cost_weight,standard_cost_snapshot,created_by,updated_by)
-      values(${orgId},${id},${itemId},${policy.quantityPer},${policy.quantityBasis},${policy.formulaOutputQuantity},${policy.outputCostWeight},${outputStandard},${actorId},${actorId}) returning id`);
-    const byproductId=inserted.rows[0]?.id;
+      values(${orgId},${id},${itemId},${policy.quantityPer},${policy.quantityBasis},${policy.formulaOutputQuantity},${policy.outputCostWeight},${outputStandard},${actorId},${actorId}) returning id`, "objects");
+    const byproductId=inserted[0]?.id;
     if(!byproductId) refuse("A work-order by-product snapshot was not saved.","write_failed","Retry the release.");
     await auditChange(tx,{orgId,actorId,table:'mfg_wo_byproducts',rowId:byproductId,action:'insert',before:null,after:{itemId,...policy,standardCostSnapshot:outputStandard}});
   }
@@ -1183,7 +1183,7 @@ async function releaseOne(
   for (const row of directRows) {
     if (row.is_byproduct) continue;
     const policy = (await tx.execute<{ supply_method: string }>(sql`
-      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`)).rows[0];
+      select supply_method from mfg_item_policies where org_id=${orgId} and item_id=${row.component_item_id}`, "objects"))[0];
     if (policy?.supply_method !== "make") continue;
     const childQty = bomRequiredQuantity(order.quantityOrdered, row.quantity_per, row.scrap_pct,{quantityBasis:row.quantity_basis,formulaOutputQuantity:row.formula_output_quantity}).quantity;
     const child = await insertDraft(tx, orgId, actorId, {
@@ -1229,14 +1229,14 @@ export async function resolveEmptyOperationOverhead(
   const order = await loadOrder(tx, orgId, workOrderId);
   const operation = (await tx.execute<{ sequence: number; work_center_id: string }>(sql`
     select sequence, work_center_id from mfg_wo_operations
-     where org_id = ${orgId} and work_order_id = ${workOrderId} and id = ${operationId}`)).rows[0];
+     where org_id = ${orgId} and work_order_id = ${workOrderId} and id = ${operationId}`, "objects"))[0];
   if (!operation || order.routingVersion === null || !order.subsidiaryId) return null;
   const governingDate = order.plannedStart ?? (order.releasedAt ? new Date(order.releasedAt).toISOString().slice(0, 10) : await releaseBusinessDate(tx, orgId));
   const routing = (await tx.execute<ActiveRouting>(sql`
     select id, version, effective_from::text, effective_to::text,
            default_issue_location_id, default_receipt_location_id, overhead_basis as "overheadBasis"
       from mfg_routings
-     where org_id = ${orgId} and produced_item_id = ${order.producedItemId} and version = ${order.routingVersion}`)).rows[0];
+     where org_id = ${orgId} and produced_item_id = ${order.producedItemId} and version = ${order.routingVersion}`, "objects"))[0];
   if (!routing) return null;
   const [snapshot] = await resolveOperationReleaseSnapshots(
     tx, orgId, order, [operation], routing, governingDate, await releaseFunctionalCurrency(tx, orgId, order));
@@ -1307,14 +1307,14 @@ export async function readWorkOrderReleaseReadiness(
   await attempt(`/inventory?inventoryView=bom&bom=${order.producedItemId}`, () =>
     explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, releaseDate));
   if (routing && subsidiaryId) {
-    const operations = (await tx.execute<{
+    const operations = await tx.execute<{
       sequence: number; name: string; work_center_id: string; setup_minutes: string; run_minutes_per_unit: string;
       backflush_at: string; quality_gate: string; labor_minutes_per_unit: string | null; labor_time_source: string;
     }>(sql`
       select sequence, name, work_center_id, setup_minutes::text, run_minutes_per_unit::text,
              backflush_at, quality_gate, labor_minutes_per_unit::text, labor_time_source
         from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
-       order by sequence`)).rows;
+       order by sequence`, "objects");
     if (!operations.length) {
       await attempt(`/manufacturing/routings?record=${routing.id}`, async () => refuse(`Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`, "routing_operations_required", "Add an operation to the active routing version."));
     }
@@ -1402,8 +1402,8 @@ export async function holdWorkOrder(tx: SqlExecutor, orgId: string, actorId: str
   const updated = await tx.execute<WorkOrderRow>(sql`
     update mfg_work_orders set status='on_hold', hold_reason=${holdReason}, hold_prior_status=${before.status},
       updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`);
-  const after = rowOrNotFound(updated.rows);
+     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: holdReason } });
   return { ...after, pendingApproval: false };
 }
@@ -1429,8 +1429,8 @@ export async function resumeWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
   const updated = await tx.execute<WorkOrderRow>(sql`
     update mfg_work_orders set status=${prior}, hold_reason=null, hold_prior_status=null,
       updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='on_hold' returning ${workOrderColumns}`);
-  const after = rowOrNotFound(updated.rows);
+     where org_id=${orgId} and id=${id} and status='on_hold' returning ${workOrderColumns}`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: "Resumed from hold." } });
   return { ...after, pendingApproval: false };
 }
@@ -1444,14 +1444,14 @@ export async function startWorkOrder(tx: SqlExecutor, orgId: string, actorId: st
   if (before.status !== "released") refuse(`Work order ${before.number} cannot start from ${before.status}.`, "invalid_work_order_transition", "Start a released work order.", 409);
   const updated = await tx.execute<WorkOrderRow>(sql`
     update mfg_work_orders set status='in_progress', started_at=now(), updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='released' returning ${workOrderColumns}`);
-  const after = rowOrNotFound(updated.rows);
+     where org_id=${orgId} and id=${id} and status='released' returning ${workOrderColumns}`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: "Started." } });
   return { ...after, pendingApproval: false };
 }
 
 async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow) {
-  return (await tx.execute<{ entry_number: string }>(sql`
+  return await tx.execute<{ entry_number: string }>(sql`
     select entry.entry_number from journal_entries entry
      where entry.org_id=${orgId} and entry.origin='manufacturing'
        -- Live entries only: cancellation is blocked only by unreversed original manufacturing entries.
@@ -1465,7 +1465,7 @@ async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow
           where reversal.org_id=entry.org_id and reversal.reverses_entry_id=entry.id
             and reversal.status in ('posted','reversed')
        )
-     order by entry.entry_number`)).rows;
+     order by entry.entry_number`, "objects");
 }
 
 /**
@@ -1481,7 +1481,7 @@ async function writeOffAbandonedWip(tx: SqlExecutor, orgId: string, actorId: str
     select coalesce(sum(line.amount), 0)::text as balance
       from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
      where line.org_id=${orgId} and line.account_id=${wipId} and entry.origin='manufacturing'
-       and entry.custom->>'work_order_number'=${order.number} and entry.status in ('posted','reversed')`)).rows[0]?.balance ?? "0";
+       and entry.custom->>'work_order_number'=${order.number} and entry.status in ('posted','reversed')`, "objects"))[0]?.balance ?? "0";
   if (isZero(balance)) return;
   if (cmp(balance, "0") < 0) {
     refuse(`Work order ${order.number} has a credit balance in Manufacturing WIP.`, "negative_work_order_wip", "Review the work order's manufacturing journal entries before cancelling it.");
@@ -1513,7 +1513,7 @@ async function writeOffAbandonedWip(tx: SqlExecutor, orgId: string, actorId: str
 }
 
 async function descendants(tx: SqlExecutor, orgId: string, id: string) {
-  return (await tx.execute<{
+  return await tx.execute<{
     id: string; number: string; status: string; started_at: Date | null; parent_wo_id: string;
     operation_started: boolean;
   }>(sql`
@@ -1527,7 +1527,7 @@ async function descendants(tx: SqlExecutor, orgId: string, id: string) {
     )
     select child.*, exists(select 1 from mfg_wo_operations op where op.org_id=${orgId}
       and op.work_order_id=child.id and (op.started_at is not null or op.status in ('running','paused','done'))) as operation_started
-      from children child order by child.id`)).rows;
+      from children child order by child.id`, "objects");
 }
 
 export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: string, id: string, reason?: string | null): Promise<WorkOrderRead> {
@@ -1571,8 +1571,8 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
     const childAfter = await tx.execute<WorkOrderRow>(sql`
       update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason ?? `Parent ${before.number} cancelled.`},
         hold_reason=null, hold_prior_status=null, updated_by=${actorId}, updated_at=now()
-       where org_id=${orgId} and id=${childBefore.id} and status=${childBefore.status} returning ${workOrderColumns}`);
-    const cancelledChild = rowOrNotFound(childAfter.rows);
+       where org_id=${orgId} and id=${childBefore.id} and status=${childBefore.status} returning ${workOrderColumns}`, "objects");
+    const cancelledChild = rowOrNotFound(childAfter);
     await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: childBefore.id, action: "update", before: childBefore, after: { ...cancelledChild, reason: cancelReason ?? `Parent ${before.number} cancelled.` } });
   }
   await cancelPendingApprovals(tx, orgId, pendingGates, actorId, cancelReason ?? "Draft cancelled.");
@@ -1580,8 +1580,8 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
   const updated = await tx.execute<WorkOrderRow>(sql`
     update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason}, hold_reason=null, hold_prior_status=null,
       updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`);
-  const after = rowOrNotFound(updated.rows);
+     where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: cancelReason ?? "Draft cancelled." } });
   return { ...after, pendingApproval: false };
 }
@@ -1593,7 +1593,7 @@ async function lockOperation(tx: SqlExecutor, orgId: string, workOrderId: string
     pause_reason: string | null; started_at: Date | null;
   }>(sql`
     select id, work_order_id, sequence, name, status, operator_user_id, pause_reason, started_at
-      from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} for update`)).rows[0];
+      from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} for update`, "objects"))[0];
   if (!operation) throw new ManufacturingNotFoundError();
   return { order, operation };
 }
@@ -1605,10 +1605,10 @@ async function lockOperation(tx: SqlExecutor, orgId: string, workOrderId: string
  * open while its rework runs; they are exempt from the sequence.
  */
 async function assertEarlierOperationsDone(tx: SqlExecutor, orgId: string, workOrderId: string, operation: { id: string; sequence: number; name: string }) {
-  const reworkOf = (await tx.execute(sql`select 1 from inventory_inspections where org_id=${orgId} and rework_operation_id=${operation.id} limit 1`)).rows[0];
+  const reworkOf = (await tx.execute(sql`select 1 from inventory_inspections where org_id=${orgId} and rework_operation_id=${operation.id} limit 1`, "objects"))[0];
   if (reworkOf) return;
-  const operations = (await tx.execute<{ sequence: number; name: string; status: string }>(sql`
-    select sequence, name, status from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId}`)).rows;
+  const operations = await tx.execute<{ sequence: number; name: string; status: string }>(sql`
+    select sequence, name, status from mfg_wo_operations where org_id=${orgId} and work_order_id=${workOrderId}`, "objects");
   const blocker = sequenceBlocker(operations, operation.sequence);
   if (blocker) {
     refuse(
@@ -1636,8 +1636,8 @@ export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
     update mfg_wo_operations set status='running', operator_user_id=${actorId}, started_at=${startedOn ? sql`${startedOn}::date::timestamptz` : sql`now()`},
       pause_reason=null, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='pending'
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`);
-  const after = rowOrNotFound(updated.rows);
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: "Operation started." } });
   await createOperationInspection(tx,orgId,actorId,workOrderId,operationId);
   await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "start", { onDate: startedOn ?? undefined });
@@ -1675,15 +1675,15 @@ export async function correctWorkOrderOperationStart(
        and custom->>'operation_id'=${operationId}
        -- Live entries only: a reversed posting no longer fixes a date.
        and status='posted' and reverses_entry_id is null
-     order by posting_date limit 1`)).rows[0];
+     order by posting_date limit 1`, "objects"))[0];
   if (posted) {
     refuse(`Operation ${before.sequence} already posted ${posted.entry_number} on ${posted.posting_date}.`, "start_correction_posted", "Reverse that posting before correcting the start, so its date and the start agree.", 409);
   }
   const updated = await tx.execute(sql`
     update mfg_wo_operations set started_at=${startedOn}::date::timestamptz, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status in ('running','paused')
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`);
-  const after = rowOrNotFound(updated.rows);
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason } });
   return after;
 }
@@ -1699,8 +1699,8 @@ export async function pauseWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
   const updated = await tx.execute(sql`
     update mfg_wo_operations set status='paused', pause_reason=${pauseReason}, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='running'
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`);
-  const after = rowOrNotFound(updated.rows);
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: pauseReason } });
   return after;
 }
@@ -1715,8 +1715,8 @@ export async function resumeWorkOrderOperation(tx: SqlExecutor, orgId: string, a
   const updated = await tx.execute(sql`
     update mfg_wo_operations set status='running', pause_reason=null, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='paused'
-     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`);
-  const after = rowOrNotFound(updated.rows);
+     returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: "Operation resumed." } });
   return after;
 }
@@ -1726,7 +1726,7 @@ export async function checkWorkOrderCreateReplay(tx:SqlExecutor,orgId:string,act
   await assertManufacturingFeature(tx,orgId,'manufacturing');
   const order=await loadOrder(tx,orgId,id);
   const scope=await lockManufacturingManageAuthority(tx,orgId,actorId,order.subsidiaryId,requestedScope);
-  if (!(await tx.execute(sql`select r.id from mfg_work_orders r where r.org_id=${orgId} and r.id=${id} ${orderResourcesVisible(scope,'r')}`)).rows[0]) throw new ManufacturingNotFoundError();
+  if (!(await tx.execute(sql`select r.id from mfg_work_orders r where r.org_id=${orgId} and r.id=${id} ${orderResourcesVisible(scope,'r')}`, "objects"))[0]) throw new ManufacturingNotFoundError();
   if(order.operatingProfileVersionId) await checkPinnedOperatingProfileCommand(tx,orgId,actorId,{versionId:order.operatingProfileVersionId,family:'production',subsidiaryId:order.subsidiaryId});
   return getWorkOrder(tx,orgId,id);
 }

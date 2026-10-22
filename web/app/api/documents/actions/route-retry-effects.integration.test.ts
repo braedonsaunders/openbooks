@@ -73,7 +73,7 @@ async function seedEffect(orgId: string, docId: string, entryId: string, date: s
 
 async function effectStatus(orgId: string, docId: string): Promise<string> {
   return withBypassContext(async () =>
-    (await db.execute<{ status: string }>(sql`select status from posting_effects where document_id = ${docId} and org_id = ${orgId}`)).rows[0]!.status)
+    (await db.execute<{ status: string }>(sql`select status from posting_effects where document_id = ${docId} and org_id = ${orgId}`, 'objects'))[0]!.status)
 }
 
 test('retry-effects refuses without the posting grant', async () => {
@@ -150,7 +150,7 @@ test('retry-effects re-queues a terminal effect with audit evidence', async () =
     })
     assert.equal(await effectStatus(org.orgId, docId), 'pending', 'the stranded effect is re-queued for the worker')
     const evidence = await withBypassContext(async () =>
-      (await db.execute<{ changes: unknown }>(sql`select changes from audit_log where org_id = ${org.orgId} and table_name = 'posting_effects' and row_id = ${effectId} order by at desc limit 1`)).rows[0])
+      (await db.execute<{ changes: unknown }>(sql`select changes from audit_log where org_id = ${org.orgId} and table_name = 'posting_effects' and row_id = ${effectId} order by at desc limit 1`, 'objects'))[0])
     assert.match(JSON.stringify(evidence?.changes), /posting_effects_replay_authorized/, 'the replay evidences its authorization')
     assert.match(JSON.stringify(evidence?.changes), /controller reviewed/, 'the evidence carries the operator reason')
   } finally {

@@ -15,7 +15,7 @@ import { guardSubsidiaryScope, subsidiaryScopeAllows, type Authz } from '@/lib/a
 export async function guardChannelScope(authz: Authz, channelId: string): Promise<NextResponse | null> {
   if (authz.allowedSubsidiaryIds === null) return null
   const row = (await withOrgContext(authz.user.orgId, () => db.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from sales_channels where org_id = ${authz.user.orgId} and id = ${channelId}`))).rows[0]
+    select subsidiary_id from sales_channels where org_id = ${authz.user.orgId} and id = ${channelId}`, 'objects')))[0]
   if (!row) return notFound('channel')
   return guardSubsidiaryScope(authz, row.subsidiary_id) ? notFound('channel') : null
 }
@@ -27,7 +27,7 @@ export async function guardChannelOrderScope(authz: Authz, orderId: string): Pro
     select c.subsidiary_id
       from channel_orders o
       join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
-     where o.org_id = ${authz.user.orgId} and o.id = ${orderId}`))).rows[0]
+     where o.org_id = ${authz.user.orgId} and o.id = ${orderId}`, 'objects')))[0]
   if (!row) return notFound('record')
   return guardSubsidiaryScope(authz, row.subsidiary_id) ? notFound('record') : null
 }
@@ -55,9 +55,9 @@ export function channelAssignmentRefusal(authz: Authz, subsidiaryId: string | nu
  */
 export async function channelAccountsRefusal(authz: Authz, accountIds: readonly string[]): Promise<NextResponse | null> {
   if (authz.allowedSubsidiaryIds === null || accountIds.length === 0) return null
-  const rows = (await withOrgContext(authz.user.orgId, () => db.execute<{ subsidiary_id: string | null }>(sql`
+  const rows = await withOrgContext(authz.user.orgId, () => db.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id from accounts
-     where org_id = ${authz.user.orgId} and id = any(${`{${accountIds.join(',')}}`}::uuid[])`))).rows
+     where org_id = ${authz.user.orgId} and id = any(${`{${accountIds.join(',')}}`}::uuid[])`, 'objects'))
   if (rows.every((row) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, row.subsidiary_id, { orgWideNull: true }))) return null
   return NextResponse.json(
     {

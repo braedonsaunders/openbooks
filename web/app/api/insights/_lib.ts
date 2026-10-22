@@ -100,8 +100,8 @@ export async function loadCard(id: string, orgId: string): Promise<CardRow | nul
       to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
       from insight_cards
      where id = ${id} and org_id = ${orgId} and ${insightVisibilitySql(authz)}
-  `))
-  const card = res.rows[0]
+  `, 'objects'))
+  const card = res[0]
   if (!card || (await guardInsightCardQuery(authz, card.query))) return null
   return card
 }
@@ -124,8 +124,8 @@ export async function loadDashboard(id: string, orgId: string): Promise<Dashboar
       to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
       from insight_dashboards
      where id = ${id} and org_id = ${orgId} and ${insightVisibilitySql(authz)}
-  `))
-  return res.rows[0] ?? null
+  `, 'objects'))
+  return res[0] ?? null
 }
 
 export type DashboardCard = {
@@ -172,11 +172,11 @@ export async function loadDashboardEmbed(
        and ${insightVisibilitySql(authz)}
        and ${sourceFilter}
        ${publishedOnly ? sql`and status = 'published'` : sql``}
-  `))
+  `, 'objects'))
 
-  const present = new Set(res.rows.map((r) => r.id))
+  const present = new Set(res.map((r) => r.id))
   const layout = dashboard.layout.filter((w) => present.has(w.cardId))
-  return { dashboard, cards: res.rows, layout }
+  return { dashboard, cards: res, layout }
 }
 
 /**
@@ -230,9 +230,9 @@ export async function resolveHomeDashboard(
        )
      order by priority asc, d.id asc
      limit 1
-  `))
+  `, 'objects'))
 
-  const row = res.rows[0]
+  const row = res[0]
   return row ? { dashboardId: row.id, source: row.source } : null
 }
 
@@ -256,8 +256,8 @@ export async function layoutCardsVisible(
     select id from insight_cards where id = any(${`{${ids.join(',')}}`}::uuid[])
       and ${insightVisibilitySql(authz)}
       and ${sourceFilter}
-  `)
-  return cards.rows.length === ids.length
+  `, 'objects')
+  return cards.length === ids.length
 }
 
 /** Normalize a dashboard layout array — clamp geometry, drop malformed entries. */

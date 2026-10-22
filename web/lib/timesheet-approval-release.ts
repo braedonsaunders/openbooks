@@ -56,9 +56,7 @@ export async function releaseTimesheetWeekApproval(
   })
   if (!decision)
     throw new Error('Complete the native Flow gate before rejecting this week.')
-  const throughDate = (
-    await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`)
-  ).rows[0]!.d
+  const throughDate = (await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`, 'objects'))[0]!.d
   await lockSharedTimeAuthority(db, orgId, actorId, {
     employeeId: parsed.employeePartyId,
     from,
@@ -72,18 +70,14 @@ export async function releaseTimesheetWeekApproval(
   // that skips this earns.
   const reason = (comment ?? '').trim()
   if(!reason)throw new Error('Record why the submitted week needs correction before rejecting it.')
-  const through = (
-    await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`)
-  ).rows[0]!.d
-  const header = (
-    await db.execute<{ id: string; status: string }>(sql`
+  const through = (await db.execute<{ d: string }>(sql`select (${from}::date + 6)::text as d`, 'objects'))[0]!.d
+  const header = (await db.execute<{ id: string; status: string }>(sql`
     select id, status from timesheet_weeks
      where org_id = ${orgId}
        and employee_party_id = ${parsed.employeePartyId}
        and week_start = ${from}::date
      for update
-  `)
-  ).rows[0]
+  `, 'objects'))[0]
   if (!header || header.status !== 'submitted')
     throw new Error('Only a submitted week can be rejected.')
   await setTimesheetWeekStatus(

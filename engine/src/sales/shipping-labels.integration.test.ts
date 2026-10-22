@@ -180,13 +180,13 @@ test("reconnecting a carrier account preserves its default unless the operator c
 
     await reconnect();
     const keptDefault = await withBypassContext(() => db.execute<{ is_default: boolean }>(sql`
-      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`));
-    assert.equal(keptDefault.rows[0]?.is_default, true);
+      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`, "objects"));
+    assert.equal(keptDefault[0]?.is_default, true);
 
     await reconnect(false);
     const clearedDefault = await withBypassContext(() => db.execute<{ is_default: boolean }>(sql`
-      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`));
-    assert.equal(clearedDefault.rows[0]?.is_default, false);
+      select is_default from shipping_accounts where org_id = ${org.orgId} and id = ${accountId}`, "objects"));
+    assert.equal(clearedDefault[0]?.is_default, false);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -301,8 +301,8 @@ test("rate shopping ranks live rates and buying is idempotent with a balanced co
     }))), (error:unknown) => error instanceof ShippingRefusal && error.code==='quote_expired');
     assert.equal(purchases,0,'a changed handling-unit version cannot reach the carrier with an old quote');
     const untouched = await withBypassContext(()=>db.execute(sql`
-      select id from shipment_labels where org_id=${org.orgId}`));
-    assert.equal(untouched.rows.length,0);
+      select id from shipment_labels where org_id=${org.orgId}`, "objects"));
+    assert.equal(untouched.length,0);
     const refreshed = await withOrg(org.orgId,()=>db.transaction(tx=>getShipmentRates(tx,org.orgId,userId,{
       shipmentId,accountId,...callOpts(baseUrl,shipmentId),
     })));
@@ -323,26 +323,26 @@ test("rate shopping ranks live rates and buying is idempotent with a balanced co
       unitId,toBinId:org.stockLocationId,date:org.date,reason:'Return carton to packing bin',commandKey:randomUUID(),
     }), /Void.*label/i);
     const physical = await withBypassContext(()=>db.execute<{current_stock_location_id:string}>(sql`
-      select current_stock_location_id from handling_units where org_id=${org.orgId} and id=${unitId}`));
-    assert.equal(physical.rows[0]!.current_stock_location_id,dock);
+      select current_stock_location_id from handling_units where org_id=${org.orgId} and id=${unitId}`, "objects"));
+    assert.equal(physical[0]!.current_stock_location_id,dock);
 
     // One balanced cost journal: DR freight 9.87, CR payables 9.87.
     const entries = await withBypassContext(() => db.execute<{ id: string; status: string }>(sql`
       select id, status from journal_entries
-       where org_id = ${org.orgId} and origin = 'shipping_label'`));
-    assert.equal(entries.rows.length, 1);
+       where org_id = ${org.orgId} and origin = 'shipping_label'`, "objects"));
+    assert.equal(entries.length, 1);
     const lines = await withBypassContext(() => db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text as amount from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${entries.rows[0]!.id} order by amount desc`));
+       where org_id = ${org.orgId} and entry_id = ${entries[0]!.id} order by amount desc`, "objects"));
     assert.deepEqual(
-      lines.rows.map((line) => [line.account_id, line.amount]),
+      lines.map((line) => [line.account_id, line.amount]),
       [[org.accounts.freight, "9.8700"], [org.accounts.ap, "-9.8700"]],
     );
     // The label PDF landed in the file cabinet.
     const files = await withBypassContext(() => db.execute<{ id: string }>(sql`
       select f.id from files f join file_attachments fa on fa.file_id = f.id
-       where fa.org_id = ${org.orgId} and fa.target_table = 'shipment_labels'`));
-    assert.equal(files.rows.length, 1);
+       where fa.org_id = ${org.orgId} and fa.target_table = 'shipment_labels'`, "objects"));
+    assert.equal(files.length, 1);
   } finally {
     await close(server);
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -376,8 +376,8 @@ test("voiding a label reverses its cost journal", { skip: !DB }, async () => {
 
     const entries = await withBypassContext(() => db.execute<{ entry_number: string; status: string }>(sql`
       select entry_number, status from journal_entries
-       where org_id = ${org.orgId} and origin = 'shipping_label' order by created_at`));
-    assert.deepEqual(entries.rows.map((row) => row.status), ["reversed", "posted"]);
+       where org_id = ${org.orgId} and origin = 'shipping_label' order by created_at`, "objects"));
+    assert.deepEqual(entries.map((row) => row.status), ["reversed", "posted"]);
   } finally {
     await close(server);
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -435,7 +435,7 @@ test("label access and carrier adjustments honor shipment subsidiary scope", { s
     assert.deepEqual(imported, { imported: 1, skipped: 0 });
     const adjustmentId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       select id from shipping_adjustments where org_id = ${org.orgId}
-       and provider_adjustment_id = ${adjustment.providerAdjustmentId}`))).rows[0]!.id;
+       and provider_adjustment_id = ${adjustment.providerAdjustmentId}`, "objects")))[0]!.id;
     await assert.rejects(withOrg(org.orgId, () => db.transaction((tx) =>
       postBillingAdjustment(tx, org.orgId, userId, adjustmentId, deniedScope))), notFound);
 
@@ -498,8 +498,8 @@ test("a tracker delivery with a bad signature is refused and changes nothing", {
       },
     );
     const untouched = await withBypassContext(() => db.execute<{ tracking_status: string }>(sql`
-      select tracking_status from shipment_labels where org_id = ${org.orgId} and id = ${bought.id}`));
-    assert.equal(untouched.rows[0]!.tracking_status, "pre_transit");
+      select tracking_status from shipment_labels where org_id = ${org.orgId} and id = ${bought.id}`, "objects"));
+    assert.equal(untouched[0]!.tracking_status, "pre_transit");
 
     const goodSignature = `t=${t},v1=${createHmac("sha256", relaySecret).update(`${t}.${rawBody}`, "utf8").digest("hex")}`;
     const delivered = await withOrg(org.orgId, () => db.transaction((tx) =>

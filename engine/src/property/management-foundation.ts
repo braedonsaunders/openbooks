@@ -31,7 +31,7 @@ export async function lockPropertyInScope(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<string> {
   const row = (await tx.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id from managed_properties where org_id=${orgId} and id=${propertyId} for update`)).rows[0];
+    select subsidiary_id from managed_properties where org_id=${orgId} and id=${propertyId} for update`, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, String(row.subsidiary_id))) {
     throw new ScopeNotFoundError();
   }
@@ -72,7 +72,7 @@ export async function lockLeasePropertyInScope(
   const row = (await tx.execute<{ property_id: string; subsidiary_id: string }>(sql`
     select p.id as property_id, p.subsidiary_id
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
-     where l.org_id=${orgId} and l.id=${leaseId} for update of l, p`)).rows[0];
+     where l.org_id=${orgId} and l.id=${leaseId} for update of l, p`, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, String(row.subsidiary_id))) {
     throw new ScopeNotFoundError();
   }
@@ -357,8 +357,8 @@ export async function fixedAssetsFeatureEnabled(runner: Pick<typeof db, "execute
 export async function multiCurrencyFeatureEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<boolean> {
   const result = (await runner.execute<{ features: Record<string, boolean> | null }>(sql`
     select settings->'features' as features from orgs where id=${orgId}
-  `));
-  return dataDependentFeatureDefault(runner as Parameters<typeof dataDependentFeatureDefault>[0], orgId, "multiCurrency", result.rows[0]?.features ?? null);
+  `, "objects"));
+  return dataDependentFeatureDefault(runner as Parameters<typeof dataDependentFeatureDefault>[0], orgId, "multiCurrency", result[0]?.features ?? null);
 }
 export async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: string, rowId: string, action: string, actorId: string | null, changes: unknown, requestId?: string | null) {
   await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,request_id)

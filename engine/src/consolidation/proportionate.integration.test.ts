@@ -103,8 +103,8 @@ test("ownership consolidation eliminates the owned share of a proportionate acqu
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${run.entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `));
-    assert.deepEqual(balances.rows, [
+    `, "objects"));
+    assert.deepEqual(balances, [
       { number: "1400", amount: "-550.0000" },
       { number: "1500", amount: "50.0000" },
       { number: "3000", amount: "500.0000" },
@@ -187,8 +187,8 @@ test("proportionate elimination absorbs the owned share of pre-acquisition retai
         join accounts a on a.id=l.account_id
        where e.id=any(${`{${run.entryIds.join(",")}}`}::uuid[])
        group by a.number order by a.number
-    `));
-    assert.deepEqual(balances.rows, [
+    `, "objects"));
+    assert.deepEqual(balances, [
       { number: "1400", amount: "-750.0000" },
       { number: "1500", amount: "50.0000" },
       { number: "3000", amount: "500.0000" },

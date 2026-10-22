@@ -134,9 +134,9 @@ export async function readCompanySettings(orgId: string,
 
   const org = await db.execute(sql`
     select id, name, legal_name, country, tax_ids, settings
-      from orgs where id = ${orgId}`);
+      from orgs where id = ${orgId}`, "objects");
 
-  const row = org.rows[0]
+  const row = org[0]
   if (!row)
     return { status: 404, body: { error: "org not found" } };
   const settings = (row.settings ?? {}) as Record<string, unknown>;
@@ -254,8 +254,8 @@ export async function updateCompanySettings(
     }
     const existing = await tx.execute(sql`
     select name, legal_name, base_currency, country, tax_ids, settings
-      from orgs where id = ${orgId} for update`);
-    const cur = existing.rows[0]
+      from orgs where id = ${orgId} for update`, "objects");
+    const cur = existing[0]
     if (!cur)
       return { status: 404, body: { error: "org not found" } };
     const settings = (cur.settings ?? {}) as Record<string, unknown>;
@@ -381,9 +381,9 @@ export async function updateCompanySettings(
         return { status: 400, body: { error: "base currency must be a 3-letter code" } };
       }
       const known = await tx.execute(
-        sql`select 1 from currencies where code = ${body.baseCurrency} limit 1`,
+        sql`select 1 from currencies where code = ${body.baseCurrency} limit 1`, "objects",
       );
-      if (!known.rows[0]) {
+      if (!known[0]) {
         return { status: 400, body: {
             error: `unknown currency "${body.baseCurrency}" — add it to the currency table first`,
           } };
@@ -392,8 +392,8 @@ export async function updateCompanySettings(
         const ledgerEvidence = await tx.execute(sql`
         select exists (
           select 1 from journal_lines where org_id = ${orgId} limit 1
-        ) as exists`);
-        if (ledgerEvidence.rows[0]?.exists) {
+        ) as exists`, "objects");
+        if (ledgerEvidence[0]?.exists) {
           return { status: 409, body: {
               error: "base-currency-locked",
               message: "Cannot change base currency after postings exist.",
@@ -457,11 +457,11 @@ export async function updateCompanySettings(
            [...ids].map((i) => sql`${i}`),
            sql`, `,
          )})
-         for share`);
+         for share`, "objects");
         try {
           assertValidControlAccountMappings(
             collected as OrgControlAccounts,
-            found.rows,
+            found,
           );
         } catch (error) {
           if (error instanceof ControlAccountsIncompleteError) {
@@ -549,8 +549,8 @@ export async function updateCompanySettings(
             from parties p
             join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
            where p.org_id = ${orgId} and p.id = ${collected.walkInCustomerId} and p.is_active
-           limit 1`);
-        if (!party.rows[0]) {
+           limit 1`, "objects");
+        if (!party[0]) {
           return { status: 400, body: {
             error: "walkInCustomerId must be an active customer of this organization",
           } };
@@ -563,8 +563,8 @@ export async function updateCompanySettings(
         const found = await tx.execute<{ id: string; type: string }>(sql`
           select id, type from accounts
            where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(tenderAccountIds)}::jsonb)::uuid)
-             and is_active and not is_summary`);
-        const byId = new Map(found.rows.map((row) => [row.id, row.type]));
+             and is_active and not is_summary`, "objects");
+        const byId = new Map(found.map((row) => [row.id, row.type]));
         for (const key of CASH_SALES_SETTING_KEYS) {
           if (key === "walkInCustomerId" || key === "depositAccountIds") continue;
           const accountId = collected[key];
@@ -590,8 +590,8 @@ export async function updateCompanySettings(
         const found = await tx.execute<{ id: string; type: string }>(sql`
           select id, type from accounts
            where org_id = ${orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(depositIds)}::jsonb)::uuid)
-             and is_active and not is_summary`);
-        const byId = new Map(found.rows.map((row) => [row.id, row.type]));
+             and is_active and not is_summary`, "objects");
+        const byId = new Map(found.map((row) => [row.id, row.type]));
         for (const accountId of depositIds) {
           const type = byId.get(accountId);
           if (!type) {
@@ -677,8 +677,8 @@ export async function updateCompanySettings(
                    ) as "leaseEvidence",
                    exists (
                      select 1 from inventory_writedowns where org_id = ${orgId}
-                   ) as "inventoryEvidence"`);
-          if (evidence.rows[0]?.leaseEvidence || evidence.rows[0]?.inventoryEvidence) {
+                   ) as "inventoryEvidence"`, "objects");
+          if (evidence[0]?.leaseEvidence || evidence[0]?.inventoryEvidence) {
             return { status: 409, body: {
                 error: "reporting-framework-locked",
                 message:
@@ -735,7 +735,7 @@ export async function updateCompanySettings(
           }
           const terms = (await tx.execute<{ name: string; isActive: boolean }>(sql`
             select name, is_active as "isActive" from payment_terms
-             where org_id = ${orgId} and id = ${rawTerms}`)).rows[0];
+             where org_id = ${orgId} and id = ${rawTerms}`, "objects"))[0];
           if (!terms) {
             return { status: 400, body: { error: `billing.defaultPaymentTermsId ${rawTerms} does not exist in this organization — choose terms from Setup → Payment terms` } };
           }
@@ -943,8 +943,8 @@ export async function updateCompanySettings(
         select id
           from fiscal_calendars
          where org_id = ${orgId} and is_default and is_active
-         for update`);
-      const calendarId = calendar.rows[0]?.id;
+         for update`, "objects");
+      const calendarId = calendar[0]?.id;
       if (!calendarId) {
         return { status: 409, body: {
             error: "fiscal-calendar-not-found",
@@ -989,8 +989,8 @@ export async function updateCompanySettings(
                       or period_lock.reopen_expires_at <= now()
                     )
                   limit 1
-               ) as closed`);
-      if (activity.rows[0]?.posted || activity.rows[0]?.closed) {
+               ) as closed`, "objects");
+      if (activity[0]?.posted || activity[0]?.closed) {
         return fiscalCalendarLockedResponse();
       }
 
@@ -1006,8 +1006,8 @@ export async function updateCompanySettings(
            and period.id = period_lock.period_id
          where period.org_id = ${orgId}
            and period.fiscal_calendar_id = ${calendarId}
-         for update of period_lock`);
-      const calendarClosed = periodLocks.rows.some(
+         for update of period_lock`, "objects");
+      const calendarClosed = periodLocks.some(
         (periodLock) => periodLock.state !== "open" || periodLock.reopenExpired,
       );
 
@@ -1019,8 +1019,8 @@ export async function updateCompanySettings(
            and period.id = entry.period_id
          where period.org_id = ${orgId}
            and period.fiscal_calendar_id = ${calendarId}
-         for update of entry`);
-      const calendarPosted = journals.rows.some(
+         for update of entry`, "objects");
+      const calendarPosted = journals.some(
         (entry) => entry.status === "posted" || entry.status === "reversed",
       );
 

@@ -53,9 +53,9 @@ export const POST = defineRoute({
         join pay_runs r on r.document_id = f.pay_run_document_id and r.org_id = f.org_id
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where f.org_id = ${gate.user.orgId} and f.id = ${fileId} and f.pay_run_document_id = ${id}
-    `))
-    if (!owned.rows[0]) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+    `, 'objects'))
+    if (!owned[0]) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
     if (denied) return denied
 
     try {

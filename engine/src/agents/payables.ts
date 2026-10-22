@@ -153,8 +153,8 @@ async function loadDuplicatePairs(orgId: string, windowDays: number, floor: stri
       left join parties p on p.id = o.party_id and p.org_id = ${orgId}
      order by o.amt desc, days_between asc, o.id, d.id
      limit 200
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     openDocId: row.open_doc_id,
     openDocNumber: row.open_doc_number,
     otherDocId: row.other_doc_id,
@@ -194,7 +194,7 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
          and d.due_date is not null and d.due_date <= ${horizonEnd}
        order by d.due_date, abs(d.open_balance) desc
        limit 25
-    `),
+    `, "objects"),
     db.execute<{ beyond_count: number; beyond_total: string }>(sql`
       select count(*)::int as beyond_count,
              coalesce(sum(abs(d.open_balance)), 0)::text as beyond_total
@@ -204,10 +204,10 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
          -- Live entries only: the beyond-horizon total counts bills still payable; a voided bill is never paid.
          and d.status = 'posted' and d.open_balance <> 0
          and (d.due_date is null or d.due_date > ${horizonEnd})
-    `),
+    `, "objects"),
   ]);
   return {
-    due: due.rows.map((row) => ({
+    due: due.map((row) => ({
       docId: row.doc_id,
       docNumber: row.doc_number,
       partyId: row.party_id,
@@ -215,8 +215,8 @@ async function loadPayrunBills(orgId: string, horizonEnd: string): Promise<{ due
       dueDate: String(row.due_date),
       openBalance: moneyAbs(row.open_balance),
     })),
-    beyondCount: Number(beyond.rows[0]?.beyond_count ?? 0),
-    beyondTotal: moneyAbs(beyond.rows[0]?.beyond_total ?? "0"),
+    beyondCount: Number(beyond[0]?.beyond_count ?? 0),
+    beyondTotal: moneyAbs(beyond[0]?.beyond_total ?? "0"),
   };
 }
 
@@ -254,8 +254,8 @@ async function loadDiscountOpportunities(orgId: string, minPercent: number): Pro
        and d.document_date + t.discount_days >= ${today}
      order by (abs(d.open_balance) * t.discount_percent / 100) desc
      limit 100
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     termId: row.term_id,
     termName: row.term_name,
     discountPercent: String(row.discount_percent),
@@ -296,8 +296,8 @@ async function loadStaleApprovals(orgId: string, cutoff: string): Promise<StaleA
        )
      order by coalesce(d.document_date, d.posting_date), abs(coalesce(d.total, 0)) desc
      limit 50
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     docId: row.doc_id,
     docNumber: row.doc_number,
     kind: row.kind,

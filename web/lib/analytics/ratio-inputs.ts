@@ -55,27 +55,27 @@ export async function loadRatioInputs(orgId: string): Promise<Record<RatioInputK
     db.execute<{ id: string; key: string }>(sql`
       select id, key from account_groups
        where org_id = ${orgId} and dimension = ${RATIO_INPUT_DIMENSION} and is_active
-    `),
+    `, "objects"),
     db.execute<{ group_id: string; id: string; number: string | null; name: string; type: string }>(sql`
       select m.group_id, a.id, a.number, a.name, a.type
         from account_group_members m
         join accounts a on a.id = m.account_id and a.org_id = m.org_id
        where m.org_id = ${orgId} and m.dimension = ${RATIO_INPUT_DIMENSION}
        order by a.number nulls last, a.name
-    `),
+    `, "objects"),
     db.execute<RatioInputAccount>(sql`
       select id, number, name, type from accounts
        where org_id = ${orgId} and is_active and not is_summary
        order by number nulls last, name
-    `),
+    `, "objects"),
   ]);
   return Object.fromEntries(RATIO_INPUT_KEYS.map((key) => {
-    const group = groups.rows.find((g) => g.key === key);
+    const group = groups.find((g) => g.key === key);
     return [key, {
       accounts: group
-        ? members.rows.filter((m) => m.group_id === group.id).map(({ id, number, name, type }) => ({ id, number, name, type }))
+        ? members.filter((m) => m.group_id === group.id).map(({ id, number, name, type }) => ({ id, number, name, type }))
         : null,
-      candidates: accounts.rows.filter((a) => RATIO_INPUT_ACCOUNT_TYPES[key].includes(a.type)),
+      candidates: accounts.filter((a) => RATIO_INPUT_ACCOUNT_TYPES[key].includes(a.type)),
     }];
   })) as Record<RatioInputKey, RatioInputState>;
 }
@@ -95,15 +95,15 @@ export async function saveRatioInput(
   const ids = [...new Set(accountIds)];
   return db.transaction(async (tx) => {
     const found = ids.length === 0
-      ? { rows: [] as RatioInputAccount[] }
+      ? [] as RatioInputAccount[]
       : await tx.execute<RatioInputAccount>(sql`
           select id, number, name, type from accounts
            where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])
            for share
-        `);
-    const missing = ids.filter((id) => !found.rows.some((a) => a.id === id));
+        `, "objects");
+    const missing = ids.filter((id) => !found.some((a) => a.id === id));
     if (missing.length > 0) throw new RatioInputError(`unknown account ${missing[0]} — reload and choose from the list`);
-    const wrong = found.rows.filter((a) => !RATIO_INPUT_ACCOUNT_TYPES[key].includes(a.type));
+    const wrong = found.filter((a) => !RATIO_INPUT_ACCOUNT_TYPES[key].includes(a.type));
     if (wrong.length > 0) {
       throw new RatioInputError(
         `${wrong.map((a) => [a.number, a.name].filter(Boolean).join(" ")).join(", ")} cannot be classified as ${key.replace(/_/g, " ")}: only ${RATIO_INPUT_ACCOUNT_TYPES[key].join(", ")} accounts can`,
@@ -114,14 +114,14 @@ export async function saveRatioInput(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ratio-inputs:${orgId}:${key}`}, 0))`);
     let group = (await tx.execute<{ id: string }>(sql`
       select id from account_groups where org_id = ${orgId} and dimension = ${RATIO_INPUT_DIMENSION} and key = ${key}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!group) {
       const inserted = await tx.execute<{ id: string }>(sql`
         insert into account_groups (org_id, dimension, key, name, sort_order, match, is_catch_all, created_by, updated_by)
         values (${orgId}, ${RATIO_INPUT_DIMENSION}, ${key}, ${groupName}, ${RATIO_INPUT_KEYS.indexOf(key) * 10}, '{}'::jsonb, false, ${actorId}, ${actorId})
         returning id
-      `);
-      group = inserted.rows[0];
+      `, "objects");
+      group = inserted[0];
       if (!group) throw new Error(`the ${key} classification could not be created`);
     } else {
       // A deactivated classification is reactivated by an explicit save.
@@ -130,7 +130,7 @@ export async function saveRatioInput(
 
     const before = (await tx.execute<{ account_id: string }>(sql`
       select account_id from account_group_members where org_id = ${orgId} and group_id = ${group.id} order by account_id
-    `)).rows.map((r) => r.account_id);
+    `, "objects")).map((r) => r.account_id);
 
     await tx.execute(sql`
       delete from account_group_members
@@ -154,6 +154,6 @@ export async function saveRatioInput(
         ${JSON.stringify({ before: { classification: key, accountIds: before }, after: { classification: key, accountIds: [...ids].sort() } })}::jsonb,
         ${actorId})
     `);
-    return found.rows.sort((a, b) => (a.number ?? a.name).localeCompare(b.number ?? b.name));
+    return found.sort((a, b) => (a.number ?? a.name).localeCompare(b.number ?? b.name));
   });
 }

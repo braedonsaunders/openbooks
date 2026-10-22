@@ -92,7 +92,7 @@ async function seedPricedQuote(tag: string): Promise<Fixture> {
     await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
       values (${goldId}, ${org.orgId}, 'GOLDB', 'Gold price', 'explicit', false, true)`);
     const baseId = (await db.execute<{ id: string }>(sql`
-      select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id;
+      select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, "objects"))[0]!.id;
     await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
       values (${org.orgId}, ${org.customerId}, ${goldId}, ${org.date}, true)`);
     const goldSchedule = randomUUID();
@@ -107,7 +107,7 @@ async function seedPricedQuote(tag: string): Promise<Fixture> {
     }
     const assignmentId = (await db.execute<{ id: string }>(sql`
       select id from customer_price_level_assignments
-       where org_id = ${org.orgId} and customer_id = ${org.customerId}`)).rows[0]!.id;
+       where org_id = ${org.orgId} and customer_id = ${org.customerId}`, "objects"))[0]!.id;
     return {
       orgId: org.orgId, actorId, orderId, customerId: org.customerId,
       documentDate: org.date,
@@ -127,7 +127,7 @@ async function patchLines(
   const revision = await withOrgContext(fixture.orgId, async () =>
     (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from documents where id = ${fixture.orderId}`)).rows[0]!.revision);
+        from documents where id = ${fixture.orderId}`, "objects"))[0]!.revision);
   return withOrgContext(fixture.orgId, () => PATCH(
     new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
       method: "PATCH",
@@ -162,7 +162,7 @@ test(
       assert.equal(response.status, 201);
       const line = await withOrgContext(fixture.orgId, async () => (await db.execute<{
         price_basis: { kind: string; scheduleId: string; levelId: string; assignmentId: string; resolvedAt: string };
-      }>(sql`select price_basis from document_lines where document_id = ${requestId}`)).rows[0]);
+      }>(sql`select price_basis from document_lines where document_id = ${requestId}`, "objects"))[0]);
       assert.equal(line?.price_basis.kind, 'customer_level');
       assert.equal(line?.price_basis.levelId, fixture.goldId);
       assert.equal(line?.price_basis.scheduleId, fixture.goldScheduleId);
@@ -210,7 +210,7 @@ test(
         } | null;
       }>(sql`
         select unit_price::text, price_basis from document_lines
-         where document_id = ${fixture.orderId}`)).rows[0]!);
+         where document_id = ${fixture.orderId}`, "objects"))[0]!);
       assert.equal(line.unit_price, '100.00000000');
       assert.equal(line.price_basis?.kind, 'customer_level');
       assert.equal(line.price_basis?.unitPrice, '100');
@@ -219,7 +219,7 @@ test(
       assert.equal(line.price_basis?.scheduleId, fixture.goldScheduleId);
       const assignmentAlive = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from customer_price_level_assignments
-         where org_id = ${fixture.orgId} and id = ${fixture.assignmentId}`)).rows[0]!.n);
+         where org_id = ${fixture.orgId} and id = ${fixture.assignmentId}`, "objects"))[0]!.n);
       assert.equal(assignmentAlive, 1);
     } finally {
       gateState.authz = null;

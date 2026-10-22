@@ -73,11 +73,11 @@ export async function packSlotState(
   const components = (await db.execute<{ country: string | null; code: string; liability_account_id: string | null }>(sql`
     select country, code, liability_account_id from pay_components
      where org_id = ${orgId} and system_key is not null and is_active
-  `));
+  `, "objects"));
   // Keyed by country as well as code: two packs may declare the same code
-  // (Canada and Australia both use WCB, 0248), and a code-only map would
+  // (Canada and Australia both use WCB), and a code-only map would
   // collapse them to whichever row was read last.
-  const byCountryCode = new Map(components.rows.map((c) => [`${c.country ?? ""}:${c.code}`, c.liability_account_id]));
+  const byCountryCode = new Map(components.map((c) => [`${c.country ?? ""}:${c.code}`, c.liability_account_id]));
   return packs.map((pack) => ({
     country: pack.country,
     name: pack.name,
@@ -110,17 +110,17 @@ export async function uninstallPayrollPack(
   const [profiles, stubRefs] = (await Promise.all([
     db.execute<{ n: number }>(sql`
       select count(*)::int as n from employee_payroll_profiles
-       where org_id = ${orgId} and country = ${country} and is_active`),
+       where org_id = ${orgId} and country = ${country} and is_active`, "objects"),
     db.execute<{ n: number }>(sql`
       select count(distinct l.stub_id)::int as n
         from pay_stub_lines l
         join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-       where l.org_id = ${orgId} and c.country = ${country} and c.system_key is not null`),
+       where l.org_id = ${orgId} and c.country = ${country} and c.system_key is not null`, "objects"),
   ]));
 
   const blockers: string[] = [];
-  const profileCount = Number(profiles.rows[0]?.n ?? 0);
-  const stubCount = Number(stubRefs.rows[0]?.n ?? 0);
+  const profileCount = Number(profiles[0]?.n ?? 0);
+  const stubCount = Number(stubRefs[0]?.n ?? 0);
   if (profileCount > 0) {
     blockers.push(`${profileCount} active employee payroll profile(s) are set to ${country} — move or deactivate them first`);
   }
@@ -138,7 +138,7 @@ export async function uninstallPayrollPack(
     const removed = (await tx.execute<{ id: string }>(sql`
       delete from pay_components
        where org_id = ${orgId} and country = ${country} and system_key is not null
-       returning id`));
+       returning id`, "objects"));
     await tx.execute(sql`
       update orgs
          set settings = jsonb_set(
@@ -152,7 +152,7 @@ export async function uninstallPayrollPack(
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'pay_components', ${orgId}, 'delete',
               ${JSON.stringify({ uninstalledPayrollPack: country })}, ${actorId})`);
-    return { componentsRemoved: removed.rows.length };
+    return { componentsRemoved: removed.length };
   });
 }
 
@@ -168,7 +168,7 @@ export async function setPackSlotAccount(
   const slot = pack?.statutorySlots.find((s) => s.key === slotKey);
   if (!slot) throw new PayrollPackError(`unknown payroll pack slot ${country}/${slotKey}`);
   if (slot.components.length === 0) return;
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update pay_components
        set liability_account_id = ${accountId}, updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and country = ${country}
@@ -211,8 +211,8 @@ export async function ensurePackSlotRoleAccounts(
   const slots = pack.statutorySlots.filter((slot) => slot.liabilityAccountRole);
   if (slots.length === 0) return;
   const settings = (await executor.execute<{ control: unknown }>(sql`
-    select settings->'controlAccounts' as control from orgs where id = ${orgId}`));
-  const control = (settings.rows[0]?.control ?? {}) as Record<string, unknown>;
+    select settings->'controlAccounts' as control from orgs where id = ${orgId}`, "objects"));
+  const control = (settings[0]?.control ?? {}) as Record<string, unknown>;
   for (const slot of slots) {
     const role = slot.liabilityAccountRole!;
     const accountId = control[role];
@@ -228,8 +228,8 @@ export async function ensurePackSlotRoleAccounts(
     const records = (await executor.execute<ControlAccountRecord>(sql`
       select id, type, is_active as "isActive", is_summary as "isSummary"
         from accounts
-       where org_id = ${orgId} and id = ${accountId}`));
-    assertValidControlAccountMappings({ [role]: accountId } as OrgControlAccounts, records.rows);
+       where org_id = ${orgId} and id = ${accountId}`, "objects"));
+    assertValidControlAccountMappings({ [role]: accountId } as OrgControlAccounts, records);
     await executor.execute(sql`
       update pay_components
          set liability_account_id = ${accountId}, updated_by = ${actorId}, updated_at = now()

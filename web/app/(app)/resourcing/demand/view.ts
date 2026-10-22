@@ -96,7 +96,7 @@ export async function loadDemandPage(
        where dl.org_id = ${authz.user.orgId} and dl.id = ${demandId}
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        limit 1
-    `)).rows[0] ?? null
+    `, 'objects'))[0] ?? null
   }
 
   const wantsDrawer = creating || row !== null
@@ -108,19 +108,19 @@ export async function loadDemandPage(
          where org_id = ${authz.user.orgId} and is_active
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
          order by name
-      `),
+      `, 'objects'),
       db.execute<OpportunityOptionRow>(sql`
         select o.id::text as id, o.title as name from crm_opportunities o
          where o.org_id = ${authz.user.orgId} ${crmOpportunityScope(authz.allowedSubsidiaryIds)}
          order by o.title limit 500
-      `),
+      `, 'objects'),
       loadFieldDefs('res_demand_lines'),
     ])
     const firstSunday = firstSundayOfCurrentWeek()
     const formRow = row ?? {
       id: '',
-      departmentId: departments.rows[0]?.id ?? '',
-      departmentName: departments.rows[0]?.name ?? '',
+      departmentId: departments[0]?.id ?? '',
+      departmentName: departments[0]?.name ?? '',
       departmentActive: true,
       jobTitle: '',
       firstWeek: firstSunday,
@@ -130,11 +130,11 @@ export async function loadDemandPage(
       opportunityId: null,
       custom: {},
     }
-    const options = departments.rows.map((department) => ({ value: department.id, label: department.name }))
+    const options = departments.map((department) => ({ value: department.id, label: department.name }))
     if (row && !options.some((option) => option.value === row!.departmentId)) {
       options.push({ value: row.departmentId, label: `${row.departmentName} (${t('demandLines.departmentInactive')})` })
     }
-    const opportunityOptions = opportunities.rows.map((opportunity) => ({ value: opportunity.id, label: opportunity.name }))
+    const opportunityOptions = opportunities.map((opportunity) => ({ value: opportunity.id, label: opportunity.name }))
     const weights = row
       ? await weightingForLine(authz.user.orgId, authz.allowedSubsidiaryIds, row)
       : []

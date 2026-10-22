@@ -38,10 +38,10 @@ test("payment drafts persist the explicit entity or resolve the party then root 
         const stored = await db.execute<{ subsidiary_id: string; org_id: string }>(sql`
           select subsidiary_id, org_id from documents
            where id = ${document.id} and org_id = ${org.orgId}
-        `);
-        assert.equal(stored.rows.length, 1, "the created draft must be readable in its organization");
-        assert.equal(stored.rows[0]!.org_id, org.orgId);
-        assert.equal(stored.rows[0]!.subsidiary_id, expected);
+        `, "objects");
+        assert.equal(stored.length, 1, "the created draft must be readable in its organization");
+        assert.equal(stored[0]!.org_id, org.orgId);
+        assert.equal(stored[0]!.subsidiary_id, expected);
       }
     });
   } finally {

@@ -131,7 +131,7 @@ test("a nested isolation request inside an ambient bypass transaction refuses by
 
 test("a nested db.transaction verifies the enclosing isolation and access mode instead of dropping them", async () => {
   const ambient = (isolation: string, readOnly: string) => ({
-    execute: async () => ({ rows: [{ isolation, read_only: readOnly }] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ isolation, read_only: readOnly }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   });
   const nested = (txDb: object, config: Parameters<typeof db.transaction>[1]) =>
     orgContext.run({ orgId: "11111111-1111-1111-1111-111111111111", bypass: false, txDb: txDb as never }, () =>

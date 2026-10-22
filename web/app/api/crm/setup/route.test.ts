@@ -65,7 +65,8 @@ const mockSources = new Map<string, string>([
         text.includes('delete from crm_') ||
         text.includes('insert into audit_log')
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.executed.push(text)
           if (state.failAudit && text.includes('insert into audit_log')) {
@@ -73,16 +74,16 @@ const mockSources = new Map<string, string>([
             throw new Error('forced audit storage failure')
           }
           if (text.includes('insert into audit_log')) state.auditSeenInTx = state.inTx
-          if (text.includes('select 1 from users')) return { rows: [{ one: 1 }] }
-          if (text.includes('select 1 from currencies')) return { rows: [{ one: 1 }] }
-          if (text.includes('select 1 from crm_sales_teams')) return { rows: [{ one: 1 }] }
-          if (text.includes('select base_currency from orgs')) return { rows: [{ base_currency: 'CAD' }] }
+          if (text.includes('select 1 from users')) return inMode({ rows: [{ one: 1 }] })
+          if (text.includes('select 1 from currencies')) return inMode({ rows: [{ one: 1 }] })
+          if (text.includes('select 1 from crm_sales_teams')) return inMode({ rows: [{ one: 1 }] })
+          if (text.includes('select base_currency from orgs')) return inMode({ rows: [{ base_currency: 'CAD' }] })
           if (isMutation(text)) {
             const ledger = state.inTx ? state.pending : state.outsideWrites
             ledger.push(text)
-            if (text.includes('returning *')) return { rows: [{ id: '${ROW_ID}', name: 'saved' }] }
+            if (text.includes('returning *')) return inMode({ rows: [{ id: '${ROW_ID}', name: 'saved' }] })
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
         transaction: async (work) => work({}),
       }

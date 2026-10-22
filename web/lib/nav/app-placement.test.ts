@@ -56,12 +56,13 @@ const hooks = registerHooks({
           const state = globalThis[Symbol.for('openbooks.nav-app-placement-test')]
           const sqlText = ${sqlText.toString()}
           export const db = {
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
-              if (text.includes('from org_nav_configs')) return { rows: state.configRows }
-              if (text.includes('from apps a')) return { rows: state.appRows }
-              if (text.includes("settings->'features'")) return { rows: [{ f: {} }] }
-              return { rows: [] }
+              if (text.includes('from org_nav_configs')) return inMode({ rows: state.configRows })
+              if (text.includes('from apps a')) return inMode({ rows: state.appRows })
+              if (text.includes("settings->'features'")) return inMode({ rows: [{ f: {} }] })
+              return inMode({ rows: [] })
             },
           }
           const unexpected = () => { throw new Error('unexpected database transaction while resolving navigation') }

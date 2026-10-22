@@ -22,9 +22,9 @@ export const ROE_EVENT_COLUMNS=sql`id,employee_party_id as "employeePartyId",emp
 /** Bare historical row keys resolve only when there is exactly one retained event. */
 export async function selectRoeEvent(orgId:string,employeePartyId:string,eventId?:string|null):Promise<SelectedRoeEvent>{
  if(!isUuid(orgId)||!isUuid(employeePartyId)||eventId!=null&&!isUuid(eventId))throw new PayrollError('Choose the native employee and separation event');
- const rows=(await db.execute<SelectedRoeEvent>(sql`select ${ROE_EVENT_COLUMNS} from payroll_roe_separation_events
+ const rows=await db.execute<SelectedRoeEvent>(sql`select ${ROE_EVENT_COLUMNS} from payroll_roe_separation_events
   where org_id=${orgId} and employee_party_id=${employeePartyId} and status in ('draft','confirmed','issued')
-    ${eventId?sql`and id=${eventId}`:sql``} order by interruption_on,id limit 2`)).rows;
+    ${eventId?sql`and id=${eventId}`:sql``} order by interruption_on,id limit 2`, 'objects');
  if(!rows.length)throw new PayrollError('This employee has no retained separation event — record the original employment-spell and separation facts');
  if(rows.length!==1)throw new PayrollError('This employee has multiple separation events — select the exact event before reviewing or issuing its ROE');
  const event=rows[0]!;
@@ -32,19 +32,19 @@ export async function selectRoeEvent(orgId:string,employeePartyId:string,eventId
  return event;
 }
 export async function assertRoeLegacySourcesBound(orgId:string,employeePartyId:string,pendingSubmissionId?:string):Promise<void>{
- const rows=(await db.execute(sql`select sl.id from payroll_filing_submission_slips sl
+ const rows=await db.execute(sql`select sl.id from payroll_filing_submission_slips sl
   join payroll_filing_submissions f on f.org_id=sl.org_id and f.id=sl.submission_id
   where sl.org_id=${orgId} and f.country='CA' and f.filing_key='roe'
    and (sl.row_id=${employeePartyId} or split_part(sl.row_id,'~',1)=${employeePartyId})
    ${pendingSubmissionId?sql`and f.id<>${pendingSubmissionId}`:sql``}
-   and not exists(select 1 from payroll_roe_issued_event_sources b where b.org_id=sl.org_id and b.issued_slip_id=sl.id) limit 1`)).rows;
+   and not exists(select 1 from payroll_roe_issued_event_sources b where b.org_id=sl.org_id and b.issued_slip_id=sl.id) limit 1`, 'objects');
  if(rows.length)throw new PayrollError('A retained issued ROE has no qualified separation-event source binding — preserve its artifact and resolve the original event evidence before recording further ROE sources');
 }
 /** Historical Canadian account/schedule identity comes from the selected spell's retained sources. */
 export async function roeEventPayrollIdentity(orgId:string,event:SelectedRoeEvent):Promise<{scheduleId:string;frequency:string;filingAccountId:string}>{
  const cutoff=event.salaryContinuanceEndOn??event.lastInsurableEarningsOn;
  if(!event.firstDayWorked)throw new PayrollError('The selected event needs its original first day worked');
- const rows=(await db.execute<{scheduleId:string|null;frequency:string|null;filingAccountId:string|null}>(sql`
+ const rows=await db.execute<{scheduleId:string|null;frequency:string|null;filingAccountId:string|null}>(sql`
   with evidence as (
    select r.pay_schedule_id as schedule_id,s.filing_account_id from pay_stubs s
     join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
@@ -61,7 +61,7 @@ export async function roeEventPayrollIdentity(orgId:string,event:SelectedRoeEven
    left join pay_schedules sc on sc.org_id=${orgId} and sc.id=e.schedule_id
    left join payroll_filing_accounts a on a.org_id=${orgId} and a.id=e.filing_account_id
     and a.subsidiary_id=${event.subsidiaryId} and a.country='CA' and a.program_type='ca_rp'
-  order by 1,2,3 limit 2`)).rows;
+  order by 1,2,3 limit 2`, 'objects');
  if(rows.length!==1||!rows[0]!.scheduleId||!rows[0]!.frequency||!rows[0]!.filingAccountId)throw new PayrollError('The selected employment spell needs one qualified retained Canadian filing account and pay schedule — current-profile settings cannot replace missing or conflicting historical evidence');
  return {scheduleId:rows[0]!.scheduleId!,frequency:rows[0]!.frequency!,filingAccountId:rows[0]!.filingAccountId!};
 }

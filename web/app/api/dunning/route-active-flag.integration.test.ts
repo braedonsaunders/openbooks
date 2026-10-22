@@ -43,19 +43,19 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function activeFlag(orgId: string, id: string): Promise<boolean | undefined> {
   const r = await withBypassContext(() =>
     db.execute<{ is_active: boolean }>(
-      sql`select is_active from dunning_policies where id = ${id} and org_id = ${orgId}`,
+      sql`select is_active from dunning_policies where id = ${id} and org_id = ${orgId}`, "objects",
     ),
   );
-  return r.rows[0]?.is_active;
+  return r[0]?.is_active;
 }
 
 async function stageCount(orgId: string, id: string): Promise<number> {
   const r = await withBypassContext(() =>
     db.execute<{ n: number }>(
-      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`,
+      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`, "objects",
     ),
   );
-  return r.rows[0]!.n;
+  return r[0]!.n;
 }
 
 const ladderStage = () => ({
@@ -77,9 +77,9 @@ test("dunning writes refuse a non-boolean isActive without writing", async () =>
       assert.equal(refused.status, 400, `POST isActive ${JSON.stringify(isActive)}: ${await refused.clone().text()}`);
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
+    assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
     const created = await create(json("POST", { name: "Collections", isActive: false, stages: [] }));
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
@@ -105,9 +105,9 @@ test("dunning writes refuse a non-boolean isActive without writing", async () =>
     assert.equal(createEmpty.status, 422, JSON.stringify(await createEmpty.clone().json()));
     assert.deepEqual(await createEmpty.json(), { error: "cannot activate a policy with no stages — add at least one stage or create it inactive" });
     const countAfter = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(countAfter.rows[0]!.n, 1, "a refused create stores nothing (only the inactive policy exists)");
+    assert.equal(countAfter[0]!.n, 1, "a refused create stores nothing (only the inactive policy exists)");
 
     // Controls: real booleans still write; omission stays active when a
     // ladder is supplied; pruning the ladder off a live policy is refused.

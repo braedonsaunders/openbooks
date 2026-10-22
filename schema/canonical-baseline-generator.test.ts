@@ -86,6 +86,13 @@ CREATE SCHEMA public;
 COMMENT ON SCHEMA public IS 'standard public schema';
 
 
+--
+-- Name: tenant_retirement; Type: SCHEMA; Schema: -; Owner: -
+--
+
+CREATE SCHEMA tenant_retirement;
+
+
 ${fn}
 
 --

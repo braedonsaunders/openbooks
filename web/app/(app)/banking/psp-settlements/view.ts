@@ -143,14 +143,14 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       from psp_settlement_batches
      where org_id = ${authz.user.orgId}${subsidiaryFilter}
      order by settlement_date desc, created_at desc
-  `)
+  `, 'objects')
   // Parked refunds and disputes waiting on an operator: the queue link names
   // the count so the work is visible before opening it.
   const pendingReviews = await db.execute<{ count: string }>(sql`
     select count(*)::text as count from payment_disputes
      where org_id = ${authz.user.orgId} and status = 'pending_review'
-  `)
-  const pendingReviewCount = Number(pendingReviews.rows[0]?.count ?? '0')
+  `, 'objects')
+  const pendingReviewCount = Number(pendingReviews[0]?.count ?? '0')
   // The import form's subsidiary picker: same flag gate and caller scope as
   // the document drawers. Empty keeps all subsidiary UI hidden
   // and the batch posts to the root like every other document.
@@ -180,7 +180,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
           from psp_provider_configs
          where org_id = ${authz.user.orgId} and is_enabled
          order by provider
-      `)).rows
+      `, 'objects'))
     : []
 
   return {
@@ -236,7 +236,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
     },
     subsidiaries,
     accounts,
-    rows: batches.rows.map((b) => {
+    rows: batches.map((b) => {
       const currency = String(b.currency)
       const fxAmount = String(b.fxAmount)
       const disputeAmount = String(b.disputeAmount)

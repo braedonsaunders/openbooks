@@ -34,8 +34,8 @@ export async function seedProjectTypes(
           from project_types
          where org_id = ${orgId} and key = ${t.key}
          limit 1
-      `));
-      const type = row.rows[0]!;
+      `, "objects"));
+      const type = row[0]!;
       await tx.execute(sql`
         insert into project_financial_profile_versions (
           org_id, project_type_id, effective_from, financial_profile,
@@ -58,16 +58,16 @@ export async function seedProjectTypes(
 
 async function main() {
   const org = await db.execute<{ id: string }>(
-    sql`select id from orgs order by created_at`,
+    sql`select id from orgs order by created_at`, "objects",
   );
-  for (const row of org.rows) await seedProjectTypes(row.id);
+  for (const row of org) await seedProjectTypes(row.id);
   const c = await db.execute<{ n: number }>(
-    sql`select count(*)::int n from project_types`,
+    sql`select count(*)::int n from project_types`, "objects",
   );
   const b = await db.execute<{ n: number }>(
-    sql`select count(*)::int n from projects where project_type_id is not null`,
+    sql`select count(*)::int n from projects where project_type_id is not null`, "objects",
   );
-  console.log("project_types:", c.rows[0]!.n, "| projects typed:", b.rows[0]!.n);
+  console.log("project_types:", c[0]!.n, "| projects typed:", b[0]!.n);
   process.exit(0);
 }
 

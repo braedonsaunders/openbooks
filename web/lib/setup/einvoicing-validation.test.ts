@@ -11,7 +11,7 @@ const id = 'a0000000-0000-4000-8000-000000000002'
 const seller = SETUP_ENTITY_BY_KEY.get('einvoice-settings')!
 const recipient = SETUP_ENTITY_BY_KEY.get('einvoice-recipients')!
 const taxCode = SETUP_ENTITY_BY_KEY.get('tax-codes')!
-const executor = (...rows: Record<string, unknown>[][]): SqlExecutor => ({ execute: async () => ({ rows: rows.shift() ?? [] }) }) as unknown as SqlExecutor
+const executor = (...rows: Record<string, unknown>[][]): SqlExecutor => ({ execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: rows.shift() ?? [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)) }) as unknown as SqlExecutor
 
 test('seller configuration refuses an unsupported profile and an unpaired electronic address', async () => {
   assert.match(String(await validateEInvoiceSetupWrite({ entity: seller, orgId, body: { defaultProfile: 'unknown' }, executor: executor() })), /supported.*profile/)

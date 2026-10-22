@@ -57,7 +57,7 @@ export async function transferPricingPolicyInEffect(
        and (effective_to is null or effective_to >= ${input.date}::date)
      order by (buyer_subsidiary_id is null), effective_from desc
      limit 1
-     for share`)).rows[0];
+     for share`, "objects"))[0];
   return row ?? null;
 }
 
@@ -107,12 +107,12 @@ export async function priceLevelUnitPrice(
             or (schedule.family_id is not null
                 and schedule.family_id = (select family_id from items where org_id = ${orgId} and id = ${input.itemId})))
      order by (schedule.item_id = ${input.itemId}) desc nulls last, schedule.effective_from desc, schedule.revision desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!schedule) return null;
-  const breaks = (await runner.execute<{ minimumQuantity: string; unitPrice: string }>(sql`
+  const breaks = await runner.execute<{ minimumQuantity: string; unitPrice: string }>(sql`
     select minimum_quantity::text as "minimumQuantity", unit_price::text as "unitPrice"
       from item_price_breaks
-     where org_id = ${orgId} and schedule_id = ${schedule.id}`)).rows;
+     where org_id = ${orgId} and schedule_id = ${schedule.id}`, "objects");
   if (breaks.length === 0) return null;
   // A quantity below the smallest break prices at the smallest break.
   const selected = selectQuantityPrice(input.quantity, breaks)

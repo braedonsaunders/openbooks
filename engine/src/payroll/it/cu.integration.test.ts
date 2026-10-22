@@ -152,7 +152,7 @@ export interface CuTieOutExpectation {
 
 /** Every committed IT stub line in the year, keyed for the tie-out. */
 async function committedLineSums(orgId: string): Promise<Map<string, CuTieOutExpectation>> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     employee_party_id: string; kind: string; system_key: string | null; taxable: boolean | null;
     amount: string; pensionable: string;
   }>(sql`
@@ -164,7 +164,7 @@ async function committedLineSums(orgId: string): Promise<Map<string, CuTieOutExp
       join pay_stub_lines l on l.org_id = ${orgId} and l.stub_id = s.id
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where s.org_id = ${orgId} and s.tax_year = ${TAX_YEAR} and s.country = 'IT'
-  `)).rows;
+  `, "objects");
   const byEmployee = new Map<string, {
     redditi: string; irpef: string; addreg: string; inps: string; ti: string;
     imponibile: string; seenPensionable: Set<string>;
@@ -198,14 +198,14 @@ async function committedLineSums(orgId: string): Promise<Map<string, CuTieOutExp
       acc.ti = add(acc.ti, String(row.amount));
     }
   }
-  const pensionable = (await db.execute<{ employee_party_id: string; pensionable: string }>(sql`
+  const pensionable = await db.execute<{ employee_party_id: string; pensionable: string }>(sql`
     select s.employee_party_id, sum(s.pensionable_earnings)::text as pensionable
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
                      and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${TAX_YEAR} and s.country = 'IT'
      group by s.employee_party_id
-  `)).rows;
+  `, "objects");
   for (const row of pensionable) {
     entry(String(row.employee_party_id)).imponibile = String(row.pensionable ?? "0");
   }
@@ -227,7 +227,7 @@ test(
   async () => {
     const { orgId, actorId, scheduleId } = await seedOrg();
     const sub = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows[0]!.id;
+      select id from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"))[0]!.id;
     const empA = await makeEmployee(orgId, sub, actorId, scheduleId, "Alba Indeterminata", "36000", {
       domicilio_comune: COMUNE,
       // The engine refuses an unknown contract term before pricing: both
@@ -260,7 +260,7 @@ test(
         join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
        where s.org_id = ${orgId} and s.pay_run_document_id = ${draft.documentId}
          and l.kind = 'deduction' and pc.system_key = 'income_tax'
-    `)).rows[0]!.amount;
+    `, "objects"))[0]!.amount;
     assert.ok(cmp(draftIrpef, "0") > 0, "the draft run withholds real IRPEF, so its exclusion is proven");
 
     const filing = cuFiling();
@@ -306,7 +306,7 @@ test(
         join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
        where s.org_id = ${orgId} and s.tax_year = ${TAX_YEAR} and s.country = 'IT'
          and l.kind = 'deduction' and pc.system_key = 'income_tax'
-    `)).rows[0]!.amount;
+    `, "objects"))[0]!.amount;
     const popIrpef = [...byId.values()].reduce((acc, row) => add(acc, String(row.irpef)), "0");
     assert.equal(cmp(add(popIrpef, draftIrpef), allIrpef), 0, "draft IRPEF is outside the filing");
 

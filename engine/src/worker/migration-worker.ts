@@ -164,8 +164,8 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
                message: "Comparing the complete source and target populations…",
              })}::jsonb)
           returning id
-        `));
-        const runId = started.rows[0]!.id;
+        `, "objects"));
+        const runId = started[0]!.id;
         try {
           const plan = await preflightFullSync(source, {
             orgId,
@@ -303,8 +303,8 @@ export async function reapStaleSyncRuns(): Promise<number> {
          when kind = 'full_migration' then interval '6 hours'
          else interval '30 minutes'
        end
-  `));
-  if (stale.rows.length === 0) return 0;
+  `, "objects"));
+  if (stale.length === 0) return 0;
 
   // A full migration can legitimately exceed the age threshold. BullMQ's
   // active state, together with its worker lock/stall recovery, distinguishes
@@ -312,7 +312,7 @@ export async function reapStaleSyncRuns(): Promise<number> {
   const activeJobs = await getMigrationQueue().getJobs(["active"]);
   const activeConnections = new Set(activeJobs.map((job) => job.data.connectionId));
   let reaped = 0;
-  for (const run of stale.rows) {
+  for (const run of stale) {
     if (run.connectionId && activeConnections.has(run.connectionId)) continue;
     const changed = await withOrgContext(run.orgId, () => db.transaction(async (tx) => {
       if (run.connectionId) {
@@ -335,9 +335,9 @@ export async function reapStaleSyncRuns(): Promise<number> {
              else interval '30 minutes'
            end
          returning id
-      `);
+      `, "objects");
     }));
-    if (changed.rows.length > 0) reaped += 1;
+    if (changed.length > 0) reaped += 1;
   }
   return reaped;
 }
@@ -406,7 +406,7 @@ export function startMirrorScheduler(): void {
         console.log(`[mirror-scheduler] reaped ${reaped} stale sync run(s)`);
       await purgeExpiredQbdBridgeData();
       // bypass: scheduler-tick — mirror connections due a scheduled run are found across every organization.
-      const candidates = (await withBypassContext(() => db.execute(sql`
+      const candidates = await withBypassContext(() => db.execute<MirrorCandidate>(sql`
         select c.id, c.org_id as "orgId", c.mirror_schedule as schedule,
                history.last_successful_at as "lastSuccessfulAt",
                history.last_scheduled_attempt_at as "lastScheduledAttemptAt",
@@ -436,8 +436,8 @@ export function startMirrorScheduler(): void {
              select 1 from sync_runs running
               where running.connection_id = c.id and running.org_id = c.org_id
                 and running.kind = 'incremental' and running.status = 'running'
-           )`))) as unknown as { rows: MirrorCandidate[] };
-      const outcome = await enqueueDueMirrors(candidates.rows);
+           )`, "objects"));
+      const outcome = await enqueueDueMirrors(candidates);
       if (outcome.orgErrors.length > 0) {
         console.error(
           `[mirror-scheduler] ${outcome.orgErrors.length} org(s) failed to enqueue this tick; they retry next tick`,

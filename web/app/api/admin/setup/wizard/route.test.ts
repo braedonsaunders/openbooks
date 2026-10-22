@@ -53,15 +53,16 @@ const mockDb = `
     })
   }
 
-  async function execute(query) {
+  async function execute(query, mode) {
+    const inMode = (result) => (mode === 'objects' ? result.rows : result)
     const text = sqlText(query)
     state.queries.push({ text, values: sqlValues(query) })
-    if (text.includes('from currencies')) return { rows: [{ one: 1 }] }
+    if (text.includes('from currencies')) return inMode({ rows: [{ one: 1 }] })
     if (text.includes('from journal_lines where org_id') && text.includes('select exists')) {
-      return { rows: [{ posted: false }] }
+      return inMode({ rows: [{ posted: false }] })
     }
     if (text.includes('from orgs where id') && text.includes('for update')) {
-      return {
+      return inMode({
         rows: [{
           name: 'Original Name',
           legal_name: 'Original Legal',
@@ -69,10 +70,10 @@ const mockDb = `
           country: 'CA',
           settings: { industry: 'general_business' },
         }],
-      }
+      })
     }
     if (text.includes('from subsidiaries s')) {
-      return {
+      return inMode({
         rows: [{
           id: '00000000-0000-4000-8000-000000000003',
           name: 'Original Name',
@@ -81,9 +82,9 @@ const mockDb = `
           country: 'CA',
           entity_count: 1,
         }],
-      }
+      })
     }
-    return { rows: [] }
+    return inMode({ rows: [] })
   }
 
   export const db = {

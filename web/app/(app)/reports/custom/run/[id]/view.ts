@@ -205,10 +205,10 @@ export async function loadReportRun(
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by r.period_end desc
        limit 27
-    `))
+    `, 'objects'))
     // The label names the worked period; the WINDOW is the run's pay date —
     // payroll plans filter on pay_date, which lands after the period ends.
-    extraPeriods = runs.rows.map((run) => ({
+    extraPeriods = runs.map((run) => ({
       id: run.document_number,
       label: `${run.document_number} · ${String(run.period_start).slice(0, 10)} → ${String(run.period_end).slice(0, 10)}${run.schedule ? ` (${run.schedule})` : ''}`,
       from: String(run.pay_date).slice(0, 10),

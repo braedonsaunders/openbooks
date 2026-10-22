@@ -153,12 +153,12 @@ export async function loadAdminExtensions(
       ${candidates} select a.*, a.updated_at as "updatedAt" from candidates a
       where ${where} order by a.name, a.row_id
       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `),
+    `, 'objects'),
     db.execute<{ status: string; n: string }>(
-      sql`${candidates} select status,count(*) as n from candidates group by status`,
+      sql`${candidates} select status,count(*) as n from candidates group by status`, 'objects',
     ),
     db.execute(
-      sql`${candidates} select count(*) as n from candidates a where ${where}`,
+      sql`${candidates} select count(*) as n from candidates a where ${where}`, 'objects',
     ),
   ])
 
@@ -176,26 +176,26 @@ export async function loadAdminExtensions(
              a.active_version_id as "activeVersionId", v.version, v.manifest
         from apps a left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
        where a.org_id = ${orgId} and a.key = ${appKey} limit 1
-    `)
-    const app = detail.rows[0]
+    `, 'objects')
+    const app = detail[0]
     if (app) {
       const [files, runs, published] = await Promise.all([
         listAppFiles(orgId, appKey),
         db.execute(sql`
           select endpoint, status, units, logs, error_message, duration_ms, at
-            from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`),
+            from app_runs where app_id = ${app.id} and org_id = ${orgId} order by at desc limit 25`, 'objects'),
         isAppPublished(appKey, orgId),
       ])
       drawer = {
         app,
         files,
-        runs: runs.rows,
+        runs,
         isPublished: published,
       }
     }
   }
 
-  const total = Number(totalRow.rows[0]?.n ?? 0)
+  const total = Number(totalRow[0]?.n ?? 0)
   const endpointCount = (m: unknown) =>
     (m as AppManifest | null)?.endpoints?.length ?? 0
 
@@ -214,7 +214,7 @@ export async function loadAdminExtensions(
     libraryLabel: tApps('actions.library'),
     searchPlaceholder: tAdminExtensions('searchPlaceholder'),
     statusLabel: tAdminExtensions('status'),
-    statusOptions: statuses.rows.map((r) => ({
+    statusOptions: statuses.map((r) => ({
       value: r.status,
       label: statusText(r.status),
       count: Number(r.n),
@@ -228,7 +228,7 @@ export async function loadAdminExtensions(
     columnRuns: tAdminExtensions('columns.runs'),
     columnStatus: tAdminExtensions('columns.status'),
     columnUpdated: tAdminExtensions('columns.updated'),
-    rows: apps.rows.map((a) => ({
+    rows: apps.map((a) => ({
       rowId: a.row_id,
       key: String(a.key),
       name: String(a.name),

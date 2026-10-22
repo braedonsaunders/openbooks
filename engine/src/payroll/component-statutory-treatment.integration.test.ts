@@ -31,15 +31,15 @@ test('dated absence selects the default treatment and committed clone evidence k
       await db.execute(sql`update employee_payroll_profiles set wcb_exempt=true
         where org_id=${f.orgId} and employee_party_id=${f.employeeId}`);
       const componentId = (await db.execute<{ id: string }>(sql`select id from pay_components
-        where org_id=${f.orgId} and system_key='base_pay'`)).rows[0]!.id;
+        where org_id=${f.orgId} and system_key='base_pay'`, 'objects'))[0]!.id;
       const defaultId = (await db.execute<{ id: string }>(sql`update pay_component_statutory_treatments
         set program_exclusions=array['wcb'] where org_id=${f.orgId} and pay_component_id=${componentId}
-          and worker_comp_group_id is null returning id`)).rows[0]!.id;
+          and worker_comp_group_id is null returning id`, 'objects'))[0]!.id;
       const groupTreatmentId = (await db.execute<{ id: string }>(sql`insert into pay_component_statutory_treatments
         (org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions,vacationable)
-        values(${f.orgId},${componentId},${groupId},'2026-01-01','{}',true) returning id`)).rows[0]!.id;
+        values(${f.orgId},${componentId},${groupId},'2026-01-01','{}',true) returning id`, 'objects'))[0]!.id;
       const liability = (await db.execute<{ id: string }>(sql`select liability_account_id::text as id from pay_components
-        where org_id=${f.orgId} and country='CA' and system_key='ei'`)).rows[0]!.id;
+        where org_id=${f.orgId} and country='CA' and system_key='ei'`, 'objects'))[0]!.id;
       await setPackSlotAccount(f.orgId, f.actorId, 'CA', 'wcb', liability);
       const run = await createPayRun({ orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
         periodStart:'2026-07-01',periodEnd:'2026-07-07',payDate:'2026-07-08' });
@@ -47,7 +47,7 @@ test('dated absence selects the default treatment and committed clone evidence k
       await mutatePayRunAdjustment({ ...command,mutation:{ action:'add',employeePartyId:f.employeeId,componentId,amount:'1000' } });
       const evidence = async () => (await db.execute<{ snapshot: PayRunCalculationSourceSnapshot; digest: string }>(sql`
         select calculation_source_snapshot as snapshot,calculation_source_digest as digest from pay_runs
-        where org_id=${f.orgId} and document_id=${run.documentId}`)).rows[0]!;
+        where org_id=${f.orgId} and document_id=${run.documentId}`, 'objects'))[0]!;
       assert.deepEqual((await calculatePayRun(command)).errors, []);
       assert.ok((await evidence()).snapshot.payComponentStatutoryTreatments?.some(row => row.id===groupTreatmentId));
       await recordHistoricalEmployerAssignment({ orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,
@@ -66,7 +66,7 @@ test('dated absence selects the default treatment and committed clone evidence k
       assert.ok(original.snapshot.payComponentStatutoryTreatments?.some(row => row.id===defaultId && row.employeeWorkerCompGroupId===null));
       assert.equal(original.snapshot.payComponentStatutoryTreatments?.some(row => row.id===groupTreatmentId), false);
       assert.equal((await db.execute<{ id: string | null }>(sql`select public.payroll_worker_comp_group_at(
-        ${f.orgId}::uuid,${f.employeeId}::uuid,'2026-07-09'::date)::text as id`)).rows[0]!.id, groupId);
+        ${f.orgId}::uuid,${f.employeeId}::uuid,'2026-07-09'::date)::text as id`, 'objects'))[0]!.id, groupId);
       await commitPayRun(command);
       await db.execute(sql`update pay_component_statutory_treatments set effective_to='2026-07-31'
         where org_id=${f.orgId} and id=${defaultId}`);
@@ -86,7 +86,7 @@ test('dated absence selects the default treatment and committed clone evidence k
           select run.calculation_source_snapshot as snapshot,run.calculation_source_digest as digest,
             public.ob_rebase(${defaultId}::uuid,org.sandbox_seed)::text as policy_id
           from orgs org join pay_runs run on run.org_id=org.id
-          where org.id=${target} and run.document_id=public.ob_rebase(${run.documentId}::uuid,org.sandbox_seed)`)).rows[0]!;
+          where org.id=${target} and run.document_id=public.ob_rebase(${run.documentId}::uuid,org.sandbox_seed)`, 'objects'))[0]!;
         assert.deepEqual(copied.snapshot, original.snapshot);
         assert.equal(copied.digest, original.digest);
         assert.notEqual(copied.policy_id, defaultId);

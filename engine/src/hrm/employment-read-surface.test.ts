@@ -164,23 +164,24 @@ function assignmentJson(employmentId: string, v: FakeAssignment): Record<string,
 
 function fakeExec(state: FakeState, org: string): SqlExecutor {
   return {
-    execute: (async (query: unknown) => {
+    execute: (async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const text = sqlText(query);
       const params = sqlParams(query);
       if (/from users/i.test(text)) {
         const user = state.users.get(str(params, 0));
-        if (/party_id/i.test(text)) return { rows: user ? [{ id: str(params, 0), partyId: null }] : [] };
-        return { rows: user ? [{ isSuperAdmin: false, isActive: true }] : [] };
+        if (/party_id/i.test(text)) return inMode({ rows: user ? [{ id: str(params, 0), partyId: null }] : [] });
+        return inMode({ rows: user ? [{ isSuperAdmin: false, isActive: true }] : [] });
       }
       if (/subsidiary_restriction/i.test(text)) {
         const user = state.users.get(str(params, 0));
-        return { rows: [{ restriction: user?.restriction ?? { mode: "all" } }] };
+        return inMode({ rows: [{ restriction: user?.restriction ?? { mode: "all" } }] });
       }
       if (/role_assignments assignment/i.test(text)) {
         const user = state.users.get(str(params, 0));
-        return { rows: user ? [{ permissions: user.grants }] : [] };
+        return inMode({ rows: user ? [{ permissions: user.grants }] : [] });
       }
-      if (/user_permission_overrides/i.test(text)) return { rows: [] };
+      if (/user_permission_overrides/i.test(text)) return inMode({ rows: [] });
       if (/hrm_employment_change_requests/i.test(text)) {
         // The select list interpolates the recorded-stamp format literal
         // before the ids — locate the employment param, never assume index 1.
@@ -188,7 +189,7 @@ function fakeExec(state: FakeState, org: string): SqlExecutor {
         const list = [...((typeof employmentId === "string" ? state.requests.get(employmentId) : undefined) ?? [])]
           // The loader orders newest-first; the fake honors the same contract.
           .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
-        return {
+        return inMode({
           rows: list.map((r) => ({
             id: r.id,
             status: r.status,
@@ -207,7 +208,7 @@ function fakeExec(state: FakeState, org: string): SqlExecutor {
             created_at: r.createdAt,
             updated_at: r.updatedAt,
           })),
-        };
+        });
       }
       // The single-employment snapshot mentions both version tables; the
       // batched headcount reads mention one each with an IN list.
@@ -215,49 +216,49 @@ function fakeExec(state: FakeState, org: string): SqlExecutor {
         if (/\bin\s*\(/i.test(text)) {
           const rows: Record<string, unknown>[] = [];
           for (const [employmentId, list] of state.versions) rows.push(...list.map((v) => versionJson(employmentId, v)));
-          return { rows };
+          return inMode({ rows });
         }
         const employmentId = str(params, 1);
         const record = state.employments.get(employmentId);
-        return {
+        return inMode({
           rows: [{
             revision: record ? record.revision : null,
             employment_versions: (state.versions.get(employmentId) ?? []).map((v) => versionJson(employmentId, v)),
             assignment_versions: (state.assignments.get(employmentId) ?? []).map((v) => assignmentJson(employmentId, v)),
           }],
-        };
+        });
       }
       if (/employment_assignment_versions/i.test(text)) {
         const rows: Record<string, unknown>[] = [];
         for (const [employmentId, list] of state.assignments) rows.push(...list.map((v) => assignmentJson(employmentId, v)));
-        return { rows };
+        return inMode({ rows });
       }
       if (/for share/i.test(text)) {
-        return { rows: state.employments.has(str(params, 1)) ? [{ one: 1 }] : [] };
+        return inMode({ rows: state.employments.has(str(params, 1)) ? [{ one: 1 }] : [] });
       }
       if (/from worker_employments/i.test(text)) {
         // The authorization subject query also projects worker_party_id —
         // only the party-resolution query filters on it.
         if (/worker_party_id\s*=/i.test(text)) {
-          return {
+          return inMode({
             rows: [...state.employments.values()]
               .filter((e) => e.workerPartyId === str(params, 1))
               .map((e) => ({ id: e.id, employerSubsidiaryId: e.employerSubsidiaryId })),
-          };
+          });
         }
         if (params.length === 1) {
           // The headcount census: org scope only, no employment predicate.
-          return {
+          return inMode({
             rows: [...state.employments.values()].map((e) => ({
               id: e.id,
               workerPartyId: e.workerPartyId,
               employerSubsidiaryId: e.employerSubsidiaryId,
               revision: e.revision,
             })),
-          };
+          });
         }
         const record = state.employments.get(str(params, 1));
-        return {
+        return inMode({
           rows: record
             ? [{
                 id: record.id,
@@ -267,16 +268,16 @@ function fakeExec(state: FakeState, org: string): SqlExecutor {
                 revision: record.revision,
               }]
             : [],
-        };
+        });
       }
       if (/from subsidiaries/i.test(text)) {
         if (/\bin\s*\(/i.test(text)) {
-          return { rows: [...state.subsidiaries.entries()].map(([id, name]) => ({ id, name })) };
+          return inMode({ rows: [...state.subsidiaries.entries()].map(([id, name]) => ({ id, name })) });
         }
-        return { rows: [] };
+        return inMode({ rows: [] });
       }
       if (/from departments/i.test(text)) {
-        return { rows: [...state.departments.entries()].map(([id, name]) => ({ id, name })) };
+        return inMode({ rows: [...state.departments.entries()].map(([id, name]) => ({ id, name })) });
       }
       throw new Error(`fake runner has no route for: ${text.slice(0, 120)}`);
     }) as SqlExecutor["execute"],
@@ -373,9 +374,9 @@ test("headcount series resolves every date from one batched temporal census", as
   const statements: string[] = [];
   const base = fakeExec(state, ORG);
   const trackingExec: SqlExecutor = {
-    execute: (async (query: unknown) => {
+    execute: (async (query: unknown, mode?: string) => {
       statements.push(sqlText(query));
-      return base.execute(query as never);
+      return base.execute(query as never, mode as never);
     }) as SqlExecutor["execute"],
   };
   const dto = await loadHeadcountTotalsAsOf(trackingExec, {
@@ -399,9 +400,9 @@ test("headcount series refuses an unbounded date list before reading", async () 
   let reads = 0;
   const base = fakeExec(state, ORG);
   const trackingExec: SqlExecutor = {
-    execute: (async (query: unknown) => {
+    execute: (async (query: unknown, mode?: string) => {
       reads += 1;
-      return base.execute(query as never);
+      return base.execute(query as never, mode as never);
     }) as SqlExecutor["execute"],
   };
   await assert.rejects(
@@ -427,9 +428,9 @@ test("headcount overview shares one scoped temporal census for current groups an
   state.versions.set(foreign.id, [activeVersion(), activeVersion({ versionNo: 2 })]);
   const statements: string[] = [];
   const base = fakeExec(state, ORG);
-  const exec: SqlExecutor = { execute: (async (query: unknown) => {
+  const exec: SqlExecutor = { execute: (async (query: unknown, mode?: string) => {
     statements.push(sqlText(query));
-    return base.execute(query as never);
+    return base.execute(query as never, mode as never);
   }) as SqlExecutor["execute"] };
   const result = await loadHeadcountOverviewAsOf(exec, {
     orgId: ORG, actorId: actor, ...ASOF, effectiveDates: ["2026-03-31", ASOF.effectiveDate],

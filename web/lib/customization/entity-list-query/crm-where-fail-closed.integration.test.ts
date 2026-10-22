@@ -25,11 +25,9 @@ async function accountCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
       ${customerBaseJoins(true)}
-      where ${customerWhere({ ...defaultListView("customer"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`)
-  ).rows;
+      where ${customerWhere({ ...defaultListView("customer"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 
@@ -38,10 +36,8 @@ async function activityCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_activities a
-      where ${activityWhere({ ...defaultListView("activity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_activities a
+      where ${activityWhere({ ...defaultListView("activity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 

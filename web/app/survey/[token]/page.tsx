@@ -34,9 +34,9 @@ export default async function SurveyRespondPage({ params }: { params: Promise<{ 
           from hrm_survey_invitations i
           join hrm_surveys s on s.org_id = i.org_id and s.id = i.survey_id
          where i.token_hash = ${hashHrmToken(token)}
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!row || row.status !== 'open' || row.responded) return null
-      const questions = (await db.execute<{
+      const questions = await db.execute<{
         id: string
         kind: string
         prompt: string
@@ -45,7 +45,7 @@ export default async function SurveyRespondPage({ params }: { params: Promise<{ 
         select id, kind, prompt, options from hrm_survey_questions
          where org_id = ${claims.orgId} and survey_id = ${row.id}
          order by position
-      `)).rows
+      `, 'objects')
       return { ...row, questions }
     })
   } catch {

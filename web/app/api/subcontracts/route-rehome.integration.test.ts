@@ -69,20 +69,20 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
       insert into projects (org_id, subsidiary_id, code, name, status, is_active, custom)
       values (${org.orgId}, ${org.subsidiaryId}, 'SC-RACE', 'Scope race project', 'active', true, '{}'::jsonb)
       returning id
-    `))).rows[0]!.id;
+    `, "objects")))[0]!.id;
     const vendorId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, is_active)
       values (${org.orgId}, 'company', 'Scope race vendor', true) returning id
-    `))).rows[0]!.id;
+    `, "objects")))[0]!.id;
     await withBypassContext(() => db.execute(sql`
       insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${vendorId}, true)
     `));
     const subcontractId = (await withBypassContext(() => createSubcontract({
       orgId: org.orgId, userId: actorId, projectId, vendorId, number: "SC-RACE-1", title: "Before race", originalCommitment: "100.00",
     }))).id;
-    const revisionRows = (await withBypassContext(() => db.execute<{ token: string }>(sql`
+    const revisionRows = await withBypassContext(() => db.execute<{ token: string }>(sql`
       select updated_at::text as token from subcontracts where org_id = ${org.orgId} and id = ${subcontractId}
-    `))).rows;
+    `, "objects"));
     assert.equal(revisionRows.length, 1, "the concurrent edit must start from one existing subcontract revision");
     const expectedUpdatedAt = revisionRows[0]!.token;
     state.user = session(org.orgId, actorId);
@@ -105,7 +105,7 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
     const result = (await withBypassContext(() => db.execute(sql`
       select s.title, p.subsidiary_id from subcontracts s join projects p on p.id = s.project_id and p.org_id = s.org_id
        where s.org_id = ${org.orgId} and s.id = ${subcontractId}
-    `))).rows[0] as { title: string; subsidiary_id: string };
+    `, "objects")))[0] as { title: string; subsidiary_id: string };
     assert.deepEqual(result, { title: "Before race", subsidiary_id: subsidiaryB });
   } finally {
     await holder.query("rollback").catch(() => undefined);
@@ -140,11 +140,11 @@ test("GET detail retries a stale snapshot after a project is rehomed", async () 
       insert into projects (org_id, subsidiary_id, code, name, status, is_active, custom)
       values (${org.orgId}, ${org.subsidiaryId}, 'SC-GET-RACE', 'Scope read project', 'active', true, '{}'::jsonb)
       returning id
-    `))).rows[0]!.id;
+    `, "objects")))[0]!.id;
     const vendorId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, is_active)
       values (${org.orgId}, 'company', 'Scope read vendor', true) returning id
-    `))).rows[0]!.id;
+    `, "objects")))[0]!.id;
     await withBypassContext(() => db.execute(sql`
       insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${vendorId}, true)
     `));

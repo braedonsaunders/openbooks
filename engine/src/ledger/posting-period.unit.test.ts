@@ -8,11 +8,12 @@ import { resolvePostingPeriod, assertPayRunConsolidatedRateCoverage } from "./po
 
 function scripted(rows: unknown[][]) {
   const calls: { sql: string; params: unknown[] }[] = [];
-  const runner = { execute: async (query: SQL) => {
+  const runner = { execute: async (query: SQL, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     assert.ok(calls.length < rows.length, "unexpected database query");
     const next = rows[calls.length]!;
     calls.push(new PgDialect().sqlToQuery(query));
-    return { rows: next };
+    return inMode({ rows: next });
   } } as unknown as Pick<typeof db, "execute">;
   return { runner, calls, done: () => assert.equal(calls.length, rows.length, "all expected database reads must occur") };
 }

@@ -115,7 +115,7 @@ export async function createReturnAuthorization(input: {
           join document_lines source_line on source_line.id = movement.document_line_id and source_line.org_id = movement.org_id
           left join items item on item.id = movement.item_id and item.org_id = movement.org_id
          where movement.org_id = ${input.orgId} and movement.id = ${selection.sourceIssueMovementId}
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!source) {
         throw new ReturnRefusal(`Return line ${index + 1} shipment is unavailable`, 'source_unavailable', 422, 'Choose a posted customer shipment with a sale line')
       }
@@ -272,7 +272,7 @@ async function customerCreditLine(
      where movement.org_id = ${orgId} and movement.id = ${sourceIssueMovementId}
        and rma.document_id = ${rmaId} and movement.kind = 'issue' and movement.status = 'posted'
        and source_line.item_id is not null
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!source) {
     throw new ReturnRefusal(`RMA line ${line.lineId} has no customer sale line to credit`, 'source_unavailable', 422, 'Choose a customer invoice or sales fulfillment line with a posted stock issue')
   }
@@ -353,7 +353,7 @@ async function customerCreditLine(
            round(sum(invoice_line.amount) * ${line.accepted}::numeric / nullif(sum(invoice_line.quantity), 0), 4)::text as amount,
            round(sum(invoice_line.tax_amount) * ${line.accepted}::numeric / nullif(sum(invoice_line.quantity), 0), 4)::text as tax_amount
       from invoice_line
-  `)).rows[0]
+  `, 'objects'))[0]
   const shipment = source.source_document_number ?? 'the shipment'
   const order = billed?.order_number ?? 'its sales order'
   if (!billed || billed.invoice_lines === 0 || billed.amount === null || billed.tax_amount === null || billed.unit_price === null) {
@@ -372,7 +372,7 @@ async function customerCreditLine(
   }
   const creditable = (await db.execute<{ quantity: string; claim: string }>(sql`
     select (${billed.billed_quantity}::numeric - ${billed.returned_quantity}::numeric - ${priorClaim}::numeric)::text as quantity,
-           (${priorClaim}::numeric + ${line.accepted}::numeric)::text as claim`)).rows[0]!
+           (${priorClaim}::numeric + ${line.accepted}::numeric)::text as claim`, 'objects'))[0]!
   if (compareDecimal(line.accepted, creditable.quantity) > 0) {
     throw new ReturnRefusal(
       `RMA line ${line.lineId} accepts ${line.accepted} units from ${order}, but only ${creditable.quantity} of the units invoiced on ${billed.invoice_numbers} remain to be credited`,
@@ -431,7 +431,7 @@ async function resolveInspectionRestockingFee(input: {
 }): Promise<ResolveRestockingFeeResult> {
   const itemIds = [...new Set(input.credited.map((line) => line.itemId).filter((id): id is string => id !== null))]
   const categories = itemIds.length === 0 ? [] : (await db.execute<{ id: string; category: string | null }>(sql`
-    select id, category from items where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(itemIds)}::jsonb)::uuid)`)).rows
+    select id, category from items where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(itemIds)}::jsonb)::uuid)`, 'objects'))
   const categoryByItem = new Map(categories.map((row) => [row.id, row.category]))
   return resolveRestockingFee(db, input.orgId, {
     returnDate: input.returnDate,
@@ -463,7 +463,7 @@ export async function previewReturnRestockingFee(input: {
   }
   const header = (await db.execute<{ document_date: string; currency: string }>(sql`
     select document_date::text, currency from documents
-     where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
+     where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`, 'objects'))[0]
   if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
   const quantum = await creditQuantum(header.currency)
   const scale = quantumScale(quantum)
@@ -507,7 +507,7 @@ async function createVendorReturnDrafts(input: {
   }
   const created: string[] = []
   for (const [vendorId, lines] of byVendor) {
-    const sourceLines = (await db.execute<{
+    const sourceLines = await db.execute<{
       line_id: string
       line_number: number
       item_id: string | null
@@ -521,7 +521,7 @@ async function createVendorReturnDrafts(input: {
         left join item_inventory_profiles profile on profile.org_id = line.org_id and profile.item_id = line.item_id
        where line.org_id = ${input.orgId} and line.document_id = ${input.rma.id}
          and line.id in (${sql.join(lines.map((line) => sql`${line.lineId}`), sql`, `)})
-       order by line.line_number`)).rows
+       order by line.line_number`, 'objects')
     const sourceByLine = new Map(sourceLines.map((line) => [line.line_id, line]))
     const vendorCreditLines: DocumentLineInput[] = lines.map((decision) => {
       const source = sourceByLine.get(decision.lineId)
@@ -576,22 +576,22 @@ async function createVendorReturnDrafts(input: {
       -- A retry may observe this same relationship after a vendor draft replay;
       -- the read below proves the expected edge exists before continuing.
       on conflict (org_id, from_document_id, to_document_id, link_type) do nothing
-      returning id`)
-    if (link.rows.length !== 1) {
+      returning id`, 'objects')
+    if (link.length !== 1) {
       const existing = await db.execute(sql`
         select id from document_links where org_id = ${input.orgId} and from_document_id = ${input.rma.id}
-          and to_document_id = ${result.id} and link_type = 'created_from'`)
-      if (existing.rows.length !== 1) throw new Error('vendor credit link was not recorded')
+          and to_document_id = ${result.id} and link_type = 'created_from'`, 'objects')
+      if (existing.length !== 1) throw new Error('vendor credit link was not recorded')
     }
     for (const decision of lines) {
-      const updated = await db.execute(sql`
+      const updated = await db.execute<never>(sql`
         update rma_lines set vendor_credit_id = ${result.id}, updated_by = ${input.actorId}, updated_at = now()
          where org_id = ${input.orgId} and document_id = ${input.rma.id} and line_id = ${decision.lineId}
            and disposition = 'vendor-return' and vendor_credit_id is null`)
       if (updated.rowCount !== 1) {
         const existing = await db.execute(sql`
-          select vendor_credit_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.rma.id} and line_id = ${decision.lineId}`)
-        if (existing.rows[0]?.vendor_credit_id !== result.id) throw new Error(`vendor credit for RMA line ${decision.lineId} was not recorded`)
+          select vendor_credit_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.rma.id} and line_id = ${decision.lineId}`, 'objects')
+        if (existing[0]?.vendor_credit_id !== result.id) throw new Error(`vendor credit for RMA line ${decision.lineId} was not recorded`)
       }
     }
   }
@@ -599,7 +599,7 @@ async function createVendorReturnDrafts(input: {
 }
 
 async function linkReturnDocument(rmaId: string, childId: string, orgId: string, actorId: string): Promise<void> {
-  const inserted = await db.execute(sql`
+  const inserted = await db.execute<Record<string, unknown>>(sql`
     insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
     values (${orgId}, ${rmaId}, ${childId}, 'created_from', ${actorId}, ${actorId})
     -- A customer credit is created once per inspected RMA; a retry may
@@ -609,8 +609,8 @@ async function linkReturnDocument(rmaId: string, childId: string, orgId: string,
   if (inserted.rowCount === 1) return
   const existing = await db.execute(sql`
     select id from document_links where org_id = ${orgId} and from_document_id = ${rmaId}
-      and to_document_id = ${childId} and link_type = 'created_from'`)
-  if (existing.rows.length !== 1) throw new Error('customer credit link was not recorded')
+      and to_document_id = ${childId} and link_type = 'created_from'`, 'objects')
+  if (existing.length !== 1) throw new Error('customer credit link was not recorded')
 }
 
 function lineIsZero(value: string): boolean {
@@ -648,11 +648,11 @@ function portalReturnRequest(value: unknown): PortalReturnRequest | null {
 }
 
 async function storeCreditProgramForCurrency(orgId: string, currency: string): Promise<string> {
-  const programs = (await db.execute<{ id: string; currency: string | null }>(sql`
+  const programs = await db.execute<{ id: string; currency: string | null }>(sql`
     select id, currency from stored_value_programs
      where org_id = ${orgId} and kind = 'store_credit' and is_active
        and (currency = ${currency} or currency is null)
-     order by currency desc nulls last, created_at, id`)).rows
+     order by currency desc nulls last, created_at, id`, 'objects')
   const exact = programs.filter((program) => program.currency === currency)
   if (exact.length === 1) return exact[0]!.id
   if (exact.length > 1) {
@@ -741,7 +741,7 @@ export async function inspectReturnAuthorization(input: {
     validateReturnInspection(current, input.inspectionLines)
     const header = (await db.execute<{ party_id: string; subsidiary_id: string; document_date: string; status: string; currency: string; created_by: string | null; custom: unknown }>(sql`
       select party_id, subsidiary_id, document_date::text, status, currency, created_by, custom
-        from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`)).rows[0]
+        from documents where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'rma'`, 'objects'))[0]
     if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
     const portalRequest = header.created_by === PORTAL_ACTOR_ID ? portalReturnRequest(header.custom) : null
     if (header.created_by === PORTAL_ACTOR_ID && !portalRequest) {
@@ -848,7 +848,7 @@ export async function inspectReturnAuthorization(input: {
       if (awaitingCreditApproval) return { authorization: await getReturnAuthorization(db, input.orgId, input.documentId, input.allowedSubsidiaryIds), awaitingCreditApproval: true }
     } else {
       const credit = (await db.execute<{ status: string }>(sql`
-        select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`)).rows[0]
+        select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`, 'objects'))[0]
       if (!credit) throw new ReturnRefusal('Return authorization customer credit not found', 'not_found', 404)
       if (credit.status === 'pending_approval') {
         return { authorization: current, awaitingCreditApproval: true }
@@ -860,7 +860,7 @@ export async function inspectReturnAuthorization(input: {
 
     if (!creditId) throw new ReturnRefusal('Customer credit was not created', 'wrong_stage', 409, 'Reload the return authorization and inspect it again')
     const creditStatus = (await db.execute<{ status: string }>(sql`
-      select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`)).rows[0]?.status
+      select status from documents where org_id = ${input.orgId} and id = ${creditId} and kind = 'customer_credit'`, 'objects'))[0]?.status
     if (creditStatus === 'approved') {
       await postDocument(creditId, await controlDeps(input.orgId), {
         deferEffects: true,
@@ -882,7 +882,7 @@ export async function inspectReturnAuthorization(input: {
     for (const line of rma.lines) {
       if (line.disposition !== 'scrap' || line.accepted === '0' || line.scrapMovementId || !line.itemId || !line.dispositionLocationId) continue
       const header = (await db.execute<{ subsidiary_id: string; document_date: string }>(sql`
-        select subsidiary_id, document_date::text from documents where org_id = ${input.orgId} and id = ${input.documentId}`)).rows[0]
+        select subsidiary_id, document_date::text from documents where org_id = ${input.orgId} and id = ${input.documentId}`, 'objects'))[0]
       if (!header) throw new ReturnRefusal('Return authorization not found', 'not_found', 404)
       const idempotencyKey = `rma-scrap:${input.documentId}:${line.lineId}`
       let movementId = await findScrapMovement(input.orgId, idempotencyKey, line)
@@ -908,14 +908,14 @@ export async function inspectReturnAuthorization(input: {
         }
       }
       if (!movementId) throw new ReturnRefusal(`Scrap movement for RMA line ${line.lineId} was not recorded`, 'changed_concurrently', 409, 'Reload the return authorization and retry inspection')
-      const recorded = await db.execute(sql`
+      const recorded = await db.execute<never>(sql`
         update rma_lines set scrap_movement_id = ${movementId}, updated_by = ${input.actorId}, updated_at = now()
          where org_id = ${input.orgId} and document_id = ${input.documentId} and line_id = ${line.lineId}
            and disposition = 'scrap' and scrap_movement_id is null`)
       if (recorded.rowCount !== 1) {
         const current = await db.execute<{ scrap_movement_id: string | null }>(sql`
-          select scrap_movement_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.documentId} and line_id = ${line.lineId}`)
-        if (current.rows[0]?.scrap_movement_id !== movementId) {
+          select scrap_movement_id from rma_lines where org_id = ${input.orgId} and document_id = ${input.documentId} and line_id = ${line.lineId}`, 'objects')
+        if (current[0]?.scrap_movement_id !== movementId) {
           throw new ReturnRefusal(`Scrap for RMA line ${line.lineId} changed concurrently`, 'changed_concurrently', 409, 'Reload the return authorization and retry inspection')
         }
       }
@@ -929,7 +929,7 @@ async function findScrapMovement(orgId: string, idempotencyKey: string, line: Re
   const row = (await db.execute<{ id: string; item_id: string; stock_location_id: string; quantity: string; lot_id: string | null; serial_id: string | null }>(sql`
     select id, item_id, stock_location_id, quantity::text, lot_id, serial_id
       from inventory_movements
-     where org_id = ${orgId} and idempotency_key = ${idempotencyKey} and kind = 'issue' and status = 'posted'`)).rows[0]
+     where org_id = ${orgId} and idempotency_key = ${idempotencyKey} and kind = 'issue' and status = 'posted'`, 'objects'))[0]
   if (!row) return null
   if (row.item_id !== line.itemId || row.stock_location_id !== line.dispositionLocationId
     || row.lot_id !== line.lotId || row.serial_id !== line.serialId
@@ -968,7 +968,7 @@ export async function sendReturnAuthorizationEmail(input: {
   const party = (await db.execute<{ email: string | null; display_name: string | null; org_name: string }>(sql`
     select p.email, p.display_name, o.name as org_name
       from orgs o left join parties p on p.org_id = o.id and p.id = ${authorization.customerId}
-     where o.id = ${input.orgId}`)).rows[0]
+     where o.id = ${input.orgId}`, 'objects'))[0]
   const to = input.to?.trim() || party?.email?.trim() || ''
   if (!to) throw new ReturnRefusal('No recipient email', 'invalid_input', 422, "Enter a recipient or add an email address to the customer's record")
   const delivery = await resolveOrgEmailTransportDetailed(input.orgId)
@@ -978,10 +978,10 @@ export async function sendReturnAuthorizationEmail(input: {
   }
   const transport = delivery.transport
   const linkedCredit = authorization.customerCreditId
-    ? (await db.execute<{ document_number: string }>(sql`select document_number from documents where org_id = ${input.orgId} and id = ${authorization.customerCreditId}`)).rows[0]?.document_number
+    ? (await db.execute<{ document_number: string }>(sql`select document_number from documents where org_id = ${input.orgId} and id = ${authorization.customerCreditId}`, 'objects'))[0]?.document_number
     : null
   const reason = input.type === 'decision' && authorization.stage === 'rejected'
-    ? (await db.execute<{ rejection_reason: string | null }>(sql`select rejection_reason from rma_documents where org_id = ${input.orgId} and document_id = ${input.documentId}`)).rows[0]?.rejection_reason
+    ? (await db.execute<{ rejection_reason: string | null }>(sql`select rejection_reason from rma_documents where org_id = ${input.orgId} and document_id = ${input.documentId}`, 'objects'))[0]?.rejection_reason
     : null
   const body = input.type === 'received'
     ? returnReceivedEmail({ orgName: party?.org_name || 'OpenBooks', recipientName: party?.display_name, rmaNumber: authorization.documentNumber })
@@ -1052,7 +1052,7 @@ export async function loadReturnableSources(input: {
   if (!subsidiaryScopeAllows(input.allowedSubsidiaryIds, input.subsidiaryId)) return null
   return withOrgContext(input.orgId, async () => {
     const party = (await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from parties where org_id = ${input.orgId} and id = ${input.partyId}`)).rows[0]
+      select subsidiary_id from parties where org_id = ${input.orgId} and id = ${input.partyId}`, 'objects'))[0]
     if (!party || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, party.subsidiary_id, { orgWideNull: true })) {
       return null
     }
@@ -1072,7 +1072,7 @@ export async function loadReturnableSources(input: {
 export async function loadReturnPartyScope(orgId: string, partyId: string): Promise<{ subsidiaryId: string | null } | null> {
   return withOrgContext(orgId, async () => {
     const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from parties where org_id = ${orgId} and id = ${partyId}`)).rows[0]
+      select subsidiary_id from parties where org_id = ${orgId} and id = ${partyId}`, 'objects'))[0]
     return row ? { subsidiaryId: row.subsidiary_id } : null
   })
 }

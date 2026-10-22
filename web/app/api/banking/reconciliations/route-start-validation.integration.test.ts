@@ -48,7 +48,7 @@ test('reconciliation start refuses a malformed account id with a domain error', 
       refused.status === 400 || refused.status === 422,
       `expected a domain 4xx, got ${refused.status}: ${JSON.stringify(await refused.json())}`,
     )
-    const sessions = (await db.execute<{ n: number }>(sql`select count(*)::int as n from reconciliations where org_id=${org.orgId}`)).rows[0]!.n
+    const sessions = (await db.execute<{ n: number }>(sql`select count(*)::int as n from reconciliations where org_id=${org.orgId}`, 'objects'))[0]!.n
     assert.equal(sessions, 0, 'refused starts open nothing')
     // A well-formed unknown account still fails closed at the service, and a
     // real reconcilable account still starts.

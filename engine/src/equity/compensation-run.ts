@@ -95,18 +95,18 @@ async function lastRun(orgId: string, subsidiaryId: string, onOrBefore?: string)
     select id, through_date::text as through_date from equity_compensation_runs
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
        ${onOrBefore ? sql`and through_date <= ${onOrBefore}::date` : sql``}
-     order by through_date desc limit 1`)).rows[0];
+     order by through_date desc limit 1`, "objects"))[0];
 }
 
 /** The latest cumulative cost recorded for every award by runs through `through` (every run when absent). */
 async function previousCumulative(orgId: string, subsidiaryId: string, through?: string): Promise<Map<string, bigint>> {
-  const rows = (await db.execute<PreviousLine>(sql`
+  const rows = await db.execute<PreviousLine>(sql`
     select distinct on (l.security_id) l.security_id, l.cumulative_amount::text as cumulative_amount
       from equity_compensation_run_lines l
       join equity_compensation_runs r on r.org_id = l.org_id and r.id = l.run_id
      where l.org_id = ${orgId} and l.subsidiary_id = ${subsidiaryId}
        ${through ? sql`and r.through_date <= ${through}::date` : sql``}
-     order by l.security_id, r.through_date desc`)).rows;
+     order by l.security_id, r.through_date desc`, "objects");
   return new Map(rows.map((row) => [row.security_id, toUnits(row.cumulative_amount)]));
 }
 
@@ -151,14 +151,14 @@ interface PreviousRelease {
 
 /** The latest release recorded for every restricted certificate by runs through `through` (every run when absent). */
 async function previousReleases(orgId: string, subsidiaryId: string, through?: string): Promise<Map<string, PreviousRelease>> {
-  const rows = (await db.execute<{ security_id: string; cumulative_shares: string; cumulative_deposit: string; cumulative_reclass: string; cumulative_par: string }>(sql`
+  const rows = await db.execute<{ security_id: string; cumulative_shares: string; cumulative_deposit: string; cumulative_reclass: string; cumulative_par: string }>(sql`
     select distinct on (l.security_id) l.security_id, l.cumulative_shares::text as cumulative_shares, l.cumulative_deposit::text as cumulative_deposit,
            l.cumulative_reclass::text as cumulative_reclass, l.cumulative_par::text as cumulative_par
       from equity_compensation_run_releases l
       join equity_compensation_runs r on r.org_id = l.org_id and r.id = l.run_id
      where l.org_id = ${orgId} and l.subsidiary_id = ${subsidiaryId}
        ${through ? sql`and r.through_date <= ${through}::date` : sql``}
-     order by l.security_id, r.through_date desc`)).rows;
+     order by l.security_id, r.through_date desc`, "objects");
   return new Map(rows.map((row) => [row.security_id, {
     shares: BigInt(row.cumulative_shares), deposit: toUnits(row.cumulative_deposit), reclass: toUnits(row.cumulative_reclass), par: toUnits(row.cumulative_par),
   }]));
@@ -325,7 +325,7 @@ export async function postCompensationRun(input: EquityCommand & { subsidiaryId:
   // A run already posted for the date is returned as it stands; nothing is submitted again.
   const posted = await withOrgTransaction(input.orgId, async () => (await db.execute<{ id: string }>(sql`
     select id from equity_compensation_runs
-     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`)).rows.length > 0);
+     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`, "objects")).length > 0);
   if (posted) return { ...(await applyCompensationRun(input)), status: "applied", requestId: null };
   // A date whose period has not ended or is closed refuses before anything is submitted for approval.
   await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "compensation"));
@@ -348,7 +348,7 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
              (select count(*)::int from equity_compensation_run_lines l where l.org_id = r.org_id and l.run_id = r.id) as lines,
              (select count(*)::int from equity_compensation_run_releases l where l.org_id = r.org_id and l.run_id = r.id) as releases
         from equity_compensation_runs r
-       where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.through_date = ${throughDate}::date`)).rows[0];
+       where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.through_date = ${throughDate}::date`, "objects"))[0];
     if (existing) {
       return {
         runId: existing.id, throughDate, total: existing.total_amount, journalEntryId: existing.journal_entry_id, lines: existing.lines,
@@ -404,20 +404,20 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
         auditAction: "equity.release", auditChanges: { runId, throughDate }, legs,
       });
     }
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equity_compensation_runs (id, org_id, subsidiary_id, through_date, currency, total_amount, journal_entry_id, release_amount, release_journal_entry_id, created_by)
       values (${runId}, ${input.orgId}, ${input.subsidiaryId}, ${throughDate}::date, ${currency}, ${formatLedger(total)}::numeric, ${journalEntryId},
         ${formatLedger(releases.total)}::numeric, ${releaseJournalEntryId}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("compensationRun") });
     const recorded = lines.filter((line) => line.units.period !== 0n || line.units.cumulative !== 0n);
     if (recorded.length > 0) {
       const values = recorded.map((line) => sql`(${input.orgId}, ${input.subsidiaryId}, ${runId}, ${line.securityId},
         ${line.cumulative}::numeric, ${line.previous}::numeric, ${line.period}::numeric)`);
-      const written = (await db.execute<{ id: string }>(sql`
+      const written = await db.execute<{ id: string }>(sql`
         insert into equity_compensation_run_lines (org_id, subsidiary_id, run_id, security_id, cumulative_amount, previous_amount, period_amount)
         values ${sql.join(values, sql`, `)}
-        returning id`)).rows;
+        returning id`, "objects");
       if (written.length !== recorded.length) {
         throw equityError("notStoredCompletely", { record: fig.choice("compensationLines") });
       }
@@ -428,11 +428,11 @@ export async function applyCompensationRun(input: EquityCommand & { subsidiaryId
         ${formatLedger(line.units.cumulative.deposit)}::numeric, ${formatLedger(line.units.period.deposit)}::numeric,
         ${formatLedger(line.units.cumulative.reclass)}::numeric, ${formatLedger(line.units.period.reclass)}::numeric,
         ${formatLedger(line.units.cumulative.par)}::numeric, ${formatLedger(line.units.period.par)}::numeric)`);
-      const written = (await db.execute<{ id: string }>(sql`
+      const written = await db.execute<{ id: string }>(sql`
         insert into equity_compensation_run_releases (org_id, subsidiary_id, run_id, security_id, cumulative_shares, previous_shares,
           cumulative_deposit, period_deposit, cumulative_reclass, period_reclass, cumulative_par, period_par)
         values ${sql.join(values, sql`, `)}
-        returning id`)).rows;
+        returning id`, "objects");
       if (written.length !== releases.lines.length) {
         throw equityError("notStoredCompletely", { record: fig.choice("releaseLines") });
       }

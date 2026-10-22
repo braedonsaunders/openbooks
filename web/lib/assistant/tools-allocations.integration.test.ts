@@ -123,18 +123,18 @@ async function seed(): Promise<Seed> {
     ],
   }));
   const journals = await withOrgContext(org.orgId, () => db.execute<{ n: string }>(sql`
-    select count(*) as n from journal_entries where org_id = ${org.orgId}`));
+    select count(*) as n from journal_entries where org_id = ${org.orgId}`, 'objects'));
   return {
     orgId: org.orgId, actorId, ruleId, versionId, deptId, driverId: driver.id,
     periodId: org.periodId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
-    journalCount: Number(journals.rows[0]?.n ?? 0),
+    journalCount: Number(journals[0]?.n ?? 0),
   };
 }
 
 async function journalCount(orgId: string): Promise<number> {
   const rows = await withOrgContext(orgId, () => db.execute<{ n: string }>(sql`
-    select count(*) as n from journal_entries where org_id = ${orgId}`));
-  return Number(rows.rows[0]?.n ?? 0);
+    select count(*) as n from journal_entries where org_id = ${orgId}`, 'objects'));
+  return Number(rows[0]?.n ?? 0);
 }
 
 test('feature-off hides every allocation tool', { skip: !DB }, async () => {

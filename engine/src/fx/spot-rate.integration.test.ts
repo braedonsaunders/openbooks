@@ -268,8 +268,8 @@ test("a manual dated spot row wins with evidence over the provider quote", { ski
        where org_id = ${org.orgId} and from_currency = 'USD' and to_currency = 'CAD'
          and as_of = '2026-07-20' and rate_type = 'spot'
       returning id
-    `);
-    assert.equal(corrected.rows.length, 1);
+    `, "objects");
+    assert.equal(corrected.length, 1);
     const evidence = await lookupSpotRateWithEvidence(db, org.orgId, "USD", "CAD", "2026-07-31");
     assert.equal(evidence.rate, "1.2345678901");
     assert.equal(evidence.observations.length, 1);

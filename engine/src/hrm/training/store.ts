@@ -97,36 +97,36 @@ async function begin(input: TrainingActor, permission: "hrm.certifications.read"
 }
 async function course(input: TrainingActor, id: string, write: boolean): Promise<TrainingCourse> {
   const scope = await begin(input, write ? "hrm.certifications.manage" : "hrm.certifications.read");
-  const row = single((await db.execute<TrainingCourse>(sql`select ${COURSE} from hrm_training_courses
-    where org_id=${input.orgId} and id=${requireUuid(id, "Course")} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} ${write ? sql`for update` : sql`for share`}`)).rows);
+  const row = single(await db.execute<TrainingCourse>(sql`select ${COURSE} from hrm_training_courses
+    where org_id=${input.orgId} and id=${requireUuid(id, "Course")} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} ${write ? sql`for update` : sql`for share`}`, "objects"));
   await lockActorCommandAuthority(db, input.orgId, input.actorId, row.subsidiaryId, write ? "hrm.certifications.manage" : "hrm.certifications.read");
   return row;
 }
 async function session(input: TrainingActor, id: string, write: boolean, self = false): Promise<TrainingSession> {
   const permission = self ? write ? "hrm.self.request" : "hrm.self.read" : write ? "hrm.certifications.manage" : "hrm.certifications.read";
   const scope = await begin(input, permission);
-  const row = single((await db.execute<TrainingSession>(sql`select ${SESSION} from hrm_training_sessions
-    where org_id=${input.orgId} and id=${requireUuid(id, "Session")} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} ${write ? sql`for update` : sql`for share`}`)).rows);
+  const row = single(await db.execute<TrainingSession>(sql`select ${SESSION} from hrm_training_sessions
+    where org_id=${input.orgId} and id=${requireUuid(id, "Session")} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} ${write ? sql`for update` : sql`for share`}`, "objects"));
   await lockActorCommandAuthority(db, input.orgId, input.actorId, row.subsidiaryId, permission);
   return row;
 }
 async function participant(input: TrainingActor, id: string, write: boolean, self = false) {
   await begin(input, self ? write ? "hrm.self.request" : "hrm.self.read" : write ? "hrm.certifications.manage" : "hrm.certifications.read");
-  const identity = single((await db.execute<{ sessionId: string; employmentId: string }>(sql`select session_id as "sessionId",employment_id as "employmentId"
-    from hrm_training_participants where org_id=${input.orgId} and id=${requireUuid(id, "Participant")}`)).rows);
+  const identity = single(await db.execute<{ sessionId: string; employmentId: string }>(sql`select session_id as "sessionId",employment_id as "employmentId"
+    from hrm_training_participants where org_id=${input.orgId} and id=${requireUuid(id, "Participant")}`, "objects"));
   if (self && !(await loadOwnEmploymentIds(db, input.orgId, input.actorId)).includes(identity.employmentId)) throw new ScopeNotFoundError();
   const delivery = await session(input, identity.sessionId, write, self);
   await lockEmploymentsForScope(db, [identity.employmentId], input);
-  const row = single((await db.execute<TrainingParticipant>(sql`select ${PARTICIPANT} from hrm_training_participants
-    where org_id=${input.orgId} and id=${id} and session_id=${delivery.id} ${write ? sql`for update` : sql`for share`}`)).rows);
+  const row = single(await db.execute<TrainingParticipant>(sql`select ${PARTICIPANT} from hrm_training_participants
+    where org_id=${input.orgId} and id=${id} and session_id=${delivery.id} ${write ? sql`for update` : sql`for share`}`, "objects"));
   return { row, delivery };
 }
 
 /** Creation retries use the same caller-held UUID, never a second row. */
 async function creationReplay<T>(input: TrainingActor, table: "hrm_training_courses" | "hrm_training_sessions" | "hrm_training_participants" | "hrm_training_feedback", id: string, hash: string, columns: typeof COURSE): Promise<T | null> {
   await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`training-create:${input.orgId}:${id}`},0))`);
-  const rows = (await db.execute<T & { requestHash: string; createdBy: string }>(sql`select ${columns},request_hash as "requestHash",created_by as "createdBy"
-    from ${sql.identifier(table)} where org_id=${input.orgId} and id=${id}`)).rows;
+  const rows = await db.execute<T & { requestHash: string; createdBy: string }>(sql`select ${columns},request_hash as "requestHash",created_by as "createdBy"
+    from ${sql.identifier(table)} where org_id=${input.orgId} and id=${id}`, "objects");
   if (!rows.length) return null;
   const stored = single(rows);
   if (stored.requestHash !== hash || stored.createdBy !== input.actorId) throw new TrainingError("This training request key already has different content — reopen the creation form to start a new request; the existing record is preserved.");
@@ -138,8 +138,8 @@ async function creationReplay<T>(input: TrainingActor, table: "hrm_training_cour
 export async function listTrainingCourses(input: TrainingActor): Promise<TrainingCourse[]> {
   return transaction(input, async () => {
     const scope = await begin(input, "hrm.certifications.read");
-    return (await db.execute<TrainingCourse>(sql`select ${COURSE} from hrm_training_courses where org_id=${input.orgId}
-      ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} order by code,version desc,id`)).rows;
+    return await db.execute<TrainingCourse>(sql`select ${COURSE} from hrm_training_courses where org_id=${input.orgId}
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} order by code,version desc,id`, "objects");
   });
 }
 export async function createTrainingCourse(
@@ -155,8 +155,8 @@ export async function createTrainingCourse(
   if (definition.version === 0) throw new TrainingError("Course version starts at 1 — choose a positive version number.");
   return transaction(input, async () => {
     await begin(input, "hrm.certifications.manage", subsidiaryId);
-    if (!(await db.execute(sql`select id from subsidiaries where org_id=${input.orgId} and id=${subsidiaryId} and is_active for share`)).rows.length) throw new ScopeNotFoundError();
-    const identity = single((await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id=${input.orgId} and id=${input.actorId} for share`)).rows);
+    if (!(await db.execute(sql`select id from subsidiaries where org_id=${input.orgId} and id=${subsidiaryId} and is_active for share`, "objects")).length) throw new ScopeNotFoundError();
+    const identity = single(await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id=${input.orgId} and id=${input.actorId} for share`, "objects"));
     if (!identity.partyId) throw new TrainingError("Course authorship needs a native person identity — link your user to its person record before creating a course.");
     const hash = trainingRequestHash(definition), replay = await creationReplay<TrainingCourse>(input, "hrm_training_courses", id, hash, COURSE);
     if (replay) return replay;
@@ -166,14 +166,14 @@ export async function createTrainingCourse(
     )
       throw new TrainingError("Qualification outcomes are disabled — enable Certifications and licenses on Company Settings → Features, or create a course without a qualification outcome.");
     const qualification = definition.qualificationTypeId ? (await db.execute<{ validityMonths: number | null; requiresEvidence: boolean }>(sql`select validity_months as "validityMonths",requires_evidence as "requiresEvidence"
-      from hrm_qualification_types where org_id=${input.orgId} and id=${definition.qualificationTypeId} and is_active for share`)).rows[0] : null;
+      from hrm_qualification_types where org_id=${input.orgId} and id=${definition.qualificationTypeId} and is_active for share`, "objects"))[0] : null;
     if (definition.qualificationTypeId && !qualification) {
       throw new TrainingError("The qualification type is unavailable — declare or reactivate its native qualification type before authoring the course.");
     }
-    return single((await db.execute<TrainingCourse>(sql`insert into hrm_training_courses
+    return single(await db.execute<TrainingCourse>(sql`insert into hrm_training_courses
       (id,org_id,subsidiary_id,code,version,name,description,effective_from,effective_to,qualification_type_id,qualification_validity_months,qualification_requires_evidence,minimum_attendance_percent,passing_score,author_party_id,request_hash,reason,created_by,updated_by)
       values(${id},${input.orgId},${subsidiaryId},${definition.code},${definition.version},${definition.name},${definition.description},${definition.effectiveFrom},${definition.effectiveTo},
-        ${definition.qualificationTypeId},${qualification?.validityMonths ?? null},${qualification?.requiresEvidence ?? false},${definition.minimumAttendancePercent},${definition.passingScore},${identity.partyId},${hash},${definition.reason},${input.actorId},${input.actorId}) returning ${COURSE}`)).rows);
+        ${definition.qualificationTypeId},${qualification?.validityMonths ?? null},${qualification?.requiresEvidence ?? false},${definition.minimumAttendancePercent},${definition.passingScore},${identity.partyId},${hash},${definition.reason},${input.actorId},${input.actorId}) returning ${COURSE}`, "objects"));
   });
 }
 export async function transitionTrainingCourse(
@@ -201,7 +201,7 @@ export async function transitionTrainingCourse(
       throw new TrainingError(
         "Choose submit, retire or cancel for the course.",
       );
-    if (row.revision === input.expectedRevision + 1 && row.status === status && (await db.execute(sql`select id from hrm_training_courses where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`)).rows.length) return row;
+    if (row.revision === input.expectedRevision + 1 && row.status === status && (await db.execute(sql`select id from hrm_training_courses where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`, "objects")).length) return row;
     revision(row, input.expectedRevision);
     if (row.status !== (input.action === "retire" ? "approved" : "draft")) throw new TrainingError("This course cannot make that transition — reload and use an action available for its current state.");
     if (
@@ -216,9 +216,9 @@ export async function transitionTrainingCourse(
       }))
     )
       return row;
-    return single((await db.execute<TrainingCourse>(sql`update hrm_training_courses set status=${status},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now(),
+    return single(await db.execute<TrainingCourse>(sql`update hrm_training_courses set status=${status},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now(),
       decided_by=case when ${status === "approved"} then ${input.actorId}::uuid else decided_by end,decided_at=case when ${status === "approved"} then now() else decided_at end
-      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${COURSE}`)).rows);
+      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${COURSE}`, "objects"));
   });
 }
 
@@ -226,8 +226,8 @@ export async function listTrainingSessions(input: TrainingActor & { courseId?: s
   return transaction(input, async () => {
     const scope = await begin(input, "hrm.certifications.read");
     if (input.courseId) await course(input, input.courseId, false);
-    return (await db.execute<TrainingSession>(sql`select ${SESSION} from hrm_training_sessions where org_id=${input.orgId}
-      ${input.courseId ? sql`and course_id=${input.courseId}` : sql``} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} order by starts_at desc,id`)).rows;
+    return await db.execute<TrainingSession>(sql`select ${SESSION} from hrm_training_sessions where org_id=${input.orgId}
+      ${input.courseId ? sql`and course_id=${input.courseId}` : sql``} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} order by starts_at desc,id`, "objects");
   });
 }
 export async function createTrainingSession(input: TrainingActor & { id: string; courseId: string; name: string; location: string; startsAt: string; endsAt: string; timeZone: string; capacity: number; reason: string }): Promise<TrainingSession> {
@@ -242,10 +242,10 @@ export async function createTrainingSession(input: TrainingActor & { id: string;
     if (policy.status !== "approved" || definition.startsOn < policy.effectiveFrom || (policy.effectiveTo !== null && definition.endsOn > policy.effectiveTo)) {
       throw new TrainingError("Choose an approved course version covering every session date — create and approve a successor version when its policy window has ended.");
     }
-    return single((await db.execute<TrainingSession>(sql`insert into hrm_training_sessions
+    return single(await db.execute<TrainingSession>(sql`insert into hrm_training_sessions
       (id,org_id,subsidiary_id,course_id,name,location,time_zone,starts_at,ends_at,starts_on,ends_on,duration_seconds,capacity,request_hash,reason,created_by,updated_by)
       values(${id},${input.orgId},${policy.subsidiaryId},${policy.id},${definition.name},${definition.location},${definition.timeZone},${definition.startsAt},${definition.endsAt},
-        ${definition.startsOn},${definition.endsOn},${definition.durationSeconds},${definition.capacity},${hash},${definition.reason},${input.actorId},${input.actorId}) returning ${SESSION}`)).rows);
+        ${definition.startsOn},${definition.endsOn},${definition.durationSeconds},${definition.capacity},${hash},${definition.reason},${input.actorId},${input.actorId}) returning ${SESSION}`, "objects"));
   });
 }
 export async function transitionTrainingSession(input: TrainingActor & { sessionId: string; expectedRevision: number; action: "schedule" | "start" | "complete" | "cancel"; reason: string }): Promise<TrainingSession> {
@@ -254,10 +254,10 @@ export async function transitionTrainingSession(input: TrainingActor & { session
     const row = await session(input, input.sessionId, true);
     const status = input.action === "schedule" ? "scheduled" : input.action === "start" ? "in_progress" : input.action === "complete" ? "completed" : input.action === "cancel" ? "cancelled" : null;
     if (!status) throw new TrainingError("Choose schedule, start, complete or cancel for the session.");
-    if (row.revision === input.expectedRevision + 1 && row.status === status && (await db.execute(sql`select id from hrm_training_sessions where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`)).rows.length) return row;
+    if (row.revision === input.expectedRevision + 1 && row.status === status && (await db.execute(sql`select id from hrm_training_sessions where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`, "objects")).length) return row;
     revision(row, input.expectedRevision);
-    return single((await db.execute<TrainingSession>(sql`update hrm_training_sessions set status=${status},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now()
-      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${SESSION}`)).rows);
+    return single(await db.execute<TrainingSession>(sql`update hrm_training_sessions set status=${status},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now()
+      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${SESSION}`, "objects"));
   });
 }
 
@@ -270,11 +270,11 @@ export async function inviteTrainingParticipant(input: TrainingActor & { id: str
     if (subject.employerSubsidiaryId !== delivery.subsidiaryId) throw new TrainingError("Participant employment belongs to a different employer — choose an employment for the session employer.");
     const hash = trainingRequestHash({ sessionId: delivery.id, employmentId, reason }), replay = await creationReplay<TrainingParticipant>(input, "hrm_training_participants", id, hash, PARTICIPANT);
     if (replay) return replay;
-    const declared = single((await db.execute<TrainingCourse>(sql`select ${COURSE}
-      from hrm_training_courses where org_id=${input.orgId} and id=${delivery.courseId} for share`)).rows);
-    return single((await db.execute<TrainingParticipant>(sql`insert into hrm_training_participants
+    const declared = single(await db.execute<TrainingCourse>(sql`select ${COURSE}
+      from hrm_training_courses where org_id=${input.orgId} and id=${delivery.courseId} for share`, "objects"));
+    return single(await db.execute<TrainingParticipant>(sql`insert into hrm_training_participants
       (id,org_id,session_id,employment_id,subsidiary_id,qualification_type_id,request_hash,reason,created_by,updated_by)
-      values(${id},${input.orgId},${delivery.id},${employmentId},${delivery.subsidiaryId},${declared.qualificationTypeId},${hash},${reason},${input.actorId},${input.actorId}) returning ${PARTICIPANT}`)).rows);
+      values(${id},${input.orgId},${delivery.id},${employmentId},${delivery.subsidiaryId},${declared.qualificationTypeId},${hash},${reason},${input.actorId},${input.actorId}) returning ${PARTICIPANT}`, "objects"));
   });
 }
 export async function respondTrainingInvitation(input: TrainingActor & { participantId: string; expectedRevision: number; action: "accept" | "decline" | "cancel"; reason: string; audience: "staff" | "self" }): Promise<TrainingParticipant> {
@@ -285,11 +285,11 @@ export async function respondTrainingInvitation(input: TrainingActor & { partici
     const { row, delivery } = await participant(input, input.participantId, true, input.audience === "self");
     const status = input.action === "accept" ? "accepted" : input.action === "decline" ? "declined" : input.action === "cancel" ? "cancelled" : null;
     if (!status) throw new TrainingError("Choose accept, decline or cancel for the invitation.");
-    if (row.revision === input.expectedRevision + 1 && row.status === status && (await db.execute(sql`select id from hrm_training_participants where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`)).rows.length) return row;
+    if (row.revision === input.expectedRevision + 1 && row.status === status && (await db.execute(sql`select id from hrm_training_participants where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`, "objects")).length) return row;
     revision(row, input.expectedRevision);
     if (!['scheduled', 'in_progress'].includes(delivery.status)) throw new TrainingError("The session is no longer open for invitation responses — contact HR about its current status.");
-    return single((await db.execute<TrainingParticipant>(sql`update hrm_training_participants set status=${status},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now()
-      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${PARTICIPANT}`)).rows);
+    return single(await db.execute<TrainingParticipant>(sql`update hrm_training_participants set status=${status},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now()
+      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${PARTICIPANT}`, "objects"));
   });
 }
 
@@ -299,21 +299,21 @@ export async function completeTrainingParticipant(input: TrainingActor & { parti
   const existing = input.existingQualificationId === null ? null : requireUuid(input.existingQualificationId, "Existing qualification");
   return transaction(input, async () => {
     const { row, delivery } = await participant(input, input.participantId, true);
-    const declared = single((await db.execute<TrainingCourse>(sql`select ${COURSE}
-      from hrm_training_courses where org_id=${input.orgId} and id=${delivery.courseId} for share`)).rows);
+    const declared = single(await db.execute<TrainingCourse>(sql`select ${COURSE}
+      from hrm_training_courses where org_id=${input.orgId} and id=${delivery.courseId} for share`, "objects"));
     const result = trainingResult(declared, delivery.durationSeconds, input.attendanceSeconds, input.score);
     const hash = trainingRequestHash({ ...result, evidence, existing, notes, reason });
     if (row.completionHash === hash && row.status === (result.passed ? "completed" : "failed")) return row;
     revision(row, input.expectedRevision);
     if (!['invited', 'accepted'].includes(row.status) || delivery.status !== "in_progress") throw new TrainingError("Record results for an invited or accepted participant in a started session — completed outcomes can only be voided with a reason.");
-    if (evidence && !(await db.execute(sql`select id from files where org_id=${input.orgId} and id=${evidence} for share`)).rows.length) throw new TrainingError("Evidence is not in this organization — upload the certificate to the native File Cabinet before attaching it.");
+    if (evidence && !(await db.execute(sql`select id from files where org_id=${input.orgId} and id=${evidence} for share`, "objects")).length) throw new TrainingError("Evidence is not in this organization — upload the certificate to the native File Cabinet before attaching it.");
     let qualificationId: string | null = null;
     let qualificationCreated = false;
     if (existing && (!result.passed || !declared.qualificationTypeId)) throw new TrainingError("Only a passing qualification-producing course may link a qualification — remove the unrelated qualification reference.");
     if (result.passed && declared.qualificationTypeId) {
       if (existing) {
         const held = (await db.execute<{ id: string; status: string; evidenceFileId: string | null }>(sql`select id,status,evidence_file_id as "evidenceFileId" from hrm_worker_qualifications
-          where org_id=${input.orgId} and id=${existing} and employment_id=${row.employmentId} and type_id=${declared.qualificationTypeId} and issued_on=${delivery.endsOn}::date for share`)).rows[0];
+          where org_id=${input.orgId} and id=${existing} and employment_id=${row.employmentId} and type_id=${declared.qualificationTypeId} and issued_on=${delivery.endsOn}::date for share`, "objects"))[0];
         if (!held || held.status === "revoked") throw new TrainingError("The existing qualification does not match this employment, course type and completion date — select its matching non-revoked ledger record or leave the link empty to create one.");
         if (declared.qualificationRequiresEvidence && !held.evidenceFileId) throw new TrainingError("The approved course requires qualification evidence — attach its certificate to the existing qualification before linking it.");
         qualificationId = held.id;
@@ -326,25 +326,25 @@ export async function completeTrainingParticipant(input: TrainingActor & { parti
         qualificationCreated = true;
       }
     }
-    return single((await db.execute<TrainingParticipant>(sql`update hrm_training_participants set status=${result.passed ? "completed" : "failed"},
+    return single(await db.execute<TrainingParticipant>(sql`update hrm_training_participants set status=${result.passed ? "completed" : "failed"},
       attendance_seconds=${result.attendanceSeconds},score=${result.score},evidence_file_id=${evidence},notes=${notes},qualification_id=${qualificationId},qualification_created=${qualificationCreated},
       completion_hash=${hash},revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now()
-      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${PARTICIPANT}`)).rows);
+      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${PARTICIPANT}`, "objects"));
   });
 }
 export async function voidTrainingOutcome(input: TrainingActor & { participantId: string; expectedRevision: number; reason: string }): Promise<TrainingParticipant> {
   const reason = trainingText(input.reason, "Correction reason");
   return transaction(input, async () => {
     const { row } = await participant(input, input.participantId, true);
-    if (row.status === "voided" && row.revision === input.expectedRevision + 1 && (await db.execute(sql`select id from hrm_training_participants where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`)).rows.length) return row;
+    if (row.status === "voided" && row.revision === input.expectedRevision + 1 && (await db.execute(sql`select id from hrm_training_participants where org_id=${input.orgId} and id=${row.id} and updated_by=${input.actorId} and reason=${reason}`, "objects")).length) return row;
     revision(row, input.expectedRevision);
     if (!['completed', 'failed'].includes(row.status)) throw new TrainingError("Only a completed result can be voided — cancel an unused invitation instead.");
     if (row.qualificationCreated && row.qualificationId) {
-      const qualification = single((await db.execute<{ status: string }>(sql`select status from hrm_worker_qualifications where org_id=${input.orgId} and id=${row.qualificationId} for update`)).rows);
+      const qualification = single(await db.execute<{ status: string }>(sql`select status from hrm_worker_qualifications where org_id=${input.orgId} and id=${row.qualificationId} for update`, "objects"));
       if (qualification.status !== "revoked") await revokeQualification(db, { orgId: input.orgId, actorId: input.actorId, qualificationId: row.qualificationId, reason });
     }
-    return single((await db.execute<TrainingParticipant>(sql`update hrm_training_participants set status='voided',revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now()
-      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${PARTICIPANT}`)).rows);
+    return single(await db.execute<TrainingParticipant>(sql`update hrm_training_participants set status='voided',revision=revision+1,reason=${reason},updated_by=${input.actorId},updated_at=now()
+      where org_id=${input.orgId} and id=${row.id} and revision=${input.expectedRevision} returning ${PARTICIPANT}`, "objects"));
   });
 }
 
@@ -359,10 +359,10 @@ export async function recordTrainingFeedback(input: TrainingActor & { id: string
     const hash = trainingRequestHash({ participantId: row.id, rating, comments, supersedes, reason }), replay = await creationReplay<TrainingFeedback>(input, "hrm_training_feedback", id, hash, FEEDBACK);
     if (replay) return replay;
     const latest = (await db.execute<{ id: string }>(sql`select f.id from hrm_training_feedback f where f.org_id=${input.orgId} and f.participant_id=${row.id}
-      and not exists(select 1 from hrm_training_feedback successor where successor.org_id=f.org_id and successor.supersedes_id=f.id) for share`)).rows[0];
+      and not exists(select 1 from hrm_training_feedback successor where successor.org_id=f.org_id and successor.supersedes_id=f.id) for share`, "objects"))[0];
     if ((latest?.id ?? null) !== supersedes) throw new TrainingError("Feedback changed — reload the latest entry and select it as the predecessor when recording a correction.");
-    return single((await db.execute<TrainingFeedback>(sql`insert into hrm_training_feedback(id,org_id,participant_id,rating,comments,supersedes_id,request_hash,reason,created_by)
-      values(${id},${input.orgId},${row.id},${rating},${comments},${supersedes},${hash},${reason},${input.actorId}) returning ${FEEDBACK}`)).rows);
+    return single(await db.execute<TrainingFeedback>(sql`insert into hrm_training_feedback(id,org_id,participant_id,rating,comments,supersedes_id,request_hash,reason,created_by)
+      values(${id},${input.orgId},${row.id},${rating},${comments},${supersedes},${hash},${reason},${input.actorId}) returning ${FEEDBACK}`, "objects"));
   });
 }
 
@@ -375,10 +375,10 @@ export async function getTrainingSession(input: TrainingActor & { sessionId: str
     const scope = await begin(input, "hrm.certifications.read");
     // The parent share lock prevents invitation/result changes while this
     // single scoped statement reads its participant context.
-    const participants = (await db.execute<TrainingParticipant>(sql`select ${PARTICIPANT} from
+    const participants = await db.execute<TrainingParticipant>(sql`select ${PARTICIPANT} from
       (select p.* from hrm_training_participants p join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id
        where p.org_id=${input.orgId} and p.session_id=${delivery.id} ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope)}) visible
-      order by created_at,id`)).rows;
+      order by created_at,id`, "objects");
     return { session: delivery, participants };
   });
 }
@@ -386,7 +386,7 @@ export async function getTrainingParticipant(input: TrainingActor & { participan
   if (input.audience !== "staff" && input.audience !== "self") throw new TrainingError("Choose the employee or HR participant workflow.");
   return transaction(input, async () => {
     const { row, delivery } = await participant(input, input.participantId, false, input.audience === "self");
-    const feedback = (await db.execute<TrainingFeedback>(sql`select ${FEEDBACK} from hrm_training_feedback where org_id=${input.orgId} and participant_id=${row.id} order by created_at,id`)).rows;
+    const feedback = await db.execute<TrainingFeedback>(sql`select ${FEEDBACK} from hrm_training_feedback where org_id=${input.orgId} and participant_id=${row.id} order by created_at,id`, "objects");
     return { participant: row, session: delivery, feedback };
   });
 }
@@ -394,13 +394,13 @@ export async function listOwnTraining(input: TrainingActor): Promise<(TrainingPa
   return transaction(input, async () => {
     const scope = await begin(input, "hrm.self.read"), employments = await loadOwnEmploymentIds(db, input.orgId, input.actorId);
     if (!employments.length) return [];
-    return (await db.execute<TrainingParticipant & { sessionName: string; startsAt: string; endsAt: string; location: string; timeZone: string }>(sql`select ${PARTICIPANT},
+    return await db.execute<TrainingParticipant & { sessionName: string; startsAt: string; endsAt: string; location: string; timeZone: string }>(sql`select ${PARTICIPANT},
       session_name as "sessionName",starts_at::text as "startsAt",ends_at::text as "endsAt",location,time_zone as "timeZone" from
       (select p.*,s.name as session_name,s.starts_at,s.ends_at,s.location,s.time_zone from hrm_training_participants p
        join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id
        join hrm_training_sessions s on s.org_id=p.org_id and s.id=p.session_id
        where p.org_id=${input.orgId} and p.employment_id in (${sql.join(employments.map(id => sql`${id}`),sql`, `)})
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope)} ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope)}) visible
-      order by starts_at desc,id`)).rows;
+      order by starts_at desc,id`, "objects");
   });
 }

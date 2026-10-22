@@ -87,14 +87,12 @@ type BillLine = { id: string; accountId: string | null; custom: Record<string, u
 
 async function billLines(fx: Fixture, billId: string): Promise<BillLine[]> {
   const { org } = fx;
-  const rows = (
-    await withOrgContext(org.orgId, () =>
+  const rows = await withOrgContext(org.orgId, () =>
       db.execute<{ id: string; account_id: string | null; custom: unknown }>(sql`
         select id, account_id, custom from document_lines
          where org_id = ${org.orgId} and document_id = ${billId}
-         order by line_number`),
-    )
-  ).rows;
+         order by line_number`, "objects"),
+    );
   return rows.map((row) => ({
     id: row.id,
     accountId: row.account_id,
@@ -117,13 +115,11 @@ async function postBill(fx: Fixture, billId: string): Promise<void> {
 async function balanceOf(fx: Fixture, accountId: string): Promise<string> {
   const { org } = fx;
   return withOrgContext(org.orgId, async () =>
-    (
-      await db.execute<{ amount: string }>(sql`
+    (await db.execute<{ amount: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as amount from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
          where l.org_id = ${org.orgId} and l.account_id = ${accountId} and e.status = 'posted'
-      `)
-    ).rows[0]!.amount,
+      `, "objects"))[0]!.amount,
   );
 }
 
@@ -151,21 +147,17 @@ test("a bill converted from received stock carries the purchase-order line and t
 
     await postBill(fx, bill.id);
 
-    const receipts = (
-      await withOrgContext(org.orgId, () =>
+    const receipts = (await withOrgContext(org.orgId, () =>
         db.execute<{ count: number }>(sql`
           select count(*)::int as count from inventory_movements
-           where org_id = ${org.orgId} and document_line_id = ${line.id} and kind = 'receipt'`),
-      )
-    ).rows[0]!.count;
+           where org_id = ${org.orgId} and document_line_id = ${line.id} and kind = 'receipt'`, "objects"),
+      ))[0]!.count;
     assert.equal(receipts, 0, "posting the bill must not receive the stock again");
-    const onHand = (
-      await withOrgContext(org.orgId, () =>
+    const onHand = (await withOrgContext(org.orgId, () =>
         db.execute<{ quantity: string }>(sql`
           select coalesce(sum(quantity), 0)::text as quantity from inventory_movements
-           where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted'`),
-      )
-    ).rows[0]!.quantity;
+           where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted'`, "objects"),
+      ))[0]!.quantity;
     assert.equal(toUnits(onHand), toUnits("4"), "stock stays at the four received units");
     assert.equal(toUnits(await balanceOf(fx, org.accounts.clearing)), toUnits("0"), "the bill clears received-not-billed");
     assert.equal(toUnits(await balanceOf(fx, org.accounts.ap)), toUnits("-8"), "payables carry the received value");
@@ -194,13 +186,11 @@ test("converting received stock refuses when its item has no received-not-billed
         error.code === ITEM_MISSING_RNB_ACCOUNT &&
         /received-not-billed/.test(error.message),
     );
-    const bills = (
-      await withOrgContext(org.orgId, () =>
+    const bills = (await withOrgContext(org.orgId, () =>
         db.execute<{ count: number }>(sql`
           select count(*)::int as count from documents
-           where org_id = ${org.orgId} and kind = 'vendor_bill'`),
-      )
-    ).rows[0]!.count;
+           where org_id = ${org.orgId} and kind = 'vendor_bill'`, "objects"),
+      ))[0]!.count;
     assert.equal(bills, 0, "a refused conversion writes no bill");
   } finally {
     await dropFixture(fx.org.orgId);
@@ -248,9 +238,9 @@ test("receiving subtracts cancelled quantity and accumulates same-line lot reque
     const facts = await withOrgContext(org.orgId, () => db.execute<{ received: string; receipts: number }>(sql`
       select (select quantity_fulfilled::text from document_lines where id = ${sourceLineId}) as received,
              (select count(*)::int from documents where org_id = ${org.orgId} and kind = 'purchase_receipt') as receipts
-    `));
-    assert.equal(toUnits(facts.rows[0]!.received), toUnits("0"));
-    assert.equal(facts.rows[0]!.receipts, 0, "both refused quantities leave the order and inventory untouched");
+    `, "objects"));
+    assert.equal(toUnits(facts[0]!.received), toUnits("0"));
+    assert.equal(facts[0]!.receipts, 0, "both refused quantities leave the order and inventory untouched");
   } finally {
     await dropFixture(fx.org.orgId);
   }
@@ -266,11 +256,11 @@ test("receiving the purchase-order remainder excludes cancelled quantity", { ski
       select id from accounting_periods
        where org_id = ${org.orgId} and starts_on <= ${receiptDate} and ends_on >= ${receiptDate}
        limit 1
-    `);
-    if (!openPeriod.rows[0]) {
+    `, "objects");
+    if (!openPeriod[0]) {
       const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
         select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}
-      `)).rows[0]!.fiscal_calendar_id;
+      `, "objects"))[0]!.fiscal_calendar_id;
       const periodNumber = Number(receiptDate.slice(5, 7));
       await db.execute(sql`
         insert into accounting_periods
@@ -284,9 +274,9 @@ test("receiving the purchase-order remainder excludes cancelled quantity", { ski
       select (select quantity_fulfilled::text from document_lines where id = ${sourceLineId}) as received,
              (select coalesce(sum(quantity), 0)::text from inventory_movements
                where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted') as moved
-    `));
-    assert.equal(toUnits(facts.rows[0]!.received), toUnits("4"));
-    assert.equal(toUnits(facts.rows[0]!.moved), toUnits("4"));
+    `, "objects"));
+    assert.equal(toUnits(facts[0]!.received), toUnits("4"));
+    assert.equal(toUnits(facts[0]!.moved), toUnits("4"));
   } finally {
     await dropFixture(fx.org.orgId);
   }

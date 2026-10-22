@@ -91,8 +91,8 @@ async function makeFixture(): Promise<Fixture> {
   })
   const label = async (id: string) =>
     (await withBypass(() =>
-      db.execute<{ number: string; name: string }>(sql`select number, name from accounts where id = ${id} and org_id = ${org.created.orgId}`),
-    )).rows[0]!
+      db.execute<{ number: string; name: string }>(sql`select number, name from accounts where id = ${id} and org_id = ${org.created.orgId}`, 'objects'),
+    ))[0]!
   const bank = await label(org.created.accounts.bank)
   const revenue = await label(org.created.accounts.revenue)
   return {
@@ -149,13 +149,11 @@ function post(body: unknown): Promise<Response> {
 }
 
 async function journalDrafts(orgId: string): Promise<{ id: string; subsidiary_id: string }[]> {
-  return (
-    await withOrgContext(orgId, () =>
+  return await withOrgContext(orgId, () =>
       db.execute<{ id: string; subsidiary_id: string }>(sql`
         select id, subsidiary_id from documents
-         where org_id = ${orgId} and kind = 'journal' order by created_at`),
+         where org_id = ${orgId} and kind = 'journal' order by created_at`, 'objects'),
     )
-  ).rows
 }
 
 test(

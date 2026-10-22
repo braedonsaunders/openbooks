@@ -26,10 +26,10 @@ async function legacyDELETE(req: Request, { params }: { params: Promise<{ id: st
     // script that could fire on future documents.
     const existing = (await tx.execute<Record<string, unknown>>(sql`
       select * from user_scripts where id = ${id} and org_id = ${user.orgId} for update
-    `))
-    if (!existing.rows[0]) return true
-    const history = await tx.execute(sql`select id from script_runs where script_id = ${id} and org_id = ${user.orgId} limit 1`)
-    if (history.rows.length) return NextResponse.json({
+    `, 'objects'))
+    if (!existing[0]) return true
+    const history = await tx.execute(sql`select id from script_runs where script_id = ${id} and org_id = ${user.orgId} limit 1`, 'objects')
+    if (history.length) return NextResponse.json({
       error: 'This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.',
       code: 'SCRIPT_HAS_RUN_HISTORY',
     }, { status: 409 })
@@ -39,7 +39,7 @@ async function legacyDELETE(req: Request, { params }: { params: Promise<{ id: st
         (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values
         (${user.orgId}, 'user_scripts', ${id}, 'delete',
-         ${JSON.stringify({ before: existing.rows[0] })}::jsonb, ${user.id}, ${req.headers.get('X-Request-Id')})
+         ${JSON.stringify({ before: existing[0] })}::jsonb, ${user.id}, ${req.headers.get('X-Request-Id')})
     `)
     return false
   })

@@ -32,7 +32,7 @@ export const GET = defineRoute({
        where org_id = ${gate.user.orgId}
          and code_hash = ${hashStoredValueCode(gate.user.orgId, code)}
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!account) return notFound('record')
     return NextResponse.json({
       accountId: account.id,

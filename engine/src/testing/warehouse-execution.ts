@@ -24,9 +24,9 @@ export async function createWarehouseOperator(
   const grant = await db.execute(sql`update app_roles set permissions=
     '["items.read","items.post","items.manage","orders.read","orders.fulfill","shipping.manage"]'::jsonb
     where org_id=${orgId} and id in (select role_id from role_assignments
-      where org_id=${orgId} and user_id=${actor}) returning id`);
+      where org_id=${orgId} and user_id=${actor}) returning id`, "objects");
   assert.ok(
-    grant.rows.length,
+    grant.length,
     "operator requires a native assigned permission grant",
   );
   return actor;
@@ -40,10 +40,10 @@ export async function confirmFixturePick(
 ): Promise<void> {
   const lines = await withOrgTransaction(orgId, () =>
     db.execute<{ id: string; quantity: string }>(sql`
-    select id,quantity::text from document_lines where org_id=${orgId} and document_id=${pickId} order by line_number`),
+    select id,quantity::text from document_lines where org_id=${orgId} and document_id=${pickId} order by line_number`, "objects"),
   );
-  assert.ok(lines.rows.length);
-  for (const line of lines.rows) {
+  assert.ok(lines.length);
+  for (const line of lines) {
     const task = await suggestPickConfirmation(orgId, actorId, {
       lineId: line.id,
       quantity: line.quantity,
@@ -68,11 +68,11 @@ export async function packFixtureShipment(
 ): Promise<string> {
   const lines = await withOrgTransaction(orgId, () =>
     db.execute<{ id: string }>(sql`
-    select id from document_lines where org_id=${orgId} and document_id=${shipmentId} order by line_number`),
+    select id from document_lines where org_id=${orgId} and document_id=${shipmentId} order by line_number`, "objects"),
   );
   const selected = lineIds
-    ? lines.rows.filter((line) => lineIds.includes(line.id))
-    : lines.rows;
+    ? lines.filter((line) => lineIds.includes(line.id))
+    : lines;
   assert.ok(
     selected.length && (!lineIds || selected.length === lineIds.length),
   );

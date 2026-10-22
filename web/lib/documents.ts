@@ -53,8 +53,8 @@ export async function partyOptions(
      where p.org_id = ${resolvedOrgId} and ${filter} and p.is_active
        ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by p.display_name limit 2000
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 export async function accountOptions(
@@ -71,8 +71,8 @@ export async function accountOptions(
      where a.org_id = ${resolvedOrgId} and a.is_active and not a.is_summary ${typeFilter}
        ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by a.number nulls last
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /**
@@ -94,8 +94,8 @@ export async function taxCodeOptions(orgId?: string, asOfDate?: string): Promise
            and (effective_to is null or effective_to >= ${date}::date)
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active order by tc.code
-  `))
-  return r.rows.map((row) => ({ ...row, tax_components: profiles.codes.get(row.id) ?? [] }))
+  `, 'objects'))
+  return r.map((row) => ({ ...row, tax_components: profiles.codes.get(row.id) ?? [] }))
 }
 
 export async function taxGroupOptions(orgId?: string, asOfDate?: string): Promise<Opt[]> {
@@ -104,8 +104,8 @@ export async function taxGroupOptions(orgId?: string, asOfDate?: string): Promis
   const result = (await db.execute<Opt>(sql`
     select id, code, name from tax_groups
      where org_id = ${resolvedOrgId} and is_active order by code
-  `))
-  return result.rows.map((row) => ({ ...row, tax_components: profiles.groups.get(row.id) ?? [] }))
+  `, 'objects'))
+  return result.map((row) => ({ ...row, tax_components: profiles.groups.get(row.id) ?? [] }))
 }
 
 export async function dimensionOptions(
@@ -115,10 +115,10 @@ export async function dimensionOptions(
 ) {
   const resolvedOrgId = await resolveOrgId(orgId)
   const [departments, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`),
-    db.execute(sql`select id, name from projects where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name limit 2000`),
-    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`),
-    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`),
+    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`, 'objects'),
+    db.execute(sql`select id, name from projects where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name limit 2000`, 'objects'),
+    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`, 'objects'),
+    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })} order by name`, 'objects'),
     segmentRegistry(resolvedOrgId, allowedSubsidiaryIds),
   ])
   // Each segment carries the dependency rules that restrict its values, so
@@ -130,10 +130,10 @@ export async function dimensionOptions(
     dependencies: rules.filter((rule) => rule.segment.id === segment.id),
   }))
   return {
-    departments: departments.rows as Opt[],
-    projects: projects.rows as Opt[],
-    locations: locations.rows as Opt[],
-    classes: classes.rows as Opt[],
+    departments: departments as Opt[],
+    projects: projects as Opt[],
+    locations: locations as Opt[],
+    classes: classes as Opt[],
     segments: withDependencies.filter((segment) => segment.sourceKind === 'custom'),
     builtinSegments: withDependencies.filter((segment) => segment.sourceKind === 'builtin'),
   }
@@ -144,8 +144,8 @@ export async function itemOptions(orgId?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
   const r = (await db.execute<Opt>(sql`
     select id, code, name from items where org_id = ${resolvedOrgId} and is_active order by coalesce(code, name), name limit 2000
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /** Active corporate cards (for card_charge / card_refund funding source). */
@@ -157,8 +157,8 @@ export async function cardOptions(orgId?: string): Promise<Opt[]> {
       left join parties p on p.id = pc.holder_party_id and p.org_id = pc.org_id
      where pc.org_id = ${resolvedOrgId} and pc.is_active
      order by pc.label
-  `))
-  return r.rows.map((c) => ({
+  `, 'objects'))
+  return r.map((c) => ({
     id: c.id,
     label: c.last_four ? `${c.label}` : c.label,
     display_name: c.last_four ? `${c.network ?? ''} •••• ${c.last_four} — ${c.holder ?? ''}`.trim() : c.label,
@@ -175,8 +175,8 @@ export async function bankAccountOptions(orgId?: string): Promise<Opt[]> {
     select id, number, name, currency_restriction from accounts
      where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'asset_bank'
      order by number nulls last
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /** Customer receipts add only the provider's explicitly scoped processor
@@ -203,8 +203,8 @@ export async function transferAccountOptions(
      where a.org_id = ${resolvedOrgId} and ${bankAccountMembership()}
        ${allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by a.number nulls last
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /**
@@ -219,6 +219,6 @@ export async function cardLiabilityAccountOptions(orgId?: string): Promise<Opt[]
     select id, number, name, currency_restriction from accounts
      where org_id = ${resolvedOrgId} and is_active and not is_summary and reconcilable and type = 'liability_card'
      order by number nulls last
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }

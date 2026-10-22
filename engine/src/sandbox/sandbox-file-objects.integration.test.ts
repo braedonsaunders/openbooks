@@ -58,9 +58,9 @@ async function seedS3File(orgId: string, storageKind: string): Promise<{
 }
 
 async function sandboxVersionId(sandboxOrgId: string): Promise<{ id: string; storage_kind: string }> {
-  const rows = (await db.execute<{ id: string; storage_kind: string }>(sql`
+  const rows = await db.execute<{ id: string; storage_kind: string }>(sql`
     select fv.id, fv.storage_kind from file_versions fv
-     join files f on f.id = fv.file_id where f.org_id = ${sandboxOrgId}`)).rows;
+     join files f on f.id = fv.file_id where f.org_id = ${sandboxOrgId}`, "objects");
   assert.equal(rows.length, 1);
   return rows[0]!;
 }
@@ -152,7 +152,7 @@ test("failed object copy cleans up partial keys and reports the failure", async 
     // object missing mid-clone); the sandbox holds its rebased row.
     const seeded = await seedS3File(prod.orgId, "s3");
     const rebased = (await db.execute<{ id: string }>(sql`
-      select ob_rebase(${seeded.versionId}, ${seed}) as id`)).rows[0]!.id;
+      select ob_rebase(${seeded.versionId}, ${seed}) as id`, "objects"))[0]!.id;
     const folderId = randomUUID();
     const fileId = randomUUID();
     await db.execute(sql`insert into folders (id, org_id, name) values (${folderId}, ${sbx.orgId}, 'Cabinet')`);

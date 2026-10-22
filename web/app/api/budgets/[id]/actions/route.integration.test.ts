@@ -41,7 +41,7 @@ function asUser(id: string, orgId: string, name: string): SessionUser {
 async function scenarioState(orgId: string, id: string) {
   return withBypassContext(async () =>
     (await db.execute<{ status: string; revision: number; submitted_by: string | null; approved_by: string | null }>(sql`
-      select status, revision, submitted_by, approved_by from budget_scenarios where id = ${id} and org_id = ${orgId}`)).rows[0]!,
+      select status, revision, submitted_by, approved_by from budget_scenarios where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!,
   )
 }
 
@@ -70,7 +70,7 @@ async function fixture() {
   }
   async function pendingGate(id: string) {
     return withBypassContext(async () => {
-      const rows = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`)).rows
+      const rows = await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, 'objects')
       assert.equal(rows.length, 1)
       return rows[0]!.id
     })
@@ -116,11 +116,11 @@ test('budget gates approve or reject through Flows with assignment, revision and
     assert.equal(rejected.status,'draft')
     assert.equal(rejected.submitted_by,null)
     assert.equal(rejected.revision,3)
-    const evidence = await withBypassContext(() => db.execute<{actor_id:string;changes:Record<string,unknown>}>(sql`select actor_id,changes from audit_log where org_id=${f.org.orgId} and table_name='budget_scenarios' and row_id=${rejectedId} and changes->>'event'='rejected'`))
-    assert.equal(evidence.rows.length,1)
-    assert.equal(evidence.rows[0]!.actor_id,f.approver)
-    assert.equal(evidence.rows[0]!.changes.comment,reason)
-    assert.equal(evidence.rows[0]!.changes.mode,'gated')
+    const evidence = await withBypassContext(() => db.execute<{actor_id:string;changes:Record<string,unknown>}>(sql`select actor_id,changes from audit_log where org_id=${f.org.orgId} and table_name='budget_scenarios' and row_id=${rejectedId} and changes->>'event'='rejected'`, 'objects'))
+    assert.equal(evidence.length,1)
+    assert.equal(evidence[0]!.actor_id,f.approver)
+    assert.equal(evidence[0]!.changes.comment,reason)
+    assert.equal(evidence[0]!.changes.mode,'gated')
   } finally { await withBypassContext(() => dropScratchOrg(f.org.orgId)) }
 })
 
@@ -144,13 +144,13 @@ test('the tenant Flow chooses whether a budget maker may approve', async () => {
       const id = await f.draft()
       const response = await f.submit(id)
       assert.equal(response.status,200,JSON.stringify(await response.clone().json()))
-      const gates = await withBypassContext(() => db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`))
+      const gates = await withBypassContext(() => db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`, 'objects'))
       if (preventSelfApproval) {
-        assert.ok(gates.rows.every(gate=>gate.assignee_user_id!==f.manager))
+        assert.ok(gates.every(gate=>gate.assignee_user_id!==f.manager))
         assert.equal((await scenarioState(f.org.orgId,id)).status,'pending_approval')
-        await withOrgContext(f.org.orgId, () => decideGate({gateId:gates.rows[0]!.id,userId:f.approver,decision:'approved'}))
+        await withOrgContext(f.org.orgId, () => decideGate({gateId:gates[0]!.id,userId:f.approver,decision:'approved'}))
       } else {
-        const own = gates.rows.find(gate=>gate.assignee_user_id===f.manager)
+        const own = gates.find(gate=>gate.assignee_user_id===f.manager)
         assert.ok(own)
         await withOrgContext(f.org.orgId, () => decideGate({gateId:own.id,userId:f.manager,decision:'approved'}))
       }

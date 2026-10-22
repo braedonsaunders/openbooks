@@ -111,8 +111,8 @@ export async function listPeriodSiblings(
   orgId: string,
   run: PeriodRunIdentity,
 ): Promise<PeriodSibling[]> {
-  const employer=(await tx.execute<{id:string}>(sql`select subsidiary_id as id from documents
-    where org_id=${orgId} and id=${run.documentId} and kind='pay_run'`)).rows;
+  const employer=await tx.execute<{id:string}>(sql`select subsidiary_id as id from documents
+    where org_id=${orgId} and id=${run.documentId} and kind='pay_run'`, "objects");
   if(employer.length!==1||!employer[0]!.id)throw new PayrollError('Pay-period sequencing requires the actual legal employer of the pay run');
   const rows = (await tx.execute<PeriodSibling>(sql`
     select r.document_id::text as document_id, d.document_number,
@@ -129,8 +129,8 @@ export async function listPeriodSiblings(
        and r.run_status <> 'voided'
        and d.status <> 'voided'
      order by r.pay_date, r.created_at, d.document_number
-  `));
-  return rows.rows;
+  `, "objects"));
+  return rows;
 }
 
 /**
@@ -207,12 +207,12 @@ export async function loadPeriodPriors(
      where s.org_id = ${orgId}
        and s.pay_run_document_id = any(${`{${earlier.join(",")}}`}::uuid[])
      group by s.employee_party_id
-  `));
+  `, "objects"));
   // Factors arrive per stub (one JSON object per earlier run) and sum in
   // application code: the key set is the pack's own trace vocabulary, which
   // SQL must not enumerate.
   const stubFactors = new Map<string, Record<string, string>[]>();
-  for (const row of byEmployee.rows) {
+  for (const row of byEmployee) {
     const perStub = Object.values(
       (row.factors ?? {}) as unknown as Record<string, Record<string, string | number>>,
     );
@@ -234,14 +234,14 @@ export async function loadPeriodPriors(
        and s.pay_run_document_id = any(${`{${earlier.join(",")}}`}::uuid[])
        and c.system_key is not null
      group by s.employee_party_id, c.system_key
-  `));
+  `, "objects"));
   const withheldByEmployee = new Map<string, Record<string, string>>();
-  for (const row of withheld.rows) {
+  for (const row of withheld) {
     const entry = withheldByEmployee.get(row.employee_party_id) ?? {};
     entry[row.system_key] = row.amount;
     withheldByEmployee.set(row.employee_party_id, entry);
   }
-  for (const row of byEmployee.rows) {
+  for (const row of byEmployee) {
     const factors: Record<string, string> = {};
     for (const perStub of stubFactors.get(row.employee_party_id) ?? []) {
       for (const [key, value] of Object.entries(perStub)) {
@@ -300,7 +300,7 @@ export async function supplementalTaxMethodForOrg(
   const treatment = pack.supplementalPayTreatment!;
   const stored = (await tx.execute<{ method: string | null }>(sql`
     select settings#>>'{payroll,supplementalTaxMethod}' as method from orgs where id = ${orgId}
-  `)).rows[0]?.method ?? null;
+  `, "objects"))[0]?.method ?? null;
   if (stored == null || stored === "") return treatment.defaultTaxMethod;
   if (!(treatment.taxMethods as readonly string[]).includes(stored)) {
     throw new PayrollError(

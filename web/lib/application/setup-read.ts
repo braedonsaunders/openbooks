@@ -129,14 +129,14 @@ export async function listSetupRecords(
     db.execute<Record<string, unknown>>(sql`
       select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)} ${rowFilter}
        order by ${sql.raw(orderBy)}
-       limit ${limit}`),
+       limit ${limit}`, "objects"),
     db.execute<{ n: number }>(sql`
-      select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`),
+      select count(*)::int as n from ${sql.raw(entity.table)} ${rowFilter}`, "objects"),
   ]);
   return {
     entityKey: entity.key,
-    total: Number(count.rows[0]?.n ?? 0),
-    records: rows.rows.map((row) => mapSetupRecord(entity, row)),
+    total: Number(count[0]?.n ?? 0),
+    records: rows.map((row) => mapSetupRecord(entity, row)),
   };
 }
 
@@ -166,16 +166,16 @@ export async function getSetupRecord(
     select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)}
      where ${sql.raw(idColumn)} = ${input.id}
      ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
-     ${setupEntitySubsidiaryFilter(entity, context.authz.allowedSubsidiaryIds)}`);
-  if (rows.rows.length === 0) throw setupRecordMissing(entity.key);
-  if (rows.rows.length !== 1) {
+     ${setupEntitySubsidiaryFilter(entity, context.authz.allowedSubsidiaryIds)}`, "objects");
+  if (rows.length === 0) throw setupRecordMissing(entity.key);
+  if (rows.length !== 1) {
     throw new ApplicationError(
       "internal_error",
-      `setup record id matched ${rows.rows.length} rows; refuse rather than guess`,
+      `setup record id matched ${rows.length} rows; refuse rather than guess`,
       500,
     );
   }
-  return mapSetupRecord(entity, rows.rows[0]!);
+  return mapSetupRecord(entity, rows[0]!);
 }
 
 /** Features switchboard as the Company Settings page shows it. */

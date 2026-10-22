@@ -11,17 +11,20 @@ export async function ensureRetirementAuthorityOwnership(): Promise<void> {
       to_regclass('public.orgs') is not null and to_regclass('tenant_retirement.runs') is not null as present`)).rows[0];
     if (!present?.present) { await client.query("commit"); return; }
     const state = (await client.query<{
-      isolated: boolean; empty: boolean; creator: boolean; privileged: boolean; owner: string;
+      isolated: boolean; empty: boolean; creator: boolean; privileged: boolean; owner: string; database_owner: string;
     }>(`select not pg_has_role(business.relowner,authority.relowner,'MEMBER') as isolated,
       not exists(select 1 from public.orgs) as empty,
       authority.relowner=(select oid from pg_roles where rolname=current_user) as creator,
       (select rolsuper from pg_roles where rolname=session_user) as privileged,
-      business.relowner::regrole::text as owner
+      business.relowner::regrole::text as owner,
+      (select r.rolname from pg_database d join pg_roles r on r.oid=d.datdba where d.datname=current_database()) as database_owner
       from pg_class business cross join pg_class authority
       where business.oid='public.orgs'::regclass and authority.oid='tenant_retirement.runs'::regclass`)).rows[0];
     if (!state) throw new Error("Retirement authority ownership cannot be resolved");
     const hostManaged = env.OPENBOOKS_PRECREATED_ROLES === "1";
-    const roleName = hostManaged ? state.owner : "openbooks_schema_owner";
+    // A host-managed installation's business owner is the database owner the
+    // host provisioned; a fresh one has not yet received its objects.
+    const roleName = hostManaged ? (state.isolated ? state.owner : state.database_owner) : "openbooks_schema_owner";
     const quotedOwner = pg.escapeIdentifier(roleName);
     if (state.isolated && state.owner !== roleName) { await client.query("commit"); return; }
     if (!state.isolated && (!state.empty || !state.creator || !state.privileged)) {

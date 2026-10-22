@@ -49,10 +49,10 @@ export interface ResolvedAccountingContext {
 /** Active contexts, or none while the feature is off. */
 export async function listAccountingContexts(executor: SqlExecutor, orgId: string): Promise<AccountingContextOption[]> {
   if (!(await orgFeatureEnabled(orgId, ACCOUNTING_CONTEXTS_FEATURE, executor))) return [];
-  return (await executor.execute<AccountingContextOption>(sql`
+  return await executor.execute<AccountingContextOption>(sql`
     select id, code, name from accounting_contexts
      where org_id = ${orgId} and is_active
-     order by name, code, id`)).rows;
+     order by name, code, id`, "objects");
 }
 
 /**
@@ -77,7 +77,7 @@ export async function resolveAccountingContext(
   if (requested) {
     const row = (await executor.execute<AccountingContextOption>(sql`
       select id, code, name from accounting_contexts
-       where org_id = ${orgId} and id::text = ${requested} and is_active`)).rows[0];
+       where org_id = ${orgId} and id::text = ${requested} and is_active`, "objects"))[0];
     if (!row) {
       throw new AccountingContextError("The accounting context is not an active context of this company.", "accounting_context_unknown", "Choose an active accounting context, or the base chart.");
     }
@@ -91,7 +91,7 @@ export async function resolveAccountingContext(
       join subsidiaries s on s.org_id = d.org_id and s.id = ${input.subsidiaryId}
      where d.org_id = ${orgId} and (d.subsidiary_id = s.id or (d.subsidiary_id is null and d.country = s.country))
      order by (d.subsidiary_id is not null) desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!fallback) return { context: null, source: "base" };
   return { context: { id: fallback.id, code: fallback.code, name: fallback.name }, source: fallback.scope };
 }
@@ -146,7 +146,7 @@ export async function loadAccountLabels(
     throw new AccountingContextError("The report date is not a calendar date.", "accounting_context_date", "Choose a valid report period.");
   }
   const subsidiaryId = options.subsidiaryId ?? null;
-  const rows = (await executor.execute<LabelRow>(sql`
+  const rows = await executor.execute<LabelRow>(sql`
     select a.id as account_id, a.number as base_number, a.name as base_name,
            loc.localized_number, loc.localized_name
       from accounts a
@@ -160,7 +160,7 @@ export async function loadAccountLabels(
          order by (l.subsidiary_id is not null) desc
          limit 1
       ) loc on true
-     where a.org_id = ${orgId}`)).rows;
+     where a.org_id = ${orgId}`, "objects");
   const labels = new Map<string, AccountLabel>();
   for (const row of rows) {
     const localized = row.localized_number !== null || row.localized_name !== null;
@@ -212,14 +212,14 @@ export async function accountLocalizationWriteError(
     return "The end date must be on or after the effective date.";
   }
   const account = (await executor.execute<{ merged_into_id: string | null }>(sql`
-    select merged_into_id from accounts where org_id = ${orgId} and id = ${input.accountId}`)).rows[0];
+    select merged_into_id from accounts where org_id = ${orgId} and id = ${input.accountId}`, "objects"))[0];
   if (!account) return "Choose an account of this company.";
   const context = (await executor.execute<{ id: string }>(sql`
-    select id from accounting_contexts where org_id = ${orgId} and id = ${input.contextId}`)).rows[0];
+    select id from accounting_contexts where org_id = ${orgId} and id = ${input.contextId}`, "objects"))[0];
   if (!context) return "Choose an accounting context of this company.";
   if (input.subsidiaryId) {
     const subsidiary = (await executor.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`)).rows[0];
+      select id from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId}`, "objects"))[0];
     if (!subsidiary) return "Choose a subsidiary of this company.";
   }
   const number = input.localizedNumber?.trim();
@@ -236,7 +236,7 @@ export async function accountLocalizationWriteError(
        and (l.subsidiary_id is null or ${input.subsidiaryId}::uuid is null or l.subsidiary_id = ${input.subsidiaryId}::uuid)
        and daterange(l.effective_from, coalesce(l.effective_to + 1, 'infinity'::date), '[)')
            && daterange(${input.effectiveFrom}::date, coalesce(${input.effectiveTo}::date + 1, 'infinity'::date), '[)')
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (clash) return `Localized number ${number} is already used by ${clash.label} in this context for an overlapping period. Give each account its own localized number.`;
   return null;
 }

@@ -120,9 +120,9 @@ export async function enqueueProviderCommitTx(
               'the custom tax hook has no commit contract — configure Avalara or TaxJar to commit transactions',
               ${args.actorId}, ${args.actorId})
       returning id
-    `));
-    if (!skipped.rows[0]) throw new TaxProviderCommitError("the provider commit skip was not stored — no row was written");
-    return skipped.rows[0].id;
+    `, "objects"));
+    if (!skipped[0]) throw new TaxProviderCommitError("the provider commit skip was not stored — no row was written");
+    return skipped[0].id;
   }
   const inserted = (await runner.execute<{ id: string }>(sql`
     insert into tax_provider_transactions
@@ -130,11 +130,11 @@ export async function enqueueProviderCommitTx(
     values (${args.orgId}, ${args.documentId}, ${config.provider}, ${providerCode}, ${direction},
             'pending', ${args.actorId}, ${args.actorId})
     returning id
-  `));
+  `, "objects"));
   // A write that matches zero rows is a failure, not a success: without the
   // row the scan never commits and the operator never learns it.
-  if (!inserted.rows[0]) throw new TaxProviderCommitError("the provider commit was not enqueued — no row was written");
-  return inserted.rows[0].id;
+  if (!inserted[0]) throw new TaxProviderCommitError("the provider commit was not enqueued — no row was written");
+  return inserted[0].id;
 }
 
 /**
@@ -146,7 +146,7 @@ export async function requestProviderVoidTx(
   runner: Runner,
   args: { orgId: string; documentId: string },
 ): Promise<number> {
-  const marked = (await runner.execute(sql`
+  const marked = (await runner.execute<never>(sql`
     update tax_provider_transactions
        set void_requested_at = coalesce(void_requested_at, now()),
            next_attempt_at = now(),
@@ -164,7 +164,7 @@ export async function retryProviderTransaction(
   actorId: string | null,
 ): Promise<void> {
   await withOrgContext(orgId, async () => {
-    const rearmed = (await db.execute(sql`
+    const rearmed = (await db.execute<never>(sql`
       update tax_provider_transactions
          set status = 'pending', attempts = 0, next_attempt_at = now(),
              last_error = null, updated_at = now(), updated_by = ${actorId}
@@ -189,11 +189,11 @@ export async function readProviderTransactionsForDocument(
   documentId: string,
 ): Promise<ProviderCommitRow[]> {
   return withOrgContext(orgId, async () => {
-    const rows = (await db.execute<ProviderCommitRow>(sql`
+    const rows = await db.execute<ProviderCommitRow>(sql`
       select ${COMMIT_ROW_COLS} from tax_provider_transactions
        where org_id = ${orgId} and document_id = ${documentId}
        order by created_at desc
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }
@@ -213,14 +213,14 @@ export async function listProviderTransactions(
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
   const offset = Math.max(filters.offset ?? 0, 0);
   return withOrgContext(orgId, async () => {
-    const rows = (await db.execute<ProviderCommitRow>(sql`
+    const rows = await db.execute<ProviderCommitRow>(sql`
       select ${COMMIT_ROW_COLS} from tax_provider_transactions
        where org_id = ${orgId}
          ${filters.status ? sql`and status = ${filters.status}` : sql``}
          ${filters.provider ? sql`and provider = ${filters.provider}` : sql``}
        order by created_at desc
        limit ${limit} offset ${offset}
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }
@@ -281,9 +281,9 @@ async function loadCommitDocument(orgId: string, documentId: string): Promise<Co
            ship_to_country as "shipToCountry", ship_to_region as "shipToRegion",
            tax_total::text as "taxTotal"
       from documents where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!doc) return null;
-  const lines = (await db.execute<{
+  const lines = await db.execute<{
     lineNumber: number;
     amount: string;
     taxAmount: string;
@@ -295,18 +295,18 @@ async function loadCommitDocument(orgId: string, documentId: string): Promise<Co
       from document_lines
      where org_id = ${orgId} and document_id = ${documentId}
      order by line_number
-  `)).rows;
+  `, "objects");
   // The selling entity's country is the commit's origin address: the
   // document subsidiary when set, else the organization itself.
   let entityCountry: string | null = null;
   if (doc.subsidiaryId) {
     entityCountry = (await db.execute<{ country: string | null }>(sql`
       select country from subsidiaries where org_id = ${orgId} and id = ${doc.subsidiaryId}
-    `)).rows[0]?.country ?? null;
+    `, "objects"))[0]?.country ?? null;
   } else {
     entityCountry = (await db.execute<{ country: string | null }>(sql`
       select country from orgs where id = ${orgId}
-    `)).rows[0]?.country ?? null;
+    `, "objects"))[0]?.country ?? null;
   }
   let merchantTax = "0";
   for (const line of lines) {
@@ -530,7 +530,7 @@ async function markCommitted(
   rowId: string,
   excerpt: Record<string, unknown>,
 ): Promise<void> {
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<never>(sql`
     update tax_provider_transactions
        set status = 'committed', attempts = attempts + 1, committed_at = now(),
            last_error = null, provider_response_excerpt = ${JSON.stringify(excerpt)}::jsonb,
@@ -543,7 +543,7 @@ async function markCommitted(
 }
 
 async function markVoided(orgId: string, rowId: string): Promise<void> {
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<never>(sql`
     update tax_provider_transactions
        set status = 'voided', attempts = attempts + 1, last_error = null,
            updated_at = now()
@@ -553,7 +553,7 @@ async function markVoided(orgId: string, rowId: string): Promise<void> {
 }
 
 async function markSkipped(orgId: string, rowId: string, reason: string): Promise<void> {
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<never>(sql`
     update tax_provider_transactions
        set status = 'skipped', attempts = attempts + 1, last_error = ${reason},
            updated_at = now()
@@ -571,9 +571,9 @@ async function markAttemptFailed(
   const message = error instanceof Error ? error.message : String(error);
   const attempts = (await db.execute<{ attempts: number }>(sql`
     select attempts from tax_provider_transactions where id = ${rowId} and org_id = ${orgId}
-  `)).rows[0]?.attempts ?? 0;
+  `, "objects"))[0]?.attempts ?? 0;
   const exhausted = terminal || attempts + 1 >= MAX_PROVIDER_COMMIT_ATTEMPTS;
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<never>(sql`
     update tax_provider_transactions
        set status = ${exhausted ? "failed" : "pending"},
            attempts = attempts + 1,
@@ -747,8 +747,8 @@ export async function runTaxProviderCommitScan(
        and t.next_attempt_at <= now()
        and (t.status = 'pending' or (t.void_requested_at is not null and t.status in ('committed', 'failed')))
      limit ${PROVIDER_COMMIT_SCAN_BATCH}
-  `));
-  for (const { orgId } of due.rows) {
+  `, "objects"));
+  for (const { orgId } of due) {
     try {
       const one = await runTaxProviderCommitScanForOrg(orgId, options);
       result.scanned += one.scanned;
@@ -774,7 +774,7 @@ export async function runTaxProviderCommitScanForOrg(
   };
   if (!orgId.trim()) throw new TaxProviderCommitError("orgId is required for an org-scoped provider commit scan");
   await withOrgContext(orgId, async () => {
-    const due = (await db.execute<ProviderCommitRow>(sql`
+    const due = await db.execute<ProviderCommitRow>(sql`
       select ${COMMIT_ROW_COLS} from tax_provider_transactions
        where org_id = ${orgId}
          and next_attempt_at <= now()
@@ -782,7 +782,7 @@ export async function runTaxProviderCommitScanForOrg(
        order by next_attempt_at
        limit ${PROVIDER_COMMIT_SCAN_BATCH}
        for update skip locked
-    `)).rows;
+    `, "objects");
     for (const row of due) {
       result.scanned += 1;
       try {

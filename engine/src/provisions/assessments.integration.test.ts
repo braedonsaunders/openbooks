@@ -39,7 +39,7 @@ test('independent provision assessments recognize and remeasure one tenant liabi
       }
       const approve = async (id: string) => {
         await submitFinancialChange(org.orgId, id, actors.submitterId)
-        const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
         await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: 'approved' })
       }
       const contingent = await proposeProvisionAssessment(org.orgId, actors.submitterId, {
@@ -70,7 +70,7 @@ test('independent provision assessments recognize and remeasure one tenant liabi
         select count(distinct entry.id)::int as count, sum(-line.amount) filter(where line.account_id=${liability})::text as amount,
           sum(line.amount)=0 as balanced from journal_entries entry join journal_lines line on line.org_id=entry.org_id and line.entry_id=entry.id
          where entry.org_id=${org.orgId} and entry.origin='provision' and entry.status='posted'
-      `)).rows[0]!
+      `, 'objects'))[0]!
       assert.equal(posted.count, 2); assert.equal(posted.amount, '65000.0000'); assert.equal(posted.balanced, true)
       const range = { ...input.assessment, estimate: { method: 'no_better_estimate_range' as const, minimum: '50000', maximum: '65000' } }
       assert.equal(measureProvision('us_gaap', range).liability, '50000.0000')
@@ -87,7 +87,7 @@ test('independent provision assessments recognize and remeasure one tenant liabi
         (org_id,period_id,book_id,subsidiary_id,module,state,locked_at,reason)
         values (${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'gl','closed',now(),'Completed period close')`))
       await assert.rejects(applyProvisionAssessment(org.orgId, unchanged, actors.submitterId), /controlled reopen workflow/)
-      assert.equal((await db.execute<{ status: string }>(sql`select status from financial_changes where org_id=${org.orgId} and id=${unchanged}`)).rows[0]!.status, 'approved')
+      assert.equal((await db.execute<{ status: string }>(sql`select status from financial_changes where org_id=${org.orgId} and id=${unchanged}`, 'objects'))[0]!.status, 'approved')
       // Tenant isolation holds at the storage fence, so prove it through the
       // login production traffic uses. PostgreSQL does not apply row
       // security (forced included) to the harness superuser login, so a raw

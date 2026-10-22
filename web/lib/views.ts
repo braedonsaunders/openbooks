@@ -56,8 +56,8 @@ async function userVisibility(orgId: string, userId: string, perms: Set<string>)
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${userId} and a.org_id = ${orgId}
-    `))
-    roleKeys = r.rows.map((x) => x.key)
+    `, 'objects'))
+    roleKeys = r.map((x) => x.key)
   }
   return { roleKeys, isAdmin }
 }
@@ -105,8 +105,8 @@ export async function loadViews(
      where sv.org_id = ${orgId}
        and (${visiblePredicate(userId, vis)})
      order by sv.updated_at desc
-  `))
-  return r.rows.map(normalize)
+  `, 'objects'))
+  return r.map(normalize)
 }
 
 export async function loadView(
@@ -123,8 +123,8 @@ export async function loadView(
      where sv.org_id = ${orgId} and sv.id = ${id}
        and (${visiblePredicate(userId, vis)})
      limit 1
-  `))
-  return r.rows[0] ? normalize(r.rows[0]) : null
+  `, 'objects'))
+  return r[0] ? normalize(r[0]) : null
 }
 
 /** The owner (or an admin) may edit/delete — checked before any mutation. */
@@ -140,8 +140,8 @@ async function assertCanMutate(
     select 1 from saved_views
      where org_id = ${orgId} and id = ${id} and owner_id = ${userId}
      limit 1
-  `))
-  return r.rows.length > 0
+  `, 'objects'))
+  return r.length > 0
 }
 
 export async function createView(args: {
@@ -157,8 +157,8 @@ export async function createView(args: {
     values (${args.orgId}, ${slug}, ${name}, ${query as unknown as Record<string, unknown>}, 'private',
             ${args.userId}, ${args.userId}, ${args.userId})
     returning id, slug
-  `))
-  return r.rows[0]!
+  `, 'objects'))
+  return r[0]!
 }
 
 export async function updateView(
@@ -227,7 +227,7 @@ export async function updateView(
         from saved_views sv
        where sv.org_id = ${orgId} and sv.id = ${id}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!before) return { ok: false, error: 'You can only edit your own views.' } as const
 
     const sets: SQL[] = []
@@ -253,7 +253,7 @@ export async function updateView(
        where org_id = ${orgId} and id = ${id}
       returning id, org_id, slug, name, description, query, layout, scope,
                 owner_id, allowed_roles, created_at, updated_at
-    `)).rows[0]!
+    `, 'objects'))[0]!
     // The edit and its audit evidence commit atomically: a mutation with no
     // audit row (or an audit row with no mutation) is a half-written history.
     await auditSetupChange(
@@ -288,7 +288,7 @@ export async function deleteView(
         from saved_views sv
        where sv.org_id = ${orgId} and sv.id = ${id}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!before) return false
     await tx.execute(sql`
       delete from saved_views where org_id = ${orgId} and id = ${id}
@@ -340,8 +340,8 @@ export async function uniqueViewSlug(orgId: string, desired: string, excludeId?:
        where org_id = ${orgId} and slug = ${slug}
          ${excludeId ? sql`and id <> ${excludeId}` : sql``}
        limit 1
-    `))
-    if (clash.rows.length === 0) return slug
+    `, 'objects'))
+    if (clash.length === 0) return slug
     slug = `${desired}-${n}`
   }
   return `${desired}-${Date.now()}`

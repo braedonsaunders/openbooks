@@ -54,11 +54,9 @@ test("re-rendering changed terms rotates the signing link", async () => {
         h.org,
         h.recruiterId,
       );
-      const templateId = (
-        await db.execute<{ templateId: string }>(sql`
+      const templateId = (await db.execute<{ templateId: string }>(sql`
       select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}
-    `)
-      ).rows[0]!.templateId;
+    `, "objects"))[0]!.templateId;
       await renderOfferVersion({
         orgId,
         actorId: h.recruiterId,
@@ -67,12 +65,10 @@ test("re-rendering changed terms rotates the signing link", async () => {
         selectedClauseKeys: [],
       });
       // The outstanding link dies with the version it displayed, proved from storage.
-      const stored = (
-        await db.execute<{ tokenHash: string | null; version: number }>(sql`
+      const stored = (await db.execute<{ tokenHash: string | null; version: number }>(sql`
       select signing_token_hash as "tokenHash", version from hrm_offers
        where org_id = ${orgId} and id = ${offerId}
-    `)
-      ).rows[0]!;
+    `, "objects"))[0]!;
       assert.equal(stored.tokenHash, null);
       assert.equal(stored.version, 2);
       for (const staleAction of [
@@ -127,11 +123,9 @@ test("signing a stale hash after new terms render is refused", async () => {
           h.recruiterId,
         );
       const shown = await readOfferForSigning(token);
-      const templateId = (
-        await db.execute<{ templateId: string }>(
-          sql`select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}`,
-        )
-      ).rows[0]!.templateId;
+      const templateId = (await db.execute<{ templateId: string }>(
+          sql`select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}`, "objects",
+        ))[0]!.templateId;
       await renderOfferVersion({
         orgId,
         actorId: h.recruiterId,
@@ -190,11 +184,9 @@ test("render and signing serialize on the offer row", async () => {
         ),
         orgId = h.org.orgId;
       const { version, documentHash } = await readOfferForSigning(token);
-      const templateId = (
-        await db.execute<{ templateId: string }>(
-          sql`select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}`,
-        )
-      ).rows[0]!.templateId;
+      const templateId = (await db.execute<{ templateId: string }>(
+          sql`select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}`, "objects",
+        ))[0]!.templateId;
       const results = await Promise.allSettled([
         renderOfferVersion({
           orgId,
@@ -210,11 +202,9 @@ test("render and signing serialize on the offer row", async () => {
         }),
       ]);
       const renderWon = results[0]?.status === "fulfilled";
-      const final = (
-        await db.execute<{ signatureStatus: string | null; version: number }>(
-          sql`select signature_status as "signatureStatus", version from hrm_offers where org_id = ${orgId} and id = ${offerId}`,
-        )
-      ).rows[0]!;
+      const final = (await db.execute<{ signatureStatus: string | null; version: number }>(
+          sql`select signature_status as "signatureStatus", version from hrm_offers where org_id = ${orgId} and id = ${offerId}`, "objects",
+        ))[0]!;
       assert.equal(
         results.filter((result) => result.status === "fulfilled").length,
         1,

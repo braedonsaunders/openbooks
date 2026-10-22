@@ -41,14 +41,14 @@ const ctx: SubsidiaryContext = {
 };
 
 const runner = {
-  execute: async () => ({
+  execute: async (_query: unknown, mode?: string) => Promise.resolve({
     rows: [{
       fromId: originSubId,
       toId: counterSubId,
       dueFrom: originDueFrom,
       dueTo: counterDueTo,
     }],
-  }),
+  }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
 } as unknown as Pick<typeof db, "execute">;
 
 function line(subsidiaryId: string, amount: string, txnAmount: string, fxRate: string): SubLine {
@@ -76,17 +76,18 @@ test("posting refuses a line party outside that line's subsidiary", async () => 
   const linePartyId = randomUUID();
   let calls = 0;
   const runner = {
-    execute: async () => {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       calls += 1;
-      if (calls === 1) return { rows: [] };
-      return {
+      if (calls === 1) return inMode({ rows: [] });
+      return inMode({
         rows: [{
           id: linePartyId,
           name: "Root-only customer",
           subsidiaryId: originSubId,
           extra: [],
         }],
-      };
+      });
     },
   } as unknown as Pick<typeof db, "execute">;
 
@@ -115,9 +116,10 @@ test("posting refuses an unknown header party instead of skipping it", async () 
   const headerPartyId = randomUUID();
   let calls = 0;
   const runner = {
-    execute: async () => {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       calls += 1;
-      return { rows: [] };
+      return inMode({ rows: [] });
     },
   } as unknown as Pick<typeof db, "execute">;
   await assert.rejects(
@@ -146,17 +148,18 @@ test("posting refuses a header party outside the document subsidiary", async () 
   const headerPartyId = randomUUID();
   let calls = 0;
   const runner = {
-    execute: async () => {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       calls += 1;
-      if (calls === 1) return { rows: [] };
-      return {
+      if (calls === 1) return inMode({ rows: [] });
+      return inMode({
         rows: [{
           id: headerPartyId,
           name: "Root-only customer",
           subsidiaryId: originSubId,
           extra: [],
         }],
-      };
+      });
     },
   } as unknown as Pick<typeof db, "execute">;
   await assert.rejects(
@@ -181,15 +184,16 @@ test("posting refuses a header party outside the document subsidiary", async () 
 test("posting accepts a header party inside the document subsidiary", async () => {
   const headerPartyId = randomUUID();
   const runner = {
-    execute: async () => {
-      return {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      return inMode({
         rows: [{
           id: headerPartyId,
           name: "Counter customer",
           subsidiaryId: counterSubId,
           extra: [],
         }],
-      };
+      });
     },
   } as unknown as Pick<typeof db, "execute">;
   await validateSubsidiaryRestrictions(runner, {

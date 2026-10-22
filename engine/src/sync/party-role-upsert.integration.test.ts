@@ -90,7 +90,7 @@ test(
       const landed = await roleRows(org.orgId);
       assert.equal(landed.length, 3);
       const stampedBefore = (await withOrg(org.orgId, () => db.execute<{ updated_at: string }>(sql`
-        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`))).rows[0]!.updated_at;
+        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`, "objects")))[0]!.updated_at;
       assert.equal(
         landed.find((r) => r.table === "customer")?.credit,
         "1738300.0000",
@@ -112,7 +112,7 @@ test(
       // optimistic-concurrency edit can see the sync touch (in particular a
       // rehome) instead of committing over it.
       const stampedAfter = (await withOrg(org.orgId, () => db.execute<{ updated_at: string }>(sql`
-        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`))).rows[0]!.updated_at;
+        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`, "objects")))[0]!.updated_at;
       assert.notEqual(stampedAfter, stampedBefore);
       assert.equal(
         relanded.find((r) => r.table === "customer")?.credit,
@@ -167,8 +167,8 @@ test(
       const parties = await db.execute<{ orgId: string; partyId: string }>(sql`
         select org_id as "orgId", id as "partyId" from parties
          where custom->>'roleUpsertTest' = 'C-2427'
-           and org_id in (${orgA.orgId}, ${orgB.orgId})`);
-      const byOrg = new Map(parties.rows.map((r) => [r.orgId, r.partyId]));
+           and org_id in (${orgA.orgId}, ${orgB.orgId})`, "objects");
+      const byOrg = new Map(parties.map((r) => [r.orgId, r.partyId]));
       assert.equal(byOrg.size, 2);
       assert.ok(byOrg.has(orgA.orgId) && byOrg.has(orgB.orgId));
       assert.notEqual(byOrg.get(orgA.orgId), byOrg.get(orgB.orgId));

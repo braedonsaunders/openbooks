@@ -92,9 +92,9 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
        order by next_run_at
        for update skip locked
        limit ${Math.max(1, Math.min(limit, 500))}
-    `));
+    `, "objects"));
     const runIds: string[] = [];
-    for (const schedule of due.rows) {
+    for (const schedule of due) {
       const scheduledFor = new Date(schedule.next_run_at);
       const next = computeNextRunAt({
         cadence: schedule.cadence,
@@ -116,8 +116,8 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
           where schedule_id is not null and scheduled_for is not null
         do nothing
         returning id
-      `));
-      if (inserted.rows[0]) runIds.push(inserted.rows[0].id);
+      `, "objects"));
+      if (inserted[0]) runIds.push(inserted[0].id);
       await tx.execute(sql`
         update report_schedules set next_run_at=${next}, updated_at=now()
          where id=${schedule.id} and org_id=${schedule.org_id}
@@ -145,9 +145,9 @@ export async function dispatchQueuedReportRuns(
        and coalesce(next_attempt_at, created_at) <= ${now}
      order by coalesce(next_attempt_at, created_at)
      limit 100
-  `));
+  `, "objects"));
   let dispatched = 0;
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const jobId = `report-run|${row.id}|${row.dispatch_count}`;
     await enqueue(
       { runId: row.id, orgId: row.org_id, definitionId: row.definition_id, scheduleId: row.schedule_id },
@@ -157,7 +157,7 @@ export async function dispatchQueuedReportRuns(
     // matched rows and must not count a dispatch it did not land. The
     // enqueued job above still exists under its deterministic id, but the
     // winner owns the row and the orphan converges without a second send.
-    const marked = await db.execute(sql`
+    const marked = await db.execute<never>(sql`
       update report_runs set dispatch_count=dispatch_count+1, updated_at=now()
        where id=${row.id} and org_id=${row.org_id} and dispatch_count=${row.dispatch_count} and status in ('queued','failed')
     `);
@@ -182,16 +182,16 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
      where id=${runId} and trigger='scheduled' and status in ('queued','failed')
        and attempt_count < ${MAX_RUN_ATTEMPTS}
      returning org_id, definition_id, recipient_emails, attempt_count, locked_at
-  `));
-  const row = claimed.rows[0];
+  `, "objects"));
+  const row = claimed[0];
   if (!row) {
     // A stored artifact is proof the run already delivered, so standing
     // down is a genuine skip. Otherwise the run is exhausted, owned by
     // another renderer, or unknown — none of which is a skip, so return a
     // named outcome the worker surfaces on the completed job instead of
     // reporting success-by-silence.
-    const complete = (await db.execute(sql`select 1 from report_run_artifacts where run_id=${runId}`));
-    if (complete.rows[0]) return { skipped: true };
+    const complete = (await db.execute(sql`select 1 from report_run_artifacts where run_id=${runId}`, "objects"));
+    if (complete[0]) return { skipped: true };
     return { unclaimed: true };
   }
 
@@ -210,11 +210,11 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
         const meta = (await db.execute<{ report_name: string }>(sql`
           select rd.name as report_name from report_definitions rd
            where rd.id=${row.definition_id} and rd.org_id=${row.org_id}
-        `));
-        if (!meta.rows[0]) throw new Error("scheduled report definition is unavailable");
+        `, "objects"));
+        if (!meta[0]) throw new Error("scheduled report definition is unavailable");
         const pdf = await render(row.org_id, row.definition_id, runId);
         if (pdf.length === 0) throw new Error("scheduled report renderer returned an empty artifact");
-        const slug = meta.rows[0].report_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "");
+        const slug = meta[0].report_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "");
         const filename = `${slug || "report"}-${await businessToday(row.org_id)}.pdf`;
         const hash = createHash("sha256").update(pdf).digest("hex");
         const recipients = [...new Set((row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
@@ -234,8 +234,8 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
              where id=${runId} and org_id=${row.org_id}
                and status='running' and locked_at=${row.locked_at}
              for update
-          `));
-          if (held.rows.length === 0) return false;
+          `, "objects"));
+          if (held.length === 0) return false;
           await tx.execute(sql`
             insert into report_run_artifacts
               (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
@@ -257,8 +257,8 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
              where id=${runId} and org_id=${row.org_id}
                and status='running' and locked_at=${row.locked_at}
              returning id
-          `));
-          return stamped.rows.length > 0;
+          `, "objects"));
+          return stamped.length > 0;
         });
         if (!completed) return { skipped: true };
         recordOutboxAttempt("report_runs", "scheduled_report", "succeeded", Date.now() - startedAt);
@@ -290,12 +290,12 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
            returning (${terminal}
                      and terminal_failed_by = ${REPORT_RUN_WORKER_IDENTITY}
                      and terminal_failed_at = ${failedAt}) as "becameTerminal"
-        `));
+        `, "objects"));
         // No row: the lease moved on (stale sweep reassigned or another
         // renderer finished). The current owner drives the outcome; this
         // render's failure is stale evidence, not a new failure.
-        if (!marked.rows[0]) return { skipped: true };
-        if (marked.rows[0].becameTerminal) {
+        if (!marked[0]) return { skipped: true };
+        if (marked[0].becameTerminal) {
           logTerminalFailure({
             surface: "report_runs",
             id: runId,
@@ -339,8 +339,8 @@ async function quarantineUndeliverableReportDelivery(
      where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed')
      returning (terminal_failed_by = ${EMAIL_DELIVERY_WORKER_IDENTITY}
                 and terminal_failed_at = ${now}) as "becameTerminal"
-  `));
-  if (marked.rows[0]?.becameTerminal) {
+  `, "objects"));
+  if (marked[0]?.becameTerminal) {
     logTerminalFailure({
       surface: "report_delivery_outbox",
       id: row.id,
@@ -391,9 +391,9 @@ async function rebuildStuckEnqueuedDeliveries(now: Date): Promise<number> {
        and d.terminal_failed_at is null
      order by d.next_attempt_at
      limit 100
-  `));
+  `, "objects"));
   let rebuilt = 0;
-  for (const row of stale.rows) {
+  for (const row of stale) {
     try {
       const deliveryKey = deriveEmailDeliveryKey({ orgId: row.org_id, scope: `report:${row.id}`, to: row.recipient });
       const log = (await db.execute<{ id: string; status: string; provider_message_id: string | null; updated_at: string | Date }>(sql`
@@ -401,15 +401,15 @@ async function rebuildStuckEnqueuedDeliveries(now: Date): Promise<number> {
          where org_id = ${row.org_id} and delivery_key = ${deliveryKey}
          order by updated_at desc
          limit 5
-      `));
-      const sent = log.rows.find((entry) => entry.status === "sent");
+      `, "objects"));
+      const sent = log.find((entry) => entry.status === "sent");
       if (sent) {
         await markReportDeliverySent(row.org_id, row.id, sent.id, sent.provider_message_id ?? "unknown");
         continue;
       }
       // The driver returns timestamptz as a string; compare as Dates (a raw
       // string >= Date comparison is always false and would rebuild live rows).
-      if (log.rows.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
+      if (log.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
         continue;
       }
       try {
@@ -462,9 +462,9 @@ async function recoverStuckSendingDeliveries(now: Date): Promise<number> {
        and d.terminal_failed_at is null
      order by d.updated_at
      limit 100
-  `));
+  `, "objects"));
   let recovered = 0;
-  for (const row of stale.rows) {
+  for (const row of stale) {
     try {
       const deliveryKey = deriveEmailDeliveryKey({ orgId: row.org_id, scope: `report:${row.id}`, to: row.recipient });
       const log = (await db.execute<{ id: string; status: string; provider_message_id: string | null; updated_at: string | Date }>(sql`
@@ -472,15 +472,15 @@ async function recoverStuckSendingDeliveries(now: Date): Promise<number> {
          where org_id = ${row.org_id} and delivery_key = ${deliveryKey}
          order by updated_at desc
          limit 5
-      `));
-      const sent = log.rows.find((entry) => entry.status === "sent");
+      `, "objects"));
+      const sent = log.find((entry) => entry.status === "sent");
       if (sent) {
         await markReportDeliverySent(row.org_id, row.id, sent.id, sent.provider_message_id ?? "unknown");
         continue;
       }
       // The driver returns timestamptz as a string; compare as Dates (a raw
       // string >= Date comparison is always false and would recover live rows).
-      if (log.rows.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
+      if (log.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
         continue;
       }
       try {
@@ -500,8 +500,8 @@ async function recoverStuckSendingDeliveries(now: Date): Promise<number> {
                next_attempt_at=${now}, updated_at=${now}
          where id=${row.id} and org_id=${row.org_id} and status='sending'
          returning id
-      `));
-      if (moved.rows[0]) recovered++;
+      `, "objects"));
+      if (moved[0]) recovered++;
     } catch (error) {
       console.error(`[reports] recovery of stuck sending delivery ${row.id} failed:`, error);
     }
@@ -535,9 +535,9 @@ export async function dispatchReportDeliveries(
        and d.attempt_count < ${MAX_DELIVERY_ATTEMPTS}
      order by d.next_attempt_at
      limit 100
-  `));
+  `, "objects"));
   let dispatched = 0;
-  for (const row of due.rows) {
+  for (const row of due) {
     if (!isValidEmailAddress(row.recipient)) {
       await quarantineUndeliverableReportDelivery(row, now);
       continue;
@@ -554,8 +554,8 @@ export async function dispatchReportDeliveries(
              queue_job_id=${jobId}, error=null, updated_at=now()
        where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed') and dispatch_count=${row.dispatch_count}
        returning id
-    `));
-    if (!claimed.rows[0]) continue;
+    `, "objects"));
+    if (!claimed[0]) continue;
     // Stage the rendered bytes outside the queue payload: the worker fetches
     // them at send time instead of Redis holding file contents for days.
     // Keys derive from the dispatch identity, so a same-generation retry
@@ -616,8 +616,8 @@ export async function dispatchReportDeliveries(
       update report_delivery_outbox set updated_at=now()
        where id=${row.id} and org_id=${row.org_id} and status='enqueued' and queue_job_id=${jobId}
        returning id
-    `));
-    if (!confirmed.rows[0]) {
+    `, "objects"));
+    if (!confirmed[0]) {
       // This attempt's staged refs belong to no live dispatch. Settle them
       // through the shared helper: it keeps them only when the queued job
       // provably needs them and deletes them on provable non-acceptance.
@@ -666,8 +666,8 @@ export async function markReportDeliveryStarted(orgId: string, deliveryId: strin
            last_attempt_at=now(), queue_job_id=coalesce(${jobId},queue_job_id), updated_at=now()
      where id=${deliveryId} and org_id=${orgId} and status in ('enqueued','sending')
     returning id
-  `);
-  if (marked.rows[0]) return true;
+  `, "objects");
+  if (marked[0]) return true;
   logDeliveryNotApplied(deliveryId, "sending", "enqueued/sending");
   return false;
 }
@@ -683,11 +683,11 @@ export async function markReportDeliverySent(orgId: string, deliveryId: string, 
     update report_delivery_outbox set status='sent', email_log_id=${emailLogId}, provider_message_id=${providerMessageId},
            sent_at=now(), error=null, updated_at=now() where id=${deliveryId} and org_id=${orgId} and status in ('sending','enqueued')
     returning id
-  `);
-  if (marked.rows[0]) return true;
+  `, "objects");
+  if (marked[0]) return true;
   const current = (await db.execute<{ status: string }>(sql`
     select status from report_delivery_outbox where id=${deliveryId} and org_id=${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (current?.status === "sent") return true;
   logDeliveryNotApplied(deliveryId, "sent", "sending/enqueued");
   return false;
@@ -703,11 +703,11 @@ export async function markReportDeliverySuppressed(orgId: string, deliveryId: st
            updated_at=now() where id=${deliveryId} and org_id=${orgId}
              and status = any(array['pending','enqueued','sending','failed'])
     returning id
-  `);
-  if (marked.rows[0]) return true;
+  `, "objects");
+  if (marked[0]) return true;
   const current = (await db.execute<{ status: string }>(sql`
     select status from report_delivery_outbox where id=${deliveryId} and org_id=${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (current?.status === "suppressed") return true;
   logDeliveryNotApplied(deliveryId, "suppressed", "pending/enqueued/sending/failed");
   return false;
@@ -747,8 +747,8 @@ export async function markReportDeliveryFailed(
                (attempt_count >= ${MAX_DELIVERY_ATTEMPTS}
                 and terminal_failed_by = ${EMAIL_DELIVERY_WORKER_IDENTITY}
                 and terminal_failed_at = ${failedAt}) as "becameTerminal"
-  `));
-  const row = marked.rows[0];
+  `, "objects"));
+  const row = marked[0];
   if (row?.becameTerminal) {
     logTerminalFailure({
       surface: "report_delivery_outbox",

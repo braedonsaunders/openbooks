@@ -88,8 +88,8 @@ test(
 
     const left = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from document_lines
-       where document_id = ${id} and org_id = ${o.orgId}`);
-    assert.equal(left.rows[0]!.n, 0, "the paired authority must admit the rebuild");
+       where document_id = ${id} and org_id = ${o.orgId}`, "objects");
+    assert.equal(left[0]!.n, 0, "the paired authority must admit the rebuild");
   },
 );
 

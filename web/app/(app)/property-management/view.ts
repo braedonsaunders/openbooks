@@ -215,33 +215,33 @@ export async function loadPropertyManagement(
     db.execute<Option>(
       multiCurrency
         ? sql`select id,name,base_currency as currency from subsidiaries where org_id=${orgId} and is_active ${allowed === null ? sql`` : sql`and id = any(${`{${allowed.join(',')}}`}::uuid[])`} order by name`
-        : sql`select id,name from subsidiaries where org_id=${orgId} and is_active ${allowed === null ? sql`` : sql`and id = any(${`{${allowed.join(',')}}`}::uuid[])`} order by name`,
+        : sql`select id,name from subsidiaries where org_id=${orgId} and is_active ${allowed === null ? sql`` : sql`and id = any(${`{${allowed.join(',')}}`}::uuid[])`} order by name`, 'objects',
     ),
     db.execute<Option>(
-      sql`select id,concat_ws(' · ',code,name) as name from locations where org_id=${orgId} and is_active order by code,name`,
+      sql`select id,concat_ws(' · ',code,name) as name from locations where org_id=${orgId} and is_active order by code,name`, 'objects',
     ),
     db.execute<Option>(
-      sql`select p.id,p.display_name as name from parties p join customer_roles c on c.party_id=p.id and c.org_id=p.org_id where p.org_id=${orgId} and p.is_active and c.is_active order by p.display_name`,
+      sql`select p.id,p.display_name as name from parties p join customer_roles c on c.party_id=p.id and c.org_id=p.org_id where p.org_id=${orgId} and p.is_active and c.is_active order by p.display_name`, 'objects',
     ),
     db.execute<Option>(
-      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type in ('income','income_other') order by number nulls last`,
+      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type in ('income','income_other') order by number nulls last`, 'objects',
     ),
     db.execute<Option>(
-      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type in ('expense','cogs') order by number nulls last`,
+      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type in ('expense','cogs') order by number nulls last`, 'objects',
     ),
     db.execute<Option>(
-      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type='liability_current_other' order by number nulls last`,
+      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type='liability_current_other' order by number nulls last`, 'objects',
     ),
     db.execute<Option>(
-      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type='asset_bank' order by number nulls last`,
+      sql`select id,concat_ws(' · ',number,name) as name from accounts where org_id=${orgId} and is_active and not is_summary and type='asset_bank' order by number nulls last`, 'objects',
     ),
     fixedAssetsEnabled
       ? db.execute<Option>(
-          sql`select id,concat_ws(' · ',asset_number,name) as name from fixed_assets where org_id=${orgId} and status not in ('disposed','written_off') ${subsidiaryScope} order by asset_number`,
+          sql`select id,concat_ws(' · ',asset_number,name) as name from fixed_assets where org_id=${orgId} and status not in ('disposed','written_off') ${subsidiaryScope} order by asset_number`, 'objects',
         )
-      : Promise.resolve({ rows: [] }),
+      : Promise.resolve([]),
     db.execute<Option>(
-      sql`select d.id,d.party_id as "partyId",concat_ws(' · ',d.document_number,d.document_date::text) as name,d.open_balance as "openBalance" from documents d where d.org_id=${orgId} and d.kind='customer_invoice' and d.status='posted' and coalesce(d.open_balance,0)>0 ${documentSubsidiaryScope} order by d.document_date desc`,
+      sql`select d.id,d.party_id as "partyId",concat_ws(' · ',d.document_number,d.document_date::text) as name,d.open_balance as "openBalance" from documents d where d.org_id=${orgId} and d.kind='customer_invoice' and d.status='posted' and coalesce(d.open_balance,0)>0 ${documentSubsidiaryScope} order by d.document_date desc`, 'objects',
     ),
     // Active tax codes for the lease-charge picker: billing honours the
     // charge's tax code, so the UI must be able to set one.
@@ -312,15 +312,15 @@ export async function loadPropertyManagement(
       listView: resolvedView.view,
     },
     options: {
-      subsidiaries: subsidiaries.rows,
-      locations: locations.rows,
-      tenants: tenants.rows,
-      incomeAccounts: incomeAccounts.rows,
-      expenseAccounts: expenseAccounts.rows,
-      liabilityAccounts: liabilityAccounts.rows,
-      bankAccounts: bankAccounts.rows,
-      assets: assets.rows,
-      openInvoices: openInvoices.rows,
+      subsidiaries,
+      locations,
+      tenants,
+      incomeAccounts,
+      expenseAccounts,
+      liabilityAccounts,
+      bankAccounts,
+      assets,
+      openInvoices,
       taxCodes,
     },
     workspace,

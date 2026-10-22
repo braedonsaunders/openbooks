@@ -16,13 +16,13 @@ test('live authorization sees tenant identity, permissions and subsidiary scope 
     await assert.rejects(withOrgTransaction(org.orgId,()=>db.transaction(async tx=>{
       const changed=await tx.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb,
         subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[org.subsidiaryId]})}::jsonb
-        where org_id=${org.orgId} and key='poster' returning id`)
-      assert.equal(changed.rows.length,1)
+        where org_id=${org.orgId} and key='poster' returning id`, 'objects')
+      assert.equal(changed.length,1)
       const actual=await resolveUserAuthz(user,tx)
       assert.ok(actual.permissions.has('reports.read'))
       assert.deepEqual(actual.allowedSubsidiaryIds,new Set([org.subsidiaryId]))
-      const inactive=await tx.execute(sql`update users set is_active=false where org_id=${org.orgId} and id=${actor} returning id`)
-      assert.equal(inactive.rows.length,1)
+      const inactive=await tx.execute(sql`update users set is_active=false where org_id=${org.orgId} and id=${actor} returning id`, 'objects')
+      assert.equal(inactive.length,1)
       assert.deepEqual((await resolveUserAuthz(user,tx)).allowedSubsidiaryIds,new Set())
       throw rollback
     })),e=>e===rollback)

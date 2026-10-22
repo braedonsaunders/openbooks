@@ -87,13 +87,13 @@ async function lockImportedSourceDocument(
        and custom->>${input.refKey} = ${input.sourceRef}
        and ${ownedByConnection(input)}
      limit 2
-     for update`);
-  if (documentResult.rows.length > 1) {
+     for update`, "objects");
+  if (documentResult.length > 1) {
     throw new SourceDeletionResolutionError(
       "multiple documents owned by this connection share the source reference",
     );
   }
-  return documentResult.rows[0] ?? null;
+  return documentResult[0] ?? null;
 }
 
 async function findImportedSourceDocument(
@@ -111,13 +111,13 @@ async function findImportedSourceDocument(
      where org_id = ${input.orgId}
        and custom->>${input.refKey} = ${input.sourceRef}
        and ${ownedByConnection(input)}
-     limit 2`);
-  if (documentResult.rows.length > 1) {
+     limit 2`, "objects");
+  if (documentResult.length > 1) {
     throw new SourceDeletionResolutionError(
       "multiple documents owned by this connection share the source reference",
     );
   }
-  return documentResult.rows[0] ?? null;
+  return documentResult[0] ?? null;
 }
 
 async function sourceApplicationLineIds(
@@ -148,8 +148,8 @@ async function sourceApplicationLineIds(
                 select id from journal_lines where org_id = ${orgId} and entry_id = ${entryId}
               )
          )
-       )`);
-  return endpoints.rows.map((row) => row.id);
+       )`, "objects");
+  return endpoints.map((row) => row.id);
 }
 
 async function sourceApplicationFxEntryIds(
@@ -167,8 +167,8 @@ async function sourceApplicationFxEntryIds(
        and application.unapplied_at is null
        and application.fx_gain_loss_entry_id is not null
        and endpoint.entry_id = ${entryId}
-     order by application.fx_gain_loss_entry_id`);
-  return result.rows.map((row) => row.id);
+     order by application.fx_gain_loss_entry_id`, "objects");
+  return result.map((row) => row.id);
 }
 
 /** Lock the complete application graph before the source document is changed.
@@ -239,16 +239,16 @@ async function reverseSourceApplicationFxEntries(
          or application.to_line_id in (
            select id from journal_lines where org_id = ${input.orgId} and entry_id = ${input.sourceEntryId}
          )
-       )`);
-  const fxEntryIds = [...new Set(applications.rows.map((row) => row.fx_entry_id))].sort();
+       )`, "objects");
+  const fxEntryIds = [...new Set(applications.map((row) => row.fx_entry_id))].sort();
   for (const fxEntryId of fxEntryIds) {
     const shared = await tx.execute(sql`
       select id from applications
        where org_id = ${input.orgId} and unapplied_at is null
          and fx_gain_loss_entry_id = ${fxEntryId}
-         and id not in (${sql.join(applications.rows.filter((row) => row.fx_entry_id === fxEntryId).map((row) => sql`${row.id}`), sql`, `)})
-       limit 1`);
-    if (shared.rows.length) {
+         and id not in (${sql.join(applications.filter((row) => row.fx_entry_id === fxEntryId).map((row) => sql`${row.id}`), sql`, `)})
+       limit 1`, "objects");
+    if (shared.length) {
       throw new SourceDeletionResolutionError(
         "the source settlement's foreign-exchange journal is shared with another active application; reconcile that allocation before deleting the source",
       );
@@ -262,13 +262,13 @@ async function reverseSourceApplicationFxEntries(
              posting_date::text as "postingDate"
         from journal_entries
        where id = ${fxEntryId} and org_id = ${input.orgId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!fxEntry || fxEntry.status !== "posted" || fxEntry.origin !== "fx_settlement") {
       throw new SourceDeletionResolutionError(
         "the source settlement's foreign-exchange journal is missing or no longer posted",
       );
     }
-    const lines = (await tx.execute<ReversalSourceJournalLine>(sql`
+    const lines = await tx.execute<ReversalSourceJournalLine>(sql`
       select line_number as "lineNumber", account_id as "accountId", subsidiary_id as "subsidiaryId",
              amount::text as amount, currency, txn_amount::text as "txnAmount", fx_rate::text as "fxRate",
              party_id as "partyId", department_id as "departmentId", project_id as "projectId",
@@ -279,7 +279,7 @@ async function reverseSourceApplicationFxEntries(
              contributor_kind as "contributorKind", contributor_ref as "contributorRef"
         from journal_lines
        where org_id = ${input.orgId} and entry_id = ${fxEntry.id}
-       order by line_number`)).rows;
+       order by line_number`, "objects");
     if (lines.length === 0) {
       throw new SourceDeletionResolutionError(
         "the source settlement's foreign-exchange journal has no lines",
@@ -562,11 +562,11 @@ export async function resolveSourceDeletion(input: {
              ) as actor_valid
         from connections c
        where c.id = ${input.connectionId} and c.org_id = ${input.orgId}
-      for update`));
-    const source = connection.rows[0]?.source;
+      for update`, "objects"));
+    const source = connection[0]?.source;
     if (!source)
       throw new SourceDeletionResolutionError("connection not found");
-    if (!connection.rows[0]!.actor_valid) {
+    if (!connection[0]!.actor_valid) {
       throw new SourceDeletionResolutionError(
         "resolution actor is not an active organization user",
       );
@@ -600,8 +600,8 @@ export async function resolveSourceDeletion(input: {
            where a.org_id = ${input.orgId} and a.unapplied_at is null and (
              exists (select 1 from journal_lines jl where jl.id = a.from_line_id and jl.org_id = a.org_id and jl.entry_id = ${document.posted_entry_id})
              or exists (select 1 from journal_lines jl where jl.id = a.to_line_id and jl.org_id = a.org_id and jl.entry_id = ${document.posted_entry_id})
-           ) limit 1`));
-        if (applications.rows.length > 0) {
+           ) limit 1`, "objects"));
+        if (applications.length > 0) {
           throw new SourceDeletionResolutionError(
             "the source-deleted document has active payment applications; reverse or unapply them before voiding",
           );
@@ -755,7 +755,7 @@ export async function resolveSourceDeletion(input: {
          and r.connection_id = ${input.connectionId}
          and r.source_ref = ${input.sourceRef}
        for update
-    `));
+    `, "objects"));
     const resolution = (await tx.execute<{ id: string }>(sql`
       insert into source_deletion_resolutions
         (org_id, connection_id, source_ref, document_id, action, note, resolved_by,
@@ -767,8 +767,8 @@ export async function resolveSourceDeletion(input: {
         resolved_by = excluded.resolved_by, resolved_at = now(), updated_by = excluded.updated_by,
         updated_at = now()
       where source_deletion_resolutions.org_id = ${input.orgId}
-      returning id`));
-    const resolutionId = resolution.rows[0]?.id;
+      returning id`, "objects"));
+    const resolutionId = resolution[0]?.id;
     if (!resolutionId) {
       throw new SourceDeletionResolutionError(
         "source-deletion resolution was not persisted",
@@ -778,7 +778,7 @@ export async function resolveSourceDeletion(input: {
       select to_jsonb(r) as row
         from source_deletion_resolutions r
        where r.id = ${resolutionId} and r.org_id = ${input.orgId}
-    `));
+    `, "objects"));
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -786,12 +786,12 @@ export async function resolveSourceDeletion(input: {
         ${input.orgId},
         'source_deletion_resolutions',
         ${resolutionId},
-        ${previousResolution.rows[0] ? "update" : "insert"},
+        ${previousResolution[0] ? "update" : "insert"},
         ${JSON.stringify({
           source: "source-deletion-resolution",
           reason: `${source}:${input.sourceRef} deleted at source`,
-          before: previousResolution.rows[0]?.row ?? null,
-          after: currentResolution.rows[0]?.row ?? null,
+          before: previousResolution[0]?.row ?? null,
+          after: currentResolution[0]?.row ?? null,
         })}::jsonb,
         ${input.actorId},
         'source-deletion-resolution'

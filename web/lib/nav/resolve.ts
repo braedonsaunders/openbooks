@@ -77,7 +77,7 @@ const GROUP_HOME_PERMISSIONS: Partial<Record<NavGroupKey, readonly string[]>> = 
 }
 
 /** Installed apps offered as menu destinations; read once per render. */
-const installedNavigationApps = cache(async (orgId: string) => (await db.execute<NavAppOption>(sql`
+const installedNavigationApps = cache(async (orgId: string) => await db.execute<NavAppOption>(sql`
   select a.key,
          coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
          coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey"
@@ -85,7 +85,7 @@ const installedNavigationApps = cache(async (orgId: string) => (await db.execute
     join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
    where a.org_id = ${orgId} and a.status = 'installed'
    order by a.sort_order, a.name
-`)).rows)
+`, 'objects'))
 
 /** The layout an organization starts from when it has not saved one. */
 async function navigationConfig(orgId: string): Promise<OrgNavConfig> {
@@ -255,7 +255,7 @@ export async function resolveNav(
  */
 const navigationRecordTypes = cache(async (orgId: string) => {
   try {
-    return (await db.execute<{
+    return await db.execute<{
       key: string
       plural_name: string
       icon_key: string
@@ -265,7 +265,7 @@ const navigationRecordTypes = cache(async (orgId: string) => {
         from custom_record_types
        where org_id = ${orgId} and status = 'published' and show_in_nav
        order by sort_order, plural_name
-    `)).rows
+    `, 'objects')
   } catch {
     // custom_record_types not migrated yet — the shell must keep rendering.
     return []

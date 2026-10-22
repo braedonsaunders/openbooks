@@ -69,16 +69,18 @@ const mockSources = new Map<string, string>([
         if (text.includes('from projects')) return { rows: [{ id: '${PROJECT_ID}', subsidiary_id: null }] }
         throw new Error('unexpected query: ' + text)
       }
-      const txRunner = () => ({ execute: (query) => {
+      const txRunner = () => ({ execute: (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         state.calls.push({ kind: 'tx-execute', text })
-        return Promise.resolve(respond('tx-execute', text))
+        return Promise.resolve(respond('tx-execute', text)).then(inMode)
       } })
       export const db = {
-        execute: (query) => {
+        execute: (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push({ kind: 'execute', text })
-          return Promise.resolve(respond('execute', text))
+          return Promise.resolve(respond('execute', text)).then(inMode)
         },
         transaction: async (work) => work(txRunner()),
       }

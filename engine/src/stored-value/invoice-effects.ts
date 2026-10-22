@@ -27,7 +27,7 @@ export async function issueStoredValueForInvoice(
   const doc = (await db.execute<{ id: string; status: string; currency: string; entryId: string | null }>(sql`
     select id, status, currency, posted_entry_id as "entryId"
       from documents where id = ${documentId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!doc || doc.status !== "posted") return { issued: 0 };
   if (!doc.entryId) {
     throw storedValueRefusal({
@@ -36,7 +36,7 @@ export async function issueStoredValueForInvoice(
       remedy: "Repost the sale, then let the posting effect retry.",
     });
   }
-  const lines = (await db.execute<GiftCardLine>(sql`
+  const lines = await db.execute<GiftCardLine>(sql`
     select dl.id, dl.amount::text as amount, dl.custom->>'storedValueProgramId' as "programId",
            dl.description as description, d.currency as currency
       from document_lines dl
@@ -45,7 +45,7 @@ export async function issueStoredValueForInvoice(
      where dl.document_id = ${documentId} and dl.org_id = ${orgId}
        and it.kind = 'gift_card'
      order by dl.line_number
-  `)).rows;
+  `, "objects");
   if (lines.length === 0) return { issued: 0 };
   let issued = 0;
   for (const line of lines) {
@@ -115,7 +115,7 @@ export async function issueStoreCreditForCreditMemo(
     select id, status, currency, total::text as total, party_id as "partyId",
            posted_entry_id as "entryId", custom
       from documents where id = ${documentId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!doc || doc.status !== "posted") return { issued: 0 };
   const programId =
     doc.custom && typeof doc.custom === "object"

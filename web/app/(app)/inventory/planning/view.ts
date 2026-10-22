@@ -54,11 +54,11 @@ export async function loadPlanning(
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'demandPlanning')
 
-  const subsidiaries = (await db.execute<{ id: string; name: string }>(sql`
+  const subsidiaries = await db.execute<{ id: string; name: string }>(sql`
     select s.id, s.name from subsidiaries s
      where s.org_id = ${orgId} and s.is_active and not s.is_elimination
        ${subsidiaryVisibleFilter(sql`s.id`, authz.allowedSubsidiaryIds)}
-     order by s.name`)).rows
+     order by s.name`, 'objects')
   const requested = pickString(sp.subsidiaryId)
   const subsidiaryId = subsidiaries.some((entry) => entry.id === requested)
     ? requested!
@@ -70,7 +70,7 @@ export async function loadPlanning(
       options.map((option) => ({ id: option.id, name: option.label ?? option.id })),
     ),
     db.execute<{ id: string; code: string }>(sql`
-      select id, code from stock_locations where org_id = ${orgId} and is_active order by code`),
+      select id, code from stock_locations where org_id = ${orgId} and is_active order by code`, 'objects'),
   ])
   const closeParams = new URLSearchParams()
   if (subsidiaryId) closeParams.set('subsidiaryId', subsidiaryId)
@@ -82,7 +82,7 @@ export async function loadPlanning(
     subsidiaryId,
     subsidiaries,
     vendors,
-    locations: locations.rows,
+    locations,
     suggestionId,
     closeHref: closeQuery ? `/inventory/planning?${closeQuery}` : '/inventory/planning',
     locale: await getLocale(),

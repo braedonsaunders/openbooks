@@ -233,7 +233,7 @@ export async function issueSalesOrder(input: {
          and org_id = ${input.orgId}
          and kind = 'sales_order'
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!order) {
       throw new SalesOrderIssueError(
         "sales order not found",

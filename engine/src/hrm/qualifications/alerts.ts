@@ -74,11 +74,11 @@ export async function listAlertEligibleOrgs(exec: SqlExecutor): Promise<string[]
   // Registry fallback shape (non-boolean stored values fall back to the
   // default instead of throwing 22P02); the explicit conjunction is the
   // hrm → hrmCertifications parent chain.
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select id::text as id from orgs
      where case (settings->'features'->>'hrm') when 'true' then true when 'false' then false else false end
        and case (settings->'features'->>'hrmCertifications') when 'true' then true when 'false' then false else false end
-  `)).rows;
+  `, "objects");
   return rows.map((row) => row.id);
 }
 
@@ -118,7 +118,7 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
     let expiredNoticed = 0;
     // Stored-valid qualifications with a dated expiry. Pending rows
     // need verification, not expiry alerts; revoked rows need nothing.
-    const due = (await tx.execute<DueRow & { renewal_lead_days: number }>(sql`
+    const due = await tx.execute<DueRow & { renewal_lead_days: number }>(sql`
       select q.id::text as qualification_id, q.employment_id::text as employment_id,
              t.code as type_code, t.name as type_name,
              q.expires_on::text, t.renewal_lead_days,
@@ -131,7 +131,7 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
        where q.org_id = ${orgId}::uuid
          and q.status = 'valid'
          and q.expires_on is not null
-    `)).rows;
+    `, "objects");
     for (const row of due) {
       const daysLeft = calendarDaysBetween(today, row.expires_on);
       if (daysLeft < 0) {
@@ -141,7 +141,7 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
            where org_id = ${orgId}::uuid and qualification_id = ${row.qualification_id}::uuid
              and kind = 'expired_noticed'
            limit 1
-        `)).rows[0];
+        `, "objects"))[0];
         if (noticed) continue;
         await tx.execute(sql`
           insert into hrm_qualification_events
@@ -179,7 +179,7 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
           -- The existing qualification threshold alert already owns its notice; do not send it twice.
           on conflict (qualification_id, lead_days) do nothing
           returning id
-        `)).rows[0]?.id;
+        `, "objects"))[0]?.id;
         if (!alertId) continue;
         alertsWritten += 1;
         freshAlertIds.push(alertId);
@@ -218,14 +218,14 @@ async function notifyHolders(
   href: string,
 ): Promise<number> {
   if (!row.holder_party_id) return 0;
-  const holders = (await exec.execute<{ id: string }>(sql`
+  const holders = await exec.execute<{ id: string }>(sql`
     select id::text as id from users
      where org_id = ${orgId}::uuid and party_id = ${row.holder_party_id}::uuid
-  `)).rows;
+  `, "objects");
   // The holder's line managers as of today (same structural predicate
   // as loadTeamEmploymentIdsForManager, inverted: holder → managers).
   const today = await businessToday(orgId);
-  const managerPartyIds = (await exec.execute<{ party_id: string }>(sql`
+  const managerPartyIds = await exec.execute<{ party_id: string }>(sql`
     select distinct m.worker_party_id::text as party_id
       from reporting_relationships r
       join worker_employments m
@@ -235,14 +235,14 @@ async function notifyHolders(
        and r.kind = 'line' and r.recorded_until is null
        and r.effective_from <= ${today}::date
        and (r.effective_to is null or r.effective_to > ${today}::date)
-  `)).rows;
+  `, "objects");
   let managerUserIds: { id: string }[] = [];
   if (managerPartyIds.length > 0) {
-    managerUserIds = (await exec.execute<{ id: string }>(sql`
+    managerUserIds = await exec.execute<{ id: string }>(sql`
       select id::text as id from users
        where org_id = ${orgId}::uuid
          and party_id in (select jsonb_array_elements_text(${JSON.stringify(managerPartyIds.map((r) => r.party_id))}::jsonb)::uuid)
-    `)).rows;
+    `, "objects");
   }
   const userIds = [...new Set([...holders, ...managerUserIds].map((u) => u.id))];
   let count = 0;
@@ -255,7 +255,7 @@ async function notifyHolders(
       values (${orgId}::uuid, ${userId}::uuid, 'hrm_qualification_expiry',
               ${title}, ${body}, ${href})
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!inserted) {
       throw new HrmQualificationError("The expiry notice was not stored — no row was written; retry the action.");
     }
@@ -280,7 +280,7 @@ export async function listAlerts(
   const allowed = await requireAggregateCertificationsRead(exec, orgId, actorId);
   await assertQualificationsFeature(exec, orgId, "Qualification alerts");
   const allowedIds = allowed === null ? null : `{${[...allowed].join(",")}}`;
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     qualification_id: string;
     employment_id: string;
@@ -307,7 +307,7 @@ export async function listAlerts(
        and (${input.employmentId ?? null}::uuid is null or q.employment_id = ${input.employmentId ?? null}::uuid)
        and (${input.unsentOnly !== true}::boolean or a.sent_at is null)
      order by a.due_on, t.code
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     qualificationId: row.qualification_id,

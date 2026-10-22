@@ -41,11 +41,9 @@ export interface ChannelPostingData {
 
 async function policyView(orgId: string, policy: ChannelPostingPolicy): Promise<ChannelPostingPolicyView> {
   const guest = policy.guestCustomerPartyId
-    ? (
-        await db.execute<{ display_name: string }>(
-          sql`select display_name from parties where org_id = ${orgId} and id = ${policy.guestCustomerPartyId}`,
-        )
-      ).rows[0]
+    ? (await db.execute<{ display_name: string }>(
+          sql`select display_name from parties where org_id = ${orgId} and id = ${policy.guestCustomerPartyId}`, 'objects',
+        ))[0]
     : null
   return { ...policy, guestCustomerName: guest?.display_name ?? null }
 }
@@ -62,7 +60,7 @@ export async function loadChannelPosting(): Promise<ChannelPostingData> {
     db.execute<{ value: string; label: string }>(sql`
       select p.id as value, p.display_name as label from parties p
         join customer_roles c on c.party_id = p.id and c.org_id = p.org_id and c.is_active
-       where p.org_id = ${orgId} and p.is_active order by p.display_name`),
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`, 'objects'),
     countChannelExceptions(orgId, authz.allowedSubsidiaryIds),
   ])
 
@@ -87,7 +85,7 @@ export async function loadChannelPosting(): Promise<ChannelPostingData> {
     channels: channels.map((channel) => ({ id: channel.id, name: channel.name, kind: channel.kind, currency: channel.currency })),
     policies,
     history,
-    customers: customers.rows,
+    customers,
   }
 }
 

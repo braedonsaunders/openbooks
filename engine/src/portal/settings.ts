@@ -125,7 +125,7 @@ export async function readPortalSettings(orgId: string, runner: SqlExecutor = db
      where org_id = ${orgId} and effective_from <= current_date
      order by effective_from desc
      limit 1
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
   return mergePortalSettings(row);
 }
 
@@ -267,7 +267,7 @@ export async function savePortalSettings(
        where org_id = ${orgId} and effective_from = ${effectiveFrom}
        limit 1
       for update
-    `)).rows[0];
+    `, "objects"))[0];
     let settingsId: string;
     if (existing) {
       const updated = (await db.execute<{ id: string }>(sql`
@@ -280,7 +280,7 @@ export async function savePortalSettings(
                updated_at = now(), updated_by = ${actorId}
          where org_id = ${orgId} and id = ${existing.id}
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!updated) throw portalRefusal("The portal settings changed while saving", "changed_concurrently", 409, "Reload the portal settings and save again");
       settingsId = updated.id;
     } else {
@@ -293,7 +293,7 @@ export async function savePortalSettings(
                 ${JSON.stringify(parsed.return_resolutions)}::jsonb, ${JSON.stringify(parsed.save_offers)}::jsonb,
                 ${actorId}, ${actorId})
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!inserted) throw new Error("portal settings were not saved");
       settingsId = inserted.id;
     }

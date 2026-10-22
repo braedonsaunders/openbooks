@@ -21,8 +21,8 @@ test("transaction benefit storage admission leaves the native ambient transactio
   await withHarness(() => setupHarness(SPEC), async h => {
     await withOrgTransaction(h.org.orgId, async () => {
       await requireTransactionPolicyStorage(db);
-      const result = await db.execute<{ id: string }>(sql`select id from orgs where id=${h.org.orgId}`);
-      assert.equal(result.rows[0]?.id, h.org.orgId, "storage admission must not abort the transaction used by award delivery and payroll");
+      const result = await db.execute<{ id: string }>(sql`select id from orgs where id=${h.org.orgId}`, "objects");
+      assert.equal(result[0]?.id, h.org.orgId, "storage admission must not abort the transaction used by award delivery and payroll");
       await requireTransactionPolicyStorage(db);
     });
   });
@@ -85,14 +85,14 @@ test("transaction incentive source admission refuses unavailable authority, iden
     const segmentKey = registry.find(r=>r.id===blank.segment)!.key;
     for (const value of [null, ""]) assert.deepEqual(validateExtraDims({ [segmentKey]: value },registry), {ok:true,cleaned:{[segmentKey]:null}}, "a deliberate blank remains a key, distinct from inherited omission");
     assert.deepEqual(validateExtraDims({},registry), {ok:true,cleaned:{}});
-    assert.deepEqual((await db.execute<{extra_dims:Record<string,unknown>}>(sql`select extra_dims from document_lines where org_id=${h.org.orgId} and id=${blank.second}`)).rows[0]!.extra_dims, {[segmentKey]:null});
+    assert.deepEqual((await db.execute<{extra_dims:Record<string,unknown>}>(sql`select extra_dims from document_lines where org_id=${h.org.orgId} and id=${blank.second}`, "objects"))[0]!.extra_dims, {[segmentKey]:null});
     await assert.rejects(()=>measure(blank.query), /no valid service_zone_.* assignment/, "persisted optional blank must not resurrect the header grouping for an incentive that requires it");
     assert.equal((await measure({...blank.query,groupingSegmentId:null})).lines.length,2,"the optional blank does not make the transaction unavailable to other policies");
     await assert.rejects(()=>db.execute(sql`select validate_extra_dims(${h.org.orgId},'{"unknown_optional_segment":null}'::jsonb,${h.org.subsidiaryId})`),error=>errorChainMatches(error,/unknown or inactive custom segment/),"null cannot bypass dimension ownership");
     const entryId=randomUUID(), posting={id:entryId,orgId:h.org.orgId,bookId:h.org.bookId,subsidiaryId:h.org.subsidiaryId,entryNumber:entryId,postingDate:"2026-07-09",periodId:h.org.periodId,origin:"manual",currency:"CAD",lines:[{accountId:h.org.accounts.cogs,amount:"1.0000",extraDims:{[segmentKey]:null}},{accountId:h.org.accounts.revenue,amount:"-1.0000"}]};
     await db.execute(sql`update accounts set required_dimensions=${JSON.stringify([segmentKey])}::jsonb where org_id=${h.org.orgId} and id=${h.org.accounts.cogs}`);
     await assert.rejects(()=>postEntry(db,posting),error=>errorChainMatches(error,/requires segment/),"an account-required dimension must still refuse an explicit blank");
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${h.org.orgId} and id=${entryId}`)).rows.length,0,"required-dimension refusal leaves no partial entry");
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${h.org.orgId} and id=${entryId}`, "objects")).length,0,"required-dimension refusal leaves no partial entry");
     await db.execute(sql`update accounts set required_dimensions='[]'::jsonb where org_id=${h.org.orgId} and id=${h.org.accounts.cogs}`);
     assert.equal((await postEntry(db,posting)).entryId,entryId,"the same optional blank may post on an account without that requirement");
     const missing = await sources(h, { missingGrouping: true });

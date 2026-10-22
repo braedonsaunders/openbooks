@@ -61,8 +61,8 @@ const costingBody = z.object({
 class ProfileRevisionConflictError extends Error {}
 
 async function loadItem(id: string, orgId: string) {
-  const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)))
-  return Boolean(item.rows[0])
+  const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`, 'objects')))
+  return Boolean(item[0])
 }
 
 export const GET = defineRoute({ permission: 'items.read', feature: 'inventory', params: itemParams, handler: async ({ params: { id }, authz: gate }) => {
@@ -77,11 +77,11 @@ export const GET = defineRoute({ permission: 'items.read', feature: 'inventory',
            standard_cost, base_unit, unit_conversions, reorder_point, preferred_stock_level,
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from item_inventory_profiles
-     where org_id = ${gate.user.orgId} and item_id = ${id}`)))
+     where org_id = ${gate.user.orgId} and item_id = ${id}`, 'objects')))
   // The editor names the company fallback behind a blank RNB field, so the
   // response carries the validated company default alongside the profile.
   const companyReceivedNotBilledAccountId = await loadCompanyReceivedNotBilledAccount(db, gate.user.orgId)
-  return NextResponse.json({ profile: profile.rows[0] ?? null, companyReceivedNotBilledAccountId })
+  return NextResponse.json({ profile: profile[0] ?? null, companyReceivedNotBilledAccountId })
 } })
 
 function accountRef(value: unknown): string | null {
@@ -169,7 +169,7 @@ export const PUT = defineRoute({
   // the same explicit style as every other validation in this route.
   if (!receivedNotBilledAccountId) {
     const itemKind = (await db.execute<{ kind: string | null }>(sql`
-      select kind from items where id = ${id} and org_id = ${orgId}`)).rows[0]?.kind ?? null
+      select kind from items where id = ${id} and org_id = ${orgId}`, 'objects'))[0]?.kind ?? null
     if (lineRequiresReceipt(itemKind) && !(await loadCompanyReceivedNotBilledAccount(db, orgId))) {
       return NextResponse.json({ error: 'This item is receipt-tracked and no company received-not-billed default exists: set a received-not-billed account on this costing profile, or set the company Received not billed control account under Company Settings, before saving' }, { status: 422 })
     }
@@ -222,14 +222,14 @@ export const PUT = defineRoute({
       }
       // A missing profile cannot be row-locked. Serialize creation on its parent;
       // NO KEY UPDATE remains compatible with inventory's foreign-key checks.
-      const parent = await tx.execute(sql`select id from items where id = ${id} and org_id = ${orgId} for no key update`)
-      if (!parent.rows[0]) throw new ProfileRevisionConflictError()
+      const parent = await tx.execute(sql`select id from items where id = ${id} and org_id = ${orgId} for no key update`, 'objects')
+      if (!parent[0]) throw new ProfileRevisionConflictError()
       const before = await lockItemInventoryProfile(tx, orgId, id)
       // The row is locked, so this revision read cannot race with a concurrent
       // writer: compare it against the caller's token to fence the save.
-      const storedRevision = ((await tx.execute<{ updated_at: string }>(sql`
+      const storedRevision = (await tx.execute<{ updated_at: string }>(sql`
         select ${documentRevisionSql(sql`updated_at`)} as updated_at from item_inventory_profiles
-         where org_id = ${orgId} and item_id = ${id}`))).rows[0]?.updated_at ?? null
+         where org_id = ${orgId} and item_id = ${id}`, 'objects'))[0]?.updated_at ?? null
       if (storedRevision !== expectedRevision) throw new ProfileRevisionConflictError()
       const assessment = await assertCostingPolicyChangeAllowed(
         tx,
@@ -244,7 +244,7 @@ export const PUT = defineRoute({
       // is fenced while stock is on hand; the rest price future postings.
       const itemLabel = (await tx.execute<{ label: string }>(sql`
         select coalesce(nullif(btrim(code), ''), btrim(name), ${id}) as label
-          from items where id = ${id} and org_id = ${orgId}`)).rows[0]?.label ?? id
+          from items where id = ${id} and org_id = ${orgId}`, 'objects'))[0]?.label ?? id
       await assertCostingAccountChangeAllowed(tx, orgId, id, itemLabel, before, {
         assetAccountId,
         cogsAccountId,
@@ -322,8 +322,8 @@ export const PUT = defineRoute({
           updated_at = greatest(clock_timestamp(), item_inventory_profiles.updated_at + interval '1 microsecond'), updated_by = ${actorId}
         where item_inventory_profiles.org_id = ${orgId}
           and item_inventory_profiles.updated_at = ${expectedRevision}::timestamptz
-        returning *, ${documentRevisionSql(sql`updated_at`)} as updated_at`)))
-      const after = afterRows.rows[0]
+        returning *, ${documentRevisionSql(sql`updated_at`)} as updated_at`, 'objects')))
+      const after = afterRows[0]
       if (!after) throw new ProfileRevisionConflictError()
       // Full mutation evidence in the same transaction as the mutation: exact
       // before/after rows, requested policy, actor (audit_log.actor_id), the

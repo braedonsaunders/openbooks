@@ -37,8 +37,7 @@ export const checklistStepSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (
-      await db.execute<{
+    (await db.execute<{
         org_id: string;
         title: string;
         kind: string;
@@ -53,8 +52,7 @@ async function load(id: string) {
       }>(sql`
     select s.org_id,s.title,p.kind,p.employment_id,e.employer_subsidiary_id,s.due_on::text,s.design,s.approval_status,s.submitted_by,s.submitted_at::text,s.created_by
     from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id
-    join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.id=${id}`)
-    ).rows[0] ?? null
+    join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.id=${id}`, "objects"))[0] ?? null
   );
 }
 export const checklistStepsFlowAdapter: FlowSubjectAdapter =
@@ -73,11 +71,9 @@ export const checklistStepsFlowAdapter: FlowSubjectAdapter =
           await db.execute(
             sql`select p.id from hrm_processes p where p.org_id=${orgId} and p.id in(select process_id from hrm_process_steps where org_id=${orgId} and id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as ids(value))) order by p.id for share`,
           );
-        const rows = (
-          await db.execute<{ id: string; employer_subsidiary_id: string }>(
-            sql`select s.id,e.employer_subsidiary_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.org_id=${orgId} and s.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as ids(value)) ${lock ? sql`for share of s,e` : sql``}`,
-          )
-        ).rows;
+        const rows = await db.execute<{ id: string; employer_subsidiary_id: string }>(
+            sql`select s.id,e.employer_subsidiary_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id join worker_employments e on e.org_id=p.org_id and e.id=p.employment_id where s.org_id=${orgId} and s.id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb) as ids(value)) ${lock ? sql`for share of s,e` : sql``}`, "objects",
+          );
         return new Map(
           rows
             .filter(

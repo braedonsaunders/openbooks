@@ -76,13 +76,11 @@ async function employee(
   date: string,
 ) {
   if (!id) return;
-  const row = (
-    await tx.execute<{
+  const row = (await tx.execute<{
       subsidiary_id: string | null;
     }>(sql`select p.subsidiary_id from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id
     where e.org_id=${scope.orgId} and e.party_id=${id} and e.is_active and e.is_sales_rep and p.is_active
-      and (e.sales_rep_since is null or e.sales_rep_since<=${date}::date) and (e.terminated_on is null or e.terminated_on>=${date}::date) for share of e,p`)
-  ).rows[0];
+      and (e.sales_rep_since is null or e.sales_rep_since<=${date}::date) and (e.terminated_on is null or e.terminated_on>=${date}::date) for share of e,p`, "objects"))[0];
   if (!row || row.subsidiary_id !== subsidiaryId)
     throw new SalesError(
       "Select an active sales employee in this legal entity. Manage eligibility in Sales → Representatives.",
@@ -96,11 +94,9 @@ async function team(
   subsidiaryId: string,
 ) {
   if (!id) return;
-  const row = (
-    await tx.execute<{ subsidiary_id: string | null }>(
-      sql`select subsidiary_id from crm_sales_teams where org_id=${scope.orgId} and id=${id} and is_active for share`,
-    )
-  ).rows[0];
+  const row = (await tx.execute<{ subsidiary_id: string | null }>(
+      sql`select subsidiary_id from crm_sales_teams where org_id=${scope.orgId} and id=${id} and is_active for share`, "objects",
+    ))[0];
   if (!row || row.subsidiary_id !== subsidiaryId)
     throw new SalesError("Select an active sales team in this legal entity.");
 }
@@ -112,11 +108,9 @@ async function current(
   expected: number | undefined,
 ): Promise<SalesRecord | null> {
   if (!id) return null;
-  const row = (
-    await tx.execute<SalesRecord>(
-      sql`select * from ${sql.identifier(table)} where org_id=${scope.orgId} and id=${id} and ${salesScopeWhere(scope, sql`subsidiary_id`)} for update`,
-    )
-  ).rows[0];
+  const row = (await tx.execute<SalesRecord>(
+      sql`select * from ${sql.identifier(table)} where org_id=${scope.orgId} and id=${id} and ${salesScopeWhere(scope, sql`subsidiary_id`)} for update`, "objects",
+    ))[0];
   if (!row) throw new SalesError("Record not found.", 404, "not_found");
   if (expected !== row.revision)
     throw new SalesError(
@@ -173,24 +167,20 @@ export async function previewTerritory(
 ): Promise<TerritoryPreview> {
   await requireSalesSchema(tx);
   assertScope(scope, input.subsidiaryId);
-  const accounts = (
-    await tx.execute<PreviewAccount>(sql`select cp.id,cp.party_id,p.display_name as name,cp.territory_id,c.sales_rep_id,cp.industry,cp.lifecycle_stage,cp.lead_source_id,cp.annual_revenue,cp.employee_count,cp.updated_at::text,
+  const accounts = await tx.execute<PreviewAccount>(sql`select cp.id,cp.party_id,p.display_name as name,cp.territory_id,c.sales_rep_id,cp.industry,cp.lifecycle_stage,cp.lead_source_id,cp.annual_revenue,cp.employee_count,cp.updated_at::text,
     a.id as address_id,a.country,a.region,a.longitude::text,a.latitude::text,a.updated_at::text as address_updated_at,
     coalesce((select source='manual' from crm_account_assignment_events e where e.org_id=cp.org_id and e.account_profile_id=cp.id order by e.created_at desc,e.id desc limit 1),false) as manual
     from crm_account_profiles cp join parties p on p.org_id=cp.org_id and p.id=cp.party_id left join customer_roles c on c.org_id=p.org_id and c.party_id=p.id
     left join lateral (select * from addresses where org_id=p.org_id and party_id=p.id order by is_default_billing desc,created_at,id limit 1) a on true
-    where cp.org_id=${scope.orgId} and p.subsidiary_id=${input.subsidiaryId} order by cp.id`)
-  ).rows;
-  const others = (
-    await tx.execute<{
+    where cp.org_id=${scope.orgId} and p.subsidiary_id=${input.subsidiaryId} order by cp.id`, "objects");
+  const others = await tx.execute<{
       id: string;
       rules: TerritoryRule[];
       match_mode: "all" | "any";
       geography: TerritoryGeography;
       updated_at: string;
     }>(sql`select t.id,coalesce(v.definition->'rules',t.rules) as rules,coalesce(v.definition->>'match_mode',t.match_mode) as match_mode,coalesce(v.definition->'geography',t.geography) as geography,t.updated_at::text from crm_sales_territories t left join lateral(select definition from crm_sales_territory_versions v where v.org_id=t.org_id and v.territory_id=t.id and v.effective_from<=${input.effectiveFrom}::date order by effective_from desc,revision desc limit 1)v on true
-    where t.org_id=${scope.orgId} and t.subsidiary_id=${input.subsidiaryId} and t.lifecycle<>'archived' and t.is_active and v.definition is not null and t.id<>${input.id ?? "00000000-0000-4000-8000-000000000000"} order by t.id`)
-  ).rows;
+    where t.org_id=${scope.orgId} and t.subsidiary_id=${input.subsidiaryId} and t.lifecycle<>'archived' and t.is_active and v.definition is not null and t.id<>${input.id ?? "00000000-0000-4000-8000-000000000000"} order by t.id`, "objects");
   const rows: TerritoryPreview["accounts"] = [];
   let matched = 0,
     changed = 0,
@@ -300,15 +290,13 @@ async function saveCommand(
     );
   const today = await businessTodayInTx(tx, scope.orgId);
   if (input.action === "representative") {
-    const before = (
-      await tx.execute<{
+    const before = (await tx.execute<{
         party_id: string;
         is_sales_rep: boolean;
         updated_at: string;
         subsidiary_id: string | null;
       }>(sql`select e.*,e.updated_at::text as updated_at,p.subsidiary_id from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id
-      where e.org_id=${scope.orgId} and e.party_id=${input.employeeId} and (not ${input.enabled} or (e.is_active and p.is_active)) and ${salesScopeWhere(scope, sql`p.subsidiary_id`)} for update of e`)
-    ).rows[0];
+      where e.org_id=${scope.orgId} and e.party_id=${input.employeeId} and (not ${input.enabled} or (e.is_active and p.is_active)) and ${salesScopeWhere(scope, sql`p.subsidiary_id`)} for update of e`, "objects"))[0];
     if (!before)
       throw new SalesError(
         "Select an existing active employee.",
@@ -322,23 +310,19 @@ async function saveCommand(
         "revision_conflict",
       );
     if (!input.enabled) {
-      const assigned = (
-        await tx.execute(sql`select 1 where exists(select 1 from customer_roles where org_id=${scope.orgId} and sales_rep_id=${input.employeeId} and is_active)
+      const assigned = (await tx.execute(sql`select 1 where exists(select 1 from customer_roles where org_id=${scope.orgId} and sales_rep_id=${input.employeeId} and is_active)
         or exists(select 1 from crm_sales_team_members where org_id=${scope.orgId} and employee_id=${input.employeeId} and is_active)
         or exists(select 1 from crm_sales_territories where org_id=${scope.orgId} and (default_employee_id=${input.employeeId} or manager_employee_id=${input.employeeId}) and lifecycle<>'archived')
         or exists(select 1 from crm_sales_teams where org_id=${scope.orgId} and manager_employee_id=${input.employeeId} and is_active)
         or exists(select 1 from crm_sales_quotas where org_id=${scope.orgId} and employee_id=${input.employeeId} and lifecycle in ('draft','pending_approval','approved') and period_end>=${today}::date)
-        or exists(select 1 from crm_opportunities o join crm_opportunity_statuses st on st.org_id=o.org_id and st.id=o.status_id where o.org_id=${scope.orgId} and o.sales_rep_id=${input.employeeId} and o.is_active and not st.is_closed)`)
-      ).rows.length;
+        or exists(select 1 from crm_opportunities o join crm_opportunity_statuses st on st.org_id=o.org_id and st.id=o.status_id where o.org_id=${scope.orgId} and o.sales_rep_id=${input.employeeId} and o.is_active and not st.is_closed)`, "objects")).length;
       if (assigned)
         throw new SalesError(
           "Reassign this employee’s customers, team memberships, territory responsibilities and open opportunities, and close or revise open quotas before removing sales eligibility.",
         );
     }
-    const after = (
-      await tx.execute<SalesRecord>(sql`update employee_roles set is_sales_rep=${input.enabled},sales_rep_since=${input.since}::date,updated_at=clock_timestamp(),updated_by=${scope.actorId}
-      where org_id=${scope.orgId} and party_id=${input.employeeId} returning *,party_id as id`)
-    ).rows[0];
+    const after = (await tx.execute<SalesRecord>(sql`update employee_roles set is_sales_rep=${input.enabled},sales_rep_since=${input.since}::date,updated_at=clock_timestamp(),updated_by=${scope.actorId}
+      where org_id=${scope.orgId} and party_id=${input.employeeId} returning *,party_id as id`, "objects"))[0];
     if (!after) throw new SalesError("Employee was not updated.", 409);
     await audit(tx, scope, "employee_roles", input.employeeId, before, after);
     return after;
@@ -363,11 +347,9 @@ async function saveCommand(
       throw new SalesError("Enter a reason for this quota decision.");
     if (
       input.lifecycle === "closed" &&
-      (
-        await tx.execute(
-          sql`select 1 from crm_sales_quotas where org_id=${scope.orgId} and parent_quota_id=${input.id} and lifecycle not in ('closed','superseded') limit 1`,
-        )
-      ).rows.length
+      (await tx.execute(
+          sql`select 1 from crm_sales_quotas where org_id=${scope.orgId} and parent_quota_id=${input.id} and lifecycle not in ('closed','superseded') limit 1`, "objects",
+        )).length
     )
       throw new SalesError(
         "Close the representative allocations before closing their team quota.",
@@ -383,12 +365,10 @@ async function saveCommand(
       });
       const ungated =
         !approvalRunId &&
-        (
-          await tx.execute<{
+        (await tx.execute<{
             allowed: boolean;
           }>(sql`select public.flow_ungated_submission_authorized(
-        ${scope.orgId},'sales_quota',${input.id},${scope.actorId},jsonb_build_object('revision',${before.revision - 1}::integer)) as allowed`)
-        ).rows[0]?.allowed === true;
+        ${scope.orgId},'sales_quota',${input.id},${scope.actorId},jsonb_build_object('revision',${before.revision - 1}::integer)) as allowed`, "objects"))[0]?.allowed === true;
       if (!decision && !ungated)
         throw new SalesError(
           "Complete the configured native Flow gates before releasing this quota.",
@@ -407,11 +387,9 @@ async function saveCommand(
           "Quota decisions require the configured approval permission.",
           403,
         );
-      const children = (
-        await tx.execute<{ amount: string; lifecycle: string }>(
-          sql`select amount::text,lifecycle from crm_sales_quotas where org_id=${scope.orgId} and parent_quota_id=${input.id} and lifecycle<>'superseded' for update`,
-        )
-      ).rows;
+      const children = await tx.execute<{ amount: string; lifecycle: string }>(
+          sql`select amount::text,lifecycle from crm_sales_quotas where org_id=${scope.orgId} and parent_quota_id=${input.id} and lifecycle<>'superseded' for update`, "objects",
+        );
       if (
         children.length &&
         (children.some((c) => c.lifecycle !== "approved") ||
@@ -420,26 +398,20 @@ async function saveCommand(
         throw new SalesError(
           "Approve the representative allocations and reconcile their total to the team target before approving the team quota.",
         );
-      const overlaps = (
-        await tx.execute(sql`select 1 from crm_sales_quotas where org_id=${scope.orgId} and id<>${input.id} and id<>${before.supersedes_id ?? "00000000-0000-4000-8000-000000000000"}
+      const overlaps = (await tx.execute(sql`select 1 from crm_sales_quotas where org_id=${scope.orgId} and id<>${input.id} and id<>${before.supersedes_id ?? "00000000-0000-4000-8000-000000000000"}
         and employee_id is not distinct from ${before.employee_id ?? null} and sales_team_id is not distinct from ${before.sales_team_id ?? null}
         and subsidiary_id is not distinct from ${before.subsidiary_id} and metric=${before.metric!} and currency=${before.currency!} and lifecycle='approved'
-        and period_start<=${before.period_end!}::date and period_end>=${before.period_start!}::date`)
-      ).rows.length;
+        and period_start<=${before.period_end!}::date and period_end>=${before.period_start!}::date`, "objects")).length;
       if (overlaps)
         throw new SalesError(
           "An approved quota already covers this target and period. Revise that quota instead of creating an overlapping target.",
         );
       if (before.supersedes_id) {
-        const replacementBefore = (
-          await tx.execute<SalesRecord>(
-            sql`select * from crm_sales_quotas where org_id=${scope.orgId} and id=${before.supersedes_id} for update`,
-          )
-        ).rows[0];
-        const replaced = (
-          await tx.execute<SalesRecord>(sql`update crm_sales_quotas set lifecycle='superseded',revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId}
-          where org_id=${scope.orgId} and id=${before.supersedes_id} and lifecycle='approved' returning *`)
-        ).rows[0];
+        const replacementBefore = (await tx.execute<SalesRecord>(
+            sql`select * from crm_sales_quotas where org_id=${scope.orgId} and id=${before.supersedes_id} for update`, "objects",
+          ))[0];
+        const replaced = (await tx.execute<SalesRecord>(sql`update crm_sales_quotas set lifecycle='superseded',revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId}
+          where org_id=${scope.orgId} and id=${before.supersedes_id} and lifecycle='approved' returning *`, "objects"))[0];
         if (!replaced)
           throw new SalesError(
             "The quota being replaced is no longer approved. Reload the revision.",
@@ -473,13 +445,11 @@ async function saveCommand(
         subjectKind: "sales_quota",
         subjectId: input.id,
       });
-    const after = (
-      await tx.execute<SalesRecord>(sql`update crm_sales_quotas set lifecycle=${input.lifecycle},
+    const after = (await tx.execute<SalesRecord>(sql`update crm_sales_quotas set lifecycle=${input.lifecycle},
       submission_policy=case when ${input.lifecycle}='pending_approval' then ${JSON.stringify(submissionPolicy)}::jsonb when ${input.lifecycle}='draft' then null else submission_policy end,
       submitted_by=case when ${input.lifecycle}='pending_approval' then ${scope.actorId}::uuid when ${input.lifecycle}='draft' then null else submitted_by end,
       reason=${input.lifecycle === "closed" ? sql`reason` : input.reason},approved_by=${input.lifecycle === "approved" ? scope.actorId : sql`approved_by`},approved_at=${input.lifecycle === "approved" ? sql`now()` : sql`approved_at`},revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId}
-      where org_id=${scope.orgId} and id=${input.id} returning *`)
-    ).rows[0];
+      where org_id=${scope.orgId} and id=${input.id} returning *`, "objects"))[0];
     if (!after) throw new SalesError("Quota transition was not applied.", 409);
     await audit(
       tx,
@@ -504,11 +474,9 @@ async function saveCommand(
   }
   assertScope(scope, input.subsidiaryId);
   if (
-    !(
-      await tx.execute(
-        sql`select id from subsidiaries where org_id=${scope.orgId} and id=${input.subsidiaryId} and is_active for share`,
-      )
-    ).rows.length
+    !(await tx.execute(
+        sql`select id from subsidiaries where org_id=${scope.orgId} and id=${input.subsidiaryId} and is_active for share`, "objects",
+      )).length
   )
     throw new SalesError("Select a legal entity in this organization.");
   if (input.action === "team") {
@@ -526,11 +494,9 @@ async function saveCommand(
     if (
       before &&
       !input.isActive &&
-      (
-        await tx.execute(
-          sql`select 1 where exists(select 1 from crm_sales_territories where org_id=${scope.orgId} and sales_team_id=${before.id} and lifecycle<>'archived') or exists(select 1 from crm_sales_quotas where org_id=${scope.orgId} and sales_team_id=${before.id} and lifecycle in ('draft','pending_approval','approved') and period_end>=${today}::date) or exists(select 1 from crm_opportunities o join crm_opportunity_statuses st on st.org_id=o.org_id and st.id=o.status_id where o.org_id=${scope.orgId} and o.sales_team_id=${before.id} and o.is_active and not st.is_closed)`,
-        )
-      ).rows.length
+      (await tx.execute(
+          sql`select 1 where exists(select 1 from crm_sales_territories where org_id=${scope.orgId} and sales_team_id=${before.id} and lifecycle<>'archived') or exists(select 1 from crm_sales_quotas where org_id=${scope.orgId} and sales_team_id=${before.id} and lifecycle in ('draft','pending_approval','approved') and period_end>=${today}::date) or exists(select 1 from crm_opportunities o join crm_opportunity_statuses st on st.org_id=o.org_id and st.id=o.status_id where o.org_id=${scope.orgId} and o.sales_team_id=${before.id} and o.is_active and not st.is_closed)`, "objects",
+        )).length
     )
       throw new SalesError(
         "Reassign active territories and open opportunities, and close or revise open team quotas before archiving this team.",
@@ -562,8 +528,7 @@ async function saveCommand(
       )
     )
       throw new SalesError("Include the team manager as a manager membership.");
-    const after = (
-      await tx.execute<SalesRecord>(
+    const after = (await tx.execute<SalesRecord>(
         input.id
           ? sql`update crm_sales_teams set name=${input.name},manager_employee_id=${input.managerEmployeeId},subsidiary_id=${input.subsidiaryId},is_active=${input.isActive},revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId} where org_id=${scope.orgId} and id=${input.id} returning *`
           : sql`insert into crm_sales_teams(org_id,key,name,manager_employee_id,subsidiary_id,is_active,created_by,updated_by) values(${scope.orgId},${createHash(
@@ -572,20 +537,17 @@ async function saveCommand(
               .update(input.name + randomUUID())
               .digest(
                 "hex",
-              )},${input.name},${input.managerEmployeeId},${input.subsidiaryId},${input.isActive},${scope.actorId},${scope.actorId}) returning *`,
-      )
-    ).rows[0];
+              )},${input.name},${input.managerEmployeeId},${input.subsidiaryId},${input.isActive},${scope.actorId},${scope.actorId}) returning *`, "objects",
+      ))[0];
     if (!after) throw new SalesError("Team was not saved.", 409);
-    const previous = (
-      await tx.execute<{
+    const previous = await tx.execute<{
         id: string;
         employee_id: string;
         role: string;
         valid_from: string;
       }>(
-        sql`select id,employee_id,role,valid_from::text from crm_sales_team_members where org_id=${scope.orgId} and team_id=${after.id} and is_active for update`,
-      )
-    ).rows;
+        sql`select id,employee_id,role,valid_from::text from crm_sales_team_members where org_id=${scope.orgId} and team_id=${after.id} and is_active for update`, "objects",
+      );
     for (const existing of previous) {
       const retained = input.members.find(
         (m) =>
@@ -674,11 +636,9 @@ async function saveCommand(
     );
     await team(tx, scope, input.salesTeamId, input.subsidiaryId);
     if (input.parentQuotaId) {
-      const parent = (
-        await tx.execute<SalesRecord>(
-          sql`select * from crm_sales_quotas where org_id=${scope.orgId} and id=${input.parentQuotaId} for update`,
-        )
-      ).rows[0];
+      const parent = (await tx.execute<SalesRecord>(
+          sql`select * from crm_sales_quotas where org_id=${scope.orgId} and id=${input.parentQuotaId} for update`, "objects",
+        ))[0];
       if (
         !parent ||
         !parent.sales_team_id ||
@@ -694,22 +654,18 @@ async function saveCommand(
           "Representative allocations require a draft team quota with the same entity, metric, currency, and period.",
         );
       if (
-        !(
-          await tx.execute(
-            sql`select 1 from crm_sales_team_members where org_id=${scope.orgId} and team_id=${parent.sales_team_id} and employee_id=${input.employeeId} and is_active and valid_from<=${input.periodStart}::date and (valid_to is null or valid_to>=${input.periodEnd}::date)`,
-          )
-        ).rows.length
+        !(await tx.execute(
+            sql`select 1 from crm_sales_team_members where org_id=${scope.orgId} and team_id=${parent.sales_team_id} and employee_id=${input.employeeId} and is_active and valid_from<=${input.periodStart}::date and (valid_to is null or valid_to>=${input.periodEnd}::date)`, "objects",
+          )).length
       )
         throw new SalesError(
           "This employee must belong to the target team throughout the quota period.",
         );
     }
     if (input.supersedesId) {
-      const prior = (
-        await tx.execute<SalesRecord>(
-          sql`select * from crm_sales_quotas where org_id=${scope.orgId} and id=${input.supersedesId} for share`,
-        )
-      ).rows[0];
+      const prior = (await tx.execute<SalesRecord>(
+          sql`select * from crm_sales_quotas where org_id=${scope.orgId} and id=${input.supersedesId} for share`, "objects",
+        ))[0];
       if (
         !prior ||
         prior.lifecycle !== "approved" ||
@@ -728,18 +684,14 @@ async function saveCommand(
         throw new SalesError("Enter a reason for revising the approved quota.");
     }
     if (
-      !(
-        await tx.execute(
-          sql`select code from currencies where code=${input.currency}`,
-        )
-      ).rows.length
+      !(await tx.execute(
+          sql`select code from currencies where code=${input.currency}`, "objects",
+        )).length
     )
       throw new SalesError("Select a configured currency.");
-    const org = (
-      await tx.execute<{ base_currency: string }>(
-        sql`select base_currency from orgs where id=${scope.orgId}`,
-      )
-    ).rows[0]!;
+    const org = (await tx.execute<{ base_currency: string }>(
+        sql`select base_currency from orgs where id=${scope.orgId}`, "objects",
+      ))[0]!;
     if (
       input.currency !== org.base_currency &&
       !(await lockAndCheckOrgFeature(tx, scope.orgId, "multiCurrency"))
@@ -747,13 +699,11 @@ async function saveCommand(
       throw new SalesError(
         "Enable Multi-currency in Company Settings → Features before using this currency.",
       );
-    const after = (
-      await tx.execute<SalesRecord>(
+    const after = (await tx.execute<SalesRecord>(
         input.id
           ? sql`update crm_sales_quotas set name=${input.name},employee_id=${input.employeeId},sales_team_id=${input.salesTeamId},subsidiary_id=${input.subsidiaryId},parent_quota_id=${input.parentQuotaId},supersedes_id=${input.supersedesId},reason=${input.reason},period_start=${input.periodStart},period_end=${input.periodEnd},currency=${input.currency},amount=${input.amount},metric=${input.metric},revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId} where org_id=${scope.orgId} and id=${input.id} returning *`
-          : sql`insert into crm_sales_quotas(org_id,name,employee_id,sales_team_id,subsidiary_id,parent_quota_id,supersedes_id,reason,period_start,period_end,currency,amount,metric,lifecycle,created_by,updated_by) values(${scope.orgId},${input.name},${input.employeeId},${input.salesTeamId},${input.subsidiaryId},${input.parentQuotaId},${input.supersedesId},${input.reason},${input.periodStart},${input.periodEnd},${input.currency},${input.amount},${input.metric},'draft',${scope.actorId},${scope.actorId}) returning *`,
-      )
-    ).rows[0];
+          : sql`insert into crm_sales_quotas(org_id,name,employee_id,sales_team_id,subsidiary_id,parent_quota_id,supersedes_id,reason,period_start,period_end,currency,amount,metric,lifecycle,created_by,updated_by) values(${scope.orgId},${input.name},${input.employeeId},${input.salesTeamId},${input.subsidiaryId},${input.parentQuotaId},${input.supersedesId},${input.reason},${input.periodStart},${input.periodEnd},${input.currency},${input.amount},${input.metric},'draft',${scope.actorId},${scope.actorId}) returning *`, "objects",
+      ))[0];
     if (!after) throw new SalesError("Quota was not saved.", 409);
     await audit(
       tx,
@@ -826,24 +776,20 @@ async function saveCommand(
         "Resolve overlapping territory matches before activation. Adjust coverage or exclusions in the territory drawer.",
       );
   }
-  const after = (
-    await tx.execute<SalesRecord>(
+  const after = (await tx.execute<SalesRecord>(
       input.id
         ? sql`update crm_sales_territories set name=${input.name},description=${input.description},manager_employee_id=${input.managerEmployeeId},default_employee_id=${input.defaultEmployeeId},sales_team_id=${input.salesTeamId},subsidiary_id=${input.subsidiaryId},priority=${input.priority},rules=${JSON.stringify(input.rules)}::jsonb,match_mode=${input.matchMode},geography=${JSON.stringify(input.geography)}::jsonb,effective_from=${input.effectiveFrom},lifecycle=${input.lifecycle},is_active=${input.lifecycle !== "archived"},revision=revision+1,updated_at=clock_timestamp(),updated_by=${scope.actorId} where org_id=${scope.orgId} and id=${input.id} returning *`
-        : sql`insert into crm_sales_territories(org_id,key,name,description,manager_employee_id,default_employee_id,sales_team_id,subsidiary_id,priority,rules,match_mode,geography,effective_from,lifecycle,is_active,created_by,updated_by) values(${scope.orgId},${randomUUID()},${input.name},${input.description},${input.managerEmployeeId},${input.defaultEmployeeId},${input.salesTeamId},${input.subsidiaryId},${input.priority},${JSON.stringify(input.rules)}::jsonb,${input.matchMode},${JSON.stringify(input.geography)}::jsonb,${input.effectiveFrom},${input.lifecycle},${input.lifecycle !== "archived"},${scope.actorId},${scope.actorId}) returning *`,
-    )
-  ).rows[0];
+        : sql`insert into crm_sales_territories(org_id,key,name,description,manager_employee_id,default_employee_id,sales_team_id,subsidiary_id,priority,rules,match_mode,geography,effective_from,lifecycle,is_active,created_by,updated_by) values(${scope.orgId},${randomUUID()},${input.name},${input.description},${input.managerEmployeeId},${input.defaultEmployeeId},${input.salesTeamId},${input.subsidiaryId},${input.priority},${JSON.stringify(input.rules)}::jsonb,${input.matchMode},${JSON.stringify(input.geography)}::jsonb,${input.effectiveFrom},${input.lifecycle},${input.lifecycle !== "archived"},${scope.actorId},${scope.actorId}) returning *`, "objects",
+    ))[0];
   if (!after) throw new SalesError("Territory was not saved.", 409);
   if (input.lifecycle === "active")
     await tx.execute(
       sql`insert into crm_sales_territory_versions(org_id,territory_id,revision,effective_from,definition,created_by) values(${scope.orgId},${after.id},${after.revision},${input.effectiveFrom},${JSON.stringify(after)}::jsonb,${scope.actorId})`,
     );
   if (input.lifecycle === "active" && input.effectiveFrom <= today) {
-    const accounts = (
-      await tx.execute<{ id: string }>(
-        sql`select cp.id from crm_account_profiles cp join parties p on p.org_id=cp.org_id and p.id=cp.party_id where cp.org_id=${scope.orgId} and p.subsidiary_id=${input.subsidiaryId} order by cp.id`,
-      )
-    ).rows;
+    const accounts = await tx.execute<{ id: string }>(
+        sql`select cp.id from crm_account_profiles cp join parties p on p.org_id=cp.org_id and p.id=cp.party_id where cp.org_id=${scope.orgId} and p.subsidiary_id=${input.subsidiaryId} order by cp.id`, "objects",
+      );
     for (const account of accounts)
       await routeSalesAccount(tx, scope.orgId, account.id, scope.actorId);
   }
@@ -926,11 +872,9 @@ export async function releaseQuotaApproval(args: {
       actorId,
     ),
   };
-  const row = (
-    await db.execute<{ revision: number; lifecycle: string }>(
-      sql`select revision,lifecycle from crm_sales_quotas where org_id=${scope.orgId} and id=${args.subjectId} for update`,
-    )
-  ).rows[0];
+  const row = (await db.execute<{ revision: number; lifecycle: string }>(
+      sql`select revision,lifecycle from crm_sales_quotas where org_id=${scope.orgId} and id=${args.subjectId} for update`, "objects",
+    ))[0];
   if (!row || row.lifecycle !== "pending_approval")
     throw new SalesError(
       "This quota no longer accepts an approval decision.",

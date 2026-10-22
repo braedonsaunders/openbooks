@@ -114,7 +114,7 @@ async function approvedOrder(
 async function revisionOf(orgId: string, orderId: string): Promise<string> {
   const row = (await db.execute<{ updated_at: string }>(sql`
     select ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
-      from documents where id = ${orderId} and org_id = ${orgId}`)).rows[0]!;
+      from documents where id = ${orderId} and org_id = ${orgId}`, "objects"))[0]!;
   return row.updated_at;
 }
 
@@ -150,7 +150,7 @@ test("fulfillment names the warehouseless line instead of failing generically", 
     const leftovers = (await db.execute<{ fulfillments: number; fulfilled: string }>(sql`
       select (select count(*)::int from documents
                where org_id = ${f.org.orgId} and kind = 'sales_fulfillment') as fulfillments,
-             (select quantity_fulfilled::text from document_lines where id = ${f.lineId}) as fulfilled`)).rows[0]!;
+             (select quantity_fulfilled::text from document_lines where id = ${f.lineId}) as fulfilled`, "objects"))[0]!;
     assert.equal(leftovers.fulfillments, 0, "the refused fulfillment creates nothing");
     assert.equal(Number(leftovers.fulfilled), 0, "no shipment evidence advances");
   } finally {
@@ -201,13 +201,13 @@ test("assignment unblocks fulfillment and routes stock to the assigned warehouse
              (select m.stock_location_id from inventory_movements m
                 join document_lines fl on fl.id = m.document_line_id and fl.org_id = m.org_id
                where m.org_id = ${f.org.orgId} and fl.document_id = ${shipped.id}
-                 and m.kind = 'issue' limit 1) as movement_warehouse`)).rows[0]!;
+                 and m.kind = 'issue' limit 1) as movement_warehouse`, "objects"))[0]!;
     assert.equal(facts.status, "approved", "the order stays approved throughout");
     assert.equal(facts.line_warehouse, f.org.stockLocationId2);
     assert.equal(facts.movement_warehouse, f.org.stockLocationId2, "the issue relieves the assigned warehouse");
     const audit = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
-       where org_id = ${f.org.orgId} and table_name = 'document_lines' and row_id = ${f.lineId}`)).rows[0]!;
+       where org_id = ${f.org.orgId} and table_name = 'document_lines' and row_id = ${f.lineId}`, "objects"))[0]!;
     assert.equal(audit.n, 1, "the assignment is audited");
   } finally {
     await drop(f);
@@ -301,7 +301,7 @@ test("a stale revision is refused before any write", async () => {
       /changed after you opened it/,
     );
     const line = (await db.execute<{ stock_location_id: string | null }>(sql`
-      select stock_location_id from document_lines where id = ${f.lineId}`)).rows[0]!;
+      select stock_location_id from document_lines where id = ${f.lineId}`, "objects"))[0]!;
     assert.equal(line.stock_location_id, null, "the refused assignment writes nothing");
   } finally {
     await drop(f);
@@ -351,7 +351,7 @@ test("both sales and purchase order routes assign the requested line warehouse",
       const row = (await db.execute<{ kind: string; stock_location_id: string | null }>(sql`
         select d.kind, l.stock_location_id
           from documents d join document_lines l on l.document_id = d.id and l.org_id = d.org_id
-         where d.org_id = ${f.org.orgId} and d.id = ${f.orderId} and l.id = ${f.lineId}`)).rows[0]!;
+         where d.org_id = ${f.org.orgId} and d.id = ${f.orderId} and l.id = ${f.lineId}`, "objects"))[0]!;
       assert.equal(row.kind, kind);
       assert.equal(row.stock_location_id, f.org.stockLocationId2);
       const order = await response.json() as {

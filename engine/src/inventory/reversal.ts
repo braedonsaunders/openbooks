@@ -58,8 +58,8 @@ export async function restoreIssueLayers(
       from inventory_provisional_costs
      where org_id = ${orgId} and issue_movement_id = ${movement.id}
      limit 1
-  `));
-  if (provisional.rows.length) {
+  `, "objects"));
+  if (provisional.length) {
     throw new InventoryError(
       "a negative-stock issue must have its provisional-cost chain reversed before the issue",
     );
@@ -83,21 +83,21 @@ export async function restoreIssueLayers(
      where c.org_id = ${orgId} and c.issue_movement_id = ${movement.id}
      order by c.created_at, c.id
      for update of l
-  `));
-  const restoredQuantity = sum(consumed.rows.map((row) => row.quantity));
+  `, "objects"));
+  const restoredQuantity = sum(consumed.map((row) => row.quantity));
   if (cmp(restoredQuantity, fromUnits(-toUnits(movement.quantity))) !== 0) {
     throw new InventoryError(
       "the issue's exact layer provenance is incomplete; controlled reversal is unavailable",
     );
   }
-  const restoredValue = sum(consumed.rows.map((row) => fromUnits(
+  const restoredValue = sum(consumed.map((row) => fromUnits(
     toUnits(extendCost(add(row.remaining_quantity, row.quantity), row.current_unit_cost)) -
     toUnits(extendCost(row.remaining_quantity, row.current_unit_cost)),
   )));
   if (movement.total_value == null || cmp(restoredValue, neg(movement.total_value)) !== 0) {
     throw new InventoryError("the source layers cannot restore the exact movement value; reverse later inventory activity first");
   }
-  for (const row of consumed.rows) {
+  for (const row of consumed) {
     if (cmp(row.current_unit_cost, row.unit_cost) !== 0) {
       throw new InventoryError(
         "a consumed cost layer was revalued after this issue; reverse the downstream landed-cost/revaluation first",
@@ -116,8 +116,8 @@ export async function restoreIssueLayers(
              remaining_original_cost = remaining_original_cost + ${row.original_cost}::numeric, updated_at = now(), updated_by = ${actorId}
        where id = ${row.cost_layer_id} and org_id = ${orgId}
        returning id
-    `);
-    if (restored.rows.length !== 1) {
+    `, "objects");
+    if (restored.length !== 1) {
       throw new InventoryError("the source cost layer changed before issue reversal");
     }
   }
@@ -134,21 +134,21 @@ export async function removeInboundLayer(
       from inventory_provisional_settlements
      where org_id = ${orgId} and receipt_movement_id = ${movement.id}
      limit 1
-  `));
-  if (settlements.rows.length) {
+  `, "objects"));
+  if (settlements.length) {
     throw new InventoryError(
       "a receipt that settled negative stock must be reversed through its full provisional-cost chain",
     );
   }
 
-  const layers = (await tx.execute<{
+  const layers = await tx.execute<{
       id: string; original_quantity: string; remaining_quantity: string; unit_cost: string;
     }>(sql`
     select id, original_quantity, remaining_quantity, unit_cost
       from cost_layers
      where org_id = ${orgId} and source_movement_id = ${movement.id}
      order by id for update
-  `)).rows;
+  `, "objects");
   if (!layers.length) {
     throw new InventoryError(
       "the inbound movement was blended into another cost layer, so its exact receipt cannot be reversed. Correct the stock instead: post a negative inventory adjustment for the received quantity (Inventory → Adjust), then reclass the adjustment amount with a journal entry to the account this document should have cleared",
@@ -163,8 +163,8 @@ export async function removeInboundLayer(
           where reversal.org_id = ${orgId}
             and reversal.reverses_movement_id = cost_layer_consumptions.issue_movement_id
        ) limit 1
-  `));
-  if (consumed.rows.length) {
+  `, "objects"));
+  if (consumed.length) {
     throw new DownstreamConsumptionError(
       "inventory from this movement has downstream consumption; reverse those issues/transfers first",
       movement.id,
@@ -180,8 +180,8 @@ export async function removeInboundLayer(
           where reversal.org_id = allocation.org_id
             and reversal.reverses_allocation_id = allocation.id
        ) limit 1
-  `));
-  if (landed.rows.length) {
+  `, "objects"));
+  if (landed.length) {
     throw new InventoryError(
       "this movement has downstream landed-cost allocations; reverse them before the inventory movement",
     );
@@ -223,8 +223,8 @@ export async function reverseInventoryJournal(
       from journal_entries
      where id = ${sourceEntryId} and org_id = ${orgId}
      for update
-  `));
-  const source = head.rows[0];
+  `, "objects"));
+  const source = head[0];
   const permittedOrigin = source?.origin === "inventory"
     || (options.allowManufacturingOrigin === true && source?.origin === "manufacturing");
   if (!source || !permittedOrigin || source.status !== "posted") {
@@ -241,7 +241,7 @@ export async function reverseInventoryJournal(
      where org_id = ${orgId} and id = ${source.book_id}
        and is_active and posts_gl
      for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!book) {
     throw new InventoryError("the source inventory journal book is not active for posting");
   }
@@ -258,18 +258,18 @@ export async function reverseInventoryJournal(
       from journal_lines
      where org_id = ${orgId} and entry_id = ${sourceEntryId}
      order by line_number
-  `));
-  if (!lines.rows.length)
+  `, "objects"));
+  if (!lines.length)
     throw new InventoryError("the source inventory journal has no lines");
 
-  const accountIds = [...new Set(lines.rows.map((line) => String(line.account_id)))];
+  const accountIds = [...new Set(lines.map((line) => String(line.account_id)))];
   await assertInventoryAccountsPostable(tx, orgId, accountIds);
   try {
     await validateSubsidiaryRestrictions(tx, {
       orgId,
       ctx: await loadSubsidiaryContext(tx, orgId),
       docSubsidiaryId: source.subsidiary_id,
-      lines: lines.rows.map((line) => ({
+      lines: lines.map((line) => ({
         accountId: String(line.account_id),
         amount: String(line.amount),
         subsidiaryId: String(line.subsidiary_id),
@@ -294,7 +294,7 @@ export async function reverseInventoryJournal(
       orgId,
       periodId: period.id,
       bookId: source.book_id,
-      subsidiaryIds: [...new Set([source.subsidiary_id, ...lines.rows.map((line) => String(line.subsidiary_id))])],
+      subsidiaryIds: [...new Set([source.subsidiary_id, ...lines.map((line) => String(line.subsidiary_id))])],
       modules: [],
     });
   } catch (error) {
@@ -318,7 +318,7 @@ export async function reverseInventoryJournal(
     ...(source.origin === "manufacturing" ? { custom: source.custom } : {}),
     actorId,
     closeModules: [],
-    lines: lines.rows.map((line) => ({
+    lines: lines.map((line) => ({
       accountId: String(line.account_id),
       subsidiaryId: String(line.subsidiary_id),
       amount: neg(String(line.amount)),
@@ -400,8 +400,8 @@ export async function reverseInventoryMovement(
              paired_movement_id, status
         from inventory_movements
        where org_id = ${orgId} and id = ${input.movementId}
-    `));
-    const peekedRequested = peeked.rows[0];
+    `, "objects"));
+    const peekedRequested = peeked[0];
     if (peekedRequested) {
       const peekedOutId =
         peekedRequested.kind === "transfer_out"
@@ -419,7 +419,7 @@ export async function reverseInventoryMovement(
              where org_id = ${orgId}
                and (id = ${peekedOutId} or paired_movement_id = ${peekedOutId})
              order by case when kind = 'transfer_out' then 0 else 1 end
-          `)).rows
+          `, "objects"))
           : [peekedRequested];
         await fencePositions(peekedPair);
       } else {
@@ -433,11 +433,11 @@ export async function reverseInventoryMovement(
         from inventory_movements
        where org_id = ${orgId} and id = ${input.movementId}
        for update
-    `));
-    const requested = sourceResult.rows[0];
+    `, "objects"));
+    const requested = sourceResult[0];
     if (!requested) throw new InventoryError("inventory movement not found");
-    const custody=await tx.execute(sql`select id from consignment_events where org_id=${orgId} and receipt_movement_id=${requested.id} limit 1`);
-    if(custody.rows.length)throw new InventoryError("Ownership acquisition has custody evidence — use an adjusting inventory transaction; its external custody cannot be silently restored by reversal");
+    const custody=await tx.execute(sql`select id from consignment_events where org_id=${orgId} and receipt_movement_id=${requested.id} limit 1`, "objects");
+    if(custody.length)throw new InventoryError("Ownership acquisition has custody evidence — use an adjusting inventory transaction; its external custody cannot be silently restored by reversal");
     if (requested.status !== "posted") {
       throw new InventoryError(
         "only posted inventory movements can be reversed",
@@ -452,9 +452,9 @@ export async function reverseInventoryMovement(
         from inventory_movements
        where org_id = ${orgId} and reverses_movement_id = ${requested.id}
        order by created_at, id
-    `));
-    if (existing.rows.length) {
-      const first = existing.rows[0]!;
+    `, "objects"));
+    if (existing.length) {
+      const first = existing[0]!;
       const group = (await tx.execute<{ id: string }>(sql`
         select id
           from inventory_movements
@@ -466,9 +466,9 @@ export async function reverseInventoryMovement(
              or paired_movement_id = ${first.paired_movement_id}
            )
          order by id
-      `));
+      `, "objects"));
       return {
-        movementIds: group.rows.map((row) => row.id),
+        movementIds: group.map((row) => row.id),
         entryId: first.journal_entry_id,
         alreadyReversed: true,
       };
@@ -506,15 +506,15 @@ export async function reverseInventoryMovement(
            and (id = ${outId} or paired_movement_id = ${outId})
          order by case when kind = 'transfer_out' then 0 else 1 end
          for update
-      `));
+      `, "objects"));
       if (
-        pair.rows.length !== 2 ||
-        pair.rows[0]!.kind !== "transfer_out" ||
-        pair.rows[1]!.kind !== "transfer_in"
+        pair.length !== 2 ||
+        pair[0]!.kind !== "transfer_out" ||
+        pair[1]!.kind !== "transfer_in"
       ) {
         throw new InventoryError("transfer movement pair is incomplete");
       }
-      sources = pair.rows;
+      sources = pair;
     } else if (requested.kind === "receipt" || requested.kind === "issue") {
       sources = [requested];
     } else {
@@ -530,7 +530,7 @@ export async function reverseInventoryMovement(
     const sourceIds = sources.map((source) => source.id);
     const orderLine = (await tx.execute(sql`select id from transfer_order_lines
       where org_id=${orgId} and (ship_movement_id=any(${uuidArray(sourceIds)}::uuid[])
-        or receive_movement_id=any(${uuidArray(sourceIds)}::uuid[])) limit 1`)).rows[0];
+        or receive_movement_id=any(${uuidArray(sourceIds)}::uuid[])) limit 1`, "objects"))[0];
     if (orderLine) {
       throw new InventoryError("transfer-order movements require a controlled order reversal; individual movement reversal would leave shipment accounting outstanding");
     }
@@ -543,8 +543,8 @@ export async function reverseInventoryMovement(
            sql`, `,
          )})
        limit 1
-    `));
-    if (prior.rows.length) {
+    `, "objects"));
+    if (prior.length) {
       throw new InventoryError(
         "one leg of this inventory operation is already reversed",
       );
@@ -570,8 +570,8 @@ export async function reverseInventoryMovement(
              sql`, `,
            )})
          limit 1
-      `));
-      if (attached.rows.length) {
+      `, "objects"));
+      if (attached.length) {
         throw new InventoryError(
           "the source journal contains a compound inventory operation; use its operation-specific reversal",
         );
@@ -593,8 +593,8 @@ export async function reverseInventoryMovement(
           from serials
          where id = ${serialId} and org_id = ${orgId}
          for update
-      `));
-      const current = serial.rows[0];
+      `, "objects"));
+      const current = serial[0];
       if (!current) {
         throw new InventoryError(
           "serial evidence is missing for the inventory movement",

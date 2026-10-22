@@ -114,9 +114,9 @@ export async function disabledDocKinds(orgId: string): Promise<string[]> {
 /** Resolve the org's base currency (used when minting a draft). */
 async function orgBaseCurrency(orgId: string): Promise<string> {
   const r = (await db.execute<{ base_currency: string }>(
-    sql`select base_currency from orgs where id = ${orgId}`,
+    sql`select base_currency from orgs where id = ${orgId}`, 'objects',
   ))
-  return r.rows[0]?.base_currency ?? 'CAD'
+  return r[0]?.base_currency ?? 'CAD'
 }
 
 /**
@@ -136,7 +136,7 @@ export async function createDocumentSeed(
     orgBaseCurrency(orgId),
     businessToday(orgId),
     db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and parent_id is null`),
+      select id from subsidiaries where org_id = ${orgId} and parent_id is null`, 'objects'),
   ])
   return {
     doc: {
@@ -145,7 +145,7 @@ export async function createDocumentSeed(
       kind,
       status: 'draft',
       document_number: null,
-      subsidiary_id: root.rows[0]?.id ?? null,
+      subsidiary_id: root[0]?.id ?? null,
       party_id: null,
       document_date: documentDate,
       due_date: null,
@@ -191,8 +191,8 @@ export async function createDocumentDraft(
   let subsidiaryId: string | null
   if (options.allowedSubsidiaryIds === null && options.subsidiaryId === undefined) {
     const root = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and parent_id is null`))
-    subsidiaryId = root.rows[0]?.id ?? null
+      select id from subsidiaries where org_id = ${orgId} and parent_id is null`, 'objects'))
+    subsidiaryId = root[0]?.id ?? null
   } else {
     const resolved = resolveDraftSubsidiary(options.allowedSubsidiaryIds, options.subsidiaryId)
     if (!resolved.ok) throw new DocumentDraftError(resolved.error)
@@ -309,8 +309,8 @@ export async function precomputeDocumentTotalsForCreate(
   if (currency !== undefined) {
     currency = String(currency).trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(currency)) throw new DocumentEditError(422, 'invalid currency')
-    const found = await db.execute(sql`select 1 from currencies where code = ${currency}`)
-    if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+    const found = await db.execute(sql`select 1 from currencies where code = ${currency}`, 'objects')
+    if (!found[0]) throw new DocumentEditError(422, 'invalid currency')
   } else {
     currency = await orgBaseCurrency(orgId)
   }
@@ -837,21 +837,17 @@ async function assertVendorCreditReturnDispositions(
   ]
   if (stockedIds.length === 0) return
   const stocked = new Set(
-    (
-      await tx.execute<{ id: string }>(sql`
+    (await tx.execute<{ id: string }>(sql`
       select p.item_id as id from item_inventory_profiles p
-       where p.org_id = ${orgId} and p.item_id in (${sql.join(stockedIds.map((id) => sql`${id}::uuid`), sql`, `)})`)
-    ).rows.map((row) => row.id),
+       where p.org_id = ${orgId} and p.item_id in (${sql.join(stockedIds.map((id) => sql`${id}::uuid`), sql`, `)})`, 'objects')).map((row) => row.id),
   )
   if (stocked.size === 0) return
   const labels = new Map(
-    (
-      await tx.execute<{ id: string; label: string }>(sql`
+    (await tx.execute<{ id: string; label: string }>(sql`
       select item.id, coalesce(nullif(btrim(item.code), ''), item.name) as label
         from items item
        where item.org_id = ${orgId}
-         and item.id in (${sql.join([...stocked].map((id) => sql`${id}::uuid`), sql`, `)})`)
-    ).rows.map((row) => [row.id, row.label] as const),
+         and item.id in (${sql.join([...stocked].map((id) => sql`${id}::uuid`), sql`, `)})`, 'objects')).map((row) => [row.id, row.label] as const),
   )
   for (let i = 0; i < preparedLines.length; i++) {
     const line = preparedLines[i]!
@@ -893,7 +889,7 @@ async function conversionSourceLabel(
   orgId: string,
   documentId: string,
 ): Promise<string> {
-  const sources = (await tx.execute<{ kind: string; documentNumber: string }>(sql`
+  const sources = await tx.execute<{ kind: string; documentNumber: string }>(sql`
     select source.kind, source.document_number as "documentNumber"
       from document_links link
       join documents source
@@ -904,7 +900,7 @@ async function conversionSourceLabel(
        and link.link_type in ('bills', 'created_from')
        and source.kind in ('quote', 'sales_order', 'purchase_order')
      order by source.document_number
-  `)).rows
+  `, 'objects')
   if (sources.length === 0) return 'its purchase order'
   return sources.map((source) => `${source.kind.replaceAll('_', ' ')} ${source.documentNumber}`).join(', ')
 }
@@ -1023,8 +1019,8 @@ async function planDocumentEntryAllocations(args: {
      where document_id = ${args.documentId} and org_id = ${orgId}
        and distribution_group_id is not null
      group by distribution_group_id
-  `)
-  for (const row of stored.rows) {
+  `, 'objects')
+  for (const row of stored) {
     existingGroups.set(row.groupId, {
       groupId: row.groupId,
       ruleId: row.ruleId,
@@ -1043,8 +1039,7 @@ async function planDocumentEntryAllocations(args: {
   }
 
   // Header-default dims feed the match coordinate when a line leaves them blank.
-  const headerRow = (
-    await db.execute<{
+  const headerRow = (await db.execute<{
       departmentId: string | null
       projectId: string | null
       locationId: string | null
@@ -1055,8 +1050,7 @@ async function planDocumentEntryAllocations(args: {
              location_id as "locationId", class_id as "classId",
              subsidiary_id as "subsidiaryId"
         from documents where id = ${args.documentId} and org_id = ${orgId}
-    `)
-  ).rows[0]
+    `, 'objects'))[0]
   const docContext: EntryDocumentContext = {
     kind: args.kind,
     departmentId: args.header.departmentId ?? headerRow?.departmentId ?? null,
@@ -1212,8 +1206,8 @@ export async function applyDocumentEdit(
     const subsidiary = (await runner.execute(sql`
       select 1 from subsidiaries
        where id = ${body.subsidiaryId} and org_id = ${orgId}
-         and is_active and not is_elimination`))
-    if (!subsidiary.rows.length) throw new DocumentEditError(422, 'invalid subsidiary')
+         and is_active and not is_elimination`, 'objects'))
+    if (!subsidiary.length) throw new DocumentEditError(422, 'invalid subsidiary')
   }
   // Header dates and reference ids reach DATE/uuid columns uncast: a malformed
   // value dies at the storage layer as a raw 500 instead of a domain error.
@@ -1251,8 +1245,8 @@ export async function applyDocumentEdit(
   if (body.locationId !== undefined && body.locationId !== null) headerOwners.push({ label: 'location', table: 'locations', value: body.locationId })
   if (body.classId !== undefined && body.classId !== null) headerOwners.push({ label: 'class', table: 'classes', value: body.classId })
   for (const ref of headerOwners) {
-    const owned = await runner.execute(sql`select 1 from ${sql.raw(`"${ref.table}"`)} where id = ${ref.value} and org_id = ${orgId}`)
-    if (!owned.rows.length) throw new DocumentEditError(404, `${ref.label} not found in this organization`)
+    const owned = await runner.execute(sql`select 1 from ${sql.raw(`"${ref.table}"`)} where id = ${ref.value} and org_id = ${orgId}`, 'objects')
+    if (!owned.length) throw new DocumentEditError(404, `${ref.label} not found in this organization`)
   }
   // Subsidiary scope of a newly assigned party. The pickers only offer
   // subsidiary-visible parties, so a scoped-out party id arrives only by
@@ -1263,8 +1257,8 @@ export async function applyDocumentEdit(
   if (body.partyId !== undefined && body.partyId !== null && body.partyId !== current.partyId) {
     if (ctx.customerPartyId === undefined || body.partyId !== ctx.customerPartyId) {
       const partyScope = await runner.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`)
-      const partySubsidiaryId = partyScope.rows[0]?.subsidiary_id ?? null
+        select subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`, 'objects')
+      const partySubsidiaryId = partyScope[0]?.subsidiary_id ?? null
       // bypass: user-keyed-lookup — the actor can belong to a different organization.
       const allowed = await withBypassContext(() => actorAllowedSubsidiaryIds(db, orgId, ctx.userId))
       if (!subsidiaryScopeAllows(allowed, partySubsidiaryId, { orgWideNull: true })) {
@@ -1277,12 +1271,12 @@ export async function applyDocumentEdit(
   if (body.currency !== undefined) {
     const code = String(body.currency).trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
-    const found = (await runner.execute(sql`select 1 from currencies where code = ${code}`)) as { rows: unknown[] }
-    if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+    const found = await runner.execute(sql`select 1 from currencies where code = ${code}`, 'objects')
+    if (!found[0]) throw new DocumentEditError(422, 'invalid currency')
     const entityCurrency = referenceSubsidiaryId
       ? (await runner.execute<{ currency: string | null }>(sql`
           select nullif(trim(base_currency), '') as currency from subsidiaries
-           where org_id = ${orgId} and id = ${referenceSubsidiaryId} and is_active`)).rows[0]?.currency
+           where org_id = ${orgId} and id = ${referenceSubsidiaryId} and is_active`, 'objects'))[0]?.currency
       : undefined
     if (!(await isFeatureEnabled(orgId, 'multiCurrency')) && code !== entityCurrency) {
       throw new DocumentEditError(404, 'not found')
@@ -1421,8 +1415,8 @@ export async function applyDocumentEdit(
              and ${referenceSubsidiaryScope}
              ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
            for key share
-        `))
-        if (!owned.rows[0]) throw new DocumentEditError(404, `${fundingNoun} not found for this subsidiary`)
+        `, 'objects'))
+        if (!owned[0]) throw new DocumentEditError(404, `${fundingNoun} not found for this subsidiary`)
         headerCustom = { ...(headerCustom ?? current.custom ?? {}), controlAccountId: override }
       }
     }
@@ -1454,8 +1448,8 @@ export async function applyDocumentEdit(
              and ${referenceSubsidiaryScope}
              ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
            for key share
-        `))
-        if (!owned.rows[0]) {
+        `, 'objects'))
+        if (!owned[0]) {
           throw new DocumentEditError(422,
             `choose an active ${noun} available to this document's subsidiary, or clear the choice to use the ${controlSide === 'ar' ? "customer's" : "vendor's"} default`,
             { controlAccountId: `not an active ${noun} for this subsidiary` })
@@ -1630,8 +1624,8 @@ export async function applyDocumentEdit(
         } else {
           const stored = await runner.execute<{ kind: string; minor: string }>(sql`
             select kind, amount_minor::text as minor from document_tenders
-             where org_id = ${orgId} and document_id = ${id} order by position`)
-          facts = stored.rows.map((row) => ({ kind: row.kind, amountMinor: BigInt(row.minor) }))
+             where org_id = ${orgId} and document_id = ${id} order by position`, 'objects')
+          facts = stored.map((row) => ({ kind: row.kind, amountMinor: BigInt(row.minor) }))
         }
         // Parts ride the freshly supplied tenders when present; otherwise
         // the stored close-out's parts (an over/short-only edit resubmits no
@@ -1821,10 +1815,10 @@ export async function applyDocumentEdit(
     }
     // Native withholding inputs survive a partial line edit by stable identity.
     // The later document revision lock fences this snapshot against a concurrent edit.
-    const storedWithholding = (await runner.execute<{
+    const storedWithholding = await runner.execute<{
       id: string; withholdingTreatment: DocumentLineInput['withholdingTreatment']; withholdingMaterialsCost: string | null
     }>(sql`select id, withholding_treatment as "withholdingTreatment", withholding_materials_cost::text as "withholdingMaterialsCost"
-      from document_lines where org_id = ${orgId} and document_id = ${id}`)).rows
+      from document_lines where org_id = ${orgId} and document_id = ${id}`, 'objects')
     const withholdingById = new Map(storedWithholding.map(line => [line.id, line]))
     body.lines = body.lines.map((line, index) => {
       const source = submittedLineKeys?.[index] ? withholdingById.get(submittedLineKeys[index]!) : undefined
@@ -1856,7 +1850,7 @@ export async function applyDocumentEdit(
            where a.org_id = ${orgId} and a.id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])
              and ${referenceSubsidiaryScope}
              ${ctx.allowedSubsidiaryIds === undefined ? sql`` : subsidiaryVisibleFilter(sql`a.subsidiary_id`, ctx.allowedSubsidiaryIds, { orgWideNull: true })}
-           for key share`)).rows
+           for key share`, 'objects'))
       : []
     if (malformedLineAccounts.length > 0 || usableLineAccounts.length !== lineAccountIds.length) {
       throw new DocumentEditError(404, 'account not found for this subsidiary')
@@ -1891,7 +1885,7 @@ export async function applyDocumentEdit(
       if (ids.length === 0) continue
       const owned = new Set((await runner.execute<{ id: string }>(sql`
         select id from ${sql.raw(`"${def.table}"`)}
-         where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)).rows.map((r) => r.id))
+         where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')).map((r) => r.id))
       const foreign = ids.find((v) => !owned.has(v))
       if (foreign !== undefined) {
         const lineNumber = body.lines.findIndex((l) => l[def.key] === foreign) + 1
@@ -1936,7 +1930,7 @@ export async function applyDocumentEdit(
             orgId,
             kind: current.kind,
             currency: currency ?? (await runner.execute<{ currency: string }>(sql`
-              select currency from documents where id = ${id} and org_id = ${orgId}`)).rows[0]?.currency ?? await orgBaseCurrency(orgId),
+              select currency from documents where id = ${id} and org_id = ${orgId}`, 'objects'))[0]?.currency ?? await orgBaseCurrency(orgId),
             documentDate: taxDate,
             partyId: body.partyId !== undefined ? body.partyId : current.partyId,
             subsidiaryId: body.subsidiaryId !== undefined ? body.subsidiaryId : current.subsidiaryId,
@@ -1976,7 +1970,7 @@ export async function applyDocumentEdit(
         }
         if (activeFacilitators === null) {
           activeFacilitators = new Set((await runner.execute<{ name: string }>(sql`
-            select name from marketplace_facilitators where org_id = ${orgId} and is_active`)).rows.map((row) => row.name))
+            select name from marketplace_facilitators where org_id = ${orgId} and is_active`, 'objects')).map((row) => row.name))
         }
         const refusal = marketplaceFacilitatorNameRefusal(facilitatorName, activeFacilitators)
         if (refusal !== null) throw new DocumentEditError(422, `Line ${i + 1}: ${refusal}`)
@@ -2093,7 +2087,7 @@ export async function applyDocumentEdit(
           from documents
          where id = ${id} and org_id = ${orgId}
          for update
-      `)).rows[0] ?? null,
+      `, 'objects'))[0] ?? null,
     mutate: async (tx, locked) => {
       const consolidationRefusal = await consolidationSourceRefusal(tx, orgId, id)
       if (consolidationRefusal) throw new DocumentEditError(422, consolidationRefusal)
@@ -2120,7 +2114,7 @@ export async function applyDocumentEdit(
       // replaces the lines. Preflight cannot pin a later configuration edit.
       if(preparedLines) {
         const native=await resolveCanadianGoodsTaxes(orgId,{kind:current.kind,subsidiaryId:targetSubsidiaryId,documentDate:body.documentDate ?? current.documentDate,
-          currency:currency ?? (await tx.execute<{currency:string}>(sql`select currency from documents where org_id=${orgId} and id=${id}`)).rows[0]!.currency,
+          currency:currency ?? (await tx.execute<{currency:string}>(sql`select currency from documents where org_id=${orgId} and id=${id}`, 'objects'))[0]!.currency,
           selection:(headerCustom ?? current.custom)?.canadianGoodsTax},preparedLines,tx)
         if(!targetSubsidiaryId && native.size)targetSubsidiaryId=native.values().next().value!.snapshot.subsidiaryId
         for(const [index,selected] of native)if(preparedLines[index]!.nativeGoodsTax?.fingerprint!==selected.snapshot.fingerprint)
@@ -2148,12 +2142,12 @@ export async function applyDocumentEdit(
           if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
         }
       } else if (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) {
-        const existingDims = (await tx.execute<{ extra_dims: Record<string, string | null> | null }>(sql`
+        const existingDims = await tx.execute<{ extra_dims: Record<string, string | null> | null }>(sql`
           select extra_dims from document_lines
            where org_id = ${orgId} and document_id = ${id}
            order by line_number
            for update
-        `)).rows
+        `, 'objects')
         for (const [index, line] of existingDims.entries()) {
           const error = await extraDimsSubsidiaryError(orgId, line.extra_dims ?? {}, targetSubsidiaryId ?? '', segments, tx)
           if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
@@ -2172,7 +2166,7 @@ export async function applyDocumentEdit(
       // keep the legacy identity-less path; their supplied identities are
       // still validated below.
       if (preparedLines && submittedLineKeys) {
-        const persisted = (await tx.execute<{
+        const persisted = await tx.execute<{
           id: string
           itemId: string | null
           quantity: string | null
@@ -2186,7 +2180,7 @@ export async function applyDocumentEdit(
            where document_id = ${id} and org_id = ${orgId}
            order by line_number
            for update
-        `)).rows
+        `, 'objects')
         // Persisted ids compare in the same canonical form: the driver returns
         // uuid columns lowercase, but the match must not depend on that.
         const byId = new Map(persisted.map((row) => [row.id.toLowerCase(), row]))
@@ -2414,10 +2408,10 @@ export async function applyDocumentEdit(
         // those rows through the generic editor's smaller column set.
         if (generated) {
           if (preparedLines && current.kind === 'vendor_bill') {
-            const sourceLines = (await tx.execute<{ id: string; treatment: DocumentLineInput['withholdingTreatment']; cost: string | null }>(sql`
+            const sourceLines = await tx.execute<{ id: string; treatment: DocumentLineInput['withholdingTreatment']; cost: string | null }>(sql`
               select id, withholding_treatment as treatment, withholding_materials_cost::text as cost
                 from document_lines where org_id=${orgId} and document_id=${id} order by line_number
-            `)).rows
+            `, 'objects')
             for (let index = 0; index < preparedLines.length; index++) {
               const line = preparedLines[index]!, sourceLine = sourceLines[index]
               const changed = sourceLine && (sourceLine.treatment !== line.withholdingTreatment ||
@@ -2475,14 +2469,14 @@ export async function applyDocumentEdit(
           select currency, party_id as "partyId", document_number as "documentNumber"
             from documents
            where id = ${id} and org_id = ${orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         const storedParty = child == null || child.partyId == null ? child?.partyId ?? null : child.partyId.toLowerCase()
         const currencyChange = currency !== undefined && child != null && currency !== child.currency
         const partyChange = wantedParty !== undefined && child != null && wantedParty !== storedParty
         if (currencyChange || partyChange) {
           // Only order sources establish conversion provenance. Other 'bills'
           // edges (for example field-ticket billing) are out of scope.
-          const sources = (await tx.execute<{ kind: string; documentNumber: string; currency: string; partyId: string | null; partyName: string | null }>(sql`
+          const sources = await tx.execute<{ kind: string; documentNumber: string; currency: string; partyId: string | null; partyName: string | null }>(sql`
             select source.kind, source.document_number as "documentNumber", source.currency,
                    source.party_id as "partyId", party.display_name as "partyName"
               from document_links link
@@ -2497,7 +2491,7 @@ export async function applyDocumentEdit(
                and link.link_type in ('bills', 'created_from')
                and source.kind in ('quote', 'sales_order', 'purchase_order')
              order by source.document_number
-          `)).rows
+          `, 'objects')
           // Any conflicting source refuses: with several edges, picking one
           // to compare against would be arbitrary.
           if (currencyChange) {
@@ -2558,13 +2552,13 @@ export async function applyDocumentEdit(
 
       const auditBefore = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
       for (const line of generatedWithholdingUpdates) {
-        const updated = await tx.execute(sql`update document_lines
+        const updated = await tx.execute<never>(sql`update document_lines
           set withholding_treatment=${line.treatment ?? null}, withholding_materials_cost=${line.cost},
               updated_by=${ctx.userId}, updated_at=now()
           where org_id=${orgId} and document_id=${id} and id=${line.id}`)
         if (updated.rowCount !== 1) throw new DocumentEditError(409, 'The generated bill line changed; reload the bill before saving')
       }
-      oldLines = ((await tx.execute<{
+      oldLines = await tx.execute<{
         lineNumber: number
         accountId: string | null
         departmentId: string | null
@@ -2576,7 +2570,7 @@ export async function applyDocumentEdit(
           from document_lines
          where document_id = ${id} and org_id = ${ctx.orgId}
          order by line_number
-      `))).rows
+      `, 'objects')
 
       if (preparedLines) {
         // Billed-time/cost provenance the editor's column set cannot express
@@ -2587,7 +2581,7 @@ export async function applyDocumentEdit(
         // the persisted line identity. Replacement rows inherit only their
         // submitted source identity, so reordering and deletion cannot move
         // labor, cost or work-period evidence onto an unrelated line.
-        const provenance = (await tx.execute<{
+        const provenance = await tx.execute<{
           id: string
           timeEntryId: string | null
           employeeId: string | null
@@ -2608,17 +2602,17 @@ export async function applyDocumentEdit(
             from document_lines
            where document_id = ${id} and org_id = ${orgId}
            order by line_number
-        `)).rows
+        `, 'objects')
         const provenanceById = new Map(provenance.map(line => [line.id.toLowerCase(), line]));
         const oldIds = `{${provenance.map(line => line.id).join(',')}}`;
-        const timeRefs = (await tx.execute<{ id: string; oldId: string }>(sql`
+        const timeRefs = await tx.execute<{ id: string; oldId: string }>(sql`
           select id, invoiced_by_line_id as "oldId" from time_entries
           where org_id=${orgId} and invoiced_by_line_id=any(${oldIds}::uuid[])
-          order by id for update`)).rows;
-        const costRefs = (await tx.execute<{ id: string; oldId: string }>(sql`
+          order by id for update`, 'objects');
+        const costRefs = await tx.execute<{ id: string; oldId: string }>(sql`
           select id, billed_by_line_id as "oldId" from document_lines
           where org_id=${orgId} and billed_by_line_id=any(${oldIds}::uuid[])
-          order by id for update`)).rows;
+          order by id for update`, 'objects');
         const hasProtectedProvenance = timeRefs.length > 0 || costRefs.length > 0 || provenance.some(line =>
           line.timeEntryId !== null || line.employeeId !== null || line.timeTypeId !== null ||
           line.equipmentUnitId !== null || line.rateVersionId !== null || line.billRate !== null ||
@@ -2683,22 +2677,22 @@ export async function applyDocumentEdit(
                     ${workPeriodSubmitted ? l.workTo ?? null : carry?.workTo ?? null},
                     ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn})
             returning id
-          `))
-          if (inserted.rows.length !== 1) throw new DocumentEditError(409, 'The replacement line was not saved; reload the draft before retrying')
-          insertedLineIds.push(inserted.rows[0]!.id)
-          if (sourceLineId) replacementById.set(sourceLineId, inserted.rows[0]!.id)
+          `, 'objects'))
+          if (inserted.length !== 1) throw new DocumentEditError(409, 'The replacement line was not saved; reload the draft before retrying')
+          insertedLineIds.push(inserted[0]!.id)
+          if (sourceLineId) replacementById.set(sourceLineId, inserted[0]!.id)
           await persistLineTaxComponents(tx, {
             orgId,
-            documentLineId: inserted.rows[0]!.id,
+            documentLineId: inserted[0]!.id,
             components: l.taxComponents,
             actorId: userId,
           })
-          if(l.nativeGoodsTax)await persistGoodsTaxSnapshot(tx,orgId,inserted.rows[0]!.id,l.nativeGoodsTax,userId)
+          if(l.nativeGoodsTax)await persistGoodsTaxSnapshot(tx,orgId,inserted[0]!.id,l.nativeGoodsTax,userId)
           if (l.providerQuote) {
             await persistTaxQuote(
               orgId,
               l.providerQuote.providerConfigId,
-              { ...l.providerQuote.request, documentLineId: inserted.rows[0]!.id },
+              { ...l.providerQuote.request, documentLineId: inserted[0]!.id },
               l.providerQuote.result,
               userId,
               tx,
@@ -2744,8 +2738,8 @@ export async function applyDocumentEdit(
             ? sql`update time_entries set invoiced_by_line_id=${target}
                 where org_id=${orgId} and id=${reference.id} and invoiced_by_line_id=${reference.oldId} returning id`
             : sql`update time_entries set invoiced_by_line_id=null,billing_status='unbilled'
-                where org_id=${orgId} and id=${reference.id} and invoiced_by_line_id=${reference.oldId} returning id`);
-          if (moved.rows.length !== 1) throw new DocumentEditError(409, 'A billed time source changed; reload the draft before saving');
+                where org_id=${orgId} and id=${reference.id} and invoiced_by_line_id=${reference.oldId} returning id`, 'objects');
+          if (moved.length !== 1) throw new DocumentEditError(409, 'A billed time source changed; reload the draft before saving');
         }
         if (costRefs.length > 0) {
           // Native paired authority changes provenance metadata only; the
@@ -2756,8 +2750,8 @@ export async function applyDocumentEdit(
             for (const reference of costRefs) {
               const target = replacementById.get(reference.oldId) ?? null;
               const moved = await tx.execute(sql`update document_lines set billed_by_line_id=${target}
-                where org_id=${orgId} and id=${reference.id} and billed_by_line_id=${reference.oldId} returning id`);
-              if (moved.rows.length !== 1) throw new DocumentEditError(409, 'A billed cost source changed; reconcile its retained billing identity before saving');
+                where org_id=${orgId} and id=${reference.id} and billed_by_line_id=${reference.oldId} returning id`, 'objects');
+              if (moved.length !== 1) throw new DocumentEditError(409, 'A billed cost source changed; reconcile its retained billing identity before saving');
             }
           } finally {
             await tx.execute(sql`set local openbooks.migration = off`)
@@ -3104,8 +3098,8 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
     // a sequence number, and a changed payload must 409 before any write.
     // Only a key with no same-org row — and no insert image — proceeds.
     const existing = await tx.execute<{ id: string; documentNumber: string }>(sql`
-      select id, document_number as "documentNumber" from documents where id = ${key} and org_id = ${orgId}`)
-    if (existing.rows[0]) return resolveCreateReplay(tx, orgId, key, existing.rows[0], match)
+      select id, document_number as "documentNumber" from documents where id = ${key} and org_id = ${orgId}`, 'objects')
+    if (existing[0]) return resolveCreateReplay(tx, orgId, key, existing[0], match)
     const documentNumber = await allocateDocumentNumber(tx, orgId, kind, cfg.numberPrefix)
     const inserted = await tx.execute<{ id: string }>(sql`
       insert into documents
@@ -3116,11 +3110,11 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
               ${JSON.stringify(input.nativeCustom ?? {})}::jsonb, ${userId})
       -- A conflicting document identity returns no row and raises the scoped creation refusal below.
       on conflict (id) do nothing
-      returning id`)
+      returning id`, 'objects')
     // A same-key same-org row would have been found above under our advisory
     // lock, so a conflict here is another org's key: fail closed without
     // disclosing it.
-    if (!inserted.rows[0]) throw new DocumentCreateConflict()
+    if (!inserted[0]) throw new DocumentCreateConflict()
     // Audit contract for a first create is TWO events, stated exactly: this
     // insert carries the request image (what was asked), and the writer's
     // update below carries before/after snapshots (initialization → final
@@ -3143,7 +3137,7 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
              ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
         from documents
        where id = ${key} and org_id = ${orgId}
-    `)).rows[0] ?? null
+    `, 'objects'))[0] ?? null
     if (!current) throw new Error(`document ${key} disappeared during initialization`)
     const deferredUpdate = await applyDocumentEdit(
       key,
@@ -3177,8 +3171,7 @@ async function resolveCreateReplay(
   prior: { id: string; documentNumber: string },
   match: { kind: string; body: unknown },
 ): Promise<DocumentCreateResult> {
-  const original = (
-    await tx.execute<{ after: unknown }>(sql`
+  const original = (await tx.execute<{ after: unknown }>(sql`
       select changes->'after' as after
         from audit_log
        where org_id = ${orgId}
@@ -3188,8 +3181,7 @@ async function resolveCreateReplay(
          and request_id = ${key}
        order by at asc
        limit 1
-    `)
-  ).rows[0]?.after
+    `, 'objects'))[0]?.after
   // No insert image (a legacy draft row that happens to carry this id, or a
   // rolled-back attempt's ghost): the key is consumed by something this
   // request did not create — fail closed rather than adopt it.
@@ -3214,15 +3206,15 @@ async function resolveCreateCurrency(
   if (currency !== undefined) {
     const code = String(currency).trim().toUpperCase()
     if (!/^[A-Z]{3}$/.test(code)) throw new DocumentEditError(422, 'invalid currency')
-    const found = await db.execute(sql`select 1 from currencies where code = ${code}`)
-    if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
+    const found = await db.execute(sql`select 1 from currencies where code = ${code}`, 'objects')
+    if (!found[0]) throw new DocumentEditError(422, 'invalid currency')
     return code
   }
   if (!subsidiaryId)
     throw new DocumentEditError(422, 'select a legal entity or enter a document currency')
   const entity = (await db.execute<{ base_currency: string | null }>(sql`
     select base_currency from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`)).rows[0]
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`, 'objects'))[0]
   if (!entity)
     throw new DocumentEditError(422, 'select an active legal entity before creating the document')
   if (!entity.base_currency)

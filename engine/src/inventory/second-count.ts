@@ -52,8 +52,7 @@ export async function recordSecondCount(
       throw new InventoryError(
         "Return the count to counting before recording a second count",
       );
-    const before = (
-      await tx.execute<{
+    const before = (await tx.execute<{
         expected_quantity: string;
         first_counted_quantity: string | null;
         variance_tolerance: string | null;
@@ -61,8 +60,7 @@ export async function recordSecondCount(
         serial_id: string | null;
       }>(sql`
       select serial_id,expected_quantity::text,first_counted_quantity::text,variance_tolerance::text,second_counted_quantity::text from stock_count_lines
-      where org_id=${orgId} and stock_count_id=${header.id} and id=${input.lineId} and adjustment_movement_id is null for update`)
-    ).rows[0];
+      where org_id=${orgId} and stock_count_id=${header.id} and id=${input.lineId} and adjustment_movement_id is null for update`, "objects"))[0];
     if (!before || before.first_counted_quantity === null)
       throw new InventoryError(
         "Record the first count before the second observation",
@@ -94,14 +92,14 @@ export async function recordSecondCount(
     const changed =
       await tx.execute(sql`update stock_count_lines set counted_quantity=${quantity},second_counted_quantity=${quantity},
       second_counted_by=${actorId},second_counted_at=now(),updated_by=${actorId},updated_at=now()
-      where org_id=${orgId} and id=${input.lineId} and stock_count_id=${header.id} returning id`);
-    if (!changed.rows.length)
+      where org_id=${orgId} and id=${input.lineId} and stock_count_id=${header.id} returning id`, "objects");
+    if (!changed.length)
       throw new InventoryError("Count line changed — reload and retry");
     const audit =
       await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${orgId},'stock_count_lines',${input.lineId},'update',
-      ${JSON.stringify({ operation: "second_count", countId: header.id, reason: reason || "Second count observation", before, after: { secondCountedQuantity: quantity } })}::jsonb,${actorId}) returning id`);
-    if (!audit.rows.length)
+      ${JSON.stringify({ operation: "second_count", countId: header.id, reason: reason || "Second count observation", before, after: { secondCountedQuantity: quantity } })}::jsonb,${actorId}) returning id`, "objects");
+    if (!audit.length)
       throw new InventoryError("Second count was not audited");
     return { lineId: input.lineId, secondCountedQuantity: quantity };
   }));

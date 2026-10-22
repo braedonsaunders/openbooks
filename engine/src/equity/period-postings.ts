@@ -133,13 +133,13 @@ export async function closeEquityPostings(orgId: string, input: { through: strin
   if (!(await orgFeatureEnabled(orgId, EQUITY_FEATURE_KEY))) return out;
   return withOrgTransaction(orgId, async () => {
     const scoped = input.subsidiaryIds.length > 0;
-    const entities = (await db.execute<{ id: string; name: string; currency: string }>(sql`
+    const entities = await db.execute<{ id: string; name: string; currency: string }>(sql`
       select s.id, s.name, nullif(trim(s.base_currency), '') as currency from subsidiaries s
        where s.org_id = ${orgId} and s.is_active and not s.is_elimination
          and nullif(trim(s.base_currency), '') is not null
          and exists (select 1 from equity_securities q where q.org_id = s.org_id and q.subsidiary_id = s.id and q.issue_date <= ${input.through}::date)
          ${scoped ? sql`and s.id = any(${`{${input.subsidiaryIds.join(",")}}`}::uuid[])` : sql``}
-       order by s.name, s.id`)).rows;
+       order by s.name, s.id`, "objects");
     for (const entity of entities) {
       const due = await equityPostingsDue(orgId, entity.id, entity.currency, input.through);
       if (due.compensation.due) out.compensation.push({ subsidiaryId: entity.id, name: entity.name, refusal: due.compensation.refusal?.message ?? null });
@@ -173,14 +173,14 @@ export async function nextEquityRunPeriod(input: { orgId: string; actorId: strin
     await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
     const table = input.kind === "compensation" ? sql`equity_compensation_runs` : sql`equity_interest_runs`;
     const last = (await db.execute<{ through: string | null }>(sql`
-      select max(through_date)::text as through from ${table} where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId}`)).rows[0]?.through ?? null;
-    const periods = (await db.execute<{ id: string; fiscal_year: number; period_number: number; ends_on: string }>(sql`
+      select max(through_date)::text as through from ${table} where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId}`, "objects"))[0]?.through ?? null;
+    const periods = await db.execute<{ id: string; fiscal_year: number; period_number: number; ends_on: string }>(sql`
       select p.id, p.fiscal_year, p.period_number, p.ends_on::text as ends_on from accounting_periods p
        where p.org_id = ${input.orgId} and not p.is_adjustment and p.ends_on <= ${input.today}::date
          ${last ? sql`and p.ends_on > ${last}::date` : sql``}
          and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${input.orgId} and is_default and is_active)
        order by p.ends_on, p.id
-       limit ${RUN_PERIOD_HORIZON}`)).rows;
+       limit ${RUN_PERIOD_HORIZON}`, "objects");
     const open: typeof periods = [];
     for (const period of periods) if (await postingPeriodOpen(db, input.orgId, input.subsidiaryId, period.ends_on)) open.push(period);
     if (open.length === 0) return null;

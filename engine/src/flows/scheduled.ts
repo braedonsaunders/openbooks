@@ -252,8 +252,8 @@ async function claimDueFlowOccurrences(
        -- A repeated due-node scan retains the one occurrence already created for this timestamp.
        on conflict (flow_id, node_id, occurred_at) do nothing
       returning id, node_id,occurred_at
-    `));
-  return inserted.rows.map((row) => ({
+    `, "objects"));
+  return inserted.map((row) => ({
     id: row.id,
     orgId: flow.orgId,
     flowId: flow.id,
@@ -298,8 +298,8 @@ async function takeOccurrenceForFiring(
          and attempt_count = ${fence.attemptCount}
          ${expectedUpdatedAt}
       returning attempt_count
-    `));
-  return taken.rows[0]?.attempt_count ?? null;
+    `, "objects"));
+  return taken[0]?.attempt_count ?? null;
 }
 
 /** Close a claim that cannot be fired to completion. */
@@ -412,9 +412,9 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
        -- the default instead of throwing 22P02 like the previous cast.
        and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
        and flow.graph::text like '%"scheduled"%'
-  `));
+  `, "objects"));
 
-  for (const { id } of candidates.rows) {
+  for (const { id } of candidates) {
     // bypass: scheduler-tick — the candidate scan returns flow ids only; this load discovers the owning organization.
     const [flow] = await withBypassContext(() =>
       db.select().from(schema.flows).where(eq(schema.flows.id, id)));
@@ -531,8 +531,8 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
          and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
        order by occ.updated_at
        limit ${RECOVERY_BATCH}
-    `));
-  for (const row of stale.rows) {
+    `, "objects"));
+  for (const row of stale) {
     const claim: FlowOccurrenceClaim = {
       id: row.id,
       orgId: row.org_id,

@@ -148,10 +148,10 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
            and run.direction = 'inbound'
            and run.purpose = 'customer_collections'
          order by run.status, run.id
-      `));
+      `, "objects"));
 
-      assert.equal(runs.rows.length, 3);
-      const failed = runs.rows.find((run) => run.status === "cancelled");
+      assert.equal(runs.length, 3);
+      const failed = runs.find((run) => run.status === "cancelled");
       assert.ok(failed);
       assert.deepEqual(failed, {
         id: failed.id,
@@ -163,7 +163,7 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
         source_document_ids: [],
       });
       assert.deepEqual(
-        runs.rows.find((run) => run.id === selectedA.id),
+        runs.find((run) => run.id === selectedA.id),
         {
           id: selectedA.id,
           status: "draft",
@@ -175,7 +175,7 @@ test("duplicate direct-debit selection is a domain failure", { skip: !DB }, asyn
         },
       );
       assert.deepEqual(
-        runs.rows.find((run) => run.id === selectedB.id),
+        runs.find((run) => run.id === selectedB.id),
         {
           id: selectedB.id,
           status: "draft",
@@ -255,7 +255,7 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
       const openLineId = (await db.execute<{ id: string }>(sql`
         select id from journal_lines
          where entry_id = ${invoiceEntryId} and org_id = ${org.orgId} and is_open_item
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       return { actorId, profileId, invoiceId, openLineId };
     });
 
@@ -299,10 +299,10 @@ test("direct-debit collection uses the transaction-ledger open, not base divided
                  limit 1) as instruction
           from payment_run_items item
          where item.org_id = ${org.orgId} and item.source_document_id = ${ids.invoiceId}
-      `));
+      `, "objects"));
       // The ledger's transaction open is 1000 - 0.10 = 999.90; dividing the
       // rounded base back by the rate must never shrink (or grow) it.
-      assert.deepEqual(items.rows[0], { gross: "999.9000", payment: "999.9000", instruction: "999.9000" });
+      assert.deepEqual(items[0], { gross: "999.9000", payment: "999.9000", instruction: "999.9000" });
     });
   } finally {
     await dropScratchOrg(org.orgId);

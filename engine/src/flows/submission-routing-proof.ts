@@ -38,8 +38,7 @@ export async function requireCompletedSubmissionRouting(input: {
     );
   }
   await lockApprovalSubject(input.orgId, input.subjectKind, input.subjectId);
-  const row = (
-    await db.execute<{
+  const row = (await db.execute<{
       flow_id: string;
       created_by: string | null;
       context: Record<string, unknown>;
@@ -63,8 +62,7 @@ export async function requireCompletedSubmissionRouting(input: {
          and other.subject_kind=r.subject_kind and other.subject_id=r.subject_id
          and other.trigger='on_submit' and other.id<>r.id and other.status in ('running','waiting','failed'))
      for share of r
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   const graph = automationGraphSchema.safeParse(row?.graph);
   const context = row?.context;
   const proof = context?.submissionRouting;

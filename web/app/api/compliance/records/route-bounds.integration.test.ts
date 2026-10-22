@@ -58,7 +58,7 @@ async function fixture() {
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, class_id, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', ${classId}, 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { org, partyId, requirementId };
 }
 
@@ -72,8 +72,8 @@ const post = (body: unknown) =>
   );
 
 async function recordCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_records where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_records where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

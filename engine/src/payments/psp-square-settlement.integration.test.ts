@@ -86,11 +86,11 @@ test("a Square payout imports idempotently and posts balanced with its bank depo
     const posted = await postSettlementBatch(org.orgId, first.batchId, userId, null);
     assert.ok(posted.entryId);
 
-    const lines = (await db.execute<{ account_id: string; amount: string }>(sql`
+    const lines = await db.execute<{ account_id: string; amount: string }>(sql`
       select jl.account_id, jl.amount::text as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where jl.org_id = ${org.orgId} and je.id = ${posted.entryId}`)).rows;
+       where jl.org_id = ${org.orgId} and je.id = ${posted.entryId}`, "objects");
     const total = lines.reduce((sum, l) => sum + BigInt(Math.round(Number(l.amount) * 10_000)), 0n);
     assert.equal(total, 0n, "the posted entry balances");
     // The bank leg is the Square payout amount, 79.54 CAD.

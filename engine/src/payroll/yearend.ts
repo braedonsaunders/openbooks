@@ -388,9 +388,9 @@ async function openingYearEndYtdByEmployee(
               and pb.tax_year = b.tax_year and coalesce(pb.insurable_ytd, 0) <> 0
          )
        )
-  `));
+  `, "objects"));
   const programs = await openingProgramBasesByEmployee(orgId, taxYear);
-  const accountRows = (await db.execute<{
+  const accountRows = await db.execute<{
     employee_party_id: string; program_key: string; filing_account_id: string; insurable_ytd: unknown;
   }>(sql`
     select ab.employee_party_id, ab.program_key, ab.filing_account_id, ab.insurable_ytd
@@ -402,7 +402,7 @@ async function openingYearEndYtdByEmployee(
        and original.sealed and original.original_country=${country}
        and ${currentOpeningLevySourceSql('original')}
      where ab.org_id = ${orgId} and ab.tax_year = ${taxYear}
-  `)).rows;
+  `, "objects");
   const accountBasesByEmployee = new Map<string, Record<string, { filingAccountId: string; insurableYtd: string }[]>>();
   for (const row of accountRows) {
     const bases = accountBasesByEmployee.get(row.employee_party_id) ?? {};
@@ -410,7 +410,7 @@ async function openingYearEndYtdByEmployee(
     bases[row.program_key]!.push({ filingAccountId: row.filing_account_id, insurableYtd: normalizeMoney(String(row.insurable_ytd)) });
     accountBasesByEmployee.set(row.employee_party_id, bases);
   }
-  const originalAmounts = new Map<string, OpeningYearEndYtd>(rows.rows.map((row) => [row.employee_party_id, {
+  const originalAmounts = new Map<string, OpeningYearEndYtd>(rows.map((row) => [row.employee_party_id, {
     pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
     insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
     cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
@@ -457,8 +457,8 @@ async function openingEmployeeProfiles(
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
        and prof.country = ${country}
      where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
-  `));
-  return new Map(rows.rows.map((row) => [row.employee_party_id, {
+  `, "objects"));
+  return new Map(rows.map((row) => [row.employee_party_id, {
     name: row.display_name,
     province: row.province ?? "",
     filingAccountId: row.filing_account_id,
@@ -549,9 +549,9 @@ async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4S
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name, c.filing_account_id, c.province
      order by p.display_name, min(c.pay_date), c.province
-  `));
+  `, "objects"));
 
-  const stubSlips = rows.rows.map((row) => {
+  const stubSlips = rows.map((row) => {
       const province = String(row.province ?? "");
       const isQuebec = province === QPIP_PROVINCE;
       if (isQuebec) assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
@@ -586,7 +586,7 @@ async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4S
     });
   // Original allocations carry their own RP/province and source-attested capped bases.
   // Current employee profiles supply no historical reporting attribution.
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const original = originalSlices.find(slice => slice.employeePartyId === String(row.employee_party_id));
     if (original && String(row.first_pay_date).slice(0, 10) <= original.coverageEnd) {
       throw new PayrollError("Committed payroll overlaps the certified original reporting coverage — reconcile the original carry-in and retained payroll before preparing T4 slips");
@@ -663,7 +663,7 @@ export async function t4Summary(
            from orgs where id = ${orgId}
        )
        ${billAccountFilter}
-  `));
+  `, "objects"));
   const total = (pick: (slip: T4Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
   return {
@@ -676,7 +676,7 @@ export async function t4Summary(
     employeeEi: total((s) => s.box18Ei),
     employerEi: total((s) => s.employerEi),
     incomeTax: total((s) => s.box22IncomeTax),
-    remitted: num(remitted.rows[0]?.amount),
+    remitted: num(remitted[0]?.amount),
   };
 }
 
@@ -876,11 +876,11 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
       left join pay_schedules sched on sched.id = prof.pay_schedule_id and sched.org_id = prof.org_id
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
-  `));
-  const row = header.rows[0];
+  `, "objects"));
+  const row = header[0];
   if (!row) return null;
   const retainedEvent=(await db.execute(sql`select id from payroll_roe_separation_events
-    where org_id=${orgId} and employee_party_id=${employeePartyId} and status in ('draft','confirmed','issued') limit 1`)).rows.length>0;
+    where org_id=${orgId} and employee_party_id=${employeePartyId} and status in ('draft','confirmed','issued') limit 1`, "objects")).length>0;
   if (!roeProfileAdmission(row.country, retainedEvent, row.display_name)) return null;
   const context = await roeWindowContext(orgId, employeePartyId, eventId);
   // Block 6 and the Block 15 window are STATUTORY declarations derived from
@@ -909,7 +909,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
   if (!finalPeriod) {
     throw new PayrollError(`${row.display_name} has no committed pay periods for the ROE reporting window`);
   }
-  const addressRows = (await db.execute<{
+  const addressRows = await db.execute<{
     line1: string | null; line2: string | null; city: string | null; region: string | null;
     postal_code: string | null; country: string | null; is_default_billing: boolean; is_default_shipping: boolean;
   }>(sql`
@@ -917,7 +917,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
       from addresses
      where org_id = ${orgId} and party_id = ${employeePartyId}
      order by is_default_shipping desc, is_default_billing desc, id
-  `)).rows;
+  `, "objects");
   const preferredAddresses = addressRows.filter((address) => address.is_default_shipping || address.is_default_billing);
   const address = preferredAddresses.length === 1 ? preferredAddresses[0]
     : addressRows.length === 1 ? addressRows[0] : null;
@@ -972,7 +972,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
        )
      order by stub.pay_date desc, stub.id desc, line.id desc
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (lateEarnings) {
     if (!lateEarnings.employmentId || !lateEarnings.earnedFrom || !lateEarnings.earnedTo
       || lateEarnings.earnedFrom > lateEarnings.earnedTo) {
@@ -991,7 +991,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
   if (!worksheet.sourceDocuments.length && !worksheet.historicalPeriods.some(period=>!period.nilPeriod)) {
     throw new PayrollError(`${row.display_name} has no retained insurable-pay source in the confirmed ROE employment spell — qualify the original payroll periods before filing`);
   }
-  const earningComponents = (await db.execute<{
+  const earningComponents = await db.execute<{
     component_id: string; component_name: string; pay_date: string; block: "none" | "17A" | "17C" | null;
   }>(sql`
     select distinct component.id as component_id, component.name as component_name,
@@ -1019,7 +1019,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
      where line.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
        and stub.employment_id = ${event.employment_id}
        and line.kind = 'earning' and stub.id=any(${`{${worksheet.sourceDocuments.map(stub=>stub.id).join(',')}}`}::uuid[])
-  `)).rows;
+  `, "objects");
   const unmapped = earningComponents.filter((component) => component.block == null);
   if (unmapped.length) {
     const names = [...new Set(unmapped.map((component) => component.component_name))].sort();
@@ -1028,7 +1028,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
       + `${names.join(", ")} — classify each component in Payroll Setup as Block 17A, Block 17C, or not separation-related`,
     );
   }
-  const separationRows = (await db.execute<{
+  const separationRows = await db.execute<{
     component_id: string; component_name: string; amount: string; payment_status: "paid" | "will_pay";
     expected_payment_on: string; block: "none" | "17A" | "17C" | null; category_code: string | null;
   }>(sql`
@@ -1051,7 +1051,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
       ) classification on true
      where payment.org_id = ${orgId} and payment.separation_event_id = ${event.id}
      order by payment.expected_payment_on, payment.id
-  `)).rows;
+  `, "objects");
   const missingCategories = separationRows
     .filter((payment) => payment.block !== "17A" && payment.block !== "17C")
     .map((payment) => payment.component_name);
@@ -1164,15 +1164,15 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
        and (extract(year from er.terminated_on)::int = ${taxYear} or r.run_type = 'termination')
      group by p.id, p.display_name, prof.country, er.terminated_on
      order by p.display_name
-  `));
-  const events=(await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string;status:string}>(sql`
+  `, "objects"));
+  const events=await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string;status:string}>(sql`
     select e.id,e.employee_party_id as "employeePartyId",p.display_name as "employeeName",
       e.last_insurable_earnings_on::text as "lastDay",e.status
     from payroll_roe_separation_events e join parties p on p.org_id=e.org_id and p.id=e.employee_party_id
     where e.org_id=${orgId} and extract(year from e.interruption_on)::int=${taxYear}
-      and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`)).rows;
+      and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`, "objects");
   const declaredEmployees=new Set(events.map(e=>e.employeePartyId));
-  const unknown = rows.rows.filter((row) => row.country == null && !declaredEmployees.has(row.id));
+  const unknown = rows.filter((row) => row.country == null && !declaredEmployees.has(row.id));
   if (unknown.length > 0) {
     const names = unknown.map((row) => row.display_name).sort().join(", ");
     throw new PayrollError(
@@ -1185,7 +1185,7 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
   return [
     ...events.map(e=>({roeRowId:roeEventRow(e.employeePartyId,e.id),eventId:e.id,employeePartyId:e.employeePartyId,
       employeeName:e.employeeName,terminatedOn:e.lastDay,lastPayDate:null,factsStatus:e.status})),
-    ...rows.rows.filter(row=>!declaredEmployees.has(row.id)).map(row=>({roeRowId:row.id,eventId:null,
+    ...rows.filter(row=>!declaredEmployees.has(row.id)).map(row=>({roeRowId:row.id,eventId:null,
       employeePartyId:row.id,employeeName:row.display_name,terminatedOn:row.terminated_on,lastPayDate:row.last_pay_date,factsStatus:null})),
   ];
 }
@@ -1286,10 +1286,10 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
       join documents d on d.org_id = r.org_id and d.id = r.document_id and d.kind = 'pay_run' and d.status <> 'voided'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
      group by 1, 2, 3, 4
-  `));
+  `, "objects"));
   const returnAccountOf = await periodicReturnAccountResolver(orgId, "US");
   const byReturn = new Map<string, Form941Quarter>();
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const quarter = Number(row.quarter) as 1 | 2 | 3 | 4;
     const source = usFilingSource(row);
     const filingAccountId = returnAccountOf(
@@ -1622,7 +1622,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       -- The carry-in lands on the employee's FIRST slip, so an employee filed
       -- under more than one EIN needs a deterministic order, not just name.
      order by p.display_name, min(s.pay_date), s.province
-   `));
+   `, "objects"));
   const missingReportCodes = (await db.execute<{ employee_name: string; component_name: string }>(sql`
     select p.display_name as employee_name, pc.name as component_name
       from pay_stubs s
@@ -1635,9 +1635,9 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
        and l.kind = 'deduction' and pc.tax_treatment = 'pension_f'
        and l.statutory_reporting_code is null
      order by p.display_name, pc.name
-  `));
-  if (missingReportCodes.rows.length > 0) {
-    const affected = missingReportCodes.rows
+  `, "objects"));
+  if (missingReportCodes.length > 0) {
+    const affected = missingReportCodes
       .map((row) => `${row.employee_name} (${row.component_name})`).join(", ");
     throw new PayrollError(
       `W-2 box 12 cannot be prepared for ${affected}: a reportable pension deferral has no `
@@ -1665,7 +1665,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
               l.statutory_reporting_code->>'boxCode', l.statutory_reporting_code->>'code',
               l.statutory_reporting_code->>'label'
      order by l.statutory_reporting_code->>'code'
-  `));
+  `, "objects"));
   const usAccounts = await loadUsFilingAccounts(db, orgId);
   const accountNumbers = new Map(usAccounts.map((account) => [account.id, account.accountNumber]));
   const federalOf = (row: { filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }) => {
@@ -1677,7 +1677,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     return resolveUsW2StateAccount(usAccounts, (row.filing_account_id as string | null) ?? null, source.subsidiaryId, province, source.date);
   };
   const box12BySlip = new Map<string, { boxCode: string; code: string; label: string; value: string }[]>();
-  for (const row of reportingRows.rows) {
+  for (const row of reportingRows) {
     const key = `${row.employee_party_id}:${federalOf(row) ?? ""}`;
     const entries = box12BySlip.get(key) ?? [];
     // Two stub accounts of one EIN report one box 12 amount per code.
@@ -1725,12 +1725,12 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       ) line_tax on true
      group by w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description, w.source_subsidiary_id, w.source_date
      order by l.description
-   `));
+   `, "objects"));
   const stateGroupKey = (row: { employee_party_id?: unknown; filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }, province: string) =>
     `${String(row.employee_party_id)}:${federalOf(row) ?? ""}:${province}:`
     + (stateAccountOf(row, province) ?? "");
   const localByGroup = new Map<string, W2LocalLine[]>();
-  for (const row of localRows.rows) {
+  for (const row of localRows) {
     const tax = num(row.local_tax);
     if (cmp(tax, "0") === 0) continue;
     const localWages = requireW2LocalWages(
@@ -1777,7 +1777,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     employeePartyId: string; employeeName: string; filingAccountId: string | null;
     groups: StateGroup[];
   }>();
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
     const province = String(row.province ?? "");
     const filingAccountId = federalOf(row);
@@ -2051,8 +2051,8 @@ async function gbYearStatements(
      group by c.employee_party_id, p.display_name, c.filing_account_id,
               er.employee_number, er.terminated_on
      order by p.display_name, min(c.pay_date)
-  `));
-  return rows.rows.map((row) => {
+  `, "objects"));
+  return rows.map((row) => {
     const rawCode = row.tax_code == null ? null : String(row.tax_code).trim() || null;
     const nonCumulative = String(row.non_cumulative ?? "").toLowerCase() === "true";
     return {
@@ -2089,8 +2089,8 @@ async function assertGbCommittedRuns(orgId: string, taxYear: number, form: strin
     join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
    where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'GB'
    limit 1
-  `));
-  if (existing.rows.length === 0) {
+  `, "objects"));
+  if (existing.length === 0) {
     throw new PayrollError(
       `no committed GB pay runs for ${taxYear}/${String(taxYear + 1).slice(2)} — a ${form} reports `
       + "what was actually paid and withheld, so a year with no committed payroll cannot produce one. "
@@ -2144,7 +2144,7 @@ export async function gbP45Leavers(orgId: string, taxYear: number): Promise<GbP4
               or exists (select 1 from employee_roles er
                          where er.org_id = ${orgId} and er.party_id = s.employee_party_id
                            and er.terminated_on::date between ${start} and ${end}))
-    `)).rows.map((row) => row.id),
+    `, "objects")).map((row) => row.id),
   );
   const leavers = statements.filter((statement) => terminatedIds.has(statement.employeePartyId));
   if (leavers.length === 0) await assertGbCommittedRuns(orgId, taxYear, "P45");
@@ -2206,8 +2206,8 @@ export async function orgYearEndFilings(
 ): Promise<YearEndFilingSection[]> {
   const installedRow = (await db.execute<{ countries: unknown }>(sql`
     select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
-  `));
-  const raw = installedRow.rows[0]?.countries;
+  `, "objects"));
+  const raw = installedRow[0]?.countries;
   const installed = new Set(Array.isArray(raw) ? raw.map(String) : []);
 
   const sections: YearEndFilingSection[] = [];
@@ -2270,8 +2270,8 @@ export async function orgPayrollDataYears(orgId: string): Promise<number[]> {
     union
     select distinct tax_year from payroll_opening_balances where org_id = ${orgId}
     order by 1 desc
-  `);
-  return rows.rows.map((row) => row.tax_year);
+  `, "objects");
+  return rows.map((row) => row.tax_year);
 }
 
 /**
@@ -2284,8 +2284,8 @@ export async function orgPayrollDataYears(orgId: string): Promise<number[]> {
 export async function orgFilingYearOptions(orgId: string, today: string): Promise<number[]> {
   const installedRow = await db.execute<{ countries: unknown }>(sql`
     select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
-  `);
-  const raw = installedRow.rows[0]?.countries;
+  `, "objects");
+  const raw = installedRow[0]?.countries;
   const countries = Array.isArray(raw) ? raw.map(String) : [];
   return payrollFilingYearOptions({ today, countries, dataYears: await orgPayrollDataYears(orgId) });
 }

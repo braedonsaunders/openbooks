@@ -92,9 +92,9 @@ test(
     const found = (await db.execute<{ indexdef: string }>(sql`
       select indexdef from pg_indexes
        where schemaname = 'public' and indexname = 'payroll_statutory_rates_org_point'
-    `));
-    assert.equal(found.rows.length, 1);
-    const def = found.rows[0]!.indexdef;
+    `, "objects"));
+    assert.equal(found.length, 1);
+    const def = found[0]!.indexdef;
     assert.match(def, /WHERE \(superseded_on IS NULL\)/);
     assert.match(def, /COALESCE\(region/);
     assert.match(def, /COALESCE\(sub_region/);
@@ -102,9 +102,9 @@ test(
     const pred = (await db.execute<{ indpred: string | null }>(sql`
       select pg_get_expr(indpred, indrelid) as indpred from pg_index
        where indexrelid = 'payroll_statutory_rates_org_point'::regclass
-    `));
+    `, "objects"));
     assert.ok(
-      pred.rows[0]?.indpred?.includes("superseded_on"),
+      pred[0]?.indpred?.includes("superseded_on"),
       "pg_index.indpred must carry the partial predicate",
     );
   },
@@ -241,17 +241,17 @@ async function ehtLine(
 ): Promise<{ gross: string; netPay: string; employerCost: string; eht: string }> {
   const stub = (await db.execute<{ gross: string; net_pay: string; employer_cost: string }>(sql`
     select gross, net_pay, employer_cost from pay_stubs
-     where org_id = ${orgId} and pay_run_document_id = ${documentId}`)).rows[0]!;
+     where org_id = ${orgId} and pay_run_document_id = ${documentId}`, "objects"))[0]!;
   const lines = (await db.execute<{ amount: string }>(sql`
     select l.amount from pay_stub_lines l
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId} and l.stub_id in (
        select id from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
-     ) and c.system_key = 'eht'`));
-  assert.equal(lines.rows.length, 1, "the committed run carries exactly one EHT line");
+     ) and c.system_key = 'eht'`, "objects"));
+  assert.equal(lines.length, 1, "the committed run carries exactly one EHT line");
   return {
     gross: String(stub.gross), netPay: String(stub.net_pay),
-    employerCost: String(stub.employer_cost), eht: String(lines.rows[0]!.amount),
+    employerCost: String(stub.employer_cost), eht: String(lines[0]!.amount),
   };
 }
 
@@ -329,8 +329,8 @@ test(
       while (!commitQueuedOnRateFence && Date.now() < waitUntil) {
         const locks = await db.execute<{ waiting: boolean }>(sql`
           select exists (select 1 from pg_locks where locktype = 'advisory' and not granted) as waiting
-        `);
-        commitQueuedOnRateFence = locks.rows[0]?.waiting ?? false;
+        `, "objects");
+        commitQueuedOnRateFence = locks[0]?.waiting ?? false;
         if (!commitQueuedOnRateFence) await new Promise((resolve) => setTimeout(resolve, 10));
       }
       releaseRateWriter();

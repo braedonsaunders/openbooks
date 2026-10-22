@@ -75,7 +75,7 @@ test(
       };
       const before = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents where kind = 'journal' and org_id = ${org.orgId}
-      `))).rows[0]!.n;
+      `, "objects")))[0]!.n;
       const res = await withOrgContext(
         org.orgId,
         () =>
@@ -102,7 +102,7 @@ test(
       );
       const after = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents where kind = 'journal' and org_id = ${org.orgId}
-      `))).rows[0]!.n;
+      `, "objects")))[0]!.n;
       assert.equal(after, before, "a refused create must store no journal");
     } finally {
       routeState.authz = null;

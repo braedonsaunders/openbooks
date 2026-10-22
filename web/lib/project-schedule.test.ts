@@ -95,18 +95,20 @@ const mockSources = new Map<string, string>([
         return { rows: [] }
       }
       const root = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.rootExecuteCalls++
-          return result(query)
+          return inMode(await result(query))
         },
         async transaction(callback) {
           state.transactionCalls++
           let taskInsert = false
           const tx = {
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               state.txQueries.push(query)
               if (/insert into project_tasks/i.test(text(query))) taskInsert = true
-              return result(query)
+              return inMode(await result(query))
             },
           }
           try {

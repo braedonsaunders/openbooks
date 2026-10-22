@@ -1,1 +1,0 @@
-DDL only: creates empty ROE reporting-evidence tables, indexes, source guards and tenant policies. It does not backfill, rewrite or validate existing tenant rows, so no data-readiness preflight is required.

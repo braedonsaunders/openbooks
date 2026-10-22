@@ -95,8 +95,8 @@ async function subscriptionMrrInOrgCurrency(
         ) candidates
         order by as_of desc, priority asc
         limit 1
-      `);
-      rate = candidates.rows[0]?.rate;
+      `, "objects");
+      rate = candidates[0]?.rate;
       if (!rate) {
         throw new SubscriptionError(
           `no spot rate for subscription MRR ${sourceCurrency}→${orgCurrency} on or before ${asOf}`,
@@ -136,9 +136,9 @@ async function guardSubscriptionScope(
       from subscriptions s
       join parties c on c.id = s.customer_id and c.org_id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${authz.user.orgId}
-  `));
-  if (!owned.rows[0]) return notFound("record");
-  return guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId, { orgWideNull: true });
+  `, "objects"));
+  if (!owned[0]) return notFound("record");
+  return guardSubsidiaryScope(authz, owned[0].subsidiaryId, { orgWideNull: true });
 }
 
 /** Load the customer boundary before creating a subscription for it. */
@@ -150,9 +150,9 @@ async function guardCustomerScope(
     select c.subsidiary_id as "subsidiaryId"
       from parties c
      where c.id = ${customerId} and c.org_id = ${authz.user.orgId}
-  `));
-  if (!customer.rows[0]) return notFound("record");
-  return guardSubsidiaryScope(authz, customer.rows[0].subsidiaryId, { orgWideNull: true });
+  `, "objects"));
+  if (!customer[0]) return notFound("record");
+  return guardSubsidiaryScope(authz, customer[0].subsidiaryId, { orgWideNull: true });
 }
 
 function subscriptionDate(value: unknown, label: string): string {
@@ -188,13 +188,13 @@ async function refuseInventoryPlanItem(
   const nextId = String(itemId);
   if (storedItemId && nextId === storedItemId) return null;
   const item = (await db.execute<{ kind: string }>(sql`
-    select kind from items where id = ${nextId} and org_id = ${orgId}`));
+    select kind from items where id = ${nextId} and org_id = ${orgId}`, "objects"));
   if (!(await isFeatureEnabled(orgId, "inventory"))) {
-    if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+    if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
       return notFound("record");
     }
   }
-  if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+  if (item[0] && item[0].kind === "equipment_charge") {
     if (!(await isFeatureEnabled(orgId, "equipment"))) {
       return notFound("record");
     }
@@ -220,7 +220,7 @@ export const GET = defineRoute({
                  interval_count as "intervalCount", income_account_id as "incomeAccountId",
                  item_id as "itemId", tax_code_id as "taxCodeId", is_active as "isActive"
             from subscription_plans where org_id = ${orgId} order by name
-        `),
+        `, "objects"),
         db.execute(sql`
           select s.id, s.customer_id as "customerId", s.plan_id as "planId", s.quantity,
                  s.price_override as "priceOverride", s.status, s.start_on as "startOn",
@@ -245,17 +245,17 @@ export const GET = defineRoute({
            where s.org_id = ${orgId}
              ${customerSubsidiaryFilter(authz.allowedSubsidiaryIds)}
            order by s.created_at desc
-        `),
+        `, "objects"),
         db.execute<{ baseCurrency: string }>(sql`
           select base_currency as "baseCurrency" from orgs where id = ${orgId}
-        `),
+        `, "objects"),
       ]);
-    const orgCurrency = String(org.rows[0]?.baseCurrency ?? "").trim().toUpperCase();
+    const orgCurrency = String(org[0]?.baseCurrency ?? "").trim().toUpperCase();
     if (!orgCurrency) throw new SubscriptionError("organization currency is not configured");
     // Contract subscriptions earn their amended component prices, not the plan
     // price they were activated from, so MRR reads the same figure the invoices do.
     const contractAmounts = await contractRecurringAmounts(orgId, asOf);
-    const earning = subs.rows.map((s) => {
+    const earning = subs.map((s) => {
       const contract = contractAmounts.get(String(s.id)) ?? null;
       const paidThroughOn = subscriptionPaidThrough({
         startOn: String(s.startOnDate),
@@ -290,7 +290,7 @@ export const GET = defineRoute({
         if (e instanceof SubscriptionError) return apiErrorResponse(e);
         throw e;
       }
-    return NextResponse.json({ plans: plans.rows, subscriptions, mrr });
+    return NextResponse.json({ plans, subscriptions, mrr });
   },
 });
 
@@ -328,15 +328,15 @@ export const POST = defineRoute({
                         ${body.currency ?? null}, ${cadence.interval}, ${cadence.intervalCount},
                         ${body.incomeAccountId ?? null}, ${body.itemId ?? null}, ${body.taxCodeId ?? null}, ${userId}, ${userId})
                 returning *
-              `));
+              `, "objects"));
               await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
-                  (${orgId}, 'subscription_plans', ${String(row.rows[0]!.id)}, 'insert',
-                   ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${userId})
+                  (${orgId}, 'subscription_plans', ${String(row[0]!.id)}, 'insert',
+                   ${JSON.stringify({ after: row[0] })}::jsonb, ${userId})
               `);
-              return row.rows[0]!;
+              return row[0]!;
             });
             return NextResponse.json({ id: ((created)).id }, { status: 201 });
           }
@@ -356,16 +356,16 @@ export const POST = defineRoute({
             let storedItemId: string | null | undefined;
             if (body.itemId !== undefined) {
               const stored = (await db.execute<{ item_id: string | null }>(sql`
-                select item_id from subscription_plans where id = ${body.id} and org_id = ${orgId}`));
-              storedItemId = stored.rows[0]?.item_id;
+                select item_id from subscription_plans where id = ${body.id} and org_id = ${orgId}`, "objects"));
+              storedItemId = stored[0]?.item_id;
               const refusedItem = await refuseInventoryPlanItem(orgId, body.itemId, storedItemId);
               if (refusedItem) return refusedItem;
             }
             const missingPlan = await db.transaction(async (tx) => {
               const before = (await tx.execute<Record<string, unknown>>(sql`
                 select * from subscription_plans where id = ${body.id} and org_id = ${orgId}
-              `));
-              if (!before.rows[0]) return true;
+              `, "objects"));
+              if (!before[0]) return true;
               const updated = (await tx.execute<Record<string, unknown>>(sql`
                 update subscription_plans set name = ${body.name}, description = ${body.description ?? null},
                        amount = ${amount},
@@ -377,13 +377,13 @@ export const POST = defineRoute({
                        updated_at = now(), updated_by = ${userId}
                  where id = ${body.id} and org_id = ${orgId}
                 returning *
-              `));
+              `, "objects"));
               await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
                   (${orgId}, 'subscription_plans', ${String(body.id)}, 'update',
-                   ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb, ${userId})
+                   ${JSON.stringify({ before: before[0], after: updated[0] })}::jsonb, ${userId})
               `);
               return false;
             });
@@ -396,19 +396,19 @@ export const POST = defineRoute({
             const deleted = await db.transaction(async (tx) => {
               // Re-check "in use" inside the transaction so a subscription created
               // between check and delete cannot orphan onto a vanished plan.
-              const inUse = (await tx.execute(sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`));
-              if (inUse.rows.length) return { inUse: true as const };
+              const inUse = (await tx.execute(sql`select 1 from subscriptions where plan_id = ${body.id} and org_id = ${orgId} limit 1`, "objects"));
+              if (inUse.length) return { inUse: true as const };
               const before = (await tx.execute<Record<string, unknown>>(sql`
                 select * from subscription_plans where id = ${body.id} and org_id = ${orgId}
-              `));
-              if (!before.rows[0]) return { inUse: false as const };
+              `, "objects"));
+              if (!before[0]) return { inUse: false as const };
               await tx.execute(sql`delete from subscription_plans where id = ${body.id} and org_id = ${orgId}`);
               await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
                   (${orgId}, 'subscription_plans', ${String(body.id)}, 'delete',
-                   ${JSON.stringify({ before: before.rows[0] })}::jsonb, ${userId})
+                   ${JSON.stringify({ before: before[0] })}::jsonb, ${userId})
               `);
               return { inUse: false as const };
             });
@@ -446,7 +446,7 @@ export const POST = defineRoute({
             const activationPlan = firstBillOn <= activationDay
               ? (await db.execute<{ interval: string; intervalCount: number }>(sql`
                   select interval, interval_count as "intervalCount" from subscription_plans
-                   where id = ${body.planId} and org_id = ${orgId}`)).rows[0]
+                   where id = ${body.planId} and org_id = ${orgId}`, "objects"))[0]
               : undefined;
             const activationCadence = activationPlan
               ? normalizeSubscriptionCadence(activationPlan.interval, activationPlan.intervalCount)
@@ -493,7 +493,7 @@ export const POST = defineRoute({
                 // behind without its first invoice.
                 const plan = (await tx.execute<{ interval: string; intervalCount: number }>(sql`
                   select interval, interval_count as "intervalCount"
-                    from subscription_plans where id = ${body.planId} and org_id = ${orgId}`)).rows[0];
+                    from subscription_plans where id = ${body.planId} and org_id = ${orgId}`, "objects"))[0];
                 if (!plan) throw new SubscriptionError("billing plan not found", 404);
                 const cadence = normalizeSubscriptionCadence(plan.interval, plan.intervalCount);
                 firstPeriodStub(startOn, firstBillOn, cadence.interval, cadence.intervalCount, anchorDay);
@@ -505,15 +505,15 @@ export const POST = defineRoute({
                         ${priceOverride},
                         ${startOn}, ${firstBillOn}, ${startOn}, ${autoPost}, ${body.memo ?? null}, ${anchorDay}, ${userId}, ${userId})
                 returning *
-              `));
+              `, "objects"));
               await tx.execute(sql`
                 insert into audit_log
                   (org_id, table_name, row_id, action, changes, actor_id)
                 values
-                  (${orgId}, 'subscriptions', ${String(row.rows[0]!.id)}, 'insert',
-                   ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${userId})
+                  (${orgId}, 'subscriptions', ${String(row[0]!.id)}, 'insert',
+                   ${JSON.stringify({ after: row[0] })}::jsonb, ${userId})
               `);
-              return row.rows[0]!;
+              return row[0]!;
             });
             const id = ((created)).id as string;
             let proration: unknown = null;
@@ -580,7 +580,7 @@ export const POST = defineRoute({
                        coalesce(s.anchor_day, extract(day from s.start_on)::int) as "anchorDay"
                   from subscriptions s
                   join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
-                 where s.id = ${body.id} and s.org_id = ${orgId} and s.status <> 'active'`)).rows[0];
+                 where s.id = ${body.id} and s.org_id = ${orgId} and s.status <> 'active'`, "objects"))[0];
               if (current) {
                 const resumeDay = await businessToday(orgId);
                 const resumeCadence = normalizeSubscriptionCadence(current.interval, current.intervalCount);
@@ -659,7 +659,7 @@ export const POST = defineRoute({
                     select p.id from parties p
                      join customer_roles cr on cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active
                      where p.org_id = ${orgId} and p.id = ${partyId} and p.is_active
-                     limit 1`)).rows[0];
+                     limit 1`, "objects"))[0];
                   if (!party) {
                     throw new SubscriptionError(
                       `${field === "billToPartyId" ? "bill-to" : "payer"} party is not an active org customer; pick a customer or clear the override`,
@@ -686,20 +686,20 @@ export const POST = defineRoute({
               // atomic against a concurrent tick.
               const before = (await tx.execute<Record<string, unknown>>(sql`
                 select * from subscriptions where id = ${body.id} and org_id = ${orgId} for update
-              `));
-              if (!before.rows[0]) return null;
+              `, "objects"));
+              if (!before[0]) return null;
               const guards = (await tx.execute<{ guardedThrough: string | null }>(sql`
                 select max(pi.period_ends_on)::text as "guardedThrough"
                   from subscription_period_invoices pi
                  where pi.org_id = ${orgId} and pi.subscription_id = ${body.id}
-              `));
-              const guardedThrough = guards.rows[0]?.guardedThrough ?? null;
+              `, "objects"));
+              const guardedThrough = guards[0]?.guardedThrough ?? null;
               if (body.status === "canceled") {
                 const today = await businessToday(orgId);
-                const billed = before.rows[0].last_invoice_id != null || guardedThrough !== null;
+                const billed = before[0].last_invoice_id != null || guardedThrough !== null;
                 const paidThrough = subscriptionPaidThrough({
-                  startOn: String(before.rows[0].start_on),
-                  nextBillOn: String(before.rows[0].next_bill_on),
+                  startOn: String(before[0].start_on),
+                  nextBillOn: String(before[0].next_bill_on),
                   billed,
                   guardedThrough,
                 });
@@ -709,7 +709,7 @@ export const POST = defineRoute({
                 const lifecycle = (await tx.execute<{ billingTiming: string }>(sql`
                   select billing_timing as "billingTiming" from subscription_lifecycles
                    where org_id = ${orgId} and subscription_id = ${body.id}
-                `)).rows[0];
+                `, "objects"))[0];
                 if (lifecycle?.billingTiming === "arrears") {
                   if (body.canceledOn != null) {
                     throw new SubscriptionError(
@@ -733,13 +733,13 @@ export const POST = defineRoute({
               let skippedWindow: { from: string; to: string } | null = null;
               if (nextBillOn !== undefined) {
                 const resolved = resolveNextBillOnUpdate({
-                  startOn: String(before.rows[0].start_on),
-                  currentPeriodStart: before.rows[0].current_period_start == null
+                  startOn: String(before[0].start_on),
+                  currentPeriodStart: before[0].current_period_start == null
                     ? null
-                    : String(before.rows[0].current_period_start),
-                  currentNextBillOn: String(before.rows[0].next_bill_on),
+                    : String(before[0].current_period_start),
+                  currentNextBillOn: String(before[0].next_bill_on),
                   guardedThrough,
-                  billed: before.rows[0].last_invoice_id != null || guardedThrough !== null,
+                  billed: before[0].last_invoice_id != null || guardedThrough !== null,
                   newNextBillOn: nextBillOn,
                   skipUnbilledService,
                   skipReason,
@@ -749,16 +749,16 @@ export const POST = defineRoute({
               const updated = (await tx.execute<Record<string, unknown>>(sql`
                 update subscriptions set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${userId}
                  where id = ${body.id} and org_id = ${orgId}
-                   ${nextBillOn === undefined ? sql`` : sql`and next_bill_on = ${before.rows[0].next_bill_on}`}
+                   ${nextBillOn === undefined ? sql`` : sql`and next_bill_on = ${before[0].next_bill_on}`}
                 returning *
-              `));
+              `, "objects"));
               // The lock + fresh validation is the primary serialization boundary.
               // Keep the old cursor in the UPDATE predicate as a final CAS fence so
               // a future write path that bypasses this lock cannot overwrite a bill.
-              if (!updated.rows[0]) {
+              if (!updated[0]) {
                 throw new SubscriptionError("subscription changed while it was being updated; reload and retry");
               }
-              const changes: Record<string, unknown> = { before: before.rows[0], after: updated.rows[0] };
+              const changes: Record<string, unknown> = { before: before[0], after: updated[0] };
               if (skippedWindow) {
                 changes.nextBillOnSkip = {
                   from: skippedWindow.from,

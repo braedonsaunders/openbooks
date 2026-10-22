@@ -38,8 +38,8 @@ export function functionalReportReader(orgId: string, where: SQL, translated = f
   return {
     censusColumn: translated ? sql`1 as __functional_currency_count` : sql`${census} as __functional_currency_count`,
     async execute<Row extends Record<string, unknown> = Record<string, unknown>>(query: SQL) {
-      const result = await db.execute<Row & { __functional_currency_count: string }>(query)
-      for (const row of result.rows) {
+      const rows = await db.execute<Row & { __functional_currency_count: string }>(query, 'objects')
+      for (const row of rows) {
         const count = Number(row.__functional_currency_count)
         if (row.__functional_currency_count == null || !Number.isSafeInteger(count) || count < 0) {
           throw new Error('Report returned invalid functional-currency evidence')
@@ -47,7 +47,7 @@ export function functionalReportReader(orgId: string, where: SQL, translated = f
         if (count > 1) throw new ReportCurrencyBasisError()
         delete (row as Record<string, unknown>).__functional_currency_count
       }
-      return { ...result, rows: result.rows as Row[] }
+      return { rows: rows as Row[] }
     },
   }
 }

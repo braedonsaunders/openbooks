@@ -208,7 +208,7 @@ export async function grantRemembranceAlternateDay(
        and kind = 'bank_in'
        and source_holiday_key = ${rule.holidayKey} and source_holiday_date = ${statutoryDate}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (prior) return null;
 
   return {

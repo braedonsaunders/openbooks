@@ -43,7 +43,7 @@ test("unscoped receipts, counts, and document lines book to the root entity", as
     await db.execute(sql`update locations set subsidiary_id=${org.subsidiaryId}, subsidiary_include_children=false
       where org_id=${org.orgId} and id=${org.locationId}`);
     const oldest = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id=${org.orgId} order by created_at,id limit 1`)).rows[0]!.id;
+      select id from subsidiaries where org_id=${org.orgId} order by created_at,id limit 1`, "objects"))[0]!.id;
     assert.equal(oldest, elderId, "fixture must make a non-root entity the oldest");
 
     // Path 1: the actions route posts an unscoped receipt.
@@ -58,7 +58,7 @@ test("unscoped receipts, counts, and document lines book to the root entity", as
     }));
     assert.equal(receipt.status, 200, JSON.stringify(await receipt.clone().json()));
     const movement = (await db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id::text as subsidiary_id from inventory_movements where org_id=${org.orgId}`)).rows[0]!;
+      select subsidiary_id::text as subsidiary_id from inventory_movements where org_id=${org.orgId}`, "objects"))[0]!;
     assert.equal(movement.subsidiary_id, org.subsidiaryId, "unscoped receipt books to the root, not the oldest entity");
 
     // Path 2: the counts route creates an unscoped count.
@@ -72,7 +72,7 @@ test("unscoped receipts, counts, and document lines book to the root entity", as
     }));
     assert.equal(count.status, 200, JSON.stringify(await count.clone().json()));
     const header = (await db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id::text as subsidiary_id from stock_counts where org_id=${org.orgId}`)).rows[0]!;
+      select subsidiary_id::text as subsidiary_id from stock_counts where org_id=${org.orgId}`, "objects"))[0]!;
     assert.equal(header.subsidiary_id, org.subsidiaryId, "unscoped count books to the root, not the oldest entity");
 
     // Path 3: document lines resolve an unscoped document to the same root.

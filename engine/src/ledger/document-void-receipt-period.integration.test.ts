@@ -96,7 +96,7 @@ async function receiptState(orgId: string, receiptId: string, lineId: string) {
              join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
             where reversal.org_id = ${orgId} and line.document_id = ${receiptId}
               and reversal.kind = 'return' and reversal.status = 'posted') as reversals
-  `)).rows[0]!;
+  `, "objects"))[0]!;
 }
 
 /**
@@ -154,7 +154,7 @@ test("the same receipt voids with an open-period reversal date", { skip: !DB }, 
         join journal_entries entry on entry.id = reversal.journal_entry_id and entry.org_id = reversal.org_id
         join accounting_periods period on period.id = entry.period_id
        where reversal.org_id = ${seed.orgId} and reversal.kind = 'return' and reversal.status = 'posted'
-       order by reversal.created_at desc limit 1`)).rows[0]!;
+       order by reversal.created_at desc limit 1`, "objects"))[0]!;
     assert.equal(landing.posting, seed.openDate);
     assert.equal(landing.period, "2026-08");
   } finally {

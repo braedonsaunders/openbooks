@@ -99,18 +99,18 @@ test("API reverse of an assembly build restores stock, replays retries, and conf
     );
     const nets = (await db.execute<{ net: string }>(sql`
       select sum(amount)::text as net from journal_lines
-       where org_id = ${org.orgId} and entry_id in (${built.entryId}::uuid, ${(first.json.entryId as string)}::uuid)`)).rows[0]!.net;
+       where org_id = ${org.orgId} and entry_id in (${built.entryId}::uuid, ${(first.json.entryId as string)}::uuid)`, "objects"))[0]!.net;
     assert.equal(nets, "0.0000", "build and reversal journals must net to zero");
 
     const movementsAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`)).rows[0]!.n;
+      select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n;
     const replay = await reverse(payload);
     assert.equal(replay.status, 200, JSON.stringify(replay.json));
     assert.equal(replay.json.replayed, true, "same key + payload must replay, never double-reverse");
     assert.deepEqual(replay.json.movementIds, first.json.movementIds);
     assert.equal(
       (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`)).rows[0]!.n,
+        select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n,
       movementsAfter,
       "the replay must write no second reversal",
     );
@@ -130,40 +130,40 @@ test("API reverse of a work-order issue reverses every consume leg in the entry"
     state.allowedSubsidiaryIds = null;
     const wipId = randomUUID();
     await withBypassContext(async () => {
-      const feature = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"manufacturing":true,"warehousing":true}'::jsonb) where id=${org.orgId} returning id`);
-      assert.equal(feature.rows.length, 1);
+      const feature = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"manufacturing":true,"warehousing":true}'::jsonb) where id=${org.orgId} returning id`, "objects");
+      assert.equal(feature.length, 1);
       const account = await db.execute(sql`insert into accounts (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
-        values (${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`);
-      assert.equal(account.rows.length, 1);
-      const mapping = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,mfgWip}',to_jsonb(${wipId}::text),true) where id=${org.orgId} returning id`);
-      assert.equal(mapping.rows.length, 1);
+        values (${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`, "objects");
+      assert.equal(account.length, 1);
+      const mapping = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,mfgWip}',to_jsonb(${wipId}::text),true) where id=${org.orgId} returning id`, "objects");
+      assert.equal(mapping.length, 1);
       const open = await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id=${org.orgId}
-        and current_date between starts_on and ends_on and not is_adjustment limit 1`);
-      if (open.rows.length === 0) {
+        and current_date between starts_on and ends_on and not is_adjustment limit 1`, "objects");
+      if (open.length === 0) {
         const period = await db.execute(sql`insert into accounting_periods
           (id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
           select ${randomUUID()},${org.orgId},extract(year from current_date)::int,extract(month from current_date)::int,
             to_char(current_date,'YYYY-MM'),date_trunc('month',current_date)::date,
             (date_trunc('month',current_date)+interval '1 month - 1 day')::date,false,fiscal_calendar_id
-            from accounting_periods where id=${org.periodId} returning id`);
-        assert.equal(period.rows.length, 1);
+            from accounting_periods where id=${org.periodId} returning id`, "objects");
+        assert.equal(period.length, 1);
       }
       const bom = await db.execute(sql`update bom_components set quantity_per='1',operation_seq=null
-        where org_id=${org.orgId} and assembly_item_id=${org.items.assembly} and component_item_id=${org.items.component} returning id`);
-      assert.equal(bom.rows.length, 1);
+        where org_id=${org.orgId} and assembly_item_id=${org.items.assembly} and component_item_id=${org.items.component} returning id`, "objects");
+      assert.equal(bom.length, 1);
       const secondBom = await db.execute(sql`insert into bom_components (org_id,assembly_item_id,component_item_id,quantity_per,sort_order,is_byproduct)
-        values (${org.orgId},${org.items.assembly},${org.items.fifo},'1',1,false) returning id`);
-      assert.equal(secondBom.rows.length, 1);
+        values (${org.orgId},${org.items.assembly},${org.items.fifo},'1',1,false) returning id`, "objects");
+      assert.equal(secondBom.length, 1);
       await receiveInventory(org.orgId, actor, { itemId: org.items.component, stockLocationId: org.stockLocationId,
         quantity: "3", unitCost: "2", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date });
       await receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId,
         quantity: "3", unitCost: "1", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date });
     });
     const departmentId=await run(async tx=>{
-      const department=(await tx.execute<{id:string}>(sql`insert into departments(org_id,name,subsidiary_id) values(${org.orgId},'Assembly',${org.subsidiaryId}) returning id`)).rows;
+      const department=await tx.execute<{id:string}>(sql`insert into departments(org_id,name,subsidiary_id) values(${org.orgId},'Assembly',${org.subsidiaryId}) returning id`, "objects");
       assert.equal(department.length,1);
-      const rate=await tx.execute(sql`insert into labor_cost_rates(org_id,department_id,currency,rate,basis,annual_hours,effective_from,is_active,created_by,updated_by) values(${org.orgId},${department[0]!.id},'CAD','0','hour','2080','2026-01-01',true,${actor},${actor}) returning id`);
-      assert.equal(rate.rows.length,1);
+      const rate=await tx.execute(sql`insert into labor_cost_rates(org_id,department_id,currency,rate,basis,annual_hours,effective_from,is_active,created_by,updated_by) values(${org.orgId},${department[0]!.id},'CAD','0','hour','2080','2026-01-01',true,${actor},${actor}) returning id`, "objects");
+      assert.equal(rate.length,1);
       return department[0]!.id;
     });
     const center = await run((tx) => createWorkCenter(tx, org.orgId, actor, {
@@ -182,9 +182,9 @@ test("API reverse of a work-order issue reverses every consume leg in the entry"
       issueLocationId: org.stockLocationId, receiptLocationId: org.stockLocationId2, plannedStart: org.date,
     }));
     await run((tx) => releaseWorkOrder(tx, org.orgId, actor, order.id));
-    const postingDate = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select current_date::text date`)).rows[0]!.date);
-    const materials = await withBypassContext(async () => (await db.execute<{ id: string; component_item_id: string }>(sql`select id,component_item_id from mfg_wo_materials
-      where org_id=${org.orgId} and work_order_id=${order.id} order by component_item_id`)).rows);
+    const postingDate = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select current_date::text date`, "objects"))[0]!.date);
+    const materials = await withBypassContext(async () => await db.execute<{ id: string; component_item_id: string }>(sql`select id,component_item_id from mfg_wo_materials
+      where org_id=${org.orgId} and work_order_id=${order.id} order by component_item_id`, "objects"));
     const issued = await run((tx) => issueMaterials(tx, org.orgId, actor, order.id,
       materials.map((material) => ({ materialId: material.id, quantity: "1" }))));
     assert.equal(issued.movementIds.length, 2);
@@ -195,12 +195,12 @@ test("API reverse of a work-order issue reverses every consume leg in the entry"
     assert.equal(result.json.alreadyReversed, false);
     assert.equal((result.json.movementIds as string[]).length, 2, "one movement leg must reverse the whole issue entry");
     const source = await withBypassContext(() => db.execute<{ status: string; origin: string; work_order_number: string }>(sql`select status,origin,custom->>'work_order_number' work_order_number
-      from journal_entries where org_id=${org.orgId} and id=${issued.entryId}`));
-    assert.deepEqual(source.rows[0], { status: "reversed", origin: "manufacturing", work_order_number: order.number });
+      from journal_entries where org_id=${org.orgId} and id=${issued.entryId}`, "objects"));
+    assert.deepEqual(source[0], { status: "reversed", origin: "manufacturing", work_order_number: order.number });
     const counters = await withBypassContext(() => db.execute<{ issued: string; backflush: string }>(sql`select sum(issued_qty)::text issued,sum(backflush_qty)::text backflush
-      from mfg_wo_materials where org_id=${org.orgId} and work_order_id=${order.id}`));
-    assert.equal(counters.rows[0]?.issued, "0.0000");
-    assert.equal(counters.rows[0]?.backflush, "0.0000");
+      from mfg_wo_materials where org_id=${org.orgId} and work_order_id=${order.id}`, "objects"));
+    assert.equal(counters[0]?.issued, "0.0000");
+    assert.equal(counters[0]?.backflush, "0.0000");
     assert.equal((await getOnHand(org.orgId, org.items.component, org.stockLocationId)).quantity, "3.0000");
     assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "3.0000");
   } finally {

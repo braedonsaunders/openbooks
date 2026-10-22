@@ -193,26 +193,27 @@ stubModules({
         },
       ]
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes('from journal_entries e')) {
-            return { rows: [{ id: '00000000-0000-4000-8000-000000000001', subsidiary_id: 'sub-visible',
+            return inMode({ rows: [{ id: '00000000-0000-4000-8000-000000000001', subsidiary_id: 'sub-visible',
               ...(state.payrollLines && !state.headerPayRun ? { origin: 'payroll', custom: { employee_note: 'Alice Anderson' } } : {}),
               ...(state.headerPayRun ? { doc_id: '00000000-0000-4000-8000-000000000003', doc_kind: 'pay_run', source_document_id: null } : {}),
-              ...(state.journalDocument ? { doc_id: '00000000-0000-4000-8000-000000000002', doc_kind: 'journal', source_document_id: null } : {}) }] }
+              ...(state.journalDocument ? { doc_id: '00000000-0000-4000-8000-000000000002', doc_kind: 'journal', source_document_id: null } : {}) }] })
           }
-          if (text.includes('from documents d')) return { rows: [{
+          if (text.includes('from documents d')) return inMode({ rows: [{
             id: '00000000-0000-4000-8000-000000000002', entry_id: '00000000-0000-4000-8000-000000000001',
             kind: 'journal', status: 'posted', updated_at: '42', custom: { native_note: 'Reviewed journal' },
-          }] }
-          if (text.includes('from document_lines l')) return { rows: [] }
-          if (text.includes('from custom_field_defs')) return { rows: [{
+          }] })
+          if (text.includes('from document_lines l')) return inMode({ rows: [] })
+          if (text.includes('from custom_field_defs')) return inMode({ rows: [{
             id: 'field-1', key: 'native_note', label: 'Native note', fieldType: 'text', config: {}, isRequired: false, sortOrder: 0,
-          }] }
+          }] })
           if (text.includes('from segment_definitions') || text.includes('from form_layouts') ||
-              text.includes('from role_assignments') || text.includes('from user_form_preferences')) return { rows: [] }
-          if (text.includes('from orgs')) return { rows: [{ f: { multiSubsidiary: false, multiCurrency: false }, complexity: 'standard' }] }
+              text.includes('from role_assignments') || text.includes('from user_form_preferences')) return inMode({ rows: [] })
+          if (text.includes('from orgs')) return inMode({ rows: [{ f: { multiSubsidiary: false, multiCurrency: false }, complexity: 'standard' }] })
           if (text.includes('from journal_lines l')) {
             if (state.payrollLines) {
               const rows = state.splitPayrollDimensions
@@ -220,15 +221,15 @@ stubModules({
                   ? { ...row, subsidiary_id: 'sub-eu', functional_currency: 'EUR' }
                   : row)
                 : payrollRows
-              return { rows: state.missingLinePayrollMarkers
+              return inMode({ rows: state.missingLinePayrollMarkers
                 ? rows.map((row) => ({ ...row, doc_kind: null, entry_origin: null }))
-                : rows }
+                : rows })
             }
             // Model PostgreSQL applying the query predicate: without the
             // predicate both intercompany lines would be returned.
-            return text.includes('l.subsidiary_id in')
+            return inMode(await (text.includes('l.subsidiary_id in')
               ? { rows: [visibleLine] }
-              : { rows: [visibleLine, restrictedLine] }
+              : { rows: [visibleLine, restrictedLine] }))
           }
           throw new Error('unexpected database query: ' + text)
         },

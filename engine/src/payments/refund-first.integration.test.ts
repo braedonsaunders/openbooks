@@ -96,11 +96,11 @@ test("a refund arriving before its success parks, settles, and queues exactly on
     assert.equal(first?.status, "pending_clawback");
     const marker = (await db.execute<{ consumed_at: string | null }>(sql`
       select consumed_at from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`)).rows[0];
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"))[0];
     assert.ok(marker, "refund-first parks a pending-clawback marker");
     assert.equal(marker.consumed_at, null);
     const untouched = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`)).rows[0]!;
+      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`, "objects"))[0]!;
     assert.equal(untouched.status, "initiated");
 
     // The real settlement lands late: books the receipt AND replays the
@@ -113,18 +113,18 @@ test("a refund arriving before its success parks, settles, and queues exactly on
     const second = await handleProviderWebhook("stripe", succeeded.headers, succeeded.body);
     assert.equal(second?.status, "settled");
     const receipts = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'`));
-    assert.equal(receipts.rows[0]!.n, 1);
+      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'`, "objects"));
+    assert.equal(receipts[0]!.n, 1);
     const attempt = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`)).rows[0]!;
+      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`, "objects"))[0]!;
     assert.equal(attempt.status, "succeeded");
     assert.ok(attempt.journal_entry_id);
     const consumed = (await db.execute<{ consumed_at: string | null; consumed_attempt_id: string | null }>(sql`
       select consumed_at, consumed_attempt_id from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`)).rows[0]!;
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"))[0]!;
     assert.ok(consumed.consumed_at, "marker consumed by the settlement");
-    const queued = (await db.execute<{ status: string; reason: string }>(sql`
-      select status, reason from payment_disputes where org_id = ${org.orgId}`)).rows;
+    const queued = await db.execute<{ status: string; reason: string }>(sql`
+      select status, reason from payment_disputes where org_id = ${org.orgId}`, "objects");
     assert.equal(queued.length, 1);
     assert.equal(queued[0]!.status, "pending_review");
     assert.match(queued[0]!.reason ?? "", /did not report a refund amount/);
@@ -140,11 +140,11 @@ test("a refund arriving before its success parks, settles, and queues exactly on
     assert.equal(third?.status, "refunded_pending_review");
     const markers = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`));
-    assert.equal(markers.rows[0]!.n, 1);
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"));
+    assert.equal(markers[0]!.n, 1);
     const queuedAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`));
-    assert.equal(queuedAfter.rows[0]!.n, 2);
+      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`, "objects"));
+    assert.equal(queuedAfter[0]!.n, 2);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -228,11 +228,11 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
       consumed_attempt_id: string | null;
     }>(sql`
       select consumed_at, consumed_attempt_id from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`)).rows[0];
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"))[0];
     const notes = async () => (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${org.orgId} and table_name = 'payment_attempts'
-         and changes->'after'->>'note' like '%before its settlement event%'`)).rows[0]!.n;
+         and changes->'after'->>'note' like '%before its settlement event%'`, "objects"))[0]!.n;
 
     // The refund beats settlement and parks (the intent is unresolvable).
     const parked = await fire({
@@ -266,8 +266,8 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     assert.equal(await notes(), 0);
     const consumedOnce = await marker();
     assert.ok(consumedOnce?.consumed_at, "marker consumed by the duplicate success");
-    const queued = (await db.execute<{ status: string }>(sql`
-      select status from payment_disputes where org_id = ${org.orgId}`)).rows;
+    const queued = await db.execute<{ status: string }>(sql`
+      select status from payment_disputes where org_id = ${org.orgId}`, "objects");
     assert.equal(queued.length, 1);
     assert.equal(queued[0]!.status, "pending_review");
 
@@ -294,8 +294,8 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     assert.equal(await notes(), 0, "no controller notes; the queue carries the return");
     assert.equal((await marker())?.consumed_at, consumedOnce?.consumed_at);
     const queuedAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`));
-    assert.equal(queuedAfter.rows[0]!.n, 1, "one return queues exactly once");
+      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`, "objects"));
+    assert.equal(queuedAfter[0]!.n, 1, "one return queues exactly once");
   } finally {
     await dropScratchOrg(org.orgId);
   }

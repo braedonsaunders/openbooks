@@ -51,6 +51,6 @@ test("the native receipt endpoint saves and replays its exact processor pool sco
     assert.equal((await save({ ...body, currency: "USD" })).status, 409);
     assert.equal((await save({ ...body, subsidiaryId: randomUUID() })).status, 404);
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries
-      where org_id = ${org.orgId} and source_document_id = ${result.doc.id}`)).rows[0]!.count, 0);
+      where org_id = ${org.orgId} and source_document_id = ${result.doc.id}`, "objects"))[0]!.count, 0);
   } finally { await dropScratchOrg(org.orgId); }
 });

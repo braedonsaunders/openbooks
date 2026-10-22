@@ -99,7 +99,7 @@ async function seed(): Promise<Fixture> {
   const projectId = (await db.execute<{ id: string }>(sql`
     insert into projects (org_id, name, is_active)
     values (${org.orgId}, 'Charge Project', true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     update items set expense_account_id = ${org.accounts.cogs}
      where id = ${org.items.service} and org_id = ${org.orgId}`);
@@ -137,8 +137,8 @@ async function postAs(
 }
 
 async function chargeStatus(orgId: string, id: string): Promise<string | null> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ status: string }>(sql`
-    select status from documents where org_id = ${orgId} and id = ${id}`))).rows;
+  const rows = await withOrgContext(orgId, () => db.execute<{ status: string }>(sql`
+    select status from documents where org_id = ${orgId} and id = ${id}`, "objects"));
   return rows[0]?.status ?? null;
 }
 

@@ -45,7 +45,7 @@ const sources = {
       return { action: 'send' };
     }
   `,
-  '../platform/db.ts': 'export const db = { execute: async () => ({ rows: [] }) }; export const withOrgContext = (_org, action) => action();',
+  '../platform/db.ts': 'export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === "objects" ? result.rows : result)) }; export const withOrgContext = (_org, action) => action();',
   '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
   '../delivery/email-config.ts': `
     export const resolveOrgEmailTransportDetailed = async () => globalThis.__emailTerminalCleanupTest.transportResolution;

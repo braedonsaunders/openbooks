@@ -13,8 +13,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function seedScenario(orgId: string, bookId: string, periodId: string, name: string): Promise<string> {
   const fy = (await db.execute<{ fiscal_year: number }>(
-    sql`select fiscal_year from accounting_periods where id = ${periodId}`,
-  )).rows[0]!.fiscal_year;
+    sql`select fiscal_year from accounting_periods where id = ${periodId}`, "objects",
+  ))[0]!.fiscal_year;
   const id = randomUUID();
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)

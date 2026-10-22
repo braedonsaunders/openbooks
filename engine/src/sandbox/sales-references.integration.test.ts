@@ -28,9 +28,9 @@ test("full clone and refresh retain original inactive sales references without p
     // customer-role assignment that would prevent native employee retirement.
     await db.execute(sql`update employee_roles set is_active=false where org_id=${org.orgId} and party_id in (${employeeId},${otherEmployeeId})`);
     await db.execute(sql`update parties set is_active=false where org_id=${org.orgId} and id in (${employeeId},${otherEmployeeId})`);
-    const source = async () => (await db.execute(sql`select to_jsonb(c) as profile,to_jsonb(e) as role,to_jsonb(p) as person
+    const source = async () => await db.execute(sql`select to_jsonb(c) as profile,to_jsonb(e) as role,to_jsonb(p) as person
       from crm_account_profiles c join employee_roles e on e.org_id=c.org_id and e.party_id=c.sales_rep_id
-      join parties p on p.org_id=e.org_id and p.id=e.party_id where c.org_id=${org.orgId} and c.id=${profileId}`)).rows;
+      join parties p on p.org_id=e.org_id and p.id=e.party_id where c.org_id=${org.orgId} and c.id=${profileId}`, "objects");
     const before = await source();
     const created = await withOrgContext(org.orgId, () => createSandbox({
       productionOrgId: org.orgId, name, tier: "full", masked: false, createdBy: actorId,
@@ -41,20 +41,20 @@ test("full clone and refresh retain original inactive sales references without p
       select ob_rebase(${employeeId}::uuid,sandbox_seed) as employee,ob_rebase(${otherEmployeeId}::uuid,sandbox_seed) as other_employee,
         ob_rebase(${prospectId}::uuid,sandbox_seed) as prospect,ob_rebase(${org.customerId}::uuid,sandbox_seed) as customer,
         ob_rebase(${profileId}::uuid,sandbox_seed) as profile from orgs where id=${target}
-    `)).rows[0]!;
-    const copied = async () => (await db.execute(sql`select c.id,c.party_id,c.sales_rep_id,
+    `, "objects"))[0]!;
+    const copied = async () => await db.execute(sql`select c.id,c.party_id,c.sales_rep_id,
         to_jsonb(c)-'id'-'org_id'-'party_id'-'sales_rep_id' as evidence,
         e.is_active as employee_active,e.is_sales_rep,e.sales_rep_since::text,p.is_active as person_active
       from crm_account_profiles c join employee_roles e on e.org_id=c.org_id and e.party_id=c.sales_rep_id
-      join parties p on p.org_id=e.org_id and p.id=e.party_id where c.org_id=${target}`)).rows;
+      join parties p on p.org_id=e.org_id and p.id=e.party_id where c.org_id=${target}`, "objects");
     const assertCopy = async () => {
       const rows = await copied();
       const evidence = (await db.execute(sql`select to_jsonb(c)-'id'-'org_id'-'party_id'-'sales_rep_id' as evidence
-        from crm_account_profiles c where c.org_id=${org.orgId} and c.id=${profileId}`)).rows[0]!.evidence;
+        from crm_account_profiles c where c.org_id=${org.orgId} and c.id=${profileId}`, "objects"))[0]!.evidence;
       assert.deepEqual(rows, [{ id: identities.profile, party_id: identities.customer, sales_rep_id: identities.employee,
         evidence, employee_active: false, is_sales_rep: true, sales_rep_since: "2020-01-01", person_active: false }]);
       assert.notEqual(identities.employee, employeeId);
-      assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`)).rows[0]!.status, "ready");
+      assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`, "objects"))[0]!.status, "ready");
       assert.deepEqual(await source(), before, "cloning never changes original sales or employment evidence");
     };
     await assertCopy();
@@ -67,7 +67,7 @@ test("full clone and refresh retain original inactive sales references without p
     ] as const) {
       const write = async () => {
         await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
-        assert.equal((await db.execute<{ allowed: boolean }>(sql`select openbooks_clone_authority() as allowed`)).rows[0]!.allowed, privileged);
+        assert.equal((await db.execute<{ allowed: boolean }>(sql`select openbooks_clone_authority() as allowed`, "objects"))[0]!.allowed, privileged);
         await db.execute(query);
       };
       await assert.rejects(privileged ? withMaintenanceTransaction(null, write) : withOrgTransaction(scope, write),
@@ -86,7 +86,7 @@ test("full clone and refresh retain original inactive sales references without p
     await withOrgContext(org.orgId, () => refreshSandbox(created.sandboxId, { keepCustomizations: false, authority: { actorId: actorId! } }));
     await assertCopy();
   } finally {
-    const rows = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`)).rows;
+    const rows = await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`, "objects");
     for (const row of rows) await deleteSandbox(row.id, { systemReason: "Remove historical sales clone fixture" });
     await dropScratchOrgReporting(org.orgId);
   }

@@ -40,7 +40,7 @@ export async function lockChequeBank(tx: SqlExecutor, orgId: string, profileId: 
       and (p.subsidiary_id is null or p.subsidiary_id is not distinct from ${subsidiaryId}::uuid)
       and (a.subsidiary_id is null or a.subsidiary_id is not distinct from ${subsidiaryId}::uuid)
     for share of p,f,a
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!row) throw new PaymentError('Select an active cheque bank profile matching this payroll entity and currency in Payment Operations Setup');
   const secrets = row.sealed ? unsealJson<Record<string, unknown>>(row.sealed, {orgId,purpose:'payment.originator.secrets'}) : {};
   const bank = ['bankName','branchAddress','accountEncoding','effectiveFrom'].some(key=>secrets[key]!==undefined) ? validateChequeBank(secrets) : null;

@@ -36,15 +36,15 @@ async function readEmailAuditRows(orgId: string): Promise<{ actorId: string | nu
     select actor_id as "actorId", at, changes from audit_log
      where org_id = ${orgId} and table_name = 'orgs' and row_id = ${orgId}
      order by at, id
-  `);
-  return r.rows.map((row) => ({ ...row, at: new Date(row.at) }));
+  `, "objects");
+  return r.map((row) => ({ ...row, at: new Date(row.at) }));
 }
 
 async function storedEmail(orgId: string): Promise<Record<string, unknown> | null> {
   const r = await db.execute<{ email: Record<string, unknown> | null }>(sql`
     select settings -> 'email' as email from orgs where id = ${orgId}
-  `);
-  return r.rows[0]?.email ?? null;
+  `, "objects");
+  return r[0]?.email ?? null;
 }
 
 const USER = randomUUID();
@@ -100,8 +100,8 @@ test("provider configuration writes carry attributable redacted before/after aud
     // The org metadata is stamped with the acting user.
     const stamped = await db.execute<{ updated_by: string | null }>(sql`
       select updated_by from orgs where id = ${org.orgId}
-    `);
-    assert.equal(stamped.rows[0]?.updated_by, USER);
+    `, "objects");
+    assert.equal(stamped[0]?.updated_by, USER);
 
     // Rotation: same shape, marker changes, before/after both show a credential.
     await saveOrgEmailConfig(org.orgId, { secret: "sk_live_email_secret_two" }, userActor);
@@ -156,8 +156,8 @@ test("provider configuration writes carry attributable redacted before/after aud
     assert.deepEqual(system.changes.actor, { kind: "system", reason: "provisioning sync" });
     const afterSystem = await db.execute<{ updated_by: string | null }>(sql`
       select updated_by from orgs where id = ${org.orgId}
-    `);
-    assert.equal(afterSystem.rows[0]?.updated_by, null);
+    `, "objects");
+    assert.equal(afterSystem[0]?.updated_by, null);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -218,7 +218,7 @@ test("a stale revision is rejected with zero partial write and a fresh retry suc
     );
     assert.equal((await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log where org_id = ${missing}
-    `)).rows[0]?.n, 0);
+    `, "objects"))[0]?.n, 0);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -234,10 +234,10 @@ test("a forced audit failure rolls the configuration write back entirely", { ski
     );
     const emailBefore = (await db.execute<{ email: unknown }>(sql`
       select settings -> 'email' as email from orgs where id = ${org.orgId}
-    `)).rows[0]?.email;
+    `, "objects"))[0]?.email;
     const metaBefore = await db.execute<{ updated_at: string | Date; updated_by: string | null }>(sql`
       select updated_at, updated_by from orgs where id = ${org.orgId}
-    `);
+    `, "objects");
     const auditsBefore = (await readEmailAuditRows(org.orgId)).length;
 
     await db.execute(sql`
@@ -269,13 +269,13 @@ test("a forced audit failure rolls the configuration write back entirely", { ski
     // rolled back as one unit.
     const emailAfter = (await db.execute<{ email: unknown }>(sql`
       select settings -> 'email' as email from orgs where id = ${org.orgId}
-    `)).rows[0]?.email;
+    `, "objects"))[0]?.email;
     assert.deepEqual(emailAfter, emailBefore);
     const metaAfter = await db.execute<{ updated_at: string | Date; updated_by: string | null }>(sql`
       select updated_at, updated_by from orgs where id = ${org.orgId}
-    `);
-    assert.deepEqual(metaAfter.rows[0]?.updated_at, metaBefore.rows[0]?.updated_at);
-    assert.equal(metaAfter.rows[0]?.updated_by, metaBefore.rows[0]?.updated_by);
+    `, "objects");
+    assert.deepEqual(metaAfter[0]?.updated_at, metaBefore[0]?.updated_at);
+    assert.equal(metaAfter[0]?.updated_by, metaBefore[0]?.updated_by);
     assert.equal((await readEmailAuditRows(org.orgId)).length, auditsBefore);
   } finally {
     await dropScratchOrgReporting(org.orgId);
@@ -312,8 +312,8 @@ test("concurrent configuration edits serialize on the org row and cannot lose di
       const r = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pg_stat_activity
          where datname = current_database() and state = 'active' and wait_event_type = 'Lock'
-      `);
-      if ((r.rows[0]?.n ?? 0) > 0) break;
+      `, "objects");
+      if ((r[0]?.n ?? 0) > 0) break;
       if (Date.now() - parkedAt > 15_000) {
         throw new Error("the second configuration save never parked on the org row lock");
       }
@@ -409,9 +409,9 @@ test("an unknown remittance id refuses by name instead of recording a phantom se
         insert into payment_remittances (id, org_id, payment_instruction_id, recipients, status)
         values (${randomUUID()}, ${other.orgId}, ${otherInstructionId}, '["ap@example.com"]'::jsonb, 'pending')
         returning id
-      `);
+      `, "objects");
       await assert.rejects(
-        markPaymentRemittanceSent(org.orgId, foreign.rows[0]!.id),
+        markPaymentRemittanceSent(org.orgId, foreign[0]!.id),
         /no such pending remittance/,
       );
     } finally {
@@ -421,7 +421,7 @@ test("an unknown remittance id refuses by name instead of recording a phantom se
     await assert.rejects(markPaymentRemittanceSent(org.orgId, cancelled), /no such pending remittance/);
     const row = (await db.execute<{ status: string }>(sql`
       select status from payment_remittances where id = ${cancelled}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "cancelled");
   } finally {
     await dropScratchOrgReporting(org.orgId);

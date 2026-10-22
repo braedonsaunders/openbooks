@@ -138,7 +138,7 @@ test("changing or deleting the ship-to after posting does not move prior sales",
     const documentId = await postKernelInvoice(org, "NEXUS-STAMP-1", "100000.0000");
 
     const stamp = (await db.execute<{ ship_to_country: string | null; ship_to_region: string | null }>(sql`
-      select ship_to_country, ship_to_region from documents where id = ${documentId}`)).rows[0]!;
+      select ship_to_country, ship_to_region from documents where id = ${documentId}`, "objects"))[0]!;
     assert.deepEqual(
       { country: stamp.ship_to_country, region: stamp.ship_to_region },
       { country: "US", region: "CA" },

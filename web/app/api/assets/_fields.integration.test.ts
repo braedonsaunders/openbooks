@@ -41,9 +41,9 @@ test("asset account overrides accept shared and caller-visible accounts and refu
        where a.org_id = ${org.orgId} and a.is_active and not a.is_summary
          ${assetAccountScopeSql(org.orgId, scope)}
          and a.id = any(${`{${childAccountId},${siblingAccountId},${sharedAccountId},${inheritableAccountId}}`}::uuid[])
-    `);
+    `, "objects");
     assert.deepEqual(
-      new Set(pickerAccounts.rows.map((row) => row.id)),
+      new Set(pickerAccounts.map((row) => row.id)),
       new Set([childAccountId, siblingAccountId, sharedAccountId, inheritableAccountId]),
     );
   } finally {

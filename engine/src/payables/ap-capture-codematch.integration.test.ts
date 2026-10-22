@@ -126,7 +126,7 @@ async function resolve(fx: Fixture, captureId: string, data: NormalizedCapture) 
 async function billedOf(fx: Fixture): Promise<string> {
   return (await db.execute<{ quantity_billed: string }>(sql`
     select quantity_billed::text as quantity_billed from document_lines where id = ${fx.poLineId}
-  `)).rows[0]!.quantity_billed;
+  `, "objects"))[0]!.quantity_billed;
 }
 
 function assertBilled(actual: string, expected: string, message: string) {

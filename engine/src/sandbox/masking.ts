@@ -124,9 +124,9 @@ export async function loadMaskingPolicies(
   const res = await db.execute<MaskingPolicyRow>(sql`
     select table_name, column_name, transform
       from masking_policies
-     where org_id = ${prodOrgId} and is_active = true`);
+     where org_id = ${prodOrgId} and is_active = true`, "objects");
   const map = new Map<string, Map<string, MaskTransform>>();
-  for (const r of res.rows) {
+  for (const r of res) {
     if (!map.has(r.table_name)) map.set(r.table_name, new Map());
     map.get(r.table_name)!.set(r.column_name, r.transform);
   }

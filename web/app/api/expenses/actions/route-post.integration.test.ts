@@ -153,8 +153,8 @@ async function documentState(documentId: string) {
              (select status from posting_effects
                where document_id = ${documentId}) as effects
         from documents d where d.id = ${documentId}
-    `)),
-  )).rows[0]!
+    `, 'objects')),
+  ))[0]!
 }
 
 test('a refused route post leaves the report, its memo, and script evidence untouched', async () => {

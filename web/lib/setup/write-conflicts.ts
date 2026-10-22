@@ -36,13 +36,13 @@ export async function filingAccountDuplicateConflict(
   orgId: string,
   accountNumber: string,
 ): Promise<{ status: 409; body: { error: string; code: 'duplicate' } }> {
-  const row = ((await db.execute(sql`
+  const row = (await db.execute(sql`
     select fa.account_number, fa.name, fa.country, fa.program_type, fa.state_code,
            fa.is_active, s.name as subsidiary_name
       from payroll_filing_accounts fa
       left join subsidiaries s on s.id = fa.subsidiary_id and s.org_id = fa.org_id
      where fa.org_id = ${orgId} and fa.account_number = ${accountNumber}
-     order by fa.created_at limit 1`))).rows[0] as {
+     order by fa.created_at limit 1`, 'objects'))[0] as {
     account_number: string; name: string; country: string; program_type: string;
     state_code: string | null; is_active: boolean; subsidiary_name: string | null;
   } | undefined
@@ -112,14 +112,14 @@ export async function guardLeavePolicyWindow(
 ): Promise<void> {
   if (!window.isActive) return
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'openbooks:leave-policy:' + orgId + ':' + window.leaveTypeId}, 0))`)
-  const rows = (await tx.execute<{ id: string; applies_to: unknown; effective_from: string; effective_to: string | null }>(sql`
+  const rows = await tx.execute<{ id: string; applies_to: unknown; effective_from: string; effective_to: string | null }>(sql`
     select id, applies_to, effective_from::text as effective_from, effective_to::text as effective_to
       from hrm_leave_policies
      where org_id = ${orgId} and leave_type_id = ${window.leaveTypeId} and is_active
        and effective_from <= ${window.effectiveTo ?? '9999-12-31'}
        and (effective_to is null or effective_to >= ${window.effectiveFrom})
        and (${ignoreId}::uuid is null or id <> ${ignoreId}::uuid)
-  `)).rows
+  `, 'objects')
   const applies = window.appliesTo ?? {}
   const pins = (stored: unknown) => (typeof stored === 'object' && stored !== null ? stored as Record<string, unknown> : {})
   const candidate = {

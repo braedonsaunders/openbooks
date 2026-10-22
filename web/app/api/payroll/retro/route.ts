@@ -69,11 +69,11 @@ async function scopedRetroEmployees(
   const root = (await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${gate.user.orgId} and parent_id is null and is_active
-     order by created_at limit 1`)).rows[0]?.id ?? null
+     order by created_at limit 1`, 'objects'))[0]?.id ?? null
   const schedule = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select coalesce(s.subsidiary_id, ${root}) as "subsidiaryId"
       from pay_schedules s
-     where s.org_id = ${gate.user.orgId} and s.id = ${payScheduleId} and s.is_active`)).rows[0]
+     where s.org_id = ${gate.user.orgId} and s.id = ${payScheduleId} and s.is_active`, 'objects'))[0]
   const deniedSchedule = guardSubsidiaryScope(gate, schedule?.subsidiaryId)
   if (deniedSchedule) return deniedSchedule
 
@@ -88,8 +88,8 @@ async function scopedRetroEmployees(
      where r.org_id = ${gate.user.orgId}
        and r.pay_schedule_id = ${payScheduleId}
        and r.run_status = 'committed'
-       and r.run_type <> 'retro'`)
-  for (const sourceRun of sourceRuns.rows) {
+       and r.run_type <> 'retro'`, 'objects')
+  for (const sourceRun of sourceRuns) {
     const denied = guardSubsidiaryScope(gate, sourceRun.subsidiaryId)
     if (denied) return denied
   }
@@ -109,8 +109,8 @@ async function scopedRetroEmployees(
        and r.pay_schedule_id = ${payScheduleId}
        and r.run_status = 'committed'
        and r.run_type <> 'retro'
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`)
-  const ids = rows.rows.map((row) => row.id)
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects')
+  const ids = rows.map((row) => row.id)
   // An empty scoped population must never be represented as `undefined`: the
   // engine treats undefined/empty as "all employees". There is no retro data
   // to expose when no allowed employee has a committed source run.
@@ -130,8 +130,8 @@ async function guardExcludedSourceRuns(
      where r.org_id = ${gate.user.orgId}
        and r.pay_schedule_id = ${payScheduleId}
        and r.document_id in (${sql.join(sourceIds.map((id) => sql`${id}`), sql`, `)})
-       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`)
-  return rows.rows.length === new Set(sourceIds).size
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects')
+  return rows.length === new Set(sourceIds).size
     ? null
     : notFound("record")
 }

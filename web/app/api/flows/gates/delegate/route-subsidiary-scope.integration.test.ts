@@ -35,8 +35,8 @@ test("allocation flow scope includes every subsidiary touched by the run", async
       assignees: [{ type: "user", userId: actor }], preventSelfApproval: false }));
     await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId, actorId: actor,
       subjectKind: "allocation_run", subjectId: runId }));
-    const gates = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates
-      where org_id=${org.orgId} and subject_kind='allocation_run' and subject_id=${runId} and status='pending'`))).rows;
+    const gates = await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates
+      where org_id=${org.orgId} and subject_kind='allocation_run' and subject_id=${runId} and status='pending'`, "objects"));
     assert.equal(gates.length, 1);
     const gateId = gates[0]!.id;
 

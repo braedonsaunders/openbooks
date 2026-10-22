@@ -16,7 +16,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `const state = globalThis[Symbol.for('openbooks.period-preset-refusal-test')]
-     export const db = { async execute() { state.dbCalls += 1; return { rows: state.periodRows } } }`,
+     export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.dbCalls += 1; return inMode({ rows: state.periodRows }) } }`,
   ],
   [
     'mock:org-scope',

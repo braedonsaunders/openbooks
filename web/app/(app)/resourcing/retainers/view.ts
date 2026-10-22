@@ -212,7 +212,7 @@ export async function loadRetainersPage(
            where r.org_id = ${authz.user.orgId} and r.id = ${requested}
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
            limit 1
-        `)).rows[0] ?? null
+        `, 'objects'))[0] ?? null
       : null
     if (requested && !createMode && !loaded) notFound()
 
@@ -247,7 +247,7 @@ export async function loadRetainersPage(
             from res_retainer_drawdowns
            where org_id = ${authz.user.orgId} and retainer_id = ${retainerId}
            order by week_start
-        `)).rows
+        `, 'objects'))
       : []
     // The displayed balance is the landed engine policy, never a local
     // formula: total minus posted drawdowns for this retainer.
@@ -266,7 +266,7 @@ export async function loadRetainersPage(
             from performance_obligations
            where org_id = ${authz.user.orgId} and id = ${obligationId}
            limit 1
-        `)).rows[0]?.contractId ?? null
+        `, 'objects'))[0]?.contractId ?? null
       : null
 
     const evidence = retainerId
@@ -280,7 +280,7 @@ export async function loadRetainersPage(
             left join parties p on p.org_id = e.org_id and p.id = te.employee_party_id
            where e.org_id = ${authz.user.orgId} and d.retainer_id = ${retainerId}
            order by te.worked_on, p.display_name
-        `)).rows
+        `, 'objects'))
       : []
 
     // Recognition events carry the deterministic source reference
@@ -309,7 +309,7 @@ export async function loadRetainersPage(
            where ev.org_id = ${authz.user.orgId} and ev.obligation_id = ${obligationId}
              and ev.source_reference like ${`${RECOGNITION_PREFIX}%`}
            order by ev.period_month
-        `)).rows
+        `, 'objects'))
       : []
 
     const invoice = loaded?.invoiceDocumentId
@@ -318,7 +318,7 @@ export async function loadRetainersPage(
             from documents
            where org_id = ${authz.user.orgId} and id = ${loaded.invoiceDocumentId}
            limit 1
-        `)).rows[0] ?? null
+        `, 'objects'))[0] ?? null
       : null
 
     const editable = canManage && (createMode || (state === 'draft' && loaded?.invoiceDocumentId === null))

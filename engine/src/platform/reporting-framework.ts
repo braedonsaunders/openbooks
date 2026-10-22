@@ -26,8 +26,8 @@ export async function orgReportingFramework(orgId: string, options: {
   const r = (await (options.runner ?? db).execute<{ rf: string | null }>(sql`
     select settings->>'reportingFramework' as rf
       from orgs where id = ${orgId} ${options.lock ? sql`for share` : sql``}
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   // A missing org row is a caller bug (wrong id, wrong tenant), never a
   // US-GAAP org: refuse it by name instead of defaulting a framework for an
   // organization that does not exist.

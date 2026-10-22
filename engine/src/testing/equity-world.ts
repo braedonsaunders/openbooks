@@ -49,14 +49,14 @@ export function applied<T extends { status: string }>(result: T): Extract<T, { s
 export async function setEquityFeature(orgId: string, key: string, on: boolean): Promise<void> {
   const updated = await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${key}}`}::text[], ${on ? "true" : "false"}::jsonb, true)
-     where id = ${orgId} returning id`);
-  assert.equal(updated.rows.length, 1, `feature ${key} written`);
+     where id = ${orgId} returning id`, "objects");
+  assert.equal(updated.length, 1, `feature ${key} written`);
 }
 
 async function grant(orgId: string, roleKey: string, permissions: string[]): Promise<void> {
   const updated = await db.execute(sql`
-    update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb where org_id = ${orgId} and key = ${roleKey} returning id`);
-  assert.equal(updated.rows.length, 1, `role ${roleKey} granted`);
+    update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb where org_id = ${orgId} and key = ${roleKey} returning id`, "objects");
+  assert.equal(updated.length, 1, `role ${roleKey} granted`);
 }
 
 /**
@@ -79,7 +79,7 @@ export async function seedEquityPolicy(w: Omit<EquityWorld, "commonClassId">, ef
 /** Monthly periods August through December 2026 on the scratch calendar. */
 async function seedSecondHalf(org: ScratchOrg): Promise<void> {
   const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`)).rows[0]!.fiscal_calendar_id;
+    select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
   for (let month = 8; month <= 12; month += 1) {
     const key = `2026-${String(month).padStart(2, "0")}`;
     await db.execute(sql`
@@ -140,16 +140,16 @@ export function equityRefusal(code: string) {
 }
 
 export async function entryLines(orgId: string, entryId: string): Promise<{ account_id: string; amount: string; currency: string; txn_amount: string }[]> {
-  return (await db.execute<{ account_id: string; amount: string; currency: string; txn_amount: string }>(sql`
+  return await db.execute<{ account_id: string; amount: string; currency: string; txn_amount: string }>(sql`
     select account_id, amount::text as amount, currency, txn_amount::text as txn_amount
-      from journal_lines where org_id = ${orgId} and entry_id = ${entryId} order by line_number`)).rows;
+      from journal_lines where org_id = ${orgId} and entry_id = ${entryId} order by line_number`, "objects");
 }
 
 export async function accountBalance(orgId: string, accountId: string): Promise<string> {
   const row = (await db.execute<{ balance: string }>(sql`
     select coalesce(sum(jl.amount), 0)::numeric(19,4)::text as balance
       from journal_lines jl join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
-     where jl.org_id = ${orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`)).rows[0];
+     where jl.org_id = ${orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`, "objects"))[0];
   return row?.balance ?? "0.0000";
 }
 

@@ -62,7 +62,7 @@ test("a setup link offers only the customer's addresses and enabled currencies, 
         body: JSON.stringify({ partyId: customer, provider: "stripe", ...body }),
       })));
     const pendingRows = async () => Number((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from customer_payment_methods where org_id = ${org.orgId} and party_id = ${customer}`)).rows[0]?.n ?? 0);
+      select count(*)::int as n from customer_payment_methods where org_id = ${org.orgId} and party_id = ${customer}`, "objects"))[0]?.n ?? 0);
 
     const foreignCurrency = await start({ currency: "JPY" });
     assert.equal(foreignCurrency.status, 422);

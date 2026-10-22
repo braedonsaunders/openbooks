@@ -147,8 +147,8 @@ test(
       const rows = await db.execute<{ revision: string }>(sql`
         select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
           from custom_records where id = ${id}
-      `);
-      return rows.rows[0]!.revision;
+      `, "objects");
+      return rows[0]!.revision;
     };
     const resolved: ResolvedApiType = {
       key: typeKey,
@@ -191,7 +191,7 @@ test(
         const stored = (await db.execute<{ title: string; n: string }>(sql`
           select data ->> 'title' as title, (select count(*)::text from custom_records where id = ${hiddenDraftId}) as n
             from custom_records where id = ${hiddenId}
-        `)).rows[0];
+        `, "objects"))[0];
         assert.equal(stored?.title, "hidden");
         assert.equal(stored?.n, "1");
 
@@ -207,7 +207,7 @@ test(
         const after = (await db.execute<{ title: string; subsidiary_id: string | null }>(sql`
           select data ->> 'title' as title, data ->> 'subsidiary_id' as subsidiary_id
             from custom_records where id = ${visibleId}
-        `)).rows[0];
+        `, "objects"))[0];
         assert.equal(after?.title, "kept");
         assert.equal(
           after?.subsidiary_id,

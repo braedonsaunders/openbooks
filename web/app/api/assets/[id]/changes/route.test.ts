@@ -63,7 +63,7 @@ const _hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `const s=globalThis[Symbol.for('asset-change-route')];export const db={execute:async()=>({rows:s.directReads++===0?[{subsidiary_id:s.legacyOwner}]:[]}),transaction:async fn=>{s.transactionReads=0;return fn({execute:async()=>{s.transactionReads++;if(s.transactionReads===1)return {rows:[{id:'asset',subsidiaryId:s.currentOwner}]};if(s.transactionReads===5&&s.groupScope)return {rows:[{elimination_subsidiary_id:s.groupScope}]};return {rows:[]}}})}};export async function withOrgTransaction(_orgId,fn){return fn()}`,
+        source: `const s=globalThis[Symbol.for('asset-change-route')];export const db={execute:async(_query, mode)=>Promise.resolve({rows:s.directReads++===0?[{subsidiary_id:s.legacyOwner}]:[]}).then((result) => (mode === 'objects' ? result.rows : result)),transaction:async fn=>{s.transactionReads=0;return fn({execute:async(_query, mode)=>{ const inMode = (result) => (mode === 'objects' ? result.rows : result);s.transactionReads++;if(s.transactionReads===1)return inMode({rows:[{id:'asset',subsidiaryId:s.currentOwner}]});if(s.transactionReads===5&&s.groupScope)return inMode({rows:[{elimination_subsidiary_id:s.groupScope}]});return inMode({rows:[]})}})}};export async function withOrgTransaction(_orgId,fn){return fn()}`,
       };
     if (url === "mock:asset-scope-db-dependency")
       return {

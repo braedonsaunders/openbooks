@@ -49,27 +49,28 @@ const flattenValues = (values: unknown[]): unknown[] =>
   )
 
 const harness = {
-  async execute(query: { text?: string; values?: unknown[] }) {
+  async execute(query: { text?: string; values?: unknown[] }, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const text = String(query.text ?? '')
     if (text.includes('select s.*, r.period_start')) {
-      return { rows: [state.stub] }
+      return inMode({ rows: [state.stub] })
     }
     if (text.includes('select l.kind, coalesce(c.name, l.description) as description')) {
-      return {
+      return inMode({
         rows: [
           { kind: 'earning', component_id: 'regular', description: 'Regular', hours: '80', rate: '50', amount: '4000.0000', taxable: true },
           { kind: 'deduction', component_id: 'fit', system_key: 'fit', description: 'Federal income tax', hours: null, rate: null, amount: '312.3100' },
           ...(state.nonCashBenefit ? [{ kind: 'earning', description: 'Gift card', hours: null, rate: null, amount: '100.0000', payment_kind: 'non_cash' }] : []),
         ],
-      }
+      })
     }
     if (text.includes('select l.component_id, l.kind')) {
       // Earlier committed stubs of the year, one aggregated row per component.
-      return {
+      return inMode({
         rows: [
           { component_id: 'regular', kind: 'earning', payment_kind: 'cash', description: 'Regular', system_key: null, taxable: true, amount: '28000.0000', hours: '560' },
         ],
-      }
+      })
     }
     if (text.includes('select coalesce(sum(s.gross)')) {
       state.ytdQuery = text
@@ -78,10 +79,10 @@ const harness = {
       // (never an enumerated factor list): without the lines join the stub's
       // federal withholding reads as 0.
       const tax = text.includes('pay_stub_lines') && text.includes('system_key') ? '312.3100' : '0'
-      return { rows: [{ gross: '4000.0000', net: '3281.6900', tax }] }
+      return inMode({ rows: [{ gross: '4000.0000', net: '3281.6900', tax }] })
     }
     if (text.includes('select name, base_currency')) {
-      return { rows: [{ name: 'Example Org', base_currency: 'USD', brand_primary: null }] }
+      return inMode({ rows: [{ name: 'Example Org', base_currency: 'USD', brand_primary: null }] })
     }
     throw new Error(`unexpected query in pay-stub values test: ${text}`)
   },
@@ -117,7 +118,7 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       const harness = globalThis[Symbol.for('openbooks.pay-stub-values-test')]
-      export const db = { execute: (query) => harness.execute(query) }
+      export const db = { execute: (query, mode) => harness.execute(query, mode) }
       // lib/subsidiaries (the shared scope predicate values.ts reuses) imports
       // this seam; the pay-stub path under test never reaches it.
       export async function withBypassContext(_opts, work) { return work() }

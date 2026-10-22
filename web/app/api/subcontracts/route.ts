@@ -125,13 +125,13 @@ async function listSubcontracts(request: Request) {
         from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id) ch on true
      where s.org_id = ${orgId} and s.id = ${id}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-  `)
-          if (!contract.rows[0]) return notFound("record");
+  `, "objects")
+          if (!contract[0]) return notFound("record");
           // A subcontract on a project outside the caller's scope is a missing one.
-          const { projectSubsidiaryId, ...subcontract } = contract.rows[0];
+          const { projectSubsidiaryId, ...subcontract } = contract[0];
           const denied = guardSubsidiaryScope(authz, projectSubsidiaryId);
           if (denied) return denied
-          await lockProjectForScope(db, orgId, String(contract.rows[0].projectId), authz.allowedSubsidiaryIds, "share");
+          await lockProjectForScope(db, orgId, String(contract[0].projectId), authz.allowedSubsidiaryIds, "share");
           const sov = await db.execute(sql`
       select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
              l.retainage_percent as "retainagePercent", l.expense_account_id as "expenseAccountId",
@@ -145,12 +145,12 @@ async function listSubcontracts(request: Request) {
            order by vpa.application_number desc limit 1
         ) earned on true
        where l.org_id = ${orgId} and l.subcontract_id = ${id} order by l.sort_order, l.item_no
-    `);
+    `, "objects");
           const changes = await db.execute(sql`
       select id, number, description, status, amount, target_sov_line_id as "targetSovLineId",
              approved_on as "approvedOn"
         from subcontract_change_orders where org_id = ${orgId} and subcontract_id = ${id} order by created_at desc
-    `)
+    `, "objects")
           const applications = await db.execute(sql`
       select a.id, a.application_number as "applicationNumber", a.period_end as "periodEnd",
              a.vendor_invoice_number as "vendorInvoiceNumber", a.status, a.revision,
@@ -158,7 +158,7 @@ async function listSubcontracts(request: Request) {
              a.vendor_bill_document_id as "vendorBillDocumentId", d.document_number as "vendorBillNumber", d.status as "vendorBillStatus"
         from vendor_pay_applications a left join documents d on d.id = a.vendor_bill_document_id and d.org_id = a.org_id
        where a.org_id = ${orgId} and a.subcontract_id = ${id} order by a.application_number desc
-    `)
+    `, "objects")
           const lines = await db.execute(sql`
       select l.pay_application_id as "payApplicationId", l.sov_line_id as "sovLineId", sov.item_no as "itemNo", sov.description,
              sov.scheduled_value as "scheduledValue", l.previous_earned as "previousEarned",
@@ -167,7 +167,7 @@ async function listSubcontracts(request: Request) {
         from vendor_pay_application_lines l join vendor_pay_applications a on a.id = l.pay_application_id and a.org_id = l.org_id
         join subcontract_sov_lines sov on sov.id = l.sov_line_id and sov.org_id = l.org_id
        where l.org_id = ${orgId} and a.subcontract_id = ${id} order by a.application_number desc, sov.sort_order
-    `);
+    `, "objects");
           const controls = await db.execute(sql`
       select c.id, c.control_type as "controlType", c.status, c.pay_application_id as "payApplicationId",
              c.vendor_bill_document_id as "vendorBillDocumentId", c.joint_payee_party_id as "jointPayeePartyId",
@@ -175,21 +175,21 @@ async function listSubcontracts(request: Request) {
              c.effective_on as "effectiveOn", c.expires_on as "expiresOn", c.release_reason as "releaseReason"
         from subcontract_payment_controls c left join parties p on p.id = c.joint_payee_party_id and p.org_id = c.org_id
        where c.org_id = ${orgId} and c.subcontract_id = ${id} order by c.created_at desc
-    `);
+    `, "objects");
           const releases = await db.execute(sql`
       select r.id, r.period_end as "periodEnd", r.amount, r.vendor_bill_document_id as "vendorBillDocumentId",
              d.document_number as "vendorBillNumber", d.status as "vendorBillStatus", r.memo
         from vendor_retainage_releases r join documents d on d.id = r.vendor_bill_document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.subcontract_id = ${id} order by r.period_end desc
-    `);
+    `, "objects");
           return NextResponse.json({
     subcontract,
-    sovLines: sov.rows,
-    changeOrders: changes.rows,
-    payApplications: applications.rows,
-    payApplicationLines: lines.rows,
-    paymentControls: controls.rows,
-    retainageReleases: releases.rows,
+    sovLines: sov,
+    changeOrders: changes,
+    payApplications: applications,
+    payApplicationLines: lines,
+    paymentControls: controls,
+    retainageReleases: releases,
   });
         })
       } catch (error) {
@@ -289,7 +289,7 @@ async function actionProjectSubsidiary(
                   join projects p on p.id = s.project_id and p.org_id = s.org_id
                  where child.org_id = ${orgId} and child.id = ${id}`;
   }
-  const row = (await db.execute<{ project_id: string; subsidiary_id: string | null }>(query)).rows[0];
+  const row = (await db.execute<{ project_id: string; subsidiary_id: string | null }>(query, "objects"))[0];
   return row ? { found: true, subsidiaryId: row.subsidiary_id, projectId: row.project_id } : { found: false, subsidiaryId: null, projectId: null };
 }
 

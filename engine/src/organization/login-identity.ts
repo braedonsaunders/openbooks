@@ -24,6 +24,6 @@ export async function loginEmailSignsInElsewhere(email: string, orgId: string | 
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
        where lower(u.email) = ${email} and u.is_active
          and (${orgId}::uuid is null or u.org_id <> ${orgId}::uuid)
-    ) as present`))).rows[0];
+    ) as present`, "objects")))[0];
   return row?.present === true;
 }

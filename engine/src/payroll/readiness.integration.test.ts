@@ -69,7 +69,7 @@ describe("readiness-levy-scope", () => {
     // employment rides the org's root subsidiary like the party does.
     const employmentSubsidiary = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries where org_id = ${orgId} and parent_id is null and is_active
-       order by created_at limit 1`)).rows[0]!.id;
+       order by created_at limit 1`, "objects"))[0]!.id;
     const employmentId = await seedWorkerEmployment(orgId, id, employmentSubsidiary);
     await seedPayrollProfile(orgId, id, employmentId, scheduleId, actorId, {
       country: country, province: province, payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
@@ -135,7 +135,7 @@ describe("readiness-levy-scope", () => {
       await calculatePayRun({ orgId: org.orgId, documentId: caRun.documentId, actorId });
       const calculated = (await db.execute<{ calculated_at: string }>(sql`
         select calculated_at::text as calculated_at from pay_runs
-         where org_id = ${org.orgId} and document_id = ${caRun.documentId}`)).rows[0]!;
+         where org_id = ${org.orgId} and document_id = ${caRun.documentId}`, "objects"))[0]!;
       const usRun = await makeRun(org.orgId, actorId, usSchedule);
       await markCommittedAfter(org.orgId, usRun.documentId, calculated.calculated_at);
       assert.equal(await levyStale(org.orgId, caRun.documentId), false);
@@ -159,7 +159,7 @@ describe("readiness-levy-scope", () => {
       await calculatePayRun({ orgId: org.orgId, documentId: runB.documentId, actorId });
       const calculated = (await db.execute<{ calculated_at: string }>(sql`
         select calculated_at::text as calculated_at from pay_runs
-         where org_id = ${org.orgId} and document_id = ${runB.documentId}`)).rows[0]!;
+         where org_id = ${org.orgId} and document_id = ${runB.documentId}`, "objects"))[0]!;
       await markCommittedAfter(org.orgId, runA.documentId, calculated.calculated_at);
       assert.equal(await levyStale(org.orgId, runB.documentId), true);
     } finally {
@@ -219,15 +219,15 @@ describe("readiness-levy-scope", () => {
       assert.ok(!fresh.reasons.includes("componentDefinitions"));
       const componentId = (await db.execute<{ id: string }>(sql`
         select id from pay_components
-         where org_id = ${org.orgId} and code = 'BASE' and country is null`)).rows[0]!.id;
+         where org_id = ${org.orgId} and code = 'BASE' and country is null`, "objects"))[0]!.id;
       const departmentId = (await db.execute<{ id: string }>(sql`
         insert into departments (id, org_id, code, name, is_active)
-        values (gen_random_uuid(), ${org.orgId}, 'OVERHEAD', 'Overhead', true) returning id`)).rows[0]!.id;
+        values (gen_random_uuid(), ${org.orgId}, 'OVERHEAD', 'Overhead', true) returning id`, "objects"))[0]!.id;
       const accountId = (await db.execute<{ id: string }>(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                               reconcilable, required_dimensions, custom, subsidiary_include_children)
         values (gen_random_uuid(), ${org.orgId}, '8010', 'Overhead wages', 'expense', false, true,
-                false, false, '[]'::jsonb, '{}'::jsonb, true) returning id`)).rows[0]!.id;
+                false, false, '[]'::jsonb, '{}'::jsonb, true) returning id`, "objects"))[0]!.id;
       await db.execute(sql`
         insert into pay_component_department_expenses
                (org_id, pay_component_id, department_id, expense_account_id,
@@ -257,7 +257,7 @@ describe("readiness-levy-scope", () => {
       await calculatePayRun({ orgId: org.orgId, documentId: runA.documentId, actorId });
       const calculated = (await db.execute<{ calculated_at: string }>(sql`
         select calculated_at::text as calculated_at from pay_runs
-         where org_id = ${org.orgId} and document_id = ${runA.documentId}`)).rows[0]!;
+         where org_id = ${org.orgId} and document_id = ${runA.documentId}`, "objects"))[0]!;
       await markCommittedAfter(org.orgId, runB.documentId, calculated.calculated_at);
       assert.equal(await levyStale(org.orgId, runA.documentId), false);
     } finally {
@@ -449,13 +449,13 @@ describe("readiness-rq-schedule", () => {
   async function subsidiaryOf(orgId: string): Promise<string> {
     const row = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries where org_id = ${orgId} and parent_id is null and is_active
-       order by created_at limit 1`)).rows[0]!;
+       order by created_at limit 1`, "objects"))[0]!;
     return row.id;
   }
 
   async function period2025(orgId: string): Promise<string> {
     const calendar = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${orgId} order by created_at limit 1`)).rows[0]!;
+      select id from fiscal_calendars where org_id = ${orgId} order by created_at limit 1`, "objects"))[0]!;
     const periodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
@@ -466,7 +466,7 @@ describe("readiness-rq-schedule", () => {
 
   async function payrollBlob(orgId: string): Promise<Record<string, unknown>> {
     const row = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
-      select settings->'payroll' as p from orgs where id = ${orgId}`)).rows[0]!;
+      select settings->'payroll' as p from orgs where id = ${orgId}`, "objects"))[0]!;
     return row.p ?? {};
   }
 
@@ -516,7 +516,7 @@ describe("readiness-rq-schedule", () => {
         // A small 2026 run only: the advisory measures the prior year, which is
         // empty, so nothing fires.
         const period = (await db.execute<{ id: string }>(sql`
-          select id from accounting_periods where org_id = ${fx.orgId} limit 1`)).rows[0]!.id;
+          select id from accounting_periods where org_id = ${fx.orgId} limit 1`, "objects"))[0]!.id;
         await seedCommittedRun(fx, period, "2026-07-31", 2026, "400.0000");
         const passed = frequencyChecks(await payrollSetupState(fx.orgId));
         assert.equal(passed.length, 1);
@@ -563,7 +563,7 @@ describe("readiness-rq-schedule", () => {
           null,
         );
         const period = (await db.execute<{ id: string }>(sql`
-          select id from accounting_periods where org_id = ${fx.orgId} limit 1`)).rows[0]!.id;
+          select id from accounting_periods where org_id = ${fx.orgId} limit 1`, "objects"))[0]!.id;
         // History in the monthly band ($60,000/year = $5,000/month): agrees with
         // the configured frequency.
         await seedCommittedRun(fx, period, "2026-07-31", 2026, "60000.0000");
@@ -575,7 +575,7 @@ describe("readiness-rq-schedule", () => {
         const fx2 = await seedRqOrg("monthly");
         try {
           const period2 = (await db.execute<{ id: string }>(sql`
-            select id from accounting_periods where org_id = ${fx2.orgId} limit 1`)).rows[0]!.id;
+            select id from accounting_periods where org_id = ${fx2.orgId} limit 1`, "objects"))[0]!.id;
           await seedCommittedRun(fx2, period2, "2026-07-31", 2026, "400.0000");
           const period25 = await period2025(fx2.orgId);
           await seedCommittedRun(fx2, period25, "2025-12-31", 2025, "400000.0000");

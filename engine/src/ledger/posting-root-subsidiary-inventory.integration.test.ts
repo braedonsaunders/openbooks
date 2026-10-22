@@ -52,8 +52,8 @@ async function glBalanceBySubsidiary(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${accountId}
-       and e.subsidiary_id = ${subsidiaryId}`));
-  return toUnits(r.rows[0]!.bal);
+       and e.subsidiary_id = ${subsidiaryId}`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 /** Σ (remaining × unit_cost) across one entity's layers at a position. */
@@ -68,8 +68,8 @@ async function layerValueBySubsidiary(
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
        and stock_location_id = ${stockLocationId}
-       and subsidiary_id = ${subsidiaryId}`));
-  return toUnits(r.rows[0]!.v);
+       and subsidiary_id = ${subsidiaryId}`, "objects"));
+  return toUnits(r[0]!.v);
 }
 
 /** Document whose header carries the defect's exact shape:
@@ -112,27 +112,23 @@ async function draftRootDocument(
     update documents set status = 'approved'
      where id = ${docId} and org_id = ${org.orgId}`);
   // Guard the premise: the fixture really produced a null-subsidiary header.
-  const [row] = (
-    await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from documents where id = ${docId}`)
-  ).rows;
+  const [row] = await db.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from documents where id = ${docId}`, "objects");
   assert.equal(row?.subsidiary_id ?? null, null);
   return docId;
 }
 
 async function effectsStatus(documentId: string): Promise<string | null> {
   const r = (await db.execute<{ status: string | null }>(sql`
-    select status from posting_effects where document_id = ${documentId}`));
-  return r.rows[0]?.status ?? null;
+    select status from posting_effects where document_id = ${documentId}`, "objects"));
+  return r[0]?.status ?? null;
 }
 
 async function firstLineId(documentId: string): Promise<string> {
-  return (
-    await db.execute<{ id: string }>(sql`
+  return (await db.execute<{ id: string }>(sql`
       select id from document_lines
        where document_id = ${documentId}
-       order by line_number limit 1`)
-  ).rows[0]!.id;
+       order by line_number limit 1`, "objects"))[0]!.id;
 }
 
 interface MovementFacts {
@@ -149,10 +145,10 @@ async function movementFacts(
     select count(*)::int as n, min(subsidiary_id::text) as subsidiary_id
       from inventory_movements
      where org_id = ${orgId} and document_line_id = ${documentLineId}
-       and kind = ${kind}`));
+       and kind = ${kind}`, "objects"));
   return {
-    count: r.rows[0]!.n,
-    subsidiaryIds: r.rows[0]!.n > 0 ? [r.rows[0]!.subsidiary_id!] : [],
+    count: r[0]!.n,
+    subsidiaryIds: r[0]!.n > 0 ? [r[0]!.subsidiary_id!] : [],
   };
 }
 
@@ -167,8 +163,8 @@ async function consumptionFacts(
       from cost_layer_consumptions c
       join inventory_movements m on m.id = c.issue_movement_id
                                  and m.org_id = c.org_id
-     where c.org_id = ${orgId} and m.document_line_id = ${documentLineId}`));
-  return { quantity: toUnits(r.rows[0]!.q), value: toUnits(r.rows[0]!.v) };
+     where c.org_id = ${orgId} and m.document_line_id = ${documentLineId}`, "objects"));
+  return { quantity: toUnits(r[0]!.q), value: toUnits(r[0]!.v) };
 }
 
 test("a root-subsidiary customer invoice relieves stock once and the GL corroborates the layers", { skip: !DB }, async () => {
@@ -261,7 +257,7 @@ test("a root-subsidiary vendor bill receives stock once and the GL corroborates 
         from cost_layers
        where org_id = ${org.orgId} and source_movement_id in (
          select id from inventory_movements
-          where org_id = ${org.orgId} and document_line_id = ${lineId})`)).rows[0]!;
+          where org_id = ${org.orgId} and document_line_id = ${lineId})`, "objects"))[0]!;
     assert.equal(layers.n, 1);
     assert.equal(toUnits(layers.unit_cost), toUnits("2"));
 
@@ -323,7 +319,7 @@ test("replay of a root-subsidiary bill runs its inventory effect exactly once", 
       select id, org_id, document_id, kind, entry_id,
              posting_date::text as posting_date, actor_id, attempt_count,
              lease_token
-        from posting_effects where document_id = ${billId}`)).rows[0]!;
+        from posting_effects where document_id = ${billId}`, "objects"))[0]!;
     await runPostDocumentEffects(billId, "approved", {
       alreadyClaimed: forced,
     });
@@ -335,7 +331,7 @@ test("replay of a root-subsidiary bill runs its inventory effect exactly once", 
       select count(*)::int as n from cost_layers
        where org_id = ${org.orgId} and source_movement_id in (
          select id from inventory_movements
-          where org_id = ${org.orgId} and document_line_id = ${lineId})`)).rows[0]!;
+          where org_id = ${org.orgId} and document_line_id = ${lineId})`, "objects"))[0]!;
     assert.equal(layers.n, 1, "replay must not duplicate the layer");
     assert.equal(await effectsStatus(billId), "succeeded");
   } finally {
@@ -363,7 +359,7 @@ test("a root-subsidiary invoice short of stock refuses its post and commits noth
     );
     const lineId = await firstLineId(invoiceId);
     const statusBefore = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${invoiceId}`)).rows[0]!.status;
+      select status from documents where id = ${invoiceId}`, "objects"))[0]!.status;
 
     await assert.rejects(
       () => postDocument(invoiceId, deps(org), { deferEffects: true }),
@@ -372,7 +368,7 @@ test("a root-subsidiary invoice short of stock refuses its post and commits noth
     // The refusal rolled the whole unit back: no status change, no journal,
     // no receivable or revenue, no effect row, no movement.
     const after = (await db.execute<{ status: string; entry: string | null }>(sql`
-      select status, posted_entry_id as entry from documents where id = ${invoiceId}`)).rows[0]!;
+      select status, posted_entry_id as entry from documents where id = ${invoiceId}`, "objects"))[0]!;
     assert.equal(after.status, statusBefore);
     assert.equal(after.entry, null);
     assert.equal(await effectsStatus(invoiceId), null);

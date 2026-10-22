@@ -57,15 +57,15 @@ async function postedInvoiceCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from documents
      where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
-  `));
-  return Number(r.rows[0]!.n);
+  `, "objects"));
+  return Number(r[0]!.n);
 }
 
 async function journalEntryCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `));
-  return Number(r.rows[0]!.n);
+  `, "objects"));
+  return Number(r[0]!.n);
 }
 
 /**
@@ -142,8 +142,8 @@ test(
 
       const guard = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from recurring_occurrence_documents where org_id = ${org.orgId}
-      `));
-      assert.equal(Number(guard.rows[0]!.n), 1);
+      `, "objects"));
+      assert.equal(Number(guard[0]!.n), 1);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -216,7 +216,7 @@ test(
             on audit.row_id = d.id and audit.org_id = d.org_id
            and audit.table_name = 'documents' and audit.action = 'post'
          where d.id = ${documentId} and d.org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(provenance.documentCreatedBy, null, "the scheduler never impersonates the template author");
       assert.equal(provenance.submittedBy, null, "system submission retains a null actor");
       assert.equal(provenance.lineCreatedBy, null, "generated lines carry the same system actor");
@@ -272,7 +272,7 @@ test(
             on audit.row_id = d.id and audit.org_id = d.org_id
            and audit.table_name = 'documents' and audit.action = 'post'
          where d.id = ${run.documentId} and d.org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(provenance.documentCreatedBy, currentActor);
       assert.equal(provenance.submittedBy, currentActor);
       assert.equal(provenance.lineCreatedBy, currentActor);
@@ -311,7 +311,7 @@ test(
           from documents d
           join document_lines line on line.document_id = d.id and line.org_id = d.org_id
          where d.id = ${run.documents[0]!.documentId} and d.org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(generated, {
         status: "posted",
         createdBy: null,
@@ -350,7 +350,7 @@ test(
                  where occurrence.org_id = schedule.org_id) as lineage
           from recurring_schedules schedule
          where schedule.org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.match(state.lastError ?? "", /approval flow "Test approval" failed: gate.*zero assignees/);
       assert.equal(state.documents, 0, "a system submission never bypasses an unresolved approval gate");
       assert.equal(state.lineage, 0, "the refused generation consumes no occurrence");
@@ -370,7 +370,7 @@ test(
       const scheduleId = await seedInvoiceSchedule(org, actorId);
       const templateId = (await db.execute<{ id: string }>(sql`
         select template_document_id::text as id from recurring_schedules where id = ${scheduleId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       // Throw at the final lineage insert, after the cloned header and lines
       // and even auto-posting have run. The outer org transaction must unwind
       // the complete accounting unit, including the occurrence claim.
@@ -387,12 +387,12 @@ test(
         select next_run_on as "nextRunOn", last_error as "lastError", is_active as "isActive",
                run_count as "runCount", last_document_id as "lastDocumentId"
           from recurring_schedules where id = ${scheduleId}
-      `));
-      assert.equal(state.rows[0]!.nextRunOn, org.date, "the occurrence stays due for the next tick");
-      assert.ok(state.rows[0]!.lastError, "last_error names the failure");
-      assert.equal(state.rows[0]!.isActive, true, "the schedule was not deactivated by the failure");
-      assert.equal(state.rows[0]!.runCount, 0, "no success bookkeeping leaked from the failed tick");
-      assert.equal(state.rows[0]!.lastDocumentId, null);
+      `, "objects"));
+      assert.equal(state[0]!.nextRunOn, org.date, "the occurrence stays due for the next tick");
+      assert.ok(state[0]!.lastError, "last_error names the failure");
+      assert.equal(state[0]!.isActive, true, "the schedule was not deactivated by the failure");
+      assert.equal(state[0]!.runCount, 0, "no success bookkeeping leaked from the failed tick");
+      assert.equal(state[0]!.lastDocumentId, null);
       assert.equal(await postedInvoiceCount(org.orgId), 0);
       assert.equal(await journalEntryCount(org.orgId), 0);
       const persisted = (await db.execute<{ documents: number; lines: number; lineage: number }>(sql`
@@ -400,7 +400,7 @@ test(
           (select count(*)::int from documents where org_id = ${org.orgId} and id <> ${templateId}) as documents,
           (select count(*)::int from document_lines where org_id = ${org.orgId} and document_id <> ${templateId}) as lines,
           (select count(*)::int from recurring_occurrence_documents where org_id = ${org.orgId}) as lineage
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(persisted, { documents: 0, lines: 0, lineage: 0 },
         "the failed lineage write leaves no partial document, line, or lineage evidence");
 
@@ -418,9 +418,9 @@ test(
       assert.equal(await journalEntryCount(org.orgId), 1, "the ledger was hit exactly once");
       const retriedState = (await db.execute<{ nextRunOn: string; runCount: number }>(sql`
         select next_run_on as "nextRunOn", run_count as "runCount" from recurring_schedules where id = ${scheduleId}
-      `));
-      assert.notEqual(retriedState.rows[0]!.nextRunOn, org.date, "the claim now advances");
-      assert.equal(retriedState.rows[0]!.runCount, 1);
+      `, "objects"));
+      assert.notEqual(retriedState[0]!.nextRunOn, org.date, "the claim now advances");
+      assert.equal(retriedState[0]!.runCount, 1);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -468,12 +468,12 @@ test(
         select template_document_id::text as id
           from recurring_schedules
          where id = ${ownerScheduleId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const foreignTemplateId = (await db.execute<{ id: string }>(sql`
         select template_document_id::text as id
           from recurring_schedules
          where id = ${foreignScheduleId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
 
       await assert.rejects(
         db.execute(sql`
@@ -503,7 +503,7 @@ test(
         select count(*)::int as n
           from recurring_occurrence_documents
          where org_id = ${owner.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(Number(persisted.n), 0, "rejected cross-tenant rows leave no lineage evidence");
     } finally {
       await dropScratchOrgReporting(owner.orgId);
@@ -526,7 +526,7 @@ for (const changed of ["is_active", "auto_post"] as const) {
       const hold = new Promise<void>(resolve => { release = resolve; });
       let editorPid = 0;
       edit = withOrg(org.orgId, async () => {
-        editorPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+        editorPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
         await db.execute(sql`update recurring_schedules set ${sql.identifier(changed)} = false
           where id = ${scheduleId} and org_id = ${org.orgId}`);
         staged();
@@ -542,7 +542,7 @@ for (const changed of ["is_active", "auto_post"] as const) {
         blocked = (await db.execute<{ blocked: boolean }>(sql`select exists (
           select 1 from pg_stat_activity where datname = current_database()
             and ${editorPid} = any(pg_blocking_pids(pid))
-        ) as blocked`)).rows[0]!.blocked;
+        ) as blocked`, "objects"))[0]!.blocked;
         if (blocked) break;
         await new Promise(resolve => setTimeout(resolve, 10));
       }
@@ -556,7 +556,7 @@ for (const changed of ["is_active", "auto_post"] as const) {
       assert.equal(await journalEntryCount(org.orgId), 0);
       const stored = (await db.execute<{ nextRunOn: string }>(sql`
         select next_run_on as "nextRunOn" from recurring_schedules where id = ${scheduleId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       if (changed === "is_active") assert.equal(stored.nextRunOn, org.date);
     } finally {
       release();
@@ -578,7 +578,7 @@ test("malformed recurring cron records a failure without changing cadence or abo
     assert.deepEqual(result.documents.map(row => row.scheduleId), [good]);
     const stored = (await db.execute<{ nextRunOn: string; error: string }>(sql`
       select next_run_on as "nextRunOn", last_error as error from recurring_schedules where id=${bad}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stored.nextRunOn, org.date);
     assert.match(stored.error, /cron/);
     assert.equal(await journalEntryCount(org.orgId), 1);
@@ -606,14 +606,14 @@ test("a catch-up occurrence is dated with its occurrence date, not today", { ski
     const doc = (await db.execute<{ documentDate: string; dueDate: string }>(sql`
       select document_date::text as "documentDate", due_date::text as "dueDate"
         from documents where id = ${documentId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     // The template carries same-day terms, so the due date follows the
     // occurrence too — not today.
     assert.equal(doc.documentDate, occurrence);
     assert.equal(doc.dueDate, occurrence);
     const next = (await db.execute<{ nextRunOn: string }>(sql`
       select next_run_on::text as "nextRunOn" from recurring_schedules where id = ${scheduleId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(next.nextRunOn, advanceCadence(occurrence, "monthly"));
   } finally { await dropScratchOrgReporting(org.orgId); }
 });
@@ -635,11 +635,11 @@ test("a stored anchor day recovers month-end starts after drift", { skip: !DB },
     const doc = (await db.execute<{ documentDate: string }>(sql`
       select document_date::text as "documentDate" from documents
        where id = ${documentId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(doc.documentDate, "2026-02-28");
     const next = (await db.execute<{ nextRunOn: string }>(sql`
       select next_run_on::text as "nextRunOn" from recurring_schedules where id = ${scheduleId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(next.nextRunOn, "2026-03-31");
   } finally { await dropScratchOrgReporting(org.orgId); }
 });

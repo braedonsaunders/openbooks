@@ -1,1 +1,0 @@
-Data-only backfill of standard close checklists: each statement adds a standard step or dependency a checklist lacks and refuses nothing, so there is no precondition to probe.

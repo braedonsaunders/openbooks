@@ -92,8 +92,8 @@ export async function ensureTimesheetWeeks(
         join (values ${pairs}) as wanted(employee_party_id, week_start)
           on wanted.employee_party_id = tw.employee_party_id and wanted.week_start = tw.week_start
        where tw.org_id = ${orgId}
-    `);
-    for (const row of rows.rows) {
+    `, "objects");
+    for (const row of rows) {
       result.set(timesheetWeekKey({ employeePartyId: row.employee_party_id, weekStart: row.week_start }), {
         id: row.id,
         status: row.status,

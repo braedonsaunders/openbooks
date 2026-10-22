@@ -30,8 +30,8 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
           insert into departments (id, org_id, name, is_active, custom)
           values (${id}, ${org.orgId}, ${index === 0 ? "Program" : "Fundraising"}, true, '{}'::jsonb)
           returning id
-        `);
-        assert.equal(made.rows.length, 1);
+        `, "objects");
+        assert.equal(made.length, 1);
       }
     });
     await assert.rejects(setFunctionalMapping({
@@ -48,8 +48,8 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
             '{"nonprofit":true,"fundAccounting":true,"functionalExpenses":true,"grantManagement":true}'::jsonb,
           true
         ) where id = ${org.orgId} returning id
-      `);
-      assert.equal(enabled.rows.length, 1);
+      `, "objects");
+      assert.equal(enabled.length, 1);
     });
     const operating = await provisionFundAccounting({
       orgId: org.orgId,
@@ -68,9 +68,9 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
           insert into accounts (org_id, number, name, type, is_summary, is_active, required_dimensions, custom, created_by, updated_by)
           values (${org.orgId}, ${`IF-${randomUUID().slice(0, 8)}`}, ${name}, ${type}, false, true, '[]'::jsonb, '{}'::jsonb, ${actorId}, ${actorId})
           returning id
-        `);
-        assert.equal(account.rows.length, 1);
-        return account.rows[0]!.id;
+        `, "objects");
+        assert.equal(account.length, 1);
+        return account[0]!.id;
       });
     const dueFromFundsAccountId = await interfundAccount("Due from other funds", "asset_current_other");
     const dueToFundsAccountId = await interfundAccount("Due to other funds", "liability_current_other");
@@ -85,9 +85,9 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
     );
     await setFundPair({ orgId: org.orgId, fromFundId: operating.defaultFundId, toFundId: restricted.id, dueFromAccountId: dueFromFundsAccountId, dueToAccountId: dueToFundsAccountId, actorId, reason: "Rotate the settlement account" });
     const pairAudit = await withOrgContext(org.orgId, () => db.execute<{ action: string; changes: string }>(sql`
-      select action, changes::text as changes from audit_log where org_id = ${org.orgId} and table_name = 'fund_pairs' order by id desc limit 1`));
-    const pairChanges = JSON.parse(pairAudit.rows[0]!.changes) as { before: { due_to_account_id: string } | null; after: { due_to_account_id: string }; reason: string };
-    assert.equal(pairAudit.rows[0]?.action, "update");
+      select action, changes::text as changes from audit_log where org_id = ${org.orgId} and table_name = 'fund_pairs' order by id desc limit 1`, "objects"));
+    const pairChanges = JSON.parse(pairAudit[0]!.changes) as { before: { due_to_account_id: string } | null; after: { due_to_account_id: string }; reason: string };
+    assert.equal(pairAudit[0]?.action, "update");
     assert.equal(pairChanges.reason, "Rotate the settlement account");
     assert.ok(pairChanges.before && pairChanges.before.due_to_account_id !== pairChanges.after.due_to_account_id);
     for (const [departmentId, functionKey] of [
@@ -114,15 +114,15 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
         insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
         values (${org.orgId}, 'grant_allowable_costs', 'grant_costs', 'Grant Allowable Costs', '{}'::jsonb, false, true, ${actorId}, ${actorId})
         returning id
-      `);
-      assert.equal(group.rows.length, 1);
+      `, "objects");
+      assert.equal(group.length, 1);
       const member = await db.execute<{ id: string }>(sql`
         insert into account_group_members (org_id, group_id, account_id, dimension, created_by, updated_by)
-        values (${org.orgId}, ${group.rows[0]!.id}, ${org.accounts.cogs}, 'grant_allowable_costs', ${actorId}, ${actorId})
+        values (${org.orgId}, ${group[0]!.id}, ${org.accounts.cogs}, 'grant_allowable_costs', ${actorId}, ${actorId})
         returning id
-      `);
-      assert.equal(member.rows.length, 1);
-      return group.rows[0]!.id;
+      `, "objects");
+      assert.equal(member.length, 1);
+      return group[0]!.id;
     });
     const grant = await createGrant({
       orgId: org.orgId, code: "COMMUNITY-AWARD", name: "Community Award",
@@ -142,9 +142,9 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
         insert into accounts (org_id, number, name, type, is_summary, is_active, required_dimensions, custom, created_by, updated_by)
         values (${org.orgId}, ${`RENT-${randomUUID().slice(0, 8)}`}, 'Shared rent', 'expense', false, true, '[]'::jsonb, '{}'::jsonb, ${actorId}, ${actorId})
         returning id
-      `);
-      assert.equal(account.rows.length, 1);
-      return account.rows[0]!.id;
+      `, "objects");
+      assert.equal(account.length, 1);
+      return account[0]!.id;
     });
     const split = splitSharedCost({
       total: "30.00",
@@ -173,9 +173,9 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
       insert into accounting_books (org_id, code, name, is_primary, created_by)
       values (${org.orgId}, ${`TAX-${randomUUID().slice(0, 8)}`}, 'Secondary tax book', false, ${actorId})
       returning id
-    `));
+    `, "objects"));
     await withOrgTransaction(org.orgId, () => postEntry(db, {
-      orgId: org.orgId, bookId: secondaryBook.rows[0]!.id, subsidiaryId: org.subsidiaryId,
+      orgId: org.orgId, bookId: secondaryBook[0]!.id, subsidiaryId: org.subsidiaryId,
       entryNumber: `TAX-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
       currency: "CAD", actorId, origin: "journal", memo: "Secondary book activity",
       lines: [
@@ -199,8 +199,8 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
     });
     const accounts = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from accounts where org_id = ${org.orgId}
-    `));
-    assert.equal(new Set(statements.financialPosition.accounts.map((row) => row.accountId)).size, accounts.rows.length);
+    `, "objects"));
+    assert.equal(new Set(statements.financialPosition.accounts.map((row) => row.accountId)).size, accounts.length);
     assert.equal(statements.functionalExpenses.totalExpenseByCurrency[0]?.amount, "30.0000");
     assert.equal(statements.functionalExpenses.totals.reduce((sum, row) => sum + toUnits(row.amount), 0n), toUnits("30.0000"));
     assert.ok(statements.activities.rows.some((row) => row.grossReleasedFromClass === "20.0000"));
@@ -225,20 +225,20 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
     );
     assert.ok(afterVoid.cashFlows.reconciliation.every((row) => row.reconciliationDifference === "0.0000"));
     const gift = await withOrgContext(org.orgId, () => db.execute<{ id: string; entry_number: string }>(sql`
-      select id, entry_number from journal_entries where org_id = ${org.orgId} and entry_number like 'GIFT-%'`));
+      select id, entry_number from journal_entries where org_id = ${org.orgId} and entry_number like 'GIFT-%'`, "objects"));
     // A correction appends the mirror reversal, then marks the gift reversed.
     await withOrgTransaction(org.orgId, async () => {
       await postEntry(db, {
         orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
-        entryNumber: `${gift.rows[0]!.entry_number}-REV`, postingDate: org.date, periodId: org.periodId,
+        entryNumber: `${gift[0]!.entry_number}-REV`, postingDate: org.date, periodId: org.periodId,
         currency: "CAD", actorId, origin: "gift", memo: "Reverse restricted community gift",
-        reversesEntryId: gift.rows[0]!.id,
+        reversesEntryId: gift[0]!.id,
         lines: [
           { accountId: org.accounts.bank, amount: "-100.0000", extraDims: { fund: restricted.id } },
           { accountId: org.accounts.revenue, amount: "100.0000", extraDims: { fund: restricted.id } },
         ],
       });
-      await markEntryReversed(db, { orgId: org.orgId, entryId: gift.rows[0]!.id, actorId });
+      await markEntryReversed(db, { orgId: org.orgId, entryId: gift[0]!.id, actorId });
     });
     await withOrgContext(org.orgId, () => db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"functionalExpenses":false}'::jsonb, true)
@@ -260,8 +260,8 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
         from journal_lines jl join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
        where jl.org_id = ${org.orgId} and je.status in ('posted', 'reversed')
          and je.posting_date between '2026-01-01'::date and ${org.date}::date
-    `));
-    assert.equal(toUnits(movement.rows[0]?.amount ?? "0"), 0n);
+    `, "objects"));
+    assert.equal(toUnits(movement[0]?.amount ?? "0"), 0n);
   } finally {
     await dropScratchOrg(org.orgId);
   }

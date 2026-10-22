@@ -165,11 +165,9 @@ async function seedBudget(
    values(${id},${orgId},${bookId},2026,${name},'budget','draft',${submitterId},${submitterId})`);
   await db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
    values(${orgId},${id},${accountId},${periodId},'140000.0000',${submitterId},${submitterId})`);
-  const row = (
-    await db.execute<{ revision: number }>(
-      sql`select revision from budget_scenarios where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0]!;
+  const row = (await db.execute<{ revision: number }>(
+      sql`select revision from budget_scenarios where org_id=${orgId} and id=${id}`, "objects",
+    ))[0]!;
   await submitBudgetScenario(orgId, submitterId, id, row.revision);
   return id;
 }
@@ -198,11 +196,9 @@ test(
         "Immediate operating budget",
       );
       assert.equal(
-        (
-          await db.execute<{ status: string }>(
-            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${zero}`,
-          )
-        ).rows[0]?.status,
+        (await db.execute<{ status: string }>(
+            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${zero}`, "objects",
+          ))[0]?.status,
         "approved",
       );
       assert.equal(
@@ -247,11 +243,9 @@ test(
         decision: "approved",
       });
       assert.equal(
-        (
-          await db.execute<{ status: string }>(
-            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${id}`,
-          )
-        ).rows[0]?.status,
+        (await db.execute<{ status: string }>(
+            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${id}`, "objects",
+          ))[0]?.status,
         "pending_approval",
       );
       assert.equal(
@@ -264,11 +258,9 @@ test(
         decision: "approved",
       });
       assert.equal(
-        (
-          await db.execute<{ status: string }>(
-            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${id}`,
-          )
-        ).rows[0]?.status,
+        (await db.execute<{ status: string }>(
+            sql`select status from budget_scenarios where org_id=${org.orgId} and id=${id}`, "objects",
+          ))[0]?.status,
         "approved",
       );
       assert.equal(

@@ -49,7 +49,7 @@ test("depreciation schedules allocate every native month into 4-4-5 periods", { 
       values (${assetId},${org.orgId},${org.subsidiaryId},${categoryId},'RTL-445','Retail asset','in_service',${org.date},${org.date},1200,0,'straight_line',6,'full_month')`);
     await buildSchedule(assetId, org.orgId, actorId, org.bookId);
 
-    const lines = (await db.execute<{
+    const lines = await db.execute<{
       period_id: string; sequence: number; planned: string; starts_on: string; ends_on: string;
     }>(sql`
       select l.period_id, l.sequence, l.planned_amount::text as planned,
@@ -58,7 +58,7 @@ test("depreciation schedules allocate every native month into 4-4-5 periods", { 
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.asset_id = ${assetId} and s.book_id = ${org.bookId}
-       order by l.sequence`)).rows;
+       order by l.sequence`, "objects");
     // One line per fiscal period, never two rows for the 5-week mergers.
     assert.equal(new Set(lines.map((l) => l.period_id)).size, lines.length, "duplicate lines for one period");
     // The whole depreciable base is planned, nothing dropped.

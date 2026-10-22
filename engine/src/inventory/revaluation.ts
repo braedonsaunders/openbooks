@@ -64,16 +64,16 @@ export async function revalueOpenLayersToStandardCost(
         from cost_layers
        where org_id = ${orgId} and item_id = ${itemId} and remaining_quantity > 0
        order by received_at, id
-       for update`));
+       for update`, "objects"));
     const allowedSubsidiaryIds = p.allowedSubsidiaryIds;
-    if (allowedSubsidiaryIds != null && layers.rows.some(layer => !allowedSubsidiaryIds.has(layer.subsidiary_id))) {
+    if (allowedSubsidiaryIds != null && layers.some(layer => !allowedSubsidiaryIds.has(layer.subsidiary_id))) {
       throw new InventoryError("revaluation requires access to every subsidiary holding this item");
     }
     // Measure per owner AND stock location while rewriting every layer onto
     // standard cost: each position revalues into its own location-stamped
     // journal below, so location-sliced statements keep tying to the layers.
     const deltasByOwner = new Map<string, { subsidiaryId: string; stockLocationId: string; delta: bigint }>();
-    for (const layer of layers.rows) {
+    for (const layer of layers) {
       const delta =
         toUnits(extendCost(layer.remaining_quantity, p.standardCost)) -
         toUnits(extendCost(layer.remaining_quantity, layer.unit_cost));
@@ -86,7 +86,7 @@ export async function revalueOpenLayersToStandardCost(
     const standardCost = p.standardCost;
     const memo = p.memo ?? "Costing method revaluation to standard";
     const repriceLayers = async () => {
-      for (const layer of layers.rows) {
+      for (const layer of layers) {
         // A revised policy replaces known original basis (including an old
         // NRV allowance), but never invents provenance for a legacy layer.
         const basis = layer.remaining_original_cost == null
@@ -97,7 +97,7 @@ export async function revalueOpenLayersToStandardCost(
           set unit_cost=${standardCost}, remaining_original_cost=${basis},
               updated_at=now(), updated_by=${actorId}
           where org_id=${orgId} and id=${layer.id}
-          returning to_jsonb(cost_layers)::text as evidence`)).rows[0]!;
+          returning to_jsonb(cost_layers)::text as evidence`, "objects"))[0]!;
         // JSON stays text between database calls so financial numbers never
         // round through JavaScript's JSON-number representation.
         // A rate change is material even when owner deltas cancel or original

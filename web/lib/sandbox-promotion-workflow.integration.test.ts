@@ -54,8 +54,8 @@ for (const scenario of ["complete workflow", "stale production", "tenant isolati
         asActor(actors[1]!, sandbox.sandboxOrgId);
         assert.ok((await transitionChangeSetAction(captured.changeSetId, "review")).error);
         const source = entityListSource("change_set")!;
-        const visible = await db.execute(sql`select cs.id from change_sets cs where ${source.where(defaultListView("change_set"), {}, sandbox.sandboxOrgId)}`);
-        assert.equal(visible.rows.length, 0);
+        const visible = await db.execute(sql`select cs.id from change_sets cs where ${source.where(defaultListView("change_set"), {}, sandbox.sandboxOrgId)}`, "objects");
+        assert.equal(visible.length, 0);
         return;
       }
       if (scenario === "missing authority") {
@@ -72,8 +72,8 @@ for (const scenario of ["complete workflow", "stale production", "tenant isolati
       if(scenario==="tenant gates") {
         assert.equal((await read()).status,"reviewed");
         assert.equal(promotionNextStep(await read()).transition,null);
-        const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId}
-          and subject_kind='sandbox_change_set' and subject_id=${captured.changeSetId} and status='pending' order by id`)).rows;
+        const gates=await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId}
+          and subject_kind='sandbox_change_set' and subject_id=${captured.changeSetId} and status='pending' order by id`, "objects");
         assert.equal(gates.length,10);
         for(const gate of gates.slice(0,-1))await decideGate({gateId:gate.id,userId:actors[2]!,decision:"approved"});
         assert.equal((await read()).status,"reviewed");

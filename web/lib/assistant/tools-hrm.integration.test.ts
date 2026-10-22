@@ -47,12 +47,12 @@ async function grantRead(orgId: string, roleKey: string): Promise<void> {
 async function mkParty(orgId: string, name: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name)
-    values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id;
+    values (${orgId}, 'person', ${name}) returning id`, 'objects'))[0]!.id;
 }
 
 async function mkDepartment(orgId: string, name: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
-    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`)).rows[0]!.id;
+    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`, 'objects'))[0]!.id;
 }
 
 async function mkSubsidiary(orgId: string, name: string, parentId: string): Promise<string> {
@@ -60,13 +60,13 @@ async function mkSubsidiary(orgId: string, name: string, parentId: string): Prom
   return (await db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, name, parent_id, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${randomUUID()}, ${orgId}, ${name}, ${parentId}, 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)
-    returning id`)).rows[0]!.id;
+    returning id`, 'objects'))[0]!.id;
 }
 
 async function mkEmployment(orgId: string, partyId: string, subsidiaryId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`)).rows[0]!.id;
+    values (${orgId}, ${partyId}, ${subsidiaryId}) returning id`, 'objects'))[0]!.id;
 }
 
 async function mkVersion(orgId: string, employmentId: string, versionNo: number, status: string, from: string): Promise<void> {
@@ -79,7 +79,7 @@ async function mkVersion(orgId: string, employmentId: string, versionNo: number,
 async function mkAssignment(orgId: string, employmentId: string, key: string, departmentId: string | null): Promise<void> {
   const slot = (await db.execute<{ id: string }>(sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, ${key}) returning id`)).rows[0]!.id;
+    values (${orgId}, ${employmentId}, ${key}) returning id`, 'objects'))[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, version_no, job_title, department_id, fte, is_primary,
@@ -94,7 +94,7 @@ async function mkDraftRequest(orgId: string, employmentId: string): Promise<stri
       (org_id, employment_id, expected_employment_revision, payload, payload_digest,
        payload_schema_version, created_by)
     values (${orgId}, ${employmentId}, 1, '{"title":"Cashier"}'::jsonb, ${'0'.repeat(64)}, 'v1', null)
-    returning id`)).rows[0]!.id;
+    returning id`, 'objects'))[0]!.id;
 }
 
 function okData(result: unknown): Record<string, unknown> {

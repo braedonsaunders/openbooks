@@ -109,12 +109,10 @@ async function post(org: Org, invoiceId: string): Promise<string> {
 
 async function invoiceState(org: Org, id: string) {
   return withBypass(async () => {
-    const row = (
-      await db.execute<{ status: string; balance: string | null; entries: number }>(sql`
+    const row = (await db.execute<{ status: string; balance: string | null; entries: number }>(sql`
         select status, open_balance::text as balance,
                (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
-          from documents where id = ${id} and org_id = ${org.orgId}`)
-    ).rows[0]!;
+          from documents where id = ${id} and org_id = ${org.orgId}`, "objects"))[0]!;
     return row;
   });
 }

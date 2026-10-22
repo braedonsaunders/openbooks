@@ -181,7 +181,7 @@ test("creating an invoice without a due date derives it from terms; an explicit 
       requestBody: {},
     }));
     const dueOf = async (id: string) => (await withBypass(() => db.execute<{ due_date: string | null }>(sql`
-      select due_date::text as due_date from documents where id = ${id} and org_id = ${s.org.orgId}`))).rows[0]?.due_date ?? null;
+      select due_date::text as due_date from documents where id = ${id} and org_id = ${s.org.orgId}`, "objects")))[0]?.due_date ?? null;
 
     const derived = await create(undefined);
     assert.equal(derived.status, "created");
@@ -224,7 +224,7 @@ test("an omitted document currency uses the selected legal entity's functional c
       requestBody: body,
     }));
     const currency = (await withBypass(() => db.execute<{ currency: string }>(sql`
-      select currency from documents where org_id = ${s.org.orgId} and id = ${created.id}`))).rows[0]?.currency;
+      select currency from documents where org_id = ${s.org.orgId} and id = ${created.id}`, "objects")))[0]?.currency;
     assert.equal(currency, "USD");
   } finally {
     await dropScratchOrg(s.org.orgId);

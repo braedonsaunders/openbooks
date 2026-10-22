@@ -72,7 +72,7 @@ test(
       });
       const events = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}
-           and kind in ('disposed','written_off')`)).rows[0]!;
+           and kind in ('disposed','written_off')`, "objects"))[0]!;
       assert.equal(events.n, 0, "a refused disposal records nothing");
 
       // Following the remedy ties the disposal to the schedule: NBV 900.
@@ -85,7 +85,7 @@ test(
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-         where l.org_id = ${org.orgId} and e.id = ${disposal.entryId}`)).rows[0]!;
+         where l.org_id = ${org.orgId} and e.id = ${disposal.entryId}`, "objects"))[0]!;
       assert.equal(balance.total, "0.0000");
     } finally {
       await dropScratchOrg(org.orgId);

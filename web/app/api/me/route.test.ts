@@ -68,7 +68,8 @@ stubModules({
       const state = globalThis[Symbol.for('openbooks.me-route-test')]
       const sqlText = globalThis.openbooksSqlTextMe
       const classify = (text) => text.includes('update users') ? 'user' : text.includes('insert into audit_log') ? 'audit' : null
-      const execute = async (query) => {
+      const execute = async (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         state.queries.push(query)
         state.executed.push(text)
@@ -76,7 +77,7 @@ stubModules({
           throw new Error('forced storage failure: ' + state.failOnText)
         }
         const kind = classify(text)
-        if (kind === 'user' && !state.updateMatches) return { rows: [], rowCount: 0 }
+        if (kind === 'user' && !state.updateMatches) return inMode({ rows: [], rowCount: 0 })
         if (kind) {
           if (kind !== 'user' || state.updateMatches) {
             const write = { kind }
@@ -85,7 +86,7 @@ stubModules({
             if (!state.inTx && kind === 'user') state.userPreference = write.preference
           }
         }
-        return kind === 'user' ? { rows: state.updateMatches ? [{ id: state.authzUser.id }] : [] } : { rows: [] }
+        return inMode(await (kind === 'user' ? { rows: state.updateMatches ? [{ id: state.authzUser.id }] : [] } : { rows: [] }))
       }
       const transaction = async (work) => {
           state.inTx = true

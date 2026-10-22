@@ -72,8 +72,8 @@ export async function createCabinetFile(input: {
   await input.authorizeFolder?.(tx)
   if (sourceSelected) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['file-source', input.orgId, input.sourceSystem, input.sourceId])}, 0))`)
-    const existing = await tx.execute(sql`select 1 from files where org_id=${input.orgId} and source_system=${input.sourceSystem!} and source_id=${input.sourceId!} limit 1`)
-    if (existing.rows.length) throw new FileIngestionError('This source file already has a retained representation; select its existing native file version instead of uploading a duplicate', 409)
+    const existing = await tx.execute(sql`select 1 from files where org_id=${input.orgId} and source_system=${input.sourceSystem!} and source_id=${input.sourceId!} limit 1`, 'objects')
+    if (existing.length) throw new FileIngestionError('This source file already has a retained representation; select its existing native file version instead of uploading a duplicate', 409)
   }
   {
     const fileIns = (await tx.execute<{ id: string }>(sql`
@@ -84,8 +84,8 @@ export async function createCabinetFile(input: {
               ${input.contentType}, ${input.bytes.length}, ${kind}, ${contentHash}, ${input.createdBy}, ${input.createdBy},
               now(), now(), ${input.sourceSystem ?? null}, ${input.sourceId ?? null})
       returning id
-    `))
-    const fileId = fileIns.rows[0]?.id
+    `, 'objects'))
+    const fileId = fileIns[0]?.id
     if (!fileId) throw new Error('Cabinet file did not persist')
 
     const verIns = (await tx.execute<{ id: string }>(sql`
@@ -93,14 +93,14 @@ export async function createCabinetFile(input: {
                                   content_hash, created_by, created_at)
       values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind}, ${contentHash}, ${input.createdBy}, now())
       returning id
-    `))
-    const versionId = verIns.rows[0]?.id
+    `, 'objects'))
+    const versionId = verIns[0]?.id
     if (!versionId) throw new Error('Cabinet file version did not persist')
 
     const updated = await tx.execute(sql`
       update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${input.orgId} returning id
-    `)
-    if (updated.rows.length !== 1) throw new Error('Cabinet file version pointer did not persist')
+    `, 'objects')
+    if (updated.length !== 1) throw new Error('Cabinet file version pointer did not persist')
     // Object-store put happens inside the transaction window: an upload
     // failure rolls the metadata back (never metadata without bytes), while
     // a later failure is compensated by the transaction owner using the
@@ -112,8 +112,8 @@ export async function createCabinetFile(input: {
     else {
       const blob = await tx.execute(sql`
         insert into file_blobs (version_id, bytes) values (${versionId}, ${input.bytes}) returning version_id
-      `)
-      if (blob.rows.length !== 1) throw new Error('Cabinet file bytes did not persist')
+      `, 'objects')
+      if (blob.length !== 1) throw new Error('Cabinet file bytes did not persist')
     }
 
     if (input.auditActorId !== undefined) {
@@ -152,8 +152,8 @@ export async function createCabinetFile(input: {
              fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
              fo.name as "folderName"
         from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id where fi.id = ${fileId} and fi.org_id = ${input.orgId}
-    `))
-    if (!meta.rows[0]) throw new Error('Cabinet file readback was not found')
-    return meta.rows[0]
+    `, 'objects'))
+    if (!meta[0]) throw new Error('Cabinet file readback was not found')
+    return meta[0]
   }
 }

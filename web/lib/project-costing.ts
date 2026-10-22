@@ -321,7 +321,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
      group by te.project_task_id, pt.name
      order by hours desc
-  `)
+  `, 'objects')
   const byEmpRows = await db.execute(sql`
     select te.employee_party_id as key, coalesce(pty.display_name, '') as label,
            coalesce(sum(te.hours), 0) as hours,
@@ -333,7 +333,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
      group by te.employee_party_id, pty.display_name
      order by hours desc
-  `)
+  `, 'objects')
   const byItemRows = await db.execute(sql`
     select te.item_id as key, coalesce(i.name, '') as label,
            coalesce(sum(te.hours), 0) as hours,
@@ -345,7 +345,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
      group by te.item_id, i.name
      order by hours desc
-  `)
+  `, 'objects')
   const totalRow = await db.execute(sql`
     select coalesce(sum(te.hours), 0) as hours,
            coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
@@ -353,7 +353,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
            coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
       from time_entries te
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-  `)
+  `, 'objects')
   const row = (r: ProjectTimeSqlRow): ProjectTimeRow => ({
     key: r.key,
     label: r.label || '',
@@ -362,18 +362,18 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
     cost: m(r.cost),
     bill: m(r.bill),
   })
-  const tot = totalRow.rows[0] ?? {}
+  const tot = totalRow[0] ?? {}
   // Bill value prices hours through active labor rate cards; with none
   // configured every bill_rate is null and the zero total means "unpriced",
   // which the cockpit states explicitly instead of printing 0.00.
   const pricing = await db.execute(sql`select exists(
-    select 1 from item_rate_versions where org_id = ${orgId} and status = 'active') as configured`)
+    select 1 from item_rate_versions where org_id = ${orgId} and status = 'active') as configured`, 'objects')
   return {
-    byTask: (byTaskRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
-    byEmployee: (byEmpRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
-    byItem: (byItemRows.rows as unknown as ProjectTimeSqlRow[]).map(row),
+    byTask: (byTaskRows as unknown as ProjectTimeSqlRow[]).map(row),
+    byEmployee: (byEmpRows as unknown as ProjectTimeSqlRow[]).map(row),
+    byItem: (byItemRows as unknown as ProjectTimeSqlRow[]).map(row),
     totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: m(tot.cost), bill: m(tot.bill) },
-    laborPricingConfigured: Boolean((pricing.rows[0] as { configured: boolean } | undefined)?.configured),
+    laborPricingConfigured: Boolean((pricing[0] as { configured: boolean } | undefined)?.configured),
   }
 }
 
@@ -451,7 +451,7 @@ async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts:
       from time_entries te
      where te.org_id = ${orgId} and te.project_id = ${projectId}
        and te.status = 'approved' and te.is_billable and te.billing_status = 'unbilled'${dateFilter}
-  `)
+  `, 'objects')
   // Document-backed billable costs and charges are transaction-currency
   // facts too. Convert each source line before summing so unbilled revenue
   // and cost stay in the same functional currency as the time rollup.
@@ -469,9 +469,9 @@ async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts:
        and dl.is_billable and dl.billed_by_line_id is null
        and ((d.kind = 'project_charge' and d.status in ('approved','posted')) -- Live entries only: unbilled project work includes currently approved and posted charges
          or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check'))) -- Live entries only: unbilled project work includes currently posted costs
-  `)
-  const tr = timeRow.rows[0] ?? {}
-  const lr = lineRow.rows[0] ?? {}
+  `, 'objects')
+  const tr = timeRow[0] ?? {}
+  const lr = lineRow[0] ?? {}
   return {
     revenue: add(m(tr.revenue), m(lr.revenue)),
     cost: add(m(tr.cost), m(lr.cost)),

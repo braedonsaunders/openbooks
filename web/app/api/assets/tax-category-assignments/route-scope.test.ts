@@ -49,22 +49,24 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.asset-tax-scope-test')]
       export const db = {
-        async execute() {
+        async execute(_query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.dbCalls += 1
-          return { rows: [{ class_attribute: 'ca_cca_class' }] }
+          return inMode({ rows: [{ class_attribute: 'ca_cca_class' }] })
         },
         async transaction(work) {
           let calls = 0
-          return work({ execute: async () => {
+          return work({ execute: async (_query, mode) => {
+            const inMode = (result) => (mode === 'objects' ? result.rows : result)
             calls += 1
-            if (calls === 1) return { rows: [{ subsidiary_id: 'sub-a' }, { subsidiary_id: 'sub-b' }] }
-            if (calls === 5) return { rows: [{ tax_attributes: { ca_cca_class: '8' } }] }
-            if (calls === 6) return { rows: state.openPoolClass ? [{ class_code: state.openPoolClass }] : [] }
+            if (calls === 1) return inMode({ rows: [{ subsidiary_id: 'sub-a' }, { subsidiary_id: 'sub-b' }] })
+            if (calls === 5) return inMode({ rows: [{ tax_attributes: { ca_cca_class: '8' } }] })
+            if (calls === 6) return inMode({ rows: state.openPoolClass ? [{ class_code: state.openPoolClass }] : [] })
             if (calls === 7) {
               state.assignmentWrites += 1
-              return { rows: [{ tax_attributes: {} }] }
+              return inMode({ rows: [{ tax_attributes: {} }] })
             }
-            return { rows: [] }
+            return inMode({ rows: [] })
           } })
         },
       }

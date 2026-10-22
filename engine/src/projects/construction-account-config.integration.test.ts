@@ -46,7 +46,7 @@ async function snapshot(f: Fixture) {
       (select jsonb_agg(to_jsonb(l) order by l.id) from document_lines l where l.org_id=${f.org.orgId}) as invoice_lines,
       (select jsonb_agg(to_jsonb(n) order by n.id) from number_sequences n where n.org_id=${f.org.orgId}) as numbers,
       (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where a.org_id=${f.org.orgId}) as audit
-  `)).rows[0];
+  `, "objects"))[0];
 }
 
 async function refusedWithoutWrites(f: Fixture, message: RegExp) {
@@ -58,10 +58,10 @@ async function refusedWithoutWrites(f: Fixture, message: RegExp) {
 
 async function generatedWithAccount(f: Fixture, accountId: string) {
   const generated = await withOrgTransaction(f.org.orgId, () => generatePayApplicationInvoice(f.org.orgId, f.actor, f.app, null));
-  const lines = (await db.execute(sql`select account_id, amount::text, unit_price::text from document_lines where org_id=${f.org.orgId} and document_id=${generated.invoiceId} order by line_number`)).rows;
+  const lines = await db.execute(sql`select account_id, amount::text, unit_price::text from document_lines where org_id=${f.org.orgId} and document_id=${generated.invoiceId} order by line_number`, "objects");
   assert.deepEqual(lines, [{ account_id: accountId, amount: "1000.1234", unit_price: "1000.12340000" }]);
   assert.equal(generated.currentDue, "1000.1234");
-  assert.deepEqual((await db.execute(sql`select status, invoice_document_id from pay_applications where org_id=${f.org.orgId} and id=${f.app}`)).rows[0],
+  assert.deepEqual((await db.execute(sql`select status, invoice_document_id from pay_applications where org_id=${f.org.orgId} and id=${f.app}`, "objects"))[0],
     { status: "invoiced", invoice_document_id: generated.invoiceId });
 }
 

@@ -18,14 +18,14 @@ test("createSandbox rejects a sandbox source before creating target metadata", {
       /must be a production organization/,
     );
     const created = await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from sandboxes where production_org_id = ${source.orgId}`);
-    assert.equal(created.rows[0]?.count, 0);
+      select count(*)::int as count from sandboxes where production_org_id = ${source.orgId}`, "objects");
+    assert.equal(created[0]?.count, 0);
   } finally {
     const leftoverOrgs = await db.execute<{ id: string }>(sql`
-      select id from orgs where sandbox_of = ${source.orgId} and name = ${name}`);
-    for (const org of leftoverOrgs.rows) {
-      const sandboxes = await db.execute<{ id: string }>(sql`select id from sandboxes where org_id = ${org.id}`);
-      for (const sandbox of sandboxes.rows) await deleteSandbox(sandbox.id);
+      select id from orgs where sandbox_of = ${source.orgId} and name = ${name}`, "objects");
+    for (const org of leftoverOrgs) {
+      const sandboxes = await db.execute<{ id: string }>(sql`select id from sandboxes where org_id = ${org.id}`, "objects");
+      for (const sandbox of sandboxes) await deleteSandbox(sandbox.id);
       await db.execute(sql`delete from orgs where id = ${org.id}`);
     }
     await dropScratchOrg(source.orgId);

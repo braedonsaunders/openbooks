@@ -86,7 +86,7 @@ export async function emailPosReceipt(input: {
       from orgs o
       left join documents d on d.org_id = o.id and d.id = ${receipt.documentId}
       left join parties p on p.org_id = o.id and p.id = d.party_id
-     where o.id = ${input.orgId}`)).rows[0]
+     where o.id = ${input.orgId}`, 'objects'))[0]
   const to = input.to?.trim() || party?.email?.trim() || ''
   if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
     throw new PosError('No valid recipient email address.', 'invalid_input', 422, "Enter the customer's email address.")

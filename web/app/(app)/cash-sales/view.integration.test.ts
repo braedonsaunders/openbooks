@@ -108,8 +108,8 @@ test('a cash sale draft is editable for its create grant and postable only with 
     assert.equal(create.drawer?.createMode, true, 'New opens the unsaved-create drawer')
     assert.equal(create.drawer?.canCreate, true)
     const count = await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from documents where org_id = ${org.orgId} and kind = 'cash_sale'`))
-    assert.equal(count.rows[0]?.n, '1', 'opening New allocates no document')
+      select count(*)::text as n from documents where org_id = ${org.orgId} and kind = 'cash_sale'`, 'objects'))
+    assert.equal(count[0]?.n, '1', 'opening New allocates no document')
   } finally {
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -157,7 +157,7 @@ test('refund prefill loads returnable lines for a sale with an issued stock line
     }))
     const movementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       select id from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`))).rows[0]?.id
+       where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, 'objects')))[0]?.id
     assert.ok(movementId, 'posting the stocked sale must issue its stock natively')
 
     const load = (user: string, sp: Record<string, string>) => {

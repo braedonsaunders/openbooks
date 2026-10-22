@@ -76,10 +76,10 @@ const STANDARD_PROFILE = {
 async function typeRow(orgId: string, id: string) {
   const r = await withBypassContext(() =>
     db.execute<{ name: string; description: string | null; is_active: boolean; sort_order: number }>(
-      sql`select name, description, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`,
+      sql`select name, description, is_active, sort_order from project_types where id = ${id} and org_id = ${orgId}`, "objects",
     ),
   );
-  return r.rows[0]!;
+  return r[0]!;
 }
 
 test("project-type PATCH leaves unsent fields alone and rejects a blank name", async () => {
@@ -155,10 +155,10 @@ test("project-type authoring preserves declared invoicing policies and refuses u
     assert.equal(created.status, 200, JSON.stringify(await created.clone().json()));
     const { id } = await created.json() as { id: string };
     const read = () => withBypassContext(async () => {
-      const row = await db.execute<{ invoicing_profile: unknown }>(sql`select invoicing_profile from project_types where org_id = ${org.orgId} and id = ${id}`);
+      const row = await db.execute<{ invoicing_profile: unknown }>(sql`select invoicing_profile from project_types where org_id = ${org.orgId} and id = ${id}`, "objects");
       const audits = await db.execute<{ action: string; actor_id: string; changes: { before?: { invoicing_profile: unknown; is_active?: boolean }; after: { invoicingProfile?: unknown; invoicing_profile?: unknown; is_active?: boolean } } }>(sql`
-        select action, actor_id, changes from audit_log where org_id = ${org.orgId} and table_name = 'project_types' and row_id = ${id} order by at, id`);
-      return { profile: row.rows[0]!.invoicing_profile, audits: audits.rows };
+        select action, actor_id, changes from audit_log where org_id = ${org.orgId} and table_name = 'project_types' and row_id = ${id} order by at, id`, "objects");
+      return { profile: row[0]!.invoicing_profile, audits };
     });
     const first = await read();
     assert.deepEqual(first.profile, original);

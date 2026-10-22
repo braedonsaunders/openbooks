@@ -82,9 +82,9 @@ async function seedBanks(): Promise<BankFixture> {
            (array_agg(id order by created_at, id)
               filter (where system_key = 'vacation_payout'))[1] as payout_id
       from pay_components where org_id = ${org.orgId}
-  `));
-  const accrualComponentId = components.rows[0]!.accrual_id;
-  const payoutComponentId = components.rows[0]!.payout_id;
+  `, "objects"));
+  const accrualComponentId = components[0]!.accrual_id;
+  const payoutComponentId = components[0]!.payout_id;
 
   const plan = async (
     code: string,
@@ -111,8 +111,8 @@ async function seedBanks(): Promise<BankFixture> {
   const vacation = (await db.execute<{ id: string }>(sql`
     select id from entitlement_plans
      where org_id = ${org.orgId} and system_key = 'vacation'
-  `));
-  const vacationPlanId = vacation.rows[0]!.id;
+  `, "objects"));
+  const vacationPlanId = vacation[0]!.id;
   const bankedPlanId = await plan("BANK", "Banked overtime");
   const recoupPlanId = await plan("RECOUP", "Benefit recoup", {
     direction: "owe", method: "fixed_per_period", value: "100.0000",
@@ -232,8 +232,8 @@ test(
       // The movement is an `opening`, written through the ledger, not a column.
       const kinds = (await db.execute<{ kind: string; n: number }>(sql`
         select kind, count(*)::int as n from entitlement_ledger
-         where org_id = ${fx.orgId} group by kind`));
-      assert.deepEqual(kinds.rows, [{ kind: "opening", n: 2 }]);
+         where org_id = ${fx.orgId} group by kind`, "objects"));
+      assert.deepEqual(kinds, [{ kind: "opening", n: 2 }]);
 
       // A final pay must clear every accrued bank — with the carry-in in it.
       await db.execute(sql`
@@ -255,8 +255,8 @@ test(
           join pay_stubs s on s.id = l.stub_id
          where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.component_id = ${fx.payoutComponentId} and l.description like '%payout%'
-         order by l.description`));
-      const paid = new Map(payouts.rows.map((r) => [r.description, r.amount]));
+         order by l.description`, "objects"));
+      const paid = new Map(payouts.map((r) => [r.description, r.amount]));
       assert.equal(
         paid.get("Banked overtime payout (accrued balance)"), "1450.5000",
         `expected the carried-in bank on the final cheque, got ${[...paid].join(", ")}`,
@@ -294,7 +294,7 @@ test(
       });
       const opening = (await db.execute<{ before: Record<string, unknown> }>(sql`
         select to_jsonb(l) || jsonb_build_object('amount', l.amount::text, 'hours', l.hours::text) as before from entitlement_ledger l
-        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`)).rows[0]!.before;
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`, "objects"))[0]!.before;
       const cleared = await saveEntitlementOpenings({
         orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
         note: "Correct source employee identity before payroll consumes this opening",
@@ -304,7 +304,7 @@ test(
       assert.equal((await entitlementOpenings(fx.orgId)).entered, 0);
       const evidence = (await db.execute<{ actor_id: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`
         select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='entitlement_ledger'
-          and action='delete' and row_id=${fx.vacationPlanId} order by at desc limit 1`)).rows[0]!;
+          and action='delete' and row_id=${fx.vacationPlanId} order by at desc limit 1`, "objects"))[0]!;
       assert.equal(evidence.actor_id, fx.actorId);
       assert.deepEqual(evidence.changes.before, [opening], "clearing preserves the exact previous amount, date and source evidence");
       assert.equal(evidence.changes.after, null);
@@ -381,8 +381,8 @@ test(
       assert.equal((await entitlementOpenings(fx.orgId)).entered, 0);
       const movements = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from entitlement_ledger
-         where org_id = ${fx.orgId}`));
-      assert.equal(movements.rows[0]!.n, 0);
+         where org_id = ${fx.orgId}`, "objects"));
+      assert.equal(movements[0]!.n, 0);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -675,7 +675,7 @@ test("entitlement openings expose only the native lifetime bank source", { skip:
     assert.equal(saved.rows[0]!.amounts[fx.vacationPlanId], "1250.5500");
     assert.equal(saved.rows[0]!.dates[fx.vacationPlanId], "2026-01-01");
     const persisted = await db.execute<{amount:string}>(sql`select amount::text as amount from entitlement_ledger
-      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`);
-    assert.deepEqual(persisted.rows, [{ amount: "1250.5500" }]);
+      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} and plan_id=${fx.vacationPlanId} and kind='opening'`, "objects");
+    assert.deepEqual(persisted, [{ amount: "1250.5500" }]);
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });

@@ -216,12 +216,12 @@ test('spend velocity fails closed when a functional has no spot coverage', { ski
 test('vendor aggregation preserves per-line pricing, distinct documents, fresh names and entity scope across many lines', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await seedTwoCurrencySpend(100)
   try {
-    const history = async () => (await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`)).rows
+    const history = async () => await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`, 'objects')
     const before = await history()
     const reference = async (scope: ReadonlySet<string> | null) => {
       const ids = scope === null ? null : [...scope]
       const allowed = ids?.length ? sql.join(ids.map(id => sql`${id}::uuid`), sql`, `) : sql`null`
-      return (await db.execute<VendorLeg>(sql`
+      return await db.execute<VendorLeg>(sql`
         with spend as materialized (
           select d.party_id as vendor_id,
             (select p.display_name from parties p where p.id=d.party_id and p.org_id=d.org_id) as vendor_name,
@@ -245,7 +245,7 @@ test('vendor aggregation preserves per-line pricing, distinct documents, fresh n
           sum(amount) as total_amount, counts.transaction_count
         from spend join counts using(vendor_id)
         group by vendor_id,vendor_name,func,counts.transaction_count
-      `)).rows
+      `, 'objects')
     }
     await pinClock('2026-07-15', async () => {
       const check = async (scope: ReadonlySet<string> | null, total: string, count: number) => {
@@ -267,7 +267,7 @@ test('vendor aggregation preserves per-line pricing, distinct documents, fresh n
       const initial = await check(null, '235.0000', 2)
       assert.equal(initial.vendorVelocity.find(row => row.id === org.vendorId)?.totalSpend, '235.0000')
       await check(new Set([org.subsidiaryId]), '100.0000', 1)
-      const otherSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and base_currency='USD'`)).rows[0]!.id
+      const otherSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and base_currency='USD'`, 'objects'))[0]!.id
       await check(new Set([otherSub]), '135.0000', 1)
       await check(new Set(), '0', 0)
       await check(new Set([randomUUID()]), '0', 0)

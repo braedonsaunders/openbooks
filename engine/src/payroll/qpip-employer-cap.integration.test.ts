@@ -109,7 +109,7 @@ test(
         const factors = (await db.execute<{ factors: unknown }>(sql`
           select factors from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-        `)).rows[0]!.factors as Record<string, string>;
+        `, "objects"))[0]!.factors as Record<string, string>;
         employerQpip.push(factors.QPIP_ER!);
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       }

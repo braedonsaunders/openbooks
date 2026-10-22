@@ -115,12 +115,12 @@ stubModules({
         return { rows: [] }
       }
       export const db = {
-        execute: async (query) => execute(query, state.assignments, []),
+        execute: async (query, mode) => Promise.resolve(execute(query, state.assignments, [])).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: async (work) => {
           const local = new Map([...state.assignments].map(([id, row]) => [id, clone(row)]))
           const pendingAudits = []
           try {
-            const result = await work({ execute: (query) => execute(query, local, pendingAudits) })
+            const result = await work({ execute: (query, mode) => Promise.resolve(execute(query, local, pendingAudits)).then((result) => (mode === 'objects' ? result.rows : result)) })
             state.assignments = local
             state.audits.push(...pendingAudits)
             return result

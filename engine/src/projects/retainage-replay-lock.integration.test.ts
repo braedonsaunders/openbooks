@@ -99,7 +99,7 @@ test("concurrent customer draws serialize on the project lock during replay", en
       values(${project},${org.orgId},${org.subsidiaryId},'LOCK-C','Lock job',${org.customerId},${type},'active')`);
     await db.execute(sql`insert into sov_lines(org_id,project_id,description,scheduled_value,sort_order,income_account_id)
       values(${org.orgId},${project},'Work','10000',1,${org.accounts.revenue})`);
-    const sov = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`)).rows[0]!.id;
+    const sov = (await db.execute<{ id: string }>(sql`select id from sov_lines where org_id=${org.orgId} and project_id=${project}`, "objects"))[0]!.id;
 
     // The prior draw must be fully closed (submitted, approved, invoiced,
     // posted): the domain refuses a second open draw, so the race under test

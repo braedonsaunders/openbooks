@@ -49,13 +49,13 @@ export async function createOrderDraft(
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new Error('Orders feature is disabled')
   const cfg = NUMBER_PREFIX[kind]
   const org = (await db.execute<{ base_currency: string | null }>(
-    sql`select base_currency from orgs where id = ${orgId}`,
+    sql`select base_currency from orgs where id = ${orgId}`, 'objects',
   ))
   // The order currency is the org's base currency — never invented. A
   // missing org row (or an unconfigured base currency) refuses by name
   // instead of silently booking foreign-currency intent as CAD, the same
   // rule the canonical order create enforces.
-  const baseCurrency = org.rows[0]?.base_currency
+  const baseCurrency = org[0]?.base_currency
   if (!baseCurrency) {
     throw new OrderDraftError('this organization has no base currency configured — set one before creating orders')
   }
@@ -96,8 +96,8 @@ export async function createOrderDraft(
       -- A concurrent draft-ID collision raises the explicit draft conflict below.
       on conflict (id) do nothing
       returning id
-    `))
-    if (!inserted.rows[0]) throw new OrderDraftConflictError()
+    `, 'objects'))
+    if (!inserted[0]) throw new OrderDraftConflictError()
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (${orgId}, 'documents', ${draftId}, 'insert',
@@ -111,12 +111,12 @@ export async function createOrderDraft(
   const doc = (await db.execute<{ id: string; document_number: string }>(sql`
     select id, document_number from documents
      where id = ${draftId} and org_id = ${orgId} and kind = ${kind}
-  `))
+  `, 'objects'))
   // A write that matches zero rows is a failure, not a success: the replay
   // above verified this org's row, so a missing row here is never a
   // legitimate empty — refuse instead of returning an unobservable draft.
-  if (!doc.rows[0]) throw new OrderDraftError('Draft order not found', 404)
-  return { ...doc.rows[0], replayed }
+  if (!doc[0]) throw new OrderDraftError('Draft order not found', 404)
+  return { ...doc[0], replayed }
 }
 
 /**

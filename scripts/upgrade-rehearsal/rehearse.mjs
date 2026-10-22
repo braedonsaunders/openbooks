@@ -14,27 +14,41 @@
  *                      data is clean before the upgrade touches it (only
  *                      checks the source DECLARES broken may fail)
  *   snapshot-before    version-tolerant ledger fingerprint
+ *   baseline-backup    when the source ledger lacks the candidate's release
+ *                      baseline (the source is the baseline's
+ *                      upgradeFromRelease): a verified pg_dump -Fc
+ *   baseline-adoption  scripts/adopt-migration-baseline.mts --check, then
+ *                      --apply: catalog equality, the exact previous-release
+ *                      ledger, and an audited adoption, as an operator
+ *                      crosses a release cut
  *   preflight          candidate `bootstrap --check --json` over the populated
  *                      install (preflight.json); datasets with expectFindings
  *                      prove the exact finding set, and when a finding
  *                      refuses, additionally refusal-without-change,
  *                      remedies, and a clean re-check before the upgrade runs
- *   upgrade            candidate bootstrap over the populated install, timed
- *                      per migration
+ *   upgrade            candidate bootstrap over the populated install: the
+ *                      forward migrations above the baseline, each timed and
+ *                      named with its recorded ledger digest
  *   ledger-complete    every candidate migration is recorded as applied
  *   idempotent         a second candidate bootstrap applies nothing
  *   ledger-parity      trial balance, documents, open balances, applications
  *                      and row counts are identical before and after
  *   candidate-harness  golden harness (candidate code) on every seeded org and
  *                      every org with posted activity
- *   assertions         post-upgrade legacy assertions
+ *   assertions         post-upgrade dataset assertions
  *                      (scripts/upgrade-rehearsal/assertions/<dataset>.mjs,
  *                      when that file exists; assertions.json)
  *   snapshot-backup    a verified pg_dump -Fc of the upgraded install,
  *                      listed by pg_restore, before the catalog diff
  *   catalog            the upgraded schema equals a fresh install's
  *
+ * Before any phase, the source must be able to upgrade into the candidate
+ * (plan.mjs sourceUpgradeRefusal): UPGRADE_SOURCE_TAG is the candidate
+ * baseline's upgradeFromRelease, or the source tree records the candidate's
+ * baseline identity.
+ *
  * Environment:
+ *   UPGRADE_SOURCE_TAG                            the source release tag
  *   OPENBOOKS_DB_URL / OPENBOOKS_RUNTIME_DB_URL   the install being upgraded
  *   OPENBOOKS_REFERENCE_DB_URL / OPENBOOKS_REFERENCE_RUNTIME_DB_URL
  *                                                 an empty database on a
@@ -50,7 +64,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { releaseMigrationPlan } from "../migration-baseline-plan.mjs";
-import { ORACLE_CANDIDATE_LOCATION, loadConfig, validateConfig } from "./plan.mjs";
+import { loadConfig, readCandidateBaseline, readSourceTreeBaseline, sourceUpgradeRefusal, validateConfig } from "./plan.mjs";
 import { candidateHarnessOrgIds, compareSnapshots, fingerprintColumnsOf, snapshotLedger } from "./ledger.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -243,13 +257,11 @@ export function diffFindingKeys(actual, expected) {
  * The source release's own tooling writes the dataset as the RUNTIME role,
  * the non-owner login an install's app and worker actually run as. Seeding
  * is tenant writes, and the migration login is a superuser in CI, which
- * FORCE ROW LEVEL SECURITY cannot bind. The source sim runs its harness as a
- * month-end invariant, and under that login the tagged rls-org-isolation
- * probe halts any multi-org seed (R1.13). Installs, upgrades, remedies, and
- * the source-harness PHASE keep the migration login. The tagged harness CLI
- * never sets an org context, so as the runtime role it can't read its own
- * org row and crashes before any check (R1.14). Its multi-org rls probe
- * failure there is a declared source defect instead.
+ * FORCE ROW LEVEL SECURITY cannot bind, so a seed under it would neither
+ * exercise nor respect tenant isolation (the source sim's month-end harness
+ * includes an RLS isolation probe). Installs, upgrades, remedies, and the
+ * source-harness PHASE keep the migration login, as an operator's
+ * maintenance tooling does.
  */
 function sourceRuntimeEnv() {
   return { OPENBOOKS_SIM: "1", OPENBOOKS_DB_URL: requireEnv("OPENBOOKS_RUNTIME_DB_URL") };
@@ -329,7 +341,7 @@ async function applySourceOracleOverlay(datasetId, overlay, sourceDir) {
   const applied = [];
   try {
     for (const file of overlay.files) {
-      const from = join(CANDIDATE, ORACLE_CANDIDATE_LOCATION[file] ?? file);
+      const from = join(CANDIDATE, file);
       const to = join(sourceDir, file);
       let bytes;
       try {
@@ -430,7 +442,7 @@ export async function harness(phase, treeDir, orgIds, tolerated = new Set(), env
   return toleratedRuns;
 }
 
-async function timedBootstrap(phase, env = {}, extraArgs = []) {
+async function timedBootstrap(phase, env = {}) {
   const migrations = [];
   let open = null;
   const started = performance.now();
@@ -438,7 +450,7 @@ async function timedBootstrap(phase, env = {}, extraArgs = []) {
     if (open) migrations.push({ filename: open.filename, seconds: Number(((at - open.at) / 1000).toFixed(3)) });
     open = null;
   };
-  await run(phase, "npx", ["tsx", "scripts/bootstrap.ts", ...extraArgs], {
+  await run(phase, "npx", ["tsx", "scripts/bootstrap.ts"], {
     cwd: CANDIDATE,
     env,
     onLine(line, at) {
@@ -464,10 +476,6 @@ function candidateMigrationPlan() {
 
 function candidateMigrationFilenames() {
   return candidateMigrationPlan().filenames;
-}
-
-function historicalUpgradeArgs() {
-  return candidateMigrationPlan().baseline ? ["--historical-migrations"] : [];
 }
 
 function refuseFindings(result) {
@@ -508,15 +516,15 @@ async function appliedFilenames(dbUrl) {
  * would be the opposite of read-only — it would UPGRADE the install early
  * and leave the upgrade phase nothing to apply.
  */
-async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedger }) {
+async function runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBeforeUpgrade }) {
   // `--check` exits 1 whenever it reports a refuse finding, which is exactly
-  // what an edge-refusals dataset expects. Exit status alone therefore can't
+  // what a dataset expecting refusals declares. Exit status alone therefore can't
   // mean "failed": the JSON result can. An `error` field (the check could not
   // run) refuses by name, and the report is written either way.
   const checkJson = async (reportName) => {
     let stdout;
     try {
-      stdout = await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", "--check", "--json", ...historicalUpgradeArgs()], {
+      stdout = await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", "--check", "--json"], {
         cwd: CANDIDATE,
       });
     } catch (error) {
@@ -558,7 +566,7 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedg
 
   let refused = false;
   try {
-    await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", ...historicalUpgradeArgs()], { cwd: CANDIDATE });
+    await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: CANDIDATE });
   } catch (error) {
     if (!(error instanceof PhaseRefusal)) throw error;
     const stdout = error.details?.stdout ?? "";
@@ -572,8 +580,8 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedg
   }
 
   const appliedAfter = await appliedFilenames(dbUrl);
-  const ledgerDrift = appliedAfter.filter((file) => !sourceLedger.includes(file));
-  if (ledgerDrift.length > 0 || appliedAfter.length !== sourceLedger.length) {
+  const ledgerDrift = appliedAfter.filter((file) => !ledgerBeforeUpgrade.includes(file));
+  if (ledgerDrift.length > 0 || appliedAfter.length !== ledgerBeforeUpgrade.length) {
     throw new PhaseRefusal(
       "preflight",
       `the refused bootstrap changed _applied_migrations: ${ledgerDrift.join(", ") || "rows removed"}`,
@@ -628,10 +636,10 @@ export function assertionsRefusal(datasetId, result) {
 }
 
 /**
- * The assertions phase runs after the candidate harness: legacy handling
- * that is only observable on the upgraded install (frozen-or-refused
- * artifacts, paused schedules, provenance rows) is checked by the
- * dataset's own script on the candidate runtime, with the upgraded
+ * The assertions phase runs after the candidate harness: upgrade handling
+ * that is only observable on the upgraded install (frozen or refused
+ * artifacts, paused schedules, provenance rows a forward migration writes)
+ * is checked by the dataset's own script on the candidate runtime, with the upgraded
  * install in OPENBOOKS_DB_URL and the seeded orgs in
  * UPGRADE_SEEDED_ORGS (JSON array). The script must print a final JSON
  * line shaped {"assertions": [{"name", "ok", "detail"?}]} and exit 0;
@@ -666,6 +674,10 @@ async function main() {
   if (problems.length > 0) throw new PhaseRefusal("config", problems.join("; "));
   const dataset = config.datasets.find((candidate) => candidate.id === datasetId);
   if (!dataset) throw new PhaseRefusal("config", `unknown dataset ${datasetId}`);
+  // Refuse a source that cannot upgrade into this candidate before any
+  // database is touched: its cell could only rehearse a refusal.
+  const ineligible = sourceUpgradeRefusal(process.env.UPGRADE_SOURCE_TAG, readCandidateBaseline(), readSourceTreeBaseline(sourceDir));
+  if (ineligible) throw new PhaseRefusal("config", ineligible);
 
   const dbUrl = requireEnv("OPENBOOKS_DB_URL");
   requireEnv("OPENBOOKS_RUNTIME_DB_URL");
@@ -686,6 +698,7 @@ async function main() {
     phases: [],
     seededOrgs: [],
     oracleOverlay: null,
+    baselineAdoption: null,
     upgrade: null,
     preflight: null,
     assertions: null,
@@ -734,11 +747,36 @@ async function main() {
 
     const before = await phase("snapshot-before", () => withClient(dbUrl, snapshotLedger));
     writeFileSync(join(reportDir, "ledger-before.json"), `${JSON.stringify(before, null, 2)}\n`);
-    const sourceLedger = await withClient(dbUrl, async (client) =>
-      (await client.query("select filename from public._applied_migrations order by filename")).rows.map((row) => row.filename));
+    const sourceLedger = await appliedFilenames(dbUrl);
+
+    // An installation of the candidate's previous release adopts the release
+    // baseline (verified backup, catalog and ledger check, audited adoption)
+    // before any forward migration is preflighted or applied, exactly as an
+    // operator upgrades across a release cut.
+    const plan = candidateMigrationPlan();
+    if (plan.baseline && !sourceLedger.includes(plan.baseline.filename)) {
+      await phase("baseline-backup", async () => {
+        const file = join(reportDir, "before-baseline-adoption.dump");
+        await run("baseline-backup", "pg_dump", ["-Fc", dbUrl, "-f", file]);
+        if (statSync(file).size === 0) throw new PhaseRefusal("baseline-backup", "the baseline backup is empty");
+        const list = await run("baseline-backup", "pg_restore", ["--list", file]);
+        if (!list.split("\n").some((line) => line.trim() && !line.startsWith(";"))) throw new PhaseRefusal("baseline-backup", "the baseline backup contains no archive entries");
+      });
+      await phase("baseline-adoption", async () => {
+        const database = decodeURIComponent(new URL(dbUrl).pathname.slice(1));
+        const args = ["--import", "tsx", "scripts/adopt-migration-baseline.mts", "--database", database];
+        const env = { OPENBOOKS_BASELINE_TARGET_URL: dbUrl };
+        await run("baseline-adoption", "node", [...args, "--check"], { cwd: CANDIDATE, env });
+        await run("baseline-adoption", "node", [...args, "--apply", "--actor", "release-verification", "--reason", "Verified previous-release upgrade and baseline cutover", "--backup", join(reportDir, "before-baseline-adoption.dump")], { cwd: CANDIDATE, env });
+      });
+      report.baselineAdoption = { filename: plan.baseline.filename, sha256: plan.baseline.baselineSha256 };
+    }
+    // Adoption appends the baseline identity, so refusal-without-change and
+    // the pending list are judged against the ledger the upgrade starts from.
+    const ledgerBeforeUpgrade = await appliedFilenames(dbUrl);
 
     report.preflight = await phase("preflight", () =>
-      runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedger }));
+      runPreflightPhase(dataset, reportDir, { dbUrl, before, ledgerBeforeUpgrade }));
 
     // Remedies change data on purpose, and an operator runs them BEFORE
     // upgrading. From here the parity baseline is the remedied install, and
@@ -753,32 +791,14 @@ async function main() {
         harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource));
     }
 
-    report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade", {}, historicalUpgradeArgs()));
-    report.upgrade.pending = candidateMigrationFilenames().filter((file) => !sourceLedger.includes(file));
+    report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));
+    report.upgrade.pending = candidateMigrationFilenames().filter((file) => !ledgerBeforeUpgrade.includes(file));
     report.upgrade.migrations.sort((left, right) => right.seconds - left.seconds);
-
-    if (candidateMigrationPlan().baseline) {
-      await phase("baseline-backup", async () => {
-        const file = join(reportDir, "before-baseline-adoption.dump");
-        await run("baseline-backup", "pg_dump", ["-Fc", dbUrl, "-f", file]);
-        if (statSync(file).size === 0) throw new PhaseRefusal("baseline-backup", "the baseline backup is empty");
-        const list = await run("baseline-backup", "pg_restore", ["--list", file]);
-        if (!list.split("\n").some((line) => line.trim() && !line.startsWith(";"))) throw new PhaseRefusal("baseline-backup", "the baseline backup contains no archive entries");
-      });
-      await phase("baseline-adoption", async () => {
-        const database = decodeURIComponent(new URL(dbUrl).pathname.slice(1));
-        const runtimeRole=decodeURIComponent(new URL(requireEnv("OPENBOOKS_RUNTIME_DB_URL")).username);
-        const args = ["--import", "tsx", "scripts/adopt-migration-baseline.mts", "--database", database,
-          "--isolate-business-owner", "--runtime-role",runtimeRole];
-        const env = { OPENBOOKS_BASELINE_TARGET_URL: dbUrl };
-        await run("baseline-adoption", "node", [...args, "--check"], { cwd: CANDIDATE, env });
-        await run("baseline-adoption", "node", [...args, "--apply", "--actor", "release-verification", "--reason", "Verified historical upgrade and baseline cutover", "--backup", join(reportDir, "before-baseline-adoption.dump")], { cwd: CANDIDATE, env });
-      });
-      // The historical chain stops at the release cut; the forward migrations
-      // above it apply through ordinary bootstrap, exactly as an operator
-      // deploys after adoption.
-      report.forward = await phase("forward", () => timedBootstrap("forward"));
-    }
+    // Timing evidence names the exact bytes it measured: the digest the
+    // ledger recorded for each applied migration.
+    const recorded = await withClient(dbUrl, async (client) =>
+      new Map((await client.query("select filename, sha256 from public._applied_migrations")).rows.map((row) => [row.filename, row.sha256])));
+    for (const migration of report.upgrade.migrations) migration.sha256 = recorded.get(migration.filename) ?? null;
 
     await phase("ledger-complete", async () => {
       const applied = await withClient(dbUrl, async (client) =>
@@ -857,40 +877,16 @@ async function main() {
 }
 
 /**
- * The lock/timing watch-list: every summary carries the candidate SHA and the
- * file digests of these five migrations, so lock evidence is always tied to
- * the exact bytes it describes. Computed from the candidate tree at summary
- * time (the tree the upgrade ran); missing files report as absent, never as
- * a digest, so a summary can never silently describe other bytes.
+ * The cell's markdown summary. Every timing row names the migration's
+ * recorded ledger digest, so lock and timing evidence is always tied to the
+ * exact bytes it describes; a migration the ledger did not record reads as
+ * unrecorded, never as a digest.
  */
-export const WATCH_LIST_MIGRATIONS = Object.freeze([
-  "0293_stock_count_line_subject_unique",
-  "0294_dunning_delivery_state_machine",
-  "0296_payroll_remittance_destination_snapshot",
-  "0299_stock_count_line_counted_nonnegative",
-  "0301_item_price_schedule_versioning",
-]);
-
-export function watchListDigests() {
-  const { createHash } = process.getBuiltinModule("node:crypto");
-  return WATCH_LIST_MIGRATIONS.map((name) => {
-    const file = join(CANDIDATE, "schema", "migrations", "generated", `${name}.sql`);
-    if (!existsSync(file)) return { name, digest: "absent" };
-    const digest = createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 8);
-    return { name, digest };
-  });
-}
-
 export function summarize(report) {
-  const digests = watchListDigests();
   const lines = [
     `### Upgrade rehearsal: ${report.source} → ${report.candidate ?? "candidate"} · dataset \`${report.dataset}\``,
     "",
     `candidate: \`${report.candidate ?? "unrecorded"}\``,
-    "",
-    "| watch-list migration | sha256[:8] |",
-    "|---|---|",
-    ...digests.map((d) => `| ${d.name} | ${d.digest} |`),
     "",
     report.ok ? "**PASS**" : `**REFUSED:** ${report.error ?? "unknown"}`,
     "",
@@ -898,14 +894,20 @@ export function summarize(report) {
     "|---|---|---|",
     ...report.phases.map((p) => `| ${p.name} | ${p.ok ? "ok" : "REFUSED"} | ${p.seconds} |`),
   ];
-  if (report.upgrade) {
+  if (report.baselineAdoption) {
+    lines.push("", `Adopted release baseline ${report.baselineAdoption.filename} (sha256 ${report.baselineAdoption.sha256.slice(0, 8)}) before the upgrade.`);
+  }
+  if (report.upgrade && report.upgrade.migrations.length === 0) {
+    lines.push("", `Upgrade applied no migrations in ${report.upgrade.seconds}s.`);
+  } else if (report.upgrade) {
     lines.push(
       "",
       `Upgrade applied ${report.upgrade.migrations.length} migration(s) in ${report.upgrade.seconds}s. Slowest:`,
       "",
-      "| migration | seconds |",
-      "|---|---|",
-      ...report.upgrade.migrations.slice(0, 10).map((m) => `| ${m.filename} | ${m.seconds} |`),
+      "| migration | sha256[:8] | seconds |",
+      "|---|---|---|",
+      ...report.upgrade.migrations.slice(0, 10).map((m) =>
+        `| ${m.filename} | ${typeof m.sha256 === "string" ? m.sha256.slice(0, 8) : "unrecorded"} | ${m.seconds} |`),
     );
   }
   if (report.oracleOverlay) {

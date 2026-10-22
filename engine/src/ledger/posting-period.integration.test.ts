@@ -19,7 +19,7 @@ test(
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `));
+      `, "objects"));
       const adjustmentPeriodId = randomUUID();
       await db.execute(sql`
         insert into accounting_periods
@@ -27,7 +27,7 @@ test(
            starts_on, ends_on, is_adjustment, custom)
         values (
           ${adjustmentPeriodId}, ${org.orgId},
-          ${calendar.rows[0]!.fiscal_calendar_id},
+          ${calendar[0]!.fiscal_calendar_id},
           2026, 13, 'FY26 Adjustment', '2026-07-01', '2026-07-31', true,
           '{"nsId":"period-13"}'::jsonb
         )
@@ -76,10 +76,10 @@ test(
         select period_id, posting_date::text
           from journal_entries
          where id = ${entryId}
-      `));
+      `, "objects"));
 
-      assert.equal(entry.rows[0]!.period_id, adjustmentPeriodId);
-      assert.equal(entry.rows[0]!.posting_date, org.date);
+      assert.equal(entry[0]!.period_id, adjustmentPeriodId);
+      assert.equal(entry[0]!.posting_date, org.date);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -96,7 +96,7 @@ test(
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `));
+      `, "objects"));
       await db.execute(sql`
         update accounting_periods
            set custom = '{"nsId":"duplicate-period"}'::jsonb
@@ -108,7 +108,7 @@ test(
            starts_on, ends_on, is_adjustment, custom)
         values (
           ${randomUUID()}, ${org.orgId},
-          ${calendar.rows[0]!.fiscal_calendar_id},
+          ${calendar[0]!.fiscal_calendar_id},
           2026, 13, 'FY26 Adjustment', '2026-07-01', '2026-07-31', true,
           '{"nsId":"duplicate-period"}'::jsonb
         )

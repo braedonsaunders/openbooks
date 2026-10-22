@@ -135,7 +135,7 @@ async function readFiling(orgId: string, id: string): Promise<FilingRow> {
     select id, period_from::text, period_to::text, version,
            functional_currency, presentation_currency, translation, subsidiary_ids,
            registration_id, registration_number, boxes
-      from tax_filings where org_id = ${orgId} and id = ${id}`)).rows[0]!
+      from tax_filings where org_id = ${orgId} and id = ${id}`, 'objects'))[0]!
 }
 
 test('prepare freezes one entity return per scope, and scoped filings mark filed', async () => {

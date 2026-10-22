@@ -40,7 +40,7 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `)).rows[0]!.balance;
+  `, "objects"))[0]!.balance;
 }
 
 /** Post an invoice carrying one inventory line; its posting issues the stock. */
@@ -74,7 +74,7 @@ async function postInvoiceShipping(
   await postDocument(documentId, depsFor(org));
   const issue = (await db.execute<{ id: string }>(sql`
     select id from inventory_movements
-     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0];
+     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0];
   assert.ok(issue, "posting the invoice should have issued the stock");
   return { documentId, lineId, issueMovementId: issue.id };
 }
@@ -225,7 +225,7 @@ test(
 
       const movement = (await db.execute<{ quantity: string; total_value: string }>(sql`
         select quantity::text, total_value::text from inventory_movements
-         where org_id = ${org.orgId} and document_line_id = ${credit.lineId} and kind = 'receipt'`)).rows[0];
+         where org_id = ${org.orgId} and document_line_id = ${credit.lineId} and kind = 'receipt'`, "objects"))[0];
       assert.equal(movement!.quantity, "4.0000");
       assert.equal(movement!.total_value, "16.0000");
 
@@ -334,7 +334,7 @@ test(
             join inventory_movements movement
               on movement.org_id = serial.org_id and movement.serial_id = serial.id
              and movement.document_line_id = ${credit.lineId}
-           where serial.org_id = ${org.orgId} and serial.id = ${serialId}`)).rows[0]!;
+           where serial.org_id = ${org.orgId} and serial.id = ${serialId}`, "objects"))[0]!;
         assert.deepEqual(returned, {
           status: "in_stock",
           current_stock_location_id: org.stockLocationId,
@@ -410,7 +410,7 @@ test(
                (select count(*)::int from inventory_movements m
                  join document_lines l on l.id = m.document_line_id
                 where m.org_id = d.org_id and l.document_id = d.id) as movements
-          from documents d where d.org_id = ${org.orgId} and d.id = ${credit.documentId}`)).rows[0];
+          from documents d where d.org_id = ${org.orgId} and d.id = ${credit.documentId}`, "objects"))[0];
       assert.notEqual(state!.status, "posted");
       assert.equal(state!.movements, 0);
       assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "0.0000");
@@ -485,7 +485,7 @@ test(
       await postDocument(documentId, depsFor(org));
 
       const posted = (await db.execute<{ status: string }>(sql`
-        select status from documents where id = ${documentId} and org_id = ${org.orgId}`)).rows[0];
+        select status from documents where id = ${documentId} and org_id = ${org.orgId}`, "objects"))[0];
       assert.equal(posted!.status, "posted");
       // A goodwill credit must not invent a stock movement.
       assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "3.0000");
@@ -537,7 +537,7 @@ test(
           /without inventory-return evidence/.test(error.message),
       );
       const status = (await db.execute<{ status: string }>(sql`
-        select status from documents where id = ${credit.documentId} and org_id = ${org.orgId}`)).rows[0]!;
+        select status from documents where id = ${credit.documentId} and org_id = ${org.orgId}`, "objects"))[0]!;
       assert.equal(status.status, "approved");
     } finally {
       await dropScratchOrg(org.orgId);

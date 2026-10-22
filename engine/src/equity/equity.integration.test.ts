@@ -30,7 +30,7 @@ test("shares issued for cash post a balanced equity entry: cash, share capital a
     });
     assert.ok(issued.journalEntryId, "the cash issuance posted");
     const entry = (await db.execute<{ origin: string; status: string }>(sql`
-      select origin, status from journal_entries where org_id = ${w.org.orgId} and id = ${issued.journalEntryId}`)).rows[0]!;
+      select origin, status from journal_entries where org_id = ${w.org.orgId} and id = ${issued.journalEntryId}`, "objects"))[0]!;
     assert.equal(entry.origin, "equity");
     assert.equal(entry.status, "posted");
     const lines = await entryLines(w.org.orgId, issued.journalEntryId!);
@@ -40,7 +40,7 @@ test("shares issued for cash post a balanced equity entry: cash, share capital a
     assert.equal(await accountBalance(w.org.orgId, w.accounts.common), "-400.0000", "par value: 4,000,000 × 0.0001");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.apic), "-3600.0000");
     const audit = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and row_id = ${issued.id} and action = 'equity.security.issue'`)).rows[0]!;
+      select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and row_id = ${issued.id} and action = 'equity.security.issue'`, "objects"))[0]!;
     assert.equal(audit.n, "1", "the issuance is audited");
     const view = await loadCapTableView({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, asOf: w.org.date });
     assert.equal(view.table.totals.outstanding, "4000000");
@@ -59,7 +59,7 @@ test("a cash issuance without an equity account policy refuses with the Setup re
       }),
       (error: unknown) => refusal("equity_account_policy_missing")(error) && (error as EquityError).remedy.includes("Setup → Equity accounts"),
     );
-    const count = (await db.execute<{ n: string }>(sql`select count(*)::text as n from equity_securities where org_id = ${w.org.orgId}`)).rows[0]!;
+    const count = (await db.execute<{ n: string }>(sql`select count(*)::text as n from equity_securities where org_id = ${w.org.orgId}`, "objects"))[0]!;
     assert.equal(count.n, "0");
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
@@ -102,10 +102,10 @@ test("a void with no Equity action Flow applies at once on the bookkeeping duty,
     assert.ok(voided.reversalEntryId, "the issuance entry is reversed");
     const request = (await db.execute<{ status: string; released_without_approval: boolean; decided_by: string | null; requested_by: string }>(sql`
       select status, released_without_approval, decided_by, requested_by from equity_action_requests
-       where org_id = ${w.org.orgId} and id = ${voided.requestId}`)).rows[0]!;
+       where org_id = ${w.org.orgId} and id = ${voided.requestId}`, "objects"))[0]!;
     assert.deepEqual(request, { status: "applied", released_without_approval: true, decided_by: null, requested_by: w.managerId }, "the request records that no approval applied");
     const original = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where org_id = ${w.org.orgId} and id = ${issued.journalEntryId}`)).rows[0]!;
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${issued.journalEntryId}`, "objects"))[0]!;
     assert.equal(original.status, "reversed");
     assert.equal(await accountBalance(w.org.orgId, w.org.accounts.bank), "0.0000");
     const view = await loadCapTableView({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, asOf: w.org.date });

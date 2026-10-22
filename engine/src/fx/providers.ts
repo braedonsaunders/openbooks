@@ -88,8 +88,8 @@ const CONFIG_COLS = sql`id, org_id as "orgId", provider, display_name as "displa
 async function multiCurrencyFeatureEnabled(orgId: string): Promise<boolean> {
   const r = (await db.execute<{ features: Record<string, boolean> | null }>(sql`
     select settings->'features' as features from orgs where id = ${orgId}
-  `));
-  return dataDependentFeatureDefault(db, orgId, "multiCurrency", r.rows[0]?.features ?? null);
+  `, "objects"));
+  return dataDependentFeatureDefault(db, orgId, "multiCurrency", r[0]?.features ?? null);
 }
 
 export async function readFxProviderConfig(
@@ -100,8 +100,8 @@ export async function readFxProviderConfig(
   const r = (await runner.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs where org_id = ${orgId} limit 1
     ${lock ? sql`for update` : sql``}
-  `));
-  return r.rows[0] ?? null;
+  `, "objects"));
+  return r[0] ?? null;
 }
 
 /**
@@ -170,8 +170,8 @@ export async function saveFxProviderConfig(
 
   const known = (await db.execute<{ code: string }>(sql`
     select code from currencies where code in (${sql.join([baseCurrency, ...currencies].map((c) => sql`${c}`), sql`, `)})
-  `));
-  if (known.rows.length !== currencies.length + 1) throw new FxProviderError("one or more currencies are not in the currency registry");
+  `, "objects"));
+  if (known.length !== currencies.length + 1) throw new FxProviderError("one or more currencies are not in the currency registry");
 
   // The config write and its immutable before/after audit commit as one
   // unit: an audit failure rolls the config back with it, so a provider,
@@ -214,8 +214,8 @@ export async function saveFxProviderConfig(
         last_error = null, updated_at = now(), updated_by = excluded.updated_by
       where fx_provider_configs.org_id = ${orgId}
       returning id
-    `));
-    const id = r.rows[0]!.id;
+    `, "objects"));
+    const id = r[0]!.id;
     const after = (await readFxProviderConfig(orgId, tx))!;
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -558,7 +558,7 @@ async function createRun(
          and status = 'running' and started_at <= now() - ${FX_RUN_LEASE_TTL}
     `);
     if (scheduledOccurrence) {
-      const occurrence = await tx.execute(sql`
+      const occurrence = await tx.execute<never>(sql`
         update fx_provider_configs set next_sync_at = ${scheduledOccurrence.nextSyncAt}, updated_at = now()
          where id = ${config.id} and org_id = ${config.orgId}
            and next_sync_at = ${scheduledOccurrence.claimedNextSyncAt}
@@ -570,8 +570,8 @@ async function createRun(
         insert into fx_provider_runs (org_id, provider_config_id, trigger, requested_from, requested_to, created_by, lease_token)
         values (${config.orgId}, ${config.id}, ${trigger}, ${from}, ${to}, ${actorId ?? null}, gen_random_uuid())
         returning id, lease_token as "leaseToken"
-      `));
-      return { runId: r.rows[0]!.id, leaseToken: r.rows[0]!.leaseToken };
+      `, "objects"));
+      return { runId: r[0]!.id, leaseToken: r[0]!.leaseToken };
     } catch (error) {
       if (isFxRunInProgressConflict(error)) throw new FxProviderError("an FX provider run is already in progress");
       throw error;
@@ -635,8 +635,8 @@ export async function applyNormalizedRates(
     select from_currency, to_currency, as_of::text, source from fx_rates
      where org_id = ${args.orgId} and rate_type = 'spot'
        and as_of between ${args.from} and ${args.to}
-  `));
-  const byKey = new Map(existing.rows.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]));
+  `, "objects"));
+  const byKey = new Map(existing.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]));
   const writable: NormalizedFxRate[] = [];
   for (const rate of args.normalized) {
     let persistedRate: string;
@@ -670,8 +670,8 @@ export async function applyNormalizedRates(
         imported_at = now(), updated_at = now(), updated_by = excluded.updated_by
        where fx_rates.source <> 'manual'
       returning (xmax = 0) as inserted
-    `));
-    for (const row of applied.rows) {
+    `, "objects"));
+    for (const row of applied) {
       if (row.inserted) counts.inserted++;
       else counts.updated++;
     }
@@ -732,7 +732,7 @@ export async function runFxProvider(
       // inside the apply is impossible (the fence below holds the run row
       // locked for the whole unit) and committing per date would trade away
       // the all-or-nothing atomicity the crash path pins.
-      const renewed = await db.execute(sql`
+      const renewed = await db.execute<never>(sql`
         update fx_provider_runs set started_at = now()
          where id = ${claim.runId} and org_id = ${orgId}
            and lease_token = ${claim.leaseToken} and status = 'running'
@@ -749,8 +749,8 @@ export async function runFxProvider(
          where id = ${claim.runId} and org_id = ${orgId}
            and lease_token = ${claim.leaseToken} and status = 'running'
          for update
-      `));
-      if (!owned.rows.length) throw new FxRunLeaseLostError();
+      `, "objects"));
+      if (!owned.length) throw new FxRunLeaseLostError();
       if (trigger !== "test") {
         const applied = await applyNormalizedRates(tx, {
           orgId,
@@ -770,7 +770,7 @@ export async function runFxProvider(
       // both commit together or neither did. Fenced on the lease token: a
       // reclaimed attempt cannot resurrect its row or promote ownership of
       // the schedule (last_success_at / watermark / next_sync_at).
-      const stamped = await tx.execute(sql`
+      const stamped = await tx.execute<never>(sql`
         update fx_provider_runs set status = 'ok', finished_at = now(), lease_token = null,
           observations_received = ${result.observationsReceived}, rates_inserted = ${result.ratesInserted},
           rates_updated = ${result.ratesUpdated}, manual_overrides_preserved = ${result.manualOverridesPreserved}
@@ -804,7 +804,7 @@ export async function runFxProvider(
     // recovery stage is also crash-consistent.
     try {
       await db.transaction(async (tx) => {
-        const stamped = await tx.execute(sql`
+        const stamped = await tx.execute<never>(sql`
           update fx_provider_runs set status = 'failed', error_message = ${message.slice(0, 1000)},
                  finished_at = now(), lease_token = null
            where id = ${claim.runId} and org_id = ${orgId} and lease_token = ${claim.leaseToken} and status = 'running'
@@ -863,9 +863,9 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
        )
        )
      order by next_sync_at limit 20
-  `));
+  `, "objects"));
   let claimedCount = 0;
-  for (const config of due.rows) {
+  for (const config of due) {
     const next = computeNextSyncAt(config.schedule, config.syncHourUtc, now);
     try {
       // The occurrence claim is performed inside runFxProvider's transaction,

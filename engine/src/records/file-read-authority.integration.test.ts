@@ -13,7 +13,7 @@ test('native source authority preserves privacy, grants, entity fences and ownin
     const actorId = await createScratchUser(org.orgId, 'Evidence operator', 'clerk')
     const ownerId = await createScratchUser(org.orgId, 'Private evidence owner', 'admin')
     const roleId = (await db.execute<{ id: string }>(sql`
-      select role_id as id from role_assignments where org_id=${org.orgId} and user_id=${actorId}`)).rows[0]!.id
+      select role_id as id from role_assignments where org_id=${org.orgId} and user_id=${actorId}`, 'objects'))[0]!.id
     await db.execute(sql`update app_roles set permissions='["documents.read","gl.read"]'::jsonb,
       subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and id=${roleId}`)
     const read = (fileId: string) => withOrg(org.orgId, () => requireNativeFileReadAuthority({ orgId: org.orgId, actorId, fileId }, db))
@@ -165,7 +165,7 @@ test('native source authority preserves privacy, grants, entity fences and ownin
 
 test('native source authority refuses unbound caller executors before consulting their answers', async () => {
   let queries = 0
-  const supplied = { execute: (() => { queries++; return { rows: [{ allowed: true }] } }) as unknown as SqlExecutor['execute'] }
+  const supplied = { execute: ((_query: unknown, mode?: string) => { const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result); queries++; return Promise.resolve({ rows: [{ allowed: true }] }).then(inMode) }) as unknown as SqlExecutor['execute'] }
   const orgId = randomUUID()
   await withOrgContext(orgId, async () => {
     await assert.rejects(requireNativeFileReadAuthority({ orgId, actorId: randomUUID(), fileId: randomUUID() }, supplied), /pinned transaction executor/)

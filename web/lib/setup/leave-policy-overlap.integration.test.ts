@@ -61,7 +61,7 @@ test("an overlapping leave-policy create conflicts typed with the remedy, never 
     const count = (await withBypass(() => db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_leave_policies
        where org_id = ${org.orgId} and leave_type_id = ${org.typeId} and is_active
-    `))).rows[0]?.n ?? 0;
+    `, "objects")))[0]?.n ?? 0;
     assert.equal(count, 1, "the refused create leaves no second window behind");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -89,7 +89,7 @@ test("stretching a policy window into its neighbour conflicts typed and moves no
     assert.match(String((stretched.body as { error?: string }).error), /Policy [0-9a-f-]{36} already covers/);
     const kept = (await withBypass(() => db.execute<{ from: string }>(sql`
       select effective_from::text as from from hrm_leave_policies where id = ${neighbourId}
-    `))).rows[0]?.from;
+    `, "objects")))[0]?.from;
     assert.equal(String(kept).slice(0, 10), "2026-07-01", "the refused edit moves no boundary");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));

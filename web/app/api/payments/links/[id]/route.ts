@@ -29,9 +29,9 @@ async function deletePaymentLink(_req: Request, { params }: { params: Promise<{ 
   const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from payment_links
      where id = ${id} and org_id = ${gate.user.orgId}
-  `));
-  if (!owned.rows[0]) return notFound("record");
-  const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId);
+  `, "objects"));
+  if (!owned[0]) return notFound("record");
+  const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId);
   if (denied) return denied;
   try {
     await voidPaymentLink(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds);

@@ -339,13 +339,13 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
         on sv.org_id = fs.org_id and sv.segment_id = fs.id and sv.id = rv.id
       left join funds f on f.org_id = sv.org_id and f.id = sv.id
      order by sv.id
-  `);
-  const segment = lookup.rows[0];
+  `, "objects");
+  const segment = lookup[0];
   if (!segment) return [];
 
   const defaultValueId = segment.defaultValueId;
   const values = new Map<string, FundSegmentLookup>();
-  for (const row of lookup.rows) if (row.fundId) values.set(row.fundId, row);
+  for (const row of lookup) if (row.fundId) values.set(row.fundId, row);
   const effectiveIds = lines.map((line) => rawFundId(line, defaultValueId));
   const hasNonDefaultFund = effectiveIds.some((fundId) => fundId !== null && fundId !== defaultValueId);
   if (hasNonDefaultFund && !(await lockAndCheckOrgFeature(runner, ctx.orgId, FEATURE_KEY))) {
@@ -434,11 +434,11 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
      where s.org_id = ${ctx.orgId}
        and s.id = any(${uuidArray(subsidiaryIds)}::uuid[])
      order by s.id, p.from_fund_id, p.to_fund_id
-  `);
+  `, "objects");
   const pairs: FundPairView[] = [];
   const baseCurrencyBySubsidiary = new Map<string, string>();
   const subsidiaryNames = new Map<string, string>();
-  for (const row of pairLookup.rows) {
+  for (const row of pairLookup) {
     baseCurrencyBySubsidiary.set(row.subsidiaryId, row.baseCurrency);
     subsidiaryNames.set(row.subsidiaryId, row.subsidiaryName);
     if (row.fromFundId && row.toFundId && row.dueFromAccountId && row.dueToAccountId) {

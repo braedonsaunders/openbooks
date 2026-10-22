@@ -115,11 +115,9 @@ const send = (method: (req: Request) => Promise<Response>, body: unknown, id?: s
 };
 
 async function relationshipCount(orgId: string): Promise<number> {
-  const rows = (
-    await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from customer_billing_relationships where org_id = ${orgId}`),
-    )
-  ).rows;
+  const rows = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from customer_billing_relationships where org_id = ${orgId}`, "objects"),
+    );
   return rows[0]!.n;
 }
 
@@ -202,7 +200,7 @@ test("scoped relationship reads and writes hide out-of-scope billing targets", {
 function windowOf(orgId: string, id: string) {
   return withBypassContext(() => db.execute<{ from: string; to: string | null }>(sql`
     select effective_from::text as "from", effective_to::text as "to"
-      from customer_billing_relationships where org_id = ${orgId} and id = ${id}`)).then((r) => r.rows[0]);
+      from customer_billing_relationships where org_id = ${orgId} and id = ${id}`, "objects")).then((r) => r[0]);
 }
 
 test("an overlapping create is refused with the remedy and writes nothing", { skip: !DB }, async () => {

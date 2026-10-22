@@ -86,11 +86,9 @@ export const CORRECTION_CONTROL_CASES: readonly ControlCase[] = [
           ledger.date,
         );
         if (!reversalId) throw new Error("reverse wrote no reversal entry");
-        reversedStatus = (
-          await db.execute<{ status: string }>(
-            sql`select status from journal_entries where id = ${entryId}`,
-          )
-        ).rows[0]!.status;
+        reversedStatus = (await db.execute<{ status: string }>(
+            sql`select status from journal_entries where id = ${entryId}`, "objects",
+          ))[0]!.status;
       });
       const restoredEntry = await capture(
         ctx,

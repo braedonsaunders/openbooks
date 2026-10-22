@@ -12,7 +12,7 @@ export async function historicalTranslationAmounts(
   tx: SqlExecutor,
   args: { orgId: string; presentationCurrency?: string; sources: SQL },
 ): Promise<SQL> {
-  const sources = (await tx.execute<{ sourceLineId: string }>(args.sources)).rows;
+  const sources = await tx.execute<{ sourceLineId: string }>(args.sources, "objects");
   if (!sources.length) return sql`null::numeric`;
   if (!args.presentationCurrency || !/^[A-Z]{3}$/.test(args.presentationCurrency))
     throw new HistoricalTranslationEvidenceError("Select the report's explicit presentation currency before reading historical equity contributions.");

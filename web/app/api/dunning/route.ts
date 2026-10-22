@@ -129,14 +129,14 @@ export const GET = defineRoute({
                autopay_final_action as "finalAction",
                to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
           from dunning_policies where org_id = ${authz.user.orgId} order by name
-      `));
+      `, "objects"));
     const stages = (await db.execute<Record<string, unknown>>(sql`
         select id, policy_id as "policyId", sequence, name, offset_days as "offsetDays",
                subject_template as "subjectTemplate", body_template as "bodyTemplate", escalate
           from dunning_stages where org_id = ${authz.user.orgId} order by policy_id, sequence
-      `));
+      `, "objects"));
     const byPolicy = new Map<string, Record<string, unknown>[]>();
-    for (const s of stages.rows) {
+    for (const s of stages) {
         const key = s.policyId as string;
         (byPolicy.get(key) ?? byPolicy.set(key, []).get(key)!).push(s);
       }
@@ -145,7 +145,7 @@ export const GET = defineRoute({
     const toRetryRows = (offsets: unknown) =>
       (Array.isArray(offsets) ? offsets : []).map((days) => ({ days }));
     return NextResponse.json({
-        policies: policies.rows.map((p) => ({
+        policies: policies.map((p) => ({
           ...p,
           retryOffsetsDays: toRetryRows(p.retryOffsetsDays),
           insufficientFundsOffsetsDays: toRetryRows(p.insufficientFundsOffsetsDays),
@@ -259,9 +259,9 @@ export const POST = defineRoute({
                   ${authz.user.id}, ${authz.user.id})
           -- A request identity already claimed cannot create another policy.
           on conflict (id) do nothing returning *
-        `));
-        if (!created.rows[0]) throw new SetupCreateConflict('foreign-key')
-        const policyId = created.rows[0]!.id as string;
+        `, "objects"));
+        if (!created[0]) throw new SetupCreateConflict('foreign-key')
+        const policyId = created[0]!.id as string;
         const insertedStages: Record<string, unknown>[] = [];
         for (const s of stages) {
           const stageRow = (await tx.execute<Record<string, unknown>>(sql`
@@ -270,9 +270,9 @@ export const POST = defineRoute({
             values (${authz.user.orgId}, ${policyId}, ${s.sequence}, ${s.name}, ${s.offsetDays},
                     ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, ${authz.user.id}, ${authz.user.id})
             returning *
-          `));
-          if (!stageRow.rows[0]) throw new Error('The reminder stage was not created; policy creation was rolled back.')
-          insertedStages.push(stageRow.rows[0]);
+          `, "objects"));
+          if (!stageRow[0]) throw new Error('The reminder stage was not created; policy creation was rolled back.')
+          insertedStages.push(stageRow[0]);
         }
         // The policy decides how overdue customers are chased; record what was
         // created (ladder included) in the same transaction as the writes.
@@ -281,7 +281,7 @@ export const POST = defineRoute({
             (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values
             (${authz.user.orgId}, 'dunning_policies', ${policyId}, 'insert',
-             ${JSON.stringify({ after: { ...created.rows[0], stages: insertedStages }, match })}::jsonb,
+             ${JSON.stringify({ after: { ...created[0], stages: insertedStages }, match })}::jsonb,
              ${authz.user.id}, ${requestId})
         `);
         return policyId;

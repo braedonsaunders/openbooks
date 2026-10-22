@@ -24,7 +24,7 @@ async function opening(f: AdoptionFixture) {
     effectiveFrom: '2026-01-01', eiEmployerMultiplier: '1.4',
   });
   assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-    where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning id`)).rows.length, 1);
+    where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning id`, 'objects')).length, 1);
   await qualifyCanadianOpeningForTest({ ...f, employeePartyId: f.employeeId, taxYear: 2026,
     filingAccountId, province: 'ON', coverageStart: '2026-01-01', coverageEnd: '2026-07-20',
     amounts: { pensionableYtd: '262.77', insurableYtd: '262.77', taxableYtd: '262.77', cppYtd: '7.63', eiYtd: '4.28' },
@@ -37,7 +37,7 @@ async function opening(f: AdoptionFixture) {
     ],
   });
   const annual = (await db.execute<{ updated_at: string }>(sql`select updated_at::text as updated_at from payroll_opening_balances
-    where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`)).rows[0]!;
+    where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`, 'objects'))[0]!;
   const amounts = Object.fromEntries(CA_PERIOD_OPENING_TREATMENT.fields.map((field) => [field.key, '0']));
   Object.assign(amounts, { pensionable: '262.77', insurable: '262.77', periodicIncome: '262.77', cpp: '7.63', ei: '4.28', enhancedCppPeriodic: '1.28' });
   return { orgId: f.orgId, actorId: f.actorId, employeePartyId: f.employeeId, taxYear: 2026,
@@ -49,21 +49,21 @@ async function opening(f: AdoptionFixture) {
 async function contributions(f: AdoptionFixture, documentId: string) {
   return (await db.execute<{ cpp: string; ei: string; pensionable: string }>(sql`
     select factors->>'C' as cpp,factors->>'EI' as ei,pensionable_earnings::text as pensionable from pay_stubs
-     where org_id=${f.orgId} and pay_run_document_id=${documentId} and employee_party_id=${f.employeeId}`)).rows[0]!;
+     where org_id=${f.orgId} and pay_run_document_id=${documentId} and employee_party_id=${f.employeeId}`, 'objects'))[0]!;
 }
 
 test('admitted period payments consume one period CPP exemption while EI remains the current payment share', { skip: !DB }, async () => {
   const f = await seedAdoption();
   try {
     const source = await opening(f);
-    const annualSource = (await db.execute(sql`select to_jsonb(b) as source from payroll_opening_balances b
-      where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`)).rows;
+    const annualSource = await db.execute(sql`select to_jsonb(b) as source from payroll_opening_balances b
+      where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`, 'objects');
     const { input } = await calculatedRun(f);
     assert.deepEqual(await contributions(f, input.documentId), { cpp: '6.2700', ei: '3.9100', pensionable: '240.0000' });
     const saved = await savePayrollPeriodOpening(source);
     assert.ok(saved.record); assert.equal(saved.annualUpdatedAt, source.expectedAnnualUpdatedAt);
-    assert.deepEqual((await db.execute(sql`select to_jsonb(b) as source from payroll_opening_balances b
-      where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`)).rows, annualSource);
+    assert.deepEqual(await db.execute(sql`select to_jsonb(b) as source from payroll_opening_balances b
+      where org_id=${f.orgId} and employee_party_id=${f.employeeId} and tax_year=2026`, 'objects'), annualSource);
     assert.deepEqual((await payRunStaleness(f.orgId, input.documentId)).reasons, ['openingBalances']);
     await assert.rejects(commitPayRun(input), /openingBalances/);
     assert.deepEqual((await calculatePayRun(input)).errors, []);
@@ -83,12 +83,12 @@ test('admitted period payments consume one period CPP exemption while EI remains
       assert.deepEqual(await contributions(f, input.documentId), { cpp: '14.2800', ei: '3.9100', pensionable: '240.0000' });
     }
     await commitPayRun(input);
-    const accounts = (await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${f.orgId}`)).rows;
+    const accounts = await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${f.orgId}`, 'objects');
     const account = (type: string) => { const row = accounts.find(candidate => candidate.type === type); assert.ok(row); return row.id; };
 
     await postDocument(input.documentId, { control: { ar: account('asset_receivable'), ap: account('liability_payable'), bank: account('asset_bank') } });
     const ledger = (await db.execute<{ amount: string; count: number }>(sql`select coalesce(sum(amount),0)::text as amount,count(*)::int as count
-      from journal_lines where org_id=${f.orgId}`)).rows[0]!;
+      from journal_lines where org_id=${f.orgId}`, 'objects'))[0]!;
     assert.ok(ledger.count > 0); assert.equal(cmp(ledger.amount, '0'), 0);
     await assert.rejects(savePayrollPeriodOpening({ ...source, expectedRevision: restored.record.revision, expectedAnnualUpdatedAt: restored.annualUpdatedAt,
       reason: 'Attempt to change a consumed opening' }), /already used.*opening balances.*controlled void action/);
@@ -104,7 +104,7 @@ test('a run paid before the declared provider cutover refuses by employee withou
     await assert.rejects(calculatedRun(f), /Terry Worker.*paid on or before.*paid-through date 2026-07-21/);
     const financial = (await db.execute<{ stubs: number; ledger: number }>(sql`select
       (select count(*)::int from pay_stubs where org_id=${f.orgId}) as stubs,
-      (select count(*)::int from journal_lines where org_id=${f.orgId}) as ledger`)).rows[0]!;
+      (select count(*)::int from journal_lines where org_id=${f.orgId}) as ledger`, 'objects'))[0]!;
     assert.deepEqual(financial, { stubs: 0, ledger: 0 });
   } finally { await dropScratchOrgReporting(f.orgId); }
 });
@@ -116,9 +116,9 @@ test('excluded employees contribute no provider priors and reinclusion restores 
     await savePayrollPeriodOpening({ ...source, paidThrough: '2026-07-21' });
     await mutatePayRunAdjustment({ ...input, mutation: { action: 'exclude', employeePartyId: f.employeeId } });
     const excluded = await calculatePayRun(input); assert.equal(excluded.employees, 0); assert.deepEqual(excluded.errors, []);
-    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_stubs where org_id=${f.orgId}`)).rows[0]!.count, 0);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_stubs where org_id=${f.orgId}`, 'objects'))[0]!.count, 0);
     await mutatePayRunAdjustment({ ...input, mutation: { action: 'include', employeePartyId: f.employeeId } });
     await assert.rejects(calculatePayRun(input), /Terry Worker.*paid on or before.*paid-through date 2026-07-21/);
-    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_lines where org_id=${f.orgId}`)).rows[0]!.count, 0);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_lines where org_id=${f.orgId}`, 'objects'))[0]!.count, 0);
   } finally { await dropScratchOrgReporting(f.orgId); }
 });

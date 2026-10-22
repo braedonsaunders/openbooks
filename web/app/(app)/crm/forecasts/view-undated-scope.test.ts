@@ -52,7 +52,7 @@ const forecastMocks = new Map<string, string>([
       export async function getTranslations() { return (key, params) => key }
     `,
   ],
-  ['mock:db', `export const db = { async execute() { return { rows: [] } } }`],
+  ['mock:db', `export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) } }`],
   // The clock module is the only business-date import the loader needs from
   // the database (businessToday reads the org timezone); the grid math below
   // mirrors engine/src/platform/business-date.ts (UTC YYYY-MM-DD grid) so
@@ -218,12 +218,13 @@ const boardMocks = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.opportunity-board-scope-test')]
       const sqlText = ${sqlText.toString()}
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.queries.push(text)
-          if (text.includes('from crm_opportunity_statuses')) return { rows: [${JSON.stringify(STATUS_ROW)}] }
-          if (text.includes('from crm_opportunities o')) return { rows: [${JSON.stringify(OPP_ROW)}] }
-          return { rows: [] }
+          if (text.includes('from crm_opportunity_statuses')) return inMode({ rows: [${JSON.stringify(STATUS_ROW)}] })
+          if (text.includes('from crm_opportunities o')) return inMode({ rows: [${JSON.stringify(OPP_ROW)}] })
+          return inMode({ rows: [] })
         },
       }
     `,

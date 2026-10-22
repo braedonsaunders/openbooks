@@ -39,10 +39,10 @@ const TABLES = ["hrm_benefit_transaction_responsibilities", "hrm_benefit_transac
 
 export async function requireTransactionPolicyStorage(exec: SqlExecutor): Promise<void> {
   const names = sql`array[${sql.join(TABLES.map(name => sql`${name}`), sql`, `)}]::text[]`;
-  const rows = (await exec.execute<{ present: number; hasContextFallback:boolean }>(sql`select count(*)::int as present,
+  const rows = await exec.execute<{ present: number; hasContextFallback:boolean }>(sql`select count(*)::int as present,
     exists(select 1 from pg_attribute a join pg_class t on t.oid=a.attrelid join pg_namespace ns_context on ns_context.oid=t.relnamespace
       where ns_context.nspname='public' and t.relname='hrm_benefit_transaction_positions'
-        and a.attname='fallback_only_when_context_absent' and not a.attisdropped) as "hasContextFallback" from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname=any(${names}) and c.relkind='r'`)).rows;
+        and a.attname='fallback_only_when_context_absent' and not a.attisdropped) as "hasContextFallback" from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relname=any(${names}) and c.relkind='r'`, "objects");
   if (rows[0]?.present !== TABLES.length || rows[0]?.hasContextFallback!==true) throw new BenefitsError("REFUSED", "Transaction benefit configuration is not installed — have the administrator upgrade through the native bootstrap runner before configuring or settling transaction programs; existing awards are preserved.");
 }
 
@@ -70,12 +70,12 @@ export function retainedTransactionPolicyOrder(policy: BenefitTransactionPolicy)
 
 export async function readTransactionPolicy(exec: SqlExecutor, orgId: string, programId: string): Promise<BenefitTransactionPolicy | null> {
   await requireTransactionPolicyStorage(exec);
-  const row = (await exec.execute<{ documentKind: BenefitTransactionPolicy["documentKind"]; dateBasis: BenefitTransactionPolicy["dateBasis"]; groupingSegmentId: string | null; unassignedShare: "refuse" | "forfeit"; rounding: "per_group" | "per_recipient"; capPercent: string | null; capProjectTypeId: string | null }>(sql`select document_kind as "documentKind",date_basis as "dateBasis",grouping_segment_id as "groupingSegmentId",unassigned_share as "unassignedShare",rounding,cap_percent::text as "capPercent",cap_project_type_id as "capProjectTypeId" from hrm_benefit_transaction_policies where org_id=${orgId} and program_id=${programId}`)).rows[0];
+  const row = (await exec.execute<{ documentKind: BenefitTransactionPolicy["documentKind"]; dateBasis: BenefitTransactionPolicy["dateBasis"]; groupingSegmentId: string | null; unassignedShare: "refuse" | "forfeit"; rounding: "per_group" | "per_recipient"; capPercent: string | null; capProjectTypeId: string | null }>(sql`select document_kind as "documentKind",date_basis as "dateBasis",grouping_segment_id as "groupingSegmentId",unassigned_share as "unassignedShare",rounding,cap_percent::text as "capPercent",cap_project_type_id as "capProjectTypeId" from hrm_benefit_transaction_policies where org_id=${orgId} and program_id=${programId}`, "objects"))[0];
   if (!row) return null;
-  const itemIds = (await exec.execute<{ id: string }>(sql`select item_id as id from hrm_benefit_transaction_items where org_id=${orgId} and program_id=${programId} order by item_id`)).rows.map(r=>r.id);
-  const positions = (await exec.execute<BenefitTransactionPolicy["positions"][number] & Record<string,unknown>>(sql`select position_key as key,name,weight::text,recipient_source as "recipientSource",fallback_source as "fallbackSource",fallback_only_when_context_absent as "fallbackOnlyWhenContextAbsent" from hrm_benefit_transaction_positions where org_id=${orgId} and program_id=${programId} order by position_key`)).rows.map(({fallbackOnlyWhenContextAbsent,...position})=>fallbackOnlyWhenContextAbsent===true?{...position,fallbackOnlyWhenContextAbsent:true}:position);
-  const responsibilities = (await exec.execute<BenefitTransactionPolicy["responsibilities"][number] & Record<string,unknown>>(sql`select group_id as "groupId",position_key as "positionKey",employment_id as "employmentId",effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo" from hrm_benefit_transaction_responsibilities where org_id=${orgId} and program_id=${programId} order by group_id,position_key,effective_from`)).rows;
-  const limits = (await exec.execute<BenefitTransactionPolicy["limits"][number] & Record<string,unknown>>(sql`select group_id as "groupId",limit_kind as kind,amount::text from hrm_benefit_transaction_limits where org_id=${orgId} and program_id=${programId} order by group_id`)).rows;
+  const itemIds = (await exec.execute<{ id: string }>(sql`select item_id as id from hrm_benefit_transaction_items where org_id=${orgId} and program_id=${programId} order by item_id`, "objects")).map(r=>r.id);
+  const positions = (await exec.execute<BenefitTransactionPolicy["positions"][number] & Record<string,unknown>>(sql`select position_key as key,name,weight::text,recipient_source as "recipientSource",fallback_source as "fallbackSource",fallback_only_when_context_absent as "fallbackOnlyWhenContextAbsent" from hrm_benefit_transaction_positions where org_id=${orgId} and program_id=${programId} order by position_key`, "objects")).map(({fallbackOnlyWhenContextAbsent,...position})=>fallbackOnlyWhenContextAbsent===true?{...position,fallbackOnlyWhenContextAbsent:true}:position);
+  const responsibilities = await exec.execute<BenefitTransactionPolicy["responsibilities"][number] & Record<string,unknown>>(sql`select group_id as "groupId",position_key as "positionKey",employment_id as "employmentId",effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo" from hrm_benefit_transaction_responsibilities where org_id=${orgId} and program_id=${programId} order by group_id,position_key,effective_from`, "objects");
+  const limits = await exec.execute<BenefitTransactionPolicy["limits"][number] & Record<string,unknown>>(sql`select group_id as "groupId",limit_kind as kind,amount::text from hrm_benefit_transaction_limits where org_id=${orgId} and program_id=${programId} order by group_id`, "objects");
   return { ...row, itemIds, positions, responsibilities, limits };
 }
 
@@ -83,7 +83,7 @@ interface PolicyOwner extends Record<string,unknown> { currency:string; legal_en
 async function owner(orgId: string, actorId: string, programId: string, write: boolean): Promise<PolicyOwner> {
   const scope = write ? await requireAggregateBenefitsManage(db,orgId,actorId) : await requireAggregateBenefitsRead(db,orgId,actorId);
   await assertHrmEnabled(db,orgId);
-  const row = (await db.execute<PolicyOwner>(sql`select currency,legal_entity_id,status,revision,effective_from::text,effective_to::text,metric from hrm_benefit_programs where org_id=${orgId} and id=${programId} ${write ? sql`for update` : sql`for share`}`)).rows[0];
+  const row = (await db.execute<PolicyOwner>(sql`select currency,legal_entity_id,status,revision,effective_from::text,effective_to::text,metric from hrm_benefit_programs where org_id=${orgId} and id=${programId} ${write ? sql`for update` : sql`for share`}`, "objects"))[0];
   if (!row || row.legal_entity_id === null || (scope !== null && !scope.has(row.legal_entity_id))) throw new BenefitsError("NOT_FOUND","Choose a benefit program with a responsible employer in your legal-entity scope before configuring its transaction rules.");
   return row;
 }
@@ -105,7 +105,7 @@ export async function getBenefitTransactionReferences(query: BenefitTransactionP
     if (!employer) throw new BenefitsError("NOT_FOUND","The program employer is unavailable — reload its native program record.");
     const segments: {value:string;label:string}[]=[], groups=[{value:employer.id,label:employer.name,scopeValue:""}];
     const tables:Record<string,string>={subsidiary_id:"subsidiaries",department_id:"departments",project_id:"projects",location_id:"locations",class_id:"classes"};
-    const definitions=(await db.execute<{id:string;name:string;source_kind:string;storage_column:string|null;feature_key:string|null}>(sql`select id,name,source_kind,storage_column,feature_key from segment_definitions where org_id=${orgId} order by sort_order,name,id`)).rows;
+    const definitions=await db.execute<{id:string;name:string;source_kind:string;storage_column:string|null;feature_key:string|null}>(sql`select id,name,source_kind,storage_column,feature_key from segment_definitions where org_id=${orgId} order by sort_order,name,id`, "objects");
     for (const s of definitions) {
       const table=s.source_kind==="custom" && s.storage_column===null ? "segment_values" : s.source_kind==="builtin" && s.storage_column ? tables[s.storage_column] : undefined;
       if (!table) continue;
@@ -113,7 +113,7 @@ export async function getBenefitTransactionReferences(query: BenefitTransactionP
       if (feature && !(await lockAndCheckOrgFeature(db,orgId,feature))) continue;
       segments.push({value:s.id,label:s.name});
       if (table==="subsidiaries") { groups.push({value:employer.id,label:employer.name,scopeValue:s.id});continue; }
-      const values=(await db.execute<{id:string;name:string;subsidiary_id:string|null;subsidiary_include_children:boolean}>(sql`select id,name,subsidiary_id,subsidiary_include_children from ${sql.raw(table)} where org_id=${orgId} ${table==="segment_values" ? sql`and segment_id=${s.id}` : sql``} order by name,id`)).rows;
+      const values=await db.execute<{id:string;name:string;subsidiary_id:string|null;subsidiary_include_children:boolean}>(sql`select id,name,subsidiary_id,subsidiary_include_children from ${sql.raw(table)} where org_id=${orgId} ${table==="segment_values" ? sql`and segment_id=${s.id}` : sql``} order by name,id`, "objects");
       for (const v of values) if (v.subsidiary_id===null || restrictionAdmits(context,v.subsidiary_id,v.subsidiary_include_children,employer.id)) groups.push({value:v.id,label:v.name,scopeValue:s.id});
     }
     return {segments,groups};
@@ -133,7 +133,7 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
   if (!policy || typeof policy!=="object" || Array.isArray(policy)) throw new BenefitsError("INVALID_INPUT","Reload the native transaction policy before saving; its configuration must be a record.");
   for (const field of ["itemIds","positions","responsibilities","limits"] as const) if (!Array.isArray(policy[field])) throw new BenefitsError("INVALID_INPUT", `Transaction policy ${field} must be an explicit list — reload its native configuration before saving.`);
   if (policy.positions.length>100 || policy.itemIds.length>10000 || policy.responsibilities.length>10000 || policy.limits.length>10000) throw new BenefitsError("INVALID_INPUT","This policy exceeds the supported configuration size — split it into separately governed programs before saving.");
-  const precision=(await exec.execute<{minor_units:number}>(sql`select minor_units from currencies where code=${currency}`)).rows[0]?.minor_units;
+  const precision=(await exec.execute<{minor_units:number}>(sql`select minor_units from currencies where code=${currency}`, "objects"))[0]?.minor_units;
   if (precision===undefined || !Number.isInteger(precision) || precision<0 || precision>4) throw new BenefitsError("REFUSED","The program currency has no supported payable precision — correct its currency registry before recording ceilings.");
   const quantum=10n**BigInt(4-precision);
   if (!["sales_order","customer_invoice","field_ticket","quote"].includes(policy.documentKind) || !["document_date","work_date"].includes(policy.dateBasis)) throw new BenefitsError("INVALID_INPUT","Select a supported commercial document kind and explicitly choose document date or work date as the source period basis.");
@@ -145,17 +145,17 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
     if (toUnits(percent)>1_000_000n) throw new BenefitsError("INVALID_INPUT","The budget ceiling is a percentage from 0 to 100.");
     if (capProjectTypeId!==null) {
       requireId(capProjectTypeId,"capProjectTypeId");
-      if (!(await exec.execute(sql`select 1 from project_types where org_id=${orgId} and id=${capProjectTypeId} for share`)).rows.length) throw new BenefitsError("NOT_FOUND","The ceiling's project type belongs to another organization — reselect the project type.");
+      if (!(await exec.execute(sql`select 1 from project_types where org_id=${orgId} and id=${capProjectTypeId} for share`, "objects")).length) throw new BenefitsError("NOT_FOUND","The ceiling's project type belongs to another organization — reselect the project type.");
     }
   }
   if (!policy.itemIds.length || new Set(policy.itemIds).size!==policy.itemIds.length) throw new BenefitsError("INVALID_INPUT","Select each eligible native source item once; an empty item selection never means all items.");
   for (const id of policy.itemIds) requireId(id,"itemId");
-  const items=(await exec.execute<{id:string}>(sql`select id from items where org_id=${orgId} and id=any(${`{${policy.itemIds.join(",")}}`}::uuid[]) order by id for share`)).rows;
+  const items=await exec.execute<{id:string}>(sql`select id from items where org_id=${orgId} and id=any(${`{${policy.itemIds.join(",")}}`}::uuid[]) order by id for share`, "objects");
   if (items.length!==policy.itemIds.length) throw new BenefitsError("NOT_FOUND","One or more eligible items belong to another organization — reselect the native items.");
   let groupTable: string="subsidiaries"; let customSegment: string | null=null;
   if (policy.groupingSegmentId!==null) {
     requireId(policy.groupingSegmentId,"groupingSegmentId");
-    const s=(await exec.execute<{source_kind:string;storage_column:string|null;feature_key:string|null}>(sql`select source_kind,storage_column,feature_key from segment_definitions where org_id=${orgId} and id=${policy.groupingSegmentId} for share`)).rows[0];
+    const s=(await exec.execute<{source_kind:string;storage_column:string|null;feature_key:string|null}>(sql`select source_kind,storage_column,feature_key from segment_definitions where org_id=${orgId} and id=${policy.groupingSegmentId} for share`, "objects"))[0];
     const builtins: Record<string,string>={subsidiary_id:"subsidiaries",department_id:"departments",project_id:"projects",location_id:"locations",class_id:"classes"};
     if (s?.source_kind==="custom" && s.storage_column===null) {groupTable="segment_values"; customSegment=policy.groupingSegmentId;}
     else if (s?.source_kind==="builtin" && s.storage_column && builtins[s.storage_column]) groupTable=builtins[s.storage_column]!;
@@ -179,7 +179,7 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
   const groupIds=[...new Set([...policy.responsibilities.map(r=>r.groupId),...policy.limits.map(r=>r.groupId)])];
   for (const id of groupIds) requireId(id,"groupId");
   if (groupIds.length) {
-    const found=(await exec.execute<{id:string;subsidiary_id:string|null;subsidiary_include_children:boolean}>(sql`select id,${groupTable==="subsidiaries" ? sql`null::uuid as subsidiary_id,true as subsidiary_include_children` : sql`subsidiary_id,subsidiary_include_children`} from ${sql.raw(groupTable)} where org_id=${orgId} and id=any(${`{${groupIds.join(",")}}`}::uuid[]) ${customSegment ? sql`and segment_id=${customSegment}` : sql``} order by id for share`)).rows;
+    const found=await exec.execute<{id:string;subsidiary_id:string|null;subsidiary_include_children:boolean}>(sql`select id,${groupTable==="subsidiaries" ? sql`null::uuid as subsidiary_id,true as subsidiary_include_children` : sql`subsidiary_id,subsidiary_include_children`} from ${sql.raw(groupTable)} where org_id=${orgId} and id=any(${`{${groupIds.join(",")}}`}::uuid[]) ${customSegment ? sql`and segment_id=${customSegment}` : sql``} order by id for share`, "objects");
     const context=await loadSubsidiaryContext(exec,orgId);
     if (found.some(row=>row.subsidiary_id!==null && !restrictionAdmits(context,row.subsidiary_id,row.subsidiary_include_children,legalEntityId))) throw new BenefitsError("REFUSED","A recipient group is restricted to another legal employer — choose a group available to this program employer.");
     if (found.length!==groupIds.length || (groupTable==="subsidiaries" && groupIds.some(id=>id!==legalEntityId))) throw new BenefitsError("NOT_FOUND","A responsibility or ceiling names a group outside the selected dimension and employer — reselect its native group.");
@@ -196,7 +196,7 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
     const key=`${r.groupId}:${r.positionKey}`, prior=spans.get(key)??[];
     if (prior.some(p=>p.effectiveFrom<=(r.effectiveTo??"9999-12-31") && r.effectiveFrom<=(p.effectiveTo??"9999-12-31"))) throw new BenefitsError("REFUSED",`Recipient position ${r.positionKey} has overlapping assignments in group ${r.groupId} — end the earlier assignment before starting its replacement.`);
     prior.push(r);spans.set(key,prior);
-    const employment=(await exec.execute<{employer_subsidiary_id:string}>(sql`select employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${r.employmentId} for share`)).rows[0];
+    const employment=(await exec.execute<{employer_subsidiary_id:string}>(sql`select employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${r.employmentId} for share`, "objects"))[0];
     if (!employment || employment.employer_subsidiary_id!==legalEntityId) throw new BenefitsError("REFUSED","A recipient employment belongs to another legal employer — choose the program employer's employment record.");
   }
 }
@@ -227,14 +227,14 @@ export async function saveBenefitTransactionPolicy(query: BenefitTransactionPoli
       await db.execute(sql`delete from ${sql.raw(table)} where org_id=${orgId} and program_id=${programId}`);
     }
     const policy=query.policy;
-    requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_policies(org_id,program_id,document_kind,date_basis,grouping_segment_id,unassigned_share,rounding,cap_percent,cap_project_type_id,created_by,updated_by,reason) values(${orgId},${programId},${policy.documentKind},${policy.dateBasis},${policy.groupingSegmentId},${policy.unassignedShare ?? "refuse"},${policy.rounding ?? "per_group"},${policy.capPercent ?? null},${policy.capProjectTypeId ?? null},${actorId},${actorId},${reason}) returning id`)).rows,"saving the transaction source policy");
-    for (const id of policy.itemIds) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_items(org_id,program_id,item_id,created_by,updated_by,reason) values(${orgId},${programId},${id},${actorId},${actorId},${reason}) returning id`)).rows,"saving the eligible source item");
-    for (const r of policy.positions) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_positions(org_id,program_id,position_key,name,weight,recipient_source,fallback_source,fallback_only_when_context_absent,created_by,updated_by,reason) values(${orgId},${programId},${r.key},${r.name},${amount(r.weight,"Share weight",true)},${r.recipientSource ?? "assignment"},${r.fallbackSource ?? null},${r.fallbackOnlyWhenContextAbsent ?? false},${actorId},${actorId},${reason}) returning id`)).rows,"saving the recipient position");
-    for (const r of policy.limits) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_limits(org_id,program_id,group_id,limit_kind,amount,created_by,updated_by,reason) values(${orgId},${programId},${r.groupId},${r.kind},${r.amount===null ? null : amount(r.amount,"Group ceiling",false)},${actorId},${actorId},${reason}) returning id`)).rows,"saving the group ceiling");
-    for (const r of policy.responsibilities) requireOneRow((await db.execute(sql`insert into hrm_benefit_transaction_responsibilities(org_id,program_id,group_id,position_key,employment_id,effective_from,effective_to,created_by,updated_by,reason) values(${orgId},${programId},${r.groupId},${r.positionKey},${r.employmentId},${r.effectiveFrom},${r.effectiveTo},${actorId},${actorId},${reason}) returning id`)).rows,"saving the dated responsibility");
+    requireOneRow(await db.execute(sql`insert into hrm_benefit_transaction_policies(org_id,program_id,document_kind,date_basis,grouping_segment_id,unassigned_share,rounding,cap_percent,cap_project_type_id,created_by,updated_by,reason) values(${orgId},${programId},${policy.documentKind},${policy.dateBasis},${policy.groupingSegmentId},${policy.unassignedShare ?? "refuse"},${policy.rounding ?? "per_group"},${policy.capPercent ?? null},${policy.capProjectTypeId ?? null},${actorId},${actorId},${reason}) returning id`, "objects"),"saving the transaction source policy");
+    for (const id of policy.itemIds) requireOneRow(await db.execute(sql`insert into hrm_benefit_transaction_items(org_id,program_id,item_id,created_by,updated_by,reason) values(${orgId},${programId},${id},${actorId},${actorId},${reason}) returning id`, "objects"),"saving the eligible source item");
+    for (const r of policy.positions) requireOneRow(await db.execute(sql`insert into hrm_benefit_transaction_positions(org_id,program_id,position_key,name,weight,recipient_source,fallback_source,fallback_only_when_context_absent,created_by,updated_by,reason) values(${orgId},${programId},${r.key},${r.name},${amount(r.weight,"Share weight",true)},${r.recipientSource ?? "assignment"},${r.fallbackSource ?? null},${r.fallbackOnlyWhenContextAbsent ?? false},${actorId},${actorId},${reason}) returning id`, "objects"),"saving the recipient position");
+    for (const r of policy.limits) requireOneRow(await db.execute(sql`insert into hrm_benefit_transaction_limits(org_id,program_id,group_id,limit_kind,amount,created_by,updated_by,reason) values(${orgId},${programId},${r.groupId},${r.kind},${r.amount===null ? null : amount(r.amount,"Group ceiling",false)},${actorId},${actorId},${reason}) returning id`, "objects"),"saving the group ceiling");
+    for (const r of policy.responsibilities) requireOneRow(await db.execute(sql`insert into hrm_benefit_transaction_responsibilities(org_id,program_id,group_id,position_key,employment_id,effective_from,effective_to,created_by,updated_by,reason) values(${orgId},${programId},${r.groupId},${r.positionKey},${r.employmentId},${r.effectiveFrom},${r.effectiveTo},${actorId},${actorId},${reason}) returning id`, "objects"),"saving the dated responsibility");
     const saved=await readTransactionPolicy(db,orgId,programId);
     if (!saved) throw new BenefitsError("REFUSED","The saved transaction policy cannot be read back — the operation was rolled back; reload before retrying.");
-    const revision=requireOneRow((await db.execute<{revision:number}>(sql`select revision from hrm_benefit_programs where org_id=${orgId} and id=${programId}`)).rows,"reading the saved program revision").revision;
+    const revision=requireOneRow(await db.execute<{revision:number}>(sql`select revision from hrm_benefit_programs where org_id=${orgId} and id=${programId}`, "objects"),"reading the saved program revision").revision;
     return {policy:saved,programRevision:revision};
   });
 }

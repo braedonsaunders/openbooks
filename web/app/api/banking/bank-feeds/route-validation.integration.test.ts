@@ -51,7 +51,7 @@ const remove = (id: string) =>
 
 async function feedRow(orgId: string, id: string) {
   return (await db.execute<{ name: string; sync_cadence: string }>(sql`
-    select name, sync_cadence from bank_feed_connections where org_id=${orgId} and id=${id}`)).rows[0]!
+    select name, sync_cadence from bank_feed_connections where org_id=${orgId} and id=${id}`, 'objects'))[0]!
 }
 
 test('bank-feed PATCH rejects an empty name that POST refuses', { skip: !enabled }, async () => {
@@ -156,7 +156,7 @@ test('bank-feed writes validate syncOverlapDays and store a custom overlap', { s
   try {
     const overlapOf = async (id: string) =>
       (await db.execute<{ overlap: number | null }>(sql`
-        select sync_overlap_days as overlap from bank_feed_connections where org_id=${org.orgId} and id=${id}`)).rows[0]!.overlap
+        select sync_overlap_days as overlap from bank_feed_connections where org_id=${org.orgId} and id=${id}`, 'objects'))[0]!.overlap
     // Unusable overlaps are 400s that create nothing: fractions, negatives,
     // past the 90-day ceiling, and non-numbers.
     for (const syncOverlapDays of [-1, 91, 1.5, '30', true]) {
@@ -191,7 +191,7 @@ test('bank-feed PATCH refuses non-boolean isActive values', { skip: !enabled }, 
       assert.equal(refused.status, 400)
       assert.equal(((await refused.json()) as { error: string }).error, 'isActive must be a boolean')
     }
-    const row = await db.execute<{ is_active: boolean }>(sql`select is_active from bank_feed_connections where id=${id}`)
-    assert.equal(row.rows[0]!.is_active, true)
+    const row = await db.execute<{ is_active: boolean }>(sql`select is_active from bank_feed_connections where id=${id}`, 'objects')
+    assert.equal(row[0]!.is_active, true)
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })

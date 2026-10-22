@@ -181,16 +181,14 @@ async function legacyGET(req: Request) {
         ? await db.execute<{ submittedBy: string | null }>(sql`
           select submitted_by as "submittedBy" from documents
            where org_id = ${orgId} and id = ${subjectId} and kind = ${subjectKind}
-        `)
+        `, 'objects')
         : null
     const submittedByViewer =
-      documentSubmission?.rows[0]?.submittedBy === authz.user.id
+      documentSubmission?.[0]?.submittedBy === authz.user.id
     const commandSubmission = adapter.nativeCommandApproval
-      ? (
-          await db.execute<{ actor_id: string; policy: { kind: string } }>(sql`
+      ? (await db.execute<{ actor_id: string; policy: { kind: string } }>(sql`
       select actor_id,policy from flow_submissions where org_id=${orgId} and subject_kind=${subjectKind} and subject_id=${subjectId}
-        and context ? 'command' order by created_at desc,id desc limit 1`)
-        ).rows[0]
+        and context ? 'command' order by created_at desc,id desc limit 1`, 'objects'))[0]
       : null
 
     const [gates, runs, roleRows] = await Promise.all([
@@ -210,7 +208,7 @@ async function legacyGET(req: Request) {
         left join users ou on ou.id = g.on_behalf_of_user_id
        where g.org_id = ${orgId} and g.subject_kind = ${subjectKind} and g.subject_id = ${subjectId}
        order by g.created_at
-    `),
+    `, 'objects'),
       db.execute<Record<string, unknown>>(sql`
       select r.id, r.status, r.error, r.finished_at as "finishedAt",
              r.started_at as "startedAt",
@@ -220,22 +218,22 @@ async function legacyGET(req: Request) {
        where r.org_id = ${orgId} and r.subject_kind = ${subjectKind}
          and r.subject_id = ${subjectId}
        order by r.started_at
-    `),
+    `, 'objects'),
       db.execute<{ key: string; name: string }>(sql`
       select key, name from app_roles where org_id = ${orgId}
-    `),
+    `, 'objects'),
     ])
 
     const roleLabel = (key: string | null): string | null => {
       if (!key) return null
-      return roleRows.rows.find((r) => r.key === key)?.name ?? key
+      return roleRows.find((r) => r.key === key)?.name ?? key
     }
     // --- pendingWith + myActions ---------------------------------------------
     const pendingWith: PendingWithEntry[] = []
     let myActions: RecordApprovalState['approvalState']['myActions'] = null
     let awaitingAnotherApprover = false
 
-    for (const g of gates.rows) {
+    for (const g of gates) {
       if (g.status !== 'pending') continue
       const name =
         (g.assigneeName as string | null) ??
@@ -256,7 +254,7 @@ async function legacyGET(req: Request) {
     // --- history --------------------------------------------------------------
     const history: ApprovalHistoryEntry[] = []
 
-    for (const r of runs.rows) {
+    for (const r of runs) {
       history.push({
         id: `run:${r.id}`,
         type: 'submitted',
@@ -266,7 +264,7 @@ async function legacyGET(req: Request) {
       })
     }
 
-    for (const g of gates.rows) {
+    for (const g of gates) {
       const assignee =
         (g.assigneeName as string | null) ??
         roleLabel(g.assigneeRole as string | null)
@@ -320,7 +318,7 @@ async function legacyGET(req: Request) {
     history.sort((a, b) => a.at.localeCompare(b.at))
 
     const latestRun =
-      runs.rows.length > 0 ? runs.rows[runs.rows.length - 1]! : null
+      runs.length > 0 ? runs[runs.length - 1]! : null
     // Withdrawal authority belongs to the document's submission actor,
     // independently of workflow retries, reminders or the presence of a
     // live gate. This is the same field the native withdrawal command locks.
@@ -342,7 +340,7 @@ async function legacyGET(req: Request) {
               at: iso(latestRun.finishedAt),
             }
           : null,
-      neverSubmitted: runs.rows.length === 0 && pendingWith.length === 0,
+      neverSubmitted: runs.length === 0 && pendingWith.length === 0,
       canRetry: session.flowsEnabled && can(authz, 'flows.manage'),
       submittedByViewer,
       canWithdrawCommand:
@@ -350,7 +348,7 @@ async function legacyGET(req: Request) {
         commandSubmission.policy.kind === 'gated' &&
         (commandSubmission.actor_id === authz.user.id ||
           can(authz, 'flows.manage')) &&
-        gates.rows.some(
+        gates.some(
           (row) => row.status === 'pending' || row.status === 'escalated',
         ),
     }

@@ -132,7 +132,7 @@ export async function loadOrgChart(query: {
   const selfFilter = scope.kind === "self"
     ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
     : sql``;
-  const incumbents = (await db.execute<IncumbentRow>(sql`
+  const incumbents = await db.execute<IncumbentRow>(sql`
     with live_emp as (
       select distinct on (v.employment_id) v.employment_id
         from worker_employment_versions v
@@ -167,7 +167,7 @@ export async function loadOrgChart(query: {
        ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope.allowed)}
        ${selfFilter}
      order by name
-  `)).rows;
+  `, "objects");
 
   // Funded-but-empty slots: positions open as of the date with no live
   // incumbent assignment. They hang at root level — positions carry no
@@ -197,7 +197,7 @@ export async function loadOrgChart(query: {
             and (a.effective_to is null or a.effective_to > ${query.asOf}::date)
        )
      order by v.title
-  `)).rows;
+  `, "objects"));
   const nodes = new Map<string, OrgChartNode>();
   for (const row of incumbents) {
     nodes.set(row.employment_id, {
@@ -338,9 +338,9 @@ export async function loadDirectory(query: {
   `;
   const totalCount = Number((await db.execute<{ n: string }>(sql`
     select count(distinct e.id)::text as n ${from} ${filters}
-  `)).rows[0]?.n ?? "0");
+  `, "objects"))[0]?.n ?? "0");
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(totalCount / pageSize)));
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     employment_id: string;
     party_id: string;
     name: string;
@@ -366,7 +366,7 @@ export async function loadDirectory(query: {
      ${filters}
      order by name, e.id
      limit ${pageSize} offset ${(page - 1) * pageSize}
-  `)).rows;
+  `, "objects");
   const entries = rows.map((r) => ({
     employmentId: r.employment_id,
     partyId: r.party_id,

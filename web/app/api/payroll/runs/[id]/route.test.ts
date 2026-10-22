@@ -28,7 +28,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-delete-test')]
       export const db = {
-        execute() { return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] }) },
+        execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] }).then(inMode) },
       }
       export const env = {}
       export const schema = {}

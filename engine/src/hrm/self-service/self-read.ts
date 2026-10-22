@@ -90,7 +90,7 @@ export async function loadMyParty(
            emergency_contact as "emergency_contact"
       from parties
      where org_id = ${orgId} and id = ${partyId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new SelfServiceError(
       "NOT_FOUND",
@@ -125,7 +125,7 @@ export async function loadMyAddress(
      where org_id = ${orgId} and party_id = ${partyId}
      order by is_default_billing desc, updated_at desc, id
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   return {
     id: row.id,
@@ -168,7 +168,7 @@ export async function loadMyEmploymentSummaries(
   if (employmentIds.length === 0) return [];
   // Bare JS arrays interpolate as row constructors, never PostgreSQL
   // arrays: ids cross as a JSON string, exactly like the sibling reads.
-  const rows = (await exec.execute<EmploymentSummaryRow>(sql`
+  const rows = await exec.execute<EmploymentSummaryRow>(sql`
     with ranked as (
       select e.id as employment_id,
              v.status, v.effective_from::text as effective_from,
@@ -214,7 +214,7 @@ export async function loadMyEmploymentSummaries(
         on d.org_id = ${orgId} and d.id = pa.department_id
      where r.rn = 1
      order by r.employment_id
-  `)).rows;
+  `, "objects");
   const summaries: MyEmploymentSummary[] = [];
   for (const row of rows) {
     const managers = (await exec.execute<{ name: string }>(sql`
@@ -231,7 +231,7 @@ export async function loadMyEmploymentSummaries(
          and r.effective_from <= ${today}::date
          and (r.effective_to is null or r.effective_to > ${today}::date)
        order by p.display_name
-    `)).rows.map((manager) => manager.name);
+    `, "objects")).map((manager) => manager.name);
     summaries.push({
       employmentId: row.employment_id,
       status: row.status,
@@ -315,7 +315,7 @@ export async function loadMySteps(
   today: string,
 ): Promise<MyStep[]> {
   if (employmentIds.length === 0) return [];
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     process_id: string;
     process_kind: string;
@@ -343,7 +343,7 @@ export async function loadMySteps(
          or (s.owner_kind = 'named_party' and s.owner_party_id = ${partyId}::uuid)
        )
      order by s.due_on, s.id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     processId: row.process_id,
@@ -398,7 +398,7 @@ export async function loadMyRequests(
   employmentIds: readonly string[],
 ): Promise<MyRequest[]> {
   if (employmentIds.length === 0) return [];
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     employment_id: string;
     payload: { kind?: unknown };
@@ -414,7 +414,7 @@ export async function loadMyRequests(
        and employment_id in (select jsonb_array_elements_text(${JSON.stringify([...employmentIds])}::jsonb)::uuid)
      order by created_at desc, id desc
      limit 100
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     employmentId: row.employment_id,

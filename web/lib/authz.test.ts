@@ -48,16 +48,18 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for("openbooks.authz-route-contract-test")];
       export const db = {
-        execute: async () => {
+        execute: async (_query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result);
           state.dbCalls += 1;
-          return { rows: [] };
+          return inMode({ rows: [] });
         },
         transaction: async (work) => {
           state.dbCalls += 1;
           return work({
-            execute: async () => {
+            execute: async (_query, mode) => {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result);
               state.dbCalls += 1;
-              return { rows: [] };
+              return inMode({ rows: [] });
             },
           });
         },

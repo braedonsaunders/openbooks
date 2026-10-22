@@ -95,8 +95,8 @@ export async function savePayComponentEarningClassification(
              then ${classification.statutoryExemptionCategory == null ? null : String(classification.statutoryExemptionCategory)}
              else statutory_exemption_category end
      where org_id = ${orgId} and pay_component_id = ${componentId}
-    returning pay_component_id`)
-  if (!result.rows.length) throw new Error('pay component classification is missing')
+    returning pay_component_id`, 'objects')
+  if (!result.length) throw new Error('pay component classification is missing')
 }
 
 export const FX_RATE_COLUMNS = new Set(['rate', 'current_rate', 'average_rate', 'historical_rate'])

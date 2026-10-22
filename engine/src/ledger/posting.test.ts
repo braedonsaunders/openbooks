@@ -903,7 +903,7 @@ test("numeric default FX header rates resolve a stored spot instead of a 1:1 peg
     const revenue = (await db.execute<{ amount: string; txn_amount: string; fx_rate: string }>(sql`
       select amount::text, txn_amount::text, fx_rate::text
         from journal_lines
-       where entry_id = ${entryId} and account_id = ${org.accounts.revenue}`)).rows[0]!;
+       where entry_id = ${entryId} and account_id = ${org.accounts.revenue}`, "objects"))[0]!;
     assert.deepEqual(revenue, {
       amount: "-100.0000",
       txn_amount: "-80.0000",
@@ -922,10 +922,10 @@ test("different document kinds sharing a number post to distinct journal identit
     await postDocument(invoiceId, deps, { deferEffects: true, suppressAutomation: true });
     const billId = await seedApprovedDocument(org, "vendor_bill", "DUP-POSTING-1");
     await postDocument(billId, deps, { deferEffects: true, suppressAutomation: true });
-    const entries = (await db.execute<{ entry_number: string; source_document_id: string }>(sql`
+    const entries = await db.execute<{ entry_number: string; source_document_id: string }>(sql`
       select entry_number, source_document_id from journal_entries
        where org_id = ${org.orgId} and source_document_id in (${invoiceId}, ${billId})
-    `)).rows;
+    `, "objects");
     assert.equal(entries.length, 2);
     assert.equal(new Set(entries.map((entry) => entry.entry_number)).size, 2);
     assert.deepEqual(new Set(entries.map((entry) => entry.source_document_id)), new Set([invoiceId, billId]));
@@ -1075,7 +1075,7 @@ test("replaying a posted document refuses without duplicating entries or lines",
                where org_id = ${org.orgId} and source_document_id = ${documentId}) as entries,
              (select count(*)::text from journal_lines jl
                 join journal_entries je on je.id = jl.entry_id
-               where je.org_id = ${org.orgId} and je.source_document_id = ${documentId}) as lines`)).rows[0]!;
+               where je.org_id = ${org.orgId} and je.source_document_id = ${documentId}) as lines`, "objects"))[0]!;
     const before = await counts();
     assert.equal(before.entries, "1");
     await assert.rejects(

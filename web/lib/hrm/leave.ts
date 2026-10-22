@@ -609,7 +609,7 @@ export async function loadMyLeave(
   const own = await loadOwnEmploymentIds(db, orgId, authz.user.id)
   if (own.length > 0) {
     const ids = own.map((id) => sql`${id}::uuid`)
-    const employments = (await db.execute<{
+    const employments = await db.execute<{
       employmentId: string
       employmentNumber: string | null
       employerName: string
@@ -623,7 +623,7 @@ export async function loadMyLeave(
         join subsidiaries s on s.org_id = w.org_id and s.id = w.employer_subsidiary_id
        where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})
        order by s.name, w.employment_number nulls last, w.id
-    `)).rows
+    `, 'objects')
     for (const employment of employments) {
       const employmentReference = employment.employmentNumber?.trim() || employment.employmentId.slice(0, 8)
       // One engine read per employment prices every active type through

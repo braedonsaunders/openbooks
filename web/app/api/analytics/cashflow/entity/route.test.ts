@@ -42,11 +42,12 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.cashflow-entity-route-test')]
       const sqlText = globalThis.openbooksCashflowEntitySqlText
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
-          if (text.trimStart().startsWith('select id from accounting_books')) return Promise.resolve({ rows: [{ id: 'book-primary' }] })
-          if (text.includes('from parties')) return Promise.resolve({ rows: [{ subsidiaryId: state.partySubsidiaryId }] })
+          if (text.trimStart().startsWith('select id from accounting_books')) return Promise.resolve({ rows: [{ id: 'book-primary' }] }).then(inMode)
+          if (text.includes('from parties')) return Promise.resolve({ rows: [{ subsidiaryId: state.partySubsidiaryId }] }).then(inMode)
           // The shared open-items reader projects through the document's
           // current posting entry; its rows carry the party for the drill's
           // filter. Dispatched before 'from applications'/'from documents d',
@@ -59,14 +60,14 @@ const mockSources = new Map<string, string>([
             id: 'line-open-2', entry_id: 'entry-open-2', doc_id: 'doc-open-2', doc_kind: 'customer_invoice',
             doc_number: 'INV-2', party_id: '00000000-0000-4000-8000-000000000001', party_name: 'Customer One',
             tran_date: '2026-08-02', due_date: '2026-08-20', remaining: '0.1250', func: null,
-          }] })
-          if (text.includes('from orgs')) return Promise.resolve({ rows: [{ baseCurrency: 'USD' }] })
-          if (text.includes('from fx_rates')) return Promise.resolve({ rows: state.fxRows })
-          if (text.includes('from applications')) return Promise.resolve({ rows: state.payLegs })
+          }] }).then(inMode)
+          if (text.includes('from orgs')) return Promise.resolve({ rows: [{ baseCurrency: 'USD' }] }).then(inMode)
+          if (text.includes('from fx_rates')) return Promise.resolve({ rows: state.fxRows }).then(inMode)
+          if (text.includes('from applications')) return Promise.resolve({ rows: state.payLegs }).then(inMode)
           if (text.includes('from documents d')) return Promise.resolve({ rows: [{
             doc_id: 'doc-payment', doc_kind: 'customer_payment', entry_id: 'entry-payment', document_number: 'PAY-1',
             date: '2026-08-12', func_amount: '999999999999999.9999', func: 'USD',
-          }] })
+          }] }).then(inMode)
           throw new Error('unexpected database query: ' + text)
         },
       }

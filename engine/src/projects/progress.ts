@@ -116,7 +116,7 @@ export async function lockProgressTask(
      where t.org_id = ${orgId} and t.id = ${taskId} and t.project_id = ${projectId}
        ${scopeFilter(allowedSubsidiaryIds)}
      for share of t, p
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new ProjectProgressError("Task not found on this project", 404, "not-found");
   return {
     id: row.id,
@@ -193,7 +193,7 @@ async function insertEntry(
     values (${orgId}, ${entry.projectId}, ${entry.taskId}, ${entry.entryDate}, ${entry.quantity}, ${entry.unit},
             ${entry.source}, ${entry.sourceDocumentId}, ${entry.reversesEntryId}, ${entry.note}, ${actorId})
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw new Error("progress entry insert returned no row");
   await executor.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -284,7 +284,7 @@ export async function reverseProgress(input: {
        where e.org_id = ${input.orgId} and e.id = ${input.entryId} and e.project_id = ${input.projectId}
          ${scopeFilter(input.allowedSubsidiaryIds)}
        for update of e
-    `)).rows[0];
+    `, "objects"))[0];
     if (!original) throw new ProjectProgressError("Progress entry not found", 404, "not-found");
     if (original.reverses_entry_id) {
       throw new ProjectProgressError(
@@ -305,7 +305,7 @@ export async function reverseProgress(input: {
     const prior = (await db.execute<{ id: string }>(sql`
       select id from project_progress_entries
        where org_id = ${input.orgId} and reverses_entry_id = ${original.id}
-    `)).rows[0];
+    `, "objects"))[0];
     if (prior) {
       throw new ProjectProgressError("This entry has already been reversed", 409, "already-reversed");
     }
@@ -331,7 +331,7 @@ function negate(value: string): string {
 }
 
 async function readEntries(executor: SqlExecutor, orgId: string, filter: SQL): Promise<ProgressEntry[]> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     id: string; project_id: string; task_id: string; task_code: string | null; task_name: string;
     entry_date: string; quantity: string; unit: string; source: "manual" | "field_ticket";
     source_document_id: string | null; source_document_number: string | null;
@@ -351,7 +351,7 @@ async function readEntries(executor: SqlExecutor, orgId: string, filter: SQL): P
       left join users u on u.id = e.created_by
      where e.org_id = ${orgId} ${filter}
      order by e.entry_date desc, e.created_at desc, e.id desc
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     projectId: row.project_id,
@@ -399,14 +399,14 @@ export async function recordFieldTicketProgressInTransaction(
   executor: SqlExecutor,
   input: { orgId: string; actorId: string; ticketId: string; projectId: string | null; entryDate: string },
 ): Promise<{ recorded: number; alreadyRecorded: boolean }> {
-  const lines = (await executor.execute<{
+  const lines = await executor.execute<{
     id: string; project_task_id: string; quantity: string; unit: string; note: string | null;
   }>(sql`
     select id, project_task_id, quantity::text as quantity, unit, note
       from field_ticket_quantities
      where org_id = ${input.orgId} and field_ticket_id = ${input.ticketId}
      order by created_at, id
-  `)).rows;
+  `, "objects");
   if (lines.length === 0) return { recorded: 0, alreadyRecorded: false };
   await assertProgressEnabled(executor, input.orgId);
   if (!input.projectId) {
@@ -425,7 +425,7 @@ export async function recordFieldTicketProgressInTransaction(
        and not exists (
          select 1 from project_progress_entries r
           where r.org_id = e.org_id and r.reverses_entry_id = e.id)
-  `)).rows[0];
+  `, "objects"))[0];
   if (Number(live?.count ?? "0") > 0) return { recorded: 0, alreadyRecorded: true };
 
   for (const line of lines) {
@@ -457,7 +457,7 @@ export async function reverseFieldTicketProgressInTransaction(
   executor: SqlExecutor,
   input: { orgId: string; actorId: string | null; ticketId: string; entryDate: string; reason: string },
 ): Promise<number> {
-  const live = (await executor.execute<{
+  const live = await executor.execute<{
     id: string; project_id: string; project_task_id: string; entry_date: string; quantity: string; unit: string;
   }>(sql`
     select e.id, e.project_id, e.project_task_id, e.entry_date::text as entry_date,
@@ -470,7 +470,7 @@ export async function reverseFieldTicketProgressInTransaction(
           where r.org_id = e.org_id and r.reverses_entry_id = e.id)
      order by e.created_at, e.id
      for update of e
-  `)).rows;
+  `, "objects");
   for (const entry of live) {
     await insertEntry(executor, input.orgId, input.actorId, {
       projectId: entry.project_id,

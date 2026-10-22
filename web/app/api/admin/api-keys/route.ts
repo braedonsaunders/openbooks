@@ -134,10 +134,8 @@ function inactiveOwnerRefusal() {
 
 /** Whether the key owner is currently active (unknown owners fail closed). */
 async function ownerIsActive(orgId: string, ownerId: string): Promise<boolean> {
-  const row = (
-    await db.execute<{ isActive: boolean }>(sql`
-    select is_active as "isActive" from users where id = ${ownerId} and org_id = ${orgId}`)
-  ).rows[0];
+  const row = (await db.execute<{ isActive: boolean }>(sql`
+    select is_active as "isActive" from users where id = ${ownerId} and org_id = ${orgId}`, "objects"))[0];
   return row?.isActive === true;
 }
 
@@ -150,7 +148,7 @@ async function ownerIsActive(orgId: string, ownerId: string): Promise<boolean> {
 async function ownerEffectivePermissions(orgId: string, ownerId: string): Promise<Set<string>> {
   const identity = (await db.execute<{ isActive: boolean; isSuperAdmin: boolean }>(sql`
     select is_active as "isActive", is_super_admin as "isSuperAdmin"
-      from users where id = ${ownerId} and org_id = ${orgId}`)).rows[0];
+      from users where id = ${ownerId} and org_id = ${orgId}`, "objects"))[0];
   if (!identity?.isActive) return new Set();
   return (await resolveUserAuthz({
     id: ownerId,
@@ -170,7 +168,7 @@ async function ownerEffectivePermissions(orgId: string, ownerId: string): Promis
 async function actorIsActiveInOrg(orgId: string, actorId: string): Promise<boolean> {
   const row = (await db.execute<{ id: string }>(sql`
     select id from users
-     where id = ${actorId} and org_id = ${orgId} and is_active`)).rows[0];
+     where id = ${actorId} and org_id = ${orgId} and is_active`, "objects"))[0];
   return !!row;
 }
 
@@ -226,8 +224,8 @@ async function hasRevocationRecord(orgId: string, rowId: string): Promise<boolea
        and table_name = 'api_keys'
        and row_id = ${rowId}
        and action = 'delete'
-     limit 1`);
-  return result.rows.length > 0;
+     limit 1`, "objects");
+  return result.length > 0;
 }
 
 /** List all keys in the org (without secrets). */
@@ -242,9 +240,9 @@ async function legacyGET() {
       from api_keys k
       join users u on u.id = k.user_id
      where k.org_id = ${gate.user.orgId}
-     order by k.created_at desc`)));
+     order by k.created_at desc`, "objects")));
 
-  return NextResponse.json({ keys: r.rows });
+  return NextResponse.json({ keys: r });
 }
 
 /** Create a new key — returns the plaintext ONCE. */
@@ -327,14 +325,14 @@ export const POST = defineRoute({
     const gen = generateApiKey();
     const description = typeof body.description === "string" ? body.description.trim() || null : null;
     const insertedId = await withOrgTransaction(actor.orgId, async () => {
-      const inserted = (await db.execute(sql`
+      const inserted = await db.execute<{ id: string }>(sql`
         insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
                               key_preview, scopes, rate_limit_per_min, is_active, expires_at, created_by, updated_by)
         values (${actor.orgId}, ${actor.id}, ${name}, ${description},
                 ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
                 ${JSON.stringify(scopes)}, ${rateValue}, true, ${expiresAt}, ${actor.id}, ${actor.id})
-        returning id`)) as unknown as { rows: Array<{ id: string }> };
-      const id = inserted.rows[0]?.id;
+        returning id`, "objects");
+      const id = inserted[0]?.id;
       if (!id) throw new Error("api key insert did not return an id");
 
       await audit({
@@ -432,12 +430,7 @@ export const PATCH = defineRoute({
     }
 
     return withOrgTransaction(actor.orgId, async () => {
-      const existing = (await db.execute(sql`
-        select id, user_id, name, description, scopes, rate_limit_per_min, is_active
-          from api_keys
-         where id = ${keyId} and org_id = ${actor.orgId}
-         for update`)) as unknown as {
-        rows: Array<{
+      const existing = await db.execute<{
           id: string;
           user_id: string;
           name: string;
@@ -445,9 +438,12 @@ export const PATCH = defineRoute({
           scopes: unknown;
           rate_limit_per_min: number | null;
           is_active: boolean;
-        }>;
-      };
-      const key = existing.rows[0];
+        }>(sql`
+        select id, user_id, name, description, scopes, rate_limit_per_min, is_active
+          from api_keys
+         where id = ${keyId} and org_id = ${actor.orgId}
+         for update`, "objects");
+      const key = existing[0];
       if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 
       if (wantsReactivation && (await hasRevocationRecord(actor.orgId, keyId))) {
@@ -573,14 +569,12 @@ export const DELETE = defineRoute({
     if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     return withOrgTransaction(actor.orgId, async () => {
-      const existing = (await db.execute(sql`
+      const existing = await db.execute<{ id: string; name: string; key_prefix: string; is_active: boolean }>(sql`
         select id, name, key_prefix, is_active
           from api_keys
          where id = ${id} and org_id = ${actor.orgId}
-         for update`)) as unknown as {
-        rows: Array<{ id: string; name: string; key_prefix: string; is_active: boolean }>;
-      };
-      const key = existing.rows[0];
+         for update`, "objects");
+      const key = existing[0];
       if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
 
       // Destroy the credential hash with a discarded secret. A direct

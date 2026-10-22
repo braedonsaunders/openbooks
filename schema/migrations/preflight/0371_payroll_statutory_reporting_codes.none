@@ -1,1 +1,0 @@
-The migration adds nullable reporting metadata and backfills no values, so no existing tenant data needs a readiness decision.

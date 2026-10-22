@@ -45,8 +45,8 @@ export const GET = defineRoute({
           left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
          where p.org_id = ${orgId} and p.id = ${employee}
          for share of p
-      `))
-      const employeeRow = currencyRes.rows[0]
+      `, 'objects'))
+      const employeeRow = currencyRes[0]
       if (!employeeRow) return notFound("record")
       const denied = guardSubsidiaryScope(gate, employeeRow.subsidiaryId)
       if (denied) return denied
@@ -66,7 +66,7 @@ export const GET = defineRoute({
          where l.org_id = ${orgId} and l.employee_party_id = ${employee}
          order by l.movement_date desc, l.created_at desc
          limit 200
-      `))
+      `, 'objects'))
 
       return NextResponse.json({
       currency,
@@ -87,7 +87,7 @@ export const GET = defineRoute({
         nearLimit: b.nearLimit,
         lastMovementDate: b.lastMovementDate,
       })),
-      movements: movements.rows,
+      movements,
       })
     })
 

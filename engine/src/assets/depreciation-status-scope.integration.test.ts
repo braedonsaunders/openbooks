@@ -30,14 +30,14 @@ for (const scope of ["empty", "other entity"] as const) {
       // Keep that state on an entity this caller cannot access.
       await db.execute(sql`update fixed_assets set status='in_service' where org_id=${org.orgId} and id=${assetId}`);
       const status = async () => (await db.execute<{ status: string }>(sql`
-        select status from fixed_assets where org_id=${org.orgId} and id=${assetId}`)).rows[0]!.status;
+        select status from fixed_assets where org_id=${org.orgId} and id=${assetId}`, "objects"))[0]!.status;
       const result = await runDepreciation(org.orgId, "2026-07-31", actorId, undefined,
         scope === "empty" ? [] : [org.subsidiaryId]);
       assert.equal(result.posted, 0);
       assert.equal(await status(), "in_service", "a caller cannot update an out-of-scope asset through status housekeeping");
       await runDepreciation(org.orgId, "2026-07-31", actorId, undefined, [ownerId]);
       assert.equal(await status(), "fully_depreciated", "authorized status reconciliation still works");
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n, 1);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n, 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }

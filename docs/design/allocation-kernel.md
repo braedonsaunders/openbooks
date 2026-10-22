@@ -1,8 +1,8 @@
 # Allocation Kernel — design and build plan
 
-Status: SHIPPED 2026-09-16 (migrations 0160–0164). The code under `engine/src/allocations/` and
+Status: SHIPPED 2026-09-16. The code under `engine/src/allocations/` and
 `web/app/(app)/admin/setup/allocations/` is the source of truth where it differs from this document.
-Schema contract: `schema/src/allocations.ts` + migration `0160_allocation_kernel.sql`.
+Schema contract: `schema/src/allocations.ts` + the release schema baseline (`schema/migrations/baselines/`).
 Type contract: `engine/src/allocations/types.ts`.
 
 ## 1. Why one kernel
@@ -38,7 +38,7 @@ bigint money (`engine/src/money/money.ts`), never floats; enforcement at the ser
 reuse-first (Setup registry, report engine, RecordListView, Drawer, SplitLinesEditor,
 ModuleView specs); vendor-neutral copy; every gate on the Features switchboard.
 
-## 2. Data model (migration 0160)
+## 2. Data model
 
 All tables are org-scoped with the standard `org_isolation` RLS policy and FORCE RLS.
 Tenant-anchored foreign keys are composite `(org_id, x) → (org_id, id)` where the parent
@@ -168,9 +168,8 @@ share numeric(19,10), residual money, created_at`. Indexes on `(org_id, journal_
 - `close_automation_rules.action` gains `'run_allocation'` (TS enum; no DB check exists).
 - `user_scripts.trigger_point` gains `'custom_gl_lines'` (TS enum; no DB check exists).
 
-The dormant `allocation_rules/allocation_rule_targets/allocation_runs` tables from
-`planning.ts` are replaced in place by 0160 (the migration refuses to run if any of them
-holds rows; none does anywhere).
+The kernel owns `allocation_rules/allocation_rule_targets/allocation_runs`; no separate
+planning-module tables of those names exist.
 
 ## 3. Engine (`engine/src/allocations/`)
 

@@ -274,8 +274,8 @@ const stubOf = async (fx: Fixture, documentId: string, employeePartyId: string) 
     select id, gross::text as gross, factors from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
        and employee_party_id = ${employeePartyId}
-  `));
-  return r.rows[0] ?? null;
+  `, "objects"));
+  return r[0] ?? null;
 };
 
 /** Every deduction line on a stub, by the system key its component carries. */
@@ -285,8 +285,8 @@ const deductionsOf = async (fx: Fixture, stubId: string) => {
       from pay_stub_lines l join pay_components c on c.id = l.component_id
      where l.org_id = ${fx.orgId} and l.stub_id = ${stubId} and l.kind = 'deduction'
      order by l.sequence
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 };
 
 /* --------------------------------------------------------------------- */
@@ -506,13 +506,13 @@ test(
       assert.ok(factors.OR_TRANSIT_TAX, "the transit amount is on the stub trace");
       assert.equal(factors["EPT_OR-TRIMET"], factors.OR_TRANSIT_TAX);
       assert.ok(factors.SIT_OR, "Oregon state tax still withholds beside it");
-      const lines = (await db.execute<{ kind: string; description: string; amount: string }>(sql`
+      const lines = await db.execute<{ kind: string; description: string; amount: string }>(sql`
         select l.kind, l.description, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and s.employee_party_id = ${rider}
-      `)).rows;
+      `, "objects");
       // The statewide transit deduction matches /transit/i too, so the
       // district line is selected by its mark: the pack posts the district
       // levy once, at employer cost, beside the statewide employee line.
@@ -761,9 +761,9 @@ test(
           key: "us_ma_m4", region: "MA", answers: { total_exemptions: "0" },
         }],
       });
-      const bonusComponent = ((await db.execute<{ id: string }>(sql`
+      const bonusComponent = (await db.execute<{ id: string }>(sql`
         select id from pay_components where org_id = ${fx.orgId} and code = 'BONUS'
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       const bonus = async (amount: string) => {
         const run = await createPayRun({
           orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
@@ -882,21 +882,21 @@ test(
       const { run, result } = await runPayroll(fx);
       assert.deepEqual(result.errors, []);
       await commitPayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
-      const stubBurden = (await db.execute<{ description: string; amount: string }>(sql`
+      const stubBurden = await db.execute<{ description: string; amount: string }>(sql`
         select l.description, l.amount::text as amount
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind = 'employer_contribution'
-         order by l.description`)).rows;
+         order by l.description`, "objects");
       assert.ok(stubBurden.length >= 2, "the stub carries multiple employer shares");
-      const debits = (await db.execute<{ description: string; amount: string }>(sql`
+      const debits = await db.execute<{ description: string; amount: string }>(sql`
         select dl.description, dl.amount::text as amount
           from document_lines dl
           join accounts a on a.id = dl.account_id
          where dl.org_id = ${fx.orgId} and dl.document_id = ${run.documentId}
            and a.number = '6010' and dl.amount::numeric > 0
-         order by dl.description`)).rows;
+         order by dl.description`, "objects");
       assert.deepEqual(
         debits.map((leg) => leg.description),
         stubBurden.map((line) => line.description),

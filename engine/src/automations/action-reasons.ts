@@ -63,8 +63,8 @@ export async function listActionReasons(
        where org_id = ${orgId}
          and (${action ?? null}::text is null or action = ${action ?? null}::text)
        order by action, reason_code
-    `);
-    return rows.rows;
+    `, "objects");
+    return rows;
   });
 }
 
@@ -103,11 +103,11 @@ export async function upsertActionReason(input: {
                     updated_by = excluded.updated_by, updated_at = now()
       returning id, action, reason_code as "reasonCode", label,
                 requires_comment as "requiresComment", is_active as "isActive"
-    `);
+    `, "objects");
     // ON CONFLICT here is the Setup upsert contract (same key = same
     // code, revised label): the conflict is expected and the row is
     // re-read via RETURNING, never silently dropped.
-    const row = rows.rows[0];
+    const row = rows[0];
     if (!row) throw new ActionReasonError("the reason code write matched no row — reload and try again");
     return row;
   });
@@ -126,8 +126,8 @@ export async function actionReasonsRequired(orgId: string): Promise<boolean> {
       select 1 as one from hrm_action_reasons
        where org_id = ${orgId} and is_active
        limit 1
-    `);
-    return rows.rows.length > 0;
+    `, "objects");
+    return rows.length > 0;
   });
 }
 
@@ -160,14 +160,14 @@ export async function validateSubmitActionReason(input: {
        where org_id = ${input.orgId} and action = ${input.action}
          and reason_code = ${input.reasonCode} and is_active
        limit 1
-    `),
+    `, "objects"),
   );
-  if (rows.rows.length === 0) {
+  if (rows.length === 0) {
     throw new ActionReasonError(
       `reason code '${input.reasonCode}' is not active for action '${input.action}' — pick an active code in the propose-change dialog`,
     );
   }
-  if (rows.rows[0]!.requiresComment && !input.reason?.trim()) {
+  if (rows[0]!.requiresComment && !input.reason?.trim()) {
     throw new ActionReasonError(
       `reason code '${input.reasonCode}' requires a written explanation — add the comment and submit again`,
     );

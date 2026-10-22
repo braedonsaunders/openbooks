@@ -51,7 +51,7 @@ export async function reconcileDeferralAccounts(
 ): Promise<ReconciliationRow[]> {
   const bookFilterS = scope.bookId ? sql`and s.book_id = ${scope.bookId}` : sql``;
   const bookFilterJ = scope.bookId ? sql`and je.book_id = ${scope.bookId}` : sql``;
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     book_id: string;
     subsidiary_id: string;
     currency: string;
@@ -106,7 +106,7 @@ export async function reconcileDeferralAccounts(
       from keys k
       left join ledger l on l.book_id = k.book_id and l.subsidiary_id = k.subsidiary_id
         and l.currency = k.currency and l.account_id = k.account_id
-     order by k.book_id, k.subsidiary_id, k.currency, k.account_id`)).rows;
+     order by k.book_id, k.subsidiary_id, k.currency, k.account_id`, "objects");
   return rows.map((row) => {
     const ledger = toUnits(row.ledger);
     const subledger = toUnits(row.subledger);
@@ -139,6 +139,6 @@ export async function dueUnpostedAmortization(
       join expense_amortization_schedules s on s.org_id = l.org_id and s.id = l.schedule_id
      where l.org_id = ${orgId} and l.status = 'planned' and s.status = 'active'
        and l.period_end <= ${scope.endsOn} and s.book_id = ${scope.bookId}
-       ${subsidiaryClause(sql`s.subsidiary_id`, scope.subsidiaryIds)}`)).rows[0];
+       ${subsidiaryClause(sql`s.subsidiary_id`, scope.subsidiaryIds)}`, "objects"))[0];
   return { lines: Number(row?.lines ?? "0"), schedules: Number(row?.schedules ?? "0") };
 }

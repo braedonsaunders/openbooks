@@ -63,13 +63,13 @@ export const PUT = defineRoute({
          where id = ${viewId} and org_id = ${user.orgId} and record_type = ${body.recordType}
            and (scope = 'org' or owner_id = ${user.id})
          for update
-      `);
-        if (!owned.rows[0]) return { kind: "missing" as const };
-        if (!owned.rows[0].isActive) {
-          return { kind: "inactive" as const, name: owned.rows[0].name };
+      `, "objects");
+        if (!owned[0]) return { kind: "missing" as const };
+        if (!owned[0].isActive) {
+          return { kind: "inactive" as const, name: owned[0].name };
         }
       }
-      const written = await tx.execute(sql`
+      const written = await tx.execute<never>(sql`
       insert into user_list_preferences (org_id, user_id, record_type, view_id, created_by, updated_by)
       values (${user.orgId}, ${user.id}, ${body.recordType}, ${viewId}, ${user.id}, ${user.id})
       on conflict (org_id, user_id, record_type) do update

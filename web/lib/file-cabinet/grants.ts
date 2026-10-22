@@ -53,12 +53,12 @@ async function recipientSubsidiaryScope(
   const role = (await tx.execute<{ restriction: SubsidiaryRestriction | null }>(sql`
     select subsidiary_restriction as restriction from app_roles
      where id = ${principalId} and org_id = ${orgId} for share
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!role) throw new GrantScopeRefusal()
   const subsidiaries = await tx.execute<SubsidiaryTreeNode>(sql`
     select id, parent_id as "parentId" from subsidiaries where org_id = ${orgId} order by id for share
-  `)
-  const scope = restrictionSubsidiaryScope(role.restriction, subsidiaries.rows)
+  `, 'objects')
+  const scope = restrictionSubsidiaryScope(role.restriction, subsidiaries)
   if (scope === undefined) throw new GrantScopeRefusal()
   return scope
 }
@@ -80,8 +80,8 @@ async function grantTargetsWithinScope(
       left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
        where fi.id = ${resourceId} and fi.org_id = ${orgId}
          and ${scopeOk(sql`fo.id`)} and ${attachmentsOk(sql`fi.id`)}
-    `)
-    return result.rows.length > 0
+    `, 'objects')
+    return result.length > 0
   }
   await tx.execute(sql`
     with recursive descendants as (
@@ -108,8 +108,8 @@ async function grantTargetsWithinScope(
        where fi.org_id = ${orgId} and fi.folder_id in (select id from descendants)
          and (not ${scopeOk(sql`fo.id`)} or not ${attachmentsOk(sql`fi.id`)})
     )
-  `)
-  return result.rows.length > 0
+  `, 'objects')
+  return result.length > 0
 }
 
 /**
@@ -128,9 +128,9 @@ export async function cabinetResourceExists(
   const exec = executor ?? db
   const r =
     resourceType === 'folder'
-      ? await exec.execute(sql`select 1 from folders where id = ${resourceId} and org_id = ${orgId} limit 1`)
-      : await exec.execute(sql`select 1 from files where id = ${resourceId} and org_id = ${orgId} limit 1`)
-  return r.rows.length > 0
+      ? await exec.execute(sql`select 1 from folders where id = ${resourceId} and org_id = ${orgId} limit 1`, 'objects')
+      : await exec.execute(sql`select 1 from files where id = ${resourceId} and org_id = ${orgId} limit 1`, 'objects')
+  return r.length > 0
 }
 
 /** The grants on a resource, with resolved principal display names. */
@@ -147,8 +147,8 @@ export async function listGrants(
       left join app_roles ar on g.principal_type = 'role' and ar.id = g.principal_id and ar.org_id = ${orgId}
      where g.org_id = ${orgId} and g.resource_type = ${resourceType} and g.resource_id = ${resourceId}
      order by g.principal_type, "principalName"
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /** Create or update a grant (idempotent on principal). */
@@ -182,7 +182,7 @@ export async function setGrant(input: {
          and principal_type = ${input.principalType}
          and principal_id = ${input.principalId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     const result = (await tx.execute<{ id: string }>(sql`
       insert into resource_grants
         (org_id, resource_type, resource_id, principal_type, principal_id, access, created_by, updated_by, created_at, updated_at)
@@ -192,7 +192,7 @@ export async function setGrant(input: {
       do update set access = ${input.access}, updated_by = ${input.actorId}, updated_at = now()
       where resource_grants.org_id = ${input.orgId}
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!result) throw new Error('grant upsert did not return a row')
     if (input.audit) {
       await recordFileEvent({
@@ -227,7 +227,7 @@ export async function removeGrant(
         from resource_grants
        where id = ${grantId} and org_id = ${orgId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!existing || existing.resourceType !== resourceType || existing.resourceId !== resourceId) return false
     const gate =
       resourceType === 'folder'
@@ -239,7 +239,7 @@ export async function removeGrant(
        where id = ${grantId} and org_id = ${orgId}
          and resource_type = ${resourceType} and resource_id = ${resourceId}
       returning id
-    `)).rows.length > 0
+    `, 'objects')).length > 0
     if (!deleted) return false
     if (audit) {
       await recordFileEvent({

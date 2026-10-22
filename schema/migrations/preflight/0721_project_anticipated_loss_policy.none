@@ -1,1 +1,0 @@
-The migration creates an empty policy table, which reads as off for every organization; no project, provision or ledger row is read or rewritten.

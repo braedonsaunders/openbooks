@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { cp, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import test from "node:test";
 import pg from "pg";
@@ -14,6 +17,28 @@ const adminUrl = process.env.OPENBOOKS_TEST_ADMIN_DB_URL;
 const DB = Boolean(process.env.OPENBOOKS_DB_URL || adminUrl);
 const root = new URL("..", import.meta.url).pathname;
 const password = "precreated-role-integration-password";
+const HEADER = [
+  "SET statement_timeout = 0;",
+  "SET idle_in_transaction_session_timeout = 0;",
+  "SET client_encoding = 'UTF8';",
+  "SET standard_conforming_strings = on;",
+  "SET client_min_messages = warning;",
+].join("\n");
+
+/** A copy of this checkout's runner and release schema with forward
+ * migrations above the baseline, so an upgrade can be exercised without
+ * touching the source tree. Engine code resolves to this checkout. */
+async function forwardMigrationTree(migrations: Record<string, string>): Promise<string> {
+  const tree = await mkdtemp(join(tmpdir(), "openbooks-forward-migrations-"));
+  for (const path of ["scripts", "package.json", "tsconfig.base.json"]) await cp(join(root, path), join(tree, path), { recursive: true });
+  await cp(join(root, "schema", "migrations"), join(tree, "schema", "migrations"), { recursive: true, filter: (source) => !/\.test\.[a-z]+$/.test(source) });
+  await symlink(join(root, "node_modules"), join(tree, "node_modules"));
+  for (const [file, body] of Object.entries(migrations)) {
+    await writeFile(join(tree, "schema", "migrations", "generated", file), `${HEADER}\n\n${body}\n`);
+    await writeFile(join(tree, "schema", "migrations", "preflight", file.replace(/\.sql$/, ".none")), "Creates a new function only; no existing rows are read or changed.\n");
+  }
+  return tree;
+}
 
 test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions without role administration", { skip: !DB, timeout: 240_000 }, async (t) => {
   assert.ok(adminUrl, "host-managed provisioning tests require OPENBOOKS_TEST_ADMIN_DB_URL; use the test cluster administrator endpoint");
@@ -35,10 +60,11 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
   const config = { connectionString: url(runtime), roleName: runtime, password };
   const ownerPool = new pg.Pool({ connectionString: url(owner), max: 1 });
   const runtimePool = new pg.Pool({ connectionString: url(runtime), max: 1 });
-  const bootstrap = async (overrides: Record<string, string> = {}) => {
+  const trees: string[] = [];
+  const bootstrap = async (overrides: Record<string, string> = {}, cwd = root) => {
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OPENBOOKS_") && !key.startsWith("ADMIN_") && !key.startsWith("ORG_") && !key.startsWith("PLATFORM_")));
     return exec(process.execPath, ["--no-concurrent-sparkplug", "--no-concurrent-recompilation", "--import", "tsx", "scripts/bootstrap.ts"], {
-      cwd: root, maxBuffer: 4 * 1024 * 1024, timeout: 150_000,
+      cwd, maxBuffer: 4 * 1024 * 1024, timeout: 150_000,
       env: { ...env, NODE_ENV: "production", OPENBOOKS_BOOTSTRAP: "1", OPENBOOKS_PRECREATED_ROLES: "1",
         OPENBOOKS_MIGRATION_DB_URL: url(owner), OPENBOOKS_DB_URL: url(runtime), OPENBOOKS_RUNTIME_DB_URL: url(runtime),
         OPENBOOKS_DATA_KEY: "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
@@ -84,7 +110,9 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
       await ownerPool.query("select set_config('app.bypass_rls','on',false)");
       const seeded = await ownerPool.query("select (select count(*)::int from orgs) as orgs, (select count(*)::int from users where email='hosted@example.test') as admins, (select count(*)::int from _applied_migrations) as migrations");
       assert.equal(seeded.rows[0].orgs, 1); assert.equal(seeded.rows[0].admins, 1);
-      assert.ok(seeded.rows[0].migrations > 100);
+      const manifest = JSON.parse(await readFile(join(root, "schema", "migrations", "baseline.json"), "utf8"));
+      assert.deepEqual((await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [manifest.filename])).rows, [{ sha256: manifest.baselineSha256 }]);
+      assert.ok(seeded.rows[0].migrations >= 1);
       // A fresh install has no other path to /platform: the seeded
       // administrator named by PLATFORM_ADMIN_EMAIL is its first platform
       // operator, and exactly that user holds the flag.
@@ -114,35 +142,30 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
       assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations order by filename")).rows, before.rows);
       assert.deepEqual((await ownerPool.query("select id from orgs order by id")).rows, orgs.rows);
     });
+    const firstForward = "0001_forward_owner_probe.sql";
+    const firstBody = "CREATE FUNCTION public.forward_owner_probe() RETURNS integer LANGUAGE sql STABLE AS 'select 1';";
     await t.test("an existing installation applies a pending forward migration with the constrained owner", async () => {
-      // Reconstruct one missing forward change only in this test's new database;
-      // published migration bytes and other history remain untouched.
-      const filename = "generated/0787_depreciation_retirement_authority.sql";
-      const before = await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [filename]);
-      const currentGuard = (await ownerPool.query("select pg_get_functiondef('public.depreciation_source_authority_guard()'::regprocedure) as definition")).rows[0].definition as string;
-      const retirementBranch = "  IF TG_OP='DELETE' AND tenant_retirement.openbooks_tenant_retirement_delete_allowed(TG_TABLE_NAME,to_jsonb(OLD)) THEN\n    RETURN OLD;\n  END IF;\n";
-      assert.equal(currentGuard.split(retirementBranch).length, 2);
-      // Reconstruct the immediate predecessor only in this uniquely owned database.
-      await ownerPool.query(currentGuard.replace(retirementBranch, ""));
-      const removed = await ownerPool.query("delete from _applied_migrations where filename=$1 returning sha256", [filename]);
-      assert.equal(removed.rowCount, 1);
-      await bootstrap();
-      assert.equal((await ownerPool.query("select pg_get_functiondef('public.depreciation_source_authority_guard()'::regprocedure) as definition")).rows[0].definition, currentGuard);
-      assert.equal((await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [filename])).rows[0].sha256, removed.rows[0].sha256);
-      assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [filename])).rows, before.rows);
+      const before = await ownerPool.query("select filename, sha256, applied_at from _applied_migrations order by filename");
+      const tree = await forwardMigrationTree({ [firstForward]: firstBody });
+      trees.push(tree);
+      await bootstrap({}, tree);
+      const probe = await ownerPool.query("select proowner::regrole::text as owner from pg_proc where oid='public.forward_owner_probe()'::regprocedure");
+      assert.equal(probe.rows[0].owner, owner);
+      const recorded = await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [`generated/${firstForward}`]);
+      assert.equal(recorded.rowCount, 1);
+      assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations where filename <> $1 order by filename", [`generated/${firstForward}`])).rows, before.rows);
     });
     await t.test("maintenance upgrades retain the established restricted business owner", async () => {
-      const filename = "generated/0789_portal_return_flow_principal.sql";
-      const before = await ownerPool.query("select filename,sha256,applied_at from _applied_migrations where filename<>$1 order by filename", [filename]);
-      // Reconstruct the missing forward function only in this owned installation.
-      await ownerPool.query("drop function public.flow_portal_return_source_valid(uuid,uuid,jsonb)");
-      const removed = await ownerPool.query("delete from _applied_migrations where filename=$1 returning sha256", [filename]);
-      assert.equal(removed.rowCount, 1);
-      await bootstrap({ OPENBOOKS_PRECREATED_ROLES: "0", OPENBOOKS_MIGRATION_DB_URL: provisionerUrl.toString() });
-      const authority = await ownerPool.query("select proowner::regrole::text as owner from pg_proc where oid='public.flow_portal_return_source_valid(uuid,uuid,jsonb)'::regprocedure");
+      const secondForward = "0002_forward_maintenance_probe.sql";
+      const before = await ownerPool.query("select filename,sha256,applied_at from _applied_migrations order by filename");
+      const tree = await forwardMigrationTree({ [firstForward]: firstBody,
+        [secondForward]: "CREATE FUNCTION public.forward_maintenance_probe() RETURNS integer LANGUAGE sql STABLE AS 'select 2';" });
+      trees.push(tree);
+      await bootstrap({ OPENBOOKS_PRECREATED_ROLES: "0", OPENBOOKS_MIGRATION_DB_URL: provisionerUrl.toString() }, tree);
+      const authority = await ownerPool.query("select proowner::regrole::text as owner from pg_proc where oid='public.forward_maintenance_probe()'::regprocedure");
       assert.equal(authority.rows[0].owner, owner);
-      assert.equal((await ownerPool.query("select sha256 from _applied_migrations where filename=$1", [filename])).rows[0].sha256, removed.rows[0].sha256);
-      assert.deepEqual((await ownerPool.query("select filename,sha256,applied_at from _applied_migrations where filename<>$1 order by filename", [filename])).rows,before.rows);
+      assert.equal((await ownerPool.query("select count(*)::int as n from _applied_migrations where filename=$1", [`generated/${secondForward}`])).rows[0].n, 1);
+      assert.deepEqual((await ownerPool.query("select filename,sha256,applied_at from _applied_migrations where filename<>$1 order by filename", [`generated/${secondForward}`])).rows, before.rows);
     });
     await t.test("effective PUBLIC leaks and missing governed-view grants are refused", async () => {
       await ownerPool.query("grant select on public.orgs to public");
@@ -210,6 +233,7 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
       assert.deepEqual(login.rows, [{ rolcanlogin: true, rolsuper: false, rolcreaterole: false, rolbypassrls: false }]);
     });
   } finally {
+    for (const tree of trees) await rm(tree, { recursive: true, force: true });
     await ownerPool.end(); await runtimePool.end();
     // Only uniquely named resources created above are removed, even on refusal.
     await admin.query(`drop database if exists ${database} with (force)`);

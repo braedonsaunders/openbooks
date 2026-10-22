@@ -895,8 +895,8 @@ export async function loadActiveDerivedRules(
        and effective_from <= ${periodEnd}
        and (effective_to is null or effective_to >= ${periodEnd})
      order by sequence, code
-  `));
-  return r.rows.map(toRule);
+  `, "objects"));
+  return r.map(toRule);
 }
 
 async function loadComponents(
@@ -916,9 +916,9 @@ async function loadComponents(
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where c.org_id = ${orgId} and c.id = any(${`{${componentIds.join(",")}}`}::uuid[])
-  `));
+  `, "objects"));
   const map = new Map<string, DerivedComponent>();
-  for (const row of r.rows) {
+  for (const row of r) {
     if (row.kind !== "earning") {
       throw new DerivedEarningsError(
         `pay component ${row.name} is not an earning — a derived rule can only emit earnings`,
@@ -943,8 +943,8 @@ async function loadEmployeeScope(
   const r = (await tx.execute<{ job_title: string | null; trade_id: string | null; department_id: string | null }>(sql`
     select job_title, trade_id, department_id from employee_roles
      where org_id = ${orgId} and party_id = ${employeePartyId} limit 1
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   return {
     jobTitle: row?.job_title ?? null,
     tradeId: row?.trade_id ?? null,
@@ -1002,8 +1002,8 @@ async function loadEquipmentCharges(
        and dl.equipment_unit_id is not null
        and d.document_date between ${from} and ${to}
      order by d.document_date, dl.id
-  `));
-  return r.rows.map((row) => ({
+  `, "objects"));
+  return r.map((row) => ({
     id: row.id,
     day: String(row.document_date instanceof Date
       ? row.document_date.toISOString()
@@ -1044,11 +1044,11 @@ async function loadEntries(
      -- Same precedence the comparator applies: the recorded clock time, then
      -- capture order for entries that have none (nulls last, not first).
      order by employee_party_id, worked_on, started_at asc nulls last, created_at, id
-  `));
+  `, "objects"));
   const stamp = (value: string | Date | null): string | null => value === null
     ? null
     : value instanceof Date ? value.toISOString() : String(value);
-  for (const row of r.rows) {
+  for (const row of r) {
     const entry: DerivedTimeEntry = {
       id: row.id,
       workedOn: String(row.worked_on).slice(0, 10),
@@ -1078,9 +1078,9 @@ async function loadRateOverrides(
        and effective_from <= ${periodEnd}
        and (effective_to is null or effective_to >= ${periodEnd})
      order by effective_from
-  `));
+  `, "objects"));
   const overrides: Record<string, string> = {};
-  for (const row of r.rows) overrides[row.component_id] = row.value;
+  for (const row of r) overrides[row.component_id] = row.value;
   return overrides;
 }
 
@@ -1211,8 +1211,8 @@ export async function previewDerivedRule(
     select r.*, c.name as component_name from pay_derived_rules r
       join pay_components c on c.id = r.component_id and c.org_id = r.org_id
      where r.org_id = ${orgId} and r.id = ${ruleId}
-  `));
-  const row = ruleRes.rows[0];
+  `, "objects"));
+  const row = ruleRes[0];
   if (!row) throw new DerivedEarningsError("derived earnings rule not found");
   const rule = toRule(row);
 
@@ -1233,8 +1233,8 @@ export async function previewDerivedRule(
          periodStart: sql`${periodStart}`, periodEnd: sql`${periodEnd}`,
        })}
      order by p.display_name
-  `));
-  const people = peopleRes.rows;
+  `, "objects"));
+  const people = peopleRes;
 
   const window = derivedEntryWindow([rule], periodStart, periodEnd);
   // Read the charge month ONCE and hand the same array to every employee: the
@@ -1275,8 +1275,8 @@ export async function previewDerivedRule(
          and te.worked_on between ${periodStart} and ${periodEnd}
          and coalesce(tt.exclude_from_wages, false) = false
        group by te.employee_party_id
-    `));
-    for (const gross of grossRes.rows) {
+    `, "objects"));
+    for (const gross of grossRes) {
       grossByEmployee.set(gross.employee_party_id, roundMoney(gross.gross, 2));
     }
   }
@@ -1346,8 +1346,8 @@ export async function previewDerivedRule(
     const projects = (await db.execute<{ id: string; label: string }>(sql`
       select id, case when coalesce(code, '') <> '' then code || ' · ' || name else name end as label
         from projects where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])
-    `));
-    const byId = new Map(projects.rows.map((project) => [project.id, project.label]));
+    `, "objects"));
+    const byId = new Map(projects.map((project) => [project.id, project.label]));
     for (const preview of rows) {
       preview.projectName = preview.projectId ? (byId.get(preview.projectId) ?? null) : null;
     }

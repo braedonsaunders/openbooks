@@ -92,7 +92,7 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
-      export const db = { execute: async () => ({ rows: [{ rowId: '${ROW_A}' }] }) }
+      export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [{ rowId: '${ROW_A}' }] }).then((result) => (mode === 'objects' ? result.rows : result)) }
     `,
   ],
   [

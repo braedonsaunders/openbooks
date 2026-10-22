@@ -37,7 +37,7 @@ const { PUT }: { PUT: (request: Request, context: { params: Promise<{ id: string
 
 async function profileRequest(org: ScratchOrg, varianceAccountId: string | null = null) {
   const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
-    from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
+    from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`, "objects"))[0]!.revision;
   return new Request(`http://localhost/api/items/${org.items.fifo}/costing`, {
     method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
       costingMethod: "standard", tracking: "none", standardCost: "10", expectedUpdatedAt: revision, baseUnit: "ea",
@@ -49,24 +49,24 @@ async function profileRequest(org: ScratchOrg, varianceAccountId: string | null 
 }
 
 async function layers(org: ScratchOrg) {
-  return (await db.execute<{ id: string; unit_cost: string; remaining_original_cost: string | null; updated_by: string }>(sql`
+  return await db.execute<{ id: string; unit_cost: string; remaining_original_cost: string | null; updated_by: string }>(sql`
     select id,unit_cost,remaining_original_cost,updated_by from cost_layers
     where org_id=${org.orgId} and item_id=${org.items.fifo} and remaining_quantity>0
-    order by received_at,id`)).rows;
+    order by received_at,id`, "objects");
 }
 
 async function assetBalance(org: ScratchOrg) {
   return (await db.execute<{ balance: string }>(sql`select coalesce(sum(amount),0)::text as balance
-    from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`)).rows[0]!.balance;
+    from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`, "objects"))[0]!.balance;
 }
 
 async function financialEvidence(org: ScratchOrg) {
-  return (await db.execute(sql`select
+  return await db.execute(sql`select
     (select jsonb_agg(to_jsonb(p) order by id) from item_inventory_profiles p where org_id=${org.orgId}) as profiles,
     (select jsonb_agg(to_jsonb(l) order by id) from cost_layers l where org_id=${org.orgId}) as layers,
     (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${org.orgId}) as audits,
     (select jsonb_agg(to_jsonb(j) order by id) from journal_entries j where org_id=${org.orgId}) as journals,
-    (select jsonb_agg(to_jsonb(l) order by id) from journal_lines l where org_id=${org.orgId}) as lines`)).rows;
+    (select jsonb_agg(to_jsonb(l) order by id) from journal_lines l where org_id=${org.orgId}) as lines`, "objects");
 }
 
 for (const provenance of ["known", "legacy unknown"] as const) {
@@ -113,7 +113,7 @@ for (const provenance of ["known", "legacy unknown"] as const) {
       assert.equal(stale.status, 409);
       assert.deepEqual(await financialEvidence(org), staleBefore, "stale profile replay must preserve all financial evidence");
       const journals = (await db.execute<{ count: number }>(sql`select count(*)::int as count
-        from journal_entries where org_id=${org.orgId}`)).rows[0]!.count;
+        from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.count;
       assert.equal(journals, 2, "only the two receipt journals exist");
       const issue = await issueInventory(org.orgId, actorId, { ...position, quantity: "1" });
       const onHand = await getOnHand(org.orgId, position.itemId, position.stockLocationId);
@@ -124,9 +124,9 @@ for (const provenance of ["known", "legacy unknown"] as const) {
       assert.equal(gl, "10.0000");
       assert.deepEqual(repriced.map((layer) => [layer.unit_cost, layer.remaining_original_cost, layer.updated_by]),
         before.map(() => ["10.0000", provenance === "known" ? "10.0000" : null, actorId]));
-      const audits = (await db.execute<{ actor_id: string; changes: { before: typeof before[number]; after: typeof before[number] } }>(sql`
+      const audits = await db.execute<{ actor_id: string; changes: { before: typeof before[number]; after: typeof before[number] } }>(sql`
         select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='cost_layers'
-          and changes->>'reason'='Costing method revaluation to standard'`)).rows;
+          and changes->>'reason'='Costing method revaluation to standard'`, "objects");
       assert.equal(audits.length, 2, "rate changes require audit evidence even when legacy basis remains null");
       for (const audit of audits) {
         assert.equal(audit.actor_id, actorId);
@@ -169,10 +169,10 @@ for (const scenario of ["zero and nonzero owners", "offsetting owner deltas"] as
       assert.equal(response.status, 200, JSON.stringify(result));
       assert.equal(result.revaluationEntryId.length, scenario === "zero and nonzero owners" ? 1 : 2);
       assert.ok((await layers(org)).every((layer) => layer.unit_cost === "10.0000" && layer.remaining_original_cost === "10.0000"));
-      const entries = (await db.execute<{ subsidiary_id: string; amount: string }>(sql`select j.subsidiary_id,l.amount
+      const entries = await db.execute<{ subsidiary_id: string; amount: string }>(sql`select j.subsidiary_id,l.amount
         from journal_entries j join journal_lines l on l.org_id=j.org_id and l.entry_id=j.id
         where j.org_id=${org.orgId} and j.memo='Costing method revaluation to standard'
-          and l.account_id=${org.accounts.invAsset} order by j.subsidiary_id`)).rows;
+          and l.account_id=${org.accounts.invAsset} order by j.subsidiary_id`, "objects");
       assert.deepEqual(new Map(entries.map((row) => [row.subsidiary_id, row.amount])),
         scenario === "zero and nonzero owners" ? new Map([[ownerId, "5.0000"]])
           : new Map([[org.subsidiaryId, "5.0000"], [ownerId, "-5.0000"]]));
@@ -181,7 +181,7 @@ for (const scenario of ["zero and nonzero owners", "offsetting owner deltas"] as
           (select sum(round(remaining_quantity*unit_cost,4))::text from cost_layers
             where org_id=${org.orgId} and subsidiary_id=${subsidiaryId}) as layers,
           (select sum(amount)::text from journal_lines where org_id=${org.orgId}
-            and subsidiary_id=${subsidiaryId} and account_id=${org.accounts.invAsset}) as gl`)).rows[0]!;
+            and subsidiary_id=${subsidiaryId} and account_id=${org.accounts.invAsset}) as gl`, "objects"))[0]!;
         assert.equal(balance.layers, balance.gl);
       }
     } finally { state.gate = null; await dropScratchOrg(org.orgId); }

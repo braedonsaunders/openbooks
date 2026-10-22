@@ -31,14 +31,14 @@ for(const scenario of ['first-rate-book','demote-rate-book','demote-accounting-b
    if(scenario==='first-rate-book'){
     // An omitted default flag lets the first active rate book become the default; an explicit false is preserved.
     const outcome=await resource.write([{code:'FIRST',name:'First active book',isActive:true}],'insert',ctx);
-    assert.equal(outcome.created,1);assert.equal((await db.execute(sql`select is_default from item_rate_books where org_id=${org.orgId} and code='FIRST'`)).rows[0]!.is_default,true);
+    assert.equal(outcome.created,1);assert.equal((await db.execute(sql`select is_default from item_rate_books where org_id=${org.orgId} and code='FIRST'`, 'objects'))[0]!.is_default,true);
    }else if(scenario==='demote-rate-book'){
     const body={code:'DEFAULT',name:'Default book',isDefault:true,isActive:true};
     assert.equal((await resource.write([body],'insert',ctx)).created,1);
     const outcome=await resource.write([{...body,isDefault:false}],'upsert',ctx);
     assert.equal(outcome.updated,0);assert.equal(outcome.failed,1);
    }else{
-    const book=(await db.execute(sql`select code,name from accounting_books where id=${org.bookId} and org_id=${org.orgId}`)).rows[0]!;
+    const book=(await db.execute(sql`select code,name from accounting_books where id=${org.bookId} and org_id=${org.orgId}`, 'objects'))[0]!;
     const outcome=await resource.write([{code:book.code,name:book.name,isPrimary:false,isActive:true}],'upsert',ctx);
     assert.equal(outcome.updated,0);assert.equal(outcome.failed,1);
    }
@@ -52,10 +52,10 @@ test('interactive promotion cannot replace an active default with an inactive bo
   const actorId=(await seedFlowActors(org.orgId)).adminId;auth.gate={user:{orgId:org.orgId,id:actorId}};
   const resource=setupResource(SETUP_ENTITY_BY_KEY.get('item-rate-books')!,org.orgId);const ctx={orgId:org.orgId,actorId,dryRun:false};
   assert.equal((await resource.write([{code:'PRIOR',name:'Prior default',isDefault:true,isActive:true},{code:'NEXT',name:'Inactive successor',isDefault:false,isActive:true}],'insert',ctx)).created,2);
-  const next=(await db.execute(sql`select id from item_rate_books where org_id=${org.orgId} and code='NEXT'`)).rows[0]!;
+  const next=(await db.execute(sql`select id from item_rate_books where org_id=${org.orgId} and code='NEXT'`, 'objects'))[0]!;
   const response=await PATCH(new Request('http://audit.local/api/admin/setup/item-rate-books',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:next.id,name:'Inactive successor',isDefault:true,isActive:false})}),{params:Promise.resolve({entity:'item-rate-books'})});
   assert.equal(response.status,400,JSON.stringify(await response.json()));
-  assert.equal((await db.execute(sql`select is_default from item_rate_books where org_id=${org.orgId} and code='PRIOR'`)).rows[0]!.is_default,true);
+  assert.equal((await db.execute(sql`select is_default from item_rate_books where org_id=${org.orgId} and code='PRIOR'`, 'objects'))[0]!.is_default,true);
  }finally{auth.gate=null;await dropScratchOrg(org.orgId);}
 });
 
@@ -71,15 +71,15 @@ for(const entity of ['accounting-books','item-rate-books'] as const){
      if(entity==='item-rate-books')assert.equal((await resource.write([{code:'PRIOR',name:'Prior',isDefault:true,isActive:true}],'insert',ctx)).created,1);
      const body={code:'TARGET',name:'Target',[key]:true,isActive:true};
      if(mode==='upsert')assert.equal((await resource.write([{...body,[key]:false}],'insert',ctx)).created,1);
-     const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
-     const auditBefore=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows;
+     const before=await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`, 'objects');
+     const auditBefore=await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects');
      const condition=failLeg==='demotion'?"NEW.changes->>'reason' is not null":"NEW.changes->'after'->>'code' = 'TARGET'";
      await db.execute(sql.raw(`create function ${fn}() returns trigger language plpgsql as $$ begin if NEW.org_id='${org.orgId}'::uuid and NEW.table_name='${table}' and (${condition}) then raise exception 'book evidence unavailable'; end if; return NEW; end $$`));
      await db.execute(sql.raw(`create trigger ${trigger} before insert on audit_log for each row execute function ${fn}()`));
      const result=await withOrgTransaction(org.orgId,()=>resource.write([body],mode,ctx));
      assert.equal(result.failed,1);assert.equal(result.created,0);assert.equal(result.updated,0);assert.match(result.errors[0]!.message,/book evidence unavailable/);
-     assert.deepEqual((await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows,before);
-     assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows,auditBefore);
+     assert.deepEqual(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`, 'objects'),before);
+     assert.deepEqual(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects'),auditBefore);
     }finally{await db.execute(sql.raw(`drop trigger if exists ${trigger} on audit_log`));await db.execute(sql.raw(`drop function if exists ${fn}()`));await dropScratchOrg(org.orgId);}
    });
   }
@@ -91,16 +91,16 @@ for(const entity of ['accounting-books','item-rate-books'] as const){
    if(definition.featureKey)await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object(${definition.featureKey}::text,true)) where id=${org.orgId}`);
    const resource=setupResource(definition,org.orgId);const ctx={orgId:org.orgId,actorId,dryRun:false};const key=entity==='accounting-books'?'isPrimary':'isDefault';const column=entity==='accounting-books'?'is_primary':'is_default';
    if(entity==='item-rate-books')assert.equal((await resource.write([{code:'PRIOR',name:'Prior',isDefault:true,isActive:true}],'insert',ctx)).created,1);
-   const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} and ${sql.identifier(column)}`)).rows[0]!;
-   const auditBefore=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows;
+   const before=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} and ${sql.identifier(column)}`, 'objects'))[0]!;
+   const auditBefore=await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects');
    const body={code:'PROMOTED',name:'Promoted book',[key]:true,isActive:true};
    assert.equal((await resource.write([body],'insert',{...ctx,dryRun:true})).created,1);
-   assert.deepEqual((await db.execute(sql`select * from ${sql.identifier(table)} where id=${String(before.id)} and org_id=${org.orgId}`)).rows[0],before);
-   assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows,auditBefore);
+   assert.deepEqual((await db.execute(sql`select * from ${sql.identifier(table)} where id=${String(before.id)} and org_id=${org.orgId}`, 'objects'))[0],before);
+   assert.deepEqual(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects'),auditBefore);
    assert.equal((await resource.write([body],'insert',ctx)).created,1);
-   const after=(await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows;
+   const after=await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`, 'objects');
    assert.equal(after.filter(row=>row[column]).length,1);assert.equal(after.find(row=>row[column])!.code,'PROMOTED');
-   const evidence=(await db.execute<{actor_id:string;changes:{source:string;before?:Record<string,unknown>;after:Record<string,unknown>;reason?:string}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name=${table} and ((row_id=${String(before.id)} and changes->>'reason' is not null) or changes->'after'->>'code'='PROMOTED') order by id`)).rows;
+   const evidence=await db.execute<{actor_id:string;changes:{source:string;before?:Record<string,unknown>;after:Record<string,unknown>;reason?:string}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name=${table} and ((row_id=${String(before.id)} and changes->>'reason' is not null) or changes->'after'->>'code'='PROMOTED') order by id`, 'objects');
    assert.equal(evidence.length,2);
    for(const row of evidence){
     assert.equal(row.actor_id,actorId);assert.equal(row.changes.source,'import');

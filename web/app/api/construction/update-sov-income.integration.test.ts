@@ -75,7 +75,7 @@ test('updateSov accepts an income-account-only change on an application-used lin
       scheduledValue: '50000', retainagePercent: '10', incomeAccountId: altIncome,
     })
     assert.equal(incomeOnly.status, 200, JSON.stringify(await incomeOnly.clone().json()))
-    const stored = (await db.execute<{ income_account_id: string; description: string; scheduled_value: string }>(sql`select income_account_id, description, scheduled_value from sov_lines where id=${line}`)).rows[0]!
+    const stored = (await db.execute<{ income_account_id: string; description: string; scheduled_value: string }>(sql`select income_account_id, description, scheduled_value from sov_lines where id=${line}`, 'objects'))[0]!
     assert.equal(stored.income_account_id, altIncome)
     assert.equal(stored.description, 'Mobilization')
 
@@ -89,7 +89,7 @@ test('updateSov accepts an income-account-only change on an application-used lin
       })
       assert.equal(refused.status, 422, `${label}: ${await refused.clone().text()}`)
       assert.match((await refused.json() as { error: string }).error, /Income|income|subsidiary/)
-      assert.equal((await db.execute<{ income_account_id: string }>(sql`select income_account_id from sov_lines where org_id=${org.orgId} and id=${line}`)).rows[0]!.income_account_id, altIncome)
+      assert.equal((await db.execute<{ income_account_id: string }>(sql`select income_account_id from sov_lines where org_id=${org.orgId} and id=${line}`, 'objects'))[0]!.income_account_id, altIncome)
     }
 
     const repriced = await post(construction.POST, org.orgId, {
@@ -101,12 +101,12 @@ test('updateSov accepts an income-account-only change on an application-used lin
 
     session.user = { id: approver, orgId: org.orgId, name: 'Billing approver', email: 'approver@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: approver }
     assert.equal((await db.execute<{ status: string }>(sql`select status from pay_applications
-      where org_id=${org.orgId} and id=${appId}`)).rows[0]!.status, 'approved',
+      where org_id=${org.orgId} and id=${appId}`, 'objects'))[0]!.status, 'approved',
       'the native submission releases when no tenant Flow gates are configured')
     await db.execute(sql`update sov_lines set income_account_id=${balanceSheetAccount} where org_id=${org.orgId} and id=${line}`)
     const invoiceRefused = await post(construction.POST, org.orgId, { action: 'billPayApp', payApplicationId: appId })
     assert.equal(invoiceRefused.status, 422, JSON.stringify(await invoiceRefused.clone().json()))
     assert.match((await invoiceRefused.json() as { error: string }).error, /Income or Other Income account/i)
-    assert.deepEqual((await db.execute<{ status: string; invoice_document_id: string | null }>(sql`select status, invoice_document_id from pay_applications where org_id=${org.orgId} and id=${appId}`)).rows[0], { status: 'approved', invoice_document_id: null })
+    assert.deepEqual((await db.execute<{ status: string; invoice_document_id: string | null }>(sql`select status, invoice_document_id from pay_applications where org_id=${org.orgId} and id=${appId}`, 'objects'))[0], { status: 'approved', invoice_document_id: null })
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })

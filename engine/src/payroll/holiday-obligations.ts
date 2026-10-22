@@ -17,39 +17,39 @@ async function entitlementState(tx: SqlExecutor, orgId: string, employmentId: st
   const employeeId = evidence.instruction.employeePartyId;
   await takeEmployeeConfigurationFence(tx, orgId, employeeId);
   const employment = (await tx.execute(sql`select id, worker_party_id, employer_subsidiary_id from worker_employments
-    where org_id=${orgId} and id=${employmentId} and worker_party_id=${employeeId} and employer_subsidiary_id=${subsidiaryId} for share`)).rows[0];
+    where org_id=${orgId} and id=${employmentId} and worker_party_id=${employeeId} and employer_subsidiary_id=${subsidiaryId} for share`, "objects"))[0];
   if (!employment) throw new PayrollError("The selected employment must belong to the employee and legal employer named in the entitlement.");
-  const profile = (await tx.execute(sql`select id, employment_id, country, province, labour_jurisdiction, pay_schedule_id
-    from employee_payroll_profiles where org_id=${orgId} and employee_party_id=${employeeId} and employment_id=${employmentId} for share`)).rows;
+  const profile = await tx.execute(sql`select id, employment_id, country, province, labour_jurisdiction, pay_schedule_id
+    from employee_payroll_profiles where org_id=${orgId} and employee_party_id=${employeeId} and employment_id=${employmentId} for share`, "objects");
   if (profile.length !== 1 || typeof profile[0]!.country !== "string" || !/^[A-Z]{2}$/.test(profile[0]!.country as string) ||
       typeof profile[0]!.province !== "string" || !(profile[0]!.province as string).trim()) {
     throw new PayrollError("Review the employee's linked payroll profile and employment jurisdiction before proposing holiday pay.");
   }
   const datedEmployment: Record<string, unknown>[] = [];
   for (const date of evidence.instruction.holidayDates) {
-    const rows = (await tx.execute(sql`select id, version_no, effective_from::text, effective_to::text, status
+    const rows = await tx.execute(sql`select id, version_no, effective_from::text, effective_to::text, status
       from worker_employment_versions where org_id=${orgId} and employment_id=${employmentId} and recorded_until is null
-        and effective_from<=${date}::date and (effective_to is null or effective_to>${date}::date) for share`)).rows;
+        and effective_from<=${date}::date and (effective_to is null or effective_to>${date}::date) for share`, "objects");
     if (rows.length !== 1 || !["active", "on_leave", "suspended"].includes(String(rows[0]!.status))) {
       throw new PayrollError(`Review the native employment history for ${date}; an unpaid entitlement must name an employment in force on each holiday.`);
     }
     datedEmployment.push({ holidayDate: date, ...rows[0] });
   }
   const dates = JSON.stringify(evidence.instruction.holidayDates);
-  const occurrences = (await tx.execute(sql`select obligation_id,holiday_date::text from payroll_holiday_occurrences
+  const occurrences = await tx.execute(sql`select obligation_id,holiday_date::text from payroll_holiday_occurrences
     where org_id=${orgId} and employee_party_id=${employeeId} and subsidiary_id=${subsidiaryId}
-      and holiday_date in(select jsonb_array_elements_text(${dates}::jsonb)::date) order by holiday_date for share`)).rows;
+      and holiday_date in(select jsonb_array_elements_text(${dates}::jsonb)::date) order by holiday_date for share`, "objects");
   if (occurrences.length) throw new PayrollError("One or more holidays already belong to an approved entitlement; use its existing payment record instead of proposing another payment.");
   // Existing ordinary holiday pay can cover several dates. Without a dated
   // allocation it cannot safely be treated as unrelated to this entitlement.
-  const paid = (await tx.execute(sql`select distinct r.document_id,s.id as stub_id
+  const paid = await tx.execute(sql`select distinct r.document_id,s.id as stub_id
     from pay_runs r join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
     join pay_stub_lines l on l.org_id=s.org_id and l.stub_id=s.id
     join pay_components c on c.org_id=l.org_id and c.id=l.component_id
     where r.org_id=${orgId} and r.run_status='committed' and s.employee_party_id=${employeeId}
       and c.system_key='stat_holiday' and (l.amount>0 or l.hours>0)
       and exists(select 1 from jsonb_array_elements_text(${dates}::jsonb) h(date)
-        where h.date::date between r.period_start and r.period_end) order by r.document_id,s.id`)).rows;
+        where h.date::date between r.period_start and r.period_end) order by r.document_id,s.id`, "objects");
   if (paid.length) throw new PayrollError("Posted payroll already contains holiday pay in a covered source period; review its dated allocation before recording another entitlement.");
   return { employment, profile: profile[0]!, datedEmployment, occurrenceClaims: occurrences, postedHolidayPayments: paid };
 }
@@ -96,7 +96,7 @@ export async function applyHolidayObligation(input: SourceAuthority & { changeId
     if (change.status === "applied") {
       const existing = (await db.execute<{ id: string }>(sql`select id from payroll_holiday_obligations
         where org_id=${input.orgId} and change_id=${change.id} and employee_party_id=${prepared.instruction.employeePartyId}
-          and subsidiary_id=${prepared.subsidiaryId} and employment_id=${employmentId} and evidence=${JSON.stringify(evidence)}::jsonb`)).rows[0];
+          and subsidiary_id=${prepared.subsidiaryId} and employment_id=${employmentId} and evidence=${JSON.stringify(evidence)}::jsonb`, "objects"))[0];
       if (!existing) throw new PayrollError("The applied proposal does not resolve to its native holiday entitlement; review the retained record.");
       return { obligationId: existing.id };
     }
@@ -106,12 +106,12 @@ export async function applyHolidayObligation(input: SourceAuthority & { changeId
     const inserted = await db.execute(sql`insert into payroll_holiday_obligations
       (id,org_id,change_id,employee_party_id,subsidiary_id,employment_id,payment_date,source_file_id,source_version_id,evidence,created_by)
       values(${id},${input.orgId},${change.id},${prepared.instruction.employeePartyId},${prepared.subsidiaryId},${employmentId},
-        ${prepared.instruction.paymentDate},${prepared.source.fileId},${prepared.source.versionId},${JSON.stringify(evidence)}::jsonb,${input.actorId}) returning id`);
-    if (inserted.rows.length !== 1) throw new PayrollError("The approved holiday entitlement could not be recorded.");
+        ${prepared.instruction.paymentDate},${prepared.source.fileId},${prepared.source.versionId},${JSON.stringify(evidence)}::jsonb,${input.actorId}) returning id`, "objects");
+    if (inserted.length !== 1) throw new PayrollError("The approved holiday entitlement could not be recorded.");
     for (const date of prepared.instruction.holidayDates) {
       const occurrence = await db.execute(sql`insert into payroll_holiday_occurrences(org_id,obligation_id,employee_party_id,subsidiary_id,holiday_date)
-        values(${input.orgId},${id},${prepared.instruction.employeePartyId},${prepared.subsidiaryId},${date}) returning holiday_date`);
-      if (occurrence.rows.length !== 1) throw new PayrollError("An approved holiday occurrence could not be recorded.");
+        values(${input.orgId},${id},${prepared.instruction.employeePartyId},${prepared.subsidiaryId},${date}) returning holiday_date`, "objects");
+      if (occurrence.length !== 1) throw new PayrollError("An approved holiday occurrence could not be recorded.");
     }
     await completeFinancialChange(db, input.orgId, change.id, input.actorId, { obligationId: id });
     return { obligationId: id };

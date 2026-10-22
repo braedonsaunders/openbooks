@@ -30,8 +30,8 @@ export const POST = defineRoute({
     }>(sql`
     select id, subsidiary_id from lease_agreements
      where org_id = ${gate.user.orgId} and id = ${id}
-  `);
-    if (!known.rows[0])
+  `, "objects");
+    if (!known[0])
       return NextResponse.json({ error: "lease not found" }, { status: 404 });
     // An out-of-scope lease answers exactly like a missing one — same body,
     // same status — without which a restricted caller told B's lease apart
@@ -41,7 +41,7 @@ export const POST = defineRoute({
     if (
       !subsidiaryScopeAllows(
         gate.allowedSubsidiaryIds,
-        known.rows[0].subsidiary_id,
+        known[0].subsidiary_id,
       )
     ) {
       return NextResponse.json({ error: "lease not found" }, { status: 404 });

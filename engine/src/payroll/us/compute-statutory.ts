@@ -255,8 +255,8 @@ async function utEmployerWaiverCoversPeriod(ctx: PayrollStatutoryComputeContext)
            and superseded_on > ${run.period_start}::date and superseded_on <= ${run.period_end}::date
       ) boundaries
      order by boundary
-  `);
-  const dates = [...new Set([run.period_start, ...changes.rows.map((row) => row.boundary), run.period_end])];
+  `, "objects");
+  const dates = [...new Set([run.period_start, ...changes.map((row) => row.boundary), run.period_end])];
   let approvedBoundaries = 0;
   for (const date of dates) if (await resolveAt(date) === "approved") approvedBoundaries++;
   if (approvedBoundaries === dates.length) return true;
@@ -307,8 +307,8 @@ export async function usEmployeeYtd(
   }
   const accounts = await loadUsFilingAccounts(tx, orgId);
   const employeeSubsidiaryId=historyScope.subsidiaryId;
-  const source = (await tx.execute<{ pay_date: string }>(sql`select pay_date::text from pay_runs
-    where org_id=${orgId} and document_id=${documentId}`)).rows;
+  const source = await tx.execute<{ pay_date: string }>(sql`select pay_date::text from pay_runs
+    where org_id=${orgId} and document_id=${documentId}`, "objects");
   if (source.length !== 1) throw new PayrollError('US year-to-date inputs require the actual native pay-run source date.');
   const sourceDate = source[0]!.pay_date;
   const scope = resolveUsEmployerScope(accounts, filingAccountId, employeeSubsidiaryId, sourceDate);
@@ -335,10 +335,10 @@ export async function usEmployeeYtd(
   }), {});
   // Resolve every retained stub at its own pay date. A state registration
   // can change affiliation without moving prior wages into the new EIN.
-  const priorStubs = (await tx.execute<{ id: string; filing_account_id: string | null; source_date: string }>(sql`
+  const priorStubs = await tx.execute<{ id: string; filing_account_id: string | null; source_date: string }>(sql`
     select s.id, s.filing_account_id, s.history_run_pay_date::text as source_date
       from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s
-  `)).rows;
+  `, "objects");
   const ids = priorStubs.filter(stub => resolveUsFederalFilingAccount(
     accounts, stub.filing_account_id, employeeSubsidiaryId, stub.source_date,
   ) === scope.federalAccountId).map(stub => stub.id);
@@ -420,8 +420,8 @@ export async function usEmployeeYtd(
       ), '{}'::jsonb) as "lstWithheldYtd"
     from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s
     where ${employerStubs}
-  `));
-  const row = r.rows[0]!;
+  `, "objects"));
+  const row = r[0]!;
   const lstWithheldYtd = { ...row.lstWithheldYtd };
   for (const allocation of openingSources.allocations) {
     if (allocation.programKey !== 'us_pa_lst' || allocation.federalAccountId !== scope.federalAccountId) continue;

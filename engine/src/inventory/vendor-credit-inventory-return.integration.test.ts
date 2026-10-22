@@ -65,7 +65,7 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `)).rows[0]!.balance;
+  `, "objects"))[0]!.balance;
 }
 
 async function layerValue(orgId: string, itemId: string): Promise<string> {
@@ -73,7 +73,7 @@ async function layerValue(orgId: string, itemId: string): Promise<string> {
     select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as value
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
-  `)).rows[0]!.value;
+  `, "objects"))[0]!.value;
 }
 
 async function createApprovedVendorReturn(
@@ -159,7 +159,7 @@ async function creditResidue(
                and effect.document_id = document.id) as effects
       from documents document
      where document.org_id = ${orgId} and document.id = ${documentId}
-  `)).rows.map((row) => ({
+  `, "objects")).map((row) => ({
     status: row.status,
     sourceEntries: row.source_entries,
     returns: row.returns,
@@ -271,7 +271,7 @@ test(
          where returned.org_id = ${org.orgId}
            and returned.document_line_id = ${credit.lineId}
            and returned.kind = 'return'
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(toUnits(provenance.quantity), toUnits("-4"));
       assert.equal(toUnits(provenance.total_value), toUnits("-8"));
       assert.equal(toUnits(provenance.consumed_quantity), toUnits("4"));
@@ -354,7 +354,7 @@ test(
         select status, current_stock_location_id
           from serials
          where org_id = ${org.orgId} and id = ${serialId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(serial, {
         status: "returned",
         current_stock_location_id: null,
@@ -418,7 +418,7 @@ test(
                count(*) filter (where kind = 'issue')::int as issues
           from inventory_movements
          where org_id = ${org.orgId} and item_id = ${org.items.fifo}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(movements.returns + movements.issues, 1);
       const onHand = await getOnHand(
         org.orgId,

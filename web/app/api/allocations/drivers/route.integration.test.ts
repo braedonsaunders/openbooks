@@ -353,7 +353,7 @@ test("restricted allocations managers cannot mutate org-wide drivers", async () 
     assert.equal(created.status, 201);
     const driver = ((await created.json()) as { driver: { id: string; updatedAt: string } }).driver;
     const beforeAudits = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`)).rows[0]!.n;
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`, "objects"))[0]!.n;
     authenticate(org.orgId, actorId, [...READ, ...MANAGE], new Set([org.subsidiaryId]));
     assert.equal((await previewRoute.POST(jsonRequest("/api/allocations/drivers/preview", "POST", { driverId: driver.id, date: "2026-07-31" }))).status, 403);
 
@@ -385,9 +385,9 @@ test("restricted allocations managers cannot mutate org-wide drivers", async () 
     assert.equal(stored.status, 200);
     assert.equal(((await stored.json()) as { driver: { name: string } }).driver.name, "Scope driver");
     assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from allocation_drivers where org_id = ${org.orgId}`)).rows[0]!.n, 1);
+      select count(*)::int as n from allocation_drivers where org_id = ${org.orgId}`, "objects"))[0]!.n, 1);
     assert.equal((await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`)).rows[0]!.n, beforeAudits);
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`, "objects"))[0]!.n, beforeAudits);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);

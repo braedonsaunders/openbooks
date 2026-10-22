@@ -45,7 +45,7 @@ export async function readPaymentProviderSetupData(
         from psp_provider_configs
        where org_id = ${orgId} and provider in ('stripe', 'adyen', 'gocardless')
        order by provider
-    `),
+    `, 'objects'),
     db.execute(sql`
       select provider, display_name as "displayName", is_enabled as "isEnabled", pull_enabled as "pullEnabled",
              default_disputed_funds_account_id as "defaultDisputedFundsAccountId",
@@ -54,13 +54,13 @@ export async function readPaymentProviderSetupData(
         from psp_provider_configs
        where org_id = ${orgId} and provider in ('paypal', 'shopify_payments', 'square')
        order by provider
-    `),
+    `, 'objects'),
     db.execute<PaymentProviderAccountRow>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
        ${accountScope}
        order by number nulls last, name
-    `),
+    `, 'objects'),
     db.execute(sql`
       select id, name, calculation, percent::text as percent,
              fixed_amount::text as "fixedAmount", cap_amount::text as "capAmount",
@@ -69,19 +69,19 @@ export async function readPaymentProviderSetupData(
              effective_to::text as "effectiveTo", is_active as "isActive"
         from payment_surcharge_rules where org_id = ${orgId}
        order by effective_from desc
-    `),
+    `, 'objects'),
     db.execute<PaymentProviderAccountRow>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type in ('income', 'income_other') and is_active and not is_summary
        ${accountScope}
        order by number nulls last, name
-    `),
+    `, 'objects'),
     db.execute<PaymentProviderAccountRow>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and is_active and not is_summary
        ${accountScope}
        order by number nulls last, name
-    `),
+    `, 'objects'),
   ])
 
   const disputeAccountKeys = [
@@ -89,9 +89,9 @@ export async function readPaymentProviderSetupData(
     'defaultChargebackLossAccountId',
     'defaultDisputeFeeAccountId',
   ] as const
-  let configRows = configs.rows as Array<Record<string, unknown>>
-  let automationRows = automationConfigs.rows as Array<Record<string, unknown>>
-  let surchargeRows = rules.rows as Array<Record<string, unknown>>
+  let configRows = configs as Array<Record<string, unknown>>
+  let automationRows = automationConfigs as Array<Record<string, unknown>>
+  let surchargeRows = rules as Array<Record<string, unknown>>
   if (scope !== null) {
     configRows = configRows.map((row) => {
       const settings = { ...((row.settings as Record<string, unknown>) ?? {}) }
@@ -119,9 +119,9 @@ export async function readPaymentProviderSetupData(
       }>(sql`
         select id, subsidiary_id from accounts
          where org_id = ${orgId} and id = any(${`{${referenced.join(',')}}`}::uuid[])
-      `)
+      `, 'objects')
       const visible = new Set(
-        accounts.rows
+        accounts
           .filter(
             (row) => row.subsidiary_id === null || scope.has(row.subsidiary_id),
           )
@@ -160,13 +160,13 @@ export async function readPaymentProviderSetupData(
     configs: configRows as unknown as PaymentProviderSetupData['configs'],
     automationConfigs:
       automationRows as unknown as PaymentProviderSetupData['automationConfigs'],
-    bankAccounts: banks.rows as PaymentProviderSetupData['bankAccounts'],
+    bankAccounts: banks as PaymentProviderSetupData['bankAccounts'],
     surchargeRules:
       surchargeRows as unknown as PaymentProviderSetupData['surchargeRules'],
     incomeAccounts:
-      incomeAccounts.rows as PaymentProviderSetupData['incomeAccounts'],
+      incomeAccounts as PaymentProviderSetupData['incomeAccounts'],
     postingAccounts:
-      postingAccounts.rows as PaymentProviderSetupData['postingAccounts'],
+      postingAccounts as PaymentProviderSetupData['postingAccounts'],
     featureEnabled: await isFeatureEnabled(orgId, 'onlinePayments'),
     bankingEnabled: await isFeatureEnabled(orgId, 'banking'),
   }

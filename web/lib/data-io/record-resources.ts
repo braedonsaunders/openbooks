@@ -316,12 +316,10 @@ async function writeRecords(
       const recNo = String(src.record_number ?? '').trim()
       let before: Record<string, unknown> | null = null
       if (recNo) {
-        const found = (await db.execute(sql`
+        const found = await db.execute<Record<string, unknown>>(sql`
           select * from custom_records
-           where org_id = ${orgId} and type_key = ${typeKey} and record_number = ${recNo} limit 1`)) as {
-          rows: Record<string, unknown>[]
-        }
-        before = (found.rows[0] ?? null) as Record<string, unknown> | null
+           where org_id = ${orgId} and type_key = ${typeKey} and record_number = ${recNo} limit 1`, 'objects')
+        before = (found[0] ?? null) as Record<string, unknown> | null
       }
       const existingId = before !== null ? String(before.id) : null
       const exists = existingId !== null || (ctx.dryRun && previewNumbers.has(recNo))
@@ -344,13 +342,13 @@ async function writeRecords(
           // Bulk import never changes lifecycle: status moves only through
           // the native record PATCH with its audited reason, so an
           // export→reimport round-trip leaves an inactive record inactive.
-          const written = (await db.execute(sql`
+          const written = await db.execute<Record<string, unknown>>(sql`
             update custom_records
                set data = ${JSON.stringify(computed)}::jsonb, search_text = ${searchText},
                    updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')
              where id = ${existingId} and org_id = ${orgId}
-             returning *`)) as { rows: Record<string, unknown>[] }
-          const after = written.rows[0]
+             returning *`, 'objects')
+          const after = written[0]
           if (!after) throw new Error('imported record disappeared during update')
           await auditSetupChange({
             orgId,
@@ -365,12 +363,12 @@ async function writeRecords(
       } else {
         if (!ctx.dryRun) {
           const number = recNo || (await allocateRecordNumber(orgId, typeKey))
-          const inserted = (await db.execute(sql`
+          const inserted = await db.execute<Record<string, unknown>>(sql`
             insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, status, created_by)
             values (${orgId}, ${type.id}, ${typeKey}, ${number}, ${JSON.stringify(computed)}::jsonb,
                     ${searchText}, 'active', ${ctx.actorId})
-            returning *`)) as { rows: Record<string, unknown>[] }
-          const after = inserted.rows[0]
+            returning *`, 'objects')
+          const after = inserted[0]
           if (!after) throw new Error('imported record did not return a row')
           await auditSetupChange({
             orgId,

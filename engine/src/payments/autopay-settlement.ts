@@ -72,8 +72,8 @@ export async function recordDecline(
              next_retry_on = ${nextRetryOn}::date, auth_url = ${authUrl}, updated_at = now()
        where id = ${attemptId} and org_id = ${orgId} and status = 'initiated'
        returning id
-    `));
-    if (!updated.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+    `, "objects"));
+    if (!updated[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
     result.failed += 1;
     result.retried += 1;
     result.notices.push({
@@ -92,8 +92,8 @@ export async function recordDecline(
            next_retry_on = null, auth_url = ${authUrl}, updated_at = now()
      where id = ${attemptId} and org_id = ${orgId} and status = 'initiated'
      returning id
-  `));
-  if (!updated.rows[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
+  `, "objects"));
+  if (!updated[0]) throw new AutopayError("collection attempt changed underfoot; refusing to record over it");
   result.failed += 1;
   result.notices.push({
     invoiceId: candidate.invoiceId,
@@ -127,8 +127,8 @@ export async function applyFinalAction(
         update subscriptions set status = 'suspended', updated_at = now(), updated_by = ${actorId}
          where id = ${subscriptionId} and org_id = ${orgId} and status = 'active'
          returning id
-      `));
-      if (!flipped.rows[0]) continue;
+      `, "objects"));
+      if (!flipped[0]) continue;
       outcome.suspended += 1;
       await auditAutopay(orgId, "subscriptions", subscriptionId, {
         event: "autopay_suspended",
@@ -142,8 +142,8 @@ export async function applyFinalAction(
                updated_at = now(), updated_by = ${actorId}
          where id = ${subscriptionId} and org_id = ${orgId} and status in ('active', 'suspended')
          returning id
-      `));
-      if (!flipped.rows[0]) continue;
+      `, "objects"));
+      if (!flipped[0]) continue;
       outcome.canceled += 1;
       await auditAutopay(orgId, "subscriptions", subscriptionId, {
         event: "autopay_canceled",
@@ -171,14 +171,14 @@ export async function reactivateScopeSubscriptions(
     : (await db.execute<{ id: string }>(sql`
         select id from subscriptions
          where org_id = ${orgId} and customer_id = ${candidate.partyId} and status = 'suspended'
-      `)).rows.map((r) => r.id);
+      `, "objects")).map((r) => r.id);
   for (const subscriptionId of targets) {
     const flipped = (await db.execute<{ id: string }>(sql`
       update subscriptions set status = 'active', updated_at = now(), updated_by = ${actorId}
        where id = ${subscriptionId} and org_id = ${orgId} and status = 'suspended'
        returning id
-    `));
-    if (!flipped.rows[0]) continue;
+    `, "objects"));
+    if (!flipped[0]) continue;
     count += 1;
     await auditAutopay(orgId, "subscriptions", subscriptionId, {
       event: "autopay_reactivated",
@@ -217,15 +217,15 @@ export async function settleCollectionAttemptEvent(
          and (a.provider_ref = ${event.externalRef}
               or (${alternateRef}::text is not null and a.provider_ref = ${alternateRef}))
        order by a.created_at desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) return null;
     if (event.status === "succeeded") {
       const claimed = (await db.execute<{ id: string }>(sql`
         update collection_attempts set status = 'processing', provider_ref = ${event.externalRef}, updated_at = now()
          where id = ${found.id} and org_id = ${orgId} and status in ('initiated', 'processing')
          returning id
-      `));
-      if (!claimed.rows[0]) return "duplicate";
+      `, "objects"));
+      if (!claimed[0]) return "duplicate";
       const receipt = await postCollectionReceipt(orgId, found.id);
       if (receipt.status === "pending_approval") return "receipt_pending";
       await reactivateScopeSubscriptions(orgId, { partyId: found.party_id, subscriptionId: found.subscription_id }, null);
@@ -242,13 +242,13 @@ export async function settleCollectionAttemptEvent(
       // Webhook failures on an already-settled attempt are stale duplicates.
       const current = (await db.execute<{ status: string }>(sql`
         select status from collection_attempts where id = ${found.id} and org_id = ${orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!current || (current.status !== "initiated" && current.status !== "processing")) return "duplicate";
       const policy = await resolveAutopayPolicy(orgId);
       const today = await businessToday(orgId);
       const position = (await db.execute<{ retry_position: number }>(sql`
         select retry_position from collection_attempts where id = ${found.id} and org_id = ${orgId}
-      `)).rows[0]?.retry_position ?? 0;
+      `, "objects"))[0]?.retry_position ?? 0;
       const candidate = {
         invoiceId: found.invoice_id,
         partyId: found.party_id,

@@ -118,7 +118,7 @@ test(
         select id
           from journal_lines
          where entry_id = ${originalEntryId} and is_open_item
-      `));
+      `, "objects"));
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -159,7 +159,7 @@ test(
            settlement_rate_reference, applied_on, created_by, updated_by)
         values (
           ${applicationId}, ${org.orgId}, ${settlementLineId},
-          ${originalOpenLine.rows[0]!.id}, 125, 125, 125, 'CAD', 125, 'CAD',
+          ${originalOpenLine[0]!.id}, 125, 125, 125, 'CAD', 125, 'CAD',
           1, 'same_currency', 'source-application-1', ${org.date},
           ${actorId}, ${actorId}
         )
@@ -215,13 +215,13 @@ test(
           join journal_entries replacement
             on replacement.id = document.posted_entry_id
          where document.id = ${documentId}
-      `));
-      assert.deepEqual(chain.rows, [
+      `, "objects"));
+      assert.deepEqual(chain, [
         {
           posted_entry_id: first.entryId,
           original_status: "reversed",
           original_period_id: org.periodId,
-          reversal_entry_id: chain.rows[0]!.reversal_entry_id,
+          reversal_entry_id: chain[0]!.reversal_entry_id,
           reversal_status: "posted",
           reversal_period_id: org.periodId,
           reverses_entry_id: originalEntryId,
@@ -236,20 +236,20 @@ test(
           from journal_entries entry
           join journal_lines line on line.entry_id = entry.id
          where entry.id in (
-           ${originalEntryId}, ${chain.rows[0]!.reversal_entry_id}, ${first.entryId}
+           ${originalEntryId}, ${chain[0]!.reversal_entry_id}, ${first.entryId}
          )
          group by entry.period_id, line.account_id
          order by entry.period_id, line.account_id
-      `));
+      `, "objects"));
       assert.deepEqual(
-        byPeriod.rows.filter((row) => row.period_id === org.periodId),
+        byPeriod.filter((row) => row.period_id === org.periodId),
         [
           { period_id: org.periodId, account_id: org.accounts.ap, amount: "0.0000" },
           { period_id: org.periodId, account_id: org.accounts.cogs, amount: "0.0000" },
         ].sort((left, right) => left.account_id.localeCompare(right.account_id)),
       );
       assert.deepEqual(
-        byPeriod.rows.filter((row) => row.period_id === replacementPeriodId),
+        byPeriod.filter((row) => row.period_id === replacementPeriodId),
         [
           {
             period_id: replacementPeriodId,
@@ -281,12 +281,12 @@ test(
          where org_id = ${org.orgId}
            and row_id = ${documentId}
            and changes->>'mode' = 'append_only_source_correction'
-      `));
-      assert.deepEqual(audit.rows, [
+      `, "objects"));
+      assert.deepEqual(audit, [
         {
           mode: "append_only_source_correction",
           original_entry_id: originalEntryId,
-          reversal_entry_id: chain.rows[0]!.reversal_entry_id,
+          reversal_entry_id: chain[0]!.reversal_entry_id,
           replacement_entry_id: first.entryId,
           actor_id: actorId,
           request_id: requestId,
@@ -312,16 +312,16 @@ test(
               and application.from_line_id = ${settlementLineId}
             )
          order by application.created_at, application.id
-      `));
-      assert.equal(applications.rows.length, 2);
-      assert.deepEqual(applications.rows[0], {
+      `, "objects"));
+      assert.equal(applications.length, 2);
+      assert.deepEqual(applications[0], {
         id: applicationId,
         unapplied: true,
         from_entry_id: settlementEntryId,
         to_entry_id: originalEntryId,
       });
-      assert.deepEqual(applications.rows[1], {
-        id: applications.rows[1]!.id,
+      assert.deepEqual(applications[1], {
+        id: applications[1]!.id,
         unapplied: false,
         from_entry_id: settlementEntryId,
         to_entry_id: first.entryId,
@@ -341,8 +341,8 @@ test(
         select count(*)::int as entries
           from journal_entries
          where source_document_id = ${documentId}
-      `);
-      assert.equal((count.rows[0] as { entries: number }).entries, 3);
+      `, "objects");
+      assert.equal((count[0] as { entries: number }).entries, 3);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -401,7 +401,7 @@ test(
         select id
           from journal_lines
          where entry_id = ${originalEntryId} and is_open_item
-      `));
+      `, "objects"));
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
@@ -442,7 +442,7 @@ test(
            settlement_rate_reference, applied_on, created_by, updated_by)
         values (
           ${applicationId}, ${org.orgId}, ${settlementLineId},
-          ${originalOpenLine.rows[0]!.id}, 125, 125, 125, 'CAD', 125, 'CAD',
+          ${originalOpenLine[0]!.id}, 125, 125, 125, 'CAD', 125, 'CAD',
           1, 'same_currency', 'source-application-overapply', ${org.date},
           ${actorId}, ${actorId}
         )
@@ -483,8 +483,8 @@ test(
                  where source_document_id = ${documentId}) as entries,
                (select status from journal_entries where id = ${originalEntryId}) as original_status,
                (select posted_entry_id from documents where id = ${documentId}) as posted_entry_id
-      `));
-      assert.deepEqual(aftermath.rows, [
+      `, "objects"));
+      assert.deepEqual(aftermath, [
         {
           entries: 1,
           original_status: "posted",
@@ -614,8 +614,8 @@ test(
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and module in ('ap', 'gl')
          order by module
-      `));
-      assert.deepEqual(locks.rows, [
+      `, "objects"));
+      assert.deepEqual(locks, [
         {
           module: "ap",
           state: "closed",
@@ -634,8 +634,8 @@ test(
           from audit_log
          where org_id = ${org.orgId} and row_id = ${documentId}
            and changes->>'mode' = 'append_only_source_correction'
-      `));
-      assert.deepEqual(replayAudit.rows, [
+      `, "objects"));
+      assert.deepEqual(replayAudit, [
         {
           mode: "authenticated_connector_historical_replay",
           locks_preserved: true,
@@ -654,7 +654,7 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `));
+      `, "objects"));
       await assert.rejects(
         db.transaction(async (tx) => {
           await tx.execute(
@@ -691,8 +691,8 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `));
-      assert.deepEqual(afterFailedReplay.rows, beforeFailedReplay.rows);
+      `, "objects"));
+      assert.deepEqual(afterFailedReplay, beforeFailedReplay);
 
       const convergedRetry = await db.transaction(async (tx) => {
         await tx.execute(
@@ -728,8 +728,8 @@ test(
                    and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
           from document_lines line
          where line.document_id = ${documentId}
-      `));
-      assert.deepEqual(afterConvergedRetry.rows, [
+      `, "objects"));
+      assert.deepEqual(afterConvergedRetry, [
         { amount: "130.0000", entries: 5, cogs_total: "130.0000" },
       ]);
 
@@ -773,8 +773,8 @@ test(
         select count(*)::int as entries
           from journal_entries
          where source_document_id = ${documentId}
-      `);
-      assert.equal((chain.rows[0] as { entries: number }).entries, 5);
+      `, "objects");
+      assert.equal((chain[0] as { entries: number }).entries, 5);
       assert.notEqual(corrected.entryId, originalEntryId);
     } finally {
       await dropScratchOrg(org.orgId);

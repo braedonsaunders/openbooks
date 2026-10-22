@@ -39,14 +39,14 @@ export const GET = defineRoute({
     const orgId = gate.user.orgId;
     const [org, subsidiaries, allAccounts] = await Promise.all([
       db.execute<{ payroll: Record<string, unknown> | null }>(sql`
-        select settings->'payroll' as payroll from orgs where id = ${orgId}`),
+        select settings->'payroll' as payroll from orgs where id = ${orgId}`, "objects"),
       db.execute<{ id: string; name: string; country: string | null }>(sql`
         select id, name, country from subsidiaries
          where org_id = ${orgId} and is_active and not is_elimination
-         order by name, id`),
+         order by name, id`, "objects"),
       listFilingAccounts(orgId),
     ]);
-    const installed = await installedPayrollCountries(orgId, org.rows[0]?.payroll ?? {});
+    const installed = await installedPayrollCountries(orgId, org[0]?.payroll ?? {});
     const packs = installed.flatMap((country) => {
       const facts = employerFactsFor(country);
       return facts.length === 0 ? [] : [{ country, facts }];
@@ -64,7 +64,7 @@ export const GET = defineRoute({
     return NextResponse.json({
       packs,
       rows: rows.filter((row) => installed.includes(row.country)),
-      subsidiaries: subsidiaries.rows,
+      subsidiaries,
       filingAccounts,
     });
 
@@ -94,8 +94,8 @@ export const PUT = defineRoute({
     try {
       const pack = payrollPack(country);
       const settings = await db.execute<{ payroll: Record<string, unknown> | null }>(sql`
-        select settings->'payroll' as payroll from orgs where id = ${gate.user.orgId}`);
-      if (!(await installedPayrollCountries(gate.user.orgId, settings.rows[0]?.payroll ?? {})).includes(country)) {
+        select settings->'payroll' as payroll from orgs where id = ${gate.user.orgId}`, "objects");
+      if (!(await installedPayrollCountries(gate.user.orgId, settings[0]?.payroll ?? {})).includes(country)) {
         return NextResponse.json({ error: `payroll pack ${country} is not installed for this organization` }, { status: 422 });
       }
       const declaration = pack.employerFacts.find((fact) => fact.key === factKey);
@@ -117,8 +117,8 @@ export const PUT = defineRoute({
         }
         const owned = await db.execute<{ country: string | null }>(sql`
           select country from subsidiaries where org_id = ${gate.user.orgId}
-           and id = ${subsidiaryId} and is_active and not is_elimination`);
-        if (!owned.rows[0] || owned.rows[0].country !== country) {
+           and id = ${subsidiaryId} and is_active and not is_elimination`, "objects");
+        if (!owned[0] || owned[0].country !== country) {
           return NextResponse.json({ error: "legal employer subsidiary is not available for this payroll country" }, { status: 422 });
         }
       }

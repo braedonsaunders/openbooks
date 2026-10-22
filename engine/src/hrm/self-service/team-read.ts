@@ -93,14 +93,14 @@ export async function findTeamEmploymentIdsForParty(query: {
     const today = await businessToday(orgId);
     const reports = await resolveTeamEmploymentIds(db, orgId, actorId, today);
     if (reports.length === 0) return [];
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       select e.id::text as id
         from worker_employments e
        where e.org_id = ${orgId}
          and e.worker_party_id = ${workerPartyId}
          and e.id in (select jsonb_array_elements_text(${JSON.stringify([...reports])}::jsonb)::uuid)
        order by e.id
-    `)).rows;
+    `, "objects");
     return rows.map((row) => row.id);
   });
 }
@@ -125,7 +125,7 @@ export async function loadTeamRoster(
 ): Promise<TeamRosterEntry[]> {
   if (reportIds.length === 0) return [];
   const summaries = await loadMyEmploymentSummaries(exec, orgId, reportIds, today);
-  const names = (await exec.execute<{ employment_id: string; worker_party_id: string; name: string }>(sql`
+  const names = await exec.execute<{ employment_id: string; worker_party_id: string; name: string }>(sql`
     select e.id::text as employment_id,
            e.worker_party_id::text as worker_party_id,
            p.display_name as name
@@ -133,7 +133,7 @@ export async function loadTeamRoster(
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
      where e.org_id = ${orgId}
        and e.id in (select jsonb_array_elements_text(${JSON.stringify([...reportIds])}::jsonb)::uuid)
-  `)).rows;
+  `, "objects");
   const byId = new Map(names.map((row) => [row.employment_id, row]));
   return summaries.map((summary) => {
     const identity = byId.get(summary.employmentId);
@@ -175,7 +175,7 @@ export async function loadTeamSteps(
   today: string,
 ): Promise<TeamStep[]> {
   if (reportIds.length === 0) return [];
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     process_id: string;
     process_kind: string;
@@ -205,7 +205,7 @@ export async function loadTeamSteps(
          or (s.owner_kind = 'named_party' and s.owner_party_id = ${partyId}::uuid)
        )
      order by s.due_on, s.id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     processId: row.process_id,
@@ -244,7 +244,7 @@ export async function loadTeamLeaveRequests(
   reportIds: readonly string[],
 ): Promise<TeamLeaveRequest[]> {
   if (reportIds.length === 0) return [];
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     employment_id: string;
     worker_name: string;
@@ -268,7 +268,7 @@ export async function loadTeamLeaveRequests(
        and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify([...reportIds])}::jsonb)::uuid)
        and r.status = 'submitted'
      order by r.starts_on, r.id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     employmentId: row.employment_id,
@@ -301,7 +301,7 @@ export async function loadTeamChangeRequests(
   reportIds: readonly string[],
 ): Promise<TeamChangeRequest[]> {
   if (reportIds.length === 0) return [];
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     employment_id: string;
     worker_name: string;
@@ -319,7 +319,7 @@ export async function loadTeamChangeRequests(
        and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify([...reportIds])}::jsonb)::uuid)
        and r.status = 'pending_approval'
      order by r.submitted_at, r.id
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     employmentId: row.employment_id,

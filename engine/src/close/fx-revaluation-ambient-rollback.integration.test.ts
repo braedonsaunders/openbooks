@@ -59,14 +59,14 @@ test("FX reversal failure removes its adjustment and preserves other entities in
       assert.equal(result.posted[0]?.subsidiaryId, branchId);
       await db.execute(sql`select 1 as usable`);
     });
-    const entries = (await db.execute<{ subsidiary_id: string; reverses_entry_id: string | null; status: string }>(sql`
+    const entries = await db.execute<{ subsidiary_id: string; reverses_entry_id: string | null; status: string }>(sql`
       select subsidiary_id, reverses_entry_id, status from journal_entries
-       where org_id=${org.orgId} and origin='fx_revaluation'`)).rows;
+       where org_id=${org.orgId} and origin='fx_revaluation'`, "objects");
     assert.equal(entries.length, 2, "only the successful branch's adjustment and reversal remain");
     assert.ok(entries.every((entry) => entry.subsidiary_id === branchId && entry.status === "posted"));
     assert.equal(entries.filter((entry) => entry.reverses_entry_id !== null).length, 1);
     const caller = (await db.execute<{ name: string }>(sql`
-      select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`)).rows[0];
+      select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`, "objects"))[0];
     assert.equal(caller?.name, "Surviving FX caller");
   } finally {
     await db.execute(sql.raw(`alter table journal_entries drop constraint if exists ${constraint}`));

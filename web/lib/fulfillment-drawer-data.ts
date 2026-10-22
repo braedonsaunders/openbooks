@@ -54,7 +54,7 @@ export async function loadFulfillmentDrawerData({
   const [headerDefs, customRow, carriers, barcodeScanningEnabled, shipping] = await Promise.all([
     loadFieldDefs('documents', kind),
     db.execute<{ custom: Record<string, unknown> | null }>(sql`
-      select custom from documents where org_id = ${orgId} and id = ${document.id}`),
+      select custom from documents where org_id = ${orgId} and id = ${document.id}`, 'objects'),
     kind === 'shipment' && document.status === 'draft' ? listActiveCarriers(orgId) : Promise.resolve([]),
     isFeatureEnabled(orgId, 'barcodeScanning'),
     kind === 'shipment' ? loadShipmentShipping(authz, orgId) : Promise.resolve({ enabled: false, canBuy: false, accounts: [], presets: [] }),
@@ -72,7 +72,7 @@ export async function loadFulfillmentDrawerData({
     document,
     layout: resolved.layout,
     headerDefs: headerDefs as CustomFieldDefClient[],
-    custom: customRow.rows[0]?.custom ?? {},
+    custom: customRow[0]?.custom ?? {},
     carriers,
     canManage: can(authz, 'orders.fulfill'),
     canPost: can(authz, 'items.post'),
@@ -100,15 +100,15 @@ export async function loadShipmentShipping(
   const [accounts, presets] = await Promise.all([
     db.execute<{ id: string; name: string; provider: string; mode: string; isDefault: boolean }>(sql`
       select id, name, provider, mode, is_default as "isDefault" from shipping_accounts
-       where org_id = ${orgId} and status = 'active' order by is_default desc, name`),
+       where org_id = ${orgId} and status = 'active' order by is_default desc, name`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from package_presets where org_id = ${orgId} order by name`),
+      select id, name from package_presets where org_id = ${orgId} order by name`, 'objects'),
   ])
   return {
     enabled: true,
     canBuy: can(authz, 'shipping.manage'),
-    accounts: accounts.rows,
-    presets: presets.rows,
+    accounts,
+    presets,
   }
 }
 
@@ -140,7 +140,7 @@ export async function loadNewPickListData({
     select d.document_number, p.display_name as party_name
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-     where d.org_id = ${orgId} and d.id = ${scope.id}`)).rows[0]
+     where d.org_id = ${orgId} and d.id = ${scope.id}`, 'objects'))[0]
   if (!order) return null
   const headerDefs = await loadFieldDefs('documents', 'pick_list')
   const [resolved, today, barcodeScanningEnabled] = await Promise.all([

@@ -114,8 +114,8 @@ async function revision(id: string): Promise<string> {
 }
 
 async function reportsOf(orgId: string) {
-  return withBypassContext(async () => (await db.execute<{ id: string; party_id: string | null }>(sql`
-    select id, party_id from documents where org_id = ${orgId} and kind = 'expense_report' order by document_number`)).rows)
+  return withBypassContext(async () => await db.execute<{ id: string; party_id: string | null }>(sql`
+    select id, party_id from documents where org_id = ${orgId} and kind = 'expense_report' order by document_number`, 'objects'))
 }
 
 test('an expense self-service holder reads, edits, scans and submits only their own reports', async () => {
@@ -156,7 +156,7 @@ test('an expense self-service holder reads, edits, scans and submits only their 
     const owner = await withBypassContext(() => expenseListOwnerFilter(fixture.org.orgId, fixture.actor))
     assert.ok(owner, 'the list narrows to the holder')
     const listed = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
-      select d.id from documents d where d.org_id = ${fixture.org.orgId} and d.kind = 'expense_report' and ${owner}`)).rows.map((row) => row.id))
+      select d.id from documents d where d.org_id = ${fixture.org.orgId} and d.kind = 'expense_report' and ${owner}`, 'objects')).map((row) => row.id))
     assert.deepEqual(listed, [fixture.ownReport])
 
     const searched = await withBypassContext(() => globalSearch(fixture.as(fixture.actor, ['expenses.self']), 'EXP-SELF'))
@@ -189,8 +189,8 @@ test('a self-service report is always the holder\'s own, and a login with no per
     assert.match(refusal.remedy, /link your user to your employee record/)
     assert.equal((await reportRoute.GET(jsonRequest(`/api/expenses/${fixture.ownReport}`, 'GET'), params(fixture.ownReport))).status, 404)
     const nothing = await withBypassContext(() => expenseListOwnerFilter(fixture.org.orgId, fixture.unlinked))
-    const listed = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
-      select d.id from documents d where d.org_id = ${fixture.org.orgId} and d.kind = 'expense_report' and ${nothing!}`)).rows)
+    const listed = await withBypassContext(async () => await db.execute<{ id: string }>(sql`
+      select d.id from documents d where d.org_id = ${fixture.org.orgId} and d.kind = 'expense_report' and ${nothing!}`, 'objects'))
     assert.deepEqual(listed, [], 'a login with no person lists nothing')
     assert.equal((await reportsOf(fixture.org.orgId)).length, before, 'no refused create stored a report')
   } finally {
@@ -239,7 +239,7 @@ test('a receipt in a format the AI model provider cannot read is refused before 
     assert.equal(refusal.code, 'llm_vision_format')
     assert.match(refusal.error, /hotel\.pdf: OpenRouter — any model, one key reads JPEG, PNG documents/)
     const stored = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from expense_receipt_captures where org_id = ${fixture.org.orgId}`)).rows[0]!.n)
+      select count(*)::int as n from expense_receipt_captures where org_id = ${fixture.org.orgId}`, 'objects'))[0]!.n)
     assert.equal(stored, 0, 'nothing is attached or registered')
   } finally {
     await teardown(fixture)

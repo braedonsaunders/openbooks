@@ -30,7 +30,7 @@ test('aging as-of reconstructs opens before later settlements', { skip: !env.OPE
         values (${scratch.orgId}, ${id}, 1, ${scratch.accounts.revenue}, 1, 100, 100, 0, 100)`)
       await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
       const entry = await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
-      const invLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entry} and is_open_item`)).rows[0]!.id
+      const invLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entry} and is_open_item`, 'objects'))[0]!.id
       // Settle in full AFTER the August as-of: a September dated application.
       const pay = randomUUID()
       await db.execute(sql`insert into journal_entries
@@ -41,7 +41,7 @@ test('aging as-of reconstructs opens before later settlements', { skip: !env.OPE
         values (${scratch.orgId}, ${pay}, 1, ${scratch.accounts.bank}, ${scratch.subsidiaryId}, ${scratch.customerId}, '100', 'CAD', '100', '1', false),
                (${scratch.orgId}, ${pay}, 2, ${scratch.accounts.ar}, ${scratch.subsidiaryId}, ${scratch.customerId}, '-100', 'CAD', '-100', '1', true)`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${pay}`)
-      const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`)).rows[0]!.id
+      const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`, 'objects'))[0]!.id
       await db.execute(sql`insert into applications
         (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
          source_transaction_currency, target_transaction_amount, target_transaction_currency,
@@ -49,7 +49,7 @@ test('aging as-of reconstructs opens before later settlements', { skip: !env.OPE
         values (${scratch.orgId}, ${payLine}, ${invLine}, '100', '2026-09-10', '100', '100', 'CAD', '100', 'CAD',
           '1', 'same_currency', 'AGING-TEST')`)
       // Live open is now settled …
-      const live = (await db.execute<{ open_balance: string }>(sql`select open_balance::text from documents where id = ${id}`)).rows[0]!
+      const live = (await db.execute<{ open_balance: string }>(sql`select open_balance::text from documents where id = ${id}`, 'objects'))[0]!
       assert.equal(live.open_balance, '0.0000')
     })
     // … but the August aging must still show the invoice as open. Reads run

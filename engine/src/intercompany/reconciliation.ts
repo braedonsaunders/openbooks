@@ -67,7 +67,7 @@ export async function intercompanyReconciliation(
       if (side.payableAccountId) keys.push({ subsidiaryId, accountId: side.payableAccountId, pairId: pair.id, role: "payable" });
     }
   }
-  const balances = (await runner.execute<BalanceRow>(sql`
+  const balances = await runner.execute<BalanceRow>(sql`
     select jl.subsidiary_id, jl.account_id, jl.currency,
            sum(jl.txn_amount)::text as txn, sum(jl.amount)::text as base
       from journal_lines jl
@@ -80,9 +80,9 @@ export async function intercompanyReconciliation(
        and exists (
          select 1 from unnest(${uuidArray(keys.map((k) => k.subsidiaryId))}::uuid[], ${uuidArray(keys.map((k) => k.accountId))}::uuid[]) as k(sub, acct)
           where k.sub = jl.subsidiary_id and k.acct = jl.account_id)
-     group by jl.subsidiary_id, jl.account_id, jl.currency`)).rows;
-  const subs = (await runner.execute<{ id: string; name: string; base_currency: string }>(sql`
-    select id, name, base_currency from subsidiaries where org_id = ${orgId}`)).rows;
+     group by jl.subsidiary_id, jl.account_id, jl.currency`, "objects");
+  const subs = await runner.execute<{ id: string; name: string; base_currency: string }>(sql`
+    select id, name, base_currency from subsidiaries where org_id = ${orgId}`, "objects");
   const subById = new Map(subs.map((sub) => [sub.id, sub]));
   const rows: ReconciliationRow[] = [];
   for (const pair of pairs) {

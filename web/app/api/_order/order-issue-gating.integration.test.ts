@@ -102,7 +102,7 @@ async function issueRequest(fixture: Fixture): Promise<Request> {
   const revision = await withOrgContext(fixture.orgId, async () =>
     (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from documents where id = ${fixture.orderId}`)).rows[0]!.revision);
+        from documents where id = ${fixture.orderId}`, "objects"))[0]!.revision);
   return new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
@@ -112,23 +112,23 @@ async function issueRequest(fixture: Fixture): Promise<Request> {
 
 async function docStatus(orgId: string, orderId: string): Promise<string> {
   const rows = await withOrgContext(orgId, async () =>
-    (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${orderId}`)).rows);
+    await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${orderId}`, "objects"));
   return rows[0]!.status;
 }
 
 async function runCount(orgId: string, orderId: string): Promise<number> {
   const rows = await withBypassContext(async () =>
-    (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from flow_runs where org_id = ${orgId} and subject_id = ${orderId}`)).rows);
+    await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from flow_runs where org_id = ${orgId} and subject_id = ${orderId}`, "objects"));
   return rows[0]!.n;
 }
 
 async function pendingGateCount(orgId: string, orderId: string): Promise<number> {
   const rows = await withBypassContext(async () =>
-    (await db.execute<{ n: number }>(sql`
+    await db.execute<{ n: number }>(sql`
       select count(*)::int as n from flow_gates
-       where org_id = ${orgId} and subject_id = ${orderId} and status = 'pending'`)).rows);
+       where org_id = ${orgId} and subject_id = ${orderId} and status = 'pending'`, "objects"));
   return rows[0]!.n;
 }
 

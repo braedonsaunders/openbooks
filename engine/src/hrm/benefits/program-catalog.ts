@@ -64,13 +64,13 @@ function programScopeFence(scope: Set<string> | null) {
 export async function listBenefitsProgramCatalog(exec: SqlExecutor, orgId: string, actorId: string, query: BenefitsCatalogQuery = {}): Promise<BenefitsProgramCatalogRow[]> {
   const scope = await requireAggregateBenefitsRead(exec,orgId,actorId), { limit,offset } = benefitsProgramPage(query);
   const payroll = await orgFeatureEnabled(orgId,'payroll',exec);
-  const rows = (await exec.execute<BenefitsProgramCatalogRow & { nativeRecord: Record<string, unknown> }>(sql`
+  const rows = await exec.execute<BenefitsProgramCatalogRow & { nativeRecord: Record<string, unknown> }>(sql`
     select offering.* from (${catalogProjection}) offering
     join hrm_benefit_catalog identity on identity.id::text=offering.id and identity.org_id=${orgId}::uuid
     where ${programScopeFence(scope)}
       ${payroll ? sql`` : sql`and offering."nativeKind"<>'entitlement'`}
       ${query.includeInternal ? sql`` : sql`and jsonb_array_length(offering."parentProgramIds")=0`}
-    order by offering.name,offering.id limit ${limit} offset ${offset}`)).rows;
+    order by offering.name,offering.id limit ${limit} offset ${offset}`, 'objects');
   return rows.map(({ nativeRecord: _nativeRecord,...row }) => row);
 }
 
@@ -88,7 +88,7 @@ export async function listBenefitsProgramParticipants(exec: SqlExecutor, orgId: 
   const payroll = await orgFeatureEnabled(orgId,'payroll',exec);
   if (query.programId) requireId(query.programId,'programId');
   if (query.employeePartyId) requireId(query.employeePartyId,'employeePartyId');
-  return (await exec.execute<BenefitsProgramParticipant>(sql`
+  return await exec.execute<BenefitsProgramParticipant>(sql`
     select a.id::text,a.program_id::text as "programId",a.native_kind as "nativeKind",a.employment_id::text as "employmentId",
       e.worker_party_id::text as "employeePartyId",p.display_name as "employeeName",a.status,
       a.effective_from::text as "effectiveFrom",a.effective_to::text as "effectiveTo"
@@ -100,7 +100,7 @@ export async function listBenefitsProgramParticipants(exec: SqlExecutor, orgId: 
       ${payroll ? sql`` : sql`and a.native_kind<>'vacation_terms'`}
       ${query.programId ? sql`and a.program_id=${query.programId}::uuid` : sql``}
       ${query.employeePartyId ? sql`and e.worker_party_id=${query.employeePartyId}::uuid` : sql``}
-    order by p.display_name,a.program_id,a.effective_from desc,a.id limit ${limit} offset ${offset}`)).rows;
+    order by p.display_name,a.program_id,a.effective_from desc,a.id limit ${limit} offset ${offset}`, 'objects');
 }
 
 const activityProjection = sql`
@@ -126,7 +126,7 @@ export async function listBenefitsProgramActivity(exec: SqlExecutor, orgId: stri
   const payroll = await orgFeatureEnabled(orgId,'payroll',exec);
   if (query.programId) requireId(query.programId,'programId');
   if (query.employeePartyId) requireId(query.employeePartyId,'employeePartyId');
-  return (await exec.execute<BenefitsProgramActivity>(sql`
+  return await exec.execute<BenefitsProgramActivity>(sql`
     select a.id::text,a.program_id::text as "programId",a.native_kind as "nativeKind",a.employment_id::text as "employmentId",
       e.worker_party_id::text as "employeePartyId",p.display_name as "employeeName",a.status,a.amount,a.currency,a.unit,
       a.on_date::text as "onDate",a.pay_run_document_id::text as "payRunDocumentId",coalesce(a.payroll_processed,false) as "payrollProcessed"
@@ -138,7 +138,7 @@ export async function listBenefitsProgramActivity(exec: SqlExecutor, orgId: stri
       ${payroll ? sql`` : sql`and a.native_kind='award'`}
       ${query.programId ? sql`and a.program_id=${query.programId}::uuid` : sql``}
       ${query.employeePartyId ? sql`and e.worker_party_id=${query.employeePartyId}::uuid` : sql``}
-    order by a.on_date desc,a.id limit ${limit} offset ${offset}`)).rows;
+    order by a.on_date desc,a.id limit ${limit} offset ${offset}`, 'objects');
 }
 
 /** One identity resolves the native record and scoped employee evidence in its program workspace. */
@@ -148,7 +148,7 @@ export async function getBenefitsProgramWorkspace(exec: SqlExecutor, orgId: stri
   const stored = (await exec.execute<BenefitsProgramCatalogRow & { nativeRecord: Record<string,unknown> }>(sql`
     select offering.* from (${catalogProjection}) offering
     join hrm_benefit_catalog identity on identity.id::text=offering.id and identity.org_id=${orgId}::uuid
-    where identity.id=${programId}::uuid and ${programScopeFence(scope)}`)).rows[0];
+    where identity.id=${programId}::uuid and ${programScopeFence(scope)}`, 'objects'))[0];
   if (!stored) throw new BenefitsError('NOT_FOUND','This program is unavailable in your organization or legal-entity scope; reopen Programs.');
   if (stored.nativeKind==='entitlement' && !(await orgFeatureEnabled(orgId,'payroll',exec))) throw new BenefitsError('REFUSED','Enable Payroll under Company Settings → Features to access entitlement programs; existing program history is preserved.');
   const {nativeRecord,...program} = stored;

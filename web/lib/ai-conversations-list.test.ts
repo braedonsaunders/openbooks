@@ -15,7 +15,7 @@ Object.assign(globalThis, {
 })
 stubModules({ extra: {
   '@openbooks/engine/platform/db':
-    'export const db = { execute: (query) => globalThis.__conversationListExecute(query) }',
+    'export const db = { execute: (query, mode) => Promise.resolve(globalThis.__conversationListExecute(query)).then((result) => (mode === "objects" ? result.rows : result)) }',
 } })
 const { listConversations } = await import('./ai-conversations')
 const authz = { user: { orgId: 'owner-org', id: 'owner-user' } } as Authz

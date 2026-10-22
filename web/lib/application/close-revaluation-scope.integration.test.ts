@@ -21,7 +21,7 @@ async function fixture() {
   const unrealizedId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
     values (${randomUUID()}, ${org.orgId}, '7990', 'Unrealized FX', 'expense_other', false, true, false, false, '{}'::jsonb, '{}'::jsonb, true)
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"multiCurrency": true}'::jsonb)
@@ -47,16 +47,16 @@ function contextFor(orgId: string, actor: string, allowed: Set<string> | null): 
 }
 
 async function fxEntryCount(orgId: string): Promise<number> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries
-     where org_id = ${orgId} and origin = 'fx_revaluation'`))).rows;
+     where org_id = ${orgId} and origin = 'fx_revaluation'`, "objects"));
   return rows[0]!.n;
 }
 
 async function idempotencyCount(orgId: string, key: string): Promise<number> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
     select count(*)::int as n from application_idempotency_keys
-     where org_id = ${orgId} and operation = 'close.revaluation.run' and idempotency_key = ${key}`))).rows;
+     where org_id = ${orgId} and operation = 'close.revaluation.run' and idempotency_key = ${key}`, "objects"));
   return rows[0]!.n;
 }
 

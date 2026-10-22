@@ -238,8 +238,8 @@ export async function listAccountGroups(dimension: string, orgId?: string): Prom
     from account_groups
     where dimension = ${dimension} and is_active = true${orgFilter}
     order by sort_order, name
-  `));
-  return r.rows.map((x) => ({
+  `, "objects"));
+  return r.map((x) => ({
     id: x.id,
     dimension: x.dimension,
     key: x.key,
@@ -296,12 +296,12 @@ async function resolveGroupsWithAccounts(dimension: string, orgId: string | unde
       join account_groups g on g.id = m.group_id
       where g.dimension = ${dimension} and g.is_active = true${orgFilter}
       order by m.account_id, g.id
-    `),
+    `, "objects"),
     readAccounts(),
   ]);
 
   const pins = new Map<string, GroupRef>();
-  for (const p of pinRows.rows) {
+  for (const p of pinRows) {
     // Migration 0081 makes duplicate account/dimension pins impossible. Keep
     // a deterministic tie-break for legacy rows that predate that constraint
     // so historical reports never depend on the database's physical order.

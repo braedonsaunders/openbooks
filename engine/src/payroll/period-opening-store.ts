@@ -83,22 +83,22 @@ export async function savePayrollPeriodOpening(input: {
     const employee = (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
       select p.id,p.subsidiary_id from parties p where p.org_id=${input.orgId} and p.id=${input.employeePartyId}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
-       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authority)} for share`)).rows[0];
+       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authority)} for share`, 'objects'))[0];
     if (!employee || employee.subsidiary_id !== input.subsidiaryId) throw new PayrollError('The employee is not available in that legal employer — review the native employee identity and your legal-entity scope');
     const profile = (await tx.execute<{ country: string; pay_schedule_id: string | null }>(sql`
       select country,pay_schedule_id from employee_payroll_profiles
-       where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} for share`)).rows[0];
+       where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} for share`, 'objects'))[0];
     if (!profile || profile.country !== input.country) throw new PayrollError('The opening country must match the employee payroll profile — review Payroll → Profiles before saving');
     const subsidiary = (await tx.execute<{ id: string; name: string; country: string | null; baseCurrency: string | null }>(sql`
-      select id,name,country,base_currency as "baseCurrency" from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId} and is_active for share`)).rows[0];
+      select id,name,country,base_currency as "baseCurrency" from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId} and is_active for share`, 'objects'))[0];
     if (!subsidiary || !await organizationCurrencyAvailable(tx, input.orgId, input.currency, input.subsidiaryId)) throw new PayrollError('The opening currency is unavailable for the legal employer — review its currency in Company Settings');
     const context = resolvePayrollRunContext({ payDate: input.paidThrough, subsidiary, runCurrency: input.currency });
     if (context.country !== input.country || context.taxYear !== taxYear) throw new PayrollError('The opening country and tax year must match the legal employer and the paid-through date under its payroll pack');
-    const quantum = (await tx.execute<{ minor_units: number }>(sql`select minor_units from currencies where code=${input.currency} for share`)).rows[0];
+    const quantum = (await tx.execute<{ minor_units: number }>(sql`select minor_units from currencies where code=${input.currency} for share`, 'objects'))[0];
     if (!quantum) throw new PayrollError('The payroll currency is unregistered — review Company Settings → Currencies');
     const schedule = (await tx.execute<ScheduleRow & { subsidiary_id: string | null }>(sql`
       select id,frequency,periods_per_year,anchor_period_end::text as anchor_period_end,pay_date_offset_days,subsidiary_id
-       from pay_schedules where org_id=${input.orgId} and id=${input.payScheduleId} and is_active for share`)).rows[0];
+       from pay_schedules where org_id=${input.orgId} and id=${input.payScheduleId} and is_active for share`, 'objects'))[0];
     if (!schedule || (schedule.subsidiary_id !== null && schedule.subsidiary_id !== input.subsidiaryId)
       || (profile.pay_schedule_id !== null && profile.pay_schedule_id !== input.payScheduleId)) throw new PayrollError('Choose the active payroll schedule assigned to this employee and legal employer');
     const period = nextPeriodAfter(schedule, iso(new Date(at(input.periodEnd).getTime() - DAY)));
@@ -109,24 +109,24 @@ export async function savePayrollPeriodOpening(input: {
       select d.document_number from pay_stubs s join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
        join documents d on d.org_id=r.org_id and d.id=r.document_id
        where s.org_id=${input.orgId} and s.employee_party_id=${input.employeePartyId} and s.tax_year=${taxYear}
-        and r.run_status='committed' order by r.pay_date limit 1`)).rows[0];
+        and r.run_status='committed' order by r.pay_date limit 1`, 'objects'))[0];
     if (committed) throw new PayrollError(`Pay run ${committed.document_number} already used this employee's ${taxYear} opening balances — use its controlled void action before correcting carry-in`);
     const annualColumns = sql.join(OPENING_BALANCE_FIELDS.flatMap((field) => [sql`${field.column}::text`, sql`${sql.identifier('b')}.${sql.identifier(field.column)}::text`]), sql`, `);
     const annual = (await tx.execute<{ id: string; updated_at: string; amounts: Record<string, string> }>(sql`
       select b.id,b.updated_at::text as updated_at,jsonb_build_object(${annualColumns}) as amounts from payroll_opening_balances b
-       where b.org_id=${input.orgId} and b.employee_party_id=${input.employeePartyId} and b.tax_year=${taxYear} for update`)).rows[0];
+       where b.org_id=${input.orgId} and b.employee_party_id=${input.employeePartyId} and b.tax_year=${taxYear} for update`, 'objects'))[0];
     if (!annual) throw new PayrollError('Record the verified annual payroll opening balances before attributing same-period payments');
     if (annual.updated_at !== input.expectedAnnualUpdatedAt) throw new PayrollError('The annual opening balance changed — reload and review both annual and period amounts before saving');
     const current = (await tx.execute<PayrollPeriodOpeningRecord>(sql`select ${COLUMNS} from payroll_period_openings
-      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and tax_year=${taxYear} for update`)).rows[0] ?? null;
+      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and tax_year=${taxYear} for update`, 'objects'))[0] ?? null;
     if ((current?.revision ?? null) !== input.expectedRevision) throw new PayrollError('The period opening changed — reload its current revision and review your source amounts');
     const { payrollPack } = await import('./packs.ts');
     const pack = payrollPack(input.country);
     const treatment = pack.periodOpeningTreatment;
     if (!treatment) throw new PayrollError(`${input.country} does not declare prior-provider period-opening inputs — use a supported payroll pack before admitting same-period payments`);
     const prepared = declaredPeriodOpening({ country: input.country, treatment, amounts: input.amounts, currencyMinorUnits: quantum.minor_units });
-    const programRows = (await tx.execute<{ program_key: string; insurable_ytd: string }>(sql`select program_key,insurable_ytd::text as insurable_ytd
-      from payroll_opening_program_bases where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and tax_year=${taxYear} for share`)).rows;
+    const programRows = await tx.execute<{ program_key: string; insurable_ytd: string }>(sql`select program_key,insurable_ytd::text as insurable_ytd
+      from payroll_opening_program_bases where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and tax_year=${taxYear} for share`, 'objects');
     const bounds: Record<string, string> = {};
     for (const [key, value] of Object.entries(prepared.annualBounds)) {
       const field = OPENING_BALANCE_FIELDS.find((candidate) => candidate.key === key && candidate.packs.includes(input.country));
@@ -149,16 +149,16 @@ export async function savePayrollPeriodOpening(input: {
         amounts=${JSON.stringify(prepared.amounts)}::jsonb,annual_bounds=${JSON.stringify(bounds)}::jsonb,contract_hash=${contractHash},
         source_reference=${sourceReference},reason=${reason},revision=revision+1,updated_by=${input.actorId},
         updated_at=greatest(clock_timestamp(),updated_at+interval '1 microsecond')
-        where org_id=${input.orgId} and id=${current.id} and revision=${input.expectedRevision} returning ${COLUMNS}`)).rows
+        where org_id=${input.orgId} and id=${current.id} and revision=${input.expectedRevision} returning ${COLUMNS}`, 'objects'))
       : (await tx.execute<PayrollPeriodOpeningRecord>(sql`insert into payroll_period_openings
         (org_id,employee_party_id,annual_opening_balance_id,subsidiary_id,pay_schedule_id,country,currency,tax_year,
          period_start,period_end,paid_through,amounts,annual_bounds,contract_hash,source_reference,reason,created_by,updated_by)
         values (${input.orgId},${input.employeePartyId},${annual.id},${input.subsidiaryId},${input.payScheduleId},${input.country},${input.currency},${taxYear},
          ${input.periodStart},${input.periodEnd},${input.paidThrough},${JSON.stringify(prepared.amounts)}::jsonb,${JSON.stringify(bounds)}::jsonb,${contractHash},
-         ${sourceReference},${reason},${input.actorId},${input.actorId}) returning ${COLUMNS}`)).rows;
+         ${sourceReference},${reason},${input.actorId},${input.actorId}) returning ${COLUMNS}`, 'objects'));
     if (rows.length !== 1) throw new PayrollError('The period opening was not saved — reload its current revision and retry');
-    const updatedAnnual = (await tx.execute<{ updated_at: string }>(sql`select updated_at::text as updated_at from payroll_opening_balances
-      where org_id=${input.orgId} and id=${annual.id}`)).rows;
+    const updatedAnnual = await tx.execute<{ updated_at: string }>(sql`select updated_at::text as updated_at from payroll_opening_balances
+      where org_id=${input.orgId} and id=${annual.id}`, 'objects');
     if (updatedAnnual.length !== 1) throw new PayrollError('The annual opening is unavailable — reload opening balances before saving');
     return { changed: true, record: rows[0]!, annualUpdatedAt: updatedAnnual[0]!.updated_at };
   };

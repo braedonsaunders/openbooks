@@ -53,10 +53,10 @@ export async function loadReadinessSnapshot(orgId: string): Promise<ReadinessSna
       (select count(*)::int from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(orgId)}) as posted_entries,
       (select count(*)::int from close_runs cr where cr.org_id=o.id and cr.status in ('closed','published')) as completed_closes
     from orgs o where o.id=${orgId}
-  `))
+  `, 'objects'))
   // The authed org always exists; the zeroed fallback only keeps the guide
   // rendering degraded (rather than crashing) if it ever does not.
-  const org: ReadinessOrgRow = result.rows[0] ?? {
+  const org: ReadinessOrgRow = result[0] ?? {
     name: '',
     legal_name: null,
     base_currency: '',

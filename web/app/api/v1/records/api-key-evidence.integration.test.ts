@@ -34,7 +34,7 @@ async function query<T extends Record<string, unknown>>(
   statement: ReturnType<typeof sql>,
 ): Promise<T[]> {
   return withBypassContext(
-    async () => (await db.execute<T>(statement)).rows as T[],
+    async () => (await db.execute<T>(statement, "objects")) as T[],
   );
 }
 
@@ -115,13 +115,13 @@ async function seedEvidenceOrg(): Promise<EvidenceOrg> {
     // permissions still intersect these grants during authentication.
     for (const userId of [adminUserId, guestUserId]) {
       const generated = generateApiKey();
-      const [row] = (await db.execute<{ id: string }>(sql`
+      const [row] = await db.execute<{ id: string }>(sql`
         insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview, scopes, is_active)
         values (${orgId}, ${userId},
                 ${userId === adminUserId ? "evidence admin key" : "roleless guest key"},
                 ${generated.keyPrefix}, ${generated.keyHash}, ${generated.keyPreview},
                 '["api.keys.manage", "parties.read", "parties.manage"]'::jsonb, true)
-        returning id`)).rows;
+        returning id`, "objects");
       if (userId === adminUserId) {
         adminKey = generated.plaintext;
         adminKeyId = row!.id;
@@ -223,10 +223,10 @@ test("malformed authenticated commands retain execution audit evidence", async (
 
 async function seedParty(orgId: string, displayName: string): Promise<string> {
   const [party] = await withBypassContext(async () =>
-    (await db.execute<{ id: string }>(sql`
+    await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, created_by, updated_by)
       values (${orgId}, 'customer', ${displayName}, null, null)
-      returning id`)).rows);
+      returning id`, "objects"));
   assert.ok(party, "the fixture party exists");
   return party.id;
 }

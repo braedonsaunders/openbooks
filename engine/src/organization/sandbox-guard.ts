@@ -20,12 +20,12 @@ export async function getEnvKind(
 ): Promise<"production" | "sandbox" | "preview"> {
   const hit = envCache.get(orgId);
   if (hit) return hit;
-  const res = (await db.execute(sql`select env_kind from orgs where id = ${orgId}`));
+  const res = (await db.execute(sql`select env_kind from orgs where id = ${orgId}`, "objects"));
   // B3-ORG-01: an UNKNOWN org (no row: deleted or forged id) must fail
   // CLOSED with a named refusal. Defaulting it to 'production' let
   // assertNotSandbox pass, so email, payment files, SFTP and webhooks
   // proceeded for an org nobody can vouch for.
-  const raw = res.rows[0]?.env_kind as string | undefined;
+  const raw = res[0]?.env_kind as string | undefined;
   if (raw == null) {
     throw new Error(`refusing guarded egress for unknown organization ${orgId}: no org row exists`);
   }

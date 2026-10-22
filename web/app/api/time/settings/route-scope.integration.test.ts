@@ -80,12 +80,10 @@ const put = (body: unknown) =>
   );
 
 async function storedRules(orgId: string): Promise<unknown> {
-  const row = (
-    await withBypassContext(() =>
+  const row = (await withBypassContext(() =>
       db.execute<{ settings: unknown }>(sql`
-        select settings->'fieldTime' as settings from orgs where id = ${orgId}`),
-    )
-  ).rows[0];
+        select settings->'fieldTime' as settings from orgs where id = ${orgId}`, "objects"),
+    ))[0];
   return row?.settings ?? null;
 }
 

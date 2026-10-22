@@ -111,7 +111,7 @@ const BASE_PATH = '/cash-sales'
  * the credit posting enforces.
  */
 async function returnableSaleLines(orgId: string, saleId: string) {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     lineId: string; itemId: string | null; accountId: string; amount: string;
     quantity: string; unitPrice: string | null; description: string | null;
     taxCodeId: string | null; stockLocationId: string | null;
@@ -129,7 +129,7 @@ async function returnableSaleLines(orgId: string, saleId: string) {
         on m.org_id = l.org_id and m.document_line_id = l.id
        and l.item_id is not null and m.kind = 'issue' and m.status = 'posted'
      where l.org_id = ${orgId} and l.document_id = ${saleId}
-     order by l.line_number, m.moved_at, m.id`)).rows
+     order by l.line_number, m.moved_at, m.id`, 'objects')
   const returnable = []
   for (const row of rows) {
     if (!row.issueMovementId || row.shipped === null) {
@@ -208,13 +208,13 @@ export async function loadCashSales(
   const tillDefaults = drawerOpen
     ? readCashSalesSettings(
         (await db.execute<{ settings: unknown }>(sql`
-          select settings->'cashSales' as settings from orgs where id = ${authz.user.orgId}`)).rows[0]?.settings,
+          select settings->'cashSales' as settings from orgs where id = ${authz.user.orgId}`, 'objects'))[0]?.settings,
       )
     : null
   const walkInCustomer = tillDefaults?.walkInCustomerId
     ? (await db.execute<{ id: string; display_name: string }>(sql`
         select id, display_name from parties
-         where org_id = ${authz.user.orgId} and id = ${tillDefaults.walkInCustomerId} and is_active limit 1`)).rows[0] ?? null
+         where org_id = ${authz.user.orgId} and id = ${tillDefaults.walkInCustomerId} and is_active limit 1`, 'objects'))[0] ?? null
     : null
   // Refund prefill: `?doc=new&kind=cash_refund&refundFrom=<sale>` proposes a
   // complete refund for review — sale lines at their original amounts with
@@ -244,7 +244,7 @@ export async function loadCashSales(
           from documents d
          where d.org_id = ${authz.user.orgId} and d.id = ${refundFromId} and d.kind = 'cash_sale' and d.status = 'posted'
          ${authz.allowedSubsidiaryIds ? sql`and d.subsidiary_id = any(${[...authz.allowedSubsidiaryIds]}::uuid[])` : sql``}
-         limit 1`)).rows[0] ?? null
+         limit 1`, 'objects'))[0] ?? null
     : null
   const refundLines = refundSource ? await returnableSaleLines(authz.user.orgId, refundSource.id) : []
   // Duplicate prefill: `?doc=new&kind=cash_sale&duplicateFrom=<sale>` copies
@@ -283,7 +283,7 @@ export async function loadCashSales(
           from documents d
          where d.org_id = ${authz.user.orgId} and d.id = ${duplicateFromId} and d.kind = 'cash_sale' and d.status <> 'voided'
          ${authz.allowedSubsidiaryIds ? sql`and d.subsidiary_id = any(${[...authz.allowedSubsidiaryIds]}::uuid[])` : sql``}
-         limit 1`)).rows[0] ?? null
+         limit 1`, 'objects'))[0] ?? null
     : null
   const duplicateSeed = duplicateSource
     ? buildDuplicateSeed({
@@ -301,7 +301,7 @@ export async function loadCashSales(
          where d.org_id = ${authz.user.orgId} and d.kind = 'cash_sale' and d.status <> 'voided'
            and d.document_date < (${await businessToday(authz.user.orgId)})::date
            ${authz.allowedSubsidiaryIds ? sql`and d.subsidiary_id = any(${[...authz.allowedSubsidiaryIds]}::uuid[])` : sql``}
-         order by d.document_date desc, d.created_at desc limit 1`)).rows[0]?.id ?? null
+         order by d.document_date desc, d.created_at desc limit 1`, 'objects'))[0]?.id ?? null
     : null
   // Fast paths join the New menu only for creators: duplicating yesterday's
   // batch as today's draft, and one-form daily summary entry. Href items
@@ -353,7 +353,7 @@ export async function loadCashSales(
                     where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                  )
                )
-             order by coalesce(it.code, it.name), it.name limit 2000`).then((r) => r.rows),
+             order by coalesce(it.code, it.name), it.name limit 2000`, 'objects'),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
           isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
             if (!multi) return null
@@ -365,7 +365,7 @@ export async function loadCashSales(
           // Warehouses for the line-level stock-location picker. Empty hides
           // the picker; a single location is stamped silently instead.
           inventoryEnabled
-            ? db.execute(sql`
+            ? db.execute<Record<string, unknown>>(sql`
               select id, code from stock_locations
                where org_id = ${authz.user.orgId} and is_active order by code`).then((r) => r.rows)
             : [],
@@ -376,7 +376,7 @@ export async function loadCashSales(
             select id, number, name from accounts
              where org_id = ${authz.user.orgId} and is_active and not is_summary
                and type in ('asset_bank', 'asset_current_other')
-             order by number nulls last, name`).then((r) => r.rows),
+             order by number nulls last, name`, 'objects'),
           // Close-out server picker: active employees the tips belong to.
           // Cash kinds only — other drawers have no close-out, and an empty
           // list pools tips for the house split instead of refusing.
@@ -487,7 +487,7 @@ export async function loadCashSales(
     ? (await db.execute<{ name: string }>(sql`
         select name from marketplace_facilitators
          where org_id = ${authz.user.orgId} and is_active
-         order by name`)).rows
+         order by name`, 'objects'))
     : []
   const tenderAccountOptions = (pickers?.[8] ?? []) as { id: string; number: string | null; name: string | null }[]
   const defaultTenderAccountId = tillDefaults?.defaultCashAccountId

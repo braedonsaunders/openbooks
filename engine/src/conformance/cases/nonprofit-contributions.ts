@@ -21,8 +21,8 @@ async function postPledgeCase(
           '{"nonprofit":true,"fundAccounting":true,"pledges":true}'::jsonb,
         true)
        where id = ${ledger.orgId}
-      returning id`);
-    if (enabled.rows.length !== 1) throw new Error("The nonprofit feature settings were not updated.");
+      returning id`, "objects");
+    if (enabled.length !== 1) throw new Error("The nonprofit feature settings were not updated.");
   });
 
   const fund = await provisionFundAccounting({
@@ -79,9 +79,9 @@ async function postPledgeCase(
        where je.org_id = ${ledger.orgId}
          and (je.id = ${booking.entryId} or
               je.custom->'nonprofitPledge'->>'pledgeId' = ${pledge.id})
-       order by je.posting_date, je.entry_number, jl.line_number`);
+       order by je.posting_date, je.entry_number, jl.line_number`, "objects");
     const entries = new Map<string, ActualEntry>();
-    for (const row of rows.rows) {
+    for (const row of rows) {
       let entry = entries.get(row.entryId);
       if (!entry) {
         entry = {

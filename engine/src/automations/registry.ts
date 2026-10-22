@@ -158,8 +158,8 @@ export async function loadSubjectSnapshot(
            and (r.effective_to is null or r.effective_to > current_date)
          where e.org_id = ${orgId} and e.id = ${subjectId}
          limit 1
-      `);
-      const row = rows.rows[0];
+      `, "objects");
+      const row = rows[0];
       if (!row) return null;
       return {
         entity,
@@ -187,8 +187,8 @@ export async function loadSubjectSnapshot(
            and (a.effective_to is null or a.effective_to > current_date)
          where r.org_id = ${orgId} and r.id = ${subjectId}
          limit 1
-      `);
-      const row = rows.rows[0];
+      `, "objects");
+      const row = rows[0];
       if (!row) return null;
       return {
         entity,
@@ -207,8 +207,8 @@ export async function loadSubjectSnapshot(
           from timesheet_weeks
          where org_id = ${orgId} and id = ${subjectId}
          limit 1
-      `);
-      const row = rows.rows[0];
+      `, "objects");
+      const row = rows[0];
       if (!row) return null;
       return {
         entity,
@@ -223,8 +223,8 @@ export async function loadSubjectSnapshot(
           from documents
          where org_id = ${orgId} and id = ${subjectId}
          limit 1
-      `);
-      const row = rows.rows[0];
+      `, "objects");
+      const row = rows[0];
       if (!row) return null;
       return { entity, fields: pick(row, entry.readableFields), previous: previous ?? null, scope: {} };
     }
@@ -234,8 +234,8 @@ export async function loadSubjectSnapshot(
         select * from ${sql.identifier(table)}
          where org_id = ${orgId} and id = ${subjectId}
          limit 1
-      `);
-      const row = rows.rows[0];
+      `, "objects");
+      const row = rows[0];
       if (!row) return null;
       return { entity, fields: pick(row, entry.readableFields), previous: previous ?? null, scope: {} };
     }

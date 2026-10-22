@@ -129,7 +129,7 @@ function asDbDate(value: Date | string): Date {
 export async function appendOccurrenceEvents(id: string, orgId: string, events: OccurrenceEvent[]): Promise<boolean> {
   if (events.length === 0) return true;
   const appended = await withOrgContext(orgId, () =>
-    db.execute(sql`
+    db.execute<never>(sql`
       update script_runs
          set logs = logs || ${JSON.stringify(events)}::jsonb
        where id = ${id} and org_id = ${orgId}
@@ -146,7 +146,7 @@ async function finalizeOccurrence(
 ): Promise<boolean> {
   // bypass: scheduler-tick — finalizes a claimed occurrence by id before its organization is in scope.
   const finalized = await withBypassContext(() =>
-    db.execute(sql`
+    db.execute<never>(sql`
       update script_runs
          set status = ${status},
              error_message = ${errorMessage},
@@ -224,8 +224,8 @@ export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): 
              ${now}
       from advanced
       returning id
-    `));
-  const row = claimed.rows[0];
+    `, "objects"));
+  const row = claimed[0];
   if (!row) return null;
   return { id: row.id, orgId: s.orgId, scriptId: s.id, occurrenceKey, nextRunAt: next };
 }
@@ -352,8 +352,8 @@ export async function scanDueScripts(): Promise<DueScript[]> {
          and organization.env_kind = 'production'
          and organization.settings #>> '{features,scripts}' = 'true'
        order by next_run_at
-    `));
-  return due.rows.map((row) => ({ ...row, nextRunAt: asDbDate(row.nextRunAt) }));
+    `, "objects"));
+  return due.map((row) => ({ ...row, nextRunAt: asDbDate(row.nextRunAt) }));
 }
 
 /**
@@ -496,10 +496,10 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
          and at < ${staleBefore}
        order by at
        limit ${RECOVERY_BATCH}
-    `));
-  for (const row of stale.rows) {
+    `, "objects"));
+  for (const row of stale) {
     const transitioned = await withOrgContext(row.orgId, () =>
-      db.execute(sql`
+      db.execute<never>(sql`
         update script_runs
            set status = 'dispatch_retry',
                logs = logs || ${JSON.stringify([{ event: "recover", attempt: MAX_OCCURRENCE_ATTEMPTS }])}::jsonb

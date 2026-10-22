@@ -22,9 +22,7 @@ async function pageIds(
 ): Promise<string[][]> {
   const out: string[][] = [];
   for (let page = 1; page <= pages; page++) {
-    const rows = (
-      await db.execute<{ id: string }>(sql`select ${sql.raw(base.select)} ${sql.raw(base.from)} where ${base.where} order by ${order} limit ${perPage} offset ${(page - 1) * perPage}`)
-    ).rows;
+    const rows = await db.execute<{ id: string }>(sql`select ${sql.raw(base.select)} ${sql.raw(base.from)} where ${base.where} order by ${order} limit ${perPage} offset ${(page - 1) * perPage}`, "objects");
     out.push(rows.map((r) => r.id));
   }
   return out;

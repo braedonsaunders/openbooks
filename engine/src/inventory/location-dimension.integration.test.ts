@@ -28,11 +28,11 @@ async function businessLocations(org: ScratchOrg): Promise<{ loc1: string; biz1:
     values (${biz2}, ${org.orgId}, 'W3 site two', true, '{}'::jsonb, null, true)`);
   const loc2 = randomUUID();
   const src = (await db.execute<{ location_id: string; code: string; kind: string }>(sql`
-    select location_id, code, kind from stock_locations where id = ${org.stockLocationId2} and org_id = ${org.orgId}`)).rows[0]!;
+    select location_id, code, kind from stock_locations where id = ${org.stockLocationId2} and org_id = ${org.orgId}`, "objects"))[0]!;
   await db.execute(sql`insert into stock_locations (id, org_id, location_id, code, kind, is_active)
     values (${loc2}, ${org.orgId}, ${biz2}, ${`${src.code}-W3B`}, ${src.kind}, true)`);
   const biz1 = (await db.execute<{ location_id: string }>(sql`
-    select location_id from stock_locations where id = ${loc1} and org_id = ${org.orgId}`)).rows[0]!.location_id;
+    select location_id from stock_locations where id = ${loc1} and org_id = ${org.orgId}`, "objects"))[0]!.location_id;
   return { loc1, biz1, loc2, biz2 };
 }
 
@@ -41,8 +41,8 @@ async function layerValueAt(orgId: string, bizLocationId: string): Promise<bigin
   const r = await db.execute<{ v: string }>(sql`
     select coalesce(sum(round(cl.remaining_quantity * cl.unit_cost, 4)), 0)::text as v
       from cost_layers cl join stock_locations sl on sl.id = cl.stock_location_id and sl.org_id = cl.org_id
-     where cl.org_id = ${orgId} and sl.location_id = ${bizLocationId}`);
-  return toUnits(r.rows[0]!.v);
+     where cl.org_id = ${orgId} and sl.location_id = ${bizLocationId}`, "objects");
+  return toUnits(r[0]!.v);
 }
 
 /** Posted+reversed inventory-asset GL sliced by the line location dimension. */
@@ -52,8 +52,8 @@ async function glAt(orgId: string, accountId: string, bizLocationId: string, asO
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
      where l.org_id = ${orgId} and l.account_id = ${accountId}
        and e.status in ('posted', 'reversed') and e.posting_date <= ${asOf}
-       and l.location_id = ${bizLocationId}`);
-  return toUnits(r.rows[0]!.bal);
+       and l.location_id = ${bizLocationId}`, "objects");
+  return toUnits(r[0]!.bal);
 }
 
 test(
@@ -118,8 +118,8 @@ test(
         select count(*)::text as n
           from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = ${org.orgId}
          where l.org_id = ${org.orgId} and e.origin = 'inventory'
-           and e.status in ('posted', 'reversed') and l.location_id is null`);
-      assert.equal(unstamped.rows[0]!.n, "0", "inventory legs must carry the location dimension");
+           and e.status in ('posted', 'reversed') and l.location_id is null`, "objects");
+      assert.equal(unstamped[0]!.n, "0", "inventory legs must carry the location dimension");
 
       // Per-location GL ties to per-location layers, at an as-of and now.
       for (const asOf of [org.date, "2026-07-31"]) {
@@ -138,11 +138,11 @@ test(
       // Org total still ties (no double-count from the new dimension).
       const total = await db.execute<{ bal: string }>(sql`
         select coalesce(sum(l.amount), 0) as bal from journal_lines l
-        where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.invAsset}`);
+        where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.invAsset}`, "objects");
       const layers = await db.execute<{ v: string }>(sql`
         select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as v
-          from cost_layers where org_id = ${org.orgId}`);
-      assert.equal(toUnits(total.rows[0]!.bal), toUnits(layers.rows[0]!.v), "org-total inventory GL must equal layers");
+          from cost_layers where org_id = ${org.orgId}`, "objects");
+      assert.equal(toUnits(total[0]!.bal), toUnits(layers[0]!.v), "org-total inventory GL must equal layers");
     } finally {
       await dropScratchOrg(org.orgId);
     }

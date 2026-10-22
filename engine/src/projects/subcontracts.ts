@@ -435,8 +435,8 @@ export async function listSubcontractRegister(
       from subcontracts s
       join projects p on p.id = s.project_id and p.org_id = s.org_id
       join parties v on v.id = s.vendor_id and v.org_id = s.org_id
-      ${predicate}`)).rows[0]?.count ?? 0);
-  const rows = (await tx.execute<SubcontractRegisterRow & Record<string, unknown>>(sql`
+      ${predicate}`, "objects"))[0]?.count ?? 0);
+  const rows = await tx.execute<SubcontractRegisterRow & Record<string, unknown>>(sql`
     select s.id, s.number, s.title, s.status, s.currency,
            s.original_commitment::text as "originalCommitment",
            (s.original_commitment + coalesce(changes.approved, 0))::text as "revisedCommitment",
@@ -458,7 +458,7 @@ export async function listSubcontractRegister(
      ${predicate}
      order by case s.status when 'active' then 0 when 'pending_approval' then 1 when 'draft' then 2 else 3 end,
               s.number
-     limit ${perPage} offset ${(page - 1) * perPage}`)).rows;
+     limit ${perPage} offset ${(page - 1) * perPage}`, "objects");
   return { rows, total, page, perPage };
 }
 
@@ -473,7 +473,7 @@ async function projectPostingScope(
     select subsidiary_id as "subsidiaryId" from projects
      where org_id = ${orgId} and id = ${projectId} and is_active
      for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!project || !subsidiaryScopeAllows(allowedSubsidiaryIds, project.subsidiaryId)) {
     throw new SubcontractError("Project not found");
   }
@@ -504,7 +504,7 @@ async function requireAccountAvailableForProject(
       from accounts
      where org_id = ${orgId} and id = ${accountId} and is_active and not is_summary
      for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!account) {
     throw new SubcontractError(`${description} must be an active, non-summary account available to the project's subsidiary`);
   }
@@ -523,7 +523,7 @@ async function requireRetainagePayableAccount(
   const configured = (await tx.execute<{ id: string | null }>(sql`
     select settings->'controlAccounts'->>'retainagePayable' as id
       from orgs where id = ${orgId}
-  `)).rows[0]?.id;
+  `, "objects"))[0]?.id;
   if (!configured) {
     throw new SubcontractError("Retainage Payable control account is not configured; choose an active, non-summary account in Company Settings");
   }
@@ -602,7 +602,7 @@ export async function createSubcontract(input: {
         left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
        where p.org_id = ${input.orgId} and p.id = ${input.projectId} and p.is_active
        for share of p
-    `)).rows[0];
+    `, "objects"))[0];
     if (!project) throw new SubcontractError("Project not found");
     const projectScope = await projectPostingScope(tx, input.orgId, input.userId, input.projectId);
     const vendor = (await tx.execute<{
@@ -615,7 +615,7 @@ export async function createSubcontract(input: {
        where vr.org_id = ${input.orgId} and vr.party_id = ${input.vendorId}
          and vr.is_active and p.is_active
        for share of p, vr
-    `)).rows[0];
+    `, "objects"))[0];
     if (!vendor) throw new SubcontractError("Vendor is not active in this organization");
     if (
       !subsidiaryScopeAllows(projectScope.allowedSubsidiaryIds, vendor.subsidiaryId, { orgWideNull: true }) ||
@@ -626,7 +626,7 @@ export async function createSubcontract(input: {
     if (!project.poOk) throw new SubcontractError("Purchase order does not belong to this project and vendor");
     const currency = input.currency ?? vendor.currency ?? project.baseCurrency;
     if (!currency) throw new SubcontractError("A transaction currency is required");
-    const currencyExists = (await tx.execute(sql`select 1 from currencies where code = ${currency}`)).rows.length > 0;
+    const currencyExists = (await tx.execute(sql`select 1 from currencies where code = ${currency}`, "objects")).length > 0;
     if (!currencyExists) throw new SubcontractError(`Currency ${currency} is not in the currency registry; add it before creating the subcontract`);
     const multiCurrencyEnabled = await lockAndCheckOrgFeature(tx, input.orgId, "multiCurrency");
     if (input.currency != null && !multiCurrencyEnabled) {
@@ -646,8 +646,8 @@ export async function createSubcontract(input: {
         ${input.purchaseOrderId ?? null}, ${input.startsOn ?? null}, ${input.endsOn ?? null},
         ${input.userId}, ${input.userId}
       ) returning *
-    `);
-    const created = result.rows[0]!;
+    `, "objects");
+    const created = result[0]!;
     await audit(tx, input.orgId, "subcontracts", String(created.id), "insert", {
       after: created,
     }, input.userId);
@@ -683,9 +683,9 @@ export async function updateDraftSubcontract(input: {
   if (startsOn && endsOn && endsOn < startsOn) throw new SubcontractError("End date cannot precede start date");
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const before = await tx.execute(sql`select * from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`);
-    if (!before.rows[0]) throw new SubcontractError("Subcontract not found");
-    if (before.rows[0].status !== "draft") throw new SubcontractError("Only a draft subcontract can be edited");
+    const before = await tx.execute(sql`select * from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`, "objects");
+    if (!before[0]) throw new SubcontractError("Subcontract not found");
+    if (before[0].status !== "draft") throw new SubcontractError("Only a draft subcontract can be edited");
     // Concurrent editors are fenced by the stamp the loader read: a stale
     // token writes zero rows, which is a conflict (409), never a success.
     const after = await tx.execute(sql`
@@ -693,13 +693,13 @@ export async function updateDraftSubcontract(input: {
         default_retainage_percent = ${retainage}, starts_on = ${startsOn}, ends_on = ${endsOn},
         updated_at = now(), updated_by = ${input.userId}
       where org_id = ${input.orgId} and id = ${input.id} and updated_at = ${input.expectedUpdatedAt}::timestamptz returning *
-    `);
-    if (!after.rows[0]) {
+    `, "objects");
+    if (!after[0]) {
       throw new SubcontractConflictError(
         "This subcontract changed while you were editing — reload it to see the other editor's values, then re-enter your changes",
       );
     }
-    await audit(tx, input.orgId, "subcontracts", input.id, "update", { before: before.rows[0], after: after.rows[0] }, input.userId);
+    await audit(tx, input.orgId, "subcontracts", input.id, "update", { before: before[0], after: after[0] }, input.userId);
   });
 }
 
@@ -726,10 +726,10 @@ export async function addSubcontractSovLine(input: {
     const owner = await tx.execute<{ status: string; projectId: string }>(sql`
       select status, project_id as "projectId" from subcontracts
        where org_id = ${input.orgId} and id = ${input.subcontractId} for update
-    `);
-    if (!owner.rows[0]) throw new SubcontractError("Subcontract not found");
-    if (owner.rows[0].status !== "draft") throw new SubcontractError("An active subcontract can only change through an approved change order");
-    const projectScope = await projectPostingScope(tx, input.orgId, input.userId, owner.rows[0].projectId);
+    `, "objects");
+    if (!owner[0]) throw new SubcontractError("Subcontract not found");
+    if (owner[0].status !== "draft") throw new SubcontractError("An active subcontract can only change through an approved change order");
+    const projectScope = await projectPostingScope(tx, input.orgId, input.userId, owner[0].projectId);
     if (input.expenseAccountId) {
       await requireAccountAvailableForProject(
         tx,
@@ -744,8 +744,8 @@ export async function addSubcontractSovLine(input: {
         retainage_percent, expense_account_id, sort_order, created_by, updated_by)
       values (${input.orgId}, ${input.subcontractId}, ${input.itemNo ?? null}, ${description}, ${value},
         ${retainage}, ${input.expenseAccountId ?? null}, ${input.sortOrder ?? 0}, ${input.userId}, ${input.userId}) returning id
-    `);
-    const id = result.rows[0]!.id;
+    `, "objects");
+    const id = result[0]!.id;
     await audit(tx, input.orgId, "subcontract_sov_lines", id, "insert", { after: { ...input, scheduledValue: value } }, input.userId);
     return { id };
   });
@@ -761,11 +761,11 @@ export async function removeSubcontractSovLine(
     const row = await tx.execute(sql`
       select l.*, s.status from subcontract_sov_lines l join subcontracts s on s.id = l.subcontract_id and s.org_id = l.org_id
       where l.org_id = ${orgId} and l.id = ${id} for update
-    `);
-    if (!row.rows[0]) throw new SubcontractError("SOV line not found");
-    if (row.rows[0].status !== "draft" || row.rows[0].change_order_id) throw new SubcontractError("A controlled SOV line cannot be deleted");
+    `, "objects");
+    if (!row[0]) throw new SubcontractError("SOV line not found");
+    if (row[0].status !== "draft" || row[0].change_order_id) throw new SubcontractError("A controlled SOV line cannot be deleted");
     await tx.execute(sql`delete from subcontract_sov_lines where org_id = ${orgId} and id = ${id}`);
-    await audit(tx, orgId, "subcontract_sov_lines", id, "delete", { before: row.rows[0] }, userId);
+    await audit(tx, orgId, "subcontract_sov_lines", id, "delete", { before: row[0] }, userId);
   });
 }
 
@@ -783,8 +783,8 @@ export async function submitSubcontract(
              coalesce((select sum(l.scheduled_value) from subcontract_sov_lines l
                where l.org_id = s.org_id and l.subcontract_id = s.id), 0) as sov_total
         from subcontracts s where s.org_id = ${orgId} and s.id = ${id} for update
-    `);
-    const contract = row.rows[0];
+    `, "objects");
+    const contract = row[0];
     if (!contract) throw new SubcontractError("Subcontract not found");
     if (contract.status !== "draft") throw new SubcontractError("Only a draft subcontract can be submitted");
     if (cmp(contract.original_commitment, "0") <= 0 || cmp(contract.sov_total, contract.original_commitment) !== 0) {
@@ -806,8 +806,8 @@ export async function approveSubcontract(
     await lockApprovalSubject(orgId, "subcontract", id);
     const tx = db;
     await assertFeatureEnabled(tx, orgId);
-    const row = await tx.execute<{ status: string; submitted_by: string | null; created_by: string | null }>(sql`select status, submitted_by, created_by from subcontracts where org_id = ${orgId} and id = ${id} for update`);
-    const contract = row.rows[0];
+    const row = await tx.execute<{ status: string; submitted_by: string | null; created_by: string | null }>(sql`select status, submitted_by, created_by from subcontracts where org_id = ${orgId} and id = ${id} for update`, "objects");
+    const contract = row[0];
     if (!contract) throw new SubcontractError("Subcontract not found");
     if (contract.status !== "pending_approval") throw new SubcontractError("Subcontract is not awaiting approval");
     await lockSubcontractCommandAuthority(
@@ -842,8 +842,8 @@ export async function transitionSubcontract(input: {
   const action = parseSubcontractTransitionAction(input.action);
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const row = await tx.execute<{ status: string }>(sql`select status from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`);
-    const status = row.rows[0]?.status;
+    const row = await tx.execute<{ status: string }>(sql`select status from subcontracts where org_id = ${input.orgId} and id = ${input.id} for update`, "objects");
+    const status = row[0]?.status;
     if (!status) throw new SubcontractError("Subcontract not found");
     const next = action === "substantially_complete" ? "substantially_complete" : action === "close" ? "closed" : "void";
     const allowed = action === "substantially_complete" ? status === "active"
@@ -851,8 +851,8 @@ export async function transitionSubcontract(input: {
         : ["draft", "pending_approval"].includes(status);
     if (!allowed) throw new SubcontractError(`Cannot ${action.replace("_", " ")} a ${status} subcontract`);
     if (next === "closed") {
-      const open = await tx.execute(sql`select 1 from vendor_pay_applications where org_id = ${input.orgId} and subcontract_id = ${input.id} and status in ('draft','submitted','approved') limit 1`);
-      if (open.rows.length) throw new SubcontractError("Complete or void open vendor applications before closing");
+      const open = await tx.execute(sql`select 1 from vendor_pay_applications where org_id = ${input.orgId} and subcontract_id = ${input.id} and status in ('draft','submitted','approved') limit 1`, "objects");
+      if (open.length) throw new SubcontractError("Complete or void open vendor applications before closing");
     }
     await tx.execute(sql`update subcontracts set status = ${next}, closed_at = case when ${next} = 'closed' then now() else closed_at end, closed_by = case when ${next} = 'closed' then ${input.userId} else closed_by end, updated_at = now(), updated_by = ${input.userId} where org_id = ${input.orgId} and id = ${input.id}`);
     await audit(tx, input.orgId, "subcontracts", input.id, action, { before: { status }, after: { status: next } }, input.userId);
@@ -874,17 +874,17 @@ export async function createSubcontractChangeOrder(input: {
   if (cmp(amount, "0") < 0 && !input.targetSovLineId) throw new SubcontractError("A deductive change must identify the SOV line it reduces");
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const contract = await tx.execute<{ status: string }>(sql`select status from subcontracts where org_id = ${input.orgId} and id = ${input.subcontractId} for update`);
-    if (!contract.rows[0] || !["active", "substantially_complete"].includes(contract.rows[0].status)) throw new SubcontractError("Only an active subcontract can receive a change order");
+    const contract = await tx.execute<{ status: string }>(sql`select status from subcontracts where org_id = ${input.orgId} and id = ${input.subcontractId} for update`, "objects");
+    if (!contract[0] || !["active", "substantially_complete"].includes(contract[0].status)) throw new SubcontractError("Only an active subcontract can receive a change order");
     if (input.targetSovLineId) {
-      const target = await tx.execute(sql`select 1 from subcontract_sov_lines where org_id = ${input.orgId} and subcontract_id = ${input.subcontractId} and id = ${input.targetSovLineId}`);
-      if (!target.rows.length) throw new SubcontractError("Target SOV line does not belong to this subcontract");
+      const target = await tx.execute(sql`select 1 from subcontract_sov_lines where org_id = ${input.orgId} and subcontract_id = ${input.subcontractId} and id = ${input.targetSovLineId}`, "objects");
+      if (!target.length) throw new SubcontractError("Target SOV line does not belong to this subcontract");
     }
     const result = await tx.execute<{ id: string }>(sql`
       insert into subcontract_change_orders (org_id, subcontract_id, number, description, amount, target_sov_line_id, created_by, updated_by)
       values (${input.orgId}, ${input.subcontractId}, ${number}, ${input.description ?? null}, ${amount}, ${input.targetSovLineId ?? null}, ${input.userId}, ${input.userId}) returning id
-    `);
-    const id = result.rows[0]!.id;
+    `, "objects");
+    const id = result[0]!.id;
     await audit(tx, input.orgId, "subcontract_change_orders", id, "insert", { after: { ...input, amount } }, input.userId);
     return { id };
   });
@@ -914,8 +914,8 @@ export async function approveSubcontractChangeOrder(
       select co.*, s.project_id from subcontract_change_orders co
       join subcontracts s on s.id = co.subcontract_id and s.org_id = co.org_id
       where co.org_id = ${orgId} and co.id = ${id} for update of co, s
-    `);
-    const change = result.rows[0];
+    `, "objects");
+    const change = result[0];
     if (!change) throw new SubcontractError("Change order not found");
     if (change.status !== "draft") throw new SubcontractError("Only a draft change order can be approved");
     await lockSubcontractCommandAuthority(
@@ -941,14 +941,14 @@ export async function approveSubcontractChangeOrder(
        where org_id = ${orgId} and subcontract_id = ${change.subcontract_id}
          and status in ('draft', 'submitted', 'approved')
        limit 1
-    `);
-    if (openApplication.rows.length) {
+    `, "objects");
+    if (openApplication.length) {
       throw new SubcontractError("Complete or void the open vendor application before approving a change order");
     }
     const approved =
       await tx.execute(sql`update subcontract_change_orders set status='approved',approved_on=${approvedOn},approved_at=now(),approved_by=${userId},updated_at=now(),updated_by=${userId}
-      where org_id=${orgId} and id=${id} and status='draft' returning id`);
-    if (approved.rows.length !== 1)
+      where org_id=${orgId} and id=${id} and status='draft' returning id`, "objects");
+    if (approved.length !== 1)
       throw new SubcontractError(
         "The change order changed before its release was recorded.",
       );
@@ -959,9 +959,9 @@ export async function approveSubcontractChangeOrder(
             from vendor_pay_application_lines vpal join vendor_pay_applications vpa on vpa.id = vpal.pay_application_id and vpa.org_id = vpal.org_id
             where vpal.org_id = ${orgId} and vpal.sov_line_id = l.id and vpa.status in ('billed','approved','submitted')), 0) as earned
         from subcontract_sov_lines l where l.org_id = ${orgId} and l.subcontract_id = ${change.subcontract_id} and l.id = ${change.target_sov_line_id} for update
-      `);
-      if (!line.rows[0]) throw new SubcontractError("Target SOV line not found");
-      const revised = revisedSubcontractSovValue(line.rows[0].scheduled_value, change.amount, line.rows[0].earned);
+      `, "objects");
+      if (!line[0]) throw new SubcontractError("Target SOV line not found");
+      const revised = revisedSubcontractSovValue(line[0].scheduled_value, change.amount, line[0].earned);
       await tx.execute(sql`update subcontract_sov_lines set scheduled_value = ${revised}, updated_at = now(), updated_by = ${userId} where org_id = ${orgId} and id = ${change.target_sov_line_id}`);
     } else {
       await tx.execute(sql`
@@ -983,8 +983,8 @@ export async function voidSubcontractChangeOrder(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, orgId);
-    const result = await tx.execute(sql`update subcontract_change_orders set status = 'void', updated_at = now(), updated_by = ${userId} where org_id = ${orgId} and id = ${id} and status = 'draft' returning id`);
-    if (!result.rows[0])
+    const result = await tx.execute(sql`update subcontract_change_orders set status = 'void', updated_at = now(), updated_by = ${userId} where org_id = ${orgId} and id = ${id} and status = 'draft' returning id`, "objects");
+    if (!result[0])
       throw new SubcontractError("Only a draft change order can be voided");
     await audit(tx, orgId, "subcontract_change_orders", id, "void", { after: { status: "void" } }, userId);
   });
@@ -1000,8 +1000,8 @@ export async function createVendorPayApplication(input: {
   requireSubcontractDate(input.periodEnd, "Period ending");
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const contract = await tx.execute<{ status: string; default_retainage_percent: string }>(sql`select status, default_retainage_percent from subcontracts where org_id = ${input.orgId} and id = ${input.subcontractId} for update`);
-    if (!contract.rows[0] || !["active", "substantially_complete"].includes(contract.rows[0].status)) throw new SubcontractError("Subcontract is not active");
+    const contract = await tx.execute<{ status: string; default_retainage_percent: string }>(sql`select status, default_retainage_percent from subcontracts where org_id = ${input.orgId} and id = ${input.subcontractId} for update`, "objects");
+    if (!contract[0] || !["active", "substantially_complete"].includes(contract[0].status)) throw new SubcontractError("Subcontract is not active");
     // A billed draw is not open: the new draw carries its earned-to-date as
     // previous_earned. That basis stays true because a billed draw can never
     // return to approved or void while this later draw exists
@@ -1013,17 +1013,17 @@ export async function createVendorPayApplication(input: {
              -- against a Date object is always false and would admit any period.
              (max(period_end) filter (where status = 'billed'))::text as last_period
         from vendor_pay_applications where org_id = ${input.orgId} and subcontract_id = ${input.subcontractId}
-    `);
-    if (lifecycle.rows[0]!.has_open) throw new SubcontractError("Complete or void the open vendor application first");
-    if (lifecycle.rows[0]!.last_period && input.periodEnd <= lifecycle.rows[0]!.last_period!) throw new SubcontractError("Period ending must follow the last billed application");
-    const number = Number(lifecycle.rows[0]!.next_number);
+    `, "objects");
+    if (lifecycle[0]!.has_open) throw new SubcontractError("Complete or void the open vendor application first");
+    if (lifecycle[0]!.last_period && input.periodEnd <= lifecycle[0]!.last_period!) throw new SubcontractError("Period ending must follow the last billed application");
+    const number = Number(lifecycle[0]!.next_number);
     const created = await tx.execute<{ id: string }>(sql`
       insert into vendor_pay_applications (org_id, subcontract_id, application_number, period_end, vendor_invoice_number,
         default_retainage_percent, created_by, updated_by)
       values (${input.orgId}, ${input.subcontractId}, ${number}, ${input.periodEnd}, ${input.vendorInvoiceNumber ?? null},
-        ${contract.rows[0]!.default_retainage_percent}, ${input.userId}, ${input.userId}) returning id
-    `);
-    const id = created.rows[0]!.id;
+        ${contract[0]!.default_retainage_percent}, ${input.userId}, ${input.userId}) returning id
+    `, "objects");
+    const id = created[0]!.id;
     await tx.execute(sql`
       insert into vendor_pay_application_lines (
         org_id, pay_application_id, sov_line_id, previous_earned, previous_materials_stored,
@@ -1031,7 +1031,7 @@ export async function createVendorPayApplication(input: {
       )
       select ${input.orgId}, ${id}, sov.id,
              coalesce(prior.earned, 0), coalesce(prior.materials_stored, 0),
-             coalesce(sov.retainage_percent, ${contract.rows[0]!.default_retainage_percent}), ${input.userId}, ${input.userId}
+             coalesce(sov.retainage_percent, ${contract[0]!.default_retainage_percent}), ${input.userId}, ${input.userId}
         from subcontract_sov_lines sov
         left join lateral (
           select (vpal.previous_earned + vpal.work_completed_this_period + vpal.materials_stored_current - vpal.previous_materials_stored) as earned,
@@ -1095,10 +1095,10 @@ export async function updateVendorPayApplicationLines(input: {
   });
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const app = await tx.execute<{ status: string; revision: number }>(sql`select status, revision from vendor_pay_applications where org_id = ${input.orgId} and id = ${input.payApplicationId} for update`);
-    if (!app.rows[0]) throw new SubcontractError("Vendor application not found");
-    if (app.rows[0].status !== "draft") throw new SubcontractError("Only a draft application can be edited");
-    const current = Number(app.rows[0].revision);
+    const app = await tx.execute<{ status: string; revision: number }>(sql`select status, revision from vendor_pay_applications where org_id = ${input.orgId} and id = ${input.payApplicationId} for update`, "objects");
+    if (!app[0]) throw new SubcontractError("Vendor application not found");
+    if (app[0].status !== "draft") throw new SubcontractError("Only a draft application can be edited");
+    const current = Number(app[0].revision);
     if (current !== input.expectedRevision) {
       throw new SubcontractConflictError(
         `This application changed while you were editing (revision ${current}, you hold ${input.expectedRevision}) — reload it to see the other editor's values, then re-enter your changes`,
@@ -1110,14 +1110,14 @@ export async function updateVendorPayApplicationLines(input: {
           updated_at = now(), updated_by = ${input.userId}
         where org_id = ${input.orgId} and pay_application_id = ${input.payApplicationId} and sov_line_id = ${line.sovLineId}
         returning id
-      `);
-      if (!changed.rows.length) throw new SubcontractError(`${line.tagged}: application line does not belong to this application`);
+      `, "objects");
+      if (!changed.length) throw new SubcontractError(`${line.tagged}: application line does not belong to this application`);
     }
     const bumped = (await tx.execute<{ revision: number }>(sql`
       update vendor_pay_applications set revision = revision + 1, updated_at = now(), updated_by = ${input.userId}
        where org_id = ${input.orgId} and id = ${input.payApplicationId}
        returning revision
-    `)).rows[0]!.revision;
+    `, "objects"))[0]!.revision;
     const revision = Number(bumped);
     const computed = await computeApplicationTx(tx, input.orgId, input.payApplicationId);
     await audit(tx, input.orgId, "vendor_pay_applications", input.payApplicationId, "update_lines", { computed, revision }, input.userId);
@@ -1130,7 +1130,7 @@ export async function updateVendorPayApplicationLines(input: {
 async function retainageCurrencyMinorUnits(tx: SqlExecutor, currency: string): Promise<number> {
   const row = (await tx.execute<{ minor_units: number }>(sql`
     select minor_units from currencies where code = ${currency}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row || !Number.isInteger(row.minor_units)) {
     throw new SubcontractError(
       `Currency ${currency} is not in the currency registry — add it before billing retainage`,
@@ -1149,7 +1149,7 @@ async function computeApplicationTx(
       from vendor_pay_applications a
       join subcontracts s on s.id = a.subcontract_id and s.org_id = a.org_id
      where a.org_id = ${orgId} and a.id = ${payApplicationId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!meta) throw new SubcontractError("Vendor application not found");
   if (!meta.currency) throw new SubcontractError("Retainage settlement requires a subcontract currency");
   // Serialize the replay on the subcontract row: two concurrent submits must
@@ -1165,7 +1165,7 @@ async function computeApplicationTx(
   // never voided) is stable between submit and bill generation: later draws
   // take higher numbers, and voiding a billed draw returns it to approved
   // rather than removing it.
-  const prior = (await tx.execute<{ gross: string; percent: string }>(sql`
+  const prior = await tx.execute<{ gross: string; percent: string }>(sql`
     select (l.work_completed_this_period + l.materials_stored_current - l.previous_materials_stored)::text as gross,
            l.retainage_percent::text as percent
       from vendor_pay_application_lines l
@@ -1174,7 +1174,7 @@ async function computeApplicationTx(
      where l.org_id = ${orgId} and a.subcontract_id = ${meta.subcontract_id}
        and a.application_number < ${meta.application_number} and a.status <> 'void'
      order by a.application_number, s.sort_order
-  `)).rows;
+  `, "objects");
   const priorExactRetainage = prior.map((row) =>
     cmp(row.gross, "0") > 0 && cmp(row.percent, "0") > 0 ? mulPercent(row.gross, row.percent) : "0.0000",
   );
@@ -1193,9 +1193,9 @@ async function computeApplicationTx(
       join subcontract_sov_lines s on s.id = l.sov_line_id and s.org_id = l.org_id
      where l.org_id = ${orgId} and l.pay_application_id = ${payApplicationId}
      order by s.sort_order
-  `);
-  if (!result.rows.length) throw new SubcontractError("Vendor application has no SOV lines");
-  return computeVendorApplication(result.rows.map((row) => ({
+  `, "objects");
+  if (!result.length) throw new SubcontractError("Vendor application has no SOV lines");
+  return computeVendorApplication(result.map((row) => ({
     sovLineId: row.sov_line_id,
     scheduledValue: row.scheduled_value,
     previousEarned: row.previous_earned,
@@ -1215,9 +1215,9 @@ export async function submitVendorPayApplication(
     await lockApprovalSubject(orgId, "vendor_pay_application", id);
     const tx = db;
     await assertFeatureEnabled(tx, orgId);
-    const app = await tx.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id = ${orgId} and id = ${id} for update`);
-    if (!app.rows[0]) throw new SubcontractError("Vendor application not found");
-    if (app.rows[0].status !== "draft") throw new SubcontractError("Only a draft application can be submitted");
+    const app = await tx.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id = ${orgId} and id = ${id} for update`, "objects");
+    if (!app[0]) throw new SubcontractError("Vendor application not found");
+    if (app[0].status !== "draft") throw new SubcontractError("Only a draft application can be submitted");
     const computed = await computeApplicationTx(tx, orgId, id);
     if (cmp(computed.grossThisPeriod, "0") <= 0) throw new SubcontractError("Application must request a positive amount");
     await tx.execute(sql`
@@ -1242,9 +1242,9 @@ export async function approveVendorPayApplication(
     await lockApprovalSubject(orgId, "vendor_pay_application", id);
     const tx = db;
     await assertFeatureEnabled(tx, orgId);
-    const app = await tx.execute<{ status: string; submitted_by: string | null; created_by: string | null }>(sql`select status, submitted_by, created_by from vendor_pay_applications where org_id = ${orgId} and id = ${id} for update`);
-    if (!app.rows[0]) throw new SubcontractError("Vendor application not found");
-    if (app.rows[0].status !== "submitted") throw new SubcontractError("Application is not awaiting approval");
+    const app = await tx.execute<{ status: string; submitted_by: string | null; created_by: string | null }>(sql`select status, submitted_by, created_by from vendor_pay_applications where org_id = ${orgId} and id = ${id} for update`, "objects");
+    if (!app[0]) throw new SubcontractError("Vendor application not found");
+    if (app[0].status !== "submitted") throw new SubcontractError("Application is not awaiting approval");
     await lockSubcontractCommandAuthority(
       orgId,
       userId,
@@ -1286,12 +1286,12 @@ export async function laterVendorApplicationNumbers(
   subcontractId: string,
   applicationNumber: number,
 ): Promise<number[]> {
-  const rows = (await tx.execute<{ application_number: number }>(sql`
+  const rows = await tx.execute<{ application_number: number }>(sql`
     select application_number from vendor_pay_applications
      where org_id = ${orgId} and subcontract_id = ${subcontractId}
        and application_number > ${applicationNumber} and status <> 'void'
      order by application_number
-  `)).rows;
+  `, "objects");
   return rows.map((row) => Number(row.application_number));
 }
 
@@ -1328,7 +1328,7 @@ export async function voidVendorPayApplication(
     }>(sql`
       select subcontract_id, application_number, status, vendor_bill_document_id from vendor_pay_applications
        where org_id = ${orgId} and id = ${id} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!app) throw new SubcontractError("Vendor application not found");
     if (!["draft", "submitted", "approved"].includes(app.status) || app.vendor_bill_document_id) {
       throw new SubcontractError("A billed or void application cannot be voided here");
@@ -1341,8 +1341,8 @@ export async function voidVendorPayApplication(
     const result = await tx.execute(sql`
       update vendor_pay_applications set status = 'void', updated_at = now(), updated_by = ${userId}
       where org_id = ${orgId} and id = ${id} and status in ('draft','submitted','approved') and vendor_bill_document_id is null returning id
-    `);
-    if (!result.rows.length) throw new SubcontractError("A billed or void application cannot be voided here");
+    `, "objects");
+    if (!result.length) throw new SubcontractError("A billed or void application cannot be voided here");
     await audit(tx, orgId, "vendor_pay_applications", id, "void", { before: { status: app.status }, after: { status: "void" } }, userId);
   });
 }
@@ -1374,13 +1374,13 @@ export async function generateVendorPayApplicationBill(
         join subcontracts s on s.id = vpa.subcontract_id and s.org_id = vpa.org_id
         join projects p on p.id = s.project_id and p.org_id = s.org_id
        where vpa.org_id = ${orgId} and vpa.id = ${id} for update of vpa
-    `);
-    const app = result.rows[0];
+    `, "objects");
+    const app = result[0];
     if (!app) throw new SubcontractError("Vendor application not found");
     const projectScope = await projectPostingScope(tx, orgId, userId, app.project_id);
     if (app.vendor_bill_document_id) {
-      const document = await tx.execute<{ document_number: string }>(sql`select document_number from documents where org_id = ${orgId} and id = ${app.vendor_bill_document_id}`);
-      return { vendorBillDocumentId: app.vendor_bill_document_id, documentNumber: document.rows[0]!.document_number, netDue: app.net_due };
+      const document = await tx.execute<{ document_number: string }>(sql`select document_number from documents where org_id = ${orgId} and id = ${app.vendor_bill_document_id}`, "objects");
+      return { vendorBillDocumentId: app.vendor_bill_document_id, documentNumber: document[0]!.document_number, netDue: app.net_due };
     }
     if (app.status !== "approved") throw new SubcontractError("Only an approved vendor application can create a bill");
     const retainageAccountId = cmp(app.retainage_this_period, "0") > 0
@@ -1400,9 +1400,9 @@ export async function generateVendorPayApplicationBill(
         left join vendor_roles vr on vr.org_id = s.org_id and vr.party_id = s.vendor_id
        where l.org_id = ${orgId} and l.pay_application_id = ${id}
        order by sov.sort_order
-    `);
+    `, "objects");
     const validatedAccounts = new Set<string>();
-    for (const line of detail.rows) {
+    for (const line of detail) {
       if (cmp(persistVendorBillLineGross(line.gross), "0") === 0) continue;
       if (!line.account_id) {
         throw new SubcontractError(`SOV line "${line.description}" requires an account. Configure its expense account or the vendor's default expense account before generating the bill.`);
@@ -1434,10 +1434,10 @@ export async function generateVendorPayApplicationBill(
         ${app.project_id}, ${app.subsidiary_id}, ${app.vendor_invoice_number}, ${`Subcontract application #${app.application_number}`},
         ${app.net_due}, '0', ${app.net_due}, ${JSON.stringify({ subcontractId: app.subcontract_id, vendorPayApplicationId: id })}::jsonb,
         ${userId}, ${userId}) returning id
-    `);
-    const vendorBillDocumentId = document.rows[0]!.id;
+    `, "objects");
+    const vendorBillDocumentId = document[0]!.id;
     let lineNumber = 1;
-    for (const line of detail.rows) {
+    for (const line of detail) {
       const amount = persistVendorBillLineGross(line.gross);
       if (cmp(amount, "0") === 0) continue;
       await tx.execute(sql`
@@ -1485,8 +1485,8 @@ export async function releaseVendorRetainage(input: {
       select s.project_id, s.vendor_id, s.currency, s.status, p.subsidiary_id
         from subcontracts s join projects p on p.id = s.project_id and p.org_id = s.org_id
        where s.org_id = ${input.orgId} and s.id = ${input.subcontractId} for update of s
-    `);
-    const row = contract.rows[0];
+    `, "objects");
+    const row = contract[0];
     if (!row || !["active", "substantially_complete", "closed"].includes(row.status)) throw new SubcontractError("Subcontract not found or cannot release retainage");
     const projectScope = await projectPostingScope(tx, input.orgId, input.userId, row.project_id);
     const retainageAccountId = await requireRetainagePayableAccount(
@@ -1500,8 +1500,8 @@ export async function releaseVendorRetainage(input: {
                where vrr.org_id = ${input.orgId} and vrr.subcontract_id = ${input.subcontractId} and rd.status <> 'voided'), 0) as released
         from vendor_pay_applications vpa left join documents d on d.id = vpa.vendor_bill_document_id and d.org_id = vpa.org_id
        where vpa.org_id = ${input.orgId} and vpa.subcontract_id = ${input.subcontractId} and vpa.status = 'billed'
-    `);
-    const available = add(balance.rows[0]?.held ?? "0", neg(balance.rows[0]?.released ?? "0"));
+    `, "objects");
+    const available = add(balance[0]?.held ?? "0", neg(balance[0]?.released ?? "0"));
     if (cmp(amount, available) > 0) throw new SubcontractError("Release exceeds posted retainage currently held");
     // Payable totals obey the currency policy: settled draws hold whole minor
     // units, so a fractional release could never reconcile exactly.
@@ -1511,15 +1511,15 @@ export async function releaseVendorRetainage(input: {
         `Release amount must be in whole minor units of ${row.currency} (${releaseMinorUnits} decimals)`,
       );
     }
-    const sourceBills = (await tx.execute<{ documentId: string; held: string }>(sql`
+    const sourceBills = await tx.execute<{ documentId: string; held: string }>(sql`
       select d.id as "documentId", a.retainage_this_period::text as held
         from vendor_pay_applications a join documents d on d.org_id=a.org_id and d.id=a.vendor_bill_document_id
        where a.org_id=${input.orgId} and a.subcontract_id=${input.subcontractId} and a.status='billed'
          and d.status='posted' and a.retainage_this_period > 0
        order by a.application_number, a.id
-    `)).rows;
+    `, "objects");
     let sources: ReturnType<typeof reserveVendorRetainageSources>;
-    try { sources = reserveVendorRetainageSources(sourceBills, balance.rows[0]?.released ?? "0", amount); }
+    try { sources = reserveVendorRetainageSources(sourceBills, balance[0]?.released ?? "0", amount); }
     catch (error) { throw new SubcontractError(error instanceof Error ? error.message : "Retainage sources cannot be resolved"); }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, "BILL-");
     const document = await tx.execute<{ id: string }>(sql`
@@ -1528,8 +1528,8 @@ export async function releaseVendorRetainage(input: {
       values (${input.orgId}, 'vendor_bill', ${documentNumber}, ${row.vendor_id}, ${input.periodEnd}, ${row.currency}, 'draft',
         ${row.project_id}, ${row.subsidiary_id}, ${input.memo ?? "Subcontract retainage release"}, ${amount}, '0', ${amount},
         ${JSON.stringify({ subcontractId: input.subcontractId, kind: "retainage_release" })}::jsonb, ${input.userId}, ${input.userId}) returning id
-    `);
-    const vendorBillDocumentId = document.rows[0]!.id;
+    `, "objects");
+    const vendorBillDocumentId = document[0]!.id;
     await tx.execute(sql`
       insert into document_lines (org_id, document_id, line_number, account_id, description, quantity, unit_price,
         amount, project_id, party_id, is_billable, created_by, updated_by)
@@ -1539,8 +1539,8 @@ export async function releaseVendorRetainage(input: {
     const release = await tx.execute<{ id: string }>(sql`
       insert into vendor_retainage_releases (org_id, subcontract_id, period_end, amount, vendor_bill_document_id, memo, source_bill_allocations, created_by, updated_by)
       values (${input.orgId}, ${input.subcontractId}, ${input.periodEnd}, ${amount}, ${vendorBillDocumentId}, ${input.memo ?? null}, ${JSON.stringify(sources)}::jsonb, ${input.userId}, ${input.userId}) returning id
-    `);
-    await audit(tx, input.orgId, "vendor_retainage_releases", release.rows[0]!.id, "insert", { after: { amount, vendorBillDocumentId, documentNumber, availableBefore: available, sources } }, input.userId);
+    `, "objects");
+    await audit(tx, input.orgId, "vendor_retainage_releases", release[0]!.id, "insert", { after: { amount, vendorBillDocumentId, documentNumber, availableBefore: available, sources } }, input.userId);
     return { vendorBillDocumentId, documentNumber, amount };
   });
 }
@@ -1580,8 +1580,8 @@ export async function createSubcontractPaymentControl(input: {
         from subcontracts s
        where s.org_id = ${input.orgId} and s.id = ${input.subcontractId}
        for share of s
-    `);
-    const row = scope.rows[0];
+    `, "objects");
+    const row = scope[0];
     if (!row) throw new SubcontractError("Subcontract not found");
     const projectScope = await projectPostingScope(tx, input.orgId, input.userId, row.projectId);
     if (input.jointPayeePartyId) {
@@ -1589,7 +1589,7 @@ export async function createSubcontractPaymentControl(input: {
         select subsidiary_id as "subsidiaryId" from parties
          where org_id = ${input.orgId} and id = ${input.jointPayeePartyId} and is_active
          for share
-      `)).rows[0];
+      `, "objects"))[0];
       if (!payee) throw new SubcontractError("Joint payee not found in this organization");
       if (
         !subsidiaryScopeAllows(projectScope.allowedSubsidiaryIds, payee.subsidiaryId, { orgWideNull: true }) ||
@@ -1606,8 +1606,8 @@ export async function createSubcontractPaymentControl(input: {
       values (${input.orgId}, ${input.subcontractId}, ${input.payApplicationId ?? null}, ${input.vendorBillDocumentId ?? null},
         ${input.controlType}, ${input.jointPayeePartyId ?? null}, ${amountLimit}, ${reason}, ${effectiveOn}, ${expiresOn},
         ${input.userId}, ${input.userId}) returning id
-    `);
-    const id = result.rows[0]!.id;
+    `, "objects");
+    const id = result[0]!.id;
     await audit(tx, input.orgId, "subcontract_payment_controls", id, "insert", { after: input }, input.userId);
     return { id };
   });
@@ -1627,8 +1627,8 @@ export async function releaseSubcontractPaymentControl(
       update subcontract_payment_controls set status = 'released', released_at = now(), released_by = ${userId},
         release_reason = ${reason}, updated_at = now(), updated_by = ${userId}
       where org_id = ${orgId} and id = ${id} and status = 'active' returning id
-    `);
-    if (!result.rows.length) throw new SubcontractError("Active payment control not found");
+    `, "objects");
+    if (!result.length) throw new SubcontractError("Active payment control not found");
     await audit(tx, orgId, "subcontract_payment_controls", id, "release", { after: { status: "released", releaseReason: reason } }, userId);
   });
 }
@@ -1656,8 +1656,8 @@ export async function assertSubcontractPaymentCleared(
        and pc.effective_on <= ${today} and (pc.expires_on is null or pc.expires_on >= ${today})
        and (${paymentAmount ?? null}::numeric is null or pc.amount_limit is null or ${paymentAmount ?? null}::numeric > pc.amount_limit)
      order by pc.amount_limit nulls first, pc.created_at
-  `);
-  const control = result.rows[0];
+  `, "objects");
+  const control = result[0];
   if (!control) return;
   const threshold = control.amount_limit ? ` above ${control.amount_limit}` : "";
   if (control.control_type === "joint_check") {
@@ -1679,14 +1679,12 @@ async function lockSubcontractCommandAuthority(
       : kind === "subcontract_change_order"
         ? "subcontract_change_orders"
         : "vendor_pay_applications";
-  const row = (
-    await db.execute<{
+  const row = (await db.execute<{
       subsidiary_id: string;
     }>(sql`select p.subsidiary_id from ${sql.identifier(table)} child
     ${kind === "subcontract" ? sql`` : sql`join subcontracts parent on parent.org_id=child.org_id and parent.id=child.subcontract_id`}
     join projects p on p.org_id=child.org_id and p.id=${kind === "subcontract" ? sql`child.project_id` : sql`parent.project_id`}
-    where child.org_id=${orgId} and child.id=${id} for share of p`)
-  ).rows[0];
+    where child.org_id=${orgId} and child.id=${id} for share of p`, "objects"))[0];
   if (!row) throw new SubcontractError("Subcontract not found");
   await lockActorCommandAuthority(
     db,

@@ -41,15 +41,16 @@ let queries: { sql: string; params: unknown[] }[] = []
 let writes: string[] = []
 let rolledBack = false
 
-db.execute = (async (query) => {
+db.execute = (async (query: Parameters<typeof db.execute>[0], mode?: string) => {
+  const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
   const compiled = dialect.sqlToQuery(query as Parameters<PgDialect['sqlToQuery']>[0]); queries.push(compiled)
   const text = compiled.sql
   assert.ok(compiled.params.includes('company-one') || text.includes('pg_advisory_xact_lock'), `organization scope: ${text}`)
-  if (text.includes('from org_nav_configs')) return { rows: before ? [{ id: 'navigation-one', config: before, updated_at: revision }] : [] }
-  if (text.includes('from apps a') || text.includes('from apps m')) return { rows: [] }
-  if (text.includes('insert into org_nav_configs')) { writes.push('configuration'); return { rows: zeroRows ? [] : [{ id: 'navigation-one', updated_at: revision }] } }
-  if (text.includes('insert into audit_log')) { writes.push('audit'); return { rows: zeroAuditRows ? [] : [{ id: 'audit-one' }] } }
-  if (text.includes('pg_advisory_xact_lock')) return { rows: [] }
+  if (text.includes('from org_nav_configs')) return inMode({ rows: before ? [{ id: 'navigation-one', config: before, updated_at: revision }] : [] })
+  if (text.includes('from apps a') || text.includes('from apps m')) return inMode({ rows: [] })
+  if (text.includes('insert into org_nav_configs')) { writes.push('configuration'); return inMode({ rows: zeroRows ? [] : [{ id: 'navigation-one', updated_at: revision }] }) }
+  if (text.includes('insert into audit_log')) { writes.push('audit'); return inMode({ rows: zeroAuditRows ? [] : [{ id: 'audit-one' }] }) }
+  if (text.includes('pg_advisory_xact_lock')) return inMode({ rows: [] })
   throw new Error(`Unexpected navigation write query: ${text}`)
 }) as typeof db.execute
 

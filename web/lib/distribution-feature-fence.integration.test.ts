@@ -114,8 +114,8 @@ const FEATURES_REMEDY = /turn on Warehousing in Company Settings → Features/
 async function setFeature(orgId: string, key: string, on: boolean) {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || jsonb_build_object(${key}::text, ${on}::boolean))
-     where id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1, `feature setting for ${key} must be stored`)
+     where id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1, `feature setting for ${key} must be stored`)
 }
 
 async function withFencedOrg(run: (org: ScratchOrg, actorId: string) => Promise<void>) {
@@ -125,8 +125,8 @@ async function withFencedOrg(run: (org: ScratchOrg, actorId: string) => Promise<
       const id = (await seedFlowActors(org.orgId)).adminId
       const grant = await db.execute(sql`update app_roles set permissions=permissions || '["orders.fulfill"]'::jsonb
         where org_id=${org.orgId} and id in (select role_id from role_assignments
-          where org_id=${org.orgId} and user_id=${id}) returning id`)
-      assert.ok(grant.rows.length, 'fulfillment fixture requires an actual assigned operator grant')
+          where org_id=${org.orgId} and user_id=${id}) returning id`, 'objects')
+      assert.ok(grant.length, 'fulfillment fixture requires an actual assigned operator grant')
       return id
     })
     state.authz = {
@@ -169,7 +169,7 @@ async function evidence(orgId: string) {
     'warehouses', (select jsonb_agg(to_jsonb(w) order by stock_location_id) from warehouses w where org_id = ${orgId}),
     'rules', (select jsonb_agg(to_jsonb(r) order by id) from putaway_rules r where org_id = ${orgId}),
     'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId} and table_name in ('warehouses', 'putaway_rules'))
-  ) as state`)).rows[0]!.state)
+  ) as state`, 'objects'))[0]!.state)
 }
 
 // ---- Warehousing ----------------------------------------------------------
@@ -302,7 +302,7 @@ async function fulfillmentEvidence(orgId: string) {
     'lines', (select jsonb_agg(to_jsonb(l) order by line_id) from fulfillment_lines l where org_id = ${orgId}),
     'cancellations', (select jsonb_agg(to_jsonb(x) order by id) from order_line_cancellations x where org_id = ${orgId}),
     'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId} and table_name in ('fulfillment_documents', 'document_lines', 'carriers'))
-  ) as state`)).rows[0]!.state)
+  ) as state`, 'objects'))[0]!.state)
 }
 
 async function fulfillmentRefusal(run: () => Promise<unknown>) {
@@ -447,7 +447,7 @@ test('return authorizations are hidden while off and retain their records and au
       select jsonb_build_object(
         'authorization', (select to_jsonb(r) from rma_documents r where org_id = ${org.orgId} and document_id = ${rmaId}),
         'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${org.orgId} and table_name = 'rma_documents')
-      ) as state`)).then((result) => result.rows[0]!.state)
+      ) as state`, 'objects')).then((result) => result[0]!.state)
     const listed = await withBypassContext(() => returnEngine.listReturnAuthorizations(db, org.orgId, null))
     assert.equal(listed.some((entry: { id: string }) => entry.id === rmaId), true)
 
@@ -481,7 +481,7 @@ test('return authorizations are hidden while off and retain their records and au
       select jsonb_build_object(
         'authorization', (select to_jsonb(r) from rma_documents r where org_id = ${org.orgId} and document_id = ${rmaId}),
         'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${org.orgId} and table_name = 'rma_documents')
-      ) as state`)).then((result) => result.rows[0]!.state)
+      ) as state`, 'objects')).then((result) => result[0]!.state)
     assert.deepEqual(after, before, 'turning the feature off and on preserves authorization evidence and audit history')
   })
 })
@@ -497,7 +497,7 @@ async function dropShipEvidence(orgId: string) {
         and d.custom ? 'dropShipConfirmation'),
     'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId}
       and table_name in ('drop_ship_lines', 'drop_ship_orders', 'documents'))
-  ) as state`)).rows[0]!.state)
+  ) as state`, 'objects'))[0]!.state)
 }
 
 test('drop shipping off hides drawer actions, returns bare route 404s, and preserves routed confirmation history', { skip: !DB }, async () => {
@@ -535,7 +535,7 @@ test('drop shipping off hides drawer actions, returns bare route 404s, and prese
       salesOrderId: order.id, vendorId: org.vendorId, idempotencyKey: randomUUID(),
     }))
     const poLine = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select id from document_lines where org_id = ${org.orgId} and document_id = ${po.id}`))).rows[0]!
+      select id from document_lines where org_id = ${org.orgId} and document_id = ${po.id}`, 'objects')))[0]!
     await withBypassContext(() => db.execute(sql`
       update documents set status = 'approved' where org_id = ${org.orgId} and id = ${po.id} and status = 'draft'`))
     const confirmation = await withBypassContext(() => dropShipServices.confirmDropShip(context, {

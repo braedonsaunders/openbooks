@@ -37,8 +37,8 @@ import { createDelegation } from "./delegations.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function docStatus(id: string): Promise<string | null> {
-  const r = await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`);
-  return r.rows[0]?.status ?? null;
+  const r = await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`, "objects");
+  return r[0]?.status ?? null;
 }
 
 async function gateRows(runOrSubject: {
@@ -47,8 +47,8 @@ async function gateRows(runOrSubject: {
   const r = await db.execute<{ id: string; status: string; assigneeUserId: string | null }>(sql`
     select id, status, assignee_user_id as "assigneeUserId"
       from flow_gates where subject_id = ${runOrSubject.subjectId} order by created_at
-  `);
-  return r.rows;
+  `, "objects");
+  return r;
 }
 
 async function withOrgFixture(fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>): Promise<void> {
@@ -160,7 +160,7 @@ test("submit FAILS CLOSED when an enabled flow has an invalid graph",{skip:!DB},
  const id=await seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.submitterId});
  await assert.rejects(submitForApproval('vendor_bill',id,actors.submitterId),/invalid|cannot run/i);
  assert.equal(await docStatus(id),'draft');assert.deepEqual(await gateRows({subjectId:id}),[]);
- assert.equal((await db.execute(sql`select id from flow_runs where org_id=${org.orgId} and subject_id=${id}`)).rows.length,0,'refused submission leaves no incomplete routing transaction');
+ assert.equal((await db.execute(sql`select id from flow_runs where org_id=${org.orgId} and subject_id=${id}`, "objects")).length,0,'refused submission leaves no incomplete routing transaction');
 }));
 
 test("submit is REFUSED when one flow gates and another fails",{skip:!DB},async()=>withOrgFixture(async(org,actors)=>{
@@ -169,7 +169,7 @@ test("submit is REFUSED when one flow gates and another fails",{skip:!DB},async(
  const id=await seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.submitterId});
  await assert.rejects(submitForApproval('vendor_bill',id,actors.submitterId),/zero assignees/);
  assert.equal(await docStatus(id),'draft');assert.deepEqual(await gateRows({subjectId:id}),[]);
- assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`)).rows.length,0);
+ assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`, "objects")).length,0);
 }));
 
 test("submit FAILS CLOSED when the approval flow resolves to zero approvers",{skip:!DB},async()=>withOrgFixture(async(org,actors)=>{
@@ -187,7 +187,7 @@ test("a refused initial submission can be resubmitted after its tenant corrects 
  const submitted=await submitForApproval('vendor_bill',id,actors.submitterId);assert.equal(submitted.gated,true);
  const gates=await gateRows({subjectId:id});assert.equal(gates.length,1);
  await decideGate({gateId:gates[0]!.id,decision:'approved',userId:actors.approver1Id});assert.equal(await docStatus(id),'approved');
- const receipts=await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`);assert.equal(receipts.rows.length,1);
+ const receipts=await db.execute(sql`select id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`, "objects");assert.equal(receipts.length,1);
 }));
 
 test("retrying a non-failed run is refused", { skip: !DB }, async () => {
@@ -201,7 +201,7 @@ test("retrying a non-failed run is refused", { skip: !DB }, async () => {
     await submitForApproval("vendor_bill", docId, actors.submitterId);
     const waitingRun = (await db.execute<{ id: string }>(sql`
       select id from flow_runs where subject_id = ${docId} and status = 'waiting' order by started_at desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(waitingRun, "a waiting run must exist");
     await assert.rejects(
       retryFlowRun(waitingRun.id, { orgId: org.orgId, userId: actors.adminId }),
@@ -344,8 +344,8 @@ async function gateProvenance(id: string): Promise<{
     select assignee_user_id as "assigneeUserId", decided_by as "decidedBy",
            delegated_from_user_id as "delegatedFromUserId", on_behalf_of_user_id as "onBehalfOfUserId"
       from flow_gates where id = ${id}
-  `);
-  return r.rows[0]!;
+  `, "objects");
+  return r[0]!;
 }
 
 test("delegateGate reassigns and records structured provenance (not a comment)", { skip: !DB }, async () => {
@@ -426,8 +426,8 @@ test("worklistGates surfaces a pending gate to its assignee only", { skip: !DB }
  * which may skew from the database in shared environments.
  */
 async function dbNow(): Promise<number> {
-  const r = await db.execute<{ now: Date | string }>(sql`select now() as now`);
-  const v = r.rows[0]!.now;
+  const r = await db.execute<{ now: Date | string }>(sql`select now() as now`, "objects");
+  const v = r[0]!.now;
   return (v instanceof Date ? v : new Date(v)).getTime();
 }
 
@@ -437,8 +437,8 @@ async function setGateEscalateTo(
   escalateTo: unknown,
 ): Promise<void> {
   const r = await db.execute<{ graph: { nodes: Array<{ id: string; data: { gate?: Record<string, unknown> } }> } }>(sql`
-    select graph from flows where id = ${flowId}`);
-  const graph = r.rows[0]!.graph;
+    select graph from flows where id = ${flowId}`, "objects");
+  const graph = r[0]!.graph;
   const node = graph.nodes.find((n) => n.id === "gate");
   node!.data.gate!.escalateTo = escalateTo as never;
   await db.execute(sql`update flows set graph = ${JSON.stringify(graph)}::jsonb where id = ${flowId}`);
@@ -637,11 +637,9 @@ test(
         (g) => g.status === "pending",
       )!;
       assert.equal(replacement.assigneeUserId, actors.adminId);
-      const lineage = (
-        await db.execute<{ escalated_from_gate_id: string }>(
-          sql`select escalated_from_gate_id from flow_gates where org_id=${org.orgId} and id=${replacement.id}`,
-        )
-      ).rows[0];
+      const lineage = (await db.execute<{ escalated_from_gate_id: string }>(
+          sql`select escalated_from_gate_id from flow_gates where org_id=${org.orgId} and id=${replacement.id}`, "objects",
+        ))[0];
       assert.equal(lineage?.escalated_from_gate_id, first.id);
       await decideGate({
         gateId: replacement.id,
@@ -649,11 +647,9 @@ test(
         decision: "approved",
       });
       assert.equal(await docStatus(id), "approved");
-      const proof = (
-        await db.execute<{ allowed: boolean }>(
-          sql`select public.flow_submission_approved(org_id,subject_kind,subject_id,id) as allowed from flow_submissions where org_id=${org.orgId} and subject_id=${id}`,
-        )
-      ).rows[0];
+      const proof = (await db.execute<{ allowed: boolean }>(
+          sql`select public.flow_submission_approved(org_id,subject_kind,subject_id,id) as allowed from flow_submissions where org_id=${org.orgId} and subject_id=${id}`, "objects",
+        ))[0];
       assert.equal(proof?.allowed, true);
     });
   },

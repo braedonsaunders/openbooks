@@ -63,8 +63,8 @@ async function deleteConnection(
       delete from connections
        where org_id = ${orgId} and id = ${id}
        returning id
-    `);
-    if (!removed.rows[0]) return null;
+    `, "objects");
+    if (!removed[0]) return null;
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
@@ -81,7 +81,7 @@ async function deleteConnection(
         ${gate.user.id}
       )
     `);
-    return removed.rows[0];
+    return removed[0];
   }).catch((e) => {
     if (storageIdentityError(e)) return null;
     throw e;

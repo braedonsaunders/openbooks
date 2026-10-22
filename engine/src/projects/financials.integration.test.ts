@@ -209,8 +209,8 @@ test("a project posting committing mid-report stays out of the resolved generati
     assert.ok(gate.midReportCommitHappened, "the staged poster must commit mid-report");
     const lateRows = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${org.orgId} and entry_number = 'SNAP-LATE' and status = 'posted'`)));
-    assert.equal(lateRows.rows[0]?.n, 1, "the staged posting is durably committed");
+       where org_id = ${org.orgId} and entry_number = 'SNAP-LATE' and status = 'posted'`, "objects")));
+    assert.equal(lateRows[0]?.n, 1, "the staged posting is durably committed");
 
     // One coherent generation: the report observed EITHER side of the commit —
     // here, wholly before it — so headline cost, total cost and the

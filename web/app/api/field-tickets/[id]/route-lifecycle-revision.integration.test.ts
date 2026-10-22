@@ -97,8 +97,8 @@ test('field-ticket lifecycle commands recheck live authority and signature revis
     // With current identity, the normal missing-delivery configuration refusal is reachable.
     const refused=await post(org.orgId,id,{...request,expectedRevision:approved.revision})
     assert.equal(refused.status,422,JSON.stringify(await refused.clone().json()))
-    const count=await withBypassContext(()=>db.execute<{n:number}>(sql`select count(*)::int n from field_ticket_signature_requests where org_id=${org.orgId}`))
-    assert.equal(count.rows[0]?.n,0)
+    const count=await withBypassContext(()=>db.execute<{n:number}>(sql`select count(*)::int n from field_ticket_signature_requests where org_id=${org.orgId}`, 'objects'))
+    assert.equal(count[0]?.n,0)
     assert.equal((await read(org.orgId,id)).revision,approved.revision)
   } finally {await cleanup(org.orgId)}
 })

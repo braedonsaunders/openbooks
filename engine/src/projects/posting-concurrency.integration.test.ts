@@ -106,8 +106,8 @@ test("project labor and overhead posting are exactly-once under concurrency and 
          and origin in ('labor_burden', 'overhead_applied')
          and reverses_entry_id is null
        group by origin
-       order by origin`));
-    assert.deepEqual(posted.rows, [
+       order by origin`, "objects"));
+    assert.deepEqual(posted, [
       { origin: "labor_burden", count: 1 },
       { origin: "overhead_applied", count: 1 },
     ]);
@@ -119,10 +119,10 @@ test("project labor and overhead posting are exactly-once under concurrency and 
       select cost_journal_entry_id, overhead_journal_entry_id
         from time_entries
        where id = any(${`{${timeEntryIds.join(",")}}`}::uuid[])
-       order by id`));
-    assert.equal(stamps.rows.length, 2);
-    assert.ok(stamps.rows.every((row) => row.cost_journal_entry_id === laborEntryId));
-    assert.ok(stamps.rows.every((row) => row.overhead_journal_entry_id === overheadEntryId));
+       order by id`, "objects"));
+    assert.equal(stamps.length, 2);
+    assert.ok(stamps.every((row) => row.cost_journal_entry_id === laborEntryId));
+    assert.ok(stamps.every((row) => row.overhead_journal_entry_id === overheadEntryId));
 
     const varianceResults = await Promise.all([
       postPayrollVariance({
@@ -148,21 +148,21 @@ test("project labor and overhead posting are exactly-once under concurrency and 
        where org_id = ${org.orgId}
          and origin = 'payroll_variance'
          and entry_number like 'PVAR-%'
-       order by created_at, id`));
+       order by created_at, id`, "objects"));
     assert.equal(
-      varianceJournals.rows.filter(
+      varianceJournals.filter(
         (row) => row.status === "posted" && row.reverses_entry_id === null,
       ).length,
       1,
       "concurrent variance runs leave one current source journal",
     );
     assert.equal(
-      varianceJournals.rows.filter((row) => row.status === "reversed").length,
+      varianceJournals.filter((row) => row.status === "reversed").length,
       1,
       "the superseded variance journal is controlled history",
     );
     assert.equal(
-      varianceJournals.rows.filter((row) => row.reverses_entry_id !== null).length,
+      varianceJournals.filter((row) => row.reverses_entry_id !== null).length,
       1,
       "the superseded variance journal has exactly one mirror",
     );
@@ -187,8 +187,8 @@ test("project labor and overhead posting are exactly-once under concurrency and 
     const reversalCount = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count
         from journal_entries
-       where org_id = ${org.orgId} and reverses_entry_id = ${overheadEntryId}`));
-    assert.equal(reversalCount.rows[0]?.count, 1);
+       where org_id = ${org.orgId} and reverses_entry_id = ${overheadEntryId}`, "objects"));
+    assert.equal(reversalCount[0]?.count, 1);
 
     await Promise.all([
       reverseProjectLaborCost(
@@ -229,9 +229,9 @@ test("project labor and overhead posting are exactly-once under concurrency and 
       select cost_journal_entry_id, overhead_journal_entry_id
         from time_entries
        where id = any(${`{${timeEntryIds.join(",")}}`}::uuid[])
-       order by id`));
+       order by id`, "objects"));
     assert.ok(
-      released.rows.every(
+      released.every(
         (row) => row.cost_journal_entry_id === null && row.overhead_journal_entry_id === null,
       ),
       "reversing one member releases every source row carried by the reversed group",
@@ -250,8 +250,8 @@ test("project labor and overhead posting are exactly-once under concurrency and 
        where org_id = ${org.orgId}
          and origin in ('labor_burden', 'overhead_applied')
          and reverses_entry_id is null
-       order by origin, created_at, id`));
-    const numbers = generations.rows.map((row) => row.entry_number);
+       order by origin, created_at, id`, "objects"));
+    const numbers = generations.map((row) => row.entry_number);
     assert.equal(new Set(numbers).size, numbers.length, "every generation carries a distinct entry number");
     assert.ok(
       numbers.every((n) => /^(LAB|OVH)-/.test(n)),

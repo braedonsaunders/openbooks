@@ -34,10 +34,10 @@ async function setup() {
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Close Package Admin", "close-admin"));
   state.user = { orgId: org.orgId, id: actorId };
   const enabled = await withBypassContext(() =>
-    db.execute<{ id: string }>(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId} returning id`),
+    db.execute<{ id: string }>(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId} returning id`, "objects"),
   );
-  assert.equal(enabled.rows.length, 1, "close package setup updates exactly one organization");
-  assert.equal(enabled.rows[0]?.id, org.orgId, "close package setup updates its own organization");
+  assert.equal(enabled.length, 1, "close package setup updates exactly one organization");
+  assert.equal(enabled[0]?.id, org.orgId, "close package setup updates its own organization");
   return { org };
 }
 
@@ -56,8 +56,8 @@ test("save-package refuses a malformed recipient without writing", async () => {
     const rows = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from close_reporting_packages
        where org_id = ${org.orgId} and name = 'Recipient Contract'
-    `));
-    assert.equal(rows.rows[0]!.count, 0, "a refused package must not be stored");
+    `, "objects"));
+    assert.equal(rows[0]!.count, 0, "a refused package must not be stored");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -78,8 +78,8 @@ test("save-package still stores a fully valid recipient list", async () => {
     const rows = (await db.execute<{ recipients: string[] }>(sql`
       select recipients from close_reporting_packages
        where org_id = ${org.orgId} and name = 'Valid Recipients'
-    `));
-    assert.deepEqual(rows.rows[0]!.recipients, ["Controller@Example.com"]);
+    `, "objects"));
+    assert.deepEqual(rows[0]!.recipients, ["Controller@Example.com"]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

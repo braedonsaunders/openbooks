@@ -76,8 +76,8 @@ export async function createBillingRequest(
       from projects
      where id = ${input.projectId} and org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds ?? null)}
-  `);
-  if (!proj.rows[0]) throw new Error("Project not found");
+  `, "objects");
+  if (!proj[0]) throw new Error("Project not found");
 
   // The project type is the authoritative classifier; snapshot its coarse
   // billing method onto the request so historical invoices stay reproducible.
@@ -196,16 +196,16 @@ export async function createBillingRequest(
        where id = ${input.projectId} and org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds ?? null)}
        for share
-    `);
-    if (!lockedProject.rows[0]) throw new Error("Project not found");
+    `, "objects");
+    if (!lockedProject[0]) throw new Error("Project not found");
 
     const numberRow = await tx.execute<{ n: string }>(sql`
       select coalesce(max((regexp_replace(request_number, '\\D', '', 'g'))::bigint), 0) as n
         from billing_requests
        where org_id = ${orgId}
          and request_number ~ '^BREQ-[0-9]+$'
-    `);
-    const requestNumber = `BREQ-${String(Number(numberRow.rows[0]?.n ?? 0) + 1).padStart(5, "0")}`;
+    `, "objects");
+    const requestNumber = `BREQ-${String(Number(numberRow[0]?.n ?? 0) + 1).padStart(5, "0")}`;
 
     if (basis === "field_ticket") {
       const selected = await tx.execute<{ id: string }>(sql`
@@ -242,8 +242,8 @@ export async function createBillingRequest(
            )
          order by ticket.id
          for update
-      `);
-      if (selected.rows.length !== fieldTicketIds.length) {
+      `, "objects");
+      if (selected.length !== fieldTicketIds.length) {
         throw new Error(
           "Every selected Field Ticket must be approved, unbilled, and belong to this project",
         );
@@ -261,10 +261,10 @@ export async function createBillingRequest(
            and selected.field_ticket_id = any(${`{${fieldTicketIds.join(",")}}`}::uuid[])
            and request.status <> 'cancelled'
          order by ticket.document_number
-      `);
-      if (unavailable.rows.length > 0) {
+      `, "objects");
+      if (unavailable.length > 0) {
         throw new Error(
-          `Field Ticket ${unavailable.rows.map((row) => row.document_number).join(", ")} is already on another billing request`,
+          `Field Ticket ${unavailable.map((row) => row.document_number).join(", ")} is already on another billing request`,
         );
       }
     }
@@ -293,13 +293,13 @@ export async function createBillingRequest(
       values (
         ${orgId}, ${input.projectId}, ${requestNumber}, ${input.invoiceType ?? "progress"}, ${basis},
         ${drawAmount}, ${input.startDate ?? null}, ${input.cutoffDate ?? null},
-        ${input.invoiceDescription ?? null}, ${input.customerPo ?? lockedProject.rows[0]!.customer_po_number},
+        ${input.invoiceDescription ?? null}, ${input.customerPo ?? lockedProject[0]!.customer_po_number},
         ${projectType.billingMethod}, ${backupRequired}, ${backupType},
         ${selectedTimeEntryIds.length ? JSON.stringify(selectedTimeEntryIds) : null},
         ${input.notes ?? null}, 'open', ${userId}, ${userId})
       returning id, request_number
-    `);
-    const created = row.rows[0]!;
+    `, "objects");
+    const created = row[0]!;
 
     for (const fieldTicketId of fieldTicketIds) {
       await tx.execute(sql`
@@ -381,8 +381,8 @@ export async function listBillingRequests(
        and br.project_id = ${projectId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
      order by br.created_at desc
-  `);
-  return r.rows;
+  `, "objects");
+  return r;
 }
 
 export type BillableFieldTicketRow = {
@@ -464,8 +464,8 @@ export async function listBillableFieldTickets(
             and request.status <> 'cancelled'
        )
      order by field_ticket.period_end desc, ticket.document_number desc
-  `);
-  return rows.rows;
+  `, "objects");
+  return rows;
 }
 
 export async function cancelBillingRequest(
@@ -481,15 +481,15 @@ export async function cancelBillingRequest(
        where br.id = ${id} and br.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        for update of br for share of p
-    `);
-    if (!visible.rows[0]) throw new Error("Billing request not found");
+    `, "objects");
+    if (!visible[0]) throw new Error("Billing request not found");
     const r = await tx.execute<{ id: string }>(sql`
       update billing_requests
          set status = 'cancelled', updated_at = now(), updated_by = ${userId}
        where id = ${id} and org_id = ${orgId} and status = 'open'
        returning id
-    `);
-    if (!r.rows[0])
+    `, "objects");
+    if (!r[0])
       throw new Error("Only an open billing request can be cancelled");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -502,6 +502,6 @@ export async function cancelBillingRequest(
         ${userId}
       )
     `);
-    return r.rows[0];
+    return r[0];
   });
 }

@@ -94,11 +94,11 @@ export async function fulfillSalesOrderInTx(
       from documents
      where id = ${sourceId} and org_id = ${orgId}
      for update
-  `))
-  const source = sourceResult.rows[0]
+  `, 'objects'))
+  const source = sourceResult[0]
   if (!source) throw new ConversionError('Sales order not found')
   if (source.kind !== 'sales_order') throw new ConversionError('Only a sales order can be fulfilled')
-  if ((await tx.execute(sql`select id from subscription_renewal_occurrences where org_id=${orgId} and document_id=${sourceId} and occurrence='document' limit 1`)).rows[0]) throw new ConversionError('This renewal order commits a subscription term; accept it in Collections and use subscription billing for periodic delivery')
+  if ((await tx.execute(sql`select id from subscription_renewal_occurrences where org_id=${orgId} and document_id=${sourceId} and occurrence='document' limit 1`, 'objects'))[0]) throw new ConversionError('This renewal order commits a subscription term; accept it in Collections and use subscription billing for periodic delivery')
   if (source.status === 'draft') throw new ConversionError('Issue the sales order before fulfilling it')
   if (source.status === 'voided') throw new ConversionError('This sales order is voided')
   if (source.status !== 'approved') throw new ConversionError(`This sales order is ${source.status}`)
@@ -120,7 +120,7 @@ export async function fulfillSalesOrderInTx(
        and link.link_type = 'fulfills' and target.kind = ${SALES_FULFILLMENT_KIND}
        and target.custom->>'fulfillmentIdempotencyKey' = ${idempotencyKey}
      limit 1
-  `)).rows[0]
+  `, 'objects'))[0]
   if (replay) {
     if (!replay.command_matches) {
       throw new ConversionError('Fulfillment idempotency key was already used with a different shipment', 409)
@@ -133,7 +133,7 @@ export async function fulfillSalesOrderInTx(
     }
   }
 
-  const sourceLines = (await tx.execute<SalesFulfillmentSourceLineRow>(sql`
+  const sourceLines = await tx.execute<SalesFulfillmentSourceLineRow>(sql`
     select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
            dl.quantity, dl.unit, dl.department_id, dl.project_id, dl.location_id,
            dl.class_id, dl.extra_dims, dl.stock_location_id,
@@ -149,7 +149,7 @@ export async function fulfillSalesOrderInTx(
      where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
      order by dl.line_number
      for update of dl
-  `)).rows
+  `, 'objects')
   const sourceById = new Map(sourceLines.map((line) => [line.id, line]))
   const shippingByLine = new Map<string, bigint>()
   const selected = requested.map((request) => {
@@ -176,7 +176,7 @@ export async function fulfillSalesOrderInTx(
           join document_lines dl on dl.org_id = ds.org_id and dl.id = ds.sales_order_line_id
          where ds.org_id = ${orgId} and dl.document_id = ${sourceId}
            and dl.id in (${sql.join(selected.map(({ line }) => sql`${line.id}`), sql`, `)})
-         order by dl.line_number limit 1`)).rows[0]
+         order by dl.line_number limit 1`, 'objects'))[0]
     : undefined
   if (routedLine && options.inventory === 'apply') {
     throw new ConversionError(
@@ -196,7 +196,7 @@ export async function fulfillSalesOrderInTx(
   }
   if (options.inventory === 'none') {
     const receiptId = input.dropShipConfirmation!.purchaseReceiptId
-    const receiptEvidence = (await tx.execute<{ sales_order_line_id: string; quantity: string }>(sql`
+    const receiptEvidence = await tx.execute<{ sales_order_line_id: string; quantity: string }>(sql`
       select routed.sales_order_line_id, receipt_line.quantity::text as quantity
         from drop_ship_lines routed
         join document_lines po_line on po_line.id = routed.purchase_order_line_id and po_line.org_id = routed.org_id
@@ -209,7 +209,7 @@ export async function fulfillSalesOrderInTx(
           and receipt_line.custom->'receipt'->>'sourceLineId' = po_line.id::text
        where routed.org_id = ${orgId} and pair.sales_order_id = ${sourceId}
          and routed.sales_order_line_id in (${sql.join(selected.map(({ line }) => sql`${line.id}`), sql`, `)})
-    `)).rows
+    `, 'objects')
     const receiptBySalesLine = new Map(receiptEvidence.map((row) => [row.sales_order_line_id, row.quantity]))
     if (receiptBySalesLine.size !== new Set(selected.map(({ line }) => line.id)).size
       || selected.some(({ request, line }) => {
@@ -246,7 +246,7 @@ export async function fulfillSalesOrderInTx(
       select id, code, stock_location_warehouse(org_id, id) as warehouse_id
         from stock_locations
        where org_id = ${orgId} and id = any(${`{${binIds.join(',')}}`}::uuid[])
-    `)).rows.map((bin) => [bin.id, bin]))
+    `, 'objects')).map((bin) => [bin.id, bin]))
     const assertBinInsideLineWarehouse = (binId: string, line: { line_number: number; warehouse_id: string | null; stock_location_id: string | null }) => {
       if (binId === line.stock_location_id) return
       const bin = bins.get(binId)
@@ -332,8 +332,8 @@ export async function fulfillSalesOrderInTx(
     const profiles = await tx.execute<{ item_id: string; tracking: string }>(sql`
       select item_id, tracking from item_inventory_profiles
        where org_id = ${orgId}
-         and item_id in (${sql.join(components.map((component) => sql`${component.componentItemId}`), sql`, `)})`)
-    const trackingByComponent = new Map(profiles.rows.map((profile) => [profile.item_id, profile.tracking]))
+         and item_id in (${sql.join(components.map((component) => sql`${component.componentItemId}`), sql`, `)})`, 'objects')
+    const trackingByComponent = new Map(profiles.map((profile) => [profile.item_id, profile.tracking]))
     const quantities = kitComponentQuantities(`line ${line.line_number}`, request.quantity, components)
     for (const component of components) {
       const tracking = trackingByComponent.get(component.componentItemId) ?? 'none'
@@ -429,7 +429,7 @@ export async function fulfillSalesOrderInTx(
          set status = 'draft', updated_by = ${userId}
        where id = ${sourceId} and org_id = ${orgId} and status = 'approved'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!reopened) throw new ConversionError('Sales order changed while it was being fulfilled', 409)
   }
 
@@ -473,7 +473,7 @@ export async function fulfillSalesOrderInTx(
        where id = ${line.id} and org_id = ${orgId}
          and ${openQuantitySql('document_lines')} >= ${request.quantity}
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!advanced) {
       throw new ConversionError(`Sales-order line ${line.line_number} changed while it was being fulfilled`, 409)
     }
@@ -486,7 +486,7 @@ export async function fulfillSalesOrderInTx(
          set status = 'approved', updated_by = ${userId}
        where id = ${sourceId} and org_id = ${orgId} and status = 'draft'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!restored) throw new ConversionError('Sales order changed while it was being fulfilled', 409)
   }
 
@@ -524,7 +524,7 @@ export async function fulfillSalesOrderRemainder(
   sourceId: string,
 ): Promise<ConvertResult> {
   const fulfillmentDate = await businessToday(orgId)
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string
     open_quantity: string
   }>(sql`
@@ -535,7 +535,7 @@ export async function fulfillSalesOrderRemainder(
      where line.org_id = ${orgId} and source.id = ${sourceId}
        and source.kind = 'sales_order'
      order by line.id
-  `)).rows
+  `, 'objects')
   const lines = rows.flatMap((line) => {
     const remaining = toQuantityUnits(line.open_quantity)
     return remaining > 0n
@@ -552,7 +552,7 @@ export async function fulfillSalesOrderRemainder(
          and link.link_type = 'fulfills' and target.kind = ${SALES_FULFILLMENT_KIND}
        order by target.created_at desc, target.id desc
        limit 1
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!latest) throw new ConversionError('Every line is already fully fulfilled or cancelled')
     return {
       id: latest.id,

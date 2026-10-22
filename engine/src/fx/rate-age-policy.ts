@@ -52,7 +52,7 @@ export async function resolveFxRateAgeLimit(
       from fx_rate_age_policies
      where org_id = ${orgId} and rate_kind = ${kind} and effective_from <= ${asOf}
      order by effective_from desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   return row
     ? { kind, maxAgeDays: Number(row.max_age_days), effectiveFrom: row.effective_from }
     : { kind, maxAgeDays: FX_RATE_AGE_DEFAULT_DAYS, effectiveFrom: null };

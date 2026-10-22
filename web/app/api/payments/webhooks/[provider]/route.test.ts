@@ -307,8 +307,8 @@ test("the route returns 500 after isolating a poison event and committing its la
       select external_ref, status, event_payload from payment_attempts
        where org_id = ${org.orgId} and link_id = ${linkId}
        order by external_ref
-    `);
-    assert.deepEqual(attempts.rows, [
+    `, "objects");
+    assert.deepEqual(attempts, [
       { external_ref: "BRQ-1", status: "initiated", event_payload: null },
       {
         external_ref: "PM-2",

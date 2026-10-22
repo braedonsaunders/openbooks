@@ -59,7 +59,7 @@ test("one mirror includes supplemental populations and advances only after every
     assert.deepEqual(ok.operationalRecords?.disabledFeatures, ["crm", "fixedAssets"]);
     assert.deepEqual(ok.excludedPopulations, []);
     assert.deepEqual(populations.at(-1), { crm: true, fixedAssets: true });
-    const cursor = async () => (await db.execute<{ cursor: string }>(sql`select cursor::text from connections where org_id=${org.orgId} and id=${connectionId}`)).rows[0]!.cursor;
+    const cursor = async () => (await db.execute<{ cursor: string }>(sql`select cursor::text from connections where org_id=${org.orgId} and id=${connectionId}`, "objects"))[0]!.cursor;
     const originalCursor = await cursor();
     failAttachments = true;
     watermark = new Date("2026-10-02T00:00:00Z");
@@ -71,7 +71,7 @@ test("one mirror includes supplemental populations and advances only after every
     assert.equal(await cursor(), originalCursor);
     const row = (await db.execute<{ status: string; stats: { attachments: ImportSummary } }>(sql`
       select status, stats from sync_runs where org_id=${org.orgId} and connection_id=${connectionId}
-      order by started_at desc limit 1`)).rows[0]!;
+      order by started_at desc limit 1`, "objects"))[0]!;
     assert.equal(row.status, "failed");
     assert.deepEqual(row.stats.attachments, attachmentSummary, "successful attachment evidence survives a later refusal");
     failProjectInputs = false;

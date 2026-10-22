@@ -49,8 +49,8 @@ async function postBalanced(org: ScratchOrg, memo: string): Promise<string> {
 }
 
 async function statusOf(entry: string): Promise<string> {
-  const r = await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${entry}`);
-  return r.rows[0]!.status;
+  const r = await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${entry}`, "objects");
+  return r[0]!.status;
 }
 
 function negDecimal(value: string): string {
@@ -94,12 +94,12 @@ async function postMirrorReversal(
   await db.execute(sql`insert into journal_entries
     (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id)
     values (${reversal}, ${org.orgId}, ${opts.bookId ?? org.bookId}, ${org.subsidiaryId}, ${num}, ${org.date}, ${org.periodId}, ${num}, 'draft', 'manual', ${original})`);
-  const src = (await db.execute<MirrorLine>(sql`
+  const src = await db.execute<MirrorLine>(sql`
     select line_number, account_id, subsidiary_id, amount::text as amount, currency,
            txn_amount::text as txn_amount, fx_rate::text as fx_rate, party_id, department_id,
            project_id, location_id, class_id, equipment_unit_id, payment_card_id, tax_code_id,
            extra_dims::text as extra_dims, quantity::text as quantity
-      from journal_lines where entry_id = ${original} and org_id = ${org.orgId} order by line_number`)).rows;
+      from journal_lines where entry_id = ${original} and org_id = ${org.orgId} order by line_number`, "objects");
   const legs = src.map(
     (row) => sql`(${org.orgId}, ${reversal}, ${row.line_number}, ${row.account_id}, ${row.subsidiary_id},
       ${opts.negate === false ? row.amount : negDecimal(row.amount)}, ${row.currency},
@@ -233,9 +233,9 @@ test("reversed entry accepts no further transition", { skip: !DB }, async () =>
 test("journal guard retains immutable history and connector admission predicates", { skip: !DB }, async () =>
   fixture(async () => {
     const r = await db.execute<{ definition: string }>(
-      sql`select pg_get_functiondef('public.je_guard()'::regprocedure) as definition`,
+      sql`select pg_get_functiondef('public.je_guard()'::regprocedure) as definition`, "objects",
     );
-    const body = r.rows[0]!.definition;
+    const body = r[0]!.definition;
     assert.match(body, /if tg_op = 'DELETE' then/i, "delete fence");
     assert.match(body, /old.status = 'posted' and new.status = 'posted'/, "posted immutability");
     assert.match(body, /old.status = 'posted' and new.status = 'reversed'/, "reversal admission");
@@ -315,7 +315,7 @@ test("posted book rehome is refused instead of stranding activity", { skip: !DB 
       values (${secondBook}, ${org.orgId}, 'SECOND', 'Second book', false, true, true)`);
     const entry = await postBalanced(org, "GUARD-BOOK-REHOME");
     const drift = async () =>
-      (await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`)).rows;
+      await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`, "objects");
     assert.deepEqual(await drift(), [], "a fresh posting must verify clean");
     await assert.rejects(
       withOrgTransaction(org.orgId, async () => {
@@ -328,8 +328,7 @@ test("posted book rehome is refused instead of stranding activity", { skip: !DB 
     );
     assert.deepEqual(await drift(), [], "the refused rehome must leave both book buckets clean");
     const bookOf = async () =>
-      (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where id = ${entry}`))
-        .rows[0]!.book_id;
+      (await db.execute<{ book_id: string }>(sql`select book_id from journal_entries where id = ${entry}`, "objects"))[0]!.book_id;
     assert.equal(await bookOf(), org.bookId);
   });
 });

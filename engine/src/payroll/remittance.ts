@@ -214,9 +214,9 @@ async function rawPayrollSettings(
   executor: RemittanceExecutor = db,
 ): Promise<Record<string, unknown>> {
   const r = (await executor.execute<{ p: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}`, "objects",
   ));
-  return r.rows[0]?.p ?? {};
+  return r[0]?.p ?? {};
 }
 
 /** Load filing-account labels through the caller's transaction when one is
@@ -232,8 +232,8 @@ async function filingAccountsByIdIn(
       from payroll_filing_accounts
      where org_id = ${orgId}
      order by is_default desc, account_number
-  `);
-  return new Map(rows.rows.map((row) => [String(row.id), {
+  `, "objects");
+  return new Map(rows.map((row) => [String(row.id), {
     id: String(row.id),
     country: String(row.country),
     programType: String(row.program_type),
@@ -282,8 +282,8 @@ async function derivedAverageRates(
       from consolidated_fx_rates
      where org_id = ${orgId} and to_currency = ${presentation}
        and period_id = any(${`{${periodIds.join(",")}}`}::uuid[])
-       and from_currency = any(${`{${currencies.join(",")}}`}::text[])`));
-  const byKey = new Map(stored.rows.map((row) => [`${row.currency}→${row.period_id}`, row.average_rate]));
+       and from_currency = any(${`{${currencies.join(",")}}`}::text[])`, "objects"));
+  const byKey = new Map(stored.map((row) => [`${row.currency}→${row.period_id}`, row.average_rate]));
   for (const need of foreign) {
     if (!byKey.has(`${need.currency}→${need.periodId}`)) {
       throw new PayrollError(
@@ -335,10 +335,10 @@ async function mixedCurrencyAccruals(
           where p.org_id = ${orgId} and not p.is_adjustment
             and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
        )
-     limit 1`));
-  if (dateless.rows[0]) {
+     limit 1`, "objects"));
+  if (dateless[0]) {
     throw new PayrollError(
-      `cannot translate ${dateless.rows[0].currency} payroll dated ${dateless.rows[0].pay_date}: ` +
+      `cannot translate ${dateless[0].currency} payroll dated ${dateless[0].pay_date}: ` +
         `no regular accounting period covers that date, so no derived consolidated rate can exist for it`,
     );
   }
@@ -391,7 +391,7 @@ async function mixedCurrencyAccruals(
               source_document.subsidiary_id,
               s.currency_code, period.id, period.ends_on
      order by c.sequence, c.code
-  `));
+  `, "objects"));
   const grossSlices = (await executor.execute<{
       filing_account_id: string | null; currency: string;
       period_id: string; period_end: string; gross: string;
@@ -413,13 +413,13 @@ async function mixedCurrencyAccruals(
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}, s.currency_code, period.id, period.ends_on
-  `));
+  `, "objects"));
   const rates = await derivedAverageRates(
     orgId,
     presentation,
     [
-      ...slices.rows.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
-      ...grossSlices.rows.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
+      ...slices.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
+      ...grossSlices.map((row) => ({ currency: row.currency, periodId: row.period_id, periodEnd: row.period_end })),
     ],
     executor,
   );
@@ -433,7 +433,7 @@ async function mixedCurrencyAccruals(
     }
     return roundMoney(mulRate(amount, rate), 2);
   };
-  const rows: RemittanceRow[] = slices.rows
+  const rows: RemittanceRow[] = slices
     .filter((row) => !isInternalAccrual({ systemKey: row.system_key, country: row.country }))
     .map((row) => ({
       component_id: row.component_id,
@@ -469,14 +469,14 @@ async function mixedCurrencyAccruals(
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}
-  `));
+  `, "objects"));
   const grossByAccount = new Map<string, string>();
-  for (const slice of grossSlices.rows) {
+  for (const slice of grossSlices) {
     const key = slice.filing_account_id ?? "";
     grossByAccount.set(key, add(grossByAccount.get(key) ?? "0", translate(slice.gross, slice.currency, slice.period_id)));
   }
   const contextByAccount = new Map<string, { gross: string; employees: number }>(
-    headcounts.rows.map((row) => [
+    headcounts.map((row) => [
       row.filing_account_id ?? "",
       { gross: grossByAccount.get(row.filing_account_id ?? "") ?? "0", employees: row.employees },
     ]),
@@ -633,7 +633,7 @@ export async function payrollRemittanceSummary(
   // single-currency scope keeps the historical queries below verbatim, so
   // its figures stay byte-identical.
   const presentation = (await executor.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? null;
+    select base_currency from orgs where id = ${orgId}`, "objects"))[0]?.base_currency ?? null;
   const scopeCurrencies = presentation
     ? (await executor.execute<{ currency: string }>(sql`
       select distinct s.currency_code as currency
@@ -641,8 +641,7 @@ export async function payrollRemittanceSummary(
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
         join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
        where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
-         ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}`))
-        .rows.map((row) => row.currency)
+         ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}`, "objects")).map((row) => row.currency)
     : [];
   let rows: RemittanceRow[];
   let contextByAccount: Map<string, { gross: string; employees: number }>;
@@ -717,7 +716,7 @@ export async function payrollRemittanceSummary(
               l.liability_account_id, ${filingAccount}, s.province,
               source_document.subsidiary_id, s.currency_code
      order by c.sequence, c.code
-  `));
+  `, "objects"));
   // Internal accruals never remit, and each pack declares its own — so the
   // exclusion is per component country, not per system key. Rows with no
   // system key (user components) always stay in the summary.
@@ -726,7 +725,7 @@ export async function payrollRemittanceSummary(
   // group total is what the employer actually sends, never the gross levy.
   // The slice amount rides along natively: this path is single-currency, so
   // it agrees with the consolidated amount by construction.
-  rows = queried.rows
+  rows = queried
     .filter((row) => !sharedResolution.isInternalAccrual({ systemKey: row.system_key, country: row.country }))
     .map((row) => ({
       ...row,
@@ -744,9 +743,9 @@ export async function payrollRemittanceSummary(
      where s.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
      group by ${filingAccount}
-  `));
+  `, "objects"));
   contextByAccount = new Map(
-    context.rows.map((row) => [row.filing_account_id ?? "", row]),
+    context.map((row) => [row.filing_account_id ?? "", row]),
   );
   }
   if (rows.length === 0) return [];
@@ -787,9 +786,9 @@ export async function payrollRemittanceSummary(
   const subsidiaryRows = (await executor.execute<{ id: string; name: string | null; currency: string | null }>(sql`
     select id::text as id, name, base_currency as currency from subsidiaries
      where org_id = ${orgId} and is_active
-  `));
+  `, "objects"));
   const subsidiaries = new Map(
-    subsidiaryRows.rows.map((s) => [s.id, { name: s.name, currency: s.currency }]),
+    subsidiaryRows.map((s) => [s.id, { name: s.name, currency: s.currency }]),
   );
 
   const groups = groupRemittanceRows({
@@ -835,12 +834,12 @@ export async function payrollRemittanceSummary(
   // client.query warning while providing no snapshot benefit.
   const parties = partyIds.length
     ? await executor.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
-                      where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
-    : { rows: [] };
+                      where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`, "objects")
+    : [];
   const accounts = accountIds.length
     ? await executor.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
-                      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`)
-    : { rows: [] };
+                      where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`, "objects")
+    : [];
   const bills = await executor.execute<{
       id: string; document_number: string; status: string; total: string;
       party_id: string | null; filing_account_id: string | null;
@@ -856,9 +855,9 @@ export async function payrollRemittanceSummary(
        and custom->'payrollRemittance'->>'from' <= ${range.to}
        and custom->'payrollRemittance'->>'to' >= ${range.from}
        and status <> 'voided'
-       ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`);
-  const partyName = new Map(parties.rows.map((p) => [p.id, p.display_name]));
-  const accountLabel = new Map(accounts.rows.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
+       ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`, "objects");
+  const partyName = new Map(parties.map((p) => [p.id, p.display_name]));
+  const accountLabel = new Map(accounts.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
   for (const group of groups.values()) {
     group.partyName = group.partyId ? (partyName.get(group.partyId) ?? null) : null;
     for (const component of group.components) {
@@ -871,7 +870,7 @@ export async function payrollRemittanceSummary(
           ? (accountLabel.get(component.liabilityAccountId) ?? null) : null;
       }
     }
-    const matched = bills.rows.filter((b) =>
+    const matched = bills.filter((b) =>
       b.from != null && b.to != null
       && b.from <= range.to && b.to >= range.from
       &&
@@ -935,7 +934,7 @@ export async function assertPayrollRemittanceBillCurrent(
       from documents
      where org_id = ${orgId} and id = ${documentId}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
-  `)).rows[0];
+  `, "objects"))[0];
   if (!marker) return;
   if (
     !marker.party_id
@@ -985,7 +984,7 @@ export async function assertPayrollRemittanceBillCurrent(
      where org_id = ${orgId} and id = ${documentId}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!locked || !locked.party_id || !locked.from || !locked.to) {
     throw new PayrollError("payroll remittance bill has an invalid source marker");
   }
@@ -1005,7 +1004,7 @@ export async function assertPayrollRemittanceBillCurrent(
     const entity = (await executor.execute<{ base_currency: string }>(sql`
       select base_currency from subsidiaries
        where org_id = ${orgId} and id = ${locked.subsidiary_id}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!entity) {
       throw new PayrollError(
         `payroll remittance bill ${billName} no longer matches its committed source: `
@@ -1020,12 +1019,12 @@ export async function assertPayrollRemittanceBillCurrent(
     }
   }
 
-  const coverage = (await executor.execute<{ stub_line_id: string; amount: string }>(sql`
+  const coverage = await executor.execute<{ stub_line_id: string; amount: string }>(sql`
     select cov.stub_line_id::text as stub_line_id, cov.amount::text as amount
       from payroll_remittance_coverage cov
      where cov.org_id = ${orgId} and cov.bill_document_id = ${documentId}
      order by cov.stub_line_id
-  `)).rows;
+  `, "objects");
 
   if (coverage.length === 0) {
     // A bill with no coverage rows predates the coverage write: reconcile
@@ -1088,9 +1087,9 @@ export async function assertPayrollRemittanceBillCurrent(
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.id = any(${`{${coverage.map((row) => row.stub_line_id).join(",")}}`}::uuid[])
-  `));
+  `, "objects"));
   const liveById = new Map(
-    live.rows.map((row) => [row.line_id, {
+    live.map((row) => [row.line_id, {
       snapshotPartyId: row.snapshot_party_id,
       componentPartyId: row.component_party_id,
       coveredPartyId: row.covered_party_id,
@@ -1099,8 +1098,8 @@ export async function assertPayrollRemittanceBillCurrent(
       province: row.province,
     } satisfies RemittanceResolvableRow]),
   );
-  const liveAmounts = new Map(live.rows.map((row) => [row.line_id, row.amount]));
-  const liveKinds = new Map(live.rows.map((row) => [row.line_id, row.kind]));
+  const liveAmounts = new Map(live.map((row) => [row.line_id, row.amount]));
+  const liveKinds = new Map(live.map((row) => [row.line_id, row.kind]));
   const resolution = makeRemittanceDestinationResolver(await rawPayrollSettings(orgId, executor));
   let gone = 0;
   let changed = 0;
@@ -1167,7 +1166,7 @@ export async function assertRemittanceBillEdit(
       from documents
      where org_id = ${orgId} and id = ${id}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
-  `)).rows[0];
+  `, "objects"))[0];
   if (!bill) return false;
   const name = `remittance bill ${bill.document_number ?? "unnumbered"}`;
   const remedy = "void or delete this draft and raise a fresh bill from Payroll → Remittances";
@@ -1999,14 +1998,14 @@ export async function createRemittanceBill(
         from vendor_roles v
         left join parties p on p.id = v.party_id and p.org_id = v.org_id
        where v.org_id = ${orgId} and v.party_id = ${input.partyId} and v.is_active
-    `));
-    if (!vendor.rows.length) throw new PayrollError("the remittance destination must be an active vendor");
+    `, "objects"));
+    if (!vendor.length) throw new PayrollError("the remittance destination must be an active vendor");
     if (
       input.allowedSubsidiaryIds != null
-      && (!(vendor.rows[0]!.party_id)
+      && (!(vendor[0]!.party_id)
         || !payrollSubsidiaryInScope(
           input.allowedSubsidiaryIds,
-          vendor.rows[0]!.subsidiary_id ?? entityId,
+          vendor[0]!.subsidiary_id ?? entityId,
         ))
     ) {
       throw new PayrollError("nothing to remit to this vendor for the period");
@@ -2024,7 +2023,7 @@ export async function createRemittanceBill(
       }>(sql`
         select subsidiary_id, account_number, name from payroll_filing_accounts
          where org_id = ${orgId} and id = ${filingAccountId} and is_active
-      `)).rows[0] ?? null
+      `, "objects"))[0] ?? null
       : null;
     if (filingAccountId && !filing) throw new PayrollError("nothing to remit to this vendor for the period");
     if (
@@ -2085,7 +2084,7 @@ export async function createRemittanceBill(
     const entity = (await tx.execute<{ id: string; name: string | null; base_currency: string | null }>(sql`
       select id, name, base_currency from subsidiaries
        where org_id = ${orgId} and id = ${entityId} and is_active
-    `)).rows[0] ?? null;
+    `, "objects"))[0] ?? null;
     if (!entity) {
       throw new PayrollError(
         `cannot remit this payroll: its subsidiary is missing or inactive — attribute its pay runs to an active subsidiary before remitting`,
@@ -2114,7 +2113,7 @@ export async function createRemittanceBill(
     if (filing && filing.subsidiary_id != null && filing.subsidiary_id !== entityId) {
       const accountEntity = (await tx.execute<{ name: string | null }>(sql`
         select name from subsidiaries where org_id = ${orgId} and id = ${filing.subsidiary_id}
-      `)).rows[0]?.name ?? null;
+      `, "objects"))[0]?.name ?? null;
       const runs = (await tx.execute<{ document_number: string }>(sql`
         select distinct d.document_number
           from pay_stubs s
@@ -2124,7 +2123,7 @@ export async function createRemittanceBill(
            and d.subsidiary_id = ${entityId}
            and s.filing_account_id is not distinct from ${filingAccountId}
          order by d.document_number
-      `)).rows.map((r) => r.document_number);
+      `, "objects")).map((r) => r.document_number);
       throw new PayrollError(
         `cannot remit ${entity.name ?? "this entity"}'s payroll under filing account `
         + `${filing.account_number ?? filing.name ?? filingAccountId} `
@@ -2157,8 +2156,8 @@ export async function createRemittanceBill(
          and ((custom->'payrollRemittance'->>'subsidiaryId') is null
               or (custom->'payrollRemittance'->>'subsidiaryId') = ${entityId})
       order by custom->'payrollRemittance'->>'from', created_at
-    `));
-    const existing = overlap.rows[0];
+    `, "objects"));
+    const existing = overlap[0];
     // Refuse by name over an intersecting live bill. The first bill whose
     // window matches exactly keeps the established idempotency message; any
     // other overlap names both windows so a controller can choose a
@@ -2190,9 +2189,9 @@ export async function createRemittanceBill(
       select prefix, subsidiary_id from number_sequences
        where org_id = ${orgId} and document_kind = 'vendor_bill'
          and (subsidiary_id = ${entityId} or subsidiary_id is null)
-    `));
+    `, "objects"));
     const chosen = pickRemittanceSequence(
-      sequences.rows.map((row) => ({ prefix: row.prefix, subsidiaryId: row.subsidiary_id })),
+      sequences.map((row) => ({ prefix: row.prefix, subsidiaryId: row.subsidiary_id })),
       entityId,
     );
     const seq = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
@@ -2202,8 +2201,8 @@ export async function createRemittanceBill(
       do update set next_number = number_sequences.next_number + 1
       where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding
-    `));
-    const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
+    `, "objects"));
+    const number = `${seq[0]!.prefix}${String(seq[0]!.next_number).padStart(seq[0]!.padding, "0")}`;
 
     // Per-accrual coverage (migration 0296): record exactly which committed
     // lines this bill consumed, resolved through the same resolver the
@@ -2242,7 +2241,7 @@ export async function createRemittanceBill(
       const blind = await remittanceBillsWithoutCoverage(
         tx,
         orgId,
-        overlap.rows.map((bill) => bill.id),
+        overlap.map((bill) => bill.id),
       );
       if (blind.length > 0) refuseOverlapping(existing);
     }
@@ -2315,8 +2314,8 @@ export async function createRemittanceBill(
               })}::jsonb,
               ${actorId}, ${actorId})
       returning id
-    `));
-    const documentId = doc.rows[0]!.id;
+    `, "objects"));
+    const documentId = doc[0]!.id;
     let lineNumber = 1;
     for (const entry of entries) {
       await tx.execute(sql`
@@ -2336,8 +2335,8 @@ export async function createRemittanceBill(
         from unnest(${`{${billable.map((line) => line.lineId).join(",")}}`}::uuid[],
                     ${`{${billable.map((line) => line.amount).join(",")}}`}::text[]) as cov(line_id, line_amount)
       returning stub_line_id::text as stub_line_id
-    `));
-    if (covered.rows.length !== billable.length) {
+    `, "objects"));
+    if (covered.length !== billable.length) {
       throw new PayrollError(
         "remittance bill coverage was not recorded — regenerate this bill",
       );
@@ -2419,8 +2418,8 @@ export async function remittanceScopeLines(
        and d.subsidiary_id = ${key.entityId}
        and s.filing_account_id is not distinct from ${key.filingAccountId}
      order by l.id
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     lineId: row.line_id,
     kind: row.kind,
     amount: row.amount,
@@ -2454,8 +2453,8 @@ export async function coveredRemittanceStubLines(
       join documents bill
         on bill.id = cov.bill_document_id and bill.org_id = cov.org_id
      where cov.org_id = ${orgId} and bill.status <> 'voided'
-  `));
-  return new Set(rows.rows.map((row) => row.stub_line_id));
+  `, "objects"));
+  return new Set(rows.map((row) => row.stub_line_id));
 }
 
 /**
@@ -2474,8 +2473,8 @@ export async function remittanceBillsWithoutCoverage(
       from payroll_remittance_coverage cov
      where cov.org_id = ${orgId}
        and cov.bill_document_id = any(${`{${billIds.join(",")}}`}::uuid[])
-  `));
-  const withCoverage = new Set(rows.rows.map((row) => row.bill_document_id));
+  `, "objects"));
+  const withCoverage = new Set(rows.map((row) => row.bill_document_id));
   return billIds.filter((id) => !withCoverage.has(id));
 }
 
@@ -2505,6 +2504,6 @@ async function sliceStubCurrencies(
        and l.kind in ('deduction', 'employer_contribution', 'credit')
        and d.subsidiary_id = ${key.entityId}
        and s.filing_account_id is not distinct from ${key.filingAccountId}
-  `));
-  return rows.rows.map((r) => r.currency).sort();
+  `, "objects"));
+  return rows.map((r) => r.currency).sort();
 }

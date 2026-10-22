@@ -361,8 +361,8 @@ export async function regenerateGlImpactTx(
            and link.link_type <> 'pays'
            and downstream.status in ('approved', 'posted')
       ) as downstream
-  `));
-  const gates = control.rows[0];
+  `, "objects"));
+  const gates = control[0];
   if (!gates?.actor_valid) {
     throw new PostingError(
       "the source correction actor is not an active organization user",
@@ -459,8 +459,8 @@ export async function regenerateGlImpactTx(
     `);
     const authorization = (await tx.execute<{ allowed: boolean }>(sql`
       select connector_historical_replay_authorized(${doc.orgId}) as allowed
-    `));
-    if (authorization.rows[0]?.allowed !== true) {
+    `, "objects"));
+    if (authorization[0]?.allowed !== true) {
       throw new PostingError(
         "closed-period connector replay is not authorized by the active sync run and connection policy",
       );
@@ -473,7 +473,7 @@ export async function regenerateGlImpactTx(
       select connection_id
         from sync_runs
        where id::text = ${correction.requestId} and org_id = ${doc.orgId}
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (!replayRun)
       throw new PostingError(
         "closed-period connector replay is not authorized by the active sync run and connection policy",
@@ -597,8 +597,8 @@ export async function regenerateGlImpactTx(
       from journal_entries
      where org_id = ${doc.orgId} and source_document_id = ${doc.id}
        and reverses_entry_id is null
-       and custom->>'mode' = 'append_only_source_correction'`));
-  const correctionGen = (priorCorrections.rows[0]?.n ?? 0) + 1;
+       and custom->>'mode' = 'append_only_source_correction'`, "objects"));
+  const correctionGen = (priorCorrections[0]?.n ?? 0) + 1;
   // The replacement posts through the ONE ledger API.
   const postedReplacement = await postEntry(tx, {
     orgId: doc.orgId,

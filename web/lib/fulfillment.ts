@@ -17,11 +17,11 @@ export interface CarrierOption {
  * a shipment that already names one still shows it from its own record.
  */
 export async function listActiveCarriers(orgId: string): Promise<CarrierOption[]> {
-  const rows = (await db.execute<{ id: string; code: string; name: string; services: string[] | null }>(sql`
+  const rows = await db.execute<{ id: string; code: string; name: string; services: string[] | null }>(sql`
     select id, code, name, services
       from carriers
      where org_id = ${orgId} and is_active
-     order by name, code`)).rows
+     order by name, code`, 'objects')
   return rows.map((row) => ({ id: row.id, code: row.code, name: row.name, services: row.services ?? [] }))
 }
 
@@ -49,7 +49,7 @@ export async function fulfillmentQueueCounts(
      where d.org_id = ${orgId}
        and d.kind in ('pick_list', 'shipment')
        and d.status <> 'voided'
-       and fd.stage = 'open'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}`)).rows[0]
+       and fd.stage = 'open'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}`, 'objects'))[0]
   return {
     openPickLists: Number(row?.open_pick_lists ?? 0),
     shipmentsToComplete: Number(row?.shipments_to_complete ?? 0),

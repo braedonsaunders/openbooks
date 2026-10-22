@@ -71,12 +71,10 @@ test("signing a withdrawn offer is refused and the token dies on withdraw", asyn
         reason: "role closed",
       });
       // The commercial write revokes the outstanding link, proved from storage.
-      const stored = (
-        await db.execute<{ tokenHash: string | null }>(sql`
+      const stored = (await db.execute<{ tokenHash: string | null }>(sql`
       select signing_token_hash as "tokenHash" from hrm_offers
        where org_id = ${h.org.orgId} and id = ${offerId}
-    `)
-      ).rows[0]!;
+    `, "objects"))[0]!;
       assert.equal(stored.tokenHash, null);
       const error = recruitingError(
         await signOffer({
@@ -108,12 +106,10 @@ test("signing a declined offer is refused and the token dies on decline", async 
         offerId,
         reason: "accepted elsewhere",
       });
-      const stored = (
-        await db.execute<{ tokenHash: string | null }>(sql`
+      const stored = (await db.execute<{ tokenHash: string | null }>(sql`
       select signing_token_hash as "tokenHash" from hrm_offers
        where org_id = ${h.org.orgId} and id = ${offerId}
-    `)
-      ).rows[0]!;
+    `, "objects"))[0]!;
       assert.equal(stored.tokenHash, null);
       const error = recruitingError(
         await signOffer({

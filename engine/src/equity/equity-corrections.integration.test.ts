@@ -39,7 +39,7 @@ const ledger = (groups: { units: bigint }[]) => -groups.reduce((sum, group) => s
 /** Monthly periods on the scratch calendar from `from` through `through` (YYYY-MM), for histories older than the world's. */
 async function seedMonths(w: EquityWorld, from: string, through: string): Promise<void> {
   const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where org_id = ${w.org.orgId} and id = ${w.org.periodId}`)).rows[0]!.fiscal_calendar_id;
+    select fiscal_calendar_id from accounting_periods where org_id = ${w.org.orgId} and id = ${w.org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
   for (let [year, month] = from.split("-").map(Number) as [number, number]; `${year}-${String(month).padStart(2, "0")}` <= through; month === 12 ? ((year += 1), (month = 1)) : (month += 1)) {
     const key = `${year}-${String(month).padStart(2, "0")}`;
     await db.execute(sql`
@@ -50,7 +50,7 @@ async function seedMonths(w: EquityWorld, from: string, through: string): Promis
 }
 
 async function periodId(w: EquityWorld, name: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${w.org.orgId} and name = ${name}`)).rows[0]!.id;
+  return (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${w.org.orgId} and name = ${name}`, "objects"))[0]!.id;
 }
 
 async function closeGl(w: EquityWorld, name: string): Promise<void> {
@@ -69,12 +69,12 @@ async function preferred(w: EquityWorld, code: string) {
 }
 
 async function equityActionRequestCount(w: EquityWorld): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from equity_action_requests where org_id = ${w.org.orgId}`)).rows[0]!.n;
+  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from equity_action_requests where org_id = ${w.org.orgId}`, "objects"))[0]!.n;
 }
 
 async function openGate(w: EquityWorld, requestId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
-    select id from flow_gates where org_id = ${w.org.orgId} and subject_id = ${requestId} and status in ('pending', 'escalated')`)).rows[0]!.id;
+    select id from flow_gates where org_id = ${w.org.orgId} and subject_id = ${requestId} and status in ('pending', 'escalated')`, "objects"))[0]!.id;
 }
 
 test("an early-exercise deposit reads as of the date on the ledger and on the vesting schedule, and copies keep it attributed", { skip: !DB }, async () => {
@@ -108,7 +108,7 @@ test("an early-exercise deposit reads as of the date on the ledger and on the ve
     const seed = randomUUID();
     await db.execute(sql`update orgs set sandbox_seed = ${seed}::uuid where id = ${w.org.orgId}`);
     const sourceIdentity = randomUUID();
-    const copied = (await db.execute<{ id: string }>(sql`select public.ob_rebase(${sourceIdentity}::uuid, ${seed}::uuid)::text as id`)).rows[0]!.id;
+    const copied = (await db.execute<{ id: string }>(sql`select public.ob_rebase(${sourceIdentity}::uuid, ${seed}::uuid)::text as id`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into equity_securities (id, org_id, subsidiary_id, security_number, kind, holder_party_id, share_class_id, issue_date, quantity, price_per_share, currency, created_by)
       values (${copied}, ${w.org.orgId}, ${w.org.subsidiaryId}, 'CS24-COPY', 'share', ${w.holderId}, ${common}, '2026-07-01', 100, 0.12, 'CAD', ${w.managerId})`);
@@ -118,22 +118,22 @@ test("an early-exercise deposit reads as of the date on the ledger and on the ve
       legs: [{ accountId: w.org.accounts.bank, units: 120_000n }, { accountId: w.accounts.deposit, units: -120_000n, balance: { securityId: sourceIdentity, role: "deposit" } }],
     });
     assert.deepEqual(await instrumentBalance(db, w.org.orgId, w.org.subsidiaryId, copied, "deposit"), [], "the line names the source identity");
-    const attributed = (await db.execute<{ n: number }>(sql`select public.equity_attribute_copied_instrument_lines(${w.org.orgId}::uuid) as n`)).rows[0]!.n;
+    const attributed = (await db.execute<{ n: number }>(sql`select public.equity_attribute_copied_instrument_lines(${w.org.orgId}::uuid) as n`, "objects"))[0]!.n;
     assert.equal(attributed, 1, "only the copied line is attributed; lines naming this tenant's securities stand as recorded");
     assert.equal(ledger(await instrumentBalance(db, w.org.orgId, w.org.subsidiaryId, copied, "deposit")), 120_000n);
-    assert.equal((await db.execute<{ n: number }>(sql`select public.equity_attribute_copied_instrument_lines(${w.org.orgId}::uuid) as n`)).rows[0]!.n, 0, "a replay records nothing again");
+    assert.equal((await db.execute<{ n: number }>(sql`select public.equity_attribute_copied_instrument_lines(${w.org.orgId}::uuid) as n`, "objects"))[0]!.n, 0, "a replay records nothing again");
     await db.execute(sql`update orgs set sandbox_seed = null where id = ${w.org.orgId}`);
 
     // A masked copy of the tenant rebases each line's identity with the security it names.
     const sandbox = await createSandbox({ productionOrgId: w.org.orgId, name: `Equity copy ${randomUUID()}`, createdBy: w.managerId });
     sandboxId = sandbox.sandboxId;
-    const sandboxSeed = (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id = ${sandbox.sandboxOrgId}`)).rows[0]!.seed;
-    const rebase = async (id: string) => (await db.execute<{ id: string }>(sql`select public.ob_rebase(${id}::uuid, ${sandboxSeed}::uuid)::text as id`)).rows[0]!.id;
+    const sandboxSeed = (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id = ${sandbox.sandboxOrgId}`, "objects"))[0]!.seed;
+    const rebase = async (id: string) => (await db.execute<{ id: string }>(sql`select public.ob_rebase(${id}::uuid, ${sandboxSeed}::uuid)::text as id`, "objects"))[0]!.id;
     const held = await instrumentBalance(db, sandbox.sandboxOrgId, await rebase(w.org.subsidiaryId), await rebase(certificate), "deposit", "2026-10-19");
     assert.equal(ledger(held), 180_000_000n, "the copy carries the certificate's deposit under its own identity");
     assert.equal(ledger(await instrumentBalance(db, sandbox.sandboxOrgId, await rebase(w.org.subsidiaryId), await rebase(copied), "deposit")), 120_000n, "attributions copy with their lines");
   } finally {
-    const sandboxes = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id = ${w.org.orgId}`)).rows.map((row) => row.id);
+    const sandboxes = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id = ${w.org.orgId}`, "objects")).map((row) => row.id);
     for (const id of new Set([...(sandboxId ? [sandboxId] : []), ...sandboxes])) await deleteSandbox(id);
     await dropScratchOrgReporting(w.org.orgId);
   }

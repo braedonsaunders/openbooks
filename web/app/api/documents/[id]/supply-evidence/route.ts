@@ -47,13 +47,13 @@ export const GET = defineRoute({
     const gate = routeAuthz;
     try {
       const doc = (await db.execute<{ custom: { crossBorder?: unknown; crossBorderSupply?: unknown } | null }>(sql`
-        select custom from documents where org_id = ${gate.user.orgId} and id = ${params.id}`)).rows[0]
+        select custom from documents where org_id = ${gate.user.orgId} and id = ${params.id}`, 'objects'))[0]
       if (!doc) return NextResponse.json({ error: 'document not found' }, { status: 404 })
-      const rows = (await db.execute<EvidenceRow>(sql`
+      const rows = await db.execute<EvidenceRow>(sql`
         select kind, country_code as "countryCode", source, observed_on::text as "observedOn"
           from document_supply_evidence
          where org_id = ${gate.user.orgId} and document_id = ${params.id}
-         order by kind, source`)).rows
+         order by kind, source`, 'objects')
       const corrected = (await db.execute<{ id: string; number: string }>(sql`
         select corrected.id, corrected.document_number as number
           from document_links link
@@ -62,7 +62,7 @@ export const GET = defineRoute({
          where link.org_id = ${gate.user.orgId}
            and link.from_document_id = ${params.id}
            and link.link_type = 'corrects'
-         limit 1`)).rows[0] ?? null
+         limit 1`, 'objects'))[0] ?? null
       return NextResponse.json({ election: doc.custom?.crossBorder ?? null, verdict: doc.custom?.crossBorderSupply ?? null, evidence: rows, correctedDocument: corrected })
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 })

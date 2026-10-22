@@ -162,7 +162,7 @@ export async function guardRootSubsidiaryScope(authz: Authz): Promise<NextRespon
       from subsidiaries
      where org_id = ${authz.user.orgId} and parent_id is null and is_active
      order by created_at
-     limit 1`)).rows[0]?.id ?? null;
+     limit 1`, "objects"))[0]?.id ?? null;
   return guardSubsidiaryScope(authz, root);
 }
 

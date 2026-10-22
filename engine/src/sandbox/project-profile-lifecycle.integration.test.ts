@@ -24,9 +24,9 @@ for (const operation of ["delete", "refresh", "reset"] as const) {
         values(${type},${org.orgId},'sandbox_policy','Sandbox policy','fixed_price',${JSON.stringify(profile.invoicingProfile)}::jsonb,${JSON.stringify(profile.backupProfile)}::jsonb)`);
       await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
         values(${org.orgId},${type},'2000-01-01',${JSON.stringify(profile.financialProfile)}::jsonb,'Scratch sandbox policy')`);
-      const before = (await db.execute(sql`select to_jsonb(v) as value from project_financial_profile_versions v where org_id=${org.orgId}`)).rows;
+      const before = await db.execute(sql`select to_jsonb(v) as value from project_financial_profile_versions v where org_id=${org.orgId}`, "objects");
       sandbox = await createSandbox({ productionOrgId: org.orgId, name: "Scratch financial policy sandbox", tier: "full", masked: false });
-      assert.equal((await db.execute(sql`select id from project_financial_profile_versions where org_id=${sandbox.sandboxOrgId}`)).rows.length, 1);
+      assert.equal((await db.execute(sql`select id from project_financial_profile_versions where org_id=${sandbox.sandboxOrgId}`, "objects")).length, 1);
       // The teardown flag alone cannot unlock production history, and cannot
       // turn a sandbox teardown exception into permission to edit policy.
       for (const target of [org.orgId, sandbox.sandboxOrgId]) {
@@ -43,12 +43,12 @@ for (const operation of ["delete", "refresh", "reset"] as const) {
       if (operation === "refresh") await refreshSandbox(sandbox.sandboxId);
       else if (operation === "reset") await resetSandbox(sandbox.sandboxId);
       if (operation !== "delete") {
-        assert.equal((await db.execute(sql`select id from project_financial_profile_versions where org_id=${sandbox.sandboxOrgId}`)).rows.length, 1);
-        assert.equal((await db.execute(sql`select status from sandboxes where id=${sandbox.sandboxId}`)).rows[0]!.status, "ready");
+        assert.equal((await db.execute(sql`select id from project_financial_profile_versions where org_id=${sandbox.sandboxOrgId}`, "objects")).length, 1);
+        assert.equal((await db.execute(sql`select status from sandboxes where id=${sandbox.sandboxId}`, "objects"))[0]!.status, "ready");
       }
       await deleteSandbox(sandbox.sandboxId);
-      assert.equal((await db.execute(sql`select id from orgs where id=${sandbox.sandboxOrgId}`)).rows.length, 0);
-      assert.deepEqual((await db.execute(sql`select to_jsonb(v) as value from project_financial_profile_versions v where org_id=${org.orgId}`)).rows, before);
+      assert.equal((await db.execute(sql`select id from orgs where id=${sandbox.sandboxOrgId}`, "objects")).length, 0);
+      assert.deepEqual(await db.execute(sql`select to_jsonb(v) as value from project_financial_profile_versions v where org_id=${org.orgId}`, "objects"), before);
     } finally {
       if (sandbox) await dropScratchOrgReporting(sandbox.sandboxOrgId);
       await dropScratchOrgReporting(org.orgId);

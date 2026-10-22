@@ -43,10 +43,10 @@ const NO_PERMS = new Set<string>()
 // ambient test bypass is replaced, so an unscoped SELECT silently returns
 // zero rows and the audit assertions would pass/fail on nothing.
 async function audits(orgId: string, rowId: string) {
-  return withOrgContext(orgId, async () => (await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
+  return withOrgContext(orgId, async () => await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
     select action, changes, actor_id from audit_log
      where org_id = ${orgId} and table_name = 'saved_views' and row_id = ${rowId}
-     order by at`)).rows)
+     order by at`, 'objects'))
 }
 
 test('view edits and deletes audit before/after in the same transaction', { skip: !DB }, async () => {

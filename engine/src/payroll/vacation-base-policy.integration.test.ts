@@ -44,9 +44,9 @@ test('a recurring earning changes vacation bases at pay date while retaining nat
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${f.orgId}`);
     await submitBenefitEnrollmentFixture(f.orgId,f.actorId,enrollmentId);
     const baseId = (await db.execute<{ id: string }>(sql`select id from pay_components
-      where org_id=${f.orgId} and system_key='base_pay' and kind='earning'`)).rows[0]!.id;
+      where org_id=${f.orgId} and system_key='base_pay' and kind='earning'`, 'objects'))[0]!.id;
     const vacationPlan = (await db.execute<{ payout_component_id: string }>(sql`select payout_component_id from entitlement_plans
-      where org_id=${f.orgId} and system_key='vacation'`)).rows[0]!;
+      where org_id=${f.orgId} and system_key='vacation'`, 'objects'))[0]!;
     const periodStart = '2026-02-15', periodEnd = '2026-02-21';
     for (const [payDate, treatmentId, included, vacation] of [
       ['2026-02-28', beforeId, false, '40.0000'],
@@ -63,16 +63,16 @@ test('a recurring earning changes vacation bases at pay date while retaining nat
         const stub = (await db.execute<{ gross: string; vacation: string; source: PayRunCalculationSourceSnapshot }>(sql`
           select s.gross::text,s.vacation_accrued::text as vacation,r.calculation_source_snapshot as source
           from pay_stubs s join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
-          where s.org_id=${f.orgId} and s.pay_run_document_id=${run.documentId}`)).rows[0]!;
+          where s.org_id=${f.orgId} and s.pay_run_document_id=${run.documentId}`, 'objects'))[0]!;
         assert.equal(stub.gross, '1100.0000');
         assert.equal(stub.vacation, vacation);
         const consumed = stub.source.payComponentStatutoryTreatments!.find(row => row.componentId===componentId)!;
         assert.equal(consumed.id, treatmentId);
         assert.equal(consumed.vacationable, included);
         assert.deepEqual(consumed.programExclusions, ['wcb']);
-        const allocations = (await db.execute<{ amount: string; snapshot: { basis: { hours: string }; statutoryTreatment: { id: string; vacationable: boolean } } }>(sql`
+        const allocations = await db.execute<{ amount: string; snapshot: { basis: { hours: string }; statutoryTreatment: { id: string; vacationable: boolean } } }>(sql`
           select amount::text,source_snapshot as snapshot from pay_run_benefit_allocations
-          where org_id=${f.orgId} and pay_run_document_id=${run.documentId} and rule_id=${ruleId}`)).rows;
+          where org_id=${f.orgId} and pay_run_document_id=${run.documentId} and rule_id=${ruleId}`, 'objects');
         assert.equal(allocations.length, 1);
         assert.equal(allocations[0]!.amount, '100.0000');
         assert.equal(allocations[0]!.snapshot.basis.hours, '20.0000');
@@ -82,9 +82,9 @@ test('a recurring earning changes vacation bases at pay date while retaining nat
       await db.execute(sql`update payroll_vacation_terms set method='pay_each_period',updated_by=${f.actorId},updated_at=now()
         where org_id=${f.orgId} and employment_id=${employmentId}`);
       assert.deepEqual((await calculatePayRun(command)).errors, []);
-      const cash = (await db.execute<{ amount: string }>(sql`select l.amount::text from pay_stub_lines l
+      const cash = await db.execute<{ amount: string }>(sql`select l.amount::text from pay_stub_lines l
         join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id where s.org_id=${f.orgId}
-          and s.pay_run_document_id=${run.documentId} and l.component_id=${vacationPlan.payout_component_id}`)).rows;
+          and s.pay_run_document_id=${run.documentId} and l.component_id=${vacationPlan.payout_component_id}`, 'objects');
       assert.deepEqual(cash, [{ amount:vacation }]);
       await db.execute(sql`update payroll_vacation_terms set method='accrue',updated_by=${f.actorId},updated_at=now()
         where org_id=${f.orgId} and employment_id=${employmentId}`);

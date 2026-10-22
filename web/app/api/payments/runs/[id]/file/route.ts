@@ -35,8 +35,8 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
        where pf.payment_run_id = ${id} and pf.org_id = ${gate.user.orgId}
          and pf.status in ('approved', 'delivered')
        order by pf.sequence_number desc limit 1
-    `))
-    const file = result.rows[0]
+    `, 'objects'))
+    const file = result[0]
     if (!file) return NextResponse.json({ error: 'no approved payment file is available' }, { status: 409 })
     // Masked-clone tombstone: the artifact row exists but its bytes were
     // never copied — refuse by name (403 via paymentErrorResponse), never as
@@ -66,8 +66,8 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: str
     const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id, {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
-    const state = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id}`))
-    return NextResponse.json({ id: file.id, filename: file.filename, status: state.rows[0]?.status })
+    const state = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id}`, 'objects'))
+    return NextResponse.json({ id: file.id, filename: file.filename, status: state[0]?.status })
   } catch (e) {
     return paymentErrorResponse(e)
   }

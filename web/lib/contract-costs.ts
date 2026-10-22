@@ -82,7 +82,7 @@ export async function parseCostAmountMinor(
     })
   }
   const row = (await db.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${currency}`)).rows[0]
+    select minor_units from currencies where code = ${currency}`, 'objects'))[0]
   if (!row) {
     throw new ContractCostError(`Unknown currency ${currency}.`, {
       code: 'contract_cost_currency_unknown',

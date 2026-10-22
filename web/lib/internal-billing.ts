@@ -42,9 +42,9 @@ export interface InternalBillingDrawerData {
 }
 
 async function names(table: 'departments' | 'locations' | 'classes', orgId: string): Promise<InternalBillingOption[] | null> {
-  const rows = (await db.execute<{ id: string; label: string }>(sql`
+  const rows = await db.execute<{ id: string; label: string }>(sql`
     select id, coalesce(code || ' · ' || name, name) as label
-      from ${sql.raw(table)} where org_id = ${orgId} and is_active order by name`)).rows
+      from ${sql.raw(table)} where org_id = ${orgId} and is_active order by name`, 'objects')
   return rows.length ? rows : null
 }
 
@@ -79,7 +79,7 @@ export async function loadInternalBillingDrawerData(args: {
         select id, name as label from subsidiaries
          where org_id = ${orgId} and is_active and not is_elimination
            ${subsidiaryVisibleFilter(sql`id`, allowed)}
-         order by name`)).rows
+         order by name`, 'objects'))
     : null
   const projectsOn = await isFeatureEnabled(orgId, 'projects')
   const projects = projectsOn
@@ -87,14 +87,14 @@ export async function loadInternalBillingDrawerData(args: {
         select id, coalesce(code || ' · ' || name, name) as label from projects
          where org_id = ${orgId} and is_active and status not in ('closed', 'cancelled')
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
-         order by name`)).rows
+         order by name`, 'objects'))
     : null
-  const items = (await db.execute<{ id: string; label: string }>(sql`
+  const items = await db.execute<{ id: string; label: string }>(sql`
     select id, coalesce(code || ' · ' || name, name) as label from items
      where org_id = ${orgId} and is_active and kind not in ('inventory', 'assembly', 'kit')
-     order by name limit 500`)).rows
+     order by name limit 500`, 'objects')
   const root = (await db.execute<{ id: string; base_currency: string }>(sql`
-    select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`)).rows[0]
+    select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`, 'objects'))[0]
   const defaultSubsidiaryId = allowed === null ? root?.id ?? null : allowed.size === 1 ? [...allowed][0]! : null
   return {
     closeHref: args.closeHref,
@@ -125,11 +125,11 @@ type SuggestedPair = { debitAccountId: string | null; creditAccountId: string | 
  * endpoint validates it.
  */
 export async function suggestInternalBillingAccounts(orgId: string): Promise<Record<InternalBillingMethodKey, SuggestedPair>> {
-  const accounts = (await db.execute<{ id: string; type: string; eliminate: boolean; name: string }>(sql`
+  const accounts = await db.execute<{ id: string; type: string; eliminate: boolean; name: string }>(sql`
     select id, type, eliminate, name from accounts
      where org_id = ${orgId} and is_active and not is_summary
        and type in ('income', 'income_other', 'cogs', 'expense', 'expense_other')
-     order by number nulls last, name`)).rows
+     order by number nulls last, name`, 'objects')
   const internal = /intern|inter-?depart|interco|recover|allocat|transfer/i
   const pick = (types: readonly string[], options: { eliminate?: boolean; except?: string | null } = {}) => {
     const candidates = accounts.filter((account) =>

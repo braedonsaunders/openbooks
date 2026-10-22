@@ -49,12 +49,12 @@ test("employer fact storage resolves legal-employer history and retains audited 
          and changes->>'factKey' = ${input.factKey}
          and changes->>'reason' like ${`%${tag}%`}
        order by at, id
-    `);
+    `, "objects");
     // The correction's supersede and insert share one transaction timestamp,
     // so only the original insert has a deterministic position.
-    assert.equal(audit.rows[0]?.action, "insert");
-    assert.deepEqual(audit.rows.slice(1).map((row) => row.action).sort(), ["insert", "supersede"]);
-    const correction = audit.rows.slice(1).find((row) => row.action === "insert");
+    assert.equal(audit[0]?.action, "insert");
+    assert.deepEqual(audit.slice(1).map((row) => row.action).sort(), ["insert", "supersede"]);
+    const correction = audit.slice(1).find((row) => row.action === "insert");
     assert.equal(correction?.changes.reason, `Corrected from filed prior-year roster ${tag}`);
   } finally {
     await dropScratchOrgReporting(org.orgId);

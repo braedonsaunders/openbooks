@@ -127,8 +127,8 @@ async function selectTextColumn(
   const orgFilter = org ? ` and t.${orgColumn} = '${org.replace(/'/g, "''")}'` : "";
   const r = await db.execute<{ id: string; orgId: string; userId?: string; value: string | null }>(sql.raw(
     `select t.id::text as id, t.${orgColumn}::text as "orgId"${userSelect}, t.${column} as value from ${table} t where t.${column} is not null${orgFilter} order by t.id`,
-  ));
-  return r.rows;
+  ), "objects");
+  return r;
 }
 
 export async function rotateDataKey(options: { apply: boolean; org?: string | null }): Promise<ResealReport[]> {
@@ -324,10 +324,10 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
         `select factor.user_id::text as "userId", factor.user_id::text as id, factor.secret_encrypted as value
            from auth_mfa_factors factor join users user_row on user_row.id = factor.user_id
           where 1 = 1${orgFilter} order by factor.user_id`,
-      ));
+      ), "objects");
       let alreadyCurrent = 0;
       const writes: Array<{ userId: string; oldValue: string; newValue: string }> = [];
-      for (const row of factors.rows) {
+      for (const row of factors) {
         const planned = planReseal(
           row.value,
           { orgId: row.userId, purpose: "auth.mfa.secret" },
@@ -358,7 +358,7 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       reports.push({
         table: "auth_mfa_factors",
         column: "secret_encrypted",
-        rows: factors.rows.length,
+        rows: factors.length,
         alreadyCurrent,
         resealed: writes.length,
       });
@@ -371,11 +371,11 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       const orgFilter = org ? ` where id = '${org.replace(/'/g, "''")}'` : "";
       const orgs = await db.execute<{ id: string; settings: unknown }>(sql.raw(
         `select id::text as id, settings from orgs${orgFilter} order by id`,
-      ));
+      ), "objects");
       let checked = 0;
       let resealed = 0;
       const writes: Array<{ id: string; oldSettings: string; newSettings: string }> = [];
-      for (const row of orgs.rows) {
+      for (const row of orgs) {
         const settings = (row.settings && typeof row.settings === "object" ? row.settings : {}) as Record<string, unknown>;
         const next = rotateOrgSettings(row.id, settings, activeId);
         checked += 1;
@@ -424,11 +424,11 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
         + ` from payroll_filing_submission_slips sl`
         + ` join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id`
         + ` where 1 = 1${orgFilter} order by sl.id`,
-      ));
+      ), "objects");
       let alreadyCurrent = 0;
       let skipped = 0;
       const writes: Array<{ id: string; where: string; oldValue: string; newValue: string }> = [];
-      for (const slip of slips.rows) {
+      for (const slip of slips) {
         const where =
           `payroll_filing_submission_slips.reported row ${slip.id} (${slip.country} ${slip.filingKey} ${slip.taxYear} row ${slip.rowId})`;
         const raw = slip.reported as Partial<PayrollFilingReported> | null;
@@ -474,7 +474,7 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       reports.push({
         table: "payroll_filing_submission_slips",
         column: "reported",
-        rows: slips.rows.length,
+        rows: slips.length,
         alreadyCurrent,
         resealed: writes.length,
         ...(skipped > 0 ? { skipped } : {}),
@@ -485,9 +485,9 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
     // an --org run skips it (nothing tenant-scoped to bind the write to).
     if (!org) {
       const single = await db.execute<{ settings: unknown }>(sql`
-        select settings from platform_settings where id = 'platform'`);
-      const settings = (single.rows[0]?.settings && typeof single.rows[0]?.settings === "object"
-        ? single.rows[0]!.settings
+        select settings from platform_settings where id = 'platform'`, "objects");
+      const settings = (single[0]?.settings && typeof single[0]?.settings === "object"
+        ? single[0]!.settings
         : {}) as Record<string, unknown>;
       const feedback = (settings.feedback && typeof settings.feedback === "object"
         ? settings.feedback

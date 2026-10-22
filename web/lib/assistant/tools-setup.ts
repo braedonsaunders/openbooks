@@ -113,20 +113,20 @@ const listSetupRecordsTool: AssistantToolDef = {
       db.execute<Record<string, unknown>>(sql`
         select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)} ${rowFilter}
          order by ${sql.raw(orderBy)}
-         limit ${limit}`),
+         limit ${limit}`, "objects"),
       db.execute<{ n: number }>(sql`
-        select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`),
+        select count(*)::int as n from ${setupReadSource(entity)} ${rowFilter}`, "objects"),
     ]);
-    const total = Number(countRes.rows[0]?.n ?? 0);
+    const total = Number(countRes[0]?.n ?? 0);
     return {
       ok: true,
       data: {
         entityKey: entity.key,
         total,
-        returned: rowsRes.rows.length,
-        truncated: total > rowsRes.rows.length,
+        returned: rowsRes.length,
+        truncated: total > rowsRes.length,
         href: setupEntityHref(entity),
-        items: rowsRes.rows.map((row) => ({
+        items: rowsRes.map((row) => ({
           id: row[idColumn],
           ...Object.fromEntries(entity.columns.map((c) => [c.key, row[toSnake(c.key)]])),
           ...(entity.key === 'pay-components'

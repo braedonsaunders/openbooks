@@ -83,7 +83,7 @@ async function setup(org: ScratchOrg, actor: string, mode: "per_order" | "daily_
     const id = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     accounts[key as keyof Fixture["accounts"]] = id;
   }
   const maps: Array<[string, string, string]> = [
@@ -184,12 +184,12 @@ function fullRefund(orderExternalId: string, refundId: string, overrides: Partia
 }
 
 async function journalSum(orgId: string, documentId: string): Promise<bigint> {
-  const legs = (await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`
+  const legs = await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`
     select l.amount::text as amount from journal_lines l
      join journal_entries e on e.id = l.entry_id
      where l.org_id = ${orgId} and l.entry_id = (
        select posted_entry_id from documents where id = ${documentId} and org_id = ${orgId})
-       and e.status in ('posted','reversed')`))).rows;
+       and e.status in ('posted','reversed')`, "objects"));
   return legs.reduce((sum, leg) => {
     const [whole, frac = ""] = leg.amount.split(".");
     return sum + BigInt(`${whole}${(frac + "0000").slice(0, 4)}`);
@@ -200,7 +200,7 @@ async function stockPosition(orgId: string, itemId: string, locationId: string):
   const row = (await withOrgContext(orgId, () => db.execute<{ quantity: string; value: string }>(sql`
     select coalesce(sum(quantity), 0)::text as quantity, coalesce(sum(total_value), 0)::text as value
       from inventory_movements
-     where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${locationId}`))).rows[0]!;
+     where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${locationId}`, "objects")))[0]!;
   return { quantity: row.quantity, value: row.value };
 }
 
@@ -229,7 +229,7 @@ test("full refund posts a balanced cash refund and restocks at original cost", {
     assert.ok(outcome.documentId);
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ kind: string; status: string; total: string; tax_total: string }>(sql`
       select kind, status, total::text as total, tax_total::text as tax_total
-        from documents where id = ${outcome.documentId} and org_id = ${org.orgId}`))).rows[0]!;
+        from documents where id = ${outcome.documentId} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(doc.kind, "cash_refund");
     assert.equal(doc.status, "posted");
     assert.equal(doc.total, "68.8600");
@@ -237,11 +237,11 @@ test("full refund posts a balanced cash refund and restocks at original cost", {
     assert.equal(await journalSum(org.orgId, outcome.documentId!), 0n);
     // The discount reversal carries the tee's tax code at zero tax, so the
     // refunded taxable base nets to the 63.00 the sale taxed, not 68.00.
-    const components = (await withOrgContext(org.orgId, () => db.execute<{ amount: string; taxable: string; tax: string }>(sql`
+    const components = await withOrgContext(org.orgId, () => db.execute<{ amount: string; taxable: string; tax: string }>(sql`
       select dl.amount::text as amount, c.taxable_amount::text as taxable, c.tax_amount::text as tax
         from document_lines dl
         join document_line_tax_components c on c.document_line_id = dl.id and c.org_id = dl.org_id
-       where dl.org_id = ${org.orgId} and dl.document_id = ${outcome.documentId}`))).rows;
+       where dl.org_id = ${org.orgId} and dl.document_id = ${outcome.documentId}`, "objects"));
     assert.deepEqual(
       components.filter((c) => c.amount.startsWith("-")).map((c) => [c.taxable, c.tax]),
       [["-5.0000", "0.0000"]],
@@ -253,12 +253,12 @@ test("full refund posts a balanced cash refund and restocks at original cost", {
       return sum + (negative ? -units : units);
     }, 0n), 630000n);
     // The payout credits the gateway clearing the sale debited.
-    const clearing = (await withOrgContext(org.orgId, () => db.execute<{ amount: string }>(sql`
+    const clearing = await withOrgContext(org.orgId, () => db.execute<{ amount: string }>(sql`
       select l.amount::text as amount from journal_lines l
        join journal_entries e on e.id = l.entry_id
        where l.org_id = ${org.orgId} and l.account_id = ${accounts.clearing}
          and l.entry_id = (select posted_entry_id from documents where id = ${outcome.documentId} and org_id = ${org.orgId})
-         and e.status in ('posted','reversed')`))).rows;
+         and e.status in ('posted','reversed')`, "objects"));
     assert.equal(clearing.length, 1);
     assert.equal(clearing[0]!.amount, "-68.8600");
     // Both units are back on the shelf: 10 received, 2 sold, 2 returned.
@@ -273,7 +273,7 @@ test("full refund posts a balanced cash refund and restocks at original cost", {
     const evidence = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from document_lines
        where document_id = ${outcome.documentId} and org_id = ${org.orgId}
-         and custom ? 'inventoryReturn'`))).rows[0]!;
+         and custom ? 'inventoryReturn'`, "objects")))[0]!;
     assert.equal(evidence.count, "2");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -306,7 +306,7 @@ test("a second full refund refuses as over-refund by name", { skip: !DB }, async
     assert.equal(outcome.code, "over_refund");
     const parked = (await withOrgContext(org.orgId, () => db.execute<{ code: string; reason: string; remedy: string }>(sql`
       select exception_code as code, exception_reason as reason, exception_remedy as remedy
-        from channel_order_events where id = ${second.eventId} and org_id = ${org.orgId}`))).rows[0]!;
+        from channel_order_events where id = ${second.eventId} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(parked.code, "over_refund");
     assert.match(parked.reason, /already returned/);
     assert.match(parked.remedy, /manual cash refund/);
@@ -335,7 +335,7 @@ test("replaying a posted refund is a no-op", { skip: !DB }, async () => {
     assert.equal(second.documentId, first.documentId);
     const count = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from documents
-       where org_id = ${org.orgId} and external_source = 'shopify' and external_ref = 'r-9004'`))).rows[0]!;
+       where org_id = ${org.orgId} and external_source = 'shopify' and external_ref = 'r-9004'`, "objects")))[0]!;
     assert.equal(count.count, "1");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -360,7 +360,7 @@ test("replaying an approved channel cash refund preserves its original lines and
     assert.equal(held.status, "pending");
     assert.ok(held.documentId);
     const gate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-      select id from flow_gates where org_id = ${org.orgId} and subject_id = ${held.documentId} and status = 'pending'`))).rows[0]!;
+      select id from flow_gates where org_id = ${org.orgId} and subject_id = ${held.documentId} and status = 'pending'`, "objects")))[0]!;
     await withOrgContext(org.orgId, () => decideGate({ gateId: gate.id, decision: "approved", userId: approver }));
 
     const replayed = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
@@ -370,7 +370,7 @@ test("replaying an approved channel cash refund preserves its original lines and
       select d.status, (select count(*)::int from document_lines l where l.org_id = d.org_id and l.document_id = d.id) as lines,
              (select count(*)::int from document_tenders t where t.org_id = d.org_id and t.document_id = d.id) as tenders,
              d.posted_entry_id as "postedEntryId"
-        from documents d where d.org_id = ${org.orgId} and d.id = ${held.documentId}`))).rows[0]!;
+        from documents d where d.org_id = ${org.orgId} and d.id = ${held.documentId}`, "objects")))[0]!;
     assert.equal(doc.status, "posted");
     assert.ok(doc.lines > 0);
     assert.equal(doc.tenders, 1);
@@ -468,7 +468,7 @@ test("gift card tender pays back onto the same stored-value card", { skip: !DB }
     const stored = await withBypass(() => ingestChannelOrder(org.orgId, actor, channelId, order));
     assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "posted");
     const before = (await withOrgContext(org.orgId, () => db.execute<{ balance_minor: string }>(sql`
-      select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`))).rows[0]!;
+      select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`, "objects")))[0]!;
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "1005", {
       kind: "refund",
       externalId: "r-9006",
@@ -491,7 +491,7 @@ test("gift card tender pays back onto the same stored-value card", { skip: !DB }
     const outcome = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(outcome.status, "posted");
     const after = (await withOrgContext(org.orgId, () => db.execute<{ balance_minor: string }>(sql`
-      select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`))).rows[0]!;
+      select balance_minor from stored_value_accounts where id = ${issued.accountId} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.ok(BigInt(after.balance_minor) - BigInt(before.balance_minor) > 0n);
     assert.equal(after.balance_minor, "500000");
   } finally {
@@ -547,7 +547,7 @@ test("a mixed kit restocks its stocked components and settles the service line i
     assert.equal(Number(sold.quantity), 9);
     const serviceMoves = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from inventory_movements
-       where org_id = ${org.orgId} and item_id = ${org.items.service}`))).rows[0]!;
+       where org_id = ${org.orgId} and item_id = ${org.items.service}`, "objects")))[0]!;
     assert.equal(serviceMoves.count, "0");
     const event = await withBypass(() => ingestChannelEvent(org.orgId, actor, channelId, "2001", {
       kind: "refund",
@@ -576,12 +576,12 @@ test("a mixed kit restocks its stocked components and settles the service line i
     assert.equal(tee.value, "20.0000");
     const after = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from inventory_movements
-       where org_id = ${org.orgId} and item_id = ${org.items.service}`))).rows[0]!;
+       where org_id = ${org.orgId} and item_id = ${org.items.service}`, "objects")))[0]!;
     assert.equal(after.count, "0");
     const evidence = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from document_lines
        where document_id = ${outcome.documentId} and org_id = ${org.orgId}
-         and custom ? 'inventoryReturn'`))).rows[0]!;
+         and custom ? 'inventoryReturn'`, "objects")))[0]!;
     assert.equal(evidence.count, "1");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -607,12 +607,12 @@ test("summary mode folds the day's refund into the batch", { skip: !DB }, async 
     assert.equal(outcome.posted, 2);
     const refunded = (await withOrgContext(org.orgId, () => db.execute<{ posting_status: string; posting_document_id: string | null }>(sql`
       select posting_status, posting_document_id from channel_order_events
-       where id = ${event.eventId} and org_id = ${org.orgId}`))).rows[0]!;
+       where id = ${event.eventId} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(refunded.posting_status, "posted");
     assert.ok(refunded.posting_document_id);
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ kind: string; status: string; total: string }>(sql`
       select kind, status, total::text as total from documents
-       where id = ${refunded.posting_document_id} and org_id = ${org.orgId}`))).rows[0]!;
+       where id = ${refunded.posting_document_id} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(doc.kind, "cash_refund");
     assert.equal(doc.status, "posted");
     assert.equal(doc.total, "68.8600");

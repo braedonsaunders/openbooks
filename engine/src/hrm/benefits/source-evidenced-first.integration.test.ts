@@ -164,13 +164,13 @@ async function retainRows(
   const versionId = randomUUID();
   const folderId = randomUUID();
   assert.equal((await db.execute(sql`insert into folders (id,org_id,name,owner_id,is_private,created_by,updated_by)
-    values (${folderId},${h.org.orgId},${`source-evidence-${folderId.slice(0, 6)}`},${folderOptions.privateOwnerId ?? null},${folderOptions.isPrivate === true},${h.authorId},${h.authorId}) returning id`)).rows.length, 1);
+    values (${folderId},${h.org.orgId},${`source-evidence-${folderId.slice(0, 6)}`},${folderOptions.privateOwnerId ?? null},${folderOptions.isPrivate === true},${h.authorId},${h.authorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into files (id,org_id,folder_id,name,file_type,content_type,size_bytes,content_hash,created_by,updated_by)
-    values (${fileId},${h.org.orgId},${folderId},${filename},'other',${contentType},${bytes.length},${contentHash},${h.authorId},${h.authorId}) returning id`)).rows.length, 1);
+    values (${fileId},${h.org.orgId},${folderId},${filename},'other',${contentType},${bytes.length},${contentHash},${h.authorId},${h.authorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into file_versions (id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-    values (${versionId},${fileId},1,${bytes.length},${contentType},${contentHash},${h.authorId}) returning id`)).rows.length, 1);
-  assert.equal((await db.execute(sql`insert into file_blobs (version_id,bytes) values (${versionId},${bytes}) returning id`)).rows.length, 1);
-  assert.equal((await db.execute(sql`update files set current_version_id=${versionId} where org_id=${h.org.orgId} and id=${fileId} returning id`)).rows.length, 1);
+    values (${versionId},${fileId},1,${bytes.length},${contentType},${contentHash},${h.authorId}) returning id`, "objects")).length, 1);
+  assert.equal((await db.execute(sql`insert into file_blobs (version_id,bytes) values (${versionId},${bytes}) returning id`, "objects")).length, 1);
+  assert.equal((await db.execute(sql`update files set current_version_id=${versionId} where org_id=${h.org.orgId} and id=${fileId} returning id`, "objects")).length, 1);
   return {
     fileId,
     versionId,
@@ -201,11 +201,11 @@ async function replaceRetainedJsonBytes(
 ) {
   const bytes = typeof json === "string" ? Buffer.from(json, "utf8") : Buffer.from(json);
   const contentHash = createHash("sha256").update(bytes).digest("hex");
-  assert.equal((await db.execute(sql`update file_blobs set bytes=${bytes} where version_id=${artifact.versionId} returning version_id`)).rows.length, 1);
+  assert.equal((await db.execute(sql`update file_blobs set bytes=${bytes} where version_id=${artifact.versionId} returning version_id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`update file_versions set size_bytes=${bytes.length},content_hash=${contentHash}
-    where file_id=${artifact.fileId} and id=${artifact.versionId} returning id`)).rows.length, 1);
+    where file_id=${artifact.fileId} and id=${artifact.versionId} returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`update files set size_bytes=${bytes.length},content_hash=${contentHash}
-    where org_id=${h.org.orgId} and id=${artifact.fileId} returning id`)).rows.length, 1);
+    where org_id=${h.org.orgId} and id=${artifact.fileId} returning id`, "objects")).length, 1);
   return { ...artifact, sha256: contentHash, sizeBytes: bytes.length };
 }
 
@@ -213,10 +213,10 @@ sourceTest(
   "source-evidenced first obligations stay separate, redact to self-service, and use normal payroll lifecycle",
   async (h) => {
     const { program, target, contributor, query } = await seedSourceAwardCase(h);
-    const timeRowsBefore = (await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
-    where org_id=${h.org.orgId} and employee_party_id in (${target.workerPartyId},${contributor.workerPartyId}) order by id`)).rows;
-    const projectRowsBefore = (await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`)).rows;
-    const ticketRowsBefore = (await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`)).rows;
+    const timeRowsBefore = await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
+    where org_id=${h.org.orgId} and employee_party_id in (${target.workerPartyId},${contributor.workerPartyId}) order by id`, "objects");
+    const projectRowsBefore = await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`, "objects");
+    const ticketRowsBefore = await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`, "objects");
     const award = await recordSourceEvidencedFirstIncentiveAward(query);
     const awardDto = await getBenefitAward(db, h.org.orgId, h.authorId, award.id);
     assert.equal("sourceSnapshot" in awardDto, false);
@@ -224,7 +224,7 @@ sourceTest(
     assert.equal(award.status, "draft");
     assert.equal(award.sourceKey?.startsWith("source-first:"), true);
     const retained = (await db.execute<{source_snapshot: Record<string, unknown>; evidence: Record<string, unknown>}>(sql`
-    select source_snapshot,evidence from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!;
+    select source_snapshot,evidence from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!;
     const evidence = retained.source_snapshot.sourceEvidence as Record<string, unknown>;
     assert.equal(retained.source_snapshot.payComponentId, program.payComponentId);
     assert.equal(evidence.sourceEvidenceClass, "missing-source-identity");
@@ -244,16 +244,16 @@ sourceTest(
            changes#>>'{after,sourceContext,sourceRowRef}' as source_row_ref,
            changes#>>'{after,sourceContext,nativePreview,digest}' as source_digest
       from audit_log where org_id=${h.org.orgId} and table_name='hrm_benefit_awards' and row_id=${award.id}
-       order by at desc,id desc limit 1`)).rows[0]!;
+       order by at desc,id desc limit 1`, "objects"))[0]!;
     assert.equal(audit.actor_id, h.authorId);
     assert.equal(audit.reason, query.reason);
     assert.equal(audit.source_row_ref, query.sourceRowRef);
     assert.equal(typeof audit.source_digest, "string");
-    assert.equal((await db.execute(sql`select id from hrm_benefit_award_events where org_id=${h.org.orgId} and award_id=${award.id} and kind='created'`)).rows.length, 1);
-    assert.deepEqual((await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
-    where org_id=${h.org.orgId} and employee_party_id in (${target.workerPartyId},${contributor.workerPartyId}) order by id`)).rows, timeRowsBefore);
-    assert.deepEqual((await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`)).rows, projectRowsBefore);
-    assert.deepEqual((await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`)).rows, ticketRowsBefore);
+    assert.equal((await db.execute(sql`select id from hrm_benefit_award_events where org_id=${h.org.orgId} and award_id=${award.id} and kind='created'`, "objects")).length, 1);
+    assert.deepEqual(await db.execute(sql`select id,employee_party_id,worked_on,hours,status from time_entries
+    where org_id=${h.org.orgId} and employee_party_id in (${target.workerPartyId},${contributor.workerPartyId}) order by id`, "objects"), timeRowsBefore);
+    assert.deepEqual(await db.execute(sql`select id from projects where org_id=${h.org.orgId} order by id`, "objects"), projectRowsBefore);
+    assert.deepEqual(await db.execute(sql`select document_id,foreman_party_id,superintendent_party_id from field_tickets where org_id=${h.org.orgId} order by document_id`, "objects"), ticketRowsBefore);
 
     const reconciliation = await reconcileIncentivePeriod({
     orgId: h.org.orgId, actorId: h.authorId, programId: program.id,
@@ -283,7 +283,7 @@ sourceTest(
     values (${stubId},${h.org.orgId},${runDocumentId},${target.workerPartyId},${target.employmentId},'TX',26,'2026-08-05',2026,'US','calculation','USD',${award.value},${award.value})`);
     const adjustment = (await db.execute<{component_id: string; note: string; amount: string}>(sql`
     select component_id::text as component_id,note,amount::text as amount from pay_run_adjustments
-    where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows[0]!;
+    where org_id=${h.org.orgId} and id=${queued.adjustmentId}`, "objects"))[0]!;
     assert.equal(adjustment.component_id, program.payComponentId, "the native approval and queue path uses the program's configured component");
     await db.execute(sql`insert into pay_stub_lines (org_id,stub_id,component_id,kind,description,amount,payment_kind,created_by,updated_by)
     values (${h.org.orgId},${stubId},${adjustment.component_id},'earning',${adjustment.note},${adjustment.amount},'cash',${h.financeId},${h.financeId})`);
@@ -292,7 +292,7 @@ sourceTest(
   });
     assert.equal(delivered.status, "delivered");
     const original = (await db.execute<{source_snapshot: unknown; program_snapshot: unknown; value: string}>(sql`
-    select source_snapshot,program_snapshot,value::text as value from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!;
+    select source_snapshot,program_snapshot,value::text as value from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!;
     const correction = await createAdjustingAward({
     orgId: h.org.orgId, actorId: h.authorId, awardId: award.id,
     correctionId: randomUUID(), value: "1.00", reason: "Correct the retained source amount after review",
@@ -301,7 +301,7 @@ sourceTest(
     assert.equal(correction.adjustsAwardId, award.id);
     assert.equal(correction.status, "draft");
     assert.deepEqual((await db.execute(sql`select source_snapshot,program_snapshot,value::text as value from hrm_benefit_awards
-    where org_id=${h.org.orgId} and id=${award.id}`)).rows[0], original);
+    where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0], original);
     const correctedReconciliation = await reconcileIncentivePeriod({
     orgId: h.org.orgId, actorId: h.authorId, programId: program.id,
     periodFrom: query.periodFrom, periodTo: query.periodTo,
@@ -323,7 +323,7 @@ sourceTest("source first retries serialize, reject alternate evidence and overla
   ]);
   assert.equal(first.id, replay.id);
   assert.equal((await db.execute<{n: number}>(sql`select count(*)::int as n from hrm_benefit_awards
-    where org_id=${h.org.orgId} and source_key like 'source-first:%'`)).rows[0]!.n, 1);
+    where org_id=${h.org.orgId} and source_key like 'source-first:%'`, "objects"))[0]!.n, 1);
   await db.execute(sql`insert into time_entries (id,org_id,employee_party_id,worked_on,hours,status,approved_at)
     values (${randomUUID()},${h.org.orgId},${target.workerPartyId},'2026-07-14','4','approved',now())`);
   await assert.rejects(recordSourceEvidencedFirstIncentiveAward(query), /different first obligation/);
@@ -368,12 +368,12 @@ sourceTest("source first admission rejects forged retained facts, foreign actors
   });
   assert.equal(nativeRead.value, "32.0000");
   const retainedHash = (await db.execute<{ content_hash: string }>(sql`select content_hash from file_versions
-    where file_id=${artifact.fileId} and id=${artifact.versionId}`)).rows[0]!.content_hash;
+    where file_id=${artifact.fileId} and id=${artifact.versionId}`, "objects"))[0]!.content_hash;
   assert.equal((await db.execute(sql`update file_versions set content_hash=${"0".repeat(64)}
-    where file_id=${artifact.fileId} and id=${artifact.versionId} returning id`)).rows.length, 1);
+    where file_id=${artifact.fileId} and id=${artifact.versionId} returning id`, "objects")).length, 1);
   await assert.rejects(recordSourceEvidencedFirstIncentiveAward(query), /native Cabinet bytes do not match/);
   assert.equal((await db.execute(sql`update file_versions set content_hash=${retainedHash}
-    where file_id=${artifact.fileId} and id=${artifact.versionId} returning id`)).rows.length, 1);
+    where file_id=${artifact.fileId} and id=${artifact.versionId} returning id`, "objects")).length, 1);
   await assert.rejects(recordSourceEvidencedFirstIncentiveAward({ ...query, sourceArtifacts: [{ ...artifact, rowPointer: "/1" }] }), /does not exist|selected retained source field/i);
   await assert.rejects(recordSourceEvidencedFirstIncentiveAward({ ...query, sourceArtifacts: [{ ...artifact, versionId: randomUUID() }] }), /retained Cabinet source file is unavailable/);
   await assert.rejects(recordSourceEvidencedFirstIncentiveAward({ ...query, value: "31.00" }), /differs from the selected retained row/);
@@ -409,7 +409,7 @@ sourceTest("source first admission rejects forged retained facts, foreign actors
   assert.equal((await db.execute(sql`insert into subsidiaries
     (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
     values (${foreignSubsidiaryId},${h.org.orgId},${h.org.subsidiaryId},'Separate legal payer','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
-    returning id`)).rows.length, 1);
+    returning id`, "objects")).length, 1);
   const foreignEmployment = await seedEmployment(h.org.orgId, foreignSubsidiaryId, { displayName: "Different legal payer employee" });
   const foreignRow = { ...row, sourceCard: "issued-card-foreign-payer" };
   const foreignArtifact = await retainRows(h, [foreignRow], "foreign-payer-retained-award.json");
@@ -458,10 +458,10 @@ sourceTest("source first rechecks same-organization Cabinet access and refuses r
   const revoked = await retainRows(h, [row], "revoked-issued-row.json", { privateOwnerId: h.approverId, isPrivate: true });
   assert.equal((await db.execute(sql`insert into resource_grants
     (id,org_id,resource_type,resource_id,principal_type,principal_id,access,created_by,updated_by)
-    values (${randomUUID()},${h.org.orgId},'folder',${revoked.folderId},'user',${h.authorId},'viewer',${h.approverId},${h.approverId}) returning id`)).rows.length, 1);
+    values (${randomUUID()},${h.org.orgId},'folder',${revoked.folderId},'user',${h.authorId},'viewer',${h.approverId},${h.approverId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`delete from resource_grants
     where org_id=${h.org.orgId} and resource_type='folder' and resource_id=${revoked.folderId}
-      and principal_type='user' and principal_id=${h.authorId} returning id`)).rows.length, 1);
+      and principal_type='user' and principal_id=${h.authorId} returning id`, "objects")).length, 1);
   await assert.rejects(recordSourceEvidencedFirstIncentiveAward({ ...query, sourceArtifacts: [revoked] }), /unavailable to this operator|accessible Cabinet file/i);
 });
 
@@ -579,7 +579,7 @@ sourceTest(
     mappingAttestation: { employmentId: worker.employmentId, basis: "The retained issued row and the reviewed employee employment crosswalk identify this recipient and program payer.", reason: "I reviewed both retained records and attest the source row maps to this employment and legal payer.", confirmed: true },
     reason: "The current native period measure is a loss, so this historical obligation needs a separately reviewed source-evidence exception.",
   }), /positive native incentive pool|loss or threshold miss/i);
-    assert.equal((await db.execute(sql`select id from hrm_benefit_awards where org_id=${h.org.orgId} and program_id=${program.id}`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from hrm_benefit_awards where org_id=${h.org.orgId} and program_id=${program.id}`, "objects")).length, 0);
     const reconciliation = await reconcileIncentivePeriod({ orgId: h.org.orgId, actorId: h.authorId, programId: program.id, periodFrom: row.earningFrom, periodTo: row.earningTo, asOf: "2026-07-31" });
     assert.equal(reconciliation.preview, null);
     assert.ok(reconciliation.nativeMeasureOnly && "value" in reconciliation.nativeMeasureOnly.measured);
@@ -608,7 +608,7 @@ sourceTest("source paid above a negative project-margin measure records a draft 
   assert.equal(award.value, "450.2500");
   assert.equal(award.sourceKey?.startsWith("source-first:"), true);
   const retainedRow = (await db.execute<{ source_snapshot: Record<string, unknown>; evidence: Record<string, unknown> }>(sql`
-    select source_snapshot, evidence from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!;
+    select source_snapshot, evidence from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!;
   const evidence = retainedRow.source_snapshot.sourceEvidence as Record<string, unknown>;
   assert.equal(evidence.sourceEvidenceClass, "source-paid-above-native-measure");
   assert.equal(evidence.sourcePaidDate, "2026-09-18");
@@ -634,7 +634,7 @@ sourceTest("source paid above a negative project-margin measure records a draft 
     select changes#>>'{after,sourceContext,sourcePaidDate}' as paid,
            changes#>>'{after,sourceContext,governingDecision,actorId}' as actor
       from audit_log where org_id=${h.org.orgId} and table_name='hrm_benefit_awards' and row_id=${award.id}
-     order by at desc, id desc limit 1`)).rows[0]!;
+     order by at desc, id desc limit 1`, "objects"))[0]!;
   assert.equal(audit.paid, "2026-09-18");
   assert.equal(audit.actor, h.authorId);
 
@@ -656,7 +656,7 @@ sourceTest("source paid above a negative project-margin measure records a draft 
     values (${stubId},${h.org.orgId},${runDocumentId},${target.workerPartyId},${target.employmentId},'TX',26,'2026-08-05',2026,'US','calculation','USD',${award.value},${award.value})`);
   const adjustment = (await db.execute<{ component_id: string; note: string; amount: string }>(sql`
     select component_id::text as component_id, note, amount::text as amount from pay_run_adjustments
-     where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows[0]!;
+     where org_id=${h.org.orgId} and id=${queued.adjustmentId}`, "objects"))[0]!;
   assert.equal(adjustment.component_id, program.payComponentId);
   await db.execute(sql`insert into pay_stub_lines (org_id,stub_id,component_id,kind,description,amount,payment_kind,created_by,updated_by)
     values (${h.org.orgId},${stubId},${adjustment.component_id},'earning',${adjustment.note},${adjustment.amount},'cash',${h.financeId},${h.financeId})`);
@@ -665,7 +665,7 @@ sourceTest("source paid above a negative project-margin measure records a draft 
   });
   assert.equal(delivered.status, "delivered");
   const original = (await db.execute(sql`select source_snapshot, program_snapshot, value::text as value from hrm_benefit_awards
-    where org_id=${h.org.orgId} and id=${award.id}`)).rows[0];
+    where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0];
   const correction = await createAdjustingAward({
     orgId: h.org.orgId, actorId: h.authorId, awardId: award.id,
     correctionId: randomUUID(), value: "1.00", reason: "Correct the retained source amount after review",
@@ -673,7 +673,7 @@ sourceTest("source paid above a negative project-margin measure records a draft 
   });
   assert.equal(correction.adjustsAwardId, award.id);
   assert.deepEqual((await db.execute(sql`select source_snapshot, program_snapshot, value::text as value from hrm_benefit_awards
-    where org_id=${h.org.orgId} and id=${award.id}`)).rows[0], original, "adjusting correction leaves the original immutable");
+    where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0], original, "adjusting correction leaves the original immutable");
 });
 
 sourceTest("original PDF report and paystub facts bind across Cabinet versions under reviewed native payroll currency", async (h) => {
@@ -713,7 +713,7 @@ sourceTest("original PDF report and paystub facts bind across Cabinet versions u
   const award = await recordSourceEvidencedFirstIncentiveAward(command);
   assert.equal(award.value, "450.2500"); assert.equal(award.currency, "USD"); assert.equal(award.status, "draft");
   assert.equal((await recordSourceEvidencedFirstIncentiveAward(command)).id, award.id);
-  const saved = (await db.execute<{ source: Record<string, unknown> }>(sql`select source_snapshot->'sourceEvidence' as source from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source;
+  const saved = (await db.execute<{ source: Record<string, unknown> }>(sql`select source_snapshot->'sourceEvidence' as source from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!.source;
   assert.equal(saved.sourcePaidDate, row.paidDate);
   assert.equal((saved.currencyEvidence as Record<string, unknown>).kind, "reviewed-native-program-payroll-currency");
   assert.equal((saved.nativeMeasureAnchor as Record<string, unknown>).targetCarryForward, "-200.0000");
@@ -885,7 +885,7 @@ sourceTest(
     reason: "Record the issued source obligation directed above the negative native measure.",
   }), /project-margin programs only/, "generic money-metric losses are deferred to governed review");
     assert.equal((await db.execute(sql`select id from hrm_benefit_awards
-    where org_id=${h.org.orgId} and source_snapshot#>>'{sourceEvidence,sourceEvidenceClass}' = 'source-paid-above-native-measure'`)).rows.length, 0);
+    where org_id=${h.org.orgId} and source_snapshot#>>'{sourceEvidence,sourceEvidenceClass}' = 'source-paid-above-native-measure'`, "objects")).length, 0);
   },
 );
 

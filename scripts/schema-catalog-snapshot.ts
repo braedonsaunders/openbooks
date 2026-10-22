@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, pool } from "@openbooks/engine/platform/db";
 
 async function rows(query: ReturnType<typeof sql>): Promise<unknown[]> {
-  return (await db.execute(query)).rows;
+  return await db.execute(query, "objects");
 }
 
 async function main(): Promise<void> {

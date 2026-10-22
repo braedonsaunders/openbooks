@@ -108,11 +108,11 @@ const listImportRuns: AssistantToolDef = {
          where ${where}
          order by j.created_at desc
          limit ${limit} offset ${offset}
-      `),
-      db.execute<{ n: string }>(sql`select count(*) as n from import_jobs j where ${where}`),
+      `, "objects"),
+      db.execute<{ n: string }>(sql`select count(*) as n from import_jobs j where ${where}`, "objects"),
     ]);
-    const total = Number(count.rows[0]?.n ?? 0);
-    const items = rows.rows.map((j) => ({
+    const total = Number(count[0]?.n ?? 0);
+    const items = rows.map((j) => ({
       id: j.id,
       resourceKey: j.resource_key,
       resourceLabel: (j.resource_label as string | null) ?? j.resource_key,
@@ -176,10 +176,10 @@ const listSyncConnections: AssistantToolDef = {
                started_at as "startedAt", finished_at as "finishedAt",
                synced_through as "syncedThrough", error_message as "errorMessage", triggered_by as "triggeredBy"
           from sync_runs where org_id = ${authz.user.orgId} and connection_id is not null
-         order by connection_id, started_at desc, id desc`),
+         order by connection_id, started_at desc, id desc`, "objects"),
     ]);
     const latestByConnection = new Map<string, SyncRunEvidence>();
-    for (const row of runs.rows) {
+    for (const row of runs) {
       const id = row.connectionId as string | null;
       if (!id || latestByConnection.has(id)) continue;
       latestByConnection.set(id, {
@@ -388,9 +388,9 @@ const listReportRuns: AssistantToolDef = {
        where ${where}
        order by r.started_at desc nulls last, r.created_at desc
        limit ${limit} offset ${offset}
-    `));
+    `, "objects"));
     const items: Record<string, unknown>[] = [];
-    for (const row of rows.rows) {
+    for (const row of rows) {
       const label = await visibleReportLabel(authz, authz.user.orgId, row.definition_id, row.authorization_snapshot);
       if (!label) continue;
       items.push({
@@ -442,9 +442,9 @@ const listEmailDeliveries: AssistantToolDef = {
        where ${where}
        order by d.created_at desc
        limit ${limit} offset ${offset}
-    `));
+    `, "objects"));
     const items: Record<string, unknown>[] = [];
-    for (const row of rows.rows) {
+    for (const row of rows) {
       const label = await visibleReportLabel(authz, authz.user.orgId, String(row.definitionId), row.snapshot);
       if (!label) continue;
       items.push({

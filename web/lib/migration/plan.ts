@@ -26,13 +26,13 @@ export class MigrationPlanRefusal extends Error {
 }
 
 export async function readMigrationPlan(orgId: string): Promise<MigrationPlan> {
-  const row = (await db.execute<{ plan: unknown }>(sql`select settings->'migrationPlan' as plan from orgs where id = ${orgId}`)).rows[0]
+  const row = (await db.execute<{ plan: unknown }>(sql`select settings->'migrationPlan' as plan from orgs where id = ${orgId}`, 'objects'))[0]
   return normalizeMigrationPlan(row?.plan)
 }
 
 async function writePlan(orgId: string, actorId: string, reason: string, mutate: (current: MigrationPlan) => Promise<MigrationPlan> | MigrationPlan): Promise<{ before: MigrationPlan; after: MigrationPlan }> {
   return withOrgTransaction(orgId, async () => {
-    const locked = (await db.execute<{ plan: unknown }>(sql`select settings->'migrationPlan' as plan from orgs where id = ${orgId} for update`)).rows[0]
+    const locked = (await db.execute<{ plan: unknown }>(sql`select settings->'migrationPlan' as plan from orgs where id = ${orgId} for update`, 'objects'))[0]
     if (!locked) throw new MigrationPlanRefusal('The organization was not found.', 404)
     const before = normalizeMigrationPlan(locked.plan)
     const draft = await mutate(before)
@@ -42,8 +42,8 @@ async function writePlan(orgId: string, actorId: string, reason: string, mutate:
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{migrationPlan}', ${JSON.stringify(after)}::jsonb, true),
              updated_at = now(), updated_by = ${actorId}::uuid
        where id = ${orgId}
-       returning id`)
-    if (updated.rows.length !== 1) throw new Error('Migration plan update did not persist')
+       returning id`, 'objects')
+    if (updated.length !== 1) throw new Error('Migration plan update did not persist')
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ migrationPlan: { before, after }, reason })}::jsonb, ${actorId})`)
@@ -63,7 +63,7 @@ export async function updateMigrationPlan(actor: { orgId: string; id: string }, 
       throw new MigrationPlanRefusal(`Unknown source system "${plan.sourceSystem}" — use a connector key from list_migration_sources, "spreadsheet" or "other".`, 422, 'sourceSystem')
     }
     if (plan.connectionId) {
-      const connection = (await db.execute<{ source: string }>(sql`select source from connections where org_id = ${actor.orgId} and id = ${plan.connectionId}`)).rows[0]
+      const connection = (await db.execute<{ source: string }>(sql`select source from connections where org_id = ${actor.orgId} and id = ${plan.connectionId}`, 'objects'))[0]
       if (!connection) throw new MigrationPlanRefusal('That connection does not exist in this organization — create it on the Migration & Sync page first.', 404, 'connectionId')
       if (plan.sourceSystem && plan.sourceSystem !== connection.source && KNOWN_SOURCES.has(plan.sourceSystem) && plan.sourceSystem !== OTHER_SOURCE) {
         throw new MigrationPlanRefusal(`The connection is a ${connection.source} connection but the plan names ${plan.sourceSystem} as the source.`, 422, 'connectionId')
@@ -72,7 +72,7 @@ export async function updateMigrationPlan(actor: { orgId: string; id: string }, 
     }
     if (plan.openingBalanceAccountId) {
       const account = (await db.execute<{ is_active: boolean; is_summary: boolean }>(sql`
-        select is_active, is_summary from accounts where org_id = ${actor.orgId} and id = ${plan.openingBalanceAccountId}`)).rows[0]
+        select is_active, is_summary from accounts where org_id = ${actor.orgId} and id = ${plan.openingBalanceAccountId}`, 'objects'))[0]
       if (!account) throw new MigrationPlanRefusal('That account does not exist in this organization.', 404, 'openingBalanceAccountId')
       if (!account.is_active || account.is_summary) throw new MigrationPlanRefusal('The opening-balance clearing account must be an active posting account, not a summary account.', 422, 'openingBalanceAccountId')
     }

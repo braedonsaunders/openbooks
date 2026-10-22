@@ -80,8 +80,8 @@ async function revisionToken(orgId: string, documentId: string): Promise<string>
     const row = (await db.execute<{ updatedAt: string }>(sql`
       select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
         from documents where id = ${documentId} and org_id = ${orgId}
-    `));
-    return row.rows[0]!.updatedAt;
+    `, "objects"));
+    return row[0]!.updatedAt;
   });
 }
 
@@ -132,7 +132,7 @@ test(
       assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()));
       const stored = await withOrgContext(org.orgId, async () => (await db.execute<{ custom: Record<string, unknown> }>(sql`
         select custom from documents where id = ${documentId} and org_id = ${org.orgId}
-      `)).rows[0]?.custom);
+      `, "objects"))[0]?.custom);
       assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
     } finally {
       routeState.authz = null;

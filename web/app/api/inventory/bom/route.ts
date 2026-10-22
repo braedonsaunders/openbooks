@@ -91,13 +91,13 @@ export const GET = defineRoute({
   const manufacturingEnabled = await isFeatureEnabled(gate.user.orgId, 'manufacturing')
   const today = await businessToday(gate.user.orgId)
   const canProposeRevision = gate.allowedSubsidiaryIds === null && can(gate,'manufacturing.manage') && can(gate,'admin.setup.manage')
-  const subsidiaries = canProposeRevision ? (await db.execute<{id:string;name:string}>(sql`select id,name from subsidiaries where org_id=${gate.user.orgId} and is_active and not is_elimination order by name,id`)).rows : []
+  const subsidiaries = canProposeRevision ? (await db.execute<{id:string;name:string}>(sql`select id,name from subsidiaries where org_id=${gate.user.orgId} and is_active and not is_elimination order by name,id`, 'objects')) : []
   if (!assemblyItemId) return NextResponse.json({ manufacturingEnabled,canProposeRevision,subsidiaries,today })
   if (!isUuid(assemblyItemId)) return refusal('Choose a valid assembly item.')
 
   const assembly = await db.execute<{ id: string; kind:string }>(sql`
-    select id,kind from items where org_id = ${gate.user.orgId} and id = ${assemblyItemId}`)
-  if (!assembly.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    select id,kind from items where org_id = ${gate.user.orgId} and id = ${assemblyItemId}`, 'objects')
+  if (!assembly[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // Catalog identity rides with every line: a component the picker would no
   // longer offer (inactive, unprofiled) still names itself instead of
   // falling back to its storage id. The joined row id tells readers
@@ -134,7 +134,7 @@ export const GET = defineRoute({
       left join items item on item.org_id = line.org_id and item.id = line.component_item_id
      where line.org_id = ${gate.user.orgId} and line.assembly_item_id = ${assemblyItemId}
      order by line.sort_order, line.component_item_id, line.operation_seq nulls first,
-              line.is_byproduct, line.effective_from nulls first, line.effective_to nulls first`)
+              line.is_byproduct, line.effective_from nulls first, line.effective_to nulls first`, 'objects')
   const version = await readBomPolicyVersion(db,gate.user.orgId,assemblyItemId)
   // The editor places a re-added line on the routing's single consuming
   // operation instead of leaving its sequence blank: the reader carries the
@@ -151,10 +151,10 @@ export const GET = defineRoute({
        and (select count(*) from mfg_routings candidate
              where candidate.org_id = ${gate.user.orgId} and candidate.produced_item_id = ${assemblyItemId} and candidate.status = 'active'
                and candidate.effective_from <= ${today}::date and (candidate.effective_to is null or ${today}::date < candidate.effective_to)) = 1
-     order by operation.sequence`)).rows : []
+     order by operation.sequence`, 'objects')) : []
   // Stocked components need costing profiles. Kit recipes can also include
   // active commercial-only components, which do not move inventory.
-  const componentEligibility = assembly.rows[0].kind === 'kit'
+  const componentEligibility = assembly[0].kind === 'kit'
     ? sql`and item.kind <> 'kit'
           and (item.kind not in ('inventory', 'assembly') or exists (
             select 1 from item_inventory_profiles profile
@@ -169,20 +169,20 @@ export const GET = defineRoute({
       from items item
      where item.org_id = ${gate.user.orgId} and item.is_active
        ${componentEligibility}
-     order by item.code nulls last, item.name`)
+     order by item.code nulls last, item.name`, 'objects')
   return NextResponse.json({
     manufacturingEnabled,
     assemblyItemId,
-    kind:assembly.rows[0].kind,
+    kind:assembly[0].kind,
     version,
     today,canProposeRevision,subsidiaries,routingOperations,
-    components: components.rows.map((line) => ({
+    components: components.map((line) => ({
       ...line,
       operationSeq: manufacturingEnabled ? line.operationSeq : null,
       isByproduct: manufacturingEnabled ? line.isByproduct : false,
       outputCostWeight:manufacturingEnabled?line.outputCostWeight:null,
     })),
-    validItems: validItems.rows,
+    validItems,
   })
   },
 })

@@ -78,7 +78,7 @@ test("channel stock and external mappings stay with the channel subsidiary", { s
       (error: unknown) => error instanceof CommerceError && error.code === "external_link_target_out_of_scope",
     );
     const linkCount = (await withBypass(() => db.execute<{ n: number }>(sql`
-      select count(*)::integer as n from external_links where org_id = ${org.orgId} and external_id = 'cross-entity-order'`))).rows[0]!.n;
+      select count(*)::integer as n from external_links where org_id = ${org.orgId} and external_id = 'cross-entity-order'`, "objects")))[0]!.n;
     assert.equal(linkCount, 0, "a cross-entity link is not persisted");
   } finally {
     await withBypass(() => dropScratchOrgReporting(org.orgId));
@@ -122,7 +122,7 @@ test("walk-in customers match the channel entity and policy audit closes the pri
     const audit = (await withBypass(() => db.execute<{ effective_to: string }>(sql`
       select changes #>> '{after,effectiveTo}' as effective_to from audit_log
        where org_id = ${org.orgId} and table_name = 'sales_channel_posting_policies'
-         and row_id = ${first.id} and action = 'update'`))).rows[0];
+         and row_id = ${first.id} and action = 'update'`, "objects")))[0];
     assert.equal(audit?.effective_to, org.date);
   } finally {
     await withBypass(() => dropScratchOrgReporting(org.orgId));

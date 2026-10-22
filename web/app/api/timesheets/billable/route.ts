@@ -121,7 +121,7 @@ export const POST = defineRoute({
              and department_id is not distinct from ${line.departmentId ?? null}
              and memo is not distinct from ${line.memo ?? null}
            for update
-        `)).rows.filter((row) => customKey(row.custom) === wantCustom);
+        `, "objects")).filter((row) => customKey(row.custom) === wantCustom);
 
         const billed = candidates.filter(
           (row) => row.billing_status === "billed" || row.invoiced_by_line_id !== null,
@@ -157,7 +157,7 @@ export const POST = defineRoute({
         // The conditional UPDATE is the claim: the row count must equal the
         // locked targets, or a concurrent decision moved an entry and the
         // whole unit rolls back instead of half-flipping the line.
-        const moved = await db.execute(sql`
+        const moved = await db.execute<never>(sql`
           update time_entries
              set is_billable = ${body.isBillable},
                  updated_by = ${user.id}, updated_at = now()

@@ -46,7 +46,7 @@ test("sandbox refresh schedule changes leave actor-attributed audit evidence", {
 
     await setScheduleAction(sandbox.sandboxId, "daily");
 
-    const evidence = (await db.execute(sql`
+    const evidence = (await db.execute<{ actor_id: string; changes: Record<string, unknown> }>(sql`
       select actor_id, changes
         from audit_log
        where org_id = ${org.orgId}
@@ -55,7 +55,7 @@ test("sandbox refresh schedule changes leave actor-attributed audit evidence", {
          and action = 'update'
        order by at desc
        limit 1
-    `) as unknown as { rows: Array<{ actor_id: string; changes: Record<string, unknown> }> }).rows[0];
+    `, "objects"))[0];
     assert.equal(evidence?.actor_id, actorId);
     assert.deepEqual(evidence?.changes, {
       before: { refresh_schedule: null },

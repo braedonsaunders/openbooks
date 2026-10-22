@@ -65,7 +65,7 @@ test('a retainage-bearing pay application is billable once the receivable contro
     const coId = (await okJson(added, 'addChangeOrder') as { id: string }).id
     asUser(org.orgId, approver)
     await okJson(await post(construction.POST, org.orgId, { action: 'approveChangeOrder', id: coId }), 'approveChangeOrder')
-    const coLine = (await db.execute<{ id: string; retainage_percent: string | null }>(sql`select id, retainage_percent from sov_lines where org_id=${org.orgId} and project_id=${project} and change_order_id=${coId}`)).rows[0]!
+    const coLine = (await db.execute<{ id: string; retainage_percent: string | null }>(sql`select id, retainage_percent from sov_lines where org_id=${org.orgId} and project_id=${project} and change_order_id=${coId}`, 'objects'))[0]!
     assert.equal(coLine.retainage_percent, null, 'the CO-created line must carry NULL retainage (the reported trigger)')
 
     // Draw on all three lines; the NULL line bills at the 10% app default.
@@ -95,7 +95,7 @@ test('a retainage-bearing pay application is billable once the receivable contro
       { controlAccounts: { retainageReceivable: retAcct } },
     ))
     assert.equal(saved.status, 200, JSON.stringify(saved.body))
-    const stored = (await db.execute<{ control: Record<string, string> }>(sql`select settings->'controlAccounts' as control from orgs where id=${org.orgId}`)).rows[0]!.control
+    const stored = (await db.execute<{ control: Record<string, string> }>(sql`select settings->'controlAccounts' as control from orgs where id=${org.orgId}`, 'objects'))[0]!.control
     assert.equal(stored.retainageReceivable, retAcct, 'Company control accounts must keep the retainage receivable mapping')
 
     // 3. The same draw now invoices: $82,000 gross, $1,200 held, $80,800 due.
@@ -103,7 +103,7 @@ test('a retainage-bearing pay application is billable once the receivable contro
     const invoice = await okJson(billed, 'billPayApp') as { invoiceId: string; currentDue: string; retainage: string }
     assert.equal(invoice.currentDue, '80800.0000')
     assert.equal(invoice.retainage, '1200.0000')
-    const lines = (await db.execute<{ account_id: string; amount: string }>(sql`select account_id, amount::text from document_lines where org_id=${org.orgId} and document_id=${invoice.invoiceId} order by line_number`)).rows
+    const lines = await db.execute<{ account_id: string; amount: string }>(sql`select account_id, amount::text from document_lines where org_id=${org.orgId} and document_id=${invoice.invoiceId} order by line_number`, 'objects')
     assert.deepEqual(lines.map((l) => l.amount), ['50000.0000', '20000.0000', '12000.0000', '-1200.0000'])
     assert.equal(lines[3]!.account_id, retAcct)
   } finally { session.user = null; await dropScratchOrg(org.orgId) }

@@ -117,10 +117,10 @@ async function seedMarketplaceInvoice(
     await persistLineTaxComponents(org.orgId, marketLineId, calculated.components, actorId, tx);
     await tx.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
   });
-  const stamped = (await db.execute<{ collectedBy: string; facilitatorName: string | null }>(sql`
+  const stamped = await db.execute<{ collectedBy: string; facilitatorName: string | null }>(sql`
     select collected_by as "collectedBy", facilitator_name as "facilitatorName"
       from document_line_tax_components
-     where org_id = ${org.orgId} and document_line_id = ${marketLineId}`)).rows;
+     where org_id = ${org.orgId} and document_line_id = ${marketLineId}`, "objects");
   assert.equal(stamped.length, 1);
   assert.equal(stamped[0]!.collectedBy, marketplace ? "marketplace" : "merchant");
   assert.equal(stamped[0]!.facilitatorName, marketplace ? "Amazon" : null);
@@ -161,9 +161,9 @@ async function seedMarketplaceCashSale(org: Org, actorId: string, number: string
 const CONTROL = (org: Org) => ({ ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank });
 
 async function journalByAccount(org: Org, entryId: string): Promise<{ legs: Map<string, string>; balanced: boolean }> {
-  const rows = (await db.execute<{ accountId: string; amount: string }>(sql`
+  const rows = await db.execute<{ accountId: string; amount: string }>(sql`
     select account_id as "accountId", amount::text as amount
-      from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId}`)).rows;
+      from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId}`, "objects");
   // Several legs can share an account: accumulate per account for the
   // assertions and prove the entry balances over every leg.
   const legs = new Map<string, bigint>();

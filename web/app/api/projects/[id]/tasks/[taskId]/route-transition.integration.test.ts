@@ -69,7 +69,7 @@ test('closed WBS tasks reopen and re-budget only with a reason', async () => {
     const reopenAudit = (await db.execute<{ changes: { reason?: string } }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'project_tasks' and row_id = ${created.id} and action = 'update'
-       order by id desc limit 1`)).rows[0]?.changes
+       order by id desc limit 1`, 'objects'))[0]?.changes
     assert.equal(reopenAudit?.reason, 'client reinstated the scope')
 
     // Close again, then re-budget the closed task: reason required.

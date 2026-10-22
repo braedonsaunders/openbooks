@@ -90,12 +90,12 @@ async function seed(): Promise<Fixture> {
       (org_id, item_id, currency, unit_price, effective_from, is_active, created_by, updated_by)
     values
       (${org.orgId}, ${org.items.service}, 'CAD', '100.0000', '2026-01-01', true, ${actorId}, ${actorId})
-    returning id`);
+    returning id`, "objects");
   return {
     orgId: org.orgId,
     actorId,
     itemId: org.items.service,
-    priceId: String(row.rows[0]!.id),
+    priceId: String(row[0]!.id),
   };
 }
 
@@ -229,8 +229,8 @@ async function auditRows(fixture: Fixture): Promise<
     select action, changes
       from audit_log
      where org_id = ${fixture.orgId} and table_name = 'fair_value_prices' and row_id = ${fixture.priceId}
-     order by at, id`);
-  return result.rows;
+     order by at, id`, "objects");
+  return result;
 }
 
 test.after(() => hooks.deregister())

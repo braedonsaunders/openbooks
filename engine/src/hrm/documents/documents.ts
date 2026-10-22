@@ -183,7 +183,7 @@ async function recordEvent(
     insert into hrm_document_events (org_id, document_id, kind, actor)
     values (${orgId}, ${documentId}, ${kind}, ${actor})
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) {
     throw new HrmDocumentsError(
       "REFUSED",
@@ -201,7 +201,7 @@ async function loadDocument(
   const row = (await exec.execute<DocumentRow>(sql`
     ${DOC_COLS} where org_id = ${orgId} and id = ${documentId}
     ${forUpdate ? sql`for update` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id or another org's document.
   if (!row) {
     throw new HrmDocumentsError("NOT_FOUND", "document is not visible in this organization");
@@ -210,13 +210,13 @@ async function loadDocument(
 }
 
 async function loadSigners(exec: SqlExecutor, orgId: string, documentId: string): Promise<SignerRow[]> {
-  return (await exec.execute<SignerRow>(sql`
+  return await exec.execute<SignerRow>(sql`
     select id, ord, signer_party_id, role, status, signed_at::text as signed_at,
            evidence, decline_reason
       from hrm_document_signers
      where org_id = ${orgId} and document_id = ${documentId}
      order by ord
-  `)).rows;
+  `, "objects");
 }
 
 async function requireAcknowledgmentOnlyAndOpen(exec: SqlExecutor, orgId: string, doc: DocumentRow): Promise<void> {
@@ -224,7 +224,7 @@ async function requireAcknowledgmentOnlyAndOpen(exec: SqlExecutor, orgId: string
     ? (await exec.execute<{ acknowledgment_only: boolean }>(sql`
         select acknowledgment_only from hrm_document_templates
          where org_id = ${orgId} and id = ${doc.template_id}
-      `)).rows[0]
+      `, "objects"))[0]
     : null;
   if (!template?.acknowledgment_only) {
     throw new HrmDocumentsError(
@@ -249,7 +249,7 @@ async function loadPerson(
   const row = (await exec.execute<{ name: string; email: string | null }>(sql`
     select coalesce(display_name, legal_name, 'Unnamed') as name, email
       from parties where org_id = ${orgId} and id = ${partyId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmDocumentsError(
       "NOT_FOUND",
@@ -279,7 +279,7 @@ export async function resolveMergeFields(
   const person = await loadPerson(exec, orgId, subject.partyId);
   const org = (await exec.execute<{ name: string }>(sql`
     select name from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   const values: { [K in DocumentMergeField]: string } = {
     employee_name: person.name,
     employee_email: person.email ?? "",
@@ -313,7 +313,7 @@ export async function resolveMergeFields(
          and (a.effective_to is null or a.effective_to > current_date)
        order by a.effective_from desc
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (emp) {
       values.department = emp.department ?? "";
       values.position_title = emp.title ?? "";
@@ -329,7 +329,7 @@ export async function resolveMergeFields(
          and (r.effective_to is null or r.effective_to > current_date)
        order by r.effective_from desc
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (mgr) values.manager_name = mgr.name;
   }
   return values;
@@ -343,7 +343,7 @@ async function loadPartyUser(
 ): Promise<{ id: string; email: string } | null> {
   const row = (await exec.execute<{ id: string; email: string }>(sql`
     select id, email from users where org_id = ${orgId} and party_id = ${partyId} limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   return row ?? null;
 }
 
@@ -393,7 +393,7 @@ export async function generateDocument(input: {
              signer_roles, acknowledgment_only, is_active
         from hrm_document_templates
        where org_id = ${input.orgId} and id = ${input.templateId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!tpl || !tpl.is_active) {
       throw new HrmDocumentsError(
         "NOT_FOUND",
@@ -421,7 +421,7 @@ export async function generateDocument(input: {
       const emp = (await db.execute<{ id: string; workerPartyId: string }>(sql`
         select id, worker_party_id as "workerPartyId"
           from worker_employments where org_id = ${input.orgId} and id = ${input.employmentId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!emp) {
         throw new HrmDocumentsError(
           "NOT_FOUND",
@@ -460,7 +460,7 @@ export async function generateDocument(input: {
               ${input.templateId}, ${tpl.category_key}, ${title},
               ${input.expiresAt ?? null}, ${input.actorId}, ${input.actorId})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const grants: string[] = [];
     const subjectUser = await loadPartyUser(db, input.orgId, input.partyId);
     if (subjectUser) grants.push(subjectUser.id);
@@ -482,7 +482,7 @@ export async function generateDocument(input: {
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     await recordEvent(db, input.orgId, docId, "created", input.actorId);
     return { document: toDTO(updated), mergePreview: values };
   });
@@ -526,7 +526,7 @@ export async function uploadDocument(input: {
       const emp = (await db.execute<{ id: string; workerPartyId: string }>(sql`
         select id, worker_party_id as "workerPartyId"
           from worker_employments where org_id = ${input.orgId} and id = ${input.employmentId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!emp) {
         throw new HrmDocumentsError(
           "NOT_FOUND",
@@ -549,7 +549,7 @@ export async function uploadDocument(input: {
               null, ${categoryKey}, ${title}, ${input.expiresAt ?? null},
               ${input.actorId}, ${input.actorId})
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const grants: string[] = [input.actorId];
     const subjectUser = await loadPartyUser(db, input.orgId, input.partyId);
     if (subjectUser) grants.push(subjectUser.id);
@@ -570,7 +570,7 @@ export async function uploadDocument(input: {
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     await recordEvent(db, input.orgId, docId, "created", input.actorId);
     return toDTO(updated);
   });
@@ -632,7 +632,7 @@ async function resolveRoleParty(
        and (r.effective_to is null or r.effective_to > current_date)
      order by r.effective_from desc
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!mgr) {
     throw new HrmDocumentsError(
       "REFUSED",
@@ -668,7 +668,7 @@ export async function sendDocument(input: {
       ? (((await db.execute<{ roles: unknown }>(sql`
           select signer_roles as roles from hrm_document_templates
            where org_id = ${input.orgId} and id = ${doc.template_id}
-        `)).rows[0]?.roles ?? []) as DocumentSignerRole[])
+        `, "objects"))[0]?.roles ?? []) as DocumentSignerRole[])
       : [];
     const tpl = doc.template_id
       ? (await db.execute<{
@@ -678,7 +678,7 @@ export async function sendDocument(input: {
         }>(sql`
           select requires_signature, acknowledgment_only, is_active from hrm_document_templates
            where org_id = ${input.orgId} and id = ${doc.template_id}
-        `)).rows[0]
+        `, "objects"))[0]
       : null;
     if (tpl && !tpl.is_active) {
       throw new HrmDocumentsError("REFUSED", "the template is inactive — activate it before sending");
@@ -712,7 +712,7 @@ export async function sendDocument(input: {
         values (${input.orgId}, ${doc.id}, ${ord}, ${partyId}, ${role},
                 ${hashHrmToken(token)}, ${input.actorId}, ${input.actorId})
         returning id
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       const user = await loadPartyUser(db, input.orgId, partyId);
       const person = await loadPerson(db, input.orgId, partyId);
       deliveries.push({
@@ -731,7 +731,7 @@ export async function sendDocument(input: {
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new HrmDocumentsError("REFUSED", "this document is no longer a draft — reload and review its current status");
     }
@@ -788,7 +788,7 @@ export async function remindDocument(input: {
            set token_hash = ${hashHrmToken(token)}, updated_at = now(), updated_by = ${input.actorId}
          where org_id = ${input.orgId} and id = ${signer.id}
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       // Zero matched rows is a failure: the signer answered mid-remind.
       if (!updated) continue;
       const user = await loadPartyUser(db, input.orgId, signer.signer_party_id);
@@ -826,7 +826,7 @@ async function assertTokenSigner(
            s.document_id as document_id
       from hrm_document_signers s
      where s.token_hash = ${hashHrmToken(token)}
-  `)).rows[0] as (SignerRow & { document_id: string }) | undefined;
+  `, "objects"))[0] as (SignerRow & { document_id: string }) | undefined;
   // No row for a valid HMAC is a failure: revoked, voided, or foreign.
   if (!signer) {
     throw new HrmDocumentsError(
@@ -869,7 +869,7 @@ async function currentFileBytes(
       join file_versions v on v.id = f.current_version_id
       left join file_blobs b on b.version_id = v.id
      where f.id = ${fileId} and f.org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmDocumentsError(
       "NOT_FOUND",
@@ -920,7 +920,7 @@ export async function readTokenDocument(
            set status = 'viewed', updated_at = now()
          where org_id = ${claims.orgId} and id = ${signer.id} and status = 'pending'
         returning 1
-      `)).rows.length;
+      `, "objects")).length;
       if (touched === 1) {
         await recordEvent(db, claims.orgId, doc.id, "viewed", null);
         if (doc.status === "sent") {
@@ -928,7 +928,7 @@ export async function readTokenDocument(
             update hrm_documents set status = 'viewed', updated_at = now()
              where org_id = ${claims.orgId} and id = ${doc.id} and status = 'sent'
             returning id
-          `)).rows.length;
+          `, "objects")).length;
           if (viewed !== 1) {
             throw new HrmDocumentsError("REFUSED", "this document is no longer open — reload to see its current status");
           }
@@ -945,7 +945,7 @@ export async function readTokenDocument(
       ? ((await db.execute<{ acknowledgment_only: boolean }>(sql`
           select acknowledgment_only from hrm_document_templates
            where org_id = ${claims.orgId} and id = ${doc.template_id}
-        `)).rows[0]?.acknowledgment_only ?? false)
+        `, "objects"))[0]?.acknowledgment_only ?? false)
       : false;
     return {
       document: toDTO(doc),
@@ -999,7 +999,7 @@ async function applySignature(
              updated_at = now()
        where org_id = ${orgId} and id = ${signer.id} and status in ('pending', 'viewed')
       returning 1
-    `)).rows.length;
+    `, "objects")).length;
     // Zero matched rows is a replay: someone consumed this link first.
     if (stamped === 0) {
       throw new HrmDocumentsError("REFUSED", "this link was just used — a signature is recorded once and never replayed");
@@ -1011,7 +1011,7 @@ async function applySignature(
         update hrm_documents set status = 'partially_signed', updated_at = now()
          where org_id = ${orgId} and id = ${doc.id} and status in ('sent', 'viewed', 'partially_signed')
         returning id
-      `)).rows.length;
+      `, "objects")).length;
       if (advanced !== 1) {
         throw new HrmDocumentsError("REFUSED", "this document is no longer open for signature — ask HR to review its current status");
       }
@@ -1034,7 +1034,7 @@ async function applySignature(
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0];
+    `, "objects"))[0];
     if (!completed) {
       throw new HrmDocumentsError("REFUSED", "this document is no longer open for signature — ask HR to review its current status");
     }
@@ -1171,7 +1171,7 @@ export async function declineTokenDocument(input: {
          set status = 'declined', decline_reason = ${reason}, updated_at = now()
        where org_id = ${orgId} and id = ${signer.id} and status in ('pending', 'viewed')
       returning 1
-    `)).rows.length;
+    `, "objects")).length;
     if (stamped === 0) {
       throw new HrmDocumentsError("REFUSED", "this link was just used — an answer is recorded once and never replayed");
     }
@@ -1182,7 +1182,7 @@ export async function declineTokenDocument(input: {
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new HrmDocumentsError("REFUSED", "this document is no longer open for a response — ask HR to review its current status");
     }
@@ -1220,8 +1220,8 @@ export async function acknowledgeDocument(input: {
                evidence = ${JSON.stringify({ acknowledged: true, timestamp: new Date().toISOString() })}::jsonb
          where org_id = ${orgId} and id = ${signer.id} and status in ('pending', 'viewed')
         returning id
-      `);
-      if (signerUpdate.rows.length !== 1) {
+      `, "objects");
+      if (signerUpdate.length !== 1) {
         throw new HrmDocumentsError("REFUSED", "this link already acknowledged — acknowledgment is recorded once");
       }
       const updated = (await db.execute<DocumentRow>(sql`
@@ -1230,7 +1230,7 @@ export async function acknowledgeDocument(input: {
         returning id, employment_id, party_id, template_id, category_key, title, file_id,
                   status, sent_at, completed_at::text as completed_at,
                   expires_at, retain_until::text as retain_until, legal_hold
-      `)).rows[0];
+      `, "objects"))[0];
       if (!updated) {
         throw new HrmDocumentsError("REFUSED", "this document is no longer open for acknowledgment");
       }
@@ -1267,7 +1267,7 @@ export async function acknowledgeDocument(input: {
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if (!updated) {
       throw new HrmDocumentsError("REFUSED", "this document is no longer open for acknowledgment");
     }
@@ -1310,7 +1310,7 @@ export async function voidDocument(input: {
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new HrmDocumentsError("REFUSED", "this document is no longer eligible to void — reload and review its current status");
     }
@@ -1341,7 +1341,7 @@ export async function setLegalHold(input: {
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
                 status, sent_at, completed_at::text as completed_at,
                 expires_at, retain_until::text as retain_until, legal_hold
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if (!input.hold) {
       // A released hold makes its previously blocked retention action
       // executable again. Anchor-blocked actions have a different remedy and
@@ -1379,7 +1379,7 @@ export async function listDocuments(query: {
     if (query.partyId) {
       await requirePartyInScope(db, query.orgId, query.actorId, query.partyId);
     }
-    const rows = (await db.execute<DocumentRow>(sql`
+    const rows = await db.execute<DocumentRow>(sql`
       ${DOC_COLS}
        where org_id = ${query.orgId}
          ${query.partyId ? sql`and party_id = ${query.partyId}` : sql``}
@@ -1388,7 +1388,7 @@ export async function listDocuments(query: {
          ${documentScopePredicate(query.orgId, allowed)}
        order by created_at desc
        limit ${Math.min(Math.max(query.limit ?? 50, 1), 200)}
-    `)).rows;
+    `, "objects");
     return rows.map(toDTO);
   });
 }
@@ -1440,13 +1440,13 @@ export async function listOwnDocuments(query: {
       "your login is not linked to a person record — ask HR to link it before opening your documents",
     );
   }
-  const rows = (await db.execute<DocumentRow>(sql`
+  const rows = await db.execute<DocumentRow>(sql`
     ${DOC_COLS}
      where org_id = ${query.orgId} and party_id = ${partyId}
        and status != 'deleted'
      order by created_at desc
      limit 100
-  `)).rows;
+  `, "objects");
   return { documents: rows.map(toDTO), partyId };
 }
 
@@ -1467,7 +1467,7 @@ export async function getDocumentDetail(query: {
       from hrm_document_events
      where org_id = ${query.orgId} and document_id = ${doc.id}
      order by recorded_at
-  `)).rows.map((event) => ({ ...event, recordedAt: timestamp(event.recordedAt)! }));
+  `, "objects")).map((event) => ({ ...event, recordedAt: timestamp(event.recordedAt)! }));
   const retentionUnverified = await isLegacyProvenance(db, query.orgId, "hrm_documents", doc.id, {
     // Before 0326 applies there is no registry: a frozen action with no
     // provenance row is exactly what the backfill left behind.
@@ -1482,7 +1482,7 @@ export async function dueReminderSigners(
   orgId: string,
   olderThanDays: number,
 ): Promise<{ signerId: string; documentId: string; partyId: string; title: string; sentAt: Date }[]> {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     signerId: string;
     documentId: string;
     partyId: string;
@@ -1504,7 +1504,7 @@ export async function dueReminderSigners(
        )
      order by d.sent_at
      limit 200
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({ ...row, sentAt: timestamp(row.sentAt)! }));
 }
 
@@ -1525,7 +1525,7 @@ export async function recordDocumentReminded(
   const row = (await exec.execute<{ document_id: string }>(sql`
     select document_id from hrm_document_signers
      where org_id = ${orgId} and id = ${signerId} and status in ('pending', 'viewed')
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return false;
   await recordEvent(exec, orgId, row.document_id, "reminded", null);
   return true;

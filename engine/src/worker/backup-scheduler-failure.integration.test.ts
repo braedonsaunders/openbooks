@@ -41,8 +41,8 @@ async function cleanupOrg(orgId: string): Promise<void> {
 async function auditEvents(orgId: string, rowId: string): Promise<string[]> {
   const res = await db.execute<{ event: string }>(sql`
     select changes->>'event' as event from audit_log
-     where org_id = ${orgId} and row_id = ${rowId} order by id`);
-  return res.rows.map((r) => r.event);
+     where org_id = ${orgId} and row_id = ${rowId} order by id`, "objects");
+  return res.map((r) => r.event);
 }
 
 async function seedStaleRunning(
@@ -52,8 +52,8 @@ async function seedStaleRunning(
   const inserted = await db.execute<{ id: string }>(sql`
     insert into backup_runs (org_id, kind, status, object_key, sha256, byte_size)
     values (${orgId}, 'scheduled', 'running', ${row.objectKey}, ${row.sha256}, ${row.byteSize})
-    returning id`);
-  const id = inserted.rows[0]!.id;
+    returning id`, "objects");
+  const id = inserted[0]!.id;
   await db.execute(sql`update backup_runs set updated_at = now() - interval '7 hours' where id = ${id}`);
   return id;
 }
@@ -71,10 +71,10 @@ test("a stale running run whose object verifies is completed with reconciliation
     await tick();
 
     const res = await db.execute<{ status: string; error: string | null; object_key: string | null }>(sql`
-      select status, error, object_key from backup_runs where id = ${runId}`);
-    assert.equal(res.rows[0]!.status, "completed");
-    assert.equal(res.rows[0]!.error, null);
-    assert.equal(res.rows[0]!.object_key, key);
+      select status, error, object_key from backup_runs where id = ${runId}`, "objects");
+    assert.equal(res[0]!.status, "completed");
+    assert.equal(res[0]!.error, null);
+    assert.equal(res[0]!.object_key, key);
     assert.deepEqual(deleted, [], "a verified object must not be deleted");
     const events = await auditEvents(org.orgId, runId);
     assert.ok(events.includes("backup_upload_reconciled"), `expected reconciliation evidence, saw: ${events}`);
@@ -100,10 +100,10 @@ test("a stale running run whose object is gone from storage is failed with the r
     await tick();
 
     const res = await db.execute<{ status: string; error: string | null; object_key: string | null }>(sql`
-      select status, error, object_key from backup_runs where id = ${runId}`);
-    assert.equal(res.rows[0]!.status, "failed");
-    assert.equal(res.rows[0]!.object_key, null);
-    assert.match(res.rows[0]!.error ?? "", /before the upload could be verified/);
+      select status, error, object_key from backup_runs where id = ${runId}`, "objects");
+    assert.equal(res[0]!.status, "failed");
+    assert.equal(res[0]!.object_key, null);
+    assert.match(res[0]!.error ?? "", /before the upload could be verified/);
     const events = await auditEvents(org.orgId, runId);
     assert.ok(events.includes("backup_upload_abandoned"), `expected abandonment evidence, saw: ${events}`);
   } finally {
@@ -124,9 +124,9 @@ test("a stale running run whose object mismatches the ledger hash is deleted fro
 
     assert.deepEqual(deleted, [key], "the mismatched object must be removed so it cannot be mistaken for the backup");
     const res = await db.execute<{ status: string; object_key: string | null }>(sql`
-      select status, object_key from backup_runs where id = ${runId}`);
-    assert.equal(res.rows[0]!.status, "failed");
-    assert.equal(res.rows[0]!.object_key, null);
+      select status, object_key from backup_runs where id = ${runId}`, "objects");
+    assert.equal(res[0]!.status, "failed");
+    assert.equal(res[0]!.object_key, null);
   } finally {
     await cleanupOrg(org.orgId);
     await dropScratchOrg(org.orgId);
@@ -146,9 +146,9 @@ test("a stale running run whose object size mismatches the ledger is deleted fro
 
     assert.deepEqual(deleted, [key], "the wrong-sized object must not be accepted as the ledger backup");
     const res = await db.execute<{ status: string; object_key: string | null }>(sql`
-      select status, object_key from backup_runs where id = ${runId}`);
-    assert.equal(res.rows[0]!.status, "failed");
-    assert.equal(res.rows[0]!.object_key, null);
+      select status, object_key from backup_runs where id = ${runId}`, "objects");
+    assert.equal(res[0]!.status, "failed");
+    assert.equal(res[0]!.object_key, null);
   } finally {
     await cleanupOrg(org.orgId);
     await dropScratchOrg(org.orgId);
@@ -171,8 +171,8 @@ test("a storage outage leaves the stale running run untouched for a later tick",
     await tick();
 
     const res = await db.execute<{ status: string; object_key: string | null }>(sql`
-      select status, object_key from backup_runs where id = ${runId}`);
-    assert.equal(res.rows[0]!.status, "running", "an undecided probe must not destroy evidence");
+      select status, object_key from backup_runs where id = ${runId}`, "objects");
+    assert.equal(res[0]!.status, "running", "an undecided probe must not destroy evidence");
     assert.deepEqual(deleted, []);
     assert.deepEqual(await auditEvents(org.orgId, runId), [], "no verdict means no evidence rows");
   } finally {
@@ -191,13 +191,13 @@ test("a due schedule claims exactly one scheduled run and advances past now", { 
     await tick();
 
     const runs = await db.execute<{ kind: string; status: string }>(sql`
-      select kind, status from backup_runs where org_id = ${org.orgId}`);
-    assert.equal(runs.rows.length, 1, "exactly one scheduled run must be claimed");
-    assert.equal(runs.rows[0]!.kind, "scheduled");
+      select kind, status from backup_runs where org_id = ${org.orgId}`, "objects");
+    assert.equal(runs.length, 1, "exactly one scheduled run must be claimed");
+    assert.equal(runs[0]!.kind, "scheduled");
     const policy = await db.execute<{ next_run_at: string }>(sql`
-      select next_run_at from backup_policies where org_id = ${org.orgId}`);
+      select next_run_at from backup_policies where org_id = ${org.orgId}`, "objects");
     assert.ok(
-      new Date(policy.rows[0]!.next_run_at).getTime() > Date.now(),
+      new Date(policy[0]!.next_run_at).getTime() > Date.now(),
       "the claim must advance next_run_at so a second scanner stands down",
     );
   } finally {
@@ -219,8 +219,8 @@ test("a claim lost to another scanner inserts no run", { skip: !DB }, async () =
     await tick();
 
     const runs = await db.execute<{ id: string }>(sql`
-      select id from backup_runs where org_id = ${org.orgId}`);
-    assert.equal(runs.rows.length, 0, "a lost claim must not insert a duplicate scheduled run");
+      select id from backup_runs where org_id = ${org.orgId}`, "objects");
+    assert.equal(runs.length, 0, "a lost claim must not insert a duplicate scheduled run");
   } finally {
     await cleanupOrg(org.orgId);
     await dropScratchOrg(org.orgId);
@@ -239,12 +239,12 @@ test("an in-flight run blocks the scheduled claim and leaves the schedule due", 
     await tick();
 
     const runs = await db.execute<{ kind: string }>(sql`
-      select kind from backup_runs where org_id = ${org.orgId}`);
-    assert.equal(runs.rows.length, 1, "the conflicting claim must roll back, not queue a second run");
+      select kind from backup_runs where org_id = ${org.orgId}`, "objects");
+    assert.equal(runs.length, 1, "the conflicting claim must roll back, not queue a second run");
     const policy = await db.execute<{ next_run_at: string }>(sql`
-      select next_run_at from backup_policies where org_id = ${org.orgId}`);
+      select next_run_at from backup_policies where org_id = ${org.orgId}`, "objects");
     assert.ok(
-      new Date(policy.rows[0]!.next_run_at).getTime() < Date.now(),
+      new Date(policy[0]!.next_run_at).getTime() < Date.now(),
       "the schedule must stay due so a later tick retries after the in-flight run lands",
     );
   } finally {
@@ -261,12 +261,12 @@ test("completed and fresh running rows are never reconciled", { skip: !DB }, asy
     const done = await db.execute<{ id: string }>(sql`
       insert into backup_runs (org_id, kind, status, object_key, sha256, byte_size, completed_at)
       values (${org.orgId}, 'scheduled', 'completed', ${`backups/${org.orgId}/done`}, ${sha}, 10, now())
-      returning id`);
-    await db.execute(sql`update backup_runs set updated_at = now() - interval '7 hours' where id = ${done.rows[0]!.id}`);
+      returning id`, "objects");
+    await db.execute(sql`update backup_runs set updated_at = now() - interval '7 hours' where id = ${done[0]!.id}`);
     const live = await db.execute<{ id: string }>(sql`
       insert into backup_runs (org_id, kind, status, object_key, sha256, byte_size)
       values (${org.orgId}, 'scheduled', 'running', ${`backups/${org.orgId}/live`}, ${sha}, 10)
-      returning id`);
+      returning id`, "objects");
     mockS3Send(t, () => ({ Metadata: { sha256: "0".repeat(64) }, ContentLength: 10 }), deleted);
 
     await tick();
@@ -275,13 +275,13 @@ test("completed and fresh running rows are never reconciled", { skip: !DB }, asy
     // scan: the completed backup keeps its object, the live worker keeps its row.
     assert.deepEqual(deleted, [], "reconciliation must not delete outside stale running runs");
     const rows = await db.execute<{ id: string; status: string; object_key: string | null }>(sql`
-      select id, status, object_key from backup_runs where org_id = ${org.orgId} order by id`);
-    assert.equal(rows.rows.length, 2);
-    for (const row of rows.rows) {
-      assert.ok([done.rows[0]!.id, live.rows[0]!.id].includes(row.id));
+      select id, status, object_key from backup_runs where org_id = ${org.orgId} order by id`, "objects");
+    assert.equal(rows.length, 2);
+    for (const row of rows) {
+      assert.ok([done[0]!.id, live[0]!.id].includes(row.id));
     }
     assert.deepEqual(
-      rows.rows.map((r) => r.status).sort(),
+      rows.map((r) => r.status).sort(),
       ["completed", "running"],
     );
   } finally {
@@ -295,8 +295,8 @@ test("a failed run's canonical orphan object is deleted with evidence before the
   const deleted: string[] = [];
   try {
     const inserted = await db.execute<{ id: string }>(sql`
-      insert into backup_runs (org_id, kind, status) values (${org.orgId}, 'scheduled', 'failed') returning id`);
-    const runId = inserted.rows[0]!.id;
+      insert into backup_runs (org_id, kind, status) values (${org.orgId}, 'scheduled', 'failed') returning id`, "objects");
+    const runId = inserted[0]!.id;
     const key = backupObjectKey(org.orgId, runId);
     await db.execute(sql`update backup_runs set object_key = ${key} where id = ${runId}`);
     mockS3Send(t, () => {
@@ -307,8 +307,8 @@ test("a failed run's canonical orphan object is deleted with evidence before the
 
     assert.deepEqual(deleted, [key]);
     const res = await db.execute<{ object_key: string | null }>(sql`
-      select object_key from backup_runs where id = ${runId}`);
-    assert.equal(res.rows[0]!.object_key, null);
+      select object_key from backup_runs where id = ${runId}`, "objects");
+    assert.equal(res[0]!.object_key, null);
     const events = await auditEvents(org.orgId, runId);
     assert.deepEqual(
       events,
@@ -327,8 +327,8 @@ test("a failed run's non-canonical object key is refused orphan cleanup", { skip
   try {
     const inserted = await db.execute<{ id: string }>(sql`
       insert into backup_runs (org_id, kind, status, object_key)
-      values (${org.orgId}, 'scheduled', 'failed', 'backups/stray-bucket-copy.gz') returning id`);
-    const runId = inserted.rows[0]!.id;
+      values (${org.orgId}, 'scheduled', 'failed', 'backups/stray-bucket-copy.gz') returning id`, "objects");
+    const runId = inserted[0]!.id;
     mockS3Send(t, () => {
       throw new Error("no storage call is expected for a refused key");
     }, deleted);
@@ -337,8 +337,8 @@ test("a failed run's non-canonical object key is refused orphan cleanup", { skip
 
     assert.deepEqual(deleted, [], "a key outside the run's ledger identity must never be deleted");
     const res = await db.execute<{ object_key: string | null }>(sql`
-      select object_key from backup_runs where id = ${runId}`);
-    assert.equal(res.rows[0]!.object_key, "backups/stray-bucket-copy.gz");
+      select object_key from backup_runs where id = ${runId}`, "objects");
+    assert.equal(res[0]!.object_key, "backups/stray-bucket-copy.gz");
     const events = await auditEvents(org.orgId, runId);
     assert.ok(!events.includes("backup_orphan_removed"), `refused keys leave no removal evidence, saw: ${events}`);
   } finally {

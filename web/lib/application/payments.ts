@@ -55,8 +55,8 @@ async function paymentHeader(
        and org_id = ${context.authz.user.orgId}
        and kind in ('vendor_payment', 'customer_payment')
      limit 1
-  `));
-  const header = result.rows[0];
+  `, "objects"));
+  const header = result[0];
   if (!header) throw notFound("payment");
   assertSubsidiaryAccess(context, header.subsidiaryId);
   assertApplicationPermission(context, paymentPermission(header.kind));

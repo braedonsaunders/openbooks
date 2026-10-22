@@ -85,7 +85,7 @@ export async function segmentRegistry(
      where sd.is_active ${orgFilter}
      group by sd.id
      order by sd.sort_order, sd.name
-  `))
+  `, 'objects'))
   // A segment carrying a feature_key belongs to an optional module: while
   // that feature is off — or names nothing declared — the segment stays out
   // of editors, rules, and report controls, so no surface offers values the
@@ -94,11 +94,11 @@ export async function segmentRegistry(
   const gated = new Set<string>()
   if (orgId) {
     const state = await resolvedFeatureState(orgId)
-    for (const row of result.rows) {
+    for (const row of result) {
       if (row.feature_key && !featureEnabled(state, row.feature_key)) gated.add(row.id)
     }
   }
-  return result.rows.filter((row) => !gated.has(row.id)).map((row) => ({
+  return result.filter((row) => !gated.has(row.id)).map((row) => ({
     id: row.id,
     key: row.key,
     name: row.name,
@@ -188,7 +188,7 @@ export async function extraDimsSubsidiaryError(
   const target = context.byId.get(subsidiaryId)
   if (!target) return 'invalid subsidiary for custom segment assignments'
   const ids = [...new Set(selected.map((entry) => entry.id))]
-  const values = (await executor.execute<{
+  const values = await executor.execute<{
     id: string
     name: string
     segment_id: string
@@ -200,7 +200,7 @@ export async function extraDimsSubsidiaryError(
       from segment_values
      where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])
      for share
-  `)).rows
+  `, 'objects')
   const byId = new Map(values.map((row) => [row.id, row]))
   for (const assignment of selected) {
     const row = byId.get(assignment.id)

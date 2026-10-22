@@ -57,7 +57,7 @@ async function seedFx(orgId: string, subsidiaryId: string, actorId: string, acco
   `);
   const period = (await db.execute<{ id: string; fiscal_calendar_id: string }>(sql`
     select id, fiscal_calendar_id from accounting_periods where org_id = ${orgId} limit 1
-  `)).rows[0]!;
+  `, 'objects'))[0]!;
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
     values (${randomUUID()}, ${orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${period.fiscal_calendar_id})
@@ -205,8 +205,8 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       // Periods are named by their canonical label, not the stored name '2026-07'.
       assert.equal(adjustment.period, 'P07 FY2026');
       const originalStatus = await db.execute<{ status: string }>(sql`
-        select status from journal_entries where org_id = ${org.orgId} and id = ${entryId}`)
-      assert.equal(originalStatus.rows[0]?.status, 'reversed')
+        select status from journal_entries where org_id = ${org.orgId} and id = ${entryId}`, 'objects')
+      assert.equal(originalStatus[0]?.status, 'reversed')
       const unfiltered = await executeAssistantTool(reader, 'list_fx_revaluations', {});
       assert.ok(unfiltered.ok, JSON.stringify(unfiltered));
       assert.equal((unfiltered.data as { total: number }).total, 2);

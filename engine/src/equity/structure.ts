@@ -275,7 +275,7 @@ export async function createShareClass(input: CreateShareClassInput): Promise<{ 
       values (${input.orgId}, ${input.subsidiaryId}, ${code}, ${name}, ${kind}, ${effectiveOn}::date, ${authorized.toString()}::bigint,
         ${input.parValue.trim()}::numeric, ${originalIssuePrice}::numeric, ${conversionPrice}::numeric, ${multiple}::numeric, ${preferenceBasis},
         ${participation}, ${cap}::numeric, ${seniority}, ${antiDilution}, ${conversionClassId}, ${adjustsForSplits}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw equityError("notSaved", { record: fig.choice("shareClass") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_share_classes", rowId: row.id, action: "equity.class.create", actorId: input.actorId,
@@ -293,7 +293,7 @@ async function classEntity(orgId: string, shareClassId: string): Promise<string>
 async function classOwner(orgId: string, shareClassId: string): Promise<{ subsidiaryId: string; code: string }> {
   if (!isUuid(shareClassId)) throw equityError("classIdUnknown");
   const row = (await withOrgTransaction(orgId, async () => (await db.execute<{ subsidiary_id: string; code: string }>(sql`
-    select subsidiary_id, code from equity_share_classes where org_id = ${orgId} and id = ${shareClassId}`)).rows[0]));
+    select subsidiary_id, code from equity_share_classes where org_id = ${orgId} and id = ${shareClassId}`, "objects"))[0]));
   if (!row) throw equityError("classIdUnknown");
   return { subsidiaryId: row.subsidiary_id, code: row.code };
 }
@@ -389,7 +389,7 @@ export async function applyShareClassAmendment(input: AmendShareClassInput): Pro
         conversion_share_class_id, reason, created_by)
       values (${input.orgId}, ${subsidiaryId}, ${shareClass.id}, ${input.kind}, ${effectiveOn}::date, ${authorized?.toString() ?? null}::bigint,
         ${conversion}::numeric, ${conversionClassId}, ${reason}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw equityError("notSaved", { record: fig.choice("classAmendment") });
     const after = input.kind === "authorized_shares" ? { authorizedShares: authorized } : input.kind === "conversion_price" ? { conversionPrice: conversion } : { conversionShareClassId: conversionClassId };
     await writeEquityAudit(db, {
@@ -469,7 +469,7 @@ export async function applySplit(input: RecordSplitInput): Promise<SplitResult> 
       insert into equity_splits (org_id, subsidiary_id, share_class_id, effective_on, ratio_numerator, ratio_denominator, reason, created_by)
       values (${input.orgId}, ${subsidiaryId}, ${shareClass.id}, ${effectiveOn}::date, ${numerator.toString()}::bigint,
         ${denominator.toString()}::bigint, ${reason}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw equityError("notSaved", { record: fig.choice("split") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_splits", rowId: row.id, action: "equity.split.record", actorId: input.actorId,
@@ -520,7 +520,7 @@ export async function createPlan(input: CreatePlanInput): Promise<{ id: string }
         recycle_forfeited, recycle_expired, recycle_repurchased, created_by)
       values (${input.orgId}, ${input.subsidiaryId}, ${code}, ${name}, ${shareClass.id}, ${effectiveOn}::date, ${reserved.toString()}::bigint,
         ${input.recycleForfeited}, ${input.recycleExpired}, ${input.recycleRepurchased}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw equityError("notSaved", { record: fig.choice("plan") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_plans", rowId: row.id, action: "equity.plan.create", actorId: input.actorId,
@@ -543,7 +543,7 @@ export async function changePlanReserve(input: ChangePlanReserveInput): Promise<
   const reason = requireReason(input.reason, "reserveChange");
   if (!isUuid(input.planId)) throw equityError("planIdUnknown");
   const plan = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; code: string }>(sql`
-    select subsidiary_id, code from equity_plans where org_id = ${input.orgId} and id = ${input.planId}`)).rows[0]);
+    select subsidiary_id, code from equity_plans where org_id = ${input.orgId} and id = ${input.planId}`, "objects"))[0]);
   if (!plan) throw equityError("planIdUnknown");
   const outcome = await governEquityAction({
     orgId: input.orgId, actorId: input.actorId, subsidiaryId: plan.subsidiary_id, action: "reserve_change",
@@ -565,7 +565,7 @@ export async function applyReserveChange(input: ChangePlanReserveInput): Promise
   const delta = BigInt(text);
   if (!isUuid(input.planId)) throw equityError("planIdUnknown");
   const plan = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id from equity_plans where org_id = ${input.orgId} and id = ${input.planId}`)).rows[0]);
+    select subsidiary_id from equity_plans where org_id = ${input.orgId} and id = ${input.planId}`, "objects"))[0]);
   if (!plan) throw equityError("planIdUnknown");
   return inEquityCommand({ ...input, subsidiaryId: plan.subsidiary_id }, "equity.manage", async ({ book }) => {
     const record = book.plans.find((row) => row.id === input.planId)!;
@@ -577,7 +577,7 @@ export async function applyReserveChange(input: ChangePlanReserveInput): Promise
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_plan_reserve_changes (org_id, subsidiary_id, plan_id, effective_on, share_delta, reason, created_by)
       values (${input.orgId}, ${plan.subsidiary_id}, ${record.id}, ${effectiveOn}::date, ${delta.toString()}::bigint, ${reason}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw equityError("notSaved", { record: fig.choice("reserveChange") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_plans", rowId: record.id, action: "equity.plan.reserve", actorId: input.actorId,
@@ -703,7 +703,7 @@ export async function usedRoundNames(orgId: string, subsidiaryId: string): Promi
   return (await db.execute<{ round_id: string; name: string }>(sql`
     select id as round_id, name from equity_financing_rounds where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
     union all
-    select round_id, name from equity_round_amendments where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and name is not null`)).rows
+    select round_id, name from equity_round_amendments where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and name is not null`, "objects"))
     .map((row) => ({ roundId: row.round_id, name: row.name }));
 }
 
@@ -733,7 +733,7 @@ export async function createRound(input: CreateRoundInput): Promise<{ id: string
       insert into equity_financing_rounds (org_id, subsidiary_id, name, share_class_id, closed_on, price_per_share, pre_money_valuation, currency, pre_money_basis_reason, created_by)
       values (${input.orgId}, ${input.subsidiaryId}, ${name}, ${shareClass.id}, ${closedOn}::date, ${input.pricePerShare.trim()}::numeric,
         ${input.preMoneyValuation.trim()}::numeric, ${currency}, ${basisReason}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw equityError("notSaved", { record: fig.choice("round") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_financing_rounds", rowId: row.id, action: "equity.round.create", actorId: input.actorId,

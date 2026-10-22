@@ -161,7 +161,7 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
       // holding at least one employment in the actor's allowed subsidiaries.
       // Employment-less parties are omitted — inviting them refuses anyway.
       const allowed = await actorAllowedSubsidiaryIds(db, authz.orgId, authz.userId)
-      const people = (await db.execute<{ id: string; name: string }>(sql`
+      const people = await db.execute<{ id: string; name: string }>(sql`
         select p.id::text as id, p.display_name as name from parties p
          where p.org_id = ${authz.orgId}::uuid and p.kind = 'person' and p.is_active
            and exists (
@@ -169,7 +169,7 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
               where e.org_id = p.org_id and e.worker_party_id = p.id
               ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
            )
-         order by p.display_name`)).rows
+         order by p.display_name`, 'objects')
       drawer = {
         closeHref: hrefFor(status, null, false),
         title: survey.name,

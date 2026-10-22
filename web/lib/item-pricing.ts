@@ -14,8 +14,8 @@ export async function isPricingCustomerVisible(
     select p.id from parties p
      where p.org_id = ${orgId} and p.id = ${customerId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-  `)
-  return result.rows.length > 0
+  `, 'objects')
+  return result.length > 0
 }
 
 export interface ResolvedItemPrice {
@@ -210,8 +210,8 @@ export async function resolveItemPrice(input: {
      where candidate.precedence < 99
      order by candidate.precedence
      limit 1
-  `)
-  const winner = result.rows[0]
+  `, 'objects')
+  const winner = result[0]
   const resolvedAt = new Date().toISOString()
   if (winner) {
     return {
@@ -246,8 +246,8 @@ export async function resolveItemPrice(input: {
       join orgs org on org.id = item.org_id
       left join item_families family on family.org_id = item.org_id and family.id = item.family_id
      where item.org_id = ${input.orgId} and item.id = ${input.itemId}
-  `)
-  const simple = fallback.rows[0]
+  `, 'objects')
+  const simple = fallback[0]
   if (!simple || simple.base_currency !== currency) return null
   // The variant's own base price wins; the family base price (the family
   // row's default rate) prices variants that carry no rate of their own.

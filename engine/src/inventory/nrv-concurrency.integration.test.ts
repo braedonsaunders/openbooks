@@ -65,7 +65,7 @@ for (const operation of ["write-down", "reversal"] as const) {
       await waitForLockWaiter(editor, { label: "the inventory remeasurement" });
       await editor.query("commit");
       const result = await pending;
-      const accounts = (await db.execute<{ account_id: string }>(sql`select account_id from journal_lines where org_id=${org.orgId} and entry_id=${result.entryId} and account_id<>${org.accounts.invAsset}`)).rows;
+      const accounts = await db.execute<{ account_id: string }>(sql`select account_id from journal_lines where org_id=${org.orgId} and entry_id=${result.entryId} and account_id<>${org.accounts.invAsset}`, "objects");
       assert.deepEqual(accounts, [{ account_id: org.accounts.freight }]);
     } finally {
       await editor.query("rollback").catch(() => {});

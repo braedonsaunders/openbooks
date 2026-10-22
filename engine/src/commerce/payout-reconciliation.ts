@@ -96,7 +96,7 @@ export async function readSettlementDocument(
     select id, kind, document_number as "documentNumber", status, currency, total::text as total,
            subsidiary_id as "subsidiaryId" from documents
      where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) return null;
   if (!(await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.subsidiaryId))) return null;
@@ -126,12 +126,12 @@ export async function lineExternalDocumentIds(
 ): Promise<string[]> {
   const candidates = refs.filter((value): value is string => typeof value === "string" && value.trim() !== "");
   if (candidates.length === 0) return [];
-  const links = (await db.execute<{ native_table: string; native_id: string }>(sql`
+  const links = await db.execute<{ native_table: string; native_id: string }>(sql`
     select native_table, native_id from external_links
      where org_id = ${orgId} and provider = ${provider}
        and external_id in (${sql.join(candidates.map((candidate) => sql`${candidate}`), sql`, `)})
        and native_table = 'documents'
-  `)).rows;
+  `, "objects");
   return [...new Set(links.map((link) => link.native_id))];
 }
 
@@ -162,13 +162,13 @@ async function sourceOrderClaimedInScope(
   if (allowedSubsidiaryIds === undefined) return false;
   const ids = orderIdCandidates(sourceOrderId);
   if (ids.length === 0) return false;
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select o.id from channel_orders o
       join sales_channels c on c.id = o.channel_id and c.org_id = o.org_id
      where o.org_id = ${orgId} and c.kind = 'shopify'
        ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}
        and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-     limit 1`)).rows;
+     limit 1`, "objects");
   return rows.length > 0;
 }
 
@@ -188,7 +188,7 @@ export async function findLineSourceOrders(
   if (allowedSubsidiaryIds === undefined) return [];
   const ids = orderIdCandidates(sourceOrderId);
   if (ids.length === 0) return [];
-  const rows = (await db.execute<LineSourceOrder>(sql`
+  const rows = await db.execute<LineSourceOrder>(sql`
     select o.id, o.channel_id as "channelId", c.subsidiary_id as "channelSubsidiaryId",
            o.external_id as "externalId",
            o.external_number as "externalNumber", o.posting_status as "postingStatus",
@@ -199,7 +199,7 @@ export async function findLineSourceOrders(
        ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds)}
        and o.external_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
      order by o.id
-  `)).rows;
+  `, "objects");
   const kept: LineSourceOrder[] = [];
   for (const row of rows) {
     if (await settlementLineDocumentInEntity(orgId, batchSubsidiaryId, row.channelSubsidiaryId)) kept.push(row);
@@ -219,7 +219,7 @@ export async function findOrderSaleDocumentId(
     const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
       select posting_document_id from channel_daily_summaries
        where org_id = ${orgId} and id = ${order.summaryId}
-    `)).rows[0];
+    `, "objects"))[0];
     return summary?.posting_document_id ?? null;
   }
   return null;
@@ -230,11 +230,11 @@ export async function findOrderRefundDocumentIds(
   orgId: string,
   orderId: string,
 ): Promise<string[]> {
-  const events = (await db.execute<{ posting_document_id: string | null }>(sql`
+  const events = await db.execute<{ posting_document_id: string | null }>(sql`
     select posting_document_id from channel_order_events
      where org_id = ${orgId} and order_id = ${orderId}
        and posting_document_id is not null
-  `)).rows;
+  `, "objects");
   return [...new Set(events.map((event) => event.posting_document_id).filter((id): id is string => id !== null))];
 }
 
@@ -505,7 +505,7 @@ export async function matchPayoutLines(
     const batch = (await db.execute<{ id: string; provider: string; subsidiary_id: string | null }>(sql`
       select id, provider, subsidiary_id from psp_settlement_batches
        where org_id = ${orgId} and id = ${batchId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!batch) {
       refuse(
         "payout_batch_missing",
@@ -514,12 +514,12 @@ export async function matchPayoutLines(
       );
     }
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
-    const lines = (await db.execute<SettlementLineRow>(sql`
+    const lines = await db.execute<SettlementLineRow>(sql`
       select id, kind, external_ref, description, amount::text, currency, document_id, meta
         from psp_settlement_lines
        where org_id = ${orgId} and batch_id = ${batchId}
        order by line_number
-    `)).rows;
+    `, "objects");
     const resolved = [];
     for (const line of lines) {
       resolved.push({ line, outcome: await resolveLineDocument(orgId, batch.provider, line, scope, batch.subsidiary_id) });

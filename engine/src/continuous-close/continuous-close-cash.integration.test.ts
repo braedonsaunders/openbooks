@@ -227,8 +227,8 @@ test(
       await withBypassContext(async () => {
         const lines = await db.execute<{ id: string; doc: string }>(sql`select jl.id, je.source_document_id as doc
           from journal_lines jl join journal_entries je on je.id = jl.entry_id
-          where jl.org_id = ${org.orgId} and jl.is_open_item and je.source_document_id in (${billId}, ${creditId})`);
-        const lineOf = (doc: string) => lines.rows.find((row) => row.doc === doc)!.id;
+          where jl.org_id = ${org.orgId} and jl.is_open_item and je.source_document_id in (${billId}, ${creditId})`, "objects");
+        const lineOf = (doc: string) => lines.find((row) => row.doc === doc)!.id;
         await db.execute(sql`insert into applications
           (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
            source_transaction_currency, target_transaction_amount, target_transaction_currency,

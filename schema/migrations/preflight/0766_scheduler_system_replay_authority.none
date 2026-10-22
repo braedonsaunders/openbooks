@@ -1,1 +1,0 @@
-No retained rows change: this migration extends the transaction-scoped scheduler replay predicate to system scan rows while preserving tenant scope and durable replay evidence.

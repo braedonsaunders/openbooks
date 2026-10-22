@@ -97,9 +97,9 @@ async function fixture() {
   })))
   const associations = (id: string) => withOrgContext(org.orgId, async () => (await db.execute<{ vendor: string | null; po: string | null }>(sql`
     select vendor_candidate_id as vendor, purchase_order_id as po
-      from ap_capture_items where org_id = ${org.orgId} and id = ${id}`)).rows[0]!)
+      from ap_capture_items where org_id = ${org.orgId} and id = ${id}`, 'objects'))[0]!)
   const revision = (id: string) => withOrgContext(org.orgId, async () => (await db.execute<{ updatedAt: string }>(sql`
-    select (revision_seq)::text as "updatedAt" from ap_capture_items where org_id = ${org.orgId} and id = ${id}`)).rows[0]!.updatedAt)
+    select (revision_seq)::text as "updatedAt" from ap_capture_items where org_id = ${org.orgId} and id = ${id}`, 'objects'))[0]!.updatedAt)
   const close = async () => {
     session.user = null
     await dropScratchOrg(org.orgId)

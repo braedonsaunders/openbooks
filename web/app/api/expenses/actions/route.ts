@@ -64,9 +64,9 @@ async function expenseReport(id: string, authz: Authz, access: ExpenseAccess = A
   // resolve it through the same not-found contract as an unknown id.
   if (!isUuid(id)) return null
   const r = (await db.execute<{ id: string; status: string; subsidiaryId: string | null; partyId: string | null }>(
-    sql`select id, status, subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${authz.user.orgId}`,
+    sql`select id, status, subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${authz.user.orgId}`, 'objects',
   ))
-  const row = r.rows[0]
+  const row = r[0]
   if (!row || !expenseAccessAllows(access, row.partyId)) return null
   return guardSubsidiaryScope(authz, row.subsidiaryId) ? null : row
 }
@@ -83,8 +83,8 @@ async function lockedExpenseInScope(documentId: string, authz: Authz, access: Ex
   const locked = (await db.execute<{ subsidiaryId: string | null; partyId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents
          where id = ${documentId} and kind = 'expense_report' and org_id = ${authz.user.orgId}
-         for update`,
-  )).rows[0]
+         for update`, 'objects',
+  ))[0]
   return !!locked && subsidiaryScopeAllows(authz.allowedSubsidiaryIds, locked.subsidiaryId)
     && expenseAccessAllows(access, locked.partyId)
 }
@@ -125,7 +125,7 @@ async function recallExpenseReport(input: {
         from documents
        where id = ${input.documentId} and kind = 'expense_report' and org_id = ${input.orgId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!locked || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, locked.subsidiaryId)
       || !expenseAccessAllows(input.access, locked.partyId)) {
       throw new DocumentEditError(404, 'expense report not found')
@@ -153,21 +153,21 @@ async function recallExpenseReport(input: {
     if (!isSubmitter && !input.isAdmin) {
       throw new DocumentEditError(403, 'only the submitter or an admin can recall this report to draft')
     }
-    const gates = (await db.execute<{ id: string }>(sql`
+    const gates = await db.execute<{ id: string }>(sql`
       update flow_gates
          set status = 'cancelled', updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and subject_kind = 'expense_report' and subject_id = ${input.documentId}
          and status in ('pending', 'escalated')
       returning id
-    `)).rows
-    const runs = (await db.execute<{ id: string }>(sql`
+    `, 'objects')
+    const runs = await db.execute<{ id: string }>(sql`
       update flow_runs
          set status = 'cancelled', finished_at = now(), error = 'recalled to draft',
              updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and subject_kind = 'expense_report' and subject_id = ${input.documentId}
          and status in ('running', 'waiting')
       returning id
-    `)).rows
+    `, 'objects')
     await db.execute(sql`
       update documents
          set status = 'draft',

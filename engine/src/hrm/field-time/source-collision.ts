@@ -52,7 +52,7 @@ export async function assertNoFieldTimeSourceCollision(
          or (${visitTimeCollides} and te.service_visit_id is not null and te.status <> 'rejected'))
      order by te.id
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (collision) {
     const sourceName = collision.source === "clock_pair" ? "clock pairing" : collision.source === "crew_batch" ? "crew batch" : "service visit labor";
     throw new FieldTimeError(

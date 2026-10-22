@@ -111,8 +111,8 @@ async function post(orgId: string, body: unknown): Promise<{ status: number; jso
 }
 
 async function linkCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ count: number }>(sql`
-    select count(*)::int as count from payment_links where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ count: number }>(sql`
+    select count(*)::int as count from payment_links where org_id = ${orgId}`, "objects");
   return rows[0]!.count;
 }
 

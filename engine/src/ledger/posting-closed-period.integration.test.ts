@@ -72,9 +72,9 @@ test(
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `),
+    `, "objects"),
       );
-      assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0 });
+      assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
     } finally {
       await withBypassContext(() => dropScratchOrg(org.orgId));
     }

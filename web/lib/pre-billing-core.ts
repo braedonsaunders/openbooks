@@ -286,8 +286,8 @@ export async function loadProjectPolicy(
        and project.status not in ('closed', 'cancelled')
        ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
      ${lock ? sql`for update of project` : sql``}
-  `))
-  const row = project.rows[0]
+  `, 'objects'))
+  const row = project[0]
   if (!row) throw new PreBillingError('Project not found or is no longer active', 404)
   if (!row.project_type_id || !row.invoicing_profile) {
     throw new PreBillingError('Assign an active project type before creating a prebill')
@@ -301,8 +301,8 @@ export async function loadProjectPolicy(
       from project_financial_profile_versions
      where org_id = ${orgId} and project_type_id = ${row.project_type_id}
      order by effective_from desc
-  `))
-  const latest = versions.rows[0]
+  `, 'objects'))
+  const latest = versions[0]
   if (!latest) throw new PreBillingError('Publish a financial profile for the project type before creating a prebill')
   return {
     projectId: row.id,
@@ -314,7 +314,7 @@ export async function loadProjectPolicy(
     markupPercent: normalizeMoney(row.markup_percent),
     fallbackProfile: latest.financialProfile,
     invoicingProfile: row.invoicing_profile,
-    versions: versions.rows,
+    versions,
   }
 }
 
@@ -353,8 +353,8 @@ export async function currentPolicyIsNte(
 ): Promise<boolean> {
   const row = (await executor.execute<{ project_type_id: string | null }>(sql`
     select project_type_id from projects where id = ${projectId} and org_id = ${orgId}
-  `));
-  const typeId = row.rows[0]?.project_type_id;
+  `, 'objects'));
+  const typeId = row[0]?.project_type_id;
   if (!typeId) return false;
   const versions = (await executor.execute<PreBillingPolicyVersion>(sql`
     select id, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
@@ -362,10 +362,10 @@ export async function currentPolicyIsNte(
       from project_financial_profile_versions
      where org_id = ${orgId} and project_type_id = ${typeId}
      order by effective_from desc
-  `));
-  const latest = versions.rows[0];
+  `, 'objects'));
+  const latest = versions[0];
   if (!latest) return false;
-  return effectivePreBillingPolicy(versions.rows, latest.financialProfile, asOf).financialProfile.totalPrice.method === 'not_to_exceed';
+  return effectivePreBillingPolicy(versions, latest.financialProfile, asOf).financialProfile.totalPrice.method === 'not_to_exceed';
 }
 
 export function rateEngineOverhead(

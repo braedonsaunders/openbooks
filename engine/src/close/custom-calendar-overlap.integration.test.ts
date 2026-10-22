@@ -43,7 +43,7 @@ test("custom calendar generation refuses overlapping period ranges", { skip: !pr
     const persisted = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from accounting_periods
        where org_id = ${org.orgId} and fiscal_calendar_id = ${calendarId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(persisted, 0, "no overlapping periods may persist");
   } finally {
     await dropScratchOrgReporting(org.orgId);

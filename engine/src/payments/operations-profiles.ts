@@ -105,8 +105,8 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
          select 1 from subsidiaries s where s.id = ${input.subsidiaryId ?? null} and s.org_id = ${orgId} and s.is_active))
        and (${input.sftpServerId ?? null}::uuid is null or exists (
          select 1 from sftp_servers sv where sv.id = ${input.sftpServerId ?? null} and sv.org_id = ${orgId} and sv.is_active))
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   if (!row) throw new PaymentError("select active tenant-owned payment, bank, subsidiary, and delivery records");
   if (!/^[A-Z]{3}$/.test(input.currency)) throw new PaymentError("currency must be a three-letter ISO code");
   if (row.format_currency && row.format_currency !== input.currency) {
@@ -116,8 +116,8 @@ async function validatePaymentBankProfileRefs(orgId: string, input: {
   if (typeof discountAccountId === "string" && discountAccountId) {
     const account = (await db.execute<{ id: string }>(sql`
       select id from accounts where id = ${discountAccountId} and org_id = ${orgId} and is_active and not is_summary
-    `));
-    if (!account.rows[0]) throw new PaymentError("discount account is invalid or inactive");
+    `, "objects"));
+    if (!account[0]) throw new PaymentError("discount account is invalid or inactive");
   }
   if (row.rail === "positive_pay" && !String(input.settings?.positivePayAccountReference ?? "").trim()) {
     throw new PaymentError("Positive Pay requires the institution's bank account reference");
@@ -178,8 +178,8 @@ async function auditProfileChange(
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'payment_bank_profiles', ${rowId}, ${action},
             ${JSON.stringify(changes)}::jsonb, ${actorId}) returning id
-  `);
-  if (audit.rows.length !== 1) throw new PaymentError("Bank profile audit was not recorded");
+  `, "objects");
+  if (audit.length !== 1) throw new PaymentError("Bank profile audit was not recorded");
 }
 
 /**
@@ -197,9 +197,9 @@ async function requireProfileScope(
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
   const account = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from accounts where id = ${bankAccountId} and org_id = ${orgId} for share`));
-  if (!account.rows[0]
-    || !subsidiaryScopeAllows(scope, account.rows[0].subsidiary_id, { orgWideNull: true })
+    select subsidiary_id from accounts where id = ${bankAccountId} and org_id = ${orgId} for share`, "objects"));
+  if (!account[0]
+    || !subsidiaryScopeAllows(scope, account[0].subsidiary_id, { orgWideNull: true })
     || !subsidiaryScopeAllows(scope, subsidiaryId ?? null, { orgWideNull: true })) {
     throw new ScopeNotFoundError();
   }
@@ -238,9 +238,9 @@ export async function createPaymentBankProfile(
     }).returning({ id: schema.paymentBankProfiles.id }))[0]!;
     const stored = (await tx.execute<Record<string, unknown>>(sql`
       select * from payment_bank_profiles where id = ${profile.id} and org_id = ${orgId}
-    `));
+    `, "objects"));
     await auditProfileChange(tx, orgId, profile.id, "insert",
-      { after: profileAuditView(stored.rows[0]!) }, userId);
+      { after: profileAuditView(stored[0]!) }, userId);
     return profile;
   }));
 }
@@ -265,9 +265,9 @@ export async function updatePaymentBankProfile(
     }>(sql`
       select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
        for update
-    `));
-    if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
-    const current = existing.rows[0];
+    `, "objects"));
+    if (!existing[0]) throw new PaymentError("payment bank profile not found");
+    const current = existing[0];
     const actorScope = await lockActorCommandAuthority(tx, orgId, userId, current.subsidiary_id, "admin.setup.manage");
     await lockActorCommandAuthority(tx, orgId, userId, input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId, "admin.setup.manage");
     await requireProfileScope(tx, orgId, input.bankAccountId ?? current.bank_account_id, input.subsidiaryId === undefined ? current.subsidiary_id : input.subsidiaryId, actorScope);
@@ -329,15 +329,15 @@ export async function updatePaymentBankProfile(
         updated_at = now(), updated_by = ${userId}
       where id = ${id} and org_id = ${orgId}
       returning id
-    `);
-    if (!write.rows[0]) throw new PaymentError("payment bank profile not found");
+    `, "objects");
+    if (!write[0]) throw new PaymentError("payment bank profile not found");
     const updated = (await tx.execute<Record<string, unknown>>(sql`
       select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
-    `));
-    if (!updated.rows[0]) throw new PaymentError("payment bank profile not found");
+    `, "objects"));
+    if (!updated[0]) throw new PaymentError("payment bank profile not found");
     await auditProfileChange(tx, orgId, id, "update", {
       before: profileAuditView(current),
-      after: profileAuditView(updated.rows[0]),
+      after: profileAuditView(updated[0]),
       ...(rotating ? { originatorSecretsRotated: true } : {}),
     }, userId);
   }));

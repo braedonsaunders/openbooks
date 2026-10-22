@@ -36,8 +36,7 @@ export async function recordNormalScrap(
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   if (![workOrderId,eventId,input.operationId,input.reasonId].every(isUuid)) throw new ManufacturingNotFoundError();
   const effectiveScope=await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId,scope);
-  const order = (
-    await tx.execute<{
+  const order = (await tx.execute<{
       id: string;
       subsidiaryId: string | null;
       status: string;
@@ -45,9 +44,8 @@ export async function recordNormalScrap(
       quantityCompleted: string;
       quantityScrapped: string;
     }>(
-      sql`select id,subsidiary_id as "subsidiaryId",status,quantity_ordered::text as "quantityOrdered",quantity_completed::text as "quantityCompleted",quantity_scrapped::text as "quantityScrapped" from mfg_work_orders where org_id=${orgId} and id=${workOrderId} for update`,
-    )
-  ).rows[0];
+      sql`select id,subsidiary_id as "subsidiaryId",status,quantity_ordered::text as "quantityOrdered",quantity_completed::text as "quantityCompleted",quantity_scrapped::text as "quantityScrapped" from mfg_work_orders where org_id=${orgId} and id=${workOrderId} for update`, "objects",
+    ))[0];
   if (!order || !subsidiaryScopeAllows(scope, order.subsidiaryId))
     throw new ManufacturingNotFoundError();
   const quantity = decimalValue(
@@ -63,8 +61,7 @@ export async function recordNormalScrap(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext('manufacturing.scrap'),hashtext(${eventId}))`,
   );
-  const replay = (
-    await tx.execute<{
+  const replay = (await tx.execute<{
       id: string;
       operationId: string;
       quantity: string;
@@ -72,9 +69,8 @@ export async function recordNormalScrap(
       classification: string;
       workOrderId: string;
     }>(
-      sql`select id,work_order_id as "workOrderId",operation_id as "operationId",quantity::text,reason_id as "reasonId",classification from mfg_scrap_events where org_id=${orgId} and id=${eventId}`,
-    )
-  ).rows[0];
+      sql`select id,work_order_id as "workOrderId",operation_id as "operationId",quantity::text,reason_id as "reasonId",classification from mfg_scrap_events where org_id=${orgId} and id=${eventId}`, "objects",
+    ))[0];
   if (replay) {
     if (
       replay.workOrderId !== workOrderId ||
@@ -104,8 +100,7 @@ export async function recordNormalScrap(
           "Hold the work order to review the loss and its existing receipt valuation.",
       },
     );
-  const operation = (
-    await tx.execute<{
+  const operation = (await tx.execute<{
       id: string;
       status: string;
       quantityPlanned: string;
@@ -113,9 +108,8 @@ export async function recordNormalScrap(
       quantityScrappedHere: string;
       subsidiaryId: string | null;
     }>(
-      sql`select o.id,o.status,o.quantity_planned::text as "quantityPlanned",o.quantity_done::text as "quantityDone",o.quantity_scrapped_here::text as "quantityScrappedHere",c.subsidiary_id as "subsidiaryId" from mfg_wo_operations o join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id where o.org_id=${orgId} and o.work_order_id=${workOrderId} and o.id=${input.operationId} for update of o`,
-    )
-  ).rows[0];
+      sql`select o.id,o.status,o.quantity_planned::text as "quantityPlanned",o.quantity_done::text as "quantityDone",o.quantity_scrapped_here::text as "quantityScrappedHere",c.subsidiary_id as "subsidiaryId" from mfg_wo_operations o join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id where o.org_id=${orgId} and o.work_order_id=${workOrderId} and o.id=${input.operationId} for update of o`, "objects",
+    ))[0];
   if (
     !operation ||
     !subsidiaryScopeAllows(effectiveScope, operation.subsidiaryId)
@@ -130,11 +124,9 @@ export async function recordNormalScrap(
         remedy: "Start the operation before recording its scrap.",
       },
     );
-  const reason = (
-    await tx.execute<{ classification: string }>(
-      sql`select classification from mfg_scrap_reasons where org_id=${orgId} and id=${input.reasonId} and is_active for share`,
-    )
-  ).rows[0];
+  const reason = (await tx.execute<{ classification: string }>(
+      sql`select classification from mfg_scrap_reasons where org_id=${orgId} and id=${input.reasonId} and is_active for share`, "objects",
+    ))[0];
   if (!reason) throw new ManufacturingNotFoundError();
   if (reason.classification !== "normal")
     throw new ManufacturingError(
@@ -172,11 +164,9 @@ export async function recordNormalScrap(
     );
   let saved: { id: string } | undefined;
   try {
-    saved = (
-      await tx.execute<{ id: string }>(
-        sql`insert into mfg_scrap_events (id,org_id,work_order_id,operation_id,quantity,reason_id,classification,treatment,frozen_value,approval_required,created_by,updated_by) values (${eventId},${orgId},${workOrderId},${input.operationId},${quantity},${input.reasonId},'normal','evidence',0,false,${actorId},${actorId}) returning id`,
-      )
-    ).rows[0];
+    saved = (await tx.execute<{ id: string }>(
+        sql`insert into mfg_scrap_events (id,org_id,work_order_id,operation_id,quantity,reason_id,classification,treatment,frozen_value,approval_required,created_by,updated_by) values (${eventId},${orgId},${workOrderId},${input.operationId},${quantity},${input.reasonId},'normal','evidence',0,false,${actorId},${actorId}) returning id`, "objects",
+      ))[0];
   } catch (error) {
     if (storageCode(error) === "23505")
       throw new ManufacturingIdempotencyConflictError();
@@ -184,12 +174,12 @@ export async function recordNormalScrap(
   }
   if (!saved) throw new Error("The scrap event was not saved.");
   const op = await tx.execute(
-    sql`update mfg_wo_operations set quantity_scrapped_here=${atOperation},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and work_order_id=${workOrderId} and id=${input.operationId} returning id`,
+    sql`update mfg_wo_operations set quantity_scrapped_here=${atOperation},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and work_order_id=${workOrderId} and id=${input.operationId} returning id`, "objects",
   );
   const wo = await tx.execute(
-    sql`update mfg_work_orders set quantity_scrapped=${total},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${workOrderId} returning id`,
+    sql`update mfg_work_orders set quantity_scrapped=${total},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${workOrderId} returning id`, "objects",
   );
-  if (op.rows.length !== 1 || wo.rows.length !== 1)
+  if (op.length !== 1 || wo.length !== 1)
     throw new Error("The scrap quantities were not saved.");
   await auditChange(tx, {
     orgId,

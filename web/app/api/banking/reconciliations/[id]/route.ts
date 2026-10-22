@@ -42,11 +42,11 @@ export const GET = defineRoute({
             from reconciliations r
             join accounts a on a.id = r.account_id and a.org_id = r.org_id
            where r.id = ${id} and r.org_id = ${user.orgId}
-        `))
-        if (!rec.rows[0]) return notFound("record")
+        `, 'objects'))
+        if (!rec[0]) return notFound("record")
         // A session on another entity's account (or a shared account, for a
         // restricted caller) reads exactly like a missing session.
-        const scoped = guardSubsidiaryScope(gate, rec.rows[0].account_subsidiary_id as string | null)
+        const scoped = guardSubsidiaryScope(gate, rec[0].account_subsidiary_id as string | null)
         if (scoped) return scoped
         const totals = await reconciliationTotals(id, {
           orgId: user.orgId,
@@ -61,8 +61,8 @@ export const GET = defineRoute({
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         })
         // The ownership column gated the read; it is not part of the response shape.
-        delete rec.rows[0].account_subsidiary_id
-        return NextResponse.json({ reconciliation: rec.rows[0], totals, staleness })
+        delete rec[0].account_subsidiary_id
+        return NextResponse.json({ reconciliation: rec[0], totals, staleness })
       } catch (e) {
         return apiErrorResponse(e)
       }

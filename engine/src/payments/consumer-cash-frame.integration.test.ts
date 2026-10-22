@@ -45,7 +45,7 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
     });
     const billLineId = (await db.execute<{ id: string }>(sql`
       select id from journal_lines where entry_id = ${billEntryId} and account_id = ${org.accounts.ap}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
@@ -91,7 +91,7 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
         from documents d
        where d.org_id = ${org.orgId} and d.kind in ('vendor_payment', 'check')
          and d.status = 'posted' and d.voided_at is null
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(tile.paid, "90.0000");
 
     // 1099 / compliance paid-this-year shape (engine/src/compliance/information-returns.ts,
@@ -106,7 +106,7 @@ test("discount payment consumers report cash, not AP-relieved gross", { skip: !D
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
         join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
        where d.org_id = ${org.orgId} and d.id = ${payment.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(cash.cash, "90.0000");
   } finally {
     await dropScratchOrgReporting(org.orgId);

@@ -151,7 +151,7 @@ export async function loadApBills(
   let createEntity: string | null = null
   if (requestedCreateEntity !== undefined) {
     if (!isUuid(requestedCreateEntity) || authz.allowedSubsidiaryIds !== null && !authz.allowedSubsidiaryIds.has(requestedCreateEntity)) notFound()
-    if (!(await db.execute(sql`select id from subsidiaries where org_id=${authz.user.orgId} and id=${requestedCreateEntity} and is_active and not is_elimination`)).rows.length) notFound()
+    if (!(await db.execute(sql`select id from subsidiaries where org_id=${authz.user.orgId} and id=${requestedCreateEntity} and is_active and not is_elimination`, 'objects')).length) notFound()
     createEntity = requestedCreateEntity
   }
   const documentOptionScope = openDoc
@@ -210,9 +210,8 @@ export async function loadApBills(
                     where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                  )
                )
-             order by coalesce(code, name), name limit 2000`,
-            )
-            .then((r) => r.rows),
+             order by coalesce(code, name), name limit 2000`, 'objects',
+            ),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
           isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
             if (!multi) return null
@@ -254,7 +253,7 @@ export async function loadApBills(
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.id = ${creditFromId} and d.kind = 'vendor_bill' and d.status <> 'voided'
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, documentOptionScope ?? null)}
-         limit 1`)).rows[0] ?? null
+         limit 1`, 'objects'))[0] ?? null
     : null
   const creditLines = creditFromId && creditSource ? await returnableBillLines(db, authz.user.orgId, creditFromId) : []
   // The credit settles the bill it corrects, so it carries the bill's payable
@@ -318,7 +317,7 @@ export async function loadApBills(
         select distinct e.scheme_code as "schemeCode" from withholding_enrollments e
          where e.org_id = ${authz.user.orgId} and e.is_active
            ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, documentOptionScope)}
-         order by 1`)).rows
+         order by 1`, 'objects'))
       .map((row) => row.schemeCode)
       .filter((code) => contractorWithholdingScheme(code) !== undefined)
       .map((code) => ({ code }))

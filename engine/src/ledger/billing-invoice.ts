@@ -211,8 +211,8 @@ export async function generateInvoiceFromBillingRequest(
     const projectGate = (await tx.execute<{ features: FeatureState | null }>(sql`
       select settings->'features' as features
         from orgs where id = ${orgId} for share
-    `))
-    const featureState = projectGate.rows[0]?.features ?? {}
+    `, 'objects'))
+    const featureState = projectGate[0]?.features ?? {}
     if (!featureEnabled(featureState, 'projects')) throw new BillingError('Projects feature is disabled')
     // Lock the request; only an open request can be invoiced.
     const reqRes = (await tx.execute<BillingRequestRow>(sql`
@@ -221,8 +221,8 @@ export async function generateInvoiceFromBillingRequest(
        where br.id = ${requestId} and br.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, effectiveScope)}
        for update of br, p
-    `))
-    const req = reqRes.rows[0]
+    `, 'objects'))
+    const req = reqRes[0]
     if (!req) throw new BillingError('Billing request not found')
     if (req.status !== 'open') throw new BillingError('This billing request has already been invoiced')
     if (req.basis === 'field_ticket' && !featureEnabled(featureState, 'fieldTickets')) {
@@ -235,9 +235,9 @@ export async function generateInvoiceFromBillingRequest(
            where org_id = ${orgId}
              and billing_request_id = ${requestId}
            order by selected_at, id
-        `))
-      : { rows: [] as { id: string }[] }
-    const selectedFieldTicketIds = selectedFieldTickets.rows.map((ticket) => ticket.id)
+        `, 'objects'))
+      : [] as { id: string }[]
+    const selectedFieldTicketIds = selectedFieldTickets.map((ticket) => ticket.id)
     if (req.basis === 'field_ticket' && selectedFieldTicketIds.length === 0) {
       throw new BillingError('The Field Ticket billing request has no selected tickets')
     }
@@ -249,8 +249,8 @@ export async function generateInvoiceFromBillingRequest(
         from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
              left join parties c on c.id = p.customer_id and c.org_id = p.org_id
        where p.id = ${req.project_id} and p.org_id = ${orgId}
-    `))
-    const project = projRes.rows[0]
+    `, 'objects'))
+    const project = projRes[0]
     if (!project) throw new BillingError('Project not found')
     if (!project.customer_id) throw new BillingError('The project has no customer to invoice')
 
@@ -274,7 +274,7 @@ export async function generateInvoiceFromBillingRequest(
     if (!currency) throw new BillingError('The project subsidiary has no functional currency')
     const currencyRow = (await tx.execute<{ minor_units: number }>(sql`
       select minor_units from currencies where code = ${currency}
-    `)).rows[0]
+    `, 'objects'))[0]
     const minorUnits = currencyRow?.minor_units
     if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
       throw new BillingError('The billing currency has unsupported minor-unit precision')
@@ -378,10 +378,10 @@ export async function generateInvoiceFromBillingRequest(
          where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
          order by sort_order
          for update
-      `))
-      if (scheds.rows.length === 0) throw new BillingError('No open milestones to bill on this project')
+      `, 'objects'))
+      if (scheds.length === 0) throw new BillingError('No open milestones to bill on this project')
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post milestones to')
-      for (const m of scheds.rows) {
+      for (const m of scheds) {
         const exact = canonicalDecimal(m.amount_billed ?? '0', 4)
         if (exact === null) throw new BillingError('A milestone billed amount is invalid')
         let amt: string
@@ -468,13 +468,13 @@ export async function generateInvoiceFromBillingRequest(
            ${isFinal && ticketIds.length === 0 && !hasTimeSelection ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
          order by te.worked_on, te.id
          for update of te
-      `))
+      `, 'objects'))
       // Every explicitly selected entry must be billable here: invoicing only
       // the eligible subset while marking the request invoiced would silently
       // drop the rest. Name the entries that cannot be billed so the operator
       // can recreate the request without them (or approve them first).
       if (hasTimeSelection) {
-        const billed = new Set(timeRows.rows.map((row) => String(row.id)))
+        const billed = new Set(timeRows.map((row) => String(row.id)))
         const missing = selected!.filter((id) => !billed.has(id))
         if (missing.length > 0) {
           throw new BillingError(
@@ -483,7 +483,7 @@ export async function generateInvoiceFromBillingRequest(
         }
       }
 
-      for (const te of timeRows.rows) {
+      for (const te of timeRows) {
         const hours = persistInvoiceDecimal(te.hours ?? '0', 'A time entry hours value is invalid')
         const sourceRate = invoicing.lineBuilder === 'cost_plus'
           ? te.cost_rate
@@ -614,12 +614,12 @@ export async function generateInvoiceFromBillingRequest(
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.kind = 'internal_billing' and d.status = 'posted')
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
-      `))
+      `, 'objects'))
 
-      if (effectiveScope !== null && costRows.rows.some(row => !effectiveScope.has(String(row.subsidiary_id)))) {
+      if (effectiveScope !== null && costRows.some(row => !effectiveScope.has(String(row.subsidiary_id)))) {
         throw new BillingError('Selected costs include subsidiaries outside your access')
       }
-      for (const cl of costRows.rows) {
+      for (const cl of costRows) {
         // Project charges and billable internal billing lines carry their own
         // snapshotted bill rate and amount; other cost lines bill at cost plus markup.
         const isProjectCharge = cl.kind === 'project_charge' || cl.kind === 'internal_billing'
@@ -932,10 +932,10 @@ export async function generateInvoiceFromBillingRequest(
       }
       for (const c of charges) {
         const item = c.adjustment.itemId
-          ? ((await tx.execute<{ income_account_id: string | null; tax_code_id: string | null }>(sql`
+          ? (await tx.execute<{ income_account_id: string | null; tax_code_id: string | null }>(sql`
               select income_account_id, tax_code_id from items
                where id = ${c.adjustment.itemId} and org_id = ${orgId}
-            `))).rows[0]
+            `, 'objects'))[0]
           : undefined
         const unitPriced = c.adjustment.calculation === 'per_hour' || c.adjustment.calculation === 'per_day'
         built.push({
@@ -964,8 +964,8 @@ export async function generateInvoiceFromBillingRequest(
     if (invoicing.notToExceed && built.length) {
       const contractRes = (await tx.execute<{ contract: string }>(sql`
         select coalesce(contract_value, 0)::text as contract from projects where id = ${req.project_id} and org_id = ${orgId}
-      `))
-      const contract = contractRes.rows[0]?.contract ?? '0'
+      `, 'objects'))
+      const contract = contractRes[0]?.contract ?? '0'
       if (cmp(contract, '0') > 0) {
         const claimedToDate = await projectContractCapacityUsed(tx, orgId, req.project_id, ptype.financialProfile.invoicedToDate)
         const running = sum(built.map((l) => l.amount))
@@ -1047,8 +1047,8 @@ export async function generateInvoiceFromBillingRequest(
       const account = await tx.execute(sql`
         select id from accounts where org_id = ${orgId} and id = ${line.accountId}
           and is_active and not is_summary for share
-      `)
-      if (!account.rows.length) {
+      `, 'objects')
+      if (!account.length) {
         throw new BillingError('The configured project billing account must be active, non-summary, and belong to this organization')
       }
       validatedAccounts.add(line.accountId)
@@ -1061,8 +1061,8 @@ export async function generateInvoiceFromBillingRequest(
       )]
       for (const itemId of itemIds) {
         const item = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${orgId}`))
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          select kind from items where id = ${itemId} and org_id = ${orgId}`, 'objects'))
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           throw new BillingError('Inventory is disabled')
         }
       }
@@ -1075,8 +1075,8 @@ export async function generateInvoiceFromBillingRequest(
       )]
       for (const itemId of itemIds) {
         const item = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${orgId}`))
-        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          select kind from items where id = ${itemId} and org_id = ${orgId}`, 'objects'))
+        if (item[0] && item[0].kind === 'equipment_charge') {
           throw new BillingError('Equipment is disabled')
         }
       }
@@ -1120,7 +1120,7 @@ export async function generateInvoiceFromBillingRequest(
               ${req.invoice_type === 'final'}, ${req.customer_po ?? project.customer_po_number},
               ${req.invoice_description}, '0', '0', '0', ${workCompletedOn(workPeriods)}, ${userId})
       returning id
-    `)).rows[0]!
+    `, 'objects'))[0]!
     const invoiceId = created.id
 
     // The invoice carries the PRESENTED lines; provenance is stamped from the
@@ -1143,7 +1143,7 @@ export async function generateInvoiceFromBillingRequest(
               ${l.unitPrice}, ${tax.amount}, ${l.departmentId ?? null}, ${req.project_id},
               ${workPeriods[index]?.workFrom ?? null}, ${workPeriods[index]?.workTo ?? null}, ${userId})
         returning id
-      `)).rows[0]!
+      `, 'objects'))[0]!
       await persistLineTaxComponents(tx, { orgId, documentLineId: String(line.id), components: tax.taxComponents, actorId: userId })
       if (tax.providerQuote) {
         await persistTaxQuote(orgId, tax.providerQuote.providerConfigId,
@@ -1166,8 +1166,8 @@ export async function generateInvoiceFromBillingRequest(
              set invoiced_by_line_id = ${billedBy}, billing_status = 'billed'
            where id = ${l.timeEntryId} and org_id = ${orgId}
              and billing_status = 'unbilled'
-           returning id`)
-        if (!claimed.rows[0]) throw new BillingError('A time entry is no longer available for billing')
+           returning id`, 'objects')
+        if (!claimed[0]) throw new BillingError('A time entry is no longer available for billing')
       }
       const sourceCostLineIds = l.sourceCostLineIds ?? (l.sourceCostLineId ? [l.sourceCostLineId] : [])
       for (const sourceCostLineId of sourceCostLineIds) {
@@ -1185,10 +1185,10 @@ export async function generateInvoiceFromBillingRequest(
              and org_id = ${orgId}
              and billed_by_line_id is null
            returning id
-        `)
+        `, 'objects')
         await tx.execute(sql`set local openbooks.migration = off`)
         await tx.execute(sql`set local openbooks.amend = off`)
-        if (!stamped.rows[0]) {
+        if (!stamped[0]) {
           throw new BillingError('A cost source line is no longer available for billing')
         }
       }

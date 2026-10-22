@@ -38,9 +38,9 @@ async function recloseApprovedReopenRow(args: {
        and id <> ${args.row.id}
        and status = 'approved'
        and expires_at > now()
-     for update`);
+     for update`, "objects");
   const coveredModules = new Set(
-    overlapping.rows.flatMap((request) =>
+    overlapping.flatMap((request) =>
       request.modules.filter((module) => modules.includes(module)),
     ),
   );
@@ -68,10 +68,10 @@ async function recloseApprovedReopenRow(args: {
          and subsidiary_id is not distinct from ${args.row.subsidiary_id}
          and module <> 'gl'
          and state <> 'closed'
-       for update`);
-    if (openSubledgers.rows.length > 0) {
+       for update`, "objects");
+    if (openSubledgers.length > 0) {
       throw new CloseError(
-        `cannot re-close GL while ${openSubledgers.rows
+        `cannot re-close GL while ${openSubledgers
           .map((item) => item.module.toUpperCase())
           .join(", ")} remains open`,
       );
@@ -115,8 +115,8 @@ async function recloseApprovedReopenRow(args: {
            updated_at = now(),
            updated_by = ${args.actorId ?? null}
      where id = ${args.row.id} and org_id = ${args.row.org_id} and status = 'approved'
-    returning id`);
-  if (updated.rows.length !== 1) {
+    returning id`, "objects");
+  if (updated.length !== 1) {
     throw new CloseError("approved reopen request changed during re-close");
   }
   await args.tx.execute(sql`
@@ -139,7 +139,7 @@ async function recloseApprovedReopenRow(args: {
               modules,
               modulesClosed: modulesToClose,
               modulesStillOpen: [...coveredModules],
-              overlappingRequestIds: overlapping.rows.map((row) => row.id),
+              overlappingRequestIds: overlapping.map((row) => row.id),
               reason: args.reason })}::jsonb)`);
 }
 
@@ -169,8 +169,8 @@ export async function recloseApprovedReopen(args: {
        where id = ${args.requestId}
          and org_id = ${args.orgId}
          and status = 'approved'
-       for update`);
-    const row = request.rows[0];
+       for update`, "objects");
+    const row = request[0];
     if (!row) throw new CloseError("approved reopen request not found");
     // Ending a window closes modules, so the gate is the reopen-approval
     // permission resolved in-transaction — never identity. A stale window's
@@ -223,13 +223,13 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
       from close_reopen_requests request
       join orgs organization on organization.id = request.org_id
      where request.status = 'approved' and request.expires_at <= now()
-       and organization.env_kind = 'production'`));
+       and organization.env_kind = 'production'`, "objects"));
   // A concurrent tick may lock a candidate first: its re-close commits and
   // this tick's lock finds no approved row. Only committed re-closes count —
   // returning the candidate count would double-count the same window across
   // the two ticks.
   let reclosed = 0;
-  for (const row of expired.rows) {
+  for (const row of expired) {
     try {
       const didReclose = await withOrgContext(row.org_id, () =>
         db.transaction(async (tx) => {
@@ -241,8 +241,8 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
                and org_id = ${row.org_id}
                and status = 'approved'
                and expires_at <= now()
-             for update`);
-          const lockedRow = locked.rows[0];
+             for update`, "objects");
+          const lockedRow = locked[0];
           if (!lockedRow) return false;
           await recloseApprovedReopenRow({
             tx,

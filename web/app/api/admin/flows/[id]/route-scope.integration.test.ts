@@ -288,12 +288,10 @@ test('restricted flows.manage cannot create, edit or delete org-wide flow policy
     const token = (
       (await detailResponse.json()) as { flow: { updated_at: string } }
     ).flow.updated_at
-    const beforeAudits = (
-      await withBypassContext(() =>
+    const beforeAudits = (await withBypassContext(() =>
         db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'flows'`),
-      )
-    ).rows[0]!.n
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'flows'`, 'objects'),
+      ))[0]!.n
 
     const created = await withOrgContext(org.orgId, () =>
       create(
@@ -346,21 +344,17 @@ test('restricted flows.manage cannot create, edit or delete org-wide flow policy
     })
 
     assert.equal(
-      (
-        await withBypassContext(() =>
+      (await withBypassContext(() =>
           db.execute<{ n: number }>(sql`
-      select count(*)::int as n from flows where org_id = ${org.orgId}`),
-        )
-      ).rows[0]!.n,
+      select count(*)::int as n from flows where org_id = ${org.orgId}`, 'objects'),
+        ))[0]!.n,
       1,
     )
     assert.equal(
-      (
-        await withBypassContext(() =>
+      (await withBypassContext(() =>
           db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'flows'`),
-        )
-      ).rows[0]!.n,
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'flows'`, 'objects'),
+        ))[0]!.n,
       beforeAudits,
     )
   } finally {
@@ -385,13 +379,11 @@ test('Flow creation has one native graph contract and refuses a separate zero-ga
     )
     assert.equal(created.status, 200)
     const { id } = (await created.json()) as { id: string }
-    const row = (
-      await withBypassContext(() =>
+    const row = (await withBypassContext(() =>
         db.execute<{ enabled: boolean; graph: unknown }>(
-          sql`select enabled,graph from flows where org_id=${org.orgId} and id=${id}`,
+          sql`select enabled,graph from flows where org_id=${org.orgId} and id=${id}`, 'objects',
         ),
-      )
-    ).rows[0]!
+      ))[0]!
     assert.equal(row.enabled, false)
     assert.deepEqual(row.graph, { schemaVersion: 1, nodes: [], edges: [] })
     const refused = await withOrgContext(org.orgId, () =>
@@ -405,13 +397,11 @@ test('Flow creation has one native graph contract and refuses a separate zero-ga
     )
     assert.equal(refused.status, 400)
     assert.equal(
-      (
-        await withBypassContext(() =>
+      (await withBypassContext(() =>
           db.execute<{ count: number }>(
-            sql`select count(*)::int count from flows where org_id=${org.orgId}`,
+            sql`select count(*)::int count from flows where org_id=${org.orgId}`, 'objects',
           ),
-        )
-      ).rows[0]?.count,
+        ))[0]?.count,
       1,
     )
   } finally {
@@ -485,27 +475,23 @@ test('an enabled-only toggle writes the native flag with a before/after audit', 
       ),
     )
     assert.equal(toggled.status, 200)
-    const row = (
-      await withBypassContext(() =>
+    const row = (await withBypassContext(() =>
         db.execute<{ enabled: boolean; name: string }>(sql`
-      select enabled, name from flows where org_id = ${org.orgId} and id = ${flowId}`),
-      )
-    ).rows[0]!
+      select enabled, name from flows where org_id = ${org.orgId} and id = ${flowId}`, 'objects'),
+      ))[0]!
     assert.equal(row.enabled, true)
     assert.equal(
       row.name,
       'Toggled flow',
       'an enabled-only write renames nothing',
     )
-    const audit = (
-      await withBypassContext(() =>
+    const audit = (await withBypassContext(() =>
         db.execute<{
           changes: { before: { enabled: boolean }; after: { enabled: boolean } }
         }>(sql`
       select changes from audit_log where org_id = ${org.orgId} and table_name = 'flows' and row_id = ${flowId}
-       order by id desc limit 1`),
-      )
-    ).rows[0]!
+       order by id desc limit 1`, 'objects'),
+      ))[0]!
     assert.equal(audit.changes.before.enabled, false)
     assert.equal(audit.changes.after.enabled, true)
   } finally {

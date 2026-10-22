@@ -41,11 +41,11 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     const projectId = String((await db.execute<{ id: string }>(sql`
       insert into projects (org_id, subsidiary_id, name, custom)
       values (${org.orgId}, ${org.subsidiaryId}, 'JOB-1', ${JSON.stringify({ nsId: "JOB-1" })}::jsonb) returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const party = async (nsId: string) => String((await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, custom)
       values (${org.orgId}, 'employee', ${nsId}, ${JSON.stringify({ nsId })}::jsonb) returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`insert into customer_roles(org_id,party_id) values (${org.orgId},${org.customerId})`);
     const foremanId = await party("F1");
     const superintendentId = await party("S1");
@@ -54,12 +54,12 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       where org_id = ${org.orgId} and id = (select party_id from customer_roles where org_id = ${org.orgId} order by party_id limit 1)`);
     const customerId = String((await db.execute<{ party_id: string }>(sql`
       select party_id::text from customer_roles where org_id = ${org.orgId} order by party_id limit 1
-    `)).rows[0]!.party_id);
+    `, "objects"))[0]!.party_id);
     const ticketId = String((await db.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, project_id, subsidiary_id, document_date, currency, status, custom)
       values (${org.orgId}, 'field_ticket', 'FT-9', ${customerId}, ${projectId}, ${org.subsidiaryId}, '2024-06-16', 'CAD', 'approved', '{}'::jsonb)
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id, superintendent_party_id)
       values (${ticketId}, ${org.orgId}, 'weekly', '2024-06-10', '2024-06-16', ${foremanId}, ${superintendentId})
@@ -67,7 +67,7 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     const snapshotId = String((await db.execute<{ id: string }>(sql`
       insert into field_ticket_labor_snapshots (org_id, field_ticket_id, revision, evidence_basis, reason, currency, captured_by)
       values (${org.orgId}, ${ticketId}, 1, 'operational_time', 'Approval capture', 'CAD', ${actor}) returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_ticket_labor_lines
         (org_id, snapshot_id, field_ticket_id, sequence, employee_party_id, employee_name, time_type_name, time_classification, worked_on, hours)
@@ -75,23 +75,23 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     `);
     const folderId = String((await db.execute<{ id: string }>(sql`
       insert into folders (org_id, name) values (${org.orgId}, 'Source exports') returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const fileId = String((await db.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, content_type, size_bytes, storage_kind, content_hash, created_by)
       values (${org.orgId}, ${folderId}, 'field-ticket-headers.json', 'application/json', ${SOURCE_BYTES.length}, 'db', ${SOURCE_SHA256}, ${actor})
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const versionId = String((await db.execute<{ id: string }>(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind, content_hash, created_by)
       values (${fileId}, 1, ${SOURCE_BYTES.length}, 'application/json', 'db', ${SOURCE_SHA256}, ${actor})
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, ${SOURCE_BYTES})`);
     await db.execute(sql`update files set current_version_id = ${versionId} where org_id = ${org.orgId} and id = ${fileId}`);
 
     const revision = String((await db.execute<{ revision: string }>(sql`
       select revision_seq::text as revision from documents where org_id = ${org.orgId} and id = ${ticketId}
-    `)).rows[0]!.revision);
+    `, "objects"))[0]!.revision);
     const certified = await certifyFieldTicketSourceIdentity({
       orgId: org.orgId, actorId: actor, requestId: randomUUID(), nativeDocumentId: ticketId,
       expectedNativeRevision: revision, sourceSystem: "legacy-app", sourceTicketId: EXTERNAL_ID,
@@ -105,7 +105,7 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
     });
     const production = (await db.execute<{ native_fingerprint_sha256: string; source_row_sha256: string }>(sql`
       select native_fingerprint_sha256, source_row_sha256 from field_ticket_source_certifications where org_id = ${org.orgId} and id = ${certified.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
 
     const created = await createSandbox({
       productionOrgId: org.orgId, name, tier: masked ? "masked" : "full", masked,
@@ -125,7 +125,7 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
              to_jsonb(c)::text as row_text
         from field_ticket_source_certifications c join orgs o on o.id = c.org_id
        where c.org_id = ${target} and c.id = ob_rebase(${certified.id}::uuid, o.sandbox_seed)
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(copied.source_system, "legacy-app");
     assert.equal(copied.source_external_id, EXTERNAL_ID);
     assert.equal(copied.source_row_snapshot.sourceId, EXTERNAL_ID,
@@ -134,11 +134,11 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
       "the source row hash keeps its original attribution");
     const rebasedTicket = (await db.execute<{ id: string }>(sql`
       select ob_rebase(${ticketId}::uuid, sandbox_seed)::text as id from orgs where id = ${target}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     assert.equal(copied.native_document_id, rebasedTicket);
     const rebasedProject = (await db.execute<{ id: string }>(sql`
       select ob_rebase(${projectId}::uuid, sandbox_seed)::text as id from orgs where id = ${target}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     assert.equal(copied.reference_project_id, rebasedProject,
       "the reference map rebases its native project while its source identity stays original");
     assert.notEqual(copied.reference_project_id, projectId);
@@ -167,10 +167,10 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
         select public.field_ticket_source_certifications_clone_matches(to_jsonb(c)) as matches
           from field_ticket_source_certifications c join orgs o on o.id=c.org_id
          where c.org_id=${target} and c.id=ob_rebase(${certified.id}::uuid,o.sandbox_seed)
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(readyMatch.matches, false, "ready sandboxes have no clone-insert admission");
-      const refreshing = (await db.execute(sql`update sandboxes set status='refreshing'
-        where id=${created.sandboxId} and org_id=${target} and status='ready' returning id`)).rows;
+      const refreshing = await db.execute(sql`update sandboxes set status='refreshing'
+        where id=${created.sandboxId} and org_id=${target} and status='ready' returning id`, "objects");
       assert.equal(refreshing.length, 1);
       const verdicts = (await db.execute<{ exact: boolean; forged: boolean }>(sql`
         select public.field_ticket_source_certifications_clone_matches(to_jsonb(c)) as exact,
@@ -178,15 +178,15 @@ for (const masked of [false, true]) test(`${masked ? "masked" : "full"} sandbox 
                  to_jsonb(c) || jsonb_build_object('source_external_id', '999')) as forged
           from field_ticket_source_certifications c join orgs o on o.id = c.org_id
          where c.org_id = ${target} and c.id = ob_rebase(${certified.id}::uuid, o.sandbox_seed)
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(verdicts, { exact: true, forged: false },
         "clone authority admits only the exact authoritative projection");
       assert.equal((await db.execute(sql`update sandboxes set status='ready'
-        where id=${created.sandboxId} and org_id=${target} and status='refreshing' returning id`)).rows.length, 1);
+        where id=${created.sandboxId} and org_id=${target} and status='refreshing' returning id`, "objects")).length, 1);
     });
     await deleteSandbox(created.sandboxId, { actorId: actor });
   } finally {
-    const shells = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id = ${org.orgId} and name = ${name}`)).rows;
+    const shells = await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id = ${org.orgId} and name = ${name}`, "objects");
     for (const shell of shells) await deleteSandbox(shell.id, { systemReason: "Remove Field Ticket certification clone fixture" });
     await dropScratchOrg(org.orgId);
   }

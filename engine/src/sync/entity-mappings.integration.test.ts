@@ -24,7 +24,7 @@ test('connection entity mappings use native custom definitions, persist across r
         (${foreign.orgId},'items','private_classification','Private classification','text','{}'::jsonb),
         (${org.orgId},'items','owner','Owner','reference',${JSON.stringify({ referenceTable: 'parties' })}::jsonb)`);
     });
-    const foreignParty = (await withBypassContext(() => db.execute<{ id: string }>(sql`insert into parties(org_id,kind,display_name) values(${foreign.orgId},'person','Foreign owner') returning id`))).rows[0]!.id;
+    const foreignParty = (await withBypassContext(() => db.execute<{ id: string }>(sql`insert into parties(org_id,kind,display_name) values(${foreign.orgId},'person','Foreign owner') returning id`, 'objects')))[0]!.id;
     let category = 'stock';
     const raw: MigrationSource = {
       name: 'qbo', refKey: 'qboId', baseCurrency: 'CAD', entityMappingMetadata: entityMappingMetadata(['items'], []),
@@ -50,21 +50,21 @@ test('connection entity mappings use native custom definitions, persist across r
       const audit = { connectionId, actorId, runId: randomUUID(), sourceName: 'qbo' };
       const first = await loadEntities(source, org.orgId, null, undefined, audit);
       assert.equal(first.items!.created, 1); assert.equal(first.items!.failed, 0);
-      const read = () => db.execute<{ id: string; name: string; custom: Record<string, unknown> }>(sql`select id,name,custom from items where org_id=${org.orgId} and custom->>'qboId'='item-100'`);
-      const saved = (await read()).rows[0]!;
+      const read = () => db.execute<{ id: string; name: string; custom: Record<string, unknown> }>(sql`select id,name,custom from items where org_id=${org.orgId} and custom->>'qboId'='item-100'`, 'objects');
+      const saved = (await read())[0]!;
       assert.equal(saved.name, 'Mapped name'); assert.equal(saved.custom.classification, 'Materials');
       await loadEntities(source, org.orgId, new Date('2026-01-01'), undefined, audit);
-      assert.equal((await read()).rows[0]!.id, saved.id, 'mirror replay retains native identity');
-      const count = () => db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and table_name='items' and actor_id=${actorId}`);
-      assert.equal((await count()).rows[0]!.count, 1, 'unchanged replay adds no audit event');
+      assert.equal((await read())[0]!.id, saved.id, 'mirror replay retains native identity');
+      const count = () => db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and table_name='items' and actor_id=${actorId}`, 'objects');
+      assert.equal((await count())[0]!.count, 1, 'unchanged replay adds no audit event');
       category = 'nonstock';
       await loadEntities(source, org.orgId, new Date('2026-01-02'), undefined, audit);
-      assert.equal((await read()).rows[0]!.custom.classification, 'Services'); assert.equal((await count()).rows[0]!.count, 2);
+      assert.equal((await read())[0]!.custom.classification, 'Services'); assert.equal((await count())[0]!.count, 2);
       await assert.rejects(validateConnectionEntityMappings(raw, org.orgId, { version: 1, entities: { items: [{ target: 'custom.owner', missing: 'default', defaultValue: foreignParty }] } }), /in this organization/);
       await assert.rejects(validateConnectionEntityMappings(raw, org.orgId, { version: 1, entities: { items: [{ target: 'custom.classification', missing: 'default', defaultValue: 'Unsupported' }] } }), /supported value/);
       const refused = withEntityMappings(raw, { version: 1, entities: { items: [{ source: 'source_class', target: 'category', missing: 'refuse', values: [{ source: 'stock', target: 'Materials' }] }] } }, org.orgId);
       await assert.rejects(loadEntities(refused, org.orgId, null, undefined, audit), /no value mapping/);
-      assert.equal((await read()).rows[0]!.custom.classification, 'Services', 'refusal preserves the last native projection');
+      assert.equal((await read())[0]!.custom.classification, 'Services', 'refusal preserves the last native projection');
     });
   } finally { await dropScratchOrg(foreign.orgId); await dropScratchOrg(org.orgId); }
 });
@@ -88,24 +88,24 @@ test('transaction and line custom mappings persist through the native writer and
       const configured = withEntityMappings(source, mappings('First'), org.orgId);
       const first = await runSync(configured, 'mapping-control', options);
       assert.equal(first.ordersNew, 1); assert.equal(first.docsFailed, 0);
-      const saved = (await db.execute<{ id: string; custom: Record<string, unknown> }>(sql`select id,custom from documents where org_id=${org.orgId} and custom->>'qboId'='order-100'`)).rows[0]!;
+      const saved = (await db.execute<{ id: string; custom: Record<string, unknown> }>(sql`select id,custom from documents where org_id=${org.orgId} and custom->>'qboId'='order-100'`, 'objects'))[0]!;
       assert.equal(saved.custom.evidence, 'First');
-      const line = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`)).rows[0]!;
+      const line = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`, 'objects'))[0]!;
       assert.equal(line.custom.classification, 'Original description');
       const replay = await runSync(configured, 'mapping-control', { ...options, kind: 'incremental', since: new Date('2026-07-19T00:00:00Z') });
       assert.equal(replay.docsUnchanged, 1); assert.equal(replay.docsFailed, 0);
-      const draft = (await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`)).rows[0]!;
+      const draft = (await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`, 'objects'))[0]!;
       assert.equal(draft.status, 'draft', 'ordinary operator edits are allowed only on the draft fixture');
       await db.execute(sql`update document_lines set custom=custom||'{"classification":"Operator edit"}'::jsonb where org_id=${org.orgId} and document_id=${saved.id}`);
       const reapplied = await runSync(configured, 'mapping-control', options);
       assert.equal(reapplied.docsAmended, 1, 'replay compares actual native mapped values, not a stale ownership marker');
-      assert.equal((await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`)).rows[0]!.custom.classification, 'Original description');
+      assert.equal((await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`, 'objects'))[0]!.custom.classification, 'Original description');
       doc.lifecycleStatus = 'approved';
       const changed = await runSync(withEntityMappings(source, mappings('Second'), org.orgId), 'mapping-control', options);
       assert.equal(changed.docsAmended, 1); assert.equal(changed.docsFailed, 0);
-      const after = (await db.execute<{ id: string; custom: Record<string, unknown> }>(sql`select id,custom from documents where org_id=${org.orgId} and custom->>'qboId'='order-100'`)).rows[0]!;
+      const after = (await db.execute<{ id: string; custom: Record<string, unknown> }>(sql`select id,custom from documents where org_id=${org.orgId} and custom->>'qboId'='order-100'`, 'objects'))[0]!;
       assert.equal(after.id, saved.id); assert.equal(after.custom.evidence, 'Second');
-      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`)).rows[0]!.status, 'approved');
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`, 'objects'))[0]!.status, 'approved');
       await assert.rejects(db.execute(sql`update document_lines set custom=custom||'{"classification":"Forbidden edit"}'::jsonb where org_id=${org.orgId} and document_id=${saved.id}`), (cause: unknown) => {
         for (let error = cause as { code?: string; cause?: unknown } | undefined; error; error = error.cause as typeof error) if (error.code === '55000') return true;
         return false;
@@ -113,8 +113,8 @@ test('transaction and line custom mappings persist through the native writer and
       doc.lines[0]!.description = 'Revised source description';
       const approvedReplay = await runSync(withEntityMappings(source, mappings('Second'), org.orgId), 'mapping-control', options);
       assert.equal(approvedReplay.docsAmended, 1); assert.equal(approvedReplay.docsFailed, 0, 'approved lines rebuild only through the native trusted mirror amendment');
-      assert.equal((await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`)).rows[0]!.custom.classification, 'Revised source description');
-      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`)).rows[0]!.status, 'approved');
+      assert.equal((await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from document_lines where org_id=${org.orgId} and document_id=${saved.id}`, 'objects'))[0]!.custom.classification, 'Revised source description');
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where org_id=${org.orgId} and id=${saved.id}`, 'objects'))[0]!.status, 'approved');
     });
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -178,20 +178,20 @@ test('operational mappings preserve native lifecycle and money while applying sa
     await withOrgContext(org.orgId, async () => {
       const first = await importNetSuiteCrm(org.orgId, connectionId, transport, { actorId });
       assert.equal(first.accounts, 1); assert.equal(first.opportunities, 1); assert.equal(first.activities.recentActivityNote, 1);
-      const profile = (await db.execute<{ lifecycle_stage: string; custom: Record<string, unknown> }>(sql`select lifecycle_stage,custom from crm_account_profiles where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!;
+      const profile = (await db.execute<{ lifecycle_stage: string; custom: Record<string, unknown> }>(sql`select lifecycle_stage,custom from crm_account_profiles where org_id=${org.orgId} and party_id=${org.customerId}`, 'objects'))[0]!;
       assert.equal(profile.lifecycle_stage, 'customer'); assert.equal(profile.custom.classification, 'Established');
-      const opportunity = (await db.execute<{ title: string; projected_amount: string; weighted_amount: string }>(sql`select title,projected_amount,weighted_amount from crm_opportunities where org_id=${org.orgId} and opportunity_number='OPP-200'`)).rows[0]!;
+      const opportunity = (await db.execute<{ title: string; projected_amount: string; weighted_amount: string }>(sql`select title,projected_amount,weighted_amount from crm_opportunities where org_id=${org.orgId} and opportunity_number='OPP-200'`, 'objects'))[0]!;
       assert.equal(opportunity.title, 'Mapped opportunity'); assert.equal(opportunity.projected_amount, '100.0100'); assert.equal(opportunity.weighted_amount, '50.0050');
-      const activity = (await db.execute<{ subject: string; custom: Record<string, unknown> }>(sql`select subject,custom from crm_activities where org_id=${org.orgId} and custom->'netsuite'->>'id'='300'`)).rows[0]!;
+      const activity = (await db.execute<{ subject: string; custom: Record<string, unknown> }>(sql`select subject,custom from crm_activities where org_id=${org.orgId} and custom->'netsuite'->>'id'='300'`, 'objects'))[0]!;
       assert.equal(activity.subject, 'Mapped source activity'); assert.equal(activity.custom.topic, 'Source site visit', 'custom mapping reads the source before the subject override');
-      const count = async () => (await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and changes->>'event'='connector_entity_mapping_applied'`)).rows[0]!.count;
+      const count = async () => (await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and changes->>'event'='connector_entity_mapping_applied'`, 'objects'))[0]!.count;
       assert.equal(await count(), 4);
       await importNetSuiteCrm(org.orgId, connectionId, transport, { actorId });
       assert.equal(await count(), 4, 'unchanged operational replay retains stable source identity without duplicate mapping audit');
       sourceMemo = 'Revised source description';
       await importNetSuiteCrm(org.orgId, connectionId, transport, { actorId });
       assert.equal(await count(), 5, 'a real opportunity content change still produces one business audit');
-      const audit = (await db.execute<{ changes: { before: Record<string, unknown>; after: Record<string, unknown> } }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_opportunities' and action='update' and changes->>'event'='connector_entity_mapping_applied'`)).rows;
+      const audit = await db.execute<{ changes: { before: Record<string, unknown>; after: Record<string, unknown> } }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_opportunities' and action='update' and changes->>'event'='connector_entity_mapping_applied'`, 'objects');
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.changes.before.description, 'Source title');
       assert.equal(audit[0]!.changes.after.description, sourceMemo);

@@ -43,7 +43,7 @@ async function claimPaymentRunForPosting(
         from payment_runs
        where id = ${runId} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) throw new PaymentError("payment run not found");
 
     if (locked.status === "processing") {
@@ -55,7 +55,7 @@ async function claimPaymentRunForPosting(
                 posting_claimed_at <= now() - ${PAYMENT_RUN_POSTING_CLAIM_STALE_MS} * interval '1 millisecond') as stale
           from payment_runs
          where id = ${runId} and org_id = ${orgId} and status = 'processing'
-      `)).rows[0]?.stale;
+      `, "objects"))[0]?.stale;
       if (!stale) throw new PaymentError("run is already being posted");
       const recovered = await db.execute<{ token: string }>(sql`
         update payment_runs
@@ -66,8 +66,8 @@ async function claimPaymentRunForPosting(
                updated_by = ${userId}
          where id = ${runId} and org_id = ${orgId} and status = 'processing'
          returning posting_claim_token as token
-      `);
-      const recovery = recovered.rows[0];
+      `, "objects");
+      const recovery = recovered[0];
       if (!recovery?.token) throw new PaymentRunPostingClaimFencedError(runId);
       await db.insert(schema.paymentEvents).values({
         orgId,
@@ -96,7 +96,7 @@ async function claimPaymentRunForPosting(
         select count(*)::int as n
           from payment_instructions
          where payment_run_id = ${runId} and org_id = ${orgId} and status = 'pending'
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       if (pending === 0) throw new PaymentError("run is already posted");
     }
     const claimed = await db.execute<{ token: string }>(sql`
@@ -109,8 +109,8 @@ async function claimPaymentRunForPosting(
              updated_by = ${userId}
        where id = ${runId} and org_id = ${orgId} and status = ${locked.status}
        returning posting_claim_token as token
-    `);
-    const fresh = claimed.rows[0];
+    `, "objects");
+    const fresh = claimed[0];
     if (!fresh?.token) throw new PaymentRunPostingClaimFencedError(runId);
     await db.insert(schema.paymentEvents).values({
       orgId,
@@ -168,7 +168,7 @@ async function postClaimedPaymentInstruction(
          and instruction.payment_run_id = ${runId}
          and instruction.org_id = ${orgId}
        for update of instruction
-    `)).rows[0];
+    `, "objects"))[0];
     if (!instruction || instruction.status !== "pending") {
       return { status: "failed", error: "payment instruction changed while its run was being posted" };
     }
@@ -195,7 +195,7 @@ async function postClaimedPaymentInstruction(
         from documents
        where id = ${instruction.payment_document_id} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!lockedDoc || lockedDoc.total === null || lockedDoc.currency === null) {
       return { status: "failed", error: "instruction payment document is missing" };
     }
@@ -258,8 +258,8 @@ async function postClaimedPaymentInstruction(
        where id = ${instruction.id} and payment_run_id = ${runId}
          and org_id = ${orgId} and status = 'pending'
        returning id
-    `);
-    if (!sent.rows[0]) {
+    `, "objects");
+    if (!sent[0]) {
       throw new PaymentError("payment instruction changed while its run was being posted");
     }
     await db.insert(schema.paymentEvents).values({
@@ -319,7 +319,7 @@ async function finishPaymentRunPosting(
              count(*) filter (where status in ('returned', 'rejected'))::int as returned
         from payment_instructions
        where payment_run_id = ${runId} and org_id = ${orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const status = tally.pending > 0
       ? "partially_failed"
       : tally.returned > 0 && requestedStatus === "confirmed"
@@ -337,8 +337,8 @@ async function finishPaymentRunPosting(
          and status = 'processing'
          and posting_claim_token = ${claim.token}
        returning id
-    `);
-    if (!completed.rows[0]) throw new PaymentRunPostingClaimFencedError(runId);
+    `, "objects");
+    if (!completed[0]) throw new PaymentRunPostingClaimFencedError(runId);
     await db.insert(schema.paymentEvents).values({
       orgId,
       paymentRunId: runId,
@@ -378,8 +378,8 @@ async function releaseFailedPaymentRunPosting(
          and status = 'processing'
          and posting_claim_token = ${claim.token}
        returning id
-    `);
-    if (!released.rows[0]) return false;
+    `, "objects");
+    if (!released[0]) return false;
     await db.insert(schema.paymentEvents).values({
       orgId,
       paymentRunId: runId,
@@ -434,7 +434,7 @@ export async function postPaymentRun(
          and instruction.org_id = ${orgId}
          and instruction.status = 'pending'
        order by party.display_name, instruction.id
-    `);
+    `, "objects");
 
     // Final compliance gate. Posting is the irreversible step, so the control
     // runs once more against today's evidence and blocks one instruction rather
@@ -448,7 +448,7 @@ export async function postPaymentRun(
 
     let posted = 0;
     const failures: { payee: string; error: string }[] = [];
-    for (const instruction of instructions.rows) {
+    for (const instruction of instructions) {
       try {
         const decisions = complianceByInstruction.get(instruction.id) ?? [];
         for (const decision of decisions) {

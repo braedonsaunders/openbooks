@@ -81,11 +81,11 @@ async function seed(): Promise<Fixture> {
   const projectId = (await db.execute<{ id: string }>(sql`
     insert into projects (org_id, name, is_active)
     values (${org.orgId}, 'Magnitude Project', true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   const vendorId = (await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Magnitude Vendor', true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into vendor_roles (org_id, party_id, is_active)
     values (${org.orgId}, ${vendorId}, true)`);
@@ -113,8 +113,8 @@ async function post(fixture: Fixture, body: Record<string, unknown>): Promise<{ 
 }
 
 async function subcontractCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from subcontracts where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from subcontracts where org_id = ${orgId}`, "objects");
   return rows[0]!.n;
 }
 

@@ -35,7 +35,7 @@ async function billableProject(org: Org, invoicing: Record<string, unknown> = {}
 
 async function status(orgId: string, id: string) {
   return (await db.execute<{ status: string; customer_decision: string | null }>(sql`
-    select status, customer_decision from prebills where org_id = ${orgId} and id = ${id}`)).rows[0]!
+    select status, customer_decision from prebills where org_id = ${orgId} and id = ${id}`, 'objects'))[0]!
 }
 
 /**
@@ -110,14 +110,14 @@ test('pre-billing customer review: dispute, rework, accept and invoice with the 
 
       const invoice = await wip.convertPrebill(org.orgId, actors.adminId, created.id)
       const document = (await db.execute<{ reference_number: string | null; total: string }>(sql`
-        select reference_number, total::text as total from documents where org_id = ${org.orgId} and id = ${invoice.id}`)).rows[0]!
+        select reference_number, total::text as total from documents where org_id = ${org.orgId} and id = ${invoice.id}`, 'objects'))[0]!
       assert.equal(document.reference_number, 'PO-7781', 'the invoice carries the PO the customer supplied')
       assert.equal(document.total, '400.0000', 'the invoice bills the accepted amounts')
       const listed = (await wip.listPrebills(org.orgId)).find((row) => row.id === created.id)!
       assert.equal(listed.stage, 'invoiced')
 
       const events = (await db.execute<{ event_type: string }>(sql`
-        select event_type from prebill_events where org_id = ${org.orgId} and prebill_id = ${created.id} order by occurred_at, id`)).rows.map((row) => row.event_type)
+        select event_type from prebill_events where org_id = ${org.orgId} and prebill_id = ${created.id} order by occurred_at, id`, 'objects')).map((row) => row.event_type)
       for (const expected of ['customer_review_sent', 'customer_disputed', 'customer_accepted', 'converted']) {
         assert.ok(events.includes(expected), `trail records ${expected}`)
       }
@@ -138,7 +138,7 @@ test('a required customer review blocks invoicing until the customer accepts', e
       const created = await wip.createPrebill(org.orgId, actors.adminId, { projectId: project, periodEnd: org.date })
       await wip.transitionPrebill(org.orgId, actors.adminId, created.id, 'submit')
       await assert.rejects(wip.convertPrebill(org.orgId, actors.adminId, created.id), /requires customer acceptance/)
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`, 'objects'))[0]!.n, 0)
     } finally { await dropScratchOrg(org.orgId) }
   })
 })
@@ -161,7 +161,7 @@ test('pre-billing approval runs through Flows with separation of duties', enable
       const created = await wip.createPrebill(org.orgId, actors.adminId, { projectId: project, periodEnd: org.date })
       const gateFor = async () => (await db.execute<{ id: string }>(sql`
         select id from flow_gates where org_id = ${org.orgId} and subject_kind = 'prebill'
-           and subject_id = ${created.id} and status in ('pending', 'escalated') order by created_at desc limit 1`)).rows[0]?.id
+           and subject_id = ${created.id} and status in ('pending', 'escalated') order by created_at desc limit 1`, 'objects'))[0]?.id
 
       await wip.transitionPrebill(org.orgId, actors.adminId, created.id, 'submit')
       assert.equal((await status(org.orgId, created.id)).status, 'review')
@@ -177,7 +177,7 @@ test('pre-billing approval runs through Flows with separation of duties', enable
       await decideGate({ gateId: first, decision: 'rejected', userId: actors.approver1Id, comment: 'Split the travel time' })
       assert.equal((await status(org.orgId, created.id)).status, 'draft')
       const returned = (await db.execute<{ details: { reason?: string } }>(sql`
-        select details from prebill_events where org_id = ${org.orgId} and prebill_id = ${created.id} and event_type = 'returned'`)).rows[0]
+        select details from prebill_events where org_id = ${org.orgId} and prebill_id = ${created.id} and event_type = 'returned'`, 'objects'))[0]
       assert.equal(returned?.details.reason, 'Split the travel time')
 
       await wip.transitionPrebill(org.orgId, actors.adminId, created.id, 'submit')

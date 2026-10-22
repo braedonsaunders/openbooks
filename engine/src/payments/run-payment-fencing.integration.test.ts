@@ -92,7 +92,7 @@ test("editing a payment claimed by an open run refuses; a closed run releases it
     );
     const untouched = await withBypass(async () => (await db.execute<{ memo: string | null }>(sql`
       select memo from documents where id = ${open.paymentId} and org_id = ${org.orgId}
-    `)).rows[0]);
+    `, "objects"))[0]);
     assert.equal(untouched?.memo, null);
 
     const closed = await seedClaimedDraft(org, userId, "confirmed", "25.0000", "25.0000");
@@ -142,7 +142,7 @@ test("posting a run whose document drifted from its instruction fails loudly", {
       select (select status from payment_instructions where id = ${seeded.instructionId}) as "instructionStatus",
              (select status from payment_runs where id = ${seeded.runId}) as "runStatus",
              (select count(*)::int from journal_entries where source_document_id = ${seeded.paymentId}) as entries
-    `)).rows[0]);
+    `, "objects"))[0]);
     assert.deepEqual(
       { instructionStatus: state?.instructionStatus, runStatus: state?.runStatus, entries: state?.entries },
       { instructionStatus: "pending", runStatus: "partially_failed", entries: 0 },

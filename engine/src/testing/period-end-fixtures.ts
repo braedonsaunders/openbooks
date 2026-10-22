@@ -23,7 +23,7 @@ export interface PeriodEndYear {
 
 export async function seedPeriodEndYear(org: ScratchOrg): Promise<PeriodEndYear> {
   const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`)).rows[0]!.fiscal_calendar_id;
+    select fiscal_calendar_id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
   const periods = new Map<string, string>([["2026-07", org.periodId]]);
   const month = async (year: number, number: number, fiscalYear: number, periodNumber: number) => {
     const key = `${year}-${String(number).padStart(2, "0")}`;
@@ -31,7 +31,7 @@ export async function seedPeriodEndYear(org: ScratchOrg): Promise<PeriodEndYear>
     const id = randomUUID();
     const starts = `${key}-01`;
     const ends = (await db.execute<{ ends: string }>(sql`
-      select ((${starts}::date + interval '1 month') - interval '1 day')::date::text as ends`)).rows[0]!.ends;
+      select ((${starts}::date + interval '1 month') - interval '1 day')::date::text as ends`, "objects"))[0]!.ends;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${id}, ${org.orgId}, ${fiscalYear}, ${periodNumber}, ${key}, ${starts}, ${ends}, false, ${calendarId})`);
@@ -128,13 +128,13 @@ export async function postScratchYearActivity(org: ScratchOrg, year: PeriodEndYe
 
 /** Signed balance of each account for the scratch entity through a date, period-assignment basis. */
 export async function balancesThrough(org: ScratchOrg, endsOn: string, subsidiaryId?: string): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ account_id: string; amount: string }>(sql`
+  const rows = await db.execute<{ account_id: string; amount: string }>(sql`
     select l.account_id, sum(l.amount)::text as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounting_periods p on p.id = e.period_id and p.org_id = e.org_id
      where l.org_id = ${org.orgId} and l.subsidiary_id = ${subsidiaryId ?? org.subsidiaryId}
        and e.book_id = ${org.bookId} and e.status in ('posted', 'reversed') and p.ends_on <= ${endsOn}::date
-     group by l.account_id`)).rows;
+     group by l.account_id`, "objects");
   return new Map(rows.map((row) => [row.account_id, row.amount]));
 }

@@ -86,7 +86,7 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `)).rows[0]!.balance;
+  `, "objects"))[0]!.balance;
 }
 
 async function layerValue(orgId: string, itemId: string): Promise<string> {
@@ -94,7 +94,7 @@ async function layerValue(orgId: string, itemId: string): Promise<string> {
     select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as value
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
-  `)).rows[0]!.value;
+  `, "objects"))[0]!.value;
 }
 
 async function returnMovements(orgId: string, documentId: string): Promise<number> {
@@ -104,7 +104,7 @@ async function returnMovements(orgId: string, documentId: string): Promise<numbe
       join document_lines line on line.id = movement.document_line_id
      where movement.org_id = ${orgId}
        and line.document_id = ${documentId}
-       and movement.kind = 'return'`)).rows[0]!.n;
+       and movement.kind = 'return'`, "objects"))[0]!.n;
 }
 
 test(
@@ -414,10 +414,10 @@ test(
           requestBody: { kind: "vendor_credit" },
         });
         assert.equal(created.status, "created");
-        const stored = (await db.execute<{ stockLocationId: string | null; custom: unknown }>(sql`
+        const stored = await db.execute<{ stockLocationId: string | null; custom: unknown }>(sql`
           select stock_location_id as "stockLocationId", custom
             from document_lines
-           where org_id = ${org.orgId} and document_id = ${created.id}`)).rows;
+           where org_id = ${org.orgId} and document_id = ${created.id}`, "objects");
         assert.equal(stored.length, 1);
         assert.equal(stored[0]!.stockLocationId, org.stockLocationId);
         assert.equal((stored[0]!.custom as { inventoryAllowance?: unknown }).inventoryAllowance, true);

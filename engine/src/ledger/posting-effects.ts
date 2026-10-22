@@ -86,7 +86,7 @@ async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffects
     const doc = (await db.execute<{ document_number: string; kind: string; subsidiary_id: string | null }>(sql`
       select document_number, kind, subsidiary_id from documents
        where id = ${row.document_id} and org_id = ${row.org_id}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!doc) throw new Error("posting-effect document was not found; terminal evidence remains on the outbox row");
     const permission = documentPostingPermission(doc.kind);
     if (!permission) throw new PostingEffectsReplayError("This document kind has no native posting authority; reconcile its posting-effects evidence before replaying.");
@@ -97,9 +97,9 @@ async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffects
       attemptCount: row.attempt_count,
       error: row.terminal_failure_reason,
     });
-    const recipients = (await db.execute<{ id: string }>(sql`
+    const recipients = await db.execute<{ id: string }>(sql`
       select id::text as id from users where org_id=${row.org_id} and is_active
-    `)).rows;
+    `, "objects");
     for (const recipient of recipients) {
       if (!await actorHasPermission(db, row.org_id, recipient.id, permission)) continue;
       const allowed = await actorAllowedSubsidiaryIds(db, row.org_id, recipient.id);
@@ -109,13 +109,13 @@ async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffects
          where org_id = ${row.org_id} and user_id = ${recipient.id}::uuid
            and kind = ${notice.kind} and title = ${notice.title} and read_at is null
         limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (existing) continue;
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into notifications (org_id, user_id, kind, title, body, href)
         values (${row.org_id}, ${recipient.id}::uuid, ${notice.kind}, ${notice.title}, ${notice.body}, ${notice.href})
         returning id
-      `)).rows[0]?.id;
+      `, "objects"))[0]?.id;
       if (!inserted) {
         throw new Error("the posting-effect terminal notice was not stored — no row was written; retry the action");
       }
@@ -291,12 +291,12 @@ export async function claimPostingEffectsForDocument(
      returning claimed.id, claimed.org_id, claimed.document_id, claimed.kind, claimed.entry_id,
                claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count,
                claimed.lease_token
-  `);
-  if (claimed.rows[0]) return claimed.rows[0];
+  `, "objects");
+  if (claimed[0]) return claimed[0];
   const existing = await db.execute<{ status: string }>(sql`
     select status from posting_effects where document_id = ${documentId}
-  `);
-  const status = existing.rows[0]?.status;
+  `, "objects");
+  const status = existing[0]?.status;
   if (status === "succeeded") return "succeeded";
   if (status === "running" || status === "failed") return "running";
   if (status === "terminal_failed") return "terminal_failed";
@@ -320,8 +320,8 @@ async function claimNextDuePostingEffects(now: Date): Promise<PostingEffectsRow 
        order by next_attempt_at
        for update skip locked
        limit 1
-    `);
-    const id = due.rows[0]?.id;
+    `, "objects");
+    const id = due[0]?.id;
     if (!id) return null;
     const claimed = await tx.execute<PostingEffectsRow>(sql`
       update posting_effects as claimed
@@ -337,8 +337,8 @@ async function claimNextDuePostingEffects(now: Date): Promise<PostingEffectsRow 
        returning claimed.id, claimed.org_id, claimed.document_id, claimed.kind, claimed.entry_id,
                  claimed.posting_date::text as posting_date, claimed.actor_id, claimed.attempt_count,
                  claimed.lease_token
-    `);
-    return claimed.rows[0] ?? null;
+    `, "objects");
+    return claimed[0] ?? null;
   });
 }
 
@@ -346,7 +346,7 @@ export async function markPostingEffectsSucceeded(
   row: PostingEffectsRow,
   now = new Date(),
 ): Promise<void> {
-  const completed = await db.execute(sql`
+  const completed = await db.execute<never>(sql`
     update posting_effects
        set status='succeeded', error=null, locked_at=null, lease_token=null, finished_at=${now},
            next_attempt_at=${now}, updated_at=now()
@@ -385,8 +385,8 @@ export async function markPostingEffectsFailed(
                  (${terminal}
                   and terminal_failed_by = ${POSTING_EFFECTS_WORKER_IDENTITY}
                   and terminal_failed_at = ${now}) as "becameTerminal"
-    `);
-    const terminalRow = result.rows[0];
+    `, "objects");
+    const terminalRow = result[0];
     if (terminalRow?.becameTerminal) await insertTerminalFailureAudit(tx, terminalRow);
     return terminalRow;
   });
@@ -506,8 +506,8 @@ export async function listFailedPostingEffects(
      where org_id=${orgId} and status in ('failed','terminal_failed')
      order by coalesce(terminal_failed_at, finished_at, updated_at) desc
      limit ${limit}
-  `));
-  return result.rows;
+  `, "objects"));
+  return result;
 }
 
 /** Authorized remediation for poison work. The prior terminal envelope is
@@ -531,8 +531,8 @@ export async function replayTerminalPostingEffect(input: {
         select 1 from users
          where id=${input.actorId} and org_id=${input.orgId} and is_active
       ) as exists
-    `);
-    if (!actor.rows[0]?.exists) {
+    `, "objects");
+    if (!actor[0]?.exists) {
       throw new PostingEffectsReplayError("replay actor is not an active user in the organization");
     }
     const selected = await tx.execute<{
@@ -549,8 +549,8 @@ export async function replayTerminalPostingEffect(input: {
         from posting_effects
        where id=${input.id} and org_id=${input.orgId}
        for update
-    `);
-    const before = selected.rows[0];
+    `, "objects");
+    const before = selected[0];
     if (!before) throw new PostingEffectsReplayError("posting effect was not found in the organization");
     if (before.status !== "terminal_failed") {
       throw new PostingEffectsReplayError("only terminal-failed posting effects can be replayed");
@@ -558,7 +558,7 @@ export async function replayTerminalPostingEffect(input: {
     const document = (await tx.execute<{ subsidiary_id: string | null; status: string; kind: string }>(sql`
       select subsidiary_id, status, kind from documents
        where id=${before.document_id} and org_id=${input.orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!document) throw new PostingEffectsReplayError("posting effect document was not found in the organization");
     if (input.allowedSubsidiaryIds !== undefined && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, document.subsidiary_id)) {
       throw new ScopeNotFoundError();
@@ -582,7 +582,7 @@ export async function replayTerminalPostingEffect(input: {
     if (document.status !== "posted") {
       throw new PostingEffectsReplayError("only a posted document's terminal-failed effects can be replayed; review the document status before retrying");
     }
-    const reset = await tx.execute(sql`
+    const reset = await tx.execute<never>(sql`
       update posting_effects
          set status='pending', attempt_count=0, next_attempt_at=${now},
              locked_at=null, lease_token=null, last_attempt_at=null, finished_at=null, error=null,

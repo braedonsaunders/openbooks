@@ -74,11 +74,9 @@ const postRequest = (body: unknown) =>
   });
 
 const siteOf = async (id: string) =>
-  (
-    await db.execute<{ site_jurisdiction: string | null }>(
-      sql`select site_jurisdiction from projects where id = ${id}`,
-    )
-  ).rows[0]!.site_jurisdiction;
+  (await db.execute<{ site_jurisdiction: string | null }>(
+      sql`select site_jurisdiction from projects where id = ${id}`, "objects",
+    ))[0]!.site_jurisdiction;
 
 test.after(() => hooks.deregister())
 test("project creation refuses an unknown site jurisdiction without writing", async () => {
@@ -88,9 +86,7 @@ test("project creation refuses an unknown site jurisdiction without writing", as
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
     assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
     assert.match(json?.error ?? "", /unknown site jurisdiction/, `expected a named refusal, got: ${JSON.stringify(json)}`);
-    const count = (
-      await db.execute<{ n: number }>(sql`select count(*)::int as n from projects where org_id = ${org.orgId}`)
-    ).rows[0]!.n;
+    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from projects where org_id = ${org.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 0);
   } finally {
     await dropScratchOrg(org.orgId);

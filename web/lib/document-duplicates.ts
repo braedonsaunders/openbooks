@@ -17,7 +17,7 @@ export async function findPossibleDuplicates(input: {
   reference: string
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined
 }): Promise<{ id: string; documentNumber: string }[]> {
-  return (await db.execute<{ id: string; documentNumber: string }>(sql`
+  return await db.execute<{ id: string; documentNumber: string }>(sql`
     select id, document_number as "documentNumber" from documents
      where org_id = ${input.orgId} and kind = ${input.kind}
        and status <> 'voided'
@@ -27,5 +27,5 @@ export async function findPossibleDuplicates(input: {
        ${input.kind === 'vendor_bill' ? sql`and nullif(btrim(reference_number), '') = ${input.reference}` : sql``}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, input.allowedSubsidiaryIds ?? null)}
      order by document_date desc, id
-     limit 5`)).rows
+     limit 5`, 'objects')
 }

@@ -1,1 +1,0 @@
-This migration replaces only the reporting-book basis function. It preserves book configuration and financial history; active book selection and posting guards remain enforced by their native boundaries.

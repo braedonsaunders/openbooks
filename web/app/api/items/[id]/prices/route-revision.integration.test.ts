@@ -52,14 +52,14 @@ async function fixture(): Promise<Fixture> {
   return withBypassContext(async () => {
     const org = await createScratchOrg()
     const actorId = (await seedFlowActors(org.orgId)).adminId
-    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`)).rows[0]
+    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`, 'objects'))[0]
     assert.ok(baseLevel, 'migration must seed one active base price level')
     return { orgId: org.orgId, actorId, itemId: org.items.service, priceLevelId: baseLevel.id }
   })
 }
 
 async function today(): Promise<string> {
-  return String((await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)
+  return String((await db.execute<{ today: string }>(sql`select current_date::text as today`, 'objects'))[0]!.today)
 }
 
 function shift(day: string, delta: number): string {
@@ -148,7 +148,7 @@ test('two editors racing on one schedule: the second gets a 409 with a reload re
     const second = await patchSchedule(f, { id: scheduleId, revision: 0, ...scheduleBody(f, shift(now, 30), '55.0000') })
     assert.equal(second.status, 409)
     assert.match(String((await second.json()).error), /reload and try again/i)
-    const breaks = (await db.execute<{ unit_price: string }>(sql`select unit_price::text from item_price_breaks where org_id=${f.orgId} and schedule_id=${scheduleId}`)).rows
+    const breaks = await db.execute<{ unit_price: string }>(sql`select unit_price::text from item_price_breaks where org_id=${f.orgId} and schedule_id=${scheduleId}`, 'objects')
     assert.deepEqual(breaks.map((row) => row.unit_price), ['70.0000'])
     const rows = await getSchedules(f)
     assert.deepEqual(rows.map((row) => [row.id, row.revision]), [[scheduleId, 1]])
@@ -177,7 +177,7 @@ test('a stale revision on a superseded schedule is refused, and DELETE is fenced
     assert.equal(staleDelete.status, 409)
     assert.match(String((await staleDelete.json()).error), /reload and try again/i)
     // The retired row is still retained history, untouched by both attempts.
-    const retained = (await db.execute<{ is_active: boolean; revision: number }>(sql`select is_active, revision from item_price_schedules where org_id=${f.orgId} and id=${scheduleId}`)).rows[0]
+    const retained = (await db.execute<{ is_active: boolean; revision: number }>(sql`select is_active, revision from item_price_schedules where org_id=${f.orgId} and id=${scheduleId}`, 'objects'))[0]
     assert.deepEqual(retained, { is_active: false, revision: 1 })
   } finally {
     await dropScratchOrgReporting(f.orgId)

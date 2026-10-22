@@ -37,7 +37,7 @@ export async function loadPartyDebitMandates(
     select p.id from parties p
      where p.id = ${partyId} and p.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!party) return null
 
   const [mandates, bankAccounts] = await Promise.all([
@@ -56,7 +56,7 @@ export async function loadPartyDebitMandates(
         join party_bank_accounts b on b.id = m.party_bank_account_id and b.org_id = m.org_id
        where m.org_id = ${orgId} and m.party_id = ${partyId}
        order by m.created_at desc, m.id
-    `),
+    `, 'objects'),
     db.execute<PartyDebitMandateBankAccount>(sql`
       select b.id,
              concat_ws(' · ', nullif(b.bank_name, ''),
@@ -65,7 +65,7 @@ export async function loadPartyDebitMandates(
        where b.org_id = ${orgId} and b.party_id = ${partyId}
          and ${payablePayeeBankAccountSql('b')}
        order by b.created_at desc, b.id
-    `),
+    `, 'objects'),
   ])
-  return { mandates: mandates.rows, bankAccounts: bankAccounts.rows }
+  return { mandates, bankAccounts }
 }

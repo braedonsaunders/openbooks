@@ -48,8 +48,8 @@ export async function countConversationAssistantTurns(
       join ai_conversations c on c.id = m.conversation_id
      where m.conversation_id = ${conversationId} and m.role = 'assistant'
        and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
-  `);
-  return Number(r.rows[0]?.count ?? 0);
+  `, "objects");
+  return Number(r[0]?.count ?? 0);
 }
 
 /** Owner-only read; null when no summary exists yet or it fails validation. */

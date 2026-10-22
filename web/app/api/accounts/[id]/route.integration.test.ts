@@ -96,9 +96,9 @@ function patchRequest(body: unknown): Request {
 
 async function parentIdOf(orgId: string, accountId: string): Promise<string | null> {
   const r = await db.execute<{ parent_id: string | null }>(sql`
-    select parent_id from accounts where org_id = ${orgId} and id = ${accountId}`);
-  assert.ok(r.rows[0], "the edited account must still exist");
-  return r.rows[0]!.parent_id;
+    select parent_id from accounts where org_id = ${orgId} and id = ${accountId}`, "objects");
+  assert.ok(r[0], "the edited account must still exist");
+  return r[0]!.parent_id;
 }
 
 /** Number of accounts that are their own ancestor — nonzero means a cycle exists. */
@@ -111,15 +111,15 @@ async function selfAncestorCount(orgId: string): Promise<number> {
       join accounts p on p.id = a.anc_id
       where p.parent_id is not null
     )
-    select count(*)::int as n from anc where id = anc_id`);
-  return r.rows[0]!.n;
+    select count(*)::int as n from anc where id = anc_id`, "objects");
+  return r[0]!.n;
 }
 
 async function auditCount(orgId: string, rowIds: string[]): Promise<number> {
   const r = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'accounts' and row_id in ${rowIds}`);
-  return r.rows[0]!.n;
+     where org_id = ${orgId} and table_name = 'accounts' and row_id in ${rowIds}`, "objects");
+  return r[0]!.n;
 }
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
@@ -186,8 +186,8 @@ async function waitForLock(
          and wait_event_type = 'Lock'
          and (${predicate.pid ?? null}::int is null or pid = ${predicate.pid ?? null})
          and (${predicate.queryPattern ?? null}::text is null
-              or query ilike ${predicate.queryPattern ?? null})`);
-    if ((blocked.rows[0]?.n ?? 0) > 0) return;
+              or query ilike ${predicate.queryPattern ?? null})`, "objects");
+    if ((blocked[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   assert.fail(`timed out waiting for account/posting serialization: ${failure}`);
@@ -203,9 +203,9 @@ async function accountState(
       from accounts a
       left join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
      where a.org_id = ${orgId} and a.id = ${accountId}
-     group by a.id, a.type, a.is_summary`);
-  assert.ok(state.rows[0], "the raced account must still exist");
-  return state.rows[0]!;
+     group by a.id, a.type, a.is_summary`, "objects");
+  assert.ok(state[0], "the raced account must still exist");
+  return state[0]!;
 }
 
 async function postingWinsClassificationPatch(
@@ -283,8 +283,8 @@ async function waitForAdvisoryParking(): Promise<void> {
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
-         and wait_event = 'advisory'`);
-    if ((r.rows[0]?.n ?? 0) > 0) return;
+         and wait_event = 'advisory'`, "objects");
+    if ((r[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(
@@ -540,7 +540,7 @@ test(
         params: Promise.resolve({ id: accountId }),
       });
       assert.equal(response.status, 200, JSON.stringify(await response.json()));
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from accounts where id = ${accountId} and org_id = ${org.orgId}`)).rows[0]?.custom;
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from accounts where id = ${accountId} and org_id = ${org.orgId}`, "objects"))[0]?.custom;
       assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
     } finally {
       routeState.authz = null;

@@ -87,8 +87,8 @@ test(
       const today = await withBypassContext(() => businessToday(org.orgId));
       const entry = await seedPostedEntry(org);
       const vendor = await withBypassContext(() =>
-        db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${org.orgId}, 'vendor', 'Vendor One') returning id`),
-      ).then((result) => (result.rows[0] as { id: string }).id);
+        db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${org.orgId}, 'vendor', 'Vendor One') returning id`, "objects"),
+      ).then((rows) => (rows[0] as { id: string }).id);
 
       // Open/open duplicate: same vendor, kind, amount, 4 days apart.
       await seedBill(org, entry, vendor, "BILL-D1", addCalendarDays(today, -30), addCalendarDays(today, 60), "1200.00");
@@ -120,8 +120,8 @@ test(
       // Another tenant with its own duplicate pair: must not leak in.
       const otherEntry = await seedPostedEntry(other);
       const otherVendor = await withBypassContext(() =>
-        db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${other.orgId}, 'vendor', 'Foreign Vendor') returning id`),
-      ).then((result) => (result.rows[0] as { id: string }).id);
+        db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${other.orgId}, 'vendor', 'Foreign Vendor') returning id`, "objects"),
+      ).then((rows) => (rows[0] as { id: string }).id);
       await seedBill(other, otherEntry, otherVendor, "BILL-F1", addCalendarDays(today, -9), addCalendarDays(today, 60), "80000.00");
       await seedBill(other, otherEntry, otherVendor, "BILL-F1B", addCalendarDays(today, -8), addCalendarDays(today, 60), "80000.00");
 

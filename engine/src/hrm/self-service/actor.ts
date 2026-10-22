@@ -88,7 +88,7 @@ export async function actorPartyOf(
   const user = requireId(userId, "userId");
   const row = (await exec.execute<{ partyId: string | null }>(sql`
     select party_id as "partyId" from users where org_id = ${org} and id = ${user}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row?.partyId) {
     throw new SelfServiceError(
       "NO_LINK",

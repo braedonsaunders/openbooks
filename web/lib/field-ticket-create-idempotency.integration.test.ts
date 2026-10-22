@@ -15,8 +15,8 @@ const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 
 async function ticketCount(orgId: string): Promise<number> {
   const rows = await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from documents where org_id = ${orgId} and kind = 'field_ticket'`)
-  return Number(rows.rows[0]?.n ?? 0)
+    select count(*)::text as n from documents where org_id = ${orgId} and kind = 'field_ticket'`, 'objects')
+  return Number(rows[0]?.n ?? 0)
 }
 
 test('a replayed create key returns the first ticket and allocates one number', enabled, async () => {

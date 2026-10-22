@@ -313,8 +313,8 @@ async function assertNoUntranslatedHistory(
        and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
        and a.type in ${types}
        and not (a.type='equity' and (${statementTranslationMethod('flow', sql`e.posting_date`)})='historical')
-       and e.posting_date < ${earliest}`));
-  const date = oldest.rows[0]?.d;
+       and e.posting_date < ${earliest}`, 'objects'));
+  const date = oldest[0]?.d;
   if (date) {
     throw new MissingRatesError(
       `Activity dated ${date} predates the earliest derived consolidated FX rates ` +
@@ -528,8 +528,8 @@ async function buildAmountColumns(opts: {
       select id from segment_definitions
        where org_id = ${orgId} and key = ${segmentKey} and source_kind = 'custom' and is_active and show_in_reports
        limit 1
-    `))
-    if (!definition.rows[0]) {
+    `, 'objects'))
+    if (!definition[0]) {
       return { cols: [{ key: 'current', label: periodLabel, from: period.from, to: period.to }], truncated: false }
     }
     const periodWhere = mode === 'balance'
@@ -537,7 +537,7 @@ async function buildAmountColumns(opts: {
       : sql`e.posting_date >= ${period.from} and e.posting_date <= ${period.to}`
     const values = (await db.execute<{ id: string; name: string }>(sql`
       select sv.id, sv.name from segment_values sv
-       where sv.org_id = ${orgId} and sv.segment_id = ${definition.rows[0].id} and sv.is_active
+       where sv.org_id = ${orgId} and sv.segment_id = ${definition[0].id} and sv.is_active
          and exists (
            select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
             where l.extra_dims ->> ${segmentKey} = sv.id::text
@@ -545,15 +545,15 @@ async function buildAmountColumns(opts: {
               and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
          )
        order by sv.name
-    `))
+    `, 'objects'))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
          and not (l.extra_dims ? ${segmentKey}) and ${periodWhere} ${bookProbe}
          and ${dimFilterSql(dims, subsidiary)} limit 1
-    `))
-    const groups = values.rows.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
-    if (unassigned.rows.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
+    `, 'objects'))
+    const groups = values.map((value) => ({ key: value.id, name: value.name, dimVal: value.id as string | null }))
+    if (unassigned.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
     const periods = await comparePeriods(orgId, period, compare, periodLabel)
     const grouped = periods.length > 1
     const cols: AmountColumn[] = []
@@ -592,16 +592,16 @@ async function buildAmountColumns(opts: {
           where l.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${sql.raw(`l.${dimCol}`)} = d.id and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        )
        order by d.name
-    `))
+    `, 'objects'))
     const unassigned = (await db.execute(sql`
       select 1 from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${sql.raw(`l.${dimCol}`)} is null and ${periodWhere} ${bookProbe} and ${dimFilterSql(dims, subsidiary)}
        limit 1
-    `))
+    `, 'objects'))
     const dimField = breakout as 'department' | 'project' | 'location' | 'class'
-    const groups = rows.rows.map((r) => ({ key: r.id, name: r.name, dimVal: r.id as string | null }))
-    if (unassigned.rows.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
+    const groups = rows.map((r) => ({ key: r.id, name: r.name, dimVal: r.id as string | null }))
+    if (unassigned.length) groups.push({ key: 'unassigned', name: 'Unassigned', dimVal: null })
 
     // Compose breakout WITH compare: each breakout value gets one column per
     // period (Current + Prior). With no compare it stays one column per value.
@@ -646,13 +646,13 @@ export async function priorAccountingWindow(
   orgId: string,
   period: { from: string; to: string },
 ): Promise<{ from: string; to: string; aligned: boolean }> {
-  const periods = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
+  const periods = await db.execute<{ starts_on: string; ends_on: string }>(sql`
     select p.starts_on::text as starts_on, p.ends_on::text as ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${orgId} and fc.is_default and fc.is_active and not p.is_adjustment
      order by p.starts_on, p.ends_on
-  `)).rows
+  `, 'objects')
   const abuts = (i: number) => periods[i + 1]?.starts_on === addCalendarDays(periods[i]!.ends_on, 1)
   const first = periods.findIndex((p) => p.starts_on === period.from)
   if (first >= 0) {

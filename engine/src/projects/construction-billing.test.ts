@@ -228,7 +228,7 @@ test("createPayApplication rejects a period before the previous invoiced Date", 
   ];
   let responseIndex = 0;
   const tx = {
-    execute: async () => responses[responseIndex++] ?? { rows: [] },
+    execute: async (_query: unknown, mode?: string) => Promise.resolve(responses[responseIndex++] ?? { rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   };
   const transactionDb = db as unknown as {
     transaction(callback: (transaction: typeof tx) => Promise<unknown>): Promise<unknown>;
@@ -269,9 +269,10 @@ function sqlText(query: unknown): string {
 test("createPayApplication takes the feature-gate fence and rechecks Projects under a shared row lock", async (t) => {
   const seen: string[] = [];
   const tx = {
-    execute: async (query: unknown) => {
+    execute: async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       seen.push(sqlText(query));
-      return { rows: [{ features: { projects: false } }] };
+      return inMode({ rows: [{ features: { projects: false } }] });
     },
   };
   const transactionDb = db as unknown as {
@@ -303,10 +304,11 @@ test("createPayApplication takes the feature-gate fence and rechecks Projects un
 test("createPayApplication proceeds past an enabled gate to the procedure check", async (t) => {
   let calls = 0;
   const tx = {
-    execute: async (_query: unknown) => {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       calls += 1;
-      if (calls === 1) return { rows: [] };
-      if (calls === 2) return { rows: [{ features: { projects: true } }] };
+      if (calls === 1) return inMode({ rows: [] });
+      if (calls === 2) return inMode({ rows: [{ features: { projects: true } }] });
       throw new Error("beyond-gate");
     },
   };

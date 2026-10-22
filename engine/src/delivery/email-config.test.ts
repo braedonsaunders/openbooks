@@ -23,11 +23,12 @@ const SEALED = { keyCiphertext: "c2VhbGVkLWNpcGhlcnRleHQ", keyNonce: "c2VhbGVkLW
 const writeEffectHarness = {
   responses: [] as Array<{ rows: unknown[] } | ((queryText: string) => { rows: unknown[] })>,
   queries: [] as Array<{ text: string }>,
-  execute(query: { text?: string }) {
+  execute(query: { text?: string }, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const text = String(query.text ?? "");
     this.queries.push({ text });
     const response = this.responses.shift();
-    return typeof response === "function" ? response(text) : response ?? { rows: [] };
+    return Promise.resolve(typeof response === "function" ? response(text) : response ?? { rows: [] }).then(inMode);
   },
   reset() {
     this.responses.length = 0;
@@ -64,7 +65,7 @@ registerHooks({
         format: "module",
         source: `
           const harness = globalThis[Symbol.for("openbooks.email-log-write-effect-test")];
-          export const db = { execute: (query) => harness.execute(query) };
+          export const db = { execute: (query, mode) => harness.execute(query, mode) };
           export async function withOrgTransaction(_orgId, work) { return work(); }
         `,
         shortCircuit: true,

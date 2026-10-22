@@ -51,8 +51,8 @@ async function glBalanceBySubsidiary(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${accountId}
-       and e.subsidiary_id = ${subsidiaryId} and e.status = 'posted'`));
-  return toUnits(r.rows[0]!.bal);
+       and e.subsidiary_id = ${subsidiaryId} and e.status = 'posted'`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 async function layerRemaining(
@@ -63,8 +63,8 @@ async function layerRemaining(
   const r = (await db.execute<{ q: string }>(sql`
     select coalesce(sum(remaining_quantity), 0)::text as q from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
-       and subsidiary_id = ${subsidiaryId}`));
-  return toUnits(r.rows[0]!.q);
+       and subsidiary_id = ${subsidiaryId}`, "objects"));
+  return toUnits(r[0]!.q);
 }
 
 test("a receipt settles only its own subsidiary's deficit", { skip: !DB }, async () => {
@@ -81,7 +81,7 @@ test("a receipt settles only its own subsidiary's deficit", { skip: !DB }, async
     });
     const deficit = (await db.execute<{ subsidiary_id: string; remaining_quantity: string }>(sql`
       select subsidiary_id::text, remaining_quantity::text from inventory_provisional_costs
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`)).rows[0]!;
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!;
     assert.equal(deficit.subsidiary_id, subA, "the deficit is owned by the issuing subsidiary");
     assert.equal(toUnits(deficit.remaining_quantity), toUnits("5"));
 
@@ -96,7 +96,7 @@ test("a receipt settles only its own subsidiary's deficit", { skip: !DB }, async
     // A's deficit is untouched and still owned by A.
     const after = (await db.execute<{ remaining_quantity: string }>(sql`
       select remaining_quantity::text from inventory_provisional_costs
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`)).rows[0]!;
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!;
     assert.equal(toUnits(after.remaining_quantity), toUnits("5"), "another subsidiary's receipt settles nothing");
 
     // B holds a full layer at its own cost; A holds none.
@@ -135,7 +135,7 @@ test("a receipt still settles its own subsidiary's deficit", { skip: !DB }, asyn
     });
     const remaining = (await db.execute<{ q: string }>(sql`
       select coalesce(sum(remaining_quantity), 0)::text as q from inventory_provisional_costs
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`)).rows[0]!.q;
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!.q;
     assert.equal(toUnits(remaining), toUnits("0"), "own-entity deficits still settle");
     assert.equal(await layerRemaining(org.orgId, org.items.fifo, subA), toUnits("0"), "settled units net the shortfall, leaving no layer");
     assert.equal(await glBalanceBySubsidiary(org.orgId, org.accounts.invAsset, subA), toUnits("0"));
@@ -173,9 +173,9 @@ for (const method of ["fifo", "movingAvg"] as const) {
         const replay = await receive();
         assert.equal(replay.replayed, true);
         assert.deepEqual(replay.value, first.value);
-        const layers = (await db.execute<{q:string;v:string}>(sql`
+        const layers = await db.execute<{q:string;v:string}>(sql`
           select remaining_quantity::text q,unit_cost::text v from cost_layers
-          where org_id=${org.orgId} and item_id=${itemId}`)).rows;
+          where org_id=${org.orgId} and item_id=${itemId}`, "objects");
         const { extendCost } = await import('./costing.ts');
         assert.equal(layers.reduce((n,l)=>n+toUnits(l.q),0n),toUnits(example.remaining));
         const layerValue=layers.reduce((n,l)=>n+toUnits(extendCost(l.q,l.v)),0n);

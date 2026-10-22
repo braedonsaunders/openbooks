@@ -69,8 +69,8 @@ async function seedComputedFiling(
   const recipients = await db.execute<{ id: string }>(sql`
     select id from information_return_recipients
      where org_id = ${org.orgId} and filing_id = ${filing.id}
-     order by party_id`);
-  return { filingId: filing.id, recipientIds: recipients.rows.map((row) => row.id) };
+     order by party_id`, "objects");
+  return { filingId: filing.id, recipientIds: recipients.map((row) => row.id) };
 }
 
 async function filingRow(
@@ -79,9 +79,9 @@ async function filingRow(
 ): Promise<{ status: string; void_reason: string | null; finalized_at: Date | null }> {
   const r = await db.execute<{ status: string; void_reason: string | null; finalized_at: Date | null }>(
     sql`select status, void_reason, finalized_at from information_return_filings
-         where org_id = ${orgId} and id = ${filingId}`,
+         where org_id = ${orgId} and id = ${filingId}`, "objects",
   );
-  return r.rows[0]!;
+  return r[0]!;
 }
 
 type RecipientRow = {
@@ -96,16 +96,16 @@ async function recipientRows(orgId: string, filingId: string): Promise<Map<strin
   const r = await db.execute<RecipientRow & { id: string }>(sql`
     select id, status, adjustments, exclusion_reason, updated_at
       from information_return_recipients
-     where org_id = ${orgId} and filing_id = ${filingId}`);
-  return new Map(r.rows.map((row) => [row.id, row]));
+     where org_id = ${orgId} and filing_id = ${filingId}`, "objects");
+  return new Map(r.map((row) => [row.id, row]));
 }
 
 async function auditActions(orgId: string, rowId: string): Promise<string[]> {
   const r = await db.execute<{ action: string }>(sql`
     select action from audit_log
      where org_id = ${orgId} and table_name = 'information_return_filings' and row_id = ${rowId}
-     order by at, id`);
-  return r.rows.map((row) => row.action);
+     order by at, id`, "objects");
+  return r.map((row) => row.action);
 }
 
 async function rejectsInfo(fn: () => Promise<unknown>, pattern: RegExp): Promise<void> {
@@ -253,7 +253,7 @@ test(
       const before = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
         select recipient_snapshot from information_return_recipients
          where org_id = ${org.orgId} and filing_id = ${filing.id}
-      `)).rows[0]!.recipient_snapshot;
+      `, "objects"))[0]!.recipient_snapshot;
 
       const late = await seedInformationReturnPayment(org, actorId, "250", "STALE-LATE");
       await rejectsInfo(
@@ -268,7 +268,7 @@ test(
       const after = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
         select recipient_snapshot from information_return_recipients
          where org_id = ${org.orgId} and filing_id = ${filing.id}
-      `)).rows[0]!.recipient_snapshot;
+      `, "objects"))[0]!.recipient_snapshot;
       assert.deepEqual(after, before, "stale refusal must not rewrite the reviewed evidence");
       assert.deepEqual(after.paymentIds, [original.paymentId]);
       assert.equal((after.paymentIds as string[]).includes(late.paymentId), false);
@@ -303,7 +303,7 @@ test(
       const before = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
         select recipient_snapshot from information_return_recipients
          where org_id = ${org.orgId} and filing_id = ${filing.id}
-      `)).rows[0]!.recipient_snapshot;
+      `, "objects"))[0]!.recipient_snapshot;
       assert.deepEqual(before.paymentIds, [source.paymentId]);
       const traces = before.paymentTraces as Array<{
         paymentId: string;
@@ -321,7 +321,7 @@ test(
       const frozen = (await db.execute<{ recipient_snapshot: Record<string, unknown> }>(sql`
         select recipient_snapshot from information_return_recipients
          where org_id = ${org.orgId} and filing_id = ${filing.id}
-      `)).rows[0]!.recipient_snapshot;
+      `, "objects"))[0]!.recipient_snapshot;
       assert.deepEqual(frozen, before);
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -385,7 +385,7 @@ test("concurrent ensureFiling opens yield one filing with the same id", { skip: 
     assert.equal(ids.size, 1);
     const count = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from information_return_filings
-       where org_id = ${org.orgId} and tax_year = 2033 and form_type = '1099-NEC'`)).rows[0]!.n;
+       where org_id = ${org.orgId} and tax_year = 2033 and form_type = '1099-NEC'`, "objects"))[0]!.n;
     assert.equal(count, 1);
   } finally {
     await dropScratchOrgReporting(org.orgId);
@@ -693,8 +693,8 @@ for (let round = 0; round < 10; round++) {
       const recipientAudits = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'information_return_recipients'
-           and row_id = ${recipientIds[0]!}`);
-      assert.equal(recipientAudits.rows[0]!.n, edit.status === "fulfilled" ? 1 : 0);
+           and row_id = ${recipientIds[0]!}`, "objects");
+      assert.equal(recipientAudits[0]!.n, edit.status === "fulfilled" ? 1 : 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -746,8 +746,8 @@ test("every successful transition writes exactly one audit row, in one unit with
     const actors = await db.execute<{ action: string; actor_id: string }>(sql`
       select action, actor_id from audit_log
        where org_id = ${org.orgId} and table_name = 'information_return_filings' and row_id = ${filingId}
-       order by at, id`);
-    assert.ok(actors.rows.every((r) => r.actor_id === actorId));
+       order by at, id`, "objects");
+    assert.ok(actors.every((r) => r.actor_id === actorId));
 
     // A real recompute run (empty ledger → zero recipients) lands the
     // `compute` evidence atomically; the blocked finalize adds nothing.
@@ -758,9 +758,9 @@ test("every successful transition writes exactly one audit row, in one unit with
     const miscAudit = await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
       select action, changes from audit_log
        where org_id = ${org.orgId} and table_name = 'information_return_filings' and row_id = ${fresh.id}
-       order by at, id`);
-    assert.deepEqual(miscAudit.rows.map((r) => r.action), ["compute"]);
-    assert.equal((miscAudit.rows[0]!.changes.after as { recipients: number }).recipients, 0);
+       order by at, id`, "objects");
+    assert.deepEqual(miscAudit.map((r) => r.action), ["compute"]);
+    assert.equal((miscAudit[0]!.changes.after as { recipients: number }).recipients, 0);
   } finally {
   await dropScratchOrgReporting(org.orgId);
   }
@@ -789,11 +789,9 @@ test("recipient edits keep the API contract: signed deltas over computed figures
     let rows = await recipientRows(org.orgId, filingId);
     assert.deepEqual(rows.get(target)!.adjustments, {});
     assert.equal(
-      (
-        await db.execute<{ n: number }>(sql`
+      (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from audit_log
-           where org_id = ${org.orgId} and row_id = ${target}`)
-      ).rows[0]!.n,
+           where org_id = ${org.orgId} and row_id = ${target}`, "objects"))[0]!.n,
       0,
     );
 
@@ -805,10 +803,10 @@ test("recipient edits keep the API contract: signed deltas over computed figures
     const audits = await db.execute<{ changes: { before: unknown; after: unknown } }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'information_return_recipients' and row_id = ${target}
-       order by at, id`);
-    assert.equal(audits.rows.length, 1);
-    assert.deepEqual(audits.rows[0]!.changes.before, { status: "included", adjustments: {} });
-    assert.deepEqual(audits.rows[0]!.changes.after, { status: "included", adjustments: { nec1: "-250.5000" } });
+       order by at, id`, "objects");
+    assert.equal(audits.length, 1);
+    assert.deepEqual(audits[0]!.changes.before, { status: "included", adjustments: {} });
+    assert.deepEqual(audits[0]!.changes.after, { status: "included", adjustments: { nec1: "-250.5000" } });
 
     // Excluding keeps the mandatory reason on the row, next to its audit.
     await call({ status: "excluded", exclusionReason: "deceased, estate paid final bill" });

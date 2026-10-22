@@ -41,7 +41,7 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
     await assert.rejects(applyHolidayObligation({ ...input, changeId: proposed.changeId }), /approval/i);
     await withOrgContext(fx.orgId, async () => {
       await submitFinancialChange(fx.orgId, proposed.changeId, fx.actorId);
-      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fx.orgId} and subject_id=${proposed.changeId} and status='pending'`)).rows[0]!;
+      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fx.orgId} and subject_id=${proposed.changeId} and status='pending'`, "objects"))[0]!;
       assert.ok(gate);
       if (approvalMode === "solo") {
         await assert.rejects(withOrgTransaction(fx.orgId, () => db.execute(sql`update financial_changes set status='approved',approved_by=${fx.actorId},approved_at=now() where org_id=${fx.orgId} and id=${proposed.changeId}`)),
@@ -63,8 +63,8 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
     assert.deepEqual(await proposeHolidayObligation(input), proposed);
     await assert.rejects(proposeHolidayObligation({ ...input, idempotencyKey: randomUUID() }), /already belong/);
     const { input: runInput } = await calculatedRun(fx);
-    const settlement = async () => (await db.execute<{ amount: string; hours: string; rate: string; status: string; lineId: string | null }>(sql`
-      select amount::text,hours::text,rate::text,status,pay_stub_line_id as "lineId" from pay_run_holiday_allocations where org_id=${fx.orgId} and obligation_id=${applied.obligationId}`)).rows;
+    const settlement = async () => await db.execute<{ amount: string; hours: string; rate: string; status: string; lineId: string | null }>(sql`
+      select amount::text,hours::text,rate::text,status,pay_stub_line_id as "lineId" from pay_run_holiday_allocations where org_id=${fx.orgId} and obligation_id=${applied.obligationId}`, "objects");
     const initial = await settlement();
     assert.equal(initial.length, 1);
     assert.equal(initial[0]!.amount, "240.0000");
@@ -80,7 +80,7 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
     await withOrgContext(fx.orgId, async () => {
       await seedApprovalFlow(fx.orgId, { subjectKind: "pay_run", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any", preventSelfApproval: true });
       await submitForApproval("pay_run", runInput.documentId, fx.actorId);
-      const payGate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fx.orgId} and subject_id=${runInput.documentId} and status='pending'`)).rows[0]!;
+      const payGate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fx.orgId} and subject_id=${runInput.documentId} and status='pending'`, "objects"))[0]!;
       assert.ok(payGate);
       await decideGate({ gateId: payGate.id, decision: "approved", userId: actors.approver1Id });
     });
@@ -90,7 +90,7 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
     assert.equal(committed[0]!.status, "committed");
     assert.equal(committed[0]!.amount, "240.0000");
     await withOrgContext(fx.orgId, async () => {
-      const accounts = (await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${fx.orgId}`)).rows;
+      const accounts = await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${fx.orgId}`, "objects");
       const account = (type: string) => {
         const id = accounts.find(row => row.type === type)?.id;
         assert.ok(id, `Missing fixture account ${type}`);
@@ -105,13 +105,13 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
         name: masked ? "Masked holiday settlement" : "Holiday settlement history", tier: "full", masked,
         createdBy: fx.actorId, lifecycleAuthority: { actorId: fx.actorId } }));
       if (!existing) sandboxIds.push(result.sandboxId);
-      const copied = (await db.execute<{ evidence: Record<string, unknown>; source: Record<string, unknown>; payload: Record<string, unknown>; result: Record<string, unknown>; amount: string; status: string; date: string; employee: string; file: string; version: string; obligation: string }>(sql`
+      const copied = await db.execute<{ evidence: Record<string, unknown>; source: Record<string, unknown>; payload: Record<string, unknown>; result: Record<string, unknown>; amount: string; status: string; date: string; employee: string; file: string; version: string; obligation: string }>(sql`
         select o.evidence,a.source_snapshot as source,f.payload,f.result,a.amount::text,a.status,occ.holiday_date::text as date,
           o.employee_party_id as employee,o.source_file_id as file,o.source_version_id as version,o.id as obligation
         from payroll_holiday_obligations o join financial_changes f on f.org_id=o.org_id and f.id=o.change_id
         join payroll_holiday_occurrences occ on occ.org_id=o.org_id and occ.obligation_id=o.id
         join pay_run_holiday_allocations a on a.org_id=o.org_id and a.obligation_id=o.id
-        where o.org_id=${result.sandboxOrgId}`)).rows;
+        where o.org_id=${result.sandboxOrgId}`, "objects");
       assert.equal(copied.length, 1);
       const row = copied[0]!;
       assert.equal(row.amount, "240.0000");
@@ -120,10 +120,10 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
       assert.notEqual(row.employee, fx.employeeId);
       assert.notEqual(row.file, file.id);
       assert.notEqual(row.version, file.currentVersionId);
-      const approvalContext = (await db.execute<{ context: Record<string, unknown>; subject: string; subsidiary: string }>(sql`
+      const approvalContext = await db.execute<{ context: Record<string, unknown>; subject: string; subsidiary: string }>(sql`
         select r.context,r.subject_id as subject,f.subsidiary_id as subsidiary from flow_runs r
         join financial_changes f on f.org_id=r.org_id and f.id=r.subject_id
-        where r.org_id=${result.sandboxOrgId} and r.subject_kind='financial_change' and f.operation='adjudicated_holiday_hours'`)).rows;
+        where r.org_id=${result.sandboxOrgId} and r.subject_kind='financial_change' and f.operation='adjudicated_holiday_hours'`, "objects");
       assert.equal(approvalContext.length, 1);
       assert.equal(approvalContext[0]!.context.id, approvalContext[0]!.subject);
       assert.equal(approvalContext[0]!.context.subsidiaryId, approvalContext[0]!.subsidiary);
@@ -133,7 +133,7 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
       }
       await withMaintenanceTransaction(null, async () => {
         await db.execute(sql`select set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true),set_config('openbooks.clone','on',true)`);
-        const proof = (await db.execute<{ exact: boolean; altered: boolean; missingDate: boolean; changedTerms: boolean }>(sql`
+        const proof = await db.execute<{ exact: boolean; altered: boolean; missingDate: boolean; changedTerms: boolean }>(sql`
           select public.holiday_historical_clone_matches('public.pay_run_holiday_allocations'::regclass,to_jsonb(a)) as exact,
             public.holiday_historical_clone_matches('public.pay_run_holiday_allocations'::regclass,to_jsonb(a)||'{"amount":241}'::jsonb) as altered,
             public.holiday_historical_clone_matches('public.payroll_holiday_occurrences'::regclass,to_jsonb(occ)||'{"holiday_date":"2026-07-02"}'::jsonb) as "missingDate",
@@ -142,7 +142,7 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
           join payroll_holiday_occurrences occ on occ.org_id=a.org_id and occ.obligation_id=a.obligation_id
           join payroll_holiday_obligations o on o.org_id=a.org_id and o.id=a.obligation_id
           join payroll_vacation_terms v on v.org_id=o.org_id and v.employment_id=o.employment_id
-          where a.org_id=${result.sandboxOrgId}`)).rows;
+          where a.org_id=${result.sandboxOrgId}`, "objects");
         assert.deepEqual(proof, [{ exact: true, altered: false, missingDate: false, changedTerms: false }]);
       });
       if (masked) {
@@ -173,7 +173,7 @@ for (const approvalMode of ["independent", "solo"] as const) test(`${approvalMod
   } finally {
     // A failed native create retains its lifecycle record for diagnostics.
     // Include those shells so a refused copy cannot strand its source org.
-    const retained = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${fx.orgId}`)).rows;
+    const retained = await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${fx.orgId}`, "objects");
     for (const id of new Set([...sandboxIds, ...retained.map(row => row.id)])) {
       await deleteSandbox(id, { systemReason: "Remove private holiday settlement fixture" });
     }

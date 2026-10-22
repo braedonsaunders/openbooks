@@ -42,12 +42,12 @@ export async function loadChangeSetDetail(orgId: string, id: string): Promise<Ch
     left join users reviewer on reviewer.id=c.reviewed_by and reviewer.org_id=c.org_id
     left join users approver on approver.id=c.approved_by and approver.org_id=c.org_id
     left join users applier on applier.id=c.applied_by and applier.org_id=c.org_id
-    where c.id=${id} and c.org_id=${orgId}`);
-  const header = result.rows[0];
+    where c.id=${id} and c.org_id=${orgId}`, "objects");
+  const header = result[0];
   if (!header) return null;
-  const items = (await db.execute<ChangeSetItem>(sql`
+  const items = await db.execute<ChangeSetItem>(sql`
     select id,table_name as "tableName",target_id as "targetId",op,payload,
       expected_before as "expectedBefore",base_captured as "baseCaptured"
-    from change_set_items where change_set_id=${id} and org_id=${orgId} order by created_at,id`)).rows;
+    from change_set_items where change_set_id=${id} and org_id=${orgId} order by created_at,id`, "objects");
   return { ...header, items, capturedCount: items.length, baseComplete: items.every(item => item.baseCaptured) };
 }

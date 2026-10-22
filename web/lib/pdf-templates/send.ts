@@ -217,14 +217,14 @@ export async function sendRecordPdfEmail(args: {
       select token, token_sealed as "tokenSealed" from payment_links
        where org_id = ${args.orgId} and document_id = ${args.id} and status = 'active'
        order by created_at desc limit 1
-    `))
+    `, 'objects'))
     // No link at all omits the call-to-action; a present-but-unsealable
     // token fails closed instead of mailing without it — the operator
     // reissues the link from the invoice's link panel.
-    const sealed = link.rows[0]?.tokenSealed
+    const sealed = link[0]?.tokenSealed
     const plain = sealed
       ? unsealSecret(sealed, { orgId: args.orgId, purpose: "payment.link.token" })
-      : (link.rows[0]?.token ?? null)
+      : (link[0]?.token ?? null)
     if (plain) paymentUrl = `${appBaseUrl()}/pay/${plain}`
   }
   const body = documentEmail({

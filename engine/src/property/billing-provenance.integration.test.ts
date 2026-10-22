@@ -44,7 +44,7 @@ async function seedPropertyFixture(): Promise<PropertyFixture> {
   const historicalAuthorId = await createScratchUser(org.orgId, "Historical lease author", "admin");
   // The scratch spine opens only July 2026; rent posting spans April→October.
   const calendarId = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id::text as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+    select fiscal_calendar_id::text as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
   for (const month of [4, 5, 6, 8, 9, 10]) {
     const startsOn = `2026-${String(month).padStart(2, "0")}-01`;
     const endsOn = new Date(Date.UTC(month === 12 ? 2027 : 2026, month === 12 ? 0 : month, 1) - 86_400_000)
@@ -92,13 +92,13 @@ const rentInvoiceIds = (orgId: string) => db.execute<{ id: string }>(sql`
   select d.id::text as id from documents d
    where d.org_id = ${orgId} and d.kind = 'customer_invoice'
      and d.custom->'propertyManagement'->>'kind' = 'rent'
-   order by d.id`);
+   order by d.id`, "objects");
 
 const lateFeeCount = (orgId: string) =>
   db.execute<{ n: number }>(sql`
     select count(*)::int as n from lease_charges
-     where org_id = ${orgId} and charge_type = 'late_fee'`)
-    .then((r) => Number(r.rows[0]!.n));
+     where org_id = ${orgId} and charge_type = 'late_fee'`, "objects")
+    .then((r) => Number(r[0]!.n));
 
 test(
   "scheduled property billing carries system provenance per surface — never a historical or cross-lease actor",
@@ -122,19 +122,19 @@ test(
           select count(*)::int as total,
                  count(*) filter (where coalesce(created_by, updated_by) is not null)::int as foreign
             from lease_schedule_lines
-           where org_id = ${orgId} and lease_id = ${leaseId}`)).rows[0]!;
+           where org_id = ${orgId} and lease_id = ${leaseId}`, "objects"))[0]!;
         assert.ok(schedules.total > 0, `${label}: schedule lines are generated`);
         assert.equal(schedules.foreign, 0, `${label}: every schedule line carries system provenance`);
 
         // Surface 2: durable per-run/per-lease marker naming the scheduler run.
-        const marker = (await db.execute<{
+        const marker = await db.execute<{
           actor: string | null; requestId: string | null; source: string | null; actorKind: string | null;
         }>(sql`
           select actor_id::text as actor, request_id as "requestId",
                  changes->>'source' as source, changes->>'actorKind' as "actorKind"
             from audit_log
            where org_id = ${orgId} and table_name = 'property_leases'
-             and row_id = ${leaseId} and action = 'schedule_generated'`)).rows;
+             and row_id = ${leaseId} and action = 'schedule_generated'`, "objects");
         assert.equal(marker.length, 1);
         assert.equal(marker[0]!.actor, null);
         assert.equal(marker[0]!.requestId, `property-billing:schedule:${leaseId}`);
@@ -142,7 +142,7 @@ test(
         assert.equal(marker[0]!.actorKind, "system");
 
         // Surface 3: rent invoice header, lines, auto-post evidence.
-        const invoice = (await db.execute<{
+        const invoice = await db.execute<{
           id: string; status: string; docActor: string | null;
           kind: string | null; leaseId: string | null; billingKey: string | null;
           runSource: string | null; actorKind: string | null;
@@ -163,7 +163,7 @@ test(
               and ta.row_id = d.id and ta.action = 'post'
            where d.org_id = ${orgId}
              and d.kind = 'customer_invoice'
-             and d.custom->'propertyManagement'->>'leaseId' = ${leaseId}`)).rows;
+             and d.custom->'propertyManagement'->>'leaseId' = ${leaseId}`, "objects");
         assert.equal(invoice.length, 1);
         const inv = invoice[0]!;
         assert.equal(inv.status, "posted", `${label}: auto-posted rent invoice`);
@@ -181,7 +181,7 @@ test(
           select count(*)::int as total,
                  count(*) filter (where dl.created_by is not null)::int as foreign
             from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-           where d.custom->'propertyManagement'->>'leaseId' = ${leaseId}`)).rows[0]!;
+           where d.custom->'propertyManagement'->>'leaseId' = ${leaseId}`, "objects"))[0]!;
         assert.ok(lineActors.total > 0, `${label}: invoice lines exist`);
         assert.equal(lineActors.foreign, 0, `${label}: every invoice line carries system provenance`);
       }
@@ -194,7 +194,7 @@ test(
            and exists (
              select 1 from jsonb_array_elements_text(d.custom->'propertyManagement'->'scheduleIds') sid
                join lease_schedule_lines s on s.id::text = sid and s.org_id = d.org_id
-              where s.lease_id <> (d.custom->'propertyManagement'->>'leaseId')::uuid)`)).rows[0]!.n;
+              where s.lease_id <> (d.custom->'propertyManagement'->>'leaseId')::uuid)`, "objects"))[0]!.n;
       assert.equal(crossLeased, 0, "rent invoices never cite a sibling lease's schedule lines");
 
       // ---- Tick two: late fees assessed under system provenance --------------
@@ -204,7 +204,7 @@ test(
       assert.equal(run1.invoices, 2, "one rent invoice per lease for June/July");
 
       for (const leaseId of [authoredLeaseId, unauthoredLeaseId]) {
-        const fees = (await db.execute<{
+        const fees = await db.execute<{
           amount: string; effectiveOn: string; chargeActor: string | null; feeLineActor: string | null;
           sourceLease: string; sourceSchedule: string;
           auditActor: string | null; auditRequest: string | null; source: string | null;
@@ -222,7 +222,7 @@ test(
             join lease_schedule_lines src on src.id = s.source_schedule_id and src.org_id = s.org_id
             left join audit_log al on al.org_id = c.org_id and al.table_name = 'lease_schedule_lines'
               and al.row_id = s.id and al.action = 'late_fee_assess'
-           where c.org_id = ${orgId} and c.charge_type = 'late_fee' and c.lease_id = ${leaseId}`)).rows;
+           where c.org_id = ${orgId} and c.charge_type = 'late_fee' and c.lease_id = ${leaseId}`, "objects");
         assert.equal(fees.length, 1);
         const fee = fees[0]!;
         assert.equal(fee.effectiveOn, "2026-07-15");
@@ -236,11 +236,11 @@ test(
       }
 
       // ---- Idempotency replay: identical day produces nothing new ------------
-      const invoicesBefore = (await rentInvoiceIds(orgId)).rows.map((r) => r.id).sort();
+      const invoicesBefore = (await rentInvoiceIds(orgId)).map((r) => r.id).sort();
       const feesBefore = await lateFeeCount(orgId);
       const run2 = await runDuePropertyBilling("2026-07-15");
       assert.equal(run2.lateFees, 0);
-      assert.deepEqual((await rentInvoiceIds(orgId)).rows.map((r) => r.id).sort(), invoicesBefore);
+      assert.deepEqual((await rentInvoiceIds(orgId)).map((r) => r.id).sort(), invoicesBefore);
       assert.equal(await lateFeeCount(orgId), feesBefore);
 
       // ---- Interactive scheduling attributes the real operator ---------------
@@ -249,20 +249,20 @@ test(
       const priorB = new Set(
         (await db.execute<{ id: string }>(sql`
           select id::text as id from lease_schedule_lines
-           where org_id = ${orgId} and lease_id = ${unauthoredLeaseId}`)).rows.map((r) => r.id),
+           where org_id = ${orgId} and lease_id = ${unauthoredLeaseId}`, "objects")).map((r) => r.id),
       );
       const manual = await scheduleLeaseCharges(orgId, operatorId, null, unauthoredLeaseId, "2028-12-31");
       assert.ok(manual.created > 0, "interactive scheduling extends beyond the scheduler horizon");
       const freshB = (await db.execute<{ id: string; createdBy: string | null; updatedBy: string | null }>(sql`
         select id::text as id, created_by::text as "createdBy", updated_by::text as "updatedBy"
           from lease_schedule_lines
-         where org_id = ${orgId} and lease_id = ${unauthoredLeaseId}`)).rows.filter((r) => !priorB.has(r.id));
+         where org_id = ${orgId} and lease_id = ${unauthoredLeaseId}`, "objects")).filter((r) => !priorB.has(r.id));
       assert.equal(freshB.length, manual.created);
       for (const row of freshB) {
         assert.equal(row.createdBy, operatorId);
         assert.equal(row.updatedBy, operatorId);
       }
-      const interactiveMarker = (await db.execute<{
+      const interactiveMarker = await db.execute<{
         actor: string | null; requestId: string | null; source: string | null; actorKind: string | null;
       }>(sql`
         select actor_id::text as actor, request_id as "requestId",
@@ -270,7 +270,7 @@ test(
           from audit_log
          where org_id = ${orgId} and table_name = 'property_leases'
            and row_id = ${unauthoredLeaseId} and action = 'schedule_generated'
-           and changes->>'source' = 'user'`)).rows;
+           and changes->>'source' = 'user'`, "objects");
       assert.equal(interactiveMarker.length, 1);
       assert.equal(interactiveMarker[0]!.actor, operatorId);
       assert.equal(interactiveMarker[0]!.requestId, null);
@@ -283,7 +283,7 @@ test(
       const sysDoc = (await db.execute<{ docActor: string | null; runSource: string | null }>(sql`
         select d.created_by::text as "docActor",
                d.custom->'propertyManagement'->>'billingRunSource' as "runSource"
-          from documents d where d.id = ${sysBill.invoices.at(-1)!} and d.org_id = ${orgId}`)).rows[0]!;
+          from documents d where d.id = ${sysBill.invoices.at(-1)!} and d.org_id = ${orgId}`, "objects"))[0]!;
       assert.equal(sysDoc.docActor, null);
       assert.equal(sysDoc.runSource, "scheduler");
 
@@ -311,7 +311,7 @@ test(
           from documents d
           left join audit_log ta on ta.org_id = d.org_id and ta.table_name = 'documents'
             and ta.row_id = d.id and ta.action = 'post'
-         where d.id = ${userDocId} and d.org_id = ${orgId}`)).rows[0]!;
+         where d.id = ${userDocId} and d.org_id = ${orgId}`, "objects"))[0]!;
       assert.equal(userDoc.docActor, operatorId);
       assert.equal(userDoc.runSource, "user");
       assert.equal(userDoc.actorKind, null);
@@ -336,7 +336,7 @@ test(
           from lease_charges c
           join lease_schedule_lines s on s.charge_id = c.id and s.org_id = c.org_id
          where c.org_id = ${orgId} and c.charge_type = 'late_fee'
-           and c.effective_from = date '2027-06-30'`)).rows[0]!;
+           and c.effective_from = date '2027-06-30'`, "objects"))[0]!;
       assert.equal(interactiveFees.total, assessed.created);
       assert.equal(interactiveFees.foreignActor, 0, "every fee names the calling user");
       assert.equal(interactiveFees.foreignAuthor, 0, "no fee impersonates the historical author");
@@ -352,7 +352,7 @@ test(
            where d.org_id = ${orgId} and document_lines.created_by = ${fx.historicalAuthorId}) +
           (select count(*)::int from lease_charges where org_id = ${orgId} and created_by = ${fx.historicalAuthorId}) +
           (select count(*)::int from lease_schedule_lines where org_id = ${orgId} and created_by = ${fx.historicalAuthorId})
-        )::int as n`)).rows[0]!.n;
+        )::int as n`, "objects"))[0]!.n;
       assert.equal(impersonated, 0, "nothing in this org ever credits the historical author again");
     } finally {
       await dropScratchOrgReporting(fx.org.orgId);
@@ -486,7 +486,7 @@ test(
       // close the old window at day X-1 and insert its successor at X.
       const predecessor = (await db.execute<{ id: string }>(sql`
         select id from lease_charges
-         where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' limit 1`)).rows[0]!.id;
+         where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' limit 1`, "objects"))[0]!.id;
       const escalated = await db.transaction(async (tx) => {
         await tx.execute(sql`
           update lease_charges set effective_to = date '2026-05-31'
@@ -494,7 +494,7 @@ test(
         return (await tx.execute(sql`
           insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from)
           values (${orgId}, ${leaseId}, 'base_rent', 'Escalated rent', '1100.0000', 'monthly', '2026-06-01')
-          returning id`)).rows.length;
+          returning id`, "objects")).length;
       });
       assert.equal(escalated, 1, "adjacent escalation windows are not overlap");
 
@@ -548,14 +548,14 @@ test(
       await runDuePropertyBilling("2026-04-20");
       await runDuePropertyBilling("2026-06-20");
 
-      const rentLines = (await db.execute<{ period: string; lines: number; amounts: number; invoiced: number }>(sql`
+      const rentLines = await db.execute<{ period: string; lines: number; amounts: number; invoiced: number }>(sql`
         select s.period_starts_on::text as period, count(*)::int as lines,
                count(distinct s.amount)::int as amounts,
                count(*) filter (where s.status = 'invoiced')::int as invoiced
           from lease_schedule_lines s join lease_charges c on c.id = s.charge_id and c.org_id = s.org_id
          where s.org_id = ${orgId} and s.lease_id = ${leaseId} and c.charge_type = 'base_rent'
            and s.period_starts_on < date '2026-07-01'
-         group by s.period_starts_on order by s.period_starts_on`)).rows;
+         group by s.period_starts_on order by s.period_starts_on`, "objects");
       assert.deepEqual(
         rentLines.map((row) => [row.period, row.lines, row.amounts]),
         [
@@ -569,8 +569,8 @@ test(
       const juneAmount = await db.execute<{ amount: string }>(sql`
         select s.amount::text as amount from lease_schedule_lines s join lease_charges c on c.id = s.charge_id and c.org_id = s.org_id
          where s.org_id = ${orgId} and s.lease_id = ${leaseId} and c.charge_type = 'base_rent'
-           and s.period_starts_on = date '2026-06-01'`);
-      assert.equal(juneAmount.rows[0]?.amount, "1100.0000", "June carries the escalated rent");
+           and s.period_starts_on = date '2026-06-01'`, "objects");
+      assert.equal(juneAmount[0]?.amount, "1100.0000", "June carries the escalated rent");
 
       // Schedule lineage survives: the controlled escalation regenerates the
       // schedule under the calling operator (source='user'), and no schedule
@@ -580,13 +580,13 @@ test(
                count(*) filter (where actor_id = ${fx.historicalAuthorId})::int as impersonated
           from audit_log
          where org_id = ${orgId} and table_name = 'property_leases'
-           and row_id = ${leaseId} and action = 'schedule_generated'`)).rows[0]!;
+           and row_id = ${leaseId} and action = 'schedule_generated'`, "objects"))[0]!;
       assert.ok(markers.userMarkers > 0, "schedule regeneration attributes its real operator");
       assert.equal(markers.impersonated, 0, "schedule lines never impersonate the editor");
       const lineActors = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from lease_schedule_lines
          where org_id = ${orgId} and lease_id = ${leaseId}
-           and created_by::text not in (${operatorId}, ${fx.historicalAuthorId})`)).rows[0]!;
+           and created_by::text not in (${operatorId}, ${fx.historicalAuthorId})`, "objects"))[0]!;
       assert.equal(lineActors.n, 0, "every generated line carries either the operator or a system null");
     } finally {
       await dropScratchOrgReporting(fx.org.orgId);
@@ -632,11 +632,11 @@ test(
       });
 
       // Surface 1: create lease — full after-state, actor, request correlation.
-      const created = (await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
+      const created = await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
         select actor_id::text as actor, request_id as "requestId", changes->'after' as after
           from audit_log
          where org_id = ${orgId} and table_name = 'property_leases' and row_id = ${lease.id}
-           and action = 'insert'`)).rows;
+           and action = 'insert'`, "objects");
       assert.equal(created.length, 1);
       assert.equal(created[0]!.actor, actorId);
       assert.equal(created[0]!.requestId, requestId);
@@ -675,7 +675,7 @@ test(
         autoPost: false,
         requestId: updateRequestId,
       });
-      const updated = (await db.execute<{
+      const updated = await db.execute<{
         before: Record<string, unknown>; after: Record<string, unknown>;
         changedFields: string[]; actor: string | null; requestId: string | null;
       }>(sql`
@@ -683,7 +683,7 @@ test(
                actor_id::text as actor, request_id as "requestId"
           from audit_log
          where org_id = ${orgId} and table_name = 'property_leases' and row_id = ${lease.id}
-           and action = 'update'`)).rows;
+           and action = 'update'`, "objects");
       assert.equal(updated.length, 1);
       assert.equal(updated[0]!.actor, actorId);
       assert.equal(updated[0]!.requestId, updateRequestId);
@@ -712,11 +712,11 @@ test(
         effectiveFrom: "2026-08-01",
         requestId: chargeRequestId,
       });
-      const chargeAudit = (await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
+      const chargeAudit = await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
         select actor_id::text as actor, request_id as "requestId", changes->'after' as after
           from audit_log
          where org_id = ${orgId} and table_name = 'lease_charges' and row_id = ${charge.id}
-           and action = 'insert'`)).rows;
+           and action = 'insert'`, "objects");
       assert.equal(chargeAudit.length, 1);
       assert.equal(chargeAudit[0]!.actor, actorId);
       assert.equal(chargeAudit[0]!.requestId, chargeRequestId);
@@ -736,11 +736,11 @@ test(
         value: "4",
         requestId: escRequestId,
       });
-      const escalationAudit = (await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
+      const escalationAudit = await db.execute<{ actor: string | null; requestId: string | null; after: Record<string, unknown> }>(sql`
         select actor_id::text as actor, request_id as "requestId", changes->'after' as after
           from audit_log
          where org_id = ${orgId} and table_name = 'lease_escalations' and row_id = ${escalation.id}
-           and action = 'insert'`)).rows;
+           and action = 'insert'`, "objects");
       assert.equal(escalationAudit.length, 1);
       assert.equal(escalationAudit[0]!.actor, actorId);
       assert.equal(escalationAudit[0]!.requestId, escRequestId);
@@ -756,7 +756,7 @@ test(
       // fires only for this scratch org, so nothing else sharing the database
       // template instance is affected.
       const chargeCount = async () => Number((await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from lease_charges where org_id = ${orgId} and lease_id = ${lease.id}`)).rows[0]!.n);
+        select count(*)::int as n from lease_charges where org_id = ${orgId} and lease_id = ${lease.id}`, "objects"))[0]!.n);
       const chargesBeforeVeto = await chargeCount();
       try {
         // CREATE TRIGGER is a utility statement: its WHEN clause cannot use
@@ -807,7 +807,7 @@ test(
       });
       const retriedAudit = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
-         where org_id = ${orgId} and table_name = 'lease_charges' and row_id = ${retried.id} and action = 'insert'`)).rows[0]!.n;
+         where org_id = ${orgId} and table_name = 'lease_charges' and row_id = ${retried.id} and action = 'insert'`, "objects"))[0]!.n;
       assert.equal(retriedAudit, 1);
       assert.equal(await chargeCount(), chargesBeforeVeto + 1, "the un-vetoed retry commits exactly one new charge");
     } finally {
@@ -843,7 +843,7 @@ test(
       assert.equal(run.orgErrors.length, 1);
       assert.equal(run.orgErrors[0]!.orgId, poisoned.orgId);
       assert.match(run.orgErrors[0]!.error, /not a known IANA time zone/);
-      assert.ok((await rentInvoiceIds(fx.org.orgId)).rows.length > 0, "the healthy org still bills");
+      assert.ok((await rentInvoiceIds(fx.org.orgId)).length > 0, "the healthy org still bills");
     } finally {
       await dropScratchOrgReporting(poisoned.orgId);
       await dropScratchOrgReporting(fx.org.orgId);

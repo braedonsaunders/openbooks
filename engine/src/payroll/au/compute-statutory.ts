@@ -294,7 +294,7 @@ export async function committedAuQualifyingYearToDate(input: {
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and d.status <> 'voided'
        and d.subsidiary_id = ${input.subsidiaryId}::uuid
-  `)).rows[0];
+  `, "objects"))[0];
   return typeof row?.qualifying === "string" ? row.qualifying : "0";
 }
 

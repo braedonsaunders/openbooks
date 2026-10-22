@@ -156,8 +156,8 @@ export async function loadPageSpec(
      where p.org_id = ${orgId} and p.route = ${route} and p.is_active
        and (p.extension_version_id is null or (m.status = 'installed' and (select settings->'features'->'apps' from orgs where id=${orgId}) is distinct from 'false'::jsonb and mv.status = 'active' and m.active_version_id = mv.id))
        and (p.user_id is null ${userId ? sql`or p.user_id = ${userId}` : sql``})
-     order by p.user_id nulls last, p.extension_version_id nulls first, p.updated_at desc, p.id`)
-  const winner = pickPageSpecRow(rows.rows)
+     order by p.user_id nulls last, p.extension_version_id nulls first, p.updated_at desc, p.id`, 'objects')
+  const winner = pickPageSpecRow(rows)
   if (!winner) return null
 
   // Validation gates the WINNER only, as it always has: an invalid winner
@@ -208,8 +208,8 @@ export async function listPageSpecs(orgId: string, userId?: string): Promise<Sto
     select id, route, spec, note, updated_at, user_id from page_specs
      where org_id = ${orgId} and is_active
        and (user_id is null ${userId ? sql`or user_id = ${userId}` : sql``})
-     order by route, user_id nulls first`)
-  return rows.rows.map((row) => ({
+     order by route, user_id nulls first`, 'objects')
+  return rows.map((row) => ({
     id: row.id,
     route: row.route,
     spec: row.spec,
@@ -262,8 +262,8 @@ export async function savePageSpec(opts: {
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
          and extension_version_id is null
-      returning id`)
-    for (const row of superseded.rows) {
+      returning id`, 'objects')
+    for (const row of superseded) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${row.id}, 'update',
@@ -274,8 +274,8 @@ export async function savePageSpec(opts: {
       insert into page_specs (org_id, user_id, route, spec, note, created_by, updated_by)
       values (${opts.orgId}, ${owner}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
               ${opts.note ?? null}, ${opts.actorId}, ${opts.actorId})
-      returning id`)
-    const id = inserted.rows[0]!.id
+      returning id`, 'objects')
+    const id = inserted[0]!.id
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${opts.orgId}, 'page_specs', ${id}, 'insert',
@@ -324,8 +324,8 @@ export async function listPageSpecHistory(orgId: string, route: string, userId?:
       left join users u on u.id = s.created_by and u.org_id = s.org_id
      where s.org_id = ${orgId} and s.route = ${route}
        and (s.user_id is null ${userId ? sql`or s.user_id = ${userId}` : sql``})
-     order by s.created_at desc`)
-  return rows.rows.map((row) => ({
+     order by s.created_at desc`, 'objects')
+  return rows.map((row) => ({
     id: row.id,
     scope: row.user_id === null ? 'org' : 'user',
     active: row.is_active,
@@ -372,8 +372,8 @@ export async function restorePageSpec(opts: {
     select spec, note, is_active from page_specs
      where org_id = ${opts.orgId} and route = ${opts.route} and id = ${opts.versionId}
        and user_id is not distinct from ${owner}
-     limit 1`)
-  const row = rows.rows[0]
+     limit 1`, 'objects')
+  const row = rows[0]
   // Scoped to the org AND the route: a version id is not a capability, and a
   // row from another route would publish a layout under a page it was never
   // written for.
@@ -394,8 +394,8 @@ export async function restorePageSpec(opts: {
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
          and extension_version_id is null
-      returning id`)
-    for (const previous of superseded.rows) {
+      returning id`, 'objects')
+    for (const previous of superseded) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${previous.id}, 'update',
@@ -406,8 +406,8 @@ export async function restorePageSpec(opts: {
       insert into page_specs (org_id, user_id, route, spec, note, created_by, updated_by)
       values (${opts.orgId}, ${owner}, ${opts.route}, ${JSON.stringify(checked.spec)}::jsonb,
               ${row.note}, ${opts.actorId}, ${opts.actorId})
-      returning id`)
-    const id = inserted.rows[0]!.id
+      returning id`, 'objects')
+    const id = inserted[0]!.id
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${opts.orgId}, 'page_specs', ${id}, 'insert',
@@ -484,8 +484,8 @@ export async function loadPageSpecDraft(
     select spec from page_spec_drafts
      where org_id = ${orgId} and user_id = ${userId} and route = ${route}
        and created_at >= now() - ${`${DRAFT_TTL_MINUTES} minutes`}::interval
-     limit 1`)
-  const row = rows.rows[0]
+     limit 1`, 'objects')
+  const row = rows[0]
   if (!row) return null
   const checked = validateAgainstRegistries(row.spec, registries)
   if (!checked.ok) {
@@ -517,13 +517,13 @@ export async function clearPageSpec(opts: {
        where org_id = ${opts.orgId} and route = ${opts.route} and is_active
          and user_id is not distinct from ${owner}
          and extension_version_id is null
-      returning id`)
-    for (const row of rows.rows) {
+      returning id`, 'objects')
+    for (const row of rows) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${opts.orgId}, 'page_specs', ${row.id}, 'update',
                 ${JSON.stringify({ route: opts.route, is_active: false })}, ${opts.actorId})`)
     }
-    return { cleared: rows.rows.length }
+    return { cleared: rows.length }
   })
 }

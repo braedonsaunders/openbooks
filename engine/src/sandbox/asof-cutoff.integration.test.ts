@@ -76,15 +76,13 @@ async function postEntry(
 }
 
 async function sandboxEntryNumbers(sandboxOrgId: string): Promise<string[]> {
-  return (
-    await db.execute<{ entry_number: string }>(sql`
-    select entry_number from journal_entries where org_id = ${sandboxOrgId} order by entry_number`)
-  ).rows.map((row) => row.entry_number);
+  return (await db.execute<{ entry_number: string }>(sql`
+    select entry_number from journal_entries where org_id = ${sandboxOrgId} order by entry_number`, "objects")).map((row) => row.entry_number);
 }
 
 async function deleteSandboxesFor(productionOrgId: string, name: string): Promise<void> {
-  const rows = (await db.execute<{ id: string }>(sql`
-    select id from sandboxes where production_org_id = ${productionOrgId} and name = ${name}`)).rows;
+  const rows = await db.execute<{ id: string }>(sql`
+    select id from sandboxes where production_org_id = ${productionOrgId} and name = ${name}`, "objects");
   for (const row of rows) await deleteSandbox(row.id);
 }
 
@@ -111,7 +109,7 @@ test("an as-of clone cuts by posting date across calendars, not by period ordina
     const augustLines = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_lines l
         join journal_entries e on e.id = l.entry_id
-       where l.org_id = ${created.sandboxOrgId} and e.entry_number = 'B-DRAFT-AUG'`)).rows[0]!.n;
+       where l.org_id = ${created.sandboxOrgId} and e.entry_number = 'B-DRAFT-AUG'`, "objects"))[0]!.n;
     assert.equal(augustLines, 0, "the post-cutoff draft entry's lines must not copy either");
   } finally {
     await deleteSandboxesFor(org.orgId, sandboxName).catch(() => undefined);
@@ -141,7 +139,7 @@ test("the as-of preflight refusal agrees exactly with the copy filter", { skip: 
     // The refusal is raised, not dropped: the failed sandbox row carries it.
     const failed = (await db.execute<{ status: string; last_error: string | null }>(sql`
       select status, last_error from sandboxes
-       where production_org_id = ${org.orgId} and name = ${sandboxName}`)).rows[0]!;
+       where production_org_id = ${org.orgId} and name = ${sandboxName}`, "objects"))[0]!;
     assert.equal(failed.status, "failed");
     assert.match(failed.last_error ?? "", /dated after 2026-07-31/);
   } finally {
@@ -159,12 +157,12 @@ test("the clone resolves the cutoff inside its snapshot, not from an outer looku
   const sandboxName = `As-of interleave ${randomUUID()}`;
   try {
     const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!.fiscal_calendar_id;
+      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`, "objects"))[0]!.fiscal_calendar_id;
     const augustId = await addPeriod(org.orgId, calendar, 2026, 8, "2026-08", "2026-08-01", "2026-08-31");
     await postEntry(org, { number: "POSTED-AUG", date: "2026-08-05", periodId: augustId, status: "posted" });
 
     const outer = (await db.execute<{ ends_on: string }>(sql`
-      select ends_on::text as ends_on from accounting_periods where id = ${org.periodId}`)).rows[0]!.ends_on;
+      select ends_on::text as ends_on from accounting_periods where id = ${org.periodId}`, "objects"))[0]!.ends_on;
     assert.equal(outer, "2026-07-31", "the pre-fix outer lookup consumed this identity");
     await db.execute(sql`update accounting_periods set ends_on = '2026-08-31' where id = ${org.periodId}`);
 
@@ -186,7 +184,7 @@ test("a relabel-free clone still refuses post-cutoff postings (single-calendar c
   const sandboxName = `As-of control ${randomUUID()}`;
   try {
     const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!.fiscal_calendar_id;
+      select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`, "objects"))[0]!.fiscal_calendar_id;
     const augustId = await addPeriod(org.orgId, calendar, 2026, 8, "2026-08", "2026-08-01", "2026-08-31");
     await postEntry(org, { number: "POSTED-AUG", date: "2026-08-05", periodId: augustId, status: "posted" });
 
@@ -244,7 +242,7 @@ test("a settings change between the org read and the copy reaches the sandbox (S
              (select count(*)::int from journal_entries
                where org_id = ${created.sandboxOrgId} and entry_number = 'RACE-POSTED') as entries
         from orgs org
-       where org.id = ${created.sandboxOrgId}`)).rows[0]!;
+       where org.id = ${created.sandboxOrgId}`, "objects"))[0]!;
     assert.deepEqual(state, {
       status: "ready",
       // The sandbox keeps its own display name: only source configuration is

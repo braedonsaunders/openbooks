@@ -43,13 +43,14 @@ const mockSources = new Map<string, string>([
       export const db = {
         // set-scope diffs the requested scope against the CURRENT exclusions:
         // answer that read from state, and the owning-document read as before.
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           let text = ''
           try { text = JSON.stringify(query) } catch { text = '' }
           if (text.includes('pay_run_adjustments')) {
-            return Promise.resolve({ rows: state.excludedIds.map((id) => ({ employee_party_id: id })) })
+            return Promise.resolve({ rows: state.excludedIds.map((id) => ({ employee_party_id: id })) }).then(inMode)
           }
-          return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] })
+          return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] }).then(inMode)
         },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn() }

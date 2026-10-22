@@ -31,8 +31,8 @@ export async function assertExpenseSettlement(
     select 1 as one from document_lines
      where org_id = ${document.orgId} and document_id = ${document.id}
        and settlement_type in ('company_paid', 'personal')
-     limit 1`);
-  if (!funded.rows[0]) return;
+     limit 1`, "objects");
+  if (!funded[0]) return;
   if (!document.paymentCardId) {
     throw new ExpenseValidationError("company-paid and personal expense lines require a corporate card on the report");
   }
@@ -41,8 +41,8 @@ export async function assertExpenseSettlement(
   // posting path likewise books the liability without an active check).
   const card = await runner.execute<{ id: string }>(sql`
     select id from payment_cards
-     where org_id = ${document.orgId} and id = ${document.paymentCardId}`);
-  if (!card.rows[0]) {
+     where org_id = ${document.orgId} and id = ${document.paymentCardId}`, "objects");
+  if (!card[0]) {
     throw new ExpenseValidationError("the report's corporate card was not found in this organization");
   }
 }
@@ -64,8 +64,8 @@ export async function assertExpenseEmployee(
          select 1 from employee_roles er
           where er.org_id = p.org_id and er.party_id = p.id
        )
-  `);
-  if (!employee.rows[0]) {
+  `, "objects");
+  if (!employee[0]) {
     throw new ExpenseValidationError("an expense report requires an employee in this organization before submission or posting");
   }
 }

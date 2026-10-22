@@ -190,8 +190,8 @@ export async function filingSubmissions(
      where s.org_id = ${orgId} and s.country = ${country}
        and s.filing_key = ${filingKey} and s.tax_year = ${taxYear}
      order by s.revision_number
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     id: String(row.id),
     country: String(row.country),
     filingKey: String(row.filing_key),
@@ -238,8 +238,8 @@ export async function filingArtifact(
     select artifact_filename, artifact_content_type, artifact_body
       from payroll_filing_submissions
      where org_id = ${orgId} and id = ${submissionId}
-  `));
-  const row = rows.rows[0];
+  `, "objects"));
+  const row = rows[0];
   if (!row || row.artifact_body == null || !row.artifact_filename) return null;
   return {
     filename: row.artifact_filename,
@@ -1114,8 +1114,8 @@ async function persist(
               ${issue.file?.contentType ?? null}, ${issue.file?.body ?? null},
               ${actorId}, ${actorId})
       returning id
-    `));
-      id = inserted.rows[0]!.id;
+    `, "objects"));
+      id = inserted[0]!.id;
     } catch (error) {
       // A rival issue committed this revision number first: the storage
       // fence held, so refuse by name at the issue paths below. Nothing

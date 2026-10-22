@@ -116,14 +116,12 @@ test(
         consentText?: string;
         documentHash?: string;
       }> {
-        const row = (
-          await db.execute<{
+        const row = (await db.execute<{
             changes: { after: Record<string, string | undefined> };
           }>(sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'signature_requests' and row_id = ${requestId}
-         order by at desc limit 1`)
-        ).rows[0];
+         order by at desc limit 1`, "objects"))[0];
         const after = row?.changes.after ?? {};
         return {
           status: after.status,
@@ -164,11 +162,9 @@ test(
       const signedRow = await withOrgContext(
         org.orgId,
         async () =>
-          (
-            await db.execute<{ status: string; signer_name: string }>(sql`
+          (await db.execute<{ status: string; signer_name: string }>(sql`
         select status, signer_name from signature_requests
-         where org_id = ${org.orgId} and id = ${signed.requestId}`)
-          ).rows[0],
+         where org_id = ${org.orgId} and id = ${signed.requestId}`, "objects"))[0],
       );
       assert.equal(signedRow?.status, "signed");
       assert.equal(signedRow?.signer_name, "Ada Customer");
@@ -188,11 +184,9 @@ test(
       const declinedRow = await withOrgContext(
         org.orgId,
         async () =>
-          (
-            await db.execute<{ status: string; signer_name: string }>(sql`
+          (await db.execute<{ status: string; signer_name: string }>(sql`
         select status, signer_name from signature_requests
-         where org_id = ${org.orgId} and id = ${declined.requestId}`)
-          ).rows[0],
+         where org_id = ${org.orgId} and id = ${declined.requestId}`, "objects"))[0],
       );
       assert.equal(declinedRow?.status, "declined");
       assert.equal(declinedRow?.signer_name, "Ada Customer");

@@ -70,12 +70,10 @@ test(
         assert.equal(outcome.failed, 0)
         assert.equal(outcome.updated, 1)
 
-        const stored = (
-          await db.execute<{ status: string; data: { title: string } }>(sql`
+        const stored = (await db.execute<{ status: string; data: { title: string } }>(sql`
             select status, data from custom_records
              where org_id = ${org.orgId} and type_key = ${typeKey} and record_number = 'LC-1'
-          `)
-        ).rows[0]!
+          `, 'objects'))[0]!
         assert.equal(stored.data.title, 'after')
         assert.equal(stored.status, 'inactive')
       })

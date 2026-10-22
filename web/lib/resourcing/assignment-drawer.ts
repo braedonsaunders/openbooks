@@ -57,10 +57,10 @@ export async function loadAssignmentDrawerData(args: {
        where p.org_id = ${args.orgId} and p.kind = 'person' and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, args.allowedSubsidiaryIds)}
        order by p.display_name, p.id
-    `),
+    `, "objects"),
     db.execute<DrawerItem>(sql`
       select id, name from items where org_id = ${args.orgId} and is_active order by name, id
-    `),
+    `, "objects"),
     loadFieldDefs("res_assignments"),
   ]);
 
@@ -96,18 +96,18 @@ export async function loadAssignmentDrawerData(args: {
   const projectsInScope = selectedProjectRow ? [selectedProjectRow, ...projectRows] : projectRows;
   if (!projectLabel) projectLabel = projectsInScope.find((row) => row.id === prefill.projectId)?.name ?? null;
 
-  const selectedPerson = prefill.employeePartyId && !personRows.rows.some((row) => row.id === prefill.employeePartyId)
+  const selectedPerson = prefill.employeePartyId && !personRows.some((row) => row.id === prefill.employeePartyId)
     ? await db.execute<DrawerPerson>(sql`
         select p.id, p.display_name as name, er.job_title as "jobTitle"
           from parties p join employee_roles er on er.org_id = p.org_id and er.party_id = p.id
          where p.org_id = ${args.orgId} and p.id = ${prefill.employeePartyId}
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, args.allowedSubsidiaryIds)}
          limit 1
-      `)
-    : { rows: [] as DrawerPerson[] };
-  const people = selectedPerson.rows.length
-    ? [selectedPerson.rows[0]!, ...personRows.rows]
-    : personRows.rows;
+      `, "objects")
+    : [] as DrawerPerson[];
+  const people = selectedPerson.length
+    ? [selectedPerson[0]!, ...personRows]
+    : personRows;
 
   const tasks = await db.select({
     id: projectTasks.id,
@@ -134,8 +134,8 @@ export async function loadAssignmentDrawerData(args: {
                and worked_on >= ${prefill.weekStart}::date
                and worked_on <= ${addCalendarDays(prefill.weekStart, 6)}::date
              order by worked_on, id
-          `)
-        : Promise.resolve({ rows: [] as ActualTimeEntry[] }),
+          `, "objects")
+        : Promise.resolve([] as ActualTimeEntry[]),
       db.execute<DrawerAbsence>(sql`
         select a.id, a.on_date::text as "onDate", a.hours::text as hours
           from hrm_absences a
@@ -144,11 +144,11 @@ export async function loadAssignmentDrawerData(args: {
            and a.on_date >= ${prefill.weekStart}::date
            and a.on_date <= ${addCalendarDays(prefill.weekStart, 6)}::date
          order by a.on_date, a.id
-      `),
+      `, "objects"),
     ]);
     capacity = figures[0] ?? null;
-    actualEntries = entries.rows;
-    absenceRows = absences.rows;
+    actualEntries = entries;
+    absenceRows = absences;
   }
 
   return {
@@ -158,7 +158,7 @@ export async function loadAssignmentDrawerData(args: {
     projectLabel,
     people: people.map((person) => ({ ...person, name: person.name ?? "" })),
     projects: projectsInScope,
-    items: itemRows.rows,
+    items: itemRows,
     tasks,
     capacity,
     actuals: { hours: sum(actualEntries.map((entry) => entry.hours)), entries: actualEntries },

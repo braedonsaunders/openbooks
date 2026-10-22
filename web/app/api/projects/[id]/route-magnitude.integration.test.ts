@@ -51,7 +51,7 @@ async function fixture() {
   const projectId = (await db.execute<{ id: string }>(sql`
     insert into projects (org_id, name, is_active, contract_value)
     values (${org.orgId}, 'Magnitude Project', true, '100.0000')
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   return { org, projectId }
 }
 
@@ -72,8 +72,8 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 }
 
 async function contractValue(projectId: string): Promise<string | null> {
-  const rows = (await db.execute<{ contract_value: string | null }>(sql`
-    select contract_value::text as contract_value from projects where id = ${projectId}`)).rows
+  const rows = await db.execute<{ contract_value: string | null }>(sql`
+    select contract_value::text as contract_value from projects where id = ${projectId}`, 'objects')
   return rows[0]!.contract_value
 }
 

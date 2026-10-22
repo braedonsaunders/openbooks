@@ -50,10 +50,10 @@ for (const history of ['depreciation', 'impairment'] as const) {
         await buildSchedule(f.assetId, org.orgId, f.actorId, org.bookId);
         assert.equal((await runDepreciation(org.orgId, '2026-07-31', f.actorId, f.assetId)).posted, 1);
       } else await remeasureAsset(org.orgId, f.assetId, { actorId: f.actorId, date: '2026-07-31', newCarryingValue: '800' });
-      const before = (await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows;
+      const before = await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects');
       const response = await patch({ ...f.body, accumulatedDepreciationAccountId: org.accounts.taxOutput });
       assert.equal(response.status, 409, JSON.stringify(await response.json()));
-      assert.deepEqual((await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows, before);
+      assert.deepEqual(await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects'), before);
     } finally { state.gate = null; await dropScratchOrg(org.orgId); }
   });
 }
@@ -71,7 +71,7 @@ for (const history of ['depreciation', 'impairment', 'disposal', 'reversed impai
       } else {
         await remeasureAsset(org.orgId, f.assetId, { actorId: f.actorId, date: '2026-07-31', newCarryingValue: '800' });
         if (history === 'reversed impairment') {
-          const event = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and asset_id=${f.assetId}`)).rows[0]!;
+          const event = (await db.execute<{id:string}>(sql`select id from asset_events where org_id=${org.orgId} and asset_id=${f.assetId}`, 'objects'))[0]!;
           await reverseAssetLifecycleEvent(org.orgId, event.id, { actorId: f.actorId, date: '2026-07-31', reason: 'Policy regression reversal' });
         }
       }
@@ -86,11 +86,11 @@ for (const history of ['depreciation', 'impairment', 'disposal', 'reversed impai
         await assert.rejects(db.execute(sql`update asset_categories set ${sql.identifier(column)}=${value} where id=${f.categoryId}`),
           (error: unknown) => (error as { cause?: { constraint?: string } }).cause?.constraint === 'asset_category_posted_policy', column);
       }
-      const before = (await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows[0]!;
+      const before = (await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects'))[0]!;
       const response = await patch({ ...f.body, name: 'Reviewed category label' });
       assert.equal(response.status, 200, JSON.stringify(await response.json()));
-      const after = (await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows[0]!;
-      const evidence = (await db.execute<{changes:unknown;actor_id:string}>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and row_id=${f.categoryId} and action='update' order by at desc limit 1`)).rows[0]!;
+      const after = (await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects'))[0]!;
+      const evidence = (await db.execute<{changes:unknown;actor_id:string}>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and row_id=${f.categoryId} and action='update' order by at desc limit 1`, 'objects'))[0]!;
       assert.deepEqual(evidence.changes, JSON.parse(JSON.stringify({ before, after })));
       assert.equal(evidence.actor_id, f.actorId);
     } finally { state.gate = null; await dropScratchOrg(org.orgId); }
@@ -107,15 +107,15 @@ test('category defaults remain editable before financial history and independent
     await db.execute(sql`insert into asset_categories(id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id) values(${other},${org.orgId},'Unused category',${org.accounts.invAsset},${org.accounts.clearing},${org.accounts.adjustment})`);
     await remeasureAsset(org.orgId, f.assetId, { actorId: f.actorId, date: '2026-07-31', newCarryingValue: '800' });
     await db.execute(sql`update asset_categories set default_life_months=36 where id=${other}`);
-    assert.equal((await db.execute(sql`select default_life_months from asset_categories where id=${other}`)).rows[0]!.default_life_months, 36);
+    assert.equal((await db.execute(sql`select default_life_months from asset_categories where id=${other}`, 'objects'))[0]!.default_life_months, 36);
   } finally { state.gate = null; await dropScratchOrg(org.orgId); }
 });
 
 async function waitForBlock(pid: number) {
   const deadline = Date.now() + 10000;
   while (Date.now() < deadline) {
-    const result = await db.execute<{blocked:boolean}>(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as blocked`);
-    if (result.rows[0]?.blocked) return;
+    const result = await db.execute<{blocked:boolean}>(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as blocked`, 'objects');
+    if (result[0]?.blocked) return;
     await new Promise(resolve => setTimeout(resolve, 25));
   }
   assert.fail('expected a database lock wait');
@@ -147,7 +147,7 @@ for (const operation of ['impairment', 'disposal'] as const) {
       await waitForBlock(pid);
       await writer.query('commit');
       await pending;
-      const accounts = (await db.execute<{account_id:string}>(sql`select account_id from journal_lines where org_id=${org.orgId}`)).rows.map(row => row.account_id);
+      const accounts = (await db.execute<{account_id:string}>(sql`select account_id from journal_lines where org_id=${org.orgId}`, 'objects')).map(row => row.account_id);
       if (operation === 'impairment') assert.ok(accounts.includes(org.accounts.taxOutput));
       assert.ok(!accounts.includes(org.accounts.clearing));
     } finally {
@@ -172,7 +172,7 @@ test('category policy update waits for an in-flight posting and then rejects com
     const f = await seed(org);
     posting = withOrgTransaction(org.orgId, async () => {
       await remeasureAsset(org.orgId, f.assetId, { actorId: f.actorId, date: '2026-07-31', newCarryingValue: '800' });
-      ready((await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
+      ready((await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid);
       await gate;
     });
     void posting.catch(failReady);
@@ -198,11 +198,11 @@ test('category metadata and evidence roll back together on audit failure', { ski
     const name = `category_audit_${randomUUID().replaceAll('-', '')}`;
     await db.execute(sql.raw(`create function public."${name}"() returns trigger language plpgsql as $$ begin if new.table_name='asset_categories' and new.actor_id='${f.actorId}'::uuid then raise exception 'forced category audit failure'; end if; return new; end $$; create trigger "${name}" before insert on audit_log for each row execute function public."${name}"();`));
     cleanup = async () => { await db.execute(sql.raw(`drop trigger if exists "${name}" on audit_log; drop function if exists public."${name}"();`)); };
-    const before = (await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows;
+    const before = await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects');
     const response = await patch({ ...f.body, name: 'Unrecorded category edit' });
     assert.equal(response.status, 400);
-    assert.deepEqual((await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows, before);
-    assert.equal((await db.execute(sql`select id from audit_log where row_id=${f.categoryId}`)).rows.length, 0);
+    assert.deepEqual(await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects'), before);
+    assert.equal((await db.execute(sql`select id from audit_log where row_id=${f.categoryId}`, 'objects')).length, 0);
   } finally { await cleanup?.(); state.gate = null; await dropScratchOrg(org.orgId); }
 });
 
@@ -211,9 +211,9 @@ test('category update cannot reach another organization', { skip: !process.env.O
   try {
     const f = await seed(org);
     state.gate = { user: { orgId: other.orgId, id: (await seedFlowActors(other.orgId)).adminId } };
-    const before = (await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows;
+    const before = await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects');
     const response = await patch({ ...f.body, name: 'Cross-tenant edit' });
     assert.equal(response.status, 404, JSON.stringify(await response.json()));
-    assert.deepEqual((await db.execute(sql`select * from asset_categories where id=${f.categoryId}`)).rows, before);
+    assert.deepEqual(await db.execute(sql`select * from asset_categories where id=${f.categoryId}`, 'objects'), before);
   } finally { state.gate = null; await dropScratchOrg(org.orgId); await dropScratchOrg(other.orgId); }
 });

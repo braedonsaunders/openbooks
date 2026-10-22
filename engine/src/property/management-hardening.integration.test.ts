@@ -70,8 +70,8 @@ async function activeLease(fx: Fixture, leaseNumber: string, startsOn: string, e
 
 const scheduleCount = (orgId: string, leaseId: string, fromInclusive: string) => db.execute<{ n: number }>(sql`
   select count(*)::int as n from lease_schedule_lines
-   where org_id = ${orgId} and lease_id = ${leaseId} and status = 'scheduled' and period_starts_on >= ${fromInclusive}`)
-  .then((r) => r.rows[0]!.n);
+   where org_id = ${orgId} and lease_id = ${leaseId} and status = 'scheduled' and period_starts_on >= ${fromInclusive}`, "objects")
+  .then((r) => r[0]!.n);
 
 const isDomainError = (pattern: RegExp) => (error: unknown) =>
   error instanceof PropertyManagementError && pattern.test(error.message);
@@ -89,16 +89,16 @@ test("R2: extending an active lease term extends its base-rent window and the ex
       requestId: `extend-${randomUUID()}`,
     });
 
-    const windows = (await db.execute<{ effective_from: string; effective_to: string | null }>(sql`
+    const windows = await db.execute<{ effective_from: string; effective_to: string | null }>(sql`
       select effective_from::text, effective_to::text from lease_charges
-       where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' order by effective_from`)).rows;
+       where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' order by effective_from`, "objects");
     assert.deepEqual(windows, [{ effective_from: "2026-01-01", effective_to: "2027-12-31" }],
       "the term-derived base-rent window follows the extended lease end");
 
     // The extension is audited on the charge row it changed, inside the same write.
-    const chargeAudit = (await db.execute<{ changes: { before?: { effectiveTo?: string }; after?: { effectiveTo?: string } } }>(sql`
+    const chargeAudit = await db.execute<{ changes: { before?: { effectiveTo?: string }; after?: { effectiveTo?: string } } }>(sql`
       select a.changes from audit_log a join lease_charges c on c.id = a.row_id and c.org_id = a.org_id
-       where a.org_id = ${orgId} and a.table_name = 'lease_charges' and a.action = 'update' and c.lease_id = ${leaseId}`)).rows;
+       where a.org_id = ${orgId} and a.table_name = 'lease_charges' and a.action = 'update' and c.lease_id = ${leaseId}`, "objects");
     assert.equal(chargeAudit.length, 1, "base-rent window extension leaves audit evidence");
     assert.equal(chargeAudit[0]!.changes.before?.effectiveTo, "2026-12-31");
     assert.equal(chargeAudit[0]!.changes.after?.effectiveTo, "2027-12-31");
@@ -128,15 +128,15 @@ test("R3: escalations apply strictly in effective-date order so rent compounds c
     // Out of order: the later one cannot jump the earlier scheduled one.
     await assert.rejects(() => applyLeaseEscalation(orgId, fx.actorId, null, b.id), isDomainError(/2026-07-01/));
     const untouched = (await db.execute<{ status: string; new_amount: string | null }>(sql`
-      select status, new_amount::text from lease_escalations where org_id = ${orgId} and id = ${b.id}`)).rows[0]!;
+      select status, new_amount::text from lease_escalations where org_id = ${orgId} and id = ${b.id}`, "objects"))[0]!;
     assert.deepEqual(untouched, { status: "scheduled", new_amount: null });
 
     // In order: 1000 -> 1100 -> 1210.
     assert.equal((await applyLeaseEscalation(orgId, fx.actorId, null, a.id)).newAmount, "1100.0000");
     assert.equal((await applyLeaseEscalation(orgId, fx.actorId, null, b.id)).newAmount, "1210.0000");
-    const windows = (await db.execute<{ effective_from: string; amount: string }>(sql`
+    const windows = await db.execute<{ effective_from: string; amount: string }>(sql`
       select effective_from::text, amount::text from lease_charges
-       where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' order by effective_from`)).rows;
+       where org_id = ${orgId} and lease_id = ${leaseId} and charge_type = 'base_rent' order by effective_from`, "objects");
     assert.deepEqual(windows, [
       { effective_from: "2026-01-01", amount: "1000.0000" },
       { effective_from: "2026-07-01", amount: "1100.0000" },
@@ -209,7 +209,7 @@ test("R6: security-deposit offset accounts are validated against the liability, 
     );
 
     const ledger = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from security_deposit_transactions where org_id = ${orgId} and lease_id = ${leaseId}`)).rows[0]!;
+      select count(*)::int as n from security_deposit_transactions where org_id = ${orgId} and lease_id = ${leaseId}`, "objects"))[0]!;
     assert.equal(ledger.n, 1, "no refused posting reached the subledger");
 
     const ok = await recordSecurityDeposit({ ...base, kind: "interest", amount: "10", offsetAccountId: fx.org.accounts.adjustment });
@@ -249,13 +249,13 @@ test("R7: CAM allocation residual and fingerprint are deterministic across physi
     });
 
     const snapshot = async () => {
-      const rows = (await db.execute<{ lease_id: string; share_percent: string; actual_allocation: string; budget_allocation: string }>(sql`
+      const rows = await db.execute<{ lease_id: string; share_percent: string; actual_allocation: string; budget_allocation: string }>(sql`
         select lease_id::text, share_percent::text, actual_allocation::text, budget_allocation::text
-          from cam_allocations where org_id = ${orgId} and pool_id = ${pool.id} order by lease_id`)).rows;
+          from cam_allocations where org_id = ${orgId} and pool_id = ${pool.id} order by lease_id`, "objects");
       const fingerprint = (await db.execute<{ fp: string }>(sql`
         select changes->>'sourceFingerprint' as fp from audit_log
          where org_id = ${orgId} and table_name = 'cam_pools' and row_id = ${pool.id} and action = 'finalize'
-         order by at desc, id desc limit 1`)).rows[0]!.fp;
+         order by at desc, id desc limit 1`, "objects"))[0]!.fp;
       return { rows, fingerprint };
     };
 
@@ -292,7 +292,7 @@ test("R8: lease, charge, and escalation creation refuse invalid policy as domain
     const counts = async () => (await db.execute<{ leases: number; charges: number; escalations: number }>(sql`
       select (select count(*)::int from property_leases where org_id = ${orgId}) as leases,
         (select count(*)::int from lease_charges where org_id = ${orgId}) as charges,
-        (select count(*)::int from lease_escalations where org_id = ${orgId}) as escalations`)).rows[0]!;
+        (select count(*)::int from lease_escalations where org_id = ${orgId}) as escalations`, "objects"))[0]!;
     const before = await counts();
     const domain = (error: unknown) => error instanceof PropertyManagementError;
     // Every rejection below used to arrive as a raw storage error (or, for
@@ -325,7 +325,7 @@ test("R8: lease, charge, and escalation creation refuse invalid policy as domain
       lateFeeType: "none", lateFeeValue: "50", graceDays: 0, autoInvoice: true, autoPost: false,
     });
     const stored = (await db.execute<{ late_fee_value: string }>(sql`
-      select late_fee_value::text from property_leases where org_id = ${orgId} and id = ${coerced.id}`)).rows[0]!;
+      select late_fee_value::text from property_leases where org_id = ${orgId} and id = ${coerced.id}`, "objects"))[0]!;
     assert.equal(stored.late_fee_value, "0.0000");
   } finally {
     await dropScratchOrg(fx.org.orgId);
@@ -338,7 +338,7 @@ test("R9: a retried deposit import key is refused as a domain error without post
     const orgId = fx.org.orgId;
     const leaseId = await activeLease(fx, "L-IMP", "2026-01-01", null);
     const entries = async () => (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"))[0]!.n;
     const journalsBefore = await entries();
     const first = await recordSecurityDeposit({
       orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId, kind: "received",
@@ -353,7 +353,7 @@ test("R9: a retried deposit import key is refused as a domain error without post
       (error: unknown) => error instanceof PropertyManagementError && /already imported/.test(error.message),
     );
     const ledger = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from security_deposit_transactions where org_id = ${orgId} and lease_id = ${leaseId}`)).rows[0]!;
+      select count(*)::int as n from security_deposit_transactions where org_id = ${orgId} and lease_id = ${leaseId}`, "objects"))[0]!;
     assert.equal(ledger.n, 1, "the retried import posted nothing");
     assert.equal(await entries(), journalsBefore + 1, "the retried import left no extra journal");
   } finally {
@@ -422,7 +422,7 @@ test("R11: duplicate lease/escalation identities and invalid charge references f
     const counts = async () => (await db.execute<{ leases: number; charges: number; escalations: number }>(sql`
       select (select count(*)::int from property_leases where org_id = ${orgId}) as leases,
         (select count(*)::int from lease_charges where org_id = ${orgId}) as charges,
-        (select count(*)::int from lease_escalations where org_id = ${orgId}) as escalations`)).rows[0]!;
+        (select count(*)::int from lease_escalations where org_id = ${orgId}) as escalations`, "objects"))[0]!;
     const before = await counts();
     const domain = (error: unknown) => error instanceof PropertyManagementError;
     // Duplicate identities used to arrive as raw unique violations.
@@ -523,10 +523,10 @@ test("R13: CAM finalization refuses an overlapping lease with no rentable area i
         && /rentable area/.test(error.message),
     );
     const persisted = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from cam_allocations where org_id = ${orgId} and pool_id = ${pool.id}`)).rows[0]!.n;
+      select count(*)::int as n from cam_allocations where org_id = ${orgId} and pool_id = ${pool.id}`, "objects"))[0]!.n;
     assert.equal(persisted, 0, "the refused finalization persisted no allocations");
     const status = (await db.execute<{ status: string }>(sql`
-      select status from cam_pools where org_id = ${orgId} and id = ${pool.id}`)).rows[0]!.status;
+      select status from cam_pools where org_id = ${orgId} and id = ${pool.id}`, "objects"))[0]!.status;
     assert.equal(status, "open", "the refused pool stays open for correction");
     // Give the lease a 300 sqft unit: the pool now prices 100:300 exactly.
     const unitB = randomUUID();
@@ -536,10 +536,10 @@ test("R13: CAM finalization refuses an overlapping lease with no rentable area i
     await db.execute(sql`update property_leases set unit_id = ${unitB} where org_id = ${orgId} and id = ${leaseB}`);
     const finalized = await finalizeCamPool(orgId, fx.actorId, null, pool.id);
     assert.equal(finalized.allocations, 2);
-    const shares = (await db.execute<{ lease_number: string; share_percent: string; actual_allocation: string }>(sql`
+    const shares = await db.execute<{ lease_number: string; share_percent: string; actual_allocation: string }>(sql`
       select l.lease_number, a.share_percent::text, a.actual_allocation::text
         from cam_allocations a join property_leases l on l.id = a.lease_id and l.org_id = a.org_id
-       where a.org_id = ${orgId} and a.pool_id = ${pool.id} order by l.lease_number`)).rows;
+       where a.org_id = ${orgId} and a.pool_id = ${pool.id} order by l.lease_number`, "objects");
     assert.deepEqual(shares.map((row) => [row.lease_number, row.share_percent, row.actual_allocation]), [
       ["LSE-CAM-AREA", "25.0000", "2500.0000"],
       ["LSE-CAM-NOAREA", "75.0000", "7500.0000"],
@@ -613,7 +613,7 @@ test("R14: CAM finalization waits for a concurrent lease-weight edit and seals t
         select 1 from pg_stat_activity
          where datname = current_database() and pid <> pg_backend_pid()
            and state = 'active' and wait_event_type = 'Lock'
-      ) as blocked`)).rows[0]!.blocked;
+      ) as blocked`, "objects"))[0]!.blocked;
       if (blocked) break;
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
@@ -626,10 +626,10 @@ test("R14: CAM finalization waits for a concurrent lease-weight edit and seals t
     const finalized = await outcome;
     assert.ifError(failed);
     assert.equal(finalized.allocations, 2);
-    const shares = (await db.execute<{ lease_number: string; share_percent: string }>(sql`
+    const shares = await db.execute<{ lease_number: string; share_percent: string }>(sql`
       select l.lease_number, a.share_percent::text
         from cam_allocations a join property_leases l on l.id = a.lease_id and l.org_id = a.org_id
-       where a.org_id = ${orgId} and a.pool_id = ${camPool.id} order by l.lease_number`)).rows;
+       where a.org_id = ${orgId} and a.pool_id = ${camPool.id} order by l.lease_number`, "objects");
     assert.deepEqual(shares.map((row) => [row.lease_number, row.share_percent]), [
       ["LSE-CAM-WA", "80.0000"],
       ["LSE-CAM-WB", "20.0000"],
@@ -662,7 +662,7 @@ test("R15: unit and property edits leave before/after audit evidence with actor,
     }>(sql`
       select changes, actor_id as "actorId", at::text as at from audit_log
        where org_id = ${orgId} and table_name = 'property_units' and row_id = ${unit.id} and action = 'update'
-       order by at desc, id desc limit 1`)).rows[0]!;
+       order by at desc, id desc limit 1`, "objects"))[0]!;
     assert.equal(unitAudit.actorId, fx.actorId, "the edit names its actor");
     assert.ok(unitAudit.at, "the edit stamps its time");
     assert.deepEqual(unitAudit.changes.before, {
@@ -693,7 +693,7 @@ test("R15: unit and property edits leave before/after audit evidence with actor,
     }>(sql`
       select changes, actor_id as "actorId" from audit_log
        where org_id = ${orgId} and table_name = 'managed_properties' and row_id = ${fx.propertyId} and action = 'update'
-       order by at desc, id desc limit 1`)).rows[0]!;
+       order by at desc, id desc limit 1`, "objects"))[0]!;
     assert.equal(propertyAudit.actorId, fx.actorId);
     assert.equal(propertyAudit.changes.before!.name, "Hardening Tower");
     assert.equal(propertyAudit.changes.after!.name, "Hardening Tower II");
@@ -719,7 +719,7 @@ test("R12: a blank termination date is refused without mutating the lease", { sk
     const row = (await db.execute<{ status: string; endsOn: string | null; moveOutOn: string | null; scheduled: number }>(sql`
       select l.status, l.ends_on::text as "endsOn", l.move_out_on::text as "moveOutOn",
         (select count(*)::int from lease_schedule_lines where org_id = l.org_id and lease_id = l.id and status = 'scheduled') as scheduled
-        from property_leases l where l.org_id = ${orgId} and l.id = ${leaseId}`)).rows[0]!;
+        from property_leases l where l.org_id = ${orgId} and l.id = ${leaseId}`, "objects"))[0]!;
     assert.deepEqual(
       { status: row.status, endsOn: row.endsOn, moveOutOn: row.moveOutOn },
       { status: "active", endsOn: "2026-12-31", moveOutOn: null },

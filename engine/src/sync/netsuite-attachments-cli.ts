@@ -46,9 +46,9 @@ async function run(options: ImportOptions) {
   // bypass: cross-org-by-design — the operator names the tenant by id or exact name.
   const orgs = await withBypassContext(() => db.execute<{ id: string }>(sql`
     select id from orgs where id::text = ${options.org} or name = ${options.org}
-  `));
-  if (orgs.rows.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
-  const orgId = orgs.rows[0]!.id;
+  `, "objects"));
+  if (orgs.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
+  const orgId = orgs[0]!.id;
   return withOrgContext(orgId, () => importNetSuiteAttachments({ ...options, org: orgId }));
 }
 

@@ -5,8 +5,8 @@
  * OWNERSHIP: candidate-owned (scripts/upgrade-rehearsal/seeders/) but RUNS
  * INSIDE THE SOURCE TREE at engine/src/upgrade-rehearsal-seed/perf-1m.ts via
  * the source release's runtime. Relative imports resolve from THERE; every
- * module imported must exist in BOTH v0.1.0-alpha.22 and v0.1.0-alpha.23.
- * A startup assertion fails closed if any bulk-path column ever drifts.
+ * module imported must exist in every supported source release. A startup
+ * assertion fails closed if any bulk-path column ever drifts.
  *
  * What it builds, deterministically from `--seed`, in ONE sim-tagged USD org:
  *   - ~1,020,000 journal_lines over 36 months (2023-07..2026-06): ~3,000
@@ -18,23 +18,18 @@
  *     `set constraints all deferred`. NO raw ledger inserts outside that
  *     guarded shape, and no document_lines (header-only documents are
  *     skipped by the totals tieout by design).
- *   - payroll volume for migration 0296: 24 committed monthly runs x 40
- *     stubs x 6 lines with the commit-stamp shape (liability source
- *     'commit', expense source 'component'), component-level remittance
- *     parties on the withholding/FUTA components, and stub-line
- *     remittance deliberately NULL — 0296 adds that column at upgrade and
- *     backfills it from the component snapshot. Plus exact-total coverage
- *     bills carrying payrollRemittance markers (which 0296 repairs into
- *     coverage rows) and one wrong-total bill for its notice path.
- *   - inventory volume for 0293/0299: 2,000 items, 3 locations, 200 bins,
- *     600 counts x 500 unique-subject lines (300,000 stock_count_lines, all
- *     counted quantities non-negative).
- *   - realistic small volumes for every other pending migration that
- *     rewrites or validates a table (0251 payment_links, 0258
- *     subscriptions/recurring_schedules, 0265 tax_filings, 0294 dunning_log,
- *     0295 qbd_requests, 0298 item_rate_lines, 0301 item_price_schedules,
- *     0248/0250 pay components, recognition_rules). Tables deliberately left
- *     without volume are listed in UPGRADE-DONE with reasons.
+ *   - payroll volume: 24 committed monthly runs x 40 stubs x 6 lines with
+ *     the commit-stamp shape (liability source 'commit', expense source
+ *     'component'), component-level remittance parties on the
+ *     withholding/FUTA components, plus exact-total remittance coverage
+ *     bills carrying payrollRemittance markers and one wrong-total bill.
+ *   - inventory volume: 2,000 items, 3 locations, 200 bins, 600 counts x
+ *     500 unique-subject lines (300,000 stock_count_lines, all counted
+ *     quantities non-negative).
+ *   - realistic small volumes for tables migrations commonly rewrite or
+ *     validate (payment_links, subscriptions/recurring_schedules,
+ *     tax_filings, dunning_log, qbd_requests, item_rate_lines,
+ *     item_price_schedules, pay components, recognition_rules).
  *
  * Prints `{"orgIds":[...]}` as its last JSON line.
  */
@@ -90,9 +85,9 @@ async function assertBulkColumns(): Promise<void> {
   // Every (table, column) the raw-SQL sections below write or read, so a
   // source release that predates a column fails closed here with the full
   // list instead of mid-seed with the first missing one. Deliberately
-  // ABSENT: pay_stub_lines.remittance_party_id (born in pending migration
-  // 0296 — no source has it; the seeder never writes it) and price_levels
-  // (probed dynamically; the 0301 section skips when the table is absent).
+  // ABSENT: pay_stub_lines.remittance_party_id (the seeder never writes it)
+  // and price_levels (probed dynamically; the price-schedule section skips
+  // when the table is absent).
   const rows = await db.execute<{ table_name: string; column_name: string }>(sql`
     WITH want(table_name, column_name) AS (VALUES
       ('journal_entries','book_id'),('journal_entries','subsidiary_id'),
@@ -163,8 +158,7 @@ async function assertBulkColumns(): Promise<void> {
     WHERE c.column_name IS NULL
     UNION ALL
     -- Version-dependent columns: required only when the table exists on the
-    -- source. item_price_schedules is born in 0244 (both sources are older),
-    -- so the 0301 section skips there by construction.
+    -- source; the price-schedule section skips a source without it.
     SELECT o.table_name, o.column_name FROM (VALUES
       ('item_price_schedules','item_id'),('item_price_schedules','currency'),
       ('item_price_schedules','effective_from'),('item_price_schedules','price_level_id')
@@ -250,7 +244,7 @@ async function main(): Promise<void> {
         values (${id}, ${orgId}, 'employee', ${`Perf Employee ${i + 1}`}, true, '{}'::jsonb)`);
       employeeIds.push(id);
     }
-    // Monthly pay schedule + remittance-capable components (for 0296).
+    // Monthly pay schedule + remittance-capable components.
     const scheduleId = randomUUID();
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
@@ -270,9 +264,9 @@ async function main(): Promise<void> {
     for (const [code, name, kind, remit] of defs) {
       const id = randomUUID();
       // FUTA alone resolves to the second vendor: the exact-total coverage
-      // bill targets the FUTA accrual group, and 0296's repair compares the
-      // bill's lines against EVERY line resolving to the marker party in the
-      // window — a shared vendor would pull STATETAX lines into the group
+      // bill targets the FUTA accrual group, and remittance coverage compares
+      // the bill's lines against EVERY line resolving to the marker party in
+      // the window — a shared vendor would pull STATETAX lines into the group
       // and the bill would never reconcile.
       const vendor = !remit ? null : code === "FUTA" ? remittanceVendors[1]! : remittanceVendors[0]!;
       await db.execute(sql`
@@ -538,7 +532,7 @@ async function main(): Promise<void> {
   }
   log(`ledger bulk done: ${totalLines} journal_lines in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 
-  // -- Payroll runs/stubs/lines for 0296 (24 monthly runs x 40 employees) -----
+  // -- Payroll runs/stubs/lines (24 monthly runs x 40 employees) --------------
   // The org-scoped maintenance boundary is needed for the same timeout reason
   // as the month loop: ~6k stub lines fire deferred checks at commit.
   await withMaintenanceTransaction(orgId, async () => {
@@ -582,12 +576,8 @@ async function main(): Promise<void> {
             // clearing account and no evidence (the commit-stamp shape), and
             // expense source 'component' with the kernel's evidence wording
             // pointing at the component that names the expense account.
-            // remittance_party_id is DELIBERATELY unset: the column is born
-            // in pending migration 0296, so no source release has it. The
-            // remittance snapshot lives on the COMPONENT (set at master
-            // build); 0296 backfills exactly the deduction/contribution
-            // lines of remittance-carrying components at upgrade, and lines
-            // of components without remittance stay NULL through it.
+            // remittance_party_id is DELIBERATELY unset: the remittance
+            // snapshot lives on the COMPONENT (set at master build).
             const evidence = JSON.stringify({
               reason: `no item on this line; component "${comp.name}" expense account answers`,
               reference: `pay_components:${comp.id}`,
@@ -602,14 +592,13 @@ async function main(): Promise<void> {
           }
         }
       }
-      // Coverage bills for 0296. The covered bill reconciles exactly: its one
-      // document line (the liability account, the signed group sum) equals
-      // the committed FUTA accrual group, the party equals the snapshot
-      // party, and the window/subsidiary/filing all match — so 0296 writes
-      // coverage rows for it. FUTA is an employer_contribution with positive
+      // Remittance coverage bills. The covered bill reconciles exactly: its
+      // one document line (the liability account, the signed group sum)
+      // equals the committed FUTA accrual group, the party equals the
+      // snapshot party, and the window/subsidiary/filing all match. FUTA is
+      // an employer_contribution with positive
       // amounts, so the signed group sum matches a sane positive bill line.
-      // The second bill carries a wrong total and exercises the named notice
-      // path (no rows, fail-closed window overlap).
+      // The second bill carries a wrong total, so it never reconciles.
       const coverSpecs: { month: number; compIdx: number; exact: boolean }[] = [
         { month: 6, compIdx: 7, exact: true },
         { month: 18, compIdx: 2, exact: false },
@@ -644,7 +633,7 @@ async function main(): Promise<void> {
   });
   log("payroll volume done");
 
-  // -- Inventory volume for 0293/0299 ------------------------------------------
+  // -- Inventory volume ---------------------------------------------------------
   await withMaintenanceTransaction(orgId, async () => {
     const invRng = rng.stream("inventory");
     const itemIds: string[] = [];
@@ -724,7 +713,7 @@ async function main(): Promise<void> {
 
   // -- Small realistic volumes for the remaining rewrite/validate tables ------
   await withMaintenanceTransaction(orgId, async () => {
-    // 0251 payment_links (token globally unique; bank must be asset_bank).
+    // payment_links (token globally unique; bank must be asset_bank).
     const invDocs = await db.execute<{ id: string; party_id: string; total: string }>(sql`
       select id, party_id, total from documents
        where org_id = ${orgId} and kind = 'customer_invoice' order by document_number limit 200`);
@@ -736,14 +725,14 @@ async function main(): Promise<void> {
                 ${world.subsidiaryId}, ${i % 2 === 0 ? "stripe" : "adyen"},
                 ${world.accounts.bank!}, ${row.total}, 'USD')`);
     }
-    // 0256-adjacent recognition_rules (methods across the enum).
+    // recognition_rules (methods across the enum).
     const methods = ["point_in_time", "straight_line_even", "straight_line_daily", "percent_complete", "milestone"];
     for (let i = 0; i < 20; i++) {
       await db.execute(sql`
         insert into recognition_rules (id, org_id, code, name, method)
         values (${randomUUID()}, ${orgId}, ${`P1M-RR-${i + 1}`}, ${`Perf rule ${i + 1}`}, ${methods[i % methods.length]!})`);
     }
-    // 0258 subscriptions + recurring_schedules (template = real docs).
+    // subscriptions + recurring_schedules (template = real docs).
     for (let i = 0; i < 100; i++) {
       await db.execute(sql`
         insert into subscriptions (id, org_id, customer_id, plan_id, start_on, next_bill_on)
@@ -755,7 +744,7 @@ async function main(): Promise<void> {
         insert into recurring_schedules (id, org_id, template_document_id, cadence, next_run_on)
         values (${randomUUID()}, ${orgId}, ${invDocs.rows[i % invDocs.rows.length]!.id}, 'monthly', '2026-07-01')`);
     }
-    // 0265 tax_filings (monthly 941s for 2024-2025). The snapshot hash must
+    // tax_filings (monthly 941s for 2024-2025). The snapshot hash must
     // be 64 lowercase hex (tax_filings_snapshot_hash_check); derive it
     // deterministically from the seed so reruns are identical.
     for (let m = 0; m < 24; m++) {
@@ -767,7 +756,7 @@ async function main(): Promise<void> {
         values (${randomUUID()}, ${orgId}, '941', 'Employer Quarterly Federal Tax Return',
                 ${`${prefix}-01`}, ${`${prefix}-28`}, 1, 'irs_mef', '[]'::jsonb, ${snapshotHash})`);
     }
-    // 0294 dunning_log (one row per invoice-stage; pairs unique).
+    // dunning_log (one row per invoice-stage; pairs unique).
     const stages = [randomUUID(), randomUUID(), randomUUID(), randomUUID(), randomUUID()];
     for (let i = 0; i < 500; i++) {
       // Stage advances every 200 rows, so (document, stage) pairs stay unique.
@@ -777,7 +766,7 @@ async function main(): Promise<void> {
         values (${randomUUID()}, ${orgId}, ${invDocs.rows[i % invDocs.rows.length]!.id},
                 ${stages[0]!}, ${stage}, ${invDocs.rows[i % invDocs.rows.length]!.total})`);
     }
-    // 0295 qbd_requests (queued/complete only: the partial unique forbids two sent).
+    // qbd_requests (queued/complete only: the partial unique forbids two sent).
     for (let c = 0; c < 5; c++) {
       const connId = randomUUID();
       await db.execute(sql`
@@ -797,7 +786,7 @@ async function main(): Promise<void> {
         }
       }
     }
-    // 0298 item_rate_lines (against a draft version) + profiles.
+    // item_rate_lines (against a draft version) + profiles.
     const bookId = randomUUID();
     await db.execute(sql`
       insert into item_rate_books (id, org_id, code, name, currency) values (${bookId}, ${orgId}, 'P1M', 'Perf rates', 'USD')`);
@@ -815,9 +804,8 @@ async function main(): Promise<void> {
         insert into item_rate_lines (id, org_id, version_id, item_id, unit_code, unit_name, base_quantity)
         values (${randomUUID()}, ${orgId}, ${versionId}, ${row.id}, 'EA', 'Each', ${String(1 + (i % 10))})`);
     }
-    // 0301 item_price_schedules on the auto-created BASE level. The table is
-    // born in 0244, so sources older than that have no legacy rows by
-    // construction — skip when the table does not exist yet. The catalog
+    // item_price_schedules on the auto-created BASE level; skip a source
+    // without price levels. The catalog
     // probe runs first on its own: naming the absent table anywhere in the
     // level query (even beside an EXISTS guard) fails with
     // undefined_table before the guard is evaluated.

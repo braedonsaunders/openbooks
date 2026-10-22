@@ -113,23 +113,24 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.custom-record-route-test')]
       const sqlText = globalThis.openbooksCustomRecordSqlText
       const copy = (value) => value == null ? value : structuredClone(value)
-      const execute = async (query) => {
+      const execute = async (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         state.calls.push({ transaction: state.inTransaction, text })
         if (text.includes('as revision') && text.includes('from custom_records') && text.includes('for update')) {
           // The locked revision is the canonical token of the row this
           // transaction will actually compare — the pending (already
           // serialized) image, exactly like the real to_char projection.
-          return { rows: state.pendingRecord ? [{ ...copy(state.pendingRecord), revision: state.pendingRecord.updated_at }] : [] }
+          return inMode({ rows: state.pendingRecord ? [{ ...copy(state.pendingRecord), revision: state.pendingRecord.updated_at }] : [] })
         }
         if (text.includes('select * from custom_records') && text.includes('for update')) {
-          return { rows: state.pendingRecord ? [copy(state.pendingRecord)] : [] }
+          return inMode({ rows: state.pendingRecord ? [copy(state.pendingRecord)] : [] })
         }
         if (text.includes('select id, name, base_currency from orgs')) {
-          return { rows: [{ id: 'org-1', name: 'Acme', base_currency: 'CAD' }] }
+          return inMode({ rows: [{ id: 'org-1', name: 'Acme', base_currency: 'CAD' }] })
         }
         if (text.includes('update custom_records')) {
-          if (!state.pendingRecord) return { rows: [] }
+          if (!state.pendingRecord) return inMode({ rows: [] })
           const data = text.match(/data = coalesce\\((\\{.*\\})::jsonb/)?.[1]
           if (data) state.pendingRecord.data = JSON.parse(data)
           const status = text.match(/status = coalesce\\(([^,]*), status\\)/)?.[1]?.trim()
@@ -139,13 +140,13 @@ const mockSources = new Map<string, string>([
           state.pendingRecord.updated_at = '2026-08-28T12:00:00.' + String(state.sequence).padStart(6, '0') + 'Z'
           const search = text.match(/search_text = coalesce\\(([^,]*), search_text\\)/)?.[1]?.trim()
           if (search) state.pendingRecord.search_text = search
-          return { rows: [copy(state.pendingRecord)] }
+          return inMode({ rows: [copy(state.pendingRecord)] })
         }
         if (text.includes('delete from custom_records')) {
-          if (!state.pendingRecord) return { rows: [] }
+          if (!state.pendingRecord) return inMode({ rows: [] })
           const deleted = copy(state.pendingRecord)
           state.pendingRecord = null
-          return { rows: [deleted] }
+          return inMode({ rows: [deleted] })
         }
         throw new Error('unexpected database query: ' + text)
       }

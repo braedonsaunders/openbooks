@@ -30,10 +30,10 @@ export async function getChangeRequest(query: GetChangeRequestQuery): Promise<Ch
   const actorId = requireActorId(query.actorId);
   const requestId = requireId(query.requestId, "requestId");
   return withOrgTransaction(orgId, async () => {
-    const rows = (await db.execute<RequestRow>(sql`
+    const rows = await db.execute<RequestRow>(sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests
        where org_id = ${orgId} and id = ${requestId}
-    `)).rows;
+    `, "objects");
     const row = rows[0];
     if (!row) {
       throw new HrmChangeRequestError(
@@ -81,7 +81,7 @@ async function resolveRequestScope(orgId: string, actorId: string) {
   const allowedSubsidiaries = await actorAllowedSubsidiaryIds(db, orgId, actorId);
   const partyId = canReadOwnProfile
     ? (await db.execute<{ party_id: string | null }>(sql`
-        select party_id::text as party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null
+        select party_id::text as party_id from users where org_id = ${orgId} and id = ${actorId}`, "objects"))[0]?.party_id ?? null
     : null;
   const employerFilter = allowedSubsidiaries === null
     ? sql`true`
@@ -134,12 +134,12 @@ export async function listChangeRequests(query: ListChangeRequestsQuery): Promis
   const limit = requestListLimit(query);
   return withOrgTransaction(orgId, async () => {
     const scope = await resolveRequestScope(orgId, actorId);
-    const rows = (await db.execute<RequestRow>(sql`
+    const rows = await db.execute<RequestRow>(sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests r
        where ${requestVisibilityWhere(query, orgId, scope)}
        order by r.created_at desc, r.id desc
        limit ${limit}
-    `)).rows;
+    `, "objects");
     return rows.map(toDTO);
   });
 }
@@ -165,10 +165,10 @@ export async function countChangeRequests(query: CountChangeRequestsQuery): Prom
   }
   return withOrgTransaction(orgId, async () => {
     const scope = await resolveRequestScope(orgId, actorId);
-    const rows = (await db.execute<{ n: string }>(sql`
+    const rows = await db.execute<{ n: string }>(sql`
       select count(*) as n from hrm_employment_change_requests r
        where ${requestVisibilityWhere(query, orgId, scope)}
-    `)).rows;
+    `, "objects");
     return Number(rows[0]?.n ?? 0);
   });
 }
@@ -195,8 +195,8 @@ export async function listChangeRequestsWithTotal(
       select (select count(*)::text from visible) as n,
         coalesce((select jsonb_agg(to_jsonb(page) order by page.created_at desc, page.id desc)
           from page), '[]'::jsonb) as rows
-    `);
-    const row = result.rows[0];
+    `, "objects");
+    const row = result[0];
     if (!row) throw new HrmChangeRequestError("REFUSED", "change request queue could not be resolved");
     return { total: Number(row.n), rows: row.rows.map(toDTO) };
   });

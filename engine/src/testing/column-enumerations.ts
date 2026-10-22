@@ -212,19 +212,6 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
-    // Was scripts/bootstrap.ts; the five sites moved with the code that owns them.
-    file: "scripts/bootstrap/governed-views.ts",
-    sites: [
-      { stance: "descriptive", note: "column comments for the schema documentation check" },
-    ],
-  },
-  {
-    file: "scripts/bootstrap/migrate.ts",
-    sites: [
-      { stance: "presence-probe", note: "payment-link seal applicability: whether token_hash/token_sealed exist; the probe only counts, the seal names its columns literally" },
-    ],
-  },
-  {
     file: "scripts/bootstrap/database-roles.ts",
     sites: [
       { stance: "presence-probe", note: "RLS coverage census over org_id tables" },

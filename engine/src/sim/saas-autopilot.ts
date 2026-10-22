@@ -90,8 +90,8 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
          join items item on item.org_id = line.org_id and item.id = line.item_id
          where line.org_id = d.org_id and line.document_id = d.id
            and item.recognition_rule_id is not null
-       )`));
-  for (const inv of fresh.rows) {
+       )`, "objects"));
+  for (const inv of fresh) {
     try {
       const r = await createObligationsFromInvoice(inv.id, world.orgId, world.actors.controller);
       if (r.created > 0) res.obligationsBuilt += r.created;
@@ -154,21 +154,21 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
         from subscriptions s
         join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
        where s.org_id = ${world.orgId} and s.status = 'active'
-       order by customer.display_name, s.id`));
-    if (active.rows.length > 0) {
+       order by customer.display_name, s.id`, "objects"));
+    if (active.length > 0) {
       // Expansion: bump seats on one subscription. Exact integer bump on the
       // 8dp quantity grid (same rendered text as the old float path for every
       // value the float path rendered exactly); an unreadable stored quantity
       // throws here and is skipped below, where the old NaN string died in
       // the subscription validator instead.
-      const up = active.rows[seed % active.rows.length]!;
+      const up = active[seed % active.length]!;
       try {
         await changeSubscription(world.orgId, up.id, { quantity: bumpQuantity(up.quantity, 1 + (seed % 3)) }, today, undefined, null);
         res.changed++;
       } catch (e) { console.error(`[saas ${today}] expansion skipped: ${(e as Error).message}`); }
       // Churn: cancel one subscription a few times a year (when the date hashes to it).
-      if (active.rows.length > 8 && seed % 6 === 0) {
-        const churn = active.rows[(seed * 7) % active.rows.length]!;
+      if (active.length > 8 && seed % 6 === 0) {
+        const churn = active[(seed * 7) % active.length]!;
         await db.execute(sql`
           update subscriptions set status = 'canceled', canceled_on = ${today}
            where id = ${churn.id} and org_id = ${world.orgId} and status = 'active'`);

@@ -258,7 +258,7 @@ async function lockPositionPlanFacts(
 ): Promise<PositionPlanFacts> {
   const position = (await db.execute<{ id: string }>(sql`
     select id from positions where org_id = ${orgId} and id = ${positionId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!position) {
     throw new CompensationError("NOT_FOUND", "position is not visible in this organization");
   }
@@ -270,7 +270,7 @@ async function lockPositionPlanFacts(
        and recorded_until is null
        and effective_from <= ${startOn}::date
        and (effective_to is null or effective_to > ${startOn}::date)
-  `)).rows[0];
+  `, "objects"))[0];
   if (!version || version.status === "closed") {
     throw new CompensationError(
       "REFUSED",
@@ -323,7 +323,7 @@ async function incumbentAnnualRate(
   const row = (await db.execute<{ rate: string; basis: string }>(sql`
     select rate::text as rate, basis
       from labor_cost_rates
-     where org_id = ${orgId} and id = ${wage.rateId}`)).rows[0];
+     where org_id = ${orgId} and id = ${wage.rateId}`, "objects"))[0];
   if (!row) {
     throw new CompensationError(
       "STALE_REVISION",
@@ -356,7 +356,7 @@ async function costLine(
   let annualTarget: string;
   if (args.jobLevelId !== null) {
     const level = (await db.execute<{ family_id: string | null }>(sql`
-      select family_id from hrm_job_levels where org_id = ${orgId} and id = ${args.jobLevelId}`)).rows[0];
+      select family_id from hrm_job_levels where org_id = ${orgId} and id = ${args.jobLevelId}`, "objects"))[0];
     if (!level) {
       throw new CompensationError("NOT_FOUND", "job level is not visible in this organization");
     }
@@ -455,7 +455,7 @@ export async function createPlan(query: {
       insert into hrm_headcount_plans (org_id, name, fiscal_period_from, fiscal_period_to, created_by, updated_by)
       values (${orgId}, ${query.name.trim().slice(0, 160)}, ${query.fiscalPeriodFrom}, ${query.fiscalPeriodTo}, ${actorId}, ${actorId})
       returning id, name, fiscal_period_from::text as fiscal_period_from,
-                fiscal_period_to::text as fiscal_period_to, status, revision`)).rows[0];
+                fiscal_period_to::text as fiscal_period_to, status, revision`, "objects"))[0];
     if (!row) throw new CompensationError("REFUSED", "the plan insert matched no row — the save is refused, never a silent success");
     return toPlanDTO(row);
   });
@@ -519,7 +519,7 @@ export async function createPlanLine(query: CreatePlanLineQuery): Promise<PlanLi
     const plan = (await db.execute<PlanRow>(sql`
       select id, name, fiscal_period_from::text as fiscal_period_from,
              fiscal_period_to::text as fiscal_period_to, status, revision, scope
-        from hrm_headcount_plans where org_id = ${orgId} and id = ${planId} for update`)).rows[0];
+        from hrm_headcount_plans where org_id = ${orgId} and id = ${planId} for update`, "objects"))[0];
     if (!plan) throw new CompensationError("NOT_FOUND", "headcount plan is not visible in this organization");
     // Existing positions own their placement. Resolve under the position
     // aggregate lock, and refuse inconsistent supplied hints before the
@@ -564,7 +564,7 @@ export async function createPlanLine(query: CreatePlanLineQuery): Promise<PlanLi
               ${query.plannedFte}, ${query.startOn}, ${query.endOn ?? null}, ${costed.estAnnualCost},
               ${query.currency}, ${JSON.stringify(costed.costBasis)}::jsonb,
               ${query.reason?.trim().slice(0, 2000) ?? null}, ${actorId}, ${actorId})
-      returning ${LINE_COLUMNS}`)).rows[0];
+      returning ${LINE_COLUMNS}`, "objects"))[0];
     if (!row) throw new CompensationError("REFUSED", "the plan line insert matched no row — the save is refused, never a silent success");
     return toLineDTO(row);
   });
@@ -586,14 +586,14 @@ export async function approvePlanLine(query: {
     await requireHrmCompensationManage(db, orgId, actorId);
     const line = (await db.execute<PlanLineRow>(sql`
       select ${LINE_COLUMNS} from hrm_headcount_plan_lines
-       where org_id = ${orgId} and id = ${lineId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${lineId} for update`, "objects"))[0];
     if (!line) throw new CompensationError("NOT_FOUND", "plan line is not visible in this organization");
     // Approving a create/backfill line OPENS A REQUISITION for its
     // employer. Resolve and lock the position after the plan lock, then
     // recheck the persisted placement before opening that requisition.
     const planScope = (await db.execute<{ scope: PlanRow["scope"] }>(sql`
       select scope from hrm_headcount_plans
-       where org_id = ${orgId} and id = ${line.plan_id} for update`)).rows[0]?.scope ?? null;
+       where org_id = ${orgId} and id = ${line.plan_id} for update`, "objects"))[0]?.scope ?? null;
     const positionFacts = line.position_id
       ? await lockPositionPlanFacts(orgId, line.position_id, String(line.start_on).slice(0, 10))
       : null;
@@ -652,7 +652,7 @@ export async function approvePlanLine(query: {
              reason = coalesce(${query.reason?.trim().slice(0, 2000) ?? null}, reason),
              revision = revision + 1, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${lineId} and status = 'proposed' and revision = ${line.revision}
-       returning ${LINE_COLUMNS}`)).rows[0];
+       returning ${LINE_COLUMNS}`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the line moved while it was approved — reload it and approve again");
     }
@@ -668,11 +668,11 @@ export async function markPlanLineFilledForRequisition(
   orgId: string,
   requisitionId: string,
 ): Promise<void> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     update hrm_headcount_plan_lines
        set status = 'filled', revision = revision + 1, updated_at = now()
      where org_id = ${orgId} and requisition_id = ${requisitionId} and status = 'opened'
-     returning id`)).rows;
+     returning id`, "objects");
   void rows;
 }
 
@@ -723,10 +723,10 @@ async function assertPlanWriteScope(
 /** Persisted line employers of one plan, read fresh in-transaction (an
  * unattributable line maps to "" and fails closed for restricted actors). */
 async function planLineEmployerIds(orgId: string, planId: string): Promise<string[]> {
-  const rows = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+  const rows = await db.execute<{ employer_subsidiary_id: string | null }>(sql`
     select l.employer_subsidiary_id
       from hrm_headcount_plan_lines l
-     where l.org_id = ${orgId} and l.plan_id = ${planId}`)).rows;
+     where l.org_id = ${orgId} and l.plan_id = ${planId}`, "objects");
   return rows.map((row) => String(row.employer_subsidiary_id ?? ""));
 }
 
@@ -734,10 +734,10 @@ export async function listPlans(query: { orgId: string; actorId: string }): Prom
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
-  const rows = (await db.execute<PlanRow>(sql`
+  const rows = await db.execute<PlanRow>(sql`
     select id, name, fiscal_period_from::text as fiscal_period_from,
            fiscal_period_to::text as fiscal_period_to, status, revision, scope
-      from hrm_headcount_plans where org_id = ${orgId} order by fiscal_period_from desc`)).rows;
+      from hrm_headcount_plans where org_id = ${orgId} order by fiscal_period_from desc`, "objects");
   return rows
     .filter((row) => {
       if (allowed === null) return true;
@@ -773,14 +773,14 @@ export async function listPlanLinesForPlans(query: {
   // input. The allowlist crosses as JSON (bare JS arrays interpolate as
   // row constructors, never PostgreSQL arrays); an empty set matches
   // nothing, so a zero-scope actor receives no salary/staffing lines.
-  const rows = (await db.execute<PlanLineRow>(sql`
+  const rows = await db.execute<PlanLineRow>(sql`
     select ${LINE_COLUMNS} from hrm_headcount_plan_lines
      where org_id = ${orgId} and plan_id = any(${`{${planIds.join(',')}}`}::uuid[])
        and (${allowed === null}::boolean
             or employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
             ))
-     order by start_on`)).rows;
+     order by start_on`, "objects");
   return rows.map(toLineDTO);
 }
 
@@ -837,7 +837,7 @@ async function transitionPlan(
     // actor approves or closes a B-scoped plan.
     const locked = (await db.execute<{ scope: PlanRow["scope"] }>(sql`
       select scope from hrm_headcount_plans
-       where org_id = ${orgId} and id = ${planId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${planId} for update`, "objects"))[0];
     if (!locked) {
       throw new CompensationError("NOT_FOUND", "headcount plan is not visible in this organization");
     }
@@ -853,11 +853,9 @@ async function transitionPlan(
         approvalRunId,
       }))
     ) {
-      const current = (
-        await db.execute<PlanRow>(
-          sql`select id,name,fiscal_period_from::text,fiscal_period_to::text,status,revision from hrm_headcount_plans where org_id=${orgId} and id=${planId}`,
-        )
-      ).rows[0];
+      const current = (await db.execute<PlanRow>(
+          sql`select id,name,fiscal_period_from::text,fiscal_period_to::text,status,revision from hrm_headcount_plans where org_id=${orgId} and id=${planId}`, "objects",
+        ))[0];
       if (!current)
         throw new CompensationError("NOT_FOUND", "Headcount plan not found.");
       return toPlanDTO(current);
@@ -868,7 +866,7 @@ async function transitionPlan(
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${planId} and status = ${from}
        returning id, name, fiscal_period_from::text as fiscal_period_from,
-                 fiscal_period_to::text as fiscal_period_to, status, revision`)).rows[0];
+                 fiscal_period_to::text as fiscal_period_to, status, revision`, "objects"))[0];
     if (!updated) {
       throw new CompensationError(
         "BAD_STATE",

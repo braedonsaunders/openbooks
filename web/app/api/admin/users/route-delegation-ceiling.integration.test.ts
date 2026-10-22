@@ -129,7 +129,7 @@ async function seed(): Promise<Fixture> {
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${orgId}, ${key}, ${key}, false, '[]'::jsonb, ${JSON.stringify(restriction)}::jsonb)
         returning id
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
     const heldId = await mk(`held_${tag}`, { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
     await db.execute(sql`
       update app_roles set permissions = '["admin.users.manage"]'::jsonb where id = ${heldId}`);
@@ -259,9 +259,9 @@ test("invite with an all-scope role refuses before any user or issuance exists",
     const res = await post({ action: "invite", email, roleId: f.wideId });
     assert.equal(res.status, 403, await res.text());
     const row = await withBypass(() => db.execute(
-      sql`select id from users where org_id = ${f.orgId} and lower(email) = ${email}`,
+      sql`select id from users where org_id = ${f.orgId} and lower(email) = ${email}`, "objects",
     ));
-    assert.equal(row.rows.length, 0, "no user was created");
+    assert.equal(row.length, 0, "no user was created");
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     assert.equal(state.deliveries.length, 0, "no delivery was issued");
   } finally { await teardown(f); }
@@ -426,7 +426,7 @@ test("reactivation unions every assignment: a wide role past fifty still refuses
         values (${f.orgId}, ${`many_${tag}_${i}`}, ${`many ${i}`}, false, '[]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
         returning id
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       await db.execute(sql`
         insert into role_assignments (org_id, user_id, role_id)
         values (${f.orgId}, ${inactive}, ${roleId})

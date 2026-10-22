@@ -20,12 +20,12 @@ export const US_OPENING_LEVY_SOURCE: Policy = {
     if (!rows.some(row => row.programKey === 'us_futa')) throw new PayrollError('Declare FUTA opening wages for each original EIN, including zero when the source confirms none');
   },
   async validateOpening({ orgId, subsidiaryId, opening, allocations }) {
-    const einRows = (await db.execute<{ id: string; isActive: boolean }>(sql`
+    const einRows = await db.execute<{ id: string; isActive: boolean }>(sql`
       select id,is_active as "isActive" from payroll_filing_accounts
        where org_id=${orgId} and country='US' and program_type='us_ein'
          and (subsidiary_id=${subsidiaryId} or subsidiary_id is null)
        order by id for share
-    `)).rows;
+    `, 'objects');
     const futa = allocations.filter((row) => row.programKey === 'us_futa');
     if (allocations.some((row) => !einRows.some((ein) => ein.id === row.federalAccountId))) {
       throw new PayrollError('Add or restore each original US EIN in Payroll Setup → Filing accounts, then bind every US opening allocation to its source-confirmed EIN');
@@ -33,11 +33,11 @@ export const US_OPENING_LEVY_SOURCE: Policy = {
     if (allocations.some((row) => !futa.some((base) => base.filingAccountId === row.federalAccountId))) {
       throw new PayrollError('Declare a FUTA opening for every original EIN named by a SUI or LST allocation, including explicit zeros');
     }
-    const accountBaseRows = (await db.execute<{ programKey: string; region: string | null; filingAccountId: string; amount: string }>(sql`
+    const accountBaseRows = await db.execute<{ programKey: string; region: string | null; filingAccountId: string; amount: string }>(sql`
       select program_key as "programKey",region,filing_account_id as "filingAccountId",insurable_ytd::text as amount
         from payroll_opening_account_bases where org_id=${orgId} and employee_party_id=${opening.employeePartyId}
          and tax_year=${opening.taxYear} and program_key in ('us_futa','us_sui')
-    `)).rows;
+    `, 'objects');
     const futaAccountBases = accountBaseRows.filter((row) => row.programKey === 'us_futa');
     if (futaAccountBases.length) {
       if (cmp(opening.insurableYtd, '0') !== 0) {
@@ -52,19 +52,19 @@ export const US_OPENING_LEVY_SOURCE: Policy = {
     } else if (cmp(sum(futa.map((row) => row.amount)), opening.insurableYtd) !== 0) {
       throw new PayrollError('The EIN-specific FUTA allocations must equal the original employee-only insurable wage opening');
     }
-    const stateRows = (await db.execute<{ region: string; amount: string }>(sql`
+    const stateRows = await db.execute<{ region: string; amount: string }>(sql`
       select sw.state as region,sw.insurable_ytd::text as amount from payroll_opening_sui_wages sw
         join payroll_opening_balances b on b.org_id=sw.org_id and b.id=sw.opening_balance_id
        where b.org_id=${orgId} and b.employee_party_id=${opening.employeePartyId} and b.tax_year=${opening.taxYear}
-    `)).rows;
+    `, 'objects');
     const suiAccountBases = accountBaseRows.filter((row) => row.programKey === 'us_sui');
     const sui = allocations.filter((row) => row.programKey === 'us_sui');
-    const suiAccounts = (await db.execute<{ id: string; stateCode: string; isActive: boolean }>(sql`
+    const suiAccounts = await db.execute<{ id: string; stateCode: string; isActive: boolean }>(sql`
       select id,state_code as "stateCode",is_active as "isActive" from payroll_filing_accounts
        where org_id=${orgId} and country='US' and program_type='us_state_sui'
          and state_code is not null and (subsidiary_id=${subsidiaryId} or subsidiary_id is null)
        order by id for share
-    `)).rows;
+    `, 'objects');
     for (const row of sui) {
       if (row.filingAccountId !== null && !suiAccounts.some((account) =>
         account.id === row.filingAccountId && account.stateCode === row.region)) {

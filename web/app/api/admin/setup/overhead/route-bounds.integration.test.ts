@@ -73,8 +73,8 @@ const post = (ratePerHour: string, departmentId: string) =>
   );
 
 async function rateCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from overhead_rates where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from overhead_rates where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

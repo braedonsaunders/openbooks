@@ -34,12 +34,12 @@ after(() => {
 
 async function linkCount(orgId: string, invoiceId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from payment_links where org_id = ${orgId} and document_id = ${invoiceId}`)).rows[0]!.n;
+    select count(*)::int as n from payment_links where org_id = ${orgId} and document_id = ${invoiceId}`, "objects"))[0]!.n;
 }
 
 async function linkStatus(orgId: string, linkId: string): Promise<string> {
   return (await db.execute<{ status: string }>(sql`
-    select status from payment_links where org_id = ${orgId} and id = ${linkId}`)).rows[0]!.status;
+    select status from payment_links where org_id = ${orgId} and id = ${linkId}`, "objects"))[0]!.status;
 }
 
 test("payment links refuse an out-of-scope invoice on list, mint, and void", { skip: !DB }, async () => {

@@ -45,7 +45,7 @@ async function fixture() {
   const unrealizedId = (await db.execute<{ id: string }>(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
     values (${randomUUID()}, ${org.orgId}, '7990', 'Unrealized FX', 'expense_other', false, true, false, false, '{}'::jsonb, '{}'::jsonb, true)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"multiCurrency": true}'::jsonb)
@@ -73,9 +73,9 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function entryCount(): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries
-     where org_id = ${state.orgId} and origin = 'fx_revaluation'`)).rows
+     where org_id = ${state.orgId} and origin = 'fx_revaluation'`, 'objects')
   return rows[0]!.n
 }
 

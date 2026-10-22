@@ -158,7 +158,7 @@ export async function buildPosCart(
   if (customerId) {
     if (!isUuid(customerId)) throw posRefusal("Choose a valid customer.", "invalid_input", 422, "Look the customer up again, or sell to the walk-in customer.");
     const customer = (await runner.execute<{ party_id: string }>(sql`
-      select party_id from customer_roles where org_id = ${orgId} and party_id = ${customerId} and is_active`)).rows[0];
+      select party_id from customer_roles where org_id = ${orgId} and party_id = ${customerId} and is_active`, "objects"))[0];
     if (!customer) throw posRefusal("That customer is not an active customer.", "invalid_input", 422, "Look the customer up again, or sell to the walk-in customer.");
   }
   const itemIds = [...new Set(input.lines.map((line) => line.itemId))];
@@ -167,7 +167,7 @@ export async function buildPosCart(
   }
   const items = new Map((await runner.execute<ItemRow>(sql`
     select id, code, name, kind, is_active from items
-     where org_id = ${orgId} and id in (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`)).rows.map((row) => [row.id, row]));
+     where org_id = ${orgId} and id in (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`, "objects")).map((row) => [row.id, row]));
   const resolvedPrices: Array<{ list: string | null; unitPrice: string; overridden: boolean }> = [];
   for (const [index, line] of input.lines.entries()) {
     const label = `Line ${index + 1}`;
@@ -306,7 +306,7 @@ async function resolveStoredValueAccount(runner: SqlExecutor, orgId: string, cod
     throw posRefusal(`${label} needs the gift card or store credit code.`, "stored_value_unknown", 422, "Scan or type the card code.");
   }
   const row = (await runner.execute<{ id: string }>(sql`
-    select id from stored_value_accounts where org_id = ${orgId} and code_hash = ${hashStoredValueCode(orgId, normalized)}`)).rows[0];
+    select id from stored_value_accounts where org_id = ${orgId} and code_hash = ${hashStoredValueCode(orgId, normalized)}`, "objects"))[0];
   if (!row) {
     throw posRefusal(`${label} names a card code that does not exist.`, "stored_value_unknown", 404, "Check the code and scan or type it again.");
   }
@@ -462,7 +462,7 @@ async function submitAndPost(
   kindLabel: string,
 ): Promise<string> {
   const locked = (await db.execute<{ status: string; kind: string }>(sql`
-    select status, kind from documents where org_id = ${orgId} and id = ${documentId} for update`)).rows[0];
+    select status, kind from documents where org_id = ${orgId} and id = ${documentId} for update`, "objects"))[0];
   if (!locked) throw new Error("register document disappeared before posting");
   if (locked.status === "posted") return "posted";
   if (locked.status !== "draft") {
@@ -513,7 +513,7 @@ async function existingTransaction(orgId: string, documentId: string): Promise<{
     select t.kind, t.total_minor::text as total_minor, t.change_minor::text as change_minor, d.document_number
       from pos_transactions t
       join documents d on d.org_id = t.org_id and d.id = t.document_id
-     where t.org_id = ${orgId} and t.document_id = ${documentId}`)).rows[0];
+     where t.org_id = ${orgId} and t.document_id = ${documentId}`, "objects"))[0];
   return row ? { kind: row.kind, totalMinor: row.total_minor, changeMinor: row.change_minor, documentNumber: row.document_number } : null;
 }
 
@@ -637,8 +637,8 @@ export async function completePosSale(input: PosSaleInput, authority: PosAuthori
         ${JSON.stringify({ lines: cart.evidence, orderDiscount: input.orderDiscount ?? null })}::jsonb, ${input.actorId})
       -- A same-key retry that raced this one already attributed the document; the existing row stands.
       on conflict (org_id, document_id) do nothing
-      returning id`);
-    if (inserted.rows.length !== 1) {
+      returning id`, "objects");
+    if (inserted.length !== 1) {
       const raced = await existingTransaction(input.orgId, created.id);
       if (!raced) throw new Error("register sale attribution was not recorded");
       return { completion: replayOf(created.id, raced, "sale"), previousStatus: "posted" };
@@ -694,7 +694,7 @@ type RefundedLineTotals = { quantity: bigint; amount: bigint; taxAmount: bigint 
 
 /** Posted refund quantity and values per original receipt line. */
 async function refundedByLine(runner: SqlExecutor, orgId: string, originalDocumentId: string): Promise<Map<number, RefundedLineTotals>> {
-  const rows = (await runner.execute<{ line_number: number; quantity: string; amount: string; tax_amount: string }>(sql`
+  const rows = await runner.execute<{ line_number: number; quantity: string; amount: string; tax_amount: string }>(sql`
     select (entry.value->>'lineNumber')::int as line_number,
            sum((entry.value->>'quantity')::numeric)::text as quantity,
            sum(refund_line.amount)::text as amount,
@@ -705,7 +705,7 @@ async function refundedByLine(runner: SqlExecutor, orgId: string, originalDocume
       join document_lines refund_line on refund_line.org_id = t.org_id and refund_line.document_id = t.document_id
                                     and refund_line.line_number = entry.refund_ordinality
      where t.org_id = ${orgId} and t.refund_of_document_id = ${originalDocumentId} and t.kind = 'refund'
-     group by 1`)).rows;
+     group by 1`, "objects");
   return new Map(rows.map((row) => [Number(row.line_number), {
     quantity: toUnits(row.quantity),
     amount: toUnits(row.amount),
@@ -741,7 +741,7 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
     const original = (await db.execute<{ id: string; kind: string; status: string; subsidiary_id: string | null; party_id: string | null; document_number: string; currency: string }>(sql`
       select id, kind, status, subsidiary_id, party_id, document_number, currency from documents
        where org_id = ${input.orgId} and id = ${input.originalDocumentId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!original || original.kind !== "cash_sale" || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, original.subsidiary_id)) {
       throw posRefusal("That receipt is not a cash sale in this organization.", "refund_source_invalid", 404, "Look the receipt up by its number.");
     }
@@ -769,7 +769,7 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
                  and not exists (select 1 from inventory_movements r where r.org_id = m.org_id and r.reverses_movement_id = m.id)
                order by m.id limit 1) as issue_movement_id
         from document_lines l where l.org_id = ${input.orgId} and l.document_id = ${original.id}
-       order by l.line_number`)).rows.map((row) => [Number(row.line_number), row]));
+       order by l.line_number`, "objects")).map((row) => [Number(row.line_number), row]));
     const already = await refundedByLine(db, input.orgId, original.id);
     const seen = new Set<number>();
     const refundLines: Array<{ lineNumber: number; quantity: string }> = [];
@@ -863,8 +863,8 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
         ${JSON.stringify({ refundLines, reason })}::jsonb, ${input.actorId})
       -- A same-key retry that raced this one already attributed the document; the existing row stands.
       on conflict (org_id, document_id) do nothing
-      returning id`);
-    if (inserted.rows.length !== 1) {
+      returning id`, "objects");
+    if (inserted.length !== 1) {
       const raced = await existingTransaction(input.orgId, created.id);
       if (!raced) throw new Error("register refund attribution was not recorded");
       return { completion: replayOf(created.id, raced, "refund"), previousStatus: "posted" };
@@ -921,7 +921,7 @@ export async function readPosReceipt(
                d.tax_total::text as tax_total, d.total::text as total
           from documents d
           left join parties p on p.org_id = d.org_id and p.id = d.party_id
-         where d.org_id = ${orgId} and d.id = ${documentId} and d.kind in ('cash_sale', 'cash_refund')`)).rows[0]
+         where d.org_id = ${orgId} and d.id = ${documentId} and d.kind in ('cash_sale', 'cash_refund')`, "objects"))[0]
     : undefined;
   if (!doc || !subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiary_id)) {
     throw posRefusal("That receipt does not exist.", "refund_source_invalid", 404, "Look the receipt up by its number.");
@@ -935,14 +935,14 @@ export async function readPosReceipt(
       join pos_registers r on r.org_id = t.org_id and r.id = t.register_id
       left join users u on u.org_id = t.org_id and u.id = t.created_by
       left join documents o on o.org_id = t.org_id and o.id = t.refund_of_document_id
-     where t.org_id = ${orgId} and t.document_id = ${doc.id}`)).rows[0];
-  const lines = (await runner.execute<{ line_number: number; description: string | null; quantity: string | null; unit_price: string | null; amount: string; tax_amount: string }>(sql`
+     where t.org_id = ${orgId} and t.document_id = ${doc.id}`, "objects"))[0];
+  const lines = await runner.execute<{ line_number: number; description: string | null; quantity: string | null; unit_price: string | null; amount: string; tax_amount: string }>(sql`
     select line_number, description, quantity::text as quantity, unit_price::text as unit_price,
            amount::text as amount, tax_amount::text as tax_amount
-      from document_lines where org_id = ${orgId} and document_id = ${doc.id} order by line_number`)).rows;
-  const tenders = (await runner.execute<{ kind: string; method_label: string; amount_minor: string; reference: string | null }>(sql`
+      from document_lines where org_id = ${orgId} and document_id = ${doc.id} order by line_number`, "objects");
+  const tenders = await runner.execute<{ kind: string; method_label: string; amount_minor: string; reference: string | null }>(sql`
     select kind, method_label, amount_minor::text as amount_minor, reference
-      from document_tenders where org_id = ${orgId} and document_id = ${doc.id} order by position`)).rows;
+      from document_tenders where org_id = ${orgId} and document_id = ${doc.id} order by position`, "objects");
   const refunded = doc.kind === "cash_sale" ? await refundedByLine(runner, orgId, doc.id) : new Map<number, RefundedLineTotals>();
   const evidence = new Map<number, { listUnitPrice: string | null; lineDiscount: string; orderDiscount: string }>();
   const pricedLines = attribution?.pricing && Array.isArray((attribution.pricing as { lines?: unknown }).lines)
@@ -997,10 +997,10 @@ export async function findPosReceiptByNumber(
 ): Promise<string | null> {
   const number = documentNumber.trim();
   if (!number || number.length > 80) return null;
-  const rows = (await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const rows = await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select id, subsidiary_id from documents
      where org_id = ${orgId} and kind = 'cash_sale' and document_number = ${number}
-     order by created_at desc limit 5`)).rows;
+     order by created_at desc limit 5`, "objects");
   return (
     rows.find((row) => subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id))?.id ?? null
   );
@@ -1012,12 +1012,12 @@ export async function listSessionReceipts(
   orgId: string,
   session: Pick<PosSessionRow, "id">,
 ): Promise<Array<{ documentId: string; documentNumber: string; kind: string; totalMinor: string; createdAt: string; customerName: string | null }>> {
-  return (await runner.execute<{ documentId: string; documentNumber: string; kind: string; totalMinor: string; createdAt: string; customerName: string | null }>(sql`
+  return await runner.execute<{ documentId: string; documentNumber: string; kind: string; totalMinor: string; createdAt: string; customerName: string | null }>(sql`
     select t.document_id as "documentId", d.document_number as "documentNumber", t.kind,
            t.total_minor::text as "totalMinor", t.created_at::text as "createdAt", p.display_name as "customerName"
       from pos_transactions t
       join documents d on d.org_id = t.org_id and d.id = t.document_id
       left join parties p on p.org_id = d.org_id and p.id = d.party_id
      where t.org_id = ${orgId} and t.session_id = ${session.id}
-     order by t.created_at desc limit 100`)).rows;
+     order by t.created_at desc limit 100`, "objects");
 }

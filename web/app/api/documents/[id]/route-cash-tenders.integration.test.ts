@@ -47,7 +47,7 @@ const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/tes
 installTrustedTestDatabaseBypass()
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`)).rows[0]!.revision
+  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`, 'objects'))[0]!.revision
 }
 
 async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
@@ -92,12 +92,12 @@ test('cash tenders persist in the table and never in custom', async () => {
       custom: { tenders: [{ kind: 'cash', accountId: bankId, amount: '100' }] },
     })
     assert.equal(saved.status, 200, JSON.stringify(saved.json))
-    const rows = (await db.execute<{ kind: string; minor: string; currency: string }>(sql`
+    const rows = await db.execute<{ kind: string; minor: string; currency: string }>(sql`
       select kind, amount_minor::text as minor, currency from document_tenders
-       where org_id = ${orgId} and document_id = ${saleId} order by position`)).rows
+       where org_id = ${orgId} and document_id = ${saleId} order by position`, 'objects')
     assert.deepEqual(rows, [{ kind: 'cash', minor: '1000000', currency: 'CAD' }])
     const custom = (await db.execute<{ custom: Record<string, unknown> }>(sql`
-      select custom from documents where id = ${saleId} and org_id = ${orgId}`)).rows[0]!.custom
+      select custom from documents where id = ${saleId} and org_id = ${orgId}`, 'objects'))[0]!.custom
     assert.ok(!('tenders' in custom), 'the tenders key must not persist in custom')
     // An unrelated edit keeps the tenders; a bad kind refuses by name.
     const kept = await patchDoc(orgId, saleId, {
@@ -106,7 +106,7 @@ test('cash tenders persist in the table and never in custom', async () => {
     })
     assert.equal(kept.status, 200, JSON.stringify(kept.json))
     assert.equal((await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from document_tenders where org_id = ${orgId} and document_id = ${saleId}`)).rows[0]!.n, '1')
+      select count(*)::text as n from document_tenders where org_id = ${orgId} and document_id = ${saleId}`, 'objects'))[0]!.n, '1')
     const refused = await patchDoc(orgId, saleId, {
       expectedUpdatedAt: await revision(orgId, saleId),
       custom: { tenders: [{ kind: 'cheque', accountId: bankId, amount: '100' }] },
@@ -142,7 +142,7 @@ async function closeoutFixture(): Promise<{ orgId: string; saleId: string; bankI
 
 async function storedCustom(orgId: string, saleId: string): Promise<Record<string, unknown>> {
   return (await db.execute<{ custom: Record<string, unknown> }>(sql`
-    select custom from documents where id = ${saleId} and org_id = ${orgId}`)).rows[0]!.custom
+    select custom from documents where id = ${saleId} and org_id = ${orgId}`, 'objects'))[0]!.custom
 }
 
 test('card tip and fee persist and survive a table-reseeded save', async () => {
@@ -233,7 +233,7 @@ test('clearing the close-out server pools the tips without wiping them', async (
   const { orgId, saleId, bankId, cleanup } = await closeoutFixture()
   try {
     const serverId = (await db.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${orgId} and is_active limit 1`)).rows[0]!.id
+      select id from parties where org_id = ${orgId} and is_active limit 1`, 'objects'))[0]!.id
     const saved = await patchDoc(orgId, saleId, {
       expectedUpdatedAt: await revision(orgId, saleId),
       custom: {

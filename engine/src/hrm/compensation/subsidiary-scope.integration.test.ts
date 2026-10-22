@@ -38,7 +38,7 @@ const STRANGER = { scope: "direct", permissions: [], link: true } as const;
 
 /** Seed a state the services only reach through a longer workflow; the update must land. */
 async function force(update: SQL): Promise<void> {
-  assert.equal((await db.execute(update)).rowCount, 1, "the seeded state change matched no row");
+  assert.equal((await db.execute<Record<string, unknown>>(update)).rowCount, 1, "the seeded state change matched no row");
 }
 
 /** Point an actor's own role at a lens the matrix has no shorthand for. */
@@ -160,7 +160,7 @@ async function cycleLine(orgId: string, cycleId: string, employmentId: string, s
     select ${orgId}, ${cycleId}, e.id, '90000.0000', 'CAD', 'annual', ${status},
            null, null
       from worker_employments e where e.org_id = ${orgId} and e.id = ${employmentId}
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
 }
 
 /** G1 in A and G2 in B, so both comparison sides are priced across entities. */
@@ -523,7 +523,7 @@ scopeMatrix([
       const orgId = w.orgId;
       const file = (actorId: string, employmentId: string) => requestPayInformation({ orgId, actorId, employmentId });
       const status = async (id: string) => (await db.execute<{ status: string }>(sql`
-        select status from hrm_pay_information_requests where org_id = ${orgId} and id = ${id}`)).rows[0]?.status;
+        select status from hrm_pay_information_requests where org_id = ${orgId} and id = ${id}`, "objects"))[0]?.status;
       const reqA = await file(w.worker, e.mine);
       assert.equal(reqA.status, "open");
       assert.equal(await status(reqA.id), "open");

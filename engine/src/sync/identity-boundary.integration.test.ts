@@ -36,9 +36,9 @@ test("the same external id from different connectors lands as separate canonical
          where org_id = ${org.orgId}
            and custom->>'qboId' = 'SHARED-42' or
                org_id = ${org.orgId} and custom->>'nsId' = 'SHARED-42'
-         order by display_name`),
+         order by display_name`, "objects"),
     );
-    assert.deepEqual(rows.rows.map((row) => ({
+    assert.deepEqual(rows.map((row) => ({
       name: row.display_name,
       custom: row.custom,
     })), [
@@ -75,8 +75,8 @@ test("duplicate legacy adapter keys refuse without updating either party", { ski
       /contains multiple rows for connector identity nsId:DUP-7/,
     );
     const rows = await withOrg(org.orgId, () => db.execute<{ display_name: string }>(sql`
-      select display_name from parties where org_id = ${org.orgId} and custom->>'nsId' = 'DUP-7' order by display_name`));
-    assert.deepEqual(rows.rows.map((row) => row.display_name), ["Legacy A", "Legacy B"]);
+      select display_name from parties where org_id = ${org.orgId} and custom->>'nsId' = 'DUP-7' order by display_name`, "objects"));
+    assert.deepEqual(rows.map((row) => row.display_name), ["Legacy A", "Legacy B"]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

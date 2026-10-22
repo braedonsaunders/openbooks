@@ -32,7 +32,7 @@ export function payrollHistoricalEmployerAssignmentsResource(orgId: string): Dat
     async columns() { return FIELDS.map(({ key, label }) => ({ key, label })) },
     async read(ctx) {
       if (!ctx || ctx.allowedSubsidiaryIds === undefined) throw new Error('Historical employer assignment export requires an explicit legal-entity scope')
-      const installed = (await db.execute<{ installed: boolean }>(sql`select to_regclass('public.payroll_employee_employer_assignments') is not null as installed`)).rows[0]?.installed
+      const installed = (await db.execute<{ installed: boolean }>(sql`select to_regclass('public.payroll_employee_employer_assignments') is not null as installed`, 'objects'))[0]?.installed
       if (!installed) throw new Error('Historical employer assignments are not installed — run the authorized database bootstrap before exporting')
       const result = (await readExportWindow<Record<string, CellValue>>(db, sql`
         select a.employee_party_id::text as employee, a.assignment_kind as kind,

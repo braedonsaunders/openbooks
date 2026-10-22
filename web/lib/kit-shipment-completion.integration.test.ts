@@ -104,13 +104,13 @@ test(
         ...scoped,
       }));
       assert.equal(completed.replayed, false);
-      const issues = (await db.execute<{ item_id: string; quantity: string }>(sql`
+      const issues = await db.execute<{ item_id: string; quantity: string }>(sql`
         select item_id, quantity::text from inventory_movements
          where org_id = ${org.orgId} and kind = 'issue'
            and document_line_id in (
              select id from document_lines where org_id = ${org.orgId} and document_id = ${completed.fulfillmentId}
            )
-         order by item_id`)).rows;
+         order by item_id`, "objects");
       assert.deepEqual(issues, [{ item_id: org.items.component, quantity: "-2.0000" }]);
     } finally {
       await dropScratchOrg(org.orgId);

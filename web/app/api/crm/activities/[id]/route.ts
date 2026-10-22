@@ -75,14 +75,14 @@ function storedTimestampText(value: unknown): string | null {
 // disagree with the CHECK after a store/load round-trip.
 async function endsPrecedeStarts(executor: QueryExecutor, startsAt: string | null, endsAt: string | null): Promise<boolean> {
   if (!startsAt || !endsAt) return false
-  const result = await executor.execute(sql`select 1 where ${endsAt}::timestamptz < ${startsAt}::timestamptz`)
-  return result.rows.length === 1
+  const result = await executor.execute(sql`select 1 where ${endsAt}::timestamptz < ${startsAt}::timestamptz`, 'objects')
+  return result.length === 1
 }
 
 async function subjectExists(orgId: string, kind: string, id: string, allowed?: ReadonlySet<string> | null): Promise<boolean> {
   if (!isUuid(id)) return false
-  const result=await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${orgId}`,sql`${kind}`,sql`${id}`,allowed)}`)
-  return result.rows.length===1
+  const result=await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${orgId}`,sql`${kind}`,sql`${id}`,allowed)}`, 'objects')
+  return result.length===1
 }
 
 export const GET = defineRoute({
@@ -107,8 +107,8 @@ export const PATCH = defineRoute({
     const { user } = gate
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
-    const current = (await db.execute(sql`select a.* from crm_activities a where a.id = ${id} and a.org_id = ${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)}`))
-    if (!current.rows[0]) return notFound("record")
+    const current = (await db.execute(sql`select a.* from crm_activities a where a.id = ${id} and a.org_id = ${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)}`, 'objects'))
+    if (!current[0]) return notFound("record")
     const parsedBody = await parseJsonBody(req, requestBodySchema, { status: 422 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
@@ -122,15 +122,15 @@ export const PATCH = defineRoute({
     }
     for (const key of ['ownerUserId', 'assignedUserId'] as const) {
       const value = body[key]
-      if (value !== undefined && value !== null && !((await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`))).rows[0]) {
+      if (value !== undefined && value !== null && !(await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`, 'objects'))[0]) {
         return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
       }
     }
     // The effective pair (request value, else the stored row) is refused here
     // instead of tripping crm_activity_dates inside the transaction. Re-checked
     // under the row lock below, where the stored side cannot have gone stale.
-    const startsAt = body.startsAt !== undefined ? textOrNull(body.startsAt) : storedTimestampText(current.rows[0].starts_at)
-    const endsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : storedTimestampText(current.rows[0].ends_at)
+    const startsAt = body.startsAt !== undefined ? textOrNull(body.startsAt) : storedTimestampText(current[0].starts_at)
+    const endsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : storedTimestampText(current[0].ends_at)
     if (await endsPrecedeStarts(db, startsAt, endsAt)) return NextResponse.json({ error: 'end must not precede start' }, { status: 422 })
     const duration = body.durationMinutes === undefined || body.durationMinutes === null ? null : Number(body.durationMinutes)
     // duration_minutes is integer: a value the column cannot hold would die in
@@ -143,25 +143,25 @@ export const PATCH = defineRoute({
     }
     const participants = body.participants
     if (participants) for (const participant of participants) {
-      if (participant.userId && !((await db.execute(sql`select 1 from users where id = ${participant.userId} and org_id = ${user.orgId}`))).rows[0]) return NextResponse.json({ error: 'invalid participant user' }, { status: 422 })
-      if (participant.contactId && !((await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`))).rows[0]) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
+      if (participant.userId && !(await db.execute(sql`select 1 from users where id = ${participant.userId} and org_id = ${user.orgId}`, 'objects'))[0]) return NextResponse.json({ error: 'invalid participant user' }, { status: 422 })
+      if (participant.contactId && !(await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`, 'objects'))[0]) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
     }
 
       const denied = await db.transaction(async (tx) => {
-      const visible=await tx.execute(sql`select a.* from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)
-      if (!visible.rows.length) return notFound("record")
+      const visible=await tx.execute(sql`select a.* from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`, 'objects')
+      if (!visible.length) return notFound("record")
       // Compared against the row locked by this write transaction, never the
       // preflight snapshot (which may have gone stale during validation). A
       // separate projection keeps the audit before-image free of computed keys.
-      const lockedRevision = (await tx.execute(sql`select ${documentRevisionSql(sql`a.updated_at`)} as revision from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)).rows[0] as { revision: unknown } | undefined
+      const lockedRevision = (await tx.execute(sql`select ${documentRevisionSql(sql`a.updated_at`)} as revision from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`, 'objects'))[0] as { revision: unknown } | undefined
       if (!isDocumentRevisionToken(lockedRevision?.revision) || lockedRevision.revision !== body.expectedUpdatedAt) {
         return NextResponse.json({ error: 'This activity changed after you opened it; reload the activity and reapply your changes' }, { status: 409 })
       }
       // The stored side of the pair comes from the locked row: a concurrent
       // save between the preflight read and this lock must not restore stale
       // dates or stale audit evidence.
-      const lockedStartsAt = body.startsAt !== undefined ? textOrNull(body.startsAt) : storedTimestampText(visible.rows[0]?.starts_at)
-      const lockedEndsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : storedTimestampText(visible.rows[0]?.ends_at)
+      const lockedStartsAt = body.startsAt !== undefined ? textOrNull(body.startsAt) : storedTimestampText(visible[0]?.starts_at)
+      const lockedEndsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : storedTimestampText(visible[0]?.ends_at)
       if (await endsPrecedeStarts(tx as unknown as QueryExecutor, lockedStartsAt, lockedEndsAt)) return NextResponse.json({error:'end must not precede start'},{status:422})
       if (links) for (const link of links) {
         // Same lock-then-recheck as the draft route: the recheck must see the
@@ -169,17 +169,17 @@ export const PATCH = defineRoute({
         // the replacement links commit.
         const exists = await lockCrmLinkSubject(tx, user.orgId, link.subjectKind, link.subjectId)
         const valid = exists
-          ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${link.subjectKind}`,sql`${link.subjectId}`,gate.allowedSubsidiaryIds)}`)
-          : { rows: [] }
-        if (!valid.rows.length) return NextResponse.json({error:'invalid related record'},{status:422})
+          ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${link.subjectKind}`,sql`${link.subjectId}`,gate.allowedSubsidiaryIds)}`, 'objects')
+          : []
+        if (!valid.length) return NextResponse.json({error:'invalid related record'},{status:422})
       }
       if (participants) for (const participant of participants) {
         if (!participant.contactId) continue
         const exists = await lockCrmLinkSubject(tx, user.orgId, 'contact', participant.contactId)
         const valid = exists
-          ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`)
-          : { rows: [] }
-        if (!valid.rows.length) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
+          ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`, 'objects')
+          : []
+        if (!valid.length) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
       }
       // Custom values merge into the locked row's bag (same contract as the
       // opportunity route): the effective bag is validated, supplied references
@@ -189,7 +189,7 @@ export const PATCH = defineRoute({
         const defs = await loadFieldDefs('crm_activities')
         const unknownKey = unknownCustomFieldKey(defs, body.custom)
         if (unknownKey) return NextResponse.json({ error: `unknown custom field: ${unknownKey}` }, { status: 422 })
-        const existingCustom = (visible.rows[0]!.custom as Record<string, unknown> | null) ?? {}
+        const existingCustom = (visible[0]!.custom as Record<string, unknown> | null) ?? {}
         const result = validateCustomValues(defs, { ...existingCustom, ...body.custom })
         if (!result.ok) return NextResponse.json({ error: Object.values(result.errors)[0], fieldErrors: result.errors }, { status: 422 })
         const suppliedCustom: Record<string, unknown> = {}
@@ -204,8 +204,8 @@ export const PATCH = defineRoute({
       }
       // Child evidence is captured on both sides of the delete/insert pairs so
       // the audit row records what actually changed, not just what was asked.
-      const linksBefore = links ? (await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} order by subject_kind, subject_id`)).rows : null
-      const participantsBefore = participants ? (await tx.execute(sql`select user_id, contact_id, email, response from crm_activity_participants where activity_id = ${id} and org_id = ${user.orgId} order by user_id, contact_id, email, response`)).rows : null
+      const linksBefore = links ? (await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} order by subject_kind, subject_id`, 'objects')) : null
+      const participantsBefore = participants ? (await tx.execute(sql`select user_id, contact_id, email, response from crm_activity_participants where activity_id = ${id} and org_id = ${user.orgId} order by user_id, contact_id, email, response`, 'objects')) : null
       await tx.execute(sql`
         update crm_activities set
           kind = ${body.kind ?? sql`kind`}, status = ${body.status ?? sql`status`},
@@ -245,13 +245,13 @@ export const PATCH = defineRoute({
       await tx.execute(sql`
         update crm_account_profiles cp set last_activity_at = greatest(coalesce(cp.last_activity_at, '-infinity'), now()), updated_at = now()
          where cp.org_id = ${user.orgId} and cp.party_id in (select subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} and subject_kind = 'account')`)
-      const afterRow = (await tx.execute(sql`select a.* from crm_activities a where a.id = ${id} and a.org_id = ${user.orgId}`)).rows[0]
-      const linksAfter = links ? (await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} order by subject_kind, subject_id`)).rows : null
-      const participantsAfter = participants ? (await tx.execute(sql`select user_id, contact_id, email, response from crm_activity_participants where activity_id = ${id} and org_id = ${user.orgId} order by user_id, contact_id, email, response`)).rows : null
+      const afterRow = (await tx.execute(sql`select a.* from crm_activities a where a.id = ${id} and a.org_id = ${user.orgId}`, 'objects'))[0]
+      const linksAfter = links ? (await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} order by subject_kind, subject_id`, 'objects')) : null
+      const participantsAfter = participants ? (await tx.execute(sql`select user_id, contact_id, email, response from crm_activity_participants where activity_id = ${id} and org_id = ${user.orgId} order by user_id, contact_id, email, response`, 'objects')) : null
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'crm_activities', ${id}, 'update', ${JSON.stringify({
-          before: visible.rows[0],
+          before: visible[0],
           after: afterRow,
           requested: body,
           links: links ? { before: linksBefore, after: linksAfter } : undefined,
@@ -273,13 +273,13 @@ export const DELETE = defineRoute({
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
     const deleted = await db.transaction(async (tx) => {
-      const visible=await tx.execute(sql`select a.* from crm_activities a where a.id=${id} and a.org_id=${gate.user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)
-      if (!visible.rows.length) return {rows:[]}
-      const before = visible.rows[0]
+      const visible=await tx.execute(sql`select a.* from crm_activities a where a.id=${id} and a.org_id=${gate.user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`, 'objects')
+      if (!visible.length) return {rows:[]}
+      const before = visible[0]
       // Both child sets are snapshotted under the same lock before the deletes
       // so the audit row preserves the full erased evidence with after null.
-      const linksBefore = (await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${gate.user.orgId} order by subject_kind, subject_id`)).rows
-      const participantsBefore = (await tx.execute(sql`select user_id, contact_id, email, response from crm_activity_participants where activity_id = ${id} and org_id = ${gate.user.orgId} order by user_id, contact_id, email, response`)).rows
+      const linksBefore = await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${gate.user.orgId} order by subject_kind, subject_id`, 'objects')
+      const participantsBefore = await tx.execute(sql`select user_id, contact_id, email, response from crm_activity_participants where activity_id = ${id} and org_id = ${gate.user.orgId} order by user_id, contact_id, email, response`, 'objects')
       await tx.execute(sql`delete from crm_activity_participants where activity_id = ${id} and org_id = ${gate.user.orgId}`)
       await tx.execute(sql`delete from crm_activity_links where activity_id = ${id} and org_id = ${gate.user.orgId}`)
       const removed = await tx.execute(sql`delete from crm_activities where id = ${id} and org_id = ${gate.user.orgId} returning id`)

@@ -323,11 +323,12 @@ const mockDb = `
     if (text.includes('document_links')) return { rows: [] }
     return { rows: [] }
   }
-  async function execute(query) {
+  async function execute(query, mode) {
+    const inMode = (result) => (mode === 'objects' ? result.rows : result)
     const seen = inspect(query)
     state.queries.push(seen.text)
     state.lastParams.push(seen.params)
-    return respond(query)
+    return inMode(await respond(query))
   }
   export function pinnedTransactionExecutor() { return undefined }
   export const db = {

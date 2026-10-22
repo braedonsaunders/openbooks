@@ -227,7 +227,7 @@ test("2027 refusals name every untranscribed scale and cap", () => {
 function stubCtx(overrides: Record<string, unknown> = {}) {
   const pushed: Array<{ key: string; amount: string; sequence: number }> = [];
   const ctx = {
-    tx: { execute: async () => ({ rows: [{ qualifying: "0.0000" }] }) },
+    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ qualifying: "0.0000" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) },
     orgId: "org", subsidiaryId: "employer", employeePartyId: "emp", documentId: "doc",
     taxYear: 2027,
     income: "5000",
@@ -280,7 +280,7 @@ test("SG stops at the maximum contributions base using this employer's committed
         { income: "33333.33", nonPeriodic: "0.0000", pensionable: "33333.33", insurable: "0.0000" },
         AU_PAYROLL_PACK.deductionTreatments,
       ),
-      tx: { execute: async () => ({ rows: [{ qualifying: committed }] }) },
+      tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ qualifying: committed }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) },
       certificateFor: () => ({
         certificate: {}, onFile: true, effectiveFrom: null, missing: [],
         answers: {

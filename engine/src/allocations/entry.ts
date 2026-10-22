@@ -229,11 +229,9 @@ export async function loadEntryRuleByKey(
   key: string,
   asOf?: string,
 ): Promise<KeyedEntryRuleLookup> {
-  const head = (
-    await db.execute<{ mode: string }>(sql`
+  const head = (await db.execute<{ mode: string }>(sql`
       select mode from allocation_rules where org_id = ${orgId} and key = ${key} limit 1
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!head) return { status: "not_found" };
   if (head.mode !== "entry") return { status: "wrong_mode", mode: head.mode as AllocationMode };
   const rules = await listEntryRulesInEffect({ orgId, mode: "entry", asOf });

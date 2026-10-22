@@ -153,7 +153,7 @@ async function loadExit(
         on p.org_id = x.org_id and p.id = x.interviewer_party_id
      where x.org_id = ${orgId} and x.id = ${exitId}
      ${forUpdate ? sql`for update of x` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -197,7 +197,7 @@ async function appendExitEvent(args: {
       ${args.before === null ? null : JSON.stringify(args.before)}::jsonb,
       ${JSON.stringify(args.after)}::jsonb)
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) {
     throw new HrmPerformanceError(
       "REFUSED",
@@ -217,13 +217,13 @@ async function requireTerminatedAsOfToday(
   employmentId: string,
   today: string,
 ): Promise<void> {
-  const versions = (await exec.execute<{ status: string }>(sql`
+  const versions = await exec.execute<{ status: string }>(sql`
     select status from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
        and recorded_until is null
        and effective_from <= ${today}::date
        and (effective_to is null or effective_to > ${today}::date)
-  `)).rows;
+  `, "objects");
   if (versions.length === 0) {
     throw new HrmPerformanceError(
       "REFUSED",
@@ -298,7 +298,7 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
     if (terminationChangeId !== null) {
       const change = (await db.execute<{ id: string }>(sql`
         select id from employment_changes where org_id = ${orgId} and id = ${terminationChangeId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!change) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
@@ -313,7 +313,7 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
         select id from employment_changes
          where org_id = ${orgId} and id = ${terminationChangeId}
            and employment_id = ${employmentId} and change_kind = 'terminated'
-      `)).rows[0];
+      `, "objects"))[0];
       if (!terminating) {
         throw new HrmPerformanceError(
           "REFUSED",
@@ -324,7 +324,7 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
     if (interviewerPartyId !== null) {
       const party = (await db.execute<{ id: string }>(sql`
         select id from parties where org_id = ${orgId} and id = ${interviewerPartyId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!party) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
@@ -360,7 +360,7 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
           recorded_by as "recordedBy",
           recorded_at as "recordedAt",
           revision
-      `)).rows[0]!;
+      `, "objects"))[0]!;
     } catch (e) {
       // The one-per-employment unique is the authority: a second record is
       // a correction of the first, made by updating it. The constraint
@@ -466,7 +466,7 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
     const wouldRehire = input.wouldRehire === undefined ? current.wouldRehire : input.wouldRehire;
     const destination = input.destination === undefined ? current.destination : input.destination;
     const notes = input.notes === undefined ? current.notes : input.notes;
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_exit_records
          set reason_kind = ${reasonKind},
              is_voluntary = ${isVoluntary},
@@ -545,7 +545,7 @@ export async function listExitRecords(args: {
       allowed === null
         ? sql``
         : sql`and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}`;
-    const rows = (await db.execute<StoredExit>(sql`
+    const rows = await db.execute<StoredExit>(sql`
       select x.id,
              x.employment_id as "employmentId",
              e.employer_subsidiary_id as "employerSubsidiaryId",
@@ -570,7 +570,7 @@ export async function listExitRecords(args: {
          ${employmentId === null ? sql`` : sql`and x.employment_id = ${employmentId}`}
          ${scopeFilter}
        order by x.recorded_at desc
-    `)).rows;
+    `, "objects");
     return rows.map(toExitDTO);
   });
 }

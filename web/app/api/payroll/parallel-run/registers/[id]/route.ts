@@ -48,7 +48,7 @@ export const DELETE = defineRoute({
               where s.org_id = r.org_id and s.register_id = r.id
                 and (p.id is null or p.subsidiary_id is null
                   or not (p.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])))
-         }`)).rows[0]
+         }`, 'objects'))[0]
       // The direct probe is intentionally indistinguishable from a nonexistent
       // register. An empty allowed set therefore denies every register.
       if (!register) return notFound("record")
@@ -59,7 +59,7 @@ export const DELETE = defineRoute({
           from payroll_prior_stubs s
           left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
          where s.org_id = ${gate.user.orgId} and s.register_id = ${id}
-         limit 1`)).rows[0]
+         limit 1`, 'objects'))[0]
       if (sample) {
         const denied = guardSubsidiaryScope(gate, sample.subsidiaryId)
         if (denied) return denied

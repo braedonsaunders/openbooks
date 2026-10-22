@@ -25,7 +25,7 @@ async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>, opt
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Stripe billing tester", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ subscriptionBilling: opts.feature !== false, usageBilling: opts.feature !== false })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ subscriptionBilling: opts.feature !== false, usageBilling: opts.feature !== false })}::jsonb, true) where id = ${org.orgId}`);
       assert.equal(result.rowCount, 1);
       if (opts.stripe !== false) await db.execute(sql`insert into psp_provider_configs (org_id,provider,display_name,is_enabled,acceptance_enabled,default_bank_account_id,secrets,created_by,updated_by) values (${org.orgId},'stripe','Stripe',true,true,${org.accounts.bank},${sealJson({ apiKey: "sk_test_billing_import" }, { orgId: org.orgId, purpose: "payment.provider.secrets" })},${actor},${actor})`);
       await db.execute(sql`update parties set kind = 'company', email = 'linked@example.test' where org_id = ${org.orgId} and id = ${org.customerId}`);
@@ -75,34 +75,34 @@ test("Stripe billing imports draft price models and replays usage idempotently",
     assert.equal(second.counts.prices.draftsCreated, 0);
     assert.equal(second.counts.usage.recordsCreated, 0);
     assert.equal(second.counts.usage.recordsReplayed, 1);
-    const links = (await withOrgContext(org.orgId, async () => db.execute<{ stripe_id: string; openbooks_id: string }>(sql`select external_id as stripe_id,native_id as openbooks_id from external_links where org_id=${org.orgId} and provider='stripe' and object_type='price'`))).rows;
+    const links = await withOrgContext(org.orgId, async () => db.execute<{ stripe_id: string; openbooks_id: string }>(sql`select external_id as stripe_id,native_id as openbooks_id from external_links where org_id=${org.orgId} and provider='stripe' and object_type='price'`, "objects"));
     assert.equal(links.length, 3);
-    const plans = await withOrgContext(org.orgId, async () => db.execute<{ n: number }>(sql`select count(*)::int as n from usage_rating_plans where org_id=${org.orgId} and name='Stripe prod_cloud CAD'`));
-    assert.equal(plans.rows[0]?.n, 1);
+    const plans = await withOrgContext(org.orgId, async () => db.execute<{ n: number }>(sql`select count(*)::int as n from usage_rating_plans where org_id=${org.orgId} and name='Stripe prod_cloud CAD'`, "objects"));
+    assert.equal(plans[0]?.n, 1);
     const expected = new Map<string, [string, string]>([["price_grad", ["12", "12.5000"]], ["price_volume", ["12", "20.0000"]], ["price_package", ["101", "22.0000"]]]);
     for (const row of links) {
-      const bands = (await withOrgContext(org.orgId, async () => db.execute<{ kind: RatingBand["kind"]; seq: number; up_to_qty: string | null; unit_price: string; flat_amount: string; included_qty: string; package_size: string | null; package_rounding: RatingBand["packageRounding"] }>(sql`select kind,seq,up_to_qty::text,unit_price::text,flat_amount::text,included_qty::text,package_size::text,package_rounding from usage_rating_bands where org_id=${org.orgId} and plan_version_id=${row.openbooks_id} order by seq`))).rows;
+      const bands = await withOrgContext(org.orgId, async () => db.execute<{ kind: RatingBand["kind"]; seq: number; up_to_qty: string | null; unit_price: string; flat_amount: string; included_qty: string; package_size: string | null; package_rounding: RatingBand["packageRounding"] }>(sql`select kind,seq,up_to_qty::text,unit_price::text,flat_amount::text,included_qty::text,package_size::text,package_rounding from usage_rating_bands where org_id=${org.orgId} and plan_version_id=${row.openbooks_id} order by seq`, "objects"));
       const expectedPrice = expected.get(row.stripe_id);
       if (!expectedPrice) throw new Error(`No expected rating was supplied for ${row.stripe_id}`);
       const [quantity, amount] = expectedPrice;
       const rated = rateUsage({ quantity: parseQuantity(quantity), bands: bands.map((band) => ({ ...band, upToQty: band.up_to_qty === null ? null : parseQuantity(band.up_to_qty), unitPrice: parseRate(band.unit_price), flatAmount: parseMoney(band.flat_amount), includedQty: parseQuantity(band.included_qty), packageSize: band.package_size === null ? null : parseQuantity(band.package_size), packageRounding: band.package_rounding })) as RatingBand[] });
       assert.equal(rated.reduce((sum, line) => sum + BigInt(parseMoney(line.amount).replace(".", "")), 0n).toString(), BigInt(amount.replace(".", "")).toString());
     }
-    const count = await withOrgContext(org.orgId, async () => db.execute<{ n: number }>(sql`select count(*)::int as n from usage_records where org_id=${org.orgId} and source='connector_stripe'`));
-    assert.equal(count.rows[0]?.n, 1);
-    const runs = await withOrgContext(org.orgId, async () => db.execute<{ stats: { usage: { recordsCreated: number }; meters: { created: number }; prices: { draftsCreated: number; awaitingPublication: Array<{ stripeId: string; versionId: string }> }; customers: { unlinked: Array<{ suggestedCustomerId: string | null }> }; refusals: Array<{ code: string; remedy: string }>; invoices: string } }>(sql`select stats from sync_runs where org_id=${org.orgId} and kind='stripe_billing' order by started_at`));
-    assert.equal(runs.rows.length, 2);
-    assert.equal(runs.rows[0]?.stats.usage.recordsCreated, 1);
-    assert.equal(runs.rows[1]?.stats.usage.recordsCreated, 0);
-    assert.equal(runs.rows[1]?.stats.meters.created, 0);
-    assert.equal(runs.rows[1]?.stats.prices.draftsCreated, 0);
-    assert.ok(runs.rows[0]?.stats.prices.awaitingPublication.some((version) => version.stripeId === "price_grad" && version.versionId.length > 0));
-    assert.equal(runs.rows[0]?.stats.customers.unlinked[0]?.suggestedCustomerId, org.customerId);
-    assert.ok(runs.rows[0]?.stats.invoices.includes("were not imported or posted"));
-    assert.ok(runs.rows[0]?.stats.refusals.some((item) => item.code === "stripe_customer_unlinked" && item.remedy.includes("linkStripeCustomer")));
-    assert.ok(runs.rows[0]?.stats.refusals.some((item) => item.code === "stripe_subscription_price_unpublished" && item.remedy.includes("publish")));
-    const meter = await withOrgContext(org.orgId, async () => db.execute<{ aggregation: string }>(sql`select m.aggregation from external_links l join usage_meters m on m.org_id=l.org_id and m.id=l.native_id where l.org_id=${org.orgId} and l.provider='stripe' and l.object_type='meter'`));
-    assert.equal(meter.rows[0]?.aggregation, "sum");
+    const count = await withOrgContext(org.orgId, async () => db.execute<{ n: number }>(sql`select count(*)::int as n from usage_records where org_id=${org.orgId} and source='connector_stripe'`, "objects"));
+    assert.equal(count[0]?.n, 1);
+    const runs = await withOrgContext(org.orgId, async () => db.execute<{ stats: { usage: { recordsCreated: number }; meters: { created: number }; prices: { draftsCreated: number; awaitingPublication: Array<{ stripeId: string; versionId: string }> }; customers: { unlinked: Array<{ suggestedCustomerId: string | null }> }; refusals: Array<{ code: string; remedy: string }>; invoices: string } }>(sql`select stats from sync_runs where org_id=${org.orgId} and kind='stripe_billing' order by started_at`, "objects"));
+    assert.equal(runs.length, 2);
+    assert.equal(runs[0]?.stats.usage.recordsCreated, 1);
+    assert.equal(runs[1]?.stats.usage.recordsCreated, 0);
+    assert.equal(runs[1]?.stats.meters.created, 0);
+    assert.equal(runs[1]?.stats.prices.draftsCreated, 0);
+    assert.ok(runs[0]?.stats.prices.awaitingPublication.some((version) => version.stripeId === "price_grad" && version.versionId.length > 0));
+    assert.equal(runs[0]?.stats.customers.unlinked[0]?.suggestedCustomerId, org.customerId);
+    assert.ok(runs[0]?.stats.invoices.includes("were not imported or posted"));
+    assert.ok(runs[0]?.stats.refusals.some((item) => item.code === "stripe_customer_unlinked" && item.remedy.includes("linkStripeCustomer")));
+    assert.ok(runs[0]?.stats.refusals.some((item) => item.code === "stripe_subscription_price_unpublished" && item.remedy.includes("publish")));
+    const meter = await withOrgContext(org.orgId, async () => db.execute<{ aggregation: string }>(sql`select m.aggregation from external_links l join usage_meters m on m.org_id=l.org_id and m.id=l.native_id where l.org_id=${org.orgId} and l.provider='stripe' and l.object_type='meter'`, "objects"));
+    assert.equal(meter[0]?.aggregation, "sum");
   });
 });
 

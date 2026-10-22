@@ -138,7 +138,7 @@ test("projects POST accepts an employed employee and refuses customers, vendors,
 
     const stored = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from projects where org_id = ${org.orgId} and foreman_id = ${unhired}
-    `)).rows[0]?.n;
+    `, "objects"))[0]?.n;
     assert.equal(stored, 0, "a refused foreman persists no project row");
   } finally {
     routeState.authz = null;

@@ -80,8 +80,8 @@ export async function saveDashboardLayout(input: unknown) {
       select layout from user_dashboard_layouts
        where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
        limit 1
-    `)))
-    const existingLayout = existing.rows[0]?.layout as DashboardLayoutData | undefined
+    `, 'objects')))
+    const existingLayout = existing[0]?.layout as DashboardLayoutData | undefined
     if (existingLayout?.quickActions) layout.quickActions = normalizeQuickActions(existingLayout.quickActions)
 
     await tx.execute(sql`
@@ -140,8 +140,8 @@ export async function saveQuickActions(input: unknown) {
       select layout from user_dashboard_layouts
        where org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
        limit 1
-    `)))
-    const existingLayout = (existing.rows[0]?.layout ?? {}) as Partial<DashboardLayoutData>
+    `, 'objects')))
+    const existingLayout = (existing[0]?.layout ?? {}) as Partial<DashboardLayoutData>
     const layout = mergeQuickActionsSave({
       existingWidgets: existingLayout.widgets,
       existingQuickActions: existingLayout.quickActions,

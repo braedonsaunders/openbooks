@@ -39,21 +39,22 @@ const mockSources = new Map<string, string>([
       export async function withOrg(_org, work) { return work() }
       export const pool = undefined
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
           if (text.includes('from close_runs')) {
-            return state.emptyScope ? { rows: [] } : { rows: [{ id: 'run-1', status: 'in_progress', period_name: 'August', tasks_total: '4', tasks_done: '2' }] }
+            return inMode(await (state.emptyScope ? { rows: [] } : { rows: [{ id: 'run-1', status: 'in_progress', period_name: 'August', tasks_total: '4', tasks_done: '2' }] }))
           }
           if (text.includes('from ai_work_items')) {
-            return state.emptyScope ? { rows: [] } : { rows: [{ severity: 'warning', n: '3' }] }
+            return inMode(await (state.emptyScope ? { rows: [] } : { rows: [{ severity: 'warning', n: '3' }] }))
           }
           if (text.includes('from journal_entries je')) {
-            return state.emptyScope
+            return inMode(await (state.emptyScope
               ? { rows: [{ draft_journals: '0', posted_7d: '0', accounts: '0', budgets: '0', assets: '0' }] }
-              : { rows: [{ draft_journals: '2', posted_7d: '5', accounts: '7', budgets: '1', assets: '3' }] }
+              : { rows: [{ draft_journals: '2', posted_7d: '5', accounts: '7', budgets: '1', assets: '3' }] }))
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
       }
       export const schema = {}

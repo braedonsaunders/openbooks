@@ -173,7 +173,7 @@ export function installEngineSeams(): void {
     }
   });
   registerApprovalSubjectFence("payment_dispute_review",async(orgId,subjectId)=>{
-    const row=(await db.execute<{attempt_id:string|null}>(sql`select attempt_id from payment_disputes where org_id=${orgId} and id=${subjectId}`)).rows[0];
+    const row=(await db.execute<{attempt_id:string|null}>(sql`select attempt_id from payment_disputes where org_id=${orgId} and id=${subjectId}`, "objects"))[0];
     if(row?.attempt_id)await lockPaymentAttempt(orgId,row.attempt_id);
   });
   registerDocumentApprovalFacts("quote", async (orgId, id) => {
@@ -461,11 +461,9 @@ export function installEngineSeams(): void {
       };
       if (kind === "bank_reconciliation_sign_off") {
         if (args.command?.sourceEvidence === true) {
-          const record = (
-            await db.execute<{ account_id: string }>(
-              sql`select account_id from reconciliations where org_id=${ctx.orgId} and id=${args.subjectId}`,
-            )
-          ).rows[0];
+          const record = (await db.execute<{ account_id: string }>(
+              sql`select account_id from reconciliations where org_id=${ctx.orgId} and id=${args.subjectId}`, "objects",
+            ))[0];
           if (!record)
             throw new Error("The source reconciliation is unavailable.");
           const result = await signOffFromSourceEvidence(
@@ -537,12 +535,10 @@ export function installEngineSeams(): void {
   registerApprovalRouter(routeSubjectSubmission);
   registerApprovalCommandRouter(routeApprovalCommand);
   registerApprovalCanceller(async (input) => {
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         id: string;
       }>(sql`select id from flow_runs where org_id=${input.orgId}
-      and subject_kind=${input.subjectKind} and subject_id=${input.subjectId} and status in ('running','waiting') order by id for update`)
-    ).rows;
+      and subject_kind=${input.subjectKind} and subject_id=${input.subjectId} and status in ('running','waiting') order by id for update`, "objects");
     await cancelDispatchRuns(
       input.orgId,
       rows.map((row) => row.id),
@@ -571,7 +567,7 @@ export function installEngineSeams(): void {
   },async(input)=> {
       if (!(await lockAndCheckOrgFeature(db, input.actor.orgId, "flows")))
         return null;
-    const flows=(await db.execute<{graph:unknown}>(sql`select graph from flows where org_id=${input.actor.orgId} and subject_kind='schedule_distribution' and enabled`)).rows;
+    const flows=await db.execute<{graph:unknown}>(sql`select graph from flows where org_id=${input.actor.orgId} and subject_kind='schedule_distribution' and enabled`, "objects");
       const observed = flows.some((flow) => {
         const parsed = automationGraphSchema.safeParse(flow.graph);
         return (
@@ -666,12 +662,10 @@ export function installEngineSeams(): void {
   registerFinancialChangeSubmission(submitFinancialChange);
   registerStockCountRouting(async ({ orgId, actorId, countId, cancel }) => {
     if (cancel) {
-      const runs = (
-        await db.execute<{
+      const runs = await db.execute<{
           id: string;
         }>(sql`select id from flow_runs where org_id=${orgId}
-        and subject_kind=${STOCK_COUNT_SUBJECT_KIND} and subject_id=${countId}`)
-      ).rows;
+        and subject_kind=${STOCK_COUNT_SUBJECT_KIND} and subject_id=${countId}`, "objects");
       await cancelDispatchRuns(
         orgId,
         runs.map((run) => run.id),
@@ -765,14 +759,12 @@ export function installEngineSeams(): void {
   // that `db` routes to does not change.
   registerFlowDocumentEffects({
     async postSubject({ subjectKind, subjectId, ctx }) {
-      const identity = (
-        await db.execute<{
+      const identity = (await db.execute<{
           subsidiary_id: string | null;
           status: string;
           posted_entry_id: string | null;
         }>(sql`
-        select subsidiary_id,status,posted_entry_id from documents where org_id=${ctx.orgId} and id=${subjectId} and kind=${subjectKind} for update`)
-      ).rows[0];
+        select subsidiary_id,status,posted_entry_id from documents where org_id=${ctx.orgId} and id=${subjectId} and kind=${subjectKind} for update`, "objects"))[0];
       const permission = documentPostingPermission(subjectKind);
       if (!identity || !ctx.userId || !permission)
         throw new Error(
@@ -786,13 +778,11 @@ export function installEngineSeams(): void {
         permission,
       );
       if (identity.status === "posted") {
-        const retained = (
-          await db.execute<{
+        const retained = (await db.execute<{
             id: string;
           }>(sql`select id from journal_entries where org_id=${ctx.orgId} and id=${identity.posted_entry_id}
           -- Live entries only: posting replay requires the retained journal to remain effective.
-          and source_document_id=${subjectId} and status='posted'`)
-        ).rows[0];
+          and source_document_id=${subjectId} and status='posted'`, "objects"))[0];
         if (!retained)
           throw new Error(
             "The posted document has no intact native journal. Review its accounting history before retrying.",

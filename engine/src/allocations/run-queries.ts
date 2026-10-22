@@ -194,8 +194,8 @@ export async function listRuns(
         from allocation_runs r
         left join allocation_rules rule on rule.org_id = r.org_id and rule.id = r.rule_id
        where ${where}
-       order by r.created_at desc`);
-    const visible = candidates.rows.filter((row) =>
+       order by r.created_at desc`, "objects");
+    const visible = candidates.filter((row) =>
       allocationScopeVisible(allowed, (row.subsidiary_id as string | null) ?? null, row.computation),
     );
     return {
@@ -209,10 +209,10 @@ export async function listRuns(
       left join allocation_rules rule on rule.org_id = r.org_id and rule.id = r.rule_id
      where ${where}
      order by r.created_at desc
-     limit ${limit} offset ${offset}`);
+     limit ${limit} offset ${offset}`, "objects");
   const counted = await ex.execute<{ n: string }>(sql`
-    select count(*) as n from allocation_runs r where ${where}`);
-  return { runs: rows.rows.map(mapRun), total: Number(counted.rows[0]?.n ?? 0) };
+    select count(*) as n from allocation_runs r where ${where}`, "objects");
+  return { runs: rows.map(mapRun), total: Number(counted[0]?.n ?? 0) };
 }
 
 export async function getRun(orgId: string, id: string, executor?: SqlExecutor): Promise<RunDetail> {
@@ -222,8 +222,8 @@ export async function getRun(orgId: string, id: string, executor?: SqlExecutor):
     select r.*, rule.key as rule_key, rule.name as rule_name
       from allocation_runs r
       left join allocation_rules rule on rule.org_id = r.org_id and rule.id = r.rule_id
-     where r.org_id = ${orgId} and r.id = ${runId}`);
-  const row = rows.rows[0];
+     where r.org_id = ${orgId} and r.id = ${runId}`, "objects");
+  const row = rows[0];
   if (!row) fail("not_found", "run not found");
   return {
     ...mapRun(row),
@@ -273,7 +273,7 @@ async function assertLineageAnchorVisible(
   if (anchor.kind === "run") {
     const run = (await ex.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
       select subsidiary_id, computation from allocation_runs
-       where org_id = ${orgId} and id = ${anchor.id}`)).rows[0];
+       where org_id = ${orgId} and id = ${anchor.id}`, "objects"))[0];
     if (!run || !allocationScopeVisible(allowed, run.subsidiary_id, run.computation)) {
       fail("not_found", "run not found");
     }
@@ -282,11 +282,11 @@ async function assertLineageAnchorVisible(
   if (anchor.kind === "journalEntry") {
     const head = (await ex.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id from journal_entries
-       where org_id = ${orgId} and id = ${anchor.id}`)).rows[0];
+       where org_id = ${orgId} and id = ${anchor.id}`, "objects"))[0];
     if (!head) fail("not_found", "journal entry not found");
-    const lines = (await ex.execute<{ subsidiary_id: string | null }>(sql`
+    const lines = await ex.execute<{ subsidiary_id: string | null }>(sql`
       select distinct subsidiary_id from journal_lines
-       where org_id = ${orgId} and entry_id = ${anchor.id}`)).rows;
+       where org_id = ${orgId} and entry_id = ${anchor.id}`, "objects");
     const touched = [head.subsidiary_id, ...lines.map((line) => line.subsidiary_id)];
     if (touched.some((sub) => sub === null || !allowed.has(sub))) {
       fail("not_found", "journal entry not found");
@@ -295,7 +295,7 @@ async function assertLineageAnchorVisible(
   }
   const doc = (await ex.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id from documents
-     where org_id = ${orgId} and id = ${anchor.id}`)).rows[0];
+     where org_id = ${orgId} and id = ${anchor.id}`, "objects"))[0];
   if (!doc || doc.subsidiary_id === null || !allowed.has(doc.subsidiary_id)) {
     fail("not_found", "document not found");
   }
@@ -321,8 +321,8 @@ export async function queryLineage(
         : sql`l.document_id = ${anchor.id}`;
   const counted = await ex.execute<{ n: string }>(sql`
     select count(*) as n from allocation_lineage l
-     where l.org_id = ${orgId} and ${anchorCond}`);
-  const total = Number(counted.rows[0]?.n ?? 0);
+     where l.org_id = ${orgId} and ${anchorCond}`, "objects");
+  const total = Number(counted[0]?.n ?? 0);
   const rows = await ex.execute<Record<string, unknown>>(sql`
     select l.*,
            rule.key as rule_key,
@@ -332,14 +332,14 @@ export async function queryLineage(
       left join allocation_drivers driver on driver.org_id = l.org_id and driver.id = l.driver_id
      where l.org_id = ${orgId} and ${anchorCond}
      order by l.created_at, l.id
-     limit ${limit} offset ${offset}`);
+     limit ${limit} offset ${offset}`, "objects");
   return {
     anchor,
     total,
     limit,
     offset,
-    truncated: offset + rows.rows.length < total,
-    rows: rows.rows.map((row) => ({
+    truncated: offset + rows.length < total,
+    rows: rows.map((row) => ({
       id: String(row.id),
       mode: String(row.mode),
       ruleId: String(row.rule_id),

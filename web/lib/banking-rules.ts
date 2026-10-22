@@ -55,7 +55,7 @@ async function bankAccountSubsidiary(orgId: string, accountId: string, lock = fa
     select subsidiary_id as "subsidiaryId" from accounts
      where id = ${accountId} and org_id = ${orgId}
      ${lock ? sql`for share` : sql``}
-  `)).rows[0]
+  `, 'objects'))[0]
   return row?.subsidiaryId
 }
 
@@ -90,17 +90,17 @@ export async function ensureOpenReconciliation(
     select id from reconciliations
      where org_id = ${orgId} and account_id = ${accountId} and status <> 'signed_off'
      order by created_at desc limit 1
-  `))
-  if (open.rows[0]) return open.rows[0].id
+  `, 'objects'))
+  if (open[0]) return open[0].id
   const latest = (await db.execute<{ through_date: string | null; closing: string | null }>(sql`
     select max(statement_date) as through_date,
            (select closing_balance from bank_statements
              where account_id = ${accountId} and org_id = ${orgId}
              order by statement_date desc, imported_at desc limit 1) as closing
       from bank_statements where account_id = ${accountId} and org_id = ${orgId}
-  `))
-  const throughDate = latest.rows[0]?.through_date ?? await businessToday(orgId)
-  const statementBalance = latest.rows[0]?.closing ?? '0'
+  `, 'objects'))
+  const throughDate = latest[0]?.through_date ?? await businessToday(orgId)
+  const statementBalance = latest[0]?.closing ?? '0'
   const rec = await startReconciliation(
     { accountId, throughDate, statementBalance },
     { orgId, userId, allowedSubsidiaryIds: scope },
@@ -143,8 +143,8 @@ async function loadActiveRules(orgId: string): Promise<RuleRow[]> {
       from bank_match_rules
      where org_id = ${orgId} and is_active
      order by priority asc, created_at asc
-  `))
-  return res.rows
+  `, 'objects'))
+  return res
 }
 
 async function loadLines(orgId: string, accountId: string, status: 'unmatched' | 'any', windowDays?: number): Promise<BankLine[]> {
@@ -160,8 +160,8 @@ async function loadLines(orgId: string, accountId: string, status: 'unmatched' |
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
      where s.account_id = ${accountId} and s.org_id = ${orgId}${statusClause}${windowClause}
      order by l.posted_on desc, l.line_number
-  `))
-  return res.rows
+  `, 'objects'))
+  return res
 }
 
 type RuleApplyOutcome = 'excluded' | 'categorized' | 'suggested' | null
@@ -196,7 +196,7 @@ async function applyRuleIfStillCurrent(
       select id, name, criteria, outcome, priority, is_active
         from bank_match_rules
        where id = ${scannedRule.id} and org_id = ${orgId}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!current?.is_active) return null
     if (!ruleAppliesToAccount(current.criteria, accountId) || !lineMatchesRule(line, current.criteria)) return null
 
@@ -295,8 +295,8 @@ export async function applyRuleToLine(
   const ruleRes = (await db.execute<RuleRow>(sql`
     select id, name, criteria, outcome, priority, is_active
       from bank_match_rules where id = ${opts.ruleId} and org_id = ${orgId}
-  `))
-  const rule = ruleRes.rows[0]
+  `, 'objects'))
+  const rule = ruleRes[0]
   if (!rule) throw new BankRuleRefusal('Rule not found', 404)
   // A disabled rule must never post: without this, deactivation is enforced
   // only by the UI hiding the rule while the API still fires it.
@@ -308,8 +308,8 @@ export async function applyRuleToLine(
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
-  `))
-  const line = lineRes.rows[0]
+  `, 'objects'))
+  const line = lineRes[0]
   if (!line) throw new BankRuleRefusal('Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line', 409)
   requireBankAccountInScope(line.subsidiaryId, scope)
   if (rule.outcome.action === 'exclude') {
@@ -341,8 +341,8 @@ export async function bankLegAmountInGlTerms(
   const sessionRes = (await db.execute<{ statement_balance: string }>(sql`
     select statement_balance from reconciliations
      where id = ${reconciliationId} and org_id = ${orgId} and account_id = ${accountId}
-  `))
-  const sessionBalance = sessionRes.rows[0]?.statement_balance
+  `, 'objects'))
+  const sessionBalance = sessionRes[0]?.statement_balance
   if (!sessionBalance) throw new BankRuleRefusal('Reconciliation session not found for this line; refresh and pick a session on the line’s account', 409)
   return statementComparisonSign(accountType) === -1 && toUnits(sessionBalance) >= 0n
     ? fromUnits(-toUnits(statementAmount))
@@ -366,7 +366,7 @@ async function postCategorizeForLine(
   const memo = outcome.memo ?? line.description ?? rule.name
   const accountType = (await db.execute<{ type: string }>(sql`
     select type from accounts where id = ${bankAccountId} and org_id = ${orgId}
-  `)).rows[0]?.type ?? ''
+  `, 'objects'))[0]?.type ?? ''
 
   await createMatchWithJournal(
     {
@@ -656,9 +656,9 @@ export async function createCategorizingJournal(
     select id from journal_lines
      where entry_id = ${entryId} and account_id = ${opts.bankAccountId} and org_id = ${orgId}
      limit 1
-  `))
-  if (!jl.rows[0]) throw new Error('categorizing journal did not post a bank line')
-  return jl.rows[0].id
+  `, 'objects'))
+  if (!jl[0]) throw new Error('categorizing journal did not post a bank line')
+  return jl[0].id
 }
 
 /**
@@ -681,8 +681,8 @@ export async function addJournalMatchFromLine(
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
-  `))
-  const line = lineRes.rows[0]
+  `, 'objects'))
+  const line = lineRes[0]
   if (!line) throw new BankRuleRefusal('Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line', 409)
   const bankLegAmount = await bankLegAmountInGlTerms(orgId, line.account_id, line.accountType, opts.reconciliationId, line.amount)
   // Both legs stay inside the caller's boundary: the bank leg's account and

@@ -67,13 +67,13 @@ async function legacyApplyOverheadForTime(
           on r.rate_kind = 'per_hour'
          and ${overheadRateAppliesToTimeEntry("r", "entry")}
        group by entry.id, entry.project_id, entry.worked_on
-       order by entry.id`));
-    if (rows.rows.length === 0) return { entryId: null, total: "0" };
+       order by entry.id`, "objects"));
+    if (rows.length === 0) return { entryId: null, total: "0" };
     const byProject = new Map<string, string>();
     const carried: string[] = [];
     let total = "0";
     let maxDate = "";
-    for (const r of rows.rows) {
+    for (const r of rows) {
       const amt = normalizeMoney(String(r.amount));
       if (isZero(amt)) continue;
       byProject.set(r.project_id, add(byProject.get(r.project_id) ?? "0", amt));
@@ -152,7 +152,7 @@ async function seed(): Promise<Fixture> {
       values(${randomUUID()},${org.orgId},'person','Parity worker',${org.subsidiaryId},true,'{}'::jsonb)
       returning id`);
     const employeeId = (await db.execute<{ id: string }>(sql`select id from parties
-      where org_id = ${org.orgId} and display_name = 'Parity worker'`)).rows[0]!.id;
+      where org_id = ${org.orgId} and display_name = 'Parity worker'`, "objects"))[0]!.id;
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
       values(${projP1},${org.orgId},${org.subsidiaryId},'PAR-P1','Parity job one',${org.customerId},'active',true,'{}'::jsonb),
             (${projP2},${org.orgId},${org.subsidiaryId},'PAR-P2','Parity job two',${org.customerId},'active',true,'{}'::jsonb),
@@ -222,8 +222,8 @@ async function journalProjection(orgId: string, entryId: string): Promise<LinePr
       left join projects p on p.org_id = l.org_id and p.id = l.project_id
       left join departments d on d.org_id = l.org_id and d.id = l.department_id
      where l.org_id = ${orgId} and l.entry_id = ${entryId}
-     order by l.line_number`);
-  return rows.rows.map((row) => ({
+     order by l.line_number`, "objects");
+  return rows.map((row) => ({
     line_number: Number(row["line_number"]),
     account: String(row["account"]),
     amount: String(row["amount"]),
@@ -245,7 +245,7 @@ test("overhead postings keep subsidiary and accounting-period groups intact", { 
       values(${childSubsidiaryId},${f.orgId},${f.rootSubsidiaryId},
         'Overhead child','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
     const calendarId = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars
-      where org_id=${f.orgId} and is_default and is_active`)).rows[0]!.id;
+      where org_id=${f.orgId} and is_default and is_active`, "objects"))[0]!.id;
     await db.execute(sql`insert into accounting_periods
       (org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
       values(${f.orgId},2026,8,'2026-08','2026-08-01','2026-08-31',false,${calendarId})`);
@@ -271,7 +271,7 @@ test("overhead postings keep subsidiary and accounting-period groups intact", { 
     assert.equal(applied.entryIds.length, 3);
     assert.equal(applied.entries, 3);
     assert.equal(applied.total, "30.0000");
-    const journalGroups = async () => (await db.execute<{
+    const journalGroups = async () => await db.execute<{
       subsidiary_id: string; period_name: string; posting_date: string; journals: number; lines_match_entity: boolean;
     }>(sql`
       select je.subsidiary_id::text as subsidiary_id, ap.name as period_name, je.posting_date::text as posting_date,
@@ -282,7 +282,7 @@ test("overhead postings keep subsidiary and accounting-period groups intact", { 
         join journal_lines jl on jl.org_id = je.org_id and jl.entry_id = je.id
        where te.org_id = ${f.orgId} and te.id = any(${`{${childEntries.join(",")}}`}::uuid[])
        group by je.subsidiary_id, ap.name, je.posting_date
-       order by ap.name, je.subsidiary_id`)).rows;
+       order by ap.name, je.subsidiary_id`, "objects");
     const firstGroups = (await journalGroups()).map((row) => ({
       subsidiaryId: row.subsidiary_id,
       period: row.period_name,
@@ -304,8 +304,8 @@ test("overhead postings keep subsidiary and accounting-period groups intact", { 
     assert.equal((await journalGroups()).length, 3);
     assert.equal((await countUnappliedOverheadTime(f.orgId)).entries, 0);
     const internalUnposted = await db.execute<{ overhead_journal_entry_id: string | null }>(sql`
-      select overhead_journal_entry_id from time_entries where org_id = ${f.orgId} and id = ${childEntries[3]}`);
-    assert.equal(internalUnposted.rows[0]?.overhead_journal_entry_id, null);
+      select overhead_journal_entry_id from time_entries where org_id = ${f.orgId} and id = ${childEntries[3]}`, "objects");
+    assert.equal(internalUnposted[0]?.overhead_journal_entry_id, null);
   } finally {
     await dropScratchOrg(f.orgId);
   }
@@ -331,34 +331,34 @@ test("folded overhead posts byte-identical lines to the pre-fold builder", { ski
     // The fold adds the kernel stamp the oracle lacks.
     const stamps = await db.execute<{ contributor_kind: string | null; contributor_ref: string | null }>(sql`
       select contributor_kind, contributor_ref from journal_lines
-       where org_id = ${f.orgId} and entry_id = ${folded.entryId} order by line_number`);
+       where org_id = ${f.orgId} and entry_id = ${folded.entryId} order by line_number`, "objects");
     const versionId = (await db.execute<{ id: string }>(sql`select v.id from allocation_rule_versions v
       join allocation_rules r on r.org_id = v.org_id and r.id = v.rule_id
-      where r.org_id = ${f.orgId} and r.key = ${OVERHEAD_SYSTEM_RULE_KEY} and v.status = 'published'`)).rows[0]!.id;
+      where r.org_id = ${f.orgId} and r.key = ${OVERHEAD_SYSTEM_RULE_KEY} and v.status = 'published'`, "objects"))[0]!.id;
     // The folded journal carries exactly the three projected lines: the
     // per-line stamp check below cannot pass over an empty set.
-    assert.equal(stamps.rows.length, foldedLines.length);
-    for (const stamp of stamps.rows) {
+    assert.equal(stamps.length, foldedLines.length);
+    for (const stamp of stamps) {
       assert.equal(stamp.contributor_kind, "rule");
       assert.equal(stamp.contributor_ref, versionId);
     }
     const oracleStamps = await db.execute<{ contributor_kind: string | null }>(sql`
       select contributor_kind from journal_lines
-       where org_id = ${f.orgId} and entry_id = ${oracle.entryId}`);
+       where org_id = ${f.orgId} and entry_id = ${oracle.entryId}`, "objects");
     // The oracle journal carries exactly the three projected lines: the
     // per-line null-stamp check below cannot pass over an empty set.
-    assert.equal(oracleStamps.rows.length, oracleLines.length);
-    for (const stamp of oracleStamps.rows) assert.equal(stamp.contributor_kind, null);
+    assert.equal(oracleStamps.length, oracleLines.length);
+    for (const stamp of oracleStamps) assert.equal(stamp.contributor_kind, null);
 
     // Idempotency stamps: carried entries claim their journal, the opt-out
     // and zero-hour entries stay free in both sets.
     for (const [set, entryId] of [[f.setA, folded.entryId], [f.setB, oracle.entryId]] as const) {
       const claimed = await db.execute<{ id: string; overhead_journal_entry_id: string | null }>(sql`
-        select id, overhead_journal_entry_id from time_entries where org_id = ${f.orgId} and id = any(${`{${set.join(",")}}`}::uuid[])`);
+        select id, overhead_journal_entry_id from time_entries where org_id = ${f.orgId} and id = any(${`{${set.join(",")}}`}::uuid[])`, "objects");
       // All six seeded entries of the set round-trip through the claim
       // query: the per-row claim check below cannot pass over an empty set.
-      assert.equal(claimed.rows.length, set.length);
-      for (const row of claimed.rows) {
+      assert.equal(claimed.length, set.length);
+      for (const row of claimed) {
         const excluded = f.excluded.includes(row.id);
         assert.equal(row.overhead_journal_entry_id, excluded ? null : entryId);
       }
@@ -375,13 +375,13 @@ test("folded overhead posts byte-identical lines to the pre-fold builder", { ski
         join allocation_rules r on r.org_id = l.org_id and r.id = l.rule_id
         left join allocation_drivers d on d.org_id = l.org_id and d.id = l.driver_id
        where l.org_id = ${f.orgId} and l.journal_entry_id = ${folded.entryId}
-       order by l.created_at`);
-    assert.equal(lineage.rows.length, 4);
+       order by l.created_at`, "objects");
+    assert.equal(lineage.length, 4);
     const legs = await db.execute<{ id: string; project_code: string | null }>(sql`
       select l.id, p.code as project_code from journal_lines l
       left join projects p on p.org_id = l.org_id and p.id = l.project_id
-      where l.org_id = ${f.orgId} and l.entry_id = ${folded.entryId} order by l.line_number`);
-    const legByProject = new Map(legs.rows.map((r) => [r.project_code, r.id]));
+      where l.org_id = ${f.orgId} and l.entry_id = ${folded.entryId} order by l.line_number`, "objects");
+    const legByProject = new Map(legs.map((r) => [r.project_code, r.id]));
     const expected: Array<{ entry: string; amount: string; share: string; leg: string }> = [
       { entry: f.setA[0]!, amount: "25.0000", share: "0.2127659574", leg: "PAR-P1" },
       { entry: f.setA[1]!, amount: "12.5000", share: "0.1063829787", leg: "PAR-P1" },
@@ -389,7 +389,7 @@ test("folded overhead posts byte-identical lines to the pre-fold builder", { ski
       { entry: f.setA[3]!, amount: "20.0000", share: "0.1702127660", leg: "PAR-P2" },
     ];
     for (const want of expected) {
-      const got = lineage.rows.find((r) => r.source_time_entry_id === want.entry);
+      const got = lineage.find((r) => r.source_time_entry_id === want.entry);
       assert.ok(got, `lineage row for ${want.entry}`);
       assert.equal(got.amount, want.amount);
       assert.equal(got.share, want.share);
@@ -398,8 +398,8 @@ test("folded overhead posts byte-identical lines to the pre-fold builder", { ski
       assert.equal(got.driver_key, "overhead-labor-hours");
     }
     const oracleLineage = await db.execute<{ n: string }>(sql`select count(*) as n from allocation_lineage
-      where org_id = ${f.orgId} and journal_entry_id = ${oracle.entryId}`);
-    assert.equal(oracleLineage.rows[0]?.n, "0");
+      where org_id = ${f.orgId} and journal_entry_id = ${oracle.entryId}`, "objects");
+    assert.equal(oracleLineage[0]?.n, "0");
   } finally {
     await dropScratchOrg(f.orgId);
   }
@@ -415,15 +415,15 @@ test("folded overhead reversal nets to zero and releases the stamp", { skip: !DB
       select sum(l.amount)::text as total from journal_lines l
        join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
       where l.org_id = ${f.orgId}
-        and (l.entry_id = ${folded.entryId} or e.reverses_entry_id = ${folded.entryId})`);
-    assert.equal(nets.rows[0]?.total, "0.0000");
+        and (l.entry_id = ${folded.entryId} or e.reverses_entry_id = ${folded.entryId})`, "objects");
+    assert.equal(nets[0]?.total, "0.0000");
     const released = await db.execute<{ n: string }>(sql`select count(*) as n from time_entries
-      where org_id = ${f.orgId} and overhead_journal_entry_id is null and id = any(${`{${f.setA.join(",")}}`}::uuid[])`);
-    assert.equal(released.rows[0]?.n, String(f.setA.length));
+      where org_id = ${f.orgId} and overhead_journal_entry_id is null and id = any(${`{${f.setA.join(",")}}`}::uuid[])`, "objects");
+    assert.equal(released[0]?.n, String(f.setA.length));
     // History survives the reversal: the four lineage rows stay put.
     const kept = await db.execute<{ n: string }>(sql`select count(*) as n from allocation_lineage
-      where org_id = ${f.orgId} and journal_entry_id = ${folded.entryId}`);
-    assert.equal(kept.rows[0]?.n, "4");
+      where org_id = ${f.orgId} and journal_entry_id = ${folded.entryId}`, "objects");
+    assert.equal(kept[0]?.n, "4");
     // And the released entries post again through the kernel path.
     const again = await applyOverheadForTime(f.orgId, f.actorId, f.setA);
     assert.ok(again.entryId);

@@ -168,10 +168,10 @@ async function submitForApprovalLocked(
        and link.link_type = 'reverses'
        and source.status <> 'voided'
      limit 1
-  `);
-  if (blockedCorrection.rows[0]) {
+  `, "objects");
+  if (blockedCorrection[0]) {
     throw new SubmitError(
-      `the correction cannot be submitted until ${blockedCorrection.rows[0].document_number}'s void is approved and completed`,
+      `the correction cannot be submitted until ${blockedCorrection[0].document_number}'s void is approved and completed`,
     );
   }
 
@@ -512,15 +512,12 @@ export async function returnDocumentToDraft(
 ): Promise<ReturnToDraftResult> {
   const reason = requireReturnReason(input.reason);
   return withOrgTransaction(input.orgId, async () => {
-    const identity = (
-      await db.execute<{ kind: string }>(
-        sql`select kind from documents where org_id=${input.orgId} and id=${input.documentId}`,
-      )
-    ).rows[0];
+    const identity = (await db.execute<{ kind: string }>(
+        sql`select kind from documents where org_id=${input.orgId} and id=${input.documentId}`, "objects",
+      ))[0];
     if (!identity) throw new ScopeNotFoundError();
     await lockApprovalSubject(input.orgId, identity.kind, input.documentId);
-    const locked = (
-      await db.execute<{
+    const locked = (await db.execute<{
         id: string;
         kind: string;
         status: string;
@@ -535,8 +532,7 @@ export async function returnDocumentToDraft(
         from documents
        where id = ${input.documentId} and org_id = ${input.orgId}
        for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!locked) {
       throw new ReturnToDraftError(
         "document not found in this organization",
@@ -593,14 +589,12 @@ export async function returnDocumentToDraft(
     // Partial application refuses by name: money already moving against
     // these details must settle first, or the redraft would strand it.
     const applied =
-      (
-        await db.execute<{ n: number }>(sql`
+      (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from payment_instructions instruction
        where instruction.org_id = ${input.orgId}
          and instruction.payment_document_id = ${input.documentId}
          and instruction.status in ('pending', 'approved', 'generated', 'sent')
-    `)
-      ).rows[0]?.n ?? 0;
+    `, "objects"))[0]?.n ?? 0;
     if (applied > 0) {
       throw new ReturnToDraftError(
         `${name} has live payment instructions against it — settle or cancel the payments before returning to draft`,
@@ -614,13 +608,11 @@ export async function returnDocumentToDraft(
     // the receipt first.
     if (locked.kind === "purchase_order") {
       const consumed =
-        (
-          await db.execute<{ n: number }>(sql`
+        (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines
          where org_id = ${input.orgId} and document_id = ${input.documentId}
            and (quantity_fulfilled > 0 or quantity_billed > 0)
-      `)
-        ).rows[0]?.n ?? 0;
+      `, "objects"))[0]?.n ?? 0;
       if (consumed > 0) {
         throw new ReturnToDraftError(
           `${name} already has received or billed lines — amend the order for the remaining quantities, or void the receipt before returning to draft`,
@@ -632,12 +624,10 @@ export async function returnDocumentToDraft(
     // In-flight runs and pending gates cancel natively; completed runs
     // stay as history (superseded, never deleted), so a resubmission starts
     // a new run and the returned document must be re-approved.
-    const runs = (
-      await db.execute<{ id: string; status: string }>(sql`
+    const runs = await db.execute<{ id: string; status: string }>(sql`
       select id::text as id, status from flow_runs
        where org_id = ${input.orgId} and subject_id = ${input.documentId}
-    `)
-    ).rows;
+    `, "objects");
     const liveRunIds = runs
       .filter((run) => run.status === "running" || run.status === "waiting")
       .map((run) => run.id);
@@ -659,16 +649,14 @@ export async function returnDocumentToDraft(
         "not-found",
       );
     }
-    const flipped = (
-      await db.execute<{ id: string }>(sql`
+    const flipped = (await db.execute<{ id: string }>(sql`
       update documents
          set status = 'draft',
              submitted_by = null, submitted_at = null,
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${input.documentId} and org_id = ${input.orgId} and status = 'approved'
       returning id
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!flipped) {
       throw new ReturnToDraftError(
         `${name} changed while it was being returned to draft; reload and try again`,
@@ -769,15 +757,12 @@ export async function withdrawDocumentSubmission(
 ): Promise<WithdrawSubmissionResult> {
   const reason = requireWithdrawReason(input.reason);
   return withOrgTransaction(input.orgId, async () => {
-    const identity = (
-      await db.execute<{ kind: string }>(
-        sql`select kind from documents where org_id=${input.orgId} and id=${input.documentId}`,
-      )
-    ).rows[0];
+    const identity = (await db.execute<{ kind: string }>(
+        sql`select kind from documents where org_id=${input.orgId} and id=${input.documentId}`, "objects",
+      ))[0];
     if (!identity) throw new ScopeNotFoundError();
     await lockApprovalSubject(input.orgId, identity.kind, input.documentId);
-    const locked = (
-      await db.execute<{
+    const locked = (await db.execute<{
         id: string;
         kind: string;
         status: string;
@@ -794,8 +779,7 @@ export async function withdrawDocumentSubmission(
         from documents
        where id = ${input.documentId} and org_id = ${input.orgId}
        for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!locked) {
       throw new WithdrawSubmissionError(
         "document not found in this organization",
@@ -856,12 +840,10 @@ export async function withdrawDocumentSubmission(
         "forbidden",
       );
     }
-    const runs = (
-      await db.execute<{ id: string; status: string }>(sql`
+    const runs = await db.execute<{ id: string; status: string }>(sql`
       select id::text as id, status from flow_runs
        where org_id = ${input.orgId} and subject_id = ${input.documentId}
-    `)
-    ).rows;
+    `, "objects");
     const liveRunIds = runs
       .filter((run) => run.status === "running" || run.status === "waiting")
       .map((run) => run.id);
@@ -880,16 +862,14 @@ export async function withdrawDocumentSubmission(
         "not-found",
       );
     }
-    const flipped = (
-      await db.execute<{ id: string }>(sql`
+    const flipped = (await db.execute<{ id: string }>(sql`
       update documents
          set status = 'draft',
              submitted_by = null, submitted_at = null,
              updated_at = now(), updated_by = ${input.actorId}
        where id = ${input.documentId} and org_id = ${input.orgId} and status = 'pending_approval'
       returning id
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!flipped) {
       throw new WithdrawSubmissionError(
         `${name} changed while its submission was being withdrawn; reload and try again`,

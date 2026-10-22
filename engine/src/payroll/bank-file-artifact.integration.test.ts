@@ -1,9 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool, withOrgContext } from "../platform/db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
 import { releasePayRunBankFile } from "./bank-file-artifact.ts";
 import {
   createScratchOrg,
@@ -14,10 +13,6 @@ import {
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const MIGRATION = readFileSync(
-  new URL("../../../schema/migrations/generated/0075_payroll_bank_file_release_status_evidence.sql", import.meta.url),
-  "utf8",
-);
 
 type BankFileFixture = {
   org: ScratchOrg;
@@ -199,9 +194,7 @@ test("payroll bank-file status cannot be changed without release evidence", { sk
   }
 });
 
-test("0075 payroll bank-file release migration replays cleanly", { skip: !DB }, async () => {
-  await pool.query(MIGRATION);
-  await pool.query(MIGRATION);
+test("the payroll bank-file release-evidence constraint is validated over every stored row", { skip: !DB }, async () => {
   const constraint = (await db.execute<{ validated: boolean }>(sql`
     select convalidated as validated
       from pg_constraint

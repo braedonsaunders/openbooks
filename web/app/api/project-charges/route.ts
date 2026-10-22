@@ -94,8 +94,8 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
-  const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${projectId} and org_id = ${gate.user.orgId}`)))
-  if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
+  const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${projectId} and org_id = ${gate.user.orgId}`, 'objects')))
+  if (!project[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project[0].subsidiary_id)))) {
     return notFound("record")
   }
   const r = (await db.execute(sql`
@@ -109,8 +109,8 @@ export const GET = defineRoute({
      where d.org_id = ${gate.user.orgId} and d.kind = 'project_charge' and d.project_id = ${projectId}
      group by d.id
      order by d.document_date desc, d.document_number desc
-  `))
-  return NextResponse.json({ charges: r.rows })
+  `, 'objects'))
+  return NextResponse.json({ charges: r })
   },
 })
 
@@ -122,8 +122,8 @@ export const POST = defineRoute({
   const parsedBody = await parseJsonBody(req, projectChargeBody);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as { projectId: string; referenceNumber?: string | null; lines: ChargeLineInput[] }
-  const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${body.projectId} and org_id = ${gate.user.orgId}`)))
-  if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
+  const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${body.projectId} and org_id = ${gate.user.orgId}`, 'objects')))
+  if (!project[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project[0].subsidiary_id)))) {
     return notFound("record")
   }
   const lines: ChargeLineInput[] = []
@@ -149,8 +149,8 @@ export const POST = defineRoute({
     for (const line of lines) {
       if (!isUuid(String(line.itemId ?? ''))) continue
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
-      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`, 'objects'))
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         return notFound("record")
       }
     }
@@ -159,8 +159,8 @@ export const POST = defineRoute({
     for (const line of lines) {
       if (!isUuid(String(line.itemId ?? ''))) continue
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
-      if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`, 'objects'))
+      if (item[0] && item[0].kind === 'equipment_charge') {
         return notFound("record")
       }
     }

@@ -98,16 +98,16 @@ test('a clean vendor role removes with its kind falling back to company', { skip
     assert.deepEqual(await res.json(), { removed: true, kind: 'company' })
 
     const stored = (await withBypassContext(() => db.execute<{ kind: string }>(sql`
-      select kind from parties where id = ${partyId} and org_id = ${ctx.orgId}`))).rows[0]
+      select kind from parties where id = ${partyId} and org_id = ${ctx.orgId}`, 'objects')))[0]
     assert.equal(stored?.kind, 'company')
     const roles = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from vendor_roles where org_id = ${ctx.orgId} and party_id = ${partyId}`))).rows[0]
+      select count(*)::text as n from vendor_roles where org_id = ${ctx.orgId} and party_id = ${partyId}`, 'objects')))[0]
     assert.equal(Number(roles?.n ?? '1'), 0, 'the role row is deleted, not deactivated')
 
     const audit = (await withBypassContext(() => db.execute<{ changes: unknown }>(sql`
       select changes from audit_log
        where org_id = ${ctx.orgId} and table_name = 'parties' and row_id = ${partyId} and action = 'update'
-       order by at desc limit 1`))).rows[0]?.changes as
+       order by at desc limit 1`, 'objects')))[0]?.changes as
       { source: string; role: string; before: { kind: string }; after: { kind: string; role: null } }
     assert.equal(audit.source, 'role-remove')
     assert.equal(audit.role, 'vendor')
@@ -135,7 +135,7 @@ test('a vendor role with an open bill refuses with the deactivate remedy', { ski
     assert.match(body.error, /[Dd]eactivate the vendor role instead/)
 
     const roles = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from vendor_roles where org_id = ${ctx.orgId} and party_id = ${partyId}`))).rows[0]
+      select count(*)::text as n from vendor_roles where org_id = ${ctx.orgId} and party_id = ${partyId}`, 'objects')))[0]
     assert.equal(Number(roles?.n ?? '0'), 1, 'the refused removal writes nothing')
   } finally {
     session.user = null

@@ -112,8 +112,8 @@ async function waitForInterleaving(what: string, probe: () => Promise<boolean>):
   }
   const activity = await db.execute(sql`
     select pid, state, wait_event_type, left(query, 160) as query
-      from pg_stat_activity where datname = current_database()`)
-  assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity.rows)}`)
+      from pg_stat_activity where datname = current_database()`, 'objects')
+  assert.fail(`timed out waiting for ${what}; backends: ${JSON.stringify(activity)}`)
 }
 
 /** A dedicated connection holding locks ACROSS another session's open
@@ -134,8 +134,8 @@ async function closeLockSession(client: pg.Client | undefined): Promise<void> {
 
 /** The fence key split into the unsigned (classid, objid) halves pg_locks shows. */
 async function fenceHalves(key: string): Promise<{ classid: bigint; objid: bigint }> {
-  const r = (await db.execute<{ key: string }>(sql`select hashtextextended(${key}, 0)::text as key`))
-  const wide = BigInt.asUintN(64, BigInt(r.rows[0]!.key))
+  const r = (await db.execute<{ key: string }>(sql`select hashtextextended(${key}, 0)::text as key`, 'objects'))
+  const wide = BigInt.asUintN(64, BigInt(r[0]!.key))
   return { classid: wide >> 32n, objid: wide & 0xffffffffn }
 }
 
@@ -149,8 +149,8 @@ async function fenceQueueDepth(fence: { classid: bigint; objid: bigint }): Promi
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from pg_locks
      where locktype = 'advisory' and granted = false
-       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`))
-  return r.rows[0]!.n
+       and classid::bigint = ${fence.classid} and objid::bigint = ${fence.objid}`, 'objects'))
+  return r[0]!.n
 }
 
 /** Any backend other than ours and the holder is parked on a lock. */
@@ -159,8 +159,8 @@ async function someBackendParked(): Promise<boolean> {
     select count(*)::int as n from pg_stat_activity
      where datname = current_database()
        and wait_event_type = 'Lock'
-       and pid <> pg_backend_pid()`))
-  return (r.rows[0]?.n ?? 0) > 0
+       and pid <> pg_backend_pid()`, 'objects'))
+  return (r[0]?.n ?? 0) > 0
 }
 
 const state = { orgId: '', userId: '' }
@@ -220,8 +220,8 @@ function createProject(): Promise<Response> {
 
 async function storedFeatures(orgId: string): Promise<string> {
   const r = (await db.execute<{ f: string }>(sql`
-    select coalesce(settings->'features', '{}'::jsonb)::text as f from orgs where id = ${orgId}`))
-  return r.rows[0]!.f
+    select coalesce(settings->'features', '{}'::jsonb)::text as f from orgs where id = ${orgId}`, 'objects'))
+  return r[0]!.f
 }
 
 async function projectRow(projectId: string): Promise<{
@@ -237,16 +237,16 @@ async function projectRow(projectId: string): Promise<{
     updated_at: string
   }>(sql`
     select is_active, status, name, updated_at::text as updated_at
-      from projects where id = ${projectId}`))
-  return r.rows[0]!
+      from projects where id = ${projectId}`, 'objects'))
+  return r[0]!
 }
 
 async function featureToggleAudits(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'orgs' and action = 'update'
-       and changes->'after' ? 'features'`))
-  return r.rows[0]!.n
+       and changes->'after' ? 'features'`, 'objects'))
+  return r[0]!.n
 }
 
 async function startScenario() {
@@ -350,7 +350,7 @@ test('project creation joins the fence: it queues behind a held feature-gate loc
     // Nothing may exist yet while the fence is held: the insert cannot have
     // jumped the gate.
     const before = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from projects where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from projects where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(before, 0, 'no project row may appear while another session holds the fence')
 
     await closeLockSession(holder)

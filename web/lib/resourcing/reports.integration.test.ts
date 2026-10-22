@@ -14,9 +14,9 @@ test('utilization reads every person beyond one availability page and engagement
   const firstSunday = '2026-04-05'
   try {
     await withBypassContext(async () => {
-      const feature = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId} returning id`)
+      const feature = await db.execute<Record<string, unknown>>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb) where id = ${org.orgId} returning id`)
       assert.equal(feature.rowCount, 1)
-      const employees = await db.execute(sql`with generated as (
+      const employees = await db.execute<Record<string, unknown>>(sql`with generated as (
         select gen_random_uuid() as id, n from generate_series(1, 521) as n
       ), inserted as (
         insert into parties(id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -26,10 +26,10 @@ test('utilization reads every person beyond one availability page and engagement
       insert into employee_roles(org_id, party_id, job_title, hired_on, is_active)
       select ${org.orgId}, id, 'Analyst', '2026-01-01', true from inserted`)
       assert.equal(employees.rowCount, 521)
-      const project = await db.execute(sql`insert into projects(id,org_id,name,customer_id,subsidiary_id)
+      const project = await db.execute<Record<string, unknown>>(sql`insert into projects(id,org_id,name,customer_id,subsidiary_id)
         values (${projectId},${org.orgId},'Unpriced engagement',${org.customerId},${org.subsidiaryId}) returning id`)
       assert.equal(project.rowCount, 1)
-      const assignment = await db.execute(sql`insert into res_assignments(org_id,project_id,employee_party_id,week_start,planned_hours,is_billable,bill_item_id,booking,state,created_by,updated_by)
+      const assignment = await db.execute<Record<string, unknown>>(sql`insert into res_assignments(org_id,project_id,employee_party_id,week_start,planned_hours,is_billable,bill_item_id,booking,state,created_by,updated_by)
         values (${org.orgId},${projectId},(select id from parties where org_id=${org.orgId} and display_name='Report person 1'),${firstSunday},'8.0000',true,null,'hard','active',null,null) returning id`)
       assert.equal(assignment.rowCount, 1)
     })

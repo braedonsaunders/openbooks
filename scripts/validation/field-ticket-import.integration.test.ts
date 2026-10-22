@@ -38,36 +38,32 @@ const ticket = (overrides: Partial<FieldTicketSourceHeaderRow> = {}): FieldTicke
 
 async function project(orgId: string, nsId: string): Promise<string> {
   return String(
-    (
-      await db.execute<{ id: string }>(sql`
+    (await db.execute<{ id: string }>(sql`
         insert into projects (org_id, subsidiary_id, name, custom)
         select ${orgId}, id, ${nsId}, ${JSON.stringify({ nsId })}::jsonb from subsidiaries where org_id = ${orgId} order by id limit 1
         returning id
-      `)
-    ).rows[0]!.id,
+      `, "objects"))[0]!.id,
   );
 }
 
 async function party(orgId: string, nsId: string): Promise<string> {
   return String(
-    (
-      await db.execute<{ id: string }>(sql`
+    (await db.execute<{ id: string }>(sql`
         insert into parties (org_id, kind, display_name, custom)
         values (${orgId}, 'employee', ${nsId}, ${JSON.stringify({ nsId })}::jsonb)
         returning id
-      `)
-    ).rows[0]!.id,
+      `, "objects"))[0]!.id,
   );
 }
 
 async function actor(orgId: string, permissions = ["time.manage", "time.read", "ar.create"]): Promise<string> {
   const id = await createScratchUser(orgId, "Source importer", `source_import_${randomUUID()}`);
   await grantScratchPermissions(orgId, id, permissions);
-  const customer = (await db.execute<{id:string}>(sql`select id from parties where org_id=${orgId} and kind='customer' order by id limit 1`)).rows[0];
+  const customer = (await db.execute<{id:string}>(sql`select id from parties where org_id=${orgId} and kind='customer' order by id limit 1`, "objects"))[0];
   assert.ok(customer, "the source importer fixture requires its native customer");
-  const role = (await db.execute(sql`select party_id from customer_roles where org_id=${orgId} and party_id=${customer.id}`)).rows[0];
-  if (!role) assert.equal((await db.execute(sql`insert into customer_roles(org_id,party_id) values(${orgId},${customer.id})`)).rowCount,1);
-  assert.equal((await db.execute(sql`update parties set custom=custom || '{"nsId":"C1"}'::jsonb where org_id=${orgId} and id=${customer.id}`)).rowCount,1);
+  const role = (await db.execute(sql`select party_id from customer_roles where org_id=${orgId} and party_id=${customer.id}`, "objects"))[0];
+  if (!role) assert.equal((await db.execute<never>(sql`insert into customer_roles(org_id,party_id) values(${orgId},${customer.id})`)).rowCount,1);
+  assert.equal((await db.execute<never>(sql`update parties set custom=custom || '{"nsId":"C1"}'::jsonb where org_id=${orgId} and id=${customer.id}`)).rowCount,1);
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', '{"projects":true,"fieldTickets":true,"orders":true}'::jsonb) where id = ${orgId}`);
   return id;
 }
@@ -87,14 +83,12 @@ async function existingDocument(
   periodStart: string,
 ): Promise<string> {
   const docId = String(
-    (
-      await db.execute<{ id: string }>(sql`
+    (await db.execute<{ id: string }>(sql`
         insert into documents (org_id, kind, document_number, project_id, subsidiary_id, document_date, currency, status, custom)
         select ${orgId}, 'field_ticket', 'FT-9', ${projectId}, subsidiary_id, '2024-06-16', ${currency}, 'approved', ${JSON.stringify(marker)}::jsonb
           from projects where org_id = ${orgId} and id = ${projectId}
         returning id
-      `)
-    ).rows[0]!.id,
+      `, "objects"))[0]!.id,
   );
   await db.execute(sql`
     insert into field_tickets (document_id, org_id, period, period_start, period_end)
@@ -104,20 +98,18 @@ async function existingDocument(
 }
 
 async function counts(orgId: string): Promise<{ tickets: number; headers: number }> {
-  const row = (
-    await db.execute<{ tickets: string; headers: string }>(sql`
+  const row = (await db.execute<{ tickets: string; headers: string }>(sql`
       select (select count(*) from documents where org_id = ${orgId} and kind = 'field_ticket')::text tickets,
              (select count(*) from field_tickets where org_id = ${orgId})::text headers
-    `)
-  ).rows[0]!;
+    `, "objects"))[0]!;
   return { tickets: Number(row.tickets), headers: Number(row.headers) };
 }
 
 async function currency(orgId: string): Promise<string> {
   return String(
     (await db.execute<{ base_currency: string }>(
-      sql`select base_currency from orgs where id = ${orgId}`,
-    )).rows[0]!.base_currency,
+      sql`select base_currency from orgs where id = ${orgId}`, "objects",
+    ))[0]!.base_currency,
   );
 }
 
@@ -146,17 +138,13 @@ test("a same-number ticket from another source refuses and leaves the old docume
       /field ticket number FT-9 already exists from a different source \(system other-connector, external id 99\)/,
     );
     assert.deepEqual(await counts(org.orgId), { tickets: 1, headers: 1 });
-    const doc = (
-      await db.execute<{ custom: unknown }>(
-        sql`select custom from documents where id = ${docId}`,
-      )
-    ).rows[0]!.custom as { source: { system: string } };
+    const doc = (await db.execute<{ custom: unknown }>(
+        sql`select custom from documents where id = ${docId}`, "objects",
+      ))[0]!.custom as { source: { system: string } };
     assert.equal(doc.source.system, "other-connector");
-    const header = (
-      await db.execute<{ period_start: string }>(
-        sql`select period_start::text from field_tickets where document_id = ${docId}`,
-      )
-    ).rows[0]!;
+    const header = (await db.execute<{ period_start: string }>(
+        sql`select period_start::text from field_tickets where document_id = ${docId}`, "objects",
+      ))[0]!;
     assert.match(header.period_start, /2024-01-01/);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -185,7 +173,7 @@ test("matching native work facts and employee source evidence cannot adopt an un
     const snapshotId = String((await db.execute<{ id: string }>(sql`
       insert into field_ticket_labor_snapshots (org_id, field_ticket_id, revision, evidence_basis, reason, source_system, source_payload_hash, currency, captured_by)
       values (${org.orgId}, ${docId}, 1, 'source_import', 'Imported employee evidence', 'test-source', ${"a".repeat(64)}, ${baseCurrency}, ${actorId}) returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_ticket_labor_lines
         (org_id, snapshot_id, field_ticket_id, sequence, employee_party_id, employee_name, time_type_name,
@@ -197,14 +185,14 @@ test("matching native work facts and employee source evidence cannot adopt an un
       select custom, updated_at::text, party_id::text, project_id::text, subsidiary_id::text, status,
              subtotal::text, tax_total::text, total::text
         from documents where org_id = ${org.orgId} and id = ${docId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const beforeHeader = (await db.execute(sql`
       select period_start::text, period_end::text, foreman_party_id::text, superintendent_party_id::text, updated_at::text
         from field_tickets where org_id = ${org.orgId} and document_id = ${docId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const beforeAudit = (await db.execute<{ count: string }>(sql`
       select count(*)::text count from audit_log where org_id = ${org.orgId}
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
 
     const sourceProof = {headersSha256: "a".repeat(64), chargesSha256: "b".repeat(64)};
     const planned = await importFieldTickets({
@@ -224,18 +212,18 @@ test("matching native work facts and employee source evidence cannot adopt an un
       select custom, updated_at::text, party_id::text, project_id::text, subsidiary_id::text, status,
              subtotal::text, tax_total::text, total::text
         from documents where org_id = ${org.orgId} and id = ${docId}
-    `)).rows[0], beforeDocument);
+    `, "objects"))[0], beforeDocument);
     assert.deepEqual((await db.execute(sql`
       select period_start::text, period_end::text, foreman_party_id::text, superintendent_party_id::text, updated_at::text
         from field_tickets where org_id = ${org.orgId} and document_id = ${docId}
-    `)).rows[0], beforeHeader);
+    `, "objects"))[0], beforeHeader);
     assert.equal((await db.execute<{ count: string }>(sql`
       select count(*)::text count from audit_log where org_id = ${org.orgId}
-    `)).rows[0]!.count, beforeAudit);
+    `, "objects"))[0]!.count, beforeAudit);
     assert.equal((await db.execute<{ count: string }>(sql`
       select count(*)::text count from field_ticket_labor_lines
        where org_id = ${org.orgId} and field_ticket_id = ${docId} and source_line_ref = 'employee:E1'
-    `)).rows[0]!.count, "1");
+    `, "objects"))[0]!.count, "1");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -273,7 +261,7 @@ test("an exact replay is still idempotent", { skip: !DB }, async () => {
     }>(sql`
       select foreman_party_id, superintendent_party_id from field_tickets
        where org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(header.foreman_party_id, roles.foremanId);
     assert.equal(header.superintendent_party_id, roles.superintendentId);
     const second = await importFieldTickets({
@@ -294,12 +282,12 @@ test("an exact replay is still idempotent", { skip: !DB }, async () => {
     assert.equal(legacyReplay.nativeUpdated, 0);
     const preserved = (await db.execute<{ superintendent_party_id: string | null }>(sql`
       select superintendent_party_id from field_tickets where org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(preserved.superintendent_party_id, roles.superintendentId);
     const audit = (await db.execute<{ count: string }>(sql`
       select count(*)::text count from audit_log
        where org_id = ${org.orgId} and table_name = 'field_tickets'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(Number(audit.count), 1);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -396,10 +384,10 @@ test("charges-only concurrent retries preserve one exact native source line", {s
     ]);
     assert.equal(first.billableChargesCreated + second.billableChargesCreated, 1);
     assert.equal(first.billableChargesUnchanged + second.billableChargesUnchanged, 1);
-    const rows = (await db.execute<{amount: string; source_system: string}>(sql`
+    const rows = await db.execute<{amount: string; source_system: string}>(sql`
       select amount::text, custom->>'sourceSystem' source_system from document_lines
        where org_id = ${org.orgId} and custom->>'sourceLineRef' = 'billable_transaction:100'
-    `)).rows;
+    `, "objects");
     assert.deepEqual(rows, [{amount: "95.0000", source_system: "test-source"}]);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -410,10 +398,10 @@ test("approved source charges replay exactly and refuse financial correction wit
     await importFieldTickets({...input, tickets: [ticket({jobRef: "1"})]});
     assert.equal((await importFieldTickets({...input, tickets: []})).billableChargesUnchanged, 1);
     await assert.rejects(() => importFieldTickets({...input, tickets: [], charges: [billableCharge({amount: "96"})]}), /approved ticket/);
-    const value = (await db.execute<{total: string; amount: string}>(sql`
+    const value = await db.execute<{total: string; amount: string}>(sql`
       select d.total::text, l.amount::text from documents d join document_lines l on l.org_id = d.org_id and l.document_id = d.id
        where d.org_id = ${org.orgId} and d.kind = 'field_ticket'
-    `)).rows;
+    `, "objects");
     assert.deepEqual(value, [{total: "95.0000", amount: "95.0000"}]);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -423,10 +411,10 @@ test("source-system charge identities are independent across connectors", {skip:
   try {
     await importFieldTickets(input);
     await importFieldTickets({...input, sourceSystem: "other-source", tickets: [ticket({jobRef: "1", number: "FT-OTHER", approval: "No"})]});
-    const rows = (await db.execute<{source_system: string}>(sql`
+    const rows = await db.execute<{source_system: string}>(sql`
       select custom->>'sourceSystem' source_system from document_lines
        where org_id = ${org.orgId} and custom->>'sourceLineRef' = 'billable_transaction:100' order by 1
-    `)).rows;
+    `, "objects");
     assert.deepEqual(rows.map(row => row.source_system), ["other-source", "test-source"]);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -446,19 +434,19 @@ test("native order links retain exact source identity and audit the successful w
     const order = (await db.execute<{id: string}>(sql`
       insert into documents (org_id, subsidiary_id, kind, document_number, project_id, document_date, currency, status, custom)
       values (${org.orgId}, ${org.subsidiaryId}, 'sales_order', 'SO-SOURCE', ${projectId}, '2024-06-12', 'CAD', 'draft', '{"nsId":"500"}'::jsonb) returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const line = (await db.execute<{id: string}>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, project_id, amount, quantity, unit_price, tax_amount, work_from)
       values (${org.orgId}, ${order}, 1, ${org.items.service}, ${projectId}, '95', '1', '95', '0', '2024-06-12') returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const linked = await importFieldTickets({...input, charges: [billableCharge({sourceDocumentRef: "500"})]});
     assert.equal(linked.salesOrderLinesLinked, 1);
-    const stored = (await db.execute<{ticket_id: string; audit_ticket_id: string}>(sql`
+    const stored = await db.execute<{ticket_id: string; audit_ticket_id: string}>(sql`
       select l.field_ticket_id::text ticket_id, a.changes->'after'->>'fieldTicketId' audit_ticket_id
         from document_lines l join audit_log a on a.org_id = l.org_id and a.row_id = l.id
        where l.org_id = ${org.orgId} and l.id = ${line}
          and a.changes->>'reason' = 'source_billable_timesheet_ticket_link'
-    `)).rows;
+    `, "objects");
     assert.equal(stored.length, 1);
     assert.equal(stored[0]!.ticket_id, stored[0]!.audit_ticket_id);
     assert.equal((await importFieldTickets({...input, tickets: [], charges: [billableCharge({sourceDocumentRef: "500"})]})).salesOrderLinesLinked, 0);
@@ -497,21 +485,21 @@ test("a certified draft ticket admits its missing source charges only through th
     await grantScratchPermissions(org.orgId, actorId, ["documents.read"]);
     const projectRow = (await db.execute<{ subsidiary_id: string }>(sql`
       select subsidiary_id::text from projects where org_id = ${org.orgId} and custom->>'nsId' = '1'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const customerId = String((await db.execute<{ party_id: string }>(sql`
       select party_id::text from customer_roles where org_id = ${org.orgId} order by party_id limit 1
-    `)).rows[0]!.party_id);
+    `, "objects"))[0]!.party_id);
     const roles = (await db.execute<{ foreman: string; superintendent: string }>(sql`
       select (select id::text from parties where org_id = ${org.orgId} and custom->>'nsId' = 'F1') foreman,
              (select id::text from parties where org_id = ${org.orgId} and custom->>'nsId' = 'S1') superintendent
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const ticketId = String((await db.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, project_id, subsidiary_id, document_date, currency, status, custom)
       values (${org.orgId}, 'field_ticket', 'FT-9', ${customerId},
               (select id from projects where org_id = ${org.orgId} and custom->>'nsId' = '1'),
               ${projectRow.subsidiary_id}, '2024-06-16', 'CAD', 'draft', '{}'::jsonb)
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id, superintendent_party_id)
       values (${ticketId}, ${org.orgId}, 'weekly', '2024-06-10', '2024-06-16', ${roles.foreman}, ${roles.superintendent})
@@ -523,26 +511,26 @@ test("a certified draft ticket admits its missing source charges only through th
     const sourceSha256 = createHash("sha256").update(sourceBytes).digest("hex");
     const folderId = String((await db.execute<{ id: string }>(sql`
       insert into folders (org_id, name) values (${org.orgId}, 'Source exports') returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const fileId = String((await db.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, content_type, size_bytes, storage_kind, content_hash, created_by)
       values (${org.orgId}, ${folderId}, 'field-ticket-headers.tsv', 'text/tab-separated-values', ${sourceBytes.length}, 'db', ${sourceSha256}, ${actorId})
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const versionId = String((await db.execute<{ id: string }>(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind, content_hash, created_by)
       values (${fileId}, 1, ${sourceBytes.length}, 'text/tab-separated-values', 'db', ${sourceSha256}, ${actorId})
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, ${sourceBytes})`);
     await db.execute(sql`update files set current_version_id = ${versionId} where org_id = ${org.orgId} and id = ${fileId}`);
 
     const revision = String((await db.execute<{ revision: string }>(sql`
       select revision_seq::text revision from documents where org_id = ${org.orgId} and id = ${ticketId}
-    `)).rows[0]!.revision);
+    `, "objects"))[0]!.revision);
     const projectId = String((await db.execute<{ id: string }>(sql`
       select id::text from projects where org_id = ${org.orgId} and custom->>'nsId' = '1'
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const certification = {
       orgId: org.orgId, actorId, requestId: randomUUID(), nativeDocumentId: ticketId,
       expectedNativeRevision: revision, sourceSystem: "test-source", sourceTicketId: "9",
@@ -575,7 +563,7 @@ test("a certified draft ticket admits its missing source charges only through th
       select d.total::text total,
              (select count(*)::text from document_lines where org_id = ${org.orgId} and document_id = d.id) charges
         from documents d where org_id = ${org.orgId} and d.id = ${ticketId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(stored, {total: "95.0000", charges: "1"});
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -586,19 +574,19 @@ test("certifier and importer admit exactly one native representation of one sour
     await grantScratchPermissions(org.orgId, actorId, ["documents.read"]);
     const projectRow = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
       select id::text, subsidiary_id::text from projects where org_id = ${org.orgId} and custom->>'nsId' = '1'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const customerId = String((await db.execute<{ party_id: string }>(sql`
       select party_id::text from customer_roles where org_id = ${org.orgId} order by party_id limit 1
-    `)).rows[0]!.party_id);
+    `, "objects"))[0]!.party_id);
     const roles = (await db.execute<{ foreman: string; superintendent: string }>(sql`
       select (select id::text from parties where org_id = ${org.orgId} and custom->>'nsId' = 'F1') foreman,
              (select id::text from parties where org_id = ${org.orgId} and custom->>'nsId' = 'S1') superintendent
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const ticketId = String((await db.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, project_id, subsidiary_id, document_date, currency, status, custom)
       values (${org.orgId}, 'field_ticket', 'FT-9', ${customerId}, ${projectRow.id}, ${projectRow.subsidiary_id}, '2024-06-16', 'CAD', 'draft', '{}'::jsonb)
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id, superintendent_party_id)
       values (${ticketId}, ${org.orgId}, 'weekly', '2024-06-10', '2024-06-16', ${roles.foreman}, ${roles.superintendent})
@@ -610,22 +598,22 @@ test("certifier and importer admit exactly one native representation of one sour
     const sourceSha256 = createHash("sha256").update(sourceBytes).digest("hex");
     const folderId = String((await db.execute<{ id: string }>(sql`
       insert into folders (org_id, name) values (${org.orgId}, 'Source exports') returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const fileId = String((await db.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, content_type, size_bytes, storage_kind, content_hash, created_by)
       values (${org.orgId}, ${folderId}, 'field-ticket-headers.tsv', 'text/tab-separated-values', ${sourceBytes.length}, 'db', ${sourceSha256}, ${actorId})
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const versionId = String((await db.execute<{ id: string }>(sql`
       insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind, content_hash, created_by)
       values (${fileId}, 1, ${sourceBytes.length}, 'text/tab-separated-values', 'db', ${sourceSha256}, ${actorId})
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, ${sourceBytes})`);
     await db.execute(sql`update files set current_version_id = ${versionId} where org_id = ${org.orgId} and id = ${fileId}`);
     const revision = String((await db.execute<{ revision: string }>(sql`
       select revision_seq::text revision from documents where org_id = ${org.orgId} and id = ${ticketId}
-    `)).rows[0]!.revision);
+    `, "objects"))[0]!.revision);
 
     const raced = await Promise.allSettled([
       certifyFieldTicketSourceIdentity({
@@ -650,11 +638,11 @@ test("certifier and importer admit exactly one native representation of one sour
       select count(*)::text count from documents
        where org_id = ${org.orgId} and kind = 'field_ticket'
          and custom->'source'->>'system' = 'test-source' and custom->'source'->>'externalId' = '9'
-    `)).rows[0]!.count);
+    `, "objects"))[0]!.count);
     assert.equal(representations, 1);
     const certifications = Number((await db.execute<{ count: string }>(sql`
       select count(*)::text count from field_ticket_source_certifications where org_id = ${org.orgId}
-    `)).rows[0]!.count);
+    `, "objects"))[0]!.count);
     assert.equal(certifications, raced[0]!.status === "fulfilled" ? 1 : 0);
   } finally { await dropScratchOrg(org.orgId); }
 });

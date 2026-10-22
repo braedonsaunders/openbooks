@@ -35,9 +35,9 @@ async function seed() {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Control actor", "control_actor");
     const targetId = await createScratchUser(org.orgId, "Control target", "control_target");
-    const firstRole = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${org.orgId} and key = 'control_target'`)).rows[0]!.id;
+    const firstRole = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${org.orgId} and key = 'control_target'`, "objects"))[0]!.id;
     const extraRole = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-      values (${org.orgId}, 'control_extra', 'Extra', false, '[]'::jsonb) returning id`)).rows[0]!.id;
+      values (${org.orgId}, 'control_extra', 'Extra', false, '[]'::jsonb) returning id`, "objects"))[0]!.id;
     return { org, actorId, targetId, firstRole, extraRole };
   });
   const { org, actorId, targetId, firstRole, extraRole } = seeded;
@@ -51,7 +51,7 @@ async function assignments(f: Fixture, userId = f.targetId) {
   // Reads stay tenant-scoped via withOrgContext — the production read path.
   // (Never called inside a transaction, so this cannot detach snapshot reads.)
   return (await withOrgContext(f.orgId, () => db.execute<{ role_id: string }>(sql`select role_id from role_assignments
-    where org_id = ${f.orgId} and user_id = ${userId} order by role_id`))).rows.map((row) => row.role_id);
+    where org_id = ${f.orgId} and user_id = ${userId} order by role_id`, "objects"))).map((row) => row.role_id);
 }
 
 async function waitForBlocked(pid: number, minimum = 1) {
@@ -73,15 +73,15 @@ test("UUID case cannot bypass self-grant or self-deactivation, and unassignment 
     assert.equal((await call({ action: "assign", userId: f.actorId.toUpperCase(), roleId: f.extraRole.toUpperCase() })).status, 403);
     assert.equal((await call({ action: "set-active", userId: f.actorId.toUpperCase(), isActive: false })).status, 400);
     assert.deepEqual(await assignments(f, f.actorId), before);
-    assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select is_active from users where id = ${f.actorId}`))).rows[0]!.is_active, true);
+    assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select is_active from users where id = ${f.actorId}`, "objects")))[0]!.is_active, true);
     assert.equal((await call({ action: "assign", userId: f.targetId.toUpperCase(), roleId: f.extraRole.toUpperCase() })).status, 200);
     assert.ok((await assignments(f)).includes(f.extraRole));
     assert.equal((await call({ action: "unassign", userId: f.targetId.toUpperCase(), roleId: f.extraRole.toUpperCase() })).status, 200);
     assert.deepEqual(await assignments(f), [f.firstRole]);
     const evidence = await withOrgContext(f.orgId, () => db.execute<{ changes: { userId: unknown[]; roleId: unknown[] } }>(sql`select changes from audit_log
-      where org_id = ${f.orgId} and table_name = 'role_assignments' order by at, id`));
-    assert.equal(evidence.rows.length, 2);
-    assert.ok(evidence.rows.every((row) => row.changes.userId.includes(f.targetId) && row.changes.roleId.includes(f.extraRole)));
+      where org_id = ${f.orgId} and table_name = 'role_assignments' order by at, id`, "objects"));
+    assert.equal(evidence.length, 2);
+    assert.ok(evidence.every((row) => row.changes.userId.includes(f.targetId) && row.changes.roleId.includes(f.extraRole)));
     assert.equal((await call({ action: "assign", userId: [f.targetId], roleId: f.extraRole })).status, 400);
     assert.equal((await call({ action: "assign", userId: f.targetId, roleId: [f.extraRole] })).status, 400);
   } finally { state.authz = null; await dropScratchOrg(f.orgId); }
@@ -185,10 +185,10 @@ for (const action of ["assign", "unassign", "set-active"] as const) {
     try {
       if (action === "unassign") await withBypassContext(() => db.execute(sql`insert into role_assignments(org_id, user_id, role_id) values (${f.orgId}, ${f.targetId}, ${f.extraRole})`));
       const snapshot = async () => ({
-        users: (await db.execute(sql`select * from users where org_id = ${f.orgId} order by id`)).rows,
-        assignments: (await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`)).rows,
-        sessions: (await db.execute(sql`select * from auth_sessions where user_id = ${f.targetId} order by id`)).rows,
-        audit: (await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`)).rows,
+        users: await db.execute(sql`select * from users where org_id = ${f.orgId} order by id`, "objects"),
+        assignments: await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`, "objects"),
+        sessions: await db.execute(sql`select * from auth_sessions where user_id = ${f.targetId} order by id`, "objects"),
+        audit: await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`, "objects"),
       });
       await db.execute(sql.raw(`create function ${trigger}() returns trigger language plpgsql as $$ begin
         if NEW.org_id = '${f.orgId}'::uuid and NEW.table_name in ('role_assignments', 'users') then
@@ -203,12 +203,12 @@ for (const action of ["assign", "unassign", "set-active"] as const) {
         await assert.rejects(call(body));
         assert.deepEqual(await snapshot(), before);
       });
-      assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select description from app_roles where id = ${f.extraRole}`))).rows[0]!.description, "earlier caller work");
+      assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select description from app_roles where id = ${f.extraRole}`, "objects")))[0]!.description, "earlier caller work");
       await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`)); installed = false;
       assert.equal((await call(body)).status, 200);
-      const evidence = await withOrgContext(f.orgId, () => db.execute(sql`select action from audit_log where org_id = ${f.orgId}`));
-      assert.equal(evidence.rows.length, 1, "successful retry has exactly one audit entry");
-      if (action === "set-active") assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select is_active from users where id = ${f.targetId}`))).rows[0]!.is_active, false);
+      const evidence = await withOrgContext(f.orgId, () => db.execute(sql`select action from audit_log where org_id = ${f.orgId}`, "objects"));
+      assert.equal(evidence.length, 1, "successful retry has exactly one audit entry");
+      if (action === "set-active") assert.equal((await withOrgContext(f.orgId, () => db.execute(sql`select is_active from users where id = ${f.targetId}`, "objects")))[0]!.is_active, false);
       else assert.equal((await assignments(f)).includes(f.extraRole), action === "assign");
     } finally {
       if (installed) await db.execute(sql.raw(`drop trigger ${trigger} on audit_log`));

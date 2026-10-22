@@ -91,13 +91,13 @@ test("a stale assignment under a prior employment is not paid twice", { skip: !D
   });
   await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
-  const lines = (await db.execute<{ amount: string }>(sql`
+  const lines = await db.execute<{ amount: string }>(sql`
     select l.amount::text as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
      where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
        and l.component_id = ${componentId}
-  `)).rows;
+  `, "objects");
   assert.equal(lines.length, 1, "one employment's row is paid once, not once per employment");
   assert.equal(lines[0]!.amount, "100.0000");
 

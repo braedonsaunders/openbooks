@@ -215,11 +215,11 @@ export async function runDueShopifyPayoutPulls(
   // bypass: scheduler-tick — the unscoped scan finds pull-enabled Shopify
   // Payments configs across every production organization.
   const configs = await withBypass(async () =>
-    (await db.execute<{ orgId: string; lastPullAt: string | null }>(sql`
+    await db.execute<{ orgId: string; lastPullAt: string | null }>(sql`
       select c.org_id as "orgId", c.last_pull_at::text as "lastPullAt"
         from psp_provider_configs c
        where c.provider = 'shopify_payments' and c.is_enabled and c.pull_enabled ${orgScope}
-       order by c.org_id`)).rows);
+       order by c.org_id`, "objects"));
   for (const config of configs) {
     const gated = await withOrg(config.orgId, () => orgFeatureEnabled(config.orgId, "banking"));
     if (!gated) {
@@ -228,10 +228,10 @@ export async function runDueShopifyPayoutPulls(
     }
     try {
       const channels = await withOrg(config.orgId, async () =>
-        (await db.execute<{ id: string }>(sql`
+        await db.execute<{ id: string }>(sql`
           select id from sales_channels
            where org_id = ${config.orgId} and kind = 'shopify' and status = 'active'
-           order by id`)).rows);
+           order by id`, "objects"));
       if (channels.length === 0) {
         throw new CommerceError(
           "shopify_payout_pull_no_channel",

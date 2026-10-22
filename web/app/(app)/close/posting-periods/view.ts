@@ -58,9 +58,9 @@ export async function loadPostingPeriods(
         from accounting_books
        where org_id = ${orgId} and is_active
        order by is_primary desc, name
-    `),
+    `, 'objects'),
   ])
-  const selectedBookId = resolvePostingPeriodsBookId(books.rows, pickString(sp.book))
+  const selectedBookId = resolvePostingPeriodsBookId(books, pickString(sp.book))
   const canRun = can(authz, 'close.run')
   const subsidiaryIds = authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds]
   const canPreview = canRun && (subsidiaryIds === null || subsidiaryIds.length > 0)
@@ -81,11 +81,11 @@ export async function loadPostingPeriods(
     description: t('postingPeriods.description'),
     currentParams: sp,
     bookLabel: t('filters.book'),
-    bookOptions: books.rows.map((book) => ({ value: book.id, label: book.name })),
+    bookOptions: books.map((book) => ({ value: book.id, label: book.name })),
     selectedBookId,
-    showBookChips: books.rows.length > 1,
-    showSingleBook: books.rows.length === 1,
-    singleBookName: books.rows[0]?.name ?? '',
+    showBookChips: books.length > 1,
+    showSingleBook: books.length === 1,
+    singleBookName: books[0]?.name ?? '',
     runId: pickString(sp.run) ?? null,
     canManageBooks: can(authz, 'admin.setup.manage'),
     manageBooksLabel: t('actions.manageBooks'),

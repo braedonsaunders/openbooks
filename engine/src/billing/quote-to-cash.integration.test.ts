@@ -241,7 +241,7 @@ test("quote term, signature, and activation operations enforce the quote subsidi
       select (select count(*)::int from quote_subscription_terms where org_id = ${org.orgId} and quote_id = ${seed.quoteId}) as terms,
              (select count(*)::int from signature_requests where org_id = ${org.orgId} and subject_id = ${seed.quoteId}) as signatures,
              (select count(*)::int from subscriptions where org_id = ${org.orgId} and source_quote_id = ${seed.quoteId}) as subscriptions
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(unchanged, { terms: 1, signatures: 0, subscriptions: 0 });
   });
 });
@@ -271,10 +271,8 @@ test(
       assert.ok(sent.token.length > 32);
       assert.equal(sent.expiresAt.getTime() > Date.now(), true);
 
-      const stored = (
-      await db.execute<{ status: string; document_hash: string; consent_text: string | null }>(sql`
-        select status, document_hash, consent_text from signature_requests where id = ${sent.requestId}`)
-    ).rows[0]!;
+      const stored = (await db.execute<{ status: string; document_hash: string; consent_text: string | null }>(sql`
+        select status, document_hash, consent_text from signature_requests where id = ${sent.requestId}`, "objects"))[0]!;
       assert.equal(stored.status, "sent");
       assert.equal(stored.document_hash, sent.documentHash);
       assert.ok((stored.consent_text ?? "").length > 32);
@@ -287,10 +285,8 @@ test(
       assert.equal(signed.quoteId, seed.quoteId);
       assert.deepEqual(signed.subscriptionIds, []);
 
-      const signedRow = (
-      await db.execute<{ status: string; signer_ip: string | null }>(sql`
-        select status, signer_ip from signature_requests where id = ${sent.requestId}`)
-    ).rows[0]!;
+      const signedRow = (await db.execute<{ status: string; signer_ip: string | null }>(sql`
+        select status, signer_ip from signature_requests where id = ${sent.requestId}`, "objects"))[0]!;
       assert.equal(signedRow.status, "signed");
       assert.equal(signedRow.signer_ip, "10.0.0.1");
 
@@ -302,12 +298,10 @@ test(
       assert.equal(first.subscriptionIds.length, 1);
       assert.equal(first.contractId, null);
 
-      const sub = (
-      await db.execute<{ quantity: string; price_override: string; source_term_id: string; status: string }>(sql`
+      const sub = (await db.execute<{ quantity: string; price_override: string; source_term_id: string; status: string }>(sql`
         select quantity::text as quantity, price_override::text as price_override,
                source_term_id, status
-          from subscriptions where id = ${first.subscriptionIds[0]}`)
-    ).rows[0]!;
+          from subscriptions where id = ${first.subscriptionIds[0]}`, "objects"))[0]!;
       assert.equal(sub.status, "active");
       assert.equal(sub.source_term_id, seed.termId);
       // Period-zero price and quantity open the subscription.
@@ -315,22 +309,18 @@ test(
       assert.equal(toUnits(sub.price_override), toUnits("100.00"));
 
       // The ramp's later periods schedule as idempotent amendments.
-      const amendments = (
-      await db.execute<{ idempotency_key: string }>(sql`
+      const amendments = (await db.execute<{ idempotency_key: string }>(sql`
         select idempotency_key from subscription_amendments
          where org_id = ${org.orgId} and subscription_id = ${first.subscriptionIds[0]}
-         order by idempotency_key`)
-    ).rows.map((r) => r.idempotency_key);
+         order by idempotency_key`, "objects")).map((r) => r.idempotency_key);
       assert.deepEqual(amendments, [`quote-activation:${seed.quoteId}:${seed.termId}:p1`]);
 
       const second = await activateQuote(org.orgId, actor, seed.quoteId, { allowedSubsidiaryIds: null });
       assert.equal(second.created, false);
       assert.deepEqual(second.subscriptionIds, first.subscriptionIds);
-      const subCount = (
-      await db.execute<{ n: string }>(sql`
+      const subCount = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from subscriptions
-         where org_id = ${org.orgId} and source_quote_id = ${seed.quoteId}`)
-    ).rows[0]!;
+         where org_id = ${org.orgId} and source_quote_id = ${seed.quoteId}`, "objects"))[0]!;
       assert.equal(subCount.n, "1");
     });
   },
@@ -382,7 +372,7 @@ test(
         const activation = await activateQuote(org.orgId, actor, seed.quoteId, { allowedSubsidiaryIds: null });
         assert.equal(activation.subscriptionIds.length, 2);
 
-        const components = (await db.execute<{
+        const components = await db.execute<{
       source_term_id: string;
       component_key: string;
       quantity: string;
@@ -392,7 +382,7 @@ test(
         from subscriptions s
         join subscription_components c on c.org_id = s.org_id and c.subscription_id = s.id
        where s.org_id = ${org.orgId} and s.source_quote_id = ${seed.quoteId}
-       order by s.source_term_id, c.component_key`)).rows;
+       order by s.source_term_id, c.component_key`, "objects");
         assert.equal(components.length, 2);
         assert.deepEqual(components.map((component) => component.source_term_id).sort(), [seed.termId, secondTermId].sort());
         assert.deepEqual(
@@ -416,7 +406,7 @@ test("quote discounts use only the tenant's configured Flow gates",DB,async()=>{
   await withDeal(async(org,actor,seed)=>{
     const sent=await send(org,actor,seed);
     assert.equal(sent.status,"sent","zero gates release the quote without a separate discount policy");
-    assert.equal((await db.execute<{status:string}>(sql`select status from documents where org_id=${org.orgId} and id=${seed.quoteId}`)).rows[0]?.status,"approved");
+    assert.equal((await db.execute<{status:string}>(sql`select status from documents where org_id=${org.orgId} and id=${seed.quoteId}`, "objects"))[0]?.status,"approved");
   },options);
   await withDeal(async(org,actor,seed)=>{
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,flows}','true'::jsonb) where id=${org.orgId}`);
@@ -424,8 +414,8 @@ test("quote discounts use only the tenant's configured Flow gates",DB,async()=>{
     await grantScratchPermissions(org.orgId,reviewer,["estimates.read","ar.approve"]);
     for(let index=0;index<10;index++)await seedApprovalFlow(org.orgId,{subjectKind:"quote",assignees:[{type:"user",userId:reviewer}],mode:"all",condition:{field:"subscriptionDiscountPercent",op:"gt",value:10}});
     assert.deepEqual(await send(org,actor,seed),{status:"pending_approval"});
-    assert.equal((await db.execute(sql`select id from signature_requests where org_id=${org.orgId} and subject_id=${seed.quoteId}`)).rows.length,0);
-    const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${seed.quoteId} and status='pending' order by id`)).rows;
+    assert.equal((await db.execute(sql`select id from signature_requests where org_id=${org.orgId} and subject_id=${seed.quoteId}`, "objects")).length,0);
+    const gates=await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${seed.quoteId} and status='pending' order by id`, "objects");
     assert.equal(gates.length,10);
     for(const gate of gates.slice(0,-1))await decideGate({gateId:gate.id,userId:reviewer,decision:"approved"});
     assert.deepEqual(await send(org,actor,seed),{status:"pending_approval"});
@@ -468,10 +458,8 @@ test(
         );
       const voided = await voidSignatureRequestsForSubject(db, org.orgId, QUOTE_SUBJECT_TABLE, seed.quoteId, null);
       assert.equal(voided.voided, 1);
-      const row = (
-      await db.execute<{ status: string }>(sql`
-        select status from signature_requests where id = ${sent.requestId}`)
-    ).rows[0]!;
+      const row = (await db.execute<{ status: string }>(sql`
+        select status from signature_requests where id = ${sent.requestId}`, "objects"))[0]!;
       assert.equal(row.status, "voided");
       await assert.rejects(signQuoteSignature({ token: sent.token, name: "Ada Customer" }), /voided/);
       // Voiding twice is a no-op, never a failure.
@@ -512,10 +500,8 @@ test(
       await db.execute(sql`
       update signature_requests set expires_at = now() + interval '1 hour'
        where id = ${soon.requestId}`);
-      const before = (
-      await db.execute<{ token_hash: string }>(sql`
-        select token_hash from signature_requests where id = ${soon.requestId}`)
-    ).rows[0]!.token_hash;
+      const before = (await db.execute<{ token_hash: string }>(sql`
+        select token_hash from signature_requests where id = ${soon.requestId}`, "objects"))[0]!.token_hash;
 
       // A second quote carries the lapsed request the scan must expire.
       const lapsedQuoteId = randomUUID();
@@ -583,35 +569,29 @@ test(
       assert.equal(first.reminded, 1);
       assert.deepEqual(first.orgErrors, []);
 
-      const lapsedRow = (
-      await db.execute<{ status: string }>(sql`
-        select status from signature_requests where id = ${lapsed.requestId}`)
-    ).rows[0]!;
+      const lapsedRow = (await db.execute<{ status: string }>(sql`
+        select status from signature_requests where id = ${lapsed.requestId}`, "objects"))[0]!;
       assert.equal(lapsedRow.status, "expired");
 
-      const serviceRows = (await db.execute<{ id: string; status: string; token_hash: string }>(sql`
+      const serviceRows = await db.execute<{ id: string; status: string; token_hash: string }>(sql`
       select id, status, token_hash from signature_requests
-       where id in (${serviceDue.requestId}, ${serviceExpired.requestId})`)).rows;
+       where id in (${serviceDue.requestId}, ${serviceExpired.requestId})`, "objects");
       assert.equal(serviceRows.length, 2);
       assert.ok(serviceRows.every((row) => row.status === "sent"));
       assert.equal(serviceRows.find((row) => row.id === serviceDue.requestId)!.token_hash, serviceDue.tokenHash);
       assert.equal(serviceRows.find((row) => row.id === serviceExpired.requestId)!.token_hash, serviceExpired.tokenHash);
       const serviceReminders = await db.execute(sql`
       select 1 from scheduler_outbox where kind = 'flow_email'
-       and occurrence_key in (${`signature-reminder:${serviceDue.requestId}`}, ${`signature-reminder:${serviceExpired.requestId}`})`);
-    assert.equal(serviceReminders.rows.length, 0);
+       and occurrence_key in (${`signature-reminder:${serviceDue.requestId}`}, ${`signature-reminder:${serviceExpired.requestId}`})`, "objects");
+    assert.equal(serviceReminders.length, 0);
 
     // The reminder rotated the live link and queued exactly one email.
-    const rotated = (
-      await db.execute<{ token_hash: string }>(sql`
-        select token_hash from signature_requests where id = ${soon.requestId}`)
-    ).rows[0]!.token_hash;
+    const rotated = (await db.execute<{ token_hash: string }>(sql`
+        select token_hash from signature_requests where id = ${soon.requestId}`, "objects"))[0]!.token_hash;
       assert.notEqual(rotated, before);
-      const queued = (
-      await db.execute<{ payload: { html: string } }>(sql`
+      const queued = await db.execute<{ payload: { html: string } }>(sql`
         select payload from scheduler_outbox
-         where kind = 'flow_email' and occurrence_key = ${`signature-reminder:${soon.requestId}`}`)
-    ).rows;
+         where kind = 'flow_email' and occurrence_key = ${`signature-reminder:${soon.requestId}`}`, "objects");
     assert.equal(queued.length, 1);
     assert.ok((queued[0]!.payload as { html: string }).html.includes("/sign/quotes/"));
 
@@ -657,10 +637,8 @@ test("signing and declining refuse while quote-to-cash is off", DB, async () => 
       /no longer available/,
       "a decline is a quote-to-cash write and refuses with the same fence",
     );
-      const stored = (
-      await db.execute<{ status: string }>(sql`
-        select status from signature_requests where id = ${sent.requestId}`)
-    ).rows[0]!;
+      const stored = (await db.execute<{ status: string }>(sql`
+        select status from signature_requests where id = ${sent.requestId}`, "objects"))[0]!;
       assert.equal(stored.status, "sent", "refused writes leave the request open for a re-sent link");
     });
   },

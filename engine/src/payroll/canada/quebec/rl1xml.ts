@@ -117,8 +117,8 @@ export function rl1TransmitterProblems(cfg: Partial<Rl1TransmitterConfig>): stri
 export async function rl1TransmitterConfig(orgId: string): Promise<Rl1TransmitterConfig> {
   const row = (await db.execute<{ cfg: Partial<Rl1TransmitterConfig> | null }>(sql`
     select settings#>'{payroll,rl1Transmitter}' as cfg from orgs where id = ${orgId}
-  `));
-  const cfg = row.rows[0]?.cfg ?? {};
+  `, "objects"));
+  const cfg = row[0]?.cfg ?? {};
   const problems = rl1TransmitterProblems(cfg);
   if (problems.length > 0) {
     throw new PayrollError(
@@ -216,8 +216,8 @@ export async function buildRl1Xml(orgId: string, taxYear: number): Promise<never
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId}
-  `));
-  const sinByEmployee = new Map(sins.rows.map((row) => [row.employee_party_id, row.sin_encrypted]));
+  `, "objects"));
+  const sinByEmployee = new Map(sins.map((row) => [row.employee_party_id, row.sin_encrypted]));
   const missingSins: string[] = [];
   for (const slip of slips) {
     const sealed = sinByEmployee.get(slip.employeePartyId);

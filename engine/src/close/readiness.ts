@@ -59,8 +59,8 @@ export async function readinessChecks(
       join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
       join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       join orgs o on o.id = r.org_id
-     where r.id = ${runId} and r.org_id = ${orgId}`));
-  const ctx = context.rows[0];
+     where r.id = ${runId} and r.org_id = ${orgId}`, "objects"));
+  const ctx = context[0];
   if (!ctx) throw new CloseError("close run not found");
   const subsidiaryIds = ctx.scope?.subsidiaryIds ?? [];
   const scoped = subsidiaryIds.length > 0;
@@ -100,7 +100,7 @@ export async function readinessChecks(
             and (d.posting_period_id = ${ctx.period_id}
               or (d.posting_period_id is null and d.status in ('draft','pending_approval')
                 and coalesce(d.posting_date, d.document_date) between ${ctx.starts_on} and ${ctx.ends_on}))
-            and ${documentScope}) as count`),
+            and ${documentScope}) as count`, "objects"),
       db.execute(sql`
       select count(*) as count
         from documents d
@@ -115,7 +115,7 @@ export async function readinessChecks(
          and d.kind not in (${nonPostingKindList()})
          and d.posting_period_id is null
          and coalesce(d.posting_date, d.document_date) between ${ctx.starts_on} and ${ctx.ends_on}
-         and ${documentScope}`),
+         and ${documentScope}`, "objects"),
       // Bank-unreconciled returns the open accounts themselves (not just a
       // count) with per-account source-evidence coverage, so the close
       // detail names each account with cleared/uncleared line counts.
@@ -175,7 +175,7 @@ export async function readinessChecks(
         ) jl on jl.account_id = o.id
         left join source_reconciliation_state s on s.org_id = ${orgId} and s.account_id = o.id
        group by o.id, o.number, o.name, s.connector, s.reconciled_through
-       order by o.number nulls last, o.name`),
+       order by o.number nulls last, o.name`, "objects"),
       db.execute(sql`
       select count(*) as count
         from depreciation_schedule_lines l
@@ -183,7 +183,7 @@ export async function readinessChecks(
         join fixed_assets a on a.id=s.asset_id and a.org_id=s.org_id
        where l.org_id = ${orgId} and l.period_id = ${ctx.period_id}
          and s.book_id = ${ctx.book_id} and l.posted_amount is null and l.planned_amount <> 0
-         and ${inScope(sql`a.subsidiary_id`)}`),
+         and ${inScope(sql`a.subsidiary_id`)}`, "objects"),
       // Unposted revenue recognition, measured the way runRevenueRecognition
       // measures due lines: unposted, nonzero, non-cancelled, non-forecast,
       // and due by period end (percent-complete catch-up is due as soon as
@@ -205,7 +205,7 @@ export async function readinessChecks(
          and o.status <> 'cancelled' and not r.is_forecast
          and (p.ends_on <= ${ctx.ends_on}
               or (r.method = 'percent_complete' and p.starts_on <= ${ctx.ends_on}))
-         and ${inScope(sql`coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})`)}`),
+         and ${inScope(sql`coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId})`)}`, "objects"),
       db.execute(sql`
       select count(*) as count
         from (
@@ -233,7 +233,7 @@ export async function readinessChecks(
               select 1 from fx_revaluation_rate_evidence successor
                where successor.org_id = evidence.org_id and successor.supersedes_id = evidence.id
             )
-       )`),
+       )`, "objects"),
       // The revaluation ENGINE decides fx readiness: the same monetary
       // population, spot-rate lookup, and delta arithmetic runRevaluation
       // posts from. A position already at the period-end rate needs no entry
@@ -255,7 +255,7 @@ export async function readinessChecks(
       // rate has moved since earlier eliminations. A foreign entity with no
       // consolidated rate cannot be measured at all; that is counted
       // separately, never as a residual.
-      scoped && ctx.system_blueprint ? Promise.resolve({ rows: [{ count: 0, missing_rates: 0 }] }) : db.execute(sql`
+      scoped && ctx.system_blueprint ? Promise.resolve([{ count: 0, missing_rates: 0 }]) : db.execute(sql`
       select count(*) filter (where residual <> 0 and not coalesce(missing_rate, false)) as count,
              count(*) filter (where missing_rate) as missing_rates
         from (
@@ -287,11 +287,11 @@ export async function readinessChecks(
            group by a.id, l.subsidiary_id
           ) by_subsidiary
          group by account_id
-      ) residuals`),
+      ) residuals`, "objects"),
       db.execute(sql`
       select coalesce(rules->>'amount', '10000.0000') as amount,
              coalesce((rules->>'percent')::numeric, 20) as percent
-        from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`),
+        from close_policies where org_id = ${orgId} and code = 'material-variance' and is_active limit 1`, "objects"),
     ]));
 
   // Name the documents behind an incomplete-effects count: the exception
@@ -310,7 +310,7 @@ export async function readinessChecks(
            ? sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)}
              or exists (select 1 from journal_lines l where l.org_id = e.org_id and l.entry_id = e.id and ${inScope(sql`l.subsidiary_id`)}))`
            : sql`true`}
-       order by d.document_number limit 10`)).rows.map((row) => row.document_number);
+       order by d.document_number limit 10`, "objects")).map((row) => row.document_number);
   }
 
   // Commerce completeness runs only when the run carries the task: the
@@ -318,11 +318,9 @@ export async function readinessChecks(
   // reads clean on an org with no channel data — so a run without the task
   // skips the storefront calls entirely instead of proving nothing.
   let commerce: CommerceCloseCheck[] = [];
-  const commerceTask = (
-    await db.execute<{ id: string }>(sql`
+  const commerceTask = (await db.execute<{ id: string }>(sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'commerce-complete' limit 1`)
-  ).rows[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'commerce-complete' limit 1`, "objects"))[0];
   if (commerceTask) {
     commerce = await commerceCloseChecks(orgId, {
       startsOn: ctx.starts_on,
@@ -338,11 +336,9 @@ export async function readinessChecks(
   let unbilledAccrual: { applies: boolean; pendingKeys: number; problem: string | null } = {
     applies: false, pendingKeys: 0, problem: null,
   };
-  const unbilledAccrualTask = (
-    await db.execute<{ id: string }>(sql`
+  const unbilledAccrualTask = (await db.execute<{ id: string }>(sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'unbilled-revenue-accrued' limit 1`)
-  ).rows[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'unbilled-revenue-accrued' limit 1`, "objects"))[0];
   if (unbilledAccrualTask) {
     unbilledAccrual = await unbilledAccrualReadiness(orgId, ctx.period_id, scoped ? subsidiaryIds : undefined);
   }
@@ -351,22 +347,18 @@ export async function readinessChecks(
   // journals match what the generator would post now. Only runs that carry
   // the task pay for the measurement.
   let periodEnd: PeriodEndCloseCheck = { count: 0 };
-  const periodEndTask = (
-    await db.execute<{ id: string }>(sql`
+  const periodEndTask = (await db.execute<{ id: string }>(sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'period-end-journals' limit 1`)
-  ).rows[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'period-end-journals' limit 1`, "objects"))[0];
   if (periodEndTask) {
     periodEnd = await periodEndJournalCloseCheck(orgId, { periodId: ctx.period_id, bookId: ctx.book_id, subsidiaryIds });
   }
 
   // Full books must hold every replicable primary entry through period end.
   let bookReplication: Awaited<ReturnType<typeof bookReplicationReadiness>> = { missing: 0, books: [] };
-  const bookReplicationTask = (
-    await db.execute<{ id: string }>(sql`
+  const bookReplicationTask = (await db.execute<{ id: string }>(sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'book-replication-complete' limit 1`)
-  ).rows[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'book-replication-complete' limit 1`, "objects"))[0];
   if (bookReplicationTask) {
     bookReplication = await bookReplicationReadiness(db, {
       orgId, bookId: ctx.book_id, through: ctx.ends_on, subsidiaryIds: scoped ? subsidiaryIds : undefined,
@@ -375,11 +367,9 @@ export async function readinessChecks(
   // Prepaid amortization is current when no active schedule holds a planned
   // period ending on or before the period end in this book and scope. Only
   // runs that carry the step pay for the count.
-  const prepaidTask = (
-    await db.execute<{ id: string }>(sql`
+  const prepaidTask = (await db.execute<{ id: string }>(sql`
       select id from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key = 'prepaid-amortized' limit 1`)
-  ).rows[0];
+       where run_id = ${runId} and org_id = ${orgId} and key = 'prepaid-amortized' limit 1`, "objects"))[0];
   const prepaidDue = prepaidTask
     ? await dueUnpostedAmortization(db, orgId, {
         endsOn: ctx.ends_on,
@@ -391,16 +381,14 @@ export async function readinessChecks(
   // Equity runs are current when no legal entity in scope with equity
   // records has a stock compensation or note interest change due through
   // period end. Only runs that carry the steps pay for the measurement.
-  const equityTasks = (
-    await db.execute<{ key: string }>(sql`
+  const equityTasks = (await db.execute<{ key: string }>(sql`
       select key from close_run_tasks
-       where run_id = ${runId} and org_id = ${orgId} and key in ('equity-compensation-posted', 'equity-interest-accrued')`)
-  ).rows.map((row) => row.key);
+       where run_id = ${runId} and org_id = ${orgId} and key in ('equity-compensation-posted', 'equity-interest-accrued')`, "objects")).map((row) => row.key);
   const equityDue = equityTasks.length > 0
     ? await closeEquityPostings(orgId, { through: ctx.ends_on, subsidiaryIds: scoped ? subsidiaryIds : [] })
     : { compensation: [], interest: [] };
 
-  const threshold = variancePolicy.rows[0] ?? {
+  const threshold = variancePolicy[0] ?? {
     amount: "10000.0000",
     percent: 20,
   };
@@ -434,7 +422,7 @@ export async function readinessChecks(
       from entity_activity v join accounts a on a.id=v.account_id and a.org_id=${orgId}
      where not a.is_summary
        and abs(v.current_amount-v.prior_amount) >= ${threshold.amount}::numeric
-       and (v.prior_amount=0 or abs((v.current_amount-v.prior_amount)/nullif(abs(v.prior_amount),0)*100) >= ${threshold.percent}::numeric)`));
+       and (v.prior_amount=0 or abs((v.current_amount-v.prior_amount)/nullif(abs(v.prior_amount),0)*100) >= ${threshold.percent}::numeric)`, "objects"));
 
   const segmentResiduals=(await db.execute<{count:string}>(sql`select count(*)::text as count from (
     select d.key,l.subsidiary_id from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
@@ -445,7 +433,7 @@ export async function readinessChecks(
       when 'department_id' then l.department_id::text when 'project_id' then l.project_id::text
       when 'location_id' then l.location_id::text when 'class_id' then l.class_id::text else l.extra_dims->>d.key end
     having sum(l.amount)<>0
-  ) residuals`)).rows[0]?.count ?? '0';
+  ) residuals`, "objects"))[0]?.count ?? '0';
 
   // Loss contracts: the effective project loss policy decides whether a
   // project forecasting a loss without a loss assessment applied in the
@@ -500,7 +488,7 @@ export async function readinessChecks(
       severity: "critical",
       title: "close.diagnostics.drafts-open.title",
       message: "close.diagnostics.drafts-open.message",
-      count: Number(drafts.rows[0]?.count ?? 0),
+      count: Number(drafts[0]?.count ?? 0),
     },
     {
       code: "posting-period-missing",
@@ -509,7 +497,7 @@ export async function readinessChecks(
       severity: "critical",
       title: "close.diagnostics.posting-period-missing.title",
       message: "close.diagnostics.posting-period-missing.message",
-      count: Number(missingPeriod.rows[0]?.count ?? 0),
+      count: Number(missingPeriod[0]?.count ?? 0),
     },
     {
       code: "bank-unreconciled",
@@ -518,9 +506,9 @@ export async function readinessChecks(
       severity: "critical",
       title: "close.diagnostics.bank-unreconciled.title",
       message: "close.diagnostics.bank-unreconciled.message",
-      count: bank.rows.length,
-      details: bank.rows.length > 0 ? {
-        accounts: bank.rows.map((row: Record<string, unknown>) => ({
+      count: bank.length,
+      details: bank.length > 0 ? {
+        accounts: bank.map((row: Record<string, unknown>) => ({
           accountId: row.account_id as string,
           number: row.number as string | null,
           name: row.name as string,
@@ -538,7 +526,7 @@ export async function readinessChecks(
       severity: "error",
       title: "close.diagnostics.depreciation-unposted.title",
       message: "close.diagnostics.depreciation-unposted.message",
-      count: Number(depreciation.rows[0]?.count ?? 0),
+      count: Number(depreciation[0]?.count ?? 0),
     },
     {
       code: "recognition-unposted",
@@ -547,7 +535,7 @@ export async function readinessChecks(
       severity: "error",
       title: "close.diagnostics.recognition-unposted.title",
       message: "close.diagnostics.recognition-unposted.message",
-      count: Number(recognition.rows[0]?.count ?? 0),
+      count: Number(recognition[0]?.count ?? 0),
     },
     {
       code: "unbilled-revenue-unaccrued",
@@ -606,7 +594,7 @@ export async function readinessChecks(
       severity: "critical",
       title: "close.diagnostics.fx-missing.title",
       message: "close.diagnostics.fx-missing.message",
-      count: Number(fx.rows[0]?.count ?? 0),
+      count: Number(fx[0]?.count ?? 0),
     },
     {
       code: "fx-unrevalued",
@@ -644,7 +632,7 @@ export async function readinessChecks(
       severity: "critical",
       title: "close.diagnostics.intercompany-residual.title",
       message: "close.diagnostics.intercompany-residual.message",
-      count: Number(intercompany.rows[0]?.count ?? 0),
+      count: Number(intercompany[0]?.count ?? 0),
     },
     {
       // Pair balances the two entities record differently at period end
@@ -668,7 +656,7 @@ export async function readinessChecks(
       severity: "critical",
       title: "close.diagnostics.consolidated-rates-missing.title",
       message: "close.diagnostics.consolidated-rates-missing.message",
-      count: Number(intercompany.rows[0]?.missing_rates ?? 0),
+      count: Number(intercompany[0]?.missing_rates ?? 0),
     },
     {
       code: "material-variances",
@@ -677,7 +665,7 @@ export async function readinessChecks(
       severity: "warning",
       title: "close.diagnostics.material-variances.title",
       message: "close.diagnostics.material-variances.message",
-      count: Number(variances.rows[0]?.count ?? 0),
+      count: Number(variances[0]?.count ?? 0),
       details: {
         // Thresholds are evaluated in each legal entity's functional currency.
         amountBasis: "entity-functional-currency",

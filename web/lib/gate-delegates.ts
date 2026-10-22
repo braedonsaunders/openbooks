@@ -19,8 +19,8 @@ export type GateDelegateOption = {
 export async function gateDelegateOptions(orgId: string, viewerId: string, gateId: string | null): Promise<GateDelegateOption[]> {
   if (!gateId) return []
   if (!(await gateDecisionCapability(gateId, viewerId)).canDelegate) return []
-  return (await db.execute<GateDelegateOption>(sql`
+  return await db.execute<GateDelegateOption>(sql`
     select id::text as id, name from users
      where org_id = ${orgId} and is_active and id <> ${viewerId}
-     order by name limit 500`)).rows
+     order by name limit 500`, 'objects')
 }

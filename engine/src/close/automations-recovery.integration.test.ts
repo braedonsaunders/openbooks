@@ -44,8 +44,8 @@ async function seedCrashedClaim(args: {
             ${lockedAtMinutesAgo === null ? null : sql`now() - make_interval(mins => ${lockedAtMinutesAgo})`},
             null, null)
     returning id
-  `));
-  const executionId = inserted.rows[0]!.id;
+  `, "objects"));
+  const executionId = inserted[0]!.id;
   if (args.stages && Object.keys(args.stages).length > 0) {
     await db.execute(sql`
       update close_automation_executions
@@ -67,8 +67,8 @@ async function seedRule(args: {
     values (${args.orgId}, 'recovery probe rule', 'run_started', ${args.action},
             '{}'::jsonb, ${JSON.stringify(args.config)}::jsonb, true)
     returning id
-  `));
-  return inserted.rows[0]!.id;
+  `, "objects"));
+  return inserted[0]!.id;
 }
 
 async function readExecution(executionId: string): Promise<{
@@ -89,16 +89,16 @@ async function readExecution(executionId: string): Promise<{
            locked_at as "lockedAt", executed_at as "executedAt"
       from close_automation_executions
      where id = ${executionId}
-  `));
-  return result.rows[0]!;
+  `, "objects"));
+  return result[0]!;
 }
 
 async function notificationCounts(orgId: string): Promise<Map<string, number>> {
-  const rows = (await db.execute<{ user_id: string; n: number }>(sql`
+  const rows = await db.execute<{ user_id: string; n: number }>(sql`
     select user_id, count(*)::int as n from notifications
      where org_id = ${orgId} and kind = 'close'
      group by user_id
-  `)).rows;
+  `, "objects");
   return new Map(rows.map((row) => [row.user_id, row.n]));
 }
 
@@ -106,12 +106,12 @@ async function terminalEventCounts(
   orgId: string,
   executionId: string,
 ): Promise<{ completed: number; failed: number }> {
-  const rows = (await db.execute<{ event_type: string; n: number }>(sql`
+  const rows = await db.execute<{ event_type: string; n: number }>(sql`
     select event_type, count(*)::int as n from close_events
      where org_id = ${orgId} and task_id is null
        and payload->>'executionId' = ${executionId}
      group by event_type
-  `)).rows;
+  `, "objects");
   return {
     completed: rows.find((r) => r.event_type === "automation.completed")?.n ?? 0,
     failed: rows.find((r) => r.event_type === "automation.failed")?.n ?? 0,
@@ -139,8 +139,8 @@ async function withProbe(
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
       returning id
-    `));
-    await fn(fixture, actors, inserted.rows[0]!.id);
+    `, "objects"));
+    await fn(fixture, actors, inserted[0]!.id);
   } finally {
     await dropScratchOrg(fixture.orgId);
   }
@@ -307,7 +307,7 @@ test("a post-effect pre-terminal crash finishes without duplicating the committe
       values (${fixture.orgId}, ${runId}, 'publish-package', 'Publish package', 'publish',
               'publish', 'automatic', 'hard', 'ready', 9000, current_date + 30)
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const reportExecutionId = await seedCrashedClaim({
       orgId: fixture.orgId,
       ruleId: reportRuleId,
@@ -338,13 +338,13 @@ test("a post-effect pre-terminal crash finishes without duplicating the committe
       select count(*)::int as n from close_run_tasks
        where org_id = ${fixture.orgId} and run_id = ${runId}
          and key like 'crash-proof-%'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(taskCount, 1);
     const evidenceCount = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from close_task_evidence
        where org_id = ${fixture.orgId} and task_id = ${taskId}
          and label = 'resumed evidence'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(evidenceCount, 1, "the crashed attempt's evidence must not be duplicated");
     assert.equal((await readExecution(reportExecutionId)).status, "completed");
 
@@ -381,7 +381,7 @@ test("concurrent schedulers still single-fire through the leased claim", { skip:
     const executions = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from close_automation_executions
        where org_id = ${fixture.orgId} and rule_id = ${ruleId} and event_key = ${eventKey}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(executions, 1, "exactly one claim row must exist");
 
     const terminalEvents = (await db.execute<{ n: number }>(sql`
@@ -390,7 +390,7 @@ test("concurrent schedulers still single-fire through the leased claim", { skip:
          and payload->>'executionId' = (
            select id::text from close_automation_executions
             where org_id = ${fixture.orgId} and rule_id = ${ruleId} and event_key = ${eventKey})
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(terminalEvents, 1);
   });
 });
@@ -515,7 +515,7 @@ const flowNotifications = (orgId: string) =>
     select title, count(*)::int as n from notifications
      where org_id = ${orgId} and kind = 'flow'
      group by title
-  `);
+  `, "objects");
 
 test("a resumed start_flow attempt adopts a completed flow run without reopening it or appending effects", { skip: !DB }, async () => {
   await withProbe(async (fixture, actors, runId) => {
@@ -536,7 +536,7 @@ test("a resumed start_flow attempt adopts a completed flow run without reopening
       values (${fixture.orgId}, ${flowId}, 'vendor_bill', ${docId}, 'manual', 'completed', '{}'::jsonb,
               ${occurrenceKey}, now(), now(), null, null)
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     await db.execute(sql`
       insert into flow_run_effects (org_id, run_id, effect_key)
       values (${fixture.orgId}, ${runRowId}, ${`${flowId}:action:act_latch`}),
@@ -551,7 +551,7 @@ test("a resumed start_flow attempt adopts a completed flow run without reopening
     `);
     const finishedBefore = (await db.execute<{ finished_at: string }>(sql`
       select finished_at::text as finished_at from flow_runs where id = ${runRowId}
-    `)).rows[0]!.finished_at;
+    `, "objects"))[0]!.finished_at;
 
     const result = await runCloseAutomations({
       orgId: fixture.orgId,
@@ -563,9 +563,9 @@ test("a resumed start_flow attempt adopts a completed flow run without reopening
 
     // Terminal evidence is immutable: adopted in place — same verdict, same
     // finished_at, and the drifted condition's fresh node never fires.
-    const [run] = (await db.execute<{ id: string; status: string; finished_at: string; error: string | null }>(sql`
+    const [run] = await db.execute<{ id: string; status: string; finished_at: string; error: string | null }>(sql`
       select id, status, finished_at::text as finished_at, error from flow_runs where occurrence_key = ${occurrenceKey}
-    `)).rows;
+    `, "objects");
     assert.ok(run);
     assert.equal(run.status, "completed");
     assert.equal(run.error, null);
@@ -575,13 +575,13 @@ test("a resumed start_flow attempt adopts a completed flow run without reopening
       "the resumed attempt must not rewrite the completed run's finished_at",
     );
     assert.deepEqual(
-      Object.fromEntries((await flowNotifications(fixture.orgId)).rows.map((r) => [r.title, r.n])),
+      Object.fromEntries((await flowNotifications(fixture.orgId)).map((r) => [r.title, r.n])),
       { "Recovery first pass": 1 },
       "the latched branch must not fire fresh under the adopted completed run",
     );
     assert.equal((await db.execute<{ n: number }>(sql`
       select count(*)::int as n from flow_run_effects where run_id = ${run.id}
-    `)).rows[0]!.n, 2);
+    `, "objects"))[0]!.n, 2);
     assert.equal((await readExecution(executionId)).status, "completed");
   });
 });
@@ -614,20 +614,20 @@ test("a resumed start_flow attempt still finishes a crashed running flow run", {
 
     // The resume contract is intact: the running run reopens, executes its
     // remaining effects under the checkpoint contract, and completes once.
-    const [run] = (await db.execute<{ id: string; status: string; finished_at: Date | null; error: string | null }>(sql`
+    const [run] = await db.execute<{ id: string; status: string; finished_at: Date | null; error: string | null }>(sql`
       select id, status, finished_at, error from flow_runs where occurrence_key = ${occurrenceKey}
-    `)).rows;
+    `, "objects");
     assert.ok(run);
     assert.equal(run.status, "completed");
     assert.ok(run.finished_at);
     assert.equal(run.error, null);
     assert.deepEqual(
-      Object.fromEntries((await flowNotifications(fixture.orgId)).rows.map((r) => [r.title, r.n])),
+      Object.fromEntries((await flowNotifications(fixture.orgId)).map((r) => [r.title, r.n])),
       { "Recovery first pass": 1 },
     );
     const memo = (await db.execute<{ memo: string | null }>(sql`
       select memo from documents where id = ${docId} and org_id = ${fixture.orgId}
-    `)).rows[0]!.memo;
+    `, "objects"))[0]!.memo;
     assert.equal(memo, "latched");
   });
 });
@@ -660,10 +660,10 @@ test("a run_allocation rule routes into the allocation scheduler instead of fail
     // engine records `unsupported close automation action` and fails.
     assert.deepEqual(result, { completed: 1, failed: 0 });
 
-    const executions = (await db.execute<{ status: string }>(sql`
+    const executions = await db.execute<{ status: string }>(sql`
       select status from close_automation_executions
        where org_id = ${fixture.orgId} and rule_id = ${ruleId} and event_key = ${eventKey}
-    `)).rows;
+    `, "objects");
     assert.equal(executions.length, 1);
     assert.equal(executions[0]!.status, "completed");
   });

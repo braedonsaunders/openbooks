@@ -30,7 +30,7 @@ export async function listReceiptVoidBlockers(
 ): Promise<ReceiptVoidRelief> {
   const header = (await runner.execute<{ document_number: string }>(sql`
     select document_number from documents
-     where id = ${receiptId} and org_id = ${orgId} and kind = 'purchase_receipt'`)).rows[0];
+     where id = ${receiptId} and org_id = ${orgId} and kind = 'purchase_receipt'`, "objects"))[0];
   if (!header) throw new InventoryError("goods receipt not found");
   const movements = await liveReceiptMovements(runner, orgId, receiptId);
   const movementIds = movements.map((movement) => movement.id);
@@ -40,9 +40,9 @@ export async function listReceiptVoidBlockers(
   const layerOwner = new Map<string, string>();
   if (movementIds.length > 0) {
     const idArr = `{${movementIds.join(",")}}`;
-    const owners = (await runner.execute<{ id: string; source_movement_id: string }>(sql`
+    const owners = await runner.execute<{ id: string; source_movement_id: string }>(sql`
       select id, source_movement_id from cost_layers
-       where org_id = ${orgId} and source_movement_id = any(${idArr}::uuid[])`)).rows;
+       where org_id = ${orgId} and source_movement_id = any(${idArr}::uuid[])`, "objects");
     for (const owner of owners) layerOwner.set(owner.id, owner.source_movement_id);
   }
   for (const row of consumptions) {
@@ -55,7 +55,7 @@ export async function listReceiptVoidBlockers(
   const layerIds = [...layerOwner.keys()];
   const landed = new Map<string, number>();
   if (layerIds.length > 0) {
-    const rows = (await runner.execute<{ target_cost_layer_id: string; n: number }>(sql`
+    const rows = await runner.execute<{ target_cost_layer_id: string; n: number }>(sql`
       select allocation.target_cost_layer_id, count(*)::int as n
         from landed_cost_allocations allocation
        where allocation.org_id = ${orgId}
@@ -66,7 +66,7 @@ export async function listReceiptVoidBlockers(
             where reversal.org_id = allocation.org_id
               and reversal.reverses_allocation_id = allocation.id
          )
-       group by allocation.target_cost_layer_id`)).rows;
+       group by allocation.target_cost_layer_id`, "objects");
     for (const row of rows) {
       const owner = layerOwner.get(row.target_cost_layer_id);
       if (owner) landed.set(owner, (landed.get(owner) ?? 0) + row.n);
@@ -76,7 +76,7 @@ export async function listReceiptVoidBlockers(
     movementIds.length > 0
       ? (await runner.execute<{ receipt_movement_id: string }>(sql`
         select receipt_movement_id from inventory_provisional_settlements
-         where org_id = ${orgId} and receipt_movement_id = any(${`{${movementIds.join(",")}}`}::uuid[])`)).rows.map(
+         where org_id = ${orgId} and receipt_movement_id = any(${`{${movementIds.join(",")}}`}::uuid[])`, "objects")).map(
         (row) => row.receipt_movement_id,
       )
       : [],
@@ -85,7 +85,7 @@ export async function listReceiptVoidBlockers(
     movementIds.length > 0
       ? (await runner.execute<{ receipt_movement_id: string }>(sql`
         select receipt_movement_id from consignment_events
-         where org_id = ${orgId} and receipt_movement_id = any(${`{${movementIds.join(",")}}`}::uuid[]) limit 500`)).rows.map(
+         where org_id = ${orgId} and receipt_movement_id = any(${`{${movementIds.join(",")}}`}::uuid[]) limit 500`, "objects")).map(
         (row) => row.receipt_movement_id,
       )
       : [],

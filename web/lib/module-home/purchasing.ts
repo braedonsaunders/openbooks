@@ -198,20 +198,20 @@ export async function purchasingHome(
   // shared tail needs no branch.
   type TrendRow = { wk: string; func: string | null; late: string | null; spend: string | number }
   type FlowRow = { dt: string; func: string | null; amt: string | number }
-  const noTrend = Promise.resolve({ rows: [] as TrendRow[] })
-  const noFlows = Promise.resolve({ rows: [] as FlowRow[] })
-  const noPos = Promise.resolve({ rows: [] as OpenPoRow[] })
+  const noTrend = Promise.resolve([] as TrendRow[])
+  const noFlows = Promise.resolve([] as FlowRow[])
+  const noPos = Promise.resolve([] as OpenPoRow[])
   const [apItems, trendRes, badgeRes, paidRowsRes, spendRowsRes, poRowsRes, orgRes] = (await Promise.all([
     grants.ap ? openItems(orgId, 'ap', today, subIds) : Promise.resolve([]),
     // 13-week billed-spend trend (posted vendor bills by week). Documents
     // translate txn→functional at their maintained rate; the second leg to
     // presentation happens per (week, functional) below.
-    grants.ap ? db.execute(sql`
+    grants.ap ? db.execute<TrendRow>(sql`
       select date_trunc('week', movement.dt)::date as wk, movement.func,
              max(movement.dt)::text as late, coalesce(sum(movement.amount), 0) as spend
         from (${documentMovements(orgId, ['vendor_bill'], trendFrom, today, docScope)}) movement
        group by 1, 2
-    `) : noTrend,
+    `, 'objects') : noTrend,
     // Directory badges + the remaining vitals (money scalars moved to the
     // per-(date, functional) row queries below so the second translation leg
     // can run in JS).
@@ -228,19 +228,19 @@ export async function purchasingHome(
         ${grants.parties ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as vendors
-    `),
+    `, 'objects'),
     // 7-day payment value per (date, functional) for presentation translation.
-    grants.ap ? db.execute(sql`
+    grants.ap ? db.execute<FlowRow>(sql`
       select movement.dt::text as dt, movement.func, coalesce(sum(movement.amount), 0) as amt
         from (${documentMovements(orgId, ['vendor_payment', 'check'], ago7, today, docScope)}) movement
        group by 1, 2
-    `) : noFlows,
+    `, 'objects') : noFlows,
     // 30-day billed spend per (date, functional) for presentation translation.
-    grants.ap ? db.execute(sql`
+    grants.ap ? db.execute<FlowRow>(sql`
       select movement.dt::text as dt, movement.func, coalesce(sum(movement.amount), 0) as amt
         from (${documentMovements(orgId, ['vendor_bill'], ago30, today, docScope)}) movement
        group by 1, 2
-    `) : noFlows,
+    `, 'objects') : noFlows,
     // Open purchase-order headers translate per-row in JS: POs never post,
     // so they carry no maintained fx_rate and a SQL sum would mix
     // transaction currencies.
@@ -251,12 +251,12 @@ export async function purchasingHome(
           from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = 'purchase_order'
-           and d.status in ('draft', 'pending_approval', 'approved') and d.voided_at is null${docScope}`)
+           and d.status in ('draft', 'pending_approval', 'approved') and d.voided_at is null${docScope}`, 'objects')
       : noPos,
     ordersOn
       ? db.execute<{ baseCurrency: string }>(sql`
-      select base_currency as "baseCurrency" from orgs where id = ${orgId}`)
-      : Promise.resolve({ rows: [] as { baseCurrency: string }[] }),
+      select base_currency as "baseCurrency" from orgs where id = ${orgId}`, 'objects')
+      : Promise.resolve([] as { baseCurrency: string }[]),
   ]))
 
   // Presentation: flows translate at their document-date spot. Balances
@@ -266,10 +266,10 @@ export async function purchasingHome(
   // lookup never runs ahead of the data it translates.
   const trendCtx = grants.ap ? await flowRates(
     orgId,
-    trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
+    trendRes.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
   ) : null
   const byWeek = new Map<string, string>()
-  for (const r of trendRes.rows) {
+  for (const r of trendRes) {
     const wk = String(r.wk).slice(0, 10)
     const late = String(r.late ?? r.wk).slice(0, 10)
     const spend = mulDecimal(String(r.spend ?? 0), trendCtx!.rateAt((r.func ?? null) as string | null, late))
@@ -277,16 +277,16 @@ export async function purchasingHome(
   }
   const paid7dValue = grants.ap ? await translateFlows(
     orgId,
-    paidRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
+    paidRowsRes.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
   ) : '0'
   const spend30d = grants.ap ? await translateFlows(
     orgId,
-    spendRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
+    spendRowsRes.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
   ) : '0'
 
-  const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
+  const orgCurrency = String(orgRes[0]?.baseCurrency ?? '').trim().toUpperCase()
   if (ordersOn && !orgCurrency) throw new Error('organization currency is not configured')
-  const po = ordersOn ? await openPoValueInOrgCurrency(orgId, today, poRowsRes.rows, unknownVendor) : { byParty: new Map(), total: '0' }
+  const po = ordersOn ? await openPoValueInOrgCurrency(orgId, today, poRowsRes, unknownVendor) : { byParty: new Map(), total: '0' }
 
   // Hero roster — vendor commitments merged from the SAME as-of open items
   // as the pulse with translated open POs, ranked by combined
@@ -360,7 +360,7 @@ export async function purchasingHome(
     const due = it.dueDate ? toISO(it.dueDate) : null
     if (due !== null && due >= today && due < in7) dueNext7 = add(dueNext7, remaining)
   }
-  const badge = badgeRes.rows[0] ?? {}
+  const badge = badgeRes[0] ?? {}
   return {
     apOutstanding,
     apOverdue,

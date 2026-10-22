@@ -100,12 +100,10 @@ const post = (body: unknown) =>
   );
 
 async function storedLeadDays(orgId: string): Promise<number[] | null> {
-  const row = (
-    await withBypassContext(() =>
+  const row = (await withBypassContext(() =>
       db.execute<{ alert_lead_days: number[] | null }>(sql`
-        select alert_lead_days from hrm_qualification_settings where org_id = ${orgId}::uuid`),
-    )
-  ).rows[0];
+        select alert_lead_days from hrm_qualification_settings where org_id = ${orgId}::uuid`, "objects"),
+    ))[0];
   return row?.alert_lead_days ?? null;
 }
 

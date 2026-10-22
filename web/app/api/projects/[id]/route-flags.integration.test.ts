@@ -36,7 +36,7 @@ test('project PATCH refuses non-boolean flag values instead of a storage 500', a
         const response = await PATCH(patchRequest(projectId, body), params(projectId))
         assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(await response.clone().json())}`)
       }
-      const stored = (await db.execute<{ is_active: boolean }>(sql`select is_active from projects where id=${projectId} and org_id=${org.orgId}`)).rows[0]
+      const stored = (await db.execute<{ is_active: boolean }>(sql`select is_active from projects where id=${projectId} and org_id=${org.orgId}`, 'objects'))[0]
       assert.equal(stored?.is_active, true, 'refused writes leave stored flags unchanged')
       const ok = await PATCH(patchRequest(projectId, { isActive: true }), params(projectId))
       assert.equal(ok.status, 200, JSON.stringify(await ok.clone().json()))

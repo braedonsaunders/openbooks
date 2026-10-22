@@ -44,7 +44,7 @@ async function seedOrg(): Promise<Seed> {
     update item_inventory_profiles set unit_conversions = '{"lb": 1}'::jsonb
      where org_id = ${org.orgId} and item_id = ${org.items.fifo}
   `);
-  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${org.orgId}`)).rows[0]!.c;
+  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${org.orgId}`, "objects"))[0]!.c;
   return {
     orgId: org.orgId,
     actorId,
@@ -139,21 +139,21 @@ async function seedDrawerBill(
 async function onHand(seed: Seed): Promise<string> {
   return (await db.execute<{ q: string }>(sql`
     select coalesce(sum(quantity), 0)::text as q from inventory_movements
-     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`)).rows[0]!.q;
+     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`, "objects"))[0]!.q;
 }
 
 async function billReceiptMovements(seed: Seed, billId: string): Promise<number> {
   return (await db.execute<{ count: number }>(sql`
     select count(*)::int as count from inventory_movements m
       join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
-     where m.org_id = ${seed.orgId} and l.document_id = ${billId} and m.kind = 'receipt'`)).rows[0]!.count;
+     where m.org_id = ${seed.orgId} and l.document_id = ${billId} and m.kind = 'receipt'`, "objects"))[0]!.count;
 }
 
 async function balanceOf(seed: Seed, accountId: string): Promise<string> {
   return (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as amount from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-     where l.org_id = ${seed.orgId} and l.account_id = ${accountId} and e.status = 'posted'`)).rows[0]!.amount;
+     where l.org_id = ${seed.orgId} and l.account_id = ${accountId} and e.status = 'posted'`, "objects"))[0]!.amount;
 }
 
 function control(seed: Seed) {
@@ -186,10 +186,10 @@ test("an unmatched bill for received stock posts through received-not-billed wit
     assert.equal(toUnits(await balanceOf(seed, seed.ap)), toUnits("-600"), "the bill books its payable");
     assert.equal(toUnits(await balanceOf(seed, seed.asset)), toUnits("600"), "inventory keeps the receipt cost");
     const stamp = (await db.execute<{ custom: { purchaseOrderLineId?: string } }>(sql`
-      select custom from document_lines where id = ${bill.lineId} and org_id = ${seed.orgId}`)).rows[0]!.custom;
+      select custom from document_lines where id = ${bill.lineId} and org_id = ${seed.orgId}`, "objects"))[0]!.custom;
     assert.equal(stamp.purchaseOrderLineId, po.lineId, "posting matched the line to its order");
     const billed = (await db.execute<{ b: string }>(sql`
-      select quantity_billed::text as b from document_lines where id = ${po.lineId}`)).rows[0]!.b;
+      select quantity_billed::text as b from document_lines where id = ${po.lineId}`, "objects"))[0]!.b;
     assert.equal(toUnits(billed), toUnits("100"));
   } finally {
     await dropScratchOrg(seed.orgId);
@@ -341,7 +341,7 @@ test("a linked bill line with no live cover refuses instead of receiving again",
       (error: Error) => /no received cover remains/.test(error.message),
     );
     const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${bill.billId}`)).rows[0]!.status;
+      select status from documents where id = ${bill.billId}`, "objects"))[0]!.status;
     assert.notEqual(status, "posted", "the refused post commits nothing");
     assert.equal(toUnits(await onHand(seed)), toUnits("0"), "no stock was received");
   } finally {

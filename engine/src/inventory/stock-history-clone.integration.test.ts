@@ -31,7 +31,7 @@ test("full and masked clones preserve retired ownership, historical issues and t
     const external = randomUUID();
     assert.equal((await run(() => db.execute(sql`insert into stock_locations
       (id,org_id,location_id,code,kind,inventory_ownership,owner_party_id)
-      values(${external},${org.orgId},${org.locationId},'HISTORY-CUSTODY','bin','vendor',${org.vendorId}) returning id`))).rows.length,1);
+      values(${external},${org.orgId},${org.locationId},'HISTORY-CUSTODY','bin','vendor',${org.vendorId}) returning id`, "objects"))).length,1);
     const lot = await run(() => ensureLot(org.orgId,org.items.fifo,"HISTORY-LOT",null,poster));
     const serials = await run(async () => Promise.all(["OLD-OWNED","ACQUIRED","MISSING"].map(
       code => ensureSerial(org.orgId,org.items.fifo,code,null,poster))));
@@ -67,7 +67,7 @@ test("full and masked clones preserve retired ownership, historical issues and t
       entity:org.subsidiaryId,lot,serial:serials[2]!},"0");
 
     const shape = (tenant: string) => run(async () => {
-      const rows = (await db.execute(sql`select serial.serial_number,serial.status,
+      const rows = await db.execute(sql`select serial.serial_number,serial.status,
         coalesce((select sum(layer.remaining_quantity) from cost_layers layer join inventory_movements source
           on source.org_id=layer.org_id and source.id=layer.source_movement_id
           where layer.org_id=serial.org_id and source.serial_id=serial.id),0)::text as valued,
@@ -75,7 +75,7 @@ test("full and masked clones preserve retired ownership, historical issues and t
           where stock.org_id=serial.org_id and stock.serial_id=serial.id),0)::text as custody,
         (select count(*) from inventory_movements movement where movement.org_id=serial.org_id and movement.serial_id=serial.id) as history,
         (serial.current_missing_count_movement_id is not null) as missing
-        from serials serial where serial.org_id=${tenant} order by serial.serial_number`)).rows;
+        from serials serial where serial.org_id=${tenant} order by serial.serial_number`, "objects");
       return rows;
     });
     const expected = await shape(org.orgId);
@@ -98,7 +98,7 @@ test("full and masked clones preserve retired ownership, historical issues and t
         const clone = await run(() => createSandbox({productionOrgId:org.orgId,name,tier:masked?"masked":"full",masked,createdBy:poster}));
         const control = (await run(() => db.execute<{ status: string; sandbox_seed: string }>(sql`
           select control.status,target.sandbox_seed from sandboxes control join orgs target on target.id=control.org_id
-          where control.id=${clone.sandboxId} and control.org_id=${clone.sandboxOrgId}`))).rows[0]!;
+          where control.id=${clone.sandboxId} and control.org_id=${clone.sandboxOrgId}`, "objects")))[0]!;
         assert.equal(control.status,"ready");
         assert.deepEqual(await shape(clone.sandboxOrgId),expected);
         const copied = (await run(() => db.execute<{ item: string; location: string; business: string; entity: string; lot: string; serial: string; pointer: string; expected_pointer: string }>(sql`
@@ -109,7 +109,7 @@ test("full and masked clones preserve retired ownership, historical issues and t
             and line.adjustment_movement_id=serial.current_missing_count_movement_id
           join stock_counts count on count.org_id=line.org_id and count.id=line.stock_count_id
           join serials original on original.org_id=${org.orgId} and original.id=${serials[2]}
-          where serial.org_id=${clone.sandboxOrgId}`))).rows[0]!;
+          where serial.org_id=${clone.sandboxOrgId}`, "objects")))[0]!;
         assert.ok(copied);
         assert.equal(copied.pointer,copied.expected_pointer);
         const provenance=(await run(()=>db.execute<{
@@ -123,7 +123,7 @@ test("full and masked clones preserve retired ownership, historical issues and t
           join inventory_movements movement on movement.org_id=line.org_id and movement.id=line.adjustment_movement_id
           join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
           left join users actor on actor.id=movement.created_by and actor.org_id=movement.org_id
-          where line.org_id=${clone.sandboxOrgId} and movement.id=${copied.pointer}`))).rows[0];
+          where line.org_id=${clone.sandboxOrgId} and movement.id=${copied.pointer}`, "objects")))[0];
         assert.ok(provenance,"copied missing-count evidence must resolve its complete posted graph");
         assert.equal(provenance.actor_org,clone.sandboxOrgId,"historical poster must resolve in the copied tenant");
         for(const actual of [provenance.movement_actor,provenance.entry_poster,provenance.line_poster,
@@ -131,17 +131,17 @@ test("full and masked clones preserve retired ownership, historical issues and t
           assert.equal(actual,provenance.expected_actor,"copied poster and observer identities must use the same native counterpart");
         assert.equal(provenance.historical_proof,true,"historical missing count must satisfy the unchanged posted-evidence proof before recovery");
         assert.equal((await run(() => db.execute(sql`select id from audit_log where org_id=${clone.sandboxOrgId}
-          and table_name='stock_counts' and changes->>'operation'='post'`))).rows.length,0,"cloning must not invent a historical post audit");
+          and table_name='stock_counts' and changes->>'operation'='post'`, "objects"))).length,0,"cloning must not invent a historical post audit");
         const clonedPoster = await run(() => createInventoryOperator(clone.sandboxOrgId,"Sandbox counter"));
         await countSerial(clone.sandboxOrgId,clonedPoster,copied,"1");
         assert.equal((await run(() => db.execute(sql`select current_missing_count_movement_id from serials
-          where org_id=${clone.sandboxOrgId} and id=${copied.serial}`))).rows[0]!.current_missing_count_movement_id,null);
+          where org_id=${clone.sandboxOrgId} and id=${copied.serial}`, "objects")))[0]!.current_missing_count_movement_id,null);
         assert.deepEqual(await shape(org.orgId),expected,"sandbox recovery must preserve the source tenant history");
       } catch(error) { failure=error; throw error; }
       finally {
         try {
           await run(async () => {
-            const shells=(await db.execute<{id:string}>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`)).rows;
+            const shells=await db.execute<{id:string}>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`, "objects");
             for(const shell of shells) await deleteSandbox(shell.id,{actorId:poster});
           });
         } catch(cleanupError) {

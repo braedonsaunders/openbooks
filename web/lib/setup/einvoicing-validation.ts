@@ -12,7 +12,7 @@ export const validateEInvoiceSetupWrite: SetupEntityValidationHook = async ({ en
   const current = rowId
     ? (await executor.execute<Record<string, unknown>>(sql`
         select * ${entity.key === 'tax-codes' ? sql`,einvoice_effective_from::text as einvoice_effective_from` : sql``}
-        from ${sql.raw(entity.table)} where org_id=${orgId} and id=${rowId} for update`)).rows[0]
+        from ${sql.raw(entity.table)} where org_id=${orgId} and id=${rowId} for update`, 'objects'))[0]
     : null
   if (rowId && !current) return 'not found'
   const value = (key: string): unknown => body[key] === undefined ? current?.[toSnake(key)] ?? null : body[key]
@@ -56,7 +56,7 @@ export const validateEInvoiceSetupWrite: SetupEntityValidationHook = async ({ en
     if (!partyId || (current && partyId !== String(current.party_id))) return 'Edit e-invoice metadata on the existing customer role; the customer identity cannot change.'
     const customer = (await executor.execute(sql`
       select p.id from parties p join customer_roles c on c.org_id=p.org_id and c.party_id=p.id
-      where p.org_id=${orgId} and p.id=${partyId} and c.id=${rowId ?? null} for share of p`)).rows[0]
+      where p.org_id=${orgId} and p.id=${partyId} and c.id=${rowId ?? null} for share of p`, 'objects'))[0]
     if (!customer) return 'The customer role is not available in this organization.'
   }
   if (seller) {
@@ -64,11 +64,11 @@ export const validateEInvoiceSetupWrite: SetupEntityValidationHook = async ({ en
     if (!subsidiaryId) return 'Choose the invoicing legal entity.'
     if (current && subsidiaryId !== String(current.subsidiary_id)) return 'The invoicing legal entity cannot change. Create settings for the other entity.'
     const subsidiary = (await executor.execute(sql`
-      select id from subsidiaries where org_id=${orgId} and id=${subsidiaryId} and is_active and not is_elimination for share`)).rows[0]
+      select id from subsidiaries where org_id=${orgId} and id=${subsidiaryId} and is_active and not is_elimination for share`, 'objects'))[0]
     if (!subsidiary) return 'Choose an active invoicing legal entity in this organization.'
     const duplicate = (await executor.execute(sql`
       select id from einvoice_settings where org_id=${orgId} and subsidiary_id=${subsidiaryId}
-      ${rowId ? sql`and id<>${rowId}` : sql``}`)).rows[0]
+      ${rowId ? sql`and id<>${rowId}` : sql``}`, 'objects'))[0]
     if (duplicate) return 'This legal entity already has e-invoice settings. Edit that record.'
     if (Object.hasOwn(body, 'paymentMeansCode') && !str('paymentMeansCode')) return 'Choose a supported payment means code.'
     if (!isKnownPaymentMeansCode(str('paymentMeansCode') ?? '30')) return 'Choose a supported payment means code.'
@@ -87,7 +87,7 @@ export const validateEInvoiceSetupWrite: SetupEntityValidationHook = async ({ en
     if (!seller && category && str('calculationType') === 'withholding') return 'Withholding taxes do not represent an EN 16931 VAT category. Configure e-invoice categories on VAT codes.'
     if (!seller && category === 'AE' && str('calculationType') !== 'reverse_charge') return 'Use the native reverse-charge calculation type for a reverse-charge e-invoice category.'
     if (!seller && str('jurisdictionId') && str('country')) {
-      const jurisdiction = (await executor.execute<{ country: string }>(sql`select country from tax_jurisdictions where org_id=${orgId} and id=${str('jurisdictionId')} for share`)).rows[0]
+      const jurisdiction = (await executor.execute<{ country: string }>(sql`select country from tax_jurisdictions where org_id=${orgId} and id=${str('jurisdictionId')} for share`, 'objects'))[0]
       if (!jurisdiction || jurisdiction.country !== str('country')) return 'Choose a tax jurisdiction in the tax code’s configured country.'
     }
     if (!seller && rowId && current?.einvoice_category && ['einvoiceCategory', 'einvoiceEffectiveFrom', 'einvoiceExemptionReason', 'einvoiceExemptionReasonCode']
@@ -96,7 +96,7 @@ export const validateEInvoiceSetupWrite: SetupEntityValidationHook = async ({ en
         select d.id from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
         where l.org_id=${orgId} and d.status='posted' and (l.tax_code_id=${rowId} or exists (
           select 1 from document_line_tax_components c where c.org_id=l.org_id and c.document_line_id=l.id and c.tax_code_id=${rowId}))
-        limit 1`)).rows[0]
+        limit 1`, 'objects'))[0]
       if (posted) return 'This e-invoice VAT treatment is used by posted documents. Create a new tax code with effective-dated rates for changes; issued originals remain preserved.'
     }
   }

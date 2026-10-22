@@ -44,11 +44,11 @@ function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): 
   return {
     periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
     programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
-    tx: { execute: async () => ++query === 1
+    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve(++query === 1
       ? ({ rows: [{ fact_value: employerEffectif }] })
       : query === 3
       ? ({ rows: [{ fact_value: "droit_commun" }] })
-      : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
+      : ({ rows: [{ fact_value: "ordinary", remuneration: "0", smic: "0", reduction: "0" }] })).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
     resolveStatutoryRates: async () => ({

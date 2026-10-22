@@ -1,0 +1,1 @@
+Rewrites object descriptions only; no table, constraint or row is read or changed.

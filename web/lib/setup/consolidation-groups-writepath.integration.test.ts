@@ -33,8 +33,8 @@ function actor(orgId: string, actorId: string) {
 
 async function groupCount(orgId: string): Promise<number> {
   const r = await withBypass(() => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from consolidation_groups where org_id = ${orgId}`))
-  return r.rows[0]!.n
+    select count(*)::int as n from consolidation_groups where org_id = ${orgId}`, 'objects'))
+  return r[0]!.n
 }
 
 test('a group naming a payer outside the organization is refused with no row', { skip: !DB }, async () => {
@@ -80,7 +80,7 @@ test('a billing entity outside the organization is refused, an active one saves'
   try {
     const root = (await withBypass(() => db.execute<{ subsidiaryId: string }>(sql`
       select s.id as "subsidiaryId" from subsidiaries s
-       where s.org_id = ${orgId} and s.is_active order by s.created_at limit 1`))).rows[0]!.subsidiaryId
+       where s.org_id = ${orgId} and s.is_active order by s.created_at limit 1`, 'objects')))[0]!.subsidiaryId
     const branchId = randomUUID()
     await withBypass(() => db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)

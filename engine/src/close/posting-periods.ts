@@ -82,8 +82,8 @@ async function assertBookOwned(
   bookId: string,
 ): Promise<void> {
   const found = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where id = ${bookId} and org_id = ${orgId} limit 1`));
-  if (!found.rows[0]) {
+    select id from accounting_books where id = ${bookId} and org_id = ${orgId} limit 1`, "objects"));
+  if (!found[0]) {
     throw new PostingPeriodAssignmentError("accounting book not found in this organization");
   }
 }
@@ -112,7 +112,7 @@ async function loadCandidates(
 ): Promise<CandidateRow[]> {
   await assertBookOwned(runner, orgId, opts.bookId);
   const scopeIds = opts.subsidiaryIds ?? null;
-  const rows = (await runner.execute<CandidateRow>(sql`
+  const rows = await runner.execute<CandidateRow>(sql`
     select d.id, d.document_number, d.kind, d.subsidiary_id,
            coalesce(d.posting_date, d.document_date)::text as effective_date
       from documents d
@@ -131,7 +131,7 @@ async function loadCandidates(
          // scope) may see or touch unattributed documents.
          ? sql`and d.subsidiary_id = any(${uuidArray(scopeIds)}::uuid[])`
          : sql``}
-     order by d.document_date, d.document_number`)).rows;
+     order by d.document_date, d.document_number`, "objects");
   if (opts.documentIds !== undefined && opts.documentIds.length > 0) {
     const seen = new Set(rows.map((row) => row.id));
     const missing = opts.documentIds.filter((id) => !seen.has(id));
@@ -162,7 +162,7 @@ async function openAdjustmentAlternative(
     select id, period_number, starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods
      where org_id = ${orgId} and fiscal_calendar_id = ${calendarId}
        and fiscal_year = ${fiscalYear} and is_adjustment
-     order by period_number limit 1`)).rows[0];
+     order by period_number limit 1`, "objects"))[0];
   if (!row) return null;
   const periodRef: PeriodDisplayInput = {
     fiscalYear,
@@ -305,8 +305,8 @@ async function assertAdjustmentOwned(
 ): Promise<void> {
   const found = (await runner.execute<{ id: string }>(sql`
     select id from accounting_periods
-     where id = ${adjustmentPeriodId} and org_id = ${orgId} and is_adjustment limit 1`));
-  if (!found.rows[0]) {
+     where id = ${adjustmentPeriodId} and org_id = ${orgId} and is_adjustment limit 1`, "objects"));
+  if (!found[0]) {
     throw new PostingPeriodAssignmentError("adjustment period not found in this organization");
   }
 }
@@ -358,7 +358,7 @@ export async function commitPostingPeriodAssignment(
         // restricted callers, like the candidate filter above.
         const locked = (await tx.execute<{ subsidiary_id: string | null }>(sql`
           select subsidiary_id from documents
-           where id = ${row.id} and org_id = ${orgId} for update`)).rows[0];
+           where id = ${row.id} and org_id = ${orgId} for update`, "objects"))[0];
         if (!locked || !subsidiaryScopeAllows(scope, locked.subsidiary_id)) {
           result.skipped.push({ documentId: row.id, reason: "no longer assignable" });
           continue;
@@ -368,14 +368,14 @@ export async function commitPostingPeriodAssignment(
           result.refused.push({ documentId: row.id, reason: resolved.blockReason ?? "not assignable" });
           continue;
         }
-        const updated = (await tx.execute<{ id: string }>(sql`
+        const updated = await tx.execute<{ id: string }>(sql`
           update documents
              set posting_period_id = ${resolved.periodId},
                  updated_at = now(), updated_by = ${opts.actorId}
            where id = ${row.id} and org_id = ${orgId}
              and status = 'approved' and posting_period_id is null
              ${scope ? sql`and subsidiary_id = any(${uuidArray([...scope])}::uuid[])` : sql``}
-          returning id`)).rows;
+          returning id`, "objects");
         if (updated.length === 0) {
           result.skipped.push({ documentId: row.id, reason: "no longer assignable" });
           continue;

@@ -81,8 +81,8 @@ export const POST = defineRoute({
          where org_id = ${user.orgId} and target_table = ${body.targetTable}
            and coalesce(target_kind, '') = coalesce(${body.targetKind ?? null}, '')
            and key = ${body.key}
-      `)
-      if (dup.rows.length > 0) return NextResponse.json({ error: 'a field with that key already exists on that target' }, { status: 409 })
+      `, 'objects')
+      if (dup.length > 0) return NextResponse.json({ error: 'a field with that key already exists on that target' }, { status: 409 })
 
       const created = (await tx.execute<ExistingFieldDef>(sql`
         insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, sort_order, created_by, updated_by)
@@ -92,7 +92,7 @@ export const POST = defineRoute({
         on conflict do nothing
         returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
                   ${documentRevisionSql(sql`updated_at`)} as updated_at
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!created) return NextResponse.json({ error: 'a field with that key already exists on that target' }, { status: 409 })
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
@@ -130,7 +130,7 @@ export const PATCH = defineRoute({
                ${documentRevisionSql(sql`updated_at`)} as updated_at
           from custom_field_defs
          where id = ${body.id} and org_id = ${user.orgId} for update
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!existing) return notFound("record")
       if (!(await isCustomFieldTargetEnabled(user.orgId, existing.target_table, existing.target_kind))) {
         return notFound("record")
@@ -155,7 +155,7 @@ export const PATCH = defineRoute({
         where id = ${body.id} and org_id = ${user.orgId}
         returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
                   ${documentRevisionSql(sql`updated_at`)} as updated_at
-      `)).rows[0]!
+      `, 'objects'))[0]!
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${user.orgId}, 'custom_field_defs', ${body.id}, 'update',

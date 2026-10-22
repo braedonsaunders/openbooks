@@ -67,8 +67,8 @@ async function fixture() {
     const sub = await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Entity B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)
-    ids.subB = sub.rows[0]!.id
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, 'objects')
+    ids.subB = sub[0]!.id
     await db.execute(sql`
       update app_roles set permissions='["admin.setup.manage"]'::jsonb,
         subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
@@ -106,7 +106,7 @@ async function fixture() {
       method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
     }), { params: Promise.resolve({ id: ids.version }) }))
   const scopeCount = async (): Promise<number> =>
-    Number((await db.execute<{ n: string }>(sql`select count(*) as n from labor_rate_version_scopes where version_id=${ids.version}`)).rows[0]!.n)
+    Number((await db.execute<{ n: string }>(sql`select count(*) as n from labor_rate_version_scopes where version_id=${ids.version}`, 'objects'))[0]!.n)
   const close = async () => {
     session.user = null
     await dropScratchOrg(org.orgId)

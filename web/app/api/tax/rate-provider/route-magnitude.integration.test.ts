@@ -74,8 +74,8 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function quoteCount(): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from tax_rate_quotes where org_id = ${state.orgId}`)).rows
+  const rows = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from tax_rate_quotes where org_id = ${state.orgId}`, 'objects')
   return rows[0]!.n
 }
 
@@ -117,8 +117,8 @@ test('PUT by a subsidiary-restricted setup manager is refused with the provider 
     const body = (await response.json().catch(() => null)) as unknown
     assert.equal(response.status, 403, JSON.stringify(body))
     assert.deepEqual(body, { error: 'requires unrestricted subsidiary access' })
-    const rows = (await db.execute<{ provider: string }>(sql`
-      select provider from tax_rate_provider_configs where org_id = ${state.orgId}`)).rows
+    const rows = await db.execute<{ provider: string }>(sql`
+      select provider from tax_rate_provider_configs where org_id = ${state.orgId}`, 'objects')
     assert.equal(rows[0]!.provider, 'manual')
   } finally {
     state.allowed = null
@@ -131,9 +131,9 @@ test('POST still quotes a column-maximum amount with identical read-back', async
   try {
     const result = await post({ action: 'providerQuote', taxableAmount: '999999999999999.9999', currency: 'CAD', shipFrom: {}, shipTo: {} })
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    const rows = (await db.execute<{ taxable_amount: string; tax_amount: string }>(sql`
+    const rows = await db.execute<{ taxable_amount: string; tax_amount: string }>(sql`
       select taxable_amount::text as taxable_amount, tax_amount::text as tax_amount
-        from tax_rate_quotes where org_id = ${state.orgId}`)).rows
+        from tax_rate_quotes where org_id = ${state.orgId}`, 'objects')
     assert.equal(rows[0]!.taxable_amount, '999999999999999.9999')
     assert.equal(rows[0]!.tax_amount, '50000000000000.0000')
   } finally {

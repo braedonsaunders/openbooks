@@ -641,11 +641,9 @@ test("operator CLI runs collect, dry-run, apply, then already_migrated", { skip 
     assert.equal(appliedReport.totals.alreadyMigrated, 2);
     assert.equal(appliedReport.totals.refused, 0);
     const stored = await withBypassContext(async () => {
-      const result = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from worker_employments where org_id = ${org.orgId}`)) as unknown as {
-        rows: Array<{ n: string }>;
-      };
-      return result.rows[0]?.n;
+      const result = await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from worker_employments where org_id = ${org.orgId}`, "objects");
+      return result[0]?.n;
     });
     assert.equal(stored, "2");
 

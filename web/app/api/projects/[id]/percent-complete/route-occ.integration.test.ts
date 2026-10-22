@@ -38,7 +38,7 @@ test('a stale percent-complete override refuses instead of re-basing recognition
     }), { params: Promise.resolve({ id: project }) }))
     const liveOverride = async () => (await db.execute<{ override: string | null }>(sql`
       select nullif(custom->>'percentCompleteOverride', '') as override
-        from projects where org_id = ${org.orgId} and id = ${project}`)).rows[0]!.override
+        from projects where org_id = ${org.orgId} and id = ${project}`, 'objects'))[0]!.override
 
     // Tab A sets 70 from the empty (null) override it rendered.
     const tabA = await put({ percentComplete: 70, expectedPercentComplete: null })

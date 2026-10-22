@@ -182,8 +182,8 @@ test('customer pulse presents in the org base and translates mixed currencies', 
     const bareParty = randomUUID()
     await withBypass(async () => {
       const orgRow = (await db.execute(
-        sql`select base_currency from orgs where id = ${scratch.orgId}`,
-      )).rows[0] as { base_currency: string } | undefined
+        sql`select base_currency from orgs where id = ${scratch.orgId}`, 'objects',
+      ))[0] as { base_currency: string } | undefined
       assert.equal(orgRow?.base_currency, 'CAD')
       await db.execute(sql`
         insert into customer_roles (org_id, party_id, credit_limit, currency)

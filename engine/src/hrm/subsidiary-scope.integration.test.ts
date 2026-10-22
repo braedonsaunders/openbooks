@@ -265,7 +265,7 @@ scopeMatrix([
     read: async (w) => {
       const today = "2026-03-04";
       const typeId = (await db.execute<{ id: string }>(sql`
-        insert into hrm_leave_types (org_id, code, name) values (${w.orgId}, 'VAC', 'Vacation') returning id`)).rows[0]!.id;
+        insert into hrm_leave_types (org_id, code, name) values (${w.orgId}, 'VAC', 'Vacation') returning id`, "objects"))[0]!.id;
       for (const [displayName, subsidiaryId] of [["Worker A", w.subA], ["Worker B", w.subB]] as const) {
         const { employmentId } = await seedEmployment(w.orgId, subsidiaryId, { displayName, withVersion: false });
         await db.execute(sql`
@@ -420,7 +420,7 @@ scopeMatrix([
     actors: BENEFITS_WRITER,
     write: async (w) => {
       const departmentB = (await db.execute<{ id: string }>(sql`
-        insert into departments (org_id, name, subsidiary_id) values (${w.orgId}, 'Second entity department', ${w.subB}) returning id`)).rows[0]!.id;
+        insert into departments (org_id, name, subsidiary_id) values (${w.orgId}, 'Second entity department', ${w.subB}) returning id`, "objects"))[0]!.id;
       const windowB = await enrollmentWindow(w.orgId, w.admin, w.subB, "B window");
       const windowOrg = await enrollmentWindow(w.orgId, w.admin, null, "Org window");
       const own = await enrollmentWindow(w.orgId, w.scoped, w.subA, "A window");
@@ -450,7 +450,7 @@ scopeMatrix([
         insert into hrm_certified_payroll_runs
           (org_id, project_id, week_ending, status, generated_at, format_key, payload, created_by, updated_by)
         values (${w.orgId}, ${projectId}, ${weekEnding}::date, 'generated', now(), 'federal-weekly', ${FROZEN}::jsonb, ${w.admin}, ${w.admin})
-        returning id::text as id`)).rows[0]!.id;
+        returning id::text as id`, "objects"))[0]!.id;
       return { ...site, runA: await run(site.projectA, "2026-09-13"), runB: await run(site.projectB, "2026-09-13"), amendB: await run(site.projectB, "2026-09-06") };
     },
     read: async (w, { projectB, runA, runB }) => {
@@ -782,7 +782,7 @@ scopeMatrix([
         await submitBatch({ ...scopeA, actorUserId: w.foremanA, batchId });
         assert.equal(await refusesCode(() => withdrawBatch({ ...scopeA, actorUserId: w.foremanB, batchId })), "batch_unknown");
         await withdrawBatch({ ...scopeA, actorUserId: w.foremanA, batchId });
-        const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${batchId}`)).rows[0]?.status;
+        const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${batchId}`, "objects"))[0]?.status;
         assert.equal(status, "draft", "A works their own batch end to end");
       });
     },

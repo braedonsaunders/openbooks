@@ -471,14 +471,15 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
     let reads = 0;
     await computeCaStatutory({
     periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: { qpip: "1100.0000" }, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: { qpip: "0" }, tx: { execute: async () => {
+    programBases: { qpip: "1100.0000" }, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: { qpip: "0" }, tx: { execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       reads += 1;
-      if (reads === 1) return { rows: [{ id: "legal-employer", currency: "CAD", payDate: "2026-02-13" }] };
-      if (reads === 2 || reads === 3 || reads === 5) return { rows: [] };
-      if (reads === 4) return { rows: [{
+      if (reads === 1) return inMode({ rows: [{ id: "legal-employer", currency: "CAD", payDate: "2026-02-13" }] });
+      if (reads === 2 || reads === 3 || reads === 5) return inMode({ rows: [] });
+      if (reads === 4) return inMode({ rows: [{
         pensionable: "0", insurable: "0", cpp: "0", cpp2: "0", ei: "0", qpip: "0",
         qpip_employer: "0", non_periodic: "0", pension_deductions_bonus: "0", f5b: "0", qc_csb: "0",
-      }] };
+      }] });
       throw new Error(`unexpected Canadian statutory source read ${reads}`);
     } } as never, orgId: "org", documentId: "run", employeePartyId: "employee",
     employeeName: "Test Employee", taxYear: 2026, country: "CA", region,

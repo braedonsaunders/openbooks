@@ -133,13 +133,11 @@ export async function publishScheduleBoard(
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-publish:${actor.orgId}:${current.id}`}, 0))`,
     );
-    const waiting = (
-      await db.execute<{id:string;entry_ids:string[];created_by:string;from_date:string;through_date:string;has_receipt:boolean}>(
+    const waiting = (await db.execute<{id:string;entry_ids:string[];created_by:string;from_date:string;through_date:string;has_receipt:boolean}>(
         sql`select p.id,p.entry_ids,p.created_by,p.from_date::text,p.through_date::text,
           exists(select 1 from flow_submissions s where s.org_id=p.org_id and s.subject_kind='schedule_publication' and s.subject_id=p.id) as has_receipt
-          from schedule_publications p where p.org_id=${actor.orgId} and p.board_id=${current.id} and p.status='pending'`,
-      )
-    ).rows[0];
+          from schedule_publications p where p.org_id=${actor.orgId} and p.board_id=${current.id} and p.status='pending'`, "objects",
+      ))[0];
     if (waiting) {
       const sameSubmission=waiting.created_by===actor.actorId && waiting.has_receipt &&
         (actor.entryIds ? actor.entryIds.length>0 && actor.entryIds.every(id=>waiting.entry_ids.includes(id)) : waiting.from_date===from && waiting.through_date===through);
@@ -163,13 +161,11 @@ export async function publishScheduleBoard(
         { code: "schedule_nothing_to_publish" },
       );
     const id = crypto.randomUUID();
-    const inserted = (
-      await db.execute(sql`insert into schedule_publications (id, org_id, board_id, subsidiary_id, from_date, through_date, entry_ids, entry_revisions,
+    const inserted = await db.execute(sql`insert into schedule_publications (id, org_id, board_id, subsidiary_id, from_date, through_date, entry_ids, entry_revisions,
       reason, request_hash, created_by, updated_by)
       values (${id}, ${actor.orgId}, ${current.id}, ${current.subsidiaryId}, ${from}, ${through}, ${`{${drafts.map((draft) => draft.id).join(",")}}`}::uuid[],
       ${`{${drafts.map((draft) => draft.revision).join(",")}}`}::integer[], ${reason},
-      ${hash({ boardId: current.id, from, through, drafts: drafts.map((draft) => [draft.id, draft.revision]) })}, ${actor.actorId}, ${actor.actorId}) returning id`)
-    ).rows;
+      ${hash({ boardId: current.id, from, through, drafts: drafts.map((draft) => [draft.id, draft.revision]) })}, ${actor.actorId}, ${actor.actorId}) returning id`, "objects");
     if (inserted.length !== 1)
       throw new ScheduleError("The publication was not recorded.", {
         code: "schedule_not_saved",
@@ -188,10 +184,8 @@ export async function publishScheduleBoard(
       );
     }
     if (routed.gated) {
-      const updated = (
-        await db.execute(sql`update schedule_publications set flow_run_id = ${routed.runId}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-        where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`)
-      ).rows;
+      const updated = await db.execute(sql`update schedule_publications set flow_run_id = ${routed.runId}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+        where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`, "objects");
       if (updated.length !== 1)
         throw new ScheduleError(
           "The publication changed while it was routed for approval.",
@@ -229,11 +223,9 @@ async function lockPublication(
   id: string,
 ): Promise<SchedulePublication> {
   if (!isUuid(id)) throw new ScopeNotFoundError();
-  const row = (
-    await db.execute<SchedulePublication>(
-      sql`select ${PUBLICATION_COLUMNS} from schedule_publications where org_id = ${orgId} and id = ${id} for update`,
-    )
-  ).rows[0];
+  const row = (await db.execute<SchedulePublication>(
+      sql`select ${PUBLICATION_COLUMNS} from schedule_publications where org_id = ${orgId} and id = ${id} for update`, "objects",
+    ))[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
@@ -253,15 +245,13 @@ async function applyPublication(
       code: "schedule_stale",
       remedy: "Reload the board.",
     });
-  const updated = (
-    await db.execute(
+  const updated = await db.execute(
       mode === "released"
         ? sql`update schedule_publications set status = 'approved', released_without_approval = true, decided_at = now(), decision_reason = ${decisionReason},
         revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${id} and revision = ${publication.revision} returning id`
         : sql`update schedule_publications set status = 'approved', decided_by = ${actor.actorId}, decided_at = now(), decision_reason = ${decisionReason},
-        revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${id} and revision = ${publication.revision} returning id`,
-    )
-  ).rows;
+        revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${id} and revision = ${publication.revision} returning id`, "objects",
+    );
   if (updated.length !== 1)
     throw new ScheduleError("The publication changed while it was decided.", {
       status: 409,
@@ -351,11 +341,9 @@ export async function releasePublicationApproval(input: {
       });
       return;
     }
-    const declined = (
-      await db.execute(sql`update schedule_publications set status = 'declined', decided_by = ${actor.actorId}, decided_at = now(),
+    const declined = await db.execute(sql`update schedule_publications set status = 'declined', decided_by = ${actor.actorId}, decided_at = now(),
     decision_reason = ${input.comment?.trim() || "Declined through the schedule publication Flow"}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-    where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`)
-    ).rows;
+    where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`, "objects");
     if (declined.length !== 1)
       throw new ScheduleError("The publication changed while it was decided.", {
         status: 409,
@@ -395,10 +383,8 @@ export async function withdrawPublication(
       subjectKind: SCHEDULE_PUBLICATION_SUBJECT_KIND,
       subjectId: publication.id,
     });
-    const updated = (
-      await db.execute(sql`update schedule_publications set status = 'withdrawn', revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`)
-    ).rows;
+    const updated = await db.execute(sql`update schedule_publications set status = 'withdrawn', revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+      where org_id = ${actor.orgId} and id = ${publication.id} and revision = ${publication.revision} returning id`, "objects");
     if (updated.length !== 1)
       throw new ScheduleError(
         "This publication changed while it was withdrawn.",
@@ -415,9 +401,7 @@ export async function pendingPublication(
   boardId: string,
 ): Promise<SchedulePublication | null> {
   return (
-    (
-      await db.execute<SchedulePublication>(sql`select ${PUBLICATION_COLUMNS} from schedule_publications
-    where org_id = ${orgId} and board_id = ${boardId} and status = 'pending'`)
-    ).rows[0] ?? null
+    (await db.execute<SchedulePublication>(sql`select ${PUBLICATION_COLUMNS} from schedule_publications
+    where org_id = ${orgId} and board_id = ${boardId} and status = 'pending'`, "objects"))[0] ?? null
   );
 }

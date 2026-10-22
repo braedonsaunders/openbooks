@@ -102,8 +102,8 @@ async function lockInvoicingItems(tx: ProjectTypeTransaction, orgId: string, pro
   for (const id of ids) {
     const result = await tx.execute<{ id: string }>(sql`
       select id from items where org_id = ${orgId} and id = ${id} and is_active = true for share
-    `);
-    if (result.rows.length !== 1) throw new ProjectTypeWriteRefusal(`Invoicing item ${id} is unavailable in this company; choose an active company item before saving the project type`);
+    `, 'objects');
+    if (result.length !== 1) throw new ProjectTypeWriteRefusal(`Invoicing item ${id} is unavailable in this company; choose an active company item before saving the project type`);
   }
 }
 
@@ -163,14 +163,14 @@ async function legacyDELETE(req: Request) {
   const result = await db.transaction(async (tx) => {
     const before = (await tx.execute<Record<string, unknown>>(sql`
       select * from project_types where id = ${id} and org_id = ${orgId} for update
-    `))
-    if (!before.rows[0]) return null
-    const after = await tx.execute(sql`update project_types set is_active = false, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${orgId} returning *`)
-    if (after.rows.length !== 1) throw new ProjectTypeWriteRefusal('The project type was not archived; reload the company record before archiving')
+    `, 'objects'))
+    if (!before[0]) return null
+    const after = await tx.execute(sql`update project_types set is_active = false, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${orgId} returning *`, 'objects')
+    if (after.length !== 1) throw new ProjectTypeWriteRefusal('The project type was not archived; reload the company record before archiving')
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'project_types', ${id}, 'archive',
-              ${JSON.stringify({ before: before.rows[0], after: after.rows[0] })}, ${gate.user.id})`)
+              ${JSON.stringify({ before: before[0], after: after[0] })}, ${gate.user.id})`)
     return true
   })
   if (result === null) return notFound("record")
@@ -227,8 +227,8 @@ export const POST = defineRoute({
             ${b.billingMethod}, ${JSON.stringify(b.invoicingProfile)}::jsonb,
             ${JSON.stringify(b.backupProfile)}::jsonb,
             ${gate.user.id}, ${gate.user.id})
-          returning id`))
-        const createdId = r.rows[0]!.id
+          returning id`, 'objects'))
+        const createdId = r[0]!.id
         await publishProjectFinancialProfileInTransaction(tx, {
           orgId,
           projectTypeId: createdId,
@@ -327,10 +327,10 @@ export const PATCH = defineRoute({
             ) version on true
            where pt.id = ${b.id} and pt.org_id = ${orgId}
            for update of pt
-        `))
-        if (!before.rows[0]) return false
+        `, 'objects'))
+        if (!before[0]) return false
         if (b.invoicingProfile) await lockInvoicingItems(tx, orgId, b.invoicingProfile)
-        const beforeInvoicing = before.rows[0].invoicing_profile as { allowedBases?: string[] } | null
+        const beforeInvoicing = before[0].invoicing_profile as { allowedBases?: string[] } | null
         // Validation above establishes the invoicing shape when present.
         const invoicingBases = b.invoicingProfile
           ? (b.invoicingProfile as { allowedBases?: string[] }).allowedBases
@@ -349,14 +349,14 @@ export const PATCH = defineRoute({
             select ${JSON.stringify(canonicalizeProjectFinancialProfile(b.financialProfile as unknown as FinancialProfile))}::jsonb
                    is distinct from
                    ${JSON.stringify(
-                     before.rows[0].financial_profile
+                     before[0].financial_profile
                        ? canonicalizeProjectFinancialProfile(
-                           before.rows[0].financial_profile as unknown as FinancialProfile,
+                           before[0].financial_profile as unknown as FinancialProfile,
                          )
                        : null,
                    )}::jsonb as changed
-          `))
-          if (comparison.rows[0]?.changed) {
+          `, 'objects'))
+          if (comparison[0]?.changed) {
             financialVersion = await publishProjectFinancialProfileInTransaction(tx, {
               orgId,
               projectTypeId: id,
@@ -373,16 +373,16 @@ export const PATCH = defineRoute({
            where id = ${b.id} and org_id = ${orgId}
            returning key, name, description, is_active, sort_order, billing_method,
                      invoicing_profile, backup_profile
-        `))
-        const projectTypeBefore = { ...before.rows[0] }
-        if (after.rows.length !== 1) throw new ProjectTypeWriteRefusal('The project type was not updated; reload the company record before saving')
+        `, 'objects'))
+        const projectTypeBefore = { ...before[0] }
+        if (after.length !== 1) throw new ProjectTypeWriteRefusal('The project type was not updated; reload the company record before saving')
         delete projectTypeBefore.financial_profile
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'project_types', ${b.id}, 'update',
                   ${JSON.stringify({
                     before: projectTypeBefore,
-                    after: after.rows[0],
+                    after: after[0],
                     ...(financialVersion ? { financialProfileVersion: financialVersion } : {}),
                   })},
                   ${gate.user.id})`)

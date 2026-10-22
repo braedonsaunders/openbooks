@@ -24,7 +24,7 @@ export async function assertHrmEnabled(exec: SqlExecutor, orgId: string): Promis
 
 /** Read admission uses the caller's snapshot without acquiring writer row locks. */
 export async function assertHrmReadEnabled(exec:SqlExecutor,orgId:string):Promise<void>{
-  const organization=(await exec.execute<{id:string}>(sql`select id from orgs where id=${orgId}`)).rows[0];
+  const organization=(await exec.execute<{id:string}>(sql`select id from orgs where id=${orgId}`, "objects"))[0];
   if(!organization||!(await orgFeatureEnabled(orgId,HRM_FEATURE_KEY,exec))){
     throw new BenefitsError("REFUSED","benefits are unavailable while the hrm feature is off — enable it under Company Settings → Features; existing benefits data is preserved");
   }

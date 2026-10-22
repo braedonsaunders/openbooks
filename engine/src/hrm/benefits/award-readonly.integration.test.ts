@@ -39,10 +39,8 @@ async function setup() {
   installEngineSeams();
   const h = await setupHarness(spec);
   assert.equal(
-    (
-      await db.execute(sql`update subsidiaries set base_currency='USD'
-  where org_id=${h.org.orgId} and id=${h.org.subsidiaryId} returning id`)
-    ).rows.length,
+    (await db.execute(sql`update subsidiaries set base_currency='USD'
+  where org_id=${h.org.orgId} and id=${h.org.subsidiaryId} returning id`, "objects")).length,
     1,
   );
   const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
@@ -88,19 +86,15 @@ test(
   () =>
     withHarness(setup, async (h) => {
       const retained = async () =>
-        (
-          await db.execute(sql`select to_jsonb(a) as snapshot from hrm_benefit_awards a
-  where org_id=${h.org.orgId} and id=${h.award.id}`)
-        ).rows;
+        await db.execute(sql`select to_jsonb(a) as snapshot from hrm_benefit_awards a
+  where org_id=${h.org.orgId} and id=${h.award.id}`, "objects");
       const before = await retained();
       await withOrgTransaction(
         h.org.orgId,
         async () => {
-          const actual = (
-            await db.execute<{ mode: string }>(
-              sql`select current_setting('transaction_read_only') as mode`,
-            )
-          ).rows[0];
+          const actual = (await db.execute<{ mode: string }>(
+              sql`select current_setting('transaction_read_only') as mode`, "objects",
+            ))[0];
           assert.equal(actual!.mode, "on");
           const read = await getBenefitAward(
             db,
@@ -132,11 +126,9 @@ test(
             /benefits are unavailable while the hrm feature is off/,
           );
           assert.equal(
-            (
-              await db.execute(
-                sql`select id from hrm_benefit_awards where org_id=${h.org.orgId} and id=${h.award.id}`,
-              )
-            ).rows.length,
+            (await db.execute(
+                sql`select id from hrm_benefit_awards where org_id=${h.org.orgId} and id=${h.award.id}`, "objects",
+              )).length,
             1,
           );
         },

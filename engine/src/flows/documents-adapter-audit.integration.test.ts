@@ -33,15 +33,12 @@ test("flow change_status evidences the document mutation in audit_log", { skip: 
       adapter.changeStatus!(docId, "pending_approval", { orgId: org.orgId, userId: actors.adminId }),
     );
 
-    const status = (
-      await db.execute<{ status: string }>(
-        sql`select status from documents where id = ${docId} and org_id = ${org.orgId}`,
-      )
-    ).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(
+        sql`select status from documents where id = ${docId} and org_id = ${org.orgId}`, "objects",
+      ))[0]!.status;
     assert.equal(status, "pending_approval");
 
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         action: string;
         actor_id: string | null;
         changes: Record<string, unknown>;
@@ -49,8 +46,7 @@ test("flow change_status evidences the document mutation in audit_log", { skip: 
         select action, actor_id, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${docId}
          order by at, id
-      `)
-    ).rows;
+      `, "objects");
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.action, "update");
     assert.equal(rows[0]!.actor_id, actors.adminId);
@@ -100,8 +96,7 @@ test("flow releaseApproval carries the decision reason on the document audit row
       adapter.releaseApproval!(approveId, "approved", ctx, { comment: "Verified against the purchase order" }),
     );
 
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         row_id: string;
         changes: Record<string, unknown>;
       }>(sql`
@@ -109,8 +104,7 @@ test("flow releaseApproval carries the decision reason on the document audit row
          where org_id = ${org.orgId} and table_name = 'documents'
            and (row_id = ${rejectedId} or row_id = ${approveId})
          order by at, id
-      `)
-    ).rows;
+      `, "objects");
     const lastFor = (id: string) =>
       rows.filter((row) => row.row_id === id).at(-1)!.changes as {
         mode: string;

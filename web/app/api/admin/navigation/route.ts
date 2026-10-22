@@ -132,8 +132,8 @@ export const PUT = defineRoute({
     if (configuredAppKeys.length > 0) {
       const installed = (await db.execute<{ key: string }>(sql`
         select key from apps where org_id = ${user.orgId} and key = any(${pgTextArrayLiteral(configuredAppKeys)}::text[])
-      `))
-      if (installed.rows.length !== configuredAppKeys.length) {
+      `, 'objects'))
+      if (installed.length !== configuredAppKeys.length) {
         return NextResponse.json({ error: 'navigation references an unknown app' }, { status: 400 })
       }
     }
@@ -142,7 +142,7 @@ export const PUT = defineRoute({
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${user.orgId}`}, 0))`);
       const before = (await tx.execute<{ id: string; config: OrgNavConfig; updated_at: Date }>(sql`
         select id, config, updated_at from org_nav_configs where org_id = ${user.orgId} limit 1 for update
-      `))
+      `, 'objects'))
       if (config.localNavigation) {
         const catalog = new Map(LOCAL_NAVIGATION.map((set) => [set.id, new Set(set.tabs.map((tab) => tab.href))]))
         for (const app of await nativeAppNavigationCatalog(user.orgId, tx)) catalog.set(app.id, new Set(app.tabs.map((tab) => tab.href)))
@@ -151,7 +151,7 @@ export const PUT = defineRoute({
         }
         // Retired extension screens keep their stored presentation preferences.
         // They may be preserved unchanged, but only live destinations can be edited.
-        for (const [key, savedPreference] of Object.entries(before.rows[0]?.config.localNavigation ?? {})) {
+        for (const [key, savedPreference] of Object.entries(before[0]?.config.localNavigation ?? {})) {
           const draft = config.localNavigation[key]
           if (draft?.items.length === savedPreference.items.length && draft.items.every((item, index) => {
             const saved = savedPreference.items[index]!
@@ -171,12 +171,12 @@ export const PUT = defineRoute({
       // accepted residual; every human-scale race is rejected). An absent
       // expectation is a legacy writer and stays unfenced.
       if (expectedUpdatedAt !== undefined) {
-        const current = before.rows[0]?.updated_at ?? null
+        const current = before[0]?.updated_at ?? null
         const expectedTime = expectedUpdatedAt === null ? null : Date.parse(expectedUpdatedAt)
         const currentTime = current === null ? null : new Date(current).getTime()
         if (expectedTime !== currentTime) return { conflict: true as const }
       }
-      const owned = new Map((before.rows[0]?.config.groups ?? []).flatMap((group) => group.items).flatMap((item) => item.kind === 'link' && item.extensionKey ? [[item.href, item] as const] : []))
+      const owned = new Map((before[0]?.config.groups ?? []).flatMap((group) => group.items).flatMap((item) => item.kind === 'link' && item.extensionKey ? [[item.href, item] as const] : []))
       for (const group of config.groups) for (const item of group.items) if (item.kind === 'link') {
         const source = owned.get(item.href)
         // Preserve installer provenance across editor round trips; only the installer can mint it.
@@ -192,22 +192,22 @@ export const PUT = defineRoute({
           updated_by = ${user.id}
         where org_nav_configs.org_id = ${user.orgId}
         returning id, updated_at
-      `))
-      if (!saved.rows[0]) throw new NavigationSaveRefusal('Navigation was not saved; reload the editor and try again')
+      `, 'objects'))
+      if (!saved[0]) throw new NavigationSaveRefusal('Navigation was not saved; reload the editor and try again')
       const audited = await tx.execute<{ id: string }>(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (
           ${user.orgId},
           'org_nav_configs',
-          ${saved.rows[0]!.id},
-          ${before.rows[0] ? 'update' : 'insert'},
-          ${JSON.stringify({ before: before.rows[0]?.config ?? null, after: config })}::jsonb,
+          ${saved[0]!.id},
+          ${before[0] ? 'update' : 'insert'},
+          ${JSON.stringify({ before: before[0]?.config ?? null, after: config })}::jsonb,
           ${user.id}
         )
         returning id
-      `)
-      if (!audited.rows[0]) throw new NavigationSaveRefusal('Navigation was not saved because audit evidence could not be recorded; reload the editor and try again')
-      return { invalid: false as const, conflict: false as const, id: saved.rows[0]!.id, updatedAt: saved.rows[0]!.updated_at }
+      `, 'objects')
+      if (!audited[0]) throw new NavigationSaveRefusal('Navigation was not saved because audit evidence could not be recorded; reload the editor and try again')
+      return { invalid: false as const, conflict: false as const, id: saved[0]!.id, updatedAt: saved[0]!.updated_at }
     })
     if (outcome.conflict) {
       return NextResponse.json({ error: 'navigation config changed since loaded' }, { status: 409 })

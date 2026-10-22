@@ -454,9 +454,9 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
       const rates = await db.execute<{ fx_rate: string }>(sql`
         select distinct fx_rate::text as fx_rate
           from journal_lines
-         where org_id = ${ledger.orgId} and entry_id = ${entryId}`);
+         where org_id = ${ledger.orgId} and entry_id = ${entryId}`, "objects");
       const applied =
-        [...new Set(rates.rows.map((row) => rateScaledBy1e10(row.fx_rate)))].sort().join(",");
+        [...new Set(rates.map((row) => rateScaledBy1e10(row.fx_rate)))].sort().join(",");
       return { entries: [invoice], values: { fxRateAppliedE10: applied } };
     },
   },
@@ -556,9 +556,9 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
       const rates = await db.execute<{ fx_rate: string }>(sql`
         select distinct fx_rate::text as fx_rate
           from journal_lines
-         where org_id = ${ledger.orgId} and entry_id = ${entryId}`);
+         where org_id = ${ledger.orgId} and entry_id = ${entryId}`, "objects");
       const applied =
-        [...new Set(rates.rows.map((row) => rateScaledBy1e10(row.fx_rate)))].sort().join(",");
+        [...new Set(rates.map((row) => rateScaledBy1e10(row.fx_rate)))].sort().join(",");
       return { entries: [invoice], values: { fxRateAppliedE10: applied } };
     },
   },

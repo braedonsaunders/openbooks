@@ -97,11 +97,9 @@ function attribute(
 }
 
 async function docSubsidiary(orgId: string, documentId: string): Promise<string | null> {
-  const row = (
-    await db.execute<{ subsidiary_id: string | null }>(sql`
+  const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id::text as subsidiary_id from documents
-       where org_id = ${orgId} and id = ${documentId}`)
-  ).rows[0];
+       where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
   return row?.subsidiary_id ?? null;
 }
 

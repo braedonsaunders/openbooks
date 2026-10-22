@@ -80,8 +80,8 @@ const control = (o: ScratchOrg) => ({
 async function header(orgId: string, docId: string) {
   const res = await db.execute<{ subtotal: string; tax_total: string; total: string }>(sql`
     select subtotal, tax_total, total from documents
-     where id = ${docId} and org_id = ${orgId}`);
-  return res.rows[0]!;
+     where id = ${docId} and org_id = ${orgId}`, "objects");
+  return res[0]!;
 }
 
 async function openItemLeg(orgId: string, docId: string): Promise<number> {
@@ -89,8 +89,8 @@ async function openItemLeg(orgId: string, docId: string): Promise<number> {
     select jl.amount from journal_lines jl
       join documents d on d.posted_entry_id = jl.entry_id and d.org_id = jl.org_id
      where d.id = ${docId} and d.org_id = ${orgId} and jl.is_open_item
-     limit 1`);
-  return Number(res.rows[0]!.amount);
+     limit 1`, "objects");
+  return Number(res[0]!.amount);
 }
 
 test(
@@ -158,10 +158,10 @@ test(
     const h = await header(o.orgId, creditId);
     const lines = await db.execute<{ sum: string }>(sql`
       select coalesce(sum(amount), 0) as sum from document_lines
-       where document_id = ${creditId} and org_id = ${o.orgId}`);
+       where document_id = ${creditId} and org_id = ${o.orgId}`, "objects");
     assert.equal(
       Number(h.total),
-      Number(lines.rows[0]!.sum),
+      Number(lines[0]!.sum),
       "the derived header must tie to the document's own lines, in sign as well as magnitude",
     );
   },
@@ -201,13 +201,13 @@ test(
                                       quantity, unit_price, amount, tax_amount, created_by)
           values (${o.orgId}, ${id}, ${n}, ${o.accounts.cogs}, 'rounding',
                   '1', ${amount}, ${amount}, ${tax}, ${actor})
-          returning id`);
+          returning id`, "objects");
         await tx.execute(sql`
           insert into document_line_tax_components
             (org_id, document_line_id, tax_code_id, sequence, rate_percent,
              taxable_amount, tax_amount, recoverable_amount, nonrecoverable_amount,
              calculation_type, paid_account_id)
-          values (${o.orgId}, ${line.rows[0]!.id}, ${taxCodeId}, 1, '13.0000',
+          values (${o.orgId}, ${line[0]!.id}, ${taxCodeId}, 1, '13.0000',
                   ${amount}, ${tax}, ${tax}, '0',
                   'standard', ${o.accounts.taxInput})`);
       }

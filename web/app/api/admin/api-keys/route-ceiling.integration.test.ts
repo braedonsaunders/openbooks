@@ -100,13 +100,13 @@ async function insertKey(orgId: string, userId: string, scopes: string[]): Promi
                           scopes, is_active, created_by, updated_by)
     values (${orgId}, ${userId}, 'ceiling key', ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
             ${JSON.stringify(scopes)}::jsonb, true, ${userId}, ${userId})
-    returning id`))).rows[0]!.id as string;
+    returning id`, "objects")))[0]!.id as string;
   return { id, plaintext: gen.plaintext };
 }
 
 async function keyScopes(orgId: string, id: string): Promise<string[]> {
   const row = (await withBypassContext(() => db.execute(sql`
-    select scopes from api_keys where id = ${id} and org_id = ${orgId}`))).rows[0] as {
+    select scopes from api_keys where id = ${id} and org_id = ${orgId}`, "objects")))[0] as {
     scopes: string[];
   };
   return row.scopes;
@@ -197,7 +197,7 @@ test(
       assert.match(((await response.json()) as { error: string }).error, /cannot grant permissions you do not hold/);
 
       const count = (await withBypassContext(() => db.execute(sql`
-        select count(*)::int as n from api_keys where org_id = ${org.orgId}`))).rows[0] as { n: number };
+        select count(*)::int as n from api_keys where org_id = ${org.orgId}`, "objects")))[0] as { n: number };
       assert.equal(count.n, 0);
     } finally {
       session.user = null;

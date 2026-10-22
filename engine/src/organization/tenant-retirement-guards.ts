@@ -1,2231 +1,288 @@
-/** Published DELETE contracts; unknown live guards refuse retirement. */
+/**
+ * Published DELETE contracts. Each guard digest is the sha256 of the function
+ * body (pg_proc.prosrc) carried by the release schema; an unknown, altered or
+ * disabled live guard refuses retirement.
+ */
 export const TENANT_RETIREMENT_GUARDS = [
-  {
-    name: "depreciation_source_authority_guard",
-    source: "0787_depreciation_retirement_authority.sql",
-    sha256: "63fdeb6a8c7461daabb24fb344e4b2b246700cbceb3baf581698f7a6bbc54d80",
-    newSha256: "63fdeb6a8c7461daabb24fb344e4b2b246700cbceb3baf581698f7a6bbc54d80",
-    patch: false,
-  },
-  {name:"calibration_entry_published_guard",source:"0775_close_and_calibration_flow_authority.sql",sha256:"a8d128e484d16f9f16a462afef52b325e2b541bbdf8a000162f7358daf0225f4",newSha256:"a8d128e484d16f9f16a462afef52b325e2b541bbdf8a000162f7358daf0225f4",patch:false},
-  {
-    name: "subcontract_change_pending_terms_guard",
-    source: "0771_flow_submission_authority.sql",
-    sha256: "442fa77c5ad1297680bbc4e6f02b434af0b8f8fb9b1c43909aff970ad866f145",
-    newSha256:
-      "442fa77c5ad1297680bbc4e6f02b434af0b8f8fb9b1c43909aff970ad866f145",
-    patch: false,
-  },
-  {
-    name: "native_command_pending_terms_guard",
-    source: "0771_flow_submission_authority.sql",
-    sha256: "5c766763063e1935610465d836d40559cfdfcb4c38aa80a982f8e98ce037b7d1",
-    newSha256:
-      "5c766763063e1935610465d836d40559cfdfcb4c38aa80a982f8e98ce037b7d1",
-    patch: false,
-  },
-  {
-    name: "flow_submission_receipt_guard",
-    source: "0789_portal_return_flow_principal.sql",
-    sha256: "21883dd58d659b5486efa7b68a97869b45cf93df0a9eb416a2a53d80e207376a",
-    newSha256:
-      "21883dd58d659b5486efa7b68a97869b45cf93df0a9eb416a2a53d80e207376a",
-    patch: false,
-  },
-  {
-    name: "payroll_roe_separation_basis_reference_guard",
-    source: "0752_governed_catalog_coverage_and_guard_repairs.sql",
-    sha256: "c9336b7c7bf3a33b660ac3f522ffa13a738107f9a523edb6431334ddb45e63de",
-    newSha256:
-      "c9336b7c7bf3a33b660ac3f522ffa13a738107f9a523edb6431334ddb45e63de",
-    patch: false,
-  },
-  {
-    name: "time_type_financial_semantics_guard",
-    source: "0714_time_type_financial_semantics.sql",
-    sha256: "41a110e2f33bc387a21d7791e792fa310e371cce9deaf0e6d34c4a6b8513fd27",
-    newSha256:
-      "41a110e2f33bc387a21d7791e792fa310e371cce9deaf0e6d34c4a6b8513fd27",
-    patch: false,
-  },
-  {
-    name: "payroll_roe_used_exclusion_guard",
-    source: "0713_roe_exclusion_evidence_row_shape.sql",
-    sha256: "bd27324c014060afb7ffac2995714db4036126dd5982c774fb4f8d47ff055790",
-    newSha256:
-      "bd27324c014060afb7ffac2995714db4036126dd5982c774fb4f8d47ff055790",
-    patch: false,
-  },
-  {
-    name: "payroll_roe_issued_event_source_guard",
-    source: "0711_roe_subsequent_service_source.sql",
-    sha256: "4836e1aa77f7b2bd3cfdc246c259f5cb2824410a539178a2d54ed0459de7f614",
-    newSha256:
-      "4836e1aa77f7b2bd3cfdc246c259f5cb2824410a539178a2d54ed0459de7f614",
-    patch: false,
-  },
-  {
-    name: "payroll_roe_subsequent_service_source_guard",
-    source: "0711_roe_subsequent_service_source.sql",
-    sha256: "6f7582c5491c30d83b678de1aadfd7c4a59066405d7ce83193d4378805be98d8",
-    newSha256:
-      "6f7582c5491c30d83b678de1aadfd7c4a59066405d7ce83193d4378805be98d8",
-    patch: false,
-  },
-  {
-    name: "payroll_opening_employer_authority_guard",
-    source: "0710_payroll_opening_legal_employer_authority.sql",
-    sha256: "cfd0fcc78d530af887f87f345a78b17c4b219a86a201b6b1ab58d50fa3bc28df",
-    newSha256:
-      "cfd0fcc78d530af887f87f345a78b17c4b219a86a201b6b1ab58d50fa3bc28df",
-    patch: false,
-  },
-  {
-    name: "payroll_opening_qualified_source_guard",
-    source: "0710_payroll_opening_legal_employer_authority.sql",
-    sha256: "0df2ebc963b29e050b286169ed8564a41214a3fd1de7d8163bae9e1244967c1f",
-    newSha256:
-      "0df2ebc963b29e050b286169ed8564a41214a3fd1de7d8163bae9e1244967c1f",
-    patch: false,
-  },
-  {
-    name: "payroll_roe_reporting_evidence_guard",
-    source: "0709_roe_issued_event_source_binding.sql",
-    sha256: "cf0d7d140805d19a59b92303f1b96a4114101d62cda002595befbcac9814799d",
-    newSha256:
-      "cf0d7d140805d19a59b92303f1b96a4114101d62cda002595befbcac9814799d",
-    patch: false,
-  },
-  {
-    name: "payroll_roe_separation_facts_guard",
-    source: "0709_roe_issued_event_source_binding.sql",
-    sha256: "882dcdb0f9cfceb172386f4947e7153e4c15c284150455cd796e328624fc819e",
-    newSha256:
-      "882dcdb0f9cfceb172386f4947e7153e4c15c284150455cd796e328624fc819e",
-    patch: false,
-  },
-  {
-    name: "rebate_agreement_guard",
-    source: "0699_financial_history_native_clone_guards.sql",
-    sha256: "70eda52193664d3f548291608a4828e9780c97194df5a4ed4fa8d643080d6efe",
-    newSha256:
-      "70eda52193664d3f548291608a4828e9780c97194df5a4ed4fa8d643080d6efe",
-    patch: false,
-  },
-  {
-    name: "rebate_claim_guard",
-    source: "0697_rebate_policy_settlements.sql",
-    sha256: "5dd3382123d65acba2da92186e5ab090c4ca95796c92ace37c65c0651afcfbdd",
-    newSha256:
-      "5dd3382123d65acba2da92186e5ab090c4ca95796c92ace37c65c0651afcfbdd",
-    patch: false,
-  },
-  {
-    name: "rebate_fact_immutable",
-    source: "0697_rebate_policy_settlements.sql",
-    sha256: "19983175d3685537c95d634c788b82991cbeef1c035dce74db83ef0018bbb427",
-    newSha256:
-      "19983175d3685537c95d634c788b82991cbeef1c035dce74db83ef0018bbb427",
-    patch: false,
-  },
-  {
-    name: "renewal_policy_guard",
-    source: "0696_renewal_policy_documents.sql",
-    sha256: "c0fa72318a1fb9dc70209e8afbab886eebd84d23dcd5acca026b3b8c0ac190b3",
-    newSha256:
-      "c0fa72318a1fb9dc70209e8afbab886eebd84d23dcd5acca026b3b8c0ac190b3",
-    patch: false,
-  },
-  {
-    name: "fair_value_used_policy_guard",
-    source: "0695_revenue_recognition_fair_value_delivery.sql",
-    sha256: "51db1038c2fcf434307a45a24e3164eafdbdbb10dc9455349da07ebe1afe3438",
-    newSha256:
-      "51db1038c2fcf434307a45a24e3164eafdbdbb10dc9455349da07ebe1afe3438",
-    patch: false,
-  },
-  {
-    name: "recognition_control_immutable",
-    source: "0695_revenue_recognition_fair_value_delivery.sql",
-    sha256: "01717f9b0b6f6ff5b890cc0e0a4fd88d0942d26d608623af7da414c5309a8696",
-    newSha256:
-      "01717f9b0b6f6ff5b890cc0e0a4fd88d0942d26d608623af7da414c5309a8696",
-    patch: false,
-  },
-  {
-    name: "journal_reversal_instruction_guard",
-    source: "0692_journal_instruction_modes.sql",
-    sha256: "d57042081fc24caa21b4640f5ac3a6c6649fcfb191bad2e9ba5e4df4314569ef",
-    newSha256:
-      "d57042081fc24caa21b4640f5ac3a6c6649fcfb191bad2e9ba5e4df4314569ef",
-    patch: false,
-  },
-  {
-    name: "intercompany_fulfillment_charge_immutable",
-    source:
-      "0686_intercompany_paired_transactions_cross_subsidiary_fulfillment.sql",
-    sha256: "04bf84b2d384b0e4e5654090ad89c3bb4e9f438f833b62d705fb358703409276",
-    newSha256:
-      "04bf84b2d384b0e4e5654090ad89c3bb4e9f438f833b62d705fb358703409276",
-    patch: false,
-  },
-  {
-    name: "intercompany_transaction_pair_guard",
-    source:
-      "0686_intercompany_paired_transactions_cross_subsidiary_fulfillment.sql",
-    sha256: "bd11595bf3c9769f72b20c8f314845d360847131038e224d1648e5d0ddb15e03",
-    newSha256:
-      "bd11595bf3c9769f72b20c8f314845d360847131038e224d1648e5d0ddb15e03",
-    patch: false,
-  },
-  {
-    name: "intercompany_transfer_pricing_policy_guard",
-    source:
-      "0686_intercompany_paired_transactions_cross_subsidiary_fulfillment.sql",
-    sha256: "490da8c21f22969b197f9f998d2097b5078a0e4c27e200cc0d3483103a41d82e",
-    newSha256:
-      "490da8c21f22969b197f9f998d2097b5078a0e4c27e200cc0d3483103a41d82e",
-    patch: false,
-  },
-  {
-    name: "intercompany_fund_transfer_guard",
-    source: "0685_intercompany_representing_parties_and_netting.sql",
-    sha256: "3e275abb17104e72ef36cdf07ff9c708506b5dd7f0f97ff1a6795ef94331b6b5",
-    newSha256:
-      "3e275abb17104e72ef36cdf07ff9c708506b5dd7f0f97ff1a6795ef94331b6b5",
-    patch: false,
-  },
-  {
-    name: "intercompany_netting_line_guard",
-    source: "0685_intercompany_representing_parties_and_netting.sql",
-    sha256: "c42af7c8e3b66f332312d70cf6897eaf9a43ceea7e7477d6901e9017f66308ed",
-    newSha256:
-      "c42af7c8e3b66f332312d70cf6897eaf9a43ceea7e7477d6901e9017f66308ed",
-    patch: false,
-  },
-  {
-    name: "intercompany_netting_run_guard",
-    source: "0685_intercompany_representing_parties_and_netting.sql",
-    sha256: "e3d7561f399608bfce6f333f572b6b5fb979e1768dc6315cc8fe829f5e2e3a7c",
-    newSha256:
-      "e3d7561f399608bfce6f333f572b6b5fb979e1768dc6315cc8fe829f5e2e3a7c",
-    patch: false,
-  },
-  {
-    name: "account_merge_immutable",
-    source: "0680_account_localization_and_merge.sql",
-    sha256: "90dc884d5ae0fbb80f4a5ba330a80107bd9f201c2b659298c438d25f132469e2",
-    newSha256:
-      "90dc884d5ae0fbb80f4a5ba330a80107bd9f201c2b659298c438d25f132469e2",
-    patch: false,
-  },
-  {
-    name: "hrm_benefit_program_revision_immutable",
-    source: "0667_benefit_program_revisions.sql",
-    sha256: "0a27548afa8b82c92b1fb9a423cf7967ebb956fda461c2ede441357cc28ed439",
-    newSha256:
-      "0a27548afa8b82c92b1fb9a423cf7967ebb956fda461c2ede441357cc28ed439",
-    patch: false,
-  },
-  {
-    name: "field_ticket_source_certification_guard",
-    source: "0729_field_ticket_source_identity_certifications.sql",
-    sha256: "24f5e61335086799a9fd4692c4fee132be9243fbaa34279cc02e0217d012c891",
-    newSha256:
-      "24f5e61335086799a9fd4692c4fee132be9243fbaa34279cc02e0217d012c891",
-    patch: false,
-  },
-  {
-    name: "fx_revaluation_rate_evidence_guard",
-    source: "0728_scoped_close_and_settlement_fx_evidence.sql",
-    sha256: "2bb84f39705198d6677b59efa8158e59ab07a91a6fc49131705f96cfa013e984",
-    newSha256:
-      "2bb84f39705198d6677b59efa8158e59ab07a91a6fc49131705f96cfa013e984",
-    patch: false,
-  },
-  {
-    name: "payroll_ca_opening_reporting_authority_guard",
-    source: "0726_payroll_ca_opening_reporting_source.sql",
-    sha256: "2ebf6495156b721da3f3b7255ae23127de02dc8e57424d0a66e98a23d2fe7377",
-    newSha256:
-      "2ebf6495156b721da3f3b7255ae23127de02dc8e57424d0a66e98a23d2fe7377",
-    patch: false,
-  },
-  {
-    name: "payroll_ca_opening_reporting_allocation_guard",
-    source: "0726_payroll_ca_opening_reporting_source.sql",
-    sha256: "3cc2f9750422a396513a7b7db8b72fe5f9830fd5976205aac6ca517f1b245e63",
-    newSha256:
-      "3cc2f9750422a396513a7b7db8b72fe5f9830fd5976205aac6ca517f1b245e63",
-    patch: false,
-  },
-  {
-    name: "payroll_ca_opening_reporting_account_guard",
-    source: "0726_payroll_ca_opening_reporting_source.sql",
-    sha256: "ba016f1c8294c60c29c9e2f19fcf9024d9f04312e98929f3fd75d40dd007356f",
-    newSha256:
-      "ba016f1c8294c60c29c9e2f19fcf9024d9f04312e98929f3fd75d40dd007356f",
-    patch: false,
-  },
-  {
-    name: "payroll_us_filing_account_lineage_guard",
-    source: "0724_payroll_us_filing_account_employer_lineage.sql",
-    sha256: "beae5e1216675b30498fc074b62a2ba8dbf181f37b09301d98faf27db682b797",
-    newSha256:
-      "beae5e1216675b30498fc074b62a2ba8dbf181f37b09301d98faf27db682b797",
-    patch: false,
-  },
-  {
-    name: "payroll_opening_levy_opening_source_guard",
-    source: "0725_payroll_opening_levy_source_successors.sql",
-    sha256: "4b9d0f5a415dd3f872fde20b13a6a7692cdabd18999f940f927f714f54c9eb10",
-    newSha256:
-      "4b9d0f5a415dd3f872fde20b13a6a7692cdabd18999f940f927f714f54c9eb10",
-    patch: false,
-  },
-  {
-    name: "payroll_opening_levy_source_allocation_guard",
-    source: "0719_payroll_opening_levy_source_authority.sql",
-    sha256: "0dae5ebe92eb319027166ab52aa57d583c22ff2c7f20c65b2718abe06b00f47d",
-    newSha256:
-      "0dae5ebe92eb319027166ab52aa57d583c22ff2c7f20c65b2718abe06b00f47d",
-    patch: false,
-  },
-  {
-    name: "payroll_opening_levy_source_authority_guard",
-    source: "0725_payroll_opening_levy_source_successors.sql",
-    sha256: "56d569fa9dd247bb08d2b27bf7f8a94a52e943781943585b9250336e16a43878",
-    newSha256:
-      "56d569fa9dd247bb08d2b27bf7f8a94a52e943781943585b9250336e16a43878",
-    patch: false,
-  },
-  {
-    name: "historical_translation_basis_guard",
-    source: "0732_historical_translation_basis_guard_layer_case.sql",
-    sha256: "7d7ca87034fe986f1781c179c7a92d55546703ba9b1138be90cd3f6418075ef0",
-    newSha256:
-      "7d7ca87034fe986f1781c179c7a92d55546703ba9b1138be90cd3f6418075ef0",
-    patch: false,
-  },
-  {
-    name: "historical_translation_layer_guard",
-    source: "0722_historical_translation_contribution_evidence.sql",
-    sha256: "35877a46a3e2069bb7c79ed45257bf60a9580560c5fa020fc40af02392d10cfa",
-    newSha256:
-      "35877a46a3e2069bb7c79ed45257bf60a9580560c5fa020fc40af02392d10cfa",
-    patch: false,
-  },
-  {
-    name: "historical_translation_source_retention",
-    source: "0722_historical_translation_contribution_evidence.sql",
-    sha256: "fd6e7437fa4e4bce97e809839cea83e56c165995ccb6a077af85112243b05786",
-    newSha256:
-      "fd6e7437fa4e4bce97e809839cea83e56c165995ccb6a077af85112243b05786",
-    patch: false,
-  },
-  {
-    name: "historical_translation_file_retention",
-    source: "0722_historical_translation_contribution_evidence.sql",
-    sha256: "ee8035d28335d3c8c27506cbcbbaa8efae0e3151dd32f0b5a00885590ded292b",
-    newSha256:
-      "ee8035d28335d3c8c27506cbcbbaa8efae0e3151dd32f0b5a00885590ded292b",
-    patch: false,
-  },
-  {
-    name: "account_group_member_scope_guard",
-    source: "0081_account_group_member_dimension_uniqueness.sql",
-    sha256: "b8db48d7a8cdb9c49acae2c77d6e6a704b48048fc65dfaf990de31548ff78c07",
-    newSha256:
-      "8a84115166d66987d60c431cae362f4627e948b8acf154c95ebe330cdf001b70",
-    patch: true,
-  },
-  {
-    name: "accounting_book_account_map_guard",
-    source: "0682_accounting_book_currency_and_account_maps.sql",
-    sha256: "1441263ecb10f36afe08b60ae0c5b5477f0fa9658bb9ec6c00c76ac6ec42b628",
-    newSha256:
-      "1441263ecb10f36afe08b60ae0c5b5477f0fa9658bb9ec6c00c76ac6ec42b628",
-    patch: false,
-  },
-  {
-    name: "accounting_book_currency_guard",
-    source: "0682_accounting_book_currency_and_account_maps.sql",
-    sha256: "8e9382dc8a72bf44a64cd5a175655648c6ea43da57a4e37e75c7d5591a75e3a8",
-    newSha256:
-      "8e9382dc8a72bf44a64cd5a175655648c6ea43da57a4e37e75c7d5591a75e3a8",
-    patch: false,
-  },
-  {
-    name: "accounting_book_replication_run_immutable",
-    source: "0682_accounting_book_currency_and_account_maps.sql",
-    sha256: "2602a805edc008997535fa1a1c461a06eaa7e09e39b6520df3750acb773f7c15",
-    newSha256:
-      "2602a805edc008997535fa1a1c461a06eaa7e09e39b6520df3750acb773f7c15",
-    patch: false,
-  },
-  {
-    name: "aging_bucket_policies_history_guard",
-    source: "0564_aging_bucket_policies.sql",
-    sha256: "4067b502751ace3e857d9c6ea7817d9f3bcb9f721be2b42ff26e529aac1d013d",
-    newSha256:
-      "1946848eedc0d0f54a6d193d0a41d4edfa69518fdcf3cc161db2471948b81e73",
-    patch: true,
-  },
-  {
-    name: "ai_decisions_refuse_update",
-    source: "0232_hrm_ai_rails.sql",
-    sha256: "17d4a505a911195abfd7003adc52cac5e594ddb3aaecfdd0538c6b7a9afa1cc6",
-    newSha256:
-      "c9374b3f6a7765ef446e4f1066fa0dac74454e7fa77c0bae395fc6f0b3755c7e",
-    patch: true,
-  },
-  {
-    name: "allocation_rule_target_guard",
-    source: "0160_allocation_kernel.sql",
-    sha256: "07861afc255fe326961adbb56bf57048fb6962fe72cdb4bbda22a19b8c369afb",
-    newSha256:
-      "a76d7247d768665eb76f5455831eaaf96cda4045865a3d571681ba645a564b81",
-    patch: true,
-  },
-  {
-    name: "application_evidence_guard",
-    source: "0001_baseline.sql",
-    sha256: "640590285e359e7b20b5829ec0e61d0e4c1258434c122c19c694398be05b60c6",
-    newSha256:
-      "c16fedc72f2ff8b33001354bf4855051439877b3989348ba6ebb39b000775804",
-    patch: true,
-  },
-  {
-    name: "assembly_disassembly_immutable",
-    source: "0460_assembly_disassembly_evidence.sql",
-    sha256: "5e180e04bc50599a5c050d647b7d1f3e080ac0b906630ad5612f1f1c5c59f95f",
-    newSha256:
-      "1b4a0e915d028f4b4c92fb9b2315f900dce5d16dde89a81744e2e03434381a52",
-    patch: true,
-  },
-  {
-    name: "asset_basis_change_guard",
-    source: "0204_asset_lifecycle_changes.sql",
-    sha256: "0af1fdaeb48e01f5e93a42461767d2f6b3f4f16e375e423c3f2b1c5aeaa6d26f",
-    newSha256:
-      "17b8aaab04b84402f040d637ce2f5aaee602ea0a3bcaebdc0998d9ba0916398f",
-    patch: true,
-  },
-  {
-    name: "asset_event_append_only_guard",
-    source: "0204_asset_lifecycle_changes.sql",
-    sha256: "bdd572c4ca080375868712c25771e1b0fc39e998f6daa08fd4450f0cd343d7bc",
-    newSha256:
-      "331a4100ee55d054476ff0f9fecfb2322c0159b27e725bc10eb0aa91110dbaff",
-    patch: true,
-  },
-  {
-    name: "asset_transfer_history_guard",
-    source: "0204_asset_lifecycle_changes.sql",
-    sha256: "d6d9f0067f87d518d9e6c47e4dbc7754cd7d2eac2dd1c264f97f00d468980fae",
-    newSha256:
-      "38879e83f23afe9d0cdb1cb081cf10bb6da5fea6f8a15823edadfaddb1d8b16b",
-    patch: true,
-  },
-  {
-    name: "asset_transfer_measurement_guard",
-    source: "0204_asset_lifecycle_changes.sql",
-    sha256: "c046ae4f5d4b1de3b14fc13eab6d35cddf62e338cf16f8d0f745bad3ef2408c6",
-    newSha256:
-      "c174dfd679cd370891b96ca7f95f486396606f6bb1b3b6c5e8e3f14225563ff5",
-    patch: true,
-  },
-  {
-    name: "audit_log_append_only_guard",
-    source: "0001_baseline.sql",
-    sha256: "f967cf9e24ef97c248702e260b1427af33f03373a177932b5f8f8e76a801a52f",
-    newSha256:
-      "4d4625231d852dad26b006891b9400173ec28c4afac3c5a601bbff3e41868c4c",
-    patch: true,
-  },
-  {
-    name: "benefit_catalog_identity_guard",
-    source: "0482_benefit_program_identity.sql",
-    sha256: "ddd4725a1304750928d9c6e6620bbbe565ff3e0e26a3853194cd9ff0482f7340",
-    newSha256:
-      "d38bdaaeaa6622cd6e341e352b738865f346bf38192d86abb62a03409cd67248",
-    patch: true,
-  },
-  {
-    name: "benefit_recovery_source_guard",
-    source: "0478_benefit_recovery_policy_windows.sql",
-    sha256: "f37d235326917c0c15c4b38d8702a53991a900ef3fcac5090124876fc8002b73",
-    newSha256:
-      "385b73e95f2a0a793a62cdd1d005940cfda17d9995f162fce06d2ac95d4887a5",
-    patch: true,
-  },
-  {
-    name: "benefit_recurring_audit",
-    source: "0476_benefit_recurring_contributions.sql",
-    sha256: "08224f95861dda28c8948555fe08e5e1365f5eff3f234f04d01a70f57e29aa4b",
-    newSha256:
-      "2bb2d1b15b48142adeb8a29e3711dad3e0c00165998179f355cb017710ebd266",
-    patch: true,
-  },
-  {
-    name: "benefit_recurring_configuration_lock",
-    source: "0476_benefit_recurring_contributions.sql",
-    sha256: "3c2cc633a7f9c97ad5a0a053af3feba41198c81f28cf3f59c3b3ffaa1d059d5d",
-    newSha256:
-      "51537522674abf1bb665627205e826da5560552cfee5d42b9d4cef0878307bea",
-    patch: true,
-  },
-  {
-    name: "benefit_recurring_history_guard",
-    source: "0478_benefit_recovery_policy_windows.sql",
-    sha256: "793d6fdad77cc049dbcbef527f2cf834a988f6a83a2a89f08d8887c6e2cbd047",
-    newSha256:
-      "22a9285f207dbfaaa3d7c4656e789a176becf387f5d00bc59f0daf6a911af4d9",
-    patch: true,
-  },
-  {
-    name: "benefit_transaction_rule_audit",
-    source: "0570_benefit_transaction_policies.sql",
-    sha256: "eb613751fdcb8ca17ac695cbf498f5b675618957a656adff4a4c9ea415d91016",
-    newSha256:
-      "fcb03068f7bbefba435a45bb245cd8aaf46040eb81ab4651b92f37dcaa03c0f0",
-    patch: true,
-  },
-  {
-    name: "benefit_transaction_rule_guard",
-    source: "0570_benefit_transaction_policies.sql",
-    sha256: "7ad7733994a255e302b12421dc613f0dbd130c2a8aacc7534e5eb55d8292b39f",
-    newSha256:
-      "ff8c88f12b663e94a7a416d12991d5466a3f5f6e12aec4abfeac3e456ad1c467",
-    patch: true,
-  },
-  {
-    name: "billing_request_field_ticket_guard",
-    source: "0001_baseline.sql",
-    sha256: "acf2a880a891bcb9c5e931d043caf59303ccc52735000e4f7fc1fa1317bb3597",
-    newSha256:
-      "c6c7b606e07b4304b3e1c809f0e59a332943a05178a880bee95e1f5be65b59fb",
-    patch: true,
-  },
-  {
-    name: "change_set_items_lifecycle_guard",
-    source: "0066_change_set_review_approval_audit.sql",
-    sha256: "06f343912fad3f4efc81b104ef8e5b45633e1536e060fa74d5835ea422ba39f4",
-    newSha256:
-      "a777f1f80e050826e743804bc67570fce1a1439815aaa3bb9c1c342b13e9c75d",
-    patch: true,
-  },
-  {
-    name: "close_append_only_guard",
-    source: "0001_baseline.sql",
-    sha256: "132e82b2ff7110a2d235bc0497cf4024dd90878ca65878757cf55a9c882bb62c",
-    newSha256:
-      "48e2596392cb0a66511cbac3b147ff072a28b82b55b0b4cc00fb02f6a8fb4e65",
-    patch: true,
-  },
-  {
-    name: "consignment_event_immutable",
-    source: "0615_inventory_stock_controls.sql",
-    sha256: "bc1a103905c6c322c0391a0a332d42d3b8b2d8783fcbba1a635993e10c3c1498",
-    newSha256:
-      "c92cfd2fac4ffc1ddcec3651bb6e571d7cab454659bc1a016ddac01cef27c866",
-    patch: true,
-  },
-  {
-    name: "consignment_position_guard",
-    source: "0616_serial_count_restoration.sql",
-    sha256: "2c31ff454310fbacf06669960649af3e9034364b0d5b5efc1d51ee13b589ac64",
-    newSha256:
-      "4100fb08bf8f48fd849763e85842413c836e2658cf8ef4e75c7c8e88108c22e3",
-    patch: true,
-  },
-  {
-    name: "contract_cost_amortization_immutable",
-    source: "0505_contract_costs.sql",
-    sha256: "a56c4bd065e2ee780487f6b5943ff51156b109e37e6ade1ff83c8581c5eb8728",
-    newSha256:
-      "4e6f370f61abd4c4bbe617e897d6a537768650f72204544f11ce3fbdfca1de8d",
-    patch: true,
-  },
-  {
-    name: "control_loss_history_guard",
-    source: "0205_consolidation_loss_of_control.sql",
-    sha256: "3ab7835d7e8a3304c55ea91e84ae172a99fc1c0de0574efec1ca03b95d2b1443",
-    newSha256:
-      "5266c018353fdf9adc114990f626d4529ed8161d0015b1dbc957296563eacb87",
-    patch: true,
-  },
-  {
-    name: "control_loss_source_guard",
-    source: "0205_consolidation_loss_of_control.sql",
-    sha256: "b6bb6b5124c427da7efcc4d12c4b4d266a54e46526ed4a46a4c33f86883e928b",
-    newSha256:
-      "b7730e245e30e208584e5d9024d7b96a4bcb162cf207e19123844021ffff3211",
-    patch: true,
-  },
-  {
-    name: "data_transfer_evidence_guard",
-    source: "0472_durable_data_transfers.sql",
-    sha256: "1d0c887654ca89ef8470e2152f56b37403810e7760958fe3a7aa6d2cf7257968",
-    newSha256:
-      "9ca4a5ce34e6c6da2654695f47816a8a35d4051f80701edc8d80e59d52406c9d",
-    patch: true,
-  },
-  {
-    name: "depreciation_book_policy_history_guard",
-    source: "0103_depreciation_book_policy_history.sql",
-    sha256: "e16e0cd56bc9d75047d424b781dd75450c8e8abc4014c7fd66aadc3ccd9af506",
-    newSha256:
-      "7892ecbd58cd9d812d54be62b0860ae62dcd9293bb790013fbe6b39d415e0f68",
-    patch: true,
-  },
-  {
-    name: "depreciation_evidence_attachment_guard",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "3465bb85d39e791912ca0181bf1ef3f4dfd92248928a1d2756b1f319c9161336",
-    newSha256:
-      "fd91428a38d7d5a08823ea70ba1b291842e40362e3e4165cf471e27c7f651617",
-    patch: true,
-  },
-  {
-    name: "depreciation_non_gl_recognition_guard",
-    source: "0316_clone_closed_period_authority.sql",
-    sha256: "14eb7f2c951cef9c7bdca54760df06cd421276989d626da8110763ad1e2a5c43",
-    newSha256:
-      "98f0f2ebeb8fd7f04da8aa26762a39cb2f26472011149734c7c1004da843a759",
-    patch: true,
-  },
-  {
-    name: "document_correction_lineage_guard",
-    source: "0001_baseline.sql",
-    sha256: "53c4bf5463281582bdcd0f3026e8c63737b272b09ecec6093f968f6ae8f45724",
-    newSha256:
-      "fe596d8052e38f65f576e50c8db7a246dd4aa767003839d4e131f7f1f283b11c",
-    patch: true,
-  },
-  {
-    name: "document_line_immutability_guard",
-    source: "0148_replay_before_parent_lookup.sql",
-    sha256: "d06b3e1236ebaa95855d1132723dcb55e7957437f2a8a53acdc6cffa901be04a",
-    newSha256:
-      "9e5f4e7b5262ead439abf1da76275c0f436df16b8ae16697f109446cd9c4ac24",
-    patch: true,
-  },
-  {
-    name: "document_line_tax_component_guard",
-    source: "0001_baseline.sql",
-    sha256: "b1831e424f816cb63924282dcd22a967f6485e59329986c60880afc199a2772e",
-    newSha256:
-      "a1543f16ab602143fb032b7e7f9ff28dd0be0432f450d0ea0c6d39e486bbe1d4",
-    patch: true,
-  },
-  {
-    name: "document_lines_total_line_refresh",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "d1623ae509c1cfc304086598a3a6f287505dc0e8bb2cc4dfdd6a4f6e05bcdd68",
-    newSha256:
-      "04bd8dbe66b8d765b18e613c670d360bc0e88bdb995070ef30705ccd2801c683",
-    patch: true,
-  },
-  {
-    name: "document_lines_total_line_tieout",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "1eeaa2d01ca04776a163c0a0162834ebd108bb877a19fbb8deb8277706b1d860",
-    newSha256:
-      "8e9476b24463f9311891f64627d3c72ad2021f462f51c91c5f8357bc40682130",
-    patch: true,
-  },
-  {
-    name: "document_supply_evidence_guard",
-    source: "0521_supply_evidence_maintenance.sql",
-    sha256: "f6a3b4e9550a4c2fb89e63af6d212a77a7bd49c2430914157a87782f5bd11f0c",
-    newSha256:
-      "d0fe78f258761f3b0a5c75a2292299ac4358b51330966cfa3982f1f6bb16ae7d",
-    patch: true,
-  },
-  {
-    name: "document_tender_lifecycle_guard",
-    source: "0494_document_tenders.sql",
-    sha256: "e3dac2e05969507c1e1cabcb088747b57e4add65d2bc2d61d54fb028d5a324d4",
-    newSha256:
-      "ae7badc6a311b1bd9a9df3dde8d74b33e7c5622ba63561c38458dc133bee25c2",
-    patch: true,
-  },
-  {
-    name: "drop_ship_allocation_guard",
-    source: "0464_drop_ship_agency.sql",
-    sha256: "584b94d271c0b4668201e185d19fc70a0fdd966e76cf648d304b6c1670982c21",
-    newSha256:
-      "0ccbb1be53311a0a7cf9d06e2f07b3b3e9cd86c2cdf3a06e98d6c76da4cbe465",
-    patch: true,
-  },
-  {
-    name: "dunning_log_guard",
-    source: "0404_sandbox_wipe_dunning_guard.sql",
-    sha256: "38e04df233701c25a964f99c50c2bf136d1a161b337a7ea8592e2fed0f42d2ab",
-    newSha256:
-      "d75214276f419d5452ae74884ee0adceef5e22c62f48547fb90a62480c1ae688",
-    patch: true,
-  },
-  {
-    name: "einvoice_documents_immutable",
-    source: "0598_einvoicing.sql",
-    sha256: "f1a208ddc016726dcb8e80528f04b1b6ed11a86f17da03a5bab05e9cb8d901ae",
-    newSha256:
-      "9221b0026514f83adc4ddc637a1ba841972182d5c712c95c48a5fab46c255ea4",
-    patch: true,
-  },
-  {
-    name: "employment_assignment_versions_closure_guard",
-    source: "0192_hrm_positions_headcount_plan.sql",
-    sha256: "cda06c9c8b7baaa066743b407281cb405f3c2ca170fc5b9216bddbe1aefe7a5d",
-    newSha256:
-      "ccf6e532f507028a49487406abcd9372e252ea98a6a6bebdeff0ecce06c11f8f",
-    patch: true,
-  },
-  {
-    name: "employment_changes_immutable_guard",
-    source: "0184_hrm_employment_foundation.sql",
-    sha256: "a17b2cffcf48279742709a555ada081e89b25960ed8b63258d422f7e107fd326",
-    newSha256:
-      "c0ab0963e6527424c2a5bdcf0200cd6fa53aec86dc1b4b9624be7d54a160b0dc",
-    patch: true,
-  },
-  {
-    name: "enforce_deleted_role_assignment",
-    source: "0096_active_user_role_serialization.sql",
-    sha256: "efac357dca70ce6700f74745cefae19943cb2175411d02b63b1581f7c9004a58",
-    newSha256:
-      "c19c4d528f0385284be86a5551b4bcd1b5b38551d5ba07a23f77305df033d3dd",
-    patch: true,
-  },
-  {
-    name: "enforce_payment_instruction_posting_claim",
-    source: "0080_payment_instruction_claim_fence_bundle_guard.sql",
-    sha256: "32cce677b2fa4bfa12016c2680b5843e47c42164e2325fa5dfc265c271c85214",
-    newSha256:
-      "9e575165e56acae28f6ee4c6860bf3d969804145aebab39943a351bd4c6c1b9d",
-    patch: true,
-  },
-  {
-    name: "entitlement_ledger_append_only_guard",
-    source: "0001_baseline.sql",
-    sha256: "a651e3b7e5b0a8d0b4394758cca04de07e73591043922fc16e96b2d8df5d32bf",
-    newSha256:
-      "dfd652399b54d27996e3c349ba223167950cdbd8a7304e2b3c31ca898552914c",
-    patch: true,
-  },
-  {
-    name: "expense_amortization_event_guard",
-    source: "0687_expense_amortization_schedules.sql",
-    sha256: "d104ac3ef1bde1af08611cfbbcbec156b8f29226b052447e4ff8f01ba039f2b6",
-    newSha256:
-      "d104ac3ef1bde1af08611cfbbcbec156b8f29226b052447e4ff8f01ba039f2b6",
-    patch: false,
-  },
-  {
-    name: "expense_amortization_line_guard",
-    source: "0687_expense_amortization_schedules.sql",
-    sha256: "0e7d6580116286f0e2bb32b4899cf3f7b96c0577f358413d51f2d681c4616160",
-    newSha256:
-      "0e7d6580116286f0e2bb32b4899cf3f7b96c0577f358413d51f2d681c4616160",
-    patch: false,
-  },
-  {
-    name: "expense_amortization_schedule_guard",
-    source: "0687_expense_amortization_schedules.sql",
-    sha256: "783345d0c9a8efd5648dc2615e84a9f3177b20b378be3375e412e91f76d13301",
-    newSha256:
-      "783345d0c9a8efd5648dc2615e84a9f3177b20b378be3375e412e91f76d13301",
-    patch: false,
-  },
-  {
-    name: "field_ticket_labor_line_immutable_guard",
-    source: "0581_field_ticket_evidence_native_sandbox_lifecycle.sql",
-    sha256: "bb9e07caa0c7f8d7fbae3229816bff3683e3862e95ac35ceeef8fcb61e29be4e",
-    newSha256:
-      "63df9eea369f3b28d3d83cd9634dba76bedba7bb65a1e471f25320fbfbb734d6",
-    patch: true,
-  },
-  {
-    name: "field_ticket_labor_snapshot_retention_guard",
-    source: "0581_field_ticket_evidence_native_sandbox_lifecycle.sql",
-    sha256: "f0e70fe6c87f9e4a6cec129e4619c9099efba45bf23e91279914d7fa57dd5820",
-    newSha256:
-      "a33480432dcb45198c495d4a7c80cc49de61d6cb8188cb43660519845ef76d17",
-    patch: true,
-  },
-  {
-    name: "field_ticket_signature_immutable_guard",
-    source: "0581_field_ticket_evidence_native_sandbox_lifecycle.sql",
-    sha256: "0def0530be74e64bbc995a1b55edade8e64094dadd80d748a0298d42c904b1a2",
-    newSha256:
-      "83be40a487799d8acba62604cc7aff69848407a9a621a7c43007ab366af4d89f",
-    patch: true,
-  },
-  {
-    name: "field_ticket_signature_request_guard",
-    source: "0001_baseline.sql",
-    sha256: "7c1af06e204db4d5bf24c9ed77df5ae37f45724ab8ec20fb0e3a671af4682ea2",
-    newSha256:
-      "28a8ef5f383204287bdfb7af9d8dfa53d6d67edc1c0721d86387237e30f76c2a",
-    patch: true,
-  },
-  {
-    name: "financial_change_guard",
-    source: "0771_flow_submission_authority.sql",
-    sha256: "7f87f9711fe93340e4ac50c108e8d13bc9a184b8ffc919274d2be656db2a5b99",
-    newSha256:
-      "7f87f9711fe93340e4ac50c108e8d13bc9a184b8ffc919274d2be656db2a5b99",
-    patch: false,
-  },
-  {
-    name: "equity_record_immutable",
-    source: "0733_equity_cap_table.sql",
-    sha256: "6cfb14a1eb3c1332895e01e9f9c8ded1e880b07d1395abdc7cf7113d904bd9cc",
-    newSha256:
-      "6cfb14a1eb3c1332895e01e9f9c8ded1e880b07d1395abdc7cf7113d904bd9cc",
-    patch: false,
-  },
-  {
-    name: "equity_action_request_guard",
-    source: "0742_equity_flows_and_position_ledger.sql",
-    sha256: "a69f2e94189a414ac3ed1928979bc3e070fbdc52069006a3726f07106e7c5f39",
-    newSha256:
-      "a69f2e94189a414ac3ed1928979bc3e070fbdc52069006a3726f07106e7c5f39",
-    patch: false,
-  },
-  {
-    name: "financial_policy_version_immutable",
-    source: "0691_financial_rate_preferences_versions.sql",
-    sha256: "f1817fdfc45950978c79b5f91e43a65fcc897189ddb6c5a4a6d25d484d08690a",
-    newSha256:
-      "f1817fdfc45950978c79b5f91e43a65fcc897189ddb6c5a4a6d25d484d08690a",
-    patch: false,
-  },
-  {
-    name: "fulfillment_documents_guard",
-    source: "0421_pick_lists_and_shipments.sql",
-    sha256: "bdd0fdf860992d29a965a51eb6f381ea3647677885168296e1e16f330626c22c",
-    newSha256:
-      "944300da429fd422e03b462d0560f31c13ec0d035bc490c7673fb2c87b7842e1",
-    patch: true,
-  },
-  {
-    name: "fulfillment_lines_guard",
-    source: "0421_pick_lists_and_shipments.sql",
-    sha256: "921d49cbbb5d5792b8c48ec48d522985f53204af07486b56b0a4a86755692b88",
-    newSha256:
-      "a7d34ce55cb1dc13d08a42679a32ab41aa3f47cfc4511bb3f6622110c604d006",
-    patch: true,
-  },
-  {
-    name: "fx_rate_age_policy_history_guard",
-    source: "0547_fx_rate_age_policies.sql",
-    sha256: "64b329661f80ea61825a51f68808849f9c4f68a11a7687a308cb42c8b714d38e",
-    newSha256:
-      "b14cbc28e1a1e44b10569eaaf71ee71b8ffd738e8b7ff4c42800044e4f19bb62",
-    patch: true,
-  },
-  {
-    name: "goods_tax_registration_history_guard",
-    source: "0466_canadian_goods_tax_evidence.sql",
-    sha256: "31c5bbfd2a326b2e7ddff1d68d791d693b8da491f89da8461d5e2426850e7160",
-    newSha256:
-      "6fedb5a2637c1c3ab2003a4f37b51d9762b73fa6ad517664e8ae61be75314687",
-    patch: true,
-  },
-  {
-    name: "goods_tax_snapshot_guard",
-    source: "0466_canadian_goods_tax_evidence.sql",
-    sha256: "0a5691b367a50c8924710f095955dbfcd56170848f169c1bd9eba8272100231d",
-    newSha256:
-      "0fe81bd84f2076e84c097a27702bd94c374e262444fc5835c8bfcd7219318e07",
-    patch: true,
-  },
-  {
-    name: "handling_unit_content_history_guard",
-    source: "0618_warehouse_execution.sql",
-    sha256: "3a14cd3323d79d609e2362fbc6467336dc2ba890c4287e50d8c78358a8f122ba",
-    newSha256:
-      "5012aac6c027f34053eeebb11856a15fc51f86dcb67eaaf10cd0f1c85355ab1e",
-    patch: true,
-  },
-  {
-    name: "handling_unit_lifecycle_guard",
-    source: "0618_warehouse_execution.sql",
-    sha256: "c0854a2856e7344ce4598e4b8b389133e5e896c9e7a51319d2f88a0ea350aac9",
-    newSha256:
-      "40dda5cb006fce4a6f8d80483a0b8a54a3768e838af403fa6d8aef0db7d809a2",
-    patch: true,
-  },
-  {
-    name: "hrm_absence_no_delete",
-    source: "0194_hrm_leave_attendance.sql",
-    sha256: "65be193a039d31fd79ca4c42b6233b1fa103e5f511183608f6a75298f47880ad",
-    newSha256:
-      "4dfa710661af5cd1da8964833ca0642d678a753fe56d669399368db1d398fa9c",
-    patch: true,
-  },
-  {
-    name: "hrm_allowance_payroll_input_no_delete",
-    source: "0223_hrm_construction_rates.sql",
-    sha256: "31a9289ec08516b2a88f50054ce3684b153e60c6fe705a626096fa2fb6393a2b",
-    newSha256:
-      "575691b4d0cf2f55bb6887c8cf33f2d177ce5f6413489756d1f5b858d3546dc5",
-    patch: true,
-  },
-  {
-    name: "hrm_application_events_immutable",
-    source: "0195_hrm_recruiting.sql",
-    sha256: "05874ac30c38ba137627a87ac70266e84aebe9f9f38c1e854b89c41f9667c4c3",
-    newSha256:
-      "d2c14ce1bff8ad9ee2a65a6704c0ad6c5eb8232a60cda187bae9d4b3ad9a6b97",
-    patch: true,
-  },
-  {
-    name: "hrm_benefit_award_event_no_delete",
-    source: "0469_benefit_programs.sql",
-    sha256: "be913574f384be090e2d75fb46f043f99abf5660e650c73ed626ec7f3a53f327",
-    newSha256:
-      "8b7aeef6376ee219518168000059b435deb3281ead8e8b1b11f20e969a817a40",
-    patch: true,
-  },
-  {
-    name: "hrm_benefit_award_no_delete",
-    source: "0469_benefit_programs.sql",
-    sha256: "d32922feb558e8a5452cdaf43ffbb05e39ce7e887d2c27105eb37709691a4e71",
-    newSha256:
-      "5810264f049b00298632357c1834561af76a24d05f7c40b4baef26da1f169384",
-    patch: true,
-  },
-  {
-    name: "hrm_benefit_enrollment_no_delete",
-    source: "0197_hrm_benefits.sql",
-    sha256: "57939f2e31642c4b33f8a9f418c659b0f6827b45ac167d500c5dbbbb562e267f",
-    newSha256:
-      "898504f2380025f85a19e72d13690795ad5ef2fb47c02628de389d7b1598c053",
-    patch: true,
-  },
-  {
-    name: "hrm_benefit_event_no_delete",
-    source: "0197_hrm_benefits.sql",
-    sha256: "359451ace3bfc83ade04de9502ef1499e218445c472157faa122820231a5b3a4",
-    newSha256:
-      "df7f94b59fb24b2714d4549cae807fd3e4ceb8c9ecbe3177422b86c3682ba024",
-    patch: true,
-  },
-  {
-    name: "hrm_benefit_payroll_input_no_delete",
-    source: "0197_hrm_benefits.sql",
-    sha256: "9c4744db4c2637bdf6a33462a9fbf7543a41a5f50aae850ebbf466780fc66d83",
-    newSha256:
-      "a5db92e0ab94edaed339b4990fe5aa0e5cc7094603e0d61df843da6b7624e547",
-    patch: true,
-  },
-  {
-    name: "hrm_benefit_program_no_delete",
-    source: "0469_benefit_programs.sql",
-    sha256: "93d87cfe89f4cd36549689aecc51ee34951d3774f8579a045a54fbd4219cec10",
-    newSha256:
-      "9e46174eeceb6a3b153fcc4a30cb928d9ebea95972953909947e6bd9e5a013b2",
-    patch: true,
-  },
-  {
-    name: "hrm_calibration_event_no_delete",
-    source: "0228_hrm_continuous_performance.sql",
-    sha256: "70c581955a4d89106450031e8806ca48821505e81da35a68126302f36a717ca3",
-    newSha256:
-      "a2ec6cee29ac5151871c4209b95ef3f3d11f3862e97d354e8be535c06d0debd7",
-    patch: true,
-  },
-  {
-    name: "hrm_checklist_publication_guard",
-    source: "0479_hrm_checklist_designer.sql",
-    sha256: "8531ee03d30256a3fdfdb4389455f3631c07ce7a9dd07f4ea28404b442cddc43",
-    newSha256:
-      "8c44f917a1530190e0d7b7efa33f3dbc896953590efe197762cd40b4651f4ac8",
-    patch: true,
-  },
-  {
-    name: "hrm_checklist_version_immutable",
-    source: "0479_hrm_checklist_designer.sql",
-    sha256: "91c09ba2e21531b1a6fa1f37826c75cc650fd9eaf8f1063717d4f8401bdb732c",
-    newSha256:
-      "ed13933eb3d11c55eebbfbb9398a11472f7ad948a285c6a26ef6236c4ef7395f",
-    patch: true,
-  },
-  {
-    name: "hrm_compensation_history_guard",
-    source: "0221_hrm_compensation_architecture.sql",
-    sha256: "9b0f5dee5274f7484fc9b2ecd7ad8b4ff7875ed4ace8a5146022dc39880cd08e",
-    newSha256:
-      "63cd9e6c47db7a2d8a6af794478f6787ed0a83c69ade85797c975cecbd8d0354",
-    patch: true,
-  },
-  {
-    name: "hrm_compensation_plans_guard",
-    source: "0222_hrm_headcount_plans_transparency.sql",
-    sha256: "4d08a142a547379f83f4b749e6de1868021ee66f56981dcd118852d3cdff6702",
-    newSha256:
-      "3f8522705d542f9b28188734d11353d6d989e1177a8f1997f1a07e7cb6e6b468",
-    patch: true,
-  },
-  {
-    name: "hrm_compliance_findings_no_delete",
-    source: "0224_hrm_construction_certified.sql",
-    sha256: "05f8db69c109a938546bb666fc1c5e0cb7e1903d924e92b1001ed02e85993c89",
-    newSha256:
-      "4dc32dd4379c9f03f7c93254fac73a91a40e32fae109c72e31a1d007dea503e7",
-    patch: true,
-  },
-  {
-    name: "hrm_documents_history_guard",
-    source: "0230_hrm_documents_surveys.sql",
-    sha256: "4d7d34dac805d7caee96a4e1cc58f0321cafd230a981472be0545f8a3251bc14",
-    newSha256:
-      "28a5dfc702d46939120d9225fc966d40e419dee1e7c1999654cdd41ac5444a6a",
-    patch: true,
-  },
-  {
-    name: "hrm_employment_change_request_no_delete",
-    source: "0188_hrm_change_request_wipe_allowance.sql",
-    sha256: "e32cba5755e74459c7bc1ccdda476c7f6c9b2e3fda5583e3047cbf99935814c8",
-    newSha256:
-      "979e5d88b23a1017fb86676a898b1e116dc4c1a810edf159ded6ddd6c5dab6df",
-    patch: true,
-  },
-  {
-    name: "hrm_exit_record_event_no_delete",
-    source: "0281_hrm_exit_record_revision_and_audit.sql",
-    sha256: "0eeaa6db06e4f16d87ae82f5f6f84cb8c4e5f1f944270158292e649d177245f5",
-    newSha256:
-      "aa9f109f1f50248d30ce3c37c9c02453b8f9dd1c307b0f3fdeddd5e82bffc817",
-    patch: true,
-  },
-  {
-    name: "hrm_exit_record_no_delete",
-    source: "0196_hrm_performance_retention.sql",
-    sha256: "0fef2334188a4107d7ff40300467119a1af136037cb18929c28c96006144230f",
-    newSha256:
-      "3895558d475803dcb6351fb5e5a7ea29320b4adb902b637cd92bc83b433579c9",
-    patch: true,
-  },
-  {
-    name: "hrm_feedback_no_delete",
-    source: "0228_hrm_continuous_performance.sql",
-    sha256: "30389829fbfe8f844eaf28926e5afc975dc25fe86d94e9c917dee2b601c17776",
-    newSha256:
-      "58ad0c39786c90e926766ca399c6fab116da445cdad4da79cc4f3dbce3257f0d",
-    patch: true,
-  },
-  {
-    name: "hrm_goal_update_no_delete",
-    source: "0196_hrm_performance_retention.sql",
-    sha256: "69fdba4a4c3f4063d73ff2c3a72f095514eec4c56b2457b8e773a682227397f7",
-    newSha256:
-      "8f022cea76f3bff5552aeeaa9474ad5acfc0e1179383df3f6cc0f8565a479ab7",
-    patch: true,
-  },
-  {
-    name: "hrm_leave_request_no_delete",
-    source: "0194_hrm_leave_attendance.sql",
-    sha256: "6cb138fc8a67c74d33a343f7db52661eec57d1574c7adcb89ff015432ea1a00d",
-    newSha256:
-      "74717c499fee9a6e1f48e2eca075cfad18ad12da87643fa3b251e9e0f38ed14a",
-    patch: true,
-  },
-  {
-    name: "hrm_payroll_input_no_delete",
-    source: "0194_hrm_leave_attendance.sql",
-    sha256: "8e8b3b1f8a73d07f328b29e523aa9e4264a6a8a8a1d0979d84280b49c378a22d",
-    newSha256:
-      "3824ddaddadf15c555cb0b19ef413694ad55f9bdb16a6e14b7d38c28d84587d6",
-    patch: true,
-  },
-  {
-    name: "hrm_pipeline_template_no_delete",
-    source: "0195_hrm_recruiting.sql",
-    sha256: "c729f72b3ca91c209954f075ecbfbeace207a7ab2e5a8c3d8ed4df573af2e235",
-    newSha256:
-      "7857864905d2b9a15c1698384cd8c50ae6066b325a84f138175bfe1cf315ab48",
-    patch: true,
-  },
-  {
-    name: "hrm_process_steps_history_guard",
-    source: "0193_hrm_employment_processes.sql",
-    sha256: "51f788d434d64e3cb71ee90e5db9965269075cdbe76d8c47aa29bdd375dfa6ec",
-    newSha256:
-      "cbaaec0dfcca4adf4ae5d4114ca2f7290c6deb063b342cd3e1b076164ebf0e5f",
-    patch: true,
-  },
-  {
-    name: "hrm_process_template_no_delete",
-    source: "0193_hrm_employment_processes.sql",
-    sha256: "7bc8b31a3bf2609f09a81effc983a09223837b45bd973d029c57f9a7177da7f1",
-    newSha256:
-      "ab1672961357916af998d83b9989aa0e8734ccf52e8e2554fba48fa7be9aa14d",
-    patch: true,
-  },
-  {
-    name: "hrm_processes_history_guard",
-    source: "0193_hrm_employment_processes.sql",
-    sha256: "64871daa1c6d5a2021eb27643f0eefb10ce4eda985691dcb863b958e2b5c733c",
-    newSha256:
-      "79dd051b031cc6cfa5cb36ed9b9b5b7e8314b4177373cc5cd465d427e98cb50d",
-    patch: true,
-  },
-  {
-    name: "hrm_qualification_events_no_delete",
-    source: "0225_hrm_qualifications_dispatch.sql",
-    sha256: "287f79cff23ab06711c5cfa8a9e8d39af7563417788dccc3b03d0eadf8626fd3",
-    newSha256:
-      "209482c3cafcc73094e7a51a528e6d7a5710fa6281491f8b5b12e5f766d3e91a",
-    patch: true,
-  },
-  {
-    name: "hrm_recruiting_depth_append_only",
-    source: "0229_hrm_recruiting_depth.sql",
-    sha256: "81fb84408735c17ddb159f15929290aac9e5c5414956c64bfbadef890a8469c7",
-    newSha256:
-      "9098c4f6d31ef1f36e155026c0e283626f44dc666c1c3c0ca2cebc39025b4858",
-    patch: true,
-  },
-  {
-    name: "hrm_recruiting_history_guard",
-    source: "0195_hrm_recruiting.sql",
-    sha256: "20772f6c42f53f37aec414d28c1b1504ba8ce4f97716e352fa01f12d407bbe51",
-    newSha256:
-      "f0ec510aba198e45f488f2c15dcfdeb6a86825c2c47676d782ce92b04975311d",
-    patch: true,
-  },
-  {
-    name: "hrm_review_event_no_delete",
-    source: "0196_hrm_performance_retention.sql",
-    sha256: "ee985ecdb79e5efcdd3c27701e69c8af018a845745234efa02df956157cf4cf0",
-    newSha256:
-      "e680cffa04a450aa4597df712e4c86c4af3a18bd0e98bb2586629449380a6ef3",
-    patch: true,
-  },
-  {
-    name: "hrm_review_no_delete",
-    source: "0196_hrm_performance_retention.sql",
-    sha256: "6264ad41a80fb7947c1aa69a6ca297c8a00be9256a337b0693c66cdb2556e7bb",
-    newSha256:
-      "1ce32ed013636689608f888a748ea3cfca747386c3fd05875f0484942f6c22fc",
-    patch: true,
-  },
-  {
-    name: "hrm_review_template_no_delete",
-    source: "0196_hrm_performance_retention.sql",
-    sha256: "0e055a772bc530f53f2880c0c797fa85fd7231ffc0499dcc5595e31b8df777b5",
-    newSha256:
-      "d2ac564e904a84d1cbfb8edc8a41858626061bbdb33418592f9c4001bf7a2ba8",
-    patch: true,
-  },
-  {
-    name: "hrm_scorecard_submitted_immutable",
-    source: "0229_hrm_recruiting_depth.sql",
-    sha256: "c24fcab8e1c21c78f3e14d72ca43ea2cc48b740eccd48d4df0c53032e4fe525b",
-    newSha256:
-      "c8ca655ef48f31c7dbf44d9a9e8a423b3a33054219200f78ea407a1e555fcdb9",
-    patch: true,
-  },
-  {
-    name: "hrm_talent_review_no_delete",
-    source: "0228_hrm_continuous_performance.sql",
-    sha256: "0fb8da368c72f0d2c87bdc44a1a5697440cdc82f5be92d5475e60e81684b54de",
-    newSha256:
-      "0f064fd83cc7a260b89378aab3ce696e8a20459e3a0dfb9ab06bf11ef17cc876",
-    patch: true,
-  },
-  {
-    name: "hrm_training_guard",
-    source: "0771_flow_submission_authority.sql",
-    sha256: "f0b7fd59034f266a1ce1c47bfafdd62db76d324fb4dd02abe263d8eaccd1e98c",
-    newSha256:
-      "f0b7fd59034f266a1ce1c47bfafdd62db76d324fb4dd02abe263d8eaccd1e98c",
-    patch: false,
-  },
-  {
-    name: "internal_billing_rules_history_guard",
-    source: "0582_project_delivery_controls.sql",
-    sha256: "9afadd02371ef178f2c7a93c2eb8f0edbcb22b67e08586712635c9e85e2489e9",
-    newSha256:
-      "315273f3d0a00b6e99d1d4520d1803acb54aa61537aab8ebfea48c01b41f5cee",
-    patch: true,
-  },
-  {
-    name: "inv_move_guard",
-    source: "0001_baseline.sql",
-    sha256: "8829d25702c1293ab6b5f8bb869cddd7a846a3a9229d2494560ef56f88a37832",
-    newSha256:
-      "48846fcf44671154f852786dbaa4546a609ebe430946d189eb54a23bbb4c6ab5",
-    patch: true,
-  },
-  {
-    name: "inventory_count_policy_history_guard",
-    source: "0615_inventory_stock_controls.sql",
-    sha256: "186804410f3f600b31f592f758805df995f8b3c7631631654bdc79be882ca0c1",
-    newSha256:
-      "147c25b98af9a3bf6cf69572e493ff1f0b73f8c18d36c54eb7b8f3699c8b0bbb",
-    patch: true,
-  },
-  {
-    name: "inventory_lot_identity_guard",
-    source: "0001_baseline.sql",
-    sha256: "4b24f2f56dccf057e1b182dc698fe8e8f3fab3b609f8e4f4fd4a0e03244f9e79",
-    newSha256:
-      "dfe6840b72217c786a1adbc395cfeff8c5145de889344961b951615695d48839",
-    patch: true,
-  },
-  {
-    name: "inventory_provisional_immutable",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "c58082d65aa97e7c4adb9a56bc6a09d3a2dbbdc40d0fc2a0442a1f49ecb19286",
-    newSha256:
-      "e5b8f44470441c5c2d3e9d4110ca813ec909443e6423c7170e068184cca1a65b",
-    patch: true,
-  },
-  {
-    name: "inventory_serial_count_history_guard",
-    source: "0616_serial_count_restoration.sql",
-    sha256: "0c59398344eba4235f222dcd7d55c56f9ed99eab8d89b4035afe61f210bcb091",
-    newSha256:
-      "f6ddf2e298fe9fafac158622051e16063791094e6a2b42570b90dc833d1c9228",
-    patch: true,
-  },
-  {
-    name: "inventory_serial_lifecycle_guard",
-    source: "0762_serial_manufacturing_reversal_evidence.sql",
-    sha256: "322f7963f1479042a2db00f86d6bbc21eedbca863b5df92a9716fde15789d340",
-    newSha256:
-      "322f7963f1479042a2db00f86d6bbc21eedbca863b5df92a9716fde15789d340",
-    patch: false,
-  },
-  {
-    name: "je_guard",
-    source: "0791_connector_replay_module_authority.sql",
-    sha256: "81264b8d4c0b65a49d18fcda3fc0c4c97a3964b5d12cabed457d4c01b0485190",
-    newSha256: "81264b8d4c0b65a49d18fcda3fc0c4c97a3964b5d12cabed457d4c01b0485190",
-    patch: false,
-  },
-  {
-    name: "jl_guard",
-    source: "0669_reconciliation_signoff_withdrawal.sql",
-    sha256: "05c9fd13613199ff8f8e571e52bf6e32c2fbe51587a8be15afaf5242357a4242",
-    newSha256:
-      "7d99adf2194cdb727672a9cbc5b5b07cc6e75788422e678439b276191eb13b3f",
-    patch: true,
-  },
-  {
-    name: "journal_lines_check_balanced_stmt_del",
-    source: "0381_ledger_statement_balance_checks.sql",
-    sha256: "afbb0489e6027291e8641f932d49f55cecc076dde2e2b9ce522773de385c02af",
-    newSha256:
-      "afbb0489e6027291e8641f932d49f55cecc076dde2e2b9ce522773de385c02af",
-    patch: false,
-  },
-  {
-    name: "journal_lines_check_fx_residual_stmt_del",
-    source: "0457_journal_fx_residual_group_bound.sql",
-    sha256: "ba13b43ff230091b873a75938c1c5dbce82f2438fa12c9d78403a62d51d226f4",
-    newSha256:
-      "ba13b43ff230091b873a75938c1c5dbce82f2438fa12c9d78403a62d51d226f4",
-    patch: false,
-  },
-  {
-    name: "landed_cost_allocation_guard",
-    source: "0001_baseline.sql",
-    sha256: "7318f56176b2c5a34437c0a009ebc34bc66818bb30c9131b95d7b9fbabf321b3",
-    newSha256:
-      "ac034451984f9c956076f7488a5be2aa278522fb49429ea23cf06ff5e074d03d",
-    patch: true,
-  },
-  {
-    name: "landed_cost_voucher_guard",
-    source: "0001_baseline.sql",
-    sha256: "7a9bd1e895107bad4047d24b4653bf090e2fdb427f2daa94d69b96fcacf16ce6",
-    newSha256:
-      "030348a94775ff4e27197991245ca1cb63d586cb116874027effb3b97833c1cb",
-    patch: true,
-  },
-  {
-    name: "landed_cost_voucher_target_guard",
-    source: "0001_baseline.sql",
-    sha256: "e3835e46d31a270fb106770156fc41ce484fc4bc209e9cf8aa8acc8495ee00ec",
-    newSha256:
-      "01b7005a5cb772deb0302368945eab9cba4865e787e5863a28b5fcc673b12828",
-    patch: true,
-  },
-  {
-    name: "lease_agreement_revision_guard",
-    source: "0202_lease_lifecycle.sql",
-    sha256: "caa37ca9044805c24e4ce748ca32f9059443073606ad4b9c94cd4f048c72ade4",
-    newSha256:
-      "2982b4b6ba82c44a0bd5d020d3e2a5f45dcf2958d5334512e5e4356fca4210be",
-    patch: true,
-  },
-  {
-    name: "lease_schedule_history_guard",
-    source: "0202_lease_lifecycle.sql",
-    sha256: "30d1141683f1e822b46e6c7e64a734234572a56345e699a4543f991050e28427",
-    newSha256:
-      "100716d7f7ec0b3343e3fea8ee2c0b83a060783207991e5b30a9d0081361c58e",
-    patch: true,
-  },
-  {
-    name: "multibook_evidence_immutable",
-    source: "0682_accounting_book_currency_and_account_maps.sql",
-    sha256: "57cfe6f0bffa374dcdb2958ae7cec3b0ec01c68b0e5ac31f54e3c8657d73bdd7",
-    newSha256:
-      "57cfe6f0bffa374dcdb2958ae7cec3b0ec01c68b0e5ac31f54e3c8657d73bdd7",
-    patch: false,
-  },
-  {
-    name: "net_investment_configuration_guard",
-    source: "0465_net_investment_oci.sql",
-    sha256: "cd5277e751a98426b11dc7af264ac76cb374645b0779008187a530cd31fc4955",
-    newSha256:
-      "affe81c2ffcdd5ada496b24d196f30b9f774e73345d11a938837929539cff46d",
-    patch: true,
-  },
-  {
-    name: "net_investment_evidence_guard",
-    source: "0465_net_investment_oci.sql",
-    sha256: "7c29f525adadb2a1e4135a2255df6c3df0740d26fb51ac3ad5c6c2de9b059610",
-    newSha256:
-      "21a55d2377f5c1c4cb79e0721b33ad9c0d60f1a077e491bf462ec85866d6573c",
-    patch: true,
-  },
-  {
-    name: "nonprofit_frameworks_guard",
-    source: "0434_nonprofit_frameworks_and_releases.sql",
-    sha256: "7c3217b4eb202242a3827f5262e1512e703ec34e276d10ec8e8d44eb48892a96",
-    newSha256:
-      "550502ce39c94e0a304aedfee5e0060f4270326518d180e5c03e29e8dd9ec49c",
-    patch: true,
-  },
-  {
-    name: "openbooks_bank_statement_line_guard",
-    source: "0335_bank_statement_line_possible_duplicate.sql",
-    sha256: "f4cd4e43879c5950d76caf0c87c0876acb6d15ef7b5c76231eba30b80cbabaed",
-    newSha256:
-      "54b74c992874a580d5d2871f4944c41a3b54b018ee4b184c4eea84f4be0960da",
-    patch: true,
-  },
-  {
-    name: "openbooks_gl_activity_entry",
-    source: "0338_posting_guards_and_summary_heals.sql",
-    sha256: "a2794dd143d8954250db4f50874e72696328ac321a4b8d52e4854c060aef1823",
-    newSha256:
-      "26121381f7ace27324ac0dd861d82eb81ac28524ae046bc8f627109aee97189b",
-    patch: true,
-  },
-  {
-    name: "openbooks_gl_activity_line",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "7bc16460ee32f02254e9ce5b11a41ca94a60242923b54041524d5768fe4d1f21",
-    newSha256:
-      "777490764041ed8ec587b2068394957ef48be8596307a95b0f61d9cde83fad5c",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_ap_capture_evidence",
-    source: "0001_baseline.sql",
-    sha256: "02b4280663902733d88f28118a3e91f44162a4dffd6fc44e7b51562b8a774c45",
-    newSha256:
-      "db53ecd91cad0c5f3e4c4b9a6a09544db85cebacb91c7b7b422cb2e244fa9591",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_ap_capture_source_blob",
-    source: "0001_baseline.sql",
-    sha256: "0d9ad41e97992373fca6b55cf3ba9e69f8f1717093ef7772d194412bd8985a89",
-    newSha256:
-      "cc8a8131769000981391399a2601667ca2268afeb7f9386bc863ad4f589cf690",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_ap_capture_source_file",
-    source: "0001_baseline.sql",
-    sha256: "c3126d46a7cdf94920e6074ccd02f4b3886abc1366faaa0f2e904a3e5ccc4b8e",
-    newSha256:
-      "f11e875cd30ea220309582fe531b50685fb5dfe2d7f308f78c47791726ec2dbc",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_ap_capture_source_version",
-    source: "0001_baseline.sql",
-    sha256: "05a9054652759f235de3bbf7ac00706af82b85517339bdd490c8af9fe246f2a9",
-    newSha256:
-      "f49975ac3f58b01819de3fa995ad60ac02215a8a5b5d9945d9654379f98e6574",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_budget_line",
-    source: "0272_budget_pnl_calendar_scope.sql",
-    sha256: "729ac10c1170d49683e3b04034702eae78c29c53a6423ccc887f88fc45cd937a",
-    newSha256:
-      "2781a16dca1c9e08ce87e4640343a673baf8fd37dc81d8d26d5f07cf5bb99994",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_budget_scenario",
-    source: "0272_budget_pnl_calendar_scope.sql",
-    sha256: "a057cfa923a80b0b9895ca8b2e8495a91220f317f13325ec6103e5978e81050f",
-    newSha256:
-      "aec8fa32f4d454de8223045d4ad73fbe5b6cbb5ebb088637a11a72fb45211dc3",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_depreciation_evidence",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "50663d9463c1c0e8e4aa5d38281444c3b54e089cd46b6453a6e7a5f83c050153",
-    newSha256:
-      "6190f0e93e8878123908f1f567892d5f0ed5782a7aaa9faebf30d1f647c16d9e",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_finished_ap_capture_run",
-    source: "0001_baseline.sql",
-    sha256: "27bf355201b803a886e0ebadb94abc7a9bb505557ff4ac0d5c2639f215e8d1fa",
-    newSha256:
-      "db3f8446ad785d1b92e9e7fce09f58522d4180d9c340b8cb6d27fa75aa17d45e",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_pay_run_bank_file",
-    source: "0001_baseline.sql",
-    sha256: "e59a1428945231c23443cfc590b8be291866b01d41c5a8b49335f07a0a64ae69",
-    newSha256:
-      "f6cfcc17a384d7c68fba8ece42d685bd96ce40b8eeeaea5e0212d2a6201e5d3f",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_payroll_bank_file_blob",
-    source: "0001_baseline.sql",
-    sha256: "b778791dd21d24f58f69b19195f0f19e0dc1ed9de3530c44977bfe1030271651",
-    newSha256:
-      "cbab19c98cb81d37b12fdf0f6ee7f9bd4f059cfd663559d0d9d12574d20c36f0",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_payroll_bank_file_file",
-    source: "0001_baseline.sql",
-    sha256: "044243daf58bf3a8c6633eed4ea3bc0c003c877a500c7cb5480b650ac70c98c2",
-    newSha256:
-      "8b1e26e04aebb8e550a40441660b82fdde94967d2f96ccd991aa6722b3387e4e",
-    patch: true,
-  },
-  {
-    name: "openbooks_guard_payroll_bank_file_version",
-    source: "0001_baseline.sql",
-    sha256: "f4063021c74e4031bb4fa141ab7c635b86163d62267b7aed958e20a20b76a96a",
-    newSha256:
-      "4c9747e8c4e63f4f5b34c7df406aa58ce9f5fdcec7319bfbc6424f060f1304d2",
-    patch: true,
-  },
-  {
-    name: "openbooks_party_payment_stats",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "229c150014ee8ee417baf95f86c7599a5060b8294cd0553ad2943c60dbaaa0dc",
-    newSha256:
-      "d1f84260a2e8e8cf6c324759fbeef57f032e481e04b07fdd4daa4fc91fe34247",
-    patch: true,
-  },
-  {
-    name: "openbooks_reconciliation_match_guard",
-    source: "0645_reconciliation_journal_clearing_groups.sql",
-    sha256: "442f7133e0dac3816cf6a89622434315cc35e2f7ec24550b6de6d33584311de1",
-    newSha256:
-      "9f1e32b854b8f966e1e37afbac93f1b5bbebbcd05b151da05cb12f64b868ca3b",
-    patch: true,
-  },
-  {
-    name: "order_line_cancellations_append_only_guard",
-    source: "0422_order_line_cancellations.sql",
-    sha256: "87a378bf9544c3059187a10a05b0c585288528a48c131b9d0ddc1823b24f1c57",
-    newSha256:
-      "7a782502a62a99ca8caf6ca702b4560a72119c6bf02c4d173cd3509b9b1b8695",
-    patch: true,
-  },
-  {
-    name: "org_business_calendars_history_guard",
-    source: "0563_business_calendars.sql",
-    sha256: "ec7ee836eb5eb5ad3ee5ee521643637dbb515d887e072583202fcca4eed31134",
-    newSha256:
-      "2bd22a5308a1f5da9c7e563fe93a0094f9d503be88cc7aa0b7548e31338ca42f",
-    patch: true,
-  },
-  {
-    name: "pay_component_earning_classifications_prevent_orphan_delete",
-    source: "0551_payroll_compensation_packages.sql",
-    sha256: "4b1791a21d7759e8b104b6f44aac88523faafebfb6d82182346ced33f39a58f6",
-    newSha256:
-      "8137f80212bd6d6c0987c647c8e3d3c112d2ef2755bf06ab2d73185f75058f9c",
-    patch: true,
-  },
-  {
-    name: "pay_component_history_guard",
-    source: "0092_pay_component_snapshot_flags.sql",
-    sha256: "f192d88367ea3453c46e0644710916e50cd89b4f06d18bb68d5edaa0e49aec05",
-    newSha256:
-      "f0ead9e55daefcb55057d74227cc9410fcc9c96704a8f318c10108f6d213d8c8",
-    patch: true,
-  },
-  {
-    name: "pay_component_statutory_treatment_preserve_committed",
-    source: "0720_pay_component_statutory_treatment.sql",
-    sha256: "14c4db9f621bf899259d58d6e33d766fc9e125225240aac2eb95f48252a3b6bf",
-    newSha256:
-      "14c4db9f621bf899259d58d6e33d766fc9e125225240aac2eb95f48252a3b6bf",
-    patch: false,
-  },
-  {
-    name: "payment_event_immutable",
-    source: "0001_baseline.sql",
-    sha256: "2ffa9522f5e2aea0f0d05d49d371b4f25038fdd8b7efdf0532590f7d27df1170",
-    newSha256:
-      "703820e2c3a1013d117df32c43ec288bf2feb20491c912e02d7017dba2d2a4a9",
-    patch: true,
-  },
-  {
-    name: "payment_run_item_guard",
-    source: "0001_baseline.sql",
-    sha256: "e3e5ab9e8a40e61b6296d6e58175d010e2eb667178ec73a051dc4c82a95a52de",
-    newSha256:
-      "8fe0c6aff0cfc9528429baa03f46780e626cafe1efd8ed134bedbef0bed43a5f",
-    patch: true,
-  },
-  {
-    name: "payroll_annual_period_bounds_guard",
-    source: "0560_payroll_period_openings.sql",
-    sha256: "254d3e9199710c1fbad5d87ef3a079b3e7873cbeab04cbf187bdc8d8c871ba6b",
-    newSha256:
-      "b0934f0f9930ec7800cc8286bf0c0469528f9b5c4d400c60603688ba6e8b73fd",
-    patch: true,
-  },
-  {
-    name: "payroll_compensation_calculation_guard",
-    source: "0551_payroll_compensation_packages.sql",
-    sha256: "b60900bb0f3449fa05059f1327ff047a7aa50a0ceacbf3107d7faadc5d1fa030",
-    newSha256:
-      "9bf4bdfb630110ea8731d08aae67eb08bdc5cd5e5c302b819991d9d88478009b",
-    patch: true,
-  },
-  {
-    name: "payroll_compensation_configuration_guard",
-    source: "0627_compensation_ungated_submission.sql",
-    sha256: "1a4ea1bb3741cb16429bdbb60c94218171283e45f00ee52aaa32458d58a14f0e",
-    newSha256:
-      "1a4ea1bb3741cb16429bdbb60c94218171283e45f00ee52aaa32458d58a14f0e",
-    patch: false,
-  },
-  {
-    name: "payroll_employee_employer_assignment_guard",
-    source: "0720_pay_component_statutory_treatment.sql",
-    sha256: "f1474d009dd0e9276be0c52c5e7bf93c7ef633f72e52e250d60facc82d8641f3",
-    newSha256:
-      "f1474d009dd0e9276be0c52c5e7bf93c7ef633f72e52e250d60facc82d8641f3",
-    patch: false,
-  },
-  {
-    name: "payroll_holiday_allocation_audit",
-    source: "0606_payroll_holiday_settlement_allocations.sql",
-    sha256: "f4fb468d09a84edd8c34464b5bccc060bda863fa58f475b2919c65eb48e98215",
-    newSha256:
-      "61c473adadc109c7f0d90259fa62b1258663fe3627f175681763bfe74a03a4a5",
-    patch: true,
-  },
-  {
-    name: "payroll_holiday_allocation_guard",
-    source: "0607_payroll_holiday_historical_clone.sql",
-    sha256: "6f894f19e18a5f455574b4cbd4c07729209d6788e121e2b93832dbe9c7efcc65",
-    newSha256:
-      "1868461bf68220c4969db8657957f7eaa7d5d98464a5060afc10143a204eed9f",
-    patch: true,
-  },
-  {
-    name: "payroll_holiday_obligation_guard",
-    source: "0610_financial_change_configured_self_approval.sql",
-    sha256: "fdc015a4221b113894f8581437818bd58ce09ecc12689c920129f0dfc4c55e75",
-    newSha256:
-      "91f56340922be70370d52d89c669a99fb6458134c6974ee83d63cf715ad4e12c",
-    patch: true,
-  },
-  {
-    name: "payroll_period_opening_guard",
-    source: "0560_payroll_period_openings.sql",
-    sha256: "78cc3909965364530ec42e81d7ec2eb0d89e5a542d51ba06b42f7f17f5a1b6a3",
-    newSha256:
-      "c03aba9b5e0a215518f7cd976d5527399e5bdf14bd618142c58b31c352d4e66d",
-    patch: true,
-  },
-  {
-    name: "payroll_program_period_bounds_guard",
-    source: "0560_payroll_period_openings.sql",
-    sha256: "0cfe76cc62209d74ab14a2cdaf22a217c4a6bdd556198cca2f08b63fcc33bdf5",
-    newSha256:
-      "b64f55188a39928326eacf09f7a20ad9ec17ce0b9e341ae6fe9e2a8337089c3d",
-    patch: true,
-  },
-  {
-    name: "payroll_service_configuration_audit",
-    source: "0477_payroll_credited_service.sql",
-    sha256: "08224f95861dda28c8948555fe08e5e1365f5eff3f234f04d01a70f57e29aa4b",
-    newSha256:
-      "2bb2d1b15b48142adeb8a29e3711dad3e0c00165998179f355cb017710ebd266",
-    patch: true,
-  },
-  {
-    name: "payroll_service_configuration_guard",
-    source: "0609_payroll_service_configuration_historical_clone.sql",
-    sha256: "b55136dbabdee59680b62baad4cc936b92124d1af4fd9c24c424c1007c3f5da9",
-    newSha256:
-      "6ac030125b6caa98e1e8a293704160c57f95aeac53488eb31386c78cf45686ab",
-    patch: true,
-  },
-  {
-    name: "payroll_work_location_allocation_audit",
-    source: "0362_payroll_work_location_allocations.sql",
-    sha256: "e7f5f1f87fd688f0402e4ee61e24698468e5adba81d5c17aca960ae939f90ef6",
-    newSha256:
-      "e28337e0ef26347c422accb607a0e14549c6332a189284e668faca1b964aa45f",
-    patch: true,
-  },
-  {
-    name: "payroll_work_location_allocation_lock_committed",
-    source: "0362_payroll_work_location_allocations.sql",
-    sha256: "30ee18d762a6c21ffcf47cb2d5844b81fc3fb0303d6f0a646892c83f0060b57f",
-    newSha256:
-      "06a75b03f20e6de17d1d944ccea9d7bc58574cda9a1b84feef0a36525462da79",
-    patch: true,
-  },
-  {
-    name: "pick_execution_history_guard",
-    source: "0618_warehouse_execution.sql",
-    sha256: "5c13cb9268df8f036f463e7e3d2b0ac78852ebef32ef31277ba8bad87303445d",
-    newSha256:
-      "6675b41773ba7d0e780fc4af92adbed3d0712a8a979151285f50e700bafc1b48",
-    patch: true,
-  },
-  {
-    name: "position_changes_immutable_guard",
-    source: "0192_hrm_positions_headcount_plan.sql",
-    sha256: "5508feab8972dcf631700c00995c0429437af02b097f4176dc467862fa336351",
-    newSha256:
-      "df87953844fc19d4951b81f9fb59eff39f7abd4cef092e981878611f9b5dd42d",
-    patch: true,
-  },
-  {
-    name: "position_versions_closure_guard",
-    source: "0192_hrm_positions_headcount_plan.sql",
-    sha256: "c1a40597f6bcd331094b63b9d3ee6663fac5b92addb3d10cdcd4c3559a0f2be5",
-    newSha256:
-      "8e76bc2f6ff00b7977134f9f829de4ecbb855bad72294a25ceec69d14f643550",
-    patch: true,
-  },
-  {
-    name: "preserve_historical_compensation_cycle",
-    source: "0559_hrm_compensation_source_cycles.sql",
-    sha256: "1d921962796f5e6c85117ba90c3464c00af30fc4274e69c2c423faaac89d87ee",
-    newSha256:
-      "d4eccf072e15d665398d2e78899dd28760bd0cf710aadedd970985d702b5ee98",
-    patch: true,
-  },
-  {
-    name: "primary_book_history_guard",
-    source: "0102_primary_book_history_guard.sql",
-    sha256: "73c4d9e7675ab7a99b0a29fb60a38302f7bba33ff9cea5431d8c3a714147fd3b",
-    newSha256:
-      "bac7038f8e1a8a71ba77fc0353678ffd3ff8f3ceaad140f4b2e1bbba4724582f",
-    patch: true,
-  },
-  {
-    name: "project_delivery_evidence_guard",
-    source: "0582_project_delivery_controls.sql",
-    sha256: "0a9b924933d0c3a59d18888ddab6f2abc6757ad1a4461029863df46f8ba79bf7",
-    newSha256:
-      "90f6b8629e4bf0a2fd2fa2d122a2d8328f4f8d698a5e6ea393a7263163071703",
-    patch: true,
-  },
-  {
-    name: "project_financial_adjustment_guard",
-    source: "0001_baseline.sql",
-    sha256: "9698849341756d30106cfadd859cbf7cf394070b755ff59afa82cf0bab6a3d11",
-    newSha256:
-      "ba265cb9c6f0b3d2fadf9acee953bc302fc4219126bbe07115bf3aa413e5d540",
-    patch: true,
-  },
-  {
-    name: "project_financial_profile_version_guard",
-    source: "0099_project_profile_sandbox_teardown.sql",
-    sha256: "f3b7fb24767592896f73613ec51650534355e1cc3301ad751898c187a14e6319",
-    newSha256:
-      "738be67b3d035dabd7af11b684ca513b6c42e1e7af9811a1bd73f644bbac619b",
-    patch: true,
-  },
-  {
-    name: "project_overhead_adjustment_guard",
-    source: "0001_baseline.sql",
-    sha256: "c096dc75ae3d7e964c6f11afc4d8560c3f0d4ebe7d6997a7e510a89a6534516e",
-    newSha256:
-      "1754d5277624f2248651c0cc57e98c1ac33e8f860cb2211496c82b12dd63364c",
-    patch: true,
-  },
-  {
-    name: "property_financial_evidence_guard",
-    source: "0001_baseline.sql",
-    sha256: "cf412831c91d63939865a38c9c0da773bf3d2cc7a6470e5830d226cfba1fd5fb",
-    newSha256:
-      "e64cfe122d93789c0a64e2410b9e6eaa213f5ee501dc81cdee65a0b943a76ba1",
-    patch: true,
-  },
-  {
-    name: "protect_application_idempotency_key",
-    source: "0402_rls_bypass_trigger_bodies.sql",
-    sha256: "51a6d8252d54ee5b75a3d6ead4faf5e3b231a5d4bb3216abb06536d2d4830e51",
-    newSha256:
-      "1972cf0709d1c70ba282f05046deff4e8deb311235964166c0e925526e93d0cc",
-    patch: true,
-  },
-  {
-    name: "protect_country_tax_pack_installation",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "5b6eea6d4d8590303769f521df79b4bf86ff5eb3d34925434687df1bd7f0e211",
-    newSha256:
-      "a77c1c221ecd79d284d26e35419ea97d44aedba30f9f4feed10c8423b5120069",
-    patch: true,
-  },
-  {
-    name: "protect_org_base_price_level",
-    source: "0245_price_level_guard_sandbox_wipe.sql",
-    sha256: "c763d05cbf9084021ecf5b60a93fd8c2132b0e28085360def2136bad3b290760",
-    newSha256:
-      "3acf699fc53c9df67a5240e56378a8470210221b6008707c8d28e69bd98de7b1",
-    patch: true,
-  },
-  {
-    name: "protect_pricing_customer_role",
-    source: "0247_customer_role_guard_sandbox_wipe.sql",
-    sha256: "00de04b3113fbe9084a84182d0cac497644e423dd82369b36e8c97e9ed501bcd",
-    newSha256:
-      "3d82d2ff31a128c0f932c963ff29a02209692966c48267fea22f55af2876622d",
-    patch: true,
-  },
-  {
-    name: "protect_tax_provision_history",
-    source: "0001_baseline.sql",
-    sha256: "a394c63726b88d6310039e8807885c89c3fb5ece7f165379851d27ec8b3f898a",
-    newSha256:
-      "d97e46fcd7752fa5eec576792ec10443bf4fe1d3cd5f05b6a77024b54d59434d",
-    patch: true,
-  },
-  {
-    name: "protect_temporary_difference_history",
-    source: "0001_baseline.sql",
-    sha256: "6c0ad6b3078c083614914401295a7fa33d359fc8ef85aadeab75375b2f289024",
-    newSha256:
-      "677df694d5525b671ce6eeb3f8bdd11fca79730a3e7de988693bec3c6f77662f",
-    patch: true,
-  },
-  {
-    name: "provision_identity_guard",
-    source: "0459_provision_obligations.sql",
-    sha256: "7db4b6a987c3470686b45d6f39553d60b7291b92fc3fedafb67e00157aaee4a6",
-    newSha256:
-      "03aad968bc3e6e396b6a16b679fb91a6f77fd2e7fbde21e4b28f4f1954725f99",
-    patch: true,
-  },
-  {
-    name: "rate_adjustment_target_version_guard",
-    source: "0001_baseline.sql",
-    sha256: "8efd5f792575931f78e04d36780115b995e3605dc1b4ea858bf821241a3f221a",
-    newSha256:
-      "8d3662d80c3bbe419040a4b302211223f9e705d11686af3932a044b41528f682",
-    patch: true,
-  },
-  {
-    name: "rate_book_currency_guard",
-    source: "0001_baseline.sql",
-    sha256: "e937e1909628cb2555c0e0c45d57a229b4fdd79ceebb3d07dca946999194426b",
-    newSha256:
-      "8b50942579e305f23f4b0cb174ff4f62735fdff3048f813f8f5595c36ae64487",
-    patch: true,
-  },
-  {
-    name: "rate_version_child_guard",
-    source: "0569_clone_preserves_activated_rate_children.sql",
-    sha256: "58a14ec3f19fe846832ff24d993988803820dd7a9670fa5b9af427378d6d9941",
-    newSha256:
-      "1c6a2c19dce2d753eb1f81a10fb24701677f1df4cdb77d4878921c1a731e1e58",
-    patch: true,
-  },
-  {
-    name: "rate_version_immutable",
-    source: "0001_baseline.sql",
-    sha256: "d486f90af091d60a1dbf20121beeaf3c758d9e8d48209ce9ec67d444485fb5fe",
-    newSha256:
-      "ce293e6767e40d1ec0838aadcb2bfc417f0cc2f165079c8c22e1b9c5cd72eb77",
-    patch: true,
-  },
-  {
-    name: "recognition_revision_history_guard",
-    source: "0203_revenue_contract_modifications.sql",
-    sha256: "5a75a9a2bb5492a9b91f701dc86949f66788c056a26275014ece3ca784cf895a",
-    newSha256:
-      "05a10a1ab732449914565ab6e3bc7e8ce1b8faea1af870964f71f1a052280474",
-    patch: true,
-  },
-  {
-    name: "recurring_occurrence_document_immutable_guard",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "57c143eb58fc0d72f7a932b05e4bb64f83076624518ef0061f41fb081cb5b2fe",
-    newSha256:
-      "0686abfe2fa5f65a8808baa3035d13aca021ecf3b1f285746c45612352af91e7",
-    patch: true,
-  },
-  {
-    name: "reporting_relationships_closure_guard",
-    source: "0184_hrm_employment_foundation.sql",
-    sha256: "a320a6ce999caa0c5ec29feb3e8bb9d8aaa2960600ee1c787c58a63e56ef60b9",
-    newSha256:
-      "2136f7308beee0af0fe379d9e00f19179fc6ca7e3494eb7168f5d1cbb8b0452c",
-    patch: true,
-  },
-  {
-    name: "saas_metrics_fx_evidence_guard",
-    source: "0455_saas_metrics_normalization_evidence.sql",
-    sha256: "6b962fb7888f3c51240e6d74c2321722822558a5cc1e455b122f3b167ffe55ac",
-    newSha256:
-      "e4bedd42fddfcb67b43e1eb47ed4f012b01993689f6148c6671ee0e7e48061a0",
-    patch: true,
-  },
-  {
-    name: "saas_metrics_normalization_request_guard",
-    source: "0771_flow_submission_authority.sql",
-    sha256: "879b07d87673ee5f6800f20a43a4c1fa448f8050c2011f85fb2c118740e6857e",
-    newSha256:
-      "879b07d87673ee5f6800f20a43a4c1fa448f8050c2011f85fb2c118740e6857e",
-    patch: false,
-  },
-  {
-    name: "sales_evidence_immutable",
-    source: "0571_sales_evidence_native_sandbox_teardown.sql",
-    sha256: "9c3ecf85e3ae9e685d1e16c3e0a9389f9b9f52ff3068f1e7f0c5c0e78b561e2b",
-    newSha256:
-      "4df5bdace9684470f6835ca7d344438409a88c1650235410d5fe3c10f1c0704e",
-    patch: true,
-  },
-  {
-    name: "sales_quota_version_guard",
-    source: "0625_quota_sandbox_wipe_authority.sql",
-    sha256: "7f1557383681d94059259b9285130e6bc143339200271ef2775d7c94a30ba2e2",
-    newSha256:
-      "5b9db55547f9dc528b15a3d4d1515676b0d831f8d3011681b432bacbfb852449",
-    patch: true,
-  },
-  {
-    name: "schedule_boards_guard",
-    source: "0592_schedule_board_resources_and_display_rules.sql",
-    sha256: "4ad2f0c147ccbba07126486726c5daf572ee8a44be69a03f01096c9b297c1896",
-    newSha256:
-      "37b10c7cfccd4dcf35cf120ba556d264d4851d724c81598a21731c949386173e",
-    patch: true,
-  },
-  {
-    name: "schedule_codes_guard",
-    source: "0583_unified_schedule_boards.sql",
-    sha256: "060e5c75fc25379fa181436edfd0a9fe8c9fb6531ad22c087a038ed8b11d0540",
-    newSha256:
-      "1dda2b3e9943c243fa8222c699da8170a6b27e869b509ac0d86859a1a7fe826c",
-    patch: true,
-  },
-  {
-    name: "schedule_distribution_snapshot_guard",
-    source: "0614_schedule_automatic_delivery.sql",
-    sha256: "7f4362628d4949f82086004d861075065784ea5ef4958a728326a0d883045fef",
-    newSha256:
-      "eb0a898ddf396edd67589f4a09e19e2e01f216f878c801fdbd968924ef160293",
-    patch: true,
-  },
-  {
-    name: "schedule_entries_guard",
-    source: "0772_schedule_publication_flow_authority.sql",
-    sha256: "ca34088a3a194f38e1cc636b2276f855df13c143ba132b5f5a0d43d3c3d2e5ac",
-    newSha256:
-      "ca34088a3a194f38e1cc636b2276f855df13c143ba132b5f5a0d43d3c3d2e5ac",
-    patch: false,
-  },
-  {
-    name: "schedule_roster_guard",
-    source: "0772_schedule_publication_flow_authority.sql",
-    sha256: "1623f069400d035106ea69d1bc4adea9762d56004c82b69d0923ba31cc8123a1",
-    newSha256:
-      "1623f069400d035106ea69d1bc4adea9762d56004c82b69d0923ba31cc8123a1",
-    patch: false,
-  },
-  {
-    name: "schedule_attendance_guard",
-    source: "0737_unified_scheduling_patterns_requests_attendance.sql",
-    sha256: "8ade53a31ede08e83da2f91d97e9cae5723b7cdbee811c5c526f72849bc3ebc6",
-    newSha256:
-      "8ade53a31ede08e83da2f91d97e9cae5723b7cdbee811c5c526f72849bc3ebc6",
-    patch: false,
-  },
-  {
-    name: "service_record_guard",
-    source: "0751_service_dispatch.sql",
-    sha256: "e170442faf95f852719ca910cfece6460937a5ee3d6b7ff50b7af14e15e42bf5",
-    newSha256:
-      "e170442faf95f852719ca910cfece6460937a5ee3d6b7ff50b7af14e15e42bf5",
-    patch: false,
-  },
-  {
-    name: "service_history_guard",
-    source: "0751_service_dispatch.sql",
-    sha256: "0b2538ad7ab29533dc0ad9913a77b05d4e461df523a4318e15c542ed6efee571",
-    newSha256:
-      "0b2538ad7ab29533dc0ad9913a77b05d4e461df523a4318e15c542ed6efee571",
-    patch: false,
-  },
-  {
-    name: "schedule_source_records_guard",
-    source: "0595_schedule_source_history.sql",
-    sha256: "b1ebb5aa91fc27f4a3d7c1c2c7a110cdf994f6a8d998e7b8f1ede614f23563f0",
-    newSha256:
-      "842dfbcc6955650ff1f4b57b571ae9f5c88139ed379fc60338d8b9d6fa1282fc",
-    patch: true,
-  },
-  {
-    name: "scheduler_outbox_terminal_audit_append_only_guard",
-    source: "0026_scheduler_outbox_terminal_audit.sql",
-    sha256: "cefffd2645431dffa7f33ad2116b1d280aff8de152f672a861ea263b4fb7c447",
-    newSha256:
-      "e06165f8a6c619f2f5e0330903ff5f452a9ab99f1890fc4e976fa837ac6fed65",
-    patch: true,
-  },
-  {
-    name: "segment_definition_guard",
-    source: "0001_baseline.sql",
-    sha256: "1760c75a0593b206faae064c33b4ba7f6dc0089a8d71d08602dcaaf07e287ed6",
-    newSha256:
-      "2ea0c74c89bf6cd02a84e4a119e0d5a587deed667b19bc58451520a94683f378",
-    patch: true,
-  },
-  {
-    name: "segment_values_clear_default_for_wipe",
-    source: "0433_fund_balancing.sql",
-    sha256: "c75b039abd9a5353a046829ef67337baccb729c87b8147c9f73e348610dc049d",
-    newSha256:
-      "192f2debaca0fbf7b3194a761311508400376928790129973bba01afc13e4ccd",
-    patch: true,
-  },
-  {
-    name: "stored_value_entries_immutable",
-    source: "0495_stored_value.sql",
-    sha256: "8e1d34eaf3b7547657637b9de3e49c092f50a33ad70b78d0ceb1796042a7b89f",
-    newSha256:
-      "d927e8e75615245d5cf99cec4d6eeaea396be4985efc111cbec42b6058584247",
-    patch: true,
-  },
-  {
-    name: "subscription_amendment_immutable_guard",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "af134f0c0d50b49b5bb24faa56213d63dd5216f33d7a90de5a7ac31e9b06fd12",
-    newSha256:
-      "3c1da0c44f593c4527ced4a54f4f404e4c3282136f9fcfd54eabcdbe61997f80",
-    patch: true,
-  },
-  {
-    name: "subscription_period_invoice_immutable_guard",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "d34cf2b3c78d544714c5c0fdfaf46245587915e9cabbd6c2a3bc1e506358ff13",
-    newSha256:
-      "23d0de0c0229e73837d6512a1e5101c2c78956de5d64c666746a93f1781cd182",
-    patch: true,
-  },
-  {
-    name: "subscription_plan_version_immutable_guard",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "534ab687f6b38854fe974e0c04a01eb4f0e4d953fd49fdfe2d42d4dbc59796a9",
-    newSha256:
-      "c8fe1c60cb2aec5b713eaf88b737a5690c25bba90e6825c23a4197ae2127f3e3",
-    patch: true,
-  },
-  {
-    name: "subscription_version_component_immutable_guard",
-    source: "0078_sandbox_wipe_guard_authorization.sql",
-    sha256: "a90030f5c33edf968f8572a5053ebd8746928f7abf71cbed8cff29e2bc8c78f5",
-    newSha256:
-      "02be1977312662234c76201fb184116c3faf3134152b42e2493f50ab37aad750",
-    patch: true,
-  },
-  {
-    name: "subsidiary_tree_guard",
-    source: "0045_subsidiary_tree_guard_serialization.sql",
-    sha256: "63e47197ca9033111c4bc3356c339b226a27e573e2e7ff14ef52b3d06b660c97",
-    newSha256:
-      "0b5767d39aa05642b6838d3e9076bf9b7d4dab898fa672044e80a909d45e43d4",
-    patch: true,
-  },
-  {
-    name: "tax_filing_immutable_guard",
-    source: "0001_baseline.sql",
-    sha256: "82dd24c4dd4cb95ac232674867d3ea11b645c971886e074ac31aa601f6d36b7b",
-    newSha256:
-      "e349880078c43089986ecbb508e2ecf10fb108a6da4a37010e0b86f3d064c9f9",
-    patch: true,
-  },
-  {
-    name: "trg_application_open_balance",
-    source: "0580_clone_preserves_recorded_document_balances.sql",
-    sha256: "17708233fcd3ef11d4d5fd62dcc00d0e7fa436da3f400c3d4bf63b4f2232f2d1",
-    newSha256:
-      "525c5a29d7ab304d49b57903b61cad23b8645f110be919acc7629c9dee3bca5e",
-    patch: true,
-  },
-  {
-    name: "trg_journal_line_open_balance",
-    source: "0580_clone_preserves_recorded_document_balances.sql",
-    sha256: "1309729a7bf15fa24d5747ed526384f459bc999c39896cd86adbf72653086ca8",
-    newSha256:
-      "66b229cd6249b55ea2ce95f59d0269f023557da9e058ec65905b95a9eeadf00b",
-    patch: true,
-  },
-  {
-    name: "usage_prepaid_draws_append_only_guard",
-    source: "0426_usage_rating_plans_prepaid.sql",
-    sha256: "a898f5c4f5715129e767382fb5d6834603c0425423212c265919661f87866fd0",
-    newSha256:
-      "1a225c03a8c7331a2153573dada85fb1ae4650013d58f739cd811e7df0fdc5d3",
-    patch: true,
-  },
-  {
-    name: "usage_rating_bands_draft_only_guard",
-    source: "0426_usage_rating_plans_prepaid.sql",
-    sha256: "63da0f86046762f99a0ce7a4aa25c1f8a657dac7719593b1eb74ba36bce68d6a",
-    newSha256:
-      "b26b1a23b258d50c89ce8d325f22959ceb37372cecffcff9de6d6092db4a38f4",
-    patch: true,
-  },
-  {
-    name: "usage_rating_published_immutable_guard",
-    source: "0426_usage_rating_plans_prepaid.sql",
-    sha256: "2874beeeebfb75bbc3aa458d1ea79a1d74fdccdf3ebf7c8d87ed830fa2b60458",
-    newSha256:
-      "771b81372107771d669c23bd41902a3819aafeb8e4e3ca6324333a45811b8960",
-    patch: true,
-  },
-  {
-    name: "warehouse_execution_history_guard",
-    source: "0618_warehouse_execution.sql",
-    sha256: "a19af2a008d1caa8ed82f77e3cb3c34d899f69dfc3d2efee9861f2f9a37b1dcb",
-    newSha256:
-      "0c5ef4f71e53ad59a12393563c90b21ce24c28de4e34f575efb62c68f82ba096",
-    patch: true,
-  },
-  {
-    name: "warehouse_execution_task_guard",
-    source: "0618_warehouse_execution.sql",
-    sha256: "ca71a4c236c3e082a639a1212720118fd02dbecc45620e651f6eb7ac9df53329",
-    newSha256:
-      "069458124b9d9fac6696ffb2c7bba6efa5df9d8d3ab5cc96d29715723f6e4c62",
-    patch: true,
-  },
-  {
-    name: "prebill_event_append_only_guard",
-    source: "0589_pre_billing_names.sql",
-    sha256: "754932f504ca612f612dce0b6a13fe9a0551b251b1469ee84cfe7998feb590e1",
-    newSha256:
-      "0a43989514038d7da4d58d6b9ed3ec2aee530e3af0f6c6bd75368ad4ed556b2b",
-    patch: true,
-  },
-  {
-    name: "withholding_deductions_guard",
-    source: "0599_contractor_withholding.sql",
-    sha256: "f4cb514dda38b4202a0cf0b8ea6f304d9ff3fcec36e2985db329ce186d76ef58",
-    newSha256:
-      "7fdd60eac96af3fd2b292a96a98a60cb16ca7d6226c49316c9d8bec1f851341a",
-    patch: true,
-  },
-  {
-    name: "withholding_returns_guard",
-    source: "0599_contractor_withholding.sql",
-    sha256: "4d68c8d76b52b2eec915177d535faf4113542d3b163ef5700e3cd19e95f47371",
-    newSha256:
-      "378492d95d6d89fa810080fa5d1a4cd8b1f05693e0f7a565ae1fe781f5cb8814",
-    patch: true,
-  },
-  {
-    name: "worker_employment_versions_closure_guard",
-    source: "0184_hrm_employment_foundation.sql",
-    sha256: "6b77c2d1c0de0455a425ef2201c1703e2a197b67fcfcd19e81a97fbc8829ef83",
-    newSha256:
-      "7154c9c44fe3b809e2c3f1e583fe2ad9d7518e4704618edd4935894974454965",
-    patch: true,
-  },
-  {
-    name: "inventory_inspection_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "87abd8a490ad156ca294264fb7fd0c8d0cfdd600ad88bf798f84ea4eb88f3d9a",
-    newSha256:
-      "2f70e53880dbd1ba12c9ec717d1a07f17b422b65ef2c6b82025f9fd136b00dba",
-    patch: true,
-  },
-  {
-    name: "inventory_inspection_plan_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "e1f1ef711bc83e995e6caa276a83e824ca218e215f00382254fc8edfdd17fcdc",
-    newSha256:
-      "eeb4cb150fb455ec4e112b0a61ecfce5aca02d5179ece9c5b423e695890ee5a6",
-    patch: true,
-  },
-  {
-    name: "manufacturing_completion_trace_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "4ed78f55c5ceb65b2760f4e50d0d47498d505fd65d3df9b5019cc8e86f5d1c86",
-    newSha256:
-      "ffdd0af706b48efe4aa129c5c60854976b1425cc18046a407c99cfd9dda5ec85",
-    patch: true,
-  },
-  {
-    name: "manufacturing_loss_event_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "ebea147d60d88a371454df2613da0f541e872e95f0a645bd386124eb1df20eb1",
-    newSha256:
-      "cf0a5f7ebccce75940bd50d6759ab6152625acdf05d140be7b936837a44954de",
-    patch: true,
-  },
-  {
-    name: "manufacturing_routing_operation_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "69203aa3d81c983e36295fa70b52cecd659c394491658696e60afb5728dba9a5",
-    newSha256:
-      "1adc332d19775925ee422fc05c9971d5676f42950a198da540c033a1170e8e5f",
-    patch: true,
-  },
-  {
-    name: "manufacturing_snapshot_configuration_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "f21502bd08a491970ef4a6a1e534c20535c86a104c88bd3a6b48593236bfe843",
-    newSha256:
-      "ffa91fa3734e9b87601a8113eca9af71a1dc553756390852b166b5f73234604e",
-    patch: true,
-  },
-  {
-    name: "operating_profile_version_immutable",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "a8cd948497ee05a7a75731460aafd700620190b35666f0ca2d68481f262683cf",
-    newSha256:
-      "3a046c0386a9f7235041a3daf65d6050cae83d432235cc18913f60da56a2a1e1",
-    patch: true,
-  },
-  {
-    name: "production_bom_revision_complete_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "cdbdfbd9d0fc157734ff441424f5e5f88892eb2c210c98f232454a209bfdc803",
-    newSha256:
-      "83c6996d0c0a971eb30726ed7bb50eb32660333eef94e7a7b9285a0018ba61de",
-    patch: true,
-  },
-  {
-    name: "production_bom_revision_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "01dab22ed6c14cfadd50ab5c282e2a8dd7e4937fc31f9462c9f71c7b6b55de74",
-    newSha256:
-      "4ceb220937a7cd8673072332b610d5ed1ba1e4148191114e17fa830ccc54c171",
-    patch: true,
-  },
-  {
-    name: "production_mrp_run_evidence_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "0529ca5df11a5faef2ed243c06fe690bb346f0b5e55e219cb2e32b98ce1d4844",
-    newSha256:
-      "6e1dec4430843c6cd8c98c5e7a8c753b265dcc9393a73ae09e06070ed60285e1",
-    patch: true,
-  },
-  {
-    name: "production_subcontract_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "303c6ee342bba6467ef63e91376b9bae1759b221eec4ca64eb6c3c44679d0b06",
-    newSha256:
-      "69314c560cc4731d7b79b3baf143535d03137f6eabb6e7fdeb62e2ba8b7cb0d1",
-    patch: true,
-  },
-  {
-    name: "production_subcontract_material_return_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "345bf575dbc7bae8af474c0682d11631503ead6bd5d0035e55af8f243c8ea5ac",
-    newSha256:
-      "61852036a10829759b618bd83fdd9027e8a2688a796ef3732da964bc509e3b44",
-    patch: true,
-  },
-  {
-    name: "production_subcontract_return_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "2d3964e196a0abc9494b9ba8e93723e7e13f11be843ef7c3313df4a447a4fa93",
-    newSha256:
-      "b7c83b0e49d2c03e3fe859e9a83cc790238d3481c2ee3f3a5ac2416a8aafd600",
-    patch: true,
-  },
-  {
-    name: "production_subcontract_service_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "48de6e18d59b2d95394b0d0858edab52b806a0b226e1e0e8ac31d5d7f41e2b6d",
-    newSha256:
-      "dfc4ac97773b7e725258727e1a43640a0899b695927f02951b7a8deb8eb00cb5",
-    patch: true,
-  },
-  {
-    name: "production_subcontract_shipment_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "05c5386f6281cf941e2d9f9c35570f4a2a980d359f38217b1ab51f2bcb17c89f",
-    newSha256:
-      "45c77b504b342953bfee5b7956bcbcab1618cbab512d1037ea28748ee537de21",
-    patch: true,
-  },
-  {
-    name: "production_time_history_guard",
-    source: "0619_operating_profiles_production_extensions.sql",
-    sha256: "50de2b351b1ccac50df8c909b860946c2c0675700304f872adb589c1e0a046c5",
-    newSha256:
-      "3e183f14cc7ae30730320daaaf841d8807b01a7e19bdab996139d86c03786a34",
-    patch: true,
-  },
-  {
-    name: "payroll_prior_earnings_guard",
-    source: "0620_payroll_prior_earnings.sql",
-    sha256: "c552a5ad592446e94ee32005ada5b971fcd0a75ea46359b40a1ebc7b1f68e946",
-    newSha256:
-      "aca581caf6ef846a3319eff6c0ec99850823d8f5678fc7e1f6a25f09837d6d08",
-    patch: true,
-  },
-  {
-    name: "period_end_journal_policy_guard",
-    source: "0684_period_end_journals.sql",
-    sha256: "c2277350b9bc1efdeccfa8961a7316610f7abea719421bb6981446a58b20b929",
-    newSha256:
-      "c2277350b9bc1efdeccfa8961a7316610f7abea719421bb6981446a58b20b929",
-    patch: false,
-  },
-  {
-    name: "period_end_journal_set_guard",
-    source: "0684_period_end_journals.sql",
-    sha256: "2b3d68814dad441e2301e8b9eaee04ac9b05d9c4149c11ebf4baa7f6403a3681",
-    newSha256:
-      "2b3d68814dad441e2301e8b9eaee04ac9b05d9c4149c11ebf4baa7f6403a3681",
-    patch: false,
-  },
-  {
-    name: "period_end_journal_entry_guard",
-    source: "0684_period_end_journals.sql",
-    sha256: "07f9d2d53dd8951b3ada47c1f9847194b1ee03322602a00affa119884fe7eeec",
-    newSha256:
-      "07f9d2d53dd8951b3ada47c1f9847194b1ee03322602a00affa119884fe7eeec",
-    patch: false,
-  },
+  { name: "depreciation_source_authority_guard", sha256: "63fdeb6a8c7461daabb24fb344e4b2b246700cbceb3baf581698f7a6bbc54d80" },
+  { name: "calibration_entry_published_guard", sha256: "a8d128e484d16f9f16a462afef52b325e2b541bbdf8a000162f7358daf0225f4" },
+  { name: "subcontract_change_pending_terms_guard", sha256: "442fa77c5ad1297680bbc4e6f02b434af0b8f8fb9b1c43909aff970ad866f145" },
+  { name: "native_command_pending_terms_guard", sha256: "5c766763063e1935610465d836d40559cfdfcb4c38aa80a982f8e98ce037b7d1" },
+  { name: "flow_submission_receipt_guard", sha256: "21883dd58d659b5486efa7b68a97869b45cf93df0a9eb416a2a53d80e207376a" },
+  { name: "payroll_roe_separation_basis_reference_guard", sha256: "c9336b7c7bf3a33b660ac3f522ffa13a738107f9a523edb6431334ddb45e63de" },
+  { name: "time_type_financial_semantics_guard", sha256: "41a110e2f33bc387a21d7791e792fa310e371cce9deaf0e6d34c4a6b8513fd27" },
+  { name: "payroll_roe_used_exclusion_guard", sha256: "bd27324c014060afb7ffac2995714db4036126dd5982c774fb4f8d47ff055790" },
+  { name: "payroll_roe_issued_event_source_guard", sha256: "4836e1aa77f7b2bd3cfdc246c259f5cb2824410a539178a2d54ed0459de7f614" },
+  { name: "payroll_roe_subsequent_service_source_guard", sha256: "6f7582c5491c30d83b678de1aadfd7c4a59066405d7ce83193d4378805be98d8" },
+  { name: "payroll_opening_employer_authority_guard", sha256: "cfd0fcc78d530af887f87f345a78b17c4b219a86a201b6b1ab58d50fa3bc28df" },
+  { name: "payroll_opening_qualified_source_guard", sha256: "0df2ebc963b29e050b286169ed8564a41214a3fd1de7d8163bae9e1244967c1f" },
+  { name: "payroll_roe_reporting_evidence_guard", sha256: "cf0d7d140805d19a59b92303f1b96a4114101d62cda002595befbcac9814799d" },
+  { name: "payroll_roe_separation_facts_guard", sha256: "882dcdb0f9cfceb172386f4947e7153e4c15c284150455cd796e328624fc819e" },
+  { name: "rebate_agreement_guard", sha256: "70eda52193664d3f548291608a4828e9780c97194df5a4ed4fa8d643080d6efe" },
+  { name: "rebate_claim_guard", sha256: "5dd3382123d65acba2da92186e5ab090c4ca95796c92ace37c65c0651afcfbdd" },
+  { name: "rebate_fact_immutable", sha256: "19983175d3685537c95d634c788b82991cbeef1c035dce74db83ef0018bbb427" },
+  { name: "renewal_policy_guard", sha256: "c0fa72318a1fb9dc70209e8afbab886eebd84d23dcd5acca026b3b8c0ac190b3" },
+  { name: "fair_value_used_policy_guard", sha256: "51db1038c2fcf434307a45a24e3164eafdbdbb10dc9455349da07ebe1afe3438" },
+  { name: "recognition_control_immutable", sha256: "01717f9b0b6f6ff5b890cc0e0a4fd88d0942d26d608623af7da414c5309a8696" },
+  { name: "journal_reversal_instruction_guard", sha256: "d57042081fc24caa21b4640f5ac3a6c6649fcfb191bad2e9ba5e4df4314569ef" },
+  { name: "intercompany_fulfillment_charge_immutable", sha256: "04bf84b2d384b0e4e5654090ad89c3bb4e9f438f833b62d705fb358703409276" },
+  { name: "intercompany_transaction_pair_guard", sha256: "bd11595bf3c9769f72b20c8f314845d360847131038e224d1648e5d0ddb15e03" },
+  { name: "intercompany_transfer_pricing_policy_guard", sha256: "490da8c21f22969b197f9f998d2097b5078a0e4c27e200cc0d3483103a41d82e" },
+  { name: "intercompany_fund_transfer_guard", sha256: "3e275abb17104e72ef36cdf07ff9c708506b5dd7f0f97ff1a6795ef94331b6b5" },
+  { name: "intercompany_netting_line_guard", sha256: "c42af7c8e3b66f332312d70cf6897eaf9a43ceea7e7477d6901e9017f66308ed" },
+  { name: "intercompany_netting_run_guard", sha256: "e3d7561f399608bfce6f333f572b6b5fb979e1768dc6315cc8fe829f5e2e3a7c" },
+  { name: "account_merge_immutable", sha256: "90dc884d5ae0fbb80f4a5ba330a80107bd9f201c2b659298c438d25f132469e2" },
+  { name: "hrm_benefit_program_revision_immutable", sha256: "0a27548afa8b82c92b1fb9a423cf7967ebb956fda461c2ede441357cc28ed439" },
+  { name: "field_ticket_source_certification_guard", sha256: "24f5e61335086799a9fd4692c4fee132be9243fbaa34279cc02e0217d012c891" },
+  { name: "fx_revaluation_rate_evidence_guard", sha256: "2bb84f39705198d6677b59efa8158e59ab07a91a6fc49131705f96cfa013e984" },
+  { name: "payroll_ca_opening_reporting_authority_guard", sha256: "2ebf6495156b721da3f3b7255ae23127de02dc8e57424d0a66e98a23d2fe7377" },
+  { name: "payroll_ca_opening_reporting_allocation_guard", sha256: "3cc2f9750422a396513a7b7db8b72fe5f9830fd5976205aac6ca517f1b245e63" },
+  { name: "payroll_ca_opening_reporting_account_guard", sha256: "ba016f1c8294c60c29c9e2f19fcf9024d9f04312e98929f3fd75d40dd007356f" },
+  { name: "payroll_us_filing_account_lineage_guard", sha256: "beae5e1216675b30498fc074b62a2ba8dbf181f37b09301d98faf27db682b797" },
+  { name: "payroll_opening_levy_opening_source_guard", sha256: "4b9d0f5a415dd3f872fde20b13a6a7692cdabd18999f940f927f714f54c9eb10" },
+  { name: "payroll_opening_levy_source_allocation_guard", sha256: "0dae5ebe92eb319027166ab52aa57d583c22ff2c7f20c65b2718abe06b00f47d" },
+  { name: "payroll_opening_levy_source_authority_guard", sha256: "56d569fa9dd247bb08d2b27bf7f8a94a52e943781943585b9250336e16a43878" },
+  { name: "historical_translation_basis_guard", sha256: "7d7ca87034fe986f1781c179c7a92d55546703ba9b1138be90cd3f6418075ef0" },
+  { name: "historical_translation_layer_guard", sha256: "35877a46a3e2069bb7c79ed45257bf60a9580560c5fa020fc40af02392d10cfa" },
+  { name: "historical_translation_source_retention", sha256: "fd6e7437fa4e4bce97e809839cea83e56c165995ccb6a077af85112243b05786" },
+  { name: "historical_translation_file_retention", sha256: "ee8035d28335d3c8c27506cbcbbaa8efae0e3151dd32f0b5a00885590ded292b" },
+  { name: "account_group_member_scope_guard", sha256: "8a84115166d66987d60c431cae362f4627e948b8acf154c95ebe330cdf001b70" },
+  { name: "accounting_book_account_map_guard", sha256: "1441263ecb10f36afe08b60ae0c5b5477f0fa9658bb9ec6c00c76ac6ec42b628" },
+  { name: "accounting_book_currency_guard", sha256: "8e9382dc8a72bf44a64cd5a175655648c6ea43da57a4e37e75c7d5591a75e3a8" },
+  { name: "accounting_book_replication_run_immutable", sha256: "2602a805edc008997535fa1a1c461a06eaa7e09e39b6520df3750acb773f7c15" },
+  { name: "aging_bucket_policies_history_guard", sha256: "1946848eedc0d0f54a6d193d0a41d4edfa69518fdcf3cc161db2471948b81e73" },
+  { name: "ai_decisions_refuse_update", sha256: "c9374b3f6a7765ef446e4f1066fa0dac74454e7fa77c0bae395fc6f0b3755c7e" },
+  { name: "allocation_rule_target_guard", sha256: "a76d7247d768665eb76f5455831eaaf96cda4045865a3d571681ba645a564b81" },
+  { name: "application_evidence_guard", sha256: "c16fedc72f2ff8b33001354bf4855051439877b3989348ba6ebb39b000775804" },
+  { name: "assembly_disassembly_immutable", sha256: "1b4a0e915d028f4b4c92fb9b2315f900dce5d16dde89a81744e2e03434381a52" },
+  { name: "asset_basis_change_guard", sha256: "17b8aaab04b84402f040d637ce2f5aaee602ea0a3bcaebdc0998d9ba0916398f" },
+  { name: "asset_event_append_only_guard", sha256: "331a4100ee55d054476ff0f9fecfb2322c0159b27e725bc10eb0aa91110dbaff" },
+  { name: "asset_transfer_history_guard", sha256: "38879e83f23afe9d0cdb1cb081cf10bb6da5fea6f8a15823edadfaddb1d8b16b" },
+  { name: "asset_transfer_measurement_guard", sha256: "c174dfd679cd370891b96ca7f95f486396606f6bb1b3b6c5e8e3f14225563ff5" },
+  { name: "audit_log_append_only_guard", sha256: "4d4625231d852dad26b006891b9400173ec28c4afac3c5a601bbff3e41868c4c" },
+  { name: "benefit_catalog_identity_guard", sha256: "d38bdaaeaa6622cd6e341e352b738865f346bf38192d86abb62a03409cd67248" },
+  { name: "benefit_recovery_source_guard", sha256: "385b73e95f2a0a793a62cdd1d005940cfda17d9995f162fce06d2ac95d4887a5" },
+  { name: "benefit_recurring_audit", sha256: "2bb2d1b15b48142adeb8a29e3711dad3e0c00165998179f355cb017710ebd266" },
+  { name: "benefit_recurring_configuration_lock", sha256: "51537522674abf1bb665627205e826da5560552cfee5d42b9d4cef0878307bea" },
+  { name: "benefit_recurring_history_guard", sha256: "22a9285f207dbfaaa3d7c4656e789a176becf387f5d00bc59f0daf6a911af4d9" },
+  { name: "benefit_transaction_rule_audit", sha256: "fcb03068f7bbefba435a45bb245cd8aaf46040eb81ab4651b92f37dcaa03c0f0" },
+  { name: "benefit_transaction_rule_guard", sha256: "ff8c88f12b663e94a7a416d12991d5466a3f5f6e12aec4abfeac3e456ad1c467" },
+  { name: "billing_request_field_ticket_guard", sha256: "c6c7b606e07b4304b3e1c809f0e59a332943a05178a880bee95e1f5be65b59fb" },
+  { name: "change_set_items_lifecycle_guard", sha256: "a777f1f80e050826e743804bc67570fce1a1439815aaa3bb9c1c342b13e9c75d" },
+  { name: "close_append_only_guard", sha256: "48e2596392cb0a66511cbac3b147ff072a28b82b55b0b4cc00fb02f6a8fb4e65" },
+  { name: "consignment_event_immutable", sha256: "c92cfd2fac4ffc1ddcec3651bb6e571d7cab454659bc1a016ddac01cef27c866" },
+  { name: "consignment_position_guard", sha256: "4100fb08bf8f48fd849763e85842413c836e2658cf8ef4e75c7c8e88108c22e3" },
+  { name: "contract_cost_amortization_immutable", sha256: "4e6f370f61abd4c4bbe617e897d6a537768650f72204544f11ce3fbdfca1de8d" },
+  { name: "control_loss_history_guard", sha256: "5266c018353fdf9adc114990f626d4529ed8161d0015b1dbc957296563eacb87" },
+  { name: "control_loss_source_guard", sha256: "b7730e245e30e208584e5d9024d7b96a4bcb162cf207e19123844021ffff3211" },
+  { name: "data_transfer_evidence_guard", sha256: "9ca4a5ce34e6c6da2654695f47816a8a35d4051f80701edc8d80e59d52406c9d" },
+  { name: "depreciation_book_policy_history_guard", sha256: "7892ecbd58cd9d812d54be62b0860ae62dcd9293bb790013fbe6b39d415e0f68" },
+  { name: "depreciation_evidence_attachment_guard", sha256: "fd91428a38d7d5a08823ea70ba1b291842e40362e3e4165cf471e27c7f651617" },
+  { name: "depreciation_non_gl_recognition_guard", sha256: "98f0f2ebeb8fd7f04da8aa26762a39cb2f26472011149734c7c1004da843a759" },
+  { name: "document_correction_lineage_guard", sha256: "fe596d8052e38f65f576e50c8db7a246dd4aa767003839d4e131f7f1f283b11c" },
+  { name: "document_line_immutability_guard", sha256: "9e5f4e7b5262ead439abf1da76275c0f436df16b8ae16697f109446cd9c4ac24" },
+  { name: "document_line_tax_component_guard", sha256: "a1543f16ab602143fb032b7e7f9ff28dd0be0432f450d0ea0c6d39e486bbe1d4" },
+  { name: "document_lines_total_line_refresh", sha256: "04bd8dbe66b8d765b18e613c670d360bc0e88bdb995070ef30705ccd2801c683" },
+  { name: "document_lines_total_line_tieout", sha256: "8e9476b24463f9311891f64627d3c72ad2021f462f51c91c5f8357bc40682130" },
+  { name: "document_supply_evidence_guard", sha256: "d0fe78f258761f3b0a5c75a2292299ac4358b51330966cfa3982f1f6bb16ae7d" },
+  { name: "document_tender_lifecycle_guard", sha256: "ae7badc6a311b1bd9a9df3dde8d74b33e7c5622ba63561c38458dc133bee25c2" },
+  { name: "drop_ship_allocation_guard", sha256: "0ccbb1be53311a0a7cf9d06e2f07b3b3e9cd86c2cdf3a06e98d6c76da4cbe465" },
+  { name: "dunning_log_guard", sha256: "d75214276f419d5452ae74884ee0adceef5e22c62f48547fb90a62480c1ae688" },
+  { name: "einvoice_documents_immutable", sha256: "9221b0026514f83adc4ddc637a1ba841972182d5c712c95c48a5fab46c255ea4" },
+  { name: "employment_assignment_versions_closure_guard", sha256: "ccf6e532f507028a49487406abcd9372e252ea98a6a6bebdeff0ecce06c11f8f" },
+  { name: "employment_changes_immutable_guard", sha256: "c0ab0963e6527424c2a5bdcf0200cd6fa53aec86dc1b4b9624be7d54a160b0dc" },
+  { name: "enforce_deleted_role_assignment", sha256: "c19c4d528f0385284be86a5551b4bcd1b5b38551d5ba07a23f77305df033d3dd" },
+  { name: "enforce_payment_instruction_posting_claim", sha256: "9e575165e56acae28f6ee4c6860bf3d969804145aebab39943a351bd4c6c1b9d" },
+  { name: "entitlement_ledger_append_only_guard", sha256: "dfd652399b54d27996e3c349ba223167950cdbd8a7304e2b3c31ca898552914c" },
+  { name: "expense_amortization_event_guard", sha256: "d104ac3ef1bde1af08611cfbbcbec156b8f29226b052447e4ff8f01ba039f2b6" },
+  { name: "expense_amortization_line_guard", sha256: "0e7d6580116286f0e2bb32b4899cf3f7b96c0577f358413d51f2d681c4616160" },
+  { name: "expense_amortization_schedule_guard", sha256: "783345d0c9a8efd5648dc2615e84a9f3177b20b378be3375e412e91f76d13301" },
+  { name: "field_ticket_labor_line_immutable_guard", sha256: "63df9eea369f3b28d3d83cd9634dba76bedba7bb65a1e471f25320fbfbb734d6" },
+  { name: "field_ticket_labor_snapshot_retention_guard", sha256: "a33480432dcb45198c495d4a7c80cc49de61d6cb8188cb43660519845ef76d17" },
+  { name: "field_ticket_signature_immutable_guard", sha256: "83be40a487799d8acba62604cc7aff69848407a9a621a7c43007ab366af4d89f" },
+  { name: "field_ticket_signature_request_guard", sha256: "28a8ef5f383204287bdfb7af9d8dfa53d6d67edc1c0721d86387237e30f76c2a" },
+  { name: "financial_change_guard", sha256: "7f87f9711fe93340e4ac50c108e8d13bc9a184b8ffc919274d2be656db2a5b99" },
+  { name: "equity_record_immutable", sha256: "6cfb14a1eb3c1332895e01e9f9c8ded1e880b07d1395abdc7cf7113d904bd9cc" },
+  { name: "equity_action_request_guard", sha256: "a69f2e94189a414ac3ed1928979bc3e070fbdc52069006a3726f07106e7c5f39" },
+  { name: "financial_policy_version_immutable", sha256: "f1817fdfc45950978c79b5f91e43a65fcc897189ddb6c5a4a6d25d484d08690a" },
+  { name: "fulfillment_documents_guard", sha256: "944300da429fd422e03b462d0560f31c13ec0d035bc490c7673fb2c87b7842e1" },
+  { name: "fulfillment_lines_guard", sha256: "a7d34ce55cb1dc13d08a42679a32ab41aa3f47cfc4511bb3f6622110c604d006" },
+  { name: "fx_rate_age_policy_history_guard", sha256: "b14cbc28e1a1e44b10569eaaf71ee71b8ffd738e8b7ff4c42800044e4f19bb62" },
+  { name: "goods_tax_registration_history_guard", sha256: "6fedb5a2637c1c3ab2003a4f37b51d9762b73fa6ad517664e8ae61be75314687" },
+  { name: "goods_tax_snapshot_guard", sha256: "0fe81bd84f2076e84c097a27702bd94c374e262444fc5835c8bfcd7219318e07" },
+  { name: "handling_unit_content_history_guard", sha256: "5012aac6c027f34053eeebb11856a15fc51f86dcb67eaaf10cd0f1c85355ab1e" },
+  { name: "handling_unit_lifecycle_guard", sha256: "40dda5cb006fce4a6f8d80483a0b8a54a3768e838af403fa6d8aef0db7d809a2" },
+  { name: "hrm_absence_no_delete", sha256: "4dfa710661af5cd1da8964833ca0642d678a753fe56d669399368db1d398fa9c" },
+  { name: "hrm_allowance_payroll_input_no_delete", sha256: "575691b4d0cf2f55bb6887c8cf33f2d177ce5f6413489756d1f5b858d3546dc5" },
+  { name: "hrm_application_events_immutable", sha256: "d2c14ce1bff8ad9ee2a65a6704c0ad6c5eb8232a60cda187bae9d4b3ad9a6b97" },
+  { name: "hrm_benefit_award_event_no_delete", sha256: "8b7aeef6376ee219518168000059b435deb3281ead8e8b1b11f20e969a817a40" },
+  { name: "hrm_benefit_award_no_delete", sha256: "5810264f049b00298632357c1834561af76a24d05f7c40b4baef26da1f169384" },
+  { name: "hrm_benefit_enrollment_no_delete", sha256: "898504f2380025f85a19e72d13690795ad5ef2fb47c02628de389d7b1598c053" },
+  { name: "hrm_benefit_event_no_delete", sha256: "df7f94b59fb24b2714d4549cae807fd3e4ceb8c9ecbe3177422b86c3682ba024" },
+  { name: "hrm_benefit_payroll_input_no_delete", sha256: "a5db92e0ab94edaed339b4990fe5aa0e5cc7094603e0d61df843da6b7624e547" },
+  { name: "hrm_benefit_program_no_delete", sha256: "9e46174eeceb6a3b153fcc4a30cb928d9ebea95972953909947e6bd9e5a013b2" },
+  { name: "hrm_calibration_event_no_delete", sha256: "a2ec6cee29ac5151871c4209b95ef3f3d11f3862e97d354e8be535c06d0debd7" },
+  { name: "hrm_checklist_publication_guard", sha256: "8c44f917a1530190e0d7b7efa33f3dbc896953590efe197762cd40b4651f4ac8" },
+  { name: "hrm_checklist_version_immutable", sha256: "ed13933eb3d11c55eebbfbb9398a11472f7ad948a285c6a26ef6236c4ef7395f" },
+  { name: "hrm_compensation_history_guard", sha256: "63cd9e6c47db7a2d8a6af794478f6787ed0a83c69ade85797c975cecbd8d0354" },
+  { name: "hrm_compensation_plans_guard", sha256: "3f8522705d542f9b28188734d11353d6d989e1177a8f1997f1a07e7cb6e6b468" },
+  { name: "hrm_compliance_findings_no_delete", sha256: "4dc32dd4379c9f03f7c93254fac73a91a40e32fae109c72e31a1d007dea503e7" },
+  { name: "hrm_documents_history_guard", sha256: "28a5dfc702d46939120d9225fc966d40e419dee1e7c1999654cdd41ac5444a6a" },
+  { name: "hrm_employment_change_request_no_delete", sha256: "979e5d88b23a1017fb86676a898b1e116dc4c1a810edf159ded6ddd6c5dab6df" },
+  { name: "hrm_exit_record_event_no_delete", sha256: "aa9f109f1f50248d30ce3c37c9c02453b8f9dd1c307b0f3fdeddd5e82bffc817" },
+  { name: "hrm_exit_record_no_delete", sha256: "3895558d475803dcb6351fb5e5a7ea29320b4adb902b637cd92bc83b433579c9" },
+  { name: "hrm_feedback_no_delete", sha256: "58ad0c39786c90e926766ca399c6fab116da445cdad4da79cc4f3dbce3257f0d" },
+  { name: "hrm_goal_update_no_delete", sha256: "8f022cea76f3bff5552aeeaa9474ad5acfc0e1179383df3f6cc0f8565a479ab7" },
+  { name: "hrm_leave_request_no_delete", sha256: "74717c499fee9a6e1f48e2eca075cfad18ad12da87643fa3b251e9e0f38ed14a" },
+  { name: "hrm_payroll_input_no_delete", sha256: "3824ddaddadf15c555cb0b19ef413694ad55f9bdb16a6e14b7d38c28d84587d6" },
+  { name: "hrm_pipeline_template_no_delete", sha256: "7857864905d2b9a15c1698384cd8c50ae6066b325a84f138175bfe1cf315ab48" },
+  { name: "hrm_process_steps_history_guard", sha256: "cbaaec0dfcca4adf4ae5d4114ca2f7290c6deb063b342cd3e1b076164ebf0e5f" },
+  { name: "hrm_process_template_no_delete", sha256: "ab1672961357916af998d83b9989aa0e8734ccf52e8e2554fba48fa7be9aa14d" },
+  { name: "hrm_processes_history_guard", sha256: "79dd051b031cc6cfa5cb36ed9b9b5b7e8314b4177373cc5cd465d427e98cb50d" },
+  { name: "hrm_qualification_events_no_delete", sha256: "209482c3cafcc73094e7a51a528e6d7a5710fa6281491f8b5b12e5f766d3e91a" },
+  { name: "hrm_recruiting_depth_append_only", sha256: "9098c4f6d31ef1f36e155026c0e283626f44dc666c1c3c0ca2cebc39025b4858" },
+  { name: "hrm_recruiting_history_guard", sha256: "f0ec510aba198e45f488f2c15dcfdeb6a86825c2c47676d782ce92b04975311d" },
+  { name: "hrm_review_event_no_delete", sha256: "e680cffa04a450aa4597df712e4c86c4af3a18bd0e98bb2586629449380a6ef3" },
+  { name: "hrm_review_no_delete", sha256: "1ce32ed013636689608f888a748ea3cfca747386c3fd05875f0484942f6c22fc" },
+  { name: "hrm_review_template_no_delete", sha256: "d2ac564e904a84d1cbfb8edc8a41858626061bbdb33418592f9c4001bf7a2ba8" },
+  { name: "hrm_scorecard_submitted_immutable", sha256: "c8ca655ef48f31c7dbf44d9a9e8a423b3a33054219200f78ea407a1e555fcdb9" },
+  { name: "hrm_talent_review_no_delete", sha256: "0f064fd83cc7a260b89378aab3ce696e8a20459e3a0dfb9ab06bf11ef17cc876" },
+  { name: "hrm_training_guard", sha256: "f0b7fd59034f266a1ce1c47bfafdd62db76d324fb4dd02abe263d8eaccd1e98c" },
+  { name: "internal_billing_rules_history_guard", sha256: "315273f3d0a00b6e99d1d4520d1803acb54aa61537aab8ebfea48c01b41f5cee" },
+  { name: "inv_move_guard", sha256: "48846fcf44671154f852786dbaa4546a609ebe430946d189eb54a23bbb4c6ab5" },
+  { name: "inventory_count_policy_history_guard", sha256: "147c25b98af9a3bf6cf69572e493ff1f0b73f8c18d36c54eb7b8f3699c8b0bbb" },
+  { name: "inventory_lot_identity_guard", sha256: "dfe6840b72217c786a1adbc395cfeff8c5145de889344961b951615695d48839" },
+  { name: "inventory_provisional_immutable", sha256: "e5b8f44470441c5c2d3e9d4110ca813ec909443e6423c7170e068184cca1a65b" },
+  { name: "inventory_serial_count_history_guard", sha256: "f6ddf2e298fe9fafac158622051e16063791094e6a2b42570b90dc833d1c9228" },
+  { name: "inventory_serial_lifecycle_guard", sha256: "322f7963f1479042a2db00f86d6bbc21eedbca863b5df92a9716fde15789d340" },
+  { name: "je_guard", sha256: "81264b8d4c0b65a49d18fcda3fc0c4c97a3964b5d12cabed457d4c01b0485190" },
+  { name: "jl_guard", sha256: "7d99adf2194cdb727672a9cbc5b5b07cc6e75788422e678439b276191eb13b3f" },
+  { name: "journal_lines_check_balanced_stmt_del", sha256: "afbb0489e6027291e8641f932d49f55cecc076dde2e2b9ce522773de385c02af" },
+  { name: "journal_lines_check_fx_residual_stmt_del", sha256: "ba13b43ff230091b873a75938c1c5dbce82f2438fa12c9d78403a62d51d226f4" },
+  { name: "landed_cost_allocation_guard", sha256: "ac034451984f9c956076f7488a5be2aa278522fb49429ea23cf06ff5e074d03d" },
+  { name: "landed_cost_voucher_guard", sha256: "030348a94775ff4e27197991245ca1cb63d586cb116874027effb3b97833c1cb" },
+  { name: "landed_cost_voucher_target_guard", sha256: "01b7005a5cb772deb0302368945eab9cba4865e787e5863a28b5fcc673b12828" },
+  { name: "lease_agreement_revision_guard", sha256: "2982b4b6ba82c44a0bd5d020d3e2a5f45dcf2958d5334512e5e4356fca4210be" },
+  { name: "lease_schedule_history_guard", sha256: "100716d7f7ec0b3343e3fea8ee2c0b83a060783207991e5b30a9d0081361c58e" },
+  { name: "multibook_evidence_immutable", sha256: "57cfe6f0bffa374dcdb2958ae7cec3b0ec01c68b0e5ac31f54e3c8657d73bdd7" },
+  { name: "net_investment_configuration_guard", sha256: "affe81c2ffcdd5ada496b24d196f30b9f774e73345d11a938837929539cff46d" },
+  { name: "net_investment_evidence_guard", sha256: "21a55d2377f5c1c4cb79e0721b33ad9c0d60f1a077e491bf462ec85866d6573c" },
+  { name: "nonprofit_frameworks_guard", sha256: "550502ce39c94e0a304aedfee5e0060f4270326518d180e5c03e29e8dd9ec49c" },
+  { name: "openbooks_bank_statement_line_guard", sha256: "54b74c992874a580d5d2871f4944c41a3b54b018ee4b184c4eea84f4be0960da" },
+  { name: "openbooks_gl_activity_entry", sha256: "26121381f7ace27324ac0dd861d82eb81ac28524ae046bc8f627109aee97189b" },
+  { name: "openbooks_gl_activity_line", sha256: "777490764041ed8ec587b2068394957ef48be8596307a95b0f61d9cde83fad5c" },
+  { name: "openbooks_guard_ap_capture_evidence", sha256: "db53ecd91cad0c5f3e4c4b9a6a09544db85cebacb91c7b7b422cb2e244fa9591" },
+  { name: "openbooks_guard_ap_capture_source_blob", sha256: "cc8a8131769000981391399a2601667ca2268afeb7f9386bc863ad4f589cf690" },
+  { name: "openbooks_guard_ap_capture_source_file", sha256: "f11e875cd30ea220309582fe531b50685fb5dfe2d7f308f78c47791726ec2dbc" },
+  { name: "openbooks_guard_ap_capture_source_version", sha256: "f49975ac3f58b01819de3fa995ad60ac02215a8a5b5d9945d9654379f98e6574" },
+  { name: "openbooks_guard_budget_line", sha256: "2781a16dca1c9e08ce87e4640343a673baf8fd37dc81d8d26d5f07cf5bb99994" },
+  { name: "openbooks_guard_budget_scenario", sha256: "aec8fa32f4d454de8223045d4ad73fbe5b6cbb5ebb088637a11a72fb45211dc3" },
+  { name: "openbooks_guard_depreciation_evidence", sha256: "6190f0e93e8878123908f1f567892d5f0ed5782a7aaa9faebf30d1f647c16d9e" },
+  { name: "openbooks_guard_finished_ap_capture_run", sha256: "db3f8446ad785d1b92e9e7fce09f58522d4180d9c340b8cb6d27fa75aa17d45e" },
+  { name: "openbooks_guard_pay_run_bank_file", sha256: "f6cfcc17a384d7c68fba8ece42d685bd96ce40b8eeeaea5e0212d2a6201e5d3f" },
+  { name: "openbooks_guard_payroll_bank_file_blob", sha256: "cbab19c98cb81d37b12fdf0f6ee7f9bd4f059cfd663559d0d9d12574d20c36f0" },
+  { name: "openbooks_guard_payroll_bank_file_file", sha256: "8b1e26e04aebb8e550a40441660b82fdde94967d2f96ccd991aa6722b3387e4e" },
+  { name: "openbooks_guard_payroll_bank_file_version", sha256: "4c9747e8c4e63f4f5b34c7df406aa58ce9f5fdcec7319bfbc6424f060f1304d2" },
+  { name: "openbooks_party_payment_stats", sha256: "d1f84260a2e8e8cf6c324759fbeef57f032e481e04b07fdd4daa4fc91fe34247" },
+  { name: "openbooks_reconciliation_match_guard", sha256: "9f1e32b854b8f966e1e37afbac93f1b5bbebbcd05b151da05cb12f64b868ca3b" },
+  { name: "order_line_cancellations_append_only_guard", sha256: "7a782502a62a99ca8caf6ca702b4560a72119c6bf02c4d173cd3509b9b1b8695" },
+  { name: "org_business_calendars_history_guard", sha256: "2bd22a5308a1f5da9c7e563fe93a0094f9d503be88cc7aa0b7548e31338ca42f" },
+  { name: "pay_component_earning_classifications_prevent_orphan_delete", sha256: "8137f80212bd6d6c0987c647c8e3d3c112d2ef2755bf06ab2d73185f75058f9c" },
+  { name: "pay_component_history_guard", sha256: "f0ead9e55daefcb55057d74227cc9410fcc9c96704a8f318c10108f6d213d8c8" },
+  { name: "pay_component_statutory_treatment_preserve_committed", sha256: "14c4db9f621bf899259d58d6e33d766fc9e125225240aac2eb95f48252a3b6bf" },
+  { name: "payment_event_immutable", sha256: "703820e2c3a1013d117df32c43ec288bf2feb20491c912e02d7017dba2d2a4a9" },
+  { name: "payment_run_item_guard", sha256: "8fe0c6aff0cfc9528429baa03f46780e626cafe1efd8ed134bedbef0bed43a5f" },
+  { name: "payroll_annual_period_bounds_guard", sha256: "b0934f0f9930ec7800cc8286bf0c0469528f9b5c4d400c60603688ba6e8b73fd" },
+  { name: "payroll_compensation_calculation_guard", sha256: "9bf4bdfb630110ea8731d08aae67eb08bdc5cd5e5c302b819991d9d88478009b" },
+  { name: "payroll_compensation_configuration_guard", sha256: "1a4ea1bb3741cb16429bdbb60c94218171283e45f00ee52aaa32458d58a14f0e" },
+  { name: "payroll_employee_employer_assignment_guard", sha256: "f1474d009dd0e9276be0c52c5e7bf93c7ef633f72e52e250d60facc82d8641f3" },
+  { name: "payroll_holiday_allocation_audit", sha256: "61c473adadc109c7f0d90259fa62b1258663fe3627f175681763bfe74a03a4a5" },
+  { name: "payroll_holiday_allocation_guard", sha256: "1868461bf68220c4969db8657957f7eaa7d5d98464a5060afc10143a204eed9f" },
+  { name: "payroll_holiday_obligation_guard", sha256: "91f56340922be70370d52d89c669a99fb6458134c6974ee83d63cf715ad4e12c" },
+  { name: "payroll_period_opening_guard", sha256: "c03aba9b5e0a215518f7cd976d5527399e5bdf14bd618142c58b31c352d4e66d" },
+  { name: "payroll_program_period_bounds_guard", sha256: "b64f55188a39928326eacf09f7a20ad9ec17ce0b9e341ae6fe9e2a8337089c3d" },
+  { name: "payroll_service_configuration_audit", sha256: "2bb2d1b15b48142adeb8a29e3711dad3e0c00165998179f355cb017710ebd266" },
+  { name: "payroll_service_configuration_guard", sha256: "6ac030125b6caa98e1e8a293704160c57f95aeac53488eb31386c78cf45686ab" },
+  { name: "payroll_work_location_allocation_audit", sha256: "e28337e0ef26347c422accb607a0e14549c6332a189284e668faca1b964aa45f" },
+  { name: "payroll_work_location_allocation_lock_committed", sha256: "06a75b03f20e6de17d1d944ccea9d7bc58574cda9a1b84feef0a36525462da79" },
+  { name: "pick_execution_history_guard", sha256: "6675b41773ba7d0e780fc4af92adbed3d0712a8a979151285f50e700bafc1b48" },
+  { name: "position_changes_immutable_guard", sha256: "df87953844fc19d4951b81f9fb59eff39f7abd4cef092e981878611f9b5dd42d" },
+  { name: "position_versions_closure_guard", sha256: "8e76bc2f6ff00b7977134f9f829de4ecbb855bad72294a25ceec69d14f643550" },
+  { name: "preserve_historical_compensation_cycle", sha256: "d4eccf072e15d665398d2e78899dd28760bd0cf710aadedd970985d702b5ee98" },
+  { name: "primary_book_history_guard", sha256: "bac7038f8e1a8a71ba77fc0353678ffd3ff8f3ceaad140f4b2e1bbba4724582f" },
+  { name: "project_delivery_evidence_guard", sha256: "90f6b8629e4bf0a2fd2fa2d122a2d8328f4f8d698a5e6ea393a7263163071703" },
+  { name: "project_financial_adjustment_guard", sha256: "ba265cb9c6f0b3d2fadf9acee953bc302fc4219126bbe07115bf3aa413e5d540" },
+  { name: "project_financial_profile_version_guard", sha256: "738be67b3d035dabd7af11b684ca513b6c42e1e7af9811a1bd73f644bbac619b" },
+  { name: "project_overhead_adjustment_guard", sha256: "1754d5277624f2248651c0cc57e98c1ac33e8f860cb2211496c82b12dd63364c" },
+  { name: "property_financial_evidence_guard", sha256: "e64cfe122d93789c0a64e2410b9e6eaa213f5ee501dc81cdee65a0b943a76ba1" },
+  { name: "protect_application_idempotency_key", sha256: "1972cf0709d1c70ba282f05046deff4e8deb311235964166c0e925526e93d0cc" },
+  { name: "protect_country_tax_pack_installation", sha256: "a77c1c221ecd79d284d26e35419ea97d44aedba30f9f4feed10c8423b5120069" },
+  { name: "protect_org_base_price_level", sha256: "3acf699fc53c9df67a5240e56378a8470210221b6008707c8d28e69bd98de7b1" },
+  { name: "protect_pricing_customer_role", sha256: "3d82d2ff31a128c0f932c963ff29a02209692966c48267fea22f55af2876622d" },
+  { name: "protect_tax_provision_history", sha256: "d97e46fcd7752fa5eec576792ec10443bf4fe1d3cd5f05b6a77024b54d59434d" },
+  { name: "protect_temporary_difference_history", sha256: "677df694d5525b671ce6eeb3f8bdd11fca79730a3e7de988693bec3c6f77662f" },
+  { name: "provision_identity_guard", sha256: "03aad968bc3e6e396b6a16b679fb91a6f77fd2e7fbde21e4b28f4f1954725f99" },
+  { name: "rate_adjustment_target_version_guard", sha256: "8d3662d80c3bbe419040a4b302211223f9e705d11686af3932a044b41528f682" },
+  { name: "rate_book_currency_guard", sha256: "8b50942579e305f23f4b0cb174ff4f62735fdff3048f813f8f5595c36ae64487" },
+  { name: "rate_version_child_guard", sha256: "1c6a2c19dce2d753eb1f81a10fb24701677f1df4cdb77d4878921c1a731e1e58" },
+  { name: "rate_version_immutable", sha256: "ce293e6767e40d1ec0838aadcb2bfc417f0cc2f165079c8c22e1b9c5cd72eb77" },
+  { name: "recognition_revision_history_guard", sha256: "05a10a1ab732449914565ab6e3bc7e8ce1b8faea1af870964f71f1a052280474" },
+  { name: "recurring_occurrence_document_immutable_guard", sha256: "0686abfe2fa5f65a8808baa3035d13aca021ecf3b1f285746c45612352af91e7" },
+  { name: "reporting_relationships_closure_guard", sha256: "2136f7308beee0af0fe379d9e00f19179fc6ca7e3494eb7168f5d1cbb8b0452c" },
+  { name: "saas_metrics_fx_evidence_guard", sha256: "e4bedd42fddfcb67b43e1eb47ed4f012b01993689f6148c6671ee0e7e48061a0" },
+  { name: "saas_metrics_normalization_request_guard", sha256: "879b07d87673ee5f6800f20a43a4c1fa448f8050c2011f85fb2c118740e6857e" },
+  { name: "sales_evidence_immutable", sha256: "4df5bdace9684470f6835ca7d344438409a88c1650235410d5fe3c10f1c0704e" },
+  { name: "sales_quota_version_guard", sha256: "5b9db55547f9dc528b15a3d4d1515676b0d831f8d3011681b432bacbfb852449" },
+  { name: "schedule_boards_guard", sha256: "37b10c7cfccd4dcf35cf120ba556d264d4851d724c81598a21731c949386173e" },
+  { name: "schedule_codes_guard", sha256: "1dda2b3e9943c243fa8222c699da8170a6b27e869b509ac0d86859a1a7fe826c" },
+  { name: "schedule_distribution_snapshot_guard", sha256: "eb0a898ddf396edd67589f4a09e19e2e01f216f878c801fdbd968924ef160293" },
+  { name: "schedule_entries_guard", sha256: "ca34088a3a194f38e1cc636b2276f855df13c143ba132b5f5a0d43d3c3d2e5ac" },
+  { name: "schedule_roster_guard", sha256: "1623f069400d035106ea69d1bc4adea9762d56004c82b69d0923ba31cc8123a1" },
+  { name: "schedule_attendance_guard", sha256: "8ade53a31ede08e83da2f91d97e9cae5723b7cdbee811c5c526f72849bc3ebc6" },
+  { name: "service_record_guard", sha256: "e170442faf95f852719ca910cfece6460937a5ee3d6b7ff50b7af14e15e42bf5" },
+  { name: "service_history_guard", sha256: "0b2538ad7ab29533dc0ad9913a77b05d4e461df523a4318e15c542ed6efee571" },
+  { name: "schedule_source_records_guard", sha256: "842dfbcc6955650ff1f4b57b571ae9f5c88139ed379fc60338d8b9d6fa1282fc" },
+  { name: "scheduler_outbox_terminal_audit_append_only_guard", sha256: "e06165f8a6c619f2f5e0330903ff5f452a9ab99f1890fc4e976fa837ac6fed65" },
+  { name: "segment_definition_guard", sha256: "2ea0c74c89bf6cd02a84e4a119e0d5a587deed667b19bc58451520a94683f378" },
+  { name: "segment_values_clear_default_for_wipe", sha256: "192f2debaca0fbf7b3194a761311508400376928790129973bba01afc13e4ccd" },
+  { name: "stored_value_entries_immutable", sha256: "d927e8e75615245d5cf99cec4d6eeaea396be4985efc111cbec42b6058584247" },
+  { name: "subscription_amendment_immutable_guard", sha256: "3c1da0c44f593c4527ced4a54f4f404e4c3282136f9fcfd54eabcdbe61997f80" },
+  { name: "subscription_period_invoice_immutable_guard", sha256: "23d0de0c0229e73837d6512a1e5101c2c78956de5d64c666746a93f1781cd182" },
+  { name: "subscription_plan_version_immutable_guard", sha256: "c8fe1c60cb2aec5b713eaf88b737a5690c25bba90e6825c23a4197ae2127f3e3" },
+  { name: "subscription_version_component_immutable_guard", sha256: "02be1977312662234c76201fb184116c3faf3134152b42e2493f50ab37aad750" },
+  { name: "subsidiary_tree_guard", sha256: "0b5767d39aa05642b6838d3e9076bf9b7d4dab898fa672044e80a909d45e43d4" },
+  { name: "tax_filing_immutable_guard", sha256: "e349880078c43089986ecbb508e2ecf10fb108a6da4a37010e0b86f3d064c9f9" },
+  { name: "trg_application_open_balance", sha256: "525c5a29d7ab304d49b57903b61cad23b8645f110be919acc7629c9dee3bca5e" },
+  { name: "trg_journal_line_open_balance", sha256: "66b229cd6249b55ea2ce95f59d0269f023557da9e058ec65905b95a9eeadf00b" },
+  { name: "usage_prepaid_draws_append_only_guard", sha256: "1a225c03a8c7331a2153573dada85fb1ae4650013d58f739cd811e7df0fdc5d3" },
+  { name: "usage_rating_bands_draft_only_guard", sha256: "b26b1a23b258d50c89ce8d325f22959ceb37372cecffcff9de6d6092db4a38f4" },
+  { name: "usage_rating_published_immutable_guard", sha256: "771b81372107771d669c23bd41902a3819aafeb8e4e3ca6324333a45811b8960" },
+  { name: "warehouse_execution_history_guard", sha256: "0c5ef4f71e53ad59a12393563c90b21ce24c28de4e34f575efb62c68f82ba096" },
+  { name: "warehouse_execution_task_guard", sha256: "069458124b9d9fac6696ffb2c7bba6efa5df9d8d3ab5cc96d29715723f6e4c62" },
+  { name: "prebill_event_append_only_guard", sha256: "0a43989514038d7da4d58d6b9ed3ec2aee530e3af0f6c6bd75368ad4ed556b2b" },
+  { name: "withholding_deductions_guard", sha256: "7fdd60eac96af3fd2b292a96a98a60cb16ca7d6226c49316c9d8bec1f851341a" },
+  { name: "withholding_returns_guard", sha256: "378492d95d6d89fa810080fa5d1a4cd8b1f05693e0f7a565ae1fe781f5cb8814" },
+  { name: "worker_employment_versions_closure_guard", sha256: "7154c9c44fe3b809e2c3f1e583fe2ad9d7518e4704618edd4935894974454965" },
+  { name: "inventory_inspection_guard", sha256: "2f70e53880dbd1ba12c9ec717d1a07f17b422b65ef2c6b82025f9fd136b00dba" },
+  { name: "inventory_inspection_plan_guard", sha256: "eeb4cb150fb455ec4e112b0a61ecfce5aca02d5179ece9c5b423e695890ee5a6" },
+  { name: "manufacturing_completion_trace_guard", sha256: "ffdd0af706b48efe4aa129c5c60854976b1425cc18046a407c99cfd9dda5ec85" },
+  { name: "manufacturing_loss_event_guard", sha256: "cf0a5f7ebccce75940bd50d6759ab6152625acdf05d140be7b936837a44954de" },
+  { name: "manufacturing_routing_operation_guard", sha256: "1adc332d19775925ee422fc05c9971d5676f42950a198da540c033a1170e8e5f" },
+  { name: "manufacturing_snapshot_configuration_guard", sha256: "ffa91fa3734e9b87601a8113eca9af71a1dc553756390852b166b5f73234604e" },
+  { name: "operating_profile_version_immutable", sha256: "3a046c0386a9f7235041a3daf65d6050cae83d432235cc18913f60da56a2a1e1" },
+  { name: "production_bom_revision_complete_guard", sha256: "83c6996d0c0a971eb30726ed7bb50eb32660333eef94e7a7b9285a0018ba61de" },
+  { name: "production_bom_revision_guard", sha256: "4ceb220937a7cd8673072332b610d5ed1ba1e4148191114e17fa830ccc54c171" },
+  { name: "production_mrp_run_evidence_guard", sha256: "6e1dec4430843c6cd8c98c5e7a8c753b265dcc9393a73ae09e06070ed60285e1" },
+  { name: "production_subcontract_guard", sha256: "69314c560cc4731d7b79b3baf143535d03137f6eabb6e7fdeb62e2ba8b7cb0d1" },
+  { name: "production_subcontract_material_return_guard", sha256: "61852036a10829759b618bd83fdd9027e8a2688a796ef3732da964bc509e3b44" },
+  { name: "production_subcontract_return_guard", sha256: "b7c83b0e49d2c03e3fe859e9a83cc790238d3481c2ee3f3a5ac2416a8aafd600" },
+  { name: "production_subcontract_service_guard", sha256: "dfc4ac97773b7e725258727e1a43640a0899b695927f02951b7a8deb8eb00cb5" },
+  { name: "production_subcontract_shipment_guard", sha256: "45c77b504b342953bfee5b7956bcbcab1618cbab512d1037ea28748ee537de21" },
+  { name: "production_time_history_guard", sha256: "3e183f14cc7ae30730320daaaf841d8807b01a7e19bdab996139d86c03786a34" },
+  { name: "payroll_prior_earnings_guard", sha256: "aca581caf6ef846a3319eff6c0ec99850823d8f5678fc7e1f6a25f09837d6d08" },
+  { name: "period_end_journal_policy_guard", sha256: "c2277350b9bc1efdeccfa8961a7316610f7abea719421bb6981446a58b20b929" },
+  { name: "period_end_journal_set_guard", sha256: "2b3d68814dad441e2301e8b9eaee04ac9b05d9c4149c11ebf4baa7f6403a3681" },
+  { name: "period_end_journal_entry_guard", sha256: "07f9d2d53dd8951b3ada47c1f9847194b1ee03322602a00affa119884fe7eeec" },
 ] as const;
 
 export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [

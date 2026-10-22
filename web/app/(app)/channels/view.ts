@@ -64,8 +64,8 @@ export async function loadChannelsHome(): Promise<ChannelsHomeData> {
       join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
      where o.org_id = ${orgId}
        and o.ordered_at >= (${today}::date::timestamp at time zone ${timeZone})
-       and o.ordered_at < ((${today}::date + 1)::timestamp at time zone ${timeZone})${orderScope}`
-  )).rows[0]?.count ?? '0'
+       and o.ordered_at < ((${today}::date + 1)::timestamp at time zone ${timeZone})${orderScope}`, 'objects'
+  ))[0]?.count ?? '0'
 
   const channels = channelsInScope(authz, channelRows).map((channel) => ({
     id: channel.id,

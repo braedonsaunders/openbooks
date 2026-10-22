@@ -40,8 +40,8 @@ async function listPaymentRuns() {
      group by r.id, a.number, a.name
      order by r.created_at desc
      limit 200
-  `))
-  return NextResponse.json({ runs: runs.rows })
+  `, 'objects'))
+  return NextResponse.json({ runs })
 }
 
 /** Create a payment run from selected posted, open vendor bills. */
@@ -62,8 +62,8 @@ async function createPaymentRun(req: Request) {
     const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
       select id, subsidiary_id as "subsidiaryId" from documents
        where org_id = ${user.orgId} and id = any(${`{${selected.join(',')}}`}::uuid[])
-    `))
-    const inScope = rows.rows.filter(
+    `, 'objects'))
+    const inScope = rows.filter(
       (row) => row.subsidiaryId !== null && gate.allowedSubsidiaryIds!.has(row.subsidiaryId),
     )
     if (inScope.length !== selected.length) {

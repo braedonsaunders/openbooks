@@ -43,13 +43,14 @@ const mockSources = new Map<string, string>([
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
       const executor = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           if (text.includes('update payment_formats')) state.updates.push('formats')
           if (text.includes('from payment_formats')) {
-            return { rows: [{ id: 'format-1', name: 'Bank file', rail: 'custom', formatter_script: 'return {}' }] }
+            return inMode({ rows: [{ id: 'format-1', name: 'Bank file', rail: 'custom', formatter_script: 'return {}' }] })
           }
-          return { rows: [{ id: 'row-1' }] }
+          return inMode({ rows: [{ id: 'row-1' }] })
         },
       }
       export const db = {

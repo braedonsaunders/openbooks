@@ -83,11 +83,11 @@ test("a queue outage during dispatch is logged, counted on the ledger, and still
       `expected a named inline-fallback log line, got: ${JSON.stringify(logged)}`,
     );
 
-    const rows = (await db.execute<OccurrenceRow>(sql`
+    const rows = await db.execute<OccurrenceRow>(sql`
       select status, logs from script_runs
        where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
        order by at desc limit 1
-    `)).rows;
+    `, "objects");
     assert.equal(rows.length, 1, "the due occurrence must have exactly one ledger row");
     const [row] = rows as [OccurrenceRow];
     assert.equal(row.status, "ok", "the occurrence still ran inline under its own identity");

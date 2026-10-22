@@ -101,8 +101,8 @@ async function seedScopedAssets(): Promise<Fixture> {
 
 async function assetCount(orgId: string, assetId: string): Promise<number> {
   return (await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from fixed_assets where org_id = ${orgId} and id = ${assetId}`,
-  )).rows[0]!.n;
+    sql`select count(*)::int as n from fixed_assets where org_id = ${orgId} and id = ${assetId}`, "objects",
+  ))[0]!.n;
 }
 
 const deleteCall = (assetId: string) =>

@@ -60,10 +60,11 @@ const sources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.subscription-drawer-test')]
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.queries.push({ text: query.text, values: [...query.values] })
-          if (query.text.includes('from subscriptions s')) return { rows: state.subscriptionRow ? [state.subscriptionRow] : [] }
-          return { rows: [] }
+          if (query.text.includes('from subscriptions s')) return inMode({ rows: state.subscriptionRow ? [state.subscriptionRow] : [] })
+          return inMode({ rows: [] })
         },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn(db) }

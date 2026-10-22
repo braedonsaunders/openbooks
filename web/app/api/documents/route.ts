@@ -102,7 +102,7 @@ export const POST = defineRoute({
         const known = isUuid(body.subsidiaryId)
           && (await db.execute<{ id: string }>(sql`
             select id from subsidiaries
-             where id = ${body.subsidiaryId} and org_id = ${user.orgId}`)).rows.length > 0
+             where id = ${body.subsidiaryId} and org_id = ${user.orgId}`, 'objects')).length > 0
         if (!known) {
           return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
         }
@@ -125,8 +125,8 @@ export const POST = defineRoute({
         for (const line of body.lines) {
           if (!line.itemId || !isUuid(line.itemId)) continue
           const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
-          if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
+          if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
             return notFound("record")
           }
         }
@@ -135,8 +135,8 @@ export const POST = defineRoute({
         for (const line of body.lines) {
           if (!line.itemId || !isUuid(line.itemId)) continue
           const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
-          if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
+          if (item[0] && item[0].kind === 'equipment_charge') {
             return notFound("record")
           }
         }
@@ -148,7 +148,7 @@ export const POST = defineRoute({
         const roots = (await db.execute<{ id: string }>(sql`
           select id from subsidiaries
            where org_id = ${user.orgId} and is_active and not is_elimination
-           order by (parent_id is null) desc, name`)).rows.map((r) => r.id)
+           order by (parent_id is null) desc, name`, 'objects')).map((r) => r.id)
         subsidiaryId = roots.find((id) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(id)) ?? null
         if (!subsidiaryId) {
           return NextResponse.json({ error: 'no_available_subsidiary' }, { status: 409 })

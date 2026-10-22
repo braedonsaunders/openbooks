@@ -44,8 +44,8 @@ const businessDay = (iso: string): string => {
 async function cashBaseCurrency(orgId: string): Promise<string> {
   const res = await db.execute<{ baseCurrency: string | null }>(sql`
     select base_currency as "baseCurrency" from orgs where id = ${orgId}
-  `);
-  const base = res.rows[0]?.baseCurrency;
+  `, "objects");
+  const base = res[0]?.baseCurrency;
   if (typeof base !== "string" || !base) throw new Error(`organization ${orgId} has no base currency`);
   return base;
 }
@@ -79,8 +79,8 @@ async function closingSpotRates(
            and as_of <= ${refDate}::date
       ) s
      order by s.from_currency, s.as_of desc, s.priority asc
-  `);
-  for (const row of res.rows) rates.set(row.from_currency, row.rate);
+  `, "objects");
+  for (const row of res) rates.set(row.from_currency, row.rate);
   const missing = needed.filter((c) => !rates.has(c));
   if (missing.length > 0) {
     throw new Error(`no spot rate for ${missing.join(",")}→${base} on or before ${refDate}`);
@@ -138,8 +138,8 @@ async function bankAccountBalances(
       left join movement m on m.account_id = a.id
      where a.org_id = ${orgId} and a.type = 'asset_bank' and a.is_summary = false and a.is_active
      group by a.id, a.name, a.number, m.func
-  `);
-  const legs = res.rows.map((row) => ({
+  `, "objects");
+  const legs = res.map((row) => ({
     id: String(row.id),
     name: String(row.name),
     number: (row.number as string | null) ?? null,
@@ -226,8 +226,8 @@ async function sideOpenItems(
       from oi
       left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
      where oi.remaining <> 0
-  `);
-  const rows = res.rows.map((row) => ({
+  `, "objects");
+  const rows = res.map((row) => ({
     id: String(row.id),
     partyId: (row.party_id as string | null) ?? null,
     partyName: String(row.party_name),
@@ -326,11 +326,11 @@ async function settlementStats(
       from stats
      group by party_id
     having sum(n) > 0
-  `);
+  `, "objects");
   const map = new Map<string, { avg: number; sd: number }>();
   let total = 0;
   let count = 0;
-  for (const row of res.rows) {
+  for (const row of res) {
     const avg = Number(row.avg_days);
     const n = Number(row.n);
     map.set(row.id, { avg, sd: Number(row.sd_days) });
@@ -537,8 +537,8 @@ async function cashflowSettings(orgId: string): Promise<{
 }> {
   const res = await db.execute<{ cfg: unknown }>(sql`
     select settings -> 'analytics' -> 'cashflow' as cfg from orgs where id = ${orgId}
-  `);
-  const stored = (res.rows[0]?.cfg ?? {}) as {
+  `, "objects");
+  const stored = (res[0]?.cfg ?? {}) as {
     weeklyApCap?: unknown;
     restrictToSafe?: unknown;
     settleBufferSigma?: unknown;

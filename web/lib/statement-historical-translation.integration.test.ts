@@ -30,16 +30,16 @@ async function fixture() {
     // The global currency registry may be absent in a schema-only fixture.
     await db.execute(sql`insert into currencies(code,name,minor_units) values('USD','US Dollar',2) on conflict(code) do nothing`)
     assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb)
-      where id=${org.orgId} returning id`)).rows.length, 1)
+      where id=${org.orgId} returning id`, 'objects')).length, 1)
     for (const actor of [actors.submitterId, actors.approver1Id])
       await grantScratchPermissions(org.orgId, actor, ['close.run', 'documents.read'])
     await seedApprovalFlow(org.orgId, { subjectKind: 'financial_change', assignees: [{ type: 'user', userId: actors.approver1Id }], mode: 'any', preventSelfApproval: true })
     const folderId = randomUUID()
     assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id)
-      values(${folderId},${org.orgId},'Original capital documents',true,${actors.adminId}) returning id`)).rows.length, 1)
+      values(${folderId},${org.orgId},'Original capital documents',true,${actors.adminId}) returning id`, 'objects')).length, 1)
     for (const actor of [actors.submitterId, actors.approver1Id])
       assert.equal((await db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
-        values(${org.orgId},'folder',${folderId},'user',${actor},'viewer',${actors.adminId}) returning id`)).rows.length, 1)
+        values(${org.orgId},'folder',${folderId},'user',${actor},'viewer',${actors.adminId}) returning id`, 'objects')).length, 1)
     return { actors, equity, folderId }
   })
   const bytes = Buffer.from('Original dated share contribution schedule and its exact documentary measurement currency.')
@@ -60,7 +60,7 @@ async function fixture() {
         lines: [{ accountId: setup.equity, subsidiaryId: org.subsidiaryId, amount, currency: 'CAD', txnAmount: amount, fxRate: '1' },
           { accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, amount: amount.startsWith('-') ? amount.slice(1) : `-${amount}`,
             currency: 'CAD', txnAmount: amount.startsWith('-') ? amount.slice(1) : `-${amount}`, fxRate: '1' }] })
-      const line = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} and account_id=${setup.equity}`)).rows
+      const line = await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} and account_id=${setup.equity}`, 'objects')
       assert.equal(line.length, 1)
       return { entryId: posted.entryId, lineId: line[0]!.id }
     })
@@ -74,7 +74,7 @@ async function fixture() {
       reason: 'Retain the independently evidenced original contribution basis', idempotencyKey: randomUUID() })
     await withOrgContext(org.orgId, async () => {
       await submitFinancialChange(org.orgId, proposal.changeId, authority.actorId)
-      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${proposal.changeId} and status='pending'`)).rows[0]
+      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${proposal.changeId} and status='pending'`, 'objects'))[0]
       assert.ok(gate)
       await decideGate({ gateId: gate.id, decision: 'approved', userId: setup.actors.approver1Id })
     })
@@ -93,7 +93,7 @@ test('statements use each immutable contribution and its correction and retain t
   try {
     await withBypassContext(async () => {
       assert.equal((await db.execute(sql`insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
-        values(${f.org.orgId},${f.equity},'2026-01-01','historical','historical','Retain original contribution rates for capital cash movements') returning id`)).rows.length, 1)
+        values(${f.org.orgId},${f.equity},'2026-01-01','historical','historical','Retain original contribution rates for capital cash movements') returning id`, 'objects')).length, 1)
     })
     const first = await f.post('-100'), second = await f.post('-100')
     await assert.rejects(f.matrix(), /historical contribution basis|Historical translation/i)
@@ -122,7 +122,7 @@ test('statements use each immutable contribution and its correction and retain t
     assert.equal(cash.direct.sections.find(section => section.section === 'financing')?.subtotal, '200.0000')
     assert.equal(cash.indirect.financingTotal, '200.0000')
     await withBypassContext(async () => {
-      assert.equal((await db.execute(sql`update subsidiaries set base_currency='USD' where org_id=${f.org.orgId} and id=${f.org.subsidiaryId} returning id`)).rows.length, 1)
+      assert.equal((await db.execute(sql`update subsidiaries set base_currency='USD' where org_id=${f.org.orgId} and id=${f.org.subsidiaryId} returning id`, 'objects')).length, 1)
     })
     const currentlyIdentity = { ...f.subsidiary, rates: [] }
     assert.deepEqual((await f.matrix(currentlyIdentity)).rows.find(row => row.id === f.equity)?.values, ['200.0000'])
@@ -169,7 +169,7 @@ test('non-equity manual historical and equity average policies retain their own 
     await withBypassContext(async () => {
       assert.equal((await db.execute(sql`insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
         values(${f.org.orgId},${f.org.accounts.bank},'2026-01-01','historical','current','Explicit manual historical policy for this account'),
-          (${f.org.orgId},${f.equity},'2026-01-01','average','average','Explicit average policy for this equity account') returning id`)).rows.length, 2)
+          (${f.org.orgId},${f.equity},'2026-01-01','average','average','Explicit average policy for this equity account') returning id`, 'objects')).length, 2)
     })
     await f.post('-100')
     const matrix = await withOrgTransaction(f.org.orgId, () => statementMatrix({ orgId: f.org.orgId, bookId: f.org.bookId,

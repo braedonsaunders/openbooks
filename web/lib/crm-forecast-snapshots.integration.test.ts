@@ -56,7 +56,7 @@ test('an empty forecast saves explicit zero evidence in the organization reporti
  assert.equal(response.status,201);
  const body=await response.json();
  assert.equal(body.ids.length,1);
- const rows=(await db.execute<{currency:string;pipeline_amount:string;weighted_amount:string;detail:Record<string,unknown>}>(sql`select currency,pipeline_amount::text,weighted_amount::text,detail from crm_forecast_snapshots where org_id=${org.orgId}`)).rows;
+ const rows=await db.execute<{currency:string;pipeline_amount:string;weighted_amount:string;detail:Record<string,unknown>}>(sql`select currency,pipeline_amount::text,weighted_amount::text,detail from crm_forecast_snapshots where org_id=${org.orgId}`, 'objects');
  assert.equal(rows.length,1);
  assert.equal(rows[0]!.currency,'CAD');
  assert.equal(rows[0]!.pipeline_amount,'0.0000');
@@ -72,18 +72,18 @@ test('forecast routes reject impossible dates before any snapshot write',enabled
   const read=await GET(new NextRequest('http://audit.local?periodStart='+day+'&periodEnd=2027-01-01'));
   assert.equal(read.status,422);
  }
- assert.equal((await db.execute(sql`select id from crm_forecast_snapshots where org_id=${org.orgId}`)).rows.length,0);
+ assert.equal((await db.execute(sql`select id from crm_forecast_snapshots where org_id=${org.orgId}`, 'objects')).length,0);
 }));
 
 test('multi-currency overrides require one currency and never duplicate money across currencies',enabled,async()=>fixture(async(org,actor)=>{
  await pipeline(org,actor,['CAD','USD']);
  const ambiguous=await POST(request({overrideAmount:'250'}));
  assert.equal(ambiguous.status,422,await ambiguous.clone().text());
- assert.equal((await db.execute(sql`select id from crm_forecast_snapshots where org_id=${org.orgId}`)).rows.length,0);
+ assert.equal((await db.execute(sql`select id from crm_forecast_snapshots where org_id=${org.orgId}`, 'objects')).length,0);
  const selected=await POST(request({overrideAmount:'250',currency:'usd'}));
  assert.equal(selected.status,201,await selected.clone().text());
  assert.equal((await selected.json()).ids.length,1);
- const rows=(await db.execute<{currency:string;override_amount:string}>(sql`select currency,override_amount::text from crm_forecast_snapshots where org_id=${org.orgId}`)).rows;
+ const rows=await db.execute<{currency:string;override_amount:string}>(sql`select currency,override_amount::text from crm_forecast_snapshots where org_id=${org.orgId}`, 'objects');
  assert.deepEqual(rows,[{currency:'USD',override_amount:'250.0000'}]);
  const calculated=await POST(request({}));
  assert.equal(calculated.status,201);
@@ -94,13 +94,13 @@ test('a single-currency override retains its unambiguous currency and snapshot k
  await pipeline(org,actor,['USD']);
  const accepted=await POST(request({overrideAmount:'250'}));
  assert.equal(accepted.status,201);
- const rows=(await db.execute<{currency:string;override_amount:string}>(sql`select currency,override_amount::text from crm_forecast_snapshots where org_id=${org.orgId}`)).rows;
+ const rows=await db.execute<{currency:string;override_amount:string}>(sql`select currency,override_amount::text from crm_forecast_snapshots where org_id=${org.orgId}`, 'objects');
  assert.deepEqual(rows,[{currency:'USD',override_amount:'250.0000'}]);
  for(const body of [{snapshotKind:'calculated',overrideAmount:'250'},{snapshotKind:'rep_override'},{snapshotKind:'manager_override'},{currency:'invalid'}]){
   const refused=await POST(request(body));
   assert.equal(refused.status,422,JSON.stringify(body));
  }
- assert.equal((await db.execute(sql`select id from crm_forecast_snapshots where org_id=${org.orgId}`)).rows.length,1);
+ assert.equal((await db.execute(sql`select id from crm_forecast_snapshots where org_id=${org.orgId}`, 'objects')).length,1);
 }));
 
 test('an override for an empty pipeline requires an explicit currency',enabled,async()=>fixture(async(org)=>{
@@ -108,7 +108,7 @@ test('an override for an empty pipeline requires an explicit currency',enabled,a
  assert.equal(ambiguous.status,422);
  const accepted=await POST(request({overrideAmount:'250',currency:'USD'}));
  assert.equal(accepted.status,201,await accepted.clone().text());
- const rows=(await db.execute<{currency:string;override_amount:string;pipeline_amount:string}>(sql`select currency,override_amount::text,pipeline_amount::text from crm_forecast_snapshots where org_id=${org.orgId}`)).rows;
+ const rows=await db.execute<{currency:string;override_amount:string;pipeline_amount:string}>(sql`select currency,override_amount::text,pipeline_amount::text from crm_forecast_snapshots where org_id=${org.orgId}`, 'objects');
  assert.deepEqual(rows,[{currency:'USD',override_amount:'250.0000',pipeline_amount:'0.0000'}]);
 }));
 
@@ -235,7 +235,7 @@ const crmForecastCases = [
           try {
             const stranger = await withBypassContext(() => db.execute<{ id: string }>(sql`
               insert into parties (org_id, kind, display_name, is_active, custom)
-              values (${org.orgId}, 'customer', 'Stranger Co', true, '{}'::jsonb) returning id`)).then((r) => r.rows[0]!.id);
+              values (${org.orgId}, 'customer', 'Stranger Co', true, '{}'::jsonb) returning id`, 'objects')).then((r) => r[0]!.id);
             await postCredit(org, stranger, 'CR-C6-X', '50.0000');
             assert.equal(await closed(org.orgId, actor), '100.0000');
           } finally {
@@ -266,9 +266,9 @@ const crmForecastCases = [
             const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Forecast reader', 'crm_reader'))
             await withBypassContext(async () => {
               await ensureCrmDefaults(org.orgId, actor)
-              const statuses = (await db.execute<{ id: string; is_closed: boolean; forecast_category?: string }>(sql`
+              const statuses = await db.execute<{ id: string; is_closed: boolean; forecast_category?: string }>(sql`
                 select id, is_closed from crm_opportunity_statuses
-                 where org_id=${org.orgId} and is_active order by is_closed, sequence`)).rows
+                 where org_id=${org.orgId} and is_active order by is_closed, sequence`, 'objects')
               const open = statuses.find((status) => !status.is_closed)
               const closed = statuses.find((status) => status.is_closed)
               assert.ok(open, 'CRM defaults provide an open status')

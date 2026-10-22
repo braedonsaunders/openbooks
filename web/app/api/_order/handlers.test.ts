@@ -135,12 +135,13 @@ class OrderRouteHarness {
     this.voidPause = null
   }
 
-  async execute(query: SqlQuery): Promise<{ rows: Record<string, unknown>[] }> {
+  async execute(query: SqlQuery, mode?: string): Promise<unknown> {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const { text, params } = this.compile(query)
     const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase()
 
     if (normalized.startsWith('select status, document_date, currency, party_id, subsidiary_id as "subsidiaryid"')) {
-      return {
+      return inMode({
         rows: this.matchesDocument(params)
           ? [{
               status: this.document.status,
@@ -151,18 +152,18 @@ class OrderRouteHarness {
               updated_at: this.document.updatedAt,
             }]
           : [],
-      }
+      })
     }
 
     // The record-boundary scope probes (PATCH/GET existence, DELETE lock,
     // convert ownership) resolve the row's subsidiary alongside org scope.
     if (normalized.startsWith('select subsidiary_id as "subsidiaryid"')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
-      return {
+      return inMode({
         rows: this.matchesDocument(params)
           ? [{ subsidiary_id: this.document.subsidiaryId ?? null, updated_at: this.document.updatedAt }]
           : [],
-      }
+      })
     }
 
     // The issuance read locks the aggregate and rechecks scope, status and
@@ -171,7 +172,7 @@ class OrderRouteHarness {
     // split reads, which the route no longer issues.
     if (normalized.startsWith('select status, party_id, subsidiary_id as "subsidiaryid", total,')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
-      return {
+      return inMode({
         rows: this.matchesDocument(params)
           ? [{
               status: this.document.status,
@@ -181,14 +182,14 @@ class OrderRouteHarness {
               updated_at: this.document.updatedAt,
             }]
           : [],
-      }
+      })
     }
 
     // The draft-save mutation locks the same aggregate before replacing
     // header/lines; scope and revision are rechecked on the locked row.
     if (normalized.startsWith('select status, subsidiary_id as "subsidiaryid", (revision_seq)::text')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
-      return {
+      return inMode({
         rows: this.matchesDocument(params)
           ? [{
               status: this.document.status,
@@ -196,24 +197,24 @@ class OrderRouteHarness {
               updated_at: this.document.updatedAt,
             }]
           : [],
-      }
+      })
     }
 
     if (normalized.startsWith('select 1 from documents')) {
       if (normalized.endsWith('for update')) await this.acquireDocumentLock()
-      return { rows: this.matchesDocument(params) ? [{ exists: 1 }] : [] }
+      return inMode({ rows: this.matchesDocument(params) ? [{ exists: 1 }] : [] })
     }
 
     // The scoped account catalog (listScopedAccountOptions) the draft save
     // reads before validating lines. Only the suite's referenced accounts
     // are visible; anything else refuses as out of scope, fail closed.
     if (normalized.startsWith('select a.id, a.number, a.name, a.type,')) {
-      return {
+      return inMode({
         rows: [
           { id: '22222222-0000-4000-8000-000000000002' },
           { id: '22222222-0000-4000-8000-000000000003' },
         ],
-      }
+      })
     }
 
     if (normalized.startsWith('update documents set')) {
@@ -221,7 +222,7 @@ class OrderRouteHarness {
       const memo = normalized.match(/\bmemo = __p(\d+)__/)
       if (memo) this.document.memo = String(params[Number(memo[1])])
       this.headerWrites += 1
-      return { rows: [] }
+      return inMode({ rows: [] })
     }
 
     throw new Error(`unexpected order handler query: ${normalized}`)
@@ -454,7 +455,7 @@ const mockSources = new Map<string, string>([
   ['mock:db', `
     const state = ${stateExpression}
     export const db = {
-      execute(query) { return state.execute(query) },
+      execute(query, mode) { return state.execute(query, mode) },
       transaction(callback) { return state.transaction(() => callback(db)) },
     }
     export function withOrgTransaction(_orgId, callback) {
@@ -815,10 +816,8 @@ class IssuePoolHarness {
     })
   }
 
-  async execute(query: SqlQuery): Promise<{
-    rows: Record<string, unknown>[]
-    fields: { name: string }[]
-  }> {
+  async execute(query: SqlQuery, mode?: string): Promise<unknown> {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const { text, params } = this.compile(query)
     const normalized = text.replace(/\s+/g, ' ').trim().toLowerCase()
 
@@ -826,52 +825,52 @@ class IssuePoolHarness {
       const [name,orgId,kind,id]=JSON.parse(String(params[0])) as string[]
       assert.equal(name,'openbooks:flow-subject-decision');assert.equal(orgId,ORG_ID);assert.equal(kind,'quote')
       assert.ok(this.requireTransaction().lockedDocumentIds.has(id!), 'the subject fence joins the owned document transaction')
-      return this.result([])
+      return inMode(await this.result([]))
     }
     if (normalized.startsWith('select id from role_assignments') || normalized.startsWith('select id from app_roles') || normalized.startsWith('select id from user_permission_overrides')) {
       this.requireTransaction()
       assert.ok(normalized.endsWith('for share'), 'command authorization stays locked on the issue transaction')
       assert.equal(params[0], ORG_ID)
-      return this.result([])
+      return inMode(await this.result([]))
     }
     if(normalized==='lock table flows in share mode'||normalized.includes('from flows')){
-      this.requireTransaction();return this.result([])
+      this.requireTransaction();return inMode(await this.result([]))
     }
     if(normalized.includes('insert into flow_submissions')){
-      this.requireTransaction();return this.result([{id:'30000000-0000-4000-8000-000000000001'}])
+      this.requireTransaction();return inMode(await this.result([{id:'30000000-0000-4000-8000-000000000001'}]))
     }
-    if(normalized.includes('from parties p')||normalized.includes('from "parties"'))return this.result([{display_name:'Pool customer',eft_notification_email:null}])
-    if(normalized.includes('from quote_subscription_terms'))return this.result([])
+    if(normalized.includes('from parties p')||normalized.includes('from "parties"'))return inMode(await this.result([{display_name:'Pool customer',eft_notification_email:null}]))
+    if(normalized.includes('from quote_subscription_terms'))return inMode(await this.result([]))
     if (normalized.startsWith('select status, document_date from documents')) {
       const document = this.documentFromParams(params)
-      return this.result(document
+      return inMode(await this.result(document
         ? [{ status: document.status, document_date: document.documentDate }]
-        : [])
+        : []))
     }
     if (normalized.startsWith('select status, document_date, currency, party_id, subsidiary_id as "subsidiaryid"')) {
       const document = this.documentFromParams(params)
-      return this.result(document
+      return inMode(await this.result(document
         ? [{ status: document.status, document_date: document.documentDate, currency: 'CAD', party_id: document.partyId, subsidiaryId: null, updated_at: document.updatedAt }]
-        : [])
+        : []))
     }
     if (normalized.startsWith('select status, party_id, subsidiary_id as "subsidiaryid", total,')) {
       const document = this.documentFromParams(params)
       if (document && normalized.endsWith('for update')) await this.lockDocument(document.id)
-      return this.result(document
+      return inMode(await this.result(document
         ? [{ status: document.status, party_id: document.partyId, subsidiaryId: null, total: document.total, updated_at: document.updatedAt }]
-        : [])
+        : []))
     }
-    if (normalized.startsWith('select source.document_number')) return this.result([])
+    if (normalized.startsWith('select source.document_number')) return inMode(await this.result([]))
     if (normalized.startsWith("select settings #>> '{features,scripts}'")) {
-      return this.result([{ enabled: 'true' }])
+      return inMode(await this.result([{ enabled: 'true' }]))
     }
     if (normalized.includes("queryconsole") && normalized.includes('features')) {
-      return this.result([{ enabled: true }])
+      return inMode(await this.result([{ enabled: true }]))
     }
     if (normalized.includes('is_super_admin') && normalized.includes('from users')) {
-      return this.result([{ id: USER_ID, orgId: ORG_ID, isSuperAdmin: true, isActive: true }])
+      return inMode(await this.result([{ id: USER_ID, orgId: ORG_ID, isSuperAdmin: true, isActive: true }]))
     }
-    if (normalized.startsWith('update user_scripts set last_run_at = now()')) return this.result([])
+    if (normalized.startsWith('update user_scripts set last_run_at = now()')) return inMode(await this.result([]))
     // The submit-path consolidation-source probe
     // (engine/src/records/consolidation-source-policy.ts): the inline
     // kind = 'customer_invoice' filter excludes the quote fixtures, so an
@@ -882,7 +881,7 @@ class IssuePoolHarness {
     // way for the same reason).
     if (normalized.startsWith("select custom->>'consolidationstatus' as consolidation_status from documents")) {
       this.consolidationProbes += 1
-      return this.result([])
+      return inMode(await this.result([]))
     }
     throw new Error(`unexpected pool-contention query: ${normalized}`)
   }
@@ -1138,7 +1137,7 @@ const poolMockSources = new Map<string, string>([
       then(resolve, reject) { return Promise.resolve().then(load).then(resolve, reject) },
     })
     export const db = {
-      execute(query) { return state.execute(query) },
+      execute(query, mode) { return state.execute(query, mode) },
       select(projection) {
         let selectedTable
         const builder = {

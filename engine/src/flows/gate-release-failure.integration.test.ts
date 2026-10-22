@@ -133,8 +133,8 @@ async function decisionNotifyCount(runId: string, gateId: string): Promise<numbe
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from scheduler_outbox
      where kind = 'flow_email' and occurrence_key = ${`${runId}:decision-notify:${gateId}`}
-  `));
-  return r.rows[0]?.n ?? 0;
+  `, "objects"));
+  return r[0]?.n ?? 0;
 }
 
 /** In-app rows written by the branch's first (successful) notify action. */
@@ -142,8 +142,8 @@ async function branchPingCount(orgId: string, userId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from notifications
      where org_id = ${orgId} and user_id = ${userId} and kind = 'flow' and title = 'Branch ping'
-  `));
-  return r.rows[0]?.n ?? 0;
+  `, "objects"));
+  return r[0]?.n ?? 0;
 }
 
 /**
@@ -155,8 +155,8 @@ async function branchCheckpointCount(runId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from flow_run_effects
      where run_id = ${runId} and effect_key like '%:action:%'
-  `));
-  return r.rows[0]?.n ?? 0;
+  `, "objects"));
+  return r[0]?.n ?? 0;
 }
 
 type GateRow = { id: string; status: string; runId: string };
@@ -165,28 +165,28 @@ async function gateRows(subjectId: string): Promise<GateRow[]> {
   const r = (await db.execute<GateRow>(sql`
     select id, status, run_id as "runId" from flow_gates
      where subject_id = ${subjectId} order by created_at
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 async function docStatus(id: string): Promise<string | null> {
-  const r = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`));
-  return r.rows[0]?.status ?? null;
+  const r = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`, "objects"));
+  return r[0]?.status ?? null;
 }
 
 async function runRow(id: string): Promise<{ status: string; error: string | null }> {
   const r = (await db.execute<{ status: string; error: string | null }>(sql`
     select status, error from flow_runs where id = ${id}
-  `));
-  return r.rows[0]!;
+  `, "objects"));
+  return r[0]!;
 }
 
 async function decisionAuditCount(gateId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where table_name = 'flow_gates' and row_id = ${gateId} and action = 'update'
-  `));
-  return r.rows[0]?.n ?? 0;
+  `, "objects"));
+  return r[0]?.n ?? 0;
 }
 
 async function withOrgFixture(fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>): Promise<void> {

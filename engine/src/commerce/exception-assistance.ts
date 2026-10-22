@@ -175,7 +175,7 @@ type ChannelRow = Record<string, unknown> & {
 async function loadChannel(orgId: string, channelId: string): Promise<ChannelRow> {
   const row = (await db.execute<ChannelRow>(sql`
     select id, kind, name, currency, external_account, subsidiary_id from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -228,7 +228,7 @@ async function findUnmappedLine(orgId: string, channel: ChannelRow, order: Chann
       });
       if (linked?.nativeTable === "items") {
         const item = (await db.execute<{ id: string }>(sql`
-          select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`)).rows[0];
+          select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`, "objects"))[0];
         if (item) continue;
       }
     }
@@ -237,7 +237,7 @@ async function findUnmappedLine(orgId: string, channel: ChannelRow, order: Chann
       const item = (await db.execute<{ id: string }>(sql`
         select id from items
          where org_id = ${orgId} and code = ${sku} and is_active
-         order by created_at limit 1`)).rows[0];
+         order by created_at limit 1`, "objects"))[0];
       if (item) continue;
     }
     return { index, sku, variantExternalId: line.variantExternalId, title: line.title };
@@ -256,10 +256,10 @@ function gatewayTokens(gateway: string): string[] {
 }
 
 async function postableAccounts(orgId: string, channel: ChannelRow): Promise<AccountRow[]> {
-  const rows = (await db.execute<AccountRow>(sql`
+  const rows = await db.execute<AccountRow>(sql`
     select id, name, type, currency_restriction as "currencyRestriction", subsidiary_id as "subsidiaryId"
       from accounts
-     where org_id = ${orgId} and is_active and not is_summary`)).rows;
+     where org_id = ${orgId} and is_active and not is_summary`, "objects");
   return rows.filter((account) => {
     if (account.currencyRestriction && account.currencyRestriction.toUpperCase() !== channel.currency.toUpperCase()) return false;
     if (channel.subsidiary_id && account.subsidiaryId && account.subsidiaryId !== channel.subsidiary_id) return false;
@@ -313,10 +313,10 @@ async function suggestUnmappedItem(orgId: string, channel: ChannelRow, order: Ch
   const like = tokens.length > 0
     ? sql`and (${sql.join(tokens.map((token) => sql`lower(code) like ${`%${token}%`} or lower(name) like ${`%${token}%`}`), sql` or `)})`
     : sql``;
-  const rows = (await db.execute<ItemRow>(sql`
+  const rows = await db.execute<ItemRow>(sql`
     select id, code, name from items
      where org_id = ${orgId} and is_active ${like}
-     order by code nulls last, name limit 50`)).rows;
+     order by code nulls last, name limit 50`, "objects");
   const scored = rows
     .map((row) => {
       const sku = querySku ? skuMatchScore(querySku, row.code ?? "") : { score: 0, signals: [] as string[] };
@@ -338,7 +338,7 @@ async function suggestUnmappedItem(orgId: string, channel: ChannelRow, order: Ch
      where l.org_id = ${orgId} and l.channel_id = ${order.channelId}
        and l.object_type = 'variant' and l.native_table = 'items'
        and i.is_active
-     limit 1`)).rows[0] : undefined;
+     limit 1`, "objects"))[0] : undefined;
   const candidates: SuggestionCandidate[] = [];
   if (past && line.variantExternalId) {
     candidates.push({
@@ -434,10 +434,10 @@ async function suggestUnmappedAccount(orgId: string, channel: ChannelRow, order:
 
 async function suggestUnmappedLocation(orgId: string, channel: ChannelRow, order: ChannelOrderDetail): Promise<{ candidates: SuggestionCandidate[]; groupKey: string }> {
   const groupKey = exceptionGroupKey("unmapped_location", {});
-  const open = (await db.execute<{ external_location_id: string; external_name: string }>(sql`
+  const open = await db.execute<{ external_location_id: string; external_name: string }>(sql`
     select external_location_id, external_name from sales_channel_locations
      where org_id = ${orgId} and channel_id = ${order.channelId} and stock_location_id is null
-     order by external_name limit 5`)).rows;
+     order by external_name limit 5`, "objects");
   if (open.length === 0) {
     return {
       groupKey,
@@ -449,8 +449,8 @@ async function suggestUnmappedLocation(orgId: string, channel: ChannelRow, order
       )],
     };
   }
-  const stocks = (await db.execute<{ id: string; name: string }>(sql`
-    select id, name from stock_locations where org_id = ${orgId} and is_active order by name limit 20`)).rows;
+  const stocks = await db.execute<{ id: string; name: string }>(sql`
+    select id, name from stock_locations where org_id = ${orgId} and is_active order by name limit 20`, "objects");
   const channelWords = new Set(wordTokens(channel.name));
   const candidates: SuggestionCandidate[] = open.slice(0, 3).map((location, index) => {
     const scored = stocks
@@ -538,13 +538,13 @@ export async function similarExceptionOrderIds(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   limit = 200,
 ): Promise<string[]> {
-  const rows = (await db.execute<{ id: string; exception_reason: string | null; lines: unknown; tenders: unknown }>(sql`
+  const rows = await db.execute<{ id: string; exception_reason: string | null; lines: unknown; tenders: unknown }>(sql`
     select o.id, o.exception_reason, o.lines, o.tenders from channel_orders o
       join sales_channels channel on channel.org_id = o.org_id and channel.id = o.channel_id
      where o.org_id = ${orgId} and o.channel_id = ${channelId}
        and o.posting_status = 'exception' and o.exception_code = ${code}
        ${subsidiaryVisibleFilter(sql`channel.subsidiary_id`, allowedSubsidiaryIds)}
-     order by o.ordered_at limit ${limit}`)).rows;
+     order by o.ordered_at limit ${limit}`, "objects");
   const out: string[] = [];
   for (const row of rows) {
     const key = exceptionGroupKeyForRow(code, row.exception_reason, row.lines, row.tenders);
@@ -592,7 +592,7 @@ export function exceptionGroupKeyForRow(code: string, reason: string | null, lin
 }
 
 async function writeApprovalAudit(orgId: string, actor: string, orderId: string, code: string, detail: string): Promise<void> {
-  const inserted = await db.execute(sql`
+  const inserted = await db.execute<never>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'channel_orders', ${orderId}, 'update',
       ${JSON.stringify({ before: { exceptionCode: code }, after: { suggestionApproved: detail }, reason: "Operator approved the proposed exception fix" })}::jsonb, ${actor})`);
@@ -685,7 +685,7 @@ export async function approveExceptionSuggestion(
     for (const targetId of targets.includes(orderId) ? targets : [orderId, ...targets]) {
       const live = await loadChannelOrder(orgId, targetId);
       if (!live || live.postingStatus !== "exception") continue;
-      const reset = await db.execute(sql`
+      const reset = await db.execute<never>(sql`
         update channel_orders
            set posting_status = 'pending',
                posting_document_id = null, summary_id = null,
@@ -723,7 +723,7 @@ export async function rejectExceptionSuggestion(orgId: string, actor: string, or
       refuse("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
     }
     const order = await requireExceptionOrder(orgId, orderId);
-    const inserted = await db.execute(sql`
+    const inserted = await db.execute<never>(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'channel_orders', ${orderId}, 'update',
         ${JSON.stringify({ before: { exceptionCode: order.exceptionCode }, after: { exceptionCode: order.exceptionCode, suggestionRejected: true }, reason: why })}::jsonb, ${actor})`);
@@ -802,7 +802,7 @@ async function loadPayoutLine(
            l.meta, b.provider
       from psp_settlement_lines l
       join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
-     where l.org_id = ${orgId} and l.id = ${lineId}`)).rows[0];
+     where l.org_id = ${orgId} and l.id = ${lineId}`, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.batchSubsidiaryId)) {
     refuse(
       "payout_line_unknown",
@@ -994,10 +994,10 @@ export async function similarPayoutLineIds(
   allowedSubsidiaryIds: PayoutSubsidiaryScope,
   limit = 200,
 ): Promise<string[]> {
-  const rows = (await db.execute<{ id: string; kind: string }>(sql`
+  const rows = await db.execute<{ id: string; kind: string }>(sql`
     select id, kind from psp_settlement_lines
      where org_id = ${orgId} and batch_id = ${batchId} and document_id is null
-     order by line_number limit ${limit}`)).rows;
+     order by line_number limit ${limit}`, "objects");
   const out: string[] = [];
   for (const row of rows) {
     if (!isMatchableSettlementLineKind(row.kind)) continue;
@@ -1008,7 +1008,7 @@ export async function similarPayoutLineIds(
 }
 
 async function writePayoutApprovalAudit(orgId: string, actor: string, lineId: string, code: string, detail: string): Promise<void> {
-  const inserted = await db.execute(sql`
+  const inserted = await db.execute<never>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'psp_settlement_lines', ${lineId}, 'update',
       ${JSON.stringify({ before: { unmatchedReason: code }, after: { suggestionApproved: detail }, reason: "Operator approved the proposed payout fix" })}::jsonb, ${actor})`);

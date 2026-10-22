@@ -83,7 +83,7 @@ export const POST = defineRoute({
           from custom_record_types
          where id = ${id} and org_id = ${user.orgId}
          for update
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!locked) return { kind: 'not_found' as const }
 
       if (action === 'archive') {
@@ -100,14 +100,14 @@ export const POST = defineRoute({
                  updated_by = ${user.id}
            where id = ${id} and org_id = ${user.orgId} and status = 'published'
           returning to_jsonb(custom_record_types) as snapshot
-        `)
-        if (archived.rows.length === 0) {
+        `, 'objects')
+        if (archived.length === 0) {
           return {
             kind: 'response' as const,
             response: NextResponse.json({ error: 'Only published types can be archived' }, { status: 422 }),
           }
         }
-        await auditTransition(locked.snapshot, archived.rows[0]!.snapshot)
+        await auditTransition(locked.snapshot, archived[0]!.snapshot)
         return { kind: 'ok' as const, status: 'archived' as const }
       }
 
@@ -153,12 +153,12 @@ export const POST = defineRoute({
                updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId} and status in ('draft', 'archived')
         returning to_jsonb(custom_record_types) as snapshot
-      `)
-      if (published.rows.length === 0) {
+      `, 'objects')
+      if (published.length === 0) {
         const live = (await db.execute<{ status: string }>(sql`
           select status from custom_record_types
            where id = ${id} and org_id = ${user.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!live) return { kind: 'not_found' as const }
         if (live.status === 'published') {
           return {
@@ -174,7 +174,7 @@ export const POST = defineRoute({
           ),
         }
       }
-      await auditTransition(locked.snapshot, published.rows[0]!.snapshot)
+      await auditTransition(locked.snapshot, published[0]!.snapshot)
       return { kind: 'ok' as const, status: 'published' as const }
     })
 

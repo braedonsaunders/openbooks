@@ -52,7 +52,7 @@ test("dated roster coverage respects exclusive windows, recorded history and exa
       select ${payrollEmploymentOverlapsPeriod(columns)} as included,
              (${payrollEpisodeDate(columns, columns.hiredOn)})::text as hired_on,
              (${payrollEpisodeDate(columns, columns.terminatedOn)})::text as terminated_on
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(result.included, example.expected, JSON.stringify(v));
     if (v.hiredOn === baseline.hiredOn) {
       assert.equal(result.hired_on, null, "current rehire date does not establish a prior episode's start");

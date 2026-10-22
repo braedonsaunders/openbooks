@@ -105,12 +105,9 @@ test(
       assert.equal(result.docsFailed, 0, JSON.stringify(result.skipped));
       assert.equal(result.docsNew, 1);
 
-      const doc = (
-        await db.execute<{ id: string }>(sql`
-          select id from documents where org_id = ${o.orgId} and custom->>'qboId' = 'TST-AUDIT'`)
-      ).rows[0]!;
-      const rows = (
-        await db.execute<{
+      const doc = (await db.execute<{ id: string }>(sql`
+          select id from documents where org_id = ${o.orgId} and custom->>'qboId' = 'TST-AUDIT'`, "objects"))[0]!;
+      const rows = await db.execute<{
           action: string;
           actor_id: string | null;
           changes: Record<string, unknown>;
@@ -118,8 +115,7 @@ test(
           select action, actor_id, changes from audit_log
            where org_id = ${o.orgId} and table_name = 'documents' and row_id = ${doc.id}
            order by at, id
-        `)
-      ).rows;
+        `, "objects");
       assert.equal(rows.length, 1);
       assert.equal(rows[0]!.action, "post");
       assert.equal(rows[0]!.actor_id, null);

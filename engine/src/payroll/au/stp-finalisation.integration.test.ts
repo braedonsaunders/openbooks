@@ -188,7 +188,7 @@ test(
 
       const committed = (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from pay_runs
-         where org_id = ${org.orgId} and run_status = 'committed'`)).rows[0]!.count;
+         where org_id = ${org.orgId} and run_status = 'committed'`, "objects"))[0]!.count;
       assert.equal(committed, "2", "exactly two runs committed — the third stays a draft");
 
       // The tie-out: hand-derived engine figures, to the cent.
@@ -245,9 +245,9 @@ test(
           left join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.tax_year = 2027 and s.country = 'AU'
          group by s.employee_party_id
-      `));
-      assert.equal(check.rows.length, 2);
-      for (const row of check.rows) {
+      `, "objects"));
+      assert.equal(check.length, 2);
+      for (const row of check) {
         const populated = byId.get(String(row.employee_party_id))!;
         assert.ok(populated, "cross-check employee is a populated row");
         assert.equal(money(populated.gross as string), money(String(row.gross)));
@@ -255,7 +255,7 @@ test(
         assert.equal(money(populated.payg as string), money(String(row.payg)));
         assert.equal(money(populated.sg as string), money(String(row.sg)));
       }
-      const checkGross = money(sum(check.rows.map((row) => String(row.gross))));
+      const checkGross = money(sum(check.map((row) => String(row.gross))));
       assert.equal(checkGross, money("10050"), "draft run's 4800 is nowhere in the totals");
 
       // parseRowId round-trips every emitted row and refuses foreign ones.

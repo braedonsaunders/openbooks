@@ -67,8 +67,8 @@ const post = (body: unknown) =>
   );
 
 async function waiverCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 
@@ -231,9 +231,9 @@ test("a lifecycle write on an out-of-scope waiver is a 404 that changes nothing"
     );
 
     assert.equal(response.status, 404);
-    const rows = (await withBypassContext(() => db.execute<{ status: string; amount: string }>(
-      sql`select status, amount from lien_waivers where id = ${waiverId} and org_id = ${org.orgId}`,
-    ))).rows;
+    const rows = await withBypassContext(() => db.execute<{ status: string; amount: string }>(
+      sql`select status, amount from lien_waivers where id = ${waiverId} and org_id = ${org.orgId}`, "objects",
+    ));
     assert.equal(rows[0]?.status, "draft");
     assert.equal(rows[0]?.amount, "1000.0000");
   } finally {

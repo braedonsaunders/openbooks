@@ -8,13 +8,14 @@ const state = { calls: 0, active: 0, maximum: 0, refuse: false }
 Object.assign(globalThis, { __analyticsQueryTransport: state })
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === '@openbooks/engine/platform/database' && context.parentURL?.endsWith('/analytics/query.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
-    export const db = { async execute() {
+    export const db = { async execute(_query, mode) {
+      const inMode = (result) => (mode === 'objects' ? result.rows : result);
       const state = globalThis.__analyticsQueryTransport;
       state.calls++; state.active++; state.maximum = Math.max(state.maximum, state.active);
       try {
         await new Promise(resolve => setTimeout(resolve, 5));
         if (state.refuse) throw new Error('Configure the statement book before reading this period.');
-        return { rows: [{ amount: '9007199254740993.0001', at: new Date('2026-07-31T00:00:00Z'), count: 9007199254740993n }] };
+        return inMode({ rows: [{ amount: '9007199254740993.0001', at: new Date('2026-07-31T00:00:00Z'), count: 9007199254740993n }] });
       } finally { state.active--; }
     } };
   `) }

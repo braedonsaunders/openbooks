@@ -34,7 +34,7 @@ async function gateStatus(orgId: string, subjectId: string): Promise<string> {
   const row = (await db.execute<{ status: string }>(sql`
     select status from flow_gates
      where org_id = ${orgId} and subject_id = ${subjectId} and status = 'pending'
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.status ?? "resolved";
 }
 
@@ -67,7 +67,7 @@ test("a restricted actor cannot approve an out-of-scope gate by id", { skip: !DB
     const gate = (await db.execute<{ id: string }>(sql`
       select id from flow_gates
        where org_id = ${org.orgId} and subject_id = ${docId} and status = 'pending'
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(gate, "the gate the actor will name by id must exist");
 
     const restricted = {

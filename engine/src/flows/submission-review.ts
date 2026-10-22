@@ -42,7 +42,7 @@ export async function loadApprovalRequestDetail(input: {
             and g.subject_kind=flow_submissions.subject_kind and g.subject_id=flow_submissions.subject_id
             and g.status in ('pending','escalated')) as active from flow_submissions
          where org_id=${input.orgId} and subject_kind=${input.subjectKind} and subject_id=${input.subjectId}
-         order by created_at desc,id desc limit 1`)).rows[0]
+         order by created_at desc,id desc limit 1`, 'objects'))[0]
       const values = receipt?.context ?? current.values
       const fields = adapter.profile.fields.flatMap(field => {
         const value = values[field.key]

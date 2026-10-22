@@ -278,8 +278,8 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
           departmentId: sql`entry.department_id`,
         })}
        group by entry.id, entry.project_id, entry.worked_on, entry.subsidiary_id, covering.id
-       order by entry.subsidiary_id nulls first, covering.id nulls first, entry.worked_on, entry.id`));
-    if (rows.rows.length === 0) return none;
+       order by entry.subsidiary_id nulls first, covering.id nulls first, entry.worked_on, entry.id`, "objects"));
+    if (rows.length === 0) return none;
 
     const groups = new Map<string, {
       subsidiaryId: string | null;
@@ -291,7 +291,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
       total: string;
     }>();
     const dust: string[] = [];
-    for (const r of rows.rows) {
+    for (const r of rows) {
       const amt = normalizeMoney(String(r.amount));
       // Hours × rate rounded to 0.0000: no journal leg, but the entry must
       // still be stamped applied-with-zero, or the unapplied counter counts
@@ -392,8 +392,8 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
          where org_id = ${orgId}
            and id = any(${`{${group.carried.join(",")}}`}::uuid[])
            and overhead_journal_entry_id is null
-         returning id`));
-      if (stamped.rows.length !== group.carried.length) {
+         returning id`, "objects"));
+      if (stamped.length !== group.carried.length) {
         throw new Error("overhead posting source claim changed before journal stamping");
       }
       entryIds.push(entryId);
@@ -403,10 +403,10 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
 
       // The offset leg is the deterministic mirror, so lineage belongs only
       // to the project legs. Lines post in order and map one-to-one.
-      const legLineIds = (await tx.execute<{ id: string; line_number: number }>(sql`
+      const legLineIds = await tx.execute<{ id: string; line_number: number }>(sql`
         select id, line_number from journal_lines
          where org_id = ${orgId} and entry_id = ${entryId}
-         order by line_number`)).rows;
+         order by line_number`, "objects");
       for (let index = 0; index < built.length - 1; index += 1) {
         const leg = built[index]!;
         const journalLineId = legLineIds[index]?.id;
@@ -516,7 +516,7 @@ export async function resolveStandardOverheadCardsInTx(
   // Driver coordinates bind as literals: a null department binds nothing
   // (`= null` never matches), so only org-wide rows survive for
   // department-less drivers — the shared kernel's own rule.
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
       id: string;
       department_id: string | null;
       category: string | null;
@@ -534,7 +534,7 @@ export async function resolveStandardOverheadCardsInTx(
          departmentId: sql`${args.departmentId ?? null}`,
        }, { method: "standard" })}
      order by case when r.department_id is null then 1 else 0 end,
-              r.effective_from, r.category asc nulls first, r.id asc`)).rows;
+              r.effective_from, r.category asc nulls first, r.id asc`, "objects");
   return rows.map((row) => ({
     id: row.id,
     orgId,
@@ -627,8 +627,8 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
              order by v.effective_from desc
              limit 1
           ) = 'none'
-       )`));
-  return { entries: Number(r.rows[0]?.entries ?? 0), hours: String(r.rows[0]?.hours ?? "0") };
+       )`, "objects"));
+  return { entries: Number(r[0]?.entries ?? 0), hours: String(r[0]?.hours ?? "0") };
 }
 
 /**
@@ -677,9 +677,9 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
             ) = 'none'
          )
        order by te.worked_on
-       limit 2000`));
-    if (ids.rows.length === 0) break;
-    const res = await applyOverheadForTime(orgId, actorId, ids.rows.map((r) => r.id));
+       limit 2000`, "objects"));
+    if (ids.length === 0) break;
+    const res = await applyOverheadForTime(orgId, actorId, ids.map((r) => r.id));
     // An all-dust batch posts no journal but still stamps progress: only
     // stop when a batch neither carries nor stamps, while unstamped rows
     // remain the loop must continue past zero batches.
@@ -710,8 +710,8 @@ export async function reverseOverheadForTime(
        where org_id = ${orgId}
          and id = any(${idArr}::uuid[])
          and overhead_journal_entry_id is not null
-       order by id`));
-    const entryIds = [...new Set(linked.rows.map((row) => row.overhead_journal_entry_id))].sort();
+       order by id`, "objects"));
+    const entryIds = [...new Set(linked.map((row) => row.overhead_journal_entry_id))].sort();
     for (const entryId of entryIds) {
       // The journal is the group serialization point. Lock it before updating
       // member rows so disjoint requests for one carried group cannot deadlock.
@@ -761,6 +761,6 @@ export async function listOverheadApplications(orgId: string, limit = 24) {
       from journal_entries e
      where e.org_id = ${orgId} and e.origin = 'overhead_applied'
      order by e.posting_date desc, e.created_at desc
-     limit ${limit}`));
-  return r.rows;
+     limit ${limit}`, "objects"));
+  return r;
 }

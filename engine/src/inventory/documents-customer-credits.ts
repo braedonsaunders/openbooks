@@ -236,7 +236,7 @@ async function expandKitCustomerCreditReturnLines(
             on source_line.id = movement.document_line_id
            and source_line.org_id = movement.org_id
          where movement.org_id = ${orgId} and movement.id = ${source.sourceIssueMovementId}
-           and source_line.item_id = ${line.itemId}`)).rows[0];
+           and source_line.item_id = ${line.itemId}`, "objects"))[0];
       if (!movement || !quantities.has(movement.item_id) || usedComponents.has(movement.item_id)) {
         throw new InventoryError(
           `${lineLabel} source shipment ${source.sourceIssueMovementId} is not an unclaimed component issue of this kit return`,
@@ -327,7 +327,7 @@ async function validateCustomerReturnSource(
      where movement.org_id = ${orgId}
        and movement.id = ${line.selection.sourceIssueMovementId}
      ${lock ? sql`for update of movement` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   const label = `document line ${line.lineNumber} (item ${line.itemId})`;
   if (!source || source.kind !== "issue" || source.status !== "posted") {
     throw new InventoryError(`${label} must reference a posted issue movement`);
@@ -464,7 +464,7 @@ export async function assertCustomerCreditInventoryReturnsPostable(
 ): Promise<void> {
   const document = (await runner.execute<{ document_date: string }>(sql`
     select document_date::text as document_date from documents
-     where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+     where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
   const lines = [
     ...(await loadCustomerCreditInventoryReturnLines(runner, orgId, documentId, false)),
     ...(document
@@ -641,7 +641,7 @@ async function returnCustomerCreditInventoryLine(
        ${`Customer return of shipment ${line.selection.sourceIssueMovementId}`},
        ${movementActorId}, ${movementActorId})
     returning id
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   // The layer carries the EXACT restored value, never quantity × a rounded
   // unit cost: several partial returns of one shipment must put back exactly
   // what the shipment relieved, with no penny stranded in inventory.
@@ -664,7 +664,7 @@ async function returnCustomerCreditInventoryLine(
     const handler = crossSubsidiaryFulfillmentHandler();
     if (!handler) throw new InventoryError("cross-subsidiary returns are not available in this installation");
     const credit = (await runner.execute<{ document_id: string }>(sql`
-      select document_id from document_lines where org_id = ${orgId} and id = ${line.lineId}`)).rows[0];
+      select document_id from document_lines where org_id = ${orgId} and id = ${line.lineId}`, "objects"))[0];
     await handler.returned(runner, {
       orgId,
       actorId,
@@ -707,7 +707,7 @@ export async function applyCustomerCreditInventoryReturns(
   }>(sql`
     select kind, party_id from documents
      where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!document || (document.kind !== "customer_credit" && document.kind !== "cash_refund")) {
     throw new InventoryError("inventory customer return requires a customer credit or cash refund");
   }
@@ -736,7 +736,7 @@ export async function applyCustomerCreditInventoryReturns(
        where org_id = ${orgId} and document_line_id = ${line.lineId}
          and item_id = ${line.itemId} and kind = 'receipt'
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (seen) continue;
     await returnCustomerCreditInventoryLine(
       runner,

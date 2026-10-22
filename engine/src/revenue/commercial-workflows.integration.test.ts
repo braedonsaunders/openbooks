@@ -30,7 +30,7 @@ async function commercialActors(org:ScratchOrg) {
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true,"revenueRecognition":true}'::jsonb) where id=${org.orgId}`);
   await db.execute(sql`insert into customer_roles(org_id,party_id,ar_account_id,is_active,created_by) values(${org.orgId},${org.customerId},${org.accounts.ar},true,${actors.adminId})`);
   await db.execute(sql`insert into vendor_roles(org_id,party_id,ap_account_id,is_active,created_by) values(${org.orgId},${org.vendorId},${org.accounts.ap},true,${actors.adminId})`);
-  const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!.id;
+  const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, 'objects'))[0]!.id;
   await generateAccountingPeriods(org.orgId,calendar,2026,actors.adminId);
   await generateAccountingPeriods(org.orgId,calendar,2027,actors.adminId);
   return actors;
@@ -49,15 +49,15 @@ async function seedAgreement(org:ScratchOrg,creator:string,code:string,tiers=[{t
   values(${id},${org.orgId},${code},'Volume service rebate',${org.subsidiaryId},'customer','sale',${org.customerId},'CAD',${org.date},${org.date},'percent','amount',${JSON.stringify(tiers)}::jsonb,${stacking},'standard',${org.accounts.deferred},${org.accounts.revenue},${org.accounts.fxGainLoss},'outside_scope','Reviewed commercial agreement',${creator},${creator})`));
  return id;
 }
-async function earned(orgId:string,agreementId:string) {return (await withOrg(orgId,()=>db.execute<{amount:string}>(sql`select coalesce(sum(amount),0)::text as amount from rebate_accruals where org_id=${orgId} and agreement_id=${agreementId}`))).rows[0]!.amount;}
+async function earned(orgId:string,agreementId:string) {return (await withOrg(orgId,()=>db.execute<{amount:string}>(sql`select coalesce(sum(amount),0)::text as amount from rebate_accruals where org_id=${orgId} and agreement_id=${agreementId}`, 'objects')))[0]!.amount;}
 
 test('hold/release requires live authority and revision, skips journals, and resumes the unchanged plan',{skip:!enabled},async()=>{
  const org=await createScratchOrg();
  try {
   const actors=await commercialActors(org);
   const documentId=await invoice(org,actors.adminId,'1200',org.items.service);
-  const obligation=(await withOrg(org.orgId,()=>db.execute<{id:string}>(sql`select o.id from performance_obligations o join document_lines l on l.org_id=o.org_id and l.id=o.document_line_id where o.org_id=${org.orgId} and l.document_id=${documentId}`))).rows[0]!;
-  const end=(await withOrg(org.orgId,()=>db.execute<{ends_on:string}>(sql`select ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`))).rows[0]!.ends_on;
+  const obligation=(await withOrg(org.orgId,()=>db.execute<{id:string}>(sql`select o.id from performance_obligations o join document_lines l on l.org_id=o.org_id and l.id=o.document_line_id where o.org_id=${org.orgId} and l.document_id=${documentId}`, 'objects')))[0]!;
+  const end=(await withOrg(org.orgId,()=>db.execute<{ends_on:string}>(sql`select ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, 'objects')))[0]!.ends_on;
   await assert.rejects(()=>withOrg(org.orgId,()=>controlRecognition(org.orgId,actors.outsiderId,obligation.id,{action:'hold',expectedRevision:1,reason:'Awaiting delivery acceptance'})));
   await withOrg(org.orgId,()=>controlRecognition(org.orgId,actors.adminId,obligation.id,{action:'hold',expectedRevision:1,reason:'Awaiting delivery acceptance'}));
   const preview=await withOrg(org.orgId,()=>previewRevenueRecognition(org.orgId,{asOfDate:end,obligationId:obligation.id}));
@@ -76,36 +76,36 @@ test('retrospective tiers append balanced catch-up facts and claims follow tenan
   const actors=await commercialActors(org);
   const agreementId=await seedAgreement(org,actors.submitterId,'VOLUME');
   await approveRebateAgreement(org.orgId,actors.submitterId,agreementId,'Reviewed commercial liability');
-  const approved=(await withOrg(org.orgId,()=>db.execute<{approved_by:string}>(sql`select approved_by from rebate_agreements where org_id=${org.orgId} and id=${agreementId} and status='approved'`))).rows[0];
+  const approved=(await withOrg(org.orgId,()=>db.execute<{approved_by:string}>(sql`select approved_by from rebate_agreements where org_id=${org.orgId} and id=${agreementId} and status='approved'`, 'objects')))[0];
   assert.equal(approved?.approved_by,actors.submitterId,'the tenant’s zero-gate policy permits the maker to submit and release the agreement');
   const first=await invoice(org,actors.adminId,'350');assert.equal(await earned(org.orgId,agreementId),'17.5000');
-  const original=(await withOrg(org.orgId,()=>db.execute<{id:string;amount:string}>(sql`select id,amount::text from rebate_accruals where org_id=${org.orgId} and agreement_id=${agreementId}`))).rows[0]!;
+  const original=(await withOrg(org.orgId,()=>db.execute<{id:string;amount:string}>(sql`select id,amount::text from rebate_accruals where org_id=${org.orgId} and agreement_id=${agreementId}`, 'objects')))[0]!;
   await invoice(org,actors.adminId,'650');assert.equal(await earned(org.orgId,agreementId),'100.0000');
-  assert.equal((await withOrg(org.orgId,()=>db.execute<{amount:string}>(sql`select amount::text from rebate_accruals where org_id=${org.orgId} and id=${original.id}`))).rows[0]!.amount,original.amount);
+  assert.equal((await withOrg(org.orgId,()=>db.execute<{amount:string}>(sql`select amount::text from rebate_accruals where org_id=${org.orgId} and id=${original.id}`, 'objects')))[0]!.amount,original.amount);
   await accrueRebatesForDocument(org.orgId,first,actors.adminId);assert.equal(await earned(org.orgId,agreementId),'100.0000');
   const claim=await generateRebateClaim(org.orgId,actors.submitterId,agreementId,org.customerId,org.date,'Claim period reconciled');
   await seedApprovalFlow(org.orgId,{subjectKind:'customer_rebate_claim',mode:'all',preventSelfApproval:true,
     assignees:[{type:'user',userId:actors.submitterId},{type:'user',userId:actors.adminId}]});
   const submitted=await approveRebateClaim(org.orgId,actors.submitterId,claim.id,'Claim reconciled for settlement');
   assert.ok("pendingApproval" in submitted && submitted.pendingApproval);
-  const gates=(await withOrg(org.orgId,()=>db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates
-    where org_id=${org.orgId} and subject_id=${claim.id} and status='pending'`))).rows;
+  const gates=await withOrg(org.orgId,()=>db.execute<{id:string;assignee_user_id:string}>(sql`select id,assignee_user_id from flow_gates
+    where org_id=${org.orgId} and subject_id=${claim.id} and status='pending'`, 'objects'));
   assert.deepEqual(gates.map(gate=>gate.assignee_user_id),[actors.adminId],'tenant policy excludes the claim maker');
   await decideGate({gateId:gates[0]!.id,decision:'approved',userId:actors.adminId,allowedSubsidiaryIds:null,comment:'Independent claim reconciliation'});
   const input={postingDate:org.date,bankAccountId:org.accounts.bank,fxRate:'1',reason:'Paid contractual earned rebate'};
   const settlement=await settleRebatePayment(org.orgId,actors.adminId,claim.id,input);
   assert.equal((await settleRebatePayment(org.orgId,actors.adminId,claim.id,input)).entryId,settlement.entryId);
   await assert.rejects(()=>settleRebatePayment(org.orgId,actors.adminId,claim.id,{...input,reason:'Different payment request image'}),/different payment/);
-  const imbalance=(await withOrg(org.orgId,()=>db.execute<{amount:string}>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and entry_id=${settlement.entryId}`))).rows[0]!.amount;assert.equal(imbalance,'0.0000');
+  const imbalance=(await withOrg(org.orgId,()=>db.execute<{amount:string}>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and entry_id=${settlement.entryId}`, 'objects')))[0]!.amount;assert.equal(imbalance,'0.0000');
   const reversed=await reverseRebatePayment(org.orgId,actors.adminId,claim.id,org.date,'Bank settlement reversed for correction');
-  const mirrored=(await withOrg(org.orgId,()=>db.execute<{amount:string;txn_amount:string;currency:string;fx_rate:string;account_id:string;line_number:number;entry_id:string}>(sql`select amount::text,txn_amount::text,currency,fx_rate::text,account_id,line_number,entry_id from journal_lines where org_id=${org.orgId} and entry_id in (${settlement.entryId},${reversed.entryId}) order by entry_id,line_number`))).rows;
+  const mirrored=await withOrg(org.orgId,()=>db.execute<{amount:string;txn_amount:string;currency:string;fx_rate:string;account_id:string;line_number:number;entry_id:string}>(sql`select amount::text,txn_amount::text,currency,fx_rate::text,account_id,line_number,entry_id from journal_lines where org_id=${org.orgId} and entry_id in (${settlement.entryId},${reversed.entryId}) order by entry_id,line_number`, 'objects'));
   const originalLines=mirrored.filter(line=>line.entry_id===settlement.entryId);
   assert.deepEqual(mirrored.filter(line=>line.entry_id===reversed.entryId).map(({entry_id,...line})=>line),originalLines.map(({entry_id,...line})=>({...line,amount:neg(line.amount),txn_amount:neg(line.txn_amount)})));
-  assert.equal((await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from rebate_claims where org_id=${org.orgId} and id=${claim.id}`))).rows[0]!.status,'approved');
+  assert.equal((await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from rebate_claims where org_id=${org.orgId} and id=${claim.id}`, 'objects')))[0]!.status,'approved');
   await assert.rejects(()=>generateRebateClaim(org.orgId,actors.adminId,agreementId,org.customerId,org.date,'Duplicate earned claim refusal'),/No unclaimed/);
   const resettled=await settleRebatePayment(org.orgId,actors.adminId,claim.id,input);
   assert.notEqual(resettled.entryId,settlement.entryId,'a reversed claim receives a fresh settlement journal');
-  assert.equal((await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from journal_entries where org_id=${org.orgId} and id=${resettled.entryId}`))).rows[0]!.status,'posted');
+  assert.equal((await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from journal_entries where org_id=${org.orgId} and id=${resettled.entryId}`, 'objects')))[0]!.status,'posted');
  } finally {await dropScratchOrg(org.orgId);}
 });
 
@@ -119,7 +119,7 @@ test('native credit settlement links the approved claim to the posted credit onc
   assert.equal((await createRebateSettlement(org.orgId,actors.adminId,claim.id,org.date)).documentId,document.documentId);
   await withBypassContext(()=>db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${document.documentId}`));
   const entryId=await withOrg(org.orgId,()=>postDocument(document.documentId,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}},{deferEffects:true,suppressAutomation:true,audit:{actorId:actors.adminId,source:'api'}}));
-  const row=(await withOrg(org.orgId,()=>db.execute<{status:string;settlement_entry_id:string}>(sql`select status,settlement_entry_id from rebate_claims where org_id=${org.orgId} and id=${claim.id}`))).rows[0]!;assert.equal(row.status,'settled');assert.equal(row.settlement_entry_id,entryId);
+  const row=(await withOrg(org.orgId,()=>db.execute<{status:string;settlement_entry_id:string}>(sql`select status,settlement_entry_id from rebate_claims where org_id=${org.orgId} and id=${claim.id}`, 'objects')))[0]!;assert.equal(row.status,'settled');assert.equal(row.settlement_entry_id,entryId);
  } finally {await dropScratchOrg(org.orgId);}
 });
 
@@ -150,7 +150,7 @@ test('taxable rebate settlement refuses a posted document after its agreement ta
    /agreement tax treatment/i,
    'a taxable settlement cannot post after its required tax code is removed',
   );
-  const claimStatus=(await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from rebate_claims where org_id=${org.orgId} and id=${claim.id}`))).rows[0]!.status;
+  const claimStatus=(await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from rebate_claims where org_id=${org.orgId} and id=${claim.id}`, 'objects')))[0]!.status;
   assert.equal(claimStatus,'document_pending','the failed posting leaves the claim available for correction');
  } finally {await dropScratchOrg(org.orgId);}
 });
@@ -166,9 +166,9 @@ test('software residuals defer every bundle element until documented delivery an
   const document=await withOrg(org.orgId,()=>createDocument({orgId:org.orgId,userId:actors.adminId,key:randomUUID(),kind:'customer_invoice',subsidiaryId:org.subsidiaryId,requestBody:{software,observable},body:{partyId:org.customerId,documentDate:org.date,currency:'CAD',lines:[{accountId:org.accounts.revenue,itemId:software,amount:'150',quantity:'1',unitPrice:'150',description:'Software license'},{accountId:org.accounts.revenue,itemId:observable,amount:'50',quantity:'1',unitPrice:'50',description:'Support'}]}}));
   await withBypassContext(()=>db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${document.id}`));
   await withOrg(org.orgId,()=>postDocument(document.id,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}},{deferEffects:true,suppressAutomation:true,audit:{actorId:actors.adminId,source:'api'}}));
-  const obligations=(await withOrg(org.orgId,()=>db.execute<{id:string;item_id:string;allocated_price:string;allocation_basis:{fairValuePriceId:string|null}}>(sql`select id,item_id,allocated_price::text,allocation_basis from performance_obligations where org_id=${org.orgId} and delivery_bundle_document_id=${document.id} order by item_id`))).rows;
+  const obligations=await withOrg(org.orgId,()=>db.execute<{id:string;item_id:string;allocated_price:string;allocation_basis:{fairValuePriceId:string|null}}>(sql`select id,item_id,allocated_price::text,allocation_basis from performance_obligations where org_id=${org.orgId} and delivery_bundle_document_id=${document.id} order by item_id`, 'objects'));
   assert.equal(obligations.length,2);assert.equal(obligations.find(o=>o.item_id===software)!.allocated_price,'120.0000');assert.equal(obligations.find(o=>o.item_id===observable)!.allocated_price,'80.0000');assert.equal(obligations.find(o=>o.item_id===observable)!.allocation_basis.fairValuePriceId,fairValueId);
-  const end=(await withOrg(org.orgId,()=>db.execute<{ends_on:string}>(sql`select ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`))).rows[0]!.ends_on;
+  const end=(await withOrg(org.orgId,()=>db.execute<{ends_on:string}>(sql`select ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, 'objects')))[0]!.ends_on;
   const pending=await withOrg(org.orgId,()=>previewRevenueRecognition(org.orgId,{asOfDate:end}));assert(pending.rows.length>0);assert(pending.rows.every(r=>r.skipReason==='delivery_pending'));
   await controlRecognition(org.orgId,actors.adminId,obligations[0]!.id,{action:'deliver',effectiveOn:org.date,evidence:'Customer signed delivery acceptance',reason:'Reviewed customer acceptance record',expectedRevision:1});
   assert.equal((await withOrg(org.orgId,()=>runRevenueRecognition(org.orgId,end,actors.adminId))).posted,0);
@@ -195,7 +195,7 @@ test('supplier-funded downstream margin rebates use posted stock cost and create
    await withOrg(org.orgId,()=>postDocument(document.id,{control:{ar:org.accounts.ar,ap:org.accounts.ap,bank:org.accounts.bank}},{deferEffects:true,suppressAutomation:true,audit:{actorId:actors.adminId,source:'api'}}));
   }
   assert.equal(await earned(org.orgId,agreementId),'20.0000');
-  const leg=(await withOrg(org.orgId,()=>db.execute<{amount:string;party_id:string}>(sql`select jl.amount::text,jl.party_id from journal_lines jl join rebate_accruals f on f.org_id=jl.org_id and f.journal_entry_id=jl.entry_id where f.org_id=${org.orgId} and f.agreement_id=${agreementId} and jl.account_id=${receivable}`))).rows[0]!;
+  const leg=(await withOrg(org.orgId,()=>db.execute<{amount:string;party_id:string}>(sql`select jl.amount::text,jl.party_id from journal_lines jl join rebate_accruals f on f.org_id=jl.org_id and f.journal_entry_id=jl.entry_id where f.org_id=${org.orgId} and f.agreement_id=${agreementId} and jl.account_id=${receivable}`, 'objects')))[0]!;
   assert.equal(leg.amount,'20.0000');assert.equal(leg.party_id,org.vendorId);
  } finally {await dropScratchOrg(org.orgId);}
 });

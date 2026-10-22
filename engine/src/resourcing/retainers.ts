@@ -344,9 +344,9 @@ export async function createRetainer(
           retainer_item_id as "retainerItemId", invoice_document_id as "invoiceDocumentId",
           obligation_id as "obligationId", state, custom, created_at as "createdAt",
           created_by as "createdBy", updated_at as "updatedAt", updated_by as "updatedBy"
-      `);
-      assertWriteRows(result.rows, 1, "retainer creation");
-      retainer = result.rows[0] as RetainerRow;
+      `, "objects");
+      assertWriteRows(result, 1, "retainer creation");
+      retainer = result[0] as RetainerRow;
       await writeIdempotentCreateAudit(tx, {
         orgId: input.orgId,
         rowId: retainer.id,
@@ -424,7 +424,7 @@ export async function updateRetainerDraft(input: UpdateRetainerDraftInput): Prom
     const project = (await tx.execute<{ customer_id: string | null; status: string }>(sql`
       select customer_id, status from projects
        where id = ${projectId} and org_id = ${input.orgId} for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!project) throw new ScopeNotFoundError();
     if (project.status === "closed" || project.status === "cancelled") {
       throw new ResourcingRefusal(409, "project_not_open", `cannot assign a retainer to a ${project.status} project`, "reopen the project or choose an active one", "projectId");
@@ -836,7 +836,7 @@ async function resolveRetainerCurrency(
       left join customer_roles cr
         on cr.org_id = o.id and cr.party_id = ${input.customerPartyId}
      where o.id = ${input.orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   const baseCurrency = context?.baseCurrency?.trim().toUpperCase();
   if (!baseCurrency) throw new Error(`organization ${input.orgId} has no base currency`);
   const customerCurrency = context?.customerCurrency?.trim();
@@ -852,8 +852,8 @@ async function resolveRetainerCurrency(
   }
   const registered = await tx.execute<CurrencyRegistryRow>(sql`
     select code from currencies where code = ${currency}
-  `);
-  if (!registered.rows[0]) {
+  `, "objects");
+  if (!registered[0]) {
     throw new ResourcingRefusal(
       422,
       "currency_not_enabled",
@@ -918,8 +918,8 @@ export async function writeAudit(
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, ${tableName}, ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
     returning row_id
-  `);
-  assertWriteRows(rows.rows, 1, `audit record for ${tableName}`);
+  `, "objects");
+  assertWriteRows(rows, 1, `audit record for ${tableName}`);
 }
 
 export function requireActiveRetainer(retainer: RetainerRow): void {

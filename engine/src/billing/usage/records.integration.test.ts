@@ -27,7 +27,7 @@ async function withUsageOrg(run: (org: ScratchOrg, actor: string) => Promise<voi
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Usage controller", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const enabled = await db.execute(sql`
+      const enabled = await db.execute<never>(sql`
         update orgs
            set settings = jsonb_set(
              settings,

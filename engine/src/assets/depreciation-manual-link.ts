@@ -88,8 +88,8 @@ export async function linkManualDepreciationEntry(
         left join asset_categories c on c.id = a.category_id and c.org_id = a.org_id
        where l.org_id = ${orgId} and l.id = ${input.lineId} and s.asset_id = ${assetId}
        ${input.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(input.allowedSubsidiaryIds)}::uuid[])` : sql``}
-       for update of l`));
-    const line = lines.rows[0];
+       for update of l`, "objects"));
+    const line = lines[0];
     if (!line) {
       throw new DepreciationRefusalError("that schedule line does not belong to this asset");
     }
@@ -141,8 +141,8 @@ export async function linkManualDepreciationEntry(
              book_id::text as book_id, period_id::text as period_id, subsidiary_id::text as subsidiary_id
         from journal_entries
        where org_id = ${orgId} and id = ${input.entryId}
-       for update`));
-    const entry = entries.rows[0];
+       for update`, "objects"));
+    const entry = entries[0];
     if (!entry) {
       throw new DepreciationRefusalError("that journal entry does not exist in this organization");
     }
@@ -163,7 +163,7 @@ export async function linkManualDepreciationEntry(
     }
     const alreadyLinked = (await db.execute<{ id: string }>(sql`
       select id::text as id from depreciation_schedule_lines
-       where org_id = ${orgId} and journal_entry_id = ${entry.id} limit 1`)).rows[0];
+       where org_id = ${orgId} and journal_entry_id = ${entry.id} limit 1`, "objects"))[0];
     if (alreadyLinked) {
       throw new DepreciationRefusalError(
         `journal entry ${entry.entry_number} already evidences another schedule line; one entry evidences one line`,
@@ -178,9 +178,9 @@ export async function linkManualDepreciationEntry(
       select coalesce(sum(amount) filter (where account_id = ${accounts.depreciationExpenseAccountId}), 0)::text as debit_total,
              coalesce(sum(amount) filter (where account_id = ${accounts.accumulatedDepreciationAccountId}), 0)::text as credit_total
         from journal_lines
-       where org_id = ${orgId} and entry_id = ${entry.id} and subsidiary_id = ${line.asset_subsidiary_id}`));
-    const debitTotal = legs.rows[0]!.debit_total;
-    const creditTotal = legs.rows[0]!.credit_total;
+       where org_id = ${orgId} and entry_id = ${entry.id} and subsidiary_id = ${line.asset_subsidiary_id}`, "objects"));
+    const debitTotal = legs[0]!.debit_total;
+    const creditTotal = legs[0]!.credit_total;
     if (cmp(debitTotal, line.planned_amount) !== 0 || cmp(creditTotal, `-${line.planned_amount}`) !== 0) {
       throw new DepreciationRefusalError(
         `journal entry ${entry.entry_number} posts ${debitTotal} / ${creditTotal} to the depreciation accounts; ${line.asset_number} ${periodLabel} plans ${line.planned_amount}, so this entry cannot be its depreciation`,

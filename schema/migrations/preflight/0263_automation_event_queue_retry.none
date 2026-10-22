@@ -1,1 +1,0 @@
-Nullable retry-accounting columns with no backfill; existing rows read as attempt 0, due immediately, exactly as the old drain treated them.

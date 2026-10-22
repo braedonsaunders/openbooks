@@ -118,8 +118,9 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
       export const db = {
-        async execute() {
-          return { rows: state.doc ? [state.doc] : [] }
+        async execute(_query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
+          return inMode({ rows: state.doc ? [state.doc] : [] })
         },
       }
     `,

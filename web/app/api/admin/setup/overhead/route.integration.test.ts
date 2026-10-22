@@ -63,30 +63,30 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 
 async function storedApplication(orgId: string): Promise<unknown> {
   const r = await withBypassContext(() => db.execute(sql`
-    select settings->'overheadApplication' as c from orgs where id = ${orgId}`));
-  return r.rows[0]?.c ?? null;
+    select settings->'overheadApplication' as c from orgs where id = ${orgId}`, "objects"));
+  return r[0]?.c ?? null;
 }
 
 async function applicationAudits(orgId: string): Promise<number> {
   const r = await withBypassContext(() => db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'orgs'
-       and changes ? 'overheadApplication'`));
-  return r.rows[0]!.n;
+       and changes ? 'overheadApplication'`, "objects"));
+  return r[0]!.n;
 }
 
 async function storedLifecycle(orgId: string): Promise<unknown> {
   const r = await withBypassContext(() => db.execute(sql`
-    select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`));
-  return r.rows[0]?.c ?? null;
+    select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`, "objects"));
+  return r[0]?.c ?? null;
 }
 
 async function lifecycleAudits(orgId: string): Promise<number> {
   const r = await withBypassContext(() => db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'orgs'
-       and changes ? 'overheadRateLifecycle'`));
-  return r.rows[0]!.n;
+       and changes ? 'overheadRateLifecycle'`, "objects"));
+  return r[0]!.n;
 }
 
 async function projectProfileActivity(orgId: string, projectTypeId: string) {
@@ -162,12 +162,12 @@ test("restricted actors cannot publish org-wide overhead rates", async () => {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Publisher", "admin"));
     routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
     const before = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`))).rows[0]!.n;
+      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`, "objects")))[0]!.n;
     const response = await post({ action: "publish", effectiveFrom: "2026-10-01", rates: [] });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
     const after = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`))).rows[0]!.n;
+      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`, "objects")))[0]!.n;
     assert.equal(after, before);
   } finally {
     routeState.gate = null;
@@ -231,16 +231,16 @@ test("restricted actors cannot backfill org-wide overhead journals", async () =>
               25, 'CAD', ${org.subsidiaryId}, 'actual', false, '{}'::jsonb, ${actorId}, ${actorId})`));
     routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
     const before = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`))).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects")))[0]!.n;
     const response = await post({ action: "backfill-overhead" });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
     const after = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`))).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects")))[0]!.n;
     assert.equal(after, before);
     const marker = (await withBypassContext(() => db.execute<{ overheadJournalEntryId: string | null; custom: Record<string, unknown> }>(sql`
       select overhead_journal_entry_id as "overheadJournalEntryId", custom
-        from time_entries where org_id = ${org.orgId} and id = ${timeEntryId}`))).rows[0]!;
+        from time_entries where org_id = ${org.orgId} and id = ${timeEntryId}`, "objects")))[0]!;
     assert.equal(marker.overheadJournalEntryId, null);
     assert.deepEqual(marker.custom, {});
   } finally {
@@ -291,14 +291,14 @@ test("set-application stores a real account with audit evidence", async () => {
     const evidence = await withBypassContext(() => db.execute(sql`
       select changes, actor_id as "actorId" from audit_log
        where org_id = ${org.orgId} and table_name = 'orgs' and changes ? 'overheadApplication'
-       order by id desc limit 1`));
-    assert.deepEqual(evidence.rows[0]?.changes, {
+       order by id desc limit 1`, "objects"));
+    assert.deepEqual(evidence[0]?.changes, {
       overheadApplication: {
         before: null,
         after: { mode: "net_zero_pair", accountId: org.accounts.adjustment },
       },
     });
-    assert.equal(evidence.rows[0]?.actorId, actorId);
+    assert.equal(evidence[0]?.actorId, actorId);
   } finally {
     routeState.gate = null;
     await dropScratchOrg(org.orgId);
@@ -401,8 +401,8 @@ test("set-lifecycle audit failure rolls the policy back", async () => {
       },
     );
     const r = await withBypassContext(() => db.execute(sql`
-      select settings->'overheadRateLifecycle' as c from orgs where id = ${org.orgId}`));
-    assert.equal(r.rows[0]?.c ?? null, null);
+      select settings->'overheadRateLifecycle' as c from orgs where id = ${org.orgId}`, "objects"));
+    assert.equal(r[0]?.c ?? null, null);
   } finally {
     await withBypassContext(() => db.execute(sql.raw(`
       drop trigger if exists "${triggerName}" on audit_log;

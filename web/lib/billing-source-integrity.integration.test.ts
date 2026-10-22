@@ -51,7 +51,7 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
     runs=[generateInvoiceFromBillingRequest(org.orgId,actor,first.id,new Set([org.subsidiaryId]))];
     const outcomes=Promise.allSettled(runs);let blocked=0;const deadline=Date.now()+10000;
     while(Date.now()<deadline){
-      blocked=await withBypassContext(async ()=>(await db.execute<{n:number}>(sql`select count(*)::int as n from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%from billing_requests br%'`)).rows[0]!.n);
+      blocked=await withBypassContext(async ()=>(await db.execute<{n:number}>(sql`select count(*)::int as n from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%from billing_requests br%'`, 'objects'))[0]!.n);
       if(blocked)break;await new Promise(r=>setTimeout(r,25));
     }
     assert.ok(blocked,'invoice generation waits for the concurrent project reassignment');
@@ -59,7 +59,7 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
     const [result]=await outcomes;
     assert.equal(result?.status,'rejected');
     if(result?.status==='rejected') assert.match(String(result.reason),/Billing request not found/);
-    assert.equal((await db.execute(sql`select status from billing_requests where id=${first.id}`)).rows[0]?.status,'open');
+    assert.equal((await db.execute(sql`select status from billing_requests where id=${first.id}`, 'objects'))[0]?.status,'open');
    }else if(scenario==='hidden cost') {
     const other=randomUUID(),source=randomUUID(),line=randomUUID();
     await withBypassContext(async ()=>{
@@ -69,8 +69,8 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
      await db.execute(sql`update documents set status='approved' where id=${source}`);
     });
     await assert.rejects(generateInvoiceFromBillingRequest(org.orgId,actor,first.id,new Set([org.subsidiaryId])),/outside.*access/i);
-    assert.equal((await db.execute(sql`select billed_by_line_id from document_lines where id=${line}`)).rows[0]?.billed_by_line_id,null);
-    assert.equal((await db.execute(sql`select status from billing_requests where id=${first.id}`)).rows[0]?.status,'open');
+    assert.equal((await db.execute(sql`select billed_by_line_id from document_lines where id=${line}`, 'objects'))[0]?.billed_by_line_id,null);
+    assert.equal((await db.execute(sql`select status from billing_requests where id=${first.id}`, 'objects'))[0]?.status,'open');
    }else{
     const employee=randomUUID(),entry=randomUUID();
     const second=await make();
@@ -85,15 +85,15 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
     const outcomes=Promise.allSettled(runs);
     const deadline=Date.now()+10000;let blocked=0;
     while(Date.now()<deadline){
-     blocked=await withBypassContext(async ()=>(await db.execute<{n:number}>(sql`select count(*)::int as n from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and (query ilike '%time_entries%' or query ilike '%from billing_requests br%' or query ilike '%pg_advisory_xact_lock%' or query ilike '%insert into document_lines%')`)).rows[0]!.n);
+     blocked=await withBypassContext(async ()=>(await db.execute<{n:number}>(sql`select count(*)::int as n from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and (query ilike '%time_entries%' or query ilike '%from billing_requests br%' or query ilike '%pg_advisory_xact_lock%' or query ilike '%insert into document_lines%')`, 'objects'))[0]!.n);
      if(blocked>=2)break;await new Promise(r=>setTimeout(r,25));
     }
     assert.ok(blocked>=2,'both generators reached the controlled contention point');
     release();await holder;
     const results=await outcomes;
     assert.equal(results.filter(r=>r.status==='fulfilled').length,1,'one source must produce only one committed invoice');
-    assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n,1);
-    assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from billing_requests where org_id=${org.orgId} and status='open'`)).rows[0]!.n,1);
+    assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`, 'objects'))[0]!.n,1);
+    assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from billing_requests where org_id=${org.orgId} and status='open'`, 'objects'))[0]!.n,1);
    }
    });
   }finally{release();await Promise.allSettled([...(holder?[holder]:[]),...runs]);await withBypassContext(()=>dropScratchOrg(org.orgId));}
@@ -142,10 +142,10 @@ const consolidatedRows = [
 
               const first = await createBillingRequest(org.orgId, actor, {projectId: project, basis: 'milestone', cutoffDate: org.date, backupRequired: false})
               const invoice = await generateInvoiceFromBillingRequest(org.orgId, actor, first.id)
-              assert.equal((await db.execute<{total:string}>(sql`select total::text from documents where org_id=${org.orgId} and id=${invoice.id}`)).rows[0]!.total, '2500.0000')
+              assert.equal((await db.execute<{total:string}>(sql`select total::text from documents where org_id=${org.orgId} and id=${invoice.id}`, 'objects'))[0]!.total, '2500.0000')
 
-              const rows = (await db.execute<{id:string; billing_request_id:string|null}>(sql`
-                select id, billing_request_id from billing_schedules where org_id=${org.orgId} and project_id=${project} order by sort_order`)).rows
+              const rows = await db.execute<{id:string; billing_request_id:string|null}>(sql`
+                select id, billing_request_id from billing_schedules where org_id=${org.orgId} and project_id=${project} order by sort_order`, 'objects')
               assert.deepEqual(rows, [
                 {id: billed, billing_request_id: first.id},
                 {id: unpricedA, billing_request_id: null},
@@ -156,9 +156,9 @@ const consolidatedRows = [
               await db.execute(sql`update billing_schedules set amount_billed='4000.0000' where org_id=${org.orgId} and id=${unpricedA}`)
               const second = await createBillingRequest(org.orgId, actor, {projectId: project, basis: 'milestone', cutoffDate: org.date, backupRequired: false})
               const secondInvoice = await generateInvoiceFromBillingRequest(org.orgId, actor, second.id)
-              assert.equal((await db.execute<{total:string}>(sql`select total::text from documents where org_id=${org.orgId} and id=${secondInvoice.id}`)).rows[0]!.total, '4000.0000')
-              const after = (await db.execute<{id:string; billing_request_id:string|null}>(sql`
-                select id, billing_request_id from billing_schedules where org_id=${org.orgId} and project_id=${project} order by sort_order`)).rows
+              assert.equal((await db.execute<{total:string}>(sql`select total::text from documents where org_id=${org.orgId} and id=${secondInvoice.id}`, 'objects'))[0]!.total, '4000.0000')
+              const after = await db.execute<{id:string; billing_request_id:string|null}>(sql`
+                select id, billing_request_id from billing_schedules where org_id=${org.orgId} and project_id=${project} order by sort_order`, 'objects')
               assert.deepEqual(after.map((r) => r.billing_request_id), [first.id, second.id, null])
             } finally { await dropScratchOrg(org.orgId) }
           })
@@ -216,7 +216,7 @@ const consolidatedRows = [
               backupType: 'costed_timesheets',
             }))
             const row = (await withBypassContext(() => db.execute<{ backup_type: string }>(sql`
-              select backup_type from billing_requests where id = ${created.id}`))).rows[0]
+              select backup_type from billing_requests where id = ${created.id}`, 'objects')))[0]
             assert.equal(row?.backup_type, 'costed_timesheets')
           } finally {
             await dropScratchOrg(org.orgId)
@@ -232,7 +232,7 @@ const consolidatedRows = [
         const { createBillingRequest } = await import('./billing-requests')
 
         const total = async (orgId: string, id: string) =>
-          (await db.execute<{total:string}>(sql`select total::text from documents where org_id=${orgId} and id=${id}`)).rows[0]!.total
+          (await db.execute<{total:string}>(sql`select total::text from documents where org_id=${orgId} and id=${id}`, 'objects'))[0]!.total
 
         /**
          * The not-to-exceed cap bounds the CUMULATIVE amount invoiced on the project.
@@ -303,7 +303,7 @@ const consolidatedRows = [
                 await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom) values (${project},${org.orgId},${org.subsidiaryId},'ROUND','Currency precision',${org.customerId},'active',true,'{}'::jsonb)`)
                 const req = await createBillingRequest(org.orgId,actors.adminId,{projectId:project,basis:'draw_amount',drawAmount:amount,cutoffDate:org.date,backupRequired:false})
                 const invoice = await generateInvoiceFromBillingRequest(org.orgId,actors.adminId,req.id)
-                const row = (await db.execute<{currency:string,total:string,amount:string,unit_price:string}>(sql`select d.currency,d.total::text,l.amount::text,l.unit_price::text from documents d join document_lines l on l.document_id=d.id and l.org_id=d.org_id where d.org_id=${org.orgId} and d.id=${invoice.id}`)).rows[0]!
+                const row = (await db.execute<{currency:string,total:string,amount:string,unit_price:string}>(sql`select d.currency,d.total::text,l.amount::text,l.unit_price::text from documents d join document_lines l on l.document_id=d.id and l.org_id=d.org_id where d.org_id=${org.orgId} and d.id=${invoice.id}`, 'objects'))[0]!
                 assert.deepEqual(row,{currency,total:expected,amount:expected,unit_price:expected+'0000'})
                 await assert.rejects(generateInvoiceFromBillingRequest(org.orgId,actors.adminId,req.id),/already been invoiced/)
               } finally { await dropScratchOrg(org.orgId) }
@@ -327,11 +327,11 @@ const consolidatedRows = [
                 const req = await createBillingRequest(org.orgId,actor,{projectId:project,basis:'date_range',cutoffDate:org.date,backupRequired:false})
                 if (expected === null) {
                   await assert.rejects(generateInvoiceFromBillingRequest(org.orgId,actor,req.id),/markup/i)
-                  const row=(await db.execute<{status:string,billed_by_line_id:string|null}>(sql`select r.status,l.billed_by_line_id from billing_requests r join document_lines l on l.org_id=r.org_id and l.id=${line} where r.org_id=${org.orgId} and r.id=${req.id}`)).rows[0]!
+                  const row=(await db.execute<{status:string,billed_by_line_id:string|null}>(sql`select r.status,l.billed_by_line_id from billing_requests r join document_lines l on l.org_id=r.org_id and l.id=${line} where r.org_id=${org.orgId} and r.id=${req.id}`, 'objects'))[0]!
                   assert.deepEqual(row,{status:'open',billed_by_line_id:null})
                 } else {
                   const invoice = await generateInvoiceFromBillingRequest(org.orgId,actor,req.id)
-                  assert.equal((await db.execute<{total:string}>(sql`select total::text from documents where org_id=${org.orgId} and id=${invoice.id}`)).rows[0]!.total,expected)
+                  assert.equal((await db.execute<{total:string}>(sql`select total::text from documents where org_id=${org.orgId} and id=${invoice.id}`, 'objects'))[0]!.total,expected)
                 }
               } finally { await dropScratchOrg(org.orgId) }
             })
@@ -363,9 +363,9 @@ const consolidatedRows = [
 
               const req1 = await createBillingRequest(org.orgId,actor,{projectId:project,basis:'date_range',cutoffDate:org.date,backupRequired:false})
               const invoice1 = await generateInvoiceFromBillingRequest(org.orgId,actor,req1.id)
-              const lines1 = (await db.execute<{amount:string}>(sql`select amount::text from document_lines where org_id=${org.orgId} and document_id=${invoice1.id} order by line_number`)).rows
+              const lines1 = await db.execute<{amount:string}>(sql`select amount::text from document_lines where org_id=${org.orgId} and document_id=${invoice1.id} order by line_number`, 'objects')
               assert.deepEqual(lines1.map((l) => l.amount), ['20.0000'], 'matching item costs combine into one invoice line with the full source amount')
-              const stamped = (await db.execute<{count:string}>(sql`select count(*)::text as count from document_lines where org_id=${org.orgId} and id in (${line1},${line2}) and billed_by_line_id is not null`)).rows[0]!
+              const stamped = (await db.execute<{count:string}>(sql`select count(*)::text as count from document_lines where org_id=${org.orgId} and id in (${line1},${line2}) and billed_by_line_id is not null`, 'objects'))[0]!
               assert.equal(stamped.count, '2', 'both sources carry their invoice line')
 
               const req2 = await createBillingRequest(org.orgId,actor,{projectId:project,basis:'date_range',cutoffDate:org.date,backupRequired:false})
@@ -374,7 +374,7 @@ const consolidatedRows = [
                 /Nothing available to bill/,
                 'a second run over stamped sources refuses instead of billing anything new',
               )
-              const billed = (await db.execute<{total:string}>(sql`select coalesce(sum(total),0)::text as total from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!
+              const billed = (await db.execute<{total:string}>(sql`select coalesce(sum(total),0)::text as total from documents where org_id=${org.orgId} and kind='customer_invoice'`, 'objects'))[0]!
               assert.equal(billed.total, '20.0000', 'both runs together bill the sources exactly once')
             } finally { await dropScratchOrg(org.orgId) }
           })
@@ -463,7 +463,7 @@ const billingTimeSelectionCases = [
                   assert.equal(listed[0]?.invoiceTotal,null);
                 }
               }
-              const state=(await withOrgContext(org.orgId,()=>db.execute(sql`select status,invoice_document_id from billing_requests where id=${request.id}`))).rows[0];
+              const state=(await withOrgContext(org.orgId,()=>db.execute(sql`select status,invoice_document_id from billing_requests where id=${request.id}`, 'objects')))[0];
               assert.equal(state?.status,action==='backup'?'invoiced':allowed?(action==='cancel'?'cancelled':'invoiced'):'open');
               if(!allowed&&action==='invoice') assert.equal(state?.invoice_document_id,null);
             }finally{session.user=null;await dropScratchOrg(org.orgId);}
@@ -522,8 +522,8 @@ const billingTimeSelectionCases = [
         }
 
         async function requestStatus(requestId: string): Promise<string> {
-          const r = await withBypassContext(() => db.execute<{ status: string }>(sql`select status from billing_requests where id = ${requestId}`))
-          return r.rows[0]?.status ?? 'missing'
+          const r = await withBypassContext(() => db.execute<{ status: string }>(sql`select status from billing_requests where id = ${requestId}`, 'objects'))
+          return r[0]?.status ?? 'missing'
         }
 
         test('invoicing refuses naming selected entries that are no longer billable', { skip: !DB }, async () => {
@@ -550,7 +550,7 @@ const billingTimeSelectionCases = [
             // The refusal leaves the request open: nothing was invoiced, nothing marked.
             assert.equal(await requestStatus(request.id), 'open')
             const freshRow = (await withBypassContext(() => db.execute<{ status: string }>(sql`
-              select billing_status as status from time_entries where id = ${fresh}`))).rows[0]
+              select billing_status as status from time_entries where id = ${fresh}`, 'objects')))[0]
             assert.equal(freshRow?.status, 'unbilled')
           } finally {
             await dropScratchOrg(org.orgId)
@@ -608,8 +608,8 @@ const billingTimeSelectionCases = [
         }
 
         async function requestStatus(requestId: string): Promise<string> {
-          const r = await withBypassContext(() => db.execute<{ status: string }>(sql`select status from billing_requests where id = ${requestId}`))
-          return r.rows[0]?.status ?? 'missing'
+          const r = await withBypassContext(() => db.execute<{ status: string }>(sql`select status from billing_requests where id = ${requestId}`, 'objects'))
+          return r[0]?.status ?? 'missing'
         }
 
         test('time_selection creation refuses an explicitly empty selection', { skip: !DB }, async () => {
@@ -656,8 +656,8 @@ const billingTimeSelectionCases = [
             }))
             const invoice = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
             assert.equal(await requestStatus(request.id), 'invoiced')
-            const rows = (await withBypassContext(() => db.execute<{ entry: string; status: string }>(sql`
-              select id as entry, billing_status as status from time_entries where project_id = ${project} and org_id = ${org.orgId}`))).rows
+            const rows = await withBypassContext(() => db.execute<{ entry: string; status: string }>(sql`
+              select id as entry, billing_status as status from time_entries where project_id = ${project} and org_id = ${org.orgId}`, 'objects'))
             const byId = new Map(rows.map((r) => [r.entry, r.status]))
             assert.equal(byId.get(billed), 'billed')
             assert.equal(byId.get(unbilled), 'unbilled')
@@ -698,7 +698,7 @@ const billingTimeSelectionCases = [
             }))
             await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
             const left = (await withBypassContext(() => db.execute<{ status: string }>(sql`
-              select billing_status as status from time_entries where id = ${unbilled}`))).rows[0]
+              select billing_status as status from time_entries where id = ${unbilled}`, 'objects')))[0]
             assert.equal(left?.status, 'unbilled')
           } finally {
             await dropScratchOrg(org.orgId)
@@ -826,8 +826,8 @@ const billingRateAndTaxCases = [
           }))
           const invoice = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
           const rows = await withBypassContext(() => db.execute<{ description: string | null; amount: string }>(sql`
-            select description, amount::text as amount from document_lines where org_id = ${org.orgId} and document_id = ${invoice.id} order by line_number`))
-          return rows.rows
+            select description, amount::text as amount from document_lines where org_id = ${org.orgId} and document_id = ${invoice.id} order by line_number`, 'objects'))
+          return rows
         }
 
         async function seedTime(fx: Fixture, hours: string, rate: string, workedOn?: string, departmentId?: string): Promise<{ entry: string; employee: string }> {
@@ -864,8 +864,8 @@ const billingRateAndTaxCases = [
           }))
           const invoice = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
           const rows = await withBypassContext(() => db.execute<{ description: string | null; amount: string; quantity: string; unitPrice: string; unit: string | null }>(sql`
-            select description, amount::text as amount, quantity::text as quantity, unit_price::text as "unitPrice", unit from document_lines where org_id = ${org.orgId} and document_id = ${invoice.id} order by line_number`))
-          return rows.rows
+            select description, amount::text as amount, quantity::text as quantity, unit_price::text as "unitPrice", unit from document_lines where org_id = ${org.orgId} and document_id = ${invoice.id} order by line_number`, 'objects'))
+          return rows
         }
 
         test('a customer-targeted surcharge charges only its own customer', { skip: !DB }, async () => {

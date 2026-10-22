@@ -56,24 +56,25 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.report-definition-route-test')]
       const sqlText = globalThis.openbooksReportDefinitionSqlText
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
           if (text.includes('update report_definitions')) {
-            return state.updateResults.shift() || { rows: [{ id: state.definition.id }] }
+            return inMode(await (state.updateResults.shift() || { rows: [{ id: state.definition.id }] }))
           }
           if (text.includes('select') && text.includes('from report_definitions')) {
-            return { rows: [{ updated_at: state.revision }] }
+            return inMode({ rows: [{ updated_at: state.revision }] })
           }
           // The audit writer confirms the one event it recorded.
-          if (text.includes('insert into audit_log')) return { rows: [{ id: 'audit-event' }] }
-          return { rows: [] }
+          if (text.includes('insert into audit_log')) return inMode({ rows: [{ id: 'audit-event' }] })
+          return inMode({ rows: [] })
         },
         // PATCH/DELETE commit the mutation with its audit evidence in one
         // transaction; the double runs the callback against this same
         // execute so statement assertions keep seeing every write.
         async transaction(fn) {
-          return fn({ execute: (query) => db.execute(query) })
+          return fn({ execute: (query, mode) => db.execute(query, mode) })
         },
       }
       export const schema = {}

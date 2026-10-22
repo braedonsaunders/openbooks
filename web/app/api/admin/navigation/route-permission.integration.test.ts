@@ -99,8 +99,8 @@ test("a holder of admin.nav.manage can save the nav config", async () => {
     assert.equal(saved.ok, true);
     assert.match(saved.revision, /^\d{4}-\d{2}-\d{2}T/);
     const stored = (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`));
-    assert.equal(stored.rows[0]!.count, 1);
+      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`, "objects"));
+    assert.equal(stored[0]!.count, 1);
   } finally {
     permState.authz = null;
     await dropScratchOrgReporting(orgId);
@@ -126,8 +126,8 @@ test("a user with neither admin key is refused without persisting anything", asy
     const res = await PUT(putRequest(CONFIG));
     assert.equal(res.status, 403);
     const stored = (await db.execute<{ count: number }>(sql`
-      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`));
-    assert.equal(stored.rows[0]!.count, 0);
+      select count(*)::int as count from org_nav_configs where org_id = ${orgId}`, "objects"));
+    assert.equal(stored[0]!.count, 0);
   } finally {
     permState.authz = null;
     await dropScratchOrgReporting(orgId);

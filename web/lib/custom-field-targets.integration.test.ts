@@ -29,8 +29,8 @@ for (const [targetTable, targetKind] of targets) {
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
       state.user = { id: actor, orgId: org.orgId, homeUserId: actor, homeOrgId: org.orgId, productionOrgId: org.orgId, envKind: 'production', name: 'Target reviewer', email: 'target@scratch.test', roles: [], isSuperAdmin: false };
-      assert.equal((await db.execute(sql`update app_roles set permissions='["admin.custom_fields.manage"]'::jsonb where org_id=${org.orgId} and key='admin' returning key`)).rows.length, 1, `${targetTable}:${targetKind ?? 'all'} role setup`);
-      assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',${JSON.stringify(Object.fromEntries(FEATURES.map(feature => [feature.key, true])))}::jsonb) where id=${org.orgId} returning id`)).rows.length, 1, `${targetTable}:${targetKind ?? 'all'} feature setup`);
+      assert.equal((await db.execute(sql`update app_roles set permissions='["admin.custom_fields.manage"]'::jsonb where org_id=${org.orgId} and key='admin' returning key`, 'objects')).length, 1, `${targetTable}:${targetKind ?? 'all'} role setup`);
+      assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',${JSON.stringify(Object.fromEntries(FEATURES.map(feature => [feature.key, true])))}::jsonb) where id=${org.orgId} returning id`, 'objects')).length, 1, `${targetTable}:${targetKind ?? 'all'} feature setup`);
       const response = await withOrgContext(org.orgId, () => POST(new Request('http://audit.local/api/admin/custom-fields', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetTable, targetKind, key: 'review_note', label: 'Review note', fieldType: 'text' }) })));
       if (!response.ok || response.status !== 200) throw new Error(await response.text());
       const created = await response.json();
@@ -55,14 +55,14 @@ for (const [table, feature, enabled] of [
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
       state.user = { id: actor, orgId: org.orgId, homeUserId: actor, homeOrgId: org.orgId, productionOrgId: org.orgId, envKind: 'production', name: 'Target reviewer', email: 'target@scratch.test', roles: [], isSuperAdmin: false };
-      assert.equal((await db.execute(sql`update app_roles set permissions='["admin.custom_fields.manage"]'::jsonb where org_id=${org.orgId} and key='admin' returning key`)).rows.length, 1, `${table}:${feature} role setup`);
-      assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',${JSON.stringify({ ...enabled, [feature]: false })}::jsonb) where id=${org.orgId} returning id`)).rows.length, 1, `${table}:${feature} feature setup`);
+      assert.equal((await db.execute(sql`update app_roles set permissions='["admin.custom_fields.manage"]'::jsonb where org_id=${org.orgId} and key='admin' returning key`, 'objects')).length, 1, `${table}:${feature} role setup`);
+      assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',${JSON.stringify({ ...enabled, [feature]: false })}::jsonb) where id=${org.orgId} returning id`, 'objects')).length, 1, `${table}:${feature} feature setup`);
       await db.execute(sql`insert into custom_field_defs(org_id,target_table,key,label,field_type) values (${org.orgId},${table},'historical_note','Historical note','text')`);
       const hidden = await withOrgContext(org.orgId, () => disabledCustomFieldTargets(org.orgId));
       assert.ok(hidden.tables.includes(table), 'settings hide the disabled target');
       const response = await withOrgContext(org.orgId, () => POST(new Request('http://audit.local/api/admin/custom-fields', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetTable: table, key: 'review_note', label: 'Review note', fieldType: 'text' }) })));
       assert.equal(response.status, 404);
-      const rows = (await db.execute(sql`select key from custom_field_defs where org_id=${org.orgId} and target_table=${table}`)).rows;
+      const rows = await db.execute(sql`select key from custom_field_defs where org_id=${org.orgId} and target_table=${table}`, 'objects');
       assert.deepEqual(rows, [{ key: 'historical_note' }], 'disabled feature preserves historical definitions');
     } finally { state.user = null; await dropScratchOrg(org.orgId); }
   });

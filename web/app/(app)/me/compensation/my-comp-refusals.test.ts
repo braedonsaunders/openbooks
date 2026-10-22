@@ -62,9 +62,10 @@ registerIoHooks({
           "data:text/javascript," +
           encodeURIComponent(
             `export * from ${JSON.stringify(target)};
-             export const db = { execute: async () => {
+             export const db = { execute: async (_query, mode) => {
+               const inMode = (result) => (mode === 'objects' ? result.rows : result);
                const plan = globalThis.__myCompDbPlan ?? [];
-               return plan.length ? plan.shift() : { rows: [] };
+               return inMode(await (plan.length ? plan.shift() : { rows: [] }));
              } };`,
           ),
       };

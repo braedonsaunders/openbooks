@@ -95,9 +95,9 @@ export async function captureCalculatedStubs(
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by s.employee_party_id, l.sequence, l.description
-  `));
+  `, "objects"));
   const byEmployee = new Map<string, CapturedStub>();
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
     let stub = byEmployee.get(employeePartyId);
     if (!stub) {

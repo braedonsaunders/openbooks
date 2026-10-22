@@ -102,8 +102,8 @@ test("global-balance and per-entry-balance fail on an unbalanced posted entry", 
     const direct = await db.execute<{ s: string }>(sql`
       select coalesce(sum(l.amount), 0)::text as s from journal_lines l
         join journal_entries e on e.id = l.entry_id
-       where l.org_id = ${org.orgId} and e.status in ('posted','reversed')`);
-    assert.equal(Number(direct.rows[0]!.s), 1, "stored posted lines must sum to exactly 1.00");
+       where l.org_id = ${org.orgId} and e.status in ('posted','reversed')`, "objects");
+    assert.equal(Number(direct[0]!.s), 1, "stored posted lines must sum to exactly 1.00");
   } finally {
     await dropScratchOrg(org.orgId);
   }

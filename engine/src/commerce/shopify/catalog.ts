@@ -395,7 +395,7 @@ async function importViaBulk(
 
 async function touchChannelSync(orgId: string, actorId: string | null, channelId: string): Promise<void> {
   await withOrg(orgId, async () => {
-    const updated = await db.execute(sql`
+    const updated = await db.execute<never>(sql`
       update sales_channels
          set last_sync_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${channelId}`);
@@ -473,10 +473,8 @@ async function upsertCatalogProductUnit(
       // variant) cannot have changed its SKU — only a present SKU that
       // differs from the linked code raises a re-match proposal.
       if (currentSku === null) continue;
-      const item = (
-        await db.execute<{ code: string | null }>(sql`
-          select code from items where org_id = ${orgId} and id = ${row.native_id}`)
-      ).rows[0];
+      const item = (await db.execute<{ code: string | null }>(sql`
+          select code from items where org_id = ${orgId} and id = ${row.native_id}`, "objects"))[0];
       const linkedCode = item?.code?.trim().toLowerCase() ?? null;
       if (item && linkedCode !== currentSku) {
         await setProposal(orgId, actorId, row.id, {
@@ -604,14 +602,12 @@ async function upsertEntry(
       ${input.shopifyUpdatedAt}, now(), ${actorId}, ${actorId})
     -- Concurrent import of the same variant reuses the catalog entry selected below.
     on conflict (org_id, channel_id, external_id) do nothing
-    returning id`);
+    returning id`, "objects");
   const id =
-    inserted.rows[0]?.id ??
-    (
-      await db.execute<{ id: string }>(sql`
+    inserted[0]?.id ??
+    (await db.execute<{ id: string }>(sql`
         select id from shopify_catalog_entries
-         where org_id = ${orgId} and channel_id = ${channel.channelId} and external_id = ${input.externalId}`)
-    ).rows[0]?.id;
+         where org_id = ${orgId} and channel_id = ${channel.channelId} and external_id = ${input.externalId}`, "objects"))[0]?.id;
   if (!id) throw new Error("Catalog queue store returned no row; the product was lost");
   // Refresh the storefront snapshot; the match decision stands until the
   // operator changes it — re-import never relinks on its own.
@@ -626,15 +622,15 @@ async function upsertEntry(
      where org_id = ${orgId} and id = ${id}
      returning id, object_type, external_id, external_parent_id, title, sku, barcode,
        price_minor, currency, option_values, shopify_updated_at::text, status,
-       native_table, native_id, ignore_reason, proposal, last_synced_at::text`);
-  if (updated.rows.length !== 1 || !updated.rows[0]) {
+       native_table, native_id, ignore_reason, proposal, last_synced_at::text`, "objects");
+  if (updated.length !== 1 || !updated[0]) {
     throw new Error("Catalog queue refresh matched no row; the product left while it imported");
   }
-  return updated.rows[0];
+  return updated[0];
 }
 
 async function setProposal(orgId: string, actorId: string | null, entryId: string, proposal: Record<string, unknown>): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update shopify_catalog_entries
        set proposal = ${JSON.stringify(proposal)}::jsonb, updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and id = ${entryId}`);
@@ -644,7 +640,7 @@ async function setProposal(orgId: string, actorId: string | null, entryId: strin
 }
 
 async function markMatched(orgId: string, actorId: string | null, entryId: string, nativeTable: string, nativeId: string): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update shopify_catalog_entries
        set status = 'matched', native_table = ${nativeTable}, native_id = ${nativeId},
            proposal = null, ignore_reason = null, updated_by = ${actorId}, updated_at = now()
@@ -662,12 +658,10 @@ async function markProductMatched(
   nativeTable: string,
   nativeId: string,
 ): Promise<void> {
-  const row = (
-    await db.execute<{ id: string }>(sql`
+  const row = (await db.execute<{ id: string }>(sql`
       select id from shopify_catalog_entries
        where org_id = ${orgId} and channel_id = ${channelId}
-         and object_type = 'product' and external_id = ${productExternalId}`)
-  ).rows[0];
+         and object_type = 'product' and external_id = ${productExternalId}`, "objects"))[0];
   if (row) await markMatched(orgId, actorId, row.id, nativeTable, nativeId);
 }
 
@@ -740,8 +734,7 @@ export async function listCatalogQueue(
   const searchClause = search
     ? sql` and (e.title ilike ${search} or e.sku ilike ${search} or e.barcode ilike ${search} or p.title ilike ${search})`
     : sql``;
-  const rows = (
-    await withOrgContext(orgId, () =>
+  const rows = await withOrgContext(orgId, () =>
       db.execute<QueueListRow>(sql`
         select e.id, e.object_type, e.external_id, e.external_parent_id,
                p.title as product_title, e.title, e.sku, e.barcode,
@@ -757,20 +750,17 @@ export async function listCatalogQueue(
             on e.native_table = 'items' and i.org_id = e.org_id and i.id = e.native_id
          where ${where}${statusClause}${searchClause}
          order by e.status = 'queued' desc, e.title
-         limit ${limit} offset ${offset}`),
-    )
-  ).rows;
-  const total = (
-    await withOrgContext(orgId, () =>
+         limit ${limit} offset ${offset}`, "objects"),
+    );
+  const total = (await withOrgContext(orgId, () =>
       db.execute<{ count: string }>(sql`
         select count(*)::text as count
           from shopify_catalog_entries e
           left join shopify_catalog_entries p
             on p.org_id = e.org_id and p.channel_id = e.channel_id
            and p.object_type = 'product' and p.external_id = e.external_parent_id
-         where ${where}${statusClause}${searchClause}`),
-    )
-  ).rows[0];
+         where ${where}${statusClause}${searchClause}`, "objects"),
+    ))[0];
   return {
     rows: rows.map((row) => ({
       id: row.id,
@@ -816,8 +806,7 @@ export interface CatalogMatchViaCounts {
  * line without storing a redundant derivation.
  */
 export async function catalogMatchViaCounts(orgId: string, channelId: string): Promise<CatalogMatchViaCounts> {
-  const rows = (
-    await withOrgContext(orgId, () =>
+  const rows = (await withOrgContext(orgId, () =>
       db.execute<{ by_sku: string; by_barcode: string }>(sql`
         select count(*) filter (
                  where e.sku is not null and i.code is not null
@@ -829,21 +818,18 @@ export async function catalogMatchViaCounts(orgId: string, channelId: string): P
           join items i on i.org_id = e.org_id and i.id = e.native_id
          where e.org_id = ${orgId} and e.channel_id = ${channelId}
            and e.status = 'matched' and e.native_table = 'items'
-           and e.object_type = 'variant'`),
-    )
-  ).rows[0];
+           and e.object_type = 'variant'`, "objects"),
+    ))[0];
   return { bySku: Number(rows?.by_sku ?? "0"), byBarcode: Number(rows?.by_barcode ?? "0") };
 }
 
 export async function catalogQueueCounts(orgId: string, channelId: string): Promise<CatalogQueueCounts> {
-  const rows = (
-    await withOrgContext(orgId, () =>
+  const rows = await withOrgContext(orgId, () =>
       db.execute<{ status: string; count: string }>(sql`
         select status, count(*)::text as count from shopify_catalog_entries
          where org_id = ${orgId} and channel_id = ${channelId}
-         group by status`),
-    )
-  ).rows;
+         group by status`, "objects"),
+    );
   const counts: CatalogQueueCounts = { queued: 0, matched: 0, ignored: 0 };
   for (const row of rows) {
     if (row.status === "queued" || row.status === "matched" || row.status === "ignored") {
@@ -861,14 +847,12 @@ export type CatalogDecision =
   | { kind: "unmatch"; reason: string };
 
 async function loadQueueEntry(orgId: string, channelId: string, entryId: string): Promise<QueueEntryRow> {
-  const row = (
-    await db.execute<QueueEntryRow>(sql`
+  const row = (await db.execute<QueueEntryRow>(sql`
       select id, object_type, external_id, external_parent_id, title, sku, barcode,
         price_minor, currency, option_values, shopify_updated_at::text, status,
         native_table, native_id, ignore_reason, proposal, last_synced_at::text
         from shopify_catalog_entries
-       where org_id = ${orgId} and channel_id = ${channelId} and id = ${entryId}`)
-  ).rows[0];
+       where org_id = ${orgId} and channel_id = ${channelId} and id = ${entryId}`, "objects"))[0];
   if (!row) {
     refuse(
       "catalog_entry_not_found",
@@ -951,10 +935,8 @@ async function decideMatch(
       "nativeId",
     );
   }
-  const target = (
-    await db.execute<{ id: string }>(sql`
-      select id from ${sql.raw(`"${targetTable}"`)} where org_id = ${orgId} and id = ${nativeId}`)
-  ).rows[0];
+  const target = (await db.execute<{ id: string }>(sql`
+      select id from ${sql.raw(`"${targetTable}"`)} where org_id = ${orgId} and id = ${nativeId}`, "objects"))[0];
   if (!target) {
     refuse(
       "catalog_target_missing",
@@ -997,12 +979,10 @@ async function linkSingleVariantProduct(
   nativeId: string,
 ): Promise<void> {
   if (entry.object_type !== "variant" || !entry.external_parent_id) return;
-  const siblings = (
-    await db.execute<{ count: string }>(sql`
+  const siblings = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from shopify_catalog_entries
        where org_id = ${orgId} and channel_id = ${channel.channelId}
-         and object_type = 'variant' and external_parent_id = ${entry.external_parent_id}`)
-  ).rows[0];
+         and object_type = 'variant' and external_parent_id = ${entry.external_parent_id}`, "objects"))[0];
   if (Number(siblings?.count ?? "0") !== 1) return;
   try {
     await linkExternal(
@@ -1091,10 +1071,8 @@ async function decideCreateItem(
     "name",
     500,
   );
-  const taken = (
-    await db.execute<{ id: string }>(sql`
-      select id from items where org_id = ${orgId} and lower(code) = lower(${code})`)
-  ).rows[0];
+  const taken = (await db.execute<{ id: string }>(sql`
+      select id from items where org_id = ${orgId} and lower(code) = lower(${code})`, "objects"))[0];
   if (taken) {
     refuse(
       "catalog_item_code_taken",
@@ -1108,14 +1086,14 @@ async function decideCreateItem(
   const inserted = await db.execute<{ id: string }>(sql`
     insert into items (org_id, kind, code, name, default_rate, is_active, created_by, updated_by)
     values (${orgId}, ${kind}, ${code}, ${name}, ${rate}, true, ${actorId}, ${actorId})
-    returning id`);
-  if (inserted.rows.length !== 1 || !inserted.rows[0]) {
+    returning id`, "objects");
+  if (inserted.length !== 1 || !inserted[0]) {
     throw new Error("Catalog item create returned no row; the item was lost");
   }
-  const itemId = inserted.rows[0].id;
+  const itemId = inserted[0].id;
   const barcode = (entry.barcode ?? "").trim();
   if (barcode !== "") {
-    const identifier = await db.execute(sql`
+    const identifier = await db.execute<never>(sql`
       insert into item_identifiers (org_id, item_id, kind, value, created_by, updated_by)
       values (${orgId}, ${itemId}, ${barcodeKind(barcode)}, ${barcode}, ${actorId}, ${actorId})
       -- A barcode collision returns no row and triggers the rollback/refusal below.
@@ -1181,16 +1159,14 @@ async function decideCreateFamily(
   }
   const kind = checkItemKind(decision.familyKind ?? "inventory");
   const code = cleanDecisionText(decision.code ?? `SHOPIFY-${entry.external_id}`, "code", 60);
-  const siblings = (
-    await db.execute<QueueEntryRow>(sql`
+  const siblings = await db.execute<QueueEntryRow>(sql`
       select id, object_type, external_id, external_parent_id, title, sku, barcode,
         price_minor, currency, option_values, shopify_updated_at::text, status,
         native_table, native_id, ignore_reason, proposal, last_synced_at::text
         from shopify_catalog_entries
        where org_id = ${orgId} and channel_id = ${channel.channelId}
          and object_type = 'variant' and external_parent_id = ${entry.external_id}
-         and status = 'queued'`)
-  ).rows;
+         and status = 'queued'`, "objects");
   if (siblings.length === 0) {
     refuse(
       "catalog_family_no_variants",
@@ -1238,10 +1214,8 @@ async function decideCreateFamily(
     const familyError = error as { code?: string; message?: string };
     if (typeof familyError?.code === "string" && familyError.code !== "family_code_taken") throw error;
     if (!(error instanceof Error) || !/already in use/.test(error.message)) throw error;
-    const standing = (
-      await db.execute<{ id: string }>(sql`
-        select id from item_families where org_id = ${orgId} and code = ${code}`)
-    ).rows[0];
+    const standing = (await db.execute<{ id: string }>(sql`
+        select id from item_families where org_id = ${orgId} and code = ${code}`, "objects"))[0];
     if (!standing) throw error;
     familyId = standing.id;
   }
@@ -1271,10 +1245,8 @@ async function decideCreateFamily(
     // re-import still matches by SKU even without the link.
     const sku = (sibling.sku ?? "").trim();
     if (sku !== "") {
-      const taken = (
-        await db.execute<{ id: string }>(sql`
-          select id from items where org_id = ${orgId} and lower(code) = lower(${sku}) and id <> ${variant.id}`)
-      ).rows[0];
+      const taken = (await db.execute<{ id: string }>(sql`
+          select id from items where org_id = ${orgId} and lower(code) = lower(${sku}) and id <> ${variant.id}`, "objects"))[0];
       if (!taken) {
         await db.execute(sql`
           update items set code = ${sku}, updated_by = ${actorId}, updated_at = now()
@@ -1346,7 +1318,7 @@ async function decideIgnore(
       409,
     );
   }
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update shopify_catalog_entries
        set status = 'ignored', ignore_reason = ${why}, proposal = null,
            updated_by = ${actorId}, updated_at = now()
@@ -1386,7 +1358,7 @@ async function decideUnmatch(
     why,
     "salesChannels",
   );
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update shopify_catalog_entries
        set status = 'queued', native_table = null, native_id = null,
            proposal = null, ignore_reason = null, updated_by = ${actorId}, updated_at = now()
@@ -1438,17 +1410,15 @@ export async function bulkDecideCatalogMatches(
 export async function similarCatalogEntries(orgId: string, channelId: string, entryId: string): Promise<string[]> {
   const entry = await withOrgContext(orgId, () => loadQueueEntry(orgId, channelId, entryId));
   const sku = (entry.sku ?? "").trim();
-  const rows = (
-    await withOrgContext(orgId, () =>
+  const rows = await withOrgContext(orgId, () =>
       db.execute<{ id: string }>(sql`
         select id from shopify_catalog_entries
          where org_id = ${orgId} and channel_id = ${channelId}
            and status = 'queued' and id <> ${entryId}
            and (${entry.external_parent_id ?? null} is not null
                 and external_parent_id = ${entry.external_parent_id ?? null}
-              ${sku !== "" ? sql`or (sku is not null and lower(sku) = lower(${sku}))` : sql``})`),
-    )
-  ).rows;
+              ${sku !== "" ? sql`or (sku is not null and lower(sku) = lower(${sku}))` : sql``})`, "objects"),
+    );
   return rows.map((row) => row.id);
 }
 
@@ -1493,10 +1463,8 @@ export async function pushItemToShopify(
         "itemId",
       );
     }
-    const item = (
-      await db.execute<{ code: string | null; name: string; default_rate: string | null }>(sql`
-        select code, name, default_rate from items where org_id = ${orgId} and id = ${itemId}`)
-    ).rows[0];
+    const item = (await db.execute<{ code: string | null; name: string; default_rate: string | null }>(sql`
+        select code, name, default_rate from items where org_id = ${orgId} and id = ${itemId}`, "objects"))[0];
     if (!item) {
       refuse(
         "catalog_target_missing",
@@ -1640,20 +1608,18 @@ export async function retireCatalogProduct(
   productExternalId: string,
 ): Promise<{ removed: number; proposed: number }> {
   return withOrg(orgId, async () => {
-    const removed = await db.execute(sql`
+    const removed = await db.execute<never>(sql`
       delete from shopify_catalog_entries
        where org_id = ${orgId} and channel_id = ${channelId}
          and status <> 'matched'
          and (external_id = ${productExternalId}
               or external_parent_id = ${productExternalId})`);
-    const matched = (
-      await db.execute<{ id: string }>(sql`
+    const matched = await db.execute<{ id: string }>(sql`
         select id from shopify_catalog_entries
          where org_id = ${orgId} and channel_id = ${channelId}
            and status = 'matched'
            and (external_id = ${productExternalId}
-                or external_parent_id = ${productExternalId})`)
-    ).rows;
+                or external_parent_id = ${productExternalId})`, "objects");
     for (const row of matched) {
       await setProposal(orgId, actorId, row.id, {
         kind: "deleted_at_shopify",

@@ -40,7 +40,7 @@ export async function seedOntarioEhtFixture(
   if (declareExemptionAllocation) {
     const employer = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries where org_id=${orgId} and country='CA' and parent_id is null order by id limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!employer) throw new Error('The Ontario EHT fixture requires a native Canadian legal employer');
     await upsertPayrollEmployerFact({ orgId, actorId, subsidiaryId: employer.id, country: 'CA',
       factKey: 'eht_exemption_share_on', effectiveFrom: '2026-01-01', value: initialExemptionAllocation,
@@ -67,8 +67,8 @@ export async function seedRoeIssuanceFixture(orgId: string, employeeId: string):
     select ${orgId}::uuid, ${employeeId}::uuid,prof.employment_id,p.subsidiary_id,'2000-01-01',
       'Original fixture employment-spell declaration','2026-08-10','2026-08-01','confirmed','ROE fixture separation'
     from employee_payroll_profiles prof join parties p on p.org_id=prof.org_id and p.id=prof.employee_party_id
-    where prof.org_id=${orgId} and prof.employee_party_id=${employeeId} returning id`);
-  assert.equal(event.rows.length, 1, "the ROE fixture resolves one native employee employment and employer");
+    where prof.org_id=${orgId} and prof.employee_party_id=${employeeId} returning id`, "objects");
+  assert.equal(event.length, 1, "the ROE fixture resolves one native employee employment and employer");
   await db.execute(sql`
     insert into payroll_roe_component_classifications
       (org_id, pay_component_id, effective_from, block, change_reason)
@@ -80,13 +80,13 @@ export async function seedUsEinAccount(
   orgId: string, actorId: string, subsidiaryId: string, accountNumber: string,
 ): Promise<string> {
   const id = randomUUID();
-  const employer = (await db.execute(sql`select id from subsidiaries where org_id=${orgId}
-    and id=${subsidiaryId} and country='US' and not is_elimination`)).rows;
+  const employer = await db.execute(sql`select id from subsidiaries where org_id=${orgId}
+    and id=${subsidiaryId} and country='US' and not is_elimination`, "objects");
   assert.equal(employer.length, 1, "the declared EIN requires a native US legal employer");
   const inserted = await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,country,program_type,account_number,name,subsidiary_id,is_active,created_by,updated_by)
-    values(${id},${orgId},'US','us_ein',${accountNumber},'Federal EIN',${subsidiaryId},true,${actorId},${actorId}) returning id`);
-  assert.equal(inserted.rows.length, 1, "the declared federal EIN must be created");
+    values(${id},${orgId},'US','us_ein',${accountNumber},'Federal EIN',${subsidiaryId},true,${actorId},${actorId}) returning id`, "objects");
+  assert.equal(inserted.length, 1, "the declared federal EIN must be created");
   return id;
 }
 
@@ -106,13 +106,13 @@ export interface UsSuiFixtureSource {
 export async function seedUsSuiAccount(
   orgId: string, actorId: string, state: string, source: UsSuiFixtureSource,
 ): Promise<string> {
-  const candidates = (await db.execute<{ id: string }>(sql`
+  const candidates = await db.execute<{ id: string }>(sql`
     select id from payroll_filing_accounts
      where org_id=${orgId} and country='US' and program_type='us_state_sui'
        and state_code=${state} and is_active
        and (subsidiary_id is null or subsidiary_id=${source.subsidiaryId})
        ${source.filingAccountId ? sql`and id=${source.filingAccountId}` : sql``}
-     order by id`)).rows;
+     order by id`, "objects");
   assert.ok(candidates.length <= 1, "declare the exact state registration when candidate accounts are ambiguous");
   if (source.filingAccountId) assert.equal(candidates.length, 1, "the declared state registration must exist");
   const filingAccountId = candidates[0]?.id ?? randomUUID();
@@ -121,8 +121,8 @@ export async function seedUsSuiAccount(
       insert into payroll_filing_accounts (id,org_id,country,program_type,account_number,name,
         subsidiary_id,state_code,is_active,created_by,updated_by)
       values (${filingAccountId},${orgId},'US','us_state_sui',${`${state}-TEST`},${`${state} SUI`},
-        ${source.subsidiaryId},${state},true,${actorId},${actorId}) returning id`);
-    assert.equal(inserted.rows.length, 1, "the declared state registration must be created");
+        ${source.subsidiaryId},${state},true,${actorId},${actorId}) returning id`, "objects");
+    assert.equal(inserted.length, 1, "the declared state registration must be created");
   }
   await db.transaction(async tx => {
     const input = { filingAccountId, federalAccountId: source.federalAccountId,
@@ -130,11 +130,11 @@ export async function seedUsSuiAccount(
       effectiveTo: source.effectiveTo, sourceReference: source.sourceReference,
       changeReason: "Retain the original state registration employer" };
     await validateUsFilingAccountLineage(tx, orgId, input);
-    const retained = (await tx.execute<{ federalAccountId: string; subsidiaryId: string;
+    const retained = await tx.execute<{ federalAccountId: string; subsidiaryId: string;
       effectiveFrom: string; effectiveTo: string | null; sourceReference: string }>(sql`
       select federal_account_id as "federalAccountId",subsidiary_id as "subsidiaryId",
         effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo",source_reference as "sourceReference"
-      from payroll_us_filing_account_employer_lineage where org_id=${orgId} and filing_account_id=${filingAccountId}`)).rows;
+      from payroll_us_filing_account_employer_lineage where org_id=${orgId} and filing_account_id=${filingAccountId}`, "objects");
     if (retained.length) {
       assert.deepEqual(retained, [{ federalAccountId: source.federalAccountId, subsidiaryId: source.subsidiaryId,
         effectiveFrom: source.effectiveFrom, effectiveTo: source.effectiveTo, sourceReference: source.sourceReference }],
@@ -144,8 +144,8 @@ export async function seedUsSuiAccount(
         (org_id,filing_account_id,federal_account_id,subsidiary_id,effective_from,effective_to,
           source_reference,change_reason,created_by,updated_by)
         values(${orgId},${filingAccountId},${source.federalAccountId},${source.subsidiaryId},
-          ${source.effectiveFrom},${source.effectiveTo},${source.sourceReference},${input.changeReason},${actorId},${actorId}) returning id`);
-      assert.equal(inserted.rows.length, 1, "the original state registration payer must be retained");
+          ${source.effectiveFrom},${source.effectiveTo},${source.sourceReference},${input.changeReason},${actorId},${actorId}) returning id`, "objects");
+      assert.equal(inserted.length, 1, "the original state registration payer must be retained");
     }
   });
   if (source.financingMethod !== null) {
@@ -301,7 +301,7 @@ export async function seedHiredEmployee(
   // A hire participates in the declared vacation offering. A scenario without
   // one creates no phantom election; an explicitly requested election still
   // refuses through the native fixture writer when its program is missing.
-  const vacationProgram = (await db.execute(sql`select id from entitlement_plans where org_id=${orgId} and system_key='vacation'`)).rows[0];
+  const vacationProgram = (await db.execute(sql`select id from entitlement_plans where org_id=${orgId} and system_key='vacation'`, "objects"))[0];
   if (vacationProgram || seed.vacationPercent !== undefined || seed.vacationMethod !== undefined) await seedVacationTerms(orgId, employmentId, actorId, seed.vacationPercent ?? "4", seed.vacationMethod ?? "accrue");
   for (const entry of seed.timeEntries ?? []) {
     await db.execute(sql`
@@ -410,14 +410,12 @@ export async function seedAdoption(
 }
 
 export async function calculatedRun(fx: AdoptionFixture) {
-  const entry = (
-    await db.execute<{ id: string }>(sql`
+  const entry = (await db.execute<{ id: string }>(sql`
     insert into time_entries (org_id, employee_party_id, worked_on, hours, status,
       is_billable, billing_status, costing_basis, created_by, updated_by)
     values (${fx.orgId}, ${fx.employeeId}, '2026-07-14', 8, 'approved', false,
       'unbilled', 'actual', ${fx.actorId}, ${fx.actorId}) returning id
-  `)
-  ).rows[0]!;
+  `, "objects"))[0]!;
   const run = await createPayRun({
     orgId: fx.orgId,
     actorId: fx.actorId,
@@ -444,11 +442,11 @@ export async function markLegacy(orgId: string) {
     const rows = await tx.execute<{
       id: string;
     }>(sql`update pay_stubs set filing_account_id=null,
-      filing_account_source='unknown',filing_account_evidence=null where org_id=${orgId} returning id`);
+      filing_account_source='unknown',filing_account_evidence=null where org_id=${orgId} returning id`, "objects");
     await tx.execute(
       sql`alter table pay_stubs enable trigger pay_stub_filing_account_guard`,
     );
-    return rows.rows[0]!.id;
+    return rows[0]!.id;
   });
 }
 
@@ -467,14 +465,14 @@ export async function qualifyCanadianOpeningForTest(input: {
     const bytes = Buffer.from(JSON.stringify(evidence));
     const sourceSha256 = createHash("sha256").update(bytes).digest("hex");
     assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-      values(${folderId},${input.orgId},'Original payroll evidence',true,${input.actorId},${input.actorId},${input.actorId}) returning id`)).rows.length, 1);
+      values(${folderId},${input.orgId},'Original payroll evidence',true,${input.actorId},${input.actorId},${input.actorId}) returning id`, "objects")).length, 1);
     assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-      values(${sourceFileId},${input.orgId},${folderId},'original-payroll.json','application/json',${bytes.length},${input.actorId},${input.actorId}) returning id`)).rows.length, 1);
+      values(${sourceFileId},${input.orgId},${folderId},'original-payroll.json','application/json',${bytes.length},${input.actorId},${input.actorId}) returning id`, "objects")).length, 1);
     assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-      values(${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${input.actorId}) returning id`)).rows.length, 1);
-    assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${sourceVersionId},${bytes}) returning version_id`)).rows.length, 1);
+      values(${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${input.actorId}) returning id`, "objects")).length, 1);
+    assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${sourceVersionId},${bytes}) returning version_id`, "objects")).length, 1);
     assert.equal((await db.execute(sql`update files set current_version_id=${sourceVersionId}
-      where org_id=${input.orgId} and id=${sourceFileId} returning id`)).rows.length, 1);
+      where org_id=${input.orgId} and id=${sourceFileId} returning id`, "objects")).length, 1);
     return { sourceFileId, sourceVersionId, sourceSha256 };
   };
   const facts = { originalCountry: "CA", originalCurrency: "CAD", coverageStart: input.coverageStart,
@@ -511,7 +509,7 @@ export async function seedCanadianFilingAccountForTest(orgId: string, actorId: s
   const filingAccountId = randomUUID();
   assert.equal((await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,country,program_type,account_number,name,subsidiary_id,is_default,created_by,updated_by)
-    values(${filingAccountId},${orgId},'CA','ca_rp',${input.accountNumber},${input.name},${input.subsidiaryId},true,${actorId},${actorId}) returning id`)).rows.length, 1);
+    values(${filingAccountId},${orgId},'CA','ca_rp',${input.accountNumber},${input.name},${input.subsidiaryId},true,${actorId},${actorId}) returning id`, "objects")).length, 1);
   await upsertPayrollEmployerFact({ orgId, actorId, filingAccountId, country: "CA",
     factKey: "ei_employer_multiplier", effectiveFrom: input.effectiveFrom, value: input.eiEmployerMultiplier,
     changeReason: "Declared employer EI multiple for the retained CRA registration" });

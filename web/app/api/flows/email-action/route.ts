@@ -86,8 +86,8 @@ async function loadGateSummary(gateId: string, orgId?: string): Promise<GateSumm
       left join documents d on d.id = g.subject_id and d.org_id = g.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where g.id = ${gateId} ${orgId ? sql`and g.org_id = ${orgId}` : sql``}
-  `))
-  return r.rows[0] ?? null
+  `, 'objects'))
+  return r[0] ?? null
 }
 
 /** Token bootstrap, then refuse when the org's Flows feature is off. */

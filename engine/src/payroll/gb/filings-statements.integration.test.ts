@@ -131,7 +131,7 @@ async function independentTotals(orgId: string, employeeId: string): Promise<{
          and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.employee_party_id = ${employeeId}
        and s.tax_year = ${YEAR} and s.country = 'GB'
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   return { pay: rows.pay, tax: rows.tax, nic: rows.nic };
 }
 
@@ -301,7 +301,7 @@ test(
           join employee_roles er on er.party_id = s.employee_party_id and er.org_id = s.org_id
          where s.org_id = ${org.orgId} and s.tax_year = ${YEAR} and s.country = 'GB'
            and (er.terminated_on is null or er.terminated_on::date > ${gbTaxYearBounds(YEAR).end})
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       const totalOf = (label: string) => String(population.totals!.find((t) => t.label === label)!.value);
       // The leaver's stubs are excluded from the P60 totals by the same
       // eligibility rule as the rows — the org-wide query above applies it.

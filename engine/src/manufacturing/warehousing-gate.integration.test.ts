@@ -44,8 +44,8 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
       await db.execute(sql`update bom_components set quantity_per = '2', operation_seq = null, is_byproduct = false
         where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly} and component_item_id = ${org.items.component}`);
       const open = await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId}
-        and current_date between starts_on and ends_on and not is_adjustment limit 1`);
-      if (open.rows.length === 0) {
+        and current_date between starts_on and ends_on and not is_adjustment limit 1`, "objects");
+      if (open.length === 0) {
         await db.execute(sql`insert into accounting_periods
           (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
           select ${randomUUID()}, ${org.orgId}, extract(year from current_date)::int, extract(month from current_date)::int,
@@ -55,7 +55,7 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
       }
     });
     const departmentId = String(
-      (await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`))).rows[0]!.id,
+      (await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`, "objects")))[0]!.id,
     );
     await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
       (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
@@ -112,8 +112,8 @@ test("single-warehouse production releases and completes with Warehousing off", 
     }));
     const released = await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
     assert.equal(released.status, "released");
-    const material = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
-      select id from mfg_wo_materials where org_id = ${f.org.orgId} and work_order_id = ${draft.id}`)).rows))[0]!.id;
+    const material = (await withBypassContext(async () => await db.execute<{ id: string }>(sql`
+      select id from mfg_wo_materials where org_id = ${f.org.orgId} and work_order_id = ${draft.id}`, "objects")))[0]!.id;
     await run(f.org.orgId, (tx) => issueMaterials(tx, f.org.orgId, f.actorId, draft.id, [{ materialId: material, quantity: "2" }]));
     const completed = await run(f.org.orgId, (tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, draft.id, { quantity: "1" }));
     assert.equal(completed.quantityCompleted, "1.0000");

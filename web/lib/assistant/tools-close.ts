@@ -50,13 +50,13 @@ const getCloseRunStatus: AssistantToolDef = {
           join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
           left join users starter on starter.id = r.started_by
          where r.id = ${a.runId} and r.org_id = ${authz.user.orgId}
-      `),
+      `, 'objects'),
       db.execute<{ status: string; n: string }>(sql`
         select status, count(*)::text as n
           from close_run_tasks
          where run_id = ${a.runId} and org_id = ${authz.user.orgId}
          group by status
-      `),
+      `, 'objects'),
       db.execute<Record<string, unknown>>(sql`
         select code, category, severity, status, title, message, created_at,
                count(*) over() as total
@@ -65,20 +65,20 @@ const getCloseRunStatus: AssistantToolDef = {
          order by case severity when 'critical' then 1 when 'error' then 2 when 'warning' then 3 else 4 end,
                   created_at
          limit 11
-      `),
+      `, 'objects'),
       db.execute<Record<string, unknown>>(sql`
         select s.signoff_type, s.decision, s.signed_at, u.name as signed_by_name
           from close_signoffs s join users u on u.id = s.signed_by
          where s.run_id = ${a.runId} and s.org_id = ${authz.user.orgId}
          order by s.signed_at desc
-      `),
+      `, 'objects'),
     ])
-    const run = runRes.rows[0]
+    const run = runRes[0]
     if (!run) return { ok: false, error: 'close_run_not_found' }
     const exceptionPage = assistantListPage(
-      exceptionRes.rows,
+      exceptionRes,
       10,
-      Number(exceptionRes.rows[0]?.total ?? 0),
+      Number(exceptionRes[0]?.total ?? 0),
     )
     const locks = await db.execute<Record<string, unknown>>(sql`
       select l.module, l.state, l.reopen_expires_at, l.locked_at, l.reason,
@@ -89,9 +89,9 @@ const getCloseRunStatus: AssistantToolDef = {
          and l.period_id = ${run.period_id as string}
          and l.book_id = ${run.book_id as string}
        order by l.subsidiary_id nulls first, l.module
-    `)
+    `, 'objects')
     const tasksByStatus: Record<string, number> = {}
-    for (const row of taskRes.rows) tasksByStatus[row.status] = Number(row.n)
+    for (const row of taskRes) tasksByStatus[row.status] = Number(row.n)
     return {
       ok: true,
       data: {
@@ -125,13 +125,13 @@ const getCloseRunStatus: AssistantToolDef = {
           message: e.message,
           createdAt: e.created_at,
         })),
-        signoffs: signoffRes.rows.map((s) => ({
+        signoffs: signoffRes.map((s) => ({
           type: s.signoff_type,
           decision: s.decision,
           signedBy: s.signed_by_name,
           signedAt: s.signed_at,
         })),
-        locks: locks.rows.map((l) => ({
+        locks: locks.map((l) => ({
           module: l.module,
           state: l.state,
           subsidiary: l.subsidiary_name,
@@ -198,14 +198,14 @@ const listPeriodLocks: AssistantToolDef = {
          where ${where}
          order by p.ends_on desc, l.subsidiary_id nulls first, l.module
          limit ${limit}
-      `),
+      `, 'objects'),
       db.execute<{ n: string }>(sql`
         select count(*) as n from period_locks l where ${where}
-      `),
+      `, 'objects'),
     ])
-    const total = Number(count.rows[0]?.n ?? 0)
+    const total = Number(count[0]?.n ?? 0)
     const { items, truncated } = capList(
-      rows.rows.map((l) => ({
+      rows.map((l) => ({
         id: l.id,
         period: l.period_name,
         periodStartsOn: l.starts_on,
@@ -289,14 +289,14 @@ const listPeriodReopenRequests: AssistantToolDef = {
          where ${where}
          order by r.created_at desc
          limit ${limit}
-      `),
+      `, 'objects'),
       db.execute<{ n: string }>(sql`
         select count(*) as n from close_reopen_requests r where ${where}
-      `),
+      `, 'objects'),
     ])
-    const total = Number(count.rows[0]?.n ?? 0)
+    const total = Number(count[0]?.n ?? 0)
     const { items, truncated } = capList(
-      rows.rows.map((r) => ({
+      rows.map((r) => ({
         id: r.id,
         period: r.period_name,
         book: r.book_name,

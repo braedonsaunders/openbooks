@@ -987,15 +987,15 @@ test(
         select sl.id::text as id, sl.reported as reported
           from payroll_filing_submission_slips sl
           join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id
-         where s.org_id = ${fx.orgId} and s.country = 'CA' and s.filing_key = 't4' and s.tax_year = 2026`);
-      assert.equal(slips.rows.length, 1);
-      const bare = slips.rows[0]!.reported.confidential[0]!.fingerprint.replace(/^k1:/, "");
+         where s.org_id = ${fx.orgId} and s.country = 'CA' and s.filing_key = 't4' and s.tax_year = 2026`, "objects");
+      assert.equal(slips.length, 1);
+      const bare = slips[0]!.reported.confidential[0]!.fingerprint.replace(/^k1:/, "");
       assert.match(bare, /^[0-9a-f]{64}$/);
       await db.execute(sql`
         update payroll_filing_submission_slips set reported = ${JSON.stringify({
-          ...slips.rows[0]!.reported,
+          ...slips[0]!.reported,
           confidential: [{ label: "Social insurance number", fingerprint: bare }],
-        })}::jsonb where id = ${slips.rows[0]!.id}`);
+        })}::jsonb where id = ${slips[0]!.id}`);
 
       // Rotate: k2 becomes active with k1 retained. The SIN is untouched, so
       // the amendment review must stay silent — no spurious CHANGED.
@@ -1028,7 +1028,7 @@ test(
       // name — the comparison names the key and the remedy, not a 500.
       const profile = (await db.execute<{ sealed: string }>(sql`
         select sin_encrypted as sealed from employee_payroll_profiles
-         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`)).rows[0]!.sealed;
+         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`, "objects"))[0]!.sealed;
       const sin = unsealSecret(profile, { orgId: fx.orgId, purpose: "payroll.employee.sin" });
       await db.execute(sql`
         update employee_payroll_profiles
@@ -1052,8 +1052,8 @@ test(
         select jsonb_path_query_first(sl.reported, '$.confidential[*].fingerprint')::text as fingerprint
           from payroll_filing_submission_slips sl
           join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id
-         where s.org_id = ${fx.orgId}`);
-      for (const row of after.rows) assert.match(row.fingerprint, /^"k2:[0-9a-f]{64}"$/);
+         where s.org_id = ${fx.orgId}`, "objects");
+      for (const row of after) assert.match(row.fingerprint, /^"k2:[0-9a-f]{64}"$/);
       useOnlyK2();
       const settled = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
       assert.equal(settled.rows[0]!.status, "unchanged");
@@ -1185,8 +1185,8 @@ test(
         select settings->>${settingKey} as marker
           from orgs
          where id = ${fx.orgId}
-      `);
-      return result.rows[0]?.marker ?? "";
+      `, "objects");
+      return result[0]?.marker ?? "";
     };
 
     registerPayrollFilings({
@@ -1286,8 +1286,8 @@ test(
         select settings->>${settingKey} as marker
           from orgs
          where id = ${fx.orgId}
-      `);
-      return result.rows[0]?.marker ?? "";
+      `, "objects");
+      return result[0]?.marker ?? "";
     };
 
     registerPayrollFilings({
@@ -1377,8 +1377,8 @@ test(
         select settings->>${settingKey} as marker
           from orgs
          where id = ${fx.orgId}
-      `);
-      return result.rows[0]?.marker ?? "";
+      `, "objects");
+      return result[0]?.marker ?? "";
     };
 
     registerPayrollFilings({
@@ -1729,13 +1729,13 @@ async function raceFilingFixture(filingKey: string) {
   const gate = new Promise<void>((resolve) => { releaseFirst = resolve; });
   let firstPid: number | undefined;
   const pauseFirst = async () => {
-    firstPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+    firstPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
     signalEntered();
     await gate;
   };
   const marker = async (): Promise<string> => (await db.execute<{ m: string | null }>(sql`
     select settings->>'zxRaceMarker' as m from orgs where id = ${org.orgId}
-  `)).rows[0]?.m ?? "";
+  `, "objects"))[0]?.m ?? "";
   registerPayrollFilings({
     country,
     programTypes: [],

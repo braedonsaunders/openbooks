@@ -27,13 +27,13 @@ test("unattributed revenue posts under the root when an older sibling exists", {
       values(${elderId},${org.orgId},${org.subsidiaryId},'Elder child','CAD','CA')`);
     await db.execute(sql`update subsidiaries set created_at='2020-01-01T00:00:00Z' where org_id=${org.orgId} and id=${elderId}`);
     const oldest = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id=${org.orgId} order by created_at,id limit 1`)).rows[0]!.id;
+      select id from subsidiaries where org_id=${org.orgId} order by created_at,id limit 1`, "objects"))[0]!.id;
     assert.equal(oldest, elderId, "fixture must make a non-root entity the oldest");
 
     const ruleId = randomUUID(), contractId = randomUUID(), oblId = randomUUID();
     const accounts = (await db.execute<{ deferred: string; recognized: string }>(sql`
       select (select id from accounts where org_id = ${org.orgId} and number = '2200') as deferred,
-             (select id from accounts where org_id = ${org.orgId} and number = '4010') as recognized`)).rows[0]!;
+             (select id from accounts where org_id = ${org.orgId} and number = '4010') as recognized`, "objects"))[0]!;
     await db.execute(sql`insert into recognition_rules
       (id,org_id,code,name,method,is_forecast,recognition_periods,start_date_source,end_date_source,period_offset,start_offset_days,initial_amount_percent,deferred_account_id,recognized_account_id,is_active)
       values (${ruleId},${org.orgId},'W6R','W6 revenue rule','straight_line_even',false,1,'contract','contract',0,0,'0',${accounts.deferred},${accounts.recognized},true)`);
@@ -50,9 +50,9 @@ test("unattributed revenue posts under the root when an older sibling exists", {
     const run = await runRevenueRecognition(org.orgId, "2026-07-31", actorId);
     assert.equal(run.posted, 1, "the July line must post through the recognition runner");
     const entries = (await db.execute<{ subsidiary_id: string }>(sql`
-      select distinct subsidiary_id::text as subsidiary_id from journal_entries where org_id=${org.orgId}`));
-    assert.ok(entries.rows.length > 0, "the run must post at least one journal");
-    for (const entry of entries.rows) {
+      select distinct subsidiary_id::text as subsidiary_id from journal_entries where org_id=${org.orgId}`, "objects"));
+    assert.ok(entries.length > 0, "the run must post at least one journal");
+    for (const entry of entries) {
       assert.equal(entry.subsidiary_id, org.subsidiaryId, "unattributed revenue books to the root, not the oldest entity");
     }
   } finally {

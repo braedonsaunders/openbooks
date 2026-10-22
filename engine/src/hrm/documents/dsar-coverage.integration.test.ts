@@ -29,7 +29,7 @@ async function catalogPersonLinkedTables(): Promise<string[]> {
        and k.contype = 'f'
        and k.confrelid in ('public.parties'::regclass, 'public.worker_employments'::regclass, 'public.hrm_candidates'::regclass)
        and a.attname <> 'org_id'
-  `)).rows.map((row) => row.table_name);
+  `, "objects")).map((row) => row.table_name);
   // Name safety net for person links the catalog does not constrain
   // (incumbent/manager/report/subject employments, unlinked employment ids).
   const named = (await db.execute<{ table_name: string }>(sql`
@@ -39,15 +39,15 @@ async function catalogPersonLinkedTables(): Promise<string[]> {
        and (column_name like '%\\_party\\_id' escape '\\'
             or column_name like '%\\_employment\\_id' escape '\\'
             or column_name in ('employment_id', 'candidate_id'))
-  `)).rows.map((row) => row.table_name);
+  `, "objects")).map((row) => row.table_name);
   return [...new Set([...fk, ...named])].sort();
 }
 
 async function catalogTables(): Promise<Set<string>> {
-  const rows = (await db.execute<{ table_name: string }>(sql`
+  const rows = await db.execute<{ table_name: string }>(sql`
     select table_name from information_schema.tables
      where table_schema = 'public' and table_type = 'BASE TABLE'
-  `)).rows;
+  `, "objects");
   return new Set(rows.map((row) => row.table_name));
 }
 

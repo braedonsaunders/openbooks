@@ -32,13 +32,11 @@ interface Fixture {
  */
 async function fixture(): Promise<Fixture> {
   const o = await withBypassContext(() => (createScratchOrg()))
-  const revenueNo = (
-    await withOrgContext(o.orgId, () =>
+  const revenueNo = (await withOrgContext(o.orgId, () =>
       db.execute<{ number: string }>(
-        sql`select number from accounts where id = ${o.accounts.revenue}`,
+        sql`select number from accounts where id = ${o.accounts.revenue}`, 'objects',
       ),
-    )
-  ).rows[0]?.number
+    ))[0]?.number
   assert.ok(revenueNo)
   return { orgId: o.orgId, date: o.date, revenueNo, customerId: o.customerId }
 }

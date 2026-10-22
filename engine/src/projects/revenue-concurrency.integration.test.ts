@@ -49,7 +49,7 @@ test("concurrent project revenue sync converges on one contract and obligation",
     const count = (await db.execute<{ contracts: number; obligations: number }>(sql`
       select (select count(*)::int from revenue_contracts where org_id=${org.orgId} and project_id=${projectId}) as contracts,
         (select count(*)::int from performance_obligations o join revenue_contracts c on c.id=o.contract_id and c.org_id=o.org_id
-          where c.org_id=${org.orgId} and c.project_id=${projectId}) as obligations`)).rows[0]!;
+          where c.org_id=${org.orgId} and c.project_id=${projectId}) as obligations`, "objects"))[0]!;
     assert.deepEqual(count, { contracts: 1, obligations: 1 });
     const synced = results.flatMap((result) => result.status === "fulfilled" ? result.value.synced : []);
     assert.equal(synced.length, 2);

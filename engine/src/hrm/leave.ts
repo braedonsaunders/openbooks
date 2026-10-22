@@ -210,7 +210,7 @@ async function loadLeaveType(exec: SqlExecutor, orgId: string, leaveTypeId: stri
   const row = (await exec.execute<LeaveTypeRow>(sql`
     select id, code, name, paid, value_crossing, requires_attachment, is_active
       from hrm_leave_types where org_id = ${orgId} and id = ${leaveTypeId}
-  `)).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization.
   if (!row) throw new LeaveError("NOT_FOUND", "leave type not found in this organization — check the type id");
   return row;
@@ -249,7 +249,7 @@ export async function createLeaveType(query: CreateLeaveTypeQuery): Promise<Leav
               ${query.paid ?? true}, ${valueCrossing}, ${query.requiresAttachment ?? false},
               ${actorId}, ${actorId})
       returning id, code, name, paid, value_crossing, requires_attachment, is_active
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) throw new LeaveError("REFUSED", "the leave type was not stored — no row was written; retry the request");
     return toTypeDTO(inserted);
   });
@@ -437,7 +437,7 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
                 ${notice}, ${effectiveFrom}, ${effectiveTo}, ${actorId}, ${actorId})
         returning id, leave_type_id, applies_to, accrual_rule, carryover_rule,
           minimum_notice_days, effective_from::text as effective_from, effective_to::text as effective_to, is_active
-      `)).rows[0];
+      `, "objects"))[0];
     } catch (error) {
       // A concurrent untargeted create landing first hits the wildcard
       // storage exclusion: name the overlap instead of leaking a PG
@@ -470,14 +470,14 @@ async function assertPolicyTargetsInOrg(
   appliesTo: LeaveAppliesTo,
 ): Promise<void> {
   if (appliesTo.employment_ids !== null) {
-    const missing = (await exec.execute<{ id: string }>(sql`
+    const missing = await exec.execute<{ id: string }>(sql`
       select value as id
         from jsonb_array_elements_text(${JSON.stringify(appliesTo.employment_ids)}::jsonb)
        where not exists (
          select 1 from worker_employments
           where org_id = ${orgId} and id = value::uuid
        )
-    `)).rows;
+    `, "objects");
     if (missing.length > 0) {
       throw new LeaveError(
         "NOT_FOUND",
@@ -486,14 +486,14 @@ async function assertPolicyTargetsInOrg(
     }
   }
   if (appliesTo.classification_ids !== null) {
-    const missing = (await exec.execute<{ id: string }>(sql`
+    const missing = await exec.execute<{ id: string }>(sql`
       select value as id
         from jsonb_array_elements_text(${JSON.stringify(appliesTo.classification_ids)}::jsonb)
        where not exists (
          select 1 from hrm_work_classifications
           where org_id = ${orgId} and id = value::uuid
        )
-    `)).rows;
+    `, "objects");
     if (missing.length > 0) {
       throw new LeaveError(
         "NOT_FOUND",
@@ -523,14 +523,14 @@ export async function assertNoSameSpecificityTargetOverlap(
   effectiveTo: string | null,
   ignoreId: string | null,
 ): Promise<void> {
-  const rows = (await exec.execute<{ id: string; applies_to: LeaveAppliesTo; effective_from: string; effective_to: string | null }>(sql`
+  const rows = await exec.execute<{ id: string; applies_to: LeaveAppliesTo; effective_from: string; effective_to: string | null }>(sql`
     select id, applies_to, effective_from::text as effective_from, effective_to::text as effective_to
       from hrm_leave_policies
      where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
        and effective_from <= ${effectiveTo ?? "9999-12-31"}
        and (effective_to is null or effective_to >= ${effectiveFrom})
        and (${ignoreId}::uuid is null or id <> ${ignoreId}::uuid)
-  `)).rows;
+  `, "objects");
   const actives: TargetedPolicyWindow[] = rows.map((row) => ({
     id: row.id,
     employerSubsidiaryId: (row.applies_to?.employer_subsidiary_id as string | null) ?? null,
@@ -610,7 +610,7 @@ async function loadRequestForUpdate(exec: SqlExecutor, orgId: string, requestId:
   const row = (await exec.execute<RequestRow>(sql`
     select ${REQUEST_COLUMNS} from hrm_leave_requests
      where org_id = ${orgId} and id = ${requestId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement — never report
   // which of the two, so existence cannot be probed across tenants).
@@ -623,9 +623,9 @@ async function assertLeaveAttachmentInOrg(
   orgId: string,
   attachmentId: string,
 ): Promise<void> {
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select id from files where org_id = ${orgId}::uuid and id = ${attachmentId}::uuid
-  `)).rows;
+  `, "objects");
   if (!rows[0]) {
     throw new LeaveError(
       "INVALID_INPUT",
@@ -646,11 +646,11 @@ async function liveEmploymentDays(
   startsOn: string,
   endsOn: string,
 ): Promise<Set<string>> {
-  const rows = (await exec.execute<{ effective_from: string; effective_to: string | null; status: string }>(sql`
+  const rows = await exec.execute<{ effective_from: string; effective_to: string | null; status: string }>(sql`
     select effective_from::text as effective_from, effective_to::text as effective_to, status
       from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-  `)).rows;
+  `, "objects");
   const live = new Set<string>();
   for (const day of eachDayOfRange(startsOn, endsOn)) {
     for (const version of rows) {
@@ -690,12 +690,12 @@ async function assertNoApprovedOverlap(
   endsOn: string,
   ignoreRequestId: string | null,
 ): Promise<void> {
-  const rows = (await exec.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+  const rows = await exec.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
     select id, starts_on::text as starts_on, ends_on::text as ends_on
       from hrm_leave_requests
      where org_id = ${orgId} and employment_id = ${employmentId} and status = 'approved'
        and (${ignoreRequestId}::uuid is null or id <> ${ignoreRequestId}::uuid)
-  `)).rows;
+  `, "objects");
   for (const row of rows) {
     const from = String(row.starts_on).slice(0, 10);
     const to = String(row.ends_on).slice(0, 10);
@@ -862,7 +862,7 @@ export async function fileLeaveRequest(query: FileLeaveRequestQuery): Promise<Le
       values (${orgId}, ${employmentId}, ${leaveTypeId}, ${startsOn}, ${endsOn},
         ${hours}, ${reason}, 'draft', ${actorId}, ${actorId})
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) throw new LeaveError("REFUSED", "the leave request was not stored — no row was written; retry the request");
     return toRequestDTO(inserted);
   });
@@ -955,15 +955,13 @@ export async function submitLeaveRequest(
       subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
       subjectId: requestId,
     });
-    const submitted = (
-      await db.execute<RequestRow>(sql`
+    const submitted = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests
          set status = 'submitted', flow_instance_id = ${routing.gatingRunId},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!submitted) {
       throw new LeaveError("BAD_STATE", "the request changed while submission was being recorded — reload it and submit again");
     }
@@ -997,7 +995,7 @@ export async function recordLeaveAttachment(query: { orgId: string; actorId: str
          set attachment_id = ${attachmentId}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) throw new LeaveError("REFUSED", "the attachment was not recorded — no row was written; retry the request");
     return toRequestDTO(updated);
   });
@@ -1042,7 +1040,7 @@ export async function withdrawLeaveRequest(
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = ${current.status}
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!withdrawn) throw new LeaveError("BAD_STATE", "the request changed while withdrawal was being recorded — reload it and try again");
     return toRequestDTO(withdrawn);
   });
@@ -1088,7 +1086,7 @@ async function committedRunCoveringDay(
      where r.org_id = ${orgId} and r.run_status = 'committed' and d.status <> 'voided'
        and r.period_start <= ${day} and r.period_end >= ${day}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   return {
     documentId: row.documentId,
@@ -1130,11 +1128,9 @@ export async function releaseLeaveRequest(
       outcome: query.outcome,
       approvalRunId: query.approvalRunId,
     });
-    const proof = (
-      await db.execute<{ valid: boolean }>(
-        sql`select public.flow_subject_decision_authorized(r.org_id,'hrm_leave_request',r.id,${actorId},public.leave_request_approval_fingerprint(r),${query.outcome}) as valid from hrm_leave_requests r where r.org_id=${orgId} and r.id=${requestId}`,
-      )
-    ).rows[0];
+    const proof = (await db.execute<{ valid: boolean }>(
+        sql`select public.flow_subject_decision_authorized(r.org_id,'hrm_leave_request',r.id,${actorId},public.leave_request_approval_fingerprint(r),${query.outcome}) as valid from hrm_leave_requests r where r.org_id=${orgId} and r.id=${requestId}`, "objects",
+      ))[0];
     if (
       !proof?.valid ||
       (query.approvalRunId ? !approval : query.outcome !== "approved")
@@ -1187,17 +1183,15 @@ export async function releaseLeaveRequest(
              decision_reason = ${comment}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'submitted'
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!decided) {
       throw new LeaveError("BAD_STATE", "the request changed while the decision was being recorded — reload it and decide again");
     }
     if (query.outcome === "rejected") return toRequestDTO(decided);
     try {
-      const employment = (
-        await db.execute<{ worker_party_id: string }>(
-          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${decided.employment_id} for share`,
-        )
-      ).rows[0];
+      const employment = (await db.execute<{ worker_party_id: string }>(
+          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${decided.employment_id} for share`, "objects",
+        ))[0];
       if (!employment)
         throw new LeaveError(
           "REFUSED",
@@ -1270,7 +1264,7 @@ async function writeApprovalEffects(
         values (${orgId}, ${request.id}, ${request.employment_id}, ${days[index]},
           ${perDay[index]}, ${request.leave_type_id}, 'request', ${actorId}, ${actorId})
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new LeaveError(
@@ -1290,7 +1284,7 @@ async function writeApprovalEffects(
         values (${orgId}, ${workerPartyId}, ${request.employment_id}, ${type.id}, ${type.value_crossing},
           ${days[index]}, ${perDay[index]}, ${request.id}, 'pending', ${actorId}, ${actorId})
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!input) {
         throw new LeaveError("REFUSED", `pay-run input for ${days[index]} was not stored — no row was written; the decision rolled back, decide again`);
       }
@@ -1323,17 +1317,17 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
     if (current.status !== "approved") {
       throw new LeaveError("BAD_STATE", `a ${current.status} request cannot be cancelled — withdraw it instead`);
     }
-    const inputs = (await db.execute<{ id: string; status: string; consumed_by_run_document_id: string | null }>(sql`
+    const inputs = await db.execute<{ id: string; status: string; consumed_by_run_document_id: string | null }>(sql`
       select id, status, consumed_by_run_document_id from hrm_payroll_inputs
        where org_id = ${orgId} and source_leave_request_id = ${requestId} and status <> 'voided'
-    `)).rows;
+    `, "objects");
     for (const input of inputs) {
       if (input.status === "consumed" && input.consumed_by_run_document_id) {
         const run = (await db.execute<{ run_status: string; document_number: string }>(sql`
           select r.run_status, d.document_number from pay_runs r
             join documents d on d.id = r.document_id and d.org_id = r.org_id
            where r.org_id = ${orgId} and r.document_id = ${input.consumed_by_run_document_id}
-        `)).rows[0];
+        `, "objects"))[0];
         if (run?.run_status === "committed") {
           throw new LeaveError(
             "STALE_RUN",
@@ -1346,15 +1340,15 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
     // rows carry leave_request_id NULL: the request-day unique would collide
     // with the row they reverse, and the recorded-day unique skips rows with
     // reversal_of set. Provenance is the reversal_of chain.
-    const absences = (await db.execute<{ id: string; on_date: string; hours: string; leave_type_id: string }>(sql`
+    const absences = await db.execute<{ id: string; on_date: string; hours: string; leave_type_id: string }>(sql`
       select id, on_date::text as on_date, hours::text as hours, leave_type_id from hrm_absences
        where org_id = ${orgId} and leave_request_id = ${requestId} and reversal_of is null
-    `)).rows;
+    `, "objects");
     for (const absence of absences) {
       const already = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_absences
          where org_id = ${orgId} and reversal_of = ${absence.id}
-      `)).rows[0]?.n ?? 0;
+      `, "objects"))[0]?.n ?? 0;
       if (already > 0) continue;
       const reversed = (await db.execute<{ id: string }>(sql`
         insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
@@ -1362,7 +1356,7 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
         values (${orgId}, null, ${current.employment_id}, ${String(absence.on_date).slice(0, 10)},
           ${`-${String(absence.hours)}`}, ${absence.leave_type_id}, 'request', ${absence.id}, ${actorId}, ${actorId})
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!reversed) {
         throw new LeaveError("REFUSED", `reversal for ${String(absence.on_date).slice(0, 10)} was not stored — no row was written; the cancellation rolled back, try again`);
       }
@@ -1383,7 +1377,7 @@ export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promis
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'approved'
       returning ${REQUEST_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!cancelled) throw new LeaveError("BAD_STATE", "the request changed while cancellation was being recorded — reload it and try again");
     return toRequestDTO(cancelled);
   });

@@ -115,7 +115,7 @@ test("period-end FX revaluation posts every subsidiary with distinct journal num
     assert.ok(refused.problems.every(message => /USD→CAD.*2026-07-01.*30 days old.*7-day limit/.test(message)));
     assert.ok(refused.problems.every(message => message.includes('Setup → FX Rate Age Policies')));
     assert.equal((await db.execute(sql`select id from journal_entries
-      where org_id=${org.orgId} and origin='fx_revaluation'`)).rows.length, 0);
+      where org_id=${org.orgId} and origin='fx_revaluation'`, "objects")).length, 0);
     await db.execute(sql`insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate)
       values (${org.orgId},'USD','CAD','2026-07-31','spot','1.3700000000')`);
     const run = await runRevaluation(org.orgId, org.periodId, actorId);
@@ -133,14 +133,14 @@ test("period-end FX revaluation posts every subsidiary with distinct journal num
       select id, entry_number, reverses_entry_id
         from journal_entries
        where org_id = ${org.orgId} and origin = 'fx_revaluation'
-       order by entry_number`));
-    assert.equal(journals.rows.length, 4, "two adjustments plus their two mirrors");
-    const numbers = journals.rows.map((row) => row.entry_number);
+       order by entry_number`, "objects"));
+    assert.equal(journals.length, 4, "two adjustments plus their two mirrors");
+    const numbers = journals.map((row) => row.entry_number);
     assert.equal(new Set(numbers).size, 4, `all four journals need distinct numbers, got ${numbers.join(", ")}`);
     assert.ok(numbers.every((n) => n.startsWith("FXREVAL-2026-07-")));
     for (const posted of run.posted) {
-      const adjustment = journals.rows.find((row) => row.id === posted.entryId);
-      const mirror = journals.rows.find((row) => row.reverses_entry_id === posted.entryId);
+      const adjustment = journals.find((row) => row.id === posted.entryId);
+      const mirror = journals.find((row) => row.reverses_entry_id === posted.entryId);
       assert.ok(adjustment && mirror, "each adjustment carries its mirror");
       assert.equal(mirror.entry_number, `${adjustment.entry_number}-R`);
     }
@@ -155,8 +155,8 @@ test("period-end FX revaluation posts every subsidiary with distinct journal num
     ]);
     const afterRerun = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from journal_entries
-       where org_id = ${org.orgId} and origin = 'fx_revaluation'`));
-    assert.equal(afterRerun.rows[0]?.count, 4);
+       where org_id = ${org.orgId} and origin = 'fx_revaluation'`, "objects"));
+    assert.equal(afterRerun[0]?.count, 4);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -209,7 +209,7 @@ test("revaluation without a following period refuses instead of posting an unrev
     assert.match(run.problems[0]!, /generate periods and re-run/);
     const journals = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${org.orgId} and origin = 'fx_revaluation'`)).rows[0]!.n;
+       where org_id = ${org.orgId} and origin = 'fx_revaluation'`, "objects"))[0]!.n;
     assert.equal(journals, 0, "the refused run writes no adjustment pair");
   } finally {
     await dropScratchOrg(org.orgId);

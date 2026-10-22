@@ -90,8 +90,8 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
            status, created_by, reason
       from hrm_leave_requests
      where id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter =
@@ -186,7 +186,7 @@ export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter =
        where org_id = ${orgId} and status in ('draft', 'submitted')
        order by created_at desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

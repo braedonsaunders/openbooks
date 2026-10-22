@@ -33,7 +33,7 @@ async function straightLineFixture() {
   const org = await createScratchOrg();
   const actorId = randomUUID();
   const calId = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+    select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"))[0]!.id;
   for (const [num, name, start, end] of MONTHS_2026.map(([name, start, end], i) => [i + 1, name, start, end] as const)) {
     // The scratch org already opens 2026-07; every other month is added.
     if (num === 7) continue;
@@ -67,13 +67,13 @@ async function straightLineFixture() {
 }
 
 async function scheduleLines(orgId: string, obligationId: string) {
-  return (await db.execute<{ month: string; planned: string; posted: boolean }>(sql`
+  return await db.execute<{ month: string; planned: string; posted: boolean }>(sql`
     select p.starts_on::text as month, l.planned_amount::text as planned, (l.journal_entry_id is not null) as posted
       from recognition_schedule_lines l
       join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where s.obligation_id = ${obligationId} and s.org_id = ${orgId}
-     order by p.starts_on`)).rows;
+     order by p.starts_on`, "objects");
 }
 
 // ---------------------------------------------------------------------------
@@ -142,7 +142,7 @@ test("reconciling a legacy obligation lifts the refusal for that obligation only
     );
     const recorded = (await db.execute<{ at: string | null; reason: string | null }>(sql`
       select legacy_reconciled_at::text as at, legacy_reconciliation_reason as reason
-        from performance_obligations where id = ${obligationId}`)).rows[0]!;
+        from performance_obligations where id = ${obligationId}`, "objects"))[0]!;
     assert.ok(recorded.at);
     assert.match(recorded.reason!, /straight-line policy memo/);
     await assert.rejects(

@@ -63,8 +63,8 @@ async function snapshot<T>(orgId: string, work: () => Promise<T>): Promise<T> {
 async function partyNames(orgId: string, ids: Iterable<string>): Promise<Record<string, string>> {
   const list = [...new Set(ids)].filter(isUuid);
   if (list.length === 0) return {};
-  const rows = (await db.execute<{ id: string; display_name: string }>(sql`
-    select id, display_name from parties where org_id = ${orgId} and id = any(${`{${list.join(",")}}`}::uuid[])`)).rows;
+  const rows = await db.execute<{ id: string; display_name: string }>(sql`
+    select id, display_name from parties where org_id = ${orgId} and id = any(${`{${list.join(",")}}`}::uuid[])`, "objects");
   return Object.fromEntries(rows.map((row) => [row.id, row.display_name]));
 }
 
@@ -73,10 +73,10 @@ export async function listEquityEntities(input: ReadInput): Promise<LegalEntity[
   return snapshot(input.orgId, async () => {
     await requireEquityReader(db, input.orgId, input.actorId, null);
     const allowed = await actorAllowedSubsidiaryIds(db, input.orgId, input.actorId);
-    const rows = (await db.execute<{ id: string; name: string; currency: string | null }>(sql`
+    const rows = await db.execute<{ id: string; name: string; currency: string | null }>(sql`
       select id, name, nullif(trim(base_currency), '') as currency from subsidiaries
        where org_id = ${input.orgId} and is_active and not is_elimination
-       order by name, id`)).rows;
+       order by name, id`, "objects");
     return rows.filter((row) => row.currency && (allowed === null || allowed.has(row.id))).map((row) => ({ id: row.id, name: row.name, currency: row.currency! }));
   });
 }
@@ -101,7 +101,7 @@ export async function loadCapTableView(input: ReadInput & { subsidiaryId: string
     const table = buildCapTable(book, input.asOf);
     const policy = (await db.execute<{ id: string }>(sql`
       select id from equity_account_policies where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId}
-         and effective_from <= ${input.asOf}::date limit 1`)).rows[0];
+         and effective_from <= ${input.asOf}::date limit 1`, "objects"))[0];
     return {
       entity,
       table,
@@ -276,7 +276,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
   if (!isUuid(input.securityId)) throw equityError("securityUnknown");
   return snapshot(input.orgId, async () => {
     const raw = (await db.execute<Record<string, unknown>>(sql`
-      select ${SECURITY_COLUMNS} from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0];
+      select ${SECURITY_COLUMNS} from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`, "objects"))[0];
     if (!raw) throw equityError("securityUnknown");
     const subsidiaryId = String(raw.subsidiary_id);
     const { entity, book } = await entityBook({ ...input, subsidiaryId });
@@ -308,12 +308,12 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         depositUnvested: formatLedger(unreleasedDeposit(book, security, input.asOf, certificateExponent)),
       };
     }
-    const eventRows = (await db.execute<Record<string, unknown>>(sql`
+    const eventRows = await db.execute<Record<string, unknown>>(sql`
       select ${EVENT_COLUMNS} from equity_security_events where org_id = ${input.orgId} and security_id = ${input.securityId}
-       order by effective_on, created_at, id`)).rows;
+       order by effective_on, created_at, id`, "objects");
     const entryIds = [...eventRows.flatMap((row) => [row.journal_entry_id, row.reversal_entry_id, row.interest_accrual_entry_id]), raw.journal_entry_id].filter((id): id is string => typeof id === "string");
     const entries = entryIds.length === 0 ? [] : (await db.execute<{ id: string; entry_number: string; status: string }>(sql`
-      select id, entry_number, status from journal_entries where org_id = ${input.orgId} and id = any(${`{${entryIds.join(",")}}`}::uuid[])`)).rows;
+      select id, entry_number, status from journal_entries where org_id = ${input.orgId} and id = any(${`{${entryIds.join(",")}}`}::uuid[])`, "objects"));
     const entryNumbers = new Map(entries.map((row) => [row.id, row.entry_number]));
     const resulting = book.securities.filter((row) => row.sourceSecurityId === security.id);
     const names = await partyNames(input.orgId, [security.holderPartyId, ...resulting.map((row) => row.holderPartyId)]);
@@ -324,7 +324,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         select l.cumulative_amount::text as cumulative_amount from equity_compensation_run_lines l
           join equity_compensation_runs r on r.org_id = l.org_id and r.id = l.run_id
          where l.org_id = ${input.orgId} and l.security_id = ${security.id} and r.through_date <= ${input.asOf}::date
-         order by r.through_date desc limit 1`)).rows[0];
+         order by r.through_date desc limit 1`, "objects"))[0];
       const fairValue = parsePrice(security.fairValuePerUnit, "fairValuePerUnit");
       compensation = {
         grantDateValue: formatLedger(ledgerUnits(restate(multiplyRational(rational(security.quantity ?? 0n), fairValue), security.fxRate), exponent)),
@@ -350,7 +350,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
       const voidedEver = voidedSecurities(book, "9999-12-31");
       const inForce = electionInForce(book, security, input.asOf);
       const reasons = new Map((await db.execute<{ id: string; reason: string }>(sql`
-        select id, reason from equity_security_amendments where org_id = ${input.orgId} and security_id = ${security.id}`)).rows.map((row) => [row.id, row.reason]));
+        select id, reason from equity_security_amendments where org_id = ${input.orgId} and security_id = ${security.id}`, "objects")).map((row) => [row.id, row.reason]));
       mfn = {
         candidates: mfnCandidates(book, security, input.asOf),
         elections: records.map((row, index): MfnElectionView => {
@@ -488,7 +488,7 @@ export async function loadStructure(input: ReadInput & { subsidiaryId: string; a
     const originalRounds = (await db.execute<{ id: string; name: string; share_class_id: string; closed_on: string; price_per_share: string; pre_money_valuation: string; currency: string; pre_money_basis_reason: string | null }>(sql`
       select id, name, share_class_id, closed_on::text as closed_on, price_per_share::text as price_per_share, pre_money_valuation::text as pre_money_valuation,
              currency, pre_money_basis_reason
-        from equity_financing_rounds where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} order by closed_on, created_at, id`)).rows
+        from equity_financing_rounds where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} order by closed_on, created_at, id`, "objects"))
       .map((row) => ({ id: row.id, name: row.name, shareClassId: row.share_class_id, closedOn: row.closed_on, pricePerShare: row.price_per_share, preMoneyValuation: row.pre_money_valuation, currency: row.currency, preMoneyBasisReason: row.pre_money_basis_reason }));
     const voided = voidedSecurities(book, input.asOf);
     const voidedLatest = voidedSecurities(book, "9999-12-31");
@@ -544,7 +544,7 @@ export async function listStakeholders(input: ReadInput & { subsidiaryId: string
     const table = buildCapTable(book, input.asOf);
     const ids = [...new Set([...book.securities.map((row) => row.holderPartyId)])].filter(isUuid);
     const rows = ids.length === 0 ? [] : (await db.execute<{ id: string; display_name: string; kind: string; email: string | null }>(sql`
-      select id, display_name, kind, email from parties where org_id = ${input.orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
+      select id, display_name, kind, email from parties where org_id = ${input.orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects"));
     return { entity, table, parties: Object.fromEntries(rows.map((row) => [row.id, { name: row.display_name, kind: row.kind, email: row.email }])) };
   });
 }
@@ -638,7 +638,7 @@ export interface CompensationRunRow {
 export async function listCompensationRuns(input: ReadInput & { subsidiaryId: string }): Promise<CompensationRunRow[]> {
   return snapshot(input.orgId, async () => {
     await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
-    const rows = (await db.execute<{ id: string; through_date: string; total_amount: string; currency: string; journal_entry_id: string | null; entry_number: string | null; release_amount: string; release_journal_entry_id: string | null; release_entry_number: string | null; created_at: string }>(sql`
+    const rows = await db.execute<{ id: string; through_date: string; total_amount: string; currency: string; journal_entry_id: string | null; entry_number: string | null; release_amount: string; release_journal_entry_id: string | null; release_entry_number: string | null; created_at: string }>(sql`
       select r.id, r.through_date::text as through_date, r.total_amount::text as total_amount, r.currency, r.journal_entry_id,
              je.entry_number, r.release_amount::text as release_amount, r.release_journal_entry_id, rje.entry_number as release_entry_number,
              r.created_at::text as created_at
@@ -646,7 +646,7 @@ export async function listCompensationRuns(input: ReadInput & { subsidiaryId: st
         left join journal_entries je on je.org_id = r.org_id and je.id = r.journal_entry_id
         left join journal_entries rje on rje.org_id = r.org_id and rje.id = r.release_journal_entry_id
        where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId}
-       order by r.through_date desc`)).rows;
+       order by r.through_date desc`, "objects");
     return rows.map((row) => ({
       id: row.id, throughDate: row.through_date, total: row.total_amount, currency: row.currency, journalEntryId: row.journal_entry_id, entryNumber: row.entry_number,
       releaseTotal: row.release_amount, releaseJournalEntryId: row.release_journal_entry_id, releaseEntryNumber: row.release_entry_number, createdAt: row.created_at,

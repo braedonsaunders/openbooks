@@ -140,13 +140,13 @@ async function loadParent(
   orgId: string,
   documentId: string,
 ): Promise<TenderParent> {
-  const rows = (await runner.execute<TenderParent>(sql`
+  const rows = await runner.execute<TenderParent>(sql`
     select id, kind, status, currency, total::text as total, subsidiary_id as "subsidiaryId",
            party_id as "partyId", custom
       from documents
      where org_id = ${orgId} and id = ${documentId}
      for update
-  `)).rows;
+  `, "objects");
   const parent = rows[0];
   if (!parent) {
     throw refusal(
@@ -184,7 +184,7 @@ export async function readDocumentTenders(
   orgId: string,
   documentId: string,
 ): Promise<DocumentTenderRow[]> {
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     id: string;
     position: number;
     kind: string;
@@ -203,7 +203,7 @@ export async function readDocumentTenders(
       from document_tenders
      where org_id = ${orgId} and document_id = ${documentId}
      order by position
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     position: row.position,
@@ -246,7 +246,7 @@ async function lockTenderStoredValueAccounts(
   const byId = new Map<string, StoredValueAccountView>();
   // Lock in id order so concurrent tender writes cannot deadlock.
   for (const accountId of [...new Set(accountIds)].sort()) {
-    const rows = (await runner.execute<{
+    const rows = await runner.execute<{
       id: string;
       programId: string;
       kind: string;
@@ -265,7 +265,7 @@ async function lockTenderStoredValueAccounts(
         from stored_value_accounts
        where org_id = ${orgId} and id = ${accountId}
        for update
-    `)).rows;
+    `, "objects");
     const row = rows[0];
     if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) {
       throw refusal(
@@ -315,11 +315,11 @@ async function assertTenderAccount(
   accountId: string,
   label: string,
 ): Promise<void> {
-  const rows = (await runner.execute<{ id: string; type: string }>(sql`
+  const rows = await runner.execute<{ id: string; type: string }>(sql`
     select id, type from accounts
      where org_id = ${orgId} and id = ${accountId} and is_active and not is_summary
      for key share
-  `)).rows;
+  `, "objects");
   const account = rows[0];
   if (!account) {
     throw refusal(
@@ -553,8 +553,8 @@ export async function replaceDocumentTenders(
           .filter((id): id is string => id !== null);
         const names = await runner.execute<{ id: string; name: string }>(sql`
           select id, name from subsidiaries
-           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`);
-        const byId = new Map(names.rows.map((row) => [row.id, row.name]));
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
+        const byId = new Map(names.map((row) => [row.id, row.name]));
         const accountSub = byId.get(storedValueAccount.subsidiaryId) ?? storedValueAccount.subsidiaryId;
         const docSub = (parent.subsidiaryId && byId.get(parent.subsidiaryId)) ?? parent.subsidiaryId ?? "no legal entity";
         throw refusal(
@@ -623,7 +623,7 @@ export async function replaceDocumentTenders(
   `);
   for (let index = 0; index < prepared.length; index++) {
     const tender = prepared[index]!;
-    const inserted = (await runner.execute<{ id: string }>(sql`
+    const inserted = await runner.execute<{ id: string }>(sql`
       insert into document_tenders
         (org_id, document_id, position, kind, method_label, account_id,
          stored_value_account_id, amount_minor, currency, reference, external_ref,
@@ -633,7 +633,7 @@ export async function replaceDocumentTenders(
         ${parent.currency}, ${tender.reference}, ${tender.externalRef},
         ${options.actorId ?? null}, ${options.actorId ?? null})
       returning id
-    `)).rows;
+    `, "objects");
     if (inserted.length !== 1 || !inserted[0]) {
       throw refusal(
         `${parent.kind === "cash_sale" ? "Cash sale" : "Cash refund"} tenders could not be saved.`,
@@ -719,7 +719,7 @@ export async function resolveCashPostingTenders(
       });
       continue;
     }
-    const accounts = (await runner.execute<{
+    const accounts = await runner.execute<{
       program_id: string; kind: string; customerPartyId: string | null; status: string;
       expiresOn: string | null; liabilityAccountId: string | null;
     }>(sql`
@@ -727,7 +727,7 @@ export async function resolveCashPostingTenders(
              status, expires_on::text as "expiresOn",
              liability_account_id as "liabilityAccountId" from stored_value_accounts
        where org_id = ${orgId} and id = ${row.storedValueAccountId}
-    `)).rows;
+    `, "objects");
     const programId = accounts[0]?.program_id;
     if (!programId || !accounts[0]) {
       throw new TenderRefusal(
@@ -831,10 +831,10 @@ export async function hasStoredValueTenders(
   orgId: string,
   documentId: string,
 ): Promise<boolean> {
-  const rows = (await runner.execute<{ n: number }>(sql`
+  const rows = await runner.execute<{ n: number }>(sql`
     select count(*)::int as n from document_tenders
      where org_id = ${orgId} and document_id = ${documentId} and kind = 'stored_value'
-  `)).rows;
+  `, "objects");
   return (rows[0]?.n ?? 0) > 0;
 }
 
@@ -858,7 +858,7 @@ export async function settleCashRefundTenders(
   }>(sql`
     select kind, status, party_id as "partyId", custom from documents
      where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!parent || parent.kind !== "cash_refund") {
     return { settled: 0 };
   }
@@ -926,13 +926,13 @@ export async function settleCashRefundTenders(
       // recorded (a crash between the entry and this write); the row count
       // turns a raced or reordered write into a refusal instead of silent
       // success.
-      const filled = (await db.execute<{ id: string }>(sql`
+      const filled = await db.execute<{ id: string }>(sql`
         update document_tenders
            set stored_value_account_id = ${loaded.accountId}, updated_at = now(),
                updated_by = ${options.actorId ?? null}
          where org_id = ${orgId} and id = ${row.id} and stored_value_account_id is null
         returning id
-      `)).rows;
+      `, "objects");
       if (filled.length !== 1) {
         const reread = (await readDocumentTenders(db, orgId, documentId)).find(
           (tender) => tender.id === row.id,

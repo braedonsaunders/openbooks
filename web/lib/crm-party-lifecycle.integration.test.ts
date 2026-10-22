@@ -28,7 +28,7 @@ const patchRequest = (body: unknown) => new Request('http://audit.local', {metho
 // Opportunity saves speak the revision contract: attach the live token so
 // these assertions exercise the account-lifecycle checks, not the 409 guard.
 async function oppRev(orgId: string, id: string) {
- return (await withOrgContext(orgId, () => db.execute<{revision:string}>(sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`))).rows[0]!.revision;
+ return (await withOrgContext(orgId, () => db.execute<{revision:string}>(sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`, 'objects')))[0]!.revision;
 }
 const editRequest = async (org: Fixture, id: string, body: Record<string, unknown>) =>
  patchRequest({ ...body, expectedUpdatedAt: await oppRev(org.orgId, id) });
@@ -40,7 +40,7 @@ async function fixture(action: (org: Fixture, open: string, closed: string) => P
    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":true}'::jsonb) where id=${org.orgId}`);
    await ensureCrmDefaults(org.orgId,actor);
-   const statuses=(await db.execute<{id:string;is_closed:boolean}>(sql`select id,is_closed from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_won order by is_default desc`)).rows;
+   const statuses=await db.execute<{id:string;is_closed:boolean}>(sql`select id,is_closed from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_won order by is_default desc`, 'objects');
    return {actor,open:statuses.find(s=>!s.is_closed)!.id,closed:statuses.find(s=>s.is_closed)!.id};
   });
   session.user={id:seeded.actor,orgId:org.orgId,name:'Reviewer',email:'reviewer@example.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:seeded.actor};
@@ -71,16 +71,16 @@ async function blockedBy(pid: number) {
 
 test('party retirement refuses open opportunities without changing state or audit history', enabled, async()=>fixture(async(org,open,closed)=>{
  const id=await opportunity(org,open);
- const before=(await withOrgContext(org.orgId,()=>db.execute<{n:string}>(sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`))).rows[0]!.n;
+ const before=(await withOrgContext(org.orgId,()=>db.execute<{n:string}>(sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`, 'objects')))[0]!.n;
  const response=await withOrgContext(org.orgId,async()=>PATCH(await retirement(org),params(org.customerId)));
  assert.equal(response.status,422,await response.clone().text());
  assert.match((await response.json()).error,/open opportunities/i);
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`))).rows[0]!.is_active,true);
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{n:string}>(sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`))).rows[0]!.n,before);
+ assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`, 'objects')))[0]!.is_active,true);
+ assert.equal((await withOrgContext(org.orgId,()=>db.execute<{n:string}>(sql`select count(*)::text as n from audit_log where org_id=${org.orgId}`, 'objects')))[0]!.n,before);
  await withBypassContext(()=>db.execute(sql`update crm_opportunities set status_id=${closed} where id=${id}`));
  const accepted=await withOrgContext(org.orgId,async()=>PATCH(await retirement(org),params(org.customerId)));
  assert.equal(accepted.status,200,await accepted.clone().text());
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`))).rows[0]!.is_active,false);
+ assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`, 'objects')))[0]!.is_active,false);
 }));
 
 test('inactive accounts refuse new and reopened opportunities but allow closing legacy work', enabled, async()=>fixture(async(org,open,closed)=>{
@@ -94,7 +94,7 @@ test('inactive accounts refuse new and reopened opportunities but allow closing 
  assert.equal(finished.status,200,await finished.clone().text());
  const reopened=await withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{statusId:open,isActive:true}),params(id)));
  assert.equal(reopened.status,422,await reopened.clone().text());
- assert.equal((await withOrgContext(org.orgId,()=>db.execute<{status_id:string}>(sql`select status_id from crm_opportunities where id=${id}`))).rows[0]!.status_id,closed);
+ assert.equal((await withOrgContext(org.orgId,()=>db.execute<{status_id:string}>(sql`select status_id from crm_opportunities where id=${id}`, 'objects')))[0]!.status_id,closed);
 }));
 
 test('retirement rechecks open work after waiting for the account lock', enabled, async()=>fixture(async(org,open)=>{
@@ -113,7 +113,7 @@ test('retirement rechecks open work after waiting for the account lock', enabled
   await client.query('commit');
   const response=await pending;
   assert.equal(response.status,422,await response.clone().text());
-  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`))).rows[0]!.is_active,true);
+  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from parties where id=${org.customerId}`, 'objects')))[0]!.is_active,true);
  } finally {await client.query('rollback');client.release();await pending?.catch(()=>{});}
 }));
 
@@ -131,6 +131,6 @@ test('opportunity activation rechecks account retirement after waiting for its l
   await client.query('commit');
   const response=await pending;
   assert.equal(response.status,422,await response.clone().text());
-  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from crm_opportunities where id=${id}`))).rows[0]!.is_active,false);
+  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{is_active:boolean}>(sql`select is_active from crm_opportunities where id=${id}`, 'objects')))[0]!.is_active,false);
  } finally {await client.query('rollback');client.release();await pending?.catch(()=>{});}
 }));

@@ -44,12 +44,12 @@ export async function insertDisputeRow(
     -- Repeated provider delivery reuses the dispute selected below instead of recording it twice.
     on conflict (org_id, provider, provider_event_id) do nothing
     returning id
-  `));
-  if (inserted.rows[0]) return { id: inserted.rows[0].id, created: true };
+  `, "objects"));
+  if (inserted[0]) return { id: inserted[0].id, created: true };
   const existing = (await db.execute<{ id: string }>(sql`
     select id from payment_disputes
      where org_id = ${orgId} and provider = ${row.provider} and provider_event_id = ${row.providerEventId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!existing) throw new PspAutomationError("dispute record could not be locked");
   return { id: existing.id, created: false };
 }
@@ -64,7 +64,7 @@ export async function transitionDisputeRow(
   // The zero-row check is the failure, not the update: under RLS an unscoped
   // write silently matches nothing, which would report a posted refund whose
   // record never moved.
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<never>(sql`
     update payment_disputes
        set status = ${status},
            documents_posted = ${JSON.stringify(documents)}::jsonb,
@@ -128,7 +128,7 @@ export async function disputeRow(
       from payment_disputes
      where id = ${disputeId} and org_id = ${orgId}
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new PspAutomationError("dispute record is not in this organization");
   return row;
 }
@@ -193,7 +193,7 @@ export async function findDisputeByRef(
        and kind = 'dispute'
      order by created_at desc limit 1
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   return row ?? null;
 }
 
@@ -237,7 +237,7 @@ export async function parkDisputeForReview(
   event: Record<string, unknown>,
   reason: string,
 ): Promise<RefundAutomationOutcome> {
-  const updated = (await db.execute(sql`
+  const updated = (await db.execute<never>(sql`
     update payment_disputes
        set status = 'pending_review',
            reason = ${reason},

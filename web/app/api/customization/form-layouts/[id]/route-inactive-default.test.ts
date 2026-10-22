@@ -73,7 +73,7 @@ const LAYOUT_ID = '22222222-2222-4222-8222-222222222222'
 function installDb(loadRow: Record<string, unknown>, opts?: { lockOverride?: Record<string, unknown> }) {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
     db: {
-      execute: (query: unknown) => Promise<{ rows: unknown[] }>
+      execute: (query: unknown, mode?: string) => Promise<unknown>
       transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>
     }
   }
@@ -81,15 +81,16 @@ function installDb(loadRow: Record<string, unknown>, opts?: { lockOverride?: Rec
   state.lockOverride = opts?.lockOverride ?? {}
   state.statements = []
   state.db = {
-    execute: async () => ({ rows: state.loadRow ? [state.loadRow] : [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: state.loadRow ? [state.loadRow] : [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
     transaction: async (fn) => {
       let txCalls = 0
       const tx = {
-        execute: async (query: unknown) => {
+        execute: async (query: unknown, mode?: string) => {
+          const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
           state.statements.push(query)
           txCalls += 1
           if (txCalls === 1) {
-            return {
+            return inMode({
               rows: state.loadRow
                 ? [{
                     id: LAYOUT_ID,
@@ -99,9 +100,9 @@ function installDb(loadRow: Record<string, unknown>, opts?: { lockOverride?: Rec
                     ...state.lockOverride,
                   }]
                 : [],
-            }
+            })
           }
-          return { rows: [{ id: LAYOUT_ID }] }
+          return inMode({ rows: [{ id: LAYOUT_ID }] })
         },
       }
       return fn(tx)

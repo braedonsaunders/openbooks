@@ -47,11 +47,11 @@ async function fixture() {
   const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Revision Account', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   const profileId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into crm_account_profiles (org_id, party_id, lifecycle_stage, industry, is_active)
     values (${org.orgId}, ${partyId}, 'lead', 'Software', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   return { org, partyId, profileId }
 }
 
@@ -83,7 +83,7 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 
 async function industryOf(profileId: string): Promise<string | null> {
   return (await withBypassContext(() => db.execute<{ industry: string | null }>(sql`
-    select industry from crm_account_profiles where id = ${profileId}`))).rows[0]!.industry
+    select industry from crm_account_profiles where id = ${profileId}`, 'objects')))[0]!.industry
 }
 
 test('PATCH without a revision token is refused before any write', async () => {

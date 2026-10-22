@@ -94,9 +94,10 @@ test("auditBackupEvent fails closed when the audit-log write fails", async (t) =
 
 test("auditBackupEvent resolves and issues its evidence insert on success", async (t) => {
   let inserts = 0;
-  t.mock.method(db, "execute", async () => {
+  t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     inserts += 1;
-    return { rows: [] };
+    return inMode({ rows: [] });
   });
   await auditBackupEvent({
     orgId: randomUUID(),

@@ -197,7 +197,7 @@ export async function loadArInvoices(
                     where org_id = ${authz.user.orgId} and document_id = ${existingDocId} and item_id is not null
                  )
                )
-             order by coalesce(it.code, it.name), it.name limit 2000`).then((r) => r.rows),
+             order by coalesce(it.code, it.name), it.name limit 2000`, 'objects'),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
           isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
             if (!multi) return null
@@ -210,7 +210,7 @@ export async function loadArInvoices(
           // invoices only). Empty hides the picker; a single location is
           // stamped silently by the edit writer instead.
           inventoryEnabled
-            ? db.execute(sql`
+            ? db.execute<Record<string, unknown>>(sql`
               select id, code from stock_locations
                where org_id = ${authz.user.orgId} and is_active order by code`).then((r) => r.rows)
             : [],
@@ -256,7 +256,7 @@ export async function loadArInvoices(
          where ap.org_id = ${authz.user.orgId} and settled_entry.source_document_id = ${openDoc.doc.id}
            and ap.unapplied_at is null
          order by ap.applied_on desc, ap.created_at desc
-      `)).rows
+      `, 'objects'))
     : []
   // A restricted subsidiary scope narrows the seed default the same way
   // the picker list narrows: the first visible subsidiary wins.
@@ -286,7 +286,7 @@ export async function loadArInvoices(
     ? (await db.execute<{ name: string }>(sql`
         select name from marketplace_facilitators
          where org_id = ${authz.user.orgId} and is_active
-         order by name`)).rows
+         order by name`, 'objects'))
     : []
   const taxProvider = providerRows.length > 0 && openDoc
     ? {

@@ -80,24 +80,20 @@ async function requestStatus(
   orgId: string,
   requestId: string,
 ): Promise<string> {
-  return (
-    await db.execute<{ status: string }>(sql`
+  return (await db.execute<{ status: string }>(sql`
     select status from close_reopen_requests where id = ${requestId} and org_id = ${orgId}
-  `)
-  ).rows[0]!.status;
+  `, "objects"))[0]!.status;
 }
 
 async function endAuditCount(
   orgId: string,
   requestId: string,
 ): Promise<number> {
-  return (
-    await db.execute<{ n: number }>(sql`
+  return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'close_reopen_requests'
        and row_id = ${requestId} and action = 'end'
-  `)
-  ).rows[0]!.n;
+  `, "objects"))[0]!.n;
 }
 
 test(
@@ -172,15 +168,13 @@ test(
 
       await db.execute(sql.raw(RECONCILE_STALE_REOPEN_WINDOWS));
       assert.equal(await requestStatus(org.orgId, stale), "reclosed");
-      const ended = (
-        await db.execute<{
+      const ended = (await db.execute<{
           reclosed_at: string | null;
           updated_by: string | null;
         }>(sql`
         select reclosed_at::text as reclosed_at, updated_by::text as updated_by
           from close_reopen_requests where id = ${stale} and org_id = ${org.orgId}
-      `)
-      ).rows[0]!;
+      `, "objects"))[0]!;
       assert.ok(ended.reclosed_at, "the re-close fields are set");
       assert.equal(
         ended.updated_by,
@@ -192,13 +186,11 @@ test(
         1,
         "one audit row per ended window",
       );
-      const auditReason = (
-        await db.execute<{ reason: string }>(sql`
+      const auditReason = (await db.execute<{ reason: string }>(sql`
         select changes->>'reason' as reason from audit_log
          where org_id = ${org.orgId} and table_name = 'close_reopen_requests'
            and row_id = ${stale} and action = 'end'
-      `)
-      ).rows[0]!.reason;
+      `, "objects"))[0]!.reason;
       assert.match(auditReason, /every covered module is already closed/);
 
       // The window still guarding open AP work is untouched.

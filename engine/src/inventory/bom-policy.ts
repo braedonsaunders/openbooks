@@ -52,7 +52,7 @@ export async function readBomPolicyVersion(
       quantity_per::text || ':' || sort_order::text || ':' || coalesce(effective_from::text,'') || ':' ||
       coalesce(effective_to::text,'') || ':' || coalesce(operation_seq::text,'') || ':' || coalesce(scrap_pct::text,'') || ':' || is_byproduct::text || ':' || quantity_basis || ':' || formula_output_quantity::text || ':' || coalesce(output_cost_weight::text,''),
       ',' order by sort_order,component_item_id,operation_seq nulls first,is_byproduct,effective_from nulls first,effective_to nulls first)) as version
-    from bom_components where org_id=${orgId} and assembly_item_id=${assemblyItemId}`)).rows[0]?.version ?? null
+    from bom_components where org_id=${orgId} and assembly_item_id=${assemblyItemId}`, "objects"))[0]?.version ?? null
   );
 }
 
@@ -118,12 +118,12 @@ export async function assertBomRevisionAuthority(
 
 /** The recipe state a revision proposes from: parent kind, concurrency version and stored lines. */
 export async function readBomRecipe(tx: SqlExecutor, orgId: string, assemblyItemId: string) {
-  const parent = (await tx.execute<{ kind: string }>(sql`select kind from items where org_id=${orgId} and id=${assemblyItemId} for no key update`)).rows[0];
+  const parent = (await tx.execute<{ kind: string }>(sql`select kind from items where org_id=${orgId} and id=${assemblyItemId} for no key update`, "objects"))[0];
   if (!parent) throw new ScopeNotFoundError();
-  const lines = (await tx.execute<StoredLine>(sql`select id,component_item_id as "componentItemId",quantity_per::text as "quantityPer",sort_order as "sortOrder",
+  const lines = await tx.execute<StoredLine>(sql`select id,component_item_id as "componentItemId",quantity_per::text as "quantityPer",sort_order as "sortOrder",
     effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo",operation_seq as "operationSeq",scrap_pct::text as "scrapPct",is_byproduct as "isByproduct",quantity_basis as "quantityBasis",formula_output_quantity::text as "formulaOutputQuantity",output_cost_weight::text as "outputCostWeight"
     from bom_components where org_id=${orgId} and assembly_item_id=${assemblyItemId}
-    order by sort_order,component_item_id,operation_seq nulls first,is_byproduct,effective_from nulls first,effective_to nulls first`)).rows;
+    order by sort_order,component_item_id,operation_seq nulls first,is_byproduct,effective_from nulls first,effective_to nulls first`, "objects");
   return { kind: parent.kind, version: await readBomPolicyVersion(tx, orgId, assemblyItemId), lines };
 }
 
@@ -133,8 +133,8 @@ async function validateReferences(tx: SqlExecutor, orgId: string, assemblyItemId
     select id, kind from items
      where org_id=${orgId} and is_active
        and id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)})
-     order by id for share`);
-  const byId = new Map(items.rows.map(item => [item.id, item]));
+     order by id for share`, "objects");
+  const byId = new Map(items.map(item => [item.id, item]));
   if (byId.size !== ids.length) {
     throw new BomPolicyError(parentKind === "kit"
       ? "The kit and every component must be active items in this organization."
@@ -151,8 +151,8 @@ async function validateReferences(tx: SqlExecutor, orgId: string, assemblyItemId
     select item_id as "itemId" from item_inventory_profiles
      where org_id=${orgId}
        and item_id in (${sql.join([...new Set(profileRequiredIds)].map(id => sql`${id}::uuid`), sql`, `)})
-     order by item_id for share`);
-  const profiled = new Set(profiles.rows.map(profile => profile.itemId));
+     order by item_id for share`, "objects");
+  const profiled = new Set(profiles.map(profile => profile.itemId));
   if ([...new Set(profileRequiredIds)].some(id => !profiled.has(id))) {
     throw new BomPolicyError(parentKind === "kit"
       ? "Each inventory or assembly component in a kit needs a costing profile; configure the component profile before saving."
@@ -202,15 +202,15 @@ async function preserveHistory(
  * active routing the blank stands and release-time checks govern. */
 async function defaultOperationSequences(tx: SqlExecutor, orgId: string, assemblyItemId: string, lines: BomPolicyLine[], asOf: string): Promise<BomPolicyLine[]> {
   if (!lines.some((line) => line.operationSeq === null)) return lines;
-  const routings = (await tx.execute<{ id: string; code: string }>(sql`
+  const routings = await tx.execute<{ id: string; code: string }>(sql`
     select id, code from mfg_routings where org_id=${orgId} and produced_item_id=${assemblyItemId} and status='active'
       and effective_from <= ${asOf}::date and (effective_to is null or ${asOf}::date < effective_to)
-     order by version desc, id`)).rows;
+     order by version desc, id`, "objects");
   if (routings.length !== 1) return lines;
   const routing = routings[0]!;
-  const consuming = (await tx.execute<{ sequence: number }>(sql`
+  const consuming = await tx.execute<{ sequence: number }>(sql`
     select sequence from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
-      and backflush_at in ('start','finish') order by sequence`)).rows;
+      and backflush_at in ('start','finish') order by sequence`, "objects");
   if (consuming.length === 0) return lines;
   if (consuming.length === 1) {
     const only = consuming[0]!.sequence;
@@ -234,34 +234,34 @@ async function assertBackdateWindowClear(tx: SqlExecutor, orgId: string, assembl
       from mfg_work_orders
      where org_id=${orgId} and produced_item_id=${assemblyItemId} and released_at is not null
        and (released_at::date >= ${earliestFrom}::date or completed_at::date >= ${earliestFrom}::date)
-     order by released_at, number limit 1`)).rows[0];
+     order by released_at, number limit 1`, "objects"))[0];
   if (order) throw new BomPolicyError(`A back-dated recipe revision is refused: work order ${order.number} already posts production for this assembly (posted ${order.posted}). Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
   const build = (await tx.execute<{ moved: string }>(sql`
     select moved_at::date::text as moved from inventory_movements
      where org_id=${orgId} and item_id=${assemblyItemId} and kind='assembly_build' and status='posted'
        and moved_at::date >= ${earliestFrom}::date
-     order by moved_at limit 1`)).rows[0];
+     order by moved_at limit 1`, "objects"))[0];
   if (build) throw new BomPolicyError(`A back-dated recipe revision is refused: finished production of this assembly already posted on ${build.moved}. Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
   const rollup = (await tx.execute<{ onDate: string }>(sql`
     select effective_on::text as "onDate" from financial_changes
      where org_id=${orgId} and subject_id=${assemblyItemId} and domain='manufacturing' and operation=${MANUFACTURING_STANDARD_ROLLUP_OPERATION}
        and status='applied' and effective_on >= ${earliestFrom}::date
-     order by effective_on limit 1`)).rows[0];
+     order by effective_on limit 1`, "objects"))[0];
   if (rollup) throw new BomPolicyError(`A back-dated recipe revision is refused: an applied standard-cost roll-up for this assembly already freezes the recipe effective on ${rollup.onDate}. Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
 }
 
 async function replace(tx: SqlExecutor, orgId: string, actorId: string, input: BomPolicyInput, before: Awaited<ReturnType<typeof readBomRecipe>>, lines: BomPolicyLine[], approvalChangeId?: string) {
   if(approvalChangeId)await tx.execute(sql`select set_config('openbooks.production_bom_changes',
     (coalesce(nullif(current_setting('openbooks.production_bom_changes',true),''),'{}')::jsonb||jsonb_build_object(${orgId+':'+input.assemblyItemId}::text,${approvalChangeId}::text))::text,true)`);
-  const deleted = await tx.execute(sql`delete from bom_components where org_id=${orgId} and assembly_item_id=${input.assemblyItemId} returning id`);
-  if (deleted.rows.length !== before.lines.length) throw new BomPolicyError("The prior recipe was not fully replaced; retry the transaction.",409);
+  const deleted = await tx.execute(sql`delete from bom_components where org_id=${orgId} and assembly_item_id=${input.assemblyItemId} returning id`, "objects");
+  if (deleted.length !== before.lines.length) throw new BomPolicyError("The prior recipe was not fully replaced; retry the transaction.",409);
   for (const line of lines) {
     const inserted = await tx.execute(sql`insert into bom_components(org_id,assembly_item_id,component_item_id,quantity_per,sort_order,effective_from,effective_to,operation_seq,scrap_pct,is_byproduct,quantity_basis,formula_output_quantity,output_cost_weight,created_by,updated_by)
-      values(${orgId},${input.assemblyItemId},${line.componentItemId},${line.quantityPer},${line.sortOrder},${line.effectiveFrom},${line.effectiveTo},${line.operationSeq},${line.scrapPct},${line.isByproduct},${line.quantityBasis},${line.formulaOutputQuantity},${line.outputCostWeight},${actorId},${actorId}) returning id`);
-    if (inserted.rows.length !== 1) throw new BomPolicyError("A component was not stored; retry the transaction.",409);
+      values(${orgId},${input.assemblyItemId},${line.componentItemId},${line.quantityPer},${line.sortOrder},${line.effectiveFrom},${line.effectiveTo},${line.operationSeq},${line.scrapPct},${line.isByproduct},${line.quantityBasis},${line.formulaOutputQuantity},${line.outputCostWeight},${actorId},${actorId}) returning id`, "objects");
+    if (inserted.length !== 1) throw new BomPolicyError("A component was not stored; retry the transaction.",409);
   }
   if ((await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${orgId},'bom_components',${input.assemblyItemId},${before.lines.length ? "update" : "insert"},${JSON.stringify({reason:input.reason.trim(),approvalChangeId:approvalChangeId ?? null,before:before.lines,after:lines})}::jsonb,${actorId}) returning id`)).rows.length !== 1) throw new BomPolicyError("The recipe audit could not be stored; retry the transaction.",409);
+    values(${orgId},'bom_components',${input.assemblyItemId},${before.lines.length ? "update" : "insert"},${JSON.stringify({reason:input.reason.trim(),approvalChangeId:approvalChangeId ?? null,before:before.lines,after:lines})}::jsonb,${actorId}) returning id`, "objects")).length !== 1) throw new BomPolicyError("The recipe audit could not be stored; retry the transaction.",409);
   return { assemblyItemId: input.assemblyItemId, version: await readBomPolicyVersion(tx,orgId,input.assemblyItemId), componentCount: lines.length };
 }
 
@@ -282,15 +282,15 @@ export async function saveBomPolicy(
   if (input.requestKey) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`financial-change:${orgId}:${input.requestKey}`}))`);
   const before = await readBomRecipe(tx,orgId,input.assemblyItemId);
   if (!manufacturingEnabled && before.kind !== "kit" && (await tx.execute(sql`select 1 from financial_changes where org_id=${orgId} and subject_id=${input.assemblyItemId} and domain='manufacturing' and operation=${MANUFACTURING_BOM_APPROVAL_OPERATION}
-    union all select 1 from mfg_work_orders where org_id=${orgId} and produced_item_id=${input.assemblyItemId} and released_at is not null limit 1`)).rows.length) throw new ScopeNotFoundError();
+    union all select 1 from mfg_work_orders where org_id=${orgId} and produced_item_id=${input.assemblyItemId} and released_at is not null limit 1`, "objects")).length) throw new ScopeNotFoundError();
   const manufacturing = manufacturingEnabled && before.kind !== "kit";
   if (!manufacturingEnabled && [...before.lines,...lines].some(line=>line.operationSeq!==null || line.isByproduct || (line.quantityBasis??'per_unit')!=='per_unit')) throw new ScopeNotFoundError();
   if (before.kind === "kit" && lines.some(line=>line.operationSeq!==null || line.isByproduct || compareDecimal(line.scrapPct ?? "0","0")!==0 || line.quantityBasis!=='per_unit')) throw new BomPolicyError("A kit ships the quantities named; remove operation, by-product and scrap settings.");
   if (manufacturing) {
     await assertBomRevisionAuthority(tx,orgId,actorId,true);
     if (!input.subsidiaryId || !isUuid(input.subsidiaryId) || !input.requestKey || input.requestKey.length>120 || input.reason.trim().length<8 || input.reason.trim().length>1000) throw new BomPolicyError("Choose a booking entity, provide a request key and enter an approval reason between 8 and 1,000 characters.");
-    if (!(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows.length) throw new ScopeNotFoundError();
-    const retained = (await tx.execute<{effective_on:string}>(sql`select effective_on::text from financial_changes where org_id=${orgId} and idempotency_key=${input.requestKey}`)).rows[0];
+    if (!(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`, "objects")).length) throw new ScopeNotFoundError();
+    const retained = (await tx.execute<{effective_on:string}>(sql`select effective_on::text from financial_changes where org_id=${orgId} and idempotency_key=${input.requestKey}`, "objects"))[0];
     const effectiveOn =
       retained?.effective_on ?? (await businessTodayInTx(tx, orgId));
     // A re-added line carries a blank sequence until the routing places it;

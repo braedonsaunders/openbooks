@@ -76,14 +76,14 @@ export async function ensureOverheadPublishFailedNotice(
   effectiveFrom: string,
   error: string,
 ): Promise<number> {
-  const recipients = (await db.execute<{ id: string }>(sql`
+  const recipients = await db.execute<{ id: string }>(sql`
     select distinct u.id::text as id
       from users u
       left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
       left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
      where u.org_id = ${orgId} and u.is_active
        and (u.is_super_admin or (r.permissions ? 'admin.setup.manage'))
-  `)).rows;
+  `, "objects");
   if (recipients.length === 0) return 0;
   let written = 0;
   for (const recipient of recipients) {
@@ -92,7 +92,7 @@ export async function ensureOverheadPublishFailedNotice(
        where org_id = ${orgId} and user_id = ${recipient.id}::uuid
          and kind = ${OVERHEAD_PUBLISH_FAILED_NOTICE_KIND} and href = ${OVERHEAD_SETUP_HREF} and read_at is null
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (existing) continue;
     const title = `Overhead scheduled publish failed for ${effectiveFrom}`;
     const body =
@@ -105,7 +105,7 @@ export async function ensureOverheadPublishFailedNotice(
       insert into notifications (org_id, user_id, kind, title, body, href)
       values (${orgId}, ${recipient.id}::uuid, ${OVERHEAD_PUBLISH_FAILED_NOTICE_KIND}, ${title}, ${body}, ${OVERHEAD_SETUP_HREF})
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!inserted) throw new Error("the overhead-publish failure notice was not stored — no row was written; retry the action");
     written += 1;
   }
@@ -119,7 +119,7 @@ export async function resolveOverheadPublishFailedNotices(orgId: string): Promis
      where org_id = ${orgId} and kind = ${OVERHEAD_PUBLISH_FAILED_NOTICE_KIND}
        and href = ${OVERHEAD_SETUP_HREF} and read_at is null
     returning 1 as n
-  `)).rows.length;
+  `, "objects")).length;
   return resolved;
 }
 
@@ -162,8 +162,8 @@ export async function tick(): Promise<void> {
        where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'
          -- Registry fallback shape (non-boolean stored values fall back to
          -- the default instead of throwing 22P02).
-         and case (settings->'features'->>'projects') when 'true' then true when 'false' then false else true end`));
-    for (const org of orgs.rows) {
+         and case (settings->'features'->>'projects') when 'true' then true when 'false' then false else true end`, "objects"));
+    for (const org of orgs) {
       // Per-org isolation: one tenant's failure (an unreadable time zone, a
       // discovery row deleted mid-tick) is recorded by name and the loop
       // continues — a bad org never aborts every org behind it. Resolving

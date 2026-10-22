@@ -42,7 +42,7 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
   const header = (await tx.execute<{ id: string; status: string }>(sql`
     select id, status from timesheet_weeks where org_id=${input.orgId}
       and employee_party_id=${input.employeePartyId} and week_start=${input.weekStart}::date for update
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!header || !['draft', 'rejected', 'approved'].includes(header.status)) {
     throw refuse('This week is awaiting a decision.', 'time_type_week_submitted',
       'Have the approver reject the submitted time, or withdraw your pending submission, before correcting it.')
@@ -53,13 +53,13 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
       and worked_on between ${input.weekStart}::date and ${input.weekStart}::date + 6
       and status='submitted') or exists(select 1 from flow_gates where org_id=${input.orgId}
       and subject_kind='timesheet_week' and subject_id=${header.id} and status in ('pending','escalated')) as blocked
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!pending || pending.blocked) throw refuse('A submission or approval workflow still holds this week.')
   const source = (await tx.execute<{ fieldTicketId: string | null }>(sql`
     select field_ticket_id as "fieldTicketId" from time_entries where org_id=${input.orgId}
       and id=${input.entryId} and employee_party_id=${input.employeePartyId}
       and worked_on between ${input.weekStart}::date and ${input.weekStart}::date + 6
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!source) throw refuse('The time entry is unavailable.')
   if (source.fieldTicketId) {
     const ticket = (await tx.execute<{ status: string; captured: boolean }>(sql`
@@ -69,7 +69,7 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
           and s.field_ticket_id=d.id and s.superseded_at is null) as captured
       from documents d where d.org_id=${input.orgId} and d.id=${source.fieldTicketId}
         and d.kind='field_ticket' for share of d
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!ticket || !['approved','posted'].includes(ticket.status)) {
       throw refuse('The source ticket has not been approved.', 'time_type_ticket_editable',
         'Correct draft crew time on its source Field Ticket before commercial approval.')
@@ -101,7 +101,7 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
     from time_entries te where te.org_id=${input.orgId} and te.id=${input.entryId}
       and te.employee_party_id=${input.employeePartyId}
       and te.worked_on between ${input.weekStart}::date and ${input.weekStart}::date + 6 for update of te
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!entry || entry.fieldTicketId !== source.fieldTicketId || entry.held || entry.workOrderId
     || !['draft','rejected'].includes(entry.status) || cmp(entry.hours, '0') <= 0) {
     throw refuse('Only unapproved, unconsumed worked time can be reclassified.', 'time_type_entry_held',
@@ -113,10 +113,10 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
   const intent = { employeePartyId: input.employeePartyId, weekStart: input.weekStart, entryId: input.entryId,
     expectedUpdatedAt: input.expectedUpdatedAt, timeTypeId: input.timeTypeId, timeTypeUpdatedAt: input.timeTypeUpdatedAt,
     commandId: input.commandId, reason: input.reason.trim(), actorId: input.actorId }
-  const prior = (await tx.execute<{ changes: { intent: unknown; after: { sourceRow: string } } }>(sql`
+  const prior = await tx.execute<{ changes: { intent: unknown; after: { sourceRow: string } } }>(sql`
     select changes from audit_log where org_id=${input.orgId} and table_name='time_entries' and row_id=${entry.id}
       and changes->>'event'='time_type_corrected' and changes->>'commandId'=${input.commandId}
-  `)).rows
+  `, 'objects')
   if (prior.length) {
     if (prior.length !== 1 || canonicalJson(prior[0]!.changes.intent) !== canonicalJson(intent)
       || prior[0]!.changes.after.sourceRow !== entry.raw) {
@@ -125,7 +125,7 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
     return { changed: false, replayed: true }
   }
   if (entry.updatedAt !== input.expectedUpdatedAt) throw refuse('The reviewed time entry changed.', 'time_type_revision_changed')
-  const types = (await tx.execute<{
+  const types = await tx.execute<{
     id: string; name: string; classification: string; costMultiplier: string; billMultiplier: string
     excludeFromWages: boolean; active: boolean; updatedAt: string
   }>(sql`
@@ -133,7 +133,7 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
       exclude_from_wages as "excludeFromWages", is_active as active,
       to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
     from time_types where org_id=${input.orgId} and id in (${input.timeTypeId}, ${entry.timeTypeId}) order by id for share
-  `)).rows
+  `, 'objects')
   const chosen = types.find(type => type.id === input.timeTypeId)
   const previous = types.find(type => type.id === entry.timeTypeId) ?? null
   if (!chosen?.active || chosen.excludeFromWages || previous?.excludeFromWages
@@ -142,13 +142,13 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
       'Reload the active worked-time types and review their cost and billing rules. Non-wage events must be recorded separately.')
   }
   if (entry.timeTypeId === chosen.id) return { changed: false, replayed: false }
-  const updated = (await tx.execute<{ raw: string }>(sql`
+  const updated = await tx.execute<{ raw: string }>(sql`
     update time_entries te set time_type_id=${chosen.id}, updated_at=clock_timestamp(), updated_by=${input.actorId}
       where te.org_id=${input.orgId} and te.id=${entry.id} and te.status=${entry.status}
       returning to_jsonb(te)::text as raw
-  `)).rows
+  `, 'objects')
   if (updated.length !== 1) throw refuse('The time entry could not be corrected.')
-  const audited = (await tx.execute<{ id: string }>(sql`
+  const audited = await tx.execute<{ id: string }>(sql`
     insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
     values(${input.orgId},'time_entries',${entry.id},'update',${JSON.stringify({
       event: 'time_type_corrected', commandId: input.commandId, intent,
@@ -157,7 +157,7 @@ async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionIn
       after: { timeTypeId: chosen.id, sourceRow: updated[0]!.raw },
       beforeType: previous, afterType: chosen, sourceTicketSnapshotUnchanged: true,
     })}::jsonb,${input.actorId}) returning id
-  `)).rows
+  `, 'objects')
   if (audited.length !== 1) throw new Error('The time-type correction audit was not recorded.')
   return { changed: true, replayed: false }
 }

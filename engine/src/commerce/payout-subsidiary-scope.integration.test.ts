@@ -155,7 +155,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
     const id = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     accounts[key] = id;
   }
 
@@ -219,7 +219,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
   assert.equal(outcomeB.status, "posted");
 
   const docOf = async (id: string): Promise<{ id: string; number: string; total: string }> => (await db.execute<{ id: string; number: string; total: string }>(sql`
-    select id, document_number as number, total::text as total from documents where org_id = ${org.orgId} and id = ${id}`)).rows[0]!;
+    select id, document_number as number, total::text as total from documents where org_id = ${org.orgId} and id = ${id}`, "objects"))[0]!;
   const docA = await docOf(outcomeA.documentId!);
   const docB = await docOf(outcomeB.documentId!);
   assert.notEqual(docA.number, docB.number, "the two entities post distinct receipt numbers");
@@ -227,7 +227,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
   const draftB = (await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, status, document_number, subsidiary_id, document_date, currency, subtotal, tax_total, total)
     values (${org.orgId}, 'cash_sale', 'draft', 'CS-DRAFT-W1', ${subB}, ${org.date}, 'CAD', '5', '0', '5')
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
 
   await withBypass(() => linkExternal(org.orgId, actor, {
     provider: "stripe", externalAccount: "acct_1", objectType: "payout",
@@ -301,7 +301,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
   }, null)).batchId;
 
   const lineOf = async (batchId: string, ref: string): Promise<string> => (await db.execute<{ id: string }>(sql`
-    select id from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId} and external_ref = ${ref}`)).rows[0]!.id;
+    select id from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId} and external_ref = ${ref}`, "objects"))[0]!.id;
   const lines: Record<string, string> = {
     mix: await lineOf(batchA, "txn-mix-1"),
     mixCompanion: await lineOf(batchA, "txn-mix-6"),
@@ -316,7 +316,7 @@ async function seed(org: ScratchOrg, actor: string): Promise<{
   // A link stored before the entity control: it models legacy evidence the
   // writer refuses today, so it is written directly — discovery must not
   // propose from it, and a restricted caller must not read through it.
-  const legacy = await db.execute(sql`update psp_settlement_lines set document_id = ${docB.id}
+  const legacy = await db.execute<never>(sql`update psp_settlement_lines set document_id = ${docB.id}
      where id = ${lines.plain!} and org_id = ${org.orgId} and batch_id = ${batchA}`);
   assert.equal(legacy.rowCount, 1, "the legacy cross-entity link lands on its line");
   return { subB, channelA, channelB, docA, docB, batchA, batchB, batchShop, lines };
@@ -455,10 +455,10 @@ test("approval discovers under the caller's scope and preserves the audited link
     const approved = await approvePayoutSuggestion(org.orgId, actor, lines.mix!, { rank: 0, applyToSimilar: false }, scope);
     assert.equal(approved.linked.length, 1);
     assert.equal(approved.linked[0]!.documentId, docA.id);
-    const audits = (await db.execute<{ action: string; changes: unknown }>(sql`
+    const audits = await db.execute<{ action: string; changes: unknown }>(sql`
       select action, changes from audit_log
        where org_id = ${org.orgId} and table_name = 'psp_settlement_lines' and row_id = ${lines.mix!}
-       order by at`)).rows;
+       order by at`, "objects");
     assert.ok(audits.some((row) => JSON.stringify(row.changes).includes("suggestionApproved")), "the approval decision is audited");
     assert.ok(audits.some((row) => row.action === "link"), "the link itself is audited");
   } finally {
@@ -660,7 +660,7 @@ test("the automatic matcher counts only receipts visible in the payout's entity"
       externalId: "txn-count-2", nativeTable: "documents", nativeId: docB.id,
     }, "salesChannels"));
     const draftId = (await db.execute<{ id: string }>(sql`
-      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`, "objects"))[0]!.id;
     await withBypass(() => linkExternal(org.orgId, actor, {
       provider: "stripe", externalAccount: "acct_1", objectType: "order",
       externalId: "txn-count-2", nativeTable: "documents", nativeId: draftId,
@@ -677,7 +677,7 @@ test("the automatic matcher counts only receipts visible in the payout's entity"
     }, null)).batchId;
     const refs = new Map((await db.execute<{ id: string; ref: string }>(sql`
       select id, external_ref as ref from psp_settlement_lines
-       where org_id = ${org.orgId} and batch_id = ${batch}`)).rows.map((row) => [row.id, row.ref] as const));
+       where org_id = ${org.orgId} and batch_id = ${batch}`, "objects")).map((row) => [row.id, row.ref] as const));
     const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
     const byRef = new Map([...refs].map(([id, ref]) => [ref, result.lines.find((line) => line.lineId === id)!]));
     const mixed = byRef.get("txn-count-1")!;
@@ -729,7 +729,7 @@ test("refund claims count only posted receipts visible in the payout's entity", 
     const refunded = await withOrgContext(org.orgId, () => postChannelRefund(org.orgId, actor, event.eventId));
     assert.equal(refunded.status, "posted", "the home refund posts its cash refund");
     assert.ok(refunded.documentId);
-    const inserted = await db.execute(sql`
+    const inserted = await db.execute<never>(sql`
       insert into channel_order_events (org_id, channel_id, order_id, kind, external_id, payload, posting_status, posting_document_id, occurred_at)
       values (${org.orgId}, ${channelA}, ${event.orderId}, 'refund', 'r-count-hidden', '{}'::jsonb, 'posted', ${docB.id}, now())`);
     assert.equal(inserted.rowCount, 1, "the hidden refund event lands on the home order");
@@ -758,12 +758,12 @@ test("hidden refund claims never read as several posted refunds", { skip: !DB },
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
     const { channelA, docB } = await seed(org, actor);
     const draftId = (await db.execute<{ id: string }>(sql`
-      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`, "objects"))[0]!.id;
     const orderId = (await db.execute<{ id: string }>(sql`
       select id from channel_orders
-       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`)).rows[0]!.id;
+       where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`, "objects"))[0]!.id;
     for (const [externalId, documentId] of [["refund-hidden-1", docB.id], ["refund-hidden-2", draftId]] as const) {
-      const inserted = await db.execute(sql`
+      const inserted = await db.execute<never>(sql`
         insert into channel_order_events (org_id, channel_id, order_id, kind, external_id, payload, posting_status, posting_document_id, occurred_at)
         values (${org.orgId}, ${channelA}, ${orderId}, 'refund', ${externalId}, '{}'::jsonb, 'posted', ${documentId}, now())`);
       assert.equal(inserted.rowCount, 1, "the refund event lands on the home order");
@@ -855,7 +855,7 @@ test("hidden posted and hidden draft sale documents share one neutral answer", {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
     const { channelA, docB } = await seed(org, actor);
     const draftId = (await db.execute<{ id: string }>(sql`
-      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`, "objects"))[0]!.id;
     // Legacy cross-posted evidence: the home order points at receipts the
     // caller may not use the way a pre-control posting left them. Posted and
     // draft targets must answer identically: the remedy never infers posting
@@ -871,7 +871,7 @@ test("hidden posted and hidden draft sale documents share one neutral answer", {
     }, null)).batchId;
     const remedies: string[] = [];
     for (const [label, documentId] of [["posted", docB.id], ["draft", draftId]] as const) {
-      const moved = await db.execute(sql`update channel_orders set posting_document_id = ${documentId}
+      const moved = await db.execute<never>(sql`update channel_orders set posting_document_id = ${documentId}
          where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
       assert.equal(moved.rowCount, 1, `the home order carries the ${label} receipt`);
       const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
@@ -902,12 +902,12 @@ test("hidden posted and hidden draft summary documents share one neutral answer"
     const actor = await withBypass(() => createScratchUser(org.orgId, "Scope clerk", "admin"));
     const { channelA, docB } = await seed(org, actor);
     const draftId = (await db.execute<{ id: string }>(sql`
-      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`)).rows[0]!.id;
+      select id from documents where org_id = ${org.orgId} and document_number = 'CS-DRAFT-W1'`, "objects"))[0]!.id;
     const summaryId = (await db.execute<{ id: string }>(sql`
       insert into channel_daily_summaries (org_id, channel_id, summary_date, stock_location_id, currency, posting_document_id)
       values (${org.orgId}, ${channelA}, ${org.date}, ${org.stockLocationId}, 'CAD', ${docB.id})
-      returning id`)).rows[0]!.id;
-    const moved = await db.execute(sql`update channel_orders set posting_document_id = null, summary_id = ${summaryId}
+      returning id`, "objects"))[0]!.id;
+    const moved = await db.execute<never>(sql`update channel_orders set posting_document_id = null, summary_id = ${summaryId}
        where org_id = ${org.orgId} and channel_id = ${channelA} and external_id = '8801'`);
     assert.equal(moved.rowCount, 1, "the home order summarizes in the channel");
     // Posted and draft targets must answer identically here too; a dangling
@@ -922,7 +922,7 @@ test("hidden posted and hidden draft summary documents share one neutral answer"
     }, null)).batchId;
     const remedies: string[] = [];
     for (const [label, documentId] of [["posted", docB.id], ["draft", draftId]] as const) {
-      const pointed = await db.execute(sql`update channel_daily_summaries set posting_document_id = ${documentId}
+      const pointed = await db.execute<never>(sql`update channel_daily_summaries set posting_document_id = ${documentId}
          where org_id = ${org.orgId} and id = ${summaryId}`);
       assert.equal(pointed.rowCount, 1, `the summary carries the ${label} receipt`);
       const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
@@ -968,7 +968,7 @@ test("a hidden order answers exactly like an unknown one to a restricted caller"
     }, null)).batchId;
     const refs = new Map((await db.execute<{ id: string; ref: string }>(sql`
       select id, external_ref as ref from psp_settlement_lines
-       where org_id = ${org.orgId} and batch_id = ${batch}`)).rows.map((row) => [row.id, row.ref] as const));
+       where org_id = ${org.orgId} and batch_id = ${batch}`, "objects")).map((row) => [row.id, row.ref] as const));
     const result = await matchPayoutLines(org.orgId, batch, actor, homeScope(org));
     const byRef = new Map([...refs].map(([id, ref]) => [ref, result.lines.find((line) => line.lineId === id)!]));
     const hidden = byRef.get("txn-oracle-hidden")!;
@@ -1003,7 +1003,7 @@ test("an unrestricted caller keeps unknown and foreign order answers apart", { s
     }, null)).batchId;
     const refs = new Map((await db.execute<{ id: string; ref: string }>(sql`
       select id, external_ref as ref from psp_settlement_lines
-       where org_id = ${org.orgId} and batch_id = ${batch}`)).rows.map((row) => [row.id, row.ref] as const));
+       where org_id = ${org.orgId} and batch_id = ${batch}`, "objects")).map((row) => [row.id, row.ref] as const));
     const result = await matchPayoutLines(org.orgId, batch, actor, null);
     const byRef = new Map([...refs].map(([id, ref]) => [ref, result.lines.find((line) => line.lineId === id)!]));
     const foreign = byRef.get("txn-null-foreign")!;

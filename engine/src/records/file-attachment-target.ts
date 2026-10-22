@@ -39,36 +39,27 @@ export async function loadAttachmentTarget(
   }
   const row = (
     targetTable === 'documents'
-      ? (
-          await executor.execute<{ kind: string; subsidiaryId: string | null; partyId: string | null }>(sql`
+      ? (await executor.execute<{ kind: string; subsidiaryId: string | null; partyId: string | null }>(sql`
         select kind, subsidiary_id as "subsidiaryId", party_id as "partyId"
           from documents
-         where id = ${targetId} and org_id = ${orgId} ${lock}`)
-        ).rows[0]
+         where id = ${targetId} and org_id = ${orgId} ${lock}`, 'objects'))[0]
       : targetTable === 'parties'
-        ? (
-            await executor.execute<{ subsidiaryId: string | null }>(sql`
+        ? (await executor.execute<{ subsidiaryId: string | null }>(sql`
           select subsidiary_id as "subsidiaryId"
             from parties
-           where id = ${targetId} and org_id = ${orgId} ${lock}`)
-          ).rows[0]
+           where id = ${targetId} and org_id = ${orgId} ${lock}`, 'objects'))[0]
         : targetTable === 'item_rate_versions'
-          ? (
-              await executor.execute(sql`
+          ? (await executor.execute(sql`
             select id
               from item_rate_versions
-             where id = ${targetId} and org_id = ${orgId} ${lock}`)
-            ).rows[0]
+             where id = ${targetId} and org_id = ${orgId} ${lock}`, 'objects'))[0]
           : targetTable === 'fixed_assets'
-            ? (
-                await executor.execute<{ subsidiaryId: string | null }>(sql`
+            ? (await executor.execute<{ subsidiaryId: string | null }>(sql`
               select subsidiary_id as "subsidiaryId"
                 from fixed_assets
-               where id = ${targetId} and org_id = ${orgId} ${lock}`)
-              ).rows[0]
+               where id = ${targetId} and org_id = ${orgId} ${lock}`, 'objects'))[0]
             : targetTable === 'compliance_records'
-              ? (
-                  await executor.execute<{
+              ? (await executor.execute<{
                     partySubsidiaryId: string | null
                     projectSubsidiaryId: string | null
                     projectId: string | null
@@ -79,11 +70,9 @@ export async function loadAttachmentTarget(
                   join parties p on p.id = cr.party_id and p.org_id = cr.org_id
                   left join projects pj on pj.id = cr.project_id and pj.org_id = cr.org_id
                  where cr.id = ${targetId} and cr.org_id = ${orgId}
-                 ${forUpdate ? sql`for update of cr, p` : sql``}`)
-                ).rows[0]
+                 ${forUpdate ? sql`for update of cr, p` : sql``}`, 'objects'))[0]
               : targetTable === 'lien_waivers'
-                ? (
-                    await executor.execute<{
+                ? (await executor.execute<{
                       partySubsidiaryId: string | null
                       projectSubsidiaryId: string | null
                     }>(sql`
@@ -93,8 +82,7 @@ export async function loadAttachmentTarget(
                     join parties p on p.id = lw.party_id and p.org_id = lw.org_id
                   join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
                    where lw.id = ${targetId} and lw.org_id = ${orgId}
-                   ${forUpdate ? sql`for update of lw, p, pj` : sql``}`)
-                  ).rows[0]
+                   ${forUpdate ? sql`for update of lw, p, pj` : sql``}`, 'objects'))[0]
                 : undefined
   ) as RawTarget | undefined
 
@@ -102,8 +90,8 @@ export async function loadAttachmentTarget(
   if (forUpdate && targetTable === 'compliance_records' && row.projectId) {
     const project = await executor.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from projects
-       where id = ${row.projectId} and org_id = ${orgId} for update`)
-    row.projectSubsidiaryId = project.rows[0]?.subsidiaryId ?? null
+       where id = ${row.projectId} and org_id = ${orgId} for update`, 'objects')
+    row.projectSubsidiaryId = project[0]?.subsidiaryId ?? null
   }
   return {
     targetTable,

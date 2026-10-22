@@ -55,7 +55,7 @@ stubModules({
     `,
     "@openbooks/engine/platform/db": `
       export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
-      export const db = { execute: async () => ({ rows: [] }) }
+      export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }
     `,
     "drizzle-orm": `
       export * from ${JSON.stringify(import.meta.resolve('drizzle-orm'))}

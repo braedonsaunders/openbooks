@@ -172,13 +172,13 @@ export async function captureFieldTicketLaborEvidence(
          and d.org_id = ${args.orgId}
          and d.kind = 'field_ticket'
        for update of d, ft
-    `));
-    if (!ticket.rows[0]) {
+    `, "objects"));
+    if (!ticket[0]) {
       throw new FieldTicketLaborEvidenceError("Field Ticket not found");
     }
     if (
       args.evidenceBasis === "operational_time" &&
-      !["draft", "pending_approval"].includes(ticket.rows[0].status)
+      !["draft", "pending_approval"].includes(ticket[0].status)
     ) {
       throw new FieldTicketLaborEvidenceError(
         "operational-time evidence is captured only while releasing a draft or submitted ticket",
@@ -186,7 +186,7 @@ export async function captureFieldTicketLaborEvidence(
     }
     if (
       args.evidenceBasis !== "operational_time" &&
-      !["approved", "voided"].includes(ticket.rows[0].status)
+      !["approved", "voided"].includes(ticket[0].status)
     ) {
       throw new FieldTicketLaborEvidenceError(
         "source imports and controlled amendments require approved retained evidence",
@@ -211,8 +211,8 @@ export async function captureFieldTicketLaborEvidence(
          and snapshot.field_ticket_id = ${args.fieldTicketId}
          and snapshot.superseded_at is null
        for update
-    `));
-    const existing = current.rows[0] ?? null;
+    `, "objects"));
+    const existing = current[0] ?? null;
     if (
       existing &&
       args.sourcePayloadHash &&
@@ -277,8 +277,8 @@ export async function captureFieldTicketLaborEvidence(
        where org_id = ${args.orgId}
          and field_ticket_id = ${args.fieldTicketId}
       returning id, revision
-    `));
-    const snapshot = inserted.rows[0]!;
+    `, "objects"));
+    const snapshot = inserted[0]!;
 
     if (args.lines.length > 0) {
       const encodedLines = JSON.stringify(args.lines);

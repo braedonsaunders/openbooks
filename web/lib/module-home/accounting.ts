@@ -191,7 +191,7 @@ export async function accountingHome(
          ${closeRunScope(scope)}
        order by r.created_at desc
        limit 1
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
     (access.gl || access.accounts || access.budgets || access.assets) ? db.execute(sql`
       select
         ${access.gl ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'journal' and d.status = 'draft'
@@ -207,14 +207,14 @@ export async function accountingHome(
           ${budgetScope(orgId, scope, sql.raw('b.id'))})` : sql`0`} as budgets,
         ${access.assets ? sql`(select count(*) from fixed_assets f where f.org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`f.subsidiary_id`, scope)})` : sql`0`} as assets
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
     // Continuous-close open findings by severity.
     access.findings ? db.execute(sql`
       select severity, count(*) as n from ai_work_items w
        where w.org_id = ${orgId} and w.status = 'open'
          ${workItemScope(orgId, scope)}
        group by severity
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
     // Closed organization-wide locks on the primary book, newest period first.
     access.close ? db.execute<{ period_name: string }>(sql`
       select ${periodLabel} as period_name
@@ -225,12 +225,12 @@ export async function accountingHome(
          ${closeRunScope(scope)}
        order by p.ends_on desc
        limit 1
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
   ]))
 
-  const close = closeRes.rows[0]
-  const counts = countsRes.rows[0] ?? {}
-  const sev = new Map(workRes.rows.map((r) => [String(r.severity), Number(r.n)]))
+  const close = closeRes[0]
+  const counts = countsRes[0] ?? {}
+  const sev = new Map(workRes.map((r) => [String(r.severity), Number(r.n)]))
   const workItems = {
     critical: sev.get('critical') ?? 0,
     warning: sev.get('warning') ?? 0,
@@ -257,7 +257,7 @@ export async function accountingHome(
     // the close section rather than naming a diagnostic the caller cannot
     // hold.
     closeUnavailable: access.close && scope !== null,
-    lastLockedPeriod: lockRes.rows[0]?.period_name ?? null,
+    lastLockedPeriod: lockRes[0]?.period_name ?? null,
     draftJournals: Number(counts.draft_journals ?? 0),
     postedJournals7d: Number(counts.posted_7d ?? 0),
     workItems,

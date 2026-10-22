@@ -41,9 +41,9 @@ export interface BomWhereUsedPath {
 
 async function itemCode(tx: SqlExecutor, orgId: string, itemId: string): Promise<string> {
   const result = await tx.execute<{ code: string | null }>(sql`
-    select code from items where org_id = ${orgId} and id = ${itemId}`);
-  const code = result.rows[0]?.code;
-  if (!result.rows[0]) {
+    select code from items where org_id = ${orgId} and id = ${itemId}`, "objects");
+  const code = result[0]?.code;
+  if (!result[0]) {
     throw new ManufacturingError(`item ${itemId} was not found in this organization`, {
       code: "item_not_found",
       remedy: "Choose an item from this organization.",
@@ -72,8 +72,8 @@ async function effectiveBom(
        and (b.effective_from is null or b.effective_from <= ${asOf}::date)
        and (b.effective_to is null or ${asOf}::date < b.effective_to)
      order by b.sort_order, b.component_item_id, b.operation_seq nulls first,
-              b.is_byproduct, b.effective_from nulls first`);
-  return result.rows;
+              b.is_byproduct, b.effective_from nulls first`, "objects");
+  return result;
 }
 
 async function supplyMethod(
@@ -84,8 +84,8 @@ async function supplyMethod(
   const result = await tx.execute<{ supplyMethod: string }>(sql`
     select supply_method as "supplyMethod"
       from mfg_item_policies
-     where org_id = ${orgId} and item_id = ${itemId}`);
-  return result.rows[0]?.supplyMethod ?? null;
+     where org_id = ${orgId} and item_id = ${itemId}`, "objects");
+  return result[0]?.supplyMethod ?? null;
 }
 
 function validateAsOf(asOf: string): void {
@@ -219,8 +219,8 @@ export async function whereUsed(
          and not b.is_byproduct
          and (b.effective_from is null or b.effective_from <= ${asOf}::date)
          and (b.effective_to is null or ${asOf}::date < b.effective_to)
-       order by parent.code, b.operation_seq nulls first, b.sort_order`);
-    for (const row of parents.rows) {
+       order by parent.code, b.operation_seq nulls first, b.sort_order`, "objects");
+    for (const row of parents) {
       const parentCode = row.parentItemCode?.trim() || row.parentItemId;
       const cycleAt = pathIds.indexOf(row.parentItemId);
       if (cycleAt >= 0) {

@@ -53,7 +53,7 @@ async function addEntry(
 }
 
 async function earningLines(orgId: string, documentId: string) {
-  return (await db.execute<{
+  return await db.execute<{
     id: string; hours: string; rate: string; amount: string; item_id: string | null;
     expense_account_id: string | null; expense_account_source: string;
     expense_account_evidence: { reason: string; reference: string } | null;
@@ -63,26 +63,26 @@ async function earningLines(orgId: string, documentId: string) {
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
      where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId} and l.kind = 'earning'
-     order by l.sequence`)).rows;
+     order by l.sequence`, "objects");
 }
 
 async function journalDebits(orgId: string, documentId: string) {
-  return (await db.execute<{ number: string | null; name: string; amount: string }>(sql`
+  return await db.execute<{ number: string | null; name: string; amount: string }>(sql`
     select a.number, a.name, d.amount from document_lines d
       join accounts a on a.id = d.account_id and a.org_id = d.org_id
      where d.org_id = ${orgId} and d.document_id = ${documentId} and d.amount > 0
-     order by a.number, d.amount`)).rows;
+     order by a.number, d.amount`, "objects");
 }
 
 async function moneySnapshot(orgId: string, documentId: string) {
-  const stubs = (await db.execute<{ gross: string; net_pay: string; employer_cost: string }>(sql`
+  const stubs = await db.execute<{ gross: string; net_pay: string; employer_cost: string }>(sql`
     select gross, net_pay, employer_cost from pay_stubs
-     where org_id = ${orgId} and pay_run_document_id = ${documentId} order by employee_party_id`)).rows;
-  const lines = (await db.execute<{ kind: string; description: string; amount: string }>(sql`
+     where org_id = ${orgId} and pay_run_document_id = ${documentId} order by employee_party_id`, "objects");
+  const lines = await db.execute<{ kind: string; description: string; amount: string }>(sql`
     select l.kind, l.description, l.amount from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
      where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-     order by l.kind, l.description, l.amount`)).rows;
+     order by l.kind, l.description, l.amount`, "objects");
   return { stubs, lines };
 }
 
@@ -208,7 +208,7 @@ test("one employee on two items posts two journal debits with the right amounts"
     // binary floats must never judge money).
     const balance = (await db.execute<{ total: string }>(sql`
       select coalesce(sum(d.amount), 0)::text as total from document_lines d
-       where d.org_id = ${fx.orgId} and d.document_id = ${run.documentId}`)).rows[0]!;
+       where d.org_id = ${fx.orgId} and d.document_id = ${run.documentId}`, "objects"))[0]!;
     assert.equal(balance.total, "0.0000");
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });

@@ -126,8 +126,8 @@ async function environmentRows(home: HomeUser, scope: SQL): Promise<EnvironmentS
          where m.id = ob_rebase(source.user_id, o.sandbox_seed) and m.org_id = o.id and m.is_active
       ) member on o.env_kind = 'sandbox'
      where ${scope}
-     order by sb.created_at, o.id`);
-  return result.rows;
+     order by sb.created_at, o.id`, "objects");
+  return result;
 }
 
 /**
@@ -206,26 +206,26 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
           select id, name from orgs
            where env_kind = 'production'
              and not coalesce((settings->'sampleTemplate'->>'enabled')::boolean, false)
-           order by name`),
+           order by name`, "objects"),
         db.execute<AccessibleOrgSqlRow>(sql`
           select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name
             from user_org_access a join orgs o on o.id = a.org_id
             join users u on u.id = a.acting_user_id and u.org_id = a.org_id and u.is_active
            where a.member_user_id = ${home.id} and a.is_active and o.env_kind = 'preview'
-           order by o.name`),
+           order by o.name`, "objects"),
       ]);
       return [
-        ...orgs.rows.map((o): AccessibleOrg => ({
+        ...orgs.map((o): AccessibleOrg => ({
           orgId: o.id,
           name: o.name,
           actingUserId: home.id,
           envKind: "production",
         })),
-        ...previews.rows.map((preview): AccessibleOrg => ({ ...preview, envKind: "preview" })),
+        ...previews.map((preview): AccessibleOrg => ({ ...preview, envKind: "preview" })),
       ];
     }
     const [homeRow, grants] = await Promise.all([
-      db.execute<OrgNameSqlRow>(sql`select name from orgs where id = ${home.orgId}`),
+      db.execute<OrgNameSqlRow>(sql`select name from orgs where id = ${home.orgId}`, "objects"),
       db.execute<AccessibleOrgSqlRow>(sql`
         select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name,
                o.env_kind as "envKind"
@@ -233,17 +233,17 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
             join users u on u.id = a.acting_user_id and u.org_id = a.org_id and u.is_active
          where a.member_user_id = ${home.id} and a.is_active
            and o.env_kind in ('production', 'preview')
-         order by o.name`),
+         order by o.name`, "objects"),
     ]);
     const out: AccessibleOrg[] = [
       {
         orgId: home.orgId,
-        name: homeRow.rows[0]?.name ?? "openbooks",
+        name: homeRow[0]?.name ?? "openbooks",
         actingUserId: home.id,
         envKind: "production",
       },
     ];
-    for (const g of grants.rows) {
+    for (const g of grants) {
       if (g.orgId === home.orgId) continue;
       out.push({
         orgId: g.orgId,
@@ -287,8 +287,8 @@ export async function resolveActiveEnv(
   // bypass: identity-bootstrap — resolves which organization the caller acts in before any organization scope exists.
   return withBypassContext(async () => {
     if (!activeOrgId || activeOrgId === home.orgId) {
-      const o = await db.execute<OrgNameSqlRow>(sql`select name from orgs where id = ${home.orgId}`);
-      return homeEnvironment(home, o.rows[0]?.name);
+      const o = await db.execute<OrgNameSqlRow>(sql`select name from orgs where id = ${home.orgId}`, "objects");
+      return homeEnvironment(home, o[0]?.name);
     }
     const [row] = await environmentRows(home, sql`o.id = ${activeOrgId}`);
     return row ? admittedEnvironment(home, row) : null;

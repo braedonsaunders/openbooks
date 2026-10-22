@@ -120,13 +120,13 @@ export async function loadOverhead(
          limit 1
       ) version on true
      where pt.org_id = ${authz.user.orgId} and pt.is_active
-     order by pt.sort_order, pt.name`),
+     order by pt.sort_order, pt.name`, 'objects'),
     db.execute<{ n: number; from_date: string | null }>(sql`
     select count(*)::int as n, min(effective_from)::text as from_date
       from overhead_rates where org_id = ${authz.user.orgId}
-       and (effective_to is null or effective_to >= ${today})`),
+       and (effective_to is null or effective_to >= ${today})`, 'objects'),
   ]);
-  const card = cardRes.rows[0] ?? { n: 0, from_date: null }
+  const card = cardRes[0] ?? { n: 0, from_date: null }
 
   const methodLabel = (oh: { method?: string; ratePercent?: string | number; ratePerHour?: string | number } | null) => {
     switch (oh?.method) {
@@ -159,7 +159,7 @@ export async function loadOverhead(
         card.n > 0 && card.from_date
           ? t('setup.entities.overhead-model.ratesActive', { count: card.n, date: card.from_date })
           : t('setup.entities.overhead-model.noRates'),
-      done: card.n > 0 && typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
+      done: card.n > 0 && typesRes.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
     },
   ]
     : [];
@@ -178,10 +178,10 @@ export async function loadOverhead(
     // so it arrives whole: the loader resolves only its inputs.
     actions: {
       departments: (data?.departments ?? []).map((d) => ({ id: d.id, name: d.name, composite: d.compositeValue })),
-      projectTypes: typesRes.rows.map((r) => ({ id: r.id, name: r.name })),
+      projectTypes: typesRes.map((r) => ({ id: r.id, name: r.name })),
       autoOpen:
         data !== null &&
-        card.n === 0 && !typesRes.rows.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
+        card.n === 0 && !typesRes.some((r) => r.overhead?.method && r.overhead.method !== 'none'),
     },
     tabs: VIEWS.map((item) => ({
       href: `/admin/setup/overhead?view=${item}`,
@@ -201,7 +201,7 @@ export async function loadOverhead(
       title: s.title,
       desc: s.desc,
     })),
-    policies: typesRes.rows.map((r) => ({
+    policies: typesRes.map((r) => ({
       id: r.id,
       name: r.name,
       methodLabel: methodLabel(r.overhead),

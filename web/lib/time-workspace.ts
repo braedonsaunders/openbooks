@@ -67,7 +67,7 @@ export function authorizeTimeWorkspace(permission: TimeCommandPermission) {
 export async function refuseOthersTime(authz: Authz, permission: TimeCommandPermission, employeeId: string): Promise<NextResponse | null> {
   if (supervisesTime(authz, permission)) return null
   const own = (await db.execute<{ partyId: string | null }>(sql`
-    select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`)).rows[0]?.partyId ?? null
+    select party_id as "partyId" from users where id = ${authz.user.id} and org_id = ${authz.user.orgId}`, 'objects'))[0]?.partyId ?? null
   if (own !== null && own === employeeId) return null
   const refusal = selfServiceTimeRefusal()
   return NextResponse.json({ error: refusal.message, code: refusal.code, remedy: refusal.remedy }, { status: refusal.status })

@@ -102,7 +102,7 @@ export async function loadKit(
     select id, name, pipeline_stage_id as "pipelineStageId", instructions,
            rating_scale as "ratingScale", is_active as "isActive"
       from hrm_interview_kits where org_id = ${orgId} and id = ${kitId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row ? toKitDTO(row) : null;
 }
 
@@ -125,14 +125,14 @@ export async function listKits(query: {
     // Kits are shared configuration: readers read, writers need the manage
     // grant plus canonical unrestricted scope (assertUnrestrictedScope).
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    const rows = (await db.execute<KitRow>(sql`
+    const rows = await db.execute<KitRow>(sql`
       select id, name, pipeline_stage_id as "pipelineStageId", instructions,
              rating_scale as "ratingScale", is_active as "isActive"
         from hrm_interview_kits
        where org_id = ${orgId}
          and (${query.includeInactive === true} or is_active)
        order by name
-    `)).rows;
+    `, "objects");
     return rows.map(toKitDTO);
   });
 }
@@ -163,7 +163,7 @@ export async function createKit(query: {
     if (stageId) {
       const stage = (await db.execute<{ one: number }>(sql`
         select 1 as one from hrm_pipeline_stages where org_id = ${orgId} and id = ${stageId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!stage) {
         throw new RecruitingError(
           "NOT_FOUND",
@@ -178,7 +178,7 @@ export async function createKit(query: {
         values (${orgId}, ${name}, ${stageId}, ${instructions}, ${pgTextArray(scale)}::text[], ${actorId}, ${actorId})
         returning id, name, pipeline_stage_id as "pipelineStageId", instructions,
                   rating_scale as "ratingScale", is_active as "isActive"
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) throw new RecruitingError("REFUSED", "the kit was not stored — no row was written; retry the request");
       return toKitDTO(row);
     } catch (error) {
@@ -211,7 +211,7 @@ export async function setKitActive(query: {
        where org_id = ${orgId} and id = ${kitId}
       returning id, name, pipeline_stage_id as "pipelineStageId", instructions,
                 rating_scale as "ratingScale", is_active as "isActive"
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw new RecruitingError("NOT_FOUND", "interview kit is not visible in this organization — it may belong to another org");
     }
@@ -229,7 +229,7 @@ export async function deleteKit(query: { orgId: string; actorId: string; kitId: 
     assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     const sittings = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from hrm_interviews where org_id = ${orgId} and kit_id = ${kitId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (sittings && Number(sittings.count) > 0) {
       throw new RecruitingError(
         "REFUSED",
@@ -238,7 +238,7 @@ export async function deleteKit(query: { orgId: string; actorId: string; kitId: 
     }
     const deleted = (await db.execute<{ id: string }>(sql`
       delete from hrm_interview_kits where org_id = ${orgId} and id = ${kitId} returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!deleted) {
       throw new RecruitingError("NOT_FOUND", "interview kit is not visible in this organization — it may belong to another org");
     }
@@ -290,7 +290,7 @@ export async function addKitAttribute(query: {
                 ${input.position}, ${query.isFocusDefault === true}, ${actorId}, ${actorId})
         returning id, kit_id as "kitId", category, attribute, description, position,
                   is_focus_default as "isFocusDefault"
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) throw new RecruitingError("REFUSED", "the attribute was not stored — no row was written; retry the request");
       return row;
     } catch (error) {
@@ -310,13 +310,13 @@ export async function listKitAttributes(
   orgId: string,
   kitId: string,
 ): Promise<readonly ScorecardAttributeDTO[]> {
-  const rows = (await exec.execute<ScorecardAttributeDTO>(sql`
+  const rows = await exec.execute<ScorecardAttributeDTO>(sql`
     select id, kit_id as "kitId", category, attribute, description, position,
            is_focus_default as "isFocusDefault"
       from hrm_scorecard_attributes
      where org_id = ${orgId} and kit_id = ${kitId}
      order by position
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -346,7 +346,7 @@ export async function addKitQuestion(query: {
       const attr = (await db.execute<{ one: number }>(sql`
         select 1 as one from hrm_scorecard_attributes
          where org_id = ${orgId} and id = ${attributeId} and kit_id = ${kitId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!attr) {
         throw new RecruitingError(
           "NOT_FOUND",
@@ -360,7 +360,7 @@ export async function addKitQuestion(query: {
           (org_id, kit_id, question, position, attribute_id, created_by, updated_by)
         values (${orgId}, ${kitId}, ${query.question}, ${query.position}, ${attributeId}, ${actorId}, ${actorId})
         returning id, kit_id as "kitId", question, position, attribute_id as "attributeId"
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) throw new RecruitingError("REFUSED", "the question was not stored — no row was written; retry the request");
       return row;
     } catch (error) {
@@ -380,11 +380,11 @@ export async function listKitQuestions(
   orgId: string,
   kitId: string,
 ): Promise<readonly KitQuestionDTO[]> {
-  const rows = (await exec.execute<KitQuestionDTO>(sql`
+  const rows = await exec.execute<KitQuestionDTO>(sql`
     select id, kit_id as "kitId", question, position, attribute_id as "attributeId"
       from hrm_interview_kit_questions
      where org_id = ${orgId} and kit_id = ${kitId}
      order by position
-  `)).rows;
+  `, "objects");
   return rows;
 }

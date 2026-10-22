@@ -53,15 +53,15 @@ async function postedInvoiceCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from documents
      where org_id = ${orgId} and kind = 'customer_invoice' and status = 'posted'
-  `));
-  return Number(r.rows[0]!.n);
+  `, "objects"));
+  return Number(r[0]!.n);
 }
 
 async function journalEntryCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries where org_id = ${orgId}
-  `));
-  return Number(r.rows[0]!.n);
+  `, "objects"));
+  return Number(r[0]!.n);
 }
 
 async function guardRows(orgId: string, subscriptionId: string): Promise<{ startsOn: string; endsOn: string; revision: number; invoiceId: string }[]> {
@@ -71,8 +71,8 @@ async function guardRows(orgId: string, subscriptionId: string): Promise<{ start
       from subscription_period_invoices
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
      order by period_starts_on
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 /** Re-create the defect window: the claim was rolled back AFTER a posted invoice committed. */
@@ -101,7 +101,7 @@ test(
       assert.equal(await journalEntryCount(org.orgId), 1);
       const firstInvoiceId = (await db.execute<{ id: string }>(sql`
         select last_invoice_id as "id" from subscriptions where id = ${subscriptionId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
 
       // Plain subscriptions now record their period through the SAME
       // subscription_period_invoices guard the advanced lifecycle uses.
@@ -123,7 +123,7 @@ test(
       assert.equal((await guardRows(org.orgId, subscriptionId)).length, 1);
       const lastInvoiceId = (await db.execute<{ id: string }>(sql`
         select last_invoice_id as "id" from subscriptions where id = ${subscriptionId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       assert.equal(lastInvoiceId, firstInvoiceId, "bookkeeping points at the same committed invoice");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -149,7 +149,7 @@ test(
       // permanently lose this billable period.
       const settings = (await db.execute<{ s: Record<string, unknown> }>(sql`
         select settings as s from orgs where id = ${org.orgId}
-      `)).rows[0]!.s;
+      `, "objects"))[0]!.s;
       await db.execute(sql`
         update orgs set settings = settings - 'controlAccounts' where id = ${org.orgId}
       `);
@@ -166,12 +166,12 @@ test(
         select next_bill_on as "nextBillOn", current_period_start as "currentPeriodStart",
                last_error as "lastError", run_count as "runCount", last_invoice_id as "lastInvoiceId"
           from subscriptions where id = ${subscriptionId}
-      `));
-      assert.equal(state.rows[0]!.nextBillOn, org.date, "the occurrence stays due for the next tick");
-      assert.equal(state.rows[0]!.currentPeriodStart, null, "the period pointer was never moved");
-      assert.ok(state.rows[0]!.lastError, "last_error names the failure");
-      assert.equal(state.rows[0]!.runCount, 0, "no success bookkeeping leaked from the failed tick");
-      assert.equal(state.rows[0]!.lastInvoiceId, null);
+      `, "objects"));
+      assert.equal(state[0]!.nextBillOn, org.date, "the occurrence stays due for the next tick");
+      assert.equal(state[0]!.currentPeriodStart, null, "the period pointer was never moved");
+      assert.ok(state[0]!.lastError, "last_error names the failure");
+      assert.equal(state[0]!.runCount, 0, "no success bookkeeping leaked from the failed tick");
+      assert.equal(state[0]!.lastInvoiceId, null);
       assert.equal(await postedInvoiceCount(org.orgId), 0);
       assert.equal(await journalEntryCount(org.orgId), 0);
       assert.equal((await guardRows(org.orgId, subscriptionId)).length, 0,
@@ -196,9 +196,9 @@ test(
       assert.equal(guard[0]!.endsOn, "2026-08-15");
       const retriedState = (await db.execute<{ nextBillOn: string; runCount: number }>(sql`
         select next_bill_on as "nextBillOn", run_count as "runCount" from subscriptions where id = ${subscriptionId}
-      `));
-      assert.notEqual(retriedState.rows[0]!.nextBillOn, org.date, "the claim now advances");
-      assert.equal(retriedState.rows[0]!.runCount, 1);
+      `, "objects"));
+      assert.notEqual(retriedState[0]!.nextBillOn, org.date, "the claim now advances");
+      assert.equal(retriedState[0]!.runCount, 1);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -230,11 +230,11 @@ test(
       assert.equal(await postedInvoiceCount(healthy.orgId), 1, "the healthy org still bills");
       const poisonedError = (await db.execute<{ lastError: string | null }>(sql`
         select last_error as "lastError" from subscriptions where id = ${poisonedSub}
-      `)).rows[0]!.lastError;
+      `, "objects"))[0]!.lastError;
       assert.match(poisonedError ?? "", /business day unavailable.*not a known IANA time zone/);
       const healthyError = (await db.execute<{ lastError: string | null }>(sql`
         select last_error as "lastError" from subscriptions where id = ${healthySub}
-      `)).rows[0]!.lastError;
+      `, "objects"))[0]!.lastError;
       assert.equal(healthyError, null);
       assert.ok(run.failed >= 1, "the poisoned org's subscriptions count as failed");
       assert.equal(run.billed, 1);
@@ -350,12 +350,12 @@ test(
       assert.equal(winner.adjustment, "100.0000", "the winner bills the full remaining slice once");
       const quantity = (await db.execute<{ quantity: string }>(sql`
         select quantity from subscriptions where id = ${subscriptionId}
-      `)).rows[0]!.quantity;
+      `, "objects"))[0]!.quantity;
       assert.equal(quantity, "2.0000");
       const invoices = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(invoices, 1, "no duplicate proration invoice exists");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -373,7 +373,7 @@ test(
       const subscriptionId = await seedPlainSubscription(org, actorId, { nextBillOn: "2026-08-15" });
       const before = (await db.execute<{ quantity: string }>(sql`
         select quantity from subscriptions where id = ${subscriptionId}
-      `)).rows[0]!.quantity;
+      `, "objects"))[0]!.quantity;
 
       await assert.rejects(
         changeSubscription(org.orgId, subscriptionId, { quantity: "1.00001" }, org.date, { actorId }, null),
@@ -384,7 +384,7 @@ test(
         select s.quantity,
                (select count(*)::int from documents d where d.org_id = ${org.orgId}) as n
           from subscriptions s where s.id = ${subscriptionId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(row.quantity, before, "the stored quantity is untouched");
       assert.equal(row.n, 0, "no invoice was cut for the refused change");
     } finally {
@@ -403,7 +403,7 @@ test(
       await seedPlainSubscription(org, actorId);
       const currency = (await db.execute<{ base_currency: string }>(sql`
         select base_currency from orgs where id = ${org.orgId}
-      `)).rows[0]!.base_currency;
+      `, "objects"))[0]!.base_currency;
 
       await assert.rejects(
         createSubscriptionInvoice({
@@ -427,7 +427,7 @@ test(
       );
       const documents = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents where org_id = ${org.orgId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(documents, 0, "the refused invoice wrote no document");
     } finally {
       await dropScratchOrgReporting(org.orgId);

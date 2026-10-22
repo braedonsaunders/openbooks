@@ -1,1 +1,0 @@
-Single revision column DEFAULT 0; the counter moves only through future PATCH writes.

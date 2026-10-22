@@ -93,13 +93,11 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     const person = await seedPerson(orgId, ENTITY, "Award Earner");
     EMPLOYMENT = person.employmentId;
     COMPONENT = await seedComponent(orgId, { code: "BONUS", kind: "earning" });
-    ACCOUNT = (
-      await db.execute<{ id: string }>(sql`
+    ACCOUNT = (await db.execute<{ id: string }>(sql`
         insert into accounts (org_id, number, name, type, is_active, is_summary)
         values (${orgId}, '6040', 'Bonus expense', 'expense', true, false)
         returning id
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
   }
 
     async function approveThroughWorkflow(orgId: string, actorId: string, awardId: string): Promise<void> {
@@ -272,15 +270,13 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
       reason: "issued for the wrong period",
     });
     assert.equal(voided.status, "voided");
-    const events = (
-      await db.execute<{ kind: string }>(sql`
+    const events = (await db.execute<{ kind: string }>(sql`
         select kind from hrm_benefit_award_events
          where org_id = ${orgId} and award_id = ${award.id} order by recorded_at
-      `)
-    ).rows.map((row) => row.kind);
+      `, "objects")).map((row) => row.kind);
     assert.deepEqual(events, ["created", "voided"]);
     const audits = (
-      await db.execute(sql`select id from audit_log where org_id = ${orgId} and table_name = 'hrm_benefit_awards' and row_id = ${award.id}`)
+      await db.execute<Record<string, unknown>>(sql`select id from audit_log where org_id = ${orgId} and table_name = 'hrm_benefit_awards' and row_id = ${award.id}`)
     ).rowCount;
     assert.ok((audits ?? 0) >= 2);
   });
@@ -385,16 +381,14 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
       await tx.execute(sql`set local openbooks.amend = 'on'`);
       assert.ok(isUuid(orgId));
       await tx.execute(sql.raw(`set local app.current_org = '${orgId}'`));
-      const foreign = (
-        await tx.execute<{ id: string }>(sql`
+      const foreign = await tx.execute<{ id: string }>(sql`
           select id from hrm_benefit_programs where org_id <> ${orgId} limit 1
-        `)
-      ).rows;
+        `, "objects");
       assert.equal(foreign.length, 0);
-      const visible = (await tx.execute<{ id: string; privileged: boolean }>(sql`
+      const visible = await tx.execute<{ id: string; privileged: boolean }>(sql`
         select id, public.app_bypass_rls_active() as privileged from hrm_benefit_awards
          where org_id = ${orgId} and id = ${award.id}
-      `)).rows;
+      `, "objects");
       assert.equal(visible.length, 1, "the guarded write must target a visible award, never zero rows");
       assert.equal(visible[0]!.privileged, false, "raw GUCs confer no privileged authority");
       await assert.rejects(
@@ -485,13 +479,13 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     await approveThroughWorkflow(orgId, APPROVER!, award.id);
     const worker = (await db.execute<{ worker_party_id: string }>(sql`
       select worker_party_id from worker_employments where org_id = ${orgId} and id = ${EMPLOYMENT}
-    `)).rows[0]!.worker_party_id;
+    `, "objects"))[0]!.worker_party_id;
     const schedule = randomUUID();
     await db.execute(sql`insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, subsidiary_id)
       values (${schedule}, ${orgId}, ${`Benefits ${schedule}`}, 'biweekly', 26, '2026-03-14', ${ENTITY})`);
     const existing = (await db.execute<{ id: string }>(sql`
       select id from employee_payroll_profiles where org_id = ${orgId} and employment_id = ${EMPLOYMENT}
-    `)).rows[0];
+    `, "objects"))[0];
     if (existing) {
       await db.execute(sql`update employee_payroll_profiles set pay_schedule_id = ${schedule} where org_id = ${orgId} and id = ${existing.id}`);
     } else {
@@ -520,7 +514,7 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     const voided = await voidBenefitAward({ orgId, actorId: HRMGR!, awardId: queued.award.id, reason: "Canceled before payment" });
     assert.equal(voided.status, "voided");
     assert.equal(voided.payRunAdjustmentId, null);
-    const remaining = (await db.execute(sql`select id from pay_run_adjustments where org_id = ${orgId} and id = ${queued.adjustmentId}`)).rows;
+    const remaining = await db.execute(sql`select id from pay_run_adjustments where org_id = ${orgId} and id = ${queued.adjustmentId}`, "objects");
     assert.equal(remaining.length, 0);
   });
 
@@ -539,12 +533,12 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
     await updateBenefitProgram({ orgId, actorId: HRMGR!, programId: program.id,
       sourceAccountIds: [], reason: "Use the component's native expense mapping" });
     assert.equal((await listProgramSources(db, orgId, HRMGR!, program.id)).length, 0);
-    const rows = (await db.execute<{ changes: {
+    const rows = await db.execute<{ changes: {
       event: string; reason: string; before: { sourceAccountIds: string[] }; after: { sourceAccountIds: string[] };
     } }>(sql`
       select changes from audit_log where org_id = ${orgId} and table_name = 'hrm_benefit_programs'
         and row_id = ${program.id} and changes->>'event' = 'updated'
-    `)).rows;
+    `, "objects");
     assert.equal(rows.length, 1);
     assert.deepEqual(rows[0]!.changes.before.sourceAccountIds, [ACCOUNT!]);
     assert.deepEqual(rows[0]!.changes.after.sourceAccountIds, []);
@@ -643,10 +637,10 @@ test("program creation retains supplied reasons through the native writer", { sk
       reason: "  Approved compensation policy  ",
     };
     const program = await createBenefitProgram(input);
-    const audit = (await db.execute<{ actor_id: string; changes: { event: string; reason: string; before: unknown; after: { id: string } } }>(sql`
+    const audit = await db.execute<{ actor_id: string; changes: { event: string; reason: string; before: unknown; after: { id: string } } }>(sql`
       select actor_id, changes from audit_log where org_id=${org.orgId}
         and table_name='hrm_benefit_programs' and row_id=${program.id} and changes->>'event'='created'
-    `)).rows;
+    `, "objects");
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.actor_id, actorId);
     assert.equal(audit[0]!.changes.reason, input.reason.trim());
@@ -655,15 +649,15 @@ test("program creation retains supplied reasons through the native writer", { sk
     for (const reason of [null, 12, {}, "", "  ", "x".repeat(2001)]) {
       await assert.rejects(() => createBenefitProgram({ ...input, code: "REFUSED", reason: reason as never }), /program audit reason/);
     }
-    assert.equal((await db.execute(sql`select id from hrm_benefit_programs where org_id=${org.orgId} and code='REFUSED'`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from hrm_benefit_programs where org_id=${org.orgId} and code='REFUSED'`, "objects")).length, 0);
     const person = await seedPerson(org.orgId, org.subsidiaryId, "Benefit recipient");
     const member = await addProgramMembership({ orgId: org.orgId, actorId, programId: program.id,
       employmentId: person.employmentId, effectiveFrom: "2026-01-01", reason: "  Approved eligible employment  " });
     await activateBenefitProgram({ orgId: org.orgId, actorId, programId: program.id, reason: "  Approved programme activation  " });
-    const moves = (await db.execute<{ changes: { event: string; reason: string; after: { id: string } } }>(sql`
+    const moves = await db.execute<{ changes: { event: string; reason: string; after: { id: string } } }>(sql`
       select changes from audit_log where org_id=${org.orgId} and table_name='hrm_benefit_programs'
         and row_id=${program.id} and changes->>'event' in ('member_added','activated')
-    `)).rows;
+    `, "objects");
     assert.equal(moves.length, 2);
     assert.equal(moves.find(row => row.changes.event === "member_added")!.changes.reason, "Approved eligible employment");
     assert.equal(moves.find(row => row.changes.event === "member_added")!.changes.after.id, member.id);

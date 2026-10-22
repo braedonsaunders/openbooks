@@ -45,7 +45,7 @@ export async function prepareAdditionalTimeSubmission(
       from timesheet_weeks where org_id = ${input.orgId}
        and employee_party_id = ${input.employeePartyId} and week_start = ${input.weekStart}::date
      for update
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!header || !['approved', 'draft', 'rejected'].includes(header.status)) {
     throw refuse('Selected time can be submitted only from a draft, returned or approved week.', 'additional_time_week_changed')
   }
@@ -54,12 +54,12 @@ export async function prepareAdditionalTimeSubmission(
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and worked_on between ${input.weekStart}::date and ${input.weekStart}::date + 6
        and status = 'submitted'
-  `)).rows[0]
+  `, 'objects'))[0]
   const gates = (await tx.execute<{ count: number }>(sql`
     select count(*)::int as count from flow_gates where org_id = ${input.orgId}
       and subject_kind = 'timesheet_week' and subject_id = ${header.id}
       and status in ('pending', 'escalated')
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!waiting || !gates || waiting.count > 0 || gates.count > 0) {
     throw refuse('This week already has a submission awaiting a decision.', 'additional_time_review_pending')
   }
@@ -68,7 +68,7 @@ export async function prepareAdditionalTimeSubmission(
     consumed: boolean
   }
   const ids = input.selections.map(row => row.id)
-  const selected = (await tx.execute<SelectedRow>(sql`
+  const selected = await tx.execute<SelectedRow>(sql`
     select id, status, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt",
            worked_on::text as "workedOn", hours::text as hours, field_ticket_id as "fieldTicketId",
            (invoiced_by_line_id is not null or payroll_batch_ref is not null or cost_journal_entry_id is not null
@@ -78,7 +78,7 @@ export async function prepareAdditionalTimeSubmission(
        and worked_on between ${input.weekStart}::date and ${input.weekStart}::date + 6
        and id = any(${`{${ids.join(',')}}`}::uuid[])
      order by id for update
-  `)).rows
+  `, 'objects')
   if (selected.length !== ids.length || selected.some(row => row.consumed || !['draft', 'rejected'].includes(row.status)
     || input.selections.find(selection => selection.id === row.id)?.updatedAt !== row.updatedAt)) {
     throw refuse('The selected time changed or is no longer available for submission.', 'additional_time_selection_changed')

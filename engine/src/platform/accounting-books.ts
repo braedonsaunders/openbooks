@@ -24,6 +24,6 @@ export async function activePostingPrimaryBookId(
   const r = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1`));
-  return r.rows[0]?.id ?? null;
+     limit 1`, "objects"));
+  return r[0]?.id ?? null;
 }

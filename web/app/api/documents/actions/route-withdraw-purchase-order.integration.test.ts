@@ -84,14 +84,14 @@ test('a pending purchase order withdraws through the native document path with a
     assert.deepEqual(body, { status: 'draft', cancelledRunIds: [runId] })
 
     const facts = await withBypassContext(async () =>
-      (await db.execute<{ status: string }>(sql`select status from documents where id = ${orderId}`)).rows[0]!)
+      (await db.execute<{ status: string }>(sql`select status from documents where id = ${orderId}`, 'objects'))[0]!)
     assert.equal(facts.status, 'draft')
 
     const audit = await withBypassContext(async () =>
       (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
         select action, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${orderId}
-         order by at desc, id desc limit 1`)).rows[0]!)
+         order by at desc, id desc limit 1`, 'objects'))[0]!)
     assert.equal(audit.action, 'update')
     const changes = audit.changes as { reason: string; before: { document: { status: string } }; after: { document: { status: string } } }
     assert.equal(changes.reason, 'vendor pulled the quote')
@@ -163,7 +163,7 @@ test('a quote withdraw by a colleague with only the create grant is refused as f
         select d.status, d.submitted_by as "submittedBy", r.status as "runStatus"
           from documents d join flow_runs r on r.org_id = d.org_id and r.subject_id = d.id
          where d.org_id = ${org.orgId} and d.id = ${orderId} and r.id = ${runId}
-      `)).rows[0]!)
+      `, 'objects'))[0]!)
     assert.equal(preserved.status, 'pending_approval')
     assert.equal(preserved.submittedBy, estimator)
     assert.equal(preserved.runStatus, 'waiting')

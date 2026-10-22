@@ -37,11 +37,11 @@ test("open-balance-fresh fails when the stored balance drifts from its lines", {
   const org = await createScratchOrg();
   try {
     const cal = await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`);
+      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects");
     const junePeriodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      values (${junePeriodId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${cal.rows[0]!.id})`);
+      values (${junePeriodId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${cal[0]!.id})`);
 
     // A balanced posted invoice: DR receivable 100 (open item) / CR revenue.
     const entryId = randomUUID();
@@ -109,11 +109,11 @@ test("open-balance-fresh fails when the stored balance drifts from its lines", {
  */
 async function foreignInvoice(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<{ docId: string }> {
   const cal = await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`);
+    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects");
   const junePeriodId = randomUUID();
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-    values (${junePeriodId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${cal.rows[0]!.id})`);
+    values (${junePeriodId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${cal[0]!.id})`);
 
   // EUR 100 invoice into a CAD-functional org at a commercial 1.45: the AR
   // leg carries 145 CAD functional with 100 EUR txn amounts.

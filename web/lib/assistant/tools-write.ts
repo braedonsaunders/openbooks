@@ -88,14 +88,14 @@ const draftJournalEntry: AssistantToolDef = {
            and (number = ${key} or lower(name) = lower(${key}))
          order by (number = ${key}) desc
          limit 2
-      `));
-      if (r.rows.length === 0) {
+      `, "objects"));
+      if (r.length === 0) {
         return { ok: false, error: `account not found: "${key}" — use find_accounts to locate it` };
       }
-      if (r.rows.length > 1 && r.rows[0]!.number !== key) {
+      if (r.length > 1 && r[0]!.number !== key) {
         return { ok: false, error: `account "${key}" is ambiguous — pass its number instead` };
       }
-      const acct = r.rows[0]!;
+      const acct = r[0]!;
       lines.push({
         accountId: acct.id,
         accountLabel: `${acct.number ?? ""} · ${acct.name}`.replace(/^ · /, ""),

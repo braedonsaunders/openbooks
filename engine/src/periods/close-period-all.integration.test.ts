@@ -24,20 +24,20 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // the run with every module's outcome explicit.
 
 async function lockStates(orgId: string, periodId: string, bookId: string): Promise<Record<string, string>> {
-  const rows = (await db.execute<{ module: string; state: string }>(sql`
+  const rows = await db.execute<{ module: string; state: string }>(sql`
     select module, state from period_locks
      where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
        and subsidiary_id is null
-  `)).rows;
+  `, "objects");
   return Object.fromEntries(rows.map((row) => [row.module, row.state]));
 }
 
 async function lockReasons(orgId: string, periodId: string, bookId: string): Promise<Record<string, string | null>> {
-  const rows = (await db.execute<{ module: string; reason: string | null }>(sql`
+  const rows = await db.execute<{ module: string; reason: string | null }>(sql`
     select module, reason from period_locks
      where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
        and subsidiary_id is null
-  `)).rows;
+  `, "objects");
   return Object.fromEntries(rows.map((row) => [row.module, row.reason]));
 }
 
@@ -71,12 +71,12 @@ test("one reason closes every module with GL last and audits each transition", {
     const audits = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
        where org_id = ${org.orgId} and table_name = 'period_locks' and action = 'insert'
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(Number(audits?.n ?? 0), 6, "each module close is audited");
     const events = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from close_events
        where org_id = ${org.orgId} and event_type = 'period.lock_changed'
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(Number(events?.n ?? 0), 6, "each module close emits its event");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -252,7 +252,7 @@ test(
       select count(*)::text as n from audit_log
        where org_id = ${org.orgId} and table_name = 'period_locks' and action = 'update'
          and changes->'after'->>'state' = 'closed'
-    `)).rows[0];
+    `, "objects"))[0];
       assert.ok(Number(recloseAudits?.n ?? 0) >= 2, "both re-closed modules leave audit entries");
     } finally {
     await dropScratchOrg(org.orgId);

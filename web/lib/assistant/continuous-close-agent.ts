@@ -393,7 +393,7 @@ export async function enrichContinuousCloseRun(
   const org = (await db.execute<{ locale: string }>(sql`
     select coalesce(settings->>'defaultLocale', 'en') as locale
       from orgs where id = ${input.orgId}
-  `));
+  `, "objects"));
   const fiscal = await orgFiscalContext(undefined, input.orgId);
   const timeoutController = new AbortController();
   const timeout = setTimeout(
@@ -403,7 +403,7 @@ export async function enrichContinuousCloseRun(
   let result: BackgroundAgentResult;
   try {
     result = await runBackgroundAgent(config, {
-      system: agentSystemPrompt(input, config?.org?.name ?? null, org.rows[0]?.locale ?? "en", fiscal),
+      system: agentSystemPrompt(input, config?.org?.name ?? null, org[0]?.locale ?? "en", fiscal),
       prompt: agentPrompt(input, evidence, today),
       tools,
       tier: input.analysis.modelTier,
@@ -475,8 +475,8 @@ export async function applyFindingAnalyses(
        where id = ${analysis.findingId} and org_id = ${orgId}
          and last_detected_run_id = ${runId}
       returning id
-    `);
-    if (updated.rows.length) applied += 1;
+    `, "objects");
+    if (updated.length) applied += 1;
     else supersededFindingIds.push(analysis.findingId);
   }
   return { applied, supersededFindingIds };

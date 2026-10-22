@@ -29,7 +29,7 @@ export async function constructionSubject(tx: SqlExecutor, orgId: string, actorI
     throw reading ? new ScopeNotFoundError() : new ProvisionError('Turn on Projects in Company Settings → Features before assessing a construction contract')
   const project = (await tx.execute<{id:string;name:string;contract_value:string|null;status:string}>(sql`
     select id,name,contract_value::text,status from projects where org_id=${orgId} and id=${identity.projectId}
-      and ${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)}=${identity.subsidiaryId} ${reading ? sql`for share` : sql`for update`}`)).rows[0]
+      and ${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)}=${identity.subsidiaryId} ${reading ? sql`for share` : sql`for update`}`, 'objects'))[0]
   if (!project) throw new ScopeNotFoundError()
   return project
 }
@@ -49,14 +49,14 @@ export async function constructionBasis(tx: SqlExecutor, orgId: string, actorId:
     and exists(select 1 from journal_lines line where line.org_id=entry.org_id and line.entry_id=entry.id and line.project_id=${identity.projectId})
     order by entry.id for share`)
   await tx.execute(sql`select id from journal_lines where org_id=${orgId} and project_id=${identity.projectId} order by id for share`)
-  const rows = (await tx.execute<{id:string;amount:string;type:string}>(sql`
+  const rows = await tx.execute<{id:string;amount:string;type:string}>(sql`
     select line.id,line.amount::text,account.type from journal_lines line
       join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
       join accounts account on account.org_id=line.org_id and account.id=line.account_id
     where line.org_id=${orgId} and line.project_id=${identity.projectId} and line.subsidiary_id=${identity.subsidiaryId}
       and entry.book_id=${identity.bookId} and entry.status in ('posted','reversed') and entry.posting_date<=${date}::date
       and account.type in ('expense','expense_other','cogs','income','income_other')
-      and line.custom->>'provisionId' is distinct from ${identity.id} order by line.id`)).rows
+      and line.custom->>'provisionId' is distinct from ${identity.id} order by line.id`, 'objects')
   return { project, contractValue, incurredCost:sum(rows.filter(row=>['expense','expense_other','cogs'].includes(row.type)).map(row=>row.amount)),
     recognizedRevenue:neg(sum(rows.filter(row=>['income','income_other'].includes(row.type)).map(row=>row.amount))),
     sourceFingerprint:createHash('sha256').update(JSON.stringify(rows)).digest('hex') }

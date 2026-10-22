@@ -77,8 +77,8 @@ const patch = (id: string, body: unknown) =>
   );
 
 async function waiverJurisdiction(waiverId: string): Promise<string | null> {
-  const rows = (await withBypassContext(() => db.execute<{ jurisdiction: string | null }>(sql`
-    select jurisdiction from lien_waivers where id = ${waiverId}`))).rows;
+  const rows = await withBypassContext(() => db.execute<{ jurisdiction: string | null }>(sql`
+    select jurisdiction from lien_waivers where id = ${waiverId}`, "objects"));
   return rows[0]!.jurisdiction;
 }
 
@@ -91,7 +91,7 @@ test("waiver creation refuses an unknown jurisdiction without writing", async ()
     assert.match(json?.error ?? "", /unknown jurisdiction/, `expected a named refusal, got: ${JSON.stringify(json)}`);
     assert.match(json?.error ?? "", /ISO 3166-2/, `expected the remedy, got: ${JSON.stringify(json)}`);
     const count = (await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${org.orgId}`))).rows[0]!.n;
+      db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${org.orgId}`, "objects")))[0]!.n;
     assert.equal(count, 0);
   } finally {
     await dropScratchOrg(org.orgId);

@@ -107,11 +107,9 @@ for (const change of [
         assert.ok(parked, "posting is waiting after its preliminary read");
         await blocker.query("commit");
         const result = await task;
-        const posted = (
-          await db.execute<{ account_id: string; amount: string }>(
-            sql`select jl.account_id,jl.amount from journal_lines jl join journal_entries j on j.org_id=jl.org_id and j.id=jl.entry_id where j.org_id=${org.orgId} and j.origin='revenue_recognition' and jl.amount<0`,
-          )
-        ).rows;
+        const posted = await db.execute<{ account_id: string; amount: string }>(
+            sql`select jl.account_id,jl.amount from journal_lines jl join journal_entries j on j.org_id=jl.org_id and j.id=jl.entry_id where j.org_id=${org.orgId} and j.origin='revenue_recognition' and jl.amount<0`, "objects",
+          );
         assert.ok(
           result && typeof result === "object" && "value" in result,
           "recognition completed successfully",
@@ -146,11 +144,9 @@ for (const change of [
               : "-1200.0000",
           );
         }
-        const amounts = (
-          await db.execute<{ planned: string; recognized: string | null }>(
-            sql`select planned_amount as planned, recognized_amount as recognized from recognition_schedule_lines where org_id=${org.orgId}`,
-          )
-        ).rows;
+        const amounts = await db.execute<{ planned: string; recognized: string | null }>(
+            sql`select planned_amount as planned, recognized_amount as recognized from recognition_schedule_lines where org_id=${org.orgId}`, "objects",
+          );
         if (change !== "forecast-rule" && change !== "missing-accounts")
           assert.equal(
             amounts[0]!.recognized,

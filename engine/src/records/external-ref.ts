@@ -75,11 +75,11 @@ export async function findDocumentByExternalRef(
   source: string,
   excludeId?: string,
 ): Promise<{ id: string; documentNumber: string } | null> {
-  const rows = (await runner.execute<{ id: string; document_number: string }>(sql`
+  const rows = await runner.execute<{ id: string; document_number: string }>(sql`
     select id, document_number from documents
      where org_id = ${orgId} and external_source = ${source} and external_ref = ${ref}
        ${excludeId ? sql`and id <> ${excludeId}` : sql<SQL>``}
-     limit 1`)).rows;
+     limit 1`, "objects");
   const row = rows[0];
   return row ? { id: row.id, documentNumber: row.document_number } : null;
 }

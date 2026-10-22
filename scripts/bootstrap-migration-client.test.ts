@@ -9,12 +9,13 @@
  * strip — including the exact header spellings the migrations use.
  */
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import type pg from "pg";
-import { publishedMigrationSessionPrelude } from "./migration-session-headers.mjs";
+import { releaseSchemaFiles, releaseSchemaSql } from "./release-schema-sql.mjs";
 import {
   DEFAULT_MIGRATION_LOCK_MAX_ATTEMPTS,
   DEFAULT_MIGRATION_LOCK_RETRY_BASE_MS,
@@ -31,7 +32,6 @@ import {
 } from "./bootstrap-migration-client.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const generatedDir = join(here, "..", "schema", "migrations", "generated");
 
 test("lock config defaults to a bounded few-second wait with limited retries", () => {
   assert.deepEqual(migrationLockConfig({}), {
@@ -137,14 +137,12 @@ test("the sanitizer leaves lock_timeout prose and function bodies alone", () => 
   assert.equal(sanitizeMigrationContent(body), body);
 });
 
-test("no published migration keeps a file-level lock_timeout after the strip", () => {
-  const files = readdirSync(generatedDir)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
-  assert.ok(files.length > 200, "expected the full published migration set");
+test("no release migration keeps a file-level lock_timeout after the strip", () => {
+  const files = releaseSchemaFiles(join(here, ".."));
+  assert.ok(files.some(({ filename }) => filename.startsWith("baselines/")), "expected the active release baseline");
   const survivors: string[] = [];
-  for (const file of files) {
-    const content = readFileSync(join(generatedDir, file), "utf8");
+  for (const { filename: file, path } of files) {
+    const content = readFileSync(path, "utf8");
     const clean = sanitizeMigrationContent(content);
     const withoutComments = clean.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "");
     if (/(^|\s)(set\s+(?:(?:session|local)\s+)?lock_timeout|reset\s+lock_timeout)\b/i.test(withoutComments)) {
@@ -216,15 +214,11 @@ test("the sanitizer strips TO/=/RESET forms with or without a semicolon, any cas
   }
 });
 
-test("sanitize and split stay linear on the published corpus and a 5 MB synthetic body (perf regression)", () => {
-  // The whole published corpus as one input: every scanner state on real DDL,
+test("sanitize and split stay linear on the release schema and a 5 MB synthetic body (perf regression)", () => {
+  // The whole release schema as one input: every scanner state on real DDL,
   // with no assertion on any file's text (the strip property over the same
-  // corpus is proven by the no-published-survivors test above).
-  const corpus = readdirSync(generatedDir)
-    .filter((file) => file.endsWith(".sql"))
-    .sort()
-    .map((file) => readFileSync(join(generatedDir, file), "utf8"))
-    .join("\n");
+  // corpus is proven by the no-survivors test above).
+  const corpus = releaseSchemaSql(join(here, ".."));
   assert.ok(corpus.length > 1_000_000, "expected the real multi-megabyte corpus");
   let started = performance.now();
   const clean = sanitizeMigrationContent(corpus);
@@ -401,14 +395,23 @@ test("the published header spellings are neutralized exactly where the runner wo
   assert.match(clean, /CREATE UNIQUE INDEX IF NOT EXISTS payment_links_token_hash/);
 });
 
-test("the exact published balance migration executes under the bounded timeout and records its original digest", async () => {
-  const filename = "generated/0580_clone_preserves_recorded_document_balances.sql";
-  const content = readFileSync(join(generatedDir, filename.split("/")[1]!), "utf8");
-  const body = sanitizeMigrationContent(publishedMigrationSessionPrelude(filename, content) + content);
+test("a migration executes under the bounded timeout and records its file digest after its body", async () => {
+  const filename = "generated/0001_bounded_probe.sql";
+  const content = [
+    "SET statement_timeout = 0;",
+    "SET lock_timeout = 0;",
+    "SET idle_in_transaction_session_timeout = 0;",
+    "SET client_encoding = 'UTF8';",
+    "SET standard_conforming_strings = on;",
+    "SET client_min_messages = warning;",
+    "",
+    "ALTER TABLE public.payment_links ADD COLUMN IF NOT EXISTS probe text;",
+  ].join("\n");
+  const digest = createHash("sha256").update(content).digest("hex");
+  const body = sanitizeMigrationContent(content);
   const { client, calls, parameters } = recordingClient();
   await executeMigrationAttempt(client, {
-    filename, body, transactional: true, lock: migrationLockConfig({}),
-    digest: "1ee33f04b4c0cfe6c1725d19d08cc613e593bbc2c63a499ae9e58b0b419ca59b",
+    filename, body, transactional: true, lock: migrationLockConfig({}), digest,
     executeBody: executeMigrationBody,
   });
   assert.doesNotMatch(body, /SET\s+lock_timeout\s*=\s*0/i);
@@ -417,5 +420,5 @@ test("the exact published balance migration executes under the bounded timeout a
   const ledgerIndex = calls.findIndex((statement) => /insert into public\._applied_migrations/.test(statement));
   assert.equal(calls.filter((statement) => /insert into public\._applied_migrations/.test(statement)).length, 1);
   assert.ok(calls.indexOf(body) < ledgerIndex);
-  assert.deepEqual(parameters[ledgerIndex], [filename, "1ee33f04b4c0cfe6c1725d19d08cc613e593bbc2c63a499ae9e58b0b419ca59b"]);
+  assert.deepEqual(parameters[ledgerIndex], [filename, digest]);
 });

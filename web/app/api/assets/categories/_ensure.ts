@@ -33,16 +33,16 @@ export async function ensureDefaultCategory(
 
     const existing = await tx.execute<{ id: string }>(sql`
       select id from asset_categories where org_id = ${orgId} and name = 'Uncategorised' limit 1
-    `);
-    if (existing.rows[0]) return existing.rows[0].id;
+    `, "objects");
+    if (existing[0]) return existing[0].id;
 
     // Posting-role lookups from the COA; each may come back empty.
     const pick = async (whereSql: ReturnType<typeof sql>) => {
       const r = await tx.execute<{ id: string }>(sql`
         select id from accounts
          where org_id = ${orgId} and is_active and not is_summary ${whereSql}
-         order by number nulls last limit 1`);
-      return r.rows[0]?.id ?? null;
+         order by number nulls last limit 1`, "objects");
+      return r[0]?.id ?? null;
     };
     const assetAcct = await pick(
       sql`and type = 'asset_fixed' and name not ilike '%accumulat%' and name not ilike '%amortiz%'`,
@@ -74,17 +74,17 @@ export async function ensureDefaultCategory(
       -- The org/name uniqueness index arbitrates racers that bypassed the
       -- advisory lock; the committed winner is re-read below.
       on conflict do nothing
-      returning id`);
-    if (ins.rows[0]) return ins.rows[0].id;
+      returning id`, "objects");
+    if (ins[0]) return ins[0].id;
 
     // A direct writer may have won the uniqueness race without taking our
     // advisory lock. Re-read the committed winner instead of returning an
     // empty id or creating a second category.
     const winner = await tx.execute<{ id: string }>(sql`
       select id from asset_categories where org_id = ${orgId} and name = 'Uncategorised' limit 1
-    `);
-    if (!winner.rows[0])
+    `, "objects");
+    if (!winner[0])
       throw new Error("default asset category insert was not committed");
-    return winner.rows[0].id;
+    return winner[0].id;
   });
 }

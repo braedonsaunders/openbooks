@@ -68,7 +68,7 @@ async function fixture(): Promise<Fixture> {
   )
   const lineA = (await db.execute<{ id: string }>(sql`
     select id from bank_statement_lines where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-  `)).rows[0]!.id
+  `, 'objects'))[0]!.id
   return { orgId: org.orgId, actor, date: org.date, subA: org.subsidiaryId, subB, bankA: org.accounts.bank, bankB, lineA }
 }
 
@@ -94,7 +94,7 @@ test('ensureOpenReconciliation refuses an out-of-scope account before creating',
   try {
     await assertUniformNotFound(ensureOpenReconciliation(fx.orgId, fx.actor, fx.bankA, new Set([fx.subB])))
     const sessions = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from reconciliations where org_id = ${fx.orgId}`)).rows[0]!.n
+      select count(*)::int as n from reconciliations where org_id = ${fx.orgId}`, 'objects'))[0]!.n
     assert.equal(sessions, 0)
     const id = await ensureOpenReconciliation(fx.orgId, fx.actor, fx.bankA, new Set([fx.subA]))
     assert.ok(id)
@@ -107,7 +107,7 @@ test('applyRulesToAccount refuses an out-of-scope account without touching lines
     await seedExcludeRule(fx.orgId, fx.actor)
     await assertUniformNotFound(applyRulesToAccount(fx.orgId, fx.actor, fx.bankA, new Set([fx.subB])))
     const status = (await db.execute<{ s: string }>(sql`
-      select match_status as s from bank_statement_lines where id = ${fx.lineA}`)).rows[0]!.s
+      select match_status as s from bank_statement_lines where id = ${fx.lineA}`, 'objects'))[0]!.s
     assert.equal(status, 'unmatched')
     const applied = await applyRulesToAccount(fx.orgId, fx.actor, fx.bankA, new Set([fx.subA]))
     assert.equal(applied.excluded, 1)
@@ -123,7 +123,7 @@ test('applyRuleToLine refuses an out-of-scope statement line', { skip: !env.OPEN
     )
     await applyRuleToLine(fx.orgId, fx.actor, { statementLineId: fx.lineA, ruleId }, new Set([fx.subA]))
     const status = (await db.execute<{ s: string }>(sql`
-      select match_status as s from bank_statement_lines where id = ${fx.lineA}`)).rows[0]!.s
+      select match_status as s from bank_statement_lines where id = ${fx.lineA}`, 'objects'))[0]!.s
     assert.equal(status, 'excluded')
   } finally { await dropScratchOrg(fx.orgId) }
 })
@@ -152,7 +152,7 @@ test('addJournalMatchFromLine refuses out-of-scope line and offset accounts', { 
       ),
     )
     const status = (await db.execute<{ s: string }>(sql`
-      select match_status as s from bank_statement_lines where id = ${fx.lineA}`)).rows[0]!.s
+      select match_status as s from bank_statement_lines where id = ${fx.lineA}`, 'objects'))[0]!.s
     assert.equal(status, 'unmatched')
   } finally { await dropScratchOrg(fx.orgId) }
 })
@@ -733,7 +733,7 @@ test('applyRulesToAccount reports a refused line and still applies the rest', { 
       { orgId: fx.orgId, userId: fx.actor, allowedSubsidiaryIds: null },
     )
     const offset = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${fx.orgId} and type = 'income' and not is_summary limit 1`)).rows[0]!.id
+      select id from accounts where org_id = ${fx.orgId} and type = 'income' and not is_summary limit 1`, 'objects'))[0]!.id
     await withBypassContext(() => (db.execute(sql`
       insert into bank_match_rules (id, org_id, name, criteria, outcome, priority, is_active, created_by)
       values (${randomUUID()}, ${fx.orgId}, 'Oversplit',
@@ -746,8 +746,8 @@ test('applyRulesToAccount reports a refused line and still applies the rest', { 
     assert.equal(result.refused.length, 1)
     assert.equal(result.refused[0]!.ruleName, 'Oversplit')
     assert.match(result.refused[0]!.reason, /over-allocates the line total of 40\.0000/)
-    const statuses = (await db.execute<{ description: string; s: string }>(sql`
-      select description, match_status as s from bank_statement_lines where org_id = ${fx.orgId} order by description`)).rows
+    const statuses = await db.execute<{ description: string; s: string }>(sql`
+      select description, match_status as s from bank_statement_lines where org_id = ${fx.orgId} order by description`, 'objects')
     assert.deepEqual(statuses.map((r) => [r.description, r.s]), [['Oversplit deposit', 'unmatched'], ['Scope probe deposit', 'excluded']])
   } finally { await dropScratchOrg(fx.orgId) }
 })

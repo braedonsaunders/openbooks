@@ -82,29 +82,23 @@ function postRequest(body: unknown): Request {
 }
 
 async function makeFolder(orgId: string, name: string): Promise<string> {
-  const rows = (
-    await db.execute<{ id: string }>(
-      sql`insert into folders (org_id, parent_folder_id, name) values (${orgId}, null, ${name}) returning id`,
+  const rows = await db.execute<{ id: string }>(
+      sql`insert into folders (org_id, parent_folder_id, name) values (${orgId}, null, ${name}) returning id`, 'objects',
     )
-  ).rows
   return rows[0]!.id
 }
 
 async function isInactive(orgId: string, id: string): Promise<boolean> {
-  const rows = (
-    await db.execute<{ is_inactive: boolean }>(
-      sql`select is_inactive from folders where id = ${id} and org_id = ${orgId}`,
+  const rows = await db.execute<{ is_inactive: boolean }>(
+      sql`select is_inactive from folders where id = ${id} and org_id = ${orgId}`, 'objects',
     )
-  ).rows
   return rows[0]?.is_inactive === true
 }
 
 async function auditEvents(orgId: string, rowId: string): Promise<Array<{ actor: string; event: string }>> {
-  const rows = (
-    await db.execute<{ actor_id: string; event: string }>(
-      sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${orgId} and table_name = 'folders' and row_id = ${rowId} order by at`,
+  const rows = await db.execute<{ actor_id: string; event: string }>(
+      sql`select actor_id, changes->>'event' as event from audit_log where org_id = ${orgId} and table_name = 'folders' and row_id = ${rowId} order by at`, 'objects',
     )
-  ).rows
   return rows.map((r) => ({ actor: r.actor_id, event: r.event }))
 }
 
@@ -157,11 +151,9 @@ test('bulk move relinks the folder and audits the move', { skip: !DB }, async ()
       skipped: 0,
       results: [{ id: moving, kind: 'folder', ok: true }],
     })
-    const rows = (
-      await db.execute<{ parent_folder_id: string | null }>(
-        sql`select parent_folder_id from folders where id = ${moving} and org_id = ${org.orgId}`,
+    const rows = await db.execute<{ parent_folder_id: string | null }>(
+        sql`select parent_folder_id from folders where id = ${moving} and org_id = ${org.orgId}`, 'objects',
       )
-    ).rows
     assert.equal(rows[0]?.parent_folder_id, target)
     assert.deepEqual(await auditEvents(org.orgId, moving), [{ actor: userId, event: 'move' }])
   } finally {

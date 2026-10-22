@@ -91,9 +91,9 @@ async function seedStoredValueOrg(): Promise<StoredValueFixture> {
 }
 
 async function entryBalanced(orgId: string, entryId: string): Promise<boolean> {
-  const rows = (await withBypass(() => db.execute<{ balanced: boolean }>(sql`
+  const rows = await withBypass(() => db.execute<{ balanced: boolean }>(sql`
     select coalesce(sum(amount), 0) = 0 as balanced from journal_lines
-     where org_id = ${orgId} and entry_id = ${entryId}`))).rows;
+     where org_id = ${orgId} and entry_id = ${entryId}`, "objects"));
   return rows[0]?.balanced ?? false;
 }
 
@@ -105,7 +105,7 @@ async function accountState(orgId: string, accountId: string) {
            a.breakage_recognized_minor::text as recognized, a.status,
            (select count(*)::int from stored_value_entries where org_id = ${orgId} and account_id = ${accountId}) as entries,
            (select journal_entry_id from stored_value_entries where org_id = ${orgId} and account_id = ${accountId} and kind = 'issue') as "journalId"
-      from stored_value_accounts a where a.org_id = ${orgId} and a.id = ${accountId}`))).rows[0]!;
+      from stored_value_accounts a where a.org_id = ${orgId} and a.id = ${accountId}`, "objects")))[0]!;
 }
 
 test("a gift card sale posts the liability, never revenue, and mints a redeemable account", { skip: !DB }, async () => {
@@ -133,15 +133,15 @@ test("a gift card sale posts the liability, never revenue, and mints a redeemabl
     const entryId = await withBypass(() =>
       postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }),
     );
-    const legs = (await withBypass(() => db.execute<{ account: string; amount: string }>(sql`
+    const legs = await withBypass(() => db.execute<{ account: string; amount: string }>(sql`
       select account_id as account, amount::text as amount from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${entryId} order by account_id`))).rows;
+       where org_id = ${org.orgId} and entry_id = ${entryId} order by account_id`, "objects"));
     const byAccount = new Map(legs.map((leg) => [leg.account, leg.amount]));
     assert.equal(byAccount.get(fx.liability), "-50.0000");
     assert.ok(!byAccount.has(org.accounts.revenue), "gift card sale must not touch revenue");
     assert.equal(await entryBalanced(org.orgId, entryId), true);
-    const accounts = (await withBypass(() => db.execute<{ id: string }>(sql`
-      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${invoiceId}`))).rows;
+    const accounts = await withBypass(() => db.execute<{ id: string }>(sql`
+      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${invoiceId}`, "objects"));
     assert.equal(accounts.length, 1);
     const state = await accountState(org.orgId, accounts[0]!.id);
     assert.equal(state.balance, "500000");
@@ -225,15 +225,15 @@ test("proportional breakage recognizes redemptions times r/(1-r) in minor units"
     const state = await accountState(org.orgId, issued.accountId);
     assert.equal(state.balance, "0");
     assert.equal(state.recognized, "100000");
-    const entry = (await withBypass(() => db.execute<{ kind: string; amount: string; journal: string }>(sql`
+    const entry = await withBypass(() => db.execute<{ kind: string; amount: string; journal: string }>(sql`
       select kind, amount_minor::text as amount, journal_entry_id as journal
         from stored_value_entries
-       where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage'`))).rows;
+       where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage'`, "objects"));
     assert.equal(entry.length, 1);
     assert.equal(entry[0]!.amount, "-100000");
-    const legs = (await withBypass(() => db.execute<{ account: string; amount: string }>(sql`
+    const legs = await withBypass(() => db.execute<{ account: string; amount: string }>(sql`
       select account_id as account, amount::text as amount from journal_lines
-       where org_id = ${org.orgId} and entry_id = ${entry[0]!.journal}`))).rows;
+       where org_id = ${org.orgId} and entry_id = ${entry[0]!.journal}`, "objects"));
     const byAccount = new Map(legs.map((leg) => [leg.account, leg.amount]));
     assert.equal(byAccount.get(fx.liability), "10.0000");
     assert.equal(byAccount.get(fx.breakageIncome), "-10.0000");
@@ -284,7 +284,7 @@ test("a second scan in one period and a replayed redemption each move the balanc
         select (select count(*)::int from journal_entries
                  where org_id = ${org.orgId} and custom->>'idempotencyKey' like ${`stored-value:breakage:${issued.accountId}:%`}) as journals,
                (select count(*)::int from stored_value_entries
-                 where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage') as breakage`))).rows[0]!;
+                 where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'breakage') as breakage`, "objects")))[0]!;
       assert.deepEqual(counts, { journals: 1, breakage: 1 });
     });
   } finally {
@@ -433,8 +433,8 @@ test("one org cannot read or redeem another org's stored value", { skip: !DB }, 
       }),
     );
     const visible = await withOrgTransaction(second.org.orgId, async () => {
-      const rows = (await db.execute<{ id: string }>(sql`
-        select id from stored_value_accounts where org_id = ${first.org.orgId}`)).rows;
+      const rows = await db.execute<{ id: string }>(sql`
+        select id from stored_value_accounts where org_id = ${first.org.orgId}`, "objects");
       return rows;
     });
     assert.deepEqual(visible, []);
@@ -504,11 +504,11 @@ test("voids reverse card effects: a receipt returns its tender, a sale takes bac
   try {
     const saleId = await postInvoice("INV-SV-VOID-1", "50", true);
     const cardId = (await withBypass(() => db.execute<{ id: string }>(sql`
-      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${saleId}`))).rows[0]!.id;
+      select id from stored_value_accounts where org_id = ${org.orgId} and source_document_id = ${saleId}`, "objects")))[0]!.id;
     const invoiceId = await postInvoice("INV-SV-VOID-2", "30", false);
     const invoiceLine = (await withBypass(() => db.execute<{ id: string }>(sql`
       select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where je.source_document_id = ${invoiceId} and je.status = 'posted' and jl.is_open_item`))).rows[0]!.id;
+       where je.source_document_id = ${invoiceId} and je.status = 'posted' and jl.is_open_item`, "objects")))[0]!.id;
     const receiptId = await withBypass(async () => {
       const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
         orgId: org.orgId, kind: "customer_payment", createdBy: actorId, partyId: org.customerId,
@@ -548,9 +548,9 @@ test("voids reverse card effects: a receipt returns its tender, a sale takes bac
     await voidDocument(saleId, "Gift card sold in error");
     const ended = await accountState(org.orgId, cardId);
     assert.deepEqual([ended.balance, ended.issued, ended.status], ["0", "0", "closed"]);
-    const reversals = (await withBypass(() => db.execute<{ amount: string; document_id: string }>(sql`
+    const reversals = await withBypass(() => db.execute<{ amount: string; document_id: string }>(sql`
       select amount_minor::text as amount, document_id from stored_value_entries
-       where org_id = ${org.orgId} and account_id = ${cardId} and kind = 'reversal' order by created_at, id`))).rows;
+       where org_id = ${org.orgId} and account_id = ${cardId} and kind = 'reversal' order by created_at, id`, "objects"));
     assert.deepEqual(reversals, [
       { amount: "200000", document_id: receiptId },
       { amount: "-500000", document_id: saleId },

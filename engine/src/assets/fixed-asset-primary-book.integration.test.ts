@@ -1,49 +1,21 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { REPORT_ENTITY_MAP, runCustomQuery } from "@openbooks/reports";
 import { db, pool } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
-const duplicatePrimaryPreflight = readFileSync(
-  new URL("../../../schema/migrations/preflight/0345_accounting_books_one_primary_per_org.sql", import.meta.url),
-  "utf8",
-).replaceAll("public.accounting_books", "pg_temp.accounting_books");
-
-test("the primary-book preflight names duplicate organizations and book ids", async () => {
-  const orgId = randomUUID();
-  const firstBookId = randomUUID();
-  const secondBookId = randomUUID();
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await client.query("create temp table accounting_books (id uuid, org_id uuid, is_primary boolean) on commit drop");
-    await client.query(
-      "insert into pg_temp.accounting_books (id, org_id, is_primary) values ($1, $2, true), ($3, $2, true)",
-      [firstBookId, orgId, secondBookId],
-    );
-    const findings = (await client.query(duplicatePrimaryPreflight)).rows as Record<string, unknown>[];
-    assert.equal(findings.length, 1);
-    const finding = findings[0]!;
-    assert.equal(finding.subject, orgId);
-    assert.match(String(finding.detail), new RegExp(orgId));
-    assert.match(String(finding.detail), new RegExp(firstBookId));
-    assert.match(String(finding.detail), new RegExp(secondBookId));
-    assert.equal(finding.severity, "refuse");
-  } finally {
-    await client.query("rollback").catch(() => {});
-    client.release();
-  }
-});
-
 test("a second primary book is refused and the fixed-asset report keeps one row per asset", async () => {
   const org = await createScratchOrg();
   try {
     await assert.rejects(db.execute(sql`
       insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-      values (${randomUUID()}, ${org.orgId}, 'SECOND-PRIMARY', 'Second primary', true, true, true)`));
+      values (${randomUUID()}, ${org.orgId}, 'SECOND-PRIMARY', 'Second primary', true, true, true)`),
+      (error: unknown) => {
+        const cause = (error as { cause?: { code?: string; constraint?: string } }).cause;
+        return cause?.code === "23505" && cause.constraint === "accounting_books_one_primary_per_org";
+      });
 
     const categoryId = randomUUID();
     await db.execute(sql`

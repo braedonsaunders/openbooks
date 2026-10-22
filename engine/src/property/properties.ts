@@ -53,8 +53,8 @@ export async function createManagedProperty(input: {
         (${input.depositLiabilityAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.depositLiabilityAccountId ?? null} and type in ('liability_current_other','liability_long_term') and is_active and not is_summary)) as deposit_account_ok,
         (${input.defaultBankAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.defaultBankAccountId ?? null} and type='asset_bank' and is_active and not is_summary)) as bank_account_ok
       from subsidiaries s where s.org_id=${input.orgId} and s.id=${input.subsidiaryId}
-    `));
-    const row = scope.rows[0];
+    `, "objects"));
+    const row = scope[0];
     if (!row) throw new PropertyManagementError("Subsidiary not found");
     // The target entity is fixed before the write: a restricted caller may
     // only create into a subsidiary they can see, checked inside the same
@@ -75,8 +75,8 @@ export async function createManagedProperty(input: {
       values(${input.orgId},${input.subsidiaryId},${input.locationId ?? null},${input.fixedAssetId ?? null},${code},${name},${input.propertyType},
         ${requestedCurrency || row.currency},${JSON.stringify(input.address ?? {})}::jsonb,${input.rentIncomeAccountId ?? null},${input.camIncomeAccountId ?? null},
         ${input.depositLiabilityAccountId ?? null},${input.defaultBankAccountId ?? null},${JSON.stringify(input.custom ?? {})}::jsonb,${input.actorId},${input.actorId}) returning id
-    `));
-    const id = inserted.rows[0]!.id;
+    `, "objects"));
+    const id = inserted[0]!.id;
     await audit(tx, input.orgId, "managed_properties", id, "insert", input.actorId, { code, name });
     return { id };
   });
@@ -187,8 +187,8 @@ export async function updateManagedProperty(input: {
         (${input.depositLiabilityAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.depositLiabilityAccountId ?? null} and type in ('liability_current_other','liability_long_term') and is_active and not is_summary)) as deposit_account_ok,
         (${input.defaultBankAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.defaultBankAccountId ?? null} and type='asset_bank' and is_active and not is_summary)) as bank_account_ok
       from managed_properties p where p.org_id=${input.orgId} and p.id=${input.propertyId} for update
-    `));
-    const row = scope.rows[0];
+    `, "objects"));
+    const row = scope[0];
     if (!row) throw new PropertyManagementError("Property not found");
     // The row is locked FOR UPDATE above: both the current and the target
     // subsidiary are rechecked inside the transaction, so a concurrent
@@ -297,8 +297,8 @@ export async function deleteManagedProperty(orgId: string, actorId: string, allo
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id) as has_leases,
         exists(select 1 from cam_pools where org_id=p.org_id and property_id=p.id) as has_cam
       from managed_properties p where p.org_id=${orgId} and p.id=${propertyId} for update
-    `));
-    const row = record.rows[0];
+    `, "objects"));
+    const row = record[0];
     if (!row) throw new PropertyManagementError("Property not found");
     if (row.has_units || row.has_leases || row.has_cam) {
       throw new PropertyManagementError("A property with units, leases, or CAM history cannot be deleted; deactivate it instead");
@@ -323,10 +323,10 @@ export async function createPropertyUnit(input: { orgId: string; actorId: string
       insert into property_units(org_id,property_id,code,name,unit_type,rentable_area,bedrooms,created_by,updated_by)
       select ${input.orgId},id,${input.code.trim()},${input.name ?? null},${input.unitType ?? null},${rentableArea},${input.bedrooms ?? null},${input.actorId},${input.actorId}
         from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id
-    `));
-    if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
-    await audit(tx, input.orgId, "property_units", result.rows[0].id, "insert", input.actorId, { propertyId: input.propertyId, code: input.code.trim() });
-    return { id: result.rows[0].id };
+    `, "objects"));
+    if (!result[0]) throw new PropertyManagementError("Active property not found");
+    await audit(tx, input.orgId, "property_units", result[0].id, "insert", input.actorId, { propertyId: input.propertyId, code: input.code.trim() });
+    return { id: result[0].id };
   });
 }
 export async function updatePropertyUnit(input: {
@@ -352,8 +352,8 @@ export async function updatePropertyUnit(input: {
       select u.status,u.code,u.name,u.unit_type,u.rentable_area::text as rentable_area,u.bedrooms,u.property_id,
         exists(select 1 from property_leases l where l.org_id=u.org_id and l.unit_id=u.id and l.status in ('active','notice')) as has_active_lease
       from property_units u where u.org_id=${input.orgId} and u.id=${input.unitId} for update
-    `));
-    const current = currentResult.rows[0];
+    `, "objects"));
+    const current = currentResult[0];
     if (!current) throw new PropertyManagementError("Unit not found");
     await lockPropertyInScope(tx, input.orgId, String(current.property_id), input.allowedSubsidiaryIds);
     const status = input.status ?? current.status;
@@ -367,8 +367,8 @@ export async function updatePropertyUnit(input: {
       update property_units set code=${code},name=${name},unit_type=${unitType},
         rentable_area=${rentableArea},bedrooms=${bedrooms},status=${status},updated_at=now(),updated_by=${input.actorId}
       where org_id=${input.orgId} and id=${input.unitId} returning id,property_id as "propertyId"
-    `));
-    const unit = result.rows[0];
+    `, "objects"));
+    const unit = result[0];
     if (!unit) throw new PropertyManagementError("Unit not found");
     // Rentable area is the CAM weight and bedrooms/status drive availability:
     // the audit carries the full before/after pair (the lease-update shape),
@@ -397,8 +397,8 @@ export async function deletePropertyUnit(orgId: string, actorId: string, allowed
       select u.code,u.property_id as "propertyId",
         exists(select 1 from property_leases where org_id=u.org_id and unit_id=u.id) as has_leases
       from property_units u where u.org_id=${orgId} and u.id=${unitId} for update
-    `));
-    const row = record.rows[0];
+    `, "objects"));
+    const row = record[0];
     if (!row) throw new PropertyManagementError("Unit not found");
     await lockPropertyInScope(tx, orgId, String(row.propertyId), allowedSubsidiaryIds);
     if (row.has_leases) throw new PropertyManagementError("A unit with lease history cannot be deleted; take it offline instead");

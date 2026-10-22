@@ -22,11 +22,23 @@ import {
 // rows) wherever the real boundary must refuse.
 
 type StubRows = { rows: Record<string, unknown>[]; rowCount: number };
-type TxStub = { execute: (query: unknown) => Promise<StubRows> };
+// Doubles honor drizzle's result modes: 'objects' resolves to the rows.
+type StubExecute = (query: unknown, mode?: string) => Promise<unknown>;
+type TxStub = { execute: StubExecute };
+
+/** Serve scripted driver results in the shape the call's mode resolves to. */
+function scriptedExecute(scripted: StubRows[]): StubExecute {
+  let call = 0;
+  return async (_query, mode) => {
+    const result = scripted[call++];
+    if (!result) throw new Error("unexpected database query");
+    return mode === "objects" ? result.rows : result;
+  };
+}
 
 async function withStubbedDb<T>(
   options: {
-    execute?: (query: unknown) => Promise<StubRows>;
+    execute?: StubExecute;
     transaction?: (fn: (tx: TxStub) => Promise<unknown>) => Promise<unknown>;
   },
   fn: () => Promise<T>,
@@ -80,10 +92,10 @@ test("backoff holds the one-minute floor on the first retry and caps at one hour
 });
 
 test("a completion whose lease is gone is fenced by claim id", async () => {
-  await withStubbedDb({ execute: async () => ({ rows: [], rowCount: 1 }) }, async () => {
+  await withStubbedDb({ execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) }, async () => {
     await markPostingEffectsSucceeded(claim, NOW);
   });
-  await withStubbedDb({ execute: async () => ({ rows: [], rowCount: 0 }) }, async () => {
+  await withStubbedDb({ execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [], rowCount: 0 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) }, async () => {
     await assert.rejects(
       () => markPostingEffectsSucceeded(claim, NOW),
       (error: unknown) => {
@@ -98,9 +110,10 @@ test("a completion whose lease is gone is fenced by claim id", async () => {
 test("failure evidence keeps the first 1000 characters of the message", async () => {
   const captured: unknown[] = [];
   const tx: TxStub = {
-    execute: async (query: unknown) => {
+    execute: async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       captured.push(query);
-      return { rows: [{ becameTerminal: false }], rowCount: 1 };
+      return inMode({ rows: [{ becameTerminal: false }], rowCount: 1 });
     },
   };
   await withStubbedDb({ transaction: async (fn) => fn(tx) }, async () => {
@@ -122,9 +135,10 @@ test("a retry stays retryable below the ceiling and turns terminal at it", async
   const runFailed = async (attemptCount: number): Promise<unknown[]> => {
     const captured: unknown[] = [];
     const tx: TxStub = {
-      execute: async (query: unknown) => {
+      execute: async (query: unknown, mode?: string) => {
+        const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
         captured.push(query);
-        return { rows: [{ becameTerminal: false }], rowCount: 1 };
+        return inMode({ rows: [{ becameTerminal: false }], rowCount: 1 });
       },
     };
     await withStubbedDb({ transaction: async (fn) => fn(tx) }, async () => {
@@ -140,9 +154,8 @@ test("a retry stays retryable below the ceiling and turns terminal at it", async
 
 test("a document claim reports terminal poison distinctly from retryable work", async () => {
   const runClaim = async (scripted: StubRows[]): Promise<unknown> => {
-    let call = 0;
     return withStubbedDb(
-      { execute: async () => (scripted[call++] ?? (() => { throw new Error("unexpected database query"); })()) },
+      { execute: scriptedExecute(scripted) },
       async () => claimPostingEffectsForDocument("33333333-3333-4333-8333-333333333333", NOW),
     );
   };
@@ -225,7 +238,7 @@ test("the terminal transition stores the named notice for an operator who can re
   };
   const tx: TxStub = {
     // The terminal UPDATE returns the row, then the audit insert lands.
-    execute: async () => ({ rows: [terminalRow], rowCount: 1 }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [terminalRow], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   };
   const notified: unknown[] = [];
   const scripted: StubRows[] = [
@@ -240,9 +253,10 @@ test("the terminal transition stores the named notice for an operator who can re
   await withStubbedDb(
     {
       transaction: async (fn) => fn(tx),
-      execute: async (query: unknown) => {
+      execute: async (query: unknown, mode?: string) => {
+        const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
         notified.push(query);
-        return scripted[call++] ?? (() => { throw new Error("unexpected database query"); })();
+        return inMode(await (scripted[call++] ?? (() => { throw new Error("unexpected database query"); })()));
       },
     },
     async () => {
@@ -269,13 +283,13 @@ test("replay names an inactive actor and a non-terminal row", async () => {
     now: NOW,
   };
   const txDenied: TxStub = {
-    execute: async () => ({ rows: [{ exists: false }], rowCount: 1 }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ exists: false }], rowCount: 1 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   };
   await withStubbedDb({ transaction: async (fn) => fn(txDenied) }, async () => {
     await assert.rejects(() => replayTerminalPostingEffect(base), /not an active user/);
   });
   // Zero actor rows (the unscoped shape) is the same refusal, not a success.
-  const txMissing: TxStub = { execute: async () => ({ rows: [], rowCount: 0 }) };
+  const txMissing: TxStub = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [], rowCount: 0 }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) };
   await withStubbedDb({ transaction: async (fn) => fn(txMissing) }, async () => {
     await assert.rejects(() => replayTerminalPostingEffect(base), /not an active user/);
   });
@@ -296,8 +310,7 @@ test("replay names an inactive actor and a non-terminal row", async () => {
       rowCount: 1,
     },
   ];
-  let call = 0;
-  const txState: TxStub = { execute: async () => (scripted[call++] ?? (() => { throw new Error("unexpected database query"); })()) };
+  const txState: TxStub = { execute: scriptedExecute(scripted) };
   await withStubbedDb({ transaction: async (fn) => fn(txState) }, async () => {
     await assert.rejects(() => replayTerminalPostingEffect(base), /only terminal-failed/);
   });

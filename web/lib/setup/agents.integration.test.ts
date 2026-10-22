@@ -50,26 +50,22 @@ const ENABLE_ACCOUNTING = {
 
 async function policyRow(orgId: string, agentKey: string) {
   return withBypassContext(async () =>
-    (
-      await db.execute<{ enabled: boolean; materiality_threshold: string }>(sql`
+    (await db.execute<{ enabled: boolean; materiality_threshold: string }>(sql`
         select enabled, materiality_threshold::text
           from ai_agent_policies
          where org_id = ${orgId} and agent_key = ${agentKey}
-      `)
-    ).rows[0],
+      `, 'objects'))[0],
   )
 }
 
 async function auditRows(orgId: string, agentKey: string) {
   return withBypassContext(async () =>
-    (
-      await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
+    await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
         select action, changes from audit_log
          where org_id = ${orgId} and table_name = 'ai_agent_policies'
            and changes->>'agentKey' = ${agentKey}
          order by id desc
-      `)
-    ).rows,
+      `, 'objects'),
   )
 }
 
@@ -399,11 +395,9 @@ test(
       const roleId = (
         await withBypassContext(
           async () =>
-            (
-              await db.execute<{ id: string }>(sql`
+            (await db.execute<{ id: string }>(sql`
                 select id::text as id from app_roles where org_id = ${org.orgId} order by name limit 1
-              `)
-            ).rows[0]?.id,
+              `, 'objects'))[0]?.id,
         )
       )!
       assert.ok(roleId, 'scratch org must have a role to route to')
@@ -471,11 +465,9 @@ test(
       const roleId = (
         await withBypassContext(
           async () =>
-            (
-              await db.execute<{ id: string }>(sql`
+            (await db.execute<{ id: string }>(sql`
                 select id::text as id from app_roles where org_id = ${org.orgId} order by name limit 1
-              `)
-            ).rows[0]?.id,
+              `, 'objects'))[0]?.id,
         )
       )!
       await withBypassContext(() =>

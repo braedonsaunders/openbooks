@@ -33,8 +33,8 @@ export async function claimIdempotentCreate(
   const prior = await tx.execute<{ id: string }>(sql`
     select id from ${sql.identifier(args.table)}
      where id = ${args.key} and org_id = ${args.orgId}
-  `)
-  return prior.rows[0] ? 'exists' : 'fresh'
+  `, 'objects')
+  return prior[0] ? 'exists' : 'fresh'
 }
 
 /**
@@ -85,12 +85,12 @@ export async function claimSetupCreate(
   const table = sql.identifier(args.table)
   if (args.orgScoped === false) {
     const prior = await tx.execute<{ id: string }>(sql`
-      select id from ${table} where id = ${args.key}`)
-    if (!prior.rows[0]) return { kind: 'fresh' }
+      select id from ${table} where id = ${args.key}`, 'objects')
+    if (!prior[0]) return { kind: 'fresh' }
   } else {
     const prior = await tx.execute<{ org_id: string }>(sql`
-      select org_id from ${table} where id = ${args.key}`)
-    const owner = prior.rows[0]?.org_id
+      select org_id from ${table} where id = ${args.key}`, 'objects')
+    const owner = prior[0]?.org_id
     if (owner === undefined) return { kind: 'fresh' }
     if (owner !== args.orgId) throw new SetupCreateConflict('foreign-key')
   }

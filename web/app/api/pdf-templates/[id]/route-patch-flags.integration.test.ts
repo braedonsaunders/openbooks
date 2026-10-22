@@ -77,8 +77,8 @@ async function seed(): Promise<{ orgId: string; actorId: string }> {
 async function storedFlags(orgId: string): Promise<{ isDefault: boolean; isActive: boolean }> {
   const r = await withOrgContext(orgId, () => db.execute<{ isDefault: boolean; isActive: boolean }>(sql`
     select is_default as "isDefault", is_active as "isActive"
-      from pdf_templates where id = ${TEMPLATE_ID} and org_id = ${orgId}`));
-  return r.rows[0]!;
+      from pdf_templates where id = ${TEMPLATE_ID} and org_id = ${orgId}`, "objects"));
+  return r[0]!;
 }
 
 function patchRequest(body: unknown): Request {

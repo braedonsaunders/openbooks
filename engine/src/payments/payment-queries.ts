@@ -104,7 +104,7 @@ export async function foreignRunReservations(
 ): Promise<RunReservation[]> {
   const ids = [...new Set(lineIds)].sort();
   if (ids.length === 0) return [];
-  return (await db.execute<RunReservation>(sql`
+  return await db.execute<RunReservation>(sql`
     select item.source_open_line_id as "lineId", document.document_number as "documentNumber",
            run.id as "runId", run.run_number as "runNumber", run.status as "runStatus"
       from payment_run_items item
@@ -118,7 +118,7 @@ export async function foreignRunReservations(
             or instruction.payment_document_id is distinct from ${paymentDocumentId}::uuid)
        and (not ${opts.skipUnassembled === true} or item.payment_instruction_id is not null)
      order by document.document_number, item.source_open_line_id
-  `)).rows;
+  `, "objects");
 }
 
 /** The operator's way out of a reservation, for the run's current status. */
@@ -212,7 +212,7 @@ async function selectOpenItemRows(
   const bookId = await paymentBookId(tenantId);
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
   const orgFilter = sql`jl.org_id = ${tenantId} and je.book_id = ${bookId} and`;
-  return (await db.execute<OpenItemRow>(sql`
+  return await db.execute<OpenItemRow>(sql`
     select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
            jl.account_id, acct.number as account_number, acct.name as account_name,
            jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
@@ -250,7 +250,7 @@ async function selectOpenItemRows(
      where ${orgFilter} jl.is_open_item and ${signFilter} and ${filter}
      order by ${opts.priority ? sql`${opts.priority}, ` : sql``}jl.due_date nulls last, je.posting_date, je.entry_number, jl.id
      ${opts.limit !== undefined ? sql`limit ${opts.limit}` : sql``}
-  `)).rows;
+  `, "objects");
 }
 
 function openItemFromRow(row: OpenItemRow): OpenItem {
@@ -374,7 +374,7 @@ export async function settlementRateObservations(
   perCurrency = 10,
 ): Promise<SettlementRateObservation[]> {
   if (targets.length === 0) return [];
-  return (await db.execute<SettlementRateObservation>(sql`
+  return await db.execute<SettlementRateObservation>(sql`
     select id, to_currency as "toCurrency", rate::text, as_of::text as "asOf", source
       from (
         select r.*,
@@ -388,7 +388,7 @@ export async function settlementRateObservations(
       ) ranked
      where ordinal <= ${perCurrency}
      order by "toCurrency", "asOf" desc
-  `)).rows;
+  `, "objects");
 }
 
 function negStr(a: string): string {
@@ -475,8 +475,8 @@ export async function creditItemsForParty(
        and jl.is_open_item and ${signFilter}
        ${paymentSubsidiaryScope(sql`jl.subsidiary_id`, allowedSubsidiaryIds)}
      order by jl.due_date nulls last, je.posting_date, je.entry_number
-  `));
-  return r.rows
+  `, "objects"));
+  return r
     .map((row) => ({
       lineId: row.line_id,
       entryId: row.entry_id,
@@ -525,14 +525,14 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: 
       left join accounts ba on ba.id = coalesce((d.custom->>'bankAccountId')::uuid, dl.account_id) and ba.org_id = d.org_id
      where d.id = ${id} and d.kind = ${kind} and d.org_id = ${orgId}
        ${paymentSubsidiaryScope(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  const row = doc.rows[0];
+  `, "objects"));
+  const row = doc[0];
   if (!row) return null;
 
   const custom = (row.custom ?? {}) as { bankAccountId?: string; allocations?: AllocationInput[] };
   const applied =
     row.status === "posted" && row.posted_entry_id
-      ? ((await db.execute<Record<string, unknown>>(sql`
+      ? (await db.execute<Record<string, unknown>>(sql`
           select a.id, a.amount, a.source_amount,
                  a.source_transaction_amount, a.source_transaction_currency,
                  a.target_transaction_amount, a.target_transaction_currency,
@@ -551,7 +551,7 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: 
             left join documents td on td.id = te.source_document_id and td.org_id = te.org_id
            where jl.entry_id = ${row.posted_entry_id} and jl.org_id = ${orgId}
            order by te.posting_date, te.entry_number
-        `))).rows
+        `, "objects"))
       : [];
 
   return {

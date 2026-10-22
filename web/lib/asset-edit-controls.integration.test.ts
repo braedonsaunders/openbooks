@@ -54,12 +54,12 @@ for (const history of ['none', 'depreciation', 'impairment', 'disposal', 'write-
         } else if (history==='disposal' || history==='write-off') {
           await disposeAsset(org.orgId,assetId,{actorId,date:'2026-07-31',proceeds:history==='write-off'?'0':'300',proceedsAccountId:org.accounts.bank,writeOff:history==='write-off'});
         }
-        const snapshot = async () => (await db.execute(sql`
+        const snapshot = async () => await db.execute(sql`
           select (select jsonb_agg(to_jsonb(a) order by id) from fixed_assets a where org_id=${org.orgId}) as assets,
                  (select jsonb_agg(to_jsonb(e) order by id) from asset_events e where org_id=${org.orgId}) as events,
                  (select jsonb_agg(to_jsonb(e) order by id) from journal_entries e where org_id=${org.orgId}) as entries,
                  (select jsonb_agg(to_jsonb(l) order by id) from depreciation_schedule_lines l where org_id=${org.orgId}) as schedule_lines
-        `)).rows;
+        `, 'objects');
         const before = await snapshot();
         const bodies: Record<typeof changes[number], Record<string,unknown>> = {
           cost:{acquisitionCost:'2000'},category:{categoryId},subsidiary:{subsidiaryId},
@@ -87,7 +87,7 @@ test('asset edit refuses a target subsidiary outside the caller scope', {skip:!p
   state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:new Set([org.subsidiaryId])};
   const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({subsidiaryId:target,expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
   assert.equal(response.status,422);
-  assert.equal((await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from fixed_assets where id=${assetId}`)).rows[0]!.subsidiary_id,org.subsidiaryId);
+  assert.equal((await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from fixed_assets where id=${assetId}`, 'objects'))[0]!.subsidiary_id,org.subsidiaryId);
  } finally {state.gate=null;await dropScratchOrg(org.orgId)}
 });
 
@@ -101,12 +101,12 @@ test('metadata save preserves the controlled impairment schedule', {skip:!proces
     select org_id,2026,8,'2026-08','2026-08-01','2026-08-31',false,fiscal_calendar_id from accounting_periods where org_id=${org.orgId} limit 1`);
   await buildSchedule(assetId,org.orgId,actorId,org.bookId);
   await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'800'});
-  const schedule=()=>db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} order by sequence`);
-  const before=(await schedule()).rows;
+  const schedule=()=>db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} order by sequence`, 'objects');
+  const before=await schedule();
   assert.deepEqual(before.map(line=>line.planned_amount),['400.0000','400.0000']);
   const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Updated asset label',expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
   assert.equal(response.status,200,JSON.stringify(await response.json()));
-  assert.deepEqual((await schedule()).rows,before,'metadata edit cannot rebuild controlled valuation amounts');
+  assert.deepEqual(await schedule(),before,'metadata edit cannot rebuild controlled valuation amounts');
  }finally{state.gate=null;await dropScratchOrg(org.orgId)}
 });
 
@@ -134,9 +134,9 @@ test('metadata save preserves the controlled impairment schedule', {skip:!proces
       const response = await pending;
       assert.equal(response.status,422);
       assert.match((await response.json()).error,/not found|scope|permitted/);
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`)).rows.length,0);
-      assert.equal((await db.execute(sql`select id from asset_events where org_id=${org.orgId}`)).rows.length,0);
-      const asset = (await db.execute<{ subsidiary_id:string; status:string }>(sql`select subsidiary_id,status from fixed_assets where id=${assetId}`)).rows[0]!;
+      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, 'objects')).length,0);
+      assert.equal((await db.execute(sql`select id from asset_events where org_id=${org.orgId}`, 'objects')).length,0);
+      const asset = (await db.execute<{ subsidiary_id:string; status:string }>(sql`select subsidiary_id,status from fixed_assets where id=${assetId}`, 'objects'))[0]!;
       assert.equal(asset.subsidiary_id,outsideId);
       assert.equal(asset.status,'in_service');
     } finally {
@@ -148,4 +148,4 @@ test('metadata save preserves the controlled impairment schedule', {skip:!proces
     }
   });
 
-async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`)).rows[0]!.revision;}
+async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`, 'objects'))[0]!.revision;}

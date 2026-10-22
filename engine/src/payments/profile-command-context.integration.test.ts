@@ -17,19 +17,19 @@ test("bank profile commands establish tenant authority and join the caller's ato
     await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
     const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from payment_formats where org_id=${org.orgId} and code='WIRE'
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     const input = { name: "Standalone profile", bankAccountId: org.accounts.bank,
       subsidiaryId: org.subsidiaryId, paymentFormatId: format.id, currency: "CAD" };
     assert.equal(orgContext.getStore()?.txDb, undefined);
     const created = await createPaymentBankProfile(org.orgId, actorId, input);
     await updatePaymentBankProfile(created.id, org.orgId, actorId, { name: "Standalone revised" });
     const state = () => withOrgContext(org.orgId, async () => ({
-      profiles: (await db.execute<{ id: string; name: string }>(sql`
+      profiles: await db.execute<{ id: string; name: string }>(sql`
         select id,name from payment_bank_profiles where org_id=${org.orgId} order by id
-      `)).rows,
-      audit: (await db.execute<{ id: string }>(sql`
+      `, "objects"),
+      audit: await db.execute<{ id: string }>(sql`
         select id from audit_log where org_id=${org.orgId} and table_name='payment_bank_profiles' order by id
-      `)).rows,
+      `, "objects"),
     }));
     const before = await state();
     assert.equal(before.profiles.find(profile => profile.id === created.id)?.name, "Standalone revised");

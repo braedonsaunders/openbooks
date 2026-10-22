@@ -50,8 +50,8 @@ async function lastSubjectIds(
        ${subsidiaryFilter}
        order by r.created_at desc
        limit ${limit}
-    `);
-    return rows.rows.map((r) => r.id);
+    `, "objects");
+    return rows.map((r) => r.id);
   }
   if (entity === "leave_request") {
     const rows = await db.execute<{ id: string }>(sql`
@@ -61,8 +61,8 @@ async function lastSubjectIds(
        ${subsidiaryFilter}
        order by r.created_at desc
        limit ${limit}
-    `);
-    return rows.rows.map((r) => r.id);
+    `, "objects");
+    return rows.map((r) => r.id);
   }
   const table = entity === "timesheet_week"
     ? "timesheet_weeks"
@@ -85,8 +85,8 @@ async function lastSubjectIds(
      where org_id = ${orgId}
      order by created_at desc
      limit ${limit}
-  `);
-  return rows.rows.map((r) => r.id);
+  `, "objects");
+  return rows.map((r) => r.id);
 }
 
 export async function simulateAutomation(input: {

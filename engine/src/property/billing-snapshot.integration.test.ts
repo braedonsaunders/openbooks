@@ -46,9 +46,9 @@ for(const change of ['proration','charge','lease'] as const){
    const billed=await pending;
    if(change==='lease'){
     assert.deepEqual(billed,{billed:0,invoices:[]});
-    assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where id=${schedule}`)).rows[0]!.status,'scheduled');
+    assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where id=${schedule}`, 'objects'))[0]!.status,'scheduled');
    } else {
-    const result=(await db.execute<{scheduled:string;invoiced:string;through_date:string;description:string}>(sql`select s.amount::text as scheduled,d.total::text as invoiced,s.period_ends_on::text as through_date,dl.description from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id join document_lines dl on dl.document_id=d.id and dl.org_id=d.org_id where s.id=${schedule} and s.org_id=${org.orgId}`)).rows[0]!;
+    const result=(await db.execute<{scheduled:string;invoiced:string;through_date:string;description:string}>(sql`select s.amount::text as scheduled,d.total::text as invoiced,s.period_ends_on::text as through_date,dl.description from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id join document_lines dl on dl.document_id=d.id and dl.org_id=d.org_id where s.id=${schedule} and s.org_id=${org.orgId}`, 'objects'))[0]!;
     assert.equal(result.invoiced,result.scheduled,'invoice must match the locked schedule amount');
     assert.ok(result.description.endsWith(result.through_date),'invoice period must match the locked schedule');
     if(change==='charge')assert.ok(result.description.startsWith('Reviewed rent'));
@@ -67,7 +67,7 @@ test('billing and a real rent escalation serialize without blocking replacement-
  let pending:ReturnType<typeof billDueLeaseCharges>|undefined;
  const holder=withOrgTransaction(org.orgId,async()=>{
   await db.execute(sql`set local lock_timeout='3s'`);
-  const pid=(await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+  const pid=(await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid;
   await db.execute(sql`select id from lease_charges where id=${charge} and org_id=${org.orgId} for update`);
   ready(pid);
   await resume;
@@ -86,7 +86,7 @@ test('billing and a real rent escalation serialize without blocking replacement-
    select s.amount::text,d.total::text,dl.description from lease_schedule_lines s
    join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id
    join document_lines dl on dl.document_id=d.id and dl.org_id=d.org_id
-   where s.id=${schedule} and s.org_id=${org.orgId}`)).rows[0]!;
+   where s.id=${schedule} and s.org_id=${org.orgId}`, 'objects'))[0]!;
   assert.equal(result.total,result.amount);
   assert.ok(result.description.endsWith('2026-07-15'));
  } finally {proceed();await holder.catch(()=>{});await pending?.catch(()=>{});}

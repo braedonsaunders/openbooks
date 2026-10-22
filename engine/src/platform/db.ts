@@ -986,15 +986,14 @@ const ISOLATION_RANK: Record<string, number> = {
  * name so the caller's snapshot promise is never silently downgraded.
  */
 async function assertAmbientTransactionSatisfies(
-  ambient: { execute: (query: ReturnType<typeof sql>) => Promise<unknown> },
+  ambient: SqlExecutor,
   config: NestedTransactionConfig | undefined,
 ): Promise<void> {
   if (!config || (config.isolationLevel === undefined && config.accessMode !== "read only")) return;
-  const result = (await ambient.execute(sql`
+  const [row] = await ambient.execute<{ isolation: string; read_only: string }>(sql`
     select current_setting('transaction_isolation') as isolation,
            current_setting('transaction_read_only') as read_only
-  `)) as { rows: Array<{ isolation: string; read_only: string }> };
-  const row = result.rows[0];
+  `, "objects");
   if (!row) throw new Error("cannot verify the enclosing transaction's isolation level");
   if (config.isolationLevel !== undefined) {
     const requested = ISOLATION_RANK[config.isolationLevel];

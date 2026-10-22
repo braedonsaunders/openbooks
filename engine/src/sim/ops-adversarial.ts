@@ -76,8 +76,8 @@ export async function postedEditProbe(world: SimOrg): Promise<InvariantResult> {
     select id, total::text as total from documents
      where org_id = ${world.orgId} and status = 'posted'
        and kind in ('customer_invoice', 'vendor_bill')
-     order by created_at desc limit 1`));
-  const doc = r.rows[0];
+     order by created_at desc limit 1`, "objects"));
+  const doc = r[0];
   if (!doc) return ok(); // nothing posted yet — probe is inert today
 
   let rejected = false;
@@ -88,8 +88,8 @@ export async function postedEditProbe(world: SimOrg): Promise<InvariantResult> {
     rejected = true;
   }
   const after = (await db.execute<{ total: string }>(sql`
-    select total::text as total from documents where id = ${doc.id} and org_id = ${world.orgId}`));
-  const unchanged = after.rows[0]?.total === doc.total;
+    select total::text as total from documents where id = ${doc.id} and org_id = ${world.orgId}`, "objects"));
+  const unchanged = after[0]?.total === doc.total;
   if (!unchanged) {
     // The mutation landed — that is the defect being reported, but the probe
     // must not leave the org poisoned, or every later oracle pass re-fails on
@@ -104,7 +104,7 @@ export async function postedEditProbe(world: SimOrg): Promise<InvariantResult> {
   if (rejected && unchanged) return ok();
   return fail(
     "adversarial-posted-edit",
-    `raw UPDATE of posted document ${doc.id} total was ${rejected ? "" : "NOT "}rejected; stored total ${unchanged ? "unchanged" : `CHANGED ${doc.total} → ${after.rows[0]?.total}`}`,
+    `raw UPDATE of posted document ${doc.id} total was ${rejected ? "" : "NOT "}rejected; stored total ${unchanged ? "unchanged" : `CHANGED ${doc.total} → ${after[0]?.total}`}`,
   );
 }
 
@@ -150,8 +150,8 @@ export async function overApplicationProbe(world: SimOrg, simDate: string): Prom
     }
     // Remove the probe draft (it must not have posted).
     const posted = (await db.execute<{ posted_entry_id: string | null }>(sql`
-      select posted_entry_id from documents where id = ${payment.id} and org_id = ${world.orgId}`));
-    if (rejected && !posted.rows[0]?.posted_entry_id) {
+      select posted_entry_id from documents where id = ${payment.id} and org_id = ${world.orgId}`, "objects"));
+    if (rejected && !posted[0]?.posted_entry_id) {
       // Best-effort cleanup; an approval-flow row may pin the draft, which is
       // harmless — an unposted probe draft has no ledger effect.
       try {
@@ -190,8 +190,8 @@ export async function reversalSymmetryProbe(world: SimOrg, simDate: string): Pro
     select count(*) as n from (
       select account_id from journal_lines
        where org_id = ${world.orgId} and entry_id in (${res.entryId}, ${reversalId})
-       group by account_id having abs(sum(amount)) >= 0.005) x`));
-  return Number(net.rows[0]?.n ?? "1") === 0
+       group by account_id having abs(sum(amount)) >= 0.005) x`, "objects"));
+  return Number(net[0]?.n ?? "1") === 0
     ? ok()
     : fail("adversarial-reversal", `journal ${res.entryId} + reversal ${reversalId} do not net to zero per account`);
 }
@@ -238,11 +238,11 @@ export async function voidRecreateProbe(world: SimOrg, simDate: string): Promise
         select account_id from journal_lines
          where org_id = ${world.orgId} and entry_id in (${first.entryId}, ${voided.reversalEntryId})
          group by account_id having abs(sum(amount)) >= 0.005) x) as unbalanced,
-      (select status from documents where org_id = ${world.orgId} and id = ${first.documentId}) as status`));
-  if (Number(residue.rows[0]?.unbalanced) !== 0 || residue.rows[0]?.status !== "voided") {
+      (select status from documents where org_id = ${world.orgId} and id = ${first.documentId}) as status`, "objects"));
+  if (Number(residue[0]?.unbalanced) !== 0 || residue[0]?.status !== "voided") {
     return fail(
       "adversarial-void",
-      `void of ${first.documentId} did not reverse cleanly (unbalanced accounts=${residue.rows[0]?.unbalanced}, status=${residue.rows[0]?.status})`,
+      `void of ${first.documentId} did not reverse cleanly (unbalanced accounts=${residue[0]?.unbalanced}, status=${residue[0]?.status})`,
     );
   }
 

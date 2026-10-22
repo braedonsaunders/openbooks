@@ -49,7 +49,7 @@ async function assignmentSources(tx: SqlExecutor, orgId: string, predicate: SQL,
     join payroll_compensation_versions v on v.org_id=a.org_id and v.package_id=a.package_id and v.id=a.version_id
     where a.org_id=${orgId} and a.status in ('active','ended') and v.status='approved' and (${predicate})
     order by a.employment_id,a.effective_from,a.id
-  `)).rows.map(row => row.source);
+  `, 'objects')).map(row => row.source);
   if (lockComponents && sources.length) {
     await lockCompensationPackageComponents(tx, orgId, sources);
     // READ COMMITTED can wait for an editor after the first statement. Re-read

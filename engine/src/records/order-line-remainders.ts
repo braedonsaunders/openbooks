@@ -96,7 +96,7 @@ async function orderLineRemainders(
   kind: "sales_order" | "purchase_order",
   filter: OrderLineRemainderFilter,
 ): Promise<Array<OrderLineRemainder & { partyId: string | null }>> {
-  const rows = (await runner.execute<RemainderRow>(sql`
+  const rows = await runner.execute<RemainderRow>(sql`
     select d.id as document_id, d.document_number, d.document_date::text as document_date,
            dl.id as line_id, dl.line_number, dl.item_id, dl.stock_location_id,
            d.subsidiary_id, d.party_id, dl.unit,
@@ -123,7 +123,7 @@ async function orderLineRemainders(
        ${filter.itemId ? sql`and dl.item_id = ${filter.itemId}` : sql``}
        ${filter.openOnly ? sql`and ${openQuantitySql("dl")} > 0` : sql``}
      order by d.document_date, d.document_number, dl.line_number
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     documentId: row.document_id,
     documentNumber: row.document_number,

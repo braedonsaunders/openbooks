@@ -57,8 +57,8 @@ test('timesheet week rows and employee options honor the caller subsidiary scope
         ${source.baseJoins}
        where ${where}
        order by tw.employee_party_id
-    `)
-    assert.deepEqual(rows.rows.map((row) => row.employee_party_id), [visibleEmployee])
+    `, 'objects')
+    assert.deepEqual(rows.map((row) => row.employee_party_id), [visibleEmployee])
 
     const employeeFilter = source.quickFilters.find((filter) => filter.filterKey === 'employee_party_id')
     assert.ok(employeeFilter?.loadOptions)

@@ -26,7 +26,7 @@ test("bank register history uses the shared window average cut at asOf", { skip:
     await withBypass(async () => {
       const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
         select fiscal_calendar_id from accounting_periods where id = ${org.periodId}
-      `)).rows[0]!.fiscal_calendar_id;
+      `, "objects"))[0]!.fiscal_calendar_id;
       const april = randomUUID();
       const lastApril = new Date(Date.UTC(2026, 4, 0)).getUTCDate();
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)

@@ -45,9 +45,9 @@ async function denyOutsideDocumentScope(
   const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and org_id = ${authz.user.orgId}
-  `));
-  if (!owned.rows[0]) return notFound("record");
-  return guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId);
+  `, "objects"));
+  if (!owned[0]) return notFound("record");
+  return guardSubsidiaryScope(authz, owned[0].subsidiaryId);
 }
 
 async function listPaymentLinksRoute(req: Request) {
@@ -70,9 +70,9 @@ async function listPaymentLinksRoute(req: Request) {
          where org_id = ${gate.user.orgId} and is_enabled and acceptance_enabled
            and default_bank_account_id is not null
          order by provider
-      `),
+      `, "objects"),
     ]);
-    return NextResponse.json({ links, providers: providers.rows.map((r) => r.provider) });
+    return NextResponse.json({ links, providers: providers.map((r) => r.provider) });
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return notFound("record");
     throw e;

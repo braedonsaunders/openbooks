@@ -78,8 +78,8 @@ async function readCommittedInventoryKeyRow(
        and source = ${INVENTORY_ACTION_SOURCE}
        and operation = ${operation}
        and idempotency_key = ${idempotencyKey}
-     limit 1`));
-  return r.rows[0] ?? null;
+     limit 1`, "objects"));
+  return r[0] ?? null;
 }
 
 /** Whether the claim advisory lock for this tuple is currently held. */
@@ -94,8 +94,8 @@ async function inventoryClaimLockHeld(
        where locktype = 'advisory'
          and classid = hashtext(${orgId})::integer
          and objid = hashtext(${`${INVENTORY_ACTION_SOURCE}|${operation}|${idempotencyKey}`})::integer
-    ) as held`));
-  return !!r.rows[0]?.held;
+    ) as held`, "objects"));
+  return !!r[0]?.held;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -158,8 +158,8 @@ export async function executeIdempotentInventoryAction<T>(
         select pg_try_advisory_xact_lock(
                  hashtext(${orgId}),
                  hashtext(${`${INVENTORY_ACTION_SOURCE}|${operation}|${idempotencyKey}`})
-               ) as acquired`));
-      if (!gate.rows[0]?.acquired) return undefined;
+               ) as acquired`, "objects"));
+      if (!gate[0]?.acquired) return undefined;
 
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into application_idempotency_keys
@@ -170,8 +170,8 @@ export async function executeIdempotentInventoryAction<T>(
         -- A retained idempotency claim belongs to another attempt; the caller resolves that outcome.
         on conflict (org_id, actor_id, source, operation, idempotency_key)
         do nothing
-        returning id`));
-      if (inserted.rows.length === 0) return undefined;
+        returning id`, "objects"));
+      if (inserted.length === 0) return undefined;
 
       const value = await action.execute();
       let serialized: string;

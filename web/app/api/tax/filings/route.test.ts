@@ -105,15 +105,16 @@ const mockSources = new Map<string, string>([
         execute() { throw new Error('unexpected database query') },
         async transaction(work) {
           return work({
-            execute(query) {
+            execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               if (text.includes('insert into tax_filings')) {
                 state.filingInserts.push(text)
-                return { rows: [{ id: 'filing-1', version: 2 }] }
+                return Promise.resolve({ rows: [{ id: 'filing-1', version: 2 }] }).then(inMode)
               }
-              if (text.includes('from tax_filings')) return { rows: [{ version: 2 }] }
-              if (text.includes('from tax_return_forms')) return { rows: [{ country: 'US' }] }
-              return { rows: [] }
+              if (text.includes('from tax_filings')) return Promise.resolve({ rows: [{ version: 2 }] }).then(inMode)
+              if (text.includes('from tax_return_forms')) return Promise.resolve({ rows: [{ country: 'US' }] }).then(inMode)
+              return Promise.resolve({ rows: [] }).then(inMode)
             },
           })
         },

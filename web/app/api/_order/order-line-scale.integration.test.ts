@@ -100,7 +100,7 @@ async function patchLines(
   const revision = await withOrgContext(fixture.orgId, async () =>
     (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from documents where id = ${fixture.orderId}`)).rows[0]!.revision);
+        from documents where id = ${fixture.orderId}`, "objects"))[0]!.revision);
   return withOrgContext(fixture.orgId, () => PATCH(
     new Request(`http://openbooks.test/api/quotes/${fixture.orderId}`, {
       method: "PATCH",
@@ -123,7 +123,7 @@ test(
       const stored = await withOrgContext(fixture.orgId, async () =>
         (await db.execute<{ quantity: string; unit_price: string }>(sql`
           select quantity::text, unit_price::text from document_lines
-           where document_id = ${fixture.orderId}`)).rows[0]!);
+           where document_id = ${fixture.orderId}`, "objects"))[0]!);
       // Premise: storage pads to the column scale.
       assert.equal(stored.unit_price, "200.00000000");
       // The drawer sends back exactly what it read; that must save.

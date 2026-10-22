@@ -75,14 +75,14 @@ test('a five-decimal base quantity is refused and the prior version stands', asy
     assert.equal(precise.status, 422)
     assert.match(String((await precise.json()).error), /at most 4 decimal places/)
 
-    const versions = (await withOrgContext(org.orgId, () => db.execute<{ effective_from: string }>(sql`
+    const versions = await withOrgContext(org.orgId, () => db.execute<{ effective_from: string }>(sql`
       select effective_from::text from item_rate_versions
        where org_id = ${org.orgId} and rate_book_id = ${book} and status = 'active'
-       order by effective_from`))).rows
+       order by effective_from`, 'objects'))
     assert.deepEqual(versions.map((v) => String(v.effective_from).slice(0, 10)), ['2026-01-01'])
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ base_quantity: string }>(sql`
+    const stored = await withOrgContext(org.orgId, () => db.execute<{ base_quantity: string }>(sql`
       select base_quantity::text from item_rate_lines
-       where org_id = ${org.orgId} and item_id = ${org.items.service}`))).rows
+       where org_id = ${org.orgId} and item_id = ${org.items.service}`, 'objects'))
     assert.deepEqual(stored.map((r) => r.base_quantity), ['1.0000'])
 
     const valid = await post(org.items.service, versioned(org.items.service, book, '1.0001', '2026-02-01'))

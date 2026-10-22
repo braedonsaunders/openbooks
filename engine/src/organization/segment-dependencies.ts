@@ -28,13 +28,13 @@ interface RuleRow extends Record<string, unknown> {
 /** Display labels for segment values: custom values and built-in domain rows alike. */
 async function labelValues(executor: SqlExecutor, orgId: string, ids: string[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
-  const rows = (await executor.execute<{ id: string; label: string }>(sql`
+  const rows = await executor.execute<{ id: string; label: string }>(sql`
     select id::text, concat_ws(' · ', code, name) as label from segment_values where org_id = ${orgId} and id::text in ${ids}
     union all select id::text, concat_ws(' · ', code, name) from departments where org_id = ${orgId} and id::text in ${ids}
     union all select id::text, concat_ws(' · ', code, name) from classes where org_id = ${orgId} and id::text in ${ids}
     union all select id::text, concat_ws(' · ', code, name) from locations where org_id = ${orgId} and id::text in ${ids}
     union all select id::text, concat_ws(' · ', code, name) from projects where org_id = ${orgId} and id::text in ${ids}
-    union all select id::text, name from subsidiaries where org_id = ${orgId} and id::text in ${ids}`)).rows;
+    union all select id::text, name from subsidiaries where org_id = ${orgId} and id::text in ${ids}`, "objects");
   return new Map(rows.map((row) => [row.id, row.label]));
 }
 
@@ -49,7 +49,7 @@ export async function loadSegmentDependencyRules(
   orgId: string,
   options: { onDate?: string | null; ignoreFeature?: boolean } = {},
 ): Promise<SegmentDependencyRule[]> {
-  const rows = (await executor.execute<RuleRow>(sql`
+  const rows = await executor.execute<RuleRow>(sql`
     select r.id, r.value_id::text as value_id, r.allowed_value_id::text as allowed_value_id,
            r.effective_from::text as effective_from, r.effective_to::text as effective_to,
            sd.id as segment_id, sd.key as segment_key, sd.name as segment_name,
@@ -62,7 +62,7 @@ export async function loadSegmentDependencyRules(
      where r.org_id = ${orgId} and r.is_active
        ${options.onDate ? sql`and (r.effective_from is null or r.effective_from <= ${options.onDate})
                              and (r.effective_to is null or r.effective_to >= ${options.onDate})` : sql``}
-     order by sd.sort_order, sd.name, r.value_id, cd.sort_order, r.id`)).rows;
+     order by sd.sort_order, sd.name, r.value_id, cd.sort_order, r.id`, "objects");
   if (rows.length === 0) return [];
   if (!options.ignoreFeature && !(await orgFeatureEnabled(orgId, SEGMENT_DEPENDENCIES_FEATURE, executor))) return [];
   const labels = await labelValues(executor, orgId, [...new Set(rows.flatMap((row) => [row.value_id, row.allowed_value_id]))]);
@@ -121,9 +121,9 @@ interface DocumentLineDims extends Record<string, unknown> {
 /** A saved document's lines with header dimensions inherited, as the kernel will post them. */
 async function documentLineDims(executor: SqlExecutor, orgId: string, documentId: string): Promise<{ date: string | null; lines: DocumentLineDims[] }> {
   const header = (await executor.execute<{ document_date: string }>(sql`
-    select document_date::text as document_date from documents where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+    select document_date::text as document_date from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
   if (!header) return { date: null, lines: [] };
-  const lines = (await executor.execute<DocumentLineDims>(sql`
+  const lines = await executor.execute<DocumentLineDims>(sql`
     select l.line_number,
            coalesce(l.subsidiary_id, d.subsidiary_id) as subsidiary_id,
            coalesce(l.department_id, d.department_id) as department_id,
@@ -134,7 +134,7 @@ async function documentLineDims(executor: SqlExecutor, orgId: string, documentId
       from document_lines l
       join documents d on d.org_id = l.org_id and d.id = l.document_id
      where l.org_id = ${orgId} and l.document_id = ${documentId}
-     order by l.line_number`)).rows;
+     order by l.line_number`, "objects");
   return { date: header.document_date, lines };
 }
 
@@ -193,7 +193,7 @@ export async function openDocumentSegmentViolations(
       ? sql`and d.subsidiary_id in ${[...options.allowedSubsidiaryIds]}`
       : sql`and false`
     : sql``;
-  const candidates = (await executor.execute<DocumentLineDims & {
+  const candidates = await executor.execute<DocumentLineDims & {
     document_id: string; kind: string; document_number: string; document_date: string; status: string;
   }>(sql`
     select d.id as document_id, d.kind, d.document_number, d.document_date::text as document_date, d.status,
@@ -207,7 +207,7 @@ export async function openDocumentSegmentViolations(
       from documents d
       join document_lines l on l.org_id = d.org_id and l.document_id = d.id
      where d.org_id = ${orgId} and d.status in ('draft', 'pending_approval', 'approved') ${scope}
-     order by d.document_date, d.document_number, d.id, l.line_number`)).rows;
+     order by d.document_date, d.document_number, d.id, l.line_number`, "objects");
   const all: OpenDocumentViolation[] = [];
   for (const row of candidates) {
     const dims: DimensionAssignment = {

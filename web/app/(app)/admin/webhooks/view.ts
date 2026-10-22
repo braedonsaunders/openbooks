@@ -51,7 +51,7 @@ async function loadEndpoint(orgId: string, id: string) {
            (select count(*)::int from webhook_deliveries d where d.org_id = e.org_id and d.endpoint_id = e.id and d.status in ('failed', 'dead')) as "failedCount"
       from webhook_endpoints e
      where e.org_id = ${orgId} and ${isUuid(id) ? sql`e.id = ${id}::uuid` : sql`e.key = ${id}`} limit 1
-  `)).rows as WebhookEndpointDrawerProps['endpoint'][]
+  `, 'objects')) as WebhookEndpointDrawerProps['endpoint'][]
   return rows[0] ?? null
 }
 
@@ -67,7 +67,7 @@ async function loadDeliveries(orgId: string, endpointId: string) {
       from webhook_deliveries d join webhook_events e on e.id = d.event_id and e.org_id = d.org_id
      where d.org_id = ${orgId} and d.endpoint_id = ${endpointId}::uuid
      order by d.created_at desc limit 50
-  `)).rows as EndpointDelivery[]
+  `, 'objects')) as EndpointDelivery[]
   return rows
 }
 

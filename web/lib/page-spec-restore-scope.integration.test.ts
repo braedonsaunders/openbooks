@@ -25,15 +25,13 @@ const spec = (note: string) =>
   }) as never
 
 async function activeRows(orgId: string, route: string) {
-  return (
-    await withBypass(() =>
+  return await withBypass(() =>
       db.execute<{ id: string; userId: string | null }>(sql`
         select id, user_id as "userId" from page_specs
          where org_id = ${orgId} and route = ${route} and is_active
          order by user_id nulls first
-      `),
+      `, 'objects'),
     )
-  ).rows
 }
 
 test('layout history shows org versions plus the reader\'s own — never a colleague\'s', { skip: !env.OPENBOOKS_DB_URL }, async () => {

@@ -120,7 +120,7 @@ function uuidOrNull(v: unknown): string | null | 'invalid' {
  */
 async function companyDefaultPaymentTermsId(orgId: string): Promise<string | null> {
   const billing = (await db.execute<{ billing: unknown }>(sql`
-    select coalesce(settings->'billing', '{}'::jsonb) as billing from orgs where id = ${orgId}`)).rows[0]?.billing
+    select coalesce(settings->'billing', '{}'::jsonb) as billing from orgs where id = ${orgId}`, 'objects'))[0]?.billing
   const id = (billing as { defaultPaymentTermsId?: unknown } | null)?.defaultPaymentTermsId
   if (typeof id !== 'string' || !isUuid(id)) return null
   return (await orgRefExists('terms', id, orgId)) ? id : null
@@ -150,8 +150,8 @@ async function orgRefExists(
                   : kind === 'workerComp'
                     ? sql`select 1 from worker_comp_groups where id = ${id} and org_id = ${orgId} and is_active`
                     : sql`select 1 from trades where id = ${id} and org_id = ${orgId} and is_active`
-  const result = await db.execute(query)
-  return result.rows.length === 1
+  const result = await db.execute(query, 'objects')
+  return result.length === 1
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
@@ -251,8 +251,8 @@ export const POST = defineRoute({
     const found = await db.execute<{ id: string }>(sql`
       select id from subsidiaries
        where org_id = ${user.orgId} and is_active and not is_elimination
-         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)
-    if (found.rows.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary', 'subsidiaryId')
+         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`, 'objects')
+    if (found.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary', 'subsidiaryId')
     // A restricted caller may only assign parties to subsidiaries they can see.
     if (!subsidiariesInScope(gate, requestedSubsidiaries)) return bad('Invalid subsidiary', 'subsidiaryId')
   }
@@ -483,8 +483,8 @@ export const POST = defineRoute({
         -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
-      `))
-      if (!inserted.rows[0]) {
+      `, 'objects'))
+      if (!inserted[0]) {
         const replay = await resolveIdempotentReplay(tx, {
           orgId: user.orgId,
           table: 'parties',
@@ -501,8 +501,8 @@ export const POST = defineRoute({
              and a.is_active and not a.is_summary and a.type = 'asset_receivable'
              and (a.subsidiary_id is null or a.subsidiary_id = ${subsidiaryId}::uuid)
              ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-           for key share`)
-        if (!account.rows.length) throw new Error('invalid_receivable_account_for_party_subsidiary')
+           for key share`, 'objects')
+        if (!account.length) throw new Error('invalid_receivable_account_for_party_subsidiary')
       }
       if (vendor?.apAccountId) {
         const account = await tx.execute(sql`
@@ -511,8 +511,8 @@ export const POST = defineRoute({
              and a.is_active and not a.is_summary and a.type = 'liability_payable'
              and (a.subsidiary_id is null or a.subsidiary_id = ${subsidiaryId}::uuid)
              ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-           for key share`)
-        if (!account.rows.length) throw new Error('invalid_payable_account_for_party_subsidiary')
+           for key share`, 'objects')
+        if (!account.length) throw new Error('invalid_payable_account_for_party_subsidiary')
       }
       if (vendor?.defaultExpenseAccountId) {
         const account = await tx.execute(sql`
@@ -521,8 +521,8 @@ export const POST = defineRoute({
              and a.is_active and not a.is_summary and a.type in ('expense', 'expense_other', 'cogs')
              and (a.subsidiary_id is null or a.subsidiary_id = ${subsidiaryId}::uuid)
              ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-           for key share`)
-        if (!account.rows.length) throw new Error('invalid_default_expense_account_for_party_subsidiary')
+           for key share`, 'objects')
+        if (!account.length) throw new Error('invalid_default_expense_account_for_party_subsidiary')
       }
       if (customer) {
         await tx.execute(sql`

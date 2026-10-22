@@ -90,20 +90,20 @@ async function latestRun(
       from script_runs
      where script_id = ${scriptId}
      order by at desc, id desc
-     limit 1`);
-  return r.rows[0]!;
+     limit 1`, "objects");
+  return r[0]!;
 }
 
 async function countRuns(scriptId: string): Promise<number> {
   const r = await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from script_runs where script_id = ${scriptId}`);
-  return Number(r.rows[0]!.n);
+    select count(*)::text as n from script_runs where script_id = ${scriptId}`, "objects");
+  return Number(r[0]!.n);
 }
 
 async function countDocuments(orgId: string): Promise<number> {
   const r = await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from documents where org_id = ${orgId}`);
-  return Number(r.rows[0]!.n);
+    select count(*)::text as n from documents where org_id = ${orgId}`, "objects");
+  return Number(r[0]!.n);
 }
 
 type JournalRow = { createdBy: string | null; custom: Record<string, unknown> };
@@ -113,8 +113,8 @@ async function journalRow(orgId: string, documentNumber: string): Promise<Journa
     select created_by as "createdBy", custom
       from documents
      where org_id = ${orgId} and kind = 'journal'
-       and document_number = ${documentNumber}`);
-  return r.rows[0]!;
+       and document_number = ${documentNumber}`, "objects");
+  return r[0]!;
 }
 
 const PROBE_SOURCE = `function main(ctx) {
@@ -278,9 +278,9 @@ test("true cron ticks stay explicitly system-attributed with durable scheduler s
     }>(sql`
       select created_by as "createdBy", logs
         from script_runs
-       where id = ${occ.id}`);
-    assert.equal(ledger.rows[0]!.createdBy, null);
-    const claimed = ledger.rows[0]!.logs.find((e) => e.event === "claimed");
+       where id = ${occ.id}`, "objects");
+    assert.equal(ledger[0]!.createdBy, null);
+    const claimed = ledger[0]!.logs.find((e) => e.event === "claimed");
     assert.ok(claimed, "the occurrence ledger records its durable scheduler source");
     assert.match(String(claimed!.occurrence), new RegExp(`^sched\\|${scriptId}\\|`));
   } finally {

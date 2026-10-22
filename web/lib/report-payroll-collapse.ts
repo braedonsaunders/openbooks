@@ -65,14 +65,14 @@ async function payrollPairs(
          where jl.org_id = ${orgId} and jl.entry_id in ${entries}
            and jl.party_id is not null
            and (d.kind = 'pay_run' or je.origin = 'payroll')
-      `)).rows.map((row) => `${row.entry_id}\0${row.account_id}`)
+      `, 'objects')).map((row) => `${row.entry_id}\0${row.account_id}`)
     : (await db.execute<{ entry_id: string; account_id: string }>(sql`
         select distinct dl.document_id as entry_id, dl.account_id
           from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
          where dl.org_id = ${orgId} and dl.document_id in ${entries}
            and d.kind = 'pay_run' and dl.party_id is not null
-      `)).rows.map((row) => `${row.entry_id}\0${row.account_id}`)
+      `, 'objects')).map((row) => `${row.entry_id}\0${row.account_id}`)
   return new Set(pairs)
 }
 

@@ -656,8 +656,8 @@ async function payrollOrg(
         'warn', true, ${actorId}, ${actorId}
       from pay_components where org_id=${org.orgId} and system_key='vacation_payout'
         and country is null and kind='earning'
-      returning id`);
-    assert.equal(vacation.rows.length, 1, "the declared zero-rate vacation program must be created");
+      returning id`, "objects");
+    assert.equal(vacation.length, 1, "the declared zero-rate vacation program must be created");
   }
   let workerCompGroupId: string | null = null;
   if (country === "CA") {
@@ -860,9 +860,9 @@ test(
     const trailer = readTrailerTotals("cpa005", text);
     assert.equal(trailer.count, artifact.entryCount);
     assert.equal(trailer.totalCents, toUnits(artifact.controlTotal) / 100n);
-    const netTotal = ((await db.execute<{ net: string }>(sql`
+    const netTotal = (await db.execute<{ net: string }>(sql`
       select net_total::text as net from pay_runs
-       where org_id = ${fx.orgId} and document_id = ${documentId}`))).rows[0]!.net;
+       where org_id = ${fx.orgId} and document_id = ${documentId}`, "objects"))[0]!.net;
     assert.equal(
       cmp(add(artifact.controlTotal, artifact.excludedTotal), netTotal), 0,
       "file money + paper money = the run's net pay",
@@ -968,7 +968,7 @@ test(
     const row = (await db.execute<{ status: string; releaseCount: number }>(sql`
       select status, release_count as "releaseCount"
         from pay_run_bank_files
-       where org_id = ${fx.orgId} and id = ${artifact.id}`)).rows[0]!;
+       where org_id = ${fx.orgId} and id = ${artifact.id}`, "objects"))[0]!;
     assert.deepEqual(row, { status: "released", releaseCount: 1 });
   },
 );
@@ -1127,9 +1127,9 @@ test(
     // --- the control total equals the run's EFT net pay --------------------
     assert.equal(artifact.controlTotal, population.total);
     assert.equal(artifact.excludedTotal, population.excludedTotal);
-    const netTotal = ((await db.execute<{ net: string }>(sql`
+    const netTotal = (await db.execute<{ net: string }>(sql`
       select net_total::text as net from pay_runs
-       where org_id = ${fx.orgId} and document_id = ${documentId}`))).rows[0]!.net;
+       where org_id = ${fx.orgId} and document_id = ${documentId}`, "objects"))[0]!.net;
     // money.ts, not JS numbers: 5185.20 + 455.25 is 5640.450000000001 in
     // binary floating point, and a payroll tie-out that only holds to within
     // an epsilon is not a tie-out.

@@ -41,8 +41,8 @@ export async function listPayrollEmployerFacts(
        and (${input.subsidiaryId ?? null}::uuid is null or subsidiary_id = ${input.subsidiaryId ?? null}::uuid)
        and (${input.filingAccountId ?? null}::uuid is null or filing_account_id = ${input.filingAccountId ?? null}::uuid)
      order by country, fact_key, effective_from desc
-  `);
-  return rows.rows;
+  `, "objects");
+  return rows;
 }
 
 /**
@@ -78,7 +78,7 @@ export async function findStoredEmployerFactValue(input: {
        and (superseded_on is null or superseded_on > ${input.asOf}::date)
      order by effective_from desc, superseded_on asc nulls last
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.fact_value ?? null;
 }
 
@@ -163,7 +163,7 @@ export async function upsertPayrollEmployerFact(input: {
            and program_type = ${declaration.filingProgramType!}
            and is_active
          for share
-      `)).rows[0];
+      `, "objects"))[0];
       if (!account) {
         throw new PayrollPackError(
           `${declaration.label} must use an active ${input.country} ${declaration.filingProgramType} account in this organization`,
@@ -182,9 +182,9 @@ export async function upsertPayrollEmployerFact(input: {
          and effective_from = ${input.effectiveFrom}::date
          and (superseded_on is null or superseded_on > CURRENT_DATE)
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (before) {
-      const changed = await tx.execute(sql`
+      const changed = await tx.execute<never>(sql`
         update payroll_employer_facts
            set superseded_on = greatest(CURRENT_DATE, effective_from), updated_by = ${input.actorId}, updated_at = now()
          where org_id = ${input.orgId} and id = ${before.id}
@@ -224,8 +224,8 @@ export async function upsertPayrollEmployerFact(input: {
         fact_value as "factValue", value_scale as "valueScale",
         change_reason as "changeReason", created_at::text as "createdAt",
         created_by as "createdBy"
-    `);
-    const row = inserted.rows[0];
+    `, "objects");
+    const row = inserted[0];
     if (!row) throw new PayrollPackError(`${declaration.label} was not saved — insert returned no row`);
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

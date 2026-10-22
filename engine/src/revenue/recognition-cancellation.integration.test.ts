@@ -101,8 +101,8 @@ test(
           join performance_obligations obligation on obligation.document_line_id = line.id and obligation.org_id = line.org_id
           join flow_gates gate on gate.run_id = ${first.runId} and gate.org_id = document.org_id
          where document.id = ${documentId} and document.org_id = ${org.orgId}
-      `);
-      assert.deepEqual(state.rows, [{
+      `, "objects");
+      assert.deepEqual(state, [{
         status: "posted",
         is_requested: true,
         obligation_status: "cancelled",
@@ -123,8 +123,8 @@ async function seedRecognitionTermPeriods(
     select fiscal_calendar_id
       from accounting_periods
      where id = ${org.periodId} and org_id = ${org.orgId}
-  `);
-  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+  `, "objects");
+  const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
     [2026, 8, "2026-08-01", "2026-08-31"],
@@ -226,7 +226,7 @@ test(
           from journal_lines
          where entry_id = ${sourceRecognitionId}
          order by line_number
-      `);
+      `, "objects");
 
       const request = {
         documentId,
@@ -289,8 +289,8 @@ test(
           join journal_entries source
             on source.id = schedule_line.journal_entry_id
          where document.id = ${documentId}
-      `);
-      assert.deepEqual(rolledBack.rows, [
+      `, "objects");
+      assert.deepEqual(rolledBack, [
         {
           document_status: "posted",
           void_requested_at: null,
@@ -369,9 +369,9 @@ test(
           join journal_entries reversal
             on reversal.id = schedule_line.reversal_journal_entry_id
          where document.id = ${documentId}
-      `));
-      assert.equal(lineage.rows.length, 1);
-      assert.deepEqual(lineage.rows[0], {
+      `, "objects"));
+      assert.equal(lineage.length, 1);
+      assert.deepEqual(lineage[0], {
         document_status: "voided",
         invoice_reversal_id: concurrent[0]!.invoiceReversalEntryId,
         obligation_status: "cancelled",
@@ -392,8 +392,8 @@ test(
           from journal_lines
          where entry_id = ${recognitionReversalId}
          order by line_number
-      `);
-      assert.deepEqual(reversalLines.rows, sourceLines.rows);
+      `, "objects");
+      assert.deepEqual(reversalLines, sourceLines);
 
       const net = (await db.execute<{ amount: string }>(sql`
         select coalesce(sum(line.amount), 0)::text as amount
@@ -412,8 +412,8 @@ test(
              from recognition_schedule_lines
             where journal_entry_id = ${sourceRecognitionId}
          )
-      `));
-      assert.equal(net.rows[0]!.amount, "0.0000");
+      `, "objects"));
+      assert.equal(net[0]!.amount, "0.0000");
 
       const rerun = await runRevenueRecognition(
         org.orgId,

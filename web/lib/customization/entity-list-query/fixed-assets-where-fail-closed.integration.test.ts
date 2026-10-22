@@ -18,10 +18,8 @@ async function assetCount(
   orgId: string,
   viewFilters: { key: string; operator: string; value?: string | null; to?: string | null }[] = [],
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from fixed_assets a
-      where ${fixedAssetWhere({ ...defaultListView("fixed_asset"), filters: viewFilters as never }, {}, orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from fixed_assets a
+      where ${fixedAssetWhere({ ...defaultListView("fixed_asset"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 

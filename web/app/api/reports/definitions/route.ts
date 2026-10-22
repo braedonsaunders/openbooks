@@ -44,9 +44,9 @@ export const GET = defineRoute({
           from report_definitions
          where org_id = ${user.orgId} and archived_at is null
          order by kind, name
-      `))
+      `, 'objects'))
     const visible = []
-    for (const row of rows.rows) {
+    for (const row of rows) {
         // Statements answer the statement feature gate and query plans the
         // entity gate; the entity gate alone hides every built-in statement.
         if (!(await canSeeReportDefinition(gate, row))) continue
@@ -135,8 +135,8 @@ export const POST = defineRoute({
           -- A retry resolves the existing audited payload below; conflicting input is refused.
           on conflict (id) do nothing
           returning id, kind, slug, name, description, query, layout, updated_at
-        `))
-        if (!inserted.rows[0]) {
+        `, 'objects'))
+        if (!inserted[0]) {
           return {
             kind: 'replay' as const,
             result: await resolveIdempotentReplay(tx, {
@@ -159,7 +159,7 @@ export const POST = defineRoute({
           },
           tx,
         )
-        return { kind: 'created' as const, definition: inserted.rows[0] }
+        return { kind: 'created' as const, definition: inserted[0] }
       })
     if (outcome.kind === 'replay') {
         if (outcome.result === 'conflict') {
@@ -169,7 +169,7 @@ export const POST = defineRoute({
           select id, kind, slug, name, description, query, layout, updated_at
             from report_definitions
            where id = ${requestId} and org_id = ${user.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!existing) {
           return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
         }

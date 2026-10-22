@@ -220,7 +220,7 @@ async function loadCorrectionSource(
            custom, extra_dims as "extraDims"
       from documents
      where id = ${sourceId} and org_id = ${orgId}
-  `)).rows[0] as CorrectionSourceHeader | undefined;
+  `, 'objects'))[0] as CorrectionSourceHeader | undefined;
   if (!rows) return null;
   return { ...rows, custom: (rows.custom ?? {}) as Record<string, unknown>, extraDims: (rows.extraDims ?? {}) as Record<string, unknown> };
 }
@@ -308,7 +308,7 @@ export async function planPostedCorrection(
   const reason = validateCorrectionReason(body.amendmentReason);
   const source = await loadCorrectionSource(db, orgId, sourceId);
   if (!source) throw new DocumentEditError(404, "not found");
-  if ((await db.execute(sql`select id from rebate_claims where org_id=${orgId} and settlement_document_id=${sourceId} limit 1`)).rows[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates');
+  if ((await db.execute(sql`select id from rebate_claims where org_id=${orgId} and settlement_document_id=${sourceId} limit 1`, 'objects'))[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates');
   if (source.status !== "posted") {
     throw new DocumentEditError(422, "only a posted document can create a correcting replacement");
   }
@@ -325,7 +325,7 @@ export async function planPostedCorrection(
       from document_lines
      where org_id = ${orgId} and document_id = ${sourceId}
      order by line_number, id
-  `)).rows.map((row) => ({
+  `, 'objects')).map((row) => ({
     // The edit API takes the gross input amount, which persists as
     // tax_input_amount; the net amount column is derived from it. An
     // untouched inclusive-tax row round-trips gross-to-gross, so the
@@ -388,7 +388,7 @@ export async function planPostedCorrection(
          and entry.status = 'posted'
          and ${sql.raw(`line.${POSTED_DIMENSION_COLUMNS[field]}`)} = ${before}
        limit 1
-    `)).rows.length > 0;
+    `, 'objects')).length > 0;
     if (carried) reclassDimensions.push({ field, before, after });
     else headerOnlyDimensions.push(field);
   }
@@ -475,9 +475,9 @@ async function authorizePostedCorrection(
        and link.to_document_id = ${sourceId}
        and link.link_type = 'reverses'
      limit 1
-  `)).rows[0]
+  `, 'objects'))[0]
   assertNoExistingDocumentCorrection(existingCorrection?.documentNumber ?? null)
-  if ((await tx.execute(sql`select id from rebate_claims where org_id=${ctx.orgId} and settlement_document_id=${sourceId} limit 1`)).rows[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates')
+  if ((await tx.execute(sql`select id from rebate_claims where org_id=${ctx.orgId} and settlement_document_id=${sourceId} limit 1`, 'objects'))[0]) throw new DocumentEditError(422,'Void this rebate settlement through the native document workflow, then prepare the corrected settlement from its reopened claim in Rebates')
   if (source.status !== 'posted') {
     throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
   }
@@ -518,7 +518,7 @@ export async function createPostedCorrection(
        from documents
        where id = ${sourceId} and org_id = ${ctx.orgId}
        for update
-    `)).rows[0] ?? null
+    `, 'objects'))[0] ?? null
     },
     mutate: async (tx, source) => {
       const allowed = await authorizePostedCorrection(tx, sourceId, source, ctx)
@@ -581,8 +581,8 @@ export async function createPostedCorrection(
                updated_by = ${ctx.userId}
          where id = ${replacement.id} and org_id = ${ctx.orgId}
          returning id
-      `)
-      if (stamped.rows.length !== 1) {
+      `, 'objects')
+      if (stamped.length !== 1) {
         throw new DocumentEditError(409, 'the replacement could not be saved; reload the source and retry the correction')
       }
       await tx.insert(schema.documentLinks).values({
@@ -709,7 +709,7 @@ async function applyDimensionReclass(
   ctx: CorrectionContext,
 ): Promise<{ reclassEntryIds: string[] }> {
   const module = closeModuleForDocument(plan.source.kind);
-  const legs = (await tx.execute<ReclassPostedLeg>(sql`
+  const legs = await tx.execute<ReclassPostedLeg>(sql`
     select entry.id as "entryId", entry.origin as "entryOrigin",
            entry.posting_date::text as "postingDate", entry.period_id as "periodId",
            entry.book_id as "bookId", line.account_id as "accountId",
@@ -733,7 +733,7 @@ async function applyDimensionReclass(
        and not exists (select 1 from book_entry_replications replica
                         where replica.org_id = entry.org_id and replica.replica_entry_id = entry.id)
      order by entry.book_id, entry.posting_date, entry.id, line.line_number, line.id
-  `)).rows;
+  `, 'objects');
   if (legs.some((leg) => leg.isCurrencyAdjustment)) {
     throw new DocumentEditError(422, "Currency adjustment dimensions are retained with the cleared residual. Void the adjustment through its native workflow and create the replacement with the required dimensions.");
   }
@@ -880,7 +880,7 @@ export async function correctPostedDocument(
          from documents
         where id = ${sourceId} and org_id = ${context.orgId}
         for update
-      `)).rows[0] ?? null;
+      `, 'objects'))[0] ?? null;
     },
     mutate: async (tx, locked) => {
       await authorizePostedCorrection(tx, sourceId, locked, context);

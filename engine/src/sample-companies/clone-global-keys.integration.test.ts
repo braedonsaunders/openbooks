@@ -47,7 +47,7 @@ async function seedTemplateOrg(): Promise<string> {
       select id from accounting_periods
        where org_id = ${template.orgId}
          and starts_on <= '2026-07-10' and ends_on >= '2026-07-10'
-       limit 1`))).rows[0]?.id;
+       limit 1`, "objects")))[0]?.id;
     assert.ok(period, "scratch org seeds no period covering the template posting date");
     const journal = await withOrgContext(template.orgId, () =>
       createScriptJournal(template.orgId, null, {
@@ -148,7 +148,7 @@ function stubTemplate(fixture: Fixture) {
 async function count(orgId: string, table: string): Promise<number> {
   return withBypassContext(async () => (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from ${sql.identifier(table)} where org_id = ${orgId}
-  `)).rows[0]!.n);
+  `, "objects"))[0]!.n);
 }
 
 test(
@@ -175,7 +175,7 @@ test(
       const postedEntries = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_entries
          where org_id = ${result.orgId} and status = 'posted'
-      `)).rows[0]!.n);
+      `, "objects"))[0]!.n);
       assert.equal(postedEntries, 1);
 
       // Executable scheduler work stays behind: never replay the source's
@@ -184,9 +184,9 @@ test(
 
       // Flow run history is kept but its global dedup key is cleared.
       assert.equal(await count(result.orgId, "flow_runs"), 1);
-      const keys = await withBypassContext(async () => (await db.execute<{ occurrence_key: string | null }>(sql`
+      const keys = await withBypassContext(async () => await db.execute<{ occurrence_key: string | null }>(sql`
         select occurrence_key from flow_runs where org_id = ${result.orgId}
-      `)).rows);
+      `, "objects"));
       assert.deepEqual(keys.map((row) => row.occurrence_key), [null]);
 
       // The signing-link bearer token stays behind with its document's
@@ -202,7 +202,7 @@ test(
       const access = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from user_org_access
          where org_id = ${result.orgId} and member_user_id = ${fixture.memberUserId} and is_active
-      `)).rows[0]!.n);
+      `, "objects"))[0]!.n);
       assert.equal(access, 1);
     } finally {
       await dropFixture(fixture);
@@ -242,11 +242,11 @@ test(
       );
       // No org row carries this attempt's birth marker: the shell is gone,
       // not merely unlisted.
-      const shells = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+      const shells = await withBypassContext(async () => await db.execute<{ id: string }>(sql`
         select id from orgs
          where settings->'sampleCompany'->>'ownerUserId' = ${fixture.memberUserId}
            and settings->'sampleCompany'->>'industryKey' = ${INDUSTRY}
-      `)).rows);
+      `, "objects"));
       assert.deepEqual(shells, []);
       // ...and the API state matches: no ready company, no resumable
       // partial, so existingOrgId=null tells the truth.

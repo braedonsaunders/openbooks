@@ -36,8 +36,8 @@ test("posted inventory movements cannot be deleted or rewritten", { skip: !DB },
     const movement = await db.execute<{ id: string }>(sql`
       select id from inventory_movements
        where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted'
-       order by created_at desc limit 1`);
-    const movementId = movement.rows[0]!.id;
+       order by created_at desc limit 1`, "objects");
+    const movementId = movement[0]!.id;
 
     await assert.rejects(
       db.execute(sql`delete from inventory_movements where id = ${movementId} and org_id = ${org.orgId}`),
@@ -57,8 +57,8 @@ test("posted inventory movements cannot be deleted or rewritten", { skip: !DB },
     await db.execute(sql`
       update inventory_movements set status = 'pending' where id = ${movementId} and org_id = ${org.orgId}`);
     const demoted = await db.execute<{ status: string }>(sql`
-      select status from inventory_movements where id = ${movementId} and org_id = ${org.orgId}`);
-    assert.equal(demoted.rows[0]!.status, "pending", "posted must demote to pending");
+      select status from inventory_movements where id = ${movementId} and org_id = ${org.orgId}`, "objects");
+    assert.equal(demoted[0]!.status, "pending", "posted must demote to pending");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -86,14 +86,14 @@ test("inventory quantities wider than numeric(19,4) fail closed before any write
     );
     const rows = await db.execute<{ movements: number; lines: number }>(sql`
       select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
-             (select count(*)::int from journal_lines where org_id = ${org.orgId}) as lines`);
-    assert.deepEqual(rows.rows[0], { movements: 0, lines: 0 });
+             (select count(*)::int from journal_lines where org_id = ${org.orgId}) as lines`, "objects");
+    assert.deepEqual(rows[0], { movements: 0, lines: 0 });
     // The column maximum itself still receives (unit cost 1 keeps the extended
     // journal math exactly at the maximum too).
     await receiveInventory(org.orgId, null, { ...input, quantity: "999999999999999.9999", unitCost: "1.00" });
     const saved = await db.execute<{ quantity: string }>(sql`
-      select quantity::text as quantity from inventory_movements where org_id = ${org.orgId}`);
-    assert.equal(saved.rows[0]!.quantity, "999999999999999.9999");
+      select quantity::text as quantity from inventory_movements where org_id = ${org.orgId}`, "objects");
+    assert.equal(saved[0]!.quantity, "999999999999999.9999");
   } finally {
     await dropScratchOrg(org.orgId);
   }

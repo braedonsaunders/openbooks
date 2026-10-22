@@ -92,11 +92,11 @@ export async function claimPaymentFileDelivery(opts: {
     // cycles with a generator that must lock the run before the artifact.
     const reference = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!reference) throw deliveryClaimRefusal(null, null);
     const run = (await db.execute<{ id: string }>(sql`
       select id from payment_runs where id = ${reference.payment_run_id} and org_id = ${opts.orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!run) throw deliveryClaimRefusal(null, null);
     await lockPendingPaymentInstructions(reference.payment_run_id, opts.orgId);
     // The file state is judged only after its row lock; a void, supersede,
@@ -105,7 +105,7 @@ export async function claimPaymentFileDelivery(opts: {
       select payment_run_id, status, delivery_claim_owner from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!current || current.payment_run_id !== reference.payment_run_id || (current.status !== "approved" && current.status !== "delivered")) {
       throw deliveryClaimRefusal(current?.status ?? null, current?.delivery_claim_owner ?? null);
     }
@@ -121,8 +121,8 @@ export async function claimPaymentFileDelivery(opts: {
         updated_at = now(), updated_by = ${opts.userId}
        where id = ${opts.fileId} and org_id = ${opts.orgId} and status = ${fromStatus}
       returning id
-    `));
-    if (!claimed.rows[0]) throw new PaymentError("cannot claim the payment file for SFTP delivery: the file moved while it was locked; reload and retry");
+    `, "objects"));
+    if (!claimed[0]) throw new PaymentError("cannot claim the payment file for SFTP delivery: the file moved while it was locked; reload and retry");
     await event({ orgId: opts.orgId, runId: current.payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_claimed", fromStatus, toStatus: "delivering", details: { owner: opts.owner } });
     return { token, owner: opts.owner, expiresAt };
   });
@@ -148,16 +148,16 @@ export async function releaseDeliveryClaim(opts: {
        where id = ${opts.fileId} and org_id = ${opts.orgId}
          and status = 'delivering' and delivery_claim_token = ${opts.token}
       returning payment_run_id
-    `));
-    if (!released.rows[0]) {
+    `, "objects"));
+    if (!released[0]) {
       const current = (await db.execute<{ status: string }>(sql`
         select status from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       throw new PaymentError(
         `cannot release the SFTP delivery claim: the file is ${current?.status ?? "no longer present"}, not delivering under this claim`,
       );
     }
-    await event({ orgId: opts.orgId, runId: released.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_claim_released", fromStatus: "delivering", toStatus: "approved" });
+    await event({ orgId: opts.orgId, runId: released[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_claim_released", fromStatus: "delivering", toStatus: "approved" });
   });
 }
 
@@ -182,22 +182,22 @@ export async function recordPaymentFileSftpDelivery(opts: {
   await withOrgTransaction(opts.orgId, async () => {
     const reference = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!reference) throw new PaymentError("payment file not found");
     const run = (await db.execute<{ id: string }>(sql`
       select id from payment_runs where id = ${reference.payment_run_id} and org_id = ${opts.orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!run) throw new PaymentError("payment run not found");
     const file = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId}
          and status = 'delivering' and delivery_claim_token = ${opts.claimToken}
        for update
-    `));
-    if (!file.rows[0]) {
+    `, "objects"));
+    if (!file[0]) {
       const current = (await db.execute<{ status: string; delivery_claim_owner: string | null }>(sql`
         select status, delivery_claim_owner from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       throw new PaymentError(
         current?.status === "delivered"
           ? "the SFTP delivery was already recorded as delivered"
@@ -228,10 +228,10 @@ export async function recordPaymentFileSftpDelivery(opts: {
        where id = ${opts.fileId} and org_id = ${opts.orgId}
          and status = 'delivering' and delivery_claim_token = ${opts.claimToken}
        returning id
-    `));
-    if (!delivered.rows[0]) throw new PaymentError("cannot record the SFTP delivery: the delivery claim was lost before the record committed");
-    await markRunDelivered(opts.orgId, opts.userId, file.rows[0].payment_run_id);
-    await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "delivering", toStatus: "delivered", details: { targetRef: opts.targetRef } });
+    `, "objects"));
+    if (!delivered[0]) throw new PaymentError("cannot record the SFTP delivery: the delivery claim was lost before the record committed");
+    await markRunDelivered(opts.orgId, opts.userId, file[0].payment_run_id);
+    await event({ orgId: opts.orgId, runId: file[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivered_sftp", fromStatus: "delivering", toStatus: "delivered", details: { targetRef: opts.targetRef } });
   });
 }
 
@@ -246,12 +246,12 @@ async function markRunDelivered(orgId: string, userId: string, runId: string): P
     update payment_runs set status = 'delivered', updated_at = now(), updated_by = ${userId}
      where id = ${runId} and org_id = ${orgId} and status = 'generated'
      returning id
-  `));
-  if (!runDelivered.rows[0]) {
+  `, "objects"));
+  if (!runDelivered[0]) {
     const runState = (await db.execute<{ status: string }>(sql`
       select status from payment_runs
        where id = ${runId} and org_id = ${orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (runState?.status !== "delivered") {
       throw new PaymentError(
         `payment run is ${runState?.status ?? "no longer present"} and cannot be marked delivered; reload the run before recording the delivery`,
@@ -282,16 +282,16 @@ export async function markDeliveryUncertain(opts: {
        where id = ${opts.fileId} and org_id = ${opts.orgId}
          and status = 'delivering' and delivery_claim_token = ${opts.token}
       returning payment_run_id
-    `));
-    if (!parked.rows[0]) {
+    `, "objects"));
+    if (!parked[0]) {
       const current = (await db.execute<{ status: string }>(sql`
         select status from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       throw new PaymentError(
         `cannot park the published file as delivery-uncertain: the file is ${current?.status ?? "no longer present"}, not delivering under this claim`,
       );
     }
-    await event({ orgId: opts.orgId, runId: parked.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_uncertain", fromStatus: "delivering", toStatus: "delivery_uncertain", details: { error: opts.error } });
+    await event({ orgId: opts.orgId, runId: parked[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_uncertain", fromStatus: "delivering", toStatus: "delivery_uncertain", details: { error: opts.error } });
   });
 }
 
@@ -312,9 +312,9 @@ export async function reclaimExpiredDeliveryClaims(opts: {
        where org_id = ${opts.orgId} and status = 'delivering'
          and delivery_claim_expires_at is not null and delivery_claim_expires_at < now()
        for update
-    `));
+    `, "objects"));
     const reclaimed: { fileId: string; runId: string }[] = [];
-    for (const row of expired.rows) {
+    for (const row of expired) {
       await db.execute(sql`
         update payment_files set status = 'delivery_uncertain', delivery_claim_token = null,
           updated_at = now(), updated_by = ${opts.userId}
@@ -352,22 +352,22 @@ export async function resolveUncertainDelivery(opts: {
       select payment_run_id from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId}
          ${opts.runId ? sql`and payment_run_id = ${opts.runId}` : sql``}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!reference) throw new PaymentError("payment file not found");
     const run = (await db.execute<{ id: string }>(sql`
       select id from payment_runs where id = ${reference.payment_run_id} and org_id = ${opts.orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!run) throw new PaymentError("payment run not found");
     const file = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId} and status = 'delivery_uncertain'
          ${opts.runId ? sql`and payment_run_id = ${opts.runId}` : sql``}
        for update
-    `));
-    if (!file.rows[0]) {
+    `, "objects"));
+    if (!file[0]) {
       const current = (await db.execute<{ status: string }>(sql`
         select status from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       throw new PaymentError(
         `cannot resolve the uncertain delivery: the file is ${current?.status ?? "no longer present"}, not delivery-uncertain`,
       );
@@ -394,9 +394,9 @@ export async function resolveUncertainDelivery(opts: {
        where id = ${opts.fileId} and org_id = ${opts.orgId} and status = 'delivery_uncertain'
     `);
     if (opts.outcome === "delivered") {
-      await markRunDelivered(opts.orgId, opts.userId, file.rows[0].payment_run_id);
+      await markRunDelivered(opts.orgId, opts.userId, file[0].payment_run_id);
     }
-    await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_uncertain_resolved", fromStatus: "delivery_uncertain", toStatus: opts.outcome, details: { reason: opts.reason } });
+    await event({ orgId: opts.orgId, runId: file[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_uncertain_resolved", fromStatus: "delivery_uncertain", toStatus: opts.outcome, details: { reason: opts.reason } });
   });
 }
 
@@ -409,9 +409,9 @@ export async function recordPaymentFileDeliveryFailure(opts: {
   error: string;
 }): Promise<void> {
   await withOrgTransaction(opts.orgId, async () => {
-    const file = (await db.execute<{ payment_run_id: string }>(sql`select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}`));
-    if (!file.rows[0]) throw new PaymentError("payment file not found");
+    const file = (await db.execute<{ payment_run_id: string }>(sql`select payment_run_id from payment_files where id = ${opts.fileId} and org_id = ${opts.orgId}`, "objects"));
+    if (!file[0]) throw new PaymentError("payment file not found");
     await db.insert(schema.paymentFileDeliveries).values({ orgId: opts.orgId, paymentFileId: opts.fileId, channel: opts.channel, targetRef: opts.targetRef, status: "failed", attemptCount: 1, lastAttemptAt: new Date(), error: opts.error, createdBy: opts.userId, updatedBy: opts.userId });
-    await event({ orgId: opts.orgId, runId: file.rows[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_failed", details: { channel: opts.channel, targetRef: opts.targetRef, error: opts.error } });
+    await event({ orgId: opts.orgId, runId: file[0].payment_run_id, fileId: opts.fileId, actorId: opts.userId, eventType: "file_delivery_failed", details: { channel: opts.channel, targetRef: opts.targetRef, error: opts.error } });
   });
 }

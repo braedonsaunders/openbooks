@@ -201,10 +201,10 @@ async function rl1SlipsInSnapshot(
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name
      order by p.display_name
-  `));
+  `, "objects"));
 
-  for (const row of rows.rows) assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
-  const stubAggregates: Rl1SlipAggregates[] = rows.rows.map((row) => ({
+  for (const row of rows) assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
+  const stubAggregates: Rl1SlipAggregates[] = rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     taxableIncome: num(row.taxable_income),
@@ -221,7 +221,7 @@ async function rl1SlipsInSnapshot(
   }));
 
   const originalSlices = (await readCanadianOpeningYearEndSlices(runner,orgId,taxYear)).filter(slice=>slice.allocation.province==='QC');
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const source=originalSlices.find(slice=>slice.employeePartyId===String(row.employee_party_id));
     if(source && String(row.first_pay_date)<=source.coverageEnd) throw new PayrollError('Committed Québec payroll overlaps the certified original reporting coverage — reconcile its original carry-in before preparing RL-1 slips');
   }
@@ -374,7 +374,7 @@ async function rl1SummaryInSnapshot(
        -- A null component country is SHARED baseline, not an unknown to
        -- default: shared rows apply to every pack's employees.
        and l.kind = 'employer_contribution' and (pc.country is null or pc.country = 'CA')
-  `));
+  `, "objects"));
   const total = (pick: (slip: Rl1Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
   const wsdrf = await wsdrfForSummary(runner, orgId, taxYear);
@@ -403,8 +403,8 @@ async function rl1SummaryInSnapshot(
     boxG: total((s) => s.boxG),
     boxH: total((s) => s.boxH),
     boxI: total((s) => s.boxI),
-    employerQpp: num(employer.rows[0]?.employer_qpp),
-    employerQpip: num(employer.rows[0]?.employer_qpip),
+    employerQpp: num(employer[0]?.employer_qpp),
+    employerQpip: num(employer[0]?.employer_qpip),
     wsdrfEligiblePayroll: wsdrf.eligiblePayroll,
     wsdrfTrainingExpenditures: wsdrf.trainingExpenditures,
     wsdrfQualityCertificate: wsdrf.qualityCertificate,
@@ -442,16 +442,16 @@ async function wsdrfForSummary(
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'QC'
-  `)).rows[0]?.payroll ?? "0";
+  `, "objects"))[0]?.payroll ?? "0";
   const asOf = `${taxYear}-12-31`;
-  const stored = (await runner.execute<{ fact_key: string; fact_value: string }>(sql`
+  const stored = await runner.execute<{ fact_key: string; fact_value: string }>(sql`
     select distinct fact_key, fact_value
       from payroll_employer_facts
      where org_id = ${orgId} and country = 'CA'
        and fact_key in ('qc_wsdrf_training_expenditures', 'qc_wsdrf_quality_certificate')
        and effective_from <= ${asOf}::date
        and (superseded_on is null or superseded_on > ${asOf}::date)
-  `)).rows;
+  `, "objects");
   const values = (key: string): string[] =>
     stored.filter((row) => row.fact_key === key).map((row) => row.fact_value);
   const expendituresRaw = values("qc_wsdrf_training_expenditures");
@@ -523,10 +523,10 @@ export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Retu
       const cfg = (await tx.execute<{ id_number: string | null }>(sql`
         select settings#>>'{payroll,rl1Transmitter,identificationNumber}' as id_number
           from orgs where id = ${orgId}
-      `));
+      `, "objects"));
       const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
       return {
-        identificationNumber: cfg.rows[0]?.id_number ?? null,
+        identificationNumber: cfg[0]?.id_number ?? null,
         slips,
         summary: await rl1SummaryInSnapshot(tx, orgId, taxYear, slips),
       };

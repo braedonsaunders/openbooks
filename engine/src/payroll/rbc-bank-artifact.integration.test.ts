@@ -45,7 +45,7 @@ async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
   });
   await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
   const formatId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    select id from payment_formats where org_id = ${org.orgId} and code = 'RBC-STD152'`))).rows[0]!.id;
+    select id from payment_formats where org_id = ${org.orgId} and code = 'RBC-STD152'`, "objects")))[0]!.id;
   const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
     name: "Canadian payroll treasury", bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId,
     paymentFormatId: formatId, currency: "CAD", country: "CA", originatorSecrets: ORIGINATOR,
@@ -102,9 +102,9 @@ async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
 }
 
 async function numbering(orgId: string) {
-  return (await withOrgContext(orgId, () => db.execute<{ document_kind: string; next_number: number }>(sql`
+  return await withOrgContext(orgId, () => db.execute<{ document_kind: string; next_number: number }>(sql`
     select document_kind, next_number from number_sequences where org_id = ${orgId}
-      and (document_kind like 'rbc_std152:%' or document_kind = 'payroll_bank_file') order by document_kind`))).rows;
+      and (document_kind like 'rbc_std152:%' or document_kind = 'payroll_bank_file') order by document_kind`, "objects"));
 }
 
 test("native RBC payroll stores exact CAD credits, releases the same bytes and gives its governed replacement a new identity", { skip: !DB }, async () => {
@@ -136,9 +136,9 @@ test("native RBC payroll stores exact CAD credits, releases the same bytes and g
     assert.equal(header!.slice(50, 64), "00012026200CAD");
     const credits = records.slice(1, -1);
     const expectedNames = ["ADA O NEIL SMITH", "ELI MORRISON JR"];
-    const stubs = (await withOrgContext(org.orgId, () => db.execute<{ employee_party_id: string; net_pay: string }>(sql`
+    const stubs = await withOrgContext(org.orgId, () => db.execute<{ employee_party_id: string; net_pay: string }>(sql`
       select employee_party_id, net_pay::text as net_pay from pay_stubs
-      where org_id = ${org.orgId} and pay_run_document_id = ${f.documentId}`))).rows;
+      where org_id = ${org.orgId} and pay_run_document_id = ${f.documentId}`, "objects"));
     let cashCents = 0n;
     for (let index = 0; index < 2; index++) {
       const employee = f.employees[index]!;
@@ -162,11 +162,11 @@ test("native RBC payroll stores exact CAD credits, releases the same bytes and g
     assert.equal(cashCents, toUnits(first.controlTotal) / 100n);
     assert.equal(text.includes("PAT PAPER"), false);
     const total = (await withOrgContext(org.orgId, () => db.execute<{ net: string }>(sql`
-      select net_total::text as net from pay_runs where org_id = ${org.orgId} and document_id = ${f.documentId}`))).rows[0]!.net;
+      select net_total::text as net from pay_runs where org_id = ${org.orgId} and document_id = ${f.documentId}`, "objects")))[0]!.net;
     assert.equal(cmp(add(first.controlTotal, first.excludedTotal), total), 0);
-    const original = (await withOrgContext(org.orgId, () => db.execute<{ display_name: string; employee_number: string }>(sql`
+    const original = await withOrgContext(org.orgId, () => db.execute<{ display_name: string; employee_number: string }>(sql`
       select p.display_name, e.employee_number from parties p join employee_roles e on e.org_id=p.org_id and e.party_id=p.id
-      where p.org_id=${org.orgId} and p.id in ${f.employees.map(employee => employee.id)} order by e.employee_number`))).rows;
+      where p.org_id=${org.orgId} and p.id in ${f.employees.map(employee => employee.id)} order by e.employee_number`, "objects"));
     assert.deepEqual(original, f.employees.map(employee => ({ display_name: employee.name, employee_number: employee.number })));
     const allocated = await numbering(org.orgId);
     assert.deepEqual((await f.release(first.id)).bytes, released.bytes);

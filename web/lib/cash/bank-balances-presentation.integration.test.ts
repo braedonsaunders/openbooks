@@ -36,9 +36,9 @@ test('bank balances translate every functional at the as-of spot', { skip: !env.
       await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
         values (${org.orgId},'USD','CAD','2026-07-15'::date,'spot',1.35,'manual')`)
       const calId = await db.execute(
-        sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`,
+        sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`, 'objects',
       )
-      const calRow = calId.rows[0]
+      const calRow = calId[0]
       if (!calRow) throw new Error('scratch period has no fiscal calendar')
       const cal = String(calRow.fiscal_calendar_id)
       const june = randomUUID()

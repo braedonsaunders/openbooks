@@ -49,7 +49,7 @@ async function seedOverheadOrg(opts: SeedOpts) {
 }
 
 async function setTrueCostProfile(orgId: string, patch: Record<string, unknown>) {
-  const current=(await db.execute<{ s: unknown }>(sql`select settings as s from orgs where id=${orgId}`)).rows[0]?.s as Record<string, unknown>;
+  const current=(await db.execute<{ s: unknown }>(sql`select settings as s from orgs where id=${orgId}`, 'objects'))[0]?.s as Record<string, unknown>;
   const analytics=((current['analytics'] ?? {}) as Record<string, unknown>);
   const trueCost=((analytics['trueCost'] ?? {}) as Record<string, unknown>);
   const profiles=(trueCost['profiles'] ?? [{ id: 'default' }]) as Array<Record<string, unknown>>;

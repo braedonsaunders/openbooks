@@ -67,8 +67,7 @@ export async function loadPspReviews(
   const selected = pickString(params.review)
   if (selected) {
     if (!isUuid(selected)) notFound()
-    const row = (
-      await db.execute<DisputeRow>(sql`
+    const row = (await db.execute<DisputeRow>(sql`
         select pd.id, pd.provider, pd.kind, pd.status, pd.currency, pd.amount::text as amount,
                pd.provider_event_id as "providerEventId", pd.provider_ref as "providerRef",
                pd.reason, r.document_number as "receiptNumber", i.document_number as "invoiceNumber",
@@ -80,8 +79,7 @@ export async function loadPspReviews(
             on i.org_id = pd.org_id and i.id = pd.invoice_document_id
          where pd.org_id = ${authz.user.orgId} and pd.id = ${selected}
          limit 1
-      `)
-    ).rows[0]
+      `, 'objects'))[0]
     // Another tenant's review reads as missing, never as a foreign refusal.
     if (!row) notFound()
     const status = REVIEW_STATUSES.includes(row.status as (typeof REVIEW_STATUSES)[number])

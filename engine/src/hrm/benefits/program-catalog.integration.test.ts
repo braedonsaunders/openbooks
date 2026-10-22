@@ -51,12 +51,12 @@ test('Canonical program ownership and scoped participants',{skip:!process.env.OP
     await assert.rejects(()=>db.execute(sql`update entitlement_plans set unit='hours' where org_id=${orgId} and id=${vacationId}`),refusal(/cannot change its balance unit or direction/));
   });
   await t.test('Runtime RLS cannot read another organization program identity',async()=>{
-    const rows=await withOrgTransaction(randomUUID(),async ()=>(await db.execute(sql`select id from hrm_benefit_catalog where id=${planId}`)).rows);assert.equal(rows.length,0);
+    const rows=await withOrgTransaction(randomUUID(),async ()=>await db.execute(sql`select id from hrm_benefit_catalog where id=${planId}`, 'objects'));assert.equal(rows.length,0);
   });
   await t.test('Payroll-off preserves native history and hides entitlement operations',async()=>{
     await setFeatures(orgId,{payroll:false});assert.equal((await listBenefitsProgramCatalog(db,orgId,actorId)).length,2);
     assert.equal((await listBenefitsProgramParticipants(db,orgId,actorId)).length,1);
     await assert.rejects(()=>getBenefitsProgramWorkspace(db,orgId,actorId,vacationId),/Enable Payroll/);
-    assert.equal((await db.execute(sql`select id from payroll_vacation_terms where org_id=${orgId}`)).rows.length,2);
+    assert.equal((await db.execute(sql`select id from payroll_vacation_terms where org_id=${orgId}`, 'objects')).length,2);
   });
 }));

@@ -36,8 +36,8 @@ test('close assistant reads return the cockpit state for an org-wide close.read 
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.adminId}, ${actors.adminId}, ${actors.adminId})
       returning id
-    `)));
-    const runId = inserted.rows[0]!.id;
+    `, 'objects')));
+    const runId = inserted[0]!.id;
     await withBypassContext(() => db.execute(sql`
       insert into close_run_tasks
         (org_id, run_id, key, title, workstream, task_type, completion_mode, gate_type, status, sort_order)
@@ -125,8 +125,8 @@ test('close assistant reads fail closed for restricted-subsidiary and unpermitte
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.adminId}, ${actors.adminId}, ${actors.adminId})
       returning id
-    `)));
-    const runId = inserted.rows[0]!.id;
+    `, 'objects')));
+    const runId = inserted[0]!.id;
     // A restricted-subsidiary caller holds close.read but the cockpit scope
     // rule (guardCloseScope) denies them — the tools must agree.
     const restricted = {
@@ -167,8 +167,8 @@ test('close run status in another org reads as missing', { skip: !process.env.OP
               ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
               '{}'::jsonb, now(), ${actors.adminId}, ${actors.adminId}, ${actors.adminId})
       returning id
-    `)));
-    const runId = inserted.rows[0]!.id;
+    `, 'objects')));
+    const runId = inserted[0]!.id;
     const otherActors = await withBypassContext(() => seedFlowActors(second.orgId));
     const authz = {
       user: userFor(second.orgId, otherActors.adminId),

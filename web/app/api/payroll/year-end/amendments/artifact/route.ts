@@ -45,13 +45,13 @@ export const GET = defineRoute({
       select country, filing_key as filing, tax_year as "taxYear"
         from payroll_filing_submissions
        where org_id = ${gate.user.orgId} and id = ${id}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!submission) return notFound("record")
-    const rows = (await db.execute<{ rowId: string }>(sql`
+    const rows = await db.execute<{ rowId: string }>(sql`
       select row_id as "rowId"
         from payroll_filing_submission_slips
        where org_id = ${gate.user.orgId} and submission_id = ${id}
-    `)).rows
+    `, 'objects')
     const denied = await guardPayrollFilingRowIds(
       gate, submission.country, submission.filing, rows.map((row) => row.rowId), submission.taxYear,
     )

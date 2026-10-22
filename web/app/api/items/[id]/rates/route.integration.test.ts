@@ -163,10 +163,10 @@ async function assertFirstVersionLanded(fixture: Fixture): Promise<void> {
       (select count(*)::int from item_rate_lines l join item_rate_versions v on v.id = l.version_id
         where l.org_id = ${fixture.orgId} and v.rate_book_id = ${fixture.bookId}) as lines,
       (select count(*)::int from audit_log where org_id = ${fixture.orgId} and table_name = 'item_rate_versions') as audit,
-      (select currency from item_rate_books where id = ${fixture.bookId}) as currency`)));
-  assert.equal(state.rows[0]?.versions, 1, "the first version must exist");
-  assert.equal(state.rows[0]?.lines, 1, "the version's rate line must exist");
-  assert.equal(state.rows[0]?.audit, 1, "the version's audit row must exist");
+      (select currency from item_rate_books where id = ${fixture.bookId}) as currency`, "objects")));
+  assert.equal(state[0]?.versions, 1, "the first version must exist");
+  assert.equal(state[0]?.lines, 1, "the version's rate line must exist");
+  assert.equal(state[0]?.audit, 1, "the version's audit row must exist");
 }
 
 test.after(() => hooks.deregister())
@@ -201,8 +201,8 @@ test(
       // Exactly one currency generation landed, and the committed first
       // version freezes it: subsequent changes are rejected.
       const book = (await withOrgContext(fixture.orgId, () => db.execute<{ currency: string }>(sql`
-        select currency from item_rate_books where id = ${fixture.bookId}`)));
-      assert.equal(book.rows[0]?.currency, "USD");
+        select currency from item_rate_books where id = ${fixture.bookId}`, "objects")));
+      assert.equal(book[0]?.currency, "USD");
       await assert.rejects(
         withBypassContext(() => (db.execute(sql`
           update item_rate_books set currency = 'EUR' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`))),
@@ -249,8 +249,8 @@ test(
       await assertFirstVersionLanded(fixture);
 
       const book = (await db.execute<{ currency: string }>(sql`
-        select currency from item_rate_books where id = ${fixture.bookId}`));
-      assert.equal(book.rows[0]?.currency, "CAD", "no currency change raced this save");
+        select currency from item_rate_books where id = ${fixture.bookId}`, "objects"));
+      assert.equal(book[0]?.currency, "CAD", "no currency change raced this save");
       await assert.rejects(
         withBypassContext(() => (db.execute(sql`
           update item_rate_books set currency = 'USD' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`))),

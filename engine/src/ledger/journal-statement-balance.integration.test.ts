@@ -14,8 +14,8 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
   try {
     const child = randomUUID();
     const branch = await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active)
-      values(${child},${org.orgId},${org.subsidiaryId},'Branch','CAD','CA',true) returning id`);
-    assert.equal(branch.rows.length,1);
+      values(${child},${org.orgId},${org.subsidiaryId},'Branch','CAD','CA',true) returning id`, "objects");
+    assert.equal(branch.length,1);
     const evidence = async () => (await db.execute<{ evidence: unknown }>(sql`
       select jsonb_build_object(
         'entries',(select coalesce(jsonb_agg(to_jsonb(e) order by e.id),'[]'::jsonb)
@@ -23,7 +23,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
         'lines',(select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]'::jsonb)
           from journal_lines l where l.org_id=${org.orgId}),
         'activity',(select coalesce(jsonb_agg(to_jsonb(g) order by g.account_id,g.subsidiary_id),'[]'::jsonb)
-          from gl_month_activity g where g.org_id=${org.orgId})) as evidence`)).rows[0]!.evidence;
+          from gl_month_activity g where g.org_id=${org.orgId})) as evidence`, "objects"))[0]!.evidence;
     const headers = async (ids: readonly string[], status: "draft" | "posted" = "draft") => {
       await db.execute(sql`insert into journal_entries
         (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,posted_at)
@@ -33,8 +33,8 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
     };
     const post = async (ids: readonly string[]) => {
       const result = await db.execute(sql`update journal_entries set status='posted',posted_at=now()
-        where org_id=${org.orgId} and id=any(${`{${ids.join(",")}}`}::uuid[]) and status='draft' returning id`);
-      assert.equal(result.rows.length,ids.length);
+        where org_id=${org.orgId} and id=any(${`{${ids.join(",")}}`}::uuid[]) and status='draft' returning id`, "objects");
+      assert.equal(result.length,ids.length);
     };
     const lines = async (rows: readonly {
       entryId: string; number: number; amount: string; subsidiaryId?: string; dims?: Record<string,string>;
@@ -55,7 +55,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
       ]));
       await post(ids);
       await db.execute(sql`set constraints all immediate`);
-      assert.deepEqual((await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`)).rows,[]);
+      assert.deepEqual(await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`, "objects"),[]);
       const before = await evidence();
       await db.execute(sql`insert into journal_lines
         (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
@@ -153,7 +153,7 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
       await post([balanced]);
       await db.execute(sql`set constraints all immediate`);
       assert.equal((await db.execute(sql`select 1 from journal_lines
-        where org_id=${org.orgId} and entry_id=${balanced}`)).rows.length,4);
+        where org_id=${org.orgId} and entry_id=${balanced}`, "objects")).length,4);
     });
 
     const draft = randomUUID();
@@ -164,10 +164,10 @@ test("bulk journal balance checks keep each entry, subsidiary and configured seg
     await withOrgTransaction(org.orgId, async () => {
       await lines([{ entryId: draft, number: 2, amount: '-2' }]);
       const posted = await db.execute(sql`update journal_entries set status='posted',posted_at=now()
-        where org_id=${org.orgId} and id=${draft} returning id`);
-      assert.equal(posted.rows.length,1,"drafts can be constructed across statements and post only when balanced");
+        where org_id=${org.orgId} and id=${draft} returning id`, "objects");
+      assert.equal(posted.length,1,"drafts can be constructed across statements and post only when balanced");
     });
-    assert.deepEqual((await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`)).rows,[]);
+    assert.deepEqual(await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`, "objects"),[]);
   } catch (error) {
     failure=error;
     throw error;

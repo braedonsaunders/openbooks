@@ -197,8 +197,8 @@ async function independentSums(orgId: string, employeePartyId: string): Promise<
             where l.org_id = ${orgId} and l.stub_id in (select id from committed)
               and l.kind = 'employer_contribution' and pc.system_key in ('ww', 'wia', 'wko')) as premies,
            (select count(*)::int from committed) as runs
-  `));
-  const row = rows.rows[0]!;
+  `, "objects"));
+  const row = rows[0]!;
   const text = (value: unknown): string => String(value ?? "0");
   return {
     loon: text(row.loon),

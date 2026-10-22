@@ -208,8 +208,8 @@ export function vendorTaxIdentityFromRole(
 export async function loadVendorComplianceClass(orgId: string, partyId: string): Promise<string | null> {
   const result = await db.execute<{ classId: string | null }>(sql`
     select compliance_class_id as "classId" from vendor_roles
-     where org_id = ${orgId} and party_id = ${partyId} and is_active`)
-  return result.rows[0]?.classId ?? null
+     where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects')
+  return result[0]?.classId ?? null
 }
 
 export async function loadComplianceClasses(orgId: string): Promise<ComplianceClassRow[]> {
@@ -221,8 +221,8 @@ export async function loadComplianceClasses(orgId: string): Promise<ComplianceCl
       from compliance_classes
      where org_id = ${orgId} and is_active
      order by code
-  `)
-  return r.rows
+  `, 'objects')
+  return r
 }
 
 /**
@@ -249,7 +249,12 @@ export async function loadComplianceMatrix(args: {
   const [policies, classes, vendors, apOpen, records, waivers, timeZone] = await Promise.all([
     loadRequirementPolicies(args.orgId),
     loadComplianceClasses(args.orgId),
-    db.execute(sql`
+    db.execute<{
+        partyId: string
+        vendorName: string
+        classId: string | null
+        className: string | null
+      }>(sql`
       select p.id as "partyId", p.display_name as "vendorName",
              vr.compliance_class_id as "classId", cc.name as "className"
         from parties p
@@ -260,9 +265,9 @@ export async function loadComplianceMatrix(args: {
          and (${args.classId ?? null}::uuid is null or vr.compliance_class_id = ${args.classId ?? null}::uuid)
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
        order by p.display_name
-    `),
+    `, 'objects'),
     openItems(args.orgId, 'ap', asOf, subIds),
-    db.execute(sql`
+    db.execute<EvidenceRecord & { partyId: string }>(sql`
       select cr.party_id as "partyId", cr.id, cr.requirement_id as "requirementId", cr.project_id as "projectId",
              cr.status, cr.effective_from as "effectiveFrom", cr.expires_on as "expiresOn",
              cr.coverage_amount as "coverageAmount", cr.aggregate_amount as "aggregateAmount",
@@ -275,12 +280,12 @@ export async function loadComplianceMatrix(args: {
         left join projects pr on pr.id = cr.project_id and pr.org_id = cr.org_id
        where cr.org_id = ${args.orgId} and cr.status <> 'superseded'
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
-    `),
+    `, 'objects'),
     // Revoked rows load too: the shared evaluator dates them by the
     // revocation's org-local date, so an as-of read sees each exception
     // exactly while it was in force. Pending requests load too but are
     // never honoured — requesting is not granting.
-    db.execute(sql`
+    db.execute<Omit<WaiverRecord, "revokedOn"> & { partyId: string }>(sql`
       select cw.party_id as "partyId", cw.id, cw.requirement_id as "requirementId", cw.project_id as "projectId",
              cw.effective_from as "effectiveFrom", cw.expires_on as "expiresOn",
              cw.approved_at as "approvedAt", cw.revoked_at as "revokedAt"
@@ -288,20 +293,11 @@ export async function loadComplianceMatrix(args: {
         left join projects pr on pr.id = cw.project_id and pr.org_id = cw.org_id
        where cw.org_id = ${args.orgId}
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
-    `),
+    `, 'objects'),
     businessTimeZone(args.orgId),
   ])
 
-  const vendorRows = (
-    vendors as unknown as {
-      rows: {
-        partyId: string
-        vendorName: string
-        classId: string | null
-        className: string | null
-      }[]
-    }
-  ).rows
+  const vendorRows = vendors
   // The "Open payable" column groups the shared as-of item set — the same
   // numbers the /ap dashboard shows — not the documents cache.
   // Unapplied credits net against the vendor's bills, exactly like the aging.
@@ -311,13 +307,13 @@ export async function loadComplianceMatrix(args: {
     openByParty.set(item.partyId, addMoney(openByParty.get(item.partyId) ?? ZERO_MONEY, item.remaining))
   }
   const recordsByParty = new Map<string, EvidenceRecord[]>()
-  for (const row of (records as unknown as { rows: (EvidenceRecord & { partyId: string })[] }).rows) {
+  for (const row of records) {
     const list = recordsByParty.get(row.partyId) ?? []
     list.push(row)
     recordsByParty.set(row.partyId, list)
   }
   const waiversByParty = new Map<string, WaiverRecord[]>()
-  for (const row of (waivers as unknown as { rows: (Omit<WaiverRecord, "revokedOn"> & { partyId: string })[] }).rows) {
+  for (const row of waivers) {
     const revokedAt = row.revokedAt as unknown as string | Date | null
     const waiver: WaiverRecord & { partyId: string } = {
       ...row,
@@ -432,8 +428,8 @@ export async function loadVendorCertificates(
        ${complianceSubsidiaryFilter(sql`party.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${complianceSubsidiaryFilter(sql`pj.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by req.code, cr.effective_from desc
-  `)
-  return r.rows
+  `, 'objects')
+  return r
 }
 
 export type ExceptionRow = {
@@ -474,8 +470,8 @@ export async function loadVendorWaivers(
        ${complianceSubsidiaryFilter(sql`party.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        ${complianceSubsidiaryFilter(sql`pj.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by w.expires_on desc
-  `)
-  return r.rows
+  `, 'objects')
+  return r
 }
 
 // ---------------------------------------------------------------------------
@@ -528,11 +524,11 @@ export async function loadBlockedBills(
        ${complianceSubsidiaryFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by d.document_date
      limit ${limit}
-  `)
-  if (bills.rows.length === 0) return []
+  `, 'objects')
+  if (bills.length === 0) return []
   const decisions = await evaluateBillsForRelease({
     orgId,
-    bills: bills.rows.map((b) => ({
+    bills: bills.map((b) => ({
       documentId: b.id,
       documentNumber: b.document_number,
       partyId: b.party_id,
@@ -546,11 +542,11 @@ export async function loadBlockedBills(
   return decisions
     .map((decision, i) => ({
       ...decision,
-      documentDate: bills.rows[i]!.document_date,
-      openBalance: bills.rows[i]!.open_balance,
-      fxRate: bills.rows[i]!.fx_rate,
-      currency: bills.rows[i]!.currency,
-      projectName: bills.rows[i]!.project_name
+      documentDate: bills[i]!.document_date,
+      openBalance: bills[i]!.open_balance,
+      fxRate: bills[i]!.fx_rate,
+      currency: bills[i]!.currency,
+      projectName: bills[i]!.project_name
     }))
     .filter((row) => row.decision !== 'cleared')
     .sort((a, b) => (a.decision === b.decision ? 0 : a.decision === 'blocked' ? -1 : 1))
@@ -673,8 +669,8 @@ export async function loadLienWaivers(args: {
        ${complianceSubsidiaryFilter(sql`pj.subsidiary_id`, args.allowedSubsidiaryIds)}
      order by lw.through_date desc, lw.waiver_number desc
      limit ${args.limit ?? 300}
-  `)
-  return r.rows
+  `, 'objects')
+  return r
 }
 
 /**
@@ -741,8 +737,8 @@ export async function loadLienWaiverPrintSource(
          order by is_default_shipping desc, created_at limit 1
       ) addr on true
      where lw.org_id = ${orgId} and lw.id = ${id}
-  `)
-  return r.rows[0] ?? null
+  `, 'objects')
+  return r[0] ?? null
 }
 
 /**
@@ -852,8 +848,8 @@ export async function loadFilings(
      where f.org_id = ${orgId}
        ${complianceSubsidiaryFilter(sql`f.subsidiary_id`, allowedSubsidiaryIds)}
      order by f.tax_year desc, f.form_type
-  `)
-  return r.rows
+  `, 'objects')
+  return r
 }
 
 /**
@@ -871,8 +867,8 @@ export async function loadInformationReturnFilingScope(
     select subsidiary_id as "subsidiaryId"
       from information_return_filings
      where org_id = ${orgId} and id = ${filingId}
-  `)
-  return r.rows[0] ?? null
+  `, 'objects')
+  return r[0] ?? null
 }
 
 export interface RecipientRow {
@@ -909,12 +905,12 @@ export async function loadFiling(
   const filing = filings.find((f) => f.id === filingId)
   if (!filing) return null
   const [meta, recipients] = await Promise.all([
-    db.execute(sql`
+    db.execute<{ payerSnapshot: Record<string, unknown>; notes: string | null }>(sql`
       select payer_snapshot as "payerSnapshot", notes
         from information_return_filings
        where org_id = ${orgId} and id = ${filingId}
-         ${complianceSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`),
-    db.execute(sql`
+         ${complianceSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}`, 'objects'),
+    db.execute<RecipientRow>(sql`
       select r.id, r.party_id as "partyId", p.display_name as "vendorName",
              r.recipient_snapshot->>'legalName' as "legalName",
              r.tin_last4 as "tinLast4", r.tin_type as "tinType",
@@ -929,18 +925,14 @@ export async function loadFiling(
         from information_return_recipients r
         join parties p on p.id = r.party_id and p.org_id = r.org_id
        where r.org_id = ${orgId} and r.filing_id = ${filingId}
-       order by r.status, p.display_name`)
+       order by r.status, p.display_name`, 'objects')
   ])
   return {
     ...filing,
     payerSnapshot:
-      (
-        meta as unknown as {
-          rows: { payerSnapshot: Record<string, unknown> }[]
-        }
-      ).rows[0]?.payerSnapshot ?? {},
-    notes: (meta as unknown as { rows: { notes: string | null }[] }).rows[0]?.notes ?? null,
-    recipients: (recipients as unknown as { rows: RecipientRow[] }).rows
+      meta[0]?.payerSnapshot ?? {},
+    notes: meta[0]?.notes ?? null,
+    recipients
   }
 }
 
@@ -1009,8 +1001,8 @@ export async function loadInformationReturnReadiness(
        )
      order by paid.total desc, p.display_name
      limit 200
-  `)
-  return r.rows
+  `, 'objects')
+  return r
 }
 
 // ---------------------------------------------------------------------------

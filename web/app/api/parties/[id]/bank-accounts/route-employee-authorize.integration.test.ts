@@ -72,8 +72,8 @@ const post = (partyId: string) =>
 
 async function accountCount(orgId: string, partyId: string): Promise<number> {
   return Number((await db.execute<{ count: string }>(
-    sql`select count(*)::text as count from party_bank_accounts where org_id=${orgId} and party_id=${partyId}`,
-  )).rows[0]!.count)
+    sql`select count(*)::text as count from party_bank_accounts where org_id=${orgId} and party_id=${partyId}`, 'objects',
+  ))[0]!.count)
 }
 
 test('HR and payroll operators capture an employee bank account; vendors stay master-data-only', async () => {

@@ -280,13 +280,13 @@ test("the exact read writes nothing: lock rows, versions and audit rows are unto
       select
         (select count(*)::text from period_locks where org_id = ${f.org.orgId}) as locks,
         (select count(*)::text from audit_log where org_id = ${f.org.orgId} and table_name = 'period_locks') as audits,
-        (select count(*)::text from close_events where org_id = ${f.org.orgId}) as events`)).rows[0]!;
+        (select count(*)::text from close_events where org_id = ${f.org.orgId}) as events`, "objects"))[0]!;
     const before = await counts();
     await read(f);
     await read(f);
     assert.deepEqual(await counts(), before);
     const version = (await db.execute<{ version: number }>(sql`
-      select version from period_locks where org_id = ${f.org.orgId} and module = 'gl'`)).rows[0]!.version;
+      select version from period_locks where org_id = ${f.org.orgId} and module = 'gl'`, "objects"))[0]!.version;
     assert.equal(version, 1);
   } finally {
     await dropScratchOrg(f.org.orgId);

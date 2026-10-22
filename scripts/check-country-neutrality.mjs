@@ -42,8 +42,8 @@ import { pathToFileURL } from "node:url";
 // bill's scope). Domain arithmetic, validation schemas and the ledger keep
 // the fields unconditionally — they store and compute, never render.
 //
-// What the gate does NOT cover, by decision: SQL migrations (data history
-// legitimately names forms — 0147 healed CA_GST34 rows by code), `??`/`||`
+// What the gate does NOT cover, by decision: schema SQL (the baseline and
+// migrations legitimately name form codes in seed and data rows), `??`/`||`
 // fallthrough defaults, and per-country UI copy in locale catalogs.
 
 const FORM_CODE = "[A-Z]{2}_[A-Z0-9]+";

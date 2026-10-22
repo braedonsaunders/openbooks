@@ -74,16 +74,16 @@ const post = (body: unknown) =>
   );
 
 async function versionCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 
 async function storedComponent(orgId: string): Promise<{ quantity: string; unitPrice: string }> {
-  const rows = (await withBypassContext(() => db.execute<{ quantity: string; unitPrice: string }>(
+  const rows = await withBypassContext(() => db.execute<{ quantity: string; unitPrice: string }>(
     sql`select quantity::text as "quantity", unit_price::text as "unitPrice"
-          from subscription_plan_version_components where org_id = ${orgId} limit 1`,
-  ))).rows;
+          from subscription_plan_version_components where org_id = ${orgId} limit 1`, "objects",
+  ));
   return { quantity: rows[0]!.quantity, unitPrice: rows[0]!.unitPrice };
 }
 

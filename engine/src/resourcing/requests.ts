@@ -563,11 +563,9 @@ export async function releaseResourceRequest(
           outcome: input.outcome,
           approvalRunId: input.approvalRunId,
         });
-        const proof = (
-          await tx.execute<{ valid: boolean }>(
-            sql`select public.flow_subject_decision_authorized(r.org_id,'resourcing_request',r.id,${input.actorId},public.resourcing_request_approval_fingerprint(r),${input.outcome}) as valid from res_requests r where r.org_id=${input.orgId} and r.id=${input.requestId}`,
-          )
-        ).rows[0];
+        const proof = (await tx.execute<{ valid: boolean }>(
+            sql`select public.flow_subject_decision_authorized(r.org_id,'resourcing_request',r.id,${input.actorId},public.resourcing_request_approval_fingerprint(r),${input.outcome}) as valid from res_requests r where r.org_id=${input.orgId} and r.id=${input.requestId}`, "objects",
+          ))[0];
         if (
           !proof?.valid ||
           (input.approvalRunId ? !decision : input.outcome !== "approved")

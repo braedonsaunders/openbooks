@@ -24,8 +24,7 @@ export async function suggestReceiptConfirmation(
   input: { lineId: string; commandKey: string },
 ) {
   return withOrgTransaction(orgId, async () => {
-    const line = (
-      await db.execute<{
+    const line = (await db.execute<{
         id: string;
         item_id: string;
         stock_location_id: string;
@@ -42,8 +41,7 @@ export async function suggestReceiptConfirmation(
       from document_lines line join documents receipt on receipt.org_id=line.org_id and receipt.id=line.document_id
       join inventory_movements movement on movement.org_id=line.org_id and movement.document_line_id=line.id
         and movement.kind='receipt' and movement.status='posted'
-      where line.org_id=${orgId} and line.id=${input.lineId} and receipt.kind='purchase_receipt' and receipt.status='approved'`)
-    ).rows[0];
+      where line.org_id=${orgId} and line.id=${input.lineId} and receipt.kind='purchase_receipt' and receipt.status='approved'`, "objects"))[0];
     if (!line)
       throw new InventoryError(
         "Select an approved purchase receipt line with posted stock evidence",
@@ -92,10 +90,8 @@ export async function suggestPutaway(
   return withOrgTransaction(orgId, async () => {
     await lockInventoryPosition(db, input.itemId, input.stagingLocationId);
     await admitExecution(db, orgId, actorId, "putaway", input.subsidiaryId);
-    const staging = (
-      await db.execute(sql`select id from stock_locations where org_id=${orgId}
-      and id=${input.stagingLocationId} and kind='staging' and is_active and stock_location_warehouse(${orgId}::uuid,id)=${input.warehouseId} for share`)
-    ).rows[0];
+    const staging = (await db.execute(sql`select id from stock_locations where org_id=${orgId}
+      and id=${input.stagingLocationId} and kind='staging' and is_active and stock_location_warehouse(${orgId}::uuid,id)=${input.warehouseId} for share`, "objects"))[0];
     if (!staging)
       throw new InventoryError(
         "Select an active staging bin in this warehouse",
@@ -152,8 +148,7 @@ export async function suggestCountObservation(
   },
 ) {
   return withOrgTransaction(orgId, async () => {
-    const line = (
-      await db.execute<{
+    const line = (await db.execute<{
         item_id: string;
         stock_location_id: string;
         stock_count_id: string;
@@ -167,8 +162,7 @@ export async function suggestCountObservation(
       select line.item_id,line.stock_location_id,line.stock_count_id,line.lot_id,line.serial_id,count.subsidiary_id,
         count.counted_on::text,line.first_counted_quantity::text,line.second_counted_quantity::text
       from stock_count_lines line join stock_counts count on count.org_id=line.org_id and count.id=line.stock_count_id
-      where line.org_id=${orgId} and line.id=${input.lineId} and count.status='counting'`)
-    ).rows[0];
+      where line.org_id=${orgId} and line.id=${input.lineId} and count.status='counting'`, "objects"))[0];
     if (!line)
       throw new InventoryError(
         "Select a line on a stock count that is counting",
@@ -227,15 +221,13 @@ export async function executeInventoryDirection(
       })),
     };
   if (task.stage === "count") {
-    const line = (
-      await tx.execute<{
+    const line = (await tx.execute<{
         prior: string | null;
         status: string;
       }>(sql`select count.status,
       case when ${task.basis.observation}='second' then line.second_counted_quantity::text else line.first_counted_quantity::text end as prior
       from stock_count_lines line join stock_counts count on count.org_id=line.org_id and count.id=line.stock_count_id
-      where line.org_id=${orgId} and line.id=${task.count_line_id} for update of count,line`)
-    ).rows[0];
+      where line.org_id=${orgId} and line.id=${task.count_line_id} for update of count,line`, "objects"))[0];
     if (!line || line.status !== "counting" || line.prior !== task.basis.prior)
       throw new InventoryError(
         "Count observation changed; refresh this line before confirming another scan",
@@ -256,22 +248,18 @@ export async function executeInventoryDirection(
     };
   }
   if (task.stage === "receive") {
-    const evidence = (
-      await tx.execute(sql`select movement.id from inventory_movements movement
+    const evidence = await tx.execute(sql`select movement.id from inventory_movements movement
       join documents receipt on receipt.org_id=movement.org_id and receipt.id=(select document_id from document_lines
         where org_id=${orgId} and id=${task.document_line_id})
       where movement.org_id=${orgId} and movement.id=${task.basis.movementId} and movement.document_line_id=${task.document_line_id}
-        and movement.status='posted' and receipt.kind='purchase_receipt' and receipt.status='approved'`)
-    ).rows;
+        and movement.status='posted' and receipt.kind='purchase_receipt' and receipt.status='approved'`, "objects");
     if (evidence.length !== 1)
       throw new InventoryError(
         "Purchase receipt changed; reopen its posted stock evidence before confirming",
       );
     if (
-      (
-        await tx.execute(sql`select id from warehouse_execution_tasks where org_id=${orgId} and document_line_id=${task.document_line_id}
-      and stage='receive' and status='done' and id<>${task.id} limit 1`)
-      ).rows[0]
+      (await tx.execute(sql`select id from warehouse_execution_tasks where org_id=${orgId} and document_line_id=${task.document_line_id}
+      and stage='receive' and status='done' and id<>${task.id} limit 1`, "objects"))[0]
     )
       throw new InventoryError(
         "This purchase receipt was already confirmed; reopen its recorded receiving evidence",

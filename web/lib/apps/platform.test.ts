@@ -87,8 +87,8 @@ test(
           select updated_at as "updatedAt", memo
             from documents
            where org_id = ${org.orgId} and id = ${documentId}
-        `))
-        const priorToken = raw.rows[0]?.updatedAt
+        `, 'objects'))
+        const priorToken = raw[0]?.updatedAt
         assert.equal(typeof priorToken, 'string')
         assert.equal(new Date(priorToken!).toISOString(), '2026-08-24T12:34:56.123Z')
         assert.match(priorToken!, /\.123456[+-]/)
@@ -101,8 +101,8 @@ test(
         )
         const retained = await inOrg(() => db.execute<{ memo: string | null }>(sql`
           select memo from documents where org_id = ${org.orgId} and id = ${documentId}
-        `))
-        assert.equal(retained.rows[0]?.memo, 'opened value')
+        `, 'objects'))
+        assert.equal(retained[0]?.memo, 'opened value')
       })
 
       await t.test('list emits an exact token accepted unchanged by update', async () => {
@@ -122,8 +122,8 @@ test(
         }))
         const saved = await inOrg(() => db.execute<{ memo: string | null }>(sql`
           select memo from documents where org_id = ${org.orgId} and id = ${documentId}
-        `))
-        assert.equal(saved.rows[0]?.memo, 'saved from list token')
+        `, 'objects'))
+        assert.equal(saved[0]?.memo, 'saved from list token')
       })
 
       await t.test('get refreshes the exact token and stale reuse still conflicts', async () => {
@@ -153,17 +153,17 @@ test(
       await t.test('non-document list and get records remain unchanged', async () => {
         const expected = await inOrg(() => db.execute<Record<string, unknown>>(sql`
           select * from parties where org_id = ${org.orgId} and id = ${org.vendorId}
-        `))
-        assert.equal(typeof expected.rows[0]?.updated_at, 'string')
+        `, 'objects'))
+        assert.equal(typeof expected[0]?.updated_at, 'string')
 
         const fetched = await inOrg(() => platform.get('parties', org.vendorId))
-        assert.deepEqual(fetched, expected.rows[0])
+        assert.deepEqual(fetched, expected[0])
 
         const listed = await inOrg(() => platform.list('parties', {
           filters: [{ field: 'id', value: org.vendorId }],
         })) as PlatformList
         assert.equal(listed.total, 1)
-        assert.deepEqual(listed.records, expected.rows)
+        assert.deepEqual(listed.records, expected)
       })
     } finally {
       await dropScratchOrg(org.orgId)
@@ -178,10 +178,10 @@ test(
     const { org, platform, inOrg } = await makePlatformFixture()
     const documentCount = async () => (await inOrg(() => db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${org.orgId}
-    `))).rows[0]!.n
+    `, 'objects')))[0]!.n
     const documentLineCount = async () => (await inOrg(() => db.execute<{ n: number }>(sql`
       select count(*)::int as n from document_lines where org_id = ${org.orgId}
-    `))).rows[0]!.n
+    `, 'objects')))[0]!.n
 
     try {
       // Control: a valid create persists exactly one draft with one line,
@@ -235,7 +235,7 @@ test(
     })
     const recordCount = async () => (await inOrg(() => db.execute<{ n: number }>(sql`
       select count(*)::int as n from custom_records where org_id = ${org.orgId} and type_key = ${typeKey}
-    `))).rows[0]!.n
+    `, 'objects')))[0]!.n
 
     try {
       // Control: a bare create seeds and keeps its draft.
@@ -295,8 +295,8 @@ test(
       )
       const row = await inOrg(() => db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id from projects where org_id = ${org.orgId} and id = ${projectId}
-      `))
-      assert.equal(row.rows[0]?.subsidiary_id, org.subsidiaryId)
+      `, 'objects'))
+      assert.equal(row[0]?.subsidiary_id, org.subsidiaryId)
     } finally {
       await dropScratchOrg(org.orgId)
     }

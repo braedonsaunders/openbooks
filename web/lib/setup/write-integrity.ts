@@ -64,8 +64,8 @@ export async function validateEntityIntegrity(
     if (employer == null || employer === '') continue
     if (!isUuid(employer)) return `Choose a valid ${scopeLabel} from this organization`
     const selected = await executor.execute(sql`select id from subsidiaries
-      where org_id=${orgId} and id=${String(employer)} and is_active and not is_elimination`)
-    if (selected.rows.length !== 1) return `Choose an active ${scopeLabel} from this organization`
+      where org_id=${orgId} and id=${String(employer)} and is_active and not is_elimination`, 'objects')
+    if (selected.length !== 1) return `Choose an active ${scopeLabel} from this organization`
   }
   for (const rule of SETUP_INTEGRITY_RULES) {
     const verdict = await rule(entity, body, orgId, rowId, executor)

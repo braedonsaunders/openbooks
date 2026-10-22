@@ -85,7 +85,7 @@ test("payroll variance uses primary-book residue and preserves secondary-book va
     assert.ok(first.entryId);
     const posted = (await db.execute<{ book_id: string; amount: string }>(sql`
       select e.book_id, l.amount from journal_entries e join journal_lines l on l.entry_id=e.id and l.org_id=e.org_id
-      where e.org_id=${org.orgId} and e.id=${first.entryId} and l.account_id=${org.accounts.clearing}`)).rows[0];
+      where e.org_id=${org.orgId} and e.id=${first.entryId} and l.account_id=${org.accounts.clearing}`, "objects"))[0];
     assert.deepEqual(posted, { book_id: org.bookId, amount: "20.0000" });
     // Make the tax journal newer than primary variance to expose cross-book
     // prior lookup on a rerun, independently of timestamp tie ordering.
@@ -93,9 +93,9 @@ test("payroll variance uses primary-book residue and preserves secondary-book va
     const second = await postPayrollVariance(opts);
     assert.equal(second.variance, "20.0000");
     assert.ok(second.entryId);
-    const states = (await db.execute<{ id: string; status: string }>(sql`
+    const states = await db.execute<{ id: string; status: string }>(sql`
       select id, status from journal_entries where org_id=${org.orgId}
-      and id in (${taxVarianceId}, ${lateTaxVarianceId}, ${first.entryId}, ${second.entryId})`)).rows;
+      and id in (${taxVarianceId}, ${lateTaxVarianceId}, ${first.entryId}, ${second.entryId})`, "objects");
     assert.equal(states.find(row => row.id === taxVarianceId)?.status, "posted");
     assert.equal(states.find(row => row.id === lateTaxVarianceId)?.status, "posted");
     assert.equal(states.find(row => row.id === first.entryId)?.status, "reversed");
@@ -104,7 +104,7 @@ test("payroll variance uses primary-book residue and preserves secondary-book va
     assert.equal(rec?.openBalance, "0.0000");
     assert.equal(rec?.periodVariance, "20.0000");
     const mirrors = (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries
-      where org_id=${org.orgId} and book_id=${taxBookId} and reverses_entry_id is not null`)).rows[0];
+      where org_id=${org.orgId} and book_id=${taxBookId} and reverses_entry_id is not null`, "objects"))[0];
     assert.equal(mirrors?.n, 0);
     await postFixtureJournal(org, actorId, org.bookId, "payroll", "20");
     assert.deepEqual(await postPayrollVariance(opts), { entryId: null, variance: "0" });
@@ -129,7 +129,7 @@ for (const policy of ["missing", "inactive", "non-posting"] as const) {
       if (policy === "non-posting") await db.execute(sql`update accounting_books set posts_gl=false where id=${org.bookId}`);
       await assert.rejects(() => laborClearingReconciliation(org.orgId, periodStart, periodEnd, org.subsidiaryId), /exactly one active posting primary GL book/);
       await assert.rejects(() => postPayrollVariance({ orgId: org.orgId, actorId, periodStart, periodEnd, subsidiaryId: org.subsidiaryId }), /exactly one active posting primary GL book/);
-      const entries = (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0];
+      const entries = (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0];
       assert.equal(entries?.n, 0);
     } finally {
       await dropScratchOrg(org.orgId);

@@ -43,12 +43,12 @@ async function withScopedReader(permission: string, fn: (ctx: { org: ScratchOrg;
   const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Scope reader', 'scope-reader'))
   const outside = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, 'Uptown', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb) returning id`))).rows[0]!.id
+    values (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, 'Uptown', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb) returning id`, 'objects')))[0]!.id
   assert.equal((await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify([permission])}::jsonb,
-    subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [outside] })}::jsonb where org_id = ${org.orgId} and key = 'scope-reader' returning key`))).rows.length, 1, 'register scope fixture permission and subsidiary setup updates scope-reader role')
+    subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [outside] })}::jsonb where org_id = ${org.orgId} and key = 'scope-reader' returning key`, 'objects'))).length, 1, 'register scope fixture permission and subsidiary setup updates scope-reader role')
   assert.equal((await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
     coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"budgets":true,"grantManagement":true,"encumbrances":true}'::jsonb, true)
-    where id = ${org.orgId} returning id`))).rows.length, 1, 'register scope fixture feature setup updates one organization')
+    where id = ${org.orgId} returning id`, 'objects'))).length, 1, 'register scope fixture feature setup updates one organization')
   const encId = await withOrgContext(org.orgId, async () => (await createEncumbrance({ orgId: org.orgId, sourceKind: 'manual', amount: '40.00',
     accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, extraDims: {} })).id)
   state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'Scope reader', email: 'scope-reader@scratch.test', roles: [{ key: 'scope-reader', name: 'Scope reader' }], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
@@ -80,7 +80,7 @@ test('an out-of-scope commitment loads no detail, links, figures, or candidates'
 test('lifting the restriction loads the commitment detail exactly once', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await withScopedReader('encumbrances.read', async ({ org, encId }) => {
     assert.equal((await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb
-      where org_id = ${org.orgId} and key = 'scope-reader' returning key`))).rows.length, 1, 'register scope unrestricted setup updates scope-reader role')
+      where org_id = ${org.orgId} and key = 'scope-reader' returning key`, 'objects'))).length, 1, 'register scope unrestricted setup updates scope-reader role')
     ;(globalThis as Record<string, unknown>).__encDetailCalls = 0
     const data = await withOrgContext(org.orgId, () => loadEncumbrances({ encumbrance: encId }))
     assert.equal(data.drawer?.mode, 'record')
@@ -109,10 +109,10 @@ test('production nonprofit tabs enforce permissions and effective feature depend
     ] as const) {
       assert.equal((await withBypassContext(() => db.execute(sql`
         update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
-        where org_id = ${org.orgId} and key = 'scope-reader' returning key`))).rows.length, 1, `${label} role update`)
+        where org_id = ${org.orgId} and key = 'scope-reader' returning key`, 'objects'))).length, 1, `${label} role update`)
       assert.equal((await withBypassContext(() => db.execute(sql`
         update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
-          ${JSON.stringify(features)}::jsonb, true) where id = ${org.orgId} returning id`))).rows.length, 1, `${label} feature update`)
+          ${JSON.stringify(features)}::jsonb, true) where id = ${org.orgId} returning id`, 'objects'))).length, 1, `${label} feature update`)
       const hrefs = await withOrgContext(org.orgId, async () => {
         const authz = await getAuthz()
         assert.ok(authz, `${label} authz`)

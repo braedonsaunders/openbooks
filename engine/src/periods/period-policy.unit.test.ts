@@ -6,9 +6,10 @@ import { assertPeriodModulesOpen, PeriodClosedError } from "./period-policy.ts";
 test("the year-end seal supplies the reopen scope before period locks are checked", async () => {
   let calls = 0;
   const executor = {
-    execute: async () => {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       calls += 1;
-      return {
+      return inMode({
         rows: calls === 1
           ? [{
               fiscal_year: 2026,
@@ -17,7 +18,7 @@ test("the year-end seal supplies the reopen scope before period locks are checke
               subsidiary_id: "subsidiary-id",
             }]
           : [],
-      };
+      });
     },
   } as unknown as SqlExecutor;
 

@@ -93,7 +93,7 @@ async function seedHolder(
   const employmentId = await mkEmployment(orgId, workerPartyId, subsidiaryId, { from: "2026-07-01" });
   const slotId = (await db.execute<{ id: string }>(sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, 'primary') returning id`)).rows[0]!.id;
+    values (${orgId}, ${employmentId}, 'primary') returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, position_id, version_no, fte, is_primary, effective_from)
@@ -107,9 +107,9 @@ function seedEmploymentForParty(orgId: string, subsidiaryId: string, workerParty
 }
 
 async function eventKinds(orgId: string, applicationId: string): Promise<string[]> {
-  const rows = (await db.execute<{ kind: string }>(sql`
+  const rows = await db.execute<{ kind: string }>(sql`
     select kind from hrm_application_events
-     where org_id = ${orgId} and application_id = ${applicationId} order by recorded_at, id`)).rows;
+     where org_id = ${orgId} and application_id = ${applicationId} order by recorded_at, id`, "objects");
   return rows.map((row) => row.kind);
 }
 
@@ -138,22 +138,22 @@ test("0195 bootstraps: nine tables, org isolation, partial uniques, immutable le
   for (const table of tables) {
     const policy = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from pg_policies
-       where schemaname = 'public' and tablename = ${table} and policyname = 'org_isolation'`)).rows[0]!.n;
+       where schemaname = 'public' and tablename = ${table} and policyname = 'org_isolation'`, "objects"))[0]!.n;
     assert.equal(policy, 1, `${table} carries the org_isolation policy`);
     const forced = (await db.execute<{ relforcerowsecurity: boolean }>(sql`
-      select relforcerowsecurity from pg_class where relname = ${table}`)).rows[0]!
+      select relforcerowsecurity from pg_class where relname = ${table}`, "objects"))[0]!
       .relforcerowsecurity;
     assert.equal(forced, true, `${table} forces row-level security`);
   }
-  const indexes = (await db.execute<{ indexname: string }>(sql`
+  const indexes = await db.execute<{ indexname: string }>(sql`
     select indexname from pg_indexes where schemaname = 'public'
-     and indexname in ('hrm_pipeline_templates_one_default_per_org', 'hrm_offers_one_live_per_application')`)).rows;
+     and indexname in ('hrm_pipeline_templates_one_default_per_org', 'hrm_offers_one_live_per_application')`, "objects");
   assert.deepEqual(
     indexes.map((row) => row.indexname).sort(),
     ["hrm_offers_one_live_per_application", "hrm_pipeline_templates_one_default_per_org"],
   );
   const trigger = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from pg_trigger where tgname = 'hrm_application_events_immutable'`)).rows[0]!.n;
+    select count(*)::int as n from pg_trigger where tgname = 'hrm_application_events_immutable'`, "objects"))[0]!.n;
   assert.equal(trigger, 1, "the append-only ledger trigger stands");
 });
 
@@ -263,23 +263,23 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
 
     // Storage proofs, not return values alone.
     const storedOffer = (await db.execute<{ status: string; approved_change_id: string | null }>(sql`
-      select status, approved_change_id from hrm_offers where id = ${offer.id}`)).rows[0]!;
+      select status, approved_change_id from hrm_offers where id = ${offer.id}`, "objects"))[0]!;
     assert.equal(storedOffer.status, "accepted");
     assert.equal(storedOffer.approved_change_id, hire.changeRequestId);
     const storedApplication = (await db.execute<{ status: string; hired_employment_id: string | null }>(sql`
-      select status, hired_employment_id from hrm_applications where id = ${application.id}`)).rows[0]!;
+      select status, hired_employment_id from hrm_applications where id = ${application.id}`, "objects"))[0]!;
     assert.equal(storedApplication.status, "hired");
     assert.equal(storedApplication.hired_employment_id, hire.employmentId);
     const storedRequisition = (await db.execute<{ filled_count: number; status: string; revision: number }>(sql`
-      select filled_count, status, revision from hrm_requisitions where id = ${opened.id}`)).rows[0]!;
+      select filled_count, status, revision from hrm_requisitions where id = ${opened.id}`, "objects"))[0]!;
     assert.equal(storedRequisition.filled_count, 1);
     assert.equal(storedRequisition.status, "filled");
     assert.equal(storedRequisition.revision, 2);
     const requestStatus = (await db.execute<{ status: string }>(sql`
-      select status from hrm_employment_change_requests where id = ${hire.changeRequestId}`)).rows[0]!.status;
+      select status from hrm_employment_change_requests where id = ${hire.changeRequestId}`, "objects"))[0]!.status;
     assert.equal(requestStatus, "pending_approval");
     const candidateParty = (await db.execute<{ party_id: string | null }>(sql`
-      select party_id from hrm_candidates where id = ${candidate.id}`)).rows[0]!.party_id;
+      select party_id from hrm_candidates where id = ${candidate.id}`, "objects"))[0]!.party_id;
     assert.equal(candidateParty, hire.workerPartyId);
     assert.deepEqual(await eventKinds(orgId, application.id), [
       "applied",
@@ -408,7 +408,7 @@ test("duplicate candidate email refuses without mergeInto and merges with it", {
     assert.ok(!refusal.message.includes("Ada"), "the survivor's name never rides the refusal");
     assert.match(refusal.message, /mergeInto/, "the refusal names the merge remedy");
     const countBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`, "objects"))[0]!.n;
     const merged = await createCandidate({
       orgId,
       actorId: h.recruiterId,
@@ -418,7 +418,7 @@ test("duplicate candidate email refuses without mergeInto and merges with it", {
     });
     assert.equal(merged.mergedInto!.id, first.candidate.id, "no new record: the survivor attaches");
     const countAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from hrm_candidates where org_id = ${orgId}`, "objects"))[0]!.n;
     assert.equal(countAfter, countBefore, "merging writes no candidate row");
 
     // The merged application records its evidence.
@@ -576,7 +576,7 @@ test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }
     // materialises in its own commit before the hire opens, and the hire
     // itself stays all-or-nothing.
     const stored = (await db.execute<{ status: string }>(sql`
-      select status from hrm_offers where id = ${offer.id}`)).rows[0]!.status;
+      select status from hrm_offers where id = ${offer.id}`, "objects"))[0]!.status;
     assert.equal(stored, "expired", "the expiry materialised before the refused hire");
     const drawer = await getRequisitionDetail({ orgId, actorId: h.recruiterId, requisitionId: requisition.id });
     assert.equal(drawer.applications[0]!.liveOfferStatus, null, "the expired offer leaves the live slot");
@@ -629,41 +629,41 @@ test("hire without an approval flow applies directly through the governed admiss
     });
     await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id });
     const partiesBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from parties where org_id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from parties where org_id = ${orgId}`, "objects"))[0]!.n;
     const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id });
     // The employee party is minted, the first version applied at once.
     const employeeRole = (await db.execute<{ id: string; active: boolean }>(sql`
       select id, is_active as active from employee_roles where org_id = ${orgId} and party_id = ${hire.workerPartyId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(employeeRole?.active, true);
     const roleAudit = (await db.execute<{ actor: string; reason: string }>(sql`
       select actor_id::text as actor, changes ->> 'reason' as reason from audit_log
        where org_id = ${orgId} and table_name = 'employee_roles' and row_id = ${employeeRole!.id}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(roleAudit?.actor, h.recruiterId);
     assert.match(roleAudit!.reason, /Hire for requisition/);
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from parties where org_id = ${orgId}`)).rows[0]!.n,
+      (await db.execute<{ n: number }>(sql`select count(*)::int as n from parties where org_id = ${orgId}`, "objects"))[0]!.n,
       partiesBefore + 1,
       "the hire mints the employee party",
     );
-    const versions = (await db.execute<{ no: number; status: string }>(sql`
+    const versions = await db.execute<{ no: number; status: string }>(sql`
       select version_no as no, status from worker_employment_versions
-       where employment_id = ${hire.employmentId} and recorded_until is null order by version_no`)).rows;
+       where employment_id = ${hire.employmentId} and recorded_until is null order by version_no`, "objects");
     assert.deepEqual(versions, [{ no: 1, status: "active" }]);
     const stored = (await db.execute<{ status: string; snapshot: { mode: string; gates: unknown[]; policy: { kind: string } } }>(sql`
-      select status, decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}`)).rows[0]!;
+      select status, decision_snapshot as snapshot from hrm_employment_change_requests where id = ${hire.changeRequestId}`, "objects"))[0]!;
     assert.equal(stored.status, "applied");
     assert.equal(stored.snapshot.mode, "automatic");
     assert.deepEqual(stored.snapshot.gates, []);
     assert.equal(stored.snapshot.policy.kind, "ungated");
-    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where id = ${offer.id}`)).rows[0]!.status, "accepted");
+    assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where id = ${offer.id}`, "objects"))[0]!.status, "accepted");
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from hrm_applications where id = ${application.id}`)).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from hrm_applications where id = ${application.id}`, "objects"))[0]!.status,
       "hired",
     );
     assert.equal(
-      (await db.execute<{ filled_count: number }>(sql`select filled_count from hrm_requisitions where id = ${requisition.id}`)).rows[0]!
+      (await db.execute<{ filled_count: number }>(sql`select filled_count from hrm_requisitions where id = ${requisition.id}`, "objects"))[0]!
         .filled_count,
       1,
     );
@@ -939,7 +939,7 @@ test("storage refuses event edits, event deletes, and template deletes with hist
     const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: "Kay" });
     const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id });
     const eventId = (await db.execute<{ id: string }>(sql`
-      select id from hrm_application_events where org_id = ${orgId} and application_id = ${application.id} limit 1`)).rows[0]!.id;
+      select id from hrm_application_events where org_id = ${orgId} and application_id = ${application.id} limit 1`, "objects"))[0]!.id;
     await assertStorageRefused(
       db.execute(sql`update hrm_application_events set reason = 'rewritten' where id = ${eventId}`),
       /append-only/,
@@ -949,7 +949,7 @@ test("storage refuses event edits, event deletes, and template deletes with hist
       /append-only/,
     );
     const templateId = (await db.execute<{ pipeline_template_id: string }>(sql`
-      select pipeline_template_id from hrm_requisitions where id = ${requisition.id}`)).rows[0]!.pipeline_template_id;
+      select pipeline_template_id from hrm_requisitions where id = ${requisition.id}`, "objects"))[0]!.pipeline_template_id;
     await assertStorageRefused(
       db.execute(sql`delete from hrm_pipeline_templates where id = ${templateId}`),
       /retained as history/,
@@ -1022,8 +1022,8 @@ async function seedSentOffer(h: Harness): Promise<{ applicationId: string; candi
 }
 
 async function employmentCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from worker_employments where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ count: string }>(sql`
+    select count(*)::text as count from worker_employments where org_id = ${orgId}`, "objects");
   return Number(rows[0]!.count);
 }
 
@@ -1051,7 +1051,7 @@ test("hire refuses an offer whose rendered letter is unsigned, writing nothing",
     );
     assert.equal(await employmentCount(orgId), before, "a refused hire writes no employment");
     const stored = (await db.execute<{ status: string }>(sql`
-      select status from hrm_offers where id = ${offerId}`)).rows[0]!;
+      select status from hrm_offers where id = ${offerId}`, "objects"))[0]!;
     assert.equal(stored.status, "sent", "the offer stands untouched by the refused hire");
   });
 });
@@ -1098,7 +1098,7 @@ test("scheduling proposes from a pool's declared windows and books first-wins", 
     assert.match(String((loser as PromiseRejectedResult).reason), /taken/, "the loser is refused by name");
     const booked = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from hrm_interview_slots
-       where org_id = ${orgId} and interview_id = ${interview.id} and kind = 'booked'`)).rows[0]!;
+       where org_id = ${orgId} and interview_id = ${interview.id} and kind = 'booked'`, "objects"))[0]!;
     assert.equal(Number(booked.count), 1, "storage holds exactly one booked slot");
   });
 });
@@ -1140,9 +1140,9 @@ async function seedAgedApplication(
     source: "direct",
   });
   const templateId = (await db.execute<{ pipelineTemplateId: string }>(sql`
-    select pipeline_template_id as "pipelineTemplateId" from hrm_requisitions where id = ${opened.id}`)).rows[0]!.pipelineTemplateId;
-  const stageRows = (await db.execute<{ id: string; key: string }>(sql`
-    select id, key from hrm_pipeline_stages where org_id = ${orgId} and template_id = ${templateId}`)).rows;
+    select pipeline_template_id as "pipelineTemplateId" from hrm_requisitions where id = ${opened.id}`, "objects"))[0]!.pipelineTemplateId;
+  const stageRows = await db.execute<{ id: string; key: string }>(sql`
+    select id, key from hrm_pipeline_stages where org_id = ${orgId} and template_id = ${templateId}`, "objects");
   const stageId = (key: string) => stageRows.find((stage) => stage.key === key)!.id;
   const applicationId = randomUUID();
   const rejected = status === "rejected";
@@ -1185,15 +1185,15 @@ test("retention anonymizes an expired prospect and keeps the analytics", { skip:
     );
     assert.equal(run.candidatesAnonymized, 1, "the expired prospect is anonymized");
     const candidate = (await db.execute<{ display_name: string; email: string | null; phone: string | null }>(sql`
-      select display_name, email, phone from hrm_candidates where id = ${candidateId}`)).rows[0]!;
+      select display_name, email, phone from hrm_candidates where id = ${candidateId}`, "objects"))[0]!;
     assert.equal(candidate.display_name, "Anonymized candidate");
     assert.equal(candidate.email, null, "contact PII is cleared");
     assert.equal(candidate.phone, null, "contact PII is cleared");
     const events = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from hrm_application_events where org_id = ${orgId} and application_id = ${applicationId}`)).rows[0]!;
+      select count(*)::text as count from hrm_application_events where org_id = ${orgId} and application_id = ${applicationId}`, "objects"))[0]!;
     assert.ok(Number(events.count) > 0, "funnel analytics survive anonymization");
     const runs = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from hrm_retention_runs where org_id = ${orgId} and rule_id = ${ruleId}`)).rows[0]!;
+      select count(*)::text as count from hrm_retention_runs where org_id = ${orgId} and rule_id = ${ruleId}`, "objects"))[0]!;
     assert.equal(Number(runs.count), 1, "the run is recorded");
   });
 });
@@ -1204,7 +1204,7 @@ test("country-scoped retention matches the candidate's requisition legal-entity 
     await enableRecruiting(orgId);
     const country = (await db.execute<{ country: string }>(sql`
       select country from subsidiaries where org_id = ${orgId} and id = ${h.org.subsidiaryId}
-    `)).rows[0]!.country;
+    `, "objects"))[0]!.country;
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
@@ -1217,7 +1217,7 @@ test("country-scoped retention matches the candidate's requisition legal-entity 
     );
     assert.equal(run.candidatesAnonymized, 1, "the legal entity's country is supplied to the matcher");
     const candidate = (await db.execute<{ display_name: string }>(sql`
-      select display_name from hrm_candidates where id = ${candidateId}`)).rows[0]!;
+      select display_name from hrm_candidates where id = ${candidateId}`, "objects"))[0]!;
     assert.equal(candidate.display_name, "Anonymized candidate");
   });
 });
@@ -1237,7 +1237,7 @@ test("the system retention duty returns its durable per-rule business-day claim"
     assert.equal(repeated.id, first.id, "a retry reuses the durable completed run");
     const count = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from hrm_retention_runs where org_id = ${orgId} and rule_id = ${ruleId}
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     assert.equal(count, 1, "the rule has one committed run row for the business day");
   });
 });
@@ -1260,7 +1260,7 @@ test("retention never touches a candidate with an open application", { skip: !DB
     assert.equal(run.candidatesAnonymized, 0, "nothing is anonymized");
     assert.equal(run.candidatesDeleted, 0, "nothing is deleted");
     const candidate = (await db.execute<{ display_name: string }>(sql`
-      select display_name from hrm_candidates where id = ${candidateId}`)).rows[0]!;
+      select display_name from hrm_candidates where id = ${candidateId}`, "objects"))[0]!;
     assert.equal(candidate.display_name, "Depth Candidate", "the open candidacy is untouched");
   });
 });
@@ -1306,7 +1306,7 @@ test("retention rechecks open applications after locking against a concurrent at
     assert.equal(run.candidatesAnonymized, 0, "retention sees the active application committed before its candidate lock releases");
     const candidate = (await db.execute<{ display_name: string }>(sql`
       select display_name from hrm_candidates where org_id = ${orgId} and id = ${candidateId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(candidate.display_name, "Depth Candidate");
   });
 });
@@ -1361,7 +1361,7 @@ test("a public apply captures consents and records the posting source", { skip: 
     await enableRecruiting(orgId);
     const seeded = await seedSentOffer(h);
     const requisitionId = (await db.execute<{ requisition_id: string }>(sql`
-      select requisition_id from hrm_applications where id = ${seeded.applicationId}`)).rows[0]!.requisition_id;
+      select requisition_id from hrm_applications where id = ${seeded.applicationId}`, "objects"))[0]!.requisition_id;
     const posting = await publishPosting({ orgId, actorId: h.recruiterId, requisitionId, boardKey: "internal" });
     assert.equal(posting.status, "published");
     const { applicationId, candidateId } = await applyViaPosting({
@@ -1372,16 +1372,16 @@ test("a public apply captures consents and records the posting source", { skip: 
       consentFutureRoles: true,
     });
     const stored = (await db.execute<{ status: string; source_posting_id: string | null }>(sql`
-      select status, source_posting_id from hrm_applications where id = ${applicationId}`)).rows[0]!;
+      select status, source_posting_id from hrm_applications where id = ${applicationId}`, "objects"))[0]!;
     assert.equal(stored.status, "active");
     assert.equal(stored.source_posting_id, posting.id, "the application carries its board source");
     const consents = (await db.execute<{ purpose: string }>(sql`
       select purpose from hrm_candidate_consents where org_id = ${orgId} and candidate_id = ${candidateId}
-       order by purpose`)).rows.map((row) => row.purpose);
+       order by purpose`, "objects")).map((row) => row.purpose);
     assert.deepEqual(consents, ["future_roles", "this_application"], "both consents are captured");
     const kinds = (await db.execute<{ kind: string }>(sql`
       select kind from hrm_posting_events where org_id = ${orgId} and posting_id = ${posting.id}
-       order by recorded_at`)).rows.map((row) => row.kind);
+       order by recorded_at`, "objects")).map((row) => row.kind);
     assert.ok(kinds.includes("apply_received"), "the board ledger records the apply");
     // One candidacy per opening still holds, but a public applicant is
     // NOT told they already applied: on an anonymous form a
@@ -1395,13 +1395,13 @@ test("a public apply captures consents and records the posting source", { skip: 
     assert.equal(again.applicationId, applicationId, "no second candidacy is created");
     const applications = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_applications
-       where org_id = ${orgId} and candidate_id = ${candidateId}`)).rows[0]?.n;
+       where org_id = ${orgId} and candidate_id = ${candidateId}`, "objects"))[0]?.n;
     assert.equal(applications, "1", "one candidacy per opening");
     // The hiring team still sees the attempt: the posting ledger is
     // staff-only, so recording it there leaks nothing to the applicant.
     const afterKinds = (await db.execute<{ kind: string }>(sql`
       select kind from hrm_posting_events where org_id = ${orgId} and posting_id = ${posting.id}
-       order by recorded_at`)).rows.map((row) => row.kind);
+       order by recorded_at`, "objects")).map((row) => row.kind);
     assert.ok(afterKinds.includes("apply_duplicate"), "the duplicate attempt is recorded for staff");
   });
 });
@@ -1418,7 +1418,7 @@ for (const worker of [
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active,custom)
         values (${partyId},${orgId},${worker.kind},'Linked candidate',true,'{}'::jsonb)`)
       const role = (await db.execute<{ id: string }>(sql`insert into employee_roles(org_id,party_id,is_active)
-        values (${orgId},${partyId},${worker.roleActive}) returning id`)).rows[0]!
+        values (${orgId},${partyId},${worker.roleActive}) returning id`, "objects"))[0]!
       const requisition = await createRequisition({ orgId, actorId: h.recruiterId, title: 'Vacancy', employerSubsidiaryId: h.org.subsidiaryId, headcount: 1 })
       await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id })
       const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: 'Linked candidate' })
@@ -1430,18 +1430,18 @@ for (const worker of [
       if (worker.permitted) {
         const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id })
         assert.equal(hire.workerPartyId, partyId)
-        assert.deepEqual((await db.execute<{ status: string }>(sql`select status from worker_employment_versions
-          where org_id=${orgId} and employment_id=${hire.employmentId} and recorded_until is null`)).rows, [{ status: 'active' }])
+        assert.deepEqual(await db.execute<{ status: string }>(sql`select status from worker_employment_versions
+          where org_id=${orgId} and employment_id=${hire.employmentId} and recorded_until is null`, "objects"), [{ status: 'active' }])
       } else {
         await assert.rejects(acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id }),
           worker.kind === 'company' ? /active natural person/ : /employee role is inactive/)
         assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from worker_employments
-          where org_id=${orgId} and worker_party_id=${partyId}`)).rows[0]!.n, '0')
-        assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where org_id=${orgId} and id=${offer.id}`)).rows[0]!.status, 'sent')
+          where org_id=${orgId} and worker_party_id=${partyId}`, "objects"))[0]!.n, '0')
+        assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where org_id=${orgId} and id=${offer.id}`, "objects"))[0]!.status, 'sent')
       }
-      assert.deepEqual((await db.execute<{ id: string; active: boolean }>(sql`select id,is_active as active from employee_roles
-        where org_id=${orgId} and party_id=${partyId}`)).rows, [{ id: role.id, active: worker.roleActive }])
-      assert.equal((await db.execute<{ kind: string }>(sql`select kind from parties where org_id=${orgId} and id=${partyId}`)).rows[0]!.kind, worker.kind)
+      assert.deepEqual(await db.execute<{ id: string; active: boolean }>(sql`select id,is_active as active from employee_roles
+        where org_id=${orgId} and party_id=${partyId}`, "objects"), [{ id: role.id, active: worker.roleActive }])
+      assert.equal((await db.execute<{ kind: string }>(sql`select kind from parties where org_id=${orgId} and id=${partyId}`, "objects"))[0]!.kind, worker.kind)
     })
   })
 }

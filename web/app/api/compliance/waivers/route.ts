@@ -155,11 +155,9 @@ export const POST = defineRoute({
     // Subsidiary fence: no exception for a vendor — or under a project —
     // the caller cannot see. Missing and hidden both read as 404, so the
     // refusal never oracles which ids exist elsewhere.
-    const waiverParty = (
-      await db.execute<{ subsidiaryId: string | null }>(sql`
+    const waiverParty = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
-    `)
-    ).rows[0]
+    `, 'objects'))[0]
     if (!waiverParty) return notFound('record')
     const waiverPartyDenied = guardSubsidiaryScope(
       gate,
@@ -168,11 +166,9 @@ export const POST = defineRoute({
     )
     if (waiverPartyDenied) return waiverPartyDenied
     if (body.projectId !== undefined && body.projectId !== null) {
-      const waiverProject = (
-        await db.execute<{ subsidiaryId: string | null }>(sql`
+      const waiverProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
-      `)
-      ).rows[0]
+      `, 'objects'))[0]
       if (!waiverProject) return notFound('record')
       const waiverProjectDenied = guardSubsidiaryScope(
         gate,
@@ -195,8 +191,8 @@ export const POST = defineRoute({
                   ${reason}, ${effectiveFrom}, ${body.expiresOn},
                   ${actorId}, null, null, ${actorId}, ${actorId})
           returning id
-        `)
-        const newId = inserted.rows[0]!.id
+        `, 'objects')
+        const newId = inserted[0]!.id
         await tx.execute(sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'compliance_waivers', ${newId}, 'insert',

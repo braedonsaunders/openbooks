@@ -40,8 +40,8 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
   const tabs = benefitsWorkspaceTabs(hrm, 'employees')
   const canManage = can(authz, 'hrm.benefits.manage')
   return withOrgTransaction(authz.user.orgId, async () => {
-    const employments = (await db.execute<{ value: string; label: string; employeePartyId: string }>(sql`select w.id as value,p.display_name as label,p.id::text as "employeePartyId" from worker_employments w join parties p on p.org_id=w.org_id and p.id=w.worker_party_id
-      where w.org_id=${authz.user.orgId} ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)} order by p.display_name,p.id,w.id`)).rows
+    const employments = await db.execute<{ value: string; label: string; employeePartyId: string }>(sql`select w.id as value,p.display_name as label,p.id::text as "employeePartyId" from worker_employments w join parties p on p.org_id=w.org_id and p.id=w.worker_party_id
+      where w.org_id=${authz.user.orgId} ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)} order by p.display_name,p.id,w.id`, 'objects')
     const employeeOptions = [...new Map(employments.map(row => [row.employeePartyId, { value: row.employeePartyId, label: row.label }])).values()]
     if (sp.employee && !employeeOptions.some(option => option.value === sp.employee)) notFound()
     const { assignments, programs } = await loadEmployeeBenefitAssignments(authz, sp.employee)
@@ -56,11 +56,11 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
     if (enrollmentAssignment && !enrollment) notFound()
     const loadedEnrollment = enrollment ? await loadBenefitEnrollmentRecord(authz, enrollment) : null
     const vacation = vacationAssignment ? (await db.execute<EmployeeBenefitPolicyRow>(sql`select id,plan_id,employment_id,method,percent_floor::text,annual_days_floor::text,effective_from::text,effective_to::text,reason
-      from payroll_vacation_terms where org_id=${authz.user.orgId} and id=${vacationAssignment.nativeId} and employment_id=${vacationAssignment.employmentId}`)).rows[0] : null
+      from payroll_vacation_terms where org_id=${authz.user.orgId} and id=${vacationAssignment.nativeId} and employment_id=${vacationAssignment.employmentId}`, 'objects'))[0] : null
     if (vacationAssignment && !vacation) notFound()
     if (creatingVacation) {
       await requireFeatureEnabled(authz.user.orgId, 'payroll')
-      const governing = (await db.execute(sql`select id from entitlement_plans where org_id=${authz.user.orgId} and id=${sp.benefitProgram}::uuid and system_key='vacation'`)).rows
+      const governing = await db.execute(sql`select id from entitlement_plans where org_id=${authz.user.orgId} and id=${sp.benefitProgram}::uuid and system_key='vacation'`, 'objects')
       if (governing.length !== 1) notFound()
     }
     const currentParams = { view: 'employees', ...(sp.employee ? { employee: sp.employee } : {}), ...(sp.benefitProgram ? { benefitProgram: sp.benefitProgram } : {}) }
@@ -92,7 +92,7 @@ export async function EmployeeBenefitsWorkspace({ sp }: { sp: Record<string, str
     let departmentOptions: { value: string; label: string }[] = []
     if ((sp.enrollment === 'new' || sp.window === 'new') && !canManage) notFound()
     if (sp.enrollment === 'new' || sp.window === 'new') {
-      const subsidiaries = (await db.execute<{ id: string; name: string }>(sql`select id,name from subsidiaries where org_id=${authz.user.orgId} and is_active ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)} order by name,id`)).rows
+      const subsidiaries = await db.execute<{ id: string; name: string }>(sql`select id,name from subsidiaries where org_id=${authz.user.orgId} and is_active ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)} order by name,id`, 'objects')
       subsidiaryOptions = subsidiaries.map(row => ({ value: row.id, label: row.name }))
       departmentOptions = (await listScopedDepartmentOptions(authz.user.orgId, authz.allowedSubsidiaryIds)).map(row => ({ value: row.id, label: row.name }))
     }

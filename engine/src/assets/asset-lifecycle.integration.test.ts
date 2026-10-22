@@ -92,16 +92,16 @@ test(
          where org_id = ${org.orgId}
            and asset_id = ${assetId}
            and journal_entry_id = ${impairment.entryId}
-      `));
+      `, "objects"));
       const impairmentEntryBefore = await db.execute(sql`
         select id, line_number, account_id, amount::text, txn_amount::text
           from journal_lines
          where entry_id = ${impairment.entryId}
          order by line_number
-      `);
+      `, "objects");
       const impairmentReversal = await reverseAssetLifecycleEvent(
         org.orgId,
-        impairmentEvent.rows[0]!.id,
+        impairmentEvent[0]!.id,
         {
           date: "2026-07-31",
           actorId,
@@ -115,10 +115,10 @@ test(
           from journal_lines
          where entry_id = ${impairment.entryId}
          order by line_number
-      `);
+      `, "objects");
       assert.deepEqual(
-        impairmentEntryAfter.rows,
-        impairmentEntryBefore.rows,
+        impairmentEntryAfter,
+        impairmentEntryBefore,
         "remeasurement journal remains immutable",
       );
 
@@ -134,14 +134,14 @@ test(
          where org_id = ${org.orgId}
            and asset_id = ${assetId}
            and journal_entry_id = ${disposal.entryId}
-      `));
+      `, "objects"));
       const disposalRuns = await Promise.all([
-        reverseAssetLifecycleEvent(org.orgId, disposalEvent.rows[0]!.id, {
+        reverseAssetLifecycleEvent(org.orgId, disposalEvent[0]!.id, {
           date: "2026-07-31",
           actorId,
           reason: "Controller restored the scrapped asset",
         }),
-        reverseAssetLifecycleEvent(org.orgId, disposalEvent.rows[0]!.id, {
+        reverseAssetLifecycleEvent(org.orgId, disposalEvent[0]!.id, {
           date: "2026-07-31",
           actorId,
           reason: "Controller restored the scrapped asset",
@@ -185,8 +185,8 @@ test(
             )
          where asset.id = ${assetId}
          group by asset.id
-      `));
-      assert.deepEqual(evidence.rows, [
+      `, "objects"));
+      assert.deepEqual(evidence, [
         {
           status: "in_service",
           sources: 2,
@@ -207,7 +207,7 @@ test(
       );
       const retry = await reverseAssetLifecycleEvent(
         org.orgId,
-        impairmentEvent.rows[0]!.id,
+        impairmentEvent[0]!.id,
         {
           date: "2026-07-31",
           actorId,
@@ -244,7 +244,7 @@ test(
             on s.id = l.schedule_id and s.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.asset_id = ${assetId}
            and s.book_id = ${org.bookId}
-         order by l.sequence`);
+         order by l.sequence`, "objects");
     try {
       await db.execute(sql`
         insert into asset_categories
@@ -275,11 +275,9 @@ test(
       // Open the nine months beyond July that a ten-month life spans, so the
       // built schedule carries unposted lines — exactly the surface the
       // remeasurement rebuild rewrites.
-      const calendarId = (
-        await db.execute<{ id: string }>(sql`
+      const calendarId = (await db.execute<{ id: string }>(sql`
           select fiscal_calendar_id as id from accounting_periods
-           where org_id = ${org.orgId} limit 1`)
-      ).rows[0]!.id;
+           where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
       const futurePeriods: [number, number, string, string, string][] = [
         [2026, 8, "2026-08", "2026-08-01", "2026-08-31"],
         [2026, 9, "2026-09", "2026-09-01", "2026-09-30"],
@@ -304,7 +302,7 @@ test(
       assert.equal(depreciation.posted, 1);
       assert.equal(depreciation.totalAmount, "100.0000");
 
-      const before = (await scheduleLines()).rows;
+      const before = await scheduleLines();
       assert.equal(before.length, 10);
       assert.equal(before.filter((line) => line.posted === null).length, 9);
 
@@ -337,21 +335,21 @@ test(
         (error: unknown) => errorChainMatches(error, /forced mid-rebuild failure/),
       );
       assert.deepEqual(
-        (await db.execute<{ n: number }>(sql`
+        await db.execute<{ n: number }>(sql`
           select count(*)::int as n from journal_entries
-           where org_id = ${org.orgId} and origin = 'revaluation'`)).rows,
+           where org_id = ${org.orgId} and origin = 'revaluation'`, "objects"),
         [{ n: 0 }],
         "no remeasurement journal may survive a failed schedule rebuild",
       );
       assert.deepEqual(
-        (await db.execute<{ n: number }>(sql`
+        await db.execute<{ n: number }>(sql`
           select count(*)::int as n from asset_events
-           where org_id = ${org.orgId} and asset_id = ${assetId}`)).rows,
+           where org_id = ${org.orgId} and asset_id = ${assetId}`, "objects"),
         [{ n: 0 }],
         "no asset event may survive a failed schedule rebuild",
       );
       assert.deepEqual(
-        (await scheduleLines()).rows,
+        await scheduleLines(),
         before,
         "a failed rebuild must leave every schedule line untouched — no old or partial state",
       );
@@ -369,21 +367,21 @@ test(
       assert.equal(recovery.kind, "impaired");
       assert.equal(recovery.delta, "-100.0000");
       assert.equal(recovery.rebuiltLines, 9);
-      const rebuilt = (await scheduleLines()).rows;
+      const rebuilt = await scheduleLines();
       assert.deepEqual(
         rebuilt.filter((line) => line.posted === null).map((line) => line.planned),
         [...Array.from({ length: 8 }, () => "88.8889"), "88.8888"],
         "future depreciation rounds equal shares to ledger precision and assigns the exact remainder to the final month",
       );
       assert.equal(rebuilt.find((line) => line.sequence === 0)!.posted, "100.0000");
-      const recoveryEntry = (await db.execute<{ status: string; origin: string }>(sql`
-        select status, origin from journal_entries where id = ${recovery.entryId}`)).rows;
+      const recoveryEntry = await db.execute<{ status: string; origin: string }>(sql`
+        select status, origin from journal_entries where id = ${recovery.entryId}`, "objects");
       assert.deepEqual(recoveryEntry, [{ status: "posted", origin: "revaluation" }]);
       assert.deepEqual(
-        (await db.execute<{ n: number }>(sql`
+        await db.execute<{ n: number }>(sql`
           select count(*)::int as n from asset_events
            where org_id = ${org.orgId} and asset_id = ${assetId}
-             and kind = 'impaired' and journal_entry_id = ${recovery.entryId}`)).rows,
+             and kind = 'impaired' and journal_entry_id = ${recovery.entryId}`, "objects"),
         [{ n: 1 }],
       );
     } finally {
@@ -432,11 +430,11 @@ test(
       `);
       const snapshot = async () => ({
         status: (await db.execute<{ status: string }>(sql`
-          select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`)).rows[0]!.status,
+          select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`, "objects"))[0]!.status,
         events: (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}`)).rows[0]!.n,
+          select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}`, "objects"))[0]!.n,
         entries: (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n,
+          select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"))[0]!.n,
       });
       const before = await snapshot();
       // The guard throws before the transaction opens, so the contradictory
@@ -504,11 +502,11 @@ test(
       `);
       const snapshot = async () => ({
         status: (await db.execute<{ status: string }>(sql`
-          select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`)).rows[0]!.status,
+          select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`, "objects"))[0]!.status,
         events: (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}`)).rows[0]!.n,
+          select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}`, "objects"))[0]!.n,
         entries: (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n,
+          select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"))[0]!.n,
       });
       const before = await snapshot();
       // A pasted 20-digit amount previously passed validation and died in
@@ -604,15 +602,15 @@ test(
         `the loser names the winner's committed status, got: ${String(refusal)}`,
       );
 
-      const events = (await db.execute<{ kind: string; n: number }>(sql`
+      const events = await db.execute<{ kind: string; n: number }>(sql`
         select kind, count(*)::int as n from asset_events
          where org_id = ${org.orgId} and asset_id = ${assetId}
          group by kind
-      `)).rows;
+      `, "objects");
       assert.deepEqual(events, [{ kind: "written_off", n: 1 }], "one disposal event, never two");
       const status = (await db.execute<{ status: string }>(sql`
         select status from fixed_assets where id = ${assetId}
-      `)).rows[0]!.status;
+      `, "objects"))[0]!.status;
       assert.equal(status, "written_off");
     } finally {
       await dropScratchOrg(org.orgId);

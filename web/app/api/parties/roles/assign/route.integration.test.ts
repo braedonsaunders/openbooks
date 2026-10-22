@@ -73,10 +73,10 @@ async function insertCompanyParty(ctx: Ctx, name: string): Promise<string> {
 async function roleCount(orgId: string, table: 'vendor_roles' | 'customer_roles', partyId: string): Promise<number> {
   const result = await withBypassContext(() =>
     db.execute<{ count: string }>(
-      sql`select count(*)::text as count from ${sql.raw(table)} where org_id = ${orgId} and party_id = ${partyId} and is_active`,
+      sql`select count(*)::text as count from ${sql.raw(table)} where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects',
     ),
   )
-  return Number(result.rows[0]?.count ?? '0')
+  return Number(result[0]?.count ?? '0')
 }
 
 const assignRequest = (body: unknown) =>
@@ -104,7 +104,7 @@ test('bulk assignment promotes every role-less party and audits each one', { ski
     const audits = (await withBypassContext(() => db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
        where org_id = ${ctx.orgId} and table_name = 'parties' and changes->>'source' = 'bulk-role-assign'
-         and row_id in (${first}, ${second}, ${already})`))).rows[0]?.n
+         and row_id in (${first}, ${second}, ${already})`, 'objects')))[0]?.n
     assert.equal(Number(audits), 2, 'each promotion carries its own audit evidence')
 
     const rerun = await withOrgContext(ctx.orgId, () => POST(assignRequest({ role: 'vendor', q: 'Assign' })))

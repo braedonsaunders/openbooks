@@ -62,8 +62,8 @@ async function seedPair(status: string): Promise<SandboxPair> {
 }
 
 async function changeSetCount(): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`select count(*)::int as n from change_sets`);
-  return r.rows[0]!.n;
+  const r = await db.execute<{ n: number }>(sql`select count(*)::int as n from change_sets`, "objects");
+  return r[0]!.n;
 }
 
 for (const status of ["failed", "refreshing", "provisioning", "deleting"]) {
@@ -108,8 +108,8 @@ test("capture holds the refresh lock: a concurrent refresh waits, then the captu
     const { changeSetId, itemCount } = await pending;
     assert.equal(itemCount, 1);
     const items = (await db.execute<{ table_name: string; op: string; target_id: string }>(sql`
-      select table_name, op, target_id::text as target_id from change_set_items where change_set_id = ${changeSetId}`));
-    assert.deepEqual(items.rows, [
+      select table_name, op, target_id::text as target_id from change_set_items where change_set_id = ${changeSetId}`, "objects"));
+    assert.deepEqual(items, [
       { table_name: "user_scripts", op: "delete", target_id: pair.prodScriptId },
     ]);
   } finally {
@@ -139,7 +139,7 @@ test("apply refuses while the sandbox is mid-refresh", async () => {
     await db.execute(sql`update sandboxes set status = 'refreshing' where id = ${pair.sandboxId}`);
     await assert.rejects(() => applyChangeSet(changeSetId, applier), /not ready/);
     const status = (await db.execute<{ status: string }>(sql`
-      select status from change_sets where id = ${changeSetId}`)).rows[0]!.status;
+      select status from change_sets where id = ${changeSetId}`, "objects"))[0]!.status;
     assert.equal(status, "approved", "the refused apply must leave the approval intact");
   } finally {
     await runTeardowns(
@@ -159,7 +159,7 @@ test("review refuses a captured change set after its sandbox stops being ready",
 
     await assert.rejects(() => reviewChangeSet(changeSetId, reviewer), /sandbox is failed, not ready/);
     assert.equal((await db.execute<{ status: string }>(sql`
-      select status from change_sets where id = ${changeSetId}`)).rows[0]?.status, "draft");
+      select status from change_sets where id = ${changeSetId}`, "objects"))[0]?.status, "draft");
   } finally {
     await runTeardowns(
       () => dropScratchOrgReporting(pair.sbxOrgId),

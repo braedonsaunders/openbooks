@@ -32,8 +32,8 @@ export const GET = defineRoute({
        and r.agent_key in (${sql.join(readable.map((agent) => sql`${agent}`), sql`, `)})
        and r.status = 'completed'
        and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'
-  `))
-  const run = result.rows[0]
+  `, 'objects'))
+  const run = result[0]
   if (!run) return NextResponse.json({ error: 'report_not_found' }, { status: 404 })
 
   const t = await getTranslations('continuousClose')

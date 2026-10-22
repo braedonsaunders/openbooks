@@ -35,7 +35,7 @@ export async function resolvePostingPeriod(
         select is_adjustment, fiscal_year,
                window_start::text as window_start, window_end::text as window_end
           from accounting_period_posting_window(${doc.orgId}, ${doc.postingPeriodId})
-      `)).rows[0];
+      `, "objects"))[0];
     if (!window) {
       throw new PostingError(`accounting period ${doc.postingPeriodId} does not exist in this organization`);
     }
@@ -47,7 +47,7 @@ export async function resolvePostingPeriod(
       );
     }
     const calendar=(await runner.execute<{matches:boolean}>(sql`select fiscal_calendar_id=public.subsidiary_posting_calendar(${doc.orgId},${doc.subsidiaryId},${postingDate}::date) as matches
-      from accounting_periods where org_id=${doc.orgId} and id=${doc.postingPeriodId}`)).rows[0];
+      from accounting_periods where org_id=${doc.orgId} and id=${doc.postingPeriodId}`, "objects"))[0];
     if (!calendar?.matches) throw new PostingError("The explicit posting period does not belong to the entity's effective fiscal calendar. Select that entity's period.");
     return { id: doc.postingPeriodId };
   }
@@ -87,8 +87,8 @@ export async function assertPayRunConsolidatedRateCoverage(
   const root = (await runner.execute<{ id: string; base_currency: string }>(sql`
     select id, base_currency from subsidiaries
      where org_id = ${args.orgId} and parent_id is null and is_active
-     order by created_at limit 1`));
-  const rootBase = root.rows[0]?.base_currency;
+     order by created_at limit 1`, "objects"));
+  const rootBase = root[0]?.base_currency;
   if (!rootBase || args.docCurrency === rootBase) return;
   // The run subsidiary's lineage, child first — the same subsidiary→ancestor
   // pairs the period-close derivation writes (see neededPairs in
@@ -102,11 +102,11 @@ export async function assertPayRunConsolidatedRateCoverage(
       union all
       select p.id, p.parent_id, p.base_currency from subsidiaries p
         join chain c on p.id = c.parent_id and p.org_id = ${args.orgId}
-    ) select id, parent_id, base_currency from chain`));
-  if (chain.rows.length === 0) {
+    ) select id, parent_id, base_currency from chain`, "objects"));
+  if (chain.length === 0) {
     throw new PostingError(`pay run subsidiary ${args.docSubsidiaryId} does not exist`);
   }
-  const byId = new Map(chain.rows.map((row) => [row.id, row]));
+  const byId = new Map(chain.map((row) => [row.id, row]));
   const pairs: { from: string; to: string }[] = [];
   const seen = new Set<string>();
   let current = byId.get(args.docSubsidiaryId);
@@ -131,8 +131,8 @@ export async function assertPayRunConsolidatedRateCoverage(
       select 1 as one from consolidated_fx_rates
        where org_id = ${args.orgId} and period_id = ${period.id}
          and from_currency = ${pair.from} and to_currency = ${pair.to}
-       limit 1`));
-    if (!covered.rows[0]) {
+       limit 1`, "objects"));
+    if (!covered[0]) {
       throw new PostingError(
         `No consolidated exchange rates for ${pair.from} → ${pair.to} in the period ending ${period.ends_on}. Derive rates from period close first.`,
       );

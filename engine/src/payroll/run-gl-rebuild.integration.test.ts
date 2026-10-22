@@ -31,23 +31,23 @@ async function committedRun() {
 }
 
 async function lines(orgId: string, documentId: string) {
-  return (await db.execute<{ account_id: string; amount: string; party_id: string | null; project_id: string | null;
+  return await db.execute<{ account_id: string; amount: string; party_id: string | null; project_id: string | null;
     department_id: string | null; custom: Record<string, unknown> }>(sql`
     select account_id::text as account_id, amount::text as amount, party_id::text as party_id,
            project_id::text as project_id, department_id::text as department_id, custom
-      from document_lines where org_id = ${orgId} and document_id = ${documentId} order by line_number`)).rows;
+      from document_lines where org_id = ${orgId} and document_id = ${documentId} order by line_number`, "objects");
 }
 
 async function revision(orgId: string, documentId: string) {
   return (await db.execute<{ revision: string }>(sql`
-    select revision_seq::text as revision from documents where org_id = ${orgId} and id = ${documentId}`)).rows[0]!.revision;
+    select revision_seq::text as revision from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0]!.revision;
 }
 
 async function stubLineSnapshot(orgId: string, documentId: string) {
-  return (await db.execute(sql`
+  return await db.execute(sql`
     select to_jsonb(l) - 'updated_at' as row from pay_stub_lines l
       join pay_stubs s on s.org_id = l.org_id and s.id = l.stub_id
-     where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId} order by l.id`)).rows;
+     where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId} order by l.id`, "objects");
 }
 
 function byAccount(rows: { account_id: string; amount: string }[]) {
@@ -78,9 +78,9 @@ test("rebuilding a committed, never-posted projection keeps every account total 
       assert.ok(after.filter((line) => line.custom.legKind === "expense")
         .every((line) => line.custom.employeePartyId === fx.employeeId));
       assert.deepEqual(await stubLineSnapshot(fx.orgId, input.documentId), stubsBefore);
-      const audit = (await db.execute<{ changes: Record<string, unknown> }>(sql`
+      const audit = await db.execute<{ changes: Record<string, unknown> }>(sql`
         select changes from audit_log where org_id = ${fx.orgId} and row_id = ${input.documentId}
-           and changes->>'operation' = 'rebuild-pay-run-gl-projection'`)).rows;
+           and changes->>'operation' = 'rebuild-pay-run-gl-projection'`, "objects");
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.changes.reason, "refine committed line identity before posting");
       await grantScratchPermissions(fx.orgId, fx.actorId, ["payroll.read"]);
@@ -101,7 +101,7 @@ test("a rebuild preserves the committed liability and net pay accounts after the
     const replacement = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${fx.orgId}, '2999', 'Replacement payable', 'liability_current_other', false, true, false, false, '{}'::jsonb, '{}'::jsonb, false)
-      returning id::text as id`)).rows[0]!.id;
+      returning id::text as id`, "objects"))[0]!.id;
     await db.execute(sql`update pay_components set liability_account_id = ${replacement}::uuid where org_id = ${fx.orgId} and liability_account_id is not null`);
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{payroll,netPayAccountId}', to_jsonb(${replacement}::text)) where id = ${fx.orgId}`);
     await rebuildPayRunGlProjection({
@@ -126,7 +126,7 @@ test("a stale revision or a posted run refuses without touching the projection",
     }), /changed after you opened it/);
     assert.deepEqual(await lines(fx.orgId, input.documentId), before);
 
-    const accounts = (await db.execute<{ id: string; type: string }>(sql`select id, type from accounts where org_id = ${fx.orgId}`)).rows;
+    const accounts = await db.execute<{ id: string; type: string }>(sql`select id, type from accounts where org_id = ${fx.orgId}`, "objects");
     const account = (type: string) => accounts.find((row) => row.type === type)!.id;
     await submitAndReleaseIfUngated("pay_run", input.documentId, fx.actorId);
     await postDocument(input.documentId, { control: { ar: account("asset_receivable"), ap: account("liability_payable"), bank: account("asset_bank") } });
@@ -237,9 +237,9 @@ test("a governed correction moves a committed bank draw from expense to the boun
     const before = await lines(fx.orgId, run.documentId);
     const drawLine = (await db.execute<{ id: string }>(sql`select l.id::text as id from pay_stub_lines l
       join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${payout}`)).rows[0]!.id;
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${payout}`, "objects"))[0]!.id;
     const movementId = (await db.execute<{ id: string }>(sql`select id::text as id from entitlement_ledger
-      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and kind='payout'`)).rows[0]!.id;
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and kind='payout'`, "objects"))[0]!.id;
     const stubsBefore = await stubLineSnapshot(fx.orgId, run.documentId);
 
     await db.execute(sql`update entitlement_plans set liability_account_id=${fx.accounts.vacationPayable} where org_id=${fx.orgId} and id=${planId}`);
@@ -274,9 +274,9 @@ test("a governed correction moves a committed bank draw from expense to the boun
       line.custom.entitlementPlanId, line.custom.entitlementMovementId, line.custom.stubLineIds]),
       [[fx.accounts.vacationPayable, "200.0000", false, "governed_correction", planId, movementId, [drawLine]]]);
     assert.deepEqual(await stubLineSnapshot(fx.orgId, run.documentId), stubsBefore, "the committed stub lines are never changed");
-    const audit = (await db.execute<{ changes: { projectionHashBefore: string; entitlementRelief: { bindings: unknown[]; corrections: Record<string, unknown>[] } } }>(sql`
+    const audit = await db.execute<{ changes: { projectionHashBefore: string; entitlementRelief: { bindings: unknown[]; corrections: Record<string, unknown>[] } } }>(sql`
       select changes from audit_log where org_id = ${fx.orgId} and row_id = ${run.documentId}
-         and changes->>'operation' = 'rebuild-pay-run-gl-projection'`)).rows;
+         and changes->>'operation' = 'rebuild-pay-run-gl-projection'`, "objects");
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.changes.projectionHashBefore, reviewed.projectionHash);
     assert.deepEqual(audit[0]!.changes.entitlementRelief.bindings, [{ planId, liabilityAccountId: fx.accounts.vacationPayable }]);

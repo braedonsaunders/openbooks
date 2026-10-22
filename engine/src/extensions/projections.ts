@@ -8,11 +8,11 @@ import { defaultNavConfig, type OrgNavConfig } from '../navigation/nav-registry.
 import { supplementalContributionSchema, type SupplementalContribution } from './contribution-schemas.ts';
 
 export async function listActiveExtensionContributions(orgId: string, tx: SqlExecutor = db) {
-  const rows = (await tx.execute<{ extensionKey: string; extensionName: string; extensionId: string; versionId: string; manifest: { contributions?: unknown[] } }>(sql`
+  const rows = await tx.execute<{ extensionKey: string; extensionName: string; extensionId: string; versionId: string; manifest: { contributions?: unknown[] } }>(sql`
     select m.key as "extensionKey", m.name as "extensionName", m.id as "extensionId", v.id as "versionId", v.manifest
     from apps m join app_versions v on v.id = m.active_version_id and v.org_id = m.org_id
     where m.org_id = ${orgId} and m.status = 'installed' and (select settings->'features'->'apps' from orgs where id=${orgId}) is distinct from 'false'::jsonb
-  `)).rows;
+  `, 'objects');
   return rows.flatMap(({ manifest, ...row }) => (manifest.contributions ?? []).flatMap((raw) => {
     if (!raw || typeof raw !== 'object' || !('kind' in raw) || !['nav', 'setting', 'permission'].includes(String(raw.kind))) return [];
     return [{ ...row, contribution: supplementalContributionSchema.parse(raw) }];
@@ -30,7 +30,7 @@ function timestampMicros(value: string): bigint {
 
 /** As-of reads use immutable value history; changing defaults never reinterprets prior configuration. */
 export async function getExtensionSettings(orgId: string, tx: SqlExecutor = db, asOf?: Date): Promise<Record<string, Record<string, unknown>>> {
-  const row = (await tx.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${orgId}`)).rows[0];
+  const row = (await tx.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${orgId}`, 'objects'))[0];
   if (asOf) {
     if (!Number.isFinite(asOf.getTime())) throw new Error('Invalid settings effective date');
     const history = (row?.settings.extensionSettingsHistory ?? {}) as SettingHistory;
@@ -46,7 +46,7 @@ export async function getExtensionSettings(orgId: string, tx: SqlExecutor = db, 
 }
 
 async function effectiveTimestamp(tx: SqlExecutor): Promise<string> {
-  return (await tx.execute<{ timestamp: string }>(sql`select clock_timestamp()::text as timestamp`)).rows[0]!.timestamp;
+  return (await tx.execute<{ timestamp: string }>(sql`select clock_timestamp()::text as timestamp`, 'objects'))[0]!.timestamp;
 }
 
 function appendSettingHistory(settings: Record<string, unknown>, extensionKey: string, key: string, value: unknown, effectiveFrom: string) {
@@ -116,7 +116,7 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
   orgId: string; actorId: string; extensionId: string; extensionKey: string; versionId: string;
   contributions: SupplementalContribution[]; reason: string; previousVersionId?: string | null;
 }) {
-  const previous = args.previousVersionId ? (await tx.execute<{ manifest: { contributions?: unknown[] } }>(sql`select manifest from app_versions where org_id = ${args.orgId} and app_id = ${args.extensionId} and id = ${args.previousVersionId}`)).rows[0]?.manifest.contributions ?? [] : [];
+  const previous = args.previousVersionId ? (await tx.execute<{ manifest: { contributions?: unknown[] } }>(sql`select manifest from app_versions where org_id = ${args.orgId} and app_id = ${args.extensionId} and id = ${args.previousVersionId}`, 'objects'))[0]?.manifest.contributions ?? [] : [];
   const previousDeclarations = previous.flatMap((raw) => { const parsed = supplementalContributionSchema.safeParse(raw); return parsed.success ? [parsed.data] : []; });
   const siblings = (await listActiveExtensionContributions(args.orgId, tx)).filter((entry) => entry.extensionId !== args.extensionId);
   for (const contribution of args.contributions) {
@@ -126,7 +126,7 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
         cross join lateral jsonb_array_elements(coalesce(v.manifest->'contributions', '[]'::jsonb)) declaration
         where m.org_id = ${args.orgId} and m.id <> ${args.extensionId}
           and declaration->>'kind' = 'permission' and declaration->>'key' = ${contribution.key} limit 1
-      `)).rows[0];
+      `, 'objects'))[0];
       if (owner) throw new ExtensionProjectionError(`permission ${contribution.key} is reserved by extension ${owner.key}; historical grants cannot be reassigned`);
     }
     if (contribution.kind === 'permission' && (isCataloguePermission(contribution.key) || siblings.some((entry) => entry.contribution.kind === 'permission' && entry.contribution.key === contribution.key))) {
@@ -138,7 +138,7 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
     ![...args.contributions, ...siblings.map((entry) => entry.contribution)].some((entry) => entry.kind === 'permission' && entry.key === nav.requiredPermission)) {
     throw new ExtensionProjectionError(`navigation requires undeclared permission ${nav.requiredPermission}`);
   }
-  const navRow = (await tx.execute<{ id: string; config: OrgNavConfig }>(sql`select id, config from org_nav_configs where org_id = ${args.orgId} for update`)).rows[0];
+  const navRow = (await tx.execute<{ id: string; config: OrgNavConfig }>(sql`select id, config from org_nav_configs where org_id = ${args.orgId} for update`, 'objects'))[0];
   const beforeNav = navRow?.config ?? null;
   const config: OrgNavConfig = structuredClone(beforeNav ?? defaultNavConfig());
   let changed = false;
@@ -188,12 +188,12 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
   if (changed) {
     const row = (await tx.execute<{ id: string }>(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
       values (${args.orgId}, ${JSON.stringify(config)}::jsonb, ${args.actorId}, ${args.actorId})
-      on conflict (org_id) do update set config = excluded.config, updated_by = excluded.updated_by, updated_at = now() returning id`)).rows[0]!;
+      on conflict (org_id) do update set config = excluded.config, updated_by = excluded.updated_by, updated_at = now() returning id`, 'objects'))[0]!;
     await audit(tx, { ...args, rowId: row.id, table: 'org_nav_configs', before: beforeNav, after: config });
   }
   const settings = args.contributions.filter((c) => c.kind === 'setting');
   if (settings.length) {
-    const row = (await tx.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${args.orgId} for update`)).rows[0]!;
+    const row = (await tx.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${args.orgId} for update`, 'objects'))[0]!;
     const before = structuredClone(row.settings);
     const modules = await getExtensionSettings(args.orgId, tx);
     const values = { ...(modules[args.extensionKey] ?? {}) };
@@ -243,7 +243,7 @@ export async function updateExtensionSetting(args: {
     if (args.expectedExtensionVersionId !== undefined && entry.versionId !== args.expectedExtensionVersionId) throw Object.assign(new Error('Extension version changed; reload the setting before saving'), { status: 409 });
     supplementalContributionSchema.parse({ ...entry.contribution, defaultValue: args.value });
     if (args.value === undefined) throw new Error('A setting value is required');
-    const row = (await tx.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${args.orgId} for update`)).rows[0]!;
+    const row = (await tx.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${args.orgId} for update`, 'objects'))[0]!;
     const values = await getExtensionSettings(args.orgId, tx);
     if (Object.hasOwn(args, 'expectedValue') && !isDeepStrictEqual(values[args.extensionKey]?.[args.key] ?? null, args.expectedValue ?? null)) throw Object.assign(new Error('Setting changed; reload before saving'), { status: 409 });
     const after: Record<string, unknown> = { ...row.settings, extensionSettings: { ...values, [args.extensionKey]: { ...values[args.extensionKey], [args.key]: args.value } } };

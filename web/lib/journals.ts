@@ -66,7 +66,7 @@ export async function createDraftJournal(
       select id, base_currency
         from subsidiaries
        where org_id = ${orgId} and id = ${normalizedSubsidiaryId}
-         and is_active and not is_elimination`)).rows[0]
+         and is_active and not is_elimination`, 'objects'))[0]
     if (!explicit) throw new DraftJournalScopeError('invalid_subsidiary', 'invalid subsidiary')
     subsidiary = explicit
   } else if (scope !== null) {
@@ -76,11 +76,11 @@ export async function createDraftJournal(
     if (ids.length === 0) {
       throw new DraftJournalScopeError('no_available_subsidiary', 'no available subsidiary')
     }
-    const allowed = (await db.execute<{ id: string; base_currency: string }>(sql`
+    const allowed = await db.execute<{ id: string; base_currency: string }>(sql`
       select id, base_currency
         from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination
-         and id = any(${`{${ids.join(',')}}`}::uuid[])`)).rows
+         and id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')
     if (allowed.length === 0) {
       throw new DraftJournalScopeError('no_available_subsidiary', 'no available subsidiary')
     }
@@ -93,8 +93,8 @@ export async function createDraftJournal(
     subsidiary = allowed[0]
   } else {
     const root = (await db.execute<{ id: string; base_currency: string }>(sql`
-      select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null`))
-    subsidiary = root.rows[0]
+      select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null`, 'objects'))
+    subsidiary = root[0]
     if (!subsidiary) throw new Error('org has no root subsidiary')
   }
 
@@ -143,8 +143,8 @@ export async function loadJournalDoc(
        where d.id = ${id} and d.org_id = ${resolvedOrgId} and d.kind = 'journal'
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for share of d
-    `)
-    if (!doc.rows[0]) return null
+    `, 'objects')
+    if (!doc[0]) return null
     const lines = await db.execute<Record<string, unknown>>(sql`
       select l.id, l.line_number, l.account_id, l.description, l.amount, l.quantity::text as quantity, l.unit,
              l.journal_currency, l.journal_fx_rate::text as journal_fx_rate, l.journal_eliminate,
@@ -154,18 +154,18 @@ export async function loadJournalDoc(
         from document_lines l
        where l.document_id = ${id} and l.org_id = ${resolvedOrgId}
        order by l.line_number
-    `)
+    `, 'objects')
     // Every leg carries its own legal entity: a null line subsidiary falls
     // back to the authorized header, but an explicit one outside the
     // caller's scope refuses the whole detail (uniform null, never a
     // silently partial journal that implies a complete editable record).
-    for (const line of lines.rows) {
+    for (const line of lines) {
       const lineSubsidiary = line.subsidiary_id as string | null
       if (lineSubsidiary !== null && !subsidiaryScopeAllows(allowedSubsidiaryIds, lineSubsidiary)) {
         return null
       }
     }
-    return { doc: doc.rows[0], lines: lines.rows }
+    return { doc: doc[0], lines }
   })
 }
 

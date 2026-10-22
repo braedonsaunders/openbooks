@@ -38,10 +38,10 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
   if(problem)throw new PayrollError(`${problem} — correct the employer withholding method record in the employee’s Payroll profile`)
   if(record.answers.method==='option1')return null
   if(record.missing.length||record.answers.method!=='option2'||!record.effectiveFrom)throw new PayrollError('Complete and date the employer withholding method election in the employee’s Payroll profile before calculating cumulative averaging')
-  const owners=(await ctx.tx.execute<{subsidiaryId:string;currency:string;payDate:string|null}>(sql`
+  const owners=await ctx.tx.execute<{subsidiaryId:string;currency:string;payDate:string|null}>(sql`
     select d.subsidiary_id as "subsidiaryId",d.currency,r.pay_date::text as "payDate" from documents d
       join pay_runs r on r.org_id=d.org_id and r.document_id=d.id
-     where d.org_id=${ctx.orgId} and d.id=${ctx.documentId} and d.kind='pay_run'`)).rows
+     where d.org_id=${ctx.orgId} and d.id=${ctx.documentId} and d.kind='pay_run'`, 'objects')
   if(owners.length!==1||!owners[0]!.subsidiaryId
     ||ctx.subsidiaryId!==undefined&&ctx.subsidiaryId!==owners[0]!.subsidiaryId)
     throw new PayrollError('Canadian averaging history requires the actual pay-run legal employer')
@@ -59,7 +59,7 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
   if(through&&(!isIsoCalendarDate(through)||through<start||through>=payDate))throw new PayrollError('Imported averaging history must end within this averaging window and before the current pay date — correct its history-through date in the Payroll profile')
   if(through&&record.answers.opening_history_complete!=='true')throw new PayrollError('Verify every averaging opening field against the prior provider’s report in Payroll → Opening Balances, then confirm complete imported history in the employee’s withholding method record')
   if(start<record.effectiveFrom&&!through)throw new PayrollError('An averaging window before this method election requires complete imported history — supply its history-through date and opening balances, or reset the window to the election date')
-  const schedule=(await ctx.tx.execute<ScheduleRow>(sql`select id,frequency,periods_per_year,anchor_period_end::text,pay_date_offset_days from pay_schedules where org_id=${ctx.orgId} and id=${ctx.run.pay_schedule_id}`)).rows[0]
+  const schedule=(await ctx.tx.execute<ScheduleRow>(sql`select id,frequency,periods_per_year,anchor_period_end::text,pay_date_offset_days from pay_schedules where org_id=${ctx.orgId} and id=${ctx.run.pay_schedule_id}`, 'objects'))[0]
   if(!schedule)throw new PayrollError('Restore this run’s pay schedule before calculating cumulative averaging')
   let cursor=iso(new Date(at(start).getTime()-DAY*(schedule.pay_date_offset_days+1)))
   let elapsed=0
@@ -74,7 +74,7 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
   // projection period; it creates no extra calendar boundary for later runs.
   elapsed=Math.max(1,elapsed)
   if(elapsed>ctx.periodsPerYear)throw new PayrollError('The averaging calendar exceeds the schedule’s periods per year — correct its calendar or reset the elected window')
-  const unknownHistory=(await ctx.tx.execute(sql`
+  const unknownHistory=await ctx.tx.execute(sql`
     select s.id from pay_stubs s
       join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
       join documents d on d.org_id=r.org_id and d.id=r.document_id
@@ -82,9 +82,9 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
        and s.pay_run_document_id<>${ctx.documentId} and r.run_status='committed' and d.status<>'voided'
        and r.pay_date>=${start}::date and d.subsidiary_id=${subsidiaryId}
        and (s.country is null or s.country='CA' and (s.currency_code<>'CAD' or d.currency<>'CAD'))
-     limit 1`)).rows
+     limit 1`, 'objects')
   if(unknownHistory.length)throw new PayrollError('Canadian averaging history has unknown country or currency attribution — qualify the original retained payroll source before calculating')
-  const history=(await ctx.tx.execute<{pay_date:string;schedule_id:string;factors:Record<string,string>}>(sql`
+  const history=await ctx.tx.execute<{pay_date:string;schedule_id:string;factors:Record<string,string>}>(sql`
     select r.pay_date::text,r.pay_schedule_id as schedule_id,s.factors from pay_stubs s
       join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
       join documents d on d.org_id=r.org_id and d.id=r.document_id
@@ -92,7 +92,7 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
       and s.pay_run_document_id<>${ctx.documentId} and r.run_status='committed' and d.status<>'voided'
       and r.pay_date>=${start}::date
       and d.subsidiary_id=${subsidiaryId} and s.country='CA' and s.currency_code='CAD'
-    order by r.pay_date,s.id`)).rows
+    order by r.pay_date,s.id`, 'objects')
   if(history.some(row=>row.pay_date>payDate))throw new PayrollError('A later pay run is already committed in this averaging window — correct payroll through the controlled void and replacement workflow before recalculating an earlier pay date')
   if(history.some(row=>row.schedule_id!==schedule.id))throw new PayrollError('The averaging window spans different pay schedules — reset the employer withholding method window on the new schedule’s effective date')
   if(through&&history.some(row=>row.pay_date<=through))throw new PayrollError('Imported averaging history overlaps committed payroll — correct its history-through date and opening balances before calculating')

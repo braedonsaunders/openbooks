@@ -50,8 +50,7 @@ export async function listApplicationWorklist(args: {
         "Enable Recruiting in Company Settings → Features.",
       );
     const allowed = await requireAggregateRecruitingRead(db, orgId, actorId);
-    return (
-      await db.execute<ApplicationWorklistRow>(sql`
+    return await db.execute<ApplicationWorklistRow>(sql`
       select a.id,c.display_name as candidate,c.id as "candidateId",r.title as opening,r.id as "requisitionId",
         s.name as stage,s.id as "stageId",a.status,c.source,a.applied_on::text as "appliedOn",p.display_name as owner
       from hrm_applications a join hrm_candidates c on c.org_id=a.org_id and c.id=a.candidate_id
@@ -63,8 +62,7 @@ export async function listApplicationWorklist(args: {
         ${opening ? sql`and r.id=${opening}` : sql``}
         ${stage ? sql`and s.id=${stage}` : sql``}
       order by a.applied_on,a.id
-    `)
-    ).rows;
+    `, "objects");
   });
 }
 export async function getApplicationWorkspace(args: {
@@ -81,11 +79,9 @@ export async function getApplicationWorkspace(args: {
         "REFUSED",
         "Enable Recruiting in Company Settings → Features.",
       );
-    const application = (
-      await db.execute<{ requisitionId: string; candidateId: string }>(
-        sql`select requisition_id as "requisitionId",candidate_id as "candidateId" from hrm_applications where org_id=${orgId} and id=${id}`,
-      )
-    ).rows[0];
+    const application = (await db.execute<{ requisitionId: string; candidateId: string }>(
+        sql`select requisition_id as "requisitionId",candidate_id as "candidateId" from hrm_applications where org_id=${orgId} and id=${id}`, "objects",
+      ))[0];
     if (!application)
       throw new RecruitingError(
         "NOT_FOUND",
@@ -113,8 +109,7 @@ export async function getApplicationWorkspace(args: {
       actorId,
       candidateId: application.candidateId,
     });
-    const events = (
-      await db.execute<{
+    const events = await db.execute<{
         id: string;
         kind: string;
         reason: string | null;
@@ -126,8 +121,7 @@ export async function getApplicationWorkspace(args: {
       from hrm_application_events e left join hrm_pipeline_stages f on f.org_id=e.org_id and f.id=e.from_stage_id
       left join hrm_pipeline_stages t on t.org_id=e.org_id and t.id=e.to_stage_id
       where e.org_id=${orgId} and e.application_id=${id} order by e.recorded_at desc,e.id desc
-    `)
-    ).rows;
+    `, "objects");
     return {
       application: selected,
       candidate,

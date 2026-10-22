@@ -55,16 +55,16 @@ async function openHiringRequisition(orgId: string, recruiterId: string, subsidi
 }
 
 async function candidateCount(orgId: string, email: string): Promise<number> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from hrm_candidates where org_id = ${orgId} and lower(btrim(email)) = lower(btrim(${email}))
-  `)).rows;
+  `, "objects");
   return rows.length;
 }
 
 async function applicationCount(orgId: string, requisitionId: string): Promise<number> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from hrm_applications where org_id = ${orgId} and requisition_id = ${requisitionId}
-  `)).rows;
+  `, "objects");
   return rows.length;
 }
 
@@ -155,7 +155,7 @@ test("a duplicate email refuses without a second row; mergeInto attaches to the 
     const kinds = (await db.execute<{ kind: string }>(sql`
       select kind from hrm_application_events
        where org_id = ${org.orgId} and application_id = ${merged.application.id} order by recorded_at, id
-    `)).rows.map((row) => row.kind);
+    `, "objects")).map((row) => row.kind);
     assert.deepEqual(kinds, ["merged"]);
   } finally {
     await dropScratchOrg(org.orgId);

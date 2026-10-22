@@ -98,15 +98,15 @@ async function seedScopedApprovalFlow(
 
 async function flowRowsFor(subjectId: string): Promise<{ runs: number; gates: number }> {
   const runs = (await db.execute<{ n: string }>(sql`
-    select count(*) as n from flow_runs where subject_id = ${subjectId}`)).rows[0]!;
+    select count(*) as n from flow_runs where subject_id = ${subjectId}`, "objects"))[0]!;
   const gates = (await db.execute<{ n: string }>(sql`
-    select count(*) as n from flow_gates where subject_id = ${subjectId}`)).rows[0]!;
+    select count(*) as n from flow_gates where subject_id = ${subjectId}`, "objects"))[0]!;
   return { runs: Number(runs.n), gates: Number(gates.n) };
 }
 
 async function docStatus(id: string): Promise<string> {
   const row = (await db.execute<{ status: string }>(sql`
-    select status::text as status from documents where id = ${id}`)).rows[0]!;
+    select status::text as status from documents where id = ${id}`, "objects"))[0]!;
   return row.status;
 }
 
@@ -257,7 +257,7 @@ test("locked admission freezes the scope owner until the dispatch transaction en
     await admissionTx;
     await rehome;
     const row = (await db.execute<{ subsidiaryId: string }>(sql`
-      select subsidiary_id as "subsidiaryId" from documents where id = ${doc}`)).rows[0]!;
+      select subsidiary_id as "subsidiaryId" from documents where id = ${doc}`, "objects"))[0]!;
     assert.equal(row.subsidiaryId, org.subsidiaryId, "the rehome lands only after the dispatch transaction");
   });
 });
@@ -327,7 +327,7 @@ test("linked scopes lock the referring row, not only the owner", { skip: !DB }, 
     await lockTx;
     await relink;
     const row = (await db.execute<{ partyId: string }>(sql`
-      select party_id as "partyId" from documents where id = ${doc}`)).rows[0]!;
+      select party_id as "partyId" from documents where id = ${doc}`, "objects"))[0]!;
     assert.equal(row.partyId, org.customerId, "the relink lands only after the lock transaction");
   });
 });
@@ -382,7 +382,7 @@ test("retry refuses when the record leaves its frozen Flow scope, preserving the
       "vendor_bill", doc, { orgId: org.orgId, userId: actors.submitterId }));
     assert.equal(submitted.failed, true);
     const failedRun = (await db.execute<{ id: string }>(sql`
-      select id from flow_runs where subject_id = ${doc} and status = 'failed' limit 1`)).rows[0];
+      select id from flow_runs where subject_id = ${doc} and status = 'failed' limit 1`, "objects"))[0];
     assert.ok(failedRun);
 
     // Rehoming the editable record cannot bypass the scope frozen on its failed run.
@@ -394,7 +394,7 @@ test("retry refuses when the record leaves its frozen Flow scope, preserving the
       /do not include this record's legal entity/,
     );
     const after = (await db.execute<{ status: string }>(sql`
-      select status::text as status from flow_runs where id = ${failedRun.id}`)).rows[0]!;
+      select status::text as status from flow_runs where id = ${failedRun.id}`, "objects"))[0]!;
     assert.equal(after.status, "failed", "the refused retry leaves the failed run untouched");
     assert.equal(await docStatus(doc), "draft", "no silent completion or release");
     assert.deepEqual(await flowRowsFor(doc), { runs: 1, gates: 0 });

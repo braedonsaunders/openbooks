@@ -19,15 +19,15 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const LIVE_BASE = "https://acme-checkout-live.adyenpayments.com/checkout/v68";
 
 async function readSettings(orgId: string, provider: string) {
-  const rows = (await db.execute<{ settings: Record<string, unknown> }>(sql`
+  const rows = await db.execute<{ settings: Record<string, unknown> }>(sql`
     select settings from psp_provider_configs
      where org_id = ${orgId} and provider = ${provider}
-  `)).rows;
+  `, "objects");
   return rows[0]!.settings as Record<string, unknown>;
 }
 
 async function readConfigRow(orgId: string, provider: string) {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; provider: AcceptanceProvider; display_name: string; is_enabled: boolean;
     acceptance_enabled: boolean; default_bank_account_id: string | null;
     publishable_key: string | null; settings: Record<string, unknown>;
@@ -43,7 +43,7 @@ async function readConfigRow(orgId: string, provider: string) {
            default_dispute_fee_account_id
       from psp_provider_configs
      where org_id = ${orgId} and provider = ${provider}
-  `)).rows;
+  `, "objects");
   return rows[0]!;
 }
 
@@ -228,11 +228,11 @@ test("overlapping apiBase edit and UI-shaped save retain both explicit changes",
     assert.equal(after.merchantAccount, "AcmeNew");
     // Audit rows must chain: the second writer's "before" is the first
     // writer's "after", never the same stale snapshot twice.
-    const audits = (await db.execute<{ changes: { before: { settings: Record<string, unknown> } | null; after: { settings: Record<string, unknown> } } }>(sql`
+    const audits = await db.execute<{ changes: { before: { settings: Record<string, unknown> } | null; after: { settings: Record<string, unknown> } } }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'psp_provider_configs' and action = 'update'
        order by id
-    `)).rows;
+    `, "objects");
     assert.equal(audits.length, 2);
     assert.deepEqual(audits[1]!.changes.before!.settings, audits[0]!.changes.after.settings);
     assert.equal(audits[1]!.changes.after.settings.apiBase, next);

@@ -175,10 +175,10 @@ test(
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
          order by bank_transaction_id
-      `));
-      assert.equal(statementRows.rows.length, 3);
+      `, "objects"));
+      assert.equal(statementRows.length, 3);
       const statementByRef = new Map(
-        statementRows.rows.map((row) => [row.bank_transaction_id, row.id]),
+        statementRows.map((row) => [row.bank_transaction_id, row.id]),
       );
 
       const starts = await Promise.allSettled([
@@ -364,8 +364,8 @@ test(
             where org_id = ${org.orgId}
               and reconciliation_id = ${reconciliationId}
               and reconciled_at is not null) as stamped
-      `));
-      assert.deepEqual(evidence.rows[0], {
+      `, "objects"));
+      assert.deepEqual(evidence[0], {
         exclusions: 2,
         restores: 1,
         signoffs: 1,
@@ -394,7 +394,7 @@ test(
       `);
       const [reversedLineId] = await postBankJournal(org, actor, ["100.0000"], "reversed");
       const reversedEntryId = (await db.execute<{ id: string }>(sql`
-        select entry_id as id from journal_lines where id = ${reversedLineId} and org_id = ${org.orgId}`)).rows[0]!.id;
+        select entry_id as id from journal_lines where id = ${reversedLineId} and org_id = ${org.orgId}`, "objects"))[0]!.id;
       // Finding 5.2: posted→reversed needs a posted same-book mirror.
       const mirrorId = randomUUID();
       await db.execute(sql`
@@ -441,13 +441,11 @@ test(
         },
         ctx,
       );
-      const statementLineId = (
-        await db.execute<{ id: string }>(sql`
+      const statementLineId = (await db.execute<{ id: string }>(sql`
           select id
             from bank_statement_lines
            where org_id = ${org.orgId} and bank_transaction_id = 'reversed-deposit'
-        `)
-      ).rows[0]!.id;
+        `, "objects"))[0]!.id;
 
       const automatic = await autoMatch(reconciliation.id, ctx);
       assert.equal(automatic.matched, 0);
@@ -508,13 +506,11 @@ test(
         },
         ctx,
       );
-      const statementLineId = (
-        await db.execute<{ id: string }>(sql`
+      const statementLineId = (await db.execute<{ id: string }>(sql`
           select id
             from bank_statement_lines
            where org_id = ${org.orgId} and bank_transaction_id = 'restore-lock'
-        `)
-      ).rows[0]!.id;
+        `, "objects"))[0]!.id;
       await excludeStatementLine(statementLineId, "Pending reconciliation lock", ctx);
 
       let lockReady!: () => void;
@@ -557,13 +553,11 @@ test(
       await restore;
       if (restoreError) throw restoreError;
       assert.equal(restored, true);
-      const status = (
-        await db.execute<{ match_status: string }>(sql`
+      const status = (await db.execute<{ match_status: string }>(sql`
           select match_status
             from bank_statement_lines
            where id = ${statementLineId} and org_id = ${org.orgId}
-        `)
-      ).rows[0]!.match_status;
+        `, "objects"))[0]!.match_status;
       assert.equal(status, "unmatched");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -749,7 +743,7 @@ test(
       const storedBeforeOptIn = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(storedBeforeOptIn, 3, "held-out lines are not stored");
 
       const second = await importStatement({ ...overlapping, includePossibleDuplicates: true }, ctx);
@@ -767,13 +761,13 @@ test(
         select id, bank_transaction_id, possible_duplicate_of
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-      `);
-      assert.equal(stored.rows.length, 6);
-      for (const row of stored.rows) assert.equal(row.bank_transaction_id, null);
-      const flagged = stored.rows.filter((row) => row.possible_duplicate_of);
+      `, "objects");
+      assert.equal(stored.length, 6);
+      for (const row of stored) assert.equal(row.bank_transaction_id, null);
+      const flagged = stored.filter((row) => row.possible_duplicate_of);
       assert.equal(flagged.length, 3);
       const earlierIds = new Set(
-        stored.rows.filter((row) => !row.possible_duplicate_of).map((row) => row.id),
+        stored.filter((row) => !row.possible_duplicate_of).map((row) => row.id),
       );
       for (const row of flagged) assert.ok(earlierIds.has(row.possible_duplicate_of!));
 
@@ -849,7 +843,7 @@ test(
         select id from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and description = 'COFFEE SHOP' and possible_duplicate_of is null
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(heldCoffee!.possibleDuplicateOf, earlierRow.id);
 
       // The reviewer confirms the coffee is genuine: a further file carrying
@@ -879,9 +873,9 @@ test(
         select id, description, possible_duplicate_of
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-      `);
-      assert.equal(stored.rows.length, 3);
-      const flaggedCoffee = stored.rows.find((row) => row.possible_duplicate_of !== null)!;
+      `, "objects");
+      assert.equal(stored.length, 3);
+      const flaggedCoffee = stored.find((row) => row.possible_duplicate_of !== null)!;
       assert.equal(flaggedCoffee.description, "COFFEE SHOP");
       assert.equal(flaggedCoffee.possible_duplicate_of, earlierRow.id);
     } finally {
@@ -934,8 +928,8 @@ test("parser-skipped rows are reported in the preview and the import", async () 
     const stored = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from bank_statement_lines
        where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-    `));
-    assert.equal(stored.rows[0]!.n, 1);
+    `, "objects"));
+    assert.equal(stored[0]!.n, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -977,7 +971,7 @@ test(
       const lineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'discard-deposit-100'
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const { id: reconciliationId } = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
         ctx,
@@ -994,21 +988,21 @@ test(
       const gone = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from reconciliations
          where id = ${reconciliationId} and org_id = ${org.orgId}
-      `));
-      assert.equal(gone.rows[0]!.n, 0);
+      `, "objects"));
+      assert.equal(gone[0]!.n, 0);
       const line = (await db.execute<{ match_status: string }>(sql`
         select match_status from bank_statement_lines where id = ${lineId}
-      `));
-      assert.equal(line.rows[0]!.match_status, "unmatched");
+      `, "objects"));
+      assert.equal(line[0]!.match_status, "unmatched");
       const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
         select changes, actor_id from audit_log
          where org_id = ${org.orgId}
            and table_name = 'reconciliations'
            and row_id = ${reconciliationId}
            and action = 'discard'
-      `));
-      assert.equal(audits.rows.length, 1);
-      assert.deepEqual(audits.rows[0]!.changes, {
+      `, "objects"));
+      assert.equal(audits.length, 1);
+      assert.deepEqual(audits[0]!.changes, {
         operation: "discard",
         releasedMatches: 1,
         releasedStatementLines: 1,
@@ -1022,7 +1016,7 @@ test(
           status: "balanced",
         },
       });
-      assert.equal(audits.rows[0]!.actor_id, actor);
+      assert.equal(audits[0]!.actor_id, actor);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -1065,7 +1059,7 @@ test(
       const lineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'match-deposit-100'
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const { id: reconciliationId } = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
         ctx,
@@ -1080,7 +1074,7 @@ test(
         select group_id from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${reconciliationId}
          limit 1
-      `)).rows[0]!.group_id;
+      `, "objects"))[0]!.group_id;
       await unmatchStatementLine({ reconciliationId, statementLineId: lineId }, ctx);
 
       const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
@@ -1090,11 +1084,11 @@ test(
            and row_id = ${lineId}
            and action = 'update'
          order by id
-      `));
+      `, "objects"));
       // Even a single-line match clears as a one-member group, and the
       // line's audit names the group that cleared it.
       assert.deepEqual(
-        audits.rows.map((row) => row.changes),
+        audits.map((row) => row.changes),
         [
           {
             operation: "match",
@@ -1116,7 +1110,7 @@ test(
           },
         ],
       );
-      for (const row of audits.rows) assert.equal(row.actor_id, actor);
+      for (const row of audits) assert.equal(row.actor_id, actor);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -1167,7 +1161,7 @@ test(
         select id from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
          order by bank_transaction_id
-      `)).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const { id: reconciliationId } = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "150" },
         ctx,
@@ -1183,9 +1177,9 @@ test(
            and table_name = 'reconciliations'
            and row_id = ${reconciliationId}
            and changes->>'operation' = 'auto_match'
-      `));
-      assert.equal(audits.rows.length, 1);
-      const changes = audits.rows[0]!.changes as {
+      `, "objects"));
+      assert.equal(audits.length, 1);
+      const changes = audits[0]!.changes as {
         operation: string;
         matched: number;
         pairs: { statementLineId: string; journalLineId: string; confidence: string; reasons: { code: string; days?: number }[] }[];
@@ -1202,17 +1196,17 @@ test(
         assert.ok(toUnits(pair.confidence) > toUnits("0.70"), `confidence ${pair.confidence} is high`);
         assert.deepEqual(pair.reasons.slice(0, 2), [{ code: "exact_amount" }, { code: "date_lag", days: 0 }]);
       }
-      const stored = (await db.execute<{ statement_line_id: string; confidence: string; match_reasons: unknown }>(sql`
+      const stored = await db.execute<{ statement_line_id: string; confidence: string; match_reasons: unknown }>(sql`
         select statement_line_id, confidence::text as confidence, match_reasons from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${reconciliationId}
-      `)).rows;
+      `, "objects");
       assert.equal(stored.length, 2);
       for (const row of stored) {
         const pair = changes.pairs.find((candidate) => candidate.statementLineId === row.statement_line_id);
         assert.ok(pair && toUnits(pair.confidence) === toUnits(row.confidence), "the stored confidence is the audited one");
         assert.deepEqual(row.match_reasons, pair.reasons, "the stored reasons are the audited ones");
       }
-      assert.equal(audits.rows[0]!.actor_id, actor);
+      assert.equal(audits[0]!.actor_id, actor);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -1320,7 +1314,7 @@ test(
       await assert.rejects(markReconciled(reconciliation.id, ctx), /difference is -10\.0000/);
       const status = (await db.execute<{ status: string }>(sql`
         select status from reconciliations where id = ${reconciliation.id} and org_id = ${org.orgId}
-      `)).rows[0]!.status;
+      `, "objects"))[0]!.status;
       assert.notEqual(status, "signed_off");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -1357,7 +1351,7 @@ test(
         select id from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and possible_duplicate_of is not null
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
 
       const [journalLineId] = await postBankJournal(org, actor, ["-5.0000"], "flagged-coffee");
       const recon = await startReconciliation(
@@ -1386,7 +1380,7 @@ test(
            and changes->>'operation' = 'clear_possible_duplicate'
            and changes->'before'->>'possibleDuplicateOf' is not null
            and actor_id = ${actor}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(clears, 1);
       // ...and the cleared line matches normally afterwards.
       const [journalLineId2] = await postBankJournal(org, actor, ["-5.0000"], "cleared-coffee");
@@ -1400,7 +1394,7 @@ test(
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and possible_duplicate_of is null and match_status = 'matched'
          limit 1
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       await assert.rejects(clearPossibleDuplicateFlag(unflaggedId, ctx), /Only flagged/);
 
       // A third overlapping file flags again, and the bulk review excludes
@@ -1425,16 +1419,16 @@ test(
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and match_status = 'excluded'
-      `));
-      assert.equal(excluded.rows.length, 1);
-      assert.equal(excluded.rows[0]!.exclusion_reason, "Duplicate of an earlier import (reviewed in bulk)");
-      assert.ok(excluded.rows[0]!.possible_duplicate_of, "the flag is kept as exclusion evidence");
+      `, "objects"));
+      assert.equal(excluded.length, 1);
+      assert.equal(excluded[0]!.exclusion_reason, "Duplicate of an earlier import (reviewed in bulk)");
+      assert.ok(excluded[0]!.possible_duplicate_of, "the flag is kept as exclusion evidence");
       const bulkAudits = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'bank_statement_lines'
            and action = 'update' and changes->>'operation' = 'exclude'
            and (changes->>'bulk')::boolean is true and actor_id = ${actor}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(bulkAudits, 1);
       // A second bulk run finds nothing left to exclude.
       assert.equal(

@@ -71,20 +71,20 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
     listProvisionRuns(orgId, gate.allowedSubsidiaryIds),
     db.execute<{ fiscal_year: number }>(sql`
       select distinct fiscal_year from accounting_periods where org_id = ${orgId} order by fiscal_year desc
-    `),
+    `, "objects"),
     db.execute(sql`
       select jurisdiction, rate_percent as "ratePercent", effective_from::text as "effectiveFrom",
              effective_to::text as "effectiveTo", subsidiary_id as "subsidiaryId"
         from income_tax_rates where org_id = ${orgId} and is_active
         ${gate.allowedSubsidiaryIds === null ? sql`` : gate.allowedSubsidiaryIds.size === 0 ? sql`and false` : sql`and (subsidiary_id is null or subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[]))`}
        order by effective_from desc
-    `),
+    `, "objects"),
     orgTaxFramework(orgId),
   ]);
   return NextResponse.json({
     runs,
-    fiscalYears: years.rows.map((r) => r.fiscal_year),
-    rates: rates.rows,
+    fiscalYears: years.map((r) => r.fiscal_year),
+    rates,
     framework,
   });
 }

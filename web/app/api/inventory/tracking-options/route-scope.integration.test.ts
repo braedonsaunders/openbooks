@@ -51,23 +51,23 @@ test("identifier selection rechecks native authority and hides movement and cust
     const hidden = randomUUID(), custodyLocation = randomUUID();
     const changed = await run(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
       coalesce(settings->'features','{}'::jsonb)||'{"inventory":true,"consignment":true}'::jsonb)
-      where id=${org.orgId} returning id`));
-    assert.equal(changed.rows.length, 1);
+      where id=${org.orgId} returning id`, "objects"));
+    assert.equal(changed.length, 1);
     assert.equal((await run(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-      values(${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA') returning id`))).rows.length, 1);
+      values(${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA') returning id`, "objects"))).length, 1);
     assert.equal((await run(() => db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id)
-      values(${org.orgId},${org.vendorId},${hidden}) returning party_id`))).rows.length, 1);
+      values(${org.orgId},${org.vendorId},${hidden}) returning party_id`, "objects"))).length, 1);
     assert.equal((await run(() => db.execute(sql`insert into stock_locations
       (id,org_id,location_id,code,kind,is_active,inventory_ownership,owner_party_id)
-      values(${custodyLocation},${org.orgId},${org.locationId},'VENDOR-CUSTODY','bin',true,'vendor',${org.vendorId}) returning id`))).rows.length, 1);
+      values(${custodyLocation},${org.orgId},${org.locationId},'VENDOR-CUSTODY','bin',true,'vendor',${org.vendorId}) returning id`, "objects"))).length, 1);
     assert.equal((await run(() => db.execute(sql`update item_inventory_profiles set tracking='lot_serial'
-      where org_id=${org.orgId} and item_id=${org.items.fifo} returning id`))).rows.length, 1);
+      where org_id=${org.orgId} and item_id=${org.items.fifo} returning id`, "objects"))).length, 1);
     async function restrict(ids: string[], permissions = ["items.read", "items.manage"]) {
       const role = await run(() => db.execute(sql`update app_roles set
         permissions=${JSON.stringify(permissions)}::jsonb,
         subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: ids })}::jsonb
-        where org_id=${org.orgId} and key='tracking_reader' returning id`));
-      assert.equal(role.rows.length, 1);
+        where org_id=${org.orgId} and key='tracking_reader' returning id`, "objects"));
+      assert.equal(role.length, 1);
     }
     await restrict([org.subsidiaryId]);
     async function register(label: string, actorId = admin) {
@@ -139,7 +139,7 @@ test("identifier selection rechecks native authority and hides movement and cust
     assert.equal((await call(org.items.fifo)).status, 404);
     session.actorId = reader;
     assert.equal((await run(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,inventory}','false'::jsonb)
-      where id=${org.orgId} returning id`))).rows.length, 1);
+      where id=${org.orgId} returning id`, "objects"))).length, 1);
     assert.equal((await call(org.items.fifo)).status, 404);
     await assert.rejects(withOrgContext(org.orgId, () => inventoryTrackingOptions(org.orgId, reader, { itemId: org.items.fifo })), ScopeNotFoundError);
   } finally {

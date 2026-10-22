@@ -26,8 +26,8 @@ async function scenarioLineSubsidiaryIds(scenarioId: string, orgId: string): Pro
   const rows = (await db.execute<{ subsidiary_id: string | null }>(sql`
     select distinct subsidiary_id from budget_lines
      where org_id = ${orgId} and scenario_id = ${scenarioId}
-  `))
-  return rows.rows.map((row) => row.subsidiary_id)
+  `, 'objects'))
+  return rows.map((row) => row.subsidiary_id)
 }
 
 /** The org's root subsidiary (the entity an unassigned line resolves to). */
@@ -38,8 +38,8 @@ async function rootSubsidiary(orgId: string): Promise<{ id: string; name: string
        and parent_id is null and is_active and not is_elimination
      order by created_at, id
      limit 1
-  `))
-  return rows.rows[0] ?? null
+  `, 'objects'))
+  return rows[0] ?? null
 }
 
 /**
@@ -74,8 +74,8 @@ export async function scenarioOutOfScopeSubsidiaryNames(
     const rows = (await db.execute<{ id: string; name: string }>(sql`
       select id, name from subsidiaries
        where org_id = ${orgId} and id = any(${`{${[...outOfScopeIds].join(',')}}`}::uuid[])
-    `))
-    const byId = new Map(rows.rows.map((row) => [row.id, row.name]))
+    `, 'objects'))
+    const byId = new Map(rows.map((row) => [row.id, row.name]))
     for (const id of [...outOfScopeIds].sort()) names.push(byId.get(id) ?? id)
   }
   if (unassignedOutOfScope) names.push(root?.name ?? 'unassigned')

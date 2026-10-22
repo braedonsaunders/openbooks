@@ -30,7 +30,7 @@ async function main(): Promise<void> {
     select u.id, u.org_id as "orgId", o.name as "orgName"
       from users u join orgs o on o.id = u.org_id
      where lower(u.email) = ${email} and u.is_active and o.env_kind = 'production'
-     order by u.created_at limit 1`)).rows[0]);
+     order by u.created_at limit 1`, "objects"))[0]);
   if (!admin) throw new Error(`no active production user ${email}`);
 
   const sandbox = await withOrgContext(admin.orgId, async () => {

@@ -74,7 +74,7 @@ export async function scopedOpeningBalances(
         join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
        where b.org_id = ${gate.user.orgId}
          and p.id = any(${`{${[...visible].join(',')}}`}::uuid[])
-       order by b.tax_year desc`)).rows.map((row) => Number(row.taxYear))
+       order by b.tax_year desc`, 'objects')).map((row) => Number(row.taxYear))
     return {
       ...data,
       rows,
@@ -107,7 +107,7 @@ export async function scopedEntitlementOpenings(
 
 /** Active schedules with committed history, visible to the caller. */
 export async function scopedRetroSchedules(gate: Authz): Promise<{ id: string; name: string }[]> {
-  return (await db.execute<{ id: string; name: string }>(sql`
+  return await db.execute<{ id: string; name: string }>(sql`
     select s.id, s.name
       from pay_schedules s
      where s.org_id = ${gate.user.orgId} and s.is_active
@@ -118,5 +118,5 @@ export async function scopedRetroSchedules(gate: Authz): Promise<{ id: string; n
           where r.org_id = s.org_id and r.pay_schedule_id = s.id
             and r.run_status = 'committed')
      order by s.name
-  `)).rows
+  `, 'objects')
 }

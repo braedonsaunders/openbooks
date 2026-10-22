@@ -31,8 +31,8 @@ test('native connection edits preserve identity, audit nested content choices an
     assert.equal(edited.status, 200)
     const saved = await getConnection(org.orgId, id)
     assert.deepEqual(saved?.config, { ...original, entityMappings:{version:1,entities:{},sourceOptions}, syncOptions: selection })
-    const audit = (await db.execute<{ actor_id: string; changes: { before: { config: unknown }; after: { config: unknown }; credentialsChanged: boolean } }>(sql`
-      select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='connections' and row_id=${id}`)).rows
+    const audit = await db.execute<{ actor_id: string; changes: { before: { config: unknown }; after: { config: unknown }; credentialsChanged: boolean } }>(sql`
+      select actor_id, changes from audit_log where org_id=${org.orgId} and table_name='connections' and row_id=${id}`, 'objects')
     assert.equal(audit.length, 1)
     assert.equal(audit[0]!.actor_id, userId)
     assert.deepEqual(audit[0]!.changes.before.config, original)
@@ -54,7 +54,7 @@ test('native connection edits preserve identity, audit nested content choices an
     const oauth = await withOrgContext(org.orgId, () => updateConnection(actor, qboId, { config: { syncOptions: supportedDefaults } }))
     assert.equal(oauth.status, 200)
     assert.deepEqual((await getConnection(org.orgId, qboId))!.config, { environment: 'sandbox', realmId: 'callback-owned', syncOptions: supportedDefaults })
-    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and table_name='connections'`)).rows[0]!.count, 2, 'refused writes produce no configuration-change audit')
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log where org_id=${org.orgId} and table_name='connections'`, 'objects'))[0]!.count, 2, 'refused writes produce no configuration-change audit')
   } finally {
     await dropScratchOrg(foreign.orgId)
     await dropScratchOrg(org.orgId)

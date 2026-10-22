@@ -45,15 +45,16 @@ const mockSources = new Map<string, string>([
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
           if (text.includes('insert into backup_runs')) {
-            return { rows: [{ id: state.runId }] }
+            return inMode({ rows: [{ id: state.runId }] })
           }
-          if (text.includes('update backup_runs')) return { rows: state.raceStatus ? [] : [{ id: state.runId }] }
-          if (text.includes('select status from backup_runs')) return { rows: [{ status: state.raceStatus }] }
-          return { rows: [] }
+          if (text.includes('update backup_runs')) return inMode({ rows: state.raceStatus ? [] : [{ id: state.runId }] })
+          if (text.includes('select status from backup_runs')) return inMode({ rows: [{ status: state.raceStatus }] })
+          return inMode({ rows: [] })
         },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn() }

@@ -87,7 +87,7 @@ test("a succeeded event arriving after its refund still settles instead of stran
     const first = await handleProviderWebhook("gocardless", refunded.headers, refunded.body);
     assert.equal(first?.status, "refunded_pending_review");
     const stranded = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`)).rows[0]!;
+      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`, "objects"))[0]!;
     assert.equal(stranded.status, "refunded");
     assert.equal(stranded.journal_entry_id, null);
 
@@ -98,13 +98,13 @@ test("a succeeded event arriving after its refund still settles instead of stran
     assert.equal(second?.status, "settled");
 
     const receipts = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'`));
-    assert.equal(receipts.rows[0]!.n, 1);
+      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'`, "objects"));
+    assert.equal(receipts[0]!.n, 1);
     const invoice = (await db.execute<{ open_balance: string }>(sql`
-      select open_balance from documents where id = ${invoiceId}`));
-    assert.equal(invoice.rows[0]!.open_balance, "0.0000");
+      select open_balance from documents where id = ${invoiceId}`, "objects"));
+    assert.equal(invoice[0]!.open_balance, "0.0000");
     const attempt = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`)).rows[0]!;
+      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`, "objects"))[0]!;
     assert.equal(attempt.status, "succeeded");
     assert.ok(attempt.journal_entry_id);
   } finally {

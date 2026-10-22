@@ -129,12 +129,12 @@ export async function lockLeavePayrollInputSources(
   orgId: string,
   runDocumentId: string,
 ): Promise<void> {
-  const leaveTypes = (await exec.execute<{ leave_type_id: string }>(sql`
+  const leaveTypes = await exec.execute<{ leave_type_id: string }>(sql`
     select distinct leave_type_id::text as leave_type_id
       from hrm_payroll_inputs
      where org_id = ${orgId} and consumed_by_run_document_id = ${runDocumentId}
      order by leave_type_id
-  `)).rows;
+  `, "objects");
   for (const row of leaveTypes) await lockLeaveEntitlementMapping(exec, orgId, row.leave_type_id);
   await exec.execute(sql`
     select id from hrm_payroll_inputs
@@ -171,7 +171,7 @@ async function resolveLeaveEntitlementPlan(
      order by m.effective_from desc
      limit 1
      for share of m, p
-  `)).rows[0];
+  `, "objects"))[0];
   return requireBankedLeaveEntitlementPlan({ absenceDate: input.absenceDate, mapping });
 }
 
@@ -215,13 +215,13 @@ export async function consumeLeavePayrollInputs(
          select jsonb_array_elements_text(${JSON.stringify(query.employeePartyIds)}::jsonb)::uuid
        )
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (foreign) {
     throw new LeavePayrollInputError(
       `payroll input ${foreign.id} is already consumed by pay run ${foreign.consumed_by_run_document_id} — release that run's inputs or narrow the period instead of absorbing another run's rows`,
     );
   }
-  const pending = (await exec.execute<Record<string, unknown>>(sql`
+  const pending = await exec.execute<Record<string, unknown>>(sql`
     select ${INPUT_COLUMNS} from hrm_payroll_inputs
      where org_id = ${orgId}
        and (status = 'pending' ${query.simulate === true
@@ -233,14 +233,14 @@ export async function consumeLeavePayrollInputs(
        )
      order by absence_date, employee_party_id
      for update
-  `)).rows;
+  `, "objects");
   // Party coherence per row: the employment's live worker must still be the
   // party the ledger will read. A merge moved the worker; refuse by name.
   for (const row of pending) {
     const employment = (await exec.execute<{ worker_party_id: string }>(sql`
       select worker_party_id from worker_employments
        where org_id = ${orgId} and id = ${String(row.employmentId)}
-    `)).rows[0];
+    `, "objects"))[0];
     if (employment && employment.worker_party_id !== String(row.employeePartyId)) {
       throw new LeavePayrollInputError(
         `payroll input ${String(row.id)} names party ${String(row.employeePartyId)} but its employment now points at party ${employment.worker_party_id} — void the stale row and re-file the request so HR re-resolves the party; the run never re-points it`,
@@ -269,7 +269,7 @@ export async function consumeLeavePayrollInputs(
   }
   if (query.simulate !== true) {
     for (const { row, plan } of prepared) {
-      const result = await exec.execute(sql`
+      const result = await exec.execute<never>(sql`
         update hrm_payroll_inputs
            set status = 'consumed', consumed_by_run_document_id = ${runDocumentId},
                consumed_at = now(), resolved_entitlement_plan_id = ${plan?.planId ?? null},
@@ -288,7 +288,7 @@ export async function consumeLeavePayrollInputs(
     entitlementMappingId: plan?.mappingId ?? row.entitlementMappingId,
     entitlementPlanUpdatedAt: plan?.planUpdatedAt ?? row.entitlementPlanUpdatedAt,
   }));
-  const consumed = (await exec.execute<Record<string, unknown>>(sql`
+  const consumed = await exec.execute<Record<string, unknown>>(sql`
     select ${INPUT_COLUMNS} from hrm_payroll_inputs
      where org_id = ${orgId} and consumed_by_run_document_id = ${runDocumentId}
        and status = 'consumed'
@@ -297,7 +297,7 @@ export async function consumeLeavePayrollInputs(
          select jsonb_array_elements_text(${JSON.stringify(query.employeePartyIds)}::jsonb)::uuid
        )
      order by absence_date, employee_party_id
-  `)).rows;
+  `, "objects");
   return consumed.map(toInput);
 }
 
@@ -327,8 +327,8 @@ export async function releaseLeavePayrollInputs(
       returning id
     )
     select count(*)::text as n from released
-  `));
-  return Number(result.rows[0]?.n ?? "0");
+  `, "objects"));
+  return Number(result[0]?.n ?? "0");
 }
 
 export interface LeavePayrollInputProblem {
@@ -388,7 +388,7 @@ export async function leavePayrollInputProblems(
        and (mapping.is_active is distinct from true or mapping.plan_active is distinct from true
          or mapping.unit is distinct from 'hours' or mapping.direction is distinct from 'accrue'
          or mapping.system_key = 'vacation')
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   if (missingMapping > 0) {
     return {
       code: "MAPPING_CHANGED",
@@ -398,7 +398,7 @@ export async function leavePayrollInputProblems(
   }
   const pending = (await exec.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_payroll_inputs where ${scope} and status = 'pending'
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   if (pending > 0) {
     return {
       code: "PENDING_INPUTS",
@@ -411,7 +411,7 @@ export async function leavePayrollInputProblems(
   const voided = (await exec.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_payroll_inputs
      where ${scope} and status = 'voided' and consumed_by_run_document_id = ${query.runDocumentId}
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   if (voided > 0) {
     return {
       code: "VOIDED_AFTER_CONSUME",
@@ -446,7 +446,7 @@ export async function leavePayrollInputProblems(
          or mapping.plan_updated_at is distinct from i.resolved_entitlement_plan_updated_at::text
          or mapping.plan_active is distinct from true or mapping.unit is distinct from 'hours'
          or mapping.direction is distinct from 'accrue' or mapping.system_key = 'vacation')
-  `)).rows[0]?.n ?? 0;
+  `, "objects"))[0]?.n ?? 0;
   if (changed > 0) {
     return {
       code: "MAPPING_CHANGED",
@@ -467,7 +467,7 @@ export async function strandedLeavePayrollInputs(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<LeavePayrollInput[]> {
-  const rows = (await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(sql`
     select ${INPUT_COLUMNS} from hrm_payroll_inputs i
      where i.org_id = ${orgId} and i.status = 'consumed'
        and exists (
@@ -477,6 +477,6 @@ export async function strandedLeavePayrollInputs(
             and r.run_status <> 'committed' and d.status <> 'voided'
        )
      order by i.absence_date, i.employee_party_id
-  `)).rows;
+  `, "objects");
   return rows.map(toInput);
 }

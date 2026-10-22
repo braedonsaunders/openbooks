@@ -200,8 +200,8 @@ async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<void> 
       select count(*)::int as count
         from pg_stat_activity activity
        where ${blockerPid} = any(pg_blocking_pids(activity.pid))
-    `));
-    if ((blocked.rows[0]?.count ?? 0) >= minimum) return;
+    `, "objects"));
+    if ((blocked[0]?.count ?? 0) >= minimum) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error(`timed out waiting for a query blocked by backend ${blockerPid}`);
@@ -257,7 +257,7 @@ test("payment files export only approved bank details on ACH, SEPA and EFT", { s
       const row = (await withBypass(() => db.execute<{ approvalStatus: string; isActive: boolean }>(sql`
         select approval_status as "approvalStatus", is_active as "isActive"
           from party_bank_accounts where id = ${fixture.accountId}
-      `))).rows[0]!;
+      `, "objects")))[0]!;
       assert.equal(row.approvalStatus, "pending");
       assert.equal(row.isActive, false);
 
@@ -350,7 +350,7 @@ test("a blocked export writes no partial file and no partial audit, and delivery
         join file_blobs fb on fb.version_id = fv.id
        where pf.payment_run_id = ${good.runId} and pf.org_id = ${org.orgId}
          and pf.id = ${artifact.id}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     assert.equal(storedBefore.contentHash, createHash("sha256").update(artifact.content).digest("hex"));
 
     // Run 2 shares the same bank account but has no artifact yet.
@@ -359,7 +359,7 @@ test("a blocked export writes no partial file and no partial audit, and delivery
       select
         (select count(*)::int from payment_files where payment_run_id = ${doomed.runId}) as files,
         (select count(*)::int from payment_events where payment_run_id = ${doomed.runId}) as events
-    `))).rows[0]!;
+    `, "objects")))[0]!;
 
     // Apply the pending edit, then attempt generation: rendering happens
     // BEFORE any artifact or event write, so the failure must leave zero rows.
@@ -375,7 +375,7 @@ test("a blocked export writes no partial file and no partial audit, and delivery
         status,
         exported_file_ref as "exportedFileRef"
        from payment_runs where id = ${doomed.runId}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     assert.equal(countsAfter.files, countsBefore.files);
     assert.equal(countsAfter.events, countsBefore.events);
     assert.equal(countsAfter.status, "approved");
@@ -393,7 +393,7 @@ test("a blocked export writes no partial file and no partial audit, and delivery
         join file_versions fv on fv.id = pf.file_version_id and fv.file_id = pf.file_id
         join file_blobs fb on fb.version_id = fv.id
        where pf.id = ${artifact.id} and pf.org_id = ${org.orgId}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     assert.equal(delivered.status, "delivered");
     assert.equal(delivered.deliveries >= 1, true);
     assert.equal(delivered.bytes.toString("utf8"), artifact.content.toString("utf8"));
@@ -436,7 +436,7 @@ test("regenerating a run reuses its stamped creation instant, reproducing byte-i
       );
       const stamp = (await withBypass(() => db.execute<{ fileCreatedAt: Date }>(sql`
         select file_created_at as "fileCreatedAt" from payment_runs where id = ${fixture.runId}
-      `))).rows[0]!;
+      `, "objects")))[0]!;
       assert.equal(new Date(stamp.fileCreatedAt).toISOString(), "2026-07-10T12:00:00.000Z");
     }
   } finally {

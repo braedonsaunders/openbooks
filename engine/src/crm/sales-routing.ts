@@ -36,8 +36,7 @@ export async function routeSalesAccount(
       "feature_disabled",
     );
   const today = await businessTodayInTx(tx, orgId);
-  const row = (
-    await tx.execute<{
+  const row = (await tx.execute<{
       id: string;
       party_id: string;
       subsidiary_id: string | null;
@@ -54,22 +53,18 @@ export async function routeSalesAccount(
       annual_revenue: string | null;
       employee_count: number | null;
     }>(
-      sql`select cp.*,p.subsidiary_id,a.country,a.region,a.longitude::text,a.latitude::text from crm_account_profiles cp join parties p on p.org_id=cp.org_id and p.id=cp.party_id left join lateral(select country,region,longitude,latitude from addresses where org_id=cp.org_id and party_id=cp.party_id order by is_default_billing desc,created_at,id limit 1)a on true where cp.org_id=${orgId} and cp.id=${profileId} for update of cp`,
-    )
-  ).rows[0];
+      sql`select cp.*,p.subsidiary_id,a.country,a.region,a.longitude::text,a.latitude::text from crm_account_profiles cp join parties p on p.org_id=cp.org_id and p.id=cp.party_id left join lateral(select country,region,longitude,latitude from addresses where org_id=cp.org_id and party_id=cp.party_id order by is_default_billing desc,created_at,id limit 1)a on true where cp.org_id=${orgId} and cp.id=${profileId} for update of cp`, "objects",
+    ))[0];
   if (!row)
     throw new SalesError(
       "Sales account not found. Reload the customer before routing.",
       404,
     );
-  const manual = (
-    await tx.execute<{ source: string }>(
-      sql`select source from crm_account_assignment_events where org_id=${orgId} and account_profile_id=${profileId} order by created_at desc,id desc limit 1`,
-    )
-  ).rows[0];
+  const manual = (await tx.execute<{ source: string }>(
+      sql`select source from crm_account_assignment_events where org_id=${orgId} and account_profile_id=${profileId} order by created_at desc,id desc limit 1`, "objects",
+    ))[0];
   if (manual?.source === "manual") return row.territory_id;
-  const candidates = (
-    await tx.execute<{
+  const candidates = await tx.execute<{
       id: string;
       definition: {
         rules: TerritoryRule[];
@@ -79,9 +74,8 @@ export async function routeSalesAccount(
         sales_team_id: string | null;
       };
     }>(
-      sql`select t.id,v.definition from crm_sales_territories t join lateral(select definition from crm_sales_territory_versions v where v.org_id=t.org_id and v.territory_id=t.id and v.effective_from<=${today}::date order by v.effective_from desc,v.revision desc limit 1)v on true where t.org_id=${orgId} and t.is_active and t.lifecycle<>'archived' and t.subsidiary_id is not distinct from ${row.subsidiary_id} order by t.id`,
-    )
-  ).rows;
+      sql`select t.id,v.definition from crm_sales_territories t join lateral(select definition from crm_sales_territory_versions v where v.org_id=t.org_id and v.territory_id=t.id and v.effective_from<=${today}::date order by v.effective_from desc,v.revision desc limit 1)v on true where t.org_id=${orgId} and t.is_active and t.lifecycle<>'archived' and t.subsidiary_id is not distinct from ${row.subsidiary_id} order by t.id`, "objects",
+    );
   const subject: TerritorySubject = {
     country: row.country,
     region: row.region,
@@ -119,11 +113,9 @@ export async function routeSalesAccount(
   const territoryId = target?.id ?? null;
   const representative = target?.definition.default_employee_id ?? null;
   if (representative) {
-    const valid = (
-      await tx.execute(
-        sql`select 1 from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${orgId} and e.party_id=${representative} and e.is_active and e.is_sales_rep and p.is_active and p.subsidiary_id is not distinct from ${row.subsidiary_id} and (e.sales_rep_since is null or e.sales_rep_since<=${today}::date) and (e.terminated_on is null or e.terminated_on>=${today}::date) for share of e,p`,
-      )
-    ).rows.length;
+    const valid = (await tx.execute(
+        sql`select 1 from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${orgId} and e.party_id=${representative} and e.is_active and e.is_sales_rep and p.is_active and p.subsidiary_id is not distinct from ${row.subsidiary_id} and (e.sales_rep_since is null or e.sales_rep_since<=${today}::date) and (e.terminated_on is null or e.terminated_on>=${today}::date) for share of e,p`, "objects",
+      )).length;
     if (!valid)
       throw new SalesError(
         "The territory representative is no longer eligible. Reassign the territory in Sales → Territories.",
@@ -131,11 +123,9 @@ export async function routeSalesAccount(
   }
   if (row.territory_id === territoryId && row.sales_rep_id === representative)
     return territoryId;
-  const updated = (
-    await tx.execute(
-      sql`update crm_account_profiles set territory_id=${territoryId},sales_rep_id=${representative},updated_at=clock_timestamp(),updated_by=${actorId} where org_id=${orgId} and id=${profileId} returning id`,
-    )
-  ).rows;
+  const updated = await tx.execute(
+      sql`update crm_account_profiles set territory_id=${territoryId},sales_rep_id=${representative},updated_at=clock_timestamp(),updated_by=${actorId} where org_id=${orgId} and id=${profileId} returning id`, "objects",
+    );
   if (!updated.length) throw new Error("The sales assignment was not applied.");
   await tx.execute(
     sql`update customer_roles set sales_rep_id=${representative},updated_at=clock_timestamp(),updated_by=${actorId} where org_id=${orgId} and party_id=${row.party_id}`,

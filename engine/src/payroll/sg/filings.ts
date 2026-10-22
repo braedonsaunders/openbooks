@@ -127,8 +127,8 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'SG'
      group by s.employee_party_id, p.display_name
      order by p.display_name
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed SG pay runs for ${taxYear} — Form IR8A reports remuneration actually paid, `
       + "so a year with nothing committed has no slip to issue",
@@ -152,12 +152,12 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
                        and r.run_status = 'committed'
      where s.org_id = ${orgId} and s.tax_year = ${nextYear} and s.country = 'SG'
      group by s.employee_party_id
-  `));
+  `, "objects"));
   const nextByEmployee = new Map<string, string>();
-  for (const row of nextRows.rows) {
+  for (const row of nextRows) {
     nextByEmployee.set(String(row.employee_party_id), num(row.next_income));
   }
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     employmentIncome: num(row.employment_income),

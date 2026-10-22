@@ -28,7 +28,7 @@ test("a statutory threshold catch-up can settle a vendor entirely through withhe
         values(${org.orgId},${bill},1,${org.accounts.cogs},'1',${amount},${amount},'0','labour')`);
       await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${bill}`);
       const entry = await postDocument(bill, deps);
-      const openLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and account_id=${org.accounts.ap}`)).rows[0]!.id;
+      const openLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and account_id=${org.accounts.ap}`, "objects"))[0]!.id;
       const payment = await createPaymentDocument({ orgId: org.orgId, createdBy: actor, kind: 'vendor_payment', partyId: org.vendorId,
         subsidiaryId: org.subsidiaryId, bankAccountId: org.accounts.bank, documentDate: org.date, currency: 'EUR', allowedSubsidiaryIds: null });
       await updateDraftPayment(payment.id, { allocations: [{ openLineId: openLine, sourceTransactionAmount: amount, targetTransactionAmount: amount,
@@ -38,15 +38,15 @@ test("a statutory threshold catch-up can settle a vendor entirely through withhe
     };
     await settle('5000');
     const crossing = await settle('100');
-    const header = (await db.execute<{ total: string; amount: string }>(sql`select total::text,custom->>'withholdingAmount' as amount from documents where org_id=${org.orgId} and id=${crossing.id}`)).rows[0];
+    const header = (await db.execute<{ total: string; amount: string }>(sql`select total::text,custom->>'withholdingAmount' as amount from documents where org_id=${org.orgId} and id=${crossing.id}`, "objects"))[0];
     assert.deepEqual(header, { total: '0.0000', amount: '100.0000' });
-    const legs = (await db.execute<{ account_id: string; amount: string }>(sql`select account_id,amount::text from journal_lines where org_id=${org.orgId} and entry_id=${crossing.entry}`)).rows;
+    const legs = await db.execute<{ account_id: string; amount: string }>(sql`select account_id,amount::text from journal_lines where org_id=${org.orgId} and entry_id=${crossing.entry}`, "objects");
     assert.equal(legs.filter(row => row.account_id === org.accounts.bank).every(row => row.amount === '0.0000'), true);
     assert.equal(legs.find(row => row.account_id === org.accounts.ap)?.amount, '100.0000');
     assert.equal(legs.find(row => row.account_id === org.accounts.withholding)?.amount, '-100.0000');
     const evidence = (await db.execute<{ deducted: string; outstanding: string; waived: string }>(sql`select deducted_amount::text as deducted,uncollected_amount::text as outstanding,
       (select reason->>'amount' from jsonb_array_elements(reasons) reason where reason->>'code'='deduction_capped') as waived
-      from withholding_deductions where org_id=${org.orgId} and payment_document_id=${crossing.id}`)).rows[0];
+      from withholding_deductions where org_id=${org.orgId} and payment_document_id=${crossing.id}`, "objects"))[0];
     assert.deepEqual(evidence, { deducted: '100.0000', outstanding: '0.0000', waived: '665.0000' });
   }); } finally { await dropScratchOrg(org.orgId); }
 });

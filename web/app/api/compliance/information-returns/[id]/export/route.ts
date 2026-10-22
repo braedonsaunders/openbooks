@@ -67,8 +67,8 @@ export const GET = defineRoute({
         join orgs o on o.id = f.org_id
         left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
        where f.org_id = ${orgId} and f.id = ${id}
-    `))
-    const filing = filings.rows[0]
+    `, 'objects'))
+    const filing = filings[0]
     if (!filing) return notFound("record")
     const form = formDefinition(filing.form_type)
 
@@ -95,7 +95,7 @@ export const GET = defineRoute({
         join parties p on p.id = r.party_id and p.org_id = r.org_id
        where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
        order by name
-    `))
+    `, 'objects'))
 
     const header = [
       'payer_name',
@@ -117,7 +117,7 @@ export const GET = defineRoute({
       ...form.boxes.map((box) => `box_${box.number}`),
     ]
     const lines = [header.join(',')]
-    for (const r of recipients.rows) {
+    for (const r of recipients) {
       const amounts = filedBoxAmounts(r.computed_amounts, r.adjustments)
       lines.push(
         [

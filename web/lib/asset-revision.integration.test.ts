@@ -37,7 +37,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { PATCH, GET } = await import('../app/api/assets/[id]/route');
 
 
-async function token(assetId:string){return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`)).rows[0]!.revision;}
+async function token(assetId:string){return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`, 'objects'))[0]!.revision;}
 async function patch(assetId:string,body:Record<string,unknown>){return PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),{params:Promise.resolve({id:assetId})});}
 for(const kind of ['missing','millisecond','malformed','stale','current'] as const){
  test(`asset editor revision ${kind}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
@@ -48,7 +48,7 @@ for(const kind of ['missing','millisecond','malformed','stale','current'] as con
    const revision=await token(assetId);
    const body:Record<string,unknown>={name:'Revision-tested asset'};
    if(kind!=='missing')body.expectedUpdatedAt=kind==='millisecond'?revision.replace('123456','123'):kind==='malformed'?'invalid':kind==='stale'?revision.replace('123456','123455'):revision;
-   const snapshot=async()=>(await db.execute(sql`select (select to_jsonb(a) from fixed_assets a where id=${assetId}) as asset,(select jsonb_agg(to_jsonb(l)) from audit_log l where row_id=${assetId}) as audit`)).rows;
+   const snapshot=async()=>await db.execute(sql`select (select to_jsonb(a) from fixed_assets a where id=${assetId}) as asset,(select jsonb_agg(to_jsonb(l)) from audit_log l where row_id=${assetId}) as audit`, 'objects');
    const before=await snapshot();const response=await patch(assetId,body);
    assert.equal(response.status,kind==='current'?200:409,JSON.stringify(await response.json()));
    if(kind!=='current')assert.deepEqual(await snapshot(),before,'revision conflict leaves both asset and evidence unchanged');
@@ -75,7 +75,7 @@ test('two stale editors cannot silently overwrite each other',{skip:!process.env
   const {actorId,assetId}=await seedAsset(org);state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};const revision=await token(assetId);
   const first=await patch(assetId,{expectedUpdatedAt:revision,name:'First committed editor'});assert.equal(first.status,200);
   const second=await patch(assetId,{expectedUpdatedAt:revision,name:'Stale editor'});assert.equal(second.status,409);
-  assert.equal((await db.execute(sql`select name from fixed_assets where id=${assetId}`)).rows[0]!.name,'First committed editor');
+  assert.equal((await db.execute(sql`select name from fixed_assets where id=${assetId}`, 'objects'))[0]!.name,'First committed editor');
  }finally{state.gate=null;await dropScratchOrg(org.orgId)}
 });
 test('asset revision rechecks the writer that committed while PATCH waited',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
@@ -86,7 +86,7 @@ test('asset revision rechecks the writer that committed while PATCH waited',{ski
   assert.equal((await writer.query("update fixed_assets set name='Concurrent committed editor',updated_at=updated_at+interval '1 microsecond' where id=$1",[assetId])).rowCount,1,'concurrent writer must hold the asset row');
   pending=patch(assetId,{expectedUpdatedAt:revision,name:'Stale waiting editor'});void pending.catch(()=>{});
   await waitForLockWaiter(writer,{label:'the stale waiting editor'});await writer.query('commit');assert.equal((await pending).status,409);
-  assert.equal((await db.execute(sql`select name from fixed_assets where id=${assetId}`)).rows[0]!.name,'Concurrent committed editor');
+  assert.equal((await db.execute(sql`select name from fixed_assets where id=${assetId}`, 'objects'))[0]!.name,'Concurrent committed editor');
  }finally{if(connected)await writer.query('rollback').catch(()=>{});if(pending)await pending.catch(()=>{});if(connected)await writer.end();state.gate=null;await dropScratchOrg(org.orgId)}
 });
 
@@ -116,7 +116,7 @@ const assetDisplayCases = [
         }
 
         async function eventFor(orgId: string, entryId: string) {
-          return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+          return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`, 'objects'))[0]!.id;
         }
 
 
@@ -195,7 +195,7 @@ const assetDisplayCases = [
             select org_id,2026,8,'2026-08','2026-08-01','2026-08-31',false,fiscal_calendar_id from accounting_periods where org_id=${org.orgId} limit 1`);
           await buildSchedule(assetId,org.orgId,actorId,org.bookId);
           assert.equal((await runDepreciation(org.orgId,'2026-07-31',actorId,assetId)).totalAmount,'100.0000');
-          const history=(await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} and posted_amount is not null`)).rows;
+          const history=await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} and posted_amount is not null`, 'objects');
           const impairment=await remeasureAsset(org.orgId,assetId,{actorId,date:'2026-07-31',newCarryingValue:'800'});
           await reverseAssetLifecycleEvent(org.orgId,await eventFor(org.orgId,impairment.entryId),{actorId,date:'2026-08-01',reason:'Correct the impairment after July depreciation'});
           for(let i=0;i<2;i++) {
@@ -204,7 +204,7 @@ const assetDisplayCases = [
            assert.ok(detail);
            assert.equal(detail.totals.netBookValue,'900.0000');
            assert.deepEqual(detail.schedule.map(line=>line.netBookValue),['800.0000','800.0000']);
-           assert.deepEqual((await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} and posted_amount is not null`)).rows,history);
+           assert.deepEqual(await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} and posted_amount is not null`, 'objects'),history);
           }
          } finally {await dropScratchOrg(org.orgId);}
         });

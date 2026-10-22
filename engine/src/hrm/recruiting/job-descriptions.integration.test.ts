@@ -44,7 +44,7 @@ async function insertJobDescription(orgId: string, values: { name: string; isAct
             'CAD', 'hourly', ${"Lead daily site operations.\n\n- Coordinate trades\n- Own safety"},
             ${values.isActive ?? true})
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   assert.ok(row, "job description stored");
   return row.id;
 }
@@ -93,7 +93,7 @@ test("a requisition copies its job description and keeps the copy when the libra
       update hrm_job_descriptions set title = 'Renamed', description = 'Rewritten'
        where org_id = ${org.orgId} and id = ${jobDescriptionId}`);
     const stored = (await db.execute<{ title: string; description: string }>(sql`
-      select title, description from hrm_requisitions where org_id = ${org.orgId} and id = ${requisition.id}`)).rows[0];
+      select title, description from hrm_requisitions where org_id = ${org.orgId} and id = ${requisition.id}`, "objects"))[0];
     assert.deepEqual(stored, { title: "Site Superintendent", description: requisition.description });
 
     await assert.rejects(
@@ -153,10 +153,10 @@ test("posting edits are revision-guarded, audited, and refused once the opening 
     assert.equal(revised.title, "Estimator", "omitted fields are unchanged");
     assert.equal(revised.revision, requisition.revision + 1);
 
-    const audit = (await db.execute<{ changes: { before: { description: string }; after: { description: string } } }>(sql`
+    const audit = await db.execute<{ changes: { before: { description: string }; after: { description: string } } }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'hrm_requisitions' and row_id = ${requisition.id}
-         and action = 'requisition_posting_revised'`)).rows;
+         and action = 'requisition_posting_revised'`, "objects");
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.changes.before.description, "Original text.");
     assert.equal(audit[0]!.changes.after.description, "Revised text.");

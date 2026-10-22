@@ -67,7 +67,7 @@ async function hasActiveEmployment(orgId: string, partyId: string): Promise<bool
         on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
      where e.org_id = ${orgId} and e.worker_party_id = ${partyId}
        and v.status in ('active', 'on_leave')
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   return !!row;
 }
 
@@ -98,7 +98,7 @@ async function readKioskWorkers(
              or e.employer_subsidiary_id <> all(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[]))
       )`
   return withOrgTransaction(orgId, async () => {
-    return (await db.execute<KioskWorker>(sql`
+    return await db.execute<KioskWorker>(sql`
       select p.id::text as id, p.display_name as name
         from parties p
        where p.org_id = ${orgId} and p.is_active
@@ -112,7 +112,7 @@ async function readKioskWorkers(
               and v.status in ('active', 'on_leave')
               ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowedSubsidiaryIds)}
          )
-       order by p.display_name, p.id`)).rows;
+       order by p.display_name, p.id`, "objects");
   });
 }
 
@@ -162,7 +162,7 @@ export async function registerKiosk(input: {
       returning id::text as id, org_id::text as "orgId", name,
                 location_id::text as "locationId", project_id::text as "projectId",
                 pin_required as "pinRequired", photo_required as "photoRequired",
-                is_active as "isActive", last_seen_at::text as "lastSeenAt"`)).rows[0];
+                is_active as "isActive", last_seen_at::text as "lastSeenAt"`, "objects"))[0];
   });
   if (!row) throw new FieldTimeError("kiosk_not_stored", "The kiosk was not stored — no row was written; retry the registration");
   return { kiosk: row, token };
@@ -180,14 +180,14 @@ export async function revokeKiosk(input: {
   const rotated = issueDeviceToken().tokenHash;
   await withOrgTransaction(orgId, async () => {
     const kiosk = (await db.execute<{ project_id: string | null }>(sql`
-      select project_id from time_kiosks where org_id = ${orgId} and id = ${kioskId} and is_active for update`)).rows[0];
+      select project_id from time_kiosks where org_id = ${orgId} and id = ${kioskId} and is_active for update`, "objects"))[0];
     if (!kiosk) refuse("kiosk_unknown", "The kiosk is unknown or already retired — reload the kiosk list");
     if (kiosk.project_id) {
       await lockProjectForScope(db, orgId, kiosk.project_id, allowedSubsidiaryIds, "share");
     } else {
       assertUnrestrictedScope(allowedSubsidiaryIds);
     }
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update time_kiosks
          set is_active = false, device_token_hash = ${rotated}, updated_at = now(), updated_by = ${actorUserId}
        where org_id = ${orgId} and id = ${kioskId} and is_active`)).rowCount ?? 0;
@@ -203,12 +203,12 @@ export async function resolveKioskByToken(deviceToken: string): Promise<KioskRow
   // below would resolve nothing — every kiosk request would 404.
   // bypass: connector-token — a sessionless kiosk's device token binds the kiosk but not its organization.
   const found = await withBypassContext(async () => {
-    const rows = (await db.execute<(KioskRow & { org_id: string })>(sql`
+    const rows = await db.execute<(KioskRow & { org_id: string })>(sql`
       select id::text as id, org_id::text as "orgId", org_id::text as org_id, name,
              location_id::text as "locationId", project_id::text as "projectId",
              pin_required as "pinRequired", photo_required as "photoRequired",
              is_active as "isActive", last_seen_at::text as "lastSeenAt"
-        from time_kiosks where device_token_hash = ${hash}`)).rows;
+        from time_kiosks where device_token_hash = ${hash}`, "objects");
     return rows[0] ?? null;
   });
   if (!found || !found.isActive) {
@@ -224,7 +224,7 @@ export async function resolveKioskByToken(deviceToken: string): Promise<KioskRow
              pin_required as "pinRequired", photo_required as "photoRequired",
              is_active as "isActive", last_seen_at::text as "lastSeenAt"
         from time_kiosks
-       where org_id = ${found.orgId} and id = ${found.id} and is_active`)).rows[0];
+       where org_id = ${found.orgId} and id = ${found.id} and is_active`, "objects"))[0];
     if (!scoped) {
       refuse("kiosk_unknown", "This kiosk link is unknown or retired — ask a manager for a current kiosk link");
     }
@@ -259,7 +259,7 @@ export async function identifyByPin(input: {
       select pin_hash, failed_attempts, locked_until::text as locked_until
        from worker_clock_pins
        where org_id = ${input.kiosk.orgId} and employee_party_id = ${input.employeePartyId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!row) {
       refuse(
         "pin_not_set",
@@ -319,9 +319,9 @@ export async function setWorkerPin(input: {
   const pinHash = hashPin(input.pin);
   await withOrgTransaction(input.orgId, async () => {
     const party = (await db.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${input.orgId} and id = ${input.employeePartyId} and is_active for update`)).rows[0];
+      select id from parties where org_id = ${input.orgId} and id = ${input.employeePartyId} and is_active for update`, "objects"))[0];
     if (!party) throw new ScopeNotFoundError();
-    const employments = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+    const employments = await db.execute<{ employer_subsidiary_id: string | null }>(sql`
       select e.employer_subsidiary_id
         from worker_employments e
         join worker_employment_versions v
@@ -329,7 +329,7 @@ export async function setWorkerPin(input: {
        where e.org_id = ${input.orgId} and e.worker_party_id = ${input.employeePartyId}
          and v.status in ('active', 'on_leave')
        order by e.id
-       for update of e`)).rows;
+       for update of e`, "objects");
     if (!employments.length) {
       refuse(
         "not_employee",

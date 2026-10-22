@@ -21,7 +21,7 @@ test("demand lines validate, audit each write, and refuse feature-off and missin
       hoursPerWeek: "12.5000", note: "quarterly staffing", opportunityId: null,
     };
     const wrote = async (query: SQL) => {
-      const result = await db.execute(query);
+      const result = await db.execute<Record<string, unknown>>(query);
       assert.equal(result.rowCount, 1);
     };
     await withBypassContext(async () => {
@@ -56,8 +56,8 @@ test("demand lines validate, audit each write, and refuse feature-off and missin
       select action, count(*)::text as count from audit_log
        where org_id = ${org.orgId} and table_name = 'res_demand_lines' and row_id = ${created.id}
        group by action order by action
-    `));
-    assert.deepEqual(actions.rows, [
+    `, "objects"));
+    assert.deepEqual(actions, [
       { action: "delete", count: "1" }, { action: "insert", count: "1" }, { action: "update", count: "1" },
     ]);
     await withBypassContext(() => wrote(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":false}'::jsonb) where id = ${org.orgId} returning id`));

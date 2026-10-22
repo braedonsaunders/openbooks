@@ -19,9 +19,9 @@ async function revisionOf(id: string): Promise<string> {
   const rows = await withBypass(() =>
     db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-        from custom_records where id = ${id}`),
+        from custom_records where id = ${id}`, "objects"),
   );
-  return rows.rows[0]!.revision;
+  return rows[0]!.revision;
 }
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -88,9 +88,9 @@ async function seedType(orgId: string, actorId: string, typeKey: string) {
 
 async function recordCount(orgId: string, typeKey: string): Promise<number> {
   const r = await withBypass(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from custom_records where org_id = ${orgId} and type_key = ${typeKey}`),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from custom_records where org_id = ${orgId} and type_key = ${typeKey}`, "objects"),
   );
-  return r.rows[0]!.n;
+  return r[0]!.n;
 }
 
 test(
@@ -180,10 +180,10 @@ test(
         `expected tenant-opaque 404, got ${refusedUpdate.status}: ${JSON.stringify(refusedUpdate.body)}`,
       );
       const afterUpdate = await withBypass(() =>
-        db.execute<{ data: unknown }>(sql`select data from custom_records where id = ${createdId}`),
+        db.execute<{ data: unknown }>(sql`select data from custom_records where id = ${createdId}`, "objects"),
       );
       assert.equal(
-        (afterUpdate.rows[0]!.data as { vendor: string }).vendor,
+        (afterUpdate[0]!.data as { vendor: string }).vendor,
         ownParty,
       );
 

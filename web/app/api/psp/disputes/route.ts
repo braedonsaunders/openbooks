@@ -46,8 +46,8 @@ export const POST = defineRoute({
       select id from payment_disputes
        where org_id = ${orgId} and id = ${body.disputeId}
        limit 1
-    `)
-    if (!existing.rows[0]) return notFound('record')
+    `, 'objects')
+    if (!existing[0]) return notFound('record')
     try {
       const outcome = await approveDisputeReview(
         orgId,

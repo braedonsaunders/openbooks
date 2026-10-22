@@ -82,8 +82,8 @@ async function seedRecognitionTermPeriods(org: ScratchOrg): Promise<void> {
   const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
     select fiscal_calendar_id
       from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`);
-  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
+  const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
     [2026, 8, "2026-08-01", "2026-08-31"],
@@ -127,7 +127,7 @@ async function docState(orgId: string, documentId: string) {
   }>(sql`
     select status, void_requested_at::text, reversal_entry_id::text
       from documents where id = ${documentId} and org_id = ${orgId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
 }
 
 async function voidMessage(input: {
@@ -172,7 +172,7 @@ test("voiding a posted inventory bill reverses its receipt movement and journal"
     const movements = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from inventory_movements movement
         join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
-       where movement.org_id = ${org.orgId} and line.document_id = ${billId}`)).rows[0]!.n;
+       where movement.org_id = ${org.orgId} and line.document_id = ${billId}`, "objects"))[0]!.n;
     assert.equal(movements, 1);
     assert.equal(toUnits((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), toUnits("5"));
 
@@ -201,10 +201,10 @@ test("a kernel-reversed bill receipt does not block the bill void", { skip: !DB 
       select movement.id from inventory_movements movement
         join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
        where movement.org_id = ${org.orgId} and line.document_id = ${billId}
-         and movement.kind = 'receipt' and movement.status = 'posted'`));
-    assert.equal(mv.rows.length, 1);
+         and movement.kind = 'receipt' and movement.status = 'posted'`, "objects"));
+    assert.equal(mv.length, 1);
     await reverseInventoryMovement(org.orgId, actor, {
-      movementId: mv.rows[0]!.id,
+      movementId: mv[0]!.id,
       reversalDate: org.date,
       reason: "probe reversal of bill receipt",
     });
@@ -233,7 +233,7 @@ test("revenue-only void refusal keeps the exact cancellation remedy", { skip: !D
     const obligations = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from performance_obligations
        where org_id = ${org.orgId} and status <> 'cancelled'
-         and document_line_id in (select id from document_lines where document_id = ${invId})`)).rows[0]!.n;
+         and document_line_id in (select id from document_lines where document_id = ${invId})`, "objects"))[0]!.n;
     assert.equal(obligations, 1);
 
     const message = await voidMessage({ orgId: org.orgId, documentId: invId, actorId: actor });
@@ -271,7 +271,7 @@ test("mixed inventory and revenue void refusal names both subledgers", { skip: !
               where movement.org_id = ${org.orgId} and line.document_id = ${invId}) as movements,
              (select count(*)::int from performance_obligations
                where org_id = ${org.orgId} and status <> 'cancelled'
-                 and document_line_id in (select id from document_lines where document_id = ${invId})) as obligations`)).rows[0]!;
+                 and document_line_id in (select id from document_lines where document_id = ${invId})) as obligations`, "objects"))[0]!;
     assert.equal(counts.movements, 1);
     assert.equal(counts.obligations, 1);
 
@@ -290,13 +290,13 @@ test("mixed inventory and revenue void refusal names both subledgers", { skip: !
 async function glBalance(orgId: string, accountId: string): Promise<string> {
   return (await db.execute<{ balance: string }>(sql`
     select coalesce(sum(amount), 0)::text as balance
-      from journal_lines where org_id = ${orgId} and account_id = ${accountId}`)).rows[0]!.balance;
+      from journal_lines where org_id = ${orgId} and account_id = ${accountId}`, "objects"))[0]!.balance;
 }
 
 async function apOpenLine(orgId: string, entryId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     select id from journal_lines
-     where org_id = ${orgId} and entry_id = ${entryId} and is_open_item`)).rows[0]!.id;
+     where org_id = ${orgId} and entry_id = ${entryId} and is_open_item`, "objects"))[0]!.id;
 }
 
 // Financial intent of this test: the vendor billed 10 for 5 units that cost
@@ -343,7 +343,7 @@ test("partial credit plus cash with full adjust-out leaves exactly the residual 
     const profile = (await db.execute<{ adjustment: string; variance: string }>(sql`
       select adjustment_account_id as adjustment, variance_account_id as variance
         from item_inventory_profiles
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`)).rows[0]!;
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!;
     assert.equal(profile.adjustment, org.accounts.adjustment);
     assert.notEqual(profile.variance, profile.adjustment);
     const billId = await seedApprovedDoc(org, "vendor_bill", "BILL-INVREM-E2E", org.vendorId, [
@@ -390,7 +390,7 @@ test("partial credit plus cash with full adjust-out leaves exactly the residual 
     const applied = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from applications
        where org_id = ${org.orgId} and unapplied_at is null
-         and (from_line_id = ${creditLine} or from_line_id = ${billLine} or to_line_id = ${billLine})`)).rows[0]!.n;
+         and (from_line_id = ${creditLine} or from_line_id = ${billLine} or to_line_id = ${billLine})`, "objects"))[0]!.n;
     assert.equal(applied, 2);
     assert.deepEqual(
       (await openItemsForParty(org.vendorId, "ap", org.orgId)).map((item) => item.lineId),

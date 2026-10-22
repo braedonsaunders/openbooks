@@ -616,8 +616,8 @@ async function readDashboardMetrics(
         (select count(*) from accounts a where a.is_active and a.org_id = ${orgId} ${totalsAccountScope}) as accounts,
         (select count(*) from journal_entries e where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and e.posting_date = ${today} ${totalsEntryScope}) as entries_today,
         (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId} ${totalsGlScope}) as ledger_sum
-    `)
-      : Promise.resolve({ rows: [{ journal_lines: 0, accounts: 0, entries_today: 0, ledger_sum: '0' }] }),
+    `, 'objects')
+      : Promise.resolve([{ journal_lines: 0, accounts: 0, entries_today: 0, ledger_sum: '0' }]),
     // Cash at bank is the cockpit's per-account reader, summed — the same
     // doorway as the /banking cockpit and the forecast's startingCash, so
     // same-labeled figures tie by construction. It is subsidiary-scoped,
@@ -797,8 +797,8 @@ async function readDashboardMetrics(
         ) lt on true
         left join subsidiaries sub on sub.id = e.subsidiary_id and sub.org_id = ${orgId}
        order by e.created_at desc, e.entry_number desc
-    `)
-      : Promise.resolve({ rows: [] }),
+    `, 'objects')
+      : Promise.resolve([]),
     need('draftDocuments')
       ? db.execute<DraftDocumentRow>(sql`
       select id, kind, document_number, document_date, total, currency, status
@@ -806,8 +806,8 @@ async function readDashboardMetrics(
        where d.org_id = ${orgId} and d.status = 'draft' and d.created_by = ${userId} ${draftDocumentScope}
        order by updated_at desc
        limit 5
-    `)
-      : Promise.resolve({ rows: [] }),
+    `, 'objects')
+      : Promise.resolve([]),
     mayApprove && need('pendingApprovals', 'pendingApprovalList', 'myApprovalList')
       ? approvalWorklistForAuthz(authz)
       : Promise.resolve([]),
@@ -815,7 +815,7 @@ async function readDashboardMetrics(
     // and the latest detection across readable packs. Same scope as the
     // workbench inbox, never a parallel count.
     agentPacks.length > 0 && need('agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun')
-      ? db.execute(sql`
+      ? db.execute<{ open: number; proposals: number; last_run: string | Date | null }>(sql`
           select (count(*) filter (where w.status in ('open', 'in_review')))::int as open,
                  (count(*) filter (where w.status in ('open', 'in_review') and w.summary ? 'proposedCommand'))::int as proposals,
                  max(w.last_detected_at) as last_run
@@ -823,8 +823,8 @@ async function readDashboardMetrics(
             ${WORK_ITEM_SUBJECT_JOIN}
            where w.org_id = ${orgId} and w.agent_key in (${agentPackList})
              ${workItemSubjectScopePredicate(orgId, authz.allowedSubsidiaryIds)}
-        `)
-      : Promise.resolve({ rows: [{ open: 0, proposals: 0, last_run: null }] }),
+        `, 'objects')
+      : Promise.resolve([{ open: 0, proposals: 0, last_run: null }]),
     wantResourcing
       ? resourcingHome(orgId, authz.allowedSubsidiaryIds).then((home) => ({
           utilization: home.utilization,
@@ -846,7 +846,7 @@ async function readDashboardMetrics(
   const banks = bankRead.rows
   const arItems = arRead.rows
   const apItems = apRead.rows
-  const t = totals.rows[0]!
+  const t = totals[0]!
   // Hub KPI arithmetic, exactly as arPosition/apPosition derive it from the
   // same items: outstanding minus the Current bucket (null/future due),
   // floored at zero.
@@ -905,7 +905,7 @@ async function readDashboardMetrics(
       ...row,
       href: approvalRecordHref(row.targetKind, row.targetId),
     }))
-  const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
+  const agent = agentFindings[0]!
   return {
     baseCurrency,
     journalLineCount: Number(t.journal_lines),
@@ -952,7 +952,7 @@ async function readDashboardMetrics(
     closeRunsUnavailable: closeReadiness.unavailable,
     resourcingPulse: resourcingPulse ?? null,
     asOfDate: today,
-    recentEntries: recentEntries.rows.map((r) => ({
+    recentEntries: recentEntries.map((r) => ({
       id: r.id,
       entryNumber: r.entry_number,
       postingDate: r.posting_date,
@@ -970,7 +970,7 @@ async function readDashboardMetrics(
     // top-5 oldest first, gates + gateless documents + budgets.
     pendingApprovalList: unionTop5.map((r) => ({ ...r })),
     myApprovalList: unionTop5.map((r) => ({ ...r })),
-    draftDocuments: draftDocuments.rows.map((r) => ({
+    draftDocuments: draftDocuments.map((r) => ({
       id: r.id,
       kind: r.kind,
       documentNumber: r.document_number,

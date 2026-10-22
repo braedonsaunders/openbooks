@@ -52,7 +52,7 @@ const modules = new Map<string, string>([
   `],
   ['mock:db', `
     const state = globalThis[Symbol.for('openbooks.insight-source-access-test')]
-    export const db = { async execute() { return { rows: state.card ? [state.card] : [] } } }
+    export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: state.card ? [state.card] : [] }) } }
   `],
 ])
 

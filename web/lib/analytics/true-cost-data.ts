@@ -685,7 +685,7 @@ export async function trueCostData(
        where t.org_id = ${orgId} ${timeScope} and t.department_id is not null
          and t.worked_on >= ${from} and t.worked_on <= ${to}
        group by t.department_id
-    `),
+    `, "objects"),
     // Premium-rate presets for the selling planner: the org's own overtime /
     // double-time cost multipliers (time_types owners), never assumed ×1.5/×2.
     db.execute(sql`
@@ -694,7 +694,7 @@ export async function trueCostData(
        where org_id = ${orgId} and is_active
          and classification in ('overtime', 'double_time')
        order by classification, name
-    `),
+    `, "objects"),
   ]);
   const profile = cfg.profile;
 
@@ -710,7 +710,7 @@ export async function trueCostData(
   const priorTimeLegs = priorTimeRows.rows as unknown as { func: string | null; late: string | null; nonbill_cost: TrueCostSqlNumeric }[];
   const appliedLegs = appliedRows.rows as unknown as { func: string | null; late: string | null; applied: TrueCostSqlNumeric; lines: string | number }[];
   const baseLegs = baseRows.rows as unknown as { dept_id: string; func: string | null; late: string | null; labor_dollars: TrueCostSqlNumeric; revenue: TrueCostSqlNumeric; direct_cost: TrueCostSqlNumeric }[];
-  const headcountRows = hcRows.rows as unknown as { department_id: string; headcount: string | number }[];
+  const headcountRows = hcRows as unknown as { department_id: string; headcount: string | number }[];
   const tcCtx = await flowRates(orgId, [
     ...acctLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
     ...hourLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
@@ -827,10 +827,10 @@ export async function trueCostData(
           select distinct on (er.party_id) er.party_id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id
             from employee_roles er
             join parties p on p.id = er.party_id and p.org_id = er.org_id
-           where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`),
+           where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects"),
         loadWorkSchedules(db, orgId, allowedSubsidiaryIds),
       ]);
-      const keysByEmp = new Map(roleRows.rows.map((r) => [r.party_id, r]));
+      const keysByEmp = new Map(roleRows.map((r) => [r.party_id, r]));
       const annualByEmp = new Map<string, string>();
       for (const id of empIds) {
         const keys = keysByEmp.get(id);
@@ -1726,7 +1726,7 @@ export async function trueCostData(
   const weighted = cmp(laborHoursExact, "0") > 0
     ? toChartNumber(div(employees.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), "0.0000"), laborHoursExact))
     : 0;
-  const premiumPresets = (premiumRows.rows as unknown as { id: string; name: string; classification: string; cost_multiplier: string }[])
+  const premiumPresets = (premiumRows as unknown as { id: string; name: string; classification: string; cost_multiplier: string }[])
     .filter((r) => r.classification === "overtime" || r.classification === "double_time")
     .map((r) => ({ id: r.id, name: r.name, classification: r.classification as "overtime" | "double_time", multiplier: normalizeMoney(r.cost_multiplier) }));
 

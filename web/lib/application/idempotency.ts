@@ -62,8 +62,8 @@ async function readCommittedKeyRow(
          and operation = ${operation}
          and idempotency_key = ${idempotencyKey}
        limit 1
-    `);
-    return result.rows[0] ?? null;
+    `, "objects");
+    return result[0] ?? null;
   };
   if (orgContext.getStore()?.txDb) return read();
   return withOrgContext(context.authz.user.orgId, read);
@@ -92,8 +92,8 @@ async function claimLockHeld(
            and classid = hashtext(${context.authz.user.orgId})::integer
            and objid = hashtext(${`${context.source}|${operation}|${idempotencyKey}`})::integer
       ) as held
-    `);
-    return !!result.rows[0]?.held;
+    `, "objects");
+    return !!result[0]?.held;
   };
   if (orgContext.getStore()?.txDb) return probe();
   return withOrgContext(context.authz.user.orgId, probe);
@@ -191,8 +191,8 @@ export async function executeIdempotent<T>(args: {
                  hashtext(${context.authz.user.orgId}),
                  hashtext(${`${context.source}|${args.operation}|${args.idempotencyKey}`})
                ) as acquired
-      `));
-      if (!gate.rows[0]?.acquired) return undefined;
+      `, "objects"));
+      if (!gate[0]?.acquired) return undefined;
 
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into application_idempotency_keys
@@ -206,8 +206,8 @@ export async function executeIdempotent<T>(args: {
         on conflict (org_id, actor_id, source, operation, idempotency_key)
         do nothing
         returning id
-      `));
-      if (inserted.rows.length === 0) return undefined;
+      `, "objects"));
+      if (inserted.length === 0) return undefined;
 
       const value = await args.execute();
       let serializable;
@@ -223,7 +223,7 @@ export async function executeIdempotent<T>(args: {
         update application_idempotency_keys
            set response = ${JSON.stringify(serializable)}::jsonb,
                completed_at = now()
-         where id = ${inserted.rows[0]!.id} and org_id = ${context.authz.user.orgId}
+         where id = ${inserted[0]!.id} and org_id = ${context.authz.user.orgId}
       `);
 
       // The command's durable evidence, committed atomically with it. A forced

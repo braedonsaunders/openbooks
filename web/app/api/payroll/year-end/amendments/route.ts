@@ -78,14 +78,14 @@ export const GET = defineRoute({
     const year = Number(yearRaw)
     const country = url.searchParams.get('country') ?? ''
     const filing = url.searchParams.get('filing') ?? ''
-    const rows = (await db.execute<{ rowId: string }>(sql`
+    const rows = await db.execute<{ rowId: string }>(sql`
       select distinct ss.row_id as "rowId"
         from payroll_filing_submissions s
         join payroll_filing_submission_slips ss
           on ss.submission_id = s.id and ss.org_id = s.org_id
        where s.org_id = ${gate.user.orgId}
          and s.country = ${country} and s.filing_key = ${filing} and s.tax_year = ${year}
-    `)).rows
+    `, 'objects')
     const denied = await guardPayrollFilingRowIds(gate, country, filing, rows.map((row) => row.rowId), year)
     if (denied) return denied
     // The CURRENT population is guarded on every read, not just when nothing

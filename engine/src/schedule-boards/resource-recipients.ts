@@ -57,18 +57,14 @@ export async function saveResourceRecipient(
       throw new ScheduleError(
         'The resource must match the selected board kind.',
       );
-    const resource = (
-      await db.execute<{ subsidiaryId: string | null }>(
+    const resource = (await db.execute<{ subsidiaryId: string | null }>(
         input.equipmentUnitId
           ? sql`select subsidiary_id as "subsidiaryId" from equipment_units where org_id=${actor.orgId} and id=${input.equipmentUnitId} for share`
-          : sql`select subsidiary_id as "subsidiaryId" from locations where org_id=${actor.orgId} and id=${input.resourceLocationId} for share`,
-      )
-    ).rows[0];
-    const party = (
-      await db.execute<{ subsidiaryId: string | null; active: boolean }>(
-        sql`select subsidiary_id as "subsidiaryId",is_active as active from parties where org_id=${actor.orgId} and id=${input.partyId} and kind='person' for share`,
-      )
-    ).rows[0];
+          : sql`select subsidiary_id as "subsidiaryId" from locations where org_id=${actor.orgId} and id=${input.resourceLocationId} for share`, 'objects',
+      ))[0];
+    const party = (await db.execute<{ subsidiaryId: string | null; active: boolean }>(
+        sql`select subsidiary_id as "subsidiaryId",is_active as active from parties where org_id=${actor.orgId} and id=${input.partyId} and kind='person' for share`, 'objects',
+      ))[0];
     if (
       !resource ||
       !party ||
@@ -88,11 +84,9 @@ export async function saveResourceRecipient(
       );
     const id = input.id ?? randomUUID();
     const before = input.id
-      ? (
-          await db.execute<Record<string, unknown>>(
-            sql`select * from schedule_resource_recipients where org_id=${actor.orgId} and id=${id} for update`,
-          )
-        ).rows[0]
+      ? (await db.execute<Record<string, unknown>>(
+            sql`select * from schedule_resource_recipients where org_id=${actor.orgId} and id=${id} for update`, 'objects',
+          ))[0]
       : null;
     if (
       input.id &&
@@ -111,16 +105,12 @@ export async function saveResourceRecipient(
         },
       );
     const saved = input.id
-      ? (
-          await db.execute(
-            sql`update schedule_resource_recipients set party_id=${input.partyId},reason=${input.reason},is_active=${input.isActive},revision=revision+1,updated_at=now(),updated_by=${actor.actorId} where org_id=${actor.orgId} and id=${id} and revision=${input.expectedRevision} returning *`,
-          )
-        ).rows
-      : (
-          await db.execute(
-            sql`insert into schedule_resource_recipients(id,org_id,board_id,equipment_unit_id,resource_location_id,party_id,subsidiary_id,reason,is_active,created_by,updated_by) values(${id},${actor.orgId},${input.boardId},${input.equipmentUnitId},${input.resourceLocationId},${input.partyId},${resource.subsidiaryId},${input.reason},${input.isActive},${actor.actorId},${actor.actorId}) returning *`,
-          )
-        ).rows;
+      ? (await db.execute(
+            sql`update schedule_resource_recipients set party_id=${input.partyId},reason=${input.reason},is_active=${input.isActive},revision=revision+1,updated_at=now(),updated_by=${actor.actorId} where org_id=${actor.orgId} and id=${id} and revision=${input.expectedRevision} returning *`, 'objects',
+          ))
+      : (await db.execute(
+            sql`insert into schedule_resource_recipients(id,org_id,board_id,equipment_unit_id,resource_location_id,party_id,subsidiary_id,reason,is_active,created_by,updated_by) values(${id},${actor.orgId},${input.boardId},${input.equipmentUnitId},${input.resourceLocationId},${input.partyId},${resource.subsidiaryId},${input.reason},${input.isActive},${actor.actorId},${actor.actorId}) returning *`, 'objects',
+          ));
     if (saved.length !== 1)
       throw new ScheduleError('The resource association was not saved.', {
         status: 409,

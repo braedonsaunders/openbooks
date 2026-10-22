@@ -1,1 +1,0 @@
-Schema-only migration: new scheduling tables and a unique index over the existing task primary key. No tenant data repair is required.

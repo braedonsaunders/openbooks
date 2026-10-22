@@ -20,8 +20,8 @@ async function postInvoice(org: Org, actor: string, input: { amount: string; doc
   await db.execute(sql`insert into document_lines
     (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${id}, 1, ${org.accounts.revenue}, 1, ${input.amount}, ${input.amount}, 0, ${input.amount})`)
-  const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${id} returning id`)
-  assert.equal(approved.rows.length, 1)
+  const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${id} returning id`, 'objects')
+  assert.equal(approved.length, 1)
   // postDocument resolves to the journal entry id; callers need the document id.
   await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
   return id
@@ -40,12 +40,12 @@ async function payInvoice(org: Org, actor: string, invoiceId: string, amount: st
   await postDocument(payId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
   const toLine = (await db.execute<{ id: string }>(sql`select jl.id from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
-    where jl.org_id = ${org.orgId} and je.source_document_id = ${invoiceId} and jl.is_open_item`)).rows[0]?.id
+    where jl.org_id = ${org.orgId} and je.source_document_id = ${invoiceId} and jl.is_open_item`, 'objects'))[0]?.id
   // The payment's AR leg settles the invoice (from_line); receipt legs post
   // under the payment kind, which is not an open-item kind.
   const fromLine = (await db.execute<{ id: string }>(sql`select jl.id from journal_lines jl
     join journal_entries je on je.id = jl.entry_id
-    where jl.org_id = ${org.orgId} and je.source_document_id = ${payId} and jl.account_id = ${org.accounts.ar}`)).rows[0]?.id
+    where jl.org_id = ${org.orgId} and je.source_document_id = ${payId} and jl.account_id = ${org.accounts.ar}`, 'objects'))[0]?.id
   assert.ok(toLine && fromLine, 'the invoice open-item line and the payment AR leg must exist')
   await db.execute(sql`insert into applications
     (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
@@ -62,7 +62,7 @@ test('collection attention follows the stated as-of date and native due-on-recei
     const actor = await createScratchUser(org.orgId, 'Collections Controller', 'admin')
     let dueOnReceiptInvoice = '';
     await withBypassContext(async () => {
-      const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id as string
+      const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, 'objects'))[0]!.id as string
       for (const [n, name, from, to] of [[4, '2026-04', '2026-04-01', '2026-04-30'], [5, '2026-05', '2026-05-01', '2026-05-31'], [6, '2026-06', '2026-06-01', '2026-06-30']] as const) {
         await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
           values (${randomUUID()}, ${org.orgId}, 2026, ${n}, ${name}, ${from}, ${to}, false, ${calendarId})`)

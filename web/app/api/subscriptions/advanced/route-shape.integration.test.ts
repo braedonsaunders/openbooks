@@ -74,8 +74,8 @@ const post = (body: unknown) =>
   );
 
 async function versionCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from subscription_plan_versions where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 
@@ -164,8 +164,8 @@ test("amend persists only allowlisted fields in the request snapshot", async () 
     });
     assert.equal(amended.status, 201, JSON.stringify(await amended.json().catch(() => null)));
     const snapshot = (await withBypassContext(() => db.execute(
-      sql`select request from subscription_amendments where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`,
-    ))).rows[0]!.request as Record<string, unknown>;
+      sql`select request from subscription_amendments where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`, "objects",
+    )))[0]!.request as Record<string, unknown>;
     assert.equal(snapshot.componentKey, "addon");
     assert.ok(!("injected" in snapshot), "unvalidated input must not reach the persisted snapshot");
     assert.ok(!("action" in snapshot), "the transport envelope must not reach the persisted snapshot");

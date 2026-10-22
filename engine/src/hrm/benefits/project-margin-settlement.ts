@@ -121,13 +121,13 @@ function sourceFirstProjectMargin(row: SettledAwardRow): ProjectMarginSnapshot |
  * project evidence in its native preview — consumes nothing.
  */
 async function settledProjects(orgId: string, programId: string, periodFrom: string): Promise<{ paid: Set<string>; carried: Map<string, bigint> }> {
-  const rows = (await db.execute<SettledAwardRow>(sql`
+  const rows = await db.execute<SettledAwardRow>(sql`
     select source_snapshot as snapshot, period_from::text as period_from, period_to::text as period_to,
            employment_id::text as employment_id, source_key, id::text as id
       from hrm_benefit_awards
      where org_id = ${orgId} and program_id = ${programId} and status not in ('voided','rejected') and adjusts_award_id is null
      order by period_from, period_to, id
-     for share`)).rows;
+     for share`, "objects");
   if (rows.some((row) => row.period_from > periodFrom)) {
     throw new BenefitsError("REFUSED", "Later project-margin awards already exist — settle periods chronologically; preserve existing awards and correct history with adjusting awards.");
   }
@@ -221,19 +221,19 @@ export async function measureProjectMarginSettlement(input: {
        and l.posting_date <= ${input.asOf}::date
      group by p.id
     having max(l.posting_date) <= ${periodTo}::date
-     order by p.id`)).rows.filter((p) => !paid.has(p.id) && !excludedProjects.has(p.id)
+     order by p.id`, "objects")).filter((p) => !paid.has(p.id) && !excludedProjects.has(p.id)
        && p.starts_on !== null && p.starts_on >= program.effectiveFrom);
   const excluded: string[] = [];
   if (!candidates.length) return empty(program, periodFrom, periodTo, input.asOf, excluded);
   const ids = candidates.map((p) => p.id);
-  const ledger = (await db.execute<{ project_id: string; account_id: string; amount: string }>(sql`
+  const ledger = await db.execute<{ project_id: string; account_id: string; amount: string }>(sql`
     select l.project_id::text as project_id, l.account_id::text as account_id, sum(l.amount)::text as amount
       from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed')
      where l.org_id = ${orgId} and l.subsidiary_id = ${program.legalEntityId}::uuid
        and l.project_id = any(${`{${ids.join(",")}}`}::uuid[])
        and l.account_id = any(${`{${accounts.join(",")}}`}::uuid[])
        and l.posting_date <= ${input.asOf}::date
-     group by 1, 2`)).rows;
+     group by 1, 2`, "objects");
   const commitments = program.includeOpenCommitments ? new Map((await db.execute<{ project_id: string; amount: string }>(sql`
     select coalesce(l.project_id, d.project_id)::text as project_id,
            sum(case when coalesce(l.quantity,0) > 0 then l.amount * greatest(0, 1 - coalesce(l.quantity_billed,0) / l.quantity) else l.amount end)::text as amount
@@ -243,10 +243,10 @@ export async function measureProjectMarginSettlement(input: {
        and d.kind = 'purchase_order' and d.status = 'approved'
        and d.document_date <= ${input.asOf}::date
        and coalesce(l.project_id, d.project_id) = any(${`{${ids.join(",")}}`}::uuid[])
-     group by 1`)).rows.map((r) => [r.project_id, toUnits(r.amount)])) : new Map<string, bigint>();
-  const members = (await db.execute<{ id: string; party: string }>(sql`
+     group by 1`, "objects")).map((r) => [r.project_id, toUnits(r.amount)])) : new Map<string, bigint>();
+  const members = await db.execute<{ id: string; party: string }>(sql`
     select id::text as id, worker_party_id::text as party from worker_employments
-     where org_id = ${orgId} and id = any(${`{${[...new Set(input.members.map((m) => m.employmentId))].join(",")}}`}::uuid[])`)).rows;
+     where org_id = ${orgId} and id = any(${`{${[...new Set(input.members.map((m) => m.employmentId))].join(",")}}`}::uuid[])`, "objects");
   const partyOf = new Map(members.map((m) => [m.id, m.party]));
   const roster: MarginMember[] = input.members.map((m) => ({ ...m, partyId: partyOf.get(m.employmentId) ?? "" }));
   const covering = (m: MarginMember, day: string) => m.effectiveFrom <= day && (m.effectiveTo === null || m.effectiveTo >= day);

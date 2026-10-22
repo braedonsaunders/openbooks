@@ -164,7 +164,7 @@ test("kiosk-wide actions refuse restricted scope and PIN resets require every ac
         revokeKiosk({ orgId: org.orgId, kioskId: kiosk.id, actorUserId: randomUUID(), allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
         UnrestrictedScopeError,
       );
-      const pins = (await db.execute<{ count: string }>(sql`select count(*)::text as count from worker_clock_pins where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0];
+      const pins = (await db.execute<{ count: string }>(sql`select count(*)::text as count from worker_clock_pins where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0];
       assert.equal(pins?.count, "0", "the refused PIN reset leaves no credential row");
     });
   } finally {

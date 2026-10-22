@@ -109,9 +109,9 @@ test(
       assert.ok(body.errors.length > 0)
       assert.ok(body.issues.some((issue) => issue.path === 'amount'))
       const rows = await withBypass(async () =>
-        db.execute<{ c: number }>(sql`select count(*)::int as c from custom_records where org_id = ${orgId}`),
+        db.execute<{ c: number }>(sql`select count(*)::int as c from custom_records where org_id = ${orgId}`, 'objects'),
       )
-      assert.equal(Number(rows.rows[0]?.c ?? 0), 0, 'a refused draft must store no row')
+      assert.equal(Number(rows[0]?.c ?? 0), 0, 'a refused draft must store no row')
     } finally {
       await withBypass(() => dropScratchOrg(orgId))
     }
@@ -137,10 +137,10 @@ test(
       const body = (await response.json()) as { id: string }
       const row = await withBypass(async () =>
         db.execute<{ data: { title?: string; amount?: number } }>(
-          sql`select data from custom_records where id = ${body.id} and org_id = ${orgId}`,
+          sql`select data from custom_records where id = ${body.id} and org_id = ${orgId}`, 'objects',
         ),
       )
-      assert.deepEqual(row.rows[0]?.data, { title: 'hello', amount: 42 })
+      assert.deepEqual(row[0]?.data, { title: 'hello', amount: 42 })
     } finally {
       await withBypass(() => dropScratchOrg(orgId))
     }

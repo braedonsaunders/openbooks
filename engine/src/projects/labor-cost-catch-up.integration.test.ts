@@ -100,8 +100,8 @@ async function seedScenario(org: ScratchOrg, actorId: string) {
   await insertTime(org, actorId, employeeId, { id: randomUUID(), projectId: project, workedOn: "2026-07-20", hours: "1.0000", rate: "25.0000", status: "approved" });
   await insertTime(org, actorId, employeeId, { id: june, projectId: project, workedOn: "2026-06-15", hours: "2.0000", rate: "25.0000", status: "approved" });
 
-  const [calendar] = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${org.orgId} and is_default`)).rows;
+  const [calendar] = await db.execute<{ id: string }>(sql`
+    select id from fiscal_calendars where org_id = ${org.orgId} and is_default`, "objects");
   const juneId = randomUUID();
   await db.execute(sql`
     insert into accounting_periods
@@ -116,13 +116,13 @@ async function seedScenario(org: ScratchOrg, actorId: string) {
 
 async function countLaborJournals(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId} and origin = 'labor_burden'`)).rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId} and origin = 'labor_burden'`, "objects"))[0]!.n;
 }
 
 async function countCatchUpAudits(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and action = 'post' and changes->>'kind' = 'labor_cost_catch_up'`)).rows[0]!.n;
+     where org_id = ${orgId} and action = 'post' and changes->>'kind' = 'labor_cost_catch_up'`, "objects"))[0]!.n;
 }
 
 test("catch-up preview counts only approved, project-bound, costed, unposted time through the date", { skip: !enabled }, async () => {
@@ -172,23 +172,23 @@ test("catch-up posts open-period time once, stamps it, skips the closed month, a
     );
     assert.ok(result.skipped[0]!.remedy.length > 0);
 
-    const rows = (await db.execute<{ id: string; cost_journal_entry_id: string | null }>(sql`
+    const rows = await db.execute<{ id: string; cost_journal_entry_id: string | null }>(sql`
       select id, cost_journal_entry_id from time_entries
-       where org_id = ${org.orgId} and cost_journal_entry_id is not null`)).rows;
+       where org_id = ${org.orgId} and cost_journal_entry_id is not null`, "objects");
     assert.deepEqual(rows.map((row) => row.id).sort(), [...eligibleIds].sort());
     assert.ok(rows.every((row) => row.cost_journal_entry_id === result.journalEntryIds[0]));
 
     const journal = (await db.execute<{ origin: string; posting_date: string; status: string }>(sql`
       select origin, posting_date::text as posting_date, status from journal_entries
-       where org_id = ${org.orgId} and id = ${result.journalEntryIds[0]!}`)).rows[0];
+       where org_id = ${org.orgId} and id = ${result.journalEntryIds[0]!}`, "objects"))[0];
     assert.deepEqual(journal, { origin: "labor_burden", posting_date: "2026-07-11", status: "posted" });
     const wip = (await db.execute<{ total: string }>(sql`
       select coalesce(sum(l.amount), 0)::text as total from journal_lines l
-       where l.org_id = ${org.orgId} and l.entry_id = ${result.journalEntryIds[0]!} and l.account_id = ${org.accounts.cogs}`)).rows[0];
+       where l.org_id = ${org.orgId} and l.entry_id = ${result.journalEntryIds[0]!} and l.account_id = ${org.accounts.cogs}`, "objects"))[0];
     assert.equal(wip?.total, "110.0000");
 
     const juneRow = (await db.execute<{ cost_journal_entry_id: string | null }>(sql`
-      select cost_journal_entry_id from time_entries where org_id = ${org.orgId} and id = ${june}`)).rows[0];
+      select cost_journal_entry_id from time_entries where org_id = ${org.orgId} and id = ${june}`, "objects"))[0];
     assert.equal(juneRow?.cost_journal_entry_id, null, "the closed-period entry stays unposted");
     assert.equal(await countCatchUpAudits(org.orgId), 1);
 
@@ -230,7 +230,7 @@ for (const refusal of refusals) {
       );
       assert.equal(await countLaborJournals(org.orgId), 0);
       const stamped = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from time_entries where org_id = ${org.orgId} and cost_journal_entry_id is not null`)).rows[0];
+        select count(*)::int as n from time_entries where org_id = ${org.orgId} and cost_journal_entry_id is not null`, "objects"))[0];
       assert.equal(stamped?.n, 0);
     } finally {
       await dropScratchOrg(org.orgId);

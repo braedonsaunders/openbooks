@@ -141,14 +141,14 @@ export async function prepareExpenseEdit(
       throw new DocumentEditError(404, 'party not found in this organization')
     }
     const owner = (await db.execute<{ id: string; subsidiary_id: string | null }>(
-      sql`select id, subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`,
+      sql`select id, subsidiary_id from parties where id = ${body.partyId} and org_id = ${orgId}`, 'objects',
     ))
-    if (!owner.rows[0]) throw new DocumentEditError(404, 'party not found in this organization')
+    if (!owner[0]) throw new DocumentEditError(404, 'party not found in this organization')
     // Cross-entity assignment: an employee of another legal entity cannot be
     // attached to this report. Org-wide (null-subsidiary) employees carry
     // org-wide identity and stay assignable; a null report subsidiary means
     // an org-wide report with no entity fence. Same opaque 404 either way.
-    const partySubsidiary = owner.rows[0].subsidiary_id ?? null
+    const partySubsidiary = owner[0].subsidiary_id ?? null
     if (
       ctx.reportSubsidiaryId !== undefined &&
       ctx.reportSubsidiaryId !== null &&
@@ -168,10 +168,10 @@ export async function prepareExpenseEdit(
       throw new DocumentEditError(404, 'corporate card not found in this organization')
     }
     const card = (await db.execute<{ id: string; is_active: boolean }>(
-      sql`select id, is_active from payment_cards where id = ${body.paymentCardId} and org_id = ${orgId}`,
+      sql`select id, is_active from payment_cards where id = ${body.paymentCardId} and org_id = ${orgId}`, 'objects',
     ))
-    if (!card.rows[0]) throw new DocumentEditError(404, 'corporate card not found in this organization')
-    if (body.paymentCardId !== ctx.existingPaymentCardId && !card.rows[0].is_active) {
+    if (!card[0]) throw new DocumentEditError(404, 'corporate card not found in this organization')
+    if (body.paymentCardId !== ctx.existingPaymentCardId && !card[0].is_active) {
       throw new DocumentEditError(404, 'corporate card not found in this organization')
     }
   }
@@ -188,7 +188,7 @@ export async function prepareExpenseEdit(
           select id from accounts
            where org_id = ${orgId} and is_active and not is_summary
              and id = any(${`{${accountIds.join(',')}}`}::uuid[])
-        `)).rows
+        `, 'objects'))
       : []
     if (malformed.length > 0 || usable.length !== accountIds.length) {
       throw new DocumentEditError(404, 'account not found in this organization')
@@ -213,7 +213,7 @@ export async function prepareExpenseEdit(
       const ids = [...new Set(body.lines.map((l) => l[key]).filter((v): v is string => typeof v === 'string' && v.length > 0))]
       if (ids.length === 0) continue
       const owned = new Set((await db.execute<{ id: string }>(sql`
-        select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)).rows.map((r) => r.id))
+        select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')).map((r) => r.id))
       const foreign = ids.find((v) => !owned.has(v))
       if (foreign !== undefined) {
         const lineNumber = body.lines.findIndex((l) => l[key] === foreign) + 1
@@ -460,11 +460,11 @@ export async function persistExpenseEdit(
                 ${l.foreign?.currency ?? null}, ${l.foreign?.originalAmount ?? null}, ${l.foreign?.originalTaxAmount ?? null},
                 ${l.foreign?.rate ?? null}, ${l.foreign ? JSON.stringify(l.foreign.evidence) : null}::jsonb)
         returning id
-      `))
-      if (inserted.rows.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
+      `, 'objects'))
+      if (inserted.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
       await persistLineTaxComponents(tx, {
         orgId,
-        documentLineId: inserted.rows[0]!.id,
+        documentLineId: inserted[0]!.id,
         components: l.taxComponents,
         actorId: args.userId,
       })
@@ -489,8 +489,8 @@ export async function persistExpenseEdit(
       updated_by = ${args.userId}
     where id = ${docId} and org_id = ${orgId}
     returning id
-  `)
-  if (updated.rows.length !== 1) throw new DocumentEditError(409, 'Expense report could not be saved')
+  `, 'objects')
+  if (updated.length !== 1) throw new DocumentEditError(409, 'Expense report could not be saved')
   await validateSavedAmortizationLines(tx, orgId, docId)
 }
 
@@ -514,7 +514,7 @@ export async function assertReportEmployee(
     select p.subsidiary_id as "subsidiaryId" from parties p
      where p.id = ${args.employeeId} and p.org_id = ${args.orgId} and p.is_active
      for key share of p
-  `)).rows[0]
+  `, 'objects'))[0]
   const outsideScope = args.allowedSubsidiaryIds !== null
     && employee?.subsidiaryId != null
     && !args.allowedSubsidiaryIds.has(employee.subsidiaryId)
@@ -597,7 +597,7 @@ export async function createExpenseCorrectionDraft(
         from documents
        where id = ${sourceId} and kind = 'expense_report' and org_id = ${ctx.orgId}
        for update
-    `)).rows[0] ?? null,
+    `, 'objects'))[0] ?? null,
     mutate: async (tx, source) => {
       const existingCorrection = (await tx.execute<{ documentNumber: string }>(sql`
         select replacement.document_number as "documentNumber"
@@ -609,7 +609,7 @@ export async function createExpenseCorrectionDraft(
            and link.to_document_id = ${sourceId}
            and link.link_type = 'reverses'
          limit 1
-      `)).rows[0]
+      `, 'objects'))[0]
       assertNoExistingDocumentCorrection(existingCorrection?.documentNumber ?? null)
       if (source.status !== 'posted') {
         throw new DocumentEditError(422, 'only a posted expense report can create a correcting replacement')
@@ -643,12 +643,12 @@ export async function createExpenseCorrectionDraft(
                 ${source.subtotal}, ${source.taxTotal}, ${source.total},
                 ${ctx.userId}, ${ctx.userId})
         returning id
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!created) throw new Error(`correction draft for ${sourceId} disappeared during initialization`)
       // Faithful line copy (including the immutable tax-component
       // snapshots, mapped onto the new line ids by line number), then the
       // submitted body applies over it through the shared persist.
-      const sourceLines = (await tx.execute<{
+      const sourceLines = await tx.execute<{
         lineNumber: number
         amortizationTemplateId: string | null
         amortizationStartOn: string | null
@@ -687,7 +687,7 @@ export async function createExpenseCorrectionDraft(
           from document_lines
          where document_id = ${sourceId} and org_id = ${ctx.orgId}
          order by line_number
-      `)).rows
+      `, 'objects')
       const lineIdByNumber = new Map<number, string>()
       for (const line of sourceLines) {
         const inserted = (await tx.execute<{ id: string }>(sql`
@@ -706,11 +706,11 @@ export async function createExpenseCorrectionDraft(
                   ${line.originalCurrency}, ${line.originalAmount}, ${line.originalTaxAmount}, ${line.originalFxRate},
                   ${line.originalFxEvidence === null ? null : JSON.stringify(line.originalFxEvidence)}::jsonb)
           returning id
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!inserted) throw new Error(`correction line ${line.lineNumber} disappeared during initialization`)
         lineIdByNumber.set(line.lineNumber, inserted.id)
       }
-      const sourceComponents = (await tx.execute<{
+      const sourceComponents = await tx.execute<{
         lineNumber: number
         taxCodeId: string
         sequence: number
@@ -741,7 +741,7 @@ export async function createExpenseCorrectionDraft(
           from document_line_tax_components c
           join document_lines l on l.id = c.document_line_id and l.org_id = c.org_id
          where l.document_id = ${sourceId} and c.org_id = ${ctx.orgId}
-      `)).rows
+      `, 'objects')
       for (const component of sourceComponents) {
         const documentLineId = lineIdByNumber.get(component.lineNumber)
         if (!documentLineId) continue

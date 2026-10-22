@@ -30,7 +30,7 @@ async function seedUnrecognized(orgId: string, bookId: string, periodId: string,
   const ruleId = randomUUID(), contractId = randomUUID(), oblId = randomUUID();
   const accounts = (await db.execute<{ deferred: string; recognized: string }>(sql`
     select (select id from accounts where org_id = ${orgId} and number = '2200') as deferred,
-           (select id from accounts where org_id = ${orgId} and number = '4010') as recognized`)).rows[0]!;
+           (select id from accounts where org_id = ${orgId} and number = '4010') as recognized`, "objects"))[0]!;
   await db.execute(sql`insert into recognition_rules
     (id,org_id,code,name,method,is_forecast,recognition_periods,start_date_source,end_date_source,period_offset,start_offset_days,initial_amount_percent,deferred_account_id,recognized_account_id,is_active)
     values (${ruleId},${orgId},'W6R','W6 revenue rule','straight_line_even',false,1,'contract','contract',0,0,'0',${accounts.deferred},${accounts.recognized},true)`);
@@ -46,9 +46,9 @@ async function seedUnrecognized(orgId: string, bookId: string, periodId: string,
 
 async function openCounts(orgId: string, runId: string): Promise<Record<string, number>> {
   await refreshCloseRun(orgId, runId);
-  const rows = (await db.execute<{ code: string; n: number }>(sql`
+  const rows = await db.execute<{ code: string; n: number }>(sql`
     select code,(details->>'count')::int as n from close_exceptions
-     where org_id=${orgId} and run_id=${runId} and status='open'`)).rows;
+     where org_id=${orgId} and run_id=${runId} and status='open'`, "objects");
   return Object.fromEntries(rows.map((r) => [r.code, r.n]));
 }
 

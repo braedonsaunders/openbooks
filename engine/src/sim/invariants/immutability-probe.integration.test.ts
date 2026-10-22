@@ -150,9 +150,9 @@ test(
       const leftovers = await withBypassContext(() =>
         db.execute<{ n: string }>(sql`
           select count(*)::text as n from documents
-           where org_id = ${org.orgId} and document_number like 'PROBE-%'`),
+           where org_id = ${org.orgId} and document_number like 'PROBE-%'`, "objects"),
       );
-      assert.equal(leftovers.rows[0]!.n, "0");
+      assert.equal(leftovers[0]!.n, "0");
     } finally {
       await withBypassContext(() => dropScratchOrg(org.orgId));
     }

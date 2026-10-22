@@ -70,35 +70,35 @@ export async function loadBankingRules(
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and is_active and not is_summary
          order by number nulls last limit 2000
-      `),
+      `, 'objects'),
       db.execute<AccountRow>(sql`
         select id, number, name from accounts
          where org_id = ${authz.user.orgId} and reconcilable and not is_summary and is_active
          order by number nulls last
-      `),
-      db.execute<DimensionRow>(sql`select id, code, name from departments where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
-      db.execute<DimensionRow>(sql`select id, code, name from locations where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
-      db.execute<DimensionRow>(sql`select id, code, name from classes where org_id = ${authz.user.orgId} and is_active order by name limit 1000`),
-      db.execute<PartyRow>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`),
+      `, 'objects'),
+      db.execute<DimensionRow>(sql`select id, code, name from departments where org_id = ${authz.user.orgId} and is_active order by name limit 1000`, 'objects'),
+      db.execute<DimensionRow>(sql`select id, code, name from locations where org_id = ${authz.user.orgId} and is_active order by name limit 1000`, 'objects'),
+      db.execute<DimensionRow>(sql`select id, code, name from classes where org_id = ${authz.user.orgId} and is_active order by name limit 1000`, 'objects'),
+      db.execute<PartyRow>(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and is_active order by display_name limit 2000`, 'objects'),
       openId && openId !== 'new' && isUuid(openId)
         ? db.execute<BankRuleRow>(sql`
             select id, name, criteria, outcome, priority, is_active
               from bank_match_rules where id = ${openId} and org_id = ${authz.user.orgId}
-          `)
-        : Promise.resolve({ rows: [] }),
+          `, 'objects')
+        : Promise.resolve([]),
       fromLine && isUuid(fromLine)
         ? db.execute<SeedLineRow>(sql`
             select l.description, l.amount from bank_statement_lines l
              where l.id = ${fromLine} and l.org_id = ${authz.user.orgId} limit 1
-          `)
-        : Promise.resolve({ rows: [] }),
+          `, 'objects')
+        : Promise.resolve([]),
     ]))
 
-  const accountOpts = offsetAccounts.rows.map((account) => ({
+  const accountOpts = offsetAccounts.map((account) => ({
     value: account.id,
     label: [account.number, account.name].filter(Boolean).join(' · '),
   }))
-  const reconAccountOpts = reconAccountsRes.rows.map((account) => ({
+  const reconAccountOpts = reconAccountsRes.map((account) => ({
     id: account.id,
     label: [account.number, account.name].filter(Boolean).join(' · '),
   }))
@@ -106,10 +106,10 @@ export async function loadBankingRules(
     value: dimension.id,
     label: [dimension.code, dimension.name].filter(Boolean).join(' · '),
   }))
-  const openRule = openId === 'new' ? null : (open.rows[0] ?? null)
-  const drawerOpen = openId === 'new' || Boolean(open.rows[0])
-  const seed = seedLine.rows[0]
-    ? { description: seedLine.rows[0].description, amount: seedLine.rows[0].amount }
+  const openRule = openId === 'new' ? null : (open[0] ?? null)
+  const drawerOpen = openId === 'new' || Boolean(open[0])
+  const seed = seedLine[0]
+    ? { description: seedLine[0].description, amount: seedLine[0].amount }
     : null
 
   // The `criteria_summary` / `outcome_summary` cell text is produced by the
@@ -133,10 +133,10 @@ export async function loadBankingRules(
           rule: openRule,
           accounts: accountOpts,
           reconAccounts: reconAccountOpts,
-          departments: dimensionOptions(departments.rows),
-          locations: dimensionOptions(locations.rows),
-          classes: dimensionOptions(classes.rows),
-          parties: parties.rows.map((party) => ({ value: party.id, label: party.display_name })),
+          departments: dimensionOptions(departments),
+          locations: dimensionOptions(locations),
+          classes: dimensionOptions(classes),
+          parties: parties.map((party) => ({ value: party.id, label: party.display_name })),
           seedFromLine: seed,
         }
       : null,

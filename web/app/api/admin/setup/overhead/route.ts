@@ -157,10 +157,10 @@ export const POST = defineRoute({
             // (departments.subsidiary_id): a restricted admin cannot replace
             // another entity's effective-dated rates.
             const wanted = [...new Set(rates.map((r) => r.departmentId))]
-            const found = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+            const found = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
               select id, subsidiary_id from departments
                where org_id = ${orgId} and id = any(${`{${wanted.join(',')}}`}::uuid[])
-            `)).rows
+            `, 'objects')
             // Unknown and out-of-scope departments answer identically: the two
             // cases are indistinguishable, so a restricted caller cannot probe
             // another subsidiary's departments by id.
@@ -242,8 +242,8 @@ export const POST = defineRoute({
                 ) version on true
                where pt.org_id = ${orgId} and pt.id = ${id}
                for update of pt
-            `))
-            const profile = current.rows[0]?.financial_profile
+            `, 'objects'))
+            const profile = current[0]?.financial_profile
             if (!profile) throw new ProjectTypeNotFoundError()
             const components = profile.totalCost.components.includes('overhead') || overhead.method === 'none'
               ? profile.totalCost.components
@@ -311,8 +311,8 @@ export const POST = defineRoute({
           return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
         }
         const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-          select settings from orgs where id = ${orgId} for update`)
-        const before = (current.rows[0]?.settings as Record<string, unknown> | undefined)?.overheadRateLifecycle ?? null
+          select settings from orgs where id = ${orgId} for update`, 'objects')
+        const before = (current[0]?.settings as Record<string, unknown> | undefined)?.overheadRateLifecycle ?? null
         const after = { mode, cadence }
         await db.execute(sql`
           update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadRateLifecycle}',
@@ -356,20 +356,20 @@ export const POST = defineRoute({
           return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
         }
         const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-          select settings from orgs where id = ${orgId} for update`)
+          select settings from orgs where id = ${orgId} for update`, 'objects')
         if (accountId !== null) {
           const found = await db.execute<{ id: string }>(sql`
             select id from accounts
              where org_id = ${orgId} and id = ${accountId} and not is_summary and is_active
-             limit 1 for share`)
-          if (!found.rows[0]) {
+             limit 1 for share`, 'objects')
+          if (!found[0]) {
             return NextResponse.json(
               { error: 'overhead applied account not found, inactive, or is a summary account' },
               { status: 422 },
             )
           }
         }
-        const before = (current.rows[0]?.settings as Record<string, unknown> | undefined)?.overheadApplication ?? null
+        const before = (current[0]?.settings as Record<string, unknown> | undefined)?.overheadApplication ?? null
         const after = { mode, accountId }
         await db.execute(sql`
           update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{overheadApplication}',

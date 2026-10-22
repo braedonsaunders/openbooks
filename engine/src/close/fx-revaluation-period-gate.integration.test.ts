@@ -78,8 +78,8 @@ async function closeAllImported(orgId: string, periodId: string, bookId: string)
 async function fxRevaluationEntryCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries
-     where org_id=${orgId} and origin='fx_revaluation'`));
-  return r.rows[0]!.n;
+     where org_id=${orgId} and origin='fx_revaluation'`, "objects"));
+  return r[0]!.n;
 }
 
 test("open periods: revaluation still posts its pair (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {

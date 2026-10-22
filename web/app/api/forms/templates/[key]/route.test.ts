@@ -105,29 +105,30 @@ const mockSources = new Map<string, string>([
           state.transactionStarts += 1
           const staged = { metadata: false }
           const tx = {
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               state.calls.push({ kind: 'tx', text })
               if (text.includes('update form_templates')) {
                 staged.metadata = true
-                return { rows: [{ id: 'template-1' }] }
+                return inMode({ rows: [{ id: 'template-1' }] })
               }
               if (state.failSchemaWrite && text.includes('update form_template_versions')) {
                 throw new Error('schema write failed')
               }
               if (text.includes('from form_templates') && text.includes('for update')) {
-                return { rows: state.templateLocked ? [templateRow()] : [] }
+                return inMode({ rows: state.templateLocked ? [templateRow()] : [] })
               }
               if (text.includes('update form_template_versions')) {
-                return { rows: state.versionUpdateKept && state.latest ? [{ version: state.latest.version }] : [] }
+                return inMode({ rows: state.versionUpdateKept && state.latest ? [{ version: state.latest.version }] : [] })
               }
               if (text.includes('insert into form_template_versions')) {
-                return { rows: [{ id: 'version-2' }] }
+                return inMode({ rows: [{ id: 'version-2' }] })
               }
               if (text.includes('form_template_versions') && text.includes('select id')) {
-                return { rows: state.latest ? [state.latest] : [] }
+                return inMode({ rows: state.latest ? [state.latest] : [] })
               }
-              return { rows: [] }
+              return inMode({ rows: [] })
             },
           }
           const result = await work(tx)

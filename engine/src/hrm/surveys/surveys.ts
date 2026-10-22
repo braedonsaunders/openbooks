@@ -87,7 +87,7 @@ async function loadQuestions(
   orgId: string,
   surveyId: string,
 ): Promise<SurveyQuestionDTO[]> {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     position: number;
     kind: string;
@@ -99,7 +99,7 @@ async function loadQuestions(
       from hrm_survey_questions
      where org_id = ${orgId} and survey_id = ${surveyId}
      order by position
-  `)).rows;
+  `, "objects");
   return rows.map((r) => ({
     id: r.id,
     position: r.position,
@@ -129,7 +129,7 @@ async function toDTO(exec: SqlExecutor, orgId: string, row: SurveyRow): Promise<
 async function loadSurvey(exec: SqlExecutor, orgId: string, surveyId: string, forUpdate = false): Promise<SurveyRow> {
   const row = (await exec.execute<SurveyRow>(sql`
     ${SURVEY_COLS} where org_id = ${orgId} and id = ${surveyId} ${forUpdate ? sql`for update` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new HrmSurveysError("NOT_FOUND", "survey is not visible in this organization");
   return row;
 }
@@ -146,14 +146,14 @@ export async function loadSurveyInviteeEmployers(
   orgId: string,
   surveyId: string,
 ): Promise<Map<string, string[]>> {
-  const rows = (await exec.execute<{ party_id: string; employer_subsidiary_id: string | null }>(sql`
+  const rows = await exec.execute<{ party_id: string; employer_subsidiary_id: string | null }>(sql`
     select i.party_id, e.employer_subsidiary_id
       from hrm_survey_invitations i
       left join worker_employments e
         on e.org_id = i.org_id and e.worker_party_id = i.party_id
            and e.employer_subsidiary_id is not null
      where i.org_id = ${orgId} and i.survey_id = ${surveyId}
-  `)).rows;
+  `, "objects");
   const byParty = new Map<string, Set<string>>();
   for (const row of rows) {
     let set = byParty.get(row.party_id);
@@ -263,12 +263,12 @@ export async function listSurveys(query: {
   status?: string;
 }): Promise<SurveyDTO[]> {
   const allowed = await requireHrmSurveysManage(db, query.orgId, query.actorId);
-  const rows = (await db.execute<SurveyRow>(sql`
+  const rows = await db.execute<SurveyRow>(sql`
     ${SURVEY_COLS}
      where org_id = ${query.orgId}
        ${query.status ? sql`and status = ${query.status}` : sql``}
      order by created_at desc
-  `)).rows;
+  `, "objects");
   // Read visibility is per-survey: drafts with no invitations carry no
   // employee data, and opened surveys show to any lens holding at least
   // one invitee. A survey spanning entities never lists for a lens with
@@ -355,7 +355,7 @@ export async function saveSurvey(input: {
         returning id, name, kind, anonymity, status,
                   opens_at::text as opens_at, closes_at::text as closes_at,
                   audience, recurrence, min_group_size
-      `)).rows[0];
+      `, "objects"))[0];
       if (!updated) throw new HrmSurveysError("NOT_FOUND", "survey is not visible in this organization");
       await db.execute(sql`
         delete from hrm_survey_questions where org_id = ${input.orgId} and survey_id = ${surveyId}
@@ -373,7 +373,7 @@ export async function saveSurvey(input: {
         returning id, name, kind, anonymity, status,
                   opens_at::text as opens_at, closes_at::text as closes_at,
                   audience, recurrence, min_group_size
-      `)).rows[0];
+      `, "objects"))[0];
       if (!inserted) {
         throw new HrmSurveysError(
           "REFUSED",
@@ -447,7 +447,7 @@ export async function openSurvey(input: {
     // party's employers must intersect the lens, so unknown, cross-org,
     // employment-less, and out-of-scope parties refuse identically —
     // invitations never cross orgs or legal entities.
-    const memberEmployers = (await db.execute<{ id: string; employer_subsidiary_id: string | null }>(sql`
+    const memberEmployers = await db.execute<{ id: string; employer_subsidiary_id: string | null }>(sql`
       select p.id, e.employer_subsidiary_id
         from parties p
         left join worker_employments e
@@ -455,7 +455,7 @@ export async function openSurvey(input: {
              and e.employer_subsidiary_id is not null
        where p.org_id = ${input.orgId}
          and p.id in (${sql.join(unique.map((id) => sql`${id}`), sql`, `)})
-    `)).rows;
+    `, "objects");
     const employersByInvitee = new Map<string, Set<string>>();
     for (const row of memberEmployers) {
       let set = employersByInvitee.get(row.id);
@@ -490,14 +490,14 @@ export async function openSurvey(input: {
         -- The existing survey-party invitation already owns its delivery; token collisions still fail.
         on conflict (org_id, survey_id, party_id) do nothing
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!inserted) continue;
       const user = (await db.execute<{ id: string; email: string }>(sql`
         select id, email from users where org_id = ${input.orgId} and party_id = ${partyId} limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       const person = (await db.execute<{ email: string | null }>(sql`
         select email from parties where org_id = ${input.orgId} and id = ${partyId}
-      `)).rows[0];
+      `, "objects"))[0];
       deliveries.push({
         invitationId: inserted.id,
         partyId,
@@ -518,7 +518,7 @@ export async function openSurvey(input: {
              updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${survey.id} and status = 'draft'
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!transitioned) {
       throw new HrmSurveysError("REFUSED", "this survey stopped being a draft while opening — refresh before trying again");
     }

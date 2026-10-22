@@ -36,7 +36,7 @@ async function fixture(status = 'draft') {
   const unitId = (await db.execute<{ id: string }>(sql`
     insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
     values (${org.orgId}, 'Test Unit', 'TEST-001', ${status}, ${org.subsidiaryId}, '100.0000')
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   return { org, unitId }
 }
 
@@ -55,13 +55,13 @@ async function call(id: string): Promise<{ status: number; json: Record<string, 
 }
 
 async function unit(unitId: string) {
-  return (await db.execute(sql`select * from equipment_units where id = ${unitId}`)).rows[0] as
+  return (await db.execute(sql`select * from equipment_units where id = ${unitId}`, 'objects'))[0] as
     | Record<string, unknown>
     | undefined
 }
 
 async function audits(orgId: string, unitId: string, action: string) {
-  return (await db.execute(sql`select changes from audit_log where org_id = ${orgId} and table_name = 'equipment_units' and row_id = ${unitId} and action = ${action} order by id`)).rows as { changes: { before: Record<string, unknown>; after?: Record<string, unknown> } }[]
+  return (await db.execute(sql`select changes from audit_log where org_id = ${orgId} and table_name = 'equipment_units' and row_id = ${unitId} and action = ${action} order by id`, 'objects')) as { changes: { before: Record<string, unknown>; after?: Record<string, unknown> } }[]
 }
 
 test('DELETE removes a draft unit and audits the locked before-image', async () => {

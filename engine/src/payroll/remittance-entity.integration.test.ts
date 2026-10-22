@@ -49,8 +49,8 @@ async function seedEntityOrg(): Promise<EntityFixture> {
          jsonb_set(coalesce(settings, '{}'::jsonb), '{payroll}',
            coalesce(settings->'payroll', '{}'::jsonb)),
          '{payroll,craRemittancePartyId}', to_jsonb(${org.vendorId}::text))
-     where id = ${org.orgId} returning id`);
-  assert.equal(destination.rows.length, 1, "the accruing entity fixture must declare its CRA remittance destination");
+     where id = ${org.orgId} returning id`, "objects");
+  assert.equal(destination.length, 1, "the accruing entity fixture must declare its CRA remittance destination");
   await db.execute(sql`
     insert into accounts
       (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -209,18 +209,18 @@ async function postRemittanceBill(fx: EntityFixture, documentId: string): Promis
 }
 
 async function liabilityBalances(fx: EntityFixture): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ subsidiary_id: string; balance: string }>(sql`
+  const rows = await db.execute<{ subsidiary_id: string; balance: string }>(sql`
     select jl.subsidiary_id, sum(jl.amount)::text as balance
       from journal_lines jl
      where jl.org_id = ${fx.org.orgId} and jl.account_id = ${fx.liability}
-     group by jl.subsidiary_id`)).rows;
+     group by jl.subsidiary_id`, "objects");
   assert.ok(rows.length > 0, "expected posted liability lines before asserting they clear");
   return new Map(rows.map((r) => [r.subsidiary_id, r.balance]));
 }
 
 async function subsidiaryName(fx: EntityFixture, id: string): Promise<string> {
   return (await db.execute<{ name: string }>(sql`
-    select name from subsidiaries where org_id = ${fx.org.orgId} and id = ${id}`)).rows[0]!.name;
+    select name from subsidiaries where org_id = ${fx.org.orgId} and id = ${id}`, "objects"))[0]!.name;
 }
 
 const PERIOD = { from: "2026-07-01", to: "2026-07-31" };
@@ -250,7 +250,7 @@ test(
         subsidiary_id: string; currency: string; total: string;
       }>(sql`
         select subsidiary_id, currency, total from documents
-         where org_id = ${fx.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+         where org_id = ${fx.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       assert.equal(stamped.subsidiary_id, child, "the bill lands on the accruing entity, not the root");
       assert.equal(stamped.currency, "CAD");
       assert.equal(cmp(stamped.total, "1000.00"), 0);
@@ -285,7 +285,7 @@ test(
         subsidiary_id: string; currency: string; total: string;
       }>(sql`
         select subsidiary_id, currency, total from documents
-         where org_id = ${fx.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+         where org_id = ${fx.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       assert.equal(stamped.subsidiary_id, child);
       assert.equal(stamped.currency, "USD", "USD accruals bill in USD, not the root's CAD");
       assert.equal(cmp(stamped.total, "500.00"), 0, "no raw-sum translation into the bill");
@@ -376,9 +376,9 @@ test(
       const childBill = await createRemittanceBill(fx.org.orgId, fx.actorId, {
         partyId: fx.org.vendorId, ...PERIOD, filingAccountId: fx.filingAccountId, subsidiaryId: child,
       });
-      const stamped = (await db.execute<{ id: string; subsidiary_id: string; total: string }>(sql`
+      const stamped = await db.execute<{ id: string; subsidiary_id: string; total: string }>(sql`
         select id, subsidiary_id, total from documents
-         where org_id = ${fx.org.orgId} and id = any(${`{${rootBill.documentId},${childBill.documentId}}`}::uuid[])`)).rows;
+         where org_id = ${fx.org.orgId} and id = any(${`{${rootBill.documentId},${childBill.documentId}}`}::uuid[])`, "objects");
       assert.equal(stamped.length, 2);
       const bySub = new Map(stamped.map((b) => [b.subsidiary_id, b.total]));
       assert.equal(cmp(bySub.get(fx.org.subsidiaryId)!, "300.00"), 0);
@@ -478,7 +478,7 @@ test(
         subsidiary_id: string; currency: string; memo: string; custom: { payrollRemittance: Record<string, unknown> };
       }>(sql`
         select subsidiary_id, currency, memo, custom from documents
-         where org_id = ${fx.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+         where org_id = ${fx.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       assert.equal(stamped.subsidiary_id, fx.org.subsidiaryId);
       assert.equal(stamped.currency, "CAD");
       assert.equal(stamped.memo, "Payroll remittance 2026-07-01 – 2026-07-31 · 123456789RP0092");

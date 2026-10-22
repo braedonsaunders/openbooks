@@ -156,15 +156,13 @@ async function snapshot(
     throw new LeaseError("effective date must be a calendar date (YYYY-MM-DD)");
   if (lease.status !== "active")
     throw new LeaseError("only an active lease can be changed");
-  const rows = (
-    await tx.execute<PlanRow>(sql`
+  const rows = await tx.execute<PlanRow>(sql`
     select id,sequence,revision,period_start::text,period_end::text,due_on::text,
       payment::text,interest::text,amortization::text,single_cost::text,rou_adjustment::text,
       payment_posted_at::text,accrual_posted_at::text
      from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${lease.id}
        and revision=${lease.revision} and superseded_by_change_id is null order by sequence for update
-  `)
-  ).rows;
+  `, "objects");
   const previous = lease.last_change_id
     ? await loadFinancialChange(tx, orgId, lease.last_change_id)
     : null;
@@ -553,11 +551,9 @@ export async function applyLeaseChange(
   return withLeaseTransaction(orgId, async (tx) => {
     // Lock the aggregate before its change request, consistently with proposal
     // and posting. The initial identity read holds no change-row lock.
-    const identity = (
-      await tx.execute<{ subject_id: string }>(
-        sql`select subject_id from financial_changes where org_id=${orgId} and id=${changeId} and domain='lease'`,
-      )
-    ).rows[0];
+    const identity = (await tx.execute<{ subject_id: string }>(
+        sql`select subject_id from financial_changes where org_id=${orgId} and id=${changeId} and domain='lease'`, "objects",
+      ))[0];
     if (!identity) throw new LeaseError("lease change not found");
     const lease = await leaseRow(orgId, identity.subject_id, tx);
     await assertFinancialChangeAccess(tx, {
@@ -610,11 +606,9 @@ export async function applyLeaseChange(
       );
     };
     const revision = lease.revision + 1;
-    const max = (
-      await tx.execute<{ sequence: number }>(
-        sql`select coalesce(max(sequence),0)::int as sequence from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${lease.id}`,
-      )
-    ).rows[0]!.sequence;
+    const max = (await tx.execute<{ sequence: number }>(
+        sql`select coalesce(max(sequence),0)::int as sequence from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${lease.id}`, "objects",
+      ))[0]!.sequence;
     // Recognize the elapsed stub using the OLD agreement before remeasurement.
     await post(
       "STUB",
@@ -725,9 +719,9 @@ export async function applyLeaseChange(
       ]);
     const superseded =
       await tx.execute(sql`update lease_agreement_schedule_lines set superseded_by_change_id=${changeId},updated_at=now(),updated_by=${actorId}
-      where org_id=${orgId} and lease_id=${lease.id} and superseded_by_change_id is null and accrual_posted_at is null returning id`);
+      where org_id=${orgId} and lease_id=${lease.id} and superseded_by_change_id is null and accrual_posted_at is null returning id`, "objects");
     if (
-      superseded.rows.length !==
+      superseded.length !==
       state.beforeState.rows.filter((row) => !row.accrual_posted_at).length
     )
       throw new LeaseError(
@@ -781,8 +775,8 @@ export async function applyLeaseChange(
       payment_amount=${terms?.payment ?? lease.payment_amount},payment_frequency=${terms?.paymentFrequency ?? lease.payment_frequency},
       payment_timing=${terms?.paymentTiming ?? lease.payment_timing},annual_discount_rate_percent=${terms?.annualRatePercent ?? lease.annual_discount_rate_percent},
       classification=${model},classification_inputs=${JSON.stringify(classificationInputs ?? lease.classification_inputs)}::jsonb,exemption=${exemptionContinues ? lease.exemption : null},updated_by=${actorId},updated_at=now()
-      where id=${lease.id} and org_id=${orgId} and revision=${lease.revision} returning id`);
-    if (updated.rows.length !== 1)
+      where id=${lease.id} and org_id=${orgId} and revision=${lease.revision} returning id`, "objects");
+    if (updated.length !== 1)
       throw new LeaseError(
         "lease changed while applying the approved revision",
       );

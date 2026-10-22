@@ -135,21 +135,21 @@ export async function employeeYtd(
   ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId">,
 ): Promise<CanadaYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
-  const employer=(await tx.execute<{id:string;currency:string;payDate:string | null}>(sql`select d.subsidiary_id as id,d.currency,r.pay_date::text as "payDate" from documents d
+  const employer=await tx.execute<{id:string;currency:string;payDate:string | null}>(sql`select d.subsidiary_id as id,d.currency,r.pay_date::text as "payDate" from documents d
     join pay_runs r on r.org_id=d.org_id and r.document_id=d.id
-    where d.org_id=${orgId} and d.id=${documentId} and d.kind='pay_run'`)).rows;
+    where d.org_id=${orgId} and d.id=${documentId} and d.kind='pay_run'`, "objects");
   if(employer.length!==1||!employer[0]!.id||ctx.subsidiaryId!==undefined&&ctx.subsidiaryId!==employer[0]!.id)
     throw new PayrollError('Canadian annual contribution history requires the actual pay-run legal employer');
   if(employer[0]!.currency!=='CAD')throw new PayrollError('Canadian annual contribution calculation requires a qualified Canadian-dollar pay-run basis');
   if (!employer[0]!.payDate) throw new PayrollError("Canadian annual contribution history requires the actual pay-run pay date");
   const subsidiaryId=employer[0]!.id;
-  const unknownHistory=(await tx.execute(sql`select s.id from pay_stubs s
+  const unknownHistory=await tx.execute(sql`select s.id from pay_stubs s
     join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
     join documents d on d.org_id=r.org_id and d.id=r.document_id
     where s.org_id=${orgId} and s.employee_party_id=${employeePartyId} and s.tax_year=${taxYear}
       and s.pay_run_document_id<>${documentId} and r.run_status='committed' and d.status<>'voided'
       and d.subsidiary_id=${subsidiaryId}
-      and (s.country is null or (s.country='CA' and (s.currency_code<>'CAD' or d.currency<>'CAD'))) limit 1`)).rows;
+      and (s.country is null or (s.country='CA' and (s.currency_code<>'CAD' or d.currency<>'CAD'))) limit 1`, "objects");
   if(unknownHistory.length)throw new PayrollError('Canadian annual contribution history has unknown country or currency attribution — qualify the original retained payroll source before calculating');
   const opening = canadaOriginalOpeningYtd(await readEmployeeOpeningLevySources(tx, {
     orgId, employeePartyId, taxYear, subsidiaryId, beforeDate: employer[0]!.payDate,
@@ -174,8 +174,8 @@ export async function employeeYtd(
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
       and r.run_status = 'committed'
       and d.status <> 'voided' and d.subsidiary_id=${subsidiaryId} and s.country='CA' and s.currency_code='CAD'
-  `));
-  const priors = r.rows[0]!;
+  `, "objects"));
+  const priors = r[0]!;
   return Object.fromEntries((Object.keys(CA_STATUTORY_OPENING_COLUMNS) as (keyof CanadaYtdRow)[])
     .map(key => [key, add(opening[key], priors[key])])) as CanadaYtdRow;
 }
@@ -203,7 +203,7 @@ export async function resolveEiEmployerMultiple(input: {
   const account = (await tx.execute<{ country: string; program_type: string }>(sql`
     select country, program_type from payroll_filing_accounts
      where org_id = ${orgId} and id = ${filingAccountId} and is_active
-  `)).rows[0];
+  `, "objects"))[0];
   if (!account || account.country !== "CA" || account.program_type !== "ca_rp") return "1.4";
   const stored = await findStoredEmployerFactValue({
     tx, orgId, filingAccountId, country: "CA",
@@ -218,7 +218,7 @@ export async function resolveEiEmployerMultiple(input: {
        where org_id = ${orgId} and filing_account_id = ${filingAccountId}::uuid
          and country = 'CA' and fact_key = 'ei_employer_multiplier'
     ) as configured
-  `)).rows[0]!.configured;
+  `, "objects"))[0]!.configured;
   if (!configured) return "1.4";
   throw new PayrollError(
     `${employeeName} is on a payroll program account with no employer EI multiple effective on ${payDate} `
@@ -261,12 +261,12 @@ export async function computeCaStatutory(
   assertRegionSupported(region);
 
   const ytd = await employeeYtd({ tx, orgId, employeePartyId, taxYear, documentId, subsidiaryId:ctx.subsidiaryId });
-  const taxAdjustments = (await tx.execute<{ amount: string | null; replace_component: boolean; note: string | null }>(sql`
+  const taxAdjustments = await tx.execute<{ amount: string | null; replace_component: boolean; note: string | null }>(sql`
     select a.amount::text as amount, a.replace_component, a.note from pay_run_adjustments a
       join pay_components c on c.org_id=a.org_id and c.id=a.component_id
      where a.org_id=${orgId} and a.pay_run_document_id=${documentId} and a.employee_party_id=${employeePartyId}
        and a.adjustment_type='line' and c.system_key='income_tax'
-     order by a.created_at, a.id`)).rows;
+     order by a.created_at, a.id`, "objects");
   const overrideAdjustments = taxAdjustments.filter((adjustment) => adjustment.replace_component);
   if (overrideAdjustments.length > 1) {
     throw new PayrollError("this employee has multiple income-tax overrides on the run — remove the duplicate adjustment before recalculating");

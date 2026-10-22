@@ -1,1 +1,0 @@
-Additive: new merge state columns on accounts (all null for existing rows), new empty tables, a widened financial change domain check, and guards that refuse only references to merged accounts, of which none exist yet.

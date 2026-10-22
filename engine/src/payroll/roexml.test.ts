@@ -148,7 +148,7 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       interruptionOn:'2026-07-19',lastInsurableEarningsOn:'2026-07-18',salaryContinuanceEndOn:null,
       sourceReference:'Original employer final service declaration',reason:'Confirm final worked date',status:'confirmed',
       expectedId:current.id,expectedUpdatedAt:current.updatedAt});
-    const component=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`)).rows;
+    const component=await db.execute<{id:string}>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`, "objects");
     assert.equal(component.length,1);
     const run=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
       periodStart:'2026-07-05',periodEnd:'2026-07-18',payDate:'2026-07-21'});
@@ -157,8 +157,8 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
         replaceComponent:true,earnedFrom:'2026-07-05',earnedTo:'2026-07-18'}});
     assert.deepEqual((await calculatePayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId})).errors,[]);
     await commitPayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId});
-    const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(stub)::text as snapshot from pay_stubs stub
-      where org_id=${f.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows;
+    const before=await db.execute<{snapshot:string}>(sql`select to_jsonb(stub)::text as snapshot from pay_stubs stub
+      where org_id=${f.orgId} and pay_run_document_id=${run.documentId} order by id`, "objects");
     const employeeId=f.employeeId;
     // 13:00Z on Jun 15 is already Jun 16 in Auckland. UTC today and wall-clock
     // today must not leak into a Service Canada upload filename.
@@ -168,8 +168,8 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       assert.equal(file.filename, "ROE-2026-06-16.xml");
       assert.notEqual(file.filename, `ROE-${new Date().toISOString().slice(0, 10)}.xml`);
       assert.notEqual(file.filename, "ROE-2026-06-15.xml");
-      assert.deepEqual((await db.execute<{snapshot:string}>(sql`select to_jsonb(stub)::text as snapshot from pay_stubs stub
-        where org_id=${f.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows,before,'filename generation preserves committed employee payroll');
+      assert.deepEqual(await db.execute<{snapshot:string}>(sql`select to_jsonb(stub)::text as snapshot from pay_stubs stub
+        where org_id=${f.orgId} and pay_run_document_id=${run.documentId} order by id`, "objects"),before,'filename generation preserves committed employee payroll');
     });
   } finally {
     await dropScratchOrgReporting(org.orgId);

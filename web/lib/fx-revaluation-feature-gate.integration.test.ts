@@ -54,10 +54,10 @@ async function fixture() {
 }
 
 async function evidence(orgId: string) {
-  return (await db.execute(sql`select * from (
+  return await db.execute(sql`select * from (
     select 'journal' as kind,to_jsonb(e) as row from journal_entries e where org_id=${orgId}
     union all select 'audit',to_jsonb(a) from audit_log a where org_id=${orgId}
-  ) evidence order by kind,row::text`)).rows;
+  ) evidence order by kind,row::text`, "objects");
 }
 
 test("disabled multi-currency blocks the FX service before any journal or audit mutation", { skip: !enabled }, async () => {

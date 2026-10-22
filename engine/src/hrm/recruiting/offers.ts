@@ -135,11 +135,9 @@ export async function loadOffer(
   offerId: string,
 ): Promise<OfferRow | null> {
   return (
-    (
-      await exec.execute<OfferRow>(sql`
+    (await exec.execute<OfferRow>(sql`
     select ${OFFER_COLUMNS} from hrm_offers where org_id = ${orgId} and id = ${offerId}
-  `)
-    ).rows[0] ?? null
+  `, "objects"))[0] ?? null
   );
 }
 
@@ -148,11 +146,9 @@ async function loadOfferForUpdate(
   orgId: string,
   offerId: string,
 ): Promise<OfferRow> {
-  const row = (
-    await exec.execute<OfferRow>(sql`
+  const row = (await exec.execute<OfferRow>(sql`
     select ${OFFER_COLUMNS} from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new RecruitingError(
       "NOT_FOUND",
@@ -289,11 +285,9 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
       );
     }
     const subsidiary =
-      (
-        await db.execute<{ one: number }>(sql`
+      (await db.execute<{ one: number }>(sql`
       select 1 as one from subsidiaries where org_id = ${orgId} and id = ${query.employerSubsidiaryId as string} limit 1
-    `)
-      ).rows.length > 0;
+    `, "objects")).length > 0;
     if (!subsidiary) {
       throw new RecruitingError(
         "NOT_FOUND",
@@ -307,8 +301,7 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     // A requisition with B's employer would book the hire into the wrong
     // legal entity.
     const declared = (query.employerSubsidiaryId as string).toLowerCase();
-    const requisition = (
-      await db.execute<{
+    const requisition = (await db.execute<{
         employerSubsidiaryId: string;
         positionId: string | null;
         requisitionNumber: string;
@@ -317,8 +310,7 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
              position_id as "positionId",
              requisition_number as "requisitionNumber"
         from hrm_requisitions where org_id = ${orgId} and id = ${application.requisitionId}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!requisition) {
       throw new RecruitingError(
         "NOT_FOUND",
@@ -343,16 +335,14 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     }
     const refPositionId = positionId ?? requisition.positionId;
     if (refPositionId) {
-      const liveEmployer = (
-        await db.execute<{ employerSubsidiaryId: string | null }>(sql`
+      const liveEmployer = (await db.execute<{ employerSubsidiaryId: string | null }>(sql`
         select v.employer_subsidiary_id as "employerSubsidiaryId"
           from position_versions v
          where v.org_id = ${orgId} and v.position_id = ${refPositionId}
            and v.recorded_until is null
          order by v.version_no desc
          limit 1
-      `)
-      ).rows[0]?.employerSubsidiaryId;
+      `, "objects"))[0]?.employerSubsidiaryId;
       if (!liveEmployer) {
         throw new RecruitingError(
           "REFUSED",
@@ -368,8 +358,7 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     }
     let inserted: OfferRow | undefined;
     try {
-      inserted = (
-        await db.execute<OfferRow>(sql`
+      inserted = (await db.execute<OfferRow>(sql`
         insert into hrm_offers
           (org_id, application_id, position_id, employer_subsidiary_id, department_id,
            job_title, employment_kind, proposed_start_on,
@@ -382,8 +371,7 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
                 ${query.compensationBasis as string},
                 'draft', ${expiresOn}::date, ${actorId}, ${actorId})
         returning ${OFFER_COLUMNS}
-      `)
-      ).rows[0];
+      `, "objects"))[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new RecruitingError(
@@ -458,15 +446,13 @@ export async function materialiseOfferExpiry(
   }
   // Expiry revokes the outstanding signing link in the same write: an
   // expired offer is never signable, so its token must die with it.
-  const updated = (
-    await exec.execute<OfferRow>(sql`
+  const updated = (await exec.execute<OfferRow>(sql`
     update hrm_offers
        set status = 'expired', signing_token_hash = null,
            updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${offer.id} and status = 'sent'
     returning ${OFFER_COLUMNS}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!updated) return false;
   await appendApplicationEvent(exec, {
     orgId: args.orgId,
@@ -505,14 +491,12 @@ export async function sendOffer(query: SendOfferQuery): Promise<OfferDTO> {
         `a ${current.status} offer cannot be sent — only drafts send`,
       );
     }
-    const approval = (
-      await db.execute<{
+    const approval = (await db.execute<{
         status: string;
         version: number;
         approvalVersion: number | null;
       }>(sql`
-      select approval_status as status,version,approval_version as "approvalVersion" from hrm_offers where org_id=${orgId} and id=${offerId}`)
-    ).rows[0]!;
+      select approval_status as status,version,approval_version as "approvalVersion" from hrm_offers where org_id=${orgId} and id=${offerId}`, "objects"))[0]!;
     if (approval.status === "pending")
       return toDTO(current, await businessToday(orgId));
     if (
@@ -529,8 +513,8 @@ export async function sendOffer(query: SendOfferQuery): Promise<OfferDTO> {
       const saved =
         await db.execute(sql`update hrm_offers set approval_status=${approved ? "approved" : "pending"},
         approval_version=version,submitted_by=${actorId},submission_policy=${JSON.stringify(routing.policy)}::jsonb,
-        updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${offerId} and status='draft' returning id`);
-      if (saved.rows.length !== 1)
+        updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${offerId} and status='draft' returning id`, "objects");
+      if (saved.length !== 1)
         throw new RecruitingError(
           "STALE_REVISION",
           "The offer changed during submission. Reload it before retrying.",
@@ -541,14 +525,12 @@ export async function sendOffer(query: SendOfferQuery): Promise<OfferDTO> {
           await businessToday(orgId),
         );
     }
-    const updated = (
-      await db.execute<OfferRow>(sql`
+    const updated = (await db.execute<OfferRow>(sql`
       update hrm_offers
          set status = 'sent', sent_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status = 'draft'
       returning ${OFFER_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -609,15 +591,13 @@ export async function declineOffer(
       );
     }
     // A declined offer is never signable: revoke the outstanding link here.
-    const updated = (
-      await db.execute<OfferRow>(sql`
+    const updated = (await db.execute<OfferRow>(sql`
       update hrm_offers
          set status = 'declined', responded_at = now(), decline_reason = ${reason},
              signing_token_hash = null, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status = 'sent'
       returning ${OFFER_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -679,15 +659,13 @@ export async function withdrawOffer(
       );
     }
     // A withdrawn offer is never signable: revoke the outstanding link here.
-    const updated = (
-      await db.execute<OfferRow>(sql`
+    const updated = (await db.execute<OfferRow>(sql`
       update hrm_offers
          set status = 'withdrawn', signing_token_hash = null,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status in ('draft', 'sent')
       returning ${OFFER_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -738,8 +716,8 @@ export async function releaseOfferApproval(args: {
     );
   const saved =
     await db.execute(sql`update hrm_offers set approval_status=${args.outcome},updated_by=${actorId},updated_at=now()
-    where org_id=${orgId} and id=${offerId} and status='draft' and approval_status='pending' and approval_version=version returning id`);
-  if (saved.rows.length !== 1)
+    where org_id=${orgId} and id=${offerId} and status='draft' and approval_status='pending' and approval_version=version returning id`, "objects");
+  if (saved.length !== 1)
     throw new RecruitingError(
       "STALE_REVISION",
       "These offer terms changed. Submit the current version through Flows.",

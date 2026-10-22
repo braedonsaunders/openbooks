@@ -1,90 +1,19 @@
 /// <reference types="node" />
 
 /**
- * Live-PostgreSQL proof for 0084_recognition_event_tenant_coherence.
- *
- * The upgrade path bootstraps a clean catalog, restores the 0062
- * single-column-FK shape, proves that it admits a cross-tenant event, and then
- * runs 0084's fail-closed preflight before repairing the clean state. The
- * migration is replayed to prove it is idempotent. A separate empty database
- * receives the complete published chain to prove fresh bootstrap wiring.
+ * Recognition events reference their performance obligation through the
+ * tenant-composite key (org_id, obligation_id), so an event can never book
+ * revenue for another tenant's obligation, while deleting a tenant's own
+ * obligation still cascades to its events.
  */
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { promisify } from "node:util";
-import pg from "pg";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
 
-const execFileAsync = promisify(execFile);
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-
-// These suites replay migrations inside a throwaway database they provision
-// themselves: CREATE DATABASE and CREATE ROLE are bootstrap-superuser work, not
-// runtime-role work. CI connects every other step as the constrained owner
-// (openbooks_app) on purpose, so that role deliberately lacks CREATEDB and the
-// provisioning here fails with 42501. Take the admin URL CI supplies.
-const ADMIN_DB_URL = (): string => {
-  // Refuse by name rather than fall back to the runtime login: the constrained
-  // role cannot replay migrations, and the fallback did not fail, it hung with
-  // no database activity. scripts/testdb.sh print_env and .github/workflows/
-  // test.yml both emit the privileged URL.
-  const url = process.env.OPENBOOKS_TEST_ADMIN_DB_URL?.trim();
-  assert.ok(
-    url,
-    "this test replays migrations with the privileged test-cluster login and requires " +
-      "OPENBOOKS_TEST_ADMIN_DB_URL (emitted by scripts/testdb.sh env and .github/workflows/test.yml); " +
-      "refusing rather than falling back to the runtime role",
-  );
-  return url;
-};
-
-const root = join(import.meta.dirname, "..");
-const generatedDir = join(root, "schema", "migrations", "generated");
-const migrationName = "0084_recognition_event_tenant_coherence.sql";
-const migrationPath = join(generatedDir, migrationName);
-const migrationBody = readFileSync(migrationPath, "utf8");
-assert.equal(createHash("sha256").update(migrationBody).digest("hex"),
-  "8ddcaa85c7d1df9f624ed3a5b43a5a56ccac0025092ffa31273c6cc4cc3322cd");
-
-async function replayPublishedMigration(client: pg.Client): Promise<void> {
-  await client.query("begin");
-  try {
-    await client.query(migrationBody);
-    await client.query("commit");
-  } catch (error) {
-    await client.query("rollback");
-    throw error;
-  }
-}
-
-const publishedFiles = readdirSync(generatedDir)
-  .filter((file) => file.endsWith(".sql"))
-  .sort();
-const migrationIndex = publishedFiles.indexOf(migrationName);
-assert.ok(migrationIndex > 0, "0084 must be a published forward migration");
-
-type ScratchDatabase = {
-  control: pg.Client;
-  client: pg.Client;
-  name: string;
-  url: string;
-};
-
-type RecognitionFixture = {
-  orgA: string;
-  orgB: string;
-  obligationA: string;
-  obligationB: string;
-};
-
-type DependentForeignKey = {
-  table: string;
-  name: string;
-  definition: string;
-};
 
 function postgresCode(error: unknown): string | undefined {
   let current: unknown = error;
@@ -96,310 +25,71 @@ function postgresCode(error: unknown): string | undefined {
   return undefined;
 }
 
-async function createScratchDatabase(baseUrl: URL, label: string): Promise<ScratchDatabase> {
-  const name = `openbooks_recognition_${label}_${randomBytes(4).toString("hex")}`;
-  const controlUrl = new URL(baseUrl.href);
-  controlUrl.pathname = "/postgres";
-  const control = new pg.Client({ connectionString: controlUrl.href });
-  await control.connect();
-  await control.query(`create database "${name}"`);
-
-  const databaseUrl = new URL(baseUrl.href);
-  databaseUrl.pathname = `/${name}`;
-  const client = new pg.Client({ connectionString: databaseUrl.href });
-  await client.connect();
-  await client.query("select set_config('app.bypass_rls', 'on', false)");
-  return { control, client, name, url: databaseUrl.href };
+async function seedObligation(org: ScratchOrg, label: string): Promise<string> {
+  const contractId = randomUUID();
+  const obligationId = randomUUID();
+  await db.execute(sql`
+    insert into revenue_contracts (id, org_id, customer_id, contract_number)
+    values (${contractId}, ${org.orgId}, ${org.customerId}, ${`contract-${label}-${contractId.slice(0, 8)}`})`);
+  await db.execute(sql`
+    insert into performance_obligations (id, org_id, contract_id, description, recognition_rule_id, allocated_price)
+    values (${obligationId}, ${org.orgId}, ${contractId}, ${`Obligation ${label}`}, ${org.recognitionRuleId}, 10)`);
+  return obligationId;
 }
 
-async function dropScratchDatabase(scratch: ScratchDatabase): Promise<void> {
-  await scratch.client.end().catch(() => undefined);
-  await scratch.control
-    .query(`drop database if exists "${scratch.name}" with (force)`)
-    .catch(() => undefined);
-  await scratch.control.end().catch(() => undefined);
+async function insertEvent(orgId: string, obligationId: string, sourceReference: string): Promise<string> {
+  const id = randomUUID();
+  await db.execute(sql`
+    insert into recognition_events (id, org_id, obligation_id, period_month, amount, source_reference)
+    values (${id}, ${orgId}, ${obligationId}, '2026-08-01', 10, ${sourceReference})`);
+  return id;
 }
 
-async function ensureMigrationRoles(control: pg.Client): Promise<void> {
-  await control.query(`do $$ begin
-    if not exists (select 1 from pg_roles where rolname = 'openbooks_read') then
-      create role openbooks_read nologin;
-    end if;
-    if not exists (select 1 from pg_roles where rolname = 'openbooks_app') then
-      create role openbooks_app nologin;
-    end if;
-  end $$;`);
+function refusedByForeignKey(scenario: string) {
+  return (error: unknown) => {
+    assert.equal(postgresCode(error), "23503", scenario);
+    return true;
+  };
 }
 
-async function runBootstrap(databaseUrl: string): Promise<void> {
-  await execFileAsync(
-    process.execPath,
-    ["--import", "tsx", "scripts/bootstrap.ts"],
-    {
-      cwd: root,
-      env: {
-        ...process.env,
-        NODE_ENV: "test",
-        OPENBOOKS_DB_URL: databaseUrl,
-        OPENBOOKS_RUNTIME_DB_URL: "",
-        // The bypass pool resolves by URL chain (bypass, admin, migration,
-        // runtime): point its head at the scratch database or the child
-        // migrates whichever database the ambient admin URL names.
-        OPENBOOKS_BYPASS_DB_URL: databaseUrl,
-        // Same reason as the 0064 replay suite: this spawns a bootstrap for a
-        // throwaway database, so CI's shared-database harness flag must not
-        // ride in on ...process.env. bootstrap refuses ownership transfer
-        // without a runtime URL, which is deliberately blank here.
-        OPENBOOKS_TEST_OWNERSHIP_TRANSFER: "",
-        OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION: "",
-        ORG_CURRENCY: "USD",
-        ORG_COUNTRY: "US",
-        OPENBOOKS_DATA_KEY:
-          process.env.OPENBOOKS_DATA_KEY
-          ?? "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-      },
-      maxBuffer: 2 * 1024 * 1024,
-    },
-  );
-}
-
-async function seedRecognitionFixture(client: pg.Client, suffix: string): Promise<RecognitionFixture> {
-  const orgA = randomUUID();
-  const orgB = randomUUID();
-  const partyA = randomUUID();
-  const partyB = randomUUID();
-  const ruleA = randomUUID();
-  const ruleB = randomUUID();
-  const contractA = randomUUID();
-  const contractB = randomUUID();
-  const obligationA = randomUUID();
-  const obligationB = randomUUID();
-
-  await client.query(
-    `insert into public.orgs (id, name, base_currency, country)
-     values ($1, $3, 'USD', 'US'), ($2, $4, 'USD', 'US')`,
-    [orgA, orgB, `Recognition A ${suffix}`, `Recognition B ${suffix}`],
-  );
-  await client.query(
-    `insert into public.parties (id, org_id, kind, display_name)
-     values ($1, $3, 'customer', $5), ($2, $4, 'customer', $6)`,
-    [partyA, partyB, orgA, orgB, `Customer A ${suffix}`, `Customer B ${suffix}`],
-  );
-  await client.query(
-    `insert into public.recognition_rules (id, org_id, code, name, method)
-     values ($1, $3, $5, $7, 'milestone'), ($2, $4, $6, $8, 'milestone')`,
-    [ruleA, ruleB, orgA, orgB, `recognition-a-${suffix}`, `recognition-b-${suffix}`, `Rule A ${suffix}`, `Rule B ${suffix}`],
-  );
-  await client.query(
-    `insert into public.revenue_contracts (id, org_id, customer_id, contract_number)
-     values ($1, $3, $5, $7), ($2, $4, $6, $8)`,
-    [contractA, contractB, orgA, orgB, partyA, partyB, `contract-a-${suffix}`, `contract-b-${suffix}`],
-  );
-  await client.query(
-     `insert into public.performance_obligations
-       (id, org_id, contract_id, description, recognition_rule_id, allocated_price)
-     values ($1, $3, $5, $7, $9, 10), ($2, $4, $6, $8, $10, 10)`,
-    [
-      obligationA,
-      obligationB,
-      orgA,
-      orgB,
-      contractA,
-      contractB,
-      `Obligation A ${suffix}`,
-      `Obligation B ${suffix}`,
-      ruleA,
-      ruleB,
-    ],
-  );
-  return { orgA, orgB, obligationA, obligationB };
-}
-
-async function constraintDefinition(client: pg.Client): Promise<string> {
-  const result = await client.query<{ definition: string }>(
-    `select pg_get_constraintdef(oid) as definition
-       from pg_constraint
-      where conrelid = 'public.recognition_events'::regclass
-        and conname = 'recognition_events_obligation_id_fkey'`,
-  );
-  assert.equal(result.rows.length, 1);
-  return result.rows[0]!.definition;
-}
-
-async function dependentForeignKeys(client: pg.Client): Promise<DependentForeignKey[]> {
-  const result = await client.query<DependentForeignKey>(
-    `select conrelid::regclass::text as table,
-            conname as name,
-            pg_get_constraintdef(oid) as definition
-       from pg_constraint
-      where contype = 'f'
-        and confrelid = 'public.performance_obligations'::regclass
-        and conindid = 'public.performance_obligations_org_id_id_unique'::regclass
-      order by conrelid::regclass::text, conname`,
-  );
-  return result.rows;
-}
-
-function quoteIdentifier(identifier: string): string {
-  return `"${identifier.replaceAll('"', '""')}"`;
-}
-
-async function restoreDependentForeignKeys(
-  client: pg.Client,
-  constraints: DependentForeignKey[],
-): Promise<void> {
-  await client.query(
-    `create unique index if not exists performance_obligations_org_id_id_unique
-       on public.performance_obligations (org_id, id)`,
-  );
-  for (const constraint of constraints) {
-    const table = constraint.table.split(".").map(quoteIdentifier).join(".");
-    await client.query(
-      `alter table ${table} add constraint ${quoteIdentifier(constraint.name)} ${constraint.definition}`,
-    );
-  }
-}
-
-async function assertCrossTenantInsertRejected(
-  client: pg.Client,
-  fixture: RecognitionFixture,
-  sourceReference: string,
-): Promise<void> {
-  await assert.rejects(
-    client.query(
-      `insert into public.recognition_events
-         (id, org_id, obligation_id, period_month, amount, source_reference)
-       values ($1, $2, $3, '2026-08-01', 10, $4)`,
-      [randomUUID(), fixture.orgA, fixture.obligationB, sourceReference],
-    ),
-    (error: unknown) => {
-      assert.equal(postgresCode(error), "23503");
-      return true;
-    },
-  );
-}
-
-async function assertSameTenantCascade(
-  client: pg.Client,
-  fixture: RecognitionFixture,
-  sourceReference: string,
-): Promise<void> {
-  const eventId = randomUUID();
-  await client.query(
-    `insert into public.recognition_events
-       (id, org_id, obligation_id, period_month, amount, source_reference)
-     values ($1, $2, $3, '2026-08-01', 10, $4)`,
-    [eventId, fixture.orgB, fixture.obligationB, sourceReference],
-  );
-  await client.query(`delete from public.performance_obligations where id = $1`, [fixture.obligationB]);
-  const remaining = await client.query(
-    `select 1 from public.recognition_events where id = $1`,
-    [eventId],
-  );
-  assert.equal(remaining.rows.length, 0, "same-tenant parent deletion must cascade its event");
-}
-
-test("0084 enforces tenant-coherent recognition events on replay and fresh bootstrap",
-  { skip: !DB, timeout: 300_000 },
+test("recognition events are tenant-coherent with their obligation and cascade within the tenant",
+  { skip: !DB, timeout: 60_000 },
   async () => {
-    const baseUrl = new URL(ADMIN_DB_URL());
-    const upgrade = await createScratchDatabase(baseUrl, "upgrade");
-    const fresh = await createScratchDatabase(baseUrl, "fresh");
+    const first = await createScratchOrg();
+    const second = await createScratchOrg();
     try {
-      await ensureMigrationRoles(upgrade.control);
-      await ensureMigrationRoles(fresh.control);
-
-      // Replay the immutable repair against its historical constraint shape.
-      // The supported baseline is qualified separately; its ledger is untouched.
-      await runBootstrap(upgrade.url);
-      await upgrade.client.query(`
-        alter table public.recognition_events
-          drop constraint recognition_events_obligation_id_fkey;
-        alter table public.recognition_events
-          add constraint recognition_events_obligation_id_fkey
-          foreign key (obligation_id)
-          references public.performance_obligations (id)
-          on delete cascade;
-      `);
-      const dependentKeys = await dependentForeignKeys(upgrade.client);
-      assert.ok(dependentKeys.length > 0, "the tenant key must have at least one dependent foreign key");
-      for (const constraint of dependentKeys) {
-        const table = constraint.table.split(".").map(quoteIdentifier).join(".");
-        await upgrade.client.query(
-          `alter table ${table} drop constraint ${quoteIdentifier(constraint.name)}`,
-        );
-      }
-      await upgrade.client.query(`drop index public.performance_obligations_org_id_id_unique`);
-      const upgradeFixture = await seedRecognitionFixture(upgrade.client, "upgrade");
-      const legacyEventId = randomUUID();
-      await upgrade.client.query(
-        `insert into public.recognition_events
-           (id, org_id, obligation_id, period_month, amount, source_reference)
-         values ($1, $2, $3, '2026-08-01', 10, $4)`,
-        [legacyEventId, upgradeFixture.orgA, upgradeFixture.obligationB, "legacy-cross-tenant"],
-      );
-      assert.equal(
-        (await upgrade.client.query(`select 1 from public.recognition_events where id = $1`, [legacyEventId])).rows.length,
-        1,
-        "0062's single-column FK must reproduce the legacy cross-tenant state",
+      const key = await db.execute<{ definition: string }>(sql`
+        select pg_get_constraintdef(oid) as definition
+          from pg_constraint
+         where conrelid = 'public.recognition_events'::regclass
+           and conname = 'recognition_events_obligation_id_fkey'`, 'objects');
+      assert.equal(key.length, 1, "recognition_events_obligation_id_fkey must exist");
+      assert.match(
+        key[0]!.definition,
+        /^FOREIGN KEY \(org_id, obligation_id\) REFERENCES performance_obligations\(org_id, id\) ON DELETE CASCADE/,
       );
 
-      try {
-        await assert.rejects(
-          replayPublishedMigration(upgrade.client),
-          (error: unknown) => {
-            assert.match(String(error), /23514|legacy data violates tenant coherence/);
-            assert.match(String(error), /legacy data violates tenant coherence/);
-            return true;
-          },
-        );
-      } finally {
-        await restoreDependentForeignKeys(upgrade.client, dependentKeys);
-      }
-      assert.match(await constraintDefinition(upgrade.client), /FOREIGN KEY \(obligation_id\) REFERENCES performance_obligations\(id\)/);
-      assert.equal(
-        (await upgrade.client.query(`select 1 from public.recognition_events where id = $1`, [legacyEventId])).rows.length,
-        1,
-        "failed preflight must preserve the legacy event for approved reconciliation",
+      const firstObligation = await seedObligation(first, "first");
+      const secondObligation = await seedObligation(second, "second");
+
+      await assert.rejects(
+        insertEvent(first.orgId, secondObligation, "cross-tenant"),
+        refusedByForeignKey("the composite key refuses another tenant's obligation"),
+      );
+      const ownEvent = await insertEvent(first.orgId, firstObligation, "same-tenant");
+      await assert.rejects(
+        db.execute(sql`update recognition_events set obligation_id = ${secondObligation} where id = ${ownEvent}`),
+        refusedByForeignKey("re-pointing an event across tenants is refused"),
       );
 
-      await upgrade.client.query(`delete from public.recognition_events where id = $1`, [legacyEventId]);
-      await replayPublishedMigration(upgrade.client);
-      assert.match(await constraintDefinition(upgrade.client), /FOREIGN KEY \(org_id, obligation_id\) REFERENCES performance_obligations\(org_id, id\)/);
-      assert.equal(
-        (await upgrade.client.query(`select 1 from public.recognition_events where org_id = $1`, [upgradeFixture.orgA])).rows.length,
-        0,
-        "the clean upgrade must not invent event rows",
-      );
-
-      // Replaying the exact published body must not duplicate the key or
-      // disturb the already-upgraded data.
-      await replayPublishedMigration(upgrade.client);
-      const replayConstraint = await upgrade.client.query(
-        `select count(*)::int as count from pg_constraint
-          where conrelid = 'public.recognition_events'::regclass
-            and conname = 'recognition_events_obligation_id_fkey'`,
-      );
-      const replayIndex = await upgrade.client.query(
-        `select count(*)::int as count from pg_indexes
-          where schemaname = 'public'
-            and indexname = 'performance_obligations_org_id_id_unique'`,
-      );
-      assert.equal(replayConstraint.rows[0]?.count, 1);
-      assert.equal(replayIndex.rows[0]?.count, 1);
-      await assertCrossTenantInsertRejected(upgrade.client, upgradeFixture, "post-upgrade-cross-tenant");
-      await assertSameTenantCascade(upgrade.client, upgradeFixture, "post-upgrade-same-tenant");
-
-      // Fresh bootstrap: applying the complete published chain installs the
-      // same key and composite edge before any event is written.
-      await runBootstrap(fresh.url);
-      const freshFixture = await seedRecognitionFixture(fresh.client, "fresh");
-      await assertCrossTenantInsertRejected(fresh.client, freshFixture, "fresh-cross-tenant");
-      await assertSameTenantCascade(fresh.client, freshFixture, "fresh-same-tenant");
-      assert.match(await constraintDefinition(fresh.client), /FOREIGN KEY \(org_id, obligation_id\) REFERENCES performance_obligations\(org_id, id\)/);
+      const cascaded = await insertEvent(second.orgId, secondObligation, "cascade");
+      await db.execute(sql`delete from performance_obligations where id = ${secondObligation}`);
+      const remaining = await db.execute<{ id: string }>(sql`
+        select id from recognition_events where id = ${cascaded}`, 'objects');
+      assert.equal(remaining.length, 0, "same-tenant obligation deletion cascades its event");
     } finally {
-      await dropScratchDatabase(upgrade);
-      await dropScratchDatabase(fresh);
+      await dropScratchOrg(second.orgId);
+      await dropScratchOrg(first.orgId);
     }
   },
 );

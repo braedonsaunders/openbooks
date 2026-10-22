@@ -58,7 +58,7 @@ export async function convertBuyGroup(
     const revision = (await db.execute<{ updated_at: string }>(orderEditServices.platform.sql`
       select ${orderEditServices.platform.documentRevisionCounterSql(orderEditServices.platform.sql`revision_seq`)} as updated_at
         from documents where org_id=${auth.user.orgId} and id=${draft.id} and kind='purchase_order'
-    `)).rows[0]?.updated_at;
+    `, "objects"))[0]?.updated_at;
     if (!revision) throw new Error("The purchase order draft revision could not be read.");
     try {
       const edited = await applyOrderEdit({

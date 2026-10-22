@@ -65,8 +65,8 @@ async function checkAccounts(orgId: string, spec: ReferenceSpec): Promise<string
     select id::text as id, type, is_summary, subsidiary_id::text as subsidiary_id
       from accounts
      where org_id = ${orgId} and id = any(${`{${spec.ids.join(",")}}`}::uuid[])
-  `);
-  const found = new Map(rows.rows.map((row) => [row.id.toLowerCase(), row]));
+  `, "objects");
+  const found = new Map(rows.map((row) => [row.id.toLowerCase(), row]));
   for (const id of spec.ids) {
     const row = found.get(id.toLowerCase());
     if (!row) return `${spec.field} "${id}" is not ${spec.kind} in this organization`;
@@ -104,8 +104,8 @@ async function checkParties(orgId: string, spec: ReferenceSpec): Promise<string 
            p.subsidiary_id::text as subsidiary_id
       from parties p
      where p.org_id = ${orgId} and p.id = any(${`{${spec.ids.join(",")}}`}::uuid[])
-  `);
-  const found = new Map(rows.rows.map((row) => [row.id.toLowerCase(), row]));
+  `, "objects");
+  const found = new Map(rows.map((row) => [row.id.toLowerCase(), row]));
   for (const id of spec.ids) {
     const row = found.get(id.toLowerCase());
     if (!row) return `${spec.field} "${id}" is not ${spec.kind} in this organization`;
@@ -140,8 +140,8 @@ async function checkSubsidiaries(orgId: string, spec: ReferenceSpec): Promise<st
     select id::text as id
       from subsidiaries
      where org_id = ${orgId} and id = any(${`{${spec.ids.join(",")}}`}::uuid[])
-  `);
-  const found = new Set(rows.rows.map((row) => row.id.toLowerCase()));
+  `, "objects");
+  const found = new Set(rows.map((row) => row.id.toLowerCase()));
   for (const id of spec.ids) {
     if (!found.has(id.toLowerCase())) return `${spec.field} "${id}" is not ${spec.kind} in this organization`;
     // A subsidiary attribution names the subsidiary itself: restricted

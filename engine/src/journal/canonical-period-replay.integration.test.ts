@@ -30,13 +30,13 @@ test("resolved entity period and caller lines identify one posting with provider
       const calendarId = randomUUID();
       const entityPeriodId = randomUUID();
       assert.equal((await db.execute(sql`insert into fiscal_calendars(id,org_id,name,is_active,is_default)
-        values(${calendarId},${org.orgId},'Entity reporting calendar',true,false) returning id`)).rows.length, 1);
+        values(${calendarId},${org.orgId},'Entity reporting calendar',true,false) returning id`, "objects")).length, 1);
       assert.equal((await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
         select ${entityPeriodId},org_id,${calendarId},fiscal_year,period_number,'Entity July',starts_on,ends_on
-        from accounting_periods where org_id=${org.orgId} and id=${org.periodId} returning id`)).rows.length, 1);
+        from accounting_periods where org_id=${org.orgId} and id=${org.periodId} returning id`, "objects")).length, 1);
       assert.equal((await db.execute(sql`insert into subsidiary_accounting_preferences(org_id,subsidiary_id,effective_from,fiscal_calendar_id,reason)
         select ${org.orgId},${org.subsidiaryId},starts_on,${calendarId},'Entity reporting calendar assignment'
-        from accounting_periods where org_id=${org.orgId} and id=${entityPeriodId} returning id`)).rows.length, 1);
+        from accounting_periods where org_id=${org.orgId} and id=${entityPeriodId} returning id`, "objects")).length, 1);
       const key = randomUUID();
       const request = { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
         postingDate: org.date, origin: "manual", currency: "CAD", idempotencyKey: key,
@@ -48,12 +48,12 @@ test("resolved entity period and caller lines identify one posting with provider
         'entry',(select to_jsonb(e) from journal_entries e where org_id=${org.orgId} and id=${first.entryId}),
         'lines',(select jsonb_agg(to_jsonb(l) order by line_number) from journal_lines l where org_id=${org.orgId} and entry_id=${first.entryId}),
         'audit',(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${org.orgId} and row_id=${first.entryId})
-      ) as state`)).rows[0]!.state;
+      ) as state`, "objects"))[0]!.state;
       const before = await state();
       const header = (await db.execute<{ period_id: string; hash: string; leg_count: number; total: string }>(sql`
         select e.period_id,e.custom->>'postingRequestHash' as hash,count(l.id)::int as leg_count,sum(l.amount)::text as total
         from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id
-        where e.org_id=${org.orgId} and e.id=${first.entryId} group by e.id`)).rows[0]!;
+        where e.org_id=${org.orgId} and e.id=${first.entryId} group by e.id`, "objects"))[0]!;
       assert.equal(header.period_id, entityPeriodId);
       assert.match(header.hash, /^[0-9a-f]{64}$/);
       assert.equal(header.leg_count, 4);
@@ -69,7 +69,7 @@ test("resolved entity period and caller lines identify one posting with provider
       /different posting content/);
       assert.deepEqual(await state(), before);
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries
-        where org_id=${org.orgId} and custom->>'idempotencyKey'=${key}`)).rows[0]!.n, 1);
+        where org_id=${org.orgId} and custom->>'idempotencyKey'=${key}`, "objects"))[0]!.n, 1);
     });
   } finally {
     clearBalancingLegProviders();
@@ -86,8 +86,8 @@ test("a regular period cannot receive a posting dated outside its own window", {
         idempotencyKey: randomUUID(),
         lines: [{ accountId: org.accounts.bank, amount: "-10" }, { accountId: org.accounts.cogs, amount: "10" }] }),
       /posting date must fall within its accounting period.*choose the period covering 2026-08-15/);
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`)).rows.length, 0);
-      assert.equal((await db.execute(sql`select id from journal_lines where org_id=${org.orgId}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, "objects")).length, 0);
+      assert.equal((await db.execute(sql`select id from journal_lines where org_id=${org.orgId}`, "objects")).length, 0);
     });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -103,7 +103,7 @@ test("calendar resolution never admits a period belonging to another organizatio
         postingDate: org.date, periodId: foreign.periodId, entryNumber: "FOREIGN-PERIOD", origin: "manual", currency: "CAD",
         lines: [{ accountId: org.accounts.bank, amount: "-10" }, { accountId: org.accounts.cogs, amount: "10" }] }),
       /accounting period .* does not exist in this organization/);
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, "objects")).length, 0);
     });
   } finally {
     await dropScratchOrg(foreign.orgId);

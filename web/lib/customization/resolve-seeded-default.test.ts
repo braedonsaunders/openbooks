@@ -37,7 +37,8 @@ type Row = Record<string, unknown>
   // null viewId ⇒ skip personal, then org/system). That is not the same as no preference row.
   prefCleared: false,
   presentationOnly: false,
-  async execute() {
+  async execute(_query: unknown, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const state = (globalThis as Record<string, unknown>).__resolveSeedDb as {
       calls: number
       viewRows: Row[]
@@ -48,10 +49,10 @@ type Row = Record<string, unknown>
     state.calls += 1
     // First query lists the views; the second (when no explicit view) reads
     // the user's default preference.
-    if (state.calls === 1) return { rows: state.viewRows }
-    if (state.presentationOnly) return {rows:[{viewId:null,selectionExplicit:false}]}
-    if (state.prefCleared) return { rows: [{ viewId: null }] }
-    return { rows: state.prefViewId ? [{ viewId: state.prefViewId }] : [] }
+    if (state.calls === 1) return inMode({ rows: state.viewRows })
+    if (state.presentationOnly) return inMode({rows:[{viewId:null,selectionExplicit:false}]})
+    if (state.prefCleared) return inMode({ rows: [{ viewId: null }] })
+    return inMode({ rows: state.prefViewId ? [{ viewId: state.prefViewId }] : [] })
   },
 }
 

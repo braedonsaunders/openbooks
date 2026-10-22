@@ -42,7 +42,7 @@ async function seedFlaggedVendorPaidOnUnmappedAccount(
     values (${randomUUID()}, ${org.orgId}, ${vendorId}, ${org.subsidiaryId})`);
 
   const calendarId = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+    select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
   const period2025 = randomUUID();
   await db.execute(sql`
     insert into accounting_periods

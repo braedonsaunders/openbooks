@@ -53,7 +53,7 @@ async function findTargets(actor: ScheduleActor & { boardId: string; query: stri
   const orgId = actor.orgId;
   const match = (code: SQL, label: SQL) => query ? sql`(lower(coalesce(${code}, '')) like ${pattern} or lower(${label}) like ${pattern})` : sql`true`;
 
-  const rows = (await db.execute<BoardTarget & { score: number }>(sql`
+  const rows = await db.execute<BoardTarget & { score: number }>(sql`
     select * from (
       select 'code' as kind, sc.id, sc.code, sc.label, null::text as context, sc.color, sc.category = 'work' as counts,
              ${rank(sql`sc.code`, sql`sc.label`, query)} as score, 0 as family
@@ -78,7 +78,7 @@ async function findTargets(actor: ScheduleActor & { boardId: string; query: stri
          ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed, { orgWideNull: true })}
          and ${match(sql`l.code`, sql`l.name`)}
     ) found order by score, family, label limit ${limit}
-  `)).rows;
+  `, "objects");
   return rows.map(({ score: _score, ...target }) => target);
 }
 
@@ -97,11 +97,11 @@ async function readProjectTaskOptions(actor: ScheduleActor & { boardId: string; 
   const allowed = await boardAuthority(actor, board, "read");
   if (!isUuid(actor.projectId)) throw new ScheduleError("Choose a project first.", { code: "schedule_invalid_target" });
   const project = (await db.execute<{ id: string }>(sql`select id from projects where org_id = ${actor.orgId} and id = ${actor.projectId}
-    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}`)).rows[0];
+    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}`, "objects"))[0];
   if (!project) return [];
-  return (await db.execute<ProjectTaskOption>(sql`select id, code, name from project_tasks
+  return await db.execute<ProjectTaskOption>(sql`select id, code, name from project_tasks
     where org_id = ${actor.orgId} and project_id = ${actor.projectId} and status = 'open'
-    order by schedule_order, code nulls last, name`)).rows;
+    order by schedule_order, code nulls last, name`, "objects");
 }
 
 /**
@@ -131,7 +131,7 @@ export async function resolveTarget(
   if (target.kind === "code") {
     if (projectTaskId) throw new ScheduleError("Only project bookings name a task.", { code: "schedule_invalid_target" });
     const row = (await executor.execute<{ label: string }>(sql`select label from schedule_codes
-      where org_id = ${orgId} and id = ${target.id} and is_active for share`)).rows[0];
+      where org_id = ${orgId} and id = ${target.id} and is_active for share`, "objects"))[0];
     if (!row) throw unavailable();
     return { ...empty, kind: "code", scheduleCodeId: target.id, label: row.label };
   }
@@ -140,7 +140,7 @@ export async function resolveTarget(
     const row = (await executor.execute<{ label: string }>(sql`select p.display_name as label from parties p
       join customer_roles cr on cr.org_id = p.org_id and cr.party_id = p.id
       where p.org_id = ${orgId} and p.id = ${target.id} and p.is_active
-      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })} for share of p`)).rows[0];
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })} for share of p`, "objects"))[0];
     if (!row) throw unavailable();
     return { ...empty, kind: "customer", customerPartyId: target.id, label: row.label };
   }
@@ -148,18 +148,18 @@ export async function resolveTarget(
     if (projectTaskId) throw new ScheduleError("Only project bookings name a task.", { code: "schedule_invalid_target" });
     const row = (await executor.execute<{ label: string }>(sql`select name as label from locations
       where org_id = ${orgId} and id = ${target.id} and is_active
-      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`)).rows[0];
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`, "objects"))[0];
     if (!row) throw unavailable();
     return { ...empty, kind: "location", locationId: target.id, label: row.label };
   }
   const project = (await executor.execute<{ label: string }>(sql`select name as label from projects
     where org_id = ${orgId} and id = ${target.id} and is_active and status = 'active'
-    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`)).rows[0];
+    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`, "objects"))[0];
   if (!project) throw unavailable();
   if (projectTaskId) {
     if (!isUuid(projectTaskId)) throw new ScheduleError("The task is not recognized.", { code: "schedule_invalid_target" });
     const task = (await executor.execute(sql`select id from project_tasks where org_id = ${orgId} and project_id = ${target.id}
-      and id = ${projectTaskId} and status = 'open' for share`)).rows[0];
+      and id = ${projectTaskId} and status = 'open' for share`, "objects"))[0];
     if (!task) throw new ScheduleError("The task is not open on this project.", { code: "schedule_invalid_target", remedy: "Pick an open task of the selected project." });
   }
   return { ...empty, kind: "project", projectId: target.id, projectTaskId, label: project.label };

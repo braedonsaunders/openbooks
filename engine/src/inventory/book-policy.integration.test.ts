@@ -23,7 +23,7 @@ for (const operation of ["receipt", "issue"] as const) {
         assert.deepEqual(await getOnHand(org.orgId,org.items.fifo,org.stockLocationId),before);
         const state=(await db.execute<{journals:number;movements:number}>(sql`
           select (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
-            (select count(*)::int from inventory_movements where org_id=${org.orgId}) as movements`)).rows[0]!;
+            (select count(*)::int from inventory_movements where org_id=${org.orgId}) as movements`, "objects"))[0]!;
         const baseline=operation === "issue" ? 1 : 0;
         assert.deepEqual(state,{journals:baseline,movements:baseline});
         await db.execute(sql`update accounting_books set ${sql.raw(flag)}=true where org_id=${org.orgId} and id=${org.bookId}`);
@@ -63,7 +63,7 @@ test("inventory receipt waits for a book edit and refuses without leaving stock 
     const counts=(await db.execute<{journals:number;movements:number;layers:number}>(sql`
       select (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
         (select count(*)::int from inventory_movements where org_id=${org.orgId}) as movements,
-        (select count(*)::int from cost_layers where org_id=${org.orgId}) as layers`)).rows[0]!;
+        (select count(*)::int from cost_layers where org_id=${org.orgId}) as layers`, "objects"))[0]!;
     assert.deepEqual(counts,{journals:0,movements:0,layers:0});
   }finally{
     await writer.query("rollback");

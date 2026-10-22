@@ -181,8 +181,8 @@ async function validatePayrollAccounts(
            number, name
       from accounts
      where org_id = ${orgId}
-       and id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
-  const byId = new Map(rows.rows.map((row) => [row.id, row]))
+       and id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`, 'objects')
+  const byId = new Map(rows.map((row) => [row.id, row]))
   for (const [key, id] of requested) {
     const row = byId.get(id)
     const field = ACCOUNT_KEY_LABELS[key]
@@ -236,8 +236,8 @@ async function validateRemittanceVendors(
       from parties p
       join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id
      where p.org_id = ${orgId}
-       and p.id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`)
-  const byId = new Map(rows.rows.map((row) => [row.id, row]))
+       and p.id in (${sql.join(requested.map(([, id]) => sql`${id}`), sql`, `)})`, 'objects')
+  const byId = new Map(rows.map((row) => [row.id, row]))
   for (const [key, id] of requested) {
     const row = byId.get(id)
     if (!row || !row.partyActive || !row.roleActive) {
@@ -253,9 +253,9 @@ async function currentPayrollBlob(
 ): Promise<Record<string, unknown>> {
   if (lock) await lockLedgerSetupFence(db, orgId, "exclusive")
   const r = (await db.execute<{ p: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p from orgs where id = ${orgId}${lock ? sql` for update` : sql``}`,
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}${lock ? sql` for update` : sql``}`, 'objects',
   ))
-  return r.rows[0]?.p ?? {}
+  return r[0]?.p ?? {}
 }
 
 async function writePayrollBlob(
@@ -291,8 +291,8 @@ async function currentSlotAccounts(
           from pay_components
          where org_id = ${orgId} and code = any(${componentCodes}::text[])
          order by liability_account_id nulls last
-         limit 1`)
-      before[country][slotKey] = row.rows[0]?.accountId ?? null
+         limit 1`, 'objects')
+      before[country][slotKey] = row[0]?.accountId ?? null
     }
   }
   return before
@@ -306,17 +306,17 @@ async function pickerOptions(
     db.execute<{ id: string; number: string | null; name: string }>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and not is_summary and is_active
-       order by number nulls last, name`),
+       order by number nulls last, name`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
        join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
        where p.org_id = ${orgId} and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null, { orgWideNull: true })}
-       order by p.display_name`),
+       order by p.display_name`, 'objects'),
   ]))
   return {
-    accounts: accounts.rows.map((a) => ({ id: a.id, label: a.number ? `${a.number} · ${a.name}` : a.name })),
-    vendors: vendors.rows.map((v) => ({ id: v.id, label: v.name })),
+    accounts: accounts.map((a) => ({ id: a.id, label: a.number ? `${a.number} · ${a.name}` : a.name })),
+    vendors: vendors.map((v) => ({ id: v.id, label: v.name })),
   }
 }
 

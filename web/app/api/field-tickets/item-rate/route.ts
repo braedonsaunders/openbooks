@@ -41,7 +41,7 @@ export const GET = defineRoute({
   const project = (await db.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id from projects
      where id = ${projectId} and org_id = ${gate.user.orgId} and is_active
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!project) return notFound("record")
   const denied = guardSubsidiaryScope(gate, project.subsidiary_id)
   if (denied) return denied
@@ -49,18 +49,18 @@ export const GET = defineRoute({
   const item = (await db.execute<{ name: string; default_rate: string | null; default_cost: string | null; unit: string | null; kind: string }>(sql`
     select name, default_rate, default_cost, unit, kind from items
      where id = ${itemId} and org_id = ${gate.user.orgId} and is_active
-  `))
-  if (!item.rows[0]) return notFound("record")
+  `, 'objects'))
+  if (!item[0]) return notFound("record")
   // The picker and add-line already refuse these kinds. Turning Inventory off
   // must also 404 a crafted preview so a live price cannot be quoted for an
   // inventory / assembly / kit item. Stored ticket lines stay as they are.
-  if (INVENTORY_ITEM_KINDS.has(item.rows[0].kind) && !(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
+  if (INVENTORY_ITEM_KINDS.has(item[0].kind) && !(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
     return notFound("record")
   }
   // The picker and add-line already refuse this kind. Turning Equipment off
   // must also 404 a crafted preview so a live price cannot be quoted for an
   // equipment_charge item. Stored ticket lines stay as they are.
-  if (item.rows[0].kind === 'equipment_charge' && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
+  if (item[0].kind === 'equipment_charge' && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
     return notFound("record")
   }
 
@@ -84,20 +84,20 @@ export const GET = defineRoute({
   // the item carries no default rate or cost, quoting '0' labeled
   // item_default would persist a billable zero line. An explicitly stored
   // zero default still quotes zero; only the unconfigured case refuses.
-  const defaultRate = item.rows[0].default_rate
-  const defaultCost = item.rows[0].default_cost
+  const defaultRate = item[0].default_rate
+  const defaultCost = item[0].default_cost
   if (!resolved && defaultRate == null && defaultCost == null) {
-    return NextResponse.json({ error: `No price for ${item.rows[0].name} on ${onDate}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.` }, { status: 422 })
+    return NextResponse.json({ error: `No price for ${item[0].name} on ${onDate}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.` }, { status: 422 })
   }
   const fallbackRate = defaultRate ?? defaultCost ?? '0'
   const amount = resolved?.bill.amount ?? mul(quantity, fallbackRate)
   return NextResponse.json({
     rate: divRate(amount, quantity),
     amount,
-    baseUnit: resolved?.baseUnit ?? item.rows[0].unit ?? 'unit',
+    baseUnit: resolved?.baseUnit ?? item[0].unit ?? 'unit',
     baseQuantity: resolved?.baseQuantity ?? quantity,
-    transactionUnitCode: resolved?.transactionUnitCode ?? item.rows[0].unit ?? 'unit',
-    transactionUnitName: resolved?.transactionUnitName ?? item.rows[0].unit ?? 'Unit',
+    transactionUnitCode: resolved?.transactionUnitCode ?? item[0].unit ?? 'unit',
+    transactionUnitName: resolved?.transactionUnitName ?? item[0].unit ?? 'Unit',
     rateUnits: resolved?.rateUnits ?? [],
     source: resolved ? 'rate_book' : 'item_default',
     // 'inferred' when the version's pin was backfilled from the live profile

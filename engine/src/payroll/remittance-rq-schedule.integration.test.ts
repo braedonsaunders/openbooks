@@ -150,8 +150,8 @@ async function seedRqPayroll(options: {
 }
 
 async function billDueDate(documentId: string): Promise<{ dueDate: string; custom: Record<string, unknown> }> {
-  const row = ((await db.execute<Record<string, unknown>>(sql`
-    select due_date, custom from documents where id = ${documentId}`))).rows[0]!;
+  const row = (await db.execute<Record<string, unknown>>(sql`
+    select due_date, custom from documents where id = ${documentId}`, "objects"))[0]!;
   return { dueDate: String(row.due_date).slice(0, 10), custom: row.custom as Record<string, unknown> };
 }
 

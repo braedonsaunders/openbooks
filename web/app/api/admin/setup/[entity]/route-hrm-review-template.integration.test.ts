@@ -56,12 +56,12 @@ const { listReviewTemplates } = await import("@openbooks/engine/hrm/performance/
 async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
   await withBypassContext(async () => {
     for (const permission of permissions) {
-      const rows = (await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
       insert into user_permission_overrides (org_id, user_id, permission, effect)
       values (${orgId}, ${userId}, ${permission}, 'grant')
       on conflict (user_id, permission) do update set effect = 'grant'
       returning id
-      `)).rows;
+      `, "objects");
       assert.equal(rows.length, 1, `performance permission ${permission} must be granted once`);
     }
   });
@@ -71,10 +71,10 @@ async function seedReviewOrg() {
   return withBypassContext(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
        where id = ${org.orgId} returning id
-    `)).rows;
+    `, "objects");
     assert.equal(rows.length, 1, "the review organization must enable HRM exactly once");
     return { org, actorId };
   });
@@ -99,10 +99,8 @@ function postRequest(entity: string, body: unknown): Request {
 const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
 async function scaleOf(id: string): Promise<{ name: string; scale: { min: unknown; max: unknown; labels: unknown } }> {
-  const rows = (
-    await db.execute<{ name: string; scale: { min: unknown; max: unknown; labels: unknown } }>(sql`
-      select name, rating_scale as scale from hrm_review_templates where id = ${id}`)
-  ).rows;
+  const rows = await db.execute<{ name: string; scale: { min: unknown; max: unknown; labels: unknown } }>(sql`
+      select name, rating_scale as scale from hrm_review_templates where id = ${id}`, "objects");
   assert.equal(rows.length, 1, "the created template must read back exactly once");
   return rows[0]!;
 }

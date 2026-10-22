@@ -24,9 +24,9 @@ export async function validateOperationsIntegrity(
     // must stop a new unit link or equipment_charge trigger without wiping
     // rules that already carry one.
     const current = rowId
-      ? (((await executor.execute(sql`
+      ? (await executor.execute(sql`
           select trigger, equipment_unit_id from pay_derived_rules
-           where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+           where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
       : null
     if (rowId && !current) return 'not found'
     const submittedUnit = Boolean(body.equipmentUnitId)
@@ -52,9 +52,9 @@ export async function validateOperationsIntegrity(
   }
   if (entity.key === 'number-sequences') {
     const current = rowId
-      ? (((await executor.execute(sql`
+      ? (await executor.execute(sql`
           select document_kind, subsidiary_id, allocated_through, prefix, padding from number_sequences
-           where id = ${rowId} and org_id = ${orgId}`)))).rows[0] as {
+           where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0] as {
         document_kind: string; subsidiary_id: string | null; allocated_through: number;
         prefix: string; padding: number;
       } | undefined
@@ -80,8 +80,8 @@ export async function validateOperationsIntegrity(
       const subsidiary = ((await executor.execute(sql`
         select 1 from subsidiaries
          where id = ${String(submittedSubsidiaryId)} and org_id = ${orgId}
-           and is_active and not is_elimination`)))
-      if (!subsidiary.rows.length) return 'Choose an active subsidiary from this organization'
+           and is_active and not is_elimination`, 'objects')))
+      if (!subsidiary.length) return 'Choose an active subsidiary from this organization'
     }
     // Two kinds on one series issue the same strings from independent
     // counters (PAY-00001 naming both a vendor payment and a pay run), so a
@@ -107,7 +107,7 @@ export async function validateOperationsIntegrity(
   }
   if (entity.key === 'depreciation-methods') {
     const current = rowId
-      ? (((await executor.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`)))).rows[0]
+      ? (await executor.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`, 'objects'))[0]
       : null
     if (rowId && !current) return 'not found'
     const formula = String(body.formula ?? current?.formula ?? '').trim()

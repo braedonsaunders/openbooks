@@ -10,9 +10,9 @@ test("the SQL label is the TypeScript label for every month and locale", { skip:
   const dates = Array.from({ length: 12 }, (_, index) => `2026-${String(index + 1).padStart(2, "0")}-${index % 2 ? "09" : "28"}`);
   for (const locale of ["en", "de", "es", "fr", "ja", "pt-BR", "zh", "ar-EG"]) {
     for (const style of ["date", "monthYear"] as const) {
-      const rows = (await db.execute<{ iso: string; label: string }>(sql`
+      const rows = await db.execute<{ iso: string; label: string }>(sql`
         select d::text as iso, ${civilDateLabelSql(sql`d`, locale, style)} as label
-          from unnest(${`{${dates.join(",")}}`}::date[]) as d`)).rows;
+          from unnest(${`{${dates.join(",")}}`}::date[]) as d`, "objects");
       assert.equal(rows.length, dates.length);
       for (const row of rows) assert.equal(row.label, civilDateLabel(row.iso, locale, style), `${locale} ${style} ${row.iso}`);
     }
@@ -20,6 +20,6 @@ test("the SQL label is the TypeScript label for every month and locale", { skip:
 });
 
 test("a null date renders as null so searches skip it", { skip: !DB }, async () => {
-  const row = (await db.execute<{ label: string | null }>(sql`select ${civilDateLabelSql(sql`null::date`, "en")} as label`)).rows[0];
+  const row = (await db.execute<{ label: string | null }>(sql`select ${civilDateLabelSql(sql`null::date`, "en")} as label`, "objects"))[0];
   assert.equal(row?.label, null);
 });

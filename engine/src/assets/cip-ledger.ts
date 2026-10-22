@@ -22,14 +22,14 @@ export interface CipBalance {
 export async function cipBalance(tx: SqlExecutor, orgId: string, cipAssetId: string): Promise<CipBalance> {
   const [costs, capitalizations] = await Promise.all([
     tx.execute<{ amount: string; status: "linked" | "unlinked" }>(sql`
-      select amount::text as amount, status from asset_cip_costs where org_id = ${orgId} and cip_asset_id = ${cipAssetId}`),
+      select amount::text as amount, status from asset_cip_costs where org_id = ${orgId} and cip_asset_id = ${cipAssetId}`, "objects"),
     tx.execute<{ capitalized_amount: string; expensed_amount: string; status: "posted" | "reversed" }>(sql`
       select capitalized_amount::text as capitalized_amount, expensed_amount::text as expensed_amount, status
-        from asset_cip_capitalizations where org_id = ${orgId} and cip_asset_id = ${cipAssetId}`),
+        from asset_cip_capitalizations where org_id = ${orgId} and cip_asset_id = ${cipAssetId}`, "objects"),
   ]);
   return cipOpenBalance(
-    costs.rows,
-    capitalizations.rows.map((row) => ({ capitalizedAmount: row.capitalized_amount, expensedAmount: row.expensed_amount, status: row.status })),
+    costs,
+    capitalizations.map((row) => ({ capitalizedAmount: row.capitalized_amount, expensedAmount: row.expensed_amount, status: row.status })),
   );
 }
 
@@ -46,7 +46,7 @@ export async function syncCipCarriedCost(
 ): Promise<CipBalance> {
   const before = (await tx.execute<{ status: string; acquisition_cost: string; asset_number: string }>(sql`
     select status, acquisition_cost::text as acquisition_cost, asset_number from fixed_assets
-     where org_id = ${args.orgId} and id = ${args.cipAssetId} for update`)).rows[0];
+     where org_id = ${args.orgId} and id = ${args.cipAssetId} for update`, "objects"))[0];
   if (!before) refuse("cip_not_found", "construction-in-progress record not found", { status: 404 });
   if (before.status !== "construction" && before.status !== "capitalized") {
     refuse("not_cip", `asset ${before.asset_number} is not a construction-in-progress record`);
@@ -69,7 +69,7 @@ export async function syncCipCarriedCost(
        set acquisition_cost = ${add(balance.open, "0")}, status = ${status},
            updated_at = clock_timestamp(), updated_by = ${args.actorId}
      where org_id = ${args.orgId} and id = ${args.cipAssetId}
-     returning id`)).rows[0];
+     returning id`, "objects"))[0];
   await tx.execute(sql`select set_config('openbooks.asset_cip_ledger', 'off', true)`);
   if (!updated) throw new Error(`construction in progress ${before.asset_number} was not updated; no row changed`);
   await tx.execute(sql`

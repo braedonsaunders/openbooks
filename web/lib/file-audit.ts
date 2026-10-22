@@ -38,6 +38,6 @@ export async function listFileActivity(
      where a.org_id = ${orgId} and a.table_name = ${table} and a.row_id = ${rowId}
      order by a.at desc
      limit ${limit}
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }

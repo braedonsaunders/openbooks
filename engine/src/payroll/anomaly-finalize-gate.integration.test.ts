@@ -32,7 +32,7 @@ test("anomaly finalization uses the native active schedule owner and refuses una
         select d.subsidiary_id as subsidiary, ps.subsidiary_id as schedule_subsidiary
         from documents d join pay_runs r on r.org_id=d.org_id and r.document_id=d.id
         join pay_schedules ps on ps.org_id=r.org_id and ps.id=r.pay_schedule_id
-        where d.org_id=${fx.orgId} and d.id=${rootRun.documentId}`)).rows[0],
+        where d.org_id=${fx.orgId} and d.id=${rootRun.documentId}`, "objects"))[0],
       { subsidiary: fx.subsidiaryId, schedule_subsidiary: null });
       assert.deepEqual(await check(rootRun.documentId), {
         periodFrom: period.periodStart, periodTo: period.periodEnd, openBlockCount: 0, openBlocks: [],
@@ -40,7 +40,7 @@ test("anomaly finalization uses the native active schedule owner and refuses una
 
       const childId = randomUUID();
       assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-        values(${childId},${fx.orgId},${fx.subsidiaryId},'Child employer','CAD','CA') returning id`)).rows.length, 1);
+        values(${childId},${fx.orgId},${fx.subsidiaryId},'Child employer','CAD','CA') returning id`, "objects")).length, 1);
       const childScheduleId = randomUUID();
       await seedPayrollSchedule(fx.orgId, childScheduleId, fx.actorId, {
         name: "Child weekly", frequency: "weekly", periodsPerYear: 52,
@@ -55,34 +55,34 @@ test("anomaly finalization uses the native active schedule owner and refuses una
         error => error instanceof PayrollError && error.message === "pay schedule not found");
       }
       assert.equal((await db.execute<{ subsidiary: string }>(sql`select subsidiary_id as subsidiary
-        from documents where org_id=${fx.orgId} and id=${childRun.documentId}`)).rows[0]?.subsidiary, childId);
+        from documents where org_id=${fx.orgId} and id=${childRun.documentId}`, "objects"))[0]?.subsidiary, childId);
       assert.deepEqual(await check(childRun.documentId), await check(rootRun.documentId));
 
       assert.equal((await db.execute(sql`update documents set subsidiary_id=${childId}
-        where org_id=${fx.orgId} and id=${rootRun.documentId} returning id`)).rows.length, 1);
+        where org_id=${fx.orgId} and id=${rootRun.documentId} returning id`, "objects")).length, 1);
       await assert.rejects(() => check(rootRun.documentId), /same legal entity/);
       assert.equal((await db.execute(sql`update documents set subsidiary_id=null
-        where org_id=${fx.orgId} and id=${rootRun.documentId} returning id`)).rows.length, 1);
+        where org_id=${fx.orgId} and id=${rootRun.documentId} returning id`, "objects")).length, 1);
       await assert.rejects(() => check(rootRun.documentId), /same legal entity/);
       assert.equal((await db.execute(sql`update documents set subsidiary_id=${fx.subsidiaryId}
-        where org_id=${fx.orgId} and id=${rootRun.documentId} returning id`)).rows.length, 1);
+        where org_id=${fx.orgId} and id=${rootRun.documentId} returning id`, "objects")).length, 1);
 
       for (const scheduleId of [fx.scheduleId, childScheduleId]) {
         const documentId = scheduleId === fx.scheduleId ? rootRun.documentId : childRun.documentId;
         assert.equal((await db.execute(sql`update pay_schedules set is_active=false
-          where org_id=${fx.orgId} and id=${scheduleId} returning id`)).rows.length, 1);
+          where org_id=${fx.orgId} and id=${scheduleId} returning id`, "objects")).length, 1);
         await assert.rejects(() => check(documentId), missingRun);
         assert.equal((await db.execute(sql`update pay_schedules set is_active=true
-          where org_id=${fx.orgId} and id=${scheduleId} returning id`)).rows.length, 1);
+          where org_id=${fx.orgId} and id=${scheduleId} returning id`, "objects")).length, 1);
       }
       // The native root cannot be deactivated; exercise unavailable ownership on its child.
       for (const subsidiaryId of [childId]) {
         const documentId = subsidiaryId === fx.subsidiaryId ? rootRun.documentId : childRun.documentId;
         assert.equal((await db.execute(sql`update subsidiaries set is_active=false
-          where org_id=${fx.orgId} and id=${subsidiaryId} returning id`)).rows.length, 1);
+          where org_id=${fx.orgId} and id=${subsidiaryId} returning id`, "objects")).length, 1);
         await assert.rejects(() => check(documentId), missingRun);
         assert.equal((await db.execute(sql`update subsidiaries set is_active=true
-          where org_id=${fx.orgId} and id=${subsidiaryId} returning id`)).rows.length, 1);
+          where org_id=${fx.orgId} and id=${subsidiaryId} returning id`, "objects")).length, 1);
       }
 
       // Deferred references model unavailable imported identities without retaining invalid fixture rows.
@@ -92,11 +92,11 @@ test("anomaly finalization uses the native active schedule owner and refuses una
           if (missing === "schedule") {
             await tx.execute(sql`set constraints pay_runs_pay_schedule_id_fkey deferred`);
             assert.equal((await tx.execute(sql`update pay_runs set pay_schedule_id=${randomUUID()}
-              where org_id=${fx.orgId} and document_id=${childRun.documentId} returning document_id`)).rows.length, 1);
+              where org_id=${fx.orgId} and document_id=${childRun.documentId} returning document_id`, "objects")).length, 1);
           } else {
             await tx.execute(sql`set constraints pay_schedules_subsidiary_id_fkey deferred`);
             assert.equal((await tx.execute(sql`update pay_schedules set subsidiary_id=${randomUUID()}
-              where org_id=${fx.orgId} and id=${childScheduleId} returning id`)).rows.length, 1);
+              where org_id=${fx.orgId} and id=${childScheduleId} returning id`, "objects")).length, 1);
           }
           await assert.rejects(() => payrollAnomalyFinalizeCheck(tx, {
             orgId: fx.orgId, documentId: childRun.documentId,
@@ -126,9 +126,9 @@ test("retained employment and overlapping period blockers refuse native commit u
       assert.equal((await db.execute(sql`insert into payroll_filing_accounts
         (id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
         values(${accountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Payroll employer account',true)
-        returning id`)).rows.length, 1);
+        returning id`, "objects")).length, 1);
       assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${accountId}
-        where org_id=${fx.orgId} and employee_party_id=${employee.partyId} returning employee_party_id`)).rows.length, 1);
+        where org_id=${fx.orgId} and employee_party_id=${employee.partyId} returning employee_party_id`, "objects")).length, 1);
       await seedHourlyPayrollTime(fx, employee.partyId, ["2026-07-14"]);
       const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, ...period });
       const input = { orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
@@ -136,8 +136,8 @@ test("retained employment and overlapping period blockers refuse native commit u
       const calculated = await calculatePayRun(input);
       assert.deepEqual(calculated.errors, []);
       assert.equal(calculated.employees, 1);
-      assert.deepEqual((await db.execute<{ employment: string }>(sql`select employment_id as employment
-        from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows,
+      assert.deepEqual(await db.execute<{ employment: string }>(sql`select employment_id as employment
+        from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects"),
       [{ employment: employee.employmentId }]);
 
       const otherScheduleId = randomUUID();
@@ -155,7 +155,7 @@ test("retained employment and overlapping period blockers refuse native commit u
         assert.equal((await db.execute(sql`insert into payroll_anomaly_flags
           (id,org_id,run_document_id,employment_id,pay_period_from,pay_period_to,kind,severity,detail,explanation,created_by)
           values(${id},${fx.orgId},${runDocumentId},${employmentId},${from},${to},'duplicate_bank',${severity},
-            ${JSON.stringify({ key: id })}::jsonb,'Review payment destination',${fx.actorId}) returning id`)).rows.length, 1);
+            ${JSON.stringify({ key: id })}::jsonb,'Review payment destination',${fx.actorId}) returning id`, "objects")).length, 1);
         return id;
       };
       const employmentFlag = await flag(employee.employmentId, period.periodStart, period.periodEnd);
@@ -173,14 +173,14 @@ test("retained employment and overlapping period blockers refuse native commit u
       assert.equal((await check()).openBlockCount, 2);
 
       assert.equal((await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${otherScheduleId}
-        where org_id=${fx.orgId} and employee_party_id=${employee.partyId} returning employee_party_id`)).rows.length, 1);
+        where org_id=${fx.orgId} and employee_party_id=${employee.partyId} returning employee_party_id`, "objects")).length, 1);
       assert.deepEqual((await check()).openBlocks, expected,
         "a current profile change cannot erase the retained employment's period review");
       assert.equal((await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${fx.scheduleId}
-        where org_id=${fx.orgId} and employee_party_id=${employee.partyId} returning employee_party_id`)).rows.length, 1);
+        where org_id=${fx.orgId} and employee_party_id=${employee.partyId} returning employee_party_id`, "objects")).length, 1);
       // Keep the unretained employment outside the native recalculation roster.
       assert.equal((await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${otherScheduleId}
-        where org_id=${fx.orgId} and employee_party_id=${outsider.partyId} returning employee_party_id`)).rows.length, 1);
+        where org_id=${fx.orgId} and employee_party_id=${outsider.partyId} returning employee_party_id`, "objects")).length, 1);
       const recalculated = await calculatePayRun(input);
       assert.deepEqual(recalculated.errors, []);
       assert.equal(recalculated.employees, 1);
@@ -192,7 +192,7 @@ test("retained employment and overlapping period blockers refuse native commit u
           join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId}),
         'lines',(select jsonb_agg(to_jsonb(l) order by id) from document_lines l where org_id=${fx.orgId} and document_id=${run.documentId}),
         'claims',(select jsonb_agg(to_jsonb(t) order by id) from time_entries t where org_id=${fx.orgId} and employee_party_id=${employee.partyId})
-      ) as state`)).rows[0]!.state;
+      ) as state`, "objects"))[0]!.state;
       const before = await snapshot();
       for (const scope of [new Set<string>(), new Set([randomUUID()])]) {
         await assert.rejects(() => commitPayRun({ ...input, allowedSubsidiaryIds: scope }), missingRun);
@@ -213,9 +213,9 @@ test("retained employment and overlapping period blockers refuse native commit u
       const committed = await commitPayRun(input);
       assert.ok(committed.lines > 0);
       assert.equal((await db.execute<{ status: string }>(sql`select run_status as status from pay_runs
-        where org_id=${fx.orgId} and document_id=${run.documentId}`)).rows[0]?.status, "committed");
+        where org_id=${fx.orgId} and document_id=${run.documentId}`, "objects"))[0]?.status, "committed");
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries
-        where org_id=${fx.orgId} and payroll_batch_ref=${run.documentId}::text`)).rows[0]?.n, 1);
+        where org_id=${fx.orgId} and payroll_batch_ref=${run.documentId}::text`, "objects"))[0]?.n, 1);
     });
   } finally {
     await dropScratchOrgReporting(fx.orgId);

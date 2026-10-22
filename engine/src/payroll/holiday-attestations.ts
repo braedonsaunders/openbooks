@@ -39,7 +39,7 @@ export async function recordHolidayAssertion(
   const run = (await tx.execute<{ run_status: string }>(sql`
     select run_status from pay_runs
      where org_id = ${orgId} and document_id = ${documentId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!run || (run.run_status !== "draft" && run.run_status !== "calculated")) {
     throw new PayrollError("holiday assertions can only be filed on an uncommitted pay run");
   }
@@ -55,7 +55,7 @@ export async function recordHolidayAssertion(
        and employee_party_id = ${employeePartyId}
        and holiday_key = ${holidayKey} and holiday_date = ${holidayDate}
      for update
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
   const updated = await tx.execute<AssertionState>(sql`
     insert into pay_run_holiday_assertions
       (org_id, pay_run_document_id, employee_party_id, holiday_key, holiday_date,
@@ -66,9 +66,9 @@ export async function recordHolidayAssertion(
     do update set absent_without_consent = excluded.absent_without_consent,
                   updated_at = greatest(clock_timestamp(), pay_run_holiday_assertions.updated_at + interval '1 microsecond'),
                   updated_by = excluded.updated_by
-    returning id, absent_without_consent, created_by, updated_by, created_at, updated_at`);
-  if (updated.rows.length !== 1) throw new PayrollError("holiday assertion was not recorded — reload the pay run and retry");
-  const after = updated.rows[0]!;
+    returning id, absent_without_consent, created_by, updated_by, created_at, updated_at`, "objects");
+  if (updated.length !== 1) throw new PayrollError("holiday assertion was not recorded — reload the pay run and retry");
+  const after = updated[0]!;
   const changes = {
     event: "holiday_absence_assertion", reason: "Statutory holiday absence eligibility assessment",
     payRunDocumentId: documentId, employeePartyId, holidayKey, holidayDate, before, after,
@@ -78,8 +78,8 @@ export async function recordHolidayAssertion(
     values (${orgId}, 'pay_run_holiday_assertions', ${after.id},
             ${before === null ? "insert" : "update"}, ${JSON.stringify(changes)}::jsonb, ${actorId})
     returning id
-  `);
-  if (audit.rows.length !== 1) throw new PayrollError("holiday assertion audit was not recorded — reload the pay run and retry");
+  `, "objects");
+  if (audit.length !== 1) throw new PayrollError("holiday assertion audit was not recorded — reload the pay run and retry");
   return { holidayKey, holidayDate };
 }
 

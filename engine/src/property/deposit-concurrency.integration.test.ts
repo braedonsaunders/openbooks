@@ -37,7 +37,7 @@ test('deposit reversal and refund cannot spend the same tenant balance', { skip:
     let settled = false;
     let contenderPid = 0;
     contender = withOrg(org.orgId, async () => {
-      contenderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+      contenderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid;
       return reverseSecurityDepositTransaction({ ...input, transactionId: first.id, reason: 'Reverse mistaken duplicate receipt' });
     });
     void contender.then(() => { settled = true; }, () => { settled = true; });
@@ -47,7 +47,7 @@ test('deposit reversal and refund cannot spend the same tenant balance', { skip:
       locked = (await db.execute<{ blocked: boolean }>(sql`select exists(
         select 1 from pg_stat_activity where datname=current_database() and pid=${contenderPid}
           and wait_event_type='Lock'
-      ) as blocked`)).rows[0]!.blocked;
+      ) as blocked`, 'objects'))[0]!.blocked;
       if (locked) break;
       await new Promise(resolve => setTimeout(resolve, 10));
     }
@@ -56,7 +56,7 @@ test('deposit reversal and refund cannot spend the same tenant balance', { skip:
     const results = await Promise.allSettled([held, contender]);
     assert.equal(results[0]!.status, 'fulfilled');
     assert.equal(results[1]!.status, 'rejected', 'reversal must observe the committed refund and refuse an overdraft');
-    const rows = (await db.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${org.orgId} and lease_id=${leaseId}`)).rows;
+    const rows = await db.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${org.orgId} and lease_id=${leaseId}`, 'objects');
     assert.equal(depositBalance(rows), '50.0000');
   } finally {
     release();

@@ -33,8 +33,8 @@ function actor(orgId: string, actorId: string) {
 
 async function accountCount(orgId: string): Promise<number> {
   const r = await withBypass(() => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from payroll_filing_accounts where org_id = ${orgId}`))
-  return r.rows[0]!.n
+    select count(*)::int as n from payroll_filing_accounts where org_id = ${orgId}`, 'objects'))
+  return r[0]!.n
 }
 
 test('a SUI account reusing the EIN number is refused naming the EIN row and its edit', { skip: !DB }, async () => {

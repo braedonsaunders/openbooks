@@ -165,10 +165,8 @@ test('a scheduled run lacking requiredPermissions renders and records them once'
               })}::jsonb, ${sender})`)
     const res = await GET(renderRequest(org.orgId, definitionId, runId))
     assert.equal(res.status, 200, await res.clone().text())
-    const snapshot = (
-      await db.execute(sql`
-        select authorization_snapshot as snapshot from report_runs where id = ${runId}`)
-    ).rows[0]?.snapshot as { requiredPermissions?: unknown } | undefined
+    const snapshot = (await db.execute(sql`
+        select authorization_snapshot as snapshot from report_runs where id = ${runId}`, 'objects'))[0]?.snapshot as { requiredPermissions?: unknown } | undefined
     assert.deepEqual(snapshot?.requiredPermissions, [], 'the render records the content key exactly once')
   } finally {
     await dropScratchOrg(org.orgId)

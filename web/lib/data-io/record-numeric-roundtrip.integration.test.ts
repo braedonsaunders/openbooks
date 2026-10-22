@@ -40,9 +40,9 @@ async function fixture() {
     assert.ok(resource)
     const live = { orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null }
     const stored = async () => (await db.execute<{ data: Record<string, unknown> }>(sql`
-      select data from custom_records where org_id=${org.orgId} and type_key=${typeKey} order by record_number`)).rows.map(r => r.data)
+      select data from custom_records where org_id=${org.orgId} and type_key=${typeKey} order by record_number`, 'objects')).map(r => r.data)
     const auditCount = async () => (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from audit_log where org_id=${org.orgId} and table_name='custom_records'`)).rows[0]!.n
+      select count(*)::text as n from audit_log where org_id=${org.orgId} and table_name='custom_records'`, 'objects'))[0]!.n
     return { org, resource, live, stored, auditCount }
   } catch (error) {
     await dropScratchOrg(org.orgId)

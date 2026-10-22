@@ -47,8 +47,8 @@ async function openLayers(
      where org_id = ${orgId} and item_id = ${itemId}
        and stock_location_id = ${stockLocationId}
        and remaining_quantity > 0
-     order by received_at, id`));
-  return r.rows;
+     order by received_at, id`, "objects"));
+  return r;
 }
 
 async function setWeight(
@@ -73,8 +73,8 @@ async function mutationSnapshot(orgId: string): Promise<Record<string, string>> 
      union all
     select 'entries', count(*)::text from journal_entries where org_id = ${orgId}
      union all
-    select 'lines', count(*)::text from journal_lines where org_id = ${orgId}`));
-  return Object.fromEntries(r.rows.map((row) => [row.k, row.n]));
+    select 'lines', count(*)::text from journal_lines where org_id = ${orgId}`, "objects"));
+  return Object.fromEntries(r.map((row) => [row.k, row.n]));
 }
 
 async function layerSnapshot(
@@ -166,10 +166,10 @@ test("weight basis apportions exactly when every open layer has a weight row", {
     const allocs = (await db.execute<{ amount: string; target_cost_layer_id: string }>(sql`
       select amount::text, target_cost_layer_id
         from landed_cost_allocations
-       where org_id = ${org.orgId} and voucher_id = ${voucher.id}`));
+       where org_id = ${org.orgId} and voucher_id = ${voucher.id}`, "objects"));
     // 10 units @ weight 2 vs 10 units @ weight 3 → 40 / 60 of 100.
-    assert.equal(allocs.rows.length, 2);
-    const byLayer = new Map(allocs.rows.map((r) => [r.target_cost_layer_id, toUnits(r.amount)]));
+    assert.equal(allocs.length, 2);
+    const byLayer = new Map(allocs.map((r) => [r.target_cost_layer_id, toUnits(r.amount)]));
     assert.equal(byLayer.get(layers[0]!.id), toUnits("40"));
     assert.equal(byLayer.get(layers[1]!.id), toUnits("60"));
   } finally {
@@ -217,10 +217,10 @@ test("explicit zero weight contributes nothing; configured freight still sums ex
     const allocs = (await db.execute<{ amount: string; target_cost_layer_id: string }>(sql`
       select amount::text, target_cost_layer_id
         from landed_cost_allocations
-       where org_id = ${org.orgId} and voucher_id = ${voucher.id}`));
-    assert.equal(allocs.rows.length, 1);
-    assert.equal(allocs.rows[0]!.target_cost_layer_id, layers[0]!.id);
-    assert.equal(toUnits(allocs.rows[0]!.amount), toUnits("100"));
+       where org_id = ${org.orgId} and voucher_id = ${voucher.id}`, "objects"));
+    assert.equal(allocs.length, 1);
+    assert.equal(allocs[0]!.target_cost_layer_id, layers[0]!.id);
+    assert.equal(toUnits(allocs[0]!.amount), toUnits("100"));
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -25,7 +25,7 @@ test("a nonresident registered payer can enroll and derive its standing from the
     const standing = await saveWithholdingStanding(db, org.orgId, {
       partyId: org.vendorId, schemeCode: "GB_CIS", bandCode: "NET", verificationReference: "V1234567890", validFrom: "2026-05-01",
     }, actor);
-    const row = (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from withholding_standings where org_id=${org.orgId} and id=${standing.id}`)).rows[0];
+    const row = (await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from withholding_standings where org_id=${org.orgId} and id=${standing.id}`, "objects"))[0];
     assert.equal(row?.subsidiary_id, org.subsidiaryId);
     const inactive = randomUUID();
     await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active) values(${inactive},${org.orgId},${org.subsidiaryId},'Inactive payer','CAD','CA',false)`);

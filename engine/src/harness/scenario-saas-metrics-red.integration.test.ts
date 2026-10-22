@@ -26,8 +26,8 @@ test("saas-metrics-tieout names a fact mismatch against the independent ledger",
           (id, org_id, name, amount, currency_code, interval, interval_count)
         values (${planId}, ${org.orgId}, 'Metrics tie-out plan', '100.0000', 'CAD', 'monthly', 1)
         returning id
-      `);
-      assert.equal(plan.rows.length, 1, "the source plan must be stored");
+      `, "objects");
+      assert.equal(plan.length, 1, "the source plan must be stored");
       const subscription = await db.execute<{ id: string }>(sql`
         insert into subscriptions
           (id, org_id, customer_id, plan_id, quantity, price_override, status,
@@ -35,8 +35,8 @@ test("saas-metrics-tieout names a fact mismatch against the independent ledger",
         values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, '1', '100.0000',
                 'active', ${month}::date, '2026-08-15', false)
         returning id
-      `);
-      assert.equal(subscription.rows.length, 1, "the source subscription must be stored");
+      `, "objects");
+      assert.equal(subscription.length, 1, "the source subscription must be stored");
       const monthly = await db.execute<{ id: string }>(sql`
         insert into saas_metrics_monthly
           (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
@@ -46,8 +46,8 @@ test("saas-metrics-tieout names a fact mismatch against the independent ledger",
                 ${month}::date, ${month}::date, 0, 100, 100, 0, 0, 0, 0,
                 'new', 0, 0, 'saas-metrics-red-proof')
         returning id
-      `);
-      assert.equal(monthly.rows.length, 1, "one subscription fact must be stored");
+      `, "objects");
+      assert.equal(monthly.length, 1, "one subscription fact must be stored");
       const inserted = await db.execute<{ id: string }>(sql`
         insert into saas_metrics_facts_monthly
           (org_id, subsidiary_id, month, mrr_start, mrr_end, new_mrr, expansion_mrr,
@@ -59,8 +59,8 @@ test("saas-metrics-tieout names a fact mismatch against the independent ledger",
                 0, 100, 100, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0,
                 0, 0, 0, 0, 0, 'billed', 'saas-metrics-red-proof')
         returning id
-      `);
-      assert.equal(inserted.rows.length, 1, "baseline SaaS facts must be stored");
+      `, "objects");
+      assert.equal(inserted.length, 1, "baseline SaaS facts must be stored");
     });
 
     const baseline = await runScenario(org.orgId, { at: org.date });
@@ -71,8 +71,8 @@ test("saas-metrics-tieout names a fact mismatch against the independent ledger",
         update saas_metrics_facts_monthly set recognized_revenue = '35.0000'
          where org_id = ${org.orgId} and subsidiary_id = ${org.subsidiaryId} and month = ${month}::date
         returning id
-      `);
-      assert.equal(updated.rows.length, 1, "the intended subsidiary-month fact must be updated");
+      `, "objects");
+      assert.equal(updated.length, 1, "the intended subsidiary-month fact must be updated");
     });
 
     const divergent = await runScenario(org.orgId, { at: org.date });

@@ -400,7 +400,7 @@ async function assertPositionRefs(
   if (args.departmentId) {
     const found = (await exec.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from departments where org_id = ${orgId} and id = ${args.departmentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmPositionError(
         "INVALID_INPUT",
@@ -422,7 +422,7 @@ async function assertPositionRefs(
   if (args.locationId) {
     const found = (await exec.execute(sql`
       select 1 as one from locations where org_id = ${orgId} and id = ${args.locationId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmPositionError(
         "INVALID_INPUT",
@@ -433,7 +433,7 @@ async function assertPositionRefs(
   if (args.employerSubsidiaryId) {
     const found = (await exec.execute(sql`
       select 1 as one from subsidiaries where org_id = ${orgId} and id = ${args.employerSubsidiaryId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmPositionError(
         "INVALID_INPUT",
@@ -444,7 +444,7 @@ async function assertPositionRefs(
   if (args.periodId) {
     const found = (await exec.execute(sql`
       select 1 as one from accounting_periods where org_id = ${orgId} and id = ${args.periodId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmPositionError(
         "INVALID_INPUT",
@@ -459,7 +459,7 @@ async function livePositionVersions(
   orgId: string,
   positionId: string,
 ): Promise<PositionVersionRow[]> {
-  const rows = (await exec.execute<PositionVersionRow>(sql`
+  const rows = await exec.execute<PositionVersionRow>(sql`
     select id, version_no, title, department_id, location_id,
            employer_subsidiary_id, job_grade, planned_fte::text as planned_fte,
            status,
@@ -476,7 +476,7 @@ async function livePositionVersions(
      where org_id = ${orgId} and position_id = ${positionId}
        and recorded_until is null
      order by version_no
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -531,7 +531,7 @@ async function insertPositionChange(
             ${args.reason}, 'user', ${args.actorId},
             ${JSON.stringify(args.closedVersions)}::jsonb, ${args.actorId}, ${args.actorId})
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) {
     throw new HrmPositionError(
       "REFUSED",
@@ -560,7 +560,7 @@ async function lockPositionAggregate(
     select revision from positions
      where org_id = ${orgId} and id = ${positionId}
        for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmPositionError("NOT_FOUND", "the position is not visible in this organization — check the position id");
   }
@@ -571,12 +571,12 @@ async function bumpPositionRevision(
   exec: SqlExecutor,
   args: { orgId: string; actorId: string; positionId: string; expected: number; next: number },
 ): Promise<void> {
-  const bumped = (await exec.execute(sql`
+  const bumped = await exec.execute(sql`
     update positions
        set revision = ${args.next}, updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${args.positionId} and revision = ${args.expected}
     returning id
-  `)).rows;
+  `, "objects");
   if (bumped.length !== 1) {
     throw new HrmPositionError(
       "STALE_REVISION",
@@ -650,14 +650,14 @@ export async function createPosition(query: CreatePositionQuery): Promise<Positi
     await assertPositionRefs(db, { orgId, departmentId, locationId, employerSubsidiaryId, allowedSubsidiaryIds: allowed });
     const clash = (await db.execute(sql`
       select 1 as one from positions where org_id = ${orgId} and position_code = ${positionCode}
-    `)).rows[0];
+    `, "objects"))[0];
     if (clash) {
       throw new HrmPositionError(
         "BAD_STATE",
         `position code ${positionCode} already exists in this organization — pick a code that is not taken`,
       );
     }
-    const nowRow = (await db.execute<{ now: Date }>(sql`select now() as now`)).rows[0];
+    const nowRow = (await db.execute<{ now: Date }>(sql`select now() as now`, "objects"))[0];
     const recordedAt = nowRow?.now;
     if (!recordedAt) {
       throw new HrmPositionError("REFUSED", "the database clock is unreadable — retry the write");
@@ -666,7 +666,7 @@ export async function createPosition(query: CreatePositionQuery): Promise<Positi
       insert into positions (org_id, position_code, created_by, updated_by)
       values (${orgId}, ${positionCode}, ${actorId}, ${actorId})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!identity) {
       throw new HrmPositionError(
         "REFUSED",
@@ -849,7 +849,7 @@ export async function revisePosition(query: RevisePositionQuery): Promise<Positi
       );
     }
     const newRevision = subject.revision + 1;
-    const nowRow = (await db.execute<{ now: Date }>(sql`select now() as now`)).rows[0];
+    const nowRow = (await db.execute<{ now: Date }>(sql`select now() as now`, "objects"))[0];
     const recordedAt = nowRow?.now;
     if (!recordedAt) {
       throw new HrmPositionError("REFUSED", "the database clock is unreadable — retry the write");
@@ -880,13 +880,13 @@ export async function revisePosition(query: RevisePositionQuery): Promise<Positi
       actorId,
     });
     for (const version of overlapping) {
-      const closed = (await db.execute(sql`
+      const closed = await db.execute(sql`
         update position_versions
            set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
                closed_by_change_id = ${changeId}
          where org_id = ${orgId} and id = ${version.id} and recorded_until is null
         returning id
-      `)).rows;
+      `, "objects");
       if (closed.length !== 1) {
         throw new HrmPositionError(
           "REFUSED",
@@ -949,7 +949,7 @@ export async function closePosition(query: ClosePositionQuery): Promise<Position
     const locked = (await db.execute(sql`
       select revision from positions
        where org_id = ${orgId} and id = ${positionId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) {
       throw new HrmPositionError(
         "NOT_FOUND",
@@ -965,7 +965,7 @@ export async function closePosition(query: ClosePositionQuery): Promise<Position
          and av.effective_from <= ${effectiveDate}::date
          and (av.effective_to is null or av.effective_to > ${effectiveDate}::date)
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (holders) {
       throw new HrmPositionError(
         "REFUSED",
@@ -989,7 +989,7 @@ export async function closePosition(query: ClosePositionQuery): Promise<Position
       set constraints position_versions_change_tenant_fkey deferred
     `);
     const newRevision = subject.revision + 1;
-    const nowRow = (await db.execute<{ now: Date }>(sql`select now() as now`)).rows[0];
+    const nowRow = (await db.execute<{ now: Date }>(sql`select now() as now`, "objects"))[0];
     const recordedAt = nowRow?.now;
     if (!recordedAt) {
       throw new HrmPositionError("REFUSED", "the database clock is unreadable — retry the write");
@@ -1023,13 +1023,13 @@ export async function closePosition(query: ClosePositionQuery): Promise<Position
       actorId,
     });
     for (const version of live) {
-      const closed = (await db.execute(sql`
+      const closed = await db.execute(sql`
         update position_versions
            set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
                closed_by_change_id = ${changeId}
          where org_id = ${orgId} and id = ${version.id} and recorded_until is null
         returning id
-      `)).rows;
+      `, "objects");
       if (closed.length !== 1) {
         throw new HrmPositionError(
           "REFUSED",
@@ -1166,7 +1166,7 @@ export async function writePositionFunding(query: WritePositionFundingQuery): Pr
     const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
       select starts_on::text as starts_on, ends_on::text as ends_on
         from accounting_periods where org_id = ${orgId} and id = ${periodId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!period) {
       throw new HrmPositionError(
         "INVALID_INPUT",
@@ -1222,7 +1222,7 @@ export async function writePositionFunding(query: WritePositionFundingQuery): Pr
              amount::text as amount, currency
         from position_funding
        where org_id = ${orgId} and position_id = ${positionId} and period_id = ${periodId}
-    `)).rows[0];
+    `, "objects"))[0];
     let written: FundingRow | undefined;
     if (prior) {
       written = (await db.execute<FundingRow>(sql`
@@ -1234,7 +1234,7 @@ export async function writePositionFunding(query: WritePositionFundingQuery): Pr
         returning id, period_id::text as period_id, funded_fte::text as funded_fte,
                   funding_source_id::text as funding_source_id,
                   amount::text as amount, currency
-      `)).rows[0];
+      `, "objects"))[0];
     } else {
       written = (await db.execute<FundingRow>(sql`
         insert into position_funding
@@ -1245,7 +1245,7 @@ export async function writePositionFunding(query: WritePositionFundingQuery): Pr
         returning id, period_id::text as period_id, funded_fte::text as funded_fte,
                   funding_source_id::text as funding_source_id,
                   amount::text as amount, currency
-      `)).rows[0];
+      `, "objects"))[0];
     }
     if (!written) {
       throw new HrmPositionError(
@@ -1330,7 +1330,7 @@ export async function recordPositionAssignmentEvent(
   if (args.priorPositionId !== null && args.priorPositionId !== args.positionId) {
     const priorRow = (await exec.execute<{ revision: number }>(sql`
       select revision from positions where org_id = ${args.orgId} and id = ${args.priorPositionId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (priorRow) {
       await insertPositionChange(exec, {
         orgId: args.orgId,

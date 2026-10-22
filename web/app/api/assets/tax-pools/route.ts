@@ -73,8 +73,8 @@ export const GET = defineRoute({
       join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
      where pp.org_id = ${gate.user.orgId} and pp.tax_year = ${taxYear}
        ${subsidiaryVisibleFilter(sql`tp.subsidiary_id`, gate.allowedSubsidiaryIds)}
-     order by tp.class_code`);
-    return NextResponse.json({ rows: r.rows });
+     order by tp.class_code`, "objects");
+    return NextResponse.json({ rows: r });
   },
 });
 
@@ -154,10 +154,10 @@ export const POST = defineRoute({
       select id
         from accounting_books
        where id = ${body.bookId} and org_id = ${gate.user.orgId} and is_active
-       limit 1`);
-      if (!book.rows[0])
+       limit 1`, "objects");
+      if (!book[0])
         return notFound("record");
-      bookId = book.rows[0].id;
+      bookId = book[0].id;
     } else {
       bookId = await activePostingPrimaryBookId(gate.user.orgId);
     }
@@ -185,10 +185,10 @@ export const POST = defineRoute({
       select id
         from subsidiaries
        where id = ${requestedSubsidiaryId} and org_id = ${gate.user.orgId}
-       limit 1`);
-      if (!subsidiary.rows[0])
+       limit 1`, "objects");
+      if (!subsidiary[0])
         return notFound("record");
-      subsidiaryId = subsidiary.rows[0].id;
+      subsidiaryId = subsidiary[0].id;
     } else {
       subsidiaryId = await rootSubsidiary(gate.user.orgId);
     }

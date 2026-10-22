@@ -237,16 +237,16 @@ export async function loadAssetWithRunner(
   const assetRes = await tx.execute<AssetRow>(sql`
     select fixed_assets.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
       from fixed_assets where id = ${id} and org_id = ${orgId} for share
-  `);
-  const asset = assetRes.rows[0];
+  `, 'objects');
+  const asset = assetRes[0];
   if (!asset) return null;
 
   const catRes = asset.category_id
     ? await tx.execute<AssetCategoryRow>(sql`
         select * from asset_categories where id = ${asset.category_id} and org_id = ${orgId}
-      `)
-    : { rows: [] };
-  const category = catRes.rows[0] ?? null;
+      `, 'objects')
+    : [];
+  const category = catRes[0] ?? null;
 
   // Effective accounts (asset override → category).
   const eff = category
@@ -283,9 +283,9 @@ export async function loadAssetWithRunner(
            ids.map((i) => sql`${i}::uuid`),
            sql`, `,
          )}]`})
-      `)
-    : { rows: [] };
-  const byId = new Map(acctRes.rows.map((r) => [r.id, r]));
+      `, 'objects')
+    : [];
+  const byId = new Map(acctRes.map((r) => [r.id, r]));
 
   const page =
     Number.isInteger(options.page) && options.page! > 0 ? options.page! : 1;
@@ -307,7 +307,7 @@ export async function loadAssetWithRunner(
         left join depreciation_schedules s on s.book_id=b.id and s.asset_id=${id} and s.org_id=b.org_id
         left join depreciation_methods m on m.id=s.depreciation_method_id and m.org_id=s.org_id
        where b.org_id=${orgId} and b.is_active
-       order by b.is_primary desc, b.code`);
+       order by b.is_primary desc, b.code`, 'objects');
   const totalRows = await tx.execute<{ n: number }>(sql`
       select count(*)::int as n
         from depreciation_schedule_lines l
@@ -316,7 +316,7 @@ export async function loadAssetWithRunner(
         join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id
        where s.asset_id=${id} and l.org_id=${orgId}
          ${bookId ? sql`and s.book_id=${bookId}` : sql``}
-         ${query ? sql`and (p.name ilike ${`%${query}%`} or ${periodLabel} ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`);
+         ${query ? sql`and (p.name ilike ${`%${query}%`} or ${periodLabel} ilike ${`%${query}%`} or b.name ilike ${`%${query}%`} or l.source ilike ${`%${query}%`})` : sql``}`, 'objects');
   const primaryTotals = await tx.execute<{
     posted: string;
     planned: string;
@@ -333,9 +333,8 @@ export async function loadAssetWithRunner(
         from depreciation_schedules s
         join accounting_books b on b.id=s.book_id and b.org_id=s.org_id and b.is_primary
         left join depreciation_schedule_lines l on l.schedule_id=s.id and l.org_id=s.org_id
-       where s.asset_id=${id} and s.org_id=${orgId}`);
-  const lifecycle = (
-    await tx.execute<LifecycleValueRow>(sql`
+       where s.asset_id=${id} and s.org_id=${orgId}`, 'objects');
+  const lifecycle = await tx.execute<LifecycleValueRow>(sql`
     select event.id, entry.book_id, book.is_primary, event.occurred_on::text,
            case when event.financial_change_id is not null then 'basis_changed' else event.kind end as kind, event.amount::text, source.kind as source_kind,
            source.amount::text as source_amount
@@ -345,18 +344,15 @@ export async function loadAssetWithRunner(
       left join asset_events source on source.id = event.reverses_event_id and source.org_id = event.org_id
      where event.org_id = ${orgId} and event.asset_id = ${id}
        and entry.status in ('posted', 'reversed')
-  `)
-  ).rows;
-  const basisChanges = (
-    await tx.execute<{
+  `, 'objects');
+  const basisChanges = await tx.execute<{
       book_id: string;
       effective_on: string;
       cost_delta: string;
       accumulated_delta: string;
     }>(
-      sql`select book_id,effective_on::text,cost_delta::text,accumulated_delta::text from asset_basis_changes where org_id=${orgId} and asset_id=${id} order by effective_on,id`,
-    )
-  ).rows;
+      sql`select book_id,effective_on::text,cost_delta::text,accumulated_delta::text from asset_basis_changes where org_id=${orgId} and asset_id=${id} order by effective_on,id`, 'objects',
+    );
   const basisAt = (book: string, through?: string) =>
     basisChanges
       .filter(
@@ -396,7 +392,7 @@ export async function loadAssetWithRunner(
        ${query ? sql`and (period_name ilike ${`%${query}%`} or period_label ilike ${`%${query}%`} or book_name ilike ${`%${query}%`} or source ilike ${`%${query}%`})` : sql``}
      order by book_code, period_starts_on, sequence
      limit ${perPage} offset ${(page - 1) * perPage}
-  `);
+  `, 'objects');
 
   const cost = toUnits(String(asset.acquisition_cost ?? "0"));
   // Continue-from-accumulated (migration 0156): the running schedule starts
@@ -405,7 +401,7 @@ export async function loadAssetWithRunner(
   const opening = toUnits(
     String(asset.opening_accumulated_depreciation ?? "0"),
   );
-  const schedule = linesRes.rows.map((l) => {
+  const schedule = linesRes.map((l) => {
     const basis = basisAt(String(l.book_id), String(l.period_ends_on));
     const accumulated = fromUnits(
       toUnits(String(l.accumulated ?? "0")) + opening + basis.accumulated,
@@ -448,15 +444,15 @@ export async function loadAssetWithRunner(
     };
   });
 
-  const postedTotal = String(primaryTotals.rows[0]?.posted ?? "0");
-  const plannedTotal = String(primaryTotals.rows[0]?.planned ?? "0");
+  const postedTotal = String(primaryTotals[0]?.posted ?? "0");
+  const plannedTotal = String(primaryTotals[0]?.planned ?? "0");
   const valuation = lifecycleValue(lifecycle);
   const disposed =
     valuation.disposed ||
     asset.status === "disposed" ||
     asset.status === "written_off";
   const primaryBasis = basisAt(
-    bookRows.rows.find((b) => b.is_primary)?.id ?? "",
+    bookRows.find((b) => b.is_primary)?.id ?? "",
   );
   const accumulated = disposed
     ? "0.0000"
@@ -514,7 +510,7 @@ export async function loadAssetWithRunner(
       posted: postedTotal,
       planned: plannedTotal,
     },
-    books: bookRows.rows.map((row) => ({
+    books: bookRows.map((row) => ({
       id: String(row.id),
       code: String(row.code),
       name: String(row.name),
@@ -528,14 +524,14 @@ export async function loadAssetWithRunner(
       methodName: row.method_name == null ? null : String(row.method_name),
     })),
     schedulePage: {
-      total: Number(totalRows.rows[0]?.n ?? 0),
+      total: Number(totalRows[0]?.n ?? 0),
       page,
       perPage,
       bookId,
       query,
     },
     hasAccountingEvidence:
-      Boolean(primaryTotals.rows[0]?.has_evidence) ||
+      Boolean(primaryTotals[0]?.has_evidence) ||
       lifecycle.length > 0 ||
       basisChanges.length > 0,
     placement: { missing: placementMissing },

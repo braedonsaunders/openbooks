@@ -34,13 +34,13 @@ export async function payrollAnomalyFinalizeCheck(
       join pay_schedules ps on ps.org_id = r.org_id and ps.id = r.pay_schedule_id and ps.is_active
       join lateral (${payScheduleOwnerSql(input.orgId, sql`ps.subsidiary_id`)}) owner on true
      where r.org_id = ${input.orgId}::uuid and r.document_id = ${input.documentId}::uuid
-  `)).rows[0];
+  `, "objects"))[0];
   if (!run) throw new PayrollError("pay run not found");
   if (!run.subsidiaryId || run.scheduleSubsidiaryId !== run.subsidiaryId) {
     throw new PayrollError("Payroll anomaly review requires the run and pay schedule to identify the same legal entity — correct the schedule before committing");
   }
 
-  const blocks = (await exec.execute<{ id: string; kind: string }>(sql`
+  const blocks = await exec.execute<{ id: string; kind: string }>(sql`
     select distinct f.id::text as id, f.kind
       from pay_runs r
       join documents d on d.org_id = r.org_id and d.id = r.document_id
@@ -57,7 +57,7 @@ export async function payrollAnomalyFinalizeCheck(
      where r.org_id = ${input.orgId}::uuid and r.document_id = ${input.documentId}::uuid
        and d.subsidiary_id = ${run.scheduleSubsidiaryId}::uuid
      order by id
-  `)).rows;
+  `, "objects");
   return {
     periodFrom: run.periodFrom,
     periodTo: run.periodTo,

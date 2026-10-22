@@ -283,11 +283,11 @@ function cycleStatusVariant(status: string): CompCycleRow['statusVariant'] {
 async function workerNames(orgId: string, employmentIds: string[]): Promise<Map<string, string>> {
   const names = new Map<string, string>()
   if (employmentIds.length === 0) return names
-  const rows = (await db.execute<{ employment_id: string; name: string }>(sql`
+  const rows = await db.execute<{ employment_id: string; name: string }>(sql`
     select e.id as employment_id, p.display_name as name
       from worker_employments e
       join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
-     where e.org_id = ${orgId} and e.id = any(${`{${employmentIds.join(',')}}`}::uuid[])`)).rows
+     where e.org_id = ${orgId} and e.id = any(${`{${employmentIds.join(',')}}`}::uuid[])`, 'objects')
   for (const row of rows) names.set(row.employment_id, row.name)
   return names
 }
@@ -406,7 +406,7 @@ export async function loadCompensationHome(
   const cycleCurrency = cycleOpen
     ? (await db.execute<{ base_currency: string | null }>(sql`
         select base_currency from orgs where id = ${orgId}
-      `)).rows[0]?.base_currency ?? ''
+      `, 'objects'))[0]?.base_currency ?? ''
     : ''
   let currencyOptions: CompCycleDialogState['currencyOptions'] = []
   let employerOptions: CompCycleDialogState['employerOptions'] = []
@@ -582,12 +582,12 @@ export async function loadCompensationSettingsBlock(
     initial,
     title: t('compensation.settings.title'),
     attributeLabel: t('compensation.settings.attribute'),
-    attributeOptions: (await db.execute<{ value: string; label: string }>(sql`
+    attributeOptions: await db.execute<{ value: string; label: string }>(sql`
       select key as value, label from custom_field_defs
        where org_id = ${orgId} and target_table = 'parties' and is_active
          and (target_kind is null or target_kind = 'employee')
          and field_type in ('text', 'select', 'boolean') order by sort_order, label
-    `)).rows,
+    `, 'objects'),
     thresholdLabel: t('compensation.settings.threshold'),
     responseDaysLabel: t('compensation.settings.responseDays'),
     roundingLabel: t('compensation.settings.roundingLabel'),
@@ -742,12 +742,12 @@ export async function loadCompCycleDetail(
   const names = await workerNames(orgId, lines.map((l) => l.employmentId))
   const departments = new Map<string, { label: string; count: number }>()
   const deptOf = new Map<string, string>()
-  const deptRows = (await db.execute<{ employment_id: string; department_id: string | null; name: string | null }>(sql`
+  const deptRows = await db.execute<{ employment_id: string; department_id: string | null; name: string | null }>(sql`
     select aav.employment_id, aav.department_id, d.name
       from employment_assignment_versions aav
       left join departments d on d.id = aav.department_id and d.org_id = aav.org_id
      where aav.org_id = ${orgId} and aav.is_primary and aav.recorded_until is null
-       and aav.employment_id = any(${`{${lines.map((l) => l.employmentId).join(',')}}`}::uuid[])`)).rows
+       and aav.employment_id = any(${`{${lines.map((l) => l.employmentId).join(',')}}`}::uuid[])`, 'objects')
   for (const row of deptRows) {
     deptOf.set(row.employment_id, row.department_id ?? '')
     if (row.department_id) {
@@ -764,10 +764,10 @@ export async function loadCompCycleDetail(
   const bandIds = [...new Set(lines.map((l) => l.bandId).filter((b): b is string => b !== null))]
   const bandEdges = new Map<string, { min: string; target: string | null; max: string }>()
   if (bandIds.length > 0) {
-    const edgeRows = (await db.execute<{ id: string; min: string; target: string | null; max: string }>(sql`
+    const edgeRows = await db.execute<{ id: string; min: string; target: string | null; max: string }>(sql`
       select id, min::text as min, target::text as target, max::text as max
         from hrm_pay_bands
-       where org_id = ${orgId} and id = any(${`{${bandIds.join(',')}}`}::uuid[])`)).rows
+       where org_id = ${orgId} and id = any(${`{${bandIds.join(',')}}`}::uuid[])`, 'objects')
     for (const row of edgeRows) bandEdges.set(row.id, { min: row.min, target: row.target, max: row.max })
   }
   const rows: CompLineRow[] = lines
@@ -817,7 +817,7 @@ export async function loadCompCycleDetail(
       select kind, actor::text as actor, reason, recorded_at::text as at
         from hrm_comp_events
        where org_id = ${orgId} and cycle_id = ${cycleId} and (line_id = ${openLineId} or line_id is null)
-       order by recorded_at`)).rows
+       order by recorded_at`, 'objects'))
     : []
   return {
     cycleId,
@@ -1069,13 +1069,13 @@ export async function loadEquity(
           groupRemedyHref = '/admin/setup/compensation'
           groupRemedyLabel = t('compensation.settings.title')
         } else {
-          groupOptions = (await db.execute<{ value: string; label: string }>(sql`
+          groupOptions = await db.execute<{ value: string; label: string }>(sql`
             select distinct p.custom->>${settings.comparisonAttributeKey} as value,
               p.custom->>${settings.comparisonAttributeKey} as label
               from parties p join worker_employments e on e.org_id = p.org_id and e.worker_party_id = p.id
              where p.org_id = ${orgId} and coalesce(p.custom->>${settings.comparisonAttributeKey}, '') <> ''
              order by value
-          `)).rows
+          `, 'objects')
           if (groupOptions.length < 2) {
             groupRefusal = { title: t('equity.generate'), message: t('compensation.workspace.comparisonGroupsRequired') }
             groupRemedyHref = '/entities/employees'
@@ -1263,7 +1263,7 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
   const openRequest = (await db.execute<{ status: string }>(sql`
     select status from hrm_pay_information_requests
      where org_id = ${orgId} and employment_id = ${employmentId} and status = 'open'
-     order by requested_at desc limit 1`)).rows[0]
+     order by requested_at desc limit 1`, 'objects'))[0]
   const hasContent = placement !== 'no_band' || statements.length > 0
   return {
     title: t('myComp.title'),

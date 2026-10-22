@@ -54,23 +54,23 @@ function headerInput(input: RoutingInput): RoutingInput {
 }
 
 async function validateHeaderRefs(tx: SqlExecutor, orgId: string, input: RoutingInput): Promise<void> {
-  const item = await tx.execute(sql`select 1 from items where org_id=${orgId} and id=${input.producedItemId}`);
-  if (!item.rows.length) throw new ManufacturingNotFoundError();
+  const item = await tx.execute(sql`select 1 from items where org_id=${orgId} and id=${input.producedItemId}`, "objects");
+  if (!item.length) throw new ManufacturingNotFoundError();
   for (const id of [input.defaultIssueLocationId, input.defaultReceiptLocationId]) {
-    if (id && !(await tx.execute(sql`select 1 from stock_locations where org_id=${orgId} and id=${id} and is_active`)).rows.length) {
+    if (id && !(await tx.execute(sql`select 1 from stock_locations where org_id=${orgId} and id=${id} and is_active`, "objects")).length) {
       refused("A default routing location must be active in this organization.", "invalid_stock_location", "defaultIssueLocationId", "Choose an active stock location in this organization.");
     }
   }
 }
 
 async function routing(tx: SqlExecutor, orgId: string, id: string) {
-  const result = await tx.execute<Record<string, unknown> & { id: string }>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id}`);
-  return result.rows[0] ?? null;
+  const result = await tx.execute<Record<string, unknown> & { id: string }>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id}`, "objects");
+  return result[0] ?? null;
 }
 
 async function assertDraft(tx: SqlExecutor, orgId: string, id: string) {
-  const result = await tx.execute<Record<string, unknown>>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id} for update`);
-  const row = result.rows[0] ?? null;
+  const result = await tx.execute<Record<string, unknown>>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id} for update`, "objects");
+  const row = result[0] ?? null;
   if (!row) throw new ManufacturingNotFoundError();
   if (row.status !== "draft") {
     throw new ManufacturingError("This routing version is not a draft and cannot be edited; create a new version.", {
@@ -88,15 +88,15 @@ export async function createRouting(tx: SqlExecutor, orgId: string, actorId: str
   await assertManufacturingStockLocationScope(tx,orgId,input.defaultReceiptLocationId,commandScope);
   await validateHeaderRefs(tx, orgId, input);
   await tx.execute(sql`select id from items where org_id=${orgId} and id=${input.producedItemId} for update`);
-  const existing = await tx.execute(sql`select 1 from mfg_routings where org_id=${orgId} and produced_item_id=${input.producedItemId} and version=1`);
-  if (existing.rows.length) refused("A routing already exists for this item; create its next version.", "routing_exists", "producedItemId", "Open the existing routing and create a new version.");
+  const existing = await tx.execute(sql`select 1 from mfg_routings where org_id=${orgId} and produced_item_id=${input.producedItemId} and version=1`, "objects");
+  if (existing.length) refused("A routing already exists for this item; create its next version.", "routing_exists", "producedItemId", "Open the existing routing and create a new version.");
   const result = await tx.execute<Record<string, unknown>>(sql`
     insert into mfg_routings (id, org_id, produced_item_id, code, name, version, status, effective_from, effective_to,
       default_issue_location_id, default_receipt_location_id, overhead_basis, created_by, updated_by)
     values (coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${orgId}, ${input.producedItemId}, ${input.code}, ${input.name}, 1, 'draft', ${input.effectiveFrom}, ${input.effectiveTo ?? null},
       ${input.defaultIssueLocationId ?? null}, ${input.defaultReceiptLocationId ?? null}, ${input.overheadBasis}, ${actorId}, ${actorId})
-    returning ${routingColumns}`);
-  const after = result.rows[0];
+    returning ${routingColumns}`, "objects");
+  const after = result[0];
   if (!after) throw new ManufacturingError("The routing was not created.", { code: "write_failed", remedy: "Retry the save." });
   await auditChange(tx, { orgId, actorId, table: "mfg_routings", rowId: String(after.id), action: "insert", before: null, after, requestId: idempotency?.requestId, match: idempotency?.match });
   return after;
@@ -110,8 +110,8 @@ export async function createNextRoutingVersion(tx: SqlExecutor, orgId: string, a
   await tx.execute(sql`select id from items where org_id=${orgId} and id=${base.producedItemId} for update`);
   const latestResult = await tx.execute<Record<string, unknown>>(sql`
     select ${routingColumns} from mfg_routings where org_id=${orgId} and produced_item_id=${base.producedItemId}
-     order by version desc limit 1 for update`);
-  const latest = latestResult.rows[0];
+     order by version desc limit 1 for update`, "objects");
+  const latest = latestResult[0];
   if (!latest) throw new ManufacturingNotFoundError();
   await lockManufacturingRoutingAuthority(tx,orgId,actorId,String(latest.id));
   const created = await tx.execute<Record<string, unknown>>(sql`
@@ -119,26 +119,26 @@ export async function createNextRoutingVersion(tx: SqlExecutor, orgId: string, a
       default_issue_location_id, default_receipt_location_id, overhead_basis, created_by, updated_by)
     values (coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${orgId}, ${latest.producedItemId}, ${latest.code}, ${latest.name}, ${Number(latest.version) + 1}, 'draft',
       ${latest.effectiveFrom}, ${latest.effectiveTo}, ${latest.defaultIssueLocationId}, ${latest.defaultReceiptLocationId},
-      ${latest.overheadBasis}, ${actorId}, ${actorId}) returning ${routingColumns}`);
-  const after = created.rows[0];
+      ${latest.overheadBasis}, ${actorId}, ${actorId}) returning ${routingColumns}`, "objects");
+  const after = created[0];
   if (!after) throw new ManufacturingError("The next routing version was not created.", { code: "write_failed", remedy: "Retry the save." });
   await auditChange(tx, { orgId, actorId, table: "mfg_routings", rowId: String(after.id), action: "insert", before: null, after: { ...after, copiedFromRoutingId: latest.id }, requestId: idempotency?.requestId, match: idempotency?.match });
-  const sourceOperations = await tx.execute<{ id: string }>(sql`select id from mfg_routing_operations where org_id=${orgId} and routing_id=${String(latest.id)} order by sequence`);
+  const sourceOperations = await tx.execute<{ id: string }>(sql`select id from mfg_routing_operations where org_id=${orgId} and routing_id=${String(latest.id)} order by sequence`, "objects");
   let copiedOperations: Record<string, unknown>[] = [];
-  if (sourceOperations.rows.length > 0) {
+  if (sourceOperations.length > 0) {
     const copies = await tx.execute<Record<string, unknown>>(sql`
       insert into mfg_routing_operations (org_id, routing_id, sequence, name, work_center_id, setup_minutes,
         run_minutes_per_unit, labor_minutes_per_unit, labor_time_source, backflush_at, quality_gate, created_by, updated_by)
       select org_id, ${String(after.id)}, sequence, name, work_center_id, setup_minutes,
         run_minutes_per_unit, labor_minutes_per_unit, labor_time_source, backflush_at, quality_gate, ${actorId}, ${actorId}
         from mfg_routing_operations where org_id=${orgId} and routing_id=${String(latest.id)}
-        order by sequence returning ${operationColumns}`);
-    if (copies.rows.length !== sourceOperations.rows.length) {
+        order by sequence returning ${operationColumns}`, "objects");
+    if (copies.length !== sourceOperations.length) {
       throw new ManufacturingError("The next routing version did not copy every operation.", {
         code: "write_failed", remedy: "Retry creating the routing version; contact an administrator if it continues.",
       });
     }
-    copiedOperations = copies.rows;
+    copiedOperations = copies;
   }
   for (const operation of copiedOperations) await auditChange(tx, { orgId, actorId, table: "mfg_routing_operations", rowId: String(operation.id), action: "insert", before: null, after: { ...operation, copiedFromRoutingId: latest.id } });
   return { ...after, operations: copiedOperations };
@@ -152,15 +152,15 @@ export async function getRouting(tx: SqlExecutor, orgId: string, id: string): Pr
     select ${operationReadColumns}, center.subsidiary_id as "workCenterSubsidiaryId"
       from mfg_routing_operations operation
       join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
-     where operation.org_id=${orgId} and operation.routing_id=${id} order by operation.sequence`);
+     where operation.org_id=${orgId} and operation.routing_id=${id} order by operation.sequence`, "objects");
   await assertManufacturingItemExists(tx, orgId, String(row.producedItemId));
   const locationIds = [...new Set([row.defaultIssueLocationId, row.defaultReceiptLocationId].filter((id): id is string => typeof id === "string"))];
   const locations = locationIds.length ? (await tx.execute<{ subsidiaryId: string | null }>(sql`
     select location.subsidiary_id as "subsidiaryId" from stock_locations stock
     join locations location on location.org_id=stock.org_id and location.id=stock.location_id
-    where stock.org_id=${orgId} and stock.id in (${sql.join(locationIds.map(id => sql`${id}::uuid`), sql`, `)}) order by stock.id`)).rows : [];
+    where stock.org_id=${orgId} and stock.id in (${sql.join(locationIds.map(id => sql`${id}::uuid`), sql`, `)}) order by stock.id`, "objects")) : [];
   if (locations.length !== locationIds.length) throw new ManufacturingNotFoundError();
-  return { ...row, operations: operations.rows, locations };
+  return { ...row, operations, locations };
 }
 
 export async function updateRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string, patch: Partial<RoutingInput>,
@@ -185,8 +185,8 @@ export async function updateRouting(tx: SqlExecutor, orgId: string, actorId: str
     update mfg_routings set code=${input.code}, name=${input.name}, effective_from=${input.effectiveFrom}, effective_to=${input.effectiveTo ?? null},
       default_issue_location_id=${input.defaultIssueLocationId ?? null}, default_receipt_location_id=${input.defaultReceiptLocationId ?? null},
       overhead_basis=${input.overheadBasis}, updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} and status='draft' returning ${routingColumns}`);
-  const after = result.rows[0];
+     where org_id=${orgId} and id=${id} and status='draft' returning ${routingColumns}`, "objects");
+  const after = result[0];
   if (!after) throw new ManufacturingNotFoundError();
   await auditChange(tx, { orgId, actorId, table: "mfg_routings", rowId: id, action: "update", before, after });
   return after;
@@ -212,10 +212,10 @@ function operationInput(input: RoutingOperationInput): RoutingOperationInput {
 }
 
 async function validateOperation(tx: SqlExecutor, orgId: string, routingId: string, input: RoutingOperationInput, existingId?: string) {
-  const center = await tx.execute<{ id: string }>(sql`select id from mfg_work_centers where org_id=${orgId} and id=${input.workCenterId} and is_active for share`);
-  if (!center.rows.length) refused("The operation work center is not active in this organization.", "invalid_work_center", "workCenterId", "Choose an active work center.");
-  const duplicate = await tx.execute<{ id: string; sequence: number; name: string }>(sql`select id, sequence, name from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and sequence=${input.sequence} and id is distinct from ${existingId ?? null} limit 1`);
-  if (duplicate.rows[0]) refused(`Operation sequence ${input.sequence} is already used by operation ${duplicate.rows[0].name} in this routing.`, "operation_sequence_duplicate", "sequence", "Choose a sequence not used by another operation.");
+  const center = await tx.execute<{ id: string }>(sql`select id from mfg_work_centers where org_id=${orgId} and id=${input.workCenterId} and is_active for share`, "objects");
+  if (!center.length) refused("The operation work center is not active in this organization.", "invalid_work_center", "workCenterId", "Choose an active work center.");
+  const duplicate = await tx.execute<{ id: string; sequence: number; name: string }>(sql`select id, sequence, name from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and sequence=${input.sequence} and id is distinct from ${existingId ?? null} limit 1`, "objects");
+  if (duplicate[0]) refused(`Operation sequence ${input.sequence} is already used by operation ${duplicate[0].name} in this routing.`, "operation_sequence_duplicate", "sequence", "Choose a sequence not used by another operation.");
 }
 
 export async function createRoutingOperation(tx: SqlExecutor, orgId: string, actorId: string, routingId: string, raw: RoutingOperationInput, idempotency?: { id: string; requestId: string; match: Record<string, unknown> }) {
@@ -230,8 +230,8 @@ export async function createRoutingOperation(tx: SqlExecutor, orgId: string, act
       run_minutes_per_unit, labor_minutes_per_unit, labor_time_source, backflush_at, quality_gate, created_by, updated_by)
     values (coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${orgId}, ${routingId}, ${input.sequence}, ${input.name}, ${input.workCenterId}, ${input.setupMinutes},
       ${input.runMinutesPerUnit}, ${input.laborMinutesPerUnit}, ${input.laborTimeSource}, ${input.backflushAt}, ${input.qualityGate}, ${actorId}, ${actorId})
-    returning ${operationColumns}`);
-  const after = result.rows[0];
+    returning ${operationColumns}`, "objects");
+  const after = result[0];
   if (!after) throw new ManufacturingError("The routing operation was not created.", { code: "write_failed", remedy: "Retry the save." });
   await auditChange(tx, { orgId, actorId, table: "mfg_routing_operations", rowId: String(after.id), action: "insert", before: null, after, requestId: idempotency?.requestId, match: idempotency?.match });
   return after;
@@ -248,8 +248,8 @@ export async function updateRoutingOperation(
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingRoutingAuthority(tx,orgId,actorId,routingId);
   await assertDraft(tx, orgId, routingId);
-  const selected = await tx.execute<Record<string, unknown>>(sql`select ${operationColumns} from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and id=${operationId} for update`);
-  const before = selected.rows[0];
+  const selected = await tx.execute<Record<string, unknown>>(sql`select ${operationColumns} from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and id=${operationId} for update`, "objects");
+  const before = selected[0];
   if (!before) throw new ManufacturingNotFoundError();
   const input = operationInput({
     sequence: Number(patch.sequence ?? before.sequence),
@@ -271,8 +271,8 @@ export async function updateRoutingOperation(
     update mfg_routing_operations set sequence=${input.sequence}, name=${input.name}, work_center_id=${input.workCenterId},
       setup_minutes=${input.setupMinutes}, run_minutes_per_unit=${input.runMinutesPerUnit}, labor_minutes_per_unit=${input.laborMinutesPerUnit},
       labor_time_source=${input.laborTimeSource}, backflush_at=${input.backflushAt}, quality_gate=${input.qualityGate}, updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and routing_id=${routingId} and id=${operationId} returning ${operationColumns}`);
-  const after = updated.rows[0];
+     where org_id=${orgId} and routing_id=${routingId} and id=${operationId} returning ${operationColumns}`, "objects");
+  const after = updated[0];
   if (!after) throw new ManufacturingNotFoundError();
   await auditChange(tx, { orgId, actorId, table: "mfg_routing_operations", rowId: operationId, action: "update", before, after });
   return after;
@@ -282,8 +282,8 @@ export async function deleteRoutingOperation(tx: SqlExecutor, orgId: string, act
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingRoutingAuthority(tx,orgId,actorId,routingId);
   await assertDraft(tx, orgId, routingId);
-  const deleted = await tx.execute<Record<string, unknown>>(sql`delete from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and id=${operationId} returning ${operationColumns}`);
-  const before = deleted.rows[0];
+  const deleted = await tx.execute<Record<string, unknown>>(sql`delete from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and id=${operationId} returning ${operationColumns}`, "objects");
+  const before = deleted[0];
   if (!before) throw new ManufacturingNotFoundError();
   await auditChange(tx, { orgId, actorId, table: "mfg_routing_operations", rowId: operationId, action: "delete", before, after: null });
   return { deleted: true as const };
@@ -294,7 +294,7 @@ async function overlappingActiveRouting(tx: SqlExecutor, orgId: string, itemId: 
     select id, code, version, effective_from::text, effective_to::text from mfg_routings
      where org_id=${orgId} and produced_item_id=${itemId} and status='active' and id<>${excludeId}
        and effective_from < coalesce(${to}::date, 'infinity'::date)
-       and ${from}::date < coalesce(effective_to, 'infinity'::date) limit 1`);
+       and ${from}::date < coalesce(effective_to, 'infinity'::date) limit 1`, "objects");
 }
 
 function routingOverlapRefusal(row?: { code: string; version: number; effective_from: string; effective_to: string | null }, remedy = "Change the draft effective dates so they do not overlap the named version."): never {
@@ -339,35 +339,35 @@ async function applyApprovedRoutingActivation(tx: SqlExecutor, orgId: string, ac
     select center.id from mfg_routing_operations operation
       join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
      where operation.org_id=${orgId} and operation.routing_id=${id}
-     order by center.id for share of center`);
-  if (centerLocks.rows.length === 0) refused("A routing needs at least one operation before it can be activated.", "routing_operations_required", "operations", "Add an operation with an active work center.");
+     order by center.id for share of center`, "objects");
+  if (centerLocks.length === 0) refused("A routing needs at least one operation before it can be activated.", "routing_operations_required", "operations", "Add an operation with an active work center.");
   const inactiveCenters = await tx.execute<{ name: string; code: string }>(sql`
     select operation.name, center.code from mfg_routing_operations operation
       join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
      where operation.org_id=${orgId} and operation.routing_id=${id} and not center.is_active
-     order by operation.sequence`);
-  if (inactiveCenters.rows.length) {
-    const names = inactiveCenters.rows.map((row) => `${row.name} (${row.code})`).join(", ");
+     order by operation.sequence`, "objects");
+  if (inactiveCenters.length) {
+    const names = inactiveCenters.map((row) => `${row.name} (${row.code})`).join(", ");
     refused(`The routing uses inactive work centers: ${names}.`, "inactive_work_center", "operations", "Reactivate each work center or change the draft operation to an active work center.");
   }
   for (const previous of evidence.supersedes) {
-    const updated=await tx.execute(sql`update mfg_routings set effective_to=${String(before.effectiveFrom)},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${previous.id} and status='active' and effective_to is not distinct from ${previous.effectiveTo}::date returning id`);
-    if (updated.rows.length!==1) throw new ManufacturingNotFoundError();
+    const updated=await tx.execute(sql`update mfg_routings set effective_to=${String(before.effectiveFrom)},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${previous.id} and status='active' and effective_to is not distinct from ${previous.effectiveTo}::date returning id`, "objects");
+    if (updated.length!==1) throw new ManufacturingNotFoundError();
     await auditChange(tx,{orgId,actorId,table:"mfg_routings",rowId:previous.id,action:"update",before:previous,after:{...previous,effectiveTo:before.effectiveFrom,approvalChangeId}});
   }
   await tx.execute(sql`select id from items where org_id=${orgId} and id=${before.producedItemId} for update`);
-  const overlap = (await overlappingActiveRouting(tx, orgId, String(before.producedItemId), String(before.effectiveFrom), before.effectiveTo as string | null, id)).rows[0];
+  const overlap = (await overlappingActiveRouting(tx, orgId, String(before.producedItemId), String(before.effectiveFrom), before.effectiveTo as string | null, id))[0];
   if (overlap) routingOverlapRefusal(overlap);
   await tx.execute(sql`savepoint mfg_routing_activate`);
   let after: Record<string, unknown> | undefined;
   try {
     after = (await tx.execute<Record<string, unknown>>(sql`update mfg_routings set status='active', activation_change_id=${approvalChangeId}, updated_by=${actorId}, updated_at=now()
-      where org_id=${orgId} and id=${id} and status='draft' returning ${routingColumns}`)).rows[0];
+      where org_id=${orgId} and id=${id} and status='draft' returning ${routingColumns}`, "objects"))[0];
   } catch (error) {
     await tx.execute(sql`rollback to savepoint mfg_routing_activate`);
     await tx.execute(sql`release savepoint mfg_routing_activate`);
     if (storageCode(error) !== "23P01") throw error;
-    const collision = (await overlappingActiveRouting(tx, orgId, String(before.producedItemId), String(before.effectiveFrom), before.effectiveTo as string | null, id)).rows[0];
+    const collision = (await overlappingActiveRouting(tx, orgId, String(before.producedItemId), String(before.effectiveFrom), before.effectiveTo as string | null, id))[0];
     routingOverlapRefusal(collision);
   }
   await tx.execute(sql`release savepoint mfg_routing_activate`);
@@ -417,7 +417,7 @@ async function routingActivationEvidence(tx:SqlExecutor,orgId:string,id:string) 
   await tx.execute(sql`select id from mfg_routings where org_id=${orgId} and produced_item_id=${identity.producedItemId} order by id for update`);
   const candidate=await getRouting(tx,orgId,id);if(!candidate)throw new ManufacturingNotFoundError();
   if(candidate.status!=="draft") refused("Only a draft routing can be proposed for activation.","routing_not_draft","routingId","Create a new draft revision to change the current routing.");
-  const active=(await tx.execute<{id:string;version:number;effectiveFrom:string;effectiveTo:string|null}>(sql`select id,version,effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo" from mfg_routings where org_id=${orgId} and produced_item_id=${candidate.producedItemId} and status='active' order by version,id`)).rows;
+  const active=await tx.execute<{id:string;version:number;effectiveFrom:string;effectiveTo:string|null}>(sql`select id,version,effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo" from mfg_routings where org_id=${orgId} and produced_item_id=${candidate.producedItemId} and status='active' order by version,id`, "objects");
   const supersedes=active.filter(r=>r.effectiveFrom<String(candidate.effectiveTo??"9999-12-31") && String(candidate.effectiveFrom)<(r.effectiveTo??"9999-12-31"));
   const conflict=supersedes.find(r=>r.effectiveFrom>=String(candidate.effectiveFrom)||r.version>=Number(candidate.version));
   if(conflict) {
@@ -437,10 +437,10 @@ export async function proposeRoutingActivation(tx:SqlExecutor,orgId:string,actor
   await routingApprovalAuthority(tx,orgId,actorId);
   if(!isUuid(id)||!isUuid(input.subsidiaryId)) throw new ManufacturingNotFoundError();
   if(input.reason.trim().length<8||input.reason.trim().length>1000||!input.idempotencyKey.trim()||input.idempotencyKey.length>120) refused("Provide a reason of 8–1,000 characters and a stable request key.","routing_proposal_invalid","reason","Explain the revision and retry with a stable request key.");
-  const entity=(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
+  const entity=(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`, "objects"))[0];
   if(!entity)throw new ManufacturingNotFoundError();
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`financial-change:${orgId}:${input.idempotencyKey}`}))`);
-  const prior=(await tx.execute<{id:string;subject_id:string;subsidiary_id:string;submitted_by:string;reason:string}>(sql`select id,subject_id,subsidiary_id,submitted_by,reason from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey} and domain='manufacturing' and operation=${MANUFACTURING_ROUTING_APPROVAL_OPERATION}`)).rows[0];
+  const prior=(await tx.execute<{id:string;subject_id:string;subsidiary_id:string;submitted_by:string;reason:string}>(sql`select id,subject_id,subsidiary_id,submitted_by,reason from financial_changes where org_id=${orgId} and idempotency_key=${input.idempotencyKey} and domain='manufacturing' and operation=${MANUFACTURING_ROUTING_APPROVAL_OPERATION}`, "objects"))[0];
   if(prior) {
     if(prior.subject_id!==id||prior.subsidiary_id!==input.subsidiaryId||prior.submitted_by!==actorId||prior.reason!==input.reason.trim()) refused("This request key identifies a different revision proposal.","routing_request_conflict","idempotencyKey","Use a new request key for a different proposal.");
     return {changeId:prior.id};
@@ -463,20 +463,20 @@ export async function applyRoutingActivation(orgId:string,actorId:string,changeI
 export async function archiveRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingRoutingAuthority(tx,orgId,actorId,id);
-  const locked = await tx.execute<Record<string, unknown>>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id} for update`);
-  const prior = locked.rows[0] ?? null;
+  const locked = await tx.execute<Record<string, unknown>>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id} for update`, "objects");
+  const prior = locked[0] ?? null;
   if (!prior) throw new ManufacturingNotFoundError();
   const openOrders = await tx.execute<{ number: string }>(sql`
     select number from mfg_work_orders where org_id=${orgId} and routing_id=${id}
-      and status in ('draft', 'released', 'in_progress', 'on_hold') order by number`);
-  if (openOrders.rows.length) {
-    const numbers = openOrders.rows.map((row) => row.number).join(", ");
+      and status in ('draft', 'released', 'in_progress', 'on_hold') order by number`, "objects");
+  if (openOrders.length) {
+    const numbers = openOrders.map((row) => row.number).join(", ");
     refused(`Routing cannot be archived while work orders ${numbers} remain open.`, "routing_in_use", "routingId", "Leave this routing active while the listed work orders reference it.");
   }
   if (prior.status === "archived") return prior;
   const result = await tx.execute<Record<string, unknown>>(sql`update mfg_routings set status='archived', updated_by=${actorId}, updated_at=now()
-    where org_id=${orgId} and id=${id} and status in ('draft', 'active') returning ${routingColumns}`);
-  const after = result.rows[0];
+    where org_id=${orgId} and id=${id} and status in ('draft', 'active') returning ${routingColumns}`, "objects");
+  const after = result[0];
   if (!after) throw new ManufacturingNotFoundError();
   await auditChange(tx, { orgId, actorId, table: "mfg_routings", rowId: id, action: "update", before: prior, after });
   return after;

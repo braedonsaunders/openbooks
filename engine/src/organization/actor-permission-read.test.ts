@@ -16,7 +16,8 @@ function fixture() {
   };
   const calls = { identity: 0, roles: 0, overrides: 0, extensions: 0 };
   const dialect = new PgDialect();
-  const exec = { async execute(query: SQL) {
+  const exec = { async execute(query: SQL, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const compiled = dialect.sqlToQuery(query);
     assert.ok(compiled.params.includes("org"));
     let rows: unknown[];
@@ -32,7 +33,7 @@ function fixture() {
       calls.extensions++; rows = state.extensions;
     } else throw new Error("Unexpected authority query");
     if (!compiled.sql.includes("from apps m")) assert.ok(compiled.params.includes("actor"));
-    return { rows: structuredClone(rows) };
+    return inMode({ rows: structuredClone(rows) });
   } } as unknown as SqlExecutor;
   return { state, calls, exec };
 }

@@ -34,10 +34,10 @@ async function setup() {
 }
 
 async function paymentDrafts(orgId: string) {
-  return (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  return await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select id, subsidiary_id from documents
      where org_id = ${orgId} and kind in ('vendor_payment', 'customer_payment')
-  `)).rows;
+  `, "objects");
 }
 
 test("a restricted payment draft lands in their own subsidiary, never the root", async () => {

@@ -50,7 +50,7 @@ export async function loadProjectTypes(): Promise<ProjectTypesData> {
   await requireProjectsFeature(orgId)
   const today = await businessToday(orgId)
   const [typesRes, dimsRes, acctRes, fieldTicketsEnabled] = await Promise.all([
-    db.execute(sql`
+    db.execute<ProjectTypeRow>(sql`
       select id, key, name, description, is_built_in as "isBuiltIn", is_active as "isActive",
              sort_order as "sortOrder", billing_method as "billingMethod",
              version.financial_profile as "financialProfile",
@@ -68,19 +68,19 @@ export async function loadProjectTypes(): Promise<ProjectTypesData> {
            limit 1
         ) version on true
        where project_types.org_id = ${orgId}
-       order by sort_order, name`),
-    db.execute(sql`select distinct dimension from account_groups where org_id = ${orgId} order by dimension`),
-    db.execute(sql`
+       order by sort_order, name`, 'objects'),
+    db.execute<{ dimension: string }>(sql`select distinct dimension from account_groups where org_id = ${orgId} order by dimension`, 'objects'),
+    db.execute<{ id: string; number: string; name: string }>(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and is_active and coalesce(is_summary,false) = false
-         and type in ('income','income_other') order by number limit 500`),
+         and type in ('income','income_other') order by number limit 500`, 'objects'),
     isFeatureEnabled(orgId, 'fieldTickets'),
   ])
 
   return {
-    types: (typesRes as unknown as { rows: ProjectTypeRow[] }).rows,
-    dimensions: (dimsRes as unknown as { rows: { dimension: string }[] }).rows.map((r) => r.dimension),
-    incomeAccounts: (acctRes as unknown as { rows: { id: string; number: string; name: string }[] }).rows,
+    types: typesRes,
+    dimensions: dimsRes.map((r) => r.dimension),
+    incomeAccounts: acctRes,
     fieldTicketsEnabled,
   }
 }

@@ -1,1 +1,0 @@
-The new status CHECK is a strict superset of the old one (it adds staged, suppressed, and incomplete); every existing row already satisfies it.

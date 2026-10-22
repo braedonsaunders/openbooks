@@ -24,8 +24,8 @@ registerHooks({
       import { db as realDb } from ${JSON.stringify(root + 'engine/src/platform/db.ts')};
       export const db = new Proxy(realDb, { get(target, key) {
         if (key !== 'execute') return Reflect.get(target, key);
-        return async (query) => {
-          const result = await target.execute(query);
+        return async (query, mode) => {
+          const result = await target.execute(query, mode);
           await globalThis.__expenseNativeState.afterRead?.(globalThis.__expenseSqlText(query));
           return result;
         };
@@ -65,11 +65,11 @@ async function fixture(work: (org: Awaited<ReturnType<typeof createScratchOrg>>,
 const get = (id: string) => withOrgContext(state.orgId, () => GET(new Request('http://expense.test'), { params: Promise.resolve({ id }) }))
 const del = (id: string, body: unknown) => withOrgContext(state.orgId, () => DELETE(new Request('http://expense.test', { method: 'DELETE', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
 async function exists(id: string) {
-  return (await withOrgContext(state.orgId, () => db.execute<{ id: string }>(sql`select id from documents where id=${id} and org_id=${state.orgId}`))).rows.length > 0
+  return (await withOrgContext(state.orgId, () => db.execute<{ id: string }>(sql`select id from documents where id=${id} and org_id=${state.orgId}`, 'objects'))).length > 0
 }
 const patch = (id: string, body: unknown) => withOrgContext(state.orgId, () => PATCH(new Request('http://expense.test', { method: 'PATCH', body: JSON.stringify(body) }), { params: Promise.resolve({ id }) }))
 async function revision(id: string) {
-  return (await withOrgContext(state.orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`))).rows[0]!.revision
+  return (await withOrgContext(state.orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${state.orgId}`, 'objects')))[0]!.revision
 }
 
 test('expense GET keeps header, lines, exact revision and subsequent OCC save coherent across a committed writer', async () => {
@@ -87,7 +87,7 @@ test('expense GET keeps header, lines, exact revision and subsequent OCC save co
     assert.equal(response.status, 200)
     const payload = await response.json()
     const saved = await patch(id, { expectedUpdatedAt: payload.doc.updated_at, memo: payload.doc.memo, lines: [{ accountId: org.accounts.cogs, amount: '10', description: 'old drawer', settlementType: 'out_of_pocket' }] })
-    const current = (await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`))).rows[0]!
+    const current = (await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, 'objects')))[0]!
     console.log(JSON.stringify({ payloadMemo: payload.doc.memo, payloadLine: payload.lines[0].description, oldRevision, payloadRevision: payload.doc.updated_at, saveStatus: saved.status, finalMemo: current.memo }))
     assert.equal(saved.status, 409, 'a stale drawer must not receive the winner revision and overwrite it')
     assert.equal(current.memo, 'winner')
@@ -108,17 +108,17 @@ test('expense draft with omitted employee cannot submit or post without reimburs
     } catch (error) { rejection = error }
     if (!rejection) {
       const entry = await withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank, employeePayable: org.accounts.ap } }))
-      console.log('BEFORE missing employee posted', (await withOrgContext(org.orgId, () => db.execute(sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`))).rows)
+      console.log('BEFORE missing employee posted', await withOrgContext(org.orgId, () => db.execute(sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, 'objects')))
     }
     assert.match(String(rejection), /employee/i, 'submission must fail at the domain boundary')
-    const header = (await withOrgContext(org.orgId, () => db.execute<{ status: string; submitted_at: unknown; posted_entry_id: unknown }>(sql`select status, submitted_at, posted_entry_id from documents where id=${id}`))).rows[0]!
+    const header = (await withOrgContext(org.orgId, () => db.execute<{ status: string; submitted_at: unknown; posted_entry_id: unknown }>(sql`select status, submitted_at, posted_entry_id from documents where id=${id}`, 'objects')))[0]!
     assert.equal(header.status, 'draft')
     assert.equal(header.submitted_at, null)
     assert.equal(header.posted_entry_id, null)
     assert.equal(await revision(id), before, 'rejected submission rolls back revision and evidence')
     await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`))
     await assert.rejects(withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })), /employee/i)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`select id from journal_entries where source_document_id=${id}`))).rows.length, 0)
+    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`select id from journal_entries where source_document_id=${id}`, 'objects'))).length, 0)
   })
 })
 
@@ -152,7 +152,7 @@ test('expense GET and PATCH scope checks cannot authorize a different subsidiary
     }
     const denied = await patch(id, { expectedUpdatedAt: before, memo: 'unauthorized overwrite' })
     assert.equal(denied.status, 404)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`))).rows[0]!.memo, 'original')
+    assert.equal((await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, 'objects')))[0]!.memo, 'original')
     assert.equal(await revision(id), rehomedRevision, 'denied save leaves the winning rehome revision unchanged')
   })
 })
@@ -190,7 +190,7 @@ test('expense PATCH response cannot bless stale content with a later writer revi
     assert.equal(payload.doc.memo, 'first save')
     assert.equal(payload.lines[0].description, 'original line')
     assert.equal((await patch(id, { expectedUpdatedAt: payload.doc.updated_at, memo: payload.doc.memo })).status, 409)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`))).rows[0]!.memo, 'later winner')
+    assert.equal((await withOrgContext(org.orgId, () => db.execute<{ memo: string }>(sql`select memo from documents where id=${id}`, 'objects')))[0]!.memo, 'later winner')
   })
 })
 
@@ -201,7 +201,7 @@ test('expense PATCH refuses a party from another organization but saves an own-o
     const denied = await patch(id, { expectedUpdatedAt: await revision(id), partyId: randomUUID() })
     assert.equal(denied.status, 404)
     assert.equal(
-      (await withOrgContext(org.orgId, () => db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`))).rows[0]!.party_id,
+      (await withOrgContext(org.orgId, () => db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`, 'objects')))[0]!.party_id,
       null,
     )
     // An own-org party saves even without an employee role: the employee-role
@@ -209,7 +209,7 @@ test('expense PATCH refuses a party from another organization but saves an own-o
     const saved = await patch(id, { expectedUpdatedAt: await revision(id), partyId: org.vendorId })
     assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
     assert.equal(
-      (await withOrgContext(org.orgId, () => db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`))).rows[0]!.party_id,
+      (await withOrgContext(org.orgId, () => db.execute<{ party_id: string | null }>(sql`select party_id from documents where id=${id}`, 'objects')))[0]!.party_id,
       org.vendorId,
     )
   })
@@ -223,14 +223,14 @@ test('expense employee identity rejects vendor-only parties but preserves former
     assert.equal(await revision(id), before)
     await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`))
     await assert.rejects(withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })), /employee in this organization/)
-    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`select id from journal_entries where source_document_id=${id}`))).rows.length, 0)
+    assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`select id from journal_entries where source_document_id=${id}`, 'objects'))).length, 0)
     await withBypassContext(() => db.execute(sql`update documents set status='draft' where id=${id}`))
     await withBypassContext(() => db.execute(sql`insert into employee_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.vendorId}, false)`))
     await withBypassContext(() => db.execute(sql`update parties set is_active=false where id=${org.vendorId}`))
     await assert.rejects(assertExpenseEmployee(db, { kind: 'expense_report', orgId: randomUUID(), partyId: org.vendorId }), /employee in this organization/)
     assert.equal((await withOrgContext(org.orgId, () => submitAndReleaseIfUngated('expense_report', id, state.actorId))).autoApproved, true)
     const entry = await withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }))
-    const control = (await withOrgContext(org.orgId, () => db.execute<{ party_id: string; is_open_item: boolean; amount: string }>(sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`))).rows[0]!
+    const control = (await withOrgContext(org.orgId, () => db.execute<{ party_id: string; is_open_item: boolean; amount: string }>(sql`select party_id, is_open_item, amount::text from journal_lines where entry_id=${entry} and account_id=${org.accounts.ap}`, 'objects')))[0]!
     assert.deepEqual(control, { party_id: org.vendorId, is_open_item: true, amount: '-10.0000' })
   })
 })
@@ -249,7 +249,7 @@ test('expense PATCH preserves omitted required header custom fields on a partial
     })
     const saved = await patch(id, { expectedUpdatedAt: await revision(id), custom: { optional_note: 'updated' } })
     assert.equal(saved.status, 200, JSON.stringify(await saved.clone().json()))
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`))).rows[0]?.custom
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]?.custom
     assert.deepEqual(stored, { required_code: 'R-1', optional_note: 'updated' })
   })
 })
@@ -258,13 +258,13 @@ test('expense PATCH refuses a line account from another organization but saves a
   await fixture(async (org, id) => {
     const foreign = await withBypassContext(() => createScratchOrg())
     try {
-      const foreignAccount = (await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`select id from accounts where org_id=${foreign.orgId} and is_active and not is_summary limit 1`))).rows[0]!.id
+      const foreignAccount = (await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`select id from accounts where org_id=${foreign.orgId} and is_active and not is_summary limit 1`, 'objects')))[0]!.id
       // The tenant-coherent lines FK would kill a foreign account at the
       // insert as a 500, so the route itself refuses it with a domain 404.
       const denied = await patch(id, { expectedUpdatedAt: await revision(id), lines: [{ accountId: foreignAccount, amount: '10', description: 'foreign account', settlementType: 'out_of_pocket' }] })
       assert.equal(denied.status, 404)
       assert.equal(
-        (await withOrgContext(org.orgId, () => db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`))).rows[0]!.account_id,
+        (await withOrgContext(org.orgId, () => db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`, 'objects')))[0]!.account_id,
         org.accounts.cogs,
         'the refused save stores no foreign account',
       )
@@ -314,10 +314,10 @@ test('expense PATCH refuses malformed and foreign line references with domain er
       // instead of a domain 422.
       const tax = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ taxCodeId: 'not-a-uuid' })] })
       assert.equal(tax.status, 422, JSON.stringify(await tax.clone().json()))
-      const lines = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`))).rows[0]!.n
+      const lines = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.n
       assert.equal(lines, 1, 'refused line references store nothing')
       assert.equal(
-        (await withOrgContext(org.orgId, () => db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`))).rows[0]!.account_id,
+        (await withOrgContext(org.orgId, () => db.execute<{ account_id: string }>(sql`select account_id from document_lines where document_id=${id}`, 'objects')))[0]!.account_id,
         org.accounts.cogs,
         'the original line survives refused saves',
       )
@@ -340,14 +340,14 @@ test('expense PATCH refuses foreign reference custom values on header and lines'
       `))
       const refusedHeader = await patch(id, { expectedUpdatedAt: await revision(id), custom: { ref_party: foreign.vendorId } })
       assert.equal(refusedHeader.status, 404, JSON.stringify(await refusedHeader.clone().json()))
-      const storedCustom = (await withOrgContext(org.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`))).rows[0]?.custom
+      const storedCustom = (await withOrgContext(org.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]?.custom
       assert.equal((storedCustom as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused header references store nothing')
       const savedHeader = await patch(id, { expectedUpdatedAt: await revision(id), custom: { ref_party: org.vendorId } })
       assert.equal(savedHeader.status, 200, JSON.stringify(await savedHeader.clone().json()))
       const line = (custom: Record<string, unknown>) => ({ accountId: org.accounts.cogs, amount: '10', description: 'probe', settlementType: 'out_of_pocket', custom })
       const refusedLine = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ line_ref: foreign.vendorId })] })
       assert.equal(refusedLine.status, 404, JSON.stringify(await refusedLine.clone().json()))
-      const lines = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`))).rows[0]!.n
+      const lines = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.n
       assert.equal(lines, 1, 'refused line references store nothing')
       const savedLine = await patch(id, { expectedUpdatedAt: await revision(id), lines: [line({ line_ref: org.vendorId })] })
       assert.equal(savedLine.status, 200, JSON.stringify(await savedLine.clone().json()))
@@ -376,7 +376,7 @@ test('expense PATCH refuses a malformed document date with a domain error instea
     // A shape-valid but impossible calendar day must fail closed too.
     const impossible = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: '2026-02-30' })
     assert.equal(impossible.status, 422, JSON.stringify(await impossible.clone().json()))
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ d: string }>(sql`select document_date::text as d from documents where id=${id} and org_id=${org.orgId}`))).rows[0]!.d
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ d: string }>(sql`select document_date::text as d from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.d
     assert.equal(stored, org.date, 'refused dates write nothing')
     // A real calendar day still saves.
     const saved = await patch(id, { expectedUpdatedAt: await revision(id), documentDate: '2026-02-27' })

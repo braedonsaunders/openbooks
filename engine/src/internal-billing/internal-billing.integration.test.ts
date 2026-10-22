@@ -57,9 +57,9 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
 }
 
 async function entryLines(entryId: string) {
-  return (await db.execute<{ account_id: string; amount: string; subsidiary_id: string; department_id: string | null; project_id: string | null }>(sql`
+  return await db.execute<{ account_id: string; amount: string; subsidiary_id: string; department_id: string | null; project_id: string | null }>(sql`
     select account_id, amount::text as amount, subsidiary_id, department_id, project_id
-      from journal_lines where entry_id = ${entryId} order by line_number`)).rows;
+      from journal_lines where entry_id = ${entryId} order by line_number`, "objects");
 }
 
 test("a department credit posts balanced, moves department revenue and leaves company revenue unchanged", enabled, () => fixture(async (f) => {
@@ -83,18 +83,18 @@ test("a department credit posts balanced, moves department revenue and leaves co
     { account: receiving, amount: "1200.0000", dept: f.field, project: null },
     { account: providing, amount: "-1200.0000", dept: f.shop, project: null },
   ]);
-  const byDepartment = (await db.execute<{ department_id: string | null; amount: string }>(sql`
+  const byDepartment = await db.execute<{ department_id: string | null; amount: string }>(sql`
     select l.department_id, sum(l.amount)::text as amount
       from journal_lines l join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${f.org.orgId} and a.type in ('income', 'income_other')
-     group by l.department_id order by l.department_id`)).rows;
+     group by l.department_id order by l.department_id`, "objects");
   const revenue = new Map(byDepartment.map((row) => [row.department_id, row.amount]));
   assert.equal(revenue.get(f.shop), "-1200.0000", "the providing department is credited with the sale");
   assert.equal(revenue.get(f.field), "1200.0000");
   const company = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as amount
       from journal_lines l join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${f.org.orgId} and a.type in ('income', 'income_other')`)).rows[0]!;
+     where l.org_id = ${f.org.orgId} and a.type in ('income', 'income_other')`, "objects"))[0]!;
   assert.equal(company.amount, "0.0000", "company revenue is not double counted");
 
   // A posted document is no longer editable; a correction is a void.
@@ -142,7 +142,7 @@ test("rule versions are effective-dated and a document without a rule in effect 
     rule: { code: "BAD", name: "Bad", method: "revenue_credit", debitAccountId: cost, creditAccountId: b, effectiveFrom: "2026-01-01" },
   }), (error) => error instanceof InternalBillingError && /department credit rule/.test(error.message));
   const audit = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from audit_log where org_id = ${f.org.orgId} and table_name = 'internal_billing_rules'`)).rows[0]!;
+    select count(*)::int as n from audit_log where org_id = ${f.org.orgId} and table_name = 'internal_billing_rules'`, "objects"))[0]!;
   assert.equal(audit.n, 3, "two versions created and one window closed, each with evidence");
 }));
 
@@ -182,10 +182,10 @@ test("a billable cost transfer is invoiced once to the receiving project and rel
     return id;
   };
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, await request());
-  const billedLines = (await db.execute<{ amount: string; quantity: string; item_id: string }>(sql`
+  const billedLines = await db.execute<{ amount: string; quantity: string; item_id: string }>(sql`
     select i.amount::text as amount, i.quantity::text as quantity, i.item_id
       from document_lines s join document_lines i on i.org_id = s.org_id and i.id = s.billed_by_line_id
-     where s.org_id = ${f.org.orgId} and s.document_id = ${saved.id} and i.document_id = ${invoice.id}`)).rows;
+     where s.org_id = ${f.org.orgId} and s.document_id = ${saved.id} and i.document_id = ${invoice.id}`, "objects");
   assert.deepEqual(billedLines, [{ amount: "440.0000", quantity: "2.00000000", item_id: item }]);
 
   // Already billed: a second request cannot bill the line again.
@@ -193,7 +193,7 @@ test("a billable cost transfer is invoiced once to the receiving project and rel
   const billedTwice = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from document_lines i
       join documents d on d.id = i.document_id and d.org_id = i.org_id
-     where i.org_id = ${f.org.orgId} and d.kind = 'customer_invoice' and i.item_id = ${item}`)).rows[0]!;
+     where i.org_id = ${f.org.orgId} and d.kind = 'customer_invoice' and i.item_id = ${item}`, "objects"))[0]!;
   assert.equal(billedTwice.n, 1);
 
   // A billed line refuses a void until the invoice lets it go.
@@ -202,8 +202,8 @@ test("a billable cost transfer is invoiced once to the receiving project and rel
     /This cost is billed on invoice .+; void or delete that invoice first/,
   );
   await deleteDocument(invoice.id, f.actor, f.org.orgId, { allowedSubsidiaryIds: null, reason: "rebill later" });
-  const released = (await db.execute<{ billed: string | null }>(sql`
-    select billed_by_line_id as billed from document_lines where org_id = ${f.org.orgId} and document_id = ${saved.id}`)).rows;
+  const released = await db.execute<{ billed: string | null }>(sql`
+    select billed_by_line_id as billed from document_lines where org_id = ${f.org.orgId} and document_id = ${saved.id}`, "objects");
   assert.deepEqual(released, [{ billed: null }]);
 }));
 

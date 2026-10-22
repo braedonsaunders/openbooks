@@ -34,11 +34,11 @@ async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const actor = await withBypassContext(() => seedFlowActors(org.orgId));
   const roles = await withBypassContext(() => db.execute(sql`update app_roles set permissions='["banking.read","banking.reconcile"]'::jsonb
-    where org_id=${org.orgId} and key='admin' returning id`));
-  assert.equal(roles.rows.length,1);
+    where org_id=${org.orgId} and key='admin' returning id`, "objects"));
+  assert.equal(roles.length,1);
   const settings = await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-    coalesce(settings->'features','{}'::jsonb) || '{"banking":true}'::jsonb,true) where id=${org.orgId} returning id`));
-  assert.equal(settings.rows.length,1);
+    coalesce(settings->'features','{}'::jsonb) || '{"banking":true}'::jsonb,true) where id=${org.orgId} returning id`, "objects"));
+  assert.equal(settings.length,1);
   auth.orgId = org.orgId; auth.actorId = actor.adminId; auth.allowed = null;
   return { ...org, actorId: actor.adminId };
 }
@@ -56,7 +56,7 @@ test("native settlement review exposes saved mapping and draft root basis withou
   const fx = await fixture();
   try {
     const draft = await importDraft(fx,null);
-    const before = (await withBypassContext(() => db.execute(sql`select count(*)::int as n from journal_entries where org_id=${fx.orgId}`))).rows[0];
+    const before = (await withBypassContext(() => db.execute(sql`select count(*)::int as n from journal_entries where org_id=${fx.orgId}`, "objects")))[0];
     const response = await detail(fx.orgId,draft.batchId);
     assert.equal(response.status,200);
     const body = await response.json();
@@ -70,7 +70,7 @@ test("native settlement review exposes saved mapping and draft root basis withou
     assert.equal(body.batch.status,'draft');
     assert.equal(body.batch.journalEntryId,null);
     assert.equal(body.batch.netAmount,'441.5200');
-    assert.deepEqual((await withBypassContext(() => db.execute(sql`select count(*)::int as n from journal_entries where org_id=${fx.orgId}`))).rows[0],before);
+    assert.deepEqual((await withBypassContext(() => db.execute(sql`select count(*)::int as n from journal_entries where org_id=${fx.orgId}`, "objects")))[0],before);
     const posted = await withOrgContext(fx.orgId, () => postSettlementBatch(fx.orgId,draft.batchId,fx.actorId,null));
     const postedResponse = await detail(fx.orgId,draft.batchId);
     assert.equal(postedResponse.status,200);

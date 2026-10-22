@@ -46,7 +46,7 @@ async function seedMixedOrg(options: { historicalBasis?: boolean } = {}): Promis
      where org_id = ${orgId} and parent_id is null`);
   await db.execute(sql`update orgs set base_currency = 'GBP', country = 'GB' where id = ${orgId}`);
   const rootSub = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows[0]!.id;
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"))[0]!.id;
   const eurSub = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
@@ -54,7 +54,7 @@ async function seedMixedOrg(options: { historicalBasis?: boolean } = {}): Promis
     values (${eurSub}, ${orgId}, ${rootSub}, 'Dublin Branch', 'EUR', 'IE', '{}'::jsonb,
             false, true, '{}'::jsonb)`);
   const calendar = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`)).rows[0]!.id;
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
   const septPeriod = randomUUID();
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
@@ -260,7 +260,7 @@ test("a foreign-subsidiary pay run refuses to post with no derived rate", { skip
       /No consolidated exchange rates for EUR → GBP in the period ending 2026-09-30\. Derive rates from period close first\./,
     );
     const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${documentId}`)).rows[0]!.status;
+      select status from documents where id = ${documentId}`, "objects"))[0]!.status;
     assert.equal(status, "approved", "the refused run stays unposted");
   } finally {
     await dropScratchOrg(fx.orgId);
@@ -276,12 +276,12 @@ test("a foreign-subsidiary pay run posts once rates derive, tagged with its curr
     await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId);
     const documentId = await seedPostableRun(fx, fx.eurSub, "EUR", "PAY-00003");
     const entryId = await postDocument(documentId, { control: fx.control });
-    const lines = (await db.execute<{
+    const lines = await db.execute<{
       subsidiary_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string;
     }>(sql`
       select subsidiary_id, amount::text as amount, currency, txn_amount::text as txn_amount,
              fx_rate::text as fx_rate
-        from journal_lines where entry_id = ${entryId} order by line_number`)).rows;
+        from journal_lines where entry_id = ${entryId} order by line_number`, "objects");
     assert.equal(lines.length, 2);
     for (const line of lines) {
       assert.equal(line.subsidiary_id, fx.eurSub);
@@ -300,7 +300,7 @@ test("a root-currency pay run posts with no rates anywhere", { skip: !DB }, asyn
     const entryId = await postDocument(documentId, { control: fx.control });
     assert.ok(entryId);
     const count = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from consolidated_fx_rates where org_id = ${fx.orgId}`)).rows[0]!.n;
+      select count(*)::int as n from consolidated_fx_rates where org_id = ${fx.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "no rate was needed or read");
   } finally {
     await dropScratchOrg(fx.orgId);

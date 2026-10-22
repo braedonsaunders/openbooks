@@ -57,8 +57,8 @@ const week = (days: unknown[], effectiveFrom = "2026-01-05") => ({
 });
 
 async function scheduleCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

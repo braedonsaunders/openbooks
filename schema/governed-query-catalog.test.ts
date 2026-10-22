@@ -1,4 +1,4 @@
-// source-pin-contract: governed query catalog secrecy and tenant-filter invariant; every view swept is derived by parsing 0001_baseline.sql, secret/curated/global names are reviewed rule parameters
+// source-pin-contract: governed query catalog secrecy and tenant-filter invariant; every view swept is derived by parsing the active baseline named in schema/migrations/baseline.json, secret/curated/global names are reviewed rule parameters
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -8,28 +8,21 @@ import test from "node:test";
  * The governed query catalog is what the report query console and user scripts
  * can read, through the `openbooks_read` role. It is built entirely by
  * `public.openbooks_refresh_query_catalog()`, which drops the whole schema and
- * rebuilds it — and the baseline's own last statement calls that function.
+ * rebuilds it from the `openbooks_query_catalog_relations` registry plus a
+ * set of curated views — and the baseline's own last statement calls that
+ * function.
  *
- * So the function, not the CREATE VIEW statements pg_dump emitted above it, is
- * the real source of truth. These tests exist because those two drifted apart
- * once already: `employee_payroll_profiles` shipped a curated view that omitted
- * `sin_encrypted`, while the function rebuilt it as `select *` and exposed the
- * sealed SIN ciphertext on every fresh install.
- *
- * The function's own comment used to argue that freezing `select *` at create
- * time made a later secret column safe "until this reviewed allowlist is
- * deliberately refreshed". That is the reasoning that failed: refreshing is one
- * function call with no review step in it.
+ * So the function and its registry, not the CREATE VIEW statements pg_dump
+ * emitted above them, are the real source of truth. These tests keep the two
+ * in agreement: a curated view that omits a secret column is worthless if the
+ * function rebuilds the relation as `select *`, and refreshing is one function
+ * call with no review step in it.
  */
 
-const BASELINE = readFileSync(
-  join(import.meta.dirname, "migrations/generated/0001_baseline.sql"),
-  "utf8",
-);
-const PRIVATE_PROJECTION_MIGRATION = readFileSync(
-  join(import.meta.dirname, "migrations/generated/0070_governed_query_private_projection.sql"),
-  "utf8",
-);
+const MANIFEST = JSON.parse(
+  readFileSync(join(import.meta.dirname, "migrations/baseline.json"), "utf8"),
+) as { filename: string };
+const BASELINE = readFileSync(join(import.meta.dirname, "migrations", MANIFEST.filename), "utf8");
 
 /** Columns that must never be readable through the governed catalog. */
 const NEVER_QUERYABLE = [
@@ -60,19 +53,25 @@ const MUST_BE_CURATED = [
  */
 const GLOBAL_RELATIONS = ["currencies"];
 
-/**
- * Payroll views that the baseline once emitted WITHOUT the tenant filter while
- * the refresh function built them with it. The file has since been rebaselined
- * from a dump of the database it builds, so the list is empty and must stay
- * that way — see "the shipped catalog carries the tenant filter" below.
- */
-const KNOWN_UNFILTERED_STALE_VIEWS: string[] = [];
+/** Relations whose private text is redacted by a curated projection. */
+const PRIVATE_TEXT_PROJECTIONS = ["crm_activities", "time_entries"];
 
+/**
+ * The generic relation set: every relation registered in
+ * `openbooks_query_catalog_relations`, which the function rebuilds as
+ * `select *` (tenant-filtered when the table has org_id).
+ */
 function safeRelations(): string[] {
-  const start = BASELINE.indexOf("safe_relations constant text[] := array[");
-  assert.notEqual(start, -1, "safe_relations array not found in the baseline");
-  const body = BASELINE.slice(start, BASELINE.indexOf("];", start));
-  return [...body.matchAll(/'(\w+)'/g)].map((m) => m[1]!);
+  const inserts = [
+    ...BASELINE.matchAll(
+      /INSERT INTO public\.openbooks_query_catalog_relations \(relation, added_in\) VALUES\n([\s\S]*?);\n/g,
+    ),
+  ];
+  assert.ok(inserts.length > 0, "the governed relation registry seed was not found in the baseline");
+  const relations = inserts.flatMap((insert) =>
+    [...insert[1]!.matchAll(/^\s*\('(\w+)',/gm)].map((m) => m[1]!));
+  assert.ok(relations.length > 100, `expected the registry seed to govern the catalog; found ${relations.length}`);
+  return relations;
 }
 
 /** Every `CREATE VIEW openbooks_query.x` and the columns it selects. */
@@ -207,35 +206,50 @@ test("the function and the shipped views agree on every generic relation", () =>
 
 test("every curated relation is granted to openbooks_read", () => {
   // A curated view that nobody can select from is a silent capability
-  // regression; the grant loop at the end of the function must name it.
-  const start = BASELINE.indexOf("foreach relation_name in array array[", BASELINE.indexOf("create view openbooks_query.parties"));
-  const grantBlock = BASELINE.slice(start, BASELINE.indexOf("] loop", start));
+  // regression. The function grants the whole governed schema in one
+  // statement after its last curated view, and the shipped catalog carries a
+  // grant for each curated view.
+  const functionBody = refreshFunctionBody();
+  const lastCuratedView = Math.max(
+    ...MUST_BE_CURATED.map((relation) =>
+      functionBody.indexOf(`create view openbooks_query.${relation} with`)),
+  );
+  const blanketGrant = functionBody.lastIndexOf(
+    "grant select on all tables in schema openbooks_query to openbooks_read;",
+  );
+  assert.ok(
+    blanketGrant > lastCuratedView,
+    "the refresh function must grant the governed schema after creating its curated views",
+  );
   for (const relation of MUST_BE_CURATED) {
     assert.ok(
-      grantBlock.includes(`'${relation}'`),
-      `${relation} has a curated view but is missing from the grant loop`,
+      functionBody.includes(`create view openbooks_query.${relation} with`),
+      `${relation} must be curated by the refresh function`,
+    );
+    assert.ok(
+      BASELINE.includes(`GRANT SELECT ON TABLE openbooks_query.${relation} TO openbooks_read;`),
+      `${relation} has a curated view but the shipped catalog does not grant it`,
     );
   }
 });
 
 test("the shipped catalog carries the tenant filter", () => {
-  // Twelve payroll views used to ship with no `where org_id = ...` while the
-  // refresh function built them with it. That was survivable only because the
-  // baseline's last statement drops the schema and rebuilds — but the file
-  // reaches `GRANT SELECT ... TO openbooks_read` on the unfiltered forms
-  // first, so the whole safety argument rested on statement order. The file
-  // has been rebaselined; this keeps it that way.
-  const unfiltered = [...shippedViewBodies()]
+  // The baseline grants SELECT on the shipped views before its final rebuild,
+  // so a shipped view without the tenant filter would be readable across
+  // tenants for as long as the file takes to apply. The shipped DDL must be
+  // as safe as what the function rebuilds.
+  const views = shippedViewBodies();
+  assert.ok(views.size > 100, `expected the baseline to ship the governed catalog; found ${views.size}`);
+  const unfiltered = [...views]
     .filter(([, body]) => !body.includes("org_id = public.openbooks_query_org_id()"))
     .map(([relation]) => relation)
     .sort();
 
   assert.deepEqual(
     unfiltered,
-    [...GLOBAL_RELATIONS, ...KNOWN_UNFILTERED_STALE_VIEWS].sort(),
+    [...GLOBAL_RELATIONS].sort(),
     "a governed view ships without `where org_id = openbooks_query_org_id()`. "
-      + "Add the filter and regenerate the baseline — KNOWN_UNFILTERED_STALE_VIEWS "
-      + "is spent and must not be reopened",
+      + "Add the filter and regenerate the baseline",
   );
 });
 
@@ -295,28 +309,34 @@ test("the refresh call is the baseline's final statement", () => {
   );
 });
 
-test("forward catalog migration redacts private CRM bodies and time memos", () => {
-  // These relations must leave the generic SELECT * allowlist. Otherwise any
+test("the catalog redacts private CRM bodies and time memos", () => {
+  // These relations must stay off the generic `select *` path. Otherwise any
   // later catalog refresh would silently restore the private text projection.
-  const safeRelationsBody = PRIVATE_PROJECTION_MIGRATION.match(
-    /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
-  )?.[1];
-  assert.ok(safeRelationsBody, "0070 safe_relations array not found");
-  assert.doesNotMatch(safeRelationsBody, /'crm_activities'/);
-  assert.doesNotMatch(safeRelationsBody, /'time_entries'/);
+  const generic = safeRelations();
+  for (const relation of PRIVATE_TEXT_PROJECTIONS) {
+    assert.ok(!generic.includes(relation), `${relation} must not be registered for the generic path`);
+  }
 
   // The curated definitions retain the row, tenant key, privacy flag, and
   // all public reporting columns while replacing only private text with NULL.
+  const functionBody = refreshFunctionBody();
   assert.match(
-    PRIVATE_PROJECTION_MIGRATION,
+    functionBody,
     /create view openbooks_query\.crm_activities[\s\S]*?case when is_private then null else body end as body[\s\S]*?is_private[\s\S]*?where org_id = public\.openbooks_query_org_id\(\)/i,
   );
   assert.match(
-    PRIVATE_PROJECTION_MIGRATION,
+    functionBody,
     /create view openbooks_query\.time_entries[\s\S]*?case when memo_is_private then null else memo end as memo[\s\S]*?memo_is_private[\s\S]*?where org_id = public\.openbooks_query_org_id\(\)/i,
   );
+
+  // The shipped views redact the same way before the final rebuild runs.
+  const shipped = shippedViewBodies();
   assert.match(
-    PRIVATE_PROJECTION_MIGRATION,
-    /select public\.openbooks_refresh_query_catalog\(\);\s*$/i,
+    shipped.get("crm_activities") ?? "",
+    /CASE\s+WHEN is_private THEN NULL::text\s+ELSE body\s+END AS body/,
+  );
+  assert.match(
+    shipped.get("time_entries") ?? "",
+    /CASE\s+WHEN memo_is_private THEN NULL::text\s+ELSE memo\s+END AS memo/,
   );
 });

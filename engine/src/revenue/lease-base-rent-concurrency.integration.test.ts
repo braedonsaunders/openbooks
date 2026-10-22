@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
@@ -12,13 +10,6 @@ import {
 } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-const migrationPath = fileURLToPath(
-  new URL(
-    "../../../schema/migrations/generated/0069_lease_cancelled_lines_accumulation.sql",
-    import.meta.url,
-  ),
-);
-const migration = readFileSync(migrationPath, "utf8");
 
 interface RepairResult {
   windows_closed: number;
@@ -175,7 +166,7 @@ async function restoreBaseRentConstraint(): Promise<void> {
 }
 
 test(
-  "0069 accumulates lease cancellation conflicts and replays without rewriting tenant evidence",
+  "base-rent repair accumulates cancellations across conflicts and is idempotent over tenant evidence",
   { skip: !DB, timeout: 120_000 },
   async () => {
     const org = await createScratchOrg();
@@ -190,24 +181,18 @@ test(
                 ${`LEASE-${propertyId.slice(0, 8)}`}, 'Lease repair fixture', 'commercial',
                 'CAD', ${org.accounts.revenue})`);
 
-      // Existing, non-conflicting tenant data is present before 0069 installs.
+      // Existing, non-conflicting tenant data must pass through the repair
+      // untouched.
       const canonicalLeaseId = await createLeaseFixture(
         org,
         propertyId,
         `CANON-${randomUUID().slice(0, 8)}`,
       );
-      await createCharge(org, canonicalLeaseId, "2026-07-01", "Canonical rent");
-      const beforeInstall = await tenantSnapshot(org.orgId);
-      await pool.query(migration);
-      assert.deepEqual(
-        await tenantSnapshot(org.orgId),
-        beforeInstall,
-        "install does not touch existing tenant rows or evidence",
-      );
+      const canonicalChargeId = await createCharge(org, canonicalLeaseId, "2026-07-01", "Canonical rent");
 
-      // 0060's exclusion constraint prevents constructing the legacy state in
-      // a current schema.  Remove it only in this scratch database, then put it
-      // back after the two pre-enforcement conflict pairs are repaired.
+      // The base-rent exclusion constraint prevents constructing overlapping
+      // charges in a current schema.  Remove it only in this scratch database,
+      // then put it back after the two conflict pairs are repaired.
       await pool.query(
         "alter table public.lease_charges drop constraint if exists lease_charges_base_rent_no_overlap",
       );
@@ -228,7 +213,7 @@ test(
         await createCharge(org, leaseId, "2026-03-01", `Successor ${suffix}`);
 
         // One line per conflict is cancellable.  The invoiced line is posted
-        // evidence and must survive both the repair and a migration replay.
+        // evidence and must survive the repair and every later pass.
         await createScheduleLine(
           org,
           leaseId,
@@ -265,6 +250,11 @@ test(
 
       const afterRepair = await tenantSnapshot(org.orgId);
       assert.equal(
+        afterRepair.charges.find((charge) => charge.id === canonicalChargeId)?.effective_to,
+        null,
+        "the non-conflicting charge keeps its open window",
+      );
+      assert.equal(
         afterRepair.schedules.filter((line) => line.status === "cancelled")
           .length,
         2,
@@ -291,21 +281,6 @@ test(
         await tenantSnapshot(org.orgId),
         afterRepair,
         "idempotent pass preserves every tenant row and evidence",
-      );
-
-      // Replaying the forward migration only replaces the installed function;
-      // it does not rerun the historical repair or alter tenant evidence.
-      await pool.query(migration);
-      assert.deepEqual(
-        await tenantSnapshot(org.orgId),
-        afterRepair,
-        "migration replay preserves repaired evidence",
-      );
-      await pool.query(migration);
-      assert.deepEqual(
-        await tenantSnapshot(org.orgId),
-        afterRepair,
-        "second migration replay is also a no-op",
       );
     } finally {
       await dropScratchOrgReporting(org.orgId);

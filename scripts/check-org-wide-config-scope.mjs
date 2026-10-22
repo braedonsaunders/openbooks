@@ -2,30 +2,35 @@
 /**
  * Every API route that mutates an org-wide configuration table must enforce
  * unrestricted subsidiary scope. The governed set is deliberately table
- * based: each table is checked against the generated schema so adding a
+ * based: each table is checked against the release schema so adding a
  * subsidiary anchor requires an explicit review of this policy.
  */
 import assert from "node:assert/strict";
 import { globSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { releaseSchemaSql } from "./release-schema-sql.mjs";
 
 const root = process.cwd();
-const schemaFiles = globSync("schema/migrations/generated/*.sql", { cwd: root });
-const schema = schemaFiles.map((file) => readFileSync(join(root, file), "utf8")).join("\n");
+const schema = releaseSchemaSql(root);
+// A forward migration anchors an existing table with ALTER TABLE, not a new
+// CREATE TABLE, so both forms count as the table gaining a column.
+const addsColumn = (table, column) =>
+  new RegExp(`ALTER TABLE(?: IF EXISTS)?(?: ONLY)? (?:public\\.)?${table}\\b[^;]*\\bADD COLUMN(?: IF NOT EXISTS)? ${column}\\b`, "i").test(schema);
 
 // Configuration tables with no subsidiary ownership column. A policy table
 // added here is derived into every route that writes it below.
 const policyTables = ["flows", "allocation_drivers", "project_types"];
 for (const table of policyTables) {
   const declaration = new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? public\\.${table} \\(([\\s\\S]*?)\\n\\);`, "i").exec(schema);
-  assert.ok(declaration, `governed org-wide config table ${table} has no generated schema declaration`);
+  assert.ok(declaration, `governed org-wide config table ${table} has no release schema declaration`);
   assert.doesNotMatch(declaration[1], /\bsubsidiary_id\b/i, `${table} gained a subsidiary anchor; review its scope policy`);
+  assert.ok(!addsColumn(table, "subsidiary_id"), `${table} gained a subsidiary anchor; review its scope policy`);
 }
 // Labor rates may be subsidiary-anchored, so only their job-title, trade,
 // and default rows are org-wide. Keep a conditional guard in the route that
 // writes the table and pin that the schema still carries the anchor field.
 const declaration = /CREATE TABLE(?: IF NOT EXISTS)? public\.labor_cost_rates \(([\s\S]*?)\n\);/i.exec(schema);
-assert.ok(declaration, "conditionally scoped policy table labor_cost_rates has no generated schema declaration");
+assert.ok(declaration, "conditionally scoped policy table labor_cost_rates has no release schema declaration");
 assert.match(declaration[1], /\bsubsidiary_id\b/i, "labor_cost_rates scope model changed; review conditional policy enforcement");
 
 function actionArm(source, action) {

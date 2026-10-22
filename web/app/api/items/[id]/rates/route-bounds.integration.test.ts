@@ -60,8 +60,8 @@ const body = (effectiveFrom: string, billRate: string) => ({
 });
 
 async function profileCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from item_rate_profiles where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from item_rate_profiles where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

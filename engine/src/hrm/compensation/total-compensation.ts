@@ -184,7 +184,7 @@ function refusalText(error: unknown): string {
 
 async function loadEmployments(orgId: string, actorId: string, employeePartyId: string, asOf: string) {
   const lens = await loadCompensationLens(db, orgId, actorId);
-  const rows = (await db.execute<{ id: string; employer: string; subsidiary_id: string; status: string | null; service_start: string | null }>(sql`
+  const rows = await db.execute<{ id: string; employer: string; subsidiary_id: string; status: string | null; service_start: string | null }>(sql`
     select e.id::text as id, s.name as employer, e.employer_subsidiary_id::text as subsidiary_id,
            v.status, e.service_start::text as service_start
       from worker_employments e
@@ -196,7 +196,7 @@ async function loadEmployments(orgId: string, actorId: string, employeePartyId: 
          order by v.effective_from desc limit 1
       ) v on true
      where e.org_id = ${orgId} and e.worker_party_id = ${employeePartyId}
-     order by (v.status in ('active', 'on_leave')) desc nulls last, e.service_start desc nulls last, e.id`)).rows;
+     order by (v.status in ('active', 'on_leave')) desc nulls last, e.service_start desc nulls last, e.id`, "objects");
   return rows.filter((row) => lens === null || lens.has(row.subsidiary_id));
 }
 
@@ -207,7 +207,7 @@ async function loadBasePay(orgId: string, employeePartyId: string, asOf: string,
   const row = (await db.execute<{ id: string; rate: string; basis: string; annual_hours: string | null; currency: string; effective_from: string }>(sql`
     select id::text as id, rate::text as rate, basis, annual_hours::text as annual_hours, currency,
            effective_from::text as effective_from
-      from labor_cost_rates where org_id = ${orgId} and id = ${resolved.rateId}`)).rows[0];
+      from labor_cost_rates where org_id = ${orgId} and id = ${resolved.rateId}`, "objects"))[0];
   if (!row || !isPayRateBasis(row.basis)) return null;
   return { row: { ...row, basis: row.basis }, scope: resolved.scope };
 }
@@ -223,7 +223,7 @@ function annualHoursFor(basis: PayRateBasis, rowHours: string | null, settingsHo
 }
 
 async function loadHistory(orgId: string, employeePartyId: string, asOf: string, settingsHours: number): Promise<CompensationRateHistoryEntry[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; rate: string; basis: string; annual_hours: string | null; currency: string;
     effective_from: string; effective_to: string | null; notes: string | null;
     cycle_name: string | null; cycle_kind: string | null; cycle_reason: string | null;
@@ -235,7 +235,7 @@ async function loadHistory(orgId: string, employeePartyId: string, asOf: string,
       left join hrm_comp_cycle_lines l on l.org_id = r.org_id and l.pushed_rate_id = r.id
       left join hrm_comp_cycles c on c.org_id = l.org_id and c.id = l.cycle_id
      where r.org_id = ${orgId} and r.employee_party_id = ${employeePartyId} and r.is_active
-     order by r.effective_from asc, r.id`)).rows;
+     order by r.effective_from asc, r.id`, "objects");
   const out: CompensationRateHistoryEntry[] = [];
   const previousAnnual = new Map<string, string>();
   for (const row of rows) {
@@ -285,7 +285,7 @@ async function projectBenefits(
   if (source.enrollments.length === 0) return [];
   const plans = new Map((await db.execute<{ id: string; name: string; kind: string }>(sql`
     select id::text as id, name, kind from hrm_benefit_plans
-     where org_id = ${orgId} and id = any(${sql.param(source.enrollments.map((e) => e.planId))}::uuid[])`)).rows
+     where org_id = ${orgId} and id = any(${sql.param(source.enrollments.map((e) => e.planId))}::uuid[])`, "objects"))
     .map((plan) => [plan.id, plan]));
   const items: CompensationRecurringItem[] = [];
   for (const enrollment of source.enrollments) {
@@ -353,7 +353,7 @@ async function projectPayComponents(
   currency: string | null,
   context: PricingContext,
 ): Promise<CompensationRecurringItem[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; name: string; kind: string; basis: string; value: string | null; tax_treatment: string | null; payment_kind: string;
   }>(sql`
     select a.id::text as id, c.name, c.kind, c.basis, coalesce(a.value, c.value)::text as value,
@@ -364,7 +364,7 @@ async function projectPayComponents(
        and (a.employment_id is null or a.employment_id = ${employmentId})
        and a.effective_from <= ${asOf}::date and (a.effective_to is null or a.effective_to >= ${asOf}::date)
        and c.is_active and c.system_key is null
-     order by c.sequence, c.name, a.id`)).rows;
+     order by c.sequence, c.name, a.id`, "objects");
   return rows.map((row) => {
     const paidBy: "employer" | "employee" = row.kind === "deduction" ? "employee" : "employer";
     const category: CompensationCategory = row.kind === "earning" ? "allowance"
@@ -421,7 +421,7 @@ export async function employeeTotalCompensation(query: {
         select p.pay_basis, s.name, s.frequency, s.periods_per_year
           from employee_payroll_profiles p
           join pay_schedules s on s.org_id = p.org_id and s.id = p.pay_schedule_id
-         where p.org_id = ${orgId} and p.employee_party_id = ${query.employeePartyId}`)).rows[0] ?? null
+         where p.org_id = ${orgId} and p.employee_party_id = ${query.employeePartyId}`, "objects"))[0] ?? null
     : null;
 
   const resolved = await loadBasePay(orgId, query.employeePartyId, asOf, settings.annualHours);
@@ -470,7 +470,7 @@ export async function employeeTotalCompensation(query: {
    where s.org_id = ${orgId} and s.employment_id = ${selected.id}
      and r.run_status = 'committed' and d.status <> 'voided'`;
   const variablePredicate = sql`l.kind = 'earning' and (coalesce(c.non_periodic, false) or r.run_type = 'bonus' or c.system_key = 'bonus')`;
-  const windowFrom = (await db.execute<{ from: string }>(sql`select ((${asOf}::date - interval '1 year') + interval '1 day')::date::text as "from"`)).rows[0]!.from;
+  const windowFrom = (await db.execute<{ from: string }>(sql`select ((${asOf}::date - interval '1 year') + interval '1 day')::date::text as "from"`, "objects"))[0]!.from;
   type VariableRow = { pay_date: string; name: string; run_type: string; currency: string; amount: string };
   const variableColumns = sql`select s.pay_date::text as pay_date, coalesce(c.name, l.description) as name,
     r.run_type, s.currency_code as currency, l.amount::text as amount`;
@@ -481,32 +481,32 @@ export async function employeeTotalCompensation(query: {
       ${committedStubs}
         and l.kind = 'employer_contribution' and c.system_key is not null
         and s.pay_date between ${windowFrom}::date and ${asOf}::date
-      group by 1, 2, 3 having sum(l.amount) <> 0 order by 2`) : Promise.resolve({ rows: [] }),
+      group by 1, 2, 3 having sum(l.amount) <> 0 order by 2`, "objects") : Promise.resolve([]),
     // The annual amount and payment count include every line in the window;
     // the display limit on history must never truncate financial totals.
     payrollEnabled ? db.execute<VariableRow>(sql`
       ${variableColumns}
       ${committedStubs} and ${variablePredicate}
         and s.pay_date between ${windowFrom}::date and ${asOf}::date
-      order by s.pay_date desc, l.id`) : Promise.resolve({ rows: [] }),
+      order by s.pay_date desc, l.id`, "objects") : Promise.resolve([]),
     payrollEnabled ? db.execute<VariableRow>(sql`
       ${variableColumns}
       ${committedStubs} and ${variablePredicate}
-      order by s.pay_date desc, l.id limit 200`) : Promise.resolve({ rows: [] }),
+      order by s.pay_date desc, l.id limit 200`, "objects") : Promise.resolve([]),
     db.execute<{ id: string; program: string | null; period_from: string; currency: string; value: string; status: string }>(sql`
       select a.id::text as id, a.program_snapshot->>'name' as program, a.period_from::text as period_from,
              a.currency, a.value::text as value, a.status
         from hrm_benefit_awards a
        where a.org_id = ${orgId} and a.employment_id = ${selected.id} and a.status <> 'voided'
-       order by a.period_from desc, a.created_at desc limit 100`),
+       order by a.period_from desc, a.created_at desc limit 100`, "objects"),
   ]);
 
   const variablePayment = (row: VariableRow): CompensationVariablePayment => ({
     payDate: row.pay_date.slice(0, 10), name: row.name, runType: row.run_type, currency: row.currency, amount: row.amount,
   });
-  const variableHistory = variableHistoryRows.rows.map(variablePayment);
-  const variable = variableRows.rows.map(variablePayment);
-  const statutory: CompensationActualLine[] = statutoryRows.rows.map((row) => ({
+  const variableHistory = variableHistoryRows.map(variablePayment);
+  const variable = variableRows.map(variablePayment);
+  const statutory: CompensationActualLine[] = statutoryRows.map((row) => ({
     key: row.key, name: row.name, currency: row.currency, amount: row.amount,
   }));
 
@@ -559,7 +559,7 @@ export async function employeeTotalCompensation(query: {
     statutory,
     variable,
     variableHistory,
-    awards: awardRows.rows.map((row) => ({
+    awards: awardRows.map((row) => ({
       id: row.id, program: row.program ?? "", periodFrom: row.period_from.slice(0, 10), currency: row.currency, value: row.value, status: row.status,
     })),
     totals,

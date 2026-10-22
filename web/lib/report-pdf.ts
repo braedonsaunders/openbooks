@@ -93,8 +93,8 @@ export async function orgBranding(orgId?: string): Promise<PdfBranding & { repor
            settings ->> 'reportPdfStyle' as report_pdf_style
       from orgs
      where id = ${activeOrgId}
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   return {
     orgName: row?.name ?? 'openbooks',
     primaryColor: row?.brand_primary || null,

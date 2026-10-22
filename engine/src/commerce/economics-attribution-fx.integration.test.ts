@@ -137,7 +137,7 @@ test("a summary batch attributes per-order COGS by quantity, exact to the minor 
     assert.equal(batch.posted, 2);
     // The batch marks every summarized order for restatement.
     const pending = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*)::text as count from channel_order_economics_pending where org_id = ${org.orgId}`))).rows[0]!;
+      select count(*)::text as count from channel_order_economics_pending where org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(pending.count, "2");
     await withBypass(() => recomputeOrderEconomics(org.orgId, actor, a.id));
     await withBypass(() => recomputeOrderEconomics(org.orgId, actor, b.id));
@@ -149,7 +149,7 @@ test("a summary batch attributes per-order COGS by quantity, exact to the minor 
     assert.equal(economicsB.cm1, 4599n);
     // Both shares name the summary cash sale — not a per-order document.
     const summaryDoc = (await withOrgContext(org.orgId, () => db.execute<{ posting_document_id: string }>(sql`
-      select posting_document_id from channel_daily_summaries where org_id = ${org.orgId}`))).rows[0]!;
+      select posting_document_id from channel_daily_summaries where org_id = ${org.orgId}`, "objects")))[0]!;
     for (const economics of [economicsA, economicsB]) {
       for (const fact of economics.facts.filter((row) => row.component === "cogs")) {
         assert.equal(fact.sourceRef, `posting:${summaryDoc.posting_document_id}`);
@@ -179,11 +179,11 @@ test("foreign-currency label and ad spend convert at the business-date spot into
       insert into fx_rates (id, org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${randomUUID()}, ${org.orgId}, 'USD', 'CAD', '2026-07-15', 'spot', '1.3605000000', 'test')`));
     const cashId = (await withOrgContext(org.orgId, () => db.execute<{ posting_document_id: string }>(sql`
-      select posting_document_id from channel_orders where id = ${stored.id} and org_id = ${org.orgId}`))).rows[0]!;
+      select posting_document_id from channel_orders where id = ${stored.id} and org_id = ${org.orgId}`, "objects")))[0]!;
     const shipmentId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, document_date, currency, status, created_by, updated_by)
       values (${org.orgId}, 'shipment', ${`SHP-FX-${stored.id.slice(0, 8)}`}, ${org.date}, 'CAD', 'draft', ${actor}, ${actor})
-      returning id`))).rows[0]!.id;
+      returning id`, "objects")))[0]!.id;
     await withOrgContext(org.orgId, () => db.execute(sql`
       insert into warehouses (org_id, stock_location_id, name, status, created_by, updated_by)
       values (${org.orgId}, ${org.stockLocationId}, 'Test Warehouse', 'active', ${actor}, ${actor})
@@ -196,9 +196,9 @@ test("foreign-currency label and ad spend convert at the business-date spot into
       insert into shipping_accounts (org_id, name, provider, mode, status, created_by, updated_by)
       values (${org.orgId}, 'Test Carrier', 'easypost', 'test', 'active', ${actor}, ${actor})
       on conflict do nothing
-      returning id`))).rows[0]?.id
+      returning id`, "objects")))[0]?.id
       ?? (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-        select id from shipping_accounts where org_id = ${org.orgId} and name = 'Test Carrier'`))).rows[0]!.id;
+        select id from shipping_accounts where org_id = ${org.orgId} and name = 'Test Carrier'`, "objects")))[0]!.id;
     await withOrgContext(org.orgId, () => db.execute(sql`
       insert into shipment_labels
         (org_id, shipment_document_id, order_document_id, account_id, provider, provider_shipment_id,

@@ -511,10 +511,8 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
       const calendarId = randomUUID(),
         categoryId = randomUUID(),
         assetId = randomUUID();
-      const previousDefaults = (
-        await db.execute<{ id: string }>(sql`
-        select id from fiscal_calendars where org_id=${ledger.orgId} and is_default`)
-      ).rows;
+      const previousDefaults = await db.execute<{ id: string }>(sql`
+        select id from fiscal_calendars where org_id=${ledger.orgId} and is_default`, "objects");
       try {
         await db.execute(sql`insert into fiscal_calendars
           (id, org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone, is_default, is_active, config)
@@ -548,13 +546,11 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
           ledger.actorId,
           ledger.bookId,
         );
-        const lines = (
-          await db.execute<{ period_id: string; planned: string }>(sql`
+        const lines = await db.execute<{ period_id: string; planned: string }>(sql`
           select l.period_id, l.planned_amount::text as planned from depreciation_schedule_lines l
           join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
           where s.org_id=${ledger.orgId} and s.asset_id=${assetId} and s.book_id=${ledger.bookId}
-          order by l.sequence`)
-        ).rows;
+          order by l.sequence`, "objects");
         return {
           values: {
             periodsIn445Year: String(periods.periods.length),
@@ -643,34 +639,28 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
                 '12000.0000', '0.0000', 'straight_line', 12,
                 '11000.0000', '2025-12-31', '{}'::jsonb)`);
       await buildSchedule(assetId, ledger.orgId, ledger.actorId, ledger.bookId);
-      const lines = (
-        await db.execute<{ month: string; planned: string }>(sql`
+      const lines = await db.execute<{ month: string; planned: string }>(sql`
         select p.starts_on::text as month, l.planned_amount::text as planned
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
           join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
          where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
-         order by p.starts_on`)
-      ).rows;
+         order by p.starts_on`, "objects");
       const run = await runDepreciation(
         ledger.orgId,
         "2026-01-31",
         ledger.actorId,
         assetId,
       );
-      const posted = (
-        await db.execute<{ posted: string }>(sql`
+      const posted = (await db.execute<{ posted: string }>(sql`
         select l.posted_amount::text as posted
           from depreciation_schedule_lines l
           join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
           join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
          where s.org_id = ${ledger.orgId} and s.asset_id = ${assetId}
-           and p.starts_on = '2026-01-01'`)
-      ).rows[0]!.posted;
-      const status = (
-        await db.execute<{ status: string }>(sql`
-        select status from fixed_assets where id = ${assetId} and org_id = ${ledger.orgId}`)
-      ).rows[0]!.status;
+           and p.starts_on = '2026-01-01'`, "objects"))[0]!.posted;
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from fixed_assets where id = ${assetId} and org_id = ${ledger.orgId}`, "objects"))[0]!.status;
       return {
         values: {
           scheduledMonths: String(lines.length),

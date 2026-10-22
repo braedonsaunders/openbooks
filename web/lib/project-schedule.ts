@@ -131,45 +131,45 @@ export async function loadProjectSchedule(
 async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Promise<ScheduleData> {
   const [tasks, dependencies, calendars, resources, assignments, baselines, baselineTasks] =
     await Promise.all([
-      db.execute(sql`
+      db.execute<Row>(sql`
         select * from project_tasks
          where org_id = ${orgId} and project_id = ${projectId}
-         order by schedule_order, name`),
-      db.execute(sql`
+         order by schedule_order, name`, 'objects'),
+      db.execute<Row>(sql`
         select id, predecessor_id, successor_id, type, lag_days
           from schedule_dependencies
-         where org_id = ${orgId} and project_id = ${projectId}`),
-      db.execute(sql`
+         where org_id = ${orgId} and project_id = ${projectId}`, 'objects'),
+      db.execute<Row>(sql`
         select * from schedule_calendars
          where org_id = ${orgId} and (project_id = ${projectId} or project_id is null)
-         order by is_default desc, name`),
-      db.execute(sql`
+         order by is_default desc, name`, 'objects'),
+      db.execute<Row>(sql`
         select * from schedule_resources
          where org_id = ${orgId} and (project_id = ${projectId} or project_id is null)
            and is_active
-         order by name`),
-      db.execute(sql`
+         order by name`, 'objects'),
+      db.execute<Row>(sql`
         select a.* from schedule_task_assignments a
           join project_tasks t on t.id = a.task_id
-         where a.org_id = ${orgId} and t.project_id = ${projectId}`),
-      db.execute(sql`
+         where a.org_id = ${orgId} and t.project_id = ${projectId}`, 'objects'),
+      db.execute<Row>(sql`
         select * from schedule_baselines
          where org_id = ${orgId} and project_id = ${projectId}
-         order by is_primary desc, created_at desc`),
-      db.execute(sql`
+         order by is_primary desc, created_at desc`, 'objects'),
+      db.execute<Row>(sql`
         select bt.* from schedule_baseline_tasks bt
           join schedule_baselines b on b.id = bt.baseline_id
-         where bt.org_id = ${orgId} and b.project_id = ${projectId}`),
+         where bt.org_id = ${orgId} and b.project_id = ${projectId}`, 'objects'),
     ])
 
-  const taskRows = (tasks as unknown as { rows: Row[] }).rows
+  const taskRows = tasks
   const phaseNames = [
     ...new Set(taskRows.map((row) => str(row.schedule_phase)).filter((v): v is string => !!v)),
   ].sort()
 
   return {
     tasks: taskRows.map(toTask),
-    dependencies: (dependencies as unknown as { rows: Row[] }).rows.map((row) => ({
+    dependencies: dependencies.map((row) => ({
       id: String(row.id),
       predecessorId: String(row.predecessor_id),
       successorId: String(row.successor_id),
@@ -179,7 +179,7 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
     // Phases are a free-text grouping band on the task, so the phase list is
     // derived from what the tasks actually use — no second table to keep in sync.
     phases: phaseNames.map((name, index) => ({ id: name, name, order: index + 1 })),
-    calendars: (calendars as unknown as { rows: Row[] }).rows.map((row) => ({
+    calendars: calendars.map((row) => ({
       id: String(row.id),
       name: String(row.name ?? ''),
       description: String(row.description ?? ''),
@@ -189,7 +189,7 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
       shiftStartMinutes: num(row.shift_start_minutes),
       shiftEndMinutes: num(row.shift_end_minutes),
     })),
-    resources: (resources as unknown as { rows: Row[] }).rows.map((row) => ({
+    resources: resources.map((row) => ({
       id: String(row.id),
       name: String(row.name ?? ''),
       role: String(row.role ?? ''),
@@ -200,14 +200,14 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
       capacityPerDay: num(row.capacity_per_day) || 1,
       costRate: row.cost_rate == null ? undefined : Number(row.cost_rate),
     })),
-    assignments: (assignments as unknown as { rows: Row[] }).rows.map((row) => ({
+    assignments: assignments.map((row) => ({
       id: String(row.id),
       taskId: String(row.task_id),
       resourceId: String(row.resource_id),
       units: num(row.units) || 1,
       role: String(row.role ?? ''),
     })),
-    baselines: (baselines as unknown as { rows: Row[] }).rows.map((row) => ({
+    baselines: baselines.map((row) => ({
       id: String(row.id),
       name: String(row.name ?? ''),
       description: String(row.description ?? ''),
@@ -215,7 +215,7 @@ async function loadProjectScheduleSnapshot(orgId: string, projectId: string): Pr
       isPrimary: row.is_primary === true,
       capturedAt: str(row.created_at) ?? undefined,
     })),
-    baselineTasks: (baselineTasks as unknown as { rows: Row[] }).rows.map((row) => ({
+    baselineTasks: baselineTasks.map((row) => ({
       id: String(row.id),
       baselineId: String(row.baseline_id),
       taskId: String(row.task_id),
@@ -242,8 +242,8 @@ type Executor = Pick<typeof db, 'execute'>
 async function assertTaskInProject(orgId: string, projectId: string, taskId: string, exec: Executor = db) {
   const r = (await exec.execute<Row>(sql`
     select 1 from project_tasks
-     where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`))
-  if (!r.rows[0]) throw new ScheduleError('task not found', 404)
+     where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
+  if (!r[0]) throw new ScheduleError('task not found', 404)
 }
 
 /**
@@ -329,8 +329,8 @@ async function assertParentInProjectTree(
   if (!isUuid(parentId)) throw new ScheduleError('parentTaskId must be a valid id', 422)
   const parent = (await exec.execute<{ id: string }>(sql`
     select id from project_tasks
-     where id = ${parentId} and org_id = ${orgId} and project_id = ${projectId}`))
-  if (!parent.rows[0]) throw new ScheduleError('parent task not found in this project', 404)
+     where id = ${parentId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
+  if (!parent[0]) throw new ScheduleError('parent task not found in this project', 404)
   const cycle = (await exec.execute<{ loop: boolean }>(sql`
     select exists (
       with recursive chain(id, depth) as (
@@ -344,8 +344,8 @@ async function assertParentInProjectTree(
            and task.parent_id is not null
       )
       select 1 from chain where id = ${taskId}::uuid and depth > 0
-    ) as loop`))
-  if (cycle.rows[0]?.loop) {
+    ) as loop`, 'objects'))
+  if (cycle[0]?.loop) {
     throw new ScheduleError('a task cannot be parented under its own descendant', 422)
   }
 }
@@ -383,8 +383,8 @@ async function applyTaskPatch(
              updated_at = now(),
              updated_by = ${userId}
        where id = ${taskId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`)
-    if (updated.rows.length !== 1) throw new ScheduleError('The task is no longer available in this project; reload the schedule.', 409)
+       returning id`, 'objects')
+    if (updated.length !== 1) throw new ScheduleError('The task is no longer available in this project; reload the schedule.', 409)
   }
 
   // Resource assignments are replaced wholesale — the editor sends the complete
@@ -398,7 +398,7 @@ async function applyTaskPatch(
         throw new ScheduleError('assignment resource must be a valid resource', 422)
       }
       const resource = (await exec.execute<{ id: string }>(sql`select id from schedule_resources
-        where org_id = ${orgId} and project_id = ${projectId} and id = ${assignment.resourceId} for share`)).rows[0]
+        where org_id = ${orgId} and project_id = ${projectId} and id = ${assignment.resourceId} for share`, 'objects'))[0]
       if (!resource) throw new ScheduleError('Choose a resource belonging to this project in Schedule → Manage schedule.', 422)
       const units = persistScheduleAssignmentUnits(assignment.units)
       if (units === 'invalid') {
@@ -448,8 +448,8 @@ async function applyTaskPatch(
                 ${userId}, ${userId})
         on conflict (task_id, resource_id)
           do update set units = excluded.units, role = excluded.role, updated_at = now(), updated_by = ${userId}
-          where schedule_task_assignments.org_id = ${orgId} returning id`)
-      if (saved.rows.length !== 1) throw new ScheduleError('The task resource assignment was not saved; reload the schedule and try again.', 409)
+          where schedule_task_assignments.org_id = ${orgId} returning id`, 'objects')
+      if (saved.length !== 1) throw new ScheduleError('The task resource assignment was not saved; reload the schedule and try again.', 409)
     }
   }
 }
@@ -512,13 +512,13 @@ export async function createScheduleTask(
     }
     const next = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(schedule_order), 0) + 1 as n from project_tasks
-       where org_id = ${orgId} and project_id = ${projectId}`))
+       where org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
     const created = (await tx.execute<{ id: string }>(sql`
       insert into project_tasks (org_id, project_id, name, schedule_order, created_by, updated_by)
       values (${orgId}, ${projectId}, ${input.name || 'New task'},
-              ${order ?? next.rows[0]?.n ?? 1}, ${userId}, ${userId})
-      returning id`))
-    const id = created.rows[0]?.id
+              ${order ?? next[0]?.n ?? 1}, ${userId}, ${userId})
+      returning id`, 'objects'))
+    const id = created[0]?.id
     if (!id) throw new ScheduleError('could not create task', 500)
     const rest: ScheduleTaskPatchInput = { ...input }
     delete rest.name
@@ -542,8 +542,8 @@ export async function deleteScheduleTask(
     // A task with posted time is job-costing history; refuse rather than orphan it.
     const timeEntries = (await tx.execute<{ n: number }>(sql`
       select count(*)::int as n from time_entries
-       where org_id = ${orgId} and project_task_id = ${taskId}`))
-    if ((timeEntries.rows[0]?.n ?? 0) > 0) {
+       where org_id = ${orgId} and project_task_id = ${taskId}`, 'objects'))
+    if ((timeEntries[0]?.n ?? 0) > 0) {
       throw new ScheduleError('task has time entries and cannot be deleted', 409)
     }
     await tx.execute(sql`
@@ -598,8 +598,8 @@ export async function createScheduleDependency(
     await assertTaskInProject(orgId, projectId, input.successorId, tx)
     const existing = (await tx.execute<Row>(sql`
       select id, predecessor_id, successor_id, type, lag_days from schedule_dependencies
-       where org_id = ${orgId} and project_id = ${projectId}`))
-    const dependencies: ScheduleDependency[] = existing.rows.map((row) => ({
+       where org_id = ${orgId} and project_id = ${projectId}`, 'objects'))
+    const dependencies: ScheduleDependency[] = existing.map((row) => ({
       id: String(row.id),
       predecessorId: String(row.predecessor_id),
       successorId: String(row.successor_id),
@@ -632,8 +632,8 @@ export async function deleteScheduleDependency(
     const deleted = await tx.execute<{ id: string }>(sql`
       delete from schedule_dependencies
        where id = ${id} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`)
-    if (!deleted.rows[0]) throw new ScheduleError('dependency not found', 404)
+       returning id`, 'objects')
+    if (!deleted[0]) throw new ScheduleError('dependency not found', 404)
   })
 }
 
@@ -658,8 +658,8 @@ export async function createScheduleBaseline(
       values (${orgId}, ${projectId}, ${input.name}, ${input.description ?? null},
               ${input.kind ?? (input.isPrimary ? 'primary' : 'snapshot')}, ${input.isPrimary === true},
               ${userId}, ${userId})
-      returning id`))
-    const baselineId = created.rows[0]?.id
+      returning id`, 'objects'))
+    const baselineId = created[0]?.id
     if (!baselineId) throw new ScheduleError('could not create baseline', 500)
     await tx.execute(sql`
       insert into schedule_baseline_tasks
@@ -687,16 +687,16 @@ export async function deleteScheduleBaseline(
     const parent = await tx.execute<{ id: string }>(sql`
       select id from schedule_baselines
        where id = ${baselineId} and org_id = ${orgId} and project_id = ${projectId}
-       for update`)
-    if (!parent.rows[0]) throw new ScheduleError('baseline not found', 404)
+       for update`, 'objects')
+    if (!parent[0]) throw new ScheduleError('baseline not found', 404)
     await tx.execute(sql`
       delete from schedule_baseline_tasks
        where org_id = ${orgId} and baseline_id = ${baselineId}`)
     const deleted = await tx.execute<{ id: string }>(sql`
       delete from schedule_baselines
        where id = ${baselineId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`)
-    if (!deleted.rows[0]) throw new ScheduleError('baseline not found', 404)
+       returning id`, 'objects')
+    if (!deleted[0]) throw new ScheduleError('baseline not found', 404)
   })
 }
 
@@ -720,8 +720,8 @@ export async function upsertScheduleCalendar(
     if (input.id) {
       const existing = await tx.execute(sql`
         select 1 from schedule_calendars
-         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`)
-      if (!existing.rows[0]) throw new ScheduleError('calendar not found', 404)
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
+      if (!existing[0]) throw new ScheduleError('calendar not found', 404)
     }
     if (input.isDefault) {
       await tx.execute(sql`
@@ -738,9 +738,9 @@ export async function upsertScheduleCalendar(
                is_default = coalesce(${input.isDefault ?? null}, is_default),
                updated_at = now(), updated_by = ${userId}
          where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}
-         returning id`)
-      if (!updated.rows[0]) throw new ScheduleError('calendar not found', 404)
-      return updated.rows[0].id
+         returning id`, 'objects')
+      if (!updated[0]) throw new ScheduleError('calendar not found', 404)
+      return updated[0].id
     }
     const created = (await tx.execute<{ id: string }>(sql`
       insert into schedule_calendars (org_id, project_id, name, description, working_days, holidays, is_default, created_by, updated_by)
@@ -749,8 +749,8 @@ export async function upsertScheduleCalendar(
                        '{"0":false,"1":true,"2":true,"3":true,"4":true,"5":true,"6":false}'::jsonb),
               coalesce(${input.holidays ? JSON.stringify(input.holidays) : null}::jsonb, '[]'::jsonb),
               ${input.isDefault === true}, ${userId}, ${userId})
-      returning id`))
-    return created.rows[0]?.id ?? null
+      returning id`, 'objects'))
+    return created[0]?.id ?? null
   }))
 }
 
@@ -765,8 +765,8 @@ export async function deleteScheduleCalendar(
     await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     const existing = await tx.execute(sql`
       select 1 from schedule_calendars
-       where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}`)
-    if (!existing.rows[0]) throw new ScheduleError('calendar not found', 404)
+       where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
+    if (!existing[0]) throw new ScheduleError('calendar not found', 404)
 
     // Tasks and resources fall back to the default calendar rather than
     // pointing at a calendar that no longer exists.
@@ -779,8 +779,8 @@ export async function deleteScheduleCalendar(
     const deleted = await tx.execute<{ id: string }>(sql`
       delete from schedule_calendars
        where id = ${calendarId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`)
-    if (!deleted.rows[0]) throw new ScheduleError('calendar not found', 404)
+       returning id`, 'objects')
+    if (!deleted[0]) throw new ScheduleError('calendar not found', 404)
   }))
 }
 
@@ -819,8 +819,8 @@ export async function upsertScheduleResource(
     if (input.id) {
       const existing = await tx.execute(sql`
         select 1 from schedule_resources
-         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`)
-      if (!existing.rows[0]) throw new ScheduleError('resource not found', 404)
+         where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
+      if (!existing[0]) throw new ScheduleError('resource not found', 404)
 
       const updated = await tx.execute<{ id: string }>(sql`
         update schedule_resources
@@ -833,9 +833,9 @@ export async function upsertScheduleResource(
                cost_rate = ${costRate === undefined ? sql`cost_rate` : sql`${costRate}`},
                updated_at = now(), updated_by = ${userId}
          where id = ${input.id} and org_id = ${orgId} and project_id = ${projectId}
-         returning id`)
-      if (!updated.rows[0]) throw new ScheduleError('resource not found', 404)
-      return updated.rows[0].id
+         returning id`, 'objects')
+      if (!updated[0]) throw new ScheduleError('resource not found', 404)
+      return updated[0].id
     }
     const created = (await tx.execute<{ id: string }>(sql`
       insert into schedule_resources
@@ -845,8 +845,8 @@ export async function upsertScheduleResource(
               ${Math.max(0.0001, Number(input.defaultUnits ?? 1) || 1)},
               ${Math.max(0.0001, Number(input.capacityPerDay ?? 1) || 1)},
               ${costRate ?? null}, ${userId}, ${userId})
-      returning id`))
-    return created.rows[0]?.id ?? null
+      returning id`, 'objects'))
+    return created[0]?.id ?? null
   }))
 }
 
@@ -861,8 +861,8 @@ export async function deleteScheduleResource(
     await assertProjectScopeInTx(tx, orgId, projectId, allowedSubsidiaryIds)
     const existing = await tx.execute(sql`
       select 1 from schedule_resources
-       where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}`)
-    if (!existing.rows[0]) throw new ScheduleError('resource not found', 404)
+       where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}`, 'objects')
+    if (!existing[0]) throw new ScheduleError('resource not found', 404)
 
     await tx.execute(sql`
       delete from schedule_task_assignments
@@ -874,7 +874,7 @@ export async function deleteScheduleResource(
     const deleted = await tx.execute<{ id: string }>(sql`
       delete from schedule_resources
        where id = ${resourceId} and org_id = ${orgId} and project_id = ${projectId}
-       returning id`)
-    if (!deleted.rows[0]) throw new ScheduleError('resource not found', 404)
+       returning id`, 'objects')
+    if (!deleted[0]) throw new ScheduleError('resource not found', 404)
   }))
 }

@@ -281,9 +281,9 @@ export async function loadApprovals(
              select 1 from jsonb_array_elements(coalesce(graph->'nodes', '[]'::jsonb)) as node
               where node->'data'->>'kind' = 'gate'
            )
-      ) as configured`,
+      ) as configured`, 'objects',
       )
-      .then((result) => result.rows[0]?.configured === true),
+      .then((result) => result[0]?.configured === true),
   ])
   const rawTab = pickString(sp.tab)
   const tab: Tab =
@@ -449,14 +449,14 @@ export async function loadApprovals(
   if (tab === 'all' && assigneeIds.length > 0) {
     const rows = await db.execute<Record<string, unknown>>(sql`
       select id, name from users where org_id = ${orgId} and id = any(${pgTextArrayLiteral(assigneeIds)}::uuid[])
-    `)
-    for (const r of rows.rows) assigneeNames.set(String(r.id), String(r.name))
+    `, 'objects')
+    for (const r of rows) assigneeNames.set(String(r.id), String(r.name))
   }
   if (tab === 'all' && assigneeRoles.length > 0) {
     const rows = await db.execute<Record<string, unknown>>(sql`
       select key, name from app_roles where org_id = ${orgId} and key = any(${pgTextArrayLiteral(assigneeRoles)}::text[])
-    `)
-    for (const r of rows.rows) roleNames.set(String(r.key), String(r.name))
+    `, 'objects')
+    for (const r of rows) roleNames.set(String(r.key), String(r.name))
   }
   const assigneeOf = (item: ApprovalWorklistItem): string | null => {
     if (tab !== 'all' || item.kind !== 'flow_gate') return null
@@ -632,14 +632,14 @@ export async function loadApprovals(
                 d.subsidiary_id, d.status, cr.id, cr.status, cp.id, p.display_name
        order by min(g.created_at), r.id
        limit ${prefix}
-    `)
-    submittedTotal = Number(flowRes.rows[0]?.fullCount ?? 0)
+    `, 'objects')
+    submittedTotal = Number(flowRes[0]?.fullCount ?? 0)
 
     // Non-document subjects name their record, party and amount through the
     // per-kind subject registry, the same one the approval rows read.
     const submittedSubjects = await resolveApprovalSubjects(
       orgId,
-      flowRes.rows.flatMap((r) =>
+      flowRes.flatMap((r) =>
         r.documentNumber == null
           ? [{ kind: String(r.kind), subjectId: String(r.subjectId) }]
           : [],
@@ -647,7 +647,7 @@ export async function loadApprovals(
       th,
     )
     await loadSubjectFormatters(submittedSubjects.values())
-    submittedRows = flowRes.rows.map((r): SubmittedListRow => {
+    submittedRows = flowRes.map((r): SubmittedListRow => {
       const kind = String(r.kind)
       const waitingSince = iso(r.waitingSince)
       const subject =
@@ -682,7 +682,7 @@ export async function loadApprovals(
       }
     })
 
-    submittedTotal = Number(flowRes.rows[0]?.fullCount ?? 0)
+    submittedTotal = Number(flowRes[0]?.fullCount ?? 0)
     submittedRows.sort(
       (a, b) =>
         a.waitingSince.localeCompare(b.waitingSince) ||
@@ -696,8 +696,8 @@ export async function loadApprovals(
     select id, name from users
      where org_id = ${orgId} and is_active and id <> ${user.id}
      order by name limit 500
-  `)
-  const delegateUsers = usersRes.rows
+  `, 'objects')
+  const delegateUsers = usersRes
 
   // ---- Kind filters (mine/all tabs) -----------------------------------------
   // Counts come from the union aggregates (unfiltered by kind, sorted by code

@@ -360,16 +360,16 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function glBalance(orgId: string, accountId: string): Promise<string> {
   const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines
-     where org_id = ${orgId} and account_id = ${accountId}`));
-  return r.rows[0]!.bal;
+     where org_id = ${orgId} and account_id = ${accountId}`, "objects"));
+  return r[0]!.bal;
 }
 
 /** Σ (remaining_quantity × unit_cost) across every cost layer in the org. */
 async function totalLayerValue(orgId: string): Promise<string> {
   const r = (await db.execute<{ v: string }>(sql`
     select coalesce((select sum(round(remaining_quantity * unit_cost, 4))
-                       from cost_layers where org_id = ${orgId}), 0)::text as v`));
-  return r.rows[0]!.v;
+                       from cost_layers where org_id = ${orgId}), 0)::text as v`, "objects"));
+  return r[0]!.v;
 }
 
 /**
@@ -383,8 +383,8 @@ async function assertGlEqualsLayers(org: ScratchOrg): Promise<void> {
   assert.equal(toUnits(gl), toUnits(layers), `inventory GL ${gl} != Σ layer value ${layers}`);
   const unbalanced = (await db.execute<{ entry_id: string; bal: string }>(sql`
     select entry_id, sum(amount) as bal from journal_lines
-     where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`));
-  assert.equal(unbalanced.rows.length, 0, `unbalanced entries: ${JSON.stringify(unbalanced.rows)}`);
+     where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`, "objects"));
+  assert.equal(unbalanced.length, 0, `unbalanced entries: ${JSON.stringify(unbalanced)}`);
 }
 
 test("standard costing keeps GL = Σ layers through a build, landed cost, a standard-cost revision, and a full drain", { skip: !DB }, async () => {
@@ -448,7 +448,7 @@ test("standard costing keeps GL = Σ layers through a build, landed cost, a stan
     // new standard and books the delta atomically — what the costing-profile
     // PUT drives for an item already costing standard.
     const calendar = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`));
+      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"));
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -458,7 +458,7 @@ test("standard costing keeps GL = Σ layers through a build, landed cost, a stan
              to_char(current_date, 'YYYY-MM'),
              date_trunc('month', current_date)::date,
              (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
-             false, ${calendar.rows[0]!.id}`);
+             false, ${calendar[0]!.id}`);
     const invBeforeRevision = await glBalance(org.orgId, org.accounts.invAsset);
     await db.transaction(async (tx) => {
       await tx.execute(sql`
@@ -544,7 +544,7 @@ test("inventory journals retain the posting actor and exact landed-cost splits r
       select created_by, updated_by, posted_by
         from journal_entries
        where id = ${receipt.entryId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(journal.created_by, actorId);
     assert.equal(journal.updated_by, actorId);
     assert.equal(journal.posted_by, actorId);
@@ -560,14 +560,14 @@ test("inventory journals retain the posting actor and exact landed-cost splits r
       voucherDate: org.date,
       targets: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
     });
-    const splitLayers = (await db.execute<{ subsidiary_id: string; remaining_quantity: string }>(sql`
+    const splitLayers = await db.execute<{ subsidiary_id: string; remaining_quantity: string }>(sql`
       select subsidiary_id, remaining_quantity
         from cost_layers
        where org_id = ${org.orgId}
          and item_id = ${org.items.fifo}
          and stock_location_id = ${org.stockLocationId}
        order by remaining_quantity
-    `)).rows;
+    `, "objects");
     assert.equal(splitLayers.length, 2);
     assert.deepEqual(new Set(splitLayers.map((layer) => layer.subsidiary_id)), new Set([org.subsidiaryId]));
     assert.deepEqual(new Set(splitLayers.map((layer) => layer.remaining_quantity)), new Set(["1.0000", "2.0000"]));
@@ -626,7 +626,7 @@ test("a receipt re-reads a costing policy after a concurrent revision commits", 
       select unit_cost
         from inventory_movements
        where id = ${receipt.movementId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(movement.unit_cost, "3.5000");
   } finally {
     await dropScratchOrgReporting(org.orgId);
@@ -673,8 +673,8 @@ test("landed cost for a receipt lands on that receipt's layers, and its sold sha
     });
     const first = await receive(null);
     const second = await receive(lineId);
-    const layer = async (movementId: string) => (await db.execute<{ remaining: string; unit_cost: string }>(sql`
-      select remaining_quantity::text remaining, unit_cost::text from cost_layers where org_id=${org.orgId} and source_movement_id=${movementId}`)).rows;
+    const layer = async (movementId: string) => await db.execute<{ remaining: string; unit_cost: string }>(sql`
+      select remaining_quantity::text remaining, unit_cost::text from cost_layers where org_id=${org.orgId} and source_movement_id=${movementId}`, "objects");
     const voucher = (amount: string) => postLandedCostVoucher(org.orgId, null, {
       amount, basis: "value", freightAccountId: org.accounts.freight, subsidiaryId: org.subsidiaryId,
       voucherDate: org.date, sourceDocumentLineId: lineId, targets: [{ itemId: item, stockLocationId: loc }],
@@ -688,7 +688,7 @@ test("landed cost for a receipt lands on that receipt's layers, and its sold sha
     await issueInventory(org.orgId, null, { itemId: item, stockLocationId: loc, quantity: "10", subsidiaryId: org.subsidiaryId, date: org.date });
     const late = await voucher("10");
     const cogs = (await db.execute<{ amount: string }>(sql`select coalesce(sum(amount),0)::text amount from journal_lines
-      where org_id=${org.orgId} and entry_id=${late.entryId} and account_id=${org.accounts.cogs}`)).rows[0]!.amount;
+      where org_id=${org.orgId} and entry_id=${late.entryId} and account_id=${org.accounts.cogs}`, "objects"))[0]!.amount;
     assert.equal(cogs, "5.0000");
     assert.equal((await getOnHand(org.orgId, item, loc)).value, "65.0000"); // 5 x 12 + 5
     await assertGlEqualsLayers(org);

@@ -180,7 +180,7 @@ test('a GB employee refused for a missing P6/P9 code calculates after it is file
     )
     const noStub = await withBypassContext(async () => (await db.execute<{ count: string }>(sql`
       select count(*) as count from pay_stubs
-       where org_id = ${org.orgId} and pay_run_document_id = ${before.run.documentId}`)).rows[0]!.count)
+       where org_id = ${org.orgId} and pay_run_document_id = ${before.run.documentId}`, 'objects'))[0]!.count)
     assert.equal(noStub, '0')
 
     // THE FILINGS, through the new API — the moment five personas are blocked
@@ -201,16 +201,16 @@ test('a GB employee refused for a missing P6/P9 code calculates after it is file
     const stub = await withBypassContext(async () => (await db.execute<{ id: string; gross: string }>(sql`
       select id, gross::text as gross from pay_stubs
        where org_id = ${org.orgId} and pay_run_document_id = ${after.run.documentId}
-         and employee_party_id = ${employeeId}`)).rows[0])
+         and employee_party_id = ${employeeId}`, 'objects'))[0])
     assert.ok(stub, 'the employee was paid')
     assert.equal(stub!.gross, '3000.0000')
-    const lines = await withBypassContext(async () => (await db.execute<{
+    const lines = await withBypassContext(async () => await db.execute<{
       system_key: string; description: string; amount: string;
     }>(sql`
       select c.system_key, l.description, l.amount::text as amount
         from pay_stub_lines l join pay_components c on c.id = l.component_id
        where l.org_id = ${org.orgId} and l.stub_id = ${stub!.id} and l.kind = 'deduction'
-       order by l.sequence`)).rows)
+       order by l.sequence`, 'objects'))
     const paye = lines.find((line) => line.system_key === 'paye')
     assert.ok(paye, `a PAYE line exists among: ${lines.map((line) => line.description).join(', ')}`)
     assert.ok(Number(paye!.amount) > 0, `PAYE prices above zero, got ${paye!.amount}`)

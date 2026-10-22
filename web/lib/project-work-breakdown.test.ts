@@ -173,14 +173,15 @@ const scopeMockSources = new Map<string, string>([
         if (state.allowedSubsidiaryIds !== null && (!state.projectSubsidiary || !state.allowedSubsidiaryIds.has(state.projectSubsidiary))) return []
         return [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed task', status: 'open', estimated_hours: '2.0000', estimated_cost: '100.0000', updated_at: '2026-08-01T00:00:00.000000Z' }]
       }
-      async function execute(query) {
+      async function execute(query, mode) {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const statement = text(query)
         state.calls.push(statement)
-        if (statement.includes('insert into project_tasks')) return { rows: [{ id: 'task-created', project_id: 'project-1', code: '02', name: 'Allowed create', status: 'open', estimated_hours: '1.0000', estimated_cost: '50.0000', updated_at: '2026-08-01T00:00:00.000000Z' }] }
-        if (statement.includes('update project_tasks')) return { rows: [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed update', status: 'open', estimated_hours: '3.0000', estimated_cost: '150.0000', updated_at: '2026-08-01T00:00:00.000000Z' }] }
-        if (statement.includes('from project_tasks')) return { rows: taskRows(statement) }
-        if (statement.includes('from projects')) return { rows: projectRows(statement) }
-        return { rows: [] }
+        if (statement.includes('insert into project_tasks')) return inMode({ rows: [{ id: 'task-created', project_id: 'project-1', code: '02', name: 'Allowed create', status: 'open', estimated_hours: '1.0000', estimated_cost: '50.0000', updated_at: '2026-08-01T00:00:00.000000Z' }] })
+        if (statement.includes('update project_tasks')) return inMode({ rows: [{ id: 'task-1', project_id: 'project-1', code: '01', name: 'Allowed update', status: 'open', estimated_hours: '3.0000', estimated_cost: '150.0000', updated_at: '2026-08-01T00:00:00.000000Z' }] })
+        if (statement.includes('from project_tasks')) return inMode({ rows: taskRows(statement) })
+        if (statement.includes('from projects')) return inMode({ rows: projectRows(statement) })
+        return inMode({ rows: [] })
       }
       const db = {
         execute,

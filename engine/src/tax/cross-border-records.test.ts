@@ -17,7 +17,7 @@ const state: ValidationState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
-  ["mock:db", "export const db = { execute: async () => ({ rows: [] }) }"],
+  ["mock:db", "export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }"],
   ["mock:features", "export async function lockAndCheckOrgFeature() { return true }"],
   ["mock:credentials", `const state = globalThis[Symbol.for('openbooks.stored-tax-id-credentials-test')]
     export async function authorityCredentialsForOrg() { state.credentialLoads += 1; return state.credentials }`],
@@ -56,7 +56,7 @@ const { validateStoredTaxId } = await import("./cross-border-records.ts");
 test("interactive stored tax ID validation loads authority credentials for its organization", async () => {
   state.credentialLoads = 0;
   state.received = undefined;
-  const result = await validateStoredTaxId("org-1", "row-1", "actor-1", {}, { execute: async () => ({ rows: [] }) } as never);
+  const result = await validateStoredTaxId("org-1", "row-1", "actor-1", {}, { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as never);
   assert.deepEqual(state.received, state.credentials);
   assert.equal(state.credentialLoads, 1);
   assert.deepEqual(result, { id: "row-1", status: "valid", consultationNumber: "REF" });

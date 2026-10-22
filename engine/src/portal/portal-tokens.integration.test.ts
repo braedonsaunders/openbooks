@@ -21,14 +21,14 @@ const EMAIL_B = 'portal-b@example.com'
 async function enablePortal(orgId: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || '{"customerPortal": true, "subscriptionBilling": true}'::jsonb) where id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1)
+      || '{"customerPortal": true, "subscriptionBilling": true}'::jsonb) where id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1)
 }
 
 async function setPartyEmail(orgId: string, partyId: string, email: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
-    update parties set email = ${email} where id = ${partyId} and org_id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1)
+    update parties set email = ${email} where id = ${partyId} and org_id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1)
 }
 
 async function secondCustomer(orgId: string, email: string): Promise<string> {
@@ -59,12 +59,12 @@ test('portal magic links store hashes only and consume exactly once', { skip: !D
     assert.equal(requested.links.length, 1)
     const token = requested.links[0]!.token
     const row = (await withBypassContext(() => db.execute<{ token_hash: string }>(sql`
-      select token_hash from customer_portal_links where org_id = ${org.orgId} limit 1`))).rows[0]!
+      select token_hash from customer_portal_links where org_id = ${org.orgId} limit 1`, 'objects')))[0]!
     assert.equal(row.token_hash, portalTokenHash(token))
-    const columns = (await withBypassContext(() => db.execute<{ column_name: string }>(sql`
+    const columns = await withBypassContext(() => db.execute<{ column_name: string }>(sql`
       select column_name from information_schema.columns
        where table_schema = 'public' and table_name = 'customer_portal_links'
-         and column_name in ('token', 'plaintext', 'secret')`))).rows
+         and column_name in ('token', 'plaintext', 'secret')`, 'objects'))
     assert.equal(columns.length, 0)
     const consumed = await consumePortalLink(token)
     assert.equal(consumed.orgId, org.orgId)
@@ -127,7 +127,7 @@ test('portal request caps stay silent past five links an hour', { skip: !DB }, a
     }
     const issued = (await withBypassContext(() => db.execute<{ count: string }>(sql`
       select count(*)::text as count from customer_portal_links
-       where org_id = ${org.orgId} and purpose = 'magic_link'`))).rows[0]!.count
+       where org_id = ${org.orgId} and purpose = 'magic_link'`, 'objects')))[0]!.count
     assert.equal(issued, '5')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })

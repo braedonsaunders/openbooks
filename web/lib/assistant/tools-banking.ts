@@ -42,12 +42,12 @@ const listBankReconciliations: AssistantToolDef = {
          ${a.accountId ? sql` and r.account_id = ${a.accountId}` : sql``}
        order by r.created_at desc
        limit ${limit}
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
-        returned: rows.rows.length,
-        reconciliations: rows.rows.map((r) => ({
+        returned: rows.length,
+        reconciliations: rows.map((r) => ({
           id: r.id,
           accountId: r.account_id,
           accountNumber: r.account_number,
@@ -83,8 +83,8 @@ const getBankReconciliation: AssistantToolDef = {
        join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${authz.user.orgId} and r.id = ${a.reconciliationId}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
-    `));
-    const recon = rows.rows[0];
+    `, "objects"));
+    const recon = rows[0];
     if (!recon) return { ok: false, error: "reconciliation_not_found" };
     const totals = await reconciliationTotals(a.reconciliationId, {
       orgId: authz.user.orgId,
@@ -143,17 +143,17 @@ const listUnmatchedBankLines: AssistantToolDef = {
          where ${where}
          order by l.posted_on desc, l.line_number
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<{ n: string }>(sql`
         select count(*) as n
           from bank_statement_lines l
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where ${where}
-      `),
+      `, "objects"),
     ]));
-    const total = Number(count.rows[0]?.n ?? 0);
+    const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
-      rows.rows.map((l) => ({
+      rows.map((l) => ({
         id: l.id,
         date: l.posted_on,
         description: l.description,
@@ -204,12 +204,12 @@ const listBankFeeds: AssistantToolDef = {
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by c.created_at desc
        limit 200
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
-        returned: rows.rows.length,
-        connections: rows.rows.map((c) => ({
+        returned: rows.length,
+        connections: rows.map((c) => ({
           id: c.id,
           name: c.name,
           provider: c.provider,

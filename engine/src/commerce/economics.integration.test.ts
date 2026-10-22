@@ -68,7 +68,7 @@ async function setup(org: ScratchOrg, actor: string): Promise<string> {
     ids[key] = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
   }
   const maps: Array<[string, string, string]> = [
     ["gateway_clearing", "shopify_payments", ids["clearing"]!],
@@ -178,7 +178,7 @@ async function settlePayout(
        dispute_amount, net_amount, fx_amount, settlement_date, subsidiary_id, line_count, created_by, updated_by)
     values (${org.orgId}, 'shopify_payments', ${externalRef}, 'draft', 'CAD', '68.86', ${feeText}, '0',
       '0', '68.86', '0', '2026-07-16', ${org.subsidiaryId}, 2, ${actor}, ${actor})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   await withOrgContext(org.orgId, () => db.execute(sql`
     insert into psp_settlement_lines (org_id, batch_id, line_number, kind, external_ref, description, amount, currency, meta, created_by, updated_by)
     values (${org.orgId}, ${batchId}, 1, 'charge', 'txn-1', ${`charge for order ${orderExternalId}`}, '68.86', 'CAD',
@@ -194,13 +194,13 @@ async function buyLabel(
   rateMinor: bigint,
 ): Promise<void> {
   const doc = (await withOrgContext(org.orgId, () => db.execute<{ posting_document_id: string }>(sql`
-    select posting_document_id from channel_orders where id = ${orderId} and org_id = ${org.orgId}`))).rows[0]!;
+    select posting_document_id from channel_orders where id = ${orderId} and org_id = ${org.orgId}`, "objects")))[0]!;
   // A shipment document behind the label: the label references the shipment
   // for fulfilment and the cash sale for margin, exactly like a bought label.
   const shipmentId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, document_date, currency, status, created_by, updated_by)
     values (${org.orgId}, 'shipment', ${`SHP-${orderId.slice(0, 8)}`}, ${org.date}, 'CAD', 'draft', ${actor}, ${actor})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   // A relabeled order reuses the same warehouse and shipment staging row;
   // both conflicts are expected on repeat buys and benign.
   await withOrgContext(org.orgId, () => db.execute(sql`
@@ -217,9 +217,9 @@ async function buyLabel(
     insert into shipping_accounts (org_id, name, provider, mode, status, created_by, updated_by)
     values (${org.orgId}, 'Test Carrier', 'easypost', 'test', 'active', ${actor}, ${actor})
     on conflict do nothing
-    returning id`))).rows[0]?.id
+    returning id`, "objects")))[0]?.id
     ?? (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-      select id from shipping_accounts where org_id = ${org.orgId} and name = 'Test Carrier'`))).rows[0]!.id;
+      select id from shipping_accounts where org_id = ${org.orgId} and name = 'Test Carrier'`, "objects")))[0]!.id;
   await withOrgContext(org.orgId, () => db.execute(sql`
     insert into shipment_labels
       (org_id, shipment_document_id, order_document_id, account_id, provider, provider_shipment_id,
@@ -296,12 +296,12 @@ test("a late label cost restates the order and keeps history", { skip: !DB }, as
     assert.equal(sumBy(economics.facts, "shipping_label"), -550n);
     const history = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from channel_order_economics
-       where org_id = ${org.orgId} and order_id = ${orderId} and not is_current`))).rows[0]!;
+       where org_id = ${org.orgId} and order_id = ${orderId} and not is_current`, "objects")))[0]!;
     // The superseded 450 allocation survives beside the current 550 one.
     assert.ok(Number(history.count) >= 3);
     const retired = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from channel_order_economics_pending
-       where org_id = ${org.orgId} and order_id = ${orderId}`))).rows[0]!;
+       where org_id = ${org.orgId} and order_id = ${orderId}`, "objects")))[0]!;
     assert.equal(retired.count, "0");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -339,7 +339,7 @@ test("imported daily ad spend allocates to CM3 and shows in the summary", { skip
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, "Clerk", "admin"));
     const channelId = await setup(org, actor);
-    const clock = (await db.execute<{ today: string; instant: string }>(sql`select current_date::text as today, now()::text as instant`)).rows[0]!;
+    const clock = (await db.execute<{ today: string; instant: string }>(sql`select current_date::text as today, now()::text as instant`, "objects"))[0]!;
     await db.execute(sql`
       insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       select ${org.orgId}, extract(year from ${clock.today}::date)::int,

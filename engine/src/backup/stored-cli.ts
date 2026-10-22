@@ -40,39 +40,39 @@ if (!s3Enabled) {
 // all actor and backup-ledger access inside that tenant's RLS scope.
 const org = await withOrgContext(orgId, () => db.execute<{ id: string; name: string; env_kind: string }>(sql`
   select id, name, env_kind from orgs where id = ${orgId}
-`));
-if (!org.rows[0]) throw new Error("organization not found");
-if (org.rows[0].env_kind !== "sandbox" && !args.has("production")) {
+`, "objects"));
+if (!org[0]) throw new Error("organization not found");
+if (org[0].env_kind !== "sandbox" && !args.has("production")) {
   throw new Error("--production is required for a live tenant");
 }
 const runId = await withOrgTransaction(orgId, async () => {
   const actor = (await db.execute<{ id: string }>(sql`
     select id from users where id = ${actorId} and org_id = ${orgId}
-  `));
-  if (!actor.rows[0]) throw new Error("audit actor does not belong to organization");
+  `, "objects"));
+  if (!actor[0]) throw new Error("audit actor does not belong to organization");
 
   const active = (await db.execute<{ id: string }>(sql`
     select id from backup_runs
      where org_id = ${orgId} and status in ('queued', 'running')
      limit 1
-  `));
-  if (active.rows[0]) {
-    throw new Error(`backup ${active.rows[0].id} is already in progress`);
+  `, "objects"));
+  if (active[0]) {
+    throw new Error(`backup ${active[0].id} is already in progress`);
   }
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into backup_runs (org_id, kind, status, actor_id)
     values (${orgId}, 'manual', 'queued', ${actorId})
     returning id
-  `));
-  return inserted.rows[0]!.id;
+  `, "objects"));
+  return inserted[0]!.id;
 });
 await executeBackupRun(runId);
 const result = await withOrgContext(orgId, () => db.execute<Record<string, unknown>>(sql`
   select id, org_id, kind, status, object_key, file_name, byte_size::text,
          sha256, table_count, row_count, started_at, completed_at, error
     from backup_runs where id = ${runId} and org_id = ${orgId}
-`));
-const report = result.rows[0];
+`, "objects"));
+const report = result[0];
 writeFileSync(out, `${JSON.stringify(report, null, 2)}\n`, {
   encoding: "utf8",
   mode: 0o600,

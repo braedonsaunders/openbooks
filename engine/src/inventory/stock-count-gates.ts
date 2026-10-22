@@ -170,13 +170,11 @@ export async function assertCountWarehouses(
 ): Promise<void> {
   for (const stockLocationId of [...new Set(stockLocationIds)].sort()) {
     await assertOwnedLocation(tx, orgId, stockLocationId);
-    const row = (
-      await tx.execute<{ code: string | null; is_active: boolean }>(sql`
+    const row = (await tx.execute<{ code: string | null; is_active: boolean }>(sql`
       select code, is_active
         from stock_locations
        where org_id = ${orgId} and id = ${stockLocationId}
-       for share`)
-    ).rows[0];
+       for share`, "objects"))[0];
     if (!row) {
       throw new InventoryError(
         "count line stock location not found in this organization — choose an active stock location",
@@ -244,8 +242,8 @@ export async function loadCountHeader(
     memo: string | null;
     blind: boolean;
   }>(sql`select id, status, location_id, subsidiary_id, counted_on::text, memo, blind
-            from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`);
-  const row = r.rows[0];
+            from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`, "objects");
+  const row = r[0];
   if (!row) {
     // Under RLS an absent result is either a wrong id or another org's row;
     // callers must not distinguish those cases.
@@ -280,8 +278,8 @@ export async function loadCountLines(
                 expected_quantity::text, counted_quantity::text, adjustment_movement_id
            from stock_count_lines
           where org_id = ${orgId} and stock_count_id = ${countId}
-          order by item_id, stock_location_id, lot_id nulls first, id`);
-  return r.rows.map((row) => ({
+          order by item_id, stock_location_id, lot_id nulls first, id`, "objects");
+  return r.map((row) => ({
     id: row.id,
     itemId: row.item_id,
     stockLocationId: row.stock_location_id,
@@ -305,8 +303,8 @@ export async function transitionCount(
   const updated = await runner.execute<{ id: string }>(sql`
     update stock_counts set status = ${to}, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${count.id} and status = ${count.status}
-    returning id`);
-  if (updated.rows.length === 0) {
+    returning id`, "objects");
+  if (updated.length === 0) {
     throw new InventoryError(
       `stock count ${count.id} changed while this action was in flight — reload the count and try again`,
     );
@@ -327,11 +325,9 @@ export async function requireAllLinesCounted(
   const missing = lines.filter((l) => l.countedQuantity === null);
   if (missing.length > 0) {
     const first = missing[0]!;
-    const detail = (
-      await runner.execute<{ code: string | null; loc: string | null }>(sql`
+    const detail = (await runner.execute<{ code: string | null; loc: string | null }>(sql`
       select (select code from items where org_id = ${orgId} and id = ${first.itemId}) as code,
-             (select code from stock_locations where org_id = ${orgId} and id = ${first.stockLocationId}) as loc`)
-    ).rows[0];
+             (select code from stock_locations where org_id = ${orgId} and id = ${first.stockLocationId}) as loc`, "objects"))[0];
     const where = `item ${detail?.code ?? first.itemId} at ${detail?.loc ?? first.stockLocationId}`;
     throw new InventoryError(
       missing.length === 1

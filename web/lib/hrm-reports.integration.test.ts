@@ -105,14 +105,14 @@ async function grantPermissions(orgId: string, userId: string, permissions: stri
 
 async function linkPerson(orgId: string, userId: string, name: string): Promise<string> {
   const person = (await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id
+    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`, 'objects'))[0]!.id
   await db.execute(sql`update users set party_id = ${person} where id = ${userId} and org_id = ${orgId}`)
   return person
 }
 
 async function mkDepartment(orgId: string, name: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
-    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`)).rows[0]!.id
+    insert into departments (org_id, name) values (${orgId}, ${name}) returning id`, 'objects'))[0]!.id
 }
 
 async function mkSubsidiary(orgId: string, name: string, parentId: string): Promise<string> {
@@ -121,20 +121,20 @@ async function mkSubsidiary(orgId: string, name: string, parentId: string): Prom
   return (await db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (gen_random_uuid(), ${orgId}, ${parentId}, ${name}, 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
 }
 
 async function mkWorker(orgId: string, name: string): Promise<string> {
   const id=(await db.execute<{ id: string }>(sql`
-    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`)).rows[0]!.id
-  assert.equal((await db.execute(sql`insert into employee_roles(org_id,party_id) values(${orgId},${id}) returning party_id`)).rows.length,1)
+    insert into parties (org_id, kind, display_name) values (${orgId}, 'person', ${name}) returning id`, 'objects'))[0]!.id
+  assert.equal((await db.execute(sql`insert into employee_roles(org_id,party_id) values(${orgId},${id}) returning party_id`, 'objects')).length,1)
   return id
 }
 
 async function mkEmployment(orgId: string, workerId: string, subsidiaryId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${orgId}, ${workerId}, ${subsidiaryId}) returning id`)).rows[0]!.id
+    values (${orgId}, ${workerId}, ${subsidiaryId}) returning id`, 'objects'))[0]!.id
 }
 
 /** One live version, no predecessor (test-only canonical writer). */
@@ -167,16 +167,16 @@ async function supersedeVersion(
     await tx.execute(sql`set constraints worker_employment_versions_change_tenant_fkey deferred`)
     const maxRow = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(version_no), 0)::int as n from worker_employment_versions
-       where org_id = ${orgId} and employment_id = ${employmentId}`)).rows[0]
+       where org_id = ${orgId} and employment_id = ${employmentId}`, 'objects'))[0]
     const versionNo = (maxRow?.n ?? 0) + 1
-    const now = (await tx.execute<{ now: Date }>(sql`select now() as now`)).rows[0]!.now
-    const prior = (await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
+    const now = (await tx.execute<{ now: Date }>(sql`select now() as now`, 'objects'))[0]!.now
+    const prior = await tx.execute<{ id: string; version_no: number; before: unknown }>(sql`
       select id, version_no, to_jsonb(worker_employment_versions) as before
         from worker_employment_versions
        where org_id = ${orgId} and employment_id = ${employmentId} and recorded_until is null
-       order by version_no`)).rows
+       order by version_no`, 'objects')
     const newRevision = (await tx.execute<{ revision: number }>(sql`
-      select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}`)).rows[0]!.revision + 1
+      select revision from worker_employments where org_id = ${orgId} and id = ${employmentId}`, 'objects'))[0]!.revision + 1
     const changeId = (await tx.execute<{ id: string }>(sql`
       insert into employment_changes
         (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
@@ -191,7 +191,7 @@ async function supersedeVersion(
                 row_id: row.id,
                 before: row.before,
               })))}::jsonb)
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     for (const row of prior) {
       await tx.execute(sql`
         update worker_employment_versions
@@ -216,7 +216,7 @@ async function mkPrimaryAssignment(
 ): Promise<void> {
   const slot = (await db.execute<{ id: string }>(sql`
     insert into employment_assignments (org_id, employment_id, assignment_key)
-    values (${orgId}, ${employmentId}, 'primary') returning id`)).rows[0]!.id
+    values (${orgId}, ${employmentId}, 'primary') returning id`, 'objects'))[0]!.id
   await db.execute(sql`
     insert into employment_assignment_versions
       (org_id, assignment_id, employment_id, version_no, job_title, department_id, fte, is_primary,
@@ -445,7 +445,7 @@ test('change-request register reads drafts, pending and decided requests', { ski
     // Explicitly scoped: RLS denies context-free reads with zero rows (never
     // an error), so this must not ride on ambient test bypass.
     const gate = await withOrgContext(scratch.orgId, async () => (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${decided.id} order by created_at`)).rows[0]!.id)
+      select id from flow_gates where subject_id = ${decided.id} order by created_at`, 'objects'))[0]!.id)
     // decideGate reads the gate under tenant RLS as well; scope the decision like the lookup.
     const outcome = await withOrgContext(scratch.orgId, () =>
       decideGate({ gateId: gate, decision: 'approved', userId: ids.approverId }))

@@ -65,9 +65,9 @@ test('dashboard create refuses missing and foreign cards without committing anyt
       assert.equal(missing.status, 422, await missing.clone().text())
 
       // …and neither refusal leaves a row or an audit event behind.
-      const leftovers = (await db.execute<{ count: string }>(sql`select count(*) from insight_dashboards where org_id = ${org.orgId}`)).rows[0]
+      const leftovers = (await db.execute<{ count: string }>(sql`select count(*) from insight_dashboards where org_id = ${org.orgId}`, 'objects'))[0]
       assert.equal(leftovers?.count, '0', 'refused creates commit no dashboard row')
-      const audits = (await db.execute<{ count: string }>(sql`select count(*) from audit_log where org_id = ${org.orgId} and table_name = 'insight_dashboards'`)).rows[0]
+      const audits = (await db.execute<{ count: string }>(sql`select count(*) from audit_log where org_id = ${org.orgId} and table_name = 'insight_dashboards'`, 'objects'))[0]
       assert.equal(audits?.count, '0', 'refused creates commit no audit event')
 
       // A layout naming a visible same-org card still creates.

@@ -119,7 +119,7 @@ async function resolveEmployee(
 ): Promise<{ id: string } | { error: string }> {
   const value = String(raw ?? '').trim()
   if (!value) return { error: 'employee is required' }
-  const matches = (await db.execute(sql`
+  const matches = await db.execute<{ id: string; display_name: string }>(sql`
     select distinct p.id, p.display_name
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
@@ -132,14 +132,14 @@ async function resolveEmployee(
             or p.short_code = ${value}
             or p.display_name = ${value})
      limit 3
-  `)) as { rows: { id: string; display_name: string }[] }
-  if (matches.rows.length === 0) {
+  `, 'objects')
+  if (matches.length === 0) {
     return { error: `employee "${value}" not found — no payroll number, code, or name matches` }
   }
-  if (matches.rows.length > 1) {
+  if (matches.length > 1) {
     return { error: `employee "${value}" matches more than one person — use the payroll number` }
   }
-  return { id: matches.rows[0]!.id }
+  return { id: matches[0]!.id }
 }
 
 /**
@@ -245,19 +245,17 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
       // Sentinel read: refuse rather than truncate a complete-looking file.
       finishExportPage(rows.rows, PRIOR_PAYROLL_REGISTER_DESCRIPTOR.label, readCtx)
 
-      const amounts = (await db.execute(sql`
+      const amounts = await db.execute<{ prior_stub_id: string; kind: string; slot: string; amount: string }>(sql`
         select a.prior_stub_id, a.kind, a.slot, a.amount
           from payroll_prior_amounts a
           join payroll_prior_stubs s on s.id = a.prior_stub_id and s.org_id = a.org_id
-         where a.org_id = ${orgId}${readCtx?.page ? (rows.rows.length ? sql` and a.prior_stub_id in (${sql.join(rows.rows.map((row) => sql`${row.stubId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`)) as {
-        rows: { prior_stub_id: string; kind: string; slot: string; amount: string }[]
-      }
+         where a.org_id = ${orgId}${readCtx?.page ? (rows.rows.length ? sql` and a.prior_stub_id in (${sql.join(rows.rows.map((row) => sql`${row.stubId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
       // Slot → the field key it exports under, so an export re-imports cleanly.
       const fieldKeyBySlot = new Map(
         all.filter((s) => s.kind !== 'total').map((s) => [`${s.kind}/${s.slot}`, s.fieldKey]),
       )
       const bySt = new Map<string, Record<string, CellValue>>()
-      for (const row of amounts.rows) {
+      for (const row of amounts) {
         const fieldKey = fieldKeyBySlot.get(`${row.kind}/${row.slot}`)
         if (!fieldKey) continue
         const bucket = bySt.get(row.prior_stub_id) ?? {}
@@ -479,13 +477,13 @@ export function priorPayrollRegisterResource(orgId: string): DataResource {
 
           // Classify before touching the header: insert mode must not mutate an
           // existing register before the stub writer refuses its duplicate.
-          const existing = (await db.execute(sql`
+          const existing = await db.execute(sql`
             select 1 from payroll_prior_stubs s
               join payroll_prior_registers g on g.id = s.register_id and g.org_id = s.org_id
              where s.org_id = ${ctx.orgId} and g.name = ${registerName}
                and s.employee_party_id = ${employee.id}
-             limit 1`)) as { rows: unknown[] }
-          const action = importRowAction(mode, existing.rows.length > 0)
+             limit 1`, 'objects')
+          const action = importRowAction(mode, existing.length > 0)
           if (action === 'conflict') {
             outcome.failed++
             outcome.errors.push({ row: rowNo, message: 'a prior register row already exists for this employee — choose upsert to replace it' })

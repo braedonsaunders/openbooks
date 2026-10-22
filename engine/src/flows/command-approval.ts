@@ -45,12 +45,10 @@ export async function routeApprovalCommand(
       );
     return false;
   }
-  const pending = (
-    await db.execute<{ context: Record<string, unknown> }>(sql`
+  const pending = await db.execute<{ context: Record<string, unknown> }>(sql`
     select r.context from flow_gates g join flow_runs r on r.org_id=g.org_id and r.id=g.run_id
     where g.org_id=${input.orgId} and g.subject_kind=${input.subjectKind} and g.subject_id=${input.subjectId}
-      and g.status in ('pending','escalated') order by g.created_at,g.id for share of g,r`)
-  ).rows;
+      and g.status in ('pending','escalated') order by g.created_at,g.id for share of g,r`, "objects");
   if (pending.length) {
     if (
       pending.some(
@@ -110,16 +108,14 @@ export async function withdrawApprovalCommand(input: {
       input.subjectId,
       scope,
     );
-    const receipt = (
-      await db.execute<{
+    const receipt = (await db.execute<{
         id: string;
         actor_id: string;
         policy: { kind: string; runIds: string[] };
         context: Record<string, unknown>;
       }>(sql`
    select id,actor_id,policy,context from flow_submissions where org_id=${input.orgId} and subject_kind=${input.subjectKind}
-    and subject_id=${input.subjectId} order by created_at desc,id desc limit 1`)
-    ).rows[0];
+    and subject_id=${input.subjectId} order by created_at desc,id desc limit 1`, "objects"))[0];
     if (!receipt?.context.command || receipt.policy.kind !== "gated")
       throw new FlowDispatchError(
         "This record has no pending native command to recall.",
@@ -134,12 +130,10 @@ export async function withdrawApprovalCommand(input: {
       ))
     )
       throw new ScopeNotFoundError();
-    const open = (
-      await db.execute<{
+    const open = await db.execute<{
         run_id: string;
       }>(sql`select distinct run_id from flow_gates where org_id=${input.orgId}
-    and subject_kind=${input.subjectKind} and subject_id=${input.subjectId} and status in ('pending','escalated')`)
-    ).rows;
+    and subject_kind=${input.subjectKind} and subject_id=${input.subjectId} and status in ('pending','escalated')`, "objects");
     if (!open.length)
       throw new FlowDispatchError(
         "This command has already been decided. Reload its recorded outcome.",

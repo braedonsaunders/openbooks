@@ -59,14 +59,14 @@ export async function searchManufacturingGenealogySeeds(
   const table = input.kind === "lot" ? sql`lots` : sql`serials`;
   const identityColumn = input.kind === "lot" ? sql`identity.lot_number` : sql`identity.serial_number`;
   const pattern = "%" + (input.q ?? "").trim() + "%";
-  return (await tx.execute<{ value: string; label: string }>(sql`
+  return await tx.execute<{ value: string; label: string }>(sql`
     select identity.id as value, concat_ws(' · ', item.name, ${identityColumn}) as label
     from ${table} identity
     join items item on item.org_id=identity.org_id and item.id=identity.item_id
     where identity.org_id=${orgId} and ${seedVisibility(input.kind, scope)}
       and (${identityColumn} ilike ${pattern} or item.name ilike ${pattern} ${input.selected ? sql`or identity.id=${input.selected}` : sql``})
     order by ${input.selected ? sql`(identity.id=${input.selected}) desc,` : sql``} item.name,${identityColumn},identity.id
-    limit 100`)).rows;
+    limit 100`, "objects");
 }
 
 /** Exact count for the genealogy directory, using the same visibility boundary
@@ -81,10 +81,10 @@ export async function countManufacturingGenealogySeeds(
   const scope = await lockManufacturingReadAuthority(tx, orgId, actorId, requestedScope, ["manufacturing.read", "items.read"]);
   const lots = (await tx.execute<{ count: number }>(sql`
     select count(*)::int as count from lots identity
-    where identity.org_id=${orgId} and ${seedVisibility("lot", scope)}`)).rows[0]?.count ?? 0;
+    where identity.org_id=${orgId} and ${seedVisibility("lot", scope)}`, "objects"))[0]?.count ?? 0;
   const serials = (await tx.execute<{ count: number }>(sql`
     select count(*)::int as count from serials identity
-    where identity.org_id=${orgId} and ${seedVisibility("serial", scope)}`)).rows[0]?.count ?? 0;
+    where identity.org_id=${orgId} and ${seedVisibility("serial", scope)}`, "objects"))[0]?.count ?? 0;
   return lots + serials;
 }
 
@@ -108,7 +108,7 @@ export async function traceManufacturingGenealogy(
   const seed = (await tx.execute<{ id: string; label: string; itemName: string }>(sql`
     select identity.id,${identityColumn} as label,item.name as "itemName"
     from ${input.kind === "lot" ? sql`lots` : sql`serials`} identity join items item on item.org_id=identity.org_id and item.id=identity.item_id
-    where identity.org_id=${orgId} and identity.id=${input.id} and ${seedVisibility(input.kind, scope)}`)).rows[0];
+    where identity.org_id=${orgId} and identity.id=${input.id} and ${seedVisibility(input.kind, scope)}`, "objects"))[0];
   if (!seed) throw new ManufacturingNotFoundError();
   const visited = new Set<string>();
   const seenEdges = new Set<string>();
@@ -123,7 +123,7 @@ export async function traceManufacturingGenealogy(
       visited.add(key);
       const tracked = input.direction === "forward" ? "component" : "output";
       const nodeColumn = sql.raw(`${tracked}.${node.kind === "lot" ? "lot_id" : "serial_id"}`);
-      const rows = (await tx.execute<Omit<GenealogyEdge, "depth">>(sql`
+      const rows = await tx.execute<Omit<GenealogyEdge, "depth">>(sql`
         select coalesce(batch.allocation_basis,'work_order') as "allocationBasis",
           cl.lot_number as "componentLotNumber",cs.serial_number as "componentSerialNumber",ol.lot_number as "outputLotNumber",os.serial_number as "outputSerialNumber",
           component.id::text || ':' || output.id::text as id,work.id as "orderId",work.number as "orderNumber",
@@ -161,7 +161,7 @@ export async function traceManufacturingGenealogy(
           ${subsidiaryVisibleFilter(sql`component.subsidiary_id`, scope)} ${subsidiaryVisibleFilter(sql`output.subsidiary_id`, scope)}
           ${subsidiaryVisibleFilter(sql`cplace.subsidiary_id`, scope, { orgWideNull: true })}
           ${subsidiaryVisibleFilter(sql`oplace.subsidiary_id`, scope, { orgWideNull: true })}
-        order by work.number,component.id,output.id limit 251`)).rows;
+        order by work.number,component.id,output.id limit 251`, "objects");
       if (rows.length > 250 || edges.length + rows.filter(row => !seenEdges.has(row.id)).length > 1000) {
         truncated = true;
         break;

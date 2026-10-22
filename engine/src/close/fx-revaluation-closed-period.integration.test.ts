@@ -45,8 +45,8 @@ async function seedUsdCash(orgId: string, subsidiaryId: string, accounts: { bank
 async function fxRevaluationEntryCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries
-     where org_id=${orgId} and origin='fx_revaluation'`));
-  return r.rows[0]!.n;
+     where org_id=${orgId} and origin='fx_revaluation'`, "objects"));
+  return r[0]!.n;
 }
 
 test("revaluation into a GL-closed period refuses with a named error", { skip: !DB }, async () => {

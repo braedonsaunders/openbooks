@@ -32,7 +32,7 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
         where id = ${org.orgId}`);
     });
     const departmentId = String(
-      (await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`))).rows[0]!.id,
+      (await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`, "objects")))[0]!.id,
     );
     await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
       (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
@@ -120,9 +120,9 @@ test("department assignment on a work center saves with an audit trail", { skip:
     const id = String((center as Record<string, unknown>).id);
     const updated = await run(f.org.orgId, (tx) => updateWorkCenter(tx, f.org.orgId, f.actorId, id, { departmentId: f.departmentId }));
     assert.equal(String((updated as Record<string, unknown>).departmentId), f.departmentId);
-    const audit = (await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
+    const audit = (await withBypassContext(async () => await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
-       where org_id = ${f.org.orgId} and table_name = 'mfg_work_centers' and row_id = ${id} and action = 'update'`)).rows))[0]!.n;
+       where org_id = ${f.org.orgId} and table_name = 'mfg_work_centers' and row_id = ${id} and action = 'update'`, "objects")))[0]!.n;
     assert.equal(audit, 1);
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));

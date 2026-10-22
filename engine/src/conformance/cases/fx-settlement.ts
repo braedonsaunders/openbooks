@@ -258,17 +258,17 @@ export const FX_SETTLEMENT_CASES: readonly ConformanceCase[] = [
         await setSpotRate(ledger,'USD','CAD','2026-07-31','1.40')
         const standalone=await capture(ctx,'standalone loan FX',async()=>{const result=await runRevaluation(ledger.orgId,periodId,ledger.actorId,[ledger.subsidiaryId]);if(result.problems.length)throw new Error(result.problems.join('; '))},{asOf:'2026-07-31'})
         const source=(await db.execute<{id:string}>(sql`select line.id from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
-          where line.org_id=${ledger.orgId} and line.account_id=${ctx.roles.netInvestmentLoan} and entry.origin='fx_revaluation' and entry.period_id=${periodId} and entry.reverses_entry_id is null`)).rows[0]!
+          where line.org_id=${ledger.orgId} and line.account_id=${ctx.roles.netInvestmentLoan} and entry.origin='fx_revaluation' and entry.period_id=${periodId} and entry.reverses_entry_id is null`, 'objects'))[0]!
         const changeId=await proposeNetInvestmentAssessment(ledger.orgId,interestId,actors.submitterId,{pairId,bookId:ledger.bookId,eliminationSubsidiaryId:eliminationId,ociAccountId:ctx.roles.netInvestmentOci,profitLossAccountId:ctx.roles.fxUnrealizedGainLoss,
           sourceLineIds:[source.id],notPlannedOrLikely:true,nonTrade:true,qualificationEvidence:'The signed long-term financing agreement and approved treasury plan establish a non-trade monetary loan with settlement neither planned nor likely in the foreseeable future.',
           effectiveOn:'2026-07-31',reason:'Recognize qualifying loan FX in consolidated OCI',idempotencyKey:randomUUID()})
         await submitFinancialChange(ledger.orgId,changeId,actors.submitterId)
-        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${changeId} and status='pending'`)).rows[0]!
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${changeId} and status='pending'`, 'objects'))[0]!
         await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
         const consolidated=await capture(ctx,'consolidated net-investment OCI',async()=>{await applyNetInvestmentAssessment(ledger.orgId,changeId,actors.submitterId)},{asOf:'2026-07-31'})
         const amounts=(await db.execute<{oci:string;pnl:string}>(sql`select coalesce(-sum(line.amount) filter(where line.account_id=${ctx.roles.netInvestmentOci}),0)::text as oci,
           coalesce(sum(line.amount) filter(where line.account_id=${ctx.roles.fxUnrealizedGainLoss}),0)::text as pnl from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
-          where line.org_id=${ledger.orgId} and entry.status in ('posted','reversed') and entry.posting_date<='2026-07-31'`)).rows[0]!
+          where line.org_id=${ledger.orgId} and entry.status in ('posted','reversed') and entry.posting_date<='2026-07-31'`, 'objects'))[0]!
         return {entries:[standalone,consolidated],values:{ociMovement:amounts.oci,profitOrLossMovement:amounts.pnl}}
       })
     },

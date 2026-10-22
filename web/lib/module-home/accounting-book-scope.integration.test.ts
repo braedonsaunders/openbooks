@@ -28,11 +28,9 @@ test('accounting journal tiles read the primary book only', { skip: !env.OPENBOO
     const secondary = randomUUID()
     const periodId = randomUUID()
     await withBypass(async () => {
-      const calendar = (
-        await db.execute<{ id: string }>(sql`
+      const calendar = (await db.execute<{ id: string }>(sql`
           select fiscal_calendar_id as id from accounting_periods where id = ${scratch.periodId}
-        `)
-      ).rows[0]!.id
+        `, 'objects'))[0]!.id
       await db.execute(sql`
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${periodId}, ${scratch.orgId}, ${year}, ${month}, ${today.slice(0, 7)}, ${monthStart}, ${monthEnd}, false, ${calendar})

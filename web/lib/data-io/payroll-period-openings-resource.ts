@@ -57,8 +57,8 @@ export function payrollPeriodOpeningsResource(orgId: string): DataResource {
     return fields
   }
   async function fields(): Promise<ResourceField[]> {
-    const countries = (await db.execute<{ country: string }>(sql`select distinct country
-      from employee_payroll_profiles where org_id=${orgId} order by country`)).rows
+    const countries = await db.execute<{ country: string }>(sql`select distinct country
+      from employee_payroll_profiles where org_id=${orgId} order by country`, 'objects')
     const amounts: ResourceField[] = []
     for (const { country } of countries) for (const field of await declared(country)) {
       amounts.push({ key: amountKey(country, field), label: `${country}: ${field.label}`, kind: 'currency' })
@@ -70,7 +70,7 @@ export function payrollPeriodOpeningsResource(orgId: string): DataResource {
     async columns() { return (await fields()).map(({ key, label }) => ({ key, label })) },
     async read(ctx) {
       if (!ctx || ctx.allowedSubsidiaryIds === undefined) throw new Error('Period-opening export requires an explicit legal-entity scope')
-      if (!(await db.execute<{ available: boolean }>(sql`select to_regclass('public.payroll_period_openings') is not null as available`)).rows[0]?.available) {
+      if (!(await db.execute<{ available: boolean }>(sql`select to_regclass('public.payroll_period_openings') is not null as available`, 'objects'))[0]?.available) {
         throw new PayrollPeriodOpeningUnavailableError()
       }
       const columns = await fields()
@@ -110,12 +110,12 @@ export function payrollPeriodOpeningsResource(orgId: string): DataResource {
         try {
           const value = String(row.employee ?? '').trim()
           if (!value) throw new Error('Employee is required — use a unique payroll number or native employee ID')
-          const employees = (await db.execute<{ id: string }>(sql`select distinct p.id from parties p
+          const employees = await db.execute<{ id: string }>(sql`select distinct p.id from parties p
             join employee_payroll_profiles ep on ep.org_id=p.org_id and ep.employee_party_id=p.id
             left join employee_roles er on er.org_id=p.org_id and er.party_id=p.id
             where p.org_id=${orgId} and (lower(p.id::text)=lower(${value}) or er.employee_number=${value}
               or p.short_code=${value} or p.display_name=${value})
-            ${subsidiaryReadFilter(sql`p.subsidiary_id`, ctx.allowedSubsidiaryIds)} limit 2`)).rows
+            ${subsidiaryReadFilter(sql`p.subsidiary_id`, ctx.allowedSubsidiaryIds)} limit 2`, 'objects')
           if (employees.length !== 1) throw new Error('Employee is unavailable or ambiguous in your legal-entity scope — use its native employee ID')
           const taxYear = yearOf(row.taxYear), employeePartyId = employees[0]!.id
           prepared.push({ row, employeePartyId, taxYear, key: `${employeePartyId}:${taxYear}` })

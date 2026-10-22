@@ -37,7 +37,7 @@ async function fixture() {
     'parties',(select jsonb_agg(to_jsonb(p) order by p.id) from parties p where org_id=${orgId}),
     'roles',(select jsonb_agg(to_jsonb(e) order by e.id) from employee_roles e where org_id=${orgId}),
     'groups',(select jsonb_agg(to_jsonb(g) order by g.id) from worker_comp_groups g where org_id=${orgId}),
-    'audit',(select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${orgId})) as state`)).rows[0]!.state
+    'audit',(select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${orgId})) as state`, 'objects'))[0]!.state
   return { orgId, subsidiaryId, actorId, employeeId, groupId, otherGroupId, row, context, snapshot, resource: employeeWorkerCompResource(orgId) }
 }
 
@@ -50,13 +50,13 @@ test('classification preview writes nothing; apply preserves employee facts, aud
     assert.equal((await fx.resource.write([{ ...fx.row, employee: fx.employeeId.toUpperCase() }], 'upsert', { ...fx.context, dryRun: true, recordKeys: async keys => { resolvedKeys.push(keys) } })).updated, 1)
     assert.deepEqual(resolvedKeys, [[fx.employeeId], [fx.employeeId]], 'separate transfer pages identify the same employee even when the UUID case differs')
     assert.deepEqual(await fx.snapshot(), before)
-    const roleBefore = (await db.execute<Record<string, unknown>>(sql`select * from employee_roles where org_id=${fx.orgId} and party_id=${fx.employeeId}`)).rows[0]!
+    const roleBefore = (await db.execute<Record<string, unknown>>(sql`select * from employee_roles where org_id=${fx.orgId} and party_id=${fx.employeeId}`, 'objects'))[0]!
     assert.equal((await fx.resource.write([fx.row], 'upsert', fx.context)).updated, 1)
-    const roleAfter = (await db.execute<Record<string, unknown>>(sql`select * from employee_roles where org_id=${fx.orgId} and party_id=${fx.employeeId}`)).rows[0]!
+    const roleAfter = (await db.execute<Record<string, unknown>>(sql`select * from employee_roles where org_id=${fx.orgId} and party_id=${fx.employeeId}`, 'objects'))[0]!
     assert.equal(roleAfter.worker_comp_group_id, fx.groupId)
     const omitChange = (row: Record<string, unknown>) => Object.fromEntries(Object.entries(row).filter(([key]) => !['worker_comp_group_id', 'updated_at', 'updated_by'].includes(key)))
     assert.deepEqual(omitChange(roleAfter), omitChange(roleBefore))
-    const audits = (await db.execute<{ actor_id: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='employee_roles'`)).rows
+    const audits = await db.execute<{ actor_id: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='employee_roles'`, 'objects')
     assert.equal(audits.length, 1)
     assert.equal(audits[0]!.actor_id, fx.actorId)
     assert.deepEqual(audits[0]!.changes.before, { workerCompGroupId: null })
@@ -143,13 +143,13 @@ test('the employee drawer saves the same classification and retains complete emp
     assert.equal(saved.status, 200, await saved.clone().text())
     const actual = await saved.json() as { employee: { worker_comp_group_id: string } }
     assert.equal(actual.employee.worker_comp_group_id, fx.groupId)
-    const evidence = (await db.execute<{ changes: { before: { employeeRole: Record<string, unknown> }; after: { employeeRole: Record<string, unknown> } } }>(sql`select changes from audit_log where org_id=${fx.orgId} and table_name='parties' and row_id=${fx.employeeId}`)).rows[0]!.changes
+    const evidence = (await db.execute<{ changes: { before: { employeeRole: Record<string, unknown> }; after: { employeeRole: Record<string, unknown> } } }>(sql`select changes from audit_log where org_id=${fx.orgId} and table_name='parties' and row_id=${fx.employeeId}`, 'objects'))[0]!.changes
     assert.ok(evidence.before.employeeRole, 'Employee changes must retain the complete pre-save role record in the audit')
     assert.ok(evidence.after.employeeRole, 'Employee changes must retain the complete saved role record in the audit')
     assert.equal(evidence.before.employeeRole.worker_comp_group_id, null)
     assert.equal(evidence.after.employeeRole.worker_comp_group_id, fx.groupId)
     assert.equal(evidence.before.employeeRole.employee_number, '00042')
     assert.equal(evidence.after.employeeRole.job_title, 'Field technician')
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${fx.orgId} and table_name='employee_roles'`)).rows.length, 1)
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${fx.orgId} and table_name='employee_roles'`, 'objects')).length, 1)
   } finally { session.user = null; await dropScratchOrgReporting(fx.orgId) }
 }))

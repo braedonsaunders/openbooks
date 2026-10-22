@@ -102,13 +102,13 @@ test('the Projects page loads a stored billing-method view without rewriting it'
       await db.execute(sql`insert into list_views(id,org_id,record_type,name,scope,is_default,config,created_by,updated_by)
         values(${viewId},${org.orgId},'project','Saved billing view','org',false,${JSON.stringify(config)}::jsonb,${userId},${userId})`);
     });
-    const before=await withOrgContext(org.orgId,()=>db.execute(sql`select config,updated_at::text from list_views where org_id=${org.orgId} and id=${viewId}`));
+    const before=await withOrgContext(org.orgId,()=>db.execute(sql`select config,updated_at::text from list_views where org_id=${org.orgId} and id=${viewId}`, "objects"));
     const element=await withOrgContext(org.orgId,()=>EntityListView({recordType:'project',orgId:org.orgId,userId,canManage:false,sp:{view:viewId}}));
     const markup=renderToStaticMarkup(element);
     assert.match(markup,/Stored view project/);
     assert.match(markup,/Saved billing classification/);
     assert.doesNotMatch(markup,/unknown column/);
-    const after=await withOrgContext(org.orgId,()=>db.execute(sql`select config,updated_at::text from list_views where org_id=${org.orgId} and id=${viewId}`));
-    assert.deepEqual(after.rows,before.rows,'a read preserves the stored view and its revision');
+    const after=await withOrgContext(org.orgId,()=>db.execute(sql`select config,updated_at::text from list_views where org_id=${org.orgId} and id=${viewId}`, "objects"));
+    assert.deepEqual(after,before,'a read preserves the stored view and its revision');
   } finally { await dropScratchOrg(org.orgId); }
 });

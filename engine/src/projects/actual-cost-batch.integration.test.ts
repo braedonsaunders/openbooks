@@ -244,12 +244,12 @@ test("the batched reader resolves per-type profiles and plans actual-cost sorts 
       // real SQL — the same shape the list view pages with.
       const idExpr = sql`p.id`;
       const descClauses = plannedPageClauses([...desc!], idExpr);
-      const descPage = (await db.execute<{ id: string }>(sql`
-        select p.id from projects p where ${descClauses.where} order by ${descClauses.order} limit 2`)).rows;
+      const descPage = await db.execute<{ id: string }>(sql`
+        select p.id from projects p where ${descClauses.where} order by ${descClauses.order} limit 2`, "objects");
       assert.deepEqual(descPage.map((r) => r.id), [pricey, cheap], "planned desc page");
       const ascClauses = plannedPageClauses([...asc!], idExpr);
-      const ascPage = (await db.execute<{ id: string }>(sql`
-        select p.id from projects p where ${ascClauses.where} order by ${ascClauses.order} limit 2`)).rows;
+      const ascPage = await db.execute<{ id: string }>(sql`
+        select p.id from projects p where ${ascClauses.where} order by ${ascClauses.order} limit 2`, "objects");
       assert.deepEqual(new Set(ascPage.map((r) => r.id)), new Set([unpriced, broken]), "planned asc page pair");
     });
   } finally {

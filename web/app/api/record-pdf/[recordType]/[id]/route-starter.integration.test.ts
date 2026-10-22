@@ -68,8 +68,8 @@ test('an invoice with no custom template prints with the native starter design',
     `))
     const templates = await db.execute(sql`
       select count(*)::int as n from pdf_templates where org_id = ${org.orgId} and record_type = 'customer_invoice'
-    `)
-    assert.equal(templates.rows[0]?.n, 0, 'the fixture org has no invoice template: the starter must print')
+    `, 'objects')
+    assert.equal(templates[0]?.n, 0, 'the fixture org has no invoice template: the starter must print')
     const response = await withOrgContext(org.orgId, () => GET(
       new Request(`http://openbooks.test/api/record-pdf/customer_invoice/${invoiceId}`),
       { params: Promise.resolve({ recordType: 'customer_invoice', id: invoiceId }) },

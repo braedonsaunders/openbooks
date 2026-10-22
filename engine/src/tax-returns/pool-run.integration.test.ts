@@ -104,12 +104,12 @@ type PeriodRow = {
 };
 
 const periodsFor = async (orgId: string): Promise<PeriodRow[]> =>
-  (await db.execute<PeriodRow>(sql`
+  await db.execute<PeriodRow>(sql`
     select pp.pool_id, pp.tax_year, pp.opening_balance::text, pp.additions::text,
            pp.allowance::text, pp.closing_balance::text, pp.recapture::text, pp.terminal_loss::text
       from tax_pool_periods pp
      where pp.org_id = ${orgId}
-     order by pp.pool_id, pp.tax_year`)).rows;
+     order by pp.pool_id, pp.tax_year`, "objects");
 
 type PoolRow = {
   id: string;
@@ -118,11 +118,11 @@ type PoolRow = {
 };
 
 const poolsFor = async (orgId: string): Promise<PoolRow[]> =>
-  (await db.execute<PoolRow>(sql`
+  await db.execute<PoolRow>(sql`
     select id, class_code, opening_balance::text
       from tax_depreciation_pools
      where org_id = ${orgId}
-     order by class_code`)).rows;
+     order by class_code`, "objects");
 
 test("unknown pool and MACRS class codes fail closed without persisting a partial run", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
@@ -312,7 +312,7 @@ test("a failing class persists nothing — the whole year rolls back atomically"
         select tp.class_code, pp.opening_balance::text, pp.closing_balance::text, pp.tax_year
           from tax_pool_periods pp
           join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
-         where pp.org_id = ${org.orgId} and pp.tax_year = 2024`)).rows.map((r) => [r.class_code, r]),
+         where pp.org_id = ${org.orgId} and pp.tax_year = 2024`, "objects")).map((r) => [r.class_code, r]),
     );
     assert.equal(byClass.get("8")!.opening_balance, "9000.0000", "retry opens from the pre-failure close");
     assert.equal(byClass.get("9")!.opening_balance, "4500.0000");
@@ -556,7 +556,7 @@ test("MACRS depreciation resumes after a disposal is reversed", { skip: !DB }, a
       select id from asset_events
        where org_id = ${org.orgId} and asset_id = ${assetId}
          and journal_entry_id = ${disposal.entryId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(event, "the lifecycle service recorded the disposal event");
     await reverseAssetLifecycleEvent(org.orgId, event.id, {
       date: org.date,

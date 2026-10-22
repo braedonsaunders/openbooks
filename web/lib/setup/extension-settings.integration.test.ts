@@ -34,7 +34,7 @@ test('setup adapter edits declared module values with tenant isolation and prese
     await assert.rejects(withBypass(() => saveExtensionSettingRow(org.orgId, actor, ['admin.setup.manage'], { id: 'setup-proof:caption', value: 'Stale', reason: 'Stale editor', expectedValue: 'Before', expectedExtensionVersionId: rows[0]!.extension_version_id })), /changed|reload|stale/i)
     await withBypass(() => disableTestExtension({ orgId: org.orgId, actorId: actor, key: 'setup-proof' }))
     assert.deepEqual(await withBypass(() => loadExtensionSettingRows(org.orgId)), [])
-    const preserved = await withBypass(() => db.execute(sql`select settings->'extensionSettings'->'setup-proof'->>'caption' as value from orgs where id = ${org.orgId}`))
-    assert.equal(preserved.rows[0]!.value, 'After')
+    const preserved = await withBypass(() => db.execute(sql`select settings->'extensionSettings'->'setup-proof'->>'caption' as value from orgs where id = ${org.orgId}`, 'objects'))
+    assert.equal(preserved[0]!.value, 'After')
   } finally { await withBypass(() => dropScratchOrg(other.orgId)); await withBypass(() => dropScratchOrg(org.orgId)) }
 })

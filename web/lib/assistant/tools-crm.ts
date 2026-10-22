@@ -128,7 +128,7 @@ const searchOpportunities: AssistantToolDef = {
          where o.org_id = ${authz.user.orgId}${filters}${scope}
          order by s.is_closed, o.expected_close_date nulls last, o.created_at desc
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select count(*)::int as count, o.currency,
                coalesce(sum(o.projected_amount), 0)::text as projected,
@@ -138,7 +138,7 @@ const searchOpportunities: AssistantToolDef = {
           left join parties p on p.id = o.party_id and p.org_id = o.org_id
          where o.org_id = ${authz.user.orgId}${filters}${scope}
          group by o.currency order by o.currency
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select s.name as status_name, s.is_closed, s.is_won, o.currency,
                count(*)::int as count,
@@ -150,23 +150,23 @@ const searchOpportunities: AssistantToolDef = {
          where o.org_id = ${authz.user.orgId}${filters}${scope}
          group by s.name, s.is_closed, s.is_won, o.currency
          order by s.is_closed, s.name, o.currency
-      `),
+      `, "objects"),
     ]);
-    const capped = capList(page.rows.map(opportunityRow));
+    const capped = capList(page.map(opportunityRow));
     return {
       ok: true,
       data: {
         returned: capped.items.length,
-        total: totals.rows.reduce((n, r) => n + Number(r.count ?? 0), 0),
+        total: totals.reduce((n, r) => n + Number(r.count ?? 0), 0),
         truncated: capped.truncated,
         opportunities: capped.items,
-        totalsByCurrency: totals.rows.map((r) => ({
+        totalsByCurrency: totals.map((r) => ({
           currency: r.currency,
           count: Number(r.count ?? 0),
           projectedAmount: decimalText(r.projected),
           weightedAmount: decimalText(r.weighted),
         })),
-        byStage: stages.rows.map((r) => ({
+        byStage: stages.map((r) => ({
           statusName: r.status_name,
           isClosed: r.is_closed,
           isWon: r.is_won,
@@ -339,17 +339,17 @@ const searchCrmAccounts: AssistantToolDef = {
          where cp.org_id = ${authz.user.orgId}${filters}${scope}
          order by p.display_name
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select cp.lifecycle_stage, count(*)::int as count
           from crm_account_profiles cp
           join parties p on p.id = cp.party_id and p.org_id = cp.org_id
          where cp.org_id = ${authz.user.orgId}${filters}${scope}
          group by cp.lifecycle_stage order by cp.lifecycle_stage
-      `),
+      `, "objects"),
     ]);
     const capped = capList(
-      page.rows.map((r) => ({
+      page.map((r) => ({
         partyId: r.party_id,
         displayName: r.display_name,
         lifecycleStage: r.lifecycle_stage,
@@ -371,10 +371,10 @@ const searchCrmAccounts: AssistantToolDef = {
       ok: true,
       data: {
         returned: capped.items.length,
-        total: stages.rows.reduce((n, r) => n + Number(r.count ?? 0), 0),
+        total: stages.reduce((n, r) => n + Number(r.count ?? 0), 0),
         truncated: capped.truncated,
         accounts: capped.items,
-        byStage: stages.rows.map((r) => ({ lifecycleStage: r.lifecycle_stage, count: Number(r.count ?? 0) })),
+        byStage: stages.map((r) => ({ lifecycleStage: r.lifecycle_stage, count: Number(r.count ?? 0) })),
         href: stageHref,
       },
     };
@@ -510,16 +510,16 @@ const searchCrmActivities: AssistantToolDef = {
          where a.org_id = ${authz.user.orgId}${filters}${scope}
          order by coalesce(a.starts_at, a.due_at, a.created_at) desc
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select a.status, count(*)::int as count
           from crm_activities a
          where a.org_id = ${authz.user.orgId}${filters}${scope}
          group by a.status order by a.status
-      `),
+      `, "objects"),
     ]);
     const capped = capList(
-      page.rows.map((r) => ({
+      page.map((r) => ({
         activityId: r.id,
         kind: r.kind,
         status: r.status,
@@ -536,10 +536,10 @@ const searchCrmActivities: AssistantToolDef = {
       ok: true,
       data: {
         returned: capped.items.length,
-        total: statuses.rows.reduce((n, r) => n + Number(r.count ?? 0), 0),
+        total: statuses.reduce((n, r) => n + Number(r.count ?? 0), 0),
         truncated: capped.truncated,
         activities: capped.items,
-        byStatus: statuses.rows.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
+        byStatus: statuses.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
         href: "/crm/activities",
       },
     };
@@ -631,7 +631,7 @@ const crmForecast: AssistantToolDef = {
         where q.org_id = ${authz.user.orgId} and q.lifecycle='approved' and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
           ${a.ownerUserId ? sql`and q.employee_id = (select party_id from users where org_id=q.org_id and id=${a.ownerUserId})` : sql``}
           ${a.salesTeamId ? sql`and q.sales_team_id = ${a.salesTeamId}` : sql``}
-        order by q.period_start, coalesce(u.display_name, t.name)`),
+        order by q.period_start, coalesce(u.display_name, t.name)`, "objects"),
       // Stored snapshots aggregate the whole org without entity lineage, so
       // restricted callers never see them — the same boundary as the route.
       authz.allowedSubsidiaryIds === null
@@ -641,8 +641,8 @@ const crmForecast: AssistantToolDef = {
           where s.org_id = ${authz.user.orgId} and s.period_start = ${periodStart}::date and s.period_end = ${periodEnd}::date
             ${a.ownerUserId ? sql`and s.owner_user_id = ${a.ownerUserId}` : sql``}
             ${a.salesTeamId ? sql`and s.sales_team_id = ${a.salesTeamId}` : sql``}
-          order by s.as_of desc limit 50`)
-        : Promise.resolve({ rows: [] as Record<string, unknown>[] }),
+          order by s.as_of desc limit 50`, "objects")
+        : Promise.resolve([] as Record<string, unknown>[]),
     ]);
     return {
       ok: true,
@@ -658,8 +658,8 @@ const crmForecast: AssistantToolDef = {
           upsideAmount: decimalText(row.upside_amount),
           closedAmount: decimalText(row.closed_amount),
         })),
-        quotas: capList(quotas.rows, 50).items,
-        snapshots: capList(snapshots.rows, 10).items,
+        quotas: capList(quotas, 50).items,
+        snapshots: capList(snapshots, 10).items,
         href: "/crm/forecasts",
       },
     };

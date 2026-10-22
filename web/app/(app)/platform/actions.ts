@@ -83,32 +83,30 @@ export async function setSuperAdminAction(
       await lockPlatformAdminMutations();
       await lockSuperAdminActor(db, authz.user.homeUserId);
 
-      const targetResult = (await db.execute(sql`
-        select id, org_id as "orgId", email, name, is_super_admin as "isSuperAdmin", is_active as "isActive"
-          from users
-         where id = ${userId}
-         for update
-      `)) as {
-        rows: {
+      const targetResult = await db.execute<{
           id: string;
           orgId: string;
           email: string;
           name: string;
           isSuperAdmin: boolean;
           isActive: boolean;
-        }[];
-      };
-      const target = targetResult.rows[0];
+        }>(sql`
+        select id, org_id as "orgId", email, name, is_super_admin as "isSuperAdmin", is_active as "isActive"
+          from users
+         where id = ${userId}
+         for update
+      `, "objects");
+      const target = targetResult[0];
       if (!target) throw new Error(t('userNotFound'));
       if (target.isSuperAdmin === value) return;
 
       if (!value) {
-        const countResult = (await db.execute(sql`
+        const countResult = await db.execute<{ count: number }>(sql`
           select count(*)::int as count
             from users
            where is_super_admin and is_active
-        `)) as { rows: { count: number }[] };
-        if (Number(countResult.rows[0]?.count ?? 0) <= 1) {
+        `, "objects");
+        if (Number(countResult[0]?.count ?? 0) <= 1) {
           throw new Error(
             t('finalSuperAdmin'),
           );
@@ -163,7 +161,13 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
     await withBypass(async () => {
       await lockPlatformAdminMutations();
       await lockSuperAdminActor(db, authz.user.homeUserId);
-      const validation = (await db.execute(sql`
+      const validation = await db.execute<{
+          memberOrgId: string;
+          memberEnvKind: string;
+          actingOrgId: string;
+          actingActive: boolean;
+          targetEnvKind: string;
+        }>(sql`
         select m.org_id as "memberOrgId", mo.env_kind as "memberEnvKind",
                au.org_id as "actingOrgId", au.is_active as "actingActive",
                target.env_kind as "targetEnvKind"
@@ -172,16 +176,8 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
           join users au on au.id = ${actingUserId}
           join orgs target on target.id = ${orgId}
          where m.id = ${memberUserId}
-      `)) as {
-        rows: {
-          memberOrgId: string;
-          memberEnvKind: string;
-          actingOrgId: string;
-          actingActive: boolean;
-          targetEnvKind: string;
-        }[];
-      };
-      const row = validation.rows[0];
+      `, "objects");
+      const row = validation[0];
       if (!row)
         throw new Error(t('grantIdentityNotFound'));
       if (row.memberEnvKind !== "production")
@@ -200,15 +196,15 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
         throw new Error(t('actingUserMustBelongToTarget'));
       if (!row.actingActive) throw new Error(t('actingUserMustBeActive'));
 
-      const beforeResult = (await db.execute(sql`
+      const beforeResult = await db.execute<{ id: string; actingUserId: string; isActive: boolean }>(sql`
         select id, acting_user_id as "actingUserId", is_active as "isActive"
           from user_org_access
          where member_user_id = ${memberUserId} and org_id = ${orgId}
          for update
-      `)) as { rows: { id: string; actingUserId: string; isActive: boolean }[] };
-      const before = beforeResult.rows[0] ?? null;
+      `, "objects");
+      const before = beforeResult[0] ?? null;
 
-      const result = (await db.execute(sql`
+      const result = await db.execute<{ id: string }>(sql`
         insert into user_org_access (
           member_user_id, org_id, acting_user_id, is_active, created_by, updated_by
         )
@@ -221,8 +217,8 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
           updated_by = excluded.updated_by
         where user_org_access.org_id = ${orgId}
         returning id
-      `)) as { rows: { id: string }[] };
-      const accessId = result.rows[0]?.id;
+      `, "objects");
+      const accessId = result[0]?.id;
       if (!accessId) throw new Error(t('grantCouldNotSave'));
 
       await auditPlatformMutation({
@@ -268,22 +264,20 @@ export async function revokeAccessAction(accessId: string): Promise<PlatformMuta
     await withBypass(async () => {
       await lockPlatformAdminMutations();
       await lockSuperAdminActor(db, authz.user.homeUserId);
-      const beforeResult = (await db.execute(sql`
-        select id, org_id as "orgId", member_user_id as "memberUserId",
-               acting_user_id as "actingUserId", is_active as "isActive"
-          from user_org_access
-         where id = ${accessId}
-         for update
-      `)) as {
-        rows: {
+      const beforeResult = await db.execute<{
           id: string;
           orgId: string;
           memberUserId: string;
           actingUserId: string;
           isActive: boolean;
-        }[];
-      };
-      const before = beforeResult.rows[0];
+        }>(sql`
+        select id, org_id as "orgId", member_user_id as "memberUserId",
+               acting_user_id as "actingUserId", is_active as "isActive"
+          from user_org_access
+         where id = ${accessId}
+         for update
+      `, "objects");
+      const before = beforeResult[0];
       if (!before) throw new Error(t('grantNotFound'));
       memberUserId = before.memberUserId;
       if (!before.isActive) return;

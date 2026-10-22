@@ -44,9 +44,9 @@ async function postArEntry(
     insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate, due_date, is_open_item)
     values ${all}
-    returning id`)
+    returning id`, 'objects')
   await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)
-  return inserted.rows.map((row) => row.id)
+  return inserted.map((row) => row.id)
 }
 
 async function applyPayment(org: Org, fromLineId: string, toLineId: string, amount: string) {

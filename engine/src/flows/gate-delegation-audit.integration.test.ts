@@ -38,11 +38,9 @@ async function withPendingGate(
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
     const res = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(res.gated, true, "submit created a gate");
-    const gate = (
-      await db.execute<{ id: string }>(sql`
+    const gate = (await db.execute<{ id: string }>(sql`
         select id from flow_gates where subject_id = ${docId} order by created_at
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
     await fn(org, actors, gate);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -50,16 +48,14 @@ async function withPendingGate(
 }
 
 async function delegationAudit(orgId: string, gateId: string) {
-  return (
-    await db.execute(sql`
+  return await db.execute(sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'flow_gates'
          and row_id = ${gateId}
        order by at, id
-    `)
-  ).rows;
+    `, "objects");
 }
 
 test("delegating a gate writes actor-attributed before/after assignee evidence", { skip: !DB }, async () => {
@@ -99,13 +95,11 @@ test("a delegation handover note reaches the audit row and the delegate notice (
     assert.equal(rows.length, 1);
     const changes = rows[0]!.changes as { after: { handoverNote: string | null } };
     assert.equal(changes.after.handoverNote, note);
-    const notices = (
-      await db.execute<{ body: string | null }>(sql`
+    const notices = await db.execute<{ body: string | null }>(sql`
         select body from notifications
          where org_id = ${org.orgId} and user_id = ${actors.approver2Id}
          order by created_at desc limit 1
-      `)
-    ).rows;
+      `, "objects");
     assert.equal(notices.length, 1);
     assert.equal(notices[0]!.body, note);
   });

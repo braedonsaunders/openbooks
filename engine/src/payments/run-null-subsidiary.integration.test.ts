@@ -72,7 +72,7 @@ test("a pay run selects a posted bill whose document has no subsidiary", { skip:
         join payment_instructions i on i.payment_document_id = d.id and i.org_id = d.org_id
        where i.payment_run_id = ${run.id} and i.org_id = ${org.orgId}
        limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(payment.subsidiary_id, org.subsidiaryId, "run payment inherits the org root, not null");
     assert.equal(payment.total, "100.0000");
   } finally {

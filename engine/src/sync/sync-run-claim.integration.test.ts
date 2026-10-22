@@ -85,8 +85,8 @@ test(
     const live = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from sync_runs
        where org_id = ${o.orgId} and connection_id = ${connectionId}
-         and kind = 'full_migration' and status = 'running'`);
-    assert.equal(live.rows[0]!.n, 1, "never more than one live full migration per connection");
+         and kind = 'full_migration' and status = 'running'`, "objects");
+    assert.equal(live[0]!.n, 1, "never more than one live full migration per connection");
   },
 );
 

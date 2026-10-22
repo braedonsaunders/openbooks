@@ -30,10 +30,8 @@ async function invoice(org: ScratchOrg, actor: string) {
   const entry = await postDocument(id, {
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
   });
-  const line = (
-    await db.execute<{ id: string }>(sql`select id from journal_lines
-    where entry_id = ${entry} and is_open_item`)
-  ).rows[0]!.id;
+  const line = (await db.execute<{ id: string }>(sql`select id from journal_lines
+    where entry_id = ${entry} and is_open_item`, "objects"))[0]!.id;
   return { id, entry, line };
 }
 
@@ -93,13 +91,11 @@ test("bank return supersedes a pending manual void with its own evidence", { ski
      where id = ${pay} and org_id = ${org.orgId}`);
     const reversalId = await reversePaymentForReturn(pay, org.orgId, "NSF return", bankOps, org.date);
     assert.ok(reversalId);
-    const doc = (
-      await db.execute<{
+    const doc = (await db.execute<{
         status: string;
         void_reason: string | null;
         voided_by: string | null;
-      }>(sql`select status, void_reason, voided_by from documents where id = ${pay}`)
-    ).rows[0]!;
+      }>(sql`select status, void_reason, voided_by from documents where id = ${pay}`, "objects"))[0]!;
     // The bank return defines the outcome: its own evidence must win, never
     // the pending manual request's reason. Completion carries the request
     // evidence into voided_by, so the bank operator lands there.
@@ -107,12 +103,10 @@ test("bank return supersedes a pending manual void with its own evidence", { ski
     assert.equal(doc.void_reason, "Bank return: NSF return");
     assert.equal(doc.voided_by, bankOps);
     // Both evidences are preserved in the audit trail.
-    const audit = (
-      await db.execute<{ changes: unknown }>(sql`select changes from audit_log
+    const audit = (await db.execute<{ changes: unknown }>(sql`select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${pay}
          and changes->>'mode' = 'void_evidence_superseded'
-       order by at desc limit 1`)
-    ).rows[0];
+       order by at desc limit 1`, "objects"))[0];
     assert.ok(audit, "expected a void_evidence_superseded audit row recording both evidences");
     const changes = audit!.changes as Record<string, unknown>;
     assert.equal(
@@ -121,11 +115,9 @@ test("bank return supersedes a pending manual void with its own evidence", { ski
     );
     assert.equal((changes.superseded as Record<string, unknown>)?.requestedBy, requester);
     // The manual requester is told their request was superseded.
-    const notice = (
-      await db.execute<{ id: string }>(sql`select id from notifications
+    const notice = (await db.execute<{ id: string }>(sql`select id from notifications
        where org_id = ${org.orgId} and user_id = ${requester} and kind = 'void_superseded'
-       order by created_at desc limit 1`)
-    ).rows[0];
+       order by created_at desc limit 1`, "objects"))[0];
     assert.ok(notice, "expected a void_superseded notification for the manual requester");
   } finally {
     await dropScratchOrg(org.orgId);

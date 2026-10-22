@@ -30,7 +30,7 @@ test("a lost database connection preserves an attested checkpoint and refuses a 
     });
     assert.equal(wiped, false, "a connection interruption must retain its accounting tenant");
     assert.ok(existsSync(`${runDir}/manifest.json`));
-    const marker = await withOrgContext(orgId, async () => (await db.execute<{ attempt: { runDir: string } }>(sql`select settings->'sampleTemplateAttempt' as attempt from orgs where id=${orgId}`)).rows[0]!);
+    const marker = await withOrgContext(orgId, async () => (await db.execute<{ attempt: { runDir: string } }>(sql`select settings->'sampleTemplateAttempt' as attempt from orgs where id=${orgId}`, "objects"))[0]!);
     assert.equal(marker.attempt.runDir, runDir);
     let provisionedAgain = false;
     await assert.rejects(generateTemplate("manufacturing", {

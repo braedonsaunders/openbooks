@@ -22,7 +22,7 @@ const loaderStateKey = Symbol.for('openbooks.pay-runs-preview-test')
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[loaderStateKey] = loaderState
 
 const mockModules = new Map<string, string>([
-  ['mock:db', `const state = globalThis[Symbol.for('openbooks.pay-runs-preview-test')]; export const db = { async execute() { return state.responses.shift() ?? { rows: [] } } }`],
+  ['mock:db', `const state = globalThis[Symbol.for('openbooks.pay-runs-preview-test')]; export const db = { async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode(await (state.responses.shift() ?? { rows: [] })) } }`],
   ['mock:authz', `export async function requirePermission() { return { user: { orgId: 'org-1' }, allowedSubsidiaryIds: null } } export function can() { return true }`],
   ['mock:intl', `export async function getTranslations() { return (key) => key }`],
   ['mock:feature', `export async function requireFeatureEnabled() {}`],

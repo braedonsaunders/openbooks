@@ -56,9 +56,9 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
       assert.equal(first.replayed, false);
       assert.ok(typeof first.id === "string", JSON.stringify(first));
       const stored = await db.execute<{ name: string; content_type: string; size_bytes: number }>(sql`
-        select name, content_type, size_bytes from files where id = ${String(first.id)} and org_id = ${org.orgId}`);
-      assert.equal(stored.rows.length, 1);
-      assert.equal(stored.rows[0]!.name, "probe.txt");
+        select name, content_type, size_bytes from files where id = ${String(first.id)} and org_id = ${org.orgId}`, "objects");
+      assert.equal(stored.length, 1);
+      assert.equal(stored[0]!.name, "probe.txt");
 
       const file = await applicationFiles.getApplicationFile(manager, String(first.id));
       assert.deepEqual([file.id, file.name, file.contentType, file.sizeBytes, file.versionCount], [
@@ -77,8 +77,8 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
       const replay = await executeApplicationTool(definition, manager, input);
       assert.deepEqual([replay.ok, replay.replayed, replay.id], [true, true, first.id]);
       const count = await db.execute<{ n: string }>(sql`
-        select count(*) as n from files where folder_id = ${folderId} and org_id = ${org.orgId}`);
-      assert.equal(Number(count.rows[0]!.n), 1, "idempotent replay must not store a second file");
+        select count(*) as n from files where folder_id = ${folderId} and org_id = ${org.orgId}`, "objects");
+      assert.equal(Number(count[0]!.n), 1, "idempotent replay must not store a second file");
 
       const viewer = ctxFor(org.orgId, viewerId, ["documents.read"]);
       await assert.rejects(() => executeApplicationTool(definition, viewer, {
@@ -162,14 +162,14 @@ test("source uploads retain native identity, bytes and audit reason; retries and
         [input.sourceSystem, input.sourceId, first.currentVersionId, first.contentHash]);
       assert.equal(read.versions[0]!.id, first.currentVersionId);
       assert.equal(read.versions[0]!.contentHash, first.contentHash);
-      const stored = await db.execute<{ bytes: Buffer }>(sql`select b.bytes from file_blobs b join file_versions v on v.id=b.version_id join files f on f.id=v.file_id where f.org_id=${org.orgId} and v.id=${String(first.currentVersionId)}`);
-      assert.equal(stored.rows[0]!.bytes.toString("base64"), contentBase64);
-      const audits = await db.execute<{ actor_id: string; changes: { reason: string; after: { sourceId: string; contentHash: string } } }>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='files' and row_id=${String(first.id)} and changes->>'event'='upload'`);
-      assert.equal(audits.rows.length, 1);
-      assert.equal(audits.rows[0]!.actor_id, actor);
-      assert.equal(audits.rows[0]!.changes.reason, input.auditReason);
-      assert.equal(audits.rows[0]!.changes.after.sourceId, input.sourceId);
-      assert.equal(audits.rows[0]!.changes.after.contentHash, first.contentHash);
+      const stored = await db.execute<{ bytes: Buffer }>(sql`select b.bytes from file_blobs b join file_versions v on v.id=b.version_id join files f on f.id=v.file_id where f.org_id=${org.orgId} and v.id=${String(first.currentVersionId)}`, "objects");
+      assert.equal(stored[0]!.bytes.toString("base64"), contentBase64);
+      const audits = await db.execute<{ actor_id: string; changes: { reason: string; after: { sourceId: string; contentHash: string } } }>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='files' and row_id=${String(first.id)} and changes->>'event'='upload'`, "objects");
+      assert.equal(audits.length, 1);
+      assert.equal(audits[0]!.actor_id, actor);
+      assert.equal(audits[0]!.changes.reason, input.auditReason);
+      assert.equal(audits[0]!.changes.after.sourceId, input.sourceId);
+      assert.equal(audits[0]!.changes.after.contentHash, first.contentHash);
       const replay = await executeApplicationTool(definition, context, input);
       assert.deepEqual([replay.id, replay.replayed], [first.id, true]);
       await assert.rejects(() => executeApplicationTool(definition, context, { ...input, auditReason: "Changed adoption basis" }), /idempotency|different|conflict/i);
@@ -184,8 +184,8 @@ test("source uploads retain native identity, bytes and audit reason; retries and
       const concurrent = { ...input, sourceId: randomUUID() };
       const race = await Promise.allSettled([1, 2].map(() => executeApplicationTool(definition, { ...context, requestId: randomUUID() }, { ...concurrent, idempotencyKey: randomUUID() })));
       assert.equal(race.filter(item => item.status === "fulfilled").length, 1);
-      const count = await db.execute<{ n: number }>(sql`select count(*)::int as n from files where org_id=${org.orgId} and source_system=${input.sourceSystem}`);
-      assert.equal(count.rows[0]!.n, 2);
+      const count = await db.execute<{ n: number }>(sql`select count(*)::int as n from files where org_id=${org.orgId} and source_system=${input.sourceSystem}`, "objects");
+      assert.equal(count[0]!.n, 2);
     });
   } finally { await dropScratchOrg(org.orgId); }
 });

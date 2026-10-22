@@ -70,11 +70,11 @@ async function correct(id: string, body: unknown): Promise<{ status: number; jso
 }
 
 async function revision(id: string): Promise<string> {
-  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${state.orgId}`)).rows[0]!.revision
+  return (await db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${state.orgId}`, 'objects'))[0]!.revision
 }
 
 async function statusOf(id: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from documents where id = ${id} and org_id = ${state.orgId}`)).rows[0]!.status
+  return (await db.execute<{ status: string }>(sql`select status from documents where id = ${id} and org_id = ${state.orgId}`, 'objects'))[0]!.status
 }
 
 interface PostedFixture {
@@ -177,35 +177,35 @@ test('correct creates the correcting revision and voids the posted source', asyn
     assert.equal(await statusOf(id), 'voided')
     assert.equal(await statusOf(correctionId), 'draft')
     const replacement = (await db.execute<{ memo: string; total: string; custom: Record<string, unknown> }>(
-      sql`select memo, total::text as total, custom from documents where id = ${correctionId}`,
-    )).rows[0]!
+      sql`select memo, total::text as total, custom from documents where id = ${correctionId}`, 'objects',
+    ))[0]!
     assert.equal(replacement.memo, 'updated memo')
     assert.equal(replacement.total, '900.0000')
     assert.equal(replacement.custom.correctionOf, id)
     assert.equal(replacement.custom.correctionReason, REASON)
-    const lines = (await db.execute<{ amount: string; description: string }>(
-      sql`select amount::text as amount, description from document_lines where document_id = ${correctionId} and org_id = ${state.orgId} order by line_number`,
-    )).rows
+    const lines = await db.execute<{ amount: string; description: string }>(
+      sql`select amount::text as amount, description from document_lines where document_id = ${correctionId} and org_id = ${state.orgId} order by line_number`, 'objects',
+    )
     assert.deepEqual(lines.map((l) => [l.description, l.amount]), [['updated line', '900.0000']])
     const link = (await db.execute<{ linkType: string; reason: string }>(
-      sql`select link_type as "linkType", reason from document_links where from_document_id = ${correctionId} and to_document_id = ${id} and org_id = ${state.orgId}`,
-    )).rows[0]
+      sql`select link_type as "linkType", reason from document_links where from_document_id = ${correctionId} and to_document_id = ${id} and org_id = ${state.orgId}`, 'objects',
+    ))[0]
     assert.equal(link?.linkType, 'reverses')
     assert.equal(link?.reason, REASON)
     // The void is an exact append-only reversal: the reversal entry mirrors
     // the source entry line for line with debits and credits swapped, and
     // source, reversal, and replacement entries are all retained.
     const sourceEntry = (await db.execute<{ id: string }>(
-      sql`select posted_entry_id as id from documents where id = ${id} and org_id = ${state.orgId}`,
-    )).rows[0]!.id
+      sql`select posted_entry_id as id from documents where id = ${id} and org_id = ${state.orgId}`, 'objects',
+    ))[0]!.id
     const reversalEntry = (await db.execute<{ id: string }>(
-      sql`select id from journal_entries where reverses_entry_id = ${sourceEntry} and org_id = ${state.orgId}`,
-    )).rows[0]?.id
+      sql`select id from journal_entries where reverses_entry_id = ${sourceEntry} and org_id = ${state.orgId}`, 'objects',
+    ))[0]?.id
     assert.ok(reversalEntry, 'the void posts a reversal entry linked to the source entry')
     type EntryLine = { account: string; amount: string; txn: string }
     const entryLines = async (entryId: string): Promise<EntryLine[]> =>
-      (await db.execute<EntryLine>(sql`select account_id as account, amount::text as amount, txn_amount::text as txn
-        from journal_lines where entry_id = ${entryId} and org_id = ${state.orgId} order by line_number`)).rows
+      await db.execute<EntryLine>(sql`select account_id as account, amount::text as amount, txn_amount::text as txn
+        from journal_lines where entry_id = ${entryId} and org_id = ${state.orgId} order by line_number`, 'objects')
     const sourceLines = await entryLines(sourceEntry)
     assert.ok(sourceLines.length > 0, 'the source entry carries lines')
     const negate = (v: string): string => (v.startsWith('-') ? v.slice(1) : `-${v}`)
@@ -216,10 +216,10 @@ test('correct creates the correcting revision and voids the posted source', asyn
     await withOrgContext(state.orgId, () => submitAndReleaseIfUngated('expense_report', correctionId, actorId))
     const replacementEntry = await postDocument(correctionId, { control })
     assert.equal(await statusOf(correctionId), 'posted')
-    const retained = (await db.execute<{ id: string; status: string }>(
+    const retained = await db.execute<{ id: string; status: string }>(
       sql`select id, status from journal_entries
-        where id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}`,
-    )).rows
+        where id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}`, 'objects',
+    )
     const byId = (rows: { id: string; status: string }[]) =>
       rows.map((r) => [r.id, r.status] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
     assert.deepEqual(
@@ -230,11 +230,11 @@ test('correct creates the correcting revision and voids the posted source', asyn
         { id: replacementEntry, status: 'posted' },
       ]),
     )
-    const net = (await db.execute<{ account: string; amount: string }>(
+    const net = await db.execute<{ account: string; amount: string }>(
       sql`select account_id as account, sum(amount)::text as amount from journal_lines
         where entry_id in (${sourceEntry}, ${reversalEntry}, ${replacementEntry}) and org_id = ${state.orgId}
-        group by account_id having sum(amount) <> 0 order by account_id`,
-    )).rows
+        group by account_id having sum(amount) <> 0 order by account_id`, 'objects',
+    )
     const byAccount = (rows: { account: string; amount: string }[]) =>
       rows.map((r) => [r.account, r.amount] as [string, string]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
     assert.deepEqual(byAccount(net), byAccount(await entryLines(replacementEntry)))
@@ -272,7 +272,7 @@ test('correct refuses inactive and out-of-entity employees', async () => {
     const corrections = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from document_links
        where org_id = ${orgId} and to_document_id = ${id} and link_type = 'reverses'
-    `)).rows[0]!.count
+    `, 'objects'))[0]!.count
     assert.equal(corrections, 0, 'refused assignments create no correction draft')
   } finally {
     await cleanup()
@@ -306,7 +306,7 @@ test('correct converts foreign expense lines with the report subsidiary rate typ
     const evidence = (await db.execute<{ rateType: string }>(sql`
       select original_fx_evidence->>'rateType' as "rateType" from document_lines
        where org_id = ${orgId} and document_id = ${String(response.json?.correctionId)}
-    `)).rows[0]
+    `, 'objects'))[0]
     assert.equal(evidence?.rateType, 'corporate')
   } finally {
     await cleanup()
@@ -327,8 +327,8 @@ test('correct fails closed on reason, state, revision, and repeat calls', async 
     const reasonOnly = await correct(id, { expectedUpdatedAt: await revision(id), amendmentReason: REASON })
     assert.equal(reasonOnly.status, 201, JSON.stringify(reasonOnly.json))
     const faithful = (await db.execute<{ memo: string; total: string }>(
-      sql`select memo, total::text as total from documents where id = ${String(reasonOnly.json?.correctionId)}`,
-    )).rows[0]!
+      sql`select memo, total::text as total from documents where id = ${String(reasonOnly.json?.correctionId)}`, 'objects',
+    ))[0]!
     assert.equal(faithful.total, '875.5000', 'an unedited correction copies the posted totals')
   } finally {
     await cleanup()
@@ -342,7 +342,7 @@ test('a standing correction edge conflicts with a second correction', async () =
     // Simulate the gated-void window: a concurrent correction's `reverses`
     // edge already stands while the source is still posted. Correction
     // lineage is immutable, so the simulation rows stay for the org wipe.
-    const subsidiaryId = (await db.execute<{ id: string }>(sql`select subsidiary_id as id from documents where id = ${id}`)).rows[0]!.id
+    const subsidiaryId = (await db.execute<{ id: string }>(sql`select subsidiary_id as id from documents where id = ${id}`, 'objects'))[0]!.id
     const dummyId = randomUUID()
     await db.execute(sql`
       insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom, created_by)

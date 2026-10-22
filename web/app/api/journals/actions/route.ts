@@ -67,16 +67,16 @@ export const POST = defineRoute({
                 from documents
                where id = ${documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
                for update
-            `))
-            if (!owned.rows[0]) return { kind: 'not_found' as const }
-            const scopeDenied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+            `, 'objects'))
+            if (!owned[0]) return { kind: 'not_found' as const }
+            const scopeDenied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
             if (scopeDenied) return { kind: 'scope_denied' as const, response: scopeDenied }
             // Fence on the locked row's exact revision: a mismatch throws before
             // any flow release or posting write, so the transaction rolls back.
             if (expectedUpdatedAt !== undefined) {
-              assertDocumentEditRevision(expectedUpdatedAt, owned.rows[0].revision)
+              assertDocumentEditRevision(expectedUpdatedAt, owned[0].revision)
             }
-            const previousStatus = owned.rows[0].status
+            const previousStatus = owned[0].status
             if (previousStatus === 'draft') {
               const submission = await submitAndReleaseIfUngated(
                 'journal',

@@ -60,12 +60,13 @@ const mockSources = new Map<string, string>([
     const sqlText = globalThis.itemCreateSqlText
     const sqlValues = globalThis.itemCreateSqlValues
     export const db = {
-      execute: async (query) => {
+      execute: async (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         const values = sqlValues(query)
         state.calls.push({ text, inTransaction: state.inTransaction })
         if (text.includes('insert into items')) {
-          if (state.item) return { rows: [] }
+          if (state.item) return inMode({ rows: [] })
           state.item = {
             id: '${ITEM_ID}', org_id: '${ORG_ID}', kind: 'service', code: null,
             name: 'Consulting', description: null, category: null, unit: null,
@@ -77,19 +78,19 @@ const mockSources = new Map<string, string>([
             create_plans_on: 'billing', revenue_allocation: 'normal',
             standalone_selling_price: null, is_active: true, custom: {},
           }
-          return { rows: [{ id: '${ITEM_ID}' }] }
+          return inMode({ rows: [{ id: '${ITEM_ID}' }] })
         }
         if (text.includes("changes->'after'")) {
-          return { rows: state.audits[0] ? [{ after: state.audits[0].changes.after }] : [] }
+          return inMode({ rows: state.audits[0] ? [{ after: state.audits[0].changes.after }] : [] })
         }
         if (text.includes('insert into audit_log')) {
           if (state.failAudit) throw new Error('audit writer unavailable')
           const encoded = values.find((value) => typeof value === 'string' && value.startsWith('{"before"'))
           if (typeof encoded !== 'string') throw new Error('audit changes missing')
           state.audits.push({ changes: JSON.parse(encoded) })
-          return { rows: [] }
+          return inMode({ rows: [] })
         }
-        return { rows: [] }
+        return inMode({ rows: [] })
       },
     }
     export async function withOrgTransaction(_orgId, work) {

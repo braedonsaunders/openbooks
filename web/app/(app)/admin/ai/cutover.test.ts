@@ -74,7 +74,7 @@ registerHooks({
           // RETURNING id into its audit write, so an empty row set would
           // throw inside the code under test instead of exercising it.
           // Select consumers all tolerate the junk row.
-          const capture = async (query) => { state.statements.push(query); return { rows: [{ id: 'mock-row-1' }] } }
+          const capture = async (query, mode) => { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.statements.push(query); return inMode({ rows: [{ id: 'mock-row-1' }] }) }
           const txShim = { execute: capture }
           export const db = {
             execute: capture,

@@ -14,10 +14,10 @@ test("bulk journal inserts maintain exact summaries with one write per group and
   const entryId = randomUUID();
   let failure: unknown;
   try {
-    const summary = async () => (await db.execute(sql`
+    const summary = async () => await db.execute(sql`
       select account_id,debit_total::text,credit_total::text,line_count::text
         from gl_month_activity where org_id=${org.orgId}
-       order by account_id`)).rows;
+       order by account_id`, "objects");
     await withMaintenanceTransaction(null, async () => {
       await db.execute(sql`insert into journal_entries
         (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,posted_at)
@@ -27,7 +27,7 @@ test("bulk journal inserts maintain exact summaries with one write per group and
         await db.execute(sql`select pg_stat_clear_snapshot()`);
         const row = (await db.execute<{ inserted: string; updated: string }>(sql`
           select n_tup_ins::text as inserted,n_tup_upd::text as updated
-          from pg_stat_xact_user_tables where relid='public.gl_month_activity'::regclass`)).rows[0]!;
+          from pg_stat_xact_user_tables where relid='public.gl_month_activity'::regclass`, "objects"))[0]!;
         return BigInt(row.inserted) + BigInt(row.updated);
       };
       const beforeWrites = await writes();
@@ -54,7 +54,7 @@ test("bulk journal inserts maintain exact summaries with one write per group and
         { account_id: org.accounts.revenue, debit_total: '0.0000', credit_total: '15.0000', line_count: '12' },
       ].sort((a,b) => a.account_id.localeCompare(b.account_id));
       assert.deepEqual(await summary(), expected);
-      assert.deepEqual((await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`)).rows, []);
+      assert.deepEqual(await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`, "objects"), []);
       const sentinel = new Error("Roll back an inserted journal batch");
       await assert.rejects(withTransactionSavepoint(db, async () => {
         await db.execute(sql`set constraints all deferred`);
@@ -83,7 +83,7 @@ test("bulk journal inserts maintain exact summaries with one write per group and
       values(${foreign.orgId},${entryId},25,${foreign.accounts.bank},${foreign.subsidiaryId},1,'CAD',1,1)`)),
     (error: unknown) => errorChainMatches(error,/does not exist in organization|foreign key/));
     assert.deepEqual(await summary(), original);
-    assert.equal((await db.execute(sql`select 1 from gl_month_activity where org_id=${foreign.orgId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`select 1 from gl_month_activity where org_id=${foreign.orgId}`, "objects")).length,0);
     await withOrgTransaction(foreign.orgId, async () => {
       const draftId = randomUUID();
       await db.execute(sql`insert into journal_entries
@@ -94,11 +94,11 @@ test("bulk journal inserts maintain exact summaries with one write per group and
         (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
         values(${foreign.orgId},${draftId},1,${foreign.accounts.bank},${foreign.subsidiaryId},3,'CAD',3,1),
               (${foreign.orgId},${draftId},2,${foreign.accounts.revenue},${foreign.subsidiaryId},-3,'CAD',-3,1)`);
-      assert.equal((await db.execute(sql`select 1 from gl_month_activity where org_id=${foreign.orgId}`)).rows.length,0);
+      assert.equal((await db.execute(sql`select 1 from gl_month_activity where org_id=${foreign.orgId}`, "objects")).length,0);
       await db.execute(sql`update journal_entries set status='posted',posted_at=now()
         where org_id=${foreign.orgId} and id=${draftId}`);
-      assert.equal((await db.execute(sql`select 1 from gl_month_activity where org_id=${foreign.orgId}`)).rows.length,2);
-      assert.deepEqual((await db.execute(sql`select * from openbooks_gl_activity_verify(${foreign.orgId})`)).rows,[]);
+      assert.equal((await db.execute(sql`select 1 from gl_month_activity where org_id=${foreign.orgId}`, "objects")).length,2);
+      assert.deepEqual(await db.execute(sql`select * from openbooks_gl_activity_verify(${foreign.orgId})`, "objects"),[]);
     });
     assert.deepEqual(await summary(), original, "another tenant's posting cannot change these summaries");
   } catch (error) {

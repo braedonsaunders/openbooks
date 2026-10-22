@@ -28,19 +28,19 @@ export const DELETE = defineRoute({
         const existing = (await tx.execute<Record<string, unknown>>(sql`
           select * from bank_match_rules where id = ${id} and org_id = ${user.orgId}
            for update
-        `))
-        if (!existing.rows[0]) return true
+        `, 'objects'))
+        if (!existing[0]) return true
         const deleted = (await tx.execute<{ id: string }>(sql`
           delete from bank_match_rules where id = ${id} and org_id = ${user.orgId}
           returning id
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!deleted) return true
         await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id)
           values
             (${user.orgId}, 'bank_match_rules', ${id}, 'delete',
-             ${JSON.stringify({ before: existing.rows[0] })}::jsonb, ${user.id})
+             ${JSON.stringify({ before: existing[0] })}::jsonb, ${user.id})
         `)
         return false
       })

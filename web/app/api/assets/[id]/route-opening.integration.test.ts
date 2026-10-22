@@ -90,7 +90,7 @@ async function seedFixture(): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
   for (const m of MONTHS_2026) {
     await db.execute(sql`
       insert into accounting_periods
@@ -118,7 +118,7 @@ async function seedFixture(): Promise<Fixture> {
 
 async function revisionOf(assetId: string): Promise<string> {
   return (await db.execute<{ revision: string }>(sql`
-    select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id = ${assetId}`)).rows[0]!.revision;
+    select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id = ${assetId}`, "objects"))[0]!.revision;
 }
 
 async function patchRequest(fixture: Fixture, body: Record<string, unknown>): Promise<Request> {
@@ -155,7 +155,7 @@ async function getPayload(fixture: Fixture, query?: string): Promise<{ status: n
 test("PATCH places a mid-life asset in service with opening figures and the drawer ties out", async () => {
   const fixture = await seedFixture();
   try {
-    const journalBefore = (await db.execute(sql`select id from journal_entries where org_id=${fixture.orgId} order by id`)).rows;
+    const journalBefore = await db.execute(sql`select id from journal_entries where org_id=${fixture.orgId} order by id`, "objects");
     const response = await PATCH(
       await patchRequest(fixture, {
         acquisitionCost: "120000",
@@ -176,8 +176,8 @@ test("PATCH places a mid-life asset in service with opening figures and the draw
     assert.equal(build.skippedMonths.length, 53);
     assert.equal(build.skippedMonths[0], '2027-01-01');
     assert.equal(build.skippedMonths.at(-1), '2031-05-01');
-    assert.equal((await db.execute(sql`select count(*)::int as n from depreciation_schedule_lines where org_id=${fixture.orgId} and schedule_id=${build.scheduleId}`)).rows[0]!.n, build.lineCount);
-    assert.deepEqual((await db.execute(sql`select id from journal_entries where org_id=${fixture.orgId} order by id`)).rows, journalBefore, 'placement builds metadata without a journal entry');
+    assert.equal((await db.execute(sql`select count(*)::int as n from depreciation_schedule_lines where org_id=${fixture.orgId} and schedule_id=${build.scheduleId}`, "objects"))[0]!.n, build.lineCount);
+    assert.deepEqual(await db.execute(sql`select id from journal_entries where org_id=${fixture.orgId} order by id`, "objects"), journalBefore, 'placement builds metadata without a journal entry');
     assert.equal(saved.asset.opening_accumulated_depreciation, "55000.0000");
     assert.equal(String(saved.asset.opening_accumulated_as_of).slice(0, 10), "2025-12-31");
     assert.equal(saved.totals.accumulated, "55000.0000", "drawer accumulated carries the opening figure");
@@ -253,7 +253,7 @@ test("PATCH refuses half-set, excessive, and post-history opening edits", async 
     );
     assert.equal(placed.status, 200);
     const bookId = (await db.execute<{ id: string }>(sql`
-      select id from accounting_books where org_id = ${fixture.orgId} and is_primary limit 1`)).rows[0]!.id;
+      select id from accounting_books where org_id = ${fixture.orgId} and is_primary limit 1`, "objects"))[0]!.id;
     await buildSchedule(fixture.assetId, fixture.orgId, fixture.actorId, bookId);
     const run = await runDepreciation(fixture.orgId, "2026-01-31", fixture.actorId, fixture.assetId);
     assert.equal(run.posted, 1);
@@ -287,17 +287,17 @@ test("the register list reads NBV as cost minus opening minus posted", async () 
     );
     assert.equal(placed.status, 200);
     const bookId = (await db.execute<{ id: string }>(sql`
-      select id from accounting_books where org_id = ${fixture.orgId} and is_primary limit 1`)).rows[0]!.id;
+      select id from accounting_books where org_id = ${fixture.orgId} and is_primary limit 1`, "objects"))[0]!.id;
     await buildSchedule(fixture.assetId, fixture.orgId, fixture.actorId, bookId);
     const run = await runDepreciation(fixture.orgId, "2026-03-31", fixture.actorId, fixture.assetId);
     assert.equal(run.totalAmount, "3000.0000");
 
-    const rows = (await db.execute<{ accumulated: string; nbv: string }>(sql`
+    const rows = await db.execute<{ accumulated: string; nbv: string }>(sql`
       select ${FIXED_ASSET_BUILT_IN_EXPR.accumulated} as accumulated,
              ${FIXED_ASSET_BUILT_IN_EXPR.net_book_value} as nbv
         from fixed_assets a
         ${FIXED_ASSET_BASE_JOINS}
-       where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`)).rows;
+       where a.org_id = ${fixture.orgId} and a.id = ${fixture.assetId}`, "objects");
     assert.equal(rows[0]?.accumulated, "58000.0000", "register accumulated = opening 55000 + posted 3000");
     assert.equal(rows[0]?.nbv, "62000.0000", "register NBV = cost − opening − posted");
   } finally {

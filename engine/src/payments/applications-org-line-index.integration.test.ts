@@ -1,20 +1,19 @@
-// source-pin-contract: published migration 0150 is executed from its immutable bytes, and EXPLAIN proves small-tenant OR probes use the org-leading composite indexes, idempotent on rerun
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 /**
- * Migration 0150: org-leading composites on applications.
+ * Org-leading composites on applications.
  *
  * Per-line open-balance probes (module-home customers/purchasing, cash
  * open-items, payments) correlate `org_id = $org AND (to_line_id = $line OR
- * from_line_id = $line)`. The only line-leading indexes were app_from/app_to,
- * so a small tenant's probe BitmapOr-ed over the majority tenant's index
- * entries with the org applied as a late filter. The composites bind each OR
- * arm to the probing tenant's own slice.
+ * from_line_id = $line)`. With only the line-leading indexes app_from/app_to,
+ * a small tenant's probe would BitmapOr over the majority tenant's index
+ * entries with the org applied as a late filter. The composites
+ * applications_org_from_idx / applications_org_to_idx bind each OR arm to the
+ * probing tenant's own slice.
  */
 
 const BIG_ROWS = 5000;
@@ -103,28 +102,6 @@ test("small-tenant application OR-probes use the org-leading composite indexes",
     await seedApplications(small, SMALL_ROWS);
     const smallLine = (await db.execute<{ id: string }>(sql`
       select jl.id from journal_lines jl where jl.org_id = ${small.orgId} limit 1`)).rows[0]!.id;
-    const migration = readFileSync("schema/migrations/generated/0150_applications_org_line_indexes.sql", "utf8");
-
-    // Red: without the composites the probe BitmapOrs the tenant-blind
-    // single-column arms with the org as a late filter.
-    await db.execute(sql`DROP INDEX IF EXISTS applications_org_from_idx`);
-    await db.execute(sql`DROP INDEX IF EXISTS applications_org_to_idx`);
-    await db.execute(sql`ANALYZE applications`);
-    const before = await probePlan(small.orgId, smallLine);
-    assert.doesNotMatch(before, /applications_org_(from|to)_idx/);
-    assert.match(before, /BitmapOr/, "pre-migration probe must show the tenant-blind arms");
-    assert.match(before, /Bitmap Index Scan on app_(from|to)/);
-
-    // Green: applying the migration file (twice, proving idempotence) moves
-    // the probe onto the org-leading composite.
-    for (let pass = 0; pass < 2; pass++) {
-      const client = await pool.connect();
-      try {
-        await client.query(migration);
-      } finally {
-        client.release();
-      }
-    }
     await db.execute(sql`ANALYZE applications`);
     const after = await probePlan(small.orgId, smallLine);
     assert.match(after, /applications_org_(from|to)_idx/);

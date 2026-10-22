@@ -141,7 +141,7 @@ async function workerContact(
       from parties p
       join worker_employments e on e.org_id = p.org_id and e.worker_party_id = p.id
      where e.org_id = ${args.orgId} and e.id = ${args.employmentId}
-  `)).rows[0];
+  `, "objects"))[0];
   return { name: row?.name ?? "employee", email: row?.email ?? null };
 }
 
@@ -243,7 +243,7 @@ export async function listOwnBankAccounts(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmSelfRead(db, orgId, actorId);
     const partyId = await actorPartyOf(db, orgId, actorId);
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       id: string;
       bankName: string | null;
       country: string | null;
@@ -259,7 +259,7 @@ export async function listOwnBankAccounts(query: {
        where org_id = ${orgId} and party_id = ${partyId} and retired_at is null
        order by is_active desc, created_at desc, id
        limit 25
-    `)).rows;
+    `, "objects");
     return rows.map((row) => ({
       id: row.id,
       bankName: row.bankName,

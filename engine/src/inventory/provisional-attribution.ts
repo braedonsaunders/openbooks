@@ -30,7 +30,7 @@ export async function listUnattributedDeficits(
   itemId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<UnattributedDeficit[]> {
-  return withOrgTransaction(orgId, async () => (await db.execute<UnattributedDeficit>(sql`
+  return withOrgTransaction(orgId, async () => await db.execute<UnattributedDeficit>(sql`
     select deficit.id, deficit.item_id as "itemId", deficit.stock_location_id as "stockLocationId",
            location.code as "stockLocationCode", deficit.subsidiary_id as "subsidiaryId",
            issue.moved_at::text as "issuedOn", deficit.issue_movement_id as "issueMovementId",
@@ -42,7 +42,7 @@ export async function listUnattributedDeficits(
      where deficit.org_id = ${orgId} and deficit.item_id = ${itemId}
        and deficit.offset_account_id is null and deficit.remaining_quantity > 0
        ${subsidiaryVisibleFilter(sql`deficit.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-     order by deficit.created_at, deficit.id`)).rows);
+     order by deficit.created_at, deficit.id`, "objects"));
 }
 
 /**
@@ -69,7 +69,7 @@ export async function attributeDeficitAccount(input: {
       select id, item_id, subsidiary_id, offset_account_id, remaining_quantity::text as remaining_quantity
         from inventory_provisional_costs
        where org_id = ${input.orgId} and id = ${input.deficitId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!deficit) throw new InventoryError("that shortfall was not found in this organization");
     await lockActorCommandAuthority(db, input.orgId, input.actorId, deficit.subsidiary_id, "gl.post");
     if (deficit.offset_account_id !== null) {
@@ -81,7 +81,7 @@ export async function attributeDeficitAccount(input: {
     }>(sql`
       select id, is_active, is_summary, subsidiary_id, subsidiary_include_children from accounts
        where org_id = ${input.orgId} and id = ${input.accountId}
-       for share`)).rows[0];
+       for share`, "objects"))[0];
     if (!account || !account.is_active || account.is_summary) {
       throw new InventoryError("choose an active posting account from this organization's chart of accounts");
     }
@@ -96,14 +96,14 @@ export async function attributeDeficitAccount(input: {
     }
     const asset = (await db.execute<{ asset_account_id: string }>(sql`
       select asset_account_id from item_inventory_profiles
-       where org_id = ${input.orgId} and item_id = ${deficit.item_id}`)).rows[0];
+       where org_id = ${input.orgId} and item_id = ${deficit.item_id}`, "objects"))[0];
     const problem = asset ? inventoryOffsetAccountProblem(asset.asset_account_id, input.accountId, "shortfall charge") : null;
     if (problem) throw new InventoryError(problem);
     const updated = (await db.execute<{ id: string }>(sql`
       update inventory_provisional_costs
          set offset_account_id = ${input.accountId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${input.deficitId} and offset_account_id is null
-       returning id`)).rows[0];
+       returning id`, "objects"))[0];
     if (!updated) throw new InventoryError("this shortfall's account was recorded by another action; reload it");
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

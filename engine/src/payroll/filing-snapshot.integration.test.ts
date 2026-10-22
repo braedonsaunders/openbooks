@@ -101,11 +101,9 @@ test(
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
       const before = await t4Slips(fx.orgId, 2026);
-      const stub = (
-        await db.execute<{ id: string; filing_account_source: string }>(
-          sql`select id,filing_account_source from pay_stubs where org_id=${fx.orgId}`,
-        )
-      ).rows[0]!;
+      const stub = (await db.execute<{ id: string; filing_account_source: string }>(
+          sql`select id,filing_account_source from pay_stubs where org_id=${fx.orgId}`, "objects",
+        ))[0]!;
       assert.equal(stub.filing_account_source, "calculation");
       const account = randomUUID();
       await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default)
@@ -210,11 +208,9 @@ test(
           /not visible in this organization and legal-entity scope/,
         );
         assert.equal(
-          (
-            await db.execute<{ source: string }>(
-              sql`select filing_account_source as source from pay_stubs where id=${stubId}`,
-            )
-          ).rows[0]?.source,
+          (await db.execute<{ source: string }>(
+              sql`select filing_account_source as source from pay_stubs where id=${stubId}`, "objects",
+            ))[0]?.source,
           "unknown",
         );
       });
@@ -236,18 +232,18 @@ test(
         };
       }>(sql`
       select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='pay_stubs' and row_id=${stubId}
-        and changes->>'operation'='reconcile_filing_account'`);
-      assert.equal(audits.rows.length, 1);
-      assert.equal(audits.rows[0]?.actor_id, fx.actorId);
+        and changes->>'operation'='reconcile_filing_account'`, "objects");
+      assert.equal(audits.length, 1);
+      assert.equal(audits[0]?.actor_id, fx.actorId);
       assert.equal(
-        audits.rows[0]?.changes.before.filing_account_source,
+        audits[0]?.changes.before.filing_account_source,
         "unknown",
       );
       assert.equal(
-        audits.rows[0]?.changes.after.filing_account_source,
+        audits[0]?.changes.after.filing_account_source,
         "reconciled",
       );
-      assert.equal(audits.rows[0]?.changes.evidence.reference, row.reference);
+      assert.equal(audits[0]?.changes.evidence.reference, row.reference);
       await assert.rejects(
         reconcilePayrollFilingAccounts({
           orgId: fx.orgId,

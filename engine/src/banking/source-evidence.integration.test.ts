@@ -29,8 +29,8 @@ test("0158: source-evidence columns, checks, and append-only stamps", { skip: !p
        and ((table_name = 'journal_lines' and column_name in ('source_cleared_date', 'source_cleared_connector'))
          or (table_name = 'reconciliations' and column_name in ('evidence_kind', 'evidence_connector'))
          or (table_name = 'source_reconciliation_state'))
-  `));
-  const have = new Set(cols.rows.map((r) => `${r.table}.${r.column}`));
+  `, "objects"));
+  const have = new Set(cols.map((r) => `${r.table}.${r.column}`));
   for (const key of [
     "journal_lines.source_cleared_date",
     "journal_lines.source_cleared_connector",
@@ -40,7 +40,7 @@ test("0158: source-evidence columns, checks, and append-only stamps", { skip: !p
     assert.ok(have.has(key), `0158 adds ${key}`);
   }
   assert.ok(
-    cols.rows.some((r) => r.table === "source_reconciliation_state"),
+    cols.some((r) => r.table === "source_reconciliation_state"),
     "0158 adds source_reconciliation_state",
   );
 
@@ -52,7 +52,7 @@ test("0158: source-evidence columns, checks, and append-only stamps", { skip: !p
       insert into reconciliations (org_id, account_id, through_date, currency, statement_balance, status, created_by)
       values (${org.orgId}, ${org.accounts.bank}, ${org.date}, 'CAD', 0, 'in_progress', ${actor})
       returning evidence_kind, evidence_connector
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stmt.evidence_kind, "statement");
     assert.equal(stmt.evidence_connector, null);
     await assert.rejects(
@@ -87,7 +87,7 @@ test("0158: source-evidence columns, checks, and append-only stamps", { skip: !p
        where id = ${lineId} and org_id = ${org.orgId}`);
     const stamped = (await db.execute<{ d: string; c: string }>(sql`
       select source_cleared_date::text as d, source_cleared_connector as c
-        from journal_lines where id = ${lineId} and org_id = ${org.orgId}`)).rows[0]!;
+        from journal_lines where id = ${lineId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(stamped.d, org.date);
     assert.equal(stamped.c, "test-connector");
     // Clearing, retargeting, or touching money alongside the stamp is forbidden.
@@ -105,7 +105,7 @@ test("0158: source-evidence columns, checks, and append-only stamps", { skip: !p
     );
     // Half-stamps violate the column check without reaching the trigger.
     const line2 = (await db.execute<{ id: string }>(sql`
-      select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 2`)).rows[0]!.id;
+      select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 2`, "objects"))[0]!.id;
     await assert.rejects(
       db.execute(sql`update journal_lines set source_cleared_date = ${org.date} where id = ${line2} and org_id = ${org.orgId}`),
       // The row trigger fires before the column check, so a half-stamp through

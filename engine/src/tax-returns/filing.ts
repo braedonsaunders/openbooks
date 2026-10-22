@@ -295,7 +295,7 @@ async function assertCoveredPeriodsClosed(
   } else {
     const known = (await db.execute<{ id: string }>(sql`
       select id from subsidiaries
-       where org_id = ${orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])`)).rows.map((r) => r.id);
+       where org_id = ${orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])`, "objects")).map((r) => r.id);
     const missing = subsidiaryIds.filter((id) => !known.includes(id));
     if (missing.length > 0) {
       throw new TaxFilingError(
@@ -345,8 +345,8 @@ async function assertCoveredPeriodsClosed(
            and org_wide.period_id = ${period.id}
            and org_wide.book_id = ${bookId}
            and org_wide.module = ${module}
-           and org_wide.subsidiary_id is null`));
-      const row = closure.rows[0];
+           and org_wide.subsidiary_id is null`, "objects"));
+      const row = closure[0];
       const covered = Number(row?.covered ?? 0);
       const closed = Number(row?.closed ?? 0);
       const orgWideClosed = Number(row?.org_wide_closed ?? 0) > 0;
@@ -482,14 +482,14 @@ export async function prepareTaxFiling(
         hashtext(${`tax-filing:${orgId}:${snapshot.formCode}:${snapshot.from}:${snapshot.to}`}))`);
     const form = (await db.execute<{ country: string | null }>(sql`
       select country from tax_return_forms
-       where org_id = ${orgId} and code = ${snapshot.formCode} limit 1`)).rows[0];
+       where org_id = ${orgId} and code = ${snapshot.formCode} limit 1`, "objects"))[0];
     if (!form) throw new TaxReturnError("the return form is no longer available — choose an available form and recompute");
     const versions = (await db.execute<{ version: number }>(sql`
       select coalesce(max(version), 0)::int + 1 as version
         from tax_filings
        where org_id = ${orgId} and form_code = ${snapshot.formCode}
-         and period_from = ${snapshot.from} and period_to = ${snapshot.to}`));
-    const version = Number(versions.rows[0]?.version ?? 1);
+         and period_from = ${snapshot.from} and period_to = ${snapshot.to}`, "objects"));
+    const version = Number(versions[0]?.version ?? 1);
     // The filing freezes the return's identity and currency posture alongside
     // its boxes: the export reprint and the mark-filed staleness check read
     // these columns, never the org's live configuration. An org-wide return
@@ -510,9 +510,9 @@ export async function prepareTaxFiling(
               ${`{${snapshot.subsidiaryIds!.join(",")}}`}::uuid[],
               ${snapshot.registrationId ?? null}, ${snapshot.registrationNumber ?? null}, ${TAX_FILING_SNAPSHOT_VERSION},
               ${actorId}, ${actorId})
-      returning id`);
-    const row = inserted.rows[0];
-    if (inserted.rows.length !== 1 || !row) {
+      returning id`, "objects");
+    const row = inserted[0];
+    if (inserted.length !== 1 || !row) {
       throw new TaxReturnError("the filing could not be recorded — prepare it again");
     }
     await db.execute(sql`
@@ -564,8 +564,8 @@ export async function markTaxFilingFiled(
              snapshot_version, subsidiary_ids, registration_id, translation
         from tax_filings
        where id = ${filingId} and org_id = ${orgId}
-         for update`));
-    const row = filing.rows[0];
+         for update`, "objects"));
+    const row = filing[0];
     if (!row) throw new TaxFilingError("not-found", "tax filing not found");
     if (row.status !== "prepared") {
       throw new TaxFilingError("already-filed", "filing is already filed");
@@ -635,8 +635,8 @@ export async function markTaxFilingFiled(
          set status = 'filed', filing_reference = ${filingReference}, filed_at = now(),
              updated_at = now(), updated_by = ${actorId}
        where id = ${row.id} and org_id = ${orgId}
-      returning id, filed_at`));
-    if (updated.rows.length !== 1 || !updated.rows[0]) {
+      returning id, filed_at`, "objects"));
+    if (updated.length !== 1 || !updated[0]) {
       throw new TaxFilingError("stale", "the filing could not be marked filed — reload it before retrying");
     }
     await db.execute(sql`
@@ -652,6 +652,6 @@ export async function markTaxFilingFiled(
                 },
               })}::jsonb,
               ${actorId})`);
-    return { id: updated.rows[0]!.id, filedAt: updated.rows[0]!.filed_at };
+    return { id: updated[0]!.id, filedAt: updated[0]!.filed_at };
   });
 }

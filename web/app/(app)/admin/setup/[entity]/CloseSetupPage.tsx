@@ -137,15 +137,15 @@ export async function CloseSetupPage({
     translatedMatch(packageList.query, "defaultData.package.name") ||
     translatedMatch(packageList.query, "defaultData.package.description");
   const books = await db.execute<CloseSetupBookRow>(
-    sql`select id, code, name, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`,
+    sql`select id, code, name, is_primary from accounting_books where org_id = ${orgId} and is_active order by is_primary desc, name`, "objects",
   );
   const requestedBookId = pickString(searchParams.book);
-  const selectedBookId = (books.rows).some(
+  const selectedBookId = (books).some(
     (book) => book.id === requestedBookId,
   )
     ? requestedBookId!
-    : ((books.rows).find((book) => book.is_primary)?.id ??
-      books.rows[0]?.id ??
+    : ((books).find((book) => book.is_primary)?.id ??
+      books[0]?.id ??
       "");
 
   // One select for every reopen read: the paged list, and the live and
@@ -207,13 +207,13 @@ export async function CloseSetupPage({
        where org_id = ${orgId}
          ${calendarList.query ? sql`and (name ilike ${`%${calendarList.query}%`} or (${calendarDefaultMatch} and name = 'close.defaultData.calendar.name'))` : sql``}
        order by is_default desc, name
-       limit ${CONFIG_PER_PAGE} offset ${calendarList.offset}`),
+       limit ${CONFIG_PER_PAGE} offset ${calendarList.offset}`, "objects"),
     db.execute(sql`
       select count(*) as count from fiscal_calendars
        where org_id = ${orgId}
-         ${calendarList.query ? sql`and (name ilike ${`%${calendarList.query}%`} or (${calendarDefaultMatch} and name = 'close.defaultData.calendar.name'))` : sql``}`),
+         ${calendarList.query ? sql`and (name ilike ${`%${calendarList.query}%`} or (${calendarDefaultMatch} and name = 'close.defaultData.calendar.name'))` : sql``}`, "objects"),
     db.execute<CalendarOptionRow>(
-      sql`select id, name, is_default, is_active from fiscal_calendars where org_id = ${orgId} and is_active order by is_default desc, name`,
+      sql`select id, name, is_default, is_active from fiscal_calendars where org_id = ${orgId} and is_active order by is_default desc, name`, "objects",
     ),
     db.execute<PeriodRow>(sql`
       select p.*, c.name as calendar_name,
@@ -233,21 +233,21 @@ export async function CloseSetupPage({
          ${q ? sql`and (p.name ilike ${`%${q}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}
        group by p.id, c.name, j.entries
        order by p.period_number
-       limit ${PER_PAGE} offset ${offset}`),
+       limit ${PER_PAGE} offset ${offset}`, "objects"),
     db.execute(sql`
       select count(*) as count from accounting_periods p join fiscal_calendars c on c.id = p.fiscal_calendar_id and c.org_id = p.org_id
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear}
-         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`),
+         ${q ? sql`and (p.name ilike ${`%${q}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${q}%`} or c.name ilike ${`%${q}%`})` : sql``}`, "objects"),
     db.execute<BlueprintRow>(sql`
       select * from close_blueprints
        where org_id = ${orgId}
          ${blueprintList.query ? sql`and (name ilike ${`%${blueprintList.query}%`} or description ilike ${`%${blueprintList.query}%`} or (${blueprintDefaultMatch} and name = 'close.defaultData.blueprint.name'))` : sql``}
        order by is_active desc, is_default desc, name, version desc
-       limit ${CONFIG_PER_PAGE} offset ${blueprintList.offset}`),
+       limit ${CONFIG_PER_PAGE} offset ${blueprintList.offset}`, "objects"),
     db.execute(sql`
       select count(*) as count from close_blueprints
        where org_id = ${orgId}
-         ${blueprintList.query ? sql`and (name ilike ${`%${blueprintList.query}%`} or description ilike ${`%${blueprintList.query}%`} or (${blueprintDefaultMatch} and name = 'close.defaultData.blueprint.name'))` : sql``}`),
+         ${blueprintList.query ? sql`and (name ilike ${`%${blueprintList.query}%`} or description ilike ${`%${blueprintList.query}%`} or (${blueprintDefaultMatch} and name = 'close.defaultData.blueprint.name'))` : sql``}`, "objects"),
     db.execute<BlueprintStepRow>(sql`
       select s.*,
              coalesce(jsonb_agg(dep.key order by dep.key) filter (where dep.id is not null), '[]'::jsonb) as depends_on
@@ -262,43 +262,43 @@ export async function CloseSetupPage({
             order by is_active desc, is_default desc, name, version desc
             limit ${CONFIG_PER_PAGE} offset ${blueprintList.offset}
          )
-       group by s.id order by s.blueprint_id, s.sort_order`),
+       group by s.id order by s.blueprint_id, s.sort_order`, "objects"),
     db.execute<PolicyRow>(sql`
       select * from close_policies
        where org_id = ${orgId} and policy_type not in ('review','segregation')
          ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}
        order by policy_type, name
-       limit ${CONFIG_PER_PAGE} offset ${policyList.offset}`),
+       limit ${CONFIG_PER_PAGE} offset ${policyList.offset}`, "objects"),
     db.execute(sql`
       select count(*) as count from close_policies
        where org_id = ${orgId} and policy_type not in ('review','segregation')
-         ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}`),
+         ${policyList.query ? sql`and (name ilike ${`%${policyList.query}%`} or code ilike ${`%${policyList.query}%`} or policy_type ilike ${`%${policyList.query}%`} or (${policyDefaultMatches.materialVariance} and name = 'close.defaultData.policies.materialVariance.name') or (${policyDefaultMatches.controlledReopen} and name = 'close.defaultData.policies.controlledReopen.name'))` : sql``}`, "objects"),
     db.execute<AutomationRow>(sql`
       select * from close_automation_rules
        where org_id = ${orgId}
          ${automationList.query ? sql`and (name ilike ${`%${automationList.query}%`} or trigger ilike ${`%${automationList.query}%`} or action ilike ${`%${automationList.query}%`})` : sql``}
        order by is_active desc, name
-       limit ${CONFIG_PER_PAGE} offset ${automationList.offset}`),
+       limit ${CONFIG_PER_PAGE} offset ${automationList.offset}`, "objects"),
     db.execute(sql`
       select count(*) as count from close_automation_rules
        where org_id = ${orgId}
-         ${automationList.query ? sql`and (name ilike ${`%${automationList.query}%`} or trigger ilike ${`%${automationList.query}%`} or action ilike ${`%${automationList.query}%`})` : sql``}`),
+         ${automationList.query ? sql`and (name ilike ${`%${automationList.query}%`} or trigger ilike ${`%${automationList.query}%`} or action ilike ${`%${automationList.query}%`})` : sql``}`, "objects"),
     db.execute<PackageRow>(sql`
       select * from close_reporting_packages
        where org_id = ${orgId}
          ${packageList.query ? sql`and (name ilike ${`%${packageList.query}%`} or description ilike ${`%${packageList.query}%`} or (${packageDefaultMatch} and name = 'close.defaultData.package.name'))` : sql``}
        order by is_default desc, name
-       limit ${CONFIG_PER_PAGE} offset ${packageList.offset}`),
+       limit ${CONFIG_PER_PAGE} offset ${packageList.offset}`, "objects"),
     db.execute(sql`
       select count(*) as count from close_reporting_packages
        where org_id = ${orgId}
-         ${packageList.query ? sql`and (name ilike ${`%${packageList.query}%`} or description ilike ${`%${packageList.query}%`} or (${packageDefaultMatch} and name = 'close.defaultData.package.name'))` : sql``}`),
+         ${packageList.query ? sql`and (name ilike ${`%${packageList.query}%`} or description ilike ${`%${packageList.query}%`} or (${packageDefaultMatch} and name = 'close.defaultData.package.name'))` : sql``}`, "objects"),
     db.execute<ReopenRow>(sql`
       ${reopenSelect}
        where r.org_id = ${orgId}
          ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}
        order by r.created_at desc
-       limit ${CONFIG_PER_PAGE} offset ${reopenList.offset}`),
+       limit ${CONFIG_PER_PAGE} offset ${reopenList.offset}`, "objects"),
     db.execute(sql`
       select count(*) as count
         from close_reopen_requests r
@@ -306,13 +306,13 @@ export async function CloseSetupPage({
         join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
         join users requester on requester.id = r.requested_by
        where r.org_id = ${orgId}
-         ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`),
+         ${reopenList.query ? sql`and (p.name ilike ${`%${reopenList.query}%`} or ${periodDisplayLabelSql(locale)} ilike ${`%${reopenList.query}%`} or b.name ilike ${`%${reopenList.query}%`} or requester.name ilike ${`%${reopenList.query}%`} or r.reason ilike ${`%${reopenList.query}%`} or r.status ilike ${`%${reopenList.query}%`})` : sql``}`, "objects"),
     db.execute<ReopenRow>(sql`
       ${reopenSelect}
        where r.org_id = ${orgId}
          and (r.status in ('requested', 'approved')
            ${selectedReopenId && isUuid(selectedReopenId) ? sql`or r.id = ${selectedReopenId}::uuid` : sql``})
-       order by r.created_at desc`),
+       order by r.created_at desc`, "objects"),
   ])));
 
   // Option sources for the structured policy/automation/package editors — so
@@ -320,16 +320,16 @@ export async function CloseSetupPage({
   // roles, and reports (built-in + custom) instead of hand-typed JSON.
   const [users, roles, reportDefs, subsidiaries, dimensions, subsidiaryUiEnabled] = ((await Promise.all([
     db.execute<SetupUserRow>(
-      sql`select id, name, email from users where org_id = ${orgId} and is_active order by name`,
+      sql`select id, name, email from users where org_id = ${orgId} and is_active order by name`, "objects",
     ),
     db.execute<SetupRoleRow>(
-      sql`select key, name from app_roles where org_id = ${orgId} order by name`,
+      sql`select key, name from app_roles where org_id = ${orgId} order by name`, "objects",
     ),
     db.execute<ReportDefinitionRow>(
-      sql`select slug, name, kind, report_type, query, statement from report_definitions where org_id = ${orgId} and archived_at is null order by kind, name`,
+      sql`select slug, name, kind, report_type, query, statement from report_definitions where org_id = ${orgId} and archived_at is null order by kind, name`, "objects",
     ),
     db.execute<{ id: string; name: string }>(
-      sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`,
+      sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`, "objects",
     ),
     dimensionOptions(orgId),
     subsidiaryFeatureEnabled(orgId),
@@ -343,7 +343,7 @@ export async function CloseSetupPage({
   const staticStatementParams = new Map(
     STANDARD_STATEMENT_DEFINITIONS.map((def) => [def.slug, def.params]),
   );
-  const dbRowBySlug = new Map(((reportDefs.rows)).map((row) => [row.slug, row]));
+  const dbRowBySlug = new Map(((reportDefs)).map((row) => [row.slug, row]));
   function descriptorFor(slug: string, dbRow: ReportDefinitionRow | undefined): ReportDescriptor {
     if (dbRow) {
       if (dbRow.report_type === "query" && dbRow.query) return describeQuery(dbRow.query, locale);
@@ -369,45 +369,45 @@ export async function CloseSetupPage({
     });
   for (const def of STANDARD_STATEMENT_DEFINITIONS) addReport(def.slug, def.name, "built_in");
   for (const def of BUILT_IN_REPORT_DEFINITIONS) addReport(def.slug, def.name, "built_in");
-  for (const row of reportDefs.rows) addReport(row.slug, row.name, row.kind);
+  for (const row of reportDefs) addReport(row.slug, row.name, row.kind);
   const mergedReportDefs = [...reportBySlug.values()].sort((a, b) =>
     a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "built_in" ? -1 : 1,
   );
 
-  const stepRows = (steps.rows);
+  const stepRows = (steps);
   return (
     <CloseSetupWorkspace
       currentParams={searchParams}
       fiscalYear={fiscalYear}
       periodPage={page}
       periodPerPage={PER_PAGE}
-      periodTotal={Number(periodCount.rows[0]?.count ?? 0)}
-      calendars={calendars.rows}
-      calendarOptions={calendarOptions.rows}
+      periodTotal={Number(periodCount[0]?.count ?? 0)}
+      calendars={calendars}
+      calendarOptions={calendarOptions}
       configLists={{
         calendar: {
           page: calendarList.page,
-          total: Number(calendarCount.rows[0]?.count ?? 0),
+          total: Number(calendarCount[0]?.count ?? 0),
         },
         blueprint: {
           page: blueprintList.page,
-          total: Number(blueprintCount.rows[0]?.count ?? 0),
+          total: Number(blueprintCount[0]?.count ?? 0),
         },
         policy: {
           page: policyList.page,
-          total: Number(policyCount.rows[0]?.count ?? 0),
+          total: Number(policyCount[0]?.count ?? 0),
         },
         automation: {
           page: automationList.page,
-          total: Number(automationCount.rows[0]?.count ?? 0),
+          total: Number(automationCount[0]?.count ?? 0),
         },
         package: {
           page: packageList.page,
-          total: Number(packageCount.rows[0]?.count ?? 0),
+          total: Number(packageCount[0]?.count ?? 0),
         },
       }}
       configPerPage={CONFIG_PER_PAGE}
-      periods={periods.rows.map((row) => ({
+      periods={periods.map((row) => ({
         ...row,
         // Every period of the calendar reads in one label format derived from its fiscal position and dates.
         name: periodDisplayLabel(
@@ -421,26 +421,26 @@ export async function CloseSetupPage({
           locale,
         ),
       }))}
-      books={books.rows}
+      books={books}
       selectedBookId={selectedBookId}
       canReopen={canReopen}
       viewerId={authz.user.id}
-      blueprints={((blueprints.rows)).map((blueprint) => ({
+      blueprints={((blueprints)).map((blueprint) => ({
         ...blueprint,
         steps: stepRows.filter((step) => step.blueprint_id === blueprint.id),
       }))}
-      policies={policies.rows}
-      automations={automations.rows}
-      packages={packages.rows}
-      users={users.rows}
-      roles={roles.rows}
+      policies={policies}
+      automations={automations}
+      packages={packages}
+      users={users}
+      roles={roles}
       reportDefs={mergedReportDefs}
-      subsidiaries={subsidiaryUiEnabled ? subsidiaries.rows : []}
+      subsidiaries={subsidiaryUiEnabled ? subsidiaries : []}
       dimensions={dimensions}
-      reopenRequests={reopenRequests.rows}
-      liveReopenRequests={liveReopenRequests.rows}
+      reopenRequests={reopenRequests}
+      liveReopenRequests={liveReopenRequests}
       reopenPage={reopenList.page}
-      reopenTotal={Number(reopenCount.rows[0]?.count ?? 0)}
+      reopenTotal={Number(reopenCount[0]?.count ?? 0)}
       reopenPerPage={CONFIG_PER_PAGE}
       advancedClose={advancedClose}
     />

@@ -360,14 +360,14 @@ const SELECT_COLS = sql`id, org_id as "orgId", source, display_name as "displayN
 
 export async function listConnections(orgId: string): Promise<ConnectionRow[]> {
   const r = (await db.execute<ConnectionRow>(sql`
-    select ${SELECT_COLS} from connections where org_id = ${orgId} order by created_at`));
-  return r.rows;
+    select ${SELECT_COLS} from connections where org_id = ${orgId} order by created_at`, "objects"));
+  return r;
 }
 
 export async function getConnection(orgId: string, id: string): Promise<ConnectionRow | null> {
   const r = (await db.execute<ConnectionRow>(sql`
-    select ${SELECT_COLS} from connections where org_id = ${orgId} and id = ${id} limit 1`));
-  return r.rows[0] ?? null;
+    select ${SELECT_COLS} from connections where org_id = ${orgId} and id = ${id} limit 1`, "objects"));
+  return r[0] ?? null;
 }
 
 /** Sealed `secrets` blob for a QBO connection: app creds + (once authorized) tokens. */
@@ -410,8 +410,8 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
     const selected = await db.execute<{ secrets: string | null }>(sql`
       select secrets from connections
        where id = ${connection.id} and org_id = ${connection.orgId}
-       for update`);
-    const sealed = selected.rows[0]?.secrets;
+       for update`, "objects");
+    const sealed = selected[0]?.secrets;
     if (typeof sealed !== "string" || sealed === "") {
       throw new Error("Connection was removed or its credentials are unavailable during token refresh");
     }
@@ -454,8 +454,8 @@ export async function refreshConnectionTokens<T extends RefreshableTokens>(
       update connections
          set secrets = ${updatedSecrets}, updated_at = now()
        where id = ${connection.id} and org_id = ${connection.orgId} and secrets = ${sealed}
-       returning id`);
-    if (updated.rows.length !== 1) {
+       returning id`, "objects");
+    if (updated.length !== 1) {
       throw new Error("Connection credentials changed during token refresh — retry the sync");
     }
     return next;

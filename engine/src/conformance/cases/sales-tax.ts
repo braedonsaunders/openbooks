@@ -566,7 +566,7 @@ export const SALES_TAX_CASES: readonly ConformanceCase[] = [
         const chosen=(await resolveCanadianGoodsTaxes(ledger.orgId,{kind:'customer_invoice',subsidiaryId:ledger.subsidiaryId,documentDate:ledger.date,currency:'CAD',selection},[{amount:'100'}])).get(0)!;
         await db.transaction(async tx=>{
           await tx.execute(sql`update documents set custom=${JSON.stringify({canadianGoodsTax:selection})}::jsonb,tax_total=${chosen.computed.taxTotal},total=${chosen.computed.total} where org_id=${ledger.orgId} and id=${documentId}`);
-          const line=(await tx.execute<{id:string}>(sql`update document_lines set tax_amount=${chosen.computed.taxTotal},tax_input_amount='100' where org_id=${ledger.orgId} and document_id=${documentId} returning id`)).rows[0]!;
+          const line=(await tx.execute<{id:string}>(sql`update document_lines set tax_amount=${chosen.computed.taxTotal},tax_input_amount='100' where org_id=${ledger.orgId} and document_id=${documentId} returning id`, "objects"))[0]!;
           await persistLineTaxComponents(ledger.orgId,line.id,chosen.computed.components,ledger.actorId,tx);
           await persistGoodsTaxSnapshot(tx,ledger.orgId,line.id,chosen.snapshot,ledger.actorId);
           await tx.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${documentId}`);

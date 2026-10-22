@@ -150,19 +150,19 @@ export async function loadPayouts(
           where m.org_id = b.org_id and jl.entry_id = b.journal_entry_id
             and jl.account_id = b.bank_account_id
        )
-  `),
+  `, 'objects'),
     db.execute<{ count: string }>(sql`
     select count(*)::text as count from psp_settlement_lines l
       join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
      where l.org_id = ${orgId} and l.document_id is null
        and l.kind in ('charge', 'refund', 'dispute', 'dispute_reversal')${subsidiaryFilter}
-  `),
+  `, 'objects'),
     db.execute<{ count: string; total: string | null }>(sql`
     select count(*)::text as count, sum(a.amount)::text as total
       from psp_payout_accruals a
       join psp_settlement_batches b on b.org_id = a.org_id and b.id = a.batch_id
      where a.org_id = ${orgId} and a.status = 'accrued'${subsidiaryFilter}
-  `),
+  `, 'objects'),
     db.execute<PayoutQueueRow>(sql`
     select l.id as "lineId", l.batch_id as "batchId", b.provider,
            b.external_ref as "externalRef", b.settlement_date::text as "settlementDate",
@@ -173,7 +173,7 @@ export async function loadPayouts(
        and l.kind in ('charge', 'refund', 'dispute', 'dispute_reversal')${subsidiaryFilter}
      order by b.settlement_date desc, l.line_number
      limit 25
-  `),
+  `, 'objects'),
     db.execute<{
     id: string
     provider: string
@@ -195,16 +195,16 @@ export async function loadPayouts(
      where b.org_id = ${orgId}${subsidiaryFilter}
      order by b.settlement_date desc, b.created_at desc
      limit 50
-  `),
+  `, 'objects'),
     can(authz, 'reports.read')
       ? builtInReportDefinitionId(orgId, 'payout-reconciliation')
       : Promise.resolve(null),
   ])
-  const unreconciled = unreconciledResult.rows[0]
-  const unmatched = unmatchedResult.rows[0]
-  const inTransit = inTransitResult.rows[0]
-  const queue = queueResult.rows
-  const batches = batchesResult.rows
+  const unreconciled = unreconciledResult[0]
+  const unmatched = unmatchedResult[0]
+  const inTransit = inTransitResult[0]
+  const queue = queueResult
+  const batches = batchesResult
 
   const batchIds = batches.map((row) => row.id)
   const [tiedRows, accruedRows]: [{ rows: { id: string }[] }, { rows: { batch_id: string }[] }] = batchIds.length > 0

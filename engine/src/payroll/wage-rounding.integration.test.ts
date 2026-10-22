@@ -28,20 +28,20 @@ test("omitted wage rounding terms inherit the policy at the saved date rather th
     await save({ effectiveFrom: "2026-08-01", rate: "36.25" });
     await save({ effectiveFrom: "2026-03-01", rate: "35.50" });
     await save({ effectiveFrom: "2026-07-12", rate: "35.75" });
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       effective_from: string; effective_to: string | null; rate: string;
       payroll_rate_scale: number; payroll_amount_rounding: string;
     }>(sql`select effective_from::text, effective_to::text, rate::text, payroll_rate_scale, payroll_amount_rounding
-      from labor_cost_rates where org_id=${fx.orgId} and employee_party_id=${partyId} order by effective_from`)).rows;
+      from labor_cost_rates where org_id=${fx.orgId} and employee_party_id=${partyId} order by effective_from`, "objects");
     assert.deepEqual(rows, [
       { effective_from: "2026-01-01", effective_to: "2026-02-28", rate: "35.2500", payroll_rate_scale: 4, payroll_amount_rounding: "dimension_group" },
       { effective_from: "2026-03-01", effective_to: "2026-07-11", rate: "35.5000", payroll_rate_scale: 4, payroll_amount_rounding: "dimension_group" },
       { effective_from: "2026-07-12", effective_to: "2026-07-31", rate: "35.7500", payroll_rate_scale: 2, payroll_amount_rounding: "time_entry" },
       { effective_from: "2026-08-01", effective_to: null, rate: "36.2500", payroll_rate_scale: 2, payroll_amount_rounding: "time_entry" },
     ]);
-    const audits = (await db.execute<{ actor_id: string; changes: { after: { payrollRateScale: number; payrollAmountRounding: string } } }>(sql`
+    const audits = await db.execute<{ actor_id: string; changes: { after: { payrollRateScale: number; payrollAmountRounding: string } } }>(sql`
       select actor_id, changes from audit_log where org_id=${fx.orgId} and table_name='labor_cost_rates'
-        and changes->>'reason'=${wage.reason} order by at,id`)).rows;
+        and changes->>'reason'=${wage.reason} order by at,id`, "objects");
     assert.equal(audits.length, 5);
     assert.ok(audits.every((audit) => audit.actor_id === fx.actorId));
     assert.deepEqual(audits.map((audit) => [audit.changes.after.payrollRateScale, audit.changes.after.payrollAmountRounding]),
@@ -75,11 +75,11 @@ test("dated wage rounding reaches native stubs, audits, replay and stale-calcula
       }
       const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: start, periodEnd: end });
       const calculate = () => calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
-      const lines = async () => (await db.execute<{ amount: string; rate: string; hours: string; earned_from: string; expense_account_id: string }>(sql`
+      const lines = async () => await db.execute<{ amount: string; rate: string; hours: string; earned_from: string; expense_account_id: string }>(sql`
         select l.amount::text,l.rate::text,l.hours::text,l.earned_from::text,l.expense_account_id
           from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
           join pay_components c on c.org_id=l.org_id and c.id=l.component_id
-         where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and c.system_key='overtime'`)).rows;
+         where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and c.system_key='overtime'`, "objects");
       assert.deepEqual((await calculate()).errors, []);
       const initial = await lines();
       assert.equal(initial.length, 1);
@@ -108,9 +108,9 @@ test("dated wage rounding reaches native stubs, audits, replay and stale-calcula
         assert.equal((await lines())[0]!.amount, "264.3800");
       }
     }
-    const audits = (await db.execute<{ actor_id: string; changes: { after: { payrollRateScale: number; payrollAmountRounding: string } } }>(sql`
+    const audits = await db.execute<{ actor_id: string; changes: { after: { payrollRateScale: number; payrollAmountRounding: string } } }>(sql`
       select actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='labor_cost_rates'
-        and changes->>'reason'=${wage.reason} order by at,id`)).rows;
+        and changes->>'reason'=${wage.reason} order by at,id`, "objects");
     assert.equal(audits.length, 3);
     assert.ok(audits.every((audit) => audit.actor_id === fx.actorId));
     assert.ok(audits.some((audit) => audit.changes.after.payrollRateScale === 2 && audit.changes.after.payrollAmountRounding === "time_entry"));

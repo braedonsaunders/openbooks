@@ -174,14 +174,12 @@ export const PATCH = defineRoute({
           // Lock and compare in the same transaction as the replacement. A slow
           // request can therefore never commit over a newer save that advanced
           // the exact revision while this request was in flight.
-          const locked = (
-            await tx.execute<{ updatedAt: string }>(sql`
+          const locked = (await tx.execute<{ updatedAt: string }>(sql`
         select ${dashboardRevisionSql(sql.raw("updated_at"))} as "updatedAt"
           from insight_dashboards
          where id = ${id} and org_id = ${user.orgId}
          for update
-      `)
-          ).rows[0];
+      `, "objects"))[0];
           if (!locked) throw new DashboardRevisionError(404, "not found");
           assertDashboardRevision(expectedRevision, locked.updatedAt);
 
@@ -202,8 +200,8 @@ export const PATCH = defineRoute({
           updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
         returning *, ${dashboardRevisionSql(sql.raw("updated_at"))} as updated_at
-      `);
-          return NextResponse.json(updated.rows[0]);
+      `, "objects");
+          return NextResponse.json(updated[0]);
         },
       );
       return outcome;

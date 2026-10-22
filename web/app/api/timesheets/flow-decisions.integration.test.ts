@@ -63,7 +63,7 @@ async function fixture(gated:boolean,preventSelfApproval=false) {
   })))
   const approve=(employee:string)=>withOrgContext(org.orgId,()=>decideTimesheetFixture({orgId:org.orgId,employee,week:WEEK,decision:'approved'}))
   const entryStatuses = async () => (await db.execute<{ status: string }>(sql`
-    select status from time_entries where org_id=${org.orgId} and employee_party_id=${ownParty}`)).rows.map((row) => row.status)
+    select status from time_entries where org_id=${org.orgId} and employee_party_id=${ownParty}`, 'objects')).map((row) => row.status)
   if(gated)await configureTimesheetReviewFixture(org.orgId,supervisor,preventSelfApproval)
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, supervisor, ownParty, coworker, asUser, save, submit, approve, entryStatuses, close }
@@ -73,7 +73,7 @@ test('a tenant without approval gates releases its own submitted hours without a
  const f=await fixture(false);try{
   assert.equal((await f.save(f.ownParty)).status,200);const response=await f.submit(f.ownParty);
   assert.equal(response.status,200,await response.clone().text());assert.deepEqual(await f.entryStatuses(),['approved']);
-  const receipt=(await db.execute<{kind:string}>(sql`select policy->>'kind' as kind from flow_submissions where org_id=${f.org.orgId} and subject_kind='timesheet_week'`)).rows;
+  const receipt=await db.execute<{kind:string}>(sql`select policy->>'kind' as kind from flow_submissions where org_id=${f.org.orgId} and subject_kind='timesheet_week'`, 'objects');
   assert.deepEqual(receipt,[{kind:'ungated'}]);
  }finally{await f.close();}
 });
@@ -91,7 +91,7 @@ test('a configured gate with no eligible assignee refuses submission and leaves 
   assert.equal((await f.save(f.ownParty)).status,200);const response=await f.submit(f.ownParty);
   assert.equal(response.status,422,await response.clone().text());assert.match(await response.text(),/zero assignees|workflow|Flow/i);
   assert.deepEqual(await f.entryStatuses(),['draft']);
-  assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId} and status='pending'`)).rows.length,0);
+  assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId} and status='pending'`, 'objects')).length,0);
  }finally{await f.close();}
 });
 
@@ -103,7 +103,7 @@ test('the shared Flow rejection preserves actor, reason, header and entry eviden
   const reason='Correct the recorded hours before this week can be released';
   const response=await withOrgContext(f.org.orgId,()=>decideTimesheetFixture({orgId:f.org.orgId,employee:f.ownParty,week:WEEK,decision:'rejected',reason}));
   assert.equal(response.status,200,await response.clone().text());assert.deepEqual(await f.entryStatuses(),['rejected']);
-  const audit=(await db.execute<{actor_id:string;changes:{reason:string;before:{status:string};after:{status:string}}}>(sql`select actor_id,changes from audit_log where org_id=${f.org.orgId} and table_name='timesheet_weeks' and changes->>'event'='rejected'`)).rows;
+  const audit=await db.execute<{actor_id:string;changes:{reason:string;before:{status:string};after:{status:string}}}>(sql`select actor_id,changes from audit_log where org_id=${f.org.orgId} and table_name='timesheet_weeks' and changes->>'event'='rejected'`, 'objects');
   assert.equal(audit.length,1);assert.equal(audit[0]?.actor_id,f.supervisor);assert.equal(audit[0]?.changes.reason,reason);
   assert.equal(audit[0]?.changes.before.status,'submitted');assert.equal(audit[0]?.changes.after.status,'rejected');
   const repeated=await withOrgContext(f.org.orgId,()=>decideTimesheetFixture({orgId:f.org.orgId,employee:f.ownParty,week:WEEK,decision:'rejected',reason}));
@@ -117,6 +117,6 @@ test('a native timesheet gate cannot be decided after current legal-entity acces
   await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id=${f.org.orgId} and key='approver'`);
   const response=await f.approve(f.ownParty);assert.ok([403,404].includes(response.status),await response.clone().text());
   assert.deepEqual(await f.entryStatuses(),['submitted']);
-  assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId} and status='pending'`)).rows.length,1);
+  assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId} and status='pending'`, 'objects')).length,1);
  }finally{await f.close();}
 });

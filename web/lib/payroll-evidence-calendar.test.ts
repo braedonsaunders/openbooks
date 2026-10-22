@@ -52,24 +52,25 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.openbooksEvidenceSqlText
       export async function withOrgTransaction(orgId, work) { return work() }
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
-          if (text.includes('from documents d')) return { rows: [{ subsidiary_id: 'sub-1', run_status: 'calculated' }] }
-          if (text.includes('from parties p')) return { rows: [] }
+          if (text.includes('from documents d')) return inMode({ rows: [{ subsidiary_id: 'sub-1', run_status: 'calculated' }] })
+          if (text.includes('from parties p')) return inMode({ rows: [] })
           if (text.includes('from pay_runs r')) {
-            return { rows: [{
+            return inMode({ rows: [{
               document_number: 'RUN-7',
               period_start: '2026-03-01',
               period_end: '2026-03-31',
               pay_date: '2026-04-02',
               run_status: 'calculated',
-            }] }
+            }] })
           }
           if (text.includes('from report_definitions')) {
-            return { rows: text.includes("kind = 'built_in'") ? ['journal', 'register'].map((part) => ({ slug: 'payroll-' + part, id: 'def-' + part, name: 'Payroll ' + part })) : ['journal', 'register'].flatMap((part) => [
+            return inMode({ rows: text.includes("kind = 'built_in'") ? ['journal', 'register'].map((part) => ({ slug: 'payroll-' + part, id: 'def-' + part, name: 'Payroll ' + part })) : ['journal', 'register'].flatMap((part) => [
                 { slug: 'payroll-' + part, id: 'custom-' + part, name: 'Custom payroll ' + part },
                 { slug: 'payroll-' + part, id: 'def-' + part, name: 'Payroll ' + part },
-              ]) }
+              ]) })
           }
           throw new Error('unexpected evidence query: ' + text.slice(0, 120))
         },

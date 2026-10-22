@@ -38,7 +38,7 @@ export async function loadHolidayPaymentEvidence(
   const party = (await tx.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
      where org_id=${input.orgId} and id=${instruction.employeePartyId} for share
-  `)).rows[0];
+  `, "objects"))[0];
   const scope = await actorAllowedSubsidiaryIds(tx, input.orgId, input.actorId);
   if (!party?.subsidiaryId || !payrollSubsidiaryInScope(scope, party.subsidiaryId)) {
     throw new PayrollError("Select an employee belonging to a legal entity within your payroll authority.");
@@ -57,6 +57,6 @@ export async function loadHolidayPaymentEvidence(
       join file_versions v on v.file_id=f.id
      where f.org_id=${input.orgId} and f.id=${reference.fileId} and v.id=${reference.versionId}
      for share of f, folder, v
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
   return { ...bindHolidayPaymentSource(input.orgId, instruction, reference, retained), subsidiaryId: party.subsidiaryId };
 }

@@ -40,14 +40,14 @@ export async function guardPayrollEmployees(
   if (gate.allowedSubsidiaryIds === null) return null
   const ids = [...new Set(employeeIds)]
   if (ids.length === 0) return null
-  const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+  const rows = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
     select p.id, p.subsidiary_id as "subsidiaryId"
       from parties p
      where p.org_id = ${gate.user.orgId}
        and p.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
      order by p.id
        for share of p
-  `)).rows
+  `, 'objects')
   // An unresolved employee id is indistinguishable from an out-of-scope one.
   if (rows.length !== ids.length) return notFound("payroll record")
   for (const row of rows) {
@@ -66,13 +66,13 @@ export async function guardPayrollFilingAccounts(
   if (gate.allowedSubsidiaryIds === null) return null
   const ids = [...new Set(accountIds.filter((id): id is string => Boolean(id)))]
   if (ids.length === 0) return guardPayrollRoot(gate)
-  const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+  const rows = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
     select id, subsidiary_id as "subsidiaryId"
       from payroll_filing_accounts
      where org_id = ${gate.user.orgId}
        and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
        and (${includeInactive} or is_active)
-  `)).rows
+  `, 'objects')
   if (rows.length !== ids.length) return notFound("payroll record")
   for (const row of rows) {
     const denied = await guardPayrollSubsidiaryOrRoot(gate, row.subsidiaryId)
@@ -83,11 +83,11 @@ export async function guardPayrollFilingAccounts(
 
 /** Vendor remittance destinations are party records and are entity-owned too. */
 export async function guardPayrollVendor(gate: Authz, partyId: string): Promise<Response | null> {
-  const rows = (await db.execute<{ subsidiaryId: string | null }>(sql`
+  const rows = await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId"
       from parties
      where org_id = ${gate.user.orgId} and id = ${partyId}
-  `)).rows
+  `, 'objects')
   if (rows.length !== 1) return notFound("payroll record")
   // Remittance bills are posted to the active root entity. A null-subsidiary
   // vendor is an org-wide party, so resolve it to that same root rather than
@@ -204,7 +204,7 @@ async function guardPayroll941Rows(
      where s.org_id = ${gate.user.orgId} and s.tax_year = ${taxYear}
        and s.country = ${country} and r.run_status in ('committed', 'voided')
        and extract(quarter from s.pay_date)::int in (${sql.join(requested.map(row => sql`${row.quarter}`), sql`, `)})
-  `)).rows
+  `, 'objects'))
     .map(row => ({ ...row, account: returnAccountOf(row.account, row.subsidiaryId, row.sourceDate) }))
     .filter(row => requestedIds.has(`${row.account ?? ''}:${row.quarter}`))
   const resolved = new Set(sources.map(row => `${row.account ?? ''}:${row.quarter}`))
@@ -240,7 +240,7 @@ async function guardPayrollFilingEmployees(
   if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound("payroll record")
   const ids = [...new Set(employeeIds)]
   if (ids.length === 0) return null
-  const rows = (await db.execute<{ employeeId: string; subsidiaryId: string | null }>(sql`
+  const rows = await db.execute<{ employeeId: string; subsidiaryId: string | null }>(sql`
     select distinct s.employee_party_id as "employeeId", d.subsidiary_id as "subsidiaryId"
       from pay_stubs s
       join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
@@ -248,7 +248,7 @@ async function guardPayrollFilingEmployees(
      where s.org_id = ${gate.user.orgId} and s.tax_year = ${taxYear}
        and s.country = ${country} and r.run_status in ('committed', 'voided')
        and s.employee_party_id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)})
-  `)).rows
+  `, 'objects')
   for (const row of rows) {
     const denied = guardSubsidiaryScope(gate, row.subsidiaryId)
     if (denied) return denied
@@ -257,7 +257,7 @@ async function guardPayrollFilingEmployees(
   // current employee boundary as an ADDITIONAL check, never infer an employer
   // for them from an unrelated pay run. Rows without any historical sources
   // retain that same boundary (including opening-only slips).
-  const openings = (await db.execute<{ employeeId: string }>(sql`
+  const openings = await db.execute<{ employeeId: string }>(sql`
     select employee_party_id as "employeeId" from payroll_opening_balances
      where org_id = ${gate.user.orgId} and tax_year = ${taxYear}
        and employee_party_id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)})
@@ -265,7 +265,7 @@ async function guardPayrollFilingEmployees(
          or coalesce(cpp_ytd, 0) <> 0 or coalesce(cpp2_ytd, 0) <> 0
          or coalesce(ei_ytd, 0) <> 0 or coalesce(qpip_ytd, 0) <> 0
          or coalesce(taxable_ytd, 0) <> 0 or coalesce(tax_ytd, 0) <> 0)
-  `)).rows
+  `, 'objects')
   const historical = new Set(rows.map(row => row.employeeId))
   return guardPayrollEmployees(gate, [
     ...ids.filter(id => !historical.has(id)),
@@ -344,7 +344,7 @@ async function activeRoot(gate: Authz): Promise<string | null> {
     select id from subsidiaries
      where org_id = ${gate.user.orgId} and parent_id is null and is_active
      order by created_at limit 1
-  `)).rows[0]?.id ?? null
+  `, 'objects'))[0]?.id ?? null
 }
 
 /**
@@ -408,8 +408,8 @@ export async function visiblePayrollEmployeeIds(gate: Authz, lock = false): Prom
      where p.org_id = ${gate.user.orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
      order by p.id
-       ${lock ? sql`for share of p` : sql``}`)
-  return new Set(rows.rows.map((row) => row.id))
+       ${lock ? sql`for share of p` : sql``}`, 'objects')
+  return new Set(rows.map((row) => row.id))
 }
 
 /**
@@ -425,7 +425,7 @@ export async function guardRemittancePeriod(
   to: string,
 ): Promise<Response | null> {
   if (gate.allowedSubsidiaryIds === null) return null
-  const rows = (await db.execute<{ subsidiaryId: string | null; filingAccountId: string | null }>(sql`
+  const rows = await db.execute<{ subsidiaryId: string | null; filingAccountId: string | null }>(sql`
     select distinct d.subsidiary_id as "subsidiaryId",
            s.filing_account_id as "filingAccountId"
       from pay_stubs s
@@ -433,7 +433,7 @@ export async function guardRemittancePeriod(
        and r.run_status = 'committed'
       left join documents d on d.id=r.document_id and d.org_id=r.org_id
      where s.org_id = ${gate.user.orgId} and s.pay_date between ${from} and ${to}
-  `)).rows
+  `, 'objects')
   // Employee transfers do not transfer the earlier employer's payroll history.
   for (const row of rows) {
     const denied = guardSubsidiaryScope(gate, row.subsidiaryId)

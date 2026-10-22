@@ -51,7 +51,7 @@ async function seedPolicy(orgId: string, actorId: string, leaveTypeId: string, o
 async function seedClassification(orgId: string, code: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     insert into hrm_work_classifications (org_id, code, name, trade)
-    values (${orgId}, ${code}, ${code}, 'trade') returning id`)).rows[0]!.id;
+    values (${orgId}, ${code}, ${code}, 'trade') returning id`, "objects"))[0]!.id;
 }
 
 async function assignClassification(
@@ -69,7 +69,7 @@ async function assignClassification(
 async function policyCount(orgId: string, leaveTypeId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_leave_policies
-     where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active`)).rows[0]?.n ?? 0;
+     where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active`, "objects"))[0]?.n ?? 0;
 }
 
 test("an employment not listed on a pinned policy is not matched", { skip: !DB }, async () => {

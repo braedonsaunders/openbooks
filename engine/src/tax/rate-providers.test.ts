@@ -947,21 +947,21 @@ async function committedConfig(orgId: string): Promise<CommittedConfig | null> {
                prefer_provider as "preferProvider", settings, secrets, last_error as "lastError",
                ${REVISION_COL} as "updatedAt", updated_by as "updatedBy"
           from tax_rate_provider_configs where org_id = ${orgId}
-      `),
-    )).rows[0] ?? null
+      `, "objects"),
+    ))[0] ?? null
   );
 }
 
 async function configAuditRows(orgId: string): Promise<ConfigAuditRow[]> {
   return (
-    (await withBypass(() =>
+    await withBypass(() =>
       db.execute<ConfigAuditRow>(sql`
         select action, actor_id, changes
           from audit_log
          where org_id = ${orgId} and table_name = 'tax_rate_provider_configs'
          order by at, id
-      `),
-    )).rows
+      `, "objects"),
+    )
   );
 }
 
@@ -1372,11 +1372,9 @@ test(
         ),
         (e: unknown) => e instanceof TaxRateProviderError && /exceeded 1048576 bytes/.test(e.message),
       );
-      const quotes = (
-        await withBypass(() =>
-          db.execute<{ n: string }>(sql`select count(*)::text as n from tax_rate_quotes where org_id = ${orgId}`),
-        )
-      ).rows[0]!.n;
+      const quotes = (await withBypass(() =>
+          db.execute<{ n: string }>(sql`select count(*)::text as n from tax_rate_quotes where org_id = ${orgId}`, "objects"),
+        ))[0]!.n;
       assert.equal(quotes, "0", "an oversize body must persist no quote evidence");
       const config = (await committedConfig(orgId))!;
       assert.match(config.lastError ?? "", /exceeded 1048576 bytes/, "the refusal is recorded, not swallowed");

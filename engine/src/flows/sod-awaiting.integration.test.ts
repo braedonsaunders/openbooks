@@ -52,12 +52,12 @@ async function withOwnSubmissionFixture(
     const gateId = (await db.execute<{ id: string }>(sql`
       select id from flow_gates
        where org_id=${org.orgId} and subject_id = ${docId} and assignee_user_id = ${actors.approver2Id} and status = 'pending'
-       limit 1`)).rows[0]?.id;
+       limit 1`, "objects"))[0]?.id;
     assert.ok(gateId, "the tenant's independent approver holds a pending gate");
     assert.equal((await db.execute(sql`select id from flow_gates where org_id=${org.orgId}
-      and subject_id=${docId} and assignee_user_id=${maker} and status='pending'`)).rows.length, 0,
+      and subject_id=${docId} and assignee_user_id=${maker} and status='pending'`, "objects")).length, 0,
       "the tenant's self-approval restriction excludes the maker at assignment");
-    const now = (await db.execute<{now:string}>(sql`select now()::text as now`)).rows[0]!.now;
+    const now = (await db.execute<{now:string}>(sql`select now()::text as now`, "objects"))[0]!.now;
     await createDelegation({ orgId: org.orgId, fromUserId: actors.approver2Id, toUserId: maker,
       startsAt: new Date(new Date(now).getTime()-3600000), endsAt: new Date(new Date(now).getTime()+3600000) });
     await fn(org, actors, docId, gateId!);
@@ -67,13 +67,13 @@ async function withOwnSubmissionFixture(
 }
 
 async function pendingGateForUser(orgId: string, docId: string, userId: string): Promise<string | null> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select g.id from flow_gates g
      where g.subject_id = ${docId} and g.status = 'pending'
        and (g.assignee_user_id = ${userId} or g.assignee_role in (
          select r.key from role_assignments ra join app_roles r on r.id = ra.role_id
           where ra.org_id = ${orgId} and ra.user_id = ${userId}))
-     limit 1`)).rows;
+     limit 1`, "objects");
   return rows[0]?.id ?? null;
 }
 

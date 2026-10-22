@@ -15,8 +15,8 @@ export async function normalizeJournalCurrencyLines(runner: SqlExecutor, doc: Pi
   if (!doc.subsidiaryId) throw new JournalInstructionError("The journal has no accounting entity.", "Choose its active entity and accounting book.");
   const normalized: KernelLine[] = [];
   const bookId=doc.accountingBookId ?? await activePostingPrimaryBookId(doc.orgId,runner);
-  const bases = (await runner.execute<{id:string;currency:string}>(sql`select id,public.accounting_book_currency(${doc.orgId},${bookId},id) as currency
-    from subsidiaries where org_id=${doc.orgId} and id in ${[...new Set([doc.subsidiaryId,...lines.map(line=>line.subsidiaryId ?? doc.subsidiaryId)].filter((id): id is string=>!!id))]}`)).rows;
+  const bases = await runner.execute<{id:string;currency:string}>(sql`select id,public.accounting_book_currency(${doc.orgId},${bookId},id) as currency
+    from subsidiaries where org_id=${doc.orgId} and id in ${[...new Set([doc.subsidiaryId,...lines.map(line=>line.subsidiaryId ?? doc.subsidiaryId)].filter((id): id is string=>!!id))]}`, "objects");
   const currencies=new Map(bases.map(row=>[row.id,row.currency]));
   const homeCurrency=doc.subsidiaryId ? currencies.get(doc.subsidiaryId) : undefined;
   if (!homeCurrency) throw new JournalInstructionError("The journal has no accounting currency.","Choose its active entity and accounting book.");

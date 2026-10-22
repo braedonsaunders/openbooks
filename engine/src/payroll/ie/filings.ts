@@ -136,14 +136,14 @@ export async function iePayeReconciliation(
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'IE'
      group by s.employee_party_id, p.display_name, s.filing_account_id
      order by p.display_name
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed IE pay stubs for tax year ${taxYear} — run, calculate and commit `
       + "an IE pay run before reconciling the year's PAYE, PRSI and USC",
     );
   }
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     filingAccountId: (row.filing_account_id as string | null) ?? null,

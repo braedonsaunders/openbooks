@@ -327,7 +327,7 @@ export async function importPulledSettlements(
              default_fx_account_id, default_clearing_account_id
         from psp_provider_configs
        where org_id = ${orgId} and provider = ${provider} and is_enabled and pull_enabled
-    `)).rows[0];
+    `, "objects"))[0];
     if (!config) {
       throw new PaymentError(
         `scheduled pull is not enabled for ${provider}; enable it in Company Settings → Payment Providers`,
@@ -348,7 +348,7 @@ export async function importPulledSettlements(
       const { batchId } = await importSettlementBatch(orgId, actorId, parsed, accounts, allowedSubsidiaryIds);
       batchIds.push(batchId);
     }
-    const pulled = (await db.execute(sql`
+    const pulled = (await db.execute<never>(sql`
       update psp_provider_configs set last_pull_at = now(), updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and provider = ${provider}
     `));
@@ -416,11 +416,11 @@ export async function runDuePspPayoutPulls(
   // bypass: scheduler-tick — the unscoped scan finds pull-enabled provider
   // configs across every production organization.
   const configs = await withBypass(async () =>
-    (await db.execute<PullConfigRow>(sql`
+    await db.execute<PullConfigRow>(sql`
       select c.org_id as "orgId", c.provider, c.secrets, c.last_pull_at::text as "lastPullAt"
         from psp_provider_configs c
        where c.provider in ('stripe', 'paypal') and c.is_enabled and c.pull_enabled ${orgScope}
-       order by c.org_id, c.provider`)).rows);
+       order by c.org_id, c.provider`, "objects"));
   for (const config of configs) {
     const gated = await withOrg(config.orgId, () => orgFeatureEnabled(config.orgId, "banking"));
     if (!gated) {

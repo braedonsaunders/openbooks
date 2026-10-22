@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import test, { before } from "node:test";
+import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
   createScratchOrg,
@@ -25,17 +25,6 @@ const {
 const { db, withBypass, withOrgContext } = await import("../platform/db.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-before(async () => {
-  if (!DB) return;
-  const client = await (await import("../platform/db.ts")).pool.connect();
-  try {
-    const { readFileSync } = await import("node:fs");
-    await client.query(readFileSync("schema/migrations/generated/0291_sftp_import_schedule_expected_account.sql", "utf8"));
-  } finally {
-    client.release();
-  }
-});
 
 /** OFX v1 SGML statement carrying one STMTTRN per fitid, optionally identified. */
 function ofxStatement(fitids: string[], acctId?: string): Buffer {

@@ -56,7 +56,7 @@ async function makeDraftBill(org: { orgId: string; subsidiaryId: string; date: s
 }
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`))).rows[0]!.revision
+  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`, 'objects')))[0]!.revision
 }
 
 async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
@@ -76,7 +76,7 @@ async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ sta
 }
 
 async function storedDate(orgId: string, id: string): Promise<string> {
-  return (await withOrgContext(orgId, () => db.execute<{ d: string }>(sql`select document_date::text as d from documents where id=${id} and org_id=${orgId}`))).rows[0]!.d
+  return (await withOrgContext(orgId, () => db.execute<{ d: string }>(sql`select document_date::text as d from documents where id=${id} and org_id=${orgId}`, 'objects')))[0]!.d
 }
 
 test('documents PATCH refuses a malformed document date with a domain error', async () => {
@@ -112,7 +112,7 @@ test('documents PATCH refuses a malformed reference id with a domain error', asy
       refused.status === 400 || refused.status === 422,
       `expected a domain 4xx, got ${refused.status}: ${JSON.stringify(refused.json)}`,
     )
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ p: string | null }>(sql`select party_id as p from documents where id=${id} and org_id=${org.orgId}`))).rows[0]!.p
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ p: string | null }>(sql`select party_id as p from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.p
     assert.equal(stored, null, 'refused references write nothing')
   } finally {
     await dropScratchOrg(org.orgId)
@@ -133,7 +133,7 @@ test('documents PATCH refuses malformed and foreign line dimension references', 
     assert.equal(malformed.status, 422, `expected 422, got ${malformed.status}: ${JSON.stringify(malformed.json)}`)
     const foreign = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), lines: [line(deptB)] })
     assert.equal(foreign.status, 404, `expected 404, got ${foreign.status}: ${JSON.stringify(foreign.json)}`)
-    const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${orgA.orgId}`))).rows[0]!.n
+    const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${orgA.orgId}`, 'objects')))[0]!.n
     assert.equal(lines, 0, 'refused line references store nothing')
   } finally {
     await dropScratchOrg(orgA.orgId)
@@ -156,7 +156,7 @@ test('documents PATCH refuses a foreign-organization party with a tenant-opaque 
       refused.status === 404 || refused.status === 422,
       `expected a domain 4xx, got ${refused.status}: ${JSON.stringify(refused.json)}`,
     )
-    const stored = (await withOrgContext(orgA.orgId, () => db.execute<{ p: string | null }>(sql`select party_id as p from documents where id=${id} and org_id=${orgA.orgId}`))).rows[0]!.p
+    const stored = (await withOrgContext(orgA.orgId, () => db.execute<{ p: string | null }>(sql`select party_id as p from documents where id=${id} and org_id=${orgA.orgId}`, 'objects')))[0]!.p
     assert.equal(stored, null, 'refused foreign references store nothing')
     // An own-org party still saves.
     const saved = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), partyId: orgA.vendorId })
@@ -184,7 +184,7 @@ test('documents PATCH refuses foreign reference custom values on header and line
     // Header: a foreign-org party id is well-formed but another tenant's.
     const refusedHeader = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), custom: { ref_party: orgB.vendorId } })
     assert.equal(refusedHeader.status, 404, `expected tenant-opaque 404, got ${refusedHeader.status}: ${JSON.stringify(refusedHeader.json)}`)
-    const storedCustom = (await withOrgContext(orgA.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${orgA.orgId}`))).rows[0]!.custom
+    const storedCustom = (await withOrgContext(orgA.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`select custom from documents where id=${id} and org_id=${orgA.orgId}`, 'objects')))[0]!.custom
     assert.equal(storedCustom?.ref_party, undefined, 'refused header references store nothing')
     // An own-org reference still saves.
     const savedHeader = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), custom: { ref_party: orgA.vendorId } })
@@ -193,7 +193,7 @@ test('documents PATCH refuses foreign reference custom values on header and line
     const line = (ref: string) => ({ accountId: orgA.accounts.cogs, amount: '10', description: 'probe', custom: { line_ref: ref } })
     const refusedLine = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), lines: [line(orgB.vendorId)] })
     assert.equal(refusedLine.status, 404, `expected tenant-opaque 404, got ${refusedLine.status}: ${JSON.stringify(refusedLine.json)}`)
-    const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${orgA.orgId}`))).rows[0]!.n
+    const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines where document_id=${id} and org_id=${orgA.orgId}`, 'objects')))[0]!.n
     assert.equal(lines, 0, 'refused line references store nothing')
     const savedLine = await patchDoc(orgA.orgId, id, { expectedUpdatedAt: await revision(orgA.orgId, id), lines: [line(orgA.vendorId)] })
     assert.equal(savedLine.status, 200, `own-org line reference must stay green: ${JSON.stringify(savedLine.json)}`)
@@ -212,7 +212,7 @@ test('documents PATCH accepts an empty due date and names the field when malform
     // An empty due date is legal: clearing it saves cleanly.
     const cleared = await patchDoc(org.orgId, id, { expectedUpdatedAt: await revision(org.orgId, id), dueDate: null })
     assert.equal(cleared.status, 200, `an empty due date must save, got ${cleared.status}: ${JSON.stringify(cleared.json)}`)
-    const stored = (await withOrgContext(org.orgId, () => db.execute<{ d: string | null }>(sql`select due_date::text as d from documents where id=${id} and org_id=${org.orgId}`))).rows[0]!.d
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ d: string | null }>(sql`select due_date::text as d from documents where id=${id} and org_id=${org.orgId}`, 'objects')))[0]!.d
     assert.equal(stored, null, 'a cleared due date stores null')
     // A malformed due date refuses with the field named through the shared reader.
     const malformed = await patchDoc(org.orgId, id, { expectedUpdatedAt: await revision(org.orgId, id), dueDate: '' })

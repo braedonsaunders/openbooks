@@ -27,8 +27,8 @@ export async function lockedDocumentScopeDenied(
   const relocked = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from documents
      where id = ${id} and org_id = ${authz.user.orgId} for update
-  `))
-  const row = relocked.rows[0]
+  `, 'objects'))
+  const row = relocked[0]
   if (!row) return notFound("record")
   return guardSubsidiaryScope(authz, row.subsidiaryId)
 }

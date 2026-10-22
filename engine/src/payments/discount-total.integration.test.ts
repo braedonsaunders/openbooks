@@ -41,7 +41,7 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
     });
     const billLineId = (await db.execute<{ id: string }>(sql`
       select id from journal_lines where entry_id = ${billEntryId} and account_id = ${org.accounts.ap}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: org.orgId,
@@ -103,14 +103,14 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
 
     const doc = (await db.execute<{ total: string; open_balance: string }>(sql`
       select total::text, open_balance::text from documents where id = ${payment.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     // Cash frame on the header…
     assert.equal(doc.total, "90.0000");
     // …settlement frame in the legs…
-    const legs = (await db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(sql`
+    const legs = await db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(sql`
       select account_id, amount::text, is_open_item from journal_lines
        where entry_id = ${entryId} and org_id = ${org.orgId} order by line_number
-    `)).rows;
+    `, "objects");
     assert.deepEqual(
       legs.map((l) => [l.account_id, l.amount, l.is_open_item]),
       [
@@ -124,7 +124,7 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
     assert.equal(doc.open_balance, "100.0000");
     const bill = (await db.execute<{ open_balance: string }>(sql`
       select open_balance::text from documents where id = ${billId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(bill.open_balance, "100.0000");
   } finally {
     await dropScratchOrgReporting(org.orgId);

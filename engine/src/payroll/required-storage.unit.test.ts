@@ -15,8 +15,9 @@ for (const operation of ['annual bounds', 'period priors', 'assignment history',
   test(`missing required payroll storage refuses ${operation} without inventing empty evidence`, async () => {
     const missing = Object.assign(new Error('Required payroll relation is unavailable'), { code: '42P01' });
     const dialect = new PgDialect();
-    const executor = { execute: async (query: SQL) => {
-      if (dialect.sqlToQuery(query).sql.includes('to_regclass')) return { rows: [{ available: false }] };
+    const executor = { execute: async (query: SQL, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result);
+      if (dialect.sqlToQuery(query).sql.includes('to_regclass')) return inMode({ rows: [{ available: false }] });
       throw missing;
     } } as unknown as SqlExecutor;
     const read = () => {

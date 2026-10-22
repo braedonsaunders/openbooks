@@ -79,7 +79,7 @@ async function seedManualAsset(
       values (${folderId}, ${org.orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
     const fileId = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-      values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`)).rows[0]!.id;
+      values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
     await tx.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
       values (${org.orgId}, ${fileId}, 'fixed_assets', ${assetId}, ${actorId})`);
@@ -125,8 +125,8 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 
 async function journalCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`));
-  return r.rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  return r[0]!.n;
 }
 
 test("open period: the runner still posts (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {

@@ -65,11 +65,11 @@ export async function writeAmortizationAudit(
     changes: Record<string, unknown>;
   },
 ): Promise<void> {
-  const written = (await runner.execute<{ id: string }>(sql`
+  const written = await runner.execute<{ id: string }>(sql`
     insert into audit_log (id, org_id, table_name, row_id, action, changes, actor_id)
     values (${randomUUID()}, ${input.orgId}, ${input.table}, ${input.rowId}, ${input.action},
       ${JSON.stringify(input.changes)}::jsonb, ${input.actorId})
-    returning id`)).rows;
+    returning id`, "objects");
   if (written.length !== 1) {
     throw new AmortizationError("The audit record was not written; the change was not saved.", {
       status: 409,
@@ -82,7 +82,7 @@ export async function writeAmortizationAudit(
 /** ISO minor-unit exponent of a currency; an unknown code refuses by name. */
 export async function amortizationCurrencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
   const row = (await runner.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${currency}`)).rows[0];
+    select minor_units from currencies where code = ${currency}`, "objects"))[0];
   const exponent = row?.minor_units;
   if (exponent === undefined || !Number.isInteger(exponent) || exponent < 0 || exponent > 4) {
     throw new AmortizationError(`Currency ${currency} has no supported precision in the currency registry.`, {
@@ -104,7 +104,7 @@ export async function nextScheduleNumber(runner: SqlExecutor, orgId: string): Pr
   const row = (await runner.execute<{ next: string }>(sql`
     select (coalesce(max(substring(schedule_number from '^AMS-([0-9]+)$')::bigint), 0) + 1)::text as next
       from expense_amortization_schedules
-     where org_id = ${orgId}`)).rows[0];
+     where org_id = ${orgId}`, "objects"))[0];
   return `AMS-${(row?.next ?? "1").padStart(6, "0")}`;
 }
 
@@ -186,12 +186,12 @@ export async function insertPlanLines(
   const values = input.lines.map((line) => sql`(${input.orgId}, ${input.scheduleId}, ${input.planRevision},
     ${line.periodStart}::date, ${line.periodEnd}::date, ${line.weight.toString()}::bigint, ${fromUnits(line.amount)}::numeric,
     ${input.destinationAccountId}, 'planned', ${input.actorId})`);
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(sql`
     insert into expense_amortization_schedule_lines
       (org_id, schedule_id, plan_revision, period_start, period_end, weight, planned_amount,
        destination_account_id, status, created_by)
     values ${sql.join(values, sql`, `)}
-    returning id`)).rows;
+    returning id`, "objects");
   if (inserted.length !== input.lines.length) {
     throw new AmortizationError("The amortization plan was not stored completely; nothing was saved.", {
       status: 409,
@@ -229,7 +229,7 @@ export async function recordScheduleEvent(
       ${input.effectiveOn}, ${fromUnits(input.balanceDelta ?? 0n)}::numeric, ${input.reason}, ${input.before ? JSON.stringify(input.before) : null}::jsonb,
       ${JSON.stringify(input.after)}::jsonb, ${input.journalEntryId ?? null},
       ${input.relatedDocumentId ?? null}, ${input.actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!row) {
     throw new AmortizationError("The schedule history was not written; the change was not saved.", {
       status: 409,

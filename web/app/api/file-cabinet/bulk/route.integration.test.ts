@@ -66,8 +66,8 @@ function bulkReq(body: unknown): Request {
 async function isInactive(orgId: string, id: string): Promise<boolean | null> {
   const r = (await db.execute<{ isInactive: boolean }>(sql`
     select is_inactive as "isInactive" from files where id = ${id} and org_id = ${orgId}
-  `))
-  return r.rows[0]?.isInactive ?? null
+  `, 'objects'))
+  return r[0]?.isInactive ?? null
 }
 
 /**

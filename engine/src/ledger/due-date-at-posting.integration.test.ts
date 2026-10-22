@@ -33,7 +33,7 @@ async function approvedInvoice(org: ScratchOrg, number: string, dueDate: string 
 
 async function header(docId: string) {
   return (await db.execute<{ status: string; due_date: string | null; document_date: string; posted_entry_id: string | null }>(sql`
-    select status, due_date::text as due_date, document_date::text as document_date, posted_entry_id from documents where id = ${docId}`)).rows[0]!;
+    select status, due_date::text as due_date, document_date::text as document_date, posted_entry_id from documents where id = ${docId}`, "objects"))[0]!;
 }
 
 test("a customer invoice posted with no due date takes the due date its customer's terms imply", { skip: !DB }, async () => {
@@ -49,8 +49,8 @@ test("a customer invoice posted with no due date takes the due date its customer
       assert.equal(row.status, "posted");
       assert.equal(row.due_date, due, "the document header carries the derived due date");
       const lines = await db.execute<{ due_date: string | null }>(sql`
-        select due_date::text as due_date from journal_lines where entry_id = ${row.posted_entry_id} and is_open_item`);
-      assert.deepEqual(lines.rows.map((line) => line.due_date), [due], "the open item carries the same due date");
+        select due_date::text as due_date from journal_lines where entry_id = ${row.posted_entry_id} and is_open_item`, "objects");
+      assert.deepEqual(lines.map((line) => line.due_date), [due], "the open item carries the same due date");
     });
   } finally {
     await dropScratchOrg(org.orgId);

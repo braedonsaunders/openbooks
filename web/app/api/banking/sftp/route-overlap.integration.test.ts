@@ -163,9 +163,9 @@ const patch = (fixture: Fixture, id: string, body: unknown) =>
 
 async function serverCount(fixture: Fixture): Promise<number> {
   const r = await withOrgContext(fixture.orgId, () =>
-    db.execute<{ n: string }>(sql`select count(*)::text as n from sftp_servers where org_id = ${fixture.orgId}`),
+    db.execute<{ n: string }>(sql`select count(*)::text as n from sftp_servers where org_id = ${fixture.orgId}`, "objects"),
   );
-  return Number(r.rows[0]!.n);
+  return Number(r[0]!.n);
 }
 
 test(

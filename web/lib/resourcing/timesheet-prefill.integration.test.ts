@@ -39,8 +39,8 @@ test('planned timesheet weeks include only visible hard active bookings', { skip
     const empty = await withOrgContext(org.orgId, () => loadWeek(org.orgId, ids.employee!, '2026-10-04', new Set([org.subsidiaryId])))
     assert.equal(empty.status, 'empty')
     assert.equal(empty.planned.length, 1)
-    const header = await withBypassContext(() => db.execute(sql`update timesheet_weeks set status='submitted' where org_id=${org.orgId} and employee_party_id=${ids.employee} and week_start='2026-10-04' returning id`))
-    assert.equal(header.rows.length, 1)
+    const header = await withBypassContext(() => db.execute(sql`update timesheet_weeks set status='submitted' where org_id=${org.orgId} and employee_party_id=${ids.employee} and week_start='2026-10-04' returning id`, 'objects'))
+    assert.equal(header.length, 1)
     const submitted = await withOrgContext(org.orgId, () => loadWeek(org.orgId, ids.employee!, '2026-10-04', new Set([org.subsidiaryId])))
     assert.deepEqual(submitted.planned, [])
   } finally {

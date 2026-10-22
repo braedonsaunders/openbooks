@@ -76,46 +76,46 @@ export const GET = defineRoute({
       const record = training
         ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select org_id,${table}::text as kind,created_at,created_by,updated_at,updated_by,subsidiary_id as "subsidiaryId"
-            from ${sql.identifier(table)} where org_id=${authz.user.orgId} and id=${recordId}`))
+            from ${sql.identifier(table)} where org_id=${authz.user.orgId} and id=${recordId}`, 'objects'))
         : table === 'payroll_compensation_packages' || table === 'payroll_compensation_assignments'
         ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select org_id,${table}::text as kind,created_at,created_by,updated_at,updated_by,subsidiary_id as "subsidiaryId"
-            from ${table === 'payroll_compensation_packages' ? sql`payroll_compensation_packages` : sql`payroll_compensation_assignments`} where org_id=${authz.user.orgId} and id=${recordId}`))
+            from ${table === 'payroll_compensation_packages' ? sql`payroll_compensation_packages` : sql`payroll_compensation_assignments`} where org_id=${authz.user.orgId} and id=${recordId}`, 'objects'))
         : table === 'payroll_compensation_versions'
         ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select v.org_id,'payroll_compensation_versions'::text as kind,v.created_at,v.created_by,v.updated_at,v.updated_by,p.subsidiary_id as "subsidiaryId"
             from payroll_compensation_versions v join payroll_compensation_packages p on p.org_id=v.org_id and p.id=v.package_id
-            where v.org_id=${authz.user.orgId} and v.id=${recordId}`))
+            where v.org_id=${authz.user.orgId} and v.id=${recordId}`, 'objects'))
         : table === 'hrm_benefit_plans'
         ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select org_id, 'benefit_program' as kind, created_at, created_by, updated_at, updated_by, employer_subsidiary_id as "subsidiaryId"
-            from hrm_benefit_plans where org_id=${authz.user.orgId} and id=${recordId}`))
+            from hrm_benefit_plans where org_id=${authz.user.orgId} and id=${recordId}`, 'objects'))
         : table === 'entitlement_plans'
         ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select org_id, 'benefit_program' as kind, created_at, created_by, updated_at, updated_by, null::uuid as "subsidiaryId"
-            from entitlement_plans where org_id=${authz.user.orgId} and id=${recordId}`))
+            from entitlement_plans where org_id=${authz.user.orgId} and id=${recordId}`, 'objects'))
         : table === 'hrm_benefit_programs'
         ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select org_id, 'benefit_program' as kind, created_at, created_by, updated_at, updated_by, legal_entity_id as "subsidiaryId"
-            from hrm_benefit_programs where org_id=${authz.user.orgId} and id=${recordId}`))
+            from hrm_benefit_programs where org_id=${authz.user.orgId} and id=${recordId}`, 'objects'))
         : table === 'documents'
         ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select org_id, kind, created_at, created_by, updated_at, updated_by,
                    subsidiary_id as "subsidiaryId"
-              from documents where id = ${recordId} and org_id = ${authz.user.orgId}`))
+              from documents where id = ${recordId} and org_id = ${authz.user.orgId}`, 'objects'))
         : table === 'hrm_benefit_enrollments' ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select e.org_id,'benefit_enrollment' as kind,e.created_at,e.created_by,e.updated_at,e.updated_by,
                    w.employer_subsidiary_id as "subsidiaryId"
             from hrm_benefit_enrollments e join worker_employments w on w.org_id=e.org_id and w.id=e.employment_id
-            where e.org_id=${authz.user.orgId} and e.id=${recordId}`))
+            where e.org_id=${authz.user.orgId} and e.id=${recordId}`, 'objects'))
         : table === 'parties' ? (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
             select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by,
                    subsidiary_id as "subsidiaryId"
-              from parties where id = ${recordId} and org_id = ${authz.user.orgId}`))
+              from parties where id = ${recordId} and org_id = ${authz.user.orgId}`, 'objects'))
         : (await tx.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId?: string | null }>(sql`
             select org_id, 'labor_rate_card' as kind, created_at, created_by, updated_at, updated_by
-              from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`))
-      const metadata = record.rows[0]
+              from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`, 'objects'))
+      const metadata = record[0]
       if (!metadata) return notFound("record")
       if (table === 'item_rate_versions') {
         // Rate-card versions carry no subsidiary_id of their own: their
@@ -132,8 +132,8 @@ export const GET = defineRoute({
             select s.scope_value_id as "subsidiaryId"
               from labor_rate_version_scopes s
              where s.org_id = ${authz.user.orgId} and s.version_id = ${recordId}
-               and s.scope_type = 'subsidiary'`)
-          const named = scopeRows.rows
+               and s.scope_type = 'subsidiary'`, 'objects')
+          const named = scopeRows
             .map((row) => row.subsidiaryId)
             .filter((id): id is string => id !== null)
           if (named.length > 0 && !named.some((id) => allowed.has(id))) {
@@ -176,9 +176,9 @@ export const GET = defineRoute({
            where r.org_id = ${authz.user.orgId} and r.document_id = ${recordId}
              and d.kind = 'pay_run'
            for share of r, d
-        `)
-        if (run.rows.length !== 1) return notFound('record')
-        const denied = guardSubsidiaryScope({ ...authz, allowedSubsidiaryIds: allowed }, run.rows[0]!.subsidiaryId)
+        `, 'objects')
+        if (run.length !== 1) return notFound('record')
+        const denied = guardSubsidiaryScope({ ...authz, allowedSubsidiaryIds: allowed }, run[0]!.subsidiaryId)
         if (denied) return denied
         try {
           await lockAndCheckPayrollRunPopulation(tx, authz.user.orgId, recordId, allowed)
@@ -233,17 +233,17 @@ export const GET = defineRoute({
             from events e left join users u on u.id = e.actor_id and u.org_id = ${authz.user.orgId}
            where true ${filters}
            order by e.at desc, e.id desc
-           limit ${perPage} offset ${(page - 1) * perPage}`)
+           limit ${perPage} offset ${(page - 1) * perPage}`, 'objects')
       const count = await tx.execute(sql`
           with events as (${events})
           select count(*) as n from events e left join users u on u.id = e.actor_id and u.org_id = ${authz.user.orgId}
-           where true ${filters}`)
+           where true ${filters}`, 'objects')
 
       return NextResponse.json({
         // Read JSONB as text so retained decimal digits never pass through
         // the driver's floating-point JSON parser.
-        rows: rows.rows.map((row) => ({ ...row, changes: parseExactJson(row.changes) })),
-        total: Number(count.rows[0]?.n ?? 0),
+        rows: rows.map((row) => ({ ...row, changes: parseExactJson(row.changes) })),
+        total: Number(count[0]?.n ?? 0),
         page,
         perPage,
         actions: ACTIONS,

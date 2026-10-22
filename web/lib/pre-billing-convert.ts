@@ -41,8 +41,8 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
       left join documents invoice on invoice.org_id = worksheet.org_id and invoice.id = worksheet.invoice_document_id
      where worksheet.org_id = ${orgId} and worksheet.id = ${id}
        ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
-  `))
-  const observed = existing.rows[0]
+  `, 'objects'))
+  const observed = existing[0]
   if (!observed) throw new PreBillingError('Prebill not found', 404)
   if (observed.status === 'converted' && observed.invoice_id) {
     return { id: observed.invoice_id, documentNumber: observed.invoice_number!, idempotent: true }
@@ -67,8 +67,8 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
        where worksheet.org_id = ${orgId} and worksheet.id = ${id}
          ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
        for update of worksheet
-    `))
-    const worksheet = header.rows[0]
+    `, 'objects'))
+    const worksheet = header[0]
     if (!worksheet) throw new PreBillingError('Prebill not found', 404)
     // Conversion mints a customer invoice: pin the project and recheck scope
     // under the lock before any line or document write.
@@ -81,8 +81,8 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     if (worksheet.status === 'converted' && worksheet.invoice_document_id) {
       const invoice = (await tx.execute<{ document_number: string }>(sql`
         select document_number from documents where org_id = ${orgId} and id = ${worksheet.invoice_document_id}
-      `))
-      return { id: worksheet.invoice_document_id, documentNumber: invoice.rows[0]!.document_number, idempotent: true }
+      `, 'objects'))
+      return { id: worksheet.invoice_document_id, documentNumber: invoice[0]!.document_number, idempotent: true }
     }
     if (worksheet.status === 'customer_review') {
       throw new PreBillingError('This prebill is with the customer for review — wait for their decision, or reopen it')
@@ -126,19 +126,19 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
        where line.org_id = ${orgId} and line.prebill_id = ${id} and line.disposition = 'bill'
        order by line.line_number
        for update
-    `))
-    if (lines.rows.length === 0) throw new PreBillingError('The prebill has no billable lines')
-    if (lines.rows.some((line) => line.actively_held)) throw new PreBillingError('Release all billing holds before conversion')
+    `, 'objects'))
+    if (lines.length === 0) throw new PreBillingError('The prebill has no billable lines')
+    if (lines.some((line) => line.actively_held)) throw new PreBillingError('Release all billing holds before conversion')
     // Stored prebill lines and existing invoices stay. Turning Inventory off
     // must refuse a convert that would persist inventory / assembly / kit.
     if (!(await isFeatureEnabled(orgId, 'inventory'))) {
       const itemIds = [...new Set(
-        lines.rows.map((line) => line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+        lines.map((line) => line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
       )]
       for (const itemId of itemIds) {
         const item = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${orgId}`))
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          select kind from items where id = ${itemId} and org_id = ${orgId}`, 'objects'))
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           throw new PreBillingError('Inventory is disabled', 404)
         }
       }
@@ -147,12 +147,12 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     // must refuse a convert that would persist equipment_charge.
     if (!(await isFeatureEnabled(orgId, 'equipment'))) {
       const itemIds = [...new Set(
-        lines.rows.map((line) => line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
+        lines.map((line) => line.item_id as string | null).filter((itemId): itemId is string => Boolean(itemId)),
       )]
       for (const itemId of itemIds) {
         const item = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${orgId}`))
-        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          select kind from items where id = ${itemId} and org_id = ${orgId}`, 'objects'))
+        if (item[0] && item[0].kind === 'equipment_charge') {
           throw new PreBillingError('Equipment is disabled', 404)
         }
       }
@@ -162,7 +162,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     // chart account or re-read the item's current policy during conversion.
     // Validate before reserving a number, and retain the account locks until
     // conversion commits so deactivation cannot race the generated invoice.
-    for (const line of lines.rows) {
+    for (const line of lines) {
       if (!line.income_account_id) {
         throw new PreBillingError(`Prebill line ${line.line_number} has no configured income account. Correct the source accounting configuration, void this prebill, and create a new prebill for approval.`)
       }
@@ -171,8 +171,8 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
          where org_id = ${orgId} and id = ${line.income_account_id}
            and is_active and not is_summary
          for share
-      `))
-      if (!account.rows[0]) {
+      `, 'objects'))
+      if (!account[0]) {
         throw new PreBillingError(`Prebill line ${line.line_number} requires an active, non-summary account in this organization. Correct the source accounting configuration, void this prebill, and create a new prebill for approval.`)
       }
     }
@@ -183,10 +183,10 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     const requestNumberResult = (await tx.execute<{ n: string }>(sql`
       select coalesce(max((regexp_replace(request_number, '\\D', '', 'g'))::bigint), 0) as n
         from billing_requests where org_id = ${orgId} and request_number ~ '^BREQ-[0-9]+$'
-    `))
-    const requestNumber = `BREQ-${String(Number(requestNumberResult.rows[0]?.n ?? 0) + 1).padStart(5, '0')}`
-    const timeIds = lines.rows.filter((line) => line.time_entry_id).map((line) => line.time_entry_id)
-    const sourceCostLineIds = lines.rows.filter((line) => line.document_line_id).map((line) => line.document_line_id)
+    `, 'objects'))
+    const requestNumber = `BREQ-${String(Number(requestNumberResult[0]?.n ?? 0) + 1).padStart(5, '0')}`
+    const timeIds = lines.filter((line) => line.time_entry_id).map((line) => line.time_entry_id)
+    const sourceCostLineIds = lines.filter((line) => line.document_line_id).map((line) => line.document_line_id)
     const requestResult = (await tx.execute<{ id: string }>(sql`
       insert into billing_requests (
         org_id, project_id, request_number, invoice_type, basis, cutoff_date,
@@ -200,8 +200,8 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
         ${JSON.stringify({ prebillId: id, selectedCostLineIds: sourceCostLineIds, policy: policySnapshot })}::jsonb,
         ${actorId}, ${actorId}
       ) returning id
-    `))
-    const billingRequestId = requestResult.rows[0]!.id
+    `, 'objects'))
+    const billingRequestId = requestResult[0]!.id
 
     const invoiceResult = (await tx.execute<{ id: string }>(sql`
       insert into documents (
@@ -214,11 +214,11 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
         ${worksheet.billing_method === 'fixed_price' ? 'fixed_price' : 'time_and_materials'}, false,
         ${worksheet.customer_po_number}, ${`Created from ${worksheet.worksheet_number}`},
         '0', '0', '0', ${JSON.stringify({ prebillId: id, billingRequestId, policy: policySnapshot })}::jsonb,
-        ${workCompletedOn(lines.rows.map((line) => workPeriodOf([line.source_date])))},
+        ${workCompletedOn(lines.map((line) => workPeriodOf([line.source_date])))},
         ${actorId}, ${actorId}
       ) returning id
-    `))
-    const invoiceId = invoiceResult.rows[0]!.id
+    `, 'objects'))
+    const invoiceId = invoiceResult[0]!.id
     const billedAmounts: string[] = []
     const billedTaxes: string[] = []
 
@@ -228,10 +228,10 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     // 0.01), so the rounded approved total is allocated across the lines by
     // largest remainder: the invoice lines sum to the approved total exactly.
     const settledAmounts = allocateLargestRemainder(
-      lines.rows.map((line) => String(line.proposed_bill_amount)),
+      lines.map((line) => String(line.proposed_bill_amount)),
       2,
     )
-    for (const [index, line] of lines.rows.entries()) {
+    for (const [index, line] of lines.entries()) {
       const inputAmount = settledAmounts[index]!
       const taxConfig = line.tax_code_id
         ? await loadTaxComponentConfig(orgId, line.tax_code_id, worksheet.period_end, tx)
@@ -260,8 +260,8 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
           ${JSON.stringify({ prebillLineId: line.id, originalBillAmount: line.original_bill_amount, adjustmentAmount: line.adjustment_amount })}::jsonb,
           ${actorId}, ${actorId}
         ) returning id
-      `))
-      const invoiceLineId = invoiceLineResult.rows[0]!.id
+      `, 'objects'))
+      const invoiceLineId = invoiceLineResult[0]!.id
       await persistLineTaxComponents(orgId, invoiceLineId, calculated.components, actorId, tx)
       if (line.source_type === 'time_entry') {
         const stamped = (await tx.execute<{ id: string }>(sql`
@@ -269,15 +269,15 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
            where org_id = ${orgId} and id = ${line.time_entry_id}
              and status = 'approved' and is_billable and billing_status = 'unbilled'
            returning id
-        `))
-        if (!stamped.rows[0]) throw new PreBillingError(`Time source on line ${line.line_number} is no longer available`)
+        `, 'objects'))
+        if (!stamped[0]) throw new PreBillingError(`Time source on line ${line.line_number} is no longer available`)
       } else {
         const stamped = (await tx.execute<{ id: string }>(sql`
           update document_lines set billed_by_line_id = ${invoiceLineId}, updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and id = ${line.document_line_id} and billed_by_line_id is null
            returning id
-        `))
-        if (!stamped.rows[0]) throw new PreBillingError(`Cost source on line ${line.line_number} is no longer available`)
+        `, 'objects'))
+        if (!stamped[0]) throw new PreBillingError(`Cost source on line ${line.line_number} is no longer available`)
       }
       billedAmounts.push(amount)
       billedTaxes.push(taxAmount)

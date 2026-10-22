@@ -131,13 +131,13 @@ export async function consumeAllowancePayrollInputs(
        and status = 'consumed' and consumed_by_run_document_id <> ${runDocumentId}
        and coverage_date between ${periodStart}::date and ${periodEnd}::date
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (foreign) {
     throw new AllowancePayrollInputError(
       `approved allowance input ${foreign.id} is already consumed by another pay run — release or void that run before recalculating this period`,
     );
   }
-  const rows = (await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(sql`
     select ${INPUT_COLUMNS} from hrm_allowance_payroll_inputs
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
        and coverage_date between ${periodStart}::date and ${periodEnd}::date
@@ -145,14 +145,14 @@ export async function consumeAllowancePayrollInputs(
          ? sql`or (status = 'consumed' and consumed_by_run_document_id = ${runDocumentId})`
          : sql``})
      order by coverage_date, entry_kind, id
-  `)).rows;
+  `, "objects");
   const prepared: AllowancePayrollInput[] = [];
   for (const raw of rows) {
     const candidate = readInput(raw);
     const employment = (await exec.execute<{ worker_party_id: string }>(sql`
       select worker_party_id::text as worker_party_id from worker_employments
        where org_id = ${orgId} and id = ${candidate.employmentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!employment || employment.worker_party_id !== candidate.employeePartyId) {
       throw new AllowancePayrollInputError(
         `approved allowance input ${candidate.id} no longer matches its employment — void and reapprove the source entry after HR corrects the employment assignment`,
@@ -163,7 +163,7 @@ export async function consumeAllowancePayrollInputs(
       select status from ${sql.identifier(sourceTable)}
        where org_id = ${orgId} and id = ${candidate.entryId}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (source?.status !== "approved") {
       throw new AllowancePayrollInputError(
         `approved allowance input ${candidate.id} no longer has an approved source entry — correct or reapprove the per-diem or travel entry before calculating payroll`,
@@ -172,7 +172,7 @@ export async function consumeAllowancePayrollInputs(
     const locked = (await exec.execute<Record<string, unknown>>(sql`
       select ${INPUT_COLUMNS} from hrm_allowance_payroll_inputs
        where org_id = ${orgId} and id = ${candidate.id} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) {
       throw new AllowancePayrollInputError(
         `approved allowance input ${candidate.id} changed while payroll was calculating — recalculate the pay run`,
@@ -190,7 +190,7 @@ export async function consumeAllowancePayrollInputs(
       select kind, is_active from pay_components
        where org_id = ${orgId} and id = ${input.payComponentId}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!component?.is_active || component.kind !== "earning") {
       throw new AllowancePayrollInputError(
         `approved allowance input ${input.id} uses an inactive or non-earning component — choose an active earning component on its policy, then void, recompute and approve the entry`,
@@ -205,7 +205,7 @@ export async function consumeAllowancePayrollInputs(
          set status = 'consumed', consumed_by_run_document_id = ${runDocumentId}, updated_at = now()
        where org_id = ${orgId} and id = ${input.id} and status = 'pending'
       returning id::text as id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new AllowancePayrollInputError(
         `approved allowance input ${input.id} changed while payroll was calculating — recalculate the pay run before committing`,
@@ -227,8 +227,8 @@ export async function releaseAllowancePayrollInputs(
          and status = 'consumed'
       returning id
     ) select count(*)::text as n from released
-  `);
-  return Number(result.rows[0]?.n ?? "0");
+  `, "objects");
+  return Number(result[0]?.n ?? "0");
 }
 
 export async function lockAllowancePayrollInputSources(
@@ -283,7 +283,7 @@ export async function allowancePayrollInputProblem(
      where org_id = ${query.orgId} and ${scope} and status = 'pending'
        and coverage_date between ${query.periodStart}::date and ${query.periodEnd}::date
      order by coverage_date, id limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (pending) {
     return {
       code: "PENDING_ALLOWANCE_INPUTS",
@@ -296,7 +296,7 @@ export async function allowancePayrollInputProblem(
        and consumed_by_run_document_id = ${query.runDocumentId}
        and coverage_date between ${query.periodStart}::date and ${query.periodEnd}::date
      order by coverage_date, id limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   return voided ? {
     code: "VOIDED_ALLOWANCE_INPUT",
     message: `approved allowance input ${voided.id} was voided after calculation — recalculate the pay run before committing`,

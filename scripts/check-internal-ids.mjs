@@ -43,16 +43,16 @@
  * - SEC-NN collides with secondary-book/section fixture shorthand
  *   (SEC-1), and RLS/DSAR prose is row-level-security / subject-access
  *   product vocabulary; only numbered RLS-/DSAR- findings are refused.
- * - schema/migrations/generated is scanned too: published files change only
- *   through the digest-transition ledger, so new wording there must arrive
- *   with its restamp entry.
+ * - schema/migrations is scanned too: the release baseline and forward
+ *   migrations are published, digest-pinned bytes, so a line there that
+ *   predates a pattern is exempt only by its exact text below.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
 const BASELINE = 'scripts/internal-ids-baseline.json'
 const SELF = 'scripts/check-internal-ids.mjs'
-const ROOTS = ['engine/', 'web/', 'schema/src', 'scripts/', 'packages/', 'docs/', 'CHANGELOG.md', 'schema/migrations/generated']
+const ROOTS = ['engine/', 'web/', 'schema/src', 'scripts/', 'packages/', 'docs/', 'CHANGELOG.md', 'schema/migrations/']
 
 // Finding/ticket id families. Case-sensitive where product vocabulary would
 // otherwise collide (CI run, THR_EARN, SEC-1 fixtures).
@@ -70,17 +70,11 @@ const ID_PATTERNS = [
   /\bF-[a-z]+[0-9]*-[0-9]{2,}\b/,
 ]
 
-// Published migration lines that predate a pattern. Their bytes are
-// fingerprinted, so they change only with a digest-transition restamp; until
-// then each is exempt by its exact text, and an entry that no longer matches
-// a line fails the check so the list can only shrink.
-const PUBLISHED_EXEMPTIONS = [
-  ['schema/migrations/generated/0169_change_orders_income_account.sql', '-- F-t03-002 residual: an owner change order approved without a target'],
-  ['schema/migrations/generated/0170_forecast_snapshot_org_target.sql', '-- F-t02-002: the forecasts page snapshots whatever scope the summary shows,'],
-  ['schema/migrations/generated/0172_tax_return_form_notice_key.sql', '-- F-w4-001: the generic tax prepare panel branched on the literal `CA_GST34`'],
-  ['schema/migrations/generated/0172_tax_return_form_notice_key.sql', "'Pack-declared filing-notice catalog key (0172, F-w4-001): a tax-namespace message key the generic prepare panel renders for this form, e.g. submission.gst34Notice. NULL = the form declares no notice. Written by pack provisioning on install and reset; never a country branch in UI code';"],
-  ['schema/migrations/generated/0179_pay_component_credit_kind.sql', '-- with the F-reg-003 architecture work (engine/src/payroll/packs.ts types the'],
-]
+// Published schema lines that predate a pattern. Their bytes are
+// digest-pinned and never edited, so each is exempt by its exact text, and an
+// entry that no longer matches a line fails the check so the list can only
+// shrink.
+const PUBLISHED_EXEMPTIONS = []
 
 // Fleet work-organization wording. Case-insensitive; each shape was removed
 // from the tree, so any reappearance is a regression.

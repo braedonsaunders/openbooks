@@ -27,9 +27,9 @@ async function addAccount(
     insert into accounts
       (org_id, number, name, type, is_summary, is_active, required_dimensions, created_by, updated_by)
     values (${orgId}, ${number}, ${name}, ${type}, false, true, '[]'::jsonb, ${actorId}, ${actorId})
-    returning id`);
-  assert.equal(inserted.rows.length, 1);
-  return inserted.rows[0]!.id;
+    returning id`, "objects");
+  assert.equal(inserted.length, 1);
+  return inserted[0]!.id;
 }
 
 test("pledges book and reverse through the ledger while gifts receive engine numbers", { skip: !DB }, async () => {
@@ -44,8 +44,8 @@ test("pledges book and reverse through the ledger while gifts receive engine num
             '{"nonprofit":true,"fundAccounting":true,"pledges":false}'::jsonb,
           true)
          where id = ${org.orgId}
-        returning id`);
-      assert.equal(changed.rows.length, 1);
+        returning id`, "objects");
+      assert.equal(changed.length, 1);
     });
     await provisionFundAccounting({
       orgId: org.orgId,
@@ -95,8 +95,8 @@ test("pledges book and reverse through the ledger while gifts receive engine num
         update orgs set settings = jsonb_set(
           settings, '{features}', settings->'features' || '{"pledges":true}'::jsonb, true)
          where id = ${org.orgId}
-        returning id`);
-      assert.equal(changed.rows.length, 1);
+        returning id`, "objects");
+      assert.equal(changed.length, 1);
     });
 
     const pledge = await createPledge(pledgeInput);
@@ -113,22 +113,22 @@ test("pledges book and reverse through the ledger while gifts receive engine num
     const stored = await withOrgContext(org.orgId, () =>
       db.execute<{ present_value: string; status: string }>(sql`
         select present_value::text as present_value, status
-          from pledges where org_id = ${org.orgId} and id = ${pledge.id}`),
+          from pledges where org_id = ${org.orgId} and id = ${pledge.id}`, "objects"),
     );
-    assert.equal(stored.rows[0]?.present_value, booking.presentValue);
-    assert.equal(stored.rows[0]?.status, "booked");
+    assert.equal(stored[0]?.present_value, booking.presentValue);
+    assert.equal(stored[0]?.status, "booked");
     const bookingLines = await withOrgContext(org.orgId, () =>
       db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount::text as amount from journal_lines
          where org_id = ${org.orgId} and entry_id = ${booking.entryId}
-         order by line_number`),
+         order by line_number`, "objects"),
     );
-    const bookedByAccount = new Map(bookingLines.rows.map((row) => [row.account_id, row.amount]));
+    const bookedByAccount = new Map(bookingLines.map((row) => [row.account_id, row.amount]));
     assert.equal(bookedByAccount.get(accounts.receivable), "5000.0000");
     assert.equal(bookedByAccount.get(accounts.discount), "-" + booking.discount);
     assert.equal(bookedByAccount.get(org.accounts.revenue), "-" + booking.presentValue);
     assert.equal(
-      bookingLines.rows.reduce((sum, row) => sum + toUnits(row.amount), 0n),
+      bookingLines.reduce((sum, row) => sum + toUnits(row.amount), 0n),
       0n,
     );
 
@@ -205,8 +205,8 @@ test("pledges book and reverse through the ledger while gifts receive engine num
               and (e.custom #>> '{nonprofitPledge,pledgeId}' = ${activityPledge.id}
                 or e.id = (select booking_entry_id from pledges where org_id = ${org.orgId} and id = ${activityPledge.id})))
          and jl.account_id in (${accounts.receivable}, ${accounts.discount}, ${accounts.allowance})
-       group by jl.account_id`));
-    assert.deepEqual(pledgeBalances.rows.map((row) => row.amount), ["0.0000", "0.0000", "0.0000"],
+       group by jl.account_id`, "objects"));
+    assert.deepEqual(pledgeBalances.map((row) => row.amount), ["0.0000", "0.0000", "0.0000"],
       "a written-off pledge leaves no receivable, discount or allowance balance standing");
 
     const collectible = await createPledge({ ...pledgeInput, discountRate: "0", totalAmount: "1000.0000",
@@ -244,7 +244,7 @@ test("pledges book and reverse through the ledger while gifts receive engine num
        where l.org_id = ${org.orgId} and l.account_id = ${accounts.allowance}
          and e.status in ('posted', 'reversed') and coalesce(e.reverses_entry_id, e.id) in (
            select j.id from journal_entries j where j.org_id = ${org.orgId}
-             and j.custom #>> '{nonprofitPledge,pledgeId}' = ${collectible.id})`))).rows[0]!.amount;
+             and j.custom #>> '{nonprofitPledge,pledgeId}' = ${collectible.id})`, "objects")))[0]!.amount;
     assert.equal(remainingAllowance, "0.0000", "a collected pledge leaves no allowance standing in the ledger");
 
     const cancelled = await cancelPledge({
@@ -260,9 +260,9 @@ test("pledges book and reverse through the ledger while gifts receive engine num
           from pledges p
           join journal_entries original on original.org_id = p.org_id and original.id = p.booking_entry_id
           join journal_entries reversal on reversal.org_id = p.org_id and reversal.id = ${cancelled.reversalEntryId}
-         where p.org_id = ${org.orgId} and p.id = ${pledge.id}`),
+         where p.org_id = ${org.orgId} and p.id = ${pledge.id}`, "objects"),
     );
-    assert.deepEqual(lifecycle.rows[0], {
+    assert.deepEqual(lifecycle[0], {
       pledge_status: "cancelled",
       original_status: "reversed",
       reversal_status: "posted",
@@ -295,8 +295,8 @@ test("pledges book and reverse through the ledger while gifts receive engine num
       select count(*)::text as n from journal_entries
        where org_id = ${org.orgId}
          and custom #>> '{nonprofitPledge,pledgeId}' = ${reversedPledge.id}
-         and custom #>> '{nonprofitPledge,operation}' = 'discount_amortization'`));
-    assert.equal(reversedAmortization.rows[0]!.n, "0",
+         and custom #>> '{nonprofitPledge,operation}' = 'discount_amortization'`, "objects"));
+    assert.equal(reversedAmortization[0]!.n, "0",
       "a reversed booking earns no discount amortization");
 
     await assert.rejects(
@@ -336,9 +336,9 @@ test("pledges book and reverse through the ledger while gifts receive engine num
     assert.equal(receipt.receiptNumber, "RCPT-00001");
     const storedGift = await withOrgContext(org.orgId, () =>
       db.execute<{ receipt_number: string; status: string }>(sql`
-        select receipt_number, status from gifts where org_id = ${org.orgId} and id = ${gift.id}`),
+        select receipt_number, status from gifts where org_id = ${org.orgId} and id = ${gift.id}`, "objects"),
     );
-    assert.deepEqual(storedGift.rows[0], { receipt_number: receipt.receiptNumber, status: "receipted" });
+    assert.deepEqual(storedGift[0], { receipt_number: receipt.receiptNumber, status: "receipted" });
   } finally {
     await dropScratchOrg(org.orgId);
   }

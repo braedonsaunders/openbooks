@@ -49,8 +49,8 @@ async function runCount(orgId: string, accountId: string): Promise<number> {
   return withBypassContext(async () =>
     Number(
       (await db.execute<{ count: string }>(
-        sql`select count(*)::text as count from flow_runs where org_id = ${orgId} and subject_id = ${accountId}`,
-      )).rows[0]!.count,
+        sql`select count(*)::text as count from flow_runs where org_id = ${orgId} and subject_id = ${accountId}`, 'objects',
+      ))[0]!.count,
     ),
   )
 }
@@ -84,7 +84,7 @@ test('pending bank details submit into tenant Flows exactly once', async () => {
     const directAudit = await withBypassContext(async () =>
       (await db.execute<{ action: string }>(sql`
         select action from audit_log where org_id = ${org.orgId} and table_name = 'party_bank_accounts'
-         and row_id = ${accountId} order by id desc limit 1`)).rows[0])
+         and row_id = ${accountId} order by id desc limit 1`, 'objects'))[0])
     assert.equal(directAudit?.action, 'approve')
 
     // A second record exercises the flow-driven path below.
@@ -110,9 +110,9 @@ test('pending bank details submit into tenant Flows exactly once', async () => {
 
     // The record is now genuinely in a flow: exactly one live gate.
     const gates = await withBypassContext(async () =>
-      (await db.execute<{ id: string; status: string }>(
-        sql`select id, status from flow_gates where org_id = ${org.orgId} and subject_id = ${flowAccountId} order by created_at`,
-      )).rows,
+      await db.execute<{ id: string; status: string }>(
+        sql`select id, status from flow_gates where org_id = ${org.orgId} and subject_id = ${flowAccountId} order by created_at`, 'objects',
+      ),
     )
     assert.equal(gates.length, 1)
     assert.equal(gates[0]!.status, 'pending')
@@ -125,8 +125,8 @@ test('pending bank details submit into tenant Flows exactly once', async () => {
     assert.equal(
       (await withBypassContext(async () =>
         (await db.execute<{ count: string }>(
-          sql`select count(*)::text as count from flow_gates where org_id = ${org.orgId} and subject_id = ${flowAccountId} and status = 'pending'`,
-        )).rows[0]!.count,
+          sql`select count(*)::text as count from flow_gates where org_id = ${org.orgId} and subject_id = ${flowAccountId} and status = 'pending'`, 'objects',
+        ))[0]!.count,
       )),
       '1',
     )
@@ -139,8 +139,8 @@ test('pending bank details submit into tenant Flows exactly once', async () => {
     assert.equal(decision.runStatus, 'completed')
     const released = await withBypassContext(async () =>
       (await db.execute<{ approvalStatus: string; isActive: boolean }>(
-        sql`select approval_status as "approvalStatus", is_active as "isActive" from party_bank_accounts where id = ${flowAccountId} and org_id = ${org.orgId}`,
-      )).rows[0]!,
+        sql`select approval_status as "approvalStatus", is_active as "isActive" from party_bank_accounts where id = ${flowAccountId} and org_id = ${org.orgId}`, 'objects',
+      ))[0]!,
     )
     assert.equal(released.approvalStatus, 'approved')
     assert.equal(released.isActive, true)
@@ -225,8 +225,8 @@ async function liveGateCount(orgId: string, accountId: string): Promise<number> 
       (await db.execute<{ count: string }>(
         sql`select count(*)::text as count from flow_gates
              where org_id = ${orgId} and subject_id = ${accountId}
-               and status in ('pending', 'escalated')`,
-      )).rows[0]!.count,
+               and status in ('pending', 'escalated')`, 'objects',
+      ))[0]!.count,
     ),
   )
 }
@@ -284,7 +284,7 @@ test('an action-only flow runs its actions and applies bank details without inve
       (await db.execute<{ isActive: boolean; runStatus: string }>(sql`
         select b.is_active as "isActive",r.status as "runStatus"
           from party_bank_accounts b join flow_runs r on r.org_id=b.org_id and r.subject_id=b.id
-         where b.org_id=${org.orgId} and b.id=${accountId}`)).rows[0])
+         where b.org_id=${org.orgId} and b.id=${accountId}`, 'objects'))[0])
     assert.deepEqual(released, { isActive: true, runStatus: 'completed' })
   } finally {
     state.user = null
@@ -355,7 +355,7 @@ for (const count of [0,10]) test(`edited bank details require exactly ${count} c
     assert.equal(initial.status,200,JSON.stringify(await initial.clone().json()))
     const revision=(await withBypassContext(()=>db.execute<{revision:string}>(sql`
       select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
-        from party_bank_accounts where org_id=${org.orgId} and id=${id}`))).rows[0]!.revision
+        from party_bank_accounts where org_id=${org.orgId} and id=${id}`, 'objects')))[0]!.revision
     for(let index=0;index<count;index++)await withBypassContext(()=>seedApprovalFlow(org.orgId,{
       subjectKind:'party_bank_account',trigger:'on_update',assignees:[{type:'user',userId:actors.approver1Id}],mode:'all',
     }))
@@ -366,9 +366,9 @@ for (const count of [0,10]) test(`edited bank details require exactly ${count} c
     assert.equal((await changed.json()).approvalStatus,count?'pending':'approved')
     const read=()=>withBypassContext(async()=>(await db.execute<{approvalStatus:string;isActive:boolean;bankName:string}>(sql`
       select approval_status as "approvalStatus",is_active as "isActive",bank_name as "bankName"
-        from party_bank_accounts where org_id=${org.orgId} and id=${id}`)).rows[0]!)
-    const gates=await withBypassContext(async()=>(await db.execute<{id:string}>(sql`
-      select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending' order by id`)).rows)
+        from party_bank_accounts where org_id=${org.orgId} and id=${id}`, 'objects'))[0]!)
+    const gates=await withBypassContext(async()=>await db.execute<{id:string}>(sql`
+      select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending' order by id`, 'objects'))
     assert.equal(gates.length,count)
     for(const gate of gates){
       assert.equal((await read()).isActive,false,'uncompleted review cannot release payment details')

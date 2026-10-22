@@ -55,9 +55,9 @@ async function seedDocument(
 }
 
 async function correctionEdge(orgId: string, creditId: string): Promise<{ to: string; linkType: string }[]> {
-  const rows = (await db.execute<{ to: string; linkType: string }>(sql`
+  const rows = await db.execute<{ to: string; linkType: string }>(sql`
     select to_document_id as "to", link_type as "linkType" from document_links
-     where org_id = ${orgId} and from_document_id = ${creditId}`)).rows;
+     where org_id = ${orgId} and from_document_id = ${creditId}`, "objects");
   return rows;
 }
 
@@ -203,7 +203,7 @@ test("an invoice cannot name a corrected document", { skip: !DB }, async () => {
     );
     assert.ok(!(await db.execute(sql`
       select 1 from documents
-       where id = ${draftId} and custom -> 'crossBorder' ? 'correctsDocumentId'`)).rows.length);
+       where id = ${draftId} and custom -> 'crossBorder' ? 'correctsDocumentId'`, "objects")).length);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -259,7 +259,7 @@ test("a draft credit naming its corrected invoice stays deletable", { skip: !DB 
       allowedSubsidiaryIds: null,
     });
     const gone = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where id = ${creditId} and org_id = ${org.orgId}`)).rows[0]!.n;
+      select count(*)::int as n from documents where id = ${creditId} and org_id = ${org.orgId}`, "objects"))[0]!.n;
     assert.equal(gone, 0, "the draft credit deletes instead of refusing on its correction edge");
     assert.deepEqual(await correctionEdge(org.orgId, creditId), [], "the edge is removed with its credit");
   } finally {

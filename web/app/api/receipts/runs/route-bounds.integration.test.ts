@@ -119,8 +119,8 @@ const post = (fx: Fx, scheduledFor: string) =>
   );
 
 async function runCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from payment_runs where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from payment_runs where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

@@ -14,7 +14,7 @@ export async function resolvePaymentCurrencyBasis(orgId: string, subsidiaryId: s
   if (!isIso4217CurrencyCode(currency) || !isIsoCalendarDate(onDate)) throw new PaymentError("Payment currency or accounting date is invalid.");
   const bookId = await paymentBookId(orgId);
   const entity = (await db.execute<{ currency: string }>(sql`select public.accounting_book_currency(${orgId}, ${bookId}, id) as currency
-    from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
+    from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination for share`, "objects"))[0];
   if (!entity || !isIso4217CurrencyCode(entity.currency)) throw new PaymentError("Payment accounting currency is unavailable; review the entity and primary accounting book in Setup.");
   const policy = await accountingPreferences(db, orgId, subsidiaryId, onDate);
   const evidence = await lookupSpotRateWithEvidence(db, orgId, currency, entity.currency, onDate, policy.postingRateType);

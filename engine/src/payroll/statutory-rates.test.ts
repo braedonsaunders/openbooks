@@ -448,10 +448,10 @@ test(
       const audit = (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
         select action, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'payroll_statutory_rates'
-         order by at`));
-      assert.equal(audit.rows.filter((r) => r.action === "insert").length, 5);
-      assert.equal(audit.rows.filter((r) => r.action === "update").length, 0);
-      const supersede = audit.rows.find((r) => r.action === "supersede")!;
+         order by at`, "objects"));
+      assert.equal(audit.filter((r) => r.action === "insert").length, 5);
+      assert.equal(audit.filter((r) => r.action === "update").length, 0);
+      const supersede = audit.find((r) => r.action === "supersede")!;
       assert.equal((supersede.changes.before as Record<string, string>).rate, "0.0106");
       assert.equal((supersede.changes.after as Record<string, string>).rate, "0.0115");
     } finally {
@@ -613,10 +613,10 @@ test(
       const audit = (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
         select action, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'payroll_statutory_rates'
-           and row_id = ${saved.id} and action = 'insert'`));
-      assert.equal(audit.rows.length, 1);
-      assert.equal(audit.rows[0]!.changes.sourceCitation, "USDOL credit-reduction table");
-      assert.equal(audit.rows[0]!.changes.reason, "credit-reduction state");
+           and row_id = ${saved.id} and action = 'insert'`, "objects"));
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.changes.sourceCitation, "USDOL credit-reduction table");
+      assert.equal(audit[0]!.changes.reason, "credit-reduction state");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

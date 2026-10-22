@@ -89,8 +89,8 @@ const body = (lineId: string, itemId: string, regular: string) => ({
 });
 
 async function billRate(lineId: string): Promise<string> {
-  const rows = (await withBypassContext(() => db.execute<{ bill_rate: string }>(sql`
-    select bill_rate::text from item_rate_lines where id = ${lineId}`))).rows;
+  const rows = await withBypassContext(() => db.execute<{ bill_rate: string }>(sql`
+    select bill_rate::text from item_rate_lines where id = ${lineId}`, "objects"));
   return rows[0]!.bill_rate;
 }
 

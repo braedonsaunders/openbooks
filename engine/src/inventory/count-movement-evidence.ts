@@ -29,17 +29,17 @@ async function stampSerialCountMovement(
       and line.item_id=${input.itemId} and line.stock_location_id=${input.stockLocationId}
       and line.serial_id=${input.serialId} and line.lot_id is not distinct from ${input.lotId ?? null}::uuid
       and count.subsidiary_id=${input.subsidiaryId} and line.adjustment_movement_id is null
-    for update of count,line`);
-  if (locked.rows.length !== 1)
+    for update of count,line`, "objects");
+  if (locked.length !== 1)
     throw new InventoryError("Serial adjustment must match an unposted reviewed count line in this entity and location");
   const stamped = await tx.execute(sql`
     update stock_count_lines set adjustment_movement_id=${movementId},updated_at=now(),updated_by=${actorId}
-    where org_id=${orgId} and id=${input.stockCountLineId} and adjustment_movement_id is null returning id`);
-  if (stamped.rows.length !== 1)
+    where org_id=${orgId} and id=${input.stockCountLineId} and adjustment_movement_id is null returning id`, "objects");
+  if (stamped.length !== 1)
     throw new InventoryError("The serial count line was already posted; reload the count");
   const proof = (await tx.execute<{ valid: boolean }>(sql`
     select public.inventory_serial_count_line_matches(${orgId}::uuid,${input.stockCountLineId}::uuid,
-      ${movementId}::uuid,false) as valid`)).rows[0];
+      ${movementId}::uuid,false) as valid`, "objects"))[0];
   if (!proof?.valid)
     throw new InventoryError("Serial count adjustment requires its exact observation, variance and posted journal evidence");
 }
@@ -53,15 +53,15 @@ export async function applySerialReceipt(
     const proof = (await tx.execute<{ status: string; valid: boolean }>(sql`
       select serial.status,public.inventory_serial_count_restoration_matches(serial.org_id,serial.id,
         serial.current_missing_count_movement_id,${input.stockLocationId}::uuid,${movementId}::uuid) as valid
-      from serials serial where serial.org_id=${orgId} and serial.id=${input.serialId} for update`)).rows[0];
+      from serials serial where serial.org_id=${orgId} and serial.id=${input.serialId} for update`, "objects"))[0];
     if (!proof || (proof.status === "shipped" && !proof.valid))
       throw new InventoryError("Found serial must recover its current posted missing-count issue in the same entity, lot and location; use the source shipment return for shipped stock");
   }
   const updated = await tx.execute(sql`
     update serials set status='in_stock',current_stock_location_id=${input.stockLocationId},
       updated_at=now(),updated_by=${actorId}
-    where id=${input.serialId} and org_id=${orgId} returning id`);
-  if (updated.rows.length !== 1) throw new InventoryError("Serial lifecycle update was not recorded");
+    where id=${input.serialId} and org_id=${orgId} returning id`, "objects");
+  if (updated.length !== 1) throw new InventoryError("Serial lifecycle update was not recorded");
 }
 
 export async function applySerialIssue(
@@ -72,6 +72,6 @@ export async function applySerialIssue(
   const updated = await tx.execute(sql`
     update serials set status='shipped',current_stock_location_id=null,
       current_missing_count_movement_id=${input.stockCountLineId ? movementId : null},updated_at=now(),updated_by=${actorId}
-    where id=${input.serialId} and org_id=${orgId} returning id`);
-  if (updated.rows.length !== 1) throw new InventoryError("Serial lifecycle update was not recorded");
+    where id=${input.serialId} and org_id=${orgId} returning id`, "objects");
+  if (updated.length !== 1) throw new InventoryError("Serial lifecycle update was not recorded");
 }

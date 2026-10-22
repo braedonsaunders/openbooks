@@ -27,8 +27,7 @@ test(
         allowedSubsidiaryIds: null,
       }
       const auditRows = async () =>
-        (
-          await db.execute<{
+        await db.execute<{
             action: string
             actor_id: string | null
             changes: Record<string, unknown>
@@ -36,8 +35,7 @@ test(
             select action, actor_id, changes from audit_log
              where org_id = ${org.orgId} and table_name = 'items'
              order by at, id
-          `)
-        ).rows
+          `, 'objects')
 
       await withOrgContext(org.orgId, async () => {
         const first = await resource.write(

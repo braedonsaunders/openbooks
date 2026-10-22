@@ -708,10 +708,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
        where org_id = ${effectiveDoc.orgId} and party_id = ${effectiveDoc.partyId}
          and is_active and is_on_hold
        limit 1
-    `));
-    if (hold.rows[0]) {
+    `, "objects"));
+    if (hold[0]) {
       throw new PostingError(
-        `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}; release the hold on the customer section of the party record before posting`,
+        `customer is on credit hold${hold[0].hold_reason ? ` — ${hold[0].hold_reason}` : ""}; release the hold on the customer section of the party record before posting`,
       );
     }
   }

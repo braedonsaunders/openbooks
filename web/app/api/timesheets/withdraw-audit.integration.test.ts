@@ -121,49 +121,43 @@ async function seedSubmittedWeek(status: "submitted" | "approved" | "draft" = "s
     await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId, actorId,
       subjectKind: 'timesheet_week', subjectId: headerId, source: 'api' }));
     runId = (await withBypassContext(() => db.execute<{ run_id: string }>(sql`select run_id from flow_gates
-      where org_id=${org.orgId} and subject_id=${headerId} and status='pending'`))).rows[0]!.run_id;
+      where org_id=${org.orgId} and subject_id=${headerId} and status='pending'`, "objects")))[0]!.run_id;
   }
   return { org, actorId, employeeId, headerId, timeEntryId, runId };
 }
 
 async function weekStatus(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => (
-    await db.execute<{ status: string }>(sql`
+  return withOrgContext(orgId, async () => (await db.execute<{ status: string }>(sql`
       select status from timesheet_weeks where org_id = ${orgId} and id = ${headerId}
-    `)
-  ).rows[0]!.status);
+    `, "objects"))[0]!.status);
 }
 
 async function entryStatus(orgId: string, timeEntryId: string) {
-  return withOrgContext(orgId, async () => (
-    await db.execute<{ status: string }>(sql`
+  return withOrgContext(orgId, async () => (await db.execute<{ status: string }>(sql`
       select status from time_entries where org_id = ${orgId} and id = ${timeEntryId}
-    `)
-  ).rows[0]!.status);
+    `, "objects"))[0]!.status);
 }
 
 async function runState(orgId: string, runId: string) {
   return withOrgContext(orgId, async () => ({
     run: (await db.execute<{ status: string }>(sql`
       select status from flow_runs where org_id = ${orgId} and id = ${runId}
-    `)).rows[0]!.status,
+    `, "objects"))[0]!.status,
     gate: (await db.execute<{ status: string }>(sql`
       select status from flow_gates where org_id = ${orgId} and run_id = ${runId}
-    `)).rows[0]!.status,
+    `, "objects"))[0]!.status,
   }));
 }
 
 async function auditRows(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => (
-    await db.execute(sql`
+  return withOrgContext(orgId, async () => await db.execute(sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'timesheet_weeks'
          and row_id = ${headerId}
        order by at, id
-    `)
-  ).rows);
+    `, "objects"));
 }
 
 async function cleanup(fixture: Awaited<ReturnType<typeof seedSubmittedWeek>>) {

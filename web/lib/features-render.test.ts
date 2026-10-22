@@ -26,7 +26,8 @@ test('feature questions share render facts while later renders and live executor
       ]);
       const calls=[];
       let unavailable=false;
-      db.execute=async query=>{
+      db.execute=async (query, mode)=>{
+        const inMode = (result) => (mode === 'objects' ? result.rows : result);
         const {sql,params}=dialect.sqlToQuery(query);
         const org=params.find(value=>typeof value==='string'&&value.startsWith('company-'));
         assert.ok(facts.has(org),'every fact is scoped to an organization');
@@ -34,10 +35,10 @@ test('feature questions share render facts while later renders and live executor
         const current=facts.get(org);
         if(sql.includes("settings->'features' as f")) {
           if(unavailable)throw new Error('feature settings unavailable');
-          return {rows:[{f:structuredClone(current.state)}]};
+          return inMode({rows:[{f:structuredClone(current.state)}]});
         }
-        if(sql.includes('from subsidiaries'))return {rows:[{n:current.subsidiaries}]};
-        if(sql.includes('from journal_lines')&&sql.includes('from fx_rates'))return {rows:[{on:current.currency}]};
+        if(sql.includes('from subsidiaries'))return inMode({rows:[{n:current.subsidiaries}]});
+        if(sql.includes('from journal_lines')&&sql.includes('from fx_rates'))return inMode({rows:[{on:current.currency}]});
         throw new Error('Unexpected query: '+sql);
       };
       const require=createRequire(import.meta.url);

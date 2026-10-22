@@ -94,8 +94,8 @@ test(
         const body = await response.json() as { id: string }
         const row = await db.execute<{ data: { subsidiary_id?: string } }>(sql`
           select data from custom_records where id = ${body.id} and org_id = ${org.orgId}
-        `)
-        assert.equal(row.rows[0]?.data.subsidiary_id, org.subsidiaryId)
+        `, 'objects')
+        assert.equal(row[0]?.data.subsidiary_id, org.subsidiaryId)
       })
     } finally {
       state.authz = null

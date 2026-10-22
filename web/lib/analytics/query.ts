@@ -22,7 +22,7 @@ async function execute<T extends QueryResultRow>(query: SQL): Promise<{ rows: T[
     if (waiting.length >= 128) throw new AnalyticsPreviewBusyError((await getTranslations('analytics'))('preview.busy'))
     await new Promise<void>((resolve) => waiting.push(resolve))
   } else active += 1
-  try { return { rows: (await db.execute<T>(query)).rows as T[] } }
+  try { return { rows: (await db.execute<T>(query, 'objects')) as T[] } }
   finally {
     const next = waiting.shift()
     if (next) next()

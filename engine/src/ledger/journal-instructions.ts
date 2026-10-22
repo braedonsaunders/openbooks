@@ -24,8 +24,7 @@ export async function validateJournalInstructions(
   documentId: string,
   posting = false,
 ): Promise<{ debits: string; credits: string }> {
-  const doc = (
-    await runner.execute<{
+  const doc = (await runner.execute<{
       subsidiary_id: string;
       document_date: string;
       posting_date: string;
@@ -39,15 +38,13 @@ export async function validateJournalInstructions(
     select d.subsidiary_id,d.document_date::text,coalesce(d.posting_date,d.document_date)::text as posting_date,
       d.currency,d.fx_rate::text,d.journal_mode,d.journal_reverse_on::text,d.accounting_book_id,s.base_currency
     from documents d join subsidiaries s on s.org_id=d.org_id and s.id=d.subsidiary_id
-    where d.org_id=${orgId} and d.id=${documentId} and d.kind='journal'`)
-  ).rows[0];
+    where d.org_id=${orgId} and d.id=${documentId} and d.kind='journal'`, "objects"))[0];
   if (!doc)
     throw new JournalInstructionError(
       "The journal or its entity is unavailable.",
       "Choose an active subsidiary and reopen the journal.",
     );
-  const lines = (
-    await runner.execute<{
+  const lines = await runner.execute<{
       line_number: number;
       account_id: string;
       type: string;
@@ -65,8 +62,7 @@ export async function validateJournalInstructions(
       l.journal_currency,l.journal_fx_rate::text,l.journal_eliminate,l.amortization_template_id as template,coalesce(l.party_id,d.party_id) is not null as has_party
     from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
     join accounts a on a.org_id=l.org_id and a.id=l.account_id
-    where l.org_id=${orgId} and l.document_id=${documentId} order by l.line_number`)
-  ).rows;
+    where l.org_id=${orgId} and l.document_id=${documentId} order by l.line_number`, "objects");
   if (lines.length === 0)
     throw new JournalInstructionError(
       "A journal needs at least one line.",
@@ -82,11 +78,9 @@ export async function validateJournalInstructions(
       "Choose a later open-period date.",
     );
   }
-  const storedCount = (
-    await runner.execute<{ count: number }>(
-      sql`select count(*)::int as count from document_lines where org_id=${orgId} and document_id=${documentId}`,
-    )
-  ).rows[0]?.count;
+  const storedCount = (await runner.execute<{ count: number }>(
+      sql`select count(*)::int as count from document_lines where org_id=${orgId} and document_id=${documentId}`, "objects",
+    ))[0]?.count;
   if (storedCount !== lines.length)
     throw new JournalInstructionError(
       "A journal line has no owned posting account.",
@@ -98,11 +92,9 @@ export async function validateJournalInstructions(
       ...lines.map((line) => line.journal_currency ?? doc.currency),
     ]),
   ];
-  const found = (
-    await runner.execute<{ code: string }>(
-      sql`select code from currencies where code in ${currencies}`,
-    )
-  ).rows;
+  const found = await runner.execute<{ code: string }>(
+      sql`select code from currencies where code in ${currencies}`, "objects",
+    );
   if (found.length !== currencies.length)
     throw new JournalInstructionError(
       "A journal currency is unavailable.",
@@ -118,11 +110,9 @@ export async function validateJournalInstructions(
     );
   const historicalReplay =
     posting &&
-    (
-      await runner.execute<{ allowed: boolean }>(
-        sql`select public.connector_historical_replay_authorized(${orgId}) as allowed`,
-      )
-    ).rows[0]?.allowed === true;
+    (await runner.execute<{ allowed: boolean }>(
+        sql`select public.connector_historical_replay_authorized(${orgId}) as allowed`, "objects",
+      ))[0]?.allowed === true;
   const usesForeign =
     currencies.some((currency) => currency !== doc.base_currency) ||
     lines.some((line) => line.journal_currency);
@@ -210,11 +200,9 @@ export async function validateJournalInstructions(
       (await activePostingPrimaryBookId(orgId, runner));
     if (
       doc.currency !==
-        (
-          await runner.execute<{ currency: string }>(
-            sql`select public.accounting_book_currency(${orgId},${bookId},${doc.subsidiary_id}) as currency`,
-          )
-        ).rows[0]?.currency ||
+        (await runner.execute<{ currency: string }>(
+            sql`select public.accounting_book_currency(${orgId},${bookId},${doc.subsidiary_id}) as currency`, "objects",
+          ))[0]?.currency ||
       compareDecimal(doc.fx_rate, "1") !== 0
     ) {
       throw new JournalInstructionError(
@@ -254,8 +242,7 @@ export async function validateJournalInstructions(
           "Choose a foreign currency and retain one clearing line per account.",
         );
       adjustedAccounts.add(line.account_id);
-      const residual = (
-        await runner.execute<{
+      const residual = (await runner.execute<{
           foreign_open: boolean;
           has_currency: boolean;
           base_amount: string;
@@ -270,8 +257,7 @@ export async function validateJournalInstructions(
         from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
         where l.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed') and e.posting_date<=${doc.posting_date}
           and l.subsidiary_id=${line.subsidiary_id} and l.account_id=${line.account_id}
-`)
-      ).rows[0]!;
+`, "objects"))[0]!;
       if (
         !residual.has_currency ||
         residual.foreign_open ||

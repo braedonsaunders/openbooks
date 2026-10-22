@@ -55,8 +55,8 @@ export async function updatePrebillLine(
        where line.org_id = ${orgId} and line.prebill_id = ${prebillId} and line.id = ${lineId}
          ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
        for update of line, worksheet
-    `))
-    const before = current.rows[0]
+    `, 'objects'))
+    const before = current[0]
     if (!before) throw new PreBillingError('Prebill line not found', 404)
     // Pin the project for the rest of this transaction and recheck scope
     // under the lock: the line/worksheet lock above does not stop a
@@ -132,7 +132,7 @@ export async function holdPrebillLine(
         from prebill_lines line
         join prebills worksheet on worksheet.org_id = line.org_id and worksheet.id = line.prebill_id
        where line.org_id = ${orgId} and line.prebill_id = ${prebillId} and line.id = ${lineId}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!target) throw new PreBillingError('Prebill line not found', 404)
     try {
       await lockProjectForScope(tx, orgId, target.project_id, scope)
@@ -149,8 +149,8 @@ export async function holdPrebillLine(
        where line.org_id = ${orgId} and line.prebill_id = ${prebillId} and line.id = ${lineId}
          ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
        for update of line, worksheet
-    `))
-    const source = row.rows[0]
+    `, 'objects'))
+    const source = row[0]
     if (!source) throw new PreBillingError('Prebill line not found', 404)
     if (source.status !== 'draft') throw new PreBillingError('Only a draft prebill can be changed')
     const existing = (await tx.execute<{ id: string }>(sql`
@@ -158,8 +158,8 @@ export async function holdPrebillLine(
        where org_id = ${orgId} and source_type = ${source.source_type}
          and source_id = ${source.source_id} and released_at is null
        for update
-    `))
-    let holdId = existing.rows[0]?.id
+    `, 'objects'))
+    let holdId = existing[0]?.id
     if (!holdId) {
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into prebill_holds (
@@ -169,8 +169,8 @@ export async function holdPrebillLine(
           ${orgId}, ${source.project_id}, ${source.source_type}, ${source.source_id},
           ${cleanReason}, ${JSON.stringify(cleanEvidence)}::jsonb, ${actorId}, ${actorId}, ${actorId}
         ) returning id
-      `))
-      holdId = inserted.rows[0]!.id
+      `, 'objects'))
+      holdId = inserted[0]!.id
     }
     await tx.execute(sql`
       update prebill_lines set disposition = 'hold', updated_at = now(), updated_by = ${actorId}
@@ -193,7 +193,7 @@ export async function releasePrebillHold(orgId: string, actorId: string, holdId:
     const target = (await tx.execute<{ project_id: string }>(sql`
       select project_id from prebill_holds
        where org_id = ${orgId} and id = ${holdId} and released_at is null
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!target) throw new PreBillingError('Active hold not found', 404)
     try {
       await lockProjectForScope(tx, orgId, target.project_id, scope)
@@ -208,8 +208,8 @@ export async function releasePrebillHold(orgId: string, actorId: string, holdId:
        where org_id = ${orgId} and id = ${holdId} and project_id = ${target.project_id}
          and released_at is null
        returning source_type, source_id
-    `))
-    const source = released.rows[0]
+    `, 'objects'))
+    const source = released[0]
     if (!source) throw new PreBillingError('Active hold not found', 404)
     const prebillRows = (await tx.execute<{ prebill_id: string }>(sql`
       update prebill_lines line
@@ -222,8 +222,8 @@ export async function releasePrebillHold(orgId: string, actorId: string, holdId:
          and line.source_type = ${source.source_type}
          and coalesce(line.time_entry_id, line.document_line_id) = ${source.source_id}
        returning line.prebill_id
-    `))
-    for (const row of prebillRows.rows) {
+    `, 'objects'))
+    for (const row of prebillRows) {
       await refreshTotals(tx, orgId, row.prebill_id, actorId)
       await appendEvent(tx, orgId, row.prebill_id, actorId, 'hold_released', { holdId, reason: releaseReason })
     }

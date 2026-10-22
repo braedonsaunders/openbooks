@@ -112,14 +112,12 @@ type SubsidiaryScope = ReadonlySet<string> | null
  */
 async function subsidiaryNames(orgId: string, scope: SubsidiaryScope): Promise<Set<string>> {
   if (scope === null) return new Set()
-  const result = (await db.execute(sql`
+  const result = await db.execute<{ id: string; name: string }>(sql`
     select id, name
       from subsidiaries
-     where org_id = ${orgId}${subsidiaryReadFilter(sql`id`, scope)}`)) as {
-    rows: { id: string; name: string }[]
-  }
+     where org_id = ${orgId}${subsidiaryReadFilter(sql`id`, scope)}`, 'objects')
   const names = new Set<string>()
-  for (const row of result.rows) {
+  for (const row of result) {
     names.add(row.id)
     names.add(row.name)
   }
@@ -153,14 +151,12 @@ async function propertyVisibleKeys(orgId: string, scope: SubsidiaryScope, page?:
 }> {
   const propertyCodes = new Set<string>()
   const leaseNumbers = new Set<string>()
-  const result = (await db.execute(sql`
+  const result = await db.execute<{ property_code: string; lease_number: string | null }>(sql`
     select p.code as property_code, l.lease_number
       from managed_properties p
       left join property_leases l on l.property_id = p.id and l.org_id = p.org_id
-     where p.org_id = ${orgId}${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}${page ? (page.keys.length ? sql` and ${page.field === 'leaseNumber' ? sql`l.lease_number` : sql`p.code`} in (${sql.join(page.keys.map((key) => sql`${key}`), sql`, `)})` : sql` and false`) : sql``}`)) as {
-    rows: { property_code: string; lease_number: string | null }[]
-  }
-  for (const row of result.rows) {
+     where p.org_id = ${orgId}${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}${page ? (page.keys.length ? sql` and ${page.field === 'leaseNumber' ? sql`l.lease_number` : sql`p.code`} in (${sql.join(page.keys.map((key) => sql`${key}`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
+  for (const row of result) {
     propertyCodes.add(row.property_code)
     if (row.lease_number) leaseNumbers.add(row.lease_number)
   }
@@ -235,12 +231,10 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
     .filter((entity) => !dedicatedKeys.has(entity.key))
     .map(setupDescriptor)
   const master = MASTER_ENTITIES.map(masterDescriptor)
-  const recordTypes = (await db.execute(sql`
+  const recordTypes = await db.execute<{ key: string; plural_name: string }>(sql`
     select key, plural_name from custom_record_types
-     where org_id = ${orgId} and status = 'published' order by sort_order, name`)) as {
-    rows: { key: string; plural_name: string }[]
-  }
-  const records: ResourceDescriptor[] = recordTypes.rows.map((t) => ({
+     where org_id = ${orgId} and status = 'published' order by sort_order, name`, 'objects')
+  const records: ResourceDescriptor[] = recordTypes.map((t) => ({
     key: `record:${t.key}`,
     label: t.plural_name,
     group: 'Records',

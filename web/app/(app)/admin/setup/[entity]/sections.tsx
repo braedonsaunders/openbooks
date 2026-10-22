@@ -207,8 +207,8 @@ export async function SetupDrawerSlot({
              where ${sql.raw(idColumn)} = ${rowParam}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
              ${setupEntitySubsidiaryFilter(entity, authz.allowedSubsidiaryIds)}
-             limit 1`)))
-          const found = selected.rows[0] ?? null
+             limit 1`, 'objects')))
+          const found = selected[0] ?? null
           // Rule-slot entities store drawer fields folded into jsonb (no
           // generated columns to read back): unfold the stored rules into
           // the slot fields so the edit drawer prefills what it would
@@ -222,8 +222,8 @@ export async function SetupDrawerSlot({
                 from tax_group_members tgm
                 join tax_groups tg on tg.id = tgm.tax_group_id and tg.org_id = ${orgId}
                where tgm.tax_group_id = ${found.id}
-               order by tgm.sequence`)))
-            members = m.rows.map((x) => x.tax_code_id as string)
+               order by tgm.sequence`, 'objects')))
+            members = m.map((x) => x.tax_code_id as string)
           }
           return { creating: false, row, members }
         })()
@@ -265,12 +265,12 @@ export async function SetupDrawerSlot({
         select id, rate_percent, effective_from, effective_to
           from tax_rates ${taxRateFilter}
          order by effective_from desc
-         limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`),
-      (db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`)),
+         limit ${taxRateList.perPage} offset ${(taxRateList.page - 1) * taxRateList.perPage}`, 'objects'),
+      (db.execute(sql`select count(*)::int as n from tax_rates ${taxRateFilter}`, 'objects')),
       loadRefOptions(taxRateEntity, orgId, authz.allowedSubsidiaryIds),
     ])
-    taxRateRows = rateRowsRes.rows
-    taxRateTotal = Number(rateCountRes.rows[0]?.n ?? 0)
+    taxRateRows = rateRowsRes
+    taxRateTotal = Number(rateCountRes[0]?.n ?? 0)
     taxRateRefOptions = childRefs
 
     const rateRowParam = pickString(sp.rateRow)
@@ -281,8 +281,8 @@ export async function SetupDrawerSlot({
         const selected = ((await db.execute(sql`
           select * from tax_rates
            where id = ${rateRowParam} and org_id = ${orgId} and tax_code_id = ${taxCodeId}
-           limit 1`)))
-        taxRateOpen = selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
+           limit 1`, 'objects')))
+        taxRateOpen = selected[0] ? { creating: false, row: selected[0] } : null
       }
     }
   }
@@ -327,12 +327,12 @@ export async function SetupDrawerSlot({
         select id, report_code, line_code, label, basis, formula, tax_code_id
           from tax_report_lines ${taxBoxFilter}
          order by report_code, sequence, line_code
-         limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`),
-      (db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`)),
+         limit ${taxBoxList.perPage} offset ${(taxBoxList.page - 1) * taxBoxList.perPage}`, 'objects'),
+      (db.execute(sql`select count(*)::int as n from tax_report_lines ${taxBoxFilter}`, 'objects')),
       loadRefOptions(taxBoxEntity, orgId, authz.allowedSubsidiaryIds),
     ])
-    taxBoxRows = boxRowsRes.rows
-    taxBoxTotal = Number(boxCountRes.rows[0]?.n ?? 0)
+    taxBoxRows = boxRowsRes
+    taxBoxTotal = Number(boxCountRes[0]?.n ?? 0)
     taxBoxRefOptions = childRefs
 
     const boxRowParam = pickString(sp.boxRow)
@@ -344,8 +344,8 @@ export async function SetupDrawerSlot({
           select * from tax_report_lines
            where id = ${boxRowParam} and org_id = ${orgId}
              and report_code = ${returnCode}
-           limit 1`)))
-        taxBoxOpen = selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
+           limit 1`, 'objects')))
+        taxBoxOpen = selected[0] ? { creating: false, row: selected[0] } : null
       }
     }
   }
@@ -395,12 +395,12 @@ export async function SetupDrawerSlot({
         select id, code, name, is_active
           from segment_values ${segValFilter}
          order by name
-         limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`),
-      (db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`)),
+         limit ${segValList.perPage} offset ${(segValList.page - 1) * segValList.perPage}`, 'objects'),
+      (db.execute(sql`select count(*)::int as n from segment_values ${segValFilter}`, 'objects')),
       loadRefOptions(segValEntity, orgId, authz.allowedSubsidiaryIds),
     ])
-    segValRows = valRowsRes.rows
-    segValTotal = Number(valCountRes.rows[0]?.n ?? 0)
+    segValRows = valRowsRes
+    segValTotal = Number(valCountRes[0]?.n ?? 0)
     segValRefOptions = childRefs
 
     const valueRowParam = pickString(sp.valueRow)
@@ -411,8 +411,8 @@ export async function SetupDrawerSlot({
         const selected = ((await db.execute(sql`
           select * from segment_values
            where id = ${valueRowParam} and org_id = ${orgId} and segment_id = ${segmentId}
-           limit 1`)))
-        segValOpen = selected.rows[0] ? { creating: false, row: selected.rows[0] } : null
+           limit 1`, 'objects')))
+        segValOpen = selected[0] ? { creating: false, row: selected[0] } : null
       }
     }
   }

@@ -31,16 +31,16 @@ async function fixture(run: (f: Fixture) => Promise<void>, features = '{"hrm":tr
   try {
     const ids = await withBypassContext(async () => {
       const actorId = await createScratchUser(org.orgId, "Supervisor", "supervisor");
-      affected(await db.execute(sql`update app_roles set permissions = '["hrm.shifts.read","hrm.shifts.manage","hrm.shifts.approve","hrm.attendance.read","hrm.attendance.manage"]'::jsonb
+      affected(await db.execute<never>(sql`update app_roles set permissions = '["hrm.shifts.read","hrm.shifts.manage","hrm.shifts.approve","hrm.attendance.read","hrm.attendance.manage"]'::jsonb
         where org_id = ${org.orgId} and key = 'supervisor'`), "permissions");
-      affected(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${features}::jsonb) where id = ${org.orgId}`), "features");
+      affected(await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${features}::jsonb) where id = ${org.orgId}`), "features");
       const ana = randomUUID();
-      affected(await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${ana}, ${org.orgId}, 'person', 'Ana Nurse', ${org.subsidiaryId}, true, '{}'::jsonb)`), "person");
-      affected(await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${org.orgId}, ${ana}, 'Nurse', '2026-01-01', true)`), "role");
+      affected(await db.execute<never>(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${ana}, ${org.orgId}, 'person', 'Ana Nurse', ${org.subsidiaryId}, true, '{}'::jsonb)`), "person");
+      affected(await db.execute<never>(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${org.orgId}, ${ana}, 'Nurse', '2026-01-01', true)`), "role");
       const board = randomUUID();
-      affected(await db.execute(sql`insert into schedule_boards (id, org_id, code, name, row_kind, board_type, views, default_view, grain, time_zone, publish_policy)
+      affected(await db.execute<never>(sql`insert into schedule_boards (id, org_id, code, name, row_kind, board_type, views, default_view, grain, time_zone, publish_policy)
         values (${board}, ${org.orgId}, 'WARD', 'Ward', 'people', 'shift_roster', '{timeline}', 'timeline', 'timed', 'UTC', 'live')`), "board");
-      const today = (await db.execute<{ today: string }>(sql`select (now() at time zone 'UTC')::date::text as today`)).rows[0]!.today;
+      const today = (await db.execute<{ today: string }>(sql`select (now() at time zone 'UTC')::date::text as today`, "objects"))[0]!.today;
       return { actorId, ana, board, day: addCalendarDays(today, -2) };
     });
     await run({ orgId: org.orgId, subsidiaryId: org.subsidiaryId, ...ids });
@@ -81,8 +81,8 @@ test("check-in batches replay idempotently and refuse contradictory source versi
   assert.deepEqual([resent.eventCount, resent.replayedEventIds.length], [0, 2], "a resent source version is recorded as replayed, never duplicated");
   await assert.rejects(admitAttendanceBatch({ ...input, id: randomUUID(), events: [{ ...events[0]!, id: randomUUID(), occurredAt: at(f, "09:20:00") }] }),
     (error: unknown) => error instanceof ScheduleError && error.code === "schedule_attendance_conflict");
-  const count = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_events where org_id = ${f.orgId}`));
-  assert.equal(count.rows[0]!.n, 2);
+  const count = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_events where org_id = ${f.orgId}`, "objects"));
+  assert.equal(count[0]!.n, 2);
   // A record inside declared completeness needs an explicit correction batch.
   await assert.rejects(admitAttendanceBatch({ ...input, id: randomUUID(), events: [event(f, "E9", "break_start", "12:00:00")] }), /correction batch/);
 }));
@@ -108,11 +108,11 @@ test("attendance observes late arrival against the published booking and correct
   const [corrected] = await processBoardAttendance({ ...actor(f), boardId: f.board, from: f.day, through: f.day });
   assert.ok(corrected?.ok && !corrected.unchanged);
   assert.equal((await attendanceExceptions({ ...actor(f), from: f.day, through: f.day })).length, 0);
-  const chain = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_observations where org_id = ${f.orgId} and entry_id = ${booking}`));
-  assert.equal(chain.rows[0]!.n, 2, "the original observation is retained as history");
+  const chain = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_observations where org_id = ${f.orgId} and entry_id = ${booking}`, "objects"));
+  assert.equal(chain[0]!.n, 2, "the original observation is retained as history");
 
   // A closed shift is final.
-  const [entry] = (await withBypassContext(() => db.execute<{ revision: number }>(sql`select revision from schedule_entries where org_id = ${f.orgId} and id = ${booking}`))).rows;
+  const [entry] = await withBypassContext(() => db.execute<{ revision: number }>(sql`select revision from schedule_entries where org_id = ${f.orgId} and id = ${booking}`, "objects"));
   await closeShift({ ...actor(f), boardId: f.board, entryId: booking, expectedRevision: entry!.revision, reason: "Attendance reviewed" });
   const change = await applyBoardChanges({ ...actor(f), boardId: f.board, changes: [{ op: "cancel", id: booking, expectedRevision: entry!.revision + 1 }] });
   assert.equal(change.results[0]?.ok === false && change.results[0].code, "schedule_closed");
@@ -126,8 +126,8 @@ test("an unmapped worker or a missing policy is refused with its remedy, and dev
   try {
     const stranger = await withBypassContext(async () => {
       const user = await createScratchUser(other.orgId, "Stranger", "supervisor");
-      affected(await db.execute(sql`update app_roles set permissions = '["hrm.attendance.read","hrm.attendance.manage"]'::jsonb where org_id = ${other.orgId} and key = 'supervisor'`), "permissions");
-      affected(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true,"hrmAttendance":true}'::jsonb) where id = ${other.orgId}`), "features");
+      affected(await db.execute<never>(sql`update app_roles set permissions = '["hrm.attendance.read","hrm.attendance.manage"]'::jsonb where org_id = ${other.orgId} and key = 'supervisor'`), "permissions");
+      affected(await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true,"hrmAttendance":true}'::jsonb) where id = ${other.orgId}`), "features");
       return user;
     });
     await assert.rejects(admitAttendanceBatch({ orgId: other.orgId, actorId: stranger, id: randomUUID(), deviceId: device, completeThrough: null, sourceEvidence: { source: "export" }, events: [], reason: "Probe" }),
@@ -171,8 +171,8 @@ test("attendance identity requires a person and explicit employment in the devic
     effectiveTo: null,
     reason: "Check employee entity",
   }), (error: unknown) => error instanceof ScheduleError && error.code === "schedule_person_unavailable");
-  const saved = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_identities where org_id = ${f.orgId}`));
-  assert.equal(saved.rows[0]!.n, 0, "incompatible identity references are never stored");
+  const saved = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_identities where org_id = ${f.orgId}`, "objects"));
+  assert.equal(saved[0]!.n, 0, "incompatible identity references are never stored");
 }));
 
 test("a subsidiary-restricted caller cannot change an organization-wide attendance policy", enabled, async () => fixture(async (f) => {
@@ -190,6 +190,6 @@ test("a subsidiary-restricted caller cannot change an organization-wide attendan
     breakGraceMinutes: 10,
     reason: "Entity-scoped policy test",
   }), (error: unknown) => error instanceof ScheduleError && error.status === 403 && error.code === "schedule_scope");
-  const policies = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_policies where org_id = ${f.orgId}`));
-  assert.equal(policies.rows[0]!.n, 0);
+  const policies = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_attendance_policies where org_id = ${f.orgId}`, "objects"));
+  assert.equal(policies[0]!.n, 0);
 }));

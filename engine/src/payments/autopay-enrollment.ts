@@ -9,7 +9,7 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 /** Automated collection retains its enrollment author and rechecks current receipt authority. */
 export async function lockAutopayEnrollmentAuthority(orgId: string, enrollmentId: string, subsidiaryId: string | null) {
   const enrollment = (await db.execute<{ created_by: string | null }>(sql`
-    select created_by from autopay_enrollments where org_id=${orgId} and id=${enrollmentId} for share`)).rows[0];
+    select created_by from autopay_enrollments where org_id=${orgId} and id=${enrollmentId} for share`, "objects"))[0];
   if (!enrollment?.created_by) throw new AutopayError("Autopay has no enrollment author. Cancel that enrollment and enroll the customer with an authorized Receipts operator before retrying collection.");
   let allowedSubsidiaryIds: ReadonlySet<string> | null;
   try {
@@ -48,7 +48,7 @@ export async function enrollAutopay(
       const sub = (await db.execute<{ customer_id: string; status: string }>(sql`
         select customer_id, status from subscriptions
          where id = ${input.subscriptionId} and org_id = ${orgId} limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (!sub) throw new AutopayError("subscription not found");
       if (sub.status === "canceled") throw new AutopayError("a canceled subscription cannot enroll in autopay; reactivate it first");
       if (sub.customer_id !== input.partyId) {
@@ -57,7 +57,7 @@ export async function enrollAutopay(
     } else {
       const party = (await db.execute<{ id: string }>(sql`
         select id from parties where id = ${input.partyId} and org_id = ${orgId} limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (!party) throw new AutopayError("customer not found; pick a customer from Customers first");
     }
     let methodId = input.paymentMethodId ?? null;
@@ -65,7 +65,7 @@ export async function enrollAutopay(
       const method = (await db.execute<{ party_id: string; status: string }>(sql`
         select party_id, status from customer_payment_methods
          where id = ${methodId} and org_id = ${orgId} limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (!method || method.status !== "active") throw new AutopayError("that payment method is not active; finish its setup first");
       if (method.party_id !== input.partyId) {
         throw new AutopayError("that method belongs to a different customer; use one of this customer's methods");
@@ -75,14 +75,14 @@ export async function enrollAutopay(
         select id from customer_payment_methods
          where org_id = ${orgId} and party_id = ${input.partyId} and status = 'active' and is_default
          limit 1
-      `)).rows[0]?.id ?? null;
+      `, "objects"))[0]?.id ?? null;
     }
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into autopay_enrollments (org_id, party_id, subscription_id, payment_method_id, status, charge_on_issue, created_by, updated_by)
       values (${orgId}, ${input.partyId}, ${input.subscriptionId ?? null}, ${methodId},
               'active', ${input.chargeOnIssue ?? false}, ${input.actorId ?? null}, ${input.actorId ?? null})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) throw new AutopayError("enrollment could not be created; try again");
     await auditAutopay(orgId, "autopay_enrollments", inserted.id, {
       event: "enrolled",
@@ -129,8 +129,8 @@ async function setEnrollmentStatus(
       update autopay_enrollments set status = ${status}, updated_at = now(), updated_by = ${actorId}
        where id = ${enrollmentId} and org_id = ${orgId} and status <> ${status}
        returning id
-    `));
-    if (!flipped.rows[0]) throw new AutopayError("enrollment not found or already in that state");
+    `, "objects"));
+    if (!flipped[0]) throw new AutopayError("enrollment not found or already in that state");
     await auditAutopay(orgId, "autopay_enrollments", enrollmentId, { event: `enrollment_${status}`, reason }, actorId);
   });
 }
@@ -175,7 +175,7 @@ export async function findCardsExpiringSoon(
     const withinDays = opts?.withinDays === undefined
       ? (await resolveAutopayPolicy(orgId)).expiryNoticeDays
       : parseExpiryNoticeDays(opts.withinDays);
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       methodId: string;
       partyId: string;
       partyName: string | null;
@@ -198,7 +198,7 @@ export async function findCardsExpiringSoon(
          and (make_date(m.exp_year, m.exp_month, 1) + interval '1 month' - interval '1 day')::date
              between ${asOf}::date and (${asOf}::date + ${withinDays}::integer)
        order by (make_date(m.exp_year, m.exp_month, 1) + interval '1 month' - interval '1 day')::date, p.display_name
-    `)).rows;
+    `, "objects");
     return rows.map((row) => ({
       methodId: row.methodId,
       partyId: row.partyId,
@@ -240,8 +240,8 @@ export async function markExpiryOutreachSent(
            and p.org_id = m.org_id and p.id = m.party_id
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
          returning m.id
-      `));
-      stamped += row.rows.length;
+      `, "objects"));
+      stamped += row.length;
     }
     if (stamped !== methodIds.length) {
       throw new AutopayError("some cards left the queue before outreach went out (removed or already notified); refresh the expiring-cards queue and retry");

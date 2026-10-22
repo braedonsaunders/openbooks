@@ -57,13 +57,13 @@ for (const scenario of ["customer_invoice", "tax code", "rate change", "inactive
         await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
           where org_id=${org.orgId} and key='recurring_operator'`);
         await assert.rejects(() => runScheduleNow(org.orgId, schedule, actor, org.date), { status: 404 });
-        assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`)).rows[0]!.count, 1);
+        assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`, "objects"))[0]!.count, 1);
         return;
       }
       if (scenario === "inactive member") {
         await db.execute(sql`update tax_codes set is_active=false where id=${taxCode}`);
         await assert.rejects(() => runScheduleNow(org.orgId, schedule, actor, org.date), /inactive or missing code/);
-        assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`)).rows[0]!.count, 1);
+        assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`, "objects"))[0]!.count, 1);
         return;
       }
       if (scenario === "rate change") {
@@ -72,25 +72,25 @@ for (const scenario of ["customer_invoice", "tax code", "rate change", "inactive
       }
       const generated = await runScheduleNow(org.orgId, schedule, actor, org.date);
       const source = (await db.execute(sql`select tax_code_id,tax_group_id,tax_input_amount,tax_amount,tax_overridden,subsidiary_id,extra_dims,journal_eliminate
-        from document_lines where document_id=${template} and line_number=1`)).rows[0];
+        from document_lines where document_id=${template} and line_number=1`, "objects"))[0];
       const cloned = (await db.execute(sql`select tax_code_id,tax_group_id,tax_input_amount,tax_amount,tax_overridden,subsidiary_id,extra_dims,journal_eliminate
-        from document_lines where document_id=${generated.documentId} and line_number=1`)).rows[0];
+        from document_lines where document_id=${generated.documentId} and line_number=1`, "objects"))[0];
       assert.deepEqual(cloned, scenario === "rate change" ? { ...source, tax_amount: "15.0000" } : source);
       if (kind === "customer_invoice") {
         assert.equal(generated.posted, true);
-        const ledger = (await db.execute<{ account: string; amount: string }>(sql`
+        const ledger = await db.execute<{ account: string; amount: string }>(sql`
           select l.account_id as account,l.amount from journal_lines l join documents d on d.posted_entry_id=l.entry_id
            where d.id=${generated.documentId} order by l.account_id
-        `)).rows;
+        `, "objects");
         assert.deepEqual(ledger, [
           { account: org.accounts.ar, amount: scenario === "rate change" ? "115.0000" : "113.0000" },
           { account: org.accounts.revenue, amount: "-100.0000" },
           { account: org.accounts.taxOutput, amount: scenario === "rate change" ? "-15.0000" : "-13.0000" },
         ].sort((a,b) => a.account.localeCompare(b.account)));
       }
-      assert.deepEqual((await db.execute(sql`select extra_dims from documents where id=${generated.documentId}`)).rows[0], { extra_dims: { division: headerValue } });
+      assert.deepEqual((await db.execute(sql`select extra_dims from documents where id=${generated.documentId}`, "objects"))[0], { extra_dims: { division: headerValue } });
       const header = (await db.execute<{ custom: Record<string, unknown>; journal_mode: string; accounting_book_id: string | null }>(sql`
-        select custom,journal_mode,accounting_book_id from documents where id=${generated.documentId}`)).rows[0]!;
+        select custom,journal_mode,accounting_book_id from documents where id=${generated.documentId}`, "objects"))[0]!;
       assert.equal(header.custom.recurringTemplateField, customFieldValue);
       assert.equal(header.custom.controlAccountId, org.accounts.ar);
       assert.equal(header.custom.recurringScheduleId, schedule);

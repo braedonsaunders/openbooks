@@ -70,7 +70,7 @@ async function setup(org: ScratchOrg, actor: string, fulfilsOrders: boolean): Pr
     const id = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     extra.set(key, id);
   }
   for (const [role, key, accountId] of [
@@ -153,14 +153,14 @@ function inboundFulfilment(orderExternalId: string, externalId: string, override
 async function issueCount(orgId: string, itemId: string): Promise<string> {
   const row = (await withOrgContext(orgId, () => db.execute<{ count: string }>(sql`
     select count(*)::text as count from inventory_movements
-     where org_id = ${orgId} and item_id = ${itemId} and kind = 'issue' and status = 'posted'`))).rows[0]!;
+     where org_id = ${orgId} and item_id = ${itemId} and kind = 'issue' and status = 'posted'`, "objects")))[0]!;
   return row.count;
 }
 
 async function onHand(orgId: string, itemId: string, locationId: string): Promise<string> {
   const row = (await withOrgContext(orgId, () => db.execute<{ quantity: string }>(sql`
     select coalesce(sum(quantity), 0)::text as quantity from inventory_movements
-     where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${locationId}`))).rows[0]!;
+     where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${locationId}`, "objects")))[0]!;
   return row.quantity;
 }
 
@@ -184,7 +184,7 @@ test("inbound fulfilment issues stock and records COGS when the sale posted with
     const issue = (await withOrgContext(org.orgId, () => db.execute<{ quantity: string; total_value: string; unit_cost: string; entry: string | null }>(sql`
       select quantity::text as quantity, total_value::text as total_value, unit_cost::text as unit_cost, journal_entry_id as entry
         from inventory_movements
-       where org_id = ${org.orgId} and item_id = ${org.items.fifo} and kind = 'issue' and status = 'posted'`))).rows[0]!;
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo} and kind = 'issue' and status = 'posted'`, "objects")))[0]!;
     assert.equal(issue.quantity, "-2.0000");
     // COGS at the layer cost: the units left at 2.00, and the issue carries
     // its journal entry — the sale's revenue finally has its cost.
@@ -241,7 +241,7 @@ test("an unmapped fulfilment location parks with its remedy", { skip: !DB }, asy
     assert.equal(outcome.code, "unmapped_fulfilment_location");
     const parked = (await withOrgContext(org.orgId, () => db.execute<{ reason: string; remedy: string }>(sql`
       select exception_reason as reason, exception_remedy as remedy from channel_order_events
-       where id = ${event.eventId} and org_id = ${org.orgId}`))).rows[0]!;
+       where id = ${event.eventId} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.match(parked.reason, /wh-nope/);
     assert.match(parked.remedy, /Map the storefront location/);
     assert.equal(await issueCount(org.orgId, org.items.fifo), "0");
@@ -284,11 +284,11 @@ test("partial fulfilments split one sale line across events with linkage", { ski
       select dl.id from document_lines dl
        join documents d on d.id = dl.document_id and d.org_id = dl.org_id
        join channel_orders o on o.posting_document_id = d.id and o.org_id = d.org_id
-      where o.org_id = ${org.orgId} and o.external_id = '2006' and dl.item_id = ${org.items.fifo}`))).rows[0]!;
+      where o.org_id = ${org.orgId} and o.external_id = '2006' and dl.item_id = ${org.items.fifo}`, "objects")))[0]!;
     const linked = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from inventory_movements
        where org_id = ${org.orgId} and item_id = ${org.items.fifo} and kind = 'issue' and status = 'posted'
-         and document_line_id = ${saleLine.id}`))).rows[0]!;
+         and document_line_id = ${saleLine.id}`, "objects")))[0]!;
     assert.equal(linked.count, "2");
     // A third unit would over-ship: it still leaves the shelf (stock truth),
     // unlinked, with the overage named in its memo.
@@ -302,10 +302,10 @@ test("partial fulfilments split one sale line across events with linkage", { ski
     }));
     assert.equal((await withBypass(() => postChannelFulfilment(org.orgId, actor, third.eventId))).status, "posted");
     assert.equal(await onHand(org.orgId, org.items.fifo, org.stockLocationId), "7.0000");
-    const bare = (await withOrgContext(org.orgId, () => db.execute<{ memo: string | null }>(sql`
+    const bare = await withOrgContext(org.orgId, () => db.execute<{ memo: string | null }>(sql`
       select memo from inventory_movements
        where org_id = ${org.orgId} and item_id = ${org.items.fifo} and kind = 'issue' and status = 'posted'
-         and document_line_id is null`))).rows;
+         and document_line_id is null`, "objects"));
     assert.equal(bare.length, 1);
     assert.match(bare[0]!.memo ?? "", /above the ordered quantity/);
   } finally {
@@ -336,10 +336,10 @@ test("a cancelled fulfilment reverses its issue", { skip: !DB }, async () => {
     }));
     assert.equal((await withBypass(() => postChannelFulfilment(org.orgId, actor, cancel.eventId))).status, "posted");
     assert.equal(await onHand(org.orgId, org.items.fifo, org.stockLocationId), "10.0000");
-    const reversal = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    const reversal = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select r.id from inventory_movements r
        join inventory_movements m on m.id = r.reverses_movement_id
-       where r.org_id = ${org.orgId} and m.item_id = ${org.items.fifo} and m.kind = 'issue'`))).rows;
+       where r.org_id = ${org.orgId} and m.item_id = ${org.items.fifo} and m.kind = 'issue'`, "objects"));
     assert.equal(reversal.length, 1);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -411,9 +411,9 @@ test("a manual push fulfils the order at Shopify with a fake server", { skip: !D
     assert.equal(lineGroups[0]!.fulfillmentOrderId, "gid://shopify/FulfillmentOrder/900");
     assert.deepEqual(lineGroups[0]!.fulfillmentOrderLineItems, [{ id: "gid://shopify/FulfillmentOrderLineItem/1", quantity: 2 }]);
     assert.equal(fulfillment.notifyCustomer, false);
-    const link = (await withOrgContext(org.orgId, () => db.execute<{ external_id: string }>(sql`
+    const link = await withOrgContext(org.orgId, () => db.execute<{ external_id: string }>(sql`
       select external_id from external_links
-       where org_id = ${org.orgId} and provider = 'shopify' and object_type = 'fulfillment'`))).rows;
+       where org_id = ${org.orgId} and provider = 'shopify' and object_type = 'fulfillment'`, "objects"));
     assert.equal(link.length, 1);
     assert.equal(link[0]!.external_id, "gid://shopify/Fulfillment/700");
     // A replay observes the link instead of pushing twice.

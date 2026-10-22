@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrgReporting,
@@ -21,114 +20,54 @@ function pgMessage(error: unknown): string {
   return `${String(error)}\n${cause === undefined ? "" : String(cause)}`;
 }
 
-const migration = readFileSync(
-  new URL(
-    "../../../schema/migrations/generated/0043_sandbox_wip_prebill_wipe_guard.sql",
-    import.meta.url,
-  ),
-  "utf8",
-);
-const authorizationMigration = readFileSync(
-  new URL(
-    "../../../schema/migrations/generated/0078_sandbox_wipe_guard_authorization.sql",
-    import.meta.url,
-  ),
-  "utf8",
-);
+async function functionDefinition(signature: string): Promise<string> {
+  const [row] = await db.execute<{ definition: string }>(
+    sql`select pg_get_functiondef(${signature}::regprocedure) as definition`,
+    "objects",
+  );
+  assert.ok(row, `${signature} is installed`);
+  return row.definition;
+}
 
-const deployedWipGuard = `
-CREATE OR REPLACE FUNCTION public.wip_prebill_event_append_only_guard() RETURNS trigger
-    LANGUAGE plpgsql
-    AS $$
-BEGIN
-  IF current_setting('openbooks.sandbox_wipe',true)='on' THEN RETURN CASE WHEN TG_OP='DELETE' THEN OLD ELSE NEW END; END IF;
-  RAISE EXCEPTION 'WIP prebill events are append-only';
-END $$;
-`;
-
-test("0043 scopes the deployed WIP guard and replays safely", { skip: !DB }, async () => {
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await client.query(deployedWipGuard);
-    const before = await client.query<{ definition: string }>(
-      "select pg_get_functiondef('public.wip_prebill_event_append_only_guard()'::regprocedure) as definition",
-    );
-    assert.match(before.rows[0]!.definition, /current_setting\('openbooks\.sandbox_wipe'/);
-
-    await client.query(migration);
-    await client.query(migration);
-    const after = await client.query<{ definition: string }>(
-      "select pg_get_functiondef('public.wip_prebill_event_append_only_guard()'::regprocedure) as definition",
-    );
-    assert.match(after.rows[0]!.definition, /openbooks_sandbox_wipe_allowed\(old\.org_id\)/i);
-    assert.doesNotMatch(after.rows[0]!.definition, /current_setting\(/);
-  } finally {
-    await client.query("rollback").catch(() => undefined);
-    client.release();
+test("immutability guards admit a sandbox wipe only through the authorized org check", { skip: !DB }, async () => {
+  // A raw session GUC is settable by any connection; only the
+  // org-scoped authorization function may open the wipe path.
+  const names = [
+    "prebill_event_append_only_guard",
+    "depreciation_evidence_attachment_guard",
+    "inventory_provisional_immutable",
+    "openbooks_guard_depreciation_evidence",
+    "je_guard",
+    "openbooks_gl_activity_entry",
+    "openbooks_gl_activity_line",
+    "openbooks_party_payment_stats",
+    "posted_document_financial_guard",
+    "protect_country_tax_pack_installation",
+    "subscription_amendment_immutable_guard",
+    "subscription_period_invoice_immutable_guard",
+    "subscription_plan_version_immutable_guard",
+    "subscription_version_component_immutable_guard",
+    "recurring_occurrence_document_immutable_guard",
+    "enforce_payment_instruction_posting_claim",
+    "document_lines_total_line_refresh",
+    "document_lines_total_line_tieout",
+  ];
+  for (const name of names) {
+    const definition = await functionDefinition(`public.${name}()`);
+    assert.doesNotMatch(definition, /current_setting\([^)]*sandbox_wipe/i, name);
+    assert.match(definition, /openbooks_sandbox_wipe_allowed/i, name);
   }
-});
-
-test("0078 replays and removes every raw sandbox-wipe short circuit", { skip: !DB }, async () => {
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await client.query(authorizationMigration);
-    await client.query(authorizationMigration);
-    const names = [
-      "depreciation_evidence_attachment_guard",
-      "inventory_provisional_immutable",
-      "openbooks_guard_depreciation_evidence",
-      "je_guard",
-      "openbooks_gl_activity_entry",
-      "openbooks_gl_activity_line",
-      "openbooks_party_payment_stats",
-      "posted_document_financial_guard",
-      "protect_country_tax_pack_installation",
-      "subscription_amendment_immutable_guard",
-      "subscription_period_invoice_immutable_guard",
-      "subscription_plan_version_immutable_guard",
-      "subscription_version_component_immutable_guard",
-      "recurring_occurrence_document_immutable_guard",
-      "enforce_payment_instruction_posting_claim",
-      "document_lines_total_line_refresh",
-      "document_lines_total_line_tieout",
-    ];
-    for (const name of names) {
-      const result = await client.query<{ definition: string }>(
-        `select pg_get_functiondef(('public.${name}()')::regprocedure) as definition`,
-      );
-      assert.doesNotMatch(result.rows[0]!.definition, /current_setting\([^)]*sandbox_wipe/i);
-      assert.match(result.rows[0]!.definition, /openbooks_sandbox_wipe_allowed/i);
-    }
-    const cascade = await client.query<{ definition: string }>(
-      "select pg_get_functiondef('public.openbooks_je_cascade_posting_date()'::regprocedure) as definition",
-    );
-    assert.doesNotMatch(cascade.rows[0]!.definition, /sandbox_wipe|current_setting\(/i);
-    for (const name of ["assert_document_totals_match_lines", "refresh_document_totals_from_lines"]) {
-      const result = await client.query<{ definition: string }>(
-        `select pg_get_functiondef(('public.${name}(uuid, uuid)')::regprocedure) as definition`,
-      );
-      assert.doesNotMatch(result.rows[0]!.definition, /sandbox_wipe|current_setting\(/i);
-    }
-  } finally {
-    await client.query("rollback").catch(() => undefined);
-    client.release();
+  // Derivation and totals functions carry no wipe path at all.
+  for (const signature of [
+    "public.openbooks_je_cascade_posting_date()",
+    "public.assert_document_totals_match_lines(uuid, uuid)",
+    "public.refresh_document_totals_from_lines(uuid, uuid)",
+  ]) {
+    assert.doesNotMatch(await functionDefinition(signature), /sandbox_wipe|current_setting\(/i, signature);
   }
 });
 
 test("a raw wipe GUC cannot rewrite posted ledger state, while an authorized sandbox delete can", { skip: !DB }, async () => {
-  const installer = await pool.connect();
-  try {
-    await installer.query("begin");
-    await installer.query(authorizationMigration);
-    // Roll back like the two replay tests above: committing here would
-    // persist 0078's guard bodies over every later refinement (0166/0168),
-    // silently downgrading je_guard for the rest of the shard.
-  } finally {
-    await installer.query("rollback").catch(() => undefined);
-    installer.release();
-  }
   const org = await createScratchOrg();
   const entryId = randomUUID();
   const lineDebitId = randomUUID();
@@ -160,8 +99,8 @@ test("a raw wipe GUC cannot rewrite posted ledger state, while an authorized san
       (error: unknown) => pgMessage(error).includes("posted and immutable"),
     );
 
-    // The amend escape is gone (migration 0380) — even the
-    // wipe+amend combination cannot move a posted entry's date. Corrections
+    // No amend escape exists: even the wipe+amend combination cannot move
+    // a posted entry's date. Corrections
     // reverse and repost; history is never edited in place.
     await assert.rejects(
       db.transaction(async (tx) => {

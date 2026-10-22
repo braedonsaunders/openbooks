@@ -21,7 +21,7 @@ export async function assertPortalDocument(
       from documents
      where org_id = ${orgId} and id = ${documentId} and party_id = ${partyId}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw portalRefusal("That record was not found in your account", "not_found", 404, "Return to your portal home and choose from your own records");
   }
@@ -39,7 +39,7 @@ export async function assertPortalSubscription(
       from subscriptions
      where org_id = ${orgId} and id = ${subscriptionId} and customer_id = ${partyId}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw portalRefusal("That subscription was not found in your account", "not_found", 404, "Return to your portal home and choose from your own subscriptions");
   }
@@ -56,7 +56,7 @@ export async function assertPortalChannelOrder(
     select id from channel_orders
      where org_id = ${orgId} and id = ${orderId} and customer_party_id = ${partyId}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw portalRefusal("That order was not found in your account", "not_found", 404, "Return to your portal home and choose from your own orders");
   }
@@ -73,7 +73,7 @@ export async function assertPortalPaymentMethod(
     select id, provider, status from customer_payment_methods
      where org_id = ${orgId} and id = ${methodId} and party_id = ${partyId}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw portalRefusal("That payment method was not found in your account", "not_found", 404, "Return to your portal home and choose from your own payment methods");
   }

@@ -213,7 +213,7 @@ export async function returnableSources(
   const limit = Number.isFinite(wantedLimit) ? Math.min(Math.max(wantedLimit, 1), 200) : 50;
   const wantedOffset = Math.floor(Number(query.offset ?? 0));
   const offset = Number.isFinite(wantedOffset) ? Math.max(wantedOffset, 0) : 0;
-  const rows = (await runner.execute<SourceRow>(sql`
+  const rows = await runner.execute<SourceRow>(sql`
     select ${sourceColumns()}
       ${sourceJoins(rules, orgId)}
      where movement.org_id = ${orgId}
@@ -233,7 +233,7 @@ export async function returnableSources(
        and abs(movement.quantity) - coalesce(returned.quantity, 0) > 0
      order by movement.moved_at desc, movement.id
      limit ${limit + 1} offset ${offset}
-  `)).rows;
+  `, "objects");
   const hasMore = rows.length > limit;
   return { sources: rows.slice(0, limit).map(toReturnableSource), hasMore };
 }
@@ -292,7 +292,7 @@ export async function assertReturnSourceSelectable(
             and reversal.reverses_movement_id = movement.id
        )
        and abs(movement.quantity) - coalesce(returned.quantity, 0) > 0
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new InventoryError(
       `${lineLabel}: that ${selection.side === "purchase" ? "receipt" : "shipment"} is not available to return — ` +

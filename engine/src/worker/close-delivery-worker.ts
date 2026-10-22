@@ -157,7 +157,7 @@ async function mintCloseReportRun(
   principal: string,
 ): Promise<string> {
   const allowed = await actorAllowedSubsidiaryIds(db, orgId, principal);
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     insert into report_runs
       (org_id, definition_id, trigger, status, recipient_emails, filters,
        authorization_snapshot, created_by)
@@ -180,7 +180,7 @@ async function mintCloseReportRun(
                 kind: definition.kind,
               },
             })}::jsonb, ${principal})
-    returning id::text as id`)).rows;
+    returning id::text as id`, "objects");
   // A write matching zero rows is a failure, not a success.
   if (!rows[0]) {
     throw new Error(
@@ -204,21 +204,21 @@ async function loadContext(data: {
            pkg.name as package_name, pkg.reports, pkg.recipients, pkg.delivery,
            pkg.created_by as package_author, o.name as org_name`;
   const rows = runId
-    ? ((await db.execute<PackageContext>(sql`
+    ? (await db.execute<PackageContext>(sql`
         select ${select}
           from close_runs r
           join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
           join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
           join close_reporting_packages pkg on pkg.id = ${packageId} and pkg.org_id = ${orgId}
           join orgs o on o.id = r.org_id
-         where r.id = ${runId} and r.org_id = ${orgId}`))).rows
-    : ((await db.execute<PackageContext>(sql`
+         where r.id = ${runId} and r.org_id = ${orgId}`, "objects"))
+    : (await db.execute<PackageContext>(sql`
         select ${select}
           from accounting_periods p
           join accounting_books b on b.id = ${bookId} and b.org_id = ${orgId}
           join close_reporting_packages pkg on pkg.id = ${packageId} and pkg.org_id = ${orgId}
           join orgs o on o.id = ${orgId}
-         where p.id = ${periodId} and p.org_id = ${orgId}`))).rows;
+         where p.id = ${periodId} and p.org_id = ${orgId}`, "objects"));
   return rows[0];
 }
 
@@ -312,8 +312,8 @@ export async function processCloseDeliveryJobData(
       const defs = (await db.execute<ReportDefinitionForRun>(sql`
         select slug, id::text as id, name, report_type as "reportType", query, statement, kind
           from report_definitions
-         where org_id = ${orgId} and slug in (${sql.join(specs.map((spec) => sql`${spec.slug}`), sql`, `)})`));
-      const defBySlug = new Map(defs.rows.map((def) => [def.slug, def]));
+         where org_id = ${orgId} and slug in (${sql.join(specs.map((spec) => sql`${spec.slug}`), sql`, `)})`, "objects"));
+      const defBySlug = new Map(defs.map((def) => [def.slug, def]));
 
       const xlsxType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
       const format = delivery.format === "xlsx" ? "xlsx" : "pdf";
@@ -389,8 +389,8 @@ export async function processCloseDeliveryJobData(
       if (runId) {
         const binder = await db.execute<{ binder_hash: string | null }>(sql`
           select binder_hash from close_runs where id = ${runId} and org_id = ${orgId}
-        `);
-        const binderHash = binder.rows[0]?.binder_hash;
+        `, "objects");
+        const binderHash = binder[0]?.binder_hash;
         emailIntentKey = binderHash
           ? `close-package|${orgId}|${runId}|${binderHash}`
           : `close-package|${orgId}|${runId}|unbound`;

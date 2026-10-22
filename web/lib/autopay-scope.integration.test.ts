@@ -107,7 +107,7 @@ test("a shared customer's collection attempt remains private to its invoice enti
     const before = (await db.execute(sql`
       select (select count(*)::text from collection_attempts where org_id = ${org.orgId}) as attempts,
         (select count(*)::text from documents where org_id = ${org.orgId}) as documents,
-        (select count(*)::text from audit_log where org_id = ${org.orgId}) as audits`)).rows[0];
+        (select count(*)::text from audit_log where org_id = ${org.orgId}) as audits`, "objects"))[0];
     const methods = await withOrgContext(org.orgId, () => methodsRoute.GET(new Request(
       `http://scope.local/api/autopay/methods?partyId=${org.customerId}`)));
     assert.equal(methods.status, 200, 'Shared customer methods remain available');
@@ -121,7 +121,7 @@ test("a shared customer's collection attempt remains private to its invoice enti
     const after = (await db.execute(sql`
       select (select count(*)::text from collection_attempts where org_id = ${org.orgId}) as attempts,
         (select count(*)::text from documents where org_id = ${org.orgId}) as documents,
-        (select count(*)::text from audit_log where org_id = ${org.orgId}) as audits`)).rows[0];
+        (select count(*)::text from audit_log where org_id = ${org.orgId}) as audits`, "objects"))[0];
     assert.deepEqual(after, before);
   } finally {
     session.user = null;

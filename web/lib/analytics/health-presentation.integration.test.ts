@@ -44,8 +44,8 @@ async function seedTwoCurrencyHealth() {
       values (${org.orgId}, ${org.periodId}, 'USD', 'CAD', 1.35, 1.35, 1.3)`)
     // The prior-year comparison window translates through its own period's
     // set, so it needs one too (same rule as the formal statements).
-    const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`)
-    const calRow0 = calRow.rows[0]
+    const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, 'objects')
+    const calRow0 = calRow[0]
     if (!calRow0) throw new Error('scratch period has no fiscal calendar')
     const priorPeriod = randomUUID()
     await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -149,7 +149,7 @@ test('the landing card and selected tab share one canonical scorecard without re
   const org = await seedTwoCurrencyHealth()
   const execute = db.execute
   let calls = 0
-  db.execute = ((...args: Parameters<typeof execute>) => { calls++; return execute.apply(db, args) }) as typeof execute
+  db.execute = ((...args: Parameters<typeof execute>) => { calls++; return Reflect.apply(execute, db, args) }) as typeof execute
   t.after(() => { db.execute = execute })
   try {
     await withOrgContext(org.orgId, async () => {

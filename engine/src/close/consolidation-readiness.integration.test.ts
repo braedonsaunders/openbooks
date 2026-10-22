@@ -31,8 +31,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function openExceptions(orgId: string, runId: string, code: string): Promise<{ count: number }[]> {
   const rows = (await db.execute<{ details: { count: number } }>(sql`
     select details from close_exceptions
-     where org_id = ${orgId} and run_id = ${runId} and code = ${code} and status = 'open'`));
-  return rows.rows.map((row) => ({ count: Number(row.details.count) }));
+     where org_id = ${orgId} and run_id = ${runId} and code = ${code} and status = 'open'`, "objects"));
+  return rows.map((row) => ({ count: Number(row.details.count) }));
 }
 
 async function postEntry(

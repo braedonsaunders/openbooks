@@ -175,8 +175,8 @@ async function assertSampleRequestAccess(input: CreateSampleCompanyInput): Promi
              )
            )
       ) as allowed
-    `));
-    return result.rows[0]?.allowed === true;
+    `, "objects"));
+    return result[0]?.allowed === true;
   });
   if (!allowed) {
     throw new SampleCompanyError(
@@ -211,8 +211,8 @@ async function templateCandidates(profileId: string): Promise<Array<{ id: string
          and not (o.settings ? 'sampleCompany')
        order by coalesce((o.settings->'sampleTemplate'->>'enabled')::boolean, false) desc,
                 o.created_at desc
-    `));
-    return result.rows;
+    `, "objects"));
+    return result;
   });
 }
 
@@ -364,7 +364,7 @@ export async function resumeSampleTemplate(runDir: string): Promise<PrepareSampl
   try {
     await client.query("select pg_advisory_lock(hashtextextended($1, 0))", [lockKey]);
     const permitted = await withOrgContext(manifest.orgId, async () => {
-      const row = (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id=${manifest.orgId}`)).rows[0];
+      const row = (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id=${manifest.orgId}`, "objects"))[0];
       const attempt = row?.settings.sampleTemplateAttempt as Record<string, unknown> | undefined;
       return row?.settings.simHarness === true && row.settings.simProfile === profile.profileId && attempt?.profileId === profile.profileId && attempt?.seed === manifest.seed
         && (attempt.runDir === undefined || (typeof attempt.runDir === "string" && resolve(attempt.runDir) === resolve(runDir)));
@@ -408,8 +408,8 @@ async function templateRowForOrg(orgId: string): Promise<(TemplateRow & { envKin
              (select count(*)::int from app_roles r
                where r.org_id = o.id and r.key = 'admin') as "adminRoles"
         from orgs o where o.id = ${orgId}
-    `));
-    return result.rows[0] ?? null;
+    `, "objects"));
+    return result[0] ?? null;
   });
 }
 
@@ -460,8 +460,8 @@ export async function promoteExistingSampleTemplate(
     await db.transaction(async (tx) => {
       const state = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
         select settings from orgs where id = ${clone.sandboxOrgId} for update
-      `));
-      const settings = { ...(state.rows[0]?.settings ?? {}) };
+      `, "objects"));
+      const settings = { ...(state[0]?.settings ?? {}) };
       delete settings.sampleCompany;
       settings.simHarness = true;
       settings.simProfile = profile.profileId;
@@ -539,8 +539,8 @@ async function existingFor(memberUserId: string, industryKey: string): Promise<{
          and coalesce(o.settings->'sampleCompany'->>'provisioningStage', 'ready') = 'ready'
        order by o.created_at asc
        limit 1
-    `));
-    return result.rows[0] ?? null;
+    `, "objects"));
+    return result[0] ?? null;
   });
 }
 
@@ -590,8 +590,8 @@ async function findPartialSampleCompany(
          and o.settings->'sampleCompany'->>'provisioningStage' <> 'ready'
        order by o.created_at asc
        limit 1
-    `));
-    const row = result.rows[0];
+    `, "objects"));
+    const row = result[0];
     if (!row) return null;
     return {
       id: row.id,
@@ -676,7 +676,7 @@ async function assertShellOrgHasNoTenantRows(orgId: string): Promise<void> {
   }
   for (let offset = 0; offset < probes.length; offset += 50) {
     const batch = probes.slice(offset, offset + 50);
-    const holder = (await db.execute<{ t: string }>(sql.raw(batch.join("\nunion all\n")))).rows[0];
+    const holder = (await db.execute<{ t: string }>(sql.raw(batch.join("\nunion all\n")), "objects"))[0];
     if (holder) {
       throw new SampleCompanyError(
         `refusing to delete partial sample company ${orgId}: table ${holder.t} still holds its rows; ` +
@@ -703,7 +703,7 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
              ((settings ? 'sampleCompany')
               or (settings ? 'sampleTemplatePromotion')
               or coalesce((settings->>'simHarness')::boolean, false)) as "isSample"
-        from orgs where id = ${orgId}`)).rows[0];
+        from orgs where id = ${orgId}`, "objects"))[0];
     if (!row) return "gone";
     if (!row.isSample) {
       throw new SampleCompanyError(
@@ -718,8 +718,8 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
     if (row.envKind === "preview") {
       await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
     }
-    const sandboxRows = (await db.execute<{ id: string }>(sql`
-      select id from sandboxes where org_id = ${orgId}`)).rows;
+    const sandboxRows = await db.execute<{ id: string }>(sql`
+      select id from sandboxes where org_id = ${orgId}`, "objects");
     if (sandboxRows.length === 0) {
       // C-63: the clone died between the org INSERT and the sandboxes INSERT
       // (rows that predate the one-transaction birth), or suffered outside
@@ -731,7 +731,7 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
       await assertShellOrgHasNoTenantRows(orgId);
       await db.execute(sql`delete from orgs where id = ${orgId}`);
       const remaining = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from orgs where id = ${orgId}`)).rows[0]!.n;
+        select count(*)::int as n from orgs where id = ${orgId}`, "objects"))[0]!.n;
       if (remaining !== 0) {
         throw new SampleCompanyError(`partial sample company ${orgId} survived deletion`);
       }
@@ -744,7 +744,7 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
     }
     await deleteSandbox(sandboxRows[0]!.id, { systemReason: "sample company cleanup requested by its owner" });
     const remaining = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from orgs where id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from orgs where id = ${orgId}`, "objects"))[0]!.n;
     if (remaining !== 0) {
       throw new SampleCompanyError(`partial sample company ${orgId} survived deletion`);
     }
@@ -766,8 +766,8 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
            and o.settings->'demoData'->'accountingVerification'->>'status' = 'passed'
            and o.settings->'sampleTemplate'->>'profileId' in ${SAMPLE_COMPANY_PROFILES.map((profile) => profile.profileId)}
            and not (o.settings ? 'sampleCompany')
-      `));
-      return result.rows;
+      `, "objects"));
+      return result;
     }).then(async (candidates) => {
       const ready = new Set<string>();
       for (const candidate of candidates) {
@@ -787,8 +787,8 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
            and access.is_active
          where o.env_kind = 'preview'
            and o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
-      `));
-      return new Map(result.rows.map((row) => [row.industry, row.id]));
+      `, "objects"));
+      return new Map(result.map((row) => [row.industry, row.id]));
     }),
   ]);
   return SAMPLE_COMPANY_PROFILES.map((profile) => ({
@@ -888,8 +888,8 @@ async function sweepStaleTemplateAttempts(
          and coalesce(settings->'sampleTemplateOracle'->>'status', '') <> 'passed'
          and coalesce(settings->'sampleTemplate'->>'enabled', 'false') <> 'true'
        order by created_at asc
-    `));
-    return result.rows;
+    `, "objects"));
+    return result;
   });
   const stuck: string[] = [];
   for (const attempt of stale) {
@@ -1069,7 +1069,7 @@ async function markSimulationOraclePassed(orgId: string, profileId: string): Pro
       const before = (await tx.execute<{ value: unknown }>(sql`
         select settings->'sampleTemplateOracle' as value
           from orgs where id = ${orgId} for update
-      `));
+      `, "objects"));
       const after = {
         version: 1,
         profileId,
@@ -1090,7 +1090,7 @@ async function markSimulationOraclePassed(orgId: string, profileId: string): Pro
           ${JSON.stringify({
             source: "sample_company_simulator",
             reason: "Simulation completed with no oracle defects",
-            sampleTemplateOracle: { before: before.rows[0]?.value ?? null, after },
+            sampleTemplateOracle: { before: before[0]?.value ?? null, after },
           })}::jsonb,
           ${`sample-template-oracle:${profileId}`}
         )
@@ -1104,8 +1104,8 @@ async function markTemplate(template: TemplateRow, profileId: string): Promise<v
     await db.transaction(async (tx) => {
       const before = (await tx.execute<{ value: unknown }>(sql`
         select settings->'sampleTemplate' as value from orgs where id = ${template.id} for update
-      `));
-      const current = before.rows[0]?.value;
+      `, "objects"));
+      const current = before[0]?.value;
       const currentCoverage = current && typeof current === "object"
         ? (current as Record<string, unknown>).coverage
         : null;
@@ -1146,7 +1146,7 @@ async function markTemplate(template: TemplateRow, profileId: string): Promise<v
         values (
           ${template.id}, 'orgs', ${template.id}, 'update',
           ${JSON.stringify({
-            sampleTemplate: { before: before.rows[0]?.value ?? null, after },
+            sampleTemplate: { before: before[0]?.value ?? null, after },
             reason: "verified synthetic company registered as a reusable sample template",
           })}::jsonb
         )
@@ -1160,8 +1160,8 @@ async function finalizePreview(args: FinalizeSampleCompanyArgs): Promise<void> {
     await db.transaction(async (tx) => {
       const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
         select settings from orgs where id = ${args.sandboxOrgId} for update
-      `));
-      const row = current.rows[0];
+      `, "objects"));
+      const row = current[0];
       if (!row) throw new SampleCompanyError("cloned sample organization disappeared during provisioning");
 
       const birth = row.settings.sampleCompany as Record<string, unknown> | undefined;
@@ -1263,8 +1263,8 @@ async function grantSampleCompanyAccess(args: {
     await db.transaction(async (tx) => {
       const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
         select settings from orgs where id = ${args.sandboxOrgId} for update
-      `));
-      const row = current.rows[0];
+      `, "objects"));
+      const row = current[0];
       if (!row) throw new SampleCompanyError("sample company disappeared during provisioning");
       const company = (row.settings ?? {}).sampleCompany;
       if (!company || typeof company !== "object") {
@@ -1390,7 +1390,7 @@ async function restoreClonedSampleScenarios(orgId: string, industryKey: string):
   const state = await withOrgContext(orgId, async () => (await db.execute<{ version: number | null; actorId: string | null }>(sql`
     select (settings->'demoData'->>'version')::int as version,
       settings->'sampleCompany'->>'finalizedBy' as "actorId" from orgs where id=${orgId}
-  `)).rows[0]);
+  `, "objects"))[0]);
   if (state?.version === DEMO_DATA_VERSION) {
     if (!state.actorId || !isUuid(state.actorId)) throw new SampleCompanyError("sample restoration requires its finalized local administrator");
     await installDemoScenarios(orgId, industryKey, { actorId: state.actorId });

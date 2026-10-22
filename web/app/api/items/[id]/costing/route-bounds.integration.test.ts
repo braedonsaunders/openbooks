@@ -148,7 +148,7 @@ test("costing saves the editor's blank optional accounts and decimals as unset",
     const after = await profile(fx);
     assert.ok(Number(after.standard_cost) === 118, `standard cost not saved: ${after.standard_cost}`);
     const stored = (await withBypassContext(() => db.execute<{ received_not_billed_account_id: string | null }>(sql`
-      select received_not_billed_account_id from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`))).rows[0];
+      select received_not_billed_account_id from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`, "objects")))[0];
     assert.equal(stored?.received_not_billed_account_id, null, "blank RNB persists as unset behind the company default");
   } finally {
     await dropScratchOrg(fx.orgId);
@@ -198,12 +198,12 @@ test("a unit-conversion row saves through the costing section with a before/afte
     const response = await call(PUT, fx.itemId, { ...putBody(fx, before.updated_at, "12.50"), unitConversions: { box: 12 } });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     const stored = (await withBypassContext(() => db.execute<{ unit_conversions: unknown }>(sql`
-      select unit_conversions from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`))).rows[0];
+      select unit_conversions from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`, "objects")))[0];
     assert.deepEqual(stored?.unit_conversions, { box: 12 }, "the conversion row persists");
     const audit = (await withBypassContext(() => db.execute<{ action: string; changes: { before: { unit_conversions?: Record<string, unknown> }; after: { unit_conversions?: Record<string, unknown> } } }>(sql`
       select action, changes from audit_log
        where org_id = ${fx.orgId} and table_name = 'item_inventory_profiles' and row_id = ${fx.itemId}
-       order by at desc, id desc limit 1`))).rows[0];
+       order by at desc, id desc limit 1`, "objects")))[0];
     assert.equal(audit?.action, "update");
     assert.deepEqual(audit?.changes.after.unit_conversions, { box: 12 }, "the audit carries the added row");
     assert.ok(!("box" in ((audit?.changes.before.unit_conversions ?? {}) as Record<string, unknown>)), "the audit shows the row as new");

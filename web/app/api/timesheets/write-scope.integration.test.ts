@@ -62,8 +62,8 @@ async function fixture() {
       method: 'PUT', body: JSON.stringify({ employee, week: WEEK, rows: [row], expectedRevision }),
     })))
   }
-  const entries = async (employee: string) => (await db.execute<{ status: string }>(sql`
-    select status from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`)).rows
+  const entries = async (employee: string) => await db.execute<{ status: string }>(sql`
+    select status from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`, 'objects')
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, member, worker, self, colleague, as, save, entries, close }
 }

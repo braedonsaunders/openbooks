@@ -27,10 +27,11 @@ test("retro candidate registry projects each registered earning source and its r
   const queries: string[] = [];
   const dialect = new PgDialect();
   const executor = {
-    execute: async (query: SQL) => {
+    execute: async (query: SQL, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const compiled = dialect.sqlToQuery(query);
       queries.push(compiled.sql);
-      return { rows: compiled.sql.trimStart().startsWith("select s.employee_party_id") ? [sourceRow] : [] };
+      return inMode({ rows: compiled.sql.trimStart().startsWith("select s.employee_party_id") ? [sourceRow] : [] });
     },
   };
 

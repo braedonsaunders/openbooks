@@ -48,10 +48,8 @@ async function countRows(
   clauses: { key: string; operator: "eq" | "ne"; value: string }[] = [],
 ): Promise<number> {
   const view = { ...defaultListView("customer_invoice"), filters: clauses };
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
-      where ${invoiceServicePartyWhere([...KINDS], view, adhoc, orgId, null)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents d
+      where ${invoiceServicePartyWhere([...KINDS], view, adhoc, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 

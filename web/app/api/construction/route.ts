@@ -229,8 +229,8 @@ export const GET = defineRoute({
           join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
                          and a.org_id = o.id
          where o.id = ${orgId}
-      `);
-        const retainageAccountId = retAcct.rows[0]?.acct ?? null;
+      `, "objects");
+        const retainageAccountId = retAcct[0]?.acct ?? null;
 
         // The org project-revenue default backing the CO income picker,
         // resolved alongside the page reads, not inside a write tx.
@@ -246,7 +246,7 @@ export const GET = defineRoute({
                  join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
                 where pal.org_id = ${orgId} and pal.sov_line_id = l.id and pa.status <> 'void') as "usedByApplication"
           from sov_lines l where l.org_id = ${orgId} and l.project_id = ${projectId} order by l.sort_order
-      `);
+      `, "objects");
         const cos = await db.execute(sql`
         select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
                co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
@@ -254,7 +254,7 @@ export const GET = defineRoute({
           from change_orders co
           left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
          where co.org_id = ${orgId} and co.project_id = ${projectId} order by co.number
-      `)
+      `, "objects")
         const apps = await db.execute(sql`
         select pa.id, pa.application_number as "applicationNumber", pa.period_end as "periodEnd", pa.kind,
                pa.status, pa.retainage_percent as "retainagePercent", pa.invoice_document_id as "invoiceDocumentId",
@@ -262,23 +262,23 @@ export const GET = defineRoute({
           from pay_applications pa
           left join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
          where pa.org_id = ${orgId} and pa.project_id = ${projectId} order by pa.application_number
-      `)
+      `, "objects")
         const held = retainageAccountId
           ? await db.execute<{ held: string }>(
-              projectRetainageHeldSql(orgId, projectId, retainageAccountId),
+              projectRetainageHeldSql(orgId, projectId, retainageAccountId), "objects",
             )
-          : { rows: [{ held: "0" }] };
+          : [{ held: "0" }];
 
         const contractSum = sum(
-          sov.rows.map((line) => String(line.scheduledValue ?? "0")),
+          sov.map((line) => String(line.scheduledValue ?? "0")),
         );
         return NextResponse.json({
-          sovLines: sov.rows,
-          changeOrders: cos.rows,
+          sovLines: sov,
+          changeOrders: cos,
           defaultIncomeAccountId: defaultIncomeAccount,
-          payApplications: apps.rows,
+          payApplications: apps,
           contractSum,
-          retainageHeld: String(held.rows[0]?.held ?? "0"),
+          retainageHeld: String(held[0]?.held ?? "0"),
           committedCost: committed.committed.cost,
           retainageConfigured: Boolean(retainageAccountId),
         });
@@ -327,9 +327,9 @@ async function projectScope(
 ): Promise<ProjectScope | null> {
   if (typeof projectId !== "string" || !isUuid(projectId)) return null;
   const r = await db.execute<{ id: string; subsidiary_id: string | null }>(
-    sql`select id, subsidiary_id from projects where id = ${projectId} and org_id = ${orgId}`,
+    sql`select id, subsidiary_id from projects where id = ${projectId} and org_id = ${orgId}`, "objects",
   );
-  const row = r.rows[0];
+  const row = r[0];
   return row ? { projectId: row.id, subsidiaryId: row.subsidiary_id } : null;
 }
 
@@ -407,9 +407,7 @@ async function actionProjectScope(
   } else {
     return null;
   }
-  const row = (
-    await db.execute<{ id: string; subsidiary_id: string | null }>(query)
-  ).rows[0];
+  const row = (await db.execute<{ id: string; subsidiary_id: string | null }>(query, "objects"))[0];
   return row ? { projectId: row.id, subsidiaryId: row.subsidiary_id } : null;
 }
 
@@ -607,8 +605,8 @@ export const POST = defineRoute({
             values (${orgId}, ${body.projectId}, ${body.itemNo ?? null}, ${description}, ${scheduledValue},
                     ${retainagePercent}, ${incomeAccountId}, ${sortOrder}, ${userId}, ${userId})
             returning id
-          `);
-            const createdId = created.rows[0]!.id;
+          `, "objects");
+            const createdId = created[0]!.id;
             await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'sov_lines', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, itemNo: body.itemNo ?? null, description, scheduledValue, retainagePercent, incomeAccountId } })}::jsonb, ${userId})`);
             return createdId;
@@ -623,18 +621,18 @@ export const POST = defineRoute({
             // project's id stays the right row to lock.
             const lockedProject = await lockEntryProject(tx);
             const before = await tx.execute(
-              sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`,
+              sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`, "objects",
             );
-            if (!before.rows[0])
+            if (!before[0])
               throw new ConstructionBillingError("Schedule line not found");
-            const stored = before.rows[0];
+            const stored = before[0];
             const used = await tx.execute(
               sql`select 1 from pay_application_lines pal
                     join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
-                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`,
+                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`, "objects",
             );
             const locked =
-              used.rows.length > 0 || stored.change_order_id != null;
+              used.length > 0 || stored.change_order_id != null;
             const incomeAccountId = await pinIncomeAccount(
               tx,
               orgId,
@@ -689,7 +687,7 @@ export const POST = defineRoute({
                 );
               if (!onlyIncome) {
                 throw new ConstructionBillingError(
-                  used.rows.length > 0
+                  used.length > 0
                     ? "A schedule line used by an application is immutable; use a change order"
                     : "A controlled schedule line is immutable; use a change order",
                 );
@@ -754,9 +752,9 @@ export const POST = defineRoute({
               update sov_lines set item_no = ${body.itemNo ?? null}, description = ${description}, scheduled_value = ${scheduledValue},
                      retainage_percent = ${retainagePercent}, income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
                where id = ${body.id} and org_id = ${orgId} returning *
-            `);
+            `, "objects");
               await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'sov_lines', ${body.id}, 'update', ${JSON.stringify({ before: before.rows[0], after: after.rows[0] })}::jsonb, ${userId})`);
+              values (${orgId}, 'sov_lines', ${body.id}, 'update', ${JSON.stringify({ before: before[0], after: after[0] })}::jsonb, ${userId})`);
             }
           });
           return NextResponse.json({ ok: true });
@@ -767,16 +765,16 @@ export const POST = defineRoute({
             // line, so a concurrent A→B move refuses before anything deletes.
             await lockEntryProject(tx);
             const before = await tx.execute(
-              sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`,
+              sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`, "objects",
             );
-            if (!before.rows[0])
+            if (!before[0])
               throw new ConstructionBillingError("Schedule line not found");
             const used = await tx.execute(
               sql`select 1 from pay_application_lines pal
                     join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
-                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`,
+                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`, "objects",
             );
-            if (used.rows.length || before.rows[0].change_order_id)
+            if (used.length || before[0].change_order_id)
               throw new ConstructionBillingError(
                 "A controlled schedule line cannot be deleted; use a reversing change order",
               );
@@ -784,7 +782,7 @@ export const POST = defineRoute({
               sql`delete from sov_lines where id = ${body.id} and org_id = ${orgId}`,
             );
             await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'sov_lines', ${body.id}, 'delete', ${JSON.stringify({ before: before.rows[0] })}::jsonb, ${userId})`);
+            values (${orgId}, 'sov_lines', ${body.id}, 'delete', ${JSON.stringify({ before: before[0] })}::jsonb, ${userId})`);
           });
           return NextResponse.json({ ok: true });
         }
@@ -850,8 +848,8 @@ export const POST = defineRoute({
             select 1 from change_orders
              where org_id = ${orgId} and project_id = ${body.projectId} and number = ${number}
              limit 1
-          `);
-            if (duplicate.rows.length)
+          `, "objects");
+            if (duplicate.length)
               throw new ConstructionBillingError(
                 "A change order with this number already exists for this project",
               );
@@ -859,8 +857,8 @@ export const POST = defineRoute({
               const target = await tx.execute(sql`
               select 1 from sov_lines
                where id = ${targetSovLineId} and org_id = ${orgId} and project_id = ${body.projectId}
-            `);
-              if (!target.rows.length)
+            `, "objects");
+              if (!target.length)
                 throw new ConstructionBillingError(
                   "The target schedule line does not belong to this project",
                 );
@@ -875,8 +873,8 @@ export const POST = defineRoute({
             const created = await tx.execute<{ id: string }>(sql`
             insert into change_orders (org_id, project_id, number, description, amount, target_sov_line_id, income_account_id, created_by, updated_by)
             values (${orgId}, ${body.projectId}, ${number}, ${body.description ?? null}, ${amount}, ${targetSovLineId}, ${incomeAccountId}, ${userId}, ${userId}) returning id
-          `);
-            const createdId = created.rows[0]!.id;
+          `, "objects");
+            const createdId = created[0]!.id;
             await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${orgId}, 'change_orders', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, number, description: body.description ?? null, amount, targetSovLineId, incomeAccountId, status: "draft" } })}::jsonb, ${userId})`);
             return createdId;
@@ -914,8 +912,8 @@ export const POST = defineRoute({
             await lockEntryProject(tx);
             const before = await tx.execute(sql`
             select * from change_orders where id = ${body.id} and org_id = ${orgId} for update
-          `);
-            if (!before.rows[0] || before.rows[0].status !== "draft") {
+          `, "objects");
+            if (!before[0] || before[0].status !== "draft") {
               throw new ConstructionBillingError(
                 "Only a draft change order can be voided",
               );

@@ -119,11 +119,11 @@ test(
       );
       const before = await native(() =>
         db.execute(
-          sql`select id from inventory_movements where org_id=${org.orgId}`,
+          sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
         ),
       );
       assert.equal(
-        before.rows.length,
+        before.length,
         1,
         "scan exception never posts another receipt",
       );
@@ -175,13 +175,11 @@ test(
         /suggest|changed|target/i,
       );
       assert.equal(
-        (
-          await native(() =>
+        (await native(() =>
             db.execute(
-              sql`select id from warehouse_scan_events where org_id=${org.orgId} and task_id=${putaway.id} and outcome='confirmed'`,
+              sql`select id from warehouse_scan_events where org_id=${org.orgId} and task_id=${putaway.id} and outcome='confirmed'`, "objects",
             ),
-          )
-        ).rows.length,
+          )).length,
         0,
         "failed transfer rolls confirmation evidence back",
       );
@@ -206,30 +204,24 @@ test(
         ).quantity,
         "1.0000",
       );
-      const position = (
-        await native(() =>
+      const position = (await native(() =>
           db.execute<{ current_stock_location_id: string }>(
-            sql`select current_stock_location_id from serials where org_id=${org.orgId} and id=${serial}`,
+            sql`select current_stock_location_id from serials where org_id=${org.orgId} and id=${serial}`, "objects",
           ),
-        )
-      ).rows[0];
+        ))[0];
       assert.equal(position?.current_stock_location_id, target);
-      const movementCount = (
-        await native(() =>
+      const movementCount = (await native(() =>
           db.execute(
-            sql`select id from inventory_movements where org_id=${org.orgId}`,
+            sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
           ),
-        )
-      ).rows.length;
+        )).length;
       await confirm(putaway.id, { ...scan, bin: "SCAN-A" });
       assert.equal(
-        (
-          await native(() =>
+        (await native(() =>
             db.execute(
-              sql`select id from inventory_movements where org_id=${org.orgId}`,
+              sql`select id from inventory_movements where org_id=${org.orgId}`, "objects",
             ),
-          )
-        ).rows.length,
+          )).length,
         movementCount,
       );
       await assert.rejects(
@@ -319,15 +311,13 @@ test(
         (tx, task) => executeInventoryDirection(tx, org.orgId, observer, task),
       );
       assert.equal(result.status, "done");
-      const counted = (
-        await native(() =>
+      const counted = (await native(() =>
           db.execute<{
             first_counted_by: string;
             second_counted_by: string;
           }>(sql`
-      select first_counted_by,second_counted_by from stock_count_lines where org_id=${org.orgId} and id=${countLine}`),
-        )
-      ).rows[0];
+      select first_counted_by,second_counted_by from stock_count_lines where org_id=${org.orgId} and id=${countLine}`, "objects"),
+        ))[0];
       assert.deepEqual(counted, {
         first_counted_by: actor,
         second_counted_by: observer,

@@ -231,7 +231,7 @@ async function convertCostAmount(
 /** Tenant minor-unit precision; an unknown currency refuses instead of converting dust. */
 export async function minorUnitsForCurrency(currency: string): Promise<number> {
   const row = (await db.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${currency}`)).rows[0];
+    select minor_units from currencies where code = ${currency}`, "objects"))[0];
   const minorUnits = row?.minor_units;
   if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
     refuse(
@@ -280,7 +280,7 @@ async function lookupChannelLineItem(
     });
     if (linked?.nativeTable === "items") {
       const item = (await db.execute<{ id: string }>(sql`
-        select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`)).rows[0];
+        select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`, "objects"))[0];
       if (item) return item.id;
     }
   }
@@ -288,7 +288,7 @@ async function lookupChannelLineItem(
   if (sku) {
     const item = (await db.execute<{ id: string }>(sql`
       select id from items where org_id = ${orgId} and code = ${sku} and is_active
-       order by created_at limit 1`)).rows[0];
+       order by created_at limit 1`, "objects"))[0];
     if (item) return item.id;
   }
   return null;
@@ -296,7 +296,7 @@ async function lookupChannelLineItem(
 
 async function channelProvider(orgId: string, channelId: string): Promise<{ kind: string; externalAccount: string }> {
   const row = (await db.execute<{ kind: string; external_account: string }>(sql`
-    select kind, external_account from sales_channels where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+    select kind, external_account from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -467,24 +467,24 @@ interface SettledFee {
  * the order thread is the provider's own source order id.
  */
 async function loadSettledOrderFees(orgId: string, orderExternalId: string): Promise<SettledFee[]> {
-  const rows = (await db.execute<SettlementRow>(sql`
+  const rows = await db.execute<SettlementRow>(sql`
     select l.line_number, l.kind, l.external_ref, l.amount::text as amount, l.currency,
            l.meta, l.batch_id, b.currency as batch_currency
       from psp_settlement_lines l
       join psp_settlement_batches b on b.id = l.batch_id and b.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.kind in ('charge', 'refund')
-       and l.meta->>'sourceOrderId' = ${orderExternalId}`)).rows;
+       and l.meta->>'sourceOrderId' = ${orderExternalId}`, "objects");
   const fees: SettledFee[] = [];
   for (const row of rows) {
     if (!row.external_ref) continue;
-    const siblings = (await db.execute<SettlementRow>(sql`
+    const siblings = await db.execute<SettlementRow>(sql`
       select l.line_number, l.kind, l.external_ref, l.amount::text as amount, l.currency,
              l.meta, l.batch_id, b.currency as batch_currency
         from psp_settlement_lines l
         join psp_settlement_batches b on b.id = l.batch_id and b.org_id = l.org_id
        where l.org_id = ${orgId} and l.batch_id = ${row.batch_id}
-         and l.kind = 'fee' and l.external_ref = ${`${row.external_ref}_fee`}`)).rows;
+         and l.kind = 'fee' and l.external_ref = ${`${row.external_ref}_fee`}`, "objects");
     for (const sibling of siblings) {
       const meta = (sibling.meta ?? {}) as Record<string, unknown>;
       const exchangeRate = typeof meta["exchangeRate"] === "string" ? meta["exchangeRate"] : null;
@@ -516,19 +516,19 @@ type LabelRow = {
 async function loadLabelCosts(orgId: string, postingDocumentId: string | null): Promise<LabelRow[]> {
   if (!postingDocumentId) return [];
   type RawLabel = { id: string; rate_minor: string; rate_currency: string };
-  const labels = (await db.execute<RawLabel>(sql`
+  const labels = await db.execute<RawLabel>(sql`
     select id, rate_minor::text, rate_currency from shipment_labels
-     where org_id = ${orgId} and order_document_id = ${postingDocumentId} and status = 'purchased'`)).rows;
+     where org_id = ${orgId} and order_document_id = ${postingDocumentId} and status = 'purchased'`, "objects");
   // Posted billing adjustments join the label's cost in their own currency,
   // so a correction restates the order instead of hiding beside the rate.
   type RawAdjustment = { label_id: string; currency: string; total: string };
-  const adjustments = (await db.execute<RawAdjustment>(sql`
+  const adjustments = await db.execute<RawAdjustment>(sql`
     select a.label_id, a.currency, sum(a.amount_minor)::text as total
       from shipping_adjustments a
       join shipment_labels l on l.id = a.label_id and l.org_id = a.org_id
      where a.org_id = ${orgId} and l.order_document_id = ${postingDocumentId} and l.status = 'purchased'
        and a.status = 'posted'
-     group by a.label_id, a.currency`)).rows;
+     group by a.label_id, a.currency`, "objects");
   const costs = new Map<string, LabelRow>();
   for (const label of labels) {
     costs.set(`${label.id}|${label.rate_currency}`, {
@@ -568,10 +568,10 @@ async function loadSummaryItemWeights(
   channel: { kind: string; externalAccount: string },
   summaryId: string,
 ): Promise<Map<string, SummaryOrderWeight[]>> {
-  const siblings = (await db.execute<{ id: string; lines: unknown }>(sql`
+  const siblings = await db.execute<{ id: string; lines: unknown }>(sql`
     select id, lines from channel_orders
      where org_id = ${orgId} and summary_id = ${summaryId}
-     order by id`)).rows;
+     order by id`, "objects");
   type ParsedLine = { orderId: string; sku: string | null; variantExternalId: string | null; quantity: string };
   const parsed: ParsedLine[] = [];
   for (const sibling of siblings) {
@@ -590,22 +590,22 @@ async function loadSummaryItemWeights(
   const itemByVariant = new Map<string, string>();
   const variantIds = [...new Set(parsed.map((line) => line.variantExternalId).filter((id): id is string => id !== null))];
   if (variantIds.length > 0) {
-    const links = (await db.execute<{ external_id: string; native_id: string }>(sql`
+    const links = await db.execute<{ external_id: string; native_id: string }>(sql`
       select l.external_id, l.native_id from external_links l
       join items i on i.org_id = l.org_id and i.id = l.native_id and i.is_active
      where l.org_id = ${orgId} and l.provider = ${channel.kind}
        and l.external_account = ${channel.externalAccount}
        and l.object_type = 'variant' and l.native_table = 'items'
-       and l.external_id in (${sql.join(variantIds.map((id) => sql`${id}`), sql`, `)})`)).rows;
+       and l.external_id in (${sql.join(variantIds.map((id) => sql`${id}`), sql`, `)})`, "objects");
     for (const link of links) itemByVariant.set(link.external_id, link.native_id);
   }
   const itemBySku = new Map<string, string>();
   const skus = [...new Set(parsed.map((line) => line.sku).filter((sku): sku is string => sku !== null))];
   if (skus.length > 0) {
-    const found = (await db.execute<{ code: string; id: string }>(sql`
+    const found = await db.execute<{ code: string; id: string }>(sql`
       select distinct on (code) code, id from items
        where org_id = ${orgId} and is_active and code in (${sql.join(skus.map((sku) => sql`${sku}`), sql`, `)})
-       order by code, created_at`)).rows;
+       order by code, created_at`, "objects");
     for (const row of found) itemBySku.set(row.code, row.id);
   }
   // One entry per order: an order spreading an item across priced lines still
@@ -633,7 +633,7 @@ async function loadSummaryItemWeights(
 async function summaryPostingDocument(orgId: string, summaryId: string): Promise<string | null> {
   const row = (await db.execute<{ posting_document_id: string | null }>(sql`
     select posting_document_id from channel_daily_summaries
-     where org_id = ${orgId} and id = ${summaryId}`)).rows[0];
+     where org_id = ${orgId} and id = ${summaryId}`, "objects"))[0];
   return row?.posting_document_id ?? null;
 }
 
@@ -644,13 +644,13 @@ async function summaryPostingDocument(orgId: string, summaryId: string): Promise
  */
 async function loadIssueCosts(orgId: string, postingDocumentId: string | null): Promise<IssueRow[]> {
   if (!postingDocumentId) return [];
-  return (await db.execute<IssueRow>(sql`
+  return await db.execute<IssueRow>(sql`
     select dl.item_id, sum(m.total_value)::text as total
       from document_lines dl
       join inventory_movements m on m.document_line_id = dl.id and m.org_id = dl.org_id
      where dl.org_id = ${orgId} and dl.document_id = ${postingDocumentId}
        and dl.item_id is not null and m.kind = 'issue' and m.total_value is not null
-     group by dl.item_id`)).rows;
+     group by dl.item_id`, "objects");
 }
 
 type RefundDocRow = {
@@ -664,13 +664,13 @@ type RefundDocRow = {
 
 /** Posted cash-refund lines against this order's refund events. */
 async function loadRefundLines(orgId: string, orderId: string): Promise<RefundDocRow[]> {
-  return (await db.execute<RefundDocRow>(sql`
+  return await db.execute<RefundDocRow>(sql`
     select d.id, dl.id as line_id, dl.item_id, dl.amount::text as amount, d.currency, dl.description
       from channel_order_events e
       join documents d on d.id = e.posting_document_id and d.org_id = e.org_id
       join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
      where e.org_id = ${orgId} and e.order_id = ${orderId} and e.kind = 'refund'
-       and e.posting_document_id is not null and d.status = 'posted'`)).rows;
+       and e.posting_document_id is not null and d.status = 'posted'`, "objects");
 }
 
 type SpendRow = {
@@ -681,9 +681,9 @@ type SpendRow = {
 
 /** Imported marketing spend for the channel on the order's UTC day. */
 async function loadDayAdSpend(orgId: string, channelId: string, orderDay: string): Promise<SpendRow[]> {
-  const rows = (await db.execute<SpendRow>(sql`
+  const rows = await db.execute<SpendRow>(sql`
     select id, amount_minor, currency from channel_ad_spend
-     where org_id = ${orgId} and channel_id = ${channelId} and spend_date = ${orderDay}::date`)).rows;
+     where org_id = ${orgId} and channel_id = ${channelId} and spend_date = ${orderDay}::date`, "objects");
   return rows.map((row) => ({ ...row, amount_minor: asMinorUnits(row.amount_minor) }));
 }
 
@@ -694,14 +694,14 @@ type DayRevenueRow = {
 
 /** Current net revenue per channel order of the day, for ad spend weights. */
 async function loadDayRevenue(orgId: string, channelId: string, orderDay: string): Promise<DayRevenueRow[]> {
-  return (await db.execute<DayRevenueRow>(sql`
+  return await db.execute<DayRevenueRow>(sql`
     select f.order_id, sum(case when f.component = 'discount' then f.amount_minor else 0 end
       + case when f.component = 'net_revenue' then f.amount_minor else 0 end)::text as revenue
       from channel_order_economics f
       join channel_orders o on o.id = f.order_id and o.org_id = f.org_id
      where f.org_id = ${orgId} and f.channel_id = ${channelId} and f.is_current
        and (o.ordered_at at time zone 'UTC')::date = ${orderDay}::date
-     group by f.order_id`)).rows;
+     group by f.order_id`, "objects");
 }
 
 /**
@@ -720,7 +720,7 @@ async function loadRealizedFeeRate(
       from channel_order_economics f
      where f.org_id = ${orgId} and f.channel_id = ${channelId} and f.is_current
        and f.order_id <> ${excludeOrderId}
-       and f.as_of > now() - interval '90 days'`)).rows[0];
+       and f.as_of > now() - interval '90 days'`, "objects"))[0];
   if (!row) return null;
   const fee = BigInt(row.fee);
   const revenue = BigInt(row.revenue);
@@ -1009,7 +1009,7 @@ async function writeFacts(
     select id, line_key, component, source_kind, source_ref, currency, amount_minor,
            item_id, sku, promotion_code, estimated, version
       from channel_order_economics
-     where org_id = ${orgId} and order_id = ${order.id} and is_current`)).rows
+     where org_id = ${orgId} and order_id = ${order.id} and is_current`, "objects"))
     .map((row) => ({ ...row, amount_minor: asMinorUnits(row.amount_minor) }));
   const byKey = new Map(current.map((row) => [factKey({
     lineKey: row.line_key, component: row.component, sourceKind: row.source_kind, sourceRef: row.source_ref,
@@ -1033,7 +1033,7 @@ async function writeFacts(
     let version = 1;
     if (existing) {
       version = existing.version + 1;
-      const retiring = await db.execute(sql`
+      const retiring = await db.execute<never>(sql`
         update channel_order_economics
            set is_current = false, updated_by = ${actor}, updated_at = now()
          where org_id = ${orgId} and id = ${existing.id} and is_current`);
@@ -1052,13 +1052,13 @@ async function writeFacts(
         ${want.sourceKind}, ${want.sourceRef}, ${want.currency}, ${want.amountMinor.toString()},
         ${want.itemId}, ${want.sku}, ${want.promotionCode}, ${want.estimated}, ${version},
         ${actor}, ${actor})
-      returning id`);
-    if (created.rows.length !== 1) throw new Error("Order economics insert returned an unexpected row count");
+      returning id`, "objects");
+    if (created.length !== 1) throw new Error("Order economics insert returned an unexpected row count");
     inserted += 1;
     if (supersedes) {
-      const linked = await db.execute(sql`
+      const linked = await db.execute<never>(sql`
         update channel_order_economics
-           set superseded_by = ${created.rows[0]!.id}, updated_by = ${actor}, updated_at = now()
+           set superseded_by = ${created[0]!.id}, updated_by = ${actor}, updated_at = now()
          where org_id = ${orgId} and id = ${supersedes}`);
       if (linked.rowCount !== 1) {
         throw new Error("Order economics history link matched no row; the fact changed while it restated");
@@ -1070,7 +1070,7 @@ async function writeFacts(
       lineKey: row.line_key, component: row.component, sourceKind: row.source_kind, sourceRef: row.source_ref,
     });
     if (seen.has(key)) continue;
-    const withdrawn = await db.execute(sql`
+    const withdrawn = await db.execute<never>(sql`
       update channel_order_economics
          set is_current = false, updated_by = ${actor}, updated_at = now()
        where org_id = ${orgId} and id = ${row.id} and is_current`);
@@ -1157,13 +1157,13 @@ export async function recomputePendingOrderEconomics(
     if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
       refuse("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
     }
-    const marks = (await db.execute<{ order_id: string }>(sql`
+    const marks = await db.execute<{ order_id: string }>(sql`
       select order_id from channel_order_economics_pending
-       where org_id = ${orgId} order by enqueued_at limit ${limit} for update skip locked`)).rows;
+       where org_id = ${orgId} order by enqueued_at limit ${limit} for update skip locked`, "objects");
     let orders = 0;
     for (const mark of marks) {
       await recomputeOrderEconomicsScoped(orgId, actor, mark.order_id);
-      const cleared = await db.execute(sql`
+      const cleared = await db.execute<never>(sql`
         delete from channel_order_economics_pending where org_id = ${orgId} and order_id = ${mark.order_id}`);
       if (cleared.rowCount !== 1) {
         throw new Error("Economics restatement mark matched no row; the queue changed while it drained");
@@ -1222,12 +1222,12 @@ export async function getOrderEconomics(orgId: string, orderId: string): Promise
       version: number;
       as_of: string;
     };
-    const rows = (await db.execute<CurrentFact>(sql`
+    const rows = await db.execute<CurrentFact>(sql`
       select line_key, component, source_kind, source_ref, currency, amount_minor::text,
              item_id, sku, promotion_code, estimated, version, as_of::text
         from channel_order_economics
        where org_id = ${orgId} and order_id = ${order.id} and is_current
-       order by line_key, component, source_kind, source_ref`)).rows;
+       order by line_key, component, source_kind, source_ref`, "objects");
     const currency = order.shopCurrency;
     const facts: EconomicsFact[] = rows.map((row) => ({
       lineKey: row.line_key,
@@ -1299,7 +1299,7 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
     );
   }
   return withOrg(orgId, async () => {
-    const rows = (await db.execute<SummaryRow>(sql`
+    const rows = await db.execute<SummaryRow>(sql`
       select c.id as channel_id, c.name as channel_name, f.currency, cur.minor_units,
              count(distinct f.order_id)::text as orders,
              coalesce(sum(case when f.component in ('net_revenue', 'discount') then f.amount_minor else 0 end), 0)::text as revenue,
@@ -1312,12 +1312,12 @@ export async function getChannelMarginSummary(orgId: string, days = 30): Promise
         left join currencies cur on cur.code = f.currency
        where f.org_id = ${orgId} and f.is_current and o.ordered_at >= now() - make_interval(days => ${days})
        group by c.id, c.name, f.currency, cur.minor_units
-       order by c.name, f.currency`)).rows;
-    const spend = (await db.execute<{ channel_id: string; currency: string; total: string }>(sql`
+       order by c.name, f.currency`, "objects");
+    const spend = await db.execute<{ channel_id: string; currency: string; total: string }>(sql`
       select channel_id, currency, coalesce(sum(amount_minor), 0)::text as total
         from channel_ad_spend
        where org_id = ${orgId} and spend_date >= (now() - make_interval(days => ${days}))::date
-       group by channel_id, currency`)).rows;
+       group by channel_id, currency`, "objects");
     const spendByChannel = new Map(spend.map((row) => [`${row.channel_id}|${row.currency}`, BigInt(row.total)]));
     return rows.map((row) => ({
       channelId: row.channel_id,
@@ -1375,8 +1375,8 @@ export async function recordChannelAdSpend(
       on conflict (org_id, channel_id, spend_date, source) do update
         set amount_minor = excluded.amount_minor, currency = excluded.currency,
             updated_by = ${actor}, updated_at = now()
-      returning id`);
-    if (stored.rows.length !== 1) throw new Error("Ad spend store returned an unexpected row count");
+      returning id`, "objects");
+    if (stored.length !== 1) throw new Error("Ad spend store returned an unexpected row count");
     // Every order of the spend day shares the new figure, so every one
     // restates; a day with no orders marks nothing, which is correct.
     await db.execute(sql`
@@ -1387,7 +1387,7 @@ export async function recordChannelAdSpend(
          and (o.ordered_at at time zone 'UTC')::date = ${input.spendDate}::date
       -- An existing order mark already requires a full restatement, including the changed ad spend.
       on conflict (org_id, order_id) do nothing`);
-    return { spendId: stored.rows[0]!.id };
+    return { spendId: stored[0]!.id };
   });
 }
 

@@ -23,7 +23,7 @@ function noStorage() {
 
 function editStorage(current: Record<string, unknown>) {
   return {
-    execute: () => ({ rows: [current] }),
+    execute: (_query: unknown, mode?: string) => Promise.resolve({ rows: [current] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
   } as never
 }
 

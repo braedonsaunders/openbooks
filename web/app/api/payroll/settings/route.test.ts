@@ -149,8 +149,8 @@ async function payrollState(orgId: string): Promise<{
       select o.settings->'payroll' as settings,
              (select liability_account_id::text from pay_components
                where org_id = o.id and code = 'TAX' limit 1) as "taxAccount"
-        from orgs o where o.id = ${orgId}`);
-    return row.rows[0] ?? { settings: null, taxAccount: null };
+        from orgs o where o.id = ${orgId}`, "objects");
+    return row[0] ?? { settings: null, taxAccount: null };
   });
 }
 
@@ -274,9 +274,9 @@ test("payroll settings distinguish malformed JSON from named field refusals befo
 test("a malformed payroll slot leaves earlier valid settings, components and audits untouched", { skip: !DB }, async () => {
   const fixture = await scratchPayrollOrg();
   await withPayrollActor(fixture, async () => {
-    const snapshot = async () => withOrgContext(fixture.orgId, async () => (await db.execute(sql`select
+    const snapshot = async () => withOrgContext(fixture.orgId, async () => await db.execute(sql`select
       (select jsonb_agg(to_jsonb(c) order by id) from pay_components c where org_id=${fixture.orgId}) as components,
-      (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${fixture.orgId}) as audits`)).rows);
+      (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${fixture.orgId}) as audits`, "objects"));
     const before = { payroll: await payrollState(fixture.orgId), records: await snapshot() };
     const refused = await refusalOf(await PUT(request("PUT", {
       wageExpenseAccountId: fixture.accounts.cogs, statutoryHolidayPay: true,
@@ -517,14 +517,14 @@ test("payroll settings save native PostgreSQL identifiers with scoped accounts, 
     await withBypass(async () => {
       const accounts = await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_active) values
         (${expenseId},${fixture.orgId},'6111','Payroll expense','expense',true),
-        (${payableId},${fixture.orgId},'2311','Payroll payable','liability_current_other',true) returning id`);
-      assert.equal(accounts.rows.length, 2);
+        (${payableId},${fixture.orgId},'2311','Payroll payable','liability_current_other',true) returning id`, "objects");
+      assert.equal(accounts.length, 2);
       const party = await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active,custom)
-        values(${vendorId},${fixture.orgId},'vendor','Payroll remittance',true,'{}'::jsonb) returning id`);
-      assert.equal(party.rows.length, 1);
+        values(${vendorId},${fixture.orgId},'vendor','Payroll remittance',true,'{}'::jsonb) returning id`, "objects");
+      assert.equal(party.length, 1);
       const role = await db.execute(sql`insert into vendor_roles(org_id,party_id,is_active)
-        values(${fixture.orgId},${vendorId},true) returning party_id`);
-      assert.equal(role.rows.length, 1);
+        values(${fixture.orgId},${vendorId},true) returning party_id`, "objects");
+      assert.equal(role.length, 1);
     });
     assert.equal((await POST(request("POST", { action: "install-pack", country: "CA" }))).status, 200);
     const before = await payrollState(fixture.orgId);
@@ -537,9 +537,9 @@ test("payroll settings save native PostgreSQL identifiers with scoped accounts, 
     const after = await payrollState(fixture.orgId);
     assert.deepEqual(after.settings, { ...before.settings, ...selected });
     assert.equal(after.taxAccount, payableId);
-    const snapshot = async () => withOrgContext(fixture.orgId, async () => (await db.execute(sql`select
+    const snapshot = async () => withOrgContext(fixture.orgId, async () => await db.execute(sql`select
       (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${fixture.orgId}) as audits,
-      (select jsonb_agg(to_jsonb(c) order by id) from pay_components c where org_id=${fixture.orgId}) as components`)).rows);
+      (select jsonb_agg(to_jsonb(c) order by id) from pay_components c where org_id=${fixture.orgId}) as components`, "objects"));
     const evidence = await snapshot();
     const audits = evidence[0]!.audits as Array<{ table_name: string; actor_id: string;
       changes: { before?: unknown; after?: { payroll?: Record<string, unknown>; payrollSlotAccounts?: unknown } } }>;

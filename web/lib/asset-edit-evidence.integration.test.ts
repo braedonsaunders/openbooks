@@ -43,13 +43,13 @@ for(const change of ['name','asset account','accumulated account','expense accou
    const {actorId,assetId}=await seedAsset(org);
    state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};
    const bodies:Record<typeof change,Record<string,unknown>>={name:{name:'Audited equipment'},'asset account':{assetAccountId:org.accounts.taxInput},'accumulated account':{accumulatedDepreciationAccountId:org.accounts.taxOutput},'expense account':{depreciationExpenseAccountId:org.accounts.cogs},status:{status:'draft'},serial:{serialNumber:'AUDIT-1'},description:{description:'Material configuration'},tax:{taxDepreciation:{ca_cca:{businessUsePercent:'80'}}}};
-   const row=async()=>JSON.parse(JSON.stringify((await db.execute(sql`select a.*,${documentRevisionSql(sql`a.updated_at`)} as updated_at,${documentRevisionSql(sql`a.created_at`)} as created_at from fixed_assets a where id=${assetId}`)).rows[0]!));
+   const row=async()=>JSON.parse(JSON.stringify((await db.execute(sql`select a.*,${documentRevisionSql(sql`a.updated_at`)} as updated_at,${documentRevisionSql(sql`a.created_at`)} as created_at from fixed_assets a where id=${assetId}`, 'objects'))[0]!));
    if(change==='name')await db.execute(sql`update fixed_assets set acquisition_cost='900000000000000.1234' where id=${assetId}`);
    const before=await row();
    const response=await patch(assetId,bodies[change]);
    assert.equal(response.status,200,JSON.stringify(await response.json()));
    const after=await row();
-   const audits=(await db.execute<{actor_id:string;changes:{before:unknown;after:unknown}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='fixed_assets' and row_id=${assetId}`)).rows;
+   const audits=await db.execute<{actor_id:string;changes:{before:unknown;after:unknown}}>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='fixed_assets' and row_id=${assetId}`, 'objects');
    assert.equal(audits.length,1,'every successful configuration edit has one atomic audit record');
    assert.equal(audits[0]!.actor_id,actorId);
    assert.deepEqual(audits[0]!.changes.before,before);
@@ -74,9 +74,9 @@ for(const edit of ['metadata','custom','tax'] as const){
    pending=patch(assetId,body);void pending.catch(()=>{});
    await waitForLockWaiter(writer,{label:'the concurrent asset save'});await writer.query('commit');
    const response=await pending;assert.equal(response.status,200,JSON.stringify(await response.json()));
-   const custom=(await db.execute(sql`select custom from fixed_assets where id=${assetId}`)).rows[0]!.custom;
+   const custom=(await db.execute(sql`select custom from fixed_assets where id=${assetId}`, 'objects'))[0]!.custom;
    assert.deepEqual(custom,{...latest,inspection_note:edit==='custom'?'Replaced inspection':latest.inspection_note,taxDepreciation:edit==='tax'?{}:latest.taxDepreciation});
-   const audit=(await db.execute<{changes:{before:{custom:unknown}}}>(sql`select changes from audit_log where row_id=${assetId} and table_name='fixed_assets'`)).rows[0];
+   const audit=(await db.execute<{changes:{before:{custom:unknown}}}>(sql`select changes from audit_log where row_id=${assetId} and table_name='fixed_assets'`, 'objects'))[0];
    assert.deepEqual(audit?.changes.before.custom,latest,'audit starts at the locked committed state');
   }finally{
    if(connected)await writer.query('rollback').catch(()=>{});
@@ -93,10 +93,10 @@ test('asset edit rolls back when its audit record cannot be stored',{skip:!proce
   const suffix=randomUUID().replaceAll('-','');const fn=`asset_audit_fail_${suffix}`;const trigger=`asset_audit_fail_${suffix}`;
   await db.execute(sql.raw(`create function public."${fn}"() returns trigger language plpgsql as $$ begin if new.table_name='fixed_assets' and new.actor_id='${actorId}'::uuid then raise exception 'forced asset audit failure'; end if; return new; end $$; create trigger "${trigger}" before insert on audit_log for each row execute function public."${fn}"();`));
   cleanup=async()=>{await db.execute(sql.raw(`drop trigger if exists "${trigger}" on audit_log; drop function if exists public."${fn}"();`));};
-  const snapshot=async()=>(await db.execute(sql`select (select jsonb_agg(to_jsonb(a)) from fixed_assets a where org_id=${org.orgId}) as assets,(select jsonb_agg(to_jsonb(s)) from depreciation_schedules s where org_id=${org.orgId}) as schedules,(select jsonb_agg(to_jsonb(l)) from depreciation_schedule_lines l where org_id=${org.orgId}) as lines`)).rows;
+  const snapshot=async()=>await db.execute(sql`select (select jsonb_agg(to_jsonb(a)) from fixed_assets a where org_id=${org.orgId}) as assets,(select jsonb_agg(to_jsonb(s)) from depreciation_schedules s where org_id=${org.orgId}) as schedules,(select jsonb_agg(to_jsonb(l)) from depreciation_schedule_lines l where org_id=${org.orgId}) as lines`, 'objects');
   const before=await snapshot();const response=await patch(assetId,{assetAccountId:org.accounts.taxInput});
   assert.equal(response.status,422);assert.deepEqual(await snapshot(),before,'asset and schedule writes roll back with failed evidence');
  }finally{if(cleanup)await cleanup();state.gate=null;await dropScratchOrg(org.orgId)}
 });
 
-async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`)).rows[0]!.revision;}
+async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`, 'objects'))[0]!.revision;}

@@ -13,7 +13,7 @@ import { subsidiaryScopeAllows, type Authz } from '@/lib/authz'
  */
 async function partyScopeDenied(authz: Authz, partySql: ReturnType<typeof sql>): Promise<NextResponse | null> {
   if (authz.allowedSubsidiaryIds === null) return null
-  const row = (await withOrgContext(authz.user.orgId, () => db.execute<{ subsidiary_id: string | null }>(partySql))).rows[0]
+  const row = (await withOrgContext(authz.user.orgId, () => db.execute<{ subsidiary_id: string | null }>(partySql, 'objects')))[0]
   if (!row || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, row.subsidiary_id, { orgWideNull: true })) {
     return notFound('record')
   }
@@ -48,7 +48,7 @@ export async function guardCollectionAttemptScope(authz: Authz, attemptId: strin
       join autopay_enrollments e on e.org_id = a.org_id and e.id = a.enrollment_id
       join parties p on p.org_id = e.org_id and p.id = e.party_id
       join documents d on d.org_id = a.org_id and d.id = a.invoice_id and d.party_id = p.id
-     where a.org_id = ${authz.user.orgId} and a.id = ${attemptId}`))).rows[0]
+     where a.org_id = ${authz.user.orgId} and a.id = ${attemptId}`, 'objects')))[0]
   if (!row?.invoice_subsidiary_id ||
       !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, row.invoice_subsidiary_id) ||
       !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, row.party_subsidiary_id, { orgWideNull: true })) {

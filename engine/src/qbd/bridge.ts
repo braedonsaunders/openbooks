@@ -42,8 +42,8 @@ async function publicConnection(connectionId: string): Promise<PublicConnection 
   return withBypassContext(async () => {
     const result = (await db.execute<PublicConnection>(sql`
       select id, org_id as "orgId", config, secrets, status
-        from connections where id = ${connectionId} and source = 'qbd' limit 1`));
-    return result.rows[0] ?? null;
+        from connections where id = ${connectionId} and source = 'qbd' limit 1`, "objects"));
+    return result[0] ?? null;
   });
 }
 
@@ -95,8 +95,8 @@ export async function waitForCapture(orgId: string, captureId: string): Promise<
     const state = await withOrgContext(orgId, async () => {
       const capture = (await db.execute<{ status: string; errorMessage: string | null; expiresAt: Date }>(sql`
         select status, error_message as "errorMessage", expires_at as "expiresAt"
-          from qbd_captures where id = ${captureId} and org_id = ${orgId} limit 1`));
-      return capture.rows[0] ?? null;
+          from qbd_captures where id = ${captureId} and org_id = ${orgId} limit 1`, "objects"));
+      return capture[0] ?? null;
     });
     if (!state) throw new Error("QuickBooks Desktop capture disappeared");
     if (state.status === "failed" || state.status === "cancelled") {
@@ -180,8 +180,8 @@ async function qbwcGuessesTripped(connectionId: string): Promise<boolean> {
          where bucket_key = ${qbwcGuessBucket(connectionId)}
            and attempt_count > ${QBWC_AUTH_GUESS_LIMIT}
            and window_started_at > now() - (${QBWC_AUTH_GUESS_WINDOW_S} * interval '1 second')
-      ) as tripped`));
-    return result.rows[0]?.tripped ?? false;
+      ) as tripped`, "objects"));
+    return result[0]?.tripped ?? false;
   });
 }
 
@@ -237,8 +237,8 @@ async function reclaimAgedRequests(connectionId: string, orgId: string): Promise
      where r.connection_id = ${connectionId} and r.org_id = ${orgId}
        and r.status = 'sent' and r.sent_at < now() - interval '10 minutes'
        and r.session_id is not null
-     order by 1`));
-  for (const owner of owners.rows) {
+     order by 1`, "objects"));
+  for (const owner of owners) {
     await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + owner.id}, 0))`);
       await tx.execute(sql`
@@ -285,7 +285,7 @@ export async function authenticateWebConnector(connectionId: string, username: s
           join qbd_captures c on c.id = r.capture_id and c.org_id = r.org_id
          where r.connection_id = ${connectionId} and r.org_id = ${conn.orgId} and r.status = 'queued'
            and c.status in ('queued', 'running') and c.expires_at > now()
-      ) as pending`));
+      ) as pending`, "objects"));
     const ticket = randomUUID();
     // The snapshot above predates this insert: a pause (status update, then
     // session termination) can commit between the password check and the
@@ -298,8 +298,8 @@ export async function authenticateWebConnector(connectionId: string, username: s
     const issue = await db.transaction(async (tx) => {
       const fresh = (await tx.execute<PublicConnection>(sql`
         select id, org_id as "orgId", config, secrets, status
-          from connections where id = ${connectionId} and source = 'qbd' limit 1 for update`));
-      const current = fresh.rows[0] ?? null;
+          from connections where id = ${connectionId} and source = 'qbd' limit 1 for update`, "objects"));
+      const current = fresh[0] ?? null;
       if (!current || current.status === "paused") return "stale" as const;
       const secret =
         current.secrets == null
@@ -322,7 +322,7 @@ export async function authenticateWebConnector(connectionId: string, username: s
     // it passed against the old secret).
     if (issue === "rotated") await recordQbwcGuessFailure(connectionId);
     if (issue !== "issued") return { ticket: "", companyFile: "nvu" };
-    return { ticket, companyFile: pending.rows[0]?.pending ? String(conn.config.companyFile ?? "") : "none" };
+    return { ticket, companyFile: pending[0]?.pending ? String(conn.config.companyFile ?? "") : "none" };
   });
 }
 type SessionRow = { id: string; orgId: string; connectionId: string; status: string; expectedRegion: string | null; connectionStatus: string | null };
@@ -335,8 +335,8 @@ async function session(ticket: string): Promise<SessionRow | null> {
              c.config->>'region' as "expectedRegion", c.status as "connectionStatus"
         from qbd_sessions s
           join connections c on c.id = s.connection_id and c.org_id = s.org_id
-       where s.id = ${ticket} and s.expires_at > now() limit 1`));
-    return result.rows[0] ?? null;
+       where s.id = ${ticket} and s.expires_at > now() limit 1`, "objects"));
+    return result[0] ?? null;
   });
 }
 
@@ -357,8 +357,8 @@ async function lockedSession(tx: BridgeTx, ticket: string): Promise<SessionRow |
            c.config->>'region' as "expectedRegion", c.status as "connectionStatus"
       from qbd_sessions s
         join connections c on c.id = s.connection_id and c.org_id = s.org_id
-     where s.id = ${ticket} and s.expires_at > now() limit 1 for update of s`));
-  return result.rows[0] ?? null;
+     where s.id = ${ticket} and s.expires_at > now() limit 1 for update of s`, "objects"));
+  return result[0] ?? null;
 }
 
 /**
@@ -431,8 +431,8 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
           select id, request_xml as "requestXml", capture_id as "captureId"
             from qbd_requests
            where session_id = ${ticket} and org_id = ${locked.orgId} and status = 'sent'
-           order by sent_at desc limit 1 for update`));
-        const outstanding = held.rows[0];
+           order by sent_at desc limit 1 for update`, "objects"));
+        const outstanding = held[0];
         if (outstanding) {
           const stamped = stampRequestId(outstanding.requestXml, outstanding.id);
           if (stamped !== outstanding.requestXml) {
@@ -449,8 +449,8 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
              where r.connection_id = ${locked.connectionId} and r.org_id = ${locked.orgId} and r.status = 'queued'
                and c.status in ('queued', 'running') and c.expires_at > now()
               order by r.sequence for update of r skip locked limit 1
-           ) returning id, request_xml as "requestXml", capture_id as "captureId"`));
-        const request = result.rows[0];
+           ) returning id, request_xml as "requestXml", capture_id as "captureId"`, "objects"));
+        const request = result[0];
         if (!request) return "";
         // Stamp the row id as the qbXML requestID before the bytes leave:
         // receiveResponseXML must prove the response answers THIS request.
@@ -518,8 +518,8 @@ async function acknowledgeReplayedResponse(
            request_kind as "requestKind", request_xml as "requestXml"
       from qbd_requests
      where id = ${replayed.requestId} and session_id = ${ticket} and org_id = ${current.orgId}
-       and status = 'complete' limit 1 for update`));
-  const completed = prior.rows[0];
+       and status = 'complete' limit 1 for update`, "objects"));
+  const completed = prior[0];
   if (!completed) return null;
   // A replay is acknowledged ONLY when the bytes are byte-identical to what
   // was stored (same sha256) and the response family answers the request.
@@ -537,8 +537,8 @@ async function acknowledgeReplayedResponse(
     select count(*) filter (where status = 'complete')::int as complete,
            count(*) filter (where status in ('queued', 'sent'))::int as remaining,
            count(*)::int as total
-      from qbd_requests where capture_id = ${completed.captureId} and org_id = ${completed.orgId}`));
-  const count = counts.rows[0] ?? { complete: 0, remaining: 1, total: 1 };
+      from qbd_requests where capture_id = ${completed.captureId} and org_id = ${completed.orgId}`, "objects"));
+  const count = counts[0] ?? { complete: 0, remaining: 1, total: 1 };
   await tx.execute(sql`update qbd_sessions set last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
   if (count.remaining === 0) return 100;
   return Math.max(1, Math.min(99, Math.floor((count.complete * 100) / Math.max(1, count.total))));
@@ -562,8 +562,8 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
       select id, org_id as "orgId", capture_id as "captureId", family, request_kind as "requestKind",
              sequence, page, request_xml as "requestXml"
         from qbd_requests where session_id = ${ticket} and org_id = ${locked.orgId} and status = 'sent'
-       order by sent_at desc limit 1 for update`));
-    const request = sent.rows[0];
+       order by sent_at desc limit 1 for update`, "objects"));
+    const request = sent[0];
     if (!request) return (await acknowledgeReplayedResponse(tx, locked, ticket, responseXml)) ?? -101;
     if (hresult || !responseXml.trim()) {
       const error = [hresult, message].filter(Boolean).join(": ") || "QuickBooks returned an empty response";
@@ -657,8 +657,8 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
       select count(*) filter (where status = 'complete')::int as complete,
              count(*) filter (where status in ('queued', 'sent'))::int as remaining,
              count(*)::int as total
-        from qbd_requests where capture_id = ${request.captureId} and org_id = ${request.orgId}`));
-    const count = counts.rows[0] ?? { complete: 0, remaining: 1, total: 1 };
+        from qbd_requests where capture_id = ${request.captureId} and org_id = ${request.orgId}`, "objects"));
+    const count = counts[0] ?? { complete: 0, remaining: 1, total: 1 };
     const complete = count.remaining === 0;
     await tx.execute(sql`
       update qbd_captures set status = ${complete ? "complete" : "running"},
@@ -694,8 +694,8 @@ export async function webConnectorLastError(ticket: string): Promise<string> {
   const current = await session(ticket);
   if (!current) return "Invalid or expired Web Connector ticket";
   return withOrgContext(current.orgId, async () => {
-    const result = (await db.execute<{ error: string | null }>(sql`select last_error as error from qbd_sessions where id = ${ticket} and org_id = ${current.orgId}`));
-    return result.rows[0]?.error ?? "No error recorded";
+    const result = (await db.execute<{ error: string | null }>(sql`select last_error as error from qbd_sessions where id = ${ticket} and org_id = ${current.orgId}`, "objects"));
+    return result[0]?.error ?? "No error recorded";
   });
 }
 
@@ -743,11 +743,11 @@ export async function terminateConnectionSessions(orgId: string, connectionId: s
     const open = (await tx.execute<{ id: string }>(sql`
       select id from qbd_sessions
        where connection_id = ${connectionId} and org_id = ${orgId} and status = 'open'
-       for update`));
+       for update`, "objects"));
     // Same ticket advisory lock as send/receive/close: a send that read
     // 'open' before this terminates must lose the race in its in-lock
     // re-read instead of claiming onto a terminated ticket.
-    for (const row of open.rows) {
+    for (const row of open) {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + row.id}, 0))`);
     }
     const reason = "QuickBooks connection was paused and its session terminated — resume the connection and authenticate again to open a new session";
@@ -762,7 +762,7 @@ export async function terminateConnectionSessions(orgId: string, connectionId: s
         from qbd_captures c
        where c.id = r.capture_id and c.org_id = r.org_id
          and r.connection_id = ${connectionId} and r.org_id = ${orgId} and r.status = 'sent'`);
-    return open.rows.length;
+    return open.length;
   }));
 }
 
@@ -795,7 +795,7 @@ export async function recordConnectionError(ticket: string, hresult: string, mes
 export async function latestWebConnectorHeartbeat(orgId: string, connectionId: string): Promise<Date | null> {
   return withOrgContext(orgId, async () => {
     const result = (await db.execute<{ heartbeat: Date | null }>(sql`
-      select max(last_seen_at) as heartbeat from qbd_sessions where connection_id = ${connectionId} and org_id = ${orgId}`));
-    return result.rows[0]?.heartbeat ?? null;
+      select max(last_seen_at) as heartbeat from qbd_sessions where connection_id = ${connectionId} and org_id = ${orgId}`, "objects"));
+    return result[0]?.heartbeat ?? null;
   });
 }

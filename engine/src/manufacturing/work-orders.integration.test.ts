@@ -26,11 +26,11 @@ function run<T>(orgId: string, work: (tx: SqlExecutor) => Promise<T>): Promise<T
 async function withSandboxClone(f: Fixture, work: (orgId: string, actorId: string) => Promise<void>) {
   const clone = await withBypassContext(() => createSandbox({ productionOrgId: f.org.orgId, name: `Manufacturing ${randomUUID()}`, tier: "full", masked: false }));
   try {
-    const actor=(await withBypassContext(()=>db.execute<{id:string}>(sql`select ob_rebase(${f.actorId}::uuid,sandbox_seed) as id from orgs where id=${clone.sandboxOrgId}`))).rows;
+    const actor=await withBypassContext(()=>db.execute<{id:string}>(sql`select ob_rebase(${f.actorId}::uuid,sandbox_seed) as id from orgs where id=${clone.sandboxOrgId}`, "objects"));
     assert.equal(actor.length,1);
     await work(clone.sandboxOrgId,actor[0]!.id);
   } finally {
-    assert.equal((await withBypassContext(() => db.execute(sql`update orgs set name='Scratch Manufacturing clone' where id=${clone.sandboxOrgId} and env_kind='sandbox' returning id`))).rows.length, 1);
+    assert.equal((await withBypassContext(() => db.execute(sql`update orgs set name='Scratch Manufacturing clone' where id=${clone.sandboxOrgId} and env_kind='sandbox' returning id`, "objects"))).length, 1);
     await dropScratchOrg(clone.sandboxOrgId);
   }
 }
@@ -42,18 +42,18 @@ async function setup(): Promise<Fixture> {
   await withBypassContext(async () => {
     const account = await db.execute(sql`insert into accounts
       (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
-      values(${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`);
-    assert.equal(account.rows.length, 1, "child release requires a genuine manufacturing WIP account");
+      values(${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`, "objects");
+    assert.equal(account.length, 1, "child release requires a genuine manufacturing WIP account");
     const result = await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb),'{controlAccounts}',
-      coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('mfgWip',${wipId}::text),true) where id=${org.orgId} returning id`);
-    assert.equal(result.rows.length, 1);
+      coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('mfgWip',${wipId}::text),true) where id=${org.orgId} returning id`, "objects");
+    assert.equal(result.length, 1);
   });
   // Releasing a work order snapshots its work centers' department rates.
-  const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`))).rows[0]!.id);
+  const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`, "objects")))[0]!.id);
   const rate = await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
     (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
-    values (${org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${actorId}, ${actorId}) returning id`));
-  assert.equal(rate.rows.length, 1, "material/lifecycle cases require an explicit standard labor rate covering release");
+    values (${org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${actorId}, ${actorId}) returning id`, "objects"));
+  assert.equal(rate.length, 1, "material/lifecycle cases require an explicit standard labor rate covering release");
   return { org, actorId, departmentId };
 }
 
@@ -113,8 +113,8 @@ const cases: Case[] = [
   { name: "component account mapping names the component", run: async (f) => {
     await route(f, f.org.items.assembly);
     await withBypassContext(async () => {
-      const changed = await db.execute(sql`update item_inventory_profiles set asset_account_id=${f.org.accounts.cogs} where org_id=${f.org.orgId} and item_id=${f.org.items.component} returning item_id`);
-      assert.equal(changed.rows.length, 1);
+      const changed = await db.execute(sql`update item_inventory_profiles set asset_account_id=${f.org.accounts.cogs} where org_id=${f.org.orgId} and item_id=${f.org.items.component} returning item_id`, "objects");
+      assert.equal(changed.length, 1);
     });
     const draft = await order(f);
     await refuse(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "component_asset_account_missing", "Component");
@@ -124,8 +124,8 @@ const cases: Case[] = [
     await receiveInventory(f.org.orgId, f.actorId, { itemId: f.org.items.component, stockLocationId: f.org.stockLocationId, quantity: "2.5", unitCost: "1", subsidiaryId: f.org.subsidiaryId, date: f.org.date, offsetAccountId: f.org.accounts.clearing });
     await run(f.org.orgId, (tx) => updateManufacturingPolicies(tx, f.org.orgId, f.actorId, { shortagePolicy: "warn", completionTolerancePct: "1", abnormalScrapApprovalThreshold: null }));
     const first = await order(f, f.org.items.assembly, f.org.date, "1.5"); await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, first.id));
-    const firstLine = await withBypassContext(async () => db.execute<{ shortage_qty: string }>(sql`select shortage_qty::text from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${first.id}`));
-    assert.equal(firstLine.rows[0]?.shortage_qty, "0.5000");
+    const firstLine = await withBypassContext(async () => db.execute<{ shortage_qty: string }>(sql`select shortage_qty::text from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${first.id}`, "objects"));
+    assert.equal(firstLine[0]?.shortage_qty, "0.5000");
     await run(f.org.orgId, (tx) => updateManufacturingPolicies(tx, f.org.orgId, f.actorId, { shortagePolicy: "refuse", completionTolerancePct: "1", abnormalScrapApprovalThreshold: null }));
     const second = await order(f, f.org.items.assembly, f.org.date, "0.5");
     await refuse(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, second.id)), "work_order_shortage", "Component: 1");
@@ -137,11 +137,11 @@ const cases: Case[] = [
     await route(f, f.org.items.component);
     await run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...itemPolicy, supplyMethod: "make" }));
     const parent = await order(f); await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, parent.id));
-    const children = await withBypassContext(async () => db.execute<{ status: string; source: string; parent_wo_id: string }>(sql`select status,source,parent_wo_id from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`));
-    assert.deepEqual(children.rows, [{ status: "released", source: "parent", parent_wo_id: parent.id }]);
+    const children = await withBypassContext(async () => db.execute<{ status: string; source: string; parent_wo_id: string }>(sql`select status,source,parent_wo_id from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`, "objects"));
+    assert.deepEqual(children, [{ status: "released", source: "parent", parent_wo_id: parent.id }]);
     await run(f.org.orgId, (tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, parent.id, "Stop production"));
-    const cancelled = await withBypassContext(async () => db.execute<{ status: string }>(sql`select status from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`));
-    assert.equal(cancelled.rows[0]?.status, "cancelled");
+    const cancelled = await withBypassContext(async () => db.execute<{ status: string }>(sql`select status from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`, "objects"));
+    assert.equal(cancelled[0]?.status, "cancelled");
   } },
   { name: "hold blocks work-order start", run: async (f) => {
     await route(f, f.org.items.assembly); const draft = await order(f); await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
@@ -149,12 +149,12 @@ const cases: Case[] = [
     await refuse(run(f.org.orgId, (tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, draft.id, " ")), "hold_reason_required", "required");
     await run(f.org.orgId, (tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "Quality review"));
     await refuse(run(f.org.orgId, (tx) => startWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "work_order_on_hold", "Quality review");
-    const operation = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!);
+    const operation = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`, "objects"))[0]!);
     await refuse(run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
     await refuse(run(f.org.orgId, (tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id, "Tool change")), "work_order_on_hold", "Quality review");
     await refuse(run(f.org.orgId, (tx) => resumeWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
     await withSandboxClone(f, async (orgId, actorId) => {
-      const cloneOrder = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_work_orders where org_id=${orgId} and number=${draft.number}`)).rows[0]!.id);
+      const cloneOrder = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_work_orders where org_id=${orgId} and number=${draft.number}`, "objects"))[0]!.id);
       assert.equal((await run(orgId, (tx) => resumeWorkOrder(tx, orgId, actorId, cloneOrder))).status, "released");
     });
     assert.equal((await run(f.org.orgId, (tx) => resumeWorkOrder(tx, f.org.orgId, f.actorId, draft.id))).status, "released");
@@ -183,7 +183,7 @@ const cases: Case[] = [
     await withBypassContext(async () => db.execute(sql`insert into bom_components (org_id, assembly_item_id, component_item_id, quantity_per, sort_order) values (${f.org.orgId}, ${f.org.items.component}, ${f.org.items.standard}, '1', 0) returning id`));
     await route(f, f.org.items.component);
     const parent = await order(f); await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, parent.id));
-    const child = await withBypassContext(async () => (await db.execute<{ id: string; number: string }>(sql`select id,number from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`)).rows[0]!);
+    const child = await withBypassContext(async () => (await db.execute<{ id: string; number: string }>(sql`select id,number from mfg_work_orders where org_id=${f.org.orgId} and parent_wo_id=${parent.id}`, "objects"))[0]!);
     await run(f.org.orgId, (tx) => startWorkOrder(tx, f.org.orgId, f.actorId, child.id));
     await refuse(run(f.org.orgId, (tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, parent.id, "Stop parent")), "started_child_work_orders", child.number);
   } },
@@ -198,26 +198,26 @@ const cases: Case[] = [
     await route(f, f.org.items.assembly, "2026-01-01", null, [{ sequence: 20, name: "Pack" }]);
     const draft = await order(f); await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
     await run(f.org.orgId, (tx) => startWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
-    const [assemble, pack] = await withBypassContext(async () => (await db.execute<{ id: string; sequence: number }>(sql`select id, sequence from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id} order by sequence`)).rows);
+    const [assemble, pack] = await withBypassContext(async () => await db.execute<{ id: string; sequence: number }>(sql`select id, sequence from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id} order by sequence`, "objects"));
     const blocked = () => refuse(run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, pack!.id)), "operation_sequence_blocked", "operation 10 (Assemble) is done");
     await blocked();
     await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, assemble!.id));
     await blocked();
     await run(f.org.orgId, (tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, assemble!.id, "Oven maintenance"));
     await blocked();
-    const state = await withBypassContext(async () => (await db.execute<{ status: string }>(sql`select status from mfg_wo_operations where org_id=${f.org.orgId} and id=${pack!.id}`)).rows[0]!);
+    const state = await withBypassContext(async () => (await db.execute<{ status: string }>(sql`select status from mfg_wo_operations where org_id=${f.org.orgId} and id=${pack!.id}`, "objects"))[0]!);
     assert.equal(state.status, "pending");
   } },
   { name: "release, start, and operation start pause resume", run: async (f) => {
     await route(f, f.org.items.assembly);
-    const profile = await withBypassContext(async () => db.execute(sql`update item_inventory_profiles set costing_method='standard', standard_cost='12.34' where org_id=${f.org.orgId} and item_id=${f.org.items.assembly} returning item_id`));
-    assert.equal(profile.rows.length, 1);
+    const profile = await withBypassContext(async () => db.execute(sql`update item_inventory_profiles set costing_method='standard', standard_cost='12.34' where org_id=${f.org.orgId} and item_id=${f.org.items.assembly} returning item_id`, "objects"));
+    assert.equal(profile.length, 1);
     const draft = await order(f); await run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
     const frozen = await run(f.org.orgId, (tx) => getWorkOrder(tx, f.org.orgId, draft.id));
     assert.equal(frozen?.routingVersion, 1); assert.match(frozen?.bomRevision ?? "", /^sha256:[0-9a-f]{64}$/);
     assert.equal(frozen?.standardCostSnapshot, "12.3400");
     await run(f.org.orgId, (tx) => startWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
-    const operation = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!);
+    const operation = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`, "objects"))[0]!);
     await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id));
     await refuse(run(f.org.orgId, (tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id, " ")), "pause_reason_required", "reason");
     await run(f.org.orgId, (tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id, "Tool change"));
@@ -229,7 +229,7 @@ const cases: Case[] = [
     const draft=await order(f);
     const cancelled=await order(f);await run(f.org.orgId, tx=>cancelWorkOrder(tx,f.org.orgId,f.actorId,cancelled.id));
     const active=await order(f);await run(f.org.orgId, tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,active.id));
-    const activeOperations=(await run(f.org.orgId, tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${active.id}`))).rows;
+    const activeOperations=await run(f.org.orgId, tx=>tx.execute<{id:string}>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${active.id}`, "objects"));
     assert.equal(activeOperations.length,1);
     const operation=activeOperations[0]!;
     await run(f.org.orgId, tx=>startWorkOrderOperation(tx,f.org.orgId,f.actorId,active.id,operation.id));
@@ -240,10 +240,10 @@ const cases: Case[] = [
       (select jsonb_agg(to_jsonb(w) order by id) from mfg_work_orders w where org_id=${f.org.orgId}) as orders,
       (select jsonb_agg(to_jsonb(o) order by id) from mfg_wo_operations o where org_id=${f.org.orgId}) as operations,
       (select count(*)::text from journal_entries where org_id=${f.org.orgId}) as entries,
-      (select count(*)::text from audit_log where org_id=${f.org.orgId}) as audits`)).rows[0]);
+      (select count(*)::text from audit_log where org_id=${f.org.orgId}) as audits`, "objects"))[0]);
     const before=await state();
     await run(f.org.orgId, async tx=>assert.ok((await tx.execute(sql`update app_roles set permissions='["manufacturing.read","items.post"]'::jsonb
-      where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`)).rows.length));
+      where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`, "objects")).length));
     for(const command of [
       ()=>run(f.org.orgId, tx=>updateDraftWorkOrder(tx,f.org.orgId,f.actorId,draft.id,{quantityOrdered:"2"})),
       ()=>run(f.org.orgId, tx=>releaseWorkOrder(tx,f.org.orgId,f.actorId,draft.id)),

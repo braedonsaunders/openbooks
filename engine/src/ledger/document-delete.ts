@@ -35,12 +35,12 @@ export async function deleteDocument(
   return db.transaction(async (tx) => {
     const kind = (await tx.execute<{ kind: string }>(sql`
       select kind from documents where id = ${documentId} and org_id = ${orgId}
-    `)).rows[0]?.kind
+    `, "objects"))[0]?.kind
     if (kind === "vendor_payment" || kind === "customer_payment") {
       // Match payment edits/posting: run → instruction → document. Locking the
       // document first would deadlock against a run transition and miss a
       // live instruction added while delete waits on its deferred FK.
-      const candidates = (await tx.execute<{ run_id: string; instruction_id: string }>(sql`
+      const candidates = await tx.execute<{ run_id: string; instruction_id: string }>(sql`
         select run.id as run_id, instruction.id as instruction_id
           from payment_instructions instruction
           join payment_runs run on run.id = instruction.payment_run_id and run.org_id = instruction.org_id
@@ -49,7 +49,7 @@ export async function deleteDocument(
            and run.status in ('draft', 'pending_approval', 'approved', 'processing',
                               'generated', 'delivered', 'partially_failed')
          order by run.id, instruction.id
-      `)).rows
+      `, "objects")
       const runIds = [...new Set(candidates.map((row) => row.run_id))].sort()
       if (runIds.length > 0) {
         await tx.execute(sql`select id from payment_runs where org_id = ${orgId} and id in ${runIds} order by id for update`)
@@ -77,7 +77,7 @@ export async function deleteDocument(
            and run.status in ('draft', 'pending_approval', 'approved', 'processing',
                               'generated', 'delivered', 'partially_failed')
          order by run.id, instruction.id limit 1
-      `)).rows[0]
+      `, "objects"))[0]
       if (claim) {
         throw new DeleteError(
           `payment is claimed by open payment run ${claim.runNumber} (${claim.status}) — ` +
@@ -108,10 +108,10 @@ export async function deleteDocument(
        where dl.from_document_id = ${documentId} and dl.org_id = ${doc.orgId}
          and dl.link_type not in ('reverses', 'corrects')
        limit 1
-    `));
-    if (downstream.rows[0]) {
+    `, "objects"));
+    if (downstream[0]) {
       throw new DeleteError(
-        `${doc.documentNumber} is the source of ${downstream.rows[0].document_number} — remove the downstream document first`,
+        `${doc.documentNumber} is the source of ${downstream[0].document_number} — remove the downstream document first`,
       );
     }
 

@@ -1,1 +1,0 @@
-The migration replaces one trigger function body. It changes no table, constraint or stored row; existing evidence is unaffected, and inserts the corrected condition accepts or refuses are exactly those the published condition intended.

@@ -73,8 +73,8 @@ async function createRun(orgId: string, submitterId: string): Promise<{ runId: s
 
 async function docFields(subjectId: string): Promise<{ dueDate: unknown; memo: unknown }> {
   const rows = await db.execute<{ due_date: unknown; memo: unknown }>(sql`
-    select due_date, memo from documents where id = ${subjectId}`);
-  return { dueDate: rows.rows[0]?.due_date, memo: rows.rows[0]?.memo };
+    select due_date, memo from documents where id = ${subjectId}`, "objects");
+  return { dueDate: rows[0]?.due_date, memo: rows[0]?.memo };
 }
 
 test("set_field refuses a wrongly-typed value and writes nothing", { skip: !DB }, async () => {
@@ -179,7 +179,7 @@ test("set_field validates tenant custom definitions for each custom value family
       assert.match(result.failed[0]!, new RegExp(field.key));
       const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`
         select custom from documents where id = ${run.subjectId} and org_id = ${org.orgId}
-      `)).rows[0]!.custom;
+      `, "objects"))[0]!.custom;
       assert.equal(Object.hasOwn(stored, field.key), false, `${field.key} must remain unwritten`);
     }
   });

@@ -73,12 +73,12 @@ export async function lockAndCheckPayrollRunPopulation(
 ): Promise<void> {
   if (allowedSubsidiaryIds == null) return;
   const candidateIds = candidates.map((candidate) => candidate.id);
-  const participants = (await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const participants = await runner.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select p.id,p.subsidiary_id from parties p where p.org_id=${orgId} and p.id in (
       select employee_party_id from pay_stubs where org_id=${orgId} and pay_run_document_id=${documentId}
       union select employee_party_id from pay_run_adjustments where org_id=${orgId} and pay_run_document_id=${documentId}
       union select unnest(${uuidArray(candidateIds)}::uuid[])
-    ) order by p.id for share`)).rows;
+    ) order by p.id for share`, "objects");
   if (participants.some((party) => !payrollSubsidiaryInScope(allowedSubsidiaryIds, party.subsidiary_id))) {
     throw new PayrollError("pay run not found");
   }
@@ -91,6 +91,6 @@ export async function lockAndCheckPayrollRunPopulation(
   }
   // Also refuse orphaned evidence; inner ownership locks cannot return it.
   const visible = (await runner.execute(sql`select 1 from pay_runs r where r.org_id=${orgId} and r.document_id=${documentId}
-    ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}`)).rows[0];
+    ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}`, "objects"))[0];
   if (!visible) throw new PayrollError("pay run not found");
 }

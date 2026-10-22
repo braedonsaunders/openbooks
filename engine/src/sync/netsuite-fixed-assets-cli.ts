@@ -22,11 +22,11 @@ const result = await withOrgContext(orgId, async () => {
   if (!(source instanceof NetSuiteSource)) throw new Error(`connection ${connectionId} is not NetSuite`);
   const actor = (await db.execute<{ id: string }>(sql`
     select id from users where org_id = ${orgId} order by created_at limit 1
-  `));
+  `, "objects"));
   return syncNetSuiteFixedAssets(source, {
     orgId,
     connectionId,
-    actorId: actor.rows[0]?.id ?? null,
+    actorId: actor[0]?.id ?? null,
   });
 });
 

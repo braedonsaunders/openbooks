@@ -27,8 +27,8 @@ export async function getTemplateByKey(
     select id, key, name, category, description, status, kind, allowed_roles
       from form_templates
      where org_id = ${orgId} and key = ${key}
-  `))
-  return r.rows[0]
+  `, 'objects'))
+  return r[0]
 }
 
 /** Latest version row regardless of publish state (what the designer edits). */
@@ -38,8 +38,8 @@ export async function getLatestVersion(orgId: string, templateId: string) {
       from form_template_versions
      where org_id = ${orgId} and template_id = ${templateId}
      order by version desc limit 1
-  `)))
-  return r.rows[0] as
+  `, 'objects')))
+  return r[0] as
     | {
         id: string
         version: number

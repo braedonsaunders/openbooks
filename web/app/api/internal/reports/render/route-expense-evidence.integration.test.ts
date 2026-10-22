@@ -1,6 +1,5 @@
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
@@ -33,7 +32,6 @@ const { GET } = await import(root + 'web/app/api/internal/reports/render/route.t
 const { reportArtifactAccessDetail, EXPENSE_READ_REVOKED_REMEDY } = await import(root + 'web/lib/report-execution-context.ts')
 
 const TOKEN = 'render-evidence-test-token'
-const migration = readFileSync(new URL(root + 'schema/migrations/generated/0750_report_run_render_evidence.sql'), 'utf8')
 
 type Reach = { scope: 'all' } | { scope: 'own'; userId: string } | { scope: 'none' }
 type Snapshot = { expenseRows?: Reach; requiredPermissions?: string[]; renders?: { renderedAt: string; expenseRows: Reach | null; contentHash: string }[] }
@@ -45,8 +43,6 @@ function workbookText(bytes: Uint8Array): string {
 
 test('each scheduled render reads with the owner\'s current expense authority and records it', async () => {
   process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN
-  // Other suites replay earlier bodies of the evidence trigger; this one runs the published one.
-  await db.execute(sql.raw(migration))
   const org = await withBypassContext(() => createScratchOrg())
   try {
     const owner = await withBypassContext(() => createScratchUser(org.orgId, 'Schedule owner', 'schedule_owner'))

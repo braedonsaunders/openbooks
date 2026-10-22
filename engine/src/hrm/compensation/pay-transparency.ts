@@ -263,7 +263,7 @@ async function comparisonGroupFor(
 ): Promise<string | null> {
   const row = (await db.execute<{ value: string | null }>(sql`
     select custom->>${attributeKey} as value
-      from parties where org_id = ${orgId} and id = ${workerPartyId}`)).rows[0];
+      from parties where org_id = ${orgId} and id = ${workerPartyId}`, "objects"))[0];
   if (row === undefined) return null;
   const value = row.value;
   if (value === null || value === undefined || String(value).trim().length === 0) return null;
@@ -310,7 +310,7 @@ export async function computeGapSnapshot(query: {
       );
     }
     // In-service employments with an architected position level at asOf.
-    const employments = (await db.execute<{
+    const employments = await db.execute<{
       employment_id: string;
       worker_party_id: string;
       employer_subsidiary_id: string;
@@ -332,12 +332,12 @@ export async function computeGapSnapshot(query: {
          and aav.effective_from <= ${query.asOf}::date
          and (aav.effective_to is null or aav.effective_to >= ${query.asOf}::date)
          and aav.recorded_until is null
-       where e.org_id = ${orgId} and ev.status in ('active', 'on_leave')`)).rows;
+       where e.org_id = ${orgId} and ev.status in ('active', 'on_leave')`, "objects");
     // Every rate is converted to the org's reporting currency before it
     // enters any mean, median, quartile or regression — native amounts in
     // different currencies never sit side by side.
     const orgRow = (await db.execute<{ base_currency: string | null }>(sql`
-      select base_currency from orgs where id = ${orgId}`)).rows[0];
+      select base_currency from orgs where id = ${orgId}`, "objects"))[0];
     const reportingCurrency = orgRow?.base_currency?.trim() || null;
     if (!reportingCurrency) {
       throw new CompensationError(
@@ -360,7 +360,7 @@ export async function computeGapSnapshot(query: {
            and effective_from <= ${query.asOf}::date
            and (effective_to is null or effective_to >= ${query.asOf}::date)
            and recorded_until is null
-         order by effective_from desc limit 1`)).rows[0];
+         order by effective_from desc limit 1`, "objects"))[0];
       if (!position?.level_id) continue;
       const level = (await db.execute<{
         code: string;
@@ -369,7 +369,7 @@ export async function computeGapSnapshot(query: {
         equal_value_criteria: unknown[];
       }>(sql`
         select code, rank, family_id, equal_value_criteria from hrm_job_levels
-         where org_id = ${orgId} and id = ${position.level_id} and is_active`)).rows[0];
+         where org_id = ${orgId} and id = ${position.level_id} and is_active`, "objects"))[0];
       if (!level) continue;
       if (level.equal_value_criteria.length === 0) {
         throw new CompensationError("REFUSED", `Job level ${level.code} has no approved equal-value criteria — configure its criteria and weights in Compensation → Job levels before generating a pay-equity assessment.`);
@@ -390,7 +390,7 @@ export async function computeGapSnapshot(query: {
       // reinterpret a worker's annual.
       const rateRow = (await db.execute<{ rate: string; basis: string; annual_hours: string }>(sql`
         select rate::text as rate, basis, annual_hours::text as annual_hours
-          from labor_cost_rates where org_id = ${orgId} and id = ${wage.rateId}`)).rows[0];
+          from labor_cost_rates where org_id = ${orgId} and id = ${wage.rateId}`, "objects"))[0];
       if (!rateRow) {
         throw new CompensationError(
           "STALE_REVISION",
@@ -567,7 +567,7 @@ export async function computeGapSnapshot(query: {
               ${JSON.stringify({ employer_subsidiary_id: null, department_id: null })}::jsonb,
               ${JSON.stringify(toStoredMetrics(metrics))}::jsonb, ${JSON.stringify(toStoredCategories(categories))}::jsonb,
               ${actorId}, ${actorId}, ${actorId})
-      returning id, generated_at::text as generated_at`)).rows[0];
+      returning id, generated_at::text as generated_at`, "objects"))[0];
     if (!inserted) throw new CompensationError("REFUSED", "the snapshot insert matched no row — the save is refused, never a silent success");
     return {
       id: inserted.id,
@@ -600,7 +600,7 @@ export async function latestGapSnapshot(query: {
       from hrm_pay_gap_snapshots
      where org_id = ${orgId}
      order by as_of desc, generated_at desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!row) return null;
   return { id: row.id, asOf: row.as_of, metrics: fromStoredMetrics(row.metrics), categories: fromStoredCategories(row.categories), generatedAt: row.generated_at };
 }
@@ -655,7 +655,7 @@ export async function requestPayInformation(query: {
     }>(sql`
       insert into hrm_pay_information_requests (org_id, employment_id, due_at, created_by, updated_by)
       values (${orgId}, ${employmentId}, now() + (${settings.responseDays} || ' days')::interval, ${actorId}, ${actorId})
-      returning id, requested_at::text as requested_at, due_at::text as due_at`)).rows[0];
+      returning id, requested_at::text as requested_at, due_at::text as due_at`, "objects"))[0];
     if (!inserted) throw new CompensationError("REFUSED", "the request insert matched no row — the save is refused, never a silent success");
     return {
       id: inserted.id,
@@ -700,7 +700,7 @@ export async function fulfilPayInformationRequest(query: {
       status: string;
     }>(sql`
       select id, employment_id, status from hrm_pay_information_requests
-       where org_id = ${orgId} and id = ${requestId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${requestId} for update`, "objects"))[0];
     // Unknown, cross-org, and out-of-scope requests share one refusal —
     // the target-employment lens runs before any state or snapshot read,
     // so a refused fulfil answers nothing and writes nothing.
@@ -766,10 +766,10 @@ export async function fulfilPayInformationRequest(query: {
         ) cat
        where s.org_id = ${orgId}
        order by s.as_of desc, s.generated_at desc, s.id desc
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (!snapshot) {
       const anySnapshot = (await db.execute<{ id: string }>(sql`
-        select id from hrm_pay_gap_snapshots where org_id = ${orgId} limit 1`)).rows[0];
+        select id from hrm_pay_gap_snapshots where org_id = ${orgId} limit 1`, "objects"))[0];
       if (!anySnapshot) {
         throw new CompensationError(
           "REFUSED",
@@ -803,7 +803,7 @@ export async function fulfilPayInformationRequest(query: {
           ) lvl
          where s.org_id = ${orgId}
          order by s.as_of desc, s.generated_at desc, s.id desc
-         limit 1`)).rows[0];
+         limit 1`, "objects"))[0];
       throw new CompensationError(
         "REFUSED",
         !newestLevel
@@ -832,7 +832,7 @@ export async function fulfilPayInformationRequest(query: {
              reason = ${JSON.stringify(averages)}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'open'
        returning requested_at::text as requested_at, due_at::text as due_at,
-                 fulfilled_at::text as fulfilled_at`)).rows[0];
+                 fulfilled_at::text as fulfilled_at`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the request moved while it was fulfilled — reload it and fulfil again");
     }
@@ -868,7 +868,7 @@ export async function refusePayInformationRequest(query: {
     await requireHrmCompensationManage(db, orgId, actorId);
     const source = (await db.execute<{ employment_id: string }>(sql`
       select employment_id from hrm_pay_information_requests
-       where org_id = ${orgId} and id = ${requestId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${requestId} for update`, "objects"))[0];
     if (!source) throw payRequestNotVisible();
     try {
       await requireHrmCompensationManageOnEmployment(db, orgId, actorId, source.employment_id);
@@ -886,7 +886,7 @@ export async function refusePayInformationRequest(query: {
          set status = 'refused', fulfilled_at = now(), reason = ${reason}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'open'
        returning employment_id, requested_at::text as requested_at, due_at::text as due_at,
-                 fulfilled_at::text as fulfilled_at`)).rows[0];
+                 fulfilled_at::text as fulfilled_at`, "objects"))[0];
     if (!updated) {
       throw new CompensationError(
         "BAD_STATE",

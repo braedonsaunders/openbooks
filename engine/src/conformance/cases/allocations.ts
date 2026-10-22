@@ -601,37 +601,37 @@ async function seedAllocationSource(ctx: CaseContext, amount: string): Promise<v
 }
 
 async function postedRunId(orgId: string, ruleId: string): Promise<string> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from allocation_runs
      where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'
-     order by created_at desc limit 1`)).rows;
+     order by created_at desc limit 1`, "objects");
   const id = rows[0]?.id;
   if (!id) throw new Error("no posted run found for the rule");
   return id;
 }
 
 async function postedRunCount(orgId: string, ruleId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(sql`
     select count(*)::text as count from allocation_runs
-     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows;
+     where org_id = ${orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects");
   return Number(rows[0]?.count ?? 0);
 }
 
 async function coordinateTotals(orgId: string): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ account_id: string; department_id: string | null; total: string }>(sql`
+  const rows = await db.execute<{ account_id: string; department_id: string | null; total: string }>(sql`
     select l.account_id, l.department_id, sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
-     group by l.account_id, l.department_id`)).rows;
+     group by l.account_id, l.department_id`, "objects");
   return new Map(rows.map((row) => [`${row.account_id}|${row.department_id ?? ""}`, row.total]));
 }
 
 async function accountTotal(orgId: string, accountId: string): Promise<string> {
-  const rows = (await db.execute<{ total: string }>(sql`
+  const rows = await db.execute<{ total: string }>(sql`
     select sum(l.amount)::text as total
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-     where l.org_id = ${orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`)).rows;
+     where l.org_id = ${orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`, "objects");
   return rows[0]?.total ?? "0.0000";
 }

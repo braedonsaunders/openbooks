@@ -24,7 +24,7 @@ async function snapshot(orgId: string) {
     'period',(select jsonb_agg(to_jsonb(o)) from payroll_period_openings o where org_id=${orgId}),
     'audit',(select jsonb_agg(to_jsonb(a)) from audit_log a where org_id=${orgId}),
     'stubs',(select jsonb_agg(to_jsonb(s)) from pay_stubs s where org_id=${orgId}),
-    'ledger',(select jsonb_agg(to_jsonb(l)) from journal_lines l where org_id=${orgId})) as state`)).rows[0]!.state
+    'ledger',(select jsonb_agg(to_jsonb(l)) from journal_lines l where org_id=${orgId})) as state`, 'objects'))[0]!.state
 }
 test('bulk period preview preserves money and history; native admission exports exact facts and reviewed replay changes nothing', { skip: !DB }, async () => {
   await withHarness(setup, async f => {

@@ -67,7 +67,7 @@ const mockAuthz = `
 
 const mockDb = withPlatformDbTestSurface(`
   const state = globalThis[Symbol.for('openbooks.setup-idempotency-test')]
-  async function execute(query) { return state.fakeExecute(query) }
+  async function execute(query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode(await state.fakeExecute(query)) }
   async function transaction(work) { return work({ execute }) }
   export const db = { execute, transaction }
   // Pass-throughs for engine modules loaded in the graph but never exercised

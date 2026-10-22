@@ -174,8 +174,8 @@ test(
         select count(*)::text as n from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${org.orgId} and s.pay_run_document_id = ${march.documentId}
-           and r.run_status <> 'committed'`));
-      assert.equal(marchStubs.rows[0]!.n, "2", "March priced two stubs and stayed uncommitted");
+           and r.run_status <> 'committed'`, "objects"));
+      assert.equal(marchStubs[0]!.n, "2", "March priced two stubs and stayed uncommitted");
 
       const slips = await pit11Slips(org.orgId, 2026);
       assert.equal(slips.length, 2, "two employees aggregate — never one row");

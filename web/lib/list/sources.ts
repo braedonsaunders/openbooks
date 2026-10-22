@@ -194,8 +194,8 @@ function fulfillmentSource(recordType: 'pick_list' | 'shipment', drawerParam: st
               from warehouses w
               join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
              where w.org_id = ${orgId}
-             order by sl.code`)
-          return result.rows
+             order by sl.code`, 'objects')
+          return result
         },
       },
     ],
@@ -234,8 +234,8 @@ const SOURCES: Record<string, DocListSource> = {
             join parties p on p.id = dl.service_party_id and p.org_id = d.org_id
            where d.org_id = ${orgId} and d.kind = 'customer_invoice'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
            group by p.id, p.display_name
-           order by p.display_name`)
-        return result.rows
+           order by p.display_name`, 'objects')
+        return result
       },
     }],
   }),
@@ -291,8 +291,8 @@ const SOURCES: Record<string, DocListSource> = {
            where d.org_id = ${orgId} and d.kind = 'expense_report'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
              ${ownerFilter ? sql`and ${ownerFilter}` : sql``}
            group by p.id, p.display_name
-           order by p.display_name`)
-        return result.rows
+           order by p.display_name`, 'objects')
+        return result
       },
     }],
   }),
@@ -412,8 +412,8 @@ const SOURCES: Record<string, DocListSource> = {
                  // else. Null is neither org-wide nor invisible; it coalesces.
                  : sql`and coalesce(s.subsidiary_id, (select root.id from subsidiaries root where root.org_id = ${orgId} and root.parent_id is null and root.is_active order by root.created_at limit 1)) = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[])`}
              group by s.id, s.name
-             order by s.name`)
-          return result.rows
+             order by s.name`, 'objects')
+          return result
         },
       },
     ],
@@ -461,8 +461,8 @@ const SOURCES: Record<string, DocListSource> = {
                : allowedSubsidiaryIds.size
                  ? sql`and (subsidiary_id is null or subsidiary_id = any(${`{${[...allowedSubsidiaryIds].join(',')}}`}::uuid[]))`
                  : sql`and false`}
-           order by number nulls last, name`)
-        return result.rows
+           order by number nulls last, name`, 'objects')
+        return result
       },
     }],
   },

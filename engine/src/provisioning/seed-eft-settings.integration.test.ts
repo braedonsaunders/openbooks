@@ -25,8 +25,8 @@ async function fixture() {
 }
 
 async function eftSettings(orgId: string): Promise<unknown> {
-  const rows = (await db.execute<{ eft: unknown }>(sql`
-    select settings->'eft' as eft from orgs where id = ${orgId}`)).rows;
+  const rows = await db.execute<{ eft: unknown }>(sql`
+    select settings->'eft' as eft from orgs where id = ${orgId}`, "objects");
   return rows[0]!.eft;
 }
 

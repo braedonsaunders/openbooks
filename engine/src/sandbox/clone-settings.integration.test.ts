@@ -47,7 +47,7 @@ test("control-account rebase uses the settings captured with the clone snapshot"
       productionSettings: captured.sourceSettings,
     }));
     const expected = (await db.execute<{ id: string }>(sql`
-      select ob_rebase(${production.accounts.ar}::uuid, ${seed}::uuid)::text as id`)).rows[0]!.id;
+      select ob_rebase(${production.accounts.ar}::uuid, ${seed}::uuid)::text as id`, "objects"))[0]!.id;
     assert.equal(rebased.ar, expected, "refresh must map the captured account identity, not the newer live setting");
     await assert.rejects(rebaseSandboxControlAccounts({ productionOrgId: production.orgId, sandboxOrgId: sandbox.orgId, seed: randomUUID() }), /owning source organization and clone seed/);
   } finally {

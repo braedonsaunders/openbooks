@@ -138,14 +138,14 @@ export async function loadAdminRoles(
         from app_roles r
        where ${where}
        order by ${orderBy}
-       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}`),
-    db.execute(sql`select count(*)::int as c from app_roles r where ${where}`),
+       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}`, 'objects'),
+    db.execute(sql`select count(*)::int as c from app_roles r where ${where}`, 'objects'),
     db.execute(sql`
       select r.is_built_in, count(*)::int as c from app_roles r
-       where ${searchWhere} group by r.is_built_in`),
+       where ${searchWhere} group by r.is_built_in`, 'objects'),
   ])))
 
-  const roles = rowsR.rows.map(
+  const roles = rowsR.map(
     (r): AdminRoleRow => ({
       id: r.id,
       key: r.key,
@@ -164,9 +164,9 @@ export async function loadAdminRoles(
       memberCount: Number(r.member_count),
     }),
   )
-  const total = Number(countR.rows[0]?.c ?? 0)
+  const total = Number(countR[0]?.c ?? 0)
   const typeCounts = Object.fromEntries(
-    typeCountsR.rows.map((r) => [r.is_built_in ? 'built_in' : 'custom', Number(r.c)]),
+    typeCountsR.map((r) => [r.is_built_in ? 'built_in' : 'custom', Number(r.c)]),
   ) as Record<string, number>
 
   return {

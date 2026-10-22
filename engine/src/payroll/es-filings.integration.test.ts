@@ -44,9 +44,9 @@ async function seedEsFilingFixture(): Promise<EsFixture> {
       payroll: { countries: ["ES"] },
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "ES");
-  const components = (await db.execute<{ id: string; code: string }>(sql`
+  const components = await db.execute<{ id: string; code: string }>(sql`
     select id, code from pay_components where org_id = ${org.orgId} and code in ('BASE', 'IRPF')
-  `)).rows;
+  `, "objects");
   const baseId = components.find((c) => c.code === "BASE")!.id;
   const irpfId = components.find((c) => c.code === "IRPF")!.id;
 
@@ -151,7 +151,7 @@ test(
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${fx.orgId} and s.tax_year = 2026 and s.country = 'ES'
-           and r.run_status = 'committed'`)).rows[0]!;
+           and r.run_status = 'committed'`, "objects"))[0]!;
       const slipTotal = slips.reduce((acc, s) => add(acc, s.percepcionIntegra), "0");
       const taxTotal = slips.reduce((acc, s) => add(acc, s.retencionesPracticadas), "0");
       assert.equal(slipTotal, totals.percepcion);

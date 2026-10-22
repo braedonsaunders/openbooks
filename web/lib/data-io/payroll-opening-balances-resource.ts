@@ -209,7 +209,7 @@ async function resolveEmployee(
 ): Promise<{ id: string } | { error: string }> {
   const value = String(raw ?? '').trim()
   if (!value) return { error: 'employee is required' }
-  const matches = (await db.execute(sql`
+  const matches = await db.execute<{ id: string; display_name: string }>(sql`
     select distinct p.id, p.display_name
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
@@ -222,14 +222,14 @@ async function resolveEmployee(
             or p.short_code = ${value}
             or p.display_name = ${value})
      limit 3
-  `)) as { rows: { id: string; display_name: string }[] }
-  if (matches.rows.length === 0) {
+  `, 'objects')
+  if (matches.length === 0) {
     return { error: `employee "${value}" not found — no payroll number, code, or name matches` }
   }
-  if (matches.rows.length > 1) {
+  if (matches.length > 1) {
     return { error: `employee "${value}" matches more than one person — use the payroll number` }
   }
-  return { id: matches.rows[0]!.id }
+  return { id: matches[0]!.id }
 }
 
 export function payrollOpeningBalancesResource(orgId: string): DataResource {
@@ -284,29 +284,25 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
 
       // Component openings pivot onto their parent row. Joining them in SQL
       // would multiply the rows; the export is one row per carry-in.
-      const componentRows = (await db.execute(sql`
+      const componentRows = await db.execute<{ opening_balance_id: string; code: string; amount: string }>(sql`
         select oc.opening_balance_id, c.code, oc.ytd_amount::text as amount
           from payroll_opening_balance_components oc
           join pay_components c on c.id = oc.component_id and c.org_id = oc.org_id
-         where oc.org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and oc.opening_balance_id in (${sql.join(result.rows.map((row) => sql`${row.__rowId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`)) as {
-        rows: { opening_balance_id: string; code: string; amount: string }[]
-      }
+         where oc.org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and oc.opening_balance_id in (${sql.join(result.rows.map((row) => sql`${row.__rowId}::uuid`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
       const byRow = new Map<string, Record<string, string>>()
-      for (const row of componentRows.rows) {
+      for (const row of componentRows) {
         const amounts = byRow.get(row.opening_balance_id) ?? {}
         amounts[`${COMPONENT_PREFIX}${row.code}`] = row.amount
         byRow.set(row.opening_balance_id, amounts)
       }
       // Program bases pivot onto their parent row by (employee, year): the
       // export stays one row per carry-in, like the components above.
-      const programRows = (await db.execute(sql`
+      const programRows = await db.execute<{ employee_party_id: string; tax_year: number; program_key: string; amount: string }>(sql`
         select employee_party_id, tax_year, program_key, insurable_ytd::text as amount
           from payroll_opening_program_bases
-         where org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and (employee_party_id,tax_year) in (${sql.join(result.rows.map((row) => sql`(${row.__employeeId}::uuid,${row.taxYear}::int)`), sql`, `)})` : sql` and false`) : sql``}`)) as {
-        rows: { employee_party_id: string; tax_year: number; program_key: string; amount: string }[]
-      }
+         where org_id = ${orgId}${readCtx?.page ? (result.rows.length ? sql` and (employee_party_id,tax_year) in (${sql.join(result.rows.map((row) => sql`(${row.__employeeId}::uuid,${row.taxYear}::int)`), sql`, `)})` : sql` and false`) : sql``}`, 'objects')
       const programsByEmployeeYear = new Map<string, Record<string, string>>()
-      for (const row of programRows.rows) {
+      for (const row of programRows) {
         const key = `${row.employee_party_id} ${row.tax_year}`
         const amounts = programsByEmployeeYear.get(key) ?? {}
         amounts[`${PROGRAM_PREFIX}${row.program_key}`] = row.amount
@@ -422,12 +418,10 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
 
           if (!lockCache.has(taxYear)) {
             lockCache.set(taxYear, await openingBalanceLocks(ctx.orgId, taxYear, db, ctx.allowedSubsidiaryIds, ctx.recordKeys ? preflight.flatMap((row) => row.employeeId ? [row.employeeId] : []) : undefined))
-            const existing = (await db.execute(sql`
+            const existing = await db.execute<{ employee_party_id: string }>(sql`
               select employee_party_id from payroll_opening_balances
-               where org_id = ${ctx.orgId} and tax_year = ${taxYear}${ctx.recordKeys ? sql` and employee_party_id in (${sql.join(preflight.filter((row) => row.employeeId !== null).map((row) => sql`${row.employeeId}::uuid`), sql`, `)})` : sql``}`)) as {
-              rows: { employee_party_id: string }[]
-            }
-            existingCache.set(taxYear, new Set(existing.rows.map((r) => r.employee_party_id)))
+               where org_id = ${ctx.orgId} and tax_year = ${taxYear}${ctx.recordKeys ? sql` and employee_party_id in (${sql.join(preflight.filter((row) => row.employeeId !== null).map((row) => sql`${row.employeeId}::uuid`), sql`, `)})` : sql``}`, 'objects')
+            existingCache.set(taxYear, new Set(existing.map((r) => r.employee_party_id)))
           }
           const lock = lockCache.get(taxYear)!.get(employeeId)
           if (lock) {
@@ -619,11 +613,11 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
       await ctx.recordKeys?.(resolvedKeys)
       const employeeIds = resolvedKeys.flatMap((key) => key ? [key.split(':')[0]!] : [])
       const locks = await entitlementOpeningLocks(ctx.orgId, db, ctx.recordKeys ? employeeIds : undefined)
-      const storedRows = (await db.execute(sql`
+      const storedRows = await db.execute<{ plan_id: string; employee_party_id: string }>(sql`
         select plan_id,employee_party_id from entitlement_ledger where org_id=${ctx.orgId} and kind='opening'
         ${ctx.recordKeys ? sql`and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)` : sql``}
-      `)) as { rows: { plan_id: string; employee_party_id: string }[] }
-      const storedKeys = new Set(storedRows.rows.map((row) => `${row.plan_id}:${row.employee_party_id}`))
+      `, 'objects')
+      const storedKeys = new Set(storedRows.map((row) => `${row.plan_id}:${row.employee_party_id}`))
       const duplicateRows = duplicateImportRowIndexes(resolvedKeys)
 
       for (let index = 0; index < rows.length; index++) {

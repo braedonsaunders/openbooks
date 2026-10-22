@@ -134,19 +134,19 @@ async function draftCashDocument(
 }
 
 async function entryLines(documentId: string, orgId: string): Promise<{ number: string | null; amount: string }[]> {
-  const rows = (await db.execute<{ number: string | null; amount: string }>(sql`
+  const rows = await db.execute<{ number: string | null; amount: string }>(sql`
     select a.number, l.amount::text as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.org_id = ${orgId} and e.source_document_id = ${documentId}
-     order by l.line_number`)).rows;
+     order by l.line_number`, "objects");
   return rows;
 }
 
 async function entryCount(documentId: string, orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where source_document_id = ${documentId} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from journal_entries where source_document_id = ${documentId} and org_id = ${orgId}`, "objects");
   return rows[0]?.n ?? 0;
 }
 
@@ -181,7 +181,7 @@ test("a cash sale posts a balanced entry with tax and two tenders, and no receiv
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.source_document_id = ${id}
-         and (l.is_open_item or l.account_id = ${org.accounts.ar})`)).rows[0]?.n ?? 1;
+         and (l.is_open_item or l.account_id = ${org.accounts.ar})`, "objects"))[0]?.n ?? 1;
     assert.equal(openItems, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -246,14 +246,14 @@ test("a cash sale discounted to zero posts with no tenders: a statistical measur
       { amount: "0.0000", itemId: org.items.fifo, quantity: "2", unitPrice: "10" },
     ], null);
     await withOrg(org.orgId, () => postDocument(id, control(org)));
-    const legs = (await db.execute<{ account_id: string; amount: string; quantity: string; unit: string }>(sql`
+    const legs = await db.execute<{ account_id: string; amount: string; quantity: string; unit: string }>(sql`
       select l.account_id, l.amount::text as amount, l.quantity::text as quantity, l.unit
         from journal_lines l join documents d on d.org_id = l.org_id and d.posted_entry_id = l.entry_id
-       where d.org_id = ${org.orgId} and d.id = ${id}`)).rows;
+       where d.org_id = ${org.orgId} and d.id = ${id}`, "objects");
     assert.deepEqual(legs.map((leg) => [leg.account_id, Number(leg.amount), Number(leg.quantity), leg.unit]), [[unitsId, 0, 2, "unit"]]);
     const issue = (await db.execute<{ value: string }>(sql`
       select total_value::text as value from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${lineIds[0]} and kind = 'issue'`)).rows[0];
+       where org_id = ${org.orgId} and document_line_id = ${lineIds[0]} and kind = 'issue'`, "objects"))[0];
     assert.equal(Math.abs(Number(issue?.value)), 6, "the comped units leave stock at their FIFO cost");
 
   } finally {
@@ -273,9 +273,9 @@ test("voiding a no-charge cash sale reverses its measurement", { skip: !DB }, as
     );
     assert.equal(requested.status, "voided");
     await withOrg(org.orgId, () => completeRequestedDocumentVoid(id, org.orgId, null));
-    const quantities = (await db.execute<{ quantity: string }>(sql`
+    const quantities = await db.execute<{ quantity: string }>(sql`
       select l.quantity::text as quantity from journal_lines l
-       where l.org_id = ${org.orgId} and l.account_id = ${unitsId}`)).rows;
+       where l.org_id = ${org.orgId} and l.account_id = ${unitsId}`, "objects");
     assert.deepEqual(quantities.map((row) => Number(row.quantity)).sort(), [-3, 3]);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -329,7 +329,7 @@ test("a stocked cash sale issues inventory and a refund restocks at original cos
     const issue = (await db.execute<{ id: string; quantity: string; value: string }>(sql`
       select id, quantity::text as quantity, total_value::text as value
         from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${sale.lineIds[0]} and kind = 'issue'`)).rows[0];
+       where org_id = ${org.orgId} and document_line_id = ${sale.lineIds[0]} and kind = 'issue'`, "objects"))[0];
     assert.ok(issue, "the sale issues stock");
     // The refund restores the first unit at the cost it left at.
     const refund = await draftCashDocument(org, "cash_refund", "CR-STOCK", [
@@ -345,7 +345,7 @@ test("a stocked cash sale issues inventory and a refund restocks at original cos
     const receipt = (await db.execute<{ quantity: string; value: string }>(sql`
       select quantity::text as quantity, total_value::text as value
         from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${refund.lineIds[0]} and kind = 'receipt'`)).rows[0];
+       where org_id = ${org.orgId} and document_line_id = ${refund.lineIds[0]} and kind = 'receipt'`, "objects"))[0];
     assert.deepEqual([receipt?.quantity, receipt?.value], ["1.0000", "4.0000"]);
     const refundLegs = await entryLines(refund.id, org.orgId);
     assert.deepEqual(
@@ -387,14 +387,14 @@ test("voiding a cash sale reverses its entry", { skip: !DB }, async () => {
     );
     assert.equal(requested.status, "voided");
     await withOrg(org.orgId, () => completeRequestedDocumentVoid(id, org.orgId, null));
-    const legs = (await db.execute<{ amount: string }>(sql`
+    const legs = await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId}
          and (e.source_document_id = ${id} or e.id in (
            select reversal_entry_id from documents where id = ${id} and org_id = ${org.orgId}
-         ))`)).rows;
+         ))`, "objects");
     const net = legs.reduce((n, l) => n + Number(l.amount), 0);
     assert.equal(net, 0);
   } finally {
@@ -440,7 +440,7 @@ async function seedStoredValue(org: ScratchOrg, actorId: string): Promise<Stored
 async function storedValueBalance(orgId: string, accountId: string): Promise<string> {
   const row = (await db.execute<{ balance: string }>(sql`
     select balance_minor::text as balance from stored_value_accounts
-     where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+     where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
   assert.ok(row);
   return row.balance;
 }
@@ -476,11 +476,11 @@ test("a stored-value tender posts debit liability and reduces the balance", { sk
     // evidence lives in the table — a masked clone nulls custom, never this.
     const link = (await db.execute<{ journal: string | null; document: string | null }>(sql`
       select journal_entry_id as journal, document_id as document from stored_value_entries
-       where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'redeem'`)).rows[0];
+       where org_id = ${org.orgId} and account_id = ${issued.accountId} and kind = 'redeem'`, "objects"))[0];
     assert.ok(link?.journal);
     assert.equal(link?.document, id);
     const custom = (await db.execute<{ custom: unknown }>(sql`
-      select custom from documents where org_id = ${org.orgId} and id = ${id}`)).rows[0]?.custom as Record<string, unknown>;
+      select custom from documents where org_id = ${org.orgId} and id = ${id}`, "objects"))[0]?.custom as Record<string, unknown>;
     assert.ok(custom && !("tenders" in custom));
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -567,7 +567,7 @@ test("a cash refund to store credit mints from the memo program and fills the te
     // the only post-commit tender write the lifecycle guard permits.
     const tender = (await db.execute<{ account: string | null }>(sql`
       select stored_value_account_id as account from document_tenders
-       where org_id = ${org.orgId} and document_id = ${id}`)).rows[0];
+       where org_id = ${org.orgId} and document_id = ${id}`, "objects"))[0];
     assert.ok(tender?.account);
     assert.equal(await storedValueBalance(org.orgId, tender.account!), toUnits("25").toString());
     const legs = await entryLines(id, org.orgId);

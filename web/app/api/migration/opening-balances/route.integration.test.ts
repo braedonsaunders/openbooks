@@ -79,7 +79,7 @@ test("opening-balance preview and draft run the native writer through the guided
     await inOrg(() => updateMigrationPlan({ orgId: org.orgId, id: adminId }, { path: "spreadsheet", sourceSystem: "spreadsheet", cutoverDate: "2026-10-01" }, "test plan"));
 
     const numbers = await inOrg(async () => Object.fromEntries((await db.execute<{ id: string; number: string }>(sql`
-      select id, number from accounts where org_id=${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.revenue}, ${org.accounts.clearing})`)).rows.map((row) => [row.id, row.number])));
+      select id, number from accounts where org_id=${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.revenue}, ${org.accounts.clearing})`, "objects")).map((row) => [row.id, row.number])));
     const bank = numbers[org.accounts.bank]!;
     const revenue = numbers[org.accounts.revenue]!;
     assert.ok(bank && revenue, "fixture accounts carry numbers");

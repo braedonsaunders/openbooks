@@ -50,7 +50,7 @@ export async function saveForecastOverride(
     refuse("This item carries no stock: it has no inventory costing profile.", "item_not_stocked", "add an inventory costing profile to the item first", 422);
   }
   const location = (await tx.execute<{ id: string }>(sql`
-    select id from stock_locations where org_id = ${orgId} and id = ${input.stockLocationId}`)).rows[0];
+    select id from stock_locations where org_id = ${orgId} and id = ${input.stockLocationId}`, "objects"))[0];
   if (!location) {
     refuse("The override location is not a stock location of this organization.", "invalid_planning_input", "choose a stock location of this organization", 422);
   }
@@ -58,7 +58,7 @@ export async function saveForecastOverride(
     select id, item_id, stock_location_id, period_start::text as period_start, quantity::text as quantity, reason
       from demand_forecast_overrides
      where org_id = ${orgId} and item_id = ${input.itemId}
-       and stock_location_id = ${input.stockLocationId} and period_start = ${input.periodStart}::date`)).rows[0] ?? null;
+       and stock_location_id = ${input.stockLocationId} and period_start = ${input.periodStart}::date`, "objects"))[0] ?? null;
   // One override per item, location and week: a repeat replaces the earlier
   // row, so the latest reason always wins and no week forecasts twice.
   const saved = (await tx.execute<OverrideRow>(sql`
@@ -70,7 +70,7 @@ export async function saveForecastOverride(
       quantity = excluded.quantity, reason = excluded.reason,
       updated_at = now(), updated_by = ${actorId}
     returning id, item_id, stock_location_id, period_start::text as period_start,
-      quantity::text as quantity, reason`)).rows[0];
+      quantity::text as quantity, reason`, "objects"))[0];
   if (!saved) refuse("The override was not saved.", "planning_write_failed", "retry saving the override");
   await auditPlanningChange(tx, {
     orgId,
@@ -103,7 +103,7 @@ export async function runDueDemandForecasts(asOf?: string): Promise<DemandForeca
   // bypass: scheduler-tick — the unscoped scan lists every organization
   // before checking each one's feature gate.
   const orgIds = await withBypassContext(async () =>
-    (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map((row) => row.id));
+    (await db.execute<{ id: string }>(sql`select id from orgs order by id`, "objects")).map((row) => row.id));
   for (const orgId of orgIds) {
     const enabled = await withOrg(orgId, () => orgFeatureEnabled(orgId, "demandPlanning", db));
     if (!enabled) {
@@ -114,14 +114,14 @@ export async function runDueDemandForecasts(asOf?: string): Promise<DemandForeca
       await withOrg(orgId, async () => {
         const today = asOf ?? await businessToday(orgId);
         const weekAgo = addCalendarDays(today, -7);
-        const subsidiaries = (await db.execute<{ id: string }>(sql`
-          select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`)).rows;
+        const subsidiaries = await db.execute<{ id: string }>(sql`
+          select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`, "objects");
         for (const subsidiary of subsidiaries) {
           const fresh = (await db.execute<{ id: string }>(sql`
             select id from demand_forecast_runs
              where org_id = ${orgId} and status = 'complete' and as_of > ${weekAgo}::date
                and parameters->>'subsidiaryId' = ${subsidiary.id}
-             limit 1`)).rows[0];
+             limit 1`, "objects"))[0];
           if (fresh) {
             result.skippedFresh += 1;
             continue;
@@ -136,7 +136,7 @@ export async function runDueDemandForecasts(asOf?: string): Promise<DemandForeca
               join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
               join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id and ar.org_id = u.org_id
              where u.org_id = ${orgId} and u.is_active and ar.key = 'admin'
-             order by u.created_at, u.id limit 1`)).rows[0];
+             order by u.created_at, u.id limit 1`, "objects"))[0];
           if (!actor) {
             throw new DemandPlanningError(
               "The weekly demand plan needs an administrator to attribute the run to.",
@@ -174,7 +174,7 @@ export async function forecastAccuracy(
 ): Promise<ForecastAccuracyRow[]> {
   await assertDemandPlanningFeature(tx as Runner, orgId);
   const entity = await availabilityEntity(tx as Runner, orgId, subsidiaryId);
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     item_class: string;
     periods: string;
     mape: string | null;
@@ -216,7 +216,7 @@ export async function forecastAccuracy(
              else (sum(forecast_qty - coalesce(actual, 0)) / sum(actual))::text end as bias
       from scored
      group by item_class
-     order by item_class`)).rows;
+     order by item_class`, "objects");
   return rows.map((row) => ({
     itemClass: row.item_class,
     periods: Number(row.periods),
@@ -238,7 +238,7 @@ export async function listForecastOverrides(
       from demand_forecasts s
       join demand_forecast_runs r on r.org_id = s.org_id and r.id = s.run_id
      where s.org_id = ${orgId} and s.run_id = ${runId}
-       and r.parameters->>'subsidiaryId' = ${subsidiaryId}`)).rows[0];
+       and r.parameters->>'subsidiaryId' = ${subsidiaryId}`, "objects"))[0];
   const horizon = run?.horizon ?? [];
   const rows = [...(await readOverrides(tx, orgId, horizon)).values()];
   return rows.map((row) => ({

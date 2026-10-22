@@ -45,7 +45,7 @@ function adapterContext({ facts, answers, rates = {}, ctx }: AdapterInput, pushe
   return {
     periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
     programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
-    tx: { execute: async () => ({ rows: facts.length ? [facts[Math.min(query++, facts.length - 1)]] : [] }) } as never,
+    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: facts.length ? [facts[Math.min(query++, facts.length - 1)]] : [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as never,
     orgId: "org", subsidiaryId: "legal-employer", documentId: "doc", employeePartyId: "emp", employmentId: "employment",
     employeeName: "Test", taxYear: 2026, country: "FR", region: "FR", emp: { hired_on: "2020-01-01" }, filingAccountId: "fr-siret-account",
     run: { pay_date: "2026-06-15", run_type: "regular" }, periodsPerYear: 12, ...legs, gross: "2000.0000",

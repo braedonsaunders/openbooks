@@ -142,9 +142,9 @@ test("an all-closed period refuses every posting route", { skip: !DB }, async ()
     const controlBill = await approvedBill(org, actor, "BILL-ROUTES-OPEN");
     await postDocument(controlBill, POST_DEPS(org));
     const controlState = await db.execute<{ status: string }>(
-      sql`select status from documents where id = ${controlBill}`,
+      sql`select status from documents where id = ${controlBill}`, "objects",
     );
-    assert.equal(controlState.rows[0]!.status, "posted");
+    assert.equal(controlState[0]!.status, "posted");
 
     // Shut every module; GL goes last (the closer refuses GL before its
     // subledgers, so a loop in declared order would trip its own guard).
@@ -204,8 +204,8 @@ test("an all-closed period refuses every posting route", { skip: !DB }, async ()
       const r = await db.execute<{ status: string; entries: number }>(sql`
         select status,
                (select count(*)::int from journal_entries where source_document_id = ${bill}) as entries
-          from documents where id = ${bill} and org_id = ${org.orgId}`);
-      return r.rows[0]!;
+          from documents where id = ${bill} and org_id = ${org.orgId}`, "objects");
+      return r[0]!;
     });
     assert.deepEqual(untouched, { status: "approved", entries: 0 });
   } finally {

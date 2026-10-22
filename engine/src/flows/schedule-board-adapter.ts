@@ -37,11 +37,9 @@ export const scheduleBoardsFlowAdapter = defineTableSubjectAdapter({
     const orgId = ambientTenantOrgId();
     if (!orgId)
       throw new Error("Schedule board delivery requires tenant context.");
-    const row = (
-      await db.execute<Record<string, unknown>>(
-        sql`select id,code,name,automatic_delivery_policy as policy,row_kind as "rowKind",case when is_active then 'active' else 'archived' end as status from schedule_boards where org_id=${orgId} and id=${id}`,
-      )
-    ).rows[0];
+    const row = (await db.execute<Record<string, unknown>>(
+        sql`select id,code,name,automatic_delivery_policy as policy,row_kind as "rowKind",case when is_active then 'active' else 'archived' end as status from schedule_boards where org_id=${orgId} and id=${id}`, "objects",
+      ))[0];
     if (!row) return null;
     const { policy, ...values } = row;
     return {
@@ -56,11 +54,9 @@ export const scheduleBoardsFlowAdapter = defineTableSubjectAdapter({
   async scheduledActorId(id) {
     const orgId = ambientTenantOrgId();
     if (!orgId) throw new Error("Schedule delivery requires tenant context.");
-    const policy = (
-      await db.execute<{ policy: unknown }>(
-        sql`select automatic_delivery_policy as policy from schedule_boards where org_id=${orgId} and id=${id} and is_active`,
-      )
-    ).rows[0]?.policy;
+    const policy = (await db.execute<{ policy: unknown }>(
+        sql`select automatic_delivery_policy as policy from schedule_boards where org_id=${orgId} and id=${id} and is_active`, "objects",
+      ))[0]?.policy;
     if (policy == null) return null;
     return automaticScheduleDeliverySchema.parse(policy).operatorId;
   },
@@ -68,11 +64,9 @@ export const scheduleBoardsFlowAdapter = defineTableSubjectAdapter({
     const orgId = ambientTenantOrgId();
     if (!orgId)
       throw new Error("Schedule board candidates require tenant context.");
-    const rows = (
-      await db.execute<{ id: string }>(
-        sql`select id from schedule_boards where org_id=${orgId} and is_active and row_kind in('people','resources') and automatic_delivery_policy is not null order by id limit ${limit + 1}`,
-      )
-    ).rows;
+    const rows = await db.execute<{ id: string }>(
+        sql`select id from schedule_boards where org_id=${orgId} and is_active and row_kind in('people','resources') and automatic_delivery_policy is not null order by id limit ${limit + 1}`, "objects",
+      );
     if (rows.length > limit)
       throw new Error(
         "More schedule boards match than the configured native fan-out limit. Increase the limit or narrow the configured board set.",
@@ -85,11 +79,9 @@ export const scheduleBoardsFlowAdapter = defineTableSubjectAdapter({
     const orgId = ambientTenantOrgId();
     if (!orgId) throw new Error("Board status requires tenant context.");
     return (
-      (
-        await db.execute<{ status: string }>(
-          sql`select case when is_active then 'active' else 'archived' end as status from schedule_boards where org_id=${orgId} and id=${id}`,
-        )
-      ).rows[0]?.status ?? null
+      (await db.execute<{ status: string }>(
+          sql`select case when is_active then 'active' else 'archived' end as status from schedule_boards where org_id=${orgId} and id=${id}`, "objects",
+        ))[0]?.status ?? null
     );
   },
   async changeStatus() {

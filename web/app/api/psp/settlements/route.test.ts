@@ -50,7 +50,8 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const staticText = (chunk) => {
             if (typeof chunk !== 'object' || chunk === null) return ''
             if (Array.isArray(chunk.value)) return chunk.value.join('')
@@ -59,35 +60,35 @@ const mockSources = new Map<string, string>([
           }
           const text = (query?.queryChunks ?? []).map(staticText).join('')
           if (text.includes('select subsidiary_id as "subsidiaryId"')) {
-            return { rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }
+            return Promise.resolve({ rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }).then(inMode)
           }
           if (text.includes('from subsidiaries')) {
             if (state.allowedSubsidiaryIds) {
-              return { rows: state.subsidiaryRows.filter((row) => state.allowedSubsidiaryIds.has(row.id)) }
+              return Promise.resolve({ rows: state.subsidiaryRows.filter((row) => state.allowedSubsidiaryIds.has(row.id)) }).then(inMode)
             }
-            return { rows: state.subsidiaryRows }
+            return Promise.resolve({ rows: state.subsidiaryRows }).then(inMode)
           }
           if (text.includes('from psp_settlement_batches')) {
-            if (state.allowedSubsidiaryIds && !text.includes('subsidiary_id = any')) return { rows: state.batchRows }
+            if (state.allowedSubsidiaryIds && !text.includes('subsidiary_id = any')) return Promise.resolve({ rows: state.batchRows }).then(inMode)
             if (state.allowedSubsidiaryIds) {
-              return { rows: state.batchRows.filter((row) => state.allowedSubsidiaryIds.has(row.subsidiaryId)) }
+              return Promise.resolve({ rows: state.batchRows.filter((row) => state.allowedSubsidiaryIds.has(row.subsidiaryId)) }).then(inMode)
             }
-            return { rows: state.batchRows }
+            return Promise.resolve({ rows: state.batchRows }).then(inMode)
           }
           if (text.includes('from psp_settlement_lines')) {
-            return { rows: state.lineRows }
+            return Promise.resolve({ rows: state.lineRows }).then(inMode)
           }
           if (text.includes('from documents d')) {
-            if (state.allowedSubsidiaryIds && !text.includes('subsidiary_id')) return { rows: state.documentRows }
+            if (state.allowedSubsidiaryIds && !text.includes('subsidiary_id')) return Promise.resolve({ rows: state.documentRows }).then(inMode)
             if (state.allowedSubsidiaryIds) {
-              return { rows: state.documentRows.filter((row) => state.allowedSubsidiaryIds.has(row.subsidiaryId)) }
+              return Promise.resolve({ rows: state.documentRows.filter((row) => state.allowedSubsidiaryIds.has(row.subsidiaryId)) }).then(inMode)
             }
-            return { rows: state.documentRows }
+            return Promise.resolve({ rows: state.documentRows }).then(inMode)
           }
           if (text.includes('reconciliation_matches') || text.includes('psp_payout_accruals')) {
-            return { rows: [] }
+            return Promise.resolve({ rows: [] }).then(inMode)
           }
-          return { rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }
+          return Promise.resolve({ rows: state.batchSubsidiaryId === undefined ? [] : [{ subsidiaryId: state.batchSubsidiaryId }] }).then(inMode)
         }
       }
     `,

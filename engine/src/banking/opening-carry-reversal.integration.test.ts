@@ -50,7 +50,7 @@ for (const scenario of [
       join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
       where l.org_id=${org.orgId} and l.account_id=${org.accounts.bank}
         and e.book_id=${org.bookId} and e.status in ('posted','reversed')
-        and e.posting_date <= ${org.date}`)).rows[0]!.amount;
+        and e.posting_date <= ${org.date}`, "objects"))[0]!.amount;
     assert.equal(balance, `${scenario.closing}.0000`);
     await importStatement({ accountId: org.accounts.bank, source: "manual", currency: "CAD",
       statementDate: org.date, openingBalance: scenario.opening, closingBalance: scenario.closing,
@@ -64,7 +64,7 @@ for (const scenario of [
     assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
     const signoff = (await db.execute<{ changes: { openingCarriedForward: string } }>(sql`
       select changes from audit_log where org_id=${org.orgId} and row_id=${recon.id}
-        and table_name='reconciliations' and action='approve'`)).rows[0]!;
+        and table_name='reconciliations' and action='approve'`, "objects"))[0]!;
     assert.equal(signoff.changes.openingCarriedForward, `${scenario.opening}.0000`);
   } finally {
     await dropScratchOrg(org.orgId);

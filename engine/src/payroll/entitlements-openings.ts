@@ -106,9 +106,9 @@ export async function entitlementOpeningLocks(
      where l.org_id = ${orgId} and l.kind = 'opening' and r.run_status = 'committed'
        ${employeePartyIds === undefined ? sql`` : sql`and l.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
      order by l.plan_id, l.employee_party_id, s.pay_date
-  `));
+  `, "objects"));
   return new Map(
-    r.rows.map((row) => [
+    r.map((row) => [
       `${row.plan_id}:${row.employee_party_id}`,
       { documentNumber: row.document_number, payDate: row.pay_date },
     ]),
@@ -136,9 +136,9 @@ export async function entitlementOpeningBlocks(
      where s.org_id = ${orgId} and r.run_status = 'committed' and s.pay_date >= ${asOf}
        ${employeePartyIds === undefined ? sql`` : sql`and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeePartyIds)}::jsonb)::uuid)`}
      order by s.employee_party_id, s.pay_date
-  `));
+  `, "objects"));
   return new Map(
-    r.rows.map((row) => [
+    r.map((row) => [
       row.employee_party_id,
       { documentNumber: row.document_number, payDate: row.pay_date },
     ]),
@@ -166,7 +166,7 @@ export async function entitlementOpenings(
       left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.is_active and p.is_active
      order by p.display_name
-  `));
+  `, "objects"));
 
   const openings = (await db.execute<{ plan_id: string; employee_party_id: string; amount: string; movement_date: string }>(sql`
     select plan_id, employee_party_id, amount::text as amount, movement_date::text as movement_date
@@ -181,7 +181,7 @@ export async function entitlementOpenings(
   const locks = await entitlementOpeningLocks(orgId);
   const blocks = await entitlementOpeningBlocks(orgId, asOf);
 
-  const rows: EntitlementOpeningRow[] = people.rows.map((raw) => {
+  const rows: EntitlementOpeningRow[] = people.map((raw) => {
     const employeePartyId = String(raw.employee_party_id);
     const amounts: Record<string, string> = {};
     const dates: Record<string, string> = {};

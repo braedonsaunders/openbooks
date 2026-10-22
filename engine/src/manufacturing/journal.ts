@@ -157,7 +157,7 @@ export async function manufacturingControlAccount(
     id: string; type: string; is_active: boolean; is_summary: boolean;
   }>(sql`
     select id, type, is_active, is_summary from accounts
-     where org_id=${orgId} and id=${accountId} for share`)).rows[0];
+     where org_id=${orgId} and id=${accountId} for share`, "objects"))[0];
   const allowedTypes: readonly string[] = CONTROL_ACCOUNT_TYPE_POLICY[role];
   if (!account || !account.is_active || account.is_summary || !allowedTypes.includes(account.type)) {
     throw new ManufacturingError(`The Manufacturing control account role ${role} is not mapped to an active posting account.`, {

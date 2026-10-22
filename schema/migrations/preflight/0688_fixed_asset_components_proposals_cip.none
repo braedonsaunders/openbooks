@@ -1,1 +1,0 @@
-Additive: new component column, guards and empty subledger tables; permission grants only extend holders of assets.manage, so no existing row is rewritten or invalidated.

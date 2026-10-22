@@ -160,11 +160,11 @@ export async function loadItems(
               join item_rate_versions version on version.org_id=line.org_id and version.id=line.version_id
                where line.org_id=${orgId} and line.item_id=${itemId} and version.status <> 'retired'
             ) as has_contract
-        `)
+        `, 'objects')
       : null,
   ])
 
-  const pricing = pricingState?.rows[0]
+  const pricing = pricingState?.[0]
   const initialPricingView: ItemDrawerProps['initialPricingView'] = createMode
     ? 'landing'
     : pricing?.has_customer
@@ -209,7 +209,7 @@ export async function loadItems(
     ? String(openItem.item.family_id)
     : null
   const openFamily = openFamilyId
-    ? (await db.execute<{ code: string }>(sql`select code from item_families where org_id = ${orgId} and id = ${openFamilyId}`)).rows[0] ?? null
+    ? (await db.execute<{ code: string }>(sql`select code from item_families where org_id = ${orgId} and id = ${openFamilyId}`, 'objects'))[0] ?? null
     : null
   const drawer =
     pickers && (openItem || createMode)

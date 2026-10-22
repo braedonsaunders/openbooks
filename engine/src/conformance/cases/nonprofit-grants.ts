@@ -71,8 +71,8 @@ export const NONPROFIT_GRANT_CASES: readonly ConformanceCase[] = [
               '{"nonprofit":true,"fundAccounting":true,"grantManagement":true}'::jsonb,
             true
           ) where id = ${ledger.orgId} returning id
-        `);
-        if (changed.rows.length !== 1) throw new Error("the grant conformance organization was not enabled");
+        `, "objects");
+        if (changed.length !== 1) throw new Error("the grant conformance organization was not enabled");
         ctx.roles.grantReceivable = await makeAccount("NP-GR-1", "Grant Receivable", "asset_receivable");
         ctx.roles.refundableAdvance = await makeAccount("NP-RA-1", "Refundable Advance", "liability_current_other");
         ctx.roles.grantRevenue = await makeAccount("NP-GR-2", "Grant Revenue", "income");
@@ -88,9 +88,9 @@ export const NONPROFIT_GRANT_CASES: readonly ConformanceCase[] = [
           insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active)
           values (${ledger.orgId}, 'grant_allowable_costs', 'grant_costs', 'Grant Allowable Costs', '{}'::jsonb, false, true)
           returning id
-        `);
-        if (!group.rows[0]) throw new Error("the allowable-cost group was not created");
-        return group.rows[0].id;
+        `, "objects");
+        if (!group[0]) throw new Error("the allowable-cost group was not created");
+        return group[0].id;
       });
       const accounts: GrantPostingAccounts = {
         bankAccountId: ctx.roles.bank,

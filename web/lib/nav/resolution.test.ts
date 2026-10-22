@@ -37,14 +37,15 @@ function reset() {
 
 // Script only database rows. Feature dependencies, metadata, permission checks,
 // URL matching, preferences, and installed-contribution validation remain real.
-db.execute = (async (query) => {
+db.execute = (async (query: Parameters<typeof db.execute>[0], mode?: string) => {
+  const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
   const compiled = dialect.sqlToQuery(query as Parameters<PgDialect['sqlToQuery']>[0])
   const text = compiled.sql
   assert.ok(compiled.params.includes('company-one'), `organization-scoped query: ${text}`)
-  if (text.includes('from org_nav_configs')) return { rows: [{ config, updated_at: new Date('2026-09-30T12:00:00Z') }] }
-  if (text.includes("settings->'features' as f")) return { rows: [{ f: features }] }
-  if (text.includes('from apps m')) return { rows: features.apps ? [{ extensionKey: 'team-tools', extensionId: 'extension', versionId: 'version', manifest: { contributions } }] : [] }
-  if (text.includes('from apps a') || text.includes('from custom_record_types')) return { rows: [] }
+  if (text.includes('from org_nav_configs')) return inMode({ rows: [{ config, updated_at: new Date('2026-09-30T12:00:00Z') }] })
+  if (text.includes("settings->'features' as f")) return inMode({ rows: [{ f: features }] })
+  if (text.includes('from apps m')) return inMode({ rows: features.apps ? [{ extensionKey: 'team-tools', extensionId: 'extension', versionId: 'version', manifest: { contributions } }] : [] })
+  if (text.includes('from apps a') || text.includes('from custom_record_types')) return inMode({ rows: [] })
   throw new Error(`Unexpected navigation query: ${text}`)
 }) as typeof db.execute
 

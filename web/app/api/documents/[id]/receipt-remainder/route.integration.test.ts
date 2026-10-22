@@ -119,8 +119,8 @@ const voidCall = (receiptId: string, body: unknown) =>
 
 async function revisionOf(orgId: string, receiptId: string): Promise<string> {
   const row = await withBypassContext(() => db.execute<{ revision: string }>(sql`
-    select revision_seq::text as revision from documents where id = ${receiptId} and org_id = ${orgId}`))
-  return row.rows[0]!.revision
+    select revision_seq::text as revision from documents where id = ${receiptId} and org_id = ${orgId}`, 'objects'))
+  return row[0]!.revision
 }
 
 test('a consumed receipt refuses typed with its dependents and without the cascade offer', async () => {
@@ -177,8 +177,8 @@ test('a closed-period reversal date refuses typed so the void dialog stays open'
     assert.equal(body.code, 'reversal-period-closed')
     assert.match(body.error, /reversal period for .* is closed/)
     const status = await withBypassContext(() => db.execute<{ status: string }>(sql`
-      select status from documents where id = ${receipt.id}`))
-    assert.equal(status.rows[0]!.status, 'approved', 'the refused receipt stays voidable')
+      select status from documents where id = ${receipt.id}`, 'objects'))
+    assert.equal(status[0]!.status, 'approved', 'the refused receipt stays voidable')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -203,9 +203,9 @@ test('void with dependents cascades through the fulfillment void', async () => {
         { params: Promise.resolve({ id: receipt.id }) }))
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     const states = await withBypassContext(() => db.execute<{ id: string; status: string }>(sql`
-      select id, status from documents where org_id = ${org.orgId} and id in (${receipt.id}, ${shipment.id})`))
+      select id, status from documents where org_id = ${org.orgId} and id in (${receipt.id}, ${shipment.id})`, 'objects'))
     assert.deepEqual(
-      new Map(states.rows.map((row) => [row.id, row.status])),
+      new Map(states.map((row) => [row.id, row.status])),
       new Map([[receipt.id, 'voided'], [shipment.id, 'voided']]),
     )
   } finally {
@@ -232,9 +232,9 @@ test('the remainder route corrects a phantom over-delivery while the receipt sta
     assert.equal(toUnits(body.adjustedQuantity), toUnits('6'))
     const facts = await withBypassContext(() => db.execute<{ status: string; received: string }>(sql`
       select (select status from documents where id = ${receipt.id}) as status,
-             (select quantity_fulfilled::text from document_lines where id = ${po.lineId}) as received`))
-    assert.equal(facts.rows[0]!.status, 'approved')
-    assert.equal(toUnits(facts.rows[0]!.received), toUnits('4'))
+             (select quantity_fulfilled::text from document_lines where id = ${po.lineId}) as received`, 'objects'))
+    assert.equal(facts[0]!.status, 'approved')
+    assert.equal(toUnits(facts[0]!.received), toUnits('4'))
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -247,7 +247,7 @@ test('the remainder route corrects a consumed line to its delivered quantity', a
     const receipt = await receiveFull(org, actor, po.orderId, po.lineId)
     await seedFulfillment(org, actor)
     const line = await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select id from document_lines where document_id = ${receipt.id} and org_id = ${org.orgId}`))
+      select id from document_lines where document_id = ${receipt.id} and org_id = ${org.orgId}`, 'objects'))
     const response = await withOrgContext(org.orgId, () =>
       correctRemainder(
         new Request(`http://probe.local/api/documents/${receipt.id}/receipt-remainder`, {
@@ -255,7 +255,7 @@ test('the remainder route corrects a consumed line to its delivered quantity', a
           body: JSON.stringify({
             reason: 'supplier short-shipped three units against the packing slip',
             date: org.date,
-            lines: [{ receiptLineId: line.rows[0]!.id, correctedQuantity: '7' }],
+            lines: [{ receiptLineId: line[0]!.id, correctedQuantity: '7' }],
           }),
         }),
         { params: Promise.resolve({ id: receipt.id }) }))
@@ -266,10 +266,10 @@ test('the remainder route corrects a consumed line to its delivered quantity', a
     const facts = await withBypassContext(() => db.execute<{ status: string; received: string; line: string }>(sql`
       select (select status from documents where id = ${receipt.id}) as status,
              (select quantity_fulfilled::text from document_lines where id = ${po.lineId}) as received,
-             (select quantity::text from document_lines where id = ${line.rows[0]!.id}) as line`))
-    assert.equal(facts.rows[0]!.status, 'approved')
-    assert.equal(toUnits(facts.rows[0]!.received), toUnits('7'))
-    assert.equal(toUnits(facts.rows[0]!.line), toUnits('10'), 'the receipt line quantity is never edited')
+             (select quantity::text from document_lines where id = ${line[0]!.id}) as line`, 'objects'))
+    assert.equal(facts[0]!.status, 'approved')
+    assert.equal(toUnits(facts[0]!.received), toUnits('7'))
+    assert.equal(toUnits(facts[0]!.line), toUnits('10'), 'the receipt line quantity is never edited')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -282,7 +282,7 @@ test('the remainder route refuses a correction past the unconsumed remainder', a
     const receipt = await receiveFull(org, actor, po.orderId, po.lineId)
     await seedFulfillment(org, actor)
     const line = await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select id from document_lines where document_id = ${receipt.id} and org_id = ${org.orgId}`))
+      select id from document_lines where document_id = ${receipt.id} and org_id = ${org.orgId}`, 'objects'))
     const response = await withOrgContext(org.orgId, () =>
       correctRemainder(
         new Request(`http://probe.local/api/documents/${receipt.id}/receipt-remainder`, {
@@ -290,7 +290,7 @@ test('the remainder route refuses a correction past the unconsumed remainder', a
           body: JSON.stringify({
             reason: 'supplier short-shipped seven units against the packing slip',
             date: org.date,
-            lines: [{ receiptLineId: line.rows[0]!.id, correctedQuantity: '3' }],
+            lines: [{ receiptLineId: line[0]!.id, correctedQuantity: '3' }],
           }),
         }),
         { params: Promise.resolve({ id: receipt.id }) }))

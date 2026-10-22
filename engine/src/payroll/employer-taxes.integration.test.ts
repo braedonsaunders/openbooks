@@ -211,10 +211,10 @@ test(
       assert.equal(result.employees, 1);
       assert.deepEqual(result.errors, []);
 
-      const stub = ((await db.execute<{ id: string; factors: Record<string, string> }>(sql`
+      const stub = (await db.execute<{ id: string; factors: Record<string, string> }>(sql`
         select id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
 
       // WCB: cap binds → assessable 2000 of 2400 gross, premium 2% = 40.00.
       assert.equal(stub.factors.WCB_EARN, "2000.0000");
@@ -226,19 +226,19 @@ test(
       const wcbLines = (await db.execute<{ amount: string; project_id: string | null }>(sql`
         select amount, project_id from pay_stub_lines
          where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'WCB/WSIB'
-         order by project_id`));
+         order by project_id`, "objects"));
       // Proportional to earnings: each job carried half the gross → 20.00 each.
-      assert.equal(wcbLines.rows.length, 2);
-      assert.ok(wcbLines.rows.every((l) => l.project_id !== null));
-      assert.deepEqual(wcbLines.rows.map((l) => l.amount).sort(), ["20.0000", "20.0000"]);
-      assert.equal(sum(wcbLines.rows.map((l) => l.amount)), "40.0000");
+      assert.equal(wcbLines.length, 2);
+      assert.ok(wcbLines.every((l) => l.project_id !== null));
+      assert.deepEqual(wcbLines.map((l) => l.amount).sort(), ["20.0000", "20.0000"]);
+      assert.equal(sum(wcbLines.map((l) => l.amount)), "40.0000");
 
       const ehtLines = (await db.execute<{ amount: string }>(sql`
         select amount from pay_stub_lines
          where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'Employer Health Tax'
-      `));
-      assert.equal(ehtLines.rows.length, 1);
-      assert.equal(ehtLines.rows[0]!.amount, "27.3000");
+      `, "objects"));
+      assert.equal(ehtLines.length, 1);
+      assert.equal(ehtLines[0]!.amount, "27.3000");
 
       // An ON stub carries no Québec line and keeps the federal labels and
       // canonical display order: income tax, CPP/CPP2, EI, then employer
@@ -248,9 +248,9 @@ test(
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id
          where l.org_id = ${org.orgId} and l.stub_id = ${stub.id} and l.sequence >= 100
-         order by l.sequence`));
+         order by l.sequence`, "objects"));
       assert.deepEqual(
-        onLines.rows.map((row) => [row.sequence, row.system_key, row.kind]),
+        onLines.map((row) => [row.sequence, row.system_key, row.kind]),
         [
           [110, "income_tax", "deduction"],
           [120, "cpp", "deduction"],
@@ -263,10 +263,10 @@ test(
         ],
       );
       const onLine = (systemKey: string, kind: string) =>
-        onLines.rows.find((row) => row.system_key === systemKey && row.kind === kind);
+        onLines.find((row) => row.system_key === systemKey && row.kind === kind);
       assert.equal(onLine("cpp", "deduction")!.description, "CPP");
       assert.equal(onLine("cpp", "employer_contribution")!.description, "CPP (employer)");
-      assert.ok(!onLines.rows.some((row) => row.system_key === "qc_income_tax"),
+      assert.ok(!onLines.some((row) => row.system_key === "qc_income_tax"),
         "no Québec income tax outside QC");
 
       // Commit: balanced projection, WCB/EHT credit their slot accounts.
@@ -274,14 +274,14 @@ test(
       const lines = (await db.execute<{ account_id: string; amount: string; project_id: string | null }>(sql`
         select account_id, amount, project_id from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `));
-      assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
-      const wcbLeg = lines.rows.filter((l) => l.account_id === wcbPayable);
+      `, "objects"));
+      assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
+      const wcbLeg = lines.filter((l) => l.account_id === wcbPayable);
       assert.equal(sum(wcbLeg.map((l) => l.amount)), neg("40.0000"));
-      const ehtLeg = lines.rows.filter((l) => l.account_id === ehtPayable);
+      const ehtLeg = lines.filter((l) => l.account_id === ehtPayable);
       assert.equal(sum(ehtLeg.map((l) => l.amount)), neg("27.3000"));
       // The employer-side burden debits carry the job tags.
-      const jobDebits = lines.rows.filter((l) => l.project_id !== null && cmp(l.amount, "0") > 0);
+      const jobDebits = lines.filter((l) => l.project_id !== null && cmp(l.amount, "0") > 0);
       assert.ok(jobDebits.length >= 2, "job-tagged burden debits exist");
 
       // A second run consumes the remaining WCB room: only $0 of cap is left
@@ -294,10 +294,10 @@ test(
                 'unbilled', 'actual', ${actorId}, ${actorId})`);
       const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
       await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
-      const stub2 = ((await db.execute<{ factors: Record<string, string> }>(sql`
+      const stub2 = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stub2.factors.WCB ?? "0", "0");
       // 600 × 1.95% — exemption already used by the committed run.
       assert.equal(stub2.factors.EHT, "11.7000");
@@ -355,10 +355,10 @@ test(
       });
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
-      const stub = ((await db.execute<{ factors: Record<string, string> }>(sql`
+      const stub = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stub.factors.EHT_EARN, "2400.0000");
       assert.equal(stub.factors.EHT, "39.0000");
     } finally {
@@ -389,21 +389,21 @@ test(
       });
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
-      const stub = ((await db.execute<{ id: string; factors: Record<string, string> }>(sql`
+      const stub = (await db.execute<{ id: string; factors: Record<string, string> }>(sql`
         select id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(cmp(stub.factors.WCB_EARN ?? "0", "1200"), 0);
       assert.equal(cmp(stub.factors.WCB ?? "0", "24"), 0);
       const wcbLines = (await db.execute<{ amount: string; project_id: string | null }>(sql`
         select amount, project_id from pay_stub_lines
          where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'WCB/WSIB'
-         order by project_id nulls last`));
-      assert.equal(wcbLines.rows.length, 2, "tagged split plus the untagged remainder");
-      assert.equal(wcbLines.rows[0]!.project_id, harness.jobA);
-      assert.equal(cmp(wcbLines.rows[0]!.amount, "12"), 0);
-      assert.equal(wcbLines.rows[1]!.project_id, null);
-      assert.equal(cmp(wcbLines.rows[1]!.amount, "12"), 0);
+         order by project_id nulls last`, "objects"));
+      assert.equal(wcbLines.length, 2, "tagged split plus the untagged remainder");
+      assert.equal(wcbLines[0]!.project_id, harness.jobA);
+      assert.equal(cmp(wcbLines[0]!.amount, "12"), 0);
+      assert.equal(wcbLines[1]!.project_id, null);
+      assert.equal(cmp(wcbLines[1]!.amount, "12"), 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -431,21 +431,21 @@ test(
       });
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
-      const stub = ((await db.execute<{ id: string; factors: Record<string, string> }>(sql`
+      const stub = (await db.execute<{ id: string; factors: Record<string, string> }>(sql`
         select id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(cmp(stub.factors.WCB_EARN ?? "0", "1000.01"), 0);
       assert.equal(cmp(stub.factors.WCB ?? "0", "20"), 0);
       const wcbLines = (await db.execute<{ amount: string; project_id: string | null }>(sql`
         select amount, project_id from pay_stub_lines
-         where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'WCB/WSIB'`));
-      const byProject = new Map(wcbLines.rows.map((l) => [l.project_id, l.amount] as const));
+         where org_id = ${org.orgId} and stub_id = ${stub.id} and description = 'WCB/WSIB'`, "objects"));
+      const byProject = new Map(wcbLines.map((l) => [l.project_id, l.amount] as const));
       assert.equal(cmp(byProject.get(harness.jobA) ?? "?", "6.67"), 0);
       assert.equal(cmp(byProject.get(harness.jobB) ?? "?", "6.67"), 0);
       assert.equal(cmp(byProject.get(harness.jobC) ?? "?", "6.66"), 0,
         "the negative penny folds into the last split");
-      assert.equal(sum(wcbLines.rows.map((l) => l.amount)), "20.0000");
+      assert.equal(sum(wcbLines.map((l) => l.amount)), "20.0000");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -478,21 +478,21 @@ test(
       const stubs = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `));
-      assert.equal(stubs.rows.length, 1);
+      `, "objects"));
+      assert.equal(stubs.length, 1);
       for (const key of ["WCB", "EHT", "HSF", "CNT"]) {
-        assert.ok(!(key in stubs.rows[0]!.factors), `no ${key} factor on zero earnings`);
+        assert.ok(!(key in stubs[0]!.factors), `no ${key} factor on zero earnings`);
       }
       for (const key of ["WCB_EARN", "EHT_EARN", "HSF_EARN", "CNT_EARN"]) {
-        assert.equal(cmp(stubs.rows[0]!.factors[key]!, "0"), 0, `${key} retains an assessed zero`);
+        assert.equal(cmp(stubs[0]!.factors[key]!, "0"), 0, `${key} retains an assessed zero`);
       }
-      const zeroPremiums = (await db.execute(sql`
+      const zeroPremiums = await db.execute(sql`
         select l.id from pay_stub_lines l
         join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
         join pay_components c on c.org_id=l.org_id and c.id=l.component_id
         where l.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
           and c.system_key in ('wcb','eht','hsf','cnt')
-      `)).rows;
+      `, "objects");
       assert.deepEqual(zeroPremiums, [], "retaining a basis does not create a zero levy line");
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       await harness.postHours("2026-07-20", "40", null);
@@ -504,7 +504,7 @@ test(
       assert.deepEqual(nextResult.errors, [], "explicit zero history satisfies the native history guard");
       const nextFactors = (await db.execute<{ factors: Record<string,string> }>(sql`
         select factors from pay_stubs where org_id=${org.orgId} and pay_run_document_id=${next.documentId}
-      `)).rows[0]!.factors;
+      `, "objects"))[0]!.factors;
       assert.equal(nextFactors.WCB_EARN, "1200.0000");
       assert.equal(nextFactors.WCB, "24.0000");
       assert.equal(nextFactors.EHT_EARN, "1200.0000");
@@ -550,18 +550,18 @@ test(
       });
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
-      const stub = ((await db.execute<{ id: string }>(sql`
+      const stub = (await db.execute<{ id: string }>(sql`
         select id from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       const lines = (await db.execute<{ system_key: string | null; kind: string; description: string; amount: string; sequence: number }>(sql`
         select c.system_key, l.kind, l.description, l.amount, l.sequence
           from pay_stub_lines l
           join pay_components c on c.id = l.component_id
          where l.org_id = ${org.orgId} and l.stub_id = ${stub.id} and l.sequence >= 100
-         order by l.sequence`));
+         order by l.sequence`, "objects"));
       assert.deepEqual(
-        lines.rows.map((row) => [row.sequence, row.system_key, row.kind]),
+        lines.map((row) => [row.sequence, row.system_key, row.kind]),
         [
           [110, "income_tax", "deduction"],
           [120, "cpp", "deduction"],
@@ -577,11 +577,11 @@ test(
         payDate: "2026-07-21", province: "ON", periodsPerYear: 26,
         income: "1200.00", federalClaimCode: 1, ytd: { pensionable: "74000.00" },
       }));
-      const cpp2 = lines.rows.find((row) => row.system_key === "cpp2");
+      const cpp2 = lines.find((row) => row.system_key === "cpp2");
       assert.ok(cpp2 && cmp(cpp2.amount, "0") > 0, "second-tier CPP posts a positive line");
       assert.equal(cpp2!.amount, expected.cpp2);
       assert.equal(cpp2!.description, "CPP2");
-      const cpp2Employer = lines.rows.find((row) => row.sequence === 215);
+      const cpp2Employer = lines.find((row) => row.sequence === 215);
       assert.ok(cpp2Employer && cmp(cpp2Employer.amount, "0") > 0, "employer second-tier CPP posts as its own line");
       assert.equal(cpp2Employer!.system_key, "cpp2");
       assert.equal(cpp2Employer!.amount, expected.cpp2);
@@ -689,10 +689,10 @@ test(
       });
       const calc1 = await calculatePayRun({ orgId: org.orgId, documentId: run1.documentId, actorId });
       assert.deepEqual(calc1.errors, []);
-      const stub1 = ((await db.execute<{ factors: Record<string, string> }>(sql`
+      const stub1 = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run1.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stub1.factors.WCB_EARN, "2000.0000");
 
       // Run 2: $600 gross in the next period. Nothing is committed, so the
@@ -701,10 +701,10 @@ test(
       const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
       const calc2 = await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
       assert.deepEqual(calc2.errors, []);
-      const stub2 = ((await db.execute<{ factors: Record<string, string> }>(sql`
+      const stub2 = (await db.execute<{ factors: Record<string, string> }>(sql`
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stub2.factors.WCB_EARN, "600.0000",
         "a draft run's assessable earnings must not consume the WCB cap");
       assert.equal(stub2.factors.WCB, "12.0000");

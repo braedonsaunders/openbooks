@@ -187,7 +187,7 @@ export function parseExpiryNoticeDays(value: unknown): number {
  * would charge on an invisible timetable.
  */
 export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     policyId: string;
     policyName: string;
     retryOffsets: unknown;
@@ -205,7 +205,7 @@ export async function resolveAutopayPolicy(orgId: string): Promise<AutopayPolicy
       from dunning_policies
      where org_id = ${orgId} and is_active and applies_to_kind = 'customer_invoice'
      order by updated_at desc limit 1
-  `)).rows;
+  `, "objects");
   const policy = rows[0];
   if (!policy) {
     const missing = new AutopayError("no active collection policy for customer invoices; activate one in Setup → Collections before enrolling customers in autopay");
@@ -274,8 +274,8 @@ export async function saveAutopayPolicy(
        returning id, name, grace_period_days as "grace_period_days",
                  autopay_insufficient_funds_offsets_days as "insufficient_funds_offsets",
                  autopay_expiry_notice_days as "expiry_notice_days"
-    `));
-    const row = updated.rows[0];
+    `, "objects"));
+    const row = updated[0];
     if (!row) throw new AutopayError("collection policy not found");
     const resolvedInsufficient = insufficientOffsets ?? parseRetryOffsetsDays(row.insufficient_funds_offsets);
     const resolvedExpiry = expiryNoticeDays ?? parseExpiryNoticeDays(row.expiry_notice_days);

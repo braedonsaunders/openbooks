@@ -69,12 +69,12 @@ for (const scenario of ["receive date", "receive subsidiary", "transfer subsidia
           amount: "1", basis: "value", freightAccountId: org.accounts.clearing, targets: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }] };
       }
       const { POST } = advanced ? await import("../app/api/inventory/advanced/route") : await import("../app/api/inventory/actions/route");
-      const before = (await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`)).rows[0]!.n;
+      const before = (await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`, "objects"))[0]!.n;
       const response = await withSimClock(org.date, () => POST(new Request("http://audit.local/api/inventory", { method: "POST", body: JSON.stringify(body) })));
       assert.equal(response.status, 422, JSON.stringify(await response.json()));
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`)).rows[0]!.n, before);
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from transfer_orders where org_id=${org.orgId}`)).rows[0]!.n, 0);
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from landed_cost_vouchers where org_id=${org.orgId}`)).rows[0]!.n, 0);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`, "objects"))[0]!.n, before);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from transfer_orders where org_id=${org.orgId}`, "objects"))[0]!.n, 0);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from landed_cost_vouchers where org_id=${org.orgId}`, "objects"))[0]!.n, 0);
     } finally { state.user = null; await dropScratchOrg(org.orgId); }
   });
 }
@@ -112,12 +112,12 @@ test("valid inventory requests retain omission defaults and exact idempotent rep
       assert.equal(retry.status, input.status, JSON.stringify(replay));
       assert.deepEqual(replay, { ...result, replayed: true });
     }
-    const movements = (await db.execute<{ moved_on: string; subsidiary_id: string }>(sql`
-      select moved_at::date::text as moved_on,subsidiary_id from inventory_movements where org_id=${org.orgId}`)).rows;
+    const movements = await db.execute<{ moved_on: string; subsidiary_id: string }>(sql`
+      select moved_at::date::text as moved_on,subsidiary_id from inventory_movements where org_id=${org.orgId}`, "objects");
     assert.equal(movements.length, 1);
     assert.equal(movements[0]!.moved_on, await withSimClock(org.date, () => businessToday(org.orgId)));
     assert.equal(movements[0]!.subsidiary_id, org.subsidiaryId);
-    assert.equal((await db.execute(sql`select entry_id from journal_lines where org_id=${org.orgId} group by entry_id having sum(amount)<>0`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select entry_id from journal_lines where org_id=${org.orgId} group by entry_id having sum(amount)<>0`, "objects")).length, 0);
   } finally { state.user = null; await dropScratchOrg(org.orgId); }
 });
 
@@ -160,10 +160,10 @@ const inventoryFeatureCases = [
                 update app_roles set permissions='["items.manage"]'::jsonb, subsidiary_restriction='{"mode":"all"}'::jsonb
                  where org_id=${org.orgId} and key='admin'`));
               const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
-                from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
-              const evidence = async () => (await db.execute(sql`select to_jsonb(p) as profile,
+                from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`, "objects"))[0]!.revision;
+              const evidence = async () => await db.execute(sql`select to_jsonb(p) as profile,
                 (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='item_inventory_profiles') as audits
-                from item_inventory_profiles p where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows;
+                from item_inventory_profiles p where org_id=${org.orgId} and item_id=${org.items.fifo}`, "objects");
               const before = await evidence();
               const body = { costingMethod: "fifo", tracking: "none", expectedUpdatedAt: revision,
                 assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
@@ -197,10 +197,10 @@ const inventoryFeatureCases = [
               update app_roles set permissions='["items.manage"]'::jsonb, subsidiary_restriction='{"mode":"all"}'::jsonb
                where org_id=${org.orgId} and key='admin'`));
             const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
-              from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
-            const evidence = async () => (await db.execute(sql`select to_jsonb(p) as profile,
+              from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`, "objects"))[0]!.revision;
+            const evidence = async () => await db.execute(sql`select to_jsonb(p) as profile,
               (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='item_inventory_profiles') as audits
-              from item_inventory_profiles p where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows;
+              from item_inventory_profiles p where org_id=${org.orgId} and item_id=${org.items.fifo}`, "objects");
             const before = await evidence();
             const request = () => PUT(new Request("http://localhost/api/items/" + org.items.fifo + "/costing", {
                 method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
@@ -318,8 +318,8 @@ const inventoryMovementCases = [
             }))
             assert.deepEqual(await saveCustom(), { dock_door: 'D-4' })
             const packingLines=await inTx(tx=>tx.execute<{id:string;stock_location_id:string}>(sql`select id,stock_location_id from document_lines
-              where org_id=${org.orgId} and document_id=${shipment.id} order by line_number`))
-            for(const packingLine of packingLines.rows)await packFixtureShipment(org.orgId,userId,shipment.id,packingLine.stock_location_id,[packingLine.id])
+              where org_id=${org.orgId} and document_id=${shipment.id} order by line_number`, "objects"))
+            for(const packingLine of packingLines)await packFixtureShipment(org.orgId,userId,shipment.id,packingLine.stock_location_id,[packingLine.id])
             const complete = () => withOrg(org.orgId, () => completeShipment(org.orgId, userId, { shipmentId: shipment.id, ...scoped }))
 
             await assert.rejects(complete(), (error: unknown) =>
@@ -349,7 +349,7 @@ const inventoryMovementCases = [
                 'stages', (select jsonb_object_agg(d.kind, jsonb_build_array(fd.stage, d.status, fd.sales_fulfillment_id = ${completed.fulfillmentId}))
                              from fulfillment_documents fd join documents d on d.id = fd.document_id
                             where fd.document_id in (${pickList.id}, ${shipment.id}))
-              ) as state`)).rows[0]!.state)
+              ) as state`, "objects"))[0]!.state)
             assert.deepEqual(evidence, {
               issued: [['A1', '5'], ['A2', '3']],
               movements: [['A1', '5'], ['A2', '3']],

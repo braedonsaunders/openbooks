@@ -153,21 +153,21 @@ export const POST = defineRoute({
       sql`select movement.subsidiary_id, movement.kind, entry.origin
             from inventory_movements movement
             left join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
-           where movement.id = ${body.movementId} and movement.org_id = ${user.orgId}`,
+           where movement.id = ${body.movementId} and movement.org_id = ${user.orgId}`, 'objects',
     )
-    const movementSubsidiaryId = source.rows[0]?.subsidiary_id ?? null
-    if (!source.rows[0] || (gate.allowedSubsidiaryIds && (!movementSubsidiaryId || !gate.allowedSubsidiaryIds.has(movementSubsidiaryId)))) {
+    const movementSubsidiaryId = source[0]?.subsidiary_id ?? null
+    if (!source[0] || (gate.allowedSubsidiaryIds && (!movementSubsidiaryId || !gate.allowedSubsidiaryIds.has(movementSubsidiaryId)))) {
       return notFound("record")
     }
     // Assembly operations must be handled as complete controlled units.
     // Manufacturing work-order issues and completion receipts use the
     // manufacturing reversal path; other assembly movements keep the
     // existing build reversal behavior.
-    const manufacturing = source.rows[0]?.origin === 'manufacturing'
+    const manufacturing = source[0]?.origin === 'manufacturing'
     if (manufacturing && !can(gate, 'manufacturing.manage')) {
       return NextResponse.json({ error: 'missing permission: manufacturing.manage' }, { status: 403 })
     }
-    const isAssemblyLeg = source.rows[0]?.kind === 'assembly_build' || source.rows[0]?.kind === 'assembly_consume'
+    const isAssemblyLeg = source[0]?.kind === 'assembly_build' || source[0]?.kind === 'assembly_consume'
     try {
       const { value: res, replayed } = await executeIdempotentInventoryAction(
         user.orgId,
@@ -186,7 +186,7 @@ export const POST = defineRoute({
               reversalDate: body.date!,
               reason: body.memo!,
             }
-            if (source.rows[0]?.kind === 'assembly_disassembly' || source.rows[0]?.kind === 'assembly_recovery')
+            if (source[0]?.kind === 'assembly_disassembly' || source[0]?.kind === 'assembly_recovery')
               return reverseAssemblyDisassembly(user.orgId,user.id,input)
             if (manufacturing) return reverseMaterialIssue(user.orgId, user.id, input)
             return isAssemblyLeg

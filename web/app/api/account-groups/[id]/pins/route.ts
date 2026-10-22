@@ -23,8 +23,8 @@ export const runtime = "nodejs";
 async function loadGroup(id: string, orgId: string) {
   const r = await db.execute(sql`
     select id, dimension from account_groups where id = ${id} and org_id = ${orgId}
-  `);
-  return r.rows[0] ?? null;
+  `, "objects");
+  return r[0] ?? null;
 }
 
 export const POST = defineRoute({

@@ -105,11 +105,9 @@ test(
           /Minimum attendance percentage.*0 to 100.*enter a value/,
         )
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from hrm_training_courses where org_id=${f.org.orgId}`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from hrm_training_courses where org_id=${f.org.orgId}`, 'objects',
+            )).length,
           0,
         )
         const saved = await create(request(body, key))
@@ -129,11 +127,9 @@ test(
           /different content.*existing record is preserved/,
         )
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from hrm_training_courses where org_id=${f.org.orgId}`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from hrm_training_courses where org_id=${f.org.orgId}`, 'objects',
+            )).length,
           1,
         )
       },
@@ -257,11 +253,9 @@ test(
         )
         assert.equal(hidden.status, 404)
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from hrm_training_participants where org_id=${f.org.orgId}`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from hrm_training_participants where org_id=${f.org.orgId}`, 'objects',
+            )).length,
           0,
         )
         const invited = await invite(
@@ -304,11 +298,9 @@ test(
           /requires an assessment score.*record the score/,
         )
         assert.equal(
-          (
-            await db.execute<{ status: string }>(
-              sql`select status from hrm_training_participants where org_id=${f.org.orgId} and id=${participant.id}`,
-            )
-          ).rows[0]!.status,
+          (await db.execute<{ status: string }>(
+              sql`select status from hrm_training_participants where org_id=${f.org.orgId} and id=${participant.id}`, 'objects',
+            ))[0]!.status,
           'invited',
         )
         const completed = await result(

@@ -104,9 +104,15 @@ export function sourceConnectionDocumentPredicate(alias: string, connection: str
 /** Render native ledger/period commands onto the reconciliation transaction. */
 export function applicationTransaction(client: PoolClient): SqlExecutor {
   return {
-    execute: (async (statement: SQL) => {
+    // Honors the same result modes as drizzle's execute: 'objects' and
+    // 'arrays' resolve to the rows themselves, raw mode to a result object.
+    execute: (async (statement: SQL, mode?: "arrays" | "objects" | "raw") => {
       const query = dialect.sqlToQuery(statement);
-      return { rows: (await client.query(query.sql, query.params)).rows };
+      if (mode === "arrays") {
+        return (await client.query({ text: query.sql, values: query.params, rowMode: "array" })).rows;
+      }
+      const { rows } = await client.query(query.sql, query.params);
+      return mode === "objects" ? rows : { rows };
     }) as SqlExecutor["execute"],
   };
 }

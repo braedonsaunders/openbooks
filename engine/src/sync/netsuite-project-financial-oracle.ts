@@ -208,9 +208,9 @@ async function main(): Promise<void> {
       from projects
      where org_id = ${orgId}
        and custom ->> ${source.refKey} is not null
-  `));
+  `, "objects"));
   const targetByRef = new Map(
-    target.rows.map((project) => [project.source_ref, project.id]),
+    target.map((project) => [project.source_ref, project.id]),
   );
   const differences: Difference[] = [];
   const comparisons: ProjectComparison[] = [];
@@ -310,7 +310,7 @@ async function main(): Promise<void> {
   const report = {
     status: differences.length ? "different" : "exact",
     sourceProjects: rawRows.length,
-    targetSourceBackedProjects: target.rows.length,
+    targetSourceBackedProjects: target.length,
     exactProjects,
     projectsWithDifferences: new Set(
       differences.map((difference) => difference.sourceRef),

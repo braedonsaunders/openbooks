@@ -35,20 +35,16 @@ interface Content extends Record<string, unknown> {
   unit: string | null;
 }
 async function unitById(tx: SqlExecutor, orgId: string, id: string) {
-  const unit = (
-    await tx.execute<HandlingUnit>(
-      sql`select *,content_version::text from handling_units where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0];
+  const unit = (await tx.execute<HandlingUnit>(
+      sql`select *,content_version::text from handling_units where org_id=${orgId} and id=${id}`, "objects",
+    ))[0];
   if (!unit) throw new ScopeNotFoundError();
   return unit;
 }
 async function contents(tx: SqlExecutor, orgId: string, unitId: string) {
-  return (
-    await tx.execute<Content>(sql`select content.*,content.quantity::text,content.document_quantity::text,line.unit
+  return await tx.execute<Content>(sql`select content.*,content.quantity::text,content.document_quantity::text,line.unit
     from handling_unit_contents content join document_lines line on line.org_id=content.org_id and line.id=content.shipment_line_id
-    where content.org_id=${orgId} and content.handling_unit_id=${unitId} order by content.item_id,content.shipment_line_id`)
-  ).rows;
+    where content.org_id=${orgId} and content.handling_unit_id=${unitId} order by content.item_id,content.shipment_line_id`, "objects");
 }
 async function admitUnit(
   tx: SqlExecutor,
@@ -95,17 +91,15 @@ async function auditUnit(
 ) {
   const saved =
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${orgId},'handling_units',${id},'update',${JSON.stringify({ operation, changes })}::jsonb,${actorId}) returning id`);
-  if (saved.rows.length !== 1)
+    values(${orgId},'handling_units',${id},'update',${JSON.stringify({ operation, changes })}::jsonb,${actorId}) returning id`, "objects");
+  if (saved.length !== 1)
     throw new InventoryError("Handling-unit operation was not audited");
 }
 async function assertNoLiveLabel(tx: SqlExecutor, orgId: string, id: string) {
   if (
-    (
-      await tx.execute(
-        sql`select id from shipment_labels where org_id=${orgId} and handling_unit_id=${id} and status='purchased' limit 1`,
-      )
-    ).rows[0]
+    (await tx.execute(
+        sql`select id from shipment_labels where org_id=${orgId} and handling_unit_id=${id} and status='purchased' limit 1`, "objects",
+      ))[0]
   )
     throw new InventoryError(
       "Void this handling unit's purchased label before changing its physical position or contents",
@@ -118,12 +112,10 @@ export async function createHandlingUnit(
   input: { shipmentId: string; code: string; binId: string; lineIds: string[] },
 ) {
   return withOrgTransaction(orgId, async () => {
-    const entity = (
-      await db.execute<{
+    const entity = (await db.execute<{
         subsidiary_id: string;
       }>(sql`select subsidiary_id from documents
-      where org_id=${orgId} and id=${input.shipmentId} and kind='shipment'`)
-    ).rows[0];
+      where org_id=${orgId} and id=${input.shipmentId} and kind='shipment'`, "objects"))[0];
     if (!entity) throw new ScopeNotFoundError();
     const scope = await admitUnit(db, orgId, actorId, entity);
     const shipment = await lockDraftShipment(
@@ -142,31 +134,25 @@ export async function createHandlingUnit(
       throw new InventoryError(
         "Give the handling unit a unique code and select each carton line once",
       );
-    const bin = (
-      await db.execute(sql`select bin.id from stock_locations bin where bin.org_id=${orgId} and bin.id=${input.binId}
-      and bin.is_active and stock_location_warehouse(${orgId}::uuid,bin.id)=${shipment.warehouse_id} for share`)
-    ).rows[0];
+    const bin = (await db.execute(sql`select bin.id from stock_locations bin where bin.org_id=${orgId} and bin.id=${input.binId}
+      and bin.is_active and stock_location_warehouse(${orgId}::uuid,bin.id)=${shipment.warehouse_id} for share`, "objects"))[0];
     if (!bin)
       throw new InventoryError(
         "Select an active packing bin in the shipment warehouse",
       );
     await assertSaleableStock(db, orgId, input.binId);
-    const lines = (
-      await db.execute<Content>(sql`select line.id as shipment_line_id,fl.pick_line_id,line.item_id,fl.lot_id,fl.serial_id,
+    const lines = await db.execute<Content>(sql`select line.id as shipment_line_id,fl.pick_line_id,line.item_id,fl.lot_id,fl.serial_id,
       line.quantity::text as document_quantity,line.unit from document_lines line
       join fulfillment_lines fl on fl.org_id=line.org_id and fl.line_id=line.id
       where line.org_id=${orgId} and line.document_id=${input.shipmentId} and line.id=any(${uuidArray(input.lineIds)}::uuid[])
-      order by line.line_number for update of line,fl`)
-    ).rows;
+      order by line.line_number for update of line,fl`, "objects");
     if (lines.length !== input.lineIds.length) throw new ScopeNotFoundError();
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${`handling-unit-code:${orgId}:${code}`},0))`,
     );
-    const prior = (
-      await db.execute<HandlingUnit & { initial_stock_location_id: string }>(
-        sql`select * from handling_units where org_id=${orgId} and code=${code}`,
-      )
-    ).rows[0];
+    const prior = (await db.execute<HandlingUnit & { initial_stock_location_id: string }>(
+        sql`select * from handling_units where org_id=${orgId} and code=${code}`, "objects",
+      ))[0];
     if (prior) {
       const priorLines = await contents(db, orgId, prior.id);
       if (
@@ -183,32 +169,28 @@ export async function createHandlingUnit(
       return prior;
     }
     if (
-      (
-        await db.execute(sql`select shipment_line_id from handling_unit_contents where org_id=${orgId}
-      and shipment_line_id=any(${uuidArray(input.lineIds)}::uuid[]) limit 1`)
-      ).rows[0]
+      (await db.execute(sql`select shipment_line_id from handling_unit_contents where org_id=${orgId}
+      and shipment_line_id=any(${uuidArray(input.lineIds)}::uuid[]) limit 1`, "objects"))[0]
     )
       throw new InventoryError(
         "A selected line already belongs to a handling unit; open that carton",
       );
-    const unit = (
-      await db.execute<HandlingUnit>(sql`insert into handling_units
+    const unit = (await db.execute<HandlingUnit>(sql`insert into handling_units
       (org_id,subsidiary_id,code,warehouse_id,current_stock_location_id,initial_stock_location_id,shipment_document_id,created_by,updated_by)
-      values(${orgId},${entity.subsidiary_id},${code},${shipment.warehouse_id},${input.binId},${input.binId},${input.shipmentId},${actorId},${actorId}) returning *`)
-    ).rows[0];
+      values(${orgId},${entity.subsidiary_id},${code},${shipment.warehouse_id},${input.binId},${input.binId},${input.shipmentId},${actorId},${actorId}) returning *`, "objects"))[0];
     if (!unit) throw new InventoryError("Handling unit was not created");
     for (const line of lines) {
       const profile = await resolveProfile(orgId, line.item_id, db);
       const row = await db.execute(sql`insert into handling_unit_contents
         (org_id,handling_unit_id,shipment_line_id,pick_line_id,item_id,lot_id,serial_id,quantity,document_quantity)
         values(${orgId},${unit.id},${line.shipment_line_id},${line.pick_line_id},${line.item_id},${line.lot_id},${line.serial_id},
-          ${toExactStockQuantity(line.document_quantity, line.unit, profile.unitConversions ?? {}, profile.baseUnit)},${line.document_quantity}) returning shipment_line_id`);
-      if (row.rows.length !== 1)
+          ${toExactStockQuantity(line.document_quantity, line.unit, profile.unitConversions ?? {}, profile.baseUnit)},${line.document_quantity}) returning shipment_line_id`, "objects");
+      if (row.length !== 1)
         throw new InventoryError("Carton contents were not assigned");
       const carton =
         await db.execute(sql`update fulfillment_lines set carton=${code},updated_at=now(),updated_by=${actorId}
-        where org_id=${orgId} and line_id=${line.shipment_line_id} and document_id=${input.shipmentId} returning line_id`);
-      if (carton.rows.length !== 1)
+        where org_id=${orgId} and line_id=${line.shipment_line_id} and document_id=${input.shipmentId} returning line_id`, "objects");
+      if (carton.length !== 1)
         throw new InventoryError("Shipment carton identity was not saved");
     }
     await auditUnit(db, orgId, actorId, unit.id, "create_carton", {
@@ -240,14 +222,12 @@ export async function suggestPackConfirmation(
       throw new InventoryError(
         "Select an unconfirmed line assigned to this carton",
       );
-    const line = (
-      await db.execute<{
+    const line = (await db.execute<{
         stock_location_id: string;
         document_date: string;
       }>(sql`select line.stock_location_id,doc.document_date::text
       from document_lines line join documents doc on doc.org_id=line.org_id and doc.id=line.document_id
-      where line.org_id=${orgId} and line.id=${input.lineId}`)
-    ).rows[0]!;
+      where line.org_id=${orgId} and line.id=${input.lineId}`, "objects"))[0]!;
     return createExecutionSuggestion(db, orgId, actorId, {
       stage: "pack",
       subsidiaryId: unit.subsidiary_id,
@@ -281,13 +261,11 @@ async function moveContent(
     lotId: content.lot_id,
     serialId: content.serial_id,
   });
-  const pick = (
-    await tx.execute<{
+  const pick = (await tx.execute<{
       picked_quantity: string;
       current_stock_location_id: string;
     }>(sql`select picked_quantity::text,current_stock_location_id
-    from pick_execution_lines where org_id=${orgId} and line_id=${content.pick_line_id} for update`)
-  ).rows[0];
+    from pick_execution_lines where org_id=${orgId} and line_id=${content.pick_line_id} for update`, "objects"))[0];
   if (
     !pick ||
     compareDecimal(pick.picked_quantity, content.document_quantity) !== 0 ||
@@ -313,11 +291,11 @@ async function moveContent(
   const line =
     await tx.execute(sql`update document_lines set stock_location_id=${to},updated_at=now(),updated_by=${actorId}
     where org_id=${orgId} and id=${content.shipment_line_id} and document_id=${unit.shipment_document_id}
-      and stock_location_id=${from} and item_id=${content.item_id} and quantity=${content.document_quantity} returning id`);
+      and stock_location_id=${from} and item_id=${content.item_id} and quantity=${content.document_quantity} returning id`, "objects");
   const reservation =
     await tx.execute(sql`update pick_execution_lines set current_stock_location_id=${to}
-    where org_id=${orgId} and line_id=${content.pick_line_id} and current_stock_location_id=${from} returning line_id`);
-  if (line.rows.length !== 1 || reservation.rows.length !== 1)
+    where org_id=${orgId} and line_id=${content.pick_line_id} and current_stock_location_id=${from} returning line_id`, "objects");
+  if (line.length !== 1 || reservation.length !== 1)
     throw new InventoryError(
       "Shipment or reservation changed while moving its handling unit",
     );
@@ -335,10 +313,8 @@ export async function executePackDirection(
   const observed = await unitById(tx, orgId, String(task.basis.unitId));
   const scope = await admitUnit(tx, orgId, actorId, observed);
   await lockDraftShipment(tx, orgId, observed.shipment_document_id, scope);
-  const unit = (
-    await tx.execute<HandlingUnit>(sql`select *,content_version::text from handling_units
-    where org_id=${orgId} and id=${observed.id} for update`)
-  ).rows[0]!;
+  const unit = (await tx.execute<HandlingUnit>(sql`select *,content_version::text from handling_units
+    where org_id=${orgId} and id=${observed.id} for update`, "objects"))[0]!;
   if (
     unit.status !== "open" ||
     unit.current_stock_location_id !== task.to_stock_location_id ||
@@ -375,11 +351,11 @@ export async function executePackDirection(
   );
   const confirmed =
     await tx.execute(sql`update handling_unit_contents set confirmation_task_id=${task.id},confirmed_at=now(),confirmed_by=${actorId}
-    where org_id=${orgId} and handling_unit_id=${unit.id} and shipment_line_id=${content.shipment_line_id} and confirmed_at is null returning shipment_line_id`);
+    where org_id=${orgId} and handling_unit_id=${unit.id} and shipment_line_id=${content.shipment_line_id} and confirmed_at is null returning shipment_line_id`, "objects");
   const version =
     await tx.execute(sql`update handling_units set content_version=content_version+1,updated_at=now(),updated_by=${actorId}
-    where org_id=${orgId} and id=${unit.id} and status='open' returning id`);
-  if (confirmed.rows.length !== 1 || version.rows.length !== 1)
+    where org_id=${orgId} and id=${unit.id} and status='open' returning id`, "objects");
+  if (confirmed.length !== 1 || version.length !== 1)
     throw new InventoryError("Carton confirmation was not recorded");
   await auditUnit(tx, orgId, actorId, unit.id, "confirm_contents", {
     lineId: content.shipment_line_id,
@@ -398,11 +374,9 @@ export async function sealHandlingUnit(
     const observed = await unitById(db, orgId, unitId);
     const scope = await admitUnit(db, orgId, actorId, observed);
     await lockDraftShipment(db, orgId, observed.shipment_document_id, scope);
-    const unit = (
-      await db.execute<HandlingUnit>(
-        sql`select * from handling_units where org_id=${orgId} and id=${unitId} for update`,
-      )
-    ).rows[0]!;
+    const unit = (await db.execute<HandlingUnit>(
+        sql`select * from handling_units where org_id=${orgId} and id=${unitId} for update`, "objects",
+      ))[0]!;
     if (unit.status !== "open" && unit.status !== "packed")
       throw new InventoryError("This handling unit cannot be packed");
     const rows = await contents(db, orgId, unit.id);
@@ -413,8 +387,8 @@ export async function sealHandlingUnit(
     if (unit.status === "open") {
       const changed =
         await db.execute(sql`update handling_units set status='packed',updated_at=now(),updated_by=${actorId}
-        where org_id=${orgId} and id=${unit.id} and status='open' returning id`);
-      if (changed.rows.length !== 1)
+        where org_id=${orgId} and id=${unit.id} and status='open' returning id`, "objects");
+      if (changed.length !== 1)
         throw new InventoryError("Handling unit changed before packing");
       await auditUnit(db, orgId, actorId, unit.id, "pack_carton", {
         lineIds: rows.map((row) => row.shipment_line_id),
@@ -452,11 +426,9 @@ export async function moveHandlingUnit(
     }
     const scope = await admitUnit(db, orgId, actorId, observed, true);
     await lockDraftShipment(db, orgId, observed.shipment_document_id, scope);
-    const unit = (
-      await db.execute<HandlingUnit>(
-        sql`select *,content_version::text from handling_units where org_id=${orgId} and id=${input.unitId} for update`,
-      )
-    ).rows[0]!;
+    const unit = (await db.execute<HandlingUnit>(
+        sql`select *,content_version::text from handling_units where org_id=${orgId} and id=${input.unitId} for update`, "objects",
+      ))[0]!;
     if (unit.current_stock_location_id !== observed.current_stock_location_id)
       throw new InventoryError(
         "Handling unit moved while this request waited; reload its position and retry",
@@ -475,13 +447,11 @@ export async function moveHandlingUnit(
       date: input.date,
       reason: input.reason.trim(),
     };
-    const prior = (
-      await db.execute<{
+    const prior = (await db.execute<{
         id: string;
         matches: boolean;
       }>(sql`select id,request=${JSON.stringify(request)}::jsonb as matches
-      from handling_unit_moves where org_id=${orgId} and handling_unit_id=${unit.id} and command_key=${input.commandKey}`)
-    ).rows[0];
+      from handling_unit_moves where org_id=${orgId} and handling_unit_id=${unit.id} and command_key=${input.commandKey}`, "objects"))[0];
     if (prior) {
       if (!prior.matches)
         throw new InventoryError("Move key belongs to different carton work");
@@ -493,10 +463,8 @@ export async function moveHandlingUnit(
       throw new InventoryError(
         "Select a different destination bin for this handling unit",
       );
-    const target = (
-      await db.execute(sql`select id from stock_locations where org_id=${orgId} and id=${input.toBinId}
-      and is_active and stock_location_warehouse(${orgId}::uuid,id)=${unit.warehouse_id} for share`)
-    ).rows[0];
+    const target = (await db.execute(sql`select id from stock_locations where org_id=${orgId} and id=${input.toBinId}
+      and is_active and stock_location_warehouse(${orgId}::uuid,id)=${unit.warehouse_id} for share`, "objects"))[0];
     if (!target)
       throw new InventoryError(
         "Move the handling unit to an active bin in its warehouse",
@@ -518,17 +486,15 @@ export async function moveHandlingUnit(
       });
     const changed =
       await db.execute(sql`update handling_units set current_stock_location_id=${input.toBinId},content_version=content_version+1,
-      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${unit.id} and current_stock_location_id=${unit.current_stock_location_id} returning id`);
-    if (changed.rows.length !== 1)
+      updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${unit.id} and current_stock_location_id=${unit.current_stock_location_id} returning id`, "objects");
+    if (changed.length !== 1)
       throw new InventoryError(
         "Handling unit moved concurrently; reload its position",
       );
-    const move = (
-      await db.execute<{ id: string }>(sql`insert into handling_unit_moves
+    const move = (await db.execute<{ id: string }>(sql`insert into handling_unit_moves
       (org_id,handling_unit_id,from_stock_location_id,to_stock_location_id,moved_on,command_key,request,movements,reason,created_by)
       values(${orgId},${unit.id},${unit.current_stock_location_id},${input.toBinId},${input.date},${input.commandKey},
-        ${JSON.stringify(request)}::jsonb,${JSON.stringify(movements)}::jsonb,${input.reason.trim()},${actorId}) returning id`)
-    ).rows[0];
+        ${JSON.stringify(request)}::jsonb,${JSON.stringify(movements)}::jsonb,${input.reason.trim()},${actorId}) returning id`, "objects"))[0];
     if (!move) throw new InventoryError("Handling-unit move was not recorded");
     await auditUnit(db, orgId, actorId, unit.id, "move_carton", {
       from: unit.current_stock_location_id,
@@ -546,21 +512,17 @@ export async function getHandlingUnits(
   shipmentId: string,
 ) {
   return withOrgTransaction(orgId, async () => {
-    const subject = (
-      await db.execute<{
+    const subject = (await db.execute<{
         subsidiary_id: string;
       }>(sql`select subsidiary_id from documents
-      where org_id=${orgId} and id=${shipmentId} and kind='shipment'`)
-    ).rows[0];
+      where org_id=${orgId} and id=${shipmentId} and kind='shipment'`, "objects"))[0];
     if (!subject) throw new ScopeNotFoundError();
     await admitUnitRead(db, orgId, actorId, subject.subsidiary_id);
-    const units = (
-      await db.execute<
+    const units = await db.execute<
         HandlingUnit & { bin_code: string }
       >(sql`select unit.*,unit.content_version::text,bin.code as bin_code
       from handling_units unit join stock_locations bin on bin.org_id=unit.org_id and bin.id=unit.current_stock_location_id
-      where unit.org_id=${orgId} and unit.shipment_document_id=${shipmentId} order by unit.created_at,unit.id`)
-    ).rows;
+      where unit.org_id=${orgId} and unit.shipment_document_id=${shipmentId} order by unit.created_at,unit.id`, "objects");
     return Promise.all(
       units.map(async (unit) => ({
         id: unit.id,
@@ -586,19 +548,16 @@ export async function handlingUnitBinOptions(
   shipmentId: string,
 ) {
   return withOrgTransaction(orgId, async () => {
-    const subject = (
-      await db.execute<{
+    const subject = (await db.execute<{
         subsidiary_id: string;
         warehouse_id: string;
       }>(sql`select doc.subsidiary_id,fd.warehouse_id from documents doc
       join fulfillment_documents fd on fd.org_id=doc.org_id and fd.document_id=doc.id
-      where doc.org_id=${orgId} and doc.id=${shipmentId} and doc.kind='shipment'`)
-    ).rows[0];
+      where doc.org_id=${orgId} and doc.id=${shipmentId} and doc.kind='shipment'`, "objects"))[0];
     if (!subject) throw new ScopeNotFoundError();
     await admitUnitRead(db, orgId, actorId, subject.subsidiary_id);
     const context = await loadSubsidiaryContext(db, orgId);
-    const bins = (
-      await db.execute<{
+    const bins = await db.execute<{
         id: string;
         code: string;
         subsidiary_id: string | null;
@@ -607,8 +566,7 @@ export async function handlingUnitBinOptions(
       select bin.id,bin.code,location.subsidiary_id,location.subsidiary_include_children as include_children
       from stock_locations bin join locations location on location.org_id=bin.org_id and location.id=bin.location_id
       where bin.org_id=${orgId} and bin.is_active and bin.inventory_ownership='owned' and bin.kind not in('quarantine','transit')
-        and stock_location_warehouse(${orgId}::uuid,bin.id)=${subject.warehouse_id} order by bin.code,bin.id`)
-    ).rows;
+        and stock_location_warehouse(${orgId}::uuid,bin.id)=${subject.warehouse_id} order by bin.code,bin.id`, "objects");
     return bins
       .filter((bin) =>
         restrictionAdmits(

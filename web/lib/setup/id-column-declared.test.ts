@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { releaseSchemaSql } from "../../../scripts/release-schema-sql.mjs";
 import { SETUP_ENTITIES } from "./registry";
 
 /**
@@ -20,32 +20,24 @@ import { SETUP_ENTITIES } from "./registry";
  * in the e2e suite.
  */
 
-// source-pin-contract: setup-reader identity invariant — every setup entity must name the column that identifies one of its rows (idColumn or a table with a uuid id in the published migrations); subjects derived from the setup registry crossed with every published migration, never hand-listed.
-const MIGRATIONS = "schema/migrations/generated";
+// source-pin-contract: setup-reader identity invariant — every setup entity must name the column that identifies one of its rows (idColumn or a table with a uuid id in the release schema); subjects derived from the setup registry crossed with the release schema (baseline plus forward migrations), never hand-listed.
 
-/** Tables that declare a uuid `id`, from the published migrations. */
+/** Tables that declare a uuid `id`, from the release schema. */
 function tablesWithIdColumn(): Set<string> {
-  const sql = readdirSync(MIGRATIONS)
-    .filter((f) => f.endsWith(".sql"))
-    .sort()
-    .map((f) => readFileSync(`${MIGRATIONS}/${f}`, "utf8"))
-    .join("\n");
+  const sql = releaseSchemaSql();
   const out = new Set<string>();
-  // Migrations are written in both styles -- uppercase DDL with a `public.`
-  // qualifier, and lowercase DDL with a bare table name. Matching only the
-  // first made every table written in the second style INVISIBLE to this
-  // check, which reports invisibility as an offence; two tax tables that do
-  // declare `id uuid` were flagged that way.
+  // The baseline is pg_dump form (uppercase DDL, `public.` qualifier);
+  // forward migrations may use either case, with or without the qualifier.
   // A table body ends at its closing `);`, whether that sits on its own line
   // or ends the last column line; reading past it would swallow the next
   // table's definition and hide its columns.
-  for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s*\(/gi)) {
+  for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s*\(/gi)) {
     const rest = sql.slice(m.index! + m[0].length);
     const end = rest.search(/\);\s*(?:\n|$)/);
     const body = end < 0 ? rest : rest.slice(0, end);
     if (/(?:^|,)\s*"?id"?\s+uuid/im.test(body)) out.add(m[1]!);
   }
-  for (const m of sql.matchAll(/alter\s+table\s+(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?id"?\b/gi)) {
+  for (const m of sql.matchAll(/alter\s+table\s+(?:only\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?id"?\b/gi)) {
     out.add(m[1]!);
   }
   return out;
@@ -53,6 +45,9 @@ function tablesWithIdColumn(): Set<string> {
 
 test("every setup entity can name the column that identifies one of its rows", () => {
   const withId = tablesWithIdColumn();
+  // A schema reader that finds nothing would report every entity; one that
+  // finds only a handful means the DDL form drifted from what it parses.
+  assert.ok(withId.has("flows") && withId.size > 500, `release schema yielded ${withId.size} tables with a uuid id`);
   const offenders: string[] = [];
   for (const entity of SETUP_ENTITIES) {
     if (entity.idColumn) continue;
@@ -72,6 +67,6 @@ test("every setup entity can name the column that identifies one of its rows", (
       "so the generic reader will select a column that does not exist:\n  " +
       offenders.join("\n  ") +
       "\n\nDeclare idColumn (org_id for a per-org singleton), or add the table to the " +
-      "migrations if this check simply cannot see it.",
+      "release schema if this check simply cannot see it.",
   );
 });

@@ -63,9 +63,9 @@ class FlakySource implements MigrationSource {
 }
 
 async function connectionHealth(orgId: string, connectionId: string) {
-  const rows = (await db.execute<{ status: string; lastError: string | null }>(sql`
+  const rows = await db.execute<{ status: string; lastError: string | null }>(sql`
     select status, last_error as "lastError" from connections
-     where id = ${connectionId} and org_id = ${orgId}`)).rows;
+     where id = ${connectionId} and org_id = ${orgId}`, "objects");
   return rows[0]!;
 }
 

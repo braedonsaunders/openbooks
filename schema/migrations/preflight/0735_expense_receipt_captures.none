@@ -1,1 +1,0 @@
-The migration creates a new, empty table with its indexes, row-level security and retirement fence; it reads and rewrites no tenant rows.

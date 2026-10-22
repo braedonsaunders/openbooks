@@ -171,8 +171,8 @@ export const PUT = defineRoute({
           updated_by = excluded.updated_by
         where user_page_layouts.org_id = ${user.orgId}
         returning layout, ${layoutRevisionSql(sql.raw("updated_at"))} as revision
-      `);
-      const row = written.rows[0];
+      `, "objects");
+      const row = written[0];
       // A write that matches zero rows is a failure, not a save: the locked
       // read above rules out a concurrent deleter, so an empty returning set
       // means the fence itself misfired — refuse rather than report {ok}.

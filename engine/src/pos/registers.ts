@@ -45,7 +45,7 @@ type RegisterRow = Omit<PosRegister, "currency" | "currencyDecimals"> & { isActi
 
 async function readRegister(runner: SqlExecutor, orgId: string, registerId: string, lock: boolean): Promise<RegisterRow | null> {
   if (!isUuid(registerId)) return null;
-  const rows = (await runner.execute<RegisterRow>(sql`
+  const rows = await runner.execute<RegisterRow>(sql`
     select r.id, r.code, r.name, r.subsidiary_id as "subsidiaryId", r.location_id as "locationId",
            r.stock_location_id as "stockLocationId", r.default_customer_id as "defaultCustomerId",
            r.price_level_id as "priceLevelId", r.cash_account_id as "cashAccountId",
@@ -57,13 +57,13 @@ async function readRegister(runner: SqlExecutor, orgId: string, registerId: stri
       join orgs o on o.id = r.org_id
       join subsidiaries s on s.org_id = r.org_id and s.id = r.subsidiary_id
      where r.org_id = ${orgId} and r.id = ${registerId}
-     ${lock ? sql`for update of r` : sql``}`)).rows;
+     ${lock ? sql`for update of r` : sql``}`, "objects");
   return rows[0] ?? null;
 }
 
 async function assertTenderAccount(runner: SqlExecutor, orgId: string, accountId: string, label: string): Promise<void> {
   const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
   if (!row || !row.is_active || row.is_summary || !(POS_TENDER_ACCOUNT_TYPES as readonly string[]).includes(row.type)) {
     throw posRefusal(
       `The register's ${label} account is not an active bank or clearing account.`,
@@ -136,14 +136,14 @@ export async function listUsableRegisters(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<Array<{ id: string; code: string; name: string; subsidiaryId: string; openSessionId: string | null; openedBy: string | null }>> {
-  const rows = (await runner.execute<{ id: string; code: string; name: string; subsidiaryId: string; openSessionId: string | null; openedBy: string | null }>(sql`
+  const rows = await runner.execute<{ id: string; code: string; name: string; subsidiaryId: string; openSessionId: string | null; openedBy: string | null }>(sql`
     select r.id, r.code, r.name, r.subsidiary_id as "subsidiaryId",
            s.id as "openSessionId", u.name as "openedBy"
       from pos_registers r
       left join pos_sessions s on s.org_id = r.org_id and s.register_id = r.id and s.status = 'open'
       left join users u on u.org_id = s.org_id and u.id = s.opened_by
      where r.org_id = ${orgId} and r.is_active
-     order by r.code`)).rows;
+     order by r.code`, "objects");
   return rows.filter((row) => subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId));
 }
 
@@ -162,7 +162,7 @@ export async function registerSetupRefusal(
   const current = rowId
     ? (await runner.execute<{ cash_account_id: string; card_account_id: string | null; other_account_id: string | null; default_customer_id: string | null }>(sql`
         select cash_account_id, card_account_id, other_account_id, default_customer_id
-          from pos_registers where org_id = ${orgId} and id = ${rowId}`)).rows[0]
+          from pos_registers where org_id = ${orgId} and id = ${rowId}`, "objects"))[0]
     : undefined;
   if (rowId && !current) return "not found";
   const pick = (key: string, column: string | null | undefined): string | null => {
@@ -182,7 +182,7 @@ export async function registerSetupRefusal(
     if (!accountId) continue;
     if (!isUuid(accountId)) return `Choose a valid ${label} account.`;
     const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-      select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+      select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
     if (!row || !row.is_active || row.is_summary || !(POS_TENDER_ACCOUNT_TYPES as readonly string[]).includes(row.type)) {
       return `The ${label} account must be an active bank or asset clearing account — tenders never settle into income, receivable or payable accounts.`;
     }
@@ -191,7 +191,7 @@ export async function registerSetupRefusal(
   if (customerId) {
     if (!isUuid(customerId)) return "Choose a valid walk-in customer.";
     const customer = (await runner.execute<{ party_id: string }>(sql`
-      select party_id from customer_roles where org_id = ${orgId} and party_id = ${customerId} and is_active`)).rows[0];
+      select party_id from customer_roles where org_id = ${orgId} and party_id = ${customerId} and is_active`, "objects"))[0];
     if (!customer) return "The walk-in customer must be an active customer.";
   }
   if (Object.hasOwn(body, "denominations")) {
@@ -221,7 +221,7 @@ export async function cashReasonSetupRefusal(
   const accountId = body.accountId;
   if (typeof accountId !== "string" || !isUuid(accountId)) return "Choose the account this reason posts against.";
   const row = (await runner.execute<{ is_active: boolean; is_summary: boolean; type: string }>(sql`
-    select is_active, is_summary, type from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+    select is_active, is_summary, type from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
   if (!row || !row.is_active || row.is_summary) return "The reason's account must be an active posting account.";
   if (row.type === "asset_receivable" || row.type === "liability_payable") {
     return "A drawer cash movement cannot post to a receivable or payable control account — record customer and vendor money through their own documents.";

@@ -54,7 +54,7 @@ const searchAssets: AssistantToolDef = {
       const like = `%${a.query}%`;
       where = sql`${where} and (f.asset_number ilike ${like} or f.name ilike ${like})`;
     }
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(sql`
       select f.id, f.asset_number as "assetNumber", f.name, f.status,
              f.acquired_on as "acquiredOn", f.in_service_on as "inServiceOn",
              f.acquisition_cost as "acquisitionCost", c.name as category,
@@ -66,14 +66,14 @@ const searchAssets: AssistantToolDef = {
        where ${where}
        order by f.asset_number nulls last, f.name
        limit ${limit}
-    `)).rows;
+    `, "objects");
     const totals = (await db.execute<{ n: string; cost: string; nbv: string }>(sql`
       select count(*) as n, coalesce(sum(f.acquisition_cost), 0) as cost,
              coalesce(sum(dep.carrying_value), 0) as nbv
         from fixed_assets f
         ${primaryAccumJoin}
        where ${where}
-    `)).rows[0];
+    `, "objects"))[0];
     const total = Number(totals?.n ?? 0);
     return {
       ok: true,
@@ -144,7 +144,7 @@ const assetTaxPools: AssistantToolDef = {
       return { ok: false, error: "fixedAssets_feature_disabled" };
     }
     const a = raw as { taxYear: number };
-    const rows = (await db.execute<Record<string, string>>(sql`
+    const rows = await db.execute<Record<string, string>>(sql`
       select pp.tax_year as "taxYear", tp.class_code as "classCode", tp.regime,
              pp.opening_balance::text as "openingBalance", pp.additions::text as additions,
              pp.dispositions::text as dispositions, pp.allowance::text as allowance,
@@ -155,7 +155,7 @@ const assetTaxPools: AssistantToolDef = {
        where pp.org_id = ${authz.user.orgId} and pp.tax_year = ${a.taxYear}
          ${subsidiaryVisibleFilter(sql`tp.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by tp.class_code
-    `)).rows;
+    `, "objects");
     return {
       ok: true,
       data: {
@@ -196,12 +196,12 @@ const searchLeaseAgreements: AssistantToolDef = {
       const query = `%${input.query}%`;
       predicate = sql`${predicate} and (la.lease_number ilike ${query} or la.description ilike ${query})`;
     }
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(sql`
       select la.id,la.lease_number,la.description,la.status,la.subsidiary_id,
         la.commencement_on::text,la.currency,la.payment_amount::text,
         la.payment_timing,la.payment_frequency,la.term_periods,la.revision
       from lease_agreements la where ${predicate}
-      order by la.lease_number,la.id limit ${limit + 1}`)).rows;
+      order by la.lease_number,la.id limit ${limit + 1}`, "objects");
     return { ok: true, data: {
       items: rows.slice(0, limit).map((row) => ({ ...row, href: `/assets/leases?lease=${row.id}` })),
       truncated: rows.length > limit,

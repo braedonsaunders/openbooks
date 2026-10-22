@@ -258,7 +258,7 @@ async function listEmployments(
   orgId: string,
   partyId: string,
 ): Promise<EmploymentIdentity[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string;
     employerSubsidiaryId: string;
     revision: number;
@@ -268,7 +268,7 @@ async function listEmployments(
            revision
       from worker_employments
      where org_id = ${orgId} and worker_party_id = ${partyId}
-     order by id`)).rows;
+     order by id`, "objects");
   return rows.map((row) => ({
     id: row.id,
     employerSubsidiaryId: row.employerSubsidiaryId,
@@ -313,8 +313,8 @@ async function resolveStatusAsOf(args: {
   const knownAt =
     args.knownAt ??
     (await db.execute<{ at: string }>(sql`
-      select to_char(now() at time zone 'UTC', ${RECORDED_TEXT}) as at`)).rows[0]!.at;
-  const versions = (await db.execute<{
+      select to_char(now() at time zone 'UTC', ${RECORDED_TEXT}) as at`, "objects"))[0]!.at;
+  const versions = await db.execute<{
     id: string;
     versionNo: number;
     status: string;
@@ -330,7 +330,7 @@ async function resolveStatusAsOf(args: {
            to_char(recorded_until at time zone 'UTC', ${RECORDED_TEXT}) as "recordedUntil"
       from worker_employment_versions
      where org_id = ${args.orgId} and employment_id = ${args.employment.id}
-     order by version_no`)).rows;
+     order by version_no`, "objects");
   const stable: EmploymentStableRow = {
     id: args.employment.id,
     orgId: args.orgId,
@@ -442,7 +442,7 @@ export async function resolveManagerForRouting(
     await requirePayrollRun(orgId, actorId);
     const employment = await resolveSingleEmployment(orgId, partyId);
     // Currently-asserted line rows whose effective window contains asOf.
-    const active = (await db.execute<{
+    const active = await db.execute<{
       managerEmploymentId: string;
       managerPartyId: string;
     }>(sql`
@@ -456,7 +456,7 @@ export async function resolveManagerForRouting(
          and r.kind = 'line'
          and r.recorded_until is null
          and r.effective_from <= ${query.asOf}::date
-         and (r.effective_to is null or r.effective_to > ${query.asOf}::date)`)).rows;
+         and (r.effective_to is null or r.effective_to > ${query.asOf}::date)`, "objects");
     const picked = pickActiveManager(active, { employmentId: employment.id, asOf: query.asOf });
     if (picked !== null) {
       return {
@@ -472,7 +472,7 @@ export async function resolveManagerForRouting(
     const ever = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n
         from reporting_relationships
-       where org_id = ${orgId} and employment_id = ${employment.id} and kind = 'line'`)).rows[0]!.n;
+       where org_id = ${orgId} and employment_id = ${employment.id} and kind = 'line'`, "objects"))[0]!.n;
     if (ever !== "0") {
       return {
         employmentId: employment.id,
@@ -484,7 +484,7 @@ export async function resolveManagerForRouting(
     const role = (await db.execute<{ supervisorId: string | null }>(sql`
       select supervisor_id as "supervisorId"
         from employee_roles
-       where org_id = ${orgId} and party_id = ${partyId}`)).rows[0] ?? null;
+       where org_id = ${orgId} and party_id = ${partyId}`, "objects"))[0] ?? null;
     return {
       employmentId: employment.id,
       managerEmploymentId: null,
@@ -566,7 +566,7 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
       // duty is proven — a dry-run preview is a read of nine tables too.
       await requirePayrollRun(orgId, actorId);
     // People with payroll rows, with their party subsidiary for the match.
-    const people = (await db.execute<{ partyId: string; subsidiaryId: string | null }>(sql`
+    const people = await db.execute<{ partyId: string; subsidiaryId: string | null }>(sql`
       select p.id as "partyId", p.subsidiary_id as "subsidiaryId"
         from parties p
        where p.org_id = ${orgId}
@@ -582,8 +582,8 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
            union all select 1 from pay_run_adjustments t where t.org_id = ${orgId} and t.employee_party_id = p.id
            union all select 1 from pay_run_holiday_assertions t where t.org_id = ${orgId} and t.employee_party_id = p.id
          )
-       order by p.id`)).rows;
-    const employments = (await db.execute<{
+       order by p.id`, "objects");
+    const employments = await db.execute<{
       id: string;
       workerPartyId: string;
       employerSubsidiaryId: string;
@@ -592,7 +592,7 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
              employer_subsidiary_id as "employerSubsidiaryId"
         from worker_employments
        where org_id = ${orgId}
-       order by id`)).rows;
+       order by id`, "objects");
     const byWorker = new Map<string, { id: string; employerSubsidiaryId: string }[]>();
     for (const item of employments) {
       const list = byWorker.get(item.workerPartyId) ?? [];
@@ -645,10 +645,10 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
     // evidence to reconcile, never to overwrite — under allowPartial too.
     const conflicts: StampReviewEntry[] = [];
     for (const table of STAMP_TABLES) {
-      const rows = (await db.execute<{ partyId: string; employmentId: string }>(sql`
+      const rows = await db.execute<{ partyId: string; employmentId: string }>(sql`
         select employee_party_id as "partyId", employment_id as "employmentId"
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is not null`)).rows;
+         where org_id = ${orgId} and employment_id is not null`, "objects");
       for (const row of rows) {
         const expected = resolved.get(row.partyId);
         if (expected === undefined || expected !== row.employmentId) {
@@ -678,7 +678,7 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
       const already = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is not null and ${targetList}`)).rows[0]!.n;
+         where org_id = ${orgId} and employment_id is not null and ${targetList}`, "objects"))[0]!.n;
       alreadyStamped[table] = Number(already);
       for (const partyId of targetPeople) {
         await db.execute(sql`
@@ -695,7 +695,7 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
       const now = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is not null and ${targetList}`)).rows[0]!.n;
+         where org_id = ${orgId} and employment_id is not null and ${targetList}`, "objects"))[0]!.n;
       stamped[table] = Number(now) - alreadyStamped[table]!;
     }
     // Read-only tables are counted, never written.
@@ -703,7 +703,7 @@ export async function stampEmploymentContext(options: StampOptions): Promise<Sta
       const left = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n
           from ${sql.identifier(table)}
-         where org_id = ${orgId} and employment_id is null and ${targetList}`)).rows[0]!.n;
+         where org_id = ${orgId} and employment_id is null and ${targetList}`, "objects"))[0]!.n;
       if (Number(left) > 0) unstampable[table] = Number(left);
     }
     const report: StampReport = {

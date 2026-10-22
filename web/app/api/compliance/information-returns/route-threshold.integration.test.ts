@@ -56,8 +56,8 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function filingCount(): Promise<number> {
-  const rows = (await withOrgContext(state.orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from information_return_filings where org_id = ${state.orgId}`))).rows
+  const rows = await withOrgContext(state.orgId, () => db.execute<{ n: number }>(sql`
+    select count(*)::int as n from information_return_filings where org_id = ${state.orgId}`, 'objects'))
   return rows[0]!.n
 }
 
@@ -88,8 +88,8 @@ test('POST still files with a column-maximum threshold and identical read-back',
   try {
     const result = await post({ taxYear: 2024, formType: '1099-NEC', threshold: '999999999999999.9999' })
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    const rows = (await withOrgContext(state.orgId, () => db.execute<{ threshold: string }>(sql`
-      select threshold::text as threshold from information_return_filings where org_id = ${state.orgId}`))).rows
+    const rows = await withOrgContext(state.orgId, () => db.execute<{ threshold: string }>(sql`
+      select threshold::text as threshold from information_return_filings where org_id = ${state.orgId}`, 'objects'))
     assert.equal(rows[0]!.threshold, '999999999999999.9999')
   } finally {
     await dropScratchOrg(org.orgId)

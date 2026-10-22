@@ -92,7 +92,7 @@ export async function accruePayoutsInTransit(
 
     // Reverse what came due first: last period's presentation clears before
     // this period's is taken, so the clearing account never double-holds.
-    const due = (await db.execute<{
+    const due = await db.execute<{
       id: string;
       batch_id: string;
       subsidiary_id: string | null;
@@ -101,7 +101,7 @@ export async function accruePayoutsInTransit(
         from psp_payout_accruals
        where org_id = ${orgId} and status = 'accrued' and reversal_date <= ${accrualDate}
        order by reversal_date, batch_id, id
-    `)).rows;
+    `, "objects");
     for (const row of due) {
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) throw new ScopeNotFoundError();
       const subsidiaryId: string = row.subsidiary_id ?? ctx.rootId;
@@ -115,7 +115,7 @@ export async function accruePayoutsInTransit(
       if (reversed.changed) result.reversed.push({ accrualId: reversed.accrualId, entryId: reversed.entryId });
     }
 
-    const batches = (await db.execute<AccrualBatchRow>(sql`
+    const batches = await db.execute<AccrualBatchRow>(sql`
       select b.id, b.provider, b.external_ref, b.currency, b.net_amount::text,
              b.bank_account_id, b.clearing_account_id, b.subsidiary_id
         from psp_settlement_batches b
@@ -125,7 +125,7 @@ export async function accruePayoutsInTransit(
          and b.settlement_date <= ${accrualDate}::date
          and a.id is null
        order by b.settlement_date, b.id
-    `)).rows;
+    `, "objects");
     for (const batch of batches) {
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) continue;
       if (!batch.bank_account_id || !batch.clearing_account_id) {
@@ -237,11 +237,11 @@ export async function accruePayoutsInTransit(
         -- Concurrent accrual of the same batch and date reuses the accrual selected below.
         on conflict (org_id, batch_id, accrual_date) do nothing
         returning id
-      `));
-      const accrualId = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`
+      `, "objects"));
+      const accrualId = inserted[0]?.id ?? (await db.execute<{ id: string }>(sql`
         select id from psp_payout_accruals
          where org_id = ${orgId} and batch_id = ${batch.id} and accrual_date = ${accrualDate}::date
-      `)).rows[0]?.id;
+      `, "objects"))[0]?.id;
       if (!accrualId) {
         throw new PspSettlementError(
           `in-transit accrual for batch ${batch.id} could not be recorded; run the accrual again`,
@@ -275,7 +275,7 @@ export async function listOutstandingInTransit(
   }[];
 }> {
   return withOrg(orgId, async () => {
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       id: string;
       batch_id: string;
       provider: string;
@@ -292,7 +292,7 @@ export async function listOutstandingInTransit(
         join psp_settlement_batches b on b.id = a.batch_id and b.org_id = a.org_id
        where a.org_id = ${orgId} and a.status = 'accrued'
        order by a.accrual_date, a.batch_id
-    `)).rows;
+    `, "objects");
     return {
       accruals: rows
         .filter((row) => subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id))

@@ -31,14 +31,14 @@ export async function assertAccountCurrencyRestrictions(
 ): Promise<void> {
   const ids = [...new Set(lines.map((l) => l.accountId))];
   if (ids.length === 0) return;
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     id: string;
     number: string | null;
     name: string;
     restriction: string | null;
   }>(sql`
     select id, number, name, currency_restriction as restriction from accounts
-     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
+     where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects");
   const byId = new Map(rows.map((r) => [r.id, r]));
   for (const line of lines) {
     const acct = byId.get(line.accountId);
@@ -231,7 +231,7 @@ export async function applySubsidiaries(
     let translated=stampPaymentWithholdingCurrency(doc,nativeTranslated);
     if(options.regeneration && doc.kind==='vendor_payment' && doc.postedEntryId) {
       // Live entries only: regeneration compares against the payment's standing posting
-      const existing=(await runner.execute<{accountId:string;currency:string}>(sql`select l.account_id as "accountId",l.currency from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${doc.orgId} and e.source_document_id=${doc.id} and e.status='posted' and ${options.bookId ? sql`e.book_id=${options.bookId}` : sql`e.id=${doc.postedEntryId}`} and l.memo='Contractor withholding' and l.contributor_kind is null`)).rows;
+      const existing=await runner.execute<{accountId:string;currency:string}>(sql`select l.account_id as "accountId",l.currency from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${doc.orgId} and e.source_document_id=${doc.id} and e.status='posted' and ${options.bookId ? sql`e.book_id=${options.bookId}` : sql`e.id=${doc.postedEntryId}`} and l.memo='Contractor withholding' and l.contributor_kind is null`, "objects");
       translated=translated.map((line,index)=>existing.some(row=>row.accountId===line.accountId && row.currency===doc.currency && row.currency!==line.currency) ? nativeTranslated[index]! : line);
     }
     let all = options.withholdingCarrying===false ? translated : await applyWithholdingCarrying(runner,doc,translated,docSubId,origin.baseCurrency,options.bookId);

@@ -139,12 +139,12 @@ export async function loadIntercompanyPairingPage(
 
 
   const subsidiaryNames = new Map((await db.execute<{ id: string; name: string }>(sql`
-    select id, name from subsidiaries where org_id = ${orgId}`)).rows.map((row) => [row.id, row.name]))
+    select id, name from subsidiaries where org_id = ${orgId}`, 'objects')).map((row) => [row.id, row.name]))
   const itemIds = [...new Set([...workspace.mismatched, ...workspace.paired].flatMap((pair) =>
     pair.comparison.mismatches.flatMap((m) => (m.kind === 'quantity' ? [m.itemId] : []))))]
   const itemNames = new Map(itemIds.length === 0 ? [] : (await db.execute<{ id: string; label: string }>(sql`
     select id, coalesce(nullif(btrim(code), ''), name) as label from items
-     where org_id = ${orgId} and id = any(${`{${itemIds.filter(isUuid).join(',')}}`}::uuid[])`)).rows.map((row) => [row.id, row.label]))
+     where org_id = ${orgId} and id = any(${`{${itemIds.filter(isUuid).join(',')}}`}::uuid[])`, 'objects')).map((row) => [row.id, row.label]))
 
   const tabs: ModuleHomeTab[] = (['unpaired', 'mismatched', 'paired'] as const).map((key) => ({
     href: mergeHref(BASE, sp, { view: key === 'unpaired' ? undefined : key, pair: undefined, link: undefined }),

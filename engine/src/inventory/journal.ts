@@ -33,8 +33,8 @@ export async function stockLocationDim(
 ): Promise<string | null> {
   if (explicit) return explicit;
   const r = await runner.execute<{ location_id: string | null }>(sql`
-    select location_id from stock_locations where org_id = ${orgId} and id = ${stockLocationId}`);
-  return r.rows[0]?.location_id ?? null;
+    select location_id from stock_locations where org_id = ${orgId} and id = ${stockLocationId}`, "objects");
+  return r[0]?.location_id ?? null;
 }
 
 export async function assertInventoryAccountsPostable(
@@ -44,7 +44,7 @@ export async function assertInventoryAccountsPostable(
 ): Promise<void> {
   const ids = [...new Set(accountIds)];
   if (!ids.length) return;
-  const accounts = (await tx.execute<{
+  const accounts = await tx.execute<{
     id: string;
     is_active: boolean;
     is_summary: boolean;
@@ -54,7 +54,7 @@ export async function assertInventoryAccountsPostable(
      where org_id = ${orgId}
        and id = any(${uuidArray(ids)}::uuid[])
      for share
-  `)).rows;
+  `, "objects");
   const byId = new Map(accounts.map((account) => [account.id, account]));
   for (const id of ids) {
     const account = byId.get(id);
@@ -106,7 +106,7 @@ export async function postInventoryEntry(
   }
   await assertInventoryAccountsPostable(tx, p.orgId, p.lines.map((line) => line.accountId));
   const book = (await tx.execute<{ id: string }>(sql`select id from accounting_books
-    where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`)).rows[0];
+    where org_id=${p.orgId} and id=${p.bookId} and is_active and posts_gl for share`, "objects"))[0];
   if (!book) throw new InventoryError("inventory journal requires an active posting book");
   // Every journal write routes through the ONE ledger API: it owns balance
   // validation, the open-period check, the posting lock, the single

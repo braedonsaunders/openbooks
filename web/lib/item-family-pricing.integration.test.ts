@@ -30,7 +30,7 @@ async function seed(): Promise<Fixture> {
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"itemVariants":true}'::jsonb)
        where id = ${org.orgId}`)
-    const currency = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${org.orgId}`)).rows[0]!.base_currency
+    const currency = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${org.orgId}`, 'objects'))[0]!.base_currency
     const customerId = randomUUID()
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
       values (${customerId}, ${org.orgId}, 'customer', 'Tee Buyer', ${org.subsidiaryId}, true, '{}'::jsonb)`)
@@ -38,7 +38,7 @@ async function seed(): Promise<Fixture> {
     const wholesaleId = randomUUID()
     await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
       values (${wholesaleId}, ${org.orgId}, 'WHOLESALE', 'Wholesale', 'explicit', false, true)`)
-    const baseId = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!.id
+    const baseId = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!.id
     const onDate = new Date().toISOString().slice(0, 10)
     await db.execute(sql`insert into customer_price_level_assignments (org_id, customer_id, price_level_id, effective_from, is_active)
       values (${org.orgId}, ${customerId}, ${wholesaleId}, '2020-01-01', true)`)
@@ -72,7 +72,7 @@ async function addSchedule(fixture: Fixture, spec: {
       values
         (${fixture.orgId}, ${spec.itemId ?? null}, ${spec.familyId ?? null}, ${spec.priceLevelId ?? null}, ${spec.customerId ?? null},
          ${fixture.currency}, 'line_quantity', ${spec.from ?? '2020-01-01'}::date, ${spec.to ?? null}::date, true)
-      returning id`)).rows[0]!
+      returning id`, 'objects'))[0]!
     await db.execute(sql`
       insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
       values (${fixture.orgId}, ${row.id}, 1, ${spec.price ?? '10.0000'})`)

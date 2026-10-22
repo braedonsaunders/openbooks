@@ -46,9 +46,9 @@ export async function listApplicationPayrollEmployees(
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
        ${like ? sql` and p.display_name ilike ${like}` : sql``}
      order by p.display_name
-     limit ${limit}`);
+     limit ${limit}`, "objects");
   return {
-    employees: rows.rows.map((row) => ({
+    employees: rows.map((row) => ({
       profileId: row.id,
       employeePartyId: row.employee_party_id,
       name: row.employee_name,

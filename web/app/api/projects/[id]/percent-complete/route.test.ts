@@ -81,13 +81,14 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.openbooksPercentCompleteSqlText
       export const db = {
         transaction: async (work) => work({
-          execute: (query) => {
+          execute: (query, mode) => {
+            const inMode = (result) => (mode === 'objects' ? result.rows : result)
             const text = sqlText(query)
             state.calls.push({ kind: 'tx-execute', text })
             if (text.includes('from orgs') && text.includes('for share')) {
-              return Promise.resolve({ rows: [{ features: { projects: true } }] })
+              return Promise.resolve({ rows: [{ features: { projects: true } }] }).then(inMode)
             }
-            return Promise.resolve(state.respondTxExecute(text))
+            return Promise.resolve(state.respondTxExecute(text)).then(inMode)
           },
         }),
       }

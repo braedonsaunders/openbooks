@@ -89,42 +89,42 @@ test('selected-components hours count signed earning hours and ignore quantity u
     }
     const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.deepEqual(result.errors, []);
-    const rows = (await db.execute<{ code: string; amount: string }>(sql`select c.code,l.amount::text as amount
+    const rows = await db.execute<{ code: string; amount: string }>(sql`select c.code,l.amount::text as amount
       from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id join pay_components c on c.org_id=l.org_id and c.id=l.component_id
-      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and c.code in ('PENSION_ER','PENSION_EE')`)).rows;
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and c.code in ('PENSION_ER','PENSION_EE')`, "objects");
     const amounts = new Map(rows.map(l => [l.code, l.amount]));
     assert.equal(amounts.get('PENSION_ER'), '58.5200', '38 counted hours at 1.54');
     assert.equal(amounts.get('PENSION_EE'), '418.0000', '38 counted hours at 11.00');
-    const incentive = (await db.execute<{ amount: string; hours: string | null; vacationable: boolean }>(sql`select l.amount::text,l.hours::text,treatment.vacationable from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+    const incentive = await db.execute<{ amount: string; hours: string | null; vacationable: boolean }>(sql`select l.amount::text,l.hours::text,treatment.vacationable from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
       join pay_component_statutory_treatments treatment on treatment.org_id=l.org_id and treatment.pay_component_id=l.component_id
         and treatment.worker_comp_group_id is null and treatment.effective_from<='2026-07-21'
         and (treatment.effective_to is null or treatment.effective_to>='2026-07-21')
-      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${cashComponentId}`)).rows;
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${cashComponentId}`, "objects");
     assert.deepEqual(incentive, [{ amount: '50.0000', hours: null, vacationable: true }], 'Ten original overtime hours are valued once without duplicating worked hours');
-    const allocation = (await db.execute<{ amount: string; source_snapshot: { basis: { hours: string; currencyMinorUnits: number }; rule: { kind: string } } }>(sql`select amount::text,source_snapshot from pay_run_benefit_allocations
-      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`)).rows;
+    const allocation = await db.execute<{ amount: string; source_snapshot: { basis: { hours: string; currencyMinorUnits: number }; rule: { kind: string } } }>(sql`select amount::text,source_snapshot from pay_run_benefit_allocations
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`, "objects");
     assert.equal(allocation.length, 1);
     assert.equal(allocation[0]!.source_snapshot.basis.hours, '10.0000');
     assert.equal(allocation[0]!.source_snapshot.basis.currencyMinorUnits, 2);
     assert.equal(allocation[0]!.source_snapshot.rule.kind, 'cash_earning');
-    const earningHours = (await db.execute<{ hours: string }>(sql`select l.hours::text from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.kind='earning' and l.hours is not null`)).rows;
+    const earningHours = await db.execute<{ hours: string }>(sql`select l.hours::text from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.kind='earning' and l.hours is not null`, "objects");
     assert.equal(sum(earningHours.map(row => row.hours)), '38.0000');
     const replay = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.deepEqual(replay.errors, []);
-    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`)).rows.length, 1);
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`, "objects")).length, 1);
     // A provider amount and an elected native earning cannot both own the same payout.
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount) values(${fx.orgId},${run.documentId},${partyId},'line',${cashComponentId},'50')`);
     const duplicate = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.equal(duplicate.errors.length, 1);
     assert.match(duplicate.errors[0]!.message, /HOURS_INCENTIVE.*sole source.*never added twice/);
-    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`)).rows.length, 0, 'Refused calculation cannot retain a partial incentive allocation');
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${cashRuleId}`, "objects")).length, 0, 'Refused calculation cannot retain a partial incentive allocation');
     await db.execute(sql`delete from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and component_id=${cashComponentId}`);
     await db.execute(sql`delete from hrm_benefit_contribution_rule_components where org_id=${fx.orgId} and rule_id=${employerRuleId} and pay_component_id<>${deposit}`);
     const negative = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.equal(negative.errors.length, 1);
     assert.match(negative.errors[0]!.message, /PENSION_ER.*negative contribution.*counted earning components.*signed bank inputs/);
-    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows.length, 0, 'A refused negative basis cannot retain any employee contribution allocation');
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects")).length, 0, 'A refused negative basis cannot retain any employee contribution allocation');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
@@ -148,8 +148,8 @@ test('a selected-components rule with no listed components refuses with its reme
     await assert.rejects(submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId),
       /PENSION2_ER.*counts selected components but lists none.*list the earning components/);
     assert.equal((await db.execute<{status:string}>(sql`select status from hrm_benefit_enrollments
-      where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]?.status,'elected');
-    assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${fx.orgId} and subject_id=${enrollmentId}`)).rows.length,0);
+      where org_id=${fx.orgId} and id=${enrollmentId}`, "objects"))[0]?.status,'elected');
+    assert.equal((await db.execute(sql`select id from flow_submissions where org_id=${fx.orgId} and subject_id=${enrollmentId}`, "objects")).length,0);
     // Setup refuses the non-earning link by name before the run ever sees it.
     const deductionId = await earningComponent(fx, 'DUESX');
     await db.execute(sql`update pay_components set kind='deduction' where org_id=${fx.orgId} and id=${deductionId}`);
@@ -200,7 +200,7 @@ test('period-end hourly policy counts paid units once while default coverage ret
     }), error => errorChainMatches(error, /hrm_benefit_contribution_hours_coverage/));
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','true'::jsonb,true) where id=${fx.orgId}`);
     await submitBenefitEnrollmentFixture(fx.orgId,fx.actorId,enrollmentId);
-    const submission = (await db.execute<{ source: { contributions: { hoursCoverage: string }[] } }>(sql`select submission_snapshot as source from hrm_benefit_enrollments where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]!.source;
+    const submission = (await db.execute<{ source: { contributions: { hoursCoverage: string }[] } }>(sql`select submission_snapshot as source from hrm_benefit_enrollments where org_id=${fx.orgId} and id=${enrollmentId}`, "objects"))[0]!.source;
     assert.deepEqual(submission.contributions.map(row => row.hoursCoverage).sort(), ['earned_dates', 'pay_period_end'], 'Native approval evidence includes the selected hour eligibility');
     await assert.rejects(() => db.transaction(async tx => {
       await tx.execute(sql`update hrm_benefit_contribution_rules set hours_coverage='pay_period_end' where org_id=${fx.orgId} and id=${rules[0]!.id}`);
@@ -208,12 +208,12 @@ test('period-end hourly policy counts paid units once while default coverage ret
     const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
       values(${fx.orgId},${run.documentId},${partyId},'line',${units},'700','14')`);
-    const before = (await db.execute(sql`select id,amount::text,hours::text from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows;
+    const before = await db.execute(sql`select id,amount::text,hours::text from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} order by id`, "objects");
     for (let pass = 0; pass < 2; pass++) {
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, []);
-      const allocations = (await db.execute<{ rule_id: string; amount: string; source_snapshot: { basis: { hours: string }; coverage: { earningsFrom: string; earningsTo: string } } }>(sql`
-        select rule_id,amount::text,source_snapshot from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+      const allocations = await db.execute<{ rule_id: string; amount: string; source_snapshot: { basis: { hours: string }; coverage: { earningsFrom: string; earningsTo: string } } }>(sql`
+        select rule_id,amount::text,source_snapshot from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects");
       assert.equal(allocations.length, 2, 'Recalculation records each elected contribution once');
       for (const rule of rules) {
         const allocation = allocations.find(row => row.rule_id === rule.id)!;
@@ -222,11 +222,11 @@ test('period-end hourly policy counts paid units once while default coverage ret
         assert.equal(allocation.source_snapshot.coverage.earningsFrom, rule.mode === 'pay_period_end' ? '2026-07-12' : '2026-07-18');
       }
     }
-    assert.deepEqual((await db.execute(sql`select id,amount::text,hours::text from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows, before, 'Policy selection never rewrites paid units');
+    assert.deepEqual(await db.execute(sql`select id,amount::text,hours::text from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} order by id`, "objects"), before, 'Policy selection never rewrites paid units');
     const next = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-19', periodEnd: '2026-07-25' });
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
       values(${fx.orgId},${next.documentId},${partyId},'line',${units},'700','14')`);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: next.documentId })).errors, []);
-    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${next.documentId}`)).rows.length, 0, 'An ended election is not reused for a later period');
+    assert.equal((await db.execute(sql`select id from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${next.documentId}`, "objects")).length, 0, 'An ended election is not reused for a later period');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });

@@ -163,7 +163,7 @@ async function loadPostChannel(
 ): Promise<{ name: string; kind: string; externalAccount: string; currency: string; subsidiaryId: string | null }> {
   const row = (await db.execute<{ name: string; kind: string; external_account: string; currency: string; subsidiary_id: string | null }>(sql`
     select name, kind, external_account, currency, subsidiary_id from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
   if (!row) {
     throw new CommerceError(
       "channel_not_found",
@@ -191,9 +191,9 @@ async function resolveStockLocation(
   channelId: string,
   channelName: string,
 ): Promise<{ stockLocationId: string; fulfilledBy: "openbooks" | "storefront" }> {
-  const links = (await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
+  const links = await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
     select stock_location_id, fulfils_orders from sales_channel_locations
-     where org_id = ${orgId} and channel_id = ${channelId} and stock_location_id is not null`)).rows;
+     where org_id = ${orgId} and channel_id = ${channelId} and stock_location_id is not null`, "objects");
   const fulfil = links
     .filter((link) => link.fulfils_orders && link.stock_location_id)
     .map((link) => link.stock_location_id!);
@@ -226,7 +226,7 @@ async function resolveItem(
     if (linked?.nativeTable === "items") {
       const item = (await db.execute<{ id: string; income_account_id: string | null }>(sql`
         select id, income_account_id from items
-         where org_id = ${orgId} and id = ${linked.nativeId} and is_active`)).rows[0];
+         where org_id = ${orgId} and id = ${linked.nativeId} and is_active`, "objects"))[0];
       if (item) return { itemId: item.id, incomeAccountId: item.income_account_id };
     }
   }
@@ -235,7 +235,7 @@ async function resolveItem(
     const item = (await db.execute<{ id: string; income_account_id: string | null }>(sql`
       select id, income_account_id from items
        where org_id = ${orgId} and code = ${sku} and is_active
-       order by created_at limit 1`)).rows[0];
+       order by created_at limit 1`, "objects"))[0];
     if (item) return { itemId: item.id, incomeAccountId: item.income_account_id };
   }
   park(
@@ -266,7 +266,7 @@ async function ensureChannelTaxCode(
 ): Promise<string> {
   const code = `SHOP-${jurisdiction}`;
   const existing = (await db.execute<{ id: string }>(sql`
-    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`)).rows[0];
+    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`, "objects"))[0];
   if (existing) return existing.id;
   // A raced duplicate keeps the first row's meaning (same jurisdiction, same
   // liability), so re-read the winner instead of refusing a duplicate.
@@ -276,9 +276,9 @@ async function ensureChannelTaxCode(
       ${liabilityAccountId}, '{}'::jsonb, ${actor}, ${actor})
     -- Concurrent tax-code creation reuses the code selected below instead of allocating a second identity.
     on conflict do nothing
-    returning id`);
-  const id = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`
-    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`)).rows[0]?.id;
+    returning id`, "objects");
+  const id = inserted[0]?.id ?? (await db.execute<{ id: string }>(sql`
+    select id from tax_codes where org_id = ${orgId} and code = ${code} limit 1`, "objects"))[0]?.id;
   if (!id) throw new Error(`Tax code ${code} could not be ensured; the jurisdiction mapping was lost`);
   return id;
 }
@@ -290,7 +290,7 @@ async function facilitatorMode(
   const row = (await db.execute<{ clearing_account_id: string; collection_mode: string }>(sql`
     select clearing_account_id, collection_mode from marketplace_facilitators
      where org_id = ${orgId} and lower(name) = lower(${facilitatorName}) and is_active
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   return row ? { accountId: row.clearing_account_id, mode: row.collection_mode } : null;
 }
 
@@ -308,7 +308,7 @@ async function resolvePromotion(
   const clean = cleanText(code);
   if (!clean) return null;
   const existing = (await db.execute<{ id: string }>(sql`
-    select id from promotions where org_id = ${orgId} and lower(code) = lower(${clean}) limit 1`)).rows[0];
+    select id from promotions where org_id = ${orgId} and lower(code) = lower(${clean}) limit 1`, "objects"))[0];
   if (existing) return existing.id;
   // Creating a promotion is an attributed merchandising act: the unattended
   // scan leaves the discount unlinked and the operator's replay creates it.
@@ -688,7 +688,7 @@ export async function resolveOrderForPosting(
       const card = linked?.nativeTable === "stored_value_accounts"
         ? (await db.execute<{ id: string; balance_minor: string; currency: string }>(sql`
             select id, balance_minor, currency from stored_value_accounts
-             where org_id = ${orgId} and id = ${linked.nativeId}`)).rows[0]
+             where org_id = ${orgId} and id = ${linked.nativeId}`, "objects"))[0]
         : undefined;
       if (!card) {
         park(
@@ -845,7 +845,7 @@ export async function postCashSaleDraft(
   const existing = (await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(sql`
     select id, status, posted_entry_id from documents
      where org_id = ${orgId} and kind = 'cash_sale'
-       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`)).rows[0];
+       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`, "objects"))[0];
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
     return { documentId: existing.id, documentNumber: "", journalEntryId: existing.posted_entry_id };
   }
@@ -856,7 +856,7 @@ export async function postCashSaleDraft(
     if (!approved) {
       await db.execute(sql`delete from document_line_tax_components where org_id = ${orgId} and document_line_id in (
         select id from document_lines where org_id = ${orgId} and document_id = ${documentId})`);
-      const removed = await db.execute(sql`
+      const removed = await db.execute<never>(sql`
         delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
       void removed.rowCount;
     }
@@ -872,9 +872,9 @@ export async function postCashSaleDraft(
         ${merchantSubtotalLedger}, ${merchantTax}, ${merchantTotal},
         ${draft.externalRef}, ${draft.provider}, ${draft.channelId},
         '{}'::jsonb, ${actor}, ${actor})
-      returning id`);
-    if (inserted.rows.length !== 1) throw new Error("Cash sale insert returned an unexpected row count");
-    documentId = inserted.rows[0]!.id;
+      returning id`, "objects");
+    if (inserted.length !== 1) throw new Error("Cash sale insert returned an unexpected row count");
+    documentId = inserted[0]!.id;
   }
   const giftLineIds: string[] = [];
   if (!approved) {
@@ -906,9 +906,9 @@ export async function postCashSaleDraft(
           ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
           ${minorToLedger(lineTaxMinor, currency)}, ${line.promotionId}, ${line.marketplaceFacilitator},
           ${line.itemId ? draft.stockLocationId : null}, ${actor}, ${actor})
-        returning id`);
-      if (inserted.rows.length !== 1) throw new Error("Cash sale line insert returned an unexpected row count");
-      const lineId = inserted.rows[0]!.id;
+        returning id`, "objects");
+      if (inserted.length !== 1) throw new Error("Cash sale line insert returned an unexpected row count");
+      const lineId = inserted[0]!.id;
       if (line.kind === "gift_issue") giftLineIds.push(lineId);
       let sequence = 0;
       for (const tax of line.taxes) {
@@ -928,10 +928,10 @@ export async function postCashSaleDraft(
   } else {
     const giftLineNumbers = draft.lines.flatMap((line, index) => line.kind === "gift_issue" ? [index + 1] : []);
     if (giftLineNumbers.length > 0) {
-      const rows = (await db.execute<{ id: string; lineNumber: number; accountId: string | null; amount: string }>(sql`
+      const rows = await db.execute<{ id: string; lineNumber: number; accountId: string | null; amount: string }>(sql`
         select id, line_number as "lineNumber", account_id as "accountId", amount::text from document_lines
          where org_id = ${orgId} and document_id = ${documentId} and line_number = any(${`{${giftLineNumbers.join(",")}}`}::int[])
-         order by line_number`)).rows;
+         order by line_number`, "objects");
       for (const lineNumber of giftLineNumbers) {
         const saved = rows.find((row) => row.lineNumber === lineNumber);
         const resolved = draft.lines[lineNumber - 1]!;
@@ -1014,7 +1014,7 @@ async function findGiftCardProgram(orgId: string, currency: string): Promise<{ i
     select id from stored_value_programs
      where org_id = ${orgId} and kind = 'gift_card' and is_active
        and (currency is null or currency = ${currency})
-     order by created_at limit 1`)).rows[0];
+     order by created_at limit 1`, "objects"))[0];
   return row ? { id: row.id } : null;
 }
 
@@ -1062,7 +1062,7 @@ async function summaryPostedForDay(
     select id from channel_daily_summaries
      where org_id = ${orgId} and channel_id = ${channelId}
        and summary_date = ${day} and currency = ${currency} and status = 'posted'
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   return !!row;
 }
 
@@ -1189,7 +1189,7 @@ async function findGoverningSalesOrder(
      where org_id = ${orgId} and kind = 'sales_order'
        and external_source = ${provider} and external_ref = ${externalRef}
        and status != 'voided'
-     order by created_at desc limit 1`)).rows[0];
+     order by created_at desc limit 1`, "objects"))[0];
   return row ?? null;
 }
 
@@ -1227,9 +1227,9 @@ export async function buildSalesOrderDraft(
       ${docSubtotal}, ${docTax}, ${docTotal},
       ${externalRef}, ${resolved.provider}, ${resolved.order.channelId},
       ${actor}, ${actor})
-    returning id`);
-  if (inserted.rows.length !== 1) throw new Error("Sales order insert returned an unexpected row count");
-  const documentId = inserted.rows[0]!.id;
+    returning id`, "objects");
+  if (inserted.length !== 1) throw new Error("Sales order insert returned an unexpected row count");
+  const documentId = inserted[0]!.id;
   let lineNumber = 0;
   for (const line of resolved.lines) {
     lineNumber += 1;
@@ -1245,9 +1245,9 @@ export async function buildSalesOrderDraft(
         ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
         ${minorToLedger(lineTaxMinor, currency)}, ${line.promotionId}, ${line.marketplaceFacilitator},
         ${line.itemId ? resolved.stockLocationId : null}, ${actor}, ${actor})
-      returning id`);
-    if (insertedLine.rows.length !== 1) throw new Error("Sales order line insert returned an unexpected row count");
-    const lineId = insertedLine.rows[0]!.id;
+      returning id`, "objects");
+    if (insertedLine.length !== 1) throw new Error("Sales order line insert returned an unexpected row count");
+    const lineId = insertedLine[0]!.id;
     let sequence = 0;
     for (const tax of line.taxes) {
       sequence += 1;
@@ -1276,11 +1276,11 @@ async function postUnpaidSalesOrder(orgId: string, actor: string, resolved: Reso
   const built = await buildSalesOrderDraft(orgId, actor, resolved, resolved.order.externalId);
   if (built.preExisting) {
     const status = (await db.execute<{ status: string }>(sql`
-      select status from documents where id = ${built.documentId} and org_id = ${orgId}`)).rows[0]?.status;
+      select status from documents where id = ${built.documentId} and org_id = ${orgId}`, "objects"))[0]?.status;
     if (status && status !== "draft") return built.documentId;
   }
   const token = (await db.execute<{ updated_at: string }>(sql`
-    select revision_seq::text as updated_at from documents where id = ${built.documentId} and org_id = ${orgId}`)).rows[0];
+    select revision_seq::text as updated_at from documents where id = ${built.documentId} and org_id = ${orgId}`, "objects"))[0];
   if (!token) throw new Error("Sales order left while it issued");
   await issueSalesOrder({ orgId, salesOrderId: built.documentId, actorId: actor, expectedUpdatedAt: token.updated_at });
   return built.documentId;

@@ -126,11 +126,11 @@ async function employmentLabels(
   const ids = [...new Set(employmentIds.filter((id): id is string => id !== null))];
   const labels = new Map<string, string>();
   if (ids.length === 0) return labels;
-  const rows = (await db.execute<{ id: string; label: string }>(sql`
+  const rows = await db.execute<{ id: string; label: string }>(sql`
     select e.id::text as id, p.display_name as label
       from worker_employments e
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-     where e.org_id = ${orgId} and e.id = any(${sql.param(ids)}::uuid[])`)).rows;
+     where e.org_id = ${orgId} and e.id = any(${sql.param(ids)}::uuid[])`, 'objects');
   for (const row of rows) labels.set(row.id, row.label);
   return labels;
 }
@@ -278,13 +278,13 @@ export interface OwnStubRow {
 export async function loadOwnStubs(authz: Authz): Promise<OwnStubRow[]> {
   const partyId = await actorPartyOf(db, authz.user.orgId, authz.user.id);
   if (!partyId) return [];
-  const rows = (await db.execute<{ id: string; payDate: string; gross: string; netPay: string }>(sql`
+  const rows = await db.execute<{ id: string; payDate: string; gross: string; netPay: string }>(sql`
     select id::text as id, pay_date::text as "payDate",
            gross::text as gross, net_pay::text as "netPay"
       from pay_stubs
      where org_id = ${authz.user.orgId} and employee_party_id = ${partyId}
      order by pay_date desc, id desc
-     limit 6`)).rows;
+     limit 6`, 'objects');
   return rows.map((row) => ({ id: row.id, payDate: row.payDate, gross: row.gross, netPay: row.netPay }));
 }
 
@@ -413,7 +413,7 @@ export async function loadExplainTrace(
 ): Promise<{ trace: ExplainPayTrace } | { missing: string }> {
   const stub = (await db.execute<{ employmentId: string | null }>(sql`
     select employment_id::text as "employmentId" from pay_stubs
-     where org_id = ${authz.user.orgId} and id = ${stubId}::uuid`)).rows[0];
+     where org_id = ${authz.user.orgId} and id = ${stubId}::uuid`, 'objects'))[0];
   if (!stub?.employmentId) {
     return { missing: 'That payslip is missing or outside this organization — pick one from the list.' };
   }
@@ -601,9 +601,9 @@ export async function loadOpenFlagsForWeek(
   weekEnd: string,
 ): Promise<WeekFlagChip[]> {
   const t = await getTranslations('payroll');
-  const employments = (await db.execute<{ id: string }>(sql`
+  const employments = await db.execute<{ id: string }>(sql`
     select id::text as id from worker_employments
-     where org_id = ${authz.user.orgId} and worker_party_id = ${partyId}`)).rows;
+     where org_id = ${authz.user.orgId} and worker_party_id = ${partyId}`, 'objects');
   if (employments.length === 0) return [];
   const chips: WeekFlagChip[] = [];
   for (const employment of employments) {

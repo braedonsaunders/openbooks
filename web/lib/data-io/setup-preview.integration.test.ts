@@ -20,8 +20,8 @@ for (const mode of ['insert','upsert'] as const) {
         assert.equal(preview.created,1);
         assert.equal(preview.updated,mode==='upsert'?1:0);
         assert.equal(preview.failed,mode==='insert'?1:0);
-        assert.equal((await db.execute(sql`select id from departments where org_id=${org.orgId}`)).rows.length,0);
-        assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`)).rows.length,0);
+        assert.equal((await db.execute(sql`select id from departments where org_id=${org.orgId}`, 'objects')).length,0);
+        assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`, 'objects')).length,0);
         assert.deepEqual(await resource.write(rows,mode,ctx),preview,'preview can be repeated without accumulating state');
         assert.deepEqual(await resource.write(rows,mode,{...ctx,dryRun:false}),preview);
       } finally {await dropScratchOrg(org.orgId);}
@@ -38,8 +38,8 @@ test('setup preview evaluates storage checks and keeps successful mixed rows tem
         {code:'INVALID',name:'Invalid protected earning',kind:'earning',protectionBase:'net_pay',protectionMaxPercent:'10'}];
       const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
       assert.equal(preview.created,1);assert.equal(preview.failed,1);
-      assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`)).rows.length,0);
-      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='pay_components'`)).rows.length,0);
+      assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`, 'objects')).length,0);
+      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='pay_components'`, 'objects')).length,0);
       const committed=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:false});
       const counts=(outcome: typeof preview)=>({created:outcome.created,updated:outcome.updated,failed:outcome.failed,rows:outcome.errors.map(error=>error.row)});
       assert.deepEqual(counts(committed),counts(preview));
@@ -62,8 +62,8 @@ test('setup preview rolls back only its savepoint inside the caller transaction'
         assert.equal(outcome.created,1);
         await db.execute(sql`insert into departments(org_id,code,name) values(${org.orgId},'AFTER','After preview')`);
       });
-      assert.deepEqual((await db.execute(sql`select code from departments where org_id=${org.orgId} order by code`)).rows,[{code:'AFTER'},{code:'BEFORE'}]);
-      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`)).rows.length,0);
+      assert.deepEqual(await db.execute(sql`select code from departments where org_id=${org.orgId} order by code`, 'objects'),[{code:'AFTER'},{code:'BEFORE'}]);
+      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='departments'`, 'objects')).length,0);
     } finally {await dropScratchOrg(org.orgId);}
   });
 
@@ -81,7 +81,7 @@ test('setup preview refuses unavailable audit evidence and leaves the outer tran
         assert.match(outcome.errors[0]!.message,/preview audit unavailable/);
         await db.execute(sql`insert into departments(org_id,code,name) values(${org.orgId},'AFTER','Outer transaction remains valid')`);
       });
-      assert.deepEqual((await db.execute(sql`select code from departments where org_id=${org.orgId}`)).rows,[{code:'AFTER'}]);
+      assert.deepEqual(await db.execute(sql`select code from departments where org_id=${org.orgId}`, 'objects'),[{code:'AFTER'}]);
     } finally {
       await db.execute(sql.raw(`drop trigger if exists ${name} on audit_log`));
       await db.execute(sql.raw(`drop function if exists ${name}()`));await dropScratchOrg(org.orgId);
@@ -100,7 +100,7 @@ test('setup import refuses a pay-component treatment the country pack does not d
       const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
       assert.equal(preview.created,0);assert.equal(preview.failed,1);
       assert.match(preview.errors[0]!.message,/pension_f.*is not declared by the .* payroll pack/);
-      assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`)).rows.length,0);
+      assert.equal((await db.execute(sql`select id from pay_components where org_id=${org.orgId}`, 'objects')).length,0);
     } finally {await dropScratchOrg(org.orgId);}
   });
 
@@ -116,6 +116,6 @@ test('setup import refuses a filing account under a program type its pack does n
       const preview=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true});
       assert.equal(preview.created,0);assert.equal(preview.failed,1);
       assert.match(preview.errors[0]!.message,/does not file under program type/);
-      assert.equal((await db.execute(sql`select id from payroll_filing_accounts where org_id=${org.orgId}`)).rows.length,0);
+      assert.equal((await db.execute(sql`select id from payroll_filing_accounts where org_id=${org.orgId}`, 'objects')).length,0);
     } finally {await dropScratchOrg(org.orgId);}
   });

@@ -64,18 +64,19 @@ const mockSources = new Map<string, string>([
           state.tail = new Promise((resolve) => { release = resolve })
           await previous
           const tx = {
-            async execute(query) {
+            async execute(query, mode) {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               state.calls.push({ kind: 'tx', text })
               if (text.includes('select * from payment_formats')) {
-                return { rows: state.format ? [{ ...state.format }] : [] }
+                return inMode({ rows: state.format ? [{ ...state.format }] : [] })
               }
               if (text.includes('update payment_formats')) {
-                if (!state.format) return { rows: [] }
+                if (!state.format) return inMode({ rows: [] })
                 state.format = { ...state.format, name: /name = coalesce\\(([^,]*), name\\)/.exec(text)[1] }
-                return { rows: [{ ...state.format }] }
+                return inMode({ rows: [{ ...state.format }] })
               }
-              return { rows: [] }
+              return inMode({ rows: [] })
             },
           }
           try {

@@ -181,8 +181,8 @@ test('concurrent first filings serialize on the employee payroll profile', async
              count(*) filter (where superseded_on is null)::text as current
         from employee_tax_certificates
        where org_id = ${org.orgId} and employee_party_id = ${hire}
-         and certificate_key = 'gb_tax_code_notice'`))
-    assert.deepEqual(rows.rows[0], { total: '2', current: '1' })
+         and certificate_key = 'gb_tax_code_notice'`, 'objects'))
+    assert.deepEqual(rows[0], { total: '2', current: '1' })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -211,8 +211,8 @@ test('count and amount answers hold their declared bands and scale', async () =>
     assert.equal(ok.status, 200, await ok.clone().text())
     const rows = await withOrgContext(org.orgId, () => db.execute<{ answers: Record<string, string> }>(sql`
       select answers from employee_tax_certificates
-       where org_id = ${org.orgId} and employee_party_id = ${hire}`))
-    assert.deepEqual(rows.rows[0]!.answers, { regular_allowances: '2', additional_per_period: '25.5000' })
+       where org_id = ${org.orgId} and employee_party_id = ${hire}`, 'objects'))
+    assert.deepEqual(rows[0]!.answers, { regular_allowances: '2', additional_per_period: '25.5000' })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -264,8 +264,8 @@ test('column-stored certificates cannot be filed as rows', async () => {
       /"ca_td1" is edited through the payroll profile, not here/,
     )
     const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_tax_certificates where org_id = ${org.orgId}`))
-    assert.equal(rows.rows[0]!.count, '0')
+      select count(*) as count from employee_tax_certificates where org_id = ${org.orgId}`, 'objects'))
+    assert.equal(rows[0]!.count, '0')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -306,21 +306,21 @@ test('a re-filing supersedes rather than overwrites, and prior dates resolve old
       select answers, effective_from::text as effective_from, superseded_on::text as superseded_on
         from employee_tax_certificates
        where org_id = ${org.orgId} and employee_party_id = ${hire}
-       order by effective_from`))
-    assert.equal(rows.rows.length, 3)
-    assert.deepEqual(rows.rows[0], {
+       order by effective_from`, 'objects'))
+    assert.equal(rows.length, 3)
+    assert.deepEqual(rows[0], {
       answers: { tax_code: '0T' }, effective_from: '2026-01-01', superseded_on: '2026-04-06',
     })
-    assert.deepEqual(rows.rows[1], {
+    assert.deepEqual(rows[1], {
       answers: { tax_code: '1257L' }, effective_from: '2026-04-06', superseded_on: '2026-08-01',
     })
-    assert.deepEqual(rows.rows[2], {
+    assert.deepEqual(rows[2], {
       answers: { tax_code: 'BR' }, effective_from: '2026-08-01', superseded_on: null,
     })
     // The engine's own resolver — the same function the pay run calls — reads
     // the certificate that was actually in force on each pay date.
     const certificate = payrollCertificate('GB', 'gb_tax_code_notice')
-    const stored = rows.rows.map((row) => ({
+    const stored = rows.map((row) => ({
       certificateKey: 'gb_tax_code_notice',
       answers: row.answers,
       effectiveFrom: row.effective_from,

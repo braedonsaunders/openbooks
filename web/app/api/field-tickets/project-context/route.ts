@@ -23,9 +23,9 @@ export const GET = defineRoute({
       from projects p
       left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${gate.user.orgId} and p.is_active
-  `))
-  if (!project.rows[0]) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, project.rows[0].subsidiary_id)
+  `, 'objects'))
+  if (!project[0]) return notFound("record")
+  const denied = guardSubsidiaryScope(gate, project[0].subsidiary_id)
   if (denied) return denied
 
   const tasks = (await db.execute<Record<string, unknown>>(sql`
@@ -34,12 +34,12 @@ export const GET = defineRoute({
       from project_tasks
      where org_id = ${gate.user.orgId} and project_id = ${projectId}
      order by code nulls last, name
-  `))
+  `, 'objects'))
 
   return NextResponse.json({
-    customerName: project.rows[0].customer_name,
+    customerName: project[0].customer_name,
     period: await resolveTicketPeriod(gate.user.orgId, projectId),
-    tasks: tasks.rows,
+    tasks,
   })
   },
 })

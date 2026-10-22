@@ -62,7 +62,7 @@ async function seedTimesheetGate(
   await seedApprovalFlow(orgId, { subjectKind: "timesheet_week", mode: "any", assignees: [{ type: "user", userId: assigneeId }] });
   await routeSubjectSubmission({ orgId, actorId, subjectKind: "timesheet_week", subjectId: headerId });
   const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
-    where org_id=${orgId} and subject_kind='timesheet_week' and subject_id=${headerId} and status='pending'`)).rows[0];
+    where org_id=${orgId} and subject_kind='timesheet_week' and subject_id=${headerId} and status='pending'`, "objects"))[0];
   assert.ok(gate);
   return gate.id;
 }
@@ -89,8 +89,8 @@ async function seedWorkOrderGates(
   ] });
   for (const subjectId of [inScopeOrderId, outOfScopeOrderId])
     await routeSubjectSubmission({ orgId, actorId: makerId, subjectKind: "work_order", subjectId });
-  const gates = (await db.execute<{ id: string; subject_id: string }>(sql`select id,subject_id from flow_gates
-    where org_id=${orgId} and subject_kind='work_order' and assignee_user_id=${firstApproverId} and status='pending'`)).rows;
+  const gates = await db.execute<{ id: string; subject_id: string }>(sql`select id,subject_id from flow_gates
+    where org_id=${orgId} and subject_kind='work_order' and assignee_user_id=${firstApproverId} and status='pending'`, "objects");
   const inScope = gates.find(gate => gate.subject_id === inScopeOrderId);
   const outOfScope = gates.find(gate => gate.subject_id === outOfScopeOrderId);
   assert.ok(inScope); assert.ok(outOfScope);
@@ -183,7 +183,7 @@ test("every table-backed subject scope names real tables and columns", { skip: !
   // only surface when a restricted caller first meets that kind.
   const catalog = new Set((await db.execute<{ name: string }>(sql`
     select table_name || '.' || column_name as name from information_schema.columns where table_schema = 'public'
-  `)).rows.map((row) => row.name));
+  `, "objects")).map((row) => row.name));
   const defects = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
     const scope = getFlowAdapter(subjectKind)?.scope;
     if (!scope || !("table" in scope)) return [];

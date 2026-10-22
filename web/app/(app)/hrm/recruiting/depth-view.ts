@@ -193,11 +193,9 @@ export async function loadPostingsTab(authz: Authz, t: T, tab: DepthTab): Promis
   const postings = await listPostings({ orgId: authz.user.orgId, actorId: authz.user.id })
   const titles = new Map<string, string>()
   if (postings.length > 0) {
-    const rows = (
-      await db.execute<{ id: string; title: string }>(sql`
+    const rows = await db.execute<{ id: string; title: string }>(sql`
         select id::text as id, title from hrm_requisitions
-         where org_id = ${authz.user.orgId}::uuid`)
-    ).rows
+         where org_id = ${authz.user.orgId}::uuid`, 'objects')
     for (const row of rows) titles.set(row.id, row.title)
   }
   return postings.map((posting) => ({
@@ -275,23 +273,19 @@ export async function loadInterviewDrawer(
       businessTimeZone(authz.user.orgId),
       getFormatter(),
     ])
-    const interview = (
-      await db.execute<{ candidate: string; requisition: string; kitId: string | null }>(sql`
+    const interview = (await db.execute<{ candidate: string; requisition: string; kitId: string | null }>(sql`
         select c.display_name as candidate, r.title as requisition, i.kit_id as "kitId"
           from hrm_interviews i
           join hrm_applications a on a.org_id = i.org_id and a.id = i.application_id
           join hrm_candidates c on c.org_id = i.org_id and c.id = a.candidate_id
           join hrm_requisitions r on r.org_id = i.org_id and r.id = a.requisition_id
-         where i.org_id = ${authz.user.orgId}::uuid and i.id = ${interviewId}::uuid`)
-    ).rows[0]
+         where i.org_id = ${authz.user.orgId}::uuid and i.id = ${interviewId}::uuid`, 'objects'))[0]
     if (!interview) return null
-    const slotRows = (
-      await db.execute<{ id: string; startsAt: string; endsAt: string; kind: string }>(sql`
+    const slotRows = await db.execute<{ id: string; startsAt: string; endsAt: string; kind: string }>(sql`
         select id::text as id, starts_at as "startsAt", ends_at as "endsAt", kind
           from hrm_interview_slots
          where org_id = ${authz.user.orgId}::uuid and interview_id = ${interviewId}::uuid
-         order by starts_at`)
-    ).rows
+         order by starts_at`, 'objects')
     let kit: InterviewDrawer['kit'] = null
     let criteria: InterviewDrawer['criteria'] = []
     if (interview.kitId) {

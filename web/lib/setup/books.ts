@@ -74,7 +74,7 @@ export async function saveSetupBook(
 
   const before = options.id
     ? (await tx.execute<Record<string, unknown>>(sql`
-        select * from ${table} where id = ${options.id} and org_id = ${orgId} for update`)).rows[0]
+        select * from ${table} where id = ${options.id} and org_id = ${orgId} for update`, 'objects'))[0]
     : undefined
   if (options.id && !before) throw new Error('not found')
   let selected = coerceBoolean(body[field])
@@ -89,7 +89,7 @@ export async function saveSetupBook(
   } else {
     const existing = (await tx.execute<{ selected: boolean }>(sql`
       select exists(select 1 from ${table} where org_id = ${orgId}
-        and ${sql.identifier(flag)} ${accounting ? sql`` : sql`and is_active`}) as selected`)).rows[0]
+        and ${sql.identifier(flag)} ${accounting ? sql`` : sql`and is_active`}) as selected`, 'objects'))[0]
     // Accounting requires a primary book. Pricing may deliberately have no
     // default: an explicit assignment then supplies the applicable agreement.
     // Preserve an explicit choice instead of installing an unrequested fallback.
@@ -103,7 +103,7 @@ export async function saveSetupBook(
     else if (before) currency = String(before.currency)
     else {
       const org = (await tx.execute<{ base_currency: string }>(sql`
-        select base_currency from orgs where id = ${orgId}`)).rows[0]
+        select base_currency from orgs where id = ${orgId}`, 'objects'))[0]
       if (!org) throw new Error('organization not found')
       currency = org.base_currency
     }
@@ -111,19 +111,19 @@ export async function saveSetupBook(
   if (selected) {
     const scope = sql`org_id = ${orgId} and ${sql.identifier(flag)}
       ${options.id ? sql`and id <> ${options.id}` : sql``}`
-    const prior = (await tx.execute<Record<string, unknown>>(sql`
-      select * from ${table} where ${scope} order by id for update`)).rows
+    const prior = await tx.execute<Record<string, unknown>>(sql`
+      select * from ${table} where ${scope} order by id for update`, 'objects')
     if (accounting && prior.length) {
       const history = (await tx.execute(sql`
         select id from journal_entries where org_id=${orgId}
-        union all select id from reconciliations where org_id=${orgId} limit 1`)).rows[0]
+        union all select id from reconciliations where org_id=${orgId} limit 1`, 'objects'))[0]
       if (history) throw new Error('Cannot reassign the primary book while journal entries or bank reconciliation sessions/history exist; a controlled book conversion is required')
     }
     const priorById = new Map(prior.map(row => [String(row.id), row]))
     if (prior.length && !options.dryRun) {
-      const demoted = (await tx.execute<Record<string, unknown>>(sql`
+      const demoted = await tx.execute<Record<string, unknown>>(sql`
         update ${table} set ${sql.identifier(flag)} = false,
-          updated_at = now(), updated_by = ${actorId} where ${scope} returning *`)).rows
+          updated_at = now(), updated_by = ${actorId} where ${scope} returning *`, 'objects')
       for (const after of demoted) {
         const previous = priorById.get(String(after.id))
         if (!previous) throw new Error('book reassignment is missing its prior state')
@@ -145,14 +145,14 @@ export async function saveSetupBook(
         update ${table} set name = ${String(body.name)}, ${sql.identifier(flag)} = ${selected},
           is_active = ${active}, updated_at = now(), updated_by = ${actorId}
           ${accounting ? sql`` : sql`, currency = ${currency}`}
-         where id = ${options.id} and org_id = ${orgId} returning *`)
+         where id = ${options.id} and org_id = ${orgId} returning *`, 'objects')
     : await tx.execute<Record<string, unknown>>(sql`
         insert into ${table} (${createId}org_id, code, name, ${sql.identifier(flag)}, is_active, created_by, updated_by
           ${accounting ? sql`` : sql`, currency`})
         values (${createIdValue}${orgId}, ${String(body.code)}, ${String(body.name)}, ${selected}, ${active}, ${actorId}, ${actorId}
           ${accounting ? sql`` : sql`, ${currency}`})
-        ${createConflict}returning *`)
-  let after = stored.rows[0]
+        ${createConflict}returning *`, 'objects')
+  let after = stored[0]
   if (!after && idempotentCreate) {
     // Lost the same-key insert race: the winner's row (and its insert audit)
     // is visible now, so re-resolve the claim — replay, or refuse.

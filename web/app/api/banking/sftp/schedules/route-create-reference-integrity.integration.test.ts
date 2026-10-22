@@ -159,9 +159,9 @@ async function makeReconcilable(
 async function scheduleCount(fixture: Fixture): Promise<number> {
   return withBypass(async () => {
     const r = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from sftp_import_schedules where org_id = ${fixture.orgId}`,
+      sql`select count(*)::int as n from sftp_import_schedules where org_id = ${fixture.orgId}`, "objects",
     );
-    return Number(r.rows[0]!.n);
+    return Number(r[0]!.n);
   });
 }
 
@@ -361,13 +361,13 @@ test(
       }>(sql`
         select action, actor_id, request_id, changes from audit_log
          where org_id = ${fixture.orgId} and table_name = 'sftp_import_schedules' and row_id = ${String(createdId)}
-      `));
-      assert.equal(audits.rows.length, 1);
-      assert.equal(audits.rows[0]!.action, "insert");
-      assert.equal(audits.rows[0]!.actor_id, fixture.actorId);
-      assert.ok(audits.rows[0]!.request_id, "the audit evidence must carry a request id");
-      assert.equal(audits.rows[0]!.changes.after?.account_id, fixture.bankAccountId);
-      assert.equal(audits.rows[0]!.changes.after?.sftp_server_id, serverId);
+      `, "objects"));
+      assert.equal(audits.length, 1);
+      assert.equal(audits[0]!.action, "insert");
+      assert.equal(audits[0]!.actor_id, fixture.actorId);
+      assert.ok(audits[0]!.request_id, "the audit evidence must carry a request id");
+      assert.equal(audits[0]!.changes.after?.account_id, fixture.bankAccountId);
+      assert.equal(audits[0]!.changes.after?.sftp_server_id, serverId);
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }

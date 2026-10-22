@@ -132,8 +132,8 @@ test(
       const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
         select employee_party_id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `));
-      const stubFor = (employeeId: string) => stubs.rows.find((row) => row.employee_party_id === employeeId);
+      `, "objects"));
+      const stubFor = (employeeId: string) => stubs.find((row) => row.employee_party_id === employeeId);
       assert.ok(stubFor(coveredId), "the covered employee has a stub");
       assert.equal(stubFor(coveredId)!.factors.WCB_EARN, "1000.0000");
       assert.equal(stubFor(coveredId)!.factors.WCB, "18.4000");

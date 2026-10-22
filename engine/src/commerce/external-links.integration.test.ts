@@ -26,7 +26,7 @@ async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>): Pr
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Link tester", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ subscriptionBilling: true, usageBilling: true, salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ subscriptionBilling: true, usageBilling: true, salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
       assert.equal(result.rowCount, 1);
     });
     await run(org, actor);
@@ -36,10 +36,10 @@ async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>): Pr
 }
 
 async function shopifyChannel(orgId: string, actor: string): Promise<string> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
     insert into sales_channels (org_id, kind, name, status, currency, external_account, settings, created_by, updated_by)
     values (${orgId}, 'shopify', 'Maple Shop', 'active', 'USD', 'maple.myshopify.com', '{}'::jsonb, ${actor}, ${actor})
-    returning id`))).rows;
+    returning id`, "objects"));
   return rows[0]!.id;
 }
 
@@ -171,7 +171,7 @@ test("links are tenant-isolated and unlink with audit evidence", DB, async () =>
     try {
       const otherActor = await withOrgContext(other.orgId, () => createScratchUser(other.orgId, "Other tester", "admin"));
       await withOrgContext(other.orgId, async () => {
-        const result = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ subscriptionBilling: true, usageBilling: true })}::jsonb, true) where id = ${other.orgId}`);
+        const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ subscriptionBilling: true, usageBilling: true })}::jsonb, true) where id = ${other.orgId}`);
         assert.equal(result.rowCount, 1);
       });
       // The other tenant sees nothing, and may link the same external id to its own record.
@@ -208,12 +208,12 @@ test("links are tenant-isolated and unlink with audit evidence", DB, async () =>
       unlinkExternal(org.orgId, actor, { provider: "stripe", externalAccount: "acct_1", objectType: "customer", externalId: "cus_private" }, "Again", "usageBilling"),
       /has no link/,
     );
-    const audit = (await withOrgContext(org.orgId, () => db.execute<{ action: string }>(sql`
-      select action from audit_log where org_id = ${org.orgId} and table_name = 'external_links' order by at`))).rows;
+    const audit = await withOrgContext(org.orgId, () => db.execute<{ action: string }>(sql`
+      select action from audit_log where org_id = ${org.orgId} and table_name = 'external_links' order by at`, "objects"));
     assert.ok(audit.some((row) => row.action === "insert"));
     assert.ok(audit.some((row) => row.action === "delete"));
-    const customer = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${org.orgId} and id = ${org.customerId}`))).rows;
+    const customer = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from parties where org_id = ${org.orgId} and id = ${org.customerId}`, "objects"));
     assert.equal(customer.length, 1);
   });
 });

@@ -40,12 +40,10 @@ interface PersonSeed {
 
 async function mkParty(orgId: string, name: string): Promise<string> {
   return withOrg(orgId, async () => {
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name)
-      values (${orgId}, 'person', ${name}) returning id::text as id`)) as unknown as {
-      rows: Array<{ id: string }>;
-    };
-    const id = inserted.rows[0]?.id;
+      values (${orgId}, 'person', ${name}) returning id::text as id`, "objects");
+    const id = inserted[0]?.id;
     assert.ok(id, "party insert must return exactly one row");
     return id;
   });
@@ -127,18 +125,11 @@ interface TableCounts {
 
 async function tableCounts(orgId: string): Promise<TableCounts> {
   return withBypassContext(async () => {
-    const result = (await db.execute<{
-      employments: string;
-      versions: string;
-      assignments: string;
-      changes: string;
-    }>(sql`select (select count(*)::text from worker_employments where org_id = ${orgId}) as employments,
+    const result = await db.execute<{ employments: string; versions: string; assignments: string; changes: string }>(sql`select (select count(*)::text from worker_employments where org_id = ${orgId}) as employments,
                   (select count(*)::text from worker_employment_versions where org_id = ${orgId}) as versions,
                   (select count(*)::text from employment_assignments where org_id = ${orgId}) as assignments,
-                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`)) as unknown as {
-      rows: Array<{ employments: string; versions: string; assignments: string; changes: string }>;
-    };
-    const row = result.rows[0]!;
+                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`, "objects");
+    const row = result[0]!;
     return {
       employments: Number(row.employments),
       versions: Number(row.versions),
@@ -157,9 +148,9 @@ async function scopedCount(orgId: string, table: string): Promise<number> {
   // ignore RLS and would count every org's rows as a false "leak".
   return withOrg(orgId, async () => {
     const result = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from ${sql.identifier(table)}`,
+      sql`select count(*)::int as n from ${sql.identifier(table)}`, "objects",
     );
-    return result.rows[0]!.n;
+    return result[0]!.n;
   });
 }
 
@@ -226,8 +217,8 @@ test("ready org migrates with digest-bound evidence; triggers accept without byp
         actor_id: string;
         changes: { after: { historicalCoverage: string }; sourceReference: string };
       }>(sql`select actor_id, changes from audit_log where org_id=${org.orgId}
-          and table_name='worker_employments' and action='insert'`);
-      return result.rows;
+          and table_name='worker_employments' and action='insert'`, "objects");
+      return result;
     });
     assert.equal(audits.length, 2);
     assert.ok(audits.every((row) => row.actor_id === actorId &&
@@ -253,25 +244,17 @@ test("ready org migrates with digest-bound evidence; triggers accept without byp
     // The evidence columns bind the candidate digest: the recorded token
     // parses to this run's namespace, source id, fingerprint, and version.
     const evidence = await withBypassContext(async () => {
-      const result = (await db.execute<{
-        employment_id: string;
-        ref: string;
-        reason: string;
-        kind: string;
-        source: string;
-      }>(sql`select employment_id::text as employment_id, recorded_source_ref as ref,
-                    reason, change_kind as kind, recorded_source as source
-               from employment_changes
-              where org_id = ${org.orgId} order by recorded_at`)) as unknown as {
-        rows: Array<{
+      const result = await db.execute<{
           employment_id: string;
           ref: string;
           reason: string;
           kind: string;
           source: string;
-        }>;
-      };
-      return result.rows;
+        }>(sql`select employment_id::text as employment_id, recorded_source_ref as ref,
+                    reason, change_kind as kind, recorded_source as source
+               from employment_changes
+              where org_id = ${org.orgId} order by recorded_at`, "objects");
+      return result;
     });
     assert.equal(evidence.length, 2);
     for (const [index, row] of evidence.entries()) {
@@ -289,14 +272,14 @@ test("ready org migrates with digest-bound evidence; triggers accept without byp
 
     // Canonical rows carry the observation-date migration, not invented dates.
     const stored = await withBypassContext(async () => {
-      const result = (await db.execute<{
-        worker: string;
-        employer: string;
-        service_start: string | null;
-        service_provenance: string | null;
-        status: string;
-        effective_from: string;
-      }>(sql`select e.worker_party_id::text as worker,
+      const result = await db.execute<{
+          worker: string;
+          employer: string;
+          service_start: string | null;
+          service_provenance: string | null;
+          status: string;
+          effective_from: string;
+        }>(sql`select e.worker_party_id::text as worker,
                     e.employer_subsidiary_id::text as employer,
                     e.service_start::text as service_start,
                     e.service_start_provenance as service_provenance,
@@ -304,17 +287,8 @@ test("ready org migrates with digest-bound evidence; triggers accept without byp
                from worker_employments e
                join worker_employment_versions v
                  on v.org_id = e.org_id and v.employment_id = e.id
-              where e.org_id = ${org.orgId} order by e.created_at`)) as unknown as {
-        rows: Array<{
-          worker: string;
-          employer: string;
-          service_start: string | null;
-          service_provenance: string | null;
-          status: string;
-          effective_from: string;
-        }>;
-      };
-      return result.rows;
+              where e.org_id = ${org.orgId} order by e.created_at`, "objects");
+      return result;
     });
     assert.equal(stored.length, 2);
     assert.equal(stored[0]!.worker, first.partyId);

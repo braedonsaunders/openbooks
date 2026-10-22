@@ -16,7 +16,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.contract-costs-amount-test')]
       export const db = {
-        async execute() { return { rows: [{ minor_units: state.minorUnits }] } },
+        async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [{ minor_units: state.minorUnits }] }) },
       }
     `,
   ],

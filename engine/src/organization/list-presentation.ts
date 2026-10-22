@@ -17,7 +17,7 @@ async function authorize(tx:SqlExecutor,orgId:string,actorId:string,context:Work
 /** Presentation shares the native personal list preference without replacing its saved-view selection. */
 export async function readWorkListPresentation(tx:SqlExecutor,orgId:string,actorId:string,context:WorkListContext):Promise<WorkListPresentation|null> {
   await authorize(tx,orgId,actorId,context);
-  const row=(await tx.execute<{presentation:WorkListPresentation|null}>(sql`select presentation from user_list_preferences where org_id=${orgId} and user_id=${actorId} and record_type=${context}`)).rows[0];
+  const row=(await tx.execute<{presentation:WorkListPresentation|null}>(sql`select presentation from user_list_preferences where org_id=${orgId} and user_id=${actorId} and record_type=${context}`, 'objects'))[0];
   return row?.presentation??null;
 }
 export async function saveWorkListPresentation(tx:SqlExecutor,orgId:string,actorId:string,context:WorkListContext,presentation:WorkListPresentation|null) {
@@ -26,6 +26,6 @@ export async function saveWorkListPresentation(tx:SqlExecutor,orgId:string,actor
   const result=(await tx.execute<{presentation:WorkListPresentation|null}>(sql`insert into user_list_preferences(org_id,user_id,record_type,presentation,view_selection_explicit,created_by,updated_by)
     values(${orgId},${actorId},${context},${presentation},false,${actorId},${actorId})
     on conflict(org_id,user_id,record_type) do update set presentation=excluded.presentation,updated_at=now(),updated_by=excluded.updated_by
-    where user_list_preferences.org_id=${orgId} and user_list_preferences.user_id=${actorId} returning presentation`)).rows[0];
+    where user_list_preferences.org_id=${orgId} and user_list_preferences.user_id=${actorId} returning presentation`, 'objects'))[0];
   if(!result)throw new ScopeNotFoundError();return result;
 }

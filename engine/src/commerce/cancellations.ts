@@ -86,7 +86,7 @@ export async function postChannelCancellation(
         const order = await loadChannelOrder(orgId, live.orderId);
         if (!order) throw new Error("Channel cancellation order left while it posted");
         if (order.postingStatus === "pending") {
-          const parked = await db.execute(sql`
+          const parked = await db.execute<never>(sql`
             update channel_orders
                set posting_status = 'excluded', exclude_reason = 'Cancelled at the storefront before posting.',
                    updated_by = ${actor}, updated_at = now()
@@ -109,7 +109,7 @@ export async function postChannelCancellation(
           return cancelSummarizedOrder(orgId, actor, order.id, eventId);
         }
         const doc = (await db.execute<{ kind: string; status: string }>(sql`
-          select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`)).rows[0];
+          select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`, "objects"))[0];
         if (!doc) throw new Error("Channel cancellation document left while it posted");
         if (doc.kind === "sales_order") {
           if (doc.status === "voided") {
@@ -151,7 +151,7 @@ export async function postChannelCancellation(
         const refunded = (await db.execute<{ id: string }>(sql`
           select id from channel_order_events
            where org_id = ${orgId} and order_id = ${order.id} and kind = 'refund' and posting_status = 'posted'
-           limit 1`)).rows[0];
+           limit 1`, "objects"))[0];
         if (refunded) {
           await markChannelEventIgnored(orgId, eventId, actor);
           return { status: "ignored", documentId: null as string | null };
@@ -191,7 +191,7 @@ async function cancelSummarizedOrder(
   const refunded = (await db.execute<{ id: string }>(sql`
     select id from channel_order_events
      where org_id = ${orgId} and order_id = ${orderId} and kind = 'refund' and posting_status = 'posted'
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (refunded) {
     await markChannelEventIgnored(orgId, eventId, actor);
     return { status: "ignored", documentId: null };

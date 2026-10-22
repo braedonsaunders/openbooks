@@ -339,9 +339,9 @@ export async function publishProjectFinancialProfileInTransaction(
       join orgs o on o.id = pt.org_id
      where pt.id = ${input.projectTypeId} and pt.org_id = ${input.orgId}
      for update of pt
-  `));
-  if (!type.rows[0]) throw new Error("project type not found");
-  if (input.effectiveFrom < type.rows[0].accounting_today) {
+  `, "objects"));
+  if (!type[0]) throw new Error("project type not found");
+  if (input.effectiveFrom < type[0].accounting_today) {
     throw new Error(
       "financial profile versions cannot be backdated through ordinary setup; use a controlled historical correction workflow",
     );
@@ -353,8 +353,8 @@ export async function publishProjectFinancialProfileInTransaction(
        and project_type_id = ${input.projectTypeId}
        and effective_from = ${input.effectiveFrom}
      limit 1
-  `));
-  if (sameDate.rows.length) {
+  `, "objects"));
+  if (sameDate.length) {
     throw new Error(
       `a financial profile version already starts on ${input.effectiveFrom}`,
     );
@@ -368,13 +368,11 @@ export async function publishProjectFinancialProfileInTransaction(
        and effective_from > ${input.effectiveFrom}
      order by effective_from
      limit 1
-  `));
-  const effectiveTo = next.rows[0]
-    ? (
-        (await tx.execute<{ d: string }>(sql`
-          select (${next.rows[0].effective_from}::date - 1)::text as d
-        `))
-      ).rows[0]!.d
+  `, "objects"));
+  const effectiveTo = next[0]
+    ? (await tx.execute<{ d: string }>(sql`
+          select (${next[0].effective_from}::date - 1)::text as d
+        `, "objects"))[0]!.d
     : null;
 
   await tx.execute(sql`
@@ -429,8 +427,8 @@ export async function publishProjectFinancialProfileInTransaction(
     )
     returning id, effective_from::text as effective_from,
               effective_to::text as effective_to
-  `));
-  const version = inserted.rows[0]!;
+  `, "objects"));
+  const version = inserted[0]!;
   await tx.execute(sql`
     insert into audit_log
       (org_id, table_name, row_id, action, changes, actor_id)

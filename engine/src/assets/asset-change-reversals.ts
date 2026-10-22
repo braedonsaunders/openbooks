@@ -58,14 +58,11 @@ async function state(
   const receiver = source.result?.receivingAssetId as string | null;
   for (const id of [source.subject_id, ...(receiver ? [receiver] : [])].sort())
     await lockAssetRow(tx, orgId, id);
-  const prior = (
-    await tx.execute(
-      sql`select 1 from financial_changes where org_id=${orgId} and domain='asset' and operation='reversal' and payload->>'sourceChangeId'=${source.id} and status='applied'`,
-    )
-  ).rows[0];
+  const prior = (await tx.execute(
+      sql`select 1 from financial_changes where org_id=${orgId} and domain='asset' and operation='reversal' and payload->>'sourceChangeId'=${source.id} and status='applied'`, "objects",
+    ))[0];
   if (prior) throw new Error("this asset change has already been reversed");
-  const basis = (
-    await tx.execute<{
+  const basis = await tx.execute<{
       asset_id: string;
       book_id: string;
       cost_delta: string;
@@ -74,32 +71,26 @@ async function state(
       impairment_released: string;
       created_at: string;
     }>(
-      sql`select *,created_at::text from asset_basis_changes where org_id=${orgId} and change_id=${source.id} order by book_id for share`,
-    )
-  ).rows;
+      sql`select *,created_at::text from asset_basis_changes where org_id=${orgId} and change_id=${source.id} order by book_id for share`, "objects",
+    );
   if (!basis.length)
     throw new Error("the original asset basis evidence is missing");
   // Matches the existing latest-event reversal rule. A return after subsequent
   // use is a new acquisition/transfer at current carrying value, not erasure of
   // the intervening depreciation or ownership chain.
   const boundary = basis[0]!.created_at;
-  const later = (
-    await tx.execute(
-      sql`select 1 from asset_events where org_id=${orgId} and asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and created_at>=${boundary}::timestamptz and financial_change_id is distinct from ${source.id} union all select 1 from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id left join journal_entries e on e.org_id=l.org_id and e.id=l.journal_entry_id where s.org_id=${orgId} and s.asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and (e.created_at>=${boundary}::timestamptz or l.non_gl_recognized_at>=${boundary}::timestamptz) limit 1`,
-    )
-  ).rows[0];
+  const later = (await tx.execute(
+      sql`select 1 from asset_events where org_id=${orgId} and asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and created_at>=${boundary}::timestamptz and financial_change_id is distinct from ${source.id} union all select 1 from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id left join journal_entries e on e.org_id=l.org_id and e.id=l.journal_entry_id where s.org_id=${orgId} and s.asset_id in(${source.subject_id},${receiver ?? source.subject_id}) and (e.created_at>=${boundary}::timestamptz or l.non_gl_recognized_at>=${boundary}::timestamptz) limit 1`, "objects",
+    ))[0];
   if (later)
     throw new Error(
       "the asset has subsequent financial history; retain it and record the returned component as a new acquisition, or an approved transfer back from the receiving company",
     );
-  const assets = (
-    await tx.execute<Record<string, unknown>>(
-      sql`select *,updated_at::text from fixed_assets where org_id=${orgId} and id in(${source.subject_id},${receiver ?? source.subject_id}) order by id`,
-    )
-  ).rows;
+  const assets = await tx.execute<Record<string, unknown>>(
+      sql`select *,updated_at::text from fixed_assets where org_id=${orgId} and id in(${source.subject_id},${receiver ?? source.subject_id}) order by id`, "objects",
+    );
   const entryIds = source.result?.entryIds as string[];
-  const journals = (
-    await tx.execute<{
+  const journals = await tx.execute<{
       id: string;
       book_id: string;
       period_id: string;
@@ -111,9 +102,8 @@ async function state(
       project_id: string | null;
       location_id: string | null;
     }>(
-      sql`select e.id,e.book_id,e.period_id,e.subsidiary_id,e.status,e.origin,s.base_currency,a.department_id,a.project_id,a.location_id from journal_entries e join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id join fixed_assets a on a.org_id=e.org_id and a.subsidiary_id=e.subsidiary_id and a.id in(${source.subject_id},${receiver ?? source.subject_id}) where e.org_id=${orgId} and e.id in(select jsonb_array_elements_text(${JSON.stringify(entryIds)}::jsonb)::uuid) order by e.id for share of e,s`,
-    )
-  ).rows;
+      sql`select e.id,e.book_id,e.period_id,e.subsidiary_id,e.status,e.origin,s.base_currency,a.department_id,a.project_id,a.location_id from journal_entries e join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id join fixed_assets a on a.org_id=e.org_id and a.subsidiary_id=e.subsidiary_id and a.id in(${source.subject_id},${receiver ?? source.subject_id}) where e.org_id=${orgId} and e.id in(select jsonb_array_elements_text(${JSON.stringify(entryIds)}::jsonb)::uuid) order by e.id for share of e,s`, "objects",
+    );
   if (
     journals.length !== entryIds.length ||
     journals.some((j) => j.status !== "posted")
@@ -121,8 +111,7 @@ async function state(
     throw new Error(
       "the source journals are no longer an intact unreversed generation",
     );
-  const lines = (
-    await tx.execute<{
+  const lines = await tx.execute<{
       entry_id: string;
       account_id: string;
       amount: string;
@@ -130,26 +119,21 @@ async function state(
       txn_amount: string;
       fx_rate: string;
     }>(
-      sql`select entry_id,account_id,amount::text,currency,txn_amount::text,fx_rate::text from journal_lines where org_id=${orgId} and entry_id in(select jsonb_array_elements_text(${JSON.stringify(entryIds)}::jsonb)::uuid) order by entry_id,line_number`,
-    )
-  ).rows;
-  const events = (
-    await tx.execute<{
+      sql`select entry_id,account_id,amount::text,currency,txn_amount::text,fx_rate::text from journal_lines where org_id=${orgId} and entry_id in(select jsonb_array_elements_text(${JSON.stringify(entryIds)}::jsonb)::uuid) order by entry_id,line_number`, "objects",
+    );
+  const events = await tx.execute<{
       id: string;
       asset_id: string;
       book_id: string;
       journal_entry_id: string | null;
     }>(
-      sql`select id,asset_id,book_id,journal_entry_id from asset_events where org_id=${orgId} and financial_change_id=${source.id} order by id for share`,
-    )
-  ).rows;
+      sql`select id,asset_id,book_id,journal_entry_id from asset_events where org_id=${orgId} and financial_change_id=${source.id} order by id for share`, "objects",
+    );
   if (!events.length || events.some((e) => !e.book_id))
     throw new Error("the source asset event book evidence is missing");
-  const transfers = (
-    await tx.execute(
-      sql`select * from asset_transfer_bases where org_id=${orgId} and change_id=${source.id} order by book_id for share`,
-    )
-  ).rows;
+  const transfers = await tx.execute(
+      sql`select * from asset_transfer_bases where org_id=${orgId} and change_id=${source.id} order by book_id for share`, "objects",
+    );
   return {
     source,
     basis,
@@ -294,9 +278,9 @@ export async function applyAssetReversal(
             "asset reversal event is missing its correcting journal",
           );
         const recorded = await db.execute(
-          sql`insert into asset_events(org_id,asset_id,book_id,kind,occurred_on,journal_entry_id,financial_change_id,reverses_event_id,reversal_reason,memo,created_by,updated_by) values(${orgId},${event.asset_id},${event.book_id},'reversed',${input.effectiveOn},${journal ?? null},${changeId},${event.id},${input.reason.trim()},'Approved asset change correction',${actorId},${actorId}) returning id`,
+          sql`insert into asset_events(org_id,asset_id,book_id,kind,occurred_on,journal_entry_id,financial_change_id,reverses_event_id,reversal_reason,memo,created_by,updated_by) values(${orgId},${event.asset_id},${event.book_id},'reversed',${input.effectiveOn},${journal ?? null},${changeId},${event.id},${input.reason.trim()},'Approved asset change correction',${actorId},${actorId}) returning id`, "objects",
         );
-        if (recorded.rows.length !== 1)
+        if (recorded.length !== 1)
           throw new Error("asset reversal event was not recorded");
       }
       for (const basis of now.basis) {
@@ -312,22 +296,22 @@ export async function applyAssetReversal(
         );
       }
       const restored = await db.execute(
-        sql`update fixed_assets set status='in_service',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${now.source.subject_id} returning id`,
+        sql`update fixed_assets set status='in_service',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${now.source.subject_id} returning id`, "objects",
       );
-      if (restored.rows.length !== 1)
+      if (restored.length !== 1)
         throw new Error("source asset could not be restored");
       if (now.receiver) {
         const retired = await db.execute(
-          sql`update fixed_assets set status='written_off',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${now.receiver} returning id`,
+          sql`update fixed_assets set status='written_off',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${now.receiver} returning id`, "objects",
         );
-        if (retired.rows.length !== 1)
+        if (retired.length !== 1)
           throw new Error("reversed receiving asset could not be retired");
       }
       if (now.transfers.length) {
         const updated = await db.execute(
-          sql`update asset_transfer_bases set reversed_by_change_id=${changeId},reversed_on=${input.effectiveOn} where org_id=${orgId} and change_id=${now.source.id} and reversed_by_change_id is null returning id`,
+          sql`update asset_transfer_bases set reversed_by_change_id=${changeId},reversed_on=${input.effectiveOn} where org_id=${orgId} and change_id=${now.source.id} and reversed_by_change_id is null returning id`, "objects",
         );
-        if (updated.rows.length !== now.transfers.length)
+        if (updated.length !== now.transfers.length)
           throw new Error(
             "transfer consolidation lineage could not be reversed",
           );

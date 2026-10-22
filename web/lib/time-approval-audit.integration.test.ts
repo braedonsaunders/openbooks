@@ -358,7 +358,7 @@ const consolidatedRows = [
               const snapshot = async () => (await db.execute<Record<string, unknown>>(sql`
                 select hours::text as hours, bill_rate::text as bill_rate, cost_rate::text as cost_rate, costing_basis,
                        project_task_id, memo_is_private, field_ticket_id, status, overhead_journal_entry_id
-                  from time_entries where org_id = ${org.orgId} and id = ${amendment}`)).rows[0]!
+                  from time_entries where org_id = ${org.orgId} and id = ${amendment}`, "objects"))[0]!
               assert.deepEqual(await snapshot(), {
                 hours: '-4.0000', bill_rate: '100.0000', cost_rate: '30.0000', costing_basis: 'estimated',
                 project_task_id: task, memo_is_private: true, field_ticket_id: null, status: 'draft', overhead_journal_entry_id: null,
@@ -377,10 +377,10 @@ const consolidatedRows = [
               assert.equal(after.overhead_journal_entry_id, null, 'estimated time never carries the net-zero overhead pair')
               const net = (await db.execute<{ bill: string; cost: string }>(sql`
                 select coalesce(sum(hours * coalesce(bill_rate, 0)), 0)::text as bill, coalesce(sum(hours * coalesce(cost_rate, 0)), 0)::text as cost
-                  from time_entries where org_id = ${org.orgId} and id in (${original}, ${amendment})`)).rows[0]!
+                  from time_entries where org_id = ${org.orgId} and id in (${original}, ${amendment})`, "objects"))[0]!
               assert.deepEqual(net, { bill: '0.00000000', cost: '0.00000000' })
               const overheadJournals = (await db.execute<{ n: number }>(sql`
-                select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'overhead_applied'`)).rows[0]!.n
+                select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'overhead_applied'`, "objects"))[0]!.n
               assert.equal(overheadJournals, 0)
             } finally {
               await db.execute(sql`delete from time_entries where org_id = ${org.orgId}`)
@@ -423,7 +423,7 @@ const consolidatedRows = [
               }
               const offsets = (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from time_entries
-                 where org_id = ${org.orgId} and amends_entry_id is not null`)).rows[0]!.n
+                 where org_id = ${org.orgId} and amends_entry_id is not null`, "objects"))[0]!.n
               assert.equal(offsets, 0, 'no offset may be written for an editable entry')
             } finally {
               await db.execute(sql`delete from time_entries where org_id = ${org.orgId}`)
@@ -457,7 +457,7 @@ const consolidatedRows = [
               )
               const offsets = (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from time_entries
-                 where org_id = ${org.orgId} and amends_entry_id = ${original}`)).rows[0]!.n
+                 where org_id = ${org.orgId} and amends_entry_id = ${original}`, "objects"))[0]!.n
               assert.equal(offsets, 0, 'the refused amendment writes no contra entry')
             } finally {
               await dropScratchOrg(org.orgId)
@@ -497,7 +497,7 @@ const consolidatedRows = [
                 await assert.rejects(write(), (error: unknown) => error instanceof ScopeNotFoundError, name)
               }
               const offsets = (await db.execute<{ n: number }>(sql`
-                select count(*)::int as n from time_entries where org_id = ${org.orgId} and amends_entry_id = ${original}`)).rows[0]!.n
+                select count(*)::int as n from time_entries where org_id = ${org.orgId} and amends_entry_id = ${original}`, "objects"))[0]!.n
               assert.equal(offsets, 0, 'a rehomed source never produces an out-of-scope contra')
             } finally {
               await db.execute(sql`delete from time_entries where org_id = ${org.orgId}`)

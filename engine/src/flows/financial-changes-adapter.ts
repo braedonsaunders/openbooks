@@ -62,7 +62,7 @@ async function assertAccountingSubjectFeatures(orgId: string, subjectId: string,
   )
     throw new FinancialChangeFeatureError('Turn on Account merges in Company Settings → Features before submitting or approving an account merge.');
   if (domain !== 'provision') return
-  const project = (await db.execute<{project_id:string|null}>(sql`select project_id from provision_obligations where org_id=${orgId} and id=${subjectId}`)).rows[0]?.project_id
+  const project = (await db.execute<{project_id:string|null}>(sql`select project_id from provision_obligations where org_id=${orgId} and id=${subjectId}`, "objects"))[0]?.project_id
   if (project && !(await lockAndCheckOrgFeature(db,orgId,'projects')))
     throw new FinancialChangeFeatureError('Turn on Projects in Company Settings → Features before submitting or approving this construction forecast')
 }
@@ -94,8 +94,8 @@ async function assertHistoricalTranslationDecisionSubject(orgId: string, actorId
        and line.subsidiary_id=${change.subsidiary_id}
        and entry.status in ('posted','reversed') and account.type='equity'
      for share of line,entry,account
-  `);
-  if (source.rows.length !== 1)
+  `, "objects");
+  if (source.length !== 1)
     throw new Error('The historical translation source is not a retained equity posting in this legal entity; reject the proposal and review its source journal.');
 }
 
@@ -153,11 +153,9 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter =
     // endpoints fail closed on it.
     permissions: null,
     async decisionPermission(id) {
-      const row = (
-        await db.execute<{ domain: keyof typeof FINANCIAL_CHANGE_AUTHORITY }>(
-          sql`select domain from financial_changes where id=${id}`,
-        )
-      ).rows[0];
+      const row = (await db.execute<{ domain: keyof typeof FINANCIAL_CHANGE_AUTHORITY }>(
+          sql`select domain from financial_changes where id=${id}`, "objects",
+        ))[0];
       return row
         ? (FINANCIAL_CHANGE_AUTHORITY[row.domain]?.permission ?? null)
         : null;
@@ -166,7 +164,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter =
     via: "custom",
     // A change is visible only when every legal entity it requires is.
     async subsidiaryOf(orgId, ids, allowed, lock) {
-      const changes = (await db.execute<{ id: string; subsidiaryId: string | null; required: Array<string | null> }>(sql`
+      const changes = await db.execute<{ id: string; subsidiaryId: string | null; required: Array<string | null> }>(sql`
         select id, subsidiary_id as "subsidiaryId",
                coalesce(payload->'requiredSubsidiaryIds', jsonb_build_array(subsidiary_id)) as required
           from financial_changes
@@ -177,7 +175,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter =
              ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,allowed)} ${orderResourcesVisible(allowed,'work')}
          ))
          ${lock ? sql`for share` : sql``}
-      `)).rows;
+      `, "objects");
       return new Map(changes.map((change) => [
         change.id,
         allowed === null || change.required.every((id) => id !== null && allowed.has(id))
@@ -200,17 +198,15 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter =
     profile: financialChangeSubjectProfile,
     async lockDecisionResources(orgId, id) {
     const row = (await db.execute<{ domain: string; operation: string }>(sql`
-      select domain,operation from financial_changes where org_id=${orgId} and id=${id}`)).rows[0];
+      select domain,operation from financial_changes where org_id=${orgId} and id=${id}`, "objects"))[0];
     if (row?.domain==='consolidation' && row.operation===HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION)
       await lockCabinetAuthorization(db,orgId);
   },
     async loadContext(id) {
     // RLS supplies the org; this adapter never widens the active tenant scope.
-    const row = (
-      await db.execute<{ org_id: string }>(
-        sql`select org_id from financial_changes where id=${id}`,
-      )
-    ).rows[0];
+    const row = (await db.execute<{ org_id: string }>(
+        sql`select org_id from financial_changes where id=${id}`, "objects",
+      ))[0];
     if (!row) return null;
     const change = await loadFinancialChange(db, row.org_id, id, { lock: false });
     const subjectLabel = await loadFinancialChangeSubjectLabel(
@@ -241,11 +237,9 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter =
     return `/accounting/changes?change=${id}`;
   },
     async getStatus(id) {
-    const row = (
-      await db.execute<{ status: string }>(
-        sql`select status from financial_changes where id=${id}`,
-      )
-    ).rows[0];
+    const row = (await db.execute<{ status: string }>(
+        sql`select status from financial_changes where id=${id}`, "objects",
+      ))[0];
     return row?.status ?? null;
   },
     async changeStatus() {
@@ -313,7 +307,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter =
         );
         if(row.operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION) {
         const scope=await lockActorCommandAuthority(db,ctx.orgId,ctx.userId,row.subsidiary_id,'manufacturing.manage');
-        if(!(await db.execute(sql`select work.id from mfg_work_orders work where work.org_id=${ctx.orgId} and work.id=${row.subject_id} ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')} for share of work`)).rows.length) throw new Error('Production work was not found in the approver’s current scope.');
+        if(!(await db.execute(sql`select work.id from mfg_work_orders work where work.org_id=${ctx.orgId} and work.id=${row.subject_id} ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')} for share of work`, "objects")).length) throw new Error('Production work was not found in the approver’s current scope.');
       }
         if (row.operation === MANUFACTURING_STANDARD_ROLLUP_OPERATION) {
           const scope=await lockActorCommandAuthority(db,ctx.orgId,ctx.userId,row.subsidiary_id,'manufacturing.manage');
@@ -363,8 +357,8 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter =
       update financial_changes set status=${outcome},approved_by=${ctx.userId},approved_at=now(),
         updated_by=${ctx.userId},updated_at=now()
        where org_id=${ctx.orgId} and id=${id} and status='pending' returning id
-    `);
-      if (updated.rows.length !== 1)
+    `, "objects");
+      if (updated.length !== 1)
       throw new Error("accounting event decision could not be recorded");
     },
   });
@@ -406,7 +400,7 @@ export async function submitFinancialChange(
         await assertHistoricalTranslationDecisionSubject(orgId,actorId,row);
       if (row.domain === "manufacturing") {
         const manufacturingScope=await lockActorCommandAuthority(tx,orgId,actorId,row.subsidiary_id,"manufacturing.manage");
-        if(row.operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION&&!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${row.subject_id} ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,manufacturingScope)} ${orderResourcesVisible(manufacturingScope,'work')} for share of work`)).rows.length) throw new Error('Production work was not found in the proposer’s current scope.');
+        if(row.operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION&&!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${row.subject_id} ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,manufacturingScope)} ${orderResourcesVisible(manufacturingScope,'work')} for share of work`, "objects")).length) throw new Error('Production work was not found in the proposer’s current scope.');
         if([MANUFACTURING_STANDARD_ROLLUP_OPERATION,MANUFACTURING_ROUTING_APPROVAL_OPERATION,MANUFACTURING_BOM_APPROVAL_OPERATION].includes(row.operation)&&manufacturingScope!==null) throw new Error("Shared manufacturing policies require unrestricted authority.");
         if (
           row.operation === MANUFACTURING_STANDARD_ROLLUP_OPERATION &&
@@ -429,8 +423,8 @@ export async function submitFinancialChange(
       const updated = await tx.execute(sql`
       update financial_changes set status='pending',submission_policy=${JSON.stringify(policy)}::jsonb,updated_by=${actorId},updated_at=now()
        where org_id=${orgId} and id=${id} and status='draft' returning id
-    `);
-      if (updated.rows.length !== 1)
+    `, "objects");
+      if (updated.length !== 1)
         throw new Error("accounting event could not be submitted");
       if (policy.kind === "ungated") {
         await financialChangesFlowAdapter.releaseApproval!(id, "approved", {

@@ -63,7 +63,7 @@ async function seed() {
 async function projectFlag(orgId: string, projectId: string): Promise<boolean> {
   return (await db.execute<{ is_internal: boolean }>(sql`
     select is_internal from projects where org_id = ${orgId} and id = ${projectId}
-  `)).rows[0]!.is_internal;
+  `, "objects"))[0]!.is_internal;
 }
 
 test("an internal project creates customer-less and refuses customer or invoicing configuration", async () => {
@@ -111,9 +111,9 @@ test("internal time posts no labor cost while customer time does", async () => {
     }
     const posted = await postProjectLaborCost(org.orgId, actor, [shopEntry, jobEntry]);
     assert.equal(posted.length, 1, "only the customer job posts a labor journal");
-    const states = (await db.execute<{ id: string; cost_journal_entry_id: string | null }>(sql`
+    const states = await db.execute<{ id: string; cost_journal_entry_id: string | null }>(sql`
       select id, cost_journal_entry_id from time_entries where org_id = ${org.orgId} and id in (${shopEntry}, ${jobEntry})
-    `)).rows;
+    `, "objects");
     assert.equal(
       states.find((row) => row.id === shopEntry)?.cost_journal_entry_id,
       null,
@@ -125,7 +125,7 @@ test("internal time posts no labor cost while customer time does", async () => {
     );
     const journals = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries where org_id = ${org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(journals, 1, "internal time alone moves no company ledger");
   } finally {
     session.user = null;

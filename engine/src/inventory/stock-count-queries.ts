@@ -115,7 +115,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
     : sql``;
   const from = sql`from stock_counts c left join locations l on l.org_id = c.org_id and l.id = c.location_id`;
   const count = (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n ${from} where c.org_id = ${orgId} ${scope} ${searchScope}`)).rows[0]!.n;
+    select count(*)::text as n ${from} where c.org_id = ${orgId} ${scope} ${searchScope}`, "objects"))[0]!.n;
   const r = (await db.execute<{
     id: string;
     status: string;
@@ -142,9 +142,9 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
      where c.org_id = ${orgId} ${scope} ${searchScope} ${cursorScope}
      order by ${LIST_ORDER}
      limit ${page == null ? limit + 1 : limit}
-     ${page == null ? sql`` : sql`offset ${(page - 1) * limit}`}`));
-  const hasMore = page == null && r.rows.length > limit;
-  const rows = hasMore ? r.rows.slice(0, limit) : r.rows;
+     ${page == null ? sql`` : sql`offset ${(page - 1) * limit}`}`, "objects"));
+  const hasMore = page == null && r.length > limit;
+  const rows = hasMore ? r.slice(0, limit) : r;
   const last = rows[rows.length - 1];
   return {
     counts: rows.map((row) => ({
@@ -202,7 +202,7 @@ export async function getStockCountDetail(
     }
     const names = (await db.execute<{ location_name: string | null; subsidiary_name: string | null }>(sql`
       select (select name from locations where org_id = ${orgId} and id = ${header.locationId}) as location_name,
-             (select name from subsidiaries where org_id = ${orgId} and id = ${header.subsidiaryId}) as subsidiary_name`)).rows[0];
+             (select name from subsidiaries where org_id = ${orgId} and id = ${header.subsidiaryId}) as subsidiary_name`, "objects"))[0];
     const r = (await db.execute<{
       id: string;
       item_id: string;
@@ -230,14 +230,14 @@ export async function getStockCountDetail(
              (select lot_number from lots where org_id = ${orgId} and id = l.lot_id) as lot_number
         from stock_count_lines l
        where l.org_id = ${orgId} and l.stock_count_id = ${header.id}
-       order by item_code nulls last, stock_location_code nulls last, l.id`));
+       order by item_code nulls last, stock_location_code nulls last, l.id`, "objects"));
     return {
       header: {
         ...header,
         locationName: names?.location_name ?? null,
         subsidiaryName: names?.subsidiary_name ?? null,
       },
-      lines: r.rows.map((row) => ({
+      lines: r.map((row) => ({
         id: row.id,
         itemId: row.item_id,
         stockLocationId: row.stock_location_id,

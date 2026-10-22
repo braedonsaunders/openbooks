@@ -79,11 +79,11 @@ const mockSources = new Map<string, string>([
         throw new Error('unexpected database query: ' + text)
       }
       export const db = {
-        execute: (query) => execute('execute', query),
+        execute: (query, mode) => Promise.resolve(execute('execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
         async transaction(work) {
           state.pending = []
           try {
-            const result = await work({ execute: (query) => execute('tx-execute', query) })
+            const result = await work({ execute: (query, mode) => Promise.resolve(execute('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) })
             state.committed.push(...state.pending)
             if (state.pending.some((text) => text.includes('update compliance_waivers'))) {
               state.revoked = true

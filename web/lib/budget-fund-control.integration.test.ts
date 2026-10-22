@@ -40,7 +40,7 @@ test('a budget saved through the worksheet writer is the cell fund control enfor
       update funds set budgetary_control = 'hard' where org_id = ${org.orgId} and id = ${defaultFundId}`))
     const scenarioId = randomUUID()
     const year = (await withOrgContext(org.orgId, () => db.execute<{ fiscal_year: number }>(sql`
-      select fiscal_year from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`))).rows[0]!.fiscal_year
+      select fiscal_year from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`, 'objects')))[0]!.fiscal_year
     await withBypassContext(() => db.execute(sql`
       insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
       values (${scenarioId}, ${org.orgId}, ${org.bookId}, ${year}, 'Operating plan', 'budget', 'draft', ${actorId}, ${actorId})`))
@@ -51,8 +51,8 @@ test('a budget saved through the worksheet writer is the cell fund control enfor
         departmentId: null, projectId: null, locationId: null, classId: null, amount: '100.0000' }],
     }))
     const stored = await withOrgContext(org.orgId, () => db.execute<{ extra_dims: Record<string, string> }>(sql`
-      select extra_dims from budget_lines where org_id = ${org.orgId} and scenario_id = ${scenarioId}`))
-    assert.deepEqual(stored.rows.map((row) => row.extra_dims), [{ fund: defaultFundId }])
+      select extra_dims from budget_lines where org_id = ${org.orgId} and scenario_id = ${scenarioId}`, 'objects'))
+    assert.deepEqual(stored.map((row) => row.extra_dims), [{ fund: defaultFundId }])
     // A line saved before fund accounting names no fund and still counts, as the default fund.
     await withBypassContext(() => db.execute(sql`
       insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)

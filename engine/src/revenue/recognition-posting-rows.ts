@@ -39,14 +39,14 @@ export async function recognitionUnearnedRemaining(
  from performance_obligations o left join recognition_schedules s on s.obligation_id=o.id and s.org_id=o.org_id and s.book_id=${input.bookId}
  left join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id
  left join documents inv on inv.id=dl.document_id and inv.org_id=dl.org_id
- where o.org_id=${input.orgId} and o.id=${input.obligationId}`)).rows[0];
+ where o.org_id=${input.orgId} and o.id=${input.obligationId}`, "objects"))[0];
  if(!row)throw new RevenueRecognitionError('recognition obligation disappeared during posting');
  let exposure:CreditExposure=row.change_basis?.creditExposure??{kind:'none'};
  if(!row.change_basis?.creditExposure && row.invoice_id && row.currency) {
-   const peers=(await tx.execute<{id:string;weight:string}>(sql`select o.id,coalesce(o.booked_amount,o.allocated_price)::text as weight
+   const peers=await tx.execute<{id:string;weight:string}>(sql`select o.id,coalesce(o.booked_amount,o.allocated_price)::text as weight
     from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id
     left join items i on i.id=o.item_id and i.org_id=o.org_id join recognition_rules r on r.id=o.recognition_rule_id and r.org_id=o.org_id
-    where o.org_id=${input.orgId} and dl.document_id=${row.invoice_id} and coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id)=${input.deferredAccountId} order by o.id`)).rows;
+    where o.org_id=${input.orgId} and dl.document_id=${row.invoice_id} and coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id)=${input.deferredAccountId} order by o.id`, "objects");
    const index=peers.findIndex(p=>p.id===input.obligationId);
    if(index<0)throw new RevenueRecognitionError('the invoice credit allocation omitted this promise');
    // The credit pool measures in transaction units, but the evidence names
@@ -71,7 +71,7 @@ export async function recognitionNetRecognized(
   select coalesce((select sum(case when l.journal_entry_id is not null and l.reversal_journal_entry_id is null then coalesce(l.recognized_amount,0) else 0 end)
     from recognition_schedule_lines l
     join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-   where l.org_id=${input.orgId} and s.obligation_id=${input.obligationId} and s.book_id=${input.bookId}),0)::text as net`)).rows[0];
+   where l.org_id=${input.orgId} and s.obligation_id=${input.obligationId} and s.book_id=${input.bookId}),0)::text as net`, "objects"))[0];
  return row?.net ?? "0";
 }
 
@@ -136,7 +136,7 @@ export async function recognitionPostingRows(
   claim = false,
 ): Promise<RecognitionPostingRow[]> {
   const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds, fallbackSubsidiaryId);
-  const rows = (await runner.execute<RecognitionPostingRow>(sql`
+  const rows = await runner.execute<RecognitionPostingRow>(sql`
     select (select max(peer.delivered_on)::text from performance_obligations peer where peer.org_id=o.org_id and peer.delivery_bundle_document_id=o.delivery_bundle_document_id and peer.status<>'cancelled') as bundle_delivered_on, o.recognition_held, o.hold_reason,
            (o.delivery_bundle_document_id is not null and exists (select 1 from performance_obligations peer
              where peer.org_id=o.org_id and peer.delivery_bundle_document_id=o.delivery_bundle_document_id and peer.status<>'cancelled'
@@ -201,13 +201,13 @@ export async function recognitionPostingRows(
        and ${obligationScope}
        ${lineId ? sql`and l.id = ${lineId}` : sql``}
      order by c.contract_number, o.description, l.sequence
-     ${claim ? sql`for update of l for share of s, bk, c, r, p` : sql``}`)).rows;
+     ${claim ? sql`for update of l for share of s, bk, c, r, p` : sql``}`, "objects");
   for (const row of rows) {
     const plannedDate=row.recognition_on ?? row.period_ends_on;
     if (!row.delivery_pending && row.bundle_delivered_on && row.bundle_delivered_on>plannedDate) {
       const deliveryPeriod=await resolveCoveringPeriod(runner,orgId,row.bundle_delivered_on);
       if (!deliveryPeriod) throw new RevenueRecognitionError('Generate an accounting period covering software bundle delivery before recognizing the deferred consideration');
-      const period=(await runner.execute<{name:string;ends_on:string;period_ref:PeriodDisplayInput}>(sql`select p.name,p.ends_on::text,${periodRefSql("p")} as period_ref from accounting_periods p where p.org_id=${orgId} and p.id=${deliveryPeriod.id}`)).rows[0];
+      const period=(await runner.execute<{name:string;ends_on:string;period_ref:PeriodDisplayInput}>(sql`select p.name,p.ends_on::text,${periodRefSql("p")} as period_ref from accounting_periods p where p.org_id=${orgId} and p.id=${deliveryPeriod.id}`, "objects"))[0];
       if (!period) throw new RevenueRecognitionError('Delivery accounting period is unavailable');
       row.period_id=deliveryPeriod.id; row.period_name=period.name; row.period_ref=period.period_ref; row.period_ends_on=period.ends_on; row.recognition_on=row.bundle_delivered_on;
     }

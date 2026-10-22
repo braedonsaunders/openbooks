@@ -119,8 +119,8 @@ async function assertProject(
      where id = ${projectId} and org_id = ${orgId}
        ${projectSubsidiaryFilter(allowedSubsidiaryIds)}
      ${lock === 'update' ? sql`for update` : lock === 'share' ? sql`for share` : sql``}
-  `))
-  if (!project.rows[0]) throw new ProjectWorkBreakdownError('Project not found', 404)
+  `, 'objects'))
+  if (!project[0]) throw new ProjectWorkBreakdownError('Project not found', 404)
 }
 
 async function taskSnapshot(
@@ -138,8 +138,8 @@ async function taskSnapshot(
      where t.id = ${taskId} and t.project_id = ${projectId} and t.org_id = ${orgId}
        ${projectSubsidiaryFilter(allowedSubsidiaryIds, sql`p.subsidiary_id`)}
      ${lock ? sql`for update of t` : sql``}
-  `))
-  return result.rows[0] ?? null
+  `, 'objects'))
+  return result[0] ?? null
 }
 
 async function recordTaskAudit(args: {
@@ -186,8 +186,8 @@ export async function loadWorkBreakdownTasks(
      where t.project_id = ${projectId} and t.org_id = ${orgId}
        ${projectSubsidiaryFilter(allowedSubsidiaryIds, sql`p.subsidiary_id`)}
      order by t.code nulls last, t.name, t.id
-  `))
-  return result.rows.map(clientTask)
+  `, 'objects'))
+  return result.map(clientTask)
 }
 
 export async function createWorkBreakdownTask(args: {
@@ -219,8 +219,8 @@ export async function createWorkBreakdownTask(args: {
         ${args.actorId}, ${args.actorId}
       )
       returning id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price, budget_quantity, budget_unit, ${documentRevisionSql(sql`updated_at`)} as updated_at
-    `))
-    const after = created.rows[0]
+    `, 'objects'))
+    const after = created[0]
     if (!after) throw new ProjectWorkBreakdownError('Task could not be created', 500)
     await recordTaskAudit({
       exec: tx,
@@ -301,8 +301,8 @@ export async function updateWorkBreakdownTask(args: {
               ${projectSubsidiaryFilter(args.allowedSubsidiaryIds, sql`p.subsidiary_id`)}
          )
        returning id, project_id, code, name, status, estimated_hours, estimated_cost, estimated_price, budget_quantity, budget_unit, ${documentRevisionSql(sql`updated_at`)} as updated_at
-    `))
-    const after = updated.rows[0]
+    `, 'objects'))
+    const after = updated[0]
     if (!after) {
       throw new ProjectWorkBreakdownError(
         'This task changed while you were saving. Refresh and review the latest values.',

@@ -75,13 +75,13 @@ export async function loadWizard(): Promise<WizardData> {
 
   const orgId = authz.user.orgId
   const [org, switchable, features] = await Promise.all([
-    db.execute(sql`
+    db.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
       select name, legal_name, base_currency, country, settings
-        from orgs where id = ${orgId}`),
+        from orgs where id = ${orgId}`, 'objects'),
     canSwitchIndustry(orgId),
     resolvedFeatureState(orgId),
   ])
-  const row = (org as unknown as { rows: { name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }[] }).rows[0]
+  const row = org[0]
   const settings = row?.settings ?? {}
   const storedProfile = settings.workspaceProfile as Record<string, unknown> | undefined
 

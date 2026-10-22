@@ -69,9 +69,9 @@ test(
       );
 
       const stored = await withBypass(() =>
-        db.execute<{ name: string }>(sql`select name from items where id = ${itemId}`),
+        db.execute<{ name: string }>(sql`select name from items where id = ${itemId}`, "objects"),
       );
-      assert.equal(stored.rows[0]?.name, "Required clear item", "stored value untouched");
+      assert.equal(stored[0]?.name, "Required clear item", "stored value untouched");
 
       // Partial PATCH omitting required fields still succeeds.
       const partial = await withOrgContext(org.orgId, () =>

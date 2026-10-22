@@ -80,15 +80,15 @@ export interface DocumentFxRateEvidence {
  * tables. Posting produces exactly one journal entry (ledger.ts). Posted
  * documents are immutable; corrections are represented by linked reversal
  * entries so the original business record and GL evidence are never rewritten.
- * The same rule is enforced for `document_lines` at storage level by migration
- * 0034: ordinary line writes require a draft parent and the parent row is locked
- * while its lifecycle status is checked.
+ * The same rule is enforced for `document_lines` at storage level by the
+ * document_line_immutability trigger: ordinary line writes require a draft
+ * parent and the parent row is locked while its lifecycle status is checked.
  *
  * Concurrency: `revision_seq` is the optimistic-concurrency revision token.
- * Readers project it through documentRevisionCounterSql, and migration
- * 0167_document_revision_counter bumps it on every UPDATE at the database
+ * Readers project it through documentRevisionCounterSql, and the
+ * documents_revision_seq trigger bumps it on every UPDATE at the database
  * boundary — including writes that backdate the `updated_at` display
- * timestamp, which migration 0013_document_revision_monotonic permits. Two
+ * timestamp, which the documents_revision_monotonic trigger permits. Two
  * committed revisions can therefore never share a token, whichever driver
  * wrote them.
  *
@@ -134,7 +134,7 @@ export const documents = pgTable(
     documentFxRateEvidence: jsonb("document_fx_rate_evidence").$type<DocumentFxRateEvidence>(),
 
     /**
-     * Frozen sale destination (0265): the jurisdiction the document was taxed
+     * Frozen sale destination: the jurisdiction the document was taxed
      * and posted with (country + region, e.g. US + CA). Stamped by the posting
      * kernel from provider-quote evidence — else the party's default shipping
      * address at posting — for customer invoices/credits only. NULL means the
@@ -170,12 +170,12 @@ export const documents = pgTable(
      * book and replicates into full books; a book id posts to that book only.
      */
     accountingBookId: uuid("accounting_book_id"),
-    /** Explicit adjustment-period override for the void's reversal journals (0333); null resolves by date. */
+    /** Explicit adjustment-period override for the void's reversal journals; null resolves by date. */
     voidReversalPeriodId: uuid("void_reversal_period_id"),
     reversalEntryId: uuid("reversal_entry_id"),
 
     // Denormalized totals (fast lists), derived from this document's lines.
-    // Migration 0017_document_total_line_invariant refreshes them whenever a
+    // Storage refreshes them (refresh_document_totals_from_lines) whenever a
     // line's financial shape changes and rejects any committed header write
     // whose subtotal/tax_total/total contradict those lines (debit-side totals
     // for journal-shaped kinds). documents_posted_financial_guard then freezes
@@ -185,7 +185,7 @@ export const documents = pgTable(
     total: money("total").notNull().default("0"),
     // Amount remaining to settle — abs(open-item line) − applied for posted
     // open-item docs, else NULL. Maintained by the
-    // open-balance triggers in migrations/generated/0001_baseline.sql so lists
+    // document open-balance triggers so lists
     // can show/sort/filter it without a live applications join.
     openBalance: money("open_balance"),
 
@@ -197,7 +197,7 @@ export const documents = pgTable(
     /** Custom segment assignments keyed by segment_definitions.key. */
     extraDims: jsonb("extra_dims").notNull().default({}),
     // Funding card: the card_charge/refund instrument, or the single corporate
-    // card backing the company_paid/personal lines of an expense_report (0171).
+    // card backing the company_paid/personal lines of an expense_report.
     paymentCardId: uuid("payment_card_id"),
 
     // Operational document metadata promoted to typed columns:
@@ -221,7 +221,7 @@ export const documents = pgTable(
 
     memo: text("memo"),
     /**
-     * Script-journal idempotency key (migration 0268): the script run's
+     * Script-journal idempotency key: the script run's
      * stable write identity (run namespace + journal.create call ordinal).
      * NULL for every non-script write; unique per org where present so a
      * retried script write observes the first execution's document.
@@ -229,7 +229,7 @@ export const documents = pgTable(
     idempotencyKey: text("idempotency_key"),
     custom: jsonb("custom").notNull().default({}),
     /**
-     * Strictly increasing optimistic-concurrency counter (migration 0167).
+     * Strictly increasing optimistic-concurrency counter.
      * Bumped by storage on every UPDATE, independent of the editable
      * `updated_at` display timestamp; revision readers project this counter
      * as the token instead of `updated_at`.
@@ -240,12 +240,12 @@ export const documents = pgTable(
   (t): PgTableExtraConfigValue[] => [
     uniqueIndex("documents_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("documents_org_kind_number").on(t.orgId, t.kind, t.documentNumber),
-    // Script-journal idempotency (migration 0268): partial, so the NULL key
+    // Script-journal idempotency: partial, so the NULL key
     // on every non-script row is unconstrained.
     uniqueIndex("documents_org_idempotency_key")
       .on(t.orgId, t.idempotencyKey)
       .where(sql`${t.idempotencyKey} is not null`),
-    // External-reference dedupe (migration 0500): partial, so the NULL
+    // External-reference dedupe: partial, so the NULL
     // reference on every native document is unconstrained.
     uniqueIndex("documents_org_external_ref")
       .on(t.orgId, t.externalSource, t.externalRef)
@@ -261,7 +261,7 @@ export const documents = pgTable(
       .on(t.orgId, t.partyId)
       .where(sql`${t.voidedAt} is null and ${t.kind} in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')`),
     index("documents_project").on(t.projectId),
-    // Channel order reference (migration 0522): partial, so the NULL
+    // Channel order reference: partial, so the NULL
     // channel on every native document is unconstrained.
     index("documents_source_channel")
       .on(t.orgId, t.sourceChannelId)
@@ -330,7 +330,7 @@ export const documents = pgTable(
       "documents_no_field_ticket_custom",
       sql`not (${t.custom} ? 'fieldTicket')`,
     ),
-    // External-reference dedupe (migration 0500): the pair is all or
+    // External-reference dedupe: the pair is all or
     // nothing, and neither half may be blank.
     check(
       "documents_external_ref_source_pair",
@@ -350,13 +350,13 @@ export const documents = pgTable(
 export const documentLines = pgTable(
   "document_lines",
   /**
-   * Financial source facts. Migration 0034_document_line_immutability installs
+   * Financial source facts. The document_line_immutability trigger enforces
    * the storage boundary: ordinary INSERT/UPDATE/DELETE is allowed only while
    * the tenant-owned parent document is `draft`. The guard locks that parent
    * before reading its status, so a line writer cannot race a posting status
    * flip. Approved, posted, reversed, voided, and any future non-draft status
    * remain byte-for-byte immutable; corrections use reversal, void, or an
-   * adjusting document. Sandbox teardown and the existing paired
+   * adjusting document. Sandbox teardown and the paired
    * `openbooks.migration` + `openbooks.amend` maintenance replay are explicit
    * trusted paths, while `openbooks.amend` alone is never an edit bypass.
    */
@@ -377,7 +377,7 @@ export const documentLines = pgTable(
     unit: text("unit"),
     unitPrice: numeric("unit_price", { precision: 28, scale: 8 }).notNull().default("0"),
     /**
-     * Pricing provenance stamped at pricing time (0336): the resolver basis
+     * Pricing provenance stamped at pricing time: the resolver basis
      * {kind, scheduleId, levelId, assignmentId, unitPrice, resolvedAt}.
      * Replay and audit read this, never a re-resolution. Null for
      * hand-priced lines (replay reads the stored unit price).
@@ -385,8 +385,9 @@ export const documentLines = pgTable(
     priceBasis: jsonb("price_basis"),
     /**
      * Promotion that produced this discount line (→ promotions). The
-     * composite tenant foreign key lives in migration 0496 rather than here
-     * so the promotions table definition does not cycle back into this file.
+     * composite tenant foreign key (document_lines_promotion_id_fkey) is
+     * declared in SQL rather than here so the promotions table definition
+     * does not cycle back into this file.
      */
     promotionId: uuid("promotion_id"),
     amount: money("amount").notNull(), // qty × price, txn currency
@@ -405,7 +406,7 @@ export const documentLines = pgTable(
      */
     taxOverridden: boolean("tax_overridden").notNull().default(false),
     /**
-     * Expense lines spent in another currency than their report (0739): the
+     * Expense lines spent in another currency than their report: the
      * original currency and amounts, the rate that converted them into the
      * report currency (`amount` and `tax_amount`), and the rate's evidence.
      * All null for a line in the report currency.
@@ -432,7 +433,7 @@ export const documentLines = pgTable(
     marketplaceFacilitator: text("marketplace_facilitator"),
 
     /**
-     * Who fronted the money for this line (0171). Only expense_report lines
+     * Who fronted the money for this line. Only expense_report lines
      * read it today; every other kind posts legacy math and ignores it.
      * out_of_pocket = the employee paid with their own funds, so the company
      * owes a person (employee payable, AP aging). company_paid = a
@@ -440,9 +441,7 @@ export const documentLines = pgTable(
      * liability, never an employee payable, never AP aging). personal = a
      * non-business charge on the company card: not an expense at all, the
      * employee owes the company (employee receivable). NULL = settlement not
-     * recorded (all pre-0171 history — the columns never captured intent, so
-     * the migration refuses to guess); the repost path treats NULL as
-     * out_of_pocket. New expense-report lines must carry an explicit value
+     * recorded; the repost path treats NULL as out_of_pocket. New expense-report lines must carry an explicit value
      * (edit-API enforced). The card itself is the header payment_card_id —
      * one card per report, by decision; a per-line override column may be
      * added later without disturbing this one.
@@ -535,11 +534,11 @@ export const documentLines = pgTable(
     workTo: date("work_to"),
 
     /**
-     * Expense amortization (0687): the template this line defers through and
+     * Expense amortization: the template this line defers through and
      * its optional service window. Posting routes the line to the template's
      * deferral account and creates its amortization schedule. The template
-     * foreign key lives in the migration so this file does not cycle into
-     * expense-amortization.ts.
+     * foreign key (document_lines_amortization_template_fkey) is declared in
+     * SQL so this file does not cycle into expense-amortization.ts.
      */
     amortizationTemplateId: uuid("amortization_template_id"),
     amortizationStartOn: date("amortization_start_on"),
@@ -570,7 +569,7 @@ export const documentLines = pgTable(
     index("doc_lines_project_billable").on(t.projectId, t.isBillable),
     index("doc_lines_party").on(t.partyId),
     /**
-     * Line FK backing (0261): item/tax/account are report filters (full);
+     * Line FK backing: item/tax/account are report filters (full);
      * the rest are sparse lineage pointers (partial, proven to serve both
      * the parameterized FK-check shape and org-scoped filters).
      */
@@ -712,12 +711,12 @@ export const documentLines = pgTable(
 );
 
 /**
- * Paid-at-sale settlement evidence for cash_sale and cash_refund (0494): one
- * row per tender naming how part of the total settled. Replaces the
- * documents.custom.tenders JSON cash sales wrote before 0494, so masked clones
- * keep the evidence and tenders are reportable and constrainable. The
- * storage boundary mirrors document lines: migration 0494 installs
- * document_tender_lifecycle_guard, so ordinary writes need a draft parent —
+ * Paid-at-sale settlement evidence for cash_sale and cash_refund: one row per
+ * tender naming how part of the total settled. Tenders are first-class rows
+ * rather than document custom JSON, so masked clones keep the evidence and
+ * tenders are reportable and constrainable. The storage boundary mirrors
+ * document lines: document_tender_lifecycle_guard requires a draft parent for
+ * ordinary writes —
  * except the refund mint-fill, the single-column fill recording the
  * store-credit account the settle effect minted after posting.
  */
@@ -764,9 +763,8 @@ export const documentTenders = pgTable(
       foreignColumns: [accounts.orgId, accounts.id],
       name: "document_tenders_account_id_fkey",
     }),
-    // No foreign key to stored_value_accounts: that table lands in a higher
-    // ordinal (0495), so the reference would fail on a fresh install. The
-    // tender writer locks the stored-value row instead of trusting the id.
+    // No foreign key to stored_value_accounts: the tender writer locks the
+    // stored-value row instead of trusting the id.
     check("document_tenders_position", sql`${t.position} >= 1`),
     check("document_tenders_amount_positive", sql`${t.amountMinor} > 0`),
   ],
@@ -974,14 +972,14 @@ export const overheadRates = pgTable(
     /** The rate value — $/hour when rateKind=per_hour, a percentage when percent. */
     ratePercent: money("rate_percent").notNull(),
     /** Inclusive validity window. Windows may not overlap within one
-     *  department/category/method/rate-kind identity (storage constraint 0051). */
+     *  department/category/method/rate-kind identity (overhead_rates_no_overlap). */
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     ...auditColumns,
   },
   (t) => [
     // The stored job-costing bases: the two historical kinds plus the two
-    // manufacturing kinds. Any other kind is refused by the 0456 preflight.
+    // manufacturing kinds. Any other kind is refused at storage.
     check("overhead_rates_rate_kind_allowed", sql`${t.rateKind} in ('per_hour', 'percent', 'per_unit', 'per_machine_hour')`),
   ],
 );

@@ -91,12 +91,12 @@ async function loadRun(orgId: string, id: string) {
            r.period_start::text as "periodStart", r.period_end::text as "periodEnd"
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${orgId} and r.document_id = ${id}`)).rows[0]
+     where r.org_id = ${orgId} and r.document_id = ${id}`, 'objects'))[0]
   return rows ?? null
 }
 
 async function loadRoster(orgId: string, payScheduleId: string): Promise<RosterEmployee[]> {
-  const rows = (await db.execute<Record<string, string | null>>(sql`
+  const rows = await db.execute<Record<string, string | null>>(sql`
     select prof.employee_party_id as "employeePartyId", p.display_name as name,
            prof.country, prof.province,
            prof.labour_jurisdiction as "labourJurisdiction",
@@ -106,7 +106,7 @@ async function loadRoster(orgId: string, payScheduleId: string): Promise<RosterE
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
      where prof.org_id = ${orgId} and (prof.pay_schedule_id = ${payScheduleId} or prof.pay_schedule_id is null)
        and prof.is_active
-     order by p.display_name`)).rows
+     order by p.display_name`, 'objects')
   return rows.map((row) => ({
     employeePartyId: String(row.employeePartyId),
     name: String(row.name),
@@ -322,8 +322,8 @@ export const POST = defineRoute({
                    updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
                    updated_by = ${gate.user.id}
              where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
-             returning employee_party_id`)
-          if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
+             returning employee_party_id`, 'objects')
+          if (updated.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
         }
 
         if (answersOccupationClass) {
@@ -333,8 +333,8 @@ export const POST = defineRoute({
                    updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
                    updated_by = ${gate.user.id}
              where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
-             returning employee_party_id`)
-          if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
+             returning employee_party_id`, 'objects')
+          if (updated.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
         }
 
         const filed = target

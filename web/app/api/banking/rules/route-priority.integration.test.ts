@@ -54,15 +54,15 @@ const post = (body: unknown) =>
   );
 
 async function ruleCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from bank_match_rules where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from bank_match_rules where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 
 async function priorities(orgId: string): Promise<number[]> {
   return (await withBypassContext(() => db.execute<{ priority: number }>(sql`
     select priority from bank_match_rules where org_id = ${orgId} order by created_at
-  `))).rows.map((row) => row.priority);
+  `, "objects"))).map((row) => row.priority);
 }
 
 test("bank-rule creation refuses an out-of-int32 priority without writing", async () => {

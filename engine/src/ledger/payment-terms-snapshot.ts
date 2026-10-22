@@ -87,19 +87,19 @@ export async function captureDocumentPaymentTerms(
   // A party update lock also fences insertion of a previously absent vendor role.
   const party = (await runner.execute<{ id: string }>(sql`
     select id from parties where org_id = ${orgId} and id = ${subject.partyId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!party) throw new PaymentTermsEvidenceError("The bill vendor was not found in this organization.");
   const role = (await runner.execute<{ payment_terms_id: string | null }>(sql`
     select payment_terms_id from vendor_roles
     where org_id = ${orgId} and party_id = ${subject.partyId} for share
-  `)).rows[0];
+  `, "objects"))[0];
   let source: "vendor" | "company" = "vendor";
   let termsId: unknown = role?.payment_terms_id ?? null;
   if (termsId === null) {
     const organization = (await runner.execute<{ default_terms_id: unknown }>(sql`
       select settings #>> '{billing,defaultPaymentTermsId}' as default_terms_id
       from orgs where id = ${orgId} for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!organization) throw new PaymentTermsEvidenceError("The bill organization was not found.");
     termsId = organization.default_terms_id;
     source = "company";
@@ -115,7 +115,7 @@ export async function captureDocumentPaymentTerms(
     select id, name, net_days as "netDays", discount_days as "discountDays", discount_percent::text as "discountPercent",
       encode(digest(convert_to((to_jsonb(payment_terms) - 'custom' - 'id' - 'org_id')::text, 'UTF8'), 'sha256'), 'hex') as "revisionHash"
     from payment_terms where org_id = ${orgId} and id = ${termsId} and is_active for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!terms) throw new PaymentTermsEvidenceError("The configured payment terms are missing or inactive. Select active terms before posting the bill.");
   const snapshot = {
     ...base,

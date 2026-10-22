@@ -72,10 +72,10 @@ async function setup() {
 }
 
 async function expenseReports(orgId: string) {
-  return (await db.execute<{ id: string; subsidiary_id: string | null; document_number: string }>(sql`
+  return await db.execute<{ id: string; subsidiary_id: string | null; document_number: string }>(sql`
     select id, subsidiary_id, document_number from documents
      where org_id = ${orgId} and kind = 'expense_report'
-  `)).rows
+  `, 'objects')
 }
 
 function createRequest(key: string, body: Record<string, unknown>): Request {

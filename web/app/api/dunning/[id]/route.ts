@@ -122,9 +122,9 @@ function parseGracePeriodDays(raw: unknown): number | null {
 
 async function owned(orgId: string, id: string): Promise<boolean> {
   const r = (await db.execute(
-    sql`select 1 from dunning_policies where id = ${id} and org_id = ${orgId}`,
+    sql`select 1 from dunning_policies where id = ${id} and org_id = ${orgId}`, "objects",
   ));
-  return r.rows.length > 0;
+  return r.length > 0;
 }
 
 export const PATCH = defineRoute({
@@ -216,15 +216,15 @@ export const PATCH = defineRoute({
         const beforePolicy = (await tx.execute<Record<string, unknown>>(sql`
           select *, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as policy_revision
             from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} for update
-        `));
-        const before = beforePolicy.rows[0]
+        `, "objects"));
+        const before = beforePolicy[0]
         if (!before) throw new PolicyEditConflict()
         if (body.expectedUpdatedAt !== undefined &&
           before.policy_revision !== body.expectedUpdatedAt) throw new PolicyEditConflict()
         const beforeStages = (await tx.execute<Record<string, unknown>>(sql`
           select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
-        `));
-        if ((body.isActive ?? before.is_active) === true && (stages ?? beforeStages.rows).length === 0) {
+        `, "objects"));
+        if ((body.isActive ?? before.is_active) === true && (stages ?? beforeStages).length === 0) {
           throw new PolicyStagesRefusal()
         }
         const sets = [];
@@ -245,13 +245,13 @@ export const PATCH = defineRoute({
             update dunning_policies set ${sql.join(sets, sql`, `)}
              where id = ${id} and org_id = ${authz.user.orgId}
             returning *
-          `));
-          afterPolicy = updated.rows[0];
+          `, "objects"));
+          afterPolicy = updated[0];
           if (!afterPolicy) throw new PolicyEditConflict()
         }
         let afterStages: Record<string, unknown>[] | undefined;
         if (stages) {
-          const identities = dunningStageIdentities(beforeStages.rows.map((stage) => ({ id: String(stage.id), sequence: Number(stage.sequence) })), stages)
+          const identities = dunningStageIdentities(beforeStages.map((stage) => ({ id: String(stage.id), sequence: Number(stage.sequence) })), stages)
           if (!identities.ok) throw new PolicyEditConflict(identities.error)
           // Replace atomically to permit sequence swaps under the unique
           // index. Retain stage ids and creation evidence: delivery claims
@@ -260,7 +260,7 @@ export const PATCH = defineRoute({
           afterStages = [];
           for (const [index, s] of stages.entries()) {
             const stageId = identities.ids[index] ?? null
-            const original = beforeStages.rows.find((row) => row.id === stageId)
+            const original = beforeStages.find((row) => row.id === stageId)
             const stageRow = (await tx.execute<Record<string, unknown>>(sql`
               insert into dunning_stages (id, org_id, policy_id, sequence, name, offset_days, subject_template,
                                           body_template, escalate, created_at, created_by, updated_by)
@@ -268,9 +268,9 @@ export const PATCH = defineRoute({
                       ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, coalesce(${original?.created_at ?? null}::timestamptz, now()),
                       ${original?.created_by ?? authz.user.id}, ${authz.user.id})
               returning *
-            `));
-            if (!stageRow.rows[0]) throw new PolicyEditConflict()
-            afterStages.push(stageRow.rows[0]!);
+            `, "objects"));
+            if (!stageRow[0]) throw new PolicyEditConflict()
+            afterStages.push(stageRow[0]!);
           }
         }
         await tx.execute(sql`
@@ -279,10 +279,10 @@ export const PATCH = defineRoute({
           values
             (${authz.user.orgId}, 'dunning_policies', ${id}, 'update',
              ${JSON.stringify({
-               before: { ...beforePolicy.rows[0], stages: beforeStages.rows },
+               before: { ...beforePolicy[0], stages: beforeStages },
                after: {
-                 ...(afterPolicy ?? beforePolicy.rows[0]),
-                 stages: afterStages ?? beforeStages.rows,
+                 ...(afterPolicy ?? beforePolicy[0]),
+                 stages: afterStages ?? beforeStages,
                },
              })}::jsonb,
              ${authz.user.id})
@@ -307,22 +307,22 @@ export const DELETE = defineRoute({
         // how this org chased overdue invoices.
         const beforePolicy = (await tx.execute<Record<string, unknown>>(sql`
           select * from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} for update
-        `));
-        if (!beforePolicy.rows[0]) return false;
+        `, "objects"));
+        if (!beforePolicy[0]) return false;
         const beforeStages = (await tx.execute<Record<string, unknown>>(sql`
           select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
-        `));
+        `, "objects"));
         await tx.execute(sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`);
         const removed = (await tx.execute<{ id: string }>(sql`
           delete from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} returning id
-        `)).rows[0];
+        `, "objects"))[0];
         if (!removed) throw new Error("dunning policy disappeared before deletion");
         await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id)
           values
             (${authz.user.orgId}, 'dunning_policies', ${id}, 'delete',
-             ${JSON.stringify({ before: { ...beforePolicy.rows[0], stages: beforeStages.rows } })}::jsonb,
+             ${JSON.stringify({ before: { ...beforePolicy[0], stages: beforeStages } })}::jsonb,
              ${authz.user.id})
         `);
         return true;

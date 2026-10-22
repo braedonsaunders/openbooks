@@ -51,8 +51,8 @@ const post = (orgId: string, body: unknown) =>
   })));
 
 async function unitCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from property_units where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from property_units where org_id = ${orgId}`, 'objects'));
   return rows[0]!.n;
 }
 
@@ -95,8 +95,8 @@ test('CAM pool vacancy treatment is validated at the API and persisted as chosen
     assert.ok(unknown.status >= 400 && unknown.status < 500, `expected a 4xx, got ${unknown.status}`);
     const created = await post(org.orgId, { ...pool, allocationBasis: 'rentable_area', vacancyTreatment: 'total_rentable_area' });
     assert.ok(created.ok, JSON.stringify(await created.clone().json().catch(() => null)));
-    const rows = (await withBypassContext(() => db.execute<{ treatment: string }>(sql`
-      select vacancy_treatment as treatment from cam_pools where org_id = ${org.orgId}`))).rows;
+    const rows = await withBypassContext(() => db.execute<{ treatment: string }>(sql`
+      select vacancy_treatment as treatment from cam_pools where org_id = ${org.orgId}`, 'objects'));
     assert.deepEqual(rows, [{ treatment: 'total_rentable_area' }]);
   } finally {
     state.user = null;

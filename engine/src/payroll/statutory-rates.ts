@@ -475,8 +475,8 @@ export async function lockStatutoryRatesForPayRun(
        and country = any(${sql.param(countries)}::text[]) and superseded_on is null
      order by country, rate_key, region nulls first, sub_region nulls first,
               filing_account_id nulls first
-  `);
-  await takeStatutoryRateAdvisoryLocks(tx, rows.rows.map((row) => statutoryRateScopePointKey({
+  `, "objects");
+  await takeStatutoryRateAdvisoryLocks(tx, rows.map((row) => statutoryRateScopePointKey({
     orgId,
     country: row.country,
     rateKey: row.rate_key,
@@ -524,8 +524,8 @@ export async function listStatutoryRates(
      order by r.country, r.rate_key, r.tax_year desc,
               r.region nulls first, r.sub_region nulls first, fa.account_number nulls first,
               r.superseded_on nulls first
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     id: String(row.id),
     country: String(row.country),
     rateKey: String(row.rate_key),
@@ -671,8 +671,8 @@ export async function upsertStatutoryRate(input: {
          and filing_account_id is not distinct from ${filingAccountId}
          and superseded_on is null
        for update
-    `));
-    const before = existing.rows[0];
+    `, "objects"));
+    const before = existing[0];
     const id = randomUUID();
     if (before) {
       // The open row is stamped, never rewritten: its values stay exactly as
@@ -680,7 +680,7 @@ export async function upsertStatutoryRate(input: {
       // unique index is the second line of defence — this stamp plus the
       // advisory lock above is the first, so two concurrent saves chain
       // instead of forking two current rows.
-      const stamped = await tx.execute(sql`
+      const stamped = await tx.execute<never>(sql`
         update payroll_statutory_rates
            set superseded_on = CURRENT_DATE,
                updated_by = ${input.actorId}, updated_at = now()
@@ -742,7 +742,7 @@ export async function deleteStatutoryRate(
       select id, country, rate_key, tax_year, region, sub_region, filing_account_id
         from payroll_statutory_rates
        where org_id = ${orgId} and id = ${id}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!candidate) return false;
     await lockStatutoryRatePoint(tx, {
       orgId, country: candidate.country, rateKey: candidate.rate_key,
@@ -753,10 +753,10 @@ export async function deleteStatutoryRate(
       select id, superseded_on::text as superseded_on from payroll_statutory_rates
        where org_id = ${orgId} and id = ${id}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) return false;
     if (row.superseded_on != null) return true;
-    const stamped = await tx.execute(sql`
+    const stamped = await tx.execute<never>(sql`
       update payroll_statutory_rates
          set superseded_on = CURRENT_DATE,
              updated_by = ${actorId}, updated_at = now()

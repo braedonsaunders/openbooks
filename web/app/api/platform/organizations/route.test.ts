@@ -121,8 +121,9 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       export const db = {
-        execute() {
-          return Promise.resolve({ rows: [] })
+        execute(_query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
+          return Promise.resolve({ rows: [] }).then(inMode)
         },
         transaction(fn) {
           return fn(db)

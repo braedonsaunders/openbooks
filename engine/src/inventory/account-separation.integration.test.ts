@@ -16,7 +16,7 @@ async function evidence(orgId: string) {
     'lines',(select jsonb_agg(to_jsonb(l) order by id) from journal_lines l where org_id=${orgId}),
     'vouchers',(select jsonb_agg(to_jsonb(v) order by id) from landed_cost_vouchers v where org_id=${orgId}),
     'writedowns',(select jsonb_agg(to_jsonb(w) order by id) from inventory_writedowns w where org_id=${orgId})
-  ) as state`)).rows[0]!.state;
+  ) as state`, "objects"))[0]!.state;
 }
 
 for (const operation of ["receipt variance", "build variance", "landed variance", "NRV", "NRV recovery",
@@ -67,7 +67,7 @@ for (const operation of ["receipt variance", "build variance", "landed variance"
       assert.ok(await run());
       assert.equal((await db.execute<{ balanced: boolean }>(sql`select
         (select sum(remaining_quantity*unit_cost) from cost_layers where org_id=${org.orgId}) =
-        (select sum(amount) from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.invAsset}) as balanced`)).rows[0]!.balanced, true);
+        (select sum(amount) from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.invAsset}) as balanced`, "objects"))[0]!.balanced, true);
     } finally { await dropScratchOrg(org.orgId); }
   });
 }

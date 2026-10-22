@@ -1,18 +1,16 @@
 /// <reference types="node" />
 
 /**
- * Fresh-install regression coverage for migration 0018. The baseline's
- * shared field-ticket evidence trigger referenced signature-only and
- * request-only columns directly, so the production signing-link INSERT
- * failed with 42703 before it could persist a request.
+ * Field-ticket signing evidence: the shared evidence trigger accepts both the
+ * signature-request and the signature row shapes the signing flow writes,
+ * binds every evidence reference to the ticket's tenant, and refuses a
+ * replayed possession digest.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "@openbooks/engine/platform/db";
+import { db } from "@openbooks/engine/platform/db";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -86,7 +84,7 @@ async function clearFieldTicketEvidence(orgId: string): Promise<void> {
   });
 }
 
-test("field-ticket signing evidence is valid, tenant-bound, replay-safe, and migration-replay safe",
+test("field-ticket signing evidence is valid, tenant-bound, and replay-safe",
   { skip: !DB, timeout: 120_000 },
   async () => {
     const org = await createScratchOrg();
@@ -117,8 +115,8 @@ test("field-ticket signing evidence is valid, tenant-bound, replay-safe, and mig
       const persisted = await db.execute<{ requests: number; signatures: number }>(sql`
         select
           (select count(*)::int from field_ticket_signature_requests where id = ${requestId}) as requests,
-          (select count(*)::int from field_ticket_signatures where org_id = ${org.orgId} and field_ticket_id = ${ticketId}) as signatures`);
-      assert.deepEqual(persisted.rows[0], { requests: 1, signatures: 1 }, "valid request and signature evidence persists");
+          (select count(*)::int from field_ticket_signatures where org_id = ${org.orgId} and field_ticket_id = ${ticketId}) as signatures`, 'objects');
+      assert.deepEqual(persisted[0], { requests: 1, signatures: 1 }, "valid request and signature evidence persists");
 
       // A request replay with the same possession digest is rejected by the
       // storage uniqueness fence, while the original evidence remains intact.
@@ -160,24 +158,13 @@ test("field-ticket signing evidence is valid, tenant-bound, replay-safe, and mig
         "missing signature-file evidence",
       );
 
-      // Replaying this forward migration must be a no-op for data and must not
-      // restore the baseline's row-shape error.
-      const migrationPath = fileURLToPath(
-        new URL("./migrations/generated/0018_field_ticket_evidence_integrity_guard.sql", import.meta.url),
-      );
-      await pool.query(readFileSync(migrationPath, "utf8"));
-      const afterReplay = await db.execute<{ requests: number; signatures: number }>(sql`
-        select
-          (select count(*)::int from field_ticket_signature_requests where id = ${requestId}) as requests,
-          (select count(*)::int from field_ticket_signatures where org_id = ${org.orgId} and field_ticket_id = ${ticketId}) as signatures`);
-      assert.deepEqual(afterReplay.rows[0], { requests: 1, signatures: 1 }, "migration replay preserves existing evidence rows");
-
+      // A second ticket accepts its own request through the same trigger.
       const secondTicketId = await insertFieldTicket(org.orgId, org.date);
       await db.execute(sql`
         insert into field_ticket_signature_requests
           (id, org_id, field_ticket_id, recipient, expires_at, token_digest)
         values (${randomUUID()}, ${org.orgId}, ${secondTicketId}, 'customer@example.test',
-                now() + interval '1 day', ${`post-replay-${randomUUID()}`})`);
+                now() + interval '1 day', ${`second-ticket-${randomUUID()}`})`);
     } finally {
       await clearFieldTicketEvidence(otherOrg.orgId);
       await clearFieldTicketEvidence(org.orgId);

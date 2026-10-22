@@ -75,9 +75,9 @@ test(
         select
           (select count(*)::text from custom_records where org_id = ${org.orgId} and type_key = ${typeKey}) as records,
           (select count(*)::text from number_sequences where org_id = ${org.orgId} and document_kind = ${`custrec:${typeKey}`}) as sequences
-      `),
+      `, "objects"),
       );
-      assert.deepEqual(afterRejected.rows[0], { records: "0", sequences: "0" });
+      assert.deepEqual(afterRejected[0], { records: "0", sequences: "0" });
 
       const created = await withOrgContext(org.orgId, () =>
         createApplicationRecord(context, {
@@ -179,9 +179,9 @@ test(
       const rows = await withBypass(() =>
         db.execute<{ count: string }>(sql`
           select count(*)::text as count from items where org_id = ${org.orgId} and name = 'should-not-exist'
-        `),
+        `, "objects"),
       );
-      assert.equal(rows.rows[0]?.count, "0");
+      assert.equal(rows[0]?.count, "0");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -254,9 +254,9 @@ test(
       const stored = await withBypass(() =>
         db.execute<{ custom: Record<string, unknown> }>(sql`
           select custom from items where id = ${itemId} and org_id = ${org.orgId}
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(stored.rows[0]?.custom, { required_code: "R-1", optional_note: "updated" });
+      assert.deepEqual(stored[0]?.custom, { required_code: "R-1", optional_note: "updated" });
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
@@ -306,7 +306,7 @@ test(
           select action, actor_id, changes, row_id from audit_log
            where org_id = ${org.orgId} and table_name = 'custom_records'
            order by at, id
-        `),
+        `, "objects"),
       );
 
     try {
@@ -329,7 +329,7 @@ test(
       assert.equal(bare.status, 201);
       const bareId = (bare.body as { record: { id: string } }).record.id;
       assert.deepEqual(
-        (await auditRows()).rows.map((row) => row.action),
+        (await auditRows()).map((row) => row.action),
         [],
       );
 
@@ -346,7 +346,7 @@ test(
       assert.equal(created.status, 201);
       const id = (created.body as { record: { id: string } }).record.id;
       {
-        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        const rows = (await auditRows()).filter((row) => row.row_id === id);
         assert.equal(rows.length, 1);
         assert.equal(rows[0]!.action, "update");
         assert.equal(rows[0]!.actor_id, actorId);
@@ -359,14 +359,12 @@ test(
       }
 
       // A data update appends a second update row; the live row is intact.
-      const revision = (
-        await withBypass(() =>
+      const revision = (await withBypass(() =>
           db.execute<{ revision: string }>(sql`
             select (revision_seq)::text as revision
               from custom_records where id = ${id} and org_id = ${org.orgId}
-          `),
-        )
-      ).rows[0]!.revision;
+          `, "objects"),
+        ))[0]!.revision;
       const updated = await withOrgContext(org.orgId, () =>
         updateRecord(
           user,
@@ -379,7 +377,7 @@ test(
       );
       assert.equal(updated.status, 200);
       {
-        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        const rows = (await auditRows()).filter((row) => row.row_id === id);
         assert.equal(rows.length, 2);
         assert.equal(rows[1]!.action, "update");
         assert.equal(rows[1]!.actor_id, actorId);
@@ -397,7 +395,7 @@ test(
       );
       assert.equal(deleted.status, 200);
       {
-        const rows = (await auditRows()).rows.filter((row) => row.row_id === bareId);
+        const rows = (await auditRows()).filter((row) => row.row_id === bareId);
         assert.equal(rows.length, 1);
         assert.equal(rows[0]!.action, "delete");
         assert.equal(rows[0]!.actor_id, actorId);
@@ -456,7 +454,7 @@ test(
           select action, actor_id, changes, row_id from audit_log
            where org_id = ${org.orgId} and table_name = 'items'
            order by at, id
-        `),
+        `, "objects"),
       );
 
     try {
@@ -473,7 +471,7 @@ test(
       assert.equal(created.status, 201);
       const id = (created.body as { id: string }).id;
       {
-        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        const rows = (await auditRows()).filter((row) => row.row_id === id);
         assert.equal(rows.length, 1);
         assert.equal(rows[0]!.action, "insert");
         assert.equal(rows[0]!.actor_id, actorId);
@@ -489,7 +487,7 @@ test(
       );
       assert.equal(updated.status, 200);
       {
-        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        const rows = (await auditRows()).filter((row) => row.row_id === id);
         assert.equal(rows.length, 2);
         assert.equal(rows[1]!.action, "update");
         assert.equal(rows[1]!.actor_id, actorId);
@@ -504,7 +502,7 @@ test(
       );
       assert.equal(deleted.status, 200);
       {
-        const rows = (await auditRows()).rows.filter((row) => row.row_id === id);
+        const rows = (await auditRows()).filter((row) => row.row_id === id);
         assert.equal(rows.length, 3);
         assert.equal(rows[2]!.action, "delete");
         assert.equal(rows[2]!.actor_id, actorId);
@@ -561,8 +559,8 @@ test(
       withBypass(() =>
         db.execute<{ n: string }>(sql`
           select count(*)::text as n from vendor_roles where org_id = ${org.orgId} and party_id = ${partyId}
-        `),
-      ).then((result) => result.rows[0]?.n);
+        `, "objects"),
+      ).then((result) => result[0]?.n);
 
     try {
       const created = await withOrgContext(org.orgId, () =>

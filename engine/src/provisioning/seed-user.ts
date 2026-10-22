@@ -46,8 +46,8 @@ export async function seedUser(input: SeedUserInput): Promise<SeedUserResult> {
   }
   const org = (await db.execute<{ id: string; name: string; env_kind: string }>(sql`
     select id, name, env_kind from orgs where id = ${input.orgId}
-  `));
-  const target = org.rows[0];
+  `, "objects"));
+  const target = org[0];
   if (!target) {
     throw new Error(
       `no organization with id ${input.orgId}; create it before seeding a login user`,
@@ -63,8 +63,8 @@ export async function seedUser(input: SeedUserInput): Promise<SeedUserResult> {
   const seeded = await db.transaction(async (tx) => {
     const roleRow = (await tx.execute<{ id: string }>(sql`
       select id from app_roles where org_id = ${target.id} and key = ${role} limit 1
-    `));
-    const roleId = roleRow.rows[0];
+    `, "objects"));
+    const roleId = roleRow[0];
     if (!roleId) throw new Error(`role ${role} does not exist in organization ${target.name} (${target.id})`);
     const user = (await tx.execute<{ id: string }>(sql`
       insert into users (org_id, email, name, password_hash)
@@ -73,8 +73,8 @@ export async function seedUser(input: SeedUserInput): Promise<SeedUserResult> {
         set password_hash = ${hash}, is_active = true, updated_at = now()
       where users.org_id = ${target.id}
       returning id
-    `));
-    const userId = user.rows[0]!.id;
+    `, "objects"));
+    const userId = user[0]!.id;
     await tx.execute(sql`
       -- The grant is the desired end state: re-seeding a user who already
       -- holds the role is a no-op, not a lost write.

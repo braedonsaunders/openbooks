@@ -32,8 +32,8 @@ export async function listBudgetSourceOptions(
        )
      order by s.updated_at desc
      limit 50
-  `)
-  return result.rows
+  `, 'objects')
+  return result
 }
 
 export type BudgetDimensions = {
@@ -205,8 +205,8 @@ export async function loadBudgetScenario(
       from budget_scenarios bs
       join accounting_books b on b.id = bs.book_id and b.org_id = bs.org_id
      where bs.id = ${id} and bs.org_id = ${orgId}
-  `))
-  const row = result.rows[0]
+  `, 'objects'))
+  const row = result[0]
   if (!row) return null
   // Reads reveal only scenarios wholly within scope: when the caller passes
   // their scope, a scenario carrying out-of-scope lines loads as missing.
@@ -256,7 +256,7 @@ async function loadWorksheetSlice(
        and parent_id is null and is_active and not is_elimination
      order by created_at, id
      limit 1
-  `)).rows[0]?.id ?? null
+  `, 'objects'))[0]?.id ?? null
   // Custom segment slice: unknown or retired selections are dropped (a stale
   // link opens the nearest valid slice), and the fund resolves to the default
   // fund, so the worksheet always names the fund its cells are saved under.
@@ -287,14 +287,14 @@ async function loadWorksheetSlice(
        where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear} and not p.is_adjustment
          and fc.is_default
        order by p.period_number
-    `),
+    `, 'objects'),
     db.execute<BudgetWorkspaceAccountRow>(sql`
       select a.id, a.number, a.name, a.type
         from accounts a
        where ${accountWhere}
        order by a.number nulls last, a.name
        limit ${opts.perPage} offset ${(opts.page - 1) * opts.perPage}
-    `),
+    `, 'objects'),
     db.execute(sql`select count(*) as n from accounts a where ${accountWhere}`) as Promise<{
       rows: { n: string }[]
     }>,
@@ -303,7 +303,7 @@ async function loadWorksheetSlice(
 
   return {
     dims,
-    periods: periodRows.rows.map((row) => {
+    periods: periodRows.map((row) => {
       // Worksheet periods are non-adjustment by the query above.
       const periodRef: PeriodDisplayInput = {
         fiscalYear: Number(row.fiscal_year),
@@ -321,7 +321,7 @@ async function loadWorksheetSlice(
         periodRef,
       }
     }),
-    accounts: accountRows.rows.map((row) => ({
+    accounts: accountRows.map((row) => ({
       id: row.id,
       number: row.number,
       name: row.name,
@@ -343,7 +343,7 @@ export async function loadBudgetWorkspace(
 
   const slice = await loadWorksheetSlice(orgId, scenario.fiscalYear, opts.dims, opts)
 
-  const total = (await db.execute(sql`
+  const total = await db.execute<{ total: string }>(sql`
       select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
         from budget_lines bl
         join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
@@ -352,11 +352,11 @@ export async function loadBudgetWorkspace(
        where bl.org_id = ${orgId} and bl.scenario_id = ${id}
          and fc.is_default
          and ${dimensionWhere('bl', slice.dims, orgId)}
-    `) as { rows: { total: string }[] })
+    `, 'objects')
 
   const accountIds = slice.accounts.map((account) => account.id)
   const lineRows = accountIds.length
-    ? ((await db.execute<BudgetWorkspaceLineRow>(sql`
+    ? (await db.execute<BudgetWorkspaceLineRow>(sql`
         select bl.id, bl.account_id, bl.period_id, bl.subsidiary_id, bl.department_id,
                bl.project_id, bl.location_id, bl.class_id, bl.amount::text, bl.note
           from budget_lines bl
@@ -366,7 +366,7 @@ export async function loadBudgetWorkspace(
            and fc.is_default
            and bl.account_id = any(${`{${accountIds.join(',')}}`}::uuid[])
            and ${dimensionWhere('bl', slice.dims, orgId)}
-      `))).rows
+      `, 'objects'))
     : []
 
   return {
@@ -388,7 +388,7 @@ export async function loadBudgetWorkspace(
     totalAccounts: slice.totalAccounts,
     page: opts.page,
     perPage: opts.perPage,
-    sliceTotal: total.rows[0]?.total ?? '0.0000',
+    sliceTotal: total[0]?.total ?? '0.0000',
     dimensions: slice.dimensions,
     effectiveSubsidiaryId: slice.dims.subsidiaryId,
     effectiveExtraDims: slice.dims.extraDims ?? {},
@@ -431,24 +431,24 @@ export async function loadUnsavedBudgetWorkspace(
           order by starts_on desc limit 1),
         (select max(fiscal_year) from accounting_periods where org_id = ${orgId})
       ) as fiscal_year
-  `))
+  `, 'objects'))
   const resolved = requestedBook
-    ? ((await db.execute(sql`
+    ? (await db.execute<{ book_id: string; book_code: string; book_name: string }>(sql`
         select id as book_id, code as book_code, name as book_name from accounting_books
          where id = ${requestedBook} and org_id = ${orgId} and is_active
-      `)) as { rows: { book_id: string; book_code: string; book_name: string }[] }).rows[0]
-    : defaults.rows[0]
+      `, 'objects'))[0]
+    : defaults[0]
   if (requestedBook && !resolved) throw new BudgetPrerequisiteError('invalid_book_or_fiscal_year')
   const bookId = resolved?.book_id ?? null
-  const fiscalYear = opts.fiscalYear ?? Number(defaults.rows[0]?.fiscal_year)
+  const fiscalYear = opts.fiscalYear ?? Number(defaults[0]?.fiscal_year)
   if (!bookId || !Number.isInteger(fiscalYear)) {
     throw new BudgetPrerequisiteError('configure_an_accounting_book_and_periods_first')
   }
   const havePeriods = (await db.execute(sql`
     select 1 from accounting_periods
      where org_id = ${orgId} and fiscal_year = ${fiscalYear} and not is_adjustment limit 1
-  `))
-  if (!havePeriods.rows[0]) {
+  `, 'objects'))
+  if (!havePeriods[0]) {
     throw new BudgetPrerequisiteError('invalid_book_or_fiscal_year')
   }
 
@@ -484,18 +484,18 @@ export async function loadUnsavedBudgetWorkspace(
 
 export async function loadBudgetDimensionOptions(orgId: string, preloadedSegments?: BudgetSegment[]): Promise<BudgetWorkspace['dimensions']> {
   const [subsidiaries, departments, projects, locations, classes] = (await Promise.all([
-    db.execute<DimensionOption>(sql`select id, null as code, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by name`),
-    db.execute<DimensionOption>(sql`select id, code, name from departments where org_id = ${orgId} and is_active order by code nulls last, name`),
-    db.execute<DimensionOption>(sql`select id, code, name from projects where org_id = ${orgId} and is_active order by code nulls last, name`),
-    db.execute<DimensionOption>(sql`select id, code, name from locations where org_id = ${orgId} and is_active order by code nulls last, name`),
-    db.execute<DimensionOption>(sql`select id, code, name from classes where org_id = ${orgId} and is_active order by code nulls last, name`),
+    db.execute<DimensionOption>(sql`select id, null as code, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by name`, 'objects'),
+    db.execute<DimensionOption>(sql`select id, code, name from departments where org_id = ${orgId} and is_active order by code nulls last, name`, 'objects'),
+    db.execute<DimensionOption>(sql`select id, code, name from projects where org_id = ${orgId} and is_active order by code nulls last, name`, 'objects'),
+    db.execute<DimensionOption>(sql`select id, code, name from locations where org_id = ${orgId} and is_active order by code nulls last, name`, 'objects'),
+    db.execute<DimensionOption>(sql`select id, code, name from classes where org_id = ${orgId} and is_active order by code nulls last, name`, 'objects'),
   ]))
   return {
-    subsidiaries: subsidiaries.rows,
-    departments: departments.rows,
-    projects: projects.rows,
-    locations: locations.rows,
-    classes: classes.rows,
+    subsidiaries,
+    departments,
+    projects,
+    locations,
+    classes,
     segments: preloadedSegments ?? await loadBudgetSegments(db, orgId),
   }
 }

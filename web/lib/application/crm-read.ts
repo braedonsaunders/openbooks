@@ -53,7 +53,7 @@ export async function listApplicationOpportunities(
        where o.org_id = ${context.authz.user.orgId}${filters}${scope}
        order by s.is_closed, o.expected_close_date nulls last, o.created_at desc
        limit ${limit}
-    `),
+    `, "objects"),
     db.execute<Record<string, unknown>>(sql`
       select count(*)::int as count, o.currency,
              coalesce(sum(o.projected_amount), 0)::text as projected,
@@ -63,11 +63,11 @@ export async function listApplicationOpportunities(
         left join parties p on p.id = o.party_id and p.org_id = o.org_id
        where o.org_id = ${context.authz.user.orgId}${filters}${scope}
        group by o.currency order by o.currency
-    `),
+    `, "objects"),
   ]);
   return {
-    total: totals.rows.reduce((n, row) => n + Number(row.count ?? 0), 0),
-    opportunities: page.rows.map((row) => ({
+    total: totals.reduce((n, row) => n + Number(row.count ?? 0), 0),
+    opportunities: page.map((row) => ({
       id: row.id,
       opportunityNumber: row.opportunity_number,
       title: row.title,
@@ -84,7 +84,7 @@ export async function listApplicationOpportunities(
       expectedCloseDate: row.expected_close_date,
       isActive: row.is_active,
     })),
-    totalsByCurrency: totals.rows.map((row) => ({
+    totalsByCurrency: totals.map((row) => ({
       currency: row.currency,
       count: Number(row.count ?? 0),
       projectedAmount: normalizeMoneyValue(String(row.projected ?? "0")),
@@ -220,18 +220,18 @@ export async function listApplicationCrmAccounts(
        where cp.org_id = ${context.authz.user.orgId}${filters}${scope}
        order by p.display_name
        limit ${limit}
-    `),
+    `, "objects"),
     db.execute<Record<string, unknown>>(sql`
       select cp.lifecycle_stage, count(*)::int as count
         from crm_account_profiles cp
         join parties p on p.id = cp.party_id and p.org_id = cp.org_id
        where cp.org_id = ${context.authz.user.orgId}${filters}${scope}
        group by cp.lifecycle_stage order by cp.lifecycle_stage
-    `),
+    `, "objects"),
   ]);
   return {
-    total: stages.rows.reduce((n, row) => n + Number(row.count ?? 0), 0),
-    accounts: page.rows.map((row) => ({
+    total: stages.reduce((n, row) => n + Number(row.count ?? 0), 0),
+    accounts: page.map((row) => ({
       partyId: row.party_id,
       displayName: row.display_name,
       lifecycleStage: row.lifecycle_stage,
@@ -245,7 +245,7 @@ export async function listApplicationCrmAccounts(
       lastActivityAt: row.last_activity_at,
       isActive: row.is_active,
     })),
-    byStage: stages.rows.map((row) => ({
+    byStage: stages.map((row) => ({
       lifecycleStage: row.lifecycle_stage,
       count: Number(row.count ?? 0),
     })),

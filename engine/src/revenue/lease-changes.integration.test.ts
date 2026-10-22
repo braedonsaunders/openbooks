@@ -106,11 +106,9 @@ function input(
 }
 async function approve(org: ScratchOrg, actors: FlowActors, changeId: string) {
   await submitFinancialChange(org.orgId, changeId, actors.submitterId);
-  const gate = (
-    await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`,
-    )
-  ).rows[0];
+  const gate = (await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, "objects",
+    ))[0];
   assert.ok(gate, "a real approval gate was created");
   await decideGate({
     gateId: gate.id,
@@ -119,11 +117,9 @@ async function approve(org: ScratchOrg, actors: FlowActors, changeId: string) {
   });
 }
 async function balance(orgId: string, accountId: string) {
-  const row = (
-    await db.execute<{ amount: string }>(
-      sql`select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${orgId} and l.account_id=${accountId} and e.status='posted'`,
-    )
-  ).rows[0]!;
+  const row = (await db.execute<{ amount: string }>(
+      sql`select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${orgId} and l.account_id=${accountId} and e.status='posted'`, "objects",
+    ))[0]!;
   return toUnits(row.amount);
 }
 test(
@@ -193,11 +189,9 @@ test(
   { skip: !DB },
   async () => {
     await fixture(async (org, actors, lease, accounts) => {
-      const old = (
-        await db.execute<{ id: string; payment_entry_id: string }>(
-          sql`select id,payment_entry_id from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} and sequence=1`,
-        )
-      ).rows[0]!;
+      const old = (await db.execute<{ id: string; payment_entry_id: string }>(
+          sql`select id,payment_entry_id from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} and sequence=1`, "objects",
+        ))[0]!;
       const { changeId } = await proposeLeaseChange(
         org.orgId,
         lease,
@@ -226,14 +220,12 @@ test(
         await balance(org.orgId, accounts.payment!),
         -toUnits("1250"),
       );
-      const kept = (
-        await db.execute<{
+      const kept = (await db.execute<{
           payment_entry_id: string;
           superseded_by_change_id: string;
         }>(
-          sql`select payment_entry_id,superseded_by_change_id from lease_agreement_schedule_lines where id=${old.id}`,
-        )
-      ).rows[0]!;
+          sql`select payment_entry_id,superseded_by_change_id from lease_agreement_schedule_lines where id=${old.id}`, "objects",
+        ))[0]!;
       assert.equal(kept.payment_entry_id, old.payment_entry_id);
       assert.equal(kept.superseded_by_change_id, changeId);
       assert.equal(
@@ -263,7 +255,7 @@ test(
       );
       const preserved = (await db.execute<{ reason: string }>(sql`
         select reason from financial_changes where org_id=${org.orgId} and id=${changeId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(preserved.reason, input(accounts).reason,
         "the refused rewrite must preserve the approved reason");
     });
@@ -309,11 +301,9 @@ test(
         await balance(org.orgId, accounts.rouAsset!),
         toUnits("4600"),
       );
-      const rows = (
-        await db.execute<{ revision: number; superseded: boolean }>(
-          sql`select revision,superseded_by_change_id is not null as superseded from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} order by sequence`,
-        )
-      ).rows;
+      const rows = await db.execute<{ revision: number; superseded: boolean }>(
+          sql`select revision,superseded_by_change_id is not null as superseded from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${lease} order by sequence`, "objects",
+        );
       assert.equal(rows.length, 6);
       assert.ok(rows.slice(0, 3).every((r) => r.superseded));
       assert.ok(rows.slice(3).every((r) => r.revision === 2 && !r.superseded));
@@ -375,11 +365,9 @@ test(
       });
       assert.equal(await balance(org.orgId, accounts.rouAsset!), before);
       assert.equal(
-        (
-          await db.execute<{ revision: number }>(
-            sql`select revision from lease_agreements where id=${lease}`,
-          )
-        ).rows[0]!.revision,
+        (await db.execute<{ revision: number }>(
+            sql`select revision from lease_agreements where id=${lease}`, "objects",
+          ))[0]!.revision,
         1,
       );
     });
@@ -413,11 +401,9 @@ test(
       } finally {
         await dropScratchOrg(other.orgId);
       }
-      const count = (
-        await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from financial_changes where org_id=${org.orgId}`,
-        )
-      ).rows[0]!.n;
+      const count = (await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from financial_changes where org_id=${org.orgId}`, "objects",
+        ))[0]!.n;
       assert.equal(count, 0);
     });
   },
@@ -434,11 +420,9 @@ test(
         input(accounts),
       );
       await submitFinancialChange(org.orgId, changeId, actors.submitterId);
-      const gate = (
-        await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`,
-        )
-      ).rows[0]!;
+      const gate = (await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, "objects",
+        ))[0]!;
       await assert.rejects(
         decideGate({
           gateId: gate.id,
@@ -449,7 +433,7 @@ test(
       );
       const pending = (await db.execute<{ status: string }>(sql`
         select status from flow_gates where org_id=${org.orgId} and id=${gate.id}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(pending.status, "pending", "the submitter's refused decision cannot approve the gate");
       const rows = await withOrg(org.orgId, () =>
         worklistGates(org.orgId, actors.approver1Id),

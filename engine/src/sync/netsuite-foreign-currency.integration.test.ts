@@ -72,18 +72,18 @@ test(
              jl.is_open_item as "openItem"
         from journal_lines jl
         join documents d on d.posted_entry_id = jl.entry_id and d.org_id = jl.org_id
-       where d.id = ${id} and d.org_id = ${o.orgId} and jl.is_open_item`);
-    assert.equal(legs.rows.length, 1);
+       where d.id = ${id} and d.org_id = ${o.orgId} and jl.is_open_item`, "objects");
+    assert.equal(legs.length, 1);
     // Functional GL is the converted value, not the foreign face value: a
     // builder that drops currency/rate would book 100.0000 here.
-    assert.equal(legs.rows[0]!.amount, "120.0000");
-    assert.equal(legs.rows[0]!.currency, "USD");
-    assert.equal(legs.rows[0]!.txnAmount, "100.0000");
+    assert.equal(legs[0]!.amount, "120.0000");
+    assert.equal(legs[0]!.currency, "USD");
+    assert.equal(legs[0]!.txnAmount, "100.0000");
 
     const doc = await db.execute<{ openBalance: string | null }>(sql`
       select open_balance::text as "openBalance" from documents
-       where id = ${id} and org_id = ${o.orgId}`);
-    assert.equal(doc.rows[0]!.openBalance, "100.0000");
+       where id = ${id} and org_id = ${o.orgId}`, "objects");
+    assert.equal(doc[0]!.openBalance, "100.0000");
   },
 );
 
@@ -178,8 +178,8 @@ test(
 
     const balances = await db.execute<{ n: string; ob: string | null }>(sql`
       select document_number as "n", open_balance::text as "ob" from documents
-       where org_id = ${o.orgId} and id in (${payDoc}, ${invDoc}) order by 1`);
-    assert.deepEqual(balances.rows, [
+       where org_id = ${o.orgId} and id in (${payDoc}, ${invDoc}) order by 1`, "objects");
+    assert.deepEqual(balances, [
       { n: "INV-FXNS", ob: "0.0000" },
       { n: "PAY-FXNS", ob: "0.0000" },
     ]);

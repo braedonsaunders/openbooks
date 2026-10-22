@@ -191,8 +191,8 @@ export async function loadPayRunWizard(
         left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${id}
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-         for share of r,d`))
-    const run = runs.rows[0]
+         for share of r,d`, 'objects'))
+    const run = runs[0]
     if (!run) notFound()
 
     try {
@@ -218,7 +218,7 @@ export async function loadPayRunWizard(
           left join employee_payroll_profiles prof
             on prof.employee_party_id = st.employee_party_id and prof.org_id = st.org_id
          where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by p.display_name`),
+         order by p.display_name`, 'objects'),
       db.execute<(StubRow['lines'])[number]>(sql`
         select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence, l.payment_kind,
                c.code as component_code, pr.name as project_name, dep.name as department_name
@@ -228,7 +228,7 @@ export async function loadPayRunWizard(
           left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
           left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
          where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by l.stub_id, l.sequence`),
+         order by l.stub_id, l.sequence`, 'objects'),
       // Step 1 roster: everyone the schedule would include, with a
       // wage-configured flag (one-table doctrine — labor_cost_rates,
       // employee scope, effective at the pay date). Approved hours are merged
@@ -274,7 +274,7 @@ export async function loadPayRunWizard(
           left join subsidiaries sub on sub.id = p.subsidiary_id and sub.org_id = p.org_id
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id} and prof.is_active
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-         order by p.display_name`),
+         order by p.display_name`, 'objects'),
       // Variance baseline: each employee's most recent committed stub before
       // this run (net pay delta drives the ±15% review flag).
       db.execute<{ employee_party_id: string; net_pay: string; pay_date: string }>(sql`
@@ -286,7 +286,7 @@ export async function loadPayRunWizard(
          where st.org_id = ${orgId} and st.pay_run_document_id <> ${id}
            and st.pay_date <= ${run.pay_date}
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
-         order by st.employee_party_id, st.pay_date desc, st.created_at desc`),
+         order by st.employee_party_id, st.pay_date desc, st.created_at desc`, 'objects'),
       // Finish-step remittance summary: the committed projection's credit legs
       // grouped by account (net pay owed + statutory/withholding liabilities).
       db.execute<RemittanceRow>(sql`
@@ -297,27 +297,27 @@ export async function loadPayRunWizard(
          where dl.org_id = ${orgId} and dl.document_id = ${id}
          group by a.id, a.number, a.name
          having sum(dl.amount) < 0
-         order by sum(dl.amount)`),
+         order by sum(dl.amount)`, 'objects'),
     ]))
 
     const linesByStub = new Map<string, StubRow['lines']>()
-    for (const line of linesRes.rows) {
+    for (const line of linesRes) {
       const list = linesByStub.get(line.stub_id)
       if (list) list.push(line)
       else linesByStub.set(line.stub_id, [line])
     }
-    const stubs = stubsRes.rows.map((stub) => ({ ...stub, lines: linesByStub.get(stub.id) ?? [] }))
+    const stubs = stubsRes.map((stub) => ({ ...stub, lines: linesByStub.get(stub.id) ?? [] }))
 
     // Scope approved hours come from the wage-hours read Calculate prices —
     // the same rows, never a parallel summary that can disagree with them.
     const wageHours = sumWageHoursByEmployee(await loadWageTimeEntries(db, {
       orgId,
-      employeePartyIds: rosterRes.rows.map((row) => String(row.employee_party_id)),
+      employeePartyIds: rosterRes.map((row) => String(row.employee_party_id)),
       periodStart: run.period_start,
       periodEnd: run.period_end,
       documentId: id,
     }))
-    const roster: RosterRow[] = rosterRes.rows.map((row) => ({
+    const roster: RosterRow[] = rosterRes.map((row) => ({
       ...row,
       approved_hours: wageHours.get(String(row.employee_party_id)) ?? '0',
     }))
@@ -347,7 +347,7 @@ export async function loadPayRunWizard(
       ),
     )
     const registerBuckets: RegisterBucket[] = buildRegisterBuckets(
-      linesRes.rows.map((line) => ({ componentCode: line.component_code, kind: line.kind, amount: line.amount })),
+      linesRes.map((line) => ({ componentCode: line.component_code, kind: line.kind, amount: line.amount })),
       declaredBuckets,
     )
     // The region column speaks the pack's language ("Province" for CA,
@@ -385,7 +385,7 @@ export async function loadPayRunWizard(
     )
 
     const previousNet: Record<string, string> = {}
-    for (const row of prevRes.rows) previousNet[row.employee_party_id] = row.net_pay
+    for (const row of prevRes) previousNet[row.employee_party_id] = row.net_pay
 
     const [adjustmentsRes, adjustableRes] = (await Promise.all([
       db.execute(sql`
@@ -396,7 +396,7 @@ export async function loadPayRunWizard(
           join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
           left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
          where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
-         order by p.display_name, a.created_at`),
+         order by p.display_name, a.created_at`, 'objects'),
       db.execute(sql`
         select component.id, component.code, component.name, component.kind,
                exists(select 1 from entitlement_plans vacation_plan
@@ -417,16 +417,16 @@ export async function loadPayRunWizard(
                where plan.org_id=component.org_id and plan.is_active and plan.unit in ('hours','money')
                  and component.kind='earning' and component.payment_kind='cash'
                  and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)))
-         order by component.sequence, component.code`),
+         order by component.sequence, component.code`, 'objects'),
     ]))
-    const adjustmentRows = adjustmentsRes.rows.map((row) => {
+    const adjustmentRows = adjustmentsRes.map((row) => {
       const evidence = parseBankCashInputEvidence(typeof row.note === 'string' ? row.note : null)
       const declaredVacation = parseDeclaredVacationAccrualEvidence(typeof row.note === 'string' ? row.note : null)
       return (evidence
         ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}${evidence.outsideBankAmount ? ` · ${evidence.outsideBankAmount} paid outside bank` : ''}` }
         : declaredVacation ? { ...row, note: `${declaredVacation.reason} · ${declaredVacation.sourceReference}` } : row) as unknown as AdjustmentRow
     })
-    const componentRows = adjustableRes.rows as unknown as ComponentOption[]
+    const componentRows = adjustableRes as unknown as ComponentOption[]
 
     // A termination run's Finish step owns the pack-declared SEPARATION
     // filings (the ROE): due within days of the interruption of earnings, so
@@ -459,10 +459,10 @@ export async function loadPayRunWizard(
             ? 'review'
             : 'period'
 
-    const registerReport = ((await db.execute<{ id: string }>(sql`
+    const registerReport = (await db.execute<{ id: string }>(sql`
       select id from report_definitions
        where org_id = ${orgId} and slug = 'payroll-register' limit 1
-    `))).rows[0] ?? null
+    `, 'objects'))[0] ?? null
 
     // The refusal record the commit gate binds to, parsed once for every
     // consumer below: the wizard's exception list, the GL-step acknowledgement
@@ -493,11 +493,11 @@ export async function loadPayRunWizard(
     // payment date at write time; this only offers it.
     const clearingWindows = parseNetPayClearingWindows((await db.execute<{ windows: unknown }>(sql`
       select settings->'payroll'->${NET_PAY_CLEARING_SETTINGS_KEY} as windows from orgs where id = ${orgId}
-    `)).rows[0]?.windows)
+    `, 'objects'))[0]?.windows)
     const clearingLabels = clearingWindows.length === 0 ? new Map<string, string>() : new Map((await db.execute<{ id: string; label: string }>(sql`
       select id::text as id, coalesce(number || ' · ', '') || name as label from accounts
        where org_id = ${orgId} and id in (${sql.join(clearingWindows.map((window) => sql`${window.accountId}::uuid`), sql`, `)})
-    `)).rows.map((row) => [row.id, row.label]))
+    `, 'objects')).map((row) => [row.id, row.label]))
     const clearingDesignations = clearingWindows.map((window) => ({
       id: window.id, accountId: window.accountId, label: clearingLabels.get(window.accountId) ?? window.accountId,
       effectiveFrom: window.effectiveFrom, effectiveTo: window.effectiveTo,
@@ -531,7 +531,7 @@ export async function loadPayRunWizard(
       previousNet,
       adjustments: adjustmentRows,
       adjustableComponents: componentRows,
-      remittance: run.run_status === 'committed' ? remitRes.rows : [],
+      remittance: run.run_status === 'committed' ? remitRes : [],
       bankAccounts,
       clearingDesignations,
       readiness,

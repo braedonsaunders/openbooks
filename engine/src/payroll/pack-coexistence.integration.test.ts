@@ -29,8 +29,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  */
 
 async function componentRows(orgId: string): Promise<{ code: string; country: string | null; system_key: string | null; kind: string }[]> {
-  return (await withBypassContext(async () => (await db.execute<{ code: string; country: string | null; system_key: string | null; kind: string }>(sql`
-    select code, country, system_key, kind from pay_components where org_id = ${orgId}`)).rows));
+  return (await withBypassContext(async () => await db.execute<{ code: string; country: string | null; system_key: string | null; kind: string }>(sql`
+    select code, country, system_key, kind from pay_components where org_id = ${orgId}`, "objects")));
 }
 
 async function insertRaw(
@@ -149,8 +149,8 @@ test(
         await seedPayrollComponents(org.orgId, null, "AU");
       });
 
-      const wcb = (await withBypassContext(async () => (await db.execute<{ country: string | null }>(sql`
-        select country from pay_components where org_id = ${org.orgId} and code = 'WCB'`)).rows));
+      const wcb = (await withBypassContext(async () => await db.execute<{ country: string | null }>(sql`
+        select country from pay_components where org_id = ${org.orgId} and code = 'WCB'`, "objects")));
       assert.deepEqual(
         wcb.map((row) => row.country).sort(),
         ["AU", "CA"],
@@ -180,9 +180,9 @@ test(
       await withBypassContext(async () => {
         await setPackSlotAccount(org.orgId, userId, "AU", "wcb", org.accounts.ap);
       });
-      const after = (await withBypassContext(async () => (await db.execute<{ country: string | null; liability_account_id: string | null }>(sql`
+      const after = (await withBypassContext(async () => await db.execute<{ country: string | null; liability_account_id: string | null }>(sql`
         select country, liability_account_id from pay_components
-         where org_id = ${org.orgId} and code = 'WCB'`)).rows));
+         where org_id = ${org.orgId} and code = 'WCB'`, "objects")));
       const au = after.find((row) => row.country === "AU");
       const ca = after.find((row) => row.country === "CA");
       assert.equal(au?.liability_account_id, org.accounts.ap, "the AU WCB slot must take the mapped account");

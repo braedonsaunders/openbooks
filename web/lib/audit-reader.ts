@@ -72,8 +72,8 @@ export async function readAuditEvent(orgId: string, eventId: string): Promise<Au
       left join users u on u.id = a.actor_id and u.org_id = a.org_id
      where a.org_id = ${orgId} and a.id = ${eventId}
      limit 1
-  `)
-  const row = result.rows[0]
+  `, 'objects')
+  const row = result[0]
   if (!row) return null
   const labels = await auditRecordLabels(orgId, [{ table: row.table_name, rowId: row.row_id }])
   return {
@@ -129,7 +129,7 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
       ${documentJoin}
       left join users u on u.id = a.actor_id and u.org_id = a.org_id
       order by selected.at desc, selected.id desc
-    `),
+    `, 'objects'),
     // Aggregate ordinary records before combining them with document kinds.
     // Only document events need the document join and retained-snapshot lookup.
     // Counts remain exact, including filtered totals and deleted documents.
@@ -157,23 +157,23 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
       )
       select f.*, u.name as actor_name from facets f
       left join users u on f.actor_group = 0 and u.id = f.actor_id and u.org_id = ${orgId}
-    `),
+    `, 'objects'),
   ])
-  const total = facets.rows.find((r) => r.action_group === 1 && r.actor_group === 1 && r.rtype_group === 1)
+  const total = facets.find((r) => r.action_group === 1 && r.actor_group === 1 && r.rtype_group === 1)
   if (!total) throw new Error('The audit query did not return its total.')
   const byCount = (a: AuditFacet, b: AuditFacet) => Number(b.n) - Number(a.n)
     || String(a.action ?? a.rtype ?? a.actor_id ?? '').localeCompare(String(b.action ?? b.rtype ?? b.actor_id ?? ''))
-  const labels = await auditRecordLabels(orgId, list.rows.map((row) => ({ table: row.table_name, rowId: row.row_id })))
+  const labels = await auditRecordLabels(orgId, list.map((row) => ({ table: row.table_name, rowId: row.row_id })))
   return {
-    rows: list.rows.map((row): AuditListRow => ({
+    rows: list.map((row): AuditListRow => ({
       id: row.id, rowId: row.row_id, at: new Date(row.at).toISOString(),
       actorName: row.actor_name, action: row.action, recordType: row.rtype,
       recordLabel: labels.get(`${row.table_name}:${row.row_id}`) ?? null,
       summaryKind: row.summary_kind, changeCount: Number(row.change_count),
     })),
     total: Number(total.filtered_n),
-    actions: facets.rows.filter((r) => r.action_group === 0).sort(byCount),
-    recordTypes: facets.rows.filter((r) => r.rtype_group === 0).sort(byCount).slice(0, 60),
-    actors: facets.rows.filter((r) => r.actor_group === 0).sort(byCount).slice(0, 50),
+    actions: facets.filter((r) => r.action_group === 0).sort(byCount),
+    recordTypes: facets.filter((r) => r.rtype_group === 0).sort(byCount).slice(0, 60),
+    actors: facets.filter((r) => r.actor_group === 0).sort(byCount).slice(0, 50),
   }
 }

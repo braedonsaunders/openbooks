@@ -52,8 +52,8 @@ test('plan-vs-actual ties planned hours to approved time with forecast capacity 
       const approved = await submitLeaveRequest({ orgId: org.orgId, actorId: ids.actor!, requestId: draft.id })
       assert.equal(approved.status, 'approved')
       ids.request = approved.id
-      const absence = (await db.execute<{ id: string }>(sql`select id from hrm_absences
-        where org_id=${org.orgId} and leave_request_id=${approved.id}`)).rows
+      const absence = await db.execute<{ id: string }>(sql`select id from hrm_absences
+        where org_id=${org.orgId} and leave_request_id=${approved.id}`, 'objects')
       assert.equal(absence.length, 1)
       ids.absence = absence[0]!.id
     })

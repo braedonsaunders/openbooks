@@ -30,7 +30,7 @@ async function readReport(actor: ScheduleActor, input: {boardId: string; from: s
     ...window.rows.filter(row => row.inScope).map(row => row.subjectId),
   ])
   const lines = scheduleReportLines(window, relevant, window.rows.filter(row => relevant.has(row.subjectId)))
-  const organizationName = (await db.execute<{name: string}>(sql`select name from orgs where id=${actor.orgId}`)).rows[0]!.name
+  const organizationName = (await db.execute<{name: string}>(sql`select name from orgs where id=${actor.orgId}`, 'objects'))[0]!.name
   const evidence = {
     boardId: board.id, boardName: board.name, organizationName,
     from: window.from, through: window.through, timeZone: board.timeZone,

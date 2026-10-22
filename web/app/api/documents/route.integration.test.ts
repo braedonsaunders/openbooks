@@ -88,26 +88,21 @@ async function setup() {
 const docCount = (orgId: string, id: string) =>
   withBypassContext(async () =>
     Number(
-      (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`))
-        .rows[0]!.n,
+      (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!.n,
     ),
   )
 
 const auditRows = (orgId: string, id: string) =>
   withBypassContext(async () =>
-    (
-      await db.execute<{ action: string; requestId: string | null; changes: unknown }>(sql`
+    await db.execute<{ action: string; requestId: string | null; changes: unknown }>(sql`
         select action, request_id as "requestId", changes from audit_log
          where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
-         order by at asc`)
-    ).rows,
+         order by at asc`, 'objects'),
   )
 
 const seqNext = (orgId: string, kind: string) =>
   withBypassContext(async () =>
-    (
-      await db.execute<{ n: number }>(sql`select next_number as n from number_sequences where org_id = ${orgId} and document_kind = ${kind}`)
-    ).rows[0]?.n ?? null,
+    (await db.execute<{ n: number }>(sql`select next_number as n from number_sequences where org_id = ${orgId} and document_kind = ${kind}`, 'objects'))[0]?.n ?? null,
   )
 
 const bodies = (org: Awaited<ReturnType<typeof setup>>['org'], bank2: string, bank3: string, cardLiability: string) => ({
@@ -273,7 +268,7 @@ test('changed payload on the same key is a 409 and changes nothing', async () =>
     const audits = await auditRows(org.orgId, key)
     assert.equal(audits.length, 2, 'conflict writes no audit')
     const doc = await withBypassContext(async () =>
-      (await db.execute<{ n: string }>(sql`select reference_number as n from documents where id = ${key} and org_id = ${org.orgId}`)).rows[0],
+      (await db.execute<{ n: string }>(sql`select reference_number as n from documents where id = ${key} and org_id = ${org.orgId}`, 'objects'))[0],
     )
     assert.equal(doc?.n, '1234', 'original row untouched')
   } finally {

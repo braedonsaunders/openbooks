@@ -221,7 +221,7 @@ export async function loadForecasts(
          ${ownerUserId ? sql`and q.employee_id = (select party_id from users where id=${ownerUserId} and org_id=q.org_id)` : sql``}
          ${salesTeamId ? sql`and q.sales_team_id = ${salesTeamId}` : sql``}
        order by q.period_start desc, coalesce(u.display_name, st.name), q.currency
-    `),
+    `, 'objects'),
     db.execute<SnapshotRow>(sql`
       select s.*, u.name owner_name, st.name team_name
         from crm_forecast_snapshots s
@@ -233,21 +233,21 @@ export async function loadForecasts(
          ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
          ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
        order by s.as_of desc
-    `),
+    `, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from users
        where org_id = ${authz.user.orgId} and is_active
        order by name
-    `),
+    `, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
       select id, name from crm_sales_teams
        where org_id = ${authz.user.orgId} and is_active
        order by name
-    `),
+    `, 'objects'),
   ])
 
-  const quotas = quotasResult.rows
-  const snapshots = snapshotsResult.rows
+  const quotas = quotasResult
+  const snapshots = snapshotsResult
   const canManageForecasts = authz.allowedSubsidiaryIds === null && can(authz, 'crm.forecasts.manage')
   const canConfigureQuotas = can(authz, 'crm.setup.manage')
 
@@ -281,12 +281,12 @@ export async function loadForecasts(
     defaultStart: start,
     defaultEnd: end,
     ownerLabel: t('fields.owner'),
-    ownerOptions: ownersResult.rows.map((row: { id: string; name: string }) => ({
+    ownerOptions: ownersResult.map((row: { id: string; name: string }) => ({
       value: row.id,
       label: row.name,
     })),
     teamLabel: t('fields.salesTeam'),
-    teamOptions: teamsResult.rows.map((row: { id: string; name: string }) => ({
+    teamOptions: teamsResult.map((row: { id: string; name: string }) => ({
       value: row.id,
       label: row.name,
     })),

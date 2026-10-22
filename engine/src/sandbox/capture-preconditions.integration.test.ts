@@ -24,8 +24,8 @@ for (const scenario of ["unchanged", "update drift", "delete drift", "late confl
       else if (scenario === "insert" || scenario === "insert collision") await db.execute(sql`insert into app_roles(org_id,key,name) values(${sandbox.sandboxOrgId},'capture_new','New role')`);
       else await db.execute(sql`update app_roles set name='Reviewed name' where org_id=${sandbox.sandboxOrgId} and (key='capture_a' or (${scenario === 'late conflict'} and key='capture_b'))`);
       const change = await buildChangeSet(sandbox.sandboxId, "Reviewed snapshot", actors[0]);
-      const items = (await db.execute<{ id: string; target_id: string; base_captured: boolean; expected_before: Record<string, unknown> | null; op: string }>(sql`
-        select id,target_id,base_captured,expected_before,op from change_set_items where change_set_id=${change.changeSetId} order by created_at,id`)).rows;
+      const items = await db.execute<{ id: string; target_id: string; base_captured: boolean; expected_before: Record<string, unknown> | null; op: string }>(sql`
+        select id,target_id,base_captured,expected_before,op from change_set_items where change_set_id=${change.changeSetId} order by created_at,id`, "objects");
       assert.ok(items.length > 0);
       for (const item of items) {
         assert.equal(item.base_captured, true);
@@ -46,17 +46,17 @@ for (const scenario of ["unchanged", "update drift", "delete drift", "late confl
       } else if (scenario === "insert collision") {
         await db.execute(sql`insert into app_roles(id,org_id,key,name) values(${items[0]!.target_id},${org.orgId},'collision','Existing production record')`);
       }
-      const before = (await db.execute(sql`select id,name from app_roles where org_id=${org.orgId} order by id`)).rows;
+      const before = await db.execute(sql`select id,name from app_roles where org_id=${org.orgId} order by id`, "objects");
       if (["update drift", "delete drift", "late conflict", "legacy", "insert collision"].includes(scenario)) {
         await assert.rejects(applyChangeSet(change.changeSetId, actors[3]), scenario === "legacy" ? /no captured production base/
           : scenario === "insert collision" ? /already exists/ : /changed since capture/);
-        assert.deepEqual((await db.execute(sql`select id,name from app_roles where org_id=${org.orgId} order by id`)).rows, before);
-        assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "approved");
-        assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and changes->>'changeSetId'=${change.changeSetId}`)).rows.length, 0);
+        assert.deepEqual(await db.execute(sql`select id,name from app_roles where org_id=${org.orgId} order by id`, "objects"), before);
+        assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`, "objects"))[0]!.status, "approved");
+        assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and changes->>'changeSetId'=${change.changeSetId}`, "objects")).length, 0);
       } else {
         await applyChangeSet(change.changeSetId, actors[3]);
-        assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`)).rows[0]!.status, "applied");
-        assert.equal((await db.execute(sql`select name from app_roles where org_id=${org.orgId} and id=${items[0]!.target_id}`)).rows[0]!.name, scenario === "insert" ? "New role" : "Reviewed name");
+        assert.equal((await db.execute(sql`select status from change_sets where id=${change.changeSetId}`, "objects"))[0]!.status, "applied");
+        assert.equal((await db.execute(sql`select name from app_roles where org_id=${org.orgId} and id=${items[0]!.target_id}`, "objects"))[0]!.name, scenario === "insert" ? "New role" : "Reviewed name");
       }
     } finally {
       if (sandbox) await deleteSandbox(sandbox.sandboxId);

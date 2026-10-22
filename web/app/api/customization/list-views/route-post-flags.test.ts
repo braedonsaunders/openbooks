@@ -49,7 +49,7 @@ registerHooks({
       return {
         shortCircuit: true,
         format: 'module',
-        url: 'data:text/javascript,export const db = { execute: async () => ({ rows: [] }), transaction: async (fn) => { globalThis[Symbol.for("openbooks.list-view-post-bool-test")].txCalls++; return fn({ execute: async () => ({ rows: [{ id: "view-1", name: "n" }] }) }) } }',
+        url: 'data:text/javascript,export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === "objects" ? result.rows : result)), transaction: async (fn) => { globalThis[Symbol.for("openbooks.list-view-post-bool-test")].txCalls++; return fn({ execute: async (_query, mode) => Promise.resolve({ rows: [{ id: "view-1", name: "n" }] }).then((result) => (mode === "objects" ? result.rows : result)) }) } }',
       }
     }
     if (

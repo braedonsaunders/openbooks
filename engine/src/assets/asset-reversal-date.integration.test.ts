@@ -19,7 +19,7 @@ async function seedAsset(org: ScratchOrg) {
 }
 
 async function eventFor(orgId: string, entryId: string) {
-  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`, 'objects'))[0]!.id;
 }
 
 const sourceDate = '2026-07-20';
@@ -42,7 +42,7 @@ for (const kind of ['disposal', 'write-off', 'impairment', 'revaluation'] as con
             actorId, date: sourceDate, newCarryingValue: kind === 'impairment' ? '800' : '1200',
           });
         const eventId = await eventFor(org.orgId, source.entryId);
-        const snapshot = async () => (await db.execute(sql`
+        const snapshot = async () => await db.execute(sql`
           select
             (select jsonb_agg(to_jsonb(a) order by a.id) from fixed_assets a where org_id=${org.orgId}) as assets,
             (select jsonb_agg(to_jsonb(e) order by e.id) from asset_events e where org_id=${org.orgId}) as events,
@@ -50,7 +50,7 @@ for (const kind of ['disposal', 'write-off', 'impairment', 'revaluation'] as con
             (select jsonb_agg(to_jsonb(l) order by l.id) from journal_lines l where org_id=${org.orgId}) as lines,
             (select jsonb_agg(to_jsonb(s) order by s.id) from depreciation_schedules s where org_id=${org.orgId}) as schedules,
             (select jsonb_agg(to_jsonb(l) order by l.id) from depreciation_schedule_lines l where org_id=${org.orgId}) as schedule_lines
-        `)).rows;
+        `, 'objects');
         const before = await snapshot();
         const dates = { earlier: '2026-07-19', 'same day': sourceDate, later: '2026-07-21', 'invalid calendar': '2026-02-30' };
         const opts = { actorId, date: dates[timing], reason: 'Correct an asset lifecycle entry after review' };
@@ -65,7 +65,7 @@ for (const kind of ['disposal', 'write-off', 'impairment', 'revaluation'] as con
           select e.posting_date::text as date, e.reverses_entry_id as source,
                  (select sum(amount)::text from journal_lines where entry_id=e.id and org_id=e.org_id) as net
             from journal_entries e where e.id=${reversed.reversalEntryId} and e.org_id=${org.orgId}
-        `)).rows[0]!;
+        `, 'objects'))[0]!;
         assert.equal(journal.date, opts.date);
         assert.equal(journal.net, '0.0000');
         assert.equal(journal.source, source.entryId);

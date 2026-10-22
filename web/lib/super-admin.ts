@@ -55,10 +55,10 @@ export class SuperAdminAuthorityError extends Error {
 async function lockActorRows(runner: SqlExecutor, actorIds: readonly string[]): Promise<Map<string, LockedActor>> {
   const ids = [...new Set(actorIds)].sort();
   const idList = sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
-  const rows = (await runner.execute<LockedActor>(sql`
+  const rows = await runner.execute<LockedActor>(sql`
     select id, email, name, org_id as "orgId", is_active as "isActive", is_super_admin as "isSuperAdmin"
       from users where id in (${idList}) order by id for update
-  `)).rows;
+  `, "objects");
   const actors = new Map(rows.map((row) => [row.id, row]));
   if (rows.length !== ids.length || rows.some((row) => !row.isActive)) {
     throw new SuperAdminAuthorityError("Acting user is no longer active — sign in again before retrying this protected change");

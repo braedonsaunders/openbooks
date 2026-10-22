@@ -54,24 +54,24 @@ async function seedSubscription(
 }
 
 async function invoiceDates(orgId: string, subscriptionId: string): Promise<{ date: string; status: string }[]> {
-  return (await db.execute<{ date: string; status: string }>(sql`
+  return await db.execute<{ date: string; status: string }>(sql`
     select d.document_date::text as "date", d.status
       from subscription_period_invoices pi
       join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
      where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}
-     order by d.document_date`)).rows;
+     order by d.document_date`, "objects");
 }
 
 async function nextBillOn(orgId: string, subscriptionId: string): Promise<string> {
   return (await db.execute<{ nextBillOn: string }>(sql`
-    select next_bill_on::text as "nextBillOn" from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`)).rows[0]!.nextBillOn;
+    select next_bill_on::text as "nextBillOn" from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`, "objects"))[0]!.nextBillOn;
 }
 
 async function catchUpAuditCount(orgId: string, subscriptionId: string): Promise<number> {
   return Number((await db.execute<{ n: string }>(sql`
     select count(*)::text as n from audit_log
      where org_id = ${orgId} and table_name = 'subscriptions' and row_id = ${subscriptionId}
-       and action = 'update' and changes->>'mode' = 'catch_up'`)).rows[0]?.n ?? 0);
+       and action = 'update' and changes->>'mode' = 'catch_up'`, "objects"))[0]?.n ?? 0);
 }
 
 test("the preview lists exactly the pending periods", { skip: !DB }, async () => {
@@ -299,7 +299,7 @@ test("a back-dated first proration is dated at its stub start", { skip: !DB }, a
       values(${subscriptionId},${org.orgId},${org.customerId},${planId},'1','active','2025-11-01','2025-11-01',false,${actorId})`);
     const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2025-11-10", undefined, { actorId });
     const doc = (await db.execute<{ date: string }>(sql`
-      select document_date::text as "date" from documents where id = ${gen.invoiceId} and org_id = ${org.orgId}`)).rows[0]!;
+      select document_date::text as "date" from documents where id = ${gen.invoiceId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(doc.date, "2025-11-01", "the stub bills on its own start date, never today");
   } finally {
     await dropScratchOrgReporting(org.orgId);

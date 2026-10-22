@@ -172,7 +172,7 @@ export async function payrollHome(
   // checklist walk below) — read up front: the tax-year resolution needs
   // the installed packs before the YTD queries are built.
   const payrollBlob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
-    select settings->'payroll' as p from orgs where id = ${orgId}`)).rows[0]?.p ?? {}
+    select settings->'payroll' as p from orgs where id = ${orgId}`, 'objects'))[0]?.p ?? {}
   const taxYears = await currentPackTaxYears(orgId, payrollBlob, allowedSubsidiaryIds, today)
   // A stub belongs to a pack's current year only as a (country, tax_year)
   // pair: GB+US in February 2027 means (GB, 2026) plus (US, 2027), so last
@@ -214,7 +214,7 @@ export async function payrollHome(
        where s.org_id = ${orgId} and s.is_active
          ${scheduleScopeFilter(orgId, allowedSubsidiaryIds)}
        order by s.is_default desc, s.name
-    `),
+    `, 'objects'),
     // Previous completed period — the latest committed (or posted) run.
     db.execute(sql`
       select r.document_id, d.document_number, d.status as document_status, sc.name as schedule_name,
@@ -226,7 +226,7 @@ export async function payrollHome(
        where r.org_id = ${orgId} and r.run_status = 'committed'
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        order by r.pay_date desc, r.period_end desc limit 1
-    `),
+    `, 'objects'),
     db.execute(sql`
       select
         (select count(*) from employee_payroll_profiles pr
@@ -244,7 +244,7 @@ export async function payrollHome(
           join documents d on d.id = r.document_id and d.org_id = r.org_id
          where r.org_id = ${orgId}
            ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}) as total_runs
-    `),
+    `, 'objects'),
     // YTD = committed stubs in the current (country, tax year) of every
     // installed pack (matches the engine's YTD basis), grouped by stub
     // currency and pay date — translated below, never summed raw across
@@ -260,7 +260,7 @@ export async function payrollHome(
        where st.org_id = ${orgId} ${stubYearFilter}
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        group by st.currency_code, st.pay_date::text
-    `),
+    `, 'objects'),
     // Active employees with no active payroll profile.
     db.execute(sql`
       select p.id, p.display_name as name, count(*) over () as result_count
@@ -273,7 +273,7 @@ export async function payrollHome(
             where pr.org_id = p.org_id and pr.employee_party_id = p.id and pr.is_active)
        order by p.display_name
        limit ${EXCEPTION_LIMIT}
-    `),
+    `, 'objects'),
     // Profiled employees with no wage effective today (one-table doctrine:
     // wages live in labor_cost_rates, employee scope).
     db.execute(sql`
@@ -289,7 +289,7 @@ export async function payrollHome(
               and (w.effective_to is null or w.effective_to >= ${today}))
        order by p.display_name
        limit ${EXCEPTION_LIMIT}
-    `),
+    `, 'objects'),
     payrollSettings(orgId, allowedSubsidiaryIds).catch((error) => {
       if (
         allowedSubsidiaryIds != null
@@ -303,7 +303,7 @@ export async function payrollHome(
       select settings->'payroll' as p from orgs where id = ${orgId}`),
   ]))
 
-  const schedules: PayrollScheduleCard[] = schedulesRes.rows.map((s) => {
+  const schedules: PayrollScheduleCard[] = schedulesRes.map((s) => {
     const latest = s.document_id
       ? {
           documentId: String(s.document_id),
@@ -349,20 +349,20 @@ export async function payrollHome(
     }
   })
 
-  const prev = prevRes.rows[0]
-  const stats = statsRes.rows[0] ?? {}
+  const prev = prevRes[0]
+  const stats = statsRes[0] ?? {}
   // YTD stubs translate at their pay-date spot into the presentation
   // currency — flows doctrine, same as the customer pipeline. Missing
   // coverage fails closed rather than dropping (or, worse, raw-adding) a
   // currency.
   const ytdFx = await flowRates(
     orgId,
-    ytdRes.rows.map((r) => ({ func: (r.currency ?? null) as string | null, date: String(r.pay_date).slice(0, 10) })),
+    ytdRes.map((r) => ({ func: (r.currency ?? null) as string | null, date: String(r.pay_date).slice(0, 10) })),
   )
   let ytdGross = '0'
   let ytdNet = '0'
   let ytdEmployerCost = '0'
-  for (const r of ytdRes.rows) {
+  for (const r of ytdRes) {
     const rate = ytdFx.rateAt((r.currency ?? null) as string | null, String(r.pay_date).slice(0, 10))
     ytdGross = add(ytdGross, mulDecimal(String(r.gross ?? '0'), rate))
     ytdNet = add(ytdNet, mulDecimal(String(r.net ?? '0'), rate))
@@ -421,10 +421,10 @@ export async function payrollHome(
     inProgressRuns: Number(stats.in_progress ?? 0),
     totalRuns: Number(stats.total_runs ?? 0),
     exceptions: {
-      missingProfiles: noProfileRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
-      missingProfilesTotal: Number(noProfileRes.rows[0]?.result_count ?? 0),
-      missingWages: noWageRes.rows.map((r) => ({ id: String(r.id), name: String(r.name) })),
-      missingWagesTotal: Number(noWageRes.rows[0]?.result_count ?? 0),
+      missingProfiles: noProfileRes.map((r) => ({ id: String(r.id), name: String(r.name) })),
+      missingProfilesTotal: Number(noProfileRes[0]?.result_count ?? 0),
+      missingWages: noWageRes.map((r) => ({ id: String(r.id), name: String(r.name) })),
+      missingWagesTotal: Number(noWageRes[0]?.result_count ?? 0),
     },
     missingSettings,
   }

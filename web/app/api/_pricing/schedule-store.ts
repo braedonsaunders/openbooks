@@ -100,14 +100,14 @@ export function parseSchedule(body: Record<string, unknown>): { error: string } 
 }
 
 async function validateReferences(tx: Pick<typeof db, 'execute'>, orgId: string, parsed: ParsedSchedule, allowedSubsidiaryIds: ReadonlySet<string> | null) {
-  if (!(await tx.execute(sql`select 1 from currencies where code=${parsed.currency}`)).rows[0]) throw new Error('Currency is not configured')
-  if (parsed.priceLevelId && !(await tx.execute(sql`select 1 from price_levels where org_id=${orgId} and id=${parsed.priceLevelId} and is_active`)).rows[0]) throw new Error('Price level is not active in this organization')
+  if (!(await tx.execute(sql`select 1 from currencies where code=${parsed.currency}`, 'objects'))[0]) throw new Error('Currency is not configured')
+  if (parsed.priceLevelId && !(await tx.execute(sql`select 1 from price_levels where org_id=${orgId} and id=${parsed.priceLevelId} and is_active`, 'objects'))[0]) throw new Error('Price level is not active in this organization')
   if (parsed.customerId && !(await tx.execute(sql`
     select 1 from parties p
       join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active
      where p.org_id=${orgId} and p.id=${parsed.customerId} and p.is_active
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-     for share of p`)).rows[0]) throw new ScopeNotFoundError()
+     for share of p`, 'objects'))[0]) throw new ScopeNotFoundError()
 }
 
 async function requireCustomerVisible(tx: Pick<typeof db, 'execute'>, orgId: string, customerId: string | null, allowedSubsidiaryIds: ReadonlySet<string> | null) {
@@ -116,7 +116,7 @@ async function requireCustomerVisible(tx: Pick<typeof db, 'execute'>, orgId: str
     select 1 from parties p
      where p.org_id=${orgId} and p.id=${customerId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-     for share of p`)).rows[0]
+     for share of p`, 'objects'))[0]
   if (!visible) throw new ScopeNotFoundError()
 }
 
@@ -143,14 +143,14 @@ function breaksEqual(prior: { minimum_quantity: string; unit_price: string }[], 
 async function lockSubject(tx: Pick<typeof db, 'execute'>, orgId: string, subject: ScheduleSubject): Promise<boolean> {
   if (subject.kind === 'family') {
     if (!(await lockAndCheckOrgFeature(tx as SqlExecutor, orgId, 'itemVariants'))) return false
-    return Boolean((await tx.execute(sql`select 1 from item_families where org_id=${orgId} and id=${subject.id} for update`)).rows[0])
+    return Boolean((await tx.execute(sql`select 1 from item_families where org_id=${orgId} and id=${subject.id} for update`, 'objects'))[0])
   }
-  return Boolean((await tx.execute(sql`select 1 from items where org_id=${orgId} and id=${subject.id} for update`)).rows[0])
+  return Boolean((await tx.execute(sql`select 1 from items where org_id=${orgId} and id=${subject.id} for update`, 'objects'))[0])
 }
 
 async function subjectExists(orgId: string, subject: ScheduleSubject): Promise<boolean> {
   const table = subject.kind === 'family' ? sql`item_families` : sql`items`
-  return Boolean((await db.execute(sql`select 1 from ${table} where org_id=${orgId} and id=${subject.id}`)).rows[0])
+  return Boolean((await db.execute(sql`select 1 from ${table} where org_id=${orgId} and id=${subject.id}`, 'objects'))[0])
 }
 
 /** The schedule's subject columns for inserts and audit payloads. */
@@ -168,10 +168,10 @@ export async function getSchedules(actor: ScheduleActor, subject: ScheduleSubjec
   if (!isUuid(subject.id) || !(await subjectExists(actor.orgId, subject))) return null
   const inherited = subject.kind === 'item' ? await inheritedFamilySchedules(actor, subject.id) : []
   const [levels, customers, currencies, organization, schedules] = await Promise.all([
-    db.execute(sql`select id,code,name,pricing_method,percentage,cost_basis,is_base from price_levels where org_id=${actor.orgId} and is_active order by is_base desc,name`),
-    db.execute(sql`select p.id,p.display_name from parties p join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active where p.org_id=${actor.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, actor.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name limit 2000`),
-    db.execute(sql`select code,name from currencies order by code`),
-    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${actor.orgId}`),
+    db.execute(sql`select id,code,name,pricing_method,percentage,cost_basis,is_base from price_levels where org_id=${actor.orgId} and is_active order by is_base desc,name`, 'objects'),
+    db.execute(sql`select p.id,p.display_name from parties p join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active where p.org_id=${actor.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, actor.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name limit 2000`, 'objects'),
+    db.execute(sql`select code,name from currencies order by code`, 'objects'),
+    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${actor.orgId}`, 'objects'),
     db.execute(sql`
       select schedule.id,schedule.price_level_id,schedule.customer_id,schedule.currency,schedule.quantity_basis,
              schedule.effective_from::text,schedule.effective_to::text,schedule.is_active,
@@ -189,14 +189,14 @@ export async function getSchedules(actor: ScheduleActor, subject: ScheduleSubjec
               ${subsidiaryVisibleFilter(sql`visible_customer.subsidiary_id`, actor.allowedSubsidiaryIds, { orgWideNull: true })}
          ))
        group by schedule.id,level.name,customer.display_name
-       order by schedule.effective_from desc,level.name nulls first,customer.display_name nulls first`),
+       order by schedule.effective_from desc,level.name nulls first,customer.display_name nulls first`, 'objects'),
   ])
   return {
-    levels: levels.rows,
-    customers: customers.rows,
-    currencies: currencies.rows,
-    baseCurrency: organization.rows[0]?.base_currency ?? null,
-    schedules: schedules.rows,
+    levels,
+    customers,
+    currencies,
+    baseCurrency: organization[0]?.base_currency ?? null,
+    schedules,
     inherited,
   }
 }
@@ -208,11 +208,11 @@ export async function getSchedules(actor: ScheduleActor, subject: ScheduleSubjec
  */
 async function inheritedFamilySchedules(actor: ScheduleActor, itemId: string) {
   const membership = (await db.execute<{ family_id: string | null }>(
-    sql`select family_id from items where org_id = ${actor.orgId} and id = ${itemId}`,
-  )).rows[0]
+    sql`select family_id from items where org_id = ${actor.orgId} and id = ${itemId}`, 'objects',
+  ))[0]
   if (!membership?.family_id) return []
   const family = { kind: 'family', id: membership.family_id } as ScheduleSubject
-  const rows = (await db.execute(sql`
+  const rows = await db.execute(sql`
     select schedule.id,schedule.price_level_id,schedule.customer_id,schedule.currency,schedule.quantity_basis,
            schedule.effective_from::text,schedule.effective_to::text,schedule.is_active,
            schedule.revision,schedule.supersedes_id,schedule.change_reason,
@@ -231,7 +231,7 @@ async function inheritedFamilySchedules(actor: ScheduleActor, itemId: string) {
             ${subsidiaryVisibleFilter(sql`visible_customer.subsidiary_id`, actor.allowedSubsidiaryIds, { orgWideNull: true })}
        ))
      group by schedule.id,level.name,customer.display_name,family.code,family.name
-     order by schedule.effective_from desc,level.name nulls first,customer.display_name nulls first`)).rows
+     order by schedule.effective_from desc,level.name nulls first,customer.display_name nulls first`, 'objects')
   return rows.map((row) => {
     const entry = row as Record<string, unknown>
     return {
@@ -283,7 +283,7 @@ export async function postSchedule(request: Request, actor: ScheduleActor, subje
            and schedule.currency = ${parsed.currency} and (${scopeOverlap})
            and schedule.effective_from <= coalesce(${parsed.effectiveTo}::date, 'infinity'::date)
            and ${parsed.effectiveFrom}::date <= coalesce(schedule.effective_to, 'infinity'::date)
-         limit 1`)).rows[0] as { id: string; is_active: boolean } | undefined
+         limit 1`, 'objects'))[0] as { id: string; is_active: boolean } | undefined
       if (overlapped) {
         throw new Error(overlapped.is_active
           ? 'An active pricing schedule already covers that scope and date range'
@@ -295,7 +295,7 @@ export async function postSchedule(request: Request, actor: ScheduleActor, subje
         -- The row id IS the idempotency key: a retried insert with the same
         -- key collides here and resolves through resolveIdempotentReplay.
         on conflict (id) do nothing
-        returning *`)).rows[0]
+        returning *`, 'objects'))[0]
       if (!row) {
         return { kind: 'replay' as const, result: await resolveIdempotentReplay(tx, { orgId: actor.orgId, table: 'item_price_schedules', key: requestId, match }) }
       }
@@ -376,15 +376,14 @@ export async function patchSchedule(request: Request, actor: ScheduleActor, subj
   const reason = String(body.reason ?? '').trim()
   try {
     const outcome = await db.transaction(async (tx) => {
-      const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)
+      const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`, 'objects'))[0]!.today)
       if (subject.kind === 'family' && !(await lockAndCheckOrgFeature(tx as SqlExecutor, actor.orgId, 'itemVariants'))) {
         return { kind: 'missing' as const }
       }
       const locked = (await tx.execute(sql`
         select *,effective_from::text as from_day,effective_to::text as to_day
           from item_price_schedules
-         where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} for update`))
-        .rows[0] as LockedSchedule | undefined
+         where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} for update`, 'objects'))[0] as LockedSchedule | undefined
       if (!locked) return { kind: 'missing' as const }
       assertScheduleScope(actor.allowedSubsidiaryIds, parsed.customerId, locked.customer_id)
       await requireCustomerVisible(tx, actor.orgId, locked.customer_id, actor.allowedSubsidiaryIds)
@@ -405,7 +404,7 @@ export async function patchSchedule(request: Request, actor: ScheduleActor, subj
         isActive: locked.is_active,
       }
       await validateReferences(tx, actor.orgId, parsed, actor.allowedSubsidiaryIds)
-      const priorBreaks = (await tx.execute<{ minimum_quantity: string; unit_price: string }>(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${actor.orgId} and schedule_id=${scheduleId} order by minimum_quantity`)).rows
+      const priorBreaks = await tx.execute<{ minimum_quantity: string; unit_price: string }>(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${actor.orgId} and schedule_id=${scheduleId} order by minimum_quantity`, 'objects')
       const contentChanged = before.priceLevelId !== parsed.priceLevelId
         || before.customerId !== parsed.customerId
         || before.currency !== parsed.currency
@@ -461,7 +460,7 @@ export async function patchSchedule(request: Request, actor: ScheduleActor, subj
         // zero rows means a racer committed first, and the loser is refused
         // instead of merged.
         const truncated = truncates
-          ? (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${truncatedTo},updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+          ? (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${truncatedTo},updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`, 'objects'))[0]
           : undefined
         if (truncates && !truncated) {
           return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
@@ -480,7 +479,7 @@ export async function patchSchedule(request: Request, actor: ScheduleActor, subj
         // and the prior row is retired but retained. The predecessor is
         // retired BEFORE the insert so the two active windows never coexist
         // under the overlap exclusion.
-        const retired = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set is_active=false,updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+        const retired = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set is_active=false,updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`, 'objects'))[0]
         if (!retired) {
           return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
         }
@@ -489,7 +488,7 @@ export async function patchSchedule(request: Request, actor: ScheduleActor, subj
         return { kind: 'saved' as const, scheduleId: versionId }
       }
 
-      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set price_level_id=${parsed.priceLevelId},customer_id=${parsed.customerId},currency=${parsed.currency},quantity_basis=${parsed.quantityBasis},effective_from=${parsed.effectiveFrom},effective_to=${parsed.effectiveTo},is_active=${parsed.isActive},updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set price_level_id=${parsed.priceLevelId},customer_id=${parsed.customerId},currency=${parsed.currency},quantity_basis=${parsed.quantityBasis},effective_from=${parsed.effectiveFrom},effective_to=${parsed.effectiveTo},is_active=${parsed.isActive},updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`, 'objects'))[0]
       if (!after) {
         return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
       }
@@ -522,22 +521,21 @@ export async function deleteSchedule(request: Request, actor: ScheduleActor, sub
     return NextResponse.json({ error: REVISION_REMEDY }, { status: 400 })
   }
   const outcome = await db.transaction(async (tx) => {
-    const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)
+    const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`, 'objects'))[0]!.today)
     if (subject.kind === 'family' && !(await lockAndCheckOrgFeature(tx as SqlExecutor, actor.orgId, 'itemVariants'))) {
       return { kind: 'missing' as const }
     }
     const locked = (await tx.execute(sql`
       select *,effective_from::text as from_day,effective_to::text as to_day
         from item_price_schedules
-       where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} for update`))
-      .rows[0] as LockedSchedule | undefined
+       where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} for update`, 'objects'))[0] as LockedSchedule | undefined
     if (!locked) return { kind: 'missing' as const }
     assertScheduleScope(actor.allowedSubsidiaryIds, locked.customer_id)
     await requireCustomerVisible(tx, actor.orgId, locked.customer_id, actor.allowedSubsidiaryIds)
     if (Number(locked.revision) !== expectedRevision) {
       return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
     }
-    const breaks = (await tx.execute(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${actor.orgId} and schedule_id=${scheduleId} order by minimum_quantity`)).rows
+    const breaks = await tx.execute(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${actor.orgId} and schedule_id=${scheduleId} order by minimum_quantity`, 'objects')
     const fromDay = toDay(locked.from_day)
     const toDayValue = locked.to_day === null ? null : toDay(locked.to_day)
     // Only a never-effective schedule may be deleted: anything that priced
@@ -553,7 +551,7 @@ export async function deleteSchedule(request: Request, actor: ScheduleActor, sub
         return { kind: 'refused' as const, status: 400, error: 'This schedule is already effective. Provide a reason to end it; the schedule stays in history with an effective-to date' }
       }
       const endedTo = toDayValue === null || toDayValue > today ? today : toDayValue
-      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${endedTo},change_reason=${reason},updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${endedTo},change_reason=${reason},updated_at=now(),updated_by=${actor.actorId},revision=revision+1 where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning *`, 'objects'))[0]
       if (!after) {
         return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
       }
@@ -563,8 +561,8 @@ export async function deleteSchedule(request: Request, actor: ScheduleActor, sub
     // A future schedule never priced anything: hard-delete it with its breaks.
     // A write that matches zero rows is a failure, not a success: under the
     // revision predicate it means a racer committed first.
-    const deleted = await tx.execute(sql`delete from item_price_schedules where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning id`)
-    if (!deleted.rows[0]) {
+    const deleted = await tx.execute(sql`delete from item_price_schedules where org_id=${actor.orgId} and (${subjectMatch(subject, 'item_price_schedules')}) and id=${scheduleId} and revision=${expectedRevision} returning id`, 'objects')
+    if (!deleted[0]) {
       return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
     }
     await auditSetupChange({ orgId: actor.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'delete', changes: { before: { ...locked, breaks } }, actorId: actor.actorId }, tx)

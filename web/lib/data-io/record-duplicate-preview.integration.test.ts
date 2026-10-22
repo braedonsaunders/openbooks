@@ -34,11 +34,11 @@ for (const scenario of [
         const resource = recordResource(org.orgId, typeKey, sections, 'Preview records')
         const ctx = { orgId: org.orgId, actorId, allowedSubsidiaryIds: null }
         const preview = await resource.write(scenario.rows, scenario.mode, { ...ctx, dryRun: true })
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int n from custom_records where org_id=${org.orgId}`)).rows[0]!.n, 0)
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int n from custom_records where org_id=${org.orgId}`, 'objects'))[0]!.n, 0)
         const committed = await resource.write(scenario.rows, scenario.mode, { ...ctx, dryRun: false })
         assert.deepEqual([preview.created, preview.updated, preview.failed], scenario.expected)
         assert.deepEqual(preview, committed, 'preview and commit classify the same rows with the same refusals')
-        const stored = (await db.execute<{ data: { title: string } }>(sql`select data from custom_records where org_id=${org.orgId}`)).rows
+        const stored = await db.execute<{ data: { title: string } }>(sql`select data from custom_records where org_id=${org.orgId}`, 'objects')
         assert.equal(stored.length, scenario.expected[0])
         if (scenario.mode === 'upsert') assert.equal(stored[0]!.data.title, 'Second')
         if (scenario.title.startsWith('insert refuses')) assert.match(preview.errors[0]!.message, /already exists \(record_number=SAME\)/)

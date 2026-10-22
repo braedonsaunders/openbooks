@@ -53,8 +53,8 @@ async function camAudits(orgId: string, table: string, rowId: string, action: st
   const result = (await db.execute<{ changes: CamAuditChanges; actorId: string | null }>(sql`
     select changes, actor_id as "actorId" from audit_log
      where org_id=${orgId} and table_name=${table} and row_id=${rowId} and action=${action}
-     order by at asc, id asc`));
-  return result.rows;
+     order by at asc, id asc`, "objects"));
+  return result;
 }
 
 interface CamFixture {
@@ -153,11 +153,11 @@ for (const scenario of ["parallel-book", "secondary-open-book", "other-entity", 
       }
       if (scenario === "reversed-expense") {
         const source = (await db.execute<{ id: string }>(sql`select id from journal_entries
-          where org_id=${fixture.org.orgId} and memo='CAM source activity'`)).rows[0]!;
+          where org_id=${fixture.org.orgId} and memo='CAM source activity'`, "objects"))[0]!;
         const reversalId = await reverseProjectGlEntry(fixture.org.orgId, actor, source.id, "Correct reversed CAM expense", "2026-07-15");
         const reversalLine = (await db.execute<{ location: string | null; amount: string }>(sql`
           select location_id as location,amount::text from journal_lines where org_id=${fixture.org.orgId}
-            and entry_id=${reversalId} and account_id=${fixture.ledgerAccount}`)).rows[0]!;
+            and entry_id=${reversalId} and account_id=${fixture.ledgerAccount}`, "objects"))[0]!;
         assert.deepEqual(reversalLine, { location: fixture.org.locationId, amount: "-1000.0000" });
         await postLedgerExpense(fixture, "1200");
       }
@@ -175,7 +175,7 @@ for (const scenario of ["parallel-book", "secondary-open-book", "other-entity", 
         const row = (await db.execute<{ status: string; actual: string | null; allocations: number }>(sql`
           select status,actual_amount::text as actual,(select count(*)::int from cam_allocations
             where org_id=${fixture.org.orgId} and pool_id=${created.id}) as allocations
-          from cam_pools where org_id=${fixture.org.orgId} and id=${created.id}`)).rows[0]!;
+          from cam_pools where org_id=${fixture.org.orgId} and id=${created.id}`, "objects"))[0]!;
         assert.deepEqual(row, { status: "open", actual: null, allocations: 0 });
       } else {
         const expected = scenario === "reversed-expense" ? "1200.0000" : "1000.0000";
@@ -188,7 +188,7 @@ for (const scenario of ["parallel-book", "secondary-open-book", "other-entity", 
         const billed = await billCamReconciliation(fixture.org.orgId, actor, null, created.id, "2026-07-15");
         assert.equal(billed.documents.length, 1);
         const invoice = (await db.execute<{ total: string }>(sql`select total::text from documents
-          where org_id=${fixture.org.orgId} and id=${billed.documents[0]}`)).rows[0]!;
+          where org_id=${fixture.org.orgId} and id=${billed.documents[0]}`, "objects"))[0]!;
         assert.equal(invoice.total, expected);
       }
     } finally {
@@ -224,7 +224,7 @@ for (const policy of ["missing", "inactive", "non-posting"] as const) {
       const row = (await db.execute<{ status: string; actual: string | null; allocations: number }>(sql`
         select status,actual_amount::text as actual,(select count(*)::int from cam_allocations
           where org_id=${fixture.org.orgId} and pool_id=${created.id}) as allocations
-        from cam_pools where org_id=${fixture.org.orgId} and id=${created.id}`)).rows[0]!;
+        from cam_pools where org_id=${fixture.org.orgId} and id=${created.id}`, "objects"))[0]!;
       assert.deepEqual(row, { status: "open", actual: null, allocations: 0 });
       assert.equal((await camAudits(fixture.org.orgId, "cam_pools", created.id, "finalize")).length, 0);
     } finally {
@@ -274,7 +274,7 @@ test("a shared-source expense feeds exactly one CAM reconciliation", { skip: !DB
     }>(sql`
       select cp.status,cp.actual_amount::text as "actualAmount",
              (select count(*)::int from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id) as allocations
-        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${primary.id}`)).rows[0]!;
+        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${primary.id}`, "objects"))[0]!;
     assert.equal(untouched.status, "open");
     assert.equal(untouched.actualAmount, null);
     assert.equal(untouched.allocations, 0);
@@ -345,7 +345,7 @@ test("a shared-source expense feeds exactly one CAM reconciliation", { skip: !DB
     }>(sql`
       select cp.status,cp.actual_amount::text as "actualAmount",
              (select count(*)::int from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id) as allocations
-        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${primary.id}`)).rows[0]!;
+        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${primary.id}`, "objects"))[0]!;
     assert.equal(untouchedAfterOverlapGuards.status, "open");
     assert.equal(untouchedAfterOverlapGuards.actualAmount, null);
     assert.equal(untouchedAfterOverlapGuards.allocations, 0);
@@ -385,7 +385,7 @@ test("late CAM expense is handled by a separately closed supplemental pool", { s
     // after the August GL module is explicitly closed.
     const augustPeriodId = randomUUID();
     const calendarId = (await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where org_id=${fixture.org.orgId} and id=${fixture.org.periodId}`)).rows[0]!.id;
+      select fiscal_calendar_id as id from accounting_periods where org_id=${fixture.org.orgId} and id=${fixture.org.periodId}`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -404,7 +404,7 @@ test("late CAM expense is handled by a separately closed supplemental pool", { s
     const late = await finalizeCamPool(fixture.org.orgId, actor, null, supplemental.id);
     assert.equal(late.actualAmount, "250.0000");
     const july = (await db.execute<{ actualAmount: string }>(sql`
-      select actual_amount::text as "actualAmount" from cam_pools where org_id=${fixture.org.orgId} and id=${primary.id}`)).rows[0]!;
+      select actual_amount::text as "actualAmount" from cam_pools where org_id=${fixture.org.orgId} and id=${primary.id}`, "objects"))[0]!;
     assert.equal(july.actualAmount, "1000.0000");
   } finally {
     await dropScratchOrg(fixture.org.orgId);
@@ -437,8 +437,8 @@ test("two racing writers cannot both claim a shared-source CAM window", { skip: 
        where org_id=${fixture.org.orgId} and property_id=${fixture.propertyId}
          and status <> 'cancelled'
          and period_starts_on <= '2026-07-31' and period_ends_on >= '2026-07-01'
-         and expense_account_ids ?| array[${fixture.ledgerAccount}]::text[]`));
-    assert.equal(claimed.rows[0]?.n, 1);
+         and expense_account_ids ?| array[${fixture.ledgerAccount}]::text[]`, "objects"));
+    assert.equal(claimed[0]?.n, 1);
   } finally {
     await dropScratchOrg(fixture.org.orgId);
   }
@@ -570,7 +570,7 @@ test("the CAM lifecycle commits before/after audit evidence with every transitio
       documents: billed.documents,
     });
     const allocationId = (await db.execute<{ id: string }>(sql`
-      select id from cam_allocations where org_id=${fixture.org.orgId} and pool_id=${created.id}`)).rows[0]!.id;
+      select id from cam_allocations where org_id=${fixture.org.orgId} and pool_id=${created.id}`, "objects"))[0]!.id;
     const linkAudits = await camAudits(fixture.org.orgId, "cam_allocations", allocationId, "invoice");
     assert.equal(linkAudits.length, 1);
     assert.equal(linkAudits[0]!.changes.after && (linkAudits[0]!.changes.after as Record<string, unknown>).invoiceDocumentId, billed.documents[0]);
@@ -579,7 +579,7 @@ test("the CAM lifecycle commits before/after audit evidence with every transitio
     // these assertions prove every stage wrote its evidence.
     const pools = (await db.execute<{ status: string; actualAmount: string }>(sql`
       select status, actual_amount::text as "actualAmount" from cam_pools
-       where org_id=${fixture.org.orgId} and id=${created.id}`)).rows[0]!;
+       where org_id=${fixture.org.orgId} and id=${created.id}`, "objects"))[0]!;
     assert.equal(pools.status, "invoiced");
     assert.equal(pools.actualAmount, "1000.0000");
   } finally {
@@ -629,7 +629,7 @@ test("forcing the CAM audit write to fail leaves no partial allocation or status
       }>(sql`
         select cp.status,(select count(*)::int from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id) as allocations,
                cp.actual_amount::text as "actualAmount"
-        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${pool.id}`)).rows[0]!;
+        from cam_pools cp where cp.org_id=${fixture.org.orgId} and cp.id=${pool.id}`, "objects"))[0]!;
       assert.equal(survivor.status, "open");
       assert.equal(survivor.allocations, 0);
       assert.equal(survivor.actualAmount, null);
@@ -682,7 +682,7 @@ test("a void reconciles in the window its reversal posts in, not by erasing the 
     const source = { id: sourceId };
     // The reversal period the void posts into once July is closed.
     const calendar = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars
-      where org_id=${fixture.org.orgId} limit 1`)).rows[0]!;
+      where org_id=${fixture.org.orgId} limit 1`, "objects"))[0]!;
     const augustId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods
@@ -717,7 +717,7 @@ test("a void reconciles in the window its reversal posts in, not by erasing the 
       select (select status from documents where org_id=${fixture.org.orgId} and id=${docId}) as doc,
              (select status from journal_entries where org_id=${fixture.org.orgId} and id=${source.id}) as orig,
              (select status from journal_entries where org_id=${fixture.org.orgId} and id=${reversalId}) as rev,
-             (select reverses_entry_id::text from journal_entries where org_id=${fixture.org.orgId} and id=${reversalId}) as link`)).rows[0]!;
+             (select reverses_entry_id::text from journal_entries where org_id=${fixture.org.orgId} and id=${reversalId}) as link`, "objects"))[0]!;
     assert.deepEqual(shape, { doc: "voided", orig: "reversed", rev: "posted", link: source.id });
     // An unvoided control expense bills normally beside the void.
     await postLedgerExpense(fixture, "1200");
@@ -764,9 +764,9 @@ test("rentable-area CAM bills vacancy to occupied tenants only when the pool say
       fiscalYear: 2026, periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31",
       allocationBasis: "rentable_area" as const, budgetAmount: "1000", expenseAccountIds: [fixture.ledgerAccount],
     };
-    const allocation = async (poolId: string) => (await db.execute<{ share: string; budget: string; actual: string }>(sql`
+    const allocation = async (poolId: string) => await db.execute<{ share: string; budget: string; actual: string }>(sql`
       select share_percent::text as share,budget_allocation::text as budget,actual_allocation::text as actual
-        from cam_allocations where org_id=${orgId} and pool_id=${poolId}`)).rows;
+        from cam_allocations where org_id=${orgId} and pool_id=${poolId}`, "objects");
 
     // Default: the one occupied lease carries the whole pool, vacancy included.
     const pool = await createCamPool(inputs);
@@ -809,7 +809,7 @@ test("CAM estimates prorate across pool boundaries and are attributed once to ov
     const { org } = fixture;
     const actor = await createScratchUser(org.orgId, "CAM estimate operator", "admin");
     const calendarId = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!.fiscal_calendar_id;
+      select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects"))[0]!.fiscal_calendar_id;
     for (const period of [
       { number: 1, name: "2026-01", startsOn: "2026-01-01", endsOn: "2026-01-31" },
       { number: 2, name: "2026-02", startsOn: "2026-02-01", endsOn: "2026-02-28" },
@@ -821,7 +821,7 @@ test("CAM estimates prorate across pool boundaries and are attributed once to ov
                 ${period.startsOn}, ${period.endsOn}, false, ${calendarId})`);
     }
     const lease = (await db.execute<{ id: string }>(sql`
-      select id from property_leases where org_id=${org.orgId} and property_id=${fixture.propertyId}`)).rows[0]!;
+      select id from property_leases where org_id=${org.orgId} and property_id=${fixture.propertyId}`, "objects"))[0]!;
     await db.execute(sql`update property_leases set starts_on='2026-01-01',ends_on='2026-02-28',auto_invoice=true
       where org_id=${org.orgId} and id=${lease.id}`);
     const chargeId = randomUUID();
@@ -849,9 +849,9 @@ test("CAM estimates prorate across pool boundaries and are attributed once to ov
       name: "FY26 CAM ESTIMATE FEB", fiscalYear: 2026, periodStartsOn: "2026-02-01", periodEndsOn: "2026-02-28",
       allocationBasis: "equal", budgetAmount: "800", expenseAccountIds: [fixture.ledgerAccount],
     });
-    const periods = (await db.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
+    const periods = await db.execute<{ id: string; starts_on: string; ends_on: string }>(sql`
       select id,starts_on::text,ends_on::text from accounting_periods where org_id=${org.orgId}
-        and starts_on<='2026-02-28' and ends_on>='2026-01-01' order by starts_on`)).rows;
+        and starts_on<='2026-02-28' and ends_on>='2026-01-01' order by starts_on`, "objects");
     assert.ok(periods.some((period) => period.starts_on <= "2026-01-20" && period.ends_on >= "2026-01-20"));
     assert.ok(periods.some((period) => period.starts_on <= "2026-02-10" && period.ends_on >= "2026-02-10"));
     const januaryPeriod = periods.find((period) => period.starts_on <= "2026-01-20" && period.ends_on >= "2026-01-20")!;
@@ -865,13 +865,13 @@ test("CAM estimates prorate across pool boundaries and are attributed once to ov
     await finalizeCamPool(org.orgId, actor, null, januaryDisjoint.id);
     await finalizeCamPool(org.orgId, actor, null, february.id);
     const billed = async (poolId: string) => (await db.execute<{ amount: string }>(sql`
-      select billed_estimate::text as amount from cam_allocations where org_id=${org.orgId} and pool_id=${poolId}`)).rows[0]!.amount;
+      select billed_estimate::text as amount from cam_allocations where org_id=${org.orgId} and pool_id=${poolId}`, "objects"))[0]!.amount;
     assert.equal(await billed(january.id), "1700.0000");
     assert.equal(await billed(januaryDisjoint.id), "0.0000");
     assert.equal(await billed(february.id), "1400.0000");
     const total = (await db.execute<{ amount: string }>(sql`
       select sum(billed_estimate)::text as amount from cam_allocations where org_id=${org.orgId}
-        and pool_id in (${january.id},${januaryDisjoint.id},${february.id})`)).rows[0]!.amount;
+        and pool_id in (${january.id},${januaryDisjoint.id},${february.id})`, "objects"))[0]!.amount;
     assert.equal(total, "3100.0000");
   } finally {
     await dropScratchOrg(fixture.org.orgId);

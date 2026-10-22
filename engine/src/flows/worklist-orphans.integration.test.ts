@@ -41,7 +41,7 @@ async function countMatchesList(orgId: string, userId: string): Promise<number> 
 
 /** Retained orphan evidence keeps the same frozen graph and receipt contract as native submission. */
 async function retainedGate(orgId:string,flowId:string,runId:string,kind:string,subjectId:string,actorId:string,assigneeId:string,title:string){
- const graph=(await db.execute<{graph:unknown}>(sql`select graph from flows where org_id=${orgId} and id=${flowId}`)).rows[0]!.graph;
+ const graph=(await db.execute<{graph:unknown}>(sql`select graph from flows where org_id=${orgId} and id=${flowId}`, "objects"))[0]!.graph;
  const policy={version:1,trigger:"on_submit",kind:"gated",flowIds:[flowId],runIds:[runId]};
  await db.execute(sql`insert into flow_runs(id,org_id,flow_id,subject_kind,subject_id,trigger,status,created_by,context)
   values(${runId},${orgId},${flowId},${kind},${subjectId},'on_submit','waiting',${actorId},

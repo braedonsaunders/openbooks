@@ -93,14 +93,14 @@ export async function loadMappableAccounts(
   ids: readonly string[],
 ): Promise<Map<string, MappableAccount>> {
   if (ids.length === 0) return new Map();
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     id: string; number: string | null; name: string; type: string; is_active: boolean; is_summary: boolean;
     currency_restriction: string | null; subsidiary_id: string | null; subsidiary_include_children: boolean;
   }>(sql`
     select id, number, name, type, is_active, is_summary, currency_restriction,
            subsidiary_id, subsidiary_include_children
       from accounts
-     where org_id = ${orgId} and id = any(${`{${[...new Set(ids)].join(",")}}`}::uuid[])`)).rows;
+     where org_id = ${orgId} and id = any(${`{${[...new Set(ids)].join(",")}}`}::uuid[])`, "objects");
   return new Map(rows.map((row) => [row.id, {
     id: row.id,
     label: [row.number, row.name].filter(Boolean).join(" "),
@@ -132,7 +132,7 @@ export async function applyBookAccountMaps<T extends { accountId: string; subsid
 ): Promise<{ lines: T[]; applied: AppliedBookAccountMap[] }> {
   const sourceIds = [...new Set(args.lines.map((line) => line.accountId))];
   if (sourceIds.length === 0) return { lines: [...args.lines], applied: [] };
-  const maps = (await runner.execute<{
+  const maps = await runner.execute<{
     id: string; subsidiary_id: string | null; source_account_id: string; target_account_id: string;
   }>(sql`
     select id, subsidiary_id, source_account_id, target_account_id
@@ -140,7 +140,7 @@ export async function applyBookAccountMaps<T extends { accountId: string; subsid
      where org_id = ${args.orgId} and book_id = ${args.bookId}
        and source_account_id = any(${`{${sourceIds.join(",")}}`}::uuid[])
        and effective_from <= ${args.postingDate}::date
-       and (effective_to is null or effective_to >= ${args.postingDate}::date)`)).rows;
+       and (effective_to is null or effective_to >= ${args.postingDate}::date)`, "objects");
   if (maps.length === 0) return { lines: [...args.lines], applied: [] };
   const pick = (accountId: string, subsidiaryId: string) =>
     maps.find((map) => map.source_account_id === accountId && map.subsidiary_id === subsidiaryId)

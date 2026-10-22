@@ -80,12 +80,13 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.run-download-authz-route-test')]
       const sqlText = globalThis.openbooksRunDownloadSqlText
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.queries.push(text)
-          if (text.includes('result_csv')) return { rows: state.csvRows }
-          if (text.includes('report_run_artifacts')) return { rows: state.artifactRows }
-          return { rows: [] }
+          if (text.includes('result_csv')) return inMode({ rows: state.csvRows })
+          if (text.includes('report_run_artifacts')) return inMode({ rows: state.artifactRows })
+          return inMode({ rows: [] })
         },
       }
       export async function withBypassContext(work) { return work() }

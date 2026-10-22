@@ -92,7 +92,7 @@ stubModules({
         return Promise.resolve({ rows: [] })
       }
       const db = {
-        execute: (query) => execute({ folders: state.folders, files: state.files, audit: [] }, 'db', query),
+        execute: (query, mode) => Promise.resolve(execute({ folders: state.folders, files: state.files, audit: [] }, 'db', query)).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: async (work) => {
           state.transactionCount++
           const target = {
@@ -100,7 +100,7 @@ stubModules({
             files: clone(state.files),
             audit: [],
           }
-          const tx = { execute: (query) => execute(target, 'tx', query) }
+          const tx = { execute: (query, mode) => Promise.resolve(execute(target, 'tx', query)).then((result) => (mode === 'objects' ? result.rows : result)) }
           try {
             const result = await work(tx)
             Object.assign(state.folders, target.folders)

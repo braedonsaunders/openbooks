@@ -42,9 +42,9 @@ export async function accountingFindings(
         join accounts a on a.id = s.account_id and a.org_id = s.org_id
        where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= ${today}
        group by a.id, a.number, a.name
-    `));
+    `, "objects"));
 
-    for (const row of unmatched.rows) {
+    for (const row of unmatched) {
       const top = (await db.execute<Record<string, unknown>>(sql`
       select l.id, l.posted_on, l.amount::text, l.description, l.counterparty_ref
         from bank_statement_lines l
@@ -53,7 +53,7 @@ export async function accountingFindings(
          and l.match_status = 'unmatched' and l.posted_on <= ${today}
        order by abs(l.amount) desc, l.posted_on
        limit 10
-    `));
+    `, "objects"));
     const materiality = moneyAbs(row.materiality);
     findings.push({
         agentKey: "accounting",
@@ -80,7 +80,7 @@ export async function accountingFindings(
         oldestDate: row.oldest_date,
         href: `/banking/${row.account_id}`,
       },
-      evidence: top.rows.map((item) => ({
+      evidence: top.map((item) => ({
         kind: "bank_transaction",
         sourceType: "bank_statement_line",
         sourceId: String(item.id),
@@ -111,9 +111,9 @@ export async function accountingFindings(
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${orgId} and r.status = 'in_progress'
-    `));
+    `, "objects"));
 
-    for (const record of reconciliations.rows) {
+    for (const record of reconciliations) {
       const { difference } = await reconciliationTotals(record.id, { orgId, userId: SYSTEM_ACTOR_ID, allowedSubsidiaryIds: null });
       const row = { ...record, difference };
       if (toUnits(row.difference) === 0n) continue;
@@ -167,8 +167,8 @@ export async function accountingFindings(
        where org_id = ${orgId} and status in ('draft','pending_approval')
          and document_date <= ${staleOnOrBefore}
          and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','cash_sale','cash_refund','expense_report','journal')
-    `));
-    const staleRow = stale.rows[0];
+    `, "objects"));
+    const staleRow = stale[0];
     if (staleRow && Number(staleRow.document_count) > 0) {
       const documents = (await db.execute<Record<string, unknown>>(sql`
         select id, kind, document_number, document_date, status, total::text
@@ -177,7 +177,7 @@ export async function accountingFindings(
            and document_date <= ${staleOnOrBefore}
            and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','cash_sale','cash_refund','expense_report','journal')
          order by document_date, abs(total) desc limit 10
-      `));
+      `, "objects"));
     const materiality = moneyAbs(staleRow.materiality);
     findings.push({
         agentKey: "accounting",
@@ -192,7 +192,7 @@ export async function accountingFindings(
           oldestDate: staleRow.oldest_date,
           href: "/close",
         },
-        evidence: documents.rows.map((item) => ({
+        evidence: documents.map((item) => ({
           kind: "document",
           sourceType: "document",
         sourceId: String(item.id),

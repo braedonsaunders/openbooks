@@ -203,11 +203,9 @@ test(
         assert.equal(retry.status, 200)
         assert.equal((await retry.json()).revision, attendee.revision)
         assert.equal(
-          (
-            await db.execute<{ status: string }>(
-              sql`select status from hrm_training_participants where org_id=${f.org.orgId} and id=${other.id}`,
-            )
-          ).rows[0]!.status,
+          (await db.execute<{ status: string }>(
+              sql`select status from hrm_training_participants where org_id=${f.org.orgId} and id=${other.id}`, 'objects',
+            ))[0]!.status,
           'invited',
         )
         await transitionTrainingSession({
@@ -256,11 +254,9 @@ test(
           /different content.*preserved/,
         )
         assert.equal(
-          (
-            await db.execute(
-              sql`select id from hrm_training_feedback where org_id=${f.org.orgId}`,
-            )
-          ).rows.length,
+          (await db.execute(
+              sql`select id from hrm_training_feedback where org_id=${f.org.orgId}`, 'objects',
+            )).length,
           1,
         )
       },

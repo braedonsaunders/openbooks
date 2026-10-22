@@ -39,9 +39,9 @@ async function postEntry(org: ScratchOrg, memo: string, legs: [string, string, s
 }
 
 async function lineId(entryId: string, accountId: string): Promise<string> {
-  const r = await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and account_id = ${accountId}`)
-  assert.ok(r.rows[0], 'expected the line to exist')
-  return r.rows[0]!.id
+  const r = await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and account_id = ${accountId}`, 'objects')
+  assert.ok(r[0], 'expected the line to exist')
+  return r[0]!.id
 }
 
 async function postInvoice(org: ScratchOrg, num: string, amount: string): Promise<string> {
@@ -56,8 +56,8 @@ async function controlBalance(org: ScratchOrg, type: 'asset_receivable' | 'liabi
   const r = await db.execute<{ bal: string }>(sql`select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
     join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
-   where l.org_id = ${org.orgId} and a.type = ${type} and e.posting_date <= ${asOf}`)
-  return r.rows[0]!.bal
+   where l.org_id = ${org.orgId} and a.type = ${type} and e.posting_date <= ${asOf}`, 'objects')
+  return r[0]!.bal
 }
 
 test('partyless control balances surface as an explicit row and tie the control', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -188,8 +188,8 @@ test('a manual AR credit with no open item reads as a reconciling line that name
       const [listed] = reconciling.entries ?? []
       assert.equal(listed?.entryId, manual)
       assert.equal(listed?.amount, '-4200.0000')
-      const number = await db.execute<{ entry_number: string }>(sql`select entry_number from journal_entries where id = ${manual}`)
-      assert.equal(listed?.entryNumber, number.rows[0]?.entry_number)
+      const number = await db.execute<{ entry_number: string }>(sql`select entry_number from journal_entries where id = ${manual}`, 'objects')
+      assert.equal(listed?.entryNumber, number[0]?.entry_number)
       // Detail lists open items only: the manual credit is never an open item.
       const detail = await agingDetail('ar', D, undefined, org.orgId)
       assert.equal(detail.totals.total, '5000.0000')
@@ -258,7 +258,7 @@ const consolidatedRows = [
                 values (${id}, ${scratch.orgId}, 'customer_invoice', 'draft', ${id}, ${scratch.subsidiaryId},
                   ${scratch.customerId}, ${scratch.date}, 'CAD', '1', 500, 0, 500, ${actor})`)
               // A draft without an entry is fine …
-              const draft = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`)).rows[0]!
+              const draft = (await db.execute<{ status: string }>(sql`select status from documents where id = ${id}`, 'objects'))[0]!
               assert.equal(draft.status, 'draft')
               // … but flipping it to posted with no posted entry — the phantom an
               // importer would have to create to escape the aging — is rejected.

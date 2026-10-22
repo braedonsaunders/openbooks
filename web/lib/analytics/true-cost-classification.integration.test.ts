@@ -366,8 +366,8 @@ test('true cost per-FTE uses resolved annual hours, not 2080', { skip: !env.OPEN
             allocationBase: 'billed_hours', rateFormat: 'per_fte', includeInComposite: false,
             manualConfig: { entryMode: 'fixed_total', fixedTotal: '800' },
           }])}::jsonb)
-        where id = ${seed.org.orgId} returning id`))
-      assert.equal(written.rows.length, 1)
+        where id = ${seed.org.orgId} returning id`, 'objects'))
+      assert.equal(written.length, 1)
       const customFull = (await load(seed.org.orgId)).categories.find((c) => c.id === customId)!
       assert.equal(customFull.byDept[seed.deptIds[0]!]!.rate, 200000)
       const customSelected = await loadSelected(seed.org.orgId, 'categories')
@@ -602,8 +602,8 @@ test('Setup retains current allocation and publication facts without reading the
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         select ${priorPeriod}, ${seeded.org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, fiscal_calendar_id
           from accounting_periods where id = ${seeded.org.periodId} and org_id = ${seeded.org.orgId}
-        returning id`)
-      assert.equal(period.rows.length, 1)
+        returning id`, 'objects')
+      assert.equal(period.length, 1)
       await db.execute(sql`insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
         values (${priorEntry}, ${seeded.org.orgId}, ${seeded.org.bookId}, ${seeded.org.subsidiaryId},
@@ -615,8 +615,8 @@ test('Setup retains current allocation and publication facts without reading the
           (${seeded.org.orgId}, ${priorEntry}, 2, ${seeded.org.accounts.bank}, ${seeded.org.subsidiaryId},
             ${seeded.deptIds[0]}, '-400.0000', 'CAD', '-400.0000', '1')`)
       const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
-        where id = ${priorEntry} and org_id = ${seeded.org.orgId} returning id`)
-      assert.equal(posted.rows.length, 1)
+        where id = ${priorEntry} and org_id = ${seeded.org.orgId} returning id`, 'objects')
+      assert.equal(posted.length, 1)
     })
     const { registerQueryObserver } = await import('@openbooks/engine/platform/query-observer')
     const captured: string[][] = []

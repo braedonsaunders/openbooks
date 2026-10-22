@@ -16,7 +16,7 @@ export async function recordCompletionGenealogy(
   tx: SqlExecutor, orgId: string, actorId: string,
   input: {workOrderId:string;orderNumber:string;entryId:string;quantity:string;remainingGood:string;final:boolean;components?:CompletionComponentSelection[]},
 ) {
-  const sources = (await tx.execute<Source>(sql`
+  const sources = await tx.execute<Source>(sql`
     select movement.id,movement.item_id as "itemId",(-movement.quantity)::text as quantity,
       coalesce((select sum(allocation.quantity) from mfg_completion_inputs allocation
         join journal_entries receipt on receipt.org_id=allocation.org_id and receipt.id=allocation.completion_entry_id
@@ -29,7 +29,7 @@ export async function recordCompletionGenealogy(
       and movement.reverses_movement_id is null and entry.origin='manufacturing' and entry.status='posted'
       and entry.custom->>'work_order_number'=${input.orderNumber}
       and not exists(select 1 from inventory_movements reversal where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id and reversal.status='posted')
-    order by entry.created_at,entry.id,movement.id for share of movement,entry`)).rows;
+    order by entry.created_at,entry.id,movement.id for share of movement,entry`, "objects");
   const remaining = new Map(sources.map(source=>[source.id,toUnits(source.quantity)-toUnits(source.assigned)]));
   if ([...remaining.values()].some(quantity=>quantity<0n)) fail("A material issue is assigned beyond its posted quantity.");
   const allocations: Array<{movementId:string;quantity:string}> = [];
@@ -65,12 +65,12 @@ export async function recordCompletionGenealogy(
   }
   // A marker also distinguishes genuinely empty-input batches from legacy receipts with no captured evidence.
   const marker=await tx.execute<{id:string}>(sql`insert into mfg_completion_batches(org_id,work_order_id,completion_entry_id,allocation_basis,quantity,created_by,updated_by)
-    values(${orgId},${input.workOrderId},${input.entryId},${input.components===undefined ? "proportional" : "recorded"},${input.quantity},${actorId},${actorId}) returning id`);
-  if (marker.rows.length!==1) fail("The completion batch evidence was not stored.");
+    values(${orgId},${input.workOrderId},${input.entryId},${input.components===undefined ? "proportional" : "recorded"},${input.quantity},${actorId},${actorId}) returning id`, "objects");
+  if (marker.length!==1) fail("The completion batch evidence was not stored.");
   for (const allocation of allocations) {
     const inserted=await tx.execute<{id:string}>(sql`insert into mfg_completion_inputs(org_id,work_order_id,completion_entry_id,input_movement_id,quantity,created_by,updated_by)
-      values(${orgId},${input.workOrderId},${input.entryId},${allocation.movementId},${allocation.quantity},${actorId},${actorId}) returning id`);
-    if (inserted.rows.length!==1) fail("A completion input was not stored.");
+      values(${orgId},${input.workOrderId},${input.entryId},${allocation.movementId},${allocation.quantity},${actorId},${actorId}) returning id`, "objects");
+    if (inserted.length!==1) fail("A completion input was not stored.");
   }
-  await auditChange(tx,{orgId,actorId,table:"mfg_completion_batches",rowId:marker.rows[0]!.id,action:"insert",before:null,after:{...input,allocationBasis:input.components===undefined ? "proportional" : "recorded",components:allocations}});
+  await auditChange(tx,{orgId,actorId,table:"mfg_completion_batches",rowId:marker[0]!.id,action:"insert",before:null,after:{...input,allocationBasis:input.components===undefined ? "proportional" : "recorded",components:allocations}});
 }

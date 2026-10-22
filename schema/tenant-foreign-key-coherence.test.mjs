@@ -1,22 +1,19 @@
-// source-pin-contract: baseline tenant-anchor FK coherence; every edge swept is derived by parsing 0001_baseline.sql, anchor names are reviewed parameters
+// source-pin-contract: release-schema tenant-anchor FK coherence; every edge swept is derived by parsing the active baseline and forward migrations, anchor names are reviewed parameters
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
+import { releaseSchemaSql } from "../scripts/release-schema-sql.mjs";
 
-const baseline = readFileSync(
-  "schema/migrations/generated/0001_baseline.sql",
-  "utf8",
-);
+const baseline = releaseSchemaSql();
 
 // The tenant-owned anchors whose ids are used throughout financial, setup,
 // inventory, payroll, and operational records. Reviewed architecture, not a
 // census: the sweep below derives every edge into them and asserts the
-// coherence rules, so a new anchor table arrives with its own reviewed
-// migration and joins this set deliberately. Live enforcement of the same
-// rules is proven against the migrated database by the ledger
-// cross-organization refusals (engine/src/ledger/kernel-constraints) and the
-// recognition-event tenant integrity suite; the published migration bytes
-// themselves are protected by the bootstrap digest check.
+// coherence rules, so a new anchor table joins this set deliberately. Live
+// enforcement of the same rules is proven against the bootstrapped database
+// by the ledger cross-organization refusals
+// (engine/src/ledger/kernel-constraints), the tenant pointer coherence suite
+// and the recognition-event tenant integrity suite; the published schema
+// bytes themselves are protected by the bootstrap digest check.
 const ANCHORS = Object.freeze([
   "accounts",
   "parties",
@@ -34,7 +31,7 @@ const ANCHORS = Object.freeze([
 ]);
 
 // tax_group_members is intentionally org-less. Its two tenant-owned parents
-// are pinned together by the migration's deferrable constraint trigger.
+// are pinned together by a deferrable constraint trigger.
 const ORGLESS_EXCEPTIONS = Object.freeze({
   tax_group_members: new Set([
     "tax_group_members_tax_code_id_fkey",
@@ -68,9 +65,12 @@ function parseForeignKeys(source) {
   return foreignKeys;
 }
 
-test("every baseline anchor edge is enumerated with one justified exception", () => {
+test("every release-schema anchor edge is enumerated with one justified exception", () => {
   const tables = parseTables(baseline);
   const anchors = new Set(ANCHORS);
+  for (const anchor of ANCHORS) {
+    assert.ok(tables.has(anchor), `anchor table ${anchor} must be parsed from the release schema`);
+  }
   const graph = parseForeignKeys(baseline).filter(
     (foreignKey) =>
       anchors.has(foreignKey.parentTable) &&
@@ -78,6 +78,7 @@ test("every baseline anchor edge is enumerated with one justified exception", ()
       foreignKey.parentColumns.length === 1 &&
       foreignKey.parentColumns[0] === "id",
   );
+  assert.ok(graph.length > 0, "the anchor edge sweep must find single-column edges to check");
 
   const orgless = graph.filter(
     (foreignKey) => !/\borg_id\b/.test(tables.get(foreignKey.childTable) ?? ""),

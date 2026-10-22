@@ -170,13 +170,15 @@ test("an orphan decision file names the stem it cannot match", () => {
   assert.ok(findings[0].value.includes("0999_ghost"));
 });
 
-test("migrations before the contract ordinal are grandfathered", () => {
+test("the first forward migration needs a decision like every other", () => {
   const { generatedDir, preflightDir } = fixtureTree({
-    "generated/0241_old.sql": "update t set x = 1;\n",
-    "generated/0242_new.sql": "select 1;\n",
-    "preflight/0242_new.none": "This migration needs no preflight at all.\n",
+    "generated/0001_first.sql": "update t set x = 1;\n",
+    "generated/0002_second.sql": "select 1;\n",
+    "preflight/0002_second.none": "This migration needs no preflight at all.\n",
   });
-  assert.deepEqual(scanTree(generatedDir, preflightDir), []);
+  const findings = scanTree(generatedDir, preflightDir);
+  assert.deepEqual(kinds(findings), ["preflight-missing"]);
+  assert.ok(findings[0].file.includes("0001_first.sql"));
 });
 
 test("a missing preflight directory fails closed on every covered migration", () => {

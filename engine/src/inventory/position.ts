@@ -34,9 +34,9 @@ export async function primaryBookId(
   runner: Runner = db,
 ): Promise<string> {
   const r = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`));
-  if (!r.rows[0]) throw new InventoryError("no active primary posting book");
-  return r.rows[0].id;
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share`, "objects"));
+  if (!r[0]) throw new InventoryError("no active primary posting book");
+  return r[0].id;
 }
 
 export async function periodForDate(
@@ -56,9 +56,9 @@ export async function subsidiaryCurrency(
   runner: Runner = db,
 ): Promise<string> {
   const r = (await runner.execute<{ base_currency: string }>(sql`
-    select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`));
-  if (!r.rows[0]) throw new InventoryError("subsidiary not found");
-  return r.rows[0].base_currency;
+    select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`, "objects"));
+  if (!r[0]) throw new InventoryError("subsidiary not found");
+  return r[0].base_currency;
 }
 
 /** Current on-hand quantity and value for an item at a location (from layers). */
@@ -155,9 +155,9 @@ export async function getOnHandWith(
                          where org_id=${orgId} and item_id=${itemId} and stock_location_id=${stockLocationId}
                            ${provisionalScope}
                            and ${sourceReceiptMovementId}::uuid is null
-                           and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as value`));
-  const quantity = r.rows[0]?.quantity ?? "0";
-  const value = r.rows[0]?.value ?? "0";
+                           and ${lotId}::uuid is null and ${serialId}::uuid is null),0))::text as value`, "objects"));
+  const quantity = r[0]?.quantity ?? "0";
+  const value = r[0]?.value ?? "0";
   const unitCost = isZero(quantity)
     ? "0"
     : unitCostPerQuantity(value, quantity)!;
@@ -252,8 +252,8 @@ export async function backdatedIssueShortage(
                         and (${lotId}::uuid is null or m.lot_id = ${lotId}::uuid)
                         and (${serialId}::uuid is null or m.serial_id = ${serialId}::uuid)), 0)::text as on_hand,
            (select r.moved_at::date <= ${date}::date from inventory_movements r
-             where r.org_id = ${orgId} and r.id = ${receiptId}::uuid) as receipt_dated`));
-  const row = r.rows[0];
+             where r.org_id = ${orgId} and r.id = ${receiptId}::uuid) as receipt_dated`, "objects"));
+  const row = r[0];
   if (!row || !row.backdated) return null;
 
   let onHand = toUnits(row.on_hand);
@@ -270,7 +270,7 @@ export async function backdatedIssueShortage(
   const labels = (await runner.execute<{ item: string; location: string | null }>(sql`
     select coalesce(nullif(btrim(i.code), ''), i.name) as item, l.code as location
       from items i left join stock_locations l on l.org_id = i.org_id and l.id = ${scope.stockLocationId}
-     where i.org_id = ${orgId} and i.id = ${scope.itemId}`)).rows[0];
+     where i.org_id = ${orgId} and i.id = ${scope.itemId}`, "objects"))[0];
   const item = labels?.item ?? scope.itemId;
   const location = labels?.location ? ` at ${labels.location}` : "";
   return `Item ${item}${location} had ${fromUnits(onHand)} on hand on ${date} but the ${movement} needs ${fromUnits(requested)} — date the ${movement} on or after the receipt that brings the stock in, or receive it first.`;

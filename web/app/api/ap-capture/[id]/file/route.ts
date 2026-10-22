@@ -32,8 +32,8 @@ export const GET = defineRoute({
         left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
        ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-    `))
-    const fileId = capture.rows[0]?.file_id
+    `, 'objects'))
+    const fileId = capture[0]?.file_id
     if (!fileId) return notFound("record")
     let blob: Awaited<ReturnType<typeof getFileBlob>>
     try {

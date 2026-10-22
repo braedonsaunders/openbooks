@@ -85,7 +85,7 @@ export async function adoptSourceCompensationCycle(query: {
     }
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:compensation-source:${sourceKey}`}, 0))`);
     const existing = (await db.execute<{ id: string; name: string; effective_on: string | null; source_evidence: CompensationCycleEvidence }>(sql`
-      select id, name, effective_on::text, source_evidence from hrm_comp_cycles where org_id = ${orgId} and source_key = ${sourceKey}`)).rows[0];
+      select id, name, effective_on::text, source_evidence from hrm_comp_cycles where org_id = ${orgId} and source_key = ${sourceKey}`, 'objects'))[0];
     if (existing) {
       const canonical = (value: unknown) => JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
         ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
@@ -98,7 +98,7 @@ export async function adoptSourceCompensationCycle(query: {
       insert into hrm_comp_cycles (org_id, name, kind, status, effective_on, currency, guideline_kind,
         guideline, scope, source_key, source_evidence, created_by, updated_by)
       values (${orgId}, ${query.name.trim()}, 'adjustment', 'historical', ${query.effectiveOn}, ${query.evidence.currency},
-        'matrix', '{}'::jsonb, '{}'::jsonb, ${sourceKey}, ${JSON.stringify(query.evidence)}::jsonb, ${actorId}, ${actorId}) returning id`)).rows[0];
+        'matrix', '{}'::jsonb, '{}'::jsonb, ${sourceKey}, ${JSON.stringify(query.evidence)}::jsonb, ${actorId}, ${actorId}) returning id`, 'objects'))[0];
     if (!inserted) throw new CompensationError('REFUSED', 'The historical compensation source was not saved; retry the import');
     await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
       values (${orgId}, 'hrm_comp_cycles', ${inserted.id}, 'insert', ${actorId},
@@ -116,7 +116,7 @@ export async function sourceCompensationCycleEvidence(query: { orgId: string; ac
   // Original source identities are not mapped to native employer assignments.
   if (allowed !== null) throw new CompensationError('REFUSED', 'Organization-wide compensation access is required to read historical source employee rows; ask your administrator for an unrestricted compensation reader role');
   const row = (await db.execute<{ source_evidence: CompensationCycleEvidence }>(sql`
-    select source_evidence from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId} and status = 'historical'`)).rows[0];
+    select source_evidence from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId} and status = 'historical'`, 'objects'))[0];
   if (!row) throw new CompensationError('NOT_FOUND', 'Historical compensation source is not visible in this organization');
   validateEvidence(row.source_evidence);
   return row.source_evidence;

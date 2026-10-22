@@ -366,13 +366,13 @@ async function findEmploymentsByNaturalKey(
   workerPartyId: string,
   employerSubsidiaryId: string,
 ): Promise<string[]> {
-  const found = (await db.execute<{ id: string }>(sql`
+  const found = await db.execute<{ id: string }>(sql`
     select id::text as id from worker_employments
      where org_id = ${orgId}
        and worker_party_id = ${workerPartyId}::uuid
        and employer_subsidiary_id = ${employerSubsidiaryId}::uuid
-     order by created_at, id`)) as unknown as { rows: Array<{ id: string }> };
-  return found.rows.map((row) => row.id);
+     order by created_at, id`, "objects");
+  return found.map((row) => row.id);
 }
 
 export interface ExecuteEmploymentMigrationOptions {
@@ -422,7 +422,7 @@ function personKey(
  * single migration transaction, under tenant RLS with bypass off.
  */
 async function loadStoredBindings(orgId: string): Promise<StoredBinding[]> {
-  const found = (await db.execute<EvidenceRow>(sql`
+  const found = await db.execute<EvidenceRow>(sql`
     select c.recorded_source_ref as ref, c.employment_id::text as employment_id,
            to_char(c.recorded_at, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as bound_at,
            e.worker_party_id::text as worker_party_id,
@@ -433,13 +433,13 @@ async function loadStoredBindings(orgId: string): Promise<StoredBinding[]> {
      where c.org_id = ${orgId}
        and c.recorded_source = 'system'
        and c.recorded_source_ref like ${`${EMPLOYMENT_MIGRATION_REF_PREFIX} %`}
-     order by c.recorded_at, c.id`)) as unknown as { rows: EvidenceRow[] };
-  if (found.rows.length === 0) return [];
+     order by c.recorded_at, c.id`, "objects");
+  if (found.length === 0) return [];
   // A write that matches rows no read can observe is not a save: every
   // evidence row must join a live employment, or the binding is corrupt.
   // (The composite FK makes this unreachable except through the governed
   // amend path; fail closed rather than assume it.)
-  const orphans = found.rows.filter(
+  const orphans = found.filter(
     (row) => row.employment_id === null || row.worker_party_id === null,
   );
   if (orphans.length > 0) {
@@ -449,7 +449,7 @@ async function loadStoredBindings(orgId: string): Promise<StoredBinding[]> {
         "evidence — reconcile employment_changes before re-running",
     );
   }
-  return found.rows.map((row) => {
+  return found.map((row) => {
     const parsed = parseMigrationRef(row.ref);
     return {
       sourceNamespace: parsed.sourceNamespace,
@@ -489,8 +489,8 @@ async function insertOne<T extends Record<string, string>>(
   label: string,
   query: ReturnType<typeof sql>,
 ): Promise<T> {
-  const result = (await db.execute<T>(query)) as unknown as { rows: T[] };
-  const row = result.rows[0];
+  const result = await db.execute<T>(query, "objects");
+  const row = result[0];
   if (row === undefined) {
     // A write that matches zero rows is a failure, not a success: under RLS
     // an unscoped write silently matches nothing and reports success.

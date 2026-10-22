@@ -28,15 +28,15 @@ export const GET = defineRoute({
     if (!['csv', 'xlsx'].includes(format)) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
     const scenario = (await db.execute<{ name: string; fiscal_year: number }>(sql`
         select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
-      `))
-    if (!scenario.rows[0]) return notFound("record")
+      `, 'objects'))
+    if (!scenario[0]) return notFound("record")
     if (gate.allowedSubsidiaryIds !== null) {
         const visible = (await db.execute<{ n: string }>(sql`
           select count(*) as n from budget_lines
            where org_id = ${gate.user.orgId} and scenario_id = ${id}
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-        `))
-        if (Number(visible.rows[0]?.n ?? 0) === 0) {
+        `, 'objects'))
+        if (Number(visible[0]?.n ?? 0) === 0) {
           return notFound("record")
         }
       }
@@ -77,7 +77,7 @@ export const GET = defineRoute({
          where bl.org_id = ${gate.user.orgId} and bl.scenario_id = ${id}
            ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by a.number nulls last, a.name, p.period_number, s.name, d.code, pr.code, loc.code, c.code
-      `))
+      `, 'objects'))
     // Custom segments (fund included) export one column each, named for the
     // segment and holding the value's code (name when it has none), which is
     // what the import resolves — so a fund budget round-trips to its fund.
@@ -89,24 +89,24 @@ export const GET = defineRoute({
     const result: ReportRunResult = {
         groups: [{
           kind: 'results',
-          title: scenario.rows[0].name,
+          title: scenario[0].name,
           columns: ['Account Number', 'Account Name', 'Period', 'Subsidiary', 'Department', 'Project', 'Location', 'Class',
             ...segments.map((segment) => segment.name), 'Amount', 'Note'],
-          rows: lines.rows.map((row) => [
+          rows: lines.map((row) => [
             row.number ?? '', row.account_name, row.period, row.subsidiary ?? '', row.department ?? '', row.project ?? '',
             row.location ?? '', row.class ?? '', ...segments.map((segment) => segmentLabel(segment.key, row.extra_dims?.[segment.key])),
             row.amount, row.note ?? '',
           ]),
-          isEmpty: lines.rows.length === 0,
+          isEmpty: lines.length === 0,
         }],
         summary: [],
-        rowCount: lines.rows.length,
+        rowCount: lines.length,
       }
     const stamp = await businessToday(gate.user.orgId)
-    const filename = `${scenario.rows[0].name}-${scenario.rows[0].fiscal_year}-${stamp}`
+    const filename = `${scenario[0].name}-${scenario[0].fiscal_year}-${stamp}`
     if (format === 'csv') return csvResponse(reportResultToCsv(result), filename)
     return xlsxResponse(await reportResultToXlsx(result, {
-        reportName: scenario.rows[0].name,
+        reportName: scenario[0].name,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
         money: await xlsxMoneyContext(gate.user.orgId),
       }), filename)

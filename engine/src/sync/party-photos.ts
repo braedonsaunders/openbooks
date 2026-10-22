@@ -42,9 +42,9 @@ export async function syncSourcePartyPhotos(source: MigrationSource, options: {
       }
       if (await actorAllowedSubsidiaryIds(db, options.orgId, options.actorId) !== null) throw new Error('Employee photo synchronization requires unrestricted subsidiary access')
     }
-    const connections = (await db.execute<{ id: string; account: string }>(sql`
+    const connections = await db.execute<{ id: string; account: string }>(sql`
       select id, config->>'account' as account from connections
-      where org_id=${options.orgId} and source=${source.name} and (status <> 'paused' or id=${options.connectionId})`)).rows
+      where org_id=${options.orgId} and source=${source.name} and (status <> 'paused' or id=${options.connectionId})`, 'objects')
     const connection = connections.find(row => row.id === options.connectionId)
     if (!connection || connections.some(row => row.id !== options.connectionId)
       || connection.account?.replaceAll('_', '-').toLowerCase() !== source.photoSourceAccount!.replaceAll('_', '-').toLowerCase()) {
@@ -70,13 +70,13 @@ export async function syncSourcePartyPhotos(source: MigrationSource, options: {
       summary.sourceWithPhoto++
       const detail = { sourceRef: photo.partyRef, sourceFileId: photo.fileRef }
       try {
-        const matches = (await db.execute<{ id: string; photo_file_id: string | null }>(sql`
+        const matches = await db.execute<{ id: string; photo_file_id: string | null }>(sql`
           select p.id, p.photo_file_id::text from parties p
           join employee_roles e on e.org_id=p.org_id and e.party_id=p.id
           where p.org_id=${options.orgId} and (
             p.custom->>${source.refKey}=${photo.partyRef}
             or (p.custom->'source'->>'system'=${source.name} and p.custom->'source'->>'externalId'=${photo.partyRef})
-          )`)).rows
+          )`, 'objects')
         if (matches.length === 0) {
           summary.unmatched++
           summary.details.push({ ...detail, status: 'unmatched', reason: 'No employee has this stable connector identity in the organization.' })

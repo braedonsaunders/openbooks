@@ -218,8 +218,8 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
     if (id) {
       const current = await tx.execute(sql`
         select c.*, exists(select 1 from accounting_periods p where p.fiscal_calendar_id = c.id and p.org_id = ${orgId}) as has_periods
-          from fiscal_calendars c where c.id = ${id} and c.org_id = ${orgId} for update`)
-      const row = current.rows[0]
+          from fiscal_calendars c where c.id = ${id} and c.org_id = ${orgId} for update`, "objects")
+      const row = current[0]
       if (!row) throw new CloseError("calendar not found");
       before = row as Record<string, unknown>
       if (
@@ -238,7 +238,7 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
         sql`update fiscal_calendars set is_default = false, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId}`,
       );
     if (id) {
-      const updated = (await tx.execute(sql`
+      const updated = await tx.execute<Record<string, unknown>>(sql`
         update fiscal_calendars set name = ${name}, cadence = ${cadence}, year_start_month = ${yearStartMonth},
                week_starts_on = ${weekStartsOn}, anchor_date = ${anchorDate},
                time_zone = ${text(body, "timeZone") ?? "UTC"},
@@ -247,8 +247,8 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
                config = ${JSON.stringify(object(body, "config"))}::jsonb,
                updated_at = now(), updated_by = ${actorId}
          where id = ${id} and org_id = ${orgId}
-         returning *`)) as { rows: Array<Record<string, unknown>> };
-      const after = updated.rows[0];
+         returning *`, "objects");
+      const after = updated[0];
       if (!after) throw new CloseError("calendar not found");
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -256,15 +256,15 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
                 ${JSON.stringify({ before, after })}::jsonb, ${actorId})`);
       savedId = id;
     } else {
-      const inserted = (await tx.execute(sql`
+      const inserted = await tx.execute<Record<string, unknown>>(sql`
         insert into fiscal_calendars
           (org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone,
            adjustment_period_enabled, is_default, is_active, config, created_by, updated_by)
         values (${orgId}, ${name}, ${cadence}, ${yearStartMonth}, ${weekStartsOn}, ${anchorDate},
                 ${text(body, "timeZone") ?? "UTC"}, ${bool(body, "adjustmentPeriodEnabled")},
                 ${isDefault}, ${isActive}, ${JSON.stringify(object(body, "config"))}::jsonb,
-                ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
-      const after = inserted.rows[0];
+                ${actorId}, ${actorId}) returning *`, "objects");
+      const after = inserted[0];
       if (!after) throw new CloseError("calendar could not be created");
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -277,13 +277,11 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
     // have every posting refused. Fail this save (rolling it back) and
     // name the fix: saving one ACTIVE calendar with the default flag on
     // performs the swap atomically through this same endpoint.
-    const guard = (await tx.execute(sql`
+    const guard = await tx.execute<{ has_periods: boolean; has_default: boolean }>(sql`
       select exists(select 1 from accounting_periods where org_id = ${orgId}) as has_periods,
              exists(select 1 from fiscal_calendars
-                     where org_id = ${orgId} and is_default and is_active) as has_default`)) as {
-      rows: Array<{ has_periods: boolean; has_default: boolean }>;
-    };
-    if (guard.rows[0]?.has_periods && !guard.rows[0]?.has_default) {
+                     where org_id = ${orgId} and is_default and is_active) as has_default`, "objects");
+    if (guard[0]?.has_periods && !guard[0]?.has_default) {
       throw new CloseError(
         "this change would leave the organization with periods but no active default fiscal calendar, and new postings would be refused; save one active calendar with the default flag switched on first",
       );
@@ -366,16 +364,16 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
     let sourceBefore: Record<string, unknown> | null = null;
     if (sourceId) {
       const source = await tx.execute(
-        sql`select * from close_blueprints where id = ${sourceId} and org_id = ${orgId} for update`,
+        sql`select * from close_blueprints where id = ${sourceId} and org_id = ${orgId} for update`, "objects",
       )
-      if (!source.rows[0]) throw new CloseError("blueprint not found");
-      sourceBefore = source.rows[0] as Record<string, unknown>;
-      version = Number(source.rows[0].version) + 1;
-      const deactivated = (await tx.execute(sql`
+      if (!source[0]) throw new CloseError("blueprint not found");
+      sourceBefore = source[0] as Record<string, unknown>;
+      version = Number(source[0].version) + 1;
+      const deactivated = await tx.execute<Record<string, unknown>>(sql`
         update close_blueprints set is_active = false, is_default = false, updated_at = now(), updated_by = ${actorId}
          where id = ${sourceId} and org_id = ${orgId}
-         returning *`)) as { rows: Array<Record<string, unknown>> };
-      const sourceAfter = deactivated.rows[0]
+         returning *`, "objects");
+      const sourceAfter = deactivated[0]
       if (!sourceAfter) throw new CloseError("blueprint not found");
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -386,12 +384,12 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
       await tx.execute(
         sql`update close_blueprints set is_default = false, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId}`,
       );
-    const inserted = (await tx.execute(sql`
+    const inserted = await tx.execute<Record<string, unknown>>(sql`
       insert into close_blueprints
         (org_id, name, description, period_type, is_default, is_active, version, scope_rules, created_by, updated_by)
       values (${orgId}, ${name}, ${description}, ${periodType}, ${isDefault}, true, ${version},
-              ${JSON.stringify(object(body, "scopeRules"))}::jsonb, ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
-    const insertedBlueprint = inserted.rows[0];
+              ${JSON.stringify(object(body, "scopeRules"))}::jsonb, ${actorId}, ${actorId}) returning *`, "objects");
+    const insertedBlueprint = inserted[0];
     if (!insertedBlueprint) throw new CloseError("blueprint could not be created");
     const blueprintId = insertedBlueprint.id as string;
     const ids = new Map<string, string>()
@@ -404,8 +402,8 @@ async function saveBlueprint(orgId: string, actorId: string, body: Body) {
         values (${orgId}, ${blueprintId}, ${step.key}, ${step.title}, ${step.description}, ${step.workstream},
                 ${step.taskType}, ${step.completionMode}, ${step.gateType}, ${step.dueOffsetBusinessDays},
                 ${step.evidenceRequired}, ${step.defaultOwnerRoleKey},
-                ${step.sortOrder}, ${JSON.stringify(step.applicability)}::jsonb, ${actorId}, ${actorId}) returning id`)
-      ids.set(step.key, result.rows[0]!.id)
+                ${step.sortOrder}, ${JSON.stringify(step.applicability)}::jsonb, ${actorId}, ${actorId}) returning id`, "objects")
+      ids.set(step.key, result[0]!.id)
     }
     for (const step of steps)
       for (const dependency of step.dependsOn) {
@@ -438,17 +436,17 @@ async function savePolicy(orgId: string, actorId: string, body: Body) {
     const beforeResult = await tx.execute(sql`
       select * from close_policies
        where org_id = ${orgId} and code = ${code}
-       for update`);
-    const before = beforeResult.rows[0] ?? null;
-    const result = (await tx.execute(sql`
+       for update`, "objects");
+    const before = beforeResult[0] ?? null;
+    const result = await tx.execute<Record<string, unknown>>(sql`
       insert into close_policies (org_id, code, name, description, policy_type, rules, is_active, created_by, updated_by)
       values (${orgId}, ${code}, ${text(body, "name", true)!}, ${text(body, "description")}, ${policyType},
               ${JSON.stringify(object(body, "rules"))}::jsonb, ${isActive}, ${actorId}, ${actorId})
       on conflict (org_id, code) do update set name = excluded.name, description = excluded.description,
         policy_type = excluded.policy_type, rules = excluded.rules, is_active = excluded.is_active,
         updated_at = now(), updated_by = excluded.updated_by
-      where close_policies.org_id = ${orgId} returning *`)) as { rows: Array<Record<string, unknown>> };
-    const after = result.rows[0];
+      where close_policies.org_id = ${orgId} returning *`, "objects");
+    const after = result[0];
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'close_policies', ${after?.id}, ${before ? "update" : "insert"},
@@ -490,25 +488,25 @@ async function saveAutomation(orgId: string, actorId: string, body: Body) {
       ? await tx.execute(sql`
           select * from close_automation_rules
            where id = ${id} and org_id = ${orgId}
-           for update`)
-      : { rows: [] as Record<string, unknown>[] };
-    const before = beforeResult.rows[0] ?? null;
+           for update`, "objects")
+      : [] as Record<string, unknown>[];
+    const before = beforeResult[0] ?? null;
     if (id && !before) throw new CloseError("automation not found");
 
     const result = (id
-      ? await tx.execute(sql`
+      ? await tx.execute<Record<string, unknown>>(sql`
           update close_automation_rules set name = ${text(body, "name", true)!}, trigger = ${trigger}, action = ${action},
             conditions = ${JSON.stringify(object(body, "conditions"))}::jsonb, config = ${JSON.stringify(object(body, "config"))}::jsonb,
             is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
            where id = ${id} and org_id = ${orgId}
-           returning *`)
-      : await tx.execute(sql`
+           returning *`, "objects")
+      : await tx.execute<Record<string, unknown>>(sql`
           insert into close_automation_rules
             (org_id, name, trigger, action, conditions, config, is_active, created_by, updated_by)
           values (${orgId}, ${text(body, "name", true)!}, ${trigger}, ${action}, ${JSON.stringify(object(body, "conditions"))}::jsonb,
                   ${JSON.stringify(object(body, "config"))}::jsonb, ${isActive}, ${actorId}, ${actorId})
-          returning *`)) as { rows: Array<Record<string, unknown>> };
-    const after = result.rows[0];
+          returning *`, "objects"));
+    const after = result[0];
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'close_automation_rules', ${after?.id}, ${before ? "update" : "insert"},
@@ -551,23 +549,23 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
       const existing = await tx.execute(sql`
         select * from close_reporting_packages
          where id = ${id} and org_id = ${orgId}
-         for update`);
-      if (!existing.rows[0]) throw new CloseError("reporting package not found");
-      before = existing.rows[0] as Record<string, unknown>;
+         for update`, "objects");
+      if (!existing[0]) throw new CloseError("reporting package not found");
+      before = existing[0] as Record<string, unknown>;
     }
     if (isDefault)
       await tx.execute(
         sql`update close_reporting_packages set is_default = false, updated_at = now(), updated_by = ${actorId} where org_id = ${orgId}`,
       );
     if (id) {
-      const updated = (await tx.execute(sql`update close_reporting_packages set name = ${text(body, "name", true)!}, description = ${text(body, "description")},
+      const updated = await tx.execute<Record<string, unknown>>(sql`update close_reporting_packages set name = ${text(body, "name", true)!}, description = ${text(body, "description")},
         reports = ${JSON.stringify(reports)}::jsonb,
         recipients = ${JSON.stringify(recipients)}::jsonb,
         delivery = ${JSON.stringify(object(body, "delivery"))}::jsonb, is_default = ${isDefault},
         is_active = ${isActive}, updated_at = now(), updated_by = ${actorId}
         where id = ${id} and org_id = ${orgId}
-        returning *`)) as { rows: Array<Record<string, unknown>> };
-      const after = updated.rows[0];
+        returning *`, "objects");
+      const after = updated[0];
       if (!after) throw new CloseError("reporting package not found");
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -575,13 +573,13 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
                 ${JSON.stringify({ before, after })}::jsonb, ${actorId})`);
       return id;
     }
-    const result = (await tx.execute(sql`insert into close_reporting_packages
+    const result = await tx.execute<Record<string, unknown>>(sql`insert into close_reporting_packages
       (org_id, name, description, reports, recipients, delivery, is_default, is_active, created_by, updated_by)
       values (${orgId}, ${text(body, "name", true)!}, ${text(body, "description")},
               ${JSON.stringify(reports)}::jsonb,
               ${JSON.stringify(recipients)}::jsonb,
-              ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
-    const after = result.rows[0];
+              ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${isActive}, ${actorId}, ${actorId}) returning *`, "objects");
+    const after = result[0];
     if (!after) throw new CloseError("reporting package could not be created");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

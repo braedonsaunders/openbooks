@@ -57,7 +57,7 @@ export async function readHistoryRows(
     and not exists (
       select 1 from inventory_movements reversal
        where reversal.org_id = m.org_id and reversal.reverses_movement_id = m.id)`;
-  const demand = (await tx.execute<HistoryRow>(sql`
+  const demand = await tx.execute<HistoryRow>(sql`
     select m.item_id, m.stock_location_id,
            date_trunc('week', m.moved_at)::date::text as week_start,
            sum(case when m.kind = 'issue' then -m.quantity else 0 end)::text as demand_qty,
@@ -68,15 +68,15 @@ export async function readHistoryRows(
        and m.moved_at >= ${windowStart}::date and m.moved_at < (${asOf}::date + 1)
        and ${reversal}
      group by 1, 2, 3
-     order by 1, 2, 3`)).rows;
-  const openingRows = (await tx.execute<{ item_id: string; stock_location_id: string; opening: string }>(sql`
+     order by 1, 2, 3`, "objects");
+  const openingRows = await tx.execute<{ item_id: string; stock_location_id: string; opening: string }>(sql`
     select m.item_id, m.stock_location_id, sum(m.quantity)::text as opening
       from inventory_movements m
      where m.org_id = ${orgId} and m.subsidiary_id = ${subsidiaryId}
        and m.status = 'posted'
        and m.moved_at < ${windowStart}::date
        and ${reversal}
-     group by 1, 2`)).rows;
+     group by 1, 2`, "objects");
   return {
     demand,
     opening: new Map(openingRows.map((row) => [`${row.item_id}:${row.stock_location_id}`, row.opening])),
@@ -90,14 +90,14 @@ async function readPromotionWindows(
   windowStart: string,
   horizonEnd: string,
 ): Promise<PromotionWindow[]> {
-  const rows = (await tx.execute<{ code: string; starts_on: string; ends_on: string }>(sql`
+  const rows = await tx.execute<{ code: string; starts_on: string; ends_on: string }>(sql`
     select code, coalesce(starts_at::date, ${windowStart}::date)::text as starts_on,
            coalesce(ends_at::date, ${horizonEnd}::date)::text as ends_on
       from promotions
      where org_id = ${orgId} and status = 'active'
        and (starts_at is null or starts_at::date <= ${horizonEnd}::date)
        and (ends_at is null or ends_at::date >= ${windowStart}::date)
-     order by code`)).rows;
+     order by code`, "objects");
   return rows.map((row) => ({ code: row.code, startsOn: row.starts_on, endsOn: row.ends_on }));
 }
 
@@ -117,11 +117,11 @@ export async function readOverrides(
   horizonStarts: readonly string[],
 ): Promise<Map<string, OverrideRow>> {
   if (horizonStarts.length === 0) return new Map();
-  const rows = (await tx.execute<OverrideRow>(sql`
+  const rows = await tx.execute<OverrideRow>(sql`
     select id, item_id, stock_location_id, period_start::text, quantity::text, reason
       from demand_forecast_overrides
      where org_id = ${orgId}
-       and period_start in (${sql.join(horizonStarts.map((day) => sql`${day}::date`), sql`, `)})`)).rows;
+       and period_start in (${sql.join(horizonStarts.map((day) => sql`${day}::date`), sql`, `)})`, "objects");
   return new Map(rows.map((row) => [`${row.item_id}:${row.stock_location_id}:${row.period_start}`, row]));
 }
 
@@ -281,7 +281,7 @@ export async function runDemandPlan(
     const existing = (await tx.execute<DemandPlanRun>(sql`
       select id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
              status, parameters, ran_at::text as "ranAt"
-        from demand_forecast_runs where org_id = ${orgId} and id = ${raw.idempotencyKey}`)).rows[0];
+        from demand_forecast_runs where org_id = ${orgId} and id = ${raw.idempotencyKey}`, "objects"))[0];
     if (existing) return { ...existing, replayed: true };
   }
 
@@ -452,7 +452,7 @@ export async function runDemandPlan(
   const nextNumber = (await tx.execute<{ sequence: string }>(sql`
     select (coalesce(max(substring(number from 5)::bigint)
       filter (where number ~ '^DFP-[0-9]+$'), 0) + 1)::text as sequence
-      from demand_forecast_runs where org_id = ${orgId}`)).rows[0]?.sequence ?? "1";
+      from demand_forecast_runs where org_id = ${orgId}`, "objects"))[0]?.sequence ?? "1";
   const number = `DFP-${BigInt(nextNumber).toString().padStart(6, "0")}`;
   const parameters: Record<string, unknown> = {
     subsidiaryId: raw.subsidiaryId,
@@ -472,7 +472,7 @@ export async function runDemandPlan(
     values (${runId}, ${orgId}, ${number}, ${asOf}, ${horizonWeeks},
       ${JSON.stringify(parameters)}::jsonb, 'draft', ${actorId}, ${actorId}, ${actorId})
     returning id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
-      status, parameters, ran_at::text as "ranAt"`)).rows[0];
+      status, parameters, ran_at::text as "ranAt"`, "objects"))[0];
   if (!created) refuse("The planning run was not saved.", "planning_write_failed", "retry the run");
   await auditPlanningChange(tx, { orgId, actorId, table: "demand_forecast_runs", rowId: created.id, action: "insert", before: null, after: created });
   for (const forecast of forecasts) {
@@ -484,8 +484,8 @@ export async function runDemandPlan(
         ${forecast.periodStart}, 'week', ${forecast.quantity}, ${forecast.lower},
         ${forecast.upper}, ${forecast.method}, ${JSON.stringify(forecast.explanation)}::jsonb,
         ${actorId}, ${actorId})
-      returning id`);
-    if (inserted.rows.length !== 1) refuse("A forecast row was not saved.", "planning_write_failed", "retry the run");
+      returning id`, "objects");
+    if (inserted.length !== 1) refuse("A forecast row was not saved.", "planning_write_failed", "retry the run");
   }
   for (const suggestion of suggestions) {
     const inserted = await tx.execute<{ id: string }>(sql`
@@ -496,22 +496,22 @@ export async function runDemandPlan(
         ${suggestion.action}, ${suggestion.quantity}, ${suggestion.dueDate},
         ${suggestion.plannedStart}, ${suggestion.forecastQty}, ${suggestion.projectedSupply},
         ${suggestion.daysOfCover}, 'suggested', ${actorId}, ${actorId})
-      returning id`);
-    if (inserted.rows.length !== 1) refuse("A planning suggestion was not saved.", "planning_write_failed", "retry the run");
+      returning id`, "objects");
+    if (inserted.length !== 1) refuse("A planning suggestion was not saved.", "planning_write_failed", "retry the run");
   }
   const completed = (await tx.execute<DemandPlanRun>(sql`
     update demand_forecast_runs set status = 'complete', ran_at = now(), updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${created.id} and status = 'draft'
     returning id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
-      status, parameters, ran_at::text as "ranAt"`)).rows[0];
+      status, parameters, ran_at::text as "ranAt"`, "objects"))[0];
   if (!completed) refuse("The planning run did not complete.", "planning_write_failed", "retry the run");
   await auditPlanningChange(tx, { orgId, actorId, table: "demand_forecast_runs", rowId: completed.id, action: "update", before: created, after: completed });
-  const old = (await tx.execute<DemandPlanRun>(sql`
+  const old = await tx.execute<DemandPlanRun>(sql`
     update demand_forecast_runs set status = 'superseded', updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and status = 'complete' and id <> ${created.id}
        and parameters->>'subsidiaryId' = ${raw.subsidiaryId}
     returning id, number, as_of::text as "asOf", horizon_weeks as "horizonWeeks",
-      status, parameters, ran_at::text as "ranAt"`)).rows;
+      status, parameters, ran_at::text as "ranAt"`, "objects");
   for (const before of old) {
     await auditPlanningChange(tx, { orgId, actorId, table: "demand_forecast_runs", rowId: before.id, action: "update", before: { ...before, status: "complete" }, after: before });
   }

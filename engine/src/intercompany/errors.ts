@@ -58,7 +58,7 @@ export async function auditIntercompany(
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${entry.orgId}, ${entry.table}, ${entry.rowId}, ${entry.action},
             ${JSON.stringify(entry.changes)}::jsonb, ${entry.actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!written) throw new IntercompanyError("the audit record could not be written", 409);
 }
 

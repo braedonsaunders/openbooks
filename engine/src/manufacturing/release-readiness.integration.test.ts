@@ -35,7 +35,7 @@ async function setupOrg(): Promise<{ org: ScratchOrg; actorId: string; departmen
     const departments: string[] = [];
     for (const name of ["Roasting", "Packing"]) {
       departments.push(String((await withBypassContext(() => db.execute(sql`
-        insert into departments (org_id, name) values (${org.orgId}, ${name}) returning id`))).rows[0]!.id));
+        insert into departments (org_id, name) values (${org.orgId}, ${name}) returning id`, "objects")))[0]!.id));
     }
     return { org, actorId, departments };
   } catch (error) {
@@ -77,7 +77,7 @@ test("a draft work order lists every unmet release prerequisite at once, and rel
     assert.ok(departmentGaps.every((finding) => finding.href === "/manufacturing/work-centers"), "each gap links to where it is resolved");
     const unchanged = (await withBypassContext(() => db.execute<{ status: string; n: number }>(sql`
       select w.status, (select count(*)::int from mfg_wo_operations o where o.org_id = w.org_id and o.work_order_id = w.id) as n
-        from mfg_work_orders w where w.org_id = ${f.org.orgId} and w.id = ${order.id}`))).rows[0]!;
+        from mfg_work_orders w where w.org_id = ${f.org.orgId} and w.id = ${order.id}`, "objects")))[0]!;
     assert.deepEqual(unchanged, { status: "draft", n: 0 }, "reading readiness never releases or snapshots the order");
 
     await assert.rejects(run(f.org.orgId, (tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, order.id)), (error: unknown) => {

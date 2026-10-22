@@ -55,7 +55,7 @@ async function waitForAdvisoryPark(): Promise<void> {
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
          and query like '%pg_advisory_xact_lock%'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     if (parked > 0) return;
     assert.ok(Date.now() < deadline, "timed out waiting for the mirror to take the fence");
     await sleep(100);
@@ -67,7 +67,7 @@ async function importedLockCount(orgId: string, periodId: string): Promise<numbe
     select count(*)::int as n from period_locks
      where org_id = ${orgId} and period_id = ${periodId}
        and reason = 'close.importedPeriodLockReason'
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   return rows;
 }
 
@@ -80,7 +80,7 @@ test("the period mirror takes the 0022 exclusive fence before writing lock rows"
       }>(sql`
       select fiscal_year, period_number, name, starts_on::text, ends_on::text
         from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const movedEndsOn = new Date(
       Date.parse(`${period.ends_on}T00:00:00Z`) + 86_400_000,
     ).toISOString().slice(0, 10);
@@ -150,13 +150,13 @@ test("the period mirror takes the 0022 exclusive fence before writing lock rows"
     const changedWindow = (await db.execute<{ ends_on: string }>(sql`
       select ends_on::text from accounting_periods
        where org_id = ${org.orgId} and id = ${org.periodId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(changedWindow.ends_on, movedEndsOn);
     const gl = (await db.execute<{ state: string; reason: string }>(sql`
       select state, reason from period_locks
        where org_id = ${org.orgId} and period_id = ${org.periodId}
          and book_id = ${org.bookId} and subsidiary_id is null and module = 'gl'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(gl.state, "closed");
     assert.equal(gl.reason, "close.importedPeriodLockReason");
   } finally {

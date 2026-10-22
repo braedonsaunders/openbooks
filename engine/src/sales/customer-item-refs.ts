@@ -36,13 +36,13 @@ export async function validateCustomerItemRef(
   itemId: string,
 ): Promise<void> {
   await assertCustomerPartNumbersEnabled(runner, orgId);
-  const rows = (await runner.execute<{ customer_id: string; item_id: string }>(sql`
+  const rows = await runner.execute<{ customer_id: string; item_id: string }>(sql`
     select p.id as customer_id, i.id as item_id
       from parties p
       join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
       join items i on i.org_id = p.org_id and i.id = ${itemId}
      where p.org_id = ${orgId} and p.id = ${customerId}
-     limit 1`)).rows;
+     limit 1`, "objects");
   if (!rows[0]) {
     throw new CustomerItemRefusal(
       "customer part number must reference a customer party and item in this organization",
@@ -74,7 +74,7 @@ export async function listCustomerItemRefs(
       join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id and cr.is_active
       join items i on i.id = cir.item_id and i.org_id = cir.org_id
      where cir.org_id = ${orgId} and cir.customer_id = ${customerId} and ${scope}
-     order by cir.customer_sku, cir.id`)).rows as Array<{
+     order by cir.customer_sku, cir.id`, "objects")) as Array<{
        id: string; customerId: string; itemId: string; customerSku: string;
        description: string | null; itemCode: string | null; itemName: string;
      }>;

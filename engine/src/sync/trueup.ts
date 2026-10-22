@@ -75,11 +75,11 @@ export async function trueUpResidualGl(
       select base_currency
         from orgs
        where id = ${orgId}
-    `));
-    if (!org.rows[0]) throw new Error("true-up organization not found");
-    if (org.rows[0].base_currency !== source.baseCurrency) {
+    `, "objects"));
+    if (!org[0]) throw new Error("true-up organization not found");
+    if (org[0].base_currency !== source.baseCurrency) {
       throw new Error(
-        `true-up source currency ${source.baseCurrency} does not match organization base currency ${org.rows[0].base_currency}`,
+        `true-up source currency ${source.baseCurrency} does not match organization base currency ${org[0].base_currency}`,
       );
     }
     // The shared active posting primary: opening balances must land where
@@ -91,8 +91,8 @@ export async function trueUpResidualGl(
         from subsidiaries
        where org_id = ${orgId} and parent_id is null
        limit 1
-    `));
-    const subsidiaryId = subRow.rows[0]?.id;
+    `, "objects"));
+    const subsidiaryId = subRow[0]?.id;
     if (!subsidiaryId) throw new Error("true-up requires a root subsidiary");
 
     const accRows = (await db.execute<{ id: string; ref: string }>(sql`
@@ -100,9 +100,9 @@ export async function trueUpResidualGl(
         from accounts
        where org_id = ${orgId}
          and custom->>${refKey} is not null
-    `));
+    `, "objects"));
     const idByRef = new Map(
-      accRows.rows.map((row) => [row.ref, row.id] as const),
+      accRows.map((row) => [row.ref, row.id] as const),
     );
     const missingRefs = [
       ...new Set(
@@ -132,13 +132,11 @@ export async function trueUpResidualGl(
       ),
     ];
     if (touchedAccountIds.length > 0) {
-      const inactive = (
-        await db.execute<{ id: string }>(sql`
+      const inactive = (await db.execute<{ id: string }>(sql`
           select id from accounts
            where org_id = ${orgId}
              and id in (${sql.join(touchedAccountIds.map((id) => sql`${id}::uuid`), sql`, `)})
-             and is_active is distinct from true`)
-      ).rows.map((row) => row.id);
+             and is_active is distinct from true`, "objects")).map((row) => row.id);
       if (inactive.length > 0) {
         throw new Error(
           `true-up account ${inactive.sort().join(", ")} is inactive; reactivate the account before re-syncing ${source.name}`,
@@ -197,17 +195,17 @@ export async function trueUpResidualGl(
              and custom->'sourceProjection'->>'sourceName' = ${source.name}
              and custom->'sourceProjection'->>'refKey' = ${refKey}
              and coalesce(custom->'sourceProjection'->>'openingBalance', 'false') = 'true'
-        `));
-        if (existing.rows.length > 0) {
+        `, "objects"));
+        if (existing.length > 0) {
           const have = (await db.execute<{ account_id: string; amount: string }>(sql`
             select jl.account_id, sum(jl.amount)::text as amount
               from journal_lines jl
               join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
              where jl.org_id = ${orgId}
-               and e.id in (${sql.join(existing.rows.map((row) => sql`${row.id}`), sql`, `)})
+               and e.id in (${sql.join(existing.map((row) => sql`${row.id}`), sql`, `)})
              group by jl.account_id
-          `));
-          const haveByAccount = new Map(have.rows.map((row) => [row.account_id, toUnits(row.amount)] as const));
+          `, "objects"));
+          const haveByAccount = new Map(have.map((row) => [row.account_id, toUnits(row.amount)] as const));
           const ties = haveByAccount.size === openingUnits.size
             && [...openingUnits.entries()].every(([accountId, units]) => haveByAccount.get(accountId) === units);
           if (!ties) {
@@ -251,7 +249,7 @@ export async function trueUpResidualGl(
               },
             },
             actorId: control.actorId,
-            currency: org.rows[0].base_currency,
+            currency: org[0].base_currency,
             closeModules: ["gl"],
             auditAction: "insert",
             requestId: control.syncRunId ?? "migration_gl_opening_balance",
@@ -308,9 +306,9 @@ export async function trueUpResidualGl(
          -- balance as same-month activity and residual it away.
          and coalesce(e.custom->'sourceProjection'->>'openingBalance', 'false') <> 'true'
        group by jl.account_id, to_char(e.posting_date, 'YYYY-MM')
-    `));
+    `, "objects"));
     const ours = new Map<string, bigint>();
-    for (const row of oursRows.rows) {
+    for (const row of oursRows) {
       ours.set(
         `${row.account_id}|${row.month}`,
         toUnits(row.amount),
@@ -411,7 +409,7 @@ export async function trueUpResidualGl(
           },
         },
         actorId: control.actorId,
-        currency: org.rows[0].base_currency,
+        currency: org[0].base_currency,
         closeModules: ["gl"],
         auditAction: "insert",
         requestId: control.syncRunId ?? "migration_gl_trueup",

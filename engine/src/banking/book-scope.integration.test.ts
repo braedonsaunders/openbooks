@@ -77,11 +77,11 @@ for (const scenario of ["manual parallel books", "automatic secondary book", "cl
       const amount = scenario === "manual parallel books" || scenario === "cleared parallel books" ? "200" : "100";
       await importStatement({ accountId: org.accounts.bank, source: "manual", currency: "CAD", statementDate: org.date, closingBalance: amount,
         lines: [{ postedOn: org.date, amount, description: "One bank deposit", bankTransactionId: "one-deposit" }] }, ctx);
-      const statementLineId = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId} and bank_transaction_id='one-deposit'`)).rows[0]!.id;
+      const statementLineId = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId} and bank_transaction_id='one-deposit'`, "objects"))[0]!.id;
       const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: amount }, ctx);
       if (scenario === "manual parallel books") {
         await assert.rejects(createMatch({ reconciliationId: recon.id, statementLineIds: [statementLineId], journalLineIds: [...primaryLines, ...taxLines] }, ctx), /book|eligible|available/);
-        assert.equal((await db.execute(sql`select id from reconciliation_matches where org_id=${org.orgId}`)).rows.length, 0);
+        assert.equal((await db.execute(sql`select id from reconciliation_matches where org_id=${org.orgId}`, "objects")).length, 0);
       } else if (scenario === "automatic secondary book") {
         // Claim the primary representation, then import a second physical
         // deposit. The tax representation cannot supply its missing journal.
@@ -106,7 +106,7 @@ for (const scenario of ["manual parallel books", "automatic secondary book", "cl
           allowedSubsidiaryIds: null, // test setup: the reviewer is unrestricted
         });
         assert.equal(scan.status, "completed");
-        const finding = (await db.execute<{ materiality: string }>(sql`select materiality from ai_work_items where org_id=${org.orgId} and finding_type='reconciliation_difference' and subject_id=${recon.id}`)).rows[0];
+        const finding = (await db.execute<{ materiality: string }>(sql`select materiality from ai_work_items where org_id=${org.orgId} and finding_type='reconciliation_difference' and subject_id=${recon.id}`, "objects"))[0];
         assert.equal(finding?.materiality, "100.0000");
       } else {
         // Simulate a legacy match created before book controls existed.
@@ -114,7 +114,7 @@ for (const scenario of ["manual parallel books", "automatic secondary book", "cl
           values(${org.orgId},${recon.id},${statementLineId},${taxLines[0]},${randomUUID()},'manual',${actor})`);
         await db.execute(sql`update bank_statement_lines set match_status='matched' where org_id=${org.orgId} and id=${statementLineId}`);
         await assert.rejects(markReconciled(recon.id, ctx), /book|matches fail/);
-        assert.notEqual((await db.execute(sql`select status from reconciliations where org_id=${org.orgId} and id=${recon.id}`)).rows[0]!.status, "signed_off");
+        assert.notEqual((await db.execute(sql`select status from reconciliations where org_id=${org.orgId} and id=${recon.id}`, "objects"))[0]!.status, "signed_off");
       }
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -130,7 +130,7 @@ test("a refused journal factory rolls back within an ambient transaction", { ski
     await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
     await importStatement({ accountId: org.accounts.bank, source: "manual", currency: "CAD", statementDate: org.date,
       lines: [{ postedOn: org.date, amount: "100", description: "Deposit", bankTransactionId: "ambient-deposit" }] }, ctx);
-    const statementLineId = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId}`)).rows[0]!.id;
+    const statementLineId = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${org.orgId}`, "objects"))[0]!.id;
     const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" }, ctx);
     await withOrgTransaction(org.orgId, async () => {
       await db.execute(sql`update parties set display_name='Surviving banking caller' where org_id=${org.orgId} and id=${org.customerId}`);
@@ -139,8 +139,8 @@ test("a refused journal factory rolls back within an ambient transaction", { ski
       await createMatchWithJournal({ reconciliationId: recon.id, statementLineIds: [statementLineId],
         createJournal: async () => (await postBankJournal(org, actor, ["100"], "ambient-valid"))[0]! }, ctx);
     });
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n, 1);
-    assert.equal((await db.execute(sql`select display_name from parties where org_id=${org.orgId} and id=${org.customerId}`)).rows[0]!.display_name, "Surviving banking caller");
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n, 1);
+    assert.equal((await db.execute(sql`select display_name from parties where org_id=${org.orgId} and id=${org.customerId}`, "objects"))[0]!.display_name, "Surviving banking caller");
     assert.equal((await reconciliationTotals(recon.id, ctx)).difference, "0.0000");
   } finally {
     await dropScratchOrgReporting(org.orgId);
@@ -163,7 +163,7 @@ for (const policy of ["inactive", "nonposting", "ambiguous"] as const) {
           "a second primary book must be refused at the write boundary",
         );
         const primaries = (await db.execute<{ n: number }>(sql`select count(*)::int as n from accounting_books
-          where org_id=${org.orgId} and is_primary`)).rows[0];
+          where org_id=${org.orgId} and is_primary`, "objects"))[0];
         assert.equal(primaries?.n, 1, "exactly one primary survives the refused sabotage");
         return;
       }

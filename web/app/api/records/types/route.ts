@@ -42,10 +42,8 @@ async function legacyGET() {
     fence === null
       ? null
       : subsidiaryDeclaredTypeIds(
-          (
-            await db.execute<{ id: string; name: string; fields: unknown }>(sql`
-              select id, name, fields from custom_record_types where org_id = ${gate.user.orgId}`)
-          ).rows,
+          await db.execute<{ id: string; name: string; fields: unknown }>(sql`
+              select id, name, fields from custom_record_types where org_id = ${gate.user.orgId}`, 'objects'),
         )
   const countScope =
     fence === null || scopedTypeIds === null
@@ -64,8 +62,8 @@ async function legacyGET() {
       from custom_record_types t
      where t.org_id = ${gate.user.orgId}
      order by t.sort_order, t.name
-  `)))
-  return NextResponse.json({ types: r.rows })
+  `, 'objects')))
+  return NextResponse.json({ types: r })
 }
 
 /**
@@ -118,8 +116,8 @@ async function createType(
       -- A retry resolves the existing audited payload below; conflicting input is refused.
       on conflict (id) do nothing
       returning id
-    `))
-    if (!inserted.rows[0]) {
+    `, 'objects'))
+    if (!inserted[0]) {
       return resolveIdempotentReplay(tx, {
         orgId,
         table: 'custom_record_types',
@@ -223,8 +221,8 @@ export const POST = defineRoute({
       const clash = (await db.execute(sql`
         select 1 from custom_record_types
          where org_id = ${user.orgId} and key = ${body.key} and id <> ${requestId}
-      `))
-      if (clash.rows.length > 0) {
+      `, 'objects'))
+      if (clash.length > 0) {
         return NextResponse.json(
           { error: `A record type with key "${body.key}" already exists` },
           { status: 409 },
@@ -234,13 +232,11 @@ export const POST = defineRoute({
     } else {
       const base = slugifyTypeKey(name) || 'new-record-type'
       const taken = new Set(
-        (
-          await db.execute<{ key: string }>(sql`
+        (await db.execute<{ key: string }>(sql`
             select key from custom_record_types
              where org_id = ${user.orgId} and id <> ${requestId}
                and (key = ${base} or key like ${base + '-%'})
-          `)
-        ).rows.map((r) => r.key),
+          `, 'objects')).map((r) => r.key),
       )
       key = base
       for (let n = 2; taken.has(key); n++) key = `${base}-${n}`

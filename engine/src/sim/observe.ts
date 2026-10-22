@@ -10,8 +10,8 @@ import type { SimOrg } from "./world.ts";
  */
 
 async function rows<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
-  const r = (await db.execute<T>(q));
-  return r.rows;
+  const r = (await db.execute<T>(q, "objects"));
+  return r;
 }
 
 /** Draft vendor bills awaiting AP review (the AP inbox). */
@@ -72,10 +72,10 @@ export async function arAging(world: SimOrg, asOf: string) {
     for (const i of items.filter((x) => x.kind === "customer_invoice")) {
       const dpd = i.dueDate ? Math.floor((Date.parse(asOf) - Date.parse(i.dueDate)) / 86_400_000) : 0;
       const bucket = dpd <= 0 ? "current" : dpd <= 30 ? "1-30" : dpd <= 60 ? "31-60" : dpd <= 90 ? "61-90" : "90+";
-      const docNum = await db.execute(sql`select document_number from documents where id = ${i.documentId}`);
+      const docNum = await db.execute<{ document_number: string }>(sql`select document_number from documents where id = ${i.documentId}`, "objects");
       out.push({
         customer: c.name,
-        number: ((docNum as unknown as { rows: { document_number: string }[] }).rows[0]?.document_number) ?? "",
+        number: (docNum[0]?.document_number) ?? "",
         open: i.open,
         dueDate: i.dueDate,
         daysPastDue: dpd,

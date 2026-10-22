@@ -25,8 +25,8 @@ export interface AccountPayload {
 export async function orgBaseCurrency(orgId: string): Promise<string | null> {
   const result = await db.execute<{ base_currency: string | null }>(sql`
     select base_currency from orgs where id = ${orgId}
-  `)
-  return result.rows[0]?.base_currency ?? null
+  `, 'objects')
+  return result[0]?.base_currency ?? null
 }
 
 /**
@@ -65,8 +65,8 @@ export async function loadAccount(
       left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id ${parentScope}
       left join subsidiaries s on s.id = a.subsidiary_id and s.org_id = a.org_id
      where a.id = ${id} and a.org_id = ${orgId} ${subsidiaryScope}
-  `))
-  const row = result.rows[0]
+  `, 'objects'))
+  const row = result[0]
   if (!row) return null
   const { parent_name, subsidiary_name, has_transactions, child_count, active_child_count, ...account } = row
   return {
@@ -130,8 +130,8 @@ export async function findNamedAccounts(
        ${visible}
      order by a.number nulls last, a.name
      limit 5
-  `);
-  return result.rows;
+  `, 'objects');
+  return result;
 }
 
 /** Transaction-scoped advisory lock keyed by org and normalized account name. */

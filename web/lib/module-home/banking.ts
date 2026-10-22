@@ -118,8 +118,8 @@ async function bankRosterRows(
            order by s.imported_at desc limit 1) st on true
        where a.org_id = ${orgId} and ${membership}${acctScope}
        order by a.type, coalesce(bal.balance, 0) desc
-    `)
-  return rows.rows as Record<string, unknown>[]
+    `, 'objects')
+  return rows as Record<string, unknown>[]
 }
 
 /**
@@ -140,8 +140,8 @@ export async function bankingReconCount(
       join accounts a on a.id = s.account_id and a.org_id = s.org_id
      where a.org_id = ${orgId} and l.match_status = 'unmatched'
        and ${bankAccountMembership()}${acctScope}
-  `)
-  const row = result.rows[0]
+  `, 'objects')
+  const row = result[0]
   if (!row) throw new Error('The reconciliation count did not return its total.')
   return Number(row.n)
 }
@@ -208,7 +208,7 @@ export async function bankingHome(
          and je.posting_date >= ${trendFrom}
          and ${excludePeriodEndJournals(sql`je.origin`)}
        group by 1, 2, 3
-    `),
+    `, 'objects'),
     // Directory badges — org-wide counts for the workspace's other pages.
     db.execute(sql`
       select
@@ -224,7 +224,7 @@ export async function bankingHome(
             and d.status = 'posted' -- Live entries only: the badge counts transactions still posted today
             and d.voided_at is null
             ${docScope}) as txns_7d
-    `),
+    `, 'objects'),
   ]))
 
   // Week grid, oldest → newest, aligned with date_trunc('week', …) (Monday).
@@ -239,14 +239,14 @@ export async function bankingHome(
   const rates = await presentationRates(
     orgId,
     base,
-    [...rosterRows.map((r) => (typeof r.func === 'string' ? r.func : null)), ...flowsRes.rows.map((r) => r.func)],
+    [...rosterRows.map((r) => (typeof r.func === 'string' ? r.func : null)), ...flowsRes.map((r) => r.func)],
     today,
   )
   const tr = (amount: unknown, func: unknown): string =>
     mulDecimal(String(amount ?? 0), rates.get(lineFunctional(typeof func === "string" ? func : null, base))!)
 
   const flows = new Map<string, Map<string, string>>()
-  for (const r of flowsRes.rows) {
+  for (const r of flowsRes) {
     const wk = String(r.wk).slice(0, 10)
     let m = flows.get(r.account_id)
     if (!m) flows.set(r.account_id, (m = new Map()))
@@ -290,7 +290,7 @@ export async function bankingHome(
 
   const bankIds = new Set(accounts.filter((a) => a.type === 'asset_bank').map((a) => a.id))
   let netFlow7d = '0'
-  for (const r of flowsRes.rows) {
+  for (const r of flowsRes) {
     if (r.flow_7d != null && bankIds.has(r.account_id)) netFlow7d = add(netFlow7d, tr(r.flow_7d, r.func))
   }
 
@@ -303,7 +303,7 @@ export async function bankingHome(
     })),
   }))
 
-  const badge = badgesRes.rows[0] ?? {}
+  const badge = badgesRes[0] ?? {}
   return {
     accounts,
     totalCash: sum(accounts.filter((a) => a.type === 'asset_bank').map((a) => a.balance)),

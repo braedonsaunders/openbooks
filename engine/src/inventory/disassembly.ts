@@ -36,7 +36,7 @@ type OperationMovement = ReversibleMovement & { assembly_disassembly_id: string 
 const movementColumns = sql`id,org_id,subsidiary_id,item_id,kind,moved_at::text,stock_location_id,lot_id,serial_id,
   quantity,unit_cost,total_value,journal_entry_id,paired_movement_id,status,assembly_disassembly_id`
 async function sourceMovement(orgId: string, id: string) {
-  const row = (await db.execute<OperationMovement>(sql`select ${movementColumns} from inventory_movements where org_id=${orgId} and id=${id}`)).rows[0]
+  const row = (await db.execute<OperationMovement>(sql`select ${movementColumns} from inventory_movements where org_id=${orgId} and id=${id}`, 'objects'))[0]
   if (!row) throw new ScopeNotFoundError()
   return row
 }
@@ -48,18 +48,18 @@ async function lockPositions(rows: ReversibleMovement[]) {
   }
 }
 async function operationRows(orgId: string, entryId: string, locked = false) {
-  return (await db.execute<OperationMovement>(sql`select ${movementColumns} from inventory_movements
-    where org_id=${orgId} and journal_entry_id=${entryId} order by id ${locked ? sql`for update` : sql``}`)).rows
+  return await db.execute<OperationMovement>(sql`select ${movementColumns} from inventory_movements
+    where org_id=${orgId} and journal_entry_id=${entryId} order by id ${locked ? sql`for update` : sql``}`, 'objects')
 }
 async function disassemblyRows(orgId: string, id: string, locked = false) {
-  return (await db.execute<OperationMovement>(sql`select ${movementColumns} from inventory_movements
+  return await db.execute<OperationMovement>(sql`select ${movementColumns} from inventory_movements
     where org_id=${orgId} and assembly_disassembly_id=${id} and kind in ('assembly_disassembly','assembly_recovery')
-    order by id ${locked ? sql`for update` : sql``}`)).rows
+    order by id ${locked ? sql`for update` : sql``}`, 'objects')
 }
 async function openPeriod(orgId: string, bookId: string, subsidiaryId: string, date: string) {
   const periodId = await periodForDate(orgId,date)
   if (!periodId) throw new InventoryError(`Create an open accounting period covering ${date} before changing inventory`)
-  if (!(await db.execute(sql`select id from accounting_books where org_id=${orgId} and id=${bookId} and is_active and posts_gl for share`)).rows.length)
+  if (!(await db.execute(sql`select id from accounting_books where org_id=${orgId} and id=${bookId} and is_active and posts_gl for share`, 'objects')).length)
     throw new InventoryError('The original accounting book must be active for controlled inventory operations')
   try { await assertPeriodModulesOpen(db,{orgId,periodId,bookId,subsidiaryIds:[subsidiaryId],modules:[]}) }
   catch (error) { if (error instanceof CloseError) throw new InventoryError(`${error.message} — use an open operation date or the controlled reopen workflow in Accounting → Close`); throw error }
@@ -69,7 +69,7 @@ async function assertUnreversed(orgId: string, rows: ReversibleMovement[]) {
   if (rows.some(row => row.status !== 'posted')) throw new InventoryError('The source operation must be fully posted')
   const ids = rows.map(row => row.id)
   if ((await db.execute(sql`select id from inventory_movements where org_id=${orgId}
-    and reverses_movement_id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)}) limit 1`)).rows.length)
+    and reverses_movement_id in (${sql.join(ids.map(id => sql`${id}`), sql`, `)}) limit 1`, 'objects')).length)
     throw new InventoryError('This source build has been reversed — select a posted build that has not been reversed')
 }
 function reason(value: string) {
@@ -110,7 +110,7 @@ export async function disassembleAssembly(orgId: string, actorId: string, input:
         throw new InventoryError('The source journal does not contain one complete light-assembly build')
       await assertUnreversed(orgId, sources)
       const journal = (await db.execute<{ book_id: string; custom: { assemblyBuild?: AssemblyBomRevisionEvidence }; origin: string }>(sql`
-        select book_id,custom,origin from journal_entries where org_id=${orgId} and id=${build.journal_entry_id} and status='posted' for share -- Live entries only: disassembly consumes the live build journal; a reversed build authorizes no disassembly`)).rows[0]
+        select book_id,custom,origin from journal_entries where org_id=${orgId} and id=${build.journal_entry_id} and status='posted' for share -- Live entries only: disassembly consumes the live build journal; a reversed build authorizes no disassembly`, 'objects'))[0]
       const evidence = journal?.custom.assemblyBuild
       if (journal?.origin !== 'inventory' || !evidence || evidence.format !== 'openbooks.inventory-bom.v1' || evidence.assemblyItemId !== build.item_id
           || evidence.revision !== `sha256:${inventoryRequestHash({ format: evidence.format, assemblyItemId: evidence.assemblyItemId, components: evidence.components })}`)
@@ -125,12 +125,12 @@ export async function disassembleAssembly(orgId: string, actorId: string, input:
       const context = await loadSubsidiaryContext(db, orgId)
       await assertStockLocationAdmitsSubsidiary(db, orgId, context, build.stock_location_id, build.subsidiary_id, 'inbound')
       const periodId = await openPeriod(orgId,journal.book_id,build.subsidiary_id,input.date)
-      const prior = (await db.execute<{ item_id: string; kind: string; quantity: string; total_value: string }>(sql`
+      const prior = await db.execute<{ item_id: string; kind: string; quantity: string; total_value: string }>(sql`
         select move.item_id,move.kind,move.quantity::text,move.total_value::text from inventory_movements move
           join assembly_disassemblies operation on operation.org_id=move.org_id and operation.id=move.assembly_disassembly_id
         where move.org_id=${orgId} and operation.build_movement_id=${build.id}
           and move.kind in ('assembly_disassembly','assembly_recovery') and move.status='posted'
-          and not exists(select 1 from inventory_movements rev where rev.org_id=move.org_id and rev.reverses_movement_id=move.id)`)).rows
+          and not exists(select 1 from inventory_movements rev where rev.org_id=move.org_id and rev.reverses_movement_id=move.id)`, 'objects')
       const previouslyDisassembled = neg(sum(prior.filter(row => row.kind === 'assembly_disassembly').map(row => row.quantity)))
       const cumulativeQuantity = add(previouslyDisassembled, quantity)
       if (cmp(cumulativeQuantity, build.quantity) > 0) throw new InventoryError('Disassembly exceeds the source build quantity remaining after its earlier disassemblies')
@@ -160,7 +160,7 @@ export async function disassembleAssembly(orgId: string, actorId: string, input:
           from assembly_disassemblies operation cross join lateral jsonb_array_elements(operation.components) component
           where operation.org_id=${orgId} and operation.build_movement_id=${build.id} and component->>'itemId'=${itemId}
             and exists(select 1 from inventory_movements move where move.org_id=operation.org_id and move.assembly_disassembly_id=operation.id
-              and move.kind='assembly_disassembly' and not exists(select 1 from inventory_movements rev where rev.org_id=move.org_id and rev.reverses_movement_id=move.id))`)).rows[0]!.amount
+              and move.kind='assembly_disassembly' and not exists(select 1 from inventory_movements rev where rev.org_id=move.org_id and rev.reverses_movement_id=move.id))`, 'objects'))[0]!.amount
         const originalCost = add(originalTotal, neg(priorOriginal))
         if (cmp(originalCost, '0') < 0) throw new InventoryError('The recorded recovery cost exceeds the cumulative build allocation — reconcile the disassembly history before continuing')
         const profile = profiles.get(itemId)!
@@ -203,15 +203,15 @@ export async function disassembleAssembly(orgId: string, actorId: string, input:
       const recorded = await db.execute(sql`insert into assembly_disassemblies
         (id,org_id,subsidiary_id,book_id,build_movement_id,quantity,withdrawn_value,moved_on,reason,components,journal_entry_id,created_by)
         values (${operationId},${orgId},${build.subsidiary_id},${journal.book_id},${build.id},${quantity},${withdrawal.cost},${input.date},
-          ${explanation},${JSON.stringify(components)}::jsonb,${entryId},${actorId}) returning id`)
-      if (recorded.rows.length !== 1) throw new InventoryError('The immutable disassembly evidence could not be recorded')
+          ${explanation},${JSON.stringify(components)}::jsonb,${entryId},${actorId}) returning id`, 'objects')
+      if (recorded.length !== 1) throw new InventoryError('The immutable disassembly evidence could not be recorded')
       const movementIds: string[] = []
       const movementId = randomUUID(); movementIds.push(movementId)
       const inserted = await db.execute(sql`insert into inventory_movements
         (id,org_id,subsidiary_id,item_id,kind,moved_at,stock_location_id,quantity,unit_cost,total_value,journal_entry_id,assembly_disassembly_id,status,memo,created_by,updated_by)
         values (${movementId},${orgId},${build.subsidiary_id},${build.item_id},'assembly_disassembly',${input.date},${build.stock_location_id},
-          ${neg(quantity)},${withdrawal.unitCost},${neg(withdrawal.cost)},${entryId},${operationId},'posted',${explanation},${actorId},${actorId}) returning id`)
-      if (inserted.rows.length !== 1) throw new InventoryError('The disassembly movement could not be recorded')
+          ${neg(quantity)},${withdrawal.unitCost},${neg(withdrawal.cost)},${entryId},${operationId},'posted',${explanation},${actorId},${actorId}) returning id`, 'objects')
+      if (inserted.length !== 1) throw new InventoryError('The disassembly movement could not be recorded')
       await recordConsumptions(db, orgId, build.subsidiary_id, withdrawal.consumptions, movementId, actorId)
       for (const component of components) {
         const id = randomUUID(); movementIds.push(id)
@@ -219,8 +219,8 @@ export async function disassembleAssembly(orgId: string, actorId: string, input:
         const created = await db.execute(sql`insert into inventory_movements
           (id,org_id,subsidiary_id,item_id,kind,moved_at,stock_location_id,quantity,unit_cost,total_value,journal_entry_id,assembly_disassembly_id,status,memo,created_by,updated_by)
           values (${id},${orgId},${build.subsidiary_id},${component.itemId},'assembly_recovery',${input.date},${build.stock_location_id},
-            ${component.quantity},${unitCost},${component.value},${entryId},${operationId},'posted',${explanation},${actorId},${actorId}) returning id`)
-        if (created.rows.length !== 1) throw new InventoryError('The recovered component movement could not be recorded')
+            ${component.quantity},${unitCost},${component.value},${entryId},${operationId},'posted',${explanation},${actorId},${actorId}) returning id`, 'objects')
+        if (created.length !== 1) throw new InventoryError('The recovered component movement could not be recorded')
         await addLayerAtCost(db, orgId, build.subsidiary_id, component.itemId, build.stock_location_id, component.quantity, component.value,
           profiles.get(component.itemId)!.costingMethod, id, input.date, actorId, unitCost, component.originalCost)
       }
@@ -244,15 +244,15 @@ export async function reverseAssemblyDisassembly(orgId: string, actorId: string,
     if (!['assembly_disassembly', 'assembly_recovery'].includes(source.kind) || !source.assembly_disassembly_id)
       throw new InventoryError('Select a movement belonging to the disassembly operation')
     const operation = (await db.execute<{ book_id: string; journal_entry_id: string | null }>(sql`select book_id,journal_entry_id from assembly_disassemblies
-      where org_id=${orgId} and id=${source.assembly_disassembly_id} for share`)).rows[0]
+      where org_id=${orgId} and id=${source.assembly_disassembly_id} for share`, 'objects'))[0]
     if (!operation) throw new InventoryError('The disassembly operation evidence is unavailable')
     await lockPositions(await disassemblyRows(orgId, source.assembly_disassembly_id))
     const sources = await disassemblyRows(orgId, source.assembly_disassembly_id, true)
     if (sources.filter(row => row.kind === 'assembly_disassembly').length !== 1 || !sources.some(row => row.kind === 'assembly_recovery')
         || sources.some(row => !['assembly_disassembly', 'assembly_recovery'].includes(row.kind) || row.subsidiary_id !== source.subsidiary_id || row.stock_location_id !== source.stock_location_id || row.status !== 'posted'))
       throw new InventoryError('The source journal does not contain one complete disassembly operation')
-    const prior = (await db.execute<{ id: string; journal_entry_id: string | null }>(sql`select id,journal_entry_id from inventory_movements where org_id=${orgId}
-      and reverses_movement_id in (${sql.join(sources.map(row => sql`${row.id}`), sql`, `)}) order by id`)).rows
+    const prior = await db.execute<{ id: string; journal_entry_id: string | null }>(sql`select id,journal_entry_id from inventory_movements where org_id=${orgId}
+      and reverses_movement_id in (${sql.join(sources.map(row => sql`${row.id}`), sql`, `)}) order by id`, 'objects')
     if (prior.length) {
       if (prior.length !== sources.length) throw new InventoryError('The disassembly reversal evidence is incomplete')
       return { movementIds: prior.map(row => row.id), entryId: prior[0]!.journal_entry_id, alreadyReversed: true }
@@ -268,8 +268,8 @@ export async function reverseAssemblyDisassembly(orgId: string, actorId: string,
       const inserted = await db.execute(sql`insert into inventory_movements
         (id,org_id,subsidiary_id,item_id,kind,moved_at,stock_location_id,quantity,unit_cost,total_value,journal_entry_id,assembly_disassembly_id,reverses_movement_id,reversal_reason,status,memo,created_by,updated_by)
         values (${id},${orgId},${row.subsidiary_id},${row.item_id},'return',${input.reversalDate},${row.stock_location_id},${neg(row.quantity)},${row.unit_cost},
-          ${row.total_value === null ? null : neg(row.total_value)},${entryId},${source.assembly_disassembly_id},${row.id},${explanation},'posted',${explanation},${actorId},${actorId}) returning id`)
-      if (inserted.rows.length !== 1) throw new InventoryError('The disassembly reversal could not be recorded')
+          ${row.total_value === null ? null : neg(row.total_value)},${entryId},${source.assembly_disassembly_id},${row.id},${explanation},'posted',${explanation},${actorId},${actorId}) returning id`, 'objects')
+      if (inserted.length !== 1) throw new InventoryError('The disassembly reversal could not be recorded')
       await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
         values (${orgId},'inventory_movements',${row.id},'void',${JSON.stringify({ reversalMovementId: id, entryId, reason: explanation })}::jsonb,${actorId})`)
     }

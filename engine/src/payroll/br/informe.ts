@@ -173,8 +173,8 @@ export async function brInformeRows(orgId: string, taxYear: number): Promise<BrI
         on prof.org_id = ${orgId} and prof.employee_party_id = c.employee_party_id
      group by c.employee_party_id, p.display_name, c.filing_account_id
      order by p.display_name
-  `));
-  if (rows.rows.length === 0) {
+  `, "objects"));
+  if (rows.length === 0) {
     throw new PayrollError(
       `no committed BR pay runs for ${taxYear} — calculate and commit a BR pay run for the year `
       + "before issuing Comprovantes de Rendimentos; a draft or uncommitted run never appears "
@@ -183,17 +183,17 @@ export async function brInformeRows(orgId: string, taxYear: number): Promise<BrI
   }
   // No ANY($array): a bare JavaScript array interpolates as a row
   // constructor, not a PostgreSQL array — filter in JS instead.
-  const wanted = new Set(rows.rows.map((row) => String(row.employee_party_id)));
+  const wanted = new Set(rows.map((row) => String(row.employee_party_id)));
   const profiles = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
     select employee_party_id, sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId}
-  `));
+  `, "objects"));
   const cpfByEmployee = new Map(
-    profiles.rows
+    profiles
       .filter((row) => wanted.has(String(row.employee_party_id)))
       .map((row) => [String(row.employee_party_id), row.sin_encrypted == null ? null : unsealSecret(row.sin_encrypted, { orgId, purpose: "payroll.employee.sin" })]),
   );
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     filingAccountId: (row.filing_account_id as string | null) ?? null,

@@ -46,17 +46,18 @@ const mockSources = new Map<string, string>([
     "platform/db.ts",
     `${STATE}
     export const db = {
-      async execute(query) {
+      async execute(query, mode) {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result);
         const compiled = globalThis[Symbol.for('openbooks.inbox-read-memo-dialect')].sqlToQuery(query);
         state.queries.push(compiled);
         const text = compiled.sql;
         if (text.includes('to_regclass')) {
           const table = compiled.params.find((param) => typeof param === 'string' && param.startsWith('public.'));
           hit('to_regclass');
-          return { rows: [{ exists: state.installed.has(String(table).slice('public.'.length)) }] };
+          return inMode({ rows: [{ exists: state.installed.has(String(table).slice('public.'.length)) }] });
         }
         hit('sql');
-        return { rows: [] };
+        return inMode({ rows: [] });
       },
     };`,
   ],

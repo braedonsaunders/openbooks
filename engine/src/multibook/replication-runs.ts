@@ -64,9 +64,9 @@ const RUN_COLUMNS = sql`
   excluded_count as "excludedCount", reason, created_at::text as "createdAt", created_by as "createdBy"`;
 
 export async function listBookReplicationRuns(orgId: string, runner: SqlExecutor = db): Promise<BookReplicationRunRow[]> {
-  return (await runner.execute<BookReplicationRunRow & Record<string, unknown>>(sql`
+  return await runner.execute<BookReplicationRunRow & Record<string, unknown>>(sql`
     select ${RUN_COLUMNS} from accounting_book_replication_runs
-     where org_id = ${orgId} order by created_at desc, id desc`)).rows;
+     where org_id = ${orgId} order by created_at desc, id desc`, "objects");
 }
 
 /** The currency difference account must be a postable P&L or equity account. */
@@ -150,7 +150,7 @@ export async function changeBookReplication(args: {
             const earlier = (await db.execute<{ n: number }>(sql`
               select count(*)::int as n from journal_entries e
                where e.org_id = ${args.orgId} and e.posting_date < ${replicationFrom}::date
-                 and ${replicableEntrySql("e")}`)).rows[0]?.n ?? 0;
+                 and ${replicableEntrySql("e")}`, "objects"))[0]?.n ?? 0;
             if (earlier > 0) {
               throw new MultiBookError(
                 `the primary book holds ${earlier} entr${earlier === 1 ? "y" : "ies"} dated before ${replicationFrom}; start on or before the first entry, or bring that history in as opening balances`,
@@ -174,7 +174,7 @@ export async function changeBookReplication(args: {
         values (${args.orgId}, ${book.id}, ${kind}, ${book.replicationMode}, ${modeAfter}, ${replicationFrom}::date,
                 ${openingStrategy}, ${JSON.stringify({ currencyDifferenceAccountId: differenceAccountId, resumed })}::jsonb,
                 ${reason}, ${args.actorId})
-        returning id`)).rows[0];
+        returning id`, "objects"))[0];
       if (!run) throw new Error("replication run insert returned no row");
 
       const updated = (await db.execute<{ id: string }>(sql`
@@ -183,7 +183,7 @@ export async function changeBookReplication(args: {
                currency_difference_account_id = ${differenceAccountId},
                updated_at = now(), updated_by = ${args.actorId}
          where org_id = ${args.orgId} and id = ${book.id}
-        returning id`)).rows[0];
+        returning id`, "objects"))[0];
       if (!updated) throw new MultiBookError("the book changed while you were saving; reload and try again", 409);
 
       let openingEntryIds: string[] = [];
@@ -218,7 +218,7 @@ export async function changeBookReplication(args: {
            set replicated_count = ${replicated}, excluded_count = ${excluded},
                opening_entry_ids = ${`{${openingEntryIds.join(",")}}`}::uuid[]
          where org_id = ${args.orgId} and id = ${run.id}
-        returning ${RUN_COLUMNS}`)).rows[0];
+        returning ${RUN_COLUMNS}`, "objects"))[0];
       if (!sealed) throw new Error("replication run outcome was not recorded");
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -257,7 +257,7 @@ async function postOpeningBalances(
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${args.orgId} and e.posting_date < ${args.from}::date
        and ${eligibleHistory}
-     order by l.subsidiary_id`)).rows.map((row) => row.subsidiary_id);
+     order by l.subsidiary_id`, "objects")).map((row) => row.subsidiary_id);
   if (historySubsidiaries.length === 0) return [];
 
   const periods = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveCoveringPeriod>>>>();
@@ -269,7 +269,7 @@ async function postOpeningBalances(
     const fiscalYearStart = (await runner.execute<{ starts_on: string | null }>(sql`
       select min(starts_on)::text as starts_on from accounting_periods
        where org_id = ${args.orgId} and fiscal_calendar_id = ${period.fiscal_calendar_id}
-         and fiscal_year = ${period.fiscal_year} and not is_adjustment`)).rows[0]?.starts_on;
+         and fiscal_year = ${period.fiscal_year} and not is_adjustment`, "objects"))[0]?.starts_on;
     if (!fiscalYearStart) {
       throw new MultiBookError(`the subsidiary's fiscal calendar has no regular periods for fiscal year ${period.fiscal_year}; generate its periods and retry`);
     }
@@ -278,7 +278,7 @@ async function postOpeningBalances(
   const pnlYearScope = sql.join([...fiscalYearStarts].map(([subsidiaryId, start]) =>
     sql`(l.subsidiary_id = ${subsidiaryId} and e.posting_date >= ${start}::date)`,
   ), sql` or `);
-  const balances = (await runner.execute<{
+  const balances = await runner.execute<{
     subsidiary_id: string; account_id: string; currency: string; amount: string; txn_amount: string;
     party_id: string | null; department_id: string | null; project_id: string | null; location_id: string | null;
     class_id: string | null; equipment_unit_id: string | null; payment_card_id: string | null; tax_code_id: string | null;
@@ -299,7 +299,7 @@ async function postOpeningBalances(
               l.party_id, l.department_id, l.project_id, l.location_id, l.class_id,
               l.equipment_unit_id, l.payment_card_id, l.tax_code_id, l.extra_dims, l.eliminate, l.unit
     having sum(l.amount) <> 0 or sum(l.txn_amount) <> 0
-     order by l.subsidiary_id, account_id, l.currency`)).rows;
+     order by l.subsidiary_id, account_id, l.currency`, "objects");
   if (balances.length === 0) return [];
   const subsidiaryIds = [...new Set(balances.map((row) => row.subsidiary_id))];
   const bookBases = await resolveBookBases(runner, { orgId: args.orgId, book: args.book, subsidiaryIds, postingDate: args.from });

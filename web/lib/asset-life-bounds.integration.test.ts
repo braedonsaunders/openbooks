@@ -36,7 +36,7 @@ for(const value of [0,-1,1.5,1_000_000_000,true,[12],{},'Infinity','1e9',1,'12',
    const {actorId,assetId}=await seedAsset(org);
    await db.execute(sql`update fixed_assets set status='draft' where id=${assetId}`);
    state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};state.builds=0;
-   const snapshot=async()=>(await db.execute(sql`select (select to_jsonb(a) from fixed_assets a where id=${assetId}) as asset,(select jsonb_agg(to_jsonb(l)) from audit_log l where row_id=${assetId}) as audit`)).rows;
+   const snapshot=async()=>await db.execute(sql`select (select to_jsonb(a) from fixed_assets a where id=${assetId}) as asset,(select jsonb_agg(to_jsonb(l)) from audit_log l where row_id=${assetId}) as audit`, 'objects');
    const before=await snapshot();
    const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({lifeMonths:value,expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
    const valid=value===1||value==='12'||value===12000||value===null;
@@ -46,9 +46,9 @@ for(const value of [0,-1,1.5,1_000_000_000,true,[12],{},'Infinity','1e9',1,'12',
    // not whether a build started.
    assert.equal(state.builds,0,'draft edits never start schedule calculation');
    if(!valid)assert.deepEqual(await snapshot(),before,'refusal leaves configuration and audit unchanged');
-   else assert.equal((await db.execute(sql`select useful_life_months from fixed_assets where id=${assetId}`)).rows[0]!.useful_life_months,value===null?null:Number(value));
+   else assert.equal((await db.execute(sql`select useful_life_months from fixed_assets where id=${assetId}`, 'objects'))[0]!.useful_life_months,value===null?null:Number(value));
   }finally{state.gate=null;await dropScratchOrg(org.orgId)}
  });
 }
 
-async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`)).rows[0]!.revision;}
+async function revision(assetId:string):Promise<string>{return (await db.execute<{revision:string}>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision from fixed_assets where id=${assetId}`, 'objects'))[0]!.revision;}

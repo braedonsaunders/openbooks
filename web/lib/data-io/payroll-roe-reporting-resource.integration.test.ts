@@ -16,15 +16,15 @@ async function fixture(){
   const hash=createHash('sha256').update(bytes).digest('hex')
   assert.equal((await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
-    values(${filingAccountId},${f.orgId},${f.subsidiaryId},'CA','ca_rp','123456789RP0001','Employer account','regular',true,true,${f.actorId},${f.actorId}) returning id`)).rows.length,1)
+    values(${filingAccountId},${f.orgId},${f.subsidiaryId},'CA','ca_rp','123456789RP0001','Employer account','regular',true,true,${f.actorId},${f.actorId}) returning id`, 'objects')).length,1)
   assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-    values(${folder},${f.orgId},'Original ROE source',true,${f.actorId},${f.actorId},${f.actorId}) returning id`)).rows.length,1)
+    values(${folder},${f.orgId},'Original ROE source',true,${f.actorId},${f.actorId},${f.actorId}) returning id`, 'objects')).length,1)
   assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-    values(${file},${f.orgId},${folder},'original.txt','text/plain',${bytes.length},${f.actorId},${f.actorId}) returning id`)).rows.length,1)
+    values(${file},${f.orgId},${folder},'original.txt','text/plain',${bytes.length},${f.actorId},${f.actorId}) returning id`, 'objects')).length,1)
   assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-    values(${version},${file},1,${bytes.length},'text/plain',${hash},${f.actorId}) returning id`)).rows.length,1)
-  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`)).rows.length,1)
-  assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file} returning id`)).rows.length,1)
+    values(${version},${file},1,${bytes.length},'text/plain',${hash},${f.actorId}) returning id`, 'objects')).length,1)
+  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`, 'objects')).length,1)
+  assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file} returning id`, 'objects')).length,1)
   return {...f,row:{
     employeePartyId:f.employeeId,employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,
     filingAccountId,payScheduleId:f.scheduleId,frequency:'biweekly',periodStart:'2026-07-05',periodEnd:'2026-07-18',
@@ -37,10 +37,10 @@ async function fixture(){
 }
 async function retainedState(orgId:string){
   return {
-    periods:(await db.execute(sql`select to_jsonb(p) as row from payroll_roe_historical_periods p where org_id=${orgId} order by id`)).rows,
-    audits:(await db.execute(sql`select to_jsonb(a) as row from audit_log a where org_id=${orgId} and table_name='payroll_roe_historical_periods' order by id`)).rows,
-    runs:(await db.execute(sql`select document_id from pay_runs where org_id=${orgId} order by document_id`)).rows,
-    journals:(await db.execute(sql`select id from journal_entries where org_id=${orgId} order by id`)).rows,
+    periods:await db.execute(sql`select to_jsonb(p) as row from payroll_roe_historical_periods p where org_id=${orgId} order by id`, 'objects'),
+    audits:await db.execute(sql`select to_jsonb(a) as row from audit_log a where org_id=${orgId} and table_name='payroll_roe_historical_periods' order by id`, 'objects'),
+    runs:await db.execute(sql`select document_id from pay_runs where org_id=${orgId} order by document_id`, 'objects'),
+    journals:await db.execute(sql`select id from journal_entries where org_id=${orgId} order by id`, 'objects'),
   }
 }
 test('shared ROE import preview rolls back native evidence and audit; commit/export/replay retain exact decimals and original identity',

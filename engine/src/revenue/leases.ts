@@ -926,7 +926,7 @@ async function validateLeaseReferences(
       select id, is_active, subsidiary_id, subsidiary_include_children
         from ${sql.raw(dimension.table)}
        where org_id = ${orgId} and id = ${dimension.id}
-       for share`)).rows[0];
+       for share`, "objects"))[0];
     if (!row || !row.is_active) {
       throw new LeaseError(`Choose an active ${dimension.label} from this organization.`);
     }
@@ -1129,14 +1129,12 @@ export async function createLeaseAgreement(
         "select a prepaid lease expense clearing account for exempt advance payments",
       );
     }
-    const binding = (
-      await db.execute<{ book_id: string; currency: string }>(sql`
+    const binding = (await db.execute<{ book_id: string; currency: string }>(sql`
     select b.id as book_id,s.base_currency as currency from accounting_books b
     join subsidiaries s on s.org_id=b.org_id and s.id=${input.subsidiaryId}
     where b.org_id=${orgId} and b.is_primary and b.is_active and b.posts_gl
       and s.is_active and not s.is_elimination for share of b,s
-  `)
-    ).rows[0];
+  `, "objects"))[0];
     if (!binding)
       throw new LeaseError(
         "lease requires an active legal entity and an active primary posting book",
@@ -1144,7 +1142,7 @@ export async function createLeaseAgreement(
     await validateLeaseReferences(db, orgId, input);
     const leaseId = randomUUID();
     try {
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(sql`
     insert into lease_agreements
       (id, org_id, subsidiary_id, book_id, currency, lease_number, description, status, commencement_on, term_periods,
        payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
@@ -1166,7 +1164,7 @@ export async function createLeaseAgreement(
             ${input.accounts.amortizationExpense}, ${input.accounts.leaseExpense}, ${input.accounts.payment},
             ${input.departmentId ?? null}, ${input.projectId ?? null}, ${input.locationId ?? null},
             '{}'::jsonb, ${actorId}, ${actorId})
-    returning id`)).rows;
+    returning id`, "objects");
       if (inserted.length !== 1 || inserted[0]?.id !== leaseId) {
         throw new LeaseError("The lease agreement was not saved; no lease was created.");
       }
@@ -1241,8 +1239,8 @@ export async function leaseRow(
            department_id, project_id, location_id, commencement_entry_id,
            revision, initial_direct_costs::text, prepayments::text, incentives::text,
            cost_clearing_account_id, last_change_id
-      from lease_agreements where org_id = ${orgId} and id = ${leaseId} for update`);
-  const row = r.rows[0];
+      from lease_agreements where org_id = ${orgId} and id = ${leaseId} for update`, "objects");
+  const row = r[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
@@ -1265,8 +1263,8 @@ async function postingContext(
   }>(sql`
     select (select id from accounting_books where org_id = ${orgId} and id=${bookId} and is_active and posts_gl for share) as book_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
-  `);
-  const row = r.rows[0];
+  `, "objects");
+  const row = r[0];
   if (!row?.book_id)
     throw new LeaseError(
       "the lease posting book is no longer active or GL-posting; ask an authorized administrator to restore the originating book's posting configuration in Accounting books before posting this lease",
@@ -1288,8 +1286,7 @@ async function assertLeaseAccountsPostable(
 ): Promise<void> {
   const ids = [...new Set(accountIds)];
   if (!ids.length) return;
-  const accounts = (
-    await tx.execute<{
+  const accounts = await tx.execute<{
       id: string;
       is_active: boolean;
       is_summary: boolean;
@@ -1298,8 +1295,7 @@ async function assertLeaseAccountsPostable(
       from accounts
      where org_id=${orgId} and id=any(${uuidArray(ids)}::uuid[])
      for share
-  `)
-  ).rows;
+  `, "objects");
   const byId = new Map(accounts.map((account) => [account.id, account]));
   if (
     ids.some((id) => {
@@ -1551,8 +1547,8 @@ export async function commenceLease(
         update lease_agreements
            set status = 'active', initial_liability = '0', initial_rou_asset = '0',
                updated_at = now(), updated_by = ${actorId}
-         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`);
-      if (activated.rows.length !== 1)
+         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`, "objects");
+      if (activated.length !== 1)
         throw new LeaseError("draft lease could not be commenced");
       return {
         leaseId,
@@ -1635,8 +1631,8 @@ export async function commenceLease(
            set status = 'active', initial_liability = ${opening.liability},
                initial_rou_asset = ${opening.rouCarrying}, commencement_entry_id = null,
                updated_at = now(), updated_by = ${actorId}
-         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`);
-      if (activated.rows.length !== 1)
+         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`, "objects");
+      if (activated.length !== 1)
         throw new LeaseError("draft lease could not be commenced");
       return {
         leaseId,
@@ -1686,8 +1682,8 @@ export async function commenceLease(
         update lease_agreement_schedule_lines set payment_entry_id=${entryId},payment_posted_at=now(),
           updated_by=${actorId},updated_at=now()
          where org_id=${orgId} and lease_id=${leaseId} and sequence=1 returning id
-      `);
-      if (paid.rows.length !== 1)
+      `, "objects");
+      if (paid.length !== 1)
         throw new LeaseError(
           "commencement payment could not be linked to its schedule",
         );
@@ -1697,8 +1693,8 @@ export async function commenceLease(
          set status = 'active', initial_liability = ${measurement.liability},
              initial_rou_asset = ${measurement.rouAsset}, commencement_entry_id = ${entryId},
              updated_at = now(), updated_by = ${actorId}
-       where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`);
-    if (activated.rows.length !== 1)
+       where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`, "objects");
+    if (activated.length !== 1)
       throw new LeaseError("draft lease could not be commenced");
 
     return {
@@ -1768,8 +1764,7 @@ export async function postDueLeaseSchedules(
     throw new LeaseError(
       "as-of date must be a valid calendar date (YYYY-MM-DD)",
     );
-  const due = (
-    await db.execute<{ line_id: string; lease_id: string }>(sql`
+  const due = await db.execute<{ line_id: string; lease_id: string }>(sql`
     select l.id as line_id,l.lease_id from lease_agreement_schedule_lines l
       join lease_agreements a on a.id=l.lease_id and a.org_id=l.org_id
      where l.org_id=${orgId} and a.status='active' and l.superseded_by_change_id is null
@@ -1777,8 +1772,7 @@ export async function postDueLeaseSchedules(
        and ((l.due_on<=${asOfDate} and l.payment_posted_at is null)
          or (l.period_end<=${asOfDate} and l.accrual_posted_at is null))
      order by l.period_start,l.sequence,l.id
-  `)
-  ).rows;
+  `, "objects");
   const result: PostLeaseScheduleResult = {
     posted: 0,
     skipped: 0,
@@ -1797,15 +1791,13 @@ export async function postDueLeaseSchedules(
           feature: "fixedAssets",
         });
       if (lease.status !== "active") return null;
-      const line = (
-        await tx.execute<LeaseSchedulePostingRow>(sql`
+      const line = (await tx.execute<LeaseSchedulePostingRow>(sql`
         select id as line_id,lease_id,sequence,due_on::text,period_end::text,
           payment::text,interest::text,principal::text,amortization::text,single_cost::text,rou_adjustment::text,
           payment_posted_at,accrual_posted_at,payment_entry_id,amortization_entry_id
          from lease_agreement_schedule_lines where org_id=${orgId} and id=${candidate.line_id}
            and lease_id=${lease.id} and superseded_by_change_id is null for update
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!line) return null;
       const pay = !line.payment_posted_at && line.due_on <= asOfDate;
       const accrue = !line.accrual_posted_at && line.period_end <= asOfDate;
@@ -2042,8 +2034,8 @@ export async function postDueLeaseSchedules(
           posted_at=case when ${pay || !!line.payment_posted_at} and ${accrue || !!line.accrual_posted_at} then now() else posted_at end,
           updated_at=now(),updated_by=${actorId}
          where org_id=${orgId} and id=${line.line_id} returning id
-      `);
-      if (updated.rows.length !== 1)
+      `, "objects");
+      if (updated.length !== 1)
         throw new LeaseError("lease schedule completion could not be recorded");
       return {
         kind: "posted",

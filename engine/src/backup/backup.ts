@@ -536,8 +536,8 @@ export async function purgeBackupRun(args: BackupPurgeRunArgs): Promise<boolean>
       update backup_runs
          set purged_at = now(), purge_reason = ${args.reason}, updated_at = now()
        where id = ${args.runId} and org_id = ${args.orgId} and purged_at is null
-       returning id`));
-    if (!stamped.rows[0]) return false;
+       returning id`, "objects"));
+    if (!stamped[0]) return false;
 
     await auditBackupEvent({
       orgId: args.orgId,
@@ -570,8 +570,8 @@ export async function executeBackupRun(runId: string): Promise<void> {
     update backup_runs
        set status = 'running', started_at = now(), updated_at = now()
      where id = ${runId} and status = 'queued'
-     returning id, org_id, kind, actor_id`));
-  const run = claimed.rows[0];
+     returning id, org_id, kind, actor_id`, "objects"));
+  const run = claimed[0];
   if (!run) return; // already claimed/finished — redelivery
 
   // A large organization can legitimately need longer than the scheduler's
@@ -608,8 +608,8 @@ export async function executeBackupRun(runId: string): Promise<void> {
       throw new Error("S3 object storage is not configured (S3_ENDPOINT/S3_BUCKET/…)");
     }
     const orgRes = (await db.execute<{ name: string }>(sql`
-      select name from orgs where id = ${run.org_id}`));
-    const orgName = orgRes.rows[0]?.name ?? "org";
+      select name from orgs where id = ${run.org_id}`, "objects"));
+    const orgName = orgRes[0]?.name ?? "org";
     fileName = `${backupFileBaseName(orgName)}.json.gz`;
     objectKey = backupObjectKey(run.org_id, run.id);
 
@@ -653,8 +653,8 @@ export async function executeBackupRun(runId: string): Promise<void> {
                table_count = ${stats.tables.length}, row_count = ${stats.totalRows},
                updated_at = now()
          where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
-         returning id`));
-      if (!intended.rows[0]) throw new Error("backup run lost its running claim before upload");
+         returning id`, "objects"));
+      if (!intended[0]) throw new Error("backup run lost its running claim before upload");
 
       uploadAttempted = true;
       await putBackupObject({
@@ -678,8 +678,8 @@ export async function executeBackupRun(runId: string): Promise<void> {
            set status = 'completed', completed_at = now(), updated_at = now(),
                error = null
          where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
-         returning id`));
-      if (!finalized.rows[0]) throw new Error("backup run could not be finalized from running state");
+         returning id`, "objects"));
+      if (!finalized[0]) throw new Error("backup run could not be finalized from running state");
       if (!stats || !fileName || byteSize === null || !sha256) {
         throw new Error("backup run finished without export statistics");
       }
@@ -709,8 +709,8 @@ export async function executeBackupRun(runId: string): Promise<void> {
     let state: { status: string } | undefined;
     try {
       const stateResult = (await db.execute<{ status: string }>(sql`
-        select status from backup_runs where id = ${runId} and org_id = ${run.org_id}`));
-      state = stateResult.rows[0];
+        select status from backup_runs where id = ${runId} and org_id = ${run.org_id}`, "objects"));
+      state = stateResult[0];
     } catch (stateError) {
       console.error(
         `[backup] run ${runId}: database state unavailable; leaving upload intent for scheduler reconciliation:`,
@@ -798,18 +798,18 @@ export async function executeBackupRun(runId: string): Promise<void> {
 export async function rotateBackups(orgId: string): Promise<void> {
   assertUuid(orgId);
   const policy = (await db.execute<{ max_keep: number }>(sql`
-    select max_keep from backup_policies where org_id = ${orgId}`));
-  const maxKeep = policy.rows[0]?.max_keep ?? 7;
+    select max_keep from backup_policies where org_id = ${orgId}`, "objects"));
+  const maxKeep = policy[0]?.max_keep ?? 7;
 
   const excess = (await db.execute<{ id: string; object_key: string | null; file_name: string | null; byte_size: number | null }>(sql`
     select id, object_key, file_name, byte_size
       from backup_runs
      where org_id = ${orgId} and status = 'completed' and purged_at is null
      order by created_at desc
-     offset ${maxKeep}`));
+     offset ${maxKeep}`, "objects"));
 
   let rotated = 0;
-  for (const run of excess.rows) {
+  for (const run of excess) {
     try {
       const purged = await purgeBackupRun({
         orgId,

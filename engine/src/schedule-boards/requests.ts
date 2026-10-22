@@ -124,7 +124,7 @@ function reasonText(value: unknown, field = "Reason"): string {
 }
 
 async function readRequest(orgId: string, id: string): Promise<ShiftRequest> {
-  const row = (await db.execute<ShiftRequest>(sql`select ${REQUEST_COLUMNS} ${REQUEST_JOINS} where r.org_id = ${orgId} and r.id = ${id}`)).rows[0];
+  const row = (await db.execute<ShiftRequest>(sql`select ${REQUEST_COLUMNS} ${REQUEST_JOINS} where r.org_id = ${orgId} and r.id = ${id}`, "objects"))[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
@@ -137,7 +137,7 @@ async function selfServiceParty(actor: ScheduleActor): Promise<string> {
   )
     throw new ScopeNotFoundError();
   await lockActorCommandAuthority(db, actor.orgId, actor.actorId, null, "hrm.self.request");
-  const party = (await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active for share`)).rows[0];
+  const party = (await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active for share`, "objects"))[0];
   if (!party?.partyId) {
     throw new ScheduleError("Your login is not linked to a person.", { code: "schedule_no_person", remedy: "Ask an administrator to link your user to your employee record." });
   }
@@ -145,7 +145,7 @@ async function selfServiceParty(actor: ScheduleActor): Promise<string> {
 }
 
 async function lockEntry(orgId: string, id: string): Promise<StoredEntry> {
-  const row = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries where org_id = ${orgId} and id = ${id} for update`)).rows[0];
+  const row = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries where org_id = ${orgId} and id = ${id} for update`, "objects"))[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
@@ -164,7 +164,7 @@ async function openRequestFor(
 ): Promise<boolean> {
   return (
     (await db.execute(sql`select 1 from schedule_entry_requests where org_id = ${orgId} and status in ('awaiting_counterpart', 'pending')
-    and ${entryId} in (entry_id, counterpart_entry_id) limit 1`)).rows.length > 0
+    and ${entryId} in (entry_id, counterpart_entry_id) limit 1`, "objects")).length > 0
   );
 }
 
@@ -192,7 +192,7 @@ export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestI
     const party = await selfServiceParty(actor);
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-request:${actor.orgId}:${id}`}, 0))`);
     const existing = (await db.execute<{ requestHash: string; createdBy: string }>(sql`select request_hash as "requestHash", created_by as "createdBy"
-      from schedule_entry_requests where org_id = ${actor.orgId} and id = ${id}`)).rows[0];
+      from schedule_entry_requests where org_id = ${actor.orgId} and id = ${id}`, "objects"))[0];
     if (existing) {
       if (existing.requestHash !== requestHash || existing.createdBy !== actor.actorId) {
         throw new ScheduleError("This request key was already used for a different request.", { status: 409, code: "schedule_key_reused", remedy: "Reload your schedule; the existing request is preserved." });
@@ -203,7 +203,7 @@ export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestI
     const entry = await lockEntry(actor.orgId, entryId);
     requestable(entry, party, actor.expectedRevision, "The shift");
     if (entry.removesPredecessor || !entry.workerPartyId) throw new ScopeNotFoundError();
-    const boardType = (await db.execute<{ boardType: string }>(sql`select board_type as "boardType" from schedule_boards where org_id = ${actor.orgId} and id = ${entry.boardId}`)).rows[0];
+    const boardType = (await db.execute<{ boardType: string }>(sql`select board_type as "boardType" from schedule_boards where org_id = ${actor.orgId} and id = ${entry.boardId}`, "objects"))[0];
     if (!boardType || !boardHasCapability(boardType, "shift_requests")) {
       throw new ScheduleError("This shift cannot be requested from your schedule.", { code: "schedule_capability_unavailable", remedy: "Ask your scheduler to change this booking." });
     }
@@ -232,14 +232,14 @@ export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestI
         throw new ScheduleError("Your colleague's shift already has an open request.", { status: 409, code: "schedule_request_open", remedy: "Choose another shift or wait for that request's decision." });
       }
     }
-    const inserted = (await db.execute(sql`insert into schedule_entry_requests (id, org_id, board_id, entry_id, entry_revision, worker_party_id, subsidiary_id, kind,
+    const inserted = await db.execute(sql`insert into schedule_entry_requests (id, org_id, board_id, entry_id, entry_revision, worker_party_id, subsidiary_id, kind,
       proposed_starts_at, proposed_ends_at, proposed_break_minutes, counterpart_entry_id, counterpart_entry_revision, counterpart_party_id, status,
       reason, request_hash, created_by, updated_by)
       values (${id}, ${actor.orgId}, ${entry.boardId}, ${entry.id}, ${entry.revision}, ${party},
       (select subsidiary_id from schedule_entries where org_id = ${actor.orgId} and id = ${entry.id}), ${actor.kind},
       ${proposed?.startsAt ?? null}, ${proposed?.endsAt ?? null}, ${proposed?.breakMinutes ?? null},
       ${counterpart?.id ?? null}, ${counterpart?.revision ?? null}, ${counterpart?.workerPartyId ?? null},
-      ${actor.kind === "swap" ? "awaiting_counterpart" : "pending"}, ${reason}, ${requestHash}, ${actor.actorId}, ${actor.actorId}) returning id`)).rows;
+      ${actor.kind === "swap" ? "awaiting_counterpart" : "pending"}, ${reason}, ${requestHash}, ${actor.actorId}, ${actor.actorId}) returning id`, "objects");
     if (inserted.length !== 1) throw new ScheduleError("The request was not saved.", { code: "schedule_not_saved", remedy: "Reload your schedule and try again." });
     if (actor.kind !== "swap") return submitForDecision(actor, id);
     const request = await readRequest(actor.orgId, id);
@@ -261,8 +261,8 @@ async function submitForDecision(actor: ScheduleActor, id: string): Promise<Shif
       remedy: routed.error ? `Ask an administrator to review the Shift request Flow: ${routed.error}` : "Ask an administrator to review the Shift request Flow." });
   }
   if (routed.gated) {
-    const updated = (await db.execute(sql`update schedule_entry_requests set flow_run_id = ${routed.runId}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`)).rows;
+    const updated = await db.execute(sql`update schedule_entry_requests set flow_run_id = ${routed.runId}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+      where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`, "objects");
     if (updated.length !== 1) throw new ScheduleError("The request changed while it was routed for approval.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
     const request = await readRequest(actor.orgId, id);
     return { request, notices: [], boardName: request.boardName, distributionRefusals: [] };
@@ -281,11 +281,11 @@ export async function respondToSwap(actor: ScheduleActor & { requestId: string; 
     if (request.status !== "awaiting_counterpart" || request.revision !== actor.expectedRevision) {
       throw new ScheduleError("This swap was already answered or withdrawn.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
     }
-    const updated = (await db.execute(actor.accept
+    const updated = await db.execute(actor.accept
       ? sql`update schedule_entry_requests set status = 'pending', counterpart_responded_by = ${actor.actorId}, counterpart_responded_at = now(),
           revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning id`
       : sql`update schedule_entry_requests set status = 'declined', decided_by = ${actor.actorId}, decided_at = now(), decision_reason = ${reason},
-          revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning id`)).rows;
+          revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning id`, "objects");
     if (updated.length !== 1) throw new ScheduleError("This swap changed while you answered.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
     if (actor.accept) return submitForDecision(actor, request.id);
     const declined = await readRequest(actor.orgId, request.id);
@@ -305,15 +305,15 @@ export async function withdrawOwnShiftRequest(actor: ScheduleActor & { requestId
     if (request.flowGated) {
       throw new ScheduleError("This request is with its approval Flow.", { status: 409, code: "schedule_request_flow_owned", remedy: "Ask the approver to decline it in the Flow." });
     }
-    const updated = (await db.execute(sql`update schedule_entry_requests set status = 'withdrawn', revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning id`)).rows;
+    const updated = await db.execute(sql`update schedule_entry_requests set status = 'withdrawn', revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+      where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning id`, "objects");
     if (updated.length !== 1) throw new ScheduleError("This request changed while you withdrew it.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
     return readRequest(actor.orgId, request.id);
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
 async function lockRequest(orgId: string, id: string): Promise<ShiftRequest> {
-  const locked = (await db.execute(sql`select id from schedule_entry_requests where org_id = ${orgId} and id = ${requireId(id, "Request")} for update`)).rows[0];
+  const locked = (await db.execute(sql`select id from schedule_entry_requests where org_id = ${orgId} and id = ${requireId(id, "Request")} for update`, "objects"))[0];
   if (!locked) throw new ScopeNotFoundError();
   return readRequest(orgId, id);
 }
@@ -403,10 +403,10 @@ async function decide(
       if (row.started) throw new ScheduleError("The shift has already started.", { code: "schedule_request_started", remedy: "Decline this request and change the booking on the board." });
     }
   }
-  const updated = (await db.execute(sql`update schedule_entry_requests set status = ${decision === "approve" ? "approved" : "declined"},
+  const updated = await db.execute(sql`update schedule_entry_requests set status = ${decision === "approve" ? "approved" : "declined"},
     decided_by = ${mode === "flow" ? actor.actorId : null}, released_without_approval = ${mode === "released"}, decided_at = now(), decision_reason = ${reason},
     revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-    where org_id = ${actor.orgId} and id = ${request.id} and status = 'pending' and revision = ${request.revision} returning id`)).rows;
+    where org_id = ${actor.orgId} and id = ${request.id} and status = 'pending' and revision = ${request.revision} returning id`, "objects");
   if (updated.length !== 1) throw new ScheduleError("This request changed while it was decided.", { status: 409, code: "schedule_stale", remedy: "Reload the requests." });
   if (decision === "approve") {
     const entry = await lockEntry(actor.orgId, request.entryId);
@@ -480,10 +480,10 @@ export function listBoardShiftRequests(actor: ScheduleActor & { boardId: string;
     const board = await getBoard(actor, requireId(actor.boardId, "Board"));
     await requireBoardCapability(actor, board, "shift_requests");
     const allowed = await boardAuthority(actor, board, "read");
-    return (await db.execute<ShiftRequest>(sql`select ${REQUEST_COLUMNS} ${REQUEST_JOINS}
+    return await db.execute<ShiftRequest>(sql`select ${REQUEST_COLUMNS} ${REQUEST_JOINS}
       where r.org_id = ${actor.orgId} and r.board_id = ${board.id} ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, allowed)}
         ${actor.status === "all" ? sql`` : sql`and r.status in ('awaiting_counterpart', 'pending')`}
-      order by r.created_at desc, r.id limit 500`)).rows;
+      order by r.created_at desc, r.id limit 500`, "objects");
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
@@ -497,12 +497,12 @@ export function listOwnShiftRequests(
       !(await lockAndCheckOrgFeature(db, actor.orgId, "hrmShiftPlanning"))
     )
       throw new ScopeNotFoundError();
-    const party = (await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active`)).rows[0]?.partyId;
+    const party = (await db.execute<{ partyId: string | null }>(sql`select party_id as "partyId" from users where org_id = ${actor.orgId} and id = ${actor.actorId} and is_active`, "objects"))[0]?.partyId;
     if (!party) return [];
-    return (await db.execute<ShiftRequest>(sql`select ${REQUEST_COLUMNS} ${REQUEST_JOINS}
+    return await db.execute<ShiftRequest>(sql`select ${REQUEST_COLUMNS} ${REQUEST_JOINS}
       where r.org_id = ${actor.orgId} and (r.worker_party_id = ${party} or r.counterpart_party_id = ${party})
         and (r.status in ('awaiting_counterpart', 'pending') or r.updated_at > now() - interval '60 days')
-      order by r.created_at desc, r.id limit 200`)).rows;
+      order by r.created_at desc, r.id limit 200`, "objects");
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
@@ -520,9 +520,9 @@ export type SwapCandidate = {
 export function listSwapCandidates(actor: ScheduleActor & { entryId: string }): Promise<SwapCandidate[]> {
   return withOrgTransaction(actor.orgId, async () => {
     const party = await selfServiceParty(actor);
-    const entry = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries where org_id = ${actor.orgId} and id = ${requireId(actor.entryId, "Shift")}`)).rows[0];
+    const entry = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries where org_id = ${actor.orgId} and id = ${requireId(actor.entryId, "Shift")}`, "objects"))[0];
     if (!entry || entry.workerPartyId !== party || entry.status !== "published") throw new ScopeNotFoundError();
-    return (await db.execute<SwapCandidate>(sql`select e.id as "entryId", e.revision, p.display_name as "workerName",
+    return await db.execute<SwapCandidate>(sql`select e.id as "entryId", e.revision, p.display_name as "workerName",
         ${INSTANT(sql`e.starts_at`)} as "startsAt", ${INSTANT(sql`e.ends_at`)} as "endsAt", e.time_zone as "timeZone",
         coalesce(pr.name, cp.display_name, lo.name, sc.label) as "targetLabel"
       from schedule_entries e join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
@@ -533,6 +533,6 @@ export function listSwapCandidates(actor: ScheduleActor & { entryId: string }): 
       where e.org_id = ${actor.orgId} and e.board_id = ${entry.boardId} and e.status = 'published' and e.worker_party_id <> ${party}
         and e.closed_at is null and e.starts_at > now() and e.starts_on between ${entry.startsOn}::date - 14 and ${entry.startsOn}::date + 14
         and not exists (select 1 from schedule_entry_requests r where r.org_id = e.org_id and r.status in ('awaiting_counterpart', 'pending') and e.id in (r.entry_id, r.counterpart_entry_id))
-      order by e.starts_at, p.display_name, e.id limit 200`)).rows;
+      order by e.starts_at, p.display_name, e.id limit 200`, "objects");
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }

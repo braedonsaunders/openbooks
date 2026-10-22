@@ -27,8 +27,8 @@ async function requestInvoice(orgId: string, requestId: string, allowedSubsidiar
          select 1 from documents d where d.id = br.invoice_document_id and d.org_id = br.org_id
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        ))
-  `))
-  return r.rows[0] ?? null
+  `, 'objects'))
+  return r[0] ?? null
 }
 
 /** POST — assemble + persist the backup package for the request's invoice. */

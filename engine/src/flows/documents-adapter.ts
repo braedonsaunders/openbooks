@@ -239,9 +239,9 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
             from parties p
             left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
            where p.id = ${doc.partyId} and p.org_id = ${doc.orgId}
-        `);
-        partyName = r.rows[0]?.display_name ?? null;
-        vendorEftEmail = r.rows[0]?.eft_notification_email ?? null;
+        `, "objects");
+        partyName = r[0]?.display_name ?? null;
+        vendorEftEmail = r[0]?.eft_notification_email ?? null;
       }
       const lines = await db
         .select()
@@ -462,8 +462,8 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
              and (target_kind is null or target_kind = ${kind})
              and key = ${field} and is_active
            limit 1
-        `);
-        if (customField.rows.length === 0) {
+        `, "objects");
+        if (customField.length === 0) {
           throw new Error(`field "${field}" is not writable by flows`);
         }
         // The value writes around applyDocumentEdit: prove shape and org
@@ -527,8 +527,8 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
          where org_id = ${orgId} and kind = ${kind} and status <> 'voided'
          order by created_at desc
          limit ${limit}
-      `);
-      return r.rows.map((row) => row.id);
+      `, "objects");
+      return r.map((row) => row.id);
     },
   });
 }

@@ -29,7 +29,7 @@ export async function listInventoryOperationOptions(orgId: string, actorId: stri
     await assertInventoryFeature(db, orgId)
     const scope = allowed === null ? sql`` : allowed.size ? sql`and m.subsidiary_id in (${sql.join([...allowed].map(id => sql`${id}::uuid`),sql`, `)})` : sql`and false`
     const after = query.cursor ? (await db.execute<{ moved_at: string; id: string }>(sql`select m.moved_at::text,m.id from inventory_movements m
-      where m.org_id=${orgId} and m.id=${query.cursor} ${scope}`)).rows[0] : null
+      where m.org_id=${orgId} and m.id=${query.cursor} ${scope}`, 'objects'))[0] : null
     if (query.cursor && !after) throw new InventoryError('The movement page cursor is unavailable — restart the search')
     const text = query.q?.trim() ?? ''
     if (text.length > 200) throw new InventoryError('Use at most 200 characters to search movements')
@@ -46,12 +46,12 @@ export async function listInventoryOperationOptions(orgId: string, actorId: stri
       ${query.operation === 'disassemble' ? sql`and entry.custom ? 'assemblyBuild'
         and exists(select 1 from cost_layers layer where layer.org_id=m.org_id and layer.source_movement_id=m.id and layer.remaining_quantity>0)` : sql``}
       ${text ? sql`and concat_ws(' ',item.code,item.name,location.code,subsidiary.name,m.id::text,m.moved_at::date::text) ilike ${`%${text}%`}` : sql``}`
-    const count = (await db.execute<{ count: number }>(sql`select count(*)::int as count from inventory_movements m ${joins} where ${where}`)).rows[0]!.count
-    const rows = (await db.execute<InventoryOperationOption>(sql`select m.id,concat_ws(' — ',item.code,item.name) as item,
+    const count = (await db.execute<{ count: number }>(sql`select count(*)::int as count from inventory_movements m ${joins} where ${where}`, 'objects'))[0]!.count
+    const rows = await db.execute<InventoryOperationOption>(sql`select m.id,concat_ws(' — ',item.code,item.name) as item,
       location.code as location,subsidiary.name as subsidiary,m.moved_at::date::text as date,m.quantity::text,m.kind
       from inventory_movements m ${joins} where ${where}
       ${after ? sql`and (m.moved_at,m.id)<(${after.moved_at}::timestamptz,${after.id}::uuid)` : sql``}
-      order by m.moved_at desc,m.id desc limit ${limit+1}`)).rows
+      order by m.moved_at desc,m.id desc limit ${limit+1}`, 'objects')
     const hasMore = rows.length > limit
     const options = rows.slice(0,limit)
     return { options, totalCount: count, nextCursor: hasMore ? options.at(-1)!.id : null }

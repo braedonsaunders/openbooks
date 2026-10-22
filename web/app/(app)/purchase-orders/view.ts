@@ -90,7 +90,7 @@ export async function loadPurchaseOrders(
   // button needs it on every render: without a configured currency it keeps
   // the draft-API path (which refuses by name with the setup remedy) instead
   // of opening an unsaved drawer, and a direct create URL opens no draft.
-  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`)).rows[0]?.base_currency ?? null
+  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`, 'objects'))[0]?.base_currency ?? null
 
   const [openOrder, pickers] = await Promise.all([
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
@@ -139,7 +139,7 @@ export async function loadPurchaseOrders(
   const linkedSalesOrderId = openOrder && dropShipping
     ? (await db.execute<{ sales_order_id: string }>(sql`
         select sales_order_id from drop_ship_orders
-         where org_id = ${authz.user.orgId} and purchase_order_id = ${openDocumentId}`)).rows[0]?.sales_order_id ?? null
+         where org_id = ${authz.user.orgId} and purchase_order_id = ${openDocumentId}`, 'objects'))[0]?.sales_order_id ?? null
     : null
   const dropShipLines = linkedSalesOrderId
     ? await dropShipOrderStatus(db, authz.user.orgId, linkedSalesOrderId, authz.allowedSubsidiaryIds)

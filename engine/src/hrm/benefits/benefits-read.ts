@@ -39,14 +39,14 @@ export async function listBenefitPlans(
 ): Promise<BenefitPlanCatalogRow[]> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   const entityFence = scope === null ? sql`true` : sql`(p.employer_subsidiary_id is null or p.employer_subsidiary_id = any (${`{${[...scope].join(",")}}`}::uuid[]))`;
-  return (await exec.execute<BenefitPlanCatalogRow>(sql`
+  return await exec.execute<BenefitPlanCatalogRow>(sql`
     select p.id::text as id, p.code, p.name, p.kind, p.currency, p.is_active as "isActive",
            p.effective_from::text as "effectiveFrom", p.effective_to::text as "effectiveTo",
            p.employer_subsidiary_id::text as "employerSubsidiaryId"
       from hrm_benefit_plans p
      where p.org_id = ${orgId}::uuid and ${entityFence}
      order by p.code, p.id
-  `)).rows;
+  `, "objects");
 }
 
 export interface EnrollmentContributionRuleOption {
@@ -74,7 +74,7 @@ export async function listEnrollmentPlanOptions(
 ): Promise<EnrollmentPlanOption[]> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   const entityFence = scope === null ? sql`true` : sql`(p.employer_subsidiary_id is null or p.employer_subsidiary_id = any (${`{${[...scope].join(",")}}`}::uuid[]))`;
-  return (await exec.execute<{ value: string; label: string; contributionRules: EnrollmentContributionRuleOption[]; classes: { value: string; label: string }[] }>(sql`
+  return await exec.execute<{ value: string; label: string; contributionRules: EnrollmentContributionRuleOption[]; classes: { value: string; label: string }[] }>(sql`
     select p.id::text as value, p.code || ' — ' || p.name || ' (' || p.currency || ')' as label,
       coalesce((select jsonb_agg(jsonb_build_object('value',r.id,'label',r.name,'basis',r.basis,
         'rate',r.rate::text,'rateFormula',r.rate_formula,'requiresMatchEligibility',r.requires_match_eligibility,'effectiveFrom',r.effective_from::text,'effectiveTo',r.effective_to::text) order by r.position,r.id)
@@ -84,7 +84,7 @@ export async function listEnrollmentPlanOptions(
       from hrm_benefit_plans p
      where p.org_id = ${orgId}::uuid and p.is_active and ${entityFence}
      order by p.code, p.id
-  `)).rows;
+  `, "objects");
 }
 
 export interface EnrollmentWindowSummary {
@@ -133,8 +133,7 @@ export async function listEnrollmentWindows(
        where av.org_id = e.org_id and aa.employment_id = e.employment_id
          and av.recorded_until is null and av.department_id = ${departmentTarget}::uuid
     ))`;
-  const rows = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(sql`
       select w.id, w.name, w.kind,
              w.opens_on::text as "opensOn", w.closes_on::text as "closesOn", w.status,
              w.applies_to as "appliesTo",
@@ -152,8 +151,7 @@ export async function listEnrollmentWindows(
        where w.org_id = ${orgId} ${status !== undefined ? sql`and w.status = ${status}` : sql``}
        group by w.id, d.id, d.subsidiary_id
        order by w.opens_on desc
-    `)
-  ).rows;
+    `, "objects");
   return rows
     .filter((row) => {
       const applies = (row.appliesTo ?? {}) as { employer_subsidiary_id?: unknown; department_id?: unknown };
@@ -237,8 +235,7 @@ export async function listEnrollments(
     await requireHrmBenefitsRead(exec, orgId, actorId, filter.employmentId);
   }
   const asOf = await businessToday(orgId);
-  const rows = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(sql`
       select e.id, e.employment_id as "employmentId", e.window_id as "windowId",
              p.display_name as "employeeName",
              plan.code as "planCode", plan.name as "planName",
@@ -260,8 +257,7 @@ export async function listEnrollments(
          ${filter?.status !== undefined ? sql`and e.status = ${filter.status}` : sql``}
          ${filter?.employmentId !== undefined ? sql`and e.employment_id = ${filter.employmentId}` : sql``}
        order by e.effective_from desc, plan.code
-    `)
-  ).rows;
+    `, "objects");
   return rows
     .filter((row) => scope === null || scope.has(String(row.subsidiaryId)))
     .map((row) => ({
@@ -320,8 +316,7 @@ async function listPendingApprovals(
   actorId: string,
 ): Promise<PendingApproval[]> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
-  const rows = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(sql`
       select e.id, e.employment_id as "employmentId", p.display_name as "employeeName",
              plan.code as "planCode", e.effective_from::text as "effectiveFrom",
              emp.employer_subsidiary_id as "subsidiaryId"
@@ -331,8 +326,7 @@ async function listPendingApprovals(
         join parties p on p.org_id = e.org_id and p.id = emp.worker_party_id
        where e.org_id = ${orgId} and e.status = 'pending_approval'
        order by e.effective_from
-    `)
-  ).rows;
+    `, "objects");
   return rows
     .filter((row) => scope === null || scope.has(String(row.subsidiaryId)))
     .map((row) => ({
@@ -361,8 +355,7 @@ export async function benefitsCockpit(
   const openWindows = (await listEnrollmentWindows(exec, orgId, actorId, { status: "open" })).slice(0, 5);
   const pendingApprovals = await listPendingApprovals(exec, orgId, actorId);
   const monthStart = `${coverageMonth}-01`;
-  const rows = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(sql`
       select e.id, plan.code as "planCode", emp.employer_subsidiary_id as "subsidiaryId"
         from hrm_benefit_enrollments e
         join hrm_benefit_plans plan on plan.org_id = e.org_id and plan.id = e.plan_id
@@ -378,8 +371,7 @@ export async function benefitsCockpit(
          )
        order by plan.code
        limit 50
-    `)
-  ).rows;
+    `, "objects");
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   return {
     openWindows,
@@ -413,15 +405,13 @@ export async function listDependents(
   employmentId: string,
 ): Promise<DependentSummary[]> {
   await requireHrmBenefitsRead(exec, orgId, actorId, employmentId);
-  const rows = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(sql`
       select id, display_name as "displayName", relationship,
              birth_date::text as "birthDate", is_active as "isActive"
         from hrm_benefit_dependents
        where org_id = ${orgId} and employment_id = ${employmentId}
        order by display_name
-    `)
-  ).rows;
+    `, "objects");
   return rows.map((row) => ({
     id: String(row.id),
     displayName: String(row.displayName),

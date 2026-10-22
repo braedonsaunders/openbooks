@@ -26,7 +26,7 @@ test('a country-less statutory component cannot substitute for its required coun
     const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.equal(result.errors.length,1);
     assert.match(result.errors[0]!.message,/missing system pay component cpp\/deduction.*Payroll setup/);
-    assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows.length,0,
+    assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, 'objects')).length,0,
       'the refused statutory identity leaves no partially calculated employee');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });

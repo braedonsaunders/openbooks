@@ -43,7 +43,7 @@ test("buy suggestions create one vendor purchase draft and preserve conversion r
       });
     }
     const first = await tx(org.orgId, (runner) => runMrp(runner, org.orgId, actorId, { subsidiaryId: org.subsidiaryId, horizonDays: 60, capacityCheck: false }));
-    const plans = await withBypassContext(async () => (await db.execute<{ id: string; item_id: string; quantity: string; due_date: string }>(sql`select id,item_id,quantity::text,due_date::text from mfg_planned_orders where org_id=${org.orgId} and run_id=${first.id} order by item_id`)).rows);
+    const plans = await withBypassContext(async () => await db.execute<{ id: string; item_id: string; quantity: string; due_date: string }>(sql`select id,item_id,quantity::text,due_date::text from mfg_planned_orders where org_id=${org.orgId} and run_id=${first.id} order by item_id`, "objects"));
     assert.equal(plans.length, 2);
     await tx(org.orgId, async (runner) => { for (const plan of plans) await confirmPlannedOrder(runner, org.orgId, actorId, plan.id); });
     const call = (id: string, body: object) => POST(new Request("http://openbooks.test/convert", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), { params: Promise.resolve({ id }) });
@@ -57,10 +57,10 @@ test("buy suggestions create one vendor purchase draft and preserve conversion r
     assert.equal(converted.status, 201, JSON.stringify(await converted.clone().json()));
     const result = await converted.json() as { id: string };
     const { doc, line, itemName, baseUnit } = await withBypassContext(async () => ({
-      doc: (await db.execute<{ party_id: string; due_date: string }>(sql`select party_id,due_date::text from documents where org_id=${org.orgId} and id=${result.id} and kind='purchase_order'`)).rows[0]!,
-      line: (await db.execute<{ item_id: string; quantity: string; unit: string; description: string; quantity_matches: boolean }>(sql`select l.item_id,l.quantity::text,l.unit,l.description,l.quantity=p.quantity as quantity_matches from document_lines l join mfg_planned_orders p on p.org_id=l.org_id and p.converted_ref_id=l.document_id where l.org_id=${org.orgId} and l.document_id=${result.id}`)).rows[0]!,
-      itemName: (await db.execute<{ name: string }>(sql`select name from items where org_id=${org.orgId} and id=${plans[0]!.item_id}`)).rows[0]!.name,
-      baseUnit: (await db.execute<{ base_unit: string }>(sql`select base_unit from item_inventory_profiles where org_id=${org.orgId} and item_id=${plans[0]!.item_id}`)).rows[0]!.base_unit,
+      doc: (await db.execute<{ party_id: string; due_date: string }>(sql`select party_id,due_date::text from documents where org_id=${org.orgId} and id=${result.id} and kind='purchase_order'`, "objects"))[0]!,
+      line: (await db.execute<{ item_id: string; quantity: string; unit: string; description: string; quantity_matches: boolean }>(sql`select l.item_id,l.quantity::text,l.unit,l.description,l.quantity=p.quantity as quantity_matches from document_lines l join mfg_planned_orders p on p.org_id=l.org_id and p.converted_ref_id=l.document_id where l.org_id=${org.orgId} and l.document_id=${result.id}`, "objects"))[0]!,
+      itemName: (await db.execute<{ name: string }>(sql`select name from items where org_id=${org.orgId} and id=${plans[0]!.item_id}`, "objects"))[0]!.name,
+      baseUnit: (await db.execute<{ base_unit: string }>(sql`select base_unit from item_inventory_profiles where org_id=${org.orgId} and item_id=${plans[0]!.item_id}`, "objects"))[0]!.base_unit,
     }));
     assert.equal(doc.party_id, org.vendorId); assert.equal(doc.due_date, plans[0]!.due_date); assert.equal(line.item_id, plans[0]!.item_id); assert.equal(line.quantity_matches, true); assert.equal(line.unit, baseUnit);
     assert.equal(line.description, `${itemName} for MRP run ${first.number}`);
@@ -68,7 +68,7 @@ test("buy suggestions create one vendor purchase draft and preserve conversion r
     await tx(org.orgId, (runner) => runMrp(runner, org.orgId, actorId, { subsidiaryId: org.subsidiaryId, horizonDays: 60, capacityCheck: false }));
     const superseded = await call(plans[1]!.id, { vendorId: org.vendorId });
     assert.equal(superseded.status, 409); assert.equal((await superseded.json() as { code: string }).code, "mrp_run_superseded");
-    assert.equal(await withBypassContext(async () => (await db.execute<{ count: string }>(sql`select count(*)::text as count from documents where org_id=${org.orgId} and kind='purchase_order'`)).rows[0]?.count), "1");
+    assert.equal(await withBypassContext(async () => (await db.execute<{ count: string }>(sql`select count(*)::text as count from documents where org_id=${org.orgId} and kind='purchase_order'`, "objects"))[0]?.count), "1");
   } finally {
     state.gate = null;
     await dropScratchOrg(org.orgId);

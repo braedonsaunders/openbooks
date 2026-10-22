@@ -39,7 +39,7 @@ export async function periodFingerprintEvidence(
   const period = (await db.execute<{
     id: string; starts_on: string; ends_on: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number;
   }>(sql`select id,starts_on::text as starts_on,ends_on::text as ends_on,is_adjustment,fiscal_calendar_id,period_number from accounting_periods
-    where org_id=${orgId} and id=${periodId}`)).rows[0];
+    where org_id=${orgId} and id=${periodId}`, "objects"))[0];
   if (!period) throw new CloseError("period not found");
   // Closing balances include prior posted activity. A controlled reopening of
   // an earlier period must invalidate evidence even without a current-period
@@ -108,8 +108,8 @@ export async function periodFingerprintEvidence(
         join accounts a on a.id=l.account_id and a.org_id=l.org_id
         where e.org_id=${orgId} and ${ledgerPeriodScope} and e.book_id=${bookId}
           and a.eliminate and ${includeGroupEvidence}) as group_activity
-  `));
-  return (result.rows[0] ?? {}) as PeriodFingerprintEvidence;
+  `, "objects"));
+  return (result[0] ?? {}) as PeriodFingerprintEvidence;
 }
 
 function hashFingerprintEvidence(subsidiaryIds: string[], evidence: PeriodFingerprintEvidence): string {

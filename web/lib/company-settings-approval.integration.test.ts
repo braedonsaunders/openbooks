@@ -50,14 +50,14 @@ const consolidatedRows = [
 
       async function orgSettings(orgId: string) {
   return withBypassContext(async () =>
-    (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${orgId}`)).rows[0]!.settings,
+    (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id = ${orgId}`, 'objects'))[0]!.settings,
   )
 }
 
       async function audits(orgId: string) {
           return withBypassContext(async () =>
-            (await db.execute<{ changes: Record<string, unknown> }>(sql`
-              select changes from audit_log where org_id = ${orgId} and table_name = 'orgs' and action = 'update'`)).rows,
+            await db.execute<{ changes: Record<string, unknown> }>(sql`
+              select changes from audit_log where org_id = ${orgId} and table_name = 'orgs' and action = 'update'`, 'objects'),
           )
         }
 
@@ -216,8 +216,8 @@ const featureDefaultsCases = [
               insert into fx_rates (org_id, as_of, from_currency, to_currency, rate_type, rate, source)
               values (${org.orgId}, '2026-07-01', 'USD', 'CAD', 'spot', 1.36, 'manual')`));
             const state = await withBypassContext(() => db.execute<{ f: FeatureState | null }>(sql`
-              select settings->'features' as f from orgs where id = ${org.orgId}`));
-            const raw = state.rows[0]?.f ?? {};
+              select settings->'features' as f from orgs where id = ${org.orgId}`, 'objects'));
+            const raw = state[0]?.f ?? {};
             assert.equal(await dataDependentFeatureDefault(db, org.orgId, "multiCurrency", raw), true);
             assert.equal((await withBypassContext(() => resolvedFeatureState(org.orgId))).multiCurrency, true);
             assert.equal(await withBypassContext(() => isFeatureEnabled(org.orgId, "multiCurrency")), true);

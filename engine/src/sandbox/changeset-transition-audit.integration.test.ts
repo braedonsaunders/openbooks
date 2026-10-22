@@ -34,14 +34,12 @@ async function insertDraftChangeSet(orgId: string, createdBy: string): Promise<s
 }
 
 async function changeSetStatus(orgId: string, changeSetId: string): Promise<string> {
-  return (
-    await db.execute<{ status: string }>(sql`
-      select status from change_sets where id = ${changeSetId} and org_id = ${orgId}`)
-  ).rows[0]!.status;
+  return (await db.execute<{ status: string }>(sql`
+      select status from change_sets where id = ${changeSetId} and org_id = ${orgId}`, "objects"))[0]!.status;
 }
 
 async function setRolePermissions(orgId: string, roleKey: string, permissions: readonly string[]): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
      where org_id = ${orgId} and key = ${roleKey}`);
   if ((updated.rowCount ?? 0) !== 1) {
@@ -112,8 +110,7 @@ test("change-set review and approval evidence their transitions in audit_log", {
 
     assert.equal(await changeSetStatus(org.orgId, changeSetId), "approved");
 
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         action: string;
         actor_id: string | null;
         changes: Record<string, unknown>;
@@ -121,8 +118,7 @@ test("change-set review and approval evidence their transitions in audit_log", {
         select action, actor_id, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'change_sets' and row_id = ${changeSetId}
          order by at, id
-      `)
-    ).rows;
+      `, "objects");
     assert.equal(rows.length, 2);
     assert.deepEqual(
       rows.map((row) => row.action),
@@ -150,6 +146,6 @@ test("change-set review and approval evidence their transitions in audit_log", {
 
 async function decideChangeSet(orgId:string,subjectId:string,userId:string): Promise<void> {
   const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId}
-    and subject_kind='sandbox_change_set' and subject_id=${subjectId} and status='pending'`)).rows[0];
+    and subject_kind='sandbox_change_set' and subject_id=${subjectId} and status='pending'`, "objects"))[0];
   assert.ok(gate);await decideGate({gateId:gate.id,userId,decision:"approved"});
 }

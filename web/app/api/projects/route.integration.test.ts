@@ -93,13 +93,11 @@ async function enableProjects(orgId: string): Promise<void> {
 }
 
 async function auditInserts(orgId: string, rowId: string): Promise<{ request_id: string | null; actor_id: string | null }[]> {
-  return (
-    await db.execute<{ request_id: string | null; actor_id: string | null }>(sql`
+  return await db.execute<{ request_id: string | null; actor_id: string | null }>(sql`
       select request_id, actor_id from audit_log
        where org_id = ${orgId} and table_name = 'projects' and row_id = ${rowId} and action = 'insert'
        order by at asc
-    `)
-  ).rows;
+    `, "objects");
 }
 
 test.after(() => hooks.deregister())
@@ -140,12 +138,10 @@ test(
         remedy: "Close and reopen the project form to retry with a fresh idempotency key.",
       });
 
-      const placeholders = (
-        await db.execute<{ n: number }>(sql`
+      const placeholders = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from projects
            where org_id = ${org.orgId} and name = 'New project'
-        `)
-      ).rows[0]?.n;
+        `, "objects"))[0]?.n;
       assert.equal(placeholders, 0, "no inactive placeholder survives the create path");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -181,11 +177,9 @@ test(
       routeState.authz = { user: { roles: [], orgId: other.orgId, id: otherAdmin }, allowedSubsidiaryIds: null };
       const claimed = await POST(postRequest(key, { name: "Harbourview Tower" }));
       assert.equal(claimed.status, 404);
-      const leaked = (
-        await db.execute<{ n: number }>(sql`
+      const leaked = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from projects where id = ${key} and org_id = ${other.orgId}
-        `)
-      ).rows[0]?.n;
+        `, "objects"))[0]?.n;
       assert.equal(leaked, 0, "the other org gains no row from the foreign key");
     } finally {
       await dropScratchOrg(org.orgId);

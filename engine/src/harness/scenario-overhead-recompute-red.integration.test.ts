@@ -32,8 +32,8 @@ test("overhead-recomputes names the posted line after its source rate changes", 
     const result = await applyOverheadForTime(org.orgId, actorId, [timeId]);
     assert.ok(result.entryId, "fixture must post overhead before the rate is changed");
     const nudged = await db.execute<{ id: string }>(sql`update overhead_rates set rate_percent=13.5
-      where org_id=${org.orgId} and id=${rateId} returning id`);
-    assert.equal(nudged.rows.length, 1, "rate change must affect exactly the fixture's configured rate");
+      where org_id=${org.orgId} and id=${rateId} returning id`, "objects");
+    assert.equal(nudged.length, 1, "rate change must affect exactly the fixture's configured rate");
 
     const checkpoint = await runScenario(org.orgId, { at: org.date });
     const check = checkpoint.checks.find((item) => item.name === "overhead-recomputes");

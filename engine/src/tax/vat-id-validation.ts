@@ -85,13 +85,11 @@ export async function validatePartyTaxId(
   rowId: string,
   options: ValidateTaxIdOptions = {},
 ): Promise<TaxIdValidationOutcome> {
-  const rows = (
-    await tx.execute<PartyTaxIdRow>(sql`
+  const rows = await tx.execute<PartyTaxIdRow>(sql`
       select id, party_id as "partyId", scheme, value, status
         from party_tax_ids
        where org_id = ${orgId} and id = ${rowId} and is_active
-    `)
-  ).rows;
+    `, "objects");
   const row = rows[0];
   if (!row) {
     throw new CrossBorderTaxError(
@@ -127,8 +125,8 @@ export async function validatePartyTaxId(
            updated_by = ${options.actorId ?? null}
      where org_id = ${orgId} and id = ${row.id}
      returning 1
-  `);
-  if (saved.rows.length !== 1) {
+  `, "objects");
+  if (saved.length !== 1) {
     throw new CrossBorderTaxError(
       "the tax ID validation could not be saved — reload the customer record before retrying",
     );
@@ -164,8 +162,8 @@ async function markUnverified(
            updated_by = ${options.actorId ?? null}
      where org_id = ${orgId} and id = ${row.id}
      returning 1
-  `);
-  if (saved.rows.length !== 1) {
+  `, "objects");
+  if (saved.length !== 1) {
     throw new CrossBorderTaxError(
       "the tax ID validation could not be saved — reload the customer record before retrying",
     );
@@ -230,9 +228,9 @@ export async function runTaxIdRevalidationScan(
          and t.status = 'valid'
          and t.revalidate_after <= ${today}::date
        limit ${limit}
-    `),
+    `, "objects"),
   );
-  for (const { orgId } of due.rows) {
+  for (const { orgId } of due) {
     try {
       const one = await runTaxIdRevalidationScanForOrg(orgId, options);
       result.scanned += one.scanned;
@@ -279,8 +277,7 @@ export async function runTaxIdRevalidationScanForOrg(
     ? await options.credentialsForOrg(orgId)
     : await authorityCredentialsForOrg(db, orgId);
   await withOrgContext(orgId, async () => {
-    const due = (
-      await db.execute<PartyTaxIdRow>(sql`
+    const due = await db.execute<PartyTaxIdRow>(sql`
         select id, party_id as "partyId", scheme, value, status
           from party_tax_ids
          where org_id = ${orgId}
@@ -290,8 +287,7 @@ export async function runTaxIdRevalidationScanForOrg(
          order by revalidate_after
          limit ${limit}
          for update skip locked
-      `)
-    ).rows;
+      `, "objects");
     for (const row of due) {
       result.scanned += 1;
       try {

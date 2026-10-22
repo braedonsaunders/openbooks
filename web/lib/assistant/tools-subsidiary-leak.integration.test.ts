@@ -80,8 +80,8 @@ for (const mode of ['restricted', 'all'] as const) {
         const persisted = await withBypassContext(() => db.execute<{ revision: string }>(sql`
           select revision_seq::text as revision from documents
            where org_id = ${org.orgId} and document_number = 'VISIBLE-BILL'
-        `));
-        assert.equal(listed?.updatedAt, persisted.rows[0]?.revision);
+        `, 'objects'));
+        assert.equal(listed?.updatedAt, persisted[0]?.revision);
       });
     } finally {
       state.user = null;
@@ -303,8 +303,8 @@ test('get_document hides a hidden-subsidiary document from a restricted caller',
       const visibleData = visible.data as { updatedAt: string };
       const persisted = await withBypassContext(() => db.execute<{ revision: string }>(sql`
         select revision_seq::text as revision from documents where id = ${visibleId}
-      `));
-      assert.equal(visibleData.updatedAt, persisted.rows[0]?.revision);
+      `, 'objects'));
+      assert.equal(visibleData.updatedAt, persisted[0]?.revision);
       const hiddenResult = await executeAssistantTool(authz, 'get_document', { documentId: hiddenId });
       assert.equal(hiddenResult.ok, false, `hidden document must read as missing, got ${JSON.stringify(hiddenResult)}`);
     });

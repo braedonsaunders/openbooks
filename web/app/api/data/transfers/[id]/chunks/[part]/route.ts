@@ -13,7 +13,7 @@ export const GET = defineRoute({ authorize: authorizeTransfers, feature: transfe
   params: z.object({ id: uuidString(), part: z.coerce.number().int().min(0).max(262_144) }),
   handler: async ({ authz, params }) => withOrgTransaction(authz.user.orgId, async () => {
     await transferAuthority(await loadTransfer(authz.user.orgId, params.id), authz)
-    const part = (await db.execute<{ sha256: string; bytes: number }>(sql`select sha256,octet_length(data) as bytes from data_transfer_chunks where org_id=${authz.user.orgId} and job_id=${params.id} and direction='source' and part_no=${params.part}`)).rows[0]
+    const part = (await db.execute<{ sha256: string; bytes: number }>(sql`select sha256,octet_length(data) as bytes from data_transfer_chunks where org_id=${authz.user.orgId} and job_id=${params.id} and direction='source' and part_no=${params.part}`, 'objects'))[0]
     return NextResponse.json({ part }, { headers: { 'Cache-Control': 'no-store' } })
   }),
 })

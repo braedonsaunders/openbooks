@@ -48,7 +48,7 @@ export async function prebillApprovalFlowsConfigured(orgId: string): Promise<boo
       select 1 from flows
        where org_id = ${orgId} and subject_kind = ${PREBILL_SUBJECT_KIND} and enabled
     ) as configured
-  `)).rows[0]
+  `, 'objects'))[0]
   return row?.configured === true
 }
 
@@ -90,7 +90,7 @@ async function customerRecipientEmail(tx: Tx, orgId: string, customerId: string)
     ) as email
       from parties party
      where party.org_id = ${orgId} and party.id = ${customerId}
-  `)).rows[0]
+  `, 'objects'))[0]
   return row?.email ?? null
 }
 
@@ -132,7 +132,7 @@ export async function sendPrebillToCustomer(
         left join subsidiaries subsidiary on subsidiary.org_id = project.org_id and subsidiary.id = project.subsidiary_id
         left join parties customer on customer.org_id = project.org_id and customer.id = project.customer_id
        where worksheet.org_id = ${orgId} and worksheet.id = ${id}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     if (!context.customer_id) throw new PreBillingError('The project has no customer to review this billing')
     if (context.customer_decision === 'accepted') {
       throw new PreBillingError('The customer has already accepted this prebill — create the invoice')
@@ -144,7 +144,7 @@ export async function sendPrebillToCustomer(
     }
     const digest = await currentBillingReviewDigest(orgId, id, tx)
     if (!digest) throw new PreBillingError('Prebill not found', 404)
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute<never>(sql`
       update prebills
          set status = 'customer_review',
              customer_decision = null, customer_decided_at = null, customer_signer_name = null,
@@ -176,7 +176,7 @@ export async function sendPrebillToCustomer(
              where settings.org_id = org.id and settings.effective_from <= current_date
              order by settings.effective_from desc limit 1) as portal_name
       from orgs org where org.id = ${orgId}
-  `)).rows[0]
+  `, 'objects'))[0]
   let emailError: string | null = null
   if (delivery.state !== 'ready') {
     emailError = `${emailDeliveryBlockedMessage(delivery)} The review is waiting in the customer portal.`
@@ -255,7 +255,7 @@ async function lockPortalReview(tx: Tx, input: PortalReviewDecisionBase): Promis
      where worksheet.org_id = ${input.orgId} and worksheet.id = ${input.prebillId}
        and project.customer_id = ${input.partyId}
      for update of worksheet
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!target || target.status !== 'customer_review') {
     throw new PreBillingError('This billing is no longer awaiting your review', 404)
   }
@@ -352,7 +352,7 @@ export async function disputePrebillReview(input: PortalReviewDecisionBase & {
   return withOrgTransaction(input.orgId, async () => db.transaction(async (tx) => {
     const target = await lockPortalReview(tx, input)
     for (const line of lines) {
-      const updated = await tx.execute(sql`
+      const updated = await tx.execute<never>(sql`
         update prebill_lines set customer_dispute_note = ${line.note}
          where org_id = ${input.orgId} and prebill_id = ${input.prebillId} and id = ${line.lineId}
            and disposition = 'bill'
@@ -408,7 +408,7 @@ export async function markPrebillViewedByCustomer(orgId: string, partyId: string
          and worksheet.customer_viewed_at is null
          and worksheet.customer_review_sent_at is not null
       returning worksheet.id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (marked) await appendEvent(tx, orgId, prebillId, PORTAL_ACTOR_ID, 'customer_viewed')
   }))
 }
@@ -435,7 +435,7 @@ export async function deliverPrebillInvoice(
       left join documents invoice on invoice.org_id = worksheet.org_id and invoice.id = worksheet.invoice_document_id
      where worksheet.org_id = ${orgId} and worksheet.id = ${id}
        ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!row) throw new PreBillingError('Prebill not found', 404)
   if (row.status !== 'converted' || !row.invoice_id) throw new PreBillingError('Create the invoice before sending it')
   if (row.invoice_status !== 'posted') {

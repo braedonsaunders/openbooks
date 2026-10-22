@@ -115,7 +115,7 @@ test("post rechecks the locked batch after a concurrent subsidiary rehome", asyn
     assert.deepEqual(await response.json(), { error: "not_found" });
     const batch = (await withBypassContext(() => db.execute(sql`
       select status, subsidiary_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
-    `))).rows[0] as { status: string; subsidiary_id: string };
+    `, "objects")))[0] as { status: string; subsidiary_id: string };
     assert.deepEqual(batch, { status: "draft", subsidiary_id: subsidiaryB });
   } finally {
     await holder.query("rollback").catch(() => undefined);
@@ -168,7 +168,7 @@ test("reverse rechecks the locked batch after a concurrent subsidiary rehome", a
     assert.deepEqual(await response.json(), { error: "not_found" });
     const batch = (await withBypassContext(() => db.execute(sql`
       select status, subsidiary_id, reversal_entry_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
-    `))).rows[0] as { status: string; subsidiary_id: string; reversal_entry_id: string | null };
+    `, "objects")))[0] as { status: string; subsidiary_id: string; reversal_entry_id: string | null };
     assert.deepEqual(batch, { status: "posted", subsidiary_id: subsidiaryB, reversal_entry_id: null });
   } finally {
     await holder.query("rollback").catch(() => undefined);
@@ -183,14 +183,12 @@ test("post/reverse answer a malformed batch id with 404, never a 500", async () 
   const org = await withBypassContext(() => createScratchOrg());
   try {
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
-    const subsidiaryId = (
-      await withBypassContext(
+    const subsidiaryId = (await withBypassContext(
         () =>
           db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`,
+            sql`select id from subsidiaries where org_id = ${org.orgId} and parent_id is null order by created_at limit 1`, "objects",
           ),
-      )
-    ).rows[0]!.id;
+      ))[0]!.id;
     state.allowed = new Set([subsidiaryId]);
     for (const body of [
       { action: "post", batchId: "not-a-uuid" },
@@ -279,7 +277,7 @@ test("import reports the persisted posted batch when the provider changes eviden
     const persisted = (await withBypassContext(() => db.execute(sql`
       select gross_amount::text as gross, status from psp_settlement_batches
        where id = ${imported.batchId} and org_id = ${org.orgId}
-    `))).rows[0] as { gross: string; status: string };
+    `, "objects")))[0] as { gross: string; status: string };
     assert.deepEqual(persisted, { gross: "100.0000", status: "posted" });
   } finally {
     state.user = { orgId: "", id: "" };

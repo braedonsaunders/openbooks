@@ -123,22 +123,22 @@ export async function resolveSubject(
   const ids = allowedSubsidiaryIds === null ? null : `{${[...allowedSubsidiaryIds].join(",")}}`;
   let name: string | null = null;
   if (subjectKind === "project") {
-    const rows = (await exec.execute<{ name: string }>(sql`
+    const rows = await exec.execute<{ name: string }>(sql`
       select name from projects where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
         and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
       for share
-    `)).rows;
+    `, "objects");
     name = rows[0]?.name ?? null;
   } else if (subjectKind === "equipment") {
-    const rows = (await exec.execute<{ name: string }>(sql`
+    const rows = await exec.execute<{ name: string }>(sql`
       select coalesce(name, serial_number, id::text) as name from equipment_units
        where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
          and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
       for share
-    `)).rows;
+    `, "objects");
     name = rows[0]?.name ?? null;
   } else if (subjectKind === "position") {
-    const rows = (await exec.execute<{ code: string }>(sql`
+    const rows = await exec.execute<{ code: string }>(sql`
       select p.position_code as code from positions p
        where p.org_id = ${orgId}::uuid and p.id = ${subjectId}::uuid
          and exists (
@@ -149,12 +149,12 @@ export async function resolveSubject(
               and (${ids}::uuid[] is null or v.employer_subsidiary_id = any(${ids}::uuid[]))
          )
       for share of p
-    `)).rows;
+    `, "objects");
     name = rows[0]?.code ?? null;
   } else {
-    const rows = (await exec.execute<{ code: string }>(sql`
+    const rows = await exec.execute<{ code: string }>(sql`
       select code from hrm_work_classifications where org_id = ${orgId}::uuid and id = ${subjectId}::uuid
-    `)).rows;
+    `, "objects");
     name = rows[0]?.code ?? null;
   }
   if (!name) {
@@ -222,7 +222,7 @@ export async function setRequirement(
     const type = (await tx.execute<{ id: string; code: string }>(sql`
       select id, code from hrm_qualification_types
        where org_id = ${orgId}::uuid and id = ${typeId}::uuid and is_active
-    `)).rows[0];
+    `, "objects"))[0];
     if (!type) {
       throw new HrmQualificationError(
         "The qualification type is not declared (or is retired) in this organization — declare it under Company Settings → HRM → Qualification types first.",
@@ -241,20 +241,20 @@ export async function setRequirement(
         severity = excluded.severity,
         updated_by = ${actorId}::uuid, updated_at = now()
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     // The upsert always stores exactly one row: the conflict arm is the
     // expected re-declaration path, so a missing id is a failure.
     if (!savedId) throw new HrmQualificationError("The requirement was not stored — no row was written; retry the action.");
     const typeName = (await tx.execute<{ name: string }>(sql`
       select name from hrm_qualification_types where org_id = ${orgId}::uuid and id = ${typeId}::uuid
-    `)).rows[0]?.name ?? type.code;
+    `, "objects"))[0]?.name ?? type.code;
     const saved = (await tx.execute<RequirementRow>(sql`
       select r.id, r.subject_kind, r.subject_id::text,
              r.required_from::text, r.required_to::text, r.severity,
              r.type_id::text as type_id
         from hrm_qualification_requirements r
        where r.org_id = ${orgId}::uuid and r.id = ${savedId}::uuid
-    `)).rows[0];
+    `, "objects"))[0];
     // The row was just written in this transaction: unreadable means the
     // transaction itself is broken, never a silent success.
     if (!saved) throw new HrmQualificationError("The requirement was stored but cannot be read back — retry the action.");
@@ -279,18 +279,18 @@ export async function removeRequirement(exec: SqlExecutor, input: RemoveRequirem
       select subject_kind, subject_id::text as subject_id
         from hrm_qualification_requirements
        where org_id = ${orgId}::uuid and id = ${requirementId}::uuid
-    `)).rows[0];
+    `, "objects"))[0];
     if (!target) {
       throw new HrmQualificationError(
         "The requirement was not found in this organization — it may belong to another org or have been removed; refresh and try again.",
       );
     }
     await resolveSubject(tx, orgId, target.subject_kind, target.subject_id, allowed, await businessToday(orgId));
-    const rows = (await tx.execute<{ id: string }>(sql`
+    const rows = await tx.execute<{ id: string }>(sql`
       delete from hrm_qualification_requirements
        where org_id = ${orgId}::uuid and id = ${requirementId}::uuid
        returning id
-    `)).rows;
+    `, "objects");
     // A write that matches zero rows is a failure, not a success.
     if (!rows[0]) {
       throw new HrmQualificationError(
@@ -342,27 +342,27 @@ export async function listRequirementSubjectOptions(
   const ids = allowed === null ? null : `{${[...allowed].join(",")}}`;
   const pattern = `%${input.query.trim().replace(/[\\%_]/g, "\\$&")}%`;
   if (input.subjectKind === "project") {
-    return (await exec.execute<RequirementSubjectOption>(sql`
+    return await exec.execute<RequirementSubjectOption>(sql`
       select id::text as id, name as label from projects
        where org_id = ${orgId}::uuid
          and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
          and name ilike ${pattern} escape '\\'
        order by name, id limit ${input.limit}
-    `)).rows;
+    `, "objects");
   }
   if (input.subjectKind === "equipment") {
-    return (await exec.execute<RequirementSubjectOption>(sql`
+    return await exec.execute<RequirementSubjectOption>(sql`
       select id::text as id, coalesce(name, serial_number, unit_number) as label
         from equipment_units
        where org_id = ${orgId}::uuid
          and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
          and coalesce(name, serial_number, unit_number) ilike ${pattern} escape '\\'
        order by label, id limit ${input.limit}
-    `)).rows;
+    `, "objects");
   }
   if (input.subjectKind === "position") {
     const today = await businessToday(orgId);
-    return (await exec.execute<RequirementSubjectOption>(sql`
+    return await exec.execute<RequirementSubjectOption>(sql`
       select p.id::text as id, p.position_code || ' · ' || v.title as label
         from positions p
         join position_versions v
@@ -373,15 +373,15 @@ export async function listRequirementSubjectOptions(
          and (${ids}::uuid[] is null or v.employer_subsidiary_id = any(${ids}::uuid[]))
          and (p.position_code || ' ' || v.title) ilike ${pattern} escape '\\'
        order by p.position_code, p.id limit ${input.limit}
-    `)).rows;
+    `, "objects");
   }
-  return (await exec.execute<RequirementSubjectOption>(sql`
+  return await exec.execute<RequirementSubjectOption>(sql`
     select id::text as id, code || ' · ' || name as label
       from hrm_work_classifications
      where org_id = ${orgId}::uuid and is_active
        and (code || ' ' || name || ' ' || trade) ilike ${pattern} escape '\\'
      order by code, id limit ${input.limit}
-  `)).rows;
+  `, "objects");
 }
 
 /** HR reads all; anyone else reads through the certifications read grant only. */
@@ -413,7 +413,7 @@ export async function listRequirements(
         : k === "position"
           ? sql`and exists (select 1 from position_versions v where v.org_id = r.org_id and v.position_id = r.subject_id and v.recorded_until is null and v.effective_from <= ${asOf}::date and (v.effective_to is null or v.effective_to > ${asOf}::date) and (${ids}::uuid[] is null or v.employer_subsidiary_id = any(${ids}::uuid[])))`
           : sql`and exists (select 1 from hrm_work_classifications c where c.org_id = r.org_id and c.id = r.subject_id)`;
-    const rows = (await exec.execute<RequirementRow>(sql`
+    const rows = await exec.execute<RequirementRow>(sql`
       select r.id, r.subject_kind, r.subject_id::text,
              ${subjectNameSql(k)} as subject_name,
              r.type_id::text as type_id, t.code as type_code, t.name as type_name,
@@ -425,7 +425,7 @@ export async function listRequirements(
          and (${subjectId}::uuid is null or r.subject_id = ${subjectId}::uuid)
          ${scope}
        order by r.subject_id, t.code
-    `)).rows;
+    `, "objects");
     for (const row of rows) {
       if (!row.subject_name) continue;
       out.push(toRequirement(row));

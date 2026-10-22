@@ -43,7 +43,7 @@ async function ownedEnabled(exec: SqlExecutor, authz: Authz, id: string) {
   const owned = (await exec.execute<{ templateId: string }>(sql`
     select template_document_id as "templateId" from recurring_schedules
      where id = ${id} and org_id = ${authz.user.orgId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!owned) return null;
   // A line writer locks its parent. Re-evaluate execution scope in a new
   // statement after acquiring that lock, not in the waiting query's snapshot.
@@ -55,8 +55,8 @@ async function ownedEnabled(exec: SqlExecutor, authz: Authz, id: string) {
      where rs.id = ${id} and rs.org_id = ${authz.user.orgId}
        ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
      for update of rs for share of d
-  `);
-  const row = r.rows[0];
+  `, "objects");
+  const row = r[0];
   return row && await isDocKindEnabled(authz.user.orgId, row.kind) ? row : null;
 }
 
@@ -92,7 +92,7 @@ export const PATCH = defineRoute({
         join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
        where rs.id = ${id} and rs.org_id = ${authz.user.orgId} and not rs.is_active
          ${recurringTemplateScopeFilter(authz.user.orgId, sql`d.id`, sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-    `)).rows[0];
+    `, "objects"))[0];
     if (current) {
       const pending = pendingOccurrences(
         {
@@ -148,13 +148,13 @@ export const PATCH = defineRoute({
       update recurring_schedules set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
        where id = ${id} and org_id = ${authz.user.orgId}
       returning *
-    `));
+    `, "objects"));
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
         (${authz.user.orgId}, 'recurring_schedules', ${id}, 'update',
-         ${JSON.stringify({ before, after: updated.rows[0] ?? null })}::jsonb,
+         ${JSON.stringify({ before, after: updated[0] ?? null })}::jsonb,
          ${authz.user.id})
     `);
   });
@@ -196,8 +196,8 @@ export const DELETE = defineRoute({
         from recurring_occurrence_documents
        where schedule_id = ${id} and org_id = ${authz.user.orgId}
        limit 1
-    `));
-    if (lineage.rows[0]) return "generated_documents_exist" as const;
+    `, "objects"));
+    if (lineage[0]) return "generated_documents_exist" as const;
     await tx.execute(
       sql`delete from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}`,
     );

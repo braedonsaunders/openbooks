@@ -63,10 +63,10 @@ stubModules({
         return { rows: [] }
       }
       export const db = {
-        execute: (query) => Promise.resolve(respond('execute', query)),
+        execute: (query, mode) => Promise.resolve(respond('execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: async (work) => {
           state.transactions += 1
-          return work({ execute: (query) => respond('tx-execute', query) })
+          return work({ execute: (query, mode) => Promise.resolve(respond('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) })
         },
       }
       export const schema = {}

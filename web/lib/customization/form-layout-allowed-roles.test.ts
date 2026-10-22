@@ -26,7 +26,8 @@ type Row = Record<string, unknown>
   formRows: [] as Row[],
   heldRoleIds: [] as string[],
   prefLayoutId: null as string | null,
-  async execute(query: unknown) {
+  async execute(query: unknown, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const state = (globalThis as Record<string, unknown>).__resolveFormRolesDb as {
       formRows: Row[]
       heldRoleIds: string[]
@@ -39,13 +40,13 @@ type Row = Record<string, unknown>
       text = String(query)
     }
     if (text.includes('role_assignments') || text.includes('app_roles')) {
-      return { rows: state.heldRoleIds.map((id) => ({ id })) }
+      return inMode({ rows: state.heldRoleIds.map((id) => ({ id })) })
     }
     if (text.includes('user_form_preferences')) {
-      return { rows: state.prefLayoutId ? [{ layoutId: state.prefLayoutId }] : [] }
+      return inMode({ rows: state.prefLayoutId ? [{ layoutId: state.prefLayoutId }] : [] })
     }
-    if (text.includes('workspaceProfile')) return { rows: [{ complexity: 'essentials' }] }
-    return { rows: state.formRows }
+    if (text.includes('workspaceProfile')) return inMode({ rows: [{ complexity: 'essentials' }] })
+    return inMode({ rows: state.formRows })
   },
 }
 

@@ -75,7 +75,7 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
     statement: unknown;
   }>(sql`
     select report_type, query, statement from report_definitions
-     where id = ${reportDefinitionId} and org_id = ${orgId} limit 1`)).rows[0];
+     where id = ${reportDefinitionId} and org_id = ${orgId} limit 1`, "objects"))[0];
   if (!def) throw new DriverAdminError("not_found", "report definition not found");
   if (def.report_type !== "query" || !def.query || typeof def.query !== "object") {
     throw new DriverAdminError(
@@ -210,8 +210,8 @@ async function resolveBookScope(
   const entity = REPORT_ENTITY_MAP[plan.entity];
   if (!entity?.bookScope) return null;
   if (customQueryReferencesBook(plan)) return null;
-  const books = (await db.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary and is_active`)).rows;
+  const books = await db.execute<{ id: string }>(sql`
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active`, "objects");
   if (books.length !== 1 || !books[0]) {
     throw new DriverAdminError(
       "validation",
@@ -223,8 +223,8 @@ async function resolveBookScope(
 
 async function fiscalStartMonth(orgId: string): Promise<number> {
   const r = (await db.execute<{ m: number }>(sql`
-    select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m from orgs where id = ${orgId}`));
-  const m = r.rows[0]?.m ?? 1;
+    select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m from orgs where id = ${orgId}`, "objects"));
+  const m = r[0]?.m ?? 1;
   return m >= 1 && m <= 12 ? m : 1;
 }
 
@@ -236,8 +236,8 @@ async function fiscalStartMonth(orgId: string): Promise<number> {
  */
 async function reportEntityEnabled(orgId: string, key: string): Promise<boolean> {
   const r = (await db.execute<{ f: FeatureState | null }>(sql`
-    select settings->'features' as f from orgs where id = ${orgId}`));
-  const state = r.rows[0]?.f ?? {};
+    select settings->'features' as f from orgs where id = ${orgId}`, "objects"));
+  const state = r[0]?.f ?? {};
   if (key === "multiSubsidiary" || key === "multiCurrency") {
     return dataDependentFeatureDefault(db, orgId, key, state);
   }

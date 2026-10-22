@@ -77,7 +77,7 @@ async function runCount(orgId: string): Promise<number> {
   return Number(
     (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from script_runs where org_id = ${orgId}
-    `)).rows[0]!.n,
+    `, "objects"))[0]!.n,
   );
 }
 

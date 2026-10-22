@@ -219,7 +219,7 @@ async function loadGate(gateId:string,orgId?:string):Promise<GateRow|null>{
  return gate??null;
 }
 async function hasLiveApprovalRun(gate:GateRow):Promise<boolean>{
- return(await db.execute<{live:boolean}>(sql`select ${liveApprovalRunSql(sql`${gate.orgId}::uuid`,sql`${gate.runId}::uuid`,sql`${gate.subjectKind}`,sql`${gate.subjectId}::uuid`)} as live`)).rows[0]?.live===true;
+ return(await db.execute<{live:boolean}>(sql`select ${liveApprovalRunSql(sql`${gate.orgId}::uuid`,sql`${gate.runId}::uuid`,sql`${gate.subjectKind}`,sql`${gate.subjectId}::uuid`)} as live`, "objects"))[0]?.live===true;
 }
 
 /**
@@ -295,11 +295,9 @@ async function gateDecisionSodBlocked(
   subject: FlowSubjectContext | null | undefined,
   identities: readonly (string | null | undefined)[],
 ): Promise<boolean> {
-  const author = (
-    await db.execute<{ created_by: string | null }>(
-      sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`,
-    )
-  ).rows[0]?.created_by;
+  const author = (await db.execute<{ created_by: string | null }>(
+      sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`, "objects",
+    ))[0]?.created_by;
   const blocked = await resolveSodBlockedIds(
     gate.orgId,
     subject ?? null,
@@ -392,8 +390,8 @@ async function finalizeRunStatus(
 ): Promise<void> {
   const pending = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from flow_gates where run_id = ${runId} and org_id = ${orgId} and status in ('pending', 'escalated')
-  `);
-  const stillWaiting = (pending.rows[0]?.n ?? 0) > 0;
+  `, "objects");
+  const stillWaiting = (pending[0]?.n ?? 0) > 0;
   const status = hadFailure ? "failed" : stillWaiting ? "waiting" : "completed";
   await db
     .update(schema.flowRuns)
@@ -757,8 +755,8 @@ async function decideGateCore(
         const pending =
           await db.execute(sql`update flow_runs set context=jsonb_set(context,'{approvalContinuation}',
           ${JSON.stringify({ version: 1, gateId: gate.id, nodeId: gate.nodeId, actorId: userId, comment: args.comment?.trim() || null, evalCtx: continuationContext })}::jsonb),
-          status='waiting',finished_at=null,error=null where org_id=${gate.orgId} and id=${gate.runId} returning id`);
-        if (pending.rows.length !== 1)
+          status='waiting',finished_at=null,error=null where org_id=${gate.orgId} and id=${gate.runId} returning id`, "objects");
+        if (pending.length !== 1)
           throw new DecisionFailedError({
             decision,
             stage: "resume",
@@ -922,8 +920,7 @@ async function completeSubjectApprovalContinuations(
   subjectId: string,
   currentRunId: string,
 ): Promise<void> {
-  const rows = (
-    await db.execute<{
+  const rows = await db.execute<{
       id: string;
       flow_id: string;
       name: string;
@@ -932,8 +929,7 @@ async function completeSubjectApprovalContinuations(
     select r.id,r.flow_id,f.name,r.context from flow_runs r join flows f on f.org_id=r.org_id and f.id=r.flow_id
       where r.org_id=${orgId} and r.subject_kind=${subjectKind} and r.subject_id=${subjectId}
         and r.id<>${currentRunId} and r.status='waiting' and r.context ? 'approvalContinuation'
-      order by r.created_at,r.id for update of r`)
-  ).rows;
+      order by r.created_at,r.id for update of r`, "objects");
   const adapter = getFlowAdapter(subjectKind);
   if (!adapter && rows.length)
     throw new Error("The pending approval subject is unavailable.");
@@ -1033,8 +1029,8 @@ async function completeSubjectApprovalContinuations(
       });
     const saved =
       await db.execute(sql`update flow_runs set context=context-'approvalContinuation',status='completed',finished_at=now(),error=null
-      where org_id=${orgId} and id=${row.id} and status='waiting' returning id`);
-    if (saved.rows.length !== 1)
+      where org_id=${orgId} and id=${row.id} and status='waiting' returning id`, "objects");
+    if (saved.length !== 1)
       throw new Error("The completed approval branch was not saved.");
   }
 }
@@ -1049,8 +1045,8 @@ async function subjectOpenGateCount(
     select count(*)::int as n from flow_gates
      where org_id = ${orgId} and subject_kind = ${subjectKind} and subject_id = ${subjectId}
        and status in ('pending', 'escalated')
-  `);
-  return r.rows[0]?.n ?? 0;
+  `, "objects");
+  return r[0]?.n ?? 0;
 }
 
 /**
@@ -1526,7 +1522,7 @@ export async function worklistGates(
        where ${worklistOrganizationWhere(orgId, allowedSubsidiaryIds, kind, query, overdue)}
        order by g.created_at, g.id
        limit ${page.prefix}
-    `)).rows.map((row) => mapWorklistRow(row, null));
+    `, "objects")).map((row) => mapWorklistRow(row, null));
     await resolveWorklistSubsidiaries(orgId, rows, allowedSubsidiaryIds);
     return allowedSubsidiaryIds != null
       ? rows.filter((g) => gateSubsidiaryScopeAllows(allowedSubsidiaryIds, g.subsidiaryId))
@@ -1541,8 +1537,8 @@ export async function worklistGates(
      where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue, page?.gateId)}
      order by g.created_at, g.id
      ${page ? sql`limit ${page.prefix}` : sql``}
-  `);
-  const out = r.rows.map((row) => mapWorklistRow(row, null));
+  `, "objects");
+  const out = r.map((row) => mapWorklistRow(row, null));
 
   // Delegated gates: pending rows whose DIRECT assignee currently delegates
   // to the caller. Only user-assigned rows qualify (the principal's
@@ -1568,8 +1564,8 @@ export async function worklistGates(
          ${worklistGateSearchSql(query)}
          ${worklistGateOverdueSql(overdue)}
        order by g.created_at, g.id
-    `);
-    for (const row of d.rows) {
+    `, "objects");
+    for (const row of d) {
       const id = String(row.id);
       if (seen.has(id)) continue;
       seen.add(id);
@@ -1616,26 +1612,26 @@ export async function worklistGateKindCounts(
       left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id
       ${WORKLIST_SUBJECT_JOINS}`;
   if (audience === "organization") {
-    accumulate((await db.execute<{ kind: string; n: string }>(sql`
+    accumulate(await db.execute<{ kind: string; n: string }>(sql`
       select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
         ${baseJoins}
        where ${worklistOrganizationWhere(orgId, allowedSubsidiaryIds, kind, query, overdue)}
        group by coalesce(d.kind, g.subject_kind)
-    `)).rows);
+    `, "objects"));
     return counts;
   }
   const roleList = roles ? [...roles] : [...(await userRoleKeys(orgId, userId))];
-  accumulate((await db.execute<{ kind: string; n: string }>(sql`
+  accumulate(await db.execute<{ kind: string; n: string }>(sql`
     select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
       ${baseJoins}
      where ${worklistDirectWhere(orgId, userId, roleList, allowedSubsidiaryIds, kind, query, overdue)}
      group by coalesce(d.kind, g.subject_kind)
-  `)).rows);
+  `, "objects"));
   const principals = await activeDelegationPrincipals(orgId, userId);
   if (principals.length > 0) {
     // Same dedup as the row merge, expressed as a predicate: a delegated row
     // satisfying the direct condition would already be counted above.
-    accumulate((await db.execute<{ kind: string; n: string }>(sql`
+    accumulate(await db.execute<{ kind: string; n: string }>(sql`
       select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
         ${baseJoins}
        where g.org_id = ${orgId} and g.status = 'pending'
@@ -1650,7 +1646,7 @@ export async function worklistGateKindCounts(
          ${worklistGateSearchSql(query)}
          ${worklistGateOverdueSql(overdue)}
        group by coalesce(d.kind, g.subject_kind)
-    `)).rows);
+    `, "objects"));
   }
   return counts;
 }
@@ -1683,7 +1679,7 @@ export interface OrphanedPendingGate {
 
 export async function listOrphanedPendingGates(orgId: string): Promise<OrphanedPendingGate[]> {
   const docKinds = JSON.stringify([...DOCUMENT_FLOW_KINDS]);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; runId: string; flowId: string; subjectKind: string; subjectId: string;
     assigneeUserId: string | null; assigneeRole: string | null; createdAt: Date;
     runStatus: string | null; fcStatus: string | null; fcExists: boolean;
@@ -1703,7 +1699,7 @@ export async function listOrphanedPendingGates(orgId: string): Promise<OrphanedP
         and g.subject_kind in (select jsonb_array_elements_text(${docKinds}::jsonb))
      where g.org_id = ${orgId} and g.status = 'pending'
      order by g.created_at, g.id
-  `)).rows;
+  `, "objects");
   const docKindSet = new Set<string>(DOCUMENT_FLOW_KINDS);
   const out: OrphanedPendingGate[] = [];
   for (const row of rows) {
@@ -1931,9 +1927,9 @@ export async function processGateTimers(
        and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
      order by gate.remind_at
      limit 200
-  `));
+  `, "objects"));
 
-  for (const { id, orgId } of dueReminders.rows) {
+  for (const { id, orgId } of dueReminders) {
     const client = await pool.connect();
     const lockKey = `openbooks:flow-gate-reminder:${orgId}:${id}`;
     let locked = false;
@@ -1967,7 +1963,7 @@ export async function processGateTimers(
       if (!gate) continue;
 
       await withOrgContext(gate.orgId, () => notifyReminder(gate));
-      const completed = await withOrgContext(orgId, () => db.execute(sql`
+      const completed = await withOrgContext(orgId, () => db.execute<Record<string, unknown>>(sql`
         update flow_gates set reminded_at = ${now}
          where id = ${id} and org_id = ${orgId} and status = 'pending'
            and remind_at <= ${now} and reminded_at is null
@@ -2005,9 +2001,9 @@ export async function processGateTimers(
        and case (organization.settings->'features'->>'flows') when 'true' then true when 'false' then false else true end
      order by gate.escalate_at
      limit 100
-  `));
+  `, "objects"));
 
-  for (const { id, orgId } of dueEscalations.rows) {
+  for (const { id, orgId } of dueEscalations) {
     await withOrgContext(orgId, () => enqueueApprovalEscalation({ orgId, gateId: id }));
     escalated++;
   }
@@ -2125,11 +2121,9 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     // Escalation recipients are authored in the frozen gate policy. Missing
     // recipients keep the original gate pending and notify administrators.
     const sodApplies = !nodeGate || nodeGate.preventSelfApproval !== false;
-    const author = (
-      await db.execute<{ created_by: string | null }>(
-        sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`,
-      )
-    ).rows[0]?.created_by;
+    const author = (await db.execute<{ created_by: string | null }>(
+        sql`select created_by from flow_runs where org_id=${gate.orgId} and id=${gate.runId}`, "objects",
+      ))[0]?.created_by;
     const blocked = await resolveSodBlockedIds(
       gate.orgId,
       subject ?? null,
@@ -2178,7 +2172,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
     }
 
     // Claim: pending → escalated (concurrent ticks race on this update).
-    const claimed = await db.execute(sql`
+    const claimed = await db.execute<never>(sql`
     update flow_gates set status = 'escalated', updated_at = now()
      where id = ${gateId} and org_id = ${gate.orgId} and status = 'pending'
   `);

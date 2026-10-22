@@ -99,19 +99,19 @@ export async function recurringBenefitSource(tx: Executor, args: {
     and e.effective_from<=${periodEnd}::date and (e.effective_to is null or e.effective_to>=${periodStart}::date)
     and w.employer_subsidiary_id is not distinct from ${subsidiaryId}::uuid
     order by e.id
-  `)).rows.map(row => row.source);
+  `, 'objects')).map(row => row.source);
   const needsService = rows.some(e => e.rules.some(r => r.enforcePolicyCap || r.rateFormula !== 'elected_rate'));
   const service = needsService ? await resolveEmploymentServiceCredit(tx, { orgId, employmentId, asOf: periodEnd, lock }) : null;
   let workSchedule: Awaited<ReturnType<typeof resolveWorkSchedule>> | null = null;
   if (rows.some(e => e.rules.some(r => r.hoursBasis === 'scheduled_paid'))) {
-    const subject = (await tx.execute<{ worker_party_id: string }>(sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${employmentId}`)).rows[0];
+    const subject = (await tx.execute<{ worker_party_id: string }>(sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${employmentId}`, 'objects'))[0];
     if (subject) workSchedule = await resolveWorkSchedule(tx, orgId, subject.worker_party_id, periodEnd);
   }
   const currencies = [...new Set(rows.map(e => e.currency))].sort();
   const currencyCodes = sql`array[${sql.join(currencies.map(code => sql`${code}`), sql`, `)}]::text[]`;
   const currencyPrecisions = currencies.length ? (await tx.execute<{ code: string; minor_units: number }>(sql`
     select code,minor_units from currencies where code=any(${currencyCodes}) order by code ${lock ? sql`for share` : sql``}
-  `)).rows : [];
+  `, 'objects')) : [];
   return { employmentId, enrollments: rows, currencyPrecisions, service, workSchedule };
 }
 
@@ -196,7 +196,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       const duplicate = (await tx.execute<{ id: string }>(sql`select id from employee_pay_components where org_id=${args.orgId}
         and employee_party_id=${args.employeePartyId} and component_id=${rule.payComponentId} and is_active
         and (employment_id is null or employment_id=${args.employmentId}) and effective_from<=${to}::date
-        and (effective_to is null or effective_to>=${from}::date) limit 1`)).rows[0];
+        and (effective_to is null or effective_to>=${from}::date) limit 1`, 'objects'))[0];
       if (duplicate) throw new PayrollError(`Benefit rule ${rule.ruleKey} also has a recurring payroll component assignment — end that duplicate assignment so the Benefits election remains the contribution source`);
       const baseLines = coveredBaseLines(originalLines, earningsFrom, earningsTo, args.periodStart, args.periodEnd);
       if (rule.hoursBasis === 'scheduled_paid' && args.payBasis === 'salary' && !args.oneOffRun) {
@@ -312,10 +312,10 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       } : null;
       if (benefitLine) args.lines.push(benefitLine);
       if (!args.simulate) {
-        const inserted = (await tx.execute<{ id: string }>(sql`insert into pay_run_benefit_allocations
+        const inserted = await tx.execute<{ id: string }>(sql`insert into pay_run_benefit_allocations
           (org_id,pay_run_document_id,employment_id,employee_party_id,enrollment_id,rule_id,term_id,period_from,period_to,amount,currency,source_snapshot,created_by,updated_by)
           values (${args.orgId},${args.documentId},${args.employmentId},${args.employeePartyId},${enrollment.id},${rule.id},${term.id},${from}::date,${to}::date,
-          ${result.amount},${args.currency},${JSON.stringify({ rule, term, coverage, basis, result, coverageAmount, insuredCoverageAmount, insuredPremiums, component, statutoryTreatment: treatment, service: source.service?.sourceSnapshot ?? null })}::jsonb,${args.actorId},${args.actorId}) returning id`)).rows;
+          ${result.amount},${args.currency},${JSON.stringify({ rule, term, coverage, basis, result, coverageAmount, insuredCoverageAmount, insuredPremiums, component, statutoryTreatment: treatment, service: source.service?.sourceSnapshot ?? null })}::jsonb,${args.actorId},${args.actorId}) returning id`, 'objects');
         if (inserted.length !== 1) throw new PayrollError(`Benefit rule ${rule.ruleKey} was not recorded — retry calculation; a payable contribution must carry its allocation evidence`);
         if (benefitLine) benefitLine.benefitAllocationId = inserted[0]!.id;
       }
@@ -326,10 +326,10 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
 export async function recurringBenefitsRunSource(tx: Executor, orgId: string, documentId: string, lock = false): Promise<RecurringBenefitSource[]> {
   const run = (await tx.execute<{ period_start: string; period_end: string; pay_date: string; subsidiary_id: string | null; run_type: string }>(sql`
     select r.period_start::text,r.period_end::text,r.pay_date::text,d.subsidiary_id,r.run_type from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
-    where r.org_id=${orgId} and r.document_id=${documentId}`)).rows[0];
+    where r.org_id=${orgId} and r.document_id=${documentId}`, 'objects'))[0];
   if (!run) throw new PayrollError('pay run not found');
-  const subjects = (await tx.execute<{ employment_id: string }>(sql`select employment_id from pay_stubs
-    where org_id=${orgId} and pay_run_document_id=${documentId} order by employment_id`)).rows;
+  const subjects = await tx.execute<{ employment_id: string }>(sql`select employment_id from pay_stubs
+    where org_id=${orgId} and pay_run_document_id=${documentId} order by employment_id`, 'objects');
   const source: RecurringBenefitSource[] = [];
   for (const subject of subjects) source.push(await recurringBenefitSource(tx, { orgId, employmentId: subject.employment_id,
     subsidiaryId: run.subsidiary_id, periodStart: run.period_start, periodEnd: run.period_end, payDate: run.pay_date, documentId, lock }));

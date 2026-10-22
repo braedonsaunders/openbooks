@@ -121,11 +121,9 @@ if (apply) {
       "refusing apply: --actor <user UUID> is required so every audit row carries its operator; pass the operator's user id from the target organization",
     );
   }
-  const actor = (
-    await db.execute(
-      sql`select id from users where org_id = ${orgId} and id = ${actorArg}`,
-    )
-  ).rows[0];
+  const actor = (await db.execute(
+      sql`select id from users where org_id = ${orgId} and id = ${actorArg}`, "objects",
+    ))[0];
   if (!actor) {
     throw new Error(
       `refusing apply: --actor ${actorArg} is not a user of this organization; pass the operator's user id from the target organization`,

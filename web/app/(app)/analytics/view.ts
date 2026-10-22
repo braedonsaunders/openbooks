@@ -15,7 +15,7 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
   const authz = await requirePermission('reports.read')
   const [t, prefs] = await Promise.all([
     getTranslations('analytics.hub'),
-    db.execute<{ layout: PageLayoutPrefs }>(sql`select layout from user_page_layouts where org_id = ${authz.user.orgId} and user_id = ${authz.user.id} and page = 'analytics' limit 1`),
+    db.execute<{ layout: PageLayoutPrefs }>(sql`select layout from user_page_layouts where org_id = ${authz.user.orgId} and user_id = ${authz.user.id} and page = 'analytics' limit 1`, 'objects'),
   ])
   const available = await Promise.all(ANALYTICS_DASHBOARDS.map(async (dashboard) => await analyticsDashboardAvailable(authz, dashboard) ? dashboard : null))
   const groups: AnalyticsGroup[] = ANALYTICS_GROUPS.map((group) => ({ key: group, label: t(`sections.${group}`), cards: available.filter((dashboard) => dashboard?.group === group).map((dashboard) => {
@@ -23,7 +23,7 @@ export async function loadAnalytics(): Promise<AnalyticsData> {
     const pack = dashboard!.industries.length ? dashboard!.industries.map((industry) => t(`packs.${industry}`)).join(' · ') : t('base')
     return { slug: dashboard!.slug, href: `/analytics/${dashboard!.slug}`, title: t(`cards.${dashboard!.titleKey}Title`), desc: t(`cards.${dashboard!.titleKey}Desc`), icon: dashboard!.icon, pack: feature ? `${pack} · ${t(`capabilities.${feature}`)}` : pack, featureLabel: feature }
   }) }))
-  return { title: t('title'), description: t('description'), groups, initialLayout: prefs.rows[0]?.layout ?? {} }
+  return { title: t('title'), description: t('description'), groups, initialLayout: prefs[0]?.layout ?? {} }
 }
 
 export function analyticsSpec(data: AnalyticsData): PageSpec {

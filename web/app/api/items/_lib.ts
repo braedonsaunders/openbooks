@@ -42,23 +42,23 @@ export async function loadItem(
 async function loadItemRecord(id: string, orgId: string): Promise<ItemPayload | null> {
   const item = (await db.execute<Record<string, unknown>>(sql`
     select * from items where id = ${id} and org_id = ${orgId}
-  `))
-  if (!item.rows[0]) return null
-  const row = item.rows[0]
+  `, 'objects'))
+  if (!item[0]) return null
+  const row = item[0]
 
   const [income, expense, payrollCosting, tax] = (await Promise.all([
     row.income_account_id
-      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.income_account_id} and org_id = ${orgId}`)
-      : Promise.resolve({ rows: [] }),
+      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.income_account_id} and org_id = ${orgId}`, 'objects')
+      : Promise.resolve([]),
     row.expense_account_id
-      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.expense_account_id} and org_id = ${orgId}`)
-      : Promise.resolve({ rows: [] }),
+      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.expense_account_id} and org_id = ${orgId}`, 'objects')
+      : Promise.resolve([]),
     row.payroll_expense_account_id
-      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.payroll_expense_account_id} and org_id = ${orgId}`)
-      : Promise.resolve({ rows: [] }),
+      ? db.execute<Record<string, unknown>>(sql`select number, name from accounts where id = ${row.payroll_expense_account_id} and org_id = ${orgId}`, 'objects')
+      : Promise.resolve([]),
     row.tax_code_id
-      ? db.execute<Record<string, unknown>>(sql`select code, name from tax_codes where id = ${row.tax_code_id} and org_id = ${orgId}`)
-      : Promise.resolve({ rows: [] }),
+      ? db.execute<Record<string, unknown>>(sql`select code, name from tax_codes where id = ${row.tax_code_id} and org_id = ${orgId}`, 'objects')
+      : Promise.resolve([]),
   ]))
 
   const acctName = (r?: Record<string, unknown>) =>
@@ -66,11 +66,11 @@ async function loadItemRecord(id: string, orgId: string): Promise<ItemPayload | 
 
   return {
     item: row,
-    incomeAccountName: acctName(income.rows[0]),
-    expenseAccountName: acctName(expense.rows[0]),
-    payrollCostingAccountName: acctName(payrollCosting.rows[0]),
-    taxCodeName: tax.rows[0]
-      ? `${(tax.rows[0].code as string) ?? ''} ${(tax.rows[0].name as string) ?? ''}`.trim() || null
+    incomeAccountName: acctName(income[0]),
+    expenseAccountName: acctName(expense[0]),
+    payrollCostingAccountName: acctName(payrollCosting[0]),
+    taxCodeName: tax[0]
+      ? `${(tax[0].code as string) ?? ''} ${(tax[0].name as string) ?? ''}`.trim() || null
       : null,
   }
 }

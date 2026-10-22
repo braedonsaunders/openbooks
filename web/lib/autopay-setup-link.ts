@@ -39,18 +39,18 @@ async function loadParty(orgId: string, partyId: string): Promise<PartyRow | nul
       left join customer_roles c on c.org_id = p.org_id and c.party_id = p.id
      where p.org_id = ${orgId} and p.id = ${partyId}
      limit 1
-  `)).rows[0] ?? null
+  `, 'objects'))[0] ?? null
 }
 
 /** The customer's email plus every active contact email, deduplicated. */
 export async function setupRecipients(orgId: string, partyId: string, party?: PartyRow | null): Promise<SetupRecipient[]> {
   const owner = party === undefined ? await loadParty(orgId, partyId) : party
   if (!owner) return []
-  const contacts = (await db.execute<{ name: string; email: string }>(sql`
+  const contacts = await db.execute<{ name: string; email: string }>(sql`
     select name, email from contacts
      where org_id = ${orgId} and party_id = ${partyId} and is_active and nullif(trim(email), '') is not null
      order by is_primary desc, name
-  `)).rows
+  `, 'objects')
   const seen = new Set<string>()
   const recipients: SetupRecipient[] = []
   const add = (email: string | null, name: string, source: SetupRecipient['source']) => {
@@ -76,7 +76,7 @@ export async function loadSetupLinkOptions(orgId: string, partyId: string): Prom
        where org_id = ${orgId} and is_enabled and acceptance_enabled
          and provider in ('stripe', 'adyen', 'gocardless')
        order by provider
-    `),
+    `, 'objects'),
     setupRecipients(orgId, partyId, party),
     resolveOrgEmailTransport(orgId),
   ])
@@ -89,7 +89,7 @@ export async function loadSetupLinkOptions(orgId: string, partyId: string): Prom
   return {
     currencies,
     defaultCurrency: preferred ?? currencies[0]?.value ?? null,
-    providers: providerRows.rows.map((row) => row.provider),
+    providers: providerRows.map((row) => row.provider),
     recipients,
     emailConfigured: transport !== null,
   }

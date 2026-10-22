@@ -106,9 +106,9 @@ export async function releaseStaleSandboxClaims(
         from sandboxes
        where status = 'refreshing'
          and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
-    `)));
+    `, "objects")));
   let released = 0;
-  for (const row of stale.rows) {
+  for (const row of stale) {
     const proofExists = row.lastError?.startsWith(REFRESH_CLONE_PROOF_PREFIX) === true;
     if (!proofExists) {
       const window = (row.cadence && CADENCE_MS[row.cadence]) || TICK_INTERVAL_MS;
@@ -120,7 +120,7 @@ export async function releaseStaleSandboxClaims(
         ? "refresh lease expired: worker stopped during clone verification; rerun refresh or delete this sandbox"
         : "refresh worker never started: stale scheduler claim released for re-queue";
       // A sandbox row is written from its production organization's scope.
-      const done = await withOrgContext(row.productionOrgId, () => db.execute(sql`
+      const done = await withOrgContext(row.productionOrgId, () => db.execute<never>(sql`
         update sandboxes set status = ${proofExists ? "failed" : "ready"},
                last_error = ${message}, updated_at = now()
          where id = ${row.id} and org_id = ${row.orgId} and production_org_id = ${row.productionOrgId}
@@ -165,15 +165,15 @@ export async function tick(
              extract(epoch from (now() - coalesce(last_refresh_at, created_at))) as "ageSec"
         from sandboxes
        where status = 'ready' and refresh_schedule is not null
-       limit 50`)));
+       limit 50`, "objects")));
 
-    for (const s of due.rows) {
+    for (const s of due) {
       const window = CADENCE_MS[s.cadence];
       if (!window || Number(s.ageSec) * 1000 < window) continue;
       // Claim: flip ready→refreshing so only one scanner fires it.
       // A sandbox row is written from its production organization's scope.
       const claimed = (await withOrgContext(s.productionOrgId, () =>
-        db.execute(sql`
+        db.execute<never>(sql`
         update sandboxes set status = 'refreshing'
          where id = ${s.id} and org_id = ${s.orgId} and production_org_id = ${s.productionOrgId}
            and status = 'ready'`)));

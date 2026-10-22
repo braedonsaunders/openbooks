@@ -45,9 +45,9 @@ export const GET = defineRoute({
       ) rc on true
      where t.org_id = ${user.orgId}
      order by t.status = 'archived', t.name
-  `);
+  `, "objects");
 
-    return NextResponse.json({ templates: r.rows });
+    return NextResponse.json({ templates: r });
   },
 });
 
@@ -75,16 +75,16 @@ export const POST = defineRoute({
       const outcome = await db.transaction(async (tx) => {
         const dupe = await tx.execute(sql`
         select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
-      `);
-        if (dupe.rows.length > 0) return { kind: "dupe" as const };
+      `, "objects");
+        if (dupe.length > 0) return { kind: "dupe" as const };
 
         const inserted = await tx.execute<{ id: string }>(sql`
         insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
         values (${user.orgId}, ${key}, ${name}, ${category?.trim() || null},
                 ${description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
         returning id
-      `);
-        const templateId = inserted.rows[0]!.id;
+      `, "objects");
+        const templateId = inserted[0]!.id;
 
         await tx.execute(sql`
         insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)

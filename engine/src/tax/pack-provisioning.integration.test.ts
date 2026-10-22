@@ -41,7 +41,7 @@ test(
            where org_id = ${target.orgId}
              and code in ('CA', 'CA-ON', 'US', 'US-NM')
            order by code
-        `)).rows as Array<{ code: string }>;
+        `, "objects")) as Array<{ code: string }>;
         const codes = (await db.execute(sql`
           select code.code,
                  coalesce(
@@ -61,7 +61,7 @@ test(
              and code.code in ('CA-GST', 'CA-ON-HST', 'US-NM-GRT')
            group by code.id, code.code
            order by code.code
-        `)).rows as Array<{
+        `, "objects")) as Array<{
           code: string;
           rates: Array<{ rate: string; from: string; to: string | null }>;
         }>;
@@ -70,13 +70,13 @@ test(
            where org_id = ${target.orgId}
              and code in ('CA_GST34', 'US_SALES_TAX_WORKPAPER')
            order by code
-        `)).rows as Array<{ code: string }>;
+        `, "objects")) as Array<{ code: string }>;
         const manifests = (await db.execute(sql`
           select pack_code as "packCode", version, status
             from tax_country_pack_installations
            where org_id = ${target.orgId}
            order by pack_code
-        `)).rows as Array<{ packCode: string; version: string; status: string }>;
+        `, "objects")) as Array<{ packCode: string; version: string; status: string }>;
         const registrations = (await db.execute(sql`
           select jurisdiction.code, registration.is_active as "isActive",
                  registration.return_form_code as "returnFormCode"
@@ -87,7 +87,7 @@ test(
            where registration.org_id = ${target.orgId}
              and jurisdiction.code in ('CA', 'US-NM')
            order by jurisdiction.code
-        `)).rows as Array<{ code: string; isActive: boolean; returnFormCode: string | null }>;
+        `, "objects")) as Array<{ code: string; isActive: boolean; returnFormCode: string | null }>;
         return { jurisdictions, codes, forms, manifests, registrations };
       });
 
@@ -172,8 +172,8 @@ test(
             (select count(*)::int from tax_return_forms where org_id = ${target.orgId} and code = 'US_SALES_TAX_WORKPAPER') as forms,
             (select count(*)::int from tax_registrations where org_id = ${target.orgId}) as registrations,
             (select count(*)::int from tax_country_pack_installations where org_id = ${target.orgId}) as manifests
-        `);
-        return result.rows[0] as {
+        `, "objects");
+        return result[0] as {
           codes: number;
           jurisdictions: number;
           forms: number;
@@ -224,7 +224,7 @@ test(
           select id, pack_code, version, content_hash, manifest
             from tax_country_pack_installations
            where org_id = ${org.orgId} and status = 'active'
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.ok(installation, "pack provisioning should persist its installation evidence");
 
@@ -269,7 +269,7 @@ test(
                  superseded_by, superseded_at is not null as superseded_at
             from tax_country_pack_installations
            where id = ${installation.id} and org_id = ${org.orgId}
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.deepEqual(superseded, {
         status: "superseded",

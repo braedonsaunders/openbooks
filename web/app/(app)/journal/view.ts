@@ -72,7 +72,7 @@ export async function loadJournal(
   const [draftCount, openJournal, pickers, postedCount] = await Promise.all([
     db.execute<{ n: string }>(sql`
       select count(*) as n from documents e
-       where ${journalDraftScopeWhere(authz.user.orgId, allowedSubsidiaries)}`),
+       where ${journalDraftScopeWhere(authz.user.orgId, allowedSubsidiaries)}`, 'objects'),
     entryParam ? loadJournalDoc(entryParam, authz.user.orgId, allowedSubsidiaries).then(async (journal) => {
       if (!journal || (allowedSubsidiaries && !allowedSubsidiaries.has(String(journal.doc.subsidiary_id)))) return null
       return redactJournalHeaderCustom(journal, customFieldViewerFor(authz))
@@ -105,9 +105,9 @@ export async function loadJournal(
             : null,
         ])
       : null,
-    (db.execute(sql`select count(*) as n from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(authz.user.orgId, allowedSubsidiaries)}`)),
+    (db.execute(sql`select count(*) as n from ${sql.raw(`${JOURNAL_ENTRY_TABLE} e`)} where ${journalScopeWhere(authz.user.orgId, allowedSubsidiaries)}`, 'objects')),
   ])
-  const total = Number(postedCount.rows[0]?.n ?? 0)
+  const total = Number(postedCount[0]?.n ?? 0)
   const resolvedForm = (openJournal || creating) && pickers
     ? await resolveFormLayout({
         orgId: authz.user.orgId,
@@ -131,7 +131,7 @@ export async function loadJournal(
     reportDrill: undefined, drawerReturn: undefined, mode: undefined, form: undefined }
   const tabs: ModuleHomeTab[] = [
     { label: t('list.entriesTab'), href: mergeHref('/journal', tabParams, { journalTab: undefined }), active: !draftsView, count: total },
-    { label: t('list.draftsTab'), href: mergeHref('/journal', tabParams, { journalTab: 'drafts' }), active: draftsView, count: Number(draftCount.rows[0]?.n ?? 0) },
+    { label: t('list.draftsTab'), href: mergeHref('/journal', tabParams, { journalTab: 'drafts' }), active: draftsView, count: Number(draftCount[0]?.n ?? 0) },
   ]
 
   // The unsaved-create payload: no row exists, so the drawer edits blanks

@@ -38,7 +38,7 @@ async function fixture(): Promise<Fixture> {
   const unitId = (await db.execute<{ id: string }>(sql`
     insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
     values (${org.orgId}, 'Test Unit', 'TEST-001', 'draft', ${org.subsidiaryId}, '100.0000')
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   return { org, unitId }
 }
 

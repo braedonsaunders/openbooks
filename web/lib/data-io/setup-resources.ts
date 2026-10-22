@@ -79,11 +79,11 @@ async function loadPayScheduleCurrent(
   orgId: string,
   existingId: string,
 ): Promise<{ frequency: unknown; periods_per_year: unknown } | null> {
-  const current = (await db.execute(sql`
+  const current = await db.execute<{ frequency: unknown; periods_per_year: unknown }>(sql`
     select frequency, periods_per_year from pay_schedules
      where id = ${existingId} and org_id = ${orgId}
-     limit 1`)) as { rows: { frequency: unknown; periods_per_year: unknown }[] }
-  return current.rows[0] ?? null
+     limit 1`, 'objects')
+  return current[0] ?? null
 }
 
 // --- Setup-registry resources -------------------------------------------------
@@ -374,12 +374,10 @@ async function setupPackProblem(
   const col = (name: string): unknown => cols.find((c) => c.column === name)?.value
   let current: Record<string, unknown> | null = null
   if (existingId) {
-    const found = (await db.execute(entity.key === 'pay-components'
+    const found = await db.execute<Record<string, unknown>>(entity.key === 'pay-components'
       ? sql`select country, tax_treatment from pay_components where id = ${existingId} and org_id = ${orgId}`
-      : sql`select country, program_type, state_code from payroll_filing_accounts where id = ${existingId} and org_id = ${orgId}`)) as {
-      rows: Record<string, unknown>[]
-    }
-    current = found.rows[0] ?? null
+      : sql`select country, program_type, state_code from payroll_filing_accounts where id = ${existingId} and org_id = ${orgId}`, 'objects')
+    current = found[0] ?? null
     if (!current) return 'row no longer exists'
   }
   if (entity.key === 'pay-components') {
@@ -423,11 +421,11 @@ async function writeSetupCommandRow(
       const channelId = String(src.channelId ?? '')
       const role = String(src.role ?? '')
       const key = src.key == null || src.key === '' ? '' : String(src.key)
-      const open = (await db.execute(sql`
+      const open = await db.execute<{ id: string }>(sql`
         select id from sales_channel_account_maps
          where org_id = ${ctx.orgId} and channel_id = ${channelId}
            and role = ${role} and key = ${key} and effective_to is null
-         limit 1`)) as { rows: { id: string }[] }
+         limit 1`, 'objects')
       await upsertAccountMap(ctx.orgId, ctx.actorId, {
         channelId,
         role,
@@ -435,7 +433,7 @@ async function writeSetupCommandRow(
         accountId: String(src.accountId ?? ''),
         effectiveFrom: String(src.effectiveFrom ?? ''),
       })
-      return open.rows[0] ? 'updated' : 'created'
+      return open[0] ? 'updated' : 'created'
     }
     case 'upsertChannelLocation': {
       const channelId = String(src.channelId ?? '')
@@ -444,11 +442,11 @@ async function writeSetupCommandRow(
       // supplied spelling coerces exactly as the interactive form does.
       const optionalBoolean = (value: unknown): boolean | undefined =>
         value === undefined || value === null || value === '' ? undefined : coerceBoolean(value)
-      const existing = (await db.execute(sql`
+      const existing = await db.execute<{ id: string }>(sql`
         select id from sales_channel_locations
          where org_id = ${ctx.orgId} and channel_id = ${channelId}
            and external_location_id = ${externalLocationId}
-         limit 1`)) as { rows: { id: string }[] }
+         limit 1`, 'objects')
       await upsertChannelLocation(ctx.orgId, ctx.actorId, {
         channelId,
         externalLocationId,
@@ -459,7 +457,7 @@ async function writeSetupCommandRow(
         bufferQuantity: src.bufferQuantity == null || src.bufferQuantity === '' ? null : String(src.bufferQuantity),
         stopSellingAtZero: optionalBoolean(src.stopSellingAtZero),
       })
-      return existing.rows[0] ? 'updated' : 'created'
+      return existing[0] ? 'updated' : 'created'
     }
     default:
       // A command without its import dispatch fails closed: the generic
@@ -585,12 +583,10 @@ async function writeSetup(
         }
         {
           const orgFilter = entity.orgScoped ? sql` and org_id = ${ctx.orgId}` : sql``
-          const dup = (await db.execute(sql`
+          const dup = await db.execute<{ id: string }>(sql`
             select ${sql.raw(idColumn(entity))} as id from ${sql.raw(entity.table)}
-             where ${sql.raw(toSnake(entity.naturalKey))} = ${nkVal}${orgFilter} limit 1`)) as {
-            rows: { id: string }[]
-          }
-          existingId = dup.rows[0]?.id ?? null
+             where ${sql.raw(toSnake(entity.naturalKey))} = ${nkVal}${orgFilter} limit 1`, 'objects')
+          existingId = dup[0]?.id ?? null
         }
       }
 
@@ -788,11 +784,11 @@ async function writeSetup(
                 setParts.push(sql`updated_at = now()`)
               }
               if (setParts.length > 0) {
-                const updated = (await tx.execute(sql`
+                const updated = await tx.execute<Record<string, unknown>>(sql`
                   update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
                    where ${sql.raw(idColumn(entity))} = ${existingId}${orgFilter}
-                  returning *`)) as { rows: Record<string, unknown>[] }
-                if (!updated.rows[0]) throw new Error('row no longer exists')
+                  returning *`, 'objects')
+                if (!updated[0]) throw new Error('row no longer exists')
                 if (entity.key === 'pay-components' && (src.supplementalWageCategory !== undefined || src.statutoryReportingCategory !== undefined || src.statutoryExemptionCategory !== undefined)) {
                   await savePayComponentEarningClassification(tx, ctx.orgId, existingId, {
                     supplementalWageCategory,
@@ -885,10 +881,10 @@ async function writeSetup(
                 cols.map((c) => sql`${bindSetupValue(c.value)}`),
                 sql`, `,
               )
-              const ins = (await tx.execute(sql`
+              const ins = await tx.execute<Record<string, unknown>>(sql`
                 insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
-                returning *`)) as { rows: Record<string, unknown>[] }
-              const inserted = ins.rows[0]
+                returning *`, 'objects')
+              const inserted = ins[0]
               const rowId = String(inserted?.[idColumn(entity)] ?? '')
               if (!inserted || !rowId) throw new Error('insert did not return a row')
               if (initialProgramExclusions !== null) {

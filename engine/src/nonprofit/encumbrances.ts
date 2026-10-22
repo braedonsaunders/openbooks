@@ -174,7 +174,7 @@ async function primaryBook(runner: SqlExecutor, orgId: string, requested: string
             or (${requested}::uuid is null and is_primary))
      order by is_primary desc
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.isPrimary ? row.id : null;
 }
 
@@ -188,19 +188,19 @@ async function fiscalYear(runner: SqlExecutor, orgId: string, date: string): Pro
        and p.starts_on <= ${date}::date and p.ends_on >= ${date}::date
      order by p.starts_on, p.ends_on, p.id
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.fiscalYear ?? null;
 }
 
 async function approvedScenario(runner: SqlExecutor, orgId: string, bookId: string, year: number): Promise<Scenario | null> {
-  const rows = (await runner.execute<Scenario>(sql`
+  const rows = await runner.execute<Scenario>(sql`
     select id, name, fiscal_year as "fiscalYear"
       from budget_scenarios
      where org_id = ${orgId} and book_id = ${bookId}
        and fiscal_year = ${year} and kind = 'budget' and status = 'approved'
      order by approved_at desc nulls last, revision desc, id
      for share
-  `)).rows;
+  `, "objects");
   if (rows.length > 1) {
     throw fundPostingRefusal({
       message: `More than one approved budget scenario applies to fiscal year ${year} for the primary posting book.`,
@@ -221,7 +221,7 @@ async function balanceWithRunner(runner: SqlExecutor, orgId: string, id: string)
       left join documents d on d.org_id = dl.org_id and d.id = dl.document_id
      where e.org_id = ${orgId} and e.id = ${id}
      group by e.id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   const amount = parseMoney(row.amount);
   const appliedActuals = parseMoney(row.applied);
@@ -264,7 +264,7 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
          where org_id = ${input.orgId} and id = ${input.sourceId}
            and kind = 'purchase_order' and subsidiary_id = ${input.subsidiaryId}
          for share
-      `)).rows[0];
+      `, "objects"))[0];
       if (!source) throw refuse(
         "The purchase order does not exist in this organization and subsidiary.",
         "encumbrance_source_invalid",
@@ -280,13 +280,13 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
          where org_id = ${input.orgId} and key = 'fund'
            and source_kind = 'custom' and is_active
          limit 1
-      `)).rows[0]?.id;
+      `, "objects"))[0]?.id;
       if (defaultFund) dims = { ...dims, fund: defaultFund };
     }
     const account = (await db.execute<{ id: string; type: string; active: boolean; summary: boolean }>(sql`
       select id, type, is_active as active, is_summary as summary
         from accounts where org_id = ${input.orgId} and id = ${input.accountId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!account || !account.active || account.summary || !EXPENSE_TYPES.has(account.type)) {
       throw refuse("The account must be an active expense account in this organization.", "encumbrance_account_invalid", "Choose an active expense account from this organization.", 422, "accountId");
     }
@@ -309,7 +309,7 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
         ${cell.locationId}, ${cell.classId}, ${JSON.stringify(dims)}::jsonb, ${amount},
         'open', ${JSON.stringify(input.custom ?? {})}::jsonb, ${input.actorId ?? null}, ${input.actorId ?? null})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw refuse("The commitment was not created.", "encumbrance_write_missing", "Retry the commitment after checking its account and dimensions.", 409);
     }
@@ -335,7 +335,7 @@ export async function createEncumbrance(input: CreateEncumbranceInput): Promise<
 export async function encumbranceSubsidiaryId(orgId: string, id: string): Promise<string | null> {
   const row = (await db.execute<{ subsidiary_id: string }>(sql`
     select subsidiary_id from encumbrances where org_id = ${orgId} and id = ${id}
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.subsidiary_id ?? null;
 }
 
@@ -365,7 +365,7 @@ export async function linkEncumbranceDocumentLine(input: {
              location_id as "locationId", class_id as "classId", extra_dims as "extraDims"
         from encumbrances where org_id = ${input.orgId} and id = ${input.encumbranceId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!e) throw refuse("The commitment does not exist in this organization.", "encumbrance_missing", "Choose an encumbrance from this organization.", 409);
     if (e.status !== "open") {
       throw refuse(`Commitment ${e.number} is ${e.status} and cannot accept linked actuals.`, "encumbrance_state_conflict", "Choose an open commitment or void this commitment.", 409);
@@ -392,7 +392,7 @@ export async function linkEncumbranceDocumentLine(input: {
          and dl.class_id is not distinct from ${e.classId}::uuid
          and dl.extra_dims = ${JSON.stringify(e.extraDims)}::jsonb
          and dl.amount > 0
-    `)).rows[0];
+    `, "objects"))[0];
     if (!line) {
       throw refuse(`The document line does not match commitment ${e.number} or its document cannot post.`, "encumbrance_line_mismatch", "Choose a positive expense line with the same account, subsidiary, and dimensions.", 422, "documentLineId");
     }
@@ -405,7 +405,7 @@ export async function linkEncumbranceDocumentLine(input: {
        where l.org_id = ${input.orgId} and l.encumbrance_id = ${input.encumbranceId}
          -- Live entries only: voided documents cannot reserve an encumbrance balance.
          and d.status in ('draft', 'pending_approval', 'approved', 'posted')
-    `)).rows[0]?.amount ?? "0";
+    `, "objects"))[0]?.amount ?? "0";
     // Every live linked line — posted or not yet posted — already reserves part
     // of the commitment, so the new line must fit in the commitment amount less
     // all of them. The open balance cannot be the ceiling here: it has already
@@ -418,7 +418,7 @@ export async function linkEncumbranceDocumentLine(input: {
       insert into encumbrance_links (org_id, encumbrance_id, document_line_id, created_by)
       values (${input.orgId}, ${input.encumbranceId}, ${input.documentLineId}, ${input.actorId ?? null})
       returning document_line_id as id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) throw refuse("The actual was not linked to the commitment.", "encumbrance_link_write_missing", "Retry after checking whether the document line is already linked.", 409);
     await audit(db, {
       orgId: input.orgId, rowId: input.encumbranceId, action: "link_actual",
@@ -446,7 +446,7 @@ async function transition(input: {
              location_id as "locationId", class_id as "classId", extra_dims as "extraDims"
         from encumbrances where org_id = ${input.orgId} and id = ${input.encumbranceId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) throw refuse("The commitment does not exist in this organization.", "encumbrance_missing", "Choose an encumbrance from this organization.", 409);
     const cell: Cell = {
       accountId: row.accountId, subsidiaryId: row.subsidiaryId,
@@ -475,7 +475,7 @@ async function transition(input: {
       update encumbrances set status = ${input.status}, updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${input.encumbranceId} and status = ${row.status}
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!changed) throw refuse(`Commitment ${row.number} changed before it could be ${input.status}.`, "encumbrance_state_conflict", "Refresh the commitment and retry the allowed transition.", 409);
     await audit(db, {
       orgId: input.orgId, rowId: input.encumbranceId, action: "update",
@@ -543,10 +543,10 @@ async function fundModes(
         on sv.org_id = fs.org_id and sv.id = rv.id
       left join funds f on f.org_id = sv.org_id and f.id = sv.id
      order by sv.id
-  `);
+  `, "objects");
   const modes = new Map<string, BudgetaryControlMode>();
   let defaultFundId: string | null = null;
-  for (const row of result.rows) {
+  for (const row of result) {
     defaultFundId ??= row.defaultFundId;
     if (row.fundId && row.mode) modes.set(row.fundId, row.mode);
   }
@@ -594,10 +594,10 @@ async function accountTypes(
 ): Promise<Map<string, string>> {
   const ids = [...new Set(lines.map((line) => line.accountId))];
   if (ids.length === 0) return new Map();
-  const rows = (await runner.execute<{ id: string; type: string }>(sql`
+  const rows = await runner.execute<{ id: string; type: string }>(sql`
     select id, type from accounts
      where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])
-  `)).rows;
+  `, "objects");
   return new Map(rows.map((row) => [row.id, row.type]));
 }
 
@@ -640,7 +640,7 @@ async function cellFiguresForScenario(input: {
       left join locations l on l.org_id = a.org_id and l.id = ${cell.locationId}
       left join classes c on c.org_id = a.org_id and c.id = ${cell.classId}
      where a.org_id = ${orgId} and a.id = ${cell.accountId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!labels) return null;
   const dims = JSON.stringify(cell.extraDims);
   const appropriationRaw = (await runner.execute<{ amount: string }>(sql`
@@ -656,7 +656,7 @@ async function cellFiguresForScenario(input: {
        and bl.location_id is not distinct from ${cell.locationId}::uuid
        and bl.class_id is not distinct from ${cell.classId}::uuid
        and ${effectiveExtraDimsSql(sql`bl.extra_dims`, orgId)} = ${dims}::jsonb
-  `)).rows[0]?.amount ?? "0";
+  `, "objects"))[0]?.amount ?? "0";
   const actualsRaw = (await runner.execute<{ amount: string }>(sql`
     select coalesce(sum(jl.amount), 0)::text as amount
       from journal_lines jl
@@ -671,7 +671,7 @@ async function cellFiguresForScenario(input: {
        and jl.location_id is not distinct from ${cell.locationId}::uuid
        and jl.class_id is not distinct from ${cell.classId}::uuid
        and ${effectiveExtraDimsSql(sql`jl.extra_dims`, orgId)} = ${dims}::jsonb
-  `)).rows[0]?.amount ?? "0";
+  `, "objects"))[0]?.amount ?? "0";
   const openEncumbrancesRaw = (await runner.execute<{ amount: string }>(sql`
     select coalesce(sum(greatest(
       e.amount
@@ -703,7 +703,7 @@ async function cellFiguresForScenario(input: {
        and e.location_id is not distinct from ${cell.locationId}::uuid
        and e.class_id is not distinct from ${cell.classId}::uuid
        and ${effectiveExtraDimsSql(sql`e.extra_dims`, orgId)} = ${dims}::jsonb
-  `)).rows[0]?.amount ?? "0";
+  `, "objects"))[0]?.amount ?? "0";
   const appropriation = parseMoney(appropriationRaw);
   const actuals = parseMoney(actualsRaw);
   const openEncumbrances = parseMoney(openEncumbrancesRaw);
@@ -832,7 +832,7 @@ export async function budgetaryControlWarnings(
            source_document_id as "sourceDocumentId", status
       from journal_entries
      where org_id = ${orgId} and id = ${entryId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!header || header.status !== "posted") return [];
   const posting = await postingBudgetContext(runner, {
     orgId,
@@ -840,7 +840,7 @@ export async function budgetaryControlWarnings(
     bookId: header.bookId,
   });
   if (!posting) return [];
-  const lines = (await runner.execute<AccountTypeLine>(sql`
+  const lines = await runner.execute<AccountTypeLine>(sql`
     select jl.account_id as "accountId", jl.amount::text as amount,
            jl.subsidiary_id as "subsidiaryId", jl.department_id as "departmentId",
            jl.project_id as "projectId", jl.location_id as "locationId",
@@ -851,7 +851,7 @@ export async function budgetaryControlWarnings(
       join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
      where jl.org_id = ${orgId} and jl.entry_id = ${entryId}
      order by jl.line_number
-  `)).rows;
+  `, "objects");
   const types = new Map(lines.map((line) => [line.accountId, line.type]));
   const { defaultFundId, modes } = await fundModes(runner, orgId, lines);
   const warnings: BudgetaryControlWarning[] = [];
@@ -933,11 +933,11 @@ export async function getEncumbranceDetail(orgId: string, id: string, asOf: stri
         join accounts a on a.org_id = e.org_id and a.id = e.account_id
         join subsidiaries s on s.org_id = e.org_id and s.id = e.subsidiary_id
        where e.org_id = ${orgId} and e.id = ${id}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) return null;
     const balance = await balanceWithRunner(db, orgId, id);
     if (!balance) return null;
-    const links = (await db.execute<{
+    const links = await db.execute<{
       document_line_id: string; document_id: string; document_number: string; document_status: string; amount: string;
     }>(sql`
       select l.document_line_id, dl.document_id, d.document_number, d.status as document_status,
@@ -947,7 +947,7 @@ export async function getEncumbranceDetail(orgId: string, id: string, asOf: stri
         join documents d on d.org_id = dl.org_id and d.id = dl.document_id
        where l.org_id = ${orgId} and l.encumbrance_id = ${id}
        order by d.document_number, l.document_line_id
-    `)).rows;
+    `, "objects");
     const fundId = typeof row.extra_dims.fund === "string" ? row.extra_dims.fund : "";
     const figures = fundId
       ? await readBudgetCellFigures(db, {
@@ -1076,15 +1076,15 @@ export async function listEncumbrances(input: ListEncumbrancesInput): Promise<{ 
       union all
       select null, null, null, null, null, null, null, null, null, null, (select total from scope_total)
        where not exists (select 1 from page)
-    `);
+    `, "objects");
     return {
-      items: rows.rows.filter((row) => row.id !== null).map((row) => ({
+      items: rows.filter((row) => row.id !== null).map((row) => ({
         id: row.id, encumbranceNumber: row.encumbrance_number, sourceKind: row.source_kind,
         accountId: row.account_id, accountNumber: row.account_number, accountName: row.account_name,
         subsidiaryId: row.subsidiary_id, subsidiaryName: row.subsidiary_name,
         amount: row.amount, status: row.status,
       })),
-      total: rows.rows[0]?.total ?? 0,
+      total: rows[0]?.total ?? 0,
     };
   });
 }

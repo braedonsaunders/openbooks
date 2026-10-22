@@ -27,8 +27,7 @@ export const recruitingOfferSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (
-      await db.execute<{
+    (await db.execute<{
         status: string;
         createdBy: string | null;
         submittedBy: string | null;
@@ -37,8 +36,7 @@ async function load(id: string) {
  select id,public.offer_approval_fingerprint(hrm_offers) as "approvalFingerprint",job_title as "jobTitle",compensation_amount::text as "compensationAmount",compensation_currency as "compensationCurrency",
  compensation_basis as "compensationBasis",proposed_start_on::text as "proposedStartOn",employer_subsidiary_id as "subsidiaryId",
  version,approval_status as status,created_by as "createdBy",submitted_by as "submittedBy"
- from hrm_offers where id=${id}`)
-    ).rows[0] ?? null
+ from hrm_offers where id=${id}`, "objects"))[0] ?? null
   );
 }
 export const recruitingOffersFlowAdapter = defineTableSubjectAdapter({

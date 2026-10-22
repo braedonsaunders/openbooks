@@ -107,12 +107,12 @@ export async function sealLegacyPaymentLinkTokens(): Promise<void> {
       select id, org_id as "orgId", token, token_sealed, token_hash from payment_links
        where token_hash is null or token is not null or token_sealed is null
        order by id
-    `);
-    if (pending.rows.length > 0) {
-      console.log(`[bootstrap] sealing ${pending.rows.length} payment link token(s) at rest`);
+    `, "objects");
+    if (pending.length > 0) {
+      console.log(`[bootstrap] sealing ${pending.length} payment link token(s) at rest`);
     }
     const unrecoverable: Array<{ id: string; reason: string }> = [];
-    for (const row of pending.rows) {
+    for (const row of pending) {
       const plan = planPaymentLinkSeal(row);
       if ("unrecoverable" in plan) {
         unrecoverable.push({ id: plan.id, reason: plan.reason });
@@ -149,8 +149,8 @@ export async function sealLegacyPaymentLinkTokens(): Promise<void> {
     const broken = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from payment_links
        where token is not null or token_hash is null or token_sealed is null
-    `);
-    if (Number(broken.rows[0]?.n ?? 0) > 0) {
+    `, "objects");
+    if (Number(broken[0]?.n ?? 0) > 0) {
       throw new Error(
         "[bootstrap] payment_links has rows holding plaintext or missing their hash or seal; refusing to continue",
       );

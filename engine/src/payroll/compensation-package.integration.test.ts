@@ -75,7 +75,7 @@ async function setup(options: { approvalFlow?: boolean } = {}) {
 type Fixture = Awaited<ReturnType<typeof setup>>;
 async function pendingGates(f: Fixture, subjectId: string, userId: string): Promise<string[]> {
   return (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId}
-    and subject_id=${subjectId} and assignee_user_id=${userId} and status='pending'`)).rows.map(row => row.id);
+    and subject_id=${subjectId} and assignee_user_id=${userId} and status='pending'`, "objects")).map(row => row.id);
 }
 /** Decide the user's own pending gate on the submitted proposal through the native Flow decision path. */
 async function decide(f: Fixture, subjectId: string, userId: string, comment = "Independent compensation review") {
@@ -129,8 +129,8 @@ test('payroll package sources require an effective approved employment assignmen
     await decide(f, saved.id, f.approverId);
     const updated = await db.execute(sql`update pay_components set basis_cap_hours_per_period='40.25',
       basis_cap_amount_per_period='1234.5678',basis_cap_amount_per_year='249999.1234'
-      where org_id=${f.org.orgId} and id=${f.componentId} returning id`);
-    assert.equal(updated.rows.length, 1);
+      where org_id=${f.org.orgId} and id=${f.componentId} returning id`, "objects");
+    assert.equal(updated.length, 1);
     const [source] = await compensationPackageEmploymentSource(db, query);
     assert.ok(source);
     assert.equal(source.assignmentId, saved.id);
@@ -195,8 +195,8 @@ test('future package proposals and retirement preserve pinned terms while native
     await updateCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, expectedRevision: 1,
       name: f.pack.name, description: null, retire: true, reason: 'Stop new assignments while retaining obligations' });
     assert.deepEqual(await compensationPackageEmploymentSource(db, query), before);
-    const changed = await db.execute(sql`update pay_components set insurable=false where org_id=${f.org.orgId} and id=${f.componentId} returning id`);
-    assert.equal(changed.rows.length, 1);
+    const changed = await db.execute(sql`update pay_components set insurable=false where org_id=${f.org.orgId} and id=${f.componentId} returning id`, "objects");
+    assert.equal(changed.length, 1);
     assert.notEqual(canonicalJson(await compensationPackageEmploymentSource(db, query)), canonicalJson(before), 'changed native financial flags must invalidate source equality');
     await transitionCompensationPackageAssignment({ ...base, expectedRevision: active.revision, action: 'end', effectiveTo: '2026-01-15' });
     assert.equal((await compensationPackageEmploymentSource(db, query))[0]!.effectiveTo, '2026-01-15');
@@ -260,7 +260,7 @@ test(
       assert.equal(approved.definitionHash, f.version.definitionHash);
       await assert.rejects(saveCompensationPackageVersion({ ...base, actorId: f.authorId, expectedRevision: approved.revision, definition: f.definition, effectiveFrom: "2026-01-01", effectiveTo: null }), /frozen.*new draft/);
       await assert.rejects(db.execute(sql`update payroll_compensation_versions set definition='{}'::jsonb,revision=revision+1 where org_id=${f.org.orgId} and id=${approved.id}`), (error: unknown) => error instanceof Error && error.cause instanceof Error && /Approved compensation history is immutable.*successor/.test(error.cause.message));
-      const audits = (await db.execute<{ actorId: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`select actor_id as "actorId",changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_compensation_versions' and row_id=${approved.id} order by at,id`)).rows;
+      const audits = await db.execute<{ actorId: string; changes: { before: unknown; after: unknown; reason: string } }>(sql`select actor_id as "actorId",changes from audit_log where org_id=${f.org.orgId} and table_name='payroll_compensation_versions' and row_id=${approved.id} order by at,id`, "objects");
       assert.equal(audits.length, 3);
       assert.deepEqual(audits.map((row) => row.actorId), [f.authorId, f.authorId, f.approverId]);
       assert.ok(audits.every((row) => row.changes.after && row.changes.reason));
@@ -378,8 +378,8 @@ test("controlled full sandbox cloning preserves approved terms and rebinds only 
     const name = `Compensation copy ${randomUUID()}`;
     try {
       const sandbox = await createSandbox({ productionOrgId: f.org.orgId, name, tier: "full", masked: false });
-      const cloned = (await db.execute<{ definition: CompensationPackageDefinition; definitionHash: string; status: string; authorship: { actorId: string; partyId: string | null }[] }>(sql`
-        select definition,definition_hash as "definitionHash",status,authorship from payroll_compensation_versions where org_id=${sandbox.sandboxOrgId}`)).rows;
+      const cloned = await db.execute<{ definition: CompensationPackageDefinition; definitionHash: string; status: string; authorship: { actorId: string; partyId: string | null }[] }>(sql`
+        select definition,definition_hash as "definitionHash",status,authorship from payroll_compensation_versions where org_id=${sandbox.sandboxOrgId}`, "objects");
       assert.equal(cloned.length, 1);
       const version = cloned[0]!;
       assert.equal(version.status, "approved"); assert.equal(version.definition.orgId, sandbox.sandboxOrgId);
@@ -387,14 +387,14 @@ test("controlled full sandbox cloning preserves approved terms and rebinds only 
       assert.equal(version.definition.rules[0]!.expression, f.definition.rules[0]!.expression);
       assert.equal(version.definitionHash, compensationPackageDefinitionHash(version.definition));
       assert.equal((await db.execute<{ category: string }>(sql`select supplemental_wage_category as category from pay_component_earning_classifications
-        where org_id=${sandbox.sandboxOrgId} and pay_component_id=${version.definition.rules[0]!.componentId}`)).rows[0]?.category, "other");
+        where org_id=${sandbox.sandboxOrgId} and pay_component_id=${version.definition.rules[0]!.componentId}`, "objects"))[0]?.category, "other");
       assert.ok(version.authorship.every((author) => author.actorId !== f.authorId && author.partyId !== f.authorPartyId));
-      const assignments = (await db.execute<{ status: string; inputs: unknown; employmentId: string }>(sql`select status,inputs,employment_id as "employmentId" from payroll_compensation_assignments where org_id=${sandbox.sandboxOrgId}`)).rows;
+      const assignments = await db.execute<{ status: string; inputs: unknown; employmentId: string }>(sql`select status,inputs,employment_id as "employmentId" from payroll_compensation_assignments where org_id=${sandbox.sandboxOrgId}`, "objects");
       assert.equal(assignments.length, 1); assert.equal(assignments[0]!.status, "active"); assert.deepEqual(assignments[0]!.inputs, { allowance: "310" });
       assert.notEqual(assignments[0]!.employmentId, f.employmentId);
-      assert.equal((await db.execute(sql`select org_id from payroll_compensation_configuration where org_id=${sandbox.sandboxOrgId}`)).rows.length, 1);
+      assert.equal((await db.execute(sql`select org_id from payroll_compensation_configuration where org_id=${sandbox.sandboxOrgId}`, "objects")).length, 1);
     } finally {
-      const shells = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${f.org.orgId} and name=${name}`)).rows;
+      const shells = await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${f.org.orgId} and name=${name}`, "objects");
       for (const shell of shells) await deleteSandbox(shell.id);
     }
   });
@@ -450,7 +450,7 @@ test(
         assert.equal(active.status, "active");
         assert.equal(active.submissionPolicy?.kind, "ungated");
         assert.equal(active.decidedBy, f.authorId);
-        assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId}`)).rows.length, 0, "no approval is routed without a tenant Flow");
+        assert.equal((await db.execute(sql`select id from flow_gates where org_id=${f.org.orgId}`, "objects")).length, 0, "no approval is routed without a tenant Flow");
         const [source] = await compensationPackageEmploymentSource(db, { orgId: f.org.orgId, employmentId: f.employmentId, periodStart: "2026-01-01", periodEnd: "2026-01-31" });
         assert.equal(source?.assignmentId, saved.id, "directly released terms are payable");
       },
@@ -487,9 +487,9 @@ test('native package stages preserve base pay and final calculation evidence wit
       assert.equal(lines.length, 2, 'the later phase cannot repeat the allowance');
       lines[1]!.amount = parseMoney('290');
       await persistCompensationPackageCalculations(db, prepared);
-      const evidence = (await db.execute<{ result: { finalLines: { amount: string }[] }; source: { definitionHash: string; inputs: Record<string, string | boolean> } }>(sql`
+      const evidence = await db.execute<{ result: { finalLines: { amount: string }[] }; source: { definitionHash: string; inputs: Record<string, string | boolean> } }>(sql`
         select result_snapshot as result,source_snapshot as source from payroll_compensation_calculations
-        where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`)).rows;
+        where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`, "objects");
       assert.equal(evidence.length, 1);
       assert.equal(evidence[0]!.source.definitionHash, f.version.definitionHash);
       assert.equal(evidence[0]!.result.finalLines[0]!.amount, '290.0000', 'final protection effects remain part of the saved evidence');
@@ -498,7 +498,7 @@ test('native package stages preserve base pay and final calculation evidence wit
       await appendCompensationPackageStage(db, simulated, 'earnings', simulatedLines);
       await appendCompensationPackageStage(db, simulated, 'remaining', simulatedLines);
       await persistCompensationPackageCalculations(db, simulated);
-      assert.equal((await db.execute(sql`select id from payroll_compensation_calculations where org_id=${f.org.orgId}`)).rows.length, 1,
+      assert.equal((await db.execute(sql`select id from payroll_compensation_calculations where org_id=${f.org.orgId}`, "objects")).length, 1,
         'simulation cannot rewrite preserved evidence');
       const exported = await exportedPayrollEvidence({ orgId: f.org.orgId, actorId: f.authorId, partyId: context.employeePartyId });
       const assignments = exported.compensationAssignments as Record<string, unknown>[];
@@ -570,9 +570,9 @@ test('package dependencies refuse an unfinished native percent amount and consum
     const context = await runtimeContext(f);
     await db.execute(sql`insert into employee_pay_components(org_id,employee_party_id,employment_id,component_id,effective_from,is_active)
       values(${f.org.orgId},${f.workerPartyId},${f.employmentId},${f.componentId},'2026-01-01',true)`);
-    context.assignedRows = (await db.execute<Record<string, unknown>>(sql`select c.*,a.run_applicability,a.effective_from::text,a.effective_to::text,a.value as override
+    context.assignedRows = await db.execute<Record<string, unknown>>(sql`select c.*,a.run_applicability,a.effective_from::text,a.effective_to::text,a.value as override
       from employee_pay_components a join pay_components c on c.org_id=a.org_id and c.id=a.component_id
-      where a.org_id=${f.org.orgId} and a.employee_party_id=${f.workerPartyId}`)).rows;
+      where a.org_id=${f.org.orgId} and a.employee_party_id=${f.workerPartyId}`, "objects");
     await assert.rejects(withOrgTransaction(f.org.orgId, async () => {
       const lines = nativeWages();
       const prepared = await prepareCompensationPackages(db, context, lines);
@@ -614,35 +614,35 @@ test('approved packages calculate and post natively only after changed employmen
     const first = await calculatePayRun(input);
     assert.deepEqual(first.errors, []);
     assert.equal((await db.execute<{ gross:string }>(sql`select gross::text from pay_stubs where org_id=${f.org.orgId}
-      and pay_run_document_id=${context.documentId}`)).rows[0]!.gross,'510.0000');
+      and pay_run_document_id=${context.documentId}`, "objects"))[0]!.gross,'510.0000');
     const active = (await getCompensationPackage({orgId:f.org.orgId,actorId:f.authorId,packageId:f.pack.id})).assignments[0]!;
     await transitionCompensationPackageAssignment({ orgId:f.org.orgId,actorId:f.authorId,packageId:f.pack.id,assignmentId:active.id,
       expectedRevision:active.revision,action:'end',effectiveTo:'2026-07-15',reason:'Approved terms ended mid-period' });
     const stale = await payRunStaleness(f.org.orgId,context.documentId);
     assert.ok(stale.reasons.includes('compensationPackages'),JSON.stringify(stale.reasons));
     await assert.rejects(commitPayRun(input),/approved compensation terms.*recalculate/i);
-    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${f.org.orgId} and source_document_id=${context.documentId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`select id from journal_entries where org_id=${f.org.orgId} and source_document_id=${context.documentId}`, "objects")).length,0);
     const recalculated = await calculatePayRun(input);
     assert.deepEqual(recalculated.errors,[]);
     assert.equal((await db.execute<{ gross:string }>(sql`select gross::text from pay_stubs where org_id=${f.org.orgId}
-      and pay_run_document_id=${context.documentId}`)).rows[0]!.gross,'350.0000');
-    const evidence = (await db.execute<{ amount:string }>(sql`select result_snapshot->'finalLines'->0->>'amount' as amount
-      from payroll_compensation_calculations where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`)).rows;
+      and pay_run_document_id=${context.documentId}`, "objects"))[0]!.gross,'350.0000');
+    const evidence = await db.execute<{ amount:string }>(sql`select result_snapshot->'finalLines'->0->>'amount' as amount
+      from payroll_compensation_calculations where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`, "objects");
     assert.deepEqual(evidence,[{amount:'150.0000'}]);
     await commitPayRun(input);
     await db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${context.documentId}`);
     const entryId = await postDocument(context.documentId, { control: { ar:f.org.accounts.ar,ap:f.org.accounts.ap,bank:f.org.accounts.bank } },
       { audit: { actorId:f.approverId,source:'payroll' } });
     const totals = (await db.execute<{ balance:string; count:number }>(sql`select coalesce(sum(amount),0)::text as balance,count(*)::int as count
-      from journal_lines where org_id=${f.org.orgId} and entry_id=${entryId}`)).rows[0]!;
+      from journal_lines where org_id=${f.org.orgId} and entry_id=${entryId}`, "objects"))[0]!;
     assert.equal(totals.balance,'0.0000','native package posting must remain exactly balanced');
     assert.ok(totals.count>0,'balanced zero rows cannot masquerade as a posting');
-    const preserved = (await db.execute(sql`select source_snapshot,result_snapshot from payroll_compensation_calculations
-      where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`)).rows;
+    const preserved = await db.execute(sql`select source_snapshot,result_snapshot from payroll_compensation_calculations
+      where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`, "objects");
     const simulated = await calculatePayRun({ ...input, simulate:true });
     assert.deepEqual(simulated.errors,[]);
-    assert.deepEqual((await db.execute(sql`select source_snapshot,result_snapshot from payroll_compensation_calculations
-      where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`)).rows,preserved,
+    assert.deepEqual(await db.execute(sql`select source_snapshot,result_snapshot from payroll_compensation_calculations
+      where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`, "objects"),preserved,
     'simulation must not rewrite posted package evidence');
     await assert.rejects(db.execute(sql`delete from payroll_compensation_calculations
       where org_id=${f.org.orgId} and pay_run_document_id=${context.documentId}`),(error:unknown)=>{
@@ -701,9 +701,9 @@ test('automatic compensation completion preserves the human gate and submitted r
     const submitted = await transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId,
       packageId: f.pack.id, versionId: f.version.id, expectedRevision: f.version.revision,
       action: 'submit', reason: 'Submit the exact employer package for review' });
-    const run = (await db.execute<{ id: string }>(sql`select id from flow_runs where org_id=${f.org.orgId}
+    const run = await db.execute<{ id: string }>(sql`select id from flow_runs where org_id=${f.org.orgId}
       and subject_kind=${COMPENSATION_VERSION_SUBJECT_KIND} and subject_id=${submitted.id}
-      and trigger='on_submit'`)).rows;
+      and trigger='on_submit'`, "objects");
     assert.equal(run.length, 1);
     const complete = (actorId: string) => completeCompensationPackageSubmission({ ctx: { orgId: f.org.orgId, userId: actorId },
       subjectKind: COMPENSATION_VERSION_SUBJECT_KIND, subjectId: submitted.id, runId: run[0]!.id, mode: 'automatic' });

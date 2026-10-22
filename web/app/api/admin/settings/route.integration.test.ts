@@ -174,9 +174,9 @@ async function settingsState(orgId: string): Promise<{
                 from accounting_periods p where p.org_id = o.id) as periods,
              (select count(*)::int from audit_log a
                where a.org_id = o.id and a.table_name = 'orgs') as audits
-        from orgs o where o.id = ${orgId}`);
-    assert.ok(row.rows[0], "scratch organization exists");
-    return row.rows[0]!;
+        from orgs o where o.id = ${orgId}`, "objects");
+    assert.ok(row[0], "scratch organization exists");
+    return row[0]!;
   });
 }
 
@@ -244,9 +244,9 @@ async function waitForSettingsWriters(): Promise<void> {
          where datname = current_database()
            and pid <> pg_backend_pid()
            and wait_event_type = 'Lock'
-           and query ilike '%orgs%'`),
+           and query ilike '%orgs%'`, "objects"),
     );
-    if ((waiters.rows[0]?.count ?? 0) >= 2) return;
+    if ((waiters[0]?.count ?? 0) >= 2) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(
@@ -320,9 +320,9 @@ test("users-manage authority cannot write accounting policy; setup authority can
              and table_name = 'orgs'
              and changes ? 'reportingFramework'
            order by at desc
-           limit 1`),
+           limit 1`, "objects"),
       );
-    assert.deepEqual(frameworkAudit.rows[0]?.change, ["us_gaap", "ifrs"]);
+    assert.deepEqual(frameworkAudit[0]?.change, ["us_gaap", "ifrs"]);
 
     // Tax presentation is an independent policy. Changing it back to ASC
     // 740 must not move the authoritative financial-reporting framework.

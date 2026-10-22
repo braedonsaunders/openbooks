@@ -59,8 +59,8 @@ test("a deposit into a currency-mismatched account refuses with a typed posting 
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `);
-    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0 });
+    `, "objects");
+    assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
@@ -105,8 +105,8 @@ test("posting a non-ISO document currency refuses with a typed posting error", {
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `);
-    assert.deepEqual(untouched.rows[0], { status: "approved", entries: 0 });
+    `, "objects");
+    assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

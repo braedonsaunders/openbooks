@@ -206,7 +206,7 @@ export async function customersHome(
              max(movement.dt)::text as late, coalesce(sum(movement.amount), 0) as collected
         from (${customerPaymentMovements(orgId, trendFrom, today, docScope)}) movement
        group by 1, 2
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
     // Directory badges — cheap counts for the workspace's other pages (the
     // collected-value scalar moved to the row query below for translation).
     // Each badge keeps its source permission — opportunity
@@ -227,7 +227,7 @@ export async function customersHome(
         ${partiesGranted ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as customers
-    `),
+    `, 'objects'),
     // 7-day net collections per (date, functional), including voids that
     // reverse an earlier receipt inside this window.
     // Skipped without ar.read — never queried, never shaped.
@@ -235,11 +235,11 @@ export async function customersHome(
       select movement.dt::text as dt, movement.func, coalesce(sum(movement.amount), 0) as amt
         from (${customerPaymentMovements(orgId, ago7, today, docScope)}) movement
        group by 1, 2
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
     crmOn && crmGranted ? calculateForecast({ orgId, periodStart: quarter.from, periodEnd: quarter.to, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
     db.execute<{ baseCurrency: string }>(sql`
       select base_currency as "baseCurrency" from orgs where id = ${orgId}
-    `),
+    `, 'objects'),
     crmOn && crmGranted && arGranted ? db.execute<{ party_id: string; n: string }>(sql`
       select o.party_id, count(*) as n
         from crm_opportunities o
@@ -247,7 +247,7 @@ export async function customersHome(
        where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))}
          and o.is_active and not s.is_closed
        group by o.party_id
-    `) : Promise.resolve({ rows: [] }),
+    `, 'objects') : Promise.resolve([]),
   ]))
 
   // Open-item balances arrive in presentation currency from the shared cash
@@ -257,10 +257,10 @@ export async function customersHome(
   // lookup never runs ahead of the data it translates.
   const trendCtx = await flowRates(
     orgId,
-    trendRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
+    trendRes.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.late ?? r.wk).slice(0, 10) })),
   )
   const byWeek = new Map<string, string>()
-  for (const r of trendRes.rows) {
+  for (const r of trendRes) {
     const wk = String(r.wk).slice(0, 10)
     const late = String(r.late ?? r.wk).slice(0, 10)
     const collected = mulDecimal(String(r.collected ?? '0'), trendCtx.rateAt((r.func ?? null) as string | null, late))
@@ -268,10 +268,10 @@ export async function customersHome(
   }
   const collected7d = add('0.0000', await translateFlows(
     orgId,
-    collectedRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
+    collectedRowsRes.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
   ))
 
-  const openOppsByParty = new Map(oppRes.rows.map((row) => [row.party_id, Number(row.n)]))
+  const openOppsByParty = new Map(oppRes.map((row) => [row.party_id, Number(row.n)]))
   let arOutstanding = '0.0000'
   let arOverdue = '0.0000'
   let openInvoices = 0
@@ -316,8 +316,8 @@ export async function customersHome(
     .sort((x, y) => cmp(y.open, x.open))
     .slice(0, 10)
 
-  const badge = badgeRes.rows[0] ?? {}
-  const orgCurrency = String(orgRes.rows[0]?.baseCurrency ?? '').trim().toUpperCase()
+  const badge = badgeRes[0] ?? {}
+  const orgCurrency = String(orgRes[0]?.baseCurrency ?? '').trim().toUpperCase()
   if (!orgCurrency) throw new Error('organization currency is not configured')
   const pipeline = await pipelineInOrgCurrency(orgId, today, forecast)
 

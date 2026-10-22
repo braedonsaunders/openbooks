@@ -102,9 +102,9 @@ async function seedSession(orgId: string, subsidiaryId: string, bankId: string, 
 
 async function reconStatus(orgId: string, reconId: string): Promise<string | null> {
   return withOrgContext(orgId, async () => {
-  const rows = (await db.execute<{ status: string }>(sql`
+  const rows = await db.execute<{ status: string }>(sql`
     select status from reconciliations where id = ${reconId} and org_id = ${orgId}
-  `)).rows;
+  `, "objects");
   return rows[0]?.status ?? null;
   });
 }

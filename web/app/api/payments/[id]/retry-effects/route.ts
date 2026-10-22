@@ -33,12 +33,12 @@ export const POST = defineRoute({
       return await withOrgTransaction(authz.user.orgId, async () => {
         const payment = (await db.execute<{ kind: PaymentKind; subsidiary_id: string | null }>(sql`
           select kind, subsidiary_id from documents where org_id = ${authz.user.orgId} and id = ${params.id}
-            and kind in ('customer_payment', 'vendor_payment')`)).rows[0]
+            and kind in ('customer_payment', 'vendor_payment')`, 'objects'))[0]
         if (!payment || !can(authz, paymentPermission(payment.kind))) return notFound('record')
         const denied = guardSubsidiaryScope(authz, payment.subsidiary_id)
         if (denied) return denied
         const effect = (await db.execute<{ id: string }>(sql`select id from posting_effects
-          where org_id = ${authz.user.orgId} and document_id = ${params.id}`)).rows[0]
+          where org_id = ${authz.user.orgId} and document_id = ${params.id}`, 'objects'))[0]
         if (!effect) return notFound('record')
         // The kernel locks effect → document → live actor authority. It
         // rechecks requested scope, current duty, Banking and posted status

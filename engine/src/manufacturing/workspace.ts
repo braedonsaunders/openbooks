@@ -84,7 +84,7 @@ export async function readManufacturingHomeSummary(
     where work.org_id=${orgId}
       ${subsidiaryVisibleFilter(sql`work.subsidiary_id`, scope)}
       ${orderResourcesVisible(scope, "work")}
-      ${input.subsidiaryId ? sql`and work.subsidiary_id=${input.subsidiaryId}` : sql``}`)).rows[0];
+      ${input.subsidiaryId ? sql`and work.subsidiary_id=${input.subsidiaryId}` : sql``}`, "objects"))[0];
   return rows ?? {
     openWorkOrders: 0,
     inProgressWorkOrders: 0,
@@ -187,16 +187,12 @@ export async function listManufacturingRecords(
     order = sql`r.ran_at desc nulls last,r.id`;
   }
   const total =
-    (
-      await tx.execute<{ total: number }>(
-        sql`select count(*)::int as total from ${from} where ${where}`,
-      )
-    ).rows[0]?.total ?? 0;
-  const rows = (
-    await tx.execute<ManufacturingRow>(
-      sql`select ${fields} from ${from} where ${where} order by ${order} limit ${query.perPage} offset ${(query.page - 1) * query.perPage}`,
-    )
-  ).rows;
+    (await tx.execute<{ total: number }>(
+        sql`select count(*)::int as total from ${from} where ${where}`, "objects",
+      ))[0]?.total ?? 0;
+  const rows = await tx.execute<ManufacturingRow>(
+      sql`select ${fields} from ${from} where ${where} order by ${order} limit ${query.perPage} offset ${(query.page - 1) * query.perPage}`, "objects",
+    );
   return { rows, total, page: query.page, perPage: query.perPage };
 }
 
@@ -211,13 +207,11 @@ export async function manufacturingOptions(
   if (actorId) scope = await lockManufacturingReadAuthority(tx,orgId,actorId,scope);
   const result = {} as ManufacturingOptions;
   const select = async (key: keyof ManufacturingOptions, query: SQL) => {
-    result[key] = (
-      await tx.execute<{
+    result[key] = await tx.execute<{
         value: string;
         label: string;
         parentId?: string | null;
-      }>(query)
-    ).rows;
+      }>(query, "objects");
   };
   await select(
     "items",
@@ -272,7 +266,7 @@ async function measuredOutputByUnit(tx: SqlExecutor, orgId: string, workOrderId:
       from mfg_wo_operations operation
       join mfg_work_orders order_row on order_row.org_id=operation.org_id and order_row.id=operation.work_order_id
      where operation.org_id=${orgId} and operation.work_order_id=${workOrderId} and operation.measured_qty is not null
-     order by operation.sequence desc limit 1`)).rows[0];
+     order by operation.sequence desc limit 1`, "objects"))[0];
   if (!measured) return new Map();
   const profile = (await stockedItems(tx as Runner, orgId, [producedItemId])).get(producedItemId);
   if (!profile) {
@@ -299,24 +293,20 @@ export async function readManufacturingRecord(
   if (actorId) scope = await lockManufacturingReadAuthority(tx,orgId,actorId,scope);
   const sections: ManufacturingRecordData["sections"] = {};
   const rows = async (key: string, query: SQL) => {
-    sections[key] = (await tx.execute<ManufacturingRow>(query)).rows;
+    sections[key] = await tx.execute<ManufacturingRow>(query, "objects");
   };
   if (view === "work-orders") {
     const record = await getWorkOrder(tx, orgId, id);
     if (!record || !subsidiaryScopeAllows(scope, record.subsidiaryId))
       throw new ManufacturingNotFoundError();
-    const item = (
-      await tx.execute<ManufacturingRow>(
-        sql`select id,name,code from items where org_id=${orgId} and id=${record.producedItemId}`,
-      )
-    ).rows[0];
+    const item = (await tx.execute<ManufacturingRow>(
+        sql`select id,name,code from items where org_id=${orgId} and id=${record.producedItemId}`, "objects",
+      ))[0];
     if (!item) throw new ManufacturingNotFoundError();
     // Refuse the whole projection if any current operation or location is outside scope.
-    const hidden = (
-      await tx.execute<{ id: string }>(
-        sql`select r.id from mfg_work_orders r where r.org_id=${orgId} and r.id=${id} and not (true ${orderResourcesVisible(scope, "r")})`,
-      )
-    ).rows;
+    const hidden = await tx.execute<{ id: string }>(
+        sql`select r.id from mfg_work_orders r where r.org_id=${orgId} and r.id=${id} and not (true ${orderResourcesVisible(scope, "r")})`, "objects",
+      );
     if (hidden.length) throw new ManufacturingNotFoundError();
     if(record.receiptReworkInspectionId) await rows(
       "repairSource",
@@ -351,7 +341,7 @@ export async function readManufacturingRecord(
       sql`select m.id,i.name as "itemName",(-m.quantity)::text as quantity,p.base_unit as unit,l.code as location,m.lot_id as "lotId",m.serial_id as "serialId",t.lot_number as "lotNumber",s.serial_number as "serialNumber",m.journal_entry_id as "entryId",e.status,(-m.quantity-coalesce((select sum(allocation.quantity) from mfg_completion_inputs allocation join journal_entries receipt on receipt.org_id=allocation.org_id and receipt.id=allocation.completion_entry_id where allocation.org_id=m.org_id and allocation.input_movement_id=m.id and receipt.status='posted' and receipt.reverses_entry_id is null),0))::text as "unassignedQty",
       not exists(select 1 from inventory_movements reversal where reversal.org_id=m.org_id and reversal.reverses_movement_id=m.id and reversal.status='posted') as "liveIssue",m.created_at::text as "createdAt" from inventory_movements m join journal_entries e on e.org_id=m.org_id and e.id=m.journal_entry_id join items i on i.org_id=m.org_id and i.id=m.item_id join item_inventory_profiles p on p.org_id=m.org_id and p.item_id=m.item_id join stock_locations l on l.org_id=m.org_id and l.id=m.stock_location_id left join lots t on t.org_id=m.org_id and t.id=m.lot_id left join serials s on s.org_id=m.org_id and s.id=m.serial_id where m.org_id=${orgId} and e.origin='manufacturing' and e.custom->>'work_order_number'=${record.number} and m.kind='assembly_consume' ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)} order by m.created_at desc,m.id`,
     );
-    const balanceSources = (await tx.execute<ProcessBalanceSource>(sql`select profile.base_unit as unit,
+    const balanceSources = await tx.execute<ProcessBalanceSource>(sql`select profile.base_unit as unit,
       coalesce(sum(-movement.quantity) filter(where movement.kind='assembly_consume'),0)::text as "inputQuantity",
       coalesce(sum(movement.quantity) filter(where movement.kind='assembly_build'),0)::text as "outputQuantity",
       coalesce(sum(movement.quantity) filter(where movement.kind='assembly_build' and movement.item_id=${record.producedItemId}::uuid),0)::text as "producedOutputQuantity"
@@ -361,7 +351,7 @@ export async function readManufacturingRecord(
         -- Live entries only: the workspace lists standing production only
         and entry.status='posted' and entry.reverses_entry_id is null and movement.status='posted' and movement.reverses_movement_id is null
         and movement.kind in('assembly_consume','assembly_build') and not exists(select 1 from inventory_movements reversal where reversal.org_id=movement.org_id and reversal.reverses_movement_id=movement.id and reversal.status='posted')
-        ${subsidiaryVisibleFilter(sql`entry.subsidiary_id`,scope)} group by profile.base_unit order by profile.base_unit`)).rows;
+        ${subsidiaryVisibleFilter(sql`entry.subsidiary_id`,scope)} group by profile.base_unit order by profile.base_unit`, "objects");
     sections.materialBalance = processBalanceRows(
       balanceSources,
       await measuredOutputByUnit(tx, orgId, id, record.producedItemId as string, record.number as string),
@@ -374,11 +364,9 @@ export async function readManufacturingRecord(
       "children",
       sql`select c.id,c.number,c.status,c.quantity_ordered::text as quantity,c.unit from mfg_work_orders c where c.org_id=${orgId} and c.parent_wo_id=${id} ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, scope)} ${orderResourcesVisible(scope, "c")} order by c.number,c.id`,
     );
-    const entity = (
-      await tx.execute<{ currency: string }>(
-        sql`select base_currency as currency from subsidiaries where org_id=${orgId} and id=${record.subsidiaryId}`,
-      )
-    ).rows[0];
+    const entity = (await tx.execute<{ currency: string }>(
+        sql`select base_currency as currency from subsidiaries where org_id=${orgId} and id=${record.subsidiaryId}`, "objects",
+      ))[0];
     return {
       record: {
         ...record,
@@ -397,7 +385,7 @@ export async function readManufacturingRecord(
       !subsidiaryScopeAllows(scope, record.subsidiaryId as string | null)
     )
       throw new ManufacturingNotFoundError();
-    if (!(await tx.execute(sql`select r.id from mfg_work_centers r where r.org_id=${orgId} and r.id=${id} ${centerResourcesVisible(scope,"r")}`)).rows.length)
+    if (!(await tx.execute(sql`select r.id from mfg_work_centers r where r.org_id=${orgId} and r.id=${id} ${centerResourcesVisible(scope,"r")}`, "objects")).length)
       throw new ManufacturingNotFoundError();
     await rows(
       "rates",
@@ -414,7 +402,7 @@ export async function readManufacturingRecord(
       )
     )
       throw new ManufacturingNotFoundError();
-    const visible = (await tx.execute(sql`select r.id from mfg_routings r where r.org_id=${orgId} and r.id=${id} ${routingResourcesVisible(scope)}`)).rows;
+    const visible = await tx.execute(sql`select r.id from mfg_routings r where r.org_id=${orgId} and r.id=${id} ${routingResourcesVisible(scope)}`, "objects");
     if (!visible.length) throw new ManufacturingNotFoundError();
     await rows(
       "operations",
@@ -431,11 +419,9 @@ export async function readManufacturingRecord(
     return { record: record as ManufacturingRow, sections };
   }
   // Scope is checked before loading suggestions or capacity.
-  const run = (
-    await tx.execute<ManufacturingRow>(
-      sql`select id,parameters from mfg_mrp_runs where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0];
+  const run = (await tx.execute<ManufacturingRow>(
+      sql`select id,parameters from mfg_mrp_runs where org_id=${orgId} and id=${id}`, "objects",
+    ))[0];
   if (
     !run ||
     !subsidiaryScopeAllows(
@@ -465,7 +451,7 @@ export async function manufacturingTracking(
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   if (!isUuid(itemId) || [query.selected,query.lotId].some(value=>value!==undefined&&!isUuid(value)) || (query.q!==undefined&&(typeof query.q!=='string'||query.q.length>200))) throw new ManufacturingNotFoundError();
   if (actorId) scope=await lockManufacturingReadAuthority(tx,orgId,actorId,scope,['manufacturing.read','items.read']);
-  if (!(await tx.execute(sql`select id from items where org_id=${orgId} and id=${itemId}`)).rows.length) throw new ManufacturingNotFoundError();
+  if (!(await tx.execute(sql`select id from items where org_id=${orgId} and id=${itemId}`, "objects")).length) throw new ManufacturingNotFoundError();
   if (scope!==null&&!scope.size) return {lots:[],serials:[]};
   const pattern='%'+(query.q??'').trim()+'%';
   const positions=sql`positions as (
@@ -476,12 +462,12 @@ export async function manufacturingTracking(
     and not exists(select 1 from positions owner where owner.lot_id=lot.id and (owner.subsidiary_id is null or not(owner.subsidiary_id=any(${uuidArray([...scope])}::uuid[]))))`;
   const serialVisible=scope===null?sql`true`:sql`exists(select 1 from positions owner where owner.serial_id=serial.id and owner.subsidiary_id=any(${uuidArray([...scope])}::uuid[]))
     and not exists(select 1 from positions owner where owner.serial_id=serial.id and (owner.subsidiary_id is null or not(owner.subsidiary_id=any(${uuidArray([...scope])}::uuid[]))))`;
-  const lots=(await tx.execute<{value:string;label:string}>(sql`with ${positions} select lot.id as value,lot.lot_number as label from lots lot
+  const lots=await tx.execute<{value:string;label:string}>(sql`with ${positions} select lot.id as value,lot.lot_number as label from lots lot
     where lot.org_id=${orgId} and lot.item_id=${itemId} and lot.hold_reason is null and ${lotVisible}
     and not ${pendingInspectionHold(sql`lot.org_id`,sql`lot.id`,sql`null::uuid`)} and (lot.lot_number ilike ${pattern} ${query.selected?sql`or lot.id=${query.selected}`:sql``})
-    order by ${query.selected?sql`(lot.id=${query.selected}) desc,`:sql``} lot.lot_number,lot.id limit 100`)).rows;
-  if(query.lotId && !(await tx.execute(sql`with ${positions} select lot.id from lots lot where lot.org_id=${orgId} and lot.item_id=${itemId} and lot.id=${query.lotId} and ${lotVisible}`)).rows.length) throw new ManufacturingNotFoundError();
-  const serials=(await tx.execute<{value:string;label:string;parentId:string|null}>(sql`with ${positions} select serial.id as value,serial.serial_number as label,serial.lot_id as "parentId" from serials serial
+    order by ${query.selected?sql`(lot.id=${query.selected}) desc,`:sql``} lot.lot_number,lot.id limit 100`, "objects");
+  if(query.lotId && !(await tx.execute(sql`with ${positions} select lot.id from lots lot where lot.org_id=${orgId} and lot.item_id=${itemId} and lot.id=${query.lotId} and ${lotVisible}`, "objects")).length) throw new ManufacturingNotFoundError();
+  const serials=await tx.execute<{value:string;label:string;parentId:string|null}>(sql`with ${positions} select serial.id as value,serial.serial_number as label,serial.lot_id as "parentId" from serials serial
     join stock_locations stock on stock.org_id=serial.org_id and stock.id=serial.current_stock_location_id
     join locations location on location.org_id=stock.org_id and location.id=stock.location_id
     left join lots lot on lot.org_id=serial.org_id and lot.id=serial.lot_id
@@ -489,7 +475,7 @@ export async function manufacturingTracking(
     and (serial.lot_id is null or ${lotVisible}) and not ${pendingInspectionHold(sql`serial.org_id`,sql`serial.lot_id`,sql`serial.id`)}
     ${query.lotId?sql`and serial.lot_id=${query.lotId}`:sql``} and (serial.serial_number ilike ${pattern} ${query.selected?sql`or serial.id=${query.selected}`:sql``})
     ${subsidiaryVisibleFilter(sql`location.subsidiary_id`,scope,{orgWideNull:true})}
-    order by ${query.selected?sql`(serial.id=${query.selected}) desc,`:sql``} serial.serial_number,serial.id limit 100`)).rows;
+    order by ${query.selected?sql`(serial.id=${query.selected}) desc,`:sql``} serial.serial_number,serial.id limit 100`, "objects");
   return {lots,serials};
 }
 
@@ -535,7 +521,7 @@ export async function searchManufacturingChoices(
       and (p.display_name ilike ${pattern} ${selected ? sql`or p.id=${selected}` : sql``})
       order by ${selected ? sql`(p.id=${selected}) desc,` : sql``} p.display_name,p.id limit 100`;
   }
-  return (await tx.execute<{ value: string; label: string }>(query)).rows;
+  return await tx.execute<{ value: string; label: string }>(query, "objects");
 }
 
 /** Bounded shared-time references use the same whole-order resource fence as the production workspace. */
@@ -547,17 +533,17 @@ export async function searchProductionTimeChoices(tx: SqlExecutor, orgId: string
   const term = `%${input.q?.trim() ?? ''}%`
   if (input.workOrderId) {
     where.append(sql` and r.id=${input.workOrderId}`)
-    return (await tx.execute<{ value: string; label: string }>(sql`
+    return await tx.execute<{ value: string; label: string }>(sql`
       select o.id as value,concat_ws(' · ',o.sequence::text,o.name,c.name) as label from mfg_work_orders r
       join mfg_wo_operations o on o.org_id=r.org_id and o.work_order_id=r.id
       join mfg_work_centers c on c.org_id=o.org_id and c.id=o.work_center_id
       where ${where} and ((r.status in ('released','in_progress') and o.status<>'done') or o.id=${input.selected ?? null})
       and (o.id=${input.selected ?? null} or o.name ilike ${term} or c.name ilike ${term})
-      order by (o.id=${input.selected ?? null}) desc nulls last,o.sequence,o.id limit 50`)).rows
+      order by (o.id=${input.selected ?? null}) desc nulls last,o.sequence,o.id limit 50`, "objects")
   }
-  return (await tx.execute<{ value: string; label: string }>(sql`
+  return await tx.execute<{ value: string; label: string }>(sql`
     select r.id as value,concat_ws(' · ',r.number,i.name) as label from mfg_work_orders r join items i on i.org_id=r.org_id and i.id=r.produced_item_id
     where ${where} and (r.status in ('released','in_progress') or r.id=${input.selected ?? null})
     and (r.id=${input.selected ?? null} or r.number ilike ${term} or i.name ilike ${term})
-    order by (r.id=${input.selected ?? null}) desc nulls last,r.number,r.id limit 50`)).rows
+    order by (r.id=${input.selected ?? null}) desc nulls last,r.number,r.id limit 50`, "objects")
 }

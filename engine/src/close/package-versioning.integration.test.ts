@@ -60,11 +60,9 @@ async function approveAndClose(
 }
 
 async function binderOf(orgId: string, runId: string) {
-  const rows = (
-    await db.execute<{ snapshot: unknown; hash: string | null }>(sql`
+  const rows = await db.execute<{ snapshot: unknown; hash: string | null }>(sql`
     select binder_snapshot as snapshot, binder_hash as hash from close_runs
-     where id = ${runId} and org_id = ${orgId}`)
-  ).rows;
+     where id = ${runId} and org_id = ${orgId}`, "objects");
   return rows[0]!;
 }
 
@@ -91,18 +89,14 @@ test(
         closeApprovedRun(org.orgId, runId, actors.adminId),
         /changed after approval/,
       );
-      const persisted = (
-        await db.execute<{ status: string; approved_at: Date | null }>(sql`
-      select status,approved_at from close_runs where id=${runId} and org_id=${org.orgId}`)
-      ).rows[0]!;
+      const persisted = (await db.execute<{ status: string; approved_at: Date | null }>(sql`
+      select status,approved_at from close_runs where id=${runId} and org_id=${org.orgId}`, "objects"))[0]!;
       assert.equal(persisted.status, "in_progress");
       assert.equal(persisted.approved_at, null);
       assert.equal(
-        (
-          await db.execute<{ count: number }>(sql`
+        (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from close_events
-       where org_id=${org.orgId} and run_id=${runId} and event_type='run.data_changed'`)
-        ).rows[0]!.count,
+       where org_id=${org.orgId} and run_id=${runId} and event_type='run.data_changed'`, "objects"))[0]!.count,
         1,
       );
     } finally {
@@ -157,10 +151,8 @@ test(
         decision: "approved",
         hours: 2,
       });
-      const expense = (
-        await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${org.orgId} and type = 'expense' limit 1`)
-      ).rows[0]!.id;
+      const expense = (await db.execute<{ id: string }>(sql`
+      select id from accounts where org_id = ${org.orgId} and type = 'expense' limit 1`, "objects"))[0]!.id;
       const entryId = randomUUID();
       await db.execute(sql`insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, memo)
@@ -218,16 +210,14 @@ test(
       );
 
       // The original must be retained as run evidence, byte-identical.
-      const superseded = (
-        await db.execute<{
+      const superseded = (await db.execute<{
           payload: {
             superseded_hash: string | null;
             binder_snapshot: unknown;
           };
         }>(sql`
       select payload from close_events where org_id = ${org.orgId} and run_id = ${runId}
-       and event_type = 'package.superseded' order by at desc limit 1`)
-      ).rows[0];
+       and event_type = 'package.superseded' order by at desc limit 1`, "objects"))[0];
       assert.ok(
         superseded,
         "re-publication must retain the superseded package as evidence",

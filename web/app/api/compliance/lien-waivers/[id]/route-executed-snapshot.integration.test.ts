@@ -75,7 +75,7 @@ async function fixture() {
   const waiverId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into lien_waivers (org_id, waiver_number, direction, party_id, project_id, waiver_type, through_date, amount, currency, created_by, updated_by)
     values (${org.orgId}, 'LW-EXEC-1', 'received', ${partyId}, ${projectId}, 'conditional_progress', '2026-03-31', '1000.00', 'CAD', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { org, partyId, projectId, waiverId };
 }
 
@@ -100,10 +100,10 @@ const print = (waiverId: string) =>
   );
 
 async function snapshotOf(waiverId: string) {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ snapshot: { data: Record<string, unknown> } | null }>(
-      sql`select executed_snapshot as snapshot from lien_waivers where id = ${waiverId}`,
-    ))).rows;
+      sql`select executed_snapshot as snapshot from lien_waivers where id = ${waiverId}`, "objects",
+    ));
   return rows[0]!.snapshot;
 }
 

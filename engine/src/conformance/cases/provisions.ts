@@ -32,7 +32,7 @@ async function approvedAssessment(ctx: CaseContext) {
         estimate: { method: 'best_estimate', amount } } }
     const id = await proposeProvisionAssessment(ledger.orgId, actors.submitterId, input)
     await submitFinancialChange(ledger.orgId, id, actors.submitterId)
-    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
     await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: 'approved' })
     return applyProvisionAssessment(ledger.orgId, id, actors.submitterId)
   })

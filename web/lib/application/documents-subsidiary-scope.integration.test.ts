@@ -32,14 +32,14 @@ async function postedBill(org: Awaited<ReturnType<typeof createScratchOrg>>, act
 
 async function revisionOf(orgId: string, id: string): Promise<string> {
   const r = (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`
-    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`)));
-  return r.rows[0]!.revision;
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`, "objects")));
+  return r[0]!.revision;
 }
 
 async function documentCounts(orgId: string): Promise<{ bills: number; statuses: string[] }> {
   const r = (await withOrgContext(orgId, () => db.execute<{ status: string; subsidiary_id: string }>(sql`
-    select status::text, subsidiary_id::text from documents where org_id = ${orgId} and kind = 'vendor_bill' order by created_at`)));
-  return { bills: r.rows.length, statuses: r.rows.map((row) => `${row.status}:${row.subsidiary_id}`) };
+    select status::text, subsidiary_id::text from documents where org_id = ${orgId} and kind = 'vendor_bill' order by created_at`, "objects")));
+  return { bills: r.length, statuses: r.map((row) => `${row.status}:${row.subsidiary_id}`) };
 }
 
 test("a restricted actor cannot re-home a correction into an out-of-scope subsidiary", { skip: !DB }, async () => {
@@ -93,7 +93,7 @@ test("a restricted actor cannot re-home a correction into an out-of-scope subsid
       }
       // Nothing was created or voided by the refused attempts.
       assert.deepEqual(await documentCounts(org.orgId), before);
-      assert.equal((await db.execute(sql`select 1 from documents where id = ${sourceId} and status = 'posted' and void_requested_at is null`)).rows.length, 1);
+      assert.equal((await db.execute(sql`select 1 from documents where id = ${sourceId} and status = 'posted' and void_requested_at is null`, "objects")).length, 1);
 
       // An in-scope metadata correction retains the posted source and records the change.
       const inScope = await correctPostedDocument(context(new Set([org.subsidiaryId])), {
@@ -105,7 +105,7 @@ test("a restricted actor cannot re-home a correction into an out-of-scope subsid
       const after = await documentCounts(org.orgId);
       assert.equal((inScope.result as { correctionOutcome: string }).correctionOutcome, "metadata-correction");
       assert.deepEqual(after, before);
-      const saved = (await db.execute<{ memo: string }>(sql`select memo from documents where org_id=${org.orgId} and id=${sourceId} and status='posted'`)).rows[0];
+      const saved = (await db.execute<{ memo: string }>(sql`select memo from documents where org_id=${org.orgId} and id=${sourceId} and status='posted'`, "objects"))[0];
       assert.equal(saved?.memo, "Corrected source evidence");
     });
   } finally {
@@ -162,8 +162,8 @@ test("journal posting rechecks subsidiary scope after waiting for the document r
           select 1 from pg_stat_activity where datname = current_database()
             and pid <> pg_backend_pid() and wait_event_type = 'Lock'
             and query ilike '%from documents%' and query ilike '%for update%'
-        ) as waiting`));
-      if (activity.rows[0]?.waiting) { waiting = true; break; }
+        ) as waiting`, "objects"));
+      if (activity[0]?.waiting) { waiting = true; break; }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assert.equal(waiting, true, "application posting reached the locked document reread");
@@ -178,11 +178,11 @@ test("journal posting rechecks subsidiary scope after waiting for the document r
     assert.equal(error.code, "forbidden");
     assert.deepEqual(error.details, { permission: "subsidiary.restricted" });
     const state = await withOrgContext(org.orgId, () => db.execute<{ status: string; posted_entry_id: string | null }>(sql`
-      select status, posted_entry_id from documents where id = ${journalId} and org_id = ${org.orgId}`));
-    assert.equal(state.rows[0]?.status, "approved");
-    assert.equal(state.rows[0]?.posted_entry_id, null);
+      select status, posted_entry_id from documents where id = ${journalId} and org_id = ${org.orgId}`, "objects"));
+    assert.equal(state[0]?.status, "approved");
+    assert.equal(state[0]?.posted_entry_id, null);
     assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`
-      select 1 from journal_entries where org_id = ${org.orgId} and source_document_id = ${journalId}`))).rows.length, 0);
+      select 1 from journal_entries where org_id = ${org.orgId} and source_document_id = ${journalId}`, "objects"))).length, 0);
   } finally {
     if (holderOpen) {
       await holder.query("rollback").catch(() => {});

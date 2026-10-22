@@ -61,8 +61,8 @@ export async function loadProjectType(
          limit 1
       ) version on true
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   if (row?.id && row.fp && row.ip && row.bp) {
     if (!row.bm) throw new Error(`project type ${row.id} is missing its billing classification`)
     return { id: row.id, key: row.key!, name: row.name!, billingMethod: row.bm, financialProfile: row.fp, financialProfileEffectiveFrom: row.fp_effective_from, invoicingProfile: row.ip, backupProfile: row.bp }

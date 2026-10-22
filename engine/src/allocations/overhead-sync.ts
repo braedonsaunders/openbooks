@@ -217,8 +217,8 @@ export async function overheadApplicationSettingsFrom(
       from orgs
      where id = ${orgId}
      ${lock ? sql`for share` : sql``}
-  `);
-  const c = r.rows[0]?.c ?? {};
+  `, "objects");
+  const c = r[0]?.c ?? {};
   return {
     mode: c.mode === "net_zero_pair" ? "net_zero_pair" : c.mode === "off" ? "off" : "report_only",
     accountId: typeof c.accountId === "string" ? c.accountId : null,
@@ -242,8 +242,8 @@ async function readHourlyCard(orgId: string): Promise<OverheadRateCardRow[]> {
            effective_from::text as effective_from, effective_to::text as effective_to
       from overhead_rates
      where org_id = ${orgId} and rate_kind = 'per_hour'
-     order by effective_from, department_id nulls first`);
-  return rows.rows.map((row) => ({
+     order by effective_from, department_id nulls first`, "objects");
+  return rows.map((row) => ({
     departmentId: row.department_id,
     category: row.category,
     method: row.method,
@@ -317,11 +317,11 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
         'post', 100, true, true, ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})
       -- Concurrent provisioning reuses the locked rule below and validates its system-owned shape.
       on conflict (org_id, key) do nothing
-      returning id`);
+      returning id`, "objects");
     const headRows = await db.execute<{ id: string; is_system: boolean; mode: string; current_version_id: string | null }>(sql`
       select id, is_system, mode, current_version_id from allocation_rules
-       where org_id = ${orgId} and key = ${OVERHEAD_SYSTEM_RULE_KEY} for update`);
-    const head = headRows.rows[0];
+       where org_id = ${orgId} and key = ${OVERHEAD_SYSTEM_RULE_KEY} for update`, "objects");
+    const head = headRows[0];
     if (!head) throw new OverheadSyncError("overhead system rule vanished during provisioning");
     if (!head.is_system || head.mode !== "post") {
       throw new OverheadSyncError(
@@ -329,7 +329,7 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
       );
     }
     const ruleId = head.id;
-    if (inserted.rows.length > 0) {
+    if (inserted.length > 0) {
       await auditEvidence({
         orgId, table: "allocation_rules", rowId: ruleId, action: "insert",
         event: "rule.provisioned", before: null, after: { key: OVERHEAD_SYSTEM_RULE_KEY }, actorId,
@@ -338,13 +338,11 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
 
     const [policy, card] = await Promise.all([overheadApplicationSettings(orgId), readHourlyCard(orgId)]);
     const derived = deriveOverheadSystemVersion(policy, card);
-    const published: PublishedRow[] = (
-      await db.execute<Record<string, unknown>>(sql`select id, version_no, effective_from::text as effective_from,
+    const published: PublishedRow[] = (await db.execute<Record<string, unknown>>(sql`select id, version_no, effective_from::text as effective_from,
           effective_to::text as effective_to, definition_hash, basis_config
         from allocation_rule_versions
        where org_id = ${orgId} and rule_id = ${ruleId} and status = 'published'
-       order by version_no`)
-    ).rows.map((row) => ({
+       order by version_no`, "objects")).map((row) => ({
       id: String(row["id"]),
       version_no: Number(row["version_no"]),
       effective_from: String(row["effective_from"]),
@@ -378,7 +376,7 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
     );
     if (current !== undefined) {
       const head = (await db.execute<{ current_version_id: string | null }>(sql`
-        select current_version_id from allocation_rules where org_id = ${orgId} and id = ${ruleId}`)).rows[0];
+        select current_version_id from allocation_rules where org_id = ${orgId} and id = ${ruleId}`, "objects"))[0];
       if (head?.current_version_id !== current.id) {
         await db.execute(sql`update allocation_rules
           set current_version_id = ${current.id}, updated_at = now(), updated_by = ${actorId}
@@ -398,19 +396,19 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
         ${JSON.stringify({ managedBy: "overhead-sync" })}, ${actorId}, ${actorId})
       -- Concurrent provisioning reuses the driver below and rejects a conflicting driver definition.
       on conflict (org_id, key) do nothing
-      returning id`);
+      returning id`, "objects");
     const driverRows = await db.execute<{ id: string; dimension: string; source_kind: string; config: unknown; is_active: boolean }>(sql`
       select id, dimension, source_kind, config, is_active from allocation_drivers
-       where org_id = ${orgId} and key = ${OVERHEAD_SYSTEM_DRIVER_KEY}`);
-    const driverId = driverRows.rows[0]?.id ?? null;
+       where org_id = ${orgId} and key = ${OVERHEAD_SYSTEM_DRIVER_KEY}`, "objects");
+    const driverId = driverRows[0]?.id ?? null;
     if (driverId === null) throw new OverheadSyncError("overhead system driver vanished during provisioning");
-    if (driverInserted.rows.length > 0) {
+    if (driverInserted.length > 0) {
       await auditEvidence({
         orgId, table: "allocation_drivers", rowId: driverId, action: "insert",
         event: "driver.provisioned", before: null, after: { key: OVERHEAD_SYSTEM_DRIVER_KEY }, actorId,
       });
     } else {
-      const driver = driverRows.rows[0]!;
+      const driver = driverRows[0]!;
       const config = (driver.config ?? {}) as Record<string, unknown>;
       if (driver.dimension !== "project" || driver.source_kind !== "native_measure" || config["measure"] !== "labor_hours") {
         throw new OverheadSyncError(
@@ -432,7 +430,7 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
     // are empty because every other published version of this rule retires
     // in the same transaction below.
     const books = await db.execute<{ id: string }>(sql`
-      select id from accounting_books where org_id = ${orgId} and is_active and posts_gl`);
+      select id from accounting_books where org_id = ${orgId} and is_active and posts_gl`, "objects");
     const candidate: AllocationRuleVersion = {
       id: "00000000-0000-0000-0000-000000000000",
       orgId,
@@ -451,7 +449,7 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
       mode: "post",
       publishedVersions: [],
       driver: { id: driverId, dimension: "project", isActive: true },
-      activePostingBookIds: books.rows.map((row) => row.id),
+      activePostingBookIds: books.map((row) => row.id),
       // Boundary proof is period-mode only; this derived version is post-mode.
       periods: [],
     });
@@ -472,8 +470,8 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
     }
     const maxRow = await db.execute<{ n: string }>(sql`
       select coalesce(max(version_no), 0)::text as n from allocation_rule_versions
-       where org_id = ${orgId} and rule_id = ${ruleId}`);
-    const versionNo = Number(maxRow.rows[0]?.n ?? "0") + 1;
+       where org_id = ${orgId} and rule_id = ${ruleId}`, "objects");
+    const versionNo = Number(maxRow[0]?.n ?? "0") + 1;
     const versionId = randomUUID();
     const stored: AllocationRuleVersion = { ...candidate, id: versionId, versionNo, status: "published" };
     const hash = definitionHash(stored, []);
@@ -582,8 +580,8 @@ export async function getOverheadSystemRuleEvidence(orgId: string): Promise<Over
       from allocation_rules r
       left join allocation_rule_versions v
         on v.org_id = r.org_id and v.id = r.current_version_id
-     where r.org_id = ${orgId} and r.key = ${OVERHEAD_SYSTEM_RULE_KEY}`);
-  const row = rows.rows[0];
+     where r.org_id = ${orgId} and r.key = ${OVERHEAD_SYSTEM_RULE_KEY}`, "objects");
+  const row = rows[0];
   if (!row || !row.rule_id) {
     return {
       ruleId: null, ruleKey: OVERHEAD_SYSTEM_RULE_KEY, ruleName: OVERHEAD_SYSTEM_RULE_NAME,

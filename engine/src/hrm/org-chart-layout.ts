@@ -22,7 +22,7 @@ export async function loadOrgChartWorkspace(input: { orgId: string; actorId: str
   return withOrgTransaction(input.orgId, async () => {
     if (!await lockAndCheckOrgFeature(db, input.orgId, 'hrm')) throw new HrmOrgChartError('REFUSED', 'Enable Human resources in Company Settings → Features to open the org chart.')
     const chart = await loadOrgChart(input)
-    const row = (await db.execute<{ layout: unknown }>(sql`select settings->'hrmOrgChartLayout' as layout from orgs where id = ${input.orgId}`)).rows[0]
+    const row = (await db.execute<{ layout: unknown }>(sql`select settings->'hrmOrgChartLayout' as layout from orgs where id = ${input.orgId}`, 'objects'))[0]
     if (!row) throw new HrmOrgChartError('NOT_FOUND', 'The organization is unavailable.')
     const saved = savedLayout(row.layout)
     const visible = new Set<string>()
@@ -50,19 +50,19 @@ export async function saveOrgChartLayout(input: { orgId: string; actorId: string
     if (!await actorHasPermission(db, input.orgId, input.actorId, 'hrm.employment.read')) throw new HrmAuthorizationError('Org chart layout editing requires hrm.employment.read. Ask an administrator to grant it in /admin/roles.')
     if (await actorAllowedSubsidiaryIds(db, input.orgId, input.actorId) !== null) throw new UnrestrictedScopeError()
     // The org row serializes layout revisions and feature changes; lock it exclusively before the shared feature check.
-    const row = (await db.execute<{ layout: unknown }>(sql`select settings->'hrmOrgChartLayout' as layout from orgs where id = ${input.orgId} for update`)).rows[0]
+    const row = (await db.execute<{ layout: unknown }>(sql`select settings->'hrmOrgChartLayout' as layout from orgs where id = ${input.orgId} for update`, 'objects'))[0]
     if (!row) throw new HrmOrgChartError('NOT_FOUND', 'The organization is unavailable.')
     if (!await lockAndCheckOrgFeature(db, input.orgId, 'hrm')) throw new HrmOrgChartError('REFUSED', 'Enable Human resources in Company Settings → Features before saving the org chart.')
     const before = savedLayout(row.layout)
     if (before.revision !== parsed.data.expectedRevision) throw new HrmOrgChartError('REFUSED', 'The chart was changed by another editor. Reload the page to review the latest layout before saving. Your unsaved layout has been kept open.')
     const employees = parsed.data.graph.nodes.filter(node => node.kind === 'employee').map(node => node.referenceId!)
     const positions = parsed.data.graph.nodes.filter(node => node.kind === 'vacancy').map(node => node.referenceId!)
-    const employeeRows = employees.length ? (await db.execute(sql`select id from worker_employments where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(employees)}::jsonb)::uuid)`)).rows : []
-    const positionRows = positions.length ? (await db.execute(sql`select id from positions where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(positions)}::jsonb)::uuid)`)).rows : []
+    const employeeRows = employees.length ? (await db.execute(sql`select id from worker_employments where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(employees)}::jsonb)::uuid)`, 'objects')) : []
+    const positionRows = positions.length ? (await db.execute(sql`select id from positions where org_id = ${input.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify(positions)}::jsonb)::uuid)`, 'objects')) : []
     if (employeeRows.length !== employees.length || positionRows.length !== positions.length) throw new HrmOrgChartError('VALIDATION', 'A chart card refers to an unavailable employee or position. Remove that card and choose a record from the sidebar.')
     const after = { revision: before.revision + 1, graph: parsed.data.graph }
-    const updated = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{hrmOrgChartLayout}', ${JSON.stringify(after)}::jsonb, true), updated_at = now() where id = ${input.orgId} returning id`)
-    if (updated.rows.length !== 1) throw new HrmOrgChartError('REFUSED', 'The chart could not be saved. Reload the page and try again.')
+    const updated = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{hrmOrgChartLayout}', ${JSON.stringify(after)}::jsonb, true), updated_at = now() where id = ${input.orgId} returning id`, 'objects')
+    if (updated.length !== 1) throw new HrmOrgChartError('REFUSED', 'The chart could not be saved. Reload the page and try again.')
     await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id) values (${input.orgId}, 'orgs', ${input.orgId}, 'org_chart_layout_saved', ${JSON.stringify({ before, after })}::jsonb, ${input.actorId})`)
     return after
   })

@@ -170,14 +170,14 @@ export interface SecurityInsert {
 
 /** A database-generated, time-ordered identifier, so records keep their recording order. */
 export async function newEquityId(runner: SqlExecutor): Promise<string> {
-  const row = (await runner.execute<{ id: string }>(sql`select public.uuid_generate_v7() as id`)).rows[0];
+  const row = (await runner.execute<{ id: string }>(sql`select public.uuid_generate_v7() as id`, "objects"))[0];
   if (!row) throw equityError("equityIdNotGenerated");
   return row.id;
 }
 
 export async function insertSecurity(runner: SqlExecutor, row: SecurityInsert): Promise<void> {
   const tranches = row.vestingTranches ? JSON.stringify(row.vestingTranches.map((tranche) => ({ date: tranche.date, quantity: tranche.quantity.toString() }))) : null;
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(sql`
     insert into equity_securities (id, org_id, subsidiary_id, security_number, kind, holder_party_id, share_class_id, plan_id, round_id,
       source_security_id, issue_date, quantity, price_per_share, consideration_amount, currency, consideration_account_id,
       vesting_start, vesting_months, cliff_months, vesting_frequency, vesting_tranches, acceleration, acceleration_percent,
@@ -196,7 +196,7 @@ export async function insertSecurity(runner: SqlExecutor, row: SecurityInsert): 
       ${row.dividendYieldPercent}::numeric, ${row.fairValuePerUnit}::numeric, ${row.expenseAttribution}, ${row.memo},
       ${row.journalEntryId}, ${row.idempotencyKey}, ${row.actorId},
       ${row.interestDayCount}, ${row.mfn}, ${row.unvestedRepurchaseBasis}, ${row.fxRate}::numeric)
-    returning id`)).rows;
+    returning id`, "objects");
   if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("security") });
 }
 
@@ -233,7 +233,7 @@ export function nextSecurityNumber(book: EquityBook, kind: SecurityKind, shareCl
 export async function requireHolder(runner: SqlExecutor, orgId: string, partyId: string, field = "holderPartyId"): Promise<string> {
   if (!isUuid(partyId)) throw equityError("holderInvalid", {}, { field });
   const row = (await runner.execute<{ display_name: string; is_active: boolean }>(sql`
-    select display_name, is_active from parties where org_id = ${orgId} and id = ${partyId}`)).rows[0];
+    select display_name, is_active from parties where org_id = ${orgId} and id = ${partyId}`, "objects"))[0];
   if (!row || !row.is_active) throw equityError("holderInactive", {}, { field });
   return row.display_name;
 }
@@ -261,7 +261,7 @@ export async function issueSecurity(input: IssueSecurityInput): Promise<{ id: st
     if (idempotencyKey) {
       const existing = (await db.execute<{ id: string; security_number: string; journal_entry_id: string | null; kind: string; holder_party_id: string; subsidiary_id: string }>(sql`
         select id, security_number, journal_entry_id, kind, holder_party_id, subsidiary_id from equity_securities
-         where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
+         where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`, "objects"))[0];
       if (existing) {
         if (existing.kind !== kind || existing.holder_party_id !== input.holderPartyId || existing.subsidiary_id !== input.subsidiaryId) {
           throw equityError("idempotencyConflict", { subject: fig.choice("issuance") });

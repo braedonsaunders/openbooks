@@ -175,8 +175,8 @@ async function normalizeSubsidiaryRestriction(
   const checkExist = async (ids: string[]): Promise<string | null> => {
     const found = ((await db.execute(sql`
       select id from subsidiaries
-       where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)));
-    const known = new Set(found.rows.map((r) => r.id as string));
+       where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects")));
+    const known = new Set(found.map((r) => r.id as string));
     const missing = ids.find((id) => !known.has(id));
     return missing ? `unknown subsidiary: ${missing}` : null;
   };
@@ -304,14 +304,14 @@ export const POST = defineRoute({
                 ${JSON.stringify(permissions)}, ${JSON.stringify(restriction)}, ${actor.id}, ${actor.id})
         -- A concurrent role-key collision returns the explicit duplicate-role refusal below.
         on conflict (org_id, key) do nothing
-        returning id`);
-      if (!inserted.rows[0]) {
+        returning id`, "objects");
+      if (!inserted[0]) {
         return NextResponse.json({ error: `a role with key "${key}" already exists` }, { status: 409 });
       }
       await seedDashboardDefaultsForOrg(actor.orgId, [key]);
       await audit({
         orgId: actor.orgId,
-        rowId: inserted.rows[0].id,
+        rowId: inserted[0].id,
         action: "insert",
         changes: {
           key: [null, key],
@@ -321,7 +321,7 @@ export const POST = defineRoute({
         },
         actorId: actor.id,
       });
-      return NextResponse.json({ ok: true, id: inserted.rows[0].id });
+      return NextResponse.json({ ok: true, id: inserted[0].id });
     }));
   },
 });
@@ -353,8 +353,8 @@ export const PATCH = defineRoute({
       const existing = ((await db.execute(sql`
         select id, key, name, description, is_built_in, permissions, subsidiary_restriction,
                updated_at::text as updated_at_token
-          from app_roles where id = ${id} and org_id = ${actor.orgId} for update`)));
-      const role = existing.rows[0];
+          from app_roles where id = ${id} and org_id = ${actor.orgId} for update`, "objects")));
+      const role = existing[0];
       if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
       if (role.is_built_in && role.key === "admin") {
         return NextResponse.json({ error: "the Administrator role cannot be edited" }, { status: 403 });
@@ -489,8 +489,8 @@ export const PATCH = defineRoute({
         update app_roles
            set ${sql.join(sets, sql`, `)}, updated_at = clock_timestamp(), updated_by = ${actor.id}
          where id = ${id} and org_id = ${actor.orgId}
-        returning permissions, updated_at::text as updated_at_token`);
-      const stored = updated.rows[0];
+        returning permissions, updated_at::text as updated_at_token`, "objects");
+      const stored = updated[0];
       if (!stored) throw new Error(`role ${id} update matched no row`);
       const persisted = rolePermissionList(stored.permissions);
       if (Array.isArray(changes.permissions)) {
@@ -544,14 +544,14 @@ export const DELETE = defineRoute({
       }>(sql`
         select id, key, name, is_built_in, permissions, subsidiary_restriction from app_roles
          where org_id = ${actor.orgId} and (id = ${id} or id = ${replacementId}::uuid)
-         order by id for update`);
-      const role = locked.rows.find((row) => row.id === id.toLowerCase());
+         order by id for update`, "objects");
+      const role = locked.find((row) => row.id === id.toLowerCase());
       if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
       if (role.is_built_in) {
         return NextResponse.json({ error: "built-in roles cannot be deleted" }, { status: 403 });
       }
       const replacement = replacementId
-        ? locked.rows.find((row) => row.id === replacementId.toLowerCase()) ?? null
+        ? locked.find((row) => row.id === replacementId.toLowerCase()) ?? null
         : null;
       if (replacementId && !replacement) {
         return NextResponse.json({ error: "replacement role not found" }, { status: 404 });
@@ -593,8 +593,8 @@ export const DELETE = defineRoute({
           join users u on u.id = a.user_id and u.org_id = a.org_id
          where a.role_id = ${id} and a.org_id = ${actor.orgId}
          order by u.is_active desc, u.name, a.id
-      `);
-      const stranded = affected.rows.filter((row) => row.is_active && row.other_roles === 0);
+      `, "objects");
+      const stranded = affected.filter((row) => row.is_active && row.other_roles === 0);
       if (stranded.length > 0 && !replacement) {
         const named = stranded.slice(0, 5).map((row) => row.user_name);
         const suffix = stranded.length > named.length ? `, and ${stranded.length - named.length} more` : "";
@@ -608,7 +608,7 @@ export const DELETE = defineRoute({
         );
       }
 
-      for (const row of affected.rows) {
+      for (const row of affected) {
         await tx.execute(sql`
           delete from role_assignments where id = ${row.id} and org_id = ${actor.orgId}`);
         await tx.execute(sql`
@@ -624,11 +624,11 @@ export const DELETE = defineRoute({
             values (${actor.orgId}, ${row.user_id}, ${replacement.id}, ${actor.id}, ${actor.id})
             -- A user already assigned the replacement role keeps that assignment without a duplicate grant.
             on conflict (org_id, user_id, role_id) do nothing
-            returning id`);
-          if (!inserted.rows[0]) continue;
+            returning id`, "objects");
+          if (!inserted[0]) continue;
           await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${actor.orgId}, 'role_assignments', ${inserted.rows[0].id}, 'insert',
+            values (${actor.orgId}, 'role_assignments', ${inserted[0].id}, 'insert',
                     ${JSON.stringify({ userId: [null, row.user_id], roleId: [null, replacement.id], reason: "role_deleted_replacement", replacedRoleId: id })},
                     ${actor.id})`);
         }
@@ -645,7 +645,7 @@ export const DELETE = defineRoute({
         changes: {
           key: [role.key, null],
           name: [role.name, null],
-          removedAssignments: affected.rows.length,
+          removedAssignments: affected.length,
           replacementRoleId: replacement?.id ?? null,
           reassignedUsers: replacement ? stranded.map((row) => row.user_id) : [],
         },
@@ -653,7 +653,7 @@ export const DELETE = defineRoute({
       }, tx);
       return NextResponse.json({
         ok: true,
-        removedAssignments: affected.rows.length,
+        removedAssignments: affected.length,
         reassignedUsers: replacement ? stranded.length : 0,
       });
     }));

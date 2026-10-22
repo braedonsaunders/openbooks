@@ -63,7 +63,7 @@ function asGraceDays(value: unknown, linkId: string): number {
  * grace days, draft). Stored values are re-validated so a row that drifts
  * past its check constraint refuses by name instead of misscheduling. */
 export async function resolveUsageRatingSchedule(orgId: string, linkId: string): Promise<UsageRatingSchedule> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     linkId: string | null;
     cadence: unknown;
     graceDays: unknown;
@@ -73,7 +73,7 @@ export async function resolveUsageRatingSchedule(orgId: string, linkId: string):
     select link_id as "linkId", cadence, grace_days as "graceDays", mode,
            last_rated_period_end::text as "lastRatedPeriodEnd"
       from usage_rating_settings
-     where org_id = ${orgId} and (link_id = ${linkId} or link_id is null)`)).rows;
+     where org_id = ${orgId} and (link_id = ${linkId} or link_id is null)`, "objects");
   const linkRow = rows.find((row) => row.linkId !== null);
   const orgRow = rows.find((row) => row.linkId === null);
   const cadence = linkRow?.cadence ?? orgRow?.cadence ?? DEFAULT_SCHEDULE.cadence;
@@ -121,7 +121,7 @@ async function activeRunForWindow(orgId: string, linkId: string, start: string, 
     select id, input_hash as "inputHash", output_hash as "outputHash", invoice_id as "invoiceId"
       from usage_rating_runs
      where org_id = ${orgId} and link_id = ${linkId}
-       and period_start = ${start} and period_end = ${end} and status = 'active'`)).rows[0] ?? null;
+       and period_start = ${start} and period_end = ${end} and status = 'active'`, "objects"))[0] ?? null;
 }
 
 async function advanceWatermark(
@@ -134,7 +134,7 @@ async function advanceWatermark(
   // Expected on every pass after the first: the link row created by an
   // earlier rating (or by the operator) already exists, so the conflict
   // path only refreshes the watermark instead of failing the scan.
-  const written = await db.execute(sql`
+  const written = await db.execute<never>(sql`
     insert into usage_rating_settings (id, org_id, link_id, cadence, grace_days, mode, last_rated_period_end, created_by, updated_by)
     values (gen_random_uuid(), ${orgId}, ${linkId}, ${schedule.cadence}, ${schedule.graceDays}, ${schedule.mode}, ${periodEnd}, ${actorId}, ${actorId})
     on conflict (org_id, link_id) where link_id is not null
@@ -201,14 +201,14 @@ export async function runDueUsageRating(asOf?: string): Promise<UsageRatingScanR
   // bypass: scheduler-tick — the unscoped scan finds links with closed
   // periods across every production organization.
   const candidates = await withBypass(async () =>
-    (await db.execute<LinkCandidate>(sql`
+    await db.execute<LinkCandidate>(sql`
       select l.org_id as "orgId", l.id as "linkId",
              l.effective_from::text as "effectiveFrom", l.effective_to::text as "effectiveTo",
              s.current_period_start::text as "currentPeriodStart", s.start_on::text as "startOn"
         from subscription_usage_links l
         join subscriptions s on s.org_id = l.org_id and s.id = l.subscription_id
        where s.status = 'active' ${orgScope}
-       order by l.org_id, l.id`)).rows);
+       order by l.org_id, l.id`, "objects"));
   const orgDateFailures = new Map<string, string>();
   const orgToday = new Map<string, string>();
   for (const link of candidates) {
@@ -276,7 +276,7 @@ export async function listUsageRatingSettings(
       : sql`g.link_id is not null ${subsidiaryVisibleFilter(
         sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true },
       )}`;
-    return (await db.execute<UsageRatingSettingRow>(sql`
+    return await db.execute<UsageRatingSettingRow>(sql`
       select g.id, g.link_id as "linkId", l.subscription_id as "subscriptionId",
              c.display_name as "customerName", g.cadence as "cadence",
              g.grace_days as "graceDays", g.mode as "mode",
@@ -287,7 +287,7 @@ export async function listUsageRatingSettings(
         left join parties c on c.org_id = l.org_id and c.id = l.customer_id
        where g.org_id = ${orgId}
          and ${scopeFilter}
-       order by g.link_id nulls first, g.updated_at desc`)).rows;
+       order by g.link_id nulls first, g.updated_at desc`, "objects");
   });
 }
 
@@ -323,7 +323,7 @@ export async function saveUsageRatingSchedule(
           join parties c on c.org_id = l.org_id and c.id = l.customer_id
          where l.org_id = ${orgId} and l.id = ${linkId}
            ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-         for share of l, c`)).rows[0];
+         for share of l, c`, "objects"))[0];
       if (!link) throw new ScopeNotFoundError();
     }
     const current = (await db.execute<{
@@ -334,7 +334,7 @@ export async function saveUsageRatingSchedule(
         from usage_rating_settings where org_id = ${orgId} and link_id is null` : sql`
       select id, cadence, grace_days as "graceDays", mode,
              last_rated_period_end::text as "lastRatedPeriodEnd"
-        from usage_rating_settings where org_id = ${orgId} and link_id = ${linkId}`)).rows[0] ?? null;
+        from usage_rating_settings where org_id = ${orgId} and link_id = ${linkId}`, "objects"))[0] ?? null;
     const before = current === null ? null : {
       cadence: asCadence(current.cadence, linkId ?? "default"),
       graceDays: asGraceDays(current.graceDays, linkId ?? "default"),
@@ -354,14 +354,14 @@ export async function saveUsageRatingSchedule(
           on conflict (org_id) where link_id is null
           do update set cadence = ${after.cadence}, grace_days = ${after.graceDays}, mode = ${after.mode},
                           updated_at = now(), updated_by = ${actorId}
-          returning id`)).rows[0]
+          returning id`, "objects"))[0]
       : (await db.execute<{ id: string }>(sql`
           insert into usage_rating_settings (id, org_id, link_id, cadence, grace_days, mode, created_by, updated_by)
           values (gen_random_uuid(), ${orgId}, ${linkId}, ${after.cadence}, ${after.graceDays}, ${after.mode}, ${actorId}, ${actorId})
           on conflict (org_id, link_id) where link_id is not null
           do update set cadence = ${after.cadence}, grace_days = ${after.graceDays}, mode = ${after.mode},
                           updated_at = now(), updated_by = ${actorId}
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
     if (!saved) throw new Error("the rating schedule was not stored — no row was written; retry the action");
     // Attributable evidence in the SAME transaction as the schedule: a
     // forced audit failure rolls the configuration change back with it.

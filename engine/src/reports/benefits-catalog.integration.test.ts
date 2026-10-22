@@ -32,7 +32,7 @@ test('award report retains snapshot identity, exact currency and lifecycle while
          delivery_method, valuation, fixed_amount)
       values (${org.orgId}, 'RECOGNITION', 'Current policy title', 'reward', ${org.subsidiaryId},
               'USD', '2026-01-01', 'external', 'fixed', '25.0000') returning id
-    `)).rows[0]!
+    `, 'objects'))[0]!
     await db.execute(sql`
       insert into hrm_benefit_awards
         (org_id, program_id, employment_id, period_from, period_to, value, currency,

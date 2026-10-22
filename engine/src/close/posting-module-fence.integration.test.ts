@@ -28,11 +28,9 @@ test("document_close_module matches the engine kind map", { skip: !DB }, async (
   // under the wrong module's lock.
   const org = await createScratchOrg();
   try {
-    const stored = (
-      await db.execute<{ kind: string; module: string }>(
-        sql`select kind, close_module as module from public.openbooks_document_close_modules order by kind`,
-      )
-    ).rows;
+    const stored = await db.execute<{ kind: string; module: string }>(
+        sql`select kind, close_module as module from public.openbooks_document_close_modules order by kind`, "objects",
+      );
     assert.deepEqual(
       stored,
       [...DOCUMENT_KINDS]
@@ -44,21 +42,17 @@ test("document_close_module matches the engine kind map", { skip: !DB }, async (
     // kind the table knows resolves through the function, and the table
     // cannot carry a kind the engine rejects.
     for (const kind of DOCUMENT_KINDS) {
-      const viaFunction = (
-        await db.execute<{ module: string | null }>(
-          sql`select public.document_close_module(${kind}) as module`,
-        )
-      ).rows[0]!.module;
+      const viaFunction = (await db.execute<{ module: string | null }>(
+          sql`select public.document_close_module(${kind}) as module`, "objects",
+        ))[0]!.module;
       assert.equal(viaFunction, closeModuleForDocument(kind), kind);
     }
     // Deliberate asymmetry, pinned: the engine throws on unknown kinds
     // (fail closed at the app boundary) while storage resolves them to null
     // (GL-only recheck; the deferrable source FK stays the backstop).
-    const unknown = (
-      await db.execute<{ module: string | null }>(
-        sql`select public.document_close_module('no_such_kind') as module`,
-      )
-    ).rows[0]!.module;
+    const unknown = (await db.execute<{ module: string | null }>(
+        sql`select public.document_close_module('no_such_kind') as module`, "objects",
+      ))[0]!.module;
     assert.equal(unknown, null);
     assert.throws(() => closeModuleForDocument("no_such_kind"));
   } finally {
@@ -163,7 +157,7 @@ test("a draft->posted flip for a module-closed source document is rejected", { s
       },
     );
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${entry}`)).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${entry}`, "objects"))[0]!.status,
       "draft",
     );
     // Control: a sourceless GL journal in the same open-GL period still posts.
@@ -181,7 +175,7 @@ test("a draft->posted flip for a module-closed source document is rejected", { s
     });
     await db.execute(sql`update journal_entries set status = 'posted', posted_by = ${actor} where id = ${manual}`);
     assert.equal(
-      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${manual}`)).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from journal_entries where id = ${manual}`, "objects"))[0]!.status,
       "posted",
     );
   } finally {
@@ -224,8 +218,8 @@ test("a module close waits for an in-flight posting window", { skip: !DB }, asyn
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
-         and wait_event = 'advisory'`);
-      if (waiting.rows[0]!.n > 0) sightings += 1;
+         and wait_event = 'advisory'`, "objects");
+      if (waiting[0]!.n > 0) sightings += 1;
       if (sightings >= 3) break;
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
@@ -234,9 +228,9 @@ test("a module close waits for an in-flight posting window", { skip: !DB }, asyn
     const [closeResult] = await settled;
     assert.equal(closeResult!.status, "fulfilled", JSON.stringify(closeResult));
     const closed = await db.execute<{ blocked: boolean }>(
-      sql`select public.period_module_blocks_write(${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'ap', false) as blocked`,
+      sql`select public.period_module_blocks_write(${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'ap', false) as blocked`, "objects",
     );
-    assert.equal(closed.rows[0]!.blocked, true);
+    assert.equal(closed[0]!.blocked, true);
   } finally {
     poster.release();
     await dropScratchOrg(org.orgId);
@@ -303,7 +297,7 @@ test("soft-close fences posting in the engine and storage twins alike", { skip: 
       select public.period_module_blocks_write(
         ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', false
       ) as blocked
-    `)).rows[0]!.blocked;
+    `, "objects"))[0]!.blocked;
     assert.equal(blocked, true, "the storage twin blocks a soft-closed period");
     // Control: reopening clears both twins together.
     await setPeriodLockState({
@@ -326,7 +320,7 @@ test("soft-close fences posting in the engine and storage twins alike", { skip: 
       select public.period_module_blocks_write(
         ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', false
       ) as blocked
-    `)).rows[0]!.blocked;
+    `, "objects"))[0]!.blocked;
     assert.equal(unblocked, false, "an open period passes both twins");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -366,7 +360,7 @@ test("posting into a closed period refuses at the engine boundary with the modul
     );
     const entries = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries where org_id = ${org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(entries, 0, "the refused post wrote no journal");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -407,8 +401,8 @@ test("a module close landing mid-posting waits for the fence: the started postin
          where datname = current_database()
            and pid <> pg_backend_pid()
            and wait_event_type = 'Timeout'
-           and wait_event = 'PgSleep'`);
-        if (sleeping.rows[0]!.n > 0) {
+           and wait_event = 'PgSleep'`, "objects");
+        if (sleeping[0]!.n > 0) {
           asleep = true;
           break;
         }
@@ -432,8 +426,8 @@ test("a module close landing mid-posting waits for the fence: the started postin
          where datname = current_database()
            and pid <> pg_backend_pid()
            and wait_event_type = 'Lock'
-           and wait_event = 'advisory'`);
-        if (waiting.rows[0]!.n > 0) sightings += 1;
+           and wait_event = 'advisory'`, "objects");
+        if (waiting[0]!.n > 0) sightings += 1;
         if (sightings >= 3) break;
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
@@ -443,13 +437,13 @@ test("a module close landing mid-posting waits for the fence: the started postin
       assert.equal(closeResult!.status, "fulfilled", JSON.stringify(closeResult));
       const status = (await db.execute<{ status: string }>(sql`
         select status from documents where id = ${invoiceId}
-      `)).rows[0]!.status;
+      `, "objects"))[0]!.status;
       assert.equal(status, "posted", "the started posting wins the race");
       const lock = (await db.execute<{ state: string }>(sql`
         select state from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and module = 'ar'
-      `)).rows[0]!.state;
+      `, "objects"))[0]!.state;
       assert.equal(lock, "closed", "the closer commits once the posting releases the fence");
     } finally {
       await db.execute(sql.raw(`drop trigger if exists probe_posting_sleep_trigger on journal_entries`));

@@ -34,7 +34,7 @@ async function features(orgId:string) {
     throw new BreakageError('Turn on Usage Billing and Revenue Recognition in Company Settings → Features before assessing prepaid breakage')
 }
 async function source(orgId:string,grantId:string,allowed:ReadonlySet<string>|null=null) {
-  const row=(await db.execute<{grant_id:string;amount:string;currency:string;obligation_id:string;contract_id:string;subsidiary_id:string;document_id:string;allocated_price:string;line_amount:string;source_line_id:string}>(sql`
+  const row=await db.execute<{grant_id:string;amount:string;currency:string;obligation_id:string;contract_id:string;subsidiary_id:string;document_id:string;allocated_price:string;line_amount:string;source_line_id:string}>(sql`
     select grant_record.id as grant_id,grant_record.amount::text,grant_record.currency_code as currency,
       obligation.id as obligation_id,obligation.contract_id,coalesce(contract.subsidiary_id,line.subsidiary_id,document.subsidiary_id) as subsidiary_id,
       document.id as document_id,obligation.allocated_price::text,line.amount::text as line_amount,line.id as source_line_id
@@ -46,7 +46,7 @@ async function source(orgId:string,grantId:string,allowed:ReadonlySet<string>|nu
     where grant_record.org_id=${orgId} and grant_record.id=${grantId} and document.kind='customer_invoice' and document.status='posted'
       and rule.method='usage' and obligation.status<>'cancelled' and contract.status<>'cancelled'
       and not exists(select 1 from recognition_schedules schedule where schedule.org_id=obligation.org_id and schedule.obligation_id=obligation.id and schedule.change_basis->>'retired'='true')
-      ${subsidiaryVisibleFilter(sql`coalesce(contract.subsidiary_id,line.subsidiary_id,document.subsidiary_id)`,allowed)}`)).rows
+      ${subsidiaryVisibleFilter(sql`coalesce(contract.subsidiary_id,line.subsidiary_id,document.subsidiary_id)`,allowed)}`, 'objects')
   if (row.length!==1 || !row[0]!.subsidiary_id) throw new ScopeNotFoundError()
   return row[0]!
 }
@@ -63,20 +63,20 @@ async function lockSource(orgId:string,grantId:string) {
 }
 async function basis(orgId:string,grantId:string,date:string) {
   const grant=await lockSource(orgId,grantId)
-  const draws=(await db.execute<{id:string;amount:string}>(sql`select id,amount::text from usage_prepaid_draws where org_id=${orgId} and grant_id=${grantId} and period_month<=${date}::date order by id`)).rows
-  const events=(await db.execute<{id:string;amount:string}>(sql`select id,amount::text from recognition_events where org_id=${orgId} and obligation_id=${grant.obligation_id}
-    and source_reference like 'prepaid-breakage:%' order by id`)).rows
-  const estimates=(await db.execute<{id:string;effective_on:string}>(sql`select id,effective_on::text from financial_changes where org_id=${orgId} and domain='revenue' and operation='expected_breakage_estimate'
+  const draws=await db.execute<{id:string;amount:string}>(sql`select id,amount::text from usage_prepaid_draws where org_id=${orgId} and grant_id=${grantId} and period_month<=${date}::date order by id`, 'objects')
+  const events=await db.execute<{id:string;amount:string}>(sql`select id,amount::text from recognition_events where org_id=${orgId} and obligation_id=${grant.obligation_id}
+    and source_reference like 'prepaid-breakage:%' order by id`, 'objects')
+  const estimates=await db.execute<{id:string;effective_on:string}>(sql`select id,effective_on::text from financial_changes where org_id=${orgId} and domain='revenue' and operation='expected_breakage_estimate'
     and subject_id=${grant.contract_id} and status='applied' and payload->>'grantId' in
-      (select id::text from usage_prepaid_grants where org_id=${orgId} and source_document_line_id=${grant.source_line_id}) order by effective_on,id`)).rows
+      (select id::text from usage_prepaid_grants where org_id=${orgId} and source_document_line_id=${grant.source_line_id}) order by effective_on,id`, 'objects')
   if (estimates.some(row=>row.effective_on>date)) throw new BreakageError('A later breakage estimate is already applied — use that date or a later date for the correcting assessment')
-  const pool=(await db.execute<{id:string;amount:string;drawn:string}>(sql`select grant_record.id,grant_record.amount::text,
+  const pool=await db.execute<{id:string;amount:string;drawn:string}>(sql`select grant_record.id,grant_record.amount::text,
     coalesce((select sum(amount) from usage_prepaid_draws draw where draw.org_id=grant_record.org_id and draw.grant_id=grant_record.id and draw.period_month<=${date}::date),0)::text as drawn
-    from usage_prepaid_grants grant_record where grant_record.org_id=${orgId} and grant_record.source_document_line_id=${grant.source_line_id} order by grant_record.id`)).rows
-  const policies=(await db.execute<{grant_id:string;estimate:BreakageEstimate}>(sql`select distinct on(payload->>'grantId') payload->>'grantId' as grant_id,payload->'estimate' as estimate
+    from usage_prepaid_grants grant_record where grant_record.org_id=${orgId} and grant_record.source_document_line_id=${grant.source_line_id} order by grant_record.id`, 'objects')
+  const policies=await db.execute<{grant_id:string;estimate:BreakageEstimate}>(sql`select distinct on(payload->>'grantId') payload->>'grantId' as grant_id,payload->'estimate' as estimate
     from financial_changes where org_id=${orgId} and domain='revenue' and operation='expected_breakage_estimate' and subject_id=${grant.contract_id} and status='applied'
       and payload->>'grantId' in (select id::text from usage_prepaid_grants where org_id=${orgId} and source_document_line_id=${grant.source_line_id})
-    order by payload->>'grantId',effective_on desc,jsonb_array_length(before_state->'estimates') desc,created_at desc,id desc`)).rows
+    order by payload->>'grantId',effective_on desc,jsonb_array_length(before_state->'estimates') desc,created_at desc,id desc`, 'objects')
   return {grant,draws,events,estimates,pool,policies,drawn:sum(draws.map(row=>row.amount)),recognizedBreakage:sum(events.map(row=>row.amount))}
 }
 function measure(amount:string,drawn:string,estimate:BreakageEstimate) {
@@ -102,8 +102,8 @@ function measure(amount:string,drawn:string,estimate:BreakageEstimate) {
 async function ensureOpen(orgId:string,grant:Awaited<ReturnType<typeof source>>,date:string) {
   const period=await resolveCoveringPeriod(db,orgId,date)
   if (!period) throw new BreakageError('Create an open accounting period covering the breakage assessment date')
-  const books=(await db.execute<{id:string}>(sql`select distinct book.id from recognition_schedules schedule join accounting_books book on book.org_id=schedule.org_id and book.id=schedule.book_id
-    where schedule.org_id=${orgId} and schedule.obligation_id=${grant.obligation_id} and book.is_active and book.posts_gl order by book.id`)).rows
+  const books=await db.execute<{id:string}>(sql`select distinct book.id from recognition_schedules schedule join accounting_books book on book.org_id=schedule.org_id and book.id=schedule.book_id
+    where schedule.org_id=${orgId} and schedule.obligation_id=${grant.obligation_id} and book.is_active and book.posts_gl order by book.id`, 'objects')
   if (!books.length) throw new BreakageError('Restore the prepaid obligation’s native recognition schedules before assessing breakage')
   try {for (const book of books) await assertPeriodModulesOpen(db,{orgId,periodId:period.id,bookId:book.id,subsidiaryIds:[grant.subsidiary_id],modules:[]})}
   catch(error){if(error instanceof CloseError)throw new BreakageError(`${error.message} — use an open assessment date or the controlled reopen workflow in Accounting → Close`);throw error}
@@ -152,7 +152,7 @@ export async function applyExpectedBreakage(orgId:string,changeId:string,actorId
   return withOrgTransaction(orgId,async()=> {
     await lockActorCommandAuthority(db,orgId,actorId,null,'ar.post')
     await features(orgId)
-    if (!(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${changeId} and domain='revenue' and operation='expected_breakage_estimate' for update`)).rows.length) throw new ScopeNotFoundError()
+    if (!(await db.execute(sql`select id from financial_changes where org_id=${orgId} and id=${changeId} and domain='revenue' and operation='expected_breakage_estimate' for update`, 'objects')).length) throw new ScopeNotFoundError()
     const change=await loadFinancialChange(db,orgId,changeId)
     await lockActorCommandAuthority(db,orgId,actorId,change.subsidiary_id,'ar.post')
     if (change.status==='applied') return change.result!
@@ -173,7 +173,7 @@ export async function refreshPrepaidBreakage(orgId:string,grantId:string,periodM
   // predecessor count orders same-day revisions even when timestamps tie.
   const policy=(await db.execute<{id:string;effective_on:string;estimate:BreakageEstimate}>(sql`select id,effective_on::text,payload->'estimate' as estimate from financial_changes
     where org_id=${orgId} and domain='revenue' and operation='expected_breakage_estimate' and payload->>'grantId'=${grantId} and status='applied'
-    order by effective_on desc,jsonb_array_length(before_state->'estimates') desc,created_at desc,id desc limit 1`)).rows[0]
+    order by effective_on desc,jsonb_array_length(before_state->'estimates') desc,created_at desc,id desc limit 1`, 'objects'))[0]
   if (!policy) return
   await features(orgId)
   const date=periodMonth>policy.effective_on ? periodMonth : policy.effective_on
@@ -184,9 +184,9 @@ export async function refreshPrepaidBreakage(orgId:string,grantId:string,periodM
 /** Draw writers acquire the native contract mutex before grant row locks,
  * including when the first estimate has not been approved yet. */
 export async function lockPrepaidRecognitionContract(orgId:string,grantId:string) {
-  const rows=(await db.execute<{contract_id:string}>(sql`select distinct obligation.contract_id from usage_prepaid_grants grant_record
+  const rows=await db.execute<{contract_id:string}>(sql`select distinct obligation.contract_id from usage_prepaid_grants grant_record
     join performance_obligations obligation on obligation.org_id=grant_record.org_id and obligation.document_line_id=grant_record.source_document_line_id
-    where grant_record.org_id=${orgId} and grant_record.id=${grantId} order by obligation.contract_id`)).rows
+    where grant_record.org_id=${orgId} and grant_record.id=${grantId} order by obligation.contract_id`, 'objects')
   for (const row of rows) await lockRevenueContract(db,orgId,row.contract_id)
 }
 
@@ -194,7 +194,7 @@ export async function breakageGrantOptions(orgId:string,actorId:string,contractI
   return withOrgTransaction(orgId,async()=> {
     const allowed=await lockActorCommandAuthority(db,orgId,actorId,null,'ar.post')
     if (!await lockAndCheckOrgFeature(db,orgId,'usageBilling') || !await lockAndCheckOrgFeature(db,orgId,'revenueRecognition')) return []
-    return (await db.execute<{id:string;amount:string;currency:string;description:string}>(sql`
+    return await db.execute<{id:string;amount:string;currency:string;description:string}>(sql`
       select grant_record.id,grant_record.amount::text,grant_record.currency_code as currency,obligation.description
       from usage_prepaid_grants grant_record join document_lines line on line.org_id=grant_record.org_id and line.id=grant_record.source_document_line_id
         join documents document on document.org_id=line.org_id and document.id=line.document_id
@@ -205,7 +205,7 @@ export async function breakageGrantOptions(orgId:string,actorId:string,contractI
         and obligation.status<>'cancelled' and contract.status<>'cancelled'
         and not exists(select 1 from recognition_schedules schedule where schedule.org_id=obligation.org_id and schedule.obligation_id=obligation.id and schedule.change_basis->>'retired'='true')
         ${subsidiaryVisibleFilter(sql`coalesce(contract.subsidiary_id,line.subsidiary_id,document.subsidiary_id)`,allowed)}
-      order by obligation.description,grant_record.id`)).rows
+      order by obligation.description,grant_record.id`, 'objects')
   })
 }
 
@@ -218,7 +218,7 @@ function allocatedAmount(price:string,face:string,exercised:string) {
  * Cumulative source allocation owns rounding across every grant on the same
  * promise; billed credit amounts are not a second transaction price. */
 export async function prepaidRecognitionAdjustment(orgId:string,grantId:string) {
-  const rows=(await db.execute<{obligation_id:string;allocated_price:string;line_amount:string;drawn:string;recognized:string}>(sql`
+  const rows=await db.execute<{obligation_id:string;allocated_price:string;line_amount:string;drawn:string;recognized:string}>(sql`
     select obligation.id as obligation_id,obligation.allocated_price::text,line.amount::text as line_amount,
       coalesce((select sum(draw.amount) from usage_prepaid_draws draw join usage_prepaid_grants sibling on sibling.org_id=draw.org_id and sibling.id=draw.grant_id
         where sibling.org_id=line.org_id and sibling.source_document_line_id=line.id),0)::text as drawn,
@@ -227,7 +227,7 @@ export async function prepaidRecognitionAdjustment(orgId:string,grantId:string) 
     from usage_prepaid_grants grant_record join document_lines line on line.org_id=grant_record.org_id and line.id=grant_record.source_document_line_id
       join performance_obligations obligation on obligation.org_id=line.org_id and obligation.document_line_id=line.id
     where grant_record.org_id=${orgId} and grant_record.id=${grantId} and obligation.status<>'cancelled'
-      and not exists(select 1 from recognition_schedules schedule where schedule.org_id=obligation.org_id and schedule.obligation_id=obligation.id and schedule.change_basis->>'retired'='true')`)).rows
+      and not exists(select 1 from recognition_schedules schedule where schedule.org_id=obligation.org_id and schedule.obligation_id=obligation.id and schedule.change_basis->>'retired'='true')`, 'objects')
   if(rows.length!==1)throw new BreakageError('Restore the source invoice’s single live usage obligation through Revenue before recognizing its prepaid draws')
   const row=rows[0]!
   return add(allocatedAmount(row.allocated_price,row.line_amount,row.drawn),neg(row.recognized))

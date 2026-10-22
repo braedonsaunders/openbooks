@@ -73,7 +73,7 @@ test("fx revaluation clears unrealized positions on a secondary book", { skip: !
 
     const postedBook = (await db.execute<{ book_id: string }>(sql`
       select distinct e.book_id from journal_entries e
-       where e.org_id = ${org.orgId} and e.origin = 'fx_revaluation'`)).rows.map((r) => r.book_id);
+       where e.org_id = ${org.orgId} and e.origin = 'fx_revaluation'`, "objects")).map((r) => r.book_id);
     assert.deepEqual(postedBook, [taxBookId], "adjustment must land on the tax book, never primary");
 
     const after = await withOrgContext(org.orgId, () =>
@@ -128,7 +128,7 @@ test("secondary-book revaluation keeps book accounts and maps only the gain or l
     await db.execute(sql`update journal_entries set status='posted', posted_at=now(), posted_by=${actorId} where id=${entryId}`);
 
     const types = new Map((await db.execute<{ id: string; type: string }>(sql`
-      select id, type from accounts where org_id = ${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.fxGainLoss})`)).rows
+      select id, type from accounts where org_id = ${org.orgId} and id in (${org.accounts.bank}, ${org.accounts.fxGainLoss})`, "objects"))
       .map((row) => [row.id, row.type]));
     const bookBank = await seedPostingAccount(org.orgId, "1015", "Tax book USD cash", types.get(org.accounts.bank)!);
     const bookGainLoss = await seedPostingAccount(org.orgId, "7915", "Tax book unrealized FX", types.get(org.accounts.fxGainLoss)!);
@@ -151,7 +151,7 @@ test("secondary-book revaluation keeps book accounts and maps only the gain or l
       select l.account_id, sum(l.amount)::text as amount from journal_lines l
         join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
        where e.org_id = ${org.orgId} and e.origin = 'fx_revaluation' and e.reverses_entry_id is null
-       group by l.account_id`)).rows.map((row) => [row.account_id, row.amount]));
+       group by l.account_id`, "objects")).map((row) => [row.account_id, row.amount]));
     assert.deepEqual(lines, new Map([[org.accounts.bank, "1.0000"], [bookGainLoss, "-1.0000"]]));
 
     const rerun = await withOrgContext(org.orgId, () =>

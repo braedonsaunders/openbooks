@@ -1,61 +1,39 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import test, { before, after } from "node:test";
+import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrgReporting,
   type ScratchOrg,
-  assertDedicatedFixtureDatabase,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const FORMAT_CONSTRAINTS = ["pay_run_bank_files_format", "pay_run_bank_files_format_numbering"] as const;
-let originalConstraints: { name: string; definition: string; validated: boolean; comment: string | null }[] = [];
-const MIGRATION_0201 = readFileSync(
-  new URL("../../../schema/migrations/generated/0201_pay_run_bank_file_sepa_cemtex.sql", import.meta.url),
-  "utf8",
-);
-const MIGRATION_0206 = readFileSync(
-  new URL("../../../schema/migrations/generated/0206_pay_run_bank_file_bacs.sql", import.meta.url),
-  "utf8",
-);
-const MIGRATION_0211 = readFileSync(
-  new URL("../../../schema/migrations/generated/0211_pay_run_bank_file_zengin_cnab240.sql", import.meta.url),
-  "utf8",
-);
 
 /**
- * Migration 0201 admits `sepa` and `cemtex` to pay_run_bank_files; migration
- * 0206 admits `bacs` on top of 0201; migration 0211 admits `zengin` and
- * `cnab240` on top of 0206 — one ordinal for both formats together.
+ * pay_run_bank_files admits each payroll bank-file format through two
+ * constraints that must agree: the format gate (pay_run_bank_files_format)
+ * and the numbering twin (pay_run_bank_files_format_numbering), whose arms
+ * each name a format and REQUIRE its numbering shape. Widening only the
+ * format gate would still refuse every row of a newly admitted format, so
+ * the positive inserts below prove each format lands with the shape its
+ * writer emits.
  *
- * The defect (both times): the format CHECK admitted only the formats known
- * so far, AND the numbering twin was an OR of exactly N arms, each REQUIRING
- * a format-specific shape — so widening only the format CHECK would still
- * have refused every new-format row. Each migration drops and re-adds BOTH
- * constraints with one honest arm per format.
- *
- * The positive inserts below replicate the artifact writer's own write
- * column-for-column. Verified against the code (not inferred):
- * engine/src/payroll/bank-file-artifact.ts writes
+ * The positive inserts replicate the artifact writer's own write
+ * column-for-column. engine/src/payroll/bank-file-artifact.ts writes
  * `fileCreationNumber = format === "cpa005" ? ... : null` and
- * `fileIdModifier = format === "nacha" ? ... : null`, so sepa, cemtex and
- * bacs all store NULL in BOTH numbering columns, with traceability in
- * sequence_value (SEPA's messageId is the fileNumber derived from that same
- * allocation; the Bacs VOL1 serial and UHL1 file number are locals passed to
- * the renderer and live in the file bytes, the Cemtex precedent — and the
- * same holds for zengin's bank-facing identity and cnab240's NSA arquivo
- * sequence, whose writers live on their own branches). A full
- * generatePayRunBankFile drive is not possible here: no EUR/AUD/GBP
- * calculation fixture exists on main to produce a committed run for those
- * rails, so the insert asserts exactly what the writer emits.
+ * `fileIdModifier = format === "nacha" ? ... : null`, so sepa, cemtex, bacs,
+ * zengin and cnab240 store NULL in BOTH numbering columns, with
+ * traceability in sequence_value (SEPA's messageId is the fileNumber derived
+ * from that same allocation; the Bacs VOL1 serial and UHL1 file number,
+ * zengin's bank-facing identity and cnab240's NSA arquivo sequence are
+ * renderer locals that live in the file bytes).
  *
- * The negative half is the point: admitting two formats must not stop
- * checking the other two. Every malformed row below must still be refused
- * BY CONSTRAINT NAME.
+ * The negative half is the point: admitting a format must not stop checking
+ * the others. Every malformed row below must still be refused BY CONSTRAINT
+ * NAME.
  */
 
 type BankFileParents = {
@@ -77,17 +55,6 @@ function errorChain(error: unknown): string {
     current = (current as { cause?: unknown }).cause;
   }
   return messages.join("\n");
-}
-
-/** First SQLSTATE found walking the error/cause chain (drizzle nests the driver error). */
-function errorCode(error: unknown): unknown {
-  let current: unknown = error;
-  while (current && typeof current === "object") {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === "string" && code.length > 0) return code;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return undefined;
 }
 
 /** Scratch org with every parent row a pay_run_bank_files insert requires. */
@@ -199,83 +166,19 @@ async function insertArtifact(
   return artifactId;
 }
 
-before(async () => {
-  if (DB) {
-    await assertDedicatedFixtureDatabase();
-    originalConstraints = (await pool.query<{ name: string; definition: string; validated: boolean; comment: string | null }>(`
-      select conname as name, pg_get_constraintdef(oid) as definition, convalidated as validated,
-             obj_description(oid,'pg_constraint') as comment
-        from pg_constraint where conrelid='public.pay_run_bank_files'::regclass and conname=any($1::text[])
-       order by conname`, [FORMAT_CONSTRAINTS])).rows;
-    assert.equal(originalConstraints.length, FORMAT_CONSTRAINTS.length);
-    // Each migration assumes its predecessor has run: apply in ordinal
-    // order, each twice to prove the replay the header promises.
-    await pool.query(MIGRATION_0201);
-    await pool.query(MIGRATION_0201);
-    await pool.query(MIGRATION_0206);
-    await pool.query(MIGRATION_0206);
-    await pool.query(MIGRATION_0211);
-    await pool.query(MIGRATION_0211);
-  }
-});
-
-after(async () => {
-  if (!DB || originalConstraints.length === 0) return;
-  // Historical admission tests must not replace newer published protections
-  // for subsequent callers in the same isolated database.
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    for (const original of originalConstraints) {
-      assert(FORMAT_CONSTRAINTS.includes(original.name as typeof FORMAT_CONSTRAINTS[number]));
-      await client.query(`alter table public.pay_run_bank_files drop constraint ${original.name}`);
-      await client.query(`alter table public.pay_run_bank_files add constraint ${original.name} ${original.definition}`);
-      const literal = original.comment === null ? "null" : "'" + original.comment.replaceAll("'", "''") + "'";
-      await client.query(`comment on constraint ${original.name} on public.pay_run_bank_files is ${literal}`);
-    }
-    const restored = (await client.query<{ name: string; definition: string; validated: boolean; comment: string | null }>(`
-      select conname as name, pg_get_constraintdef(oid) as definition, convalidated as validated,
-             obj_description(oid,'pg_constraint') as comment
-        from pg_constraint where conrelid='public.pay_run_bank_files'::regclass and conname=any($1::text[])
-       order by conname`, [FORMAT_CONSTRAINTS])).rows;
-    assert.deepEqual(restored, originalConstraints);
-    await client.query("commit");
-  } catch (error) {
-    await client.query("rollback");
-    throw error;
-  } finally {
-    client.release();
-  }
-});
-
-test("0201 payroll bank-file format migration replays cleanly", { skip: !DB }, async () => {
-  for (const name of ["pay_run_bank_files_format", "pay_run_bank_files_format_numbering"]) {
-    const constraint = (await db.execute<{ validated: boolean }>(sql`
-      select convalidated as validated
-        from pg_constraint
-       where conrelid = 'public.pay_run_bank_files'::regclass
-         and conname = ${name}`)).rows[0];
-    assert.deepEqual(constraint, { validated: true }, `${name} must be present and validated`);
-  }
-});
-
-test("0206 admits bacs to both constraints with a fifth null-null arm", { skip: !DB }, async () => {
-  const defs = (await db.execute<{ name: string; def: string }>(sql`
-    select conname as name, pg_get_constraintdef(oid) as def
+test("both format constraints are installed, validated and free of a permissive catch-all", { skip: !DB }, async () => {
+  const constraints = await db.execute<{ name: string; validated: boolean; def: string }>(sql`
+    select conname as name, convalidated as validated, pg_get_constraintdef(oid) as def
       from pg_constraint
      where conrelid = 'public.pay_run_bank_files'::regclass
-       and conname in ('pay_run_bank_files_format', 'pay_run_bank_files_format_numbering')`)).rows;
-  const format = defs.find((row) => row.name === "pay_run_bank_files_format")!;
-  const numbering = defs.find((row) => row.name === "pay_run_bank_files_format_numbering")!;
-  assert.ok(format.def.includes("'bacs'"), `format gate must name bacs, got: ${format.def}`);
-  assert.ok(
-    numbering.def.includes("format = 'bacs'")
-      && numbering.def.includes("file_creation_number IS NULL")
-      && numbering.def.includes("file_id_modifier IS NULL"),
-    `numbering gate must carry an exact bacs null-null arm, got: ${numbering.def}`,
-  );
-  // No permissive catch-all: every arm names its format.
-  assert.doesNotMatch(numbering.def, /NOT IN/i);
+       and conname = any(${`{${FORMAT_CONSTRAINTS.join(",")}}`}::text[])
+     order by conname`, "objects");
+  assert.deepEqual(constraints.map(({ name, validated }) => ({ name, validated })),
+    FORMAT_CONSTRAINTS.map((name) => ({ name, validated: true })));
+  // Every numbering arm names the formats it admits; an exclusion list would
+  // silently admit any format the gate later widens to.
+  const numbering = constraints.find((row) => row.name === "pay_run_bank_files_format_numbering")!;
+  assert.doesNotMatch(numbering.def, /NOT IN|<> ALL/i);
 });
 
 test("sepa and cemtex artifacts insert with the writer's null-null numbering shape", { skip: !DB }, async () => {
@@ -357,7 +260,7 @@ test("bacs artifacts insert with the writer's null-null numbering shape", { skip
 test("malformed bank-file rows are still refused by constraint name", { skip: !DB }, async () => {
   const fx = await bankFileParents("refused");
   try {
-    // sepa must not carry a cpa005 number: the new arm states null-null.
+    // sepa must not carry a cpa005 number: its arm states null-null.
     await assert.rejects(
       insertArtifact(fx, {
         format: "sepa", sequenceNumber: 11, sequenceValue: 11,
@@ -375,7 +278,7 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "cemtex with a file_id_modifier must be refused",
     );
-    // The legacy arms keep checking: cpa005 with a zero number, a modifier,
+    // The cpa005 and nacha arms keep checking: cpa005 with a zero number, a modifier,
     // and nacha with a number are all still refused.
     await assert.rejects(
       insertArtifact(fx, {
@@ -456,31 +359,6 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
   }
 });
 
-test("0211 admits zengin and cnab240 to both constraints with sixth and seventh null-null arms", { skip: !DB }, async () => {
-  const defs = (await db.execute<{ name: string; def: string }>(sql`
-    select conname as name, pg_get_constraintdef(oid) as def
-      from pg_constraint
-     where conrelid = 'public.pay_run_bank_files'::regclass
-       and conname in ('pay_run_bank_files_format', 'pay_run_bank_files_format_numbering')`)).rows;
-  const format = defs.find((row) => row.name === "pay_run_bank_files_format")!;
-  const numbering = defs.find((row) => row.name === "pay_run_bank_files_format_numbering")!;
-  assert.ok(format.def.includes("'zengin'") && format.def.includes("'cnab240'"), `format gate must name zengin and cnab240, got: ${format.def}`);
-  // The five earlier formats stay admitted: the re-ADD lists all seven.
-  for (const name of ["'cpa005'", "'nacha'", "'sepa'", "'cemtex'", "'bacs'"]) {
-    assert.ok(format.def.includes(name), `format gate must keep ${name}, got: ${format.def}`);
-  }
-  for (const name of ["zengin", "cnab240"]) {
-    assert.ok(
-      numbering.def.includes(`format = '${name}'`)
-        && numbering.def.includes("file_creation_number IS NULL")
-        && numbering.def.includes("file_id_modifier IS NULL"),
-      `numbering gate must carry an exact ${name} null-null arm, got: ${numbering.def}`,
-    );
-  }
-  // No permissive catch-all: every arm names its format.
-  assert.doesNotMatch(numbering.def, /NOT IN/i);
-});
-
 test("zengin and cnab240 artifacts insert with the writer's null-null numbering shape", { skip: !DB }, async () => {
   const fx = await bankFileParents("zengin-cnab240-ok");
   try {
@@ -510,111 +388,6 @@ test("zengin and cnab240 artifacts insert with the writer's null-null numbering 
       { id: zenginId, format: "zengin", sequenceValue: 7, fileCreationNumber: null, fileIdModifier: null },
       { id: cnabId, format: "cnab240", sequenceValue: 8, fileCreationNumber: null, fileIdModifier: null },
     ]);
-  } finally {
-    await dropScratchOrgReporting(fx.org.orgId);
-  }
-});
-
-test("red-proof: without 0206 the bacs insert dies on the format gate", { skip: !DB }, async () => {
-  // It temporarily restores the 0201-only state (both constraints dropped
-  // and re-added without bacs), proves the bacs row is refused there, then
-  // re-applies 0206 and proves the same row inserts again. The 0211
-  // red-proof runs after this one and leaves 0211 applied.
-  const fx = await bankFileParents("bacs-redproof");
-  try {
-    await pool.query(MIGRATION_0201);
-    const outcome: { inserted: true } | { inserted: false; code: unknown; chain: string } =
-      await insertArtifact(fx, {
-        format: "bacs", sequenceNumber: 1, sequenceValue: 21,
-        fileCreationNumber: null, fileIdModifier: null,
-      }).then(
-        () => ({ inserted: true as const }),
-        (error: unknown) => ({
-          inserted: false as const,
-          code: errorCode(error),
-          chain: errorChain(error),
-        }),
-      );
-    assert.equal(outcome.inserted, false, "without 0206 the bacs insert must be refused");
-    if (!outcome.inserted) {
-      // The exact refusal the gate must produce: SQLSTATE 23514 naming the
-      // format CHECK. The code rides on the nested driver error, not the
-      // outer message — assert both halves so the quote below is literal.
-      assert.equal(outcome.code, "23514", `expected SQLSTATE 23514, got: ${outcome.chain}`);
-      assert.ok(
-        outcome.chain.includes('violates check constraint "pay_run_bank_files_format"'),
-        `without 0206 the bacs insert must die on the format gate, got: ${outcome.chain}`,
-      );
-    }
-    const refused = (await db.execute<{ count: string }>(sql`
-      select count(*) as count from pay_run_bank_files
-       where org_id = ${fx.org.orgId}`)).rows[0]!;
-    assert.equal(refused.count, "0");
-    await pool.query(MIGRATION_0206);
-    const bacsId = await insertArtifact(fx, {
-      format: "bacs", sequenceNumber: 1, sequenceValue: 21,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const rows = (await db.execute<{ id: string }>(sql`
-      select id from pay_run_bank_files
-       where org_id = ${fx.org.orgId} and id = ${bacsId}`)).rows;
-    assert.equal(rows.length, 1);
-  } finally {
-    await dropScratchOrgReporting(fx.org.orgId);
-  }
-});
-
-test("red-proof: without 0211 the zengin and cnab240 inserts die on the format gate", { skip: !DB }, async () => {
-  // Defined last so it runs last: it temporarily restores the 0206-only
-  // state (both constraints dropped and re-added without zengin/cnab240),
-  // proves both rows are refused there, then re-applies 0211 and proves the
-  // same rows insert again — so the file leaves the database exactly as it
-  // found it.
-  const fx = await bankFileParents("zengin-cnab240-redproof");
-  try {
-    await pool.query(MIGRATION_0206);
-    for (const format of ["zengin", "cnab240"]) {
-      const outcome: { inserted: true } | { inserted: false; code: unknown; chain: string } =
-        await insertArtifact(fx, {
-          format, sequenceNumber: 1, sequenceValue: 21,
-          fileCreationNumber: null, fileIdModifier: null,
-        }).then(
-          () => ({ inserted: true as const }),
-          (error: unknown) => ({
-            inserted: false as const,
-            code: errorCode(error),
-            chain: errorChain(error),
-          }),
-        );
-      assert.equal(outcome.inserted, false, `without 0211 the ${format} insert must be refused`);
-      if (!outcome.inserted) {
-        // The exact refusal the gate must produce: SQLSTATE 23514 naming
-        // the format CHECK. The code rides on the nested driver error, not
-        // the outer message — assert both halves so the quote is literal.
-        assert.equal(outcome.code, "23514", `expected SQLSTATE 23514, got: ${outcome.chain}`);
-        assert.ok(
-          outcome.chain.includes('violates check constraint "pay_run_bank_files_format"'),
-          `without 0211 the ${format} insert must die on the format gate, got: ${outcome.chain}`,
-        );
-      }
-    }
-    const refused = (await db.execute<{ count: string }>(sql`
-      select count(*) as count from pay_run_bank_files
-       where org_id = ${fx.org.orgId}`)).rows[0]!;
-    assert.equal(refused.count, "0");
-    await pool.query(MIGRATION_0211);
-    const zenginId = await insertArtifact(fx, {
-      format: "zengin", sequenceNumber: 1, sequenceValue: 21,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const cnabId = await insertArtifact(fx, {
-      format: "cnab240", sequenceNumber: 2, sequenceValue: 22,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const rows = (await db.execute<{ id: string }>(sql`
-      select id from pay_run_bank_files
-       where org_id = ${fx.org.orgId} and id in (${zenginId}, ${cnabId})`)).rows;
-    assert.equal(rows.length, 2);
   } finally {
     await dropScratchOrgReporting(fx.org.orgId);
   }

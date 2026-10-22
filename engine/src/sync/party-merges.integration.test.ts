@@ -92,17 +92,17 @@ async function loadParties(
 async function partyRow(orgId: string, id: string) {
   return withOrg(orgId, () =>
     db.execute<{ id: string; display_name: string; is_active: boolean; custom: Record<string, unknown> }>(sql`
-      select id, display_name, is_active, custom from parties where id = ${id} and org_id = ${orgId}`),
-  ).then((r) => r.rows[0]!);
+      select id, display_name, is_active, custom from parties where id = ${id} and org_id = ${orgId}`, "objects"),
+  ).then((r) => r[0]!);
 }
 
 async function partyIdByRef(orgId: string, refKey: string, ref: string): Promise<string> {
   const found = await withOrg(orgId, () =>
     db.execute<{ id: string }>(sql`
-      select id from parties where org_id = ${orgId} and custom->>${refKey} = ${ref} limit 1`),
+      select id from parties where org_id = ${orgId} and custom->>${refKey} = ${ref} limit 1`, "objects"),
   );
-  assert.ok(found.rows[0], `party ${ref} landed`);
-  return found.rows[0]!.id;
+  assert.ok(found[0], `party ${ref} landed`);
+  return found[0]!.id;
 }
 
 for (const adapter of ADAPTERS) {
@@ -147,18 +147,18 @@ for (const adapter of ADAPTERS) {
          union all
         select 'addresses', party_id from addresses where org_id = ${org.orgId} and custom->>${adapter.refKey} = 'ADDR-1'
          union all
-        select 'projects', customer_id from projects where org_id = ${org.orgId} and custom->>${adapter.refKey} = 'P-1'`));
+        select 'projects', customer_id from projects where org_id = ${org.orgId} and custom->>${adapter.refKey} = 'P-1'`, "objects"));
       // One row per seeded reference (contact, address, project): the
       // per-row survivor check below cannot pass over an empty set.
-      assert.equal(refs.rows.length, 3);
-      for (const row of refs.rows) {
+      assert.equal(refs.length, 3);
+      for (const row of refs) {
         assert.equal(row.pid, survivorId, `${row.tbl} follows the survivor`);
       }
 
       const audit = await withOrg(org.orgId, () => db.execute<{ n: string }>(sql`
         select count(*)::text as n from audit_log
-         where org_id = ${org.orgId} and table_name = 'parties' and row_id = ${absorbedId} and action = 'merge'`));
-      assert.equal(audit.rows[0]?.n, "1");
+         where org_id = ${org.orgId} and table_name = 'parties' and row_id = ${absorbedId} and action = 'merge'`, "objects"));
+      assert.equal(audit[0]?.n, "1");
 
       // Re-pulling the same signal is an idempotent no-op: no new outcome, no failure.
       const outcome3: PartyMirrorOutcome = { merges: [], holds: [] };
@@ -204,8 +204,8 @@ for (const adapter of ADAPTERS) {
       assert.equal(held.is_active, true);
       assert.equal(held.custom["merged_into"], undefined);
       const contact = await withOrg(org.orgId, () => db.execute<{ pid: string }>(sql`
-        select party_id as pid from contacts where org_id = ${org.orgId} and custom->>${adapter.refKey} = 'C-9'`));
-      assert.equal(contact.rows[0]?.pid, vanishingId);
+        select party_id as pid from contacts where org_id = ${org.orgId} and custom->>${adapter.refKey} = 'C-9'`, "objects"));
+      assert.equal(contact[0]?.pid, vanishingId);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -254,26 +254,26 @@ async function seedPostedInvoice(
     const entry1 = (await db.execute<{ id: string }>(sql`
       insert into journal_entries (org_id, book_id, entry_number, posting_date, period_id, subsidiary_id, status)
       values (${org.orgId}, ${org.bookId}, ${`PM-INV-${opts.tag}`}, ${org.date}, ${org.periodId}, ${org.subsidiaryId}, 'draft')
-      returning id`)).rows[0]!.id;
-    const lines1 = (await db.execute<{ id: string; line_number: number }>(sql`
+      returning id`, "objects"))[0]!.id;
+    const lines1 = await db.execute<{ id: string; line_number: number }>(sql`
       insert into journal_lines
         (org_id, entry_id, line_number, account_id, amount, currency, txn_amount, subsidiary_id, party_id, is_open_item)
       values
         (${org.orgId}, ${entry1}, 1, ${org.accounts.ar}, '100', 'CAD', '100', ${org.subsidiaryId}, ${opts.customerPartyId}, true),
         (${org.orgId}, ${entry1}, 2, ${org.accounts.revenue}, '-100', 'CAD', '-100', ${org.subsidiaryId}, null, false)
-      returning id, line_number`)).rows;
+      returning id, line_number`, "objects");
     lines1.sort((a, b) => a.line_number - b.line_number);
     const entry2 = (await db.execute<{ id: string }>(sql`
       insert into journal_entries (org_id, book_id, entry_number, posting_date, period_id, subsidiary_id, status)
       values (${org.orgId}, ${org.bookId}, ${`PM-PAY-${opts.tag}`}, ${org.date}, ${org.periodId}, ${org.subsidiaryId}, 'draft')
-      returning id`)).rows[0]!.id;
-    const lines2 = (await db.execute<{ id: string; line_number: number }>(sql`
+      returning id`, "objects"))[0]!.id;
+    const lines2 = await db.execute<{ id: string; line_number: number }>(sql`
       insert into journal_lines
         (org_id, entry_id, line_number, account_id, amount, currency, txn_amount, subsidiary_id, party_id, is_open_item)
       values
         (${org.orgId}, ${entry2}, 1, ${org.accounts.bank}, '40', 'CAD', '40', ${org.subsidiaryId}, null, false),
         (${org.orgId}, ${entry2}, 2, ${org.accounts.ar}, '-40', 'CAD', '-40', ${org.subsidiaryId}, ${opts.customerPartyId}, true)
-      returning id, line_number`)).rows;
+      returning id, line_number`, "objects");
     lines2.sort((a, b) => a.line_number - b.line_number);
     await db.execute(sql`
       update journal_entries set status = 'posted'
@@ -286,14 +286,14 @@ async function seedPostedInvoice(
          settlement_rate, settlement_rate_source, settlement_rate_reference)
       values (${org.orgId}, ${lines2[1]!.id}, ${lines1[0]!.id}, '40', ${org.date}, '40',
               '40', 'CAD', '40', 'CAD', '1', 'same_currency', 'party-merge')
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     const documentId = (await db.execute<{ id: string }>(sql`
       insert into documents
         (org_id, kind, document_number, document_date, currency, party_id, status,
          subtotal, tax_total, total, open_balance)
       values (${org.orgId}, 'customer_invoice', ${`PM-DOC-${opts.tag}`}, ${org.date}, 'CAD',
               ${opts.customerPartyId}, 'draft', '0', '0', '0', null)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into document_lines (org_id, document_id, line_number, account_id, amount, party_id)
       values (${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '100', ${opts.customerPartyId})`);
@@ -325,7 +325,7 @@ test("a merge re-points posted documents, lines, journals, and open balances whi
       party_id: string; status: string; open_balance: string | null; total: string;
     }>(sql`
       select party_id, status, open_balance::text as open_balance, total::text as total
-        from documents where id = ${seeded.documentId} and org_id = ${org.orgId}`)).then((r) => r.rows[0]!);
+        from documents where id = ${seeded.documentId} and org_id = ${org.orgId}`, "objects")).then((r) => r[0]!);
     assert.equal(beforeDoc.party_id, absorbedId);
     assert.equal(beforeDoc.status, "posted");
 
@@ -342,28 +342,28 @@ test("a merge re-points posted documents, lines, journals, and open balances whi
     }>(sql`
       select party_id, status, open_balance::text as open_balance, total::text as total,
              (select sum(n)::text from party_payment_stats where org_id = ${org.orgId} and party_id = ${survivorId}) as payment_stats_n
-        from documents where id = ${seeded.documentId} and org_id = ${org.orgId}`)).then((r) => r.rows[0]!);
+        from documents where id = ${seeded.documentId} and org_id = ${org.orgId}`, "objects")).then((r) => r[0]!);
     assert.deepEqual(
       [afterDoc.party_id, afterDoc.status, afterDoc.open_balance, afterDoc.total, afterDoc.payment_stats_n],
       [survivorId, "posted", beforeDoc.open_balance, beforeDoc.total, "1"],
     );
 
     const docLine = await withOrg(org.orgId, () => db.execute<{ pid: string }>(sql`
-      select party_id as pid from document_lines where document_id = ${seeded.documentId} and org_id = ${org.orgId}`));
-    assert.equal(docLine.rows[0]?.pid, survivorId);
+      select party_id as pid from document_lines where document_id = ${seeded.documentId} and org_id = ${org.orgId}`, "objects"));
+    assert.equal(docLine[0]?.pid, survivorId);
 
     const journals = await withOrg(org.orgId, () => db.execute<{ id: string; pid: string | null }>(sql`
       select id, party_id as pid from journal_lines
-       where org_id = ${org.orgId} and id in (${seeded.invoiceArLineId}, ${seeded.paymentArLineId})`));
+       where org_id = ${org.orgId} and id in (${seeded.invoiceArLineId}, ${seeded.paymentArLineId})`, "objects"));
     // Both seeded AR lines must follow the survivor.
-    assert.equal(journals.rows.length, 2);
-    for (const row of journals.rows) assert.equal(row.pid, survivorId);
+    assert.equal(journals.length, 2);
+    for (const row of journals) assert.equal(row.pid, survivorId);
 
     const application = await withOrg(org.orgId, () => db.execute<{
       from_line_id: string; to_line_id: string; amount: string;
     }>(sql`
       select from_line_id, to_line_id, amount::text as amount from applications
-       where id = ${seeded.applicationId} and org_id = ${org.orgId}`)).then((r) => r.rows[0]!);
+       where id = ${seeded.applicationId} and org_id = ${org.orgId}`, "objects")).then((r) => r[0]!);
     assert.equal(application.from_line_id, seeded.paymentArLineId);
     assert.equal(application.to_line_id, seeded.invoiceArLineId);
     assert.equal(application.amount, "40.0000");
@@ -371,20 +371,20 @@ test("a merge re-points posted documents, lines, journals, and open balances whi
     // Keep the survivor's role and retain the absorbed role as deactivated history.
     const roles = await withOrg(org.orgId, () => db.execute<{ pid: string; active: boolean }>(sql`
       select party_id as pid, is_active as active from customer_roles
-       where org_id = ${org.orgId} and party_id in (${survivorId}, ${absorbedId}) order by pid`));
-    assert.equal(roles.rows.length, 2);
-    assert.equal(roles.rows.find((r) => r.pid === survivorId)?.active, true);
-    assert.equal(roles.rows.find((r) => r.pid === absorbedId)?.active, false);
+       where org_id = ${org.orgId} and party_id in (${survivorId}, ${absorbedId}) order by pid`, "objects"));
+    assert.equal(roles.length, 2);
+    assert.equal(roles.find((r) => r.pid === survivorId)?.active, true);
+    assert.equal(roles.find((r) => r.pid === absorbedId)?.active, false);
 
     // Both sides linked the same subsidiary: the absorbed link is retained.
     const links = await withOrg(org.orgId, () => db.execute<{ pid: string }>(sql`
-      select party_id as pid from party_subsidiaries where org_id = ${org.orgId} and subsidiary_id = ${org.subsidiaryId}`));
-    assert.deepEqual(links.rows.map((r) => r.pid).sort(), [absorbedId, survivorId].sort());
+      select party_id as pid from party_subsidiaries where org_id = ${org.orgId} and subsidiary_id = ${org.subsidiaryId}`, "objects"));
+    assert.deepEqual(links.map((r) => r.pid).sort(), [absorbedId, survivorId].sort());
 
     const audit = await withOrg(org.orgId, () => db.execute<{ changes: Record<string, unknown> }>(sql`
       select changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'parties' and row_id = ${absorbedId} and action = 'merge'`));
-    const changes = audit.rows[0]?.changes as { moved: Record<string, number>; retained: Record<string, number> };
+       where org_id = ${org.orgId} and table_name = 'parties' and row_id = ${absorbedId} and action = 'merge'`, "objects"));
+    const changes = audit[0]?.changes as { moved: Record<string, number>; retained: Record<string, number> };
     assert.ok((changes.moved["documents.party_id"] ?? 0) >= 1);
     assert.ok((changes.moved["journal_lines.party_id"] ?? 0) >= 2);
     assert.ok((changes.retained["customer_roles.party_id"] ?? 0) >= 1);
@@ -418,20 +418,20 @@ test("journal lines in a controller-closed period are retained, never forced", {
 
     const journals = await withOrg(org.orgId, () => db.execute<{ id: string; pid: string | null }>(sql`
       select id, party_id as pid from journal_lines
-       where org_id = ${org.orgId} and id in (${seeded.invoiceArLineId}, ${seeded.paymentArLineId})`));
+       where org_id = ${org.orgId} and id in (${seeded.invoiceArLineId}, ${seeded.paymentArLineId})`, "objects"));
     // Both seeded AR lines round-trip: the per-line retention check below
     // cannot pass over an empty set.
-    assert.equal(journals.rows.length, 2);
-    for (const row of journals.rows) assert.equal(row.pid, absorbedId);
+    assert.equal(journals.length, 2);
+    for (const row of journals) assert.equal(row.pid, absorbedId);
 
     const afterDoc = await withOrg(org.orgId, () => db.execute<{ pid: string }>(sql`
-      select party_id as pid from documents where id = ${seeded.documentId} and org_id = ${org.orgId}`));
-    assert.equal(afterDoc.rows[0]?.pid, survivorId);
+      select party_id as pid from documents where id = ${seeded.documentId} and org_id = ${org.orgId}`, "objects"));
+    assert.equal(afterDoc[0]?.pid, survivorId);
 
     const audit = await withOrg(org.orgId, () => db.execute<{ changes: Record<string, unknown> }>(sql`
       select changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'parties' and row_id = ${absorbedId} and action = 'merge'`));
-    const retained = (audit.rows[0]?.changes as { retained: Record<string, number> }).retained;
+       where org_id = ${org.orgId} and table_name = 'parties' and row_id = ${absorbedId} and action = 'merge'`, "objects"));
+    const retained = (audit[0]?.changes as { retained: Record<string, number> }).retained;
     assert.ok((retained["journal_lines.party_id"] ?? 0) >= 2);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -511,7 +511,7 @@ test("a merge re-points a frozen remittance snapshot through the paired authorit
         insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
         values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
       const period = (await db.execute<{ id: string }>(sql`
-        select id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+        select id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
       const runId = randomUUID();
       await db.execute(sql`
         insert into documents
@@ -581,9 +581,9 @@ test("a merge re-points a frozen remittance snapshot through the paired authorit
     const snapshots = await withOrg(org.orgId, () =>
       db.execute<{ id: string; snapshot: string | null }>(sql`
         select id, remittance_party_id as snapshot from pay_stub_lines
-         where org_id = ${org.orgId} and id in (${seed.frozenLine}, ${seed.openLine})`),
+         where org_id = ${org.orgId} and id in (${seed.frozenLine}, ${seed.openLine})`, "objects"),
     );
-    const byId = new Map(snapshots.rows.map((r) => [r.id, r.snapshot]));
+    const byId = new Map(snapshots.map((r) => [r.id, r.snapshot]));
     // The frozen line follows the survivor; the NULL snapshot never equalled
     // the absorbed id and keeps resolving through pack settings.
     assert.equal(byId.get(seed.frozenLine), survivor);
@@ -602,8 +602,8 @@ test("the merge covers every foreign key to parties(id)", { skip: !DB }, async (
       join information_schema.constraint_column_usage ccu
         on ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema
      where tc.constraint_type = 'FOREIGN KEY' and ccu.table_name = 'parties' and ccu.column_name = 'id'
-       and kcu.column_name <> 'org_id'`);
-  const inCatalog = new Set(catalog.rows.map((r) => `${r.tbl}.${r.col}`));
+       and kcu.column_name <> 'org_id'`, "objects");
+  const inCatalog = new Set(catalog.map((r) => `${r.tbl}.${r.col}`));
   const covered = new Set(PARTY_MERGE_REF_COVERAGE.map(([t, c]) => `${t}.${c}`));
   assert.deepEqual([...inCatalog].sort(), [...covered].sort());
 });
@@ -706,7 +706,7 @@ test("a submitted scorecard stays attributed to its interviewer during a party m
     }));
     assert.equal(result.survivorId, survivorId);
     const scorecard = (await db.execute<{ interviewer_party_id: string }>(sql`
-      select interviewer_party_id from hrm_scorecards where org_id = ${org.orgId} and id = ${scorecardId}`)).rows[0]!;
+      select interviewer_party_id from hrm_scorecards where org_id = ${org.orgId} and id = ${scorecardId}`, "objects"))[0]!;
     assert.equal(scorecard.interviewer_party_id, absorbedId);
   } finally {
     await dropScratchOrg(org.orgId);

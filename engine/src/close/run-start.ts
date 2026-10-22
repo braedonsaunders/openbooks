@@ -110,22 +110,22 @@ export async function startCloseRun(args: {
              where p2.org_id = p.org_id and p2.fiscal_calendar_id = p.fiscal_calendar_id
                and p2.fiscal_year = p.fiscal_year and not p2.is_adjustment) as last_regular_period
       from accounting_periods p
-     where p.id = ${args.periodId} and p.org_id = ${args.orgId}`));
-  const period = periodRes.rows[0];
+     where p.id = ${args.periodId} and p.org_id = ${args.orgId}`, "objects"));
+  const period = periodRes[0];
   if (!period) throw new CloseError("period not found");
   const configuration = (await db.execute<{ blueprint_name: string | null; package_ok: boolean }>(sql`
     select
       (select name from close_blueprints where id = ${blueprintId} and org_id = ${args.orgId} and is_active) as blueprint_name,
       (${reportingPackageId}::uuid is null or exists(
         select 1 from close_reporting_packages where id = ${reportingPackageId} and org_id = ${args.orgId} and is_active
-      )) as package_ok`));
-  if (!configuration.rows[0]?.blueprint_name)
+      )) as package_ok`, "objects"));
+  if (!configuration[0]?.blueprint_name)
     throw new CloseError("active close blueprint not found");
-  const systemBlueprint = configuration.rows[0].blueprint_name === "close.defaultData.blueprint.name";
+  const systemBlueprint = configuration[0].blueprint_name === "close.defaultData.blueprint.name";
   if (!closeFeatures.advancedClose && !systemBlueprint) {
     throw new CloseError("custom close blueprints require Advanced close controls");
   }
-  if (!configuration.rows[0]?.package_ok)
+  if (!configuration[0]?.package_ok)
     throw new CloseError("active reporting package not found");
   // A shape-valid non-day such as February 30 would otherwise reach the
   // target_close_date DATE column and surface as a raw storage throw (HTTP 500
@@ -145,7 +145,7 @@ export async function startCloseRun(args: {
       }>(sql`select r.id,r.scope,r.blueprint_id,r.status,
           b.name='close.defaultData.blueprint.name' as system_blueprint
         from close_runs r join close_blueprints b on b.id=r.blueprint_id and b.org_id=r.org_id
-        where r.org_id=${args.orgId} and r.period_id=${args.periodId} and r.book_id=${args.bookId} for update of r`)).rows[0];
+        where r.org_id=${args.orgId} and r.period_id=${args.periodId} and r.book_id=${args.bookId} for update of r`, "objects"))[0];
       if (existing) {
         if (args.subsidiaryIds !== undefined &&
             canonicalJson([...(args.subsidiaryIds ?? [])].sort()) !== canonicalJson([...(existing.scope?.subsidiaryIds ?? [])].sort()))
@@ -176,8 +176,8 @@ export async function startCloseRun(args: {
               ${fingerprint}, now(), now(), ${args.actorId}, ${args.actorId}, ${args.actorId})
       -- A concurrent start returns no row and raises the retry-to-resume refusal below.
       on conflict (org_id, period_id, book_id) do nothing
-      returning id`));
-      const runId = inserted.rows[0]?.id;
+      returning id`, "objects"));
+      const runId = inserted[0]?.id;
       if (!runId) throw new CloseError("close run was created concurrently; retry to resume its captured scope");
       const steps = (await tx.execute<CloseBlueprintStepRow>(sql`
       select id, key, title, description, workstream, task_type, completion_mode,
@@ -185,11 +185,11 @@ export async function startCloseRun(args: {
              default_owner_role_key, applicability
         from close_blueprint_steps
        where blueprint_id = ${blueprintId} and org_id = ${args.orgId}
-       order by sort_order`));
-      if (steps.rows.length === 0)
+       order by sort_order`, "objects"));
+      if (steps.length === 0)
         throw new CloseError("close blueprint has no steps");
       let materializedSteps = 0;
-      for (const step of steps.rows) {
+      for (const step of steps) {
         if (systemBlueprint && !defaultCloseStepEnabled(step.key, closeFeatures)) continue;
         // These standard tasks certify group consolidation, never one entity.
         if (systemBlueprint && args.subsidiaryIds?.length && ["intercompany-balanced", "consolidation"].includes(step.key)) continue;
@@ -214,8 +214,8 @@ export async function startCloseRun(args: {
             join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
            where u.org_id = ${args.orgId} and u.is_active and ar.key = ${roleKey}
            order by u.id limit 1
-        `));
-          return user.rows[0]?.id ?? null;
+        `, "objects"));
+          return user[0]?.id ?? null;
         }
         const configuredOwnerId = await userForRole(
           step.default_owner_role_key,

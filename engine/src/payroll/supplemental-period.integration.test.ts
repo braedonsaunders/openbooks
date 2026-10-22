@@ -122,23 +122,23 @@ async function line(fx: Fixture, documentId: string, componentId: string, amount
 }
 
 async function stubLine(fx: Fixture, documentId: string, systemKey: string): Promise<string> {
-  const rows = (await db.execute<{ amount: string }>(sql`
+  const rows = await db.execute<{ amount: string }>(sql`
     select l.amount::text as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${documentId}
        and s.employee_party_id = ${fx.worker}
-       and c.system_key = ${systemKey} and l.kind = 'deduction'`)).rows;
+       and c.system_key = ${systemKey} and l.kind = 'deduction'`, "objects");
   assert.equal(rows.length, 1, `expected one ${systemKey} line`);
   return rows[0]!.amount;
 }
 
 async function stubFactor(fx: Fixture, documentId: string, key: string): Promise<string> {
-  const rows = (await db.execute<{ value: string | null }>(sql`
+  const rows = await db.execute<{ value: string | null }>(sql`
     select (factors->>${key})::text as value from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
-       and employee_party_id = ${fx.worker}`)).rows;
+       and employee_party_id = ${fx.worker}`, "objects");
   assert.ok(rows[0]?.value != null, `expected factor ${key}`);
   return rows[0]!.value!;
 }
@@ -209,7 +209,7 @@ test("default: each run taxed as its own periodic pay, credits off what the run 
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where s.org_id = ${fx.orgId} and s.employee_party_id = ${fx.worker}
-         and s.tax_year = 2026 and r.run_status = 'committed' and d.status <> 'voided'`)).rows[0]!;
+         and s.tax_year = 2026 and r.run_status = 'committed' and d.status <> 'voided'`, "objects"))[0]!;
     assert.equal(ytd.pensionable, "4993.7700");
     assert.equal(ytd.insurable, "4988.1600");
     assert.equal(ytd.cpp, "293.1200");

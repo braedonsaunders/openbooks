@@ -89,14 +89,14 @@ async function seedRole(orgId: string, key: string, permissions: string[]): Prom
 
 async function runCount(orgId: string, subjectId: string): Promise<number> {
   const rows = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-    select count(*) as n from flow_runs where org_id = ${orgId} and subject_id = ${subjectId}`)))
-  return Number(rows.rows[0]?.n ?? 0)
+    select count(*) as n from flow_runs where org_id = ${orgId} and subject_id = ${subjectId}`, 'objects')))
+  return Number(rows[0]?.n ?? 0)
 }
 
 async function billMemo(orgId: string, id: string): Promise<string | null> {
   const rows = (await withBypassContext(() => db.execute<{ memo: string | null }>(sql`
-    select memo from documents where id = ${id} and org_id = ${orgId}`)))
-  return rows.rows[0]?.memo ?? null
+    select memo from documents where id = ${id} and org_id = ${orgId}`, 'objects')))
+  return rows[0]?.memo ?? null
 }
 
 test('a read-only role is refused a field-writing manual trigger', async () => {

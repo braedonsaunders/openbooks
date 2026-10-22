@@ -13,7 +13,7 @@ async function evidence(orgId: string) {
     'layers',(select jsonb_agg(to_jsonb(l) order by id) from cost_layers l where org_id=${orgId}),
     'journals',(select jsonb_agg(to_jsonb(j) order by id) from journal_entries j where org_id=${orgId}),
     'lines',(select jsonb_agg(to_jsonb(l) order by id) from journal_lines l where org_id=${orgId})
-  ) as state`)).rows[0]!.state;
+  ) as state`, "objects"))[0]!.state;
 }
 
 for (const scenario of ["disabled feature", "disabled book", "missing period", "restricted account", "inactive owner", "later owner restriction", "missing account", "aliased accounts", "uppercase aliased accounts"] as const) {
@@ -51,7 +51,7 @@ for (const scenario of ["disabled feature", "disabled book", "missing period", "
         assert.deepEqual(await evidence(org.orgId), before, "caught refusal must restore all layers and journals");
       }));
       assert.deepEqual(await evidence(org.orgId), before);
-      assert.equal((await db.execute<{ name: string }>(sql`select name from orgs where id=${org.orgId}`)).rows[0]!.name, "Scratch revaluation caller work");
+      assert.equal((await db.execute<{ name: string }>(sql`select name from orgs where id=${org.orgId}`, "objects"))[0]!.name, "Scratch revaluation caller work");
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
       await db.execute(sql`update accounting_books set posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
       await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${org.accounts.invAsset}`);
@@ -62,7 +62,7 @@ for (const scenario of ["disabled feature", "disabled book", "missing period", "
       assert.equal(entries?.length, scenario === "later owner restriction" ? 2 : 1);
       const balance = (await db.execute<{ balanced: boolean }>(sql`select
         (select sum(remaining_quantity*unit_cost) from cost_layers where org_id=${org.orgId}) =
-        (select sum(amount) from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.invAsset}) as balanced`)).rows[0]!;
+        (select sum(amount) from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.invAsset}) as balanced`, "objects"))[0]!;
       assert.equal(balance.balanced, true, "successful retry preserves inventory GL = layer value");
     } finally { await dropScratchOrg(org.orgId); }
   });

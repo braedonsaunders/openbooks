@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
-import { migrationIdentityIsApplied } from "../scripts/migration-baseline-plan.mjs";
 import { sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
 import { db, pool, withOrgContext } from "@openbooks/engine/platform/db";
@@ -13,10 +11,9 @@ import {
 const skip = !process.env.OPENBOOKS_DB_URL;
 
 /**
- * 0192 HRM positions storage proof: the migration's tables, keys, exclusion,
- * closure-guard content allowlist, evidence guards, and tenant RLS exist on
- * the bootstrapped database (not SQL-file-only assertions), the bootstrap
- * ledger carries the 0192 ordinal, and a cross-org write is refused by RLS.
+ * HRM positions storage: the position tables, keys, exclusion, closure-guard
+ * content allowlist and tenant RLS exist on the bootstrapped database, and a
+ * cross-org write is refused by RLS.
  */
 
 async function session(bypass: boolean, orgId?: string): Promise<PoolClient> {
@@ -65,14 +62,6 @@ async function hasPolicy(table: string, policy: string): Promise<boolean> {
   return (rows[0]?.n ?? 0) > 0;
 }
 
-test("fresh bootstrap retains verified position migration coverage", { skip }, async () => {
-  const rows = (await db.execute<{ filename: string; sha256: string }>(sql`
-    select filename, sha256 from public._applied_migrations`)).rows;
-  const baseline = JSON.parse(readFileSync("schema/migrations/baseline.json", "utf8"));
-  assert.equal(migrationIdentityIsApplied("generated/0192_hrm_positions_headcount_plan.sql", rows, baseline), true,
-    "the bootstrap ledger must retain the exact migration or its verified release baseline coverage");
-});
-
 test("position tables exist with enforced tenant RLS", { skip }, async () => {
   const security = await tableSecurity();
   for (const table of ["positions", "position_versions", "position_funding", "position_changes"]) {
@@ -99,7 +88,7 @@ test("position storage invariants exist by name", { skip }, async () => {
     select pg_get_functiondef(oid) as definition from pg_proc
      where proname = 'employment_assignment_versions_closure_guard'`)).rows[0]?.definition;
   assert.ok(guard, "the assignment closure guard must exist");
-  assert.match(guard, /position_id/, "the closure allowlist must pin the position link (v2)");
+  assert.match(guard, /position_id/, "the closure allowlist must pin the position link");
 });
 
 test("a cross-org position write is refused by RLS", { skip }, async () => {

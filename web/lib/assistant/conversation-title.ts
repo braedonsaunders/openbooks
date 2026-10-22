@@ -86,9 +86,9 @@ export async function readTitleState(
         from ai_conversations c
        where c.id = ${conversationId}
          and c.org_id = ${authz.user.orgId} and c.user_id = ${authz.user.id}
-    `);
-    if (fallback.rows.length === 0) return null;
-    return { title: fallback.rows[0]!.title, source: null };
+    `, "objects");
+    if (fallback.length === 0) return null;
+    return { title: fallback[0]!.title, source: null };
   }
   if (r.rows.length === 0) return null;
   const source = r.rows[0]!.source;
@@ -120,8 +120,8 @@ export async function writeAutoTitle(
        where id = ${conversationId}
          and org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
       returning id
-    `);
-    return r.rows.length > 0;
+    `, "objects");
+    return r.length > 0;
   } catch (error) {
     if (!isMissingMetadataColumn(error)) throw error;
     const r = await db.execute(sql`
@@ -130,8 +130,8 @@ export async function writeAutoTitle(
        where id = ${conversationId}
          and org_id = ${authz.user.orgId} and user_id = ${authz.user.id}
       returning id
-    `);
-    return r.rows.length > 0;
+    `, "objects");
+    return r.length > 0;
   }
 }
 

@@ -128,17 +128,17 @@ function postRequest(fixture: Fixture, body: unknown): Request {
 }
 
 async function eventFor(orgId: string, entryId: string): Promise<string> {
-  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`, "objects"))[0]!.id;
 }
 
 async function writeCounts(orgId: string, assetId: string) {
   return (await db.execute<{ events: number; journals: number }>(sql`
     select (select count(*)::int from asset_events where org_id=${orgId} and asset_id=${assetId}) as events,
-           (select count(*)::int from journal_entries where org_id=${orgId}) as journals`)).rows[0]!;
+           (select count(*)::int from journal_entries where org_id=${orgId}) as journals`, "objects"))[0]!;
 }
 
 async function assetStatus(orgId: string, assetId: string): Promise<string> {
-  return (await db.execute<{ status: string }>(sql`select status from fixed_assets where org_id=${orgId} and id=${assetId}`)).rows[0]!.status;
+  return (await db.execute<{ status: string }>(sql`select status from fixed_assets where org_id=${orgId} and id=${assetId}`, "objects"))[0]!.status;
 }
 
 test("reverse-event GET names a posted disposal as the reversible candidate", async () => {
@@ -325,7 +325,7 @@ test("reverse-event keeps approved multi-book change events on Accounting events
     const actors = { submitterId: flowActors.submitterId, approver1Id: flowActors.approver1Id };
     // Applying a 12-month-life change rebuilds the full remaining plan, so the
     // calendar must cover the whole horizon, not just the effective month.
-    const calendar = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where org_id=${fixture.orgId} limit 1`)).rows[0]!.id;
+    const calendar = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where org_id=${fixture.orgId} limit 1`, "objects"))[0]!.id;
     for (let y = 2026; y <= 2027; y++) {
       for (let m = y === 2026 ? 8 : 1; m <= (y === 2026 ? 12 : 6); m++) {
         const last = new Date(y, m, 0).getDate();
@@ -333,7 +333,7 @@ test("reverse-event keeps approved multi-book change events on Accounting events
         await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,custom) values(${randomUUID()},${fixture.orgId},${calendar},${y},${m},${`${y}-${mm}`},${`${y}-${mm}-01`},${`${y}-${mm}-${last}`},false,'{}'::jsonb)`);
       }
     }
-    const clearing = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fixture.orgId} limit 1`)).rows[0]!.id;
+    const clearing = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fixture.orgId} limit 1`, "objects"))[0]!.id;
     await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${fixture.orgId},${actors.submitterId},'assets.manage','grant')`);
     await grantScratchPermissions(fixture.orgId, actors.approver1Id, ['assets.manage']);
     await seedApprovalFlow(fixture.orgId, {
@@ -354,10 +354,10 @@ test("reverse-event keeps approved multi-book change events on Accounting events
     };
     const changeId = await proposeAssetChange(fixture.orgId, fixture.assetId, actors.submitterId, input);
     await submitFinancialChange(fixture.orgId, changeId, actors.submitterId);
-    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fixture.orgId} and subject_id=${changeId} and status='pending'`)).rows[0]!;
+    const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${fixture.orgId} and subject_id=${changeId} and status='pending'`, "objects"))[0]!;
     await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: "approved" });
     await applyAssetChange(fixture.orgId, changeId, actors.submitterId);
-    const owned = (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${fixture.orgId} and asset_id=${fixture.assetId} and financial_change_id=${changeId} limit 1`)).rows[0];
+    const owned = (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${fixture.orgId} and asset_id=${fixture.assetId} and financial_change_id=${changeId} limit 1`, "objects"))[0];
     assert.ok(owned, "the approved change must own a lifecycle event");
 
     authed(fixture);

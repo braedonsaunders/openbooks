@@ -112,7 +112,7 @@ const outboxForRun = (runId: string) =>
     select id, status, payload from scheduler_outbox
      where kind = 'flow_email' and subject_id = ${runId}
      order by created_at
-  `);
+  `, "objects");
 
 test("a rolled-back transactional flow leaves no pending email behind", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
@@ -132,7 +132,7 @@ test("a rolled-back transactional flow leaves no pending email behind", { skip: 
         assert.equal(res.completed.length, 1, "the email effect ran inside the unit");
         // The deferred send is visible inside the caller's own transaction…
         const visible = await outboxForRun(run.runId);
-        assert.equal(visible.rows.length, 1);
+        assert.equal(visible.length, 1);
         // …and then the business unit fails after the flow ran.
         throw new Error("void completion exploded");
       }),
@@ -141,14 +141,14 @@ test("a rolled-back transactional flow leaves no pending email behind", { skip: 
 
     // Rollback discards the pending send together with every flow effect.
     assert.equal(
-      (await outboxForRun(run.runId)).rows.length,
+      (await outboxForRun(run.runId)).length,
       0,
       "no flow email may survive the rolled-back unit",
     );
     assert.equal(
       await db.execute<{ n: number }>(sql`
         select count(*) as n from flow_run_effects where run_id = ${run.runId}
-      `).then((r) => Number(r.rows[0]!.n)),
+      `, "objects").then((r) => Number(r[0]!.n)),
       0,
       "effect checkpoints roll back with the unit",
     );
@@ -168,7 +168,7 @@ test("a replayed execution collapses onto the same outbox row", { skip: !DB }, a
 
     const first = await executeFlowPlan({ orgId: org.orgId }, adapter, params);
     assert.equal(first.completed.length, 1);
-    const rows = (await outboxForRun(run.runId)).rows;
+    const rows = await outboxForRun(run.runId);
     assert.equal(rows.length, 1);
 
     // Crash-window replay: the effect checkpoint was lost (crash before its
@@ -177,7 +177,7 @@ test("a replayed execution collapses onto the same outbox row", { skip: !DB }, a
     await db.execute(sql`delete from flow_run_effects where run_id = ${run.runId}`);
     const second = await executeFlowPlan({ orgId: org.orgId }, adapter, params);
     assert.equal(second.completed.length, 1, "the replay re-ran the unclaimed node");
-    assert.equal((await outboxForRun(run.runId)).rows.length, 1, "still exactly one pending send");
+    assert.equal((await outboxForRun(run.runId)).length, 1, "still exactly one pending send");
   });
 });
 
@@ -199,7 +199,7 @@ test("committed flow emails drain through the outbox exactly once", { skip: !DB 
     });
     assert.equal(sent.length, 1, "the worker delivered exactly one flow email");
     assert.equal(sent[0]!.org_id, org.orgId, "the delivery carries its organization");
-    const stored = (await outboxForRun(run.runId)).rows[0]!;
+    const stored = (await outboxForRun(run.runId))[0]!;
     const payload = stored.payload as {
       to: string[];
       subject: string;
@@ -237,7 +237,7 @@ test("gate approval requests defer per assignee through the outbox", { skip: !DB
     assert.equal(res.gatesCreated, 2);
 
     // One pending approval-request email per gate ROW, keyed deterministically.
-    const rows = (await outboxForRun(run.runId)).rows;
+    const rows = await outboxForRun(run.runId);
     assert.equal(rows.length, 2);
     for (const row of rows) {
       const payload = row.payload as { meta?: { category?: string }; to: string[] };
@@ -247,18 +247,18 @@ test("gate approval requests defer per assignee through the outbox", { skip: !DB
 
     const gateRows = await db.execute<{ id: string }>(sql`
       select id from flow_gates where run_id = ${run.runId} order by created_at
-    `);
+    `, "objects");
     // gatesCreated is pinned to 2 above: every created gate persisted a row,
     // so the per-row email check below cannot pass over an empty set.
-    assert.equal(gateRows.rows.length, res.gatesCreated);
+    assert.equal(gateRows.length, res.gatesCreated);
     const keys = await db.execute<{ occurrence_key: string }>(sql`
       select occurrence_key from scheduler_outbox
        where kind = 'flow_email' and subject_id = ${run.runId}
        order by occurrence_key
-    `);
-    for (const gate of gateRows.rows) {
+    `, "objects");
+    for (const gate of gateRows) {
       assert.ok(
-        keys.rows.some((k) => k.occurrence_key === `${run.runId}:gate-email:${gate.id}`),
+        keys.some((k) => k.occurrence_key === `${run.runId}:gate-email:${gate.id}`),
         "each gate row owns exactly one deterministic approval email",
       );
     }
@@ -291,7 +291,7 @@ test("enqueueFlowEmail rejects malformed deliveries before they become durable",
       Number((await db.execute<{ n: number }>(sql`
         select count(*) as n from scheduler_outbox
          where kind = 'flow_email' and subject_id = ${runId}
-      `)).rows[0]!.n),
+      `, "objects"))[0]!.n),
       0,
       "no malformed delivery may reach storage",
     );

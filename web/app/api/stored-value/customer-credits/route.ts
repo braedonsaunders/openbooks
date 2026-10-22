@@ -26,13 +26,13 @@ export const GET = defineRoute({
     const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
        where id = ${partyId} and org_id = ${authz.user.orgId}
-    `))
-    if (!party.rows[0]) return notFound('record')
-    const scopeDenied = guardSubsidiaryScope(authz, party.rows[0].subsidiaryId, { orgWideNull: true })
+    `, 'objects'))
+    if (!party[0]) return notFound('record')
+    const scopeDenied = guardSubsidiaryScope(authz, party[0].subsidiaryId, { orgWideNull: true })
     if (scopeDenied) return scopeDenied
     // The party gate above is not enough: each credit carries its own
     // entity, and a restricted caller reads only the entities they may see.
-    const credits = (await db.execute<{
+    const credits = await db.execute<{
       accountId: string; codeLast4: string; currency: string; balanceMinor: string
     }>(sql`
       select id as "accountId", code_last4 as "codeLast4", currency,
@@ -42,7 +42,7 @@ export const GET = defineRoute({
          and status in ('active', 'frozen') and balance_minor > 0
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by currency, code_last4
-    `)).rows
+    `, 'objects')
     return NextResponse.json({
       credits: credits.map(({ balanceMinor, ...credit }) => ({ ...credit, balance: fromUnits(BigInt(balanceMinor)) })),
     })

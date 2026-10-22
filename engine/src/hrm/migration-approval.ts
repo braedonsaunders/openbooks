@@ -55,8 +55,7 @@ export async function resolveMappingApprovalSnapshots(
     const id = row.resolution?.approvalSubmissionId;
     if (!id || proofs.has(id.toLowerCase())) continue;
     requireUuid(id, "mapping Flow submission");
-    const proof = (
-      await db.execute<{
+    const proof = (await db.execute<{
         submissionId: string;
         status: string;
         subjectKind: string;
@@ -68,8 +67,7 @@ export async function resolveMappingApprovalSnapshots(
       and not exists(select 1 from flow_submissions newer where newer.org_id=s.org_id and newer.subject_kind=s.subject_kind
         and newer.subject_id=s.subject_id and (newer.created_at,newer.id)>(s.created_at,s.id)) then 'approved' else a.status||'_unreleased' end as status
    from flow_submissions s join hrm_employment_migration_approvals a on a.org_id=s.org_id and a.id=s.subject_id
-   where s.org_id=${orgId} and s.id=${id} and s.subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND}`)
-    ).rows[0];
+   where s.org_id=${orgId} and s.id=${id} and s.subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND}`, "objects"))[0];
     if (!proof)
       throw new MappingApprovalError(
         "The named mapping submission is unavailable in this organization. Submit the exact mapping set through Flows.",
@@ -141,23 +139,19 @@ export async function requestMigrationMappingApproval(
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${"mapping-submission:" + orgId + ":" + digest},0))`,
     );
-    let prior = (
-      await db.execute<{
+    let prior = (await db.execute<{
         id: string;
         status: string;
         submissionId: string | null;
       }>(sql`select a.id,a.status,
       (select s.id from flow_submissions s where s.org_id=a.org_id and s.subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and s.subject_id=a.id order by created_at desc,id desc limit 1) as "submissionId"
-      from hrm_employment_migration_approvals a where a.org_id=${orgId} and a.mapping_digest=${digest}`)
-    ).rows[0];
+      from hrm_employment_migration_approvals a where a.org_id=${orgId} and a.mapping_digest=${digest}`, "objects"))[0];
     const approvalId =
       prior?.id ??
-      (
-        await db.execute<{
+      (await db.execute<{
           id: string;
         }>(sql`insert into hrm_employment_migration_approvals(org_id,mapping_digest,status,requested_by,created_by,updated_by)
-      values(${orgId},${digest},'draft',${requestedBy},${requestedBy},${requestedBy}) returning id`)
-      ).rows[0]?.id;
+      values(${orgId},${digest},'draft',${requestedBy},${requestedBy},${requestedBy}) returning id`, "objects"))[0]?.id;
     if (!approvalId)
       throw new MappingApprovalError("The mapping submission was not stored.");
     await lockApprovalSubject(
@@ -166,11 +160,9 @@ export async function requestMigrationMappingApproval(
       approvalId,
     );
     if (prior) {
-      const current = (
-        await db.execute<{ status: string }>(
-          sql`select status from hrm_employment_migration_approvals where org_id=${orgId} and id=${approvalId} for update`,
-        )
-      ).rows[0];
+      const current = (await db.execute<{ status: string }>(
+          sql`select status from hrm_employment_migration_approvals where org_id=${orgId} and id=${approvalId} for update`, "objects",
+        ))[0];
       if (!current)
         throw new MappingApprovalError(
           "The mapping submission is no longer available.",
@@ -181,11 +173,9 @@ export async function requestMigrationMappingApproval(
       prior?.submissionId &&
       ["pending_approval", "approved"].includes(prior.status)
     ) {
-      const gates = (
-        await db.execute<{ id: string; run_id: string }>(
-          sql`select id,run_id from flow_gates where org_id=${orgId} and subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and subject_id=${approvalId} and status in('pending','escalated')`,
-        )
-      ).rows;
+      const gates = await db.execute<{ id: string; run_id: string }>(
+          sql`select id,run_id from flow_gates where org_id=${orgId} and subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and subject_id=${approvalId} and status in('pending','escalated')`, "objects",
+        );
       if (prior.status === "approved" || gates.length)
         return {
           approvalId,
@@ -210,20 +200,18 @@ export async function requestMigrationMappingApproval(
     const status =
       routing.policy.kind === "gated" ? "pending_approval" : "approved";
     const saved = await db.execute(
-      sql`update hrm_employment_migration_approvals set status=${status},updated_by=${requestedBy},updated_at=now() where org_id=${orgId} and id=${approvalId} and status='draft' returning id`,
+      sql`update hrm_employment_migration_approvals set status=${status},updated_by=${requestedBy},updated_at=now() where org_id=${orgId} and id=${approvalId} and status='draft' returning id`, "objects",
     );
-    if (saved.rows.length !== 1)
+    if (saved.length !== 1)
       throw new MappingApprovalError(
         "The mapping submission changed before its outcome was recorded.",
       );
     await db.execute(
       sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'hrm_employment_migration_approvals',${approvalId},'submit',${JSON.stringify({ digest, submissionId: routing.submissionId, policy: routing.policy, status })}::jsonb,${requestedBy})`,
     );
-    const gates = (
-      await db.execute<{ id: string }>(
-        sql`select id from flow_gates where org_id=${orgId} and subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and subject_id=${approvalId} and status in('pending','escalated')`,
-      )
-    ).rows;
+    const gates = await db.execute<{ id: string }>(
+        sql`select id from flow_gates where org_id=${orgId} and subject_kind=${HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND} and subject_id=${approvalId} and status in('pending','escalated')`, "objects",
+      );
     return {
       approvalId,
       digest,

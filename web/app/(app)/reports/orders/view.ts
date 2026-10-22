@@ -105,19 +105,19 @@ export async function loadOrders(): Promise<OrdersData> {
        where d.org_id = ${orgId}
          and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
          ${subsidiaryFilter}
-       group by d.kind, d.status`),
+       group by d.kind, d.status`, 'objects'),
     db.execute(sql`
       select d.kind, count(distinct d.id)::int as converted
         from documents d
         join document_links dl on dl.from_document_id = d.id and dl.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind in (${sql.join(KINDS.map((k) => sql`${k}`), sql`, `)})
          ${subsidiaryFilter}
-       group by d.kind`),
+       group by d.kind`, 'objects'),
     orgInfo(orgId),
   ])
 
   const convByKind = new Map<string, number>(
-    converted.rows.map((r) => [String(r.kind), Number(r.converted)]),
+    converted.map((r) => [String(r.kind), Number(r.converted)]),
   )
 
   const columnLabel = {
@@ -142,7 +142,7 @@ export async function loadOrders(): Promise<OrdersData> {
     columnConvRate: columnLabel.convRate,
     columnVoided: columnLabel.voided,
     rows: KINDS.map((kind) => {
-      const forKind = pipeline.rows.filter((r) => r.kind === kind)
+      const forKind = pipeline.filter((r) => r.kind === kind)
       const open = forKind.reduce((a: number, r) => a + Number(r.open_n ?? 0), 0)
       const openValue = decimalSum(forKind.map((r) => String(r.open_value ?? '0')))
       const voided = forKind

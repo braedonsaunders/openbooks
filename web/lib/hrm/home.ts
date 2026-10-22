@@ -367,7 +367,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
            or (ev.effective_to > ${effectiveDate}::date
                and ev.effective_to <= (${effectiveDate}::date + ${HOME_WINDOW_DAYS}::int)))
        order by ev.effective_from
-       limit ${HOME_WINDOW_LIMIT}`),
+       limit ${HOME_WINDOW_LIMIT}`, 'objects'),
     db.execute<{
       kind: string
       reason: string
@@ -384,7 +384,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
        where c.org_id = ${orgId}::uuid
          ${employmentScope}
        order by c.recorded_at desc
-       limit ${HOME_RECENT_LIMIT}`),
+       limit ${HOME_RECENT_LIMIT}`, 'objects'),
     db.execute<{ n: unknown }>(sql`
       select count(*) as n
         from parties p
@@ -395,7 +395,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
            select 1 from worker_employments w
             where w.org_id = p.org_id and w.worker_party_id = p.id
               ${subsidiaryVisibleFilter(sql`w.employer_subsidiary_id`, authz.allowedSubsidiaryIds)}
-         )`),
+         )`, 'objects'),
     canReadProcesses
       ? getOnboardingOverview({ orgId, actorId: authz.user.id }).then((overview) => ({
           openCount: overview.openProcesses.length,
@@ -561,7 +561,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // overview down in production on alpha.19.
   // Probation ends are not modeled (versions carry status and the
   // effective window only), and the panel says so instead of implying it.
-  const windowRows = windowResult.rows
+  const windowRows = windowResult
   const upcomingTruncated = windowRows.length >= HOME_WINDOW_LIMIT
   const starts: UpcomingChangeItem[] = []
   const ends: UpcomingChangeItem[] = []
@@ -593,7 +593,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     minute: '2-digit',
     timeZoneName: 'short',
   }
-  const changeRows = changeResult.rows
+  const changeRows = changeResult
   const recent: RecentChangeItem[] = changeRows.map((row) => ({
     name: row.name,
     partyId: row.partyId,
@@ -608,7 +608,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
   // employer scope, so a restricted viewer never counts outside their
   // lens. The sentence names what the number means and headcount's
   // exclusion; the link opens the migration article.
-  const unmigratedRows = unmigratedResult.rows
+  const unmigratedRows = unmigratedResult
   const unmigrated = Number(unmigratedRows[0]?.n ?? 0)
 
   // Quick actions, each gated by the permission its target enforces: the

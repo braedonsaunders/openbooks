@@ -52,21 +52,21 @@ interface World {
 async function setFeature(orgId: string, key: string, on: boolean): Promise<void> {
   const updated = await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${key}}`}::text[], ${on ? "true" : "false"}::jsonb, true)
-     where id = ${orgId} returning id`);
-  assert.equal(updated.rows.length, 1, `feature ${key} written`);
+     where id = ${orgId} returning id`, "objects");
+  assert.equal(updated.length, 1, `feature ${key} written`);
 }
 
 async function grant(orgId: string, roleKey: string, permissions: string[]): Promise<void> {
   const updated = await db.execute(sql`
     update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb
-     where org_id = ${orgId} and key = ${roleKey} returning id`);
-  assert.equal(updated.rows.length, 1, `role ${roleKey} granted`);
+     where org_id = ${orgId} and key = ${roleKey} returning id`, "objects");
+  assert.equal(updated.length, 1, `role ${roleKey} granted`);
 }
 
 /** Seed open monthly periods after the scratch tenant's July period. */
 async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<string, string>> {
   const cal = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${orgId} and is_default`)).rows[0];
+    select id from fiscal_calendars where org_id = ${orgId} and is_default`, "objects"))[0];
   assert.ok(cal, "scratch org ships a default fiscal calendar");
   const ids = new Map<string, string>();
   for (const month of monthStarts) {
@@ -80,7 +80,7 @@ async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<st
         ${`${name}-01`}, ${`${name}-${String(daysInCivilMonth(year, mon)).padStart(2, "0")}`}, false, ${cal.id})
       on conflict do nothing`);
     const row = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${orgId} and name = ${name}`)).rows[0];
+      select id from accounting_periods where org_id = ${orgId} and name = ${name}`, "objects"))[0];
     assert.ok(row, `period ${name} exists`);
     ids.set(name, row.id);
   }
@@ -166,24 +166,24 @@ async function accountBalance(orgId: string, accountId: string): Promise<string>
     select coalesce(sum(jl.amount), 0)::numeric(19,4)::text as balance
       from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
-     where jl.org_id = ${orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`)).rows[0];
+     where jl.org_id = ${orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`, "objects"))[0];
   return row?.balance ?? "0.0000";
 }
 
 async function scheduleFor(orgId: string, lineId: string) {
   const row = (await db.execute<{ id: string; status: string; total_amount: string; revision: number }>(sql`
     select id, status, total_amount::text as total_amount, revision from expense_amortization_schedules
-     where org_id = ${orgId} and source_line_id = ${lineId}`)).rows[0];
+     where org_id = ${orgId} and source_line_id = ${lineId}`, "objects"))[0];
   assert.ok(row, "the posted line has a schedule");
   return row;
 }
 
 async function plan(orgId: string, scheduleId: string): Promise<{ period: string; amount: string; status: string }[]> {
-  return (await db.execute<{ period: string; amount: string; status: string }>(sql`
+  return await db.execute<{ period: string; amount: string; status: string }>(sql`
     select to_char(period_start, 'YYYY-MM') as period, planned_amount::text as amount, status
       from expense_amortization_schedule_lines
      where org_id = ${orgId} and schedule_id = ${scheduleId} and status in ('planned', 'posted')
-     order by period_start`)).rows;
+     order by period_start`, "objects");
 }
 
 async function assertReconciled(w: World, asOf: string): Promise<void> {
@@ -201,7 +201,7 @@ test("a templated bill line posts to the prepaid account and its schedule is cre
   const w = await setupWorld();
   try {
     const department = (await db.execute<{ id: string }>(sql`
-      insert into departments (id, org_id, name) values (${randomUUID()}, ${w.org.orgId}, 'Operations') returning id`)).rows[0]!;
+      insert into departments (id, org_id, name) values (${randomUUID()}, ${w.org.orgId}, 'Operations') returning id`, "objects"))[0]!;
     const bill = await postSourceDocument(w, { number: "B-AM-1", amount: "300.00", departmentId: department.id });
     assert.equal(await accountBalance(w.org.orgId, w.prepaidId), "300.0000", "the deferral account carries the bill line");
     assert.equal(await accountBalance(w.org.orgId, w.expenseId), "0.0000", "nothing reaches expense at posting");
@@ -214,7 +214,7 @@ test("a templated bill line posts to the prepaid account and its schedule is cre
       { period: "2026-09", amount: "100.0000", status: "planned" },
     ]);
     const dims = (await db.execute<{ department_id: string | null; source_entry_id: string }>(sql`
-      select department_id, source_entry_id from expense_amortization_schedules where id = ${schedule.id}`)).rows[0]!;
+      select department_id, source_entry_id from expense_amortization_schedules where id = ${schedule.id}`, "objects"))[0]!;
     assert.equal(dims.department_id, department.id, "the schedule keeps the line's department");
     assert.equal(dims.source_entry_id, bill.entryId);
     await assertReconciled(w, w.org.date);
@@ -236,7 +236,7 @@ test("each due period posts exactly once, in its own period, and the schedule co
     const entry = (await db.execute<{ origin: string; period_id: string; posting_date: string; balanced: boolean }>(sql`
       select je.origin, je.period_id, je.posting_date::text as posting_date,
              (select sum(amount) = 0 from journal_lines where entry_id = je.id) as balanced
-        from journal_entries je where je.id = ${july.entries[0]!.entryId}`)).rows[0]!;
+        from journal_entries je where je.id = ${july.entries[0]!.entryId}`, "objects"))[0]!;
     assert.equal(entry.origin, "expense_amortization");
     assert.equal(entry.period_id, w.periods.get("2026-07"));
     assert.equal(entry.posting_date, "2026-07-31");
@@ -274,7 +274,7 @@ test("concurrent runs never post a period twice", { skip: !DB }, async () => {
     const posted = results.reduce((acc, result) => acc + (result.status === "fulfilled" ? result.value.posted : 0), 0);
     assert.equal(posted, 6, "six periods post once in total across both runs");
     const entries = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from journal_entries where org_id = ${w.org.orgId} and origin = 'expense_amortization'`)).rows[0]!;
+      select count(*)::text as n from journal_entries where org_id = ${w.org.orgId} and origin = 'expense_amortization'`, "objects"))[0]!;
     assert.equal(entries.n, "6");
     assert.equal(await accountBalance(w.org.orgId, w.prepaidId), "0.0000");
   } finally {
@@ -294,15 +294,15 @@ test("zero plan lines are retired without posting empty journal entries", { skip
     assert.equal(run.posted, 0, "a zero line is not counted as a posted journal");
     assert.deepEqual(run.entries, [], "a zero line has no journal entry");
     assert.deepEqual(run.problems, []);
-    const closed = (await db.execute<{ status: string; closed_at: Date | null }>(sql`
+    const closed = await db.execute<{ status: string; closed_at: Date | null }>(sql`
       select status, closed_at from expense_amortization_schedule_lines
        where org_id = ${w.org.orgId} and schedule_id = ${schedule.id}
-         and planned_amount = 0 and status = 'superseded'`)).rows;
+         and planned_amount = 0 and status = 'superseded'`, "objects");
     assert.equal(closed.length, 1);
     assert.equal(closed[0]?.status, "superseded");
     assert.ok(closed[0]?.closed_at, "the zero line is retained in closed schedule history");
     const entries = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from journal_entries where org_id = ${w.org.orgId} and origin = 'expense_amortization'`)).rows[0]!;
+      select count(*)::text as n from journal_entries where org_id = ${w.org.orgId} and origin = 'expense_amortization'`, "objects"))[0]!;
     assert.equal(entries.n, "0");
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
@@ -451,12 +451,12 @@ test("voiding the bill cancels its schedule and returns posted amortization to t
     assert.equal(schedule.status, "cancelled");
     assert.equal(await accountBalance(w.org.orgId, w.prepaidId), "0.0000", "the deferral nets to zero");
     assert.equal(await accountBalance(w.org.orgId, w.expenseId), "0.0000", "posted amortization is returned");
-    const lines = (await db.execute<{ status: string }>(sql`
-      select status from expense_amortization_schedule_lines where schedule_id = ${schedule.id} order by period_start`)).rows;
+    const lines = await db.execute<{ status: string }>(sql`
+      select status from expense_amortization_schedule_lines where schedule_id = ${schedule.id} order by period_start`, "objects");
     assert.deepEqual(lines.map((line) => line.status), ["posted", "cancelled", "cancelled"], "the posted July period is never rewritten");
     await assertReconciled(w, w.org.date);
-    const history = (await db.execute<{ kind: string }>(sql`
-      select kind from expense_amortization_schedule_events where schedule_id = ${schedule.id} order by created_at`)).rows;
+    const history = await db.execute<{ kind: string }>(sql`
+      select kind from expense_amortization_schedule_events where schedule_id = ${schedule.id} order by created_at`, "objects");
     assert.deepEqual(history.map((event) => event.kind), ["created", "source_voided"]);
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
@@ -500,13 +500,13 @@ test("hold, resume and term changes are governed, audited and refuse stale or po
       { period: "2026-11", amount: "50.0000", status: "planned" },
     ]);
     const superseded = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from expense_amortization_schedule_lines where schedule_id = ${schedule.id} and status = 'superseded'`)).rows[0]!;
+      select count(*)::text as n from expense_amortization_schedule_lines where schedule_id = ${schedule.id} and status = 'superseded'`, "objects"))[0]!;
     assert.equal(superseded.n, "2", "the replaced August and September plan is kept as history");
-    const kinds = (await db.execute<{ kind: string; reason: string }>(sql`
-      select kind, reason from expense_amortization_schedule_events where schedule_id = ${schedule.id} order by created_at`)).rows;
+    const kinds = await db.execute<{ kind: string; reason: string }>(sql`
+      select kind, reason from expense_amortization_schedule_events where schedule_id = ${schedule.id} order by created_at`, "objects");
     assert.deepEqual(kinds.map((event) => event.kind), ["created", "held", "resumed", "term_changed"]);
     const audited = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and table_name = 'expense_amortization_schedules' and row_id = ${schedule.id}`)).rows[0]!;
+      select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and table_name = 'expense_amortization_schedules' and row_id = ${schedule.id}`, "objects"))[0]!;
     assert.ok(Number(audited.n) >= 4, "every change is audited");
     await assert.rejects(
       db.execute(sql`update expense_amortization_schedule_lines set planned_amount = 1 where schedule_id = ${schedule.id} and status = 'posted'`),
@@ -656,13 +656,13 @@ test("the close step stays open while prepaid amortization is due and clears onc
     const runId = await startCloseRun({ orgId: w.org.orgId, periodId: w.org.periodId, bookId: w.org.bookId, actorId: closeActorId });
     const openCounts = async (): Promise<Record<string, number>> => {
       await refreshCloseRun(w.org.orgId, runId);
-      const rows = (await db.execute<{ code: string; n: number }>(sql`
+      const rows = await db.execute<{ code: string; n: number }>(sql`
         select code, (details->>'count')::int as n from close_exceptions
-         where org_id = ${w.org.orgId} and run_id = ${runId} and status = 'open'`)).rows;
+         where org_id = ${w.org.orgId} and run_id = ${runId} and status = 'open'`, "objects");
       return Object.fromEntries(rows.map((row) => [row.code, row.n]));
     };
     const task = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from close_run_tasks where org_id = ${w.org.orgId} and run_id = ${runId} and key = 'prepaid-amortized'`)).rows[0]!;
+      select count(*)::text as n from close_run_tasks where org_id = ${w.org.orgId} and run_id = ${runId} and key = 'prepaid-amortized'`, "objects"))[0]!;
     assert.equal(task.n, "1", "the close carries the prepaid amortization step while the feature is on");
     assert.equal((await openCounts())["prepaid-amortization-unposted"], 1, "July's due period keeps the step open");
     await runExpenseAmortization({ orgId: w.org.orgId, actorId: w.actorId, periodId: w.org.periodId });

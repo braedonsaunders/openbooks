@@ -110,9 +110,9 @@ function adapterCtx(taxYear: number, payDate: string, income: string) {
     periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
     programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
     tx: {
-      execute: async () => ({
+      execute: async (_query: unknown, mode?: string) => Promise.resolve({
         rows: [{ dochod: "200000.0000", podstawa: "242000.0000", payer_first_pay: `${taxYear}-01-15`, payer_first_period: `${taxYear}-01-01` }],
-      }),
+      }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
     },
     orgId: "org", subsidiaryId: "payer", employeePartyId: "emp", documentId: "doc",
     taxYear,

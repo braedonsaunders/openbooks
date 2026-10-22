@@ -78,8 +78,8 @@ async function revisionToken(orgId: string, documentId: string): Promise<string>
   const row = (await withOrgContext(orgId, () => db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `)));
-  return row.rows[0]!.updatedAt;
+  `, "objects")));
+  return row[0]!.updatedAt;
 }
 
 async function seedDraftJournal(org: { orgId: string; subsidiaryId: string; date: string }, actorId: string): Promise<string> {
@@ -101,11 +101,11 @@ async function seedDraftJournal(org: { orgId: string; subsidiaryId: string; date
 async function storedState(orgId: string, documentId: string): Promise<{ total: string; n: number; amounts: string[] }> {
   const doc = (await withOrgContext(orgId, () => db.execute<{ total: string }>(sql`
     select total::text as total from documents where id = ${documentId} and org_id = ${orgId}
-  `))).rows[0]!;
-  const lines = (await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`
+  `, "objects")))[0]!;
+  const lines = await withOrgContext(orgId, () => db.execute<{ amount: string }>(sql`
     select amount::text as amount from document_lines
      where document_id = ${documentId} and org_id = ${orgId} order by line_number
-  `))).rows;
+  `, "objects"));
   return { total: doc.total, n: lines.length, amounts: lines.map((l) => l.amount) };
 }
 

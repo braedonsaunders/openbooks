@@ -250,7 +250,7 @@ test(
         const stored = (await db.execute<{ title: string; subsidiary_id: string | null }>(sql`
           select data ->> 'title' as title, data ->> 'subsidiary_id' as subsidiary_id
             from custom_records where id = ${visibleId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(stored?.title, 'kept')
         assert.equal(
           stored?.subsidiary_id,

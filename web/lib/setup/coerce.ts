@@ -496,8 +496,8 @@ export function describeDbError(e: unknown): string {
   if (code === '23503') return 'in-use' // foreign_key_violation
   if (code === '23502') return 'missing-required' // not_null_violation
   // Drizzle wraps driver failures in DrizzleQueryError whose own message
-  // embeds the FULL SQL text plus bound params (a raw INSERT once reached
-  // the dialog this way) — never echo the wrapper. The driver's
+  // embeds the full SQL text (and bound params when the database handle
+  // enables paramsInErrors) — never echo the wrapper. The driver's
   // message (cause) is plain Postgres text, e.g. a trigger's user-language
   // refusal; anything else degrades to a generic failure, never SQL.
   const driverMessage = (e as { cause?: { message?: unknown } })?.cause?.message

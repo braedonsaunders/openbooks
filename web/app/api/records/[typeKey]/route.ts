@@ -56,13 +56,13 @@ async function legacyGET(req: Request, { params }: { params: Promise<{ typeKey: 
        where ${where}
        order by r.created_at desc
        limit ${perPage} offset ${(page - 1) * perPage}
-    `)),
-    db.execute<{ n: string }>(sql`select count(*) as n from custom_records r where ${where}`),
+    `, 'objects')),
+    db.execute<{ n: string }>(sql`select count(*) as n from custom_records r where ${where}`, 'objects'),
   ])
 
   return NextResponse.json({
-    records: rows.rows,
-    total: Number(count.rows[0]?.n ?? 0),
+    records: rows,
+    total: Number(count[0]?.n ?? 0),
     page,
     perPage,
   })

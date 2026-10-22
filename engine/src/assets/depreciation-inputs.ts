@@ -114,8 +114,8 @@ export async function recordDepreciationInput(
        where s.org_id = ${args.orgId} and s.asset_id = ${args.assetId}
          and s.book_id=${selectedBookId}
        limit 1
-       for update of s, a, p`);
-    const row = schedule.rows[0];
+       for update of s, a, p`, "objects");
+    const row = schedule[0];
     if (!row)
       throw new DepreciationRefusalError(
         "no depreciation schedule or accounting period covers the effective date",
@@ -160,8 +160,8 @@ export async function recordDepreciationInput(
         join file_attachments fa on fa.org_id = f.org_id and fa.file_id = f.id
        where f.id = ${args.evidenceFileId} and f.org_id = ${args.orgId} and not f.is_inactive
          and fa.target_table = 'fixed_assets' and fa.target_id = ${args.assetId}
-       limit 1`);
-    if (!evidence.rows[0])
+       limit 1`, "objects");
+    if (!evidence[0])
       throw new DepreciationRefusalError("evidence file must be attached to this asset");
 
     const source = args.kind === "manual" ? "manual" : "production_usage";
@@ -176,8 +176,8 @@ export async function recordDepreciationInput(
          and source = ${source} and posted_amount is null
        order by created_at desc
        limit 1
-       for update`);
-    const replacedInputId = priorLine.rows[0]?.input_id ?? null;
+       for update`, "objects");
+    const replacedInputId = priorLine[0]?.input_id ?? null;
 
     const totals = await tx.execute<{
       planned: string;
@@ -188,7 +188,7 @@ export async function recordDepreciationInput(
         from depreciation_schedule_lines l
         left join depreciation_inputs i on i.id = l.input_id and i.org_id = l.org_id
        where l.org_id = ${args.orgId} and l.schedule_id = ${row.id}
-         ${priorLine.rows[0] ? sql`and l.id <> ${priorLine.rows[0].id}` : sql``}`);
+         ${priorLine[0] ? sql`and l.id <> ${priorLine[0].id}` : sql``}`, "objects");
     const basisChange = await assetBasisDelta(
       tx,
       args.orgId,
@@ -201,12 +201,10 @@ export async function recordDepreciationInput(
       );
     const currentCost = add(row.acquisition_cost, basisChange.cost),
       currentSalvage = add(row.salvage_value, basisChange.salvage);
-    const valuation = (
-      await tx.execute<{ delta: string; cutoff: string | null }>(
+    const valuation = (await tx.execute<{ delta: string; cutoff: string | null }>(
         // Live entries only: the carrying delta is the sum of standing remeasurements, not their history.
-        sql`select coalesce(sum(v.amount),0)::text as delta,max(v.occurred_on)::text as cutoff from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${args.orgId} and v.asset_id=${args.assetId} and e.book_id=${row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id)`,
-      )
-    ).rows[0]!;
+        sql`select coalesce(sum(v.amount),0)::text as delta,max(v.occurred_on)::text as cutoff from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${args.orgId} and v.asset_id=${args.assetId} and e.book_id=${row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id)`, "objects",
+      ))[0]!;
     if (valuation.cutoff && args.effectiveDate < valuation.cutoff)
       throw new DepreciationRefusalError(
         "depreciation input cannot precede the retained asset valuation; correct that valuation before changing its historical inputs",
@@ -218,7 +216,7 @@ export async function recordDepreciationInput(
     // Continue-from-accumulated (migration 0156): evidence caps run against
     // the REMAINING basis — the opening figure already consumed part of it.
     const alreadyPlanned = add(
-      totals.rows[0]?.planned ?? "0",
+      totals[0]?.planned ?? "0",
       add(row.opening_accumulated_depreciation ?? "0", basisChange.accumulated),
     );
     let plannedAmount: string;
@@ -247,20 +245,16 @@ export async function recordDepreciationInput(
           : null;
       const cutoff = valuationCutover ?? basisChange.cutoff;
       const cutoverTotals = cutoff
-        ? (
-            await tx.execute<{ planned: string; used_units: string }>(
-              sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units),0)::text as used_units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} ${valuationCutover ? sql`and p.ends_on>${cutoff}` : sql`and p.ends_on>=${cutoff}`} ${priorLine.rows[0] ? sql`and l.id<>${priorLine.rows[0].id}` : sql``}`,
-            )
-          ).rows[0]!
+        ? (await tx.execute<{ planned: string; used_units: string }>(
+              sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units),0)::text as used_units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} ${valuationCutover ? sql`and p.ends_on>${cutoff}` : sql`and p.ends_on>=${cutoff}`} ${priorLine[0] ? sql`and l.id<>${priorLine[0].id}` : sql``}`, "objects",
+            ))[0]!
         : null;
       let lifetimeUnits = basisChange.unitsRemaining ?? row.units_total;
       let cutoverBasis = basisChange.depreciableAfter;
       if (valuationCutover) {
-        const prior = (
-          await tx.execute<{ planned: string; units: string }>(
-            sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units) filter(where ${basisChange.cutoff ? sql`p.ends_on>=${basisChange.cutoff}` : sql`true`}),0)::text as units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} and p.ends_on<=${valuationCutover}`,
-          )
-        ).rows[0]!;
+        const prior = (await tx.execute<{ planned: string; units: string }>(
+            sql`select coalesce(sum(l.planned_amount),0)::text as planned,coalesce(sum(i.production_units) filter(where ${basisChange.cutoff ? sql`p.ends_on>=${basisChange.cutoff}` : sql`true`}),0)::text as units from depreciation_schedule_lines l join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id left join depreciation_inputs i on i.org_id=l.org_id and i.id=l.input_id and i.voided_at is null where l.org_id=${args.orgId} and l.schedule_id=${row.id} and p.ends_on<=${valuationCutover}`, "objects",
+          ))[0]!;
         lifetimeUnits = add(lifetimeUnits, neg(prior.units));
         cutoverBasis = add(
           add(add(currentCost, valuation.delta), neg(currentSalvage)),
@@ -273,7 +267,7 @@ export async function recordDepreciationInput(
         );
       }
       const usedUnits =
-        cutoverTotals?.used_units ?? totals.rows[0]?.used_units ?? "0";
+        cutoverTotals?.used_units ?? totals[0]?.used_units ?? "0";
       const nextUnits = toUnits(usedUnits) + toUnits(value);
       if (nextUnits < 0n || nextUnits > toUnits(lifetimeUnits))
         throw new DepreciationRefusalError(
@@ -304,12 +298,12 @@ export async function recordDepreciationInput(
       values (${args.orgId}, ${row.id}, ${row.period_id}, ${args.kind},
               ${args.kind === "manual" ? value : null}, ${args.kind === "production_usage" ? value : null},
               ${memo}, ${args.evidenceFileId}, ${replacedInputId}, ${args.actorId}, ${args.actorId})
-      returning id`);
-    const inputId = inserted.rows[0]!.id;
+      returning id`, "objects");
+    const inputId = inserted[0]!.id;
 
     let scheduleLineId: string;
-    if (priorLine.rows[0]) {
-      scheduleLineId = priorLine.rows[0].id;
+    if (priorLine[0]) {
+      scheduleLineId = priorLine[0].id;
       await tx.execute(sql`
         update depreciation_schedule_lines
            set planned_amount = ${plannedAmount}, source = ${args.kind === "manual" ? "manual" : "production_usage"},
@@ -323,8 +317,8 @@ export async function recordDepreciationInput(
                 (select coalesce(max(sequence), -1) + 1 from depreciation_schedule_lines where org_id = ${args.orgId} and schedule_id = ${row.id}),
                 ${plannedAmount}, ${args.kind === "manual" ? "manual" : "production_usage"},
                 ${inputId}, ${args.actorId}, ${args.actorId})
-        returning id`);
-      scheduleLineId = line.rows[0]!.id;
+        returning id`, "objects");
+      scheduleLineId = line[0]!.id;
     }
 
     // The covering period is always a regular period (the lookup excludes adjustments).

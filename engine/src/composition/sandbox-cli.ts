@@ -36,11 +36,11 @@ async function firstOrg(): Promise<string> {
   // bypass: cross-org-by-design — with no organization given, the operator CLI picks the first production organization of the installation.
   const r = await withBypassContext(() =>
     db.execute<{ id: string }>(
-      sql`select id from orgs where env_kind = 'production' order by created_at limit 1`,
+      sql`select id from orgs where env_kind = 'production' order by created_at limit 1`, "objects",
     ),
   );
-  if (!r.rows[0]) throw new Error("no production org found");
-  return r.rows[0].id;
+  if (!r[0]) throw new Error("no production org found");
+  return r[0].id;
 }
 
 /** Resolve only the tenant identity here; all command work runs in that tenant. */
@@ -54,11 +54,11 @@ async function commandOrg(
     if (!suppliedOrg) return firstOrg();
     const org = await withOrgContext(suppliedOrg, () =>
       db.execute<{ id: string }>(sql`
-      select id from orgs where id = ${suppliedOrg} and env_kind = 'production'`),
+      select id from orgs where id = ${suppliedOrg} and env_kind = 'production'`, "objects"),
     );
-    if (!org.rows[0])
+    if (!org[0])
       throw new Error(`production org not found: ${suppliedOrg}`);
-    return org.rows[0].id;
+    return org[0].id;
   }
 
   const targetId = positional[0];
@@ -69,17 +69,13 @@ async function commandOrg(
   // bypass: cross-org-by-design — resolves which production organization owns a sandbox or change set.
   const ownerId = await withBypassContext(async () => {
     if (cmd === "apply") {
-      return (
-        await db.execute<{ org_id: string }>(
-          sql`select org_id from change_sets where id = ${targetId}`,
-        )
-      ).rows[0]?.org_id;
+      return (await db.execute<{ org_id: string }>(
+          sql`select org_id from change_sets where id = ${targetId}`, "objects",
+        ))[0]?.org_id;
     }
-    return (
-      await db.execute<{ production_org_id: string }>(
-        sql`select production_org_id from sandboxes where id = ${targetId}`,
-      )
-    ).rows[0]?.production_org_id;
+    return (await db.execute<{ production_org_id: string }>(
+        sql`select production_org_id from sandboxes where id = ${targetId}`, "objects",
+      ))[0]?.production_org_id;
   });
   if (!ownerId)
     throw new Error(

@@ -111,7 +111,7 @@ test("generate, send, ordered sign completes with evidence and a signed PDF vers
   // The stored file is a real PDF with one version.
   const versions = (await db.execute<{ n: string }>(sql`
     select count(*) as n from file_versions where file_id = ${document.fileId!}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   assert.equal(versions, "1");
 
   const sent = await sendDocument({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
@@ -134,7 +134,7 @@ test("generate, send, ordered sign completes with evidence and a signed PDF vers
   assert.equal(viewed.document.id, document.id);
   const viewedRow = (await db.execute<{ status: string }>(sql`
     select status from hrm_document_signers where document_id = ${document.id} and ord = 0
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   assert.equal(viewedRow.status, "viewed");
 
   const signed1 = await signTokenDocument({ token: employeeToken!, name: "Eddie Employee", ip: "10.0.0.1", userAgent: "test-agent" });
@@ -146,10 +146,10 @@ test("generate, send, ordered sign completes with evidence and a signed PDF vers
   assert.ok(done.completedAt);
 
   // Evidence hash recorded for every signer, read back from storage.
-  const evidence = (await db.execute<{ role: string; evidence: { documentHash: string; ipHash: string | null } }>(sql`
+  const evidence = await db.execute<{ role: string; evidence: { documentHash: string; ipHash: string | null } }>(sql`
     select role, evidence from hrm_document_signers
      where document_id = ${document.id} order by ord
-  `)).rows;
+  `, "objects");
   assert.equal(evidence.length, 3);
   for (const row of evidence) {
     assert.match(row.evidence.documentHash, /^[0-9a-f]{64}$/);
@@ -159,11 +159,11 @@ test("generate, send, ordered sign completes with evidence and a signed PDF vers
   // The signed PDF appended a second file version; retain_until stored.
   const versionsAfter = (await db.execute<{ n: string }>(sql`
     select count(*) as n from file_versions where file_id = ${document.fileId!}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   assert.equal(versionsAfter, "2");
   const stored = (await db.execute<{ status: string; retain_until: string | null }>(sql`
     select status, retain_until::text as retain_until from hrm_documents where id = ${document.id}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   assert.equal(stored.status, "signed");
 
   // Token replay after completion is refused, never double-counted.
@@ -173,7 +173,7 @@ test("generate, send, ordered sign completes with evidence and a signed PDF vers
   );
   const signEvents = (await db.execute<{ n: string }>(sql`
     select count(*) as n from hrm_document_events where document_id = ${document.id} and kind = 'signed'
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   assert.equal(signEvents, "3");
   });
 });
@@ -263,7 +263,7 @@ test("decline, void, acknowledge, and legal hold follow their rules", { skip: !D
   assert.equal(voided.status, "voided");
   const reason = (await db.execute<{ void_reason: string }>(sql`
     select void_reason from hrm_documents where id = ${draft2.document.id}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   assert.equal(reason.void_reason, "Issued in error");
   // Legal hold toggles and lands in the audit log.
   const held = await setLegalHold({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id, hold: true });
@@ -271,7 +271,7 @@ test("decline, void, acknowledge, and legal hold follow their rules", { skip: !D
   const audit = (await db.execute<{ n: string }>(sql`
     select count(*) as n from audit_log
      where org_id = ${h.org.orgId} and table_name = 'hrm_documents' and row_id = ${document.id} and action = 'legal_hold_on'
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
   assert.equal(audit, "1");
   const detail = await getDocumentDetail({ orgId: h.org.orgId, actorId: h.hrId, documentId: document.id });
   assert.ok(detail.events.some((e) => e.kind === "sent"));

@@ -82,13 +82,13 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
       select id, concat_ws(' · ', asset_number, name) as label from fixed_assets
        where org_id = ${orgId} and status in ('draft', 'in_service', 'fully_depreciated', 'construction')
          ${scoped(sql`subsidiary_id`, allowed)}
-       order by asset_number limit 2000`),
+       order by asset_number limit 2000`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
       select p.id, p.display_name as name from parties p
         join vendor_roles v on v.org_id = p.org_id and v.party_id = p.id
        where p.org_id = ${orgId} and p.is_active and v.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })}
-       order by p.display_name limit 1000`),
+       order by p.display_name limit 1000`, 'objects'),
     db.execute<{ id: string; label: string; subsidiary_id: string | null }>(sql`
       select dl.id, concat_ws(' · ', d.document_number, coalesce(dl.description, ''), dl.amount::text) as label, d.subsidiary_id
         from document_lines dl
@@ -97,7 +97,7 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
          and coalesce(d.posting_date, d.document_date) >= ${today}::date - 400
          ${allowed ? sql`and (d.subsidiary_id is null or d.subsidiary_id = any(${`{${[...allowed].join(',')}}`}::uuid[]))` : sql``}
        order by coalesce(d.posting_date, d.document_date) desc, d.document_number, dl.line_number
-       limit 400`),
+       limit 400`, 'objects'),
   ])
   const rows = standing === 'all' ? queue : queue.filter((row) => row.standing === standing)
   let selected: ScheduleDetail | null = null
@@ -116,9 +116,9 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
              (select max(r.reading)::text from asset_usage_readings r where r.org_id = s.org_id and r.asset_id = s.asset_id and lower(r.unit) = lower(s.usage_unit)) as current_usage
         from asset_maintenance_schedules s
         join fixed_assets a on a.org_id = s.org_id and a.id = s.asset_id
-       where s.org_id = ${orgId} and s.id = ${selectedId} ${scoped(sql`a.subsidiary_id`, allowed)}`)).rows[0]
+       where s.org_id = ${orgId} and s.id = ${selectedId} ${scoped(sql`a.subsidiary_id`, allowed)}`, 'objects'))[0]
     if (schedule) {
-      const records = (await db.execute<{
+      const records = await db.execute<{
         id: string; performed_on: string; description: string; cost: string; treatment: 'expense' | 'betterment'; usage_reading: string | null;
         vendor_name: string | null; source_label: string | null; proposal_id: string | null; status: 'recorded' | 'cancelled';
       }>(sql`
@@ -128,7 +128,7 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
           left join parties v on v.org_id = r.org_id and v.id = r.vendor_party_id
           left join documents d on d.org_id = r.org_id and d.id = r.source_document_id
          where r.org_id = ${orgId} and r.asset_id = ${schedule.asset_id} and (r.schedule_id = ${schedule.id} or r.schedule_id is null)
-         order by r.performed_on desc, r.created_at desc limit 200`)).rows
+         order by r.performed_on desc, r.created_at desc limit 200`, 'objects')
       selected = {
         id: schedule.id,
         assetId: schedule.asset_id,
@@ -180,8 +180,8 @@ export async function loadMaintenance(sp: Record<string, string | string[] | und
     createMode: pickString(sp.schedule) === 'new' && can(authz, 'assets.maintain'),
     canMaintain: can(authz, 'assets.maintain'),
     proposalsEnabled,
-    assets: assets.rows,
-    vendors: vendors.rows,
-    billLines: billLines.rows.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
+    assets,
+    vendors,
+    billLines: billLines.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
   }
 }

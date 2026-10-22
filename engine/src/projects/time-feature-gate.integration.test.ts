@@ -72,7 +72,7 @@ for (const operation of ["labor", "overhead"] as const) {
         }>(sql`select t.status,t.hours::text,t.cost_journal_entry_id,t.overhead_journal_entry_id,
           (select count(*)::int from projects where org_id=t.org_id and id=${projectId}) as projects,
           (select count(*)::int from journal_entries where org_id=t.org_id) as journals
-          from time_entries t where t.org_id=${org.orgId} and t.id=${timeId}`)).rows[0]!;
+          from time_entries t where t.org_id=${org.orgId} and t.id=${timeId}`, "objects"))[0]!;
         assert.deepEqual(untouched, { status: "approved", hours: "2.0000", cost_journal_entry_id: null,
           overhead_journal_entry_id: null, projects: 1, journals: 0 });
         await toggle(true);
@@ -83,7 +83,7 @@ for (const operation of ["labor", "overhead"] as const) {
         const reverse = operation === "labor" ? reverseProjectLaborCost : reverseOverheadForTime;
         await reverse(org.orgId, actorId, [timeId], "Controller approved historical correction", org.date);
         const source = (await db.execute<{ status: string }>(sql`
-          select status from journal_entries where org_id=${org.orgId} and id=${entryId}`)).rows[0]!;
+          select status from journal_entries where org_id=${org.orgId} and id=${entryId}`, "objects"))[0]!;
         assert.equal(source.status, "reversed", "disabled features preserve controlled correction of history");
         assert.equal(await run(), null, "disabled parent prevents recreating the reversed posting");
       } finally {

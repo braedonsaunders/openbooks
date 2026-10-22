@@ -1,1 +1,0 @@
-Retains the migration ordinal without changing tenant rows or constraints. Country-owned setup defaults are applied by the installed payroll pack in an audited transaction. No data-dependent preflight is needed.

@@ -79,7 +79,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
               const held = new Promise<void>(resolve => { release = resolve; });
               const staged = new Promise<void>(resolve => { ready = resolve; });
               const edit = withOrg(org.orgId, async () => {
-                editorPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+                editorPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
                 await db.execute(sql`update document_lines set subsidiary_id=${hidden}
                   where document_id=${templates[0]!} and line_number=1`);
                 ready();
@@ -97,7 +97,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
                   blocked = (await db.execute<{ blocked: boolean }>(sql`select exists(
                     select 1 from pg_stat_activity where datname=current_database()
                       and ${editorPid} = any(pg_blocking_pids(pid))
-                  ) as blocked`)).rows[0]!.blocked;
+                  ) as blocked`, "objects"))[0]!.blocked;
                   if (blocked) break;
                   await new Promise(resolve => setTimeout(resolve, 10));
                 }
@@ -109,8 +109,8 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
             } else response = await invoke();
             assert.equal(response.status, 404, JSON.stringify(await response.json()));
           }
-          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId}`)).rows[0]!.n, 2);
-          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules where org_id=${org.orgId}`)).rows[0]!.n, 2);
+          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId}`, "objects"))[0]!.n, 2);
+          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules where org_id=${org.orgId}`, "objects"))[0]!.n, 2);
           return;
         }
         if (operation === "empty scope" || operation === "subtree scope" || operation === "unrestricted scope") {
@@ -135,7 +135,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
           }
           await assert.rejects(() => runScheduleNow(org.orgId, schedules[operation === "direct hidden" ? 1 : 0]!, actor, org.date),
             { status: operation === "direct hidden" ? 404 : 403 });
-          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId}`)).rows[0]!.n, 2);
+          assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId}`, "objects"))[0]!.n, 2);
           return;
         }
         if (operation === "authorized lifecycle") {
@@ -154,8 +154,8 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
           assert.equal((await second.json()).documentId, generated.documentId);
           assert.equal((await detail.DELETE(request("DELETE"), params)).status, 409);
           assert.equal((await detail.DELETE(request("DELETE"), visibleParams)).status, 200);
-          const audits = (await db.execute<{ action: string }>(sql`select action from audit_log
-            where org_id=${org.orgId} and table_name='recurring_schedules' and row_id=${id} order by at`)).rows;
+          const audits = await db.execute<{ action: string }>(sql`select action from audit_log
+            where org_id=${org.orgId} and table_name='recurring_schedules' and row_id=${id} order by at`, "objects");
           assert.deepEqual(audits.map(row => row.action), ["insert", "update"]);
           return;
         }
@@ -192,8 +192,8 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
           expected = operation === "coerced posting" ? 400 : 403;
         }
         assert.equal(response.status, expected, JSON.stringify(await response.json()));
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId}`)).rows[0]!.n, 2);
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules where org_id=${org.orgId}`)).rows[0]!.n, 2);
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId}`, "objects"))[0]!.n, 2);
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules where org_id=${org.orgId}`, "objects"))[0]!.n, 2);
       }));
     } finally { state.user = null; await dropScratchOrg(org.orgId); }
   });

@@ -50,24 +50,24 @@ test("native bills retain direct materials costs through edits and partial CIS p
     loaded = (await read())!;
     assert.equal(loaded.lines[1]!.withholding_treatment, "materials");
     assert.equal(loaded.lines[1]!.withholding_materials_cost, "300.0000");
-    const audits = (await db.execute<{ after: { lines: { withholding_materials_cost: string | number | null }[] } }>(sql`
+    const audits = await db.execute<{ after: { lines: { withholding_materials_cost: string | number | null }[] } }>(sql`
       select changes->'after' as after from audit_log where org_id=${org.orgId} and table_name='documents' and row_id=${created.id} and action='update' order by at
-    `)).rows;
+    `, "objects");
     assert.ok(audits.some(audit => audit.after.lines.some(line => /^300(?:\.0+)?$/.test(String(line.withholding_materials_cost)))));
     await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${created.id}`);
     const entry = await postDocument(created.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
-    const openLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and account_id=${org.accounts.ap}`)).rows[0]!.id;
+    const openLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and account_id=${org.accounts.ap}`, "objects"))[0]!.id;
     const payment = await createPaymentDocument({ orgId: org.orgId, createdBy: actor, kind: "vendor_payment", partyId: org.vendorId,
       subsidiaryId: org.subsidiaryId, bankAccountId: org.accounts.bank, documentDate: org.date, currency: "GBP", allowedSubsidiaryIds: null });
     const save = (amount: string) => updateDraftPayment(payment.id, { allocations: [{ openLineId: openLine,
       sourceTransactionAmount: amount, targetTransactionAmount: amount, settlementRate: "1", settlementRateSource: "same_currency" as const,
       settlementRateReference: "Same transaction currency" }] }, actor, org.orgId, { allowedSubsidiaryIds: null });
     await save("700");
-    let paymentRow = (await db.execute<{ total: string; custom: unknown }>(sql`select total::text,custom from documents where org_id=${org.orgId} and id=${payment.id}`)).rows[0]!;
+    let paymentRow = (await db.execute<{ total: string; custom: unknown }>(sql`select total::text,custom from documents where org_id=${org.orgId} and id=${payment.id}`, "objects"))[0]!;
     assert.equal(paymentRow.total, "590.0000");
     assert.equal(storedPaymentWithholdings(paymentRow.custom)[0]!.deducted, "110.0000");
     await save("1400");
-    paymentRow = (await db.execute<{ total: string; custom: unknown }>(sql`select total::text,custom from documents where org_id=${org.orgId} and id=${payment.id}`)).rows[0]!;
+    paymentRow = (await db.execute<{ total: string; custom: unknown }>(sql`select total::text,custom from documents where org_id=${org.orgId} and id=${payment.id}`, "objects"))[0]!;
     assert.equal(paymentRow.total, "1180.0000");
     assert.equal(storedPaymentWithholdings(paymentRow.custom)[0]!.deducted, "220.0000");
   }); } finally { await dropScratchOrg(org.orgId); }

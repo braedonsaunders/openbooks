@@ -40,7 +40,7 @@ for (const [label,body] of cases) {
       session.user={id:actor,orgId:org.orgId,name:'Item controller',email:'item@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
       const id=org.items.service;
       await db.execute(sql`update items set default_rate='100',default_cost='40',income_account_id=${org.accounts.revenue} where id=${id}`);
-      const before=(await db.execute(sql`select * from items where id=${id}`)).rows[0];
+      const before=(await db.execute(sql`select * from items where id=${id}`, 'objects'))[0];
       const accepted=['explicit clear','valid edit','omitted finance'].includes(label);
       const response=await withOrgContext(org.orgId,()=>PATCH(new Request('http://audit.local/api/items/'+id,{method:'PATCH',body:JSON.stringify(body)}),{params:Promise.resolve({id})}));
       const payload = (await response.json()) as { error?: string; issues?: Array<{ path: string; message: string }> };
@@ -56,12 +56,12 @@ for (const [label,body] of cases) {
           assert.match(refusal,/decimal string.*precision/,`${label}: explain why JSON numbers are unsafe`);
         }
       }
-      const after=(await db.execute(sql`select * from items where id=${id}`)).rows[0];
+      const after=(await db.execute(sql`select * from items where id=${id}`, 'objects'))[0];
       if(!accepted) assert.deepEqual(after,before,'refused malformed input cannot change the item');
       else if(label==='explicit clear') {assert.equal(after?.default_rate,null);assert.equal(after?.default_cost,null);assert.equal(after?.income_account_id,null);}
       else if(label==='valid edit') {assert.equal(after?.default_rate,'75.1250');assert.equal(after?.default_cost,'12.5000');}
       else {assert.equal(after?.default_rate,'100.0000');assert.equal(after?.default_cost,'40.0000');}
-      const audits=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and table_name='items' and row_id=${id}`)).rows[0]!.n;
+      const audits=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and table_name='items' and row_id=${id}`, 'objects'))[0]!.n;
       assert.equal(audits,accepted?1:0);
     } finally {session.user=null;await dropScratchOrg(org.orgId);}
   });
@@ -87,7 +87,7 @@ test('item PATCH preserves omitted required custom fields on a partial edit', {s
 
     const response=await withOrgContext(org.orgId,()=>PATCH(new Request('http://audit.local/api/items/'+id,{method:'PATCH',body:JSON.stringify({custom:{optional_note:'updated'}})}),{params:Promise.resolve({id})}));
     assert.equal(response.status,200,JSON.stringify(await response.json()));
-    const stored=(await db.execute<{custom:Record<string,unknown>}>(sql`select custom from items where id=${id} and org_id=${org.orgId}`)).rows[0]?.custom;
+    const stored=(await db.execute<{custom:Record<string,unknown>}>(sql`select custom from items where id=${id} and org_id=${org.orgId}`, 'objects'))[0]?.custom;
     assert.deepEqual(stored,{required_code:'R-1',optional_note:'updated'});
   } finally {session.user=null;await dropScratchOrg(org.orgId);}
 });

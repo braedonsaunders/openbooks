@@ -43,19 +43,19 @@ async function fixture(): Promise<Fixture> {
   const mandateId = (await db.execute<{ id: string }>(sql`
     insert into payment_mandates (org_id, party_id, party_bank_account_id, scheme, mandate_reference, status)
     values (${org.orgId}, ${org.vendorId}, ${bankAccountId}, 'custom', 'MAND-MISSING-ROW-1', 'active')
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   const formatId = (await db.execute<{ id: string }>(sql`
     insert into payment_formats (org_id, code, name, rail, direction, is_active)
     values (${org.orgId}, 'MISSINGROW', 'Missing-row format', 'custom', 'credit', true)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   const profileId = (await db.execute<{ id: string }>(sql`
     insert into payment_bank_profiles (org_id, name, bank_account_id, payment_format_id, currency, is_active)
     values (${org.orgId}, 'Missing-row profile', ${org.accounts.bank}, ${formatId}, 'CAD', true)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   const scheduleId = (await db.execute<{ id: string }>(sql`
     insert into payment_schedules (org_id, name, payment_bank_profile_id, cron, timezone, action, is_active)
     values (${org.orgId}, 'Missing-row schedule', ${profileId}, '0 9 * * *', 'UTC', 'create_draft', true)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   return { org, mandateId, scheduleId }
 }
 
@@ -101,7 +101,7 @@ test("mandate PATCH on another org's id answers 404 and changes nothing", async 
     const response = await patch('mandates', mandateId, { status: 'suspended' })
     assert.equal(response.status, 404, `expected 404, got ${response.status}: ${JSON.stringify(await response.clone().json())}`)
     const status = (await db.execute<{ status: string }>(sql`
-      select status from payment_mandates where id = ${mandateId} and org_id = ${org.orgId}`)).rows[0]!.status
+      select status from payment_mandates where id = ${mandateId} and org_id = ${org.orgId}`, 'objects'))[0]!.status
     assert.equal(status, 'active')
   } finally {
     await dropScratchOrg(org.orgId)
@@ -115,7 +115,7 @@ test('schedule PATCH on an existing schedule still saves', async () => {
     const response = await patch('schedules', scheduleId, { name: 'Renamed schedule' })
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
     const name = (await db.execute<{ name: string }>(sql`
-      select name from payment_schedules where id = ${scheduleId} and org_id = ${org.orgId}`)).rows[0]!.name
+      select name from payment_schedules where id = ${scheduleId} and org_id = ${org.orgId}`, 'objects'))[0]!.name
     assert.equal(name, 'Renamed schedule')
   } finally {
     await dropScratchOrg(org.orgId)

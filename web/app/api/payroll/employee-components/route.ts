@@ -108,7 +108,7 @@ function refusalResponse(error: unknown): NextResponse {
 async function employeeSubsidiary(orgId: string, employeePartyId: string): Promise<string | null | undefined> {
   const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
-     where org_id = ${orgId} and id = ${employeePartyId} for share`)).rows[0]
+     where org_id = ${orgId} and id = ${employeePartyId} for share`, 'objects'))[0]
   return row ? row.subsidiaryId : undefined
 }
 
@@ -136,24 +136,24 @@ export const GET = defineRoute({
             from employee_pay_components a
             join pay_components c on c.org_id = a.org_id and c.id = a.component_id
            where a.org_id = ${orgId} and a.employee_party_id = ${employee} and a.is_active
-           order by a.effective_from desc`),
+           order by a.effective_from desc`, 'objects'),
         db.execute<Record<string, unknown>>(sql`
           select c.id, c.code, c.name, c.kind, c.basis, c.value::text as value,
                  c.payment_kind as "paymentKind", c.country
             from pay_components c
            where c.org_id = ${orgId} and c.is_active and c.system_key is null
-           order by c.sequence, c.code`),
+           order by c.sequence, c.code`, 'objects'),
         db.execute<Record<string, unknown>>(sql`
           select w.id, w.service_start::text as "serviceStart", s.name as "subsidiaryName"
             from worker_employments w
             left join subsidiaries s on s.org_id = w.org_id and s.id = w.employer_subsidiary_id
            where w.org_id = ${orgId} and w.worker_party_id = ${employee}
-           order by w.service_start nulls last, w.id`),
+           order by w.service_start nulls last, w.id`, 'objects'),
       ])
       return NextResponse.json({
-        assignments: assignments.rows,
-        components: components.rows,
-        employments: employments.rows,
+        assignments,
+        components,
+        employments,
       })
     })
   },

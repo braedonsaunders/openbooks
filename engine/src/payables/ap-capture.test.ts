@@ -565,14 +565,14 @@ test(
       assert.ok(bill.documentId);
       let billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed);
+      `, "objects"))[0]!.quantity_billed);
       assert.equal(billed, "6.1250", "a positive vendor bill increases PO billed quantity");
 
       const replay = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId, allowedSubsidiaryIds: null });
       assert.equal(replay.documentId, bill.documentId, "replaying a materialized capture is idempotent");
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed);
+      `, "objects"))[0]!.quantity_billed);
       assert.equal(billed, "6.1250");
 
       const creditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-REG", "2.1250");
@@ -580,7 +580,7 @@ test(
       assert.ok(credit.documentId);
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed);
+      `, "objects"))[0]!.quantity_billed);
       assert.equal(billed, "4.0000", "a positive vendor credit decreases PO billed quantity");
 
       const overCreditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-OVER", "4.0001");
@@ -590,7 +590,7 @@ test(
       );
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed);
+      `, "objects"))[0]!.quantity_billed);
       assert.equal(billed, "4.0000", "an over-credit cannot underflow the PO billed balance");
 
       const overCancelledId = await insertCapture("vendor_bill", "BILL-CAPTURE-CANCELLED", "2.0000",
@@ -601,11 +601,11 @@ test(
       );
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed);
+      `, "objects"))[0]!.quantity_billed);
       assert.equal(billed, "4.0000", "a refused bill leaves the other order unchanged");
       const cancelledBilled = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${cancelledPoLineId}
-      `)).rows[0]!.quantity_billed);
+      `, "objects"))[0]!.quantity_billed);
       assert.equal(cancelledBilled, "4.0000", "cancelled quantity is excluded from AP capture billing without advancing the source");
 
       const racingBillA = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-A", "4.0000");
@@ -618,7 +618,7 @@ test(
       assert.equal(raced.filter((result) => result.status === "rejected").length, 1);
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
-      `)).rows[0]!.quantity_billed);
+      `, "objects"))[0]!.quantity_billed);
       assert.equal(billed, "8.0000", "the locked PO line admits only one concurrent bill");
     } finally {
       // Capture evidence is intentionally append-only in production. Remove
@@ -719,7 +719,7 @@ test(
          where org_id = ${org.orgId} and kind = 'vendor_bill' and status <> 'voided'
            and party_id = ${org.vendorId}
            and regexp_replace(lower(nullif(reference_number, '')), '[^a-z0-9]', '', 'g') = 'invduprace'
-      `)).rows[0]!.count;
+      `, "objects"))[0]!.count;
       assert.equal(drafts, "1", "exactly one draft bill survives the race");
     } finally {
       await db.transaction(async (tx) => {
@@ -836,7 +836,7 @@ test(
       }>(sql`
         select status, normalized, validation_issues from ap_capture_items
          where id = ${captureId} and org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(item.status, "needs_review");
       assert.equal(item.normalized.total, "1,234", "refused header money stays raw in storage");
       assert.equal(item.normalized.lines[0]!.quantity, "1,234", "refused line money stays raw in storage");
@@ -851,12 +851,12 @@ test(
       const evidence = (await db.execute<{ raw_value: string | null; normalized_value: unknown }>(sql`
         select raw_value, normalized_value from ap_capture_fields
          where org_id = ${org.orgId} and field_key = 'total'
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(evidence?.raw_value, "1,234", "raw OCR evidence is retained");
       const run = (await db.execute<{ status: string; raw_provider_payload: unknown }>(sql`
         select status, raw_provider_payload from ap_capture_runs
          where org_id = ${org.orgId} and capture_item_id = ${captureId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(run.status, "succeeded");
       assert.ok(run.raw_provider_payload, "raw provider payload is retained");
     } finally {

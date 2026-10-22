@@ -94,8 +94,8 @@ async function loadBatchSummary(subjectId: string): Promise<BatchRow | null> {
      where b.id = ${subjectId}
      group by b.id,b.org_id, foreman.display_name, b.foreman_party_id, b.project_id,
               project.name, b.worked_on, b.status, b.updated_by, b.created_by
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const crewBatchFlowAdapter: FlowSubjectAdapter =
@@ -129,7 +129,7 @@ export const crewBatchFlowAdapter: FlowSubjectAdapter =
           on worker.id = l.employee_party_id
        where l.batch_id = ${subjectId}
        order by worker.display_name, l.id
-    `);
+    `, "objects");
       return {
         values: {
           id: subjectId,
@@ -145,14 +145,12 @@ export const crewBatchFlowAdapter: FlowSubjectAdapter =
           workerCount: batch.worker_count,
           submittedBy: batch.submitted_by,
         },
-        rows: { crewLines: lines.rows },
+        rows: { crewLines: lines },
         submitterUserId: batch.submitted_by,
         makerUserId: batch.submitted_by,
-        makerUserIds: (
-          await db.execute<{ id: string }>(
-            sql`select distinct u.id from users u join crew_time_batch_lines l on l.org_id=u.org_id and l.employee_party_id=u.party_id where l.org_id=${batch.org_id} and l.batch_id=${subjectId}`,
-          )
-        ).rows.map((row) => row.id),
+        makerUserIds: (await db.execute<{ id: string }>(
+            sql`select distinct u.id from users u join crew_time_batch_lines l on l.org_id=u.org_id and l.employee_party_id=u.party_id where l.org_id=${batch.org_id} and l.batch_id=${subjectId}`, "objects",
+          )).map((row) => row.id),
       };
     },
 
@@ -207,7 +205,7 @@ export const crewBatchFlowAdapter: FlowSubjectAdapter =
          and status = 'submitted'
        order by worked_on desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

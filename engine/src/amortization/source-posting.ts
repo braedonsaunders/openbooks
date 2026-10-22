@@ -199,7 +199,7 @@ export async function createSchedulesForPostedDocument(
     select e.book_id, e.posting_date::text as posting_date, d.document_date::text as transaction_date from journal_entries e
      join documents d on d.org_id = e.org_id and d.id = ${input.documentId}
      where e.org_id = ${input.orgId} and e.id = ${input.entryId}
-       and e.source_document_id = d.id and e.reverses_entry_id is null`)).rows[0];
+       and e.source_document_id = d.id and e.reverses_entry_id is null`, "objects"))[0];
   if (!entry) throw new AmortizationError(`The posted entry for ${input.documentNumber} is not readable.`, { status: 409 });
   const book = await loadBookProfile(runner, input.orgId, entry.book_id);
   if (!book) throw new AmortizationError("The source accounting book is unavailable.", { status: 409 });
@@ -209,7 +209,7 @@ export async function createSchedulesForPostedDocument(
     if (!route) throw new AmortizationError(`Document line ${leg.documentLineId} has no amortization routing.`, { status: 409 });
     const existing = (await runner.execute<{ id: string }>(sql`
       select id from expense_amortization_schedules
-       where org_id = ${input.orgId} and source_line_id = ${leg.documentLineId} and book_id = ${entry.book_id}`)).rows[0];
+       where org_id = ${input.orgId} and source_line_id = ${leg.documentLineId} and book_id = ${entry.book_id}`, "objects"))[0];
     if (existing) continue;
     const posted = (await runner.execute<{
       account_id: string;
@@ -227,7 +227,7 @@ export async function createSchedulesForPostedDocument(
         from journal_lines jl
         join subsidiaries sub on sub.org_id = jl.org_id and sub.id = jl.subsidiary_id
        where jl.org_id = ${input.orgId} and jl.entry_id = ${input.entryId}
-         and jl.line_number = ${leg.journalLineNumber}`)).rows[0];
+         and jl.line_number = ${leg.journalLineNumber}`, "objects"))[0];
     if (!posted) throw new AmortizationError(`Line ${route.lineNumber} has no posted deferral leg.`, { status: 409 });
     const basis = (await resolveBookBases(runner, { orgId: input.orgId, book, subsidiaryIds: [posted.subsidiary_id], postingDate: entry.posting_date })).get(posted.subsidiary_id)!;
     const mapped = book.isPrimary ? { lines: [{ accountId: route.deferralAccountId, subsidiaryId: posted.subsidiary_id }, { accountId: route.destinationAccountId, subsidiaryId: posted.subsidiary_id }] }
@@ -271,7 +271,7 @@ export async function createSchedulesForPostedDocument(
         ${deferralAccountId}, ${destinationAccountId}, ${posted.department_id}, ${posted.project_id},
         ${posted.location_id}, ${posted.class_id}, ${JSON.stringify(posted.extra_dims ?? {})}::jsonb,
         ${`${input.documentNumber} line ${route.lineNumber}`}, ${input.actorId}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!inserted) {
       throw new AmortizationError(`The amortization schedule for line ${route.lineNumber} was not stored.`, { status: 409 });
     }
@@ -319,10 +319,10 @@ export async function createSchedulesForDocumentBooks(
   runner: SqlExecutor,
   input: Parameters<typeof createSchedulesForPostedDocument>[1],
 ): Promise<string[]> {
-  const replicas = (await runner.execute<{ id: string }>(sql`
+  const replicas = await runner.execute<{ id: string }>(sql`
     select replica_entry_id as id from book_entry_replications
     where org_id = ${input.orgId} and source_entry_id = ${input.entryId} and replica_entry_id is not null
-    order by book_id`)).rows;
+    order by book_id`, "objects");
   const created: string[] = [];
   for (const entryId of [input.entryId, ...replicas.map(row => row.id)]) {
     created.push(...await createSchedulesForPostedDocument(runner, { ...input, entryId }));
@@ -338,9 +338,9 @@ export async function createSchedulesForReplicatedDocument(
   const source = (await runner.execute<{ id: string; kind: string; number: string }>(sql`
     select d.id, d.kind, d.document_number as number from documents d
     join journal_entries e on e.org_id = d.org_id and e.source_document_id = d.id
-    where e.org_id = ${input.orgId} and e.id = ${input.sourceEntryId} and e.reverses_entry_id is null`)).rows[0];
+    where e.org_id = ${input.orgId} and e.id = ${input.sourceEntryId} and e.reverses_entry_id is null`, "objects"))[0];
   if (!source) return [];
-  const schedules = (await runner.execute<{
+  const schedules = await runner.execute<{
     source_line_id: string; template_id: string; deferral_account_id: string; destination_account_id: string;
     service_start_on: string; service_end_on: string; line_number: number;
     status: string; revision: number; hasPosted: boolean;
@@ -352,7 +352,7 @@ export async function createSchedulesForReplicatedDocument(
     from expense_amortization_schedules s
     join document_lines l on l.org_id = s.org_id and l.id = s.source_line_id
     where s.org_id = ${input.orgId} and s.source_entry_id = ${input.sourceEntryId}
-    order by l.line_number for share of s`)).rows;
+    order by l.line_number for share of s`, "objects");
   if (schedules.length === 0) return [];
   if (schedules.some(schedule => schedule.status !== "active" || schedule.revision !== 1 || schedule.hasPosted)) {
     throw new AmortizationError(`Document ${source.number} has amortization history that cannot be reconstructed as a new deferral.`, {
@@ -361,10 +361,10 @@ export async function createSchedulesForReplicatedDocument(
       remedy: "Activate the book using opening balances from a date after this document and its amortization history, then create manual schedules in that book for the carried-in prepaid balances.",
     });
   }
-  const legs = (await runner.execute<{ sourceLineId: string; lineNumber: number }>(sql`
+  const legs = await runner.execute<{ sourceLineId: string; lineNumber: number }>(sql`
     select custom->>'amortizationSourceLineId' as "sourceLineId", line_number as "lineNumber"
     from journal_lines where org_id = ${input.orgId} and entry_id = ${input.replicaEntryId}
-      and custom->>'amortizationSourceLineId' is not null order by line_number`)).rows;
+      and custom->>'amortizationSourceLineId' is not null order by line_number`, "objects");
   const routing = new Map<string, AmortizationRouting>();
   for (const schedule of schedules) {
     routing.set(schedule.source_line_id, {
@@ -393,11 +393,11 @@ export async function scheduledDeferralByLine(
   orgId: string,
   documentId: string,
 ): Promise<Map<string, { deferralAccountId: string }>> {
-  const rows = (await runner.execute<{ source_line_id: string; deferral_account_id: string }>(sql`
+  const rows = await runner.execute<{ source_line_id: string; deferral_account_id: string }>(sql`
     select s.source_line_id, s.deferral_account_id from expense_amortization_schedules s
     join documents d on d.org_id = s.org_id and d.id = s.source_document_id
     join journal_entries e on e.org_id = d.org_id and e.id = d.posted_entry_id and e.book_id = s.book_id
-     where s.org_id = ${orgId} and s.source_document_id = ${documentId} and s.source_line_id is not null`)).rows;
+     where s.org_id = ${orgId} and s.source_document_id = ${documentId} and s.source_line_id is not null`, "objects");
   return new Map(rows.map((row) => [row.source_line_id, { deferralAccountId: row.deferral_account_id }]));
 }
 
@@ -405,13 +405,13 @@ export async function scheduledDeferralByLine(
 export async function validateSavedAmortizationLines(runner: SqlExecutor, orgId: string, documentId: string): Promise<void> {
   const document = (await runner.execute<{ kind: string; transactionDate: string }>(sql`
     select kind, document_date::text as "transactionDate" from documents
-    where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+    where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
   if (!document) throw new AmortizationError("Document not found.", { status: 404 });
-  const lines = (await runner.execute<AmortizationSourceLine>(sql`
+  const lines = await runner.execute<AmortizationSourceLine>(sql`
     select id, line_number as "lineNumber", account_id as "accountId", amount::text as amount,
            amortization_template_id as "amortizationTemplateId", amortization_start_on::text as "amortizationStartOn",
            amortization_end_on::text as "amortizationEndOn", settlement_type as "settlementType"
-    from document_lines where org_id = ${orgId} and document_id = ${documentId} order by line_number`)).rows;
+    from document_lines where org_id = ${orgId} and document_id = ${documentId} order by line_number`, "objects");
   for (const line of lines) {
     const refusal = amortizationLineRefusal(document.kind, line);
     if (refusal) throw new AmortizationError(`Line ${line.lineNumber}: ${refusal}`);

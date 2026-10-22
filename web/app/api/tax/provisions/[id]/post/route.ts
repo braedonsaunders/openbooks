@@ -27,11 +27,9 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: str
   // lookup — an existing run and a missing id answer identically.
   const scope = guardUnrestrictedScope(gate);
   if (scope) return scope;
-  const owned = (
-    (await db.execute<{ id: string }>(sql`
+  const owned = (await db.execute<{ id: string }>(sql`
       select id from tax_provision_runs where org_id = ${gate.user.orgId} and id = ${id}
-    `))
-  ).rows[0];
+    `, "objects"))[0];
   if (!owned) return notFound("record");
   try {
     const result = await postProvisionRun(gate.user.orgId, id, gate.user.id);

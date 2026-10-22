@@ -69,7 +69,7 @@ export async function loadReportDelivery(id: string): Promise<ReportDeliveryData
         from report_schedules
        where org_id = ${authz.user.orgId} and definition_id = ${id}
        order by next_run_at
-    `),
+    `, 'objects'),
     db.execute<RunRow & { authorization_snapshot: unknown }>(sql`
       select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
              r.authorization_snapshot,
@@ -83,7 +83,7 @@ export async function loadReportDelivery(id: string): Promise<ReportDeliveryData
        where r.org_id = ${authz.user.orgId} and r.definition_id = ${id}
        group by r.id
        order by r.created_at desc limit 10
-    `),
+    `, 'objects'),
   ])
 
   // The list API filters rows the caller cannot reach through the run's
@@ -92,14 +92,14 @@ export async function loadReportDelivery(id: string): Promise<ReportDeliveryData
   // error and artifact metadata never leak through the delivery screen.
   // The snapshot itself never leaves the server.
   const visibleSchedules: ScheduleRow[] = []
-  for (const row of schedules.rows) {
+  for (const row of schedules) {
     const { authorization_snapshot, ...visible } = row
     if (authorization_snapshot == null || (await canAccessReportArtifact(authz, authorization_snapshot))) {
       visibleSchedules.push(visible)
     }
   }
   const visibleRuns: RunRow[] = []
-  for (const run of recentRuns.rows) {
+  for (const run of recentRuns) {
     const { authorization_snapshot, ...visible } = run
     if (authorization_snapshot == null || (await canAccessReportArtifact(authz, authorization_snapshot))) {
       visibleRuns.push({ ...visible, error: visible.error ? tk('runner.runFailedHelp') : null })

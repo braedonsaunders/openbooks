@@ -66,7 +66,7 @@ async function seedOpenBill(
     select jl.id from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
      where je.source_document_id = ${billId} and je.status = 'posted' and jl.is_open_item
-  `)).rows[0]!.id;
+  `, "objects"))[0]!.id;
   return { billId, openLineId };
 }
 
@@ -124,7 +124,7 @@ test("a partial vendor payment posts and leaves the remainder open", { skip: !DB
 
     const payment = (await db.execute<{ total: string; status: string }>(sql`
       select total::text as total, status from documents where id = ${draft.doc.id} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(toUnits(payment.total), toUnits("3500"), "the payment carries the partial amount");
     assert.equal(payment.status, "posted", "the partial payment posts");
 

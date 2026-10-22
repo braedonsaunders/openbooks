@@ -38,8 +38,8 @@ async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: s
       purged_at: string | null;
     }>(sql`
     select id, file_name, object_key, status, kind, byte_size, sha256, purged_at
-      from backup_runs where id = ${id} and org_id = ${orgId}`));
-  const run = res.rows[0];
+      from backup_runs where id = ${id} and org_id = ${orgId}`, "objects"));
+  const run = res[0];
   if (!run) return NextResponse.json({ error: "backup not found" }, { status: 404 });
   if (run.purged_at) {
     return NextResponse.json({ error: "backup was already purged" }, { status: 409 });

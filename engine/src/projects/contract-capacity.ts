@@ -33,6 +33,6 @@ export async function projectContractCapacityUsed(
                 and worksheet.status in ('draft', 'review', 'approved')
                 and (${excludePrebillId}::uuid is null or worksheet.id <> ${excludePrebillId})
            ), 0) as used
-  `))
-  return normalizeMoney(used.rows[0]?.used ?? '0')
+  `, "objects"))
+  return normalizeMoney(used[0]?.used ?? '0')
 }

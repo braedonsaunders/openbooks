@@ -34,12 +34,12 @@ test("banking lists keep shared and other-entity bank accounts from a restricted
     const reconciliationAccounts = async (scope: Set<string> | null) => (await db.execute<{ account_id: string }>(sql`
       select r.account_id from reconciliations r
         join accounts bank_account on bank_account.id = r.account_id and bank_account.org_id = r.org_id
-       where ${bankReconciliationWhere({ ...defaultListView("bank_reconciliation"), filters: [] }, {}, org.orgId, scope)}`)).rows
+       where ${bankReconciliationWhere({ ...defaultListView("bank_reconciliation"), filters: [] }, {}, org.orgId, scope)}`, "objects"))
       .map((row) => row.account_id).sort();
     const statementAccounts = async (scope: Set<string> | null) => (await db.execute<{ account_id: string }>(sql`
       select bs.account_id from bank_statements bs
         join accounts statement_account on statement_account.id = bs.account_id and statement_account.org_id = bs.org_id
-       where ${bankStatementWhere({ ...defaultListView("bank_statement"), filters: [] }, {}, org.orgId, scope)}`)).rows
+       where ${bankStatementWhere({ ...defaultListView("bank_statement"), filters: [] }, {}, org.orgId, scope)}`, "objects"))
       .map((row) => row.account_id).sort();
 
     const restricted = new Set([org.subsidiaryId]);

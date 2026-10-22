@@ -79,14 +79,14 @@ async function mkPerson(ctx: Ctx, name: string, subsidiaryId: string | null = ct
   const { db } = await import("../platform/db.ts");
   return (await db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, subsidiary_id, custom)
-    values (${ctx.orgId}, 'person', ${name}, ${subsidiaryId}, '{}'::jsonb) returning id`)).rows[0]!.id;
+    values (${ctx.orgId}, 'person', ${name}, ${subsidiaryId}, '{}'::jsonb) returning id`, "objects"))[0]!.id;
 }
 
 async function mkEmployment(ctx: Ctx, workerId: string, subId: string = ctx.subId): Promise<string> {
   const { db } = await import("../platform/db.ts");
   return (await db.execute<{ id: string }>(sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
-    values (${ctx.orgId}, ${workerId}, ${subId}) returning id`)).rows[0]!.id;
+    values (${ctx.orgId}, ${workerId}, ${subId}) returning id`, "objects"))[0]!.id;
 }
 
 async function mkVersion(
@@ -218,9 +218,9 @@ const TABLES = [
 
 async function employmentOf(table: string, orgId: string, personId: string): Promise<string | null> {
   const { db } = await import("../platform/db.ts");
-  const rows = (await db.execute<{ employmentId: string | null }>(sql`
+  const rows = await db.execute<{ employmentId: string | null }>(sql`
     select employment_id as "employmentId" from ${sql.identifier(table)}
-     where org_id = ${orgId} and employee_party_id = ${personId}`)).rows;
+     where org_id = ${orgId} and employee_party_id = ${personId}`, "objects");
   assert.equal(rows.length, 1);
   return rows[0]!.employmentId;
 }
@@ -228,9 +228,9 @@ async function employmentOf(table: string, orgId: string, personId: string): Pro
 /** updated_at of the person's stub: proves a stamp run counted without rewriting. */
 async function stubUpdatedAt(orgId: string, personId: string): Promise<string> {
   const { db } = await import("../platform/db.ts");
-  const rows = (await db.execute<{ updatedAt: string }>(sql`
+  const rows = await db.execute<{ updatedAt: string }>(sql`
     select updated_at::text as "updatedAt" from pay_stubs
-     where org_id = ${orgId} and employee_party_id = ${personId}`)).rows;
+     where org_id = ${orgId} and employee_party_id = ${personId}`, "objects");
   assert.equal(rows.length, 1);
   return rows[0]!.updatedAt;
 }
@@ -239,7 +239,7 @@ async function personRowCount(table: string, orgId: string, personId: string): P
   const { db } = await import("../platform/db.ts");
   return Number((await db.execute<{ n: string }>(sql`
     select count(*)::text as n from ${sql.identifier(table)}
-     where org_id = ${orgId} and employee_party_id = ${personId}`)).rows[0]!.n);
+     where org_id = ${orgId} and employee_party_id = ${personId}`, "objects"))[0]!.n);
 }
 
 test("every 0186 FK refuses a cross-org employment id", { skip: !DB, timeout: 120_000 }, async (t) => {
@@ -685,7 +685,7 @@ test("the single_line exclusion keeps two live lines unseedable, so ambiguity ca
 test("every party foreign key has an explicit merge or identity-preservation policy", { skip: !DB, timeout: 120_000 }, async () => {
   const { db } = await import("../platform/db.ts");
   const { PARTY_MERGE_REF_COVERAGE } = await import("../sync/party-merges.ts");
-  const catalog = (await db.execute<{ tbl: string; col: string }>(sql`
+  const catalog = await db.execute<{ tbl: string; col: string }>(sql`
     select distinct tc.table_name as tbl, kcu.column_name as col
       from information_schema.table_constraints tc
       join information_schema.key_column_usage kcu
@@ -693,7 +693,7 @@ test("every party foreign key has an explicit merge or identity-preservation pol
       join information_schema.constraint_column_usage ccu
         on ccu.constraint_name = tc.constraint_name and ccu.constraint_schema = tc.constraint_schema
      where tc.constraint_type = 'FOREIGN KEY' and ccu.table_name = 'parties' and ccu.column_name = 'id'
-       and kcu.column_name <> 'org_id'`)).rows;
+       and kcu.column_name <> 'org_id'`, "objects");
   const inCatalog = new Set(catalog.map((r) => `${r.tbl}.${r.col}`));
   const covered = new Set(PARTY_MERGE_REF_COVERAGE.map(([tbl, col]) => `${tbl}.${col}`));
   assert.deepEqual([...inCatalog].sort(), [...covered].sort());

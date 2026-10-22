@@ -43,16 +43,13 @@ async function seedPeriodRule(
   } = {},
 ): Promise<{ ruleId: string; versionId: string; publishedBy: string | null }> {
   const actors = await seedFlowActors(org.orgId);
-  const rule = (
-    await db.execute<{ id: string }>(sql`
+  const rule = (await db.execute<{ id: string }>(sql`
       insert into allocation_rules (org_id, key, name, mode, is_active)
       values (${org.orgId}, ${`sched-${randomUUID().slice(0, 8)}`}, 'Scheduled rule', ${overrides.mode ?? "period"}, ${overrides.isActive ?? true})
       returning id
-    `)
-  ).rows[0]!;
+    `, "objects"))[0]!;
   // Targets are immutable once published: draft → targets → publish.
-  const version = (
-    await db.execute<{ id: string }>(sql`
+  const version = (await db.execute<{ id: string }>(sql`
       insert into allocation_rule_versions
         (org_id, rule_id, version_no, status, effective_from, effective_to, definition_hash,
          run_policy, run_offset_days, book_scope, book_ids, account_scope)
@@ -60,15 +57,12 @@ async function seedPeriodRule(
               ${overrides.runPolicy ?? "auto_preview"}, 0, 'books', ${JSON.stringify([org.bookId])}::jsonb,
               ${JSON.stringify({ kind: "accounts", accountIds: [org.accounts.adjustment] })}::jsonb)
       returning id
-    `)
-  ).rows[0]!;
-  const deptId = (
-    await db.execute<{ id: string }>(sql`
+    `, "objects"))[0]!;
+  const deptId = (await db.execute<{ id: string }>(sql`
       insert into departments (org_id, name, is_active, custom)
       values (${org.orgId}, ${`Sched ${randomUUID().slice(0, 8)}`}, true, '{}'::jsonb)
       returning id
-    `)
-  ).rows[0]!.id;
+    `, "objects"))[0]!.id;
   await db.execute(sql`
     insert into allocation_rule_targets
       (org_id, version_id, sequence, department_id, fixed_percent, is_remainder, custom)
@@ -110,9 +104,9 @@ async function seedPeriodRule(
 }
 
 async function runStatusCount(orgId: string, ruleId: string, status: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(sql`
     select count(*)::text as count from allocation_runs
-     where org_id = ${orgId} and rule_id = ${ruleId} and status = ${status}`)).rows;
+     where org_id = ${orgId} and rule_id = ${ruleId} and status = ${status}`, "objects");
   return Number(rows[0]?.count ?? 0);
 }
 
@@ -123,8 +117,8 @@ async function outboxRows(orgId: string): Promise<
     select id, org_id, payload from scheduler_outbox
      where org_id = ${orgId} and kind = ${ALLOCATION_RUN_OUTBOX_KIND}
      order by created_at
-  `);
-  return result.rows;
+  `, "objects");
+  return result;
 }
 
 test("enqueue is idempotent and honors policy, runs, feature, and status guards", { skip: !DB }, async () => {
@@ -140,7 +134,7 @@ test("enqueue is idempotent and honors policy, runs, feature, and status guards"
     assert.equal(
       (await db.execute<{ occurrence_key: string }>(sql`
         select occurrence_key from scheduler_outbox where id = ${rows[0]!.id}
-      `)).rows[0]!.occurrence_key,
+      `, "objects"))[0]!.occurrence_key,
       key,
     );
     const payload = rows[0]!.payload as Record<string, string>;
@@ -166,11 +160,9 @@ test("enqueue is idempotent and honors policy, runs, feature, and status guards"
       update allocation_rule_versions set run_policy = 'auto_preview'
        where org_id = ${org.orgId} and rule_id = ${ruleId}
     `);
-    const versionId = (
-      await db.execute<{ id: string }>(sql`
+    const versionId = (await db.execute<{ id: string }>(sql`
         select id from allocation_rule_versions where org_id = ${org.orgId} and rule_id = ${ruleId}
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
     await db.execute(sql`
       insert into allocation_runs (org_id, rule_id, version_id, definition_hash, period_id, book_id, status)
       values (${org.orgId}, ${ruleId}, ${versionId}, 'sched', ${org.periodId}, ${org.bookId}, 'previewed')
@@ -215,7 +207,7 @@ test("delayed occurrence keeps its effective version publisher and preview-only 
       select org_id, rule_id, 2, 'draft', '2026-08-01', 'sched-v2', 'auto_post',
              run_offset_days, book_scope, book_ids, account_scope, null, null
         from allocation_rule_versions where org_id = ${org.orgId} and id = ${first.versionId}
-      returning id`)).rows[0]!;
+      returning id`, "objects"))[0]!;
     await db.execute(sql`
       insert into allocation_rule_targets
         (org_id, version_id, sequence, target_account_id, department_id, location_id, class_id,
@@ -237,8 +229,8 @@ test("delayed occurrence keeps its effective version publisher and preview-only 
     assert.deepEqual(result, { outcome: "ran", note: "previewed (source 100.0000)" });
     const runs = await db.execute<{ version_id: string; requested_by: string; status: string }>(sql`
       select version_id, requested_by, status from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${first.ruleId}`);
-    assert.deepEqual(runs.rows, [{ version_id: first.versionId, requested_by: first.publishedBy!, status: "previewed" }]);
+       where org_id = ${org.orgId} and rule_id = ${first.ruleId}`, "objects");
+    assert.deepEqual(runs, [{ version_id: first.versionId, requested_by: first.publishedBy!, status: "previewed" }]);
     assert.equal(v2Publisher === first.publishedBy, false);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -260,7 +252,7 @@ test("processing previews and posts through the real engine", { skip: !DB }, asy
     // never a borrowed human or a faceless system actor.
     const requestedBy = (await db.execute<{ requested_by: string }>(sql`
       select requested_by from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows[0]
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects"))[0]
       ?.requested_by;
     assert.equal(requestedBy, publishedBy);
 
@@ -312,7 +304,7 @@ test("a deliberately reversed run is not silently resurrected by the scheduler",
     assert.equal(await runStatusCount(org.orgId, ruleId, "posted"), 1);
     const postedId = (await db.execute<{ id: string }>(sql`
       select id from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows[0]!.id;
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects"))[0]!.id;
     await reverseAllocationRun(postedId, publishedBy!, "controller unwinding a bad sweep", {
       reversalDate: org.date,
     });
@@ -355,8 +347,7 @@ test("close action previews and posts selected rules with stage checkpoints", { 
     await enableAllocations(org.orgId);
     const actors = await seedFlowActors(org.orgId);
     const defaults = await ensureCloseDefaults(org.orgId, actors.adminId);
-    const runId = (
-      await db.execute<{ id: string }>(sql`
+    const runId = (await db.execute<{ id: string }>(sql`
         insert into close_runs
           (org_id, period_id, book_id, blueprint_id, reporting_package_id, status,
            current_stage, target_close_date, scope, started_at, started_by, created_by, updated_by)
@@ -364,8 +355,7 @@ test("close action previews and posts selected rules with stage checkpoints", { 
                 ${defaults.reportingPackageId}, 'in_progress', 'review', current_date + 30,
                 '{}'::jsonb, now(), ${actors.submitterId}, ${actors.submitterId}, ${actors.submitterId})
         returning id
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
     const first = await seedPeriodRule(org);
     const second = await seedPeriodRule(org);
 
@@ -418,7 +408,7 @@ test("close action previews and posts selected rules with stage checkpoints", { 
     // publisher, not to the close initiator.
     const closeRequestedBy = (await db.execute<{ requested_by: string }>(sql`
       select requested_by from allocation_runs
-       where org_id = ${org.orgId} and status = 'posted'`)).rows
+       where org_id = ${org.orgId} and status = 'posted'`, "objects"))
       .map((row) => row.requested_by)
       .sort();
     assert.deepEqual(closeRequestedBy, [first.publishedBy, second.publishedBy].sort());
@@ -426,7 +416,7 @@ test("close action previews and posts selected rules with stage checkpoints", { 
     const reasons = (await db.execute<{ reason: string | null }>(sql`
       select changes->>'reason' as reason from audit_log
        where org_id = ${org.orgId} and table_name = 'allocation_runs'
-         and changes->>'mode' = 'allocation_run_post'`)).rows
+         and changes->>'mode' = 'allocation_run_post'`, "objects"))
       .map((audit) => audit.reason);
     assert.ok(reasons.some((reason) => reason?.match(/close automation/)));
     const resumed = await runAllocationCloseAction({

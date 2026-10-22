@@ -42,7 +42,7 @@ export async function reversePayoutAccrual(
         from psp_payout_accruals
        where org_id = ${input.orgId} and id = ${input.accrualId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) throw new ScopeNotFoundError();
 
     const subsidiaryId = row.subsidiary_id ?? input.subsidiaryId ?? null;
@@ -81,7 +81,7 @@ export async function reversePayoutAccrual(
       select book_id, status from journal_entries
        where id = ${row.accrual_entry_id} and org_id = ${input.orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!original || original.status !== "posted") {
       throw new PspSettlementError("in-transit accrual source journal is missing or already reversed");
     }
@@ -114,7 +114,7 @@ export async function reversePayoutAccrual(
       ],
     });
     await markEntryReversed(tx, { orgId: input.orgId, entryId: row.accrual_entry_id, actorId: input.actorId });
-    const stamped = await tx.execute(sql`
+    const stamped = await tx.execute<never>(sql`
       update psp_payout_accruals
          set status = 'reversed', reversal_entry_id = ${posted.entryId},
              updated_at = now(), updated_by = ${input.actorId}
@@ -123,7 +123,7 @@ export async function reversePayoutAccrual(
     if ((stamped.rowCount ?? 0) !== 1) {
       throw new PspSettlementError("in-transit accrual could not be marked reversed; run the payout operation again");
     }
-    const audited = await tx.execute(sql`
+    const audited = await tx.execute<never>(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'psp_payout_accruals', ${row.id}, 'reverse',
               ${JSON.stringify({ reversalEntryId: posted.entryId, postingDate })}::jsonb, ${input.actorId})
@@ -146,12 +146,12 @@ export async function reverseOpenPayoutAccrualsForBatch(
     postingDate: string;
   },
 ): Promise<void> {
-  const rows = (await executor.execute<{ id: string }>(sql`
+  const rows = await executor.execute<{ id: string }>(sql`
     select id from psp_payout_accruals
      where org_id = ${input.orgId} and batch_id = ${input.batchId} and status = 'accrued'
      order by accrual_date
      for update
-  `)).rows;
+  `, "objects");
   for (const row of rows) {
     await reversePayoutAccrual(executor, {
       orgId: input.orgId,

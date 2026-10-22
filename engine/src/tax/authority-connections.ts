@@ -81,15 +81,13 @@ async function readConnection(
   orgId: string,
   authority: TaxAuthority,
 ): Promise<ConnectionRow | null> {
-  const rows = (
-    await runner.execute<ConnectionRow>(sql`
+  const rows = await runner.execute<ConnectionRow>(sql`
       select id, sealed_credentials, status,
              token_expires_at::text as token_expires_at,
              last_error, last_verified_at::text as last_verified_at
         from tax_authority_connections
        where org_id = ${orgId} and authority = ${authority}
-       limit 1`)
-  ).rows;
+       limit 1`, "objects");
   return rows[0] ?? null;
 }
 
@@ -128,8 +126,7 @@ export async function saveAuthorityCredentials(
         }
       : { guid: demandNonEmpty((credentials as AbnCredentials).guid, "ABR lookup GUID", authority) };
   const sealed = sealJson(stored, { orgId, purpose: TAX_AUTHORITY_PURPOSE(authority) });
-  const rows = (
-    await runner.execute<{ id: string }>(sql`
+  const rows = await runner.execute<{ id: string }>(sql`
       insert into tax_authority_connections
         (id, org_id, authority, sealed_credentials, status, token_expires_at,
          last_error, last_verified_at, created_by, updated_by)
@@ -143,8 +140,7 @@ export async function saveAuthorityCredentials(
              last_verified_at = null,
              updated_by = excluded.updated_by,
              updated_at = now()
-      returning id`)
-  ).rows;
+      returning id`, "objects");
   // Under row-level security an unscoped write silently matches nothing: a
   // saved credential no read can observe was not saved.
   if (rows.length !== 1) {
@@ -201,16 +197,14 @@ async function markConnection(
   error: string | null,
   verified: boolean,
 ): Promise<void> {
-  const updated = (
-    await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(sql`
       update tax_authority_connections
          set status = ${status},
              last_error = ${error},
              last_verified_at = ${verified ? sql`now()` : sql`last_verified_at`},
              updated_at = now()
        where org_id = ${orgId} and authority = ${authority}
-      returning id`)
-  ).rows;
+      returning id`, "objects");
   if (updated.length !== 1) {
     throw new CrossBorderTaxError(
       `the ${authority === "hmrc" ? "HMRC VAT API" : "ABN Lookup"} connection is gone; reconnect it in Tax setup before validating`,
@@ -309,8 +303,7 @@ export async function refreshHmrcToken(
     orgId,
     purpose: TAX_AUTHORITY_PURPOSE("hmrc"),
   });
-  const updated = (
-    await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(sql`
       update tax_authority_connections
          set sealed_credentials = ${resealed},
              status = 'ready',
@@ -320,8 +313,7 @@ export async function refreshHmrcToken(
              updated_by = ${actorId},
              updated_at = now()
        where org_id = ${orgId} and authority = 'hmrc'
-      returning id`)
-  ).rows;
+      returning id`, "objects");
   if (updated.length !== 1) {
     throw new CrossBorderTaxError("the HMRC token was fetched but not stored; refresh the token in Tax setup again");
   }

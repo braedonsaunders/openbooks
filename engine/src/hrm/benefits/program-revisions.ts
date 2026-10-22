@@ -46,10 +46,10 @@ export async function recordProgramRevision(exec: SqlExecutor, query: {
     throw new BenefitsError("INVALID_INPUT", "changing an active program needs the date the change applies from — earlier periods keep the current rules");
   }
   const changeEffectiveFrom = requireCivilDate(query.changeEffectiveFrom, "changeEffectiveFrom");
-  const program = requireOneRow((await exec.execute<{ row: Record<string, unknown>; effective_from: string; effective_to: string | null; status: string }>(sql`
+  const program = requireOneRow(await exec.execute<{ row: Record<string, unknown>; effective_from: string; effective_to: string | null; status: string }>(sql`
     select to_jsonb(p) as row, p.effective_from::text as effective_from, p.effective_to::text as effective_to, p.status
       from hrm_benefit_programs p where p.org_id = ${orgId} and p.id = ${programId}
-  `)).rows, "reading the program being revised");
+  `, "objects"), "reading the program being revised");
   if (program.status !== "active") {
     throw new BenefitsError("BAD_STATE", `program is ${program.status} — only an active program is revised; drafts edit in place and closed programs keep their history`);
   }
@@ -64,33 +64,33 @@ export async function recordProgramRevision(exec: SqlExecutor, query: {
   const settledThrough = (await exec.execute<{ through: string | null }>(sql`
     select max(coalesce(period_to, period_from))::text as through from hrm_benefit_awards
      where org_id = ${orgId} and program_id = ${programId} and status <> 'voided'
-  `)).rows[0]?.through ?? null;
+  `, "objects"))[0]?.through ?? null;
   if (settledThrough !== null && changeEffectiveFrom <= settledThrough) {
     throw new BenefitsError("REFUSED", `awards are already recorded through ${settledThrough} — choose a change date after ${settledThrough}; recorded awards keep the rules they were measured under`);
   }
   const latest = (await exec.execute<{ effective_from: string }>(sql`
     select max(effective_from)::text as effective_from from hrm_benefit_program_revisions
      where org_id = ${orgId} and program_id = ${programId}
-  `)).rows[0]?.effective_from ?? null;
+  `, "objects"))[0]?.effective_from ?? null;
   if (latest !== null && changeEffectiveFrom < latest) {
     throw new BenefitsError("REFUSED", `the program already changes on ${latest} — choose a change date on or after ${latest}; revisions apply in date order`);
   }
-  const scopes = (await exec.execute<ProgramRevisionSnapshot["scopes"][number] & Record<string, unknown>>(sql`
+  const scopes = await exec.execute<ProgramRevisionSnapshot["scopes"][number] & Record<string, unknown>>(sql`
     select department_id, project_id, customer_id, excluded from hrm_benefit_program_scopes
      where org_id = ${orgId} and program_id = ${programId}
      order by department_id, project_id, customer_id
-  `)).rows;
-  const sources = (await exec.execute<{ accountId: string; weightBps: number | null }>(sql`
+  `, "objects");
+  const sources = await exec.execute<{ accountId: string; weightBps: number | null }>(sql`
     select account_id as "accountId", weight_bps as "weightBps" from hrm_benefit_program_sources
      where org_id = ${orgId} and program_id = ${programId}
      order by account_id
-  `)).rows;
+  `, "objects");
   const snapshot: ProgramRevisionSnapshot = { program: program.row, scopes, sources, transactionPolicy: query.transactionPolicy };
-  return requireOneRow((await exec.execute<{ id: string }>(sql`
+  return requireOneRow(await exec.execute<{ id: string }>(sql`
     insert into hrm_benefit_program_revisions (org_id, program_id, effective_from, prior_policy, reason, created_by)
     values (${orgId}, ${programId}, ${changeEffectiveFrom}::date, ${JSON.stringify(snapshot)}::jsonb, ${query.reason}, ${actorId})
     returning id
-  `)).rows, "recording the program revision").id;
+  `, "objects"), "recording the program revision").id;
 }
 
 /**
@@ -99,11 +99,11 @@ export async function recordProgramRevision(exec: SqlExecutor, query: {
  * half under each set of rules.
  */
 export async function programRevisionInForce(exec: SqlExecutor, orgId: string, programId: string, periodFrom: string, periodTo: string): Promise<ProgramRevisionInForce | null> {
-  const revisions = (await exec.execute<{ id: string; effective_from: string; prior_policy: ProgramRevisionSnapshot }>(sql`
+  const revisions = await exec.execute<{ id: string; effective_from: string; prior_policy: ProgramRevisionSnapshot }>(sql`
     select id, effective_from::text as effective_from, prior_policy from hrm_benefit_program_revisions
      where org_id = ${orgId} and program_id = ${programId}
      order by effective_from, created_at, id
-  `)).rows;
+  `, "objects");
   const inside = revisions.find((r) => r.effective_from > periodFrom && r.effective_from <= periodTo);
   if (inside) {
     throw new BenefitsError("REFUSED", `the program rules change on ${inside.effective_from}, inside ${periodFrom}..${periodTo} — settle the days before ${inside.effective_from} and the days from it as separate periods`);

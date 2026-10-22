@@ -202,7 +202,7 @@ async function releaseCarriedCreditAllocations(
        order by a.created_at, a.id
        limit 1
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!application) {
       notLive.push(allocation);
       continue;
@@ -212,7 +212,7 @@ async function releaseCarriedCreditAllocations(
          set unapplied_at = now(), updated_at = now(), updated_by = ${input.actorId}
        where id = ${application.id} and org_id = ${input.orgId} and unapplied_at is null
        returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!unapplied) {
       throw new DocumentVoidError("a credit this payment applied changed while the void was being completed — retry", 409);
     }
@@ -251,7 +251,7 @@ export async function resolveVoidCalendarSubsidiaryId(
         where s.org_id = ${orgId} and s.parent_id is null and s.is_active
         order by s.id limit 1)
     )::text as id
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.id ?? null;
 }
 
@@ -285,7 +285,7 @@ async function resolveVoidReversalPeriod(
        and w.window_start <= ${reversalDate}::date and w.window_end >= ${reversalDate}::date
        and p.fiscal_calendar_id = public.subsidiary_posting_calendar(${orgId}::uuid, ${subsidiaryId}::uuid, ${reversalDate}::date)
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new DocumentVoidError(
       `reversal period ${reversalPeriodId} is not an adjustment period in the subsidiary's effective fiscal calendar covering ${reversalDate} — name an adjustment period in that calendar, or omit the override to reverse in the regular covering period`,
@@ -313,7 +313,7 @@ async function loadDocument(documentId: string, orgId: string): Promise<Document
 async function assertPostingEffectsCompleteForVoid(exec: SqlExecutor, orgId: string, documentId: string): Promise<void> {
   const effect = (await exec.execute<{ status: string }>(sql`
     select status from posting_effects where org_id=${orgId} and document_id=${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (effect && effect.status !== "succeeded") {
     throw new DocumentVoidError(
       `posting effects are ${effect.status}; wait for completion before voiding. For a terminal failure, resolve the cause and choose Retry posting effects on the posted document with a review reason`,
@@ -434,15 +434,15 @@ export async function suggestVoidReversalDate(
     adjustment: false,
   });
   const modules = [voidCloseModule(doc.kind)];
-  const books = (await runner.execute<{ bookId: string }>(sql`
+  const books = await runner.execute<{ bookId: string }>(sql`
     select distinct e.book_id as "bookId" from journal_entries e
      -- Live entries only: a reversed entry cannot be reversed again
-     where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
-  const lines = (await runner.execute<{ subsidiaryId: string | null }>(sql`
+     where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`, "objects");
+  const lines = await runner.execute<{ subsidiaryId: string | null }>(sql`
     select distinct l.subsidiary_id as "subsidiaryId" from journal_lines l
      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      -- Live entries only: a reversed entry cannot be reversed again
-     where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`)).rows;
+     where e.org_id = ${orgId} and e.source_document_id = ${doc.id} and e.status = 'posted'`, "objects");
   const postedBookIds = [...new Set(books.map((row) => row.bookId))];
   const primaryBookId = postedBookIds.length > 0 ? null : await activePostingPrimaryBookId(orgId, runner);
   const bookIds = postedBookIds.length > 0 ? postedBookIds : (primaryBookId ? [primaryBookId] : []);
@@ -471,7 +471,7 @@ export async function suggestVoidReversalDate(
       suggestedOpen: true,
     };
   }
-  const later = (await runner.execute<{ id: string; fiscal_year: number; period_number: number; starts_on: string }>(sql`
+  const later = await runner.execute<{ id: string; fiscal_year: number; period_number: number; starts_on: string }>(sql`
     select p.id, p.fiscal_year, p.period_number, p.starts_on::text as starts_on
       from accounting_periods p
       join fiscal_calendars fc
@@ -481,7 +481,7 @@ export async function suggestVoidReversalDate(
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on > ${covering.ends_on}
      order by p.starts_on, p.ends_on, p.id
-     limit 25`)).rows;
+     limit 25`, "objects");
   for (const candidate of later) {
     if (await openIn(candidate.id)) {
       return {
@@ -588,8 +588,8 @@ export async function requestDocumentVoid(
          and status in ('approved', 'posted')
          and void_requested_at is null
       returning id
-    `));
-    if (!reserved.rows[0]) {
+    `, "objects"));
+    if (!reserved[0]) {
       assertDocumentVoidable(current);
       throw new DocumentVoidError(
         `${current.documentNumber} changed while the void request was being created; reload and try again`,
@@ -782,22 +782,22 @@ async function assertOrderShipmentReversalPeriodOpen(
   },
 ): Promise<void> {
   const movementKind = input.voidKind === "sales_fulfillment" ? "issue" : "receipt";
-  const books = (await tx.execute<{ book_id: string }>(sql`
+  const books = await tx.execute<{ book_id: string }>(sql`
     select distinct e.book_id
       from inventory_movements movement
       join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
       join journal_entries e on e.id = movement.journal_entry_id and e.org_id = movement.org_id
      where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
        -- Live entries only: a reversed entry cannot be reversed again
-       and movement.kind = ${movementKind} and movement.status = 'posted' and e.status = 'posted'`)).rows;
+       and movement.kind = ${movementKind} and movement.status = 'posted' and e.status = 'posted'`, "objects");
   const bookIds = [...new Set(books.map((row) => row.book_id))];
   if (bookIds.length === 0) return;
-  const subsidiaries = (await tx.execute<{ subsidiary_id: string }>(sql`
+  const subsidiaries = await tx.execute<{ subsidiary_id: string }>(sql`
     select distinct movement.subsidiary_id
       from inventory_movements movement
       join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
      where movement.org_id = ${input.orgId} and line.document_id = ${input.voidDocumentId}
-       and movement.kind = ${movementKind} and movement.status = 'posted'`)).rows;
+       and movement.kind = ${movementKind} and movement.status = 'posted'`, "objects");
   for (const bookId of bookIds) for (const subsidiary of subsidiaries) {
     const period = await resolveCoveringPeriod(tx, input.orgId, input.reversalDate, subsidiary.subsidiary_id);
     if (!period) throw new DocumentVoidError(
@@ -839,7 +839,7 @@ async function billConsumptionRefusal(
   billId: string,
   billNumber: string,
 ): Promise<DocumentVoidError> {
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     quantity: string;
     item_code: string | null;
     item_name: string;
@@ -871,7 +871,7 @@ async function billConsumptionRefusal(
          select 1 from inventory_movements reversal
           where reversal.org_id = im.org_id and reversal.reverses_movement_id = im.id
        )
-     order by m.id, im.moved_at, im.id`)).rows;
+     order by m.id, im.moved_at, im.id`, "objects");
   const lines = [
     `Bill ${billNumber} cannot void — stock it received has downstream consumption:`,
   ];
@@ -935,8 +935,8 @@ async function reverseBillInventoryReceipts(
        )
      order by movement.id
      for update of movement
-  `));
-  for (const movement of liveMovements.rows) {
+  `, "objects"));
+  for (const movement of liveMovements) {
     try {
       await reverseInventoryMovement(input.orgId, input.actorId, {
         movementId: movement.id,
@@ -957,17 +957,17 @@ async function reverseBillInventoryReceipts(
   // Purchase price variance the bill settled against its goods receipts
   // reverses with the bill: without this the variance leg would strand
   // while the bill and the receipt both unwind.
-  const billLines = (await tx.execute<{ id: string }>(sql`
+  const billLines = await tx.execute<{ id: string }>(sql`
     select id from document_lines
      where org_id = ${input.orgId} and document_id = ${input.billId}
-  `)).rows;
+  `, "objects");
   for (const line of billLines) {
     const entryNumber = `INV-PPV-${line.id}`;
     const ppv = (await tx.execute<{ id: string }>(sql`
       select id from journal_entries
        -- Live entries only: a reversed entry cannot be reversed again
        where org_id = ${input.orgId} and entry_number = ${entryNumber} and status = 'posted'
-    `)).rows[0];
+    `, "objects"))[0];
     if (!ppv) continue;
     try {
       await reverseInventoryJournal(tx, input.orgId, input.actorId, ppv.id, input.reversalDate, input.reason);
@@ -1030,14 +1030,14 @@ async function reverseOrderShipment(
       from document_lines l
      where l.document_id = ${input.voidDocumentId} and l.org_id = ${input.orgId}
      group by 1
-  `));
-  if (voidQtyBySource.rows.some((row) => !row.source_line_id)) {
+  `, "objects"));
+  if (voidQtyBySource.some((row) => !row.source_line_id)) {
     throw new DocumentVoidError(
       "this document has a line without order-line provenance — correct the line before voiding",
     );
   }
-  if (voidQtyBySource.rows.length > 0) {
-    const sources = voidQtyBySource.rows as { source_line_id: string; void_quantity: string }[];
+  if (voidQtyBySource.length > 0) {
+    const sources = voidQtyBySource as { source_line_id: string; void_quantity: string }[];
     // Malformed legacy provenance must refuse as a controlled void error,
     // never as a raw SQL cast failure from the uuid[] predicates below.
     for (const source of sources) {
@@ -1062,8 +1062,8 @@ async function reverseOrderShipment(
          )
        order by d.id
        for update
-    `));
-    for (const order of orders.rows) {
+    `, "objects"));
+    for (const order of orders) {
       if (order.kind !== expectedOrderKind) {
         throw new DocumentVoidError(
           "a source line does not belong to an order of the expected kind — correct the line before voiding",
@@ -1071,13 +1071,13 @@ async function reverseOrderShipment(
       }
     }
     const orderByLine = new Map<string, { id: string; status: string; kind: string }>();
-    for (const order of orders.rows) {
+    for (const order of orders) {
       const lineIds = (await tx.execute<{ id: string }>(sql`
         select l.id from document_lines l
          where l.org_id = ${input.orgId} and l.document_id = ${order.id}
            and l.id = any(${idArr}::uuid[])
-      `));
-      for (const line of lineIds.rows) orderByLine.set(line.id, order);
+      `, "objects"));
+      for (const line of lineIds) orderByLine.set(line.id, order);
     }
     if (orderByLine.size !== sources.length) {
       throw new DocumentVoidError("a source order line for this document is missing");
@@ -1087,8 +1087,8 @@ async function reverseOrderShipment(
        where l.org_id = ${input.orgId} and l.id = any(${idArr}::uuid[])
        order by l.id
        for update of l
-    `));
-    if (sourceLines.rows.length !== sources.length) {
+    `, "objects"));
+    if (sourceLines.length !== sources.length) {
       throw new DocumentVoidError("a source order line changed while it was being voided");
     }
     for (const source of sources) {
@@ -1102,7 +1102,7 @@ async function reverseOrderShipment(
         select (quantity_fulfilled - ${source.void_quantity}::numeric) >= 0 as restorable,
                (quantity_fulfilled - ${source.void_quantity}::numeric) < quantity_billed as billed_block
           from document_lines where id = ${source.source_line_id} and org_id = ${input.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       if (!cover.restorable) {
         throw new DocumentVoidError("voiding would drive a source line below zero fulfilled");
       }
@@ -1116,7 +1116,7 @@ async function reverseOrderShipment(
     // move: captured under the locks above, before any counter or movement
     // write in this unwind.
     const beforeSnapshots = new Map<string, TransactionAuditSnapshot>();
-    for (const order of orders.rows) {
+    for (const order of orders) {
       const snapshot = await captureTransactionAuditSnapshot(tx, order.id, input.orgId);
       if (!snapshot) throw new DocumentVoidError("a source order disappeared while it was being voided");
       beforeSnapshots.set(order.id, snapshot);
@@ -1137,9 +1137,9 @@ async function reverseOrderShipment(
          )
        order by movement.id
        for update of movement
-    `));
+    `, "objects"));
     if (input.voidKind === "sales_fulfillment") {
-      for (const movement of liveMovements.rows) {
+      for (const movement of liveMovements) {
         const returned = await postedReturnQuantity(tx, input.orgId, {
           returnKind: "receipt",
           evidenceKey: "sourceIssueMovementId",
@@ -1152,7 +1152,7 @@ async function reverseOrderShipment(
         }
       }
     }
-    for (const movement of liveMovements.rows) {
+    for (const movement of liveMovements) {
       try {
         await reverseInventoryMovement(input.orgId, input.actorId, {
           movementId: movement.id,
@@ -1188,13 +1188,13 @@ async function reverseOrderShipment(
     // fulfilled counter is operational reconciliation state, not a
     // commercial edit. Reopen each source header while its counters restore
     // (the established order-cycle pattern), then restore approved status.
-    for (const order of orders.rows) {
+    for (const order of orders) {
       const reopened = (await tx.execute<{ id: string }>(sql`
         update documents
            set status = 'draft', updated_by = ${input.actorId}
          where id = ${order.id} and org_id = ${input.orgId} and status = 'approved'
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!reopened) throw new DocumentVoidError("the source order changed while it was being voided");
       for (const source of sources.filter((row) => orderByLine.get(row.source_line_id)!.id === order.id)) {
         const restored = (await tx.execute<{ id: string }>(sql`
@@ -1204,7 +1204,7 @@ async function reverseOrderShipment(
            where id = ${source.source_line_id} and org_id = ${input.orgId}
              and quantity_fulfilled - ${source.void_quantity}::numeric >= 0
           returning id
-        `)).rows[0];
+        `, "objects"))[0];
         if (!restored) throw new DocumentVoidError("a source order line changed while it was being voided");
       }
       const restored = (await tx.execute<{ id: string }>(sql`
@@ -1212,12 +1212,12 @@ async function reverseOrderShipment(
            set status = 'approved', updated_by = ${input.actorId}
          where id = ${order.id} and org_id = ${input.orgId} and status = 'draft'
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!restored) throw new DocumentVoidError("the source order changed while it was being voided");
     }
     // After-evidence pairs each source order's before snapshot: the void's
     // reason and actor travel on the envelope like the shipment's own.
-    for (const order of orders.rows) {
+    for (const order of orders) {
       const after = await captureTransactionAuditSnapshot(tx, order.id, input.orgId);
       await recordTransactionAudit(tx, {
         orgId: input.orgId,
@@ -1264,7 +1264,7 @@ async function assertRetainageDrawVoidable(
   const control = (await tx.execute<{ account: string | null }>(sql`
     select settings->'controlAccounts'->>${kind === "customer_invoice" ? "retainageReceivable" : "retainagePayable"} as account
       from orgs where id = ${orgId}
-  `)).rows[0]?.account;
+  `, "objects"))[0]?.account;
   if (!control) return;
   if (kind === "customer_invoice") {
     // Support removed, per project: the negative retainage-receivable lines
@@ -1276,11 +1276,11 @@ async function assertRetainageDrawVoidable(
        where org_id = ${orgId} and document_id = ${documentId}
          and account_id = ${control}::uuid and amount < 0
        group by project_id
-    `)).rows.filter((row) => cmp(row.removed, "0") > 0);
+    `, "objects")).filter((row) => cmp(row.removed, "0") > 0);
     for (const { project_id: projectId, removed: drawSupport } of removed) {
       await tx.execute(sql`select id from projects where org_id = ${orgId} and id = ${projectId} for update`);
       const held = String(
-        (await tx.execute<{ held: string | number }>(projectRetainageHeldSql(orgId, projectId, control))).rows[0]?.held ?? "0",
+        (await tx.execute<{ held: string | number }>(projectRetainageHeldSql(orgId, projectId, control), "objects"))[0]?.held ?? "0",
       );
       const pending = (await tx.execute<{ reserved: string; release_number: string | null }>(sql`
         select coalesce(sum(d.total), 0)::text as reserved, min(d.document_number) as release_number
@@ -1288,7 +1288,7 @@ async function assertRetainageDrawVoidable(
           join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
          where pa.org_id = ${orgId} and pa.project_id = ${projectId} and pa.kind = 'retainage_release'
            and pa.status in ('invoiced', 'posted') and d.status not in ('posted', 'voided')
-      `)).rows[0];
+      `, "objects"))[0];
       if (cmp(String(pending?.reserved ?? "0"), add(held, neg(drawSupport))) > 0) {
         throw new DocumentVoidError(
           `this application supports retainage release ${pending?.release_number ?? "(pending)"} — reverse the retainage release first`,
@@ -1304,7 +1304,7 @@ async function assertRetainageDrawVoidable(
       from vendor_pay_applications vpa
      where vpa.org_id = ${orgId} and vpa.vendor_bill_document_id = ${documentId} and vpa.status = 'billed'
      group by vpa.subcontract_id
-  `)).rows.filter((row) => cmp(row.support, "0") > 0);
+  `, "objects")).filter((row) => cmp(row.support, "0") > 0);
   for (const { subcontract_id: subcontractId, support: drawSupport } of draws) {
     await tx.execute(sql`select id from subcontracts where org_id = ${orgId} and id = ${subcontractId} for update`);
     const balance = (await tx.execute<{ held: string; released: string; release_number: string | null }>(sql`
@@ -1318,7 +1318,7 @@ async function assertRetainageDrawVoidable(
         from vendor_pay_applications vpa
         left join documents d on d.id = vpa.vendor_bill_document_id and d.org_id = vpa.org_id
        where vpa.org_id = ${orgId} and vpa.subcontract_id = ${subcontractId} and vpa.status = 'billed'
-    `)).rows[0];
+    `, "objects"))[0];
     if (cmp(String(balance?.released ?? "0"), add(String(balance?.held ?? "0"), neg(drawSupport))) > 0) {
       throw new DocumentVoidError(
         `this subcontract draw supports retainage release ${balance?.release_number ?? "(pending)"} — reverse the retainage release first`,
@@ -1366,9 +1366,9 @@ async function refuseUnavailablePayRunVoid(
      where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
        and a.status = 'delivered' and p.delivery_method = 'external' and a.external_ref is not null
      order by a.id for update of a
-  `)).rows[0];
+  `, "objects"))[0];
   if (fulfilled) throw new DocumentVoidError(`this pay run represents fulfilled non-cash benefit ${fulfilled.code} (provider reference ${fulfilled.external_ref}); voiding payroll does not cancel provider fulfillment — record an adjusting benefit award and a correcting payroll run instead`);
-  const bankFiles = (await executor.execute<{
+  const bankFiles = await executor.execute<{
     file_number: string;
     release_count: number;
   }>(sql`
@@ -1377,7 +1377,7 @@ async function refuseUnavailablePayRunVoid(
      where f.org_id = ${orgId} and f.pay_run_document_id = ${documentId}
      order by f.file_number, f.id
      for update of f
-  `)).rows;
+  `, "objects");
   const releasedBankFile = bankFiles.find((file) => file.release_count > 0);
   if (releasedBankFile) {
     throw new DocumentVoidError(
@@ -1398,9 +1398,9 @@ export async function completeRequestedDocumentVoid(
   return withOrgTransaction(orgId, async () => {
     // Serialize payroll release with retained opening-source replacement and filing snapshots.
     // The fence precedes document locks so all payroll lifecycle writers use the same order.
-    const payrollYear=(await db.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
+    const payrollYear=await db.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
       join documents d on d.org_id=r.org_id and d.id=r.document_id
-      where r.org_id=${orgId} and r.document_id=${documentId} and d.kind='pay_run'`)).rows;
+      where r.org_id=${orgId} and r.document_id=${documentId} and d.kind='pay_run'`, "objects");
     if(payrollYear.length>1) throw new DocumentVoidError('The payroll source year is ambiguous');
     if(payrollYear[0]) await takeOpeningSourceYearFence(db,orgId,payrollYear[0].taxYear);
     await lockLedgerSetupFence(db, orgId, "shared");
@@ -1412,7 +1412,7 @@ export async function completeRequestedDocumentVoid(
     } = await db.transaction(async (tx) => {
       // Completion-time backstop for the request-path check above: a release
       // landing between request and completion is refused here instead.
-      const reversalDocument = (await tx.execute<{ void_requested_by: string | null }>(sql`select void_requested_by from documents where org_id=${orgId} and id=${documentId} for update`)).rows[0];
+      const reversalDocument = (await tx.execute<{ void_requested_by: string | null }>(sql`select void_requested_by from documents where org_id=${orgId} and id=${documentId} for update`, "objects"))[0];
       await assertJournalVoidNotAutomaticallyReversed(tx,orgId,documentId);
       await cancelScheduledJournalReversal(tx,orgId,documentId,reversalDocument?.void_requested_by ?? null);
       await refuseUnavailablePayRunVoid(tx, orgId, documentId);
@@ -1428,7 +1428,7 @@ export async function completeRequestedDocumentVoid(
         select posted_entry_id, kind, custom
           from documents
          where id = ${documentId} and org_id = ${orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       const discoveredEntryId = discovered?.posted_entry_id ?? null;
       // A payment's carried credit allocations are released with it below, so
       // their credit and target lines join the same evidence lock.
@@ -1454,7 +1454,7 @@ export async function completeRequestedDocumentVoid(
             select id from source_lines
             union
             select id from related_lines
-          `)).rows.map((row) => row.id).concat(carriedCreditEndpoints)
+          `, "objects")).map((row) => row.id).concat(carriedCreditEndpoints)
         : [];
       let lockedEvidence: Awaited<ReturnType<typeof lockApplicationEvidence>>;
       try {
@@ -1480,8 +1480,8 @@ export async function completeRequestedDocumentVoid(
           from documents
          where id = ${documentId} and org_id = ${orgId}
          for update
-      `));
-      const doc = locked.rows[0];
+      `, "objects"));
+      const doc = locked[0];
       if (!doc) throw new DocumentVoidError("document not found");
       if (allowedSubsidiaryIds !== undefined &&
           !subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiary_id as string | null)) {
@@ -1511,7 +1511,7 @@ export async function completeRequestedDocumentVoid(
           select id from source_lines
           union
           select id from related_lines
-        `)).rows.map((row) => row.id);
+        `, "objects")).map((row) => row.id);
         const lockedLineIds = new Set(lockedEvidence.lineIds);
         if (liveEndpoints.some((id) => !lockedLineIds.has(id))) {
           throw new DocumentVoidError(
@@ -1548,10 +1548,10 @@ export async function completeRequestedDocumentVoid(
            and d2.status in ('approved', 'posted')
            and dl.link_type <> 'pays'
          limit 1
-      `));
-      if (downstream.rows[0]) {
+      `, "objects"));
+      if (downstream[0]) {
         throw new DocumentVoidError(
-          `this transaction feeds ${downstream.rows[0].document_number} — reverse the downstream transaction first`,
+          `this transaction feeds ${downstream[0].document_number} — reverse the downstream transaction first`,
         );
       }
 
@@ -1639,13 +1639,13 @@ export async function completeRequestedDocumentVoid(
           select id from res_retainers
            where org_id = ${orgId} and invoice_document_id = ${documentId}
            for update
-        `)).rows[0];
+        `, "objects"))[0];
         if (linkedRetainer) {
           const postedDrawdown = (await tx.execute<{ id: string }>(sql`
             select id from res_retainer_drawdowns
              where org_id = ${orgId} and retainer_id = ${linkedRetainer.id} and state = 'posted'
              limit 1
-          `)).rows[0];
+          `, "objects"))[0];
           if (postedDrawdown) {
             throw new DocumentVoidError(
               "this retainer invoice has posted drawdowns and cannot be voided without orphaning their recognition history — keep the invoice posted and correct the issue with an adjusting journal entry",
@@ -1667,8 +1667,8 @@ export async function completeRequestedDocumentVoid(
              select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
            )
            limit 1
-        `));
-        if (reconciled.rows.length > 0) {
+        `, "objects"));
+        if (reconciled.length > 0) {
           throw new DocumentVoidError(
             "this transaction is bank-reconciled — remove the reconciliation match before voiding",
           );
@@ -1681,8 +1681,8 @@ export async function completeRequestedDocumentVoid(
                select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
              )
            limit 1
-        `));
-        if (incoming.rows.length > 0) {
+        `, "objects"));
+        if (incoming.length > 0) {
           throw new DocumentVoidError(
             "this transaction has live payments or credits applied to it — unapply them before voiding",
           );
@@ -1735,9 +1735,9 @@ export async function completeRequestedDocumentVoid(
                )
                  and obligation.status <> 'cancelled'
             ) as revenue
-        `));
-        const hasInventoryActivity = dependentSubledger.rows[0]?.inventory ?? false;
-        const hasRevenueActivity = dependentSubledger.rows[0]?.revenue ?? false;
+        `, "objects"));
+        const hasInventoryActivity = dependentSubledger[0]?.inventory ?? false;
+        const hasRevenueActivity = dependentSubledger[0]?.revenue ?? false;
         if (hasInventoryActivity || hasRevenueActivity) {
           // The queries above are existence-based: movement and obligation
           // rows survive a kernel reversal, so reversing the stock does not
@@ -1783,7 +1783,7 @@ export async function completeRequestedDocumentVoid(
                           where p.org_id = ${orgId} and p.source_entry_id = ${entryId} and p.status = 'accepted') as accepted,
                  exists (select 1 from asset_cip_costs c
                           where c.org_id = ${orgId} and c.source_entry_id = ${entryId} and c.status = 'linked') as linked
-        `)).rows[0];
+        `, "objects"))[0];
         if (capitalized?.accepted) {
           throw new DocumentVoidError(
             "this transaction was capitalized through an accepted fixed-asset proposal — reverse the acceptance from Fixed Assets → Proposals (Reverse acceptance), then void the transaction",
@@ -1799,8 +1799,8 @@ export async function completeRequestedDocumentVoid(
           select * from journal_entries
            where id = ${entryId} and org_id = ${orgId}
            for update
-        `));
-        const entry = entryResult.rows[0];
+        `, "objects"));
+        const entry = entryResult[0];
         if (!entry || entry.status !== "posted") {
           throw new DocumentVoidError("the source journal entry is not posted");
         }
@@ -1831,13 +1831,13 @@ export async function completeRequestedDocumentVoid(
           select distinct subsidiary_id
             from journal_lines
            where entry_id = ${entryId} and org_id = ${orgId}
-        `));
+        `, "objects"));
         try {
           await assertPeriodModulesOpen(tx, {
             orgId,
             periodId: period.id,
             bookId: String(entry.book_id),
-            subsidiaryIds: subsidiaries.rows.map((row) => row.subsidiary_id),
+            subsidiaryIds: subsidiaries.map((row) => row.subsidiary_id),
             modules: [voidCloseModule(String(doc.kind))],
           });
         } catch (error) {
@@ -1860,7 +1860,7 @@ export async function completeRequestedDocumentVoid(
              and a.from_line_id in (
                select id from journal_lines where entry_id = ${entryId} and org_id = ${orgId}
              )
-        `));
+        `, "objects"));
         await tx.execute(sql`
           update applications
              set unapplied_at = now(), updated_at = now(),
@@ -1899,8 +1899,8 @@ export async function completeRequestedDocumentVoid(
             select * from journal_entries
              where id = ${sourceEntryId} and org_id = ${orgId}
              for update
-          `));
-          const source = sourceResult.rows[0];
+          `, "objects"));
+          const source = sourceResult[0];
           if (!source || source.status !== "posted") {
             throw new DocumentVoidError("linked posted entry is missing or already reversed");
           }
@@ -1954,7 +1954,7 @@ export async function completeRequestedDocumentVoid(
           if (error instanceof AmortizationError) throw new DocumentVoidError(`${error.message} ${error.remedy}`, 422, "invalid");
           throw error;
         }
-        for (const fx of outgoingFx.rows) {
+        for (const fx of outgoingFx) {
           await reverseEntry(fx.id, "VOID");
         }
         // Post-mode allocations in secondary books live in their own
@@ -1969,19 +1969,19 @@ export async function completeRequestedDocumentVoid(
              and origin = 'allocation' and status = 'posted'
            order by id
            for update
-        `));
-        for (const linked of linkedAllocations.rows) {
+        `, "objects"));
+        for (const linked of linkedAllocations) {
           const linkedSubs = (await tx.execute<{ subsidiary_id: string }>(sql`
             select distinct subsidiary_id
               from journal_lines
              where entry_id = ${linked.id} and org_id = ${orgId}
-          `));
+          `, "objects"));
           try {
             await assertPeriodModulesOpen(tx, {
               orgId,
               periodId: period.id,
               bookId: linked.book_id,
-              subsidiaryIds: linkedSubs.rows.map((row) => row.subsidiary_id),
+              subsidiaryIds: linkedSubs.map((row) => row.subsidiary_id),
               modules: [voidCloseModule(String(doc.kind))],
             });
           } catch (error) {
@@ -2007,8 +2007,8 @@ export async function completeRequestedDocumentVoid(
              and origin in ('stored_value','rebate_settlement') and status = 'posted'
            order by id
            for update
-        `));
-        for (const fx of storedValueFx.rows) {
+        `, "objects"));
+        for (const fx of storedValueFx) {
           await reverseEntry(fx.id, "VOID");
         }
         // The journal reversal above moved the stored-value liability; the
@@ -2173,7 +2173,7 @@ async function releaseVoidedPayRun(
      order by bill.created_at, bill.id
      limit 1
      for update of bill
-  `)).rows[0];
+  `, "objects"))[0];
   if (covered) {
     throw new DocumentVoidError(
       `this pay run is covered by posted payroll remittance bill ${covered.document_number}; void the remittance bill first`,
@@ -2184,7 +2184,7 @@ async function releaseVoidedPayRun(
   // refuse while any non-voided dependent retro run is committed. All such
   // rows are locked first in document order; commitPayRun holds this same
   // row to its flip and never locks the source, so either order serializes.
-  const dependents = (await tx.execute<{ document_number: string; run_status: string; doc_status: string }>(sql`
+  const dependents = await tx.execute<{ document_number: string; run_status: string; doc_status: string }>(sql`
     select retro_doc.document_number, rr.run_status, retro_doc.status as doc_status
       from payroll_retro_settlements st
       join pay_runs rr
@@ -2195,7 +2195,7 @@ async function releaseVoidedPayRun(
        and rr.run_status <> 'voided'
      order by rr.document_id
      for update of rr
-  `)).rows;
+  `, "objects");
   const blocking = dependents.find(
     (row) => row.run_status === "committed" && row.doc_status !== "voided",
   );
@@ -2214,8 +2214,8 @@ async function releaseVoidedPayRun(
      where org_id = ${orgId} and document_id = ${documentId}
        and run_status <> 'voided'
      returning document_id
-  `));
-  if (run.rows.length === 0) return; // already released (idempotent replay)
+  `, "objects"));
+  if (run.length === 0) return; // already released (idempotent replay)
 
   await tx.execute(sql`
     update time_entries
@@ -2241,8 +2241,8 @@ async function releaseVoidedPayRun(
          group by l.org_id, l.plan_id, l.employee_party_id
         having sum(l.amount) <> 0
       ) owed_groups
-  `)).rows[0];
-  const reversed = (await tx.execute<{ id: string }>(sql`
+  `, "objects"))[0];
+  const reversed = await tx.execute<{ id: string }>(sql`
     insert into entitlement_ledger
       (org_id, plan_id, employee_party_id, movement_date, amount, hours, kind,
        pay_run_document_id, note, created_by, updated_by)
@@ -2260,7 +2260,7 @@ async function releaseVoidedPayRun(
     -- A prior adjustment returns no row and the required reversal count refuses the void below.
     on conflict do nothing
     returning id
-  `)).rows;
+  `, "objects");
   if (Number(owed?.n ?? 0) !== reversed.length) {
     throw new DocumentVoidError(
       "entitlement adjustments already exist for this pay run, so the void cannot reverse its entitlements once; reload the run and review its entitlement adjustments before voiding",
@@ -2285,8 +2285,8 @@ export async function rejectRequestedDocumentVoid(
         from documents
        where id = ${documentId} and org_id = ${orgId}
        for update
-    `);
-    const request = locked.rows[0];
+    `, "objects");
+    const request = locked[0];
     if (!request?.void_requested_at || !request.void_requested_by || !request.void_reason) {
       throw new DocumentVoidError("the document has no pending void request", 409);
     }
@@ -2305,8 +2305,8 @@ export async function rejectRequestedDocumentVoid(
          and void_requested_by is not null
          and void_reason is not null
       returning id
-    `);
-    if (!cleared.rows[0]) {
+    `, "objects");
+    if (!cleared[0]) {
       throw new DocumentVoidError("the document has no pending void request", 409);
     }
     await db.execute(sql`

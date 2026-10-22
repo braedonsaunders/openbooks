@@ -21,10 +21,10 @@ test('batched catalog refresh preserves custom and edited reports while refreshi
       await db.execute(sql`update report_definitions set updated_by=${actorId},name='Tenant edited report' where org_id=${org.orgId} and slug=${edited.slug}`)
       await db.execute(sql`update report_definitions set updated_by=${actorId},name='Tenant edited statement' where org_id=${org.orgId} and slug=${statement.slug}`)
       await db.execute(sql`update report_definitions set name='Previous catalog name' where org_id=${org.orgId} and slug=${owned.slug}`)
-      const read = async () => (await db.execute<Record<string, unknown>>(sql`
+      const read = async () => await db.execute<Record<string, unknown>>(sql`
         select id,slug,name,description,kind,query,statement,report_type,system,updated_by,updated_at
           from report_definitions where org_id=${org.orgId} order by slug
-      `)).rows
+      `, 'objects')
       const before = await read()
       await ensureReportDefinitions(org.orgId)
       const after = await read()

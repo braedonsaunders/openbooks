@@ -91,8 +91,7 @@ async function postCardJournal(
     const offsetAmount = bankAmount.startsWith("-")
       ? bankAmount.slice(1)
       : `-${bankAmount}`;
-    const [bankLine] = (
-      await tx.execute<{ id: string }>(sql`
+    const [bankLine] = await tx.execute<{ id: string }>(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -104,8 +103,7 @@ async function postCardJournal(
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD',
          ${offsetAmount}, 1, ${label})
       returning id
-    `)
-    ).rows;
+    `, "objects");
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -134,33 +132,27 @@ async function statementLineIds(
   orgId: string,
   statementId: string,
 ): Promise<string[]> {
-  return (
-    await db.execute<{ id: string }>(sql`
+  return (await db.execute<{ id: string }>(sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
      order by line_number
-  `)
-  ).rows.map((row) => row.id);
+  `, "objects")).map((row) => row.id);
 }
 
 async function lineStatus(orgId: string, lineId: string): Promise<string> {
-  return (
-    await db.execute<{ match_status: string }>(sql`
+  return (await db.execute<{ match_status: string }>(sql`
     select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}
-  `)
-  ).rows[0]!.match_status;
+  `, "objects"))[0]!.match_status;
 }
 
 async function matchedPairs(orgId: string, reconId: string) {
-  return (
-    await db.execute<{
+  return await db.execute<{
       statement_line_id: string | null;
       journal_line_id: string;
     }>(sql`
     select statement_line_id, journal_line_id from reconciliation_matches
      where org_id = ${orgId} and reconciliation_id = ${reconId}
-  `)
-  ).rows;
+  `, "objects");
 }
 
 test(
@@ -733,12 +725,10 @@ test(
         "banks post after the book date, so the lagging line wins the tie in distance",
       );
       assert.equal(await lineStatus(org.orgId, leading!), "unmatched");
-      const stored = (
-        await db.execute<{ confidence: string; match_reasons: unknown }>(sql`
+      const stored = await db.execute<{ confidence: string; match_reasons: unknown }>(sql`
         select confidence::text as confidence, match_reasons from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${recon.id}
-      `)
-      ).rows;
+      `, "objects");
       assert.deepEqual(stored, [
         {
           confidence: "0.7400",
@@ -811,13 +801,11 @@ test(
         1,
         "the bare six-day pair waits in the review queue",
       );
-      const held = (
-        await db.execute<{ n: number }>(sql`
+      const held = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${recon.id}
            and matched_by = 'auto' and confidence <= 0.7
-      `)
-      ).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(
         held,
         1,

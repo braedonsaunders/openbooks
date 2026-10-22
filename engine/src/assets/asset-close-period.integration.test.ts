@@ -46,8 +46,8 @@ async function seedAsset(org: ScratchOrg, actorId: string, tag: string): Promise
 
 async function journalCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`));
-  return r.rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  return r[0]!.n;
 }
 
 async function closeGl(org: ScratchOrg, actorId: string): Promise<void> {
@@ -127,7 +127,7 @@ test("an assets-closed period refuses asset disposals dated inside it", { skip: 
     );
     assert.equal(await journalCount(org.orgId), before, "refused disposal left GL residue");
     const status = (await db.execute<{ status: string }>(sql`
-      select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`)).rows[0]!;
+      select status from fixed_assets where org_id = ${org.orgId} and id = ${assetId}`, "objects"))[0]!;
     assert.equal(status.status, "in_service", "refused disposal must not derecognize the asset");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -143,7 +143,7 @@ test("a GL-closed period refuses asset reversals dated inside it", { skip: !DB }
     await disposeAsset(org.orgId, assetId, { writeOff: true, date: org.date, actorId });
     const event = (await db.execute<{ id: string }>(sql`
       select id from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}
-       order by created_at desc limit 1`)).rows[0]!;
+       order by created_at desc limit 1`, "objects"))[0]!;
     await closeGl(org, actorId);
     const before = await journalCount(org.orgId);
     await assert.rejects(

@@ -183,7 +183,7 @@ async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string, fo
       join worker_employments e
         on e.org_id = r.org_id and e.id = r.employment_id
      where r.org_id = ${orgId} and r.id = ${reviewId} ${forUpdate ? sql`for update of r` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization.
   // Callers narrow this to NOT_FOUND uniformly so an unreadable review is
   // indistinguishable from a missing one (see performance-read.ts).
@@ -201,7 +201,7 @@ async function loadAnswers(
   orgId: string,
   reviewId: string,
 ): Promise<ReviewAnswerDTO[]> {
-  const rows = (await exec.execute<ReviewAnswerDTO>(sql`
+  const rows = await exec.execute<ReviewAnswerDTO>(sql`
     select id,
            section_title as "sectionTitle",
            question_prompt as "questionPrompt",
@@ -213,7 +213,7 @@ async function loadAnswers(
       from hrm_review_answers
      where org_id = ${orgId} and review_id = ${reviewId}
      order by position
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -276,7 +276,7 @@ async function writeReviewAnswers(args: {
     const cycleLock = (await db.execute<{status:string}>(sql`
       select c.status from hrm_review_cycles c join hrm_reviews r on r.org_id=c.org_id and r.cycle_id=c.id
       where r.org_id=${orgId} and r.id=${reviewId} for share of c
-    `)).rows[0];
+    `, "objects"))[0];
     if(!cycleLock || cycleLock.status!=='open') throw new HrmPerformanceError('BAD_STATE','This cycle is not open for review answers. Return to the review list and check its status.');
     const review = toReviewDTO(await loadReview(db, orgId, reviewId, true));
     if(args.revision!==undefined && args.revision!==review.revision) throw new HrmPerformanceError('STALE_REVISION','This review changed in another session. Reload it before saving; your answers have not been applied.');
@@ -304,7 +304,7 @@ async function writeReviewAnswers(args: {
         from hrm_review_templates t
         join hrm_review_cycles c on c.org_id = t.org_id and c.template_id = t.id
        where c.org_id = ${orgId} and c.id = ${review.cycleId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!template) {
       throw new HrmPerformanceError(
         "TEMPLATE_NOT_FOUND",
@@ -334,7 +334,7 @@ async function writeReviewAnswers(args: {
       if (rating !== null && rating.trim().length > 0) {
         mathRefusal("REFUSED", () => assertRatingInScale(scale, rating.trim(), answer.questionPrompt ?? answer.sectionTitle));
       }
-      const answerWrite = await db.execute(sql`
+      const answerWrite = await db.execute<never>(sql`
         update hrm_review_answers
            set rating = ${rating === null || rating.trim().length === 0 ? null : rating.trim()}::numeric,
                text = ${text},
@@ -349,7 +349,7 @@ async function writeReviewAnswers(args: {
     if (overall !== null) {
       mathRefusal("REFUSED", () => assertRatingInScale(scale, overall, "overall rating"));
     }
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_reviews
          set status = ${args.draft?'pending':'submitted'}, submitted_at = case when ${!!args.draft} then null else now() end,
              revision=revision+1, draft_saved_at=case when ${!!args.draft} then now() else draft_saved_at end,
@@ -397,7 +397,7 @@ export async function shareReview(args: {
     const cycle = (await db.execute<{ status: string }>(sql`
       select status from hrm_review_cycles where org_id = ${orgId} and id = ${review.cycleId}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!cycle) {
       throw new HrmPerformanceError("NOT_FOUND", `review cycle for review ${reviewId} is not visible in this organization`);
     }
@@ -423,7 +423,7 @@ export async function shareReview(args: {
         `review ${reviewId} sits in a calibrating cycle — finish calibration (close the cycle) before sharing it with the subject`,
       );
     }
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_reviews
          set revision=revision+1, status = 'shared', shared_at = now(), updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${reviewId} and status in ('submitted', 'calibrated')
@@ -470,7 +470,7 @@ export async function acknowledgeReview(args: {
         `review ${reviewId} is ${review.status} — only a shared review acknowledges`,
       );
     }
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_reviews
          set revision=revision+1, status = 'acknowledged', acknowledged_at = now(),
              updated_at = now(), updated_by = ${actorId}
@@ -525,7 +525,7 @@ export async function reopenReview(args: {
     // Back to pending clears the submission stamp (the submitted event
     // remains as evidence); answers and the author's rating stay for
     // correction, calibration stays beside them as history.
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_reviews
          set revision=revision+1, status = 'pending', submitted_at = null,
              updated_at = now(), updated_by = ${actorId}

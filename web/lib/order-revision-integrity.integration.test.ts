@@ -36,7 +36,7 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
         values (${org.orgId},${id},1,${org.accounts.revenue},'1','100','100')`));
       if (operation.endsWith("void") || operation.includes("conversion")) await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`));
       await withBypassContext(() => db.execute(sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`));
-      const token = (await withOrgContext(org.orgId, () => db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`))).rows[0]!.revision;
+      const token = (await withOrgContext(org.orgId, () => db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`, "objects")))[0]!.revision;
       const cfg = { kind, readPerm: "ar.read", createPerm: "ar.create" };
       const params = { params: Promise.resolve({ id }) };
       await withOrgContext(org.orgId, async () => {
@@ -55,7 +55,7 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
           const payload = await response.json();
           assert.equal(response.status, 200, JSON.stringify(payload));
           const resultId = operation === "current conversion" ? payload.id : id;
-          const result = (await db.execute<{ status: string }>(sql`select status from documents where id=${resultId}`)).rows[0];
+          const result = (await db.execute<{ status: string }>(sql`select status from documents where id=${resultId}`, "objects"))[0];
           assert.equal(result?.status, operation === "current void" ? "voided" : "approved");
           return;
         }
@@ -64,7 +64,7 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
           // must still fail closed before any write.
           const response = await makePATCH(cfg)(request("PATCH", { status: "approved", expectedUpdatedAt: `${token}.0` }), params);
           assert.equal(response.status, 409);
-          assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${id}`)).rows[0]!.status, "draft");
+          assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${id}`, "objects"))[0]!.status, "draft");
           return;
         }
         let response: Response;
@@ -73,7 +73,7 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
           const staged = new Promise<void>(resolve => { ready = resolve; });
           const hold = new Promise<void>(resolve => { release = resolve; });
           edit = withOrg(org.orgId, async () => {
-            pid = (await db.execute<{ pid:number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+            pid = (await db.execute<{ pid:number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
             await db.execute(sql`update documents set memo='Concurrent edit',updated_at=updated_at+interval '1 second' where id=${id}`);
             ready(); await hold;
           });
@@ -83,7 +83,7 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
           void command.then(() => { settled=true; },()=>{settled=true;});
           const deadline=Date.now()+10_000;
           while (!settled && Date.now()<deadline) {
-            blocked=(await db.execute<{blocked:boolean}>(sql`select exists(select 1 from pg_stat_activity where datname=current_database() and ${pid}=any(pg_blocking_pids(pid))) as blocked`)).rows[0]!.blocked;
+            blocked=(await db.execute<{blocked:boolean}>(sql`select exists(select 1 from pg_stat_activity where datname=current_database() and ${pid}=any(pg_blocking_pids(pid))) as blocked`, "objects"))[0]!.blocked;
             if (blocked) break;
             await new Promise(resolve=>setTimeout(resolve,10));
           }
@@ -95,7 +95,7 @@ for (const operation of ["read", "edit", "issue", "delete", "void", "conversion 
             : await makePATCH(cfg)(request("PATCH",{expectedUpdatedAt:token,...(operation === "edit" ? {memo:"Stale edit"} : operation === "issue" ? {status:"approved"} : {status:"voided",reason:"Cancel reviewed order",reversalDate:org.date})}),params);
         }
         assert.equal(response.status,409,JSON.stringify(await response.json()));
-        assert.equal((await db.execute<{count:number}>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`)).rows[0]!.count,1);
+        assert.equal((await db.execute<{count:number}>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`, "objects"))[0]!.count,1);
       });
     } finally { release(); await Promise.allSettled([edit,command]); state.user=null; await dropScratchOrg(org.orgId); }
   });

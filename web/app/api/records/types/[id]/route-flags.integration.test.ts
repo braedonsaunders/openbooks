@@ -42,7 +42,7 @@ test('record-type PATCH refuses a non-boolean showInNav instead of a storage 500
           `expected 4xx, got ${response.status}: ${JSON.stringify(await response.clone().json())}`,
         )
       }
-      const stored = (await db.execute<{ show_in_nav: boolean }>(sql`select show_in_nav from custom_record_types where id=${typeId} and org_id=${org.orgId}`)).rows[0]
+      const stored = (await db.execute<{ show_in_nav: boolean }>(sql`select show_in_nav from custom_record_types where id=${typeId} and org_id=${org.orgId}`, 'objects'))[0]
       assert.equal(stored?.show_in_nav, false, 'refused writes leave the stored flag unchanged')
       const ok = await PATCH(
         patchRequest(typeId, { showInNav: true, expectedUpdatedAt: await openedRevision(typeId) }),

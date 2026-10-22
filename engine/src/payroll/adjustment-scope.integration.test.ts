@@ -31,7 +31,7 @@ for (const scenario of ["authorized", "hidden snapshot", "concurrent transfer"] 
         'run',(select to_jsonb(r) from pay_runs r where org_id=${fx.orgId} and document_id=${input.documentId}),
         'stubs',(select jsonb_agg(to_jsonb(s) order by id) from pay_stubs s where org_id=${fx.orgId}),
         'adjustments',(select jsonb_agg(to_jsonb(a) order by id) from pay_run_adjustments a where org_id=${fx.orgId})
-        ) as state`)).rows[0]!.state;
+        ) as state`, "objects"))[0]!.state;
       const before = await snapshot();
       const change = () => mutatePayRunAdjustment({ ...input, allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
         mutation: { action: "exclude", employeePartyId: targetId } });

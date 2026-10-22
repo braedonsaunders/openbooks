@@ -59,8 +59,9 @@ const mockSources = new Map<string, string>([
       export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
       export const db = {
-        async execute() {
-          return { rows: [{ id: '11111111-1111-4111-8111-111111111111', subsidiary_id: state.projectSubsidiary }] }
+        async execute(_query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
+          return inMode({ rows: [{ id: '11111111-1111-4111-8111-111111111111', subsidiary_id: state.projectSubsidiary }] })
         },
       }
     `,

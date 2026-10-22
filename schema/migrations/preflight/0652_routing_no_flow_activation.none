@@ -1,1 +1,0 @@
-Definition change only: replaces manufacturing_routing_revision_guard(), financial_change_self_decision_guard() and production_bom_revision_guard() to admit an automatic no-flow direct activation for routing and BOM revisions; no tables, columns, data, or grants change.

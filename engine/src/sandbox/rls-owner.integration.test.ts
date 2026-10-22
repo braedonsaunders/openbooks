@@ -32,8 +32,8 @@ test("sandbox RLS requires the sandbox org to belong to its production org", { s
       insert into sandboxes (id, org_id, production_org_id, name, tier, masked, status)
       values (${validSandboxId}, ${ownerSandboxOrgId}, ${owner.orgId}, 'Valid sandbox', 'masked', true, 'provisioning')`));
     const visible = await withOrg(owner.orgId, () => db.execute<{ id: string }>(sql`
-      select id from sandboxes where id = ${validSandboxId}`));
-    assert.deepEqual(visible.rows, [{ id: validSandboxId }]);
+      select id from sandboxes where id = ${validSandboxId}`, "objects"));
+    assert.deepEqual(visible, [{ id: validSandboxId }]);
 
     await assert.rejects(
       withOrg(owner.orgId, () => db.execute(sql`
@@ -74,8 +74,8 @@ test("sandbox RLS requires the sandbox org to belong to its production org", { s
       },
     );
     const stillValid = await withOrg(owner.orgId, () => db.execute<{ org_id: string }>(sql`
-      select org_id from sandboxes where id = ${validSandboxId}`));
-    assert.deepEqual(stillValid.rows, [{ org_id: ownerSandboxOrgId }]);
+      select org_id from sandboxes where id = ${validSandboxId}`, "objects"));
+    assert.deepEqual(stillValid, [{ org_id: ownerSandboxOrgId }]);
   } finally {
     await withBypassContext(async () => {
       await db.execute(sql`delete from sandboxes where id in (${validSandboxId}, ${forgedSandboxId}, ${unownedOrgSandboxId})`);

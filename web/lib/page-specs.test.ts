@@ -62,9 +62,10 @@ const MOCK_DB_SOURCE = `
     walk(top)
     return out.replace(/\\s+/g, ' ').trim()
   }
-  async function execute(query) {
+  async function execute(query, mode) {
+    const inMode = (result) => (mode === 'objects' ? result.rows : result)
     state.queries.push(flattenSqlChunks(query))
-    return state.responses.shift() ?? { rows: [] }
+    return inMode(await (state.responses.shift() ?? { rows: [] }))
   }
   export const db = { execute, transaction: async (fn) => fn({ execute }) }
 `

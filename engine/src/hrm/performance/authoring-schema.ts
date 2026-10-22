@@ -6,7 +6,7 @@ export class PerformanceUpgradeRequiredError extends HrmPerformanceError {
   constructor() {
     super(
       "REFUSED",
-      "Performance requires the Talent database upgrade (0481_hrm_talent_workspaces.sql). Ask your administrator to apply the upgrade before opening review templates or editing reviews.",
+      "Performance review authoring is not installed in this database. Ask your administrator to run the database upgrade through the native bootstrap runner before opening review templates or editing reviews.",
     );
     this.name = "PerformanceUpgradeRequiredError";
   }

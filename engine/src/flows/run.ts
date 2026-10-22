@@ -573,8 +573,8 @@ async function retryFlowRunLocked(
      where org_id = ${ctx.orgId} and flow_id = ${run.flowId} and subject_id = ${run.subjectId}
        and id <> ${run.id} and started_at >= ${run.startedAt}
      limit 1
-  `);
-  if (newer.rows[0]) {
+  `, "objects");
+  if (newer[0]) {
     throw new FlowRetryError("only the latest run for this record can be retried; retry that one instead");
   }
 

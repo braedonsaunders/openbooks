@@ -30,8 +30,8 @@ export async function listApplicationTaxReturnForms(context: ApplicationContext)
              where r.org_id = f.org_id and r.return_form_code = f.code) as registrations
       from tax_return_forms f
      where f.org_id = ${context.authz.user.orgId}
-    order by f.is_active desc, f.country, f.code`);
-  const visibleRows = await filterTaxReturnFormsByFeatures(context.authz.user.orgId, rows.rows);
+    order by f.is_active desc, f.country, f.code`, "objects");
+  const visibleRows = await filterTaxReturnFormsByFeatures(context.authz.user.orgId, rows);
   return {
     total: visibleRows.length,
     forms: visibleRows.map((row) => ({

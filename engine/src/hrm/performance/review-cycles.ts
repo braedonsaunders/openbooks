@@ -140,7 +140,7 @@ async function assertCycleInScope(exec: SqlExecutor, orgId: string, allowed: Set
     : (await exec.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId" from departments
          where org_id = ${orgId} and id = ${scope.departmentId}
-      `)).rows[0] ?? null;
+      `, "objects"))[0] ?? null;
   if (scope.departmentId !== null && department === null) {
     throw new HrmPerformanceError("REFUSED", `review cycle ${cycle.id} names a department outside this organization — choose a department in this organization`);
   }
@@ -173,7 +173,7 @@ async function loadCycle(exec: SqlExecutor, orgId: string, cycleId: string, forU
            closed_at as "closedAt"
       from hrm_review_cycles
      where org_id = ${orgId} and id = ${cycleId} ${forUpdate ? sql`for update` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!row) {
@@ -218,7 +218,7 @@ export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
         ${scope.employerSubsidiaryId ? sql`exists(select 1 from subsidiaries where id = ${scope.employerSubsidiaryId} and org_id = ${orgId})` : sql`true`} as "subsidiaryOk",
         ${scope.departmentId ? sql`exists(select 1 from departments where id = ${scope.departmentId} and org_id = ${orgId})` : sql`true`} as "departmentOk",
         ${scope.departmentId ? sql`(select subsidiary_id from departments where id = ${scope.departmentId} and org_id = ${orgId})` : sql`null::uuid`} as "departmentSubsidiaryId"
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if (!refs.subsidiaryOk) {
       throw new HrmPerformanceError(
         "REFUSED",
@@ -244,7 +244,7 @@ export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
     const template = (await db.execute<{ id: string; isActive: boolean }>(sql`
       select id, is_active as "isActive" from hrm_review_templates
        where org_id = ${orgId} and id = ${templateId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!template) {
       throw new HrmPerformanceError(
         "TEMPLATE_NOT_FOUND",
@@ -273,9 +273,9 @@ export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
         status, applies_to as "appliesTo",
         manager_gap_count as "managerGapCount",
         opened_at as "openedAt", closed_at as "closedAt"
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     if(input.requireManagerReviews!==undefined) {
-      const changed=await db.execute(sql`update hrm_review_cycles set require_manager_reviews=${input.requireManagerReviews} where org_id=${orgId} and id=${row.id}`);
+      const changed=await db.execute<never>(sql`update hrm_review_cycles set require_manager_reviews=${input.requireManagerReviews} where org_id=${orgId} and id=${row.id}`);
       if(changed.rowCount!==1) throw new HrmPerformanceError('REFUSED','The review policy was not saved. Retry creating the cycle.');
     }
     await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'hrm_review_cycles',${row.id},'insert',${JSON.stringify({event:'cycle_created',before:null,after:{...toCycleDTO(row),requireManagerReviews:input.requireManagerReviews??false}})}::jsonb,${actorId})`);
@@ -301,7 +301,7 @@ async function loadInServiceEmployments(
   orgId: string,
   asOf: string,
 ): Promise<InServiceEmployment[]> {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     employmentId: string;
     workerPartyId: string;
     employerSubsidiaryId: string;
@@ -319,7 +319,7 @@ async function loadInServiceEmployments(
        and (v.effective_to is null or v.effective_to > ${asOf}::date)
      where e.org_id = ${orgId}
      group by e.id, e.worker_party_id, e.employer_subsidiary_id
-  `)).rows;
+  `, "objects");
   const inService: InServiceEmployment[] = [];
   for (const row of rows) {
     if (row.statuses.length !== 1) {
@@ -340,7 +340,7 @@ async function loadInServiceEmployments(
          and (av.effective_to is null or av.effective_to > ${asOf}::date)
        order by av.version_no desc
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     inService.push({
       employmentId: row.employmentId,
       workerPartyId: row.workerPartyId,
@@ -360,7 +360,7 @@ async function resolveLineManager(
   employmentId: string,
   asOf: string,
 ): Promise<ManagerResolution> {
-  const active = (await exec.execute<{
+  const active = await exec.execute<{
     managerEmploymentId: string;
     managerPartyId: string;
   }>(sql`
@@ -375,7 +375,7 @@ async function resolveLineManager(
        and r.recorded_until is null
        and r.effective_from <= ${asOf}::date
        and (r.effective_to is null or r.effective_to > ${asOf}::date)
-  `)).rows;
+  `, "objects");
   if (active.length === 0) return null;
   if (active.length > 1) {
     throw new HrmPerformanceError(
@@ -410,7 +410,7 @@ async function loadTemplateSnapshot(
   const template = (await exec.execute<{ ratingScale: unknown; isActive: boolean; draft: unknown; published: ReviewTemplateDocument | null; version: number }>(sql`
     select rating_scale as "ratingScale", is_active as "isActive", draft_document as draft, published_document as published, published_version as version
       from hrm_review_templates where org_id = ${orgId} and id = ${templateId} for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!template) {
     throw new HrmPerformanceError(
       "TEMPLATE_NOT_FOUND",
@@ -433,14 +433,14 @@ async function loadTemplateSnapshot(
   // The scale must parse before anything instantiates: answers submitted
   // against an unreadable scale would validate against nothing.
   const scale = mathRefusal("REFUSED", () => parseRatingScale(template.ratingScale));
-  const sections = (await exec.execute<{ id: string; title: string; kind: string; weight: string|null; competencyId:string|null; position: number }>(sql`
+  const sections = await exec.execute<{ id: string; title: string; kind: string; weight: string|null; competencyId:string|null; position: number }>(sql`
     select id, title, kind, weight::text as weight, competency_id as "competencyId", position from hrm_review_template_sections
      where org_id = ${orgId} and template_id = ${templateId}
      order by position
-  `)).rows;
+  `, "objects");
   const snapshot: TemplateSnapshot = { scale, sections: [] };
   for (const section of sections) {
-    const questions = (await exec.execute<{
+    const questions = await exec.execute<{
       prompt: string;
       position: number;
       answerKind: string;
@@ -450,7 +450,7 @@ async function loadTemplateSnapshot(
         from hrm_review_template_questions
        where org_id = ${orgId} and section_id = ${section.id}
        order by position
-    `)).rows;
+    `, "objects");
     snapshot.sections.push({
       ...section,
       title: section.title,
@@ -517,7 +517,7 @@ export async function openCycle(args: {
     // concurrent openers serialize here — the loser is refused before
     // writing a single review, and any later failure rolls the claim back
     // with the transaction, so a partial instantiation cannot exist.
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_review_cycles
          set status = 'open', opened_at = now(), rating_scale_snapshot = ${JSON.stringify(snapshot.scale)}::jsonb, template_document_snapshot = ${JSON.stringify(snapshot)}::jsonb, template_version = ${snapshot.version ?? 0}, revision = revision + 1,
              updated_at = now(), updated_by = ${actorId}
@@ -538,7 +538,7 @@ export async function openCycle(args: {
       const manager = override ? {managerEmploymentId:'',managerPartyId:override} : await resolveLineManager(db, orgId, employment.employmentId, dto.periodEndOn);
       if(override) await assertReviewer(orgId,allowed,override,employment.workerPartyId,dto.periodEndOn);
       if(!manager && cycle.requireManagerReviews) {
-        const name=(await db.execute<{name:string}>(sql`select display_name as name from parties where org_id=${orgId} and id=${employment.workerPartyId}`)).rows[0]?.name??employment.employmentId;
+        const name=(await db.execute<{name:string}>(sql`select display_name as name from parties where org_id=${orgId} and id=${employment.workerPartyId}`, "objects"))[0]?.name??employment.employmentId;
         throw new HrmPerformanceError('REFUSED',`Assign a manager reviewer for ${name} in Participants before launching, or change the cycle policy to permit self-reviews for employees without a manager.`);
       }
       const selfId = (await db.execute<{ id: string }>(sql`
@@ -548,7 +548,7 @@ export async function openCycle(args: {
         values (${orgId}, ${cycleId}, ${employment.employmentId}, ${employment.workerPartyId},
           ${employment.workerPartyId}, 'self', 'pending', ${actorId}, ${actorId})
         returning id
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       instantiated += 1;
       await insertAnswers(db, orgId, actorId, selfId, snapshot, answerPositions);
       await db.execute(sql`
@@ -563,7 +563,7 @@ export async function openCycle(args: {
           values (${orgId}, ${cycleId}, ${employment.employmentId}, ${employment.workerPartyId},
             ${manager.managerPartyId}, 'manager', 'pending', ${actorId}, ${actorId})
           returning id
-        `)).rows[0]!.id;
+        `, "objects"))[0]!.id;
         managerReviews += 1;
         await insertAnswers(db, orgId, actorId, managerId, snapshot, answerPositions);
         await db.execute(sql`
@@ -576,7 +576,7 @@ export async function openCycle(args: {
     }
     // The gap count lands last, on the already-open cycle: the reviews
     // above are committed with it or rolled back together.
-    const gaped = (await db.execute(sql`
+    const gaped = (await db.execute<never>(sql`
       update hrm_review_cycles
          set manager_gap_count = ${gaps}, updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${cycleId} and status = 'open'
@@ -646,14 +646,14 @@ export async function moveToCalibrating(args: {
         `review cycle ${cycleId} is ${cycle.status} — only an open cycle moves to calibrating`,
       );
     }
-    const pending = (await db.execute<{ id: string }>(sql`
+    const pending = await db.execute<{ id: string }>(sql`
       select r.id from hrm_reviews r
       join hrm_review_answers a
         on a.org_id = r.org_id and a.review_id = r.id and a.required
      where r.org_id = ${orgId} and r.cycle_id = ${cycleId}
        and r.kind = 'manager' and r.status = 'pending'
      group by r.id
-    `)).rows;
+    `, "objects");
     if (pending.length > 0 && !args.force) {
       throw new HrmPerformanceError(
         "REFUSED",
@@ -676,7 +676,7 @@ export async function moveToCalibrating(args: {
         `);
       }
     }
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_review_cycles
          set status = 'calibrating', revision=revision+1, updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${cycleId} and status = 'open'
@@ -716,7 +716,7 @@ export async function closeCycle(args: {
         `review cycle ${cycleId} is ${cycle.status} — only an open or calibrating cycle closes`,
       );
     }
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_review_cycles
          set status = 'closed', revision=revision+1, closed_at = now(), updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${cycleId} and status = ${cycle.status}
@@ -753,12 +753,12 @@ export async function listReviewTemplates(args: {
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     await requireAggregatePerformanceManage(db, orgId, actorId);
-    const rows = (await db.execute<ReviewTemplateOption>(sql`
+    const rows = await db.execute<ReviewTemplateOption>(sql`
       select id, name, is_active as "isActive"
         from hrm_review_templates
        where org_id = ${orgId} and (draft_document is null or published_document is not null)
        order by is_active desc, name
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }
@@ -778,20 +778,20 @@ export async function getCycleManagement(args:{orgId:string;actorId:string;cycle
     const all=cycle.status==='draft'?await loadInServiceEmployments(db,orgId,cycle.periodEndOn):
       (await db.execute<InServiceEmployment>(sql`select distinct r.employment_id as "employmentId",r.subject_party_id as "workerPartyId",e.employer_subsidiary_id as "employerSubsidiaryId",null::uuid as "departmentId"
         from hrm_reviews r join worker_employments e on e.org_id=r.org_id and e.id=r.employment_id
-        where r.org_id=${orgId} and r.cycle_id=${cycleId}`)).rows;
+        where r.org_id=${orgId} and r.cycle_id=${cycleId}`, "objects"));
     const eligible=all.filter(e=>allowed===null||allowed.has(e.employerSubsidiaryId));
-    const names=(await db.execute<{id:string;name:string}>(sql`select id,display_name as name from parties where org_id=${orgId} and id in (select worker_party_id from worker_employments where org_id=${orgId})`)).rows;
+    const names=await db.execute<{id:string;name:string}>(sql`select id,display_name as name from parties where org_id=${orgId} and id in (select worker_party_id from worker_employments where org_id=${orgId})`, "objects");
     const nameMap=new Map(names.map(p=>[p.id,p.name]));
     const participants=[];
     for(const e of eligible.filter(e=>cycle.status!=='draft'||scopeMatchesEmployment(toCycleDTO(cycle).appliesTo,e))){
       const manager=cycle.status==='draft'?cycle.reviewerAssignments[e.employmentId]??(await resolveLineManager(db,orgId,e.employmentId,cycle.periodEndOn))?.managerPartyId??null:
-        (await db.execute<{partyId:string}>(sql`select reviewer_party_id as "partyId" from hrm_reviews where org_id=${orgId} and cycle_id=${cycleId} and employment_id=${e.employmentId} and kind='manager'`)).rows[0]?.partyId??null;
+        (await db.execute<{partyId:string}>(sql`select reviewer_party_id as "partyId" from hrm_reviews where org_id=${orgId} and cycle_id=${cycleId} and employment_id=${e.employmentId} and kind='manager'`, "objects"))[0]?.partyId??null;
       participants.push({id:e.employmentId,name:nameMap.get(e.workerPartyId)??e.employmentId,subjectPartyId:e.workerPartyId,reviewerPartyId:manager,reviewerName:manager?nameMap.get(manager)??manager:null});
     }
-    const history=(await db.execute<{at:string;event:string;actor:string|null}>(sql`
+    const history=await db.execute<{at:string;event:string;actor:string|null}>(sql`
       select a.at::text as at, a.changes->>'event' as event,u.name as actor from audit_log a
       left join users u on u.org_id=a.org_id and u.id=a.actor_id where a.org_id=${orgId} and a.table_name='hrm_review_cycles' and a.row_id=${cycleId} order by a.at desc limit 100
-    `)).rows;
+    `, "objects");
     return {revision:cycle.revision,requireManagerReviews:cycle.requireManagerReviews,
       selfDueOn:cycle.selfDueOn,managerDueOn:cycle.managerDueOn,
       participants,reviewers:eligible.map(e=>({value:e.workerPartyId,label:nameMap.get(e.workerPartyId)??e.workerPartyId})),history};
@@ -820,7 +820,7 @@ export async function updateCycleManagement(args:{orgId:string;actorId:string;cy
       if(cycle.status!=='draft') throw new HrmPerformanceError('REFUSED','Launched reviewers are captured assignments. Create a new cycle to change reviewer ownership; saved or submitted reviews must retain their author.');
       assignments[employmentId]=reviewer;
     }
-    const changed=await db.execute(sql`update hrm_review_cycles set name=${args.name===undefined?cycle.name:requireText('Cycle name',args.name)},
+    const changed=await db.execute<never>(sql`update hrm_review_cycles set name=${args.name===undefined?cycle.name:requireText('Cycle name',args.name)},
       self_due_on=${self}::date,manager_due_on=${manager}::date,require_manager_reviews=${args.requireManagerReviews??cycle.requireManagerReviews},
       reviewer_assignments=${JSON.stringify(assignments)}::jsonb,revision=revision+1,updated_at=now(),updated_by=${actorId}
       where org_id=${orgId} and id=${cycleId} and revision=${args.revision}`);
@@ -837,8 +837,8 @@ export async function listCycleScopeOptions(args:{orgId:string;actorId:string}) 
   return withOrgTransaction(orgId,async()=>{
     await assertPerformanceFeature(db,orgId);
     const allowed=await requireAggregatePerformanceManage(db,orgId,actorId);
-    const subsidiaries=(await db.execute<{value:string;label:string}>(sql`select id as value,name as label from subsidiaries where org_id=${orgId} order by name`)).rows.filter(r=>allowed===null||allowed.has(r.value));
-    const departments=(await db.execute<{value:string;label:string;subsidiaryId:string|null}>(sql`select id as value,name as label,subsidiary_id as "subsidiaryId" from departments where org_id=${orgId} order by name`)).rows.filter(r=>allowed===null||r.subsidiaryId!==null&&allowed.has(r.subsidiaryId));
+    const subsidiaries=(await db.execute<{value:string;label:string}>(sql`select id as value,name as label from subsidiaries where org_id=${orgId} order by name`, "objects")).filter(r=>allowed===null||allowed.has(r.value));
+    const departments=(await db.execute<{value:string;label:string;subsidiaryId:string|null}>(sql`select id as value,name as label,subsidiary_id as "subsidiaryId" from departments where org_id=${orgId} order by name`, "objects")).filter(r=>allowed===null||r.subsidiaryId!==null&&allowed.has(r.subsidiaryId));
     return {subsidiaries,departments,unrestricted:allowed===null};
   });
 }

@@ -106,7 +106,7 @@ export async function resolveScan(
       : subsidiaries.length > 0
         ? sql`(p.subsidiary_id is null or p.subsidiary_id = any(${sql.param(subsidiaries)}::uuid[]))`
         : sql`p.subsidiary_id is null`;
-    const matches = (await runner.execute<ScanCandidate & { priority: number }>(sql`
+    const matches = await runner.execute<ScanCandidate & { priority: number }>(sql`
       select i.id, i.id as "itemId",
              coalesce(i.code || ' · ', '') || i.name as label,
              'code'::text as kind, null::text as unit, 2 as priority
@@ -132,7 +132,7 @@ export async function resolveScan(
          and cir.customer_id = ${input.customerId ?? null}
          and ${customerRefsEnabled}
          and ${customerScope}
-       order by priority, label, id`)).rows;
+       order by priority, label, id`, "objects");
     const bestByItem = new Map<string, ScanCandidate>();
     for (const candidate of matches) {
       if (!bestByItem.has(candidate.id)) {
@@ -153,7 +153,7 @@ export async function resolveScan(
       : subsidiaries.length > 0
         ? sql`(l.subsidiary_id is null or l.subsidiary_id = any(${sql.param(subsidiaries)}::uuid[]))`
         : sql`l.subsidiary_id is null`;
-    const matches = (await runner.execute<ScanCandidate>(sql`
+    const matches = await runner.execute<ScanCandidate>(sql`
       select sl.id, null::uuid as "itemId",
              sl.code || ' · ' || coalesce(l.name, l.code, 'stock location') as label,
              sl.kind, null::text as unit
@@ -161,7 +161,7 @@ export async function resolveScan(
         join locations l on l.id = sl.location_id and l.org_id = sl.org_id
        where sl.org_id = ${orgId} and sl.code = ${value} and sl.is_active
          and ${subsidiaryFilter}
-       order by label, sl.id`)).rows;
+       order by label, sl.id`, "objects");
     if (matches.length === 0) return refuseUnknown(input.field, value);
     if (matches.length > 1) return refuseAmbiguous(input.field, value, matches);
     return { ...matches[0]!, field: input.field };
@@ -178,7 +178,7 @@ export async function resolveScan(
                'lot'::text as kind, null::text as unit
           from lots l join items i on i.id = l.item_id and i.org_id = l.org_id
          where l.org_id = ${orgId} and l.item_id = ${input.itemId} and l.lot_number = ${value}
-         order by l.id`)).rows
+         order by l.id`, "objects"))
     : (await runner.execute<ScanCandidate>(sql`
         select s.id, s.item_id as "itemId",
                i.name || ' · serial ' || s.serial_number as label,
@@ -191,7 +191,7 @@ export async function resolveScan(
            and (${input.allowedSubsidiaryIds == null ? sql`true` : input.allowedSubsidiaryIds.size > 0
              ? sql`(l.subsidiary_id is null or l.subsidiary_id = any(${sql.param([...input.allowedSubsidiaryIds])}::uuid[]))`
              : sql`l.subsidiary_id is null`})
-         order by s.id`)).rows;
+         order by s.id`, "objects"));
   if (matches.length === 0) return refuseUnknown(input.field, value);
   if (matches.length > 1) return refuseAmbiguous(input.field, value, matches);
   return { ...matches[0]!, field: input.field };
@@ -229,7 +229,7 @@ export async function validateIdentifierUnit(
       from items i
       left join item_inventory_profiles p on p.item_id = i.id and p.org_id = i.org_id
      where i.org_id = ${orgId} and i.id = ${itemId}
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!row) {
     throw new ScanRefusal("item identifier must reference an item in this organization", "scan_item_out_of_scope", "select an item from this organization", 422);
   }

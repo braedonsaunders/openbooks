@@ -69,14 +69,14 @@ export async function loadContractorWithholding(
   let loadFailure: string | null = null
 
   if (activeTab === 'standings' && canStandings) {
-    standings = (await db.execute<StandingRow>(sql`
+    standings = await db.execute<StandingRow>(sql`
       select w.id, s.name as "entityName", p.display_name as "partyName", w.scheme_code as "schemeCode",
              w.band_code as "bandCode", w.status, w.valid_from::text as "validFrom", w.valid_to::text as "validTo"
         from withholding_standings w
         join parties p on p.org_id=w.org_id and p.id=w.party_id
         left join subsidiaries s on s.org_id=w.org_id and s.id=w.subsidiary_id
        where w.org_id=${authz.user.orgId}
-       order by p.display_name, w.scheme_code, w.valid_from desc`)).rows
+       order by p.display_name, w.scheme_code, w.valid_from desc`, 'objects')
   } else if (enrollment) {
     try {
       if (activeTab === 'periods') {

@@ -80,8 +80,8 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
-  `));
-  const sealed = r.rows[0]?.originator_secrets_encrypted;
+  `, "objects"));
+  const sealed = r[0]?.originator_secrets_encrypted;
   const eft = sealed == null ? {} : unsealJson<Partial<EftSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" });
   return validateEftSettings(eft);
 }

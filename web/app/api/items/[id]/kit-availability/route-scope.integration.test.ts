@@ -41,8 +41,8 @@ test('kit availability validates item IDs and lists warehouses admitted by the c
           when ${branchWarehouseId} then 'Branch warehouse'
           else name end
         where org_id = ${org.orgId} and stock_location_id in (${homeWarehouseId}, ${branchWarehouseId})
-        returning stock_location_id`)
-      assert.equal(warehouses.rows.length, 2)
+        returning stock_location_id`, 'objects')
+      assert.equal(warehouses.length, 2)
     })
 
     const call = (id: string) => withOrgContext(org.orgId, async () => {

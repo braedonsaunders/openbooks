@@ -40,7 +40,7 @@ async function fixture() {
   const actorId = (await db.execute<{ id: string }>(sql`
     insert into users (org_id, email, name, password_hash, is_active)
     values (${org.orgId}, 'prefs@test.local', 'Prefs User', 'x', false)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   state.orgId = org.orgId
   state.actorId = actorId
   return org

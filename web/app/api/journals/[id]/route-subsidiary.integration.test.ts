@@ -85,8 +85,8 @@ async function revisionToken(documentId: string): Promise<string> {
   const row = (await db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `));
-  return row.rows[0]!.updatedAt;
+  `, "objects"));
+  return row[0]!.updatedAt;
 }
 
 test(
@@ -138,8 +138,8 @@ test(
       assert.match((await refused.json() as { error: string }).error, /subsidiary/i);
       const stored = (await withOrgContext(org.orgId, () => db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id from documents where id = ${documentId}
-      `)));
-      assert.equal(stored.rows[0]!.subsidiary_id, org.subsidiaryId);
+      `, "objects")));
+      assert.equal(stored[0]!.subsidiary_id, org.subsidiaryId);
 
       // Positive control: an ordinary header edit with the same revision
       // still saves, so the refusal is the null — not the harness.

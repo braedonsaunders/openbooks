@@ -71,7 +71,7 @@ async function lastRun(orgId: string, subsidiaryId: string, onOrBefore?: string)
     select id, through_date::text as through_date from equity_interest_runs
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
        ${onOrBefore ? sql`and through_date <= ${onOrBefore}::date` : sql``}
-     order by through_date desc limit 1`)).rows[0];
+     order by through_date desc limit 1`, "objects"))[0];
 }
 
 /**
@@ -80,7 +80,7 @@ async function lastRun(orgId: string, subsidiaryId: string, onOrBefore?: string)
  * date and settlements dated on or before it).
  */
 async function accrued(orgId: string, subsidiaryId: string, through?: string): Promise<Map<string, bigint>> {
-  const rows = (await db.execute<{ security_id: string; amount: string }>(sql`
+  const rows = await db.execute<{ security_id: string; amount: string }>(sql`
     select security_id, sum(amount)::text as amount from (
       select l.security_id, l.period_amount as amount from equity_interest_run_lines l
         join equity_interest_runs r on r.org_id = l.org_id and r.id = l.run_id
@@ -92,7 +92,7 @@ async function accrued(orgId: string, subsidiaryId: string, through?: string): P
          ${through ? sql`and e.effective_on <= ${through}::date` : sql``}
          and not exists (select 1 from equity_security_events r where r.org_id = e.org_id and r.kind = 'reverse' and r.reverses_event_id = e.id)
          and not exists (select 1 from equity_security_events v where v.org_id = e.org_id and v.kind = 'void' and v.security_id = e.resulting_security_id)
-    ) accruals group by security_id`)).rows;
+    ) accruals group by security_id`, "objects");
   return new Map(rows.map((row) => [row.security_id, toUnits(row.amount)]));
 }
 
@@ -268,7 +268,7 @@ export async function postInterestRun(input: EquityCommand & { subsidiaryId: str
   // A run already posted for the date is returned as it stands; nothing is submitted again.
   const posted = await withOrgTransaction(input.orgId, async () => (await db.execute<{ id: string }>(sql`
     select id from equity_interest_runs
-     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`)).rows.length > 0);
+     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`, "objects")).length > 0);
   if (posted) return { ...(await applyInterestRun(input)), status: "applied", requestId: null };
   // A date whose period has not ended or is closed refuses before anything is submitted for approval.
   await withOrgTransaction(input.orgId, () => assertRunPeriodPostable(db, input.orgId, input.subsidiaryId, throughDate, "interest"));
@@ -290,7 +290,7 @@ export async function applyInterestRun(input: EquityCommand & { subsidiaryId: st
       select r.id, r.total_amount::text as total_amount, r.journal_entry_id,
              (select count(*)::int from equity_interest_run_lines l where l.org_id = r.org_id and l.run_id = r.id) as lines
         from equity_interest_runs r
-       where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.through_date = ${throughDate}::date`)).rows[0];
+       where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.through_date = ${throughDate}::date`, "objects"))[0];
     if (existing) {
       return { runId: existing.id, throughDate, total: existing.total_amount, journalEntryId: existing.journal_entry_id, lines: existing.lines, replayed: true };
     }
@@ -319,18 +319,18 @@ export async function applyInterestRun(input: EquityCommand & { subsidiaryId: st
         auditAction: "equity.interest", auditChanges: { runId, throughDate }, legs,
       });
     }
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equity_interest_runs (id, org_id, subsidiary_id, through_date, currency, total_amount, journal_entry_id, created_by)
       values (${runId}, ${input.orgId}, ${input.subsidiaryId}, ${throughDate}::date, ${currency}, ${formatLedger(total)}::numeric, ${journalEntryId}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("interestRun") });
     if (lines.length > 0) {
       const values = lines.map((line) => sql`(${input.orgId}, ${input.subsidiaryId}, ${runId}, ${line.securityId}, ${line.currency},
         ${line.cumulative}::numeric, ${line.previous}::numeric, ${line.period}::numeric, ${line.fxRate}::numeric, ${line.functional}::numeric)`);
-      const written = (await db.execute<{ id: string }>(sql`
+      const written = await db.execute<{ id: string }>(sql`
         insert into equity_interest_run_lines (org_id, subsidiary_id, run_id, security_id, currency, cumulative_amount, previous_amount, period_amount, fx_rate, functional_amount)
         values ${sql.join(values, sql`, `)}
-        returning id`)).rows;
+        returning id`, "objects");
       if (written.length !== lines.length) {
         throw equityError("notStoredCompletely", { record: fig.choice("interestLines") });
       }
@@ -357,12 +357,12 @@ export async function listInterestRuns(input: { orgId: string; actorId: string; 
   await assertEquityReadable(input.orgId);
   return withOrgTransaction(input.orgId, async () => {
     await requireEquityReader(db, input.orgId, input.actorId, input.subsidiaryId);
-    const rows = (await db.execute<{ id: string; through_date: string; total_amount: string; currency: string; journal_entry_id: string | null; entry_number: string | null }>(sql`
+    const rows = await db.execute<{ id: string; through_date: string; total_amount: string; currency: string; journal_entry_id: string | null; entry_number: string | null }>(sql`
       select r.id, r.through_date::text as through_date, r.total_amount::text as total_amount, r.currency, r.journal_entry_id, je.entry_number
         from equity_interest_runs r
         left join journal_entries je on je.org_id = r.org_id and je.id = r.journal_entry_id
        where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId}
-       order by r.through_date desc`)).rows;
+       order by r.through_date desc`, "objects");
     return rows.map((row) => ({ id: row.id, throughDate: row.through_date, total: row.total_amount, currency: row.currency, journalEntryId: row.journal_entry_id, entryNumber: row.entry_number }));
   }, { isolationLevel: "REPEATABLE READ", readOnly: true });
 }

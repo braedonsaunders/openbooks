@@ -20,19 +20,19 @@ export async function readEInvoiceSubject(
     left join einvoice_settings s on s.org_id = d.org_id and s.subsidiary_id = d.subsidiary_id
     where d.org_id = ${scope.orgId} and d.id = ${documentId} and d.kind in ('customer_invoice', 'customer_credit')
       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope.allowedSubsidiaryIds ?? null)}
-      ${options.lock ? sql`for share of d` : sql``}`)).rows[0] ?? null
+      ${options.lock ? sql`for share of d` : sql``}`, 'objects'))[0] ?? null
 }
 
 /** One sealed e-invoice archive of a document, with its original bytes. */
 export async function readEInvoiceArchive(tx: SqlExecutor, orgId: string, documentId: string, archiveId: string) {
   return (await tx.execute<{ content: Uint8Array; fileName: string; mediaType: string; sha256: string }>(sql`
     select content, file_name as "fileName", media_type as "mediaType", content_sha256 as sha256
-    from einvoice_documents where org_id = ${orgId} and document_id = ${documentId} and id = ${archiveId}`)).rows[0] ?? null
+    from einvoice_documents where org_id = ${orgId} and document_id = ${documentId} and id = ${archiveId}`, 'objects'))[0] ?? null
 }
 
 /** Every sealed e-invoice issued for a document, oldest first. */
 export async function listEInvoiceArchives(tx: SqlExecutor, orgId: string, documentId: string) {
-  return (await tx.execute<{ id: string; profile: string; fileName: string; issuedAt: string; sha256: string; buyerReference: string | null }>(sql`
+  return await tx.execute<{ id: string; profile: string; fileName: string; issuedAt: string; sha256: string; buyerReference: string | null }>(sql`
     select id, profile, file_name as "fileName", issued_at::text as "issuedAt", content_sha256 as sha256, buyer_reference as "buyerReference"
-    from einvoice_documents where org_id = ${orgId} and document_id = ${documentId} order by issued_at, id`)).rows
+    from einvoice_documents where org_id = ${orgId} and document_id = ${documentId} order by issued_at, id`, 'objects')
 }

@@ -95,8 +95,8 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
       select *, ${documentRevisionSql(sql`updated_at`)} as updated_at from parties where id = ${id} and org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
         for share
-    `))
-    if (!party.rows[0]) return null
+    `, 'objects'))
+    if (!party[0]) return null
     if (crmOnly) {
       const addresses = await db.execute<Record<string, unknown>>(sql`
         select id, label, line1, line2, city, region, postal_code, country,
@@ -109,7 +109,7 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
           from contacts where party_id = ${id} and org_id = ${orgId}
          order by is_primary desc, name
       `)
-      return { party: party.rows[0]!, crm: { addresses, contacts } as const, full: null }
+      return { party: party[0]!, crm: { addresses, contacts } as const, full: null }
     }
 
     const customer = await db.execute<Record<string, unknown>>(sql`
@@ -190,7 +190,7 @@ async function loadPartyRecord(id: string, orgId: string, allowedSubsidiaryIds: 
           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
        group by currency order by currency`)
     return {
-      party: party.rows[0]!,
+      party: party[0]!,
       crm: null,
       full: { customer, vendor, employee, addresses, contacts, bankAccounts, partySubs, txnSummary, currencySummary } as const,
     }

@@ -209,16 +209,12 @@ const issue = (
   );
 const counts = async (orgId: string) =>
   withOrgTransaction(orgId, async () => ({
-    requests: (
-      await db.execute<{ n: number }>(
-        sql`select count(*)::int n from schedule_distributions`,
-      )
-    ).rows[0]!.n,
-    outbox: (
-      await db.execute<{ n: number }>(
-        sql`select count(*)::int n from scheduler_outbox where kind='flow_email'`,
-      )
-    ).rows[0]!.n,
+    requests: (await db.execute<{ n: number }>(
+        sql`select count(*)::int n from schedule_distributions`, 'objects',
+      ))[0]!.n,
+    outbox: (await db.execute<{ n: number }>(
+        sql`select count(*)::int n from scheduler_outbox where kind='flow_email'`, 'objects',
+      ))[0]!.n,
   }));
 
 test(
@@ -352,13 +348,10 @@ test(
       assert.equal(sent.status, 'queued');
       assert.equal(sent.replayed, false);
       const evidence = await withOrgTransaction(f.orgId, async () => ({
-        request: (
-          await db.execute<{ flow_run_id: string; created_by: string }>(
-            sql`select flow_run_id,created_by from schedule_distributions where id=${sent.id}`,
-          )
-        ).rows[0]!,
-        outbox: (
-          await db.execute<{
+        request: (await db.execute<{ flow_run_id: string; created_by: string }>(
+            sql`select flow_run_id,created_by from schedule_distributions where id=${sent.id}`, 'objects',
+          ))[0]!,
+        outbox: await db.execute<{
             subject_id: string;
             payload: {
               to: string[];
@@ -366,14 +359,11 @@ test(
               meta: { distributionId: string; version: string };
             };
           }>(
-            sql`select subject_id,payload from scheduler_outbox where kind='flow_email' order by id`,
-          )
-        ).rows,
-        audits: (
-          await db.execute(
-            sql`select id from audit_log where table_name='schedule_distributions' and row_id=${sent.id}`,
-          )
-        ).rows,
+            sql`select subject_id,payload from scheduler_outbox where kind='flow_email' order by id`, 'objects',
+          ),
+        audits: await db.execute(
+            sql`select id from audit_log where table_name='schedule_distributions' and row_id=${sent.id}`, 'objects',
+          ),
       }));
       assert.equal(evidence.request.created_by, f.actorId);
       assert.equal(evidence.outbox.length, 2);
@@ -485,10 +475,10 @@ test(
       assert.deepEqual(await counts(f.orgId), { requests: 1, outbox: 0 });
       const failed = await withOrgTransaction(f.orgId, () =>
         db.execute<{ status: string }>(
-          sql`select status from flow_runs where subject_kind='schedule_distribution'`,
+          sql`select status from flow_runs where subject_kind='schedule_distribution'`, 'objects',
         ),
       );
-      assert.equal(failed.rows[0]?.status, 'failed');
+      assert.equal(failed[0]?.status, 'failed');
     }),
 );
 
@@ -615,10 +605,10 @@ test(
       );
       const audits = await withOrgTransaction(f.orgId, () =>
         db.execute<{ n: number }>(
-          sql`select count(*)::int n from audit_log where table_name='schedule_resource_recipients' and row_id=${saved.id}`,
+          sql`select count(*)::int n from audit_log where table_name='schedule_resource_recipients' and row_id=${saved.id}`, 'objects',
         ),
       );
-      assert.equal(audits.rows[0]!.n, 2);
+      assert.equal(audits[0]!.n, 2);
       await assert.rejects(
         saveResourceRecipient(
           { ...f, actorId: f.readerId },
@@ -689,27 +679,25 @@ test(
           resource_location_id: string | null;
           report: { attachments: { content: string }[] };
         }>(
-          sql`select party_id,worker_party_id,equipment_unit_id,resource_location_id,report from schedule_distribution_recipients where distribution_id=${sent.id}`,
+          sql`select party_id,worker_party_id,equipment_unit_id,resource_location_id,report from schedule_distribution_recipients where distribution_id=${sent.id}`, 'objects',
         ),
       );
-      assert.equal(rows.rows.length, 1);
-      assert.equal(rows.rows[0]!.party_id, contact);
-      assert.equal(rows.rows[0]!.worker_party_id, null);
-      assert.equal(rows.rows[0]!.equipment_unit_id, null);
-      assert.equal(rows.rows[0]!.resource_location_id, null);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.party_id, contact);
+      assert.equal(rows[0]!.worker_party_id, null);
+      assert.equal(rows[0]!.equipment_unit_id, null);
+      assert.equal(rows[0]!.resource_location_id, null);
       assert.ok(
-        Buffer.from(rows.rows[0]!.report.attachments[0]!.content, "base64")
+        Buffer.from(rows[0]!.report.attachments[0]!.content, "base64")
           .subarray(0, 5)
           .equals(Buffer.from("%PDF-")),
       );
       assert.equal(
-        (
-          await withOrgTransaction(f.orgId, () =>
+        (await withOrgTransaction(f.orgId, () =>
             db.execute(
-              sql`select id from employee_roles where party_id=${contact}`,
+              sql`select id from employee_roles where party_id=${contact}`, 'objects',
             ),
-          )
-        ).rows.length,
+          )).length,
         0,
       );
       assert.equal((await issue(f, p, key)).replayed, true);
@@ -865,18 +853,18 @@ test(
           trigger: string;
           subject_kind: string;
         }>(
-          sql`select o.occurred_at::text,o.status,r.created_by,r.trigger,r.subject_kind from flow_scheduled_occurrences o join flow_runs r on r.org_id=o.org_id and r.flow_id=o.flow_id and r.context->'scheduledOccurrence'->>'occurredAt'=to_char(o.occurred_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') where o.flow_id=${flowId} order by o.occurred_at`,
+          sql`select o.occurred_at::text,o.status,r.created_by,r.trigger,r.subject_kind from flow_scheduled_occurrences o join flow_runs r on r.org_id=o.org_id and r.flow_id=o.flow_id and r.context->'scheduledOccurrence'->>'occurredAt'=to_char(o.occurred_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') where o.flow_id=${flowId} order by o.occurred_at`, 'objects',
         ),
       );
-      assert.equal(rows.rows.length, 2);
-      for (const row of rows.rows) {
+      assert.equal(rows.length, 2);
+      for (const row of rows) {
         assert.equal(row.status, "fired");
         assert.equal(row.created_by, f.actorId);
         assert.equal(row.subject_kind, "schedule_board");
         assert.equal(row.trigger, "scheduled");
       }
-      assert.ok(rows.rows[0]!.occurred_at.startsWith("2026-10-12 10:00"));
-      assert.ok(rows.rows[1]!.occurred_at.startsWith("2026-10-12 18:30"));
+      assert.ok(rows[0]!.occurred_at.startsWith("2026-10-12 10:00"));
+      assert.ok(rows[1]!.occurred_at.startsWith("2026-10-12 18:30"));
       assert.equal(
         (await runDueScheduledFlows(new Date("2026-10-12T20:00:00Z"))).fired,
         0,
@@ -892,11 +880,11 @@ test(
       assert.deepEqual(await counts(f.orgId), { requests: 2, outbox: 4 });
       const versions = await withOrgTransaction(f.orgId, () =>
         db.execute<{ n: number }>(
-          sql`select count(distinct version)::int n from schedule_distributions`,
+          sql`select count(distinct version)::int n from schedule_distributions`, 'objects',
         ),
       );
       assert.equal(
-        versions.rows[0]!.n,
+        versions[0]!.n,
         1,
         "deliberate occurrences may deliver the same reviewed board version",
       );
@@ -919,11 +907,11 @@ test(
       assert.deepEqual(await counts(f.orgId), { requests: 0, outbox: 0 });
       const failed = await withOrgTransaction(f.orgId, () =>
         db.execute<{ status: string; error: string }>(
-          sql`select status,error from flow_runs where flow_id=${flowId}`,
+          sql`select status,error from flow_runs where flow_id=${flowId}`, 'objects',
         ),
       );
-      assert.equal(failed.rows[0]!.status, "failed");
-      assert.match(failed.rows[0]!.error, /inactive|unavailable/);
+      assert.equal(failed[0]!.status, "failed");
+      assert.match(failed[0]!.error, /inactive|unavailable/);
       await withBypassContext(async () => {
         await db.execute(
           sql`update users set is_active=true where id=${f.actorId}`,
@@ -1022,9 +1010,9 @@ test('revoking the scheduling feature after authoring leaves native failed timer
   const result = await runDueScheduledFlows(new Date('2026-10-12T20:00:00Z'));
   assert.equal(result.errors, 2);
   assert.deepEqual(await counts(f.orgId), { requests: 0, outbox: 0 });
-  const failures = await withOrgTransaction(f.orgId, () => db.execute<{status: string; error: string}>(sql`select status,error from flow_runs where subject_kind='schedule_board' order by created_at,id`));
-  assert.equal(failures.rows.length, 2);
-  assert.ok(failures.rows.every(run => run.status === 'failed' && run.error.includes('(not found)')), JSON.stringify(failures.rows));
+  const failures = await withOrgTransaction(f.orgId, () => db.execute<{status: string; error: string}>(sql`select status,error from flow_runs where subject_kind='schedule_board' order by created_at,id`, 'objects'));
+  assert.equal(failures.length, 2);
+  assert.ok(failures.every(run => run.status === 'failed' && run.error.includes('(not found)')), JSON.stringify(failures));
 }));
 
 test('native PDF evidence binds ordered board rule colors for literal source observations and bookings without changing source identity', enabled, () => fixture(async f => {
@@ -1035,10 +1023,10 @@ test('native PDF evidence binds ordered board rule colors for literal source obs
     { field: 'bookingLabel', match: 'contains', value: 'SHOP', color: '#1d4ed8' },
   ];
   await withBypassContext(async () => {
-    const code = await db.execute(sql`insert into schedule_codes(id,org_id,code,label,category,color) values(${codeId},${f.orgId},'SHOP','Shop','work','#99f6e4') returning id`);
-    assert.equal(code.rows.length, 1);
-    const board = await db.execute(sql`update schedule_boards set cell_color_rules=${JSON.stringify(rules)}::jsonb where org_id=${f.orgId} and id=${f.boardId} returning id`);
-    assert.equal(board.rows.length, 1);
+    const code = await db.execute(sql`insert into schedule_codes(id,org_id,code,label,category,color) values(${codeId},${f.orgId},'SHOP','Shop','work','#99f6e4') returning id`, 'objects');
+    assert.equal(code.length, 1);
+    const board = await db.execute(sql`update schedule_boards set cell_color_rules=${JSON.stringify(rules)}::jsonb where org_id=${f.orgId} and id=${f.boardId} returning id`, 'objects');
+    assert.equal(board.length, 1);
   });
   const saved = await applyBoardChanges({ ...actor, boardId: f.boardId, changes: [{ op: 'create', id: randomUUID(), workerPartyId: f.ana, onDate: '2026-10-13', target: { kind: 'code', id: codeId }, span: { mode: 'day' } }] });
   assert.equal(saved.results[0]?.ok, true);
@@ -1048,8 +1036,8 @@ test('native PDF evidence binds ordered board rule colors for literal source obs
   assert.equal(actualLines.length, 2);
   assert.ok(actualLines.every(line => line.color === '#fde68a'));
   await withBypassContext(async () => {
-    const cleared = await db.execute(sql`update schedule_boards set cell_color_rules='[]'::jsonb where org_id=${f.orgId} and id=${f.boardId} returning id`);
-    assert.equal(cleared.rows.length, 1);
+    const cleared = await db.execute(sql`update schedule_boards set cell_color_rules='[]'::jsonb where org_id=${f.orgId} and id=${f.boardId} returning id`, 'objects');
+    assert.equal(cleared.length, 1);
   });
   const fallback = await preview(f);
   assert.notEqual(fallback.version, before.version);
@@ -1071,11 +1059,11 @@ test('rich manual content is version-bound and queued exactly once with immutabl
   assert.deepEqual(await counts(f.orgId), {requests: 0, outbox: 0});
   const key = randomUUID();
   const first = await issue(f, p, key);
-  const before = await withOrgTransaction(f.orgId, async () => (await db.execute<{payload: {html: string; text: string}}>(sql`select payload from scheduler_outbox where kind='flow_email' order by id`)).rows);
+  const before = await withOrgTransaction(f.orgId, async () => await db.execute<{payload: {html: string; text: string}}>(sql`select payload from scheduler_outbox where kind='flow_email' order by id`, 'objects'));
   assert.equal(before.length, 2);
   for (const row of before) {assert.ok(row.payload.html.includes('<strong>Bring &lt;tools&gt;</strong>')); assert.ok(row.payload.text.includes('Bring <tools>')); assert.ok(!row.payload.text.includes('ignore this alternative'));}
   assert.deepEqual(await issue(f, p, key), {...first, replayed: true});
-  const after = await withOrgTransaction(f.orgId, async () => (await db.execute(sql`select payload from scheduler_outbox where kind='flow_email' order by id`)).rows);
+  const after = await withOrgTransaction(f.orgId, async () => await db.execute(sql`select payload from scheduler_outbox where kind='flow_email' order by id`, 'objects'));
   assert.deepEqual(after, before);
   await assert.rejects(previewScheduleDistribution(f, f.boardId, dates.from, dates.through, {...personal, messageContent: {version: 1, blocks: [{kind: 'paragraph', spans: [{text: 'Unsafe', href: 'javascript:alert(1)'}]}]}}), /formatted message/);
   assert.deepEqual(await counts(f.orgId), {requests: 1, outbox: 2});
@@ -1088,7 +1076,7 @@ test('standalone board PDF preview is provider/recipient/Flows-independent, vers
     await db.execute(sql`update parties set is_active=false where org_id=${f.orgId} and id=${f.ben}`);
     await db.execute(sql`update employee_roles set is_active=false,terminated_on='2026-10-11' where org_id=${f.orgId} and party_id=${f.ben}`);
   });
-  await withOrgTransaction(f.orgId, async () => (await db.execute<{n: number}>(sql`select count(*)::int n from audit_log`)).rows[0]!.n);
+  await withOrgTransaction(f.orgId, async () => (await db.execute<{n: number}>(sql`select count(*)::int n from audit_log`, 'objects'))[0]!.n);
   const p = await previewScheduleBoardReport(f, {boardId: f.boardId, ...dates});
   assert.equal(p.audience.visibility, 'board');
   assert.ok(p.lines.some(line => line.assignment === 'SHOP/ N' && line.hours === 'Hours unknown'));

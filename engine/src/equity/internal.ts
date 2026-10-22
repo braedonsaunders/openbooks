@@ -90,7 +90,7 @@ async function readLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId:
   }
   const row = (await runner.execute<{ id: string; name: string; currency: string | null; is_active: boolean; is_elimination: boolean }>(sql`
     select id, name, nullif(trim(base_currency), '') as currency, is_active, is_elimination
-      from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0];
+      from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`, "objects"))[0];
   if (!row || !row.is_active || row.is_elimination) {
     throw equityError("entityInactive", {}, { field: "subsidiaryId" });
   }
@@ -102,7 +102,7 @@ async function readLegalEntity(runner: SqlExecutor, orgId: string, subsidiaryId:
 
 /** ISO minor-unit exponent of a currency; an unknown code refuses by name. */
 export async function currencyExponent(runner: SqlExecutor, currency: string): Promise<number> {
-  const row = (await runner.execute<{ minor_units: number }>(sql`select minor_units from currencies where code = ${currency}`)).rows[0];
+  const row = (await runner.execute<{ minor_units: number }>(sql`select minor_units from currencies where code = ${currency}`, "objects"))[0];
   const exponent = row?.minor_units;
   if (exponent === undefined || !Number.isInteger(exponent) || exponent < 0 || exponent > 4) {
     throw equityError("currencyUnknown", { currency: fig.text(currency) });
@@ -115,11 +115,11 @@ export async function writeEquityAudit(
   runner: SqlExecutor,
   input: { orgId: string; table: string; rowId: string; action: string; actorId: string | null; changes: Record<string, unknown> },
 ): Promise<void> {
-  const written = (await runner.execute<{ id: string }>(sql`
+  const written = await runner.execute<{ id: string }>(sql`
     insert into audit_log (id, org_id, table_name, row_id, action, changes, actor_id)
     values (${randomUUID()}, ${input.orgId}, ${input.table}, ${input.rowId}, ${input.action},
       ${JSON.stringify(input.changes, (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value))}::jsonb, ${input.actorId})
-    returning id`)).rows;
+    returning id`, "objects");
   if (written.length !== 1) {
     throw equityError("auditUnwritten");
   }

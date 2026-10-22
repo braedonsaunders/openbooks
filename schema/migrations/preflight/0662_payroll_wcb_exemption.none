@@ -1,1 +1,0 @@
-New exemption columns default to covered (false) with no reason; the CHECK admits every existing row and gates future writes only.

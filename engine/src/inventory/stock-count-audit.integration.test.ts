@@ -36,11 +36,11 @@ type AuditEvent = {
 };
 
 async function lineAudit(orgId: string, lineId: string): Promise<AuditEvent[]> {
-  return (await db.execute<AuditEvent>(sql`
+  return await db.execute<AuditEvent>(sql`
     select actor_id, at::text as at, changes
       from audit_log
      where org_id = ${orgId} and table_name = 'stock_count_lines' and row_id = ${lineId}
-     order by at, id`)).rows;
+     order by at, id`, "objects");
 }
 
 test("a correction keeps the first counter's observation with actor, time, before, after, and reason", { skip: !DB }, async () => {

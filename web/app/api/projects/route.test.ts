@@ -82,15 +82,17 @@ stubModules({
         return { rows: [] }
       }
       const txClient = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.transactionQueries.push(sqlText(query))
-          return respond(query)
+          return inMode(await respond(query))
         },
       }
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.queries.push(sqlText(query))
-          return respond(query)
+          return inMode(await respond(query))
         },
         transaction: async (work) => work(txClient),
       }

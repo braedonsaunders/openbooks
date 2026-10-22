@@ -105,8 +105,8 @@ async function packageTransaction<T>(orgId: string, action: () => Promise<T>): P
 /** A row lock also detects a changed snapshot under REPEATABLE READ; a bare advisory lock cannot do that. */
 export async function lockCompensationPackageConfiguration(tx: SqlExecutor, orgId: string, mode: "read" | "write" = "read"): Promise<string> {
   await lockAndCheckOrgFeature(tx, orgId, "compensationPackages");
-  const rows = (await tx.execute<{ revision: string }>(sql`select revision::text as revision from payroll_compensation_configuration
-    where org_id=${orgId} ${mode === "write" ? sql`for update` : sql`for share`}`)).rows;
+  const rows = await tx.execute<{ revision: string }>(sql`select revision::text as revision from payroll_compensation_configuration
+    where org_id=${orgId} ${mode === "write" ? sql`for update` : sql`for share`}`, "objects");
   if (rows.length !== 1) throw new PayrollError("Compensation configuration is missing — complete the database upgrade before calculating or saving payroll.");
   return rows[0]!.revision;
 }
@@ -126,9 +126,9 @@ async function begin(
 }
 async function packageRecord(query: CompensationPackageActor, packageId: string, permission: string, write: boolean): Promise<CompensationPackageRecord> {
   const scope = await begin(query, permission, write);
-  const row = one((await db.execute<CompensationPackageRecord>(sql`select ${PACKAGE_COLUMNS} from payroll_compensation_packages
+  const row = one(await db.execute<CompensationPackageRecord>(sql`select ${PACKAGE_COLUMNS} from payroll_compensation_packages
     where org_id=${query.orgId} and id=${identifier(packageId, "package")} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
-    ${write ? sql`for update` : sql`for share`}`)).rows);
+    ${write ? sql`for update` : sql`for share`}`, "objects"));
   await lockActorCommandAuthority(db, query.orgId, query.actorId, row.subsidiaryId, permission);
   return row;
 }
@@ -145,8 +145,8 @@ async function checkedDefinition(orgId: string, pack: CompensationPackageRecord,
   return validateCompensationPackage(definition, components);
 }
 async function versionRecord(orgId: string, packageId: string, versionId: string, write = true): Promise<CompensationPackageVersion> {
-  return one((await db.execute<CompensationPackageVersion>(sql`select ${VERSION_COLUMNS} from payroll_compensation_versions
-    where org_id=${orgId} and package_id=${packageId} and id=${identifier(versionId, "package version")} ${write ? sql`for update` : sql`for share`}`)).rows);
+  return one(await db.execute<CompensationPackageVersion>(sql`select ${VERSION_COLUMNS} from payroll_compensation_versions
+    where org_id=${orgId} and package_id=${packageId} and id=${identifier(versionId, "package version")} ${write ? sql`for update` : sql`for share`}`, "objects"));
 }
 
 /** Native create keys identify the row; compare immutable insert evidence so later approvals or edits do not break retries. */
@@ -155,10 +155,10 @@ async function createReplay<T extends Record<string, unknown>>(orgId: string, ke
   columns: typeof PACKAGE_COLUMNS, match: Readonly<Record<string, unknown>>): Promise<T | null> {
   if (key === undefined) return null;
   identifier(key, "create request key");
-  const rows = (await db.execute<T>(sql`select ${columns} from ${sql.identifier(table)} where org_id=${orgId} and id=${key} for share`)).rows;
+  const rows = await db.execute<T>(sql`select ${columns} from ${sql.identifier(table)} where org_id=${orgId} and id=${key} for share`, "objects");
   if (rows.length === 0) return null;
   const original = (await db.execute<{ after: Record<string, unknown> }>(sql`select changes->'after' as after from audit_log
-    where org_id=${orgId} and table_name=${table} and row_id=${key} and action='insert' order by at,id limit 1`)).rows[0]?.after;
+    where org_id=${orgId} and table_name=${table} and row_id=${key} and action='insert' order by at,id limit 1`, "objects"))[0]?.after;
   if (!original || Object.keys(match).some((name) => !Object.hasOwn(original, name) || canonicalJson(original[name]) !== canonicalJson(match[name]))) {
     throw new PayrollError("This compensation create request was already saved with different details — reopen the creation form to start a new request, or reload the existing record.");
   }
@@ -169,8 +169,8 @@ export async function listCompensationPackages(query: CompensationPackageActor):
   actor(query);
   return packageTransaction(query.orgId, async () => {
     const scope = await begin(query, "payroll.read", false);
-    return (await db.execute<CompensationPackageRecord>(sql`select ${PACKAGE_COLUMNS} from payroll_compensation_packages
-      where org_id=${query.orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} order by code,id`)).rows;
+    return await db.execute<CompensationPackageRecord>(sql`select ${PACKAGE_COLUMNS} from payroll_compensation_packages
+      where org_id=${query.orgId} ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)} order by code,id`, "objects");
   });
 }
 
@@ -183,10 +183,10 @@ export async function getCompensationPackageForSubject(query: CompensationPackag
   return packageTransaction(query.orgId, async () => {
     const scope = await begin(query, "payroll.read", false);
     const table = query.subjectKind === COMPENSATION_VERSION_SUBJECT_KIND ? "payroll_compensation_versions" : "payroll_compensation_assignments";
-    const row = one((await db.execute<{ package_id: string }>(sql`
+    const row = one(await db.execute<{ package_id: string }>(sql`
       select s.package_id from ${sql.identifier(table)} s join payroll_compensation_packages p on p.org_id=s.org_id and p.id=s.package_id
       where s.org_id=${query.orgId} and s.id=${query.subjectId} ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope)}
-    `)).rows);
+    `, "objects"));
     return getCompensationPackage({ ...query, packageId: row.package_id });
   });
 }
@@ -196,10 +196,10 @@ export async function getCompensationPackage(query: CompensationPackageActor & {
   actor(query);
   return packageTransaction(query.orgId, async () => {
     const pack = await packageRecord(query, query.packageId, "payroll.read", false);
-    const versions = (await db.execute<CompensationPackageVersion>(sql`select ${VERSION_COLUMNS} from payroll_compensation_versions
-      where org_id=${query.orgId} and package_id=${pack.id} order by version desc`)).rows;
-    const assignments = (await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments
-      where org_id=${query.orgId} and package_id=${pack.id} order by effective_from desc,id`)).rows;
+    const versions = await db.execute<CompensationPackageVersion>(sql`select ${VERSION_COLUMNS} from payroll_compensation_versions
+      where org_id=${query.orgId} and package_id=${pack.id} order by version desc`, "objects");
+    const assignments = await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments
+      where org_id=${query.orgId} and package_id=${pack.id} order by effective_from desc,id`, "objects");
     return { package: pack, versions, assignments };
   });
 }
@@ -218,15 +218,15 @@ export async function createCompensationPackage(
     const replay = await createReplay<CompensationPackageRecord>(query.orgId, query.idempotencyKey, "payroll_compensation_packages", PACKAGE_COLUMNS,
       { subsidiary_id: query.subsidiaryId, code, name, description: query.description ?? null, country: query.country, currency: query.currency, reason, created_by: query.actorId });
     if (replay) return replay;
-    const employer = (await db.execute(sql`select id from subsidiaries where org_id=${query.orgId} and id=${query.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
+    const employer = (await db.execute(sql`select id from subsidiaries where org_id=${query.orgId} and id=${query.subsidiaryId} and is_active and not is_elimination for share`, "objects"))[0];
     if (!employer) throw new ScopeNotFoundError();
     if (
       !(await organizationCurrencyAvailable(db, query.orgId, query.currency, query.subsidiaryId))
     )
       throw new PayrollError("Choose an enabled currency for the package employer — foreign currencies require Company Settings → Features → Multi-currency.");
-    return one((await db.execute<CompensationPackageRecord>(sql`insert into payroll_compensation_packages
+    return one(await db.execute<CompensationPackageRecord>(sql`insert into payroll_compensation_packages
       (id,org_id,subsidiary_id,code,name,description,country,currency,reason,created_by,updated_by)
-      values(coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${query.subsidiaryId},${code},${name},${query.description ?? null},${query.country},${query.currency},${reason},${query.actorId},${query.actorId}) returning ${PACKAGE_COLUMNS}`)).rows);
+      values(coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${query.subsidiaryId},${code},${name},${query.description ?? null},${query.country},${query.currency},${reason},${query.actorId},${query.actorId}) returning ${PACKAGE_COLUMNS}`, "objects"));
   });
 }
 export async function updateCompensationPackage(query: CompensationPackageActor & { packageId: string; expectedRevision: number; name: string; description: string | null; retire: boolean; reason: string }): Promise<CompensationPackageRecord> {
@@ -236,8 +236,8 @@ export async function updateCompensationPackage(query: CompensationPackageActor 
   return packageTransaction(query.orgId, async () => {
     const pack = await packageRecord(query, query.packageId, "payroll.manage", true); revision(pack, query.expectedRevision);
     if (pack.status !== "active") throw new PayrollError("This package is retired — create a new package; existing approved employee terms remain in force.");
-    return one((await db.execute<CompensationPackageRecord>(sql`update payroll_compensation_packages set name=${name},description=${query.description},status=${query.retire ? "retired" : "active"},revision=revision+1,
-      reason=${reason},updated_by=${query.actorId},updated_at=now() where org_id=${query.orgId} and id=${pack.id} and revision=${query.expectedRevision} returning ${PACKAGE_COLUMNS}`)).rows);
+    return one(await db.execute<CompensationPackageRecord>(sql`update payroll_compensation_packages set name=${name},description=${query.description},status=${query.retire ? "retired" : "active"},revision=revision+1,
+      reason=${reason},updated_by=${query.actorId},updated_at=now() where org_id=${query.orgId} and id=${pack.id} and revision=${query.expectedRevision} returning ${PACKAGE_COLUMNS}`, "objects"));
   });
 }
 export async function saveCompensationPackageVersion(
@@ -265,14 +265,14 @@ export async function saveCompensationPackageVersion(
     if (query.versionId) {
       const version = await versionRecord(query.orgId, pack.id, query.versionId); revision(version, query.expectedRevision);
       if (version.status !== "draft") throw new PayrollError("This version is frozen — create a new draft version to change its terms.");
-      return one((await db.execute<CompensationPackageVersion>(sql`update payroll_compensation_versions set effective_from=${window.effectiveFrom},effective_to=${window.effectiveTo},
+      return one(await db.execute<CompensationPackageVersion>(sql`update payroll_compensation_versions set effective_from=${window.effectiveFrom},effective_to=${window.effectiveTo},
         definition=${definition}::jsonb,definition_hash=${hash},revision=revision+1,reason=${reason},updated_by=${query.actorId},updated_at=now()
-        where org_id=${query.orgId} and id=${version.id} and revision=${query.expectedRevision} returning ${VERSION_COLUMNS}`)).rows);
+        where org_id=${query.orgId} and id=${version.id} and revision=${query.expectedRevision} returning ${VERSION_COLUMNS}`, "objects"));
     }
-    return one((await db.execute<CompensationPackageVersion>(sql`insert into payroll_compensation_versions
+    return one(await db.execute<CompensationPackageVersion>(sql`insert into payroll_compensation_versions
       (id,org_id,package_id,version,effective_from,effective_to,definition,definition_hash,reason,created_by,updated_by)
       select coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${pack.id},coalesce(max(version),0)+1,${window.effectiveFrom}::date,${window.effectiveTo}::date,${definition}::jsonb,${hash},${reason},${query.actorId},${query.actorId}
-      from payroll_compensation_versions where org_id=${query.orgId} and package_id=${pack.id} returning ${VERSION_COLUMNS}`)).rows);
+      from payroll_compensation_versions where org_id=${query.orgId} and package_id=${pack.id} returning ${VERSION_COLUMNS}`, "objects"));
   });
 }
 async function compensationDecisionIdentity(
@@ -286,8 +286,8 @@ async function compensationDecisionIdentity(
 ): Promise<void> {
   if (!requireIndependentActor) return;
   const ids = [...new Set([actorId, createdBy, submittedBy, ...authors.map((row) => row.actorId)].filter((id): id is string => id !== null))].sort();
-  const identities = (await db.execute<{ id: string; partyId: string | null; isActive: boolean }>(sql`select id,party_id as "partyId",is_active as "isActive" from users
-    where org_id=${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) order by id for share`)).rows;
+  const identities = await db.execute<{ id: string; partyId: string | null; isActive: boolean }>(sql`select id,party_id as "partyId",is_active as "isActive" from users
+    where org_id=${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)}) order by id for share`, "objects");
   const approver = identities.find((row) => row.id === actorId);
   if (!approver?.isActive || !approver.partyId) throw new PayrollError("Compensation approval needs a resolved person identity — link the approver to their native person record before deciding.");
   if (ids.some((id) => id !== actorId && !identities.find((row) => row.id === id)?.partyId)) throw new PayrollError("Compensation authorship needs resolved person identities — link the author and submitter to their native person records before approval.");
@@ -312,7 +312,7 @@ async function submitCompensationApproval(query: CompensationPackageActor, subje
 
 async function assertCompensationAssignmentAvailable(orgId: string, row: CompensationPackageAssignment): Promise<void> {
   const overlap = (await db.execute(sql`select id from payroll_compensation_assignments where org_id=${orgId} and employment_id=${row.employmentId} and status in ('active','ended')
-    and daterange(effective_from,effective_to,'[]') && daterange(${row.effectiveFrom}::date,${row.effectiveTo}::date,'[]') limit 1`)).rows[0];
+    and daterange(effective_from,effective_to,'[]') && daterange(${row.effectiveFrom}::date,${row.effectiveTo}::date,'[]') limit 1`, "objects"))[0];
   if (overlap) throw new PayrollError("The employment already has approved compensation for this window — end the existing assignment and use non-overlapping successor dates.");
 }
 
@@ -328,10 +328,10 @@ async function finalizeUngatedCompensationSubmission(query: CompensationPackageA
   if (assignment) await assertCompensationAssignmentAvailable(query.orgId, row as CompensationPackageAssignment);
   const table = assignment ? "payroll_compensation_assignments" : "payroll_compensation_versions";
   const policy: CompensationSubmissionPolicy = { ...row.submissionPolicy, kind: "ungated" };
-  const saved = (await db.execute(sql`update ${sql.identifier(table)} set status=${assignment ? "active" : "approved"},
+  const saved = await db.execute(sql`update ${sql.identifier(table)} set status=${assignment ? "active" : "approved"},
     submission_policy=${canonicalJson(policy)}::jsonb,decided_by=${query.actorId},decided_at=now(),revision=revision+1,
     reason=${reason},updated_by=${query.actorId},updated_at=now()
-    where org_id=${query.orgId} and id=${row.id} and status='submitted' and revision=${row.revision} returning id`)).rows;
+    where org_id=${query.orgId} and id=${row.id} and status='submitted' and revision=${row.revision} returning id`, "objects");
   if (saved.length !== 1) throw new PayrollError("The ungated compensation submission was not saved; nothing applied.");
 }
 
@@ -354,9 +354,9 @@ export async function completeCompensationPackageSubmission(
     if (!isUuid(context.packageId)) throw new PayrollError('The original compensation package reference is missing; review the submitted workflow.');
     const pack = await packageRecord(query, context.packageId, 'payroll.manage', true);
     const row: CompensationPackageAssignment | CompensationPackageVersion = assignment
-      ? one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS}
+      ? one(await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS}
           from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id}
-          and id=${args.subjectId} for update`)).rows)
+          and id=${args.subjectId} for update`, "objects"))
       : await versionRecord(query.orgId, pack.id, args.subjectId);
     const policy = row.submissionPolicy;
     if (!policy || policy.version !== 1 || !row.submittedBy || routing.createdBy !== row.submittedBy
@@ -392,11 +392,11 @@ export async function completeCompensationPackageSubmission(
         { effectiveFrom: assigned.effectiveFrom, effectiveTo: assigned.effectiveTo });
     }
     const table = assignment ? "payroll_compensation_assignments" : "payroll_compensation_versions";
-    const original = one((await db.execute<{ reason: string }>(sql`select reason from ${sql.identifier(table)}
-      where org_id=${query.orgId} and id=${row.id} and revision=${row.revision}`)).rows);
+    const original = one(await db.execute<{ reason: string }>(sql`select reason from ${sql.identifier(table)}
+      where org_id=${query.orgId} and id=${row.id} and revision=${row.revision}`, "objects"));
     await finalizeUngatedCompensationSubmission(query, args.subjectKind, row, text(original.reason, 'Submission reason', 2000), row.submittedBy!);
-    const saved = one((await db.execute<{ status: string }>(sql`select status from ${sql.identifier(table)}
-      where org_id=${query.orgId} and id=${args.subjectId}`)).rows);
+    const saved = one(await db.execute<{ status: string }>(sql`select status from ${sql.identifier(table)}
+      where org_id=${query.orgId} and id=${args.subjectId}`, "objects"));
     if (saved.status !== completedStatus) throw new PayrollError('The compensation workflow did not complete; no automatic decision was saved.');
     return saved;
   });
@@ -448,12 +448,12 @@ export async function transitionCompensationPackageVersion(
       query.action === "submit"
         ? { version: 1, kind: "flow", submittedRevision: version.revision + 1 }
         : (version.submissionPolicy ?? null);
-    const updated = one((await db.execute<CompensationPackageVersion>(sql`update payroll_compensation_versions set
+    const updated = one(await db.execute<CompensationPackageVersion>(sql`update payroll_compensation_versions set
       submission_policy=${canonicalJson(submissionPolicy)}::jsonb,status=${query.action === "submit" ? "submitted" : query.action === "approve" ? "approved" : "rejected"},
       submitted_by=${query.action === "submit" ? query.actorId : version.submittedBy},submitted_at=case when ${query.action === "submit"} then now() else submitted_at end,
       decided_by=${query.action === "submit" ? null : query.actorId},decided_at=case when ${query.action === "submit"} then null else now() end,
       revision=revision+1,reason=${reason},updated_by=${query.actorId},updated_at=now()
-      where org_id=${query.orgId} and id=${version.id} and revision=${query.expectedRevision} returning ${VERSION_COLUMNS}`)).rows);
+      where org_id=${query.orgId} and id=${version.id} and revision=${query.expectedRevision} returning ${VERSION_COLUMNS}`, "objects"));
     if (
       query.action === "submit" &&
       (await submitCompensationApproval(query, COMPENSATION_VERSION_SUBJECT_KIND, updated.id)) === "ungated"
@@ -485,8 +485,8 @@ export async function saveCompensationPackageAssignment(
       version.definitionHash
     )
       throw new PayrollError("The package definition does not match its approval evidence — choose a verified approved version.");
-    const employment = one((await db.execute<{ workerPartyId: string }>(sql`select worker_party_id as "workerPartyId" from worker_employments
-      where org_id=${query.orgId} and id=${query.employmentId} and employer_subsidiary_id=${pack.subsidiaryId} for share`)).rows);
+    const employment = one(await db.execute<{ workerPartyId: string }>(sql`select worker_party_id as "workerPartyId" from worker_employments
+      where org_id=${query.orgId} and id=${query.employmentId} and employer_subsidiary_id=${pack.subsidiaryId} for share`, "objects"));
     const inputs = compensationPackageAssignmentInputs(version.definition, query.inputs);
     if (!query.assignmentId) {
       const replay = await createReplay<CompensationPackageAssignment>(query.orgId, query.idempotencyKey, "payroll_compensation_assignments", ASSIGNMENT_COLUMNS,
@@ -497,24 +497,24 @@ export async function saveCompensationPackageAssignment(
     if (pack.status !== "active") throw new PayrollError("The package is retired — choose an active package for future employee assignments.");
     await checkAssignmentSubject(query.orgId, pack, version, query.employmentId, employment.workerPartyId, window);
     if (query.assignmentId) {
-      const assignment = one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id} and id=${identifier(query.assignmentId, "assignment")} for update`)).rows);
+      const assignment = one(await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id} and id=${identifier(query.assignmentId, "assignment")} for update`, "objects"));
       revision(assignment, query.expectedRevision);
       if (assignment.status !== "draft") throw new PayrollError("This employee assignment is frozen — create an effective-dated successor for changed terms.");
-      return one((await db.execute<CompensationPackageAssignment>(sql`update payroll_compensation_assignments set version_id=${version.id},employment_id=${query.employmentId},employee_party_id=${employment.workerPartyId},
+      return one(await db.execute<CompensationPackageAssignment>(sql`update payroll_compensation_assignments set version_id=${version.id},employment_id=${query.employmentId},employee_party_id=${employment.workerPartyId},
         effective_from=${window.effectiveFrom},effective_to=${window.effectiveTo},inputs=${canonicalJson(inputs)}::jsonb,revision=revision+1,reason=${reason},updated_by=${query.actorId},updated_at=now()
-        where org_id=${query.orgId} and id=${assignment.id} and revision=${query.expectedRevision} returning ${ASSIGNMENT_COLUMNS}`)).rows);
+        where org_id=${query.orgId} and id=${assignment.id} and revision=${query.expectedRevision} returning ${ASSIGNMENT_COLUMNS}`, "objects"));
     }
-    return one((await db.execute<CompensationPackageAssignment>(sql`insert into payroll_compensation_assignments
+    return one(await db.execute<CompensationPackageAssignment>(sql`insert into payroll_compensation_assignments
       (id,org_id,package_id,version_id,employment_id,employee_party_id,subsidiary_id,effective_from,effective_to,inputs,reason,created_by,updated_by)
-      values(coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${pack.id},${version.id},${query.employmentId},${employment.workerPartyId},${pack.subsidiaryId},${window.effectiveFrom},${window.effectiveTo},${canonicalJson(inputs)}::jsonb,${reason},${query.actorId},${query.actorId}) returning ${ASSIGNMENT_COLUMNS}`)).rows);
+      values(coalesce(${query.idempotencyKey ?? null}::uuid,uuid_generate_v7()),${query.orgId},${pack.id},${version.id},${query.employmentId},${employment.workerPartyId},${pack.subsidiaryId},${window.effectiveFrom},${window.effectiveTo},${canonicalJson(inputs)}::jsonb,${reason},${query.actorId},${query.actorId}) returning ${ASSIGNMENT_COLUMNS}`, "objects"));
   });
 }
 async function checkAssignmentSubject(orgId: string, pack: CompensationPackageRecord, version: CompensationPackageVersion, employmentId: string, workerPartyId: string, window: { effectiveFrom: string; effectiveTo: string | null }): Promise<void> {
   if (window.effectiveFrom < version.effectiveFrom || (version.effectiveTo !== null && (window.effectiveTo === null || window.effectiveTo > version.effectiveTo))) throw new PayrollError("The employee assignment exceeds its approved version window — choose dates covered by that version.");
   const coverage = (await db.execute(sql`select employment_id from worker_employment_versions where org_id=${orgId} and employment_id=${employmentId} and recorded_until is null and status in ('active','on_leave')
-    group by employment_id having range_agg(daterange(effective_from,effective_to,'[)')) @> daterange(${window.effectiveFrom}::date,${window.effectiveTo}::date,'[]')`)).rows[0];
+    group by employment_id having range_agg(daterange(effective_from,effective_to,'[)')) @> daterange(${window.effectiveFrom}::date,${window.effectiveTo}::date,'[]')`, "objects"))[0];
   if (!coverage) throw new PayrollError("The employment does not cover this compensation assignment — choose a covered window or record verified employment history through its native workflow.");
-  const profile = (await db.execute<{ country: string }>(sql`select country from employee_payroll_profiles where org_id=${orgId} and employee_party_id=${workerPartyId} and employment_id=${employmentId} and is_active for share`)).rows;
+  const profile = await db.execute<{ country: string }>(sql`select country from employee_payroll_profiles where org_id=${orgId} and employee_party_id=${workerPartyId} and employment_id=${employmentId} and is_active for share`, "objects");
   if (profile.length !== 1 || profile[0]!.country !== pack.country) throw new PayrollError("The employee needs one active payroll profile matching this package country — configure the native employment payroll profile before assigning the package.");
 }
 export async function transitionCompensationPackageAssignment(
@@ -532,7 +532,7 @@ export async function transitionCompensationPackageAssignment(
     );
     const decide = query.action === "approve" || query.action === "reject";
     const pack = await packageRecord(query, query.packageId, decide ? "hrm.compensation.approve" : "payroll.manage", true);
-    const row = one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id} and id=${identifier(query.assignmentId, "assignment")} for update`)).rows);
+    const row = one(await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id} and id=${identifier(query.assignmentId, "assignment")} for update`, "objects"));
     revision(row, query.expectedRevision);
     const expectedStatus = decide ? "submitted" : query.action === "end" ? "active" : "draft";
     if (row.status !== expectedStatus || (pack.status !== "active" && query.action !== "end" && query.action !== "cancel")) throw new PayrollError("This compensation assignment cannot make that transition — reload its current state before acting.");
@@ -559,18 +559,18 @@ export async function transitionCompensationPackageAssignment(
       query.action === "submit"
         ? { version: 1, kind: "flow", submittedRevision: row.revision + 1 }
         : (row.submissionPolicy ?? null);
-    const updated = one((await db.execute<CompensationPackageAssignment>(sql`update payroll_compensation_assignments set submission_policy=${canonicalJson(submissionPolicy)}::jsonb,status=${status},effective_to=${effectiveTo},
+    const updated = one(await db.execute<CompensationPackageAssignment>(sql`update payroll_compensation_assignments set submission_policy=${canonicalJson(submissionPolicy)}::jsonb,status=${status},effective_to=${effectiveTo},
       submitted_by=${query.action === "submit" ? query.actorId : row.submittedBy},submitted_at=case when ${query.action === "submit"} then now() else submitted_at end,
       decided_by=${decide ? query.actorId : row.decidedBy},decided_at=case when ${decide} then now() else decided_at end,
-      revision=revision+1,reason=${reason},updated_by=${query.actorId},updated_at=now() where org_id=${query.orgId} and id=${row.id} and revision=${query.expectedRevision} returning ${ASSIGNMENT_COLUMNS}`)).rows);
+      revision=revision+1,reason=${reason},updated_by=${query.actorId},updated_at=now() where org_id=${query.orgId} and id=${row.id} and revision=${query.expectedRevision} returning ${ASSIGNMENT_COLUMNS}`, "objects"));
     if (
       query.action === "submit" &&
       (await submitCompensationApproval(query, COMPENSATION_ASSIGNMENT_SUBJECT_KIND, updated.id)) === "ungated"
     ) {
       await finalizeUngatedCompensationSubmission(query, COMPENSATION_ASSIGNMENT_SUBJECT_KIND, updated, reason);
     }
-    return one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments
-      where org_id=${query.orgId} and package_id=${pack.id} and id=${updated.id}`)).rows);
+    return one(await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments
+      where org_id=${query.orgId} and package_id=${pack.id} and id=${updated.id}`, "objects"));
   });
 }
 export async function previewCompensationPackageVersion(query: CompensationPackageActor & { packageId: string; versionId: string; context: CompensationPackageEvaluationContext }) {

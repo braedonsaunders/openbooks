@@ -88,8 +88,8 @@ export async function conversionWouldCopyInventoryKinds(orgId: string, sourceId:
            line.unit_price, line.tax_amount
       from document_lines line
       left join items i on i.id = line.item_id and i.org_id = line.org_id
-     where line.org_id = ${orgId} and line.document_id = ${sourceId}`))
-  return lines.rows.some((line) => {
+     where line.org_id = ${orgId} and line.document_id = ${sourceId}`, 'objects'))
+  return lines.some((line) => {
     if (!line.item_id || !line.kind || !INVENTORY_ITEM_KINDS.has(line.kind)) return false
     return remainingOrderLine({
       quantity: String(line.quantity),
@@ -120,7 +120,7 @@ export async function convertOrder(
       const source = (await tx.execute<{ revision: string }>(sql`
         select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents
          where id = ${sourceId} and org_id = ${orgId} for update
-      `)).rows[0];
+      `, 'objects'))[0];
       if (!source) throw new ConversionError('Order not found', 404)
       if (!isDocumentRevisionToken(options.expectedUpdatedAt) || options.expectedUpdatedAt !== source.revision) {
         throw new ConversionError('this order changed after you opened it; reload and review the latest revision', 409)
@@ -154,11 +154,11 @@ export async function convertOrder(
              subsidiary_id, department_id, project_id, location_id, class_id, extra_dims, memo, billing_method,
              work_completed_on::text as work_completed_on
         from documents where id = ${sourceId} and org_id = ${orgId} for update
-    `))
-    const doc = src.rows[0]
+    `, 'objects'))
+    const doc = src[0]
     if (!doc) throw new ConversionError('Order not found')
     if (!ORDER_KINDS.includes(doc.kind as OrderKind)) throw new ConversionError('Not an order document')
-    if ((await tx.execute(sql`select id from subscription_renewal_occurrences where org_id=${orgId} and document_id=${sourceId} and occurrence='document' limit 1`)).rows[0]) {
+    if ((await tx.execute(sql`select id from subscription_renewal_occurrences where org_id=${orgId} and document_id=${sourceId} and occurrence='document' limit 1`, 'objects'))[0]) {
       throw new ConversionError('Accept this renewal from the subscription in Collections; subscription billing generates its invoices and prevents duplicate order billing')
     }
     // Only an issued order converts. The switch is exhaustive so a status
@@ -194,7 +194,7 @@ export async function convertOrder(
        where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
        order by dl.line_number
        for update of dl
-    `))
+    `, 'objects'))
     // A sales-side line with no account inherits the item's income account so
     // the converted document stays postable (converted SO lines
     // carried null accounts and their invoices could never post). An explicit
@@ -209,7 +209,7 @@ export async function convertOrder(
     }
 
     // Remaining (un-pulled) quantity per line.
-    const remaining = lines.rows
+    const remaining = lines
       .map((line) => ({
         line,
         remainder: remainingOrderLine({
@@ -332,8 +332,8 @@ export async function convertOrder(
       )]
       for (const itemId of itemIds) {
         const item = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${orgId}`))
-        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          select kind from items where id = ${itemId} and org_id = ${orgId}`, 'objects'))
+        if (item[0] && item[0].kind === 'equipment_charge') {
           throw new ConversionError(
             'Equipment is disabled: this conversion would copy equipment charges onto the new document — enable Equipment under Company Settings → Features, then convert again',
           )
@@ -372,7 +372,7 @@ export async function convertOrder(
               ${doc.location_id}, ${doc.class_id}, ${JSON.stringify(doc.extra_dims ?? {})}::jsonb, ${doc.billing_method}, ${doc.memo},
               '0', '0', '0', ${carriesWorkDates ? doc.work_completed_on ?? null : null}, ${JSON.stringify(targetCustom)}::jsonb, ${userId})
       returning id
-    `)).rows[0]!
+    `, 'objects'))[0]!
     const newId = created.id
 
     // Migration 0034 makes approved document lines immutable. Advancing
@@ -389,7 +389,7 @@ export async function convertOrder(
            set status = 'draft', updated_by = ${userId}
          where id = ${sourceId} and org_id = ${orgId} and status = 'approved'
         returning id
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!reopened) throw new ConversionError('Order changed while it was being converted', 409)
     }
 
@@ -419,7 +419,7 @@ export async function convertOrder(
           select id from accounts
            where id = ${resolved.accountId} and org_id = ${orgId}
              and (subsidiary_id is null or subsidiary_id = ${doc.subsidiary_id}::uuid)
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!visible) {
           throw new ConversionError(
             `Purchase-order line ${line.line_number}${itemLabel} cannot be billed: its received-not-billed account is not available to this order's subsidiary — set the item's costing profile or the company Received not billed account to an account of this subsidiary, then convert again`,
@@ -462,8 +462,8 @@ export async function convertOrder(
               })}::jsonb, ${userId}, ${l.price_basis == null ? null : JSON.stringify(l.price_basis)}::jsonb,
               ${carriesWorkDates ? l.work_from ?? null : null}, ${carriesWorkDates ? l.work_to ?? null : null})
         returning id
-      `))
-      const newLineId = inserted.rows[0]!.id
+      `, 'objects'))
+      const newLineId = inserted[0]!.id
       const originalQty = toQuantityUnits(String(l.quantity))
       if (originalQty !== 0n && (l.tax_code_id || l.tax_group_id)) {
         const components = (await tx.execute<{
@@ -490,8 +490,8 @@ export async function convertOrder(
             from document_line_tax_components
            where document_line_id = ${l.id} and org_id = ${orgId}
            order by sequence
-        `))
-        if (components.rows.length === 0) {
+        `, 'objects'))
+        if (components.length === 0) {
           throw new ConversionError(
             `line ${l.line_number} has a tax profile but no calculation evidence — reopen the order and save it so tax can be recalculated`,
           )
@@ -500,7 +500,7 @@ export async function convertOrder(
           orgId,
           documentLineId: newLineId,
           actorId: userId,
-          components: components.rows.map((c) => {
+          components: components.map((c) => {
             const tax = mulRatio(String(c.tax_amount), r.units, originalQty)
             const recoverable = mulRatio(String(c.recoverable_amount), r.units, originalQty)
             return {
@@ -537,7 +537,7 @@ export async function convertOrder(
            and quantity_billed + ${coveredQty} <= ${orderedNetOfCancelledSql('document_lines')}
            ${receiptRequired ? sql`and quantity_billed + ${coveredQty} <= quantity_fulfilled` : sql``}
         returning id
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!advanced) throw new ConversionError(`Line ${l.line_number} changed while it was being converted`, 409)
       lineNo++
     }
@@ -548,7 +548,7 @@ export async function convertOrder(
            set status = 'approved', updated_by = ${userId}
          where id = ${sourceId} and org_id = ${orgId} and status = 'draft'
         returning id
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!restored) throw new ConversionError('Order changed while it was being converted', 409)
     }
 
@@ -557,7 +557,7 @@ export async function convertOrder(
              total = ${add(sum(convertedAmounts), sum(convertedTaxes))}, updated_by = ${userId}
       where id = ${newId} and org_id = ${orgId}
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!totalsWritten) throw new ConversionError('The converted document could not be totalled', 409)
 
     // Every conversion is audited with what it carried and what it withheld,
@@ -596,7 +596,7 @@ export async function convertOrder(
     if (target.kind === 'sales_order') {
       const revision = (await tx.execute<{ updated_at: string }>(sql`
         select ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${newId} and org_id = ${orgId}
-      `)).rows[0]!.updated_at
+      `, 'objects'))[0]!.updated_at
       const issuance = await issueSalesOrder({
         orgId,
         salesOrderId: newId,
@@ -617,11 +617,11 @@ export async function convertOrder(
     const opportunityLink = (await tx.execute<{ opportunity_id: string }>(sql`
       select opportunity_id from crm_opportunity_documents
        where document_id = ${sourceId} and org_id = ${orgId}
-    `))
-    if (opportunityLink.rows[0]) {
+    `, 'objects'))
+    if (opportunityLink[0]) {
       await tx.execute(sql`
         insert into crm_opportunity_documents (org_id, opportunity_id, document_id, created_by, updated_by)
-        values (${orgId}, ${opportunityLink.rows[0].opportunity_id}, ${newId}, ${userId}, ${userId})
+        values (${orgId}, ${opportunityLink[0].opportunity_id}, ${newId}, ${userId}, ${userId})
         `)
     }
     if (doc.party_id && ['sales_order', 'customer_invoice', 'customer_credit', 'customer_payment'].includes(target.kind)) {

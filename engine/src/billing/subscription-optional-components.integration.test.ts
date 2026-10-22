@@ -68,8 +68,8 @@ test("publishing an all-optional version refuses and leaves the draft unpublishe
     }, null);
     await assert.rejects(publishPlanVersion(org.orgId, actor, versionId, null), /at least one required component/);
     const status = (await db.execute<{ status: string }>(
-      sql`select status from subscription_plan_versions where id = ${versionId} and org_id = ${org.orgId}`,
-    )).rows[0]!.status;
+      sql`select status from subscription_plan_versions where id = ${versionId} and org_id = ${org.orgId}`, "objects",
+    ))[0]!.status;
     assert.equal(status, "draft");
   });
 });
@@ -94,8 +94,8 @@ test("a version with a required component still publishes", DB, async () => {
       renewalPolicy: "none",
     });
     const components = (await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from subscription_components where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`,
-    )).rows[0]!.n;
+      sql`select count(*)::int as n from subscription_components where org_id = ${org.orgId} and subscription_id = ${subscriptionId}`, "objects",
+    ))[0]!.n;
     assert.equal(components, 1);
   });
 });
@@ -127,7 +127,7 @@ test("activating a legacy all-optional published version refuses with nothing wr
     const written = (await db.execute<{ lifecycles: number; components: number }>(sql`
       select (select count(*)::int from subscription_lifecycles where org_id = ${org.orgId} and subscription_id = ${subscriptionId}) as lifecycles,
              (select count(*)::int from subscription_components where org_id = ${org.orgId} and subscription_id = ${subscriptionId}) as components
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(written, { lifecycles: 0, components: 0 });
   });
 });

@@ -44,8 +44,8 @@ async function currentRow(tx: SqlExecutor, id: string, orgId: string) {
   const r = (await tx.execute<SftpServerAuditRow & { id: string }>(sql`
     select id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
       from sftp_servers where id = ${id} and org_id = ${orgId} for update
-  `))
-  return r.rows[0] ?? null
+  `, 'objects'))
+  return r[0] ?? null
 }
 
 export const PATCH = defineRoute({
@@ -75,7 +75,7 @@ export const PATCH = defineRoute({
             update sftp_servers set password_encrypted = ${encryptSecret(password, user.orgId)}, updated_at = now(), updated_by = ${user.id}
              where id = ${id} and org_id = ${user.orgId}
             returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
-          `)).rows[0]!
+          `, 'objects'))[0]!
           await auditSetupChange({
             orgId: user.orgId,
             table: 'sftp_servers',
@@ -108,10 +108,10 @@ export const PATCH = defineRoute({
           await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-roots:' + user.orgId}, 0))`)
           const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
             select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} and id <> ${id} for update
-          `))
+          `, 'objects'))
           const hit = findRootOverlap(
             before.root_prefix,
-            siblings.rows.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
+            siblings.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
           )
           if (hit) {
             refused = NextResponse.json({ error: rootOverlapRefusal(before.root_prefix, hit), code: 'sftp_root_overlap' }, { status: 409 })
@@ -124,15 +124,15 @@ export const PATCH = defineRoute({
           // through its last import and archive operation; try-locking returns a
           // truthful 409 instead of disabling the server mid-run. A claim token
           // with no live lock belongs to a dead worker and is invalidated here.
-          const schedules = (await tx.execute<{ id: string }>(sql`
+          const schedules = await tx.execute<{ id: string }>(sql`
             select id from sftp_import_schedules
              where org_id = ${user.orgId} and sftp_server_id = ${id}
              order by id
-          `)).rows
+          `, 'objects')
           for (const schedule of schedules) {
             const acquired = (await tx.execute<{ acquired: boolean }>(sql`
               select pg_try_advisory_xact_lock(hashtextextended(${sftpImportScheduleRunLockKey(user.orgId, schedule.id)}, 0)) as acquired
-            `)).rows[0]?.acquired
+            `, 'objects'))[0]?.acquired
             if (!acquired) {
               refused = NextResponse.json(
                 { error: 'A statement import is still running on this server — wait for the scan to finish before disabling it.', code: 'SFTP_IMPORT_RUNNING' },
@@ -156,7 +156,7 @@ export const PATCH = defineRoute({
           update sftp_servers set is_active = ${nextActive}, updated_at = now(), updated_by = ${user.id}
            where id = ${id} and org_id = ${user.orgId}
           returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
-        `)).rows[0]!
+        `, 'objects'))[0]!
         await auditSetupChange({
           orgId: user.orgId,
           table: 'sftp_servers',
@@ -208,7 +208,7 @@ export const DELETE = defineRoute({
             select
               (select count(*)::text from payment_bank_profiles where org_id = ${user.orgId} and sftp_server_id = ${id}) as profiles,
               (select count(*)::text from sftp_import_schedules where org_id = ${user.orgId} and sftp_server_id = ${id}) as schedules
-          `)).rows[0]!
+          `, 'objects'))[0]!
           if (Number(dependents.profiles) > 0) {
             refused = NextResponse.json(
               { error: 'This SFTP server still delivers payment files for a bank profile — point the profile at another server first', code: 'bank_profile_in_use' },

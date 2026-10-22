@@ -164,8 +164,8 @@ async function auditMapping(
       ${JSON.stringify({ before: input.before, after: input.after, reason: input.reason })}::jsonb,
       ${input.actorId}
     ) returning id
-  `);
-  if (recorded.rows.length !== 1) {
+  `, "objects");
+  if (recorded.length !== 1) {
     throw new NonprofitError({
       message: "The functional mapping change was not recorded in audit history.",
       status: 409,
@@ -197,7 +197,7 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
          and effective_to is null
          and effective_from < ${input.effectiveFrom}::date
        for update
-    `)).rows[0];
+    `, "objects"))[0];
 
     if (prior) {
       const closed = await tx.execute<FunctionalMappingRow>(sql`
@@ -207,8 +207,8 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
          where org_id = ${input.orgId} and id = ${prior.id} and effective_to is null
         returning id, org_id, department_id, project_id, function, program_key,
                   effective_from::text, effective_to::text, created_at::text, created_by::text
-      `);
-      const previous = closed.rows[0];
+      `, "objects");
+      const previous = closed[0];
       if (!previous) {
         throw new NonprofitError({
           message: "The previous functional mapping changed before the new mapping could be saved.",
@@ -236,8 +236,8 @@ export async function setFunctionalMapping(input: SetFunctionalMappingInput): Pr
          and daterange(effective_from, effective_to, '[]') &&
              daterange(${input.effectiveFrom}::date, ${effectiveTo}::date, '[]')
        for update
-    `);
-    if (overlaps.rows.length > 0) {
+    `, "objects");
+    if (overlaps.length > 0) {
       throw mappingRefusal(
         "The functional mapping period overlaps an existing mapping for this department or project.",
         "functional_mapping_period_overlap",
@@ -305,8 +305,8 @@ export async function listFunctionalMappings(orgId: string): Promise<FunctionalM
         from functional_mappings
        where org_id = ${orgId}
        order by coalesce(department_id, project_id), effective_from, id
-    `);
-    return rows.rows.map(toMapping);
+    `, "objects");
+    return rows.map(toMapping);
   });
 }
 

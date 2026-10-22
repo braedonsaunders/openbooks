@@ -83,7 +83,7 @@ async function seedBilledContract(org: ScratchOrg, actorId: string) {
   const run = await withOrgContext(org.orgId, () => runDueSubscriptions("2026-05-15"));
   const billed = (await db.execute<{ next_bill_on: string; last_error: string | null }>(sql`
     select next_bill_on::text, last_error from subscriptions
-     where org_id = ${org.orgId} and id = ${subscriptionId}`)).rows[0]!;
+     where org_id = ${org.orgId} and id = ${subscriptionId}`, "objects"))[0]!;
   assert.equal(run.failed, 0, billed.last_error ?? "the first contract invoice must succeed");
   assert.equal(run.billed, 1);
   assert.equal(run.posted, 1);
@@ -94,7 +94,7 @@ async function seedBilledContract(org: ScratchOrg, actorId: string) {
 async function lifecycleVersion(orgId: string, subscriptionId: string): Promise<string> {
   return (await db.execute<{ id: string }>(sql`
     select plan_version_id as id from subscription_lifecycles where org_id = ${orgId} and subscription_id = ${subscriptionId}
-  `)).rows[0]!.id;
+  `, "objects"))[0]!.id;
 }
 
 test("a plan change on the paid-through date re-seeds the components and records one amendment per key", { skip: !DB }, async () => {
@@ -116,11 +116,11 @@ test("a plan change on the paid-through date re-seeds the components and records
     assert.equal(first.replayed, false);
     assert.equal(await lifecycleVersion(org.orgId, subscriptionId), planB.versionId);
 
-    const windows = (await db.execute<{ unitPrice: string; effectiveFrom: string; effectiveTo: string | null }>(sql`
+    const windows = await db.execute<{ unitPrice: string; effectiveFrom: string; effectiveTo: string | null }>(sql`
       select unit_price::text as "unitPrice", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
         from subscription_components where org_id = ${org.orgId} and subscription_id = ${subscriptionId} and component_key = 'platform'
        order by effective_from
-    `)).rows;
+    `, "objects");
     assert.deepEqual(windows.map((row) => [row.unitPrice, row.effectiveFrom, row.effectiveTo]), [
       ["100.0000", "2026-05-15", "2026-06-14"],
       ["250.0000", "2026-06-15", null],
@@ -128,7 +128,7 @@ test("a plan change on the paid-through date re-seeds the components and records
 
     const planOfRecord = (await db.execute<{ planId: string }>(sql`
       select plan_id as "planId" from subscriptions where id = ${subscriptionId}
-    `)).rows[0]!.planId;
+    `, "objects"))[0]!.planId;
     assert.equal(planOfRecord, planB.planId);
     assert.notEqual(planA.planId, planB.planId);
 

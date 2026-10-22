@@ -217,11 +217,11 @@ async function readRequest(
   orgId: string,
   requestId: string,
 ): Promise<RequestRow | null> {
-  const rows = (await executor.execute<RequestRow>(sql`
+  const rows = await executor.execute<RequestRow>(sql`
     select ${REQUEST_COLUMNS}
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and id = ${requestId}
-  `)).rows;
+  `, "objects");
   return rows[0] ?? null;
 }
 
@@ -293,13 +293,13 @@ export async function createNormalizationRequest(args: {
     await lockNormalizationOperator(orgId,requestedBy);
     const attemptInsert = async (): Promise<{ request: NormalizationRequestRecord; created: boolean } | null> => {
       try {
-        const inserted = (await db.execute<RequestRow>(sql`
+        const inserted = await db.execute<RequestRow>(sql`
           insert into saas_metrics_normalization_requests
             (org_id, month, reason, requested_by, idempotency_key, request_hash, created_by, updated_by)
           values (${orgId}, ${month}::date, ${reason}, ${requestedBy}, ${idempotencyKey}, ${bodyHash},
                   ${requestedBy}, ${requestedBy})
           returning ${REQUEST_COLUMNS}
-        `)).rows;
+        `, "objects");
         if (inserted.length !== 1 || !inserted[0]) {
           throw refusal(
             "saas_normalization_request_write_missing",
@@ -382,11 +382,11 @@ async function readRequestByKey(
   orgId: string,
   idempotencyKey: string,
 ): Promise<RequestRow | null> {
-  const rows = (await executor.execute<RequestRow>(sql`
+  const rows = await executor.execute<RequestRow>(sql`
     select ${REQUEST_COLUMNS}
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and idempotency_key = ${idempotencyKey}
-  `)).rows;
+  `, "objects");
   return rows[0] ?? null;
 }
 
@@ -395,11 +395,11 @@ async function readLiveRequest(
   orgId: string,
   month: string,
 ): Promise<RequestRow | null> {
-  const rows = (await executor.execute<RequestRow>(sql`
+  const rows = await executor.execute<RequestRow>(sql`
     select ${REQUEST_COLUMNS}
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and month = ${month}::date and status in ('pending', 'running')
-  `)).rows;
+  `, "objects");
   return rows[0] ?? null;
 }
 
@@ -425,7 +425,7 @@ async function diagnoseFenceMiss(
     select lease_expires_at <= now() as expired
       from saas_metrics_normalization_requests
      where org_id = ${orgId} and id = ${requestId}
-  `)).rows[0]?.expired ?? true;
+  `, "objects"))[0]?.expired ?? true;
   throw refusal(
     "saas_normalization_lease_mismatch",
     `The presented lease token does not match the live lease for request ${requestId}.`,
@@ -460,12 +460,12 @@ export async function cancelNormalizationRequest(args: {
         );
       }
       await cancelNativeApprovals({orgId,actorId,subjectKind:"metrics_normalization",subjectId:requestId});
-      const updated = (await db.execute<RequestRow>(sql`
+      const updated = await db.execute<RequestRow>(sql`
         update saas_metrics_normalization_requests
            set status = 'cancelled', updated_by = ${actorId}
          where org_id = ${orgId} and id = ${requestId} and status = 'pending'
         returning ${REQUEST_COLUMNS}
-      `)).rows;
+      `, "objects");
       if (updated.length !== 1 || !updated[0]) throw missingRequest(requestId);
       return toRecord(updated[0]!);
     }
@@ -516,7 +516,7 @@ async function assertLiveClaim(
       { status: 409 },
     );
   }
-  const claimed = (await executor.execute<{
+  const claimed = await executor.execute<{
     month: string; attempt_count: number; approved_by: string; reason: string; idempotency_key: string;
   }>(sql`
     update saas_metrics_normalization_requests
@@ -527,7 +527,7 @@ async function assertLiveClaim(
        and lease_token = ${leaseToken} and lease_expires_at > now()
     returning month::text as month, attempt_count, approved_by::text as approved_by,
               reason, idempotency_key::text as idempotency_key
-  `)).rows;
+  `, "objects");
   if (claimed.length !== 1 || !claimed[0]) {
     await diagnoseFenceMiss(executor, orgId, requestId);
   }
@@ -559,14 +559,14 @@ async function markProgress(
   leaseToken: string,
   progress: Record<string, unknown>,
 ): Promise<void> {
-  const updated = (await executor.execute<{ id: string }>(sql`
+  const updated = await executor.execute<{ id: string }>(sql`
     update saas_metrics_normalization_requests
        set progress = progress || ${JSON.stringify(progress)}::jsonb,
            updated_by = approved_by
      where org_id = ${orgId} and id = ${requestId} and status = 'running'
        and lease_token = ${leaseToken} and lease_expires_at > now()
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     await diagnoseFenceMiss(executor, orgId, requestId);
   }
@@ -826,7 +826,7 @@ async function writeCorrectionAudit(
 ): Promise<void> {
   for (const seed of args.seeds) {
     const after = seed.after as { normalizationEvidence?: unknown } | null;
-    const inserted = (await executor.execute<{ id: string }>(sql`
+    const inserted = await executor.execute<{ id: string }>(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (${args.orgId}, ${seed.table}, ${seed.rowId}, 'saas_normalization_corrected',
         ${JSON.stringify({
@@ -846,7 +846,7 @@ async function writeCorrectionAudit(
           v1Evidence: after?.normalizationEvidence ?? null,
         })}::jsonb, ${args.actor}, ${args.idempotencyKey})
       returning id
-    `)).rows;
+    `, "objects");
     if (inserted.length !== 1) {
       throw refusal(
         "saas_normalization_audit_write_missing",
@@ -887,7 +887,7 @@ async function recordExecutionFailure(args: {
 }): Promise<never> {
   try {
     await withOrgTransaction(args.orgId, async () => {
-      const updated = (await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(sql`
         update saas_metrics_normalization_requests
            set status = 'failed', failure = ${args.failure}, remedy = ${args.remedy},
                progress = progress || '{"phase":"failed"}'::jsonb,
@@ -895,7 +895,7 @@ async function recordExecutionFailure(args: {
          where org_id = ${args.orgId} and id = ${args.requestId} and status = 'running'
            and lease_token = ${args.leaseToken} and lease_expires_at > now()
         returning id
-      `)).rows;
+      `, "objects");
       if (updated.length !== 1) {
         await diagnoseFenceMiss(db, args.orgId, args.requestId);
       }
@@ -988,18 +988,18 @@ async function runCorrectionAttempt(
     // A closed month is corrected here only under this approved request;
     // the accounting period itself is never reopened and posted history is
     // never reversed or rewritten.
-    const deletedMonthly = (await db.execute<{ id: string }>(sql`
+    const deletedMonthly = await db.execute<{ id: string }>(sql`
       delete from saas_metrics_monthly
        where org_id = ${orgId} and month = ${claim.month}::date returning id
-    `)).rows;
-    const deletedFacts = (await db.execute<{ id: string }>(sql`
+    `, "objects");
+    const deletedFacts = await db.execute<{ id: string }>(sql`
       delete from saas_metrics_facts_monthly
        where org_id = ${orgId} and month = ${claim.month}::date returning id
-    `)).rows;
-    const deletedCohorts = (await db.execute<{ id: string }>(sql`
+    `, "objects");
+    const deletedCohorts = await db.execute<{ id: string }>(sql`
       delete from saas_metrics_cohort_monthly
        where org_id = ${orgId} and month = ${claim.month}::date returning id
-    `)).rows;
+    `, "objects");
     if (
       deletedMonthly.length !== before.monthly.length
       || deletedFacts.length !== before.facts.length
@@ -1116,7 +1116,7 @@ async function runCorrectionAttempt(
       replacedCohorts: before.cohorts.length,
       sourceV0Hashes,
     };
-    const finalized = (await db.execute<{ id: string }>(sql`
+    const finalized = await db.execute<{ id: string }>(sql`
       update saas_metrics_normalization_requests
          set status = 'succeeded', result = ${JSON.stringify(result)}::jsonb,
              progress = progress || '{"phase":"complete"}'::jsonb,
@@ -1124,7 +1124,7 @@ async function runCorrectionAttempt(
        where org_id = ${orgId} and id = ${requestId} and status = 'running'
          and lease_token = ${leaseToken} and lease_expires_at > now()
       returning id
-    `)).rows;
+    `, "objects");
     if (finalized.length !== 1) {
       await diagnoseFenceMiss(db, orgId, requestId);
     }
@@ -1197,12 +1197,12 @@ export async function approveAndExecuteNormalizationRequest(args: {
   const leaseToken = randomUUID();
   await withOrgTransaction(orgId, async () => {
     if (peek.approved_by === null) {
-      const approved = (await db.execute<{ id: string }>(sql`
+      const approved = await db.execute<{ id: string }>(sql`
         update saas_metrics_normalization_requests
            set approved_by = ${approverId}, approved_at = now(), updated_by = ${approverId}
          where org_id = ${orgId} and id = ${requestId} and status = 'pending' and approved_by is null
         returning id
-      `)).rows;
+      `, "objects");
       if (approved.length !== 1) {
         const current = await readRequest(db, orgId, requestId);
         if (!current) throw missingRequest(requestId);
@@ -1222,7 +1222,7 @@ export async function approveAndExecuteNormalizationRequest(args: {
         );
       }
     }
-    const claimed = (await db.execute<{ id: string }>(sql`
+    const claimed = await db.execute<{ id: string }>(sql`
       update saas_metrics_normalization_requests
          set status = 'running', lease_token = ${leaseToken},
              lease_expires_at = now() + make_interval(mins => ${ttlMinutes}),
@@ -1231,7 +1231,7 @@ export async function approveAndExecuteNormalizationRequest(args: {
              updated_by = approved_by
        where org_id = ${orgId} and id = ${requestId} and status = 'pending'
       returning id
-    `)).rows;
+    `, "objects");
     if (claimed.length !== 1) {
       const current = await readRequest(db, orgId, requestId);
       throw refusal(
@@ -1507,7 +1507,7 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
     if (!(await lockAndCheckOrgFeature(db, resolvedOrgId, "saasMetrics"))) {
       throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
     }
-    const shapes = (await db.execute<MonthShapeRow>(sql`
+    const shapes = await db.execute<MonthShapeRow>(sql`
       with rows as (
         select month::text as month, reporting_currency, denomination_version, normalization_evidence,
                inputs_hash, 'monthly' as source
@@ -1548,14 +1548,14 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
                                 then 1 else 0 end), 0)::int as "evidenceMismatch"
         from months m left join rows r on r.month = m.month
        group by m.month order by m.month desc
-    `)).rows;
-    const requests = (await db.execute<MonthRequestRow>(sql`
+    `, "objects");
+    const requests = await db.execute<MonthRequestRow>(sql`
       select id::text as id, month::text as month, status,
              created_at::text as "createdAt", failure, remedy, result
         from saas_metrics_normalization_requests
        where org_id = ${resolvedOrgId}
        order by month desc, created_at desc, id desc
-    `)).rows;
+    `, "objects");
     const byMonth = new Map<string, MonthRequestRow[]>();
     for (const row of requests) {
       const key = row.month.slice(0, 10);
@@ -1597,11 +1597,9 @@ async function requireNormalizationApproval(
   });
   const ungated =
     !approvalRunId &&
-    (
-      await db.execute<{ allowed: boolean }>(
-        sql`select public.normalization_request_flow_authorized(${orgId},${requestId},${actorId},'approved') as allowed`,
-      )
-    ).rows[0]?.allowed === true;
+    (await db.execute<{ allowed: boolean }>(
+        sql`select public.normalization_request_flow_authorized(${orgId},${requestId},${actorId},'approved') as allowed`, "objects",
+      ))[0]?.allowed === true;
   if (!decision && !ungated)
     throw refusal(
       "saas_normalization_approval_required",
@@ -1650,6 +1648,6 @@ export async function releaseNormalizationApproval(args: {
   await lockNormalizationOperator(orgId,actorId);
   const changed =
     await db.execute(sql`update saas_metrics_normalization_requests set status='cancelled',updated_by=${actorId}
-    where org_id=${orgId} and id=${requestId} and status='pending' returning id`);
-  if (changed.rows.length !== 1) throw missingRequest(requestId);
+    where org_id=${orgId} and id=${requestId} and status='pending' returning id`, "objects");
+  if (changed.length !== 1) throw missingRequest(requestId);
 }

@@ -85,11 +85,11 @@ const _hooks = registerHooks({
             return Promise.resolve(state.respondTx(text))
           }
           export const db = {
-            execute: (query) => record('execute', query),
+            execute: (query, mode) => Promise.resolve(record('execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
             transaction: async (work) => {
               state.inTx = true
               try {
-                const tx = { execute: (query) => record('tx-execute', query) }
+                const tx = { execute: (query, mode) => Promise.resolve(record('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) }
                 return await work(tx)
               } finally {
                 state.inTx = false

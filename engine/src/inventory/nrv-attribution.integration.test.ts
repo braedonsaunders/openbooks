@@ -23,11 +23,11 @@ for (const operation of ["write-down", "reversal"] as const) {
       // provenance below cannot pass over an empty set.
       assert.equal(result.entities.length, 1);
       for (const entity of result.entities) {
-        const evidence = (await db.execute(sql`
+        const evidence = await db.execute(sql`
           select e.created_by, e.updated_by, e.posted_by, w.created_by as evidence_actor
           from journal_entries e join inventory_writedowns w on w.journal_entry_id=e.id and w.org_id=e.org_id
           where e.org_id=${org.orgId} and e.id=${entity.entryId}
-        `)).rows;
+        `, "objects");
         assert.deepEqual(evidence, [{ created_by: actor, updated_by: actor, posted_by: actor, evidence_actor: actor }]);
       }
     } finally { await dropScratchOrg(org.orgId); }

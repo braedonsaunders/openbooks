@@ -47,9 +47,9 @@ export async function compensationArchitectureSummary(query: {
       (select count(*)::int from visible_bands where effective_from <= ${asOf}::date
         and (effective_to is null or effective_to >= ${asOf}::date)) as bands,
       (select count(*)::int from visible_bands) as "bandVersions"
-  `);
-  if (!result.rows[0]) throw new Error('Compensation architecture totals could not be read');
-  return result.rows[0];
+  `, 'objects');
+  if (!result[0]) throw new Error('Compensation architecture totals could not be read');
+  return result[0];
 }
 
 /**
@@ -82,12 +82,12 @@ export async function compensationWageSummary(query: { orgId: string; actorId: s
     db.execute<{ workers: number; covered: number; missing: number; ambiguous: number }>(sql`${wages}
       select count(*)::int as workers, count(*) filter (where matches = 1)::int as covered,
         count(*) filter (where matches = 0)::int as missing,
-        count(*) filter (where matches > 1)::int as ambiguous from wages`),
+        count(*) filter (where matches > 1)::int as ambiguous from wages`, 'objects'),
     db.execute<{ currency: string; basis: PayRateBasis; workers: number; average: string; min: string; max: string }>(sql`${wages}
       select currency, basis, count(*)::int as workers, round(avg(rate), 4)::text as average,
         min(rate)::text as min, max(rate)::text as max
-      from wages where matches = 1 group by currency, basis order by currency, basis`),
+      from wages where matches = 1 group by currency, basis order by currency, basis`, 'objects'),
   ]);
-  if (!counts.rows[0]) throw new Error('Compensation wage coverage could not be read');
-  return { asOf, ...counts.rows[0], groups: groups.rows };
+  if (!counts[0]) throw new Error('Compensation wage coverage could not be read');
+  return { asOf, ...counts[0], groups };
 }

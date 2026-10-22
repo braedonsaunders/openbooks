@@ -78,7 +78,7 @@ async function fixture(): Promise<Fx> {
         values (${folderId}, ${org.orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
       const fileId = (await tx.execute<{ id: string }>(sql`
         insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-        values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`)).rows[0]!.id;
+        values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
       await tx.execute(sql`
         insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
         values (${org.orgId}, ${fileId}, 'fixed_assets', ${assetId}, ${actorId})`);
@@ -107,8 +107,8 @@ const post = (fx: Fx, effectiveDate: string, value: string) =>
   );
 
 async function inputCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from depreciation_inputs where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from depreciation_inputs where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

@@ -42,8 +42,8 @@ async function setFeatures(orgId: string, features: Record<string, boolean>): Pr
     const changed = await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb, true)
-       where id = ${orgId} returning id`)
-    assert.equal(changed.rows.length, 1, 'the feature settings row must remain in the organization')
+       where id = ${orgId} returning id`, 'objects')
+    assert.equal(changed.length, 1, 'the feature settings row must remain in the organization')
   })
 }
 
@@ -61,19 +61,19 @@ async function createUsageSetup(org: Awaited<ReturnType<typeof createScratchOrg>
     const item = await db.execute(sql`
       insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
       values (${itemId}, ${org.orgId}, 'service', ${`Usage item ${suffix}`}, ${org.accounts.revenue}, true, '{}'::jsonb)
-      returning id`)
-    assert.equal(item.rows.length, 1)
+      returning id`, 'objects')
+    assert.equal(item.length, 1)
     const plan = await db.execute(sql`
       insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count, created_by)
       values (${subscriptionPlanId}, ${org.orgId}, ${`Subscription ${suffix}`}, '100', 'CAD', 'monthly', 1, ${actorId})
-      returning id`)
-    assert.equal(plan.rows.length, 1)
+      returning id`, 'objects')
+    assert.equal(plan.length, 1)
     const subscription = await db.execute(sql`
       insert into subscriptions (id, org_id, customer_id, plan_id, quantity, price_override, status,
                                  start_on, next_bill_on, auto_post, created_by)
       values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${subscriptionPlanId}, '1', '100', 'active',
-              '2026-07-01', '2026-08-15', false, ${actorId}) returning id`)
-    assert.equal(subscription.rows.length, 1)
+              '2026-07-01', '2026-08-15', false, ${actorId}) returning id`, 'objects')
+    assert.equal(subscription.length, 1)
   })
   const meter = await createUsageMeter(org.orgId, actorId, {
     key: `requests-${suffix}`, name: `API requests ${suffix}`, unit: 'request', aggregation: 'sum', itemId,
@@ -105,8 +105,8 @@ async function evidenceSnapshot(orgId: string): Promise<string> {
         'metrics', (select coalesce(jsonb_agg(to_jsonb(m) order by m.month, m.subsidiary_id), '[]'::jsonb) from saas_metrics_monthly m where m.org_id = ${orgId}),
         'facts', (select coalesce(jsonb_agg(to_jsonb(f) order by f.month, f.subsidiary_id), '[]'::jsonb) from saas_metrics_facts_monthly f where f.org_id = ${orgId}),
         'cohorts', (select coalesce(jsonb_agg(to_jsonb(c) order by c.month, c.subsidiary_id, c.cohort_month), '[]'::jsonb) from saas_metrics_cohort_monthly c where c.org_id = ${orgId})
-      )::text as snapshot`)
-    return result.rows[0]!.snapshot
+      )::text as snapshot`, 'objects')
+    return result[0]!.snapshot
   })
 }
 

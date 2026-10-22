@@ -53,9 +53,9 @@ export async function loadActivities(
   if (openId && isUuid(openId)) {
     const [open, owners, accounts, opportunities] = await Promise.all([
       loadActivity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
-      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`)),
-      (db.execute(sql`select o.id,o.opportunity_number,o.title from crm_opportunities o where o.org_id=${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)} order by o.created_at desc`)),
+      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
+      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`, 'objects')),
+      (db.execute(sql`select o.id,o.opportunity_number,o.title from crm_opportunities o where o.org_id=${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)} order by o.created_at desc`, 'objects')),
     ])
     if (open) {
       const requestedReturn = pickString(sp.drawerReturn)
@@ -65,9 +65,9 @@ export async function loadActivities(
         // must not survive a record switch.
         remountKey: openId,
         data: open as unknown as ActivityDrawerProps['data'],
-        owners: owners.rows as unknown as ActivityDrawerProps['owners'],
-        accounts: accounts.rows as unknown as ActivityDrawerProps['accounts'],
-        opportunities: opportunities.rows as unknown as ActivityDrawerProps['opportunities'],
+        owners: owners as unknown as ActivityDrawerProps['owners'],
+        accounts: accounts as unknown as ActivityDrawerProps['accounts'],
+        opportunities: opportunities as unknown as ActivityDrawerProps['opportunities'],
         closeHref,
         canManage: manage,
       }

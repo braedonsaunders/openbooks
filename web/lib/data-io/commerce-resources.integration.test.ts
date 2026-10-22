@@ -61,10 +61,10 @@ test('channel ad-spend imports daily figures through the margin restatement', { 
     assert.deepEqual([committed.created, committed.failed], [1, 0])
     const stored = await withOrgContext(org.orgId, () => db.execute<{ amount: string; source: string }>(sql`
       select amount_minor::text as amount, source from channel_ad_spend
-       where org_id = ${org.orgId} and channel_id = ${channelId} and spend_date = '2026-07-20'`))
-    assert.equal(stored.rows.length, 1)
-    assert.equal(stored.rows[0]!.amount, '12050')
-    assert.equal(stored.rows[0]!.source, 'meta-export')
+       where org_id = ${org.orgId} and channel_id = ${channelId} and spend_date = '2026-07-20'`, 'objects'))
+    assert.equal(stored.length, 1)
+    assert.equal(stored[0]!.amount, '12050')
+    assert.equal(stored[0]!.source, 'meta-export')
 
     // Re-importing the same source replaces its figure instead of doubling it.
     const replaced = await withOrgContext(org.orgId, () =>
@@ -72,9 +72,9 @@ test('channel ad-spend imports daily figures through the margin restatement', { 
     assert.deepEqual([replaced.created, replaced.failed], [1, 0])
     const restated = await withOrgContext(org.orgId, () => db.execute<{ amount: string; source: string; channel: string }>(sql`
       select amount_minor::text as amount, source, channel_id::text as channel from channel_ad_spend
-       where org_id = ${org.orgId} and channel_id = ${channelId} and spend_date = '2026-07-20'`))
-    assert.equal(restated.rows.length, 1)
-    assert.equal(restated.rows[0]!.amount, '10000')
+       where org_id = ${org.orgId} and channel_id = ${channelId} and spend_date = '2026-07-20'`, 'objects'))
+    assert.equal(restated.length, 1)
+    assert.equal(restated[0]!.amount, '10000')
 
     const otherSubsidiaryId = randomUUID()
     await withOrgContext(org.orgId, () => db.execute(sql`

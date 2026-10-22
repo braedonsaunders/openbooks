@@ -230,7 +230,7 @@ export async function appendDerivedEarningLines(
                 and c.system_key = case
                   when coalesce(tt.classification, 'regular') in ('overtime', 'double_time') then 'overtime'
                   else 'base_pay' end)
-      `));
+      `, "objects"));
       const derived = await resolveDerivedEarnings(tx, {
         orgId,
         employeePartyId,
@@ -238,7 +238,7 @@ export async function appendDerivedEarningLines(
         periodEnd: run.period_end!,
         payDate: run.pay_date!,
         rules: derivedRules,
-        timeEntries: facts.rows.map((fact) => ({
+        timeEntries: facts.map((fact) => ({
           id: fact.id,
           workedOn: String(fact.worked_on).slice(0, 10),
           hours: fact.hours,
@@ -293,7 +293,7 @@ async function runLineAdjustmentRows(
   documentId: string,
   employeePartyId: string,
 ): Promise<readonly Record<string, unknown>[]> {
-  return (await tx.execute<Record<string, unknown>>(sql`
+  return await tx.execute<Record<string, unknown>>(sql`
     select a.id as adjustment_id, a.amount::text as adj_amount, a.hours::text as adj_hours, a.earned_from::text as adj_earned_from, a.earned_to::text as adj_earned_to, a.replace_component, a.note, r.pay_date::text as run_pay_date, d.currency as run_currency, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_run_adjustments a
@@ -305,7 +305,7 @@ async function runLineAdjustmentRows(
      where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
        and a.employee_party_id = ${employeePartyId} and a.adjustment_type = 'line'
      order by c.sequence, a.created_at
-  `)).rows;
+  `, "objects");
 }
 
 /**

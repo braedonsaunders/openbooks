@@ -35,8 +35,8 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
            byte_size::text as byte_size, table_count, row_count::text as row_count,
            created_at
       from backup_runs
-     where id = ${id} and org_id = ${gate.user.orgId}`));
-  const run = result.rows[0];
+     where id = ${id} and org_id = ${gate.user.orgId}`, "objects"));
+  const run = result[0];
   if (!run || run.status !== "completed" || run.purged_at || !run.sha256 || !run.file_name) {
     return NextResponse.json({ error: "backup not found" }, { status: 404 });
   }

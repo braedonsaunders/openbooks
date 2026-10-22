@@ -587,9 +587,9 @@ export async function testBankFeedConnection(
        where c.id = ${connectionId}
          and c.org_id = ${ctx.orgId}
          and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
-    `)),
+    `, "objects")),
   );
-  const conn = row.rows[0];
+  const conn = row[0];
   if (!conn) return { ok: false, detail: "connection not found" };
   const adapter = getBankFeedAdapter(conn.provider);
   if (!adapter) return { ok: false, detail: "provider is not an API feed" };
@@ -749,8 +749,8 @@ async function assertCurrentSyncConfiguration(
        and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
        and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end
      for share of c, o
-  `);
-  if (!current.rows.length) throw new FeedError("Bank feed configuration changed during sync; run the sync again");
+  `, "objects");
+  if (!current.length) throw new FeedError("Bank feed configuration changed during sync; run the sync again");
 }
 
 /**
@@ -798,8 +798,8 @@ async function recordSyncOutcome(
            and exists (select 1 from orgs o where o.id = bank_feed_connections.org_id
              and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end)
          returning id
-      `);
-    return result.rows.length > 0;
+      `, "objects");
+    return result.length > 0;
   });
 }
 
@@ -886,11 +886,11 @@ export async function runDueBankFeeds(options: RunDueBankFeedsOptions = {}): Pro
          and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
          and c.sync_cadence <> 'manual'
          and (c.next_sync_at is null or c.next_sync_at <= now())
-    `)),
+    `, "objects")),
   );
 
   const { outcomes, deferred } = await runDueFeedPass(
-    due.rows,
+    due,
     (row) => claimAndSyncDueFeed(row, now),
     {
       budgetMs: options.budgetMs ?? BANK_FEED_PASS_BUDGET_MS,
@@ -954,9 +954,9 @@ async function claimAndSyncDueFeed(
                 c.sync_cadence as "syncCadence", c.next_sync_at as "nextSyncAt",
                 c.last_sync_at as "lastSyncAt", c.sync_overlap_days as "syncOverlapDays",
                 c.updated_at::text as "configurationRevision"
-    `)),
+    `, "objects")),
   );
-  const claim = claimed.rows[0];
+  const claim = claimed[0];
   if (!claim) return null;
 
   let outcome: FeedSyncOutcome;
@@ -1006,9 +1006,9 @@ export async function syncBankFeedNow(
          and c.org_id = ${ctx.orgId}
          and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
          and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
-    `)),
+    `, "objects")),
   );
-  const conn = row.rows[0];
+  const conn = row[0];
   if (!conn) throw new FeedError("connection not found");
   // The route gates the connection's account before calling, and the engine
   // re-proves it here on the freshly loaded row: a sync filing another

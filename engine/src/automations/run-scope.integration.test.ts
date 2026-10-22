@@ -53,15 +53,15 @@ async function seed(): Promise<Harness> {
   const subB = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into subsidiaries (org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-    returning id`)).rows[0]!.id));
+    returning id`, "objects"))[0]!.id));
   const projectA = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into projects (org_id, name, is_active, subsidiary_id)
     values (${org.orgId}, 'Scope project A', true, ${org.subsidiaryId})
-    returning id`)).rows[0]!.id));
+    returning id`, "objects"))[0]!.id));
   const projectB = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into projects (org_id, name, is_active, subsidiary_id)
     values (${org.orgId}, 'Scope project B', true, ${subB})
-    returning id`)).rows[0]!.id));
+    returning id`, "objects"))[0]!.id));
   const adminId = await createScratchUser(org.orgId, "Run Scope Admin", "run_scope_admin");
   await grant(org.orgId, adminId, "automations.read");
   const restrictedId = await createScratchUser(org.orgId, "Run Scope Viewer", "run_scope_viewer");
@@ -73,12 +73,12 @@ async function seed(): Promise<Harness> {
     insert into automations (org_id, name, status, trigger, rules, conditions, actions)
     values (${org.orgId}, 'run scope recipe', 'enabled',
             '{"kind":"manual"}'::jsonb, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb)
-    returning id`)).rows[0]!.id));
+    returning id`, "objects"))[0]!.id));
   const mkRun = async (subjectKind: string | null, subjectId: string | null): Promise<string> =>
     (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
       insert into automation_runs (org_id, automation_id, version, subject_kind, subject_id, status)
       values (${org.orgId}, ${automationId}, 1, ${subjectKind}, ${subjectId}, 'succeeded')
-      returning id`)).rows[0]!.id));
+      returning id`, "objects"))[0]!.id));
   const runA = await mkRun("project", projectA);
   const runB = await mkRun("project", projectB);
   const runBare = await mkRun(null, null);

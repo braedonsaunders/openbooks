@@ -64,7 +64,7 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
       // Close lifecycle access remains restricted to organization-wide operators,
       // including when the run itself captures a single-entity scope.
       const runId = await withBypassContext(() => startCloseRun({orgId:org.orgId, periodId:org.periodId, bookId:org.bookId, actorId:actor, subsidiaryIds:[org.subsidiaryId]}))
-      const taskId = await withBypassContext(async () => (await db.execute<{id:string}>(sql`select id from close_run_tasks where run_id=${runId} and org_id=${org.orgId} order by sort_order limit 1`)).rows[0]!.id)
+      const taskId = await withBypassContext(async () => (await db.execute<{id:string}>(sql`select id from close_run_tasks where run_id=${runId} and org_id=${org.orgId} order by sort_order limit 1`, 'objects'))[0]!.id)
       const params = { params: Promise.resolve({id:runId, taskId}) }
       const target = {periodId:org.periodId,bookId:org.bookId}
       let expectedBinder: unknown;
@@ -74,7 +74,7 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
           await seedCloseRunApprovalFixture(org.orgId, runId, publisher)
           await closeApprovedRun(org.orgId, runId, publisher)
           await publishCloseRun(org.orgId, runId, publisher)
-          expectedBinder = (await db.execute<{snapshot: unknown}>(sql`select binder_snapshot as snapshot from close_runs where org_id=${org.orgId} and id=${runId}`)).rows[0]!.snapshot
+          expectedBinder = (await db.execute<{snapshot: unknown}>(sql`select binder_snapshot as snapshot from close_runs where org_id=${org.orgId} and id=${runId}`, 'objects'))[0]!.snapshot
         })
       }
       await withOrgContext(org.orgId, async () => {
@@ -145,8 +145,8 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
             assert.equal(conflict.status,422)
             assert.deepEqual(await conflict.json(),{error:'existing close run has a different subsidiary scope'})
           }
-          const captured = await db.execute<{id:string;scope:{subsidiaryIds:string[]}}>(sql`select id,scope from close_runs where org_id=${org.orgId} and period_id=${org.periodId} and book_id=${org.bookId}`)
-          assert.deepEqual(captured.rows,[{id:runId,scope:{subsidiaryIds:[org.subsidiaryId]}}])
+          const captured = await db.execute<{id:string;scope:{subsidiaryIds:string[]}}>(sql`select id,scope from close_runs where org_id=${org.orgId} and period_id=${org.periodId} and book_id=${org.bookId}`, 'objects')
+          assert.deepEqual(captured,[{id:runId,scope:{subsidiaryIds:[org.subsidiaryId]}}])
           const resumed = await create(request({...target,subsidiaryIds:[org.subsidiaryId]}))
           assert.equal(resumed.status,200)
           assert.deepEqual(await resumed.json(),{ok:true,runId})
@@ -166,8 +166,8 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
           assert.equal((await binder(request({}),params)).status,404)
         }
       })
-      const persisted = await withBypassContext(() => db.execute<{n:number}>(sql`select count(*)::int as n from close_task_evidence where run_id=${runId} and org_id=${org.orgId}`))
-      assert.equal(persisted.rows[0]!.n,0)
+      const persisted = await withBypassContext(() => db.execute<{n:number}>(sql`select count(*)::int as n from close_task_evidence where run_id=${runId} and org_id=${org.orgId}`, 'objects'))
+      assert.equal(persisted[0]!.n,0)
     } finally {
       state.user=null
       await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -283,7 +283,7 @@ const closeRunCases = [
               assert.equal(omitted.status, 404);
               const omittedRun = (await db.execute<{ scope: { subsidiaryIds?: string[] } }>(sql`
                 select scope from close_runs where org_id = ${org.orgId}
-                  and period_id = ${org.periodId} and book_id = ${org.bookId}`)).rows[0];
+                  and period_id = ${org.periodId} and book_id = ${org.bookId}`, 'objects'))[0];
               assert.equal(omittedRun, undefined);
 
               // Invalid UUIDs are rejected instead of silently filtered to an empty,

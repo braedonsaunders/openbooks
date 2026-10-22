@@ -68,14 +68,14 @@ export async function recordRecognitionEvent(
         from performance_obligations o
         join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
        where o.id = ${input.obligationId} and o.org_id = ${input.orgId}
-       for update of o`));
-    if (!oblRes.rows[0]) {
+       for update of o`, "objects"));
+    if (!oblRes[0]) {
       throw new RevenueRecognitionError("obligation not found");
     }
-    if (oblRes.rows[0].status === "cancelled") throw new RevenueRecognitionError("cancelled obligations cannot accept recognition events");
-    if (oblRes.rows[0].method !== "milestone" && oblRes.rows[0].method !== "usage") {
+    if (oblRes[0].status === "cancelled") throw new RevenueRecognitionError("cancelled obligations cannot accept recognition events");
+    if (oblRes[0].method !== "milestone" && oblRes[0].method !== "usage") {
       throw new RevenueRecognitionError(
-        `recognition method '${oblRes.rows[0].method}' does not accept events; only milestone and usage methods are supported`,
+        `recognition method '${oblRes[0].method}' does not accept events; only milestone and usage methods are supported`,
       );
     }
     // A promise retired by a prospective modification keeps its satisfied
@@ -86,13 +86,13 @@ export async function recordRecognitionEvent(
     // corrections, which reverse earned revenue through the normal rebuild.
     const schedRes = (await tx.execute<{ change_basis: RevenueChangeBasis | null }>(sql`
       select change_basis from recognition_schedules
-       where obligation_id = ${input.obligationId} and org_id = ${input.orgId}`));
-    const retirement = schedRes.rows
+       where obligation_id = ${input.obligationId} and org_id = ${input.orgId}`, "objects"));
+    const retirement = schedRes
       .map((row) => row.change_basis)
       .find((basis) => basis?.retired);
     if (retirement) {
       throw new RevenueRecognitionError(
-        `"${oblRes.rows[0].description}" was retired by modification ${retirement.changeId} on ${retirement.effectiveOn} — record the event against its replacement promise or amend the contract`,
+        `"${oblRes[0].description}" was retired by modification ${retirement.changeId} on ${retirement.effectiveOn} — record the event against its replacement promise or amend the contract`,
       );
     }
 
@@ -111,14 +111,14 @@ export async function recordRecognitionEvent(
       on conflict (org_id, obligation_id, source_reference)
         where source_reference is not null
       do nothing
-      returning id`));
+      returning id`, "objects"));
 
-    if (res.rows[0]) {
+    if (res[0]) {
       // Rebuild the obligation's schedule on every GL-posting book so the new
       // event immediately appears as a planned recognition line.  This stays
       // on tx, so a failure rolls back both the event and all schedule writes.
       await buildAllRecognitionSchedulesOn(tx, input.obligationId, input.orgId, input.actorId);
-      return { eventId: res.rows[0].id };
+      return { eventId: res[0].id };
     }
 
     // A source reference may be retried with the exact same event payload,
@@ -139,8 +139,8 @@ export async function recordRecognitionEvent(
        where org_id = ${input.orgId}
          and obligation_id = ${input.obligationId}
          and source_reference = ${sourceReference}
-       limit 1`));
-    const prior = existing.rows[0];
+       limit 1`, "objects"));
+    const prior = existing[0];
     if (!prior) {
       // The unique index and the read must agree.  Reaching this state means a
       // concurrent delete or a schema drift bypassed the idempotency contract;

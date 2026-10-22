@@ -68,13 +68,13 @@ test("foreign platform identities are locked in the command transaction without 
     const actor = await createScratchUser(home.orgId, "Platform operator", "admin");
     await withBypassContext(() => db.execute(sql`update users set is_super_admin=true where id=${actor}`));
     await withOrg(target.orgId, async () => {
-      assert.equal((await db.execute(sql`select id from users where id=${actor}`)).rows.length, 0,
+      assert.equal((await db.execute(sql`select id from users where id=${actor}`, "objects")).length, 0,
         "ordinary target FORCE-RLS does not expose the foreign home row");
       assert.equal((await lockActorIdentity(db, target.orgId, actor))?.id, actor);
       assert.equal(await actorHasPermission(db, target.orgId, actor, "admin.setup.manage"), true);
-      const scope = (await db.execute<{ scope: string }>(sql`select current_setting('app.current_org') as scope`)).rows[0]!.scope;
+      const scope = (await db.execute<{ scope: string }>(sql`select current_setting('app.current_org') as scope`, "objects"))[0]!.scope;
       assert.equal(scope, target.orgId);
-      assert.equal((await db.execute(sql`select id from accounts where org_id=${home.orgId}`)).rows.length, 0,
+      assert.equal((await db.execute(sql`select id from accounts where org_id=${home.orgId}`, "objects")).length, 0,
         "tenant reads remain isolated after identity resolution");
     });
     await withBypassContext(() => db.execute(sql`update users set is_active=false where id=${actor}`));
@@ -179,7 +179,7 @@ test("parallel financial reads on the pinned connection never observe a foreign 
     await blocker.query("select set_config('app.current_org',$1,true),set_config('app.bypass_rls','off',true)", [home.orgId]);
     await blocker.query("select id from users where org_id=$1 and id=$2 for update", [home.orgId, actor]);
     await withOrg(target.orgId, async () => {
-      const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+      const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
       const identity = lockActorIdentity(db, target.orgId, actor);
       pendingIdentity = identity.catch(() => {});
       try {
@@ -189,14 +189,14 @@ test("parallel financial reads on the pinned connection never observe a foreign 
         const financialRead = db.execute<{ scope: string; foreignCount: string; ownCount: string }>(sql`
           select current_setting('app.current_org') as scope,
             (select count(*)::text from accounts where org_id=${home.orgId}) as "foreignCount",
-            (select count(*)::text from accounts where org_id=${target.orgId}) as "ownCount"`).then(result => result.rows[0]!);
+            (select count(*)::text from accounts where org_id=${target.orgId}) as "ownCount"`, "objects").then(result => result[0]!);
         await blocker.query("rollback");
         assert.equal((await identity)?.id, actor);
         const financial = await financialRead;
         assert.equal(financial.scope, target.orgId);
         assert.equal(financial.foreignCount, "0");
         assert.ok(BigInt(financial.ownCount) > 0n, "the financial read has a nonempty target account population");
-        assert.equal((await db.execute<{ scope: string }>(sql`select current_setting('app.current_org') as scope`)).rows[0]!.scope, target.orgId);
+        assert.equal((await db.execute<{ scope: string }>(sql`select current_setting('app.current_org') as scope`, "objects"))[0]!.scope, target.orgId);
       } finally {
         await blocker.query("rollback").catch(() => {});
         await pendingIdentity;
@@ -225,7 +225,7 @@ test("a foreign actor's live revocation wins while its exact home-row lock waits
       await blocker.query("select set_config('app.current_org',$1,true),set_config('app.bypass_rls','off',true)", [home.orgId]);
       await blocker.query(`update users set ${column}=false where org_id=$1 and id=$2`, [home.orgId, actor]);
       await assert.rejects(withOrg(target.orgId, async () => {
-        const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+        const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
         const outcome = lockActorIdentity(db, target.orgId, actor).then(
           value => ({ value, error: undefined }), error => ({ value: undefined, error }));
         pendingIdentity = outcome;
@@ -242,7 +242,7 @@ test("a foreign actor's live revocation wins while its exact home-row lock waits
       }), error => errorChainMatches(error, /Actor is not eligible to command this organization/));
       await withOrg(target.orgId, async () => {
         assert.equal(await lockActorIdentity(db, target.orgId, actor), undefined);
-        assert.equal((await db.execute<{ scope: string }>(sql`select current_setting('app.current_org') as scope`)).rows[0]!.scope, target.orgId);
+        assert.equal((await db.execute<{ scope: string }>(sql`select current_setting('app.current_org') as scope`, "objects"))[0]!.scope, target.orgId);
       });
     }
   } finally {

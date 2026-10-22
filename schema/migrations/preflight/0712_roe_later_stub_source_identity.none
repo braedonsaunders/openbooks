@@ -1,1 +1,0 @@
-Function argument binding only; no stored rows or schema constraints change. Existing issued source snapshots and digests remain immutable.

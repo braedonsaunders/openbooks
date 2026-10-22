@@ -5,7 +5,7 @@ import { parseMoney } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
 /** Only the database boundary is replaced; exact conversion uses the native money helpers. */
-const runner={execute:async()=>({rows:[{id:"home",currency:"CAD"}]})} as unknown as SqlExecutor;
+const runner={execute:async(_query: unknown, mode?: string)=>Promise.resolve({rows:[{id:"home",currency:"CAD"}]}).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))} as unknown as SqlExecutor;
 const document={id:"journal",orgId:"org",kind:"journal",subsidiaryId:"home",accountingBookId:"book",currency:"CAD",fxRate:"1",postingDate:null,documentDate:"2026-07-15",journalMode:"monetary"};
 
 test("advanced journal balancing retains original currencies and exact header equivalents",async()=>{

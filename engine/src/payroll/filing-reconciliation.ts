@@ -77,7 +77,7 @@ export async function reconcilePayrollFilingAccounts(input: {
           select d.subsidiary_id, ent.name as subsidiary_name from pay_stubs s
           join documents d on d.org_id=s.org_id and d.id=s.pay_run_document_id
           left join subsidiaries ent on ent.org_id=s.org_id and ent.id=d.subsidiary_id
-          where s.org_id=${input.orgId} and s.id=${row.stubId} for share of d`)).rows[0];
+          where s.org_id=${input.orgId} and s.id=${row.stubId} for share of d`, "objects"))[0];
         const allowed = await actorAllowedSubsidiaryIds(db,input.orgId,input.actorId);
         if (!source || (allowed !== null && (!source.subsidiary_id || !allowed.has(source.subsidiary_id)))) {
           throw new PayrollError("Historical payroll is not visible in this organization and legal-entity scope.");
@@ -98,7 +98,7 @@ export async function reconcilePayrollFilingAccounts(input: {
             select a.subsidiary_id, a.account_number, a.name, ent.name as entity_name
               from payroll_filing_accounts a
               left join subsidiaries ent on ent.org_id=a.org_id and ent.id=a.subsidiary_id
-             where a.org_id=${input.orgId} and a.id=${row.filingAccountId}`)).rows[0] ?? null;
+             where a.org_id=${input.orgId} and a.id=${row.filingAccountId}`, "objects"))[0] ?? null;
           if (!account) {
             throw new PayrollError(
               `Cannot reconcile pay stub ${row.stubId} with filing account ${row.filingAccountId}: ` +
@@ -130,8 +130,8 @@ export async function reconcilePayrollFilingAccounts(input: {
          where org_id = ${input.orgId} and id = ${row.stubId}
            and filing_account_source = 'unknown'
          returning id
-      `);
-        if (result.rows.length !== 1) {
+      `, "objects");
+        if (result.length !== 1) {
           throw new PayrollError(
             `Pay stub ${row.stubId} is not unresolved legacy payroll in this organization.`,
           );

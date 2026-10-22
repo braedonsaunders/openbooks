@@ -11,10 +11,10 @@ import { seedPayrollInputsFixture as payrollFixture } from "../testing/payroll-i
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const adjustmentCount = async (orgId: string, documentId: string): Promise<number> => {
-  const rows = (await db.execute<{ n: string }>(sql`
+  const rows = await db.execute<{ n: string }>(sql`
     select count(*)::text as n from pay_run_adjustments
      where org_id = ${orgId} and pay_run_document_id = ${documentId} and adjustment_type = 'line'
-  `)).rows;
+  `, "objects");
   return Number(rows[0]!.n);
 };
 
@@ -46,12 +46,12 @@ test("replaying an adjustment add with the same key writes once", { skip: !DB },
     assert.equal(second.changed, false);
     assert.equal(second.replayed, true);
     assert.equal(await adjustmentCount(fx.orgId, fx.documentId), 1);
-    const events = async () => (await db.execute<{
+    const events = async () => await db.execute<{
       action: string; actor_id: string;
       changes: { before: { amount: string } | null; after: { amount: string } | null; reason: string };
     }>(sql`select action,actor_id,changes from audit_log
       where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${key}
-      order by at,id`)).rows;
+      order by at,id`, "objects");
     assert.deepEqual((await events()).map(e => [e.action, e.actor_id, e.changes.before, e.changes.after?.amount]),
       [['insert', fx.actorId, null, '125.0000']]);
     await mutatePayRunAdjustment({ orgId: fx.orgId, documentId: fx.documentId, actorId: fx.actorId,

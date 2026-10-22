@@ -40,9 +40,9 @@ export const GET = defineRoute({
          where org_id = ${user.orgId}
            ${definitionId ? sql`and definition_id = ${definitionId}` : sql``}
          order by next_run_at
-      `))
+      `, 'objects'))
     const schedules = []
-    for (const row of rows.rows) {
+    for (const row of rows) {
         const def = await loadReportDefinition(user.orgId, String(row.definition_id))
         if (def && await canAccessReportDefinition(gate, def) &&
             (row.authorization_snapshot == null || await canAccessReportArtifact(gate, row.authorization_snapshot))) {
@@ -135,9 +135,9 @@ export const POST = defineRoute({
                 ${nextRunAt.toISOString()}, ${body.active !== false}, ${user.id}, ${user.id}, ${JSON.stringify(snapshotReportAuthorization(gate, def))}::jsonb)
         returning id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
                   timezone, recipient_emails, next_run_at, active
-      `))
+      `, 'objects'))
 
-      const created = inserted.rows[0]
+      const created = inserted[0]
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, at, request_id)
         values (${user.orgId}, 'report_schedules', ${created!.id}, 'insert',

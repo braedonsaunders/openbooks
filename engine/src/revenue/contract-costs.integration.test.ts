@@ -132,7 +132,7 @@ async function seedContract(
 /** Seed one open monthly period per given month start (scratch ships July only). */
 async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<string, string>> {
   const cal = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${orgId} and is_default`)).rows[0];
+    select id from fiscal_calendars where org_id = ${orgId} and is_default`, "objects"))[0];
   assert.ok(cal, "scratch org ships a default fiscal calendar");
   const ids = new Map<string, string>();
   assert.ok(monthStarts.length > 0, "at least one fiscal period is requested");
@@ -149,7 +149,7 @@ async function seedPeriods(orgId: string, monthStarts: string[]): Promise<Map<st
         ${`${name}-01`}, ${`${name}-${String(lastDay).padStart(2, "0")}`}, false, ${cal.id})
       on conflict do nothing`);
     const row = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${orgId} and name = ${name}`)).rows[0];
+      select id from accounting_periods where org_id = ${orgId} and name = ${name}`, "objects"))[0];
     assert.ok(row, `period ${name} exists after seeding`);
     ids.set(name, row.id);
   }
@@ -162,7 +162,7 @@ async function entryBalance(entryId: string): Promise<{ lines: number; balanced:
       from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
      where jl.entry_id = ${entryId}
-       and je.status in ('posted', 'reversed')`)).rows[0]!;
+       and je.status in ('posted', 'reversed')`, "objects"))[0]!;
   return { lines: Number(rows.lines), balanced: rows.balanced };
 }
 
@@ -219,7 +219,7 @@ test("contract-cost capitalization and amortization authorize and post in the co
     assert.ok(capitalized.capitalizeEntryId);
     const capitalization = (await db.execute<{ subsidiary_id: string }>(sql`
       select subsidiary_id from journal_entries where org_id = ${world.org.orgId} and id = ${capitalized.capitalizeEntryId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(capitalization?.subsidiary_id, subsidiaryId);
 
     const periods = await seedPeriods(world.org.orgId, ["2026-07"]);
@@ -233,7 +233,7 @@ test("contract-cost capitalization and amortization authorize and post in the co
       select subsidiary_id
         from journal_entries
        where org_id = ${world.org.orgId} and id = ${amortization.entries[0]!.entryId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(posted?.subsidiary_id, subsidiaryId);
   } finally {
     await dropScratchOrgReporting(world.org.orgId);
@@ -292,7 +292,7 @@ test(
           (org_id, code, name, is_primary, is_active, posts_gl, created_by, updated_by)
         values (${world.org.orgId}, 'CC-SECONDARY', 'Contract cost secondary', false, true, true,
           ${world.actors.adminId}, ${world.actors.adminId})
-        returning id`)).rows[0]?.id;
+        returning id`, "objects"))[0]?.id;
       assert.ok(secondaryBookId);
       const secondaryEntryId = randomUUID();
       await db.execute(sql`
@@ -385,12 +385,12 @@ test(
       }
       const posted = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(amount_minor), 0)::text as total
-          from contract_cost_amortization where org_id = ${world.org.orgId}`)).rows[0]!;
+          from contract_cost_amortization where org_id = ${world.org.orgId}`, "objects"))[0]!;
       assert.equal(posted.total, "100000");
       assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 0n);
       const status = (await db.execute<{ status: string }>(sql`
         select status from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${cap.assetId}`)).rows[0]!;
+         where org_id = ${world.org.orgId} and id = ${cap.assetId}`, "objects"))[0]!;
       assert.equal(status.status, "fully_amortized");
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
@@ -510,7 +510,7 @@ test(
       assert.equal(cap.capitalizeEntryId, null);
       const journals = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from journal_entries
-         where org_id = ${world.org.orgId} and origin like 'contract_cost%'`)).rows[0]!;
+         where org_id = ${world.org.orgId} and origin like 'contract_cost%'`, "objects"))[0]!;
       assert.equal(journals.n, "0");
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
@@ -582,7 +582,7 @@ test(
       assert.equal(await assetCarryingMinor(db, world.org.orgId, cap.assetId), 100000n);
       const status = (await db.execute<{ status: string }>(sql`
         select status from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${cap.assetId}`)).rows[0]!;
+         where org_id = ${world.org.orgId} and id = ${cap.assetId}`, "objects"))[0]!;
       assert.equal(status.status, "active", "a remaining carrying balance stays amortizable");
       const schedule = await scheduleForAsset(db, world.org.orgId, cap.assetId);
       assert.equal(
@@ -640,7 +640,7 @@ test(
       });
       const excludedRow = (await db.execute<{ status: string; revenue_contract_id: string | null }>(sql`
         select status, revenue_contract_id from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${excluded.assetId}`)).rows[0]!;
+         where org_id = ${world.org.orgId} and id = ${excluded.assetId}`, "objects"))[0]!;
       assert.equal(excludedRow.status, "expensed");
       assert.equal(excludedRow.revenue_contract_id, longContract);
 
@@ -675,11 +675,11 @@ test(
       });
       const expedientRow = (await db.execute<{ status: string }>(sql`
         select status from contract_cost_assets
-         where org_id = ${world.org.orgId} and id = ${expedientAsset.assetId}`)).rows[0]!;
+         where org_id = ${world.org.orgId} and id = ${expedientAsset.assetId}`, "objects"))[0]!;
       assert.equal(expedientRow.status, "expensed");
       const journals = (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from journal_entries
-         where org_id = ${world.org.orgId} and origin = 'contract_cost_capitalize'`)).rows[0]!;
+         where org_id = ${world.org.orgId} and origin = 'contract_cost_capitalize'`, "objects"))[0]!;
       assert.equal(journals.count, "0", "policy and expedient refusals do not post capitalization journals");
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
@@ -726,7 +726,7 @@ test(
       assert.equal(result[1]?.ok, true);
       const assets = (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from contract_cost_assets
-         where org_id = ${world.org.orgId} and revenue_contract_id = ${contractId}`)).rows[0]!;
+         where org_id = ${world.org.orgId} and revenue_contract_id = ${contractId}`, "objects"))[0]!;
       assert.equal(assets.count, "1", "the failed row leaves no asset and the valid sibling commits");
     } finally {
       await dropScratchOrgReporting(world.org.orgId);
@@ -814,7 +814,7 @@ test(
       assert.equal(second.skipped, 1);
       const rows = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from contract_cost_amortization
-         where org_id = ${world.org.orgId}`)).rows[0]!;
+         where org_id = ${world.org.orgId}`, "objects"))[0]!;
       assert.equal(rows.n, "1");
     } finally {
       await dropScratchOrgReporting(world.org.orgId);

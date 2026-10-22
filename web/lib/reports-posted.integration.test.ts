@@ -719,8 +719,8 @@ const generalLedgerCases = [
                   select coalesce(sum(b.amount), 0)::text as amount
                     from ${buckets} b
                    where b.account_id = ${org.accounts.revenue}
-                     and b.subsidiary_id = ${org.subsidiaryId}`);
-                assert.equal(result.rows[0]?.amount, "-100.0000");
+                     and b.subsidiary_id = ${org.subsidiaryId}`, "objects");
+                assert.equal(result[0]?.amount, "-100.0000");
               });
             } finally {
               await withBypassContext(() => dropScratchOrg(org.orgId));

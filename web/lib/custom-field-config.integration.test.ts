@@ -54,9 +54,9 @@ for (const method of ['POST','PATCH'] as const) for (const [scenario, body] of i
         assert.equal(created.status, 200);
         const data = await created.json(); revision = { id: data.id, expectedUpdatedAt: data.updatedAt };
       }
-      const snapshot = async () => (await db.execute(sql`select
+      const snapshot = async () => await db.execute(sql`select
         (select jsonb_agg(to_jsonb(f) order by f.id) from custom_field_defs f where org_id=${org.orgId}) as definitions,
-        (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${org.orgId}) as audit`)).rows;
+        (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${org.orgId}) as audit`, 'objects');
       const before = await snapshot();
       const response = await withOrgContext(org.orgId, () => (method === 'POST' ? POST : PATCH)(request(method, { ...base, ...revision, ...body })));
       assert.equal(response.status, 400, JSON.stringify(await response.json()));
@@ -85,7 +85,7 @@ for (const [scenario, fieldType, config, expected] of valid) {
       const request = (verb: string, data: unknown) => new Request('http://audit.local/api/admin/custom-fields', { method: verb, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
       const create = await withOrgContext(org.orgId, () => POST(request('POST', { targetTable: 'parties', key: 'valid_review', label: 'Valid review', fieldType, config })));
       const created = await create.json(); assert.equal(create.status, 200, JSON.stringify(created));
-      const row = async () => (await db.execute<{ config: unknown; label: string }>(sql`select config,label from custom_field_defs where org_id=${org.orgId} and id=${created.id}`)).rows[0]!;
+      const row = async () => (await db.execute<{ config: unknown; label: string }>(sql`select config,label from custom_field_defs where org_id=${org.orgId} and id=${created.id}`, 'objects'))[0]!;
       assert.deepEqual((await row()).config, expected);
       const edit = await withOrgContext(org.orgId, () => PATCH(request('PATCH', { id: created.id, expectedUpdatedAt: created.updatedAt, label: 'Renamed review' })));
       assert.equal(edit.status, 200, JSON.stringify(await edit.json()));

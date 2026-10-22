@@ -59,8 +59,8 @@ async function seedEmployee(orgId: string, actorId: string, name: string, subsid
 
 async function ledgerCount(orgId: string): Promise<number> {
   const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from entitlement_ledger where org_id = ${orgId}`));
-  return rows.rows[0]!.n;
+    select count(*)::int as n from entitlement_ledger where org_id = ${orgId}`, "objects"));
+  return rows[0]!.n;
 }
 
 function row(employee: string, amount: unknown) {
@@ -149,7 +149,7 @@ test(
       let signalReady!: () => void;
       const ready = new Promise<void>((resolve) => { signalReady = resolve });
       finishRehome = withBypassContext(() => db.transaction(async (tx) => {
-        rehomePid = Number((await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
+        rehomePid = Number((await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid);
         await tx.execute(sql`update parties set subsidiary_id = ${otherSubsidiaryId} where id = ${employeeId} and org_id = ${org.orgId}`);
         signalReady();
         await new Promise<void>((resolve) => { releaseRehome = resolve });
@@ -159,8 +159,8 @@ test(
       let blocked = false;
       for (let attempt = 0; attempt < 100; attempt += 1) {
         const waiting = await withBypassContext(() => db.execute(sql`
-          select 1 from pg_stat_activity where ${rehomePid} = any(pg_blocking_pids(pid)) limit 1`));
-        if (waiting.rows.length) { blocked = true; break; }
+          select 1 from pg_stat_activity where ${rehomePid} = any(pg_blocking_pids(pid)) limit 1`, "objects"));
+        if (waiting.length) { blocked = true; break; }
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       assert.equal(blocked, true, "the import save must wait for the concurrent employee rehome");

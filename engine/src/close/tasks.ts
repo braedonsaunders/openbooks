@@ -28,13 +28,13 @@ export async function transitionCloseTaskTx(
   await authorizeTask(args.orgId,args.actorId,args.approvalRunId?"close.approve":"close.run");
   const run=(await tx.execute<{status:string;data_fingerprint:string|null}>(sql`
     select status,data_fingerprint from close_runs where org_id=${args.orgId} and id=${args.runId} for share
-  `)).rows[0];
+  `, "objects"))[0];
   if(!run || !["in_progress","review"].includes(run.status))throw new CloseError("The close run is not editable; reopen its native workflow before changing tasks.");
   if(!run.data_fingerprint || run.data_fingerprint!==args.fingerprint)throw new CloseError("Validate the current close run before submitting this task.");
   const task=(await tx.execute<{status:string;owner_id:string|null;task_type:string;completion_mode:string;evidence_required:boolean;evidence_count:number;notes:string|null}>(sql`
     select t.*,(select count(*)::int from close_task_evidence e where e.org_id=t.org_id and e.task_id=t.id) as evidence_count
       from close_run_tasks t where t.id=${args.taskId} and t.run_id=${args.runId} and t.org_id=${args.orgId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if(!task)throw new CloseError("close task not found");
   if(task.task_type==="approval")throw new CloseError("Submit the close run through its native Flow approval controls; approval tasks reflect that run's recorded decision.");
   if(task.completion_mode!=="manual")throw new CloseError("Computed close tasks complete through native run validation.");
@@ -50,13 +50,13 @@ export async function transitionCloseTaskTx(
     if(!["ready","invalidated","changes_requested"].includes(task.status))throw new CloseError("Only ready or returned tasks can be started.");
   }else if(args.outcome==="rejected"){
     const proof=await readNativeApprovalDecision({orgId:args.orgId,actorId:args.actorId!,subjectKind:"close_task",subjectId:args.taskId,outcome:"rejected",approvalRunId:args.approvalRunId});
-    const retained=(await tx.execute<{command:unknown}>(sql`select context->'command' as command from flow_runs where org_id=${args.orgId} and id=${args.approvalRunId}`)).rows[0];
+    const retained=(await tx.execute<{command:unknown}>(sql`select context->'command' as command from flow_runs where org_id=${args.orgId} and id=${args.approvalRunId}`, "objects"))[0];
     if(!proof || canonicalJson(retained?.command)!==canonicalJson(command))throw new CloseError("Decide the current close task's assigned native Flow gate.");
   }else{
     if(!args.approvalRunId){
       const prepared=await tx.execute(sql`update close_run_tasks set status='submitted',notes=${notes},data_fingerprint=${args.fingerprint},
-        updated_by=${args.actorId},updated_at=now() where org_id=${args.orgId} and id=${args.taskId} and run_id=${args.runId} returning id`);
-      if(prepared.rows.length!==1)throw new CloseError("The close task submission was not saved.");
+        updated_by=${args.actorId},updated_at=now() where org_id=${args.orgId} and id=${args.taskId} and run_id=${args.runId} returning id`, "objects");
+      if(prepared.length!==1)throw new CloseError("The close task submission was not saved.");
     }
     if(await requestNativeCommandApproval({orgId:args.orgId,actorId:args.actorId!,subjectKind:"close_task",subjectId:args.taskId,command,approvalRunId:args.approvalRunId})){
       if(task.status!=="submitted")await tx.execute(sql`insert into close_events(org_id,run_id,task_id,event_type,actor_id,payload)
@@ -69,7 +69,7 @@ export async function transitionCloseTaskTx(
   const preparer=args.approvalRunId?(await tx.execute<{actor_id:string}>(sql`
     select actor_id from flow_submissions where org_id=${args.orgId} and subject_kind='close_task' and subject_id=${args.taskId}
       and policy->'runIds' ? ${args.approvalRunId}::text order by created_at desc,id desc limit 1
-  `)).rows[0]?.actor_id:args.actorId;
+  `, "objects"))[0]?.actor_id:args.actorId;
   if(status!=="in_progress" && !preparer)throw new CloseError("The task's original submission actor is missing; recall and resubmit it.");
   const saved=await tx.execute(sql`update close_run_tasks set status=${status},notes=${notes},
     completed_at=case when ${status} in('complete','waived') then now() else null end,
@@ -78,8 +78,8 @@ export async function transitionCloseTaskTx(
     reviewed_by=case when ${!!args.approvalRunId} then ${args.actorId}::uuid else null end,
     data_fingerprint=case when ${status}<>'in_progress' then ${args.fingerprint} else data_fingerprint end,
     updated_at=now(),updated_by=${args.actorId}
-    where id=${args.taskId} and org_id=${args.orgId} and run_id=${args.runId} returning id`);
-  if(saved.rows.length!==1)throw new CloseError("The close task transition was not saved.");
+    where id=${args.taskId} and org_id=${args.orgId} and run_id=${args.runId} returning id`, "objects");
+  if(saved.length!==1)throw new CloseError("The close task transition was not saved.");
   if(!rejected && args.action!=="start" && (args.approvalRunId || action==="waive"))
     await tx.execute(sql`insert into close_signoffs(org_id,run_id,task_id,signoff_type,decision,comment,data_fingerprint,signed_by)
       values(${args.orgId},${args.runId},${args.taskId},${action==="waive"?"waive":"review"},${action==="waive"?"waived":"approved"},${notes},${args.fingerprint},${args.actorId})`);
@@ -116,12 +116,10 @@ export async function assignCloseTaskTx(
 ): Promise<void> {
   await lockApprovalSubject(args.orgId,"close_task",args.taskId);
   await authorizeTask(args.orgId,args.actorId,"close.run");
-  const before = (
-    await tx.execute<{ owner_id: string | null }>(sql`
+  const before = (await tx.execute<{ owner_id: string | null }>(sql`
     select owner_id from close_run_tasks
      where id = ${args.taskId} and run_id = ${args.runId} and org_id = ${args.orgId}
-     for update`)
-  ).rows[0];
+     for update`, "objects"))[0];
   if (!before) throw new CloseError("automation task not found");
   const updated = (
     await tx.execute<{ id: string }>(sql`
@@ -129,10 +127,10 @@ export async function assignCloseTaskTx(
        set owner_id = coalesce(${args.ownerId}, owner_id),
            updated_at = now(), updated_by = ${args.actorId}
      where id = ${args.taskId} and run_id = ${args.runId} and org_id = ${args.orgId}
-     returning id`)
+     returning id`, "objects")
   );
   // The row was locked above: zero matched rows is a failure, not success.
-  if (updated.rows.length !== 1) throw new CloseError("automation task not found");
+  if (updated.length !== 1) throw new CloseError("automation task not found");
   await tx.execute(sql`
     insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
     values (${args.orgId}, ${args.runId}, ${args.taskId}, 'task.assign', ${args.actorId},
@@ -155,14 +153,14 @@ export async function updateCloseTask(args: {
   const fingerprint=await withOrgTransaction(args.orgId,async()=>{
     await lockApprovalSubject(args.orgId,"close_task",args.taskId);
     const fingerprint=(await db.execute<{data_fingerprint:string|null}>(sql`select data_fingerprint from close_runs
-      where id=${args.runId} and org_id=${args.orgId} for share`)).rows[0]?.data_fingerprint;
+      where id=${args.runId} and org_id=${args.orgId} for share`, "objects"))[0]?.data_fingerprint;
     if(!fingerprint)throw new CloseError("validate the close run before updating tasks");
     await transitionCloseTaskTx(db,{...args,fingerprint});
     return fingerprint;
   });
   const ready = (await db.execute<{ id: string; key: string }>(sql`select id, key from close_run_tasks
-    where run_id = ${args.runId} and org_id = ${args.orgId} and status = 'ready'`));
-  for (const task of ready.rows) {
+    where run_id = ${args.runId} and org_id = ${args.orgId} and status = 'ready'`, "objects"));
+  for (const task of ready) {
     await runCloseAutomations({
       orgId: args.orgId,
       runId: args.runId,
@@ -196,7 +194,7 @@ export async function addCloseEvidence(args: {
     inDbTransaction(async (tx) => {
       await lockApprovalSubject(args.orgId,"close_task",args.taskId);
       await authorizeTask(args.orgId,args.actorId,"close.run");
-      const run=(await tx.execute<{status:string}>(sql`select status from close_runs where org_id=${args.orgId} and id=${args.runId} for share`)).rows[0];
+      const run=(await tx.execute<{status:string}>(sql`select status from close_runs where org_id=${args.orgId} and id=${args.runId} for share`, "objects"))[0];
       if(!run || !["in_progress","review"].includes(run.status))throw new CloseError("The close run is not editable.");
       // Evidence and its append-only audit event are one atomic unit. A
       // committed evidence row without its event cannot be reconciled during
@@ -210,13 +208,13 @@ export async function addCloseEvidence(args: {
                ${JSON.stringify(snapshot)}::jsonb, ${contentHash}, ${args.actorId}, ${args.actorId}
           from close_run_tasks t
          where t.id = ${args.taskId} and t.run_id = ${args.runId} and t.org_id = ${args.orgId}
-        returning id`));
-      if (!inserted.rows[0]) throw new CloseError("close task not found");
+        returning id`, "objects"));
+      if (!inserted[0]) throw new CloseError("close task not found");
       await tx.execute(sql`
         insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
         values (${args.orgId}, ${args.runId}, ${args.taskId}, 'task.evidence_added', ${args.actorId},
-                ${JSON.stringify({ evidenceId: inserted.rows[0].id, type: args.evidenceType, label: args.label.trim() })}::jsonb)`);
-      return inserted.rows[0].id;
+                ${JSON.stringify({ evidenceId: inserted[0].id, type: args.evidenceType, label: args.label.trim() })}::jsonb)`);
+      return inserted[0].id;
     }),
   );
 }
@@ -230,10 +228,10 @@ export async function withdrawCloseTaskSubmission(input:{orgId:string;actorId:st
       where s.org_id=${input.orgId} and s.subject_kind='close_task' and s.subject_id=${input.subjectId} and s.policy->>'kind'='gated'
       and not exists(select 1 from flow_submissions newer where newer.org_id=s.org_id and newer.subject_kind=s.subject_kind and newer.subject_id=s.subject_id and (newer.created_at,newer.id)>(s.created_at,s.id))
       and exists(select 1 from flow_runs r where r.org_id=s.org_id and s.policy->'runIds' ? r.id::text and r.status='cancelled')
-      and not exists(select 1 from flow_gates g where g.org_id=s.org_id and g.subject_kind=s.subject_kind and g.subject_id=s.subject_id and g.status in('pending','escalated'))) as valid`)).rows[0];
+      and not exists(select 1 from flow_gates g where g.org_id=s.org_id and g.subject_kind=s.subject_kind and g.subject_id=s.subject_id and g.status in('pending','escalated'))) as valid`, "objects"))[0];
     if(!proof?.valid)throw new CloseError("Recall the current pending task through its native Flow submission.");
-    const saved=(await db.execute<{run_id:string}>(sql`update close_run_tasks set status='in_progress',updated_at=now(),updated_by=${input.actorId}
-      where org_id=${input.orgId} and id=${input.subjectId} and status='submitted' returning run_id`)).rows;
+    const saved=await db.execute<{run_id:string}>(sql`update close_run_tasks set status='in_progress',updated_at=now(),updated_by=${input.actorId}
+      where org_id=${input.orgId} and id=${input.subjectId} and status='submitted' returning run_id`, "objects");
     if(saved.length!==1)throw new CloseError("The pending close task was not restored to preparation.");
     await db.execute(sql`insert into close_events(org_id,run_id,task_id,event_type,actor_id,payload)
       values(${input.orgId},${saved[0]!.run_id},${input.subjectId},'task.withdraw',${input.actorId},${JSON.stringify({reason:input.reason})}::jsonb)`);

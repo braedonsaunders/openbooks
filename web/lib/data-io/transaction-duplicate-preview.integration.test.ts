@@ -34,11 +34,9 @@ async function fixture(): Promise<Fixture> {
   await withBypassContext(() =>
     db.execute(sql`update parties set short_code = 'ACMEV' where id = ${o.vendorId}`),
   )
-  const expenseNo = (
-    await withOrgContext(o.orgId, () =>
-      db.execute<{ number: string }>(sql`select number from accounts where id = ${o.accounts.cogs}`),
-    )
-  ).rows[0]?.number
+  const expenseNo = (await withOrgContext(o.orgId, () =>
+      db.execute<{ number: string }>(sql`select number from accounts where id = ${o.accounts.cogs}`, 'objects'),
+    ))[0]?.number
   assert.ok(expenseNo)
   return { orgId: o.orgId, date: o.date, expenseNo }
 }
@@ -74,9 +72,9 @@ async function countDocs(fx: Fixture, kind: string, documentNumber: string): Pro
   const n = await withOrgContext(fx.orgId, () =>
     db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents
-       where org_id = ${fx.orgId} and kind = ${kind} and document_number = ${documentNumber}`),
+       where org_id = ${fx.orgId} and kind = ${kind} and document_number = ${documentNumber}`, 'objects'),
   )
-  return n.rows[0]?.n ?? 0
+  return n[0]?.n ?? 0
 }
 
 /**

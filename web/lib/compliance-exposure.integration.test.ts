@@ -222,11 +222,9 @@ async function seedAsOfBill(
              posting_period_id = ${opts.periodId}
        where org_id = ${org.orgId} and id = ${docId}`)
   })
-  const line = (
-    await withBypassContext(() =>
-      db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and is_open_item`),
-    )
-  ).rows[0]!.id
+  const line = (await withBypassContext(() =>
+      db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entryId} and is_open_item`, 'objects'),
+    ))[0]!.id
   return { docId, lineId: line }
 }
 
@@ -238,13 +236,11 @@ test(
     try {
       const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'As-of reader', 'admin'))
       await seedBlockingPolicy(org, actorId)
-      const calendar = (
-        await withBypassContext(() =>
+      const calendar = (await withBypassContext(() =>
           db.execute<{ fiscal_calendar_id: string }>(
-            sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`,
+            sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, 'objects',
           ),
-        )
-      ).rows[0]!.fiscal_calendar_id
+        ))[0]!.fiscal_calendar_id
       const augustPeriod = randomUUID()
       await withBypassContext(async () => {
         await db.execute(sql`insert into accounting_periods
@@ -277,9 +273,7 @@ test(
           values (${org.orgId}, ${pay}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.vendorId}, '-1000', 'CAD', '-1000', '1', false),
                  (${org.orgId}, ${pay}, 2, ${org.accounts.ap}, ${org.subsidiaryId}, ${org.vendorId}, '1000', 'CAD', '1000', '1', true)`)
         await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${pay}`)
-        const payLine = (
-          await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`)
-        ).rows[0]!.id
+        const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`, 'objects'))[0]!.id
         await db.execute(sql`insert into applications
           (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
            source_transaction_currency, target_transaction_amount, target_transaction_currency,

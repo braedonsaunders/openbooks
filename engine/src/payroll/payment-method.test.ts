@@ -150,10 +150,10 @@ test("the SQL ladder gives the same answer as the resolver", { skip: !DB }, asyn
             fallbackToCheque,
           });
           const row = (await db.execute<{ method: string }>(
-            sql`select ${expression} as method`,
+            sql`select ${expression} as method`, "objects",
           ));
           assert.equal(
-            row.rows[0]!.method,
+            row[0]!.method,
             resolve({ profileMethod, partyMethod, hasApprovedBankDetails: hasBank, fallbackToCheque }).method,
             `SQL disagrees for ${profileMethod}/${partyMethod}/bank=${hasBank}/fallback=${fallbackToCheque}`,
           );

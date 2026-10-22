@@ -56,22 +56,22 @@ test("createFamilyWithVariants creates the family and chosen variants atomically
       ["TEE-S-RED", "TEE-S-BLUE", "TEE-M-RED", "TEE-M-GREEN", "TEE-M-BLUE"],
     );
     const rows = await withBypassContext(async () =>
-      (await db.execute<{ code: string; default_rate: string }>(sql`
+      await db.execute<{ code: string; default_rate: string }>(sql`
         select code, default_rate::text from items
-         where org_id = ${org.orgId} and family_id = ${family.id} order by code`)).rows);
+         where org_id = ${org.orgId} and family_id = ${family.id} order by code`, "objects"));
     assert.equal(rows.length, 5);
     assert.equal(rows.find((row) => row.code === "TEE-S-BLUE")?.default_rate, "29.9900");
     assert.equal(rows.find((row) => row.code === "TEE-M-GREEN")?.default_rate, "24.9900");
     const barcode = await withBypassContext(async () =>
       (await db.execute<{ value: string }>(sql`
         select value from item_identifiers where org_id = ${org.orgId}
-         and item_id = (select id from items where org_id = ${org.orgId} and code = 'TEE-M-RED')`)).rows[0]);
+         and item_id = (select id from items where org_id = ${org.orgId} and code = 'TEE-M-RED')`, "objects"))[0]);
     assert.equal(barcode?.value, "123456789012");
     const events = await withBypassContext(async () =>
       (await db.execute<{ event: string }>(sql`
         select changes->>'event' as event from audit_log
          where org_id = ${org.orgId} and table_name = 'item_families' and row_id = ${family.id}
-         order by at`)).rows.map((row) => row.event));
+         order by at`, "objects")).map((row) => row.event));
     assert.ok(events.includes("family_created"));
     assert.ok(events.includes("variants_generated"));
   } finally {
@@ -103,7 +103,7 @@ test("createFamilyWithVariants leaves nothing behind when a variant is refused",
     );
     const leftover = await withBypassContext(async () =>
       (await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from item_families where org_id = ${org.orgId} and code = 'HOOD'`)).rows[0]);
+        select count(*)::text as count from item_families where org_id = ${org.orgId} and code = 'HOOD'`, "objects"))[0]);
     assert.equal(leftover?.count, "0");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

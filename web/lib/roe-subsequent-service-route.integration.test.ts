@@ -20,20 +20,20 @@ async function setup() {
   await seedPayrollSettings(f.orgId, { features: { payroll: true } });
   await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
   await seedRoeIssuanceFixture(f.orgId, f.employeeId);
-  const events = (await db.execute<{id:string}>(sql`select id from payroll_roe_separation_events
-    where org_id=${f.orgId} and employee_party_id=${f.employeeId}`)).rows;
+  const events = await db.execute<{id:string}>(sql`select id from payroll_roe_separation_events
+    where org_id=${f.orgId} and employee_party_id=${f.employeeId}`, 'objects');
   assert.equal(events.length, 1);
   const file = randomUUID(), version = randomUUID(), folder = randomUUID();
   const bytes = Buffer.from('Original employee return-to-work declaration, 2026-08-11');
   const hash = createHash('sha256').update(bytes).digest('hex');
   assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-    values(${folder},${f.orgId},'Original return evidence',true,${f.actorId},${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+    values(${folder},${f.orgId},'Original return evidence',true,${f.actorId},${f.actorId},${f.actorId}) returning id`, 'objects')).length,1);
   assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-    values(${file},${f.orgId},${folder},'return.txt','text/plain',${bytes.length},${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+    values(${file},${f.orgId},${folder},'return.txt','text/plain',${bytes.length},${f.actorId},${f.actorId}) returning id`, 'objects')).length,1);
   assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-    values(${version},${file},1,${bytes.length},'text/plain',${hash},${f.actorId}) returning id`)).rows.length,1);
-  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`)).rows.length,1);
-  assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file} returning id`)).rows.length,1);
+    values(${version},${file},1,${bytes.length},'text/plain',${hash},${f.actorId}) returning id`, 'objects')).length,1);
+  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`, 'objects')).length,1);
+  assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file} returning id`, 'objects')).length,1);
   return { ...f, file, version, hash, eventId: events[0]!.id };
 }
 type Fixture = Awaited<ReturnType<typeof setup>>;
@@ -65,11 +65,11 @@ test('selected-event return API saves and reads exact retained evidence, replays
     assert.equal(read.status,200);assert.deepEqual((await read.json()).record,record);
     const stale = await POST(request({...input,firstDayWorked:'2026-08-12'})); assert.equal(stale.status,422);
     assert.match((await stale.json()).error,/changed.*reload/i);
-    const rows = (await db.execute<{id:string;first:string}>(sql`select id,first_day_worked::text as first
-      from payroll_roe_subsequent_service_sources where org_id=${f.orgId}`)).rows;
+    const rows = await db.execute<{id:string;first:string}>(sql`select id,first_day_worked::text as first
+      from payroll_roe_subsequent_service_sources where org_id=${f.orgId}`, 'objects');
     assert.deepEqual(rows,[{id:record.id,first:'2026-08-11'}]);
-    const audit = (await db.execute(sql`select id from audit_log where org_id=${f.orgId}
-      and table_name='payroll_roe_subsequent_service_sources' and row_id=${record.id}`)).rows;
+    const audit = await db.execute(sql`select id from audit_log where org_id=${f.orgId}
+      and table_name='payroll_roe_subsequent_service_sources' and row_id=${record.id}`, 'objects');
     assert.equal(audit.length,1,'exact API replay creates no second certificate or audit');
   }); } finally { state.gate=null;await withBypassContext(()=>dropScratchOrgReporting(f.orgId)); }
 });
@@ -86,9 +86,9 @@ test('return API refuses entity/event substitution, inactive source and malforme
       {...input,firstDayWorked:'2026-08-10'},{...input,firstDayWorked:'2026-02-30'},{...input,sourceVersionId:randomUUID()}]) {
       const refused=await POST(request(altered));assert.equal(refused.status,422);
     }
-    assert.equal((await db.execute(sql`update files set is_inactive=true where org_id=${f.orgId} and id=${f.file} returning id`)).rows.length,1);
+    assert.equal((await db.execute(sql`update files set is_inactive=true where org_id=${f.orgId} and id=${f.file} returning id`, 'objects')).length,1);
     const inactive = await GET(new Request('https://openbooks.test/api/payroll/separations/subsequent-service?' + new URLSearchParams({...subject(f),sourceFileId:f.file})));
     assert.equal(inactive.status,422);assert.match((await inactive.json()).error,/original.*Cabinet/);
-    assert.equal((await db.execute(sql`select id from payroll_roe_subsequent_service_sources where org_id=${f.orgId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`select id from payroll_roe_subsequent_service_sources where org_id=${f.orgId}`, 'objects')).length,0);
   }); } finally { state.gate=null;await withBypassContext(()=>dropScratchOrgReporting(f.orgId)); }
 });

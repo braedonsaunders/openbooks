@@ -103,7 +103,7 @@ test("withScopeSnapshot holds one snapshot across queries", async () => {
     const readSubsidiary = async () =>
       (await db.execute<{ subsidiary_id: string }>(sql`
         select subsidiary_id from projects where id = ${projectId} and org_id = ${scratch.orgId}
-      `)).rows[0]!.subsidiary_id;
+      `, "objects"))[0]!.subsidiary_id;
 
     // A concurrent reassignment commits mid-snapshot on its own connection
     // (it cannot reuse the test's bypass scope from inside the snapshot);
@@ -144,7 +144,7 @@ test("withScopeSnapshot holds one snapshot across queries", async () => {
     );
     const name = (await withBypass(() => db.execute<{ name: string }>(sql`
       select name from projects where id = ${projectId} and org_id = ${scratch.orgId}
-    `))).rows[0]!.name;
+    `, "objects")))[0]!.name;
     assert.match(name, /^SCOPE-LOCK-/);
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId));

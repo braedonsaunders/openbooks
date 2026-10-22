@@ -51,8 +51,8 @@ async function postedRun(mixed = false) {
     }
     const { input } = await calculatedRun(fx);
     await commitPayRun(input);
-    const accounts = (await db.execute<{ id: string; type: string }>(sql`
-      select id,type from accounts where org_id=${fx.orgId}`)).rows;
+    const accounts = await db.execute<{ id: string; type: string }>(sql`
+      select id,type from accounts where org_id=${fx.orgId}`, "objects");
     const account = (type: string) => {
       const id = accounts.find((row) => row.type === type)?.id;
       assert.ok(id, `fixture account ${type}`);
@@ -71,7 +71,7 @@ async function postedRun(mixed = false) {
       from documents d join journal_entries e on e.id=d.posted_entry_id and e.org_id=d.org_id
       join journal_lines jl on jl.entry_id=e.id and jl.org_id=e.org_id
       where d.org_id=${fx.orgId} and d.id=${input.documentId}
-        and jl.party_id=${fx.employeeId} and jl.is_open_item and jl.amount<0`)).rows[0]!;
+        and jl.party_id=${fx.employeeId} and jl.is_open_item and jl.amount<0`, "objects"))[0]!;
     assert.ok(source);
     return { ...fx, input, bankAccountId, source };
   } catch (error) {
@@ -108,16 +108,16 @@ test("payroll payment settles only the residual after an ordinary partial paymen
   const fx = await postedRun();
   try {
     await ordinaryPayment(fx, "50");
-    const prior = (await db.execute<{ amount: string; target_transaction_amount: string }>(sql`
+    const prior = await db.execute<{ amount: string; target_transaction_amount: string }>(sql`
       select amount,target_transaction_amount from applications
-      where org_id=${fx.orgId} and to_line_id=${fx.source.id} and unapplied_at is null`)).rows;
+      where org_id=${fx.orgId} and to_line_id=${fx.source.id} and unapplied_at is null`, "objects");
     assert.deepEqual(prior, [{ amount: "50.0000", target_transaction_amount: "50.0000" }]);
     const payment = await recordPayRunPayment({ ...fx.input, bankAccountId: fx.bankAccountId });
     assert.equal(payment.total, add(neg(fx.source.txn_amount), "-50"));
     const state = (await db.execute<{ applied: string; transaction_applied: string; balanced: boolean }>(sql`
       select sum(amount)::text as applied,sum(target_transaction_amount)::text as transaction_applied,
         (select sum(amount)=0 from journal_lines where org_id=${fx.orgId} and entry_id=${payment.entryId}) as balanced
-      from applications where org_id=${fx.orgId} and to_line_id=${fx.source.id} and unapplied_at is null`)).rows[0]!;
+      from applications where org_id=${fx.orgId} and to_line_id=${fx.source.id} and unapplied_at is null`, "objects"))[0]!;
     assert.deepEqual(state, { applied: neg(fx.source.amount), transaction_applied: neg(fx.source.txn_amount), balanced: true });
     await assert.rejects(() => recordPayRunPayment({ ...fx.input, bankAccountId: fx.bankAccountId }), /already recorded as paid/);
   } finally {
@@ -130,8 +130,8 @@ test("payroll residual ignores controlled reversals of earlier payment applicati
   try {
     const prior = await ordinaryPayment(fx, "50");
     await reversePaymentForReturn(prior.documentId, fx.orgId, "Payment returned by bank", fx.actorId, "2026-07-21");
-    const reversed = (await db.execute<{ reversed: boolean }>(sql`
-      select unapplied_at is not null as reversed from applications where org_id=${fx.orgId} and to_line_id=${fx.source.id}`)).rows;
+    const reversed = await db.execute<{ reversed: boolean }>(sql`
+      select unapplied_at is not null as reversed from applications where org_id=${fx.orgId} and to_line_id=${fx.source.id}`, "objects");
     assert.deepEqual(reversed, [{ reversed: true }]);
     const payment = await recordPayRunPayment({ ...fx.input, bankAccountId: fx.bankAccountId });
     assert.equal(payment.total, neg(fx.source.txn_amount));
@@ -154,16 +154,16 @@ test("payroll liability cannot masquerade as the credit; the run pays the full l
       document_date,currency,fx_rate,subtotal,tax_total,total,created_by)
       values(${invoiceId},${fx.orgId},'customer_invoice','draft',${invoiceId},${fx.subsidiaryId},${fx.employeeId},
         '2026-07-21','CAD',1,100,0,100,${fx.actorId})`);
-    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fx.orgId} and type='income' limit 1`)).rows[0]!;
+    const revenue = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fx.orgId} and type='income' limit 1`, "objects"))[0]!;
     await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
       values(${fx.orgId},${invoiceId},1,${revenue.id},1,100,100,0,100)`);
     await db.execute(sql`update documents set status='approved' where org_id=${fx.orgId} and id=${invoiceId}`);
-    const controlAccounts = (await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${fx.orgId} and type in ('asset_receivable','liability_payable')`)).rows;
+    const controlAccounts = await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${fx.orgId} and type in ('asset_receivable','liability_payable')`, "objects");
     const receivable = controlAccounts.find(account => account.type === 'asset_receivable')!.id;
     const payable = controlAccounts.find(account => account.type === 'liability_payable')!.id;
     const invoiceEntry = await postDocument(invoiceId, { control: { ar: receivable, ap: payable, bank: fx.bankAccountId } });
     const target = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${fx.orgId}
-      and entry_id=${invoiceEntry} and account_id=${receivable} and amount>0`)).rows[0]!;
+      and entry_id=${invoiceEntry} and account_id=${receivable} and amount>0`, "objects"))[0]!;
     await assert.rejects(
       withOrgTransaction(fx.orgId, async () => {
         const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null, orgId: fx.orgId, createdBy: fx.actorId, kind: "customer_payment",
@@ -180,10 +180,10 @@ test("payroll liability cannot masquerade as the credit; the run pays the full l
         error instanceof PaymentError && /must be a posted customer_credit line/.test(error.message),
       "a payroll liability line is refused as the credit by name",
     );
-    const written = (await db.execute<{ id: string }>(sql`
+    const written = await db.execute<{ id: string }>(sql`
       select id from applications where org_id=${fx.orgId}
         and (from_line_id=${fx.source.id} or to_line_id=${fx.source.id} or to_line_id=${target.id})
-        and unapplied_at is null`)).rows;
+        and unapplied_at is null`, "objects");
     assert.deepEqual(written, [], "the refused set-off writes no application");
     const payment = await recordPayRunPayment({ ...fx.input, bankAccountId: fx.bankAccountId });
     assert.equal(payment.total, neg(fx.source.txn_amount));
@@ -195,12 +195,12 @@ test("payroll liability cannot masquerade as the credit; the run pays the full l
 test("payroll residual excludes fully settled employees, preserves rail splits, and serializes repeat calls", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const fx = await postedRun(true);
   try {
-    const sources = (await db.execute<(typeof fx.source) & { display_name: string }>(sql`
+    const sources = await db.execute<(typeof fx.source) & { display_name: string }>(sql`
       select jl.*,e.book_id,p.display_name from journal_lines jl
       join journal_entries e on e.id=jl.entry_id and e.org_id=jl.org_id
       join parties p on p.id=jl.party_id and p.org_id=jl.org_id
       where jl.org_id=${fx.orgId} and e.source_document_id=${fx.input.documentId}
-        and jl.is_open_item and jl.amount<0`)).rows;
+        and jl.is_open_item and jl.amount<0`, "objects");
     assert.equal(sources.length, 3);
     const settled = sources.find(row => row.display_name === "Already paid employee")!;
     const unpaid = sources.find(row => row.display_name === "Unpaid employee")!;
@@ -220,7 +220,7 @@ test("payroll residual excludes fully settled employees, preserves rail splits, 
     assert.equal(payment.cheque, neg(unpaid.txn_amount));
     const targets = (await db.execute<{ to_line_id: string }>(sql`
       select a.to_line_id from applications a join journal_lines jl on jl.id=a.from_line_id and jl.org_id=a.org_id
-      where a.org_id=${fx.orgId} and jl.entry_id=${payment.entryId}`)).rows.map(row => row.to_line_id);
+      where a.org_id=${fx.orgId} and jl.entry_id=${payment.entryId}`, "objects")).map(row => row.to_line_id);
     assert.deepEqual(targets.sort(), [fx.source.id, unpaid.id].sort());
   } finally {
     await dropScratchOrgReporting(fx.orgId);
@@ -233,7 +233,7 @@ test("payroll residual uses the target carrying and transaction amounts after a 
     await ordinaryPayment(fx, "50", true);
     const prior = (await db.execute<{ source_amount: string; amount: string; source_transaction_amount: string; target_transaction_amount: string }>(sql`
       select source_amount,amount,source_transaction_amount,target_transaction_amount from applications
-      where org_id=${fx.orgId} and to_line_id=${fx.source.id} and unapplied_at is null`)).rows[0]!;
+      where org_id=${fx.orgId} and to_line_id=${fx.source.id} and unapplied_at is null`, "objects"))[0]!;
     assert.deepEqual(prior, { source_amount: "52.0000", amount: "50.0000", source_transaction_amount: "40.0000", target_transaction_amount: "50.0000" });
     const payment = await recordPayRunPayment({ ...fx.input, bankAccountId: fx.bankAccountId });
     assert.equal(payment.total, add(neg(fx.source.txn_amount), "-50"));
@@ -251,7 +251,7 @@ test("an already settled payroll run refuses new cash and does not invent a paid
       select paid_at,paid_entry_id,
         (select count(*)::int from journal_entries where org_id=${fx.orgId}) as entries,
         (select count(*)::int from applications where org_id=${fx.orgId}) as applications
-      from pay_runs where org_id=${fx.orgId} and document_id=${fx.input.documentId}`)).rows[0]!;
+      from pay_runs where org_id=${fx.orgId} and document_id=${fx.input.documentId}`, "objects"))[0]!;
     assert.deepEqual(state, { paid_at: null, paid_entry_id: null, entries: 2, applications: 1 });
   } finally {
     await dropScratchOrgReporting(fx.orgId);
@@ -266,7 +266,7 @@ test("payroll reads applications committed while waiting for the liability lock"
   const locked = new Promise<number>(resolve => { ready = resolve; });
   const partial = withOrgTransaction(fx.orgId, async () => {
     await ordinaryPayment(fx, "50");
-    const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+    const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
     ready(pid);
     await hold;
   });
@@ -277,7 +277,7 @@ test("payroll reads applications committed while waiting for the liability lock"
     let waiting = false;
     for (let attempt = 0; attempt < 100; attempt++) {
       waiting = (await db.execute<{ waiting: boolean }>(sql`
-        select exists(select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))) as waiting`)).rows[0]!.waiting;
+        select exists(select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))) as waiting`, "objects"))[0]!.waiting;
       if (waiting) break;
       await new Promise(resolve => setTimeout(resolve, 10));
     }
@@ -298,7 +298,7 @@ test("payroll rejects a mismatched liability at storage without creating cash or
   try {
     const { input } = await calculatedRun(fx);
     await commitPayRun(input);
-    const bank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fx.orgId} and type='asset_bank'`)).rows[0]!.id;
+    const bank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id=${fx.orgId} and type='asset_bank'`, "objects"))[0]!.id;
     // Attempt a manual projection of a CAD run with a USD net-pay line at par.
     // The document balance guard must reject the link and roll back the entire
     // posting transaction, before this mismatch can reach payroll settlement.
@@ -311,7 +311,7 @@ test("payroll rejects a mismatched liability at storage without creating cash or
         from documents d join pay_runs r on r.document_id=d.id and r.org_id=d.org_id
         join accounting_books b on b.org_id=d.org_id and b.is_primary
         join accounting_periods p on p.org_id=d.org_id and not p.is_adjustment and r.pay_date between p.starts_on and p.ends_on
-        where d.org_id=${fx.orgId} and d.id=${input.documentId} returning id`)).rows[0]!.id;
+        where d.org_id=${fx.orgId} and d.id=${input.documentId} returning id`, "objects"))[0]!.id;
       attemptedEntryId = entry;
       await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,is_open_item)
         select dl.org_id,${entry},dl.line_number,dl.account_id,coalesce(dl.subsidiary_id,d.subsidiary_id),dl.amount,
@@ -344,7 +344,7 @@ test("payroll rejects a mismatched liability at storage without creating cash or
         (select count(*)::int from journal_lines where org_id=${fx.orgId}) as lines,
         (select count(*)::int from applications where org_id=${fx.orgId}) as applications
       from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
-      where r.org_id=${fx.orgId} and r.document_id=${input.documentId}`)).rows[0]!;
+      where r.org_id=${fx.orgId} and r.document_id=${input.documentId}`, "objects"))[0]!;
     assert.deepEqual(state, {
       paid_at: null, paid_entry_id: null, run_status: "committed",
       document_status: "approved", posted_entry_id: null, currency: "CAD",

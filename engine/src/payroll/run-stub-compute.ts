@@ -56,8 +56,8 @@ export async function calculateStub(
   const schedule = (await tx.execute<{ periods_per_year: number }>(sql`
     select periods_per_year from pay_schedules
      where org_id = ${orgId} and id = ${run.pay_schedule_id}
-  `));
-  const P = schedule.rows[0]!.periods_per_year;
+  `, "objects"));
+  const P = schedule[0]!.periods_per_year;
   // Every one of these comes from the resolved context, not from re-reading
   // `emp` and defaulting. `country` decides which statutory engine runs;
   // `region` is the province or state it runs for; both were asserted against
@@ -251,7 +251,7 @@ export async function calculateStub(
        and (a.employment_id is null
             or a.employment_id = ${rosterEmploymentId}::uuid)
      order by c.sequence
-  `));
+  `, "objects"));
 
   // Phase 2 — derived earnings. Per diem for nights stayed, on-call days,
   // travel pay costed to the first job of the day, site and equipment
@@ -300,14 +300,14 @@ export async function calculateStub(
     periodStart: run.period_start!, periodEnd: run.period_end!, payDate: run.pay_date!, taxYear,
     hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
     payScheduleId: run.pay_schedule_id!, runType, oneOffRun, terminationRun: runType === "termination", simulate: !!ctx.simulate,
-    assignedRows: assigned.rows, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
+    assignedRows: assigned, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
     unionAgreementId: emp.union_agreement_id ?? null, unionClassificationId: emp.union_classification_id ?? null,
   }, lines);
   await appendCompensationPackageStage(tx, compensationPackages, 'earnings', lines);
 
   await applyAssignedComponentLines(tx, {
     orgId, employeePartyId, employmentId, taxYear, documentId,
-    assignedRows: assigned.rows, runType, oneOffRun, lines,
+    assignedRows: assigned, runType, oneOffRun, lines,
     periodStart: run.period_start!, periodEnd: run.period_end!, payDate: run.pay_date!,
   });
 

@@ -32,7 +32,7 @@ test('authority policy refuses missing evidence, separator amounts and dates out
   assert.throws(()=>validateWithholdingRemittancePolicy({...policy,other945Liabilities:[{date:'2026-05-01',amount:'1',sourceReference:''}]}),/source references/);
   assert.deepEqual(validateWithholdingRemittancePolicy({...policy,other945Liabilities:[{date:'2026-05-01',amount:'12.34',sourceReference:'Pension withholding ledger'}]}).other945Liabilities?.[0]?.amount,'12.34');
 });
-function executor(rows:Record<string,unknown>[][]):SqlExecutor { let index=0; return {execute:async()=>({rows:rows[index++]??[],rowCount:1})} as unknown as SqlExecutor; }
+function executor(rows:Record<string,unknown>[][]):SqlExecutor { let index=0; return {execute:async(_query: unknown, mode?: string)=>Promise.resolve({rows:rows[index++]??[],rowCount:1}).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result))} as unknown as SqlExecutor; }
 test('deposit bill dates, authority and line amounts are protected while equivalent native saves remain supported',async()=>{
   const header={kind:'vendor_bill',currency:'USD',subsidiaryId:'entity',partyId:'irs',documentDate:'2026-05-22',dueDate:'2026-06-15',fxRate:'1',subtotal:'24',taxTotal:'0',total:'24'};
   const line={id:'line',lineNumber:1,accountId:'liability',description:'Authority deposit',quantity:'1',unitPrice:'24',amount:'24',taxAmount:'0',withholdingTreatment:'excluded'};

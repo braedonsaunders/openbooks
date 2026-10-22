@@ -99,11 +99,9 @@ function filingBody(subsidiaryId: string | null | undefined) {
 }
 
 async function filingCount(orgId: string): Promise<number> {
-  const rows = (
-    await db.execute<{ n: string }>(
-      sql`select count(*)::text as n from information_return_filings where org_id = ${orgId}`,
-    )
-  ).rows;
+  const rows = await db.execute<{ n: string }>(
+      sql`select count(*)::text as n from information_return_filings where org_id = ${orgId}`, "objects",
+    );
   return Number(rows[0]?.n ?? 0);
 }
 

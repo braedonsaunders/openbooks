@@ -27,8 +27,8 @@ export interface TargetOrg {
  * visible in the command that was actually run.
  */
 export async function resolveTargetOrg(orgId: string, argv: string[] = process.argv): Promise<TargetOrg> {
-  const row = ((await retry(() => db.execute(sql`
-    select id, name, env_kind from orgs where id = ${orgId}`)))).rows[0];
+  const row = (await retry(() => db.execute(sql`
+    select id, name, env_kind from orgs where id = ${orgId}`, "objects")))[0];
   if (!row) throw new Error(`no such org: ${orgId}`);
 
   const target: TargetOrg = {

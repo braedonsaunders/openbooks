@@ -57,14 +57,14 @@ export async function validateEmployeePayComponentAssignment(
   assignmentAppliesToRun(input.runApplicability ?? 'standard_runs', 'regular');
   const { employeePartyId, employmentId, componentId, effectiveFrom, effectiveTo } = input;
   const employee = (await exec.execute<{ display_name: string | null }>(sql`
-    select display_name from parties where org_id = ${orgId} and id = ${employeePartyId}`)).rows[0];
+    select display_name from parties where org_id = ${orgId} and id = ${employeePartyId}`, "objects"))[0];
   if (!employee) {
     throw new PayrollError("The employee for this pay-component assignment is not visible in this organization — reload the employee drawer and try again");
   }
   const employeeName = employee.display_name ?? employeePartyId;
   if (employmentId !== null) {
     const employment = (await exec.execute(sql`select id from worker_employments
-      where org_id = ${orgId} and id = ${employmentId} and worker_party_id = ${employeePartyId}`)).rows[0];
+      where org_id = ${orgId} and id = ${employmentId} and worker_party_id = ${employeePartyId}`, "objects"))[0];
     if (!employment) {
       throw new PayrollError(`${employeeName} holds no such employment in this organization — choose one of their employments or leave the assignment party-wide`);
     }
@@ -74,7 +74,7 @@ export async function validateEmployeePayComponentAssignment(
   }
   const component = (await exec.execute<{ code: string; name: string; kind: string; basis: string; is_active: boolean; system_key: string | null; country: string | null }>(sql`
     select code, name, kind, basis, is_active, system_key, country
-      from pay_components where org_id = ${orgId} and id = ${componentId}`)).rows[0];
+      from pay_components where org_id = ${orgId} and id = ${componentId}`, "objects"))[0];
   if (!component) {
     throw new PayrollError("The payroll component for this assignment is not visible in this organization — choose a component from Payroll setup");
   }
@@ -88,7 +88,7 @@ export async function validateEmployeePayComponentAssignment(
     const rateCard = (await exec.execute(sql`select id from pay_derived_rules
       where org_id=${orgId} and component_id=${componentId} and is_active and rate_mode='rate_card'
         and effective_from <= coalesce(${effectiveTo}::date, 'infinity'::date)
-        and (effective_to is null or effective_to >= ${effectiveFrom}::date) limit 1`)).rows[0];
+        and (effective_to is null or effective_to >= ${effectiveFrom}::date) limit 1`, "objects"))[0];
     if (rateCard) throw new PayrollError(`Payroll component ${component.code} prices operational facts through a rate-card rule — keep standard applicability for its rate assignment and configure operational earnings in the derived rule.`);
   }
   if (component.country !== null) {
@@ -96,7 +96,7 @@ export async function validateEmployeePayComponentAssignment(
       select country from employee_payroll_profiles
        where org_id = ${orgId} and employee_party_id = ${employeePartyId} and is_active
          and (${employmentId}::uuid is null or employment_id = ${employmentId}::uuid)
-       order by created_at desc limit 1`)).rows[0];
+       order by created_at desc limit 1`, "objects"))[0];
     if (profile?.country != null && profile.country !== component.country) {
       throw new PayrollError(`Payroll component ${component.code} belongs to the ${component.country} payroll while ${employeeName} pays under ${profile.country} — choose a component available to the employee payroll`);
     }
@@ -113,7 +113,7 @@ export async function validateEmployeePayComponentAssignment(
        and (employment_id is null or ${employmentId}::uuid is null or employment_id = ${employmentId}::uuid)
        and daterange(effective_from, effective_to, '[]') && daterange(${effectiveFrom}::date, ${effectiveTo}::date, '[]')
        and (${input.excludeId ?? null}::uuid is null or id <> ${input.excludeId ?? null}::uuid)
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (overlap) {
     const window = `${overlap.effective_from} to ${overlap.effective_to ?? 'open'}`;
     throw new PayrollError(`${employeeName} already holds ${component.code} for ${window} — end that assignment before starting an overlapping one`);
@@ -132,7 +132,7 @@ export async function validateEmployeePayComponentAssignment(
        and e.status in ('active', 'ended')
        and e.effective_from <= ${effectiveTo ?? '9999-12-31'}::date
        and (e.effective_to is null or e.effective_to >= ${effectiveFrom}::date)
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (benefit) {
     throw new PayrollError(`Payroll component ${component.code} is already delivered to ${employeeName} by benefit rule ${benefit.rule_key} (plan ${benefit.code}) — keep the Benefits election as the contribution source instead of assigning a duplicate`);
   }

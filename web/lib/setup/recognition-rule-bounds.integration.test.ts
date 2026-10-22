@@ -41,11 +41,9 @@ const ruleBody = (extra: Record<string, unknown> = {}) => ({
 });
 
 async function ruleCount(orgId: string, code: string) {
-  const rows = (
-    await db.execute<{ id: string }>(
-      sql`select id from recognition_rules where org_id = ${orgId} and code = ${code}`,
-    )
-  ).rows;
+  const rows = await db.execute<{ id: string }>(
+      sql`select id from recognition_rules where org_id = ${orgId} and code = ${code}`, "objects",
+    );
   return rows.length;
 }
 
@@ -110,11 +108,9 @@ test(
         String((refused.body as { error?: string }).error ?? ""),
         /recognitionPeriods/,
       );
-      const row = (
-        await db.execute<{ recognition_periods: number }>(
-          sql`select recognition_periods from recognition_rules where org_id = ${org.orgId} and id = ${id}`,
-        )
-      ).rows[0]!;
+      const row = (await db.execute<{ recognition_periods: number }>(
+          sql`select recognition_periods from recognition_rules where org_id = ${org.orgId} and id = ${id}`, "objects",
+        ))[0]!;
       assert.equal(row.recognition_periods, 12);
       const saved = await updateSetupRecord(actor, "recognition-rules", {
         id,

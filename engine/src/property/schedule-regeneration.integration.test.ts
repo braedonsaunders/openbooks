@@ -63,7 +63,7 @@ test("overlapping schedule regenerations serialize on the lease", { skip: !DB },
     assert.equal(result.created, 6, "six monthly periods July-December materialise exactly once");
     const lines = (await db.execute<{ n: number; total: string }>(sql`
       select count(*)::int as n, coalesce(sum(amount),0)::text as total from lease_schedule_lines
-       where org_id=${org.orgId} and lease_id=${leaseId}`)).rows[0]!;
+       where org_id=${org.orgId} and lease_id=${leaseId}`, "objects"))[0]!;
     assert.deepEqual([lines.n, lines.total], [6, "6000.0000"]);
 
     // A pure re-run replays the same deterministic stream and creates nothing.

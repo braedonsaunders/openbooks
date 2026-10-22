@@ -49,7 +49,7 @@ async function bill(org: ScratchOrg, actor: string, migration = false) {
 async function retained(org: ScratchOrg, id: string) {
   return (await db.execute<{ snapshot: unknown; entry: string; due_date: string }>(sql`
     select payment_terms_snapshot as snapshot, posted_entry_id as entry, due_date::text as due_date
-      from documents where org_id = ${org.orgId} and id = ${id}`)).rows[0]!;
+      from documents where org_id = ${org.orgId} and id = ${id}`, "objects"))[0]!;
 }
 
 async function run(org: ScratchOrg, actor: string, profileId: string, billId: string, captureDiscounts = true) {
@@ -59,9 +59,9 @@ async function run(org: ScratchOrg, actor: string, profileId: string, billId: st
 }
 
 async function composition(org: ScratchOrg, id: string) {
-  return (await db.execute<{ discount: string; payment: string }>(sql`
+  return await db.execute<{ discount: string; payment: string }>(sql`
     select discount_amount::text as discount, payment_amount::text as payment from payment_run_items
-    where org_id = ${org.orgId} and payment_run_id = ${id}`)).rows;
+    where org_id = ${org.orgId} and payment_run_id = ${id}`, "objects");
 }
 
 test("posted vendor terms retain discount and audit authority after setup replacement", { skip: !DB }, async () => {
@@ -79,9 +79,9 @@ test("posted vendor terms retain discount and audit authority after setup replac
     assert.equal(snapshot.terms.id, originalTerms);
     assert.equal(snapshot.terms.discountPercent, "2.0000");
     assert.match(snapshot.terms.revisionHash, /^[a-f0-9]{64}$/);
-    const audit = (await db.execute<{ retained: unknown }>(sql`
+    const audit = await db.execute<{ retained: unknown }>(sql`
       select changes #> '{after,document,payment_terms_snapshot}' as retained from audit_log
-      where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${id} and action = 'post'`)).rows;
+      where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${id} and action = 'post'`, "objects");
     assert.equal(audit.length, 1);
     assert.deepEqual(audit[0]!.retained, before.snapshot);
 
@@ -142,7 +142,7 @@ test("historical replay does not fabricate current terms and missing evidence re
     await assert.rejects(run(org, actor, profile, id), /missing or invalid retained payment terms/);
     const rows = (await db.execute<{ runs: string; items: string }>(sql`
       select (select count(*)::text from payment_runs where org_id = ${org.orgId}) as runs,
-        (select count(*)::text from payment_run_items where org_id = ${org.orgId}) as items`)).rows[0]!;
+        (select count(*)::text from payment_run_items where org_id = ${org.orgId}) as items`, "objects"))[0]!;
     assert.deepEqual(rows, { runs: "0", items: "0" });
     assert.deepEqual(await retained(org, id), before);
     const paymentRun = await run(org, actor, profile, id, false);
@@ -163,10 +163,10 @@ test("financial-history cloning rebinds payment policy identities without changi
     const original = (await retained(org, id)).snapshot as { partyId: string; terms: { id: string; revisionHash: string } };
     const created = await createSandbox({ productionOrgId: org.orgId, name: `Payment terms ${randomUUID()}`, tier: "full", masked: false });
     sandboxId = created.sandboxId;
-    const copies = (await db.execute<{ party_id: string; snapshot: typeof original; terms_id: string }>(sql`
+    const copies = await db.execute<{ party_id: string; snapshot: typeof original; terms_id: string }>(sql`
       select d.party_id, d.payment_terms_snapshot as snapshot, p.id as terms_id
       from documents d join payment_terms p on p.org_id = d.org_id and p.id = (d.payment_terms_snapshot #>> '{terms,id}')::uuid
-      where d.org_id = ${created.sandboxOrgId} and d.kind = 'vendor_bill'`)).rows;
+      where d.org_id = ${created.sandboxOrgId} and d.kind = 'vendor_bill'`, "objects");
     assert.equal(copies.length, 1);
     const copy = copies[0]!;
     assert.notEqual(copy.party_id, org.vendorId);

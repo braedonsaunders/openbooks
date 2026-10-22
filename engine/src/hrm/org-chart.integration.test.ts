@@ -220,7 +220,7 @@ test("chart and directory are fenced by employer scope and the self-service team
     const partyOf = async (employmentId: string): Promise<string> => {
       const row = (await db.execute<{ partyId: string }>(sql`
         select worker_party_id::text as "partyId" from worker_employments
-         where org_id = ${org.orgId} and id = ${employmentId}`)).rows[0];
+         where org_id = ${org.orgId} and id = ${employmentId}`, "objects"))[0];
       return row!.partyId;
     };
 

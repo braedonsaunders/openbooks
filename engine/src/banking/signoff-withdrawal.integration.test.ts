@@ -36,13 +36,11 @@ async function postBankJournal(
       values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`DEP-${entryId.slice(0, 8)}`}, ${date},
               ${org.periodId}, 'Deposit', 'draft', 'manual', ${actorId}, ${actorId})`);
     const offset = amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
-    const [bankLine] = (
-      await tx.execute<{ id: string }>(sql`
+    const [bankLine] = await tx.execute<{ id: string }>(sql`
       insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
       values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, 1, 'deposit'),
              (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offset}, 'CAD', ${offset}, 1, 'deposit')
-      returning id`)
-    ).rows;
+      returning id`, "objects");
     await tx.execute(sql`
       update journal_entries set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
        where id = ${entryId} and org_id = ${org.orgId}`);
@@ -85,10 +83,8 @@ async function signedSession(
     },
     ctx,
   );
-  const [line] = (
-    await db.execute<{ id: string }>(sql`
-    select id from bank_statement_lines where org_id = ${org.orgId} and statement_id = ${imported.statementId!}`)
-  ).rows;
+  const [line] = await db.execute<{ id: string }>(sql`
+    select id from bank_statement_lines where org_id = ${org.orgId} and statement_id = ${imported.statementId!}`, "objects");
   const recon = await startReconciliation(
     {
       accountId: org.accounts.bank,
@@ -170,21 +166,16 @@ test(
         "balanced",
         "matches survive, so the session still foots",
       );
-      const session = (
-        await db.execute<{ status: string; signed_off_at: string | null }>(sql`
-      select status, signed_off_at::text from reconciliations where id = ${reconId}`)
-      ).rows[0]!;
+      const session = (await db.execute<{ status: string; signed_off_at: string | null }>(sql`
+      select status, signed_off_at::text from reconciliations where id = ${reconId}`, "objects"))[0]!;
       assert.deepEqual(session, { status: "balanced", signed_off_at: null });
-      const line = (
-        await db.execute<{
+      const line = (await db.execute<{
           reconciled_at: string | null;
           reconciliation_id: string | null;
         }>(sql`
-      select reconciled_at::text, reconciliation_id::text from journal_lines where id = ${journal}`)
-      ).rows[0]!;
+      select reconciled_at::text, reconciliation_id::text from journal_lines where id = ${journal}`, "objects"))[0]!;
       assert.deepEqual(line, { reconciled_at: null, reconciliation_id: null });
-      const audit = (
-        await db.execute<{
+      const audit = await db.execute<{
           changes: {
             operation: string;
             reason: string;
@@ -192,8 +183,7 @@ test(
           };
         }>(sql`
       select changes from audit_log where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${reconId}
-       and changes->>'operation' = 'withdraw_sign_off'`)
-      ).rows;
+       and changes->>'operation' = 'withdraw_sign_off'`, "objects");
       assert.equal(audit.length, 1);
       assert.equal(
         audit[0]!.changes.reason,

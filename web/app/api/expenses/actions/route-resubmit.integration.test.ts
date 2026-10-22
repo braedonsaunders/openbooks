@@ -74,13 +74,13 @@ test('resubmitting an expense report fails closed with a 422, not a 500', async 
           insert into app_roles (org_id, key, name, is_built_in, permissions)
           values (${org.orgId}, 'clerk', 'clerk', false, '["expenses.create","ap.post"]'::jsonb)
           on conflict (org_id, key) do update set updated_at = now()
-          returning id`))
+          returning id`, 'objects'))
         await tx.execute(sql`
           insert into users (id, org_id, email, name, password_hash, is_active)
           values (${actorId}, ${org.orgId}, 'sammy@test.local', 'Sammy', 'x', true)`)
         await tx.execute(sql`
           insert into role_assignments (org_id, user_id, role_id)
-          values (${org.orgId}, ${actorId}, ${role.rows[0]!.id})`)
+          values (${org.orgId}, ${actorId}, ${role[0]!.id})`)
       })
       const documentId = randomUUID()
       await db.execute(sql`

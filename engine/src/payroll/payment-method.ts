@@ -139,9 +139,9 @@ export async function payrollPaymentMethodSettings(
 ): Promise<PayrollPaymentMethodSettings> {
   const r = (await db.execute<{ v: unknown }>(sql`
     select settings#>'{payroll,eftFallbackToCheque}' as v from orgs where id = ${orgId}
-  `));
+  `, "objects"));
   // Absent = on. Only an explicit `false` turns the safety net off.
-  return { eftFallbackToCheque: r.rows[0]?.v !== false };
+  return { eftFallbackToCheque: r[0]?.v !== false };
 }
 
 export interface EmployeePaymentMethodRow extends ResolvedPaymentMethod {
@@ -179,8 +179,8 @@ export async function stubPaymentMethods(
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
      order by p.display_name
-  `));
-  return rows.rows.map((row) => {
+  `, "objects"));
+  return rows.map((row) => {
     const live = resolvePayrollPaymentMethod({
       profileMethod: row.profile_method,
       partyMethod: row.party_method,

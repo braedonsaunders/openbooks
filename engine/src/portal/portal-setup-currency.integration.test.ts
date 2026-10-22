@@ -13,8 +13,8 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 async function enablePortalBilling(orgId: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || '{"customerPortal": true, "subscriptionBilling": true}'::jsonb) where id = ${orgId} returning id`));
-  assert.equal(result.rows.length, 1);
+      || '{"customerPortal": true, "subscriptionBilling": true}'::jsonb) where id = ${orgId} returning id`, "objects"));
+  assert.equal(result.length, 1);
 }
 
 async function seedPlanSubscription(orgId: string, customerId: string): Promise<string> {

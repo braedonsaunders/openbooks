@@ -43,8 +43,8 @@ export async function publicPaymentPage(token: string): Promise<PublicPaymentPag
         from orgs o, documents d, parties p
        where o.id = ${link.orgId} and d.id = ${link.documentId} and d.org_id = ${link.orgId}
          and p.id = ${link.partyId} and p.org_id = ${link.orgId}
-    `));
-    const row = ctx.rows[0];
+    `, "objects"));
+    const row = ctx[0];
     if (!row) return null;
     const config = await loadPaymentProviderConfig<ProviderConfigRow>(link.orgId, link.provider);
     if (cmp(row.openBalance, "0") > 0 && link.amount !== null && cmp(link.amount, row.openBalance) !== 0) {
@@ -157,7 +157,7 @@ export async function createCheckoutSession(
              expires_on::text as "expiresOn"
         from payment_links where id = ${initialLink.id} and org_id = ${initialLink.orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!lockedLink) throw new PaymentAcceptanceError("payment link not found");
     if (lockedLink.status !== "active") throw new PaymentAcceptanceError(`payment link is ${lockedLink.status}`);
     if (lockedLink.expiresOn && lockedLink.expiresOn < await businessToday(initialLink.orgId)) {
@@ -168,9 +168,9 @@ export async function createCheckoutSession(
     const doc = (await db.execute<{ document_number: string; open_balance: string }>(sql`
       select document_number, open_balance from documents where id = ${link.documentId} and org_id = ${link.orgId}
        for update
-    `));
-    if (!doc.rows[0]) throw new PaymentAcceptanceError("invoice not found");
-    const openBalance = doc.rows[0].open_balance;
+    `, "objects"));
+    if (!doc[0]) throw new PaymentAcceptanceError("invoice not found");
+    const openBalance = doc[0].open_balance;
     if (cmp(openBalance, "0") <= 0) throw new PaymentAcceptanceError("invoice is already paid");
     if (link.amount !== null && cmp(link.amount, openBalance) !== 0) {
       throw new PaymentAcceptanceError("payment link is out of date; request a new link");
@@ -227,8 +227,8 @@ export async function createCheckoutSession(
       select id, external_ref, event_payload from payment_attempts
        where org_id = ${link.orgId} and link_id = ${link.id} and provider = ${link.provider} and status = 'initiated'
        order by created_at desc limit 1
-    `));
-    const open = existing.rows[0];
+    `, "objects"));
+    const open = existing[0];
     if (open?.event_payload?.redirectUrl && open.event_payload.invoiceAmount === invoiceAmount && open.event_payload.surchargeAmount === surcharge.amount) {
       return { redirectUrl: open.event_payload.redirectUrl };
     }
@@ -238,7 +238,7 @@ export async function createCheckoutSession(
       configSecrets(config, link.orgId),
       {
         linkToken: link.token,
-        description: `Invoice ${doc.rows[0].document_number}`,
+        description: `Invoice ${doc[0].document_number}`,
         invoiceAmount,
         surchargeAmount: surcharge.amount,
         currency: link.currency,
@@ -255,11 +255,11 @@ export async function createCheckoutSession(
               null, null)
       -- A repeated provider reference is accepted only for the same link and quoted amounts below.
       on conflict (org_id, provider, external_ref) do nothing
-      returning id`);
-    if (inserted.rows.length === 0) {
+      returning id`, "objects");
+    if (inserted.length === 0) {
       const existing = (await db.execute<{ link_id: string | null; amount: string; surcharge_amount: string }>(sql`
         select link_id, amount::text, surcharge_amount::text from payment_attempts
-         where org_id = ${link.orgId} and provider = ${link.provider} and external_ref = ${session.externalRef}`)).rows[0];
+         where org_id = ${link.orgId} and provider = ${link.provider} and external_ref = ${session.externalRef}`, "objects"))[0];
       if (!existing || existing.link_id !== link.id || cmp(existing.amount, invoiceAmount) !== 0
           || cmp(existing.surcharge_amount, surcharge.amount) !== 0) {
         throw new PaymentAcceptanceError(

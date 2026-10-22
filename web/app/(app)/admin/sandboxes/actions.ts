@@ -89,9 +89,9 @@ export async function createSandboxAction(input: {
 
 async function ownedSandbox(sandboxId: string, productionOrgId: string): Promise<string> {
   const r = await db.execute<{ orgId: string }>(sql`
-    select org_id as "orgId" from sandboxes where id = ${sandboxId} and production_org_id = ${productionOrgId}`);
-  if (!r.rows.length) throw new Error("sandbox not found");
-  return r.rows[0]!.orgId;
+    select org_id as "orgId" from sandboxes where id = ${sandboxId} and production_org_id = ${productionOrgId}`, "objects");
+  if (!r.length) throw new Error("sandbox not found");
+  return r[0]!.orgId;
 }
 
 export async function refreshSandboxAction(sandboxId: string, keepCustomizations: boolean, clientOpKey: string): Promise<void> {
@@ -137,16 +137,16 @@ export async function setScheduleAction(sandboxId: string, cadence: string | nul
         from sandboxes
        where id = ${sandboxId} and production_org_id = ${authz.user.productionOrgId}
        for update
-    `);
-    const before = existing.rows[0];
+    `, "objects");
+    const before = existing[0];
     if (!before) throw new Error("sandbox not found");
     const updated = await tx.execute(sql`
       update sandboxes
          set refresh_schedule = ${value}, updated_at = now(), updated_by = ${authz.user.id}
        where id = ${sandboxId} and org_id = ${before.orgId}
        returning id
-    `);
-    if (!updated.rows.length) throw new Error("sandbox not found");
+    `, "objects");
+    if (!updated.length) throw new Error("sandbox not found");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${authz.user.productionOrgId}, 'sandboxes', ${sandboxId}, 'update',
@@ -172,8 +172,8 @@ export async function reviewChangeSetAction(changeSetId: string): Promise<void> 
   const authz = await requireManager();
   assertUuid(changeSetId, "Change set");
   const r = await db.execute(sql`
-    select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`);
-  if (!r.rows.length) throw new Error("change set not found");
+    select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`, "objects");
+  if (!r.length) throw new Error("change set not found");
   await reviewChangeSet(changeSetId, authz.user.id);
   revalidatePath("/admin/sandboxes");
 }
@@ -181,8 +181,8 @@ export async function reviewChangeSetAction(changeSetId: string): Promise<void> 
 export async function applyChangeSetAction(changeSetId: string): Promise<void> {
   const authz = await requireManager();
   assertUuid(changeSetId, "Change set");
-  const r = ((await db.execute(sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`)));
-  if (!r.rows.length) throw new Error("change set not found");
+  const r = ((await db.execute(sql`select 1 from change_sets where id = ${changeSetId} and org_id = ${authz.user.productionOrgId}`, "objects")));
+  if (!r.length) throw new Error("change set not found");
   await applyChangeSet(changeSetId, authz.user.id);
   revalidatePath("/admin/sandboxes");
 }

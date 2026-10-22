@@ -82,8 +82,8 @@ export async function postLaborForProject(world: SimOrg, projectId: string): Pro
   const rows = (await db.execute<{ id: string }>(sql`
     select id from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and cost_journal_entry_id is null`));
-  const ids = rows.rows.map((r) => r.id);
+       and status = 'approved' and cost_journal_entry_id is null`, "objects"));
+  const ids = rows.map((r) => r.id);
   if (ids.length === 0) return { entryIds: [], costed: 0 };
   const { entryIds } = await postLaborCost(world, ids);
   return { entryIds, costed: ids.length };
@@ -118,30 +118,30 @@ export async function billTimeAndMaterials(
   opts: { extraLines?: ExtraBillLine[]; memo?: string; costPlusFee?: number } = {},
 ): Promise<{ invoiceId: string; documentNumber: string; billed: string; laborCost: string; lines: number } | null> {
   const proj = (await db.execute<{ customer_id: string | null; name: string; code: string }>(sql`
-    select customer_id, name, code from projects where id = ${projectId} and org_id = ${world.orgId}`));
-  const customerId = proj.rows[0]?.customer_id;
+    select customer_id, name, code from projects where id = ${projectId} and org_id = ${world.orgId}`, "objects"));
+  const customerId = proj[0]?.customer_id;
   if (!customerId) throw new Error(`project ${projectId} has no customer to bill`);
 
   const time = (await db.execute<UnbilledTime>(sql`
     select id, hours::text, bill_rate::text, cost_rate::text, employee_party_id, time_type_id
       from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and billing_status = 'unbilled'`));
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`, "objects"));
   const extraLines = opts.extraLines ?? [];
-  if (time.rows.length === 0 && extraLines.length === 0) return null;
+  if (time.length === 0 && extraLines.length === 0) return null;
 
   // Cost-plus jobs bill labor at cost × (1 + fee); standard T&M bills at bill rate.
   const fee = opts.costPlusFee;
   const rateOf = (t: UnbilledTime) => (fee === undefined ? t.bill_rate : mul(t.cost_rate, (1 + fee).toFixed(4)));
   const empName = new Map(world.employees.map((e) => [e.id, e.name]));
-  const effRates = time.rows.map(rateOf);
-  const lineAmounts = time.rows.map((t, i) => mul(t.hours, effRates[i]!));
+  const effRates = time.map(rateOf);
+  const lineAmounts = time.map((t, i) => mul(t.hours, effRates[i]!));
   const laborBilled = sumMoney(lineAmounts);
   const total = sumMoney([laborBilled, ...extraLines.map((l) => l.amount)]);
-  const laborCost = sumMoney(time.rows.map((t) => mul(t.hours, t.cost_rate)));
+  const laborCost = sumMoney(time.map((t) => mul(t.hours, t.cost_rate)));
 
   const docId = randomUUID();
-  const documentNumber = `${fee === undefined ? "TM" : "CP"}-${proj.rows[0]!.code}-${invoiceDate.replace(/-/g, "")}`;
+  const documentNumber = `${fee === undefined ? "TM" : "CP"}-${proj[0]!.code}-${invoiceDate.replace(/-/g, "")}`;
   // Net-30 terms with a modest collection lag, so the environment's collection
   // step remits against this invoice (otherwise billed T&M never gets paid).
   const dueDate = addCalendarDays(invoiceDate, 30);
@@ -152,13 +152,13 @@ export async function billTimeAndMaterials(
        currency, subtotal, tax_total, total, created_by, memo, custom)
     values (${docId}, ${world.orgId}, 'customer_invoice', 'draft', ${documentNumber}, ${customerId}, ${invoiceDate},
             ${dueDate}, ${expectedPayDate}, ${world.currency}, ${total}, '0.00', ${total}, ${world.actors.arClerk},
-            ${opts.memo ?? `T&M billing — ${proj.rows[0]!.name}`},
+            ${opts.memo ?? `T&M billing — ${proj[0]!.name}`},
             ${JSON.stringify({ sim: { tm: true, projectId, payFraction: "1" } })}::jsonb)`);
 
   const lineIds: { lineId: string; timeEntryId: string }[] = [];
   let lineNo = 0;
-  for (let i = 0; i < time.rows.length; i++) {
-    const t = time.rows[i]!;
+  for (let i = 0; i < time.length; i++) {
+    const t = time[i]!;
     const rate = effRates[i]!;
     const lineId = randomUUID();
     await db.execute(sql`

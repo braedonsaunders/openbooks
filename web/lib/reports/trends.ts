@@ -90,6 +90,6 @@ export async function financialTrends(
            ), 0)::text as closing_cash
       from recent p join activity a on a.id = p.id
      order by p.ends_on
-  `));
-  return rows.rows;
+  `, "objects"));
+  return rows;
 }

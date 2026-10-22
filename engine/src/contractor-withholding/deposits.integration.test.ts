@@ -21,7 +21,7 @@ const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 async function fixture(org: ScratchOrg) {
   const actor = await createScratchUser(org.orgId, "Withholding accountant", "withholding_accountant");
   const role = (await db.execute<{ role_id: string }>(sql`select role_id from role_assignments
-    where org_id=${org.orgId} and user_id=${actor}`)).rows[0]!.role_id;
+    where org_id=${org.orgId} and user_id=${actor}`, "objects"))[0]!.role_id;
   const authority = randomUUID(), enrollment = randomUUID();
   // The shared ISO registry may already contain USD from another scratch organization.
   await db.execute(sql`insert into currencies(code,name,minor_units) values('USD','US Dollar',2) on conflict(code) do nothing`);
@@ -45,13 +45,13 @@ async function fixture(org: ScratchOrg) {
   const body = { partyId: org.vendorId, documentDate: org.date, lines: [{ accountId: org.accounts.cogs, amount: "1000" }] };
   const bill = await createDocument({ orgId: org.orgId, userId: actor, kind: "vendor_bill", key: randomUUID(), body, requestBody: body, subsidiaryId: org.subsidiaryId });
   const billEntry = await post(bill.id, "vendor_bill");
-  const openLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${billEntry} and account_id=${org.accounts.ap}`)).rows[0]!.id;
+  const openLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${billEntry} and account_id=${org.accounts.ap}`, "objects"))[0]!.id;
   const payment = await createPaymentDocument({ orgId: org.orgId, createdBy: actor, kind: "vendor_payment", partyId: org.vendorId,
     subsidiaryId: org.subsidiaryId, bankAccountId: org.accounts.bank, documentDate: org.date, currency: "USD", allowedSubsidiaryIds: null });
   await updateDraftPayment(payment.id, { allocations: [{ openLineId: openLine, sourceTransactionAmount: "1000", targetTransactionAmount: "1000",
     settlementRate: "1", settlementRateSource: "same_currency", settlementRateReference: "Same transaction currency" }] }, actor, org.orgId, { allowedSubsidiaryIds: null });
   await post(payment.id, "vendor_payment");
-  const deduction = (await db.execute<{ id: string; amount: string }>(sql`select id,deducted_amount::text as amount from withholding_deductions where org_id=${org.orgId} and payment_document_id=${payment.id} and status='posted'`)).rows;
+  const deduction = await db.execute<{ id: string; amount: string }>(sql`select id,deducted_amount::text as amount from withholding_deductions where org_id=${org.orgId} and payment_document_id=${payment.id} and status='posted'`, "objects");
   assert.equal(deduction.length, 1);
   assert.equal(deduction[0]!.amount, "240.0000");
   const prepare = (throughDate = org.date) => withOrgTransaction(org.orgId, () => createWithholdingDeposit(db, org.orgId, { enrollmentId: enrollment, throughDate }, actor));
@@ -87,7 +87,7 @@ test("native deposit preparation snapshots one posted deduction and retries with
   await assert.rejects(() => f.prepare("2026-07-16"), /No unreserved posted deductions/);
   const counts = (await db.execute<{ bills: number; audits: number }>(sql`select
     (select count(*)::int from documents where org_id=${org.orgId} and custom ? 'withholdingDeposit') as bills,
-    (select count(*)::int from audit_log where org_id=${org.orgId} and row_id=${first.documentId} and changes->>'reason'='authority_deposit_prepared') as audits`)).rows[0];
+    (select count(*)::int from audit_log where org_id=${org.orgId} and row_id=${first.documentId} and changes->>'reason'='authority_deposit_prepared') as audits`, "objects"))[0];
   assert.deepEqual(counts, { bills: 1, audits: 1 });
 }));
 
@@ -136,9 +136,9 @@ test("native draft deletion releases the deposit reservation with an actor audit
   const first = await f.prepare();
   await deleteDocument(first.documentId, f.actor, org.orgId, { allowedSubsidiaryIds: null, reason: "Replace authority deposit draft" });
   assert.equal(await loadDocument(first.documentId, org.orgId), null);
-  const releases = (await db.execute<{ actor_id: string; before: { reservedDeductionIds: string[] }; after: { reservedDeductionIds: string[] } }>(sql`
+  const releases = await db.execute<{ actor_id: string; before: { reservedDeductionIds: string[] }; after: { reservedDeductionIds: string[] } }>(sql`
     select actor_id,changes->'before' as before,changes->'after' as after from audit_log
-    where org_id=${org.orgId} and row_id=${first.documentId} and changes->>'reason'='authority_deposit_released'`)).rows;
+    where org_id=${org.orgId} and row_id=${first.documentId} and changes->>'reason'='authority_deposit_released'`, "objects");
   assert.deepEqual(releases, [{ actor_id: f.actor, before: { reservedDeductionIds: [f.deductionId] }, after: { reservedDeductionIds: [] } }]);
   const replacement = await f.prepare();
   assert.notEqual(replacement.documentId, first.documentId);
@@ -149,7 +149,7 @@ test("native draft deletion releases the deposit reservation with an actor audit
 test("posting and governed void balance the authority bill, preserve deduction evidence and release only the voided reservation", enabled, async () => scenario(async (org, f) => {
   const first = await f.prepare();
   const entry = await f.post(first.documentId, "vendor_bill");
-  const legs = (await db.execute<{ account_id: string; amount: string }>(sql`select account_id,amount::text from journal_lines where org_id=${org.orgId} and entry_id=${entry}`)).rows;
+  const legs = await db.execute<{ account_id: string; amount: string }>(sql`select account_id,amount::text from journal_lines where org_id=${org.orgId} and entry_id=${entry}`, "objects");
   assert.deepEqual(new Map(legs.map(row => [row.account_id, row.amount])), new Map([[org.accounts.withholding, "240.0000"], [org.accounts.ap, "-240.0000"]]));
   assert.deepEqual(await f.prepare(), first);
   await assert.rejects(() => f.prepare("2026-07-16"), /No unreserved posted deductions/);
@@ -157,10 +157,10 @@ test("posting and governed void balance the authority bill, preserve deduction e
   const voided = await requestDocumentVoid({ documentId: first.documentId, orgId: org.orgId, actorId: f.actor, reason: "Replace authority deposit bill", reversalDate: org.date, allowedSubsidiaryIds: null });
   assert.equal(voided.status, "voided");
   assert.ok(voided.reversalEntryId);
-  const reversal = (await db.execute<{ account_id: string; amount: string }>(sql`select account_id,amount::text from journal_lines where org_id=${org.orgId} and entry_id=${voided.reversalEntryId}`)).rows;
+  const reversal = await db.execute<{ account_id: string; amount: string }>(sql`select account_id,amount::text from journal_lines where org_id=${org.orgId} and entry_id=${voided.reversalEntryId}`, "objects");
   assert.deepEqual(new Map(reversal.map(row => [row.account_id, row.amount])), new Map([[org.accounts.withholding, "-240.0000"], [org.accounts.ap, "240.0000"]]));
   assert.equal((await loadDocument(first.documentId, org.orgId))!.doc.status, "voided");
-  const deduction = (await db.execute<{ status: string; amount: string }>(sql`select status,deducted_amount::text as amount from withholding_deductions where org_id=${org.orgId} and id=${f.deductionId}`)).rows[0];
+  const deduction = (await db.execute<{ status: string; amount: string }>(sql`select status,deducted_amount::text as amount from withholding_deductions where org_id=${org.orgId} and id=${f.deductionId}`, "objects"))[0];
   assert.deepEqual(deduction, { status: "posted", amount: "240.0000" });
   const replacement = await f.prepare();
   assert.notEqual(replacement.documentId, first.documentId);
@@ -172,12 +172,12 @@ test("native source payment reversal preserves evidence and refuses a stale appr
   assert.equal((await submitAndReleaseIfUngated("vendor_bill", deposit.documentId, f.actor)).autoApproved, true);
   const result = await requestDocumentVoid({ documentId: f.paymentId, orgId: org.orgId, actorId: f.actor, reason: "Reverse incorrectly paid contractor bill", reversalDate: org.date, allowedSubsidiaryIds: null });
   assert.equal(result.status, "voided");
-  const deduction = (await db.execute<{ status: string; amount: string; voided_by: string }>(sql`select status,deducted_amount::text as amount,voided_by from withholding_deductions where org_id=${org.orgId} and id=${f.deductionId}`)).rows[0];
+  const deduction = (await db.execute<{ status: string; amount: string; voided_by: string }>(sql`select status,deducted_amount::text as amount,voided_by from withholding_deductions where org_id=${org.orgId} and id=${f.deductionId}`, "objects"))[0];
   assert.deepEqual(deduction, { status: "voided", amount: "240.0000", voided_by: f.actor });
   await assert.rejects(() => postDocument(deposit.documentId, f.deps, { audit: { actorId: f.actor, source: "ui" } }), /no longer matches its posted source deductions/);
   const state = (await db.execute<{ status: string; posted_entry_id: string | null; entries: number }>(sql`select status,posted_entry_id,
     (select count(*)::int from journal_entries where org_id=d.org_id and source_document_id=d.id) as entries
-    from documents d where org_id=${org.orgId} and id=${deposit.documentId}`)).rows[0];
+    from documents d where org_id=${org.orgId} and id=${deposit.documentId}`, "objects"))[0];
   assert.deepEqual(state, { status: "approved", posted_entry_id: null, entries: 0 });
   await requestDocumentVoid({ documentId: deposit.documentId, orgId: org.orgId, actorId: f.actor, reason: "Discard stale authority deposit bill", reversalDate: org.date, allowedSubsidiaryIds: null });
   await assert.rejects(() => f.prepare(), /No unreserved posted deductions/);
@@ -193,13 +193,13 @@ test("deposit commands enforce live payment permission, legal-entity scope and t
   await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and id=${f.role}`);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,contractorWithholding}','false'::jsonb) where id=${org.orgId}`);
   await assert.rejects(() => f.prepare(), /Enable Contractor withholding/);
-  assert.equal((await db.execute(sql`select id from documents where org_id=${org.orgId} and custom ? 'withholdingDeposit'`)).rows.length, 0);
+  assert.equal((await db.execute(sql`select id from documents where org_id=${org.orgId} and custom ? 'withholdingDeposit'`, "objects")).length, 0);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,contractorWithholding}','true'::jsonb) where id=${org.orgId}`);
   const prepared = await f.prepare();
   assert.equal((await loadDocument(prepared.documentId, org.orgId))!.doc.total, "240.0000");
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,contractorWithholding}','false'::jsonb) where id=${org.orgId}`);
   await assert.rejects(() => f.post(prepared.documentId, "vendor_bill"), /Enable Contractor withholding/);
-  assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${prepared.documentId}`)).rows.length, 0);
+  assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and source_document_id=${prepared.documentId}`, "objects")).length, 0);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,contractorWithholding}','true'::jsonb) where id=${org.orgId}`);
   await postDocument(prepared.documentId, f.deps, { audit: { actorId: f.actor, source: 'ui' } });
 }));

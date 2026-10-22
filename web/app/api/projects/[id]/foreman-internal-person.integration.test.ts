@@ -48,7 +48,7 @@ test('project header PATCH moves the foreman to an internal person and refuses o
     const moved = await patch(org.orgId, project, { foremanId: partner })
     assert.equal(moved.status, 200, JSON.stringify(await moved.clone().json()))
     const stored = (await db.execute<{ foreman_id: string | null }>(sql`
-      select foreman_id from projects where id=${project} and org_id=${org.orgId}`)).rows[0]?.foreman_id
+      select foreman_id from projects where id=${project} and org_id=${org.orgId}`, 'objects'))[0]?.foreman_id
     assert.equal(stored, partner)
 
     const vendor = await seedParty(org.orgId, 'vendor', 'Vera Vendor', org.subsidiaryId)
@@ -56,7 +56,7 @@ test('project header PATCH moves the foreman to an internal person and refuses o
     assert.equal(refused.status, 422)
     assert.match(((await refused.json()) as { error: string }).error, /must be an active employee or internal person/)
     const unchanged = (await db.execute<{ foreman_id: string | null }>(sql`
-      select foreman_id from projects where id=${project} and org_id=${org.orgId}`)).rows[0]?.foreman_id
+      select foreman_id from projects where id=${project} and org_id=${org.orgId}`, 'objects'))[0]?.foreman_id
     assert.equal(unchanged, partner, "a refused foreman leaves the stored link alone")
   } finally { session.user = null; await dropScratchOrg(org.orgId) }
 })

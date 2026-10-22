@@ -229,9 +229,9 @@ await seedPayrollTime(org.orgId, employeeId, actorId, {
     assert.equal(calculated.gross, '24.0000', 'the retro cheque IS the difference')
     const stub = (await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
       select gross, factors from pay_stubs
-       where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}`))
-    assert.equal(stub.rows[0]!.gross, '24.0000')
-    assert.equal(stub.rows[0]!.factors.B, '24.0000', 'CA taxes retro pay non-periodically')
+       where org_id = ${org.orgId} and pay_run_document_id = ${retro.documentId}`, 'objects'))
+    assert.equal(stub[0]!.gross, '24.0000')
+    assert.equal(stub[0]!.factors.B, '24.0000', 'CA taxes retro pay non-periodically')
   } finally {
     await dropScratchOrgReporting(org.orgId)
   }
@@ -348,8 +348,8 @@ test(
       const writes = await db.execute<{ count: number }>(sql`
         select count(*)::int as count
           from documents
-         where org_id = ${org.orgId} and kind = 'pay_run'`)
-      assert.equal(writes.rows[0]?.count, 0, 'the rejected scope check writes no run')
+         where org_id = ${org.orgId} and kind = 'pay_run'`, 'objects')
+      assert.equal(writes[0]?.count, 0, 'the rejected scope check writes no run')
 
       const allowed = await createPayRun({
         orgId: org.orgId,
@@ -429,7 +429,7 @@ await seedPayrollTime(org.orgId, employeeId, actorId, {
 async function storedRunColumns(orgId: string, documentId: string) {
   return (await db.execute<{ calculation_errors: unknown; refusal_acknowledgement: unknown; run_status: string }>(sql`
     select calculation_errors, refusal_acknowledgement, run_status from pay_runs
-     where org_id = ${orgId} and document_id = ${documentId}`)).rows[0]!
+     where org_id = ${orgId} and document_id = ${documentId}`, 'objects'))[0]!
 }
 
 test('a run with refused in-scope employees cannot commit silently', { skip: !DB }, async () => {
@@ -471,7 +471,7 @@ test('a run with refused in-scope employees cannot commit silently', { skip: !DB
     assert.equal(after.run_status, 'calculated', 'the refused commit writes nothing')
     const lines = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from document_lines
-       where org_id = ${f.orgId} and document_id = ${f.documentId}`)).rows[0]?.count
+       where org_id = ${f.orgId} and document_id = ${f.documentId}`, 'objects'))[0]?.count
     assert.equal(lines, 0, 'no GL projection is materialized by a refused commit')
   } finally {
     await dropScratchOrgReporting(f.orgId)
@@ -513,7 +513,7 @@ test('acknowledged refusals commit and the acknowledgement is recorded', { skip:
     const audit = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from audit_log
        where org_id = ${f.orgId} and table_name = 'pay_runs' and row_id = ${f.documentId}
-         and changes->>'operation' = 'acknowledge-refusals'`)).rows[0]?.count
+         and changes->>'operation' = 'acknowledge-refusals'`, 'objects'))[0]?.count
     assert.equal(audit, 1, 'the acknowledgement decision is in the audit log')
   } finally {
     await dropScratchOrgReporting(f.orgId)
@@ -535,7 +535,7 @@ test('an adjustment clears the stored errors and acknowledgement together with t
     assert.ok(parsePayRunRefusalAcknowledgement(before.refusal_acknowledgement))
 
     const bonus = (await db.execute<{ id: string }>(sql`
-      select id from pay_components where org_id = ${f.orgId} and code = 'BONUS'`)).rows[0]!
+      select id from pay_components where org_id = ${f.orgId} and code = 'BONUS'`, 'objects'))[0]!
     await mutatePayRunAdjustment({
       orgId: f.orgId, documentId: f.documentId, actorId: f.actorId,
       mutation: {

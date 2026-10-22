@@ -58,14 +58,14 @@ async function loadVisibleDefinitions(
   context: ApplicationContext,
 ): Promise<ReportDefinitionRow[]> {
   assertApplicationPermission(context, "reports.read");
-  const rows = (await db.execute<ReportDefinitionRow>(sql`
+  const rows = await db.execute<ReportDefinitionRow>(sql`
     select id, name, description, kind,
            coalesce(report_type, 'query') as report_type,
            slug, query, statement
       from report_definitions
      where org_id = ${context.authz.user.orgId} and archived_at is null
      order by updated_at desc, name
-  `)).rows;
+  `, "objects");
   const visible: ReportDefinitionRow[] = [];
   for (const row of rows) {
     if (await canAccessReportDefinition(context.authz, asAuthorizationDefinition(row))) {

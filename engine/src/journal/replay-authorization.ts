@@ -45,7 +45,7 @@ export async function authorizeConnectorReplay(
     values (${input.orgId}, ${input.connectionId}, ${input.authorizedBy},
             ${input.periodFromId}, ${input.periodToId}, ${input.expiresAt},
             ${input.reason}, ${input.actorId ?? null}, ${input.actorId ?? null})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!inserted)
     throw new PostingError(
       "the connector replay authorization was not recorded — retry the grant instead of replaying without it",
@@ -63,7 +63,7 @@ export async function findLiveReplayAuthorization(
   executor: SqlExecutor,
   input: { orgId: string; periodId: string },
 ): Promise<LiveReplayAuthorization | null> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     id: string;
     connection_id: string;
     reason: string;
@@ -89,7 +89,7 @@ export async function findLiveReplayAuthorization(
        and target.starts_on >= least(from_period.starts_on, to_period.starts_on)
        and target.ends_on <= greatest(from_period.ends_on, to_period.ends_on)
      order by auth.authorized_at desc
-     limit 1`)).rows;
+     limit 1`, "objects");
   const found = rows[0];
   if (!found) return null;
   return {

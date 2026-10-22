@@ -56,16 +56,16 @@ test("assign-posting-period previews, commits with audit, and is idempotent", { 
     assert.equal(first.refused.length, 0);
     assert.equal(first.skipped.length, 0);
     const stored = await db.execute<{ id: string; posting_period_id: string }>(sql`
-      select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${sales}, ${purchase})`);
+      select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${sales}, ${purchase})`, "objects");
     // Both seeded documents round-trip: the per-row period check below
     // cannot pass over an empty set.
-    assert.equal(stored.rows.length, 2);
-    for (const row of stored.rows) assert.equal(row.posting_period_id, org.periodId);
+    assert.equal(stored.length, 2);
+    for (const row of stored) assert.equal(row.posting_period_id, org.periodId);
     const audit = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
        where org_id = ${org.orgId} and table_name = 'documents'
-         and row_id in (${sales}, ${purchase}) and action = 'update'`);
-    assert.equal(audit.rows[0]?.n, "2");
+         and row_id in (${sales}, ${purchase}) and action = 'update'`, "objects");
+    assert.equal(audit[0]?.n, "2");
 
     const second = await commitPostingPeriodAssignment(org.orgId, { bookId: org.bookId, actorId: actor });
     assert.deepEqual(second, { assigned: [], skipped: [], refused: [] });
@@ -127,8 +127,8 @@ test("assign-posting-period refuses closed periods and dateless calendars per do
     assert.equal(result.refused.length, 2);
     const stillNull = await db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
-       where org_id = ${org.orgId} and id in (${sales}, ${dateless}) and posting_period_id is null`);
-    assert.equal(stillNull.rows[0]?.n, "2");
+       where org_id = ${org.orgId} and id in (${sales}, ${dateless}) and posting_period_id is null`, "objects");
+    assert.equal(stillNull[0]?.n, "2");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -171,7 +171,7 @@ test("assign-posting-period offers the open adjustment period when the regular p
     });
     const regular = (await db.execute<{ fiscal_calendar_id: string; fiscal_year: number; ends_on: string }>(sql`
       select fiscal_calendar_id, fiscal_year, ends_on::text as ends_on from accounting_periods
-       where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!;
+       where id = ${org.periodId} and org_id = ${org.orgId}`, "objects"))[0]!;
     const adjustmentId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods
@@ -200,7 +200,7 @@ test("assign-posting-period offers the open adjustment period when the regular p
     const audit = (await db.execute<{ reason: string }>(sql`
       select changes->>'reason' as reason from audit_log
        where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${journal}
-       order by at desc, id desc limit 1`)).rows[0];
+       order by at desc, id desc limit 1`, "objects"))[0];
     assert.equal(audit?.reason, `bulk posting-period assignment to adjustment period ${adjustmentLabel}`);
 
     // A bogus adjustment id refuses instead of silently assigning nothing.

@@ -67,8 +67,8 @@ export async function loadGateHeader(
            g.subject_kind, g.subject_id
       from flow_gates g
      where g.id = ${gateId} and g.org_id = ${orgId}
-  `))
-  const gate = r.rows[0]
+  `, 'objects'))
+  const gate = r[0]
   if (!gate) return null
   const scope = getFlowAdapter(gate.subject_kind)?.scope
   if (!scope) throw new FlowSubjectScopeUnresolvedError(gate.subject_kind, gate.subject_id)

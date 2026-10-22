@@ -112,8 +112,8 @@ registerHooks({
             return { rows: [] }
           }
           export const db = {
-            execute: async (query) => refuse(query),
-            transaction: async (fn) => fn({ execute: async (query) => refuse(query) }),
+            execute: async (query, mode) => Promise.resolve(refuse(query)).then((result) => (mode === 'objects' ? result.rows : result)),
+            transaction: async (fn) => fn({ execute: async (query, mode) => Promise.resolve(refuse(query)).then((result) => (mode === 'objects' ? result.rows : result)) }),
           }
         `,
         shortCircuit: true,

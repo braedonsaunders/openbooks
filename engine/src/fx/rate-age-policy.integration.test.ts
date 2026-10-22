@@ -44,8 +44,8 @@ test("Setup creates an audited policy and preserves existing versions at API and
     const { createSetupRecord, updateSetupRecord, deleteSetupRecord } = await import("../../../web/lib/setup/write.ts");
     const created = await createSetupRecord(actor,"fx-rate-age-policies",{rateKind:"closing",maxAgeDays:7,effectiveFrom:"2026-07-01"});
     assert.equal(created.status,200,JSON.stringify(created.body));
-    const row = (await db.execute<{id:string}>(sql`select id from fx_rate_age_policies where org_id=${org.orgId}`)).rows[0]!;
-    const audit = (await db.execute<{actor_id:string}>(sql`select actor_id from audit_log where org_id=${org.orgId} and table_name='fx_rate_age_policies' and row_id=${row.id}`)).rows;
+    const row = (await db.execute<{id:string}>(sql`select id from fx_rate_age_policies where org_id=${org.orgId}`, "objects"))[0]!;
+    const audit = await db.execute<{actor_id:string}>(sql`select actor_id from audit_log where org_id=${org.orgId} and table_name='fx_rate_age_policies' and row_id=${row.id}`, "objects");
     assert.ok(audit.some(entry=>entry.actor_id===actor.id));
     const updated = await updateSetupRecord(actor,"fx-rate-age-policies",{id:row.id,maxAgeDays:99});
     assert.equal(updated.status,405);

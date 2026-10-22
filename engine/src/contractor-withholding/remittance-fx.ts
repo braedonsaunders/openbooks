@@ -13,7 +13,7 @@ export async function withholdingRemittanceFx(
 ): Promise<FxAsOfEvidence & { rate: string }> {
   const entity = (await executor.execute<{ base_currency: string }>(sql`
     select base_currency from subsidiaries
-     where org_id=${orgId} and id=${subsidiaryId} and is_active for share`)).rows[0];
+     where org_id=${orgId} and id=${subsidiaryId} and is_active for share`, "objects"))[0];
   if (!entity?.base_currency) throw new ContractorWithholdingError(
     "The enrolled legal entity must remain active with a configured functional currency.",
     "Review the legal entity in Setup before preparing the authority document.",

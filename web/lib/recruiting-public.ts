@@ -19,16 +19,12 @@ export async function resolvePublicOrgFeatures(
   return withBypassContext(async () => {
     const found =
       table === 'interview'
-        ? (
-            await db.execute<{ orgId: string }>(sql`
+        ? (await db.execute<{ orgId: string }>(sql`
               select org_id as "orgId" from hrm_interviews where id = ${rowId}
-            `)
-          ).rows[0]
-        : (
-            await db.execute<{ orgId: string }>(sql`
+            `, 'objects'))[0]
+        : (await db.execute<{ orgId: string }>(sql`
               select org_id as "orgId" from hrm_offers where id = ${rowId}
-            `)
-          ).rows[0]
+            `, 'objects'))[0]
     return found ?? null
   })
 }
@@ -55,11 +51,9 @@ export function orgSlugFor(name: string): string {
 export async function resolveOrgBySlug(slug: string): Promise<{ orgId: string; name: string } | null> {
   // bypass: cross-org-by-design — matching a public slug requires checking all production organization names for ambiguity.
   const orgs = await withBypassContext(async () => {
-    const rows = (
-      await db.execute<{ orgId: string; name: string }>(sql`
+    const rows = await db.execute<{ orgId: string; name: string }>(sql`
         select id as "orgId", name from orgs where env_kind = 'production'
-      `)
-    ).rows
+      `, 'objects')
     return rows
   })
   const matches = orgs.filter((org) => orgSlugFor(org.name) === slug)

@@ -84,15 +84,15 @@ export async function releaseAbandonedBulkRunKey(args: {
        and idempotency_key = ${args.key}
        and request_hash = ${hash}
        and completed_at is null
-  `)).rows[0];
+  `, "objects"))[0];
   if (!rival) return false;
   const deleted = (await db.execute<{ id: string }>(sql`
     delete from application_idempotency_keys
      where id = ${rival.id}
        and completed_at is null
     returning id
-  `));
-  return (deleted.rows?.length ?? 0) > 0;
+  `, "objects"));
+  return (deleted?.length ?? 0) > 0;
 }
 
 /**
@@ -114,15 +114,15 @@ export async function claimBulkRunKey(args: {
     -- A retry resolves the existing claim below and verifies its request hash before replaying.
     on conflict (org_id, actor_id, source, operation, idempotency_key) do nothing
     returning id
-  `));
-  if (inserted.rows[0]) return { status: "claimed" };
+  `, "objects"));
+  if (inserted[0]) return { status: "claimed" };
   const rival = (await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(sql`
     select request_hash as "requestHash", response, completed_at as "completedAt"
       from application_idempotency_keys
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
        and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
        and idempotency_key = ${args.key}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!rival) return { status: "claimed" };
   if (rival.requestHash !== hash) return { status: "mismatched" };
   if (rival.completedAt !== null) return { status: "completed", response: rival.response };
@@ -185,15 +185,15 @@ export async function claimBulkRunExecution(args: {
        and completed_at is null
        and (response is null or coalesce(response->>'bulkRunStartedAt', '') < ${cutoff})
     returning id
-  `));
-  if (won.rows[0]) return { status: "mine" };
+  `, "objects"));
+  if (won[0]) return { status: "mine" };
   const rival = (await db.execute<{ requestHash: string; response: unknown; completedAt: Date | null }>(sql`
     select request_hash as "requestHash", response, completed_at as "completedAt"
       from application_idempotency_keys
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
        and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
        and idempotency_key = ${args.key}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!rival) return { status: "mine" };
   if (rival.requestHash !== hash) return { status: "mismatched" };
   if (rival.completedAt !== null) return { status: "completed", response: rival.response };
@@ -214,7 +214,7 @@ export async function readBulkRunClaim(args: {
      where org_id = ${args.orgId} and actor_id = ${args.actorId}
        and source = ${BULK_RUN_SOURCE} and operation = ${BULK_RUN_OPERATION}
        and idempotency_key = ${args.key}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return { status: "claimed" };
   if (row.requestHash !== hash) return { status: "mismatched" };
   if (row.completedAt !== null) return { status: "completed", response: row.response };
@@ -252,6 +252,6 @@ export async function completeBulkRunKey(args: {
        and request_hash = ${requestHash(args.scriptId)}
        and completed_at is null
     returning id
-  `));
-  return (updated.rows?.length ?? 0) > 0;
+  `, "objects"));
+  return (updated?.length ?? 0) > 0;
 }

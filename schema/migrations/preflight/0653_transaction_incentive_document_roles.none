@@ -1,1 +1,0 @@
-Additive: a nullable field-ticket column, widened and new checks that every existing row satisfies through its defaults, and nullable or defaulted policy columns; existing programs keep their behaviour.

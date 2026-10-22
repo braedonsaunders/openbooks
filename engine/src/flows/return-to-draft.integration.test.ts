@@ -46,12 +46,12 @@ test("returning an approved document to draft rechecks native actor authority be
     const actors = await seedReturnActors(org.orgId);
     const documentId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
     await submitAndReleaseIfUngated("vendor_bill", documentId, actors.submitterId);
-    const auditBefore = (await db.execute(sql`select id from audit_log where org_id=${org.orgId}`)).rows;
+    const auditBefore = await db.execute(sql`select id from audit_log where org_id=${org.orgId}`, "objects");
     await assert.rejects(returnDocumentToDraft({ orgId: org.orgId, documentId, actorId: actors.outsiderId,
       allowedSubsidiaryIds: null, reason: "Review the bill before another submission" }), /not found/);
     assert.equal((await db.execute<{status:string}>(sql`select status from documents
-      where org_id=${org.orgId} and id=${documentId}`)).rows[0]?.status, "approved");
-    assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId}`)).rows, auditBefore);
+      where org_id=${org.orgId} and id=${documentId}`, "objects"))[0]?.status, "approved");
+    assert.deepEqual(await db.execute(sql`select id from audit_log where org_id=${org.orgId}`, "objects"), auditBefore);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -69,23 +69,23 @@ async function nativeBill(org: Awaited<ReturnType<typeof createScratchOrg>>, act
 }
 
 async function docStatus(orgId: string, id: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status from documents where id = ${id} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ status: string }>(sql`
+    select status from documents where id = ${id} and org_id = ${orgId}`, "objects");
   return rows[0]!.status;
 }
 
 async function latestDocumentAudit(orgId: string, id: string) {
-  const rows = (await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } } }>(sql`
+  const rows = await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } } }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
-     order by at desc, id desc limit 1`)).rows;
+     order by at desc, id desc limit 1`, "objects");
   return rows[0]!;
 }
 
 
 async function runStatus(orgId: string, runId: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status from flow_runs where id = ${runId} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ status: string }>(sql`
+    select status from flow_runs where id = ${runId} and org_id = ${orgId}`, "objects");
   return rows[0]!.status;
 }
 
@@ -203,8 +203,8 @@ test("a flow-governed bill keeps its completed run as history and resubmits into
     const first = await submitForApproval("vendor_bill", billId, actors.submitterId);
     assert.equal(first.gated, true);
     const firstRunId = first.runId!;
-    const gates = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${billId} and org_id = ${org.orgId}`)).rows;
+    const gates = await db.execute<{ id: string }>(sql`
+      select id from flow_gates where subject_id = ${billId} and org_id = ${org.orgId}`, "objects");
     await decideGate({ gateId: gates[0]!.id, decision: "approved", userId: actors.approver1Id });
     assert.equal(await docStatus(org.orgId, billId), "approved");
     assert.equal(await runStatus(org.orgId, firstRunId), "completed");
@@ -303,8 +303,8 @@ test("a concurrent post and return converge to exactly one outcome", { skip: !DB
       assert.equal(posted.status, "rejected", "posting refuses a returned draft");
       assert.equal(await docStatus(org.orgId, billId), "draft");
     }
-    const entries = (await db.execute<{ id: string }>(sql`
-      select id from journal_entries where org_id=${org.orgId} and source_document_id=${billId}`)).rows;
+    const entries = await db.execute<{ id: string }>(sql`
+      select id from journal_entries where org_id=${org.orgId} and source_document_id=${billId}`, "objects");
     assert.equal(entries.length, postWon ? 1 : 0, "only the winning posting can leave accounting history");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -280,7 +280,7 @@ export async function statutoryHolidayLinesForStub(
     const employee = (await tx.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id from parties
        where org_id = ${orgId} and id = ${employeePartyId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!employee || !payrollSubsidiaryInScope(allowedSubsidiaryIds, employee.subsidiary_id)) {
       throw new PayrollError("employee not found");
     }
@@ -363,8 +363,8 @@ export async function insertPayStubRow(
             ${stub.paymentMethod},
             ${stub.actorId}, ${stub.actorId})
     returning id
-  `));
-  return inserted.rows[0]!.id;
+  `, "objects"));
+  return inserted[0]!.id;
 }
 
 /** Insert one row per stub line, in the order the phases appended them. */
@@ -405,22 +405,22 @@ export async function insertPayStubLineRows(
               }) : null}::jsonb,
               ${line.paymentKind ?? "cash"}, ${line.nonCashAccountId ?? null},
               ${args.actorId}, ${args.actorId}) returning id
-    `);
-    if (!insertedLine.rows[0]) throw new PayrollError("The calculated payroll line was not stored; retry calculation before committing.");
-    if (line.entitlementMovementKey && insertedLine.rows[0]) entitlementLineIds.set(line.entitlementMovementKey,insertedLine.rows[0].id);
+    `, "objects");
+    if (!insertedLine[0]) throw new PayrollError("The calculated payroll line was not stored; retry calculation before committing.");
+    if (line.entitlementMovementKey && insertedLine[0]) entitlementLineIds.set(line.entitlementMovementKey,insertedLine[0].id);
     if (line.benefitAllocationId) {
-      const persisted = insertedLine.rows[0];
+      const persisted = insertedLine[0];
       if (!persisted) throw new PayrollError('The recurring benefit payroll line was not stored — retry calculation before committing');
-      const linked = (await tx.execute(sql`update pay_run_benefit_allocations set pay_stub_line_id=${persisted.id},amount=${line.amount},updated_by=${args.actorId},updated_at=now()
-        where org_id=${args.orgId} and id=${line.benefitAllocationId} and status='calculated' returning id`)).rows;
+      const linked = await tx.execute(sql`update pay_run_benefit_allocations set pay_stub_line_id=${persisted.id},amount=${line.amount},updated_by=${args.actorId},updated_at=now()
+        where org_id=${args.orgId} and id=${line.benefitAllocationId} and status='calculated' returning id`, "objects");
       if (linked.length !== 1) throw new PayrollError('The recurring benefit allocation could not link to its native payroll line — retry calculation before committing');
     }
     if (line.holidayAllocationId) {
-      const persisted = insertedLine.rows[0];
+      const persisted = insertedLine[0];
       if (!persisted) throw new PayrollError("The approved holiday payroll line was not stored; retry calculation.");
-      const linked = (await tx.execute(sql`update pay_run_holiday_allocations set pay_stub_line_id=${persisted.id},updated_by=${args.actorId},updated_at=now()
+      const linked = await tx.execute(sql`update pay_run_holiday_allocations set pay_stub_line_id=${persisted.id},updated_by=${args.actorId},updated_at=now()
         where org_id=${args.orgId} and id=${line.holidayAllocationId} and status='calculated'
-          and amount=${line.amount} and hours=${line.hours ?? null} and rate=${line.rate ?? null} returning id`)).rows;
+          and amount=${line.amount} and hours=${line.hours ?? null} and rate=${line.rate ?? null} returning id`, "objects");
       if (linked.length !== 1) throw new PayrollError("The approved holiday claim no longer matches its native payroll line; review payroll earning limits and recalculate.");
     }
   }
@@ -613,13 +613,13 @@ export async function employeeHomeDepartment(
          and (effective_to is null or effective_to > ${args.onDate}::date)
        order by version_no desc
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (assigned?.department_id) return assigned.department_id;
   }
   const role = (await tx.execute<{ department_id: string | null }>(sql`
     select department_id::text as department_id from employee_roles
      where org_id = ${args.orgId} and party_id = ${args.employeePartyId}
-  `)).rows[0];
+  `, "objects"))[0];
   return role?.department_id ?? null;
 }
 
@@ -695,7 +695,7 @@ export async function stampDepartmentExpenseAccounts(args: {
     `${line.componentId}|${line.departmentId}`,
     { componentId: line.componentId!, departmentId: line.departmentId! },
   ])).values()];
-  const mappings = (await tx.execute<{
+  const mappings = await tx.execute<{
     pay_component_id: string; department_id: string; expense_account_id: string;
   }>(sql`
     select distinct on (m.pay_component_id, m.department_id)
@@ -709,7 +709,7 @@ export async function stampDepartmentExpenseAccounts(args: {
        and m.effective_from <= ${payDate}::date
        and (m.effective_to is null or ${payDate}::date <= m.effective_to)
      order by m.pay_component_id, m.department_id, m.effective_from desc
-  `)).rows;
+  `, "objects");
   // The exclusion constraint admits one active window per component,
   // department and date, so at most one row answers per pair; the
   // effective_from ordering is a belt-and-braces tiebreak that can only

@@ -105,9 +105,9 @@ if (DB) {
         db.execute<{ n: string }>(sql`
           select count(*)::text as n from audit_log
            where org_id = ${fx.org.orgId} and action = 'delete'
-             and changes->>'event' = 'app_uninstall'`),
+             and changes->>'event' = 'app_uninstall'`, 'objects'),
       )
-      assert.equal(beforeDelete.rows[0]!.n, '0')
+      assert.equal(beforeDelete[0]!.n, '0')
 
       // Same ambient-scope class as the refusal call above: deleteApp resolves
       // its row through the ambient scope, so the real uninstall needs the
@@ -130,15 +130,15 @@ if (DB) {
             from audit_log
            where org_id = ${fx.org.orgId} and action = 'delete'
              and changes->>'event' = 'app_uninstall'
-           order by at desc limit 1`),
+           order by at desc limit 1`, 'objects'),
       )
-      assert.equal(evidence.rows.length, 1)
-      assert.equal(evidence.rows[0]!.actorId, fx.actorId)
-      assert.equal(evidence.rows[0]!.changes.after, null)
-      assert.equal(evidence.rows[0]!.changes.before.versions.length, 1)
-      assert.equal(evidence.rows[0]!.changes.before.files.length, 3)
-      assert.equal(evidence.rows[0]!.changes.before.runs.length, 1)
-      assert.equal(evidence.rows[0]!.changes.before.storage.length, 1)
+      assert.equal(evidence.length, 1)
+      assert.equal(evidence[0]!.actorId, fx.actorId)
+      assert.equal(evidence[0]!.changes.after, null)
+      assert.equal(evidence[0]!.changes.before.versions.length, 1)
+      assert.equal(evidence[0]!.changes.before.files.length, 3)
+      assert.equal(evidence[0]!.changes.before.runs.length, 1)
+      assert.equal(evidence[0]!.changes.before.storage.length, 1)
       assert.equal(await withBypass(() => getAppByKey(fx.org.orgId, fx.key)), null)
     } finally {
       await withBypass(() => dropScratchOrg(fx.org.orgId))
@@ -158,11 +158,11 @@ if (DB) {
           select actor_id as "actorId", changes from audit_log
            where org_id = ${fx.org.orgId} and action = 'update'
              and changes->>'event' = 'app_status_changed'
-           order by at desc limit 1`),
+           order by at desc limit 1`, 'objects'),
       )
-      assert.equal(audited.rows[0]!.actorId, fx.actorId)
-      assert.deepEqual(audited.rows[0]!.changes.before.status, 'installed')
-      assert.deepEqual(audited.rows[0]!.changes.after.status, 'disabled')
+      assert.equal(audited[0]!.actorId, fx.actorId)
+      assert.deepEqual(audited[0]!.changes.before.status, 'installed')
+      assert.deepEqual(audited[0]!.changes.after.status, 'disabled')
 
       await withBypass(async () => {
         await db.execute(sql`
@@ -201,21 +201,21 @@ if (DB) {
     const fx=await seedApp()
     try {
       const original=(await withBypass(()=>getAppByKey(fx.org.orgId,fx.key)))!
-      const files=(await withBypass(()=>db.execute<{path:string;content:string;isBinary:boolean}>(sql`select path,content,is_binary as "isBinary" from app_files where org_id=${fx.org.orgId} and version_id=${original.activeVersionId}`))).rows
+      const files=await withBypass(()=>db.execute<{path:string;content:string;isBinary:boolean}>(sql`select path,content,is_binary as "isBinary" from app_files where org_id=${fx.org.orgId} and version_id=${original.activeVersionId}`, 'objects'))
       const before=files.find(file=>file.path==='frontend/styles.css')!.content
       const editedFiles=files.map(file=>file.path==='frontend/styles.css'?{...file,content:'body { color: blue }'}:file)
       await withBypass(()=>installApp(fx.org.orgId,fx.actorId,{manifest:{...original.manifest!,name:'Renamed Proof',version:'2.0.0'},files:editedFiles}))
       const edited=(await withBypass(()=>getAppByKey(fx.org.orgId,fx.key)))!
       assert.notEqual(edited.activeVersionId,original.activeVersionId)
       assert.equal(edited.name,'Renamed Proof')
-      const historical=(await withBypass(()=>db.execute<{status:string;manifest:{name:string}}>(sql`select status,manifest from app_versions where id=${original.activeVersionId}`))).rows[0]!
+      const historical=(await withBypass(()=>db.execute<{status:string;manifest:{name:string}}>(sql`select status,manifest from app_versions where id=${original.activeVersionId}`, 'objects')))[0]!
       assert.equal(historical.status,'superseded');assert.equal(historical.manifest.name,original.name)
-      const css=(await withBypass(()=>db.execute<{version_id:string;content:string}>(sql`select version_id,content from app_files where org_id=${fx.org.orgId} and path='frontend/styles.css'`))).rows
+      const css=await withBypass(()=>db.execute<{version_id:string;content:string}>(sql`select version_id,content from app_files where org_id=${fx.org.orgId} and path='frontend/styles.css'`, 'objects'))
       assert.equal(css.find(file=>file.version_id===original.activeVersionId)!.content,before)
       assert.equal(css.find(file=>file.version_id===edited.activeVersionId)!.content,'body { color: blue }')
       await withBypass(()=>installApp(fx.org.orgId,fx.actorId,{manifest:{...edited.manifest!,version:'3.0.0'},files:editedFiles.filter(file=>file.path!=='frontend/styles.css')}))
       const removed=(await withBypass(()=>getAppByKey(fx.org.orgId,fx.key)))!
-      const retained=(await withBypass(()=>db.execute<{version_id:string}>(sql`select version_id from app_files where org_id=${fx.org.orgId} and path='frontend/styles.css'`))).rows
+      const retained=await withBypass(()=>db.execute<{version_id:string}>(sql`select version_id from app_files where org_id=${fx.org.orgId} and path='frontend/styles.css'`, 'objects'))
       assert.ok(retained.some(file=>file.version_id===edited.activeVersionId));assert.ok(!retained.some(file=>file.version_id===removed.activeVersionId))
     } finally { await withBypass(()=>dropScratchOrg(fx.org.orgId)) }
   })
@@ -282,8 +282,8 @@ if (DB) {
       )
       const rows = await withBypass(() => db.execute<{ n: string }>(sql`
         select count(*)::text as n from apps where org_id=${fx.org.orgId} and key=${unsafeKey}
-      `))
-      assert.equal(rows.rows[0]!.n, '0')
+      `, 'objects'))
+      assert.equal(rows[0]!.n, '0')
     } finally {
       await withBypass(() => dropScratchOrg(fx.org.orgId))
     }

@@ -52,14 +52,14 @@ for (const method of ["POST", "PATCH"] as const) {
         session.user = { id: actor, orgId: org.orgId, name: "Script administrator", email: "script@scratch.test", roles: [], isSuperAdmin: false,
           envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
         const original = (await db.execute<{ id: string }>(sql`insert into user_scripts(org_id,name,trigger_point,source,is_active)
-          values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`)).rows[0]!;
-        const before = (await db.execute(sql`select * from user_scripts where org_id=${org.orgId} order by id`)).rows;
+          values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`, "objects"))[0]!;
+        const before = await db.execute(sql`select * from user_scripts where org_id=${org.orgId} order by id`, "objects");
         const response = await withOrgContext(org.orgId, () => (method === "POST" ? POST : PATCH)(new Request("http://audit.local/api/admin/scripts", {
           method, body: JSON.stringify({ id: original.id, name: "Changed", triggerPoint: "before_submit", source: "function main(ctx) {}", isActive: false, ...override }),
         })));
         const valid = label.startsWith("valid ");
         assert.ok(valid ? response.status === 200 : [400, 422].includes(response.status), `unexpected ${response.status}: ${await response.text()}`);
-        const after = (await db.execute(sql`select * from user_scripts where org_id=${org.orgId} order by id`)).rows;
+        const after = await db.execute(sql`select * from user_scripts where org_id=${org.orgId} order by id`, "objects");
         if (!valid) assert.deepEqual(after, before);
         else {
           const saved = after.find(row => row.name === "Changed")!;
@@ -71,7 +71,7 @@ for (const method of ["POST", "PATCH"] as const) {
           // Whoever saves a script answers for its unattended runs.
           assert.equal(saved.run_as_user_id, actor);
         }
-        assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`)).rows.length, valid ? 1 : 0);
+        assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`, "objects")).length, valid ? 1 : 0);
       } finally {
         session.user = null;
         await dropScratchOrgReporting(org.orgId);
@@ -97,7 +97,7 @@ test("a script that reads or posts cannot be saved by someone who could not do s
     const poster = await save('function main() { return ob.journal.create({ memo: "m", lines: [] }, { post: true }); }');
     assert.equal(poster.status, 403);
     assert.match((await poster.json()).error, /writes journals with ob\.journal\.create.*missing permission: gl\.post/);
-    assert.deepEqual((await db.execute(sql`select id from user_scripts where org_id=${org.orgId}`)).rows, []);
+    assert.deepEqual(await db.execute(sql`select id from user_scripts where org_id=${org.orgId}`, "objects"), []);
 
     await db.execute(sql`update app_roles set permissions='["scripts.manage","sql.execute","gl.post"]'::jsonb where org_id=${org.orgId} and key='admin'`);
     assert.equal((await save('function main() { return ob.query("select 1 as n"); }')).status, 200);
@@ -119,7 +119,7 @@ for (const method of ["PATCH", "DELETE"] as const) {
       session.user = { id: actor, orgId: org.orgId, name: "Script administrator", email: "script@scratch.test", roles: [], isSuperAdmin: false,
         envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
       const original = (await db.execute<{ id: string }>(sql`insert into user_scripts(org_id,name,trigger_point,source,is_active)
-        values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`)).rows[0]!;
+        values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`, "objects"))[0]!;
       await blocker.query("begin");
       await blocker.query("select set_config('app.current_org',$1,true)", [org.orgId]);
       const pid = (await blocker.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
@@ -130,14 +130,14 @@ for (const method of ["PATCH", "DELETE"] as const) {
       // Observe the actual waiter before committing the competing write.
       let waiting = false;
       for (let i = 0; i < 200; i++) {
-        waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))) as waiting`)).rows[0]!.waiting;
+        waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${pid} = any(pg_blocking_pids(pid))) as waiting`, "objects"))[0]!.waiting;
         if (waiting) break;
         await delay(10);
       }
       assert.ok(waiting, "script mutation reached the competing row lock");
       await blocker.query("commit");
       assert.equal((await request).status, 200);
-      const audit = (await db.execute<{ changes: { before: { name: string } } }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='user_scripts' and row_id=${original.id}`)).rows[0]!;
+      const audit = (await db.execute<{ changes: { before: { name: string } } }>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='user_scripts' and row_id=${original.id}`, "objects"))[0]!;
       assert.equal(audit.changes.before.name, "Intervening committed change");
     } finally {
       await blocker.query("rollback");
@@ -173,11 +173,11 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: () =
       session.user = { id: actor, orgId: org.orgId, name: 'Script administrator', email: 'script@scratch.test', roles: [], isSuperAdmin: false,
         envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
       const id = (await db.execute<{ id: string }>(sql`insert into user_scripts(org_id,name,trigger_point,source,cron,next_run_at,is_active)
-        values(${org.orgId},'Scheduled','scheduled','function main(ctx) { return 42; }','0 12 * * *','2030-01-01 12:00:00.123456+00',true) returning id`)).rows[0]!.id;
+        values(${org.orgId},'Scheduled','scheduled','function main(ctx) { return 42; }','0 12 * * *','2030-01-01 12:00:00.123456+00',true) returning id`, "objects"))[0]!.id;
       await run(org.orgId, id, actor);
     } finally { session.user = null; control.afterRun = null; await dropScratchOrgReporting(org.orgId); }
   }
-  const cursor = async (orgId: string, id: string) => (await db.execute<{ value: string | null }>(sql`select next_run_at::text as value from user_scripts where org_id=${orgId} and id=${id}`)).rows[0]!.value;
+  const cursor = async (orgId: string, id: string) => (await db.execute<{ value: string | null }>(sql`select next_run_at::text as value from user_scripts where org_id=${orgId} and id=${id}`, "objects"))[0]!.value;
   const patch = (orgId: string, id: string, body: Record<string, unknown>) => withOrgContext(orgId, () => PATCH(new Request('http://audit.local/api/admin/scripts', {
     method: 'PATCH', body: JSON.stringify({ id, name: 'Edited', triggerPoint: 'scheduled', source: 'function main(ctx) { return 1; }', cron: '0 12 * * *', isActive: true, ...body }),
   })));
@@ -192,7 +192,7 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: () =
       const pid = (await blocker.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
       await blocker.query("update user_scripts set next_run_at='2031-01-01 12:00:00.654321+00' where org_id=$1 and id=$2", [orgId, id]);
       pending = patch(orgId, id, { timeoutMs: 3000, sortOrder: 42 });
-      let waiting = false; for (let i = 0; i < 200; i++) { waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as waiting`)).rows[0]!.waiting; if (waiting) break; await delay(10); }
+      let waiting = false; for (let i = 0; i < 200; i++) { waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as waiting`, "objects"))[0]!.waiting; if (waiting) break; await delay(10); }
       assert.ok(waiting); await blocker.query('commit'); assert.equal((await pending).status, 200); assert.match((await cursor(orgId, id))!, /^2031-01-01 .*\.654321/);
     } finally { await blocker.query('rollback'); blocker.release(); await pending?.catch(() => undefined); }
   }));
@@ -208,20 +208,20 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: () =
     await db.execute(sql`insert into script_runs(org_id,script_id,status,created_by) values(${orgId},${id},'ok',${actor})`);
     const response = await withOrgContext(orgId, () => DELETE(new Request(`http://audit.local/api/admin/scripts/${id}`, { method: 'DELETE' }), { params: Promise.resolve({ id }) }));
     assert.equal(response.status, 409); assert.match((await response.json()).error, /Deactivate.*preserve/i);
-    assert.equal((await db.execute(sql`select id from script_runs where org_id=${orgId} and script_id=${id}`)).rows.length, 1);
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${orgId} and table_name='user_scripts'`)).rows.length, 0);
+    assert.equal((await db.execute(sql`select id from script_runs where org_id=${orgId} and script_id=${id}`, "objects")).length, 1);
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${orgId} and table_name='user_scripts'`, "objects")).length, 0);
     assert.equal((await patch(orgId, id, { isActive: false })).status, 200); assert.equal(await cursor(orgId, id), null);
   }));
   for (const [trigger, active, status] of [['scheduled', false, 409], ['bulk', false, 409], ['before_submit', true, 422], ['endpoint', true, 422], ['client', true, 422]] as const)
     test(`Run now refuses ${active ? 'active' : 'inactive'} ${trigger} before execution`, enabled, async () => fixture(async (orgId, id) => {
       await db.execute(sql`update user_scripts set trigger_point=${trigger},is_active=${active} where org_id=${orgId} and id=${id}`);
       const before = await cursor(orgId, id); assert.equal((await runNow(orgId, id)).status, status); assert.equal(await cursor(orgId, id), before);
-      assert.equal((await db.execute(sql`select id from script_runs where org_id=${orgId} and script_id=${id}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select id from script_runs where org_id=${orgId} and script_id=${id}`, "objects")).length, 0);
     }));
   test('Run now advances an unchanged microsecond cursor and records the actor', enabled, async () => fixture(async (orgId, id, actor) => {
     const from = Date.now(), response = await runNow(orgId, id); assert.equal(response.status, 200); assert.equal((await response.json()).status, 'ok');
     const next = new Date((await cursor(orgId, id))!).getTime(); assert.ok(next > from && next <= Date.now() + 86_400_000);
-    assert.deepEqual((await db.execute(sql`select created_by,status from script_runs where org_id=${orgId} and script_id=${id}`)).rows, [{ created_by: actor, status: 'ok' }]);
+    assert.deepEqual(await db.execute(sql`select created_by,status from script_runs where org_id=${orgId} and script_id=${id}`, "objects"), [{ created_by: actor, status: 'ok' }]);
   }));
   for (const change of ['cron', 'deactivate', 'trigger', 'tick'] as const) test(`Run now cannot overwrite a concurrent ${change} scheduling change`, enabled, async () => fixture(async (orgId, id) => {
     const reached = Promise.withResolvers<void>(), release = Promise.withResolvers<void>();
@@ -248,7 +248,7 @@ for (const method of ["POST", "PATCH"] as const) {
       session.user = { id: actor, orgId: org.orgId, name: "Script administrator", email: "script@scratch.test", roles: [], isSuperAdmin: false,
         envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
       const original = (await db.execute<{ id: string }>(sql`insert into user_scripts(org_id,name,trigger_point,source,is_active)
-        values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`)).rows[0]!;
+        values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`, "objects"))[0]!;
       // A slow request body allows a feature revocation after the initial
       // API guard. The eventual database write must observe that revocation.
       const payload = { id: original.id, name: "Changed", triggerPoint: "before_submit", source: "function main(ctx) {}" };
@@ -288,8 +288,8 @@ for (const method of ["POST", "PATCH"] as const) {
       });
       const response = await withOrgContext(org.orgId, () => (method === "POST" ? POST : PATCH)(request));
       assert.equal(response.status, 404);
-      assert.deepEqual((await db.execute(sql`select name from user_scripts where org_id=${org.orgId}`)).rows, [{ name: "Original" }]);
-      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`)).rows.length, 0);
+      assert.deepEqual(await db.execute(sql`select name from user_scripts where org_id=${org.orgId}`, "objects"), [{ name: "Original" }]);
+      assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`, "objects")).length, 0);
     } finally {
       session.user = null;
       await dropScratchOrgReporting(org.orgId);
@@ -308,7 +308,7 @@ test("script DELETE rechecks the feature under its row lock", { skip: !process.e
     session.user = { id: actor, orgId: org.orgId, name: "Script administrator", email: "script@scratch.test", roles: [], isSuperAdmin: false,
       envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
     const original = (await db.execute<{ id: string }>(sql`insert into user_scripts(org_id,name,trigger_point,source,is_active)
-      values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`)).rows[0]!;
+      values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`, "objects"))[0]!;
     // Hold the org row so the delete's locked feature recheck waits behind us.
     await blocker.query("begin");
     await blocker.query("select set_config('app.current_org',$1,true)", [org.orgId]);
@@ -318,7 +318,7 @@ test("script DELETE rechecks the feature under its row lock", { skip: !process.e
       { params: Promise.resolve({ id: original.id }) }));
     let waiting = false;
     for (let i = 0; i < 200; i++) {
-      waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${blockerPid} = any(pg_blocking_pids(pid))) as waiting`)).rows[0]!.waiting;
+      waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${blockerPid} = any(pg_blocking_pids(pid))) as waiting`, "objects"))[0]!.waiting;
       if (waiting) break;
       await delay(10);
     }
@@ -328,8 +328,8 @@ test("script DELETE rechecks the feature under its row lock", { skip: !process.e
     await blocker.query("update orgs set settings=jsonb_set(settings,'{features,scripts}','false') where id=$1", [org.orgId]);
     await blocker.query("commit");
     assert.equal((await request).status, 404);
-    assert.deepEqual((await db.execute(sql`select name from user_scripts where org_id=${org.orgId}`)).rows, [{ name: "Original" }]);
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`)).rows.length, 0);
+    assert.deepEqual(await db.execute(sql`select name from user_scripts where org_id=${org.orgId}`, "objects"), [{ name: "Original" }]);
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='user_scripts'`, "objects")).length, 0);
   } finally {
     await blocker.query("rollback");
     blocker.release();

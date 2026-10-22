@@ -88,7 +88,7 @@ async function chargeForMovement(runner: SqlExecutor, orgId: string, movementId:
       left join document_lines line
         on line.org_id = charge.org_id and line.id = charge.fulfillment_line_id
      where charge.org_id = ${orgId} and charge.movement_id = ${movementId} and charge.kind = 'fulfillment'
-     for update of charge`)).rows[0] ?? null;
+     for update of charge`, "objects"))[0] ?? null;
 }
 
 /**
@@ -220,9 +220,9 @@ async function postCrossCharge(
 async function fulfill(runner: SqlExecutor, request: CrossSubsidiaryIssueRequest): Promise<void> {
   const { orgId } = request;
   const pair = await loadIntercompanyPair(runner, orgId, request.sellingSubsidiaryId, request.fulfillingSubsidiaryId);
-  const names = (await runner.execute<{ id: string; name: string }>(sql`
+  const names = await runner.execute<{ id: string; name: string }>(sql`
     select id, name from subsidiaries
-     where org_id = ${orgId} and id in (${request.sellingSubsidiaryId}, ${request.fulfillingSubsidiaryId})`)).rows;
+     where org_id = ${orgId} and id in (${request.sellingSubsidiaryId}, ${request.fulfillingSubsidiaryId})`, "objects");
   const nameOf = (id: string) => names.find((row) => row.id === id)?.name ?? id;
   if (!pair || !pair.isActive) {
     refuse(
@@ -240,9 +240,9 @@ async function fulfill(runner: SqlExecutor, request: CrossSubsidiaryIssueRequest
     );
   }
   const item = (await runner.execute<{ label: string }>(sql`
-    select coalesce(nullif(btrim(code), ''), name) as label from items where org_id = ${orgId} and id = ${request.itemId}`)).rows[0];
+    select coalesce(nullif(btrim(code), ''), name) as label from items where org_id = ${orgId} and id = ${request.itemId}`, "objects"))[0];
   const document = (await runner.execute<{ document_number: string }>(sql`
-    select document_number from documents where org_id = ${orgId} and id = ${request.fulfillmentDocumentId}`)).rows[0];
+    select document_number from documents where org_id = ${orgId} and id = ${request.fulfillmentDocumentId}`, "objects"))[0];
   // The fulfilling entity relieves its own layers at its own cost; its
   // dimensions are its warehouse's, never the selling entity's.
   const issue = await issueInventory(orgId, request.actorId, {
@@ -298,7 +298,7 @@ async function fulfill(runner: SqlExecutor, request: CrossSubsidiaryIssueRequest
     departmentId: request.departmentId,
     projectId: request.projectId,
   });
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(sql`
     insert into intercompany_fulfillment_charges
       (org_id, kind, fulfillment_document_id, fulfillment_line_id, selling_subsidiary_id, fulfilling_subsidiary_id,
        policy_id, item_id, stock_location_id, movement_id, quantity, cost_amount, cost_currency, transfer_currency,
@@ -307,7 +307,7 @@ async function fulfill(runner: SqlExecutor, request: CrossSubsidiaryIssueRequest
             ${request.fulfillingSubsidiaryId}, ${policy.id}, ${request.itemId}, ${request.stockLocationId},
             ${issue.movementId}, ${request.quantity}, ${cost}, ${currency}, ${currency}, ${unitPrice}, ${amount},
             ${entryId}, ${request.date}, ${request.actorId})
-    returning id`)).rows;
+    returning id`, "objects");
   if (inserted.length !== 1) refuse("the cross-subsidiary charge could not be recorded");
 }
 
@@ -344,7 +344,7 @@ async function returned(runner: SqlExecutor, request: CrossSubsidiaryReturnReque
   // partial returns reverse exactly the whole charge.
   const priorReturned = (await runner.execute<{ quantity: string }>(sql`
     select coalesce(sum(quantity), 0)::text as quantity from intercompany_fulfillment_charges
-     where org_id = ${orgId} and kind = 'return' and reverses_charge_id = ${charge.id}`)).rows[0]!.quantity;
+     where org_id = ${orgId} and kind = 'return' and reverses_charge_id = ${charge.id}`, "objects"))[0]!.quantity;
   const shipped = scaled(charge.quantity, 8);
   const before = scaled(priorReturned, 8);
   const returningUnits = scaled(request.quantity, 8);
@@ -353,10 +353,10 @@ async function returned(runner: SqlExecutor, request: CrossSubsidiaryReturnReque
   const amount = fromUnits(roundDiv(total * (before + returningUnits), shipped) - roundDiv(total * before, shipped));
   const costShare = mulRatio(charge.cost_amount, returningUnits, shipped);
   const document = (await runner.execute<{ document_number: string }>(sql`
-    select document_number from documents where org_id = ${orgId} and id = ${request.creditDocumentId}`)).rows[0];
+    select document_number from documents where org_id = ${orgId} and id = ${request.creditDocumentId}`, "objects"))[0];
   const policy = (await runner.execute<{ revenue_account_id: string; cost_account_id: string }>(sql`
     select revenue_account_id, cost_account_id from intercompany_transfer_pricing_policies
-     where org_id = ${orgId} and id = ${charge.policy_id}`)).rows[0];
+     where org_id = ${orgId} and id = ${charge.policy_id}`, "objects"))[0];
   if (!policy) refuse("the transfer pricing policy of the returned shipment no longer exists");
   let entryId: string | null = null;
   if (toUnits(amount) > 0n) {
@@ -378,7 +378,7 @@ async function returned(runner: SqlExecutor, request: CrossSubsidiaryReturnReque
     });
   }
   if (!entryId) refuse("the returned quantity carries no transfer amount to reverse");
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(sql`
     insert into intercompany_fulfillment_charges
       (org_id, kind, fulfillment_document_id, fulfillment_line_id, credit_document_id, reverses_charge_id,
        selling_subsidiary_id, fulfilling_subsidiary_id, policy_id, item_id, stock_location_id, movement_id,
@@ -389,7 +389,7 @@ async function returned(runner: SqlExecutor, request: CrossSubsidiaryReturnReque
             ${charge.policy_id}, ${charge.item_id}, ${charge.stock_location_id}, ${request.returnMovementId},
             ${request.quantity}, ${costShare}, ${charge.cost_currency}, ${charge.transfer_currency},
             ${charge.transfer_unit_price}, ${amount}, ${entryId}, ${request.date}, ${request.actorId})
-    returning id`)).rows;
+    returning id`, "objects");
   if (inserted.length !== 1) refuse("the cross-subsidiary return could not be recorded");
 }
 
@@ -410,12 +410,12 @@ async function voided(runner: SqlExecutor, request: CrossSubsidiaryVoidRequest):
       join journal_entries entry on entry.org_id = returned.org_id and entry.id = returned.entry_id
      where returned.org_id = ${request.orgId} and returned.kind = 'return'
        and returned.reverses_charge_id = ${charge.id} and entry.status = 'posted' -- Live entries only: a reversed return charge no longer authorizes blocking shipment void.
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (liveReturnCharge) {
     refuse("this cross-subsidiary shipment has a live customer-credit charge return; reverse that credit before voiding the shipment");
   }
   const status = (await runner.execute<{ status: string; entry_number: string; book_id: string }>(sql`
-    select status, entry_number, book_id from journal_entries where org_id = ${request.orgId} and id = ${charge.entry_id}`)).rows[0];
+    select status, entry_number, book_id from journal_entries where org_id = ${request.orgId} and id = ${charge.entry_id}`, "objects"))[0];
   if (!status || status.status !== "posted") return;
   const periodId = await asInventoryRefusal(() => intercompanyPostingPeriod(runner, request.orgId, request.reversalDate, charge.selling_subsidiary_id));
   await asInventoryRefusal(() => assertIntercompanyPeriodsOpen(runner, {

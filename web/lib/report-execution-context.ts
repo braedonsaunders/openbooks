@@ -174,7 +174,7 @@ async function loadReportPrincipal(orgId: string, snapshot: ReportAuthorization)
        and (u.org_id = ${orgId} or u.is_super_admin or exists (
          select 1 from role_assignments a where a.user_id = u.id and a.org_id = ${orgId}
        ))
-  `)).rows[0])
+  `, 'objects'))[0])
   if (!row) throw new Error('Report execution principal is inactive or unavailable')
   return { ...row, orgId, roles: [], envKind: 'production', productionOrgId: orgId,
     homeUserId: row.id, homeOrgId: row.org_id, isSuperAdmin: row.is_super_admin }

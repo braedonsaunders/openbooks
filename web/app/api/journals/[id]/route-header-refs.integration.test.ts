@@ -81,8 +81,8 @@ async function revisionToken(orgId: string, documentId: string): Promise<string>
   const row = (await withOrgContext(orgId, () => db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `)));
-  return row.rows[0]!.updatedAt;
+  `, "objects")));
+  return row[0]!.updatedAt;
 }
 
 async function makeDraftJournal(org: { orgId: string; subsidiaryId: string; date: string }, adminId: string, n: string) {
@@ -122,7 +122,7 @@ test(
       );
       const date = (await withOrgContext(orgA.orgId, () => db.execute<{ d: string }>(sql`
         select document_date::text as d from documents where id = ${documentId}
-      `))).rows[0]!.d;
+      `, "objects")))[0]!.d;
       assert.equal(date, orgA.date, "refused date writes nothing");
     } finally {
       routeState.authz = null;
@@ -157,7 +157,7 @@ test(
       );
       const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
-      `))).rows[0]!.n;
+      `, "objects")))[0]!.n;
       assert.equal(lines, 0, "refused foreign-party lines store nothing");
     } finally {
       routeState.authz = null;
@@ -189,7 +189,7 @@ test(
       );
       const party = (await withOrgContext(orgA.orgId, () => db.execute<{ p: string | null }>(sql`
         select party_id as p from documents where id = ${documentId}
-      `))).rows[0]!.p;
+      `, "objects")))[0]!.p;
       assert.equal(party, null, "refused header party writes nothing");
     } finally {
       routeState.authz = null;
@@ -231,7 +231,7 @@ test(
       );
       const storedCustom = (await withOrgContext(orgA.orgId, () => db.execute<{ custom: Record<string, unknown> }>(sql`
         select custom from documents where id = ${documentId}
-      `))).rows[0]!.custom;
+      `, "objects")))[0]!.custom;
       assert.equal(
         (storedCustom as Record<string, unknown> | undefined)?.ref_party,
         undefined,
@@ -256,7 +256,7 @@ test(
       );
       const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
-      `))).rows[0]!.n;
+      `, "objects")))[0]!.n;
       assert.equal(lines, 2, "refused line references preserve the balanced saved journal");
       const savedLine = patchRequest(documentId, {
         expectedUpdatedAt: await revisionToken(orgA.orgId, documentId),

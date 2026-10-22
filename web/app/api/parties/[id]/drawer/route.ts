@@ -27,17 +27,17 @@ export const GET = defineRoute({
   if (!isUuid(id)) return notFound("record")
   // Party record boundary (null-subsidiary parties are org-wide).
   const scope = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`, 'objects',
   ))
-  if (!scope.rows[0]) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (!scope[0]) return notFound("record")
+  const scopeDenied = guardSubsidiaryScope(gate, scope[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
   const [payload, paymentTerms, departments, trades, workerCompGroups, fieldDefs, subsidiaries, accounts, taxCodes, salesReps, payrollEnabled, multiCurrency, complianceEnabled, informationReturnsEnabled] = await Promise.all([
     loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) }),
-    (db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`)),
-    (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`)),
-    (db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`)),
+    (db.execute(sql`select id, name from payment_terms where org_id = ${gate.user.orgId} and is_active order by name`, 'objects')),
+    (db.execute(sql`select id, name from departments where org_id = ${gate.user.orgId} and is_active order by name`, 'objects')),
+    (db.execute(sql`select id, name from trades where org_id = ${gate.user.orgId} and is_active order by name`, 'objects')),
     isFeatureEnabled(gate.user.orgId, 'payroll').then((enabled) => enabled
       ? db.execute<{ id: string; name: string }>(sql`select id, name from worker_comp_groups where org_id = ${gate.user.orgId} and is_active order by name`)
       : Promise.resolve({ rows: [] as { id: string; name: string }[] })),
@@ -45,9 +45,9 @@ export const GET = defineRoute({
     subsidiaryUiOptions(gate.user.orgId).then((options) => gate.allowedSubsidiaryIds
       ? options.filter((option) => gate.allowedSubsidiaryIds!.has(option.id))
       : options),
-    (db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${gate.user.orgId} and is_active and not is_summary order by number nulls last, name`)),
-    (db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${gate.user.orgId} and is_active order by code`)),
-    (db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`)),
+    (db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${gate.user.orgId} and is_active and not is_summary order by number nulls last, name`, 'objects')),
+    (db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${gate.user.orgId} and is_active order by code`, 'objects')),
+    (db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active where p.org_id = ${gate.user.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`, 'objects')),
     isFeatureEnabled(gate.user.orgId, 'payroll'),
     isFeatureEnabled(gate.user.orgId, 'multiCurrency'),
     isFeatureEnabled(gate.user.orgId, 'subcontractorCompliance'),
@@ -106,9 +106,9 @@ export const GET = defineRoute({
     payload,
     consolidatedBilling,
     debitMandates,
-    paymentTerms: paymentTerms.rows,
-    departments: departments.rows,
-    trades: trades.rows,
+    paymentTerms,
+    departments,
+    trades,
     workerCompGroups: workerCompGroups.rows,
     canReadBenefits: role === 'employee' && can(gate, 'hrm.benefits.read') && await isFeatureEnabled(gate.user.orgId, 'hrm'),
     canReadCompensation: role === 'employee' && can(gate, 'hrm.compensation.read') && await isFeatureEnabled(gate.user.orgId, 'hrm'),
@@ -123,9 +123,9 @@ export const GET = defineRoute({
     fieldDefs: visibleCustomFieldDefs(fieldDefs, customFieldViewerFor(gate)),
     customFieldViewer: customFieldViewerFor(gate),
     subsidiaries,
-    accounts: accounts.rows,
-    taxCodes: taxCodes.rows,
-    salesReps: salesReps.rows,
+    accounts,
+    taxCodes,
+    salesReps,
     layout: resolvedForm?.layout,
     forms: resolvedForm?.available ?? [],
     currentFormId: resolvedForm?.row?.id ?? null,

@@ -169,10 +169,10 @@ test(
 
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, [], `calculation refused: ${JSON.stringify(result.errors)}`);
-      const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string>; net_pay: string }>(sql`
+      const stubs = await db.execute<{ employee_party_id: string; factors: Record<string, string>; net_pay: string }>(sql`
         select employee_party_id, factors, net_pay::text from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `)).rows;
+      `, "objects");
       const adjusted = stubs.find((row) => row.employee_party_id === adjustedId)!;
       const peer = stubs.find((row) => row.employee_party_id === peerId)!;
       // Assessed factors stay the native assessment of the stub's own lines;
@@ -188,10 +188,10 @@ test(
       assert.equal(cmp(adjusted.net_pay, peer.net_pay), 0, "employer-only adjustments never move net pay");
 
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `)).rows;
+      `, "objects");
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
       assert.equal(sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)), "-44.2200");
       assert.equal(sum(glLines.filter((row) => row.account_id === ehtPayable).map((row) => row.amount)), "-65.3200");
@@ -317,12 +317,12 @@ test(
       const loser = race.find(result => result.status === "rejected") as PromiseRejectedResult;
       assert.ok(loser.reason instanceof PayRunAdjustmentIdempotencyConflict);
       assert.equal(loser.reason.status, 409);
-      const admitted = (await db.execute<{ id: string; events: string }>(sql`
+      const admitted = await db.execute<{ id: string; events: string }>(sql`
         select a.id::text, (select count(*)::text from audit_log event
           where event.org_id=a.org_id and event.table_name='pay_run_adjustments' and event.row_id=a.id) as events
          from pay_run_adjustments a where a.org_id=${org.orgId}
           and a.id in (${racingInputs[0]!.mutation.idempotencyKey},${racingInputs[1]!.mutation.idempotencyKey})
-      `)).rows;
+      `, "objects");
       assert.equal(admitted.length, 1);
       assert.equal(admitted[0]!.events, "1", "only the winning source admission creates an audit event");
       await assert.rejects(mutatePayRunAdjustment({ ...racingInputs[0]!,
@@ -333,7 +333,7 @@ test(
         select factors, gross::text, net_pay::text from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
            and employee_party_id = ${employeeId}
-      `)).rows[0];
+      `, "objects"))[0];
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, [], `calculation refused: ${JSON.stringify(result.errors)}`);
       const stub = await stubOf();
@@ -348,12 +348,12 @@ test(
       assert.equal(stub.factors.EHT, undefined, "zero-assessed premium factor retains its native conditional shape");
       assert.equal(stub.factors.WCB_ADJ, "17.8200");
       assert.equal(stub.factors.EHT_ADJ, "26.3200");
-      const lineSums = (await db.execute<{ kind: string; total: string; lines: number }>(sql`
+      const lineSums = await db.execute<{ kind: string; total: string; lines: number }>(sql`
         select l.kind, coalesce(sum(l.amount), 0)::text as total, count(*)::int as lines
           from pay_stub_lines l join pay_stubs s on s.org_id = l.org_id and s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          group by l.kind
-      `)).rows;
+      `, "objects");
       // Sole levy projection: each issued entry materializes exactly once —
       // one employer-contribution line per programme, totalling the issued
       // premiums and nothing more.
@@ -381,10 +381,10 @@ test(
       assert.equal(finalStub!.factors.EHT_ADJ, "26.3200");
       assert.equal(cmp(finalStub!.net_pay, "0"), 0);
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `)).rows;
+      `, "objects");
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
       assert.equal(cmp(sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)), "0"), 0);
       assert.equal(sum(glLines.filter((row) => row.account_id === ehtPayable).map((row) => row.amount)), "-26.3200");

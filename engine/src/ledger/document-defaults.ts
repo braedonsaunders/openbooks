@@ -94,7 +94,7 @@ export async function resolveTermsDueDate(
     select pt.id, pt.name, pt.net_days
       from ${roleTable} r
       join payment_terms pt on pt.id = r.payment_terms_id and pt.org_id = r.org_id and pt.is_active
-     where r.org_id = ${orgId} and r.party_id = ${input.partyId}`)).rows[0]
+     where r.org_id = ${orgId} and r.party_id = ${input.partyId}`, 'objects'))[0]
   if (terms) {
     const netDays = Number(terms.net_days)
     return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(input.documentDate, netDays), source: 'party' }
@@ -115,14 +115,14 @@ export async function resolveCompanyTermsDueDate(
   documentDate: string,
 ): Promise<TermsDueDate | null> {
   const billing = (await exec.execute<{ billing: { defaultPaymentTermsId?: unknown } | null }>(sql`
-    select coalesce(settings->'billing', '{}'::jsonb) as billing from orgs where id = ${orgId}`)).rows[0]?.billing
+    select coalesce(settings->'billing', '{}'::jsonb) as billing from orgs where id = ${orgId}`, 'objects'))[0]?.billing
   const defaultId = typeof billing?.defaultPaymentTermsId === 'string' && isUuid(billing.defaultPaymentTermsId)
     ? billing.defaultPaymentTermsId
     : null
   if (!defaultId) return null
   const terms = (await exec.execute<{ id: string; name: string; net_days: number }>(sql`
     select id, name, net_days from payment_terms
-     where org_id = ${orgId} and id = ${defaultId} and is_active`)).rows[0]
+     where org_id = ${orgId} and id = ${defaultId} and is_active`, 'objects'))[0]
   if (!terms) return null
   const netDays = Number(terms.net_days)
   return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(documentDate, netDays), source: 'company' }
@@ -152,14 +152,14 @@ export async function resolveDocumentLineDefaults(
   const itemIds = [...new Set(input.itemIds.filter(isUuid))]
   if (!cfg || !side || itemIds.length === 0) return []
 
-  const items = (await exec.execute<ItemDefaultsRow>(sql`
+  const items = await exec.execute<ItemDefaultsRow>(sql`
     select i.id, i.income_account_id, i.expense_account_id, i.tax_code_id,
            p.asset_account_id as inventory_asset_account_id,
            p.received_not_billed_account_id as inventory_clearing_account_id
       from items i
       left join item_inventory_profiles p on p.org_id = i.org_id and p.item_id = i.id
      where i.org_id = ${orgId} and i.is_active
-       and i.id in (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`)).rows
+       and i.id in (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`, 'objects')
   if (items.length === 0) return []
 
   const role = partyRoleOf(cfg)
@@ -168,10 +168,10 @@ export async function resolveDocumentLineDefaults(
     ? (role === 'customer'
       ? (await exec.execute<{ tax_code_id: string | null; default_expense_account_id: string | null }>(sql`
           select tax_code_id, null::uuid as default_expense_account_id from customer_roles
-           where org_id = ${orgId} and party_id = ${partyId} and is_active`)).rows[0]
+           where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects'))[0]
       : (await exec.execute<{ tax_code_id: string | null; default_expense_account_id: string | null }>(sql`
           select tax_code_id, default_expense_account_id from vendor_roles
-           where org_id = ${orgId} and party_id = ${partyId} and is_active`)).rows[0])
+           where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects'))[0])
     : undefined
   const inventoryRouted = side === 'purchase' && items.some((item) => item.inventory_asset_account_id)
     ? await isFeatureEnabled(orgId, 'inventory', exec)
@@ -202,13 +202,13 @@ export async function resolveDocumentLineDefaults(
     ? new Set((await exec.execute<{ id: string }>(sql`
         select id from accounts
          where org_id = ${orgId} and is_active and not is_summary ${typeFilter}
-           and id in (${sql.join([...candidateAccounts].map((id) => sql`${id}`), sql`, `)})`)).rows.map((row) => row.id))
+           and id in (${sql.join([...candidateAccounts].map((id) => sql`${id}`), sql`, `)})`, 'objects')).map((row) => row.id))
     : new Set<string>()
   const usableTaxCodes = candidateTaxCodes.size
     ? new Set((await exec.execute<{ id: string }>(sql`
         select id from tax_codes
          where org_id = ${orgId} and is_active
-           and id in (${sql.join([...candidateTaxCodes].map((id) => sql`${id}`), sql`, `)})`)).rows.map((row) => row.id))
+           and id in (${sql.join([...candidateTaxCodes].map((id) => sql`${id}`), sql`, `)})`, 'objects')).map((row) => row.id))
     : new Set<string>()
 
   const pick = <S extends string>(choices: [string | null | undefined, S][], usable: Set<string>) => {

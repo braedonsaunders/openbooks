@@ -51,12 +51,12 @@ export interface Checkpoint {
 }
 
 async function one<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
-  const r = (await db.execute<T>(q));
-  return r.rows[0]!;
+  const r = (await db.execute<T>(q, "objects"));
+  return r[0]!;
 }
 async function all<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
-  const r = (await db.execute<T>(q));
-  return r.rows;
+  const r = (await db.execute<T>(q, "objects"));
+  return r;
 }
 
 type SaaSMetricsTieRow = {
@@ -465,7 +465,7 @@ class ProbeUnestablished extends Error {}
 export async function probeTableIsolation(orgId: string, foreignId: string): Promise<TableIsolationProbe> {
   const readLogin = async () => (await db.execute<{ login: string; bypass: boolean }>(sql`
     select current_user as login,
-           coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass`)).rows[0]!;
+           coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass`, "objects"))[0]!;
   try {
     return await withOrgTransaction(orgId, async () => {
       const login = await readLogin();
@@ -494,12 +494,12 @@ export async function probeTableIsolation(orgId: string, foreignId: string): Pro
         }
         switchNote = ` [table half assumed runtime role ${role}; harness login ${login.login} bypasses RLS]`;
       }
-      const seen = await db.execute(sql`select id from documents where id = ${foreignId}`);
-      const own = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${orgId}`);
+      const seen = await db.execute<Record<string, unknown>>(sql`select id from documents where id = ${foreignId}`);
+      const own = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${orgId}`, "objects");
       return {
         established: true,
         tableHidden: (seen.rowCount ?? 0) === 0,
-        ownDocs: own.rows[0]!.n,
+        ownDocs: own[0]!.n,
         detail: switchNote,
       };
     }, { readOnly: true });
@@ -1203,8 +1203,8 @@ export async function runScenario(
     // bypass: cross-org-by-design — the isolation probe needs a row owned by some other organization.
     const foreign = await withBypassContext(async () => {
       const r = await db.execute<{ id: string }>(sql`
-        select id from documents where org_id <> ${orgId} limit 1`);
-      return r.rows[0] ?? null;
+        select id from documents where org_id <> ${orgId} limit 1`, "objects");
+      return r[0] ?? null;
     });
     if (!foreign) {
       rlsDetail += "; no foreign-org rows anywhere on this cluster — live probe vacuous, catalog-only";

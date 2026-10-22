@@ -34,7 +34,7 @@ for (const policy of ["inactive receipt offset", "inactive asset account", "inac
           (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
           (select count(*)::int from inventory_movements where org_id=${org.orgId}) as movements,
           (select count(*)::int from cost_layers where org_id=${org.orgId}) as layers
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       const run = policy === "inactive issue offset"
         ? issueInventory(org.orgId, actorId, {
             itemId: org.items.fifo,
@@ -62,7 +62,7 @@ for (const policy of ["inactive receipt offset", "inactive asset account", "inac
           (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
           (select count(*)::int from inventory_movements where org_id=${org.orgId}) as movements,
           (select count(*)::int from cost_layers where org_id=${org.orgId}) as layers
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(after, before);
     } finally {
       await dropScratchOrg(org.orgId);

@@ -5,72 +5,65 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { assertBaselineCatalogsEqual, baselineDigest, baselineRegistrySql } from "./migration-baseline-catalog.mjs";
-import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "./migration-baseline-plan.mjs";
+import { assertBaselineHistory, migrationIdentityIsApplied, missingUpgradeLedger, releaseMigrationPlan } from "./migration-baseline-plan.mjs";
 
 function fixture(context) {
   const directory = mkdtempSync(join(tmpdir(), "openbooks-baseline-test-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   mkdirSync(join(directory, "generated"));
   mkdirSync(join(directory, "baselines"));
-  const files = ["0001_baseline.sql", "0480_last.sql", "0481_new.sql"];
+  const files = ["0001_first.sql", "0002_second.sql"];
   for (const file of files) writeFileSync(join(directory, "generated", file), `-- ${file}\n`);
-  writeFileSync(join(directory, "baselines/alpha29.sql"), "-- release schema\n");
-  writeFileSync(join(directory, "baselines/alpha29.sql.environments.sql"), "-- policies\n");
-  const baseline = { format: 1, verified: true, filename: "baselines/alpha29.sql",
-    baselineSha256: baselineDigest("-- release schema\n"), catalogSha256: baselineDigest("catalog"), environmentSha256: baselineDigest("-- policies\n"),
-    covered: files.slice(0,2).map((file) => ({ filename: `generated/${file}`, sha256: baselineDigest(`-- ${file}\n`) })) };
+  writeFileSync(join(directory, "baselines/alpha35.sql"), "-- release schema\n");
+  const identity = (filename) => ({ filename, sha256: baselineDigest(filename) });
+  const upgradeFrom = [identity("baselines/alpha29.sql"), identity("generated/0482_prior.sql")];
+  const baseline = { format: 2, verified: true, filename: "baselines/alpha35.sql",
+    baselineSha256: baselineDigest("-- release schema\n"), catalogSha256: baselineDigest("catalog"),
+    upgradeFromRelease: "v0.1.0-alpha.34.3", upgradeFrom,
+    covered: [identity("generated/0001_baseline.sql"), identity("generated/0251_payment_link_token_at_rest.sql"), ...upgradeFrom] };
   const publish = () => writeFileSync(join(directory, "baseline.json"), JSON.stringify(baseline));
   return { directory, baseline, files, publish };
 }
 
-test("without a release cut every historical migration remains active", (context) => {
+test("without a release baseline every forward migration is the plan", (context) => {
   const { directory, files } = fixture(context);
   assert.deepEqual(releaseMigrationPlan(directory, files).filenames, files.map((file) => `generated/${file}`));
-  assert.deepEqual(historicalMigrationPlan(directory, files).filenames, files.map((file) => `generated/${file}`));
 });
 
-test("a release cut applies one baseline and only the later forward migrations", (context) => {
+test("a release applies its baseline and then the forward migrations, none of which need retired source files", (context) => {
   const { directory, files, publish } = fixture(context);
   publish();
-  assert.deepEqual(releaseMigrationPlan(directory, files).filenames, ["baselines/alpha29.sql", "generated/0481_new.sql"]);
-  assert.deepEqual(historicalMigrationPlan(directory, files).filenames, ["generated/0001_baseline.sql", "generated/0480_last.sql"]);
-  writeFileSync(join(directory, "baselines/alpha29.sql.environments.sql"), "-- drifted policies\n");
-  assert.throws(() => historicalMigrationPlan(directory, files), /differs from the tenant-policy environment baselines\/alpha29.sql was verified with/);
+  assert.deepEqual(releaseMigrationPlan(directory, files).filenames, ["baselines/alpha35.sql", "generated/0001_first.sql", "generated/0002_second.sql"]);
+  assert.deepEqual(releaseMigrationPlan(directory, []).filenames, ["baselines/alpha35.sql"]);
 });
 
-test("later-delivered schema changes wait for their prerequisite without changing immutable migration identities", (context) => {
+test("a forward migration may not reuse an identity the baseline covers", (context) => {
+  const { directory, publish } = fixture(context);
+  publish();
+  writeFileSync(join(directory, "generated/0001_baseline.sql"), "-- reused name\n");
+  assert.throws(() => releaseMigrationPlan(directory, ["0001_baseline.sql"]), /reuses an identity baselines\/alpha35.sql covers/);
+});
+
+test("forward migrations wait for their declared prerequisites without changing their identities", (context) => {
   const { directory, files, publish } = fixture(context);
-  const generated = [...files, "0482_authority.sql", "0483_contract.sql"];
-  for (const file of generated.slice(files.length)) writeFileSync(join(directory, "generated", file), `-- ${file}\n`);
+  const generated = [...files, "0003_authority.sql"];
+  writeFileSync(join(directory, "generated/0003_authority.sql"), "-- 0003\n");
   writeFileSync(join(directory, "prerequisites.json"), JSON.stringify({ format: 1, dependencies: [
-    { migration: "generated/0481_new.sql", requires: ["generated/0483_contract.sql"] },
-    { migration: "generated/0483_contract.sql", requires: ["generated/0482_authority.sql"] },
+    { migration: "generated/0001_first.sql", requires: ["generated/0003_authority.sql"] },
   ] }));
-  const expected = ["generated/0482_authority.sql", "generated/0483_contract.sql", "generated/0481_new.sql"];
+  publish();
   assert.deepEqual(releaseMigrationPlan(directory, generated).filenames,
-    [...files.slice(0, 2).map(file => `generated/${file}`), ...expected]);
-  publish();
-  assert.deepEqual(releaseMigrationPlan(directory, generated).filenames, ["baselines/alpha29.sql", ...expected]);
-  assert.deepEqual(historicalMigrationPlan(directory, generated).filenames, files.slice(0, 2).map(file => `generated/${file}`));
-});
-
-test("verified baseline coverage satisfies a forward prerequisite without replaying covered SQL", (context) => {
-  const { directory, files, publish } = fixture(context);
-  writeFileSync(join(directory, "prerequisites.json"), JSON.stringify({ format: 1, dependencies: [
-    { migration: "generated/0481_new.sql", requires: ["generated/0480_last.sql"] },
-  ] }));
-  publish();
-  assert.deepEqual(releaseMigrationPlan(directory, files).filenames, ["baselines/alpha29.sql", "generated/0481_new.sql"]);
+    ["baselines/alpha35.sql", "generated/0002_second.sql", "generated/0003_authority.sql", "generated/0001_first.sql"]);
 });
 
 test("missing prerequisites and cycles refuse the release before any migration is applied", (context) => {
   const { directory, files } = fixture(context);
   const publish = dependencies => writeFileSync(join(directory, "prerequisites.json"), JSON.stringify({ format: 1, dependencies }));
-  publish([{ migration: "generated/0481_new.sql", requires: ["generated/0482_missing.sql"] }]);
-  assert.throws(() => releaseMigrationPlan(directory, files), /requires missing migration generated\/0482_missing.sql/);
+  publish([{ migration: "generated/0002_second.sql", requires: ["generated/0003_missing.sql"] }]);
+  assert.throws(() => releaseMigrationPlan(directory, files), /requires missing migration generated\/0003_missing.sql/);
   publish([
-    { migration: "generated/0481_new.sql", requires: ["generated/0480_last.sql"] },
-    { migration: "generated/0480_last.sql", requires: ["generated/0481_new.sql"] },
+    { migration: "generated/0002_second.sql", requires: ["generated/0001_first.sql"] },
+    { migration: "generated/0001_first.sql", requires: ["generated/0002_second.sql"] },
   ]);
   assert.throws(() => releaseMigrationPlan(directory, files), /prerequisites contain a cycle/);
 });
@@ -92,34 +85,32 @@ test("unselected migration prerequisites do not expand a selected release and ma
   }
 });
 
-test("a covered write cannot change after the baseline was verified", (context) => {
-  const { directory, files, publish } = fixture(context);
-  publish();
-  writeFileSync(join(directory, "generated/0480_last.sql"), "-- different guard\n");
-  assert.throws(() => releaseMigrationPlan(directory, files), /covered migration changed: generated\/0480_last.sql/);
-});
-
-test("an unverified new ordinal inside the cut is refused", (context) => {
-  const { directory, files, publish } = fixture(context);
-  publish();
-  assert.throws(() => releaseMigrationPlan(directory, [...files.slice(0,1), "0479_late.sql", ...files.slice(1)]), /0479_late.sql.*without verified coverage/);
-});
-
-test("unverified and unordered release manifests fail closed", (context) => {
+test("unverified, incomplete and inconsistent release manifests fail closed", (context) => {
   const { directory, files, baseline, publish } = fixture(context);
-  baseline.verified = false;
+  for (const change of [
+    (m) => { m.verified = false; },
+    (m) => { m.format = 1; },
+    (m) => { delete m.upgradeFromRelease; },
+    (m) => { m.upgradeFrom = []; },
+    (m) => { m.covered = [...m.covered, m.covered[0]]; },
+    (m) => { m.covered = [...m.covered, { filename: "../outside.sql", sha256: "0".repeat(64) }]; },
+  ]) {
+    const original = structuredClone(baseline);
+    change(baseline);
+    publish();
+    assert.throws(() => releaseMigrationPlan(directory, files), /manifest is malformed/);
+    Object.keys(baseline).forEach((key) => delete baseline[key]);
+    Object.assign(baseline, original);
+  }
+  baseline.covered = baseline.covered.filter((entry) => entry.filename !== "generated/0482_prior.sql");
   publish();
-  assert.throws(() => releaseMigrationPlan(directory, files), /manifest is malformed/);
-  baseline.verified = true;
-  baseline.covered.reverse();
-  publish();
-  assert.throws(() => releaseMigrationPlan(directory, files), /unique ordered migration identities/);
+  assert.throws(() => releaseMigrationPlan(directory, files), /upgrade ledger must be covered/);
 });
 
-test("changed baseline bytes are refused even when historical inputs match", (context) => {
+test("changed baseline bytes are refused", (context) => {
   const { directory, files, publish } = fixture(context);
   publish();
-  writeFileSync(join(directory, "baselines/alpha29.sql"), "-- wrong constraints\n");
+  writeFileSync(join(directory, "baselines/alpha35.sql"), "-- wrong constraints\n");
   assert.throws(() => releaseMigrationPlan(directory, files), /baseline bytes differ/);
 });
 
@@ -127,9 +118,19 @@ test("only an empty database or the exact adopted identity may apply the release
   const { baseline } = fixture(context);
   assert.doesNotThrow(() => assertBaselineHistory(baseline, [], false));
   assert.doesNotThrow(() => assertBaselineHistory(baseline, [{ filename: baseline.filename, sha256: baseline.baselineSha256 }], true));
-  for (const history of [[], [{ filename: "generated/0001_baseline.sql", sha256: baseline.baselineSha256 }], [{ filename: baseline.filename, sha256: "old-digest" }]]) {
-    assert.throws(() => assertBaselineHistory(baseline, history, true), /upgrade or reconcile.*adopt-migration-baseline.*No baseline SQL may be replayed over tenant data/);
+  for (const history of [[], baseline.upgradeFrom, [{ filename: "generated/0001_baseline.sql", sha256: baseline.baselineSha256 }]]) {
+    assert.throws(() => assertBaselineHistory(baseline, history, true), /Upgrade it with v0\.1\.0-alpha\.34\.3 first.*adopt-migration-baseline.*No baseline SQL may be replayed over tenant data/);
   }
+  assert.throws(() => assertBaselineHistory(baseline, [{ filename: baseline.filename, sha256: "0".repeat(64) }], true), /at another digest/);
+});
+
+test("adoption requires the previous release's exact ledger", (context) => {
+  const { baseline } = fixture(context);
+  assert.deepEqual(missingUpgradeLedger(baseline, baseline.upgradeFrom), []);
+  assert.deepEqual(missingUpgradeLedger(baseline, [...baseline.upgradeFrom, { filename: "generated/0001_baseline.sql", sha256: "f".repeat(64) }]), []);
+  assert.deepEqual(missingUpgradeLedger(baseline, baseline.upgradeFrom.slice(0, 1)), ["generated/0482_prior.sql"]);
+  assert.deepEqual(missingUpgradeLedger(baseline, [baseline.upgradeFrom[0], { ...baseline.upgradeFrom[1], sha256: "0".repeat(64) }]), ["generated/0482_prior.sql"]);
+  assert.deepEqual(missingUpgradeLedger(baseline, []), baseline.upgradeFrom.map((entry) => entry.filename));
 });
 
 test("catalog equivalence preserves whitespace inside financial refusal messages", () => {
@@ -166,11 +167,25 @@ test("optional trigram absence permits only its acceleration indexes to be absen
 test("system seed SQL preserves currency precision and registry identity", () => {
   const sql = baselineRegistrySql({ currencies: [{ code: "KWD", name: "Kuwait's dinar", minor_units: 3 }], platform_settings: [{ id: "platform" }],
     openbooks_query_catalog_relations: [{ relation: "pay_runs", added_in: "0352" }],
-    openbooks_document_close_modules: [{ kind: "invoice", close_module: "ar", added_in: "0418" }] });
+    openbooks_document_close_modules: [{ kind: "invoice", close_module: "ar", added_in: "0418" }],
+    openbooks_schedule_board_types: [{ key: "people", row_kind: "people", capabilities: ["bookings"], added_in: "0737" }],
+    marketplace_nexus_state_rules: [{ state: "CA", include_in_threshold: true, needs_review: false, source: "cited" }] });
   assert.match(sql, /'KWD', 'Kuwait''s dinar', '3'/);
   assert.match(sql, /platform_settings \(id\)/);
   assert.doesNotMatch(sql, /added_at|ON CONFLICT|settings,/i);
   assert.throws(() => baselineRegistrySql({}), /registry is empty: currencies/);
+});
+
+test("system seed SQL writes array columns as PostgreSQL arrays and absent values as NULL", () => {
+  const sql = baselineRegistrySql({ currencies: [{ code: "USD", name: "US dollar", minor_units: 2 }], platform_settings: [{ id: "platform" }],
+    openbooks_query_catalog_relations: [{ relation: "pay_runs", added_in: "0352" }],
+    openbooks_document_close_modules: [{ kind: "invoice", close_module: "ar", added_in: "0418" }],
+    openbooks_schedule_board_types: [{ key: "people", row_kind: "people", capabilities: ["bookings", 'say "hi"'], added_in: "0737" },
+      { key: "tasks", row_kind: "tasks", capabilities: [], added_in: "0737" }],
+    marketplace_nexus_state_rules: [{ state: "CA", include_in_threshold: true, needs_review: false, source: null }] });
+  assert.match(sql, /\('people', 'people', '\{"bookings","say \\"hi\\""\}', '0737'\)/);
+  assert.match(sql, /\('tasks', 'tasks', '\{\}', '0737'\)/);
+  assert.match(sql, /\('CA', 'true', 'false', NULL\)/);
 });
 
 test("baseline preparation refuses missing and remote resource declarations even with NODE_ENV unset", () => {

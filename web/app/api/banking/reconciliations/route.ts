@@ -40,8 +40,8 @@ export const GET = defineRoute({
            ${accountId ? sql` and r.account_id = ${accountId}` : sql``}
          order by r.created_at desc
          limit 200
-      `))
-    return NextResponse.json({ reconciliations: rows.rows })
+      `, 'objects'))
+    return NextResponse.json({ reconciliations: rows })
   },
 });
 

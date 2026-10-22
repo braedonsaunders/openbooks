@@ -25,10 +25,10 @@ export async function itemKinds(
   itemIds: readonly string[],
 ): Promise<Map<string, string>> {
   if (itemIds.length === 0) return new Map();
-  const rows = (await runner.execute<{ id: string; kind: string }>(sql`
+  const rows = await runner.execute<{ id: string; kind: string }>(sql`
     select id, kind from items
      where org_id = ${orgId}
-       and id in (${sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows;
+       and id in (${sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects");
   return new Map(rows.map((row) => [row.id, row.kind]));
 }
 
@@ -51,7 +51,7 @@ export async function kitLabel(
   itemId: string,
 ): Promise<string> {
   const row = (await runner.execute<{ code: string | null; name: string }>(sql`
-    select code, name from items where org_id = ${orgId} and id = ${itemId}`)).rows[0];
+    select code, name from items where org_id = ${orgId} and id = ${itemId}`, "objects"))[0];
   if (!row) return itemId;
   return row.code?.trim() || row.name || itemId;
 }
@@ -108,7 +108,7 @@ export async function loadKitComponents(
   kitItemId: string,
   date: string,
 ): Promise<KitComponent[]> {
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     component_item_id: string;
     component_kind: string;
     quantity_per: string;
@@ -125,7 +125,7 @@ export async function loadKitComponents(
      where b.org_id = ${orgId} and b.assembly_item_id = ${kitItemId}
        and (b.effective_from is null or b.effective_from <= ${date}::date)
        and (b.effective_to is null or ${date}::date < b.effective_to)
-     order by b.sort_order, b.component_item_id`)).rows;
+     order by b.sort_order, b.component_item_id`, "objects");
   if (rows.length === 0) {
     throw new InventoryError(
       `kit ${await kitLabel(runner, orgId, kitItemId)} has no bill of materials effective on ${date}; ` +

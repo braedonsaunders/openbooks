@@ -23,7 +23,7 @@ test('Field Ticket service refuses direct creation when Field Tickets is disable
         (error: unknown) => error instanceof FieldTicketNotFoundError && error.status === 404,
       )
       assert.equal(
-        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='field_ticket'`)).rows[0]!.n,
+        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='field_ticket'`, 'objects'))[0]!.n,
         0,
       )
     } finally {
@@ -90,7 +90,7 @@ const consolidatedRows = [
               )
               const hours = (await db.execute<{ hours: string }>(sql`
                 select hours::text as hours from time_entries
-                 where org_id = ${org.orgId} and field_ticket_id = ${created.id}`)).rows[0]!.hours
+                 where org_id = ${org.orgId} and field_ticket_id = ${created.id}`, 'objects'))[0]!.hours
               assert.equal(Number(hours), 8)
 
               // A cleared cell must fail too — the approved entry is not deleted.
@@ -100,7 +100,7 @@ const consolidatedRows = [
               )
               const remaining = (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from time_entries
-                 where org_id = ${org.orgId} and field_ticket_id = ${created.id}`)).rows[0]!.n
+                 where org_id = ${org.orgId} and field_ticket_id = ${created.id}`, 'objects'))[0]!.n
               assert.equal(remaining, 1)
               const nextProject = randomUUID()
               await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
@@ -109,7 +109,7 @@ const consolidatedRows = [
               await assert.rejects(updateTicketHeader(org.orgId, actor, created.id, { projectId: nextProject }, beforeRehome.revision, null),
                 (e) => e instanceof FieldTicketError && /submitted or approved time/.test(e.message))
               assert.equal((await loadFieldTicket(org.orgId, created.id)).projectId, beforeRehome.projectId)
-              assert.equal((await db.execute<{ project_id: string }>(sql`select project_id from time_entries where org_id=${org.orgId} and field_ticket_id=${created.id}`)).rows[0]!.project_id, beforeRehome.projectId)
+              assert.equal((await db.execute<{ project_id: string }>(sql`select project_id from time_entries where org_id=${org.orgId} and field_ticket_id=${created.id}`, 'objects'))[0]!.project_id, beforeRehome.projectId)
             } finally {
               await dropScratchOrg(org.orgId)
             }
@@ -157,7 +157,7 @@ const consolidatedRows = [
               )
               assert.equal(
                 (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries
-                  where org_id = ${org.orgId} and field_ticket_id = ${created.id}`)).rows[0]!.n,
+                  where org_id = ${org.orgId} and field_ticket_id = ${created.id}`, 'objects'))[0]!.n,
                 0,
                 'the refused grid stores no crew hours',
               )
@@ -168,7 +168,7 @@ const consolidatedRows = [
               )
               assert.equal(
                 (await db.execute<{ n: number }>(sql`select count(*)::int as n from document_lines
-                  where org_id = ${org.orgId} and document_id = ${created.id}`)).rows[0]!.n,
+                  where org_id = ${org.orgId} and document_id = ${created.id}`, 'objects'))[0]!.n,
                 0,
                 'the refused add stores no item line',
               )
@@ -199,7 +199,7 @@ const consolidatedRows = [
               )
               assert.equal(
                 (await db.execute<{ project_id: string }>(sql`select project_id from documents
-                  where org_id = ${org.orgId} and id = ${created.id}`)).rows[0]!.project_id,
+                  where org_id = ${org.orgId} and id = ${created.id}`, 'objects'))[0]!.project_id,
                 firstId,
                 'the refused re-home keeps the original project',
               )
@@ -310,7 +310,7 @@ const consolidatedRows = [
                 )
                 const rows = (await db.execute<{ n: number }>(sql`
                   select count(*)::int as n from time_entries
-                   where org_id = ${org.orgId} and field_ticket_id = ${ticket.id}`)).rows[0]!.n
+                   where org_id = ${org.orgId} and field_ticket_id = ${ticket.id}`, 'objects'))[0]!.n
                 assert.equal(rows, 0, 'the refused grid writes nothing')
               }
 
@@ -373,10 +373,10 @@ const consolidatedRows = [
 
               // The service owns the scope boundary too; route preflight cannot be
               // the authority after a concurrent project rehome.
-              const beforeTickets = (await db.execute<{n:number}>(sql`select count(*)::int n from field_tickets where org_id=${org.orgId}`)).rows[0]!.n
+              const beforeTickets = (await db.execute<{n:number}>(sql`select count(*)::int n from field_tickets where org_id=${org.orgId}`, 'objects'))[0]!.n
               await assert.rejects(createFieldTicket(org.orgId,actor,{projectId,allowedSubsidiaryIds:new Set()}),/Project not found/)
               await assert.rejects(createFieldTicket(org.orgId,actor,{projectId,date:'2026-02-30', allowedSubsidiaryIds: null}),/Invalid ticket date/)
-              assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from field_tickets where org_id=${org.orgId}`)).rows[0]!.n,beforeTickets)
+              assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from field_tickets where org_id=${org.orgId}`, 'objects'))[0]!.n,beforeTickets)
               // This week spans February into March: a regex and lexical window check
               // alone accepted the impossible February 30 date and reached a SQL cast.
               const feb = await createFieldTicket(org.orgId,actor,{projectId,date:'2027-03-01',period:'weekly', allowedSubsidiaryIds: null})
@@ -394,7 +394,7 @@ const consolidatedRows = [
                 const rows = (await db.execute<{ n: number }>(sql`
                   select count(*)::int as n from time_entries
                    where org_id = ${org.orgId} and field_ticket_id = ${ticket.id}
-                     and employee_party_id = ${employeeId}`)).rows[0]!.n
+                     and employee_party_id = ${employeeId}`, 'objects'))[0]!.n
                 assert.equal(rows, 1)
               }
             } finally {

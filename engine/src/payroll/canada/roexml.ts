@@ -125,8 +125,8 @@ export async function buildRoeXml(
 
   const cfgRow = (await db.execute<{ cfg: Partial<EmployerConfig> | null }>(sql`
     select settings#>'{payroll,t4Transmitter}' as cfg from orgs where id = ${orgId}
-  `));
-  const cfg = cfgRow.rows[0]?.cfg ?? {};
+  `, "objects"));
+  const cfg = cfgRow[0]?.cfg ?? {};
   const missingCfg = (["bn", "name", "contactName", "contactPhone"] as const)
     .filter((key) => !cfg[key] || !String(cfg[key]).trim());
   if (missingCfg.length > 0) {
@@ -140,8 +140,8 @@ export async function buildRoeXml(
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId} and prof.country = 'CA'
-  `));
-  const sinByEmployee = new Map(sins.rows.map((row) => [row.employee_party_id, row.sin_encrypted]));
+  `, "objects"));
+  const sinByEmployee = new Map(sins.map((row) => [row.employee_party_id, row.sin_encrypted]));
 
   const missingSins: string[] = [];
   const missingComments: string[] = [];

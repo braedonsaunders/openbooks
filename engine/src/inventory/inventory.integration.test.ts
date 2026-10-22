@@ -31,23 +31,23 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 /** Sum of posted journal_lines on an account (the GL balance). */
 async function glBalance(orgId: string, accountId: string): Promise<string> {
   const r = (await db.execute<{ bal: string }>(sql`
-    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
-  return r.rows[0]!.bal;
+    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`, "objects"));
+  return r[0]!.bal;
 }
 
 /** Σ (remaining_quantity × unit_cost) across every cost layer in the org. */
 async function totalLayerValue(orgId: string): Promise<string> {
   const r = (await db.execute<{ v: string }>(sql`
     select (coalesce((select sum(round(remaining_quantity * unit_cost,4)) from cost_layers where org_id=${orgId}),0)
-            - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs where org_id=${orgId}),0))::text as v`));
-  return r.rows[0]!.v;
+            - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs where org_id=${orgId}),0))::text as v`, "objects"));
+  return r[0]!.v;
 }
 
 /** Assert every posted journal entry in the org balances to zero. */
 async function assertAllEntriesBalance(orgId: string): Promise<void> {
   const r = (await db.execute<{ entry_id: string; bal: string }>(sql`
-    select entry_id, sum(amount) as bal from journal_lines where org_id = ${orgId} group by entry_id having sum(amount) <> 0`));
-  assert.equal(r.rows.length, 0, `unbalanced entries: ${JSON.stringify(r.rows)}`);
+    select entry_id, sum(amount) as bal from journal_lines where org_id = ${orgId} group by entry_id having sum(amount) <> 0`, "objects"));
+  assert.equal(r.length, 0, `unbalanced entries: ${JSON.stringify(r)}`);
 }
 
 /** The inventory GL balance must always equal the sum of cost-layer value. */
@@ -161,8 +161,8 @@ async function billInventoryResidue(
            (select count(*)::int from posting_effects pe
              where pe.org_id = d.org_id and pe.document_id = d.id) as effect_rows
       from documents d
-     where d.org_id = ${orgId} and d.id = ${documentId}`));
-  const row = result.rows[0]!;
+     where d.org_id = ${orgId} and d.id = ${documentId}`, "objects"));
+  const row = result[0]!;
   return {
     status: row.status,
     movements: row.movements,
@@ -461,9 +461,9 @@ test("inventory subledger posts, costs, and keeps GL = Σ layer value", { skip: 
     const evidence = (await db.execute<{ quantity: string; provisional_unit_cost: string; receipt_unit_cost: string; correction_amount: string }>(sql`
       select quantity,provisional_unit_cost,receipt_unit_cost,correction_amount
         from inventory_provisional_settlements where org_id=${org.orgId}
-    `));
-    assert.equal(evidence.rows.length, 1);
-    assert.equal(toUnits(evidence.rows[0]!.correction_amount), toUnits("5"));
+    `, "objects"));
+    assert.equal(evidence.length, 1);
+    assert.equal(toUnits(evidence[0]!.correction_amount), toUnits("5"));
     await assertInvariant(org);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -593,9 +593,9 @@ test("inventory reversals append exact lineage, restore layers, and are concurre
        where m.org_id = ${org.orgId}
          and m.reverses_movement_id is not null
        order by m.created_at, m.id
-    `));
-    assert.equal(evidence.rows.length, 4);
-    for (const row of evidence.rows) {
+    `, "objects"));
+    assert.equal(evidence.length, 4);
+    for (const row of evidence) {
       assert.ok(row.reverses_movement_id);
       assert.ok(row.reversal_reason.length >= 5);
       assert.equal(row.created_by, actor);
@@ -683,8 +683,8 @@ test("landed costs preserve the GL-to-layer invariant to the smallest ledger uni
       select id
         from cost_layers
        where org_id = ${org.orgId} and remaining_quantity > 0
-    `));
-    for (const layer of openLayers.rows) {
+    `, "objects"));
+    for (const layer of openLayers) {
       await db.execute(sql`
         insert into cost_layer_weights (org_id, cost_layer_id, weight, created_by, updated_by)
         values (${org.orgId}, ${layer.id}, '1', ${actor}, ${actor})
@@ -741,14 +741,14 @@ test("landed costs preserve the GL-to-layer invariant to the smallest ledger uni
                where org_id = ${org.orgId} and status = 'void') as void_vouchers
         from landed_cost_allocations
        where org_id = ${org.orgId}
-    `));
-    assert.equal(toUnits(evidence.rows[0]!.allocated), toUnits("0.0006"));
-    assert.ok(evidence.rows[0]!.allocation_rows >= 6);
-    assert.equal(evidence.rows[0]!.unlinked, 0);
+    `, "objects"));
+    assert.equal(toUnits(evidence[0]!.allocated), toUnits("0.0006"));
+    assert.ok(evidence[0]!.allocation_rows >= 6);
+    assert.equal(evidence[0]!.unlinked, 0);
     // quantity + manual + value + quantity remain posted; the weight voucher
     // is the independently preserved void below.
-    assert.equal(evidence.rows[0]!.vouchers, 4);
-    assert.equal(evidence.rows[0]!.void_vouchers, 1);
+    assert.equal(evidence[0]!.vouchers, 4);
+    assert.equal(evidence[0]!.void_vouchers, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -919,7 +919,7 @@ test("inventory locks prevent oversell and transfer-order failures roll back eve
     );
     assert.equal(
       (await db.execute<{ count: number }>(sql`
-        select count(*)::int as count from transfer_orders where org_id = ${org.orgId}`)).rows[0]!.count,
+        select count(*)::int as count from transfer_orders where org_id = ${org.orgId}`, "objects"))[0]!.count,
       0,
       "a refused creation must persist no draft",
     );
@@ -1074,8 +1074,8 @@ test("lot and serial selection is tenant-bound, exact, and lifecycle controlled"
       select status, current_stock_location_id
         from serials
        where id = ${serialId}
-    `));
-    assert.deepEqual(registered.rows[0], {
+    `, "objects"));
+    assert.deepEqual(registered[0], {
       status: "registered",
       current_stock_location_id: null,
     });
@@ -1176,8 +1176,8 @@ test("lot and serial selection is tenant-bound, exact, and lifecycle controlled"
 /** The engine's advisory key split into the (classid, objid) halves pg_locks shows. */
 async function positionLockHalves(key: string): Promise<{ classid: bigint; objid: bigint }> {
   const r = (await db.execute<{ key: string }>(sql`
-    select hashtextextended(${key}, 0)::text as key`));
-  const wide = BigInt.asUintN(64, BigInt(r.rows[0]!.key));
+    select hashtextextended(${key}, 0)::text as key`, "objects"));
+  const wide = BigInt.asUintN(64, BigInt(r[0]!.key));
   return { classid: wide >> 32n, objid: wide & 0xffffffffn };
 }
 
@@ -1241,8 +1241,8 @@ test("positive adjustment values stock at the average prevailing under the posit
           select 1 from pg_locks
            where locktype = 'advisory' and granted = false
              and classid::bigint = ${halves.classid}
-             and objid::bigint = ${halves.objid}`));
-        queued = waiter.rows.length > 0;
+             and objid::bigint = ${halves.objid}`, "objects"));
+        queued = waiter.length > 0;
         if (!queued) await new Promise((resolve) => setTimeout(resolve, 25));
       }
       assert.equal(queued, true, "adjustment never queued on the inventory position lock");
@@ -1299,9 +1299,9 @@ test("positive adjustment values stock at the average prevailing under the posit
         select unit_cost, total_value from inventory_movements
          where org_id = ${org.orgId} and item_id = ${org.items.movingAvg}
            and stock_location_id = ${loc} and kind = 'receipt'
-         order by created_at desc, id desc limit 1`));
-      assert.equal(toUnits(movement.rows[0]!.unit_cost), toUnits("20"));
-      assert.equal(toUnits(movement.rows[0]!.total_value), toUnits("200"));
+         order by created_at desc, id desc limit 1`, "objects"));
+      assert.equal(toUnits(movement[0]!.unit_cost), toUnits("20"));
+      assert.equal(toUnits(movement[0]!.total_value), toUnits("200"));
       await assertInvariant(org);
     } finally {
       if (!committed) {
@@ -1376,7 +1376,7 @@ test("costing method and tracking flips are guarded, revalued under standard, an
     // A controlled switch to standard revalues open layers onto the standard
     // cost through one balanced variance entry.
     const calendar = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`));
+      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"));
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -1386,7 +1386,7 @@ test("costing method and tracking flips are guarded, revalued under standard, an
              to_char(current_date, 'YYYY-MM'),
              date_trunc('month', current_date)::date,
              (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
-             false, ${calendar.rows[0]!.id}
+             false, ${calendar[0]!.id}
     `);
     await db.execute(sql`
       update item_inventory_profiles set standard_cost = '10'
@@ -1482,13 +1482,11 @@ test("direct inventory action retries replay the stored result without duplicati
       });
     };
     const receiptCount = async () =>
-      (
-        await db.execute<{ n: string }>(sql`
+      (await db.execute<{ n: string }>(sql`
           select count(*)::text as n from inventory_movements
            where org_id = ${org.orgId} and item_id = ${org.items.fifo}
              and stock_location_id = ${org.stockLocationId}
-             and kind = 'receipt'`)
-      ).rows[0]!.n;
+             and kind = 'receipt'`, "objects"))[0]!.n;
 
     // Representative concurrent replay: three racing resends of ONE lost
     // request. Exactly one accounting unit posts; the losers replay its
@@ -1612,11 +1610,11 @@ test("manual-basis landed cost lands on a target whose layers carry no value, ke
         select count(*)::int as n, coalesce(sum(amount), 0)::text as total
           from landed_cost_allocations
          where org_id = ${org.orgId} and voucher_id = ${voucherId}
-           and reverses_allocation_id is null`)).rows[0]!;
+           and reverses_allocation_id is null`, "objects"))[0]!;
     const layerValue = async (itemId: string) =>
       (await db.execute<{ v: string }>(sql`
         select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as v
-          from cost_layers where org_id = ${org.orgId} and item_id = ${itemId}`)).rows[0]!.v;
+          from cost_layers where org_id = ${org.orgId} and item_id = ${itemId}`, "objects"))[0]!.v;
 
     // A single zero-value target: previously died on an empty allocation list.
     const single = await postLandedCostVoucher(org.orgId, actor, {

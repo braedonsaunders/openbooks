@@ -27,21 +27,21 @@ function stripeRows() {
 }
 
 async function assertNothingPersisted(orgId: string, externalRef: string): Promise<void> {
-  const batches = (await db.execute<{ id: string }>(sql`
+  const batches = await db.execute<{ id: string }>(sql`
     select id from psp_settlement_batches
      where org_id = ${orgId} and provider = 'stripe' and external_ref = ${externalRef}
-  `)).rows;
+  `, "objects");
   assert.deepEqual(batches, [], "refused import must leave no settlement batch");
-  const lines = (await db.execute<{ id: string }>(sql`
+  const lines = await db.execute<{ id: string }>(sql`
     select l.id from psp_settlement_lines l
       join psp_settlement_batches b on b.id = l.batch_id
      where b.org_id = ${orgId} and b.external_ref = ${externalRef}
-  `)).rows;
+  `, "objects");
   assert.deepEqual(lines, [], "refused import must leave no settlement lines");
-  const audit = (await db.execute<{ id: string }>(sql`
+  const audit = await db.execute<{ id: string }>(sql`
     select id from audit_log
      where org_id = ${orgId} and changes::text like ${`%${externalRef}%`}
-  `)).rows;
+  `, "objects");
   assert.deepEqual(audit, [], "refused import must leave no audit evidence");
 }
 

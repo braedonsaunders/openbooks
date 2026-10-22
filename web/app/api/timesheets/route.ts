@@ -362,13 +362,13 @@ const save = defineRoute({
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-         and item_id is not null`);
-      const storedIds = new Set(stored.rows.map((row) => row.item_id));
+         and item_id is not null`, "objects");
+      const storedIds = new Set(stored.map((row) => row.item_id));
       for (const p of toPersist) {
         if (!p.itemId || storedIds.has(p.itemId)) continue;
         const item = await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${p.itemId} and org_id = ${orgId}`);
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`, "objects");
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           return notFound("record");
         }
       }
@@ -382,13 +382,13 @@ const save = defineRoute({
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-         and item_id is not null`);
-      const storedIds = new Set(stored.rows.map((row) => row.item_id));
+         and item_id is not null`, "objects");
+      const storedIds = new Set(stored.map((row) => row.item_id));
       for (const p of toPersist) {
         if (!p.itemId || storedIds.has(p.itemId)) continue;
         const item = await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${p.itemId} and org_id = ${orgId}`);
-        if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`, "objects");
+        if (item[0] && item[0].kind === "equipment_charge") {
           return notFound("record");
         }
       }
@@ -455,8 +455,7 @@ const save = defineRoute({
         //
         // The row lock serializes concurrent saves of this week so two writers
         // cannot interleave their diffs.
-        const stored = (
-          await tx.execute<{
+        const stored = await tx.execute<{
             id: string;
             worked_on: string;
             hours: string;
@@ -497,8 +496,7 @@ const save = defineRoute({
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
        for update
-    `)
-        ).rows;
+    `, "objects");
         // Lost-update fence: the client names the revision it loaded,
         // refuse a save over a week that moved since. The lock above is held,
         // so the re-read sees the latest committed state; no write has
@@ -618,8 +616,8 @@ const save = defineRoute({
         delete from time_entries
          where org_id = ${orgId}
            and id = any(${`{${deleteIds.join(",")}}`}::uuid[]) returning id
-      `);
-          if (deleted.rows.length !== deleteIds.length) throw new TimeLineEntityRefusal("The time lines changed while saving. Reload before trying again.");
+      `, "objects");
+          if (deleted.length !== deleteIds.length) throw new TimeLineEntityRefusal("The time lines changed while saving. Reload before trying again.");
         }
         for (const p of toInsert) {
           if (p.workOrderId) await lockTimeWorkOrderTarget(tx, orgId, user.id, { workOrderId: p.workOrderId, operationId: p.woOperationId, requestedScope: gate.allowedSubsidiaryIds, permission: timeEntryPermission });
@@ -634,8 +632,8 @@ const save = defineRoute({
            ${p.isBillable}, ${newStatus}, ${JSON.stringify(p.custom)}::jsonb,
            ${user.id}, ${user.id})
         returning id
-      `);
-          if(saved.rows.length!==1)throw new TimeLineEntityRefusal("The time line was not saved. Reload the week before retrying.");
+      `, "objects");
+          if(saved.length!==1)throw new TimeLineEntityRefusal("The time line was not saved. Reload the week before retrying.");
         }
         return false
       })

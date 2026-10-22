@@ -52,11 +52,11 @@ test("a committed receipt retried after midnight replays with one movement and o
     assert.equal(retry.status, 200, JSON.stringify(replay));
     assert.deepEqual(replay, { ...result, replayed: true });
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`)).rows[0]!.n,
+      (await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`, "objects"))[0]!.n,
       1, "the retry must replay, not post a second movement",
     );
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,
+      (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n,
       1, "the retry must replay, not post a second journal",
     );
     // Mechanism guard: the SAME key retried with the date left for the

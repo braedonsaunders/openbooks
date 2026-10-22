@@ -15,8 +15,8 @@ test('unknown posted liability accounts cannot follow setup changes or generate 
   await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default,created_by,updated_by)
     values(${filingAccountId},${fx.orgId},'CA','ca_rp','123456789RP0001','CRA payroll','regular',true,${fx.actorId},${fx.actorId})`);
   const profile=await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-    where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
-  assert.equal(profile.rows.length,1);
+    where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`, 'objects');
+  assert.equal(profile.length,1);
   const {input}=await calculatedRun(fx);await commitPayRun(input);
   const range={from:'2026-07-01',to:'2026-07-31'};
   const known=await payrollRemittanceSummary(fx.orgId,range);
@@ -40,7 +40,7 @@ test('unknown posted liability accounts cannot follow setup changes or generate 
   await db.execute(sql`insert into vendor_roles(org_id,party_id,is_active) values(${fx.orgId},${vendor},true)`);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll,craRemittancePartyId}',to_jsonb(${vendor}::text)) where id=${fx.orgId}`);
   await assert.rejects(createRemittanceBill(fx.orgId,fx.actorId,{partyId:vendor,...range,filingAccountId:known[0]!.filingAccount.id}),unresolved);
-  assert.equal((await db.execute(sql`select id from documents where org_id=${fx.orgId} and kind='vendor_bill'`)).rows.length,0);
+  assert.equal((await db.execute(sql`select id from documents where org_id=${fx.orgId} and kind='vendor_bill'`, 'objects')).length,0);
   assert.deepEqual(await payrollRemittanceSummary(fx.orgId,{from:'2026-08-01',to:'2026-08-31'}),[],'unrelated periods stay usable');
  }finally{await dropScratchOrgReporting(fx.orgId);}
 });

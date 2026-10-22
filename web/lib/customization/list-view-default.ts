@@ -115,6 +115,6 @@ export async function assertSingleListViewDefault(
        and record_type = ${args.recordType}
        and scope = ${args.scope}
        and is_default
-       and (scope = 'org' or owner_id = ${args.ownerId})`);
-  if ((counted.rows[0]?.n ?? 0) > 1) throw new AmbiguousListViewDefaultError();
+       and (scope = 'org' or owner_id = ${args.ownerId})`, "objects");
+  if ((counted[0]?.n ?? 0) > 1) throw new AmbiguousListViewDefaultError();
 }

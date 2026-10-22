@@ -43,8 +43,8 @@ export const POST = defineRoute({
     const visible = await db.execute(sql`
     select 1 from fixed_assets where id = ${id} and org_id = ${gate.user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-  `);
-    if (!visible.rows[0])
+  `, "objects");
+    if (!visible[0])
       return notFound("record");
 
     // The scope rides into both locked writes: the visibility precheck above

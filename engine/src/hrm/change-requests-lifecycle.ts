@@ -68,8 +68,7 @@ export async function createChangeRequestDraft(
     // payload_digest is NOT NULL without a default, but the guard trigger
     // overwrites it on insert with the canonical sha256 — the 64-zero
     // placeholder never survives the trigger and is never read back.
-    const inserted = (
-      await db.execute<RequestRow>(sql`
+    const inserted = (await db.execute<RequestRow>(sql`
       insert into hrm_employment_change_requests
         (org_id, employment_id, expected_employment_revision, payload,
          payload_digest, payload_schema_version, action, reason_code, created_by, updated_by)
@@ -79,8 +78,7 @@ export async function createChangeRequestDraft(
               ${query.action ?? null}::text, ${query.reasonCode ?? null}::text,
               ${actorId}, ${actorId})
       returning ${REQUEST_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -164,9 +162,9 @@ export async function updateChangeRequestPayload(
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${requestId}
         returning ${REQUEST_COLUMNS}
-      `,
+      `, "objects",
       )
-      .then((result) => result.rows[0])
+      .then((result) => result[0])
       .catch((error: unknown): RequestRow => mapGuardRefusal(error));
     if (!updated) {
       throw new HrmChangeRequestError(
@@ -269,8 +267,7 @@ export async function submitChangeRequest(
         "FLOW_ERROR",
         "The submission has no pending native gate; review its Flow history.",
       );
-    const submitted = (
-      await db.execute<RequestRow>(sql`
+    const submitted = (await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = 'pending_approval',
              reason = ${reason},
@@ -281,8 +278,7 @@ export async function submitChangeRequest(
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId} and status = 'draft'
       returning ${REQUEST_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!submitted) {
       throw new HrmChangeRequestError(
         "BAD_STATE",
@@ -310,16 +306,14 @@ async function applyAutomaticRequest(
     ...evidence,
     mode: "automatic",
   };
-  const approved = (
-    await db.execute<RequestRow>(sql`
+  const approved = (await db.execute<RequestRow>(sql`
     update hrm_employment_change_requests set status='approved', decision_snapshot=${JSON.stringify(snapshot)}::jsonb,
       updated_by=${actorId}, updated_at=now()
     where org_id=${orgId} and id=${submitted.id} and status='pending_approval'
       and request_revision=${submitted.request_revision} and payload_digest=${submitted.payload_digest}
       and flow_run_id=${submitted.flow_run_id}
     returning ${REQUEST_COLUMNS}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!approved)
     throw new HrmChangeRequestError(
       "BAD_STATE",
@@ -431,12 +425,10 @@ export async function completeHrmChangeRequestSubmission(
 export async function employmentChangeFlowsEnabled(
   orgId: string,
 ): Promise<boolean> {
-  const row = (
-    await db.execute<{ n: number }>(sql`
+  const row = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from flows
      where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and enabled
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   return (row?.n ?? 0) > 0;
 }
 
@@ -469,8 +461,7 @@ async function applyDirectRequest(args: {
     policy: args.policy,
     submissionId: args.submissionId,
   };
-  const approved = (
-    await db.execute<RequestRow>(sql`
+  const approved = (await db.execute<RequestRow>(sql`
     update hrm_employment_change_requests
        set status = 'approved',
            reason = ${reason},
@@ -481,8 +472,7 @@ async function applyDirectRequest(args: {
            updated_by = ${actorId}, updated_at = now()
      where org_id = ${orgId} and id = ${request.id} and status = 'draft'
     returning ${REQUEST_COLUMNS}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!approved) {
     throw new HrmChangeRequestError(
       "BAD_STATE",
@@ -561,15 +551,13 @@ export async function withdrawChangeRequest(
            and status in ('running', 'waiting')
       `);
     }
-    const withdrawn = (
-      await db.execute<RequestRow>(sql`
+    const withdrawn = (await db.execute<RequestRow>(sql`
       update hrm_employment_change_requests
          set status = 'withdrawn', updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${requestId}
          and status in ('draft', 'pending_approval')
       returning ${REQUEST_COLUMNS}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!withdrawn) {
       throw new HrmChangeRequestError(
         "BAD_STATE",

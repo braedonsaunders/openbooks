@@ -151,10 +151,10 @@ export async function loadNonprofit(): Promise<NonprofitData> {
              count(*) filter (where sv.is_active)::int as active
         from funds f
         join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
-       where f.org_id = ${orgId}`),
+       where f.org_id = ${orgId}`, 'objects'),
     db.execute<PairCountRow>(sql`
       select count(*)::int as total from fund_pairs
-       where org_id = ${orgId} and is_active`),
+       where org_id = ${orgId} and is_active`, 'objects'),
     db.execute<PendingRow>(sql`
       select r.id, r.release_number, r.amount::text as amount,
              r.release_date::text as release_date,
@@ -164,15 +164,15 @@ export async function loadNonprofit(): Promise<NonprofitData> {
         join segment_values tf on tf.org_id = r.org_id and tf.id = r.to_fund_id
        where r.org_id = ${orgId} and r.status = 'pending_approval'
        order by r.submitted_at desc nulls last, r.id
-       limit 6`),
+       limit 6`, 'objects'),
     db.execute<FrameworkRow>(sql`
       select framework, reason, set_at::text as set_at from nonprofit_frameworks
-       where org_id = ${orgId}`),
+       where org_id = ${orgId}`, 'objects'),
   ])
-  const funds = fundCounts.rows[0] ?? { total: 0, active: 0 }
-  const pairs = pairCounts.rows[0] ?? { total: 0 }
-  const current = framework.rows[0] ?? null
-  const pendingRows: PendingReleaseItem[] = pending.rows.map((row) => ({
+  const funds = fundCounts[0] ?? { total: 0, active: 0 }
+  const pairs = pairCounts[0] ?? { total: 0 }
+  const current = framework[0] ?? null
+  const pendingRows: PendingReleaseItem[] = pending.map((row) => ({
     id: row.id,
     number: row.release_number,
     amount: row.amount,

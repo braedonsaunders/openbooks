@@ -28,18 +28,18 @@ const listCurrencies: AssistantToolDef = {
   execute: async (_raw, authz): Promise<ToolResult> => {
     const [currencies, org] = await Promise.all([
       db.execute<{ code: string; name: string; minor_units: number }>(
-        sql`select code, name, minor_units from currencies order by code`,
+        sql`select code, name, minor_units from currencies order by code`, "objects",
       ),
       db.execute<{ base_currency: string }>(
-        sql`select base_currency from orgs where id = ${authz.user.orgId}`,
+        sql`select base_currency from orgs where id = ${authz.user.orgId}`, "objects",
       ),
     ]);
     return {
       ok: true,
       data: {
-        baseCurrency: org.rows[0]?.base_currency ?? null,
-        total: currencies.rows.length,
-        currencies: currencies.rows.map((c) => ({
+        baseCurrency: org[0]?.base_currency ?? null,
+        total: currencies.length,
+        currencies: currencies.map((c) => ({
           code: c.code,
           name: c.name,
           minorUnits: c.minor_units,
@@ -82,11 +82,11 @@ const listFxRates: AssistantToolDef = {
        where ${where}
        order by as_of desc, created_at desc
        limit ${limit + 1}
-    `));
+    `, "objects"));
     const count = (await db.execute<{ total: number }>(sql`
       select count(*)::int as total from fx_rates where ${where}
-    `)).rows[0];
-    const page = assistantListPage(rows.rows, limit, Number(count?.total ?? 0));
+    `, "objects"))[0];
+    const page = assistantListPage(rows, limit, Number(count?.total ?? 0));
     return {
       ok: true,
       data: {
@@ -148,23 +148,23 @@ const listFxRevaluations: AssistantToolDef = {
        group by e.id, p.id, b.name, b.code, s.name, m.entry_number
        order by e.posting_date desc, e.entry_number desc
        limit ${limit}
-    `));
+    `, "objects"));
     const c = (await db.execute<{ n: string; sum_debits: string }>(sql`
       select count(distinct e.id) as n,
              coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as sum_debits
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where ${where}
-    `));
-    const total = Number(c.rows[0]?.n ?? 0);
+    `, "objects"));
+    const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
       data: {
         total,
-        sumDebits: money(c.rows[0]?.sum_debits),
-        returned: rows.rows.length,
-        truncated: total > rows.rows.length,
-        items: rows.rows.map((r) => ({
+        sumDebits: money(c[0]?.sum_debits),
+        returned: rows.length,
+        truncated: total > rows.length,
+        items: rows.map((r) => ({
           id: r.id,
           entryNumber: r.entry_number,
           postingDate: r.posting_date,
@@ -201,7 +201,7 @@ const getConsolidationView: AssistantToolDef = {
       select p.id, ${canonicalPeriodLabelSql("p")} as name, p.starts_on, p.ends_on, p.fiscal_year
         from accounting_periods p
        where p.id = ${a.periodId} and p.org_id = ${authz.user.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!period) return { ok: false, error: "period_not_found" };
     const [rates, runs, entries] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
@@ -212,14 +212,14 @@ const getConsolidationView: AssistantToolDef = {
          where org_id = ${authz.user.orgId} and period_id = ${a.periodId}
          order by from_currency, to_currency
          limit 201
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select count(*) over() as total_count, id, status, error, started_at, finished_at
           from ownership_consolidation_runs
          where org_id = ${authz.user.orgId} and period_id = ${a.periodId}
          order by started_at desc
          limit 21
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select count(*) over() as total_count, e.kind, j.entry_number, j.posting_date, j.status
           from ownership_consolidation_entries e
@@ -228,9 +228,9 @@ const getConsolidationView: AssistantToolDef = {
          where e.org_id = ${authz.user.orgId} and r.period_id = ${a.periodId}
          order by j.posting_date desc, j.entry_number desc
          limit 101
-      `),
+      `, "objects"),
     ]);
-    const ratesMapped = rates.rows.map((r) => ({
+    const ratesMapped = rates.map((r) => ({
       fromCurrency: r.from_currency,
       toCurrency: r.to_currency,
       currentRate: r.current_rate,
@@ -239,22 +239,22 @@ const getConsolidationView: AssistantToolDef = {
       source: r.source,
       updatedAt: r.updated_at,
     }));
-    const runsMapped = runs.rows.map((r) => ({
+    const runsMapped = runs.map((r) => ({
       id: r.id,
       status: r.status,
       error: r.error,
       startedAt: r.started_at,
       finishedAt: r.finished_at,
     }));
-    const entriesMapped = entries.rows.map((e) => ({
+    const entriesMapped = entries.map((e) => ({
       kind: e.kind,
       entryNumber: e.entry_number,
       postingDate: e.posting_date,
       status: e.status,
     }));
-    const ratesPage = assistantListPage(ratesMapped, 200, Number(rates.rows[0]?.total_count ?? 0));
-    const runsPage = assistantListPage(runsMapped, 20, Number(runs.rows[0]?.total_count ?? 0));
-    const entriesPage = assistantListPage(entriesMapped, 100, Number(entries.rows[0]?.total_count ?? 0));
+    const ratesPage = assistantListPage(ratesMapped, 200, Number(rates[0]?.total_count ?? 0));
+    const runsPage = assistantListPage(runsMapped, 20, Number(runs[0]?.total_count ?? 0));
+    const entriesPage = assistantListPage(entriesMapped, 100, Number(entries[0]?.total_count ?? 0));
     return {
       ok: true,
       data: {

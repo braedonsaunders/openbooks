@@ -42,34 +42,32 @@ export const POST = defineRoute({
       // Lock the parent first so concurrent publishers cannot both observe the
       // same draft and stamp it published. The row is re-read inside the
       // transaction because the preflight lookup above is not authoritative.
-      const lockedTemplate = (await tx.execute(sql`
+      const lockedTemplate = await tx.execute<{ id: string }>(sql`
       select id
         from form_templates
        where id = ${template.id} and org_id = ${user.orgId}
        for update
-    `)) as { rows: { id: string }[] };
-      if (lockedTemplate.rows.length === 0)
+    `, "objects");
+      if (lockedTemplate.length === 0)
         return { kind: "not-found" as const };
 
       // Lock and recheck the latest version after taking the parent lock. A
       // published version is immutable; only the still-draft latest row may be
       // validated and transitioned by this request.
-      const lockedLatest = (await tx.execute(sql`
+      const lockedLatest = await tx.execute<{
+          id: string;
+          version: number;
+          schema: unknown;
+          published_at: string | null;
+        }>(sql`
       select id, version, schema, published_at
         from form_template_versions
        where org_id = ${user.orgId} and template_id = ${template.id}
        order by version desc
        limit 1
        for update
-    `)) as {
-        rows: {
-          id: string;
-          version: number;
-          schema: unknown;
-          published_at: string | null;
-        }[];
-      };
-      const latest = lockedLatest.rows[0];
+    `, "objects");
+      const latest = lockedLatest[0];
       if (!latest) return { kind: "no-draft" as const };
       if (latest.published_at)
         return { kind: "already-published" as const, version: latest.version };
@@ -90,10 +88,10 @@ export const POST = defineRoute({
              updated_at = now(), updated_by = ${user.id}
        where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
        returning id
-    `);
+    `, "objects");
       // A write that matches zero rows is a failure, not a success: the draft
       // was published (or removed) after the lock was taken.
-      if (stamped.rows.length === 0)
+      if (stamped.length === 0)
         return { kind: "already-published" as const, version: latest.version };
       await tx.execute(sql`
       update form_templates

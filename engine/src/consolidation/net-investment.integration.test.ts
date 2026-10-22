@@ -17,15 +17,15 @@ test('net-investment OCI preserves standalone FX, attributes each native source 
     const actual=await FX_SETTLEMENT_CASES.find(c=>c.id==='fx-net-investment-oci')!.run!({roles:org.roles,ledger})
     assert.deepEqual(actual.values,{ociMovement:'500.0000',profitOrLossMovement:'0.0000'})
     await withOrgContext(ledger.orgId,async()=>{
-      const change=(await db.execute<{id:string;subject_id:string;submitted_by:string;approved_by:string;payload:NetInvestmentAssessment}>(sql`select id,subject_id,submitted_by,approved_by,payload from financial_changes where org_id=${ledger.orgId} and operation='net_investment_oci' and status='applied'`)).rows[0]!
+      const change=(await db.execute<{id:string;subject_id:string;submitted_by:string;approved_by:string;payload:NetInvestmentAssessment}>(sql`select id,subject_id,submitted_by,approved_by,payload from financial_changes where org_id=${ledger.orgId} and operation='net_investment_oci' and status='applied'`, 'objects'))[0]!
       const result=await applyNetInvestmentAssessment(ledger.orgId,change.id,change.submitted_by)
       assert.equal(result.ociMovement,'500.0000')
-      assert.equal((await db.execute(sql`select 1 from net_investment_sources where org_id=${ledger.orgId}`)).rows.length,1)
+      assert.equal((await db.execute(sql`select 1 from net_investment_sources where org_id=${ledger.orgId}`, 'objects')).length,1)
       const standalone=(await db.execute<{amount:string}>(sql`select sum(line.amount)::text as amount from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
-        where line.org_id=${ledger.orgId} and line.account_id=${org.roles.fxUnrealizedGainLoss} and entry.subsidiary_id=${ledger.subsidiaryId} and entry.posting_date<='2026-07-31' and entry.status in ('posted','reversed')`)).rows[0]!.amount
+        where line.org_id=${ledger.orgId} and line.account_id=${org.roles.fxUnrealizedGainLoss} and entry.subsidiary_id=${ledger.subsidiaryId} and entry.posting_date<='2026-07-31' and entry.status in ('posted','reversed')`, 'objects'))[0]!.amount
       assert.equal(standalone,'-500.0000')
       const lineage=(await db.execute<{amount:string}>(sql`${consolidationHistory(ledger.orgId)} select sum(line.amount)::text as amount from history h join journal_lines line on line.org_id=${ledger.orgId} and line.entry_id=h.id
-        where h.interest_id=${change.subject_id} and h.subject_id=(select subsidiary_id from subsidiary_ownership_interests where org_id=${ledger.orgId} and id=${change.subject_id}) and line.account_id=${org.roles.netInvestmentOci}`)).rows[0]!.amount
+        where h.interest_id=${change.subject_id} and h.subject_id=(select subsidiary_id from subsidiary_ownership_interests where org_id=${ledger.orgId} and id=${change.subject_id}) and line.account_id=${org.roles.netInvestmentOci}`, 'objects'))[0]!.amount
       assert.equal(lineage,'-500.0000')
       await assert.rejects(proposeNetInvestmentAssessment(ledger.orgId,change.subject_id,change.submitted_by,{...change.payload,idempotencyKey:randomUUID()}),/already has an approved OCI attribution/)
       await assert.rejects(proposeNetInvestmentAssessment(ledger.orgId,change.subject_id,change.submitted_by,{...change.payload,nonTrade:false,idempotencyKey:randomUUID()}),/non-trade monetary loan/)
@@ -35,26 +35,26 @@ test('net-investment OCI preserves standalone FX, attributes each native source 
       const reverseId=await proposeNetInvestmentReversal(ledger.orgId,change.id,change.submitted_by,{effectiveOn:'2026-07-31',reason:'Correct the qualification after a revised treasury settlement decision',idempotencyKey:randomUUID()})
       await assert.rejects(applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by),/Submit this change through Flows and obtain a decision permitted by its approval policy/)
       await submitFinancialChange(ledger.orgId,reverseId,change.submitted_by)
-      const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${reverseId} and status='pending'`)).rows[0]!
+      const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${reverseId} and status='pending'`, 'objects'))[0]!
       await decideGate({gateId:gate.id,userId:change.approved_by,decision:'approved'})
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','false'::jsonb) where id=${ledger.orgId}`)
       await applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by)
-      assert.equal((await db.execute(sql`select 1 from journal_entries where org_id=${ledger.orgId} and book_id=${fullBookId} and origin='net_investment_oci'`)).rows.length,0)
-      assert.deepEqual(await applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by),(await db.execute<{result:Record<string,unknown>}>(sql`select result from financial_changes where org_id=${ledger.orgId} and id=${reverseId}`)).rows[0]!.result)
-      assert.equal((await db.execute(sql`select 1 from net_investment_sources where org_id=${ledger.orgId} and reversed_by_change_id is null`)).rows.length,0)
-      const reversed=(await db.execute<{amount:string}>(sql`${consolidationHistory(ledger.orgId)} select sum(line.amount)::text as amount from history h join journal_lines line on line.org_id=${ledger.orgId} and line.entry_id=h.id where h.interest_id=${change.subject_id} and line.account_id=${org.roles.netInvestmentOci}`)).rows[0]!.amount
+      assert.equal((await db.execute(sql`select 1 from journal_entries where org_id=${ledger.orgId} and book_id=${fullBookId} and origin='net_investment_oci'`, 'objects')).length,0)
+      assert.deepEqual(await applyNetInvestmentReversal(ledger.orgId,reverseId,change.submitted_by),(await db.execute<{result:Record<string,unknown>}>(sql`select result from financial_changes where org_id=${ledger.orgId} and id=${reverseId}`, 'objects'))[0]!.result)
+      assert.equal((await db.execute(sql`select 1 from net_investment_sources where org_id=${ledger.orgId} and reversed_by_change_id is null`, 'objects')).length,0)
+      const reversed=(await db.execute<{amount:string}>(sql`${consolidationHistory(ledger.orgId)} select sum(line.amount)::text as amount from history h join journal_lines line on line.org_id=${ledger.orgId} and line.entry_id=h.id where h.interest_id=${change.subject_id} and line.account_id=${org.roles.netInvestmentOci}`, 'objects'))[0]!.amount
       assert.equal(reversed,'0.0000')
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','true'::jsonb) where id=${ledger.orgId}`)
       const replacementId=await proposeNetInvestmentAssessment(ledger.orgId,change.subject_id,change.submitted_by,{...change.payload,idempotencyKey:randomUUID()})
       async function approve(id:string) {
         await submitFinancialChange(ledger.orgId,id,change.submitted_by)
-        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
         await decideGate({gateId:gate.id,userId:change.approved_by,decision:'approved'})
       }
       await approve(replacementId);await applyNetInvestmentAssessment(ledger.orgId,replacementId,change.submitted_by)
-      assert.equal((await db.execute(sql`select 1 from journal_entries where org_id=${ledger.orgId} and book_id=${fullBookId} and origin='net_investment_oci'`)).rows.length,0)
-      const interest=(await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from subsidiary_ownership_interests where org_id=${ledger.orgId} and id=${change.subject_id}`)).rows[0]!
-      const periodId=(await db.execute<{id:string}>(sql`select id from accounting_periods where org_id=${ledger.orgId} and name='2026-07'`)).rows[0]!.id
+      assert.equal((await db.execute(sql`select 1 from journal_entries where org_id=${ledger.orgId} and book_id=${fullBookId} and origin='net_investment_oci'`, 'objects')).length,0)
+      const interest=(await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from subsidiary_ownership_interests where org_id=${ledger.orgId} and id=${change.subject_id}`, 'objects'))[0]!
+      const periodId=(await db.execute<{id:string}>(sql`select id from accounting_periods where org_id=${ledger.orgId} and name='2026-07'`, 'objects'))[0]!.id
       await db.execute(sql`insert into consolidated_fx_rates(org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
         values(${ledger.orgId},${periodId},'USD','CAD','1.4','1.375','1.35','manual')`)
       const disposal:LossOfControlInput={effectiveOn:'2026-07-31',reason:'Liquidate the foreign operation after releasing its qualified translation reserve',idempotencyKey:randomUUID(),
@@ -68,7 +68,7 @@ test('net-investment OCI preserves standalone FX, attributes each native source 
       const disposalId=await proposeLossOfControl(ledger.orgId,change.subject_id,change.submitted_by,disposal)
       await approve(disposalId);await applyLossOfControl(ledger.orgId,disposalId,change.submitted_by)
       const released=(await db.execute<{amount:string}>(sql`select sum(line.amount)::text as amount from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
-        where line.org_id=${ledger.orgId} and line.account_id=${org.roles.netInvestmentOci} and entry.posting_date<='2026-07-31' and entry.status in ('posted','reversed')`)).rows[0]!.amount
+        where line.org_id=${ledger.orgId} and line.account_id=${org.roles.netInvestmentOci} and entry.posting_date<='2026-07-31' and entry.status in ('posted','reversed')`, 'objects'))[0]!.amount
       assert.equal(released,'0.0000')
       await assert.rejects(proposeNetInvestmentReversal(ledger.orgId,replacementId,change.submitted_by,{effectiveOn:'2026-07-31',reason:'Correct a reserve already released by disposal',idempotencyKey:randomUUID()}),/correct that loss-of-control event/)
       await db.execute(sql`update user_permission_overrides set effect='deny' where org_id=${ledger.orgId} and user_id=${change.submitted_by} and permission='close.run'`)

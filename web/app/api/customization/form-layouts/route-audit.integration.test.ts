@@ -74,8 +74,8 @@ async function seed(): Promise<{ orgId: string }> {
 async function auditFor(orgId: string, rowId: string): Promise<{ action: string; changes: unknown }[]> {
   const r = await db.execute<{ action: string; changes: unknown }>(sql`
     select action, changes from audit_log
-     where org_id = ${orgId} and table_name = 'form_layouts' and row_id = ${rowId}`);
-  return r.rows;
+     where org_id = ${orgId} and table_name = 'form_layouts' and row_id = ${rowId}`, "objects");
+  return r;
 }
 
 test(

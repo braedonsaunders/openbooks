@@ -96,9 +96,9 @@ async function legacyPOST(_req: Request, { params }: { params: Promise<{ typeKey
     values (${user.orgId}, ${type.id}, ${typeKey}, ${recordNumber}, ${JSON.stringify(data)}::jsonb,
             ${searchText}, ${user.id}, ${user.id})
     returning id, record_number
-  `))
+  `, 'objects'))
 
-  return NextResponse.json({ id: r.rows[0]!.id, recordNumber: r.rows[0]!.record_number })
+  return NextResponse.json({ id: r[0]!.id, recordNumber: r[0]!.record_number })
 }
 
 export const POST = defineRoute({

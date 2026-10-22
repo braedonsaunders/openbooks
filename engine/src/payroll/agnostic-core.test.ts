@@ -264,24 +264,24 @@ test("seeding a third pack provisions exactly its declaration — no Canadian co
     const rows = (await db.execute<{ code: string; system_key: string | null; country: string | null }>(sql`
       select code, system_key, country from pay_components where org_id = ${org.orgId}
       order by sequence, code
-    `));
+    `, "objects"));
 
     // Exactly the jurisdiction-free baseline, all of it country-less; not one
     // statutory component of anybody else's.
     assert.deepEqual(
-      rows.rows.map((r) => r.code),
+      rows.map((r) => r.code),
       ["BASE", "OT", "STAT", "STATPREM", "ALLOW", "BONUS", "VACPAY"],
     );
-    assert.ok(rows.rows.every((r) => r.country === null));
-    const systemKeys = new Set(rows.rows.map((r) => r.system_key));
+    assert.ok(rows.every((r) => r.country === null));
+    const systemKeys = new Set(rows.map((r) => r.system_key));
     for (const caOnly of ["cpp", "cpp2", "ei", "qpip", "income_tax", "vacation_accrual", "wcb", "eht", "fit", "ss"]) {
       assert.ok(!systemKeys.has(caOnly), `${caOnly} seeded for a ZZ org`);
     }
     // No vacation entitlement plan either: ZZ declares no vacation accrual.
     const plans = (await db.execute(sql`
       select 1 from entitlement_plans where org_id = ${org.orgId} and system_key = 'vacation'
-    `));
-    assert.equal(plans.rows.length, 0);
+    `, "objects"));
+    assert.equal(plans.length, 0);
   } finally {
     delete PAYROLL_COUNTRY_PACKS.ZZ;
   }
@@ -545,10 +545,10 @@ test("the holiday calculation honours the caller's subsidiary scope", async () =
   // in-scope employee instead (blocking every scoped run) and waves the
   // out-of-scope one through to a cross-subsidiary stub.
   const scopedTx = {
-    execute: async () => ({ rows: [{ subsidiary_id: "sub-1" }] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ subsidiary_id: "sub-1" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
   const emptyTx = {
-    execute: async () => ({ rows: [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
   const need = () => {
     throw new Error("components looked up before the scope gate passed");
@@ -608,7 +608,7 @@ test("captured stubs aggregate every line row under one employee", async () => {
     },
   ];
   const tx = {
-    execute: async () => ({ rows }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   } as unknown as Parameters<typeof captureCalculatedStubs>[0];
   const stubs = await captureCalculatedStubs(tx, "o", "d");
   assert.equal(stubs.length, 2);
@@ -760,8 +760,8 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
         left join pay_components c on c.id = l.component_id
        where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        order by s.employee_party_id, l.sequence, l.amount, l.description
-    `));
-    return JSON.stringify(rows.rows);
+    `, "objects"));
+    return JSON.stringify(rows);
   };
 
   // --- Feature OFF (the default): calculates exactly as before the feature.
@@ -859,16 +859,16 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       join pay_components c on c.id = l.component_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        and c.system_key in ('stat_holiday', 'stat_holiday_premium')
-  `));
-  assert.equal(statLines.rows.length, 4);
-  const ontarioStat = statLines.rows.find((r) => r.employee_party_id === ontarioId);
+  `, "objects"));
+  assert.equal(statLines.length, 4);
+  const ontarioStat = statLines.find((r) => r.employee_party_id === ontarioId);
   assert.ok(ontarioStat);
   assert.equal(ontarioStat.system_key, "stat_holiday");
   assert.equal(cmp(ontarioStat.amount, "120.00"), 0);
   // The day's pay is IN gross, ahead of the statutory pass (phase 2).
   assert.equal(cmp(ontarioStat.gross, add("2400.00", "120.00")), 0);
 
-  const quebecStat = statLines.rows.find((r) =>
+  const quebecStat = statLines.find((r) =>
     r.employee_party_id === quebecId && /Canada Day/.test(r.description));
   assert.ok(quebecStat);
   assert.equal(quebecStat.system_key, "stat_holiday");
@@ -882,12 +882,12 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
     where org_id=${orgId} and employee_party_id=${manitobaId}`);
   const construction = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
   assert.equal(construction.employees, 3);
-  const constructionPay = (await db.execute<{amount:string}>(sql`
+  const constructionPay = await db.execute<{amount:string}>(sql`
     select l.amount::text as amount from pay_stub_lines l
     join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
     join pay_components c on c.id=l.component_id and c.org_id=l.org_id
     where s.org_id=${orgId} and s.pay_run_document_id=${run2.documentId}
-      and s.employee_party_id=${manitobaId} and c.system_key='stat_holiday'`)).rows;
+      and s.employee_party_id=${manitobaId} and c.system_key='stat_holiday'`, "objects");
   assert.equal(constructionPay.length, 1);
   assert.equal(cmp(constructionPay[0]!.amount, '48.00'), 0);
   await db.execute(sql`update employee_payroll_profiles set statutory_occupation_class='general', updated_at=clock_timestamp()
@@ -921,8 +921,8 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        and s.employee_party_id = ${ontarioId} and c.system_key = 'stat_holiday'
-  `);
-  assert.equal(Number(deniedHoliday.rows[0]?.count ?? 0), 0);
+  `, "objects");
+  assert.equal(Number(deniedHoliday[0]?.count ?? 0), 0);
 
   // Hand-worked Manitoba s. 23(1): the wages for regular hours on a NORMAL
   // WORKDAY — 8 scheduled hours × $30.00 = $240.00. Note what it is not: the
@@ -930,7 +930,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // wages ÷ 20, and the four weeks here are 40 hours (two 20-hour days) ×
   // $30 = $1,200, which ÷ 20 is $60. The province genuinely changes the
   // number by four times, which is why neither may stand in for the other.
-  const manitobaStat = statLines.rows.find((r) => r.employee_party_id === manitobaId);
+  const manitobaStat = statLines.find((r) => r.employee_party_id === manitobaId);
   assert.ok(manitobaStat);
   assert.equal(manitobaStat.system_key, "stat_holiday");
   assert.equal(cmp(manitobaStat.amount, "240.00"), 0);

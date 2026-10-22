@@ -1,1 +1,0 @@
-The nullable time links preserve existing rows; the new BOM range and exclusion accept every row admitted by the prior unique index.

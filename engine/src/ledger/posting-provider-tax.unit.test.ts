@@ -103,11 +103,11 @@ const quoteRow = (over: Record<string, unknown> = {}) => ({
 /** Mock only the database reads (config, address, quote); money and tax math stay real. */
 const evidenceReads = (steps: Record<string, unknown>[][]) => {
   let calls = 0;
-  return async () => {
+  return async (_query: unknown, mode?: string) => {
     const step = steps[calls];
     calls += 1;
     if (!step) throw new Error(`unexpected database read #${calls}`);
-    return { rows: step };
+    return mode === "objects" ? step : { rows: step };
   };
 };
 

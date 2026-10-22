@@ -63,8 +63,8 @@ async function readLink(id: string): Promise<{ token: string | null; tokenSealed
   const r = await withBypassContext(() => db.execute<{ token: string | null; tokenSealed: string | null; tokenHash: string | null }>(sql`
     select token, token_sealed as "tokenSealed", token_hash as "tokenHash"
       from payment_links where id = ${id}
-  `));
-  return r.rows[0]!;
+  `, "objects"));
+  return r[0]!;
 }
 
 async function removeLink(id: string): Promise<void> {
@@ -75,8 +75,8 @@ async function removeLink(id: string): Promise<void> {
 async function resolveByHash(hash: string): Promise<string | null> {
   const r = await withBypassContext(() => db.execute<{ id: string }>(sql`
     select id from payment_links where token_hash = ${hash} limit 1
-  `));
-  return r.rows[0]?.id ?? null;
+  `, "objects"));
+  return r[0]?.id ?? null;
 }
 
 test("deploy-window plaintext rows are sealed AND hashed in one step", { skip: !DB }, async () => {
@@ -115,8 +115,8 @@ test("node hash encoding is byte-identical to the 0251 migration SQL", { skip: !
   const ascii = "AbC123xY-9_8qZ";
   const r = await withBypassContext(() => db.execute<{ h: string }>(sql`
     select encode(sha256(${ascii}::bytea), 'hex') as h
-  `));
-  assert.equal(paymentLinkTokenHash(ascii), r.rows[0]!.h);
+  `, "objects"));
+  assert.equal(paymentLinkTokenHash(ascii), r[0]!.h);
   assert.equal(paymentLinkTokenHash(ascii).length, 64);
 });
 

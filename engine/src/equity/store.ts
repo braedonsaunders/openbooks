@@ -94,7 +94,7 @@ export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidi
 export async function loadEquityBookAtEvent(runner: SqlExecutor, orgId: string, eventId: string): Promise<EquityBook | null> {
   const event = (await runner.execute<{ subsidiary_id: string; created_at: string }>(sql`
     select subsidiary_id, created_at::text as created_at from equity_security_events
-     where org_id = ${orgId} and id = ${eventId}`)).rows[0];
+     where org_id = ${orgId} and id = ${eventId}`, "objects"))[0];
   if (!event) return null;
   return readEquityBook(runner, orgId, event.subsidiary_id, event.created_at);
 }
@@ -109,39 +109,39 @@ async function readEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: 
            liquidation_preference_basis,
            participation, participation_cap_multiple::text as participation_cap_multiple, seniority, anti_dilution,
            conversion_share_class_id, conversion_adjusts_for_splits
-      from equity_share_classes where ${scope} order by created_at, id`)).rows.map(shareClassFromRow);
+      from equity_share_classes where ${scope} order by created_at, id`, "objects")).map(shareClassFromRow);
   const amendments = (await runner.execute<Row>(sql`
     select id, share_class_id, kind, effective_on::text as effective_on, authorized_shares::text as authorized_shares,
            conversion_price::text as conversion_price, conversion_share_class_id, reason
-      from equity_class_amendments where ${scope} order by created_at, id`)).rows.map((row): ClassAmendmentRecord => ({
+      from equity_class_amendments where ${scope} order by created_at, id`, "objects")).map((row): ClassAmendmentRecord => ({
     id: str(row, "id"), shareClassId: str(row, "share_class_id"), kind: str(row, "kind") as ClassAmendmentRecord["kind"],
     effectiveOn: str(row, "effective_on"), authorizedShares: big(opt(row, "authorized_shares")), conversionPrice: opt(row, "conversion_price"),
     conversionShareClassId: opt(row, "conversion_share_class_id"), reason: str(row, "reason"),
   }));
   const splits = (await runner.execute<Row>(sql`
     select id, share_class_id, effective_on::text as effective_on, ratio_numerator::text as ratio_numerator, ratio_denominator::text as ratio_denominator
-      from equity_splits where ${scope} order by effective_on, created_at, id`)).rows.map((row): SplitRecord => ({
+      from equity_splits where ${scope} order by effective_on, created_at, id`, "objects")).map((row): SplitRecord => ({
     id: str(row, "id"), shareClassId: str(row, "share_class_id"), effectiveOn: str(row, "effective_on"),
     ratioNumerator: BigInt(str(row, "ratio_numerator")), ratioDenominator: BigInt(str(row, "ratio_denominator")),
   }));
   const plans = (await runner.execute<Row>(sql`
     select id, code, name, share_class_id, effective_on::text as effective_on, initial_reserved_shares::text as initial_reserved_shares,
            recycle_forfeited, recycle_expired, recycle_repurchased
-      from equity_plans where ${scope} order by created_at, id`)).rows.map((row): PlanRecord => ({
+      from equity_plans where ${scope} order by created_at, id`, "objects")).map((row): PlanRecord => ({
     id: str(row, "id"), code: str(row, "code"), name: str(row, "name"), shareClassId: str(row, "share_class_id"), effectiveOn: str(row, "effective_on"),
     initialReservedShares: BigInt(str(row, "initial_reserved_shares")), recycleForfeited: row.recycle_forfeited === true,
     recycleExpired: row.recycle_expired === true, recycleRepurchased: row.recycle_repurchased === true,
   }));
   const reserveChanges = (await runner.execute<Row>(sql`
     select id, plan_id, effective_on::text as effective_on, share_delta::text as share_delta
-      from equity_plan_reserve_changes where ${scope} order by created_at, id`)).rows.map((row): ReserveChangeRecord => ({
+      from equity_plan_reserve_changes where ${scope} order by created_at, id`, "objects")).map((row): ReserveChangeRecord => ({
     id: str(row, "id"), planId: str(row, "plan_id"), effectiveOn: str(row, "effective_on"), shareDelta: BigInt(str(row, "share_delta")),
   }));
   const rounds = applyRoundAmendments(
     (await runner.execute<Row>(sql`
       select id, name, share_class_id, closed_on::text as closed_on, price_per_share::text as price_per_share,
              pre_money_valuation::text as pre_money_valuation, currency, pre_money_basis_reason
-        from equity_financing_rounds where ${scope} order by closed_on, created_at, id`)).rows.map((row): FinancingRoundRecord => ({
+        from equity_financing_rounds where ${scope} order by closed_on, created_at, id`, "objects")).map((row): FinancingRoundRecord => ({
       id: str(row, "id"), name: str(row, "name"), shareClassId: str(row, "share_class_id"), closedOn: str(row, "closed_on"),
       pricePerShare: str(row, "price_per_share"), preMoneyValuation: str(row, "pre_money_valuation"), currency: str(row, "currency"),
       preMoneyBasisReason: opt(row, "pre_money_basis_reason"),
@@ -149,13 +149,13 @@ async function readEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: 
     await loadRoundAmendments(runner, orgId, subsidiaryId, recordedThrough),
   ).live;
   const securities = (await runner.execute<Row>(sql`
-    select ${SECURITY_COLUMNS} from equity_securities where ${scope} order by created_at, id`)).rows.map(securityFromRow);
+    select ${SECURITY_COLUMNS} from equity_securities where ${scope} order by created_at, id`, "objects")).map(securityFromRow);
   const events = (await runner.execute<Row>(sql`
-    select ${EVENT_COLUMNS} from equity_security_events where ${scope} order by created_at, id`)).rows.map(eventFromRow);
+    select ${EVENT_COLUMNS} from equity_security_events where ${scope} order by created_at, id`, "objects")).map(eventFromRow);
   const securityAmendments = (await runner.execute<Row>(sql`
     select id, security_id, kind, effective_on::text as effective_on, source_security_id, valuation_cap::text as valuation_cap,
            discount_percent::text as discount_percent, safe_type, reverses_amendment_id
-      from equity_security_amendments where ${scope} order by effective_on, created_at, id`)).rows.map((row): SecurityAmendmentRecord => ({
+      from equity_security_amendments where ${scope} order by effective_on, created_at, id`, "objects")).map((row): SecurityAmendmentRecord => ({
     id: str(row, "id"), securityId: str(row, "security_id"), kind: str(row, "kind") as SecurityAmendmentRecord["kind"], effectiveOn: str(row, "effective_on"),
     sourceSecurityId: str(row, "source_security_id"), valuationCap: opt(row, "valuation_cap"), discountPercent: opt(row, "discount_percent"),
     safeType: str(row, "safe_type") as SecurityAmendmentRecord["safeType"], reversesAmendmentId: opt(row, "reverses_amendment_id"),
@@ -184,7 +184,7 @@ export async function loadRoundAmendments(runner: SqlExecutor, orgId: string, su
            pre_money_valuation::text as pre_money_valuation, pre_money_basis_reason, reason, created_at::text as created_at
       from equity_round_amendments where org_id = ${orgId} and subsidiary_id = ${subsidiaryId}
        ${recordedThrough ? sql`and created_at <= ${recordedThrough}::timestamptz` : sql``}
-     order by created_at, id`)).rows.map((row) => ({
+     order by created_at, id`, "objects")).map((row) => ({
     id: str(row, "id"), roundId: str(row, "round_id"), kind: str(row, "kind") as RoundAmendmentRecord["kind"], effectiveOn: str(row, "effective_on"),
     name: opt(row, "name"), pricePerShare: opt(row, "price_per_share"), preMoneyValuation: opt(row, "pre_money_valuation"),
     preMoneyBasisReason: opt(row, "pre_money_basis_reason"), reason: str(row, "reason"), createdAt: str(row, "created_at"),

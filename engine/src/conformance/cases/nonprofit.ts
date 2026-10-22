@@ -38,8 +38,8 @@ async function runRelease(ctx: CaseContext, scenario: ReleaseScenario) {
         coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true}'::jsonb,
         true
       ) where id = ${ledger.orgId} returning id
-    `);
-    if (!enabled.rows[0]?.id) throw new Error("nonprofit features were not enabled in the conformance tenant");
+    `, "objects");
+    if (!enabled[0]?.id) throw new Error("nonprofit features were not enabled in the conformance tenant");
     const setup = await provisionFundAccounting({
       orgId: ledger.orgId,
       defaultFund: { code: scenario.toCode, name: "Unrestricted Fund" },
@@ -85,12 +85,12 @@ async function runRelease(ctx: CaseContext, scenario: ReleaseScenario) {
       if (!posted.postedEntryId) throw new Error("the release did not identify its posted journal entry");
       entryId = posted.postedEntryId;
     });
-    const amounts = (await db.execute<{ fund: string; amount: string }>(sql`
+    const amounts = await db.execute<{ fund: string; amount: string }>(sql`
       select extra_dims->>'fund' as fund, sum(amount)::text as amount
         from journal_lines
        where org_id = ${ledger.orgId} and entry_id = ${entryId} and account_id = ${ctx.roles.revenue}
        group by extra_dims->>'fund'
-    `)).rows;
+    `, "objects");
     return {
       entries: [movement],
       values: {

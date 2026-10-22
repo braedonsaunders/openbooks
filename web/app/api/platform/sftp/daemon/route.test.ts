@@ -147,9 +147,10 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.platform-sftp-daemon-route-test')]
       const sqlText = globalThis.platformSftpDaemonSqlText
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query); state.inserts.push({ text })
-          return Promise.resolve({ rows: text.includes('from users') ? [{ id: state.identity?.user?.id ?? 'user-platform', orgId: 'org-platform', isActive: true, isSuperAdmin: state.identity?.user?.id === 'user-platform' }] : [{ id: 'server-1' }] })
+          return Promise.resolve({ rows: text.includes('from users') ? [{ id: state.identity?.user?.id ?? 'user-platform', orgId: 'org-platform', isActive: true, isSuperAdmin: state.identity?.user?.id === 'user-platform' }] : [{ id: 'server-1' }] }).then(inMode)
         },
         transaction(fn) {
           return fn(db)

@@ -46,6 +46,6 @@ export async function resolveApprovalRequestNotices(
             and g.status = 'pending'
        )
     returning n.id
-  `);
-  return resolved.rows.length;
+  `, "objects");
+  return resolved.length;
 }

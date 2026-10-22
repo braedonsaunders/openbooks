@@ -87,15 +87,13 @@ export async function createDependent(query: SaveDependentQuery): Promise<Depend
     await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
     await assertHrmEnabled(db, orgId);
     const inserted = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_dependents
             (org_id, employment_id, relationship, display_name, birth_date, created_by, updated_by)
           values (${orgId}, ${employmentId}, ${relationship}, ${displayName},
                   ${birthDate}::date, ${actorId}, ${actorId})
           returning ${DEPENDENT_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "recording the dependent",
     );
     return toDependentDTO(inserted);
@@ -116,12 +114,10 @@ export async function updateDependent(query: {
   const dependentId = requireId(query.dependentId, "dependentId");
   return withOrgTransaction(orgId, async () => {
     const current = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           select ${DEPENDENT_COLUMNS} from hrm_benefit_dependents
            where org_id = ${orgId} and id = ${dependentId}
-        `)
-      ).rows,
+        `, "objects"),
       "dependent",
     );
     const dto = toDependentDTO(current);
@@ -136,15 +132,13 @@ export async function updateDependent(query: {
     const birthDate =
       query.birthDate === undefined ? dto.birthDate : query.birthDate === null ? null : requireCivilDate(query.birthDate, "birthDate");
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_dependents
              set relationship = ${relationship}, display_name = ${displayName},
                  birth_date = ${birthDate}::date, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${dependentId}
           returning ${DEPENDENT_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "updating the dependent",
     );
     return toDependentDTO(updated);
@@ -162,26 +156,22 @@ export async function deactivateDependent(query: {
   const dependentId = requireId(query.dependentId, "dependentId");
   return withOrgTransaction(orgId, async () => {
     const current = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           select ${DEPENDENT_COLUMNS} from hrm_benefit_dependents
            where org_id = ${orgId} and id = ${dependentId}
-        `)
-      ).rows,
+        `, "objects"),
       "dependent",
     );
     const dto = toDependentDTO(current);
     await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, dto.employmentId);
     await assertHrmEnabled(db, orgId);
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_dependents
              set is_active = false, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${dependentId}
           returning ${DEPENDENT_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "deactivating the dependent",
     );
     return toDependentDTO(updated);
@@ -195,21 +185,17 @@ async function requireSameEmployment(
   dependentId: string,
 ): Promise<{ employmentId: string }> {
   const enrollment = requireOneRow(
-    (
-      await exec.execute<{ employment_id: string }>(sql`
+    await exec.execute<{ employment_id: string }>(sql`
         select employment_id from hrm_benefit_enrollments
          where org_id = ${orgId} and id = ${enrollmentId}
-      `)
-    ).rows,
+      `, "objects"),
     "benefit enrollment",
   );
   const dependent = requireOneRow(
-    (
-      await exec.execute<{ employment_id: string }>(sql`
+    await exec.execute<{ employment_id: string }>(sql`
         select employment_id from hrm_benefit_dependents
          where org_id = ${orgId} and id = ${dependentId}
-      `)
-    ).rows,
+      `, "objects"),
     "dependent",
   );
   if (String(enrollment.employment_id) !== String(dependent.employment_id)) {
@@ -265,13 +251,11 @@ export async function unlinkDependent(query: {
     const { employmentId } = await requireSameEmployment(db, orgId, enrollmentId, dependentId);
     await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
     await assertHrmEnabled(db, orgId);
-    const deleted = (
-      await db.execute(sql`
+    const deleted = await db.execute(sql`
         delete from hrm_enrollment_dependents
          where org_id = ${orgId} and enrollment_id = ${enrollmentId} and dependent_id = ${dependentId}
         returning id
-      `)
-    ).rows;
+      `, "objects");
     if (deleted.length !== 1) {
       throw new BenefitsError(
         "REFUSED",

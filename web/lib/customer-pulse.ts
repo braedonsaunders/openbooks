@@ -183,9 +183,9 @@ export async function loadCustomerPulse(
       left join subsidiaries sub on sub.id = p.subsidiary_id and sub.org_id = p.org_id
       left join payment_terms pt on pt.id = cr.payment_terms_id and pt.org_id = p.org_id
      where p.id = ${partyId} and p.org_id = ${orgId}${crmSharedScope(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `)
+  `, 'objects')
 
-  const partyRow = partyResult.rows[0]
+  const partyRow = partyResult[0]
   if (!partyRow) return null
 
   // The credit limit lives on the customer role alongside terms and hold
@@ -279,9 +279,9 @@ export async function loadCustomerPulse(
     // first leg (d.fx_rate) and translates functional→base at the
     // document-date spot (flow doctrine), so a mixed-currency book lands in
     // the presentation base instead of summing raw across currencies.
-    const unbilledRows = (await db.execute<{ date: string; func: string | null; amount: string }>(
-      customerOrderCommitmentsSource(orgId, allowedSubsidiaryIds ?? null, partyId),
-    )).rows
+    const unbilledRows = await db.execute<{ date: string; func: string | null; amount: string }>(
+      customerOrderCommitmentsSource(orgId, allowedSubsidiaryIds ?? null, partyId), 'objects',
+    )
     const unbilledOrdersBalance = await translateFlows(orgId, unbilledRows)
 
     // Remaining credit headroom, exact: limit minus committed (open plus
@@ -335,7 +335,7 @@ export async function loadCustomerPulse(
   // covers every row; a missing rate refuses by name instead of mixing.
   let pipeline: CustomerPulseData['pipeline']
   if (effectiveSections.crm) {
-    const oppRows = (await db.execute<{
+    const oppRows = await db.execute<{
       projected: string
       weighted: string
       currency: string
@@ -352,7 +352,7 @@ export async function loadCustomerPulse(
          and o.party_id = ${partyId}
          and o.is_active
          ${crmOpportunityScope(allowedSubsidiaryIds)}
-    `)).rows
+    `, 'objects')
 
     const fx = await flowRates(orgId, oppRows.map((r) => ({ func: r.currency, date: r.date })))
     let projected = '0'
@@ -405,11 +405,11 @@ export async function loadCustomerPulse(
          and prj.customer_id = ${partyId}
          and prj.is_active
          ${subsidiaryVisibleFilter(sql`prj.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-    `)
+    `, 'objects')
     let contractTotal = '0'
     let billedTotal = '0'
     let costTotal = '0'
-    for (const row of listRes.rows) {
+    for (const row of listRes) {
       const projectType = await loadProjectType(orgId, row.id)
       const fin = await resolveProjectFinancials(orgId, row.id, projectType.financialProfile)
       contractTotal = add(contractTotal, normalizeMoney(String(fin.contractValue ?? '0')))
@@ -419,8 +419,8 @@ export async function loadCustomerPulse(
     const profit = add(billedTotal, neg(costTotal))
     projects = {
       enabled: true,
-      totalCount: listRes.rows.length,
-      activeCount: listRes.rows.filter((r) => r.status === 'awarded' || r.status === 'active').length,
+      totalCount: listRes.length,
+      activeCount: listRes.filter((r) => r.status === 'awarded' || r.status === 'active').length,
       totalContractValue: normalizeMoney(contractTotal),
       totalBilled: normalizeMoney(billedTotal),
       totalCost: normalizeMoney(costTotal),

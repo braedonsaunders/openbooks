@@ -34,11 +34,9 @@ interface ItemRow extends Record<string, unknown> {
 export async function matchCatalogVariant(orgId: string, candidate: MatchCandidate): Promise<CatalogMatch> {
   const sku = clean(candidate.sku);
   if (sku) {
-    const rows = (
-      await db.execute<ItemRow>(sql`
+    const rows = await db.execute<ItemRow>(sql`
         select id, code, name from items
-         where org_id = ${orgId} and lower(code) = lower(${sku})`)
-    ).rows;
+         where org_id = ${orgId} and lower(code) = lower(${sku})`, "objects");
     if (rows.length > 1) {
       const names = rows.map((row) => `"${row.code ?? row.id}"`).join(", ");
       throw new CommerceError(
@@ -53,12 +51,10 @@ export async function matchCatalogVariant(orgId: string, candidate: MatchCandida
   }
   const barcode = clean(candidate.barcode);
   if (barcode) {
-    const hit = (
-      await db.execute<ItemRow>(sql`
+    const hit = (await db.execute<ItemRow>(sql`
         select i.id, i.code, i.name from item_identifiers ii
           join items i on i.org_id = ii.org_id and i.id = ii.item_id
-         where ii.org_id = ${orgId} and ii.value = ${barcode}`)
-    ).rows[0];
+         where ii.org_id = ${orgId} and ii.value = ${barcode}`, "objects"))[0];
     if (hit) return { kind: "matched", itemId: hit.id, itemCode: hit.code, itemName: hit.name, via: "barcode" };
   }
   return { kind: "queued" };

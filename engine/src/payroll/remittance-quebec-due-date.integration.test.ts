@@ -122,8 +122,8 @@ test(
         to: "2026-07-31",
         filingAccountId: fx.accountId,
       });
-      const billDoc = ((await db.execute<Record<string, unknown>>(sql`
-        select due_date from documents where id = ${bill.documentId}`))).rows[0]!;
+      const billDoc = (await db.execute<Record<string, unknown>>(sql`
+        select due_date from documents where id = ${bill.documentId}`, "objects"))[0]!;
       // The July 22-to-31 quarter-month ends Friday July 31 2026. Three
       // working days is August 6 nationally but August 5 in Quebec — the
       // Civic Holiday (Aug 3) is not observed there. A bill stamping the 6th

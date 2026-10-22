@@ -66,8 +66,8 @@ const patch = (partyId: string, body: unknown) =>
   );
 
 async function flags(partyId: string): Promise<{ backup: boolean; reportable: boolean }> {
-  const rows = (await withBypassContext(() => db.execute<{ backup_withholding: boolean; is_t4a: boolean }>(sql`
-    select backup_withholding, is_t4a from vendor_roles where party_id = ${partyId}`))).rows;
+  const rows = await withBypassContext(() => db.execute<{ backup_withholding: boolean; is_t4a: boolean }>(sql`
+    select backup_withholding, is_t4a from vendor_roles where party_id = ${partyId}`, "objects"));
   return { backup: rows[0]!.backup_withholding, reportable: rows[0]!.is_t4a };
 }
 

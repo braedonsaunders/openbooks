@@ -83,9 +83,9 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
       join orgs o on o.id = s.org_id and o.env_kind = 'production'
      where s.is_active and s.next_run_at <= ${now}
      order by s.next_run_at
-  `));
+  `, "objects"));
   // Raw `db.execute` timestamps arrive as Date or driver text depending on path.
-  const due = schedules.rows.map((row) => ({ ...row, next_run_at: asOccurrenceDate(row.next_run_at) }));
+  const due = schedules.map((row) => ({ ...row, next_run_at: asOccurrenceDate(row.next_run_at) }));
   const outcomes: Array<{ scheduleId: string; runId?: string; selected: number; error?: string }> = [];
   for (const schedule of due) {
     try {
@@ -129,8 +129,8 @@ async function processDuePaymentSchedule(
         values (${schedule.org_id}, ${schedule.id}, ${occurrenceAt}, 'completed', ${JSON.stringify(result)}::jsonb)
         -- A concurrent occurrence is re-read below so an empty selection cannot hide its linked run.
         on conflict (org_id, schedule_id, occurrence_at) do nothing
-        returning id`);
-      if (inserted.rows.length === 0) {
+        returning id`, "objects");
+      if (inserted.length === 0) {
         const raced = await loadPaymentScheduleOccurrence(schedule.org_id, schedule.id, occurrenceAt);
         if (!raced) throw new PaymentError('Payment schedule occurrence disappeared; retry the schedule.');
         if (raced.payment_run_id) return finishLinkedOccurrence(schedule, occurrenceAt, next, raced, now);
@@ -198,11 +198,11 @@ async function selectScheduledBills(
        and (${schedule.subsidiary_id}::uuid is null or d.subsidiary_id = ${schedule.subsidiary_id})
        and coalesce(d.due_date, d.document_date) <= (${businessDate}::date + ${dueDays}::integer)
      order by coalesce(d.due_date, d.document_date), d.document_number
-  `));
+  `, "objects"));
   const selected: string[] = [];
   let accumulated = 0n;
   const cap = maximum ? toUnits(maximum) : null;
-  for (const bill of candidates.rows) {
+  for (const bill of candidates) {
     const amount = toUnits(bill.open_balance);
     if (cap !== null && accumulated + amount > cap) continue;
     selected.push(bill.id);
@@ -220,7 +220,7 @@ async function loadPaymentScheduleOccurrence(
     select status, payment_run_id::text as payment_run_id, attempt_count, result
       from payment_schedule_occurrences
      where org_id = ${orgId} and schedule_id = ${scheduleId} and occurrence_at = ${occurrenceAt}
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
 }
 
 /**
@@ -289,7 +289,7 @@ async function submitOccurrenceRun(
   if (occurrence.status !== "awaiting_submit" && occurrence.status !== "submit_failed") return {};
   const run = (await db.execute<{ status: string }>(sql`
     select status from payment_runs where id = ${runId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!run) return {};
   if (isPaymentRunSubmissionSuccess(run.status)) {
     await markOccurrenceSubmitted(orgId, scheduleId, occurrenceAt, runId);
@@ -314,7 +314,7 @@ async function submitOccurrenceRun(
     // state while ours failed. Terminal non-success states remain failures.
     const after = (await db.execute<{ status: string }>(sql`
       select status from payment_runs where id = ${runId} and org_id = ${orgId}
-    `)).rows[0]?.status;
+    `, "objects"))[0]?.status;
     if (after && isPaymentRunSubmissionSuccess(after)) {
       await markOccurrenceSubmitted(orgId, scheduleId, occurrenceAt, runId);
       return {};
@@ -432,8 +432,8 @@ async function recoverPaymentScheduleOccurrences(): Promise<void> {
          )
        order by o.occurrence_at
        limit 100
-  `));
-  for (const row of pending.rows) {
+  `, "objects"));
+  for (const row of pending) {
     try {
       await withOrgContext(row.orgId, () =>
         submitOccurrenceRun(row.orgId, row.scheduleId, asOccurrenceDate(row.occurrenceAt), row.runId));

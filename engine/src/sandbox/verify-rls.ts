@@ -161,9 +161,9 @@ async function countChunk(
         : sql`select ${table}::text as tbl, count(*)::int as n from ${sql.raw(`"${table}"`)} where org_id = ${whereOrg}`,
     );
     const result = await db.execute<{ tbl: string; n: number }>(
-      sql.join(branches, sql` union all `),
+      sql.join(branches, sql` union all `), "objects",
     );
-    for (const row of result.rows) out.set(row.tbl, row.n);
+    for (const row of result) out.set(row.tbl, row.n);
     for (const table of tables.slice(i, i + 100)) {
       if (!out.has(table)) out.set(table, 0);
     }
@@ -196,8 +196,8 @@ export async function verifyCloneRls(args: {
     }>(sql`
       select id, env_kind, sandbox_of, settings
         from orgs
-       where id = ${args.productionOrgId} or id = ${args.sandboxOrgId}`);
-    return result.rows;
+       where id = ${args.productionOrgId} or id = ${args.sandboxOrgId}`, "objects");
+    return result;
   });
   const production = orgs.find((row) => row.id === args.productionOrgId);
   const sandbox = orgs.find((row) => row.id === args.sandboxOrgId);
@@ -263,8 +263,8 @@ async function resolveClonePair(argv: string[]): Promise<{
     // bypass: cross-org-by-design — a sandbox row links a production organization to its copy.
     const row = await withBypass(async () => {
       const result = await db.execute<{ tier: SandboxTier }>(sql`
-        select tier from sandboxes where org_id = ${sandboxOrgId} order by created_at desc limit 1`);
-      return result.rows[0];
+        select tier from sandboxes where org_id = ${sandboxOrgId} order by created_at desc limit 1`, "objects");
+      return result[0];
     });
     if (!row) {
       throw new Error(
@@ -285,8 +285,8 @@ async function resolveClonePair(argv: string[]): Promise<{
         from sandboxes
        where status = 'ready'
        order by created_at desc
-       limit 1`);
-    return result.rows[0];
+       limit 1`, "objects");
+    return result[0];
   });
   if (!pair) {
     throw new Error(

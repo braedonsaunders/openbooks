@@ -155,17 +155,17 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
     select account_id, id as reconciliation_id, through_date::text
       from reconciliations
      where org_id = ${orgId} and status = 'in_progress'
-  `));
-  const sessionByAccount = new Map(sessions.rows.map((row) => [row.account_id, row]));
+  `, "objects"));
+  const sessionByAccount = new Map(sessions.map((row) => [row.account_id, row]));
   const accounts = (await db.execute<{ account_id: string; number: string | null; name: string }>(sql`
     select distinct s.account_id, a.number, a.name
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
       join accounts a on a.id = s.account_id and a.org_id = s.org_id
      where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= ${today}
-  `));
+  `, "objects"));
   const out: ReconAccountCandidates[] = [];
-  for (const account of accounts.rows) {
+  for (const account of accounts) {
     const session = sessionByAccount.get(account.account_id) ?? null;
     const cutoff = session?.through_date ?? today;
     const [lines, journals] = await Promise.all([
@@ -185,7 +185,7 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
            and l.match_status = 'unmatched' and l.posted_on <= ${cutoff}
          order by abs(l.amount) desc, l.posted_on
          limit 100
-      `),
+      `, "objects"),
       db.execute<{ journal_line_id: string; posting_date: string; amount: string; currency: string }>(sql`
         select jl.id as journal_line_id, je.posting_date::text, jl.txn_amount::text as amount, jl.currency
           from journal_lines jl
@@ -198,18 +198,18 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
            and ${excludePeriodEndJournals(sql`je.origin`)}
            and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
          limit 500
-      `),
+      `, "objects"),
     ]);
     const sameCurrencyJournals = (currency: string): ReconcilableJournalRow[] =>
-      journals.rows
+      journals
         .filter((row) => row.currency === currency)
         // Signed amounts: autoMatch pairs exact signed values, never absolutes.
         .map((row) => ({ journalLineId: row.journal_line_id, postingDate: String(row.posting_date), amount: String(row.amount) }));
-    const lineById = new Map(lines.rows.map((row) => [row.line_id, row]));
+    const lineById = new Map(lines.map((row) => [row.line_id, row]));
     const candidates: MatchCandidate[] = [];
     // Pair per currency partition: autoMatch only matches within one currency.
-    for (const currency of new Set(lines.rows.map((row) => row.currency))) {
-      const currencyLines: UnmatchedLineRow[] = lines.rows
+    for (const currency of new Set(lines.map((row) => row.currency))) {
+      const currencyLines: UnmatchedLineRow[] = lines
         .filter((row) => row.currency === currency)
         .map((row) => ({ lineId: row.line_id, postedOn: String(row.posted_on), amount: String(row.amount) }));
       for (const pair of pairMatchCandidates(currencyLines, sameCurrencyJournals(currency), windowDays)) {
@@ -221,7 +221,7 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
           description: line.description,
           counterpartyRef: line.counterparty_ref,
           journalLineId: pair.journalLineId,
-          journalDate: journals.rows.find((row) => row.journal_line_id === pair.journalLineId)?.posting_date ?? "",
+          journalDate: journals.find((row) => row.journal_line_id === pair.journalLineId)?.posting_date ?? "",
           daysBetween: pair.daysBetween,
           confidence: pair.confidence,
           confidencePercent: pair.confidence === "0.90" ? 90 : 70,
@@ -235,7 +235,7 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
       accountName: account.name,
       reconciliationId: session?.reconciliation_id ?? null,
       throughDate: session?.through_date ?? null,
-      totalUnmatched: lines.rows.length,
+      totalUnmatched: lines.length,
       candidates,
     });
   }
@@ -261,9 +261,9 @@ async function loadStaleSessions(orgId: string, cutoff: string): Promise<StaleRe
        and r.updated_at <= ${cutoff}::timestamptz
      order by r.updated_at
      limit 50
-  `));
+  `, "objects"));
   const out: StaleReconRow[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const { difference } = await reconciliationTotals(row.reconciliation_id, { orgId, userId: SYSTEM_ACTOR_ID, allowedSubsidiaryIds: null });
     out.push({
       reconciliationId: row.reconciliation_id,
@@ -299,8 +299,8 @@ async function loadNeverReconciled(orgId: string, lookbackStart: string): Promis
        and a.reconcilable
        and not exists (select 1 from reconciliations r where r.org_id = ${orgId} and r.account_id = s.account_id)
      group by s.account_id, a.number, a.name
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     accountId: row.account_id,
     accountNumber: row.number,
     accountName: row.name,

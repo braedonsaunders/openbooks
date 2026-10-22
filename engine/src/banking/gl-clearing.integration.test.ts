@@ -90,8 +90,7 @@ async function postBankLine(
     const offsetAmount = bankAmount.startsWith("-")
       ? bankAmount.slice(1)
       : `-${bankAmount}`;
-    const [bankLine] = (
-      await tx.execute<{ id: string }>(sql`
+    const [bankLine] = await tx.execute<{ id: string }>(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -103,8 +102,7 @@ async function postBankLine(
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD',
          ${offsetAmount}, 1, ${label})
       returning id
-    `)
-    ).rows;
+    `, "objects");
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -133,13 +131,11 @@ async function statementLineIds(
   orgId: string,
   statementId: string,
 ): Promise<string[]> {
-  return (
-    await db.execute<{ id: string }>(sql`
+  return (await db.execute<{ id: string }>(sql`
     select id from bank_statement_lines
      where org_id = ${orgId} and statement_id = ${statementId}
      order by line_number
-  `)
-  ).rows.map((row) => row.id);
+  `, "objects")).map((row) => row.id);
 }
 
 async function groupOf(
@@ -148,12 +144,10 @@ async function groupOf(
   journalLineId: string,
 ): Promise<string | null> {
   return (
-    (
-      await db.execute<{ group_id: string }>(sql`
+    (await db.execute<{ group_id: string }>(sql`
     select group_id from reconciliation_matches
      where org_id = ${orgId} and reconciliation_id = ${reconId} and journal_line_id = ${journalLineId}
-  `)
-    ).rows[0]?.group_id ?? null
+  `, "objects"))[0]?.group_id ?? null
   );
 }
 
@@ -340,13 +334,11 @@ test(
       assert.ok(groupId);
 
       // A statement-backed group is refused here: it unmatches by line.
-      const stmtGroup = (
-        await db.execute<{ group_id: string }>(sql`
+      const stmtGroup = (await db.execute<{ group_id: string }>(sql`
         select group_id from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${recon.id}
            and statement_line_id is not null limit 1
-      `)
-      ).rows[0]!.group_id;
+      `, "objects"))[0]!.group_id;
       await assert.rejects(
         unmatchGlClearingGroup(
           { reconciliationId: recon.id, groupId: stmtGroup },
@@ -451,11 +443,9 @@ test(
       // correction — but its entry can be reversed, and then the group no
       // longer cross-foots at sign-off. Reversal needs a posted same-book
       // mirror of the corrected entry.
-      const correctionEntryId = (
-        await db.execute<{ id: string }>(sql`
+      const correctionEntryId = (await db.execute<{ id: string }>(sql`
         select entry_id as id from journal_lines where id = ${correction!} and org_id = ${org.orgId}
-      `)
-      ).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const mirrorId = randomUUID();
       await db.execute(sql`
         insert into journal_entries

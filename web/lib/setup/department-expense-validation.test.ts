@@ -12,9 +12,10 @@ function executorFor(steps: { rows: unknown[] }[]) {
   const calls: unknown[] = []
   return {
     calls,
-    execute: async (query: unknown) => {
+    execute: async (query: unknown, mode?: string) => {
       calls.push(query)
-      return steps[Math.min(calls.length - 1, steps.length - 1)]!
+      const result = steps[Math.min(calls.length - 1, steps.length - 1)]!
+      return mode === 'objects' ? result.rows : result
     },
   }
 }

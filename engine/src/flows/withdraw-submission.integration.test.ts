@@ -30,34 +30,34 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const ZERO = "00000000-0000-0000-0000-000000000000";
 
 async function docStatus(orgId: string, id: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status from documents where id = ${id} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ status: string }>(sql`
+    select status from documents where id = ${id} and org_id = ${orgId}`, "objects");
   return rows[0]!.status;
 }
 
 async function runStatus(orgId: string, runId: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status from flow_runs where id = ${runId} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ status: string }>(sql`
+    select status from flow_runs where id = ${runId} and org_id = ${orgId}`, "objects");
   return rows[0]!.status;
 }
 
 async function gateStatuses(orgId: string, runId: string): Promise<string[]> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status from flow_gates where run_id = ${runId} and org_id = ${orgId} order by created_at`)).rows;
+  const rows = await db.execute<{ status: string }>(sql`
+    select status from flow_gates where run_id = ${runId} and org_id = ${orgId} order by created_at`, "objects");
   return rows.map((row) => row.status);
 }
 
 async function latestDocumentAudit(orgId: string, id: string) {
-  const rows = (await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } } }>(sql`
+  const rows = await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } } }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
-     order by at desc, id desc limit 1`)).rows;
+     order by at desc, id desc limit 1`, "objects");
   return rows[0]!;
 }
 
 async function pendingGateId(orgId: string, billId: string): Promise<string> {
-  const rows = (await db.execute<{ id: string }>(sql`
-    select id from flow_gates where subject_id = ${billId} and org_id = ${orgId} and status = 'pending'`)).rows;
+  const rows = await db.execute<{ id: string }>(sql`
+    select id from flow_gates where subject_id = ${billId} and org_id = ${orgId} and status = 'pending'`, "objects");
   assert.equal(rows.length, 1, `expected one pending gate, got ${rows.length}`);
   return rows[0]!.id;
 }

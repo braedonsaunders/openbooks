@@ -88,15 +88,15 @@ export async function loadProjectTimeEntryPage(args: {
          and org_id = ${args.orgId}
          ${subsidiaryFilter}
          for share
-    `)
-    if (!project.rows[0]) throw new ProjectTimeDetailError('Project not found')
+    `, 'objects')
+    if (!project[0]) throw new ProjectTimeDetailError('Project not found')
 
     const employeeIds = (await db.execute<{ id: string }>(sql`
       select distinct employee_party_id as id from time_entries
        where org_id = ${args.orgId} and project_id = ${args.projectId}
          and status = 'approved' and employee_party_id is not null
        order by employee_party_id
-    `)).rows.map((row) => row.id)
+    `, 'objects')).map((row) => row.id)
     const employees = await lockScopeRows(
       db,
       args.orgId,
@@ -133,7 +133,7 @@ export async function loadProjectTimeEntryPage(args: {
          and te.status = 'approved'
          ${employeeScopeFilter}
          and ${dimensionFilter}
-    `)
+    `, 'objects')
     const entries = await db.execute(sql`
       select te.id,
              te.worked_on::text as worked_on,
@@ -169,14 +169,14 @@ export async function loadProjectTimeEntryPage(args: {
          and ${dimensionFilter}
        order by te.worked_on desc, te.id
        limit ${pageSize} offset ${offset}
-    `)
+    `, 'objects')
     return [summary, entries] as const
   })
 
-  const totals = summaryResult.rows[0] ?? {}
+  const totals = summaryResult[0] ?? {}
   const totalEntries = Number(totals.entries ?? 0)
   return {
-    entries: (entryResult.rows).map((row) => ({
+    entries: entryResult.map((row) => ({
       id: String(row.id),
       workedOn: String(row.worked_on),
       workRegion: row.work_region == null ? null : String(row.work_region),

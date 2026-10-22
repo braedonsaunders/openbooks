@@ -32,8 +32,8 @@ async function legacyPOST(req: Request, { params }: { params: Promise<{ id: stri
   const owned = (await db.execute(sql`
     select 1 from payment_instructions i join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
      where i.id = ${instructionId} and r.id = ${id} and r.org_id = ${gate.user.orgId}
-  `))
-  if (!owned.rows[0]) return NextResponse.json({ error: 'Payment instruction not found' }, { status: 404 })
+  `, 'objects'))
+  if (!owned[0]) return NextResponse.json({ error: 'Payment instruction not found' }, { status: 404 })
   const parsed = await parseJsonBody(req, settlementBody)
   if (!parsed.ok) return parsed.response
   const body = parsed.data

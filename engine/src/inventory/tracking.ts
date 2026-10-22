@@ -91,15 +91,15 @@ export async function ensureLot(
       -- A repeated lot identity is selected below and must agree with its organization and expiry.
       on conflict (item_id, lot_number) do nothing
       returning id
-    `));
-    if (inserted.rows[0]) return inserted.rows[0].id;
+    `, "objects"));
+    if (inserted[0]) return inserted[0].id;
     const existing = (await tx.execute<{ id: string; org_id: string; expires_on: string | null }>(sql`
       select id, org_id, expires_on::text
         from lots
        where org_id = ${orgId} and item_id = ${itemId} and lot_number = ${lotNumber.trim()}
        for update
-    `));
-    const row = existing.rows[0];
+    `, "objects"));
+    const row = existing[0];
     if (!row || row.org_id !== orgId) {
       throw new InventoryError("lot identity belongs to another organization");
     }
@@ -157,8 +157,8 @@ export async function ensureSerial(
       -- A repeated serial identity is selected below and its organization and location are verified.
       on conflict (item_id, serial_number) do nothing
       returning id
-    `));
-    if (inserted.rows[0]) return inserted.rows[0].id;
+    `, "objects"));
+    if (inserted[0]) return inserted[0].id;
     const existing = (await tx.execute<{
         id: string;
         org_id: string;
@@ -168,8 +168,8 @@ export async function ensureSerial(
         from serials
        where org_id = ${orgId} and item_id = ${itemId} and serial_number = ${serialNumber.trim()}
        for update
-    `));
-    const row = existing.rows[0];
+    `, "objects"));
+    const row = existing[0];
     if (!row || row.org_id !== orgId) {
       throw new InventoryError(
         "serial identity belongs to another organization",
@@ -254,8 +254,8 @@ export async function queryLotRecall(
        and (${filter.expiresOnOrBefore ?? null}::date is null or l.expires_on <= ${filter.expiresOnOrBefore ?? null}::date)
        and (${filter.includeExpiryOnly !== true} or l.expires_on is not null)
        ${subsidiaryScope}
-     order by im.moved_at desc`));
-  return r.rows;
+     order by im.moved_at desc`, "objects"));
+  return r;
 }
 
 export async function validateTrackingSelection(
@@ -275,8 +275,8 @@ export async function validateTrackingSelection(
         from lots
        where id = ${selection.lotId} and org_id = ${orgId} and item_id = ${itemId}
        for update
-    `));
-    if (!lot.rows[0]) {
+    `, "objects"));
+    if (!lot[0]) {
       throw new InventoryError(
         "lot must belong to the item and organization",
       );
@@ -295,8 +295,8 @@ export async function validateTrackingSelection(
       from serials
      where id = ${selection.serialId} and org_id = ${orgId} and item_id = ${itemId}
      for update
-  `));
-  const row = serial.rows[0];
+  `, "objects"));
+  const row = serial[0];
   if (!row) {
     throw new InventoryError(
       "serial must belong to the item and organization",
@@ -318,21 +318,21 @@ export async function validateTrackingSelection(
        where org_id = ${orgId} and serial_id = ${selection.serialId}
          and status = 'posted'
        limit 1
-    `));
-    if (prior.rows.length && operation === "receipt") {
+    `, "objects"));
+    if (prior.length && operation === "receipt") {
       throw new InventoryError(
         "serial already has posted inventory movement history; use a controlled return workflow",
       );
     }
     if (operation === "receipt") {
-      const custody=(await tx.execute(sql`select 1 from consignment_stock where org_id=${orgId} and serial_id=${row.id} and remaining_quantity>0 limit 1`)).rows;
+      const custody=await tx.execute(sql`select 1 from consignment_stock where org_id=${orgId} and serial_id=${row.id} and remaining_quantity>0 limit 1`, "objects");
       if(custody.length)throw new InventoryError('Serial is externally owned — take ownership through the Consignment command');
     }
     if (operation !== "receipt") {
-      const occupied = (await tx.execute(sql`select 1 from cost_layers layer
+      const occupied = await tx.execute(sql`select 1 from cost_layers layer
         join inventory_movements source on source.org_id=layer.org_id and source.id=layer.source_movement_id
         where layer.org_id=${orgId} and source.serial_id=${row.id} and layer.remaining_quantity>0
-        union all select 1 from consignment_stock where org_id=${orgId} and serial_id=${row.id} and remaining_quantity>0 limit 1`)).rows;
+        union all select 1 from consignment_stock where org_id=${orgId} and serial_id=${row.id} and remaining_quantity>0 limit 1`, "objects");
       if (row.status === 'in_stock' || occupied.length) throw new InventoryError('Serial already exists in stock or custody — resolve its location before recording another receipt');
     }
     if (
@@ -344,11 +344,11 @@ export async function validateTrackingSelection(
       );
     }
     if (profile.tracking === "lot_serial" && !row.lot_id) {
-      const bound = await tx.execute(sql`update serials set lot_id=${selection.lotId}, updated_by=${actorId}, updated_at=now() where org_id=${orgId} and id=${row.id} and lot_id is null returning id`);
-      if (!bound.rows.length) throw new InventoryError("serial lot assignment changed — reload the receipt");
+      const bound = await tx.execute(sql`update serials set lot_id=${selection.lotId}, updated_by=${actorId}, updated_at=now() where org_id=${orgId} and id=${row.id} and lot_id is null returning id`, "objects");
+      if (!bound.length) throw new InventoryError("serial lot assignment changed — reload the receipt");
       const audit=await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-        values(${orgId},'serials',${row.id},'update',${JSON.stringify({operation:'bind_lot',before:{lotId:null},after:{lotId:selection.lotId},reason:'Receipt establishes serial lot identity'})}::jsonb,${actorId}) returning id`);
-      if (!audit.rows.length) throw new InventoryError('Serial lot assignment was not audited');
+        values(${orgId},'serials',${row.id},'update',${JSON.stringify({operation:'bind_lot',before:{lotId:null},after:{lotId:selection.lotId},reason:'Receipt establishes serial lot identity'})}::jsonb,${actorId}) returning id`, "objects");
+      if (!audit.length) throw new InventoryError('Serial lot assignment was not audited');
     }
     return;
   }

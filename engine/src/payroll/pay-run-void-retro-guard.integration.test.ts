@@ -20,13 +20,11 @@ async function seedPostedSource() {
     effectiveFrom: "2026-01-01", eiEmployerMultiplier: "1.4",
   });
   assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-    where org_id=${fx.orgId} and employment_id=${fx.employmentId} returning id`)).rows.length, 1);
+    where org_id=${fx.orgId} and employment_id=${fx.employmentId} returning id`, "objects")).length, 1);
   const { input } = await calculatedRun(fx);
   await commitPayRun(input);
-  const accounts = (
-    await db.execute<{ id: string; type: string }>(sql`
-      select id, type from accounts where org_id = ${fx.orgId}`)
-  ).rows;
+  const accounts = await db.execute<{ id: string; type: string }>(sql`
+      select id, type from accounts where org_id = ${fx.orgId}`, "objects");
   const account = (type: string) => {
     const id = accounts.find((row) => row.type === type)?.id;
     assert.ok(id, `fixture account ${type}`);
@@ -97,7 +95,7 @@ async function committedSettledTotal(orgId: string, sourceDocumentId: string) {
         and rr.org_id = st.org_id
      where st.org_id = ${orgId}
        and st.source_pay_run_document_id = ${sourceDocumentId}
-       and rr.run_status = 'committed'`)).rows[0]?.settled ?? null;
+       and rr.run_status = 'committed'`, "objects"))[0]?.settled ?? null;
 }
 
 test(
@@ -108,10 +106,10 @@ test(
     try {
       const retroNumber = (await db.execute<{ document_number: string }>(sql`
         select document_number from documents
-         where org_id = ${fx.orgId} and id = ${retro.documentId}`)).rows[0]!.document_number;
+         where org_id = ${fx.orgId} and id = ${retro.documentId}`, "objects"))[0]!.document_number;
       const orgCounts = async () => (await db.execute<{ entries: string; audit: string }>(sql`
         select (select count(*)::text from journal_entries where org_id = ${fx.orgId}) as entries,
-               (select count(*)::text from audit_log where org_id = ${fx.orgId}) as audit`)).rows[0]!;
+               (select count(*)::text from audit_log where org_id = ${fx.orgId}) as audit`, "objects"))[0]!;
       const before = await orgCounts();
       await assert.rejects(
         requestDocumentVoid({
@@ -147,7 +145,7 @@ test(
                     and rr.org_id = st.org_id
                  where st.org_id = ${fx.orgId}
                    and st.source_pay_run_document_id = ${input.documentId}
-                   and rr.run_status = 'committed') as settled`)).rows[0]!;
+                   and rr.run_status = 'committed') as settled`, "objects"))[0]!;
       assert.deepEqual(await orgCounts(), before, "the refused void writes no journal or audit rows");
       assert.equal(state.source_status, "posted", "the source stays posted");
       assert.equal(state.void_requested_at, null, "no void claim survives the refusal");
@@ -185,7 +183,7 @@ test(
         select (select run_status from pay_runs
                  where org_id = ${fx.orgId} and document_id = ${input.documentId}) as source_run,
                (select run_status from pay_runs
-                 where org_id = ${fx.orgId} and document_id = ${retro.documentId}) as retro_run`)).rows[0]!;
+                 where org_id = ${fx.orgId} and document_id = ${retro.documentId}) as retro_run`, "objects"))[0]!;
       assert.equal(state.source_run, "voided", "the source voids");
       assert.equal(state.retro_run, "draft", "the uncommitted retro is untouched");
     } finally {
@@ -239,7 +237,7 @@ test(
           lockReject(error);
           throw error;
         }
-        holderPid = (await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+        holderPid = (await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
         lockResolve();
         await releaseGate;
       });
@@ -257,7 +255,7 @@ test(
           select exists (
             select 1 from pg_stat_activity
              where datname=current_database() and ${holderPid}::int=any(pg_blocking_pids(pid))
-          ) as blocked`)).rows[0]?.blocked;
+          ) as blocked`, "objects"))[0]?.blocked;
         if (blocked) break;
         if (attempt >= 600) throw new Error("source void did not reach the retro guard");
         await new Promise((resolve) => setTimeout(resolve, 10));
@@ -275,7 +273,7 @@ test(
         select (select status from documents
                  where org_id = ${fx.orgId} and id = ${input.documentId}) as source_status,
                (select run_status from pay_runs
-                 where org_id = ${fx.orgId} and document_id = ${input.documentId}) as source_run`)).rows[0]!;
+                 where org_id = ${fx.orgId} and document_id = ${input.documentId}) as source_run`, "objects"))[0]!;
       assert.equal(state.source_status, "posted", "the source stays posted");
       assert.equal(state.source_run, "committed", "the source stays committed");
     } finally {
@@ -324,7 +322,7 @@ test(
       assert.equal(
         (await db.execute<{ run_status: string }>(sql`
           select run_status from pay_runs
-           where org_id = ${fx.orgId} and document_id = ${retro.documentId}`)).rows[0]!.run_status,
+           where org_id = ${fx.orgId} and document_id = ${retro.documentId}`, "objects"))[0]!.run_status,
         "voided",
         "the retro top-up is retired",
       );
@@ -363,7 +361,7 @@ test(
         select sum(s.gross)::text as total from pay_stubs s
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
          where s.org_id = ${fx.orgId} and s.employee_party_id = ${fx.employeeId}
-           and r.run_status = 'committed'`)).rows[0]!;
+           and r.run_status = 'committed'`, "objects"))[0]!;
       assert.equal(paid.total, "264.0000", "$264.00 corrected base with no stranded top-up on top");
     } finally {
       await dropScratchOrgReporting(fx.orgId);

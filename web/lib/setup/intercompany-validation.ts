@@ -14,7 +14,7 @@ export const validateRepresentingPartiesWrite: SetupEntityValidationHook = async
   const current = rowId
     ? (await executor.execute<Record<string, unknown>>(sql`
         select subsidiary_id, customer_party_id, vendor_party_id, is_active
-          from intercompany_representing_parties where org_id = ${orgId} and id = ${rowId}`)).rows[0] ?? null
+          from intercompany_representing_parties where org_id = ${orgId} and id = ${rowId}`, 'objects'))[0] ?? null
     : null
   return representingPartiesRefusal(executor, orgId, body, current, rowId ?? null)
 }
@@ -26,7 +26,7 @@ export const validateTransferPricingWrite: SetupEntityValidationHook = async ({ 
     ? (await executor.execute<Record<string, unknown>>(sql`
         select seller_subsidiary_id, buyer_subsidiary_id, method, price_level_id, markup_percent::text as markup_percent,
                revenue_account_id, cost_account_id, effective_from::text as effective_from, effective_to::text as effective_to
-          from intercompany_transfer_pricing_policies where org_id = ${orgId} and id = ${rowId}`)).rows[0] ?? null
+          from intercompany_transfer_pricing_policies where org_id = ${orgId} and id = ${rowId}`, 'objects'))[0] ?? null
     : null
   return transferPricingPolicySetupRefusal(executor, orgId, body, current)
 }

@@ -80,8 +80,8 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
 
   const org = (await db.execute<{ brand_primary: string | null }>(sql`
     select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${user.orgId}
-  `));
-  const starter = starterTemplate(meta, org.rows[0]?.brand_primary);
+  `, "objects"));
+  const starter = starterTemplate(meta, org[0]?.brand_primary);
 
   const source = body.sourceHtml?.trim() ? body.sourceHtml : starter.sourceHtml;
   const headerHtml = body.headerHtml ?? starter.headerHtml;
@@ -146,8 +146,8 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
                 ${prettySource}, ${compiled.compiledHtml}, ${body.isDefault === true},
                 ${user.id}, ${user.id})
         returning id, name, to_jsonb(pdf_templates) as snapshot
-      `));
-      const inserted = result.rows[0]!;
+      `, "objects"));
+      const inserted = result[0]!;
       // Insert evidence follows the {after} convention: the created design's
       // full row, so the audit shows what was designed — not just its name.
       await tx.execute(sql`

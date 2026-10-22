@@ -138,16 +138,16 @@ export const POST = defineRoute({
                 ${cron}, ${nextRunAt}, ${body.timeoutMs ?? 2000}, ${body.sortOrder ?? 100}, ${body.isActive !== false},
                 ${user.id}, ${user.id}, ${user.id})
         returning *
-      `))
+      `, 'objects'))
       await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values
-          (${user.orgId}, 'user_scripts', ${String(created.rows[0]!.id)}, 'insert',
-           ${JSON.stringify({ after: created.rows[0] })}::jsonb,
+          (${user.orgId}, 'user_scripts', ${String(created[0]!.id)}, 'insert',
+           ${JSON.stringify({ after: created[0] })}::jsonb,
            ${user.id}, ${request.headers.get('X-Request-Id')})
       `)
-      return created.rows[0]!
+      return created[0]!
     })
     if (row instanceof NextResponse) return row
     return NextResponse.json({ id: String(row.id) })
@@ -183,12 +183,12 @@ export const PATCH = defineRoute({
       if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
       const before = (await tx.execute<Record<string, unknown>>(sql`
         select * from user_scripts where id = ${body.id} and org_id = ${user.orgId} for update
-      `))
-      if (!before.rows[0]) return true
+      `, 'objects'))
+      if (!before[0]) return true
       // Derive policy changes against the live locked row. Ordinary edits must
       // retain the scheduler's cursor, including PostgreSQL microseconds.
-      const schedulingChanged = before.rows[0].trigger_point !== body.triggerPoint
-        || before.rows[0].cron !== cron || before.rows[0].is_active !== (body.isActive !== false)
+      const schedulingChanged = before[0].trigger_point !== body.triggerPoint
+        || before[0].cron !== cron || before[0].is_active !== (body.isActive !== false)
       // Activating a schedule outside production would never fire (the
       // scanner only reads production orgs) — refuse by name before
       // writing. Name-only edits, deactivations, and other trigger points
@@ -215,14 +215,14 @@ export const PATCH = defineRoute({
           run_as_user_id = ${user.id}, updated_by = ${user.id}, updated_at = now()
         where id = ${body.id} and org_id = ${user.orgId}
         returning *
-      `))
-      if (!updated.rows[0]) throw new Error('script update matched no row after its lock')
+      `, 'objects'))
+      if (!updated[0]) throw new Error('script update matched no row after its lock')
       await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values
-          (${user.orgId}, 'user_scripts', ${String(updated.rows[0]!.id)}, 'update',
-           ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb,
+          (${user.orgId}, 'user_scripts', ${String(updated[0]!.id)}, 'update',
+           ${JSON.stringify({ before: before[0], after: updated[0] })}::jsonb,
            ${user.id}, ${request.headers.get('X-Request-Id')})
       `)
       return false

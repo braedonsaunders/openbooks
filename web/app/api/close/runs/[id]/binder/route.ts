@@ -25,8 +25,8 @@ async function legacyGET(
     select binder_snapshot, binder_hash
       from close_runs
      where id = ${id} and org_id = ${gate.user.orgId} and status = 'published'
-  `));
-  const binder = result.rows[0];
+  `, "objects"));
+  const binder = result[0];
   if (!binder?.binder_snapshot || !binder.binder_hash) {
     return NextResponse.json(
       { error: "published audit binder not found" },

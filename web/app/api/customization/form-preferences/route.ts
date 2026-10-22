@@ -72,8 +72,8 @@ export const PUT = defineRoute({
       select is_active as "isActive", allowed_roles as "allowedRoles"
         from form_layouts
        where id = ${layoutId} and org_id = ${user.orgId} and record_type = ${body.recordType}
-    `);
-      const row = owned.rows[0];
+    `, "objects");
+      const row = owned[0];
       if (!row)
         return NextResponse.json(
           { error: "form layout not found" },

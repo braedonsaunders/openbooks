@@ -57,7 +57,7 @@ export async function committedFrPlafondYearToDate(input: {
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and d.subsidiary_id = ${input.subsidiaryId}::uuid
        ${employmentFilter}
-  `)).rows[0];
+  `, "objects"))[0];
   return {
     ytdGross: typeof row?.remuneration === "string" ? row.remuneration : "0",
     priorStubCount: typeof row?.stubs === "number" ? row.stubs : 0,

@@ -453,7 +453,7 @@ async function visibleFilingAccounts(gate: Parameters<typeof guardPayrollFilingA
 /** The org's installed payroll packs, by the same resolver the setup wizard and pay-run readiness use. */
 async function installedProfileCountries(orgId: string): Promise<string[]> {
   const settings = (await db.execute<{ payroll: Record<string, unknown> | null }>(sql`
-    select settings->'payroll' as payroll from orgs where id = ${orgId}`)).rows[0]?.payroll ?? {}
+    select settings->'payroll' as payroll from orgs where id = ${orgId}`, 'objects'))[0]?.payroll ?? {}
   return (await installedPayrollCountries(orgId, settings)).filter((country) => country in PAYROLL_COUNTRY_PACKS)
 }
 
@@ -481,7 +481,7 @@ export const GET = defineRoute({
       const employeeScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId"
           from parties
-         where org_id = ${gate.user.orgId} and id = ${employee}`)).rows[0]
+         where org_id = ${gate.user.orgId} and id = ${employee}`, 'objects'))[0]
       if (!employeeScope) return notFound("record")
       const denied = guardSubsidiaryScope(gate, employeeScope.subsidiaryId)
       if (denied) return denied
@@ -499,8 +499,8 @@ export const GET = defineRoute({
             on root_sub.org_id = p.org_id and root_sub.parent_id is null and root_sub.is_active
          where p.org_id = ${gate.user.orgId} and p.id = ${employee}
          order by root_sub.created_at limit 1
-      `))
-      const subsidiaryCountry = defaultCountryRes.rows[0]?.country ?? null
+      `, 'objects'))
+      const subsidiaryCountry = defaultCountryRes[0]?.country ?? null
       const installed = await installedProfileCountries(gate.user.orgId)
       const defaultCountry = subsidiaryCountry && subsidiaryCountry in PAYROLL_COUNTRY_PACKS
         ? subsidiaryCountry
@@ -534,19 +534,19 @@ export const GET = defineRoute({
             left join pay_schedules s on s.id = prof.pay_schedule_id and s.org_id = prof.org_id
             left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
             left join employee_roles er on er.party_id = prof.employee_party_id and er.org_id = prof.org_id
-           where prof.org_id = ${gate.user.orgId} and prof.employee_party_id = ${employee}`),
+           where prof.org_id = ${gate.user.orgId} and prof.employee_party_id = ${employee}`, 'objects'),
         db.execute(sql`
           select id, name, frequency from pay_schedules
            where org_id = ${gate.user.orgId} and is_active
              ${payrollVisibleScheduleFilter(gate)}
-           order by name`),
+           order by name`, 'objects'),
         db.execute<{ id: string }>(sql`select id from worker_employments
           where org_id=${gate.user.orgId} and worker_party_id=${employee}
-          ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, gate.allowedSubsidiaryIds)} order by id`),
+          ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, gate.allowedSubsidiaryIds)} order by id`, 'objects'),
       ]))
       const profileAccountDenied = await guardPayrollFilingAccounts(
         gate,
-        [((profileRes.rows[0] as { filing_account_id?: string | null } | undefined)?.filing_account_id) ?? null],
+        [((profileRes[0] as { filing_account_id?: string | null } | undefined)?.filing_account_id) ?? null],
       )
       if (profileAccountDenied) return profileAccountDenied
       // The employee's current (unsuperseded) row-backed certificate filings,
@@ -563,7 +563,7 @@ export const GET = defineRoute({
           from employee_tax_certificates
          where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
            and superseded_on is null
-         order by certificate_key`)
+         order by certificate_key`, 'objects')
       // Pack-derived prefill hints (0191): values the pack derives from facts
       // already on file — today only the PL birth year off the PESEL — so the
       // editor shows them before anything is saved. The sealed identifier is
@@ -572,14 +572,14 @@ export const GET = defineRoute({
       // operator who may already edit the profile. Keyed by profile column,
       // read generically off the pack's own hook — never a country branch.
       const derivedProfileColumns: Record<string, string> = {}
-      const profileCountry = (profileRes.rows[0] as { country?: unknown } | undefined)?.country
+      const profileCountry = (profileRes[0] as { country?: unknown } | undefined)?.country
       const drawerDeriveHook = typeof profileCountry === 'string'
         ? PAYROLL_COUNTRY_PACKS[profileCountry]?.deriveEmployeeFacts : undefined
       if (drawerDeriveHook) {
         const sealed = (await db.execute<{ sealed: string | null }>(sql`
           select sin_encrypted as sealed from employee_payroll_profiles
            where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
-        `)).rows[0]?.sealed
+        `, 'objects'))[0]?.sealed
         // A tampered identifier degrades to unconfigured — the same derived
         // facts as a profile with no identifier yet — never a 500.
         let drawerIdentifier: string | null = null
@@ -596,27 +596,27 @@ export const GET = defineRoute({
       // to, so the main Save files an explicit date instead of today.
       const employmentStart = (await db.execute<{ hired_on: string | null }>(sql`
         select min(hired_on)::text as hired_on from employee_roles
-         where org_id = ${gate.user.orgId} and party_id = ${employee}`)).rows[0]?.hired_on ?? null
+         where org_id = ${gate.user.orgId} and party_id = ${employee}`, 'objects'))[0]?.hired_on ?? null
       return NextResponse.json({
-        profile: profileRes.rows[0] ?? null,
+        profile: profileRes[0] ?? null,
         employmentId: (() => {
-          const linked = (profileRes.rows[0] as { employment_id?: string } | undefined)?.employment_id
-          if (linked) return employmentsRes.rows.some(row => row.id === linked) ? linked : null
-          return employmentsRes.rows.length === 1 ? employmentsRes.rows[0]!.id : null
+          const linked = (profileRes[0] as { employment_id?: string } | undefined)?.employment_id
+          if (linked) return employmentsRes.some(row => row.id === linked) ? linked : null
+          return employmentsRes.length === 1 ? employmentsRes[0]!.id : null
         })(),
         employmentStart,
         derivedProfileColumns,
-        storedCertificates: storedRes.rows,
-        schedules: schedulesRes.rows,
+        storedCertificates: storedRes,
+        schedules: schedulesRes,
         filingAccounts: await visibleFilingAccounts(gate),
         // Active WCB/WSIB rate classes for the payroll tab's coverage
         // control, beside the employee's current class served on the row.
-        workerCompGroups: (await db.execute<{ id: string; code: string; name: string }>(sql`
+        workerCompGroups: await db.execute<{ id: string; code: string; name: string }>(sql`
           select id::text as id, code, name from worker_comp_groups
-           where org_id = ${gate.user.orgId} and is_active order by name`)).rows,
+           where org_id = ${gate.user.orgId} and is_active order by name`, 'objects'),
         labourJurisdictions: labourJurisdictionOptions(),
         defaultCountry,
-        countries: offeredProfileCountries(installed, [(profileRes.rows[0] as { country?: string | null } | undefined)?.country]),
+        countries: offeredProfileCountries(installed, [(profileRes[0] as { country?: string | null } | undefined)?.country]),
         packProfiles: packProfileDeclarations(),
         statutoryOccupationClasses: occupationClassOptions(),
       })
@@ -649,11 +649,11 @@ export const GET = defineRoute({
         left join payroll_filing_accounts fa on fa.id = prof.filing_account_id and fa.org_id = prof.org_id
        where prof.org_id = ${gate.user.orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
-       order by p.display_name`))
+       order by p.display_name`, 'objects'))
     // A profile can name a filing account attached to another legal entity even
     // when its employee is visible. Refuse the aggregate rather than returning
     // account metadata that the caller cannot otherwise inspect.
-    for (const profile of profiles.rows) {
+    for (const profile of profiles) {
       const denied = await guardPayrollFilingAccounts(
         gate,
         [typeof profile.filing_account_id === 'string' ? profile.filing_account_id : null],
@@ -662,12 +662,12 @@ export const GET = defineRoute({
     }
     const filingAccounts = await visibleFilingAccounts(gate)
     return NextResponse.json({
-      profiles: profiles.rows,
+      profiles,
       filingAccounts,
       labourJurisdictions: labourJurisdictionOptions(),
       countries: offeredProfileCountries(
         await installedProfileCountries(gate.user.orgId),
-        profiles.rows.map((row) => (row as { country?: string | null }).country),
+        profiles.map((row) => (row as { country?: string | null }).country),
       ),
       packProfiles: packProfileDeclarations(),
       statutoryOccupationClasses: occupationClassOptions(),
@@ -948,11 +948,11 @@ export const POST = defineRoute({
              and (er.is_active or er.terminated_on is not null)
            where p.org_id = ${orgId} and p.id = ${body.employeePartyId}
              and (p.is_active or er.terminated_on is not null)
-           for no key update of p for share of er`),
+           for no key update of p for share of er`, 'objects'),
         db.execute(sql`
           select subsidiary_id as "subsidiaryId"
             from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active
-            for share`),
+            for share`, 'objects'),
       ]))
       // The two locking reads above stay exactly as they are: one round trip on
       // the success path. A zero-row inner join is a single outcome for three
@@ -960,13 +960,13 @@ export const POST = defineRoute({
       // termination, no eligible employee role),
       // so the refusal below re-reads with a left join to resolve WHICH
       // predicate failed — but only on this failure path, never on success.
-      if (refs[0].rows.length !== 1 || refs[1].rows.length !== 1) {
-        if (refs[0].rows.length !== 1) {
+      if (refs[0].length !== 1 || refs[1].length !== 1) {
+        if (refs[0].length !== 1) {
           const employee = (await db.execute<{ partyActive: boolean | null; roleActive: boolean | null }>(sql`
             select p.is_active as "partyActive", er.is_active as "roleActive"
               from parties p left join employee_roles er
                 on er.party_id = p.id and er.org_id = p.org_id
-             where p.org_id = ${orgId} and p.id = ${body.employeePartyId}`)).rows[0]
+             where p.org_id = ${orgId} and p.id = ${body.employeePartyId}`, 'objects'))[0]
           if (!employee) return NextResponse.json({ error: 'employee is not available' }, { status: 422 })
           // An unsaved new employee never reaches this route (the drawer
           // creates the record on Save), so an inactive party is a deactivated
@@ -989,8 +989,8 @@ export const POST = defineRoute({
       // The employee and schedule are both payroll records. Resolve their legal
       // entities before the upsert so a restricted operator cannot re-home a
       // profile or edit another subsidiary by guessing an employee id.
-      const employeeSubsidiaryId = (refs[0].rows[0] as { subsidiaryId: string | null }).subsidiaryId
-      const scheduleSubsidiaryId = (refs[1].rows[0] as { subsidiaryId: string | null }).subsidiaryId
+      const employeeSubsidiaryId = (refs[0][0] as { subsidiaryId: string | null }).subsidiaryId
+      const scheduleSubsidiaryId = (refs[1][0] as { subsidiaryId: string | null }).subsidiaryId
       const employeeDenied = guardSubsidiaryScope(gate, employeeSubsidiaryId)
       if (employeeDenied) return employeeDenied
       const scheduleDenied = guardSubsidiaryScope(gate, scheduleSubsidiaryId)
@@ -1011,9 +1011,9 @@ export const POST = defineRoute({
         // as the employee — a CA employee can never be filed on a US EIN.
         const account = (await db.execute(sql`
           select 1 from payroll_filing_accounts
-           where org_id = ${orgId} and id = ${filingAccountId} and is_active and country = ${country}`,
+           where org_id = ${orgId} and id = ${filingAccountId} and is_active and country = ${country}`, 'objects',
         ))
-        if (account.rows.length !== 1) {
+        if (account.length !== 1) {
           return NextResponse.json({ error: 'filing account is not available for this country' }, { status: 422 })
         }
       }
@@ -1073,7 +1073,7 @@ export const POST = defineRoute({
         select ${PROFILE_AUDIT_COLUMNS} from employee_payroll_profiles
          where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
          for update
-      `)).rows[0]
+      `, 'objects'))[0]
       const employmentId = await payrollProfileEmployment(
         db, orgId, body.employeePartyId, employeeSubsidiaryId,
         typeof before?.employment_id === 'string' ? before.employment_id : null,
@@ -1097,7 +1097,7 @@ export const POST = defineRoute({
           const stored = (await db.execute<{ sealed: string | null }>(sql`
             select sin_encrypted as sealed from employee_payroll_profiles
              where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
-          `)).rows[0]?.sealed
+          `, 'objects'))[0]?.sealed
           // A tampered identifier degrades to unconfigured, exactly as before
           // seals failed closed: the derivation below runs on null and the
           // save refuses or prefills by its existing rules, never a 500.
@@ -1240,14 +1240,14 @@ export const POST = defineRoute({
                                        else employee_payroll_profiles.sin_last3 end,
                       updated_at = greatest(clock_timestamp(), employee_payroll_profiles.updated_at + interval '1 microsecond'), updated_by = ${userId}
         where employee_payroll_profiles.org_id = ${orgId}
-        returning ${PROFILE_AUDIT_COLUMNS}`)).rows[0]
+        returning ${PROFILE_AUDIT_COLUMNS}`, 'objects'))[0]
       if (!after) throw new Error('payroll profile save returned no row')
       const audited = await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
         values (${orgId}, 'employee_payroll_profiles', ${after.id}, ${before ? 'update' : 'insert'},
           ${JSON.stringify({ ...(before ? { before } : {}), after, ...(body.auditReason === undefined ? {} : { reason: body.auditReason }) })}::jsonb,
-          ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp()) returning id`)
-      if (audited.rows.length !== 1) throw new Error('payroll profile audit returned no row')
+          ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp()) returning id`, 'objects')
+      if (audited.length !== 1) throw new Error('payroll profile audit returned no row')
       return NextResponse.json({ ok: true })
     })
 

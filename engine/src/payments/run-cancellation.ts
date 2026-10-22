@@ -66,7 +66,7 @@ export async function cancelPaymentRun(
         from payment_runs
        where id = ${runId} and org_id = ${orgId}
         for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) throw new PaymentError("payment run not found");
     if (!CANCELLABLE_RUN_STATUSES.includes(locked.status)) {
       throw new PaymentError(`a ${locked.status} run cannot be cancelled`);
@@ -102,8 +102,8 @@ export async function cancelPaymentRun(
         where id = ${runId} and org_id = ${orgId}
           and status in ('draft', 'rejected', 'rolled_back')
         returning id
-    `);
-    if (!cancelled.rows[0]) {
+    `, "objects");
+    if (!cancelled[0]) {
       throw new PaymentError("the run changed state while it was being cancelled");
     }
     // Canonical lifecycle evidence, only after the mutation proved its own

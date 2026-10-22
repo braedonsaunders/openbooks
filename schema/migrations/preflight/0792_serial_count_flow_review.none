@@ -1,1 +1,0 @@
-This migration replaces the serial-count posted-evidence guard without changing recorded observations, decisions, stock or journals. Both native zero-gate and completed gated submissions retain their immutable review evidence.

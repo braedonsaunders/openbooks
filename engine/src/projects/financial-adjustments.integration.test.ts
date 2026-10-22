@@ -151,8 +151,8 @@ test(
              and a.table_name = 'project_financial_adjustments'
              and pfa.project_id = ${projectId}
            order by pfa.reverses_adjustment_id nulls first
-        `);
-        assert.deepEqual(audit.rows, [
+        `, "objects");
+        assert.deepEqual(audit, [
           {
             row_id: original.id,
             actor_id: actorId,

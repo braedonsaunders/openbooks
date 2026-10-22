@@ -206,8 +206,8 @@ test("a different photo of the same receipt warns by merchant, date and total", 
     assert.deepEqual(view.issues.filter((issue) => issue.code === "possible_duplicate").map((issue) => issue.cause), ["same_receipt"]);
     // A discarded capture no longer counts.
     await discardReceiptCapture(db, { orgId: fixture.org.orgId, documentId: fixture.reportA, captureId: first.id, actorId: fixture.actorId });
-    const audit = (await db.execute<{ changes: { after: { status: string } } }>(sql`
-      select changes from audit_log where org_id = ${fixture.org.orgId} and table_name = 'expense_receipt_captures' and row_id = ${first.id}`)).rows;
+    const audit = await db.execute<{ changes: { after: { status: string } } }>(sql`
+      select changes from audit_log where org_id = ${fixture.org.orgId} and table_name = 'expense_receipt_captures' and row_id = ${first.id}`, "objects");
     assert.equal(audit.at(-1)?.changes.after.status, "discarded");
   } finally {
     await teardown(fixture);
@@ -241,7 +241,7 @@ test("a foreign-currency receipt drafts its own amounts and confirms only a line
       lines: [{ accountId: fixture.mealsAccountId, amount: "136.9300", taxAmount: "15.1200", originalCurrency: "USD", originalAmount: "99.5000", originalTaxAmount: "10.9900" }],
       confirmations: [{ captureId: usd.id, ...confirmation }] });
     const usdRow = (await db.execute<{ currency: string; total: string; confirmed_amount: string; confirmed_tax_amount: string }>(sql`
-      select currency, total::text, confirmed_amount::text, confirmed_tax_amount::text from expense_receipt_captures where id = ${usd.id}`)).rows[0]!;
+      select currency, total::text, confirmed_amount::text, confirmed_tax_amount::text from expense_receipt_captures where id = ${usd.id}`, "objects"))[0]!;
     assert.deepEqual(usdRow, { currency: "USD", total: "110.4900", confirmed_amount: "136.9300", confirmed_tax_amount: "15.1200" },
       "the receipt keeps its own currency and total; the confirmation records the converted line");
     const line = cadLine(fixture.mealsAccountId, "99.5000", "10.9900");
@@ -270,7 +270,7 @@ test("a foreign-currency receipt drafts its own amounts and confirms only a line
       { lineNumber: 1, accountId: fixture.mealsAccountId, amount: "99.5000", taxAmount: "10.9900", merchantName: "The Keg", transactionDate: "2026-10-03", at: undefined },
     );
     const row = (await db.execute<{ total: string; merchant_key: string; merchant_party_id: string; confirmed_by: string }>(sql`
-      select total::text, merchant_key, merchant_party_id, confirmed_by from expense_receipt_captures where id = ${cad.id}`)).rows[0]!;
+      select total::text, merchant_key, merchant_party_id, confirmed_by from expense_receipt_captures where id = ${cad.id}`, "objects"))[0]!;
     assert.deepEqual(row, { total: "110.4900", merchant_key: "thekeg", merchant_party_id: fixture.vendorId, confirmed_by: fixture.actorId });
     await assert.rejects(
       confirmReceiptLines(db, { orgId: fixture.org.orgId, documentId: fixture.reportB, reportCurrency: "CAD", actorId: fixture.actorId, lines: [line], confirmations: [{ captureId: cad.id, ...confirmation }] }),
@@ -377,7 +377,7 @@ test("the organization's AI model reads a receipt when it is the configured capt
     assert.equal(view.draft?.merchantPartyId, fixture.vendorId);
     assert.equal(view.overallConfidence, "0.9500");
     const row = (await db.execute<{ provider: string; model: string; api_version: string }>(sql`
-      select provider, model, api_version from expense_receipt_captures where id = ${captured.id}`)).rows[0]!;
+      select provider, model, api_version from expense_receipt_captures where id = ${captured.id}`, "objects"))[0]!;
     assert.deepEqual(row, { provider: "llm_vision", model: "claude-sonnet-4-6", api_version: "anthropic-messages-2023-06-01" });
 
     // An answer that is not the contract fails the capture; it can be retried.

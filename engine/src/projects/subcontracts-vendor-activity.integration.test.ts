@@ -49,12 +49,12 @@ test("createSubcontract refuses an inactive vendor party even when its vendor ro
       (error: unknown) => error instanceof SubcontractError && error.message === "Vendor is not active in this organization",
     );
     assert.equal(
-      (await db.execute(sql`select count(*)::int as count from subcontracts where org_id = ${org.orgId}`)).rows[0]?.count,
+      (await db.execute(sql`select count(*)::int as count from subcontracts where org_id = ${org.orgId}`, "objects"))[0]?.count,
       0,
       "an inactive vendor must not create a subcontract",
     );
     assert.equal(
-      (await db.execute(sql`select count(*)::int as count from audit_log where org_id = ${org.orgId}`)).rows[0]?.count,
+      (await db.execute(sql`select count(*)::int as count from audit_log where org_id = ${org.orgId}`, "objects"))[0]?.count,
       0,
       "a rejected subcontract must not write audit evidence",
     );
@@ -183,7 +183,7 @@ test("subcontract inputs enforce currency and subsidiary availability in the ser
       /joint payee available to the project's subsidiary/,
     );
     assert.equal(
-      (await db.execute(sql`select count(*)::int as count from subcontracts where org_id = ${org.orgId} and number <> 'SC-SCOPE'`)).rows[0]?.count,
+      (await db.execute(sql`select count(*)::int as count from subcontracts where org_id = ${org.orgId} and number <> 'SC-SCOPE'`, "objects"))[0]?.count,
       0,
       "refused subcontract writes must leave no records",
     );

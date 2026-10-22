@@ -131,10 +131,10 @@ export async function postMirrorReversal(
   const original = (await runner.execute<{ book_id: string; subsidiary_id: string; status: string; origin: string }>(sql`
     select book_id, subsidiary_id, status, origin from journal_entries
      where org_id = ${input.orgId} and id = ${input.entryId}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!original) throw new IntercompanyError("the entry to reverse no longer exists", 409);
   if (original.status !== "posted") throw new IntercompanyError("only a posted entry can be reversed", 409);
-  const lines = (await runner.execute<{
+  const lines = await runner.execute<{
     id: string; line_number: number; account_id: string; subsidiary_id: string; amount: string;
     currency: string; txn_amount: string; fx_rate: string; party_id: string | null;
     department_id: string | null; project_id: string | null; location_id: string | null; class_id: string | null;
@@ -145,7 +145,7 @@ export async function postMirrorReversal(
            project_id, location_id, class_id, due_date::text as due_date, is_open_item
       from journal_lines
      where org_id = ${input.orgId} and entry_id = ${input.entryId}
-     order by line_number`)).rows;
+     order by line_number`, "objects");
   let posted: PostEntryResult;
   try {
     posted = await postEntry(runner, {

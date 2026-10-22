@@ -21,10 +21,10 @@ export async function createCommercialDocument(input:{orgId:string;actorId:strin
   if(!await lockAndCheckOrgFeature(db,input.orgId,'orders')) throw new DocumentDraftError('Enable Orders in Company Settings → Features before generating a commercial renewal');
   const draft=await createDocumentDraft(input.orgId,input.actorId,input.kind,{allowedSubsidiaryIds:allowed,subsidiaryId:input.subsidiaryId,runFlows:false,source:'api',commercialKind:input.kind});
   const current=(await db.execute<DocumentEditCurrent>(sql`select kind,status,total::text,tax_total::text as "taxTotal",party_id as "partyId",document_date::text as "documentDate",
-    ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt",custom,subsidiary_id as "subsidiaryId" from documents where org_id=${input.orgId} and id=${draft.id} for update`)).rows[0];
+    ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt",custom,subsidiary_id as "subsidiaryId" from documents where org_id=${input.orgId} and id=${draft.id} for update`, 'objects'))[0];
   if(!current) throw new DocumentDraftError('Commercial draft was not observable after creation');
   if(!(await db.execute(sql`insert into audit_log(org_id,actor_id,table_name,row_id,action,changes)
-    values(${input.orgId},${input.actorId},'documents',${draft.id},'insert',${JSON.stringify({reason:'Created commercial agreement document',kind:input.kind,request:input.body})}::jsonb) returning id`)).rows[0]) throw new DocumentDraftError('Commercial draft audit could not be saved');
+    values(${input.orgId},${input.actorId},'documents',${draft.id},'insert',${JSON.stringify({reason:'Created commercial agreement document',kind:input.kind,request:input.body})}::jsonb) returning id`, 'objects'))[0]) throw new DocumentDraftError('Commercial draft audit could not be saved');
   const deferredUpdate=await applyDocumentEdit(draft.id,current,{...input.body,expectedUpdatedAt:current.updatedAt},{orgId:input.orgId,userId:input.actorId,allowedSubsidiaryIds:allowed,source:'api',deferFlows:true,commercialKind:input.kind});
   return {status:'created',id:draft.id,documentNumber:draft.documentNumber,deferredUpdate:deferredUpdate??null};
  });

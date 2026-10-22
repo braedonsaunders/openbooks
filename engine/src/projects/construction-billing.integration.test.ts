@@ -79,8 +79,8 @@ test(
         select org_id::text, invoice_document_id::text
           from pay_applications
          where id = ${ownerApplicationId}
-      `);
-      assert.deepEqual(linked.rows, [{ org_id: owner.orgId, invoice_document_id: ownerInvoiceId }]);
+      `, "objects");
+      assert.deepEqual(linked, [{ org_id: owner.orgId, invoice_document_id: ownerInvoiceId }]);
     } finally {
       await dropScratchOrg(foreign.orgId);
       await dropScratchOrg(owner.orgId);

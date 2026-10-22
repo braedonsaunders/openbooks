@@ -50,8 +50,8 @@ export async function listFilingAccounts(
      where org_id = ${orgId} and (${includeInactive} or is_active)
        and (${country ?? null}::text is null or country = ${country ?? null})
      order by is_default desc, account_number
-  `));
-  return rows.rows.map(toAccount);
+  `, "objects"));
+  return rows.map(toAccount);
 }
 
 function toAccount(row: Record<string, unknown>): PayrollFilingAccount {
@@ -149,8 +149,8 @@ export async function assertPayrollFilingAccountKnown(
      where s.org_id = ${orgId} and ${filter}
        and r.run_status = 'committed' and s.filing_account_source = 'unknown'
      limit 1
-  `);
-  if (result.rows.length) {
+  `, "objects");
+  if (result.length) {
     throw new PayrollError("Committed payroll has an unknown historical filing account. Reconcile its original payroll evidence before generating filing or remittance reports.");
   }
 }

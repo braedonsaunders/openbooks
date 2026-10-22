@@ -42,8 +42,8 @@ function asDaemonConfig(row: DaemonRow): DaemonConfig {
 async function readDaemonRow(runner: SqlExecutor): Promise<DaemonRow | undefined> {
   const r = await runner.execute<DaemonRow>(sql`
     select enabled, port, host_key, advertised_host from sftp_daemon where id = 'default'
-  `);
-  return r.rows[0];
+  `, "objects");
+  return r[0];
 }
 
 /** Load the singleton daemon config, provisioning it (with a fresh host key) on first use. */
@@ -62,8 +62,8 @@ export async function loadDaemonConfig(runner: SqlExecutor = db): Promise<Daemon
     insert into sftp_daemon (id, enabled, port, host_key) values ('default', false, 2222, ${hostKey})
     on conflict (id) do nothing
     returning enabled, port, host_key, advertised_host
-  `);
-  if (inserted.rows[0]) return asDaemonConfig(inserted.rows[0]);
+  `, "objects");
+  if (inserted[0]) return asDaemonConfig(inserted[0]);
 
   const persisted = await readDaemonRow(runner);
   if (!persisted) {
@@ -96,8 +96,8 @@ async function loadServer(username: string): Promise<ServerRow | null> {
     const r = await db.execute<ServerRow>(sql`
     select id, org_id as "orgId", username, backend, bucket, root_prefix, password_encrypted, authorized_keys, updated_at
       from sftp_servers where username = ${username} and is_active limit 1
-  `);
-    return r.rows[0] ?? null;
+  `, "objects");
+    return r[0] ?? null;
   });
 }
 async function touch(row: { id: string; orgId: string; username: string }) {
@@ -106,7 +106,7 @@ async function touch(row: { id: string; orgId: string; username: string }) {
   // identity: a zero-row outcome (concurrent deactivate/delete, or RLS
   // denying the row) fails the login instead of reporting success.
   await withOrgContext(row.orgId, async () => {
-    const updated = await db.execute(sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`);
+    const updated = await db.execute<never>(sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`);
     if (updated.rowCount !== 1) {
       throw new Error(
         `refusing SFTP login for ${JSON.stringify(row.username)}: its server row is no longer present in its organization — recreate or reactivate the server and try again`,
@@ -158,8 +158,8 @@ async function loadSessionRow(id: string, orgId: string): Promise<SessionRow | n
     const r = await db.execute<SessionRow>(sql`
     select id, org_id as "orgId", username, is_active, updated_at, password_encrypted, authorized_keys
       from sftp_servers where id = ${id} and org_id = ${orgId} limit 1
-  `);
-    return r.rows[0] ?? null;
+  `, "objects");
+    return r[0] ?? null;
   });
 }
 
@@ -176,8 +176,8 @@ async function loadProtectedDirs(row: ServerRow): Promise<string[]> {
     const r = await db.execute<{ folder: string }>(sql`
       select distinct coalesce(nullif(btrim(sftp_folder), ''), 'outbound') as folder
         from payment_bank_profiles where sftp_server_id = ${row.id} and org_id = ${row.orgId}
-    `);
-    return r.rows;
+    `, "objects");
+    return r;
   });
   const dirs = new Set<string>(["outbound"]);
   for (const f of folders) {
@@ -271,7 +271,7 @@ export const dbResolver: SftpResolver = {
     await withBypass(async () => {
       const daemon = (await db.execute<{ enabled: boolean }>(sql`
         select enabled from sftp_daemon where id = 'default' for share
-      `)).rows[0];
+      `, "objects"))[0];
       if (!daemon?.enabled) {
         await operation({ alive: false, reason: "the SFTP daemon is disabled — ask a platform administrator to enable it, then reconnect" });
         return;
@@ -280,7 +280,7 @@ export const dbResolver: SftpResolver = {
       const row = (await db.execute<SessionRow>(sql`
         select id, org_id as "orgId", username, is_active, updated_at, password_encrypted, authorized_keys
           from sftp_servers where id = ${config.id} and org_id = ${config.orgId} for share
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) {
         await operation({ alive: false, reason: `sftp login '${config.username}' no longer exists — ask your administrator to recreate it, then reconnect` });
         return;

@@ -124,8 +124,8 @@ async function legacyPATCH(req: Request, { params }: Params, injectedGate?: Auth
       // vanished row.
       const before = (await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
         select to_jsonb(pdf_templates) as snapshot from pdf_templates
-         where org_id = ${user.orgId} and id = ${id} for update`))
-      if (before.rows.length === 0) return 'missing' as const
+         where org_id = ${user.orgId} and id = ${id} for update`, "objects"))
+      if (before.length === 0) return 'missing' as const
       // A promotion clears the old default BEFORE the self-update sets the
       // new one: unique indexes are checked per statement, so setting self
       // first would trip the one-default backstop mid-transaction. The clear
@@ -151,15 +151,15 @@ async function legacyPATCH(req: Request, { params }: Params, injectedGate?: Auth
                revision = revision + 1,
                updated_at = now(), updated_by = ${user.id}
          where org_id = ${user.orgId} and id = ${id}
-        returning to_jsonb(pdf_templates) as snapshot`))
-      if (updated.rows.length === 0) return 'missing' as const
+        returning to_jsonb(pdf_templates) as snapshot`, "objects"))
+      if (updated.length === 0) return 'missing' as const
       // The design audit carries the full before/after row — a bare {name}
       // cannot show what the save changed, and the failing audit write rolls
       // the design change back with it.
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'pdf_templates', ${id}, 'update',
-                ${JSON.stringify({ before: before.rows[0]!.snapshot, after: updated.rows[0]!.snapshot })}, ${user.id})`);
+                ${JSON.stringify({ before: before[0]!.snapshot, after: updated[0]!.snapshot })}, ${user.id})`);
       return 'ok' as const
     });
     if (outcome === 'missing') return notFound("record");
@@ -194,15 +194,15 @@ async function legacyDELETE(_req: Request, { params }: Params, injectedGate?: Au
   const deleted = (await db.transaction(async (tx) => {
     const before = (await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
       select to_jsonb(pdf_templates) as snapshot from pdf_templates
-       where org_id = ${user.orgId} and id = ${id} for update`))
-    if (before.rows.length === 0) return 'missing' as const
+       where org_id = ${user.orgId} and id = ${id} for update`, "objects"))
+    if (before.length === 0) return 'missing' as const
     const removed = (await tx.execute<{ id: string }>(sql`
-      delete from pdf_templates where org_id = ${user.orgId} and id = ${id} returning id`))
-    if (removed.rows.length === 0) return 'missing' as const
+      delete from pdf_templates where org_id = ${user.orgId} and id = ${id} returning id`, "objects"))
+    if (removed.length === 0) return 'missing' as const
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'pdf_templates', ${id}, 'delete',
-              ${JSON.stringify({ before: before.rows[0]!.snapshot })}, ${user.id})`);
+              ${JSON.stringify({ before: before[0]!.snapshot })}, ${user.id})`);
     return 'ok' as const
   }));
   if (deleted === 'missing') return notFound("record");

@@ -57,11 +57,11 @@ test("masked clone masks contact identity and address locality", async () => {
     });
     sandboxId = created.sandboxId;
 
-    const sbxContact = (await db.execute<{
+    const sbxContact = await db.execute<{
       first_name: string; last_name: string; name: string; title: string | null; role: string | null;
       email: string; phone: string; mobile_phone: string; fax: string;
     }>(sql`select first_name, last_name, name, title, role, email, phone, mobile_phone, fax
-             from contacts where org_id = ${created.sandboxOrgId}`)).rows;
+             from contacts where org_id = ${created.sandboxOrgId}`, "objects");
     assert.equal(sbxContact.length, 1);
     const c = sbxContact[0]!;
     for (const [field, value] of Object.entries({
@@ -79,10 +79,10 @@ test("masked clone masks contact identity and address locality", async () => {
     assert.equal(c.title, "Controller");
     assert.equal(c.role, "Billing");
 
-    const sbxAddress = (await db.execute<{
+    const sbxAddress = await db.execute<{
       line1: string; city: string; postal_code: string; region: string | null; country: string | null;
     }>(sql`select line1, city, postal_code, region, country
-             from addresses where org_id = ${created.sandboxOrgId}`)).rows;
+             from addresses where org_id = ${created.sandboxOrgId}`, "objects");
     assert.equal(sbxAddress.length, 1);
     const a = sbxAddress[0]!;
     assert.equal(a.line1, "REDACTED");
@@ -147,24 +147,24 @@ test("masked clone tombstones file rows and copies no bytes", async () => {
     });
     sandboxId = created.sandboxId;
 
-    const sbxFiles = (await db.execute<{ storage_kind: string; name: string; content_hash: string }>(sql`
-      select storage_kind, name, content_hash from files where org_id = ${created.sandboxOrgId}`)).rows;
+    const sbxFiles = await db.execute<{ storage_kind: string; name: string; content_hash: string }>(sql`
+      select storage_kind, name, content_hash from files where org_id = ${created.sandboxOrgId}`, "objects");
     assert.equal(sbxFiles.length, 1);
     assert.equal(sbxFiles[0]!.storage_kind, MASKED_STORAGE_KIND);
     // Metadata stays browsable test data; only the bytes are tombstoned.
     assert.equal(sbxFiles[0]!.name, "contract.pdf");
     assert.equal(sbxFiles[0]!.content_hash, "prod-hash");
 
-    const sbxVersions = (await db.execute<{ storage_kind: string }>(sql`
+    const sbxVersions = await db.execute<{ storage_kind: string }>(sql`
       select fv.storage_kind from file_versions fv join files f on f.id = fv.file_id
-       where f.org_id = ${created.sandboxOrgId}`)).rows;
+       where f.org_id = ${created.sandboxOrgId}`, "objects");
     assert.equal(sbxVersions.length, 1);
     assert.equal(sbxVersions[0]!.storage_kind, MASKED_STORAGE_KIND);
 
     const sbxBlobs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from file_blobs fb
        where fb.version_id in (select fv.id from file_versions fv join files f on f.id = fv.file_id
-                                where f.org_id = ${created.sandboxOrgId})`)).rows[0]!.n;
+                                where f.org_id = ${created.sandboxOrgId})`, "objects"))[0]!.n;
     assert.equal(sbxBlobs, 0, "masked clone must copy no file bytes");
 
     // The tombstoned row dispatches to the named refusal, never to a fetch.
@@ -172,7 +172,7 @@ test("masked clone tombstones file rows and copies no bytes", async () => {
 
     // Production bytes are untouched by the clone.
     const prodBlobs = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from file_blobs where version_id = ${versionId}`)).rows[0]!.n;
+      select count(*)::int as n from file_blobs where version_id = ${versionId}`, "objects"))[0]!.n;
     assert.equal(prodBlobs, 1);
   } finally {
     const sid = sandboxId;

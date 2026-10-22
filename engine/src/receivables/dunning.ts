@@ -237,11 +237,11 @@ async function readDunningDeliveryVerdict(
   orgId: string,
   claimId: string,
 ): Promise<DunningDeliveryVerdict> {
-  const rows = (await db.execute<{ status: string; attempts: unknown }>(sql`
+  const rows = await db.execute<{ status: string; attempts: unknown }>(sql`
     select status, meta -> 'attempts' as attempts
       from email_log
      where org_id = ${orgId} and meta ->> 'dunningLogId' = ${claimId}
-  `)).rows;
+  `, "objects");
   let sawUncertain = false;
   for (const row of rows) {
     if (row.status === "sent") return "accepted";
@@ -370,9 +370,9 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
       // day — the scheduler itself runs on the server's UTC day.
       const today = asOf ?? (await businessToday(orgId));
       const org = (await db.execute<{ name: string; baseCurrency: string }>(
-        sql`select name, base_currency as "baseCurrency" from orgs where id = ${orgId}`,
+        sql`select name, base_currency as "baseCurrency" from orgs where id = ${orgId}`, "objects",
       ));
-      const orgName = org.rows[0]?.name ?? "";
+      const orgName = org[0]?.name ?? "";
 
       const policies = (await db.execute<{
           id: string;
@@ -385,9 +385,9 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
         select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
                min_balance as "minBalance", reply_to as "replyTo"
           from dunning_policies where org_id = ${orgId} and is_active
-      `));
+      `, "objects"));
 
-      for (const policy of policies.rows) {
+      for (const policy of policies) {
         if (!isDunnableDocumentKind(policy.appliesToKind)) {
           console.warn(
             `[dunning] policy ${policy.id} applies to ${JSON.stringify(policy.appliesToKind)}, which is not a dunnable receivable kind — skipped`,
@@ -399,8 +399,8 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
                  subject_template as "subjectTemplate", body_template as "bodyTemplate", escalate
             from dunning_stages where policy_id = ${policy.id} and org_id = ${orgId}
            order by sequence
-        `));
-        const stages = stageRows.rows;
+        `, "objects"));
+        const stages = stageRows;
         if (!stages.length) {
           // Stage-less active policies predate the activation refusal and
           // can never fire a rung. Skip loudly — a named entry on the tick
@@ -464,9 +464,9 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
              and d.status = 'posted' and d.due_date is not null
              and d.due_date <= ${addCalendarDays(today, -minOffset)}
            order by d.id
-         `));
+         `, "objects"));
 
-        for (const doc of docs.rows) {
+        for (const doc of docs) {
           result.scanned += 1;
           if (cmp(doc.balanceDueBase, policy.minBalance) <= 0) continue;
           // Signed days from the due date — negative while the document is
@@ -492,8 +492,8 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
           const fired = (await db.execute<{ stageId: string }>(sql`
             select stage_id as "stageId" from dunning_log
              where document_id = ${doc.id} and org_id = ${orgId} and status = 'sent'
-          `));
-          const firedIds = new Set(fired.rows.map((r) => r.stageId));
+          `, "objects"));
+          const firedIds = new Set(fired.map((r) => r.stageId));
 
           const stage = selectDueStage(stages, daysOverdue, firedIds, policy.gracePeriodDays);
           if (!stage) continue;
@@ -564,8 +564,8 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
             -- The existing document-stage claim is resolved below before any letter is re-armed or queued.
             on conflict (document_id, stage_id) do nothing
             returning id
-          `);
-          let claimId = claimed.rows[0]?.id;
+          `, "objects");
+          let claimId = claimed[0]?.id;
           // Fresh claims defer under the rung's base identity; every re-arm
           // rotates the key with its own re-arm time, so a retry never
           // collapses onto a dead outbox row from an earlier round and
@@ -575,7 +575,7 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
             const existing = (await db.execute<{ id: string; status: string; updatedAt: Date | string }>(sql`
               select id, status, updated_at as "updatedAt" from dunning_log
                where org_id = ${orgId} and document_id = ${doc.id} and stage_id = ${stage.id}
-            `)).rows[0];
+            `, "objects"))[0];
             if (!existing) {
               // Unreachable under the advisory lock held above: a conflict
               // proves a rival row exists, and no rival can delete one (the
@@ -618,11 +618,11 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
                   update dunning_log set status = 'sent', sent_at = now(), updated_at = now()
                    where id = ${existing.id} and org_id = ${orgId} and status = 'staged'
                   returning id
-                `);
-                if (!settled.rows[0]) {
+                `, "objects");
+                if (!settled[0]) {
                   const current = (await db.execute<{ status: string }>(sql`
                     select status from dunning_log where id = ${existing.id} and org_id = ${orgId}
-                  `)).rows[0]?.status;
+                  `, "objects"))[0]?.status;
                   console.error(
                     `[dunning] ${doc.documentNumber} stage ${stage.id} has accepted delivery evidence but the claim is now ${current ?? "missing"} — not re-firing`,
                   );
@@ -653,8 +653,8 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
                   update dunning_log set status = 'failed', detail = ${blockedNote}, updated_at = now()
                    where id = ${existing.id} and org_id = ${orgId} and status = 'staged'
                   returning id
-                `);
-                if (!parked.rows[0]) {
+                `, "objects");
+                if (!parked[0]) {
                   console.error(
                     `[dunning] ${doc.documentNumber} stage ${stage.id} has uncertain delivery evidence but the claim left staged under this tick — not re-firing`,
                   );
@@ -665,8 +665,8 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
                      set status = 'staged', detail = ${blockedNote}, updated_at = now()
                    where id = ${existing.id} and org_id = ${orgId} and status = 'failed'
                   returning id
-                `);
-                if (!restaged.rows[0]) {
+                `, "objects");
+                if (!restaged[0]) {
                   throw new Error(
                     `[dunning] ${doc.documentNumber} stage ${stage.id} reconciliation hold matched zero rows — refusing to send unclaimed`,
                   );
@@ -698,8 +698,8 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
                 update dunning_log set status = 'failed', detail = ${rearmNote}, updated_at = now()
                  where id = ${existing.id} and org_id = ${orgId} and status = 'staged'
                  returning id
-              `);
-              if (!abandoned.rows[0]) {
+              `, "objects");
+              if (!abandoned[0]) {
                 throw new Error(
                   `[dunning] ${doc.documentNumber} stage ${stage.id} abandonment matched zero rows — refusing to send unclaimed`,
                 );
@@ -711,14 +711,14 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
                      amount_due = ${doc.balanceDue}, currency_code = ${doc.currency}, updated_at = now()
                where id = ${existing.id} and org_id = ${orgId} and status in ('failed', 'suppressed')
                returning id, updated_at as "updatedAt"
-            `);
-            claimId = rearmed.rows[0]?.id;
+            `, "objects");
+            claimId = rearmed[0]?.id;
             if (!claimId) {
               throw new Error(
                 `[dunning] ${doc.documentNumber} stage ${stage.id} re-arm matched zero rows — refusing to send unclaimed`,
               );
             }
-            occurrenceKey = `dunning:${doc.id}:${stage.id}:${new Date(rearmed.rows[0]!.updatedAt).getTime()}`;
+            occurrenceKey = `dunning:${doc.id}:${stage.id}:${new Date(rearmed[0]!.updatedAt).getTime()}`;
           }
 
           // In-tick outcomes for claims that never reach the worker: only a
@@ -737,8 +737,8 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
               update dunning_log set status = ${status}, detail = ${detail}
                where id = ${claimId} and org_id = ${orgId}
                returning id
-            `);
-            if (!moved.rows[0]) {
+            `, "objects");
+            if (!moved[0]) {
               throw new Error(
                 `[dunning] ${doc.documentNumber} stage ${stage.id} outcome ${status} matched zero rows — refusing to report an unrecorded outcome`,
               );

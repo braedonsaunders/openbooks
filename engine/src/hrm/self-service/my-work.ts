@@ -367,8 +367,7 @@ export async function loadManagerOwedReviews(query: {
     const reports = await resolveTeamEmploymentIds(db, orgId, actorId, today);
     if (reports.length === 0) return [];
     const params = reports.map((id) => sql`${id}::uuid`);
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         employmentId: string;
         workerName: string;
         cycleId: string;
@@ -397,8 +396,7 @@ export async function loadManagerOwedReviews(query: {
          and r.reviewer_party_id = ${partyId}
          and r.employment_id in (${sql.join(params, sql`, `)})
        order by c.period_end_on desc, p.display_name
-    `)
-    ).rows;
+    `, "objects");
     return rows.map((row) => ({
       employmentId: row.employmentId,
       workerName: row.workerName,
@@ -474,14 +472,12 @@ async function loadOwnEmployments(
   orgId: string,
   actorId: string,
 ): Promise<OwnEmployment[]> {
-  const rows = (
-    await exec.execute<{ id: string; subsidiaryId: string }>(sql`
+  const rows = await exec.execute<{ id: string; subsidiaryId: string }>(sql`
     select e.id, e.employer_subsidiary_id as "subsidiaryId"
       from worker_employments e
       join users u on u.org_id = e.org_id and u.id = ${actorId}
      where e.org_id = ${orgId} and e.worker_party_id = u.party_id and u.party_id is not null
-  `)
-  ).rows;
+  `, "objects");
   // Zero rows is a fact the caller reports (no employment yet), never a
   // forged id: every downstream predicate runs over these trusted rows.
   return rows.map((row) => ({ id: row.id, subsidiaryId: row.subsidiaryId }));
@@ -492,15 +488,13 @@ async function liveDepartmentIds(
   orgId: string,
   employmentId: string,
 ): Promise<string[]> {
-  const rows = (
-    await exec.execute<{ department_id: string | null }>(sql`
+  const rows = await exec.execute<{ department_id: string | null }>(sql`
     select v.department_id
       from employment_assignment_versions v
       join employment_assignments s on s.org_id = v.org_id and s.id = v.assignment_id
      where v.org_id = ${orgId} and s.employment_id = ${employmentId}
        and v.recorded_until is null and v.department_id is not null
-  `)
-  ).rows;
+  `, "objects");
   return [...new Set(rows.map((row) => String(row.department_id)))];
 }
 
@@ -539,8 +533,7 @@ export async function getMyBenefitsWorkspace(query: {
     const elections: MyElectionRow[] = [];
     const dependents: MyDependentRow[] = [];
     for (const employment of own) {
-      const rows = (
-        await db.execute<Record<string, unknown>>(sql`
+      const rows = await db.execute<Record<string, unknown>>(sql`
         select e.id, e.employment_id as "employmentId",
                plan.id as "planId", plan.code as "planCode", plan.name as "planName",
                e.class_key as "classKey", e.match_eligible as "matchEligible",
@@ -561,8 +554,7 @@ export async function getMyBenefitsWorkspace(query: {
             on cls.org_id = e.org_id and cls.plan_id = e.plan_id and cls.class_key = e.class_key
          where e.org_id = ${orgId} and e.employment_id = ${employment.id}
          order by e.effective_from desc, plan.code
-      `)
-      ).rows;
+      `, "objects");
       for (const row of rows) {
         elections.push({
           id: String(row.id),
@@ -587,14 +579,12 @@ export async function getMyBenefitsWorkspace(query: {
           currency: String(row.currency),
         });
       }
-      const deps = (
-        await db.execute<Record<string, unknown>>(sql`
+      const deps = await db.execute<Record<string, unknown>>(sql`
         select id, display_name as "displayName", relationship
           from hrm_benefit_dependents
          where org_id = ${orgId} and employment_id = ${employment.id} and is_active
          order by display_name
-      `)
-      ).rows;
+      `, "objects");
       for (const row of deps) {
         dependents.push({
           id: String(row.id),
@@ -604,8 +594,7 @@ export async function getMyBenefitsWorkspace(query: {
       }
     }
     const subsidiaries = [...new Set(own.map((e) => e.subsidiaryId))];
-    const windows = (
-      await db.execute<Record<string, unknown>>(sql`
+    const windows = await db.execute<Record<string, unknown>>(sql`
       select id, name, kind,
              opens_on::text as "opensOn", closes_on::text as "closesOn",
              status, applies_to as "appliesTo"
@@ -613,8 +602,7 @@ export async function getMyBenefitsWorkspace(query: {
        where org_id = ${orgId} and status = 'open'
          and opens_on <= ${today}::date and closes_on >= ${today}::date
        order by closes_on
-    `)
-    ).rows;
+    `, "objects");
     const openWindows: MyWindowRow[] = [];
     for (const row of windows) {
       const scope = windowScope(row.appliesTo);
@@ -654,8 +642,7 @@ export async function getMyBenefitsWorkspace(query: {
     const plans: MyPlanRow[] = [];
     if (subsidiaries.length > 0) {
       const subParams = subsidiaries.map((id) => sql`${id}::uuid`);
-      const planRows = (
-        await db.execute<Record<string, unknown>>(sql`
+      const planRows = await db.execute<Record<string, unknown>>(sql`
         select id, code, name, kind, currency,
                effective_from::text as "effectiveFrom",
                effective_to::text as "effectiveTo"
@@ -665,11 +652,9 @@ export async function getMyBenefitsWorkspace(query: {
            and (effective_to is null or effective_to >= ${today}::date)
            and (employer_subsidiary_id is null or employer_subsidiary_id in (${sql.join(subParams, sql`, `)}))
          order by code
-      `)
-      ).rows;
+      `, "objects");
       for (const row of planRows) {
-        const contributionRules = (
-          await db.execute<{
+        const contributionRules = await db.execute<{
             value: string;
             label: string;
             basis: string;
@@ -683,14 +668,11 @@ export async function getMyBenefitsWorkspace(query: {
             from hrm_benefit_contribution_rules
            where org_id=${orgId} and plan_id=${String(row.id)} and is_active
            order by position,id
-        `)
-        ).rows;
-        const classes = (
-          await db.execute<{ value: string; label: string }>(sql`
+        `, "objects");
+        const classes = await db.execute<{ value: string; label: string }>(sql`
           select class_key as value,name as label from hrm_benefit_contribution_classes
            where org_id=${orgId} and plan_id=${String(row.id)} order by class_key,id
-        `)
-        ).rows;
+        `, "objects");
         plans.push({
           id: String(row.id),
           code: String(row.code),
@@ -774,12 +756,10 @@ export async function changeMyBenefit(query: {
     await actorPartyOf(db, orgId, actorId);
     const changeDate =
       typeof query.changeDate === "string" ? query.changeDate.slice(0, 10) : "";
-    const enrollment = (
-      await db.execute<{ employmentId: string }>(sql`
+    const enrollment = (await db.execute<{ employmentId: string }>(sql`
       select employment_id as "employmentId" from hrm_benefit_enrollments
        where org_id = ${orgId} and id = ${query.enrollmentId}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!enrollment) {
       throw new SelfServiceError(
         "NOT_FOUND",
@@ -794,14 +774,12 @@ export async function changeMyBenefit(query: {
         "that enrollment belongs to another employment — the Me workspace changes only your own elections",
       );
     }
-    const windows = (
-      await db.execute<Record<string, unknown>>(sql`
+    const windows = await db.execute<Record<string, unknown>>(sql`
       select applies_to as "appliesTo"
         from hrm_enrollment_windows
        where org_id = ${orgId} and status = 'open'
          and opens_on <= ${changeDate}::date and closes_on >= ${changeDate}::date
-    `)
-    ).rows;
+    `, "objects");
     let covered = false;
     for (const row of windows) {
       const scope = windowScope(row.appliesTo);
@@ -856,16 +834,12 @@ export async function selfWorkspaceCapabilities(orgId: string): Promise<{
 }> {
   const org = requireOrgId(orgId);
   return withOrgTransaction(org, async () => {
-    const cycles = (
-      await db.execute<{ n: string }>(sql`
+    const cycles = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_review_cycles where org_id = ${org}
-    `)
-    ).rows[0]?.n;
-    const plans = (
-      await db.execute<{ n: string }>(sql`
+    `, "objects"))[0]?.n;
+    const plans = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_benefit_plans where org_id = ${org}
-    `)
-    ).rows[0]?.n;
+    `, "objects"))[0]?.n;
     return {
       hasReviewCycles: Number(cycles ?? "0") > 0,
       hasBenefitPlans: Number(plans ?? "0") > 0,

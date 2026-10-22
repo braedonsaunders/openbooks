@@ -35,12 +35,12 @@ export const GET = defineRoute({
          and (${gate.allowedSubsidiaryIds === null}::boolean
            or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
        order by party.display_name, employment.id
-    `);
+    `, "objects");
     const url = new URL(request.url);
     const employmentId = url.searchParams.get("employmentId");
     const periodStart = url.searchParams.get("periodStart");
     const periodEnd = url.searchParams.get("periodEnd");
-    if (!employmentId && !periodStart && !periodEnd) return NextResponse.json({ employees: employees.rows });
+    if (!employmentId && !periodStart && !periodEnd) return NextResponse.json({ employees });
     if (!employmentId || !isUuid(employmentId) || !periodStart || !dateShape.test(periodStart)
         || !periodEnd || !dateShape.test(periodEnd) || periodStart > periodEnd) {
       return NextResponse.json({ error: "employment and a valid payroll period are required" }, { status: 422 });
@@ -57,8 +57,8 @@ export const GET = defineRoute({
          and subsidiary.is_active and not subsidiary.is_elimination
          and (${gate.allowedSubsidiaryIds === null}::boolean
            or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
-    `);
-    if (!allowed.rows[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
+    `, "objects");
+    if (!allowed[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
     const rows = await db.execute(sql`
       select id, region, subregion, service_days as "serviceDays", work_share::text as "workShare",
              source, evidence_document_id as "evidenceDocumentId", change_reason as "changeReason"
@@ -66,8 +66,8 @@ export const GET = defineRoute({
        where org_id = ${orgId} and employment_id = ${employmentId}
          and period_start = ${periodStart}::date and period_end = ${periodEnd}::date
        order by region, subregion, id
-    `);
-    return NextResponse.json({ employees: employees.rows, rows: rows.rows });
+    `, "objects");
+    return NextResponse.json({ employees, rows });
 
   },
 })
@@ -106,8 +106,8 @@ export const POST = defineRoute({
          and subsidiary.is_active and not subsidiary.is_elimination
          and (${gate.allowedSubsidiaryIds === null}::boolean
            or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
-    `);
-    if (!allowed.rows[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
+    `, "objects");
+    if (!allowed[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
     const saved = await withOrgTransaction(orgId, async () => {
       const row = await db.execute(sql`
         insert into payroll_work_location_allocations
@@ -119,9 +119,9 @@ export const POST = defineRoute({
           ${value.changeReason}, ${gate.user.id}, ${gate.user.id})
         returning id, region, subregion, service_days as "serviceDays", work_share::text as "workShare",
           source, evidence_document_id as "evidenceDocumentId", change_reason as "changeReason"
-      `);
-      if (!row.rows[0]) throw new Error("work location allocation insert returned no row");
-      return row.rows[0];
+      `, "objects");
+      if (!row[0]) throw new Error("work location allocation insert returned no row");
+      return row[0];
     });
     return NextResponse.json({ row: saved }, { status: 201 });
 
@@ -147,8 +147,8 @@ export const PATCH = defineRoute({
          and subsidiary.is_active and not subsidiary.is_elimination
          and (${gate.allowedSubsidiaryIds === null}::boolean
            or employment.employer_subsidiary_id = any(${`{${[...(gate.allowedSubsidiaryIds ?? [])].join(",")}}`}::uuid[]))
-    `);
-    if (!allowed.rows[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
+    `, "objects");
+    if (!allowed[0]) return NextResponse.json({ error: "employment is outside your payroll scope" }, { status: 404 });
     const row = await withOrgTransaction(orgId, async () => db.execute(sql`
       update payroll_work_location_allocations
          set region = ${value.region}, subregion = ${value.subregion ?? null},
@@ -159,9 +159,9 @@ export const PATCH = defineRoute({
          and period_start = ${value.periodStart}::date and period_end = ${value.periodEnd}::date
        returning id, region, subregion, service_days as "serviceDays", work_share::text as "workShare",
          source, evidence_document_id as "evidenceDocumentId", change_reason as "changeReason"
-    `));
-    if (!row.rows[0]) return NextResponse.json({ error: "allocation was not found for this employment period" }, { status: 404 });
-    return NextResponse.json({ row: row.rows[0] });
+    `, "objects"));
+    if (!row[0]) return NextResponse.json({ error: "allocation was not found for this employment period" }, { status: 404 });
+    return NextResponse.json({ row: row[0] });
 
   },
 })

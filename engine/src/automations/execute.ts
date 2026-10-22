@@ -85,8 +85,8 @@ export async function loadAutomation(orgId: string, automationId: string): Promi
       from automations
      where org_id = ${orgId} and id = ${automationId}
      limit 1
-  `);
-  return rows.rows[0] ?? null;
+  `, "objects");
+  return rows[0] ?? null;
 }
 
 async function requireAutomationsPermission(
@@ -139,8 +139,8 @@ export async function resolveActionRecipients(
         join worker_employments e on e.org_id = u.org_id and e.worker_party_id = u.party_id
        where u.org_id = ${orgId} and e.id = ${managerId} and u.is_active
        limit 5
-    `);
-    return rows.rows.map((r) => r.id);
+    `, "objects");
+    return rows.map((r) => r.id);
   }
   if (to.startsWith("role:")) {
     const key = to.slice("role:".length);
@@ -155,18 +155,18 @@ export async function resolveActionRecipients(
         join role_assignments a on a.org_id = u.org_id and a.user_id = u.id
         join app_roles r on r.org_id = a.org_id and r.id = a.role_id and r.key = ${key}
        where u.org_id = ${orgId} and u.is_active
-    `);
-    return rows.rows.map((r) => r.id);
+    `, "objects");
+    return rows.map((r) => r.id);
   }
   const rows = await db.execute<{ id: string }>(sql`
     select id from users where org_id = ${orgId} and id = ${to} and is_active limit 1
-  `);
-  if (rows.rows.length === 0) {
+  `, "objects");
+  if (rows.length === 0) {
     throw new AutomationExecuteError(
       `action recipient '${to}' resolves to no active user in this org — use a user id, 'role:<key>', 'manager', or 'initiator'`,
     );
   }
-  return [rows.rows[0]!.id];
+  return [rows[0]!.id];
 }
 
 async function runActionLive(
@@ -235,8 +235,8 @@ async function runActionLive(
       // bind casts a scalar to uuid[] and every send_email run fails.
       const emails = await db.execute<{ email: string }>(sql`
         select email from users where org_id = ${orgId} and id = any(${`{${users.join(",")}}`}::uuid[])
-      `);
-      const to = emails.rows.map((r) => r.email);
+      `, "objects");
+      const to = emails.map((r) => r.email);
       if (to.length === 0) return "skipped: no recipient emails";
       // The key resolves through the closed registry (unknown keys refuse
       // here for already-stored rows, and at publish for new ones) and
@@ -248,8 +248,8 @@ async function runActionLive(
       });
       const orgRows = await db.execute<{ name: string }>(sql`
         select name from orgs where id = ${orgId} limit 1
-      `);
-      const brand = orgRows.rows[0]?.name ?? "OpenBooks";
+      `, "objects");
+      const brand = orgRows[0]?.name ?? "OpenBooks";
       const { flowNotificationEmail } = await import("@openbooks/emails");
       const mail = flowNotificationEmail({ orgName: brand, subject: draft.subject, body: draft.body });
       await enqueueFlowEmail({
@@ -502,9 +502,9 @@ export async function executeAutomation(input: {
          and subject_id is not distinct from ${subjectId}::uuid
          and trigger_fingerprint = ${fingerprint}
        limit 1
-    `);
-    if (duplicate.rows[0]) {
-      const row = duplicate.rows[0];
+    `, "objects");
+    if (duplicate[0]) {
+      const row = duplicate[0];
       return { runId: row.id, status: row.status, steps: [], replayed: true };
     }
     const claimed = await db.execute<{ id: string }>(sql`
@@ -516,8 +516,8 @@ export async function executeAutomation(input: {
       -- A concurrent identical trigger reuses the existing run selected below.
       on conflict (org_id, automation_id, subject_kind, subject_id, trigger_fingerprint) do nothing
       returning id
-    `);
-    if (claimed.rows.length === 0) {
+    `, "objects");
+    if (claimed.length === 0) {
       const existing = await db.execute<{ id: string; status: string }>(sql`
         select id, status from automation_runs
          where org_id = ${input.orgId} and automation_id = ${input.automationId}
@@ -525,14 +525,14 @@ export async function executeAutomation(input: {
            and subject_id is not distinct from ${subjectId}::uuid
            and trigger_fingerprint = ${fingerprint}
          limit 1
-      `);
-      const row = existing.rows[0];
+      `, "objects");
+      const row = existing[0];
       if (!row) {
         throw new AutomationExecuteError("the run claim raced and vanished — retry the run");
       }
       return { runId: row.id, status: row.status, steps: [], replayed: true };
     }
-    const runId: string = claimed.rows[0]!.id;
+    const runId: string = claimed[0]!.id;
 
     if (subject) {
       const verdict = evaluateAutomation(rules, conditions, subject);

@@ -35,11 +35,11 @@ test("subledger-gl-tieout fails on an open-item line with no document behind it"
   const org = await createScratchOrg();
   try {
     const cal = await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`);
+      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects");
     const augPeriodId = randomUUID();
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      values (${augPeriodId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${cal.rows[0]!.id})`);
+      values (${augPeriodId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${cal[0]!.id})`);
 
     const entryId = randomUUID();
     await db.execute(sql`

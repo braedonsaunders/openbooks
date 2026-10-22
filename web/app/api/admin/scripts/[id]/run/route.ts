@@ -71,10 +71,10 @@ export const POST = defineRoute({
 
     const existing = (await db.execute<{ trigger_point: string; cron: string | null; is_active: boolean; cursor: string | null }>(sql`
       select trigger_point, cron, is_active, next_run_at::text as cursor from user_scripts where id = ${id} and org_id = ${user.orgId}
-    `))
-    if (!existing.rows[0]) return notFound("record")
-    const kind = existing.rows[0].trigger_point
-    if (!existing.rows[0].is_active) return NextResponse.json({ error: 'Activate this script before running it.', code: 'SCRIPT_INACTIVE' }, { status: 409 })
+    `, 'objects'))
+    if (!existing[0]) return notFound("record")
+    const kind = existing[0].trigger_point
+    if (!existing[0].is_active) return NextResponse.json({ error: 'Activate this script before running it.', code: 'SCRIPT_INACTIVE' }, { status: 409 })
     if (kind !== 'scheduled' && kind !== 'bulk') return NextResponse.json({ error: 'Run now is available only for scheduled and bulk scripts.', code: 'SCRIPT_TRIGGER_NOT_RUNNABLE' }, { status: 422 })
 
     try {
@@ -188,7 +188,7 @@ export const POST = defineRoute({
       let next: Date | null = null
       if (kind === 'scheduled') {
         try {
-          next = computeScheduledScriptNextRunAt(existing.rows[0].cron)
+          next = computeScheduledScriptNextRunAt(existing[0].cron)
         } catch (error) {
           if (!(error instanceof InvalidScheduledScriptCronError)) throw error
           return invalidCronResponse(error)
@@ -201,8 +201,8 @@ export const POST = defineRoute({
       if (next) {
         await db.execute(sql`update user_scripts set next_run_at = ${next}
           where id = ${id} and org_id = ${user.orgId} and trigger_point = 'scheduled' and is_active
-            and cron is not distinct from ${existing.rows[0].cron}
-            and next_run_at is not distinct from ${existing.rows[0].cursor}::timestamptz`)
+            and cron is not distinct from ${existing[0].cron}
+            and next_run_at is not distinct from ${existing[0].cursor}::timestamptz`)
       }
       return NextResponse.json(outcome)
     } catch (e) {

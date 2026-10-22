@@ -58,7 +58,7 @@ for(const mode of ['insert','upsert'] as const){
    const resource=setupResource(SETUP_ENTITY_BY_KEY.get('item-rate-books')!,org.orgId);
    const body={code:'FENCED',name:'Fenced import',isDefault:true,isActive:true};
    if(mode==='upsert')assert.equal((await resource.write([body],'insert',{orgId:org.orgId,actorId,dryRun:false})).created,1);
-   const before=(await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`))).rows;
+   const before=await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`, 'objects'));
    await holder.connect();await holder.query('begin');
    await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[`openbooks:feature-gate:${org.orgId}`]);
    // 0399 gates the bypass GUC by session role, so the holder connects as the privileged test login above.
@@ -67,7 +67,7 @@ for(const mode of ['insert','upsert'] as const){
    const request=resource.write([{...body,name:'Must be refused'}],mode,{orgId:org.orgId,actorId,dryRun:false});pending=request;void request.catch(()=>{});
    await waitForLockWaiter(holder,{label:'the setup import write'});await holder.query('commit');
    const outcome=await request;assert.equal(outcome.failed,1);assert.equal(outcome.created,0);assert.equal(outcome.updated,0);
-   assert.deepEqual((await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`))).rows,before);
+   assert.deepEqual(await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`, 'objects')),before);
   }finally{await holder.query('rollback').catch(()=>{});await pending?.catch(()=>{});await holder.end();await dropScratchOrg(org.orgId);}
  });
 }
@@ -78,11 +78,11 @@ test('enabled import preview remains read-only and disabled preview fails', {ski
   const actorId=(await seedFlowActors(org.orgId)).adminId;
   const resource=setupResource(SETUP_ENTITY_BY_KEY.get('time-types')!,org.orgId);
   const rows=[{name:'Preview only',classification:'regular',costMultiplier:'1',billMultiplier:'1',isActive:true}];
-  const before=(await db.execute(sql`select * from time_types where org_id=${org.orgId} order by id`)).rows;
-  const auditBefore=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows;
+  const before=await db.execute(sql`select * from time_types where org_id=${org.orgId} order by id`, 'objects');
+  const auditBefore=await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects');
   assert.equal((await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true})).created,1);
-  assert.deepEqual((await db.execute(sql`select * from time_types where org_id=${org.orgId} order by id`)).rows,before);
-  assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows,auditBefore);
+  assert.deepEqual(await db.execute(sql`select * from time_types where org_id=${org.orgId} order by id`, 'objects'),before);
+  assert.deepEqual(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects'),auditBefore);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"timeTracking":false}'::jsonb) where id=${org.orgId}`);
   assert.equal((await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:true})).failed,1);
  }finally{await dropScratchOrg(org.orgId);}
@@ -97,10 +97,10 @@ test('a base-currency book import uses the organization currency and retains it 
   assert.ok(!(await resource.fields()).some(field=>field.key==='currency'));
   const body={code:'BASE',name:'Base import',isDefault:true,isActive:true};
   assert.equal((await resource.write([body],'insert',{orgId:org.orgId,actorId,dryRun:false})).created,1);
-  const currency=(await db.execute(sql`select base_currency from orgs where id=${org.orgId}`)).rows[0]!.base_currency;
-  assert.equal((await db.execute(sql`select currency from item_rate_books where org_id=${org.orgId} and code='BASE'`)).rows[0]!.currency,currency);
+  const currency=(await db.execute(sql`select base_currency from orgs where id=${org.orgId}`, 'objects'))[0]!.base_currency;
+  assert.equal((await db.execute(sql`select currency from item_rate_books where org_id=${org.orgId} and code='BASE'`, 'objects'))[0]!.currency,currency);
   assert.equal((await resource.write([{...body,name:'Updated label'}],'upsert',{orgId:org.orgId,actorId,dryRun:false})).updated,1);
-  assert.equal((await db.execute(sql`select currency from item_rate_books where org_id=${org.orgId} and code='BASE'`)).rows[0]!.currency,currency);
+  assert.equal((await db.execute(sql`select currency from item_rate_books where org_id=${org.orgId} and code='BASE'`, 'objects'))[0]!.currency,currency);
  }finally{await dropScratchOrg(org.orgId);}
 });
 
@@ -111,17 +111,17 @@ test('an unavailable field fails only its row and an outer evidence failure roll
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":false}'::jsonb) where id=${org.orgId}`);
   const resource=setupResource(SETUP_ENTITY_BY_KEY.get('departments')!,org.orgId);
   const rows=[{code:'INVALID',name:'Unavailable scope',subsidiaryId:org.subsidiaryId,isActive:true},{code:'VALID',name:'Valid unscoped',isActive:true}];
-  const auditBefore=(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows;
+  const auditBefore=await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects');
   await assert.rejects(withOrgTransaction(org.orgId,async()=>{
    const outcome=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:false});
    assert.equal(outcome.failed,1);assert.equal(outcome.created,1);assert.equal(outcome.errors[0]?.row,1);
    throw new Error('import job evidence unavailable');
   }),/import job evidence unavailable/);
-  assert.equal((await db.execute(sql`select id from departments where org_id=${org.orgId} and code in ('INVALID','VALID')`)).rows.length,0);
-  assert.deepEqual((await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`)).rows,auditBefore);
+  assert.equal((await db.execute(sql`select id from departments where org_id=${org.orgId} and code in ('INVALID','VALID')`, 'objects')).length,0);
+  assert.deepEqual(await db.execute(sql`select id from audit_log where org_id=${org.orgId} order by id`, 'objects'),auditBefore);
   const outcome=await resource.write(rows,'insert',{orgId:org.orgId,actorId,dryRun:false});
   assert.equal(outcome.failed,1);assert.equal(outcome.created,1);
-  assert.deepEqual((await db.execute(sql`select code,subsidiary_id from departments where org_id=${org.orgId} and code in ('INVALID','VALID')`)).rows,[{code:'VALID',subsidiary_id:null}]);
+  assert.deepEqual(await db.execute(sql`select code,subsidiary_id from departments where org_id=${org.orgId} and code in ('INVALID','VALID')`, 'objects'),[{code:'VALID',subsidiary_id:null}]);
  }finally{await dropScratchOrg(org.orgId);}
 });
 

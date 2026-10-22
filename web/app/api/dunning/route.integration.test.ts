@@ -39,9 +39,9 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function policyKind(orgId: string, id: string): Promise<string | undefined> {
   const r = await withBypassContext(() =>
-    db.execute<{ kind: string }>(sql`select applies_to_kind as kind from dunning_policies where id = ${id} and org_id = ${orgId}`),
+    db.execute<{ kind: string }>(sql`select applies_to_kind as kind from dunning_policies where id = ${id} and org_id = ${orgId}`, "objects"),
   );
-  return r.rows[0]?.kind;
+  return r[0]?.kind;
 }
 
 const ladderStage = () => ({
@@ -85,9 +85,9 @@ test("dunning policies only apply to dunnable receivable kinds", async () => {
       assert.equal(refused.status, 422, `POST appliesToKind ${JSON.stringify(appliesToKind)}`);
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
+    assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
     // Omitted defaults to the receivable kind; explicit receivable kinds pass.
     // (A ladder is supplied: activating a stage-less policy is refused.)
@@ -125,8 +125,8 @@ test('retrying policy creation replays once and refuses changed details', async 
     const counts = await withBypassContext(() => db.execute<{ policies: number; stages: number; audits: number }>(sql`
       select (select count(*)::int from dunning_policies where org_id=${org.orgId}) as policies,
         (select count(*)::int from dunning_stages where org_id=${org.orgId}) as stages,
-        (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='dunning_policies' and action='insert') as audits`))
-    assert.deepEqual(counts.rows[0], { policies: 1, stages: 1, audits: 1 })
+        (select count(*)::int from audit_log where org_id=${org.orgId} and table_name='dunning_policies' and action='insert') as audits`, "objects"))
+    assert.deepEqual(counts[0], { policies: 1, stages: 1, audits: 1 })
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
 
@@ -136,8 +136,8 @@ test('policy editing retains reminder identity and refuses stale or foreign stag
     state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId }
     const created = await create(json('POST', { name: 'Standard', stages: [ladderStage()] }))
     const { id } = await created.json()
-    const readStages = () => withBypassContext(() => db.execute<{ id: string; created_at: Date; created_by: string; subject_template: string }>(sql`select id, created_at, created_by, subject_template from dunning_stages where org_id=${org.orgId} and policy_id=${id}`))
-    const before = (await readStages()).rows[0]!
+    const readStages = () => withBypassContext(() => db.execute<{ id: string; created_at: Date; created_by: string; subject_template: string }>(sql`select id, created_at, created_by, subject_template from dunning_stages where org_id=${org.orgId} and policy_id=${id}`, "objects"))
+    const before = (await readStages())[0]!
     const listed = await read(json('GET'))
     const revision = (await listed.json()).policies.find((policy: { id: string }) => policy.id === id).updatedAt
     assert.match(revision, /\.\d{6}Z$/, 'the conflict token must retain database precision')
@@ -146,7 +146,7 @@ test('policy editing retains reminder identity and refuses stale or foreign stag
     assert.match(JSON.stringify(await empty.json()), /At least one field must be provided/)
     const edited = await patch(json('PATCH', { name: 'Revised', expectedUpdatedAt: revision, stages: [{ ...ladderStage(), id: before.id, subjectTemplate: 'Revised subject' }] }), params(id))
     assert.equal(edited.status, 200)
-    const after = (await readStages()).rows[0]!
+    const after = (await readStages())[0]!
     assert.equal(after.id, before.id, 'editing must not reset delivery deduplication')
     assert.deepEqual(after.created_at, before.created_at)
     assert.equal(after.created_by, before.created_by)
@@ -157,8 +157,8 @@ test('policy editing retains reminder identity and refuses stale or foreign stag
     const foreign = await patch(json('PATCH', { name: 'Must roll back', stages: [{ ...ladderStage(), id: randomUUID() }] }), params(id))
     assert.equal(foreign.status, 409)
     assert.match((await foreign.json()).error, /belongs to this policy.*Refresh Policies/)
-    const policy = await withBypassContext(() => db.execute<{ name: string }>(sql`select name from dunning_policies where id=${id} and org_id=${org.orgId}`))
-    assert.equal(policy.rows[0]!.name, 'Revised', 'the refused edit cannot partially rename the policy')
-    assert.deepEqual((await readStages()).rows[0], after, 'a refusal preserves the entire reminder')
+    const policy = await withBypassContext(() => db.execute<{ name: string }>(sql`select name from dunning_policies where id=${id} and org_id=${org.orgId}`, "objects"))
+    assert.equal(policy[0]!.name, 'Revised', 'the refused edit cannot partially rename the policy')
+    assert.deepEqual((await readStages())[0], after, 'a refusal preserves the entire reminder')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })

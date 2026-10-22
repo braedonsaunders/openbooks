@@ -70,7 +70,7 @@ async function bankEntry(
 async function periodEnd(orgId: string, periodId: string): Promise<string> {
   return (await db.execute<{ ends_on: string }>(sql`
     select ends_on::text from accounting_periods where id = ${periodId} and org_id = ${orgId}
-  `)).rows[0]!.ends_on;
+  `, "objects"))[0]!.ends_on;
 }
 
 async function bankException(orgId: string, runId: string): Promise<{ count: number; accounts: { number: string | null; clearedLines: number; unclearedLines: number }[] } | null> {
@@ -78,7 +78,7 @@ async function bankException(orgId: string, runId: string): Promise<{ count: num
   const row = (await db.execute<{ details: { count: number; accounts?: { number: string | null; clearedLines: number; unclearedLines: number }[] } }>(sql`
     select details from close_exceptions
      where org_id = ${orgId} and run_id = ${runId} and code = 'bank-unreconciled' and status = 'open'
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   return { count: row.details.count, accounts: row.details.accounts ?? [] };
 }

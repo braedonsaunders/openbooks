@@ -33,12 +33,12 @@ export interface AuthorityPostingInput { document: Row; lines: Row[] }
 async function readSnapshot(tx: SqlExecutor, orgId: string, id: string): Promise<{ financial: FinancialSnapshot; custom: Row }> {
   const document = (await tx.execute<Row>(sql`select *, document_date::text as document_date, posting_date::text as posting_date, due_date::text as due_date,
     fx_rate::text as fx_rate, subtotal::text as subtotal, tax_total::text as tax_total, total::text as total
-    from documents where org_id=${orgId} and id=${id} for share`)).rows[0];
+    from documents where org_id=${orgId} and id=${id} for share`, "objects"))[0];
   if (!document) return refusal();
-  const lines = (await tx.execute<Row>(sql`select *, quantity::text as quantity, unit_price::text as unit_price, amount::text as amount,
+  const lines = await tx.execute<Row>(sql`select *, quantity::text as quantity, unit_price::text as unit_price, amount::text as amount,
     tax_input_amount::text as tax_input_amount, tax_amount::text as tax_amount, withholding_materials_cost::text as withholding_materials_cost,
-    work_from::text as work_from, work_to::text as work_to from document_lines where org_id=${orgId} and document_id=${id} order by line_number`)).rows;
-  const components = (await tx.execute(sql`select c.id from document_line_tax_components c join document_lines l on l.org_id=c.org_id and l.id=c.document_line_id where l.org_id=${orgId} and l.document_id=${id} limit 1`)).rows;
+    work_from::text as work_from, work_to::text as work_to from document_lines where org_id=${orgId} and document_id=${id} order by line_number`, "objects");
+  const components = await tx.execute(sql`select c.id from document_line_tax_components c join document_lines l on l.org_id=c.org_id and l.id=c.document_line_id where l.org_id=${orgId} and l.document_id=${id} limit 1`, "objects");
   if (components.length) return refusal();
   return { financial: { header: selectFields(camel(document), headerFields), lines: lines.map(line => selectFields(camel(line), ["id", "lineNumber", ...lineFields])) }, custom: document.custom as Row };
 }
@@ -53,16 +53,16 @@ export async function captureAuthoritySourceIntegrity(tx: SqlExecutor, orgId: st
   const source = live.custom?.[key];
   if (!source || typeof source !== "object" || Array.isArray(source)) return refusal();
   const captured = { ...source, financialSnapshot: live.financial };
-  const write = await tx.execute(sql`update documents set custom=jsonb_set(custom,ARRAY[${key}]::text[],${JSON.stringify(captured)}::jsonb) where org_id=${orgId} and id=${id} and status='draft'`);
+  const write = await tx.execute<never>(sql`update documents set custom=jsonb_set(custom,ARRAY[${key}]::text[],${JSON.stringify(captured)}::jsonb) where org_id=${orgId} and id=${id} and status='draft'`);
   if (write.rowCount !== 1) return refusal();
-  const audit = await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'documents',${id},'insert',${JSON.stringify({ reason: "authority_source_captured", sourceKey: key, source: captured })}::jsonb,${actorId})`);
+  const audit = await tx.execute<never>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'documents',${id},'insert',${JSON.stringify({ reason: "authority_source_captured", sourceKey: key, source: captured })}::jsonb,${actorId})`);
   if (audit.rowCount !== 1) return refusal();
 }
 
 /** Creation audit is independent authority: a custom-field writer cannot replace its own evidence. */
 export async function assertAuthoritySourceCurrent(tx: SqlExecutor, orgId: string, id: string, key: AuthoritySourceKey, input?: AuthorityPostingInput): Promise<FinancialSnapshot> {
   const live = await readSnapshot(tx, orgId, id);
-  const audits = (await tx.execute<{ source: Row }>(sql`select changes->'source' as source from audit_log where org_id=${orgId} and table_name='documents' and row_id=${id} and action='insert' and changes->>'reason'='authority_source_captured' and changes->>'sourceKey'=${key}`)).rows;
+  const audits = await tx.execute<{ source: Row }>(sql`select changes->'source' as source from audit_log where org_id=${orgId} and table_name='documents' and row_id=${id} and action='insert' and changes->>'reason'='authority_source_captured' and changes->>'sourceKey'=${key}`, "objects");
   if (audits.length !== 1 || canonical(audits[0]!.source) !== canonical(live.custom?.[key])) return refusal();
   const financial = audits[0]!.source.financialSnapshot as FinancialSnapshot | undefined;
   if (!financial || !Array.isArray(financial.lines) || !financial.header || !sameSnapshot(financial, live.financial)) return refusal();
@@ -78,7 +78,7 @@ export async function assertAuthoritySourceEdit(tx: SqlExecutor, orgId: string, 
   if (patch.custom && typeof patch.custom === "object") {
     const custom = patch.custom as Row;
     if (sourceKeys.some(sourceKey => Object.hasOwn(custom, sourceKey))) {
-      const stored = (await tx.execute<{ custom: Row }>(sql`select custom from documents where org_id=${orgId} and id=${id}`)).rows[0]?.custom;
+      const stored = (await tx.execute<{ custom: Row }>(sql`select custom from documents where org_id=${orgId} and id=${id}`, "objects"))[0]?.custom;
       if (sourceKeys.some(sourceKey => Object.hasOwn(custom, sourceKey) && canonical(custom[sourceKey]) !== canonical(stored?.[sourceKey]))) return refusal();
     }
   }

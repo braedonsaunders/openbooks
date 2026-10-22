@@ -68,8 +68,8 @@ export async function setupProject(
   // cost_plus) and is derived from the resolved type.
   const typeRow = (await db.execute<{ id: string }>(sql`
     select id from project_types
-     where org_id = ${world.orgId} and key = ${method} and is_active limit 1`));
-  const type = typeRow.rows[0];
+     where org_id = ${world.orgId} and key = ${method} and is_active limit 1`, "objects"));
+  const type = typeRow[0];
   if (!type) throw new Error(`no project_type "${method}" — run seedProjectTypes`);
 
   await db.execute(sql`
@@ -103,10 +103,10 @@ export async function runProgressBilling(
   approverId: string,
 ): Promise<{ invoiceId: string; documentNumber: string; currentDue: string; retainage: string }> {
   const sov = (await db.execute<{ id: string; scheduled_value: string }>(sql`
-    select id, scheduled_value from sov_lines where org_id = ${world.orgId} and project_id = ${projectId}`));
+    select id, scheduled_value from sov_lines where org_id = ${world.orgId} and project_id = ${projectId}`, "objects"));
   // The simulator runs as the system, outside any subsidiary restriction.
   const app = await createPayApplication(world.orgId, submitterId, projectId, periodEnd, "10", null);
-  const updates: PayApplicationLineUpdate[] = sov.rows.map((l) => ({
+  const updates: PayApplicationLineUpdate[] = sov.map((l) => ({
     sovLineId: l.id,
     thisPeriodCompleted: mulDecimal(l.scheduled_value, fraction),
     materialsStored: "0",
@@ -133,8 +133,8 @@ export async function billFixedPrice(
   const proj = (await db.execute<{ customer_id: string | null; name: string; code: string; type_key: string | null; contract: string }>(sql`
     select p.customer_id, p.name, p.code, pt.key as type_key, p.contract_value::text as contract
       from projects p left join project_types pt on pt.id = p.project_type_id
-     where p.id = ${projectId} and p.org_id = ${world.orgId}`));
-  const p = proj.rows[0];
+     where p.id = ${projectId} and p.org_id = ${world.orgId}`, "objects"));
+  const p = proj[0];
   if (!p?.customer_id) throw new Error(`project ${projectId} has no customer to bill`);
   if (p.type_key !== "fixed_price" && p.type_key !== "not_to_exceed") {
     throw new Error(`project ${projectId} is a ${p.type_key ?? "?"} job, not fixed-price/NTE`);
@@ -144,8 +144,8 @@ export async function billFixedPrice(
     select coalesce(sum(total), 0)::text as billed from documents
      -- Live entries only: a voided invoice no longer consumes contract value, so it does not block billing.
      where org_id = ${world.orgId} and kind = 'customer_invoice' and status = 'posted'
-       and custom->'sim'->>'projectId' = ${projectId}`));
-  const priorBilled = priorRow.rows[0]?.billed ?? "0";
+       and custom->'sim'->>'projectId' = ${projectId}`, "objects"));
+  const priorBilled = priorRow[0]?.billed ?? "0";
   const billedToDate = add(priorBilled, amount);
   if (cmp(billedToDate, p.contract) > 0) {
     throw new Error(`fixed-price billing would exceed contract value ${p.contract}`);

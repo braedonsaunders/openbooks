@@ -15,10 +15,9 @@ async function main(): Promise<void> {
     throw new Error("--verify requires --retirement-backup-access-only");
   }
   const backupAccessOnly = process.argv.includes("--retirement-backup-access-only");
-  if (backupAccessOnly && (process.argv.includes("--check") || process.argv.includes("--historical-migrations"))) {
+  if (backupAccessOnly && process.argv.includes("--check")) {
     throw new Error("Retirement backup access provisioning cannot be combined with migration or check options");
   }
-  const historicalMigrations = process.argv.includes("--historical-migrations");
   if (process.argv.includes("--check")) {
     // Strictly read-only: this path takes no advisory lock (it must not
     // block a live app), creates nothing, and performs no role, seed, or
@@ -27,7 +26,7 @@ async function main(): Promise<void> {
     const json = process.argv.includes("--json");
     let code = 1;
     try {
-      code = await runUpgradeCheckMain(json, historicalMigrations);
+      code = await runUpgradeCheckMain(json);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(message);
@@ -107,7 +106,7 @@ async function main(): Promise<void> {
         // with (they refuse at import without one).
         await requireRuntimeLoginRole(runtimeConfig);
         if (bypassConfig) await requireBypassLoginRole(bypassConfig);
-        await migrate(historicalMigrations);
+        await migrate();
         const payrollOrganizations = await pool.query<{ id: string }>("select id from orgs order by created_at");
         for (const { id } of payrollOrganizations.rows) await provisionPayrollPackDefaults(id);
         await ensureRuntimeDatabaseRole(runtimeConfig, true);
@@ -154,7 +153,7 @@ async function main(): Promise<void> {
       if (bypassConfig && !precreated) {
         await ensureBypassRoleExists(bypassConfig, runtimeConfig?.roleName ?? null);
       }
-      await migrate(historicalMigrations);
+      await migrate();
       if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig, precreated);
       if (bypassConfig && !precreated) {
         await ensureBypassDatabaseRole(bypassConfig, runtimeConfig?.roleName ?? null);

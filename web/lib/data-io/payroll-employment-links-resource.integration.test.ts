@@ -33,18 +33,18 @@ test('employment link preview leaves all records intact; apply audits the profil
     const snapshot = async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
       'profiles',(select jsonb_agg(to_jsonb(p)) from employee_payroll_profiles p where org_id=${fx.orgId}),
       'employments',(select jsonb_agg(to_jsonb(e)) from worker_employments e where org_id=${fx.orgId}),
-      'audit',(select jsonb_agg(to_jsonb(a)) from audit_log a where org_id=${fx.orgId})) as state`)).rows[0]!.state
+      'audit',(select jsonb_agg(to_jsonb(a)) from audit_log a where org_id=${fx.orgId})) as state`, 'objects'))[0]!.state
     const before = await snapshot()
     const candidate = (await fx.resource.read({ allowedSubsidiaryIds: null })).rows[0]!
     assert.equal(candidate.employment, fx.employmentId)
     assert.equal(candidate.currentEmployment, null, 'an exported proposal is not a saved link')
     assert.deepEqual(await fx.resource.write([fx.row], 'upsert', { ...fx.context, dryRun: true }), { created: 0, updated: 1, failed: 0, errors: [] })
     assert.deepEqual(await snapshot(), before)
-    const employmentBefore = (await db.execute(sql`select to_jsonb(e) as row from worker_employments e where org_id=${fx.orgId}`)).rows
+    const employmentBefore = await db.execute(sql`select to_jsonb(e) as row from worker_employments e where org_id=${fx.orgId}`, 'objects')
     assert.equal((await fx.resource.write([fx.row], 'upsert', fx.context)).updated, 1)
-    assert.equal((await db.execute<{ employment_id: string }>(sql`select employment_id from employee_payroll_profiles where org_id=${fx.orgId}`)).rows[0]!.employment_id, fx.employmentId)
-    assert.deepEqual((await db.execute(sql`select to_jsonb(e) as row from worker_employments e where org_id=${fx.orgId}`)).rows, employmentBefore)
-    const audit = (await db.execute<{ changes: { before: unknown; after: unknown; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${fx.orgId} and table_name='employee_payroll_profiles'`)).rows
+    assert.equal((await db.execute<{ employment_id: string }>(sql`select employment_id from employee_payroll_profiles where org_id=${fx.orgId}`, 'objects'))[0]!.employment_id, fx.employmentId)
+    assert.deepEqual(await db.execute(sql`select to_jsonb(e) as row from worker_employments e where org_id=${fx.orgId}`, 'objects'), employmentBefore)
+    const audit = await db.execute<{ changes: { before: unknown; after: unknown; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${fx.orgId} and table_name='employee_payroll_profiles'`, 'objects')
     assert.equal(audit.length, 1); assert.equal(audit[0]!.actor_id, fx.actorId)
     assert.deepEqual(audit[0]!.changes.before, { employmentId: null })
     assert.deepEqual(audit[0]!.changes.after, { employmentId: fx.employmentId })
@@ -73,7 +73,7 @@ test('employment links refuse wrong workers, conflicting links, duplicates, hidd
       const duplicates = await fx.resource.write([fx.row, fx.row], 'upsert', { ...fx.context, dryRun })
       assert.equal(duplicates.failed, 2); assert.match(duplicates.errors[0]!.message, /more than once/)
     }
-    assert.equal((await db.execute<{ employment_id: string | null }>(sql`select employment_id from employee_payroll_profiles where org_id=${fx.orgId}`)).rows[0]!.employment_id, null)
+    assert.equal((await db.execute<{ employment_id: string | null }>(sql`select employment_id from employee_payroll_profiles where org_id=${fx.orgId}`, 'objects'))[0]!.employment_id, null)
     const otherEpisode = await seedWorkerEmployment(fx.orgId, fx.employeeId, fx.subsidiaryId)
     assert.equal(await payrollProfileEmployment(db, fx.orgId, fx.employeeId, fx.subsidiaryId, null), null, 'ambiguous episodes are never chosen automatically')
     await fx.resource.write([fx.row], 'upsert', fx.context)

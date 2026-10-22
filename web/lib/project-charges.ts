@@ -221,14 +221,14 @@ export async function createProjectCharge(
            and project_id = ${input.projectId}
            and kind = 'field_ticket'
          for update
-      `))
-      if (!ticket.rows[0]) {
+      `, 'objects'))
+      if (!ticket[0]) {
         throw new ChargeError('The source Field Ticket does not belong to this project')
       }
     }
     const subsidiaryId = lockedProject.subsidiaryId
-    const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
-    const currency = org.rows[0]?.base_currency ?? 'CAD'
+    const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects'))
+    const currency = org[0]?.base_currency ?? 'CAD'
     const documentNumber = await nextDocumentNumber(orgId, 'project_charge', 'CHG-', subsidiaryId ?? undefined)
     const docDate = input.documentDate ?? await businessToday(orgId)
 
@@ -238,7 +238,7 @@ export async function createProjectCharge(
       values (${orgId}, 'project_charge', ${documentNumber}, ${docDate}, ${currency}, 'draft', ${input.projectId},
               ${subsidiaryId}, ${input.referenceNumber ?? null}, '0', '0', '0', ${userId})
       returning id
-    `)).rows[0]!
+    `, 'objects'))[0]!
     const docId = doc.id
 
     const amounts: string[] = []
@@ -259,8 +259,8 @@ export async function createProjectCharge(
       const item = (await tx.execute(sql`
         select kind, default_cost, default_rate, expense_account_id, cost_recovery_account_id, tax_code_id, name, unit
           from items where id = ${line.itemId} and org_id = ${orgId}
-      `))
-      const it = item.rows[0]
+      `, 'objects'))
+      const it = item[0]
       if (!it) throw new ChargeError('Item not found')
       // The charge picker already hides these kinds. Turning Inventory off
       // must also refuse a new inventory / assembly / kit line so a crafted
@@ -291,11 +291,11 @@ export async function createProjectCharge(
         const unit = (await tx.execute<{ charge_item_id: string; status: string; subsidiary_id: string }>(sql`
           select charge_item_id, status, subsidiary_id from equipment_units
            where id = ${line.equipmentUnitId} and org_id = ${orgId}
-        `))
-        if (!unit.rows[0]) throw new ChargeError('Equipment unit not found')
-        if (unit.rows[0].status !== 'active') throw new ChargeError('Equipment unit is not active')
-        if (unit.rows[0].charge_item_id !== line.itemId) throw new ChargeError('Equipment unit does not use the selected charge item')
-        if (unit.rows[0].subsidiary_id !== subsidiaryId) throw new ChargeError('Equipment and project must use the same subsidiary')
+        `, 'objects'))
+        if (!unit[0]) throw new ChargeError('Equipment unit not found')
+        if (unit[0].status !== 'active') throw new ChargeError('Equipment unit is not active')
+        if (unit[0].charge_item_id !== line.itemId) throw new ChargeError('Equipment unit does not use the selected charge item')
+        if (unit[0].subsidiary_id !== subsidiaryId) throw new ChargeError('Equipment and project must use the same subsidiary')
       }
       if (line.employeeId) {
         // Validated at the service boundary, not just in the picker: this
@@ -304,8 +304,8 @@ export async function createProjectCharge(
         const operator = (await tx.execute(sql`
           select 1 from employee_roles
            where party_id = ${line.employeeId} and org_id = ${orgId}
-        `))
-        if (!operator.rows[0]) throw new ChargeError('The operator must be an employee of this organization')
+        `, 'objects'))
+        if (!operator[0]) throw new ChargeError('The operator must be an employee of this organization')
         if (!line.equipmentUnitId) {
           // An operator on a material or service charge would look like an
           // equipment attribution to every reader and to the incentive rule,
@@ -348,8 +348,8 @@ export async function createProjectCharge(
          where org_id = ${orgId} and id = ${accountId}
            and type in ('expense', 'cogs', 'expense_other', 'expense_deferred')
            and is_active and not is_summary
-      `))
-      if (!account.rows.length) {
+      `, 'objects'))
+      if (!account.length) {
         throw new ChargeError(`Item "${it.name}" must use an active, non-summary expense/COGS account in this organization`)
       }
       if (!isZero(costAmount) && !it.cost_recovery_account_id) {
@@ -362,7 +362,7 @@ export async function createProjectCharge(
         const task = (await tx.execute(sql`
           select 1 from project_tasks
            where id = ${line.projectTaskId} and org_id = ${orgId} and project_id = ${input.projectId}
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!task) throw new ChargeError('The line task must belong to the charge’s project')
       }
       const isBillable = line.isBillable ?? true
@@ -378,7 +378,7 @@ export async function createProjectCharge(
               ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null},
               ${input.fieldTicketId ?? null}, ${line.projectTaskId ?? null}, ${userId})
         returning id
-      `)).rows as { id: string }[]
+      `, 'objects')) as { id: string }[]
 
       const componentRows = [
         ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: resolved?.baseUnit ?? it.unit ?? 'unit', unitName: resolved?.baseUnit ?? it.unit ?? 'Unit', quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),

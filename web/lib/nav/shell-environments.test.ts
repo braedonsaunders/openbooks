@@ -9,7 +9,7 @@ const state = { rows: [] as Record<string, unknown>[], queries: [] as { sql: str
 ;(globalThis as unknown as Record<symbol, unknown>)[Symbol.for('openbooks.shell-environments-test')] = state
 const database = 'data:text/javascript,' + encodeURIComponent(`
   const state = globalThis[Symbol.for('openbooks.shell-environments-test')];
-  export const db = { async execute(query) { state.queries.push(state.dialect.sqlToQuery(query)); return {rows:state.rows}; } };
+  export const db = { async execute(query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.queries.push(state.dialect.sqlToQuery(query)); return inMode({rows:state.rows}); } };
   export async function withBypassContext(work) { state.bypass++; return work(); }
 `)
 const hooks = registerHooks({

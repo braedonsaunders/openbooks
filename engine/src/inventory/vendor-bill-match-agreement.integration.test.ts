@@ -94,7 +94,7 @@ async function seedApprovedPo(seed: OrgSeed, number: string, vendorId: string): 
 
 async function seedHandBill(seed: OrgSeed, number: string, vendorId: string): Promise<string> {
   const billId = randomUUID();
-  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0]!.c;
+  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`, "objects"))[0]!.c;
   await db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
                            status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
@@ -200,15 +200,15 @@ test("guard and match dialog agree across partial and full receipts, then the bi
                  and custom ? 'purchaseOrderLineId') as stamps,
              (select coalesce(sum(quantity_billed), 0)::text from document_lines
                where org_id = ${seed.orgId} and id in (${po.lineA}, ${po.lineB}, ${po2.lineA}, ${po2.lineB})) as billed
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(leaked.stamps, 0, "a refused post stamps no match");
     assert.equal(toUnits(leaked.billed), toUnits("0"), "a refused post advances no billed cover");
 
     // Matching the ambiguous line explicitly lets the same bill post.
-    const billLineIds = (await db.execute<{ id: string }>(sql`
+    const billLineIds = await db.execute<{ id: string }>(sql`
       select id from document_lines
        where org_id = ${seed.orgId} and document_id = ${billId} and line_number in (1, 2) order by line_number
-    `)).rows;
+    `, "objects");
     await withOrg(seed.orgId, () => matchVendorBillLines({
       orgId: seed.orgId, billId, actorId: seed.actorId,
       matches: [{ billLineId: billLineIds[1]!.id, purchaseOrderLineId: po.lineB }],
@@ -229,7 +229,7 @@ test("guard and match dialog agree across partial and full receipts, then the bi
              (select quantity_billed::text from document_lines where id = ${po.lineA}) as "billedA",
              (select quantity_billed::text from document_lines where id = ${po.lineB}) as "billedB",
              (select quantity_billed::text from document_lines where id = ${po2.lineB}) as "billedC"
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(facts.status, "posted");
     assert.equal(toUnits(facts.clearing), toUnits("-2500"), "only the unmatched second receipt's cover stands");
     assert.equal(toUnits(facts.onHand), toUnits("3128"), "the matched bill receives nothing again");
@@ -251,7 +251,7 @@ test("ordered-but-unreceived order lines offer no match and block unmatched stoc
   try {
     await seedApprovedPo(seed, "PO-M38-02", seed.vendorId);
     const billId = randomUUID();
-    const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0]!.c;
+    const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`, "objects"))[0]!.c;
     await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
                              status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
@@ -273,9 +273,9 @@ test("ordered-but-unreceived order lines offer no match and block unmatched stoc
       assert.equal((error as Error & { code: string }).code, "BILL_LINES_UNMATCHED");
       return true;
     });
-    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`)).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`, "objects"))[0]!.status;
     assert.equal(status, "approved", "the refused posting preserves the approved bill");
-    const movements = (await db.execute(sql`select id from inventory_movements where org_id=${seed.orgId}`)).rows;
+    const movements = await db.execute(sql`select id from inventory_movements where org_id=${seed.orgId}`, "objects");
     assert.equal(movements.length, 0, "unreceived stock is not received through an unmatched bill");
   } finally {
     await dropScratchOrg(seed.orgId);
@@ -301,7 +301,7 @@ test("another vendor's received cover is invisible to the guard and the dialog",
       lines: [{ sourceLineId: po.lineA, quantity: "2888" }],
     });
     const billId = randomUUID();
-    const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0]!.c;
+    const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`, "objects"))[0]!.c;
     await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
                              status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
@@ -319,14 +319,14 @@ test("another vendor's received cover is invisible to the guard and the dialog",
     const dialog = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
     assert.deepEqual(candidateNumbers(dialog.lines, 1), [], "a different vendor's order is never offered");
     await postBill(seed, billId);
-    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`)).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`, "objects"))[0]!.status;
     assert.equal(status, "posted", "an unrelated vendor's order does not block this bill");
-    const otherOrder = (await db.execute<{ quantity_billed: string }>(sql`select quantity_billed::text from document_lines where org_id=${seed.orgId} and id=${po.lineA}`)).rows[0]!;
+    const otherOrder = (await db.execute<{ quantity_billed: string }>(sql`select quantity_billed::text from document_lines where org_id=${seed.orgId} and id=${po.lineA}`, "objects"))[0]!;
     assert.equal(toUnits(otherOrder.quantity_billed), 0n, "the bill cannot consume another vendor's received cover");
     const ownReceipt = (await db.execute<{ quantity: string }>(sql`
       select sum(m.quantity)::text as quantity from inventory_movements m
       join document_lines l on l.org_id=m.org_id and l.id=m.document_line_id
-      where m.org_id=${seed.orgId} and l.document_id=${billId} and m.status='posted'`)).rows[0]!;
+      where m.org_id=${seed.orgId} and l.document_id=${billId} and m.status='posted'`, "objects"))[0]!;
     assert.equal(toUnits(ownReceipt.quantity), toUnits("2128"), "the independent bill receives its own stock");
   } finally {
     await dropScratchOrg(seed.orgId);

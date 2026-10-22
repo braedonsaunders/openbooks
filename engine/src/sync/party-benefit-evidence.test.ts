@@ -10,17 +10,18 @@ const dialect = new PgDialect();
 const queries: { sql: string; params: unknown[] }[] = [];
 let protectedTable = 'pay_run_benefit_allocations';
 const executor = {
-  async execute(query: Parameters<typeof dialect.sqlToQuery>[0]) {
+  async execute(query: Parameters<typeof dialect.sqlToQuery>[0], mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result);
     const compiled = dialect.sqlToQuery(query);
     queries.push(compiled);
-    if (compiled.sql.includes("current_setting('openbooks.amend'")) return { rows: [] };
-    if (compiled.sql.startsWith('set local')) return { rows: [] };
-    if (compiled.sql.includes('order by id for update')) return { rows: [{ id: absorbedId }, { id: survivorId }] };
+    if (compiled.sql.includes("current_setting('openbooks.amend'")) return inMode({ rows: [] });
+    if (compiled.sql.startsWith('set local')) return inMode({ rows: [] });
+    if (compiled.sql.includes('order by id for update')) return inMode({ rows: [{ id: absorbedId }, { id: survivorId }] });
     if (compiled.sql.includes('select id, display_name')) {
       const id = compiled.params[0];
-      return { rows: [{ id, display_name: id === absorbedId ? 'Recorded employee' : 'Surviving employee', is_active: true, custom: {} }] };
+      return inMode({ rows: [{ id, display_name: id === absorbedId ? 'Recorded employee' : 'Surviving employee', is_active: true, custom: {} }] });
     }
-    if (compiled.sql.startsWith('select id from')) return { rows: compiled.sql.includes(`"${protectedTable}"`) ? [{ id: 'recorded-evidence' }] : [] };
+    if (compiled.sql.startsWith('select id from')) return inMode({ rows: compiled.sql.includes(`"${protectedTable}"`) ? [{ id: 'recorded-evidence' }] : [] });
     throw new Error('Unexpected query before protected payroll refusal: ' + compiled.sql);
   },
 };

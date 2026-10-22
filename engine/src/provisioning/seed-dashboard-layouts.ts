@@ -18,14 +18,14 @@ const orgs = (await db.execute<{ id: string; name: string; role_keys: string[] }
     left join app_roles r on r.org_id = o.id
    group by o.id, o.name
    order by o.created_at
-`));
+`, "objects"));
 
-if (orgs.rows.length === 0) {
+if (orgs.length === 0) {
   console.error("no orgs found — seed an org before seeding dashboard layouts");
   process.exit(1);
 }
 
-for (const org of orgs.rows) {
+for (const org of orgs) {
   const roleKeys = [...new Set([...DASHBOARD_ROLE_KEYS, ...org.role_keys])];
   const count = await seedDashboardDefaultsForOrg(org.id, roleKeys);
   console.log(`org "${org.name}": ${count} role dashboard default(s) upserted`);

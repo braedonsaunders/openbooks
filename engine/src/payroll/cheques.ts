@@ -72,8 +72,8 @@ export async function issuePayRunCheques(input: {
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for update of r
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     const actorScope = await lockActorCommandAuthority(tx, orgId, actorId, run.subsidiary_id, "payroll.run");
     if (run.run_status !== "committed") {
@@ -97,22 +97,22 @@ export async function issuePayRunCheques(input: {
          and s.payment_method = 'cheque'
        order by p.display_name, s.id
        for update of s
-    `));
+    `, "objects"));
 
     // A per-subsidiary sequence is used only when the employer has configured
     // one; otherwise the org-wide row. Same probe as engine/src/payments/payments.ts.
     const scoped = run.subsidiary_id
-      ? ((await tx.execute(sql`
+      ? (await tx.execute(sql`
           select 1 from number_sequences
            where org_id = ${orgId} and document_kind = ${PAYROLL_CHEQUE_SEQUENCE_KIND}
              and subsidiary_id = ${run.subsidiary_id} limit 1
-        `))).rows.length > 0
+        `, "objects")).length > 0
       : false;
     const sequenceSubsidiaryId = scoped ? run.subsidiary_id : null;
 
     let issued = 0;
     const cheques: PayRunCheque[] = [];
-    for (const stub of stubs.rows) {
+    for (const stub of stubs) {
       if (toUnits(stub.net_pay) <= 0n || toUnits(stub.net_pay) % 100n !== 0n) throw new PayrollError("Cheques require positive whole-cent net pay; correct the payroll calculation before committing the run");
       let number = stub.cheque_number;
       let bankBasis: IssuedChequeBank | null = null;
@@ -123,13 +123,13 @@ export async function issuePayRunCheques(input: {
       } else {
         let profileId=input.bankProfileId;
         if (!profileId) {
-          const profiles=(await tx.execute<{id:string}>(sql`select p.id from payment_bank_profiles p
+          const profiles=await tx.execute<{id:string}>(sql`select p.id from payment_bank_profiles p
             join payment_formats f on f.org_id=p.org_id and f.id=p.payment_format_id and f.is_active and f.rail='cheque'
             join accounts a on a.org_id=p.org_id and a.id=p.bank_account_id and a.is_active and not a.is_summary and a.type='asset_bank'
             where p.org_id=${orgId} and p.is_active and p.currency=${stub.currency_code}
               and (p.subsidiary_id is null or p.subsidiary_id is not distinct from ${run.subsidiary_id}::uuid)
               and (a.subsidiary_id is null or a.subsidiary_id is not distinct from ${run.subsidiary_id}::uuid)
-            order by p.id for share of p,f,a`)).rows;
+            order by p.id for share of p,f,a`, "objects");
           if (profiles.length !== 1) throw new PayrollError("Configure a cheque bank profile in Payment Operations Setup and select it in the cheque designer when more than one profile applies");
           profileId=profiles[0]!.id;
         }
@@ -137,7 +137,7 @@ export async function issuePayRunCheques(input: {
       }
       if (input.printMicr && !bankBasis?.bank) throw new PayrollError("Configure the Canadian MICR bank fields on the cheque bank profile before printing blank stock");
       if (bankBasis && run.paid_entry_id) {
-        const funding=(await tx.execute<{account_id:string}>(sql`select distinct l.account_id from journal_lines l join accounts a on a.org_id=l.org_id and a.id=l.account_id and a.type='asset_bank' where l.org_id=${orgId} and l.entry_id=${run.paid_entry_id} and l.amount<0`)).rows;
+        const funding=await tx.execute<{account_id:string}>(sql`select distinct l.account_id from journal_lines l join accounts a on a.org_id=l.org_id and a.id=l.account_id and a.type='asset_bank' where l.org_id=${orgId} and l.entry_id=${run.paid_entry_id} and l.amount<0`, "objects");
         if (funding.length!==1 || funding[0]!.account_id!==bankBasis.bankAccountId) throw new PayrollError("Use cheque stock for the bank account recorded on this payroll payment");
       }
       if (!number) {
@@ -149,21 +149,21 @@ export async function issuePayRunCheques(input: {
           do update set next_number = number_sequences.next_number + 1
           where number_sequences.org_id = ${orgId}
           returning prefix, next_number, padding
-        `));
-        const s = seq.rows[0];
+        `, "objects"));
+        const s = seq[0];
         if (!s) throw new PayrollError("Cheque number allocation was not recorded");
         number = `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
         if (input.printMicr && bankBasis?.bank) chequeMicrFields(number, bankBasis.bank);
         const stamped = await tx.execute<{ id: string }>(sql`
           update pay_stubs set cheque_number = ${number}, updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and id = ${stub.id} and cheque_number is null returning id
-        `);
-        if (stamped.rows.length !== 1) throw new PayrollError("Cheque number was not recorded on the pay stub");
+        `, "objects");
+        if (stamped.length !== 1) throw new PayrollError("Cheque number was not recorded on the pay stub");
         const audit = await tx.execute<{ id: string }>(sql`
           insert into audit_log (org_id,table_name,row_id,action,changes,actor_id)
           values (${orgId},'pay_stubs',${stub.id},'update',${JSON.stringify({event:"cheque_issued",before:{chequeNumber:null},after:{chequeNumber:number},documentId,amount:stub.net_pay,bankBasis:bankBasis ? sealJson(bankBasis,{orgId,purpose:`payroll.cheque.bank.${stub.id}`}) : null})}::jsonb,${actorId}) returning id
-        `);
-        if (audit.rows.length !== 1) throw new PayrollError("Cheque issuance audit was not recorded");
+        `, "objects");
+        if (audit.length !== 1) throw new PayrollError("Cheque issuance audit was not recorded");
         issued += 1;
       }
       if (input.printMicr && bankBasis?.bank) chequeMicrFields(number, bankBasis.bank);
@@ -187,18 +187,18 @@ export interface IssuedChequeBank { profileId: string; bankAccountId: string; ba
 
 /** The issued instrument retains encrypted bank identity independently of mutable setup. */
 async function readIssuedChequeBank(tx: import("../platform/db.ts").SqlExecutor, orgId: string, stubId: string): Promise<IssuedChequeBank | null> {
-  const rows = (await tx.execute<{ sealed: string | null }>(sql`
+  const rows = await tx.execute<{ sealed: string | null }>(sql`
     select a.changes->>'bankBasis' sealed from audit_log a
     join pay_stubs s on s.org_id=a.org_id and s.id=a.row_id
     where a.org_id=${orgId} and a.table_name='pay_stubs' and a.row_id=${stubId}
       and a.changes->>'event'='cheque_issued' and a.changes#>>'{after,chequeNumber}'=s.cheque_number
-  `)).rows;
+  `, "objects");
   if (rows.length > 1) throw new PayrollError("Cheque issuance evidence is ambiguous; review its audit history before printing");
   return rows[0]?.sealed ? unsealJson<IssuedChequeBank>(rows[0].sealed, {orgId,purpose:`payroll.cheque.bank.${stubId}`}) : null;
 }
 
 export async function assertIssuedChequeFunding(tx: import("../platform/db.ts").SqlExecutor, orgId:string, documentId:string, bankAccountId:string) {
-  const stubs=(await tx.execute<{id:string}>(sql`select id from pay_stubs where org_id=${orgId} and pay_run_document_id=${documentId} and cheque_number is not null order by id for share`)).rows;
+  const stubs=await tx.execute<{id:string}>(sql`select id from pay_stubs where org_id=${orgId} and pay_run_document_id=${documentId} and cheque_number is not null order by id for share`, "objects");
   for(const stub of stubs) {
     const basis=await readIssuedChequeBank(tx,orgId,stub.id);
     if(basis && basis.bankAccountId!==bankAccountId) throw new PayrollError("Select the bank account bound to this run’s issued cheques; bank details cannot be changed after issuance");
@@ -214,7 +214,7 @@ export async function lockIssuedChequePrint(tx: import("../platform/db.ts").SqlE
     join documents d on d.org_id=r.org_id and d.id=r.document_id
     where s.org_id=${input.orgId} and s.id=${input.stubId} and s.payment_method='cheque' and s.cheque_number is not null
       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`,input.allowedSubsidiaryIds)} for share of r,s,d
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new PayrollError("Issued cheque not found in committed payroll");
   const scope=await lockActorCommandAuthority(tx,input.orgId,input.actorId,row.subsidiary_id,"payroll.run");
   await lockAndCheckPayrollRunPopulation(tx,input.orgId,row.document_id,scope);
@@ -245,9 +245,9 @@ export async function payRunCheques(
        and s.payment_method = 'cheque'
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name, s.id
-  `));
+  `, "objects"));
   const cheques: PayRunCheque[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const basis = row.cheque_number ? await readIssuedChequeBank(db, orgId, row.id) : null;
     cheques.push({stubId: row.id, employeePartyId: row.employee_party_id,
       employeeName: basis?.payeeName ?? row.name, chequeNumber: row.cheque_number ?? "", amount: row.net_pay});

@@ -37,10 +37,10 @@ test("reconcilable account imports require currency and preserve existing denomi
     assert.equal(conflict.accounts.failed, 1);
     assert.ok(conflict.accounts.errors[0]);
     assert.match(conflict.accounts.errors[0].message, /source currency conflicts with its existing currency control/);
-    const stored = await withOrg(org.orgId, () => db.execute(sql`select name, currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='card'`));
-    assert.deepEqual(stored.rows, [{ name: "Corporate card", currency_restriction: "CAD" }]);
-    const foreign = await withOrg(org.orgId, () => db.execute(sql`select currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='foreign-bank'`));
-    assert.deepEqual(foreign.rows, [{ currency_restriction: "USD" }]);
+    const stored = await withOrg(org.orgId, () => db.execute(sql`select name, currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='card'`, "objects"));
+    assert.deepEqual(stored, [{ name: "Corporate card", currency_restriction: "CAD" }]);
+    const foreign = await withOrg(org.orgId, () => db.execute(sql`select currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='foreign-bank'`, "objects"));
+    assert.deepEqual(foreign, [{ currency_restriction: "USD" }]);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -109,9 +109,9 @@ test(
             from items
            where org_id = ${org.orgId}
              and custom->>'migrationTest' = 'good-item'
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(landed.rows, [{ sourceRef: "good-item" }]);
+      assert.deepEqual(landed, [{ sourceRef: "good-item" }]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -250,8 +250,8 @@ test(
         select display_name as name from parties where org_id = ${org.orgId} and custom->>'migrationTest' = 'PTY-1'
         union all
         select name from payment_terms where org_id = ${org.orgId} and custom->>'migrationTest' = 'TRM-1'
-      `));
-      assert.deepEqual(names.rows.map((row) => row.name).sort(), ["New Party", "New Sub", "New Term"]);
+      `, "objects"));
+      assert.deepEqual(names.map((row) => row.name).sort(), ["New Party", "New Sub", "New Term"]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -287,8 +287,8 @@ test(
           values (${org.orgId}, 'TAX-HIST', 'History Tax', 'both',
                   '{"migrationTest": "TAX-HIST"}'::jsonb)
           returning id
-        `),
-      ).then((r) => r.rows);
+        `, "objects"),
+      );
       await withOrg(org.orgId, () => db.execute(sql`
         insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, effective_to)
         values (${org.orgId}, ${code!.id}, '5.0000', '2020-01-01', '2022-12-31'),
@@ -316,10 +316,10 @@ test(
             from tax_rates
            where org_id = ${org.orgId} and tax_code_id = ${code!.id}
            order by effective_from
-        `),
+        `, "objects"),
       );
       assert.deepEqual(
-        windows.rows.map((row) => [row.rate, row.from, row.to]),
+        windows.map((row) => [row.rate, row.from, row.to]),
         [
           ["5.0000", "2020-01-01", "2022-12-31"],
           ["13.0000", "2023-01-01", "2026-12-31"],
@@ -386,9 +386,9 @@ test(
             from tax_rates tr
             join tax_codes tc on tc.id = tr.tax_code_id and tc.org_id = tr.org_id
            where tr.org_id = ${org.orgId} and tc.code = 'TAX-OPEN'
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(windows.rows, [{ rate: "13.0000" }]);
+      assert.deepEqual(windows, [{ rate: "13.0000" }]);
     } finally {
       await dropScratchOrg(org.orgId);
     }

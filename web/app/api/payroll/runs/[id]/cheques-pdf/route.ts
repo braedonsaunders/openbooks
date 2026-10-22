@@ -41,7 +41,7 @@ export const POST = defineRoute({
       select d.subsidiary_id as "subsidiaryId"
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`, 'objects'))[0]
     if (!owned) return notFound("record")
     const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
     if (denied) return denied

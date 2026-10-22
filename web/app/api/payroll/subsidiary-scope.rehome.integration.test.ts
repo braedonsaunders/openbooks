@@ -16,8 +16,8 @@ async function waitForRehomeWaiter(): Promise<boolean> {
        where datname = current_database()
          and wait_event_type = 'Lock'
          and query ilike 'update parties set subsidiary_id%'
-    `)
-    if (Number(rows.rows[0]?.n ?? 0) > 0) return true
+    `, 'objects')
+    if (Number(rows[0]?.n ?? 0) > 0) return true
     await new Promise((resolve) => setTimeout(resolve, 25))
   }
   return false
@@ -32,7 +32,7 @@ test('payroll filing employee authorization holds the party scope against concur
   const guardHeld = new Promise<void>((resolve) => { releaseGuard = resolve })
   let authorization: Promise<void> | undefined
   try {
-    const assigned = await withBypassContext(() => (db.execute(sql`
+    const assigned = await withBypassContext(() => (db.execute<never>(sql`
       update parties set subsidiary_id = ${org.subsidiaryId}
        where org_id = ${org.orgId} and id = ${org.customerId}
     `)))

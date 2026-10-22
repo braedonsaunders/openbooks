@@ -211,8 +211,8 @@ async function postMonthlyLaborAndCogs(ctx: SimContext): Promise<void> {
       from documents
      where org_id = ${ctx.world.orgId} and status = 'posted'
        and kind in ('customer_invoice', 'customer_credit')
-       and document_date >= ${monthStart} and document_date <= ${ctx.simDate}`));
-  const revenue = rev.rows[0]?.revenue ?? "0";
+       and document_date >= ${monthStart} and document_date <= ${ctx.simDate}`, "objects"));
+  const revenue = rev[0]?.revenue ?? "0";
   if (cmp(revenue, "0") <= 0) return;
 
   const labor = mulDecimal(revenue, econ.laborPctOfRevenue);

@@ -40,10 +40,10 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 async function policyRow(orgId: string, id: string): Promise<{ name: string; grace: number } | undefined> {
   const r = await withBypassContext(() =>
     db.execute<{ name: string; grace: number }>(
-      sql`select name, grace_period_days as grace from dunning_policies where id = ${id} and org_id = ${orgId}`,
+      sql`select name, grace_period_days as grace from dunning_policies where id = ${id} and org_id = ${orgId}`, "objects",
     ),
   );
-  return r.rows[0];
+  return r[0];
 }
 
 const ladderStage = () => ({
@@ -57,10 +57,10 @@ const ladderStage = () => ({
 async function stageCount(orgId: string, id: string): Promise<number> {
   const r = await withBypassContext(() =>
     db.execute<{ n: number }>(
-      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`,
+      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`, "objects",
     ),
   );
-  return r.rows[0]!.n;
+  return r[0]!.n;
 }
 
 test("dunning writes reject an invalid grace period or an empty name", async () => {
@@ -76,9 +76,9 @@ test("dunning writes reject an invalid grace period or an empty name", async () 
       assert.equal(refused.status, 400, `POST gracePeriodDays ${JSON.stringify(gracePeriodDays)}`);
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
+    assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
     const created = await create(json("POST", { name: "Collections", gracePeriodDays: 3, stages: [ladderStage()] }));
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
@@ -126,9 +126,9 @@ test("dunning writes refuse blank stage templates with the fix named", async () 
       assert.deepEqual(await refused.json(), { error: "stage subject and body templates must not be blank" });
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
+    assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
     const created = await create(json("POST", { name: "Collections", stages: [ladderStage()] }));
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
@@ -149,9 +149,9 @@ test("dunning writes reject an invalid reply-to and store a valid one", async ()
     const replyOf = async (id: string) =>
       (await withBypassContext(() =>
         db.execute<{ replyTo: string | null }>(
-          sql`select reply_to as "replyTo" from dunning_policies where id = ${id} and org_id = ${org.orgId}`,
+          sql`select reply_to as "replyTo" from dunning_policies where id = ${id} and org_id = ${org.orgId}`, "objects",
         ),
-      )).rows[0]?.replyTo;
+      ))[0]?.replyTo;
 
     // POST: malformed reply-to values are 400s and create nothing.
     for (const replyTo of ["not-an-email", "", 7]) {
@@ -159,9 +159,9 @@ test("dunning writes reject an invalid reply-to and store a valid one", async ()
       assert.equal(refused.status, 400, `POST replyTo ${JSON.stringify(replyTo)}`);
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
+    assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
     // POST: a valid reply-to stores; omission stores null (org default applies).
     const stored = await create(

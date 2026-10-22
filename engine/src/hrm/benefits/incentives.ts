@@ -282,14 +282,14 @@ export async function resolvePeriodBasis(
   orgId: string,
 ): Promise<ResolvedPeriodBasis> {
   const org = requireOrgId(orgId);
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string; name: string; cadence: string; year_start_month: number;
   }>(sql`
     select id::text as id, name, cadence, year_start_month
       from fiscal_calendars
      where org_id = ${org} and is_active and is_default
      order by id
-  `)).rows;
+  `, "objects");
   if (rows.length === 0) {
     throw new BenefitsError(
       "REFUSED",
@@ -332,10 +332,10 @@ async function requireProjectsExist(
   projectIds: readonly string[],
 ): Promise<void> {
   if (projectIds.length === 0) return;
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select id::text as id from projects
      where org_id = ${orgId} and id = any (${uuidList(projectIds, "project id")}::uuid[])
-  `)).rows;
+  `, "objects");
   const found = new Set(rows.map((r) => r.id));
   const missing = projectIds.filter((id) => !found.has(id));
   if (missing.length > 0) {
@@ -352,11 +352,11 @@ async function requireProjectsExist(
  * the same entity, so summing every book would double-count the base.
  */
 async function resolvePrimaryBook(exec: SqlExecutor, orgId: string): Promise<string> {
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select id::text as id from accounting_books
      where org_id = ${orgId} and is_primary and posts_gl and is_active
      order by id
-  `)).rows;
+  `, "objects");
   if (rows.length === 0) {
     throw new BenefitsError(
       "REFUSED",
@@ -449,10 +449,10 @@ export async function measureMoneySource(
   // Bind every named account to its actual GL type: a revenue account that
   // is not income, or a cost account that is not a cost, refuses here.
   const allAccounts = [...config.revenueAccountIds, ...config.expenseAccountIds];
-  const accountRows = (await exec.execute<{ id: string; type: string; name: string }>(sql`
+  const accountRows = await exec.execute<{ id: string; type: string; name: string }>(sql`
     select id::text as id, type, name from accounts
      where org_id = ${org} and id = any (${uuidList(allAccounts, "account id")}::uuid[])
-  `)).rows;
+  `, "objects");
   const typeById = new Map(accountRows.map((r) => [r.id, r]));
   for (const id of allAccounts) {
     const row = typeById.get(id);
@@ -491,7 +491,7 @@ export async function measureMoneySource(
 
   // One statement supplies both the totals and their evidence. Independent
   // aggregate and detail reads could observe different posting commits.
-  const sourceRows = (await exec.execute<{
+  const sourceRows = await exec.execute<{
     entry_id: string; line_id: string; account_id: string; amount: string;
     currency: string; subsidiary_id: string; department_id: string | null;
     project_id: string | null; posting_date: string; posted_at: string | null;
@@ -508,7 +508,7 @@ export async function measureMoneySource(
        and l.subsidiary_id = ${legalEntityId}::uuid
        and l.account_id = any (${uuidList(allAccounts, "account id")}::uuid[])
      order by l.entry_id, l.line_number, l.id
-  `)).rows;
+  `, "objects");
   const dimensionIds = new Set(config.scope === "department" ? config.departmentIds : config.projectIds);
   const lineRows = sourceRows.filter((r) => {
     if (config.scope === "company") return true;
@@ -623,13 +623,13 @@ export async function measureApprovedHours(
   // legal entity — the measure-time half of the same-entity proof — and
   // one party maps to exactly one member employment, so a day's hours are
   // never split or doubled across two employments of the same worker.
-  const memberRows = (await exec.execute<{ id: string; worker_party_id: string; employer_subsidiary_id: string }>(sql`
+  const memberRows = await exec.execute<{ id: string; worker_party_id: string; employer_subsidiary_id: string }>(sql`
     select id::text as id, worker_party_id::text as worker_party_id,
            employer_subsidiary_id::text as employer_subsidiary_id
       from worker_employments
      where org_id = ${org}
        and id = any (${uuidList(config.memberEmploymentIds, "member employment id")}::uuid[])
-  `)).rows;
+  `, "objects");
   const memberById = new Map(memberRows.map((r) => [r.id, r]));
   for (const id of config.memberEmploymentIds) {
     const row = memberById.get(id);
@@ -663,7 +663,7 @@ export async function measureApprovedHours(
     const found = (await exec.execute<{ id: string }>(sql`
       select id::text as id from departments
        where org_id = ${org} and id = any (${uuidList(workDepartmentIds, "department id")}::uuid[])
-    `)).rows.length;
+    `, "objects")).length;
     if (found !== workDepartmentIds.length) {
       throw new BenefitsError("REFUSED", "the measure narrows work to a department outside this organization — reselect the work departments; measures never cross tenants");
     }
@@ -700,7 +700,7 @@ export async function measureApprovedHours(
             and v.status='active' and v.recorded_until is null and v.recorded_at <= now()
             and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to > t.worked_on)
        )
-    `)).rows[0]?.n ?? 0;
+    `, "objects"))[0]?.n ?? 0;
     if (unshaped > 0) {
       const dim = config.scope === "department" ? "department" : "project";
       throw new BenefitsError(
@@ -710,7 +710,7 @@ export async function measureApprovedHours(
     }
   }
 
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string; hours: string; employee_party_id: string; approved_at: string | null;
     worked_on: string; department_id: string | null; project_id: string | null; approved_by: string | null;
     employment_facts: HoursEmploymentFact[];
@@ -744,7 +744,7 @@ export async function measureApprovedHours(
             and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to > t.worked_on)
        )
      order by t.id
-  `)).rows;
+  `, "objects");
 
   const memberPeriods = new Map<string, Array<{ effectiveFrom: string; effectiveTo: string | null }>>();
   for (const period of config.memberPeriods ?? []) {

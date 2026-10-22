@@ -28,14 +28,14 @@ for (const scenario of [
           { code: 'SAME', name: scenario.invalid ? '' : 'First', kind: 'service', ...(scenario.custom ? { [customKey]: 'retained' } : {}) },
           { code: 'SAME', name: 'Second', kind: 'service' },
         ]
-        const before = (await db.execute<{ n: number }>(sql`select count(*)::int n from audit_log where org_id=${org.orgId}`)).rows[0]!.n
+        const before = (await db.execute<{ n: number }>(sql`select count(*)::int n from audit_log where org_id=${org.orgId}`, 'objects'))[0]!.n
         const preview = await resource.write(rows, scenario.mode, { ...ctx, dryRun: true })
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int n from items where org_id=${org.orgId} and code='SAME'`)).rows[0]!.n, 0)
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int n from audit_log where org_id=${org.orgId}`)).rows[0]!.n, before)
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int n from items where org_id=${org.orgId} and code='SAME'`, 'objects'))[0]!.n, 0)
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int n from audit_log where org_id=${org.orgId}`, 'objects'))[0]!.n, before)
         const committed = await resource.write(rows, scenario.mode, { ...ctx, dryRun: false })
         assert.deepEqual([preview.created, preview.updated, preview.failed], scenario.expected)
         assert.deepEqual(preview, committed)
-        const stored = (await db.execute<{ name: string; custom: Record<string, string> }>(sql`select name,custom from items where org_id=${org.orgId} and code='SAME'`)).rows
+        const stored = await db.execute<{ name: string; custom: Record<string, string> }>(sql`select name,custom from items where org_id=${org.orgId} and code='SAME'`, 'objects')
         assert.equal(stored.length, 1)
         assert.equal(stored[0]!.name, scenario.mode === 'insert' && !scenario.invalid ? 'First' : 'Second')
         if (scenario.custom) assert.equal(stored[0]!.custom[customKey], 'retained')

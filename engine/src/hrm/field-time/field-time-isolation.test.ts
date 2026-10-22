@@ -43,9 +43,9 @@ const FIELD_TIME_TABLES =
 function recording() {
   const seen: string[] = [];
   const exec = {
-    execute: (async (query: SQL) => {
+    execute: (async (query: SQL, mode?: string) => {
       seen.push(new PgDialect().sqlToQuery(query).sql);
-      return db.execute(query as unknown as Parameters<typeof db.execute>[0]);
+      return db.execute(query as unknown as Parameters<typeof db.execute>[0], mode as never);
     }),
   } as unknown as SqlExecutor;
   return { exec, seen };

@@ -152,11 +152,9 @@ function input(
 }
 async function approve(f: Fixture, id: string) {
   await submitFinancialChange(f.org.orgId, id, f.actors.submitterId);
-  const gate = (
-    await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`,
-    )
-  ).rows[0]!;
+  const gate = (await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`, "objects",
+    ))[0]!;
   await decideGate({
     gateId: gate.id,
     userId: f.actors.approver1Id,
@@ -190,11 +188,9 @@ test(
   { skip: !DB },
   async () =>
     fixture(async (f) => {
-      const before = (
-        await db.execute<{ n: number }>(
-          sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`,
-        )
-      ).rows[0]!.n;
+      const before = (await db.execute<{ n: number }>(
+          sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`, "objects",
+        ))[0]!.n;
       const args = input(f),
         id = await proposeLossOfControl(
           f.org.orgId,
@@ -203,19 +199,15 @@ test(
           args,
         );
       assert.equal(
-        (
-          await db.execute<{ n: number }>(
-            sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`,
-          )
-        ).rows[0]!.n,
+        (await db.execute<{ n: number }>(
+            sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`, "objects",
+          ))[0]!.n,
         before,
         "rollback-only preview must retain no provisional journal",
       );
-      const proposal = (
-        await db.execute<{ before_state: Record<string, unknown> }>(sql`
+      const proposal = (await db.execute<{ before_state: Record<string, unknown> }>(sql`
           select before_state from financial_changes
-           where org_id=${f.org.orgId} and id=${id}`)
-      ).rows[0]!;
+           where org_id=${f.org.orgId} and id=${id}`, "objects"))[0]!;
       assert.ok(
         proposal.before_state.preview,
         "the approval workpaper must retain its measured balances",
@@ -251,13 +243,11 @@ test(
         ),
         id,
       );
-      const loss = (
-        await db.execute<{
+      const loss = (await db.execute<{
           measurement: { preview: { netAssets: string; nci: string } };
         }>(
-          sql`select measurement from consolidation_control_losses where org_id=${f.org.orgId} and change_id=${id}`,
-        )
-      ).rows[0]!;
+          sql`select measurement from consolidation_control_losses where org_id=${f.org.orgId} and change_id=${id}`, "objects",
+        ))[0]!;
       assert.equal(loss.measurement.preview.netAssets, "1200.0000");
       assert.equal(loss.measurement.preview.nci, "220.0000");
       const count = (result.entryIds as string[]).length;
@@ -271,11 +261,9 @@ test(
         returnedIds.length,
         "committed journal links must be unique",
       );
-      const committedEntries = (
-        await db.execute<{ id: string; status: string }>(sql`
+      const committedEntries = await db.execute<{ id: string; status: string }>(sql`
           select id,status from journal_entries where org_id=${f.org.orgId}
-           and id in(select jsonb_array_elements_text(${JSON.stringify(returnedIds)}::jsonb)::uuid)`)
-      ).rows;
+           and id in(select jsonb_array_elements_text(${JSON.stringify(returnedIds)}::jsonb)::uuid)`, "objects");
       assert.deepEqual(
         committedEntries.map((entry) => entry.id).sort(),
         [...returnedIds].sort(),
@@ -334,15 +322,13 @@ test(
         f.actors.submitterId,
       );
       assert.equal(result.groupGain, "220.0000");
-      const retained = (
-        await db.execute<{
+      const retained = (await db.execute<{
           effective_from: string;
           acquisition_cost: string;
           method: string;
         }>(
-          sql`select effective_from::text,acquisition_cost::text,method from subsidiary_ownership_interests where org_id=${f.org.orgId} and id=${result.retainedInterestId as string}`,
-        )
-      ).rows[0]!;
+          sql`select effective_from::text,acquisition_cost::text,method from subsidiary_ownership_interests where org_id=${f.org.orgId} and id=${result.retainedInterestId as string}`, "objects",
+        ))[0]!;
       assert.deepEqual(retained, {
         effective_from: "2026-07-21",
         acquisition_cost: "300.0000",
@@ -365,28 +351,22 @@ test(
         (reversed.entryIds as string[]).length >=
           (result.entryIds as string[]).length,
       );
-      const investment = (
-        await db.execute<{ balance: string }>(
-          sql`select coalesce(sum(l.amount),0)::text as balance from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${f.org.orgId} and l.account_id=${f.accounts.investment!} and e.status in('posted','reversed')`,
-        )
-      ).rows[0]!.balance;
+      const investment = (await db.execute<{ balance: string }>(
+          sql`select coalesce(sum(l.amount),0)::text as balance from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${f.org.orgId} and l.account_id=${f.accounts.investment!} and e.status in('posted','reversed')`, "objects",
+        ))[0]!.balance;
       assert.equal(
         investment,
         "0.0000",
         "the restored parent investment has exactly one consolidation elimination",
       );
-      const old = (
-        await db.execute<{ status: string }>(
-          sql`select status from journal_entries where org_id=${f.org.orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(result.entryIds)}::jsonb)::uuid)`,
-        )
-      ).rows;
+      const old = await db.execute<{ status: string }>(
+          sql`select status from journal_entries where org_id=${f.org.orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(result.entryIds)}::jsonb)::uuid)`, "objects",
+        );
       assert.ok(old.length > 0 && old.every((e) => e.status === "reversed"));
       assert.equal(
-        (
-          await db.execute<{ effective_to: string | null }>(
-            sql`select effective_to::text from subsidiary_ownership_interests where org_id=${f.org.orgId} and id=${f.interest}`,
-          )
-        ).rows[0]!.effective_to,
+        (await db.execute<{ effective_to: string | null }>(
+            sql`select effective_to::text from subsidiary_ownership_interests where org_id=${f.org.orgId} and id=${f.interest}`, "objects",
+          ))[0]!.effective_to,
         null,
       );
       assert.deepEqual(
@@ -420,11 +400,9 @@ test(
         /changed after this proposal/,
       );
       assert.equal(
-        (
-          await db.execute(
-            sql`select id from consolidation_control_losses where org_id=${f.org.orgId}`,
-          )
-        ).rows.length,
+        (await db.execute(
+            sql`select id from consolidation_control_losses where org_id=${f.org.orgId}`, "objects",
+          )).length,
         0,
       );
     }),
@@ -447,30 +425,24 @@ test(
           `create function ${name}() returns trigger language plpgsql as $$ begin if NEW.org_id='${f.org.orgId}'::uuid then raise exception 'injected control loss storage failure'; end if; return NEW; end $$; create trigger ${name} before insert on consolidation_control_losses for each row execute function ${name}()`,
         ),
       );
-      const before = (
-        await db.execute<{ n: number }>(
-          sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`,
-        )
-      ).rows[0]!.n;
+      const before = (await db.execute<{ n: number }>(
+          sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`, "objects",
+        ))[0]!.n;
       try {
         await assert.rejects(
           applyLossOfControl(f.org.orgId, id, f.actors.submitterId),
           (e) => /injected control loss/.test(deepest(e)),
         );
         assert.equal(
-          (
-            await db.execute<{ n: number }>(
-              sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`,
-            )
-          ).rows[0]!.n,
+          (await db.execute<{ n: number }>(
+              sql`select count(*)::int n from journal_entries where org_id=${f.org.orgId}`, "objects",
+            ))[0]!.n,
           before,
         );
         assert.equal(
-          (
-            await db.execute<{ effective_to: string | null }>(
-              sql`select effective_to::text from subsidiary_ownership_interests where org_id=${f.org.orgId} and id=${f.interest}`,
-            )
-          ).rows[0]!.effective_to,
+          (await db.execute<{ effective_to: string | null }>(
+              sql`select effective_to::text from subsidiary_ownership_interests where org_id=${f.org.orgId} and id=${f.interest}`, "objects",
+            ))[0]!.effective_to,
           null,
         );
       } finally {
@@ -538,10 +510,10 @@ async function scopedActor(f: Fixture): Promise<string> {
     "a_scoped_controller",
   );
   const updated = await db.execute(
-    sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [f.org.subsidiaryId, f.child, f.elimination] })}::jsonb where org_id=${f.org.orgId} and key='a_scoped_controller' returning id`,
+    sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [f.org.subsidiaryId, f.child, f.elimination] })}::jsonb where org_id=${f.org.orgId} and key='a_scoped_controller' returning id`, "objects",
   );
   assert.equal(
-    updated.rows.length,
+    updated.length,
     1,
     "the scoped role restriction must apply to exactly one role",
   );
@@ -569,11 +541,9 @@ async function bOnlyManualLine(f: Fixture) {
       sql`update journal_entries set status='posted',posted_at=now() where org_id=${f.org.orgId} and id=${entry}`,
     );
   });
-  return (
-    await db.execute<{ id: string; amount: string }>(
-      sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${entry} and account_id=${f.accounts.goodwill!} order by line_number limit 1`,
-    )
-  ).rows[0]!;
+  return (await db.execute<{ id: string; amount: string }>(
+      sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${entry} and account_id=${f.accounts.goodwill!} order by line_number limit 1`, "objects",
+    ))[0]!;
 }
 test(
   "L2: a B-only manual elimination is hidden from family A's restricted picker",
@@ -649,10 +619,10 @@ async function secondInterest(
     sql`insert into accounts(id,org_id,number,name,type,is_active,is_summary,eliminate) values(${investB},${f.org.orgId},'C-invest-b','B investment','asset_current_other',true,false,false)`,
   );
   const created = await db.execute(
-    sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,acquisition_date,investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,goodwill_account_id,fair_value_adjustment_account_id) values(${interestB},${f.org.orgId},${f.org.subsidiaryId},${f.childB},'2026-07-01',80,'full','2026-07-01',${investB},${f.accounts.income!},${f.accounts.nci!},${f.accounts.nciIncome!},${f.accounts.goodwill!},${f.accounts.fairValue!}) returning id`,
+    sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,acquisition_date,investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,goodwill_account_id,fair_value_adjustment_account_id) values(${interestB},${f.org.orgId},${f.org.subsidiaryId},${f.childB},'2026-07-01',80,'full','2026-07-01',${investB},${f.accounts.income!},${f.accounts.nci!},${f.accounts.nciIncome!},${f.accounts.goodwill!},${f.accounts.fairValue!}) returning id`, "objects",
   );
   assert.equal(
-    created.rows.length,
+    created.length,
     1,
     "the second family's ownership interest must be recorded",
   );
@@ -719,11 +689,9 @@ test(
         (e) => /must be an equity reserve account/.test(deepest(e)),
       );
       assert.equal(
-        (
-          await db.execute(
-            sql`select id from consolidation_control_losses where org_id=${f.org.orgId}`,
-          )
-        ).rows.length,
+        (await db.execute(
+            sql`select id from consolidation_control_losses where org_id=${f.org.orgId}`, "objects",
+          )).length,
         0,
       );
     }),
@@ -781,11 +749,9 @@ test(
         { accountId: f.accounts.goodwill!, amount: "100" },
         { accountId: f.org.accounts.bank, amount: "-100" },
       ]);
-      const line = (
-        await db.execute<{ id: string; amount: string }>(
-          sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${original} and account_id=${f.accounts.goodwill!} order by line_number limit 1`,
-        )
-      ).rows[0]!;
+      const line = (await db.execute<{ id: string; amount: string }>(
+          sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${original} and account_id=${f.accounts.goodwill!} order by line_number limit 1`, "objects",
+        ))[0]!;
       const reversal = await post(
         f,
         f.elimination,
@@ -797,10 +763,10 @@ test(
         original,
       );
       const marked = await db.execute(
-        sql`update journal_entries set status='reversed' where org_id=${f.org.orgId} and id=${original} and status='posted' returning id`,
+        sql`update journal_entries set status='reversed' where org_id=${f.org.orgId} and id=${original} and status='posted' returning id`, "objects",
       );
       assert.equal(
-        marked.rows.length,
+        marked.length,
         1,
         "the reversed original must be marked exactly once",
       );
@@ -812,9 +778,9 @@ test(
       );
       // The reversal entry stays 'posted' but only cancels its original, so
       // its negated lines are no more evidence than the original's.
-      const reversalLines = (await db.execute<{ id: string; amount: string }>(
-        sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${reversal} order by line_number`,
-      )).rows;
+      const reversalLines = await db.execute<{ id: string; amount: string }>(
+        sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${reversal} order by line_number`, "objects",
+      );
       assert.ok(
         open.adjustmentLines.every((l) => l.id !== line.id && !reversalLines.some((r) => r.id === l.id)),
         "neither the reversed line nor its reversal is outstanding evidence to offer",
@@ -869,11 +835,9 @@ test(
         "fixture must create a real ownership consolidation generation",
       );
       const original = initial.entryIds[0]!;
-      const originalLines = (
-        await db.execute<{ account_id: string; amount: string }>(
-          sql`select account_id,(-amount)::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${original} order by line_number`,
-        )
-      ).rows;
+      const originalLines = await db.execute<{ account_id: string; amount: string }>(
+          sql`select account_id,(-amount)::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${original} order by line_number`, "objects",
+        );
       const correction = await post(
         f,
         f.elimination,
@@ -884,21 +848,17 @@ test(
         })),
         original,
       );
-      const history = (
-        await db.execute<{ id: string }>(
-          sql`${consolidationHistory(f.org.orgId)} select id from history where id in(${original},${correction})`,
-        )
-      ).rows;
+      const history = await db.execute<{ id: string }>(
+          sql`${consolidationHistory(f.org.orgId)} select id from history where id in(${original},${correction})`, "objects",
+        );
       assert.deepEqual(
         history.map((r) => r.id).sort(),
         [original, correction].sort(),
         "a correcting journal occurs once in the automatic lineage",
       );
-      const correctingLine = (
-        await db.execute<{ id: string; amount: string }>(
-          sql`select id,amount::text from journal_lines where org_id=${f.org.orgId} and entry_id=${correction} order by line_number limit 1`,
-        )
-      ).rows[0]!;
+      const correctingLine = (await db.execute<{ id: string; amount: string }>(
+          sql`select id,amount::text from journal_lines where org_id=${f.org.orgId} and entry_id=${correction} order by line_number limit 1`, "objects",
+        ))[0]!;
       await assert.rejects(
         proposeLossOfControl(
           f.org.orgId,

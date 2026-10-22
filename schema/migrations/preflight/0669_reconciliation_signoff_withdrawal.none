@@ -1,1 +1,0 @@
-Function replacement only: it redefines the journal-line guard to admit one additional governed transition and changes no table, constraint, index, or data. No existing row can make it refuse.

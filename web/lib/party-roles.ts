@@ -45,7 +45,7 @@ export async function ensurePartyRoleRow(
   if (role === 'employee') {
     const party = (await executor.execute<{ kind: string }>(sql`
       select kind from parties where org_id = ${args.orgId} and id = ${args.partyId} for share
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!party || !isNaturalPersonPartyKind(party.kind)) throw new EmployeePartyKindError()
   }
   const table = PARTY_ROLE_TABLES[role]
@@ -71,13 +71,13 @@ export async function readPartyForRoleChange(orgId: string, partyId: string) {
     id: string; kind: string; display_name: string; subsidiary_id: string | null; is_active: boolean
   }>(sql`
     select id, kind, display_name, subsidiary_id, is_active from parties
-     where id = ${partyId} and org_id = ${orgId} limit 1`)).rows[0] ?? null
+     where id = ${partyId} and org_id = ${orgId} limit 1`, 'objects'))[0] ?? null
 }
 
 /** The party's row for one native role, or null when it holds none. */
 export async function readPartyRoleRow(orgId: string, role: RemovablePartyRole, partyId: string) {
   return (await db.execute<Record<string, unknown>>(sql`
-    select * from ${sql.raw(ROLE_TABLES[role])} where org_id = ${orgId} and party_id = ${partyId} limit 1`)).rows[0] ?? null
+    select * from ${sql.raw(ROLE_TABLES[role])} where org_id = ${orgId} and party_id = ${partyId} limit 1`, 'objects'))[0] ?? null
 }
 
 /**
@@ -90,7 +90,7 @@ export async function openRoleActivity(orgId: string, partyId: string, role: Rem
   if (role === 'employee') {
     const weeks = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from timesheet_weeks
-       where org_id = ${orgId} and employee_party_id = ${partyId} and status in ('draft', 'submitted')`)).rows[0]
+       where org_id = ${orgId} and employee_party_id = ${partyId} and status in ('draft', 'submitted')`, 'objects'))[0]
     const count = Number(weeks?.n ?? '0')
     return count > 0 ? [`${count} unapproved timesheet ${count === 1 ? 'week remains' : 'weeks remain'}`] : []
   }
@@ -99,7 +99,7 @@ export async function openRoleActivity(orgId: string, partyId: string, role: Rem
     select count(*)::text as n from documents
      where org_id = ${orgId} and party_id = ${partyId} and kind in (${kindList})
        -- Live entries only: only standing documents with open balances block removing the role
-       and (status in ('pending_approval', 'approved') or (status = 'posted' and coalesce(open_balance, 0) <> 0))`)).rows[0]
+       and (status in ('pending_approval', 'approved') or (status = 'posted' and coalesce(open_balance, 0) <> 0))`, 'objects'))[0]
   const blockers: string[] = []
   const docCount = Number(docs?.n ?? '0')
   if (docCount > 0) {
@@ -112,7 +112,7 @@ export async function openRoleActivity(orgId: string, partyId: string, role: Rem
     const pipeline = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from crm_opportunities o
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-       where o.org_id = ${orgId} and o.party_id = ${partyId} and o.is_active and not s.is_closed`)).rows[0]
+       where o.org_id = ${orgId} and o.party_id = ${partyId} and o.is_active and not s.is_closed`, 'objects'))[0]
     const pipeCount = Number(pipeline?.n ?? '0')
     if (pipeCount > 0) {
       blockers.push(`${pipeCount} open ${pipeCount === 1 ? 'opportunity remains' : 'opportunities remain'}`)
@@ -134,12 +134,12 @@ export async function deletePartyRole(input: {
   const { orgId, actorId, partyId, role } = input
   return db.transaction(async (tx) => {
     const deleted = (await tx.execute<{ id: string }>(sql`
-      delete from ${sql.raw(ROLE_TABLES[role])} where org_id = ${orgId} and party_id = ${partyId} returning id`)).rows[0]
+      delete from ${sql.raw(ROLE_TABLES[role])} where org_id = ${orgId} and party_id = ${partyId} returning id`, 'objects'))[0]
     if (!deleted) throw new Error(`the ${role} role changed while removing it — reload and try again`)
     if (input.nextKind !== input.priorKind) {
       const renamed = (await tx.execute<{ id: string }>(sql`
         update parties set kind = ${input.nextKind}, updated_at = now(), updated_by = ${actorId}
-         where id = ${partyId} and org_id = ${orgId} returning id`)).rows[0]
+         where id = ${partyId} and org_id = ${orgId} returning id`, 'objects'))[0]
       if (!renamed) throw new Error('the party changed while removing its role — reload and try again')
     }
     await tx.execute(sql`
@@ -160,7 +160,7 @@ export async function roleLessPartiesInSlice(input: {
   orgId: string; q: string | null; includeInactive: boolean; limit: number
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined
 }): Promise<{ id: string; is_active: boolean }[]> {
-  return ((await db.execute(sql`
+  return await db.execute<{ id: string; is_active: boolean }>(sql`
     select p.id, p.is_active from parties p
      where p.org_id = ${input.orgId}
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds ?? null, { orgWideNull: true })}
@@ -170,7 +170,7 @@ export async function roleLessPartiesInSlice(input: {
       and not exists (select 1 from vendor_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
       and not exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)
      order by p.display_name
-     limit ${input.limit}`)) as { rows: { id: string; is_active: boolean }[] }).rows
+     limit ${input.limit}`, 'objects')
 }
 
 /** Promote one party to a native role through the insert-only role command, audited. */
@@ -179,15 +179,13 @@ export async function assignPartyRoleAudited(input: {
 }): Promise<void> {
   const { orgId, actorId, partyId, role } = input
   await db.transaction(async (tx) => {
-    const before = (await tx.execute(sql`
-      select kind, is_active from parties where id = ${partyId} and org_id = ${orgId}`)) as {
-      rows: { kind: string; is_active: boolean }[]
-    }
-    if (!before.rows[0]) throw new Error(`party ${partyId} not found in this organization`)
-    await ensurePartyRoleRow(tx, { orgId, partyId, kind: role, isActive: before.rows[0].is_active, actorId })
+    const before = await tx.execute<{ kind: string; is_active: boolean }>(sql`
+      select kind, is_active from parties where id = ${partyId} and org_id = ${orgId}`, 'objects')
+    if (!before[0]) throw new Error(`party ${partyId} not found in this organization`)
+    await ensurePartyRoleRow(tx, { orgId, partyId, kind: role, isActive: before[0].is_active, actorId })
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'parties', ${partyId}, 'update',
-              ${JSON.stringify({ source: 'bulk-role-assign', role, before: before.rows[0], after: { ...before.rows[0], [role]: true } })}::jsonb, ${actorId})`)
+              ${JSON.stringify({ source: 'bulk-role-assign', role, before: before[0], after: { ...before[0], [role]: true } })}::jsonb, ${actorId})`)
   })
 }

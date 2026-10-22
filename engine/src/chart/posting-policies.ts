@@ -32,7 +32,7 @@ export const mergedAccountPostingProvider: BalancingLegProvider = async (runner,
       join accounts t on t.org_id = a.org_id and t.id = a.merged_into_id
      where a.org_id = ${ctx.orgId} and a.id in ${ids} and a.merged_into_id is not null
      order by a.number nulls last, a.id
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!merged) return [];
   throw new PostingError(
     `Account ${merged.label} was merged into ${merged.survivor_label} on ${merged.merged_on}; it no longer accepts postings. Post to ${merged.survivor_label} instead — a document posted earlier to the merged account is corrected with a journal entry on the surviving account.`,

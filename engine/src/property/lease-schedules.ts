@@ -25,8 +25,8 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
   // loser wait, re-read committed charges, and count only genuinely new lines.
   // Xact-scoped: held to the caller's commit, in every caller.
   await runner.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"property-schedule:" + orgId + ":" + leaseId}, 0))`);
-  const leaseResult = (await runner.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`));
-  const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
+  const leaseResult = (await runner.execute<LeaseScheduleContextRow>(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`, "objects"));
+  const lease = leaseResult[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
   const currentMonth = startOfMonth(await businessToday(orgId));
   const requested = validDate(throughOn, "Schedule horizon");
   const cap = addCalendarDays(addMonthsStart(currentMonth, MAX_LEASE_SCHEDULE_HORIZON_MONTHS), -1);
@@ -34,9 +34,9 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
     throw new PropertyManagementError(`Schedule horizon cannot exceed ${MAX_LEASE_SCHEDULE_HORIZON_MONTHS} months ahead (through ${cap})`);
   }
   const horizon = requested ?? addCalendarDays(addMonthsStart(currentMonth, 13), -1);
-  const charges = (await runner.execute<LeaseChargeScheduleRow>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
+  const charges = (await runner.execute<LeaseChargeScheduleRow>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`, "objects"));
   let created = 0;
-  for (const charge of charges.rows) {
+  for (const charge of charges) {
     for (const period of leaseChargeSchedule({ ...charge, leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn, throughOn: horizon, billingDay: lease.billingDay })) {
       // The conflict is expected and benign, never a dropped write: the
       // stream above is deterministic in the committed charges, so an
@@ -51,8 +51,8 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
         values(${orgId},${leaseId},${charge.id},${period.periodStartsOn},${period.periodEndsOn},${period.dueOn},${period.amount},${actorId},${actorId})
         -- An existing charge-period line is already materialized; preserve billed and superseded history.
         on conflict(org_id,charge_id,period_starts_on) do nothing returning id
-      `));
-      created += result.rows.length;
+      `, "objects"));
+      created += result.length;
     }
   }
   if (created === 0) return 0;
@@ -78,11 +78,11 @@ export async function activatePropertyLease(orgId: string, actorId: string, allo
   return db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     await lockLeasePropertyInScope(tx, orgId, leaseId, allowedSubsidiaryIds);
-    const lease = (await tx.execute(sql`select * from property_leases where org_id=${orgId} and id=${leaseId} for update`));
-    const row = lease.rows[0]; if (!row || row.status !== "draft") throw new PropertyManagementError("Draft lease not found");
+    const lease = (await tx.execute(sql`select * from property_leases where org_id=${orgId} and id=${leaseId} for update`, "objects"));
+    const row = lease[0]; if (!row || row.status !== "draft") throw new PropertyManagementError("Draft lease not found");
     if (row.unit_id) {
-      const conflict = (await tx.execute(sql`select 1 from property_leases where org_id=${orgId} and unit_id=${row.unit_id} and id<>${leaseId} and status in ('active','notice')`));
-      if (conflict.rows.length) throw new PropertyManagementError("Unit already has an active lease");
+      const conflict = (await tx.execute(sql`select 1 from property_leases where org_id=${orgId} and unit_id=${row.unit_id} and id<>${leaseId} and status in ('active','notice')`, "objects"));
+      if (conflict.length) throw new PropertyManagementError("Unit already has an active lease");
       await tx.execute(sql`update property_units set status='occupied',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.unit_id}`);
     }
     await tx.execute(sql`update property_leases set status='active',activated_at=now(),activated_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${leaseId} and org_id=${orgId}`);
@@ -98,13 +98,13 @@ export async function terminatePropertyLease(orgId: string, actorId: string, all
   await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
     await lockLeasePropertyInScope(tx, orgId, leaseId, allowedSubsidiaryIds);
-    const lease = (await tx.execute<{ starts_on: string; unit_id: string | null }>(sql`select starts_on,unit_id from property_leases where org_id=${orgId} and id=${leaseId} and status in ('active','notice') for update`));
-    const row = lease.rows[0];
+    const lease = (await tx.execute<{ starts_on: string; unit_id: string | null }>(sql`select starts_on,unit_id from property_leases where org_id=${orgId} and id=${leaseId} and status in ('active','notice') for update`, "objects"));
+    const row = lease[0];
     if (!row) throw new PropertyManagementError("Active lease not found");
     if (effectiveOn < row.starts_on) throw new PropertyManagementError("Termination date cannot precede the lease start");
     const partials = (await tx.execute<{ id: string; period_starts_on: string; period_ends_on: string; amount: string }>(sql`select id,period_starts_on,period_ends_on,amount from lease_schedule_lines
-      where org_id=${orgId} and lease_id=${leaseId} and status='scheduled' and period_starts_on<=${effectiveOn} and period_ends_on>${effectiveOn} for update`));
-    for (const period of partials.rows) {
+      where org_id=${orgId} and lease_id=${leaseId} and status='scheduled' and period_starts_on<=${effectiveOn} and period_ends_on>${effectiveOn} for update`, "objects"));
+    for (const period of partials) {
       const prorated = mulRatio(period.amount, BigInt(inclusiveCalendarDays(period.period_starts_on, effectiveOn)), BigInt(inclusiveCalendarDays(period.period_starts_on, period.period_ends_on)));
       await tx.execute(sql`update lease_schedule_lines set period_ends_on=${effectiveOn},amount=${prorated},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id} and status='scheduled'`);
     }
@@ -124,13 +124,13 @@ export async function addLeaseEscalation(input: { orgId: string; actorId: string
     await assertEnabled(tx, input.orgId);
     await lockLeasePropertyInScope(tx, input.orgId, input.leaseId, input.allowedSubsidiaryIds);
     const duplicateDate = (await tx.execute(sql`select 1 from lease_escalations
-      where org_id=${input.orgId} and lease_id=${input.leaseId} and effective_on=${effectiveOn} limit 1`));
-    if (duplicateDate.rows.length) throw new PropertyManagementError("An escalation already exists for this date");
+      where org_id=${input.orgId} and lease_id=${input.leaseId} and effective_on=${effectiveOn} limit 1`, "objects"));
+    if (duplicateDate.length) throw new PropertyManagementError("An escalation already exists for this date");
     const result = (await tx.execute<{ id: string; method: string; effectiveFrom: string }>(sql`insert into lease_escalations(org_id,lease_id,effective_on,method,value,created_by,updated_by)
       select ${input.orgId},id,${effectiveOn},${input.method},${value},${input.actorId},${input.actorId}
         from property_leases where org_id=${input.orgId} and id=${input.leaseId} and status in ('draft','active','notice')
-      returning id,method,effective_on::text as "effectiveFrom"`));
-    const escalation = result.rows[0];
+      returning id,method,effective_on::text as "effectiveFrom"`, "objects"));
+    const escalation = result[0];
     if (!escalation) throw new PropertyManagementError("Lease not found");
     // A scheduled escalation changes future rent when applied: like every
     // financial-term write here, the row and its audit evidence commit as
@@ -144,8 +144,8 @@ export async function addLeaseEscalation(input: { orgId: string; actorId: string
 export async function applyLeaseEscalation(orgId: string, actorId: string, allowedSubsidiaryIds: ReadonlySet<string> | null, escalationId: string): Promise<{ chargeId: string; newAmount: string }> {
   const applied = await db.transaction(async (tx) => {
     await assertEnabled(tx, orgId);
-    const escalation = (await tx.execute<LeaseEscalationDbRow>(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`));
-    const e = escalation.rows[0]; if (!e || e.status !== "scheduled") throw new PropertyManagementError("Scheduled escalation not found");
+    const escalation = (await tx.execute<LeaseEscalationDbRow>(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`, "objects"));
+    const e = escalation[0]; if (!e || e.status !== "scheduled") throw new PropertyManagementError("Scheduled escalation not found");
     await lockLeasePropertyInScope(tx, orgId, String(e.lease_id), allowedSubsidiaryIds);
     // Escalations compound: each one is computed from the rent in force on its
     // effective date, so they must be applied in effective-date order. An
@@ -155,22 +155,22 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, allow
       select effective_on::text as effective_on,status from lease_escalations
        where org_id=${orgId} and lease_id=${e.lease_id} and id<>${escalationId}
          and ((status='scheduled' and effective_on<${e.effective_on}) or (status='applied' and effective_on>${e.effective_on}))
-       order by effective_on limit 1`)).rows[0];
+       order by effective_on limit 1`, "objects"))[0];
     if (ordering?.status === "scheduled") {
       throw new PropertyManagementError(`Apply the earlier scheduled escalation effective ${ordering.effective_on} first; escalations compound in effective-date order`);
     }
     if (ordering?.status === "applied") {
       throw new PropertyManagementError(`A later escalation effective ${ordering.effective_on} is already applied; escalations compound in effective-date order`);
     }
-    const chargeResult = (await tx.execute<BaseRentChargeRow>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc, id desc limit 1 for update`));
-    const charge = chargeResult.rows[0]; if (!charge) throw new PropertyManagementError("Effective base-rent charge not found");
+    const chargeResult = (await tx.execute<BaseRentChargeRow>(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc, id desc limit 1 for update`, "objects"));
+    const charge = chargeResult[0]; if (!charge) throw new PropertyManagementError("Effective base-rent charge not found");
     if (e.effective_on <= charge.effective_from) throw new PropertyManagementError("Escalation must begin after the current rent charge starts");
     // Stored charges and the scheduled escalation stay. Copying an inventory /
     // assembly / kit item onto a new charge is Inventory configuration.
     if (charge.item_id && !(await inventoryFeatureEnabled(tx, orgId))) {
       const item = (await tx.execute<{ kind: string }>(sql`
-        select kind from items where id = ${charge.item_id} and org_id = ${orgId}`));
-      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        select kind from items where id = ${charge.item_id} and org_id = ${orgId}`, "objects"));
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         throw new PropertyManagementError("Inventory is disabled", 404);
       }
     }
@@ -181,19 +181,19 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, allow
       const equipmentOn = await orgFeatureEnabled(orgId, "equipment", tx as SqlExecutor);
       if (!equipmentOn) {
         const item = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${charge.item_id} and org_id = ${orgId}`));
-        if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
+          select kind from items where id = ${charge.item_id} and org_id = ${orgId}`, "objects"));
+        if (item[0] && item[0].kind === "equipment_charge") {
           throw new PropertyManagementError("Equipment is disabled", 404);
         }
       }
     }
     const alreadyBilled = (await tx.execute(sql`select 1 from lease_schedule_lines where org_id=${orgId} and charge_id=${charge.id}
-      and status in ('invoiced','credited') and period_ends_on>=${e.effective_on} limit 1`));
-    if (alreadyBilled.rows.length) throw new PropertyManagementError("Affected rent is already billed; credit or void it before applying this escalation");
+      and status in ('invoiced','credited') and period_ends_on>=${e.effective_on} limit 1`, "objects"));
+    if (alreadyBilled.length) throw new PropertyManagementError("Affected rent is already billed; credit or void it before applying this escalation");
     const next = escalatedRent(charge.amount, e.method, e.value);
     const scheduled = (await tx.execute<{ id: string; period_starts_on: string; period_ends_on: string; amount: string }>(sql`select id,period_starts_on,period_ends_on,amount from lease_schedule_lines
-      where org_id=${orgId} and charge_id=${charge.id} and status='scheduled' and period_ends_on>=${e.effective_on} for update`));
-    for (const period of scheduled.rows) {
+      where org_id=${orgId} and charge_id=${charge.id} and status='scheduled' and period_ends_on>=${e.effective_on} for update`, "objects"));
+    for (const period of scheduled) {
       if (period.period_starts_on >= e.effective_on) {
         await tx.execute(sql`update lease_schedule_lines set status='cancelled',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id}`);
       } else {
@@ -204,11 +204,11 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, allow
     }
     await tx.execute(sql`update lease_charges set effective_to=(${e.effective_on}::date-interval '1 day')::date,updated_at=now(),updated_by=${actorId} where id=${charge.id} and org_id=${orgId}`);
     const inserted = (await tx.execute<{ id: string }>(sql`insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
-      values(${orgId},${e.lease_id},'base_rent',${charge.description},${next},${charge.frequency},${e.effective_on},${charge.effective_to},${charge.income_account_id},${charge.item_id},${charge.tax_code_id},${actorId},${actorId}) returning id`));
+      values(${orgId},${e.lease_id},'base_rent',${charge.description},${next},${charge.frequency},${e.effective_on},${charge.effective_to},${charge.income_account_id},${charge.item_id},${charge.tax_code_id},${actorId},${actorId}) returning id`, "objects"));
     await tx.execute(sql`update lease_escalations set status='applied',previous_amount=${charge.amount},new_amount=${next},applied_at=now(),applied_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${escalationId} and org_id=${orgId}`);
     await audit(tx, orgId, "lease_escalations", escalationId, "apply", actorId, { previousAmount: charge.amount, newAmount: next, effectiveOn: e.effective_on });
     await generateLeaseSchedule(tx, orgId, actorId, e.lease_id);
-    return { chargeId: inserted.rows[0]!.id, newAmount: next };
+    return { chargeId: inserted[0]!.id, newAmount: next };
   });
   return applied;
 }

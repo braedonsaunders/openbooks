@@ -35,14 +35,14 @@ const allocationCases = [
             const rule = (await db.execute<{ id: string }>(sql`
               insert into allocation_rules (org_id, key, name, mode, is_active)
               values (${org.orgId}, 'fenced-rule', 'Fenced rule', 'period', true)
-              returning id`)).rows[0]!
+              returning id`, 'objects'))[0]!
             await db.execute(sql`
               insert into allocation_rules (org_id, key, name, mode, is_active)
               values (${org.orgId}, 'fenced-retired', 'Fenced retired rule', 'period', false)`)
             const version = (await db.execute<{ id: string }>(sql`
               insert into allocation_rule_versions (org_id, rule_id, version_no, status, effective_from)
               values (${org.orgId}, ${rule.id}, 1, 'draft', '2026-01-01')
-              returning id`)).rows[0]!
+              returning id`, 'objects'))[0]!
             await db.execute(sql`
               insert into allocation_runs (org_id, rule_id, version_id, definition_hash, period_id, book_id, status)
               values (${org.orgId}, ${rule.id}, ${version.id}, 'fenced', ${org.periodId}, ${org.bookId}, 'previewed')`)
@@ -94,18 +94,18 @@ const allocationCases = [
               const rule = (await db.execute<{ id: string }>(sql`
                 insert into allocation_rules (org_id, key, name, mode, is_active)
                 values (${scratch.orgId}, 'report-proof', 'Report proof', 'period', true)
-                returning id`)).rows[0]!
+                returning id`, 'objects'))[0]!
               const version = (await db.execute<{ id: string }>(sql`
                 insert into allocation_rule_versions (org_id, rule_id, version_no, status, effective_from, definition_hash)
                 values (${scratch.orgId}, ${rule.id}, 1, 'published', '2026-01-01', 'proof')
-                returning id`)).rows[0]!
+                returning id`, 'objects'))[0]!
               const run = (await db.execute<{ id: string }>(sql`
                 insert into allocation_runs
                   (org_id, rule_id, version_id, definition_hash, period_id, book_id,
                    status, trigger_kind, source_total, allocated_total, residual, started_at, completed_at)
                 values (${scratch.orgId}, ${rule.id}, ${version.id}, 'proof', ${scratch.periodId}, ${scratch.bookId},
                         'posted', 'manual', '100.0000', '100.0000', '0.0000', now(), now())
-                returning id`)).rows[0]!
+                returning id`, 'objects'))[0]!
               await db.execute(sql`
                 insert into allocation_lineage
                   (org_id, mode, rule_id, version_id, definition_hash, run_id, amount, share, driver_value, driver_total)

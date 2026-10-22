@@ -93,10 +93,8 @@ async function seed(rolePermissions: string[] = []) {
   const seeded = await withBypassContext(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Invite actor", "invite_actor");
-    const roleId = (
-      await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-        values (${org.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`)
-    ).rows[0]!.id;
+    const roleId = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${org.orgId}, 'invitable', 'Invitable', false, ${JSON.stringify(rolePermissions)}::jsonb) returning id`, "objects"))[0]!.id;
     await db.execute(sql`update orgs set env_kind = 'production' where id = ${org.orgId}`);
     return { org, actorId, roleId };
   });
@@ -125,10 +123,8 @@ const tokenFromUrl = (url: string): string =>
   new URL(url, "https://books.example.test").searchParams.get("token")!;
 
 async function liveTokenCount(userId: string): Promise<number> {
-  return withBypassContext(async () => (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
-      where user_id = ${userId} and used_at is null and expires_at > now()`)
-  ).rows[0]!.n);
+  return withBypassContext(async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
+      where user_id = ${userId} and used_at is null and expires_at > now()`, "objects"))[0]!.n);
 }
 
 /** Direct test-body reads/writes run under bypass; the route under test sets its own org scope. */
@@ -293,10 +289,8 @@ test("a refused re-issue never exposes a link, even with no mail transport", asy
       await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId })
     ).json()) as { userId: string; setPasswordUrl: string };
     // A different administrator grants a permission this actor does not hold.
-    const highRoleId = await asBypass(async () => (
-      await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`)
-    ).rows[0]!.id);
+    const highRoleId = await asBypass(async () => (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`, "objects"))[0]!.id);
     await asBypass(() => db.execute(sql`insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
       values (${f.orgId}, ${invited.userId}, ${highRoleId}, ${f.actorId}, ${f.actorId})`));
     // No mail transport here, so a leaked raw link would be a takeover URL.
@@ -323,10 +317,8 @@ test("resend-invite enforces the inviter's role ceiling", async () => {
       await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId })
     ).json()) as { userId: string };
     // A different administrator grants a permission this actor does not hold.
-    const highRoleId = await asBypass(async () => (
-      await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`)
-    ).rows[0]!.id);
+    const highRoleId = await asBypass(async () => (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`, "objects"))[0]!.id);
     await asBypass(() => db.execute(sql`insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
       values (${f.orgId}, ${invited.userId}, ${highRoleId}, ${f.actorId}, ${f.actorId})`));
     const response = await post({ action: "resend-invite", userId: invited.userId });

@@ -72,8 +72,8 @@ test("a subsidiary-restricted channel manager sees and changes only channels of 
       assert.equal(createdOutside.status, 403);
     }
     const stored = await db.execute<{ name: string; subsidiary_id: string }>(sql`
-      select name, subsidiary_id::text from sales_channels where org_id = ${org.orgId} order by name`);
-    assert.deepEqual(stored.rows, [
+      select name, subsidiary_id::text from sales_channels where org_id = ${org.orgId} order by name`, "objects");
+    assert.deepEqual(stored, [
       { name: "Child store", subsidiary_id: childId },
       { name: "Root store", subsidiary_id: org.subsidiaryId },
     ]);

@@ -136,13 +136,13 @@ async function createPayment(request: Request) {
   if (partyId) {
     const party = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
       select id, subsidiary_id as "subsidiaryId" from parties
-       where id = ${partyId} and org_id = ${user.orgId} and is_active`)).rows[0]
+       where id = ${partyId} and org_id = ${user.orgId} and is_active`, 'objects'))[0]
     if (!party) return NextResponse.json({ error: 'party not found in this organization' }, { status: 404 })
     const roleTable = side === 'ap' ? 'vendor_roles' : 'customer_roles'
     const role = (await db.execute<{ id: string }>(sql`
       select party_id as id from ${sql.raw(roleTable)}
-       where party_id = ${partyId} and org_id = ${user.orgId} and is_active`))
-    if (!role.rows[0]) {
+       where party_id = ${partyId} and org_id = ${user.orgId} and is_active`, 'objects'))
+    if (!role[0]) {
       return bad(
         side === 'ap' ? 'payment party must be an active vendor' : 'receipt party must be an active customer',
         'partyId',
@@ -155,7 +155,7 @@ async function createPayment(request: Request) {
   }
 
   if (bankAccountId && !(await db.execute(sql`select id from accounts
-    where org_id = ${user.orgId} and id = ${bankAccountId} and is_active and not is_summary`)).rows[0]) {
+    where org_id = ${user.orgId} and id = ${bankAccountId} and is_active and not is_summary`, 'objects'))[0]) {
     return NextResponse.json({ error: 'payment funding account not found in this organization' }, { status: 404 })
   }
 
@@ -166,18 +166,18 @@ async function createPayment(request: Request) {
   let subsidiaryId: string | null = body.subsidiaryId ?? partySubsidiaryId
   if (!subsidiaryId) {
     const root = (await db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`))
-    subsidiaryId = root.rows[0]?.id ?? null
+      select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`, 'objects'))
+    subsidiaryId = root[0]?.id ?? null
     if (!subsidiaryId) return bad('org has no root subsidiary', undefined, 500)
   }
   const denied = guardSubsidiaryScope(gate, subsidiaryId)
   if (denied) return denied
   const entity = (await db.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${user.orgId} and id = ${subsidiaryId}
-      and is_active and not is_elimination`)).rows[0]
+      and is_active and not is_elimination`, 'objects'))[0]
   if (!entity) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const org = (await db.execute<{ baseCurrency: string }>(sql`
-    select base_currency as "baseCurrency" from orgs where id = ${user.orgId}`)).rows[0]
+    select base_currency as "baseCurrency" from orgs where id = ${user.orgId}`, 'objects'))[0]
   if (!org) return bad('org not found', undefined, 500)
   const currency = body.currency ?? org.baseCurrency
 
@@ -309,8 +309,8 @@ async function createPayment(request: Request) {
            ${JSON.stringify(fundedCustom)}::jsonb, ${total}, '0', ${total}, ${user.id}, ${user.id})
         -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
-        returning id`))
-      if (!inserted.rows[0]) {
+        returning id`, 'objects'))
+      if (!inserted[0]) {
         // Lost insert race or foreign/global UUID collision: the re-read
         // decides — a genuine retry replays, anything else conflicts, all
         // without reading another org's row.

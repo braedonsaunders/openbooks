@@ -36,8 +36,8 @@ function actor(orgId: string, actorId: string) {
 
 async function classCount(orgId: string): Promise<number> {
   const r = await withBypass(() => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from compliance_classes where org_id = ${orgId}`))
-  return r.rows[0]!.n
+    select count(*)::int as n from compliance_classes where org_id = ${orgId}`, 'objects'))
+  return r[0]!.n
 }
 
 test('the waiver-form field is required exactly while enforcement applies', () => {
@@ -126,8 +126,8 @@ test('touching another field on an enforced class keeps the stored waiver form',
     }))
     assert.equal(result.status, 200)
     const stored = await withBypass(() => db.execute<{ t: string | null }>(sql`
-      select default_lien_waiver_type as t from compliance_classes where id = ${String(id)} and org_id = ${orgId}`))
-    assert.equal(stored.rows[0]?.t, 'conditional_progress')
+      select default_lien_waiver_type as t from compliance_classes where id = ${String(id)} and org_id = ${orgId}`, 'objects'))
+    assert.equal(stored[0]?.t, 'conditional_progress')
   } finally {
     await withBypass(() => dropScratchOrg(orgId))
   }

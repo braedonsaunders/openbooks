@@ -24,9 +24,9 @@ import { mulDecimal } from '../money/money.ts'
 /** The org's base (functional) currency — the consolidated presentation currency. */
 export async function presentationBaseCurrency(orgId: string): Promise<string> {
   const r = await db.execute(
-    sql`select base_currency as "baseCurrency" from orgs where id = ${orgId}`,
+    sql`select base_currency as "baseCurrency" from orgs where id = ${orgId}`, 'objects',
   )
-  const base = (r.rows[0] as { baseCurrency?: unknown } | undefined)?.baseCurrency
+  const base = (r[0] as { baseCurrency?: unknown } | undefined)?.baseCurrency
   if (typeof base !== 'string' || !base) {
     throw new Error(`organization ${orgId} has no base currency`)
   }
@@ -73,12 +73,12 @@ export async function flowTranslation(
              and as_of <= ${maxDate}::date
         ) s
        order by s.as_of desc, s.priority asc
-      `)
+      `, 'objects')
       // Direct quotes win ties (same rule as the kernel lookup): keep the
       // first row per date.
       const seen = new Set<string>()
       const timeline: { asOf: string; rate: string }[] = []
-      for (const row of r.rows) {
+      for (const row of r) {
         if (seen.has(row.as_of)) continue
         seen.add(row.as_of)
         timeline.push({ asOf: row.as_of, rate: row.rate })

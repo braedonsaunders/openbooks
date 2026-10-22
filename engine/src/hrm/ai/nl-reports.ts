@@ -254,10 +254,10 @@ export async function saveNlDraft(
     throw new AiRailsError("ai_invalid_input", "ask a question first — an empty question has no report");
   }
   const definition = validateNlDefinition(input.candidate, input.catalog, input.callerPermissions);
-  const rows = (await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     insert into nl_report_drafts (org_id, user_id, question, definition, status)
     values (${orgId}::uuid, ${actorId}::uuid, ${question}, ${JSON.stringify(definition)}::jsonb, 'drafted')
-    returning id::text as id`)).rows;
+    returning id::text as id`, "objects");
   const draft = rows[0];
   if (!draft) {
     throw new AiRailsError(
@@ -299,13 +299,13 @@ export async function listNlDrafts(
   exec: SqlExecutor,
   input: { readonly orgId: string; readonly actorId: string },
 ): Promise<NlDraftRow[]> {
-  const rows = (await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
+  const rows = await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
     select id::text as id, question, definition, status,
            created_at::text as "createdAt"
       from nl_report_drafts
      where org_id = ${input.orgId}::uuid and user_id = ${input.actorId}::uuid
      order by created_at desc, id desc
-     limit 20`)).rows;
+     limit 20`, "objects");
   return rows.map((row) => ({
     id: row.id,
     question: row.question,
@@ -324,13 +324,13 @@ export async function transitionNlDraft(
   exec: SqlExecutor,
   input: { readonly orgId: string; readonly actorId: string; readonly draftId: string; readonly status: "saved" | "discarded" },
 ): Promise<NlDraftRow> {
-  const rows = (await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
+  const rows = await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
     update nl_report_drafts
        set status = ${input.status}
      where org_id = ${input.orgId}::uuid and user_id = ${input.actorId}::uuid
        and id = ${input.draftId}::uuid and status = 'drafted'
     returning id::text as id, question, definition, status,
-              created_at::text as "createdAt"`)).rows;
+              created_at::text as "createdAt"`, "objects");
   const row = rows[0];
   if (!row) {
     throw new AiRailsError(

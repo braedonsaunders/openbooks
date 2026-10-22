@@ -80,16 +80,16 @@ export async function loadExpenseReport(
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = 'expense_report' ${scope}
        and ${expenseOwnerPredicate(access, sql`d.party_id`)}
-  `)
-  if (!result.rows[0]) return null
-  const { __lines: lines, ...doc } = result.rows[0]
+  `, 'objects')
+  if (!result[0]) return null
+  const { __lines: lines, ...doc } = result[0]
   return { doc, lines }
 }
 
 /** The currency new expense reports are kept in: the organization base currency, or null when unset. */
 export async function expenseReportCurrency(orgId: string): Promise<string | null> {
   return (await db.execute<{ base_currency: string | null }>(sql`
-    select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? null
+    select base_currency from orgs where id = ${orgId}`, 'objects'))[0]?.base_currency ?? null
 }
 
 /**
@@ -100,7 +100,7 @@ export async function expenseReportCurrency(orgId: string): Promise<string | nul
  */
 export async function blankExpenseReport(orgId: string, employeeId: string | null = null) {
   const [org, today, employee] = await Promise.all([
-    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`),
+    db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects'),
     businessToday(orgId),
     employeeId
       ? db.execute<{ display_name: string }>(sql`select display_name from parties where id = ${employeeId} and org_id = ${orgId}`)
@@ -120,7 +120,7 @@ export async function blankExpenseReport(orgId: string, employeeId: string | nul
     entry_id: null,
     document_date: today,
     memo: null,
-    currency: org.rows[0]?.base_currency ?? 'CAD',
+    currency: org[0]?.base_currency ?? 'CAD',
     subtotal: '0',
     tax_total: '0',
     total: '0',

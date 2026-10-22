@@ -68,7 +68,7 @@ async function portalCandidates(email: string): Promise<PortalCandidate[]> {
   // A customer is reachable at their party email or any active contact email.
   // Matches in orgs without the portal gate stay silent: the requester
   // learns nothing about which orgs hold their address.
-  const rows = (await db.execute<PortalCandidate>(sql`
+  const rows = await db.execute<PortalCandidate>(sql`
     with candidates as (
       select p.org_id as "orgId", p.id as "partyId"
         from parties p
@@ -87,7 +87,7 @@ async function portalCandidates(email: string): Promise<PortalCandidate[]> {
            ), 'Customer portal') as "portalName"
       from candidates
       join orgs o on o.id = candidates."orgId"
-  `)).rows;
+  `, "objects");
   const enabled: PortalCandidate[] = [];
   for (const row of rows) {
     if (await orgFeatureEnabled(row.orgId, PORTAL_FEATURE)) enabled.push(row);
@@ -155,7 +155,7 @@ async function issuePartyLink(
     select count(*)::text as count from customer_portal_links
      where org_id = ${orgId} and lower(contact_email) = ${email} and purpose = 'magic_link'
        and created_at > now() - interval '1 hour'
-  `)).rows[0]?.count ?? "0";
+  `, "objects"))[0]?.count ?? "0";
   if (Number(recent) >= PORTAL_REQUESTS_PER_HOUR) return null;
   const token = mintPortalToken();
   const inserted = (await runner.execute<{ id: string; expires_at: string }>(sql`
@@ -163,7 +163,7 @@ async function issuePartyLink(
     values (${orgId}, ${partyId}, ${email}, ${portalTokenHash(token)}, 'magic_link',
             now() + ${`${PORTAL_LINK_TTL_MINUTES} minutes`}::interval)
     returning id, expires_at
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw portalRefusal("The portal link could not be created", "invalid_link", 422, "Request a new link");
   await recordPortalEvent(runner, orgId, {
     partyId,
@@ -218,7 +218,7 @@ export async function issuePortalReviewInvite(
     values (${orgId}, ${partyId}, ${email}, ${portalTokenHash(token)}, 'magic_link',
             now() + ${`${PORTAL_REVIEW_INVITE_TTL_DAYS} days`}::interval)
     returning id, expires_at::text as expires_at
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw portalRefusal("The portal link could not be created", "invalid_link", 422, "Send the review again");
   await recordPortalEvent(runner, orgId, {
     partyId,
@@ -263,7 +263,7 @@ export async function consumePortalLink(token: unknown): Promise<ConsumedPortalL
        where token_hash = ${portalTokenHash(token)} and purpose = 'magic_link'
        limit 1
       for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw portalRefusal("This portal link is invalid", "invalid_link", 404, "Request a new link from the portal sign-in");
     }
@@ -286,7 +286,7 @@ export async function consumePortalLink(token: unknown): Promise<ConsumedPortalL
            set consumed_at = now(), updated_at = now()
          where org_id = ${row.org_id} and id = ${row.id} and consumed_at is null
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!consumed) {
         throw portalRefusal("This portal link was already used", "link_consumed", 404, "Request a new link from the portal sign-in");
       }
@@ -304,7 +304,7 @@ export async function consumePortalLink(token: unknown): Promise<ConsumedPortalL
                now() + ${`${PORTAL_SESSION_TTL_HOURS} hours`}::interval
           from customer_portal_links where org_id = ${row.org_id} and id = ${row.id}
         returning id, expires_at::text as expires_at
-      `)).rows[0];
+      `, "objects"))[0];
       if (!session) throw new Error("portal session was not recorded");
       await recordPortalEvent(db, row.org_id, {
         partyId: row.party_id,
@@ -348,7 +348,7 @@ export async function resolvePortalSession(token: unknown): Promise<PortalSessio
         from customer_portal_links
        where token_hash = ${portalTokenHash(token)} and purpose = 'session'
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row || row.consumed_at) return null;
     if (new Date(row.expires_at).getTime() <= Date.now()) return null;
     if (!(await orgFeatureEnabled(row.org_id, PORTAL_FEATURE))) return null;
@@ -365,7 +365,7 @@ export async function revokePortalSession(token: unknown): Promise<void> {
       select org_id, id from customer_portal_links
        where token_hash = ${portalTokenHash(token)} and purpose = 'session'
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) return;
     await withOrgTransaction(row.org_id, async () => {
       await db.execute(sql`
@@ -393,7 +393,7 @@ export async function recordPortalEvent(
     values (${orgId}, ${event.partyId}, ${event.linkId}, ${event.action}, ${event.reasonCode},
             ${JSON.stringify(event.detail)}::jsonb)
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw new Error("portal audit event was not recorded");
   return inserted.id;
 }

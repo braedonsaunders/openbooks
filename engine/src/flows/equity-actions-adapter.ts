@@ -121,14 +121,12 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
   // Adapter parity (documents, leave requests): the gate row scopes every
   // caller to its organization; findCandidateIds keeps the explicit boundary.
   return (
-    (
-      await db.execute<RequestRow>(sql`
+    (await db.execute<RequestRow>(sql`
     select r.org_id, r.subsidiary_id, r.action, r.subject_id, r.subject_label, r.effective_on::text as effective_on,
            r.reason, r.summary, r.status, r.requested_by, s.name as legal_entity
       from equity_action_requests r
       left join subsidiaries s on s.org_id = r.org_id and s.id = r.subsidiary_id
-     where r.id = ${subjectId}`)
-    ).rows[0] ?? null
+     where r.id = ${subjectId}`, "objects"))[0] ?? null
   );
 }
 
@@ -267,12 +265,10 @@ export const equityActionsFlowAdapter: FlowSubjectAdapter =
         throw new Error(
           `findCandidateIds for "${EQUITY_ACTION_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
         );
-      const rows = (
-        await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
       select id::text as id from equity_action_requests
        where org_id = ${orgId} and status = 'pending_approval'
-       order by created_at desc limit ${limit}`)
-      ).rows;
+       order by created_at desc limit ${limit}`, "objects");
       return rows.map((row) => row.id);
     },
   });

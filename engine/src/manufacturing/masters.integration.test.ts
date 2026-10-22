@@ -17,8 +17,8 @@ async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
   await withBypassContext(async () => {
-    const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true}'::jsonb) where id=${org.orgId} returning id`);
-    assert.equal(rows.rows.length, 1);
+    const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true}'::jsonb) where id=${org.orgId} returning id`, "objects");
+    assert.equal(rows.length, 1);
   });
   return { org, actorId };
 }
@@ -90,7 +90,7 @@ const refusalCases: Array<{ name: string; run: (f: Fixture) => Promise<unknown>;
     return run(f.org.orgId, (tx) => archiveRouting(tx, f.org.orgId, f.actorId, String(rt.id)));
   } },
   { name: "transfer needs two active stock locations", code: "transfer_locations_required", run: async (f) => {
-    await withBypassContext(async () => { const rows = await db.execute(sql`update stock_locations set is_active=false where org_id=${f.org.orgId} and id=${f.org.stockLocationId2} returning id`); assert.equal(rows.rows.length, 1); });
+    await withBypassContext(async () => { const rows = await db.execute(sql`update stock_locations set is_active=false where org_id=${f.org.orgId} and id=${f.org.stockLocationId2} returning id`, "objects"); assert.equal(rows.length, 1); });
     return run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, supplyMethod: "transfer" }));
   } },
   { name: "lead time is a non-negative integer", code: "invalid_lead_time", run: (f) => run(f.org.orgId, (tx) => upsertItemPolicy(tx, f.org.orgId, f.actorId, f.org.items.component, { ...basePolicy, leadTimeDays: 1.5 })) },
@@ -159,10 +159,10 @@ test("master commands pin live authority, reject narrower shared policies and pr
       (select jsonb_agg(to_jsonb(o) order by id) from mfg_routing_operations o where org_id=${f.org.orgId}) as operations,
       (select jsonb_agg(to_jsonb(r) order by id) from mfg_work_center_rates r where org_id=${f.org.orgId}) as rates,
       (select jsonb_agg(to_jsonb(p) order by id) from mfg_item_policies p where org_id=${f.org.orgId}) as policies,
-      (select count(*)::text from audit_log where org_id=${f.org.orgId}) as audits`)).rows[0]);
+      (select count(*)::text from audit_log where org_id=${f.org.orgId}) as audits`, "objects"))[0]);
     const before = await state();
     await run(f.org.orgId, async tx=>assert.ok((await tx.execute(sql`update app_roles set permissions='["manufacturing.read"]'::jsonb
-      where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`)).rows.length));
+      where org_id=${f.org.orgId} and id in(select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actorId}) returning id`, "objects")).length));
     const denied = [
       ()=>center(f,"WC-REVOKED"),
       ()=>run(f.org.orgId, tx=>updateWorkCenter(tx,f.org.orgId,f.actorId,String(wc.id),{name:"Denied"})),

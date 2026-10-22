@@ -282,8 +282,8 @@ export async function loadBankingAccount(
              order by r.created_at desc limit 1) as open_reconciliation_id
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
-  `))
-  const account = accountRes.rows[0]
+  `, 'objects'))
+  const account = accountRes[0]
   if (!account) notFound()
   const { money } = await getMoneyFormatter(orgId, account.currency_restriction ?? undefined)
 
@@ -325,7 +325,7 @@ export async function loadBankingAccount(
   const stmtTotal = statementList.total
 
   const [sourceCounts, recons, reconCount, reconStatusCounts] = (await Promise.all([
-    db.execute<SourceCountRow>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`),
+    db.execute<SourceCountRow>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`, 'objects'),
     db.execute<ReconciliationRow>(sql`
       select r.id, r.through_date, r.statement_balance, r.currency, r.status, r.signed_off_at, r.created_at,
              r.evidence_kind, r.evidence_connector
@@ -333,9 +333,9 @@ export async function loadBankingAccount(
        where ${reconWhere}
        order by ${RECON_SORTS[reconParams.sort]} ${reconParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${reconParams.perPage} offset ${(reconParams.page - 1) * reconParams.perPage}
-    `),
-    db.execute<CountRow>(sql`select count(*) as n from reconciliations r where ${reconWhere}`),
-    db.execute<StatusCountRow>(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} and r.org_id = ${orgId} group by r.status`),
+    `, 'objects'),
+    db.execute<CountRow>(sql`select count(*) as n from reconciliations r where ${reconWhere}`, 'objects'),
+    db.execute<StatusCountRow>(sql`select r.status, count(*) as n from reconciliations r where r.account_id = ${accountId} and r.org_id = ${orgId} group by r.status`, 'objects'),
   ]))
 
   // -- statement drawer (?statement=<id>) ------------------------------------
@@ -354,8 +354,8 @@ export async function loadBankingAccount(
         from bank_statements s
         join accounts a on a.id = s.account_id and a.org_id = s.org_id
        where s.id = ${openStatementId} and s.account_id = ${accountId} and s.org_id = ${orgId}
-    `))
-    if (s.rows[0]) {
+    `, 'objects'))
+    if (s[0]) {
       const lineParams = parsePrefixedListParams(sp, 'sl', {
         sort: 'line',
         dir: 'asc',
@@ -372,8 +372,8 @@ export async function loadBankingAccount(
            where ${lineWhere}
            order by ${lineSorts[lineParams.sort]} ${lineParams.dir === 'asc' ? sql`asc` : sql`desc`}
            limit ${lineParams.perPage} offset ${(lineParams.page - 1) * lineParams.perPage}
-        `),
-        db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l where ${lineWhere}`),
+        `, 'objects'),
+        db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l where ${lineWhere}`, 'objects'),
       ]))
       // Balances stay editable until the first match — the engine refuses
       // matched and signed-off-history statements, and the drawer names the
@@ -384,30 +384,30 @@ export async function loadBankingAccount(
             from reconciliation_matches m
             join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
            where l.statement_id = ${openStatementId} and l.org_id = ${orgId}
-        `),
+        `, 'objects'),
         db.execute<{ first_posted: string | null; signed_through: string | null }>(sql`
           select (select min(l.posted_on)::text from bank_statement_lines l
                    where l.statement_id = ${openStatementId} and l.org_id = ${orgId}) as first_posted,
                  (select max(r.through_date)::text from reconciliations r
                    where r.org_id = ${orgId} and r.account_id = ${accountId} and r.status = 'signed_off') as signed_through
-        `),
+        `, 'objects'),
       ]))
-      const matchedLineCount = Number(matchedLines.rows[0]?.n ?? 0)
-      const signedThrough = coverage.rows[0]?.signed_through ?? null
-      const firstPosted = coverage.rows[0]?.first_posted ?? null
+      const matchedLineCount = Number(matchedLines[0]?.n ?? 0)
+      const signedThrough = coverage[0]?.signed_through ?? null
+      const firstPosted = coverage[0]?.first_posted ?? null
       const canEditBalances =
         matchedLineCount === 0 && !(signedThrough && firstPosted && firstPosted <= signedThrough)
       drawer = {
         basePath,
         currentParams: sp,
         statement: {
-          id: s.rows[0].id,
-          source: statementSourceLabel(s.rows[0].source),
-          currency: s.rows[0].currency,
-          statement_date: s.rows[0].statement_date,
-          opening_balance: s.rows[0].opening_balance,
-          closing_balance: s.rows[0].closing_balance,
-          importedAtLabel: formatImportTimestamp(s.rows[0].imported_at),
+          id: s[0].id,
+          source: statementSourceLabel(s[0].source),
+          currency: s[0].currency,
+          statement_date: s[0].statement_date,
+          opening_balance: s[0].opening_balance,
+          closing_balance: s[0].closing_balance,
+          importedAtLabel: formatImportTimestamp(s[0].imported_at),
         },
         canEditBalances,
         balancesBlockedReason:
@@ -416,8 +416,8 @@ export async function loadBankingAccount(
             : signedThrough && firstPosted && firstPosted <= signedThrough
               ? t('drawer.balancesBlockedSignedOff', { date: signedThrough })
               : null,
-        lines: lines.rows,
-        lineTotal: Number(lineCount.rows[0]?.n ?? 0),
+        lines,
+        lineTotal: Number(lineCount[0]?.n ?? 0),
         page: lineParams.page,
         perPage: lineParams.perPage,
         sort: lineParams.sort,
@@ -431,7 +431,7 @@ export async function loadBankingAccount(
   // product copy stays vendor-neutral. One query for every distinct
   // connector on the page keeps the row mapping synchronous below.
   const evidenceConnectors = [...new Set(
-    recons.rows.map((r) => r.evidence_connector).filter((c): c is string => c !== null),
+    recons.map((r) => r.evidence_connector).filter((c): c is string => c !== null),
   )]
   const connectorNames = new Map<string, string>()
   if (evidenceConnectors.length > 0) {
@@ -440,16 +440,16 @@ export async function loadBankingAccount(
         from connections c
        where c.org_id = ${orgId} and c.source in (${sql.join(evidenceConnectors.map((c) => sql`${c}`), sql`, `)})
        order by c.source, c.mirror_enabled desc, c.created_at
-    `)
-    for (const n of names.rows) connectorNames.set(n.source, n.display_name)
+    `, 'objects')
+    for (const n of names) connectorNames.set(n.source, n.display_name)
   }
   const connectorLabel = (connector: string | null) =>
     (connector && connectorNames.get(connector)) || t('sourceSystem.other')
   const evidenceLabel = (kind: string, connector: string | null) =>
     kind === 'source' ? t('evidenceKind.sourceFrom', { connector: connectorLabel(connector) }) : t('evidenceKind.statement')
 
-  const sourceOptions = sourceCounts.rows.map((r) => ({ value: r.source, label: statementSourceLabel(r.source), count: Number(r.n) }))
-  const reconStatusOptions = reconStatusCounts.rows.map((r) => ({
+  const sourceOptions = sourceCounts.map((r) => ({ value: r.source, label: statementSourceLabel(r.source), count: Number(r.n) }))
+  const reconStatusOptions = reconStatusCounts.map((r) => ({
     value: r.status,
     label: reconStatusLabel(r.status),
     count: Number(r.n),
@@ -467,14 +467,14 @@ export async function loadBankingAccount(
   // status, reusing the workspace reader so the two can never disagree.
   const staleness = await reconciliationStalenessSummaries(
     accountId,
-    recons.rows.map((r) => r.id),
+    recons.map((r) => r.id),
     { orgId, userId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
   )
 
   // The native page shows the empty state only when the list is truly empty —
   // a filter that matches nothing renders the table with zero body rows.
   const stmtIsEmpty = stmtTotal === 0 && !stmtParams.q && !source
-  const reconTotal = Number(reconCount.rows[0]?.n ?? 0)
+  const reconTotal = Number(reconCount[0]?.n ?? 0)
   const reconIsEmpty = reconTotal === 0 && !reconParams.q && !reconStatus
 
   return {
@@ -571,7 +571,7 @@ export async function loadBankingAccount(
     columnEvidence: t('account.columns.evidence'),
     columnStarted: t('account.columns.started'),
     columnSignedOff: t('account.columns.signedOff'),
-    reconRows: recons.rows.map((r) => ({
+    reconRows: recons.map((r) => ({
       id: r.id,
       throughDate: r.through_date,
       statementBalance: money(r.statement_balance, { currency: r.currency }),

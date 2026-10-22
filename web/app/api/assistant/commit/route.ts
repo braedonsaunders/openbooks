@@ -129,7 +129,7 @@ export const POST = defineRoute({
          and not is_elimination
        order by created_at
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!found) throw new Error("org has no active root subsidiary");
     subsidiary = found;
   } else {
@@ -141,7 +141,7 @@ export const POST = defineRoute({
          and is_active
          and not is_elimination
          and id = any(${`{${ids.join(',')}}`}::uuid[])
-    `)).rows;
+    `, "objects"));
     if (allowed.length === 0) {
       return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
     }
@@ -182,7 +182,7 @@ export const POST = defineRoute({
              and id = any(${`{${accountIds.join(",")}}`}::uuid[])
            order by id
            for share
-        `)).rows;
+        `, "objects"));
         if (
           lockedAccounts.length !== accountIds.length
           || lockedAccounts.some((account) => !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, account.subsidiary_id, { orgWideNull: true }))
@@ -204,8 +204,8 @@ export const POST = defineRoute({
             ${subsidiary.base_currency}, ${p.memo}, ${totalDebits}, '0', ${totalDebits}, ${user.id}
           )
           returning id, document_number
-        `));
-        const doc = inserted.rows[0];
+        `, "objects"));
+        const doc = inserted[0];
         if (!doc) throw new Error("journal draft could not be created");
 
         for (let i = 0; i < lines.length; i++) {

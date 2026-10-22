@@ -55,11 +55,11 @@ test('a reason code created through the setup writer persists and lists', { skip
       requiresComment: false,
     }))
     assert.equal(created.status, 200, `the write is accepted, not refused: ${JSON.stringify(created.body)}`)
-    const rows = (await withBypass(() => db.execute<{
+    const rows = await withBypass(() => db.execute<{
       action: string; reason_code: string; label: string; requires_comment: boolean; is_active: boolean
     }>(sql`
       select action, reason_code, label, requires_comment, is_active
-        from hrm_action_reasons where org_id = ${orgId}`))).rows
+        from hrm_action_reasons where org_id = ${orgId}`, 'objects'))
     assert.equal(rows.length, 1, 'the code persists')
     assert.deepEqual(
       rows[0],

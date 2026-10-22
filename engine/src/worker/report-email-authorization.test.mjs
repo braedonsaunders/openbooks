@@ -16,7 +16,7 @@ const sources = {
       ? { action: 'complete', providerMessageId: 'prior-acceptance' } : { action: 'send' };
     export async function sendVia() { globalThis.__reportEmailTest.sent++; return { kind: 'sent', providerMessageId: 'new' }; }
   `,
-  '../platform/db.ts': `export const db = { execute: async () => ({rows:[{run_id:'run',definition_id:'definition'}]}) };
+  '../platform/db.ts': `export const db = { execute: async (_query, mode) => Promise.resolve({rows:[{run_id:'run',definition_id:'definition'}]}).then((result) => (mode === 'objects' ? result.rows : result)) };
     export const withOrgContext = (_org, action) => action();`,
   '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
   '../delivery/email-config.ts': `

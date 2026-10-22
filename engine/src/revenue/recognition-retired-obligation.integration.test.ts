@@ -42,11 +42,9 @@ async function fixture(fn: (f: Fixture) => Promise<void>) {
     await db.execute(
       sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
     );
-    const calendar = (
-      await db.execute<{ id: string }>(
-        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
-      )
-    ).rows[0]!.id;
+    const calendar = (await db.execute<{ id: string }>(
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
+      ))[0]!.id;
     for (const [month, last] of [
       ["08", "31"],
       ["09", "30"],
@@ -105,11 +103,9 @@ async function fixture(fn: (f: Fixture) => Promise<void>) {
 }
 
 async function eventCount(f: Fixture, obligationId: string) {
-  const rows = (
-    await db.execute<{ id: string }>(
-      sql`select id from recognition_events where org_id=${f.org.orgId} and obligation_id=${obligationId}`,
-    )
-  ).rows;
+  const rows = await db.execute<{ id: string }>(
+      sql`select id from recognition_events where org_id=${f.org.orgId} and obligation_id=${obligationId}`, "objects",
+    );
   return rows.length;
 }
 
@@ -122,11 +118,9 @@ test(
       // milestone promise retires it: satisfied, schedule closed.
       const { changeId } = await proposeRevenueModification(
         f.org.orgId,
-        (
-          await db.execute<{ id: string }>(
-            sql`select contract_id as id from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`,
-          )
-        ).rows[0]!.id,
+        (await db.execute<{ id: string }>(
+            sql`select contract_id as id from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`, "objects",
+          ))[0]!.id,
         f.actors.submitterId,
         {
           effectiveOn: "2026-08-01",
@@ -160,11 +154,9 @@ test(
         },
       );
       await submitFinancialChange(f.org.orgId, changeId, f.actors.submitterId);
-      const gate = (
-        await db.execute<{ id: string }>(
-          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${changeId} and status='pending'`,
-        )
-      ).rows[0];
+      const gate = (await db.execute<{ id: string }>(
+          sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${changeId} and status='pending'`, "objects",
+        ))[0];
       assert.ok(gate);
       await decideGate({
         gateId: gate.id,
@@ -176,11 +168,9 @@ test(
         changeId,
         f.actors.submitterId,
       );
-      const status = (
-        await db.execute<{ status: string }>(
-          sql`select status from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`,
-        )
-      ).rows[0]!.status;
+      const status = (await db.execute<{ status: string }>(
+          sql`select status from performance_obligations where org_id=${f.org.orgId} and id=${f.obligationId}`, "objects",
+        ))[0]!.status;
       assert.equal(status, "satisfied");
 
       await assert.rejects(

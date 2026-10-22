@@ -246,10 +246,10 @@ test(
           insert into accounts (id, org_id, number, name, type, subsidiary_id)
           values (${randomUUID()}, ${org.orgId}, ${number}, ${`Scoped ${number}`}, 'asset_other', ${subsidiaryId})
           returning id
-        `)));
-      const accountA = (await seed('9101', org.subsidiaryId)).rows[0]!.id as string;
-      const accountB = (await seed('9102', entityB)).rows[0]!.id as string;
-      const sharedId = (await seed('9103', null)).rows[0]!.id as string;
+        `, "objects")));
+      const accountA = (await seed('9101', org.subsidiaryId))[0]!.id as string;
+      const accountB = (await seed('9102', entityB))[0]!.id as string;
+      const sharedId = (await seed('9103', null))[0]!.id as string;
       const scoped = (subsidiaryId: string) => {
         routeState.authz = {
           user: { roles: [], orgId: org.orgId, id: adminId },
@@ -293,8 +293,8 @@ test(
       assert.deepEqual(await hiddenParentPatch.json(), { error: 'not_found' });
       const stored = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from accounts where org_id = ${org.orgId} and name in ('B cash', 'Shared cash')
-      `);
-      assert.equal(stored.rows[0]?.n ?? -1, 0, 'refused creates store nothing');
+      `, "objects");
+      assert.equal(stored[0]?.n ?? -1, 0, 'refused creates store nothing');
       // PATCH: B's account is unreachable, A cannot move to B, and the shared
       // chart refuses a restricted write.
       assert.equal((await PATCH(patchRequest({ name: 'B renamed' }), { params: Promise.resolve({ id: accountB }) })).status, 404);

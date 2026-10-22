@@ -181,8 +181,8 @@ export async function frRecapRows(orgId: string, taxYear: number): Promise<FrRec
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'FR'
      group by s.employee_party_id, p.display_name, to_char(s.pay_date, 'YYYY-MM'), s.filing_account_id
      order by p.display_name, to_char(s.pay_date, 'YYYY-MM')
-   `));
-  return rows.rows.map((row) => {
+   `, "objects"));
+  return rows.map((row) => {
     const vieil = num(row.vieil_sal);
     const csg = num(row.csg);
     const crds = num(row.crds);

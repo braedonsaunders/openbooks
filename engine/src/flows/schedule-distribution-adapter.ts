@@ -48,8 +48,7 @@ export const scheduleDistributionsFlowAdapter = defineTableSubjectAdapter({
       throw new Error(
         'Schedule distribution requires a native tenant context.',
       );
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         id: string;
         boardId: string;
         boardCode: string;
@@ -62,9 +61,8 @@ export const scheduleDistributionsFlowAdapter = defineTableSubjectAdapter({
         createdBy: string;
         recipientCount: number;
       }>(
-        sql`select d.id,d.board_id as "boardId",b.code as "boardCode",d.audience->>'visibility' as visibility,b.name as "boardName",d.from_date::text as "from",d.through_date::text as "through",d.version,d.status,d.created_by as "createdBy",(select count(distinct party_id)::int from schedule_distribution_recipients r where r.org_id=d.org_id and r.distribution_id=d.id) as "recipientCount" from schedule_distributions d join schedule_boards b on b.org_id=d.org_id and b.id=d.board_id where d.org_id=${orgId} and d.id=${id}`,
-      )
-    ).rows[0];
+        sql`select d.id,d.board_id as "boardId",b.code as "boardCode",d.audience->>'visibility' as visibility,b.name as "boardName",d.from_date::text as "from",d.through_date::text as "through",d.version,d.status,d.created_by as "createdBy",(select count(distinct party_id)::int from schedule_distribution_recipients r where r.org_id=d.org_id and r.distribution_id=d.id) as "recipientCount" from schedule_distributions d join schedule_boards b on b.org_id=d.org_id and b.id=d.board_id where d.org_id=${orgId} and d.id=${id}`, 'objects',
+      ))[0];
     return row
       ? {
           values: {
@@ -88,11 +86,9 @@ export const scheduleDistributionsFlowAdapter = defineTableSubjectAdapter({
   deepLink: (id) => `/scheduling?distribution=${encodeURIComponent(id)}`,
   async getStatus(id) {
     return (
-      (
-        await db.execute<{ status: string }>(
-          sql`select status from schedule_distributions where id=${id}`,
-        )
-      ).rows[0]?.status ?? null
+      (await db.execute<{ status: string }>(
+          sql`select status from schedule_distributions where id=${id}`, 'objects',
+        ))[0]?.status ?? null
     );
   },
   async changeStatus() {

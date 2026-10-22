@@ -146,7 +146,7 @@ export async function recordForecast(input: {
       values (${input.orgId}, ${task.projectId}, ${task.id}, ${input.asOfDate}, ${input.method},
               ${costToComplete}, ${hoursToComplete}, ${note}, ${input.actorId})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) throw new Error("forecast insert returned no row");
     const after = {
       projectId: task.projectId,
@@ -168,7 +168,7 @@ export async function recordForecast(input: {
 }
 
 async function readForecasts(orgId: string, filter: ReturnType<typeof sql>): Promise<ProjectForecast[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; task_id: string; as_of_date: string; method: ForecastMethod; cost_to_complete: string;
     hours_to_complete: string | null; note: string | null; created_at: string; created_by_name: string | null;
   }>(sql`
@@ -179,7 +179,7 @@ async function readForecasts(orgId: string, filter: ReturnType<typeof sql>): Pro
       left join users u on u.id = f.created_by
      where f.org_id = ${orgId} ${filter}
      order by f.as_of_date desc, f.created_at desc, f.id desc
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: row.id,
     taskId: row.task_id,

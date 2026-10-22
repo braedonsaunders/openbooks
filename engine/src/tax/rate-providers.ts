@@ -104,8 +104,8 @@ export async function readTaxRateProviderConfig(
   const r = (await runner.execute<TaxRateProviderConfigRow>(sql`
     select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} limit 1
     ${forShare ? sql`for share` : sql``}
-  `));
-  return r.rows[0] ?? null;
+  `, "objects"));
+  return r[0] ?? null;
 }
 
 /**
@@ -227,12 +227,10 @@ export async function resolveEntityTaxAddress(
 ): Promise<EntityTaxAddress> {
   if (subsidiaryId) {
     uuidOrThrow(subsidiaryId, "subsidiary");
-    const row = (
-      await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
+    const row = (await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
         select name, legal_name as "legalName", country from subsidiaries
          where org_id = ${orgId} and id = ${subsidiaryId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!row) {
       throw new TaxRateProviderError(
         "the receiving entity has no tax address — set it in Setup → Subsidiaries " +
@@ -246,11 +244,9 @@ export async function resolveEntityTaxAddress(
     }
     return { address: { country: row.country }, entityName: row.legalName ?? row.name };
   }
-  const org = (
-    await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
+  const org = (await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
       select name, legal_name as "legalName", country from orgs where id = ${orgId}
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!org || !org.country?.trim()) {
     throw new TaxRateProviderError("the organization has no tax address — set its country before quoting provider tax");
   }
@@ -274,8 +270,7 @@ export async function resolveCounterpartyTaxAddress(
     );
   }
   uuidOrThrow(partyId, "party");
-  const row = (
-    await runner.execute<{
+  const row = (await runner.execute<{
       line1: string | null;
       city: string | null;
       region: string | null;
@@ -289,14 +284,11 @@ export async function resolveCounterpartyTaxAddress(
        where a.org_id = ${orgId} and a.party_id = ${partyId}
        order by a.is_default_shipping desc, a.is_default_billing desc, a.id asc
        limit 1
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
-    const party = (
-      await runner.execute<{ displayName: string }>(sql`
+    const party = (await runner.execute<{ displayName: string }>(sql`
         select display_name as "displayName" from parties where org_id = ${orgId} and id = ${partyId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     throw new TaxRateProviderError(
       `the ${counterpartyLabel} "${party?.displayName ?? partyId}" has no tax address — add an address on the party record before quoting provider tax`,
     );
@@ -356,11 +348,9 @@ export async function validateJurisdictionTaxCodes(
         `provider jurisdiction "${jurisdiction}" is mapped to "${codeId}", which is not a tax code id`,
       );
     }
-    const row = (
-      await runner.execute<{ id: string; code: string; isActive: boolean }>(sql`
+    const row = (await runner.execute<{ id: string; code: string; isActive: boolean }>(sql`
         select id, code, is_active as "isActive" from tax_codes where org_id = ${orgId} and id = ${codeId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!row) {
       throw new TaxRateProviderError(
         `provider jurisdiction "${jurisdiction}" is mapped to a tax code that does not exist in this organization`,
@@ -495,8 +485,8 @@ export async function saveTaxRateProviderConfig(
     // back together.
     const locked = (await db.execute<TaxRateProviderConfigRow>(sql`
       select ${CONFIG_COLS} from tax_rate_provider_configs where org_id = ${orgId} for update
-    `));
-    const existing = locked.rows[0] ?? null;
+    `, "objects"));
+    const existing = locked[0] ?? null;
 
     if (options.expectedUpdatedAt !== undefined) {
       const expected = options.expectedUpdatedAt ?? null;
@@ -593,10 +583,10 @@ export async function saveTaxRateProviderConfig(
          where org_id = ${orgId}
         returning id,
                   to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
-      `));
-      if (!updated.rows[0]) throw new TaxRateProviderError("tax provider config row vanished while saving");
+      `, "objects"));
+      if (!updated[0]) throw new TaxRateProviderError("tax provider config row vanished while saving");
       configId = existing.id;
-      afterRevision = updated.rows[0].updatedAt;
+      afterRevision = updated[0].updatedAt;
     } else {
       const inserted = (await db.execute<{ id: string; updatedAt: string }>(sql`
         insert into tax_rate_provider_configs
@@ -605,9 +595,9 @@ export async function saveTaxRateProviderConfig(
                 ${JSON.stringify(settings)}::jsonb, ${sealedSecrets}, ${input.preferProvider ?? true},
                 ${actorId}, ${actorId})
         returning id, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
-      `));
-      configId = inserted.rows[0]!.id;
-      afterRevision = inserted.rows[0]!.updatedAt;
+      `, "objects"));
+      configId = inserted[0]!.id;
+      afterRevision = inserted[0]!.updatedAt;
     }
 
     const after: TaxProviderConfigAuditState = {
@@ -1433,8 +1423,7 @@ async function providerTaxCodeFields(
   runner: Pick<typeof db, "execute">,
   forShare = false,
 ): Promise<ProviderTaxCodeFields> {
-  const row = (
-    await runner.execute<{
+  const row = (await runner.execute<{
       id: string;
       code: string;
       calculationType: string;
@@ -1451,8 +1440,7 @@ async function providerTaxCodeFields(
              withholding_account_id as "withholdingAccountId", is_active as "isActive"
         from tax_codes where org_id = ${orgId} and id = ${codeId}
         ${forShare ? sql`for share` : sql``}
-      `)
-  ).rows[0];
+      `, "objects"))[0];
   if (!row) {
     throw new TaxRateProviderError(
       `provider jurisdiction "${jurisdiction}" is mapped to a tax code that does not exist in this organization`,
@@ -1753,8 +1741,8 @@ export async function readTaxQuoteForDocumentLine(
      where org_id = ${orgId} and document_line_id = ${documentLineId}
      order by created_at desc, id desc
      limit 1
-  `);
-  const row = result.rows[0];
+  `, "objects");
+  const row = result[0];
   if (!row) return null;
   return {
     id: row.id,
@@ -1809,8 +1797,8 @@ export async function persistTaxQuote(
             ${result.externalRef}, ${result.raw ? JSON.stringify(result.raw) : null}::jsonb,
             ${req.documentLineId ?? null}, ${actorId}, ${actorId})
     returning id
-  `);
-  const id = inserted.rows[0]?.id;
+  `, "objects");
+  const id = inserted[0]?.id;
   if (!id) throw new TaxRateProviderError("provider tax evidence insert returned no id");
   return id;
 }

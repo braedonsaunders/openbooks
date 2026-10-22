@@ -148,7 +148,8 @@ const mockSources = new Map<string, string>([
       function makeTx() {
         let lockAcquired = false
         return {
-          async execute(query) {
+          async execute(query, mode) {
+            const inMode = (result) => (mode === 'objects' ? result.rows : result)
             const text = sqlText(query)
             if (text.includes('pg_advisory_xact_lock')) {
               if (state.lockHeld) await new Promise((resolve) => state.lockWaiters.push(resolve))
@@ -156,21 +157,22 @@ const mockSources = new Map<string, string>([
               lockAcquired = true
             }
             if (text.includes('from connections')) {
-              return { rows: state.versionMatch === false ? [] : [{ one: 1 }] }
+              return inMode({ rows: state.versionMatch === false ? [] : [{ one: 1 }] })
             }
             if (text.includes('from sync_runs')) {
-              return { rows: state.running ? [{ one: 1 }] : [] }
+              return inMode({ rows: state.running ? [{ one: 1 }] : [] })
             }
-            return { rows: [] }
+            return inMode({ rows: [] })
           },
           ownsLock() { return lockAcquired },
         }
       }
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           if (text.includes('from connections')) {
-            return {
+            return inMode({
               rows: [{
                 id: '00000000-0000-4000-8000-000000000001',
                 orgId: 'org-1',
@@ -180,9 +182,9 @@ const mockSources = new Map<string, string>([
                 secrets: null,
                 updatedAt: 't0',
               }],
-            }
+            })
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
         async transaction(callback) {
           const tx = makeTx()

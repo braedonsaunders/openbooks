@@ -21,7 +21,7 @@ test("createPayApplication refuses by name while Projects is disabled and writes
         error instanceof ConstructionBillingError && error.message === "Projects feature is disabled",
     );
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_applications
-      where org_id=${org.orgId}`)).rows[0]!.n;
+      where org_id=${org.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "a refused application must leave no pay_applications row");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -56,7 +56,7 @@ test("createPayApplication blocked on the fence loses to a committed Projects di
         error instanceof ConstructionBillingError && error.message === "Projects feature is disabled",
     );
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_applications
-      where org_id=${org.orgId}`)).rows[0]!.n;
+      where org_id=${org.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "the losing creator must leave no pay_applications row");
   } finally {
     await writer.query("rollback").catch(() => {});

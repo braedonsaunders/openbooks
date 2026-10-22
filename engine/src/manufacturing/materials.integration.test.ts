@@ -30,13 +30,13 @@ async function setup(): Promise<Fixture> {
     const wipId = randomUUID(), departmentId = randomUUID();
     await withBypassContext(async () => {
       const department = await db.execute<{ id: string }>(sql`insert into departments (id, org_id, name, subsidiary_id)
-        values (${departmentId}, ${org.orgId}, 'Assembly', ${org.subsidiaryId}) returning id`);
-      assert.equal(department.rows.length, 1, "assembly department fixture must be created before work-order release");
+        values (${departmentId}, ${org.orgId}, 'Assembly', ${org.subsidiaryId}) returning id`, "objects");
+      assert.equal(department.length, 1, "assembly department fixture must be created before work-order release");
       const laborRate = await db.execute<{ id: string }>(sql`insert into labor_cost_rates
         (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
         values (${org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${actorId}, ${actorId})
-        returning id`);
-      assert.equal(laborRate.rows.length, 1, "assembly labor-cost rate fixture must cover work-order release");
+        returning id`, "objects");
+      assert.equal(laborRate.length, 1, "assembly labor-cost rate fixture must cover work-order release");
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId} returning id`);
       await db.execute(sql`insert into accounts (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
         values (${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`);
@@ -85,8 +85,8 @@ async function prepare(f: Fixture, input: {
   return withBypassContext(async () => ({
     id: draft.id,
     number: draft.number,
-    materialId: (await db.execute<{ id: string }>(sql`select id from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!.id,
-    operationId: (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!.id,
+    materialId: (await db.execute<{ id: string }>(sql`select id from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${draft.id}`, "objects"))[0]!.id,
+    operationId: (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`, "objects"))[0]!.id,
   }));
 }
 
@@ -108,18 +108,18 @@ async function withVancouverDate(f: Fixture, work: () => Promise<void>) {
         (select 1 from accounting_periods where org_id=${f.org.orgId} and date '2026-10-31' between starts_on and ends_on and not is_adjustment) returning id)
     select (select count(*)::int from zone) as zone_count,
       (select count(*)::int from added)+(select count(*)::int from accounting_periods where org_id=${f.org.orgId}
-        and date '2026-10-31' between starts_on and ends_on and not is_adjustment) as period_count`));
-  assert.deepEqual(result.rows, [{ zone_count: 1, period_count: 1 }]);
+        and date '2026-10-31' between starts_on and ends_on and not is_adjustment) as period_count`, "objects"));
+  assert.deepEqual(result, [{ zone_count: 1, period_count: 1 }]);
   await withSimClock("2026-10-31T23:30:00-07:00", work);
 }
 async function orderPostingDate(f: Fixture, number: string) {
-  return withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text as date from journal_entries where org_id=${f.org.orgId} and origin='manufacturing' and custom->>'work_order_number'=${number} order by id desc limit 1`)).rows[0]?.date);
+  return withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text as date from journal_entries where org_id=${f.org.orgId} and origin='manufacturing' and custom->>'work_order_number'=${number} order by id desc limit 1`, "objects"))[0]?.date);
 }
 async function issue(f: Fixture, orderId: string, materialId: string, quantity = "1", lotId?: string | null, serialId?: string | null) {
   return run(f.org.orgId, (tx) => issueMaterials(tx, f.org.orgId, f.actorId, orderId, [{ materialId, quantity, lotId, serialId }]));
 }
 async function componentLabel(f: Fixture) {
-  return withBypassContext(async () => (await db.execute<{ label: string }>(sql`select coalesce(nullif(trim(code),''),name) as label from items where org_id=${f.org.orgId} and id=${f.org.items.component}`)).rows[0]!.label);
+  return withBypassContext(async () => (await db.execute<{ label: string }>(sql`select coalesce(nullif(trim(code),''),name) as label from items where org_id=${f.org.orgId} and id=${f.org.items.component}`, "objects"))[0]!.label);
 }
 async function refuses(work: Promise<unknown>, code: string, text: string, remedy?: string) {
   await assert.rejects(work, (error: unknown) => error instanceof ManufacturingError && error.code === code
@@ -132,9 +132,9 @@ async function withSandboxClone(f: Fixture, masked: boolean, work: (orgId: strin
   try {
     const clone = await withBypassContext(() => createSandbox({ productionOrgId: f.org.orgId, name, tier: masked ? "masked" : "full", masked, createdBy: f.actorId }));
     const state = await withBypassContext(() => db.execute<{ status: string }>(sql`
-      select status from sandboxes where id=${clone.sandboxId} and org_id=${clone.sandboxOrgId}`));
-    assert.equal(state.rows[0]?.status, "ready", "only a preserved, validated clone may run the scenario");
-    const actor=(await withBypassContext(()=>db.execute<{id:string}>(sql`select ob_rebase(${f.actorId}::uuid,sandbox_seed) as id from orgs where id=${clone.sandboxOrgId}`))).rows;
+      select status from sandboxes where id=${clone.sandboxId} and org_id=${clone.sandboxOrgId}`, "objects"));
+    assert.equal(state[0]?.status, "ready", "only a preserved, validated clone may run the scenario");
+    const actor=await withBypassContext(()=>db.execute<{id:string}>(sql`select ob_rebase(${f.actorId}::uuid,sandbox_seed) as id from orgs where id=${clone.sandboxOrgId}`, "objects"));
     assert.equal(actor.length,1);
     await work(clone.sandboxOrgId,actor[0]!.id);
   } catch (error) {
@@ -143,8 +143,8 @@ async function withSandboxClone(f: Fixture, masked: boolean, work: (orgId: strin
   } finally {
     try {
       await withBypassContext(async () => {
-        const shells = (await db.execute<{ id: string }>(sql`
-          select id from sandboxes where production_org_id=${f.org.orgId} and name=${name}`)).rows;
+        const shells = await db.execute<{ id: string }>(sql`
+          select id from sandboxes where production_org_id=${f.org.orgId} and name=${name}`, "objects");
         for (const shell of shells) await deleteSandbox(shell.id, { actorId: f.actorId });
       });
     } catch (cleanupError) {
@@ -159,7 +159,7 @@ const cases: Case[] = [
     const order = await prepare(f); await stock(f, "4", "2");
     await withVancouverDate(f, async () => {
       const posted = await issue(f, order.id, order.materialId);
-      const date = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text date from journal_entries where org_id=${f.org.orgId} and id=${posted.entryId}`)).rows[0]?.date);
+      const date = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text date from journal_entries where org_id=${f.org.orgId} and id=${posted.entryId}`, "objects"))[0]?.date);
       assert.equal(date, "2026-10-31");
     });
   } },
@@ -202,13 +202,13 @@ const cases: Case[] = [
       const copied = await withBypassContext(() => db.execute<{ tracking: string; quantity: string }>(sql`
         select profile.tracking,movement.quantity::text as quantity from inventory_movements movement
         join item_inventory_profiles profile on profile.org_id=movement.org_id and profile.item_id=movement.item_id
-        where movement.org_id=${orgId} and movement.kind='receipt'`));
-      assert.equal(copied.rows.length, 1, "the clone must preserve the valued receipt and its profile");
-      assert.equal(copied.rows[0]!.tracking, "none");
-      assert.equal(copied.rows[0]!.quantity, "5.0000");
-      const clone = await withBypassContext(async () => (await db.execute<{ id: string; operation_id: string }>(sql`select wo.id,operation.id as operation_id from mfg_work_orders wo join mfg_wo_operations operation on operation.org_id=wo.org_id and operation.work_order_id=wo.id where wo.org_id=${orgId} and wo.number=${order.number}`)).rows[0]!);
+        where movement.org_id=${orgId} and movement.kind='receipt'`, "objects"));
+      assert.equal(copied.length, 1, "the clone must preserve the valued receipt and its profile");
+      assert.equal(copied[0]!.tracking, "none");
+      assert.equal(copied[0]!.quantity, "5.0000");
+      const clone = await withBypassContext(async () => (await db.execute<{ id: string; operation_id: string }>(sql`select wo.id,operation.id as operation_id from mfg_work_orders wo join mfg_wo_operations operation on operation.org_id=wo.org_id and operation.work_order_id=wo.id where wo.org_id=${orgId} and wo.number=${order.number}`, "objects"))[0]!);
       await run(orgId, (tx) => startWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id));
-      assert.equal((await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${orgId} and kind='assembly_consume'`))).rows[0]?.quantity, "-4.4000");
+      assert.equal((await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${orgId} and kind='assembly_consume'`, "objects")))[0]?.quantity, "-4.4000");
       await refuses(run(orgId, (tx) => completeWorkOrderOperation(tx, orgId, actorId, clone.id, clone.operation_id, { doneQty: "1" })), "measured_quantity_required", "measured quantity");
     });
   } },
@@ -216,24 +216,24 @@ const cases: Case[] = [
     const order = await prepare(f, { backflushAt: "finish", operationSeq: 10, quantityPer: "2", scrapPct: "10", orderQty: "2" });
     await stock(f, "5", "2"); await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
     await run(f.org.orgId, (tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" }));
-    const row = await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${f.org.orgId} and kind='assembly_consume'`));
-    assert.equal(row.rows[0]?.quantity, "-2.2000");
+    const row = await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${f.org.orgId} and kind='assembly_consume'`, "objects"));
+    assert.equal(row[0]?.quantity, "-2.2000");
   } },
   { name: "tracked backflush consumes oldest lots first", run: async (f) => {
     const order = await prepare(f, { backflushAt: "start", operationSeq: 10, quantityPer: "3", tracking: "lot" });
     const old = await stock(f, "2", "2", "LOT-OLD"), next = await stock(f, "2", "3", "LOT-NEXT");
     await run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
-    const rows = await withBypassContext(async () => db.execute<{ lot_id: string; quantity: string }>(sql`select lot_id,quantity::text from inventory_movements where org_id=${f.org.orgId} and kind='assembly_consume'`));
-    assert.equal(rows.rows.find((row) => row.lot_id === old)?.quantity, "-2.0000");
-    assert.equal(rows.rows.find((row) => row.lot_id === next)?.quantity, "-1.0000");
+    const rows = await withBypassContext(async () => db.execute<{ lot_id: string; quantity: string }>(sql`select lot_id,quantity::text from inventory_movements where org_id=${f.org.orgId} and kind='assembly_consume'`, "objects"));
+    assert.equal(rows.find((row) => row.lot_id === old)?.quantity, "-2.0000");
+    assert.equal(rows.find((row) => row.lot_id === next)?.quantity, "-1.0000");
   } },
   { name: "tracked backflush shortage names missing quantity and posts nothing", run: async (f) => {
     const order = await prepare(f, { backflushAt: "start", operationSeq: 10, quantityPer: "3", tracking: "lot" });
     const component = await componentLabel(f);
     await stock(f, "1", "2", "LOT-SHORT");
     await refuses(run(f.org.orgId, (tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId)), "backflush_lot_shortage", `Component ${component} is short by 2.0000`);
-    const count = await withBypassContext(async () => db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and origin='manufacturing'`));
-    assert.equal(count.rows[0]?.n, 0);
+    const count = await withBypassContext(async () => db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and origin='manufacturing'`, "objects"));
+    assert.equal(count[0]?.n, 0);
   } },
   { name: "negative inventory refuses with component shortfall", run: async (f) => {
     const order = await prepare(f); const component = await componentLabel(f);
@@ -281,7 +281,7 @@ cases.push(...(["finish", "start"] as const).map(trigger => ({name:`${trigger} b
   await run(f.org.orgId, tx=>recordNormalScrap(tx,f.org.orgId,f.actorId,null,order.id,randomUUID(),{operationId:order.operationId,quantity:'2',reasonId}));
   await run(f.org.orgId, tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
   await run(f.org.orgId, tx=>completeWorkOrderOperation(tx,f.org.orgId,f.actorId,order.id,order.operationId,{doneQty:'8'}));
-  const result=await withBypassContext(async()=>(await db.execute<{quantity:string;entries:number}>(sql`select m.backflush_qty::text as quantity,(select count(*)::int from journal_entries where org_id=${f.org.orgId} and custom->>'operation_id'=${order.operationId} and custom->>'backflush_trigger'=${trigger}) as entries from mfg_wo_materials m where m.org_id=${f.org.orgId} and m.work_order_id=${order.id}`)).rows[0]!);
+  const result=await withBypassContext(async()=>(await db.execute<{quantity:string;entries:number}>(sql`select m.backflush_qty::text as quantity,(select count(*)::int from journal_entries where org_id=${f.org.orgId} and custom->>'operation_id'=${order.operationId} and custom->>'backflush_trigger'=${trigger}) as entries from mfg_wo_materials m where m.org_id=${f.org.orgId} and m.work_order_id=${order.id}`, "objects"))[0]!);
   assert.deepEqual(result,{quantity:'20.0000',entries:1});
 }})));
 

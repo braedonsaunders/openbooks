@@ -5,9 +5,9 @@ import { PayrollError } from './error.ts';
 
 /** Annual carry-in cannot fall below its explicitly attributed period payments. */
 export async function annualPeriodOpeningBounds(tx: SqlExecutor, orgId: string, employeeIds: readonly string[], taxYear: number) {
-  const rows = (await tx.execute<{ employee_party_id: string; annual_bounds: Record<string, string> }>(sql`
+  const rows = await tx.execute<{ employee_party_id: string; annual_bounds: Record<string, string> }>(sql`
     select employee_party_id,annual_bounds from payroll_period_openings where org_id=${orgId} and tax_year=${taxYear}
-     and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)`)).rows;
+     and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employeeIds)}::jsonb)::uuid)`, 'objects');
   return new Map(rows.map((row) => [row.employee_party_id, row.annual_bounds]));
 }
 

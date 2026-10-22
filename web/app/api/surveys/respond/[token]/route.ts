@@ -49,15 +49,15 @@ export async function GET(_req: Request, ctx: { params: Promise<{ token: string 
           from hrm_survey_invitations i
           join hrm_surveys s on s.org_id = i.org_id and s.id = i.survey_id
          where i.token_hash = ${hashHrmToken(token)}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) {
         throw new SurveyLinkRefusal("this survey link is no longer available — ask HR for a fresh invitation");
       }
-      const questions = (await db.execute<{ id: string; kind: string; prompt: string; options: unknown }>(sql`
+      const questions = await db.execute<{ id: string; kind: string; prompt: string; options: unknown }>(sql`
         select id, kind, prompt, options from hrm_survey_questions
          where org_id = ${claims.orgId} and survey_id = ${row.id}
          order by position
-      `)).rows;
+      `, "objects");
       return { ...row, questions };
     });
     return NextResponse.json({ survey });

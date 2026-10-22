@@ -30,7 +30,7 @@ const { NextRequest } = await import('next/server');
 const period = { periodStart: '2026-07-01', periodEnd: '2026-07-31' };
 const request = (body: Record<string, unknown>) => new NextRequest('http://audit.local', { method: 'POST', body: JSON.stringify({ ...period, ...body }) });
 async function snapshotCount(orgId: string) {
-  return (await db.execute(sql`select id from crm_forecast_snapshots where org_id=${orgId}`)).rows.length;
+  return (await db.execute(sql`select id from crm_forecast_snapshots where org_id=${orgId}`, 'objects')).length;
 }
 async function fixture() {
   const orgA = await withBypassContext(() => createScratchOrg());
@@ -46,8 +46,8 @@ async function fixture() {
   session.user = { id: actorA, orgId: orgA.orgId, name: 'Reviewer A', email: 'a@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgA.orgId, homeOrgId: orgA.orgId, homeUserId: actorA };
   await withOrgContext(orgA.orgId, () => ensureCrmDefaults(orgA.orgId, actorA));
   await withOrgContext(orgB.orgId, () => ensureCrmDefaults(orgB.orgId, actorB));
-  const teamB = (await db.execute<{ id: string }>(sql`select id from crm_sales_teams where org_id=${orgB.orgId} order by name limit 1`)).rows[0]?.id
-    ?? (await db.execute<{ id: string }>(sql`insert into crm_sales_teams (org_id, key, name, created_by, updated_by) values (${orgB.orgId}, 'team-b', 'Team B', ${actorB}, ${actorB}) returning id`)).rows[0]!.id;
+  const teamB = (await db.execute<{ id: string }>(sql`select id from crm_sales_teams where org_id=${orgB.orgId} order by name limit 1`, 'objects'))[0]?.id
+    ?? (await db.execute<{ id: string }>(sql`insert into crm_sales_teams (org_id, key, name, created_by, updated_by) values (${orgB.orgId}, 'team-b', 'Team B', ${actorB}, ${actorB}) returning id`, 'objects'))[0]!.id;
   return { orgA, orgB, actorB, teamB };
 }
 

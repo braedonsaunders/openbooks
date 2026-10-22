@@ -101,7 +101,7 @@ export function validateFieldTimeSettings(raw: unknown): FieldTimeSettings {
 
 export async function loadFieldTimeSettings(orgId: string): Promise<FieldTimeSettings> {
   const row = (await db.execute<{ settings: unknown }>(sql`
-    select settings->'fieldTime' as settings from orgs where id = ${orgId}`)).rows[0];
+    select settings->'fieldTime' as settings from orgs where id = ${orgId}`, "objects"))[0];
   if (!row || row.settings == null) {
     throw new FieldTimeError(
       "field_time_not_configured",

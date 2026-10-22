@@ -50,7 +50,7 @@ const { documentRevisionSql } = await import('@openbooks/engine/records/revision
 // The account PATCH requires the profile's current revision token (79b64f876).
 const accountToken = async (orgId: string, partyId: string) =>
   (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
-    from crm_account_profiles where org_id=${orgId} and party_id=${partyId}`)).rows[0]!.revision
+    from crm_account_profiles where org_id=${orgId} and party_id=${partyId}`, 'objects'))[0]!.revision
 // The loader-projected revision token every activity PATCH must echo back.
 // Fetched at each call site so sequential saves always carry a fresh token.
 const activityToken = async (orgId: string, id: string) =>
@@ -91,11 +91,9 @@ async function fixture() {
 
 async function seedOpportunity(orgId: string, actor: string, date: string) {
   await ensureCrmDefaults(orgId, actor)
-  const status = (
-    await db.execute<{ id: string }>(
-      sql`select id from crm_opportunity_statuses where org_id=${orgId} and is_default and is_active limit 1`,
-    )
-  ).rows[0]!.id
+  const status = (await db.execute<{ id: string }>(
+      sql`select id from crm_opportunity_statuses where org_id=${orgId} and is_default and is_active limit 1`, 'objects',
+    ))[0]!.id
   const id = randomUUID()
   // Header 10%: line 1 carries an explicit 100% override, line 2 inherits
   // (null), line 3 is a legacy row whose stored probability equals the header.
@@ -112,29 +110,23 @@ async function seedOpportunity(orgId: string, actor: string, date: string) {
 }
 
 async function storedLines(orgId: string, id: string) {
-  return (
-    await db.execute<{ line_number: number; probability: number | null; expected_amount: string }>(
-      sql`select line_number, probability, expected_amount from crm_opportunity_lines where org_id=${orgId} and opportunity_id=${id} order by line_number`,
+  return await db.execute<{ line_number: number; probability: number | null; expected_amount: string }>(
+      sql`select line_number, probability, expected_amount from crm_opportunity_lines where org_id=${orgId} and opportunity_id=${id} order by line_number`, 'objects',
     )
-  ).rows
 }
 
 async function header(orgId: string, id: string) {
-  return (
-    await db.execute<{ probability: number; projected_amount: string; weighted_amount: string; expected_close_date: string | null }>(
-      sql`select probability, projected_amount, weighted_amount, expected_close_date::text from crm_opportunities where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0]!
+  return (await db.execute<{ probability: number; projected_amount: string; weighted_amount: string; expected_close_date: string | null }>(
+      sql`select probability, projected_amount, weighted_amount, expected_close_date::text from crm_opportunities where org_id=${orgId} and id=${id}`, 'objects',
+    ))[0]!
 }
 
 // Opportunity saves speak the revision contract: read the live token so the
 // validation assertions below exercise domain checks, not the 409 guard.
 async function edit(orgId: string, id: string, body: Record<string, unknown>) {
-  const revision = (
-    await db.execute<{ revision: string }>(
-      sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0]!.revision
+  const revision = (await db.execute<{ revision: string }>(
+      sql`select (revision_seq)::text as revision from crm_opportunities where org_id=${orgId} and id=${id}`, 'objects',
+    ))[0]!.revision
   return opportunityEdit(request({ ...body, expectedUpdatedAt: revision }), params(id))
 }
 
@@ -182,11 +174,9 @@ test(
     try {
       await withOrgContext(org.orgId, async () => {
         const { id, status } = await seedOpportunity(org.orgId, actor, org.date)
-        const next = (
-          await db.execute<{ id: string; probability: number }>(
-            sql`select id, probability from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_closed and id<>${status} and probability<>10 order by sequence limit 1`,
-          )
-        ).rows[0]
+        const next = (await db.execute<{ id: string; probability: number }>(
+            sql`select id, probability from crm_opportunity_statuses where org_id=${org.orgId} and is_active and not is_closed and id<>${status} and probability<>10 order by sequence limit 1`, 'objects',
+          ))[0]
         assert.ok(next, 'defaults seed an open status with a different probability')
         const edited = await edit(org.orgId, id, { statusId: next.id })
         assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
@@ -315,9 +305,9 @@ test(
         assert.equal(draft.status, 200)
         const activityId = (await draft.json()).id
         const audits = async () =>
-          (await db.execute<{ action: string; actor_id: string; changes: { before: { subject: string } } }>(
-            sql`select action, actor_id, changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} order by at, id`,
-          )).rows
+          await db.execute<{ action: string; actor_id: string; changes: { before: { subject: string } } }>(
+            sql`select action, actor_id, changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} order by at, id`, 'objects',
+          )
         const first = await activityEdit(request({ subject: 'First save', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
         assert.equal(first.status, 200, JSON.stringify(await first.clone().json()))
         const second = await activityEdit(request({ subject: 'Second save', expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
@@ -370,14 +360,14 @@ test(
         const applied = await activityEdit(request({ isPrivate: true, expectedUpdatedAt: await activityToken(org.orgId, activityId) }), params(activityId))
         assert.equal(applied.status, 200, JSON.stringify(await applied.clone().json()))
         const stored = (await db.execute<{ is_private: boolean }>(
-          sql`select is_private from crm_activities where org_id=${org.orgId} and id=${activityId}`,
-        )).rows[0]!
+          sql`select is_private from crm_activities where org_id=${org.orgId} and id=${activityId}`, 'objects',
+        ))[0]!
         assert.equal(stored.is_private, true)
         // The six refusals above all fired before the transaction, so exactly
         // one update audit row exists: refused writes leave no evidence.
-        const updates = (await db.execute<{ action: string }>(
-          sql`select action from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId}`,
-        )).rows
+        const updates = await db.execute<{ action: string }>(
+          sql`select action from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId}`, 'objects',
+        )
         assert.equal(updates.length, 1)
       })
     } finally {
@@ -404,14 +394,14 @@ test(
           params(activityId),
         )
         assert.equal(edited.status, 200, JSON.stringify(await edited.clone().json()))
-        const rows = (await db.execute<{ changes: {
+        const rows = await db.execute<{ changes: {
           before: { subject: string }
           after: { subject: string }
           links?: { before: unknown[]; after: unknown[] }
           participants?: { before: unknown[]; after: Array<{ user_id: string | null; contact_id: string | null; email: string | null; response: string }> }
         } }>(
-          sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} and action='update'`,
-        )).rows
+          sql`select changes from audit_log where org_id=${org.orgId} and table_name='crm_activities' and row_id=${activityId} and action='update'`, 'objects',
+        )
         assert.equal(rows.length, 1)
         const changes = rows[0]!.changes
         assert.equal(changes.before.subject, 'New activity')
@@ -453,11 +443,11 @@ async function scopedCrmFixture() {
 }
 
 async function activityCount(orgId: string) {
-  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_activities where org_id=${orgId}`)).rows[0]!.n
+  return (await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_activities where org_id=${orgId}`, 'objects'))[0]!.n
 }
 
 async function linkSubjects(orgId: string, activityId: string) {
-  return (await db.execute<{ subject_id: string }>(sql`select subject_id from crm_activity_links where org_id=${orgId} and activity_id=${activityId} order by subject_id`)).rows.map((r) => r.subject_id)
+  return (await db.execute<{ subject_id: string }>(sql`select subject_id from crm_activity_links where org_id=${orgId} and activity_id=${activityId} order by subject_id`, 'objects')).map((r) => r.subject_id)
 }
 
 test('activity draft and link writes refuse out-of-scope subjects and write nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -470,7 +460,7 @@ test('activity draft and link writes refuse out-of-scope subjects and write noth
       )
       assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()))
       assert.equal(await activityCount(org.orgId), before, 'a refused draft writes no activity')
-      assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${concealed}`)).rows.length, 0)
+      assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${concealed}`, 'objects')).length, 0)
 
       const accepted = await activityDraft(
         new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: visible }) }),
@@ -515,7 +505,7 @@ test('activity draft waits on a subject rehome in flight instead of racing it', 
     const response = await pending
     assert.equal(response.status, 404, JSON.stringify(await response.clone().json()))
     assert.equal(await activityCount(org.orgId), before, 'the draft refused after the rehome committed writes nothing')
-    assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${moving}`)).rows.length, 0)
+    assert.equal((await db.execute(sql`select 1 from crm_activity_links where org_id=${org.orgId} and subject_id=${moving}`, 'objects')).length, 0)
   } finally {
     await writer.query('rollback').catch(() => {})
     await pending?.catch(() => {})
@@ -559,10 +549,10 @@ test('activity PATCH refuses a token predating a concurrent commit and preserves
         // The refused write changed nothing and left no update evidence: the
         // concurrent predecessor stands.
         const stored=(await db.execute<{subject:string}>(sql`
-          select subject from crm_activities where org_id=${org.orgId} and id=${id}`)).rows[0]!
+          select subject from crm_activities where org_id=${org.orgId} and id=${id}`, 'objects'))[0]!
         assert.equal(stored.subject,'Concurrent predecessor')
-        const updates=(await db.execute<{action:string}>(sql`
-          select action from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='update'`)).rows
+        const updates=await db.execute<{action:string}>(sql`
+          select action from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='update'`, 'objects')
         assert.equal(updates.length,0)
         // A fresh token still saves, so the delete half keeps its participant
         // evidence coverage.
@@ -571,7 +561,7 @@ test('activity PATCH refuses a token predating a concurrent commit and preserves
         const result=await activityDelete(new Request('http://crm.local',{method:'DELETE'}),params(id))
         assert.equal(result.status,200)
         const removed=(await db.execute<{changes:{after:null;participants:{user_id:string}[];links:unknown[]}}>(sql`
-          select changes from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='delete'`)).rows[0]!
+          select changes from audit_log where org_id=${org.orgId} and row_id=${id} and table_name='crm_activities' and action='delete'`, 'objects'))[0]!
         assert.equal(removed.changes.after,null)
         assert.deepEqual(removed.changes.participants.map(p=>p.user_id),[actor])
         assert.deepEqual(removed.changes.links,[])

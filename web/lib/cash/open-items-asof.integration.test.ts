@@ -30,7 +30,7 @@ test('open items reconstruct remaining as of the forecast date', { skip: !env.OP
         values (${scratch.orgId}, ${id}, 1, ${scratch.accounts.revenue}, 1, 100, 100, 0, 100)`)
       await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
       const entry = await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
-      const invLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entry} and is_open_item`)).rows[0]!.id
+      const invLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${entry} and is_open_item`, 'objects'))[0]!.id
       const pay = randomUUID()
       await db.execute(sql`insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
@@ -40,7 +40,7 @@ test('open items reconstruct remaining as of the forecast date', { skip: !env.OP
         values (${scratch.orgId}, ${pay}, 1, ${scratch.accounts.bank}, ${scratch.subsidiaryId}, ${scratch.customerId}, '100', 'CAD', '100', '1', false),
                (${scratch.orgId}, ${pay}, 2, ${scratch.accounts.ar}, ${scratch.subsidiaryId}, ${scratch.customerId}, '-100', 'CAD', '-100', '1', true)`)
       await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${pay}`)
-      const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`)).rows[0]!.id
+      const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${pay} and is_open_item`, 'objects'))[0]!.id
       await db.execute(sql`insert into applications
         (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
          source_transaction_currency, target_transaction_amount, target_transaction_currency,

@@ -100,8 +100,8 @@ async function belongsToOrg(
 ) {
   const result = await db.execute(sql`
     select 1 from ${sql.raw(table)} where id = ${id} and org_id = ${orgId}
-  `);
-  return Boolean(result.rows[0]);
+  `, "objects");
+  return Boolean(result[0]);
 }
 
 export const GET = defineRoute({
@@ -230,16 +230,16 @@ export const PATCH = defineRoute({
       }>(sql`
       select type, subsidiary_id from accounts
        where id = ${effectiveParentId} and org_id = ${gate.user.orgId}
-    `);
-      if (!parent.rows[0]) return notFound("record");
+    `, "objects");
+      if (!parent[0]) return notFound("record");
       if (
-        guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, {
+        guardSubsidiaryScope(gate, parent[0].subsidiary_id, {
           orgWideNull: true,
         })
       ) {
         return notFound("record");
       }
-      if (parent.rows[0].type !== nextType) {
+      if (parent[0].type !== nextType) {
         return bad("parent_type_mismatch", "type");
       }
     }
@@ -259,9 +259,9 @@ export const PATCH = defineRoute({
       }
       if (currencyRestriction) {
         const currency = await db.execute(
-          sql`select 1 from currencies where code = ${currencyRestriction}`,
+          sql`select 1 from currencies where code = ${currencyRestriction}`, "objects",
         );
-        if (!currency.rows[0])
+        if (!currency[0])
           return bad("invalid_currency", "currencyRestriction");
       }
     }
@@ -300,10 +300,10 @@ export const PATCH = defineRoute({
       const definitions = await db.execute<{ key: string }>(sql`
       select key from segment_definitions
        where org_id = ${gate.user.orgId} and is_active and allow_account_requirement
-    `);
+    `, "objects");
       const allowed = new Set([
         "party",
-        ...definitions.rows.map((row) => row.key),
+        ...definitions.map((row) => row.key),
       ]);
       if (
         !Array.isArray(body.requiredDimensions) ||
@@ -377,8 +377,7 @@ export const PATCH = defineRoute({
         // statement import/reconciliation holds this same row lock while it
         // rechecks subsidiary ownership, so a rehome and account-scoped work
         // have one deterministic order.
-        const locked = (
-          await tx.execute<{
+        const locked = (await tx.execute<{
             subsidiary_id: string | null;
             unchanged: boolean;
           }>(sql`
@@ -387,8 +386,7 @@ export const PATCH = defineRoute({
           from accounts
          where id = ${id} and org_id = ${gate.user.orgId}
          for update
-      `)
-        ).rows[0];
+      `, "objects"))[0];
         if (
           !locked ||
           !subsidiaryScopeAllows(
@@ -401,15 +399,13 @@ export const PATCH = defineRoute({
         }
         if (!locked.unchanged) throw new Error("account_changed");
         if (body.isSummary === false || body.isActive === false) {
-          const children = (
-            await tx.execute<{
+          const children = (await tx.execute<{
               has_children: boolean;
               has_active_children: boolean;
             }>(sql`
           select exists(select 1 from accounts child where child.org_id = ${gate.user.orgId} and child.parent_id = ${id}) as has_children,
                  exists(select 1 from accounts child where child.org_id = ${gate.user.orgId} and child.parent_id = ${id} and child.is_active) as has_active_children
-        `)
-          ).rows[0];
+        `, "objects"))[0];
           if (body.isSummary === false && children?.has_children)
             throw new PatchInvalid("summary_has_children", "isSummary");
           if (body.isActive === false && children?.has_active_children)
@@ -438,13 +434,13 @@ export const PATCH = defineRoute({
               type: string;
             }>(sql`
             select is_summary, is_active, type from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
-          `);
-            if (!parent.rows[0]) throw new PatchNotFound();
-            if (!parent.rows[0].is_summary)
+          `, "objects");
+            if (!parent[0]) throw new PatchNotFound();
+            if (!parent[0].is_summary)
               throw new PatchInvalid("parent_must_be_summary", "parentId");
-            if (!parent.rows[0].is_active)
+            if (!parent[0].is_active)
               throw new PatchInvalid("inactive_parent", "parentId");
-            if (parent.rows[0].type !== nextType)
+            if (parent[0].type !== nextType)
               throw new PatchInvalid("parent_type_mismatch", "parentId");
             const cycle = await tx.execute(sql`
             with recursive descendants as (
@@ -455,8 +451,8 @@ export const PATCH = defineRoute({
               where child.org_id = ${gate.user.orgId}
             )
             select 1 from descendants where id = ${parentId} limit 1
-          `);
-            if (cycle.rows[0])
+          `, "objects");
+            if (cycle[0])
               throw new PatchInvalid("parent_cycle", "parentId");
           }
         }
@@ -505,14 +501,14 @@ export const PATCH = defineRoute({
          where id = ${id} and org_id = ${gate.user.orgId}
            and updated_at = ${existing.updated_at}
          returning *
-      `);
-        if (!updated.rows[0]) throw new Error("account_changed");
+      `, "objects");
+        if (!updated[0]) throw new Error("account_changed");
         await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values
           (${gate.user.orgId}, 'accounts', ${id}, 'update',
-           ${JSON.stringify({ before: existing, after: updated.rows[0] })}::jsonb,
+           ${JSON.stringify({ before: existing, after: updated[0] })}::jsonb,
            ${gate.user.id}, ${request.headers.get("X-Request-Id")})
       `);
       });
@@ -557,7 +553,7 @@ export const PATCH = defineRoute({
               select id, name, number from accounts
                where org_id = ${gate.user.orgId} and number = ${attempted} and id <> ${id}
                limit 1
-            `)).rows[0]
+            `, "objects"))[0]
           : undefined;
         return bad("number_in_use", "number", holder ? {
           existingAccountId: holder.id,
@@ -581,13 +577,13 @@ export const PATCH = defineRoute({
     // corroboration even when the name says nothing. The warning rides
     // alongside success — the edit is always saved.
     const backed = await db.execute(sql`
-    select 1 from bank_statements where org_id = ${gate.user.orgId} and account_id = ${id} limit 1`);
+    select 1 from bank_statements where org_id = ${gate.user.orgId} and account_id = ${id} limit 1`, "objects");
     const hygiene = assetBankHygieneWarning({
       type: nextType,
       name: name ?? String(existing.name),
       reconcilable: nextReconcilable,
       isSummary: nextSummary,
-      hasStatements: Boolean(backed.rows[0]),
+      hasStatements: Boolean(backed[0]),
     });
     return NextResponse.json({
       ...saved,

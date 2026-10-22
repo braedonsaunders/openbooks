@@ -32,7 +32,7 @@ async function scenario(org: ScratchOrg): Promise<Scenario> {
   const julyId = org.periodId;
   const augustId = randomUUID();
   const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where id = ${julyId}`)).rows[0]!.fiscal_calendar_id;
+    select fiscal_calendar_id from accounting_periods where id = ${julyId}`, "objects"))[0]!.fiscal_calendar_id;
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
     values (${augustId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar})`);
@@ -95,22 +95,22 @@ async function billTime(s: Scenario, timeEntryId: string, date: string): Promise
     values (${lineId}, ${s.org.orgId}, ${invoiceId}, 1, ${s.org.accounts.revenue}, '100.0000', ${s.tmProject}, ${timeEntryId})`);
   const stamped = await db.execute(sql`
     update time_entries set billing_status = 'billed', invoiced_by_line_id = ${lineId}
-     where org_id = ${s.org.orgId} and id = ${timeEntryId} returning id`);
-  assert.equal(stamped.rows.length, 1);
+     where org_id = ${s.org.orgId} and id = ${timeEntryId} returning id`, "objects");
+  assert.equal(stamped.length, 1);
 }
 
 async function accrualEntries(orgId: string) {
-  return (await db.execute<{
+  return await db.execute<{
     id: string; posting_date: string; period_id: string; reverses_entry_id: string | null; status: string;
   }>(sql`
     select id, posting_date::text, period_id, reverses_entry_id, status from journal_entries
-     where org_id = ${orgId} and origin = 'revenue_accrual' order by created_at, entry_number`)).rows;
+     where org_id = ${orgId} and origin = 'revenue_accrual' order by created_at, entry_number`, "objects");
 }
 
 async function entryLines(orgId: string, entryId: string) {
-  return (await db.execute<{ account_id: string; amount: string; project_id: string | null }>(sql`
+  return await db.execute<{ account_id: string; amount: string; project_id: string | null }>(sql`
     select account_id, amount::text, project_id from journal_lines
-     where org_id = ${orgId} and entry_id = ${entryId} order by line_number`)).rows;
+     where org_id = ${orgId} and entry_id = ${entryId} order by line_number`, "objects");
 }
 
 test("unbilled T&M revenue accrues at period end, reverses next period, and reruns post only the change", { skip }, async () => {
@@ -148,17 +148,17 @@ test("unbilled T&M revenue accrues at period end, reverses next period, and reru
       assert.equal(reversal!.period_id, s.augustId);
       assert.equal(reversal!.reverses_entry_id, accrual!.id);
       // Memos name the period by its canonical label; entry numbers keep the stored name.
-      const headers = (await db.execute<{ id: string; entry_number: string; memo: string }>(sql`
-        select id, entry_number, memo from journal_entries where org_id = ${org.orgId} and id in (${accrual!.id}, ${reversal!.id})`)).rows;
+      const headers = await db.execute<{ id: string; entry_number: string; memo: string }>(sql`
+        select id, entry_number, memo from journal_entries where org_id = ${org.orgId} and id in (${accrual!.id}, ${reversal!.id})`, "objects");
       const accrualHeader = headers.find((row) => row.id === accrual!.id)!;
       const reversalHeader = headers.find((row) => row.id === reversal!.id)!;
       assert.equal(accrualHeader.memo, "Unbilled revenue accrual — P07 FY2026");
       assert.equal(reversalHeader.memo, "Unbilled revenue accrual reversal — P07 FY2026");
       assert.match(accrualHeader.entry_number, /^UNBILLED-2026-07-[0-9a-f]{8}$/);
       assert.equal(reversalHeader.entry_number, `${accrualHeader.entry_number}-R`);
-      const runAudit = (await db.execute<{ period_name: string }>(sql`
+      const runAudit = await db.execute<{ period_name: string }>(sql`
         select changes->>'periodName' as period_name from audit_log
-         where org_id = ${org.orgId} and table_name = 'project_revenue_accruals' and row_id = ${run.runId}`)).rows;
+         where org_id = ${org.orgId} and table_name = 'project_revenue_accruals' and row_id = ${run.runId}`, "objects");
       assert.deepEqual(runAudit, [{ period_name: "P07 FY2026" }]);
       assert.deepEqual(await entryLines(org.orgId, accrual!.id), [
         { account_id: s.unbilledAccountId, amount: "200.0000", project_id: s.tmProject },
@@ -168,9 +168,9 @@ test("unbilled T&M revenue accrues at period end, reverses next period, and reru
         { account_id: s.unbilledAccountId, amount: "-200.0000", project_id: s.tmProject },
         { account_id: org.accounts.revenue, amount: "200.0000", project_id: s.tmProject },
       ]);
-      const evidence = (await db.execute<{ amount: string; accrual_entry_id: string; reversal_entry_id: string; reversal_date: string }>(sql`
+      const evidence = await db.execute<{ amount: string; accrual_entry_id: string; reversal_entry_id: string; reversal_date: string }>(sql`
         select amount::text, accrual_entry_id, reversal_entry_id, reversal_date::text from project_revenue_accruals
-         where org_id = ${org.orgId}`)).rows;
+         where org_id = ${org.orgId}`, "objects");
       assert.deepEqual(evidence, [{ amount: "200.0000", accrual_entry_id: accrual!.id, reversal_entry_id: reversal!.id, reversal_date: "2026-08-01" }]);
       assert.equal((await unbilledAccrualReadiness(org.orgId, s.julyId)).pendingKeys, 0);
 
@@ -183,8 +183,8 @@ test("unbilled T&M revenue accrues at period end, reverses next period, and reru
       const second = await approvedTime(s, s.tmProject, "2026-07-20", "1.0000");
       assert.equal((await unbilledAccrualReadiness(org.orgId, s.julyId)).pendingKeys, 1);
       await runUnbilledRevenueAccrual(org.orgId, s.actorId, { periodEnd: "2026-07-31" });
-      const deltas = (await db.execute<{ amount: string }>(sql`
-        select amount::text from project_revenue_accruals where org_id = ${org.orgId} order by created_at`)).rows;
+      const deltas = await db.execute<{ amount: string }>(sql`
+        select amount::text from project_revenue_accruals where org_id = ${org.orgId} order by created_at`, "objects");
       assert.deepEqual(deltas.map((row) => row.amount), ["200.0000", "100.0000"]);
 
       // Billed in August: still unbilled at the end of July.
@@ -217,7 +217,7 @@ test("the accrual refuses closed reversal periods, unmapped accounts and a disab
       const refusedWith = (code: string) => (error: unknown) => error instanceof UnbilledAccrualError && error.code === code;
       const nothingPosted = async () => {
         assert.equal((await accrualEntries(org.orgId)).length, 0);
-        assert.equal((await db.execute(sql`select 1 from project_revenue_accruals where org_id = ${org.orgId}`)).rows.length, 0);
+        assert.equal((await db.execute(sql`select 1 from project_revenue_accruals where org_id = ${org.orgId}`, "objects")).length, 0);
       };
 
       // The reversal period is closed.

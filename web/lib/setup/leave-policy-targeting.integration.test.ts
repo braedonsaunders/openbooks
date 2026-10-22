@@ -45,17 +45,17 @@ function policyBody(overrides: Record<string, unknown> = {}) {
 async function seedClassification(orgId: string, code: string): Promise<string> {
   return (await withBypass(() => db.execute<{ id: string }>(sql`
     insert into hrm_work_classifications (org_id, code, name, trade)
-    values (${orgId}, ${code}, ${code}, 'trade') returning id`))).rows[0]!.id;
+    values (${orgId}, ${code}, ${code}, 'trade') returning id`, "objects")))[0]!.id;
 }
 
 async function storedPolicy(orgId: string, id: string) {
   return (await withBypass(() => db.execute<{ applies_to: unknown; accrual_rule: unknown }>(sql`
-    select applies_to, accrual_rule from hrm_leave_policies where org_id = ${orgId} and id = ${id}`))).rows[0];
+    select applies_to, accrual_rule from hrm_leave_policies where org_id = ${orgId} and id = ${id}`, "objects")))[0];
 }
 
 async function auditReasons(orgId: string, rowId: string): Promise<unknown[]> {
-  const rows = (await withBypass(() => db.execute<{ changes: unknown }>(sql`
-    select changes from audit_log where org_id = ${orgId} and row_id = ${rowId} order by id`))).rows;
+  const rows = await withBypass(() => db.execute<{ changes: unknown }>(sql`
+    select changes from audit_log where org_id = ${orgId} and row_id = ${rowId} order by id`, "objects"));
   return rows.map((row) => (row.changes as Record<string, unknown>).reason);
 }
 
@@ -110,7 +110,7 @@ test("two overlapping wildcard windows are still refused by storage itself", { s
     assert.equal(String(cause.code ?? ""), "23P01", `expected the exclusion to fire, got ${String(cause.code ?? "")}`);
     assert.equal(cause.constraint, "hrm_leave_policies_no_same_scope_overlap");
     const count = (await withBypass(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_leave_policies where org_id = ${org.orgId} and leave_type_id = ${org.typeId}`))).rows[0]?.n ?? -1;
+      select count(*)::int as n from hrm_leave_policies where org_id = ${org.orgId} and leave_type_id = ${org.typeId}`, "objects")))[0]?.n ?? -1;
     assert.equal(count, 1, "the storage refusal stores no second window");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -149,7 +149,7 @@ test("a policy change without a reason is refused and stores nothing", { skip: !
     assert.equal(created.status, 400);
     assert.match(String((created.body as { error?: string }).error), /reason is required|needs a reason/);
     const count = (await withBypass(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from hrm_leave_policies where org_id = ${org.orgId} and leave_type_id = ${org.typeId}`))).rows[0]?.n ?? -1;
+      select count(*)::int as n from hrm_leave_policies where org_id = ${org.orgId} and leave_type_id = ${org.typeId}`, "objects")))[0]?.n ?? -1;
     assert.equal(count, 0, "the reasonless create stores nothing");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -175,7 +175,7 @@ test("same-specificity intersecting targets conflict typed naming the policy", {
     // the first pins employments org-wide) overlaps freely: specificity
     // resolves, and storage only guards identical scope pins.
     const departmentId = (await withBypass(() => db.execute<{ id: string }>(sql`
-      insert into departments (org_id, name) values (${org.orgId}, 'Field') returning id`))).rows[0]!.id;
+      insert into departments (org_id, name) values (${org.orgId}, 'Field') returning id`, "objects")))[0]!.id;
     const broader = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
       leaveTypeId: org.typeId, effectiveFrom: "2026-06-01", appliesDepartmentId: departmentId,
     })));
@@ -213,7 +213,7 @@ test("stretching a window into a same-class neighbour conflicts typed and moves 
     assert.match(String((stretched.body as { error?: string }).error), new RegExp(`Policy ${neighbourId} already covers`));
     const window = (await withBypass(() => db.execute<{ effective_to: string }>(sql`
       select effective_to::text as effective_to from hrm_leave_policies
-       where org_id = ${org.orgId} and id = ${String((first.body as { id?: string }).id)}`))).rows[0];
+       where org_id = ${org.orgId} and id = ${String((first.body as { id?: string }).id)}`, "objects")))[0];
     assert.equal(String(window?.effective_to).slice(0, 10), "2026-06-30");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));

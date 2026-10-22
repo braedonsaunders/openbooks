@@ -37,7 +37,7 @@ const COLUMNS = sql`id, effective_from::text as "effectiveFrom", notify_arrival_
 /** The policy version in force on a date, or null when none starts on or before it. */
 export async function policyOn(orgId: string, onDate: string): Promise<ServiceDispatchPolicy | null> {
   return (await db.execute<ServiceDispatchPolicy>(sql`select ${COLUMNS} from service_dispatch_policies
-    where org_id = ${orgId} and effective_from <= ${onDate} order by effective_from desc limit 1`)).rows[0] ?? null;
+    where org_id = ${orgId} and effective_from <= ${onDate} order by effective_from desc limit 1`, "objects"))[0] ?? null;
 }
 
 /** The policy in force, refusing when the organization has not configured one. */
@@ -53,8 +53,8 @@ export async function requirePolicy(orgId: string, onDate: string): Promise<Serv
 }
 
 export async function listPolicies(orgId: string): Promise<ServiceDispatchPolicy[]> {
-  return (await db.execute<ServiceDispatchPolicy>(sql`select ${COLUMNS} from service_dispatch_policies
-    where org_id = ${orgId} order by effective_from desc`)).rows;
+  return await db.execute<ServiceDispatchPolicy>(sql`select ${COLUMNS} from service_dispatch_policies
+    where org_id = ${orgId} order by effective_from desc`, "objects");
 }
 
 export interface PolicyVersionInput {
@@ -110,12 +110,12 @@ export async function savePolicyVersion(actor: ServiceActor & { input: PolicyVer
       throw new ServiceError("The dispatch policy applies to every legal entity.", { status: 403, code: "service_forbidden", remedy: "Ask an administrator with access to every legal entity to change it." });
     }
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`service-policy:${actor.orgId}`}, 0))`);
-    const row = requireOne((await db.execute<ServiceDispatchPolicy>(sql`insert into service_dispatch_policies
+    const row = requireOne(await db.execute<ServiceDispatchPolicy>(sql`insert into service_dispatch_policies
       (org_id, effective_from, notify_arrival_window, notify_en_route, arrival_window_minutes, default_visit_minutes,
        urgent_response_hours, high_response_hours, normal_response_hours, low_response_hours, agreement_horizon_days, reason, created_by)
       values (${actor.orgId}, ${effectiveFrom}, ${values.notifyArrivalWindow}, ${values.notifyEnRoute}, ${values.arrivalWindowMinutes}, ${values.defaultVisitMinutes},
        ${values.urgentResponseHours}, ${values.highResponseHours}, ${values.normalResponseHours}, ${values.lowResponseHours}, ${values.agreementHorizonDays}, ${values.reason}, ${actor.actorId})
-      returning ${COLUMNS}`)).rows, "The dispatch policy");
+      returning ${COLUMNS}`, "objects"), "The dispatch policy");
     await auditService({ orgId: actor.orgId, table: "service_dispatch_policies", rowId: row.id, action: "insert", actorId: actor.actorId, after: row, reason: values.reason });
     return row;
   }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });

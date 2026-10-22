@@ -54,7 +54,7 @@ async function seedReplayOrg(): Promise<ReplayFixture> {
   const secondId = (await withBypass(() => db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-      from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`))).rows[0]!.id
+      from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, 'objects')))[0]!.id
   // The application posts the payment dated today, outside the fixture's
   // 2026-07 period: open the current month so the redemption reaches the
   // scope and replay boundaries instead of the period guard.
@@ -245,7 +245,7 @@ test('reusing a key with a different card conflicts instead of replaying', { ski
     const paymentsBefore = await withOrgContext(fx.orgId, () =>
       db.execute<{ count: number }>(sql`
         select count(*)::int as count from documents
-         where org_id = ${fx.orgId} and kind = 'customer_payment'`))
+         where org_id = ${fx.orgId} and kind = 'customer_payment'`, 'objects'))
     const first = await redeemStoredValueForInvoice(ctx, { code: fx.codeA, invoiceId: inv, amount: '100', idempotencyKey: key })
     assert.equal(first.replayed, false)
     // Same key, invoice and amount, but a different secret code: the hashed
@@ -265,8 +265,8 @@ test('reusing a key with a different card conflicts instead of replaying', { ski
     const paymentsAfter = await withOrgContext(fx.orgId, () =>
       db.execute<{ count: number }>(sql`
         select count(*)::int as count from documents
-         where org_id = ${fx.orgId} and kind = 'customer_payment'`))
-    assert.equal(paymentsAfter.rows[0]!.count, paymentsBefore.rows[0]!.count + 1, 'only the first redemption posted a payment')
+         where org_id = ${fx.orgId} and kind = 'customer_payment'`, 'objects'))
+    assert.equal(paymentsAfter[0]!.count, paymentsBefore[0]!.count + 1, 'only the first redemption posted a payment')
   } finally {
     await withBypass(() => dropScratchOrg(fx.orgId))
   }

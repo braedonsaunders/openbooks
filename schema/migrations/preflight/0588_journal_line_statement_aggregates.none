@@ -1,1 +1,0 @@
-Replaces ledger summary trigger maintenance with statement-level aggregation; reads and rewrites no existing rows.

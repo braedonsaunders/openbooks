@@ -63,8 +63,8 @@ function quotaAction(amount: unknown) {
 }
 
 async function quotaCount(): Promise<number> {
-  const rows = (await withOrgContext(state.orgId,()=>db.execute<{ n: number }>(sql`
-    select count(*)::int as n from crm_sales_quotas where org_id = ${state.orgId}`))).rows
+  const rows = await withOrgContext(state.orgId,()=>db.execute<{ n: number }>(sql`
+    select count(*)::int as n from crm_sales_quotas where org_id = ${state.orgId}`, 'objects'))
   return rows[0]!.n
 }
 
@@ -88,13 +88,13 @@ test('retired setup refuses writes and native Sales preserves a column-maximum q
     assert.equal(await quotaCount(), 0)
     const {writeSalesCommand} = await import('@openbooks/engine/crm/sales')
     const employee = await withBypassContext(async () => {
-      const p = (await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${state.orgId},'employee','Quota representative',${org.subsidiaryId}) returning id`)).rows[0]!.id
+      const p = (await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${state.orgId},'employee','Quota representative',${org.subsidiaryId}) returning id`, 'objects'))[0]!.id
       await db.execute(sql`insert into employee_roles(org_id,party_id,is_sales_rep,sales_rep_since) values(${state.orgId},${p},true,'2020-01-01')`)
       return p
     })
     await withOrgContext(state.orgId, () => writeSalesCommand({orgId:state.orgId, actorId:state.actorId, allowedSubsidiaryIds:null}, {action:'quota', name:'Maximum target', subsidiaryId:org.subsidiaryId, employeeId:employee, salesTeamId:null, parentQuotaId:null, supersedesId:null, reason:'', periodStart:'2026-07-01',periodEnd:'2026-07-31',currency:'CAD',amount:'999999999999999.9999',metric:'closed_won'}))
-    const rows = (await withOrgContext(state.orgId,()=>db.execute<{ amount: string }>(sql`
-      select amount::text as amount from crm_sales_quotas where org_id = ${state.orgId}`))).rows
+    const rows = await withOrgContext(state.orgId,()=>db.execute<{ amount: string }>(sql`
+      select amount::text as amount from crm_sales_quotas where org_id = ${state.orgId}`, 'objects'))
     assert.equal(rows[0]!.amount, '999999999999999.9999')
   } finally {
     await dropScratchOrg(org.orgId)

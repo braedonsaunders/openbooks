@@ -22,8 +22,8 @@ test('POST refuses malformed policy values without writing', async () => {
   try {
     const invalidDate = await post(itemId, { currency: 'CAD', unitPrice: '10', effectiveFrom: '2024-02-30' })
     const invalidFlag = await post(itemId, { currency: 'CAD', unitPrice: '10', effectiveFrom: '2024-02-29', isActive: 'false' })
-    const rows = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from fair_value_prices where item_id = ${itemId}`)).rows
+    const rows = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from fair_value_prices where item_id = ${itemId}`, 'objects')
     assert.deepEqual([invalidDate.status, invalidFlag.status, rows[0]!.n], [400, 400, 0])
   } finally {
     await dropScratchOrg(org.orgId)

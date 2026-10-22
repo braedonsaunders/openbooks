@@ -54,8 +54,8 @@ async function enableMetrics(orgId: string): Promise<void> {
       '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling":true,"saasMetrics":true}'::jsonb
     ) where id = ${orgId} returning id
-  `);
-  assert.equal(result.rows.length, 1, "the feature setting must be applied to the scratch organization");
+  `, "objects");
+  assert.equal(result.length, 1, "the feature setting must be applied to the scratch organization");
 }
 
 interface Fixture {
@@ -103,23 +103,23 @@ async function seedCustomerAndSubscription(ctx: Fixture, currency = "CAD"): Prom
       insert into parties (id, org_id, kind, display_name, subsidiary_id)
       values (${customerId}, ${ctx.org.orgId}, 'customer', 'Metrics Customer', ${ctx.org.subsidiaryId})
       returning id
-    `);
-    assert.equal(customer.rows.length, 1, "the customer must be stored");
+    `, "objects");
+    assert.equal(customer.length, 1, "the customer must be stored");
     const plan = await db.execute<{ id: string }>(sql`
       insert into subscription_plans
         (id, org_id, name, amount, currency_code, interval, interval_count, income_account_id, created_by)
       values (${planId}, ${ctx.org.orgId}, 'Metrics plan', '100.0000', ${currency}, 'monthly', 1, null, ${ctx.requester})
       returning id
-    `);
-    assert.equal(plan.rows.length, 1, "the subscription plan must be stored");
+    `, "objects");
+    assert.equal(plan.length, 1, "the subscription plan must be stored");
     const subscription = await db.execute<{ id: string }>(sql`
       insert into subscriptions
         (id, org_id, customer_id, plan_id, quantity, price_override, status, start_on, next_bill_on, canceled_on, auto_post, created_by)
       values (${subscriptionId}, ${ctx.org.orgId}, ${customerId}, ${planId}, '1', '100.0000',
               'active', '2026-07-01', '2026-08-15', null, false, ${ctx.requester})
       returning id
-    `);
-    assert.equal(subscription.rows.length, 1, "the subscription must be stored");
+    `, "objects");
+    assert.equal(subscription.length, 1, "the subscription must be stored");
   });
   return { customerId, subscriptionId };
 }
@@ -146,8 +146,8 @@ async function seedV0Month(ctx: Fixture, month: string = MONTH, repeated = false
                 ${row.contractionMrr}, ${row.churnedMrr}, ${row.reactivationMrr}, ${row.movement},
                 ${row.recognizedRevenue}, ${row.deferredDelta}, ${v0.legacyHash})
         returning id
-      `);
-      assert.equal(stored.rows.length, 1, "the legacy monthly row must be stored");
+      `, "objects");
+      assert.equal(stored.length, 1, "the legacy monthly row must be stored");
     }
     for (const row of v0.facts) {
       const stored = await db.execute<{ id: string }>(sql`
@@ -165,8 +165,8 @@ async function seedV0Month(ctx: Fixture, month: string = MONTH, repeated = false
                 ${row.glRevenue}, ${row.glCogs}, ${row.bookings}, ${row.billings}, ${row.deferredBalance},
                 ${row.basis}, ${v0.legacyHash})
         returning id
-      `);
-      assert.equal(stored.rows.length, 1, "the legacy facts row must be stored");
+      `, "objects");
+      assert.equal(stored.length, 1, "the legacy facts row must be stored");
     }
     for (const row of v0.cohorts) {
       const stored = await db.execute<{ id: string }>(sql`
@@ -177,8 +177,8 @@ async function seedV0Month(ctx: Fixture, month: string = MONTH, repeated = false
                 ${row.monthsSinceStart}, ${row.startMrr}, ${row.mrr},
                 ${row.startCustomers}, ${row.customers}, ${v0.legacyHash})
         returning id
-      `);
-      assert.equal(stored.rows.length, 1, "the legacy cohort row must be stored");
+      `, "objects");
+      assert.equal(stored.length, 1, "the legacy cohort row must be stored");
     }
   });
   const replay = await withOrgTransaction(ctx.org.orgId, async () => computeLegacyV0Month(db, ctx.org.orgId, month));
@@ -192,8 +192,8 @@ async function seedV0Month(ctx: Fixture, month: string = MONTH, repeated = false
       const stored = await db.execute(sql`
         update ${sql.identifier(table)} set inputs_hash = ${replay.legacyHash}
          where org_id = ${ctx.org.orgId} and month = ${month}::date returning id
-      `);
-      assert.equal(stored.rows.length, 1, `${table} must record the repeated historical computation`);
+      `, "objects");
+      assert.equal(stored.length, 1, `${table} must record the repeated historical computation`);
     }
   });
   return replay;
@@ -207,8 +207,8 @@ async function setSaaSMetricsFeature(ctx: Fixture, enabled: boolean): Promise<vo
         '{features}',
         coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ saasMetrics: enabled })}::jsonb
       ) where id = ${ctx.org.orgId} returning id
-    `);
-    assert.equal(result.rows.length, 1, "the feature setting must be applied to the scratch organization");
+    `, "objects");
+    assert.equal(result.length, 1, "the feature setting must be applied to the scratch organization");
   });
 }
 
@@ -218,8 +218,8 @@ async function seedFxRate(ctx: Fixture, from: string, to: string, asOf: string, 
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${ctx.org.orgId}, ${from}, ${to}, ${asOf}, 'spot', ${rate}, 'manual')
       returning id
-    `);
-    assert.equal(stored.rows.length, 1, "the covering spot rate must be stored");
+    `, "objects");
+    assert.equal(stored.length, 1, "the covering spot rate must be stored");
   });
 }
 
@@ -237,8 +237,8 @@ async function seedNormalizedMonth(ctx: Fixture, customerId: string, subscriptio
               'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
               'CAD', 'v1', ${V1_EVIDENCE}::jsonb)
       returning id
-    `);
-    assert.equal(monthly.rows.length, 1, "the normalized subscription month must be stored");
+    `, "objects");
+    assert.equal(monthly.length, 1, "the normalized subscription month must be stored");
     const facts = await db.execute(sql`
       insert into saas_metrics_facts_monthly
         (org_id, subsidiary_id, month, mrr_start, mrr_end, new_mrr, expansion_mrr,
@@ -251,8 +251,8 @@ async function seedNormalizedMonth(ctx: Fixture, customerId: string, subscriptio
               'recognised', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
               'CAD', 'v1', ${V1_EVIDENCE}::jsonb)
       returning id
-    `);
-    assert.equal(facts.rows.length, 1, "the normalized subsidiary facts must be stored");
+    `, "objects");
+    assert.equal(facts.length, 1, "the normalized subsidiary facts must be stored");
     const cohort = await db.execute(sql`
       insert into saas_metrics_cohort_monthly
         (org_id, subsidiary_id, cohort_month, month, months_since_start, start_mrr, mrr,
@@ -263,27 +263,27 @@ async function seedNormalizedMonth(ctx: Fixture, customerId: string, subscriptio
               'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
               'CAD', 'v1', ${V1_EVIDENCE}::jsonb)
       returning id
-    `);
-    assert.equal(cohort.rows.length, 1, "the normalized cohort month must be stored");
+    `, "objects");
+    assert.equal(cohort.length, 1, "the normalized cohort month must be stored");
   });
 }
 
 async function requestAuditEvents(orgId: string, requestId: string): Promise<Array<{ action: string; changes: Record<string, unknown> }>> {
   return withOrgTransaction(orgId, async () =>
-    (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
+    await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
       select action, changes from audit_log
        where org_id = ${orgId} and table_name = 'saas_metrics_normalization_requests' and row_id = ${requestId}
        order by at, cmin::text::bigint, id
-    `)).rows);
+    `, "objects"));
 }
 
 async function correctionAuditEvents(orgId: string): Promise<Array<{ table: string; row: string; changes: Record<string, unknown> }>> {
   return withOrgTransaction(orgId, async () =>
-    (await db.execute<{ table: string; row: string; changes: Record<string, unknown> }>(sql`
+    await db.execute<{ table: string; row: string; changes: Record<string, unknown> }>(sql`
       select table_name as table, row_id::text as row, changes from audit_log
        where org_id = ${orgId} and action = 'saas_normalization_corrected'
        order by table_name, row_id
-    `)).rows);
+    `, "objects"));
 }
 
 async function expectRefusal(
@@ -621,7 +621,7 @@ test("a requester outside the organization is refused and stores nothing", { ski
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from saas_metrics_normalization_requests where org_id = ${ctx.org.orgId}
-      `)).rows[0]?.count);
+      `, "objects"))[0]?.count);
     assert.equal(rows, "0", "the refused write must store no request row");
   });
 });
@@ -641,7 +641,7 @@ test("an empty month refuses with the recompute remedy and records the failure",
     const stored = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from saas_metrics_monthly where org_id = ${ctx.org.orgId}
-      `)).rows[0]?.count);
+      `, "objects"))[0]?.count);
     assert.equal(stored, "0", "no metric write survives a refused proof");
   });
 });
@@ -657,10 +657,10 @@ test("a fully normalized month refuses as already done and keeps its rows", { sk
       "stored month",
     );
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ hash: string }>(sql`
+      await db.execute<{ hash: string }>(sql`
         select inputs_hash as hash from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(rows.length, 1, "the refused correction writes nothing");
     assert.equal(
       rows[0]?.hash,
@@ -681,8 +681,8 @@ test("a mixed legacy and normalized month refuses as unsupported partial", { ski
                normalization_evidence = ${V1_EVIDENCE}::jsonb
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(changed.rows.length, 1, "the subsidiary facts must become normalized to stage a mixed month");
+      `, "objects");
+      assert.equal(changed.length, 1, "the subsidiary facts must become normalized to stage a mixed month");
     });
     const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
@@ -691,10 +691,10 @@ test("a mixed legacy and normalized month refuses as unsupported partial", { ski
       "never edited by hand",
     );
     const monthly = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(monthly[0]?.currency, null, "the legacy row stays legacy after the refused batch");
   });
 });
@@ -709,8 +709,8 @@ test("missing FX evidence fails the batch with its setup remedy and no writes", 
         delete from fx_rates
          where org_id = ${ctx.org.orgId} and from_currency = 'EUR' and to_currency = 'CAD'
         returning id
-      `);
-      assert.equal(removed.rows.length, 1, "the covering rate must be withdrawn to stage the drift");
+      `, "objects");
+      assert.equal(removed.length, 1, "the covering rate must be withdrawn to stage the drift");
     });
     const { request } = await pendingFlowRequest(ctx);
     const error = await expectRefusal(
@@ -722,10 +722,10 @@ test("missing FX evidence fails the batch with its setup remedy and no writes", 
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: request.id });
     assert.equal(status.status, "pending", "a refused native decision rolls its lifecycle back");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null; hash: string }>(sql`
+      await db.execute<{ currency: string | null; hash: string }>(sql`
         select reporting_currency as currency, inputs_hash as hash from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.currency, null, "the legacy row is untouched by the failed batch");
     assert.equal(rows[0]?.hash, v0.legacyHash, "the recorded v0 hash is untouched by the failed batch");
@@ -741,7 +741,7 @@ test("a reproduced legacy month corrects atomically with per-row before and afte
     const journalBefore = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from journal_entries where org_id = ${ctx.org.orgId}
-      `)).rows[0]?.count);
+      `, "objects"))[0]?.count);
     const { request } = await pendingFlowRequest(ctx);
     const result = await executeNormalizationFlowFixture(ctx, request.id);
     assert.equal(result.month, MONTH);
@@ -753,7 +753,7 @@ test("a reproduced legacy month corrects atomically with per-row before and afte
     assert.equal(result.replacedFacts, v0.facts.length);
     assert.equal(result.replacedCohorts, v0.cohorts.length);
     const stored = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ hash: string; currency: string; version: string }>(sql`
+      await db.execute<{ hash: string; currency: string; version: string }>(sql`
         select inputs_hash as hash, reporting_currency as currency, denomination_version as version
           from saas_metrics_monthly where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         union all
@@ -762,7 +762,7 @@ test("a reproduced legacy month corrects atomically with per-row before and afte
         union all
         select inputs_hash as hash, reporting_currency as currency, denomination_version as version
           from saas_metrics_cohort_monthly where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(
       stored.length,
       v0.monthly.length + v0.facts.length + v0.cohorts.length,
@@ -793,7 +793,7 @@ test("a reproduced legacy month corrects atomically with per-row before and afte
     const journalAfter = await withOrgTransaction(ctx.org.orgId, async () =>
       (await db.execute<{ count: string }>(sql`
         select count(*)::text as count from journal_entries where org_id = ${ctx.org.orgId}
-      `)).rows[0]?.count);
+      `, "objects"))[0]?.count);
     assert.equal(journalAfter, journalBefore, "posted accounting history is never rewritten");
   });
 });
@@ -807,17 +807,17 @@ test("a closed month corrects only through the approved request without reopenin
         insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state)
         values (${ctx.org.orgId}, ${ctx.org.periodId}, ${ctx.org.bookId}, null, 'ar', 'closed')
         returning period_id
-      `);
-      assert.equal(closed.rows.length, 1, "July AR must be closed before the correction");
+      `, "objects");
+      assert.equal(closed.length, 1, "July AR must be closed before the correction");
     });
     const { request } = await pendingFlowRequest(ctx);
     const result = await executeNormalizationFlowFixture(ctx, request.id);
     assert.match(result.monthHash, /^[0-9a-f]{64}$/);
     const locks = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ state: string }>(sql`
+      await db.execute<{ state: string }>(sql`
         select state from period_locks
          where org_id = ${ctx.org.orgId} and period_id = ${ctx.org.periodId} and module = 'ar'
-      `)).rows);
+      `, "objects"));
     assert.equal(locks[0]?.state, "closed", "the accounting period stays closed throughout");
   });
 });
@@ -831,8 +831,8 @@ test("a changed source refuses as drift with zero writes and the chained remedy"
         update subscriptions set price_override = '200.0000'
          where org_id = ${ctx.org.orgId} and id = ${seeded.subscriptionId}
         returning id
-      `);
-      assert.equal(changed.rows.length, 1, "the subscription price must move to stage source drift");
+      `, "objects");
+      assert.equal(changed.length, 1, "the subscription price must move to stage source drift");
     });
     const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
@@ -841,10 +841,10 @@ test("a changed source refuses as drift with zero writes and the chained remedy"
       "earlier months first",
     );
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(rows.length, 1, "the drifted batch writes no v1 row");
     assert.equal(rows[0]?.currency, null, "the legacy row stays legacy after source drift");
   });
@@ -859,8 +859,8 @@ test("a tampered stored value refuses with zero writes and administrator escalat
         update saas_metrics_monthly set mrr_end = mrr_end + 1, expansion_mrr = expansion_mrr + 1
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(tampered.rows.length, 1, "the stored value must move to stage tamper");
+      `, "objects");
+      assert.equal(tampered.length, 1, "the stored value must move to stage tamper");
     });
     const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
@@ -869,10 +869,10 @@ test("a tampered stored value refuses with zero writes and administrator escalat
       "never edited by hand",
     );
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null; hash: string }>(sql`
+      await db.execute<{ currency: string | null; hash: string }>(sql`
         select reporting_currency as currency, inputs_hash as hash from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(rows.length, 1, "the tampered batch writes no v1 row");
     assert.equal(rows[0]?.currency, null);
     assert.equal(rows[0]?.hash, v0.legacyHash, "the recorded hash still stands");
@@ -889,8 +889,8 @@ test("a tampered stored hash refuses with zero writes and administrator escalati
            set inputs_hash = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd'
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(tampered.rows.length, 1, "the stored hash must move to stage tamper");
+      `, "objects");
+      assert.equal(tampered.length, 1, "the stored hash must move to stage tamper");
     });
     const { request } = await pendingFlowRequest(ctx);
     const error = await expectRefusal(
@@ -900,10 +900,10 @@ test("a tampered stored hash refuses with zero writes and administrator escalati
     );
     assert.match(error.remedy, /escalate with the request id/);
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(rows.length, 1, "the tampered batch writes no v1 row");
     assert.equal(rows[0]?.currency, null);
   });
@@ -918,8 +918,8 @@ test("a missing stored row refuses as key drift with zero writes", { skip: !DB }
         delete from saas_metrics_facts_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(removed.rows.length, 1, "the facts row must leave to stage a missing key");
+      `, "objects");
+      assert.equal(removed.length, 1, "the facts row must leave to stage a missing key");
     });
     const { request } = await pendingFlowRequest(ctx);
     await expectRefusal(
@@ -928,10 +928,10 @@ test("a missing stored row refuses as key drift with zero writes", { skip: !DB }
       "new request",
     );
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(rows.length, 1, "the key-drifted batch writes no v1 row");
     assert.equal(rows[0]?.currency, null);
   });
@@ -950,10 +950,10 @@ test("an extra source key refuses as key drift with zero writes", { skip: !DB },
     );
     assert.match(error.message, /saas_metrics_monthly:/, "the refusal names the drifted natural key");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.equal(rows.length, 1, "the key-drifted batch writes no v1 row");
     assert.equal(rows[0]?.currency, null);
   });
@@ -982,10 +982,10 @@ test("chained mixed-currency months reproduce v0 across the audited correction",
     assert.equal(doneAugust.request.status, "succeeded");
     assert.deepEqual(doneAugust.result.sourceV0Hashes, [augustBefore.legacyHash]);
     const augustRows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ version: string | null }>(sql`
+      await db.execute<{ version: string | null }>(sql`
         select denomination_version as version from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.ok(augustRows.length > 0, "August stores corrected rows");
     for (const row of augustRows) assert.equal(row.version, "v1");
   });
@@ -1012,10 +1012,10 @@ test("a prior ordinary v1 rewrite with no preserved provenance refuses", { skip:
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
     assert.equal(status.status, "pending", "a refused native decision rolls its lifecycle back");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.ok(rows.length > 0, "August legacy rows remain");
     for (const row of rows) assert.equal(row.currency, null, "no August row normalizes without provenance");
   });
@@ -1033,8 +1033,8 @@ test("a tampered prior v1 row does not poison the next month's proof", { skip: !
         update saas_metrics_monthly set mrr_end = mrr_end + 1, expansion_mrr = expansion_mrr + 1
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(tampered.rows.length, 1, "the corrected July row must move to stage prior tamper");
+      `, "objects");
+      assert.equal(tampered.length, 1, "the corrected July row must move to stage prior tamper");
     });
     const augustV0 = await seedV0Month(ctx, NEXT_MONTH);
     const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
@@ -1051,7 +1051,7 @@ async function monthlyCorrectedChanges(ctx: Fixture): Promise<Record<string, unk
        where org_id = ${ctx.org.orgId} and table_name = 'saas_metrics_monthly'
          and action = 'saas_normalization_corrected'
        order by at limit 1
-    `)).rows[0]?.changes);
+    `, "objects"))[0]?.changes);
   assert.ok(found, "a corrected monthly event must exist to stage conflicting provenance");
   return found;
 }
@@ -1070,8 +1070,8 @@ async function appendAuditEvent(
       values (${ctx.org.orgId}, ${table}, ${rowId}, 'saas_normalization_corrected',
               ${JSON.stringify(changes)}::jsonb, ${actorId}, ${requestKey})
       returning id
-    `);
-    assert.equal(stored.rows.length, 1, "the conflicting audit candidate must append");
+    `, "objects");
+    assert.equal(stored.length, 1, "the conflicting audit candidate must append");
   });
 }
 
@@ -1083,7 +1083,7 @@ test("a succeeded correction binds audit columns, counts, and hashes to its requ
     const done = await completeNormalizationFlowFixture(ctx, filed.request.id);
     assert.equal(done.request.status, "succeeded");
     const bound = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{
+      await db.execute<{
         table: string;
         row_id: string;
         request_key: string | null;
@@ -1095,7 +1095,7 @@ test("a succeeded correction binds audit columns, counts, and hashes to its requ
           from audit_log
          where org_id = ${ctx.org.orgId} and action = 'saas_normalization_corrected'
          order by at
-      `)).rows);
+      `, "objects"));
     assert.equal(bound.length, 3, "one correction records all three row sets");
     const counts: Record<string, number> = {};
     for (const row of bound) {
@@ -1149,10 +1149,10 @@ test("a conflicting appended provenance candidate refuses as ambiguous", { skip:
     const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
     assert.equal(status.status, "pending", "a refused native decision rolls its lifecycle back");
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.ok(rows.length > 0, "August legacy rows remain");
     for (const row of rows) assert.equal(row.currency, null, "no August row normalizes on ambiguous provenance");
   });
@@ -1174,10 +1174,10 @@ test("a duplicated provenance event refuses as tampered over-count", { skip: !DB
       "escalate with the request id",
     );
     const rows = await withOrgTransaction(ctx.org.orgId, async () =>
-      (await db.execute<{ currency: string | null }>(sql`
+      await db.execute<{ currency: string | null }>(sql`
         select reporting_currency as currency from saas_metrics_monthly
          where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
-      `)).rows);
+      `, "objects"));
     assert.ok(rows.length > 0, "August legacy rows remain");
     for (const row of rows) assert.equal(row.currency, null, "no August row normalizes on a duplicated set");
   });
@@ -1203,8 +1203,8 @@ test("every configured tenant gate completes before the correction is released",
     assert.equal((await getNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id})).status,"pending");
     assert.equal((await correctionAuditEvents(ctx.org.orgId)).length,0);
     const stored=await withOrgTransaction(ctx.org.orgId,()=>db.execute<{hash:string}>(sql`select inputs_hash as hash
-      from saas_metrics_monthly where org_id=${ctx.org.orgId} and month=${MONTH}`));
-    assert.equal(stored.rows[0]?.hash,before.legacyHash);
+      from saas_metrics_monthly where org_id=${ctx.org.orgId} and month=${MONTH}`, "objects"));
+    assert.equal(stored[0]?.hash,before.legacyHash);
     await decideGate({gateId:gates.at(-1)!,userId:ctx.approver,decision:"approved"});
     const done=await getNormalizationRequest({orgId:ctx.org.orgId,requestId:filed.request.id});
     assert.equal(done.status,"succeeded");assert.equal(done.attemptCount,1);

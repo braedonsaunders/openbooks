@@ -50,19 +50,19 @@ test("the review outline reorders sections and moves a question across sections 
       sections: [{ id: b, questionIds: [q3, q1] }, { id: a, questionIds: [q2] }],
     });
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
-    const sections = (await db.execute<{ id: string; position: number }>(sql`
-      select id, position from hrm_review_template_sections where org_id = ${orgId} order by position`)).rows;
+    const sections = await db.execute<{ id: string; position: number }>(sql`
+      select id, position from hrm_review_template_sections where org_id = ${orgId} order by position`, "objects");
     assert.deepEqual(sections.map((row) => [row.id, row.position]), [[b, 0], [a, 1]]);
-    const questions = (await db.execute<{ id: string; sectionId: string; position: number }>(sql`
+    const questions = await db.execute<{ id: string; sectionId: string; position: number }>(sql`
       select id, section_id as "sectionId", position from hrm_review_template_questions
-       where org_id = ${orgId} order by section_id, position`)).rows;
+       where org_id = ${orgId} order by section_id, position`, "objects");
     assert.deepEqual(
       new Set(questions.map((row) => `${row.id}@${row.sectionId}#${row.position}`)),
       new Set([`${q3}@${b}#0`, `${q1}@${b}#1`, `${q2}@${a}#0`]),
     );
     const audited = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
-       where org_id = ${orgId} and table_name = 'hrm_review_template_questions' and row_id = ${q1} and action = 'update'`)).rows[0]!.n;
+       where org_id = ${orgId} and table_name = 'hrm_review_template_questions' and row_id = ${q1} and action = 'update'`, "objects"))[0]!.n;
     assert.equal(audited, 1, "the cross-section move is audited");
 
     // An outline that omits a stored question is stale: refused, nothing moves.
@@ -71,8 +71,8 @@ test("the review outline reorders sections and moves a question across sections 
     });
     assert.equal(stale.status, 409);
     assert.equal((stale.body as { code?: string }).code, "stale");
-    const after = (await db.execute<{ id: string }>(sql`
-      select id from hrm_review_template_sections where org_id = ${orgId} order by position`)).rows;
+    const after = await db.execute<{ id: string }>(sql`
+      select id from hrm_review_template_sections where org_id = ${orgId} order by position`, "objects");
     assert.deepEqual(after.map((row) => row.id), [b, a], "a refused order writes nothing");
   } finally {
     await dropScratchOrg(orgId);
@@ -90,8 +90,8 @@ test("pipeline stages reorder in one transaction and the default switches withou
 
     const ok = await orderPipelineStages(actor, second, { stageIds: [applied, panel, hired] });
     assert.equal(ok.status, 200, JSON.stringify(ok.body));
-    const stages = (await db.execute<{ id: string }>(sql`
-      select id from hrm_pipeline_stages where org_id = ${orgId} and template_id = ${second} order by position`)).rows;
+    const stages = await db.execute<{ id: string }>(sql`
+      select id from hrm_pipeline_stages where org_id = ${orgId} and template_id = ${second} order by position`, "objects");
     assert.deepEqual(stages.map((row) => row.id), [applied, panel, hired]);
 
     const foreign = await orderPipelineStages(actor, first, { stageIds: [applied, panel, hired] });
@@ -99,8 +99,8 @@ test("pipeline stages reorder in one transaction and the default switches withou
 
     const switched = await makeDefaultPipeline(actor, second);
     assert.equal(switched.status, 200, JSON.stringify(switched.body));
-    const defaults = (await db.execute<{ id: string }>(sql`
-      select id from hrm_pipeline_templates where org_id = ${orgId} and is_default`)).rows;
+    const defaults = await db.execute<{ id: string }>(sql`
+      select id from hrm_pipeline_templates where org_id = ${orgId} and is_default`, "objects");
     assert.deepEqual(defaults.map((row) => row.id), [second]);
 
     await db.execute(sql`update hrm_pipeline_templates set is_active = false where id = ${first}`);

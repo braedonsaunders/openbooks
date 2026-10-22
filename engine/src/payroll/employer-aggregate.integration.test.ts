@@ -145,8 +145,8 @@ async function stubFactors(orgId: string, documentId: string): Promise<Record<st
       from pay_stubs s
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-  `));
-  return Object.fromEntries(rows.rows.map((row) => [row.employee, row.factors]));
+  `, "objects"));
+  return Object.fromEntries(rows.map((row) => [row.employee, row.factors]));
 }
 
 test(
@@ -166,7 +166,7 @@ test(
       await postHours(org.orgId, actorId, empB, "2026-07-06", "20");
       const employees = (await db.execute<{ id: string; display_name: string }>(sql`
         select id, display_name from parties where org_id = ${org.orgId} and kind = 'person'
-      `));
+      `, "objects"));
       await withDeclarations([thresholdLevy()], async () => {
         const run = await createPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -187,7 +187,7 @@ test(
 
         // A later run prices from the committed total: 2,000 of base used,
         // so $500 prices 500 at 10%.
-        const amy = employees.rows.find((e) => e.display_name === "Amy Aggregate")!;
+        const amy = employees.find((e) => e.display_name === "Amy Aggregate")!;
         await postHours(org.orgId, actorId, amy.id, "2026-07-22", "10");
         const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
         await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
@@ -201,8 +201,8 @@ test(
             from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${org.orgId} and s.tax_year = 2026 and r.run_status = 'committed'
-        `));
-        assert.equal(cmp(total.rows[0]!.total, "150"), 0);
+        `, "objects"));
+        assert.equal(cmp(total[0]!.total, "150"), 0);
       });
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -259,8 +259,8 @@ test(
             from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${org.orgId} and s.tax_year = 2026 and r.run_status = 'committed'
-        `));
-        assert.equal(cmp(total.rows[0]!.total, "60"), 0);
+        `, "objects"));
+        assert.equal(cmp(total[0]!.total, "60"), 0);
       });
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -529,9 +529,9 @@ test(
           select l.description from pay_stub_lines l
             join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
            where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-        `));
+        `, "objects"));
         assert.ok(
-          lines.rows.every((l) => l.description !== "Synthetic annual levy"),
+          lines.every((l) => l.description !== "Synthetic annual levy"),
           "no annual levy line on the stub",
         );
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });

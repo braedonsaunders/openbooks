@@ -23,7 +23,7 @@ async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
   await withBypassContext(() => grantScratchPermissions(org.orgId, actorId, ["ap.pay", "admin.setup.manage", "parties.manage"]));
   await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
   const formatId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    select id from payment_formats where org_id=${org.orgId} and code='RBC-STD152'`))).rows[0]!.id;
+    select id from payment_formats where org_id=${org.orgId} and code='RBC-STD152'`, "objects")))[0]!.id;
   const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
     name: "RBC Canadian vendor payments", bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId,
     paymentFormatId: formatId, currency: "CAD", country: "CA", originatorSecrets: ORIGINATOR,
@@ -58,8 +58,8 @@ async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
 }
 
 async function numbered(orgId: string) {
-  return (await withOrgContext(orgId, () => db.execute<{ document_kind: string; next_number: number }>(sql`
-    select document_kind,next_number from number_sequences where org_id=${orgId} and document_kind like 'rbc_std152:%' order by document_kind`))).rows;
+  return await withOrgContext(orgId, () => db.execute<{ document_kind: string; next_number: number }>(sql`
+    select document_kind,next_number from number_sequences where org_id=${orgId} and document_kind like 'rbc_std152:%' order by document_kind`, "objects"));
 }
 
 async function stored(orgId: string, fileId: string) {
@@ -67,14 +67,14 @@ async function stored(orgId: string, fileId: string) {
     select pf.content_hash,fb.bytes,pf.status,pf.sequence_number,pf.total_amount::text as total_amount,pf.payment_count,pf.currency
       from payment_files pf join file_versions fv on fv.id=pf.file_version_id
       join files fi on fi.id=fv.file_id and fi.org_id=pf.org_id join file_blobs fb on fb.version_id=fv.id
-      where pf.org_id=${orgId} and pf.id=${fileId}`))).rows[0]!;
+      where pf.org_id=${orgId} and pf.id=${fileId}`, "objects")))[0]!;
 }
 
 async function removeFixture(orgId: string) {
   // Dispose only this scratch tenant's artifacts before their cabinet versions.
   await withBypassContext(() => db.transaction(async tx => {
     await tx.execute(sql`select set_config('openbooks.amend','on',true),set_config('openbooks.sandbox_wipe','on',true)`);
-    const owner = (await tx.execute(sql`update orgs set env_kind='sandbox' where id=${orgId} and name like 'Scratch %' returning id`)).rows[0];
+    const owner = (await tx.execute(sql`update orgs set env_kind='sandbox' where id=${orgId} and name like 'Scratch %' returning id`, "objects"))[0];
     assert.ok(owner, "artifact teardown must retain disposable tenant ownership");
     await tx.execute(sql`delete from payment_file_deliveries where org_id=${orgId}`);
     await tx.execute(sql`delete from payment_events where org_id=${orgId}`);
@@ -123,7 +123,7 @@ test("native RBC AP generation stores its approved CAD artifact and re-download 
     assert.equal(trailer!.slice(26,40),"00000000123456");
     const payment = (await withOrgContext(org.orgId, () => db.execute<{ document_number: string; status: string }>(sql`
       select d.document_number,d.status from payment_instructions i join documents d on d.org_id=i.org_id and d.id=i.payment_document_id
-      where i.org_id=${org.orgId} and i.payment_run_id=${f.runId}`))).rows[0]!;
+      where i.org_id=${org.orgId} and i.payment_run_id=${f.runId}`, "objects")))[0]!;
     assert.equal(credit!.slice(21,40),payment.document_number.replaceAll("-"," ").padEnd(19));
     assert.equal(payment.status,"draft");
     const sequence = await numbered(org.orgId);
@@ -150,10 +150,10 @@ test("native RBC AP generation stores its approved CAD artifact and re-download 
     assert.deepEqual(await numbered(org.orgId),replacementNumber);
     const originals = (await withOrgContext(org.orgId, () => db.execute<{ name: string; bill: string }>(sql`
       select p.display_name as name,d.document_number as bill from documents d join parties p on p.id=d.party_id and p.org_id=d.org_id
-      where d.org_id=${org.orgId} and d.id=${f.billId}`))).rows[0]!;
+      where d.org_id=${org.orgId} and d.id=${f.billId}`, "objects")))[0]!;
     assert.deepEqual(originals,{name:"O’Neil-Smith Supply, Ltd.",bill:"BILL-00427"});
-    const events = (await withOrgContext(org.orgId, () => db.execute<{ actor_id: string; event_type: string }>(sql`
-      select actor_id,event_type from payment_events where org_id=${org.orgId} and payment_run_id=${f.runId}`))).rows;
+    const events = await withOrgContext(org.orgId, () => db.execute<{ actor_id: string; event_type: string }>(sql`
+      select actor_id,event_type from payment_events where org_id=${org.orgId} and payment_run_id=${f.runId}`, "objects"));
     assert.equal(events.filter(event => event.event_type==='rbc_file_number_allocated').length,2);
     assert.equal(events.filter(event => event.event_type==='file_downloaded').length,3);
     assert.ok(events.every(event => event.actor_id===f.actorId));
@@ -178,7 +178,7 @@ test("native RBC AP refuses revoked duty, current role scope, disabled banking a
       paymentFormatId:f.formatId,currency:"CAD",country:"CA",originatorSecrets:{},
     })),/clientNumber/);
     assert.equal((await withOrgContext(org.orgId, () => db.execute<{ n:number }>(sql`
-      select count(*)::int as n from payment_bank_profiles where org_id=${org.orgId}`))).rows[0]!.n,1);
+      select count(*)::int as n from payment_bank_profiles where org_id=${org.orgId}`, "objects")))[0]!.n,1);
     await assert.rejects(withOrgContext(org.orgId, () => updatePaymentBankProfile(f.profileId,org.orgId,f.actorId,
       {originatorSecrets:{clientNumber:""}})),/clientNumber/);
     assert.deepEqual(await numbered(org.orgId),[]);
@@ -199,7 +199,7 @@ test("native RBC AP refuses revoked duty, current role scope, disabled banking a
     assert.deepEqual(await numbered(org.orgId),identity);
     assert.equal((await stored(org.orgId,first.id)).status,"approved");
     assert.equal((await withOrgContext(org.orgId, () => db.execute<{ n:number }>(sql`
-      select count(*)::int as n from payment_file_deliveries where org_id=${org.orgId} and payment_file_id=${first.id}`))).rows[0]!.n,0);
+      select count(*)::int as n from payment_file_deliveries where org_id=${org.orgId} and payment_file_id=${first.id}`, "objects")))[0]!.n,0);
     await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,banking}','true'::jsonb) where id=${org.orgId}`));
     await deny("admin.setup.manage");
     await assert.rejects(withOrgContext(org.orgId, () => updatePaymentBankProfile(f.profileId,org.orgId,f.actorId,{name:"Unauthorized treasury edit"})),ScopeNotFoundError);

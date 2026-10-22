@@ -95,11 +95,11 @@ test('zero additional hours submits module widening as a new request without cha
         modules: string[]
         expires_at: Date | null
       }>(sql`
-      select id, status, modules, expires_at from close_reopen_requests where org_id = ${org.orgId}`),
+      select id, status, modules, expires_at from close_reopen_requests where org_id = ${org.orgId}`, 'objects'),
     )
-    assert.equal(requests.rows.length, 2)
-    const original = requests.rows.find((row) => row.id === source)!
-    const amendment = requests.rows.find((row) => row.id === result.requestId)!
+    assert.equal(requests.length, 2)
+    const original = requests.find((row) => row.id === source)!
+    const amendment = requests.find((row) => row.id === result.requestId)!
     assert.equal(original.status, 'approved')
     assert.deepEqual(original.modules, ['gl'])
     assert.equal(result.expiresAt, new Date(original.expires_at!).toISOString())

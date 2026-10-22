@@ -38,15 +38,15 @@ export async function representingPartiesRefusal(
   if (!customerPartyId && !vendorPartyId) return "Choose a representing customer, a representing vendor, or both";
   if (!active) return null;
   const subsidiary = (await runner.execute<{ name: string; base_currency: string; is_active: boolean; is_elimination: boolean }>(sql`
-    select name, base_currency, is_active, is_elimination from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0];
+    select name, base_currency, is_active, is_elimination from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}`, "objects"))[0];
   if (!subsidiary) return "Choose a subsidiary of this organization";
   if (!subsidiary.is_active || subsidiary.is_elimination) return `${subsidiary.name} is not an active operating subsidiary`;
   const duplicateSubsidiary = (await runner.execute(sql`
     select 1 from intercompany_representing_parties
-     where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and is_active and id is distinct from ${rowId}::uuid`)).rows[0];
+     where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and is_active and id is distinct from ${rowId}::uuid`, "objects"))[0];
   if (duplicateSubsidiary) return `${subsidiary.name} already has representing parties; edit that record instead`;
   const root = (await runner.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows[0]?.id ?? null;
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"))[0]?.id ?? null;
   for (const [partyId, role] of [[customerPartyId, "customer"], [vendorPartyId, "vendor"]] as const) {
     if (!partyId) continue;
     if (!isUuid(partyId)) return `Choose a valid representing ${role}`;
@@ -58,12 +58,12 @@ export async function representingPartiesRefusal(
              where p.org_id = ${orgId} and p.id = ${partyId}`
       : sql`select p.display_name as name, p.subsidiary_id, p.is_active, r.is_active as role_active, r.currency
               from parties p left join vendor_roles r on r.org_id = p.org_id and r.party_id = p.id
-             where p.org_id = ${orgId} and p.id = ${partyId}`)).rows[0];
+             where p.org_id = ${orgId} and p.id = ${partyId}`, "objects"))[0];
     if (!party) return `The representing ${role} does not exist in this organization`;
     if (!party.is_active || party.role_active !== true) return `${party.name} is not an active ${role}`;
     const transacting = new Set<string>([party.subsidiary_id ?? root ?? ""]);
     for (const row of (await runner.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id from party_subsidiaries where org_id = ${orgId} and party_id = ${partyId}`)).rows) {
+      select subsidiary_id from party_subsidiaries where org_id = ${orgId} and party_id = ${partyId}`, "objects"))) {
       transacting.add(row.subsidiary_id);
     }
     if (transacting.has(subsidiaryId)) {
@@ -73,12 +73,12 @@ export async function representingPartiesRefusal(
       ? sql`select 1 from intercompany_representing_parties
              where org_id = ${orgId} and customer_party_id = ${partyId} and is_active and id is distinct from ${rowId}::uuid`
       : sql`select 1 from intercompany_representing_parties
-             where org_id = ${orgId} and vendor_party_id = ${partyId} and is_active and id is distinct from ${rowId}::uuid`)).rows[0];
+             where org_id = ${orgId} and vendor_party_id = ${partyId} and is_active and id is distinct from ${rowId}::uuid`, "objects"))[0];
     if (duplicateParty) return `${party.name} already represents another subsidiary`;
     if (party.currency) {
       const functional = (await runner.execute<{ base_currency: string }>(sql`
         select base_currency from subsidiaries
-         where org_id = ${orgId} and id = any(${uuidArray([...transacting].filter(isUuid))}::uuid[])`)).rows
+         where org_id = ${orgId} and id = any(${uuidArray([...transacting].filter(isUuid))}::uuid[])`, "objects"))
         .map((row) => row.base_currency);
       if (party.currency !== subsidiary.base_currency && !functional.includes(party.currency)) {
         return `${party.name} trades in ${party.currency}, which is not the functional currency of ${subsidiary.name} or of a subsidiary it transacts with; change the ${role}'s currency`;
@@ -113,7 +113,7 @@ export async function transferPricingPolicySetupRefusal(
     const accountId = text(merged(key, column));
     if (!accountId || !isUuid(accountId)) return `Choose the ${label} account`;
     const account = (await runner.execute<{ name: string; type: string; eliminate: boolean; is_active: boolean; is_summary: boolean }>(sql`
-      select name, type, eliminate, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+      select name, type, eliminate, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
     if (!account || !account.is_active || account.is_summary) return `Choose an active posting account for ${label}`;
     if (!(types as readonly string[]).includes(account.type)) return `${account.name} cannot carry ${label}; choose an account of type ${types.join(" or ")}`;
     if (!account.eliminate) return `${account.name} is not eliminated in consolidation; mark it Eliminate on consolidation in Chart of accounts`;

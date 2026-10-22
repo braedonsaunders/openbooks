@@ -16,7 +16,7 @@ async function fixture(run: (org: ScratchOrg, actor: string) => Promise<void>): 
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Usage rating scheduler", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const enabled = await db.execute(sql`
+      const enabled = await db.execute<never>(sql`
         update orgs set settings = jsonb_set(settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb)
             || '{"subscriptionBilling":true,"usageBilling":true}'::jsonb, true)
@@ -35,8 +35,8 @@ async function closedJulyLink(org: ScratchOrg, actor: string) {
   const itemId = randomUUID();
   await withOrgContext(org.orgId, async () => {
     const item = await db.execute(sql`insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
-      values (${itemId}, ${org.orgId}, 'service', ${`Schedule item ${itemId.slice(0, 8)}`}, ${org.accounts.revenue}, true, '{}'::jsonb) returning id`);
-    assert.equal(item.rows.length, 1);
+      values (${itemId}, ${org.orgId}, 'service', ${`Schedule item ${itemId.slice(0, 8)}`}, ${org.accounts.revenue}, true, '{}'::jsonb) returning id`, "objects");
+    assert.equal(item.length, 1);
   });
   const usageMeter = await createUsageMeter(org.orgId, actor, {
     key: `sched-requests-${randomUUID()}`, name: "API requests", unit: "request", aggregation: "sum", itemId,
@@ -48,8 +48,8 @@ async function closedJulyLink(org: ScratchOrg, actor: string) {
       values (${planId}, ${org.orgId}, ${`Schedule plan ${planId.slice(0, 8)}`}, 0, 'CAD', 'monthly', 1)`);
     const row = await db.execute(sql`insert into subscriptions
       (id, org_id, customer_id, plan_id, quantity, status, start_on, current_period_start, next_bill_on)
-      values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, 1, 'active', '2026-07-01', '2026-08-01', '2026-09-01') returning id`);
-    assert.equal(row.rows.length, 1);
+      values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, 1, 'active', '2026-07-01', '2026-08-01', '2026-09-01') returning id`, "objects");
+    assert.equal(row.length, 1);
   });
   const plan = await createUsageRatingPlan(org.orgId, actor, { name: `Schedule rating ${randomUUID()}`, currency: "CAD" });
   const version = await createUsageRatingPlanVersion(org.orgId, actor, { planId: plan.id, effectiveFrom: "2026-07-01" });
@@ -70,15 +70,15 @@ async function closedJulyLink(org: ScratchOrg, actor: string) {
 }
 
 async function ratingRuns(orgId: string, linkId: string) {
-  return (await db.execute<{ id: string; invoiceId: string | null; periodStart: string; periodEnd: string }>(sql`
+  return await db.execute<{ id: string; invoiceId: string | null; periodStart: string; periodEnd: string }>(sql`
     select id, invoice_id as "invoiceId", period_start::text as "periodStart", period_end::text as "periodEnd"
-      from usage_rating_runs where org_id = ${orgId} and link_id = ${linkId} and status = 'active'`)).rows;
+      from usage_rating_runs where org_id = ${orgId} and link_id = ${linkId} and status = 'active'`, "objects");
 }
 
 async function watermark(orgId: string, linkId: string) {
   return (await db.execute<{ end: string | null }>(sql`
     select last_rated_period_end::text as "end" from usage_rating_settings
-     where org_id = ${orgId} and link_id = ${linkId}`)).rows[0]?.end ?? null;
+     where org_id = ${orgId} and link_id = ${linkId}`, "objects"))[0]?.end ?? null;
 }
 
 test("scheduled rating auto-commits the closed period once the grace period passes", DB, async () => {
@@ -86,8 +86,8 @@ test("scheduled rating auto-commits the closed period once the grace period pass
     const { link } = await closedJulyLink(org, actor);
     await withOrgContext(org.orgId, async () => {
       const settings = await db.execute(sql`insert into usage_rating_settings (id, org_id, link_id, cadence, grace_days, mode, created_by)
-        values (${randomUUID()}, ${org.orgId}, ${link.id}, 'billing_period', 2, 'auto_commit', ${actor}) returning id`);
-      assert.equal(settings.rows.length, 1);
+        values (${randomUUID()}, ${org.orgId}, ${link.id}, 'billing_period', 2, 'auto_commit', ${actor}) returning id`, "objects");
+      assert.equal(settings.length, 1);
     });
     // Two days after the July close the grace period still holds: nothing rates.
     const waiting = await runDueUsageRating("2026-08-02");
@@ -130,8 +130,8 @@ test("a paused schedule never rates its closed periods", DB, async () => {
     const { link } = await closedJulyLink(org, actor);
     await withOrgContext(org.orgId, async () => {
       const settings = await db.execute(sql`insert into usage_rating_settings (id, org_id, link_id, cadence, grace_days, mode, created_by)
-        values (${randomUUID()}, ${org.orgId}, ${link.id}, 'paused', 2, 'auto_commit', ${actor}) returning id`);
-      assert.equal(settings.rows.length, 1);
+        values (${randomUUID()}, ${org.orgId}, ${link.id}, 'paused', 2, 'auto_commit', ${actor}) returning id`, "objects");
+      assert.equal(settings.length, 1);
     });
     const due = await runDueUsageRating("2026-08-10");
     assert.equal(due.rated, 0);
@@ -159,13 +159,13 @@ test("rating schedules honor subsidiary visibility and protect the organization 
           (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
         values
           (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Usage schedule subsidiary', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-        returning id`);
-      assert.equal(subsidiary.rows.length, 1, "the fixture subsidiary is created");
+        returning id`, "objects");
+      assert.equal(subsidiary.length, 1, "the fixture subsidiary is created");
       const customer = await db.execute(sql`
         update parties set subsidiary_id = ${otherSubsidiaryId}
          where org_id = ${org.orgId} and id = ${org.customerId}
-         returning id`);
-      assert.equal(customer.rows.length, 1, "the customer is moved to the fixture subsidiary");
+         returning id`, "objects");
+      assert.equal(customer.length, 1, "the customer is moved to the fixture subsidiary");
     });
 
     const firstSubsidiaryOnly = new Set([org.subsidiaryId]);

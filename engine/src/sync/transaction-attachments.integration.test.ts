@@ -62,7 +62,7 @@ test('transaction files backfill old records, reconcile links without downloadin
         (select count(*)::int from files where org_id=${org.orgId}) as files,
         (select count(*)::int from file_versions v join files f on f.id=v.file_id where f.org_id=${org.orgId}) as versions,
         (select count(*)::int from file_attachments where org_id=${org.orgId}) as links,
-        (select count(*)::int from audit_log where org_id=${org.orgId} and actor_id=${actorId} and table_name in ('files','file_attachments')) as audits`)).rows[0]!;
+        (select count(*)::int from audit_log where org_id=${org.orgId} and actor_id=${actorId} and table_name in ('files','file_attachments')) as audits`, 'objects'))[0]!;
       assert.deepEqual(counts, { files: 1, versions: 2, links: 2, audits: 3 });
       await assert.rejects(linkExistingTransactionFiles(org.orgId, 'qbo', actorId, [{ sourceId: id, documentId: foreignId }]), /unavailable in this organization/);
       await assert.rejects(syncTransactionAttachments(provider, { ...options, actorId: randomUUID() }), /active user/);
@@ -77,8 +77,8 @@ test('transaction files backfill old records, reconcile links without downloadin
       Object.assign(globalThis, { __transactionFilePutFailure: true });
       try { await assert.rejects(persistTransactionFile({ ...input, source: { id: 'failed-write', name: 'bill.pdf' } }), /Object write response failed/); }
       finally { Object.assign(globalThis, { __transactionFilePutFailure: false }); }
-      assert.equal((await db.execute(sql`select id from files where org_id=${org.orgId} and source_id='failed-write'`)).rows.length, 0, 'the file row and version roll back together');
-      const cleanup = (await db.execute<{ object_key: string }>(sql`select object_key from storage_cleanup_outbox where org_id=${org.orgId}`)).rows;
+      assert.equal((await db.execute(sql`select id from files where org_id=${org.orgId} and source_id='failed-write'`, 'objects')).length, 0, 'the file row and version roll back together');
+      const cleanup = await db.execute<{ object_key: string }>(sql`select object_key from storage_cleanup_outbox where org_id=${org.orgId}`, 'objects');
       assert.equal(cleanup.length, 1, 'a blob whose write response failed has a durable cleanup intent');
       assert.ok(cleanup[0]!.object_key.startsWith('file-cabinet/'));
 

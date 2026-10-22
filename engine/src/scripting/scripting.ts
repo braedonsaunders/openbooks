@@ -365,8 +365,8 @@ export async function scriptingFeatureEnabled(orgId: string): Promise<boolean> {
     select settings #>> '{features,scripts}' as enabled
       from orgs
      where id = ${orgId}
-  `));
-  return result.rows[0]?.enabled === "true";
+  `, "objects"));
+  return result[0]?.enabled === "true";
 }
 
 /**
@@ -1666,8 +1666,8 @@ export async function quarantineInvalidScheduledScript(input: {
     select failure.id as "runId"
       from failure
       cross join audited
-  `);
-  return quarantined.rows.length === 1;
+  `, "objects");
+  return quarantined.length === 1;
 }
 
 export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
@@ -1761,8 +1761,8 @@ export async function customGlLinesEnabled(orgId: string): Promise<boolean> {
     select settings->'features' as features
       from orgs
      where id = ${orgId}
-  `));
-  const state = r.rows[0]?.features ?? {};
+  `, "objects"));
+  const state = r[0]?.features ?? {};
   return (
     featureEnabled(state, "scripts") &&
     featureEnabled(state, "allocationsAtPosting")
@@ -2070,8 +2070,8 @@ export async function resolveCustomGlLines(
   if (codes.length > 0) {
     const r = (await db.execute<{ id: string; number: string }>(sql`
       select id, number from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`));
-    for (const row of r.rows) byCode.set(String(row.number), String(row.id));
+       where org_id = ${orgId} and is_active = true and is_summary = false and number in ${codes}`, "objects"));
+    for (const row of r) byCode.set(String(row.number), String(row.id));
     for (const line of parsed) {
       if (!line.accountId && !byCode.has(line.accountCode!)) {
         const lineNo = parsed.indexOf(line) + 1;
@@ -2084,8 +2084,8 @@ export async function resolveCustomGlLines(
   if (accountIds.length > 0) {
     const r = (await db.execute<{ id: string }>(sql`
       select id from accounts
-       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${accountIds}`));
-    const found = new Set(r.rows.map((x) => String(x.id)));
+       where org_id = ${orgId} and is_active = true and is_summary = false and id in ${accountIds}`, "objects"));
+    const found = new Set(r.map((x) => String(x.id)));
     const foreign = parsed.find((l) => l.accountId && !found.has(l.accountId));
     if (foreign) {
       throw new CustomGlLinesError(
@@ -2108,8 +2108,8 @@ export async function resolveCustomGlLines(
     ];
     if (refIds.length === 0) continue;
     const r = (await db.execute<{ id: string }>(sql`
-      select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id in ${refIds}`));
-    const found = new Set(r.rows.map((x) => String(x.id)));
+      select id from ${sql.raw(`"${table}"`)} where org_id = ${orgId} and id in ${refIds}`, "objects"));
+    const found = new Set(r.map((x) => String(x.id)));
     const foreign = parsed.find((l) => l[key] && !found.has(l[key]!));
     if (foreign) {
       throw new CustomGlLinesError(
@@ -2131,9 +2131,9 @@ export async function resolveCustomGlLines(
   const bookCodes = [...new Set(parsed.map((l) => l.bookCode).filter((x): x is string => typeof x === "string"))];
   if (bookCodes.length > 0) {
     const books = (await db.execute<{ code: string; isPrimary: boolean }>(sql`
-      select code, is_primary as "isPrimary" from accounting_books where org_id = ${orgId}`));
+      select code, is_primary as "isPrimary" from accounting_books where org_id = ${orgId}`, "objects"));
     for (const code of bookCodes) {
-      const book = books.rows.find((b) => b.code === code);
+      const book = books.find((b) => b.code === code);
       if (!book) {
         throw new CustomGlLinesError(
           `custom_gl_lines script "${scriptName}": unknown book code "${code}"`,

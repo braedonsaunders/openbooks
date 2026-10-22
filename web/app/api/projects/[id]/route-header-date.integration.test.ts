@@ -42,7 +42,7 @@ test('project header PATCH refuses impossible start and end dates', async () => 
     assert.match((await badEnd.json()).error, /Invalid end date/)
 
     const stored = (await db.execute<{ starts_on: string | null; ends_on: string | null }>(sql`
-      select starts_on::text as starts_on, ends_on::text as ends_on from projects where id=${project} and org_id=${org.orgId}`)).rows[0]!
+      select starts_on::text as starts_on, ends_on::text as ends_on from projects where id=${project} and org_id=${org.orgId}`, 'objects'))[0]!
     assert.equal(stored.starts_on, null)
     assert.equal(stored.ends_on, null)
 

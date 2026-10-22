@@ -98,7 +98,7 @@ export async function resolveSubjectSubsidiaries(
     default:
       return unreachableScope(scope);
   }
-  const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(query)).rows;
+  const rows = await db.execute<{ id: string; subsidiaryId: string | null }>(query, "objects");
   return new Map(rows.map((row) => [row.id, row.subsidiaryId]));
 }
 
@@ -166,7 +166,7 @@ export async function lockSubjectScope(
             select ${sql.identifier(scope.column)} as "subsidiaryId" from ${sql.identifier(scope.table)}
              where id = ${subjectId} and org_id = ${orgId}
              for share
-          `)).rows.map((row) => [subjectId, row.subsidiaryId]));
+          `, "objects")).map((row) => [subjectId, row.subsidiaryId]));
       if (!owners.has(subjectId)) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId);
       if (!subsidiaryScopeAllows(allowed, owners.get(subjectId))) throw new ScopeNotFoundError();
       return;
@@ -185,7 +185,7 @@ export async function lockSubjectScope(
         select ${sql.identifier(scope.column)} as "ownerId" from ${sql.identifier(scope.table)}
          where id = ${subjectId} and org_id = ${orgId}
          for share
-      `)).rows[0];
+      `, "objects"))[0];
       if (!row) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId);
       await lockScopeRow(db, orgId, scope.via, row.ownerId, allowed, "share");
       return;

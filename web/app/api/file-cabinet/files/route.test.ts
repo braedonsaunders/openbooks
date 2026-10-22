@@ -73,7 +73,7 @@ test('file upload rolls back metadata when its audit append fails', { skip: !env
     )
     const failed = (await db.execute(sql`
       select count(*)::int as n from files where org_id = ${org.orgId} and folder_id = ${folderId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(failed.n, 0, 'an upload audit failure rolls back the file row')
 
     await db.execute(sql`drop trigger block_upload_audit on audit_log`)
@@ -84,7 +84,7 @@ test('file upload rolls back metadata when its audit append fails', { skip: !env
     assert.equal(response.status, 201)
     const committed = (await db.execute(sql`
       select count(*)::int as n from files where org_id = ${org.orgId} and folder_id = ${folderId}
-    `)).rows[0]!
+    `, 'objects'))[0]!
     assert.equal(committed.n, 1)
   } finally {
     state.authz = null

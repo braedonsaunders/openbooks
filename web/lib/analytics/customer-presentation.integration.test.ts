@@ -34,8 +34,8 @@ test('customer overview keeps the complete financial population while detail tab
       }
       const changed = await db.execute(sql`update orgs
         set settings=jsonb_set(settings, '{fiscalYearStartMonth}', '4'::jsonb)
-        where id=${org.orgId} returning id`)
-      assert.equal(changed.rows.length, 1)
+        where id=${org.orgId} returning id`, 'objects')
+      assert.equal(changed.length, 1)
     })
     await pinClock('2026-07-15', () => withOrgContext(org.orgId, async () => {
       const period = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
@@ -117,8 +117,8 @@ test('customer intelligence translates every revenue functional to presentation'
         values (${scratch.orgId},'EUR','CAD','2026-07-14','spot',1.5,'manual'),
                (${scratch.orgId},'USD','CAD','2026-07-14','spot',1.35,'manual'),
                (${scratch.orgId},'USD','CAD','2025-07-14','spot',1.3,'manual')`)
-      const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${scratch.periodId}`)
-      const calRow0 = calRow.rows[0]
+      const calRow = await db.execute(sql`select fiscal_calendar_id from accounting_periods where id = ${scratch.periodId}`, 'objects')
+      const calRow0 = calRow[0]
       if (!calRow0) throw new Error('scratch period has no fiscal calendar')
       const cal = String(calRow0.fiscal_calendar_id)
       const priorPeriod = randomUUID()

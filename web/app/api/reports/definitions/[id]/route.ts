@@ -41,8 +41,8 @@ async function loadReportDefinitionRevision(orgId: string, id: string): Promise<
     select ${REPORT_DEFINITION_REVISION} as updated_at
       from report_definitions
      where id = ${id} and org_id = ${orgId}
-  `)
-  return result.rows[0]?.updated_at ?? null
+  `, 'objects')
+  return result[0]?.updated_at ?? null
 }
 
 export const GET = defineRoute({
@@ -128,8 +128,8 @@ export const PATCH = defineRoute({
             and ${REPORT_DEFINITION_REVISION} = ${expectedUpdatedAt}
           returning id, kind, report_type, slug, name, description, query, statement,
                     system, layout, created_at, updated_at, created_by, updated_by
-        `)
-        const after = result.rows[0]
+        `, 'objects')
+        const after = result[0]
         if (!after) return null
         await auditSetupChange(
           {
@@ -184,8 +184,8 @@ export const DELETE = defineRoute({
            returning id, kind, report_type, slug, name, description, query, statement,
                      system, layout, created_at, updated_at, created_by, updated_by,
                      archived_at, archived_by
-        `))
-        const after = result.rows[0]
+        `, 'objects'))
+        const after = result[0]
         if (!after) return null
 
         await tx.execute(sql`

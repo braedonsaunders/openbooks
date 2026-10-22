@@ -56,9 +56,10 @@ const hooks = registerHooks({
         shortCircuit: true,
         url: `data:text/javascript,${encodeURIComponent(`
           export const db = {
-            execute: async (query) => {
+            execute: async (query, mode) => {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result);
               globalThis.__sourceIdMapCapture.push(query);
-              return { rows: [] };
+              return inMode({ rows: [] });
             },
           };
           export const withOrgTransaction = async (_orgId, fn) => fn(db);

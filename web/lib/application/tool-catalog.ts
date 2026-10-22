@@ -848,7 +848,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       const orgId = context.authz.user.orgId;
       const view = settleWrite(await readCompanySettings(orgId));
       const row = (await db.execute<{ base_currency: string; settings: Record<string, unknown> | null }>(sql`
-        select base_currency, settings from orgs where id = ${orgId}`)).rows[0];
+        select base_currency, settings from orgs where id = ${orgId}`, "objects"))[0];
       if (!row) throw notFound("organization");
       const settings = row.settings ?? {};
       const control = (settings.controlAccounts ?? {}) as Record<string, string>;
@@ -856,7 +856,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       const accounts = ids.length
         ? (await db.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
             select id, number, name, type from accounts
-             where org_id = ${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`)).rows
+             where org_id = ${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`, "objects"))
         : [];
       const byId = new Map(accounts.map((a) => [a.id, a]));
       const features = await resolvedFeatureState(orgId);

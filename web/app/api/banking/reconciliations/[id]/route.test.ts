@@ -99,16 +99,17 @@ const mockSources = new Map<string, string>([
           const transactionId = state.nextTransactionId++
           let releaseLock
           const transaction = {
-            execute: async (query) => {
+            execute: async (query, mode) => {
+              const inMode = (result) => (mode === 'objects' ? result.rows : result)
               const text = sqlText(query)
               if (text.startsWith('select account_id from reconciliations')) {
-                return { rows: [{ account_id: 'account-1' }] }
+                return inMode({ rows: [{ account_id: 'account-1' }] })
               }
               if (text.includes('from accounting_books')) {
-                return { rows: [{ id: 'book-1', is_active: true, posts_gl: true }] }
+                return inMode({ rows: [{ id: 'book-1', is_active: true, posts_gl: true }] })
               }
               if (text.includes('as cleared')) {
-                return { rows: [{ cleared: '0', matched_journal: '0', matched_stmt: '0', unmatched_stmt: '0' }] }
+                return inMode({ rows: [{ cleared: '0', matched_journal: '0', matched_stmt: '0', unmatched_stmt: '0' }] })
               }
               if (text.includes('select r.id, r.org_id, r.through_date, r.statement_balance')) {
                 if (text.includes('for update')) {
@@ -120,7 +121,7 @@ const mockSources = new Map<string, string>([
                 }
                 const before = { ...state.committed }
                 transaction.before = before
-                return {
+                return inMode({
                   rows: [{
                     id: '00000000-0000-4000-8000-000000000001',
                     org_id: 'org-1',
@@ -129,25 +130,25 @@ const mockSources = new Map<string, string>([
                     account_id: 'account-1', currency: 'CAD', status: 'in_progress',
                     subsidiary_id: null,
                   }],
-                }
+                })
               }
               if (text.includes('update reconciliations')) {
                 const after = state.desired[transactionId]
                 if (!after) throw new Error('missing desired reconciliation values')
                 state.committed = { ...after }
-                return {
+                return inMode({
                   rows: [{
                     through_date: after.throughDate,
                     statement_balance: after.statementBalance,
                     id: '00000000-0000-4000-8000-000000000001',
                     account_id: 'account-1', currency: 'CAD', status: 'in_progress',
                   }],
-                }
+                })
               }
               if (text.includes('insert into audit_log')) {
                 state.audits.push({ before: transaction.before, after: { ...state.committed } })
               }
-              return { rows: [] }
+              return inMode({ rows: [] })
             },
           }
           try {

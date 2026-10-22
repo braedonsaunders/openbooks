@@ -31,7 +31,7 @@ export async function resolveEffectiveEmployment(
     const project = (await exec.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id::text as "subsidiaryId"
         from projects where org_id = ${input.orgId}::uuid and id = ${input.projectId}::uuid
-    `)).rows[0];
+    `, "objects"))[0];
     if (!project) {
       throw new EffectiveEmploymentError(
         "project_unknown",
@@ -40,7 +40,7 @@ export async function resolveEffectiveEmployment(
     }
     projectSubsidiaryId = project.subsidiaryId;
   }
-  const rows = (await exec.execute<{ id: string; employerSubsidiaryId: string | null; departmentId: string | null }>(sql`
+  const rows = await exec.execute<{ id: string; employerSubsidiaryId: string | null; departmentId: string | null }>(sql`
     select e.id::text as id,
            e.employer_subsidiary_id::text as "employerSubsidiaryId",
            (select av.department_id::text
@@ -63,7 +63,7 @@ export async function resolveEffectiveEmployment(
             or e.employer_subsidiary_id = ${projectSubsidiaryId}::uuid)
      order by e.id
      limit 2
-  `)).rows;
+  `, "objects");
   if (rows.length > 1) {
     throw new EffectiveEmploymentError(
       "ambiguous_employment",
@@ -77,7 +77,7 @@ export async function primaryDepartmentForEmploymentAsOf(
   exec: SqlExecutor,
   input: { orgId: string; employmentId: string; workedOn: string },
 ): Promise<string | null> {
-  const rows = (await exec.execute<{ departmentId: string | null }>(sql`
+  const rows = await exec.execute<{ departmentId: string | null }>(sql`
     select department_id::text as "departmentId"
       from employment_assignment_versions
      where org_id = ${input.orgId}::uuid and employment_id = ${input.employmentId}::uuid
@@ -86,7 +86,7 @@ export async function primaryDepartmentForEmploymentAsOf(
        and (effective_to is null or effective_to > ${input.workedOn}::date)
      order by version_no desc
      limit 2
-  `)).rows;
+  `, "objects");
   if (rows.length > 1) {
     throw new EffectiveEmploymentError(
       "ambiguous_employment",

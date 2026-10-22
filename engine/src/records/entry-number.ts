@@ -67,8 +67,8 @@ export async function nextFreeEntryNumber(
     const taken = await tx.execute(sql`
       select 1 from journal_entries
        where org_id = ${orgId} and entry_number = ${candidate}
-       limit 1`);
-    if (taken.rows.length === 0) return candidate;
+       limit 1`, "objects");
+    if (taken.length === 0) return candidate;
   }
   throw new EntryNumberError(
     `could not allocate a journal entry number derived from "${preferred}"`,
@@ -106,8 +106,8 @@ export async function allocateEntryNumber(
     const found = await tx.execute<{ source_document_id: string | null }>(sql`
       select source_document_id from journal_entries
        where org_id = ${orgId} and entry_number = ${candidate}
-       limit 1`);
-    return found.rows.length === 0 ? undefined : found.rows[0]!.source_document_id;
+       limit 1`, "objects");
+    return found.length === 0 ? undefined : found[0]!.source_document_id;
   };
 
   const held = await holder(preferred);

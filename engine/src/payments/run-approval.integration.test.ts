@@ -86,12 +86,12 @@ test("bank details release under an explicit frozen solo policy with audit evide
       where org_id=${org.orgId} and id=${flowId}`);
     await decideGate({ gateId: gate.id, decision: "approved", userId: actors.submitterId });
     const row = (await db.execute<{ approval_status: string; approved_by: string; is_active: boolean }>(sql`
-      select approval_status,approved_by,is_active from party_bank_accounts where org_id=${org.orgId} and id=${id}`)).rows[0]!;
+      select approval_status,approved_by,is_active from party_bank_accounts where org_id=${org.orgId} and id=${id}`, "objects"))[0]!;
     assert.equal(row.approval_status, "approved");
     assert.equal(row.approved_by, actors.submitterId);
     assert.equal(row.is_active, true);
-    const audit = (await db.execute(sql`select actor_id from audit_log where org_id=${org.orgId}
-      and table_name='party_bank_accounts' and row_id=${id} and action='approve'`)).rows;
+    const audit = await db.execute(sql`select actor_id from audit_log where org_id=${org.orgId}
+      and table_name='party_bank_accounts' and row_id=${id} and action='approve'`, "objects");
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.actor_id, actors.submitterId);
   });
@@ -147,20 +147,20 @@ async function runState(orgId: string, runId: string) {
   }>(sql`
     select status, submitted_by, approved_by, approved_at is not null as approved,
            rejected_by, rejection_reason
-      from payment_runs where id = ${runId} and org_id = ${orgId}`)).rows[0]!;
+      from payment_runs where id = ${runId} and org_id = ${orgId}`, "objects"))[0]!;
 }
 
 async function runEvents(orgId: string, runId: string) {
-  return (await db.execute<{ event_type: string; actor_id: string | null; to_status: string | null; details: Record<string, unknown> }>(sql`
+  return await db.execute<{ event_type: string; actor_id: string | null; to_status: string | null; details: Record<string, unknown> }>(sql`
     select event_type, actor_id, to_status, details from payment_events
      where payment_run_id = ${runId} and org_id = ${orgId}
-     order by created_at, id`)).rows;
+     order by created_at, id`, "objects");
 }
 
 async function openGates(orgId: string, runId: string) {
-  return (await db.execute<{ id: string; subject_kind: string; assignee_user_id: string | null; run_id: string }>(sql`
+  return await db.execute<{ id: string; subject_kind: string; assignee_user_id: string | null; run_id: string }>(sql`
     select id, subject_kind, assignee_user_id, run_id from flow_gates
-     where org_id = ${orgId} and subject_id = ${runId} and status in ('pending', 'escalated')`)).rows;
+     where org_id = ${orgId} and subject_id = ${runId} and status in ('pending', 'escalated')`, "objects");
 }
 
 test("with no payment-run flow, a submitted run is approved at once and says why", { skip: !DB }, async () => {

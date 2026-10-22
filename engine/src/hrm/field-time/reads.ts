@@ -19,7 +19,7 @@ import { isClockPhotoSql } from "./photos.ts";
  *  supervisor must still see in-scope project batches, just no "own" ones. */
 async function ownPartyOrNull(orgId: string, userId: string, exec: SqlExecutor): Promise<string | null> {
   const row = (await exec.execute<{ party_id: string | null }>(sql`
-    select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`)).rows[0];
+    select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`, "objects"))[0];
   return row?.party_id ?? null;
 }
 
@@ -33,7 +33,7 @@ import { clockStatus } from "./clock.ts";
 
 export async function resolveOwnParty(orgId: string, userId: string, exec: SqlExecutor = db): Promise<string> {
   const row = (await exec.execute<{ party_id: string | null }>(sql`
-    select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`)).rows[0];
+    select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`, "objects"))[0];
   if (!row?.party_id) {
     refuse(
       "no_employee_link",
@@ -68,7 +68,7 @@ export async function myClockDay(orgId: string, userId: string, exec: SqlExecuto
   }
   const partyId = await resolveOwnParty(orgId, userId, exec);
   const status = await clockStatus(orgId, partyId);
-  const pairs = (await exec.execute<TodayPair>(sql`
+  const pairs = await exec.execute<TodayPair>(sql`
     select i.id::text as "pairId", i.occurred_at::text as "clockInAt",
            o.occurred_at::text as "clockOutAt",
            i.project_id::text as "projectId", p.name as "projectName",
@@ -85,7 +85,7 @@ export async function myClockDay(orgId: string, userId: string, exec: SqlExecuto
      where i.org_id = ${orgId} and i.employee_party_id = ${partyId}
        and i.kind = 'clock_in'
        and i.occurred_at >= date_trunc('day', now())
-     order by i.occurred_at desc`)).rows;
+     order by i.occurred_at desc`, "objects");
   return { status, pairs };
 }
 
@@ -106,16 +106,16 @@ export async function teamClockedIn(orgId: string, userId: string, today: string
   // must not run — an existing path calling this must observe nothing.
   if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) return [];
   const person = (await exec.execute<{ party_id: string | null }>(sql`
-    select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`)).rows[0];
+    select party_id::text as party_id from users where org_id = ${orgId} and id = ${userId}`, "objects"))[0];
   if (!person?.party_id) return [];
   const own = (await exec.execute<{ id: string }>(sql`
     select id::text as id from worker_employments
-     where org_id = ${orgId} and worker_party_id = ${person.party_id}`)).rows.map((row) => row.id);
+     where org_id = ${orgId} and worker_party_id = ${person.party_id}`, "objects")).map((row) => row.id);
   if (own.length === 0) return [];
   // One parameter per id: bare JS arrays must never be interpolated into
   // ANY() (they bind as row constructors, not PostgreSQL arrays).
   const ids = own.map((id) => sql`${id}::uuid`);
-  return (await exec.execute<{
+  return await exec.execute<{
     employeePartyId: string;
     employeeName: string | null;
     since: string;
@@ -152,7 +152,7 @@ export async function teamClockedIn(orgId: string, userId: string, today: string
        and r.recorded_until is null
        and r.effective_from <= ${today}::date
        and (r.effective_to is null or r.effective_to > ${today}::date)
-     order by i.occurred_at`)).rows;
+     order by i.occurred_at`, "objects");
 }
 
 /** Who is clocked in on a project right now — the cockpit "Crew today". */
@@ -164,7 +164,7 @@ export async function crewToday(orgId: string, projectId: string, exec: SqlExecu
   geoCheck: string;
 }>> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) return [];
-  return (await exec.execute<{
+  return await exec.execute<{
     employeePartyId: string;
     employeeName: string | null;
     since: string;
@@ -189,7 +189,7 @@ export async function crewToday(orgId: string, projectId: string, exec: SqlExecu
      where i.org_id = ${orgId} and i.kind = 'clock_in' and i.status = 'recorded'
        and (case when switched.id is null then i.project_id else switched.project_id end = ${projectId}
          or ${projectId}::uuid is null)
-     order by i.occurred_at`)).rows;
+     order by i.occurred_at`, "objects");
 }
 
 export type CrewBatchSummary = {
@@ -224,7 +224,7 @@ export async function listCrewBatches(
     scope === null || scope.size === 0
       ? sql`false`
       : sql`prj.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[])`;
-  return (await exec.execute<CrewBatchSummary>(sql`
+  return await exec.execute<CrewBatchSummary>(sql`
     select b.id::text as id, frm.display_name as "foremanName",
            prj.name as "projectName", b.worked_on::text as "workedOn", b.status,
            coalesce(sum(l.hours), 0)::text as "totalHours",
@@ -238,7 +238,7 @@ export async function listCrewBatches(
        ${filter.projectId ? sql`and b.project_id = ${filter.projectId}` : sql``}
        ${scope === null ? sql`` : sql`and (${ownArm} or ${scopeArm})`}
      group by b.id, frm.display_name, prj.name, b.worked_on, b.status
-     order by b.worked_on desc, b.id`)).rows;
+     order by b.worked_on desc, b.id`, "objects");
 }
 
 export type BatchDetail = {
@@ -303,11 +303,11 @@ export async function getBatchDetail(
       left join parties frm on frm.id = b.foreman_party_id and frm.org_id = b.org_id
       left join projects prj on prj.id = b.project_id and prj.org_id = b.org_id
      where b.org_id = ${orgId} and b.id = ${batchId}
-       ${scope === null ? sql`` : sql`and (${ownArm} or ${scopeArm})`}`)).rows[0];
+       ${scope === null ? sql`` : sql`and (${ownArm} or ${scopeArm})`}`, "objects"))[0];
   if (!batch) {
     throw new FieldTimeError("batch_unknown", "The crew batch is unknown in this organization — reload the crew list");
   }
-  const lines = (await exec.execute<BatchDetail["lines"][number]>(sql`
+  const lines = await exec.execute<BatchDetail["lines"][number]>(sql`
     select l.id::text as id, l.employee_party_id::text as "employeePartyId",
            emp.display_name as "employeeName", l.hours::text as hours,
            l.time_type_id::text as "timeTypeId", l.project_task_id::text as "projectTaskId",
@@ -318,14 +318,14 @@ export async function getBatchDetail(
       left join parties emp on emp.id = l.employee_party_id and emp.org_id = ${orgId}
       left join equipment_units eq on eq.id = l.equipment_id and eq.org_id = ${orgId}
      where l.batch_id = ${batchId}
-     order by emp.display_name, l.id`)).rows;
-  const events = (await exec.execute<BatchDetail["events"][number]>(sql`
+     order by emp.display_name, l.id`, "objects");
+  const events = await exec.execute<BatchDetail["events"][number]>(sql`
     select e.kind, u.name as "actorName", e.reason,
            e.recorded_at::text as "recordedAt"
       from crew_time_batch_events e
       left join users u on u.id = e.actor_id
      where e.org_id = ${orgId} and e.batch_id = ${batchId}
-     order by e.recorded_at`)).rows;
+     order by e.recorded_at`, "objects");
   return {
     id: batch.id,
     status: batch.status,
@@ -365,7 +365,7 @@ export async function approvalFlags(
   const pairFilter = filter.batchId
     ? sql`and te.crew_batch_line_id in (select id from crew_time_batch_lines where batch_id = ${filter.batchId})`
     : sql`and te.employee_party_id = ${filter.employeePartyId} and te.worked_on >= ${filter.weekStart}::date and te.worked_on <= ${filter.weekStart}::date + 6`;
-  return (await exec.execute<{
+  return await exec.execute<{
     entryId: string;
     workedOn: string;
     hours: string;
@@ -396,5 +396,5 @@ export async function approvalFlags(
         on ev.org_id = te.org_id and ev.pair_id = te.clock_pair_id
      where te.org_id = ${orgId} ${pairFilter}
      group by te.id, te.worked_on, te.hours
-     order by te.worked_on, te.id`)).rows;
+     order by te.worked_on, te.id`, "objects");
 }

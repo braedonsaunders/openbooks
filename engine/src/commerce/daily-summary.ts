@@ -212,11 +212,11 @@ export async function postSummaryBatch(
         values (${orgId}, ${group.channelId}, ${group.day}, ${group.stockLocationId}, ${group.currency}, ${actor}, ${actor})
         -- A cutoff replay reuses the existing batch selected below and checks its posting state.
         on conflict (org_id, channel_id, summary_date, stock_location_id, currency) do nothing
-        returning id, status, posting_document_id`);
-      const batch = inserted.rows[0] ?? (await db.execute<SummaryDbRow>(sql`
+        returning id, status, posting_document_id`, "objects");
+      const batch = inserted[0] ?? (await db.execute<SummaryDbRow>(sql`
         select id, status, posting_document_id from channel_daily_summaries
          where org_id = ${orgId} and channel_id = ${group.channelId} and summary_date = ${group.day}
-           and stock_location_id = ${group.stockLocationId} and currency = ${group.currency}`)).rows[0];
+           and stock_location_id = ${group.stockLocationId} and currency = ${group.currency}`, "objects"))[0];
       if (!batch) throw new Error("Summary batch store returned no row; the batch was lost");
       if (batch.status === "posted" && batch.posting_document_id) {
         return { status: "posted", documentId: batch.posting_document_id, summarized: 0, parked, effectsDocumentId: null as string | null };
@@ -253,7 +253,7 @@ export async function postSummaryBatch(
         discountMinor += order.order.discountMinor;
         totalMinor += order.order.totalMinor;
       }
-      const closed = await db.execute(sql`
+      const closed = await db.execute<never>(sql`
         update channel_daily_summaries
            set status = 'posted', order_count = ${resolved.length},
                subtotal_minor = ${subtotalMinor.toString()}, tax_minor = ${taxMinor.toString()},
@@ -326,8 +326,7 @@ export async function postDueDailySummaries(): Promise<{ posted: number; parked:
   // bypass: scheduler-tick — the summary cut-off scans pending orders
   // across organizations before each row's organization is known.
   const orgs = await withBypassContext(() => db.execute<{ org_id: string }>(sql`
-    select distinct org_id from channel_orders where posting_status = 'pending' limit 50`))
-    .then((result) => result.rows);
+    select distinct org_id from channel_orders where posting_status = 'pending' limit 50`, "objects"));
   let posted = 0;
   let parked = 0;
   const failures: string[] = [];
@@ -357,16 +356,16 @@ async function postDueDailySummariesForOrgIn(
 ): Promise<{ posted: number; parked: number }> {
   let posted = 0;
   let parked = 0;
-  const channels = (await db.execute<{ channel_id: string }>(sql`
+  const channels = await db.execute<{ channel_id: string }>(sql`
     select distinct channel_id from channel_orders
-     where org_id = ${orgId} and posting_status = 'pending'`)).rows;
+     where org_id = ${orgId} and posting_status = 'pending'`, "objects");
   for (const channel of channels) {
     const meta = (await db.execute<{ kind: string; subsidiary_id: string | null }>(sql`
-      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`)).rows[0];
+      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`, "objects"))[0];
     if (!meta) throw new Error(`Pending orders reference missing channel ${channel.channel_id}`);
     let policy: { mode: string; cutoffTz: string };
     try {
-      const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+      const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
       policy = await getPostingPolicy(orgId, channel.channel_id, today);
     } catch (error) {
       if (!(error instanceof CommerceError)) throw error;
@@ -377,7 +376,7 @@ async function postDueDailySummariesForOrgIn(
     let shopToday: string;
     try {
       shopToday = await withTransactionSavepoint(db, async () => (await db.execute<{ day: string }>(sql`
-        select ((now() at time zone ${policy.cutoffTz})::date)::text as day`)).rows[0]!.day);
+        select ((now() at time zone ${policy.cutoffTz})::date)::text as day`, "objects"))[0]!.day);
     } catch (error) {
       if (pgCause(error)?.code !== '22023') throw error;
       parked += await parkPendingChannelOrders(orgId, channel.channel_id, actor, new CommerceError(
@@ -391,9 +390,9 @@ async function postDueDailySummariesForOrgIn(
     // OpenBooks fulfils, else the single mapped 3PL shelf. Anything else
     // (no shelf, or several) posts per order and parks with the Locations
     // remedy at resolution.
-    const locationLinks = (await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
+    const locationLinks = await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
       select stock_location_id, fulfils_orders from sales_channel_locations
-       where org_id = ${orgId} and channel_id = ${channel.channel_id} and stock_location_id is not null`)).rows;
+       where org_id = ${orgId} and channel_id = ${channel.channel_id} and stock_location_id is not null`, "objects");
     const fulfilShelves = locationLinks
       .filter((link) => link.fulfils_orders && link.stock_location_id)
       .map((link) => link.stock_location_id!);
@@ -405,20 +404,20 @@ async function postDueDailySummariesForOrgIn(
       : fulfilShelves.length === 0 && mappedShelves.length === 1
         ? { stockLocationId: mappedShelves[0]!, fulfilledBy: "storefront" as const }
         : null;
-    const groups = (await db.execute<{ day: string; currency: string; order_ids: string[] }>(sql`
+    const groups = await db.execute<{ day: string; currency: string; order_ids: string[] }>(sql`
       select ((ordered_at at time zone ${policy.cutoffTz})::date)::text as day,
              shop_currency as currency,
              array_agg(id order by ordered_at) as order_ids
         from channel_orders
        where org_id = ${orgId} and channel_id = ${channel.channel_id} and posting_status = 'pending'
-       group by 1, 2`)).rows;
+       group by 1, 2`, "objects");
     for (const group of groups) {
       if (group.day >= shopToday) continue;
       const postedSummary = (await db.execute<{ id: string }>(sql`
         select id from channel_daily_summaries
          where org_id = ${orgId} and channel_id = ${due.channelId}
            and summary_date = ${group.day} and currency = ${group.currency} and status = 'posted'
-         limit 1`)).rows[0];
+         limit 1`, "objects"))[0];
       if (postedSummary) {
         for (const orderId of group.order_ids) {
           const outcome = await postChannelOrder(orgId, actor, orderId, { forcePerOrder: true });

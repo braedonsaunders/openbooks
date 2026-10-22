@@ -617,7 +617,7 @@ test("a prior-year opening and current-year bank movements retain one lifetime b
     const fresh = randomUUID();
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${fresh}, ${fx.orgId}, 'person', 'New bank participant', true, '{}'::jsonb)`);
-    const planId = (await db.execute<{id:string}>(sql`select id from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!.id;
+    const planId = (await db.execute<{id:string}>(sql`select id from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`, "objects"))[0]!.id;
     await saveEntitlementOpenings({ orgId: fx.orgId, actorId: fx.actorId, movementDate: '2025-01-01',
       rows: [{ employeePartyId: fx.employeeId, amounts: { [planId]: '1250.55' } }] });
     await db.transaction(async tx => {

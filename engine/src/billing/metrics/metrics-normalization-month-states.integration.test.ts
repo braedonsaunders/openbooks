@@ -50,8 +50,8 @@ async function withFixture(run: (ctx: Fixture) => Promise<void>): Promise<void> 
           '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling":true,"saasMetrics":true}'::jsonb
         ) where id = ${org.orgId} returning id
-      `);
-      assert.equal(result.rows.length, 1, "the feature setting must be applied to the scratch organization");
+      `, "objects");
+      assert.equal(result.length, 1, "the feature setting must be applied to the scratch organization");
     });
     const ctx={org,requester,approver};
     await prepareNormalizationFlowFixture(ctx);
@@ -86,23 +86,23 @@ async function seedCustomerAndSubscription(ctx: Fixture): Promise<{ customerId: 
       insert into parties (id, org_id, kind, display_name, subsidiary_id)
       values (${customerId}, ${ctx.org.orgId}, 'customer', 'Metrics Customer', ${ctx.org.subsidiaryId})
       returning id
-    `);
-    assert.equal(customer.rows.length, 1, "the customer must be stored");
+    `, "objects");
+    assert.equal(customer.length, 1, "the customer must be stored");
     const plan = await db.execute<{ id: string }>(sql`
       insert into subscription_plans
         (id, org_id, name, amount, currency_code, interval, interval_count, income_account_id, created_by)
       values (${planId}, ${ctx.org.orgId}, 'Metrics plan', '100.0000', 'CAD', 'monthly', 1, null, ${ctx.requester})
       returning id
-    `);
-    assert.equal(plan.rows.length, 1, "the subscription plan must be stored");
+    `, "objects");
+    assert.equal(plan.length, 1, "the subscription plan must be stored");
     const subscription = await db.execute<{ id: string }>(sql`
       insert into subscriptions
         (id, org_id, customer_id, plan_id, quantity, price_override, status, start_on, next_bill_on, canceled_on, auto_post, created_by)
       values (${subscriptionId}, ${ctx.org.orgId}, ${customerId}, ${planId}, '1', '100.0000',
               'active', '2026-07-01', '2026-08-15', null, false, ${ctx.requester})
       returning id
-    `);
-    assert.equal(subscription.rows.length, 1, "the subscription must be stored");
+    `, "objects");
+    assert.equal(subscription.length, 1, "the subscription must be stored");
   });
   return { customerId, subscriptionId };
 }
@@ -124,8 +124,8 @@ async function seedLegacyMonth(ctx: Fixture, month: string = MONTH): Promise<voi
                 ${row.contractionMrr}, ${row.churnedMrr}, ${row.reactivationMrr}, ${row.movement},
                 ${row.recognizedRevenue}, ${row.deferredDelta}, ${v0.legacyHash})
         returning id
-      `);
-      assert.equal(stored.rows.length, 1, "the legacy monthly row must be stored");
+      `, "objects");
+      assert.equal(stored.length, 1, "the legacy monthly row must be stored");
     }
     for (const row of v0.facts) {
       const stored = await db.execute<{ id: string }>(sql`
@@ -143,8 +143,8 @@ async function seedLegacyMonth(ctx: Fixture, month: string = MONTH): Promise<voi
                 ${row.glRevenue}, ${row.glCogs}, ${row.bookings}, ${row.billings}, ${row.deferredBalance},
                 ${row.basis}, ${v0.legacyHash})
         returning id
-      `);
-      assert.equal(stored.rows.length, 1, "the legacy facts row must be stored");
+      `, "objects");
+      assert.equal(stored.length, 1, "the legacy facts row must be stored");
     }
     for (const row of v0.cohorts) {
       const stored = await db.execute<{ id: string }>(sql`
@@ -155,8 +155,8 @@ async function seedLegacyMonth(ctx: Fixture, month: string = MONTH): Promise<voi
                 ${row.monthsSinceStart}, ${row.startMrr}, ${row.mrr},
                 ${row.startCustomers}, ${row.customers}, ${v0.legacyHash})
         returning id
-      `);
-      assert.equal(stored.rows.length, 1, "the legacy cohort row must be stored");
+      `, "objects");
+      assert.equal(stored.length, 1, "the legacy cohort row must be stored");
     }
   });
 }
@@ -279,8 +279,8 @@ test("mixed legacy and normalized rows refuse by name instead of reading ready",
                normalization_evidence = ${V1_EVIDENCE}::jsonb
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(updated.rows.length, 1, "one monthly row must be normalized");
+      `, "objects");
+      assert.equal(updated.length, 1, "one monthly row must be normalized");
     });
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "refused");
@@ -401,8 +401,8 @@ test("a disabled feature refuses the read by name", { skip: !DB }, async () => {
         update orgs set settings = jsonb_set(
           settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"saasMetrics":false}'::jsonb
         ) where id = ${ctx.org.orgId} returning id
-      `);
-      assert.equal(result.rows.length, 1, "the feature must be switched off");
+      `, "objects");
+      assert.equal(result.length, 1, "the feature must be switched off");
     });
     await expectRefusal(listNormalizationMonthStates(ctx.org.orgId), "feature_off", "Company Settings → Features");
   });
@@ -435,8 +435,8 @@ test("a hand-edited row hash refuses with the tamper named, not ready", { skip: 
            set inputs_hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(updated.rows.length, 1, "one stored row must be tampered with");
+      `, "objects");
+      assert.equal(updated.length, 1, "one stored row must be tampered with");
     });
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "refused");
@@ -460,8 +460,8 @@ test("a hand-edited evidence hash refuses with the evidence named", { skip: !DB 
            set normalization_evidence = '{"inputs_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}'::jsonb
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(updated.rows.length, 1, "one stored evidence must be tampered with");
+      `, "objects");
+      assert.equal(updated.length, 1, "one stored evidence must be tampered with");
     });
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "refused");
@@ -483,8 +483,8 @@ test("rows removed after success refuse with the counts named", { skip: !DB }, a
         delete from saas_metrics_facts_monthly
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(removed.rows.length, 1, "one stored facts row must be removed");
+      `, "objects");
+      assert.equal(removed.length, 1, "one stored facts row must be removed");
     });
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "refused");
@@ -534,8 +534,8 @@ async function normalizeRowsToV1(ctx: Fixture, month: string = MONTH): Promise<v
              inputs_hash = ${CANONICAL_HASH}
        where org_id = ${ctx.org.orgId} and month = ${month}::date
       returning id
-    `);
-    assert.ok(monthly.rows.length >= 1, "the monthly rows must be normalized");
+    `, "objects");
+    assert.ok(monthly.length >= 1, "the monthly rows must be normalized");
     const facts = await db.execute<{ id: string }>(sql`
       update saas_metrics_facts_monthly
          set reporting_currency = 'CAD', denomination_version = 'v1',
@@ -543,8 +543,8 @@ async function normalizeRowsToV1(ctx: Fixture, month: string = MONTH): Promise<v
              inputs_hash = ${CANONICAL_HASH}
        where org_id = ${ctx.org.orgId} and month = ${month}::date
       returning id
-    `);
-    assert.ok(facts.rows.length >= 1, "the facts rows must be normalized");
+    `, "objects");
+    assert.ok(facts.length >= 1, "the facts rows must be normalized");
     const cohorts = await db.execute<{ id: string }>(sql`
       update saas_metrics_cohort_monthly
          set reporting_currency = 'CAD', denomination_version = 'v1',
@@ -552,8 +552,8 @@ async function normalizeRowsToV1(ctx: Fixture, month: string = MONTH): Promise<v
              inputs_hash = ${CANONICAL_HASH}
        where org_id = ${ctx.org.orgId} and month = ${month}::date
       returning id
-    `);
-    assert.ok(cohorts.rows.length >= 1, "the cohort rows must be normalized");
+    `, "objects");
+    assert.ok(cohorts.length >= 1, "the cohort rows must be normalized");
   });
 }
 
@@ -580,8 +580,8 @@ test("ordinary v1 rows with a hand-edited row hash refuse with no request", { sk
            set inputs_hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(updated.rows.length, 1, "one stored row hash must be tampered with");
+      `, "objects");
+      assert.equal(updated.length, 1, "one stored row hash must be tampered with");
     });
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "refused");
@@ -605,8 +605,8 @@ test("ordinary v1 rows with a hand-edited evidence hash refuse with no request",
            set normalization_evidence = '{"inputs_hash":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}'::jsonb
          where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
         returning id
-      `);
-      assert.equal(updated.rows.length, 1, "one stored evidence hash must be tampered with");
+      `, "objects");
+      assert.equal(updated.length, 1, "one stored evidence hash must be tampered with");
     });
     const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
     assert.equal(state.state, "refused");

@@ -83,7 +83,7 @@ test(
           select id
             from journal_lines
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-        `);
+        `, "objects");
 
         const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
@@ -98,7 +98,7 @@ test(
         await updateDraftPayment(
           payment.id,
           {
-            allocations: [sameCurrencyAllocation(invoiceControl.rows[0]!.id, "100")],
+            allocations: [sameCurrencyAllocation(invoiceControl[0]!.id, "100")],
             bankAccountId: org.accounts.bank,
           },
           actorId,
@@ -214,9 +214,9 @@ test(
             (select count(*)::int from payment_settlements where payment_instruction_id = ${seeded.instructionId}) as settlements,
             (select status from payment_runs where id = ${seeded.runId}) as run_status,
             (select count(*)::int from payment_events where payment_instruction_id = ${seeded.instructionId}) as events
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(state.rows[0], {
+      assert.deepEqual(state[0], {
         document_status: "posted",
         document_reversal_entry_id: null,
         void_requested: false,
@@ -277,7 +277,7 @@ test(
           select id
             from journal_lines
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-        `);
+        `, "objects");
 
         const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
@@ -292,7 +292,7 @@ test(
         await updateDraftPayment(
           payment.id,
           {
-            allocations: [sameCurrencyAllocation(invoiceControl.rows[0]!.id, "100")],
+            allocations: [sameCurrencyAllocation(invoiceControl[0]!.id, "100")],
             bankAccountId: org.accounts.bank,
           },
           actorId,
@@ -407,9 +407,9 @@ test(
             (select count(*)::int from payment_settlements where payment_instruction_id = ${seeded.instructionId}) as settlements,
             (select status from payment_runs where id = ${seeded.runId}) as run_status,
             (select count(*)::int from payment_events where payment_instruction_id = ${seeded.instructionId}) as events
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(state.rows[0], {
+      assert.deepEqual(state[0], {
         document_status: "posted",
         document_reversal_entry_id: null,
         void_requested: false,
@@ -599,7 +599,7 @@ async function generationOutcomeSnapshot(
                 and e.event_type = 'file_generated') as generated_events,
            (select status from payment_runs r
              where r.id = ${runId} and r.org_id = ${orgId}) as run_status
-  `)).rows[0];
+  `, "objects"))[0];
 }
 
 test(
@@ -675,7 +675,7 @@ test(
                  and wait_event_type = 'Lock'
                  and query like '%update payment_runs set file_created_at%'
             ) as waiting
-          `)).rows[0]?.waiting ?? false,
+          `, "objects"))[0]?.waiting ?? false,
         );
         blockedOnRunRow = waiting;
         if (!blockedOnRunRow) await new Promise((resolve) => setTimeout(resolve, 25));
@@ -702,7 +702,7 @@ test(
               select id from payment_runs where org_id = ${org.orgId}
                 and run_number like 'GEN-%'
             )
-        `)).rows.map((row) => row.id),
+        `, "objects")).map((row) => row.id),
       );
       for (const artifactId of artifactIds) {
         await withBypass(() => removePaymentFileFixture(org.orgId, artifactId));
@@ -788,7 +788,7 @@ test(
                  (select r.status from payment_runs r where r.id = pf.payment_run_id) as run_status
             from payment_files pf
            where pf.id = ${seededFileId} and pf.org_id = ${org.orgId}
-        `)).rows[0]
+        `, "objects"))[0]
       );
       assert.deepEqual(state, { file_status: "voided", deliveries: 0, run_status: "rolled_back" });
     } finally {
@@ -843,7 +843,7 @@ test(
                    where d.payment_file_id = pf.id and d.org_id = pf.org_id) as deliveries
             from payment_files pf
            where pf.id = ${seeded!.fileId} and pf.org_id = ${org.orgId}
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.deepEqual(afterWrongClaim, { file_status: "delivering", deliveries: 0 });
 
@@ -881,7 +881,7 @@ test(
             from payment_files pf
             join payment_runs r on r.id = pf.payment_run_id and r.org_id = pf.org_id
            where pf.id = ${seeded!.fileId} and pf.org_id = ${org.orgId}
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.deepEqual(recorded, {
         file_status: "delivered",
@@ -1120,7 +1120,7 @@ test(
           select id
             from journal_lines
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-        `);
+        `, "objects");
 
         const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
           orgId: org.orgId,
@@ -1135,7 +1135,7 @@ test(
         await updateDraftPayment(
           payment.id,
           {
-            allocations: [sameCurrencyAllocation(invoiceControl.rows[0]!.id, "100")],
+            allocations: [sameCurrencyAllocation(invoiceControl[0]!.id, "100")],
             bankAccountId: org.accounts.bank,
           },
           actorId,
@@ -1204,9 +1204,9 @@ test(
             (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
             (select status from payment_instructions where id = ${seeded.instructionId}) as instruction_status,
             (select count(*)::int from payment_settlements where payment_instruction_id = ${seeded.instructionId}) as settlements
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(state.rows[0], {
+      assert.deepEqual(state[0], {
         document_status: "posted",
         instruction_status: "sent",
         settlements: 0,
@@ -1229,9 +1229,9 @@ test(
           select
             (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
             (select status from payment_instructions where id = ${seeded.instructionId}) as instruction_status
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(after.rows[0], {
+      assert.deepEqual(after[0], {
         document_status: "voided",
         instruction_status: "returned",
       });

@@ -58,7 +58,7 @@ async function fixture(reviewRequired: boolean) {
     const additional=loaded.status==='approved'?{selections:loaded.pendingEntries!.map(({id,updatedAt})=>({id,updatedAt})),reason:'Submit the newly recorded hours.'}:{};
     return withOrgContext(org.orgId,()=>submitWeek(new Request('http://audit.local/api/timesheets/submit',{method:'POST',body:JSON.stringify({employee,week,...additional})})));
   }
-  const snapshot = () => db.execute(sql`select * from time_entries where org_id=${org.orgId} order by id`)
+  const snapshot = () => db.execute(sql`select * from time_entries where org_id=${org.orgId} order by id`, 'objects')
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, actor, employee, project, row, save, submit, snapshot, close }
 }
@@ -67,7 +67,7 @@ test('malformed weekly grids cannot erase existing hours', async () => {
   const f = await fixture(true)
   try {
     assert.equal((await f.save({})).status, 200)
-    const before = (await f.snapshot()).rows
+    const before = await f.snapshot()
     assert.equal(before.length, 1)
     for (const body of [
       { employee: "not-an-id" },
@@ -82,11 +82,11 @@ test('malformed weekly grids cannot erase existing hours', async () => {
     ]) {
       const response = await f.save(body)
       assert.equal(response.status, 422, JSON.stringify(body))
-      assert.deepEqual((await f.snapshot()).rows, before)
+      assert.deepEqual(await f.snapshot(), before)
     }
     // An intentional empty grid still clears editable time.
     assert.equal((await f.save({ rows: [] })).status, 200)
-    assert.equal((await f.snapshot()).rows.length, 0)
+    assert.equal((await f.snapshot()).length, 0)
   } finally { await f.close() }
 })
 
@@ -95,36 +95,36 @@ test('zero-gate submission captures rates and posts configured labor atomically'
   try {
     const response = await f.save({})
     assert.equal(response.status, 200, await response.clone().text())
-    assert.equal((await f.snapshot()).rows[0]!.status,'draft','saving captures a draft; submission applies the tenant policy');
+    assert.equal((await f.snapshot())[0]!.status,'draft','saving captures a draft; submission applies the tenant policy');
     const submitted=await f.submit();assert.equal(submitted.status,200,await submitted.clone().text());
-    const entry = (await f.snapshot()).rows[0]!
+    const entry = (await f.snapshot())[0]!
     assert.equal(entry.status, 'approved')
     assert.equal(entry.cost_rate, '30.0000')
     assert.equal(entry.bill_rate, '100.0000')
     assert.ok(entry.cost_journal_entry_id)
     assert.equal(entry.approved_by, f.actor, 'zero-gate release retains the actual native command actor')
-    const journal = (await db.execute(sql`select count(*)::int as lines, sum(amount)::text as balance from journal_lines where org_id=${f.org.orgId} and entry_id=${entry.cost_journal_entry_id}`)).rows[0]!
+    const journal = (await db.execute(sql`select count(*)::int as lines, sum(amount)::text as balance from journal_lines where org_id=${f.org.orgId} and entry_id=${entry.cost_journal_entry_id}`, 'objects'))[0]!
     assert.equal(journal.lines, 2)
     assert.equal(journal.balance, '0.0000')
     // The next day's automatic approval preserves the first day's posted
     // evidence and applies effects only to the newly captured hours.
     assert.equal((await f.save({ rows: [{ ...f.row, hours: ['', '', '', '', '2', '', ''] }] })).status, 200)
     const additional=await f.submit();assert.equal(additional.status,200,await additional.clone().text());
-    const before = (await f.snapshot()).rows
+    const before = await f.snapshot()
     assert.equal(before.length, 2)
     assert.deepEqual(before.find(row => row.id === entry.id), entry)
     const posted = (await db.execute(sql`select sum(l.amount)::text as cost from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
-      where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.cogs} and e.status='posted'`)).rows[0]!
+      where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.cogs} and e.status='posted'`, 'objects'))[0]!
     assert.equal(posted.cost, '180.0000')
     // No accounting period exists for this second date. Failed effects must
     // roll back the time insert as well as the journal work.
     assert.equal((await f.save({week:'2026-08-02'})).status,200);
-    const saved=(await f.snapshot()).rows;
+    const saved=await f.snapshot();
     const refused=await f.submit('2026-08-02');
     const refusalBody=await refused.text();
     assert.equal(refused.status,409,refusalBody);
     assert.match(refusalBody,/No accounting period covers/);
-    assert.deepEqual((await f.snapshot()).rows,saved,'a refused submission preserves the saved draft and every posted row');
+    assert.deepEqual(await f.snapshot(),saved,'a refused submission preserves the saved draft and every posted row');
     for(const row of before)assert.deepEqual(saved.find(candidate=>candidate.id===row.id),row)
   } finally { await f.close() }
 })
@@ -144,10 +144,10 @@ test('nonbillable employee hours retain their department and dated wage without 
       assert.equal(refusal.status, 422, await refusal.clone().text())
       const message = ((await refusal.json()) as { error: string }).error
       assert.match(message, invalid.isBillable ? /Billable hours need a project.*select.*or mark.*nonbillable/ : /department.*different legal entity.*select/)
-      assert.equal((await f.snapshot()).rows.length, 0)
+      assert.equal((await f.snapshot()).length, 0)
     }
     assert.equal((await f.save({ rows: [row] })).status, 200)
-    const draft = (await f.snapshot()).rows[0]!
+    const draft = (await f.snapshot())[0]!
     assert.equal(draft.status, 'draft')
     assert.equal(draft.project_id, null)
     assert.equal(draft.department_id, department)
@@ -158,7 +158,7 @@ test('nonbillable employee hours retain their department and dated wage without 
     assert.equal(submitted.status, 200, await submitted.clone().text())
     const approved = await withOrgContext(f.org.orgId,()=>decideTimesheetFixture({orgId:f.org.orgId,employee:f.employee,week:'2026-07-12',decision:'approved'}))
     assert.equal(approved.status, 200, await approved.clone().text())
-    const entry = (await f.snapshot()).rows[0]!
+    const entry = (await f.snapshot())[0]!
     assert.equal(entry.id, draft.id)
     assert.equal(entry.project_id, null)
     assert.equal(entry.department_id, department)
@@ -171,14 +171,14 @@ test('nonbillable employee hours retain their department and dated wage without 
     assert.equal(entry.bill_rate, null)
     assert.equal(entry.cost_journal_entry_id, null)
     assert.equal(entry.overhead_journal_entry_id, null)
-    const journals = (await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`)).rows
+    const journals = await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`, 'objects')
     assert.equal(journals.length, 0)
-    const audit = (await db.execute(sql`select changes from audit_log where org_id=${f.org.orgId}
-      and table_name='timesheet_weeks' and actor_id=${f.actor} and changes->>'event'='approved'`)).rows
+    const audit = await db.execute(sql`select changes from audit_log where org_id=${f.org.orgId}
+      and table_name='timesheet_weeks' and actor_id=${f.actor} and changes->>'event'='approved'`, 'objects')
     assert.equal(audit.length, 1)
     assert.equal((await f.save({ rows: [row] })).status, 200)
-    assert.deepEqual((await f.snapshot()).rows, [entry])
-    assert.deepEqual((await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`)).rows, journals)
+    assert.deepEqual(await f.snapshot(), [entry])
+    assert.deepEqual(await db.execute(sql`select * from journal_entries where org_id=${f.org.orgId} order by id`, 'objects'), journals)
   } finally { await f.close() }
 })
 
@@ -188,15 +188,15 @@ test('replaying an identical save returns the stored week without duplicating ho
   try {
     assert.equal((await f.save({})).status, 200)
     const submission=await f.submit();assert.equal(submission.status,200,await submission.clone().text());
-    const first = (await f.snapshot()).rows
+    const first = await f.snapshot()
     assert.equal(first.length, 1)
-    const journalsBefore = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`)).rows[0]!.n
+    const journalsBefore = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`, 'objects'))[0]!.n
     const replay = await f.save({})
     assert.equal(replay.status, 200, await replay.clone().text())
-    const second = (await f.snapshot()).rows
+    const second = await f.snapshot()
     assert.deepEqual(second.map((row) => row.id), first.map((row) => row.id), 'replay must reuse the stored rows')
     assert.deepEqual(second, first)
-    const journalsAfter = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`)).rows[0]!.n
+    const journalsAfter = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`, 'objects'))[0]!.n
     assert.equal(journalsAfter, journalsBefore, 'replay must not post fresh financial effects')
   } finally { await f.close() }
 })
@@ -205,10 +205,10 @@ test('replaying a draft grid reuses the stored rows instead of churning them', a
   const f = await fixture(true)
   try {
     assert.equal((await f.save({})).status, 200)
-    const first = (await f.snapshot()).rows
+    const first = await f.snapshot()
     assert.equal(first.length, 1)
     assert.equal((await f.save({})).status, 200)
-    assert.deepEqual((await f.snapshot()).rows, first)
+    assert.deepEqual(await f.snapshot(), first)
   } finally { await f.close() }
 })
 
@@ -229,7 +229,7 @@ test('time cannot be pinned to a non-person party or an employment that lapsed',
     const closed = await f.save({ expectedRevision })
     assert.equal(closed.status, 422, await closed.clone().text())
     assert.match(((await closed.json()) as { error: string }).error, /Employee not found/)
-    assert.equal((await f.snapshot()).rows.length, 1, 'refused pins store nothing new')
+    assert.equal((await f.snapshot()).length, 1, 'refused pins store nothing new')
   } finally { await f.close() }
 })
 
@@ -253,12 +253,12 @@ test('a weekly save never deletes amendment offsets or their referenced original
     await db.execute(sql`insert into time_entries
       (id, org_id, employee_party_id, worked_on, hours, project_id, item_id, status, is_billable, costing_basis, custom, created_by, updated_by)
       values (${ordinaryId},${f.org.orgId},${f.employee},'2026-07-16','2.0000',${f.project},${f.org.items.service},'draft',true,'actual','{}'::jsonb,${f.actor},${f.actor})`)
-    const before = (await f.snapshot()).rows
+    const before = await f.snapshot()
     assert.equal(before.length, 3)
     // A grid that replaces the week's editable hours outright.
     const response = await f.save({ rows: [{ ...f.row, hours: ['', '', '', '8', '', '', ''] }] })
     assert.equal(response.status, 200, await response.clone().text())
-    const after = (await f.snapshot()).rows
+    const after = await f.snapshot()
     const byId = new Map(after.map((row) => [row.id, row]))
     assert.deepEqual(byId.get(originalId), before.find((row) => row.id === originalId), 'the referenced original survives byte-identical')
     assert.deepEqual(byId.get(offsetId), before.find((row) => row.id === offsetId), 'the amendment offset survives byte-identical')
@@ -279,10 +279,10 @@ test("hours cannot be booked to another legal entity's project", async () => {
     const refused = await f.save({ rows: [{ ...f.row, projectId: otherProject }] })
     assert.equal(refused.status, 422, await refused.clone().text())
     assert.match(((await refused.json()) as { error: string }).error, /different legal entity/)
-    assert.equal((await f.snapshot()).rows.length, 0, 'refused cross-entity lines store nothing')
+    assert.equal((await f.snapshot()).length, 0, 'refused cross-entity lines store nothing')
     // The employee's own entity still saves.
     assert.equal((await f.save({})).status, 200)
-    assert.equal((await f.snapshot()).rows.length, 1)
+    assert.equal((await f.snapshot()).length, 1)
   } finally { await f.close() }
 })
 
@@ -295,11 +295,11 @@ test('an hours cell wider than the ledger column fails closed without writing', 
     const response = await f.save({ rows: [{ ...f.row, hours: ['99999999999999999999', '', '', '', '', '', ''] }] })
     assert.equal(response.status, 422, await response.clone().text())
     assert.match(((await response.json()) as { error: string }).error, /Hours/)
-    assert.equal((await f.snapshot()).rows.length, 0)
+    assert.equal((await f.snapshot()).length, 0)
     // The column maximum itself still saves.
     const ok = await f.save({ rows: [{ ...f.row, hours: ['999999999999999.9999', '', '', '', '', '', ''] }] })
     assert.equal(ok.status, 200, await ok.clone().text())
-    assert.equal((await f.snapshot()).rows.length, 1)
+    assert.equal((await f.snapshot()).length, 1)
   } finally { await f.close() }
 })
 
@@ -315,10 +315,10 @@ test('a foreign reference custom value cannot be saved on a time row', async () 
     `)
     const refused = await f.save({ rows: [{ ...f.row, custom: { line_ref: foreign.vendorId } }] })
     assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${await refused.clone().text()}`)
-    assert.equal((await f.snapshot()).rows.length, 0, 'refused references store nothing')
+    assert.equal((await f.snapshot()).length, 0, 'refused references store nothing')
     const saved = await f.save({ rows: [{ ...f.row, custom: { line_ref: f.org.vendorId } }] })
     assert.equal(saved.status, 200, `own-org reference must stay green: ${await saved.clone().text()}`)
-    assert.equal((await f.snapshot()).rows.length, 1)
+    assert.equal((await f.snapshot()).length, 1)
   } finally {
     await dropScratchOrgReporting(foreign.orgId)
     await f.close()
@@ -345,7 +345,7 @@ test('a project save racing a Projects disable loses and stores nothing', async 
     const response = await pending
     assert.equal(response.status, 422, await response.clone().text())
     assert.equal(((await response.json()) as { error: string }).error, 'Projects feature is disabled')
-    assert.equal((await f.snapshot()).rows.length, 0, 'the losing save inserts no project lines')
+    assert.equal((await f.snapshot()).length, 0, 'the losing save inserts no project lines')
   } finally {
     await writer.query('rollback').catch(() => {})
     await writer.end()

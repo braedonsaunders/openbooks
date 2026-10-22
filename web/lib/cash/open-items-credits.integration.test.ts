@@ -77,8 +77,8 @@ test('open items consume a foreign credit through its source leg', { skip: !env.
       const creditId = await postBill(scratch, actor, 'customer_credit', 60, 'USD', '1.35')
       const lines = await db.execute<{ id: string; doc: string }>(sql`select jl.id, je.source_document_id as doc
         from journal_lines jl join journal_entries je on je.id = jl.entry_id
-        where jl.org_id = ${scratch.orgId} and jl.is_open_item and je.source_document_id in (${invId}, ${creditId})`)
-      const lineOf = (doc: string) => lines.rows.find((row) => row.doc === doc)!.id
+        where jl.org_id = ${scratch.orgId} and jl.is_open_item and je.source_document_id in (${invId}, ${creditId})`, 'objects')
+      const lineOf = (doc: string) => lines.find((row) => row.doc === doc)!.id
       await db.execute(sql`insert into applications
         (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
          source_transaction_currency, target_transaction_amount, target_transaction_currency,
@@ -89,7 +89,7 @@ test('open items consume a foreign credit through its source leg', { skip: !env.
     })
     assert.ok(invId && creditLine && invLine)
     const applicationsBefore = await withOrgContext(scratch.orgId, async () =>
-      (await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`)).rows)
+      await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`, 'objects'))
     for (const [asOf, expectedSource, expectedTarget] of [
       ['2026-07-11', '0', '0'],
       ['2026-07-12', '27', '25'],
@@ -98,13 +98,13 @@ test('open items consume a foreign credit through its source leg', { skip: !env.
       const consumed = await withOrgContext(scratch.orgId, async () =>
         (await db.execute<{ source: string; target: string }>(sql`select
           ${datedAppliedAmountSql(scratch.orgId, sql`${creditLine}::uuid`, asOf!)}::text as source,
-          ${datedAppliedAmountSql(scratch.orgId, sql`${invLine}::uuid`, asOf!)}::text as target`)).rows[0]!)
+          ${datedAppliedAmountSql(scratch.orgId, sql`${invLine}::uuid`, asOf!)}::text as target`, 'objects'))[0]!)
       assert.equal(cmp(consumed.source, expectedSource!), 0)
       assert.equal(cmp(consumed.target, expectedTarget!), 0)
     }
     const foreignConsumption = await withOrgContext(scratch.orgId, async () =>
       (await db.execute<{ amount: string }>(sql`select
-        ${datedAppliedAmountSql(randomUUID(), sql`${creditLine}::uuid`, '2026-07-31')}::text as amount`)).rows[0]!)
+        ${datedAppliedAmountSql(randomUUID(), sql`${creditLine}::uuid`, '2026-07-31')}::text as amount`, 'objects'))[0]!)
     assert.equal(foreignConsumption.amount, '0', 'a tenant mismatch cannot consume another organization’s application')
     const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-07-31'))
     const credit = items.find((item) => item.docKind === 'customer_credit')
@@ -112,7 +112,7 @@ test('open items consume a foreign credit through its source leg', { skip: !env.
     const invoice = items.find((item) => item.docKind === 'customer_invoice')
     assert.equal(invoice?.remaining, '75.0000')
     assert.deepEqual(await withOrgContext(scratch.orgId, async () =>
-      (await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`)).rows), applicationsBefore)
+      await db.execute(sql`select * from applications where org_id=${scratch.orgId} order by id`, 'objects')), applicationsBefore)
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

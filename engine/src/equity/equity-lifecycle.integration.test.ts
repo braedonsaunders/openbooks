@@ -73,7 +73,7 @@ test("an MFN SAFE adopts a later SAFE's better terms by a recorded election and 
     assert.equal((await electMfnTerms({ ...manage(w), ...election })).replayed, true, "a retried election returns the one recorded");
     await assert.rejects(electMfnTerms({ ...manage(w), ...election, idempotencyKey: null }), refusal("equity_mfn_not_better"), "terms already adopted are not better");
     const audit = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and row_id = ${mfn.id} and action = 'equity.mfn.elect'`)).rows[0]!;
+      select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and row_id = ${mfn.id} and action = 'equity.mfn.elect'`, "objects"))[0]!;
     assert.equal(audit.n, "1");
 
     const seriesSeed = await preferredClass(w);
@@ -145,7 +145,7 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     await assert.rejects(postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }), refusal("equity_run_nothing_due"), "a converted note stops accruing, so no run is due");
     await recordSecurityEvent({ ...manage(w), securityId: converted.resultingSecurityId!, kind: "void", effectiveOn: "2026-10-01", reason: "Conversion certificate recorded in error" });
     const accrual = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where org_id = ${w.org.orgId} and id = ${converted.accrualEntryId}`)).rows[0]!;
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${converted.accrualEntryId}`, "objects"))[0]!;
     assert.equal(accrual.status, "reversed", "voiding a conversion reverses its settlement-date interest accrual");
     const resumed = applied(await withSimClock("2026-12-31", () =>
       postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-10-31" }),
@@ -176,7 +176,7 @@ test("a note is repaid with its accrued interest, a SAFE repays only its purchas
       reason: "Repayment was recorded in error",
     });
     const settlementAccrual = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where org_id = ${w.org.orgId} and id = ${repaid.accrualEntryId}`)).rows[0]!;
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${repaid.accrualEntryId}`, "objects"))[0]!;
     assert.equal(settlementAccrual.status, "reversed", "reversing a settlement also reverses its interest accrual entry");
     const historicalRun = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-15" }));
     assert.equal(historicalRun.total, "115.0700", "a later reversed settlement does not block an earlier interest run");
@@ -254,7 +254,7 @@ test("an early exercise issues restricted stock, holds the deposit, releases it 
     assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-4400.0000", "August and September release 200 shares' deposit");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.common), "-0.0400");
     const released = (await db.execute<{ period_reclass: string }>(sql`
-      select period_reclass::text as period_reclass from equity_compensation_run_releases where org_id = ${w.org.orgId} and run_id = ${run.runId}`)).rows[0]!;
+      select period_reclass::text as period_reclass from equity_compensation_run_releases where org_id = ${w.org.orgId} and run_id = ${run.runId}`, "objects"))[0]!;
     assert.equal(BigInt(released.period_reclass.replace(".", "")), reclass200, "the released units' grant-date value moves to share capital with them");
     assert.equal((applied(await postCompensationRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }))).replayed, true);
 
@@ -333,7 +333,7 @@ test("one forfeiture, cancellation or repurchase is undone by a reversal; depend
     const buyback = await recordSecurityEvent({ ...manage(w), securityId: shares.id, kind: "repurchase", effectiveOn: "2026-07-10", quantity: "400", amount: "400", considerationAccountId: w.org.accounts.bank, reason: "Buyback" });
     assert.equal(await accountBalance(w.org.orgId, w.accounts.treasury), "400.0000");
     const undone = await recordSecurityEvent({ ...manage(w), securityId: shares.id, kind: "reverse", effectiveOn: "2026-07-11", reversesEventId: buyback.eventId, reason: "Buyback was not completed" });
-    const original = (await db.execute<{ status: string }>(sql`select status from journal_entries where org_id = ${w.org.orgId} and id = ${buyback.journalEntryId}`)).rows[0]!;
+    const original = (await db.execute<{ status: string }>(sql`select status from journal_entries where org_id = ${w.org.orgId} and id = ${buyback.journalEntryId}`, "objects"))[0]!;
     assert.equal(original.status, "reversed");
     assert.ok(undone.reversalEntryId);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.treasury), "0.0000");
@@ -447,7 +447,7 @@ test("a voided note's accrued interest reverses in the next run, and a foreign n
     const august = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" }));
     const reversed = (await db.execute<{ period_amount: string; fx_rate: string | null; functional_amount: string }>(sql`
       select period_amount::text as period_amount, fx_rate::text as fx_rate, functional_amount::text as functional_amount
-        from equity_interest_run_lines where org_id = ${w.org.orgId} and run_id = ${august.runId} and security_id = ${local.id}`)).rows[0]!;
+        from equity_interest_run_lines where org_id = ${w.org.orgId} and run_id = ${august.runId} and security_id = ${local.id}`, "objects"))[0]!;
     assert.deepEqual(reversed, { period_amount: "-657.5300", fx_rate: null, functional_amount: "-657.5300" }, "the voided note's accrual reverses exactly");
     // 100.27 USD accrued to August 31 less 49.32 already posted, at 1.37.
     assert.equal(await accountBalance(w.org.orgId, w.accounts.interestExpense), "136.8767");

@@ -147,24 +147,24 @@ export const GET = defineRoute({
           join parties p on p.id = er.party_id and p.org_id = er.org_id
          where er.org_id = ${orgId}
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope)}
-         order by p.display_name`),
+         order by p.display_name`, 'objects'),
       db.execute<{ id: string; name: string }>(sql`
-        select id, name from trades where org_id = ${orgId} order by name`),
+        select id, name from trades where org_id = ${orgId} order by name`, 'objects'),
       db.execute<{ id: string; name: string }>(sql`
-        select id, name from departments where org_id = ${orgId} order by name`),
+        select id, name from departments where org_id = ${orgId} order by name`, 'objects'),
       db.execute<{ id: string; name: string }>(sql`
         select id, name from subsidiaries where org_id = ${orgId}
           ${subsidiaryVisibleFilter(sql`id`, scope)}
-         order by name`),
+         order by name`, 'objects'),
     ])
 
     return NextResponse.json({
       schedules,
       options: {
-        employees: employees.rows,
-        trades: trades.rows,
-        departments: departments.rows,
-        subsidiaries: subsidiaries.rows,
+        employees,
+        trades,
+        departments,
+        subsidiaries,
       },
     })
 
@@ -188,7 +188,7 @@ async function scheduleRowBucket(
   if (row.employee_party_id) {
     const sub = (await tx.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
-       where org_id = ${orgId} and id = ${row.employee_party_id} for share`)).rows[0]?.subsidiaryId ?? null
+       where org_id = ${orgId} and id = ${row.employee_party_id} for share`, 'objects'))[0]?.subsidiaryId ?? null
     return guardSubsidiaryScope(authz, sub) ? 'hidden' : 'ok'
   }
   if (row.subsidiary_id) {
@@ -221,17 +221,15 @@ export const POST = defineRoute({
       // concurrent rehome cannot move the delete onto another subsidiary.
       const outcome = await db.transaction(async (tx) => {
         const existing = (await tx.execute(sql`
-          select * from work_schedules where org_id = ${orgId} and id = ${id} for update`)
-        ).rows[0] as Record<string, unknown> | undefined
+          select * from work_schedules where org_id = ${orgId} and id = ${id} for update`, 'objects'))[0] as Record<string, unknown> | undefined
         if (!existing) return 'unknown' as const
         const bucket = await scheduleRowBucket(tx, authz, orgId, {
           employee_party_id: (existing.employee_party_id as string | null) ?? null,
           subsidiary_id: (existing.subsidiary_id as string | null) ?? null,
         })
         if (bucket !== 'ok') return bucket
-        const days = (await tx.execute(sql`
-          select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${id} order by day_index`)
-        ).rows
+        const days = await tx.execute(sql`
+          select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${id} order by day_index`, 'objects')
         // work_schedule_days cascades on the FK, so the pattern never outlives
         // the schedule it describes.
         await tx.execute(sql`
@@ -326,7 +324,7 @@ export const POST = defineRoute({
       if (scope.employeePartyId) {
         const sub = (await tx.execute<{ subsidiaryId: string | null }>(sql`
           select subsidiary_id as "subsidiaryId" from parties
-           where org_id = ${orgId} and id = ${scope.employeePartyId} for share`)).rows[0]?.subsidiaryId ?? null
+           where org_id = ${orgId} and id = ${scope.employeePartyId} for share`, 'objects'))[0]?.subsidiaryId ?? null
         if (guardSubsidiaryScope(authz, sub)) return { hidden: true }
       } else if (scope.subsidiaryId) {
         if (guardSubsidiaryScope(authz, scope.subsidiaryId)) return { hidden: true }
@@ -335,17 +333,15 @@ export const POST = defineRoute({
       }
       if (scheduleId) {
         const existing = (await tx.execute(sql`
-          select * from work_schedules where org_id = ${orgId} and id = ${scheduleId} for update`)
-        ).rows[0] as Record<string, unknown> | undefined
+          select * from work_schedules where org_id = ${orgId} and id = ${scheduleId} for update`, 'objects'))[0] as Record<string, unknown> | undefined
         if (!existing) return unrestricted ? { conflict: 'that work schedule no longer exists' } : { hidden: true }
         const bucket = await scheduleRowBucket(tx, authz, orgId, {
           employee_party_id: (existing.employee_party_id as string | null) ?? null,
           subsidiary_id: (existing.subsidiary_id as string | null) ?? null,
         })
         if (bucket !== 'ok') return { [bucket]: true }
-        const beforeDays = (await tx.execute(sql`
-          select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId} order by day_index`)
-        ).rows
+        const beforeDays = await tx.execute(sql`
+          select * from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId} order by day_index`, 'objects')
         const updated = (await tx.execute<Record<string, unknown>>(sql`
           update work_schedules
              set name = ${name}, employee_party_id = ${scope.employeePartyId},
@@ -356,10 +352,10 @@ export const POST = defineRoute({
                  notes = ${notes}, is_active = ${isActive},
                  updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and id = ${scheduleId}
-           returning *`))
+           returning *`, 'objects'))
         before = { ...existing, days: beforeDays }
-        scheduleId = updated.rows[0]!.id as string
-        afterRow = updated.rows[0]!
+        scheduleId = updated[0]!.id as string
+        afterRow = updated[0]!
         await tx.execute(sql`
           delete from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId}`)
       } else {
@@ -372,17 +368,17 @@ export const POST = defineRoute({
                   ${scope.departmentId}, ${scope.subsidiaryId}, ${pattern}, ${cycleDays},
                   ${cycleAnchor}, ${effectiveFrom}, ${effectiveTo}, ${notes}, ${isActive},
                   ${actorId}, ${actorId})
-          returning *`))
-        scheduleId = inserted.rows[0]!.id as string
-        afterRow = inserted.rows[0]!
+          returning *`, 'objects'))
+        scheduleId = inserted[0]!.id as string
+        afterRow = inserted[0]!
       }
       const afterDays: Record<string, unknown>[] = []
       for (const day of days) {
         const dayRow = (await tx.execute<Record<string, unknown>>(sql`
           insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by)
           values (${orgId}, ${scheduleId}, ${day.dayIndex}, ${day.hours}, ${actorId}, ${actorId})
-          returning *`))
-        afterDays.push(dayRow.rows[0]!)
+          returning *`, 'objects'))
+        afterDays.push(dayRow[0]!)
       }
       const after = { ...afterRow, days: afterDays }
       await tx.execute(sql`

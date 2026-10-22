@@ -29,8 +29,8 @@ test("sample preservation retains every native composite-key evidence row and re
       await recordSupplyEvidence(db, org.orgId, addedId, { election, evidence: [evidence[0]!] }, actorId);
       assert.ok((await assertSampleRecordsPreserved(org.orgId, before)).records >= 2, "new native records do not alter the protected rows");
     });
-    const readEvidence = () => withOrgTransaction(org.orgId, async () => (await db.execute(sql`
-      select to_jsonb(e) as evidence from document_supply_evidence e where org_id=${org.orgId} order by document_id,kind,source`)).rows, { readOnly: true });
+    const readEvidence = () => withOrgTransaction(org.orgId, async () => await db.execute(sql`
+      select to_jsonb(e) as evidence from document_supply_evidence e where org_id=${org.orgId} order by document_id,kind,source`, "objects"), { readOnly: true });
     const before = await readEvidence();
     await assert.rejects(withOrgTransaction(org.orgId, async () => {
       const all = await snapshotSampleRecords(org.orgId, new Map());

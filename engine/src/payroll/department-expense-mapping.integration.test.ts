@@ -63,7 +63,7 @@ test(
       const baseId = (await db.execute<{ id: string }>(sql`
         select id from pay_components
          where org_id = ${org.orgId} and code = 'BASE' and country is null
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       await db.execute(sql`
         update pay_components set expense_account_id = ${wagesDefault}, updated_by = ${actorId}
          where org_id = ${org.orgId} and id = ${baseId}`);
@@ -153,10 +153,10 @@ test(
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind = 'earning'
-      `));
-      assert.equal(stubLines.rows.length, 2);
-      const fieldLine = stubLines.rows.find((row) => row.department_id === fieldId)!;
-      const overheadLine = stubLines.rows.find((row) => row.department_id === overheadId)!;
+      `, "objects"));
+      assert.equal(stubLines.length, 2);
+      const fieldLine = stubLines.find((row) => row.department_id === fieldId)!;
+      const overheadLine = stubLines.find((row) => row.department_id === overheadId)!;
       assert.equal(fieldLine.amount, "1000.0000");
       assert.equal(fieldLine.expense_account_id, wagesDefault);
       assert.equal(fieldLine.expense_account_source, "component");
@@ -185,27 +185,27 @@ test(
       const glLines = (await db.execute<{ account_id: string; amount: string; custom: { payrollExpense?: boolean; payComponentId?: string | null } }>(sql`
         select account_id, amount, custom from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `));
-      assert.equal(cmp(sum(glLines.rows.map((row) => row.amount)), "0"), 0, "projection balances");
+      `, "objects"));
+      assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
       assert.equal(
-        sum(glLines.rows.filter((row) => row.account_id === wagesDefault).map((row) => row.amount)),
+        sum(glLines.filter((row) => row.account_id === wagesDefault).map((row) => row.amount)),
         "1000.0000",
       );
       assert.equal(
-        sum(glLines.rows.filter((row) => row.account_id === overheadExpense).map((row) => row.amount)),
+        sum(glLines.filter((row) => row.account_id === overheadExpense).map((row) => row.amount)),
         "400.0000",
       );
-      const wageLegs = glLines.rows.filter(row => row.account_id === wagesDefault || row.account_id === overheadExpense);
+      const wageLegs = glLines.filter(row => row.account_id === wagesDefault || row.account_id === overheadExpense);
       assert.ok(wageLegs.every(row => row.custom.payrollExpense === true && row.custom.payComponentId === baseId));
-      const liabilities = glLines.rows.filter(row => cmp(row.amount, '0') < 0);
+      const liabilities = glLines.filter(row => cmp(row.amount, '0') < 0);
       assert.ok(liabilities.every(row => row.custom.payrollExpense === false && row.custom.payComponentId === null));
       await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${run.documentId}`);
       const entryId = await postDocument(run.documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }, { audit: { actorId, source: "payroll" } });
-      const posted = (await db.execute<{ account_id: string; amount: string; department_id: string | null; extra_dims: Record<string, string> }>(sql`select account_id, amount, department_id, extra_dims from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId} order by line_number`)).rows;
+      const posted = await db.execute<{ account_id: string; amount: string; department_id: string | null; extra_dims: Record<string, string> }>(sql`select account_id, amount, department_id, extra_dims from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId} order by line_number`, "objects");
       assert.equal(cmp(sum(posted.map(row => row.amount)), '0'), 0);
       assert.deepEqual(posted.filter(row => row.extra_dims.crew).map(row => [row.department_id, row.extra_dims.crew, row.amount]), [[fieldId, crewNorth, '240.0000'], [overheadId, crewSouth, '160.0000']]);
       for (const liability of liabilities) assert.equal(sum(posted.filter(row => row.account_id === liability.account_id).map(row => row.amount)), sum(liabilities.filter(row => row.account_id === liability.account_id).map(row => row.amount)));
-      assert.equal((await db.execute<{ count: string }>(sql`select count(*)::text as count from allocation_lineage where org_id = ${org.orgId} and document_id = ${run.documentId} and version_id = ${allocation.draft.version.id}`)).rows[0]?.count, '3');
+      assert.equal((await db.execute<{ count: string }>(sql`select count(*)::text as count from allocation_lineage where org_id = ${org.orgId} and document_id = ${run.documentId} and version_id = ${allocation.draft.version.id}`, "objects"))[0]?.count, '3');
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -252,7 +252,7 @@ test(
       await seedOntarioEhtFixture(org.orgId, actorId, "0");
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
       const baseId = (await db.execute<{ id: string }>(sql`
-        select id from pay_components where org_id = ${org.orgId} and code = 'BASE' and country is null`)).rows[0]!.id;
+        select id from pay_components where org_id = ${org.orgId} and code = 'BASE' and country is null`, "objects"))[0]!.id;
       const officeId = randomUUID();
       await db.execute(sql`insert into departments (id, org_id, code, name, is_active) values (${officeId}, ${org.orgId}, 'OFFICE', 'Office', true)`);
       await db.execute(sql`
@@ -290,11 +290,11 @@ test(
       const run = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart: "2026-07-12", periodEnd: "2026-07-18" });
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
-      const lines = (await db.execute<{ kind: string; department_id: string | null; expense_account_id: string | null; expense_account_source: string | null }>(sql`
+      const lines = await db.execute<{ kind: string; department_id: string | null; expense_account_id: string | null; expense_account_source: string | null }>(sql`
         select l.kind, l.department_id, l.expense_account_id, l.expense_account_source
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-           and l.kind in ('earning', 'employer_contribution')`)).rows;
+           and l.kind in ('earning', 'employer_contribution')`, "objects");
       const salary = lines.filter((line) => line.kind === "earning");
       assert.equal(salary.length, 1);
       assert.deepEqual(salary[0], { kind: "earning", department_id: officeId, expense_account_id: officeWages, expense_account_source: "department" });

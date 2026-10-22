@@ -79,8 +79,7 @@ interface FundReleaseFlowRow extends Record<string, unknown> {
 async function loadRelease(
   subjectId: string,
 ): Promise<FundReleaseFlowRow | null> {
-  const row = (
-    await db.execute<FundReleaseFlowRow>(sql`
+  const row = (await db.execute<FundReleaseFlowRow>(sql`
     select r.org_id, r.release_number, r.release_date::text, r.amount::text,
            r.purpose, r.satisfaction_ref, r.status,
            r.submitted_by::text, r.created_by::text,
@@ -94,8 +93,7 @@ async function loadRelease(
       join funds to_fund on to_fund.org_id = r.org_id and to_fund.id = r.to_fund_id
       join segment_values to_value on to_value.org_id = r.org_id and to_value.id = to_fund.id
      where r.id = ${subjectId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   return row ?? null;
 }
 
@@ -185,14 +183,12 @@ export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
         `findCandidateIds for "${FUND_RELEASE_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
       );
     }
-    const rows = (
-      await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       select id::text as id from fund_releases
        where org_id = ${orgId} and status = 'pending_approval'
        order by submitted_at desc, id
        limit ${limit}
-    `)
-    ).rows;
+    `, "objects");
     return rows.map((row) => row.id);
   },
 };

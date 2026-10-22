@@ -135,7 +135,7 @@ export async function loadWarehouse(
   const showNew = canManage && pickString(sp.warehouseNew) === '1'
   const locations = showNew
     ? (await db.execute<{ id: string; name: string }>(sql`
-        select id, name from locations where org_id = ${orgId} and is_active order by name`)).rows
+        select id, name from locations where org_id = ${orgId} and is_active order by name`, 'objects'))
     : []
 
   const warehouses = tieOut.rows.filter((row) => row.warehouseId !== null)

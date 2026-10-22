@@ -66,8 +66,8 @@ export async function loadRecordTypeByKey(
   const r = (await db.execute<RecordTypeRow>(sql`
     select ${TYPE_COLUMNS} from custom_record_types
      where org_id = ${orgId} and key = ${key}
-  `))
-  return r.rows[0]
+  `, 'objects'))
+  return r[0]
 }
 
 export async function loadRecordTypeById(
@@ -77,8 +77,8 @@ export async function loadRecordTypeById(
   const r = (await db.execute<RecordTypeRow>(sql`
     select ${TYPE_COLUMNS} from custom_record_types
      where org_id = ${orgId} and id = ${id}
-  `))
-  return r.rows[0]
+  `, 'objects'))
+  return r[0]
 }
 
 export async function loadRecord(
@@ -91,8 +91,8 @@ export async function loadRecord(
            ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
       from custom_records
      where org_id = ${orgId} and type_key = ${typeKey} and id = ${id}
-  `))
-  return r.rows[0]
+  `, 'objects'))
+  return r[0]
 }
 
 /** Whether a custom-record definition carries the conventional subsidiary field. */
@@ -236,19 +236,19 @@ export async function resolveEntityLabels(
           select id, display_name from parties
            where org_id = ${orgId}
              and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...partyIds])}::jsonb))
-        `))
-      : Promise.resolve({ rows: [] as { id: string; display_name: string }[] }),
+        `, 'objects'))
+      : Promise.resolve([] as { id: string; display_name: string }[]),
     accountIds.size > 0
       ? (db.execute<{ id: string; number: string | null; name: string }>(sql`
           select id, number, name from accounts
            where org_id = ${orgId}
              and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...accountIds])}::jsonb))
-        `))
-      : Promise.resolve({ rows: [] as { id: string; number: string | null; name: string }[] }),
+        `, 'objects'))
+      : Promise.resolve([] as { id: string; number: string | null; name: string }[]),
   ])
   return {
-    parties: new Map(parties.rows.map((p) => [p.id, p.display_name])),
-    accounts: new Map(accounts.rows.map((a) => [a.id, `${a.number ?? ''} ${a.name}`.trim()])),
+    parties: new Map(parties.map((p) => [p.id, p.display_name])),
+    accounts: new Map(accounts.map((a) => [a.id, `${a.number ?? ''} ${a.name}`.trim()])),
   }
 }
 

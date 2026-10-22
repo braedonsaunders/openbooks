@@ -15,7 +15,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 async function createConnection(orgId: string): Promise<string> {
   const id = randomUUID();
-  const saved = (await db.execute<{ id: string }>(sql`insert into connections(id,org_id,source,display_name) values(${id},${orgId},'netsuite',${`Fixed assets source ${id}`}) returning id`)).rows[0];
+  const saved = (await db.execute<{ id: string }>(sql`insert into connections(id,org_id,source,display_name) values(${id},${orgId},'netsuite',${`Fixed assets source ${id}`}) returning id`, "objects"))[0];
   if (!saved) throw new Error('The fixed assets connection fixture was not saved');
   return saved.id;
 }
@@ -200,8 +200,8 @@ test(
       }
       const stored = await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
-         where org_id = ${org.orgId} and custom ? 'nsFamMoneyTest'`);
-      assert.equal(stored.rows[0]!.n, 0);
+         where org_id = ${org.orgId} and custom ? 'nsFamMoneyTest'`, "objects");
+      assert.equal(stored[0]!.n, 0);
     } finally {
       await dropScratchOrg(org.orgId);
     }

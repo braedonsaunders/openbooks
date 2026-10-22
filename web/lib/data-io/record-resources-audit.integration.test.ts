@@ -48,8 +48,7 @@ test(
         allowedSubsidiaryIds: null,
       }
       const auditRows = async () =>
-        (
-          await db.execute<{
+        await db.execute<{
             action: string
             actor_id: string | null
             changes: Record<string, unknown>
@@ -58,8 +57,7 @@ test(
             select action, actor_id, changes, row_id from audit_log
              where org_id = ${org.orgId} and table_name = 'custom_records'
              order by at, id
-          `)
-        ).rows
+          `, 'objects')
 
       await withOrgContext(org.orgId, async () => {
         // A dry run writes nothing and evidences nothing.
@@ -70,11 +68,9 @@ test(
         // A committed create evidences the after-image with the actor.
         const first = await resource.write([{ title: 'imported' }], 'upsert', ctx)
         assert.equal(first.created, 1)
-        const number = (
-          await db.execute<{ record_number: string }>(sql`
+        const number = (await db.execute<{ record_number: string }>(sql`
             select record_number from custom_records
-             where org_id = ${org.orgId} and type_key = ${typeKey}`)
-        ).rows[0]!.record_number
+             where org_id = ${org.orgId} and type_key = ${typeKey}`, 'objects'))[0]!.record_number
         {
           const rows = await auditRows()
           assert.equal(rows.length, 1)

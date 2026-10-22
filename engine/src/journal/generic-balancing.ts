@@ -37,14 +37,14 @@ const dimension = (line: BalancingLineView, key: string, storage: string | null)
 
 /** Domain-specific providers run first; generic policies balance only the remaining segment obligations. */
 export const genericSegmentBalancingProvider: BalancingLegProvider = async (runner, ctx, lines) => {
-  const definitions = (await runner.execute<{
+  const definitions = await runner.execute<{
     key: string; storage_column: string | null; default_value_id: string | null; account_id: string | null; priority: number | null;
   }>(sql`
     select d.key,d.storage_column,d.default_value_id::text as default_value_id,
            p.clearing_account_id as account_id,p.priority from segment_definitions d
     left join lateral (select clearing_account_id,priority from segment_balancing_policies
       where org_id=d.org_id and segment_key=d.key and effective_from<=${ctx.postingDate}::date order by effective_from desc limit 1) p on true
-    where d.org_id=${ctx.orgId} and d.is_active and d.is_balancing order by p.priority nulls last,d.key`)).rows;
+    where d.org_id=${ctx.orgId} and d.is_active and d.is_balancing order by p.priority nulls last,d.key`, "objects");
   const effectiveLines = lines.map((line) => {
     const extraDims: Record<string, unknown> = { ...line.extraDims };
     for (const definition of definitions) {
@@ -79,7 +79,7 @@ export const genericSegmentBalancingProvider: BalancingLegProvider = async (runn
         entryLabel: "Segment balancing", lines: [{ accountId: policy.account_id!, subsidiaryId: group.subsidiaryId }] });
     const accountId = mapped.lines[0]!.accountId;
     const account = (await runner.execute<{ id: string }>(sql`select id from accounts where org_id=${ctx.orgId} and id=${accountId}
-      and is_active and not is_summary and type in ('asset_current_other','asset_other','liability_current_other','liability_long_term')`)).rows[0];
+      and is_active and not is_summary and type in ('asset_current_other','asset_other','liability_current_other','liability_long_term')`, "objects"))[0];
     if (!account) throw new PostingError("The segment balancing clearing account is unavailable. Choose an active balance-sheet clearing account in Setup → Segment balancing policies.");
     const amount = parseMoney(fromUnits(-group.amount));
     legs.push({ accountId, amount, txnAmount: amount, fxRate: "1", currency: bases.get(group.subsidiaryId)!.bookCurrency,

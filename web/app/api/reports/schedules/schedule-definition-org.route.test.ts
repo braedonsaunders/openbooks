@@ -48,13 +48,14 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.schedule-definition-org-route-test')]
       const sqlText = globalThis.openbooksScheduleDefOrgSqlText
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           if (text.includes('insert into report_schedules')) {
             state.inserts.push(text)
-            return { rows: [{ id: '00000000-0000-4000-8000-00000000b003' }] }
+            return inMode({ rows: [{ id: '00000000-0000-4000-8000-00000000b003' }] })
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
       }
       export async function withOrgTransaction(_orgId, work) { return work() }

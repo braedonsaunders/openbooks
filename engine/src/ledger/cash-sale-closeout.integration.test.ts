@@ -106,13 +106,13 @@ async function closeoutAccounts(org: ScratchOrg): Promise<{ tips: string; fees: 
 }
 
 async function entryLegs(documentId: string, orgId: string): Promise<[string | null, string][]> {
-  const rows = (await db.execute<{ number: string | null; amount: string }>(sql`
+  const rows = await db.execute<{ number: string | null; amount: string }>(sql`
     select a.number, l.amount::text as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where e.org_id = ${orgId} and e.source_document_id = ${documentId}
-     order by l.line_number`)).rows;
+     order by l.line_number`, "objects");
   return rows.map((row) => [row.number, row.amount]);
 }
 
@@ -210,7 +210,7 @@ test("server-tagged tips carry the party for payroll pay-out", { skip: !DB }, as
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where e.org_id = ${org.orgId} and e.source_document_id = ${id} and a.number = '2160'`)).rows[0]?.party;
+       where e.org_id = ${org.orgId} and e.source_document_id = ${id} and a.number = '2160'`, "objects"))[0]?.party;
     assert.equal(tipParty, org.customerId);
     const exposure = await withBypassContext(() =>
       readTipsPayableExposure(db, org.orgId, { allowedSubsidiaryIds: null }),

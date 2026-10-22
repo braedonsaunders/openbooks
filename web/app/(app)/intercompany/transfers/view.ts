@@ -70,17 +70,17 @@ export async function loadTransfersPage(sp: Record<string, string | string[] | u
   const { money } = await getMoneyFormatter()
   const canSettle = can(authz, 'intercompany.settle')
   const transfers = await listIntercompanyFundTransfers(orgId, authz.allowedSubsidiaryIds)
-  const subsidiaries = (await db.execute<{ id: string; name: string; baseCurrency: string }>(sql`
+  const subsidiaries = await db.execute<{ id: string; name: string; baseCurrency: string }>(sql`
     select id, name, base_currency as "baseCurrency" from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination
-       ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)} order by name`)).rows
+       ${subsidiaryVisibleFilter(sql`id`, authz.allowedSubsidiaryIds)} order by name`, 'objects')
   const names = new Map(subsidiaries.map((sub) => [sub.id, sub.name]))
-  const accounts = (await db.execute<{ id: string; label: string; subsidiaryId: string | null; currency: string | null }>(sql`
+  const accounts = await db.execute<{ id: string; label: string; subsidiaryId: string | null; currency: string | null }>(sql`
     select id, concat_ws(' · ', number, name) as label, subsidiary_id as "subsidiaryId", currency_restriction as currency
       from accounts
      where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-     order by number nulls last, name`)).rows
+     order by number nulls last, name`, 'objects')
   const accountLabels = new Map(accounts.map((account) => [account.id, account.label]))
   const param = pickString(sp.transfer)
   const closeHref = mergeHref(BASE, sp, { transfer: undefined })

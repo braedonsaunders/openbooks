@@ -17,7 +17,7 @@ async function seed(org: ScratchOrg, actor: string, kind: "quote" | "sales_order
   await db.execute(sql`update documents set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${id}`);
   // The revision token is the strictly increasing revision_seq counter
   // (migration 0167), never the editable updated_at display timestamp.
-  const revision = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`)).rows[0]!.revision;
+  const revision = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${id}`, "objects"))[0]!.revision;
   return { id, revision };
 }
 
@@ -32,7 +32,7 @@ for (const operation of ["issue", "void"] as const) {
         ? issueSalesOrder({ orgId: org.orgId, actorId: actor, salesOrderId: doc.id, expectedUpdatedAt: doc.revision })
         : requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: doc.id, expectedUpdatedAt: doc.revision, reversalDate: org.date, reason: "Cancel reviewed revision" });
       await assert.rejects(run, /changed after you opened it/);
-      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${doc.id}`)).rows[0]!.status, operation === "issue" ? "draft" : "approved");
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${doc.id}`, "objects"))[0]!.status, operation === "issue" ? "draft" : "approved");
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
@@ -46,7 +46,7 @@ for (const date of ["2026-02-30", "0000-01-01", "", "  "]) {
       await assert.rejects(requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: doc.id,
         expectedUpdatedAt: doc.revision, reversalDate: date, reason: "Reject invalid calendar instruction" }),
         error => error instanceof DocumentVoidError && /reversalDate must be a valid/.test(error.message));
-      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${doc.id}`)).rows[0]!.status, "approved");
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${doc.id}`, "objects"))[0]!.status, "approved");
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
@@ -63,7 +63,7 @@ test("void rechecks the reviewed revision after a concurrent edit commits", { sk
     const staged = new Promise<void>(resolve => { ready = resolve; });
     const hold = new Promise<void>(resolve => { release = resolve; });
     edit = withOrg(org.orgId, async () => {
-      pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+      pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
       await db.execute(sql`update documents set memo='Concurrent edit',updated_at=updated_at+interval '1 second' where id=${doc.id}`);
       ready(); await hold;
     });
@@ -75,14 +75,14 @@ test("void rechecks the reviewed revision after a concurrent edit commits", { sk
     const deadline = Date.now()+10_000;
     while (!settled && Date.now()<deadline) {
       blocked = (await db.execute<{ blocked: boolean }>(sql`select exists(select 1 from pg_stat_activity
-        where datname=current_database() and ${pid}=any(pg_blocking_pids(pid))) as blocked`)).rows[0]!.blocked;
+        where datname=current_database() and ${pid}=any(pg_blocking_pids(pid))) as blocked`, "objects"))[0]!.blocked;
       if (blocked) break;
       await new Promise(resolve => setTimeout(resolve,10));
     }
     assert.ok(blocked, "void must reach the aggregate lock");
     release(); await edit;
     await assert.rejects(command, /changed after you opened it/);
-    assert.deepEqual((await db.execute(sql`select status,memo,void_requested_at from documents where id=${doc.id}`)).rows[0],
+    assert.deepEqual((await db.execute(sql`select status,memo,void_requested_at from documents where id=${doc.id}`, "objects"))[0],
       { status: "approved", memo: "Concurrent edit", void_requested_at: null });
   } finally { release(); await Promise.allSettled([edit,command]); await dropScratchOrg(org.orgId); }
 });
@@ -100,14 +100,14 @@ for (const operation of ["issue", "void"] as const) {
       // Overwrite the display timestamp with a value older than any issued
       // token while committing new content the holder never saw.
       await db.execute(sql`update documents set memo='Backdated content', updated_at=now() - interval '30 days' where id=${doc.id}`);
-      const stored = (await db.execute<{ memo: string; revision: string }>(sql`select memo, (revision_seq)::text as revision from documents where id=${doc.id}`)).rows[0]!;
+      const stored = (await db.execute<{ memo: string; revision: string }>(sql`select memo, (revision_seq)::text as revision from documents where id=${doc.id}`, "objects"))[0]!;
       assert.equal(stored.memo, "Backdated content");
       assert.notEqual(stored.revision, doc.revision, "the backdated write must advance the counter");
       const run = operation === "issue"
         ? issueSalesOrder({ orgId: org.orgId, actorId: actor, salesOrderId: doc.id, expectedUpdatedAt: doc.revision })
         : requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: doc.id, expectedUpdatedAt: doc.revision, reversalDate: org.date, reason: "Cancel reviewed revision" });
       await assert.rejects(run, /changed after you opened it/);
-      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${doc.id}`)).rows[0]!.status, operation === "issue" ? "draft" : "approved");
+      assert.equal((await db.execute<{ status: string }>(sql`select status from documents where id=${doc.id}`, "objects"))[0]!.status, operation === "issue" ? "draft" : "approved");
     } finally { await dropScratchOrg(org.orgId); }
   });
 }
@@ -120,7 +120,7 @@ test("void accepts the fresh counter token after a backward-timestamp write", { 
     const actor = await createScratchUser(org.orgId, "Revision controller", "admin");
     const doc = await seed(org, actor, "quote");
     await db.execute(sql`update documents set memo='Backdated content', updated_at=now() - interval '30 days' where id=${doc.id}`);
-    const fresh = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${doc.id}`)).rows[0]!.revision;
+    const fresh = (await db.execute<{ revision: string }>(sql`select (revision_seq)::text as revision from documents where id=${doc.id}`, "objects"))[0]!.revision;
     assert.notEqual(fresh, doc.revision);
     const result = await requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: doc.id,
       expectedUpdatedAt: fresh, reversalDate: org.date, reason: "Cancel reviewed revision" });

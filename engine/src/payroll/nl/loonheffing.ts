@@ -639,9 +639,9 @@ async function nlCommittedSvBase(args: Pick<
   const rows = await tx.execute<{ sv: string }>(sql`
     select coalesce(sum((s.factors->>'SV_BASE')::numeric), 0)::text as sv
     from ${employerScopedStatutoryStubs(scope,{employeePartyId})} s
-  `);
-  if(rows.rows.length!==1)throw new PayrollError('NL committed statutory history did not return its required SV prior total');
-  return rows.rows[0]!.sv;
+  `, "objects");
+  if(rows.length!==1)throw new PayrollError('NL committed statutory history did not return its required SV prior total');
+  return rows[0]!.sv;
 }
 
 /** A real ISO calendar date, or a named refusal — contract facts date the revision rules. */
@@ -675,8 +675,8 @@ async function nlProfileBsn(args: Pick<
     select prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId} and prof.employee_party_id = ${employeePartyId}
-  `);
-  const sealed = rows.rows[0]?.sin_encrypted ?? null;
+  `, "objects");
+  const sealed = rows[0]?.sin_encrypted ?? null;
   return sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
 }
 

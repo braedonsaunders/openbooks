@@ -26,7 +26,7 @@ type CurrentCustomerItemRef = { customer_id: string; item_id: string }
 const validateIdentifierWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
   const current = rowId
     ? (await executor.execute<CurrentIdentifier>(sql`
-        select item_id, unit from item_identifiers where id = ${rowId} and org_id = ${orgId}`)).rows[0]
+        select item_id, unit from item_identifiers where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
     : null
   if (rowId && !current) return 'not found'
   const itemId = String(body.itemId ?? current?.item_id ?? '')
@@ -39,7 +39,7 @@ const validateIdentifierWrite: SetupEntityValidationHook = async ({ orgId, body,
 const validateCustomerItemRefWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
   const current = rowId
     ? (await executor.execute<CurrentCustomerItemRef>(sql`
-        select customer_id, item_id from customer_item_refs where id = ${rowId} and org_id = ${orgId}`)).rows[0]
+        select customer_id, item_id from customer_item_refs where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
     : null
   if (rowId && !current) return 'not found'
   const customerId = String(body.customerId ?? current?.customer_id ?? '')
@@ -66,7 +66,7 @@ const validateAmortizationTemplateWrite: SetupEntityValidationHook = async ({ or
   const current = rowId
     ? (await executor.execute<Record<string, unknown>>(sql`
         select method, term_source, period_count, percentages, period_offset, deferral_account_id, destination_account_id
-          from expense_amortization_templates where id = ${rowId} and org_id = ${orgId}`)).rows[0] ?? null
+          from expense_amortization_templates where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0] ?? null
     : null
   if (rowId && !current) return 'not found'
   return validateAmortizationTemplate(executor, orgId, body as Record<string, unknown>, current)

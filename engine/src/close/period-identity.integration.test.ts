@@ -45,8 +45,8 @@ async function waitForFenceState(
          and classid::text = ((k.h >> 32) & 4294967295)::text
          and objid::text = (k.h & 4294967295)::text
          and granted = ${want === "granted"}
-    `));
-    if ((rows.rows[0]?.n ?? 0) > 0) return true;
+    `, "objects"));
+    if ((rows[0]?.n ?? 0) > 0) return true;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   return false;
@@ -92,17 +92,17 @@ async function seedApprovedCloseRun(org: ScratchOrg): Promise<{
 
 async function runStatus(runId: string, orgId: string): Promise<string> {
   const rows = (await db.execute<{ status: string }>(sql`
-    select status from close_runs where id = ${runId} and org_id = ${orgId}`));
-  return rows.rows[0]!.status;
+    select status from close_runs where id = ${runId} and org_id = ${orgId}`, "objects"));
+  return rows[0]!.status;
 }
 
 /** Every GL lock row for the close scope must read 'closed' after a completed close. */
 async function assertScopeLockedClosed(org: ScratchOrg): Promise<void> {
   const rows = (await db.execute<{ module: string; state: string }>(sql`
     select module, state from period_locks
-     where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}`));
-  assert.ok(rows.rows.length > 0, "a completed close must write module locks");
-  for (const row of rows.rows) {
+     where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}`, "objects"));
+  assert.ok(rows.length > 0, "a completed close must write module locks");
+  for (const row of rows) {
     assert.equal(row.state, "closed", `module ${row.module} must end closed`);
   }
 }
@@ -142,8 +142,7 @@ test(
       assert.equal(await runStatus(runId, org.orgId), "closed");
       await assertScopeLockedClosed(org);
       const stored = (await db.execute<{ data_fingerprint: string | null }>(sql`
-        select data_fingerprint from close_runs where id = ${runId} and org_id = ${org.orgId}`))
-        .rows[0]!.data_fingerprint;
+        select data_fingerprint from close_runs where id = ${runId} and org_id = ${org.orgId}`, "objects"))[0]!.data_fingerprint;
       // Re-evaluating the settled ledger must agree with the stored evidence:
       // if the close had evaluated before the posting committed, its stored
       // fingerprint would drift from this recomputation now.
@@ -152,8 +151,8 @@ test(
       assert.equal(reread.invalidated, 0);
       assert.equal(await runStatus(runId, org.orgId), "closed");
       const posted = (await db.execute<{ status: string }>(sql`
-        select status from journal_entries where id = ${entryId}`));
-      assert.equal(posted.rows[0]!.status, "posted");
+        select status from journal_entries where id = ${entryId}`, "objects"));
+      assert.equal(posted[0]!.status, "posted");
     } finally {
       if (poster) {
         await poster.query("rollback").catch(() => undefined);
@@ -226,21 +225,21 @@ test(
         const closedLocks = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from period_locks
            where org_id = ${org.orgId} and period_id = ${org.periodId} and book_id = ${org.bookId}
-             and state = 'closed'`));
-        assert.equal(closedLocks.rows[0]!.n, 0, "every module lock must roll back");
+             and state = 'closed'`, "objects"));
+        assert.equal(closedLocks[0]!.n, 0, "every module lock must roll back");
         assert.equal(await runStatus(runId, org.orgId), "approved");
         const runRow = (await db.execute<{ closed_at: Date | null }>(sql`
-          select closed_at from close_runs where id = ${runId} and org_id = ${org.orgId}`));
-        assert.equal(runRow.rows[0]!.closed_at, null);
+          select closed_at from close_runs where id = ${runId} and org_id = ${org.orgId}`, "objects"));
+        assert.equal(runRow[0]!.closed_at, null);
         const lockTasks = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from close_run_tasks
            where run_id = ${runId} and org_id = ${org.orgId}
-             and key in ('lock-subledgers', 'lock-gl') and status = 'complete'`));
-        assert.equal(lockTasks.rows[0]!.n, 0, "lock task completions must roll back");
+             and key in ('lock-subledgers', 'lock-gl') and status = 'complete'`, "objects"));
+        assert.equal(lockTasks[0]!.n, 0, "lock task completions must roll back");
         const closedEvents = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from close_events
-           where run_id = ${runId} and org_id = ${org.orgId} and event_type = 'run.closed'`));
-        assert.equal(closedEvents.rows[0]!.n, 1, "only the planted event may remain");
+           where run_id = ${runId} and org_id = ${org.orgId} and event_type = 'run.closed'`, "objects"));
+        assert.equal(closedEvents[0]!.n, 1, "only the planted event may remain");
       } finally {
         await db.execute(sql`drop index close_events_run_closed_once_regression`);
       }
@@ -261,7 +260,7 @@ test(
         select fiscal_calendar_id
           from accounting_periods
          where id = ${org.periodId}
-      `));
+      `, "objects"));
       const adjustmentPeriodId = randomUUID();
       await db.execute(sql`
         insert into accounting_periods
@@ -269,7 +268,7 @@ test(
            starts_on, ends_on, is_adjustment, custom)
         values (
           ${adjustmentPeriodId}, ${org.orgId},
-          ${calendar.rows[0]!.fiscal_calendar_id},
+          ${calendar[0]!.fiscal_calendar_id},
           2026, 13, 'FY26 Adjustment', '2026-07-01', '2026-07-31', true,
           '{}'::jsonb
         )
@@ -331,14 +330,14 @@ test(
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'drafts-open'
-      `));
-      assert.equal(initialDrafts.rows.length, 0);
+      `, "objects"));
+      assert.equal(initialDrafts.length, 0);
       const initialFx = (await db.execute<{ status: string; details: { count: number } }>(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'fx-unrevalued'
-      `));
-      assert.equal(initialFx.rows.length, 0);
+      `, "objects"));
+      assert.equal(initialFx.length, 0);
 
       await db.execute(sql`
         update documents
@@ -376,15 +375,15 @@ test(
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'drafts-open'
-      `));
-      assert.ok(exactPeriodDrafts.rows.length === 0 || exactPeriodDrafts.rows[0]!.status === "resolved");
+      `, "objects"));
+      assert.ok(exactPeriodDrafts.length === 0 || exactPeriodDrafts[0]!.status === "resolved");
       const missingPeriod = (await db.execute<{ status: string; details: { count: number } }>(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'posting-period-missing'
-      `));
-      assert.equal(missingPeriod.rows[0]!.status, "open");
-      assert.equal(Number(missingPeriod.rows[0]!.details.count), 1);
+      `, "objects"));
+      assert.equal(missingPeriod[0]!.status, "open");
+      assert.equal(Number(missingPeriod[0]!.details.count), 1);
 
       await db.execute(sql`
         update documents
@@ -402,8 +401,8 @@ test(
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'posting-period-missing'
-      `));
-      assert.equal(resolvedPeriodIdentity.rows[0]!.status, "resolved");
+      `, "objects"));
+      assert.equal(resolvedPeriodIdentity[0]!.status, "resolved");
     } finally {
       await dropScratchOrg(org.orgId);
     }

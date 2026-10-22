@@ -133,8 +133,8 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     const wrongDataKeySha256 = createHash("sha256").update(wrongDataKeyBytes).digest("hex");
 
     await dropScratchOrg(source.orgId);
-    const absent = (await db.execute<{ count: number }>(sql`select count(*)::int as count from orgs where id = ${source.orgId}`));
-    assert.equal(absent.rows[0]?.count, 0);
+    const absent = (await db.execute<{ count: number }>(sql`select count(*)::int as count from orgs where id = ${source.orgId}`, "objects"));
+    assert.equal(absent[0]?.count, 0);
 
     await assert.rejects(
       restoreOrgBackup({
@@ -191,15 +191,15 @@ test("offline drill exports, removes, restores, and revalidates an organization"
              (select count(*)::int from accounts where org_id = ${source.orgId}) account_count,
              (select count(*)::int from parties where org_id = ${source.orgId}) party_count
         from orgs o where o.id = ${source.orgId}
-    `));
-    assert.match(restored.rows[0]?.name ?? "", /^Scratch /);
-    assert.ok(restored.rows[0]!.account_count >= 15);
-    assert.equal(restored.rows[0]!.party_count, 2);
+    `, "objects"));
+    assert.match(restored[0]?.name ?? "", /^Scratch /);
+    assert.ok(restored[0]!.account_count >= 15);
+    assert.equal(restored[0]!.party_count, 2);
     const restoredTemplate = (await db.execute<{ applies_employer_subsidiary_id: string | null }>(sql`
-      select applies_employer_subsidiary_id from hrm_process_templates where org_id = ${source.orgId} and id = ${processTemplateId}`)).rows[0];
+      select applies_employer_subsidiary_id from hrm_process_templates where org_id = ${source.orgId} and id = ${processTemplateId}`, "objects"))[0];
     assert.equal(restoredTemplate?.applies_employer_subsidiary_id, source.subsidiaryId, "generated projection recomputed on restore");
     assert.equal(
-      unsealEmailSecret(restored.rows[0]!.email.keySealed, source.orgId),
+      unsealEmailSecret(restored[0]!.email.keySealed, source.orgId),
       emailCredential,
     );
 
@@ -217,8 +217,8 @@ test("offline drill exports, removes, restores, and revalidates an organization"
         (select count(*)::int from auth_login_challenges where user_id = ${authUserId}) challenge_count,
         (select count(*)::int from user_org_access
           where org_id = ${source.orgId} and acting_user_id = ${authUserId}) access_count
-    `));
-    const authRow = restoredAuth.rows[0]!;
+    `, "objects"));
+    const authRow = restoredAuth[0]!;
     assert.equal(authRow.mfa_count, 1);
     assert.equal(unsealSecret(authRow.mfa_ciphertext, { orgId: authUserId, purpose: "auth.mfa.secret" }), mfaSecret);
     assert.equal(authRow.oidc_count, 1);
@@ -244,8 +244,8 @@ test("offline drill exports, removes, restores, and revalidates an organization"
       select
         (select count(*)::int from auth_mfa_factors where user_id = ${authUserId}) mfa_count,
         (select count(*)::int from auth_oidc_identities where user_id = ${authUserId}) oidc_count
-    `));
-    const resetAuthRow = resetAuth.rows[0]!;
+    `, "objects"));
+    const resetAuthRow = resetAuth[0]!;
     assert.equal(resetAuthRow.mfa_count, 0);
     assert.equal(resetAuthRow.oidc_count, 1);
   } finally {
@@ -307,7 +307,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
 
     // Kernel payment applied to the invoice's AR line, then reversed.
     const invoiceArLine = (await db.execute<{ id: string }>(sql`
-      select id from journal_lines where entry_id = ${invoiceEntryId} and account_id = ${source.accounts.ar}`)).rows[0]!.id;
+      select id from journal_lines where entry_id = ${invoiceEntryId} and account_id = ${source.accounts.ar}`, "objects"))[0]!.id;
     const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
       orgId: source.orgId,
       kind: "customer_payment",
@@ -339,7 +339,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
     const paysLinks = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from document_links
        where org_id = ${source.orgId} and from_document_id = ${payment.id}
-         and to_document_id = ${invoiceId} and link_type = 'pays'`)).rows[0]!.n;
+         and to_document_id = ${invoiceId} and link_type = 'pays'`, "objects"))[0]!.n;
     assert.ok(paysLinks >= 1, "posting the payment must record the pays source link");
     await reversePaymentForReturn(payment.id, source.orgId, "Drill return", actorId, source.date);
 
@@ -390,19 +390,19 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
     const comparableCounts = (counts: Record<string, number>): Record<string, number> =>
       Object.fromEntries(Object.entries(counts).filter(([name]) => !derivedAggregates.has(name)));
     await db.execute(sql`update documents set open_balance = 999 where id = ${invoiceId}`); const beforeCounts = await orgRowCounts(source.orgId);
-    const trialBalance = async () => (await db.execute<{ book: string; entries: number; balance: string; lines: number }>(sql`
+    const trialBalance = async () => await db.execute<{ book: string; entries: number; balance: string; lines: number }>(sql`
       select e.book_id as book, count(distinct e.id)::int as entries,
              coalesce(sum(l.amount), 0)::text as balance, count(l.*)::int as lines
         from journal_entries e left join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.org_id = ${source.orgId} and e.status in ('posted', 'reversed')
-       group by e.book_id order by e.book_id`)).rows;
-    const blobBytesHex = async () => (await db.execute<{ version_id: string; hex: string }>(sql`
+       group by e.book_id order by e.book_id`, "objects");
+    const blobBytesHex = async () => await db.execute<{ version_id: string; hex: string }>(sql`
       select v.id as version_id, encode(b.bytes, 'hex') as hex
         from file_blobs b join file_versions v on v.id = b.version_id
         join files f on f.id = v.file_id
-       where f.org_id = ${source.orgId} order by v.id`)).rows;
+       where f.org_id = ${source.orgId} order by v.id`, "objects");
     const reversedBefore = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${source.orgId} and status = 'reversed'`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${source.orgId} and status = 'reversed'`, "objects"))[0]!.n;
     const beforeTrial = await trialBalance();
     const beforeBlobs = await blobBytesHex();
     assert.ok(reversedBefore >= 1, "the seeded ledger must contain a reversed entry");
@@ -434,7 +434,7 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
       // empty-target gate cannot pass in a bootstrapped database.
       testOnlyAllowNonemptyTarget: true,
     });
-    assert.equal(report.validation.postedLedgerBalance, "passed"); assert.equal((await db.execute<{ open_balance: string }>(sql`select open_balance from documents where id = ${invoiceId}`)).rows[0]!.open_balance, "500.0000");
+    assert.equal(report.validation.postedLedgerBalance, "passed"); assert.equal((await db.execute<{ open_balance: string }>(sql`select open_balance from documents where id = ${invoiceId}`, "objects"))[0]!.open_balance, "500.0000");
 
     // The restored tenant must match the independent totals exactly, with
     // nonzero counts everywhere the seeded ledger wrote. Rebuilt aggregates
@@ -442,16 +442,16 @@ test("populated ledger exports, restores, and revalidates with nonzero fidelity"
     assert.deepEqual(comparableCounts(await orgRowCounts(source.orgId)), comparableCounts(beforeCounts));
     assert.deepEqual(await trialBalance(), beforeTrial);
     assert.deepEqual(await blobBytesHex(), beforeBlobs);
-    const statsVerify = (await db.execute(sql`select * from openbooks_party_payment_stats_verify(${source.orgId})`)).rows;
+    const statsVerify = await db.execute(sql`select * from openbooks_party_payment_stats_verify(${source.orgId})`, "objects");
     assert.deepEqual(statsVerify, [], "rebuilt payment stats must verify against the restored applications");
-    const glVerify = (await db.execute(sql`select * from openbooks_gl_activity_verify(${source.orgId})`)).rows;
+    const glVerify = await db.execute(sql`select * from openbooks_gl_activity_verify(${source.orgId})`, "objects");
     assert.deepEqual(glVerify, [], "rebuilt GL activity must verify against the restored ledger");
     for (const name of ["journal_entries", "journal_lines", "documents", "document_lines", "applications",
       "accounting_books", "document_links", "custom_field_defs", "folders", "files", "file_attachments"]) {
       assert.ok((beforeCounts[name] ?? 0) > 0, `the seeded ledger must hold nonzero ${name} rows`);
     }
     const reversedAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${source.orgId} and status = 'reversed'`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${source.orgId} and status = 'reversed'`, "objects"))[0]!.n;
     assert.ok(reversedAfter >= 1, "the reversal must survive the restore");
   } finally {
     await dropScratchOrgReporting(source.orgId);

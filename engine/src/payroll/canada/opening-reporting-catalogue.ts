@@ -10,12 +10,12 @@ export async function readCanadianOpeningReportingCatalogue(tx: SqlExecutor, org
     programKey: program.programKey, country: program.country,
     ...(program.country === 'CA' && program.programKey === 'qpip' ? { provinces: ['QC'] } : {}),
   }]));
-  const components = (await tx.execute<{ id: string; country: string | null }>(sql`
+  const components = await tx.execute<{ id: string; country: string | null }>(sql`
     select id,country from pay_components where org_id=${orgId} order by id for share
-  `)).rows;
-  const filingAccounts = (await tx.execute<CanadianOpeningReportingCatalogue['filingAccounts'][number]>(sql`
+  `, 'objects');
+  const filingAccounts = await tx.execute<CanadianOpeningReportingCatalogue['filingAccounts'][number]>(sql`
     select id,org_id as "orgId",subsidiary_id as "subsidiaryId",country,program_type as "programType",name,account_number as "accountNumber"
       from payroll_filing_accounts where org_id=${orgId} order by id for share
-  `)).rows;
+  `, 'objects');
   return { annualFields: OPENING_BALANCE_FIELDS, components, programs: [...uniquePrograms.values()], filingAccounts };
 }

@@ -42,8 +42,8 @@ async function documentHeader(
       from documents
      where id = ${id} and org_id = ${context.authz.user.orgId}
      limit 1
-  `));
-  const header = result.rows[0];
+  `, "objects"));
+  const header = result[0];
   if (!header) throw notFound("document");
   if (!(await isDocKindEnabled(context.authz.user.orgId, header.kind))) {
     throw notFound("document");
@@ -63,8 +63,8 @@ async function lockDocumentHeader(
       from documents
      where id = ${id} and org_id = ${context.authz.user.orgId}
      for update
-  `));
-  const header = result.rows[0];
+  `, "objects"));
+  const header = result[0];
   if (!header) throw notFound("document");
   if (!(await isDocKindEnabled(context.authz.user.orgId, header.kind))) {
     throw notFound("document");

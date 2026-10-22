@@ -21,7 +21,7 @@ async function insertOrder(orgId: string, actor: string, kind: string, subsidiar
   // The caller's real revision token — the same revision_seq counter the
   // converter compares against. Every v1 convert must carry one.
   const revision = (await withBypassContext(() => db.execute<{ revision: string }>(sql`
-    select revision_seq::text as revision from documents where id = ${id}`))).rows[0]?.revision;
+    select revision_seq::text as revision from documents where id = ${id}`, "objects")))[0]?.revision;
   assert.ok(revision);
   return { id, revision };
 }

@@ -32,11 +32,11 @@ export async function sandboxSubsidiaryMap(productionOrgId: string, sandboxOrgId
  * proven counterpart is deliberately absent, so callers refuse rather than
  * guess. */
 async function sandboxCounterpartMap(table: "subsidiaries" | "departments", productionOrgId: string, sandboxOrgId: string, seed: string): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ source_id: string; target_id: string }>(sql`
+  const rows = await db.execute<{ source_id: string; target_id: string }>(sql`
     select source.id as source_id, target.id as target_id
       from ${sql.identifier(table)} source join ${sql.identifier(table)} target
         on target.id = ob_rebase(source.id, ${seed}::uuid) and target.org_id = ${sandboxOrgId}
-     where source.org_id = ${productionOrgId}`)).rows;
+     where source.org_id = ${productionOrgId}`, "objects");
   return new Map(rows.map(row => [row.source_id, row.target_id]));
 }
 
@@ -97,9 +97,9 @@ export async function rebaseClonedJsonReferences(args: {
   if (args.copiedTables.has("app_roles") || args.copiedTables.has("subsidiaries")) {
     const ids = args.copiedTables.has("app_roles")
       ? await sandboxSubsidiaryMap(args.productionOrgId, args.sandboxOrgId, args.seed)
-      : new Map((await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${args.sandboxOrgId}`)).rows.map(row => [row.id, row.id]));
-    const roles = (await db.execute<{ id: string; subsidiary_restriction: unknown }>(sql`
-      select id, subsidiary_restriction from app_roles where org_id = ${args.sandboxOrgId} order by id for update`)).rows;
+      : new Map((await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${args.sandboxOrgId}`, "objects")).map(row => [row.id, row.id]));
+    const roles = await db.execute<{ id: string; subsidiary_restriction: unknown }>(sql`
+      select id, subsidiary_restriction from app_roles where org_id = ${args.sandboxOrgId} order by id for update`, "objects");
     for (const role of roles) {
       const after = remapRoleRestriction(role.subsidiary_restriction, ids, `sandbox role ${role.id}`);
       if (JSON.stringify(after) === JSON.stringify(role.subsidiary_restriction)) continue;
@@ -108,14 +108,14 @@ export async function rebaseClonedJsonReferences(args: {
     }
   }
   if (args.copiedTables.has("subsidiaries")) {
-    const accounts = (await db.execute<{ source_id: string; target_id: string }>(sql`
+    const accounts = await db.execute<{ source_id: string; target_id: string }>(sql`
       select source.id as source_id, target.id as target_id
         from accounts source join accounts target
           on target.id=ob_rebase(source.id,${args.seed}::uuid) and target.org_id=${args.sandboxOrgId}
-       where source.org_id=${args.productionOrgId}`)).rows;
+       where source.org_id=${args.productionOrgId}`, "objects");
     const ids = new Map(accounts.map(row => [row.source_id, row.target_id]));
-    const subsidiaries = (await db.execute<{ id: string; control_accounts: Record<string, unknown> }>(sql`
-      select id,control_accounts from subsidiaries where org_id=${args.sandboxOrgId} order by id for update`)).rows;
+    const subsidiaries = await db.execute<{ id: string; control_accounts: Record<string, unknown> }>(sql`
+      select id,control_accounts from subsidiaries where org_id=${args.sandboxOrgId} order by id for update`, "objects");
     for (const subsidiary of subsidiaries) {
       const before = subsidiary.control_accounts;
       const after: Record<string, string> = {};
@@ -137,8 +137,8 @@ export async function rebaseClonedJsonReferences(args: {
   }
   if (args.copiedTables.has("flows")) {
     const ids = await sandboxSubsidiaryMap(args.productionOrgId, args.sandboxOrgId, args.seed);
-    const copiedFlows = (await db.execute<{ id: string; graph: unknown }>(sql`
-      select id, graph from flows where org_id = ${args.sandboxOrgId} order by id for update`)).rows;
+    const copiedFlows = await db.execute<{ id: string; graph: unknown }>(sql`
+      select id, graph from flows where org_id = ${args.sandboxOrgId} order by id for update`, "objects");
     for (const flow of copiedFlows) {
       validateClonedFlowGraphScope(flow.graph, new Set(ids.values()), `sandbox flow ${flow.id}`);
     }
@@ -157,8 +157,8 @@ export async function rebaseClonedJsonReferences(args: {
       departments: await sandboxCounterpartMap("departments", args.productionOrgId, args.sandboxOrgId, args.seed),
     };
     for (const table of scoped) {
-      const rows = (await db.execute<{ id: string; applies_to: unknown }>(sql`
-        select id, applies_to from ${sql.identifier(table)} where org_id = ${args.sandboxOrgId} order by id for update`)).rows;
+      const rows = await db.execute<{ id: string; applies_to: unknown }>(sql`
+        select id, applies_to from ${sql.identifier(table)} where org_id = ${args.sandboxOrgId} order by id for update`, "objects");
       for (const row of rows) {
         const after = remapScopeFilter(row.applies_to, ids, `sandbox ${table} ${row.id}`);
         if (JSON.stringify(after) === JSON.stringify(row.applies_to)) continue;

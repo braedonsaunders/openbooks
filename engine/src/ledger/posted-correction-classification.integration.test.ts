@@ -74,7 +74,7 @@ async function seedPostedInvoice(
 async function revision(orgId: string, id: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
     select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-      from documents where id = ${id} and org_id = ${orgId}`))).rows[0]!.revision;
+      from documents where id = ${id} and org_id = ${orgId}`, "objects")))[0]!.revision;
 }
 
 function writerFor(orgId: string, actorId: string) {
@@ -107,21 +107,21 @@ async function docState(orgId: string, id: string) {
   }>(sql`
     select status, department_id as "departmentId", project_id as "projectId", memo,
            void_requested_at::text as "voidRequested"
-      from documents where id = ${id} and org_id = ${orgId}`))).rows[0]!;
+      from documents where id = ${id} and org_id = ${orgId}`, "objects")))[0]!;
 }
 
 async function entryCount(orgId: string, id: string): Promise<number> {
   return (await withBypassContext(() => db.execute<{ count: number }>(sql`
     select count(*)::int as count from journal_entries
-     where org_id = ${orgId} and source_document_id = ${id}`))).rows[0]!.count;
+     where org_id = ${orgId} and source_document_id = ${id}`, "objects")))[0]!.count;
 }
 
 async function correctionAudits(orgId: string, id: string) {
-  return (await withBypassContext(() => db.execute<{ action: string; changes: unknown }>(sql`
+  return await withBypassContext(() => db.execute<{ action: string; changes: unknown }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
        and changes->>'mode' like 'posted\\_%'
-     order by id`))).rows;
+     order by id`, "objects"));
 }
 
 test("a locked-period project amendment refuses with the reopen remedy and changes nothing", { skip: !DB }, async () => {
@@ -188,20 +188,20 @@ test("a multi-dimension correction moves balances once and stays in the source p
       postingDate: string; periodId: string; origin: string;
     }>(sql`
       select posting_date::text as "postingDate", period_id as "periodId", origin
-        from journal_entries where id = ${outcome.reclassEntryIds[0]} and org_id = ${org.orgId}`))).rows[0]!;
+        from journal_entries where id = ${outcome.reclassEntryIds[0]} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(reclass.postingDate, org.date);
     assert.equal(reclass.periodId, org.periodId);
     assert.equal(reclass.origin, "correction");
     // Every leg moves once from the old combination to the new combination.
-    const dimensions = (await withBypassContext(() => db.execute<{
+    const dimensions = await withBypassContext(() => db.execute<{
       department: string | null; project: string | null; account: string; total: string;
     }>(sql`
       select l.department_id as department, l.project_id as project, l.account_id as account, sum(l.amount)::text as total
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.source_document_id = ${invoice}
-       group by l.department_id, l.project_id, l.account_id`))).rows;
-    const original = (await withBypassContext(() => db.execute<{
+       group by l.department_id, l.project_id, l.account_id`, "objects"));
+    const original = await withBypassContext(() => db.execute<{
       account: string; total: string;
     }>(sql`
       select l.account_id as account, sum(l.amount)::text as total
@@ -209,7 +209,7 @@ test("a multi-dimension correction moves balances once and stays in the source p
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.source_document_id = ${invoice}
          and e.id <> ${outcome.reclassEntryIds[0]}
-       group by l.account_id`))).rows;
+       group by l.account_id`, "objects"));
     const moved = new Map(original.map((row) => [row.account, row.total]));
     for (const row of dimensions) {
       if (row.department === departmentA && row.project === projectA) assert.equal(row.total, "0.0000");
@@ -244,7 +244,7 @@ test("an open-period amount change voids with the reversal in the original perio
     const project = await seedProject(org, "AMT-A");
     const invoice = await seedPostedInvoice(org, actor, project, "INV-AMT", "4200");
     const originalEntry = (await withBypassContext(() => db.execute<{ entry: string }>(sql`
-      select posted_entry_id as entry from documents where id = ${invoice} and org_id = ${org.orgId}`))).rows[0]!.entry;
+      select posted_entry_id as entry from documents where id = ${invoice} and org_id = ${org.orgId}`, "objects")))[0]!.entry;
     const token = await revision(org.orgId, invoice);
     const outcome = await correctPostedDocument(invoice, {
       documentDate: org.date,
@@ -261,13 +261,13 @@ test("an open-period amount change voids with the reversal in the original perio
     assert.equal(kept.status, "voided");
     const reversal = (await withBypassContext(() => db.execute<{ postingDate: string }>(sql`
       select posting_date::text as "postingDate" from journal_entries
-       where org_id = ${org.orgId} and reverses_entry_id = ${originalEntry}`))).rows[0]!;
+       where org_id = ${org.orgId} and reverses_entry_id = ${originalEntry}`, "objects")))[0]!;
     assert.equal(reversal.postingDate, org.date);
     const replacement = (await withBypassContext(() => db.execute<{
       id: string; status: string; documentDate: string;
     }>(sql`
       select id, status, document_date::text as "documentDate" from documents
-       where org_id = ${org.orgId} and custom->>'correctionOf' = ${invoice}`))).rows[0]!;
+       where org_id = ${org.orgId} and custom->>'correctionOf' = ${invoice}`, "objects")))[0]!;
     assert.equal(replacement.status, "draft");
     assert.equal(replacement.documentDate, org.date);
   } finally {
@@ -285,7 +285,7 @@ test("a drawer-shaped memo edit resending unchanged lines stays a metadata corre
       id: string; description: string | null;
     }>(sql`
       select id, description from document_lines
-       where org_id = ${org.orgId} and document_id = ${invoice}`))).rows[0]!;
+       where org_id = ${org.orgId} and document_id = ${invoice}`, "objects")))[0]!;
     const token = await revision(org.orgId, invoice);
     // The drawer always resends every row; an untouched row must round-trip
     // without tripping the financial path — otherwise every posted memo edit

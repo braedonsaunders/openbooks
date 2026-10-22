@@ -87,10 +87,10 @@ async function revision(orgId: string, partyId: string): Promise<string> {
 async function roleCount(orgId: string, table: 'vendor_roles' | 'customer_roles', partyId: string): Promise<number> {
   const result = await withBypassContext(() =>
     db.execute<{ count: string }>(
-      sql`select count(*)::text as count from ${sql.raw(table)} where org_id = ${orgId} and party_id = ${partyId} and is_active`,
+      sql`select count(*)::text as count from ${sql.raw(table)} where org_id = ${orgId} and party_id = ${partyId} and is_active`, 'objects',
     ),
   )
-  return Number(result.rows[0]?.count ?? '0')
+  return Number(result[0]?.count ?? '0')
 }
 
 async function patchKind(
@@ -115,10 +115,10 @@ test('PATCH repairs an orphan company party to kind vendor with its role', async
     assert.equal(first.status, 200, `the repair PATCH must succeed, got ${first.text}`)
     const kind = await withBypassContext(() =>
       db.execute<{ kind: string }>(
-        sql`select kind from parties where id = ${partyId} and org_id = ${ctx.orgId}`,
+        sql`select kind from parties where id = ${partyId} and org_id = ${ctx.orgId}`, 'objects',
       ),
     )
-    assert.equal(kind.rows[0]?.kind, 'vendor', 'the kind is now vendor')
+    assert.equal(kind[0]?.kind, 'vendor', 'the kind is now vendor')
     assert.equal(await roleCount(ctx.orgId, 'vendor_roles', partyId), 1, 'the canonical vendor role now exists')
 
     const second = await patchKind(ctx, partyId, { kind: 'vendor', roles: { vendor: { enabled: true } } })

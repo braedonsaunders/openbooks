@@ -114,8 +114,8 @@ test("PATCH records immutable account-group before/after audit evidence", { skip
     const stored = await db.execute<{ name: string; color: string; match: unknown; updated_by: string }>(sql`
       select name, color, match, updated_by::text from account_groups
        where id = ${groupId} and org_id = ${org.orgId}
-    `);
-    assert.deepEqual(stored.rows[0], {
+    `, "objects");
+    assert.deepEqual(stored[0], {
       name: "New name",
       color: "#222222",
       match: { numberPrefixes: ["6"], namePattern: "new" },
@@ -132,9 +132,9 @@ test("PATCH records immutable account-group before/after audit evidence", { skip
         from audit_log
        where org_id = ${org.orgId} and table_name = 'account_groups' and row_id = ${groupId}
        order by at desc
-    `);
-    assert.equal(audits.rows.length, 1);
-    const audit = audits.rows[0]!;
+    `, "objects");
+    assert.equal(audits.length, 1);
+    const audit = audits[0]!;
     assert.equal(audit.action, "update");
     assert.equal(audit.actor_id, actorId);
     assert.equal(audit.request_id, "account-group-audit-test");
@@ -177,13 +177,13 @@ test("PATCH refuses org-wide classification rewrites to restricted callers", { s
     assert.deepEqual(await denied.json(), { error: "requires unrestricted subsidiary access" });
     const stored = await db.execute<{ name: string }>(sql`
       select name from account_groups where id = ${groupId} and org_id = ${org.orgId}
-    `);
-    assert.equal(stored.rows[0]?.name, "Scope name");
+    `, "objects");
+    assert.equal(stored[0]?.name, "Scope name");
     const audits = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${org.orgId} and table_name = 'account_groups' and row_id = ${groupId}
-    `);
-    assert.equal(audits.rows[0]?.n ?? -1, 0, "a refused rewrite audits nothing");
+    `, "objects");
+    assert.equal(audits[0]?.n ?? -1, 0, "a refused rewrite audits nothing");
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(org.orgId);

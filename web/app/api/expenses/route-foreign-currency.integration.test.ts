@@ -124,7 +124,7 @@ async function storedLine(fixture: Fixture) {
     select l.amount::text, l.tax_amount::text, l.original_currency, l.original_amount::text, l.original_fx_rate::text,
            l.original_fx_evidence, d.total::text
       from document_lines l join documents d on d.id = l.document_id and d.org_id = l.org_id
-     where l.org_id = ${fixture.org.orgId} and l.document_id = ${fixture.report}`)).rows[0])
+     where l.org_id = ${fixture.org.orgId} and l.document_id = ${fixture.report}`, 'objects'))[0])
 }
 
 test('a foreign line converts at the dated rate, keeps its evidence, and posts the converted amount', async () => {
@@ -160,11 +160,11 @@ test('a foreign line converts at the dated rate, keeps its evidence, and posts t
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'post', documentId: fixture.report }),
     }))
     assert.equal(posted.status, 200, JSON.stringify(await posted.clone().json()))
-    const journal = await withBypassContext(async () => (await db.execute<{ account_id: string; amount: string }>(sql`
+    const journal = await withBypassContext(async () => await db.execute<{ account_id: string; amount: string }>(sql`
       select l.account_id, l.amount::text from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${fixture.org.orgId} and e.source_document_id = ${fixture.report}
-       order by l.amount desc`)).rows)
+       order by l.amount desc`, 'objects'))
     assert.deepEqual(journal.map((row) => [row.account_id, row.amount]), [
       [fixture.org.accounts.cogs, '148.2300'],
       [fixture.employeePayable, '-148.2300'],

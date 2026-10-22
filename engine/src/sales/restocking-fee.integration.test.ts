@@ -23,8 +23,8 @@ const postingDeps = (org: ScratchOrg) => ({ control: { ar: org.accounts.ar, ap: 
 async function enableReturns(orgId: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || '{"warehousing": true, "fulfillment": true, "returnAuthorizations": true}'::jsonb) where id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1)
+      || '{"warehousing": true, "fulfillment": true, "returnAuthorizations": true}'::jsonb) where id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1)
 }
 
 async function ensureIsoRegistry(): Promise<void> {
@@ -34,8 +34,8 @@ async function ensureIsoRegistry(): Promise<void> {
     insert into currencies (code, name, minor_units)
     values ('BHD', 'Bahraini Dinar', 3), ('JPY', 'Japanese Yen', 0)
     on conflict (code) do nothing`))
-  const rows = (await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`
-    select code, minor_units from currencies where code in ('BHD', 'JPY') order by code`))).rows
+  const rows = await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`
+    select code, minor_units from currencies where code in ('BHD', 'JPY') order by code`, 'objects'))
   assert.deepEqual(rows, [{ code: 'BHD', minor_units: 3 }, { code: 'JPY', minor_units: 0 }])
 }
 
@@ -73,11 +73,11 @@ async function postedSale(org: ScratchOrg): Promise<{ documentId: string; issueI
                                 stock_location_id, custom, tax_overridden)
     values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, '10',
             '10', '100', '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`)
-  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`)
-  assert.equal(approved.rows.length, 1)
+  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`, 'objects')
+  assert.equal(approved.length, 1)
   await postDocument(documentId, postingDeps(org))
   const issue = (await db.execute<{ id: string }>(sql`
-    select id from inventory_movements where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0]
+    select id from inventory_movements where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, 'objects'))[0]
   assert.ok(issue)
   return { documentId, issueId: issue.id }
 }
@@ -165,8 +165,8 @@ test('waive requires the grant and a reason, and is audited', { skip: !DB }, asy
     await withOrg(org.orgId, () => recordRestockingFeeWaiver(db, org.orgId, actorId, rmaId, {
       totalMinor: '1000', currency: 'CAD', minorUnits: 2, reason: 'Damaged in transit',
     }))
-    const audit = (await db.execute<{ changes: { reason: string; minorUnits: number; currency: string; totalMinor: string } }>(sql`
-      select changes from audit_log where org_id = ${org.orgId} and table_name = 'rma_documents' and row_id = ${rmaId}`)).rows
+    const audit = await db.execute<{ changes: { reason: string; minorUnits: number; currency: string; totalMinor: string } }>(sql`
+      select changes from audit_log where org_id = ${org.orgId} and table_name = 'rma_documents' and row_id = ${rmaId}`, 'objects')
     assert.equal(audit.length, 1)
     assert.equal(audit[0]?.changes.reason, 'Damaged in transit')
     assert.equal(audit[0]?.changes.minorUnits, 2)
@@ -275,15 +275,15 @@ test('inspected credit equals returned value minus fee and balances', { skip: !D
               ${fee.unitPrice}, ${fee.amount}, '0', false, '0', '0', '{}'::jsonb, true)`)
     await withOrg(org.orgId, () => db.transaction((tx) => recordReturnInspection(tx, org.orgId, actorId,
       rma.id, [{ lineId: rma.lineId, accepted: '10', disposition: 'restock', dispositionLocationId: org.stockLocationId }], creditId, null)))
-    const approved = await db.execute(sql`update documents set status = 'approved' where id = ${creditId} and org_id = ${org.orgId} returning id`)
-    assert.equal(approved.rows.length, 1)
+    const approved = await db.execute(sql`update documents set status = 'approved' where id = ${creditId} and org_id = ${org.orgId} returning id`, 'objects')
+    assert.equal(approved.length, 1)
     await withOrg(org.orgId, () => postDocument(creditId, postingDeps(org)))
     await withOrg(org.orgId, () => db.transaction((tx) => completeReturnInspection(tx, org.orgId, actorId, rma.id, null)))
     const header = (await db.execute<{ total: string }>(sql`
-      select total::text from documents where org_id = ${org.orgId} and id = ${creditId}`)).rows[0]
+      select total::text from documents where org_id = ${org.orgId} and id = ${creditId}`, 'objects'))[0]
     assert.equal(header?.total, '90.0000')
-    const unbalanced = (await db.execute(sql`
-      select entry_id from journal_lines where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`)).rows
+    const unbalanced = await db.execute(sql`
+      select entry_id from journal_lines where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`, 'objects')
     assert.equal(unbalanced.length, 0)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -355,8 +355,8 @@ test('percent fees price whole yen on JPY and refuse unknown precision', { skip:
     assert.equal(yen.totalMinor, '1000')
     assert.equal(yen.minorUnits, 0)
     assert.equal(restockingFeeCreditLines(yen)[0]!.amount, '-1000.0000')
-    const absent = (await withBypassContext(() => db.execute<{ code: string }>(sql`
-      select code from currencies where code = 'ZZZ'`))).rows
+    const absent = await withBypassContext(() => db.execute<{ code: string }>(sql`
+      select code from currencies where code = 'ZZZ'`, 'objects'))
     assert.equal(absent.length, 0)
     await assert.rejects(
       withOrg(org.orgId, () => resolveRestockingFee(db, org.orgId, {

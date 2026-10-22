@@ -167,8 +167,8 @@ test(
          where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}
            and status = 'approved' and hours > 0
            and worked_on between '2026-06-01' and '2026-06-30'
-      `));
-      assert.equal(Number(timesheetDays.rows[0]?.days ?? 0), 0);
+      `, "objects"));
+      assert.equal(Number(timesheetDays[0]?.days ?? 0), 0);
 
       const lines = await resolveStatutoryHolidayPay(db, holidayInput(fx));
       const holidayPay = lines.find((line) => line.componentId === fx.holidayComponentId);

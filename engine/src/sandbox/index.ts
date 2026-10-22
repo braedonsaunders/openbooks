@@ -30,8 +30,8 @@ export async function listSandboxes(productionOrgId: string): Promise<SandboxSum
            refresh_schedule as "refreshSchedule", storage_rows as "storageRows", created_at as "createdAt"
       from sandboxes
      where production_org_id = ${productionOrgId}
-     order by created_at desc`);
-  return res.rows;
+     order by created_at desc`, "objects");
+  return res;
 }
 
 /** Resolve the sandbox row for an org that IS a sandbox (used by org-switch). */

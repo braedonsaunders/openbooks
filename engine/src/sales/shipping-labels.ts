@@ -125,7 +125,7 @@ export async function loadShippingAccount(
     select id, provider, mode, status, name, secrets, webhook_secret, last_error
       from shipping_accounts
      where org_id = ${orgId} and status = 'active'
-     order by is_default desc, created_at asc limit 1 for share`)).rows[0];
+     order by is_default desc, created_at asc limit 1 for share`, "objects"))[0];
   if (!row) {
     throw new ShippingRefusal(
       accountId ? "Carrier account not found" : "No carrier account is connected",
@@ -219,12 +219,12 @@ export interface ShippingAccountView {
 /** Every carrier account with its health, for Setup. Keys never leave sealed. */
 export async function listShippingAccounts(runner: SqlExecutor, orgId: string): Promise<ShippingAccountView[]> {
   await assertShippingFeature(runner, orgId);
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     id: string; name: string; provider: string; mode: string; status: string;
     is_default: boolean; secrets: string | null; has_relay_secret: boolean; last_error: string | null; last_checked_at: string | null;
   }>(sql`
     select id, name, provider, mode, status, is_default, secrets, webhook_secret is not null as has_relay_secret, last_error, last_checked_at
-      from shipping_accounts where org_id = ${orgId} order by name`)).rows;
+      from shipping_accounts where org_id = ${orgId} order by name`, "objects");
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -250,8 +250,8 @@ async function writeAccountAudit(
   const written = await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'shipping_accounts', ${accountId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`);
-  if (written.rows.length === 0) throw new Error("shipping account change was not audited");
+    returning id`, "objects");
+  if (written.length === 0) throw new Error("shipping account change was not audited");
 }
 
 export interface ConnectAccountInput {
@@ -310,8 +310,8 @@ export async function connectShippingAccount(
       ? sql`${base}, secrets = ${sealAccountSecrets(orgId, input.apiKey.trim())}`
       : base;
     const updated = await tx.execute<{ id: string }>(sql`
-      ${keyed} where org_id = ${orgId} and id = ${input.accountId} returning id`);
-    if (updated.rows.length === 0) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
+      ${keyed} where org_id = ${orgId} and id = ${input.accountId} returning id`, "objects");
+    if (updated.length === 0) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
     await writeAccountAudit(tx, orgId, actorId, input.accountId, "update", {
       mode: "shipping_account_connect",
       name,
@@ -331,8 +331,8 @@ export async function connectShippingAccount(
     values (${orgId}, ${name}, ${input.provider}, ${input.mode}, 'active',
             ${input.makeDefault === true}, ${sealAccountSecrets(orgId, input.apiKey.trim())},
             ${relay.sealed(orgId)}, ${actorId}, ${actorId})
-    returning id`);
-  const accountId = created.rows[0]?.id;
+    returning id`, "objects");
+  const accountId = created[0]?.id;
   if (!accountId) throw new Error("shipping account was not connected");
   await writeAccountAudit(tx, orgId, actorId, accountId, "insert", {
     mode: "shipping_account_connect",
@@ -364,8 +364,8 @@ export async function rotateShippingRelaySecret(
       from (select id, webhook_secret is not null as had_secret from shipping_accounts
              where org_id = ${orgId} and id = ${accountId} for update) prior
      where a.org_id = ${orgId} and a.id = prior.id
-    returning a.id, prior.had_secret`);
-  const row = updated.rows[0];
+    returning a.id, prior.had_secret`, "objects");
+  const row = updated[0];
   if (!row) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
   await writeAccountAudit(tx, orgId, actorId, accountId, "update", {
     mode: "shipping_account_relay_secret",
@@ -386,8 +386,8 @@ export async function disconnectShippingAccount(
     update shipping_accounts
        set status = 'disabled', updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${accountId} and status <> 'disabled'
-    returning id`);
-  if (updated.rows.length === 0) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
+    returning id`, "objects");
+  if (updated.length === 0) throw new ShippingRefusal("Carrier account not found", "not_found", 404);
   await writeAccountAudit(tx, orgId, actorId, accountId, "update", { mode: "shipping_account_disconnect" });
 }
 
@@ -487,7 +487,7 @@ async function lockShipmentForRating(
           join documents up on up.id = l.from_document_id and up.org_id = l.org_id
          where l.org_id = d.org_id and l.to_document_id = d.id and l.link_type in ('reserves', 'ships')
          limit 1) so on true
-     where d.org_id = ${orgId} and d.id = ${shipmentId} and d.kind = 'shipment'`)).rows[0];
+     where d.org_id = ${orgId} and d.id = ${shipmentId} and d.kind = 'shipment'`, "objects"))[0];
   if (!row) throw new ShippingRefusal("Shipment not found", "not_found", 404);
   if (scope !== null && scope !== undefined && !scope.has(row.subsidiary_id)) {
     throw new ShippingRefusal("Shipment not found", "not_found", 404);
@@ -555,7 +555,7 @@ async function warehouseAddress(tx: SqlExecutor, orgId: string, warehouseId: str
     region: string | null; postal_code: string | null; country: string | null; name: string;
   }>(sql`
     select address_line1, address_line2, city, region, postal_code, country, name
-      from warehouses where org_id = ${orgId} and stock_location_id = ${warehouseId}`)).rows[0];
+      from warehouses where org_id = ${orgId} and stock_location_id = ${warehouseId}`, "objects"))[0];
   if (!row) {
     throw new ShippingRefusal(
       `${documentNumber} ships from a warehouse that no longer exists`,
@@ -637,7 +637,7 @@ async function buildParcels(
   presetId: string | null | undefined,
   unitId?: string,
 ): Promise<{ parcels: CarrierParcel[]; lines: ParcelLine[] }> {
-  const lines = (await tx.execute<{
+  const lines = await tx.execute<{
     item_id: string; item_code: string | null; item_name: string; quantity: string; unit_price: string;
     weight: string | null; weight_unit: string | null; dimensions: ParcelLine["dimensions"];
     hs_code: string | null; country_of_origin: string | null;
@@ -650,7 +650,7 @@ async function buildParcels(
      where dl.org_id = ${orgId} and dl.document_id = ${shipment.id} and dl.item_id is not null
        ${unitId?sql`and exists(select 1 from handling_unit_contents c where c.org_id=dl.org_id
          and c.shipment_line_id=dl.id and c.handling_unit_id=${unitId} and c.confirmed_at is not null)`:sql``}
-     order by dl.line_number`)).rows;
+     order by dl.line_number`, "objects");
   if (lines.length === 0) {
     throw new ShippingRefusal(
       `${shipment.documentNumber} has no item lines to rate`,
@@ -665,7 +665,7 @@ async function buildParcels(
       dim_unit: string; weight: string | null; weight_unit: string;
     }>(sql`
       select id, length::text, width::text, height::text, dim_unit, weight::text, weight_unit
-        from package_presets where org_id = ${orgId} and id = ${presetId}`)).rows[0];
+        from package_presets where org_id = ${orgId} and id = ${presetId}`, "objects"))[0];
     if (!preset) throw new ShippingRefusal("Package preset not found", "not_found", 404);
     if (!preset.weight || !preset.weight_unit) {
       throw new ShippingRefusal("Package preset has no weight", "invalid_input", 422, "Set a weight on the preset in Setup → Shipping");
@@ -725,7 +725,7 @@ async function loadSettings(tx: SqlExecutor, orgId: string): Promise<ShippingSet
   }>(sql`
     select shipping_expense_account_id, carrier_payable_account_id, default_rate_rule,
            markup_bps, default_insurance, default_signature, customs_defaults
-      from shipping_settings where org_id = ${orgId} limit 1`)).rows[0];
+      from shipping_settings where org_id = ${orgId} limit 1`, "objects"))[0];
   return {
     shippingExpenseAccountId: row?.shipping_expense_account_id ?? null,
     carrierPayableAccountId: row?.carrier_payable_account_id ?? null,
@@ -752,10 +752,10 @@ async function requirePostingAccounts(
       "Choose the shipping expense and carrier payable accounts in Setup → Shipping",
     );
   }
-  const found = (await tx.execute<{ id: string }>(sql`
+  const found = await tx.execute<{ id: string }>(sql`
     select id from accounts
      where org_id = ${orgId} and id in (${settings.shippingExpenseAccountId}, ${settings.carrierPayableAccountId})
-       and is_active for share`)).rows;
+       and is_active for share`, "objects");
   if (found.length !== 2) {
     throw new ShippingRefusal(
       "A shipping cost account is missing or inactive",
@@ -996,7 +996,7 @@ export async function getShipmentRates(
     select rates from shipping_rate_quotes
      where org_id = ${orgId} and shipment_document_id = ${shipment.id}
        and account_id = ${account.id} and request_hash = ${hash} and expires_at > now()
-     order by quoted_at desc limit 1`)).rows[0];
+     order by quoted_at desc limit 1`, "objects"))[0];
   if (cached) {
     return {
       shipmentId: shipment.id,
@@ -1049,8 +1049,8 @@ export async function getShipmentRates(
     values (${orgId}, ${shipment.id}, ${account.id}, ${hash},
             ${JSON.stringify(ranked)}::jsonb, now() + (${QUOTE_TTL_MINUTES} || ' minutes')::interval,
             ${actorId}, ${actorId},${unit.id},${unit.content_version}::bigint,${direction})
-    returning id`);
-  if (stored.rows.length === 0) throw new Error("rate quote was not recorded");
+    returning id`, "objects");
+  if (stored.length === 0) throw new Error("rate quote was not recorded");
   return {
     shipmentId: shipment.id,
     documentNumber: shipment.documentNumber,
@@ -1070,12 +1070,12 @@ export async function findQuotedRate(
   providerRateId: string,
   unit?:{id:string;content_version:string;direction:string},
 ): Promise<RankedShippingRate> {
-  const rows = (await tx.execute<{ rates: RankedShippingRate[] }>(sql`
+  const rows = await tx.execute<{ rates: RankedShippingRate[] }>(sql`
     select rates from shipping_rate_quotes
      where org_id = ${orgId} and shipment_document_id = ${shipmentId} and account_id = ${accountId}
        and expires_at > now()
        ${unit?sql`and handling_unit_id=${unit.id} and handling_unit_version=${unit.content_version}::bigint and direction=${unit.direction}`:sql`and handling_unit_id is null`}
-       order by quoted_at desc limit 5`)).rows;
+       order by quoted_at desc limit 5`, "objects");
   for (const row of rows) {
     const found = (row.rates as RankedShippingRate[]).find((rate) => rate.providerRateId === providerRateId);
     if (found) return found;
@@ -1134,14 +1134,14 @@ async function writeLabelAudit(
   const written = await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'shipment_labels', ${labelId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`);
-  if (written.rows.length === 0) throw new Error("shipping label change was not audited");
+    returning id`, "objects");
+  if (written.length === 0) throw new Error("shipping label change was not audited");
 }
 
 /** Tenant minor-unit precision; an unknown currency refuses instead of posting dust. */
 async function minorUnitsFor(tx: SqlExecutor, currency: string): Promise<number> {
   const row = (await tx.execute<{ minor_units: number }>(sql`
-    select minor_units from currencies where code = ${currency}`)).rows[0];
+    select minor_units from currencies where code = ${currency}`, "objects"))[0];
   const minorUnits = row?.minor_units;
   if (minorUnits == null || !Number.isInteger(minorUnits) || minorUnits < 0 || minorUnits > 4) {
     throw new ShippingRefusal(
@@ -1163,7 +1163,7 @@ async function requireFunctionalCurrency(
 ): Promise<string> {
   const row = (await tx.execute<{ base_currency: string | null }>(sql`
     select nullif(trim(base_currency), '') as base_currency from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0];
+     where org_id = ${orgId} and id = ${subsidiaryId}`, "objects"))[0];
   const functional = row?.base_currency;
   if (!functional) {
     throw new ShippingRefusal("The shipment subsidiary has no functional currency", "invalid_input", 422);
@@ -1220,26 +1220,26 @@ async function storeLabelPdf(
   const existing = (await tx.execute<{ id: string }>(sql`
     select id from folders
      where org_id = ${orgId} and record_table = 'shipment_labels' and record_id = ${labelId}
-       and record_id is not null for share`)).rows[0];
+       and record_id is not null for share`, "objects"))[0];
   let folderId = existing?.id;
   if (!folderId) {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"shipping-attachments-root:" + orgId}, 0))`);
     const root = (await tx.execute<{ id: string }>(sql`
-      select id from folders where org_id = ${orgId} and system_kind = 'attachments'`)).rows[0];
+      select id from folders where org_id = ${orgId} and system_kind = 'attachments'`, "objects"))[0];
     const rootId = root?.id ?? (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, name, is_system, system_kind, created_at, updated_at)
-      values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id`)).rows[0]!.id;
+      values (${orgId}, 'Attachments', true, 'attachments', now(), now()) returning id`, "objects"))[0]!.id;
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"shipping-attach-group:" + orgId}, 0))`);
     const group = (await tx.execute<{ id: string }>(sql`
       select id from folders where org_id = ${orgId} and parent_folder_id = ${rootId}
-        and record_id is null and name = 'Shipping labels'`)).rows[0];
+        and record_id is null and name = 'Shipping labels'`, "objects"))[0];
     const groupId = group?.id ?? (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, created_at, updated_at)
-      values (${orgId}, ${rootId}, 'Shipping labels', true, 'shipment_labels', now(), now()) returning id`)).rows[0]!.id;
+      values (${orgId}, ${rootId}, 'Shipping labels', true, 'shipment_labels', now(), now()) returning id`, "objects"))[0]!.id;
     folderId = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, parent_folder_id, name, is_system, record_table, record_id, created_at, updated_at)
       values (${orgId}, ${groupId}, ${"shipment_labels / " + labelId.slice(0, 8)}, true, 'shipment_labels', ${labelId}, now(), now())
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
   }
   const filename = `${documentNumber.replace(/[^A-Za-z0-9-]+/g, "-")}-label.pdf`;
   const fileId = (await tx.execute<{ id: string }>(sql`
@@ -1247,15 +1247,15 @@ async function storeLabelPdf(
                        size_bytes, storage_kind, content_hash, created_by, updated_by, created_at, updated_at)
     values (${orgId}, ${folderId}, ${filename}, 'pdf', 'pdf', 'application/pdf',
             ${content.length}, 'db', ${contentHash}, ${actorId}, ${actorId}, now(), now())
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   const versionId = (await tx.execute<{ id: string }>(sql`
     insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                content_hash, created_by, created_at)
     values (${fileId}, 1, ${content.length}, 'application/pdf', 'db', ${contentHash}, ${actorId}, now())
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   const patched = await tx.execute<{ id: string }>(sql`
-    update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${orgId} returning id`);
-  if (patched.rows.length === 0) throw new Error("label file was not linked to its version");
+    update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${orgId} returning id`, "objects");
+  if (patched.length === 0) throw new Error("label file was not linked to its version");
   await tx.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, ${content})`);
   // Justified: the file_attachments_unique key makes link creation idempotent,
   // so a retried unit converges instead of failing on its own earlier effect.
@@ -1310,7 +1310,7 @@ export async function buyShipmentLabel(
       from shipment_labels
      where org_id = ${orgId} and shipment_document_id = ${shipment.id}
        and handling_unit_id=${unit.id} and direction=${input.direction??'outbound'} and status = 'purchased'
-     limit 1 for share`)).rows[0];
+     limit 1 for share`, "objects"))[0];
   if (existing?.cost_entry_id) {
     return {
       id: existing.id,
@@ -1387,7 +1387,7 @@ export async function buyShipmentLabel(
             ${bought.labelUrl}, ${bought.trackingNumber},
             ${bought.trackingNumber ? "pre_transit" : "unknown"},
             'purchased', now(), ${actorId}, ${actorId},${unit.id},${unit.content_version}::bigint,${input.direction??'outbound'})
-    returning id`)).rows[0]?.id;
+    returning id`, "objects"))[0]?.id;
   if (!labelId) throw new Error("shipping label was not recorded");
 
   let labelFileId: string | null = null;
@@ -1396,8 +1396,8 @@ export async function buyShipmentLabel(
     if (labelFileId) {
       const patched = await tx.execute<{ id: string }>(sql`
         update shipment_labels set label_file_id = ${labelFileId}, updated_at = now(), updated_by = ${actorId}
-         where org_id = ${orgId} and id = ${labelId} returning id`);
-      if (patched.rows.length === 0) throw new Error("shipping label file was not linked");
+         where org_id = ${orgId} and id = ${labelId} returning id`, "objects");
+      if (patched.length === 0) throw new Error("shipping label file was not linked");
     }
   }
 
@@ -1423,12 +1423,12 @@ export async function buyShipmentLabel(
            services = (select array_agg(distinct service order by service)
                          from unnest(carriers.services || excluded.services) as service),
            updated_at = now(), updated_by = ${actorId}
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!carrierRow) throw new Error("carrier row was not filed for the shipping label");
   // The first outbound unit supplies the shipment summary; every unit keeps its own label and tracking history.
   const primaryOutbound = input.direction !== "return" && !(await tx.execute(sql`
     select id from shipment_labels where org_id=${orgId} and shipment_document_id=${shipment.id}
-      and id<>${labelId} and status='purchased' and (direction='outbound' or direction is null) limit 1`)).rows.length;
+      and id<>${labelId} and status='purchased' and (direction='outbound' or direction is null) limit 1`, "objects")).length;
   const stamped = await tx.execute<{ id: string }>(sql`
     update fulfillment_documents
        set carrier_id = case when ${primaryOutbound} then ${carrierRow.id}::uuid else carrier_id end,
@@ -1436,8 +1436,8 @@ export async function buyShipmentLabel(
            tracking_number = case when ${primaryOutbound} then ${bought.trackingNumber} else tracking_number end,
            updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and document_id = ${shipment.id} and stage = 'open'
-    returning document_id`);
-  if (stamped.rows.length === 0) {
+    returning document_id`, "objects");
+  if (stamped.length === 0) {
     throw new ShippingRefusal(
       `${shipment.documentNumber} changed while its label was being bought`,
       "changed_concurrently",
@@ -1532,7 +1532,7 @@ async function postLabelCost(
   // the serialization point, and the entry number is stable per label.
   const resumed = (await tx.execute<{ cost_entry_id: string | null }>(sql`
     select cost_entry_id from shipment_labels
-     where org_id = ${orgId} and id = ${input.labelId} for update`)).rows[0];
+     where org_id = ${orgId} and id = ${input.labelId} for update`, "objects"))[0];
   if (!resumed) throw new Error("shipping label disappeared while its cost was being posted");
   if (resumed.cost_entry_id) return resumed.cost_entry_id;
   const carrier = input.isReturn ? "return " : "";
@@ -1567,10 +1567,10 @@ async function postLabelCost(
   // locked above, so no row means it was deleted mid-flight.
   const linked = await tx.execute<{ id: string }>(sql`
     update shipment_labels set cost_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
-     where org_id = ${orgId} and id = ${input.labelId} and cost_entry_id is null returning id`);
-  if (linked.rows.length === 0) {
+     where org_id = ${orgId} and id = ${input.labelId} and cost_entry_id is null returning id`, "objects");
+  if (linked.length === 0) {
     const winner = (await tx.execute<{ cost_entry_id: string | null }>(sql`
-      select cost_entry_id from shipment_labels where org_id = ${orgId} and id = ${input.labelId}`)).rows[0];
+      select cost_entry_id from shipment_labels where org_id = ${orgId} and id = ${input.labelId}`, "objects"))[0];
     if (winner?.cost_entry_id) return winner.cost_entry_id;
     throw new Error("shipping label cost was not linked");
   }
@@ -1612,7 +1612,7 @@ export async function voidShipmentLabel(
            l.provider_label_id, l.status, l.tracking_number, l.cost_entry_id, d.subsidiary_id
       from shipment_labels l
       join documents d on d.id = l.shipment_document_id and d.org_id = l.org_id
-     where l.org_id = ${orgId} and l.id = ${input.labelId} for update of l`)).rows[0];
+     where l.org_id = ${orgId} and l.id = ${input.labelId} for update of l`, "objects"))[0];
   if (!label) throw new ShippingRefusal("Shipping label not found", "not_found", 404);
   if (input.allowedSubsidiaryIds && !input.allowedSubsidiaryIds.has(label.subsidiary_id)) {
     throw new ShippingRefusal("Shipping label not found", "not_found", 404);
@@ -1650,8 +1650,8 @@ export async function voidShipmentLabel(
   const flipped = await tx.execute<{ id: string }>(sql`
     update shipment_labels
        set status = 'voided', voided_at = now(), updated_at = now(), updated_by = ${actorId}
-     where org_id = ${orgId} and id = ${label.id} and status = 'purchased' returning id`);
-  if (flipped.rows.length === 0) {
+     where org_id = ${orgId} and id = ${label.id} and status = 'purchased' returning id`, "objects");
+  if (flipped.length === 0) {
     throw new ShippingRefusal("That label changed while it was being voided", "changed_concurrently", 409, "Reload and try again");
   }
   let reversalEntryId: string | null = null;
@@ -1705,7 +1705,7 @@ export async function refreshLabelTracking(
       join documents d on d.org_id = l.org_id and d.id = l.shipment_document_id and d.kind = 'shipment'
      where l.org_id = ${orgId} and l.id = ${input.labelId}
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
-     for update of l, d`)).rows[0];
+     for update of l, d`, "objects"))[0];
   if (!label) throw new ShippingRefusal("Shipping label not found", "not_found", 404);
   const account = await loadShippingAccount(tx, orgId, label.account_id);
   const adapter = adapterFor(account.provider);
@@ -1755,8 +1755,8 @@ async function applyTrackerState(
     update shipment_labels
        set tracking_status = ${status}, events = ${JSON.stringify(merged)}::jsonb,
            updated_at = now(), updated_by = ${actorId}
-     where org_id = ${orgId} and id = ${label.id} returning id`);
-  if (updated.rows.length === 0) throw new Error("shipping label tracking was not recorded");
+     where org_id = ${orgId} and id = ${label.id} returning id`, "objects");
+  if (updated.length === 0) throw new Error("shipping label tracking was not recorded");
   await writeLabelAudit(tx, orgId, actorId, label.id, "update", {
     mode: "shipping_tracking",
     trackingStatus: status,
@@ -1825,12 +1825,12 @@ async function trackerCandidateOrgIds(
   tracker: { providerShipmentId?: string; trackingNumber?: string },
 ): Promise<string[]> {
   if (!tracker.providerShipmentId && !tracker.trackingNumber) return [];
-  const rows = (await db.execute<{ org_id: string }>(sql`
+  const rows = await db.execute<{ org_id: string }>(sql`
     select distinct org_id from shipment_labels
      where provider = ${provider}
        and (${tracker.providerShipmentId ? sql`provider_shipment_id = ${tracker.providerShipmentId}` : sql`false`}
             or ${tracker.trackingNumber ? sql`tracking_number = ${tracker.trackingNumber}` : sql`false`})
-     order by org_id`)).rows;
+     order by org_id`, "objects");
   return rows.map((row) => row.org_id);
 }
 
@@ -1924,14 +1924,14 @@ async function findLabelForTracker(
     const byShipment = (await tx.execute<TrackedLabel>(sql`
       select ${columns} from shipment_labels
        where org_id = ${orgId} and provider_shipment_id = ${providerShipmentId}
-       limit 1 for update`)).rows[0];
+       limit 1 for update`, "objects"))[0];
     if (byShipment) return byShipment;
   }
   if (trackingNumber) {
     const byTracking = (await tx.execute<TrackedLabel>(sql`
       select ${columns} from shipment_labels
        where org_id = ${orgId} and tracking_number = ${trackingNumber}
-       limit 1 for update`)).rows[0];
+       limit 1 for update`, "objects"))[0];
     if (byTracking) return byTracking;
   }
   return undefined;
@@ -2018,7 +2018,7 @@ export async function importBillingAdjustments(
        where l.org_id = ${orgId} and l.account_id = ${account.id}
          and l.provider_shipment_id = ${item.providerShipmentId}
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-       limit 1 for share of l, d`)).rows[0];
+       limit 1 for share of l, d`, "objects"))[0];
     if (!label) {
       throw new ShippingRefusal(
         `Billing adjustment ${identity} references an unknown label`,
@@ -2037,14 +2037,14 @@ export async function importBillingAdjustments(
               ${item.reason ?? null}, 'pending', ${item.occurredAt ?? null}, ${actorId}, ${actorId})
       -- A repeated provider adjustment retains its first recorded evidence and is counted as skipped below.
       on conflict (org_id, provider_adjustment_id) do nothing
-      returning id`);
-    if (written.rows.length === 0) {
+      returning id`, "objects");
+    if (written.length === 0) {
       skipped += 1;
     } else {
       imported += 1;
       await writeLabelAudit(tx, orgId, actorId, label.id, "update", {
         mode: "shipping_adjustment_import",
-        adjustmentId: written.rows[0]!.id,
+        adjustmentId: written[0]!.id,
         providerAdjustmentId: identity,
         kind: item.kind,
         amountMinor: amountMinor.toString(),
@@ -2080,7 +2080,7 @@ export async function postBillingAdjustment(
       join documents d on d.id = l.shipment_document_id and d.org_id = a.org_id and d.kind = 'shipment'
      where a.org_id = ${orgId} and a.id = ${adjustmentId}
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-     for update of a, l, d`)).rows[0];
+     for update of a, l, d`, "objects"))[0];
   if (!adjustment) throw new ShippingRefusal("Billing adjustment not found", "not_found", 404);
   if (adjustment.entry_id) return { adjustmentId: adjustment.id, entryId: adjustment.entry_id };
   if (adjustment.status !== "pending") {
@@ -2128,8 +2128,8 @@ export async function postBillingAdjustment(
   const flipped = await tx.execute<{ id: string }>(sql`
     update shipping_adjustments
        set status = 'posted', entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
-     where org_id = ${orgId} and id = ${adjustment.id} and status = 'pending' returning id`);
-  if (flipped.rows.length === 0) throw new Error("billing adjustment was not marked posted");
+     where org_id = ${orgId} and id = ${adjustment.id} and status = 'pending' returning id`, "objects");
+  if (flipped.length === 0) throw new Error("billing adjustment was not marked posted");
   await writeLabelAudit(tx, orgId, actorId, adjustment.label_id, "update", {
     mode: "shipping_adjustment_post",
     adjustmentId: adjustment.id,
@@ -2206,9 +2206,9 @@ export async function listAdjustmentsByCarrier(
   }
   const book = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!book) throw new ShippingRefusal("No active primary posting book", "invalid_input", 422);
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     carrier: string; kind: string; adjustments: string; amount_minor: string; currency: string;
   }>(sql`
     select l.carrier, a.kind, count(*)::text as adjustments,
@@ -2222,7 +2222,7 @@ export async function listAdjustmentsByCarrier(
        and je.status = 'posted'
        and je.posting_date >= ${input.from}::date and je.posting_date <= ${input.to}::date
      group by l.carrier, a.kind, a.currency
-     order by l.carrier, a.kind`)).rows;
+     order by l.carrier, a.kind`, "objects");
   return rows.map((row) => ({
     carrier: row.carrier,
     kind: row.kind,
@@ -2239,7 +2239,7 @@ export interface BulkCandidate {
 /** Only confirmed cartons without an outbound label enter bulk label buying. */
 export async function listBulkCandidates(runner:SqlExecutor,orgId:string,scope:Scope):Promise<BulkCandidate[]> {
   await assertShippingFeature(runner,orgId);
-  return (await runner.execute<BulkCandidate & Record<string,unknown>>(sql`
+  return await runner.execute<BulkCandidate & Record<string,unknown>>(sql`
     select doc.id as "shipmentId",unit.id as "handlingUnitId",unit.code as "handlingUnitCode",
       doc.document_number as "documentNumber",party.display_name as "customerName",doc.due_date::text as "promisedDate",0 as "labelCount"
     from handling_units unit join documents doc on doc.org_id=unit.org_id and doc.id=unit.shipment_document_id
@@ -2249,7 +2249,7 @@ export async function listBulkCandidates(runner:SqlExecutor,orgId:string,scope:S
       ${scope===null?sql``:sql`and doc.subsidiary_id=any(${[...scope]}::uuid[])`}
       and not exists(select 1 from shipment_labels label where label.org_id=unit.org_id and label.handling_unit_id=unit.id
         and label.direction='outbound' and label.status='purchased')
-    order by doc.document_number,unit.code,unit.id limit 500`)).rows;
+    order by doc.document_number,unit.code,unit.id limit 500`, "objects");
 }
 
 // --- Drawer and download reads --------------------------------------------------
@@ -2283,7 +2283,7 @@ export async function getShipmentLabels(
   shipmentId: string,
 ): Promise<ShipmentLabelView[]> {
   await assertShippingFeature(runner, orgId);
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     handling_unit_id:string|null;handling_unit_code:string|null;direction:"outbound"|"return"|null;
     id: string; account_name: string; provider: string; carrier: string; service: string;
     tracking_number: string | null; tracking_status: string; status: string;
@@ -2300,7 +2300,7 @@ export async function getShipmentLabels(
       join shipping_accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join handling_units unit on unit.org_id=l.org_id and unit.id=l.handling_unit_id
      where l.org_id = ${orgId} and l.shipment_document_id = ${shipmentId}
-     order by l.purchased_at desc`)).rows;
+     order by l.purchased_at desc`, "objects");
   return rows.map((row) => ({
     id: row.id,handlingUnitId:row.handling_unit_id,handlingUnitCode:row.handling_unit_code,direction:row.direction,
     accountName: row.account_name,
@@ -2349,7 +2349,7 @@ export async function readLabelFile(
       join file_blobs b on b.version_id = v.id
       join documents d on d.id = l.shipment_document_id and d.org_id = l.org_id and d.kind = 'shipment'
      where l.org_id = ${orgId} and l.id = ${labelId}
-       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}`)).rows[0];
+       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}`, "objects"))[0];
   if (!row) throw new ShippingRefusal("Shipping label file not found", "not_found", 404);
   return { filename: row.filename, contentType: row.content_type, bytes: row.bytes };
 }

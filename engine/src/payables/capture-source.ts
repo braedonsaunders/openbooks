@@ -14,8 +14,8 @@ export async function loadCaptureSourceBlob(orgId: string, fileId: string): Prom
       join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
       left join file_blobs fb on fb.version_id = fv.id
      where f.org_id = ${orgId} and f.id = ${fileId} and not f.is_inactive
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   if (!row) throw new Error("Capture source file is missing");
   refuseMaskedStorageKind(row.storage_kind);
   const bytes = row.storage_kind === "s3" ? await getS3Blob(row.version_id) : row.bytes;

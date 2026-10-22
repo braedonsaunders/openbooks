@@ -29,7 +29,7 @@ test("project revenue sync preserves contracts and schedules while Projects is d
         "project revenue sync skipped: the Projects feature is off — turn it on in Company Settings → Features to recognize project progress",
     });
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts
-      where org_id=${org.orgId} and project_id=${projectId}`)).rows[0]!.n;
+      where org_id=${org.orgId} and project_id=${projectId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "disabled Projects cannot create revenue contracts");
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','true'::jsonb) where id=${org.orgId}`);
     const enabled = await sync();
@@ -42,7 +42,7 @@ test("project revenue sync preserves contracts and schedules while Projects is d
         'contracts',(select jsonb_agg(to_jsonb(c) order by c.id) from revenue_contracts c where org_id=${org.orgId}),
         'obligations',(select jsonb_agg(to_jsonb(o) order by o.id) from performance_obligations o where org_id=${org.orgId}),
         'schedules',(select jsonb_agg(to_jsonb(s) order by s.id) from recognition_schedule_lines s where org_id=${org.orgId})
-      ) as evidence`)).rows[0]!.evidence;
+      ) as evidence`, "objects"))[0]!.evidence;
     const before = await snapshot();
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=${org.orgId}`);
     await db.execute(sql`update projects set custom=jsonb_set(custom,'{percentCompleteOverride}','"75"'::jsonb)
@@ -86,7 +86,7 @@ test("project revenue sync writes no contract while Revenue Recognition is off a
         "project revenue sync skipped: revenue recognition is off — turn it on in Company Settings → Features to recognize project progress",
     });
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts
-      where org_id=${org.orgId} and project_id=${projectId}`)).rows[0]!.n;
+      where org_id=${org.orgId} and project_id=${projectId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "disabled Revenue Recognition cannot create revenue contracts");
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,revenueRecognition}','true'::jsonb) where id=${org.orgId}`);
     const enabled = await sync();
@@ -116,7 +116,7 @@ test("sync with unmapped project accounts names the missing accounts and creates
     assert.match(result.skipped ?? "", /control accounts unmapped: unbilled receivable, project revenue/);
     assert.match(result.skipped ?? "", /Company & Accounting/);
     const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from revenue_contracts
-      where org_id=${org.orgId} and project_id=${projectId}`)).rows[0]!.n;
+      where org_id=${org.orgId} and project_id=${projectId}`, "objects"))[0]!.n;
     assert.equal(count, 0, "an unmapped sync creates no revenue contract");
   } finally { await dropScratchOrg(org.orgId); }
 });

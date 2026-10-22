@@ -130,8 +130,8 @@ test('thirteen org-authored definitions all surface in Custom & Saved', async ()
     const authored = custom.cards.filter((card) => card.href.startsWith('/reports/custom/run/'))
     assert.equal(authored.length, 13, 'all thirteen org-authored definitions must surface, not the twelve most recent')
     const runIds = authored.map((card) => card.href.slice('/reports/custom/run/'.length))
-    const { rows: builtIns } = await withBypass(() => db.execute<{ id: string }>(
-      sql`select id from report_definitions where org_id = ${orgId} and kind = 'built_in'`,
+    const builtIns = await withBypass(() => db.execute<{ id: string }>(
+      sql`select id from report_definitions where org_id = ${orgId} and kind = 'built_in'`, 'objects',
     ))
     const builtInIds = new Set(builtIns.map((row) => row.id))
     assert.deepEqual(runIds.filter((id) => builtInIds.has(id)), [], 'no built-in definition may surface inside Custom & Saved')

@@ -86,9 +86,9 @@ async function seedNotification(
 
 async function readAt(id: string): Promise<string | null> {
   const found = await db.execute<{ read_at: string | null }>(
-    sql`select read_at from notifications where id = ${id}`,
+    sql`select read_at from notifications where id = ${id}`, "objects",
   );
-  return found.rows[0]?.read_at ?? null;
+  return found[0]?.read_at ?? null;
 }
 
 function patchRequest(body: unknown): Request {

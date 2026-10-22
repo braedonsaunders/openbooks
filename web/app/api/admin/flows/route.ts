@@ -71,8 +71,8 @@ async function legacyGET() {
         ) lr on true
        where f.org_id = ${gate.user.orgId}
        order by f.name
-    `)
-    return NextResponse.json({ flows: r.rows })
+    `, 'objects')
+    return NextResponse.json({ flows: r })
   }
   // A subsidiary-restricted caller must not learn org-wide run counts or
   // last-run verdicts: the counts and last-run fields below are computed
@@ -86,7 +86,7 @@ async function legacyGET() {
         from flows f
        where f.org_id = ${gate.user.orgId}
        order by f.name
-    `),
+    `, 'objects'),
     db.execute<{
       flowId: string
       status: string
@@ -113,7 +113,7 @@ async function legacyGET() {
     byFlow.set(run.flowId, list)
   }
   return NextResponse.json({
-    flows: flows.rows.map((flow) => {
+    flows: flows.map((flow) => {
       const scoped = (byFlow.get(String(flow.id)) ?? []).sort(
         (a, b) =>
           new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
@@ -189,8 +189,8 @@ export const POST = defineRoute({
         values (${user.orgId}, ${name}, ${subjectKind}, ${lint.ok},
                 ${JSON.stringify(graph)}::jsonb, ${user.id}, ${user.id})
         returning *
-      `)
-      const created = r.rows[0]!
+      `, 'objects')
+      const created = r[0]!
       await tx.execute(sql`
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)

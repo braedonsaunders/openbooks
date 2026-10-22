@@ -11,7 +11,7 @@ export async function loadRbcStd152Settings(orgId: string, runId: string) {
     join payment_bank_profiles p on p.org_id=r.org_id and p.id=r.payment_bank_profile_id and p.is_active
     join payment_formats f on f.org_id=p.org_id and f.id=p.payment_format_id and f.is_active
     where r.org_id=${orgId} and r.id=${runId} and f.rail='rbc_std152_credit'
-  `)).rows[0];
+  `, "objects"))[0];
   if (row?.currency !== "CAD") return { ok: false as const, missing: ["the available RBC STD152 format requires a CAD profile"] };
   const checked = validateRbcStd152Settings(row?.sealed
     ? unsealJson<Partial<RbcStd152Settings>>(row.sealed, { orgId, purpose: "payment.originator.secrets" }) : {});
@@ -34,7 +34,7 @@ export async function allocateRbcStd152Number(tx: SqlExecutor, orgId: string, cl
     do update set next_number=number_sequences.next_number+1
       where number_sequences.org_id=${orgId} and number_sequences.next_number<9999
     returning next_number
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row || !Number.isInteger(Number(row.next_number)) || Number(row.next_number) < 1 || Number(row.next_number) > 9999) {
     throw new PaymentError("RBC file creation numbers are exhausted — arrange a renewed file-number range with RBC before changing the numbering sequence; numbers are never silently reused");
   }

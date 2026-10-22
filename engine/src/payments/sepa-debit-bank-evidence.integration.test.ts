@@ -133,19 +133,16 @@ async function seedSepaDebitRun(
   // the only state the exporter accepts.
   await submitPaymentRun(run.id, org.orgId, seeded.actorId);
 
-  const instructionId = (
-    await withBypass(() =>
+  const instructionId = (await withBypass(() =>
       db.execute<{ id: string }>(sql`
         select id from payment_instructions
-         where payment_run_id = ${run.id} and org_id = ${org.orgId}`),
-    )
-  ).rows[0]!.id;
+         where payment_run_id = ${run.id} and org_id = ${org.orgId}`, "objects"),
+    ))[0]!.id;
   return { actorId: seeded.actorId, runId: run.id, instructionId, accountId: seeded.accountId };
 }
 
 async function runState(orgId: string, runId: string) {
-  return (
-    await withBypass(() =>
+  return (await withBypass(() =>
       db.execute<{ status: string; files: number; events: number; exportedFileRef: string | null }>(sql`
         select r.status,
                (select count(*)::int from payment_files f
@@ -153,9 +150,8 @@ async function runState(orgId: string, runId: string) {
                (select count(*)::int from payment_events e
                  where e.payment_run_id = r.id and e.org_id = r.org_id) as events,
                r.exported_file_ref as "exportedFileRef"
-          from payment_runs r where r.id = ${runId} and r.org_id = ${orgId}`),
-    )
-  ).rows[0]!;
+          from payment_runs r where r.id = ${runId} and r.org_id = ${orgId}`, "objects"),
+    ))[0]!;
 }
 
 /**

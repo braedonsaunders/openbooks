@@ -252,7 +252,7 @@ test("ES statutory rates carry no tenant slots: every rate is a published consta
 
 test("ES computeStatutory refuses foral regions, off-year runs and off-monthly payroll", async () => {
   const base = {
-    tx: { execute: async () => ({ rows: [{ changed: false }] }) },
+    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ changed: false }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) },
     orgId: "org",
     employeePartyId: "employee",
     documentId: "run",

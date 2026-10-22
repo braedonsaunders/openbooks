@@ -183,9 +183,9 @@ test('assistant report runs and deliveries surface with visibility filtering, is
       const found = await db.execute<{ id: string }>(sql`select id from report_definitions
         where org_id = ${orgA.orgId} and report_type = 'statement'
           and (statement->>'kind' is null or statement->>'kind' not in ('project-profitability', 'true-cost', 'budget'))
-        limit 1`)
-      assert.ok(found.rows[0], 'seeded statement definitions missing')
-      const defId = found.rows[0]!.id
+        limit 1`, 'objects')
+      assert.ok(found[0], 'seeded statement definitions missing')
+      const defId = found[0]!.id
       await db.execute(sql`insert into report_runs (id, org_id, definition_id, trigger, status, row_count)
         values (${runId}, ${orgA.orgId}, ${defId}, 'manual', 'succeeded', 7)`)
       await db.execute(sql`insert into report_delivery_outbox (org_id, run_id, recipient, status)

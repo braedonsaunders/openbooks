@@ -135,8 +135,8 @@ export const POST = defineRoute({
               ${encryptAccountNumber(accountNumber, { orgId: user.orgId })}, ${accountNumber.slice(-4)},
               'pending', false, null, null, ${user.id}, now(), ${user.id})
       returning id
-    `)
-      const accountId = inserted.rows[0]?.id
+    `, 'objects')
+      const accountId = inserted[0]?.id
       if (!accountId) throw new Error('The bank details were not saved.')
       const routed = await routeSubjectSubmission({
         orgId: user.orgId,
@@ -159,8 +159,8 @@ export const POST = defineRoute({
                updated_at = now(), updated_by = ${user.id}
          where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
            and approval_status = 'pending' and retired_at is null
-         returning id`)
-          if (!applied.rows[0]) {
+         returning id`, 'objects')
+          if (!applied[0]) {
         return NextResponse.json(
           { error: 'these bank details changed while being recorded; reload and review the latest revision' },
           { status: 409 },
@@ -249,9 +249,9 @@ export const PATCH = defineRoute({
              ${documentRevisionSql(sql.raw('updated_at'))} as "updatedAt"
         from party_bank_accounts
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
-    `)
-      if (existing.rows.length === 0) return notFound("record")
-      if (!expectedUpdatedAt || expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
+    `, 'objects')
+      if (existing.length === 0) return notFound("record")
+      if (!expectedUpdatedAt || expectedUpdatedAt !== existing[0]!.updatedAt) {
       return NextResponse.json(
         { error: 'these bank details changed after you opened them; reload and review the latest revision' },
         { status: 409 },
@@ -265,8 +265,8 @@ export const PATCH = defineRoute({
            and instruction.payee_bank_account_id = ${accountId}
            and instruction.status in ('pending', 'approved', 'generated', 'sent')
       ) as "inFlightPayment"
-    `)
-      if (dependencies.rows[0]?.inFlightPayment) {
+    `, 'objects')
+      if (dependencies[0]?.inFlightPayment) {
       return NextResponse.json(
         { error: 'cancel in-flight payment instructions referencing these bank details before editing them' },
         { status: 422 },
@@ -291,8 +291,8 @@ export const PATCH = defineRoute({
         and updated_at = ${expectedUpdatedAt}::timestamptz
         and retired_at is null
       returning id
-    `)
-      if (!updated.rows[0]) {
+    `, 'objects')
+      if (!updated[0]) {
       return NextResponse.json(
         { error: 'these bank details changed or were retired; reload and review the latest revision' },
         { status: 409 },
@@ -306,8 +306,8 @@ export const PATCH = defineRoute({
          and subject_id = ${accountId}
          and status in ('pending', 'escalated')
        returning run_id
-    `)
-      const runIds = [...new Set(cancelledRuns.rows.map((row) => row.run_id))]
+    `, 'objects')
+      const runIds = [...new Set(cancelledRuns.map((row) => row.run_id))]
       if (runIds.length > 0) {
       await db.execute(sql`
         update flow_runs
@@ -350,8 +350,8 @@ export const PATCH = defineRoute({
                updated_at = now(), updated_by = ${user.id}
          where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
          and approval_status='pending' and retired_at is null returning id
-      `)
-        if (applied.rows.length !== 1)
+      `, 'objects')
+        if (applied.length !== 1)
           throw new Error('The bank details changed before release.')
         await db.execute(sql`
         insert into audit_log
@@ -424,8 +424,8 @@ export const DELETE = defineRoute({
              and mandate.party_bank_account_id = ${accountId}
              and mandate.status in ('pending', 'active', 'suspended')
         ) as live_mandate
-    `)
-      if (dependencies.rows[0]?.in_flight_payment || dependencies.rows[0]?.live_mandate) {
+    `, 'objects')
+      if (dependencies[0]?.in_flight_payment || dependencies[0]?.live_mandate) {
       return NextResponse.json(
         { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
         { status: 422 },
@@ -445,8 +445,8 @@ export const DELETE = defineRoute({
          and retired_at is null
          and updated_at = ${expectedUpdatedAt}::timestamptz
        returning id
-    `)
-      if (!updated.rows[0]) {
+    `, 'objects')
+      if (!updated[0]) {
       return NextResponse.json(
         { error: 'these bank details changed or were already retired; reload and review the latest revision' },
         { status: 409 },

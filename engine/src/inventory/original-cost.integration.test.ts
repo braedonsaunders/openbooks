@@ -21,14 +21,14 @@ async function basis(org: ScratchOrg, itemId = org.items.movingAvg, locationId =
     coalesce(sum(remaining_original_cost),0)::text as basis,
     count(*) filter(where remaining_original_cost is null)::int as unknown
     from cost_layers where org_id=${org.orgId} and item_id=${itemId}
-      and stock_location_id=${locationId} and remaining_quantity>0`)).rows[0]!;
+      and stock_location_id=${locationId} and remaining_quantity>0`, "objects"))[0]!;
 }
 async function snapshot(org: ScratchOrg) {
-  return (await db.execute(sql`select
+  return await db.execute(sql`select
     (select jsonb_agg(to_jsonb(l) order by id) from cost_layers l where org_id=${org.orgId}) as layers,
     (select jsonb_agg(to_jsonb(w) order by id) from inventory_writedowns w where org_id=${org.orgId}) as writedowns,
     (select count(*) from journal_entries where org_id=${org.orgId}) as journals,
-    (select count(*) from audit_log where org_id=${org.orgId}) as audits`)).rows;
+    (select count(*) from audit_log where org_id=${org.orgId}) as audits`, "objects");
 }
 async function ifrs(org: ScratchOrg) {
   await db.execute(sql`update orgs set settings=settings || '{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`);
@@ -43,12 +43,12 @@ for (const quantity of ["0.5", "1"]) {
       await receiveInventory(org.orgId, actor, { ...p, quantity: "1", unitCost: "100", offsetAccountId: org.accounts.clearing });
       // Simulate the pre-basis UPDATE. It has no writer marker and no knowledge
       // of the new column, so even exhaustion must safely become unknown.
-      const rows = (await db.execute<{ remaining_original_cost: null }>(sql`update cost_layers
+      const rows = await db.execute<{ remaining_original_cost: null }>(sql`update cost_layers
         set remaining_quantity=remaining_quantity-${quantity}::numeric
-        where org_id=${org.orgId} returning remaining_original_cost`)).rows;
+        where org_id=${org.orgId} returning remaining_original_cost`, "objects");
       assert.deepEqual(rows, [{ remaining_original_cost: null }]);
-      const audit = (await db.execute<{ actor_id: null }>(sql`select actor_id from audit_log
-        where org_id=${org.orgId} and changes->>'reason'='Original-cost provenance invalidated by an unversioned inventory writer'`)).rows;
+      const audit = await db.execute<{ actor_id: null }>(sql`select actor_id from audit_log
+        where org_id=${org.orgId} and changes->>'reason'='Original-cost provenance invalidated by an unversioned inventory writer'`, "objects");
       assert.deepEqual(audit, [{ actor_id: null }]);
     } finally { await dropScratchOrg(org.orgId); }
   });
@@ -66,8 +66,8 @@ test("a current writer preserves known basis when fractional relief rounds to ze
       subsidiaryId: p.subsidiaryId, date: p.date, quantity: "0.0001" });
     assert.equal(toUnits(issue.value), 0n);
     assert.deepEqual(await basis(org), { basis: "0.0001", unknown: 0 });
-    const consumption = (await db.execute<{ original_cost: string }>(sql`select original_cost from cost_layer_consumptions
-      where org_id=${org.orgId} and issue_movement_id=${issue.fromMovementId}`)).rows;
+    const consumption = await db.execute<{ original_cost: string }>(sql`select original_cost from cost_layer_consumptions
+      where org_id=${org.orgId} and issue_movement_id=${issue.fromMovementId}`, "objects");
     assert.deepEqual(consumption, [{ original_cost: "0.0000" }]);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -83,13 +83,13 @@ test("fractional FIFO recovery cannot leave an over-cost residual after withdraw
     await reverseInventoryWritedown(org.orgId, null, { ...p, nrvPerUnit: "1" });
     const before = (await db.execute<{ value: string; rate: string }>(sql`select
       sum(round(remaining_quantity*unit_cost,4))::text as value,max(unit_cost)::text as rate from cost_layers
-      where org_id=${org.orgId} and source_movement_id=${first.movementId} and remaining_quantity>0`)).rows[0]!;
+      where org_id=${org.orgId} and source_movement_id=${first.movementId} and remaining_quantity>0`, "objects"))[0]!;
     assert.equal(before.value, "3.0002");
     assert.equal(before.rate, "1.0001");
     await issueInventory(org.orgId, null, { ...p, quantity: "2" });
     const remaining = (await db.execute<{ value: string; basis: string }>(sql`select
       sum(round(remaining_quantity*unit_cost,4))::text as value,sum(remaining_original_cost)::text as basis from cost_layers
-      where org_id=${org.orgId} and source_movement_id=${first.movementId} and remaining_quantity>0`)).rows[0]!;
+      where org_id=${org.orgId} and source_movement_id=${first.movementId} and remaining_quantity>0`, "objects"))[0]!;
     assert.deepEqual(remaining, { value: "1.0001", basis: "1.0001" });
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -126,8 +126,8 @@ test("original-cost evidence follows fractional issue, transfer and exact contro
     const p = position(org);
     await receiveInventory(org.orgId, actor, { ...p, quantity: "124.9114", unitCost: "641.9975", offsetAccountId: org.accounts.clearing });
     const issue = await issueInventory(org.orgId, actor, { ...p, quantity: "42.0967" });
-    const consumed = (await db.execute<{ original_cost: string }>(sql`select original_cost from cost_layer_consumptions
-      where org_id=${org.orgId} and issue_movement_id=${issue.movementId}`)).rows;
+    const consumed = await db.execute<{ original_cost: string }>(sql`select original_cost from cost_layer_consumptions
+      where org_id=${org.orgId} and issue_movement_id=${issue.movementId}`, "objects");
     assert.equal(sum(consumed.map((c) => c.original_cost)), "27025.9762");
     assert.deepEqual(await basis(org), { basis: "53166.8303", unknown: 0 });
     await assert.rejects(db.execute(sql`update cost_layer_consumptions set original_cost=original_cost+0.0001
@@ -144,8 +144,8 @@ test("original-cost evidence follows fractional issue, transfer and exact contro
     await reverseInventoryMovement(org.orgId, actor, { movementId: issue.movementId,
       reversalDate: org.date, reason: "Restore fractional consumed original-cost evidence" });
     assert.deepEqual(await basis(org), { basis: "80192.8065", unknown: 0 });
-    const audit = (await db.execute<{ actor_id: string }>(sql`select actor_id from audit_log where org_id=${org.orgId}
-      and table_name='cost_layers' and changes->>'reason'='Inventory original-cost balance change'`)).rows;
+    const audit = await db.execute<{ actor_id: string }>(sql`select actor_id from audit_log where org_id=${org.orgId}
+      and table_name='cost_layers' and changes->>'reason'='Inventory original-cost balance change'`, "objects");
     assert.ok(audit.length > 4);
     assert.ok(audit.every((row) => row.actor_id === actor));
   } finally { await dropScratchOrg(org.orgId); }
@@ -225,7 +225,7 @@ test("landed-cost split and its reversal conserve original cost at ledger precis
       reversalDate: org.date, reason: "Remove exact original-cost landed allocation" });
     assert.equal((await basis(org, p.itemId)).basis, "3.0000");
     const balance = (await db.execute<{ value: string }>(sql`select sum(amount)::text as value from journal_lines
-      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`)).rows[0]!;
+      where org_id=${org.orgId} and account_id=${org.accounts.invAsset}`, "objects"))[0]!;
     assert.equal(toUnits(balance.value), toUnits("3"));
   } finally { await dropScratchOrg(org.orgId); }
 });

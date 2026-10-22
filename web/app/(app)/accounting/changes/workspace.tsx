@@ -37,8 +37,7 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
   const id =
     typeof sp.change === "string" && isUuid(sp.change) ? sp.change : null;
   const row = id
-    ? (
-        await db.execute<
+    ? (await db.execute<
           FinancialChange & {
             subsidiary_name: string;
             proposer_name: string;
@@ -50,8 +49,7 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
       ${financialChangeSubjectExpr("fc")} as subject_label
     from financial_changes fc join subsidiaries s on s.id=fc.subsidiary_id and s.org_id=fc.org_id
       left join users u on u.id=fc.submitted_by left join users a on a.id=fc.approved_by
-    where fc.org_id=${orgId} and fc.id=${id} and ${scopePredicate} ${subsidiaryVisibleFilter(sql`fc.subsidiary_id`, auth.allowedSubsidiaryIds)}`)
-      ).rows[0]
+    where fc.org_id=${orgId} and fc.id=${id} and ${scopePredicate} ${subsidiaryVisibleFilter(sql`fc.subsidiary_id`, auth.allowedSubsidiaryIds)}`, "objects"))[0]
     : null;
   const referenceIds = new Set<string>();
   const collect = (v: unknown): void => {
@@ -66,8 +64,7 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
     collect(row.before_state.previews);
   }
   const references = referenceIds.size
-    ? (
-        await db.execute<{ id: string; label: string }>(sql`
+    ? (await db.execute<{ id: string; label: string }>(sql`
     select id,number||' — '||name as label from accounts where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,name from accounting_books where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,name from recognition_rules where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
@@ -79,8 +76,7 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
     union all select id,number as label from mfg_work_orders where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,name from provision_obligations where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
     union all select id,name from users where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify([...referenceIds])}::jsonb)::uuid)
-  `)
-      ).rows
+  `, "objects"))
     : [];
   const referenceNames = Object.fromEntries(
     references.map((r) => [r.id, r.label]),
@@ -102,8 +98,7 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
   // that refuses on click.
   const pendingGates =
     row?.status === "pending" && id
-      ? (
-          await db.execute<{
+      ? (await db.execute<{
             id: string;
             assigneeUserId: string | null;
             signatureRequired: boolean;
@@ -113,8 +108,7 @@ export async function AccountingChangesWorkspace({ data }: { data: AccountingCha
           from flow_gates g
          where g.org_id = ${orgId} and g.subject_kind = 'financial_change'
            and g.subject_id = ${id} and g.status = 'pending'
-         order by g.created_at, g.id`)
-        ).rows
+         order by g.created_at, g.id`, "objects"))
       : [];
   const gateDecisions = await Promise.all(
     pendingGates.map(async (gate) => ({

@@ -66,13 +66,11 @@ function postRequest(key: string, body: unknown): Request {
 }
 
 async function auditInserts(orgId: string, rowId: string): Promise<{ request_id: string | null; actor_id: string | null }[]> {
-  return (
-    await db.execute<{ request_id: string | null; actor_id: string | null }>(sql`
+  return await db.execute<{ request_id: string | null; actor_id: string | null }>(sql`
       select request_id, actor_id from audit_log
        where org_id = ${orgId} and table_name = 'parties' and row_id = ${rowId} and action = 'insert'
        order by at asc
-    `)
-  ).rows;
+    `, "objects");
 }
 
 test(
@@ -96,11 +94,9 @@ test(
       assert.equal(payload.party.is_active, true);
       assert.equal(payload.party.subsidiary_id, subsidiaryId, "a rebased PostgreSQL UUID remains an owned reference");
 
-      const role = (
-        await db.execute<{ party_id: string }>(sql`
+      const role = await db.execute<{ party_id: string }>(sql`
           select party_id from customer_roles where party_id = ${key} and org_id = ${org.orgId} and is_active
-        `)
-      ).rows;
+        `, "objects");
       assert.equal(role.length, 1, "the customer role is created active with the party");
 
       const audits = await auditInserts(org.orgId, key);
@@ -125,12 +121,10 @@ test(
       });
 
       // The create path never mints placeholder rows.
-      const placeholders = (
-        await db.execute<{ n: number }>(sql`
+      const placeholders = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from parties
            where org_id = ${org.orgId} and display_name in ('New party', 'New lead')
-        `)
-      ).rows[0]?.n;
+        `, "objects"))[0]?.n;
       assert.equal(placeholders, 0, "no inactive placeholder survives the create path");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -163,11 +157,9 @@ test(
         remedy: "Close and reopen the drawer to try again with a fresh request.",
       });
 
-      const leaked = (
-        await db.execute<{ n: number }>(sql`
+      const leaked = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from parties where id = ${key} and org_id = ${orgB.orgId}
-        `)
-      ).rows[0]?.n;
+        `, "objects"))[0]?.n;
       assert.equal(leaked, 0, "org B gains no row from org A's key");
     } finally {
       await dropScratchOrg(orgA.orgId);
@@ -194,28 +186,24 @@ test(
         assert.equal(created.status, 201, JSON.stringify(await created.clone().json().catch(() => null)));
       }
 
-      const stored = (
-        await db.execute<{ display_name: string; kind: string }>(sql`
+      const stored = await db.execute<{ display_name: string; kind: string }>(sql`
           select display_name, kind from parties
            where org_id = ${org.orgId} and display_name in ('Pat Partner', 'HoldCo Ltd')
            order by display_name
-        `)
-      ).rows;
+        `, "objects");
       assert.deepEqual(
         stored.map((r) => [r.display_name, r.kind]),
         [["HoldCo Ltd", "company"], ["Pat Partner", "person"]],
       );
 
-      const roles = (
-        await db.execute<{ n: number }>(sql`
+      const roles = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from (
             select party_id from customer_roles where org_id = ${org.orgId}
             union all select party_id from vendor_roles where org_id = ${org.orgId}
             union all select party_id from employee_roles where org_id = ${org.orgId}
           ) r join parties p on p.id = r.party_id and p.org_id = ${org.orgId}
          where p.display_name in ('Pat Partner', 'HoldCo Ltd')
-        `)
-      ).rows[0]?.n;
+        `, "objects"))[0]?.n;
       assert.equal(roles, 0, "no commercial role is stamped on a non-commercial party");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -240,7 +228,7 @@ test(
           || jsonb_build_object('billing', jsonb_build_object('defaultPaymentTermsId', ${net30}::text))
          where id = ${org.orgId}`);
       const termsOf = async (key: string) => (await db.execute<{ payment_terms_id: string | null }>(sql`
-        select payment_terms_id from customer_roles where party_id = ${key} and org_id = ${org.orgId}`)).rows[0]?.payment_terms_id ?? null;
+        select payment_terms_id from customer_roles where party_id = ${key} and org_id = ${org.orgId}`, "objects"))[0]?.payment_terms_id ?? null;
 
       const defaultedKey = randomUUID();
       const defaulted = await POST(postRequest(defaultedKey, {

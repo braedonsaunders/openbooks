@@ -24,7 +24,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 async function fixture() {
   const org = await createScratchOrg()
   const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, 'objects'))[0]!.id
   const months = [
     { n: 1, from: '2026-01-01', to: '2026-01-31' },
     { n: 2, from: '2026-02-01', to: '2026-02-28' },
@@ -86,11 +86,11 @@ test('a mid-life row imports, continues its schedule, and round-trips verbatim',
       { created: 1, failed: 0, errors: [] },
     )
     const asset = (await db.execute<{ id: string }>(sql`
-      select id from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-9001'`)).rows[0]!
+      select id from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-9001'`, 'objects'))[0]!
     const createAudit = (await db.execute<{ actor_id: string; action: string; changes: unknown }>(sql`
       select actor_id, action, changes from audit_log
        where org_id = ${org.orgId} and table_name = 'fixed_assets' and row_id = ${asset.id}
-         and changes->>'source' = 'import'`)).rows[0]!
+         and changes->>'source' = 'import'`, 'objects'))[0]!
     assert.equal(createAudit.actor_id, actorId)
     assert.equal(createAudit.action, 'insert')
     assert.deepEqual(createAudit.changes, {
@@ -99,7 +99,7 @@ test('a mid-life row imports, continues its schedule, and round-trips verbatim',
       after: {
         assetNumber: 'FA-9001', name: 'Imported press', description: null,
         subsidiaryId: org.subsidiaryId, categoryId: (await db.execute<{ id: string }>(sql`
-          select id from asset_categories where org_id = ${org.orgId} and name = 'Import Equipment'`)).rows[0]!.id,
+          select id from asset_categories where org_id = ${org.orgId} and name = 'Import Equipment'`, 'objects'))[0]!.id,
         status: 'in_service', acquisitionCost: '120000.0000', salvageValue: '0.0000',
         acquiredOn: null, inServiceOn: '2021-06-15', depreciationMethod: 'straight_line',
         usefulLifeMonths: 120, depreciationRatePercent: null, depreciationConvention: 'full_month',
@@ -113,14 +113,14 @@ test('a mid-life row imports, continues its schedule, and round-trips verbatim',
 
     // The continuation is real on import: the first scheduled month is one
     // month, and the opening figure sits on the row.
-    const lines = (await db.execute<{ month: string; planned: string }>(sql`
+    const lines = await db.execute<{ month: string; planned: string }>(sql`
       select p.starts_on::text as month, l.planned_amount::text as planned
         from depreciation_schedule_lines l
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
         join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
        where s.org_id = ${org.orgId} and a.asset_number = 'FA-9001'
-       order by p.starts_on`)).rows
+       order by p.starts_on`, 'objects')
     assert.deepEqual(
       lines.map((l) => l.month),
       ['2026-01-01', '2026-02-01', '2026-03-01', '2026-07-01'],
@@ -147,10 +147,10 @@ test('a mid-life row imports, continues its schedule, and round-trips verbatim',
       (r) => (r as Record<string, unknown>).assetNumber === 'FA-9001',
     )
     assert.deepEqual(reread, row)
-    const importAudits = (await db.execute<{ action: string; changes: unknown }>(sql`
+    const importAudits = await db.execute<{ action: string; changes: unknown }>(sql`
       select action, changes from audit_log
        where org_id = ${org.orgId} and table_name = 'fixed_assets' and row_id = ${asset.id}
-         and changes->>'source' = 'import' order by at, id`)).rows
+         and changes->>'source' = 'import' order by at, id`, 'objects')
     assert.equal(importAudits.length, 2)
     assert.equal(importAudits[1]!.action, 'update')
     assert.equal((importAudits[1]!.changes as { before: { name: string } }).before.name, 'Imported press')
@@ -221,7 +221,7 @@ test('dry-run previews without writing; bad rows fail with field messages', { sk
       { created: 1, failed: 0 },
     )
     const count = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-9001'`)).rows[0]!.n
+      select count(*)::text as n from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-9001'`, 'objects'))[0]!.n
     assert.equal(count, '0', 'dry-run writes nothing')
 
     const bad = await resource.write(
@@ -296,7 +296,7 @@ test('restricted imports lock only in-scope natural-key matches across a rehome'
     assert.equal(outcome.updated, 0)
     assert.equal(outcome.failed, 1, 'the moved row is rechecked against the scope predicate after the lock wait')
     const stillHidden = (await db.execute<{ subsidiary_id: string; name: string }>(sql`
-      select subsidiary_id, name from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-SCOPE-RACE'`)).rows[0]!
+      select subsidiary_id, name from fixed_assets where org_id = ${org.orgId} and asset_number = 'FA-SCOPE-RACE'`, 'objects'))[0]!
     assert.equal(stillHidden.subsidiary_id, otherSubsidiaryId)
     assert.equal(stillHidden.name, 'Imported press')
 
@@ -349,8 +349,8 @@ test('a caught schedule refusal rolls back each asset import row to its savepoin
       select asset_number, status, acquisition_cost::text from fixed_assets
        where org_id = ${org.orgId} and asset_number in (
          'FA-IMPORT-INSERT-ROLLBACK', 'FA-IMPORT-UPDATE-ROLLBACK', 'FA-IMPORT-SURVIVOR')
-       order by asset_number`)
-    assert.deepEqual(persisted.rows, [
+       order by asset_number`, 'objects')
+    assert.deepEqual(persisted, [
       { asset_number: 'FA-IMPORT-SURVIVOR', status: 'draft', acquisition_cost: '120000.0000' },
       { asset_number: 'FA-IMPORT-UPDATE-ROLLBACK', status: 'draft', acquisition_cost: '120000.0000' },
     ], 'failed schedule creation must roll back its new asset and prior draft update without aborting later rows')

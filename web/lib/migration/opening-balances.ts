@@ -49,8 +49,8 @@ async function stagedRows(authz: Authz, transferId: string) {
   if (job.totalRows > MAX_OPENING_ROWS) {
     throw new OpeningBalanceRefusal(`The file has ${job.totalRows} rows; an opening trial balance is limited to ${MAX_OPENING_ROWS} — summarize sub-accounts first.`)
   }
-  const rows = (await db.execute<{ row_no: string; data: Record<string, unknown> }>(sql`
-    select row_no::text, data from data_transfer_rows where org_id = ${job.orgId} and job_id = ${job.id} order by row_no limit ${MAX_OPENING_ROWS + 1}`)).rows
+  const rows = await db.execute<{ row_no: string; data: Record<string, unknown> }>(sql`
+    select row_no::text, data from data_transfer_rows where org_id = ${job.orgId} and job_id = ${job.id} order by row_no limit ${MAX_OPENING_ROWS + 1}`, 'objects')
   return { job, rows: rows.map((row) => ({ rowNo: Number(row.row_no), data: row.data })) }
 }
 
@@ -74,8 +74,8 @@ export async function previewOpeningBalances(authz: Authz, request: OpeningBalan
   for (const column of [request.columns.account, request.columns.debit, request.columns.credit, request.columns.amount, request.columns.description]) {
     if (column && !job.headers.includes(column)) throw new OpeningBalanceRefusal(`The file has no column "${column}". Columns: ${job.headers.join(', ')}.`)
   }
-  const accounts = (await db.execute<{ id: string; number: string | null; name: string; is_active: boolean; is_summary: boolean }>(sql`
-    select id, number, name, is_active, is_summary from accounts where org_id = ${authz.user.orgId}`)).rows
+  const accounts = await db.execute<{ id: string; number: string | null; name: string; is_active: boolean; is_summary: boolean }>(sql`
+    select id, number, name, is_active, is_summary from accounts where org_id = ${authz.user.orgId}`, 'objects')
   const resolve = accountResolver(accounts.map((account) => ({ id: account.id, number: account.number, name: account.name, isActive: account.is_active, isSummary: account.is_summary })))
   const remap = new Map<string, AccountResolution>()
   for (const entry of request.accountRemap ?? []) {
@@ -118,7 +118,7 @@ export async function draftOpeningBalances(authz: Authz, request: OpeningBalance
   return withOrgTransaction(authz.user.orgId, async () => {
     // Serialize the opening journal with plan changes and go-live. A refusal
     // rolls the native journal and plan update back together.
-    const locked = (await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for update`)).rows[0]
+    const locked = (await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for update`, 'objects'))[0]
     if (!locked) throw new OpeningBalanceRefusal('The organization was not found.', 404)
     const plan = await readMigrationPlan(authz.user.orgId)
     if (plan.openingJournalId && plan.openingJournalId !== journalRequestId(authz.user.orgId, idempotencyKey)) {

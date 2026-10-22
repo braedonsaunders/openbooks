@@ -156,7 +156,7 @@ const mockSources = new Map<string, string>([
       }
 
       export const db = {
-        execute: (query) => Promise.resolve(respond(state.inTx?'tx-execute':'execute', query)),
+        execute: (query, mode) => Promise.resolve(respond(state.inTx?'tx-execute':'execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
         select(){const query={from(){return query},where(){return Promise.resolve([])}};return query},
         transaction: async (work) => {
           state.transactions += 1
@@ -164,7 +164,7 @@ const mockSources = new Map<string, string>([
           state.stagedRecord = null
           state.pendingAudits = []
           try {
-            const result = await work({ execute: (query) => respond('tx-execute', query) })
+            const result = await work({ execute: (query, mode) => Promise.resolve(respond('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) })
             if (state.stagedRecord) state.committedRecord = state.stagedRecord
             state.committedAudits.push(...state.pendingAudits)
             return result

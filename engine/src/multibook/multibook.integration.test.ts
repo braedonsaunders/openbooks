@@ -46,7 +46,7 @@ async function fixture(run: (f: Fixture) => Promise<void>): Promise<void> {
         insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
         values (${book}, ${org.orgId}, 'GAAP', 'US GAAP', false, true, true)`);
       baseCurrency = (await db.execute<{ base_currency: string }>(sql`
-        select base_currency from subsidiaries where org_id = ${org.orgId} and id = ${org.subsidiaryId}`)).rows[0]!.base_currency;
+        select base_currency from subsidiaries where org_id = ${org.orgId} and id = ${org.subsidiaryId}`, "objects"))[0]!.base_currency;
     });
     let next = 7400;
     const account = async (type: string) => {
@@ -95,19 +95,19 @@ async function activate(f: Fixture, extra: { replicationFrom?: string; openingSt
 
 async function replicaOf(f: Fixture, sourceEntryId: string) {
   return withOrgContext(f.org.orgId, async () => {
-    const link = (await db.execute<{ replica_entry_id: string | null; outcome: string }>(sql`
+    const link = await db.execute<{ replica_entry_id: string | null; outcome: string }>(sql`
       select replica_entry_id, outcome from book_entry_replications
-       where org_id = ${f.org.orgId} and book_id = ${f.book} and source_entry_id = ${sourceEntryId}`)).rows;
+       where org_id = ${f.org.orgId} and book_id = ${f.book} and source_entry_id = ${sourceEntryId}`, "objects");
     const replicaId = link[0]?.replica_entry_id ?? null;
     const header = replicaId
       ? (await db.execute<{ book_id: string; status: string; origin: string; reverses_entry_id: string | null }>(sql`
-          select book_id, status, origin, reverses_entry_id from journal_entries where id = ${replicaId}`)).rows[0]
+          select book_id, status, origin, reverses_entry_id from journal_entries where id = ${replicaId}`, "objects"))[0]
       : undefined;
     const lines = replicaId
       ? (await db.execute<{ account_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string; is_open_item: boolean }>(sql`
           select account_id, amount::text as amount, currency, txn_amount::text as txn_amount,
                  fx_rate::text as fx_rate, is_open_item
-            from journal_lines where entry_id = ${replicaId} order by line_number`)).rows
+            from journal_lines where entry_id = ${replicaId} order by line_number`, "objects"))
       : [];
     return { links: link.length, replicaId, header, lines };
   });
@@ -130,7 +130,7 @@ test("a full book receives each primary posting exactly once and mirrors its rev
     replicateEntryToBooks(db, postEntry, { orgId: f.org.orgId, sourceEntryId: sourceId, actorId: f.actor }));
   assert.deepEqual(replay.map((o) => o.outcome), ["already"]);
   const copies = (await withOrgContext(f.org.orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and book_id = ${f.book} and custom->>'bookReplicaOf' = ${sourceId}`))).rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and book_id = ${f.book} and custom->>'bookReplicaOf' = ${sourceId}`, "objects")))[0]!.n;
   assert.equal(copies, 1);
 
   // A governed reversal replicates as a reversal of the copy, and marking the
@@ -186,7 +186,7 @@ test("a book in its own currency translates at the book rate and refuses a missi
     (error: unknown) => assert.ok(error instanceof MultiBookError && /monthly average rate/.test(error.message), String(error)),
   );
   const ifrsMode = (await withOrgContext(f.org.orgId, () => db.execute<{ replication_mode: string }>(sql`
-    select replication_mode from accounting_books where id = ${ifrs}`))).rows[0]!.replication_mode;
+    select replication_mode from accounting_books where id = ${ifrs}`, "objects")))[0]!.replication_mode;
   assert.equal(ifrsMode, "adjustment_only", "a refused activation changes nothing");
 
   // Changing a version under entries the book already holds is refused.
@@ -275,10 +275,10 @@ test("activation refuses full history over earlier entries and brings them in as
   );
   const run = await activate(f, { replicationFrom: "2026-07-20", openingStrategy: "opening_balances" });
   assert.equal(run.openingEntryIds.length, 1, "one opening entry per subsidiary with balances");
-  const opening = (await withOrgContext(f.org.orgId, () => db.execute<{ account_id: string; amount: string; origin: string; book_id: string }>(sql`
+  const opening = await withOrgContext(f.org.orgId, () => db.execute<{ account_id: string; amount: string; origin: string; book_id: string }>(sql`
     select l.account_id, l.amount::text as amount, e.origin, e.book_id
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-     where e.id = ${run.openingEntryIds[0]!} order by l.account_id`))).rows;
+     where e.id = ${run.openingEntryIds[0]!} order by l.account_id`, "objects"));
   assert.ok(opening.every((row) => row.origin === "book_opening" && row.book_id === f.book));
   const byAccount = new Map(opening.map((row) => [row.account_id, row.amount]));
   assert.equal(byAccount.get(f.org.accounts.bank), "75.0000");
@@ -286,7 +286,7 @@ test("activation refuses full history over earlier entries and brings them in as
 
   // The start date is fixed and recorded; the book's settings changed only with the run.
   const audit = (await withOrgContext(f.org.orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from audit_log where org_id = ${f.org.orgId} and table_name = 'accounting_books' and row_id = ${f.book}`))).rows[0]!.n;
+    select count(*)::int as n from audit_log where org_id = ${f.org.orgId} and table_name = 'accounting_books' and row_id = ${f.book}`, "objects")))[0]!.n;
   assert.ok(audit >= 1, "the activation is audited on the book");
   await withOrgContext(f.org.orgId, () => db.execute(sql`
     update accounting_books set replication_mode = 'adjustment_only' where id = ${f.book}`)).then(
@@ -305,7 +305,7 @@ test("opening balances preserve dimensions and carry only current-year merged P&
   const currentYearPeriod = randomUUID();
   await withOrgContext(f.org.orgId, async () => {
     const calendar = (await db.execute<{ id: string }>(sql`
-      select fiscal_calendar_id as id from accounting_periods where org_id = ${f.org.orgId} and id = ${f.org.periodId}`)).rows[0]!.id;
+      select fiscal_calendar_id as id from accounting_periods where org_id = ${f.org.orgId} and id = ${f.org.periodId}`, "objects"))[0]!.id;
     await db.execute(sql`insert into departments (id, org_id, name) values (${department}, ${f.org.orgId}, 'Operations')`);
     await db.execute(sql`update accounts set required_dimensions = '["department"]'::jsonb
       where org_id = ${f.org.orgId} and id in (${source}, ${target})`);
@@ -342,13 +342,13 @@ test("opening balances preserve dimensions and carry only current-year merged P&
     currencyDifferenceAccountId: currencyDifference,
   });
 
-  const opening = (await withOrgContext(f.org.orgId, () => db.execute<{
+  const opening = await withOrgContext(f.org.orgId, () => db.execute<{
     account_id: string; amount: string; department_id: string | null;
   }>(sql`
     select l.account_id, l.amount::text as amount, l.department_id
       from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
      where e.org_id = ${f.org.orgId} and e.book_id = ${f.book} and e.origin = 'book_opening'
-     order by l.line_number`))).rows;
+     order by l.line_number`, "objects"));
   assert.ok(opening.some((line) => line.account_id === target && line.amount === "200.0000" && line.department_id === department));
   assert.ok(!opening.some((line) => line.account_id === source), "merged historical P&L remains on the survivor, never the inactive source");
 }));
@@ -383,7 +383,7 @@ test("a closed period in a full book refuses the primary posting as a whole", en
     (error: unknown) => assert.ok(error instanceof Error),
   );
   const primary = (await withOrgContext(f.org.orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and entry_number = ${marker}`))).rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and entry_number = ${marker}`, "objects")))[0]!.n;
   assert.equal(primary, 0, "the primary posting rolled back with its refused copy");
 }));
 
@@ -456,13 +456,13 @@ test("a book-specific journal posts to its book only and is never replicated", e
     }, { audit: { actorId: f.actor, source: "ui" } });
   });
   const entry = (await withOrgContext(f.org.orgId, () => db.execute<{ book_id: string }>(sql`
-    select book_id from journal_entries where id = ${entryId}`))).rows[0]!;
+    select book_id from journal_entries where id = ${entryId}`, "objects")))[0]!;
   assert.equal(entry.book_id, f.book, "the journal posts to its target book");
   const inPrimary = (await withOrgContext(f.org.orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and source_document_id = ${documentId} and book_id = ${f.org.bookId}`))).rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and source_document_id = ${documentId} and book_id = ${f.org.bookId}`, "objects")))[0]!.n;
   assert.equal(inPrimary, 0, "nothing reaches the primary book");
   const links = (await withOrgContext(f.org.orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from book_entry_replications where org_id = ${f.org.orgId} and source_entry_id = ${entryId}`))).rows[0]!.n;
+    select count(*)::int as n from book_entry_replications where org_id = ${f.org.orgId} and source_entry_id = ${entryId}`, "objects")))[0]!.n;
   assert.equal(links, 0);
 }));
 
@@ -581,12 +581,12 @@ test("a prepaid document creates and releases one reconciled schedule per book w
   const schedules = await withOrgContext(f.org.orgId, () => db.execute<{
     book_id: string; currency: string; amount: string; deferral_account_id: string; destination_account_id: string;
   }>(sql`select book_id, currency, total_amount::text as amount, deferral_account_id, destination_account_id
-    from expense_amortization_schedules where org_id = ${f.org.orgId} and source_line_id = ${source.line}`));
-  assert.equal(schedules.rows.length, 2);
-  assert.deepEqual(schedules.rows.find(row => row.book_id === f.org.bookId), {
+    from expense_amortization_schedules where org_id = ${f.org.orgId} and source_line_id = ${source.line}`, "objects"));
+  assert.equal(schedules.length, 2);
+  assert.deepEqual(schedules.find(row => row.book_id === f.org.bookId), {
     book_id: f.org.bookId, currency: f.baseCurrency, amount: "100.0000", deferral_account_id: source.prepaid, destination_account_id: source.expense,
   });
-  assert.deepEqual(schedules.rows.find(row => row.book_id === f.book), {
+  assert.deepEqual(schedules.find(row => row.book_id === f.book), {
     book_id: f.book, currency: source.currency, amount: "68.0000", deferral_account_id: source.bookPrepaid, destination_account_id: source.bookExpense,
   });
   await withOrgContext(f.org.orgId, () => db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
@@ -600,9 +600,9 @@ test("a prepaid document creates and releases one reconciled schedule per book w
     const rows = await reconcileDeferralAccounts(db, f.org.orgId, { asOf: "2026-07-31" });
     assert.ok(rows.some(row => row.bookId === f.book && row.currency === source.currency));
     assert.ok(rows.every(row => row.ledger === "0.0000" && row.subledger === "0.0000" && row.difference === "0.0000"));
-    const releases = (await db.execute<{ book_id: string; amount: string }>(sql`
+    const releases = await db.execute<{ book_id: string; amount: string }>(sql`
       select e.book_id, l.amount::text from journal_entries e join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
-      where e.org_id = ${f.org.orgId} and e.origin = 'expense_amortization' and l.account_id in (${source.expense}, ${source.bookExpense})`)).rows;
+      where e.org_id = ${f.org.orgId} and e.origin = 'expense_amortization' and l.account_id in (${source.expense}, ${source.bookExpense})`, "objects");
     assert.equal(releases.length, 2, "each book releases only its own measured schedule");
     assert.equal(releases.find(row => row.book_id === f.book)?.amount, "68.0000");
   });
@@ -614,9 +614,9 @@ test("activation refuses already amortized history atomically", enabled, () => f
   await runExpenseAmortization({ orgId: f.org.orgId, actorId: f.actor, periodId: f.org.periodId });
   await assert.rejects(activate(f), (error: unknown) => error instanceof AmortizationError && error.code === "amortization_book_history");
   await withOrgContext(f.org.orgId, async () => {
-    const book = (await db.execute<{ replication_mode: string }>(sql`select replication_mode from accounting_books where org_id = ${f.org.orgId} and id = ${f.book}`)).rows[0]!;
+    const book = (await db.execute<{ replication_mode: string }>(sql`select replication_mode from accounting_books where org_id = ${f.org.orgId} and id = ${f.book}`, "objects"))[0]!;
     assert.equal(book.replication_mode, "adjustment_only");
-    const entries = (await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries where org_id = ${f.org.orgId} and book_id = ${f.book}`)).rows[0]!;
+    const entries = (await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries where org_id = ${f.org.orgId} and book_id = ${f.book}`, "objects"))[0]!;
     assert.equal(entries.count, 0, "the refused activation leaves no copies or schedules");
   });
 }));
@@ -626,9 +626,9 @@ test("activation creates the secondary schedule from an untouched source's recor
   await source.post();
   await activate(f);
   await withOrgContext(f.org.orgId, async () => {
-    const schedules = (await db.execute<{ amount: string; account_id: string }>(sql`
+    const schedules = await db.execute<{ amount: string; account_id: string }>(sql`
       select total_amount::text as amount, deferral_account_id as account_id from expense_amortization_schedules
-      where org_id = ${f.org.orgId} and source_line_id = ${source.line} and book_id = ${f.book}`)).rows;
+      where org_id = ${f.org.orgId} and source_line_id = ${source.line} and book_id = ${f.book}`, "objects");
     assert.deepEqual(schedules, [{ amount: "68.0000", account_id: source.bookPrepaid }]);
     assert.ok((await reconcileDeferralAccounts(db, f.org.orgId, { asOf: f.org.date })).every(row => row.difference === "0.0000"));
   });
@@ -645,9 +645,9 @@ test("opening balances carry completed prepaid releases rather than the original
       from accounting_periods where org_id = ${f.org.orgId} and id = ${f.org.periodId}`));
   await activate(f, { replicationFrom: "2026-08-01", openingStrategy: "opening_balances" });
   await withOrgContext(f.org.orgId, async () => {
-    const amounts = (await db.execute<{ account_id: string; amount: string }>(sql`
+    const amounts = await db.execute<{ account_id: string; amount: string }>(sql`
       select l.account_id, sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
-      where e.org_id = ${f.org.orgId} and e.book_id = ${f.book} group by l.account_id`)).rows;
+      where e.org_id = ${f.org.orgId} and e.book_id = ${f.book} group by l.account_id`, "objects");
     assert.equal(amounts.find(row => row.account_id === source.bookExpense)?.amount, "68.0000");
     assert.equal(amounts.find(row => row.account_id === source.bookPrepaid)?.amount ?? "0.0000", "0.0000");
   });
@@ -661,7 +661,7 @@ test("a manual carried-in schedule uses the selected book's first release period
   await withOrgContext(f.org.orgId, async () => {
     const schedule = (await db.execute<{ currency: string; amount: string; deferral_account_id: string; destination_account_id: string }>(sql`
       select currency, total_amount::text as amount, deferral_account_id, destination_account_id from expense_amortization_schedules
-      where org_id = ${f.org.orgId} and id = ${manual.scheduleId}`)).rows[0]!;
+      where org_id = ${f.org.orgId} and id = ${manual.scheduleId}`, "objects"))[0]!;
     assert.deepEqual(schedule, { currency: source.currency, amount: "68.0000", deferral_account_id: source.bookPrepaid, destination_account_id: source.bookExpense });
   });
 }));

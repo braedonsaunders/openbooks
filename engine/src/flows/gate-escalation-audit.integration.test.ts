@@ -37,8 +37,8 @@ async function withEscalatableGate(
     });
     // Point the gate node at the org admin as its escalation target.
     const r = await db.execute<{ graph: { nodes: Array<{ id: string; data: { gate?: Record<string, unknown> } }> } }>(sql`
-      select graph from flows where id = ${flowId}`);
-    const graph = r.rows[0]!.graph;
+      select graph from flows where id = ${flowId}`, "objects");
+    const graph = r[0]!.graph;
     graph.nodes.find((n) => n.id === "gate")!.data.gate!.escalateTo = {
       type: "user",
       userId: actors.adminId,
@@ -47,11 +47,9 @@ async function withEscalatableGate(
     const docId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
     const res = await submitForApproval("vendor_bill", docId, actors.submitterId);
     assert.equal(res.gated, true, "submit created a gate");
-    const gate = (
-      await db.execute<{ id: string }>(sql`
+    const gate = (await db.execute<{ id: string }>(sql`
         select id from flow_gates where subject_id = ${docId} order by created_at
-      `)
-    ).rows[0]!.id;
+      `, "objects"))[0]!.id;
     await fn(org, actors, gate);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -59,16 +57,14 @@ async function withEscalatableGate(
 }
 
 async function escalationAudit(orgId: string, gateId: string) {
-  return (
-    await db.execute(sql`
+  return await db.execute(sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'flow_gates'
          and row_id = ${gateId}
        order by at, id
-    `)
-  ).rows;
+    `, "objects");
 }
 
 test("an escalation writes system-attributed before/after audit evidence", { skip: !DB }, async () => {

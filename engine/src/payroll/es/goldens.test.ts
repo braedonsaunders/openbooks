@@ -205,7 +205,7 @@ function esAdapterContext(c: AdapterCase): { ctx: PayrollStatutoryComputeContext
   const ctx = {
     periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
     programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
-    tx: { execute: async () => ({ rows: [{ changed: c.priorChanged ?? false }] }) },
+    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ changed: c.priorChanged ?? false }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) },
     orgId: "org", employeePartyId: "employee", documentId: "run", taxYear: 2026, region: "MD",
     run: { pay_date: c.payDate },
     emp: { es_situacion_laboral: "activo", es_grupo_cotizacion: "7", es_ano_nacimiento: "1990",

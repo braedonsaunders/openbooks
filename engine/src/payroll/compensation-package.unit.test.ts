@@ -123,7 +123,7 @@ test("native compensation configuration is required with authoring enabled or di
     for (const configured of [false, true]) {
       const responses = [[{ features: { payroll: true, compensationPackages: enabled } }], configured ? [{ revision: "7" }] : []];
       let calls = 0;
-      const tx = { execute: async () => ({ rows: responses[calls++] ?? [] }) } as unknown as SqlExecutor;
+      const tx = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: responses[calls++] ?? [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as unknown as SqlExecutor;
       const result = lockCompensationPackageConfiguration(tx, orgId, mode);
       if (configured) assert.equal(await result, "7");
       else await assert.rejects(result, /Compensation configuration is missing/);

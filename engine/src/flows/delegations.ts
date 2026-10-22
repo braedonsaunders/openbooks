@@ -66,8 +66,8 @@ export async function activeDelegationPrincipals(
       join users u on u.id = d.from_user_id and u.org_id = d.org_id and u.is_active
      where d.org_id = ${orgId} and d.to_user_id = ${delegateUserId}
        and d.revoked_at is null and now() between d.starts_at and d.ends_at
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 export interface DelegationView {
@@ -98,8 +98,8 @@ export async function listUserDelegations(orgId: string, userId: string): Promis
        and (d.from_user_id = ${userId} or d.to_user_id = ${userId})
        and d.revoked_at is null and d.ends_at >= now()
      order by d.starts_at
-  `));
-  return r.rows.map((row) => ({
+  `, "objects"));
+  return r.map((row) => ({
     id: String(row.id),
     fromUserId: String(row.fromUserId),
     fromUserName: (row.fromUserName as string | null) ?? null,

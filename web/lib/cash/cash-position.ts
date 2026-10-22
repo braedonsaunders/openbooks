@@ -264,7 +264,7 @@ export async function cashPosition(
       where org_id = ${orgId} and is_summary = false
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, visible, { orgWideNull: true })}
       order by number nulls last, name
-    `),
+    `, "objects"),
     // "Parties with any payable document" is a semi-join: joining every
     // payable document to its party and then DISTINCTing back down to a few
     // thousand names materialized the whole document set to answer a
@@ -280,7 +280,7 @@ export async function cashPosition(
              ${vendorDocScope(visible, includeNullSubsidiary === true)}
         )
       order by 2
-    `),
+    `, "objects"),
     // Attribution picker scope: the caller's own allowed set (not the
     // narrowed view — attributing beyond the current view is legitimate),
     // active non-elimination subsidiaries, like the report picker.
@@ -289,7 +289,7 @@ export async function cashPosition(
       where s.org_id = ${orgId} and s.is_active and not s.is_elimination
         ${subsidiaryVisibleFilter(sql`s.id`, allowedSubsidiaryIds)}
       order by s.name
-    `),
+    `, "objects"),
     cashflowModel(orgId),
     fiscalStartMonth(orgId),
     defaultFiscalCalendarPeriods(orgId),
@@ -379,8 +379,8 @@ export async function cashPosition(
     categories,
     unavailableCategories: refused,
     apSettings: { ...apSettings, weeklyCap: normalizeMoneyValue(apSettings.weeklyCap) },
-    vendorOptions: vendorRows.rows.map((v) => ({ id: v.id, name: v.name })),
-    accountOptions: accountRows.rows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
-    subsidiaryOptions: subsidiaryRows.rows.map((s) => ({ id: s.id, name: s.name })),
+    vendorOptions: vendorRows.map((v) => ({ id: v.id, name: v.name })),
+    accountOptions: accountRows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
+    subsidiaryOptions: subsidiaryRows.map((s) => ({ id: s.id, name: s.name })),
   };
 }

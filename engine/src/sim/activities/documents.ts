@@ -186,8 +186,8 @@ export async function collectibleOpenItems(
     select line_id, document_id, kind, due_date, expected_pay_date, custom,
            (abs(amount) - applied)::text as open
       from lines
-     where abs(amount) - applied > 0.005`));
-  return rows.rows.map((r) => ({
+     where abs(amount) - applied > 0.005`, "objects"));
+  return rows.map((r) => ({
     lineId: r.line_id,
     documentId: r.document_id,
     kind: r.kind,

@@ -259,7 +259,7 @@ for (const row of REFUSALS) {
 // (systemKey, kind) throws PayrollPackError here exactly as in a live run.
 /** Committed history the year-to-date query returns: a payer running here since January. */
 const HISTORY = { dochod: "33265.0000", podstawa: "40000.0000", payer_first_pay: "2026-01-31", payer_first_period: "2026-01-01" };
-const historyTx = (row: Record<string, string | null> = HISTORY) => ({ execute: async () => ({ rows: [row] }) });
+const historyTx = (row: Record<string, string | null> = HISTORY) => ({ execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [row] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) });
 
 function adapterContext(payDate: string, overrides: Record<string, unknown> = {}) {
   const lines: StubLine[] = [];

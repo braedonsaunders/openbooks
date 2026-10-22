@@ -127,7 +127,7 @@ test(
       assert.deepEqual(outcome.skipped, []);
       const row = (await db.execute<{ evidence_kind: string }>(sql`
         select evidence_kind from reconciliations where id = ${outcome.signedOff[0]!.reconciliationId} and org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(row.evidence_kind, "source");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -193,7 +193,7 @@ test(
       assert.equal(outcome.skipped[0]!.clearedLines, 1);
       assert.equal(outcome.skipped[0]!.unclearedLines, 1);
       assert.equal(
-        Number((await db.execute<{ n: string }>(sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`)).rows[0]!.n),
+        Number((await db.execute<{ n: string }>(sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`, "objects"))[0]!.n),
         0,
       );
     } finally {

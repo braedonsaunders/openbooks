@@ -52,7 +52,7 @@ async function postTaxActivity(
   codeId: string,
 ): Promise<void> {
   const book = (await db.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`)).rows[0]!;
+    select id from accounting_books where org_id = ${org.orgId} and is_primary limit 1`, "objects"))[0]!;
   const entryId = randomUUID();
   await db.execute(sql`
     insert into journal_entries

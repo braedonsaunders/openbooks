@@ -393,8 +393,8 @@ async function searchContacts(
      where p.org_id = ${orgId}
        ${subsidiaryFilter}
      order by sim desc, p.display_name
-     limit ${PER_GROUP}`))
-  return r.rows.map((row): SearchHit => ({
+     limit ${PER_GROUP}`, 'objects'))
+  return r.map((row): SearchHit => ({
     id: row.id,
     type: 'contact',
     title: row.display_name,
@@ -497,8 +497,8 @@ async function searchTransactions(
         from documents d
         left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
        where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
-         and d.id = any(${uuidArray(match.ids)})`))
-    return transactionHits(r.rows)
+         and d.id = any(${uuidArray(match.ids)})`, 'objects'))
+    return transactionHits(r)
   }
 
   const { q, like, amount } = match
@@ -561,8 +561,8 @@ async function searchTransactions(
       left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
      where true ${visibleKindFilter}${documentSubsidiaryFilter}
      order by (d.document_number = ${q} or d.external_ref = ${q}) desc, ${numOrder}sim desc, d.created_at desc
-     limit ${PER_GROUP + 2}`))
-  return transactionHits(r.rows)
+     limit ${PER_GROUP + 2}`, 'objects'))
+  return transactionHits(r)
 }
 
 function transactionHits(rows: SearchTransactionRow[]): SearchHit[] {
@@ -647,8 +647,8 @@ async function searchJournalEntries(
         from journal_entries e
        where ${visibility}
          and e.id = any(${uuidArray(match.ids)})
-         and ${exactArmLinkRule}`))
-    return journalHits(r.rows)
+         and ${exactArmLinkRule}`, 'objects'))
+    return journalHits(r)
   }
   const { q, like } = match
   // UNION forbids expression ORDER BY, so the merged legs sit in a
@@ -673,8 +673,8 @@ async function searchJournalEntries(
         limit 5)
     ) u
      order by (u.entry_number = ${q}) desc, similarity(u.entry_number, ${q}) desc, u.created_at desc
-     limit ${PER_GROUP}`))
-  return journalHits(r.rows)
+     limit ${PER_GROUP}`, 'objects'))
+  return journalHits(r)
 }
 
 function journalHits(rows: SearchJournalEntryRow[]): SearchHit[] {
@@ -705,8 +705,8 @@ async function searchAccounts(
        ${subsidiaryFilter}
        and ${predicate}
      order by ${order}
-     limit ${PER_GROUP}`))
-  return r.rows.map((row): SearchHit => ({
+     limit ${PER_GROUP}`, 'objects'))
+  return r.map((row): SearchHit => ({
     id: row.id,
     type: 'account',
     title: `${row.number ? `${row.number} · ` : ''}${row.name}`,
@@ -736,8 +736,8 @@ async function searchItems(orgId: string, match: Match): Promise<SearchHit[]> {
       join item_cand on item_cand.id = i.id
      where i.org_id = ${orgId}
      order by ${order}
-     limit ${PER_GROUP}`))
-  return r.rows.map((row): SearchHit => ({
+     limit ${PER_GROUP}`, 'objects'))
+  return r.map((row): SearchHit => ({
     id: row.id,
     type: 'item',
     title: row.name,
@@ -764,8 +764,8 @@ async function searchProjects(
      where org_id = ${orgId} ${subsidiaryFilter}
        and ${predicate}
      order by ${order}
-     limit ${PER_GROUP}`))
-  return r.rows.map((row): SearchHit => ({
+     limit ${PER_GROUP}`, 'objects'))
+  return r.map((row): SearchHit => ({
     id: row.id,
     type: 'project',
     title: row.name,

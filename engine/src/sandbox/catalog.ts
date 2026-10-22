@@ -335,7 +335,7 @@ export async function loadCatalog(): Promise<Catalog> {
         on t.table_name = c.table_name and t.table_schema = c.table_schema
      where c.table_schema = 'public' and t.table_type = 'BASE TABLE'
        and c.is_generated = 'NEVER'
-     order by c.table_name, c.ordinal_position`);
+     order by c.table_name, c.ordinal_position`, "objects");
 
   // Foreign-key edges: (table, column) → referenced table + delete behavior.
   // Use pg_catalog OIDs, not the information_schema constraint-name joins.
@@ -368,10 +368,10 @@ export async function loadCatalog(): Promise<Catalog> {
        and source_column.attnum = con.conkey[position]
      where con.contype = 'f'
        and source_namespace.nspname = 'public'
-     order by source.relname, con.conname, position`);
+     order by source.relname, con.conname, position`, "objects");
 
   const byTable = new Map<string, TableInfo>();
-  for (const r of colsRes.rows) {
+  for (const r of colsRes) {
     let t = byTable.get(r.table_name);
     if (!t) {
       t = {
@@ -396,7 +396,7 @@ export async function loadCatalog(): Promise<Catalog> {
     if (r.column_name === "org_id") t.hasOrgId = true;
     if (r.column_name === "id") t.hasId = true;
   }
-  for (const r of fkRes.rows) {
+  for (const r of fkRes) {
     const t = byTable.get(r.table_name);
     if (t) {
       t.fks[r.column_name] = r.ref_table;
@@ -414,8 +414,8 @@ export async function loadCatalog(): Promise<Catalog> {
      where ix.indisunique and a.atttypid = 'uuid'::regtype
        and exists (select 1 from pg_attribute o where o.attrelid = ix.indrelid and o.attname = 'org_id' and not o.attisdropped)
        and not exists (select 1 from pg_attribute o2 join lateral unnest(ix.indkey) kk(n) on o2.attnum = kk.n
-                        where o2.attrelid = ix.indrelid and o2.attname = 'org_id')`);
-  for (const r of uqRes.rows) {
+                        where o2.attrelid = ix.indrelid and o2.attname = 'org_id')`, "objects");
+  for (const r of uqRes) {
     const t = byTable.get(r.table_name);
     if (t && r.column_name !== "id" && r.column_name !== "org_id") t.forceRebase.add(r.column_name);
   }

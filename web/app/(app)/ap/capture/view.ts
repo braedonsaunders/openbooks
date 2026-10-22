@@ -119,7 +119,7 @@ export async function loadApCapture(
         : sql`ci.received_at ${list.dir === 'asc' ? sql`asc` : sql`desc`}`
   const offset = (list.page - 1) * list.perPage
   const [rowsResult, totalResult, countsResult, providerOperational] = await Promise.all([
-    db.execute(sql`
+    db.execute<CaptureListRow>(sql`
       select ci.id, ci.status, ci.original_filename as "filename", ci.document_kind as "documentKind",
              ci.normalized->>'vendorName' as "vendorName", ci.normalized->>'invoiceNumber' as "invoiceNumber",
              ci.normalized->>'invoiceDate' as "invoiceDate", ci.normalized->>'currency' as currency,
@@ -130,26 +130,26 @@ export async function loadApCapture(
         left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
         left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ${where} order by ${order} limit ${list.perPage} offset ${offset}
-    `),
-    db.execute(sql`
+    `, 'objects'),
+    db.execute<{ n: number }>(sql`
       select count(*)::int as n from ap_capture_items ci
       left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
       left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
       where ${where}
-    `),
-    db.execute(sql`
+    `, 'objects'),
+    db.execute<{ status: string; n: number }>(sql`
       select ci.status, count(*)::int as n from ap_capture_items ci
       left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
       left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ci.org_id = ${authz.user.orgId}
          ${subsidiaryScope}
        group by ci.status
-    `),
+    `, 'objects'),
     documentCaptureOperational(authz.user.orgId),
   ])
-  const rows = (rowsResult as unknown as { rows: CaptureListRow[] }).rows
-  const total = Number(((totalResult) as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0)
-  const counts = new Map<string, number>(((countsResult) as unknown as { rows: { status: string; n: number }[] }).rows.map((row) => [row.status, Number(row.n)]))
+  const rows = rowsResult
+  const total = Number(totalResult[0]?.n ?? 0)
+  const counts = new Map<string, number>(countsResult.map((row) => [row.status, Number(row.n)]))
   // Only a real capture id reaches SQL: a malformed ?capture= must never
   // bind to a uuid column and render a 500.
   const rawSelectedId = pickString(sp.capture)
@@ -167,8 +167,8 @@ export async function loadApCapture(
         left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
        where ci.org_id = ${authz.user.orgId} and ci.id = ${selectedId}
        ${subsidiaryScope}
-    `))
-    detail = selected.rows[0] ?? null
+    `, 'objects'))
+    detail = selected[0] ?? null
     if (detail) {
       const vendorScope = allowed === null
         ? sql``
@@ -191,35 +191,35 @@ export async function loadApCapture(
           : sql`and (subsidiary_id is null or subsidiary_id in (${sql.join(allowed.map((id) => sql`${id}`), sql`, `)}))`
       canLookupPurchaseOrders = await isDocKindEnabled(authz.user.orgId, 'purchase_order')
       const [vendors, accounts, purchaseOrders, evidence] = await Promise.all([
-        db.execute(sql`
+        db.execute<{ id: string; label: string }>(sql`
           select p.id, p.display_name as label from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
            where p.org_id = ${authz.user.orgId} and p.is_active and vr.is_active ${vendorScope}
            order by p.display_name limit 2000
-        `),
-        db.execute(sql`
+        `, 'objects'),
+        db.execute<{ id: string; label: string }>(sql`
           select id, concat_ws(' · ', number, name) as label from accounts
            where org_id = ${authz.user.orgId} and is_active and not is_summary ${accountScope} order by number nulls last limit 3000
-        `),
+        `, 'objects'),
         canLookupPurchaseOrders
-          ? db.execute(sql`
+          ? db.execute<{ id: string; label: string }>(sql`
           select d.id, d.document_number as label from documents d
            where d.org_id = ${authz.user.orgId} and d.kind = 'purchase_order' and d.status = 'approved' ${poScope}
            order by d.document_date desc limit 1000
-        `)
-          : Promise.resolve({ rows: [] }),
-        db.execute(sql`
+        `, 'objects')
+          : Promise.resolve([]),
+        db.execute<CaptureDetail['evidence'][number]>(sql`
           select af.field_key as "fieldKey", af.line_index as "lineIndex", af.confidence,
                  af.page_number as "pageNumber", af.polygon
             from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
            where af.org_id = ${authz.user.orgId} and ar.capture_item_id = ${selectedId}
              and ar.attempt = (select max(attempt) from ap_capture_runs where capture_item_id = ${selectedId} and org_id = ${authz.user.orgId})
-        `),
+        `, 'objects'),
       ])
-      detail.evidence = (evidence as unknown as { rows: CaptureDetail['evidence'] }).rows
+      detail.evidence = evidence
       options = {
-        vendors: ((vendors) as unknown as { rows: { id: string; label: string }[] }).rows,
-        accounts: ((accounts) as unknown as { rows: { id: string; label: string }[] }).rows,
-        purchaseOrders: ((purchaseOrders) as unknown as { rows: { id: string; label: string }[] }).rows,
+        vendors,
+        accounts,
+        purchaseOrders,
       }
     }
   }

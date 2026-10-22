@@ -26,8 +26,8 @@ export async function assertSystemSubmissionSource(input: {
       throw new FlowDispatchError("Enable Customer portal in Company Settings → Features before submitting portal returns.");
     const source = await db.execute<{ valid: boolean }>(sql`select public.flow_portal_return_source_valid(
       d.org_id,d.id,d.custom->'portalRequest') as valid from documents d
-      where d.org_id=${input.orgId} and d.id=${input.subjectId}`);
-    if (source.rows[0]?.valid) return;
+      where d.org_id=${input.orgId} and d.id=${input.subjectId}`, "objects");
+    if (source[0]?.valid) return;
   }
   if (input.source === "sync" && ["cash_sale", "cash_refund"].includes(input.subjectKind)) {
     if (!(await lockAndCheckOrgFeature(db,input.orgId,"salesChannels")) ||
@@ -37,8 +37,8 @@ export async function assertSystemSubmissionSource(input: {
       on d.org_id=c.org_id and d.source_channel_id=c.id and d.external_source=c.kind
       where d.org_id=${input.orgId} and d.id=${input.subjectId} and d.kind=${input.subjectKind}
         and nullif(btrim(d.external_ref),'') is not null and c.status='active'
-      for share of c`);
-    if (channel.rows.length === 1) return;
+      for share of c`, "objects");
+    if (channel.length === 1) return;
   }
   throw new FlowDispatchError("The submission requires an authorized actor or its native unattended source.");
 }
@@ -92,12 +92,10 @@ export async function routeSubjectSubmission(input: {
       command: input.command,
       commandAction: input.command.action ?? null,
     };
-  const flows = (
-    await db.execute<{ id: string; graph: unknown }>(sql`
+  const flows = await db.execute<{ id: string; graph: unknown }>(sql`
     select id,graph from flows where org_id=${input.orgId}
       and subject_kind=${input.subjectKind} and enabled order by id
-  `)
-  ).rows;
+  `, "objects");
   for (const flow of flows) {
     if (!parseFlowGraph(flow.id, flow.graph))
       throw new FlowDispatchError(`Flow ${flow.id} has an invalid graph. Open Flows to correct it before submitting this record.`);
@@ -141,8 +139,8 @@ export async function routeSubjectSubmission(input: {
   const saved =
     await db.execute(sql`insert into flow_submissions(id,org_id,subject_kind,subject_id,actor_id,policy,context,graphs)
     values(${submissionId},${input.orgId},${input.subjectKind},${input.subjectId},${input.actorId},${JSON.stringify(policy)}::jsonb,
-      ${JSON.stringify(context.values)}::jsonb,${JSON.stringify(flows)}::jsonb) returning id`);
-  if (saved.rows.length !== 1)
+      ${JSON.stringify(context.values)}::jsonb,${JSON.stringify(flows)}::jsonb) returning id`, "objects");
+  if (saved.length !== 1)
     throw new FlowDispatchError(
       "The submission routing receipt was not saved; nothing was released.",
     );

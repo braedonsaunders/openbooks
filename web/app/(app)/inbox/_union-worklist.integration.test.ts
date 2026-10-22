@@ -111,7 +111,7 @@ async function budget(org:ScratchOrg,actor:string){
   await db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
    values(${org.orgId},${id},${org.accounts.revenue},${org.periodId},'50000.0000',${actor},${actor})`);
  });
- const revision=(await withBypass(()=>db.execute<{revision:number}>(sql`select revision from budget_scenarios where org_id=${org.orgId} and id=${id}`))).rows[0]!.revision;
+ const revision=(await withBypass(()=>db.execute<{revision:number}>(sql`select revision from budget_scenarios where org_id=${org.orgId} and id=${id}`, "objects")))[0]!.revision;
  await withOrgContext(org.orgId,()=>submitBudgetScenario(org.orgId,actor,id,revision));return id;
 }
 async function week(org:ScratchOrg,actor:string){
@@ -127,7 +127,7 @@ test('zero-gate records create no human work or approval badge',{skip:!DB},async
  const id=await doc(org,actors.submitterId);await budget(org,actors.submitterId);state.authz=viewer(org.orgId,actors.approver1Id);
  const data=await withOrgContext(org.orgId,()=>loadApprovals({}));assert.ok(data);assert.equal(data.total,0);assert.deepEqual(data.approvalRows,[]);
  const counts=await withOrgContext(org.orgId,async()=>{const authz=state.authz as Authz;return inboxCounts(authz,await inboxContext(authz));});assert.equal(counts.approvals,0);
- assert.equal((await withBypass(()=>db.execute<{status:string}>(sql`select status from documents where org_id=${org.orgId} and id=${id}`))).rows[0]?.status,'approved');
+ assert.equal((await withBypass(()=>db.execute<{status:string}>(sql`select status from documents where org_id=${org.orgId} and id=${id}`, "objects")))[0]?.status,'approved');
 }));
 
 for(const kind of ['vendor_bill','budget_scenario','timesheet_week'] as const){

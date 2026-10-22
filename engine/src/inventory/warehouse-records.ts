@@ -20,7 +20,7 @@ async function assertWarehouseRead(runner: Runner, orgId: string): Promise<void>
     select count(*)::text as n
       from warehouses w
       join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
-     where w.org_id = ${orgId} and sl.is_active`)).rows[0];
+     where w.org_id = ${orgId} and sl.is_active`, "objects"))[0];
   if (Number(rows?.n ?? "0") > 1) throw warehousingDisabledRefusal();
 }
 export interface WarehouseAddress {
@@ -93,8 +93,8 @@ export async function writeWarehouseAudit(
   const written = (await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'warehouses', ${warehouseId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`));
-  if (written.rows.length === 0) {
+    returning id`, "objects"));
+  if (written.length === 0) {
     throw new InventoryError("warehouse change was not audited; reload and try again");
   }
 }
@@ -104,16 +104,16 @@ export async function listWarehouses(runner: Runner, orgId: string): Promise<War
   const r = await runner.execute<WarehouseRecord>(sql`
     ${WAREHOUSE_SELECT}
      where w.org_id = ${orgId}
-     order by sl.code`);
-  return r.rows;
+     order by sl.code`, "objects");
+  return r;
 }
 
 export async function getWarehouse(runner: Runner, orgId: string, warehouseId: string): Promise<WarehouseRecord | null> {
   await assertWarehousingFeature(runner, orgId);
   const r = await runner.execute<WarehouseRecord>(sql`
     ${WAREHOUSE_SELECT}
-     where w.org_id = ${orgId} and w.stock_location_id = ${warehouseId}`);
-  return r.rows[0] ?? null;
+     where w.org_id = ${orgId} and w.stock_location_id = ${warehouseId}`, "objects");
+  return r[0] ?? null;
 }
 
 /** The warehouse enclosing a stock location (itself included), or null. */
@@ -122,8 +122,8 @@ export async function warehouseOf(runner: Runner, orgId: string, stockLocationId
   const r = await runner.execute<WarehouseRecord>(sql`
     ${WAREHOUSE_SELECT}
      where w.org_id = ${orgId}
-       and w.stock_location_id = stock_location_warehouse(${orgId}::uuid, ${stockLocationId}::uuid)`);
-  return r.rows[0] ?? null;
+       and w.stock_location_id = stock_location_warehouse(${orgId}::uuid, ${stockLocationId}::uuid)`, "objects");
+  return r[0] ?? null;
 }
 
 export type WarehouseLocationRecord = {
@@ -151,8 +151,8 @@ export async function listWarehouseLocations(
        where c.org_id = ${orgId} and c.kind <> 'warehouse' and t.depth < 64
     )
     select id, parent_id as "parentId", code, kind, is_active as "isActive"
-      from tree where depth > 0 order by path`);
-  return r.rows;
+      from tree where depth > 0 order by path`, "objects");
+  return r;
 }
 
 export interface CreateWarehouseInput extends WarehouseAddress {
@@ -181,7 +181,7 @@ export async function createWarehouse(
   return db.transaction(async (tx) => {
     await assertWarehousingFeature(tx, orgId, { lock: true });
     const location = (await tx.execute<{ is_active: boolean }>(sql`
-      select is_active from locations where org_id = ${orgId} and id = ${input.locationId}`)).rows[0];
+      select is_active from locations where org_id = ${orgId} and id = ${input.locationId}`, "objects"))[0];
     if (!location?.is_active) {
       throw new WarehouseRefusal(
         "the warehouse's location must be an active location of this organization",
@@ -191,7 +191,7 @@ export async function createWarehouse(
       );
     }
     const taken = (await tx.execute(sql`
-      select 1 from stock_locations where org_id = ${orgId} and kind = 'warehouse' and code = ${code}`)).rows.length > 0;
+      select 1 from stock_locations where org_id = ${orgId} and kind = 'warehouse' and code = ${code}`, "objects")).length > 0;
     if (taken) {
       throw new WarehouseRefusal(
         `warehouse code ${code} is already in use`,
@@ -203,9 +203,9 @@ export async function createWarehouse(
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into stock_locations (org_id, location_id, code, kind, is_active, created_by, updated_by)
       values (${orgId}, ${input.locationId}, ${code}, 'warehouse', true, ${actorId}, ${actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!inserted) throw new InventoryError("warehouse stock location was not created");
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute<never>(sql`
       update warehouses
          set status = 'draft', name = ${name},
              address_line1 = ${address.addressLine1}, address_line2 = ${address.addressLine2},
@@ -219,7 +219,7 @@ export async function createWarehouse(
     }
     const record = (await tx.execute<WarehouseRecord>(sql`
       ${WAREHOUSE_SELECT}
-       where w.org_id = ${orgId} and w.stock_location_id = ${inserted.id}`)).rows[0]!;
+       where w.org_id = ${orgId} and w.stock_location_id = ${inserted.id}`, "objects"))[0]!;
     await writeWarehouseAudit(tx, orgId, actorId, record.id, "insert", { event: "warehouse_created", after: record });
     return record;
   });
@@ -245,7 +245,7 @@ export async function updateWarehouseDetails(
       postalCode: patch.postalCode === undefined ? before.postalCode : patch.postalCode,
       country: patch.country === undefined ? before.country : patch.country,
     });
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute<never>(sql`
       update warehouses
          set name = ${name},
              address_line1 = ${address.addressLine1}, address_line2 = ${address.addressLine2},
@@ -256,7 +256,7 @@ export async function updateWarehouseDetails(
     if ((updated.rowCount ?? 0) !== 1) throw new InventoryError(`warehouse ${before.code} was not updated`);
     const after = (await tx.execute<WarehouseRecord>(sql`
       ${WAREHOUSE_SELECT}
-       where w.org_id = ${orgId} and w.stock_location_id = ${warehouseId}`)).rows[0]!;
+       where w.org_id = ${orgId} and w.stock_location_id = ${warehouseId}`, "objects"))[0]!;
     await writeWarehouseAudit(tx, orgId, actorId, warehouseId, "update", { event: "warehouse_details", before, after });
     return after;
   });
@@ -266,7 +266,7 @@ export async function lockWarehouse(tx: Runner, orgId: string, warehouseId: stri
   const row = (await tx.execute<WarehouseRecord>(sql`
     ${WAREHOUSE_SELECT}
      where w.org_id = ${orgId} and w.stock_location_id = ${warehouseId}
-     for update of w`)).rows[0];
+     for update of w`, "objects"))[0];
   if (!row) {
     throw new WarehouseRefusal(
       "warehouse not found in this organization",

@@ -96,8 +96,8 @@ async function fixture() {
       kind: 'clock_in', occurredAt: new Date().toISOString(), clientEventId: randomUUID(),
     }),
   })))
-  const entries = async (employee: string) => (await db.execute<{ status: string; is_billable: boolean }>(sql`
-    select status, is_billable from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`)).rows
+  const entries = async (employee: string) => await db.execute<{ status: string; is_billable: boolean }>(sql`
+    select status, is_billable from time_entries where org_id=${org.orgId} and employee_party_id=${employee}`, 'objects')
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, barista, partner, supervisor, own, mate, project, as, read, save, submit, approve, reject, reopen, amend, clock, entries, close }
 }

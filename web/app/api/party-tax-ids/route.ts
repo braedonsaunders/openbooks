@@ -42,12 +42,12 @@ export const GET = defineRoute({
       return NextResponse.json({ error: 'partyId (uuid) is required' }, { status: 400 })
     }
     try {
-      const rows = (await db.execute<TaxIdRow>(sql`
+      const rows = await db.execute<TaxIdRow>(sql`
         select id, scheme, value, status, checked_at::text as "checkedAt",
                consultation_number as "consultationNumber", revalidate_after::text as "revalidateAfter"
           from party_tax_ids
          where org_id = ${gate.user.orgId} and party_id = ${partyId} and is_active
-         order by created_at desc`)).rows
+         order by created_at desc`, 'objects')
       return NextResponse.json({ taxIds: rows })
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 })

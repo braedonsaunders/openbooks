@@ -76,27 +76,27 @@ async function addPeriod(org: ScratchOrg, year: number, month: number): Promise<
 
 async function documentsByIds(orgId: string, ids: string[]): Promise<{ id: string; date: string; status: string }[]> {
   if (ids.length === 0) return [];
-  return (await db.execute<{ id: string; date: string; status: string }>(sql`
+  return await db.execute<{ id: string; date: string; status: string }>(sql`
     select id, document_date::text as "date", status from documents
      where org_id = ${orgId} and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-  `)).rows;
+  `, "objects");
 }
 
 async function generatedInvoiceCount(orgId: string, templateId: string): Promise<number> {
   return Number((await db.execute<{ n: string }>(sql`
     select count(*)::text as n from documents
-     where org_id = ${orgId} and kind = 'customer_invoice' and id <> ${templateId}`)).rows[0]?.n ?? 0);
+     where org_id = ${orgId} and kind = 'customer_invoice' and id <> ${templateId}`, "objects"))[0]?.n ?? 0);
 }
 
 async function scheduleRunCount(orgId: string, scheduleId: string): Promise<number> {
   return Number((await db.execute<{ n: string }>(sql`
-    select run_count::text as n from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}`)).rows[0]?.n ?? 0);
+    select run_count::text as n from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}`, "objects"))[0]?.n ?? 0);
 }
 
 async function scheduleState(orgId: string, scheduleId: string): Promise<{ nextRunOn: string; isActive: boolean }> {
   const row = (await db.execute<{ nextRunOn: string; isActive: boolean }>(sql`
     select next_run_on::text as "nextRunOn", is_active as "isActive"
-      from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}`)).rows[0]!;
+      from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}`, "objects"))[0]!;
   return { nextRunOn: row.nextRunOn, isActive: row.isActive };
 }
 
@@ -104,7 +104,7 @@ async function catchUpAuditCount(orgId: string, scheduleId: string): Promise<num
   return Number((await db.execute<{ n: string }>(sql`
     select count(*)::text as n from audit_log
      where org_id = ${orgId} and table_name = 'recurring_schedules' and row_id = ${scheduleId}
-       and action = 'update' and changes->>'mode' = 'catch_up'`)).rows[0]?.n ?? 0);
+       and action = 'update' and changes->>'mode' = 'catch_up'`, "objects"))[0]?.n ?? 0);
 }
 
 const AS_OF = "2026-07-15";
@@ -266,7 +266,7 @@ test("a closed occurrence period stops the run and the retry completes it", { sk
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        and fc.is_default and fc.is_active
        where p.org_id = ${org.orgId} and not p.is_adjustment
-         and p.starts_on <= '2026-06-10' and p.ends_on >= '2026-06-10'`)).rows[0]!.id;
+         and p.starts_on <= '2026-06-10' and p.ends_on >= '2026-06-10'`, "objects"))[0]!.id;
     await setPeriodLockState({
       orgId: org.orgId, periodId: juneId, bookId: org.bookId,
       module: "gl", state: "soft_closed", actorId, reason: "catch-up failure regression",
@@ -333,13 +333,13 @@ test("catch-up over three periods resolves three distinct descriptions", { skip:
     });
 
     assert.equal(outcome.stopped, "reached_end");
-    const docs = (await db.execute<{ description: string; memo: string | null; date: string }>(sql`
+    const docs = await db.execute<{ description: string; memo: string | null; date: string }>(sql`
       select l.description, d.memo, d.document_date::text as "date"
         from recurring_occurrence_documents g
         join documents d on d.id = g.document_id and d.org_id = g.org_id
         join document_lines l on l.document_id = d.id and l.org_id = d.org_id
        where g.org_id = ${org.orgId} and g.schedule_id = ${scheduleId}
-       order by d.document_date`)).rows;
+       order by d.document_date`, "objects");
     assert.deepEqual(docs.map((doc) => doc.description), [
       "Snow contract January instalment 1 of 3",
       "Snow contract February instalment 2 of 3",

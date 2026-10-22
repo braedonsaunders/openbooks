@@ -50,7 +50,7 @@ async function clearSignatureRequests(orgId: string): Promise<void> {
 async function userEmail(orgId: string, userId: string): Promise<string> {
   const row = (await db.execute<{ email: string }>(sql`
     select email from users where org_id = ${orgId} and id = ${userId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row!.email;
 }
 

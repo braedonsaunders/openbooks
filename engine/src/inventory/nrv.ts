@@ -169,15 +169,15 @@ async function remainingLayers(
        ${ownerScope}
        and layer.remaining_quantity > 0
      order by layer.received_at, layer.id
-     for update of layer`));
-  return r.rows;
+     for update of layer`, "objects"));
+  return r;
 }
 
 async function itemAccounts(tx: Pick<typeof db, "execute">, orgId: string, itemId: string): Promise<{ asset: string; adjustment: string }> {
   const r = (await tx.execute<{ asset_account_id: string; adjustment_account_id: string }>(sql`
     select asset_account_id, coalesce(adjustment_account_id, cogs_account_id) as adjustment_account_id
-      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId} for share`));
-  const row = r.rows[0];
+      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId} for share`, "objects"));
+  const row = r[0];
   if (!row) throw new InventoryNrvError("item has no inventory profile");
   const accountProblem = inventoryOffsetAccountProblem(row.asset_account_id, row.adjustment_account_id, "adjustment");
   if (accountProblem) throw new InventoryNrvError(accountProblem);
@@ -221,8 +221,8 @@ async function postingContext(
   }
   const r = (await tx.execute<{ currency: string | null }>(sql`
     select base_currency as currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   if (!row?.currency) throw new InventoryNrvError("subsidiary not found");
   return { bookId, periodId: period.id, currency: row.currency };
 }
@@ -296,8 +296,8 @@ export async function writeDownInventoryToNrv(
     // The requested entity must exist: without this, a mistyped id would
     // fall through to "nothing on hand" and read as success. Scope refusal
     // itself is enforced per plan by postingContext below.
-    const requested = (await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId}`));
-    if (!requested.rows.length) throw new InventoryNrvError("subsidiary not found");
+    const requested = (await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId}`, "objects"));
+    if (!requested.length) throw new InventoryNrvError("subsidiary not found");
     const accounts = await itemAccounts(tx, orgId, input.itemId);
     // Only the requesting entity's layers: another owner sharing the
     // warehouse is never remeasured by this call.
@@ -493,13 +493,13 @@ export async function reverseInventoryWritedown(
          and subsidiary_id = ${input.subsidiaryId}
          and kind = 'writedown' and amount > reversed_amount
        order by date, created_at
-       for update`));
+       for update`, "objects"));
     // These rows explain the current carrying amount. Applying only older
     // rows would still revalue layers that already include later write-downs.
-    if (open.rows.some((row) => row.date > input.date)) {
+    if (open.some((row) => row.date > input.date)) {
       throw new InventoryNrvError("reversal date cannot precede an open inventory write-down");
     }
-    const totalReversible = open.rows.reduce((a, r) => a + toUnits(r.remaining), 0n);
+    const totalReversible = open.reduce((a, r) => a + toUnits(r.remaining), 0n);
     if (totalReversible <= 0n) {
       throw new InventoryNrvError(
         "no unreversed write-down exists for this item, location, and legal entity",
@@ -573,7 +573,7 @@ export async function reverseInventoryWritedown(
     // Consume the open write-downs oldest-first.
     let toConsume = increase;
     let lastWritedownId: string | null = null;
-    for (const row of open.rows) {
+    for (const row of open) {
       if (toConsume <= 0n) break;
       const remaining = toUnits(row.remaining);
       const take = remaining < toConsume ? remaining : toConsume;

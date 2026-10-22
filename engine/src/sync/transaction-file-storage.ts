@@ -73,7 +73,7 @@ export async function persistTransactionFile(input: {
     if (!input.targetIds.length) throw new Error("Source file requires content and at least one native record");
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`source-file:${input.orgId}:${input.sourceSystem}:${input.source.id}`}))`);
     for (const targetId of input.targetIds) {
-      const target = (await tx.execute<{ id: string }>(sql`select id from ${sql.identifier(targetTable)} where org_id=${input.orgId} and id=${targetId} for key share`)).rows[0];
+      const target = (await tx.execute<{ id: string }>(sql`select id from ${sql.identifier(targetTable)} where org_id=${input.orgId} and id=${targetId} for key share`, "objects"))[0];
       if (!target) throw new Error(`Source attachment target is not a ${targetTable === "documents" ? "transaction" : "party"} in this organization`);
     }
     const existing = (await tx.execute<{
@@ -96,15 +96,15 @@ export async function persistTransactionFile(input: {
         from files
        where org_id = ${input.orgId} and source_system = ${input.sourceSystem} and source_id = ${input.source.id}
        for update
-    `));
+    `, "objects"));
 
-    let fileId = existing.rows[0]?.id;
+    let fileId = existing[0]?.id;
     let created = false;
     let versioned = false;
-    const unchanged = existing.rows[0]?.contentHash === hash && existing.rows[0]?.currentVersionReady === true;
-    const storedModifiedAt = existing.rows[0]?.sourceModifiedAt == null
+    const unchanged = existing[0]?.contentHash === hash && existing[0]?.currentVersionReady === true;
+    const storedModifiedAt = existing[0]?.sourceModifiedAt == null
       ? null
-      : new Date(existing.rows[0].sourceModifiedAt).getTime();
+      : new Date(existing[0].sourceModifiedAt).getTime();
     const incomingModifiedAt = input.sourceModifiedAt?.getTime() ?? null;
     // The file row lock fences this comparison with every concurrent import.
     // A slower attempt may finish downloading an older source snapshot after a
@@ -122,8 +122,8 @@ export async function persistTransactionFile(input: {
         values (${fileId}, ${input.orgId}, ${folderId}, ${filename}, ${extension(filename)},
                 ${deriveFileType(input.contentType)}, ${input.contentType}, ${input.bytes.length}, 's3',
                 ${input.sourceSystem}, ${input.source.id}, ${sourceModifiedAtIso}, ${hash}, ${input.actorId}, ${input.actorId}, now(), now()) returning id
-      `);
-      if (inserted.rows.length !== 1) throw new Error("Source file was not recorded; retry the sync");
+      `, "objects");
+      if (inserted.length !== 1) throw new Error("Source file was not recorded; retry the sync");
       created = true;
     }
 
@@ -132,14 +132,14 @@ export async function persistTransactionFile(input: {
       // reconciled below because those links are independent of file version.
     } else if (created || !unchanged) {
       const versionId = randomUUID();
-      const versionNumber = created ? 1 : Number(existing.rows[0]!.maxVersion) + 1;
+      const versionNumber = created ? 1 : Number(existing[0]!.maxVersion) + 1;
       const insertedVersion = await tx.execute<{ id: string }>(sql`
         insert into file_versions (id, file_id, version_number, size_bytes, content_type, storage_kind,
                                    content_hash, created_by, created_at)
         values (${versionId}, ${fileId}, ${versionNumber}, ${input.bytes.length}, ${input.contentType}, 's3',
                 ${hash}, ${input.actorId}, now()) returning id
-      `);
-      if (insertedVersion.rows.length !== 1) throw new Error("Source file version was not recorded; retry the sync");
+      `, "objects");
+      if (insertedVersion.length !== 1) throw new Error("Source file version was not recorded; retry the sync");
       stagedVersionId = versionId;
       stagedFileId = fileId;
       await putS3Blob(versionId, input.bytes, input.contentType);
@@ -150,8 +150,8 @@ export async function persistTransactionFile(input: {
                          source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
                          updated_by = ${input.actorId}, updated_at = now()
          where id = ${fileId} and org_id = ${input.orgId} returning id
-      `);
-      if (written.rows.length !== 1) throw new Error("Imported file was not updated; retry after resolving its identity");
+      `, "objects");
+      if (written.length !== 1) throw new Error("Imported file was not updated; retry after resolving its identity");
       versioned = !created;
     } else {
       const written = await tx.execute<{ id: string }>(sql`
@@ -161,8 +161,8 @@ export async function persistTransactionFile(input: {
                          source_modified_at = coalesce(${sourceModifiedAtIso}, source_modified_at),
                          updated_by = ${input.actorId}, updated_at = now()
          where id = ${fileId} and org_id = ${input.orgId} returning id
-      `);
-      if (written.rows.length !== 1) throw new Error("Imported file was not updated; retry after resolving its identity");
+      `, "objects");
+      if (written.length !== 1) throw new Error("Imported file was not updated; retry after resolving its identity");
     }
 
     let createdLinks = 0;
@@ -173,18 +173,18 @@ export async function persistTransactionFile(input: {
         -- An existing attachment already links this file to this record; count only new associations.
         on conflict (org_id, file_id, target_table, target_id) do nothing
         returning id
-      `));
-      createdLinks += linked.rows.length;
+      `, "objects"));
+      createdLinks += linked.length;
     }
-    if (created || versioned || createdLinks > 0 || (!stale && existing.rows[0]?.name !== filename)) {
+    if (created || versioned || createdLinks > 0 || (!stale && existing[0]?.name !== filename)) {
       const audited = await tx.execute<{ id: string }>(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${input.orgId}, 'files', ${fileId}, ${created ? 'insert' : 'update'}, ${JSON.stringify({
           event: 'transaction_file_synced', sourceSystem: input.sourceSystem, sourceId: input.source.id,
-          before: existing.rows[0] ? { contentHash: existing.rows[0].contentHash, name: existing.rows[0].name } : null,
-          after: { name: stale ? existing.rows[0]?.name : filename, contentHash: stale ? existing.rows[0]?.contentHash : hash, targetTable, targetIds: input.targetIds },
+          before: existing[0] ? { contentHash: existing[0].contentHash, name: existing[0].name } : null,
+          after: { name: stale ? existing[0]?.name : filename, contentHash: stale ? existing[0]?.contentHash : hash, targetTable, targetIds: input.targetIds },
           createdLinks, versioned, reason: targetTable === 'documents' ? 'Synchronize source transaction evidence' : 'Synchronize source record files',
-        })}::jsonb, ${input.actorId}) returning id`);
-      if (audited.rows.length !== 1) throw new Error("Source file change was not audited; retry the sync");
+        })}::jsonb, ${input.actorId}) returning id`, "objects");
+      if (audited.length !== 1) throw new Error("Source file change was not audited; retry the sync");
     }
     return { fileId, created, versioned, unchanged: !created && unchanged, stale, createdLinks };
   }).catch(async (error) => {
@@ -229,8 +229,8 @@ export async function verifyTransactionFiles(
       left join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
      where f.org_id = ${orgId} and f.source_system = ${sourceSystem}
        and f.source_id in (${sourceIdsSql})
-  `));
-  const filesBySourceId = new Map(filesResult.rows.map((row) => [row.sourceId, row]));
+  `, "objects"));
+  const filesBySourceId = new Map(filesResult.map((row) => [row.sourceId, row]));
 
   for (const sourceFileId of sourceFileIds) {
     const row = filesBySourceId.get(sourceFileId);
@@ -265,9 +265,9 @@ export async function verifyTransactionFiles(
         on fa.org_id = f.org_id and fa.file_id = f.id and fa.target_table = ${targetTable}
      where f.org_id = ${orgId} and f.source_system = ${sourceSystem}
        and f.source_id in (${sourceIdsSql})
-  `));
+  `, "objects"));
   const actualLinks = new Set(
-    linksResult.rows.map((row) => `${row.sourceId}\0${row.targetId}`),
+    linksResult.map((row) => `${row.sourceId}\0${row.targetId}`),
   );
   for (const [sourceFileId, documentIds] of fileToDocuments) {
     for (const documentId of documentIds) {

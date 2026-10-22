@@ -48,8 +48,8 @@ export async function resolveRateAdjustmentWindow(input: RateAdjustmentScope): P
   const context = (await db.execute<{ customer_id: string | null; starts_on: string | null; subsidiary_id: string | null }>(sql`
     select p.customer_id, p.starts_on, p.subsidiary_id
       from projects p where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-  `))
-  const ctx = context.rows[0]
+  `, 'objects'))
+  const ctx = context[0]
   if (!ctx) return { versionId: null, effectiveFrom: null, effectiveTo: null, adjustments: [] }
   const projectStart = ctx.starts_on ?? input.onDate
 
@@ -130,9 +130,9 @@ export async function resolveRateAdjustmentWindow(input: RateAdjustmentScope): P
       join item_rate_versions v on v.id = r.version_id and v.org_id = ${input.orgId}
      where a.org_id = ${input.orgId} and a.is_active
      order by a.sort_order, a.code
-  `))
+  `, 'objects'))
 
-  const adjustments = rows.rows.map((r) => ({
+  const adjustments = rows.map((r) => ({
     id: String(r.id),
     code: String(r.code),
     name: String(r.name),
@@ -149,7 +149,7 @@ export async function resolveRateAdjustmentWindow(input: RateAdjustmentScope): P
     sortOrder: Number(r.sort_order ?? 0),
     targets: (r.targets as AdjustmentTarget[]) ?? [],
   }))
-  const first = rows.rows[0]
+  const first = rows[0]
   return {
     versionId: first ? String(first.version_id) : null,
     effectiveFrom: (first?.version_from as string | null) ?? null,
@@ -304,7 +304,7 @@ export async function findLapsedRateCard(input: RateAdjustmentScope): Promise<{ 
       from context c cross join coverage
      where exists (select 1 from selected)
        and coverage.covering_versions = 0
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   return row ? { customerId: row.customer_id, lastEffectiveTo: row.last_effective_to } : null
 }

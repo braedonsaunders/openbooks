@@ -28,14 +28,14 @@ async function glBalance(org: ScratchOrg, accountId: string): Promise<bigint> {
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${org.orgId} and l.account_id = ${accountId}
-       and e.status = 'posted'`));
-  return toUnits(r.rows[0]!.bal);
+       and e.status = 'posted'`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 async function layerTotal(orgId: string, itemId: string): Promise<bigint> {
-  const rows = (await db.execute<{ remaining: string; unit_cost: string }>(sql`
+  const rows = await db.execute<{ remaining: string; unit_cost: string }>(sql`
     select remaining_quantity::text as remaining, unit_cost::text from cost_layers
-     where org_id = ${orgId} and item_id = ${itemId}`)).rows;
+     where org_id = ${orgId} and item_id = ${itemId}`, "objects");
   return rows.reduce((sum, row) => sum + toUnits(extendCost(row.remaining, row.unit_cost)), 0n);
 }
 

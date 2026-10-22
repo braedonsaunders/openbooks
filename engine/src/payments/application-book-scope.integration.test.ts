@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
-
-const migration = readFileSync(new URL("../../../schema/migrations/generated/0101_application_book_scope.sql", import.meta.url), "utf8");
-const baseline = readFileSync(new URL("../../../schema/migrations/generated/0001_baseline.sql", import.meta.url), "utf8");
-const originalFunction = baseline.slice(
-  baseline.indexOf("CREATE FUNCTION public.app_validate_endpoints()"),
-  baseline.indexOf("\nend $$;", baseline.indexOf("CREATE FUNCTION public.app_validate_endpoints()")) + "\nend $$;".length,
-).replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
 
 async function openLine(org: ScratchOrg, actor: string, book: string, amount: "100" | "-100") {
   return withOrgTransaction(org.orgId, async () => {
@@ -47,7 +39,7 @@ function isBookRefusal(error: unknown): boolean {
   return false;
 }
 
-test("application storage isolates books and preserves controlled legacy unapplication", { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
+test("application storage isolates books and keeps cross-book evidence correctable by unapplication", { skip: !process.env.OPENBOOKS_DB_URL }, async (t) => {
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Application reviewer", "admin");
@@ -71,24 +63,24 @@ test("application storage isolates books and preserves controlled legacy unappli
         await withOrgTransaction(org.orgId, () => apply(org, actor, from!, to!));
       }
     });
-    await t.test("forward upgrade preserves evidence and permits unapplying old cross-book mistakes", async () => {
-      // Function replacement and legacy evidence are confined to one rollback:
-      // other sessions never see the old policy, including parallel test files.
-      const rollback = new Error("rollback legacy fixture");
+    await t.test("cross-book evidence admitted by trusted replay is corrected through ordinary unapplication", async () => {
+      // Trusted replay copies pre-validated history without the endpoint
+      // checks; any cross-book row it carries must stay correctable through
+      // the audited unapplication lifecycle. The fixture is confined to one
+      // rollback so no other session observes the invalid evidence.
+      const rollback = new Error("rollback cross-book fixture");
       await assert.rejects(db.transaction(async (tx) => {
-        await tx.execute(sql.raw(originalFunction));
         const legacyId = randomUUID();
+        await tx.execute(sql`set local openbooks.migration = 'on'`);
         await tx.execute(sql`
           insert into applications (id,org_id,from_line_id,to_line_id,amount,source_amount,
             source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,
             settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by)
-          values (${legacyId},${org.orgId},${primarySource},${taxTarget},25,25,25,'CAD',25,'CAD',1,'same_currency','legacy book error',${org.date},${actor})`);
-        await tx.execute(sql.raw(migration));
-        const preserved = await tx.execute<{ count: number }>(sql`select count(*)::int as count from applications where id=${legacyId} and unapplied_at is null`);
-        assert.equal(preserved.rows[0]!.count, 1);
+          values (${legacyId},${org.orgId},${primarySource},${taxTarget},25,25,25,'CAD',25,'CAD',1,'same_currency','cross-book evidence',${org.date},${actor})`);
+        await tx.execute(sql`set local openbooks.migration = 'off'`);
         await tx.execute(sql`update applications set unapplied_at=now(),updated_by=${actor},updated_at=now() where id=${legacyId}`);
-        const corrected = await tx.execute<{ corrected: boolean }>(sql`select unapplied_at is not null as corrected from applications where id=${legacyId}`);
-        assert.equal(corrected.rows[0]!.corrected, true);
+        const corrected = await tx.execute<{ corrected: boolean }>(sql`select unapplied_at is not null as corrected from applications where id=${legacyId}`, "objects");
+        assert.deepEqual(corrected, [{ corrected: true }]);
         throw rollback;
       }), (error) => error === rollback);
     });

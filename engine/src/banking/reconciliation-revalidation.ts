@@ -44,13 +44,13 @@ async function reviewInTransaction(
   await acquireOrgFeatureGateLock(tx,ctx.orgId)
   if (!(await lockAndCheckOrgFeature(tx,ctx.orgId,'banking')))
     throw new ScopeNotFoundError();
-  const active = (await tx.execute(sql`select id from users where org_id=${ctx.orgId} and id=${ctx.userId} and is_active for share`)).rows[0]
+  const active = (await tx.execute(sql`select id from users where org_id=${ctx.orgId} and id=${ctx.userId} and is_active for share`, 'objects'))[0]
   if (!active) throw new ScopeNotFoundError()
   const head = (await tx.execute<{account_id:string;subsidiary_id:string|null}>(sql`
     select r.account_id,a.subsidiary_id from reconciliations r
       join accounts a on a.org_id=r.org_id and a.id=r.account_id
      where r.org_id=${ctx.orgId} and r.id=${id}
-  `)).rows[0]
+  `, 'objects'))[0]
   requireSessionRowInScope(head,ctx.allowedSubsidiaryIds)
   // Existing reconciliation authority still covers review; the narrower
   // duty can certify evidence without conferring other bank mutations.
@@ -67,20 +67,20 @@ async function reviewInTransaction(
            r.signed_off_at::text as signed_off_at,r.signed_off_by,a.subsidiary_id
       from reconciliations r join accounts a on a.org_id=r.org_id and a.id=r.account_id
      where r.org_id=${ctx.orgId} and r.id=${id} for update of r for share of a
-  `)).rows[0]
+  `, 'objects'))[0]
   requireSessionRowInScope(row,ctx.allowedSubsidiaryIds)
   requireSessionRowInScope(row,actualScope)
   if (row.status!=='signed_off' || !row.signed_off_at || !row.signed_off_by || row.evidence_kind!=='statement') {
     throw new BankingError('Review requires an existing statement-backed sign-off. Source-only or unsigned sessions use their ordinary reconciliation workflow.')
   }
-  const affected = (await tx.execute<{subsidiaryId:string|null}>(sql`
+  const affected = await tx.execute<{subsidiaryId:string|null}>(sql`
     select distinct jl.subsidiary_id as "subsidiaryId" from journal_lines jl
       join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
      where jl.org_id=${ctx.orgId} and jl.account_id=${row.account_id} and jl.currency=${row.currency}
       and je.book_id=${bookId} and je.status in ('posted','reversed')
       and je.posting_date<=${row.through_date}::date
       and (je.posted_at>${row.signed_off_at}::timestamptz or jl.reconciled_at is null)
-  `)).rows
+  `, 'objects')
   const entities = [...new Set([row.subsidiary_id,...affected.map(effect=>effect.subsidiaryId)])]
   const periods: {id:string;label:string;subsidiaryId:string|null}[] = []
   for (const entity of entities) {
@@ -98,7 +98,7 @@ async function reviewInTransaction(
   for (const id of [...new Set(periods.map(period=>period.id))].sort()) {
     await tx.execute(sql`select period_posting_fence(${ctx.orgId},${id},${bookId})`)
   }
-  const approval = (await tx.execute<{id:string;changes:{
+  const approval = await tx.execute<{id:string;changes:{
     operation?:unknown;bookId?:unknown;throughDate?:unknown;currency?:unknown;statementBalance?:unknown
     matchedJournalLines?:unknown;excludedStatementLines?:unknown;openingCarriedForward?:unknown;difference?:unknown
   }}>(sql`
@@ -107,7 +107,7 @@ async function reviewInTransaction(
        and al.action='approve' and al.actor_id=${row.signed_off_by}
        and al.at=${row.signed_off_at}::timestamptz and al.changes->>'operation'='sign_off'
      order by al.id limit 2
-  `)).rows
+  `, 'objects')
   const original = approval[0];
   if (approval.length!==1 || !original || original.changes.bookId!==bookId
     || original.changes.throughDate!==row.through_date || original.changes.currency!==row.currency
@@ -127,7 +127,7 @@ async function reviewInTransaction(
       and row_id=${id} and action='update' and changes->>'operation'='revalidate_sign_off'
       and changes->>'originalSignedOffAt'=${row.signed_off_at}
      order by at desc,id desc limit 1
-  `)).rows[0]?.proof
+  `, 'objects'))[0]?.proof
   if (previous?.ledgerDigest===proof.ledgerDigest && previous.completeLedgerDigest!==proof.completeLedgerDigest
     && Array.isArray(previous.outstandingLegalEntityEffects)
     && canonicalJson(previous.outstandingLegalEntityEffects.filter(effect=>toUnits(effect.amount)!==0n))
@@ -144,7 +144,7 @@ async function reviewInTransaction(
     select count(*)::int as count from bank_statement_lines where org_id=${ctx.orgId}
       and account_id=${row.account_id} and currency=${row.currency}
       and posted_on<=${row.through_date}::date and match_status='excluded'
-  `)).rows[0]?.count
+  `, 'objects'))[0]?.count
   const totals = await reconciliationTotals(id,ctx)
   if (proof.journalLines!==original.changes.matchedJournalLines
     || excluded!==original.changes.excludedStatementLines || totals.unmatchedStatementLines!==0
@@ -204,7 +204,7 @@ export async function revalidateReconciliationSignOff(
       const blocked = (await db.execute<{blocked:boolean}>(sql`
         select period_module_blocks_write(${ctx.orgId},${period.id},${review.subject.bookId},
           ${period.subsidiaryId},'banking',false) as blocked
-      `)).rows[0]?.blocked
+      `, 'objects'))[0]?.blocked
       if (blocked!==false) throw new BankingError(`Banking is closed for ${period.label}. Request its controlled reopening before recording the independent review.`)
     }
     if (
@@ -228,7 +228,7 @@ export async function revalidateReconciliationSignOff(
         lateLinesRemainUncleared:review.preview.proof.lateUnclearedJournalLines===review.preview.proof.lateJournalLines,
         clearingStampsUnchanged:true,neutralBasis:review.preview.proof.neutralBasis,originalEvidenceUnchanged:true,
       })}::jsonb,${ctx.userId}) returning id,at::text as at
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!audit) throw new BankingError('The review certificate was not recorded. Nothing changed.')
     return {
       status: "recorded" as const,

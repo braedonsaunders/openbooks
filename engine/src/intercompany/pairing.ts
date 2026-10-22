@@ -96,7 +96,7 @@ export async function intercompanyDocument(
            document_date::text as document_date
       from documents
      where org_id = ${orgId} and id = ${documentId}
-     ${options.lock ? sql`for share` : sql``}`)).rows[0];
+     ${options.lock ? sql`for share` : sql``}`, "objects"))[0];
   if (!doc || !doc.party_id) return null;
   const side = pairSideOf(doc.kind);
   if (!side) return null;
@@ -105,8 +105,8 @@ export async function intercompanyDocument(
       ? sql`select subsidiary_id from intercompany_representing_parties
              where org_id = ${orgId} and customer_party_id = ${doc.party_id} and is_active`
       : sql`select subsidiary_id from intercompany_representing_parties
-             where org_id = ${orgId} and vendor_party_id = ${doc.party_id} and is_active`,
-  )).rows[0];
+             where org_id = ${orgId} and vendor_party_id = ${doc.party_id} and is_active`, "objects",
+  ))[0];
   if (!representation) return null;
   const subsidiaryId = doc.subsidiary_id ?? (await rootSubsidiaryId(runner, orgId));
   return {
@@ -130,7 +130,7 @@ export async function livePairOf(runner: SqlExecutor, orgId: string, documentId:
   const row = (await runner.execute<{ id: string }>(sql`
     select id from intercompany_transaction_pairs
      where org_id = ${orgId} and status = 'linked'
-       and (seller_document_id = ${documentId} or buyer_document_id = ${documentId})`)).rows[0];
+       and (seller_document_id = ${documentId} or buyer_document_id = ${documentId})`, "objects"))[0];
   return row ?? null;
 }
 
@@ -176,13 +176,13 @@ export async function linkIntercompanyDocuments(
       const existing = await livePairOf(db, orgId, doc.documentId);
       if (existing) refuse(`${doc.documentNumber} is already paired; unlink it first`, 409);
     }
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into intercompany_transaction_pairs
         (org_id, pair_kind, seller_subsidiary_id, buyer_subsidiary_id, seller_document_id, buyer_document_id,
          origin, link_reason, linked_by)
       values (${orgId}, ${seller.pairKind}, ${seller.subsidiaryId}, ${buyer.subsidiaryId}, ${seller.documentId},
               ${buyer.documentId}, ${origin}, ${reason}, ${actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(inserted, "the pair could not be recorded");
     const id = inserted[0]!.id;
     await auditIntercompany(db, {
@@ -226,14 +226,14 @@ export async function unlinkIntercompanyPair(
     const pair = (await db.execute<{ status: string; seller_subsidiary_id: string; buyer_subsidiary_id: string }>(sql`
       select status, seller_subsidiary_id, buyer_subsidiary_id from intercompany_transaction_pairs
        where org_id = ${orgId} and id = ${pairId}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!pair || !scopeAllows(allowedSubsidiaryIds, [pair.seller_subsidiary_id, pair.buyer_subsidiary_id])) refuse("pair not found", 404);
     if (pair.status !== "linked") refuse("this pair is already unlinked", 409);
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update intercompany_transaction_pairs
          set status = 'unlinked', unlinked_by = ${actorId}, unlinked_at = now(), unlink_reason = ${reason}, updated_at = now()
        where org_id = ${orgId} and id = ${pairId} and status = 'linked'
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(updated, "the pair changed while it was being unlinked");
     await auditIntercompany(db, {
       orgId,
@@ -253,16 +253,16 @@ async function documentSummaries(
   ids: readonly string[],
 ): Promise<Map<string, PairedDocumentSummary & { kind: string; documentDate: string }>> {
   if (ids.length === 0) return new Map();
-  const docs = (await runner.execute<{
+  const docs = await runner.execute<{
     id: string; document_number: string; status: string; currency: string; total: string; kind: string; document_date: string;
   }>(sql`
     select id, document_number, status, currency, total::text as total, kind, document_date::text as document_date
-      from documents where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`)).rows;
-  const quantities = (await runner.execute<{ document_id: string; item_id: string; quantity: string }>(sql`
+      from documents where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`, "objects");
+  const quantities = await runner.execute<{ document_id: string; item_id: string; quantity: string }>(sql`
     select document_id, item_id, sum(coalesce(quantity, 0))::text as quantity
       from document_lines
      where org_id = ${orgId} and document_id = any(${uuidArray(ids)}::uuid[]) and item_id is not null
-     group by document_id, item_id`)).rows;
+     group by document_id, item_id`, "objects");
   const out = new Map<string, PairedDocumentSummary & { kind: string; documentDate: string }>();
   for (const doc of docs) {
     out.set(doc.id, {
@@ -326,7 +326,7 @@ export async function loadIntercompanyPairDetail(
 ): Promise<PairDetail> {
   if (!isUuid(pairId)) refuse("pair not found", 404);
   const row = (await runner.execute<PairRow>(sql`
-    select ${PAIR_COLUMNS} from intercompany_transaction_pairs where org_id = ${orgId} and id = ${pairId}`)).rows[0];
+    select ${PAIR_COLUMNS} from intercompany_transaction_pairs where org_id = ${orgId} and id = ${pairId}`, "objects"))[0];
   if (!row || !scopeAllows(allowedSubsidiaryIds, [row.seller_subsidiary_id, row.buyer_subsidiary_id])) refuse("pair not found", 404);
   const [detail] = await pairDetails(runner, orgId, [row]);
   if (!detail) refuse("pair not found", 404);
@@ -362,7 +362,7 @@ export async function intercompanyWorkspace(
   const subsidiaryFilter = filter.subsidiaryId && isUuid(filter.subsidiaryId) ? filter.subsidiaryId : null;
   const allowed = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds];
   const root = await rootSubsidiaryId(db, orgId);
-  const unpairedRows = (await db.execute<{
+  const unpairedRows = await db.execute<{
     id: string; document_number: string; kind: string; status: string; subsidiary_id: string; counterparty_id: string;
     party_id: string; party_name: string; currency: string; total: string; document_date: string;
     subsidiary_name: string; counterparty_name: string;
@@ -391,8 +391,8 @@ export async function intercompanyWorkspace(
             or (coalesce(d.subsidiary_id, ${root}::uuid) = any(${uuidArray(allowed ?? [])}::uuid[])
                 and r.subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])))
      order by d.document_date desc, d.document_number desc
-     limit ${WORKSPACE_LIMIT + 1}`)).rows;
-  const pairRows = (await db.execute<PairRow>(sql`
+     limit ${WORKSPACE_LIMIT + 1}`, "objects");
+  const pairRows = await db.execute<PairRow>(sql`
     select ${PAIR_COLUMNS} from intercompany_transaction_pairs
      where org_id = ${orgId} and status = 'linked'
        and (${subsidiaryFilter}::uuid is null
@@ -401,7 +401,7 @@ export async function intercompanyWorkspace(
             or (seller_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])
                 and buyer_subsidiary_id = any(${uuidArray(allowed ?? [])}::uuid[])))
      order by linked_at desc
-     limit ${WORKSPACE_LIMIT + 1}`)).rows;
+     limit ${WORKSPACE_LIMIT + 1}`, "objects");
   const details = await pairDetails(db, orgId, pairRows.slice(0, WORKSPACE_LIMIT));
   return {
     unpaired: unpairedRows.slice(0, WORKSPACE_LIMIT).map((row) => {
@@ -480,8 +480,8 @@ export async function planIntercompanyCounterpart(
     const targetKind = targetSide === "buyer" ? BUYER_KIND[source.pairKind] : SELLER_KIND[source.pairKind];
     const representatives = await loadSubsidiaryRepresentatives(db, orgId, source.subsidiaryId);
     const targetPartyId = targetSide === "buyer" ? representatives?.vendorPartyId : representatives?.customerPartyId;
-    const names = (await db.execute<{ id: string; name: string }>(sql`
-      select id, name from subsidiaries where org_id = ${orgId} and id in (${source.subsidiaryId}, ${source.counterpartySubsidiaryId})`)).rows;
+    const names = await db.execute<{ id: string; name: string }>(sql`
+      select id, name from subsidiaries where org_id = ${orgId} and id in (${source.subsidiaryId}, ${source.counterpartySubsidiaryId})`, "objects");
     const nameOf = (id: string) => names.find((row) => row.id === id)?.name ?? id;
     if (!targetPartyId) {
       refuse(
@@ -491,9 +491,9 @@ export async function planIntercompanyCounterpart(
     const vendorDefault = targetSide === "buyer"
       ? (await db.execute<{ account_id: string | null }>(sql`
           select default_expense_account_id as account_id from vendor_roles
-           where org_id = ${orgId} and party_id = ${targetPartyId}`)).rows[0]?.account_id ?? null
+           where org_id = ${orgId} and party_id = ${targetPartyId}`, "objects"))[0]?.account_id ?? null
       : null;
-    const lines = (await db.execute<{
+    const lines = await db.execute<{
       line_number: number; item_id: string | null; description: string | null; quantity: string | null; unit: string | null;
       unit_price: string | null; amount: string; income_account_id: string | null; expense_account_id: string | null;
     }>(sql`
@@ -503,7 +503,7 @@ export async function planIntercompanyCounterpart(
         from document_lines l
         left join items i on i.org_id = l.org_id and i.id = l.item_id
        where l.org_id = ${orgId} and l.document_id = ${documentId}
-       order by l.line_number`)).rows;
+       order by l.line_number`, "objects");
     if (lines.length === 0) refuse(`${source.documentNumber} has no lines to mirror`);
     const isOrder = source.pairKind === "order";
     const planned: CounterpartLine[] = lines.map((line) => {

@@ -110,7 +110,7 @@ test(
       );
       const statementLineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines where org_id = ${org.orgId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "130" },
         ctx,
@@ -131,7 +131,7 @@ test(
       assert.deepEqual(await markReconciled(recon.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
       const status = (await db.execute<{ status: string }>(sql`
         select status from reconciliations where org_id = ${org.orgId} and id = ${recon.id}
-      `)).rows[0]!.status;
+      `, "objects"))[0]!.status;
       assert.equal(status, "signed_off");
       const runtimeUrl = process.env.OPENBOOKS_RUNTIME_DB_URL ?? process.env.OPENBOOKS_DB_URL;
       const runtime = new Client({ connectionString: runtimeUrl });
@@ -163,7 +163,7 @@ test(
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'reconciliations' and row_id = ${recon.id}
            and action = 'approve'
-      `)).rows[0]!.changes;
+      `, "objects"))[0]!.changes;
       assert.equal(signoff.openingCarriedForward, "100.0000");
       assert.equal(signoff.openingCarryStartDate, org.date);
 
@@ -193,7 +193,7 @@ test(
       const statement2Id = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'second-recon-deposit'
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const recon2 = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: "2026-07-20", statementBalance: "150" },
         ctx,
@@ -217,7 +217,7 @@ test(
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
          where jl.org_id = ${org.orgId} and jl.account_id = ${org.accounts.bank}
            and jl.reconciliation_id is null and je.posting_date < ${org.date}
-      `)).rows[0]!.count;
+      `, "objects"))[0]!.count;
       assert.equal(carriedStillOpen, 1);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -262,7 +262,7 @@ test(
       );
       const statementLineId = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines where org_id = ${org.orgId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "130" },
         ctx,

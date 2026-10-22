@@ -84,7 +84,7 @@ test("getSetupRecord finds a tax code that a 200-row list page omits", async () 
     assert.equal(listed.records.length, 200);
     const listedIds = new Set(listed.records.map((row) => String(row.id)));
     const allIds = (await withOrgContext(orgA.orgId, () => db.execute<{ id: string }>(sql`
-      select id from tax_codes where org_id = ${orgA.orgId}`))).rows.map((row) => row.id);
+      select id from tax_codes where org_id = ${orgA.orgId}`, "objects"))).map((row) => row.id);
     const omitted = allIds.find((id) => !listedIds.has(id));
     assert.ok(omitted, "the 201st tax code must fall off the 200-row list page");
 

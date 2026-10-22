@@ -50,11 +50,9 @@ async function seedPostingScript(orgId: string, date: string): Promise<string> {
 }
 
 async function journalDocCount(orgId: string): Promise<number> {
-  return (
-    await db.execute<{ n: number }>(sql`
+  return (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${orgId} and kind = 'journal'
-    `)
-  ).rows[0]!.n;
+    `, "objects"))[0]!.n;
 }
 
 test("the same occurrence run twice across a clock gap posts exactly one journal", { skip: !DB }, async () => {
@@ -109,12 +107,10 @@ test("the worker links its run row to the occurrence ledger row", { skip: !DB },
       occurrenceRunId,
     });
     assert.equal(outcome.status, "ok", `run errored: ${outcome.abortReason}`);
-    const run = (
-      await db.execute<{ targetId: string | null }>(sql`
+    const run = (await db.execute<{ targetId: string | null }>(sql`
         select target_id as "targetId" from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled'
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     assert.equal(run?.targetId, occurrenceRunId, "recovery matches evidence on this identity");
 
     // Manual runs belong to no occurrence and must never absorb one.
@@ -124,12 +120,10 @@ test("the worker links its run row to the occurrence ledger row", { skip: !DB },
       kind: "scheduled",
     });
     assert.equal(manual.status, "ok", `manual run errored: ${manual.abortReason}`);
-    const unattributed = (
-      await db.execute<{ n: number }>(sql`
+    const unattributed = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled' and target_id is null
-      `)
-    ).rows[0]!.n;
+      `, "objects"))[0]!.n;
     assert.equal(unattributed, 1, "exactly the manual run stays unattributed");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -42,7 +42,7 @@
     "@uiw/react-codemirror": "^4.25.11",
     "@xyflow/react": "^12.8.6",
     "ai": "6.0.226",
-    "drizzle-orm": "1.0.0-rc.4",
+    "drizzle-orm": "1.0.0-rc.5",
     "fflate": "^0.8.3",
     "framer-motion": "^12.42.2",
     "grapesjs": "^0.22.16",

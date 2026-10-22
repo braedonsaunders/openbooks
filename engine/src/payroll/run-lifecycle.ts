@@ -76,8 +76,8 @@ export async function createPayRun(input: {
       select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, subsidiary_id
         from pay_schedules where org_id = ${orgId} and id = ${input.payScheduleId} and is_active
       for update
-    `));
-    const schedule = s.rows[0];
+    `, "objects"));
+    const schedule = s[0];
     if (!schedule) throw new PayrollError("pay schedule not found");
 
     let periodStart = input.periodStart;
@@ -91,8 +91,8 @@ export async function createPayRun(input: {
         select max(period_end) as last_end from pay_runs
          where org_id = ${orgId} and pay_schedule_id = ${schedule.id}
            and run_type = 'regular'
-      `));
-      const next = nextPeriodAfter(schedule, last.rows[0]?.last_end ?? null);
+      `, "objects"));
+      const next = nextPeriodAfter(schedule, last[0]?.last_end ?? null);
       periodStart = next.periodStart;
       periodEnd = next.periodEnd;
     }
@@ -114,9 +114,9 @@ export async function createPayRun(input: {
     // and silently so: every YTD accumulator and every year-end slip keys on
     // `tax_year`.
     const sub = await tx.execute<{ id: string; name: string; country: string | null; currency_code: string | null }>(
-      payScheduleOwnerSql(orgId, sql`${schedule.subsidiary_id}`),
+      payScheduleOwnerSql(orgId, sql`${schedule.subsidiary_id}`), "objects",
     );
-    const subsidiary = sub.rows[0];
+    const subsidiary = sub[0];
     if (!subsidiary) {
       throw new PayrollError(schedule.subsidiary_id
         ? "the pay schedule's subsidiary is missing or inactive"
@@ -165,10 +165,10 @@ export async function createPayRun(input: {
            -- VOIDED regular run go on blocking its own replacement.
            and d.status <> 'voided'
          limit 1
-      `));
-      if (overlap.rows[0]) {
+      `, "objects"));
+      if (overlap[0]) {
         throw new PayrollError(
-          `pay run ${overlap.rows[0].document_number} already covers ${periodStart} to ${periodEnd} — `
+          `pay run ${overlap[0].document_number} already covers ${periodStart} to ${periodEnd} — `
           + "a second regular run would pay the period twice; create a supplemental run for the same period instead",
         );
       }
@@ -230,8 +230,8 @@ export async function createPayRun(input: {
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${schedule.id} and prof.is_active
            and (${schedule.subsidiary_id}::uuid is null
                 or p.subsidiary_id = ${schedule.subsidiary_id}::uuid)
-      `));
-      const roster = new Set(onSchedule.rows.map((row) => row.employee_party_id));
+      `, "objects"));
+      const roster = new Set(onSchedule.map((row) => row.employee_party_id));
       const strangers = scopedEmployeeIds.filter((id) => !roster.has(id));
       if (strangers.length > 0) {
         throw new PayrollError(
@@ -248,8 +248,8 @@ export async function createPayRun(input: {
       do update set next_number = number_sequences.next_number + 1
       where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding
-    `));
-    const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
+    `, "objects"));
+    const number = `${seq[0]!.prefix}${String(seq[0]!.next_number).padStart(seq[0]!.padding, "0")}`;
 
     const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date,
@@ -258,8 +258,8 @@ export async function createPayRun(input: {
               ${runContext.currency}, 'draft',
               ${`${RUN_TYPE_MEMO[runType]} ${periodStart} – ${periodEnd}`}, ${actorId}, ${actorId})
       returning id
-    `));
-    const documentId = doc.rows[0]!.id;
+    `, "objects"));
+    const documentId = doc[0]!.id;
     await tx.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                             pay_date, tax_year, run_type, created_by, updated_by)
@@ -307,14 +307,14 @@ export async function payScheduleSubsidiaryProblem(
     const sub = (await runner.execute<{ id: string }>(sql`
       select id from subsidiaries
        where org_id = ${orgId} and id = ${subsidiaryId}
-         and is_active and not is_elimination`));
-    if (!sub.rows[0]) return "Choose an active subsidiary from this organization";
+         and is_active and not is_elimination`, "objects"));
+    if (!sub[0]) return "Choose an active subsidiary from this organization";
     return null;
   }
   const count = (await runner.execute<{ n: number }>(sql`
     select count(*)::int as n from subsidiaries
-     where org_id = ${orgId} and is_active and not is_elimination`));
-  if ((count.rows[0]?.n ?? 0) > 1) {
+     where org_id = ${orgId} and is_active and not is_elimination`, "objects"));
+  if ((count[0]?.n ?? 0) > 1) {
     return "Choose the subsidiary this schedule pays for — this organization runs more than "
       + "one legal entity, and a pay run freezes its paying entity and currency when it is "
       + "created, so a schedule with no subsidiary pays from the wrong entity";
@@ -375,8 +375,8 @@ export async function attributePayRunEntity(input: {
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     const number = run.document_number;
     if (run.run_status !== "committed") {
@@ -394,7 +394,7 @@ export async function attributePayRunEntity(input: {
     const target = (await tx.execute<{ id: string; name: string | null }>(sql`
       select id::text as id, name from subsidiaries
        where org_id = ${orgId} and id = ${subsidiaryId} and is_active
-    `)).rows[0];
+    `, "objects"))[0];
     if (!target) {
       throw new PayrollError("the subsidiary is missing or inactive — choose an active subsidiary");
     }
@@ -412,8 +412,8 @@ export async function attributePayRunEntity(input: {
          -- Live entries only: reversed lines are no longer books in any entity.
          and e.status = 'posted'
        for update of l
-    `));
-    const foreign = posted.rows.filter((line) => line.subsidiary_id !== subsidiaryId);
+    `, "objects"));
+    const foreign = posted.filter((line) => line.subsidiary_id !== subsidiaryId);
     if (foreign.length > 0) {
       throw new PayrollError(
         `pay run ${number} already posts into another entity — void the run and re-issue it under the right entity`,
@@ -466,8 +466,8 @@ export async function discardPayRun(input: {
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        for update of r, d
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     try {
       const liveScope = await lockActorCommandAuthority(tx, orgId, actorId, run.doc_subsidiary_id, "payroll.run");
@@ -518,14 +518,14 @@ export async function discardPayRun(input: {
       delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     await tx.execute(sql`
       delete from pay_run_bank_files where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-    const deleted = await tx.execute(sql`delete from documents where org_id = ${orgId} and id = ${documentId} returning id`);
-    if (deleted.rows.length !== 1) throw new PayrollError("The draft pay run was not discarded; reload it before retrying");
+    const deleted = await tx.execute(sql`delete from documents where org_id = ${orgId} and id = ${documentId} returning id`, "objects");
+    if (deleted.length !== 1) throw new PayrollError("The draft pay run was not discarded; reload it before retrying");
     const audited = await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'documents', ${documentId}, 'delete',
               ${JSON.stringify({ operation: "discard_pay_run", documentNumber: number, ...(reason === undefined ? {} : { reason }) })}::jsonb,
-              ${actorId}) returning id`);
-    if (audited.rows.length !== 1) throw new PayrollError("The draft pay run discard audit was not recorded");
+              ${actorId}) returning id`, "objects");
+    if (audited.length !== 1) throw new PayrollError("The draft pay run discard audit was not recorded");
     return { documentNumber: number };
   }));
 }
@@ -586,8 +586,8 @@ export async function reresolveRunToSubsidiary(
     id: string; name: string; country: string | null; currency_code: string | null;
   }>(sql`
     select id, name, country, base_currency as currency_code from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`));
-  const subsidiary = sub.rows[0];
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`, "objects"));
+  const subsidiary = sub[0];
   if (!subsidiary) {
     throw new PayrollError(
       "the pay schedule is scoped to a subsidiary that is missing or inactive — choose an "
@@ -606,8 +606,8 @@ export async function reresolveRunToSubsidiary(
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-     for update of r, d`));
-  const run = runRow.rows[0];
+     for update of r, d`, "objects"));
+  const run = runRow[0];
   if (!run) throw new PayrollError("pay run not found");
   if (run.run_status === "committed") {
     throw new PayrollError(
@@ -675,19 +675,19 @@ export async function rescopePayScheduleRuns(
 ): Promise<{ reresolved: number; untouched: number; skipped: RescopedRunSkipped[] }> {
   const { orgId, payScheduleId, actorId } = input;
   const s = (await runner.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${payScheduleId}`));
-  const schedule = s.rows[0];
+    select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${payScheduleId}`, "objects"));
+  const schedule = s[0];
   if (!schedule) throw new PayrollError("pay schedule not found");
   if (!schedule.subsidiary_id) return { reresolved: 0, untouched: 0, skipped: [] };
   const runs = (await runner.execute<{ document_id: string }>(sql`
     select r.document_id::text as document_id
       from pay_runs r
      where r.org_id = ${orgId} and r.pay_schedule_id = ${payScheduleId}
-     order by r.document_id`));
+     order by r.document_id`, "objects"));
   let reresolved = 0;
   let untouched = 0;
   const skipped: RescopedRunSkipped[] = [];
-  for (const candidate of runs.rows) {
+  for (const candidate of runs) {
     // Lock the candidate and recheck its lifecycle UNDER the lock. The
     // snapshot above is only a candidate list: a commit that posts lines and
     // flips the status after the snapshot would otherwise have its stubs
@@ -705,8 +705,8 @@ export async function rescopePayScheduleRuns(
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${candidate.document_id}
-       for update of r, d`));
-    const run = locked.rows[0];
+       for update of r, d`, "objects"));
+    const run = locked[0];
     if (!run) {
       untouched += 1;
       skipped.push({

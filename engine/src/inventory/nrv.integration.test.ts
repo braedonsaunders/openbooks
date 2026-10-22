@@ -37,8 +37,8 @@ test("moving-average NRV recovery excludes consumed loss after replenishment", {
 
 async function glBalance(orgId: string, accountId: string): Promise<bigint> {
   const r = (await db.execute<{ bal: string }>(sql`
-    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`));
-  return toUnits(r.rows[0]!.bal);
+    select coalesce(sum(amount), 0) as bal from journal_lines where org_id = ${orgId} and account_id = ${accountId}`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 type NrvLayerAudit = {
@@ -73,8 +73,8 @@ async function nrvLayerAudit(
        and layer.stock_location_id = ${stockLocationId}
        and layer.subsidiary_id = ${subsidiaryId}
        and layer.remaining_quantity > 0
-     order by layer.received_at, layer.id`);
-  return r.rows;
+     order by layer.received_at, layer.id`, "objects");
+  return r;
 }
 
 function valuesBySource(layers: NrvLayerAudit[]): Map<string, bigint> {
@@ -192,8 +192,8 @@ test("tax-framework edits do not reinterpret the reporting policy or prior NRV e
     assert.equal(await orgReportingFramework(org.orgId), "us_gaap");
     const evidence = await db.execute<{ framework: string }>(sql`
       select framework from inventory_writedowns
-       where id = ${writedown.writedownId} and org_id = ${org.orgId}`);
-    assert.equal(evidence.rows[0]?.framework, "us_gaap");
+       where id = ${writedown.writedownId} and org_id = ${org.orgId}`, "objects");
+    assert.equal(evidence[0]?.framework, "us_gaap");
     await assert.rejects(
       reverseInventoryWritedown(org.orgId, null, {
         itemId: org.items.fifo,
@@ -466,8 +466,8 @@ test("NRV reversal apportions heterogeneous FIFO headroom without crossing any s
       update cost_layers set id = ${earlyFragmentId}
        where org_id = ${org.orgId} and source_movement_id = ${low.movementId}
          and original_quantity = '1.0000' and remaining_quantity = '1.0000'
-       returning id`);
-    assert.equal(fragment.rows.length, 1, "the write-down produced the rounding fragment under test");
+       returning id`, "objects");
+    assert.equal(fragment.length, 1, "the write-down produced the rounding fragment under test");
     // FIFO consumes the adjacent-rate fragments of the earlier $6 receipt.
     await issueInventory(org.orgId, null, {
       itemId: org.items.fifo,
@@ -711,8 +711,8 @@ async function entityGlBalance(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${accountId}
-       and e.subsidiary_id = ${subsidiaryId}`));
-  return toUnits(r.rows[0]!.bal);
+       and e.subsidiary_id = ${subsidiaryId}`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 /** Σ (remaining × unit_cost) across one entity's layers at a position. */
@@ -727,8 +727,8 @@ async function entityLayerValue(
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId}
        and stock_location_id = ${stockLocationId}
-       and subsidiary_id = ${subsidiaryId}`));
-  return toUnits(r.rows[0]!.v);
+       and subsidiary_id = ${subsidiaryId}`, "objects"));
+  return toUnits(r[0]!.v);
 }
 
 /** Every posted entry must balance WITHIN each legal entity. */
@@ -739,8 +739,8 @@ async function assertEntriesBalancedPerEntity(orgId: string): Promise<void> {
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId}
      group by e.subsidiary_id, l.entry_id
-    having sum(l.amount) <> 0`));
-  assert.equal(r.rows.length, 0, "an entry is unbalanced inside a subsidiary");
+    having sum(l.amount) <> 0`, "objects"));
+  assert.equal(r.length, 0, "an entry is unbalanced inside a subsidiary");
 }
 
 test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, async () => {
@@ -789,8 +789,8 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
     // The posting journalized under the requesting owner.
     const je = (await db.execute<{ subsidiary_id: string }>(sql`
       select subsidiary_id::text as "subsidiary_id"
-        from journal_entries where id = ${result.entities[0]!.entryId} and org_id = ${org.orgId}`));
-    assert.equal(je.rows[0]!.subsidiary_id, subA);
+        from journal_entries where id = ${result.entities[0]!.entryId} and org_id = ${org.orgId}`, "objects"));
+    assert.equal(je[0]!.subsidiary_id, subA);
 
     // The unrequested owner's layers and GL are exactly as received.
     assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB), toUnits("100"));
@@ -812,9 +812,9 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
     const evidence = (await db.execute<{ subsidiary_id: string; amount: string; reversed_amount: string }>(sql`
       select subsidiary_id::text as "subsidiary_id", amount::text as amount, reversed_amount::text as "reversed_amount"
         from inventory_writedowns
-       where org_id = ${org.orgId} and kind = 'writedown'`));
+       where org_id = ${org.orgId} and kind = 'writedown'`, "objects"));
     assert.deepEqual(
-      new Map(evidence.rows.map((r) => [r.subsidiary_id, { amount: r.amount, reversed_amount: r.reversed_amount }])),
+      new Map(evidence.map((r) => [r.subsidiary_id, { amount: r.amount, reversed_amount: r.reversed_amount }])),
       new Map([
         [subA, { amount: "10.0000", reversed_amount: "0.0000" }],
         [subB, { amount: "60.0000", reversed_amount: "0.0000" }],
@@ -841,15 +841,15 @@ test("an NRV write-down remeasures only the requesting entity", { skip: !DB }, a
     assert.equal(reversalB.amount, "20.0000");
     const reversalEntry = (await db.execute<{ subsidiary_id: string }>(sql`
       select subsidiary_id::text as "subsidiary_id"
-        from journal_entries where id = ${reversalB.entryId} and org_id = ${org.orgId}`));
-    assert.equal(reversalEntry.rows[0]!.subsidiary_id, subB);
+        from journal_entries where id = ${reversalB.entryId} and org_id = ${org.orgId}`, "objects"));
+    assert.equal(reversalEntry[0]!.subsidiary_id, subB);
     assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subA), toUnits("20"));
     assert.equal(await entityLayerValue(org.orgId, org.items.fifo, org.stockLocationId, subB), toUnits("60"));
     const aStillOpen = (await db.execute<{ reversed_amount: string }>(sql`
       select reversed_amount::text as "reversed_amount"
         from inventory_writedowns
-       where org_id = ${org.orgId} and subsidiary_id = ${subA} and kind = 'writedown'`));
-    assert.equal(aStillOpen.rows[0]!.reversed_amount, "0.0000");
+       where org_id = ${org.orgId} and subsidiary_id = ${subA} and kind = 'writedown'`, "objects"));
+    assert.equal(aStillOpen[0]!.reversed_amount, "0.0000");
 
     // Then A recovers — capped at its own write-down, back to cost exactly.
     const reversalA = await reverseInventoryWritedown(org.orgId, null, {
@@ -888,7 +888,7 @@ test("standard-cost revaluation posts one balanced entry per owning legal entity
 
     // The engine dates the revaluation itself; open a period covering today.
     const calendar = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`));
+      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"));
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -898,7 +898,7 @@ test("standard-cost revaluation posts one balanced entry per owning legal entity
              to_char(current_date, 'YYYY-MM'),
              date_trunc('month', current_date)::date,
              (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
-             false, ${calendar.rows[0]!.id}
+             false, ${calendar[0]!.id}
       on conflict do nothing`);
 
     // Standard cost 3.00: A revalues +8.00 (4 units), B +10.00 (10 units).
@@ -918,9 +918,9 @@ test("standard-cost revaluation posts one balanced entry per owning legal entity
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where e.id in (${entryIds[0]}, ${entryIds[1]}) and e.org_id = ${org.orgId}
-       group by e.subsidiary_id`));
+       group by e.subsidiary_id`, "objects"));
     assert.deepEqual(
-      new Map(posted.rows.map((r) => [r.subsidiary_id, r.delta])),
+      new Map(posted.map((r) => [r.subsidiary_id, r.delta])),
       new Map([
         [subA, "8.0000"],
         [subB, "10.0000"],
@@ -974,8 +974,8 @@ test("NRV refuses negative and non-decimal per-unit rates with the domain error"
     // Refused inputs write nothing: layers and evidence are untouched.
     assert.deepEqual(await getOnHand(org.orgId, position.itemId, position.stockLocationId), before);
     const writedowns = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`));
-    assert.equal(writedowns.rows[0]!.n, 0);
+      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`, "objects"));
+    assert.equal(writedowns[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -1000,8 +1000,8 @@ test("an NRV write-down for an unknown entity is refused by name", { skip: !DB }
     );
     assert.deepEqual(await getOnHand(org.orgId, position.itemId, position.stockLocationId), before);
     const writedowns = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`));
-    assert.equal(writedowns.rows[0]!.n, 0);
+      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`, "objects"));
+    assert.equal(writedowns[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }

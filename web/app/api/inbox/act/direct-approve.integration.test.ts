@@ -40,14 +40,14 @@ async function fixture() {
     values (${org.orgId},${worker},'2026-07-14',8,'submitted',false,'unbilled','actual',${supervisor},${supervisor})`)
   await seedApprovalFlow(org.orgId, {subjectKind:'timesheet_week',mode:'any',preventSelfApproval:false,assignees:[{type:'user',userId:supervisor}]})
   await withOrgTransaction(org.orgId,()=>routeSubjectSubmission({orgId:org.orgId,actorId:supervisor,subjectKind:'timesheet_week',subjectId:week}))
-  const gate = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${week} and status='pending'`)).rows[0]!
+  const gate = (await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${week} and status='pending'`, 'objects'))[0]!
   session.user = { id: supervisor, orgId: org.orgId, name: 'Approver', email: 'approver@example.test', roles: [], isSuperAdmin: false,
     envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: supervisor }
   const act = (itemId: string, actionKey: string) => withOrgContext(org.orgId, () => POST(new Request('http://time.local/api/inbox/act', {
     method: 'POST', body: JSON.stringify({ itemId, actionKey }),
   })))
   const status = async () => (await db.execute<{ status: string }>(sql`
-    select status from time_entries where org_id=${org.orgId} and employee_party_id=${worker}`)).rows.map((row) => row.status)
+    select status from time_entries where org_id=${org.orgId} and employee_party_id=${worker}`, 'objects')).map((row) => row.status)
   const close = async () => { session.user = null; await dropScratchOrgReporting(org.orgId) }
   return { org, supervisor, worker, week, gateId: gate.id, act, status, close }
 }

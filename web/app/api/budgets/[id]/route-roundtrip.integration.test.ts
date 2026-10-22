@@ -128,11 +128,11 @@ test('export then import round-trips null account numbers and null dimension cod
     const result = (await imported.json()) as { revision?: number; imported?: number; valid?: boolean; errors?: unknown[] }
     assert.equal(imported.status, 200, `round-trip import must succeed: ${JSON.stringify(result)}`)
 
-    const lines = (await db.execute<{
+    const lines = await db.execute<{
       account_id: string; period_id: string; subsidiary_id: string; department_id: string | null; amount: string
     }>(sql`
       select account_id, period_id, subsidiary_id, department_id, amount::text as amount
-        from budget_lines where scenario_id = ${targetId} and org_id = ${org.orgId}`)).rows
+        from budget_lines where scenario_id = ${targetId} and org_id = ${org.orgId}`, 'objects')
     assert.equal(lines.length, 1, 'exactly one line lands, on no other cell')
     assert.equal(lines[0]!.account_id, accountId)
     assert.equal(lines[0]!.period_id, org.periodId)

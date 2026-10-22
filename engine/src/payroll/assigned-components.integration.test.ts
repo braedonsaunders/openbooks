@@ -46,9 +46,9 @@ test('a validated fixed deduction prices on the regular run at its override', { 
     const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
     const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.deepEqual(result.errors, []);
-    const lines = (await db.execute<{ code: string; amount: string; kind: string }>(sql`select c.code,l.amount::text as amount,l.kind
+    const lines = await db.execute<{ code: string; amount: string; kind: string }>(sql`select c.code,l.amount::text as amount,l.kind
       from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id join pay_components c on c.org_id=l.org_id and c.id=l.component_id
-      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and c.code='COVERALLS'`)).rows;
+      where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and c.code='COVERALLS'`, "objects");
     assert.equal(lines.length, 1);
     assert.equal(lines[0]!.amount, '25.0000');
     assert.equal(lines[0]!.kind, 'deduction');
@@ -83,7 +83,7 @@ test('effective rate-card assignments price qualifying facts without a recurring
       assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
       const total = (await db.execute<{ amount: string }>(sql`select coalesce(sum(l.amount),0)::numeric(19,4)::text as amount
         from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-        where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${incentive}`)).rows[0]!.amount;
+        where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${incentive}`, "objects"))[0]!.amount;
       assert.equal(total, expected);
       await discardPayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId,
         reason:"Complete the independent rate-card period comparison"});
@@ -96,7 +96,7 @@ test('assignment writes refuse statutory components, overlaps, and Benefits-deli
   try {
     const { partyId, employmentId } = await employee(fx, 'Refused Assignment Employee');
     const statutory = (await db.execute<{ id: string; code: string }>(sql`select id,code from pay_components
-      where org_id=${fx.orgId} and system_key is not null and kind='deduction' limit 1`)).rows[0]!;
+      where org_id=${fx.orgId} and system_key is not null and kind='deduction' limit 1`, "objects"))[0]!;
     await assert.rejects(
       () => validateEmployeePayComponentAssignment(db, fx.orgId, {
         employeePartyId: partyId, employmentId, componentId: statutory.id, value: '5', effectiveFrom: '2026-01-01', effectiveTo: null,

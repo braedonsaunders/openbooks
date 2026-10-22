@@ -1,24 +1,12 @@
 #!/usr/bin/env node
 /**
- * Repo-wide audit: new migrations must not disarm the runner's bounded
- * lock_timeout, and must carry the standard session header. An immutable
- * published file with an incomplete header may receive reviewed settings
- * from the canonical runner, pinned to its exact filename and digest. The
- * same reviewed policy can retain an immutable lock header while the runner
- * strips that setting and imposes its bounded timeout.
+ * Repo-wide audit: every migration carries the standard session header and
+ * leaves lock_timeout to the runner. A migration runs while the previous
+ * release keeps serving traffic; an unbounded lock wait queues every later
+ * query on its table behind it, so the runner imposes and retries its own
+ * bounded lock_timeout.
  *
- * Every migration used to run with `SET lock_timeout = 0` in its own body,
- * each in one transaction while the old stack keeps serving traffic — an
- * ALTER TABLE queued behind a long report query waits forever, and every
- * later query on that table queues behind the migration. Published files
- * (ordinal <= 0251) are immutable, so the runner strips their file-level
- * lock_timeout statements and imposes its own bound instead. That amnesty
- * ends at 0251: any migration with a HIGHER ordinal that sets lock_timeout
- * to 0 (or resets it to the unbounded default) is refused here unless its
- * exact published bytes have reviewed runner-owned timeout handling. New
- * authoring must omit that setting and let the runner's bound govern.
- *
- * A new migration violates when EITHER holds (checked on the body with SQL
+ * A migration violates when EITHER holds (checked on the body with SQL
  * comments stripped, so prose mentioning lock_timeout does not count):
  *
  *   viol1  it sets lock_timeout to 0 in any spelling (`SET lock_timeout = 0`,
@@ -28,13 +16,10 @@
  *          the runner cannot strip an expression the way it strips a SET
  *          statement, so the call would silently override the runner's
  *          bound for every statement after it;
- *   viol2  it omits the standard header: the five session SETs every
- *          migration since the early ordinals carries (statement_timeout,
- *          idle_in_transaction_session_timeout, client_encoding,
- *          standard_conforming_strings, client_min_messages). lock_timeout
- *          is deliberately NOT part of the required header — the runner owns
- *          it now. Only exact published bytes registered in the runner's
- *          shared session-header policy can receive missing settings there.
+ *   viol2  it omits the standard header: the five session SETs
+ *          (statement_timeout, idle_in_transaction_session_timeout,
+ *          client_encoding, standard_conforming_strings, client_min_messages).
+ *          lock_timeout is deliberately NOT part of the header.
  *
  * The file list is derived from schema/migrations/generated (never
  * hand-listed), so a new migration is checked the moment it lands.
@@ -42,13 +27,9 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { publishedMigrationSessionSettings, publishedMigrationUsesRunnerLockTimeout } from "./migration-session-headers.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const GENERATED_DIR = join(ROOT, "schema", "migrations", "generated");
-
-/** Last ordinal covered by the published-files amnesty. */
-export const LOCK_TIMEOUT_AMNESTY_MAX_ORDINAL = 251;
 
 const REQUIRED_HEADER_SETTINGS = [
   "statement_timeout",
@@ -140,20 +121,10 @@ function isZeroTimeout(value) {
 }
 
 export function scanMigrationFile(filename, content) {
-  const ordinal = Number(/^(\d{4})_[a-z0-9_]+\.sql$/.exec(filename)?.[1] ?? NaN);
-  if (!Number.isInteger(ordinal) || ordinal <= LOCK_TIMEOUT_AMNESTY_MAX_ORDINAL) return [];
   const findings = [];
   const code = stripSqlComments(content);
-  let suppliedSettings = [];
-  let runnerOwnsPublishedLockTimeout = false;
-  try {
-    suppliedSettings = publishedMigrationSessionSettings(`generated/${filename}`, content).map(({ name }) => name);
-    runnerOwnsPublishedLockTimeout = publishedMigrationUsesRunnerLockTimeout(`generated/${filename}`, content);
-  } catch (error) {
-    findings.push({ file: filename, kind: "published-content-changed", value: error.message });
-  }
   const setting = lockTimeoutSettings(code).find(isZeroTimeout) ?? null;
-  if (!runnerOwnsPublishedLockTimeout && (setting !== null || /reset\s+lock_timeout\s*;?/i.test(code))) {
+  if (setting !== null || /reset\s+lock_timeout\s*;?/i.test(code)) {
     findings.push({
       file: filename,
       kind: "lock_timeout-zero",
@@ -165,8 +136,7 @@ export function scanMigrationFile(filename, content) {
     findings.push({ file: filename, kind: "lock_timeout-set_config", value: setConfig });
   }
   const missing = REQUIRED_HEADER_SETTINGS.filter(
-    (name) => !suppliedSettings.includes(name)
-      && !new RegExp(`(^|\\s)SET\\s+(?:(?:SESSION|LOCAL)\\s+)?${name}\\b`, "i").test(code),
+    (name) => !new RegExp(`(^|\\s)SET\\s+(?:(?:SESSION|LOCAL)\\s+)?${name}\\b`, "i").test(code),
   );
   for (const name of missing) {
     findings.push({ file: filename, kind: "header-missing", value: `SET ${name}` });

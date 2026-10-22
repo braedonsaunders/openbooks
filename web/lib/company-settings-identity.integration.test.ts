@@ -19,7 +19,7 @@ const skip = !process.env.OPENBOOKS_DB_URL
 async function orgRow(orgId: string) {
   return withBypassContext(async () =>
     (await db.execute<{ tax_ids: Record<string, string>; settings: Record<string, unknown> }>(sql`
-      select tax_ids, settings from orgs where id = ${orgId}`)).rows[0]!,
+      select tax_ids, settings from orgs where id = ${orgId}`, 'objects'))[0]!,
   )
 }
 
@@ -49,8 +49,8 @@ test('legal identity persists canonically, reads back for the assistant, and is 
     assert.equal((company.address as Record<string, string>).city, 'Austin')
 
     const audits = await withBypassContext(async () =>
-      (await db.execute<{ changes: Record<string, unknown> }>(sql`
-        select changes from audit_log where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`)).rows,
+      await db.execute<{ changes: Record<string, unknown> }>(sql`
+        select changes from audit_log where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`, 'objects'),
     )
     assert.ok(
       audits.some((entry) => JSON.stringify(entry.changes.taxIds) === JSON.stringify([{}, { us_ein: '12-3456789' }])),

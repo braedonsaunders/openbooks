@@ -25,7 +25,7 @@ test("concurrent bank-profile secret rotations preserve both fields and audit th
     await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
     const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'WIRE'
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
       name: "Rotation profile",
       bankAccountId: org.accounts.bank,
@@ -49,18 +49,18 @@ test("concurrent bank-profile secret rotations preserve both fields and audit th
     const stored = (await withOrgContext(org.orgId, () => db.execute<{ originator_secrets_encrypted: string | null; name: string }>(sql`
       select originator_secrets_encrypted, name from payment_bank_profiles
        where id = ${profile.id} and org_id = ${org.orgId}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     assert.deepEqual(unsealJson(stored.originator_secrets_encrypted!, { orgId: org.orgId, purpose: "payment.originator.secrets" }), {
       initial: "present",
       credentialA: "value-a",
       credentialB: "value-b",
     });
 
-    const audit = (await withOrgContext(org.orgId, () => db.execute<{ changes: { before: { name: string }; after: { name: string } } }>(sql`
+    const audit = await withOrgContext(org.orgId, () => db.execute<{ changes: { before: { name: string }; after: { name: string } } }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'payment_bank_profiles'
          and row_id = ${profile.id} and action = 'update'
-    `))).rows;
+    `, "objects"));
     assert.equal(audit.length, 2, "each rotation must have an audit record");
     assert.ok(
       audit.some(({ changes }) => changes.before.name === "Rotation A" || changes.before.name === "Rotation B"),
@@ -84,7 +84,7 @@ test("CPA profile creation and secret updates refuse malformed transaction-code 
     await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
     const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'CPA005'
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     const profileInput = {
       name: "CPA transaction code profile",
       bankAccountId: org.accounts.bank,
@@ -112,7 +112,7 @@ test("CPA profile creation and secret updates refuse malformed transaction-code 
     const stored = (await withOrgContext(org.orgId, () => db.execute<{ originator_secrets_encrypted: string | null }>(sql`
       select originator_secrets_encrypted from payment_bank_profiles
        where id = ${profile.id} and org_id = ${org.orgId}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     assert.equal(stored.originator_secrets_encrypted == null ? undefined : unsealJson<{ transactionCode?: string }>(stored.originator_secrets_encrypted, { orgId: org.orgId, purpose: "payment.originator.secrets" }).transactionCode, "460");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -131,7 +131,7 @@ test("NACHA profile saves refuse incomplete originator configuration by field", 
     await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
     const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from payment_formats where org_id = ${org.orgId} and code = 'NACHA-CREDIT'
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     const profileInput = {
       name: "NACHA originator profile",
       bankAccountId: org.accounts.bank,
@@ -264,7 +264,7 @@ test(
             (select count(*)::int from payment_settlements where payment_instruction_id = ${returnedInstructionId}) as returned_settlement_count,
             (select count(*)::int from payment_settlements where payment_instruction_id = ${reversedInstructionId}) as reversed_settlement_count,
             (select status from payment_runs where id = ${runId}) as run_status
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.deepEqual(afterRefusals, {
         returned_status: "returned",
@@ -294,7 +294,7 @@ test(
             (select status from payment_instructions where id = ${sentInstructionId}) as instruction_status,
             (select status from payment_settlements where payment_instruction_id = ${sentInstructionId}) as settlement_status,
             (select status from payment_runs where id = ${runId}) as run_status
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.deepEqual(afterHappyPath, {
         instruction_status: "settled",
@@ -378,7 +378,7 @@ test(
           select
             (select status from payment_instructions where id = ${instructionId}) as instruction_status,
             (select count(*)::int from payment_settlements where payment_instruction_id = ${instructionId}) as settlements
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.deepEqual(state, { instruction_status: "sent", settlements: 0 });
     } finally {
@@ -441,12 +441,12 @@ test(
       await settle(orgB, actorB, instructionB, "ref-B");
 
       const rows = await withBypass(async () =>
-        (await db.execute<{ orgId: string; reference: string | null; count: number }>(sql`
+        await db.execute<{ orgId: string; reference: string | null; count: number }>(sql`
           select org_id as "orgId", bank_reference as "reference", count(*)::int as "count"
             from payment_settlements
            where payment_instruction_id in (${instructionA}, ${instructionB})
            group by org_id, bank_reference
-           order by org_id`)).rows,
+           order by org_id`, "objects"),
       );
       const sortedRows = [...rows].sort((a, b) => a.orgId.localeCompare(b.orgId));
       const expectedRows = [
@@ -477,7 +477,7 @@ test(
       await ensureBuiltInPaymentFormats(orgB.orgId, null);
       const count = async (orgId: string) =>
         (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from payment_formats where org_id = ${orgId}`)).rows[0]!.n;
+          select count(*)::int as n from payment_formats where org_id = ${orgId}`, "objects"))[0]!.n;
       const first = await count(orgA.orgId);
       assert.ok(first > 0, "built-ins land on first ensure");
       await ensureBuiltInPaymentFormats(orgA.orgId, null);

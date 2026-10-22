@@ -33,17 +33,17 @@ async function stockedOrg(): Promise<ScratchOrg> {
 
 async function movementCount(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from inventory_movements where org_id = ${orgId}`)).rows[0]!.n;
+    select count(*)::int as n from inventory_movements where org_id = ${orgId}`, "objects"))[0]!.n;
 }
 
 /** Every account touched by the build must net to exactly zero after reversal. */
 async function glNetsToZero(orgId: string, entryIds: (string | null)[]): Promise<void> {
   const ids = entryIds.filter((id): id is string => id !== null);
-  const rows = (await db.execute<{ account: string; net: string }>(sql`
+  const rows = await db.execute<{ account: string; net: string }>(sql`
     select account_id::text as account, sum(amount)::text as net
       from journal_lines
      where org_id = ${orgId} and entry_id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
-     group by account_id`)).rows;
+     group by account_id`, "objects");
   assert.ok(rows.length > 0, "the build and its reversal must leave journal evidence");
   for (const row of rows) {
     assert.equal(row.net, "0.0000", `account ${row.account} must net to zero across build + reversal`);
@@ -114,7 +114,7 @@ test("reversing from a consume leg reverses the whole operation", { skip: !DB },
     });
     const consume = (await db.execute<{ id: string }>(sql`
       select id from inventory_movements
-       where org_id = ${org.orgId} and journal_entry_id = ${built.entryId} and kind = 'assembly_consume'`)).rows[0]!.id;
+       where org_id = ${org.orgId} and journal_entry_id = ${built.entryId} and kind = 'assembly_consume'`, "objects"))[0]!.id;
     const reversed = await reverseAssemblyBuild(org.orgId, randomUUID(), {
       movementId: consume,
       reversalDate: org.date,

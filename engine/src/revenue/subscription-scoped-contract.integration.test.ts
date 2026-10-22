@@ -55,7 +55,7 @@ test("subscription-scoped contract reads the plan currency", { skip: !DB }, asyn
       assert.equal(first.created, true);
       const contract = (await db.execute<{ scope: string; currency: string; subscription_id: string }>(sql`
         select scope, currency, subscription_id from revenue_contracts
-         where id = ${first.id} and org_id = ${org.orgId}`)).rows[0];
+         where id = ${first.id} and org_id = ${org.orgId}`, "objects"))[0];
       assert.equal(contract?.scope, "subscription");
       assert.equal(contract?.currency, "EUR");
       assert.equal(contract?.subscription_id, eurSubscription);

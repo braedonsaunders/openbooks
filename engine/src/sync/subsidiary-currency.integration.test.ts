@@ -25,9 +25,9 @@ import { stubMigrationSource as source } from "./integration-seeds.ts";
 const DB = !!env.OPENBOOKS_DB_URL;
 
 async function currencyOf(orgId: string, ref: string): Promise<string | null> {
-  const [row] = (await withOrg(orgId, () => db.execute<{ base_currency: string }>(sql`
+  const [row] = await withOrg(orgId, () => db.execute<{ base_currency: string }>(sql`
     select base_currency from subsidiaries
-     where org_id = ${orgId} and custom->>'migrationTest' = ${ref}`))).rows;
+     where org_id = ${orgId} and custom->>'migrationTest' = ${ref}`, "objects"));
   return row?.base_currency ?? null;
 }
 
@@ -66,9 +66,9 @@ test(
         /SUB-FX.*CAD → USD/,
         "the held change names the source ref and both currencies",
       );
-      const [renamed] = (await withOrg(org.orgId, () => db.execute<{ name: string }>(sql`
+      const [renamed] = await withOrg(org.orgId, () => db.execute<{ name: string }>(sql`
         select name from subsidiaries
-         where org_id = ${org.orgId} and custom->>'migrationTest' = 'SUB-FX'`))).rows;
+         where org_id = ${org.orgId} and custom->>'migrationTest' = 'SUB-FX'`, "objects"));
       assert.equal(
         renamed?.name,
         "Fx Sub Renamed",

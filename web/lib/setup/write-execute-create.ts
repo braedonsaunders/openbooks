@@ -201,9 +201,9 @@ export async function createSetupRecord(
       : sql``
     const dup = ((await db.execute(sql`
       select id from ${sql.raw(entity.table)}
-       where ${sql.raw(col)} = ${val}${orgFilter}${effectiveFilter} limit 1`)))
-    if (dup.rows.length > 0
-      && !(dup.rows as { id: unknown }[]).some((row) => String(row.id) === requestId)) {
+       where ${sql.raw(col)} = ${val}${orgFilter}${effectiveFilter} limit 1`, 'objects')))
+    if (dup.length > 0
+      && !(dup as { id: unknown }[]).some((row) => String(row.id) === requestId)) {
       // Filing accounts share one account-number namespace across programs,
       // entities and archived rows: name the row the server sees, or the
       // operator stares at a list that does not show it.
@@ -344,27 +344,27 @@ export async function createSetupRecord(
         if (claim.kind === 'replay') return claim.id
         const effectiveFrom = String(body.effectiveFrom)
         const prior = coerceBoolean(body.isActive)
-          ? ((await tx.execute(sql`
+          ? await tx.execute(sql`
               select * from pay_derived_rules
                where org_id = ${orgId} and code = ${String(body.code)}
                  and is_active
                  and effective_from < ${effectiveFrom}::date
                  and (effective_to is null or effective_to >= ${effectiveFrom}::date)
-               for update`)))
-          : { rows: [] as { id: string }[] }
-        for (const row of prior.rows) {
+               for update`, 'objects')
+          : []
+        for (const row of prior) {
           const closed = ((await tx.execute(sql`
             update pay_derived_rules
                set effective_to = (${effectiveFrom}::date - 1),
                    updated_at = now(), updated_by = ${actorId}
              where id = ${String(row.id)} and org_id = ${orgId}
-            returning *`)))
+            returning *`, 'objects')))
           await audit({
             orgId,
             table: entity.table,
             rowId: String(row.id),
             action: 'update',
-            changes: { before: row, after: closed.rows[0] },
+            changes: { before: row, after: closed[0] },
             actorId,
           }, tx)
         }
@@ -372,8 +372,8 @@ export async function createSetupRecord(
           insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
           -- A concurrent create claim is verified against its audited payload below before replaying.
           on conflict (id) do nothing
-          returning ${sql.raw(idColumn(entity))} as id`)))
-        const insertedRow = inserted.rows[0]
+          returning ${sql.raw(idColumn(entity))} as id`, 'objects')))
+        const insertedRow = inserted[0]
         if (!insertedRow) {
           // Lost the same-key insert race: the winner's row (and its insert
           // audit) is visible now, so re-resolve the claim in this same
@@ -445,8 +445,8 @@ export async function createSetupRecord(
         insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
         -- A concurrent create claim is verified against its audited payload below before replaying.
         on conflict (id) do nothing
-        returning ${sql.raw(idColumn(entity))} as id${entity.key === 'pay-components' ? sql`, vacationable` : sql``}`)))
-      const insertedRow = inserted.rows[0]
+        returning ${sql.raw(idColumn(entity))} as id${entity.key === 'pay-components' ? sql`, vacationable` : sql``}`, 'objects')))
+      const insertedRow = inserted[0]
       if (!insertedRow) {
         // Lost the same-key insert race: re-resolve the claim in this same
         // transaction — replay, or refuse.

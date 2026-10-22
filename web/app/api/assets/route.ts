@@ -163,9 +163,9 @@ export const POST = defineRoute({
     const category = await db.execute<{ id: string }>(sql`
     select id from asset_categories
      where org_id = ${user.orgId} and is_active and id = ${categoryId}
-  `);
+  `, "objects");
     if (
-      !category.rows.some((row) => String(row.id).toLowerCase() === categoryId)
+      !category.some((row) => String(row.id).toLowerCase() === categoryId)
     ) {
       return bad("invalid_category", "categoryId");
     }
@@ -185,15 +185,15 @@ export const POST = defineRoute({
      where org_id = ${user.orgId} and is_active and not is_elimination
        ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
      order by (parent_id is null) desc, name
-  `);
+  `, "objects");
     const subsidiaryId = suppliedSubsidiaryId
-      ? subsidiaries.rows.some(
+      ? subsidiaries.some(
           (row) => String(row.id).toLowerCase() === suppliedSubsidiaryId,
         )
         ? suppliedSubsidiaryId
         : null
-      : subsidiaries.rows[0]
-        ? String(subsidiaries.rows[0].id)
+      : subsidiaries[0]
+        ? String(subsidiaries[0].id)
         : null;
     if (suppliedSubsidiaryId && !subsidiaryId) {
       return bad("invalid_subsidiary", "subsidiaryId");
@@ -376,8 +376,8 @@ export const POST = defineRoute({
               const nextRes = await tx.execute<{ n: number }>(sql`
               select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
                 from fixed_assets
-               where org_id = ${user.orgId} and asset_number ~ '^FA-\\d+$'`);
-              assetNumber = `FA-${String(Number(nextRes.rows[0]?.n ?? 1)).padStart(4, "0")}`;
+               where org_id = ${user.orgId} and asset_number ~ '^FA-\\d+$'`, "objects");
+              assetNumber = `FA-${String(Number(nextRes[0]?.n ?? 1)).padStart(4, "0")}`;
             }
             // Another transaction may claim this key after the preflight read;
             // a missing RETURNING row below is resolved from the immutable
@@ -402,8 +402,8 @@ export const POST = defineRoute({
                ${user.id}, ${user.id})
             -- A retry is accepted only after the existing audited create payload is verified below.
             on conflict (id) do nothing
-            returning id`);
-            if (!inserted.rows[0]) {
+            returning id`, "objects");
+            if (!inserted[0]) {
               const replay = await resolveIdempotentReplay(tx, {
                 orgId: user.orgId,
                 table: "fixed_assets",

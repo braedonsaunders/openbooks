@@ -27,13 +27,13 @@ export class BillingReleaseRefusedError extends Error {}
  * be created between this check and the release.
  */
 async function assertCustomerDrawReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
-  const draws = (await tx.execute<{ project_id: string; application_number: number }>(sql`
+  const draws = await tx.execute<{ project_id: string; application_number: number }>(sql`
     select project_id, application_number from pay_applications
      where org_id = ${orgId} and invoice_document_id = ${documentId}
        and kind = 'progress' and status in ('invoiced', 'posted')
      order by application_number
      for update
-  `)).rows;
+  `, "objects");
   for (const draw of draws) {
     await tx.execute(sql`select 1 from projects where org_id = ${orgId} and id = ${draw.project_id} for update`);
     const later = await laterProgressApplicationNumbers(tx, orgId, draw.project_id, Number(draw.application_number));
@@ -49,12 +49,12 @@ async function assertCustomerDrawReleasable(tx: SqlExecutor, orgId: string, docu
  * approved while a later non-void draw on the same subcontract carries its
  * earned-to-date forward. Draw rows, then the subcontract row. */
 async function assertVendorDrawReleasable(tx: SqlExecutor, orgId: string, documentId: string): Promise<void> {
-  const draws = (await tx.execute<{ subcontract_id: string; application_number: number }>(sql`
+  const draws = await tx.execute<{ subcontract_id: string; application_number: number }>(sql`
     select subcontract_id, application_number from vendor_pay_applications
      where org_id = ${orgId} and vendor_bill_document_id = ${documentId} and status = 'billed'
      order by application_number
      for update
-  `)).rows;
+  `, "objects");
   for (const draw of draws) {
     await tx.execute(sql`select 1 from subcontracts where org_id = ${orgId} and id = ${draw.subcontract_id} for update`);
     const later = await laterVendorApplicationNumbers(tx, orgId, draw.subcontract_id, Number(draw.application_number));
@@ -97,7 +97,7 @@ export async function liveInvoicesBillingDocument(
        -- Live entries only: a voided invoice has released what it billed.
        and invoice.status <> 'voided'
      order by invoice.document_number
-  `)).rows.map((row) => row.document_number);
+  `, "objects")).map((row) => row.document_number);
 }
 
 /** The operator remedy for voiding a cost that an invoice still bills. */
@@ -134,13 +134,13 @@ export async function releaseBillingProvenance(
       from res_retainers
      where org_id = ${orgId} and invoice_document_id = ${documentId}
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (retainer) {
     const postedDrawdown = (await tx.execute<{ id: string }>(sql`
       select id from res_retainer_drawdowns
        where org_id = ${orgId} and retainer_id = ${retainer.id} and state = 'posted'
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (postedDrawdown) throw new Error("retainer invoice provenance cannot be released while a drawdown is posted");
     const nextState = retainer.state === "active" ? "draft" : retainer.state;
     const released = await tx.execute<{ id: string }>(sql`
@@ -191,8 +191,8 @@ export async function releaseBillingProvenance(
   `);
   const lineRes = (await tx.execute<{ id: string }>(sql`
     select id from document_lines where document_id = ${documentId} and org_id = ${orgId}
-  `));
-  const lineIds = lineRes.rows.map((r) => r.id);
+  `, "objects"));
+  const lineIds = lineRes.map((r) => r.id);
   if (lineIds.length > 0) {
     const idArr = `{${lineIds.join(",")}}`;
     await tx.execute(sql`
@@ -353,7 +353,7 @@ export async function releaseVendorRetainageProvenance(
 ): Promise<void> {
   const guarded = (await tx.execute<{ kind: string; status: string }>(sql`
     select kind, status from documents where org_id = ${orgId} and id = ${documentId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!guarded || guarded.kind !== "vendor_bill" || guarded.status !== "draft") {
     throw new Error("a vendor retainage release reservation can only be released for a draft vendor bill");
   }
@@ -406,13 +406,13 @@ export async function releaseConvertedOrderQuantities(
 ): Promise<void> {
   const child = (await tx.execute<{ id: string; kind: string }>(sql`
     select id, kind from documents where org_id = ${orgId} and id = ${childDocumentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!child) return;
-  const lines = (await tx.execute<{ id: string; quantity: string; custom: unknown }>(sql`
+  const lines = await tx.execute<{ id: string; quantity: string; custom: unknown }>(sql`
     select id, quantity::text, custom from document_lines
      where org_id = ${orgId} and document_id = ${child.id}
      order by line_number
-  `)).rows;
+  `, "objects");
 
   // direction 'down' walks back an advance that added to the billed counter
   // (a conversion cover or a bill); 'up' walks back one that subtracted (a
@@ -472,12 +472,12 @@ export async function releaseConvertedOrderQuantities(
   // the lines and waits on the header (SQLSTATE 40P01). Nothing read
   // here is trusted; every property is re-validated under the locks
   // below.
-  const discovered = (await tx.execute<{ id: string; document_id: string }>(sql`
+  const discovered = await tx.execute<{ id: string; document_id: string }>(sql`
     select l.id, l.document_id
       from document_lines l
       join documents d on d.id = l.document_id and d.org_id = l.org_id
      where l.org_id = ${orgId} and l.id = any(${idArr}::uuid[])
-  `)).rows;
+  `, "objects");
   if (discovered.length !== byLine.size) {
     throw new Error("a source order line for this document is missing — reconcile it before voiding or deleting");
   }
@@ -486,12 +486,12 @@ export async function releaseConvertedOrderQuantities(
   // Lock the source headers in canonical id order before their lines (the
   // order-cycle lock order), then restore each line under the same ceiling
   // rules the advance faced.
-  const headers = (await tx.execute<{ id: string; status: string; document_number: string }>(sql`
+  const headers = await tx.execute<{ id: string; status: string; document_number: string }>(sql`
     select id, status, document_number from documents
      where org_id = ${orgId} and id = any(${`{${candidateDocIds.join(",")}}`}::uuid[])
      order by id
      for update
-  `)).rows;
+  `, "objects");
   if (headers.length !== candidateDocIds.length) {
     throw new Error("a source order for this document is missing — reconcile it before voiding or deleting");
   }
@@ -499,7 +499,7 @@ export async function releaseConvertedOrderQuantities(
   // The discovery above ran unlocked, so a line that moved to an order
   // whose header is not held here refuses instead of restoring against
   // an unlocked source.
-  const sources = (await tx.execute<{
+  const sources = await tx.execute<{
     id: string; document_id: string; document_kind: string; document_status: string;
     quantity: string; quantity_billed: string; quantity_fulfilled: string;
     item_id: string | null; item_kind: string | null;
@@ -513,7 +513,7 @@ export async function releaseConvertedOrderQuantities(
      where l.org_id = ${orgId} and l.id = any(${idArr}::uuid[])
      order by l.document_id, l.id
      for update of l
-  `)).rows;
+  `, "objects");
   if (sources.length !== byLine.size) {
     throw new Error("a source order line for this document is missing — reconcile it before voiding or deleting");
   }
@@ -541,7 +541,7 @@ export async function releaseConvertedOrderQuantities(
       select link_type from document_links
        where org_id = ${orgId} and from_document_id = ${sourceDocId} and to_document_id = ${child.id}
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     const edgeOk = edge && (edge.link_type === "bills" || edge.link_type === "created_from");
     const apOnly = sources
       .filter((source) => source.document_id === sourceDocId)
@@ -576,7 +576,7 @@ export async function releaseConvertedOrderQuantities(
         update documents set status = 'draft', updated_at = now(), updated_by = ${audit.actorId}
          where id = ${header.id} and org_id = ${orgId} and status = 'approved'
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!reopened) throw new Error("a source order changed while it was being voided or deleted");
     }
     for (const source of sources.filter((row) => row.document_id === header.id)) {
@@ -596,7 +596,7 @@ export async function releaseConvertedOrderQuantities(
              ${restore.direction === "down" ? sql`` : sql`and ${step} <= quantity`}
              ${restore.direction === "up" && receiptGoverned ? sql`and ${step} <= quantity_fulfilled` : sql``}
           returning id
-        `)).rows[0];
+        `, "objects"))[0];
         if (!restored) {
           throw new Error(
             `reversing this document would overdraw the billed quantity on ${header.document_number} — reverse the later billing documents first`,
@@ -609,7 +609,7 @@ export async function releaseConvertedOrderQuantities(
         update documents set status = 'approved', updated_at = now(), updated_by = ${audit.actorId}
          where id = ${header.id} and org_id = ${orgId} and status = 'draft'
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!restored) throw new Error("a source order changed while it was being voided or deleted");
     }
   }

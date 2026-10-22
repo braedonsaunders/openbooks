@@ -154,10 +154,10 @@ export async function loadRequestForUpdate(
   orgId: string,
   requestId: string,
 ): Promise<RequestRow> {
-  const rows = (await exec.execute<RequestRow>(sql`
+  const rows = await exec.execute<RequestRow>(sql`
     select ${REQUEST_COLUMNS} from hrm_employment_change_requests
      where org_id = ${orgId} and id = ${requestId} for update
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement — never report
@@ -187,7 +187,7 @@ export async function liveEmploymentVersions(
   orgId: string,
   employmentId: string,
 ): Promise<LiveEmploymentVersion[]> {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     version_no: number;
     status: string;
@@ -203,7 +203,7 @@ export async function liveEmploymentVersions(
      where org_id = ${orgId} and employment_id = ${employmentId}
        and recorded_until is null
      order by version_no
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -212,10 +212,10 @@ export async function employmentVersionCount(
   orgId: string,
   employmentId: string,
 ): Promise<number> {
-  const rows = (await exec.execute<{ n: number }>(sql`
+  const rows = await exec.execute<{ n: number }>(sql`
     select count(*)::int as n from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
-  `)).rows;
+  `, "objects");
   return rows[0]?.n ?? 0;
 }
 
@@ -296,7 +296,7 @@ export async function assertKindPreconditions(
     if (payload.initialAssignment?.positionId) {
       const position = (await exec.execute(sql`
         select 1 as one from positions where org_id = ${orgId} and id = ${payload.initialAssignment!.positionId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!position) {
         throw new HrmChangeRequestError(
           "INVALID_PAYLOAD",
@@ -332,7 +332,7 @@ export async function assertKindPreconditions(
   if (payload.kind === "position_assignment" && payload.positionId !== null) {
     const position = (await exec.execute(sql`
       select 1 as one from positions where org_id = ${orgId} and id = ${payload.positionId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!position) {
       throw new HrmChangeRequestError(
         "INVALID_PAYLOAD",
@@ -358,14 +358,14 @@ export async function decidedGatesOfRequest(
   orgId: string,
   requestId: string,
 ): Promise<DecidedGate[]> {
-  const rows = (await exec.execute<DecidedGate>(sql`
+  const rows = await exec.execute<DecidedGate>(sql`
     select id as gate_id, status as decision, decided_by, on_behalf_of_user_id,
            decided_at, comment
       from flow_gates
      where org_id = ${orgId} and subject_kind = ${HRM_CHANGE_REQUEST_SUBJECT_KIND} and subject_id = ${requestId}
        and status in ('approved', 'rejected')
      order by decided_at, id
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -432,7 +432,7 @@ export async function assertEmploymentStatusPayrollWindow(
 ): Promise<void> {
   const subject = (await exec.execute<{ worker_party_id: string; employer_subsidiary_id: string }>(sql`
     select worker_party_id,employer_subsidiary_id from worker_employments where org_id=${orgId} and id=${employmentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!subject) throw new HrmChangeRequestError("NOT_FOUND", "Select a saved employment in this organization.");
   // Payroll calculation and commit take this employee-wide fence before
   // their year locks, so a committed-period check cannot race a commit.
@@ -448,7 +448,7 @@ export async function assertEmploymentStatusPayrollWindow(
       and (((${end}::date is null or r.period_start<${end}::date) and r.period_end>=${from}::date)
         or (r.pay_date>=${from}::date and (${end}::date is null or r.pay_date<${end}::date)))
     limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (committed) {
     throw new HrmChangeRequestError("REFUSED", `Payroll dated ${committed.pay_date} is committed for this employment window; preserve its status evidence and use a governed correction.`);
   }

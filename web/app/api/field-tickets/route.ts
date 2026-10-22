@@ -72,8 +72,8 @@ export const GET = defineRoute({
       left join parties fm on fm.id = ft.foreman_party_id and fm.org_id = ft.org_id
      where d.org_id = ${orgId} and d.kind = 'field_ticket'${filters}
      order by d.document_date desc, d.created_at desc
-     limit 200`))
-  return NextResponse.json({ tickets: rows.rows })
+     limit 200`, 'objects'))
+  return NextResponse.json({ tickets: rows })
   },
 })
 
@@ -98,11 +98,11 @@ export const POST = defineRoute({
       select p.subsidiary_id as "subsidiaryId"
         from projects p
        where p.id = ${body.projectId} and p.org_id = ${orgId} and p.is_active
-    `))
-    if (!scopedProject.rows[0]) return notFound("record")
+    `, 'objects'))
+    if (!scopedProject[0]) return notFound("record")
     const projectDenied = guardSubsidiaryScope(
       gate.allowedSubsidiaryIds === undefined ? { ...gate, allowedSubsidiaryIds: null } : gate,
-      scopedProject.rows[0].subsidiaryId,
+      scopedProject[0].subsidiaryId,
     )
     if (projectDenied) return projectDenied
   }

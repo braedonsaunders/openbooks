@@ -163,9 +163,9 @@ test(
       `the ignored repeat must be reported, got: ${JSON.stringify(second.skipped)}`,
     );
 
-    const [doc] = (await db.execute<{ total: string }>(sql`
+    const [doc] = await db.execute<{ total: string }>(sql`
       select total::text as total from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`)).rows;
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`, "objects");
     assert.equal(doc?.total, "100.0000", "the first occurrence wins deterministically");
   },
 );
@@ -187,9 +187,9 @@ test(
       `the ignored repeat must be reported, got: ${JSON.stringify(result.skipped)}`,
     );
 
-    const [doc] = (await db.execute<{ status: string; total: string }>(sql`
+    const [doc] = await db.execute<{ status: string; total: string }>(sql`
       select status, total::text as total from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`)).rows;
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-DUP'`, "objects");
     assert.equal(doc?.status, "posted");
     assert.equal(doc?.total, "100.0000", "the open-item truth (100) matches the kept copy");
   },

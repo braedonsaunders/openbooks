@@ -79,10 +79,10 @@ function toType(row: TypeRow): QualificationType {
 const TYPE_COLS = sql`id, code, name, category, issuing_body, validity_months, renewal_lead_days, requires_evidence, is_active`;
 
 export async function loadSettings(exec: SqlExecutor, orgId: string): Promise<QualificationSettings> {
-  const rows = (await exec.execute<{ extra_categories: string[]; alert_lead_days: number[] }>(sql`
+  const rows = await exec.execute<{ extra_categories: string[]; alert_lead_days: number[] }>(sql`
     select extra_categories, alert_lead_days from hrm_qualification_settings
      where org_id = ${orgId}::uuid
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   if (!row) return { extraCategories: [], alertLeadDays: [...DEFAULT_ALERT_LEAD_DAYS] };
   return {
@@ -113,12 +113,12 @@ export async function listQualificationTypes(
   requireId(input.actorId, "actorId");
   await requireHrmCertificationsRead(exec, orgId, input.actorId);
   await assertQualificationsFeature(exec, orgId, "Qualification types");
-  const rows = (await exec.execute<TypeRow>(sql`
+  const rows = await exec.execute<TypeRow>(sql`
     select ${TYPE_COLS} from hrm_qualification_types
      where org_id = ${orgId}::uuid
        and (${input.includeInactive === true}::boolean or is_active)
      order by code
-  `)).rows;
+  `, "objects");
   return rows.map(toType);
 }
 
@@ -158,7 +158,7 @@ export async function createQualificationType(
       throw new HrmQualificationError("renewal_lead_days must be a non-negative whole number of days.");
     }
     try {
-      const rows = (await tx.execute<TypeRow>(sql`
+      const rows = await tx.execute<TypeRow>(sql`
         insert into hrm_qualification_types
           (org_id, code, name, category, issuing_body, validity_months,
            renewal_lead_days, requires_evidence, created_by, updated_by)
@@ -167,7 +167,7 @@ export async function createQualificationType(
                 ${renewalLeadDays}, ${input.requiresEvidence ?? false}::boolean,
                 ${actorId}::uuid, ${actorId}::uuid)
         returning ${TYPE_COLS}
-      `)).rows;
+      `, "objects");
       const created = rows[0];
       if (!created) throw new HrmQualificationError("The qualification type was not stored — no row was written; retry the action.");
       return toType(created);
@@ -227,7 +227,7 @@ export async function updateQualificationType(
         throw new HrmQualificationError("renewal_lead_days must be a non-negative whole number of days.");
       }
     }
-    const rows = (await tx.execute<TypeRow>(sql`
+    const rows = await tx.execute<TypeRow>(sql`
       update hrm_qualification_types set
         name = coalesce(${name ?? null}, name),
         category = coalesce(${category ?? null}, category),
@@ -243,7 +243,7 @@ export async function updateQualificationType(
         updated_by = ${actorId}::uuid, updated_at = now()
        where org_id = ${orgId}::uuid and id = ${typeId}::uuid
        returning ${TYPE_COLS}
-    `)).rows;
+    `, "objects");
     const updated = rows[0];
     // A write that matches zero rows is a failure, not a success: under
     // RLS an unscoped update silently matches nothing and reports success.

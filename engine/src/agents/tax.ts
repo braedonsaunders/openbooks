@@ -31,17 +31,17 @@ export async function taxFindings(
   const findings: AgentFinding[] = [];
   const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
 
-  const activeForms = await filterTaxReturnFormsByFeatures(orgId, (await db.execute<{ code: string; name: string }>(sql`
+  const activeForms = await filterTaxReturnFormsByFeatures(orgId, await db.execute<{ code: string; name: string }>(sql`
     select code, name from tax_return_forms where org_id = ${orgId} and is_active order by code
-  `)).rows);
+  `, "objects"));
 
   const formRegistration = async (formCode: string): Promise<string | null> => {
     const reg = (await db.execute<{ id: string }>(sql`
       select id from tax_registrations
        where org_id = ${orgId} and is_active and return_form_code = ${formCode}
        limit 1
-    `));
-    return reg.rows[0]?.id ?? null;
+    `, "objects"));
+    return reg[0]?.id ?? null;
   };
 
   const codesPolicy = byKey.get("tax_missing_codes");
@@ -57,8 +57,8 @@ export async function taxFindings(
          where d.org_id = ${orgId} and d.kind = ${kind} and d.status = 'posted'
            and d.document_date between ${from} and ${today}
            and dl.tax_code_id is null and dl.amount <> 0
-      `));
-      const row = agg.rows[0];
+      `, "objects"));
+      const row = agg[0];
       if (!row || Number(row.documents) === 0) continue;
       const materiality = moneyAbs(row.untaxed_amount);
       if (absoluteUnits(materiality) < absoluteUnits(threshold)) continue;
@@ -82,7 +82,7 @@ export async function taxFindings(
            and dl.tax_code_id is null and dl.amount <> 0
          group by d.id, d.document_number, d.document_date, p.display_name
          order by sum(abs(dl.amount)) desc limit 5
-      `));
+      `, "objects"));
       findings.push({
         agentKey: "tax",
         findingType: "tax_missing_codes",
@@ -99,7 +99,7 @@ export async function taxFindings(
           to: today,
           href: "/tax",
         },
-        evidence: docs.rows.map((doc) => ({
+        evidence: docs.map((doc) => ({
           kind: "document",
           sourceType: "document",
           sourceId: doc.id,
@@ -195,8 +195,8 @@ export async function taxFindings(
        where p.org_id = ${orgId} and fc.is_default and fc.is_active
          and not p.is_adjustment and p.ends_on < ${today}
        order by p.ends_on desc limit 1
-    `));
-    const period = periods.rows[0];
+    `, "objects"));
+    const period = periods[0];
     if (period) {
       // The shared active posting primary: lock scoping must read the live
       // book, never a deactivated primary.
@@ -207,9 +207,9 @@ export async function taxFindings(
              where org_id = ${orgId} and period_id = ${period.id}
                and book_id = ${bookId} and module = 'tax' and state = 'closed'
              limit 1
-          `))
-        : { rows: [] as { id: string }[] };
-      if (locked.rows.length === 0) {
+          `, "objects"))
+        : [] as { id: string }[];
+      if (locked.length === 0) {
         findings.push({
           agentKey: "tax",
           findingType: "tax_unlocked_period",

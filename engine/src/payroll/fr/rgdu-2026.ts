@@ -41,7 +41,7 @@ export async function committedFrRgduYearToDate(input: {
        and s.pay_date <= ${input.payDate}::date
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and d.subsidiary_id = ${input.subsidiaryId}::uuid
-  `)).rows[0];
+  `, "objects"))[0];
   return row ?? { remuneration: "0", smic: "0", reduction: "0" };
 }
 

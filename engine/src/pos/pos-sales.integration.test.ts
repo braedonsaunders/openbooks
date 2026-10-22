@@ -84,7 +84,7 @@ async function restockedValue(f: Fixture, documentId: string): Promise<number> {
     select sum(m.total_value)::text as value
       from inventory_movements m
       join document_lines l on l.org_id = m.org_id and l.id = m.document_line_id
-     where m.org_id = ${f.org.orgId} and l.document_id = ${documentId} and m.kind = 'receipt'`))).rows[0];
+     where m.org_id = ${f.org.orgId} and l.document_id = ${documentId} and m.kind = 'receipt'`, "objects")))[0];
   return Number(row?.value ?? 0);
 }
 
@@ -101,14 +101,14 @@ test("a sale discounted in full completes with no tender: a posted cash sale, in
     assert.equal(completion.replayed, false);
 
     const doc = (await withOrg(f.org.orgId, () => db.execute<{ kind: string; status: string; total: string; posted_entry_id: string | null }>(sql`
-      select kind, status, total::text as total, posted_entry_id from documents where org_id = ${f.org.orgId} and id = ${completion.documentId}`))).rows[0]!;
+      select kind, status, total::text as total, posted_entry_id from documents where org_id = ${f.org.orgId} and id = ${completion.documentId}`, "objects")))[0]!;
     assert.deepEqual([doc.kind, doc.status, doc.total], ["cash_sale", "posted", "0.0000"]);
     assert.ok(doc.posted_entry_id, "the sale keeps its exact journal identity");
 
     // The sale's own entry moves no money: one statistical measurement of the units given.
-    const legs = (await withOrg(f.org.orgId, () => db.execute<{ account_id: string; amount: string; quantity: string | null; unit: string | null; is_open_item: boolean }>(sql`
+    const legs = await withOrg(f.org.orgId, () => db.execute<{ account_id: string; amount: string; quantity: string | null; unit: string | null; is_open_item: boolean }>(sql`
       select account_id, amount::text as amount, quantity::text as quantity, unit, is_open_item
-        from journal_lines where org_id = ${f.org.orgId} and entry_id = ${doc.posted_entry_id} order by line_number`))).rows;
+        from journal_lines where org_id = ${f.org.orgId} and entry_id = ${doc.posted_entry_id} order by line_number`, "objects"));
     assert.equal(legs.length, 1);
     assert.equal(legs[0]!.account_id, f.unitsAccountId);
     assert.equal(Number(legs[0]!.amount), 0);
@@ -116,7 +116,7 @@ test("a sale discounted in full completes with no tender: a posted cash sale, in
     assert.equal(legs[0]!.is_open_item, false);
 
     const tenders = (await withOrg(f.org.orgId, () => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from document_tenders where org_id = ${f.org.orgId} and document_id = ${completion.documentId}`))).rows[0]!.n;
+      select count(*)::int as n from document_tenders where org_id = ${f.org.orgId} and document_id = ${completion.documentId}`, "objects")))[0]!.n;
     assert.equal(tenders, 0);
 
     // Inventory relief still runs: two units leave stock at their FIFO cost.
@@ -124,17 +124,17 @@ test("a sale discounted in full completes with no tender: a posted cash sale, in
       select sum(m.quantity)::text as quantity, sum(m.total_value)::text as value
         from inventory_movements m
         join document_lines l on l.org_id = m.org_id and l.id = m.document_line_id
-       where m.org_id = ${f.org.orgId} and l.document_id = ${completion.documentId} and m.kind = 'issue'`))).rows[0]!;
+       where m.org_id = ${f.org.orgId} and l.document_id = ${completion.documentId} and m.kind = 'issue'`, "objects")))[0]!;
     assert.equal(Math.abs(Number(issue.quantity)), 2);
     assert.equal(Math.abs(Number(issue.value)), 8);
 
     const attribution = (await withOrg(f.org.orgId, () => db.execute<{ total_minor: string; cash_applied_minor: string; change_minor: string }>(sql`
       select total_minor::text, cash_applied_minor::text, change_minor::text from pos_transactions
-       where org_id = ${f.org.orgId} and document_id = ${completion.documentId}`))).rows[0]!;
+       where org_id = ${f.org.orgId} and document_id = ${completion.documentId}`, "objects")))[0]!;
     assert.deepEqual([attribution.total_minor, attribution.cash_applied_minor, attribution.change_minor], ["0", "0", "0"]);
 
     const audit = (await withOrg(f.org.orgId, () => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.org.orgId} and row_id = ${completion.documentId} and table_name = 'documents'`))).rows[0]!.n;
+      select count(*)::int as n from audit_log where org_id = ${f.org.orgId} and row_id = ${completion.documentId} and table_name = 'documents'`, "objects")))[0]!.n;
     assert.ok(audit >= 2, "the sale's submission and posting are audited");
 
     const receipt = await withOrg(f.org.orgId, () => readPosReceipt(db, f.org.orgId, completion.documentId, null));
@@ -167,10 +167,10 @@ test("a sale discounted in full completes with no tender: a posted cash sale, in
     }));
     assert.equal(refund.total, "0.0000");
     const refundDoc = (await withOrg(f.org.orgId, () => db.execute<{ status: string; posted_entry_id: string }>(sql`
-      select status, posted_entry_id from documents where org_id = ${f.org.orgId} and id = ${refund.documentId}`))).rows[0]!;
+      select status, posted_entry_id from documents where org_id = ${f.org.orgId} and id = ${refund.documentId}`, "objects")))[0]!;
     assert.equal(refundDoc.status, "posted");
-    const refundLegs = (await withOrg(f.org.orgId, () => db.execute<{ quantity: string }>(sql`
-      select quantity::text as quantity from journal_lines where org_id = ${f.org.orgId} and entry_id = ${refundDoc.posted_entry_id}`))).rows;
+    const refundLegs = await withOrg(f.org.orgId, () => db.execute<{ quantity: string }>(sql`
+      select quantity::text as quantity from journal_lines where org_id = ${f.org.orgId} and entry_id = ${refundDoc.posted_entry_id}`, "objects"));
     assert.deepEqual(refundLegs.map((leg) => Number(leg.quantity)), [-2]);
     assert.equal(await restockedValue(f, refund.documentId), 8, "the returned units come back at the cost they left at");
     const after = await withOrg(f.org.orgId, () => readSessionSummary(db, f.org.orgId, f.sessionId, null));
@@ -185,7 +185,7 @@ test("a full discount needs the register override permission", { skip: !DB }, as
   try {
     await assert.rejects(withSimClock(SALE_INSTANT, () => completePosSale(sale(f), cashier, pricing)), refusedWith("discount_not_permitted"));
     const docs = (await withOrg(f.org.orgId, () => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'cash_sale'`))).rows[0]!.n;
+      select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'cash_sale'`, "objects")))[0]!.n;
     assert.equal(docs, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
@@ -199,8 +199,8 @@ test("voided POS sales do not count toward session totals or expected cash", { s
     const serviceItem = await withBypassContext(() => db.execute<{ id: string }>(sql`
       update items set recognition_rule_id = null, deferred_account_id = null
        where org_id = ${f.org.orgId} and id = ${f.org.items.service}
-       returning id`));
-    assert.equal(serviceItem.rows.length, 1, 'the sale fixture uses a non-recurring service item');
+       returning id`, "objects"));
+    assert.equal(serviceItem.length, 1, 'the sale fixture uses a non-recurring service item');
     stage = "completing the sale";
     const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
       lines: [{ itemId: f.org.items.service, quantity: "1" }],
@@ -242,7 +242,7 @@ test("registers use their subsidiary currency for sessions and POS documents", {
   const f = await fixture({ subsidiaryCurrency: "USD" });
   try {
     const sessionCurrency = (await withOrg(f.org.orgId, () => db.execute<{ currency: string }>(sql`
-      select currency from pos_sessions where org_id = ${f.org.orgId} and id = ${f.sessionId}`))).rows[0]?.currency;
+      select currency from pos_sessions where org_id = ${f.org.orgId} and id = ${f.sessionId}`, "objects")))[0]?.currency;
     assert.equal(sessionCurrency, "USD");
     const sold = await withSimClock(SALE_INSTANT, () => completePosSale(sale(f, {
       lines: [{ itemId: f.org.items.fifo, quantity: "1" }],
@@ -250,7 +250,7 @@ test("registers use their subsidiary currency for sessions and POS documents", {
       expectedTotal: "10.0000",
     }), cashier, pricing));
     const currency = (await withOrg(f.org.orgId, () => db.execute<{ currency: string }>(sql`
-      select currency from documents where org_id = ${f.org.orgId} and id = ${sold.documentId}`))).rows[0]?.currency;
+      select currency from documents where org_id = ${f.org.orgId} and id = ${sold.documentId}`, "objects")))[0]?.currency;
     assert.equal(currency, "USD");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
@@ -269,7 +269,7 @@ test("a zero-total sale takes no payment, and a sale with an amount due still ne
       refusedWith("tender_mismatch"),
     );
     const docs = (await withOrg(f.org.orgId, () => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'cash_sale'`))).rows[0]!.n;
+      select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'cash_sale'`, "objects")))[0]!.n;
     assert.equal(docs, 0, "a refused sale leaves nothing behind");
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
@@ -284,7 +284,7 @@ test("a comped sale is refused, leaving nothing behind, until the No-charge unit
       (error: unknown) => error instanceof Error && /No-charge units account in Setup/.test(error.message),
     );
     const docs = (await withOrg(f.org.orgId, () => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'cash_sale'`))).rows[0]!.n;
+      select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'cash_sale'`, "objects")))[0]!.n;
     assert.equal(docs, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));

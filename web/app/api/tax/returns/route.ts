@@ -25,8 +25,8 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
            notice_key, official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${gate.user.orgId} and is_active
-     order by name`))
-  return NextResponse.json({ forms: await filterTaxReturnFormsByFeatures(gate.user.orgId, r.rows) })
+     order by name`, 'objects'))
+  return NextResponse.json({ forms: await filterTaxReturnFormsByFeatures(gate.user.orgId, r) })
 }
 
 /** Atomically install or explicitly reset one or more reference jurisdiction packs. */
@@ -41,11 +41,11 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   const body = parsedBody.data
   const installedRows = (await db.execute<{ code: string }>(sql`
     select code from tax_return_forms where org_id = ${gate.user.orgId}
-  `))
+  `, 'objects'))
   const plan = planTaxReturnLibraryChange(
     body,
     new Set(TAX_RETURN_PACKS.map((pack) => pack.code)),
-    new Set(installedRows.rows.map((row) => row.code)),
+    new Set(installedRows.map((row) => row.code)),
   )
   if ('error' in plan) {
     return NextResponse.json({ error: plan.error }, { status: plan.status })

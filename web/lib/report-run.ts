@@ -565,7 +565,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
         const selection = await bookDifferenceSelection(orgId, p.get('compareBook'))
         const primaryView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.primary.id)
         const compareView = await resolveSubsidiaryView(q.subsidiaryId, asOf, authz.allowedSubsidiaryIds, selection.compare.id)
-        const base = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? ''
+        const base = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects'))[0]?.base_currency ?? ''
         return {
           render: 'data',
           data: await bookDifferencesExportData({
@@ -668,8 +668,8 @@ async function loadAuthorizedDefinition(orgId: string, id: string): Promise<{
     select kind, slug, report_type, name, description, query, statement
       from report_definitions
      where id = ${id} and org_id = ${orgId} and archived_at is null
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   if (!row) throw new ReportResolutionError('report not found')
 
   const authz = await requireReportAuthz(orgId)

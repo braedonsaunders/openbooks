@@ -22,7 +22,7 @@ export const authorizePartyBankWrite = async ({ params }: { request: Request; pa
   if (
     isUuid(partyId) &&
     (can(authz, 'hrm.employment.manage') || can(authz, 'payroll.manage')) &&
-    (await db.execute(sql`select 1 from employee_roles where org_id = ${authz.user.orgId} and party_id = ${partyId} and is_active`)).rows.length > 0
+    (await db.execute(sql`select 1 from employee_roles where org_id = ${authz.user.orgId} and party_id = ${partyId} and is_active`, 'objects')).length > 0
   ) {
     return authz
   }
@@ -32,10 +32,10 @@ export const authorizePartyBankWrite = async ({ params }: { request: Request; pa
 /** Party record boundary shared by every bank-account verb here (null-subsidiary parties are org-wide). */
 export async function denyOutsidePartyScope(gate: Authz, partyId: string): Promise<NextResponse | null> {
   const row = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${gate.user.orgId}`,
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${gate.user.orgId}`, 'objects',
   ))
-  if (!row.rows[0]) return NextResponse.json({ error: 'party not found' }, { status: 404 })
-  return guardSubsidiaryScope(gate, row.rows[0].subsidiaryId, { orgWideNull: true })
+  if (!row[0]) return NextResponse.json({ error: 'party not found' }, { status: 404 })
+  return guardSubsidiaryScope(gate, row[0].subsidiaryId, { orgWideNull: true })
 }
 
 /**

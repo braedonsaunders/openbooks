@@ -128,7 +128,7 @@ function requireId(value: unknown, field: string): string {
 
 export async function readEntry(orgId: string, id: string): Promise<BoardEntry> {
   const row = (await db.execute<Parameters<typeof shapeEntry>[0]>(sql`select ${ENTRY_COLUMNS} ${ENTRY_JOINS}
-    where e.org_id = ${orgId} and e.id = ${id}`)).rows[0];
+    where e.org_id = ${orgId} and e.id = ${id}`, "objects"))[0];
   if (!row) throw new ScopeNotFoundError();
   return shapeEntry(row);
 }
@@ -139,7 +139,7 @@ export async function bookablePerson(orgId: string, allowed: ReadonlySet<string>
   const row = (await db.execute<Person>(sql`select p.id as "partyId", p.display_name as name, p.subsidiary_id as "subsidiaryId"
     from parties p join employee_roles er on er.org_id = p.org_id and er.party_id = p.id
     where p.org_id = ${orgId} and p.id = ${requireId(partyId, "Person")} and p.is_active and er.is_active
-    ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} for share of p`)).rows[0];
+    ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} for share of p`, "objects"))[0];
   if (!row) throw new ScheduleError("This person cannot be booked.", { code: "schedule_person_unavailable", remedy: "Pick an active employee you have access to." });
   return row;
 }
@@ -158,16 +158,16 @@ async function bookableSubject(board: ScheduleBoard, orgId: string, allowed: Rea
   const resource = subject.kind === "equipment"
     ? (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`select id, subsidiary_id as "subsidiaryId" from equipment_units
         where org_id = ${orgId} and id = ${subject.id} and status = 'active' and (in_service_on is null or in_service_on <= ${onDate})
-        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} for share`)).rows[0]
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} for share`, "objects"))[0]
     : (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`select id, subsidiary_id as "subsidiaryId" from locations
-        where org_id = ${orgId} and id = ${subject.id} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`)).rows[0];
+        where org_id = ${orgId} and id = ${subject.id} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`, "objects"))[0];
   if (!resource) throw new ScheduleError("This resource is inactive, outside your access or not yet in service.", { code: "schedule_resource_unavailable", remedy: "Choose an active native equipment unit or location covering the booking date." });
   return { ...resource, kind: subject.kind };
 }
 
 async function bookableDepartment(orgId: string, departmentId: string | null): Promise<string | null> {
   if (departmentId === null) return null;
-  const row = (await db.execute(sql`select id from departments where org_id = ${orgId} and id = ${requireId(departmentId, "Department")} and is_active for share`)).rows[0];
+  const row = (await db.execute(sql`select id from departments where org_id = ${orgId} and id = ${requireId(departmentId, "Department")} and is_active for share`, "objects"))[0];
   if (!row) throw new ScheduleError("The department is not available.", { code: "schedule_invalid", remedy: "Pick an active department." });
   return departmentId;
 }
@@ -236,7 +236,7 @@ export async function insertEntry(input: {
   const published = input.status === "published";
   const pattern = input.origin?.pattern ?? null;
   const qualifications = `{${(input.requiredQualificationTypeIds ?? []).join(",")}}`;
-  const rows = (await db.execute(sql`insert into schedule_entries
+  const rows = await db.execute(sql`insert into schedule_entries
     (id, org_id, board_id, worker_party_id, equipment_unit_id, resource_location_id, employment_id, subsidiary_id, target_kind, customer_party_id, project_id, project_task_id, location_id, schedule_code_id,
      department_id, detail, notes, span_mode, time_zone, starts_on, ends_on, starts_at, ends_at, break_minutes, series_id, supersedes_id,
      status, published_by, published_at, reason, request_hash, created_by, updated_by,
@@ -250,7 +250,7 @@ export async function insertEntry(input: {
      ${published ? actor.actorId : null}, ${published ? sql`now()` : null}, ${input.reason}, ${input.requestHash}, ${actor.actorId}, ${actor.actorId},
      ${pattern?.assignmentId ?? null}, ${pattern?.occursOn ?? null}, ${pattern?.slot ?? null}, ${pattern?.override ?? false},
      ${input.origin?.requestId ?? null}, ${input.origin?.removesPredecessor ?? false}, ${qualifications}::uuid[], ${input.serviceVisitId ?? null})
-    returning id`)).rows;
+    returning id`, "objects");
   if (rows.length !== 1) throw new ScheduleError("The booking was not saved.", { code: "schedule_not_saved", remedy: "Reload the board and try again." });
 }
 
@@ -269,8 +269,8 @@ export async function recordPatternOmission(actor: ScheduleActor, row: Pick<Stor
 
 /** Cancel the unpublished revisions waiting on a published booking. */
 export async function cancelPendingRevisions(actor: ScheduleActor, rowId: string, reason: string): Promise<void> {
-  const pending = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
-    where org_id = ${actor.orgId} and supersedes_id = ${rowId} and status = 'draft' for update`)).rows;
+  const pending = await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
+    where org_id = ${actor.orgId} and supersedes_id = ${rowId} and status = 'draft' for update`, "objects");
   for (const draft of pending) await setStatus(actor, draft, "cancelled", reason);
 }
 
@@ -295,7 +295,7 @@ export async function removePublished(actor: ScheduleActor, board: ScheduleBoard
 export async function exactStoredBooking(orgId: string, row: StoredEntry): Promise<Normalized> {
   const stored = (await db.execute<{ subsidiaryId: string | null; customerPartyId: string | null; projectId: string | null; locationId: string | null; scheduleCodeId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId", customer_party_id as "customerPartyId", project_id as "projectId", location_id as "locationId", schedule_code_id as "scheduleCodeId"
-      from schedule_entries where org_id = ${orgId} and id = ${row.id}`)).rows[0]!;
+      from schedule_entries where org_id = ${orgId} and id = ${row.id}`, "objects"))[0]!;
   return {
     subject: { id: row.subjectId, kind: row.subjectKind, subsidiaryId: stored.subsidiaryId },
     target: row.targetKind ? { kind: row.targetKind, customerPartyId: stored.customerPartyId, projectId: stored.projectId, projectTaskId: row.projectTaskId,
@@ -308,7 +308,7 @@ export async function exactStoredBooking(orgId: string, row: StoredEntry): Promi
 
 export async function lockStored(orgId: string, boardId: string, id: string): Promise<StoredEntry> {
   const row = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
-    where org_id = ${orgId} and id = ${requireId(id, "Booking")} for update`)).rows[0];
+    where org_id = ${orgId} and id = ${requireId(id, "Booking")} for update`, "objects"))[0];
   if (!row) throw new ScopeNotFoundError();
   if (row.boardId !== boardId) {
     throw new ScheduleError("This booking belongs to another board.", { code: "schedule_other_board", remedy: "Open the board it was booked on to change it." });
@@ -335,9 +335,9 @@ export function checkRevision(row: StoredEntry, expected: unknown): void {
 }
 
 export async function setStatus(actor: ScheduleActor, row: Pick<StoredEntry, "id" | "revision">, status: "cancelled", reason: string): Promise<void> {
-  const updated = (await db.execute(sql`update schedule_entries set status = ${status}, revision = revision + 1, reason = ${reason},
+  const updated = await db.execute(sql`update schedule_entries set status = ${status}, revision = revision + 1, reason = ${reason},
     updated_at = now(), updated_by = ${actor.actorId}
-    where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`)).rows;
+    where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`, "objects");
   if (updated.length !== 1) throw new ScheduleError("Someone changed this booking since the board was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the board." });
 }
 
@@ -364,7 +364,7 @@ async function createOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   const requestHash = hash(definition(board, booking));
   await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-entry:${actor.orgId}:${id}`}, 0))`);
   const existing = (await db.execute<{ requestHash: string; createdBy: string }>(sql`select request_hash as "requestHash", created_by as "createdBy"
-    from schedule_entries where org_id = ${actor.orgId} and id = ${id}`)).rows[0];
+    from schedule_entries where org_id = ${actor.orgId} and id = ${id}`, "objects"))[0];
   if (existing) {
     if (existing.requestHash !== requestHash || existing.createdBy !== actor.actorId) {
       throw new ScheduleError("This booking key was already used for a different booking.", { status: 409, code: "schedule_key_reused", remedy: "Reload the board; the existing booking is preserved." });
@@ -412,7 +412,7 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
     if (row.patternAssignmentId && !samePerson) {
       throw new ScheduleError("A pattern booking keeps its person.", { code: "schedule_pattern_person", remedy: "Remove this booking and book the other person, or change the person's pattern assignment." });
     }
-    const updated = (await db.execute(sql`update schedule_entries set
+    const updated = await db.execute(sql`update schedule_entries set
       worker_party_id = ${booking.subject.kind === "person" ? booking.subject.id : null},
       equipment_unit_id = ${booking.subject.kind === "equipment" ? booking.subject.id : null}, resource_location_id = ${booking.subject.kind === "location" ? booking.subject.id : null}, subsidiary_id = ${booking.subject.subsidiaryId},
       employment_id = ${employmentId},
@@ -423,12 +423,12 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
       starts_at = ${booking.span.startsAt}, ends_at = ${booking.span.endsAt}, break_minutes = ${booking.span.breakMinutes},
       series_id = ${booking.seriesId}, pattern_override = ${row.patternAssignmentId !== null}, reason = ${reason ?? `Changed on ${board.name}`},
       revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`)).rows;
+      where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`, "objects");
     if (updated.length !== 1) throw new ScheduleError("Someone changed this booking since the board was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the board." });
     return { id: row.id, op: "update", ok: true, entry: await readEntry(actor.orgId, row.id), replacedId: null };
   }
 
-  const pending = (await db.execute(sql`select id from schedule_entries where org_id = ${actor.orgId} and supersedes_id = ${row.id} and status = 'draft'`)).rows[0];
+  const pending = (await db.execute(sql`select id from schedule_entries where org_id = ${actor.orgId} and supersedes_id = ${row.id} and status = 'draft'`, "objects"))[0];
   if (pending) {
     throw new ScheduleError("This booking already has an unpublished change.", { status: 409, code: "schedule_pending_change", remedy: "Edit the pending change shown on the board, or discard it first." });
   }
@@ -457,7 +457,7 @@ async function cancelOne(actor: ScheduleActor, board: ScheduleBoard, change: Ext
 async function personName(orgId: string, change: BoardChange): Promise<string | undefined> {
   const partyId = change.op === "create" ? change.workerPartyId : change.op === "update" ? change.fields?.workerPartyId : undefined;
   if (!isUuid(partyId)) return undefined;
-  return (await db.execute<{ name: string }>(sql`select display_name as name from parties where org_id = ${orgId} and id = ${partyId}`)).rows[0]?.name;
+  return (await db.execute<{ name: string }>(sql`select display_name as name from parties where org_id = ${orgId} and id = ${partyId}`, "objects"))[0]?.name;
 }
 
 /** Apply a batch of board edits. Refused changes are reported individually; accepted ones commit together. */
@@ -489,7 +489,7 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
               and tstzrange(x.starts_at,x.ends_at,'[)') && tstzrange(d.starts_at,d.ends_at,'[)')
               and x.id<>d.id and x.id is distinct from d.supersedes_id
               and (x.status='published' or x.status='draft' and x.id=any(${`{${accepted.join(',')}}`}::uuid[]))
-              where d.org_id=${actor.orgId} and d.id=${result.entry.id} limit 1`)).rows[0];
+              where d.org_id=${actor.orgId} and d.id=${result.entry.id} limit 1`, "objects"))[0];
             if(collision)throw new ScheduleError("This person or resource is already booked at that time.",{status:409,code:"schedule_double_booked",remedy:"Choose a free time or change the existing booking."});
           }
           return result;
@@ -573,12 +573,12 @@ export async function lockPublishableDrafts(actor: ScheduleActor, board: Schedul
   const filter = "ids" in scope
     ? sql`id = any(${`{${scope.ids.join(",")}}`}::uuid[])`
     : sql`starts_on between ${scope.from} and ${scope.through}`;
-  return (await db.execute<PublishableDraft>(sql`select ${STORED_COLUMNS},
+  return await db.execute<PublishableDraft>(sql`select ${STORED_COLUMNS},
       coalesce((select display_name from parties p where p.org_id = schedule_entries.org_id and p.id = schedule_entries.worker_party_id),
       (select name from equipment_units u where u.org_id = schedule_entries.org_id and u.id = schedule_entries.equipment_unit_id),
       (select name from locations l where l.org_id = schedule_entries.org_id and l.id = schedule_entries.resource_location_id)) as "personName"
     from schedule_entries where org_id = ${actor.orgId} and board_id = ${board.id} and status = 'draft' and ${filter}
-    order by starts_at, id for update`)).rows;
+    order by starts_at, id for update`, "objects");
 }
 
 /**
@@ -594,7 +594,7 @@ export async function publishDrafts(actor: ScheduleActor, board: ScheduleBoard, 
       await withTransactionSavepoint(db, async () => {
         if (draft.supersedesId) {
           const prior = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
-            where org_id = ${actor.orgId} and id = ${draft.supersedesId} for update`)).rows[0];
+            where org_id = ${actor.orgId} and id = ${draft.supersedesId} for update`, "objects"))[0];
           if (prior?.status === "published") {
             await setStatus(actor, prior, "cancelled", publishReason);
             if (prior.patternAssignmentId && (draft.removesPredecessor || draft.patternAssignmentId !== prior.patternAssignmentId)) {
@@ -606,10 +606,10 @@ export async function publishDrafts(actor: ScheduleActor, board: ScheduleBoard, 
         // closed as history rather than published as a booking.
         const updated = draft.removesPredecessor
           ? (await db.execute(sql`update schedule_entries set status = 'cancelled', reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-              where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows
+              where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`, "objects"))
           : (await db.execute(sql`update schedule_entries set status = 'published', published_by = ${actor.actorId}, published_at = now(),
               reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-              where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows;
+              where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`, "objects"));
         if (updated.length !== 1) throw new ScheduleError("A booking changed during publication.", { status: 409, code: "schedule_stale" });
       });
     } catch (error) {

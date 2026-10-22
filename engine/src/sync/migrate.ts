@@ -249,14 +249,12 @@ async function reconcileSourceParties(
   }
   if (signals.size > 0) {
     const involved = [...new Set([...signals.keys(), ...signals.values()])];
-    const stored = (await db.execute(sql`
+    const stored = await db.execute<{ id: string; ref: string; survivor: string | null }>(sql`
       select id, custom->>${refKey} as ref, custom->'merged_into'->>'survivor' as survivor
         from parties
-       where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(involved)}::text[])`)) as {
-      rows: { id: string; ref: string; survivor: string | null }[];
-    };
-    const idByRef = new Map(stored.rows.map((r) => [r.ref, r.id]));
-    const markerById = new Map(stored.rows.map((r) => [r.id, r.survivor]));
+       where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(involved)}::text[])`, "objects");
+    const idByRef = new Map(stored.map((r) => [r.ref, r.id]));
+    const markerById = new Map(stored.map((r) => [r.id, r.survivor]));
     const alreadyFailed = new Set(s.errors.map((e) => e.sourceRef));
     for (const [absorbedRef, firstTarget] of signals) {
       if (alreadyFailed.has(absorbedRef)) continue;
@@ -343,13 +341,11 @@ async function reconcileSourceParties(
     const pulled = new Set(records.map((r) => r.sourceRef));
     const missing = [...ctx.maps.parties.keys()].filter((k) => !pulled.has(k));
     if (missing.length > 0) {
-      const rows = (await db.execute(sql`
+      const rows = await db.execute<{ id: string; display_name: string; ref: string; custom: Record<string, unknown> }>(sql`
         select id, display_name, custom->>${refKey} as ref, custom
           from parties
-         where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(missing)}::text[])`)) as {
-        rows: { id: string; display_name: string; ref: string; custom: Record<string, unknown> }[];
-      };
-      for (const row of rows.rows) {
+         where org_id = ${orgId} and custom->>${refKey} = any(${textArrayLiteral(missing)}::text[])`, "objects");
+      for (const row of rows) {
         if (storedMergeSurvivor(row.custom)) continue;
         const refs = await findPartyReferences(db, orgId, row.id);
         if (refs.length === 0) continue;
@@ -369,10 +365,10 @@ async function reconcileSourceParties(
 
 async function loadMap(table: string, orgId: string, refKey: string): Promise<Map<string, string>> {
   const m = new Map<string, string>();
-  const rows = (await db.execute(sql`
+  const rows = await db.execute<{ id: string; ns: string }>(sql`
     select id, custom->>${refKey} ns from ${sql.raw(table)}
-     where org_id = ${orgId} and custom->>${refKey} is not null`)) as { rows: { id: string; ns: string }[] };
-  for (const r of rows.rows) {
+     where org_id = ${orgId} and custom->>${refKey} is not null`, "objects");
+  for (const r of rows) {
     if (m.has(r.ns)) {
       throw new Error(
         `${table} contains multiple rows for connector identity ${refKey}:${r.ns}`,
@@ -390,14 +386,12 @@ async function loadMap(table: string, orgId: string, refKey: string): Promise<Ma
  * parentless row by ref.
  */
 async function ensureRootSubsidiary(orgId: string, fallbackCurrency: string): Promise<void> {
-  const existing = (await db.execute(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`)) as { rows: { id: string }[] };
-  if (existing.rows[0]) return;
-  const org = (await db.execute(sql`
-    select name, legal_name, base_currency, country from orgs where id = ${orgId}`)) as {
-    rows: { name: string; legal_name: string | null; base_currency: string | null; country: string | null }[];
-  };
-  const o = org.rows[0];
+  const existing = await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects");
+  if (existing[0]) return;
+  const org = await db.execute<{ name: string; legal_name: string | null; base_currency: string | null; country: string | null }>(sql`
+    select name, legal_name, base_currency, country from orgs where id = ${orgId}`, "objects");
+  const o = org[0];
   if (!o) throw new Error(`organization ${orgId} does not exist`);
   const name = String(o.legal_name || o.name).trim();
   if (!name) throw new Error(`organization ${orgId} has no configured name`);
@@ -528,7 +522,7 @@ export async function loadEntities(
         await withOrg(orgId, async () => {
           if (!ctx.audit?.connectionId) throw new Error('Connection mappings require the native sync-run audit context');
           const mapped = stream.records.filter(record => record.mappingApplied);
-          const before = new Map((await db.execute<{ ref: string; snapshot: Record<string, unknown> }>(sql`select custom->>${ctx.refKey} as ref,to_jsonb(t) as snapshot from time_entries t where org_id=${orgId} and custom->>${ctx.refKey}=any(${textArrayLiteral(mapped.map(record => record.sourceRef))}::text[]) for update`)).rows.map(row => [row.ref, row.snapshot]));
+          const before = new Map((await db.execute<{ ref: string; snapshot: Record<string, unknown> }>(sql`select custom->>${ctx.refKey} as ref,to_jsonb(t) as snapshot from time_entries t where org_id=${orgId} and custom->>${ctx.refKey}=any(${textArrayLiteral(mapped.map(record => record.sourceRef))}::text[]) for update`, "objects")).map(row => [row.ref, row.snapshot]));
           await loadTimeEntries(stream.records, ctx, s);
           for (const rec of mapped) {
             if (s.errors.some(error => error.sourceRef === rec.sourceRef)) continue;
@@ -619,12 +613,12 @@ async function loadAccountingPeriods(
   s: ResourceLoadStats,
 ): Promise<void> {
   const defaults = await ensureCloseDefaults(orgId);
-  const books = (await db.execute(sql`
+  const books = await db.execute<{ id: string }>(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_active
      order by id
-  `)) as { rows: { id: string }[] };
-  if (books.rows.length === 0) {
+  `, "objects");
+  if (books.length === 0) {
     s.skipped += records.length;
     return;
   }
@@ -653,33 +647,33 @@ async function loadAccountingPeriods(
     // boundary while the mirror changes it. Books iterate by id, matching
     // calendar generation's lock order and preventing cross-writer deadlocks.
     await db.transaction(async (tx) => {
-      const existing = (await tx.execute(sql`
+      const existing = await tx.execute<{ id: string }>(sql`
         select id from accounting_periods
          where org_id = ${orgId}
            and fiscal_calendar_id = ${defaults.calendarId}
            and fiscal_year = ${fiscalYear}
            and period_number = ${periodNumber}
          limit 1
-      `)) as { rows: { id: string }[] };
-      const existingPeriodId = existing.rows[0]?.id;
+      `, "objects");
+      const existingPeriodId = existing[0]?.id;
       if (existingPeriodId) {
         // Existing period definitions can change the date window a tax filing
         // certifies. Take the same period/book fence BEFORE the upsert, then
         // re-read the row under that fence. New periods have no prior filing
         // scope to race and take the fence immediately after insertion below.
-        for (const book of books.rows) {
+        for (const book of books) {
           await periodScopeAdvisoryLock(tx, orgId, existingPeriodId, book.id);
         }
-        const lockedPeriod = (await tx.execute(sql`
+        const lockedPeriod = await tx.execute<{ id: string }>(sql`
           select id from accounting_periods
            where org_id = ${orgId} and id = ${existingPeriodId}
            for update
-        `)) as { rows: { id: string }[] };
-        if (!lockedPeriod.rows[0]) {
+        `, "objects");
+        if (!lockedPeriod[0]) {
           throw new Error(`accounting period ${existingPeriodId} disappeared while waiting for its scope fence`);
         }
       }
-      const period = (await tx.execute(sql`
+      const period = await tx.execute<{ id: string }>(sql`
         insert into accounting_periods
           (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
            starts_on, ends_on, is_adjustment, custom)
@@ -693,13 +687,13 @@ async function loadAccountingPeriods(
           updated_at = now()
         where accounting_periods.org_id = ${orgId}
         returning id
-      `)) as { rows: { id: string }[] };
-      const periodId = period.rows[0]?.id;
+      `, "objects");
+      const periodId = period[0]?.id;
       if (!periodId) {
         s.skipped++;
         return;
       }
-      if (existing.rows[0]) s.updated++;
+      if (existing[0]) s.updated++;
       else s.created++;
 
       const fullyClosed = f.closed === true || f.allLocked === true;
@@ -707,7 +701,7 @@ async function loadAccountingPeriods(
         ? f.moduleStates as Record<string, unknown>
         : {};
       const closedAt = str(f.closedAt);
-      for (const book of books.rows) {
+      for (const book of books) {
         if (!existingPeriodId) await periodScopeAdvisoryLock(tx, orgId, periodId, book.id);
         for (const module of CLOSE_MODULES) {
           const closed = fullyClosed ||
@@ -765,16 +759,14 @@ export async function syncSourceAccountingPeriods(
 }
 
 async function findByRef(table: string, orgId: string, refKey: string, sourceRef: string) {
-  const existing = (await db.execute(sql`
-    select id from ${sql.raw(table)} where org_id = ${orgId} and custom->>${refKey} = ${sourceRef} limit 2`)) as {
-    rows: { id: string }[];
-  };
-  if (existing.rows.length > 1) {
+  const existing = await db.execute<{ id: string }>(sql`
+    select id from ${sql.raw(table)} where org_id = ${orgId} and custom->>${refKey} = ${sourceRef} limit 2`, "objects");
+  if (existing.length > 1) {
     throw new Error(
       `${table} contains multiple rows for connector identity ${refKey}:${sourceRef}`,
     );
   }
-  return existing.rows[0]?.id ?? null;
+  return existing[0]?.id ?? null;
 }
 
 async function findPartyByRef(orgId: string, refKey: string, sourceRef: string) {
@@ -822,7 +814,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const adoption = resource === 'payment_terms' ? sql`or name=${String(rec.fields.name ?? `Term ${rec.sourceRef}`)}`
       : resource === 'tax_codes' ? sql`or code=${String(rec.fields.code ?? rec.sourceRef)}`
       : resource === 'subsidiaries' && !rec.parentRef ? sql`or (parent_id is null and not exists(select 1 from subsidiaries where org_id=${ctx.orgId} and custom->>${ctx.refKey}=${rec.sourceRef}))` : sql``;
-    const before = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(resource)} t where org_id=${ctx.orgId} and (custom->>${ctx.refKey}=${rec.sourceRef} ${adoption}) for update`)).rows;
+    const before = await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(resource)} t where org_id=${ctx.orgId} and (custom->>${ctx.refKey}=${rec.sourceRef} ${adoption}) for update`, "objects");
     if (before.length > 1) throw new Error('Entity mapping identity is ambiguous');
     const rolesBefore = resource === 'parties' && before[0]?.snapshot.id ? await mappedPartyRoles(ctx.orgId, String(before[0].snapshot.id)) : undefined;
     const id = await upsertBase(resource, ctx, rec, s);
@@ -840,21 +832,21 @@ async function completeMappedRecord(table: string, ctx: Ctx, rec: SourceEntity, 
   const saved = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`update ${sql.identifier(table)} t
     set custom=(custom - 'connectorMappedValues')
       || ${JSON.stringify(Object.keys(values).length ? { ...values, connectorMappedValues: values } : {})}::jsonb
-    where id=${id} and org_id=${ctx.orgId} returning to_jsonb(t) as snapshot`)).rows[0];
+    where id=${id} and org_id=${ctx.orgId} returning to_jsonb(t) as snapshot`, "objects"))[0];
   if (!saved) throw new Error('Mapped entity disappeared before its custom values were saved');
   const rolesAfter = table === 'parties' ? await mappedPartyRoles(ctx.orgId, id) : undefined;
   const previous = table === 'parties' && before ? { ...before, roles: rolesBefore ?? {} } : before;
   const next = rolesAfter ? { ...saved.snapshot, roles: rolesAfter } : saved.snapshot;
   if (JSON.stringify(stableMappingSnapshot(previous)) === JSON.stringify(stableMappingSnapshot(next))) return;
   const audit = (await db.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${ctx.orgId},${table},${id},${before ? 'update' : 'insert'},${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId: ctx.audit?.connectionId, sourceRef: rec.sourceRef, before: previous, after: next })}::jsonb,${ctx.audit?.actorId ?? null}) returning id`)).rows[0];
+    values(${ctx.orgId},${table},${id},${before ? 'update' : 'insert'},${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId: ctx.audit?.connectionId, sourceRef: rec.sourceRef, before: previous, after: next })}::jsonb,${ctx.audit?.actorId ?? null}) returning id`, "objects"))[0];
   if (!audit) throw new Error('The native mapping audit was not saved');
 }
 
 async function mappedPartyRoles(orgId: string, partyId: string): Promise<Record<string, unknown>> {
   const roles: Record<string, unknown> = {};
   for (const table of ['customer_roles', 'vendor_roles', 'employee_roles']) {
-    roles[table] = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(table)} t where org_id=${orgId} and party_id=${partyId} for update`)).rows[0]?.snapshot ?? null;
+    roles[table] = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(table)} t where org_id=${orgId} and party_id=${partyId} for update`, "objects"))[0]?.snapshot ?? null;
   }
   return roles;
 }
@@ -875,11 +867,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     const parentId = rec.parentRef ? ctx.maps.subsidiaries.get(rec.parentRef) ?? null : null;
     let id = await findByRef("subsidiaries", orgId, refKey, rec.sourceRef);
     if (!id && !rec.parentRef) {
-      const root = (await db.execute(sql`
-        select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`)) as {
-        rows: { id: string }[];
-      };
-      id = root.rows[0]?.id ?? null;
+      const root = await db.execute<{ id: string }>(sql`
+        select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects");
+      id = root[0]?.id ?? null;
     }
     if (id) {
       // A functional-currency change reinterprets translated history:
@@ -889,11 +879,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       // including the reused posting root), but never restate it silently
       // afterwards: hold the stored value, converge the descriptive fields,
       // and report the held change for controller review.
-      const current = ((await db.execute(sql`
+      const current = (await db.execute<{ base_currency: string; ns: string | null }>(sql`
         select base_currency, custom->>${refKey} as ns from subsidiaries
-         where id = ${id} and org_id = ${orgId}`)) as {
-        rows: { base_currency: string; ns: string | null }[];
-      }).rows[0];
+         where id = ${id} and org_id = ${orgId}`, "objects"))[0];
       const storedCurrency = String(current?.base_currency ?? "").toUpperCase();
       const heldCurrency =
         current?.ns != null && storedCurrency !== baseCurrency;
@@ -919,14 +907,14 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       return id;
     }
     if (rec.parentRef && !parentId) throw new Error(`subsidiary parent ${rec.parentRef} is not loaded`);
-    const ins = (await db.execute(sql`
+    const ins = await db.execute<{ id: string }>(sql`
       insert into subsidiaries
         (org_id, parent_id, name, legal_name, base_currency, country, is_elimination, is_active, custom)
       values (${orgId}, ${parentId}, ${name}, ${legalName}, ${baseCurrency}, ${country},
               ${!!f.isElimination}, ${f.isActive !== false}, ${custom}::jsonb)
-      returning id`)) as { rows: { id: string }[] };
+      returning id`, "objects");
     s.created++;
-    return ins.rows[0]?.id ?? null;
+    return ins[0]?.id ?? null;
   }
 
   if (resource === "accounts") {
@@ -947,8 +935,8 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
         is_summary=${vals.isSummary}, is_active=${vals.isActive}, eliminate=${vals.eliminate}, reconcilable=${vals.reconcilable}
         where id=${id} and org_id=${orgId}
           and (${suppliedCurrency}::text is null or currency_restriction = ${suppliedCurrency}::text)
-        returning id`);
-      if (changed.rows.length !== 1) {
+        returning id`, "objects");
+      if (changed.length !== 1) {
         throw new Error(`account ${rec.sourceRef} was not updated: source currency conflicts with its existing currency control or the account is unavailable; review the account currency configuration before retrying`);
       }
       s.updated++; return id;
@@ -956,19 +944,19 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     if (vals.reconcilable && !suppliedCurrency) {
       throw new Error(`reconcilable account ${rec.sourceRef} requires an explicit currency; the connector must supply its verified ISO currency before retrying`);
     }
-    const ins = (await db.execute(sql`insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, custom)
+    const ins = await db.execute<{ id: string }>(sql`insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, currency_restriction, custom)
       values (${orgId}, ${(f.number as string) ?? null}, ${vals.name}, ${vals.type}::text, ${vals.isSummary}, ${vals.isActive}, ${vals.eliminate}, ${vals.reconcilable}, ${suppliedCurrency}, ${custom}::jsonb)
-      returning id`)) as { rows: { id: string }[] };
-    if (!ins.rows[0]?.id) throw new Error(`account ${rec.sourceRef} was not created; retry the source import`);
-    s.created++; return ins.rows[0].id;
+      returning id`, "objects");
+    if (!ins[0]?.id) throw new Error(`account ${rec.sourceRef} was not created; retry the source import`);
+    s.created++; return ins[0].id;
   }
 
   if (resource === "departments") {
     const name = String(f.name ?? `Department ${rec.sourceRef}`);
     const id = await findByRef("departments", orgId, refKey, rec.sourceRef);
     if (id) { await db.execute(sql`update departments set name=${name} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
-    const ins = (await db.execute(sql`insert into departments (org_id, name, custom) values (${orgId}, ${name}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into departments (org_id, name, custom) values (${orgId}, ${name}, ${custom}::jsonb) returning id`, "objects");
+    s.created++; return ins[0]?.id ?? null;
   }
 
   if (resource === "payment_terms") {
@@ -976,8 +964,8 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     // match by nsId, else by name (reconciles with name-seeded rows).
     let id = await findByRef("payment_terms", orgId, refKey, rec.sourceRef);
     if (!id) {
-      const byName = (await db.execute(sql`select id from payment_terms where org_id=${orgId} and name=${name} limit 1`)) as { rows: { id: string }[] };
-      id = byName.rows[0]?.id ?? null;
+      const byName = await db.execute<{ id: string }>(sql`select id from payment_terms where org_id=${orgId} and name=${name} limit 1`, "objects");
+      id = byName[0]?.id ?? null;
     }
     const netDays = Number(f.netDays ?? 30);
     if (id) {
@@ -988,9 +976,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
         where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
-    const ins = (await db.execute(sql`insert into payment_terms (org_id, name, net_days, discount_days, discount_percent, custom)
-      values (${orgId}, ${name}, ${netDays}, ${(f.discountDays as number) ?? null}, ${f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent)}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into payment_terms (org_id, name, net_days, discount_days, discount_percent, custom)
+      values (${orgId}, ${name}, ${netDays}, ${(f.discountDays as number) ?? null}, ${f.discountPercent == null || f.discountPercent === "" ? null : persistPaymentTermDiscountPercent(f.discountPercent)}, ${custom}::jsonb) returning id`, "objects");
+    s.created++; return ins[0]?.id ?? null;
   }
 
   if (resource === "time_types") {
@@ -1000,9 +988,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     );
     const id = await findByRef("time_types", orgId, refKey, rec.sourceRef);
     if (id) { await db.execute(sql`update time_types set name=${name}, cost_multiplier=${mult}, is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
-    const ins = (await db.execute(sql`insert into time_types (org_id, name, cost_multiplier, is_active, custom)
-      values (${orgId}, ${name}, ${mult}, ${f.isActive !== false}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into time_types (org_id, name, cost_multiplier, is_active, custom)
+      values (${orgId}, ${name}, ${mult}, ${f.isActive !== false}, ${custom}::jsonb) returning id`, "objects");
+    s.created++; return ins[0]?.id ?? null;
   }
 
   if (resource === "tax_codes") {
@@ -1023,15 +1011,15 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     });
     let id = await findByRef("tax_codes", orgId, refKey, rec.sourceRef);
     if (!id) {
-      const byCode = (await db.execute(sql`select id from tax_codes where org_id=${orgId} and code=${code} limit 1`)) as { rows: { id: string }[] };
-      id = byCode.rows[0]?.id ?? null;
+      const byCode = await db.execute<{ id: string }>(sql`select id from tax_codes where org_id=${orgId} and code=${code} limit 1`, "objects");
+      id = byCode[0]?.id ?? null;
     }
     // Optional per-code control accounts (source refs → openbooks ids).
     const acctId = async (ref: unknown): Promise<string | null> => {
       if (!ref) return null;
-      const r = (await db.execute(sql`
-        select id from accounts where org_id=${orgId} and custom->>${refKey} = ${String(ref)} limit 1`)) as { rows: { id: string }[] };
-      return r.rows[0]?.id ?? null;
+      const r = await db.execute<{ id: string }>(sql`
+        select id from accounts where org_id=${orgId} and custom->>${refKey} = ${String(ref)} limit 1`, "objects");
+      return r[0]?.id ?? null;
     };
     const collected = await acctId(f.collectedAccountRef);
     const paid = await acctId(f.paidAccountRef);
@@ -1052,9 +1040,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
           and effective_to is null and effective_from <= current_date`);
       s.updated++; return id;
     }
-    const ins = (await db.execute(sql`insert into tax_codes (org_id, code, name, applies_to, collected_account_id, paid_account_id, custom)
-      values (${orgId}, ${code}, ${name}, ${appliesTo}::text, ${collected}, ${paid}, ${taxCustom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    const newId = ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into tax_codes (org_id, code, name, applies_to, collected_account_id, paid_account_id, custom)
+      values (${orgId}, ${code}, ${name}, ${appliesTo}::text, ${collected}, ${paid}, ${taxCustom}::jsonb) returning id`, "objects");
+    const newId = ins[0]?.id ?? null;
     if (newId) {
       await db.execute(sql`insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
         values (${orgId}, ${newId}, ${rate}, '1970-01-01')`);
@@ -1071,10 +1059,10 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
     if (id) { await db.execute(sql`update items set name=${name}, code=case when ${rec.mappedFields?.includes("code") ?? false} then ${str(f.code)} else code end, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
       default_cost=coalesce(${defaultCost}, default_cost), default_rate=coalesce(${defaultRate}, default_rate),
       unit=coalesce(${unit}, unit), is_active=${f.isActive !== false} where id=${id} and org_id=${orgId}`); s.updated++; return id; }
-    const ins = (await db.execute(sql`insert into items (org_id, kind, code, name, category, default_cost, default_rate, unit, is_active, custom)
+    const ins = await db.execute<{ id: string }>(sql`insert into items (org_id, kind, code, name, category, default_cost, default_rate, unit, is_active, custom)
       values (${orgId}, ${String(f.kind ?? "service")}::text, ${(f.code as string) ?? null}, ${name}, ${str(f.category)},
-              ${defaultCost}, ${defaultRate}, ${unit}, ${f.isActive !== false}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+              ${defaultCost}, ${defaultRate}, ${unit}, ${f.isActive !== false}, ${custom}::jsonb) returning id`, "objects");
+    s.created++; return ins[0]?.id ?? null;
   }
 
   if (resource === "projects") {
@@ -1111,9 +1099,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       });
       s.updated++; return id;
     }
-    const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, project_type_id, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
-      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, (select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${contractValue}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into projects (org_id, name, code, status, project_type_id, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
+      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, (select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${contractValue}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`, "objects");
+    s.created++; return ins[0]?.id ?? null;
   }
 
   if (resource === "addresses") {
@@ -1131,9 +1119,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
         is_default_billing=${v.db}, is_default_shipping=${v.ds} where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
-    const ins = (await db.execute(sql`insert into addresses (org_id, party_id, label, line1, line2, city, region, postal_code, country, is_default_billing, is_default_shipping, custom)
-      values (${orgId}, ${pid}, ${v.label}, ${v.line1}, ${v.line2}, ${v.city}, ${v.region}, ${v.postal}, ${v.country}, ${v.db}, ${v.ds}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into addresses (org_id, party_id, label, line1, line2, city, region, postal_code, country, is_default_billing, is_default_shipping, custom)
+      values (${orgId}, ${pid}, ${v.label}, ${v.line1}, ${v.line2}, ${v.city}, ${v.region}, ${v.postal}, ${v.country}, ${v.db}, ${v.ds}, ${custom}::jsonb) returning id`, "objects");
+    s.created++; return ins[0]?.id ?? null;
   }
 
   if (resource === "contacts") {
@@ -1150,9 +1138,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
         is_primary=${v.primary}, is_active=${v.isActive} where id=${id} and org_id=${orgId}`);
       s.updated++; return id;
     }
-    const ins = (await db.execute(sql`insert into contacts (org_id, party_id, name, first_name, last_name, title, role, email, phone, mobile_phone, fax, is_primary, is_active, custom)
-      values (${orgId}, ${pid}, ${v.name}, ${v.first}, ${v.last}, ${v.title}, ${v.role}, ${v.email}, ${v.phone}, ${v.mobile}, ${v.fax}, ${v.primary}, ${v.isActive}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    s.created++; return ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into contacts (org_id, party_id, name, first_name, last_name, title, role, email, phone, mobile_phone, fax, is_primary, is_active, custom)
+      values (${orgId}, ${pid}, ${v.name}, ${v.first}, ${v.last}, ${v.title}, ${v.role}, ${v.email}, ${v.phone}, ${v.mobile}, ${v.fax}, ${v.primary}, ${v.isActive}, ${custom}::jsonb) returning id`, "objects");
+    s.created++; return ins[0]?.id ?? null;
   }
 
   // parties (+ role)
@@ -1177,9 +1165,9 @@ async function upsertBase(resource: string, ctx: Ctx, rec: SourceEntity, s: Reso
       where id=${pid} and org_id=${orgId}`);
     s.updated++;
   } else {
-    const ins = (await db.execute(sql`insert into parties (org_id, kind, display_name, is_active, subsidiary_id, email, phone, website, legal_name, tax_ids, custom)
-      values (${orgId}, ${kind}::text, ${displayName}, ${isActive}, ${subsidiaryId}, ${str(f.email)}, ${str(f.phone)}, ${str(f.website)}, ${str(f.legalName)}, ${taxIds}::jsonb, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
-    pid = ins.rows[0]?.id ?? null;
+    const ins = await db.execute<{ id: string }>(sql`insert into parties (org_id, kind, display_name, is_active, subsidiary_id, email, phone, website, legal_name, tax_ids, custom)
+      values (${orgId}, ${kind}::text, ${displayName}, ${isActive}, ${subsidiaryId}, ${str(f.email)}, ${str(f.phone)}, ${str(f.website)}, ${str(f.legalName)}, ${taxIds}::jsonb, ${custom}::jsonb) returning id`, "objects");
+    pid = ins[0]?.id ?? null;
     s.created++;
   }
   if (!pid) return null;
@@ -1238,8 +1226,8 @@ async function upsertRole(table: string, orgId: string, partyId: string, cols: R
     insert into ${sql.raw(table)} (org_id, party_id, ${sql.join(colList, sql`, `)})
     values (${orgId}, ${partyId}, ${sql.join(valList, sql`, `)})
     on conflict (party_id) do update set ${sql.join(setList, sql`, `)}
-    where ${sql.raw(table)}.org_id = ${orgId} returning party_id`);
-  if (written.rows.length !== 1) throw new Error('The source role did not persist in this organization');
+    where ${sql.raw(table)}.org_id = ${orgId} returning party_id`, "objects");
+  if (written.length !== 1) throw new Error('The source role did not persist in this organization');
 }
 
 async function auditTimeBillingChange(
@@ -1299,20 +1287,18 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
       sourceBillingStatus: string | null;
     }
   >();
-  const rows = (await db.execute(sql`
-    select id, custom->>${refKey} ns, billing_status, costing_basis,
-           custom->>'sourceBillingStatus' as source_billing_status
-      from time_entries
-     where org_id=${orgId} and custom->>${refKey} is not null`)) as {
-    rows: {
+  const rows = await db.execute<{
       id: string;
       ns: string;
       billing_status: "unbilled" | "billed";
       costing_basis: "actual" | "estimated";
       source_billing_status: string | null;
-    }[];
-  };
-  for (const r of rows.rows) {
+    }>(sql`
+    select id, custom->>${refKey} ns, billing_status, costing_basis,
+           custom->>'sourceBillingStatus' as source_billing_status
+      from time_entries
+     where org_id=${orgId} and custom->>${refKey} is not null`, "objects");
+  for (const r of rows) {
     existing.set(r.ns, {
       id: r.id,
       billingStatus: r.billing_status,
@@ -1398,8 +1384,8 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
                  billing_status is distinct from ${effectiveBillingStatus}
                  or costing_basis is distinct from ${sourceCostingBasis}
                )
-             returning id`));
-          if (updated.rows.length) {
+             returning id`, "objects"));
+          if (updated.length) {
             await auditTimeBillingChange(
               tx,
               ctx,
@@ -1413,7 +1399,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
               sourceCostingBasis,
             );
           }
-          return updated.rows.length > 0;
+          return updated.length > 0;
         });
         if (changed) s.updated++;
         else s.skipped++;

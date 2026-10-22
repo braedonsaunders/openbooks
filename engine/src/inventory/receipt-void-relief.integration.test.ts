@@ -145,7 +145,7 @@ async function seedFulfillment(seed: Seed, number: string, quantity: string): Pr
 
 async function docStatus(seed: Seed, documentId: string): Promise<string> {
   return (await db.execute<{ status: string }>(sql`
-    select status from documents where id = ${documentId} and org_id = ${seed.orgId}`)).rows[0]!.status;
+    select status from documents where id = ${documentId} and org_id = ${seed.orgId}`, "objects"))[0]!.status;
 }
 
 async function voidFailure(seed: Seed, receiptId: string): Promise<DocumentVoidError> {
@@ -240,7 +240,7 @@ test("fulfillment consumption offers void-with-dependents and the cascade voids 
     const counters = (await db.execute<{ poFulfilled: string; soFulfilled: string }>(sql`
       select (select quantity_fulfilled::text from document_lines where id = ${po.lineId}) as "poFulfilled",
              (select quantity_fulfilled::text from document_lines where document_id = ${shipment.orderId}) as "soFulfilled"
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(toUnits(counters.poFulfilled), toUnits("0"), "the purchase order is receivable again");
     assert.equal(toUnits(counters.soFulfilled), toUnits("0"), "the sales order is shippable again");
   } finally {
@@ -275,12 +275,12 @@ test("phantom remainder corrects through adjustment with audit while the receipt
       "only truly received cover stood, and it was sold",
     );
     const fulfilled = (await db.execute<{ q: string }>(sql`
-      select quantity_fulfilled::text as q from document_lines where id = ${po.lineId}`)).rows[0]!.q;
+      select quantity_fulfilled::text as q from document_lines where id = ${po.lineId}`, "objects"))[0]!.q;
     assert.equal(toUnits(fulfilled), toUnits("4"), "the order keeps only truly received cover");
     const audits = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${seed.orgId} and table_name = 'documents' and row_id = ${receiptId}
-         and action = 'update' and changes->>'mode' = 'receipt_remainder_corrected'`)).rows[0]!.n;
+         and action = 'update' and changes->>'mode' = 'receipt_remainder_corrected'`, "objects"))[0]!.n;
     assert.equal(audits, 1, "the correction is audited against the receipt");
     assert.equal(await docStatus(seed, receiptId), "approved", "the receipt stands as evidence");
 
@@ -293,7 +293,7 @@ test("phantom remainder corrects through adjustment with audit while the receipt
       select (select quantity_fulfilled::text from document_lines where id = ${po.lineId}) as received,
              (select quantity::text from (select coalesce(sum(quantity), 0) as quantity from inventory_movements
                where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}) s) as "onHand"
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(toUnits(counters.received), toUnits("4"));
     assert.equal(toUnits(counters.onHand), toUnits("0"));
   } finally {

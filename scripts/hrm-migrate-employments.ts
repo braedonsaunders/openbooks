@@ -177,12 +177,10 @@ function fail(message: string): number {
  */
 async function readDatabaseMarker(): Promise<string | null> {
   try {
-    const result = (await db.execute<{ marker: string | null }>(sql`
+    const result = await db.execute<{ marker: string | null }>(sql`
       select shobj_description(oid, 'pg_database') as marker
-        from pg_database where datname = current_database()`)) as unknown as {
-      rows: Array<{ marker: string | null }>;
-    };
-    return result.rows[0]?.marker ?? null;
+        from pg_database where datname = current_database()`, "objects");
+    return result[0]?.marker ?? null;
   } catch {
     // Fail closed: an unreadable marker never counts as ephemeral.
     return null;

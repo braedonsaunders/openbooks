@@ -17,13 +17,14 @@ import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
 
 function ieHistoryFixture(rows:Record<string,unknown>){
-  return {execute:async(query:SQL)=>{
+  return {execute:async(query:SQL, mode?: string)=>{
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const text=new PgDialect().sqlToQuery(query).sql;
-    if(text.includes("d.kind='pay_run'"))return {rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'EUR',taxYear:2026}]};
-    if(text.includes('select id from worker_employments'))return {rows:[{id:'55555555-5555-4555-8555-555555555555'}]};
-    if(text.includes('select s.id from pay_stubs s'))return {rows:[]};
-    if(text.includes('jsonb_array_elements_text'))return {rows:[]};
-      if(text.includes('history_run_pay_date'))return {rows:[rows]};
+    if(text.includes("d.kind='pay_run'"))return inMode({rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'EUR',taxYear:2026}]});
+    if(text.includes('select id from worker_employments'))return inMode({rows:[{id:'55555555-5555-4555-8555-555555555555'}]});
+    if(text.includes('select s.id from pay_stubs s'))return inMode({rows:[]});
+    if(text.includes('jsonb_array_elements_text'))return inMode({rows:[]});
+      if(text.includes('history_run_pay_date'))return inMode({rows:[rows]});
     throw new Error('Unexpected database read outside the declared Irish employment history fixture');
   }};
 }

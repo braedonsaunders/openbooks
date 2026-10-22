@@ -121,27 +121,21 @@ test(
         assert.equal(res.status, 200);
 
         // The definition row survives as archived — runs keep their parent.
-        const def = (
-          await db.execute<{ archived_at: string | null; archived_by: string | null }>(sql`
+        const def = (await db.execute<{ archived_at: string | null; archived_by: string | null }>(sql`
             select archived_at::text as archived_at, archived_by::text as archived_by
               from report_definitions where id = ${definitionId} and org_id = ${org.orgId}
-          `)
-        ).rows[0]!;
+          `, "objects"))[0]!;
         assert.ok(def.archived_at, "definition is stamped archived, not deleted");
         assert.equal(def.archived_by, actorId);
 
-        const runs = (
-          await db.execute<{ n: string }>(sql`
+        const runs = (await db.execute<{ n: string }>(sql`
             select count(*)::text as n from report_runs where id = ${runId} and org_id = ${org.orgId}
-          `)
-        ).rows[0]!.n;
+          `, "objects"))[0]!.n;
         assert.equal(runs, "1", "the historical run survives the delete");
-        const artifacts = (
-          await db.execute<{ n: string }>(sql`
+        const artifacts = (await db.execute<{ n: string }>(sql`
             select count(*)::text as n from report_run_artifacts
              where run_id = ${runId} and org_id = ${org.orgId}
-          `)
-        ).rows[0]!.n;
+          `, "objects"))[0]!.n;
         assert.equal(artifacts, "1", "the immutable artifact survives the delete");
 
         // The artifact stays downloadable under the run's original authz.
@@ -158,20 +152,16 @@ test(
         assert.ok(!catalog.definitions.some((d) => d.id === definitionId));
 
         // Its schedules stop.
-        const schedule = (
-          await db.execute<{ active: boolean }>(sql`
+        const schedule = (await db.execute<{ active: boolean }>(sql`
             select active from report_schedules where id = ${scheduleId} and org_id = ${org.orgId}
-          `)
-        ).rows[0]!;
+          `, "objects"))[0]!;
         assert.equal(schedule.active, false);
 
         // The delete is audited with before/after.
-        const audits = (
-          await db.execute<{ action: string; changes: unknown }>(sql`
+        const audits = await db.execute<{ action: string; changes: unknown }>(sql`
             select action, changes from audit_log
              where org_id = ${org.orgId} and table_name = 'report_definitions' and row_id = ${definitionId}
-          `)
-        ).rows;
+          `, "objects");
         assert.equal(audits.length, 1);
         assert.equal(audits[0]!.action, "delete");
         const changes = audits[0]!.changes as { before: object; after: { archived_at: string } };

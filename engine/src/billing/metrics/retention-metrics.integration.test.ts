@@ -38,19 +38,19 @@ test("retention metrics on a seeded cohort equal hand-computed values", DB, asyn
     const subB = randomUUID();
     const subC = randomUUID();
     await withOrgTransaction(org.orgId, async () => {
-      const features = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || '{"subscriptionBilling":true,"saasMetrics":true,"revenueRecognition":true}'::jsonb, true) where id = ${org.orgId} returning id`);
-      assert.equal(features.rows.length, 1);
+      const features = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || '{"subscriptionBilling":true,"saasMetrics":true,"revenueRecognition":true}'::jsonb, true) where id = ${org.orgId} returning id`, "objects");
+      assert.equal(features.length, 1);
       for (const [id, name] of [[customerB, "Retention B"], [customerC, "Retention C"]] as Array<[string, string]>) {
-        const party = await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${id}, ${org.orgId}, 'customer', ${name}) returning id`);
-        assert.equal(party.rows.length, 1);
+        const party = await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${id}, ${org.orgId}, 'customer', ${name}) returning id`, "objects");
+        assert.equal(party.length, 1);
       }
       const plans: Array<[string, string]> = [[randomUUID(), "100"], [randomUUID(), "150"], [randomUUID(), "200"]];
       const planIds = new Map<string, string>();
       for (const [planId, amount] of plans) {
         planIds.set(amount, planId);
         const plan = await db.execute(sql`insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count)
-          values (${planId}, ${org.orgId}, ${`Retention plan ${amount}`}, ${amount}, 'CAD', 'monthly', 1) returning id`);
-        assert.equal(plan.rows.length, 1);
+          values (${planId}, ${org.orgId}, ${`Retention plan ${amount}`}, ${amount}, 'CAD', 'monthly', 1) returning id`, "objects");
+        assert.equal(plan.length, 1);
       }
       const subs: Array<[string, string, string, string, string, string | null]> = [
         [subA, org.customerId, planIds.get("100")!, "active", "2026-06-01", null],
@@ -61,8 +61,8 @@ test("retention metrics on a seeded cohort equal hand-computed values", DB, asyn
         const amount = plan === planIds.get("100")! ? "100" : plan === planIds.get("150")! ? "150" : "200";
         const row = await db.execute(sql`insert into subscriptions
           (id, org_id, customer_id, plan_id, quantity, price_override, status, start_on, next_bill_on, canceled_on, created_by)
-          values (${id}, ${org.orgId}, ${customer}, ${plan}, '1', ${amount}, ${status}, ${startOn}, '2026-08-15', ${canceledOn}, ${actorId}) returning id`);
-        assert.equal(row.rows.length, 1);
+          values (${id}, ${org.orgId}, ${customer}, ${plan}, '1', ${amount}, ${status}, ${startOn}, '2026-08-15', ${canceledOn}, ${actorId}) returning id`, "objects");
+        assert.equal(row.length, 1);
       }
       const priors: Array<[string, string, string, string]> = [
         [subA, org.customerId, "100", "new"],
@@ -78,8 +78,8 @@ test("retention metrics on a seeded cohort equal hand-computed values", DB, asyn
           values (${org.orgId}, ${org.subsidiaryId}, ${customer}, ${sub},
                   '2026-06-01', '2026-06-01', '0', ${mrrEnd},
                   ${mrrEnd}, '0', '0', '0', '0', ${movement}, '0', '0', 'history-seed',
-                  'CAD', 'v1', '{"inputs_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}') returning id`);
-        assert.equal(row.rows.length, 1);
+                  'CAD', 'v1', '{"inputs_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}') returning id`, "objects");
+        assert.equal(row.length, 1);
       }
     });
 
@@ -90,7 +90,7 @@ test("retention metrics on a seeded cohort equal hand-computed values", DB, asyn
              sum(churned_mrr)::text as churned_mrr,
              sum(customers_start)::int::text as customers_start,
              sum(customers_churned)::int::text as customers_churned
-        from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = ${MONTH}::date`)).rows[0]!;
+        from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = ${MONTH}::date`, "objects"))[0]!;
     // The seeded cohort opens July with 100 + 100 + 200 of MRR across three
     // customers; July brings 50 of expansion and 200 of churn.
     assert.equal(facts.mrr_start, "400.0000");

@@ -214,7 +214,7 @@ test("restricted save-rate refuses org-wide job-title, trade, and default rates 
     };
     const beforeRates = await storedRates(f.orgId);
     const beforeAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
 
     for (const scope of [
       { jobTitle: "Field technician" },
@@ -228,7 +228,7 @@ test("restricted save-rate refuses org-wide job-title, trade, and default rates 
 
     assert.deepEqual(await storedRates(f.orgId), beforeRates);
     const afterAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
     assert.equal(afterAudit, beforeAudit);
   } finally {
     routeState.authz = null;
@@ -251,7 +251,7 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
     assert.equal(deleteCreated.status, 200);
     const beforeRates = await storedRates(f.orgId);
     const beforeAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
     const endId = beforeRates.find((rate) => rate.rate === "100.0000")!.id;
     const deleteId = beforeRates.find((rate) => rate.rate === "125.0000")!.id;
 
@@ -270,13 +270,13 @@ test("restricted end-rate and delete-rate refuse org-wide rows without rate or a
 
     assert.deepEqual(await storedRates(f.orgId), beforeRates);
     const afterAudit = Number((await db.execute(sql`
-      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`, "objects"))[0]!.n);
     assert.equal(afterAudit, beforeAudit);
 
     // A department-anchored rate ends for its own restricted setup actor.
     const departmentId = (await db.execute<{ id: string }>(sql`
       insert into departments (org_id, name, is_active, subsidiary_id)
-      values (${f.orgId}, 'Field crew', true, ${f.subsidiaryId}) returning id`)).rows[0]!.id;
+      values (${f.orgId}, 'Field crew', true, ${f.subsidiaryId}) returning id`, "objects"))[0]!.id;
     const departmentCreated = await POST(postRequest(saveRateBody({ departmentId, rate: "140" })));
     assert.equal(departmentCreated.status, 200);
     const departmentRateId = (await storedRates(f.orgId)).find((rate) => rate.rate === "140.0000")!.id;
@@ -306,8 +306,8 @@ async function storedRates(orgId: string): Promise<StoredRate[]> {
            effective_to::text as "effectiveTo", is_active as "isActive"
       from labor_cost_rates
      where org_id = ${orgId}
-     order by effective_from`);
-  return rows.rows;
+     order by effective_from`, "objects");
+  return rows;
 }
 
 type RateAudit = {
@@ -327,8 +327,8 @@ async function rateAudits(orgId: string): Promise<RateAudit[]> {
     select action, actor_id, changes
       from audit_log
      where org_id = ${orgId} and table_name = 'labor_cost_rates'
-     order by at, id`);
-  return rows.rows;
+     order by at, id`, "objects");
+  return rows;
 }
 
 /** A second (child) subsidiary of the scratch org — a distinct wage scope. */
@@ -363,14 +363,14 @@ interface StoredPolicy {
 
 async function storedPolicy(orgId: string): Promise<StoredPolicy | null> {
   const rows = await db.execute<{ c: StoredPolicy | null }>(sql`
-    select settings->'laborCosting' as c from orgs where id = ${orgId}`);
-  return rows.rows[0]!.c ?? null;
+    select settings->'laborCosting' as c from orgs where id = ${orgId}`, "objects");
+  return rows[0]!.c ?? null;
 }
 
 async function storedControl(orgId: string, key: string): Promise<string | null> {
   const rows = await db.execute<{ v: string | null }>(sql`
-    select settings#>>'{controlAccounts,${sql.raw(key)}}' as v from orgs where id = ${orgId}`);
-  return rows.rows[0]!.v ?? null;
+    select settings#>>'{controlAccounts,${sql.raw(key)}}' as v from orgs where id = ${orgId}`, "objects");
+  return rows[0]!.v ?? null;
 }
 
 /** A rejected save must leave zero trace: no policy, no accounts, no audit. */
@@ -381,8 +381,8 @@ async function assertNothingPersisted(orgId: string): Promise<void> {
   }
   const audits = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'orgs'`);
-  assert.equal(audits.rows[0]!.n, 0);
+     where org_id = ${orgId} and table_name = 'orgs'`, "objects");
+  assert.equal(audits[0]!.n, 0);
 }
 
 test("a valid save persists policy, control accounts, and audit evidence in one unit", async () => {
@@ -431,9 +431,9 @@ test("a valid save persists policy, control accounts, and audit evidence in one 
     const audits = await db.execute<{ action: string; actor_id: string | null; changes: Record<string, unknown> }>(sql`
       select action, actor_id, changes from audit_log
        where org_id = ${f.orgId} and table_name = 'orgs'
-       order by at`);
-    assert.equal(audits.rows.length, 1);
-    const audit = audits.rows[0]!;
+       order by at`, "objects");
+    assert.equal(audits.length, 1);
+    const audit = audits[0]!;
     assert.equal(audit.action, "update");
     assert.equal(audit.actor_id, f.actorId);
     assert.deepEqual(audit.changes.laborCosting, [null, after]);
@@ -652,9 +652,9 @@ test("re-saves keep the audit trail continuous — before values match what was 
     const audits = await db.execute<{ changes: { laborCosting: unknown[]; controlAccounts: Record<string, unknown[]> } }>(sql`
       select changes from audit_log
        where org_id = ${f.orgId} and table_name = 'orgs'
-       order by at`);
-    assert.equal(audits.rows.length, 2);
-    const evidence = audits.rows[1]!.changes;
+       order by at`, "objects");
+    assert.equal(audits.length, 2);
+    const evidence = audits[1]!.changes;
     assert.deepEqual(evidence.laborCosting[0], first);
     assert.deepEqual(evidence.laborCosting[1], second);
     assert.deepEqual(evidence.controlAccounts.laborWip, [f.wipAccount, null]);
@@ -1006,8 +1006,8 @@ test("out-of-scope compensation is 404 to a restricted setup actor; variance pos
     const bRates = await storedRates(f.orgId);
     assert.equal(bRates.length, 0);
     const journals = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${f.orgId}`);
-    assert.equal(journals.rows[0]!.n, 0);
+      select count(*)::int as n from journal_entries where org_id = ${f.orgId}`, "objects");
+    assert.equal(journals[0]!.n, 0);
   } finally {
     routeState.authz = null;
     const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");

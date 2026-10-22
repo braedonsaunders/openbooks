@@ -117,9 +117,9 @@ async function dropFixture(fixture: Fixture): Promise<void> {
   // before the parent delete can trip over it.
   const known = new Set([...fixture.createdOrgIds, fixture.templateOrgId, fixture.memberOrgId]);
   for (let depth = 0; depth < 10; depth += 1) {
-    const strays = (await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+    const strays = (await withBypassContext(async () => await db.execute<{ id: string }>(sql`
       select id from orgs
-       where sandbox_of in (${sql.join([...known].map((id) => sql`${id}`), sql`, `)})`)).rows))
+       where sandbox_of in (${sql.join([...known].map((id) => sql`${id}`), sql`, `)})`, "objects")))
       .map((row) => row.id)
       .filter((id) => !known.has(id));
     if (strays.length === 0) break;
@@ -168,8 +168,8 @@ async function sampleOrgsFor(memberUserId: string): Promise<
        where o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
          and o.settings->'sampleCompany'->>'industryKey' = ${INDUSTRY}
        order by o.created_at asc
-    `);
-    return result.rows;
+    `, "objects");
+    return result;
   });
 }
 
@@ -177,8 +177,8 @@ async function orgStage(orgId: string): Promise<string | null> {
   return withBypassContext(async () => {
     const result = await db.execute<{ stage: string | null }>(sql`
       select settings->'sampleCompany'->>'provisioningStage' as stage
-        from orgs where id = ${orgId}`);
-    return result.rows[0]?.stage ?? null;
+        from orgs where id = ${orgId}`, "objects");
+    return result[0]?.stage ?? null;
   });
 }
 
@@ -189,8 +189,8 @@ async function maxInvoiceNumber(orgId: string): Promise<number> {
         from documents
        where org_id = ${orgId}
          and kind = 'customer_invoice'
-         and starts_with(document_number, 'INV-')`);
-    return Number(result.rows[0]?.mx ?? 0);
+         and starts_with(document_number, 'INV-')`, "objects");
+    return Number(result[0]?.mx ?? 0);
   });
 }
 
@@ -198,8 +198,8 @@ async function sequenceNext(orgId: string, kind: string): Promise<number | null>
   return withBypassContext(async () => {
     const result = await db.execute<{ next_number: number }>(sql`
       select next_number from number_sequences
-       where org_id = ${orgId} and document_kind = ${kind}`);
-    return result.rows[0] ? Number(result.rows[0].next_number) : null;
+       where org_id = ${orgId} and document_kind = ${kind}`, "objects");
+    return result[0] ? Number(result[0].next_number) : null;
   });
 }
 
@@ -448,24 +448,24 @@ async function templateAttemptOrgs(profileId: string): Promise<Array<{ id: strin
   return withBypassContext(async () => {
     const result = await db.execute<{ id: string }>(sql`
       select id from orgs
-       where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}`);
-    return result.rows;
+       where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}`, "objects");
+    return result;
   });
 }
 
 async function simProfileOrgs(profileId: string): Promise<Array<{ id: string }>> {
   return withBypassContext(async () => {
     const result = await db.execute<{ id: string }>(sql`
-      select id from orgs where settings->>'simProfile' = ${profileId}`);
-    return result.rows;
+      select id from orgs where settings->>'simProfile' = ${profileId}`, "objects");
+    return result;
   });
 }
 
 async function hasTemplateAttemptMarker(orgId: string): Promise<boolean> {
   return withBypassContext(async () => {
     const result = await db.execute<{ marked: boolean }>(sql`
-      select (settings ? 'sampleTemplateAttempt') as marked from orgs where id = ${orgId}`);
-    return result.rows[0]?.marked ?? false;
+      select (settings ? 'sampleTemplateAttempt') as marked from orgs where id = ${orgId}`, "objects");
+    return result[0]?.marked ?? false;
   });
 }
 
@@ -473,8 +473,8 @@ async function templateOracleStatus(orgId: string): Promise<string | null> {
   return withBypassContext(async () => {
     const result = await db.execute<{ status: string | null }>(sql`
       select settings->'sampleTemplateOracle'->>'status' as status
-        from orgs where id = ${orgId}`);
-    return result.rows[0]?.status ?? null;
+        from orgs where id = ${orgId}`, "objects");
+    return result[0]?.status ?? null;
   });
 }
 
@@ -581,8 +581,8 @@ test(
 
       const leftover = await withBypassContext(async () => {
         const result = await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from orgs where id = ${first.orgId}`);
-        return result.rows[0]!.n;
+          select count(*)::int as n from orgs where id = ${first.orgId}`, "objects");
+        return result[0]!.n;
       });
       assert.equal(leftover, 0, "the interrupted clone must actually be gone");
     } finally {
@@ -629,8 +629,8 @@ test(
 
       const stranded = await withBypassContext(async () => {
         const result = await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from orgs where id = ${strandedId}`);
-        return result.rows[0]!.n;
+          select count(*)::int as n from orgs where id = ${strandedId}`, "objects");
+        return result[0]!.n;
       });
       assert.equal(stranded, 0, "the compensated partial must actually be gone");
     } finally {

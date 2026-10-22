@@ -61,7 +61,7 @@ async function callUpsert(
 
 async function partyRow(orgId: string, id: string) {
   return (await withBypassContext(() => db.execute<Record<string, unknown>>(sql`
-    select id, display_name, email, subsidiary_id, custom from parties where id = ${id} and org_id = ${orgId}`))).rows[0];
+    select id, display_name, email, subsidiary_id, custom from parties where id = ${id} and org_id = ${orgId}`, "objects")))[0];
 }
 
 async function seedParty(orgId: string, name: string, email: string | null, subsidiaryId: string | null = null): Promise<string> {
@@ -94,11 +94,11 @@ test("upsert creates by email with an address, then matches", { skip: !DB }, asy
     const stored = await partyRow(fixture.orgId, id);
     assert.equal(stored?.email, email);
     const role = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${id}`))).rows[0]!.n;
+      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${id}`, "objects")))[0]!.n;
     assert.equal(role, "1");
     const address = (await withBypassContext(() => db.execute<{ line1: string | null; country: string | null }>(sql`
       select line1, country from addresses
-       where org_id = ${fixture.orgId} and party_id = ${id} and is_default_billing`))).rows[0];
+       where org_id = ${fixture.orgId} and party_id = ${id} and is_default_billing`, "objects")))[0];
     assert.equal(address?.line1, "1 Market St");
     assert.equal(address?.country, "US");
 
@@ -109,7 +109,7 @@ test("upsert creates by email with an address, then matches", { skip: !DB }, asy
     assert.equal(matched.json.id, id);
     assert.equal((await partyRow(fixture.orgId, id))?.display_name, "Storefront Customer Inc.");
     const addressCount = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from addresses where org_id = ${fixture.orgId} and party_id = ${id}`))).rows[0]!.n;
+      select count(*)::text as n from addresses where org_id = ${fixture.orgId} and party_id = ${id}`, "objects")))[0]!.n;
     assert.equal(addressCount, "1");
   } finally {
     await withBypassContext(() => dropScratchOrg(fixture.orgId));
@@ -222,7 +222,7 @@ test("upsert does not turn another party into a customer or cross subsidiary sco
     const employeeNameMatch = await callUpsert(fixture, { name: "Existing Employee" });
     assert.equal(employeeNameMatch.status, 409, JSON.stringify(employeeNameMatch.json));
     const employeeRoleCount = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${employeeId}`))).rows[0]!.n;
+      select count(*)::text as n from customer_roles where org_id = ${fixture.orgId} and party_id = ${employeeId}`, "objects")))[0]!.n;
     assert.equal(employeeRoleCount, "0");
 
     const foreignMatch = await callUpsert(fixture, {

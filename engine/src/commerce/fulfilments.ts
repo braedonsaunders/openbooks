@@ -148,7 +148,7 @@ async function mapFulfilmentLocation(
   if (locationExternalId) {
     const row = (await db.execute<{ stock_location_id: string | null }>(sql`
       select stock_location_id from sales_channel_locations
-       where org_id = ${orgId} and channel_id = ${channelId} and external_location_id = ${locationExternalId}`)).rows[0];
+       where org_id = ${orgId} and channel_id = ${channelId} and external_location_id = ${locationExternalId}`, "objects"))[0];
     if (row?.stock_location_id) return row.stock_location_id;
     park(
       "unmapped_fulfilment_location",
@@ -158,9 +158,9 @@ async function mapFulfilmentLocation(
   }
   // No location on the delivery: exactly one mapped location is unambiguous,
   // anything else names the storefront to disambiguate.
-  const rows = (await db.execute<{ stock_location_id: string | null }>(sql`
+  const rows = await db.execute<{ stock_location_id: string | null }>(sql`
     select stock_location_id from sales_channel_locations
-     where org_id = ${orgId} and channel_id = ${channelId} and stock_location_id is not null`)).rows;
+     where org_id = ${orgId} and channel_id = ${channelId} and stock_location_id is not null`, "objects");
   const mapped = rows.map((row) => row.stock_location_id).filter((id): id is string => !!id);
   if (mapped.length !== 1) {
     park(
@@ -202,7 +202,7 @@ async function matchFulfilmentItem(
     });
     if (linked?.nativeTable === "items") {
       const item = (await db.execute<{ id: string }>(sql`
-        select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`)).rows[0];
+        select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`, "objects"))[0];
       if (item) return { itemId: item.id, orderLine };
     }
   }
@@ -211,7 +211,7 @@ async function matchFulfilmentItem(
     const item = (await db.execute<{ id: string }>(sql`
       select id from items
        where org_id = ${orgId} and code = ${sku} and is_active
-       order by created_at limit 1`)).rows[0];
+       order by created_at limit 1`, "objects"))[0];
     if (item) return { itemId: item.id, orderLine };
   }
   park(
@@ -232,7 +232,7 @@ interface ChannelMeta {
 async function loadFulfilmentChannel(orgId: string, channelId: string): Promise<ChannelMeta> {
   const row = (await db.execute<{ name: string; kind: string; external_account: string; currency: string; subsidiary_id: string | null }>(sql`
     select name, kind, external_account, currency, subsidiary_id from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
   if (!row) {
     throw new CommerceError(
       "channel_not_found",
@@ -252,7 +252,7 @@ async function loadFulfilmentChannel(orgId: string, channelId: string): Promise<
 async function saleDocumentForFulfilment(orgId: string, order: ChannelOrderDetail): Promise<string | null> {
   if (order.postingDocumentId) {
     const sale = (await db.execute<{ kind: string; status: string }>(sql`
-      select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`)).rows[0];
+      select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`, "objects"))[0];
     if (sale?.kind === "cash_sale" && sale.status === "posted") return order.postingDocumentId;
     return null;
   }
@@ -260,7 +260,7 @@ async function saleDocumentForFulfilment(orgId: string, order: ChannelOrderDetai
   const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
     select s.posting_document_id from channel_daily_summaries s
      join documents d on d.org_id = s.org_id and d.id = s.posting_document_id
-     where s.org_id = ${orgId} and s.id = ${order.summaryId} and d.status = 'posted'`)).rows[0];
+     where s.org_id = ${orgId} and s.id = ${order.summaryId} and d.status = 'posted'`, "objects"))[0];
   return summary?.posting_document_id ?? null;
 }
 
@@ -303,12 +303,12 @@ async function loadSalePositions(
   documentDate: string,
   fulfilmentId: string,
 ): Promise<SalePosition[]> {
-  const lines = (await db.execute<{ id: string; item_id: string; quantity: string; kind: string }>(sql`
+  const lines = await db.execute<{ id: string; item_id: string; quantity: string; kind: string }>(sql`
     select dl.id, dl.item_id, dl.quantity::text as quantity, i.kind
       from document_lines dl
       join items i on i.org_id = dl.org_id and i.id = dl.item_id
      where dl.org_id = ${orgId} and dl.document_id = ${saleDocumentId} and dl.item_id is not null
-     order by dl.line_number`)).rows;
+     order by dl.line_number`, "objects");
   const positions: SalePosition[] = [];
   for (const line of lines) {
     if (line.kind !== "inventory" && line.kind !== "assembly" && line.kind !== "kit") continue;
@@ -333,7 +333,7 @@ async function loadSalePositions(
            and m.item_id = ${ruler!.componentItemId} and m.kind = 'issue' and m.status = 'posted'
            and not exists (
              select 1 from inventory_movements r
-              where r.org_id = m.org_id and r.reverses_movement_id = m.id and r.status = 'posted')`)).rows[0]!.total;
+              where r.org_id = m.org_id and r.reverses_movement_id = m.id and r.status = 'posted')`, "objects"))[0]!.total;
       const issuedComp4dp = -scale4dp(issued);
       const issuedKit4dp = issuedComp4dp * 10_000n;
       if (issuedKit4dp % perKit4dp !== 0n) {
@@ -358,7 +358,7 @@ async function loadSalePositions(
          and m.kind = 'issue' and m.status = 'posted'
          and not exists (
            select 1 from inventory_movements r
-            where r.org_id = m.org_id and r.reverses_movement_id = m.id and r.status = 'posted')`)).rows[0]!.total;
+            where r.org_id = m.org_id and r.reverses_movement_id = m.id and r.status = 'posted')`, "objects"))[0]!.total;
     positions.push({
       lineId: line.id,
       itemId: line.item_id,
@@ -419,7 +419,7 @@ async function postInboundFulfilment(
   const governed = await isSaleFulfilmentGoverned(db, orgId, saleDocumentId!);
   const stockLocationId = await mapFulfilmentLocation(orgId, order.channelId, channel.name, fulfilment.externalId, fulfilment.locationExternalId);
   const saleSubsidiary = (await db.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from documents where org_id = ${orgId} and id = ${saleDocumentId}`)).rows[0]?.subsidiary_id ?? null;
+    select subsidiary_id from documents where org_id = ${orgId} and id = ${saleDocumentId}`, "objects"))[0]?.subsidiary_id ?? null;
   const subsidiaryId = channel.subsidiaryId ?? saleSubsidiary;
   if (!subsidiaryId) {
     park(
@@ -437,7 +437,7 @@ async function postInboundFulfilment(
     const matched = await matchFulfilmentItem(orgId, channel.kind, channel.externalAccount, order, fulfilment.externalId, line);
     if (!matched.orderLine || matched.orderLine.giftCard || !matched.itemId) continue;
     const itemKind = (await db.execute<{ kind: string }>(sql`
-      select kind from items where org_id = ${orgId} and id = ${matched.itemId}`)).rows[0]?.kind ?? null;
+      select kind from items where org_id = ${orgId} and id = ${matched.itemId}`, "objects"))[0]?.kind ?? null;
     if (itemKind !== "inventory" && itemKind !== "assembly" && itemKind !== "kit") continue;
     const stockQty = toStockQuantity(qty, `${fulfilment.externalId} line "${line.sku ?? "?"}"`);
     let need4dp = scale4dp(stockQty);
@@ -564,7 +564,7 @@ async function reverseFulfilment(
        and id != ${eventId} and coalesce(payload->>'cancelled', 'false') = 'false'
        and payload->>'externalId' = ${fulfilment.externalId}
      order by occurred_at desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!original || original.posting_status !== "posted") {
     park(
       "cancellation_blocked",
@@ -572,11 +572,11 @@ async function reverseFulfilment(
       "Record the fulfilment first (replay its delivery), then replay the cancellation.",
     );
   }
-  const movements = (await db.execute<{ id: string; item_id: string; quantity: string; unit_cost: string }>(sql`
+  const movements = await db.execute<{ id: string; item_id: string; quantity: string; unit_cost: string }>(sql`
     select id, item_id, quantity::text as quantity, unit_cost::text as unit_cost from inventory_movements
      where org_id = ${orgId} and status = 'posted' and kind = 'issue'
        and idempotency_key like ${`channel-fulfilment:${original!.id}:%`}
-     order by moved_at, id`)).rows;
+     order by moved_at, id`, "objects");
   if (movements.length === 0) {
     // The original fulfilment moved no stock (its sale had already issued):
     // the cancellation reverses to nothing and closes.
@@ -590,7 +590,7 @@ async function reverseFulfilment(
     const reversed = (await db.execute<{ id: string }>(sql`
       select id from inventory_movements
        where org_id = ${orgId} and reverses_movement_id = ${movement.id}
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (reversed) continue;
     const returned = await postedReturnQuantity(db, orgId, {
       returnKind: "receipt",
@@ -642,24 +642,24 @@ async function outboundShipmentLines(
   shipmentId: string,
 ): Promise<{ salesOrderId: string; lines: OutboundShipmentLine[] } | null> {
   const shipment = (await db.execute<{ id: string; kind: string }>(sql`
-    select id, kind from documents where org_id = ${orgId} and id = ${shipmentId}`)).rows[0];
+    select id, kind from documents where org_id = ${orgId} and id = ${shipmentId}`, "objects"))[0];
   if (!shipment || shipment.kind !== "shipment") return null;
   const pick = (await db.execute<{ from_document_id: string }>(sql`
     select from_document_id from document_links
      where org_id = ${orgId} and to_document_id = ${shipmentId} and link_type = 'created_from'
-     order by created_at limit 1`)).rows[0];
+     order by created_at limit 1`, "objects"))[0];
   if (!pick) return null;
   const salesOrder = (await db.execute<{ from_document_id: string; kind: string }>(sql`
     select l.from_document_id, d.kind from document_links l
      join documents d on d.org_id = l.org_id and d.id = l.from_document_id
      where l.org_id = ${orgId} and l.to_document_id = ${pick.from_document_id} and l.link_type = 'created_from'
-     order by l.created_at limit 1`)).rows[0];
+     order by l.created_at limit 1`, "objects"))[0];
   if (!salesOrder || salesOrder.kind !== "sales_order") return null;
-  const lines = (await db.execute<{ sku: string; quantity: string }>(sql`
+  const lines = await db.execute<{ sku: string; quantity: string }>(sql`
     select i.code as sku, dl.quantity::text as quantity
       from document_lines dl
       join items i on i.id = dl.item_id and i.org_id = dl.org_id
-     where dl.org_id = ${orgId} and dl.document_id = ${shipmentId} and dl.item_id is not null`)).rows;
+     where dl.org_id = ${orgId} and dl.document_id = ${shipmentId} and dl.item_id is not null`, "objects");
   return {
     salesOrderId: salesOrder.from_document_id,
     lines: lines
@@ -689,7 +689,7 @@ async function outboundTracking(orgId: string, shipmentId: string): Promise<Ship
     select carrier, tracking_number, label_url from shipment_labels
      where org_id = ${orgId} and shipment_document_id = ${shipmentId} and status not in ('voided', 'refunded')
      order by created_at desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (label?.tracking_number) {
     return { trackingNumber: label.tracking_number, trackingUrl: label.label_url, carrierName: label.carrier };
   }
@@ -697,7 +697,7 @@ async function outboundTracking(orgId: string, shipmentId: string): Promise<Ship
     select fd.tracking_number, fd.carrier_service, c.code, c.tracking_url_template
       from fulfillment_documents fd
       left join carriers c on c.id = fd.carrier_id and c.org_id = fd.org_id
-     where fd.org_id = ${orgId} and fd.document_id = ${shipmentId}`)).rows[0];
+     where fd.org_id = ${orgId} and fd.document_id = ${shipmentId}`, "objects"))[0];
   if (!shipment?.tracking_number) return { trackingNumber: null, trackingUrl: null, carrierName: null };
   return {
     trackingNumber: shipment.tracking_number,
@@ -758,14 +758,14 @@ async function postOutboundFulfilment(
     }
     const salesOrder = (await db.execute<{ external_ref: string | null; source_channel_id: string | null }>(sql`
       select external_ref, source_channel_id from documents
-       where org_id = ${orgId} and id = ${chain.salesOrderId}`)).rows[0];
+       where org_id = ${orgId} and id = ${chain.salesOrderId}`, "objects"))[0];
     if (salesOrder?.external_ref !== order.externalId || salesOrder?.source_channel_id !== order.channelId) {
       await markChannelEventIgnored(orgId, eventId, actor);
       return { status: "ignored", documentId: null };
     }
     const stage = (await db.execute<{ stage: string }>(sql`
       select stage from fulfillment_documents
-       where org_id = ${orgId} and document_id = ${outbound.shipmentId}`)).rows[0]?.stage ?? null;
+       where org_id = ${orgId} and document_id = ${outbound.shipmentId}`, "objects"))[0]?.stage ?? null;
     if (stage !== "done") {
       // The shipment has not completed: the push waits for completion.
       return { status: "pending", documentId: null };
@@ -796,7 +796,7 @@ async function postOutboundFulfilment(
       select id from external_links
        where org_id = ${orgId} and provider = ${channel.kind} and object_type = 'fulfillment'
          and native_table = ${nativeTable} and native_id = ${nativeId}
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (pushed) {
       await markChannelEventPosted(orgId, eventId, actor, linkDocumentId);
       return { status: "posted", documentId: linkDocumentId };
@@ -971,14 +971,14 @@ export async function requestChannelFulfilmentPush(
       if (!chain) return { status: "ignored", documentId: null, eventId: null };
       const salesOrder = (await db.execute<{ id: string; external_ref: string | null; source_channel_id: string | null }>(sql`
         select id, external_ref, source_channel_id from documents
-         where org_id = ${orgId} and id = ${chain.salesOrderId}`)).rows[0];
+         where org_id = ${orgId} and id = ${chain.salesOrderId}`, "objects"))[0];
       if (!salesOrder?.external_ref || !salesOrder.source_channel_id) {
         return { status: "ignored", documentId: null, eventId: null };
       }
       const order = (await db.execute<{ id: string }>(sql`
         select id from channel_orders
          where org_id = ${orgId} and channel_id = ${salesOrder.source_channel_id}
-           and external_id = ${salesOrder.external_ref}`)).rows[0];
+           and external_id = ${salesOrder.external_ref}`, "objects"))[0];
       if (!order) return { status: "ignored", documentId: null, eventId: null };
       orderId = order.id;
       orderExternalId = salesOrder.external_ref;

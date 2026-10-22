@@ -43,7 +43,7 @@ test("explicit sample authority preserves grants, denies and legal-entity scope"
       () => assertSampleOperator(db, org.orgId, actorId, org.subsidiaryId, "general_business", true)));
     await assert.rejects(authorize(), /lacks admin.setup.manage/);
     await withBypass(() => db.execute(sql`update app_roles set permissions=${JSON.stringify(sampleOperatorPermissions("general_business"))}::jsonb where org_id=${org.orgId} and key='sample_author'`));
-    const grants = () => withBypass(async () => (await db.execute(sql`select to_jsonb(r) as role from app_roles r where org_id=${org.orgId} order by id`)).rows);
+    const grants = () => withBypass(async () => await db.execute(sql`select to_jsonb(r) as role from app_roles r where org_id=${org.orgId} order by id`, "objects"));
     const before = await grants();
     await authorize();
     assert.deepEqual(await grants(), before, "authorization never upgrades stored role definitions");

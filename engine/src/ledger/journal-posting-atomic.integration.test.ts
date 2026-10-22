@@ -37,7 +37,7 @@ test("script journal submission keeps its provenance while ordinary submissions 
         subjectKind: "journal", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any",
       });
       const graph = (await db.execute<{ graph: { nodes: unknown[]; edges: unknown[] } }>(sql`
-        select graph from flows where org_id = ${org.orgId} and id = ${seeded.flowId}`)).rows[0]!.graph;
+        select graph from flows where org_id = ${org.orgId} and id = ${seeded.flowId}`, "objects"))[0]!.graph;
       graph.nodes.push({ id: "source", position: { x: 110, y: 0 }, data: {
         kind: "condition", rule: { op: "eq", field: "event_source", value: "ui" },
       } });
@@ -46,8 +46,8 @@ test("script journal submission keeps its provenance while ordinary submissions 
         { id: "source-gate", source: "source", target: seeded.gateNodeId, sourceHandle: "then" },
       ];
       const changed = await db.execute(sql`update flows set graph = ${JSON.stringify(graph)}::jsonb
-        where org_id = ${org.orgId} and id = ${seeded.flowId} returning id`);
-      assert.equal(changed.rows.length, 1);
+        where org_id = ${org.orgId} and id = ${seeded.flowId} returning id`, "objects");
+      assert.equal(changed.length, 1);
       const scripted = await createScriptJournal(org.orgId, actors.adminId, {
         documentDate: org.date, lines: [
           { accountId: org.accounts.bank, amount: "10" },
@@ -258,9 +258,9 @@ test(
                  (select count(*)::int from journal_entries
                     where source_document_id = ${documentId}) as entry_count
             from documents where id = ${documentId}
-        `)),
+        `, "objects")),
       );
-      assert.deepEqual(state.rows[0], {
+      assert.deepEqual(state[0], {
         status: "draft",
         submitted_at: null,
         posted_entry_id: null,
@@ -332,9 +332,9 @@ test("before_post script effects are atomic with the posting transaction", { ski
                (select count(*)::int from script_runs r
                  where r.target_id = ${failingDoc}) as script_runs
           from documents d where d.id = ${failingDoc}
-      `)),
+      `, "objects")),
     );
-    assert.deepEqual(rolledBack.rows[0], {
+    assert.deepEqual(rolledBack[0], {
       memo: null,
       script_runs: 0,
     }, "the failed post must not leave the script mutation or its evidence behind");
@@ -361,9 +361,9 @@ test("before_post script effects are atomic with the posting transaction", { ski
                (select count(*)::int from script_runs r
                  where r.target_id = ${okDoc}) as script_runs
           from documents d where d.id = ${okDoc}
-      `)),
+      `, "objects")),
     );
-    assert.deepEqual(committed.rows[0], {
+    assert.deepEqual(committed[0], {
       memo: "scripted-memo",
       status: "posted",
       script_runs: 1,
@@ -439,9 +439,9 @@ test(
                    where source_document_id = ${documentId}) as "entryCount"
             from documents
            where id = ${documentId} and org_id = ${org.orgId}
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(state.rows[0], {
+      assert.deepEqual(state[0], {
         status: "approved",
         custom: { controlAccountId: org.accounts.ar, marker: "original" },
         entryCount: 0,
@@ -529,31 +529,31 @@ test(
             from journal_lines
            where org_id = ${org.orgId} and entry_id = ${entryId}
            order by line_number
-        `),
+        `, "objects"),
       );
       // The final line absorbed the −0.0001 residual; nothing else moved.
       assert.deepEqual(
-        lines.rows.map((l) => l.amount),
+        lines.map((l) => l.amount),
         ["33.3333", "33.3333", "-66.6666"],
       );
       assert.equal(
-        lines.rows.reduce((acc, l) => acc + toUnits(l.amount), 0n),
+        lines.reduce((acc, l) => acc + toUnits(l.amount), 0n),
         0n,
         "the committed entry must balance to the ten-thousandth",
       );
       // The transaction-currency economics are untouched by the absorption.
       assert.deepEqual(
-        lines.rows.map((l) => l.txn_amount),
+        lines.map((l) => l.txn_amount),
         ["100.0000", "100.0000", "-200.0000"],
       );
-      assert.deepEqual(lines.rows.map((l) => l.fx_rate), [
+      assert.deepEqual(lines.map((l) => l.fx_rate), [
         "0.3333333333",
         "0.3333333333",
         "0.3333333333",
       ]);
-      assert.deepEqual([...new Set(lines.rows.map((l) => l.currency))], ["EUR"]);
+      assert.deepEqual([...new Set(lines.map((l) => l.currency))], ["EUR"]);
       assert.deepEqual(
-        [...new Set(lines.rows.map((l) => l.subsidiary_id))],
+        [...new Set(lines.map((l) => l.subsidiary_id))],
         [org.subsidiaryId],
       );
     } finally {
@@ -619,14 +619,14 @@ test(
             from journal_lines
            where org_id = ${org.orgId} and entry_id = ${entryId}
            order by line_number
-        `),
+        `, "objects"),
       );
       assert.deepEqual(
-        lines.rows.map((l) => l.amount),
+        lines.map((l) => l.amount),
         ["125.0000", "62.5000", "-187.5000"],
       );
       assert.deepEqual(
-        lines.rows.map((l) => l.txn_amount),
+        lines.map((l) => l.txn_amount),
         ["100.0000", "50.0000", "-150.0000"],
       );
     } finally {
@@ -682,9 +682,9 @@ test(
             from journal_lines
            where org_id = ${org.orgId} and entry_id = ${entryId}
            order by line_number
-        `),
+        `, "objects"),
       );
-      assert.deepEqual(lines.rows, [
+      assert.deepEqual(lines, [
         { amount: "200.0000", fx_rate: "2.0000000000", txn_amount: "100.0000" },
         { amount: "-200.0000", fx_rate: "2.0000000000", txn_amount: "-100.0000" },
       ]);
@@ -817,10 +817,10 @@ test(
                  (select count(*)::int from journal_entries
                    where source_document_id = ${documentId}) as entry_count
             from documents d where d.id = ${documentId}
-        `)),
+        `, "objects")),
       );
       assert.deepEqual(
-        rolledBack.rows[0],
+        rolledBack[0],
         {
           status: "approved",
           memo: null,
@@ -859,10 +859,10 @@ test(
                  (select status from posting_effects
                    where document_id = ${documentId}) as effects
             from documents d where d.id = ${documentId}
-        `)),
+        `, "objects")),
       );
       assert.deepEqual(
-        committed.rows[0],
+        committed[0],
         {
           status: "posted",
           memo: "scripted-memo",

@@ -203,10 +203,10 @@ async function resolveNativeReferenceMap(
   orgId: string,
   table: "projects" | "parties",
 ): Promise<Map<string, string>> {
-  const rows = (await db.execute<{ k: string; id: string }>(sql`
+  const rows = await db.execute<{ k: string; id: string }>(sql`
     select custom->>'nsId' as k, id::text as id from ${sql.raw(`"${table}"`)}
      where org_id = ${orgId} and custom->>'nsId' is not null order by id for share
-  `)).rows;
+  `, "objects");
   const mapped = new Map<string, string>();
   for (const row of rows) {
     const ref = String(row.k);
@@ -238,7 +238,7 @@ async function lockNativeEvidence(orgId: string, nativeDocumentId: string, charg
 }
 
 async function readNativePointInTime(orgId: string, nativeDocumentId: string): Promise<Record<string, unknown>> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     document: Record<string, unknown>;
     fieldTicket: Record<string, unknown> | null;
     documentLines: unknown[];
@@ -283,7 +283,7 @@ async function readNativePointInTime(orgId: string, nativeDocumentId: string): P
             or jsonb_path_exists(a.source_snapshot, '$.measurement.settlement.transaction.recipientContexts[*] ? (@.ticket_reference == $documentId)', jsonb_build_object('documentId', ${nativeDocumentId}::text))
             or exists (select 1 from document_lines l where l.org_id = ${orgId} and l.field_ticket_id = ${nativeDocumentId}
                          and jsonb_path_exists(a.source_snapshot, '$.measurement.settlement.transaction.source.lines[*] ? (@.sourceId == $lineId)', jsonb_build_object('lineId', l.id::text))))) as "awardUseIds"
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   if (!row?.document) {
     throw new FieldTicketSourceCertificationError("the native Field Ticket is unavailable; choose an existing native ticket in this organization");
@@ -351,7 +351,7 @@ export async function certifyFieldTicketSourceIdentity(
     const preliminary = (await db.execute<{ document_number: string; project_id: string | null; subsidiary_id: string | null }>(sql`
       select document_number, project_id::text, subsidiary_id::text from documents
        where org_id = ${orgId} and id = ${input.nativeDocumentId} and kind = 'field_ticket'
-    `)).rows[0];
+    `, "objects"))[0];
     if (!preliminary) {
       throw new FieldTicketSourceCertificationError("the native Field Ticket is unavailable; choose an existing native ticket in this organization");
     }
@@ -384,7 +384,7 @@ export async function certifyFieldTicketSourceIdentity(
       select period_start::text, period_end::text, foreman_party_id::text,
              superintendent_party_id::text, charge_document_id::text
         from field_tickets where org_id = ${orgId} and document_id = ${input.nativeDocumentId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!headerRow) {
       throw new FieldTicketSourceCertificationError("the native Field Ticket header is unavailable; choose a complete native ticket in this organization");
     }
@@ -402,7 +402,7 @@ export async function certifyFieldTicketSourceIdentity(
 
     // Replay and conflict admission reads the retained certificates under
     // lock: one source pair and one native ticket may be certified once.
-    const existingCertifications = (await db.execute<{
+    const existingCertifications = await db.execute<{
       id: string; request_id: string; request_payload_sha256: string; certified_by: string;
       native_document_id: string; source_system: string; source_external_id: string;
     }>(sql`
@@ -414,7 +414,7 @@ export async function certifyFieldTicketSourceIdentity(
            or native_document_id = ${input.nativeDocumentId}
            or (source_system = ${input.sourceSystem} and source_external_id = ${input.sourceTicketId}))
        order by id for share
-    `)).rows;
+    `, "objects");
     const replay = existingCertifications.find((row) => row.request_id === input.requestId);
     if (replay) {
       if (replay.certified_by === actorId && replay.request_payload_sha256 === payloadSha256
@@ -434,13 +434,13 @@ export async function certifyFieldTicketSourceIdentity(
     // second native representation may be certified for it. The held
     // source fence serializes this read against the importer. The
     // refusal names no other record: a foreign owner is not disclosed.
-    const otherOwners = (await db.execute<{ id: string }>(sql`
+    const otherOwners = await db.execute<{ id: string }>(sql`
       select id from documents
        where org_id = ${orgId} and kind = 'field_ticket' and id <> ${input.nativeDocumentId}
          and custom->'source'->>'system' = ${input.sourceSystem}
          and custom->'source'->>'externalId' = ${input.sourceTicketId}
        order by id for share
-    `)).rows;
+    `, "objects");
     if (otherOwners.length > 0) {
       throw new FieldTicketSourceCertificationError("this source ticket is already represented by another native Field Ticket; reconcile the duplicate source representation before certifying");
     }
@@ -466,7 +466,7 @@ export async function certifyFieldTicketSourceIdentity(
 
     // Actual retained bytes — never a client-asserted row or hash — prove
     // the reviewed source row is a member of the pinned file version.
-    const retained = (await db.execute<{
+    const retained = await db.execute<{
       is_inactive: boolean; content_hash: string | null; storage_kind: string; bytes: Buffer | null;
     }>(sql`
       select file.is_inactive, version.content_hash, version.storage_kind, blob.bytes
@@ -476,7 +476,7 @@ export async function certifyFieldTicketSourceIdentity(
        where file.org_id = ${orgId} and file.id = ${input.sourceFileId}
          and version.id = ${input.sourceVersionId}
        for share of file, version
-    `)).rows;
+    `, "objects");
     if (retained.length !== 1 || retained[0]!.is_inactive) {
       throw new FieldTicketSourceCertificationError("the pinned source file version is unavailable; retain the exact source export in the File Cabinet and certify against its active version");
     }
@@ -518,9 +518,9 @@ export async function certifyFieldTicketSourceIdentity(
       throw new FieldTicketSourceCertificationError("the explicit reference map's customer does not match the source row's mapped native customer");
     }
     if (resolvedCustomerId) {
-      const customerRole = (await db.execute(sql`
+      const customerRole = await db.execute(sql`
         select party_id from customer_roles where org_id = ${orgId} and party_id = ${resolvedCustomerId} for share
-      `)).rows;
+      `, "objects");
       if (customerRole.length !== 1) {
         throw new FieldTicketSourceCertificationError(`source customer ${sourceRow.customerRef} does not resolve to a native customer; map the source customer before certifying`);
       }
@@ -576,7 +576,7 @@ export async function certifyFieldTicketSourceIdentity(
     };
     const nativeFingerprintSha256 = nativePointInTimeFingerprint(before);
 
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into field_ticket_source_certifications
         (org_id, native_document_id, native_document_number, native_project_id, native_subsidiary_id,
          source_system, source_external_id, source_file_id, source_version_id, source_file_sha256,
@@ -590,7 +590,7 @@ export async function certifyFieldTicketSourceIdentity(
         ${revisionToken}::bigint, ${JSON.stringify(before)}::jsonb, ${nativeFingerprintSha256},
         ${input.requestId}, ${payloadSha256}, ${actorId})
       returning id::text
-    `)).rows;
+    `, "objects");
     if (inserted.length !== 1 || !inserted[0]?.id) {
       throw new FieldTicketSourceCertificationError("the source-identity certification was not retained");
     }
@@ -614,13 +614,13 @@ export async function certifyFieldTicketSourceIdentity(
       finalTicket: sourceRow.final,
       approval: sourceRow.approval,
     };
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update documents
          set custom = custom || ${JSON.stringify({ source: sourceMetadata })}::jsonb,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${input.nativeDocumentId} and revision_seq = ${revisionToken}::bigint
       returning id::text
-    `)).rows;
+    `, "objects");
     if (updated.length !== 1) {
       throw new FieldTicketSourceCertificationError("the native ticket changed while its source identity was certified; the certification was not projected");
     }
@@ -634,7 +634,7 @@ export async function certifyFieldTicketSourceIdentity(
       throw new FieldTicketSourceCertificationError("the certified source identity is not observable on the native ticket; the certification was not projected");
     }
 
-    const audit = (await db.execute(sql`
+    const audit = await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
       values (${orgId}, 'documents', ${input.nativeDocumentId}, 'update',
         ${JSON.stringify({
@@ -650,7 +650,7 @@ export async function certifyFieldTicketSourceIdentity(
         })}::jsonb,
         ${actorId}, ${input.requestId})
       returning id
-    `)).rows;
+    `, "objects");
     if (audit.length !== 1) {
       throw new FieldTicketSourceCertificationError("the source-identity certification was not audited");
     }
@@ -702,7 +702,7 @@ export async function listFieldTicketSourceCertificationCandidates(input: {
       : allowed.size
         ? sql` and d.subsidiary_id = any(${sql.param([...allowed])}::uuid[])`
         : sql` and false`;
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       nativeDocumentId: string; documentNumber: string; revision: string;
       projectId: string | null; subsidiaryId: string | null; status: string;
       sourceSystem: string | null; sourceExternalId: string | null; certificationId: string | null;
@@ -719,7 +719,7 @@ export async function listFieldTicketSourceCertificationCandidates(input: {
        where d.org_id = ${orgId} and d.kind = 'field_ticket'${scopeFilter}
        order by d.document_number, d.id
        limit 500
-    `)).rows;
+    `, "objects");
     return {
       tickets: rows.map((row) => ({
         nativeDocumentId: row.nativeDocumentId,

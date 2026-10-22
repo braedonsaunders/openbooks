@@ -99,7 +99,7 @@ async function shipmentState(orgId: string, fulfillmentId: string, salesLineId: 
              join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
             where reversal.org_id = ${orgId} and line.document_id = ${fulfillmentId}
               and reversal.kind = 'return' and reversal.status = 'posted') as reversals
-  `)).rows[0]!;
+  `, "objects"))[0]!;
 }
 
 /**

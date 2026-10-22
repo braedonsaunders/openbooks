@@ -92,7 +92,7 @@ const line = (verdict: BucketVerdict) => {
 };
 
 (async () => {
-  const org = ((await retry(() => db.execute(sql`select name, env_kind from orgs where id = ${ORG}`)))).rows[0];
+  const org = (await retry(() => db.execute(sql`select name, env_kind from orgs where id = ${ORG}`, "objects")))[0];
   if (!org) throw new Error(`no such org: ${ORG}`);
   console.log(`${org.name} (${org.env_kind})  —  posting on/after ${SINCE}\n`);
 
@@ -138,7 +138,7 @@ const line = (verdict: BucketVerdict) => {
     total: String(row.total ?? "0"),
   }));
 
-  const ours = ((await retry(() => db.execute<LedgerTotals>(sql`
+  const ours = await retry(() => db.execute<LedgerTotals>(sql`
     select s.base_currency as currency, je.subsidiary_id::text as subsidiary,
            coalesce(sum(-jl.amount) filter (where a.type = any(${`{${REVENUE.join(",")}}`}::text[])), 0)::text revenue,
            coalesce(sum(jl.amount) filter (where a.type = any(${`{${COST.join(",")}}`}::text[])), 0)::text cost
@@ -147,16 +147,16 @@ const line = (verdict: BucketVerdict) => {
       join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
       left join subsidiaries s on s.id = je.subsidiary_id and s.org_id = jl.org_id
      where jl.org_id = ${ORG} and je.posting_date >= ${SINCE}
-     group by s.base_currency, je.subsidiary_id`)))).rows;
+     group by s.base_currency, je.subsidiary_id`, "objects"));
   for (const row of ours) {
     if (!row.currency) {
       throw new Error(`postings for subsidiary ${row.subsidiary} have no base currency; assign the legal entity a base currency before comparing`);
     }
   }
-  const ourInv = ((await retry(() => db.execute<InvoiceTotals>(sql`
+  const ourInv = await retry(() => db.execute<InvoiceTotals>(sql`
     select currency, count(*)::int n, coalesce(sum(total), 0)::text total from documents
      where org_id = ${ORG} and kind = 'customer_invoice' and status = 'posted' and document_date >= ${SINCE}
-     group by currency`)))).rows;
+     group by currency`, "objects"));
 
   // No FX translation anywhere below: each bucket is compared in its stated
   // currency, and a currency one side lacks zero-fills into a difference.
@@ -182,7 +182,7 @@ const line = (verdict: BucketVerdict) => {
 
   // Job detail only exists after cutover; before it the history is year-end
   // summary journals with no project, so a job margin spanning both is meaningless.
-  const job = ((await retry(() => db.execute<JobTotals>(sql`
+  const job = (await retry(() => db.execute<JobTotals>(sql`
     select coalesce(sum(-jl.amount) filter (where a.type = any(${`{${REVENUE.join(",")}}`}::text[])), 0)::text revenue,
            coalesce(sum(jl.amount) filter (where a.type = any(${`{${COST.join(",")}}`}::text[])), 0)::text cost,
            coalesce(sum(jl.amount) filter (where je.origin = 'overhead_applied'), 0)::text overhead,
@@ -190,7 +190,7 @@ const line = (verdict: BucketVerdict) => {
       from journal_lines jl
       join accounts a on a.id = jl.account_id
       join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
-     where jl.org_id = ${ORG} and jl.project_id is not null and je.posting_date >= ${SINCE}`)))).rows[0]!;
+     where jl.org_id = ${ORG} and jl.project_id is not null and je.posting_date >= ${SINCE}`, "objects")))[0]!;
   console.log(`\nJOB-TAGGED (${job.projects} projects, detail exists only after cutover)`);
   console.log(`  revenue ${formatMoney(job.revenue)}   cost ${formatMoney(job.cost)}   of which applied overhead ${formatMoney(job.overhead)}`);
   const refusal = emptyPopulationRefusal(verdicts, ALLOW_EMPTY);

@@ -47,18 +47,18 @@ async function fixture(withAddress: boolean) {
   const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Routable Account', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   const profileId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into crm_account_profiles (org_id, party_id, lifecycle_stage, is_active)
     values (${org.orgId}, ${partyId}, 'lead', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   if (withAddress) {
     await withBypassContext(() => db.execute(sql`
       insert into addresses (org_id, party_id, country, region, is_default_billing)
       values (${org.orgId}, ${partyId}, 'US', 'CA', true)`))
     const employee = await withBypassContext(async () => {
       await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId} where org_id=${org.orgId} and id=${partyId}`)
-      const p=(await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Territory representative',${org.subsidiaryId}) returning id`)).rows[0]!.id
+      const p=(await db.execute<{id:string}>(sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Territory representative',${org.subsidiaryId}) returning id`, 'objects'))[0]!.id
       await db.execute(sql`insert into employee_roles(org_id,party_id,is_sales_rep,sales_rep_since) values(${org.orgId},${p},true,'2020-01-01')`)
       return p
     })
@@ -96,7 +96,7 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 async function revisionFor(partyId: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
-      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+      from crm_account_profiles where party_id = ${partyId}`, 'objects')))[0]!.revision
 }
 
 test('PATCH { route: true } succeeds when the account has no address or territory', async () => {
@@ -115,14 +115,14 @@ test('PATCH { route: true } assigns the matching territory, owner, and assignmen
     const result = await patch(partyId, { route: true, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`)
     const profile = (await withBypassContext(() => db.execute<{ territory_id: string | null; sales_rep_id: string | null }>(sql`
-      select territory_id, sales_rep_id from crm_account_profiles where id = ${profileId}`))).rows[0]!
+      select territory_id, sales_rep_id from crm_account_profiles where id = ${profileId}`, 'objects')))[0]!
     assert.ok(profile.territory_id, 'expected the matching territory to be assigned')
     assert.ok(profile.sales_rep_id)
-    const native=(await withBypassContext(()=>db.execute<{party_id:string}>(sql`select party_id from employee_roles where org_id=${org.orgId} and party_id=${profile.sales_rep_id}`))).rows
+    const native=await withBypassContext(()=>db.execute<{party_id:string}>(sql`select party_id from employee_roles where org_id=${org.orgId} and party_id=${profile.sales_rep_id}`, 'objects'))
     assert.equal(native.length,1, 'the assigned representative is a native employee')
-    const events = (await withBypassContext(() => db.execute<{ to_territory_id: string; source: string }>(sql`
+    const events = await withBypassContext(() => db.execute<{ to_territory_id: string; source: string }>(sql`
       select to_territory_id, source from crm_account_assignment_events
-       where org_id = ${org.orgId} and account_profile_id = ${profileId}`))).rows
+       where org_id = ${org.orgId} and account_profile_id = ${profileId}`, 'objects'))
     assert.equal(events.length, 1)
     assert.equal(events[0]!.to_territory_id, profile.territory_id)
     assert.equal(events[0]!.source, 'routing')

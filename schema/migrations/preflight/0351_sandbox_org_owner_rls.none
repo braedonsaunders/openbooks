@@ -1,1 +1,0 @@
-This policy-only migration tightens future writes and does not transform existing rows.

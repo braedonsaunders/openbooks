@@ -17,7 +17,7 @@ test('legacy zero Canadian bases require original zero cash lines and retained d
     const current = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-12', periodEnd: '2026-07-18' });
     const componentId = (await db.execute<{ id: string }>(sql`select id from pay_components
-      where org_id=${fx.orgId} and system_key='base_pay' and kind='earning' and (country is null or country='CA')`)).rows[0]!.id;
+      where org_id=${fx.orgId} and system_key='base_pay' and kind='earning' and (country is null or country='CA')`, 'objects'))[0]!.id;
     const scope = await resolveStatutoryHistoryScope(db, { orgId: fx.orgId, documentId: current.documentId,
       taxYear: 2026, country: 'CA', employeePartyId: partyId, employmentId });
     const treatment = { componentId, effectiveFrom: '2026-01-01', effectiveTo: null, programExclusions: [] as string[] };
@@ -69,11 +69,11 @@ test('legacy zero Canadian bases require original zero cash lines and retained d
           ...(item.derivedRuleCode ? { derivedRuleCode: item.derivedRuleCode, derivedQuantity: '1.0000' } : {}),
           ...(item.paymentKind ? { paymentKind: item.paymentKind, nonCashAccountId: fx.accounts.wageExpense } : {}) }));
         await insertPayStubLineRows(tx, { orgId: fx.orgId, actorId: fx.actorId, stubId, country: 'CA', payDate: '2026-06-23' }, lines);
-        const original = (await tx.execute<{ body: string }>(sql`select to_jsonb(s)::text as body from pay_stubs s where org_id=${fx.orgId} and id=${stubId}`)).rows[0]!.body;
+        const original = (await tx.execute<{ body: string }>(sql`select to_jsonb(s)::text as body from pay_stubs s where org_id=${fx.orgId} and id=${stubId}`, 'objects'))[0]!.body;
         const validate = () => requireStatutoryHistoryFactors(tx, scope, { employeePartyId: partyId }, item.keys ?? ['WCB_EARN', 'EHT_EARN']);
         if (item.accepts) await validate();
         else await assert.rejects(validate(), /missing a numeric factor/);
-        assert.equal((await tx.execute<{ body: string }>(sql`select to_jsonb(s)::text as body from pay_stubs s where org_id=${fx.orgId} and id=${stubId}`)).rows[0]!.body, original);
+        assert.equal((await tx.execute<{ body: string }>(sql`select to_jsonb(s)::text as body from pay_stubs s where org_id=${fx.orgId} and id=${stubId}`, 'objects'))[0]!.body, original);
         throw rolledBack;
       }), error => error === rolledBack);
     });

@@ -22,7 +22,7 @@ for(const [name,field] of invalid) test(`app custom fields reject ${name} before
  try{
   const actor=(await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   await assert.rejects(()=>withOrgContext(org.orgId,()=>installApp(org.orgId,actor,bundle(field))),error=>(error as {status?:number}).status===400);
-  const result=(await withOrgContext(org.orgId,()=>db.execute(sql`select (select count(*)::int from apps where org_id=${org.orgId}) as apps,(select count(*)::int from custom_field_defs where org_id=${org.orgId}) as definitions,(select count(*)::int from audit_log where org_id=${org.orgId}) as audits`))).rows[0];
+  const result=(await withOrgContext(org.orgId,()=>db.execute(sql`select (select count(*)::int from apps where org_id=${org.orgId}) as apps,(select count(*)::int from custom_field_defs where org_id=${org.orgId}) as definitions,(select count(*)::int from audit_log where org_id=${org.orgId}) as audits`, 'objects')))[0];
   assert.deepEqual(result,{apps:0,definitions:0,audits:0});
  }finally{await dropScratchOrg(org.orgId)}
 });
@@ -31,8 +31,8 @@ for(const scenario of ['create evidence','upgrade evidence','create audit failur
  try{
   const actor=(await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   const install=(field:Record<string,unknown>,version='1.0.0')=>withOrgContext(org.orgId,()=>installApp(org.orgId,actor,bundle(field,version)));
-  const definition=async()=>(await withOrgContext(org.orgId,()=>db.execute(sql`select f.*,${documentRevisionSql(sql`created_at`)} as created_at,${documentRevisionSql(sql`updated_at`)} as updated_at from custom_field_defs f where org_id=${org.orgId}`))).rows[0];
-  const audits=async()=>(await withOrgContext(org.orgId,()=>db.execute(sql`select * from audit_log where org_id=${org.orgId} and table_name='custom_field_defs' order by at,id`))).rows;
+  const definition=async()=>(await withOrgContext(org.orgId,()=>db.execute(sql`select f.*,${documentRevisionSql(sql`created_at`)} as created_at,${documentRevisionSql(sql`updated_at`)} as updated_at from custom_field_defs f where org_id=${org.orgId}`, 'objects')))[0];
+  const audits=async()=>await withOrgContext(org.orgId,()=>db.execute(sql`select * from audit_log where org_id=${org.orgId} and table_name='custom_field_defs' order by at,id`, 'objects'));
   if(scenario==='disabled project target'){
    await withBypassContext(()=>db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}','{"projects":false}'::jsonb) where id=${org.orgId}`));
    await assert.rejects(()=>install({targetTable:'projects'}),error=>(error as {status?:number}).status===404);
@@ -46,7 +46,7 @@ for(const scenario of ['create evidence','upgrade evidence','create audit failur
    const name='app_cf_audit_'+randomUUID().replaceAll('-','');
    await db.execute(sql.raw(`create function public."${name}"() returns trigger language plpgsql as $$ begin if new.table_name='custom_field_defs' and new.actor_id='${actor}'::uuid then raise exception 'forced app custom-field audit failure'; end if; return new; end $$; create trigger "${name}" before insert on audit_log for each row execute function public."${name}"();`));
    cleanup=async()=>{await db.execute(sql.raw(`drop trigger if exists "${name}" on audit_log; drop function if exists public."${name}"();`))};
-   const snapshot=async()=>(await withOrgContext(org.orgId,()=>db.execute(sql`select (select jsonb_agg(to_jsonb(a) order by a.id) from apps a where org_id=${org.orgId}) as apps,(select jsonb_agg(to_jsonb(v) order by v.id) from app_versions v where org_id=${org.orgId}) as versions,(select jsonb_agg(to_jsonb(f) order by f.id) from custom_field_defs f where org_id=${org.orgId}) as definitions,(select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${org.orgId}) as audits`))).rows;
+   const snapshot=async()=>await withOrgContext(org.orgId,()=>db.execute(sql`select (select jsonb_agg(to_jsonb(a) order by a.id) from apps a where org_id=${org.orgId}) as apps,(select jsonb_agg(to_jsonb(v) order by v.id) from app_versions v where org_id=${org.orgId}) as versions,(select jsonb_agg(to_jsonb(f) order by f.id) from custom_field_defs f where org_id=${org.orgId}) as definitions,(select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${org.orgId}) as audits`, 'objects'));
    const original=await snapshot();await assert.rejects(()=>install({label:'Must roll back'},upgrade?'1.0.1':'1.0.0'));assert.deepEqual(await snapshot(),original);return;
   }
   await install({fieldType:'currency',label:upgrade?'Renamed field':'Review field',config:{min:' +0001.0000 ',max:'2.0000',defaultValue:'1.5',extension:{keep:true}}},upgrade?'1.0.1':'1.0.0');
@@ -68,9 +68,9 @@ test('app field upgrades preserve target identity', {skip:!process.env.OPENBOOKS
   const install=(kind:string,version:string)=>withOrgContext(org.orgId,()=>installApp(org.orgId,actor,bundle({targetTable:'documents',targetKind:kind},version)));
   await install('vendor_bill','1.0.0');
   await assert.rejects(()=>install('customer_invoice','1.0.1'),error=>(error as {status?:number}).status===400);
-  const result=(await withOrgContext(org.orgId,()=>db.execute(sql`select target_kind from custom_field_defs where org_id=${org.orgId}`))).rows;
+  const result=await withOrgContext(org.orgId,()=>db.execute(sql`select target_kind from custom_field_defs where org_id=${org.orgId}`, 'objects'));
   assert.deepEqual(result,[{target_kind:'vendor_bill'}]);
-  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{n:number}>(sql`select count(*)::int as n from app_versions where org_id=${org.orgId}`))).rows[0]!.n,1);
+  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{n:number}>(sql`select count(*)::int as n from app_versions where org_id=${org.orgId}`, 'objects')))[0]!.n,1);
  }finally{await dropScratchOrg(org.orgId)}
 });
 
@@ -88,13 +88,13 @@ test('app field installation rechecks a feature after a competing disable commit
   pending=withOrgContext(org.orgId,()=>installApp(org.orgId,actor,bundle({targetTable:'projects'})));pending.catch(()=>{});
   let waiting=false;
   for(let attempt=0;attempt<100;attempt++){
-   const row=(await db.execute<{waiting:boolean}>(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as waiting`)).rows[0]!;
+   const row=(await db.execute<{waiting:boolean}>(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as waiting`, 'objects'))[0]!;
    if(row.waiting){waiting=true;break}await new Promise(resolve=>setTimeout(resolve,20));
   }
   assert.ok(waiting,'installation must wait at the feature fence');
   await holder.query('commit');
   await assert.rejects(pending,error=>(error as {status?:number}).status===404);
-  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{n:number}>(sql`select count(*)::int as n from custom_field_defs where org_id=${org.orgId}`))).rows[0]!.n,0);
+  assert.equal((await withOrgContext(org.orgId,()=>db.execute<{n:number}>(sql`select count(*)::int as n from custom_field_defs where org_id=${org.orgId}`, 'objects')))[0]!.n,0);
  }finally{await holder.query('rollback');await holder.end();await pending?.catch(()=>{});await dropScratchOrg(org.orgId)}
 });
 
@@ -110,7 +110,7 @@ test('app reinstall after uninstall re-adopts the objects it provisioned', {skip
   const recordType={type:'record_type',key:'review-asset',name:'Review asset',pluralName:'Review assets',fields:[{id:'main',fields:[{id:'name',type:'text',label:'Name'}]}]};
   const withType=(version:string)=>{const b=bundle({fieldType:'text',config:{}},version);b.files.push({path:'objects/type.json',content:JSON.stringify(recordType)});return b;};
   const install=(version:string)=>withOrgContext(org.orgId,()=>installApp(org.orgId,actor,withType(version)));
-  const objects=async()=>(await withOrgContext(org.orgId,()=>db.execute<{types:number;fields:number;apps:number}>(sql`select (select count(*)::int from custom_record_types where org_id=${org.orgId} and key='review-asset') as types,(select count(*)::int from custom_field_defs where org_id=${org.orgId} and key='review_field') as fields,(select count(*)::int from apps where org_id=${org.orgId}) as apps`))).rows[0]!;
+  const objects=async()=>(await withOrgContext(org.orgId,()=>db.execute<{types:number;fields:number;apps:number}>(sql`select (select count(*)::int from custom_record_types where org_id=${org.orgId} and key='review-asset') as types,(select count(*)::int from custom_field_defs where org_id=${org.orgId} and key='review_field') as fields,(select count(*)::int from apps where org_id=${org.orgId}) as apps`, 'objects')))[0]!;
   await install('1.0.0');
   assert.deepEqual(await objects(),{types:1,fields:1,apps:1});
   await withOrgContext(org.orgId,()=>deleteApp(org.orgId,actor,'field-controls-review'));
@@ -118,13 +118,13 @@ test('app reinstall after uninstall re-adopts the objects it provisioned', {skip
 
   await install('1.0.1');
   assert.deepEqual(await objects(),{types:1,fields:1,apps:1},'reinstall upgrades in place, no duplicates');
-  const app=(await withOrgContext(org.orgId,()=>db.execute<{provisioned:{recordTypes:string[];customFields:string[]}}>(sql`select provisioned from apps where org_id=${org.orgId} and key='field-controls-review'`))).rows[0]!;
+  const app=(await withOrgContext(org.orgId,()=>db.execute<{provisioned:{recordTypes:string[];customFields:string[]}}>(sql`select provisioned from apps where org_id=${org.orgId} and key='field-controls-review'`, 'objects')))[0]!;
   assert.deepEqual(app.provisioned,{recordTypes:['review-asset'],customFields:['parties:review_field']});
-  const adoption=(await withOrgContext(org.orgId,()=>db.execute<{changes:{event:string;appKey:string;evidenceAuditId:string;after:{provisioned:{recordTypes:string[];customFields:string[]}}}}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='apps' and changes->>'event'='app_provenance_adopted'`))).rows;
+  const adoption=await withOrgContext(org.orgId,()=>db.execute<{changes:{event:string;appKey:string;evidenceAuditId:string;after:{provisioned:{recordTypes:string[];customFields:string[]}}}}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='apps' and changes->>'event'='app_provenance_adopted'`, 'objects'));
   assert.equal(adoption.length,1);
   assert.equal(adoption[0]!.changes.appKey,'field-controls-review');
   assert.deepEqual(adoption[0]!.changes.after.provisioned,{recordTypes:['review-asset'],customFields:['parties:review_field']});
-  const evidence=(await withOrgContext(org.orgId,()=>db.execute(sql`select 1 from audit_log where id=${adoption[0]!.changes.evidenceAuditId} and org_id=${org.orgId} and changes->>'event'='app_uninstall'`))).rows;
+  const evidence=await withOrgContext(org.orgId,()=>db.execute(sql`select 1 from audit_log where id=${adoption[0]!.changes.evidenceAuditId} and org_id=${org.orgId} and changes->>'event'='app_uninstall'`, 'objects'));
   assert.equal(evidence.length,1,'adoption cites the uninstall evidence it relied on');
 
   // A same-key object authored AFTER the uninstall is the user's, not the app's.

@@ -77,7 +77,7 @@ async function setup(org: ScratchOrg, actor: string): Promise<string> {
     const id = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     accounts[key] = id;
   }
   const maps: Array<[string, string, string]> = [
@@ -198,7 +198,7 @@ test("shopify payout lines link to channel orders, queue the rest with remedies"
     const stored = (await db.execute<{ document_id: string | null }>(sql`
       select document_id from psp_settlement_lines
        where batch_id = ${imported.batchId} and org_id = ${org.orgId} and external_ref = 'txn-a'
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(stored!.document_id, outcome.documentId);
 
     // A repeated provider reference converges onto the stored links instead
@@ -227,7 +227,7 @@ test("manual link refuses unposted documents; adjustment reclass refoots the bat
     const draftId = (await db.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total)
       values (${org.orgId}, 'cash_sale', 'draft', 'DRAFT-1', '2026-07-10', 'CAD', '10', '0', '10')
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
 
     const parsed = parseShopifyPaymentsPayout(
       { id: "shopify-payout-match-2", currency: "CAD", issuedAt: "2026-07-10" },
@@ -245,7 +245,7 @@ test("manual link refuses unposted documents; adjustment reclass refoots the bat
     const lineOf = async (ref: string) => (await db.execute<{ id: string }>(sql`
       select id from psp_settlement_lines
        where batch_id = ${imported.batchId} and org_id = ${org.orgId} and external_ref = ${ref}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
 
     const lineX = await lineOf("txn-x");
     await assert.rejects(
@@ -259,13 +259,13 @@ test("manual link refuses unposted documents; adjustment reclass refoots the bat
     const before = (await db.execute<{ net_amount: string; adjustment_amount: string }>(sql`
       select net_amount::text, adjustment_amount::text from psp_settlement_batches
        where id = ${imported.batchId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const marked = await markSettlementLineAdjustment(org.orgId, imported.batchId, await lineOf("txn-y"), actor, null);
     assert.equal(marked.kind, "adjustment");
     const after = (await db.execute<{ net_amount: string; adjustment_amount: string }>(sql`
       select net_amount::text, adjustment_amount::text from psp_settlement_batches
        where id = ${imported.batchId} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.notEqual(after.net_amount, before.net_amount, "the batch refoots after reclassification");
     assert.ok(Number(after.adjustment_amount) > Number(before.adjustment_amount));
   } finally {
@@ -370,13 +370,13 @@ test("ambiguous payout line proposes each document with evidence; approval links
     assert.equal(approved.linked[0]!.documentId, otherId);
     const stored = (await db.execute<{ document_id: string | null }>(sql`
       select document_id from psp_settlement_lines where id = ${queued.lineId} and org_id = ${org.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(stored!.document_id, otherId, "approval writes the chosen link");
-    const audits = (await db.execute<{ action: string; changes: unknown }>(sql`
+    const audits = await db.execute<{ action: string; changes: unknown }>(sql`
       select action, changes from audit_log
        where org_id = ${org.orgId} and table_name = 'psp_settlement_lines' and row_id = ${queued.lineId}
        order by at
-    `)).rows;
+    `, "objects");
     assert.ok(audits.some((row) => JSON.stringify(row.changes).includes("suggestionApproved")), "the approval decision is audited");
     assert.ok(audits.some((row) => row.action === "link"), "the link itself is audited");
 

@@ -43,7 +43,7 @@ async function fixture() {
   const owner = await withBypassContext(() => createScratchUser(org.orgId, 'Owner', 'scope_owner'))
   const scoped = await withBypassContext(() => createScratchUser(org.orgId, 'A clerk', 'scope_clerk'))
   const accts = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-    select id from accounts where org_id=${org.orgId} and is_active order by number limit 3`))).rows.map((r) => r.id)
+    select id from accounts where org_id=${org.orgId} and is_active order by number limit 3`, 'objects'))).map((r) => r.id)
   assert.equal(accts.length, 3)
   const [acctA, acctB, acctN] = accts as [string, string, string]
   let subB = ''
@@ -52,8 +52,8 @@ async function fixture() {
     const sub = await db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Entity B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)
-    subB = sub.rows[0]!.id
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, 'objects')
+    subB = sub[0]!.id
     await db.execute(sql`
       update app_roles set permissions=${JSON.stringify(SCOPED_PERMS)}::jsonb,
         subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
@@ -127,13 +127,13 @@ test('a restricted caller cannot move another entity’s finding lifecycle', asy
         method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review' }),
       }), f.itemParams(f.itemB))
       assert.equal(denied.status, 404)
-      const statusB = (await db.execute<{ status: string }>(sql`select status from ai_work_items where id=${f.itemB}`)).rows[0]!.status
+      const statusB = (await db.execute<{ status: string }>(sql`select status from ai_work_items where id=${f.itemB}`, 'objects'))[0]!.status
       assert.equal(statusB, 'open', 'the refused transition wrote nothing')
       const allowed = await patchItem(new Request('https://x/', {
         method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review' }),
       }), f.itemParams(f.itemA))
       assert.equal(allowed.status, 200)
-      const statusA = (await db.execute<{ status: string }>(sql`select status from ai_work_items where id=${f.itemA}`)).rows[0]!.status
+      const statusA = (await db.execute<{ status: string }>(sql`select status from ai_work_items where id=${f.itemA}`, 'objects'))[0]!.status
       assert.equal(statusA, 'in_review')
     })
   } finally {
@@ -151,7 +151,7 @@ test('a restricted caller cannot rate another entity’s finding', async () => {
         body: JSON.stringify({ rating: 'helpful', comment: 'noted' }),
       }), f.itemParams(f.itemB))
       assert.equal(denied.status, 404)
-      const count = Number((await db.execute<{ n: string }>(sql`select count(*) as n from ai_work_item_feedback where work_item_id=${f.itemB}`)).rows[0]!.n)
+      const count = Number((await db.execute<{ n: string }>(sql`select count(*) as n from ai_work_item_feedback where work_item_id=${f.itemB}`, 'objects'))[0]!.n)
       assert.equal(count, 0, 'no feedback row persists from the refused write')
     })
   } finally {

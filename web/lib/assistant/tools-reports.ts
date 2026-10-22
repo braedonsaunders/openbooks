@@ -94,9 +94,9 @@ const listReportDefinitions: AssistantToolDef = {
          ${like ? sql`and name ilike ${like}` : sql``}
        order by updated_at desc
        limit 500
-    `));
+    `, "objects"));
     const visible = [];
-    for (const row of rows.rows) {
+    for (const row of rows) {
       if (await definitionPermitted(authz, row)) visible.push(row);
     }
     return {
@@ -161,9 +161,9 @@ const runReport: AssistantToolDef = {
       select coalesce(report_type, 'query') as report_type, query->>'entity' as entity, statement->>'kind' as statement_kind
         from report_definitions
        where id = ${a.definitionId} and org_id = ${orgId} and archived_at is null
-    `));
-    if (!def.rows[0]) return { ok: false, error: "report_not_found" };
-    if (!(await definitionPermitted(authz, def.rows[0]))) {
+    `, "objects"));
+    if (!def[0]) return { ok: false, error: "report_not_found" };
+    if (!(await definitionPermitted(authz, def[0]))) {
       return { ok: false, error: "forbidden" };
     }
 
@@ -401,9 +401,9 @@ const listReportSchedules: AssistantToolDef = {
          ${a.definitionId ? sql`and s.definition_id = ${a.definitionId}` : sql``}
        order by s.next_run_at
        limit 200
-    `));
+    `, "objects"));
     const schedules = [];
-    for (const row of rows.rows) {
+    for (const row of rows) {
       if (!(await definitionPermitted(authz, {
         report_type: row.report_type ?? 'query',
         entity: row.entity,
@@ -441,11 +441,11 @@ const listReportingPackages: AssistantToolDef = {
        where org_id = ${authz.user.orgId}
        order by is_default desc, name
        limit 100
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
-        packages: rows.rows.map((row) => ({
+        packages: rows.map((row) => ({
           id: row.id,
           name: row.name,
           description: row.description,

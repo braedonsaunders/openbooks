@@ -71,13 +71,11 @@ async function loadPublication(
   if (!orgId)
     throw new Error("Schedule publications require a native tenant context.");
   return (
-    (
-      await db.execute<PublicationRow>(sql`
+    (await db.execute<PublicationRow>(sql`
     select p.id, p.status, p.board_id, b.code as board_code, b.name as board_name, p.from_date::text as from_date, p.through_date::text as through_date,
            cardinality(p.entry_ids)::int as change_count, p.reason, p.created_by
       from schedule_publications p join schedule_boards b on b.org_id = p.org_id and b.id = p.board_id
-     where p.org_id = ${orgId} and p.id = ${subjectId}`)
-    ).rows[0] ?? null
+     where p.org_id = ${orgId} and p.id = ${subjectId}`, "objects"))[0] ?? null
   );
 }
 
@@ -90,12 +88,12 @@ export const schedulePublicationsFlowAdapter: FlowSubjectAdapter =
       approve: "hrm.shifts.approve",
     },
     async readPermission(id,actorId) {
-      const row=(await db.execute<{org_id:string;row_kind:string;board_type:string;resource_kind:string|null}>(sql`select p.org_id,b.row_kind,b.board_type,b.resource_kind from schedule_publications p join schedule_boards b on b.org_id=p.org_id and b.id=p.board_id where p.id=${id}`)).rows[0];
+      const row=(await db.execute<{org_id:string;row_kind:string;board_type:string;resource_kind:string|null}>(sql`select p.org_id,b.row_kind,b.board_type,b.resource_kind from schedule_publications p join schedule_boards b on b.org_id=p.org_id and b.id=p.board_id where p.id=${id}`, "objects"))[0];
       if(row?.row_kind==='resources' && row.resource_kind==='equipment' && !(await actorHasPermission(db,row.org_id,actorId,'assets.read')))return null;
       return row?.row_kind==='resources' ? 'projects.read' : row?.board_type==='dispatch' ? 'service.read' : row ? 'hrm.shifts.read' : null;
     },
     async decisionPermission(id,actorId) {
-      const row=(await db.execute<{org_id:string;row_kind:string;board_type:string;resource_kind:string|null}>(sql`select p.org_id,b.row_kind,b.board_type,b.resource_kind from schedule_publications p join schedule_boards b on b.org_id=p.org_id and b.id=p.board_id where p.id=${id}`)).rows[0];
+      const row=(await db.execute<{org_id:string;row_kind:string;board_type:string;resource_kind:string|null}>(sql`select p.org_id,b.row_kind,b.board_type,b.resource_kind from schedule_publications p join schedule_boards b on b.org_id=p.org_id and b.id=p.board_id where p.id=${id}`, "objects"))[0];
       if(row?.row_kind==='resources' && row.resource_kind==='equipment' && actorId && !(await actorHasPermission(db,row.org_id,actorId,'assets.manage')))return null;
       return row?.row_kind === 'resources' ? 'projects.manage' : row?.board_type === 'dispatch' ? 'service.dispatch' : row ? 'hrm.shifts.approve' : null;
     },
@@ -178,11 +176,9 @@ export const schedulePublicationsFlowAdapter: FlowSubjectAdapter =
         throw new Error(
           `findCandidateIds for "${SCHEDULE_PUBLICATION_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
         );
-      return (
-        await db.execute<{
+      return (await db.execute<{
           id: string;
         }>(sql`select id::text as id from schedule_publications
-      where org_id = ${orgId} and status = 'pending' order by created_at desc limit ${limit}`)
-      ).rows.map((row) => row.id);
+      where org_id = ${orgId} and status = 'pending' order by created_at desc limit ${limit}`, "objects")).map((row) => row.id);
     },
   });

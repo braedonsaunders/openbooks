@@ -29,13 +29,13 @@ function identifier(value: string) {
 export async function snapshotSampleRecords(orgId: string, authoredTables: Map<string, string>): Promise<SamplePreservationSnapshot> {
   const tables = [...new Set<string>([...PROTECTED_TABLES, "rma_documents", ...authoredTables.keys()])].sort();
   const selected = sql.join(tables.map(table => sql`${table}`), sql`, `);
-  const columns = (await db.execute<{ tableName: string; columnName: string }>(sql`
+  const columns = await db.execute<{ tableName: string; columnName: string }>(sql`
     select table_name as "tableName",column_name as "columnName" from information_schema.columns
     where table_schema='public' and table_name in (${selected})
-  `)).rows;
+  `, "objects");
   // Authored fixture keys are lookup hints, not authoritative row identities.
   // Preserve every component, in the native primary-key constraint's order.
-  const keys = (await db.execute<{ tableName: string; primaryKeys: string[] }>(sql`
+  const keys = await db.execute<{ tableName: string; primaryKeys: string[] }>(sql`
     select t.relname as "tableName",array_agg(a.attname::text order by k.ordinality) as "primaryKeys"
     from pg_catalog.pg_constraint c
     join pg_catalog.pg_class t on t.oid=c.conrelid
@@ -44,7 +44,7 @@ export async function snapshotSampleRecords(orgId: string, authoredTables: Map<s
     join pg_catalog.pg_attribute a on a.attrelid=t.oid and a.attnum=k.attnum and not a.attisdropped
     where c.contype='p' and n.nspname='public' and t.relname in (${selected})
     group by t.relname
-  `)).rows;
+  `, "objects");
   const snapshot: SamplePreservationSnapshot = new Map();
   for (const table of tables) {
     const available = columns.filter(column => column.tableName === table).map(column => column.columnName);
@@ -56,10 +56,10 @@ export async function snapshotSampleRecords(orgId: string, authoredTables: Map<s
       throw new SampleCompanyError(`Cannot preserve ${table}: its tenant or native primary key is unavailable. Use a compatible released schema before refreshing.`);
     }
     const keyColumns = sql.join(primaryKeys.map(key => sql`r.${identifier(key)}`), sql`, `);
-    const rows = (await db.execute<RowDigest>(sql`
+    const rows = await db.execute<RowDigest>(sql`
       select jsonb_build_array(${keyColumns})::text as id,md5(to_jsonb(r)::text) as digest
       from public.${identifier(table)} r where r.org_id=${orgId} order by ${keyColumns} for share
-    `)).rows;
+    `, "objects");
     snapshot.set(table, { primaryKeys, rows });
   }
   return snapshot;
@@ -69,10 +69,10 @@ export async function assertSampleRecordsPreserved(orgId: string, before: Sample
   let records = 0;
   for (const [table, snapshot] of before) {
     const keyColumns = sql.join(snapshot.primaryKeys.map(key => sql`r.${identifier(key)}`), sql`, `);
-    const rows = (await db.execute<RowDigest>(sql`
+    const rows = await db.execute<RowDigest>(sql`
       select jsonb_build_array(${keyColumns})::text as id,md5(to_jsonb(r)::text) as digest
       from public.${identifier(table)} r where r.org_id=${orgId} order by ${keyColumns}
-    `)).rows;
+    `, "objects");
     const after = new Map(rows.map(row => [row.id, row.digest]));
     const changed = snapshot.rows.find(row => after.get(row.id) !== row.digest);
     if (changed) throw new SampleCompanyError(`Sample refresh would change existing ${table} record ${changed.id}. The entire company upgrade was rolled back. Preserve that record and use a new versioned scenario identity or resolve the incompatible source state through its native workflow.`);

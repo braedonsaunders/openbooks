@@ -38,8 +38,8 @@ export async function isFulfilmentGovernedInvoice(
         on source.id = link.from_document_id and source.org_id = link.org_id
      where link.org_id = ${orgId} and link.to_document_id = ${documentId}
        and link.link_type = 'bills' and source.kind = 'sales_order'
-     limit 1`);
-  return !!governed.rows[0];
+     limit 1`, "objects");
+  return !!governed[0];
 }
 
 /**
@@ -80,7 +80,7 @@ export async function assertInvoiceIssuesPostable(
   // shipment flow that carries component lot and serial evidence.
   const document = (await runner.execute<{ document_date: string }>(sql`
     select document_date::text as document_date from documents
-     where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+     where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
   const date = document?.document_date;
   for (const line of lines) {
     if (line.itemKind !== "kit" || !date) continue;
@@ -303,8 +303,8 @@ export async function applySalesFulfillmentInventoryIssues(
         select 1 from inventory_movements
          where org_id = ${orgId} and document_line_id = ${line.lineId}
            and kind = 'issue'
-         limit 1`));
-      if (seen.rows[0]) continue;
+         limit 1`, "objects"));
+      if (seen[0]) continue;
       const selection = salesFulfillmentTrackingSelection(line);
       // A warehouse owned by another entity ships through cross-subsidiary
       // fulfillment when it is on; otherwise the ordinary issue below refuses
@@ -344,8 +344,8 @@ export async function applySalesFulfillmentInventoryIssues(
         select 1 from inventory_movements
          where org_id = ${orgId} and document_line_id = ${line.lineId}
            and item_id = ${component.componentItemId} and kind = 'issue'
-         limit 1`));
-      if (seen.rows[0]) continue;
+         limit 1`, "objects"));
+      if (seen[0]) continue;
       await issueInventory(
         orgId,
         actorId,
@@ -459,8 +459,8 @@ export async function applyInventoryIssuesForInvoice(
       const explosion = explosions.get(l.lineId);
       if (!explosion) {
         const seen = (await tx.execute(sql`
-          select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`));
-        if (seen.rows[0]) continue;
+          select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`, "objects"));
+        if (seen[0]) continue;
         await issueInventory(
           orgId,
           actorId,
@@ -472,8 +472,8 @@ export async function applyInventoryIssuesForInvoice(
       for (const component of explosion.components) {
         const seen = (await tx.execute(sql`
           select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId}
-            and item_id = ${component.componentItemId} and kind = 'issue' limit 1`));
-        if (seen.rows[0]) continue;
+            and item_id = ${component.componentItemId} and kind = 'issue' limit 1`, "objects"));
+        if (seen[0]) continue;
         await issueInventory(
           orgId,
           actorId,

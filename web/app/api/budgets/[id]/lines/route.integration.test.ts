@@ -48,11 +48,11 @@ async function fixture(): Promise<LinesFixture> {
   state.allowed = null
   const subB = (await db.execute<{ id: string }>(
     sql`insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-        values (${org.orgId}, ${org.subsidiaryId}, 'Lines Sub B', 'CAD', 'CA') returning id`,
-  )).rows[0]!.id
+        values (${org.orgId}, ${org.subsidiaryId}, 'Lines Sub B', 'CAD', 'CA') returning id`, 'objects',
+  ))[0]!.id
   const fy = (await db.execute<{ fiscal_year: number }>(
-    sql`select fiscal_year from accounting_periods where id = ${org.periodId}`,
-  )).rows[0]!.fiscal_year
+    sql`select fiscal_year from accounting_periods where id = ${org.periodId}`, 'objects',
+  ))[0]!.fiscal_year
   const scenarioId = randomUUID()
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -72,10 +72,10 @@ async function patch(scenarioId: string, body: unknown) {
 }
 
 async function storedLines(scenarioId: string, orgId: string) {
-  return (await db.execute<{ subsidiary_id: string; amount: string }>(
+  return await db.execute<{ subsidiary_id: string; amount: string }>(
     sql`select subsidiary_id, amount::text as amount from budget_lines
-        where org_id = ${orgId} and scenario_id = ${scenarioId} order by amount`,
-  )).rows
+        where org_id = ${orgId} and scenario_id = ${scenarioId} order by amount`, 'objects',
+  )
 }
 
 test('lines PATCH honors an explicit subsidiaryId', async () => {

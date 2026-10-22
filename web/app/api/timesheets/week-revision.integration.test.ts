@@ -87,8 +87,8 @@ async function fixture() {
     })))
   }
   const snapshot = async () =>
-    (await db.execute(sql`select hours::text as hours, worked_on::text as worked_on from time_entries
-       where org_id=${org.orgId} order by worked_on, id`)).rows
+    await db.execute(sql`select hours::text as hours, worked_on::text as worked_on from time_entries
+       where org_id=${org.orgId} order by worked_on, id`, 'objects')
   const close = async () => {
     session.user = null
     await dropScratchOrgReporting(org.orgId)

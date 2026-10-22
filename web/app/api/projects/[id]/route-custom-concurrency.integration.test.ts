@@ -61,8 +61,8 @@ test('concurrent custom PATCHes merge under the row lock instead of losing keys'
         select exists(
           select 1 from pg_stat_activity
            where wait_event_type = 'Lock' and query ilike '%from projects%for update%'
-        ) as waiting`)
-      if (waiting.rows[0]?.waiting) break
+        ) as waiting`, 'objects')
+      if (waiting[0]?.waiting) break
       if (Date.now() > deadline) throw new Error('PATCH never blocked on the project row lock')
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
@@ -71,7 +71,7 @@ test('concurrent custom PATCHes merge under the row lock instead of losing keys'
     await holder.query('COMMIT')
     const response = await pending
     assert.equal(response.status, 200, JSON.stringify(await response.json()))
-    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`)).rows[0]?.custom
+    const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`, 'objects'))[0]?.custom
     assert.deepEqual(stored, { key_a: 'from-holder', key_b: 'from-patch' })
   } finally {
     try { await holder.query('ROLLBACK') } catch { /* already committed */ }

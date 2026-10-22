@@ -34,7 +34,7 @@ async function withUsageOrg(run: (org: ScratchOrg, actor: string) => Promise<voi
   try {
     const actor = await createScratchUser(org.orgId, "Usage plan controller", "admin");
     await withBypassContext(async () => {
-      const enabled = await db.execute(sql`
+      const enabled = await db.execute<never>(sql`
         update orgs
            set settings = jsonb_set(
              settings,
@@ -110,10 +110,10 @@ async function seedPostedInvoiceLine(
   const lineId = randomUUID();
   await withBypassContext(async () => {
     const rule = (await db.execute<{ method: string }>(sql`
-      select method from recognition_rules where org_id = ${org.orgId} and id = ${org.recognitionRuleId}`)).rows[0];
+      select method from recognition_rules where org_id = ${org.orgId} and id = ${org.recognitionRuleId}`, "objects"))[0];
     assert.ok(rule, "the scratch recognition rule must be available");
     if (rule.method !== method) {
-      const changed = await db.execute(sql`
+      const changed = await db.execute<never>(sql`
         update recognition_rules set method = ${method}
          where org_id = ${org.orgId} and id = ${org.recognitionRuleId}`);
       assert.equal(changed.rowCount, 1, "the scratch recognition rule must remain available");
@@ -137,7 +137,7 @@ async function seedPostedInvoiceLine(
       values
         (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.items.service}, ${org.accounts.revenue},
          1, ${amount}, ${amount}, 0, false, 0, 0, '{}'::jsonb, false, '{}'::jsonb, ${actor}, ${actor})`);
-    const approved = await db.execute(sql`
+    const approved = await db.execute<never>(sql`
       update documents set status = 'approved', updated_at = now()
        where org_id = ${org.orgId} and id = ${documentId} and status = 'draft'`);
     assert.equal(approved.rowCount, 1, "the invoice must enter the approved posting state");

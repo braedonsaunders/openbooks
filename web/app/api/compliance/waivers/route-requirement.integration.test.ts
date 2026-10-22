@@ -63,20 +63,20 @@ async function fixture() {
   const applicableId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const inactiveId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, is_active, created_by, updated_by)
     values (${org.orgId}, 'OLD', 'Retired requirement', 'insurance', 'block_payment', false, ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const wrongClassId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, class_id, created_by, updated_by)
     values (${org.orgId}, 'SUP-ONLY', 'Supplier requirement', 'insurance', 'block_payment', ${otherClassId}, ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const otherOrg = await withBypassContext(() => createScratchOrg());
   const foreignId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, created_by, updated_by)
     values (${otherOrg.orgId}, 'COI', 'Foreign requirement', 'insurance', 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { org, otherOrg, partyId, applicableId, inactiveId, wrongClassId, foreignId };
 }
 
@@ -90,8 +90,8 @@ const post = (body: unknown) =>
   );
 
 async function waiverCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_waivers where org_id = ${orgId}`))).rows;
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_waivers where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 

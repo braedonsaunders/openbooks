@@ -114,23 +114,21 @@ export async function loadDashboards(
         from insight_dashboards
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
     db.execute<{ total: string; drafts: string; published: string }>(sql`
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,
              count(*) filter (where status = 'published') as published
-        from insight_dashboards where org_id = ${orgId} and ${visibility}`),
+        from insight_dashboards where org_id = ${orgId} and ${visibility}`, 'objects'),
   ])
-  const c = counts.rows[0]!
+  const c = counts[0]!
   const total = Number(c.total)
   const filteredTotal =
     params.q || status
       ? Number(
-          (
-            await db.execute<{ n: string }>(
-              sql`select count(*) as n from insight_dashboards where ${where}`,
-            )
-          ).rows[0]!.n,
+          (await db.execute<{ n: string }>(
+              sql`select count(*) as n from insight_dashboards where ${where}`, 'objects',
+            ))[0]!.n,
         )
       : total
 
@@ -163,7 +161,7 @@ export async function loadDashboards(
     columnCards: t('dashboards.cardsColumn'),
     columnStatus: tCommon('labels.status'),
     columnUpdated: tCommon('labels.updated'),
-    rows: dashboards.rows.map((row) => ({
+    rows: dashboards.map((row) => ({
       id: String(row.id),
       name: String(row.name),
       href: `/insights/dashboards/${row.id}`,

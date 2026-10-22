@@ -24,16 +24,14 @@ async function employeeCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
       ${employeeBaseJoins(true, TODAY, null)}
       where ${employeeWhere(
         { ...defaultListView("employee"), filters: viewFilters as never },
         { filters: adhocFilters, hrmEnabled: true },
         orgId,
         null,
-      )}`)
-  ).rows;
+      )}`, "objects");
   return rows[0]!.n;
 }
 
@@ -46,15 +44,13 @@ async function employeeCountWithoutJoins(
   adhocFilters: Record<string, string> = {},
   hrmEnabled?: boolean,
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
       where ${employeeWhere(
         { ...defaultListView("employee"), filters: viewFilters as never },
         { filters: adhocFilters, hrmEnabled },
         orgId,
         null,
-      )}`)
-  ).rows;
+      )}`, "objects");
   return rows[0]!.n;
 }
 

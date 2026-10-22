@@ -188,7 +188,7 @@ export async function setupOptionsContext(orgId: string, entity: SetupEntity): P
   if (!needsPacks) return {}
   const row = (await db.execute<{ payroll: Record<string, unknown> | null }>(sql`
     select settings -> 'payroll' as payroll from orgs where id = ${orgId}
-  `)).rows[0]
+  `, 'objects'))[0]
   return { installedPayrollCountries: await installedPayrollCountries(orgId, row?.payroll ?? {}) }
 }
 

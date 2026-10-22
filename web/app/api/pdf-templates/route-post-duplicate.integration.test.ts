@@ -108,8 +108,8 @@ test(
     assert.equal(res.status, 200);
     const created = (await res.json()) as { id: string };
     const stored = await withBypassContext(() => db.execute<{ name: string }>(sql`
-      select name from pdf_templates where id = ${created.id} and org_id = ${f.orgId}`));
-    assert.equal(stored.rows[0]?.name, "Standard 2");
+      select name from pdf_templates where id = ${created.id} and org_id = ${f.orgId}`, "objects"));
+    assert.equal(stored[0]?.name, "Standard 2");
   },
 );
 

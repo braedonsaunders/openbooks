@@ -27,12 +27,12 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
          where p.org_id = time_kiosks.org_id and p.id = time_kiosks.project_id
            and ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
       )`
-  const rows = (await db.execute(sql`
+  const rows = await db.execute(sql`
     select id::text as id, name, location_id::text as "locationId",
            project_id::text as "projectId", pin_required as "pinRequired",
            photo_required as "photoRequired", last_seen_at::text as "lastSeenAt",
            is_active as "isActive"
-      from time_kiosks where org_id = ${gate.user.orgId} ${visibleProject} order by name`)).rows
+      from time_kiosks where org_id = ${gate.user.orgId} ${visibleProject} order by name`, 'objects')
   return NextResponse.json({ kiosks: rows })
 }
 

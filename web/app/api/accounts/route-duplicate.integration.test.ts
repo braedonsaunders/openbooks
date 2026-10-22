@@ -133,8 +133,8 @@ test("a same-name account is refused until the duplicate is acknowledged", async
       remedy: "Open the existing account, or resend the request with acknowledgeDuplicateName set to true to create it anyway.",
       details: { existingAccountId: holderId, existingAccountName: "Interest Expense", existingAccountNumber: "7000" },
     });
-    const unchanged = await withBypassContext(() => db.execute(sql`select count(*)::int as n from accounts where org_id = ${org.orgId} and number = '8100'`));
-    assert.equal((unchanged.rows[0] as { n: number }).n, 0, "a refused create writes no account row");
+    const unchanged = await withBypassContext(() => db.execute(sql`select count(*)::int as n from accounts where org_id = ${org.orgId} and number = '8100'`, "objects"));
+    assert.equal((unchanged[0] as { n: number }).n, 0, "a refused create writes no account row");
 
     const acknowledgedKey = randomUUID();
     const acknowledged = await POST(postRequest(acknowledgedKey, { name: "  interest   EXPENSE ", type: "expense_other", number: "8100", acknowledgeDuplicateName: true }));

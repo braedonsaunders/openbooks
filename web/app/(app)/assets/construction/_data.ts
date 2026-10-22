@@ -69,7 +69,7 @@ const scoped = (column: SQL, allowed: Set<string> | null) =>
   allowed ? sql`and ${column} = any(${`{${[...allowed].join(',')}}`}::uuid[])` : sql``
 
 async function records(orgId: string, allowed: Set<string> | null, id?: string): Promise<CipRecordRow[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; asset_number: string; name: string; status: 'construction' | 'capitalized'; subsidiary_id: string;
     subsidiary_name: string; account_label: string; linked: string; capitalized: string; expensed: string; open: string;
   }>(sql`
@@ -86,7 +86,7 @@ async function records(orgId: string, allowed: Set<string> | null, id?: string):
        ${id ? sql`and a.id = ${id}` : sql``}
        ${scoped(sql`a.subsidiary_id`, allowed)}
      order by a.status, a.asset_number
-     limit 500`)).rows
+     limit 500`, 'objects')
   return rows.map((row) => ({
     id: row.id,
     assetNumber: row.asset_number,
@@ -118,26 +118,26 @@ export async function loadConstruction(sp: Record<string, string | string[] | un
     tab === 'reconciliation' ? cipReconciliation(orgId, { asOf, allowedSubsidiaryIds: scope }) : Promise.resolve([]),
     isFeatureEnabled(orgId, 'assetComponents'),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination ${scoped(sql`id`, allowed)} order by name`),
+      select id, name from subsidiaries where org_id = ${orgId} and is_active and not is_elimination ${scoped(sql`id`, allowed)} order by name`, 'objects'),
     db.execute<{ id: string; name: string }>(sql`
-      select id, name from asset_categories where org_id = ${orgId} and is_active and asset_account_id is not null order by name`),
+      select id, name from asset_categories where org_id = ${orgId} and is_active and asset_account_id is not null order by name`, 'objects'),
     db.execute<{ id: string; label: string }>(sql`
       select id, concat_ws(' · ', number, name) as label from accounts
        where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${CIP_ACCOUNT_TYPES.join(',')}}`}::text[])
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
-       order by number nulls last`),
+       order by number nulls last`, 'objects'),
     db.execute<{ id: string; label: string }>(sql`
       select id, concat_ws(' · ', number, name) as label from accounts
        where org_id = ${orgId} and is_active and not is_summary and type = any(${`{${PNL_COST_TYPES.join(',')}}`}::text[])
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
-       order by number nulls last`),
+       order by number nulls last`, 'objects'),
     db.execute<{ id: string; label: string; subsidiary_id: string }>(sql`
       select id, concat_ws(' · ', asset_number, name) as label, subsidiary_id from fixed_assets
        where org_id = ${orgId} and parent_asset_id is null and status in ('draft', 'in_service', 'fully_depreciated')
          ${scoped(sql`subsidiary_id`, allowed)}
-       order by asset_number limit 1000`),
+       order by asset_number limit 1000`, 'objects'),
   ])
-  const names = new Map(subsidiaries.rows.map((row) => [row.id, row.name]))
+  const names = new Map(subsidiaries.map((row) => [row.id, row.name]))
   let selected: CipDetail | null = null
   const selectedId = pickString(sp.cip)
   if (selectedId && isUuid(selectedId)) {
@@ -151,7 +151,7 @@ export async function loadConstruction(sp: Record<string, string | string[] | un
             from asset_cip_costs c
             join journal_entries je on je.org_id = c.org_id and je.id = c.source_entry_id
            where c.org_id = ${orgId} and c.cip_asset_id = ${record.id}
-           order by c.status, c.posting_date, je.entry_number`),
+           order by c.status, c.posting_date, je.entry_number`, 'objects'),
         db.execute<{ id: string; capitalized_on: string; entry_id: string; capitalized_amount: string; expensed_amount: string; reason: string; status: 'posted' | 'reversed'; lines: CipDetail['capitalizations'][number]['lines'] }>(sql`
           select k.id, k.capitalized_on::text as capitalized_on, k.entry_id, k.capitalized_amount::text as capitalized_amount,
                  k.expensed_amount::text as expensed_amount, k.reason, k.status,
@@ -159,17 +159,17 @@ export async function loadConstruction(sp: Record<string, string | string[] | un
                              from asset_cip_capitalization_lines l where l.org_id = k.org_id and l.capitalization_id = k.id), '[]'::jsonb) as lines
             from asset_cip_capitalizations k
            where k.org_id = ${orgId} and k.cip_asset_id = ${record.id}
-           order by k.capitalized_on desc, k.created_at desc`),
+           order by k.capitalized_on desc, k.created_at desc`, 'objects'),
         record.status === 'construction' ? listCipCandidateLines(orgId, { cipAssetId: record.id, allowedSubsidiaryIds: scope }) : Promise.resolve([]),
       ])
       selected = {
         ...record,
-        costs: costs.rows.map((row) => ({
+        costs: costs.map((row) => ({
           id: row.id, entryId: row.entry_id, entryNumber: row.entry_number, postingDate: row.posting_date, amount: row.amount,
           memo: row.memo, status: row.status, unlinkReason: row.unlink_reason, fromAcceptance: row.from_acceptance,
         })),
         candidates,
-        capitalizations: capitalizations.rows.map((row) => ({
+        capitalizations: capitalizations.map((row) => ({
           id: row.id, capitalizedOn: row.capitalized_on, entryId: row.entry_id, capitalized: row.capitalized_amount,
           expensed: row.expensed_amount, reason: row.reason, status: row.status, lines: row.lines,
         })),
@@ -195,10 +195,10 @@ export async function loadConstruction(sp: Record<string, string | string[] | un
     createMode: pickString(sp.cip) === 'new' && canCapitalize,
     canCapitalize,
     componentsEnabled,
-    subsidiaries: subsidiaries.rows,
-    categories: categories.rows,
-    cipAccounts: cipAccounts.rows,
-    expenseAccounts: expenseAccounts.rows,
-    parents: parents.rows.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
+    subsidiaries,
+    categories,
+    cipAccounts,
+    expenseAccounts,
+    parents: parents.map((row) => ({ id: row.id, label: row.label, subsidiaryId: row.subsidiary_id })),
   }
 }

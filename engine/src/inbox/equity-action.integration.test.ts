@@ -39,14 +39,14 @@ async function reserved(w: EquityWorld, planId: string): Promise<string> {
 
 async function request(orgId: string, id: string) {
   return (await db.execute<{ status: string; decided_by: string | null; decision_comment: string | null }>(sql`
-    select status, decided_by, decision_comment from equity_action_requests where org_id = ${orgId} and id = ${id}`)).rows[0]!;
+    select status, decided_by, decision_comment from equity_action_requests where org_id = ${orgId} and id = ${id}`, "objects"))[0]!;
 }
 
 async function flowState(orgId: string, requestId: string) {
-  const gates = (await db.execute<{ status: string }>(sql`
-    select status from flow_gates where org_id = ${orgId} and subject_kind = ${EQUITY_ACTION_SUBJECT_KIND} and subject_id = ${requestId}`)).rows;
-  const runs = (await db.execute<{ status: string }>(sql`
-    select status from flow_runs where org_id = ${orgId} and subject_kind = ${EQUITY_ACTION_SUBJECT_KIND} and subject_id = ${requestId}`)).rows;
+  const gates = await db.execute<{ status: string }>(sql`
+    select status from flow_gates where org_id = ${orgId} and subject_kind = ${EQUITY_ACTION_SUBJECT_KIND} and subject_id = ${requestId}`, "objects");
+  const runs = await db.execute<{ status: string }>(sql`
+    select status from flow_runs where org_id = ${orgId} and subject_kind = ${EQUITY_ACTION_SUBJECT_KIND} and subject_id = ${requestId}`, "objects");
   return { gates: gates.map((row) => row.status), runs: runs.map((row) => row.status) };
 }
 
@@ -148,9 +148,9 @@ test("a Flow naming an equity reviewer without approval authority refuses routin
     const reviewerId = await createScratchUser(w.org.orgId, "Read-only Reviewer", "equity_reader");
     await db.execute(sql`update app_roles set permissions = '["equity.read"]'::jsonb where org_id = ${w.org.orgId} and key = 'equity_reader'`);
     await seedApprovalFlow(w.org.orgId, { subjectKind: EQUITY_ACTION_SUBJECT_KIND, assignees: [{ type: "user", userId: reviewerId }], mode: "any" });
-    const before = (await db.execute(sql`select id from equity_action_requests where org_id=${w.org.orgId}`)).rows;
+    const before = await db.execute(sql`select id from equity_action_requests where org_id=${w.org.orgId}`, "objects");
     await assert.rejects(planWithPendingReserve(w), /cannot approve this record/);
-    assert.deepEqual((await db.execute(sql`select id from equity_action_requests where org_id=${w.org.orgId}`)).rows, before);
+    assert.deepEqual(await db.execute(sql`select id from equity_action_requests where org_id=${w.org.orgId}`, "objects"), before);
     assert.deepEqual(await inbox(w, reviewerId), []);
     const structure = await loadStructure({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, asOf: "2026-12-31" });
     assert.equal(structure.plans.find(plan => plan.code === "EIP")?.reserved, "4000000");
@@ -188,8 +188,8 @@ test("the requester withdraws a pending equity action: its approval closes and n
     assert.equal(await reserved(w, plan.id), "4000000");
     assert.deepEqual(await inbox(w, w.approverId), [], "the approver has nothing left to decide");
     assert.deepEqual(await pendingEquityActions({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId }), []);
-    const audit = (await db.execute<{ action: string; changes: { reason?: string; before?: unknown; after?: unknown } }>(sql`
-      select action, changes from audit_log where org_id = ${w.org.orgId} and row_id = ${requestId} order by at, id`)).rows;
+    const audit = await db.execute<{ action: string; changes: { reason?: string; before?: unknown; after?: unknown } }>(sql`
+      select action, changes from audit_log where org_id = ${w.org.orgId} and row_id = ${requestId} order by at, id`, "objects");
     assert.deepEqual(audit.map((row) => row.action), ["equity.action.submitted", "equity.action.withdrawn"]);
     assert.deepEqual(audit[1]!.changes.before, { status: "pending_approval" });
     assert.deepEqual(audit[1]!.changes.after, { status: "withdrawn" });

@@ -74,10 +74,11 @@ const harness = {
   // The mocked @openbooks/pdf delegates certification to the real qpdf-backed
   // verifier, imported lazily at call time (after the hooks deregister).
   pdfCryptoModuleUrl: new URL('../../packages/pdf/src/encrypt.ts', import.meta.url).href,
-  async execute(query: SqlQuery) {
-    if (query.text.includes('from pay_stubs s')) return { rows: state.stubs }
+  async execute(query: SqlQuery, mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
+    if (query.text.includes('from pay_stubs s')) return inMode({ rows: state.stubs })
     if (query.text.includes("settings#>'{payroll,stubPassword}'")) {
-      return { rows: [{ policy: state.policy }] }
+      return inMode({ rows: [{ policy: state.policy }] })
     }
     throw new Error(`unexpected payroll output query: ${query.text}`)
   },
@@ -136,7 +137,7 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
-      export const db = { execute: (query) => harness.execute(query) }
+      export const db = { execute: (query, mode) => harness.execute(query, mode) }
     `,
   ],
   [

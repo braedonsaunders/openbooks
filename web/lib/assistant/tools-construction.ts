@@ -44,7 +44,7 @@ const retainageBalances: AssistantToolDef = {
         from orgs o
         join accounts a on a.id = nullif(o.settings->'controlAccounts'->>${roleKey}, '')::uuid and a.org_id = o.id
        where o.id = ${orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!acct) {
       return {
         ok: true,
@@ -72,10 +72,10 @@ const retainageBalances: AssistantToolDef = {
     `;
     const total = (await db.execute<{ total: string; lines: number }>(sql`
       select coalesce(${signed}, 0) as total, count(*)::int as lines ${base} ${filters}
-    `)).rows[0];
+    `, "objects"))[0];
     let rows: Record<string, unknown>[];
     if (groupBy === "party") {
-      rows = (await db.execute<Record<string, unknown>>(sql`
+      rows = await db.execute<Record<string, unknown>>(sql`
         select p.id as party_id, p.display_name as party, coalesce(${signed}, 0) as balance, count(*)::int as lines
           ${base}
           left join parties p on p.id = l.party_id and p.org_id = l.org_id
@@ -84,9 +84,9 @@ const retainageBalances: AssistantToolDef = {
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
          limit ${limit + 1}
-      `)).rows;
+      `, "objects");
     } else if (groupBy === "project") {
-      rows = (await db.execute<Record<string, unknown>>(sql`
+      rows = await db.execute<Record<string, unknown>>(sql`
         select pr.id as project_id, pr.name as project, pr.code as project_code, coalesce(${signed}, 0) as balance, count(*)::int as lines
           ${base}
           left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
@@ -95,9 +95,9 @@ const retainageBalances: AssistantToolDef = {
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
          limit ${limit + 1}
-      `)).rows;
+      `, "objects");
     } else {
-      rows = (await db.execute<Record<string, unknown>>(sql`
+      rows = await db.execute<Record<string, unknown>>(sql`
         select d.id as document_id, d.kind, d.document_number, d.document_date, d.status,
                p.display_name as party, coalesce(${signed}, 0) as balance
           ${base}
@@ -108,7 +108,7 @@ const retainageBalances: AssistantToolDef = {
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
          limit ${limit + 1}
-      `)).rows;
+      `, "objects");
     }
     const page = assistantListPage(rows, limit, rows.length);
     return {

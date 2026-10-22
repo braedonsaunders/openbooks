@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
@@ -12,10 +11,6 @@ import { recomputeOpenBalances } from "../sync/applications.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const migration = readFileSync(new URL("../../../schema/migrations/generated/0100_document_open_balance_currency.sql", import.meta.url), "utf8");
-const baseline = readFileSync(new URL("../../../schema/migrations/generated/0001_baseline.sql", import.meta.url), "utf8");
-const legacyCalculation = baseline.slice(baseline.indexOf("CREATE FUNCTION public.recompute_document_open_balance("), baseline.indexOf("-- Name: row_extra_dims_guard"))
-  .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION");
 
 async function invoice(org: ScratchOrg, actor: string, currency = "EUR") {
   const id = randomUUID();
@@ -112,27 +107,6 @@ test("bulk recompute heals drift only in its tenant and clears non-open-item and
     assert.equal(await recomputeOpenBalances(org.orgId), 1);
     assert.equal(await balance(journal), null);
   } finally { await dropScratchOrg(other.orgId); }
-}));
-
-test("0100 upgrades legacy projections atomically and idempotently without changing financial evidence", { skip: !DB }, async () => fixture(async (org, actor) => {
-  const inv = await invoice(org, actor);
-  const pay = await payment(org, actor, inv.line);
-  const client = await pool.connect();
-  try {
-    await client.query("begin");
-    await client.query(legacyCalculation);
-    await client.query("select public.recompute_document_open_balance(id) from documents where id = any($1::uuid[])", [[inv.id, pay]]);
-    const before = await client.query("select id, open_balance from documents where id = any($1::uuid[]) order by id", [[inv.id, pay]]);
-    assert.equal(before.rows.find((row) => row.id === pay).open_balance, "10.0000", "reproduces legacy source carrying-amount residual");
-    const evidenceSql = `select (select jsonb_agg(to_jsonb(j) order by id) from journal_lines j where org_id = $1) as journal,
-      (select jsonb_agg(to_jsonb(a) order by id) from applications a where org_id = $1) as applications`;
-    const evidence = (await client.query(evidenceSql, [org.orgId])).rows;
-    await client.query(migration);
-    assert.deepEqual((await client.query("select open_balance from documents where id = any($1::uuid[])", [[inv.id, pay]])).rows,
-      [{ open_balance: "0.0000" }, { open_balance: "0.0000" }]);
-    await client.query(migration);
-    assert.deepEqual((await client.query(evidenceSql, [org.orgId])).rows, evidence);
-  } finally { await client.query("rollback"); client.release(); }
 }));
 
 async function openJournal(org: ScratchOrg, actor: string, amounts: readonly string[]) {
@@ -259,18 +233,13 @@ test("ambiguous currency projection fails with actionable organization and entry
   assert.equal(await balance(inv.id), "100.0000");
 }));
 
-test("posted INSERT computes open_balance and migration heals a stale non-NULL cache", { skip: !DB }, async () => {
-  // G8 covers direct posted inserts; the forward repair also fixes drifted
-  // non-NULL caches before the INSERT path is exercised.
+test("posted INSERT computes open_balance and the native recompute heals a stale non-NULL cache", { skip: !DB }, async () => {
   await fixture(async (org, actorId) => {
     const first = await invoice(org, actorId);
     assert.equal(await balance(first.id), "100.0000");
     await db.execute(sql`update documents set open_balance = 999 where id = ${first.id}`);
     assert.equal(await balance(first.id), "999.0000");
-    const migration = sql.raw(readFileSync("schema/migrations/generated/0368_repair_document_open_balance_cache.sql", "utf8"));
-    await db.transaction(async (tx) => {
-      await tx.execute(migration);
-    });
+    assert.ok(await recomputeOpenBalances(org.orgId) >= 1, "the drifted cache must be rewritten");
     assert.equal(await balance(first.id), "100.0000");
     // The INSERT path: a directly inserted posted row computes its balance.
     // Document row first (the line tenant guard needs its parent), lines
@@ -285,7 +254,7 @@ test("posted INSERT computes open_balance and migration heals a stale non-NULL c
       await tx.execute(sql`insert into documents
           (id, org_id, kind, document_number, subsidiary_id, document_date, posting_date, posting_period_id, currency,
            status, subtotal, tax_total, total, posted_entry_id, created_by)
-        select ${secondId}, org_id, kind, 'G8-BACKFILL-2', subsidiary_id, document_date, posting_date, posting_period_id, currency,
+        select ${secondId}, org_id, kind, 'POSTED-INSERT-2', subsidiary_id, document_date, posting_date, posting_period_id, currency,
            'posted', subtotal, tax_total, total, posted_entry_id, ${actorId}
           from documents where id = ${first.id}`);
       await tx.execute(sql`insert into document_lines

@@ -1,1 +1,0 @@
-This migration replaces only the journal guard function. An exact installed-definition digest check runs before replacement; existing journals and period locks remain unchanged.

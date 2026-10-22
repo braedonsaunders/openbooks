@@ -42,9 +42,9 @@ test("the position ledger summed through any date is the replayed cap table, thr
     assert.equal(afterVoid.get(`s:${scenario.optionId}`)!.shares - beforeVoid.get(`s:${scenario.optionId}`)!.shares, 200n);
 
     // Reconciling again appends nothing: the ledger already matches the replay.
-    const rows = Number((await db.execute<{ n: string }>(sql`select count(*)::text as n from equity_position_movements where org_id = ${w.org.orgId}`)).rows[0]!.n);
+    const rows = Number((await db.execute<{ n: string }>(sql`select count(*)::text as n from equity_position_movements where org_id = ${w.org.orgId}`, "objects"))[0]!.n);
     assert.equal(await withOrgTransaction(w.org.orgId, () => syncPositionLedger(db, w.org.orgId, w.org.subsidiaryId)), 0);
-    assert.equal(Number((await db.execute<{ n: string }>(sql`select count(*)::text as n from equity_position_movements where org_id = ${w.org.orgId}`)).rows[0]!.n), rows);
+    assert.equal(Number((await db.execute<{ n: string }>(sql`select count(*)::text as n from equity_position_movements where org_id = ${w.org.orgId}`, "objects"))[0]!.n), rows);
     // Movements are retained history.
     await assert.rejects(db.execute(sql`update equity_position_movements set shares_delta = shares_delta + 1 where org_id = ${w.org.orgId}`));
     await assert.rejects(db.execute(sql`delete from equity_position_movements where org_id = ${w.org.orgId}`));
@@ -57,9 +57,9 @@ test("the migration's backfill computes the same positions from recorded history
   const w = await setupEquityWorld();
   try {
     const scenario = await seedPositionScenario(w);
-    const rows = (await db.execute<{ security_id: string | null; plan_id: string | null; effective_on: string; shares_delta: string; as_converted_delta: string }>(sql`
+    const rows = await db.execute<{ security_id: string | null; plan_id: string | null; effective_on: string; shares_delta: string; as_converted_delta: string }>(sql`
       select security_id, plan_id, effective_on::text as effective_on, shares_delta::text as shares_delta, as_converted_delta::text as as_converted_delta
-        from public.equity_position_backfill(${w.org.orgId}::uuid, ${w.org.subsidiaryId}::uuid, false)`)).rows;
+        from public.equity_position_backfill(${w.org.orgId}::uuid, ${w.org.subsidiaryId}::uuid, false)`, "objects");
     assert.ok(rows.length > 0);
     assert.ok(scenario.checkDates.length > 0, 'the scenario names the dates the cap table is checked on');
     for (const on of scenario.checkDates) {

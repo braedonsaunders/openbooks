@@ -93,12 +93,12 @@ test("a clock-out before its clock-in refuses and leaves the pair open", { skip:
     await withOrg(org.orgId, async () => {
       // No entry was posted for the refused close …
       const entries = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from time_entries where org_id = ${org.orgId}`)).rows[0]?.n;
+        select count(*)::text as n from time_entries where org_id = ${org.orgId}`, "objects"))[0]?.n;
       assert.equal(entries, "0");
       // … and the clock-in is still open, never silently paired.
-      const open = (await db.execute<{ status: string }>(sql`
+      const open = await db.execute<{ status: string }>(sql`
         select status from time_clock_events
-         where org_id = ${org.orgId} and kind = 'clock_in'`)).rows;
+         where org_id = ${org.orgId} and kind = 'clock_in'`, "objects");
       assert.equal(open.length, 1);
       assert.equal(open[0]?.status, "recorded");
     });
@@ -125,13 +125,13 @@ test("clock-paired entries stay draft until the employee submits the timesheet w
         source: "mobile", clientEventId: randomUUID(),
       });
       assert.equal(paired.entryIds.length, 1);
-      const rows = (await db.execute<{ entryStatus: string; weekStatus: string }>(sql`
+      const rows = await db.execute<{ entryStatus: string; weekStatus: string }>(sql`
         select te.status as "entryStatus", w.status as "weekStatus"
           from time_entries te
           join timesheet_weeks w on w.org_id = te.org_id
             and w.employee_party_id = te.employee_party_id
             and te.worked_on between w.week_start and w.week_start + 6
-         where te.org_id = ${org.orgId} and te.employee_party_id = ${worker}`)).rows;
+         where te.org_id = ${org.orgId} and te.employee_party_id = ${worker}`, "objects");
       assert.deepEqual(rows, [{ entryStatus: "draft", weekStatus: "draft" }]);
     });
   } finally {
@@ -173,19 +173,19 @@ test("clock events accept only live images in the field-time photo folder and fl
     const imageId = await withOrg(org.orgId, async () => {
       const row = (await db.execute<{ id: string }>(sql`
         select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId}
-         and file_type = 'image' and not is_inactive`)).rows[0];
+         and file_type = 'image' and not is_inactive`, "objects"))[0];
       assert.ok(row);
       return row.id;
     });
     const pdfId = await withOrg(org.orgId, async () => {
       const row = (await db.execute<{ id: string }>(sql`
-        select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId} and file_type = 'pdf'`)).rows[0];
+        select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId} and file_type = 'pdf'`, "objects"))[0];
       assert.ok(row);
       return row.id;
     });
     const inactiveImageId = await withOrg(org.orgId, async () => {
       const row = (await db.execute<{ id: string }>(sql`
-        select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId} and is_inactive`)).rows[0];
+        select id::text as id from files where org_id = ${org.orgId} and folder_id = ${photoFolderId} and is_inactive`, "objects"))[0];
       assert.ok(row);
       return row.id;
     });
@@ -209,7 +209,7 @@ test("clock events accept only live images in the field-time photo folder and fl
         occurredAt: now, source: 'mobile', clientEventId: randomUUID() });
       const entry = (await db.execute<{ id: string; week_start: string }>(sql`
         select id::text as id, date_trunc('week', worked_on)::date::text as week_start
-          from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0]!;
+          from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0]!;
       const flags = await approvalFlags(org.orgId, { weekStart: entry.week_start, employeePartyId: worker });
       assert.equal(flags[0]?.hasPhoto, true);
       assert.equal(flags[0]?.photoFileId, imageId);
@@ -262,10 +262,10 @@ test("a mid-shift project switch deducts the unpaid break once per shift", { ski
         source: "mobile", clientEventId: randomUUID(),
       });
       assert.equal(result.entryIds.length, 2);
-      const rows = (await db.execute<{ hours: string; project_id: string; cost_code_ref: string | null }>(sql`
+      const rows = await db.execute<{ hours: string; project_id: string; cost_code_ref: string | null }>(sql`
         select hours::text as hours, project_id::text as project_id, cost_code_ref from time_entries
          where org_id = ${org.orgId} and employee_party_id = ${worker}
-         order by project_id`)).rows;
+         order by project_id`, "objects");
       // 7.5 paid hours, dealt 3.75 + 3.75 — never 7h from a per-segment deduction.
       assert.deepEqual(rows.map((r) => r.hours), ["3.7500", "3.7500"]);
       assert.deepEqual(rows.map((r) => r.project_id).sort(), [projectA, projectB].sort());
@@ -299,9 +299,9 @@ test("clock-out refs apply when a shift has no project segment before clock-out"
         source: "mobile", projectId: project, costCodeRef: "CC-C", clientEventId: randomUUID(),
       });
       assert.equal(result.entryIds.length, 1);
-      const rows = (await db.execute<{ project_id: string | null; cost_code_ref: string | null }>(sql`
+      const rows = await db.execute<{ project_id: string | null; cost_code_ref: string | null }>(sql`
         select project_id::text as project_id, cost_code_ref from time_entries
-         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows;
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects");
       assert.deepEqual(rows, [{ project_id: project, cost_code_ref: "CC-C" }]);
     });
   } finally {
@@ -337,10 +337,10 @@ test("auto-close keeps the latest switched project on the final segment", { skip
         source: "mobile", projectId: projectA, clientEventId: randomUUID(),
       });
       assert.ok(next.autoClosedPairId);
-      const rows = (await db.execute<{ hours: string; project_id: string }>(sql`
+      const rows = await db.execute<{ hours: string; project_id: string }>(sql`
         select hours::text as hours, project_id::text as project_id from time_entries
          where org_id = ${org.orgId} and employee_party_id = ${worker}
-         order by project_id`)).rows;
+         order by project_id`, "objects");
       const expectedRows = [
         { hours: "2.0000", project_id: projectA },
         { hours: "2.0000", project_id: projectB },
@@ -373,9 +373,9 @@ test("a 23:52-00:08 shift rounds once, never once per midnight piece", { skip: !
       // 16 minutes round once to a single quarter — per-piece rounding
       // paid 0.25 + 0.25 = 0.50 for the same 16 minutes.
       assert.equal(result.entryIds.length, 1);
-      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+      const rows = await db.execute<{ hours: string; worked_on: string }>(sql`
         select hours::text as hours, worked_on::text as worked_on from time_entries
-         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows;
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects");
       assert.deepEqual(rows.map((r) => r.hours), ["0.2500"]);
     });
   } finally {
@@ -401,10 +401,10 @@ test("an overnight shift deals its rounded total across both UTC days", { skip: 
         kind: "clock_out", occurredAt: "2026-09-15T02:00:00.000Z",
         source: "mobile", projectId, clientEventId: randomUUID(),
       });
-      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+      const rows = await db.execute<{ hours: string; worked_on: string }>(sql`
         select hours::text as hours, worked_on::text as worked_on from time_entries
          where org_id = ${org.orgId} and employee_party_id = ${worker}
-         order by worked_on`)).rows;
+         order by worked_on`, "objects");
       // 4 paid hours, dealt 2.00 + 2.00 across the UTC midnight.
       assert.deepEqual(rows.map((r) => r.hours), ["2.0000", "2.0000"]);
       assert.deepEqual(rows.map((r) => r.worked_on), ["2026-09-14", "2026-09-15"]);
@@ -437,7 +437,7 @@ test("concurrent replays of one offline id record once", { skip: !DB }, async ()
     await withOrg(org.orgId, async () => {
       const rows = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from time_clock_events
-         where org_id = ${org.orgId} and client_event_id = ${key}`)).rows[0]?.n;
+         where org_id = ${org.orgId} and client_event_id = ${key}`, "objects"))[0]?.n;
       assert.equal(rows, "1");
     });
   } finally {
@@ -482,7 +482,7 @@ test("concurrent distinct clock-ins serialize per employee", { skip: !DB }, asyn
           select employee_party_id from time_clock_events
            where org_id = ${org.orgId} and kind = 'clock_in' and status = 'recorded'
            group by employee_party_id having count(*) > 1
-        ) duplicate_employees`)).rows[0]?.n;
+        ) duplicate_employees`, "objects"))[0]?.n;
       assert.equal(duplicates, "0", "no employee may have two open clock-ins");
     });
   } finally {
@@ -513,7 +513,7 @@ test("a reused offline id with a different payload conflicts", { skip: !DB }, as
     await withOrg(org.orgId, async () => {
       const rows = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from time_clock_events
-         where org_id = ${org.orgId} and client_event_id = ${key}`)).rows[0]?.n;
+         where org_id = ${org.orgId} and client_event_id = ${key}`, "objects"))[0]?.n;
       assert.equal(rows, "1");
     });
   } finally {
@@ -542,9 +542,9 @@ test("a UTC-5 evening shift posts on its one local date", { skip: !DB }, async (
         source: "mobile", projectId, clientEventId: randomUUID(),
       });
       assert.equal(result.entryIds.length, 1);
-      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+      const rows = await db.execute<{ hours: string; worked_on: string }>(sql`
         select hours::text as hours, worked_on::text as worked_on from time_entries
-         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows;
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects");
       assert.deepEqual(rows.map((r) => r.hours), ["4.0000"]);
       assert.deepEqual(rows.map((r) => r.worked_on), ["2026-01-14"]);
     });
@@ -572,10 +572,10 @@ test("an overnight local shift splits at the business midnight", { skip: !DB }, 
         kind: "clock_out", occurredAt: "2026-01-15T07:00:00.000Z",
         source: "mobile", projectId, clientEventId: randomUUID(),
       });
-      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+      const rows = await db.execute<{ hours: string; worked_on: string }>(sql`
         select hours::text as hours, worked_on::text as worked_on from time_entries
          where org_id = ${org.orgId} and employee_party_id = ${worker}
-         order by worked_on`)).rows;
+         order by worked_on`, "objects");
       assert.deepEqual(rows.map((r) => r.hours), ["2.0000", "2.0000"]);
       assert.deepEqual(rows.map((r) => r.worked_on), ["2026-01-14", "2026-01-15"]);
     });

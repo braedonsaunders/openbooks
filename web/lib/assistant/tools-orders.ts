@@ -120,16 +120,16 @@ const searchOrders: AssistantToolDef = {
                   d.currency, d.total, d.memo, p.display_name
       ), filtered as (select * from grouped where ${progressFilter})
     `;
-    const rows = (await db.execute<Record<string, unknown>>(sql`${filtered}
+    const rows = await db.execute<Record<string, unknown>>(sql`${filtered}
       select * from filtered
        order by document_date desc, document_number desc
        limit ${limit + 1}
-    `)).rows;
+    `, "objects");
     const totals = (await db.execute<{ n: string; sum_total: string; backlog: string }>(sql`${filtered}
       select count(*) as n, coalesce(sum(total), 0) as sum_total,
              coalesce(sum(case when status = 'approved' then total else 0 end), 0) as backlog
         from filtered
-    `)).rows[0];
+    `, "objects"))[0];
     const total = Number(totals?.n ?? 0);
     const mapped = rows.map((r) => {
       const ordered = toQuantityUnits(String(r.ordered ?? "0"));
@@ -186,7 +186,7 @@ const getOrder: AssistantToolDef = {
     if (!can(authz, kindPerm(a.kind))) return { ok: false, error: "forbidden" };
     const payload = await loadOrder(a.id, authz.user.orgId, a.kind, authz.allowedSubsidiaryIds);
     if (!payload) return { ok: false, error: "not_found" };
-    const fulfil = (await db.execute<{ id: string; item_id: string | null; item_kind: string | null; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>(sql`
+    const fulfil = await db.execute<{ id: string; item_id: string | null; item_kind: string | null; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>(sql`
       select l.id, l.item_id, i.kind as item_kind, l.quantity::text as quantity,
              coalesce(l.quantity_fulfilled, 0)::text as quantity_fulfilled,
              coalesce(l.quantity_billed, 0)::text as quantity_billed,
@@ -194,7 +194,7 @@ const getOrder: AssistantToolDef = {
         from document_lines l
         left join items i on i.id = l.item_id and i.org_id = l.org_id
        where l.document_id = ${a.id} and l.org_id = ${authz.user.orgId}
-    `)).rows;
+    `, "objects");
     const fulfilById = new Map(fulfil.map((f) => [f.id, f]));
     const doc = payload.doc as Record<string, unknown>;
     let dropShip: unknown = undefined;
@@ -203,7 +203,7 @@ const getOrder: AssistantToolDef = {
       if (a.kind === "purchase_order") {
         salesOrderId = (await db.execute<{ sales_order_id: string }>(sql`
           select sales_order_id from drop_ship_orders
-           where org_id = ${authz.user.orgId} and purchase_order_id = ${a.id}`)).rows[0]?.sales_order_id ?? null;
+           where org_id = ${authz.user.orgId} and purchase_order_id = ${a.id}`, "objects"))[0]?.sales_order_id ?? null;
       }
       if (salesOrderId) {
         dropShip = {

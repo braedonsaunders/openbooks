@@ -37,15 +37,15 @@ test('dated employer assignments change only their recorded pay dates, stale dra
         effectiveFrom: '2026-01-01', value: value!, changeReason: 'Dated employer account approval',
       });
       const liability = (await db.execute<{ id: string }>(sql`select liability_account_id::text as id from pay_components
-        where org_id=${f.orgId} and country='CA' and system_key='ei' and kind='deduction'`)).rows[0]!.id;
+        where org_id=${f.orgId} and country='CA' and system_key='ei' and kind='deduction'`, 'objects'))[0]!.id;
       await setPackSlotAccount(f.orgId, f.actorId, 'CA', 'wcb', liability);
       const run = await createPayRun({ orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
         periodStart: '2026-07-01', periodEnd: '2026-07-07', payDate: '2026-07-08' });
       const command = { orgId: f.orgId, actorId: f.actorId, documentId: run.documentId };
-      const component = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`)).rows[0]!.id;
+      const component = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`, 'objects'))[0]!.id;
       await mutatePayRunAdjustment({ ...command, mutation: { action: 'add', employeePartyId: f.employeeId, componentId: component, amount: '1000' } });
       const stub = async () => (await db.execute<{ filing_account_id: string; factors: Record<string, string> }>(sql`
-        select filing_account_id,factors from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
+        select filing_account_id,factors from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`, 'objects'))[0]!;
       assert.deepEqual((await calculatePayRun(command)).errors, []);
       const before = await stub();
       const input = { orgId: f.orgId, actorId: f.actorId, employeePartyId: f.employeeId, kind: 'filing_account' as const,
@@ -66,11 +66,11 @@ test('dated employer assignments change only their recorded pay dates, stale dra
       assert.equal(after.factors.EI_ER, roundMoney(mul(after.factors.EI!, '1.167'), 2));
       assert.equal(before.factors.EI_ER, roundMoney(mul(before.factors.EI!, '1.4'), 2));
       const wcb = (await db.execute<{ amount: string }>(sql`select l.amount::text from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-        join pay_components c on c.org_id=l.org_id and c.id=l.component_id where s.org_id=${f.orgId} and s.pay_run_document_id=${run.documentId} and c.system_key='wcb'`)).rows[0];
+        join pay_components c on c.org_id=l.org_id and c.id=l.component_id where s.org_id=${f.orgId} and s.pay_run_document_id=${run.documentId} and c.system_key='wcb'`, 'objects'))[0];
       assert.ok(wcb && cmp(wcb.amount, '0') > 0);
       const current = (await db.execute<{ filing_account_id: string; worker_comp_group_id: string | null }>(sql`
         select p.filing_account_id,r.worker_comp_group_id from employee_payroll_profiles p join employee_roles r on r.org_id=p.org_id and r.party_id=p.employee_party_id
-        where p.org_id=${f.orgId} and p.employee_party_id=${f.employeeId}`)).rows[0]!;
+        where p.org_id=${f.orgId} and p.employee_party_id=${f.employeeId}`, 'objects'))[0]!;
       assert.equal(current.filing_account_id, standard); assert.equal(current.worker_comp_group_id, null);
       assert.equal((await recordHistoricalEmployerAssignment({ ...input, dryRun: false })).changed, false);
       await assert.rejects(recordHistoricalEmployerAssignment({ ...input, assignmentId: standard }), /overlap|covers/i);
@@ -104,8 +104,8 @@ test('dated employer assignments change only their recorded pay dates, stale dra
       try { assert.equal((await recordHistoricalEmployerAssignment(later)).changed, true); }
       finally { resume(); }
       await staleResult;
-      const audit = (await db.execute<{ actor_id: string; changes: Record<string, unknown> }>(sql`select actor_id,changes from audit_log
-        where org_id=${f.orgId} and table_name='payroll_employee_employer_assignments' and row_id=${saved.id}`)).rows;
+      const audit = await db.execute<{ actor_id: string; changes: Record<string, unknown> }>(sql`select actor_id,changes from audit_log
+        where org_id=${f.orgId} and table_name='payroll_employee_employer_assignments' and row_id=${saved.id}`, 'objects');
       assert.equal(audit.length, 1); assert.equal(audit[0]!.actor_id, f.actorId);
       assert.equal(audit[0]!.changes.sourceReference, input.sourceReference);
       const other = await seedHiredEmployee(f.orgId, f.actorId, { name: 'Other subject', subsidiaryId: f.subsidiaryId,

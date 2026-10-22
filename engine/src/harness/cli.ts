@@ -25,7 +25,7 @@ const argOrg = process.argv[2];
 const orgId = argOrg ?? (await withBypassContext(async () =>
   (await db.execute<{ id: string }>(sql`
     select id from orgs where env_kind = 'sandbox' order by created_at, id limit 1
-  `)).rows[0]?.id,
+  `, "objects"))[0]?.id,
 ));
 if (!orgId) { console.error("no org"); process.exit(1); }
 

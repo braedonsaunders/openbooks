@@ -44,10 +44,11 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = Array.isArray(query?.strings) ? query.strings.join('') : String(query)
           state.executeCalls.push({ text, values: query?.values ?? [] })
-          return { rows: state.listingRows }
+          return inMode({ rows: state.listingRows })
         },
       }
       export async function withBypassContext(work) { return work() }

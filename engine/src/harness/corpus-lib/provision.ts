@@ -125,14 +125,14 @@ export async function provisionCorpusOrg(
         values (${orgId}, 'admin', 'admin', false, '[]'::jsonb)
         on conflict (org_id, key) do update set updated_at = now()
         returning id
-      `));
+      `, "objects"));
       await tx.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)
         values (${adminId}, ${orgId}, ${`replay-${adminId.slice(0, 8)}@sim.test`}, 'Replay Operator', 'x', true)
       `);
       await tx.execute(sql`
         insert into role_assignments (org_id, user_id, role_id)
-        values (${orgId}, ${adminId}, ${role.rows[0]!.id})
+        values (${orgId}, ${adminId}, ${role[0]!.id})
       `);
     });
 
@@ -141,8 +141,8 @@ export async function provisionCorpusOrg(
     const projectIds: Record<string, string> = {};
     if (corpus.projects?.length) {
       const typeByKey = new Map(
-        ((await db.execute<{ id: string; key: string }>(sql`
-          select id, key from project_types where org_id = ${orgId} and is_active`))).rows.map((t) => [t.key, t.id]),
+        (await db.execute<{ id: string; key: string }>(sql`
+          select id, key from project_types where org_id = ${orgId} and is_active`, "objects")).map((t) => [t.key, t.id]),
       );
       for (const spec of corpus.projects) {
         projectIds[spec.key] = await insertProject(orgId, spec, {

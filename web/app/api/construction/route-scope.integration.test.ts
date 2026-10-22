@@ -42,8 +42,8 @@ async function fixture() {
   const subRow = await db.execute<{ id: string }>(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     select ${randomUUID()}, ${org.orgId}, s.id, 'Entity B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-      from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`)
-  subB = subRow.rows[0]!.id
+      from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, 'objects')
+  subB = subRow[0]!.id
   await db.execute(sql`
     update app_roles set permissions='["ar.read","ar.create","ar.approve","ar.post"]'::jsonb,
       subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
@@ -98,9 +98,9 @@ test('an A-only caller sees only not-found for B’s project reads and SOV write
       const res = await f.post(body)
       assert.equal(res.status, 404, `expected not-found for ${body.action}`)
     }
-    const lines = (await db.execute<{ n: string }>(sql`select count(*) as n from sov_lines where org_id=${f.org.orgId} and project_id=${f.projectB}`)).rows[0]!.n
+    const lines = (await db.execute<{ n: string }>(sql`select count(*) as n from sov_lines where org_id=${f.org.orgId} and project_id=${f.projectB}`, 'objects'))[0]!.n
     assert.equal(lines, '1', 'no SOV line was added, changed, or removed on B’s project')
-    const orders = (await db.execute<{ n: string }>(sql`select count(*) as n from change_orders where org_id=${f.org.orgId} and project_id=${f.projectB}`)).rows[0]!.n
+    const orders = (await db.execute<{ n: string }>(sql`select count(*) as n from change_orders where org_id=${f.org.orgId} and project_id=${f.projectB}`, 'objects'))[0]!.n
     assert.equal(orders, '0', 'no change order landed on B’s project')
   } finally {
     await f.close()
@@ -121,7 +121,7 @@ test('an A-only caller cannot touch B’s pay-application lifecycle', async () =
       lines: [{ sovLineId: f.lineB, thisPeriodCompleted: '5000', materialsStored: '0' }],
     })
     assert.equal(submitted.status, 404, 'restricted submit is not-found')
-    let status = (await db.execute<{ status: string }>(sql`select status from pay_applications where id=${appId}`)).rows[0]!.status
+    let status = (await db.execute<{ status: string }>(sql`select status from pay_applications where id=${appId}`, 'objects'))[0]!.status
     assert.equal(status, 'draft', 'the refused submit advances nothing')
 
     f.asOwner()
@@ -136,7 +136,7 @@ test('an A-only caller cannot touch B’s pay-application lifecycle', async () =
     assert.equal((await f.post({ action: 'voidPayApp', payApplicationId: appId })).status, 404)
     assert.equal((await f.post({ action: 'billPayApp', payApplicationId: appId })).status, 404)
     assert.equal((await f.post({ action: 'releaseRetainage', projectId: f.projectB, periodEnd: f.org.date, amount: '10' })).status, 404)
-    status = (await db.execute<{ status: string }>(sql`select status from pay_applications where id=${appId}`)).rows[0]!.status
+    status = (await db.execute<{ status: string }>(sql`select status from pay_applications where id=${appId}`, 'objects'))[0]!.status
     assert.equal(status, 'approved', 'none of the refused writes moved the application')
   } finally {
     await f.close()

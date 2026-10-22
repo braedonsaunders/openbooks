@@ -42,7 +42,7 @@ export async function saveFulfillmentCustom(
       from documents d
       join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
      where d.org_id = ${orgId} and d.id = ${input.documentId} and d.kind = ${input.kind}
-     for update of d`)).rows[0]
+     for update of d`, 'objects'))[0]
   if (!current) throw new FulfillmentRefusal(`${input.kind === 'pick_list' ? 'Pick list' : 'Shipment'} not found`, 'not_found', 404)
   if (current.status !== 'draft' || current.stage !== 'open') {
     throw new FulfillmentRefusal(
@@ -68,16 +68,16 @@ export async function saveFulfillmentCustom(
   const saved = await tx.execute<{ id: string }>(sql`
     update documents set custom = ${JSON.stringify(next)}::jsonb, updated_at = now(), updated_by = ${actorId}
      where org_id = ${orgId} and id = ${input.documentId} and status = 'draft'
-    returning id`)
-  if (saved.rows.length === 0) {
+    returning id`, 'objects')
+  if (saved.length === 0) {
     throw new FulfillmentRefusal(`${current.document_number} changed while its custom fields were being saved`, 'changed_concurrently', 409, 'Reload and try again')
   }
   const audited = await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'documents', ${input.documentId}, 'update',
             ${JSON.stringify({ mode: 'custom_fields_set', before: existing, after: next })}::jsonb, ${actorId})
-    returning id`)
-  if (audited.rows.length === 0) throw new Error('custom-field change was not audited')
+    returning id`, 'objects')
+  if (audited.length === 0) throw new Error('custom-field change was not audited')
   return next
 }
 
@@ -226,7 +226,7 @@ export async function completeShipment(
     if (locked.shipment.stage === 'done' && locked.shipment.sales_fulfillment_id) {
       const recorded = (await tx.execute<{ document_number: string }>(sql`
         select document_number from documents
-         where org_id = ${orgId} and id = ${locked.shipment.sales_fulfillment_id}`)).rows[0]
+         where org_id = ${orgId} and id = ${locked.shipment.sales_fulfillment_id}`, 'objects'))[0]
       return {
         shipmentId: locked.shipment.id,
         shipmentNumber,
@@ -289,7 +289,7 @@ export async function sendShipmentTracking(
     select p.email, o.name as org_name
       from orgs o
       left join parties p on p.org_id = o.id and p.id = ${shipment.customer?.id ?? null}
-     where o.id = ${orgId}`)).rows[0]
+     where o.id = ${orgId}`, 'objects'))[0]
   const to = (input.to?.trim() || party?.email?.trim() || '')
   if (!to) {
     throw new FulfillmentRefusal(

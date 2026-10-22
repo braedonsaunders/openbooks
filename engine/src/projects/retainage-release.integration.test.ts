@@ -78,7 +78,7 @@ test("retainage capacity excludes another legal entity but includes converted tr
   await hold({ subsidiary: other });
   await assert.rejects(release("150"), /exceeds available retained funds/);
   const result = await release("100");
-  const doc = (await db.execute<{ currency: string; subsidiary_id: string; total: string }>(sql`select currency,subsidiary_id,total from documents where org_id=${org.orgId} and id=${result.invoiceId}`)).rows[0]!;
+  const doc = (await db.execute<{ currency: string; subsidiary_id: string; total: string }>(sql`select currency,subsidiary_id,total from documents where org_id=${org.orgId} and id=${result.invoiceId}`, "objects"))[0]!;
   assert.deepEqual(doc, { currency: "CAD", subsidiary_id: org.subsidiaryId, total: "100.0000" });
 }));
 
@@ -106,14 +106,14 @@ for (const invalidity of ["inactive", "summary"] as const) {
     }
     const before = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from documents where org_id = ${org.orgId}
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     if (invalidity === "inactive") {
       await db.execute(sql`update accounts set is_active = false where org_id = ${org.orgId} and id = ${controlAccount}`);
     }
     await assert.rejects(release("50"), /No Retainage Receivable control account is configured/);
     const after = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from documents where org_id = ${org.orgId}
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     assert.equal(after, before, "invalid control account must not create a release invoice");
   }));
 }
@@ -132,7 +132,7 @@ test("controlled void cancels a release reservation and permits replacement", en
   await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${first.invoiceId}`);
   const result = await requestDocumentVoid({ orgId: org.orgId, actorId: actor, documentId: first.invoiceId, reason: "Correct retainage request", reversalDate: org.date });
   assert.equal(result.status, "voided");
-  assert.equal((await db.execute(sql`select status from pay_applications where org_id=${org.orgId}`)).rows[0]!.status, "void");
+  assert.equal((await db.execute(sql`select status from pay_applications where org_id=${org.orgId}`, "objects"))[0]!.status, "void");
   await release("100");
 }));
 
@@ -142,7 +142,7 @@ test("ordinary progress applications preserve their lines and regenerate after d
   await submitPayApplication(org.orgId, actor, app.id, [], null);
   const first = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct progress invoice", allowedSubsidiaryIds: null }));
-  assert.equal((await db.execute(sql`select status from pay_applications where org_id=${org.orgId} and id=${app.id}`)).rows[0]!.status, "approved");
+  assert.equal((await db.execute(sql`select status from pay_applications where org_id=${org.orgId} and id=${app.id}`, "objects"))[0]!.status, "approved");
   const replacement = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, app.id, null));
   assert.notEqual(replacement.invoiceId, first.invoiceId);
   assert.equal(replacement.currentDue, first.currentDue);
@@ -157,8 +157,8 @@ test("release cleanup is tenant scoped and its audit rolls back with the transit
     await releaseBillingProvenance(db, org.orgId, first.invoiceId, { actorId: actor, reason: "Rollback proof" });
     throw new Error("rollback proof");
   }), /rollback proof/);
-  assert.deepEqual((await db.execute(sql`select status,invoice_document_id from pay_applications where org_id=${org.orgId}`)).rows, [{ status: "invoiced", invoice_document_id: first.invoiceId }]);
-  assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='pay_applications' and action='billing_released'`)).rows.length, 0);
+  assert.deepEqual(await db.execute(sql`select status,invoice_document_id from pay_applications where org_id=${org.orgId}`, "objects"), [{ status: "invoiced", invoice_document_id: first.invoiceId }]);
+  assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='pay_applications' and action='billing_released'`, "objects")).length, 0);
   await assert.rejects(release("1"), /exceeds available retained funds/);
 }));
 
@@ -174,17 +174,17 @@ for (const policy of ["inactive book", "nonposting book", "missing entity"] as c
 test("deleting a release invoice cancels its application with evidence and permits a fresh release and progress draw", enabled, async () => fixture(async ({ org, actor, project, hold, release }) => {
   await hold();
   const first = await release("100");
-  const app = (await db.execute<{ id: string }>(sql`select id from pay_applications where org_id=${org.orgId} and invoice_document_id=${first.invoiceId}`)).rows[0]!.id;
+  const app = (await db.execute<{ id: string }>(sql`select id from pay_applications where org_id=${org.orgId} and invoice_document_id=${first.invoiceId}`, "objects"))[0]!.id;
   await withOrgTransaction(org.orgId, () => deleteDocument(first.invoiceId, actor, org.orgId, { reason: "Correct release amount", allowedSubsidiaryIds: null }));
-  assert.deepEqual((await db.execute(sql`select status,invoice_document_id,updated_by from pay_applications where org_id=${org.orgId} and id=${app}`)).rows, [{ status: "void", invoice_document_id: null, updated_by: actor }]);
-  const evidence = (await db.execute<{ changes: { before: { status: string }; after: { status: string }; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and row_id=${app} and action='billing_released'`)).rows;
+  assert.deepEqual(await db.execute(sql`select status,invoice_document_id,updated_by from pay_applications where org_id=${org.orgId} and id=${app}`, "objects"), [{ status: "void", invoice_document_id: null, updated_by: actor }]);
+  const evidence = await db.execute<{ changes: { before: { status: string }; after: { status: string }; reason: string }; actor_id: string }>(sql`select changes,actor_id from audit_log where org_id=${org.orgId} and row_id=${app} and action='billing_released'`, "objects");
   assert.equal(evidence.length, 1);
   assert.equal(evidence[0]!.changes.before.status, "invoiced");
   assert.equal(evidence[0]!.changes.after.status, "void");
   assert.equal(evidence[0]!.changes.reason, "Correct release amount");
   assert.equal(evidence[0]!.actor_id, actor);
   await withOrgTransaction(org.orgId, () => releaseBillingProvenance(db, org.orgId, first.invoiceId, { actorId: actor, reason: "Repeat cleanup" }));
-  assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${app} and action='billing_released'`)).rows.length, 1);
+  assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${app} and action='billing_released'`, "objects")).length, 1);
   const replacement = await release("75");
   assert.notEqual(replacement.invoiceId, first.invoiceId);
   await assert.rejects(release("26"), /exceeds available retained funds/);
@@ -203,6 +203,6 @@ test("retainage release applications cannot fabricate approval evidence", enable
   const app = randomUUID();
   await assert.rejects(db.execute(sql`insert into pay_applications(id,org_id,project_id,application_number,period_end,kind,status,retainage_percent)
     values(${app},${org.orgId},${project},1,${org.date},'retainage_release','approved',0)`), error => errorChainMatches(error, /native draft|native Flow/));
-  assert.equal((await db.execute(sql`select id from pay_applications where org_id=${org.orgId} and id=${app}`)).rows.length,0);
+  assert.equal((await db.execute(sql`select id from pay_applications where org_id=${org.orgId} and id=${app}`, "objects")).length,0);
   assert.equal((await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, org.date, "10", null))).applicationNumber, 1);
 }));

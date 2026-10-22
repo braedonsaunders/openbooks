@@ -71,7 +71,7 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
   const employerName = (await db.execute<{ name: string }>(sql`
     select name from subsidiaries
      where org_id = ${orgId}::uuid and id = ${detail.employerSubsidiaryId}
-     limit 1`)).rows[0]?.name;
+     limit 1`, "objects"))[0]?.name;
   assert.ok(employerName, "the persisted employer resolves to a name");
   const actions = catalog.recruiting.offerActions;
   const offerStatus = catalog.recruiting.offerStatus;

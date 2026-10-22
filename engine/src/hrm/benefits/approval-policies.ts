@@ -25,14 +25,12 @@ export async function listBenefitApprovalPolicies(query: {
   const programId = requireId(query.programId, "programId");
   return withOrgTransaction(orgId, async () => {
     await getBenefitProgram(db, orgId, actorId, programId);
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         id: string;
         name: string;
       }>(
-        sql`select id, name from flows where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and enabled order by name, id`,
-      )
-    ).rows;
+        sql`select id, name from flows where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and enabled order by name, id`, "objects",
+      );
     return {
       configured: rows.length > 0,
       href: "/admin/flows",

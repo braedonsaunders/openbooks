@@ -23,12 +23,12 @@ export async function loadBenefitsReportLinks(authz: Authz): Promise<BenefitsRep
   if (allowed.length === 0) return []
   return withOrgTransaction(authz.user.orgId, async () => {
     await ensureReportDefinitions(authz.user.orgId)
-    const { rows } = await db.execute<{ id: string; slug: string; entity: string }>(sql`
+    const rows = await db.execute<{ id: string; slug: string; entity: string }>(sql`
       select id, slug, query->>'entity' as entity from report_definitions
        where org_id = ${authz.user.orgId} and kind = 'built_in'
          and coalesce(report_type, 'query') = 'query' and archived_at is null
          and slug in (${sql.join(allowed.map((report) => sql`${report.slug}`), sql`, `)})
-    `)
+    `, 'objects')
     return allowed.flatMap((report) => {
       const definition = rows.find((row) => row.slug === report.slug && row.entity === report.entity)
       return definition ? [{ key: report.key, href: `/reports/custom/run/${definition.id}` }] : []

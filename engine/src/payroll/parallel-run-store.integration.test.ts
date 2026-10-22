@@ -102,22 +102,22 @@ async function priorEvidence(
   const stubs = (await db.execute<Record<string, unknown>>(sql`
     select employee_label, gross::text as gross, net_pay::text as net_pay
       from payroll_prior_stubs
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}`));
+     where org_id = ${orgId} and employee_party_id = ${employeePartyId}`, "objects"));
   const amounts = (await db.execute(sql`
     select a.kind, a.slot, a.amount::text as amount
       from payroll_prior_amounts a
       join payroll_prior_stubs s on s.id = a.prior_stub_id and s.org_id = a.org_id
      where a.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-     order by a.kind, a.slot`));
-  return { stub: stubs.rows[0] ?? null, amounts: amounts.rows };
+     order by a.kind, a.slot`, "objects"));
+  return { stub: stubs[0] ?? null, amounts };
 }
 
 async function tableCount(orgId: string, table: string, extraWhere = ""): Promise<number> {
   if (!/^[a-z_]+$/.test(table)) throw new Error(`unsafe table name: ${table}`);
   const rows = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from ${sql.raw(`public.${table}`)}
-     where org_id = ${orgId}${extraWhere ? sql.raw(` and ${extraWhere}`) : sql.raw("")}`));
-  return rows.rows[0]!.n;
+     where org_id = ${orgId}${extraWhere ? sql.raw(` and ${extraWhere}`) : sql.raw("")}`, "objects"));
+  return rows[0]!.n;
 }
 
 test("a suppressed identity-correction audit rolls back its employee binding and source header", { skip: !DB }, async () => {
@@ -131,11 +131,11 @@ test("a suppressed identity-correction audit rolls back its employee binding and
     await db.execute(sql`insert into employee_roles(org_id,party_id,is_active) values(${f.orgId},${target},true)`);
     await savePriorStub({ orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
       row: { employeePartyId: f.employeePartyId, employeeLabel: 'SOURCE-AUDIT', gross: '100', netPay: '80', employerCost: null, amounts: [] } }, f.slots);
-    const stubId = (await db.execute<{id:string}>(sql`select id from payroll_prior_stubs where org_id=${f.orgId} and register_id=${f.registerId}`)).rows[0]!.id;
+    const stubId = (await db.execute<{id:string}>(sql`select id from payroll_prior_stubs where org_id=${f.orgId} and register_id=${f.registerId}`, "objects"))[0]!.id;
     const snapshot = async () => (await db.execute<{state:unknown}>(sql`select jsonb_build_object(
       'register',(select to_jsonb(r) from payroll_prior_registers r where r.org_id=${f.orgId} and r.id=${f.registerId}),
       'stub',(select to_jsonb(s) from payroll_prior_stubs s where s.org_id=${f.orgId} and s.id=${stubId}),
-      'auditCount',(select count(*) from audit_log where org_id=${f.orgId} and table_name='payroll_prior_stubs')) as state`)).rows[0]!.state;
+      'auditCount',(select count(*) from audit_log where org_id=${f.orgId} and table_name='payroll_prior_stubs')) as state`, "objects"))[0]!.state;
     const before = await snapshot();
     await db.execute(sql.raw(`create function ${name}() returns trigger language plpgsql as $$ begin return null; end $$`));
     await db.execute(sql.raw(`create trigger ${name} before insert on audit_log for each row
@@ -167,7 +167,7 @@ test("reviewed prior-payroll identity corrections preserve money, serialize comp
       row: { employeePartyId: f.employeePartyId, employeeLabel: "SOURCE-001", gross: "3000", netPay: "2500", employerCost: "125",
         amounts: [{ fieldKey: "SALARY", amount: "3000", sourceColumn: "Source Salary" }] } }, f.slots);
     const stubId = (await db.execute<{ id: string }>(sql`select id from payroll_prior_stubs
-      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`)).rows[0]!.id;
+      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`, "objects"))[0]!.id;
     const before = await priorEvidence(f.orgId, f.employeePartyId);
     const auditCount = () => tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
     const baseline = await auditCount();
@@ -194,7 +194,7 @@ test("reviewed prior-payroll identity corrections preserve money, serialize comp
     assert.deepEqual(await correctPriorStubEmployee({ ...correction, employeePartyId: winner, dryRun: false }), { changed: false });
     assert.equal(await auditCount(), baseline + 1, "a replay creates no extra event");
     const audit = (await db.execute<{ changes: { before: { employee_party_id: string }; after: { employee_party_id: string }; reason: string; sourceReference: string } }>(sql`
-      select changes from audit_log where org_id=${f.orgId} and row_id=${stubId} and action='update'`)).rows[0]!;
+      select changes from audit_log where org_id=${f.orgId} and row_id=${stubId} and action='update'`, "objects"))[0]!;
     assert.equal(audit.changes.before.employee_party_id, f.employeePartyId);
     assert.equal(audit.changes.after.employee_party_id, winner);
     assert.equal(audit.changes.reason, correction.reason);
@@ -202,7 +202,7 @@ test("reviewed prior-payroll identity corrections preserve money, serialize comp
     await savePriorStub({ orgId: f.orgId, actorId: f.actorId, registerId: f.registerId,
       row: { employeePartyId: f.employeePartyId, employeeLabel: "SECOND-SOURCE", gross: "10", netPay: "8", employerCost: null, amounts: [] } }, f.slots);
     const duplicateId = (await db.execute<{ id: string }>(sql`select id from payroll_prior_stubs
-      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`)).rows[0]!.id;
+      where org_id=${f.orgId} and register_id=${f.registerId} and employee_party_id=${f.employeePartyId}`, "objects"))[0]!.id;
     const beforeConflict = await auditCount();
     await assert.rejects(correctPriorStubEmployee({ ...correction, stubId: duplicateId, employeePartyId: winner,
       expectedEmployeeLabel: "SECOND-SOURCE", dryRun: false }), /already contains the verified employee/);
@@ -404,8 +404,8 @@ test("a re-import replaces amounts wholesale, files one attributable audit row p
     const audits = (await db.execute<{ action: string }>(sql`
       select action from audit_log
        where org_id = ${f.orgId} and table_name = 'payroll_prior_stubs'
-       order by at`));
-    assert.deepEqual(audits.rows.map((row) => row.action), ["insert", "update", "update"]);
+       order by at`, "objects"));
+    assert.deepEqual(audits.map((row) => row.action), ["insert", "update", "update"]);
   } finally {
     await dropScratchOrgReporting(f.orgId);
   }
@@ -457,8 +457,8 @@ test("discarding a register removes every trace in one motion and audits the del
     const deletions = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${f.orgId} and table_name = 'payroll_prior_registers'
-         and row_id = ${f.registerId} and action = 'delete'`));
-    assert.equal(deletions.rows[0]!.n, 1);
+         and row_id = ${f.registerId} and action = 'delete'`, "objects"));
+    assert.equal(deletions[0]!.n, 1);
 
     // The deletion is audited; the history of what WAS there stays.
     const stubHistory = await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
@@ -485,8 +485,8 @@ test("discarding an unknown register is a named refusal with no audit row", { sk
     const phantom = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${f.orgId} and table_name = 'payroll_prior_registers'
-         and row_id = ${missing} and action = 'delete'`));
-    assert.equal(phantom.rows[0]!.n, 0, "a refused discard must leave no audit evidence");
+         and row_id = ${missing} and action = 'delete'`, "objects"));
+    assert.equal(phantom[0]!.n, 0, "a refused discard must leave no audit evidence");
 
     // And the untouched register is still fully there.
     assert.equal(await tableCount(f.orgId, "payroll_prior_registers"), 1);
@@ -542,17 +542,17 @@ test("a first tolerance save audits create with a null before-image; a second au
     const audits = (await db.execute<{ action: string; changes: unknown }>(sql`
       select action, changes from audit_log
        where org_id = ${org.orgId} and table_name = 'payroll_parallel_tolerances'
-       order by id`));
-    assert.equal(audits.rows.length, 2);
-    assert.equal(audits.rows[0]!.action, "create");
-    const created = audits.rows[0]!.changes as {
+       order by id`, "objects"));
+    assert.equal(audits.length, 2);
+    assert.equal(audits[0]!.action, "create");
+    const created = audits[0]!.changes as {
       before: null; after: { tolerance: string; reason: string };
     };
     assert.equal(created.before, null);
     assert.equal(created.after.tolerance, "25.0000");
     assert.equal(created.after.reason, "provider rounding on hourly conversions");
-    assert.equal(audits.rows[1]!.action, "update");
-    const updated = audits.rows[1]!.changes as {
+    assert.equal(audits[1]!.action, "update");
+    const updated = audits[1]!.changes as {
       before: { tolerance: string; reason: string }; after: { tolerance: string; reason: string };
     };
     assert.equal(updated.before.tolerance, "25.0000");
@@ -679,9 +679,9 @@ test("a filed comparison stores its header, its findings and its audit row toget
     const headers = (await db.execute<{ status: string; compared: number; difference_count: number }>(sql`
       select status, compared_employee_count as compared, difference_count
         from payroll_parallel_comparisons
-       where org_id = ${org.orgId} and id = ${filed.comparisonId}`));
-    assert.equal(headers.rows.length, 1);
-    assert.deepEqual(headers.rows[0], { status: "clean", compared: 1, difference_count: 0 });
+       where org_id = ${org.orgId} and id = ${filed.comparisonId}`, "objects"));
+    assert.equal(headers.length, 1);
+    assert.deepEqual(headers[0], { status: "clean", compared: 1, difference_count: 0 });
 
     const findings = await tableCount(org.orgId, "payroll_parallel_findings",
       `comparison_id = '${filed.comparisonId}'`);
@@ -690,8 +690,8 @@ test("a filed comparison stores its header, its findings and its audit row toget
     const audits = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${org.orgId} and table_name = 'payroll_parallel_comparisons'
-         and row_id = ${filed.comparisonId} and action = 'insert'`));
-    assert.equal(audits.rows[0]!.n, 1);
+         and row_id = ${filed.comparisonId} and action = 'insert'`, "objects"));
+    assert.equal(audits[0]!.n, 1);
 
     const summaries = await parallelComparisons(org.orgId);
     assert.equal(summaries.length, 1);

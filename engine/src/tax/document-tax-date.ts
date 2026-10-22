@@ -19,7 +19,7 @@ export async function documentTaxDate(
       from document_links link
       join documents corrected on corrected.org_id = link.org_id and corrected.id = link.to_document_id
      where link.org_id = ${orgId} and link.from_document_id = ${documentId} and link.link_type = 'corrects'
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   return corrected?.document_date ?? documentDate;
 }
 
@@ -56,5 +56,5 @@ export async function staleTaxRateLine(
        and not dl.tax_overridden and not c.overridden
        and tr.rate_percent is distinct from c.rate_percent
      order by dl.line_number, c.sequence
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
 }

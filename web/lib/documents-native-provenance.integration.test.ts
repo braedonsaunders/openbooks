@@ -141,20 +141,16 @@ type Balances = {
 async function billBalances(fx: Fixture): Promise<Balances> {
   const { org } = fx;
   return withOrgContext(org.orgId, async () => {
-    const onHand = (
-      await db.execute<{ quantity: string }>(sql`
+    const onHand = (await db.execute<{ quantity: string }>(sql`
         select coalesce(sum(quantity), 0)::text as quantity from inventory_movements
          where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted'
-      `)
-    ).rows[0]!.quantity;
+      `, "objects"))[0]!.quantity;
     const balanceOf = async (accountId: string): Promise<string> =>
-      (
-        await db.execute<{ amount: string }>(sql`
+      (await db.execute<{ amount: string }>(sql`
           select coalesce(sum(l.amount), 0)::text as amount from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
            where l.org_id = ${org.orgId} and l.account_id = ${accountId} and e.status = 'posted'
-        `)
-      ).rows[0]!.amount;
+        `, "objects"))[0]!.amount;
     return {
       onHand,
       invAsset: await balanceOf(org.accounts.invAsset),
@@ -174,16 +170,14 @@ type StoredBillLine = {
 
 async function storedBillLines(fx: Fixture, billId: string): Promise<StoredBillLine[]> {
   const { org } = fx;
-  return (
-    await withOrgContext(
+  return await withOrgContext(
       org.orgId,
       () => db.execute<StoredBillLine>(sql`
         select id, description, quantity::text as "quantity", custom from document_lines
          where org_id = ${org.orgId} and document_id = ${billId}
          order by line_number
-      `),
-    )
-  ).rows;
+      `, "objects"),
+    );
 }
 
 /** Drawer-shaped line input: stable identity, tenant custom only, native
@@ -294,15 +288,13 @@ test("description-only edit keeps native provenance and posts once", { skip: !DB
     const ids = (await storedBillLines(fx, billId)).map((r) => r.id);
     assert.ok(ids.length === 1 && ids[0] !== converted.id);
     const idArr = `{${ids.join(",")}}`;
-    const receipts = (
-      await withOrgContext(
+    const receipts = (await withOrgContext(
         org.orgId,
         () => db.execute<{ count: number }>(sql`
           select count(*)::int as count from inventory_movements
            where org_id = ${org.orgId} and document_line_id = any(${idArr}::uuid[]) and kind = 'receipt'
-        `),
-      )
-    ).rows[0]!.count;
+        `, "objects"),
+      ))[0]!.count;
     assert.equal(receipts, 0, "billing received stock must not receive it again");
     const balances = await billBalances(fx);
     assert.equal(toUnits(balances.onHand), toUnits("4"), "stock stays at the received four");
@@ -339,16 +331,14 @@ test("legacy identity-less edit is refused with zero changes; the bill still pos
     assert.match(refused.message, /stable identities/);
 
     // Zero changes: description, evidence, and the billed cover are intact.
-    const facts = (
-      await withOrgContext(
+    const facts = (await withOrgContext(
         org.orgId,
         () => db.execute<{ description: string | null; custom: unknown; billed: string }>(sql`
           select bl.description, bl.custom,
                  (select quantity_billed::text from document_lines where id = ${sourceIds[0]!}) as billed
             from document_lines bl where bl.org_id = ${org.orgId} and bl.document_id = ${billId}
-        `),
-      )
-    ).rows[0]!;
+        `, "objects"),
+      ))[0]!;
     assert.notEqual(facts.description, "Legacy note");
     assert.equal((facts.custom as Record<string, unknown>).purchaseOrderLineId, sourceIds[0]);
     assert.equal(toUnits(facts.billed), toUnits("4"));
@@ -538,14 +528,12 @@ test("quantity change and line removal are refused; delete and reconvert is the 
     const intact = (await storedBillLines(fx, billId))[0]!;
     assert.equal(toUnits(intact.quantity ?? ""), toUnits("4"));
     assert.equal(nativeCustomOf(intact).purchaseOrderLineId, sourceIds[0]);
-    const billed = (
-      await withOrgContext(
+    const billed = (await withOrgContext(
         org.orgId,
         () => db.execute<{ billed: string }>(sql`
           select quantity_billed::text as billed from document_lines where id = ${sourceIds[0]!}
-        `),
-      )
-    ).rows[0]!.billed;
+        `, "objects"),
+      ))[0]!.billed;
     assert.equal(toUnits(billed), toUnits("4"));
 
     // The named remedy exists: deleting the draft releases the cover, and
@@ -557,14 +545,12 @@ test("quantity change and line removal are refused; delete and reconvert is the 
         allowedSubsidiaryIds: null,
       }),
     );
-    const released = (
-      await withOrgContext(
+    const released = (await withOrgContext(
         org.orgId,
         () => db.execute<{ billed: string }>(sql`
           select quantity_billed::text as billed from document_lines where id = ${sourceIds[0]!}
-        `),
-      )
-    ).rows[0]!.billed;
+        `, "objects"),
+      ))[0]!.billed;
     assert.equal(toUnits(released), toUnits("0"), "draft delete releases the billed cover");
     const rebillId = await convertToBill(fx, orderId);
     const rebilled = (await storedBillLines(fx, rebillId))[0]!;
@@ -804,14 +790,12 @@ test("posted correction copies source line identities as new replacement lines",
       ),
     );
     assert.ok(isUuid(created.id), "expected a real UUID document id");
-    const replacement = (
-      await withOrgContext(
+    const replacement = (await withOrgContext(
         org.orgId,
         () => db.execute<{ memo: string | null; custom: unknown }>(sql`
           select memo, custom from documents where id = ${created.id} and org_id = ${org.orgId}
-        `),
-      )
-    ).rows[0]!;
+        `, "objects"),
+      ))[0]!;
     assert.equal(replacement.memo, "corrected memo");
     assert.equal((replacement.custom as Record<string, unknown>).correctionOf, invoiceId);
     const replacementLines = await storedBillLines(fx, created.id);
@@ -937,8 +921,7 @@ const consolidatedRows = [
         }
 
         async function storedLines(f: Fixture, id: string) {
-          return withOrgContext(f.org.orgId, async () => (
-            await db.execute<{
+          return withOrgContext(f.org.orgId, async () => await db.execute<{
               id: string;
               lineNumber: number;
               accountId: string;
@@ -955,8 +938,7 @@ const consolidatedRows = [
                      distribution_locked as "locked"
                 from document_lines where document_id = ${id} and org_id = ${f.org.orgId}
                order by line_number
-            `)
-          ).rows);
+            `, "objects"));
         }
 
         function sumAmounts(amounts: string[]): bigint {
@@ -1005,13 +987,11 @@ const consolidatedRows = [
               const doc = await db.execute<{ total: string }>(
                 sql`select total::text as total from documents where id = ${id} and org_id = ${f.org.orgId}`,
               );
-              const lineage = (
-                await db.execute<{ ruleId: string; amount: string; targetId: string | null; sourceId: string | null }>(sql`
+              const lineage = await db.execute<{ ruleId: string; amount: string; targetId: string | null; sourceId: string | null }>(sql`
                   select rule_id as "ruleId", amount::text as amount,
                          target_document_line_id as "targetId", source_document_line_id as "sourceId"
                     from allocation_lineage where org_id = ${f.org.orgId} and document_id = ${id}
-                `)
-              ).rows;
+                `, "objects");
               return { doc, lineage };
             });
             assert.equal(doc.rows[0]?.total, "125.0000");
@@ -1224,14 +1204,12 @@ const consolidatedRows = [
                 { control: { ar: f.org.accounts.ar, ap: f.org.accounts.ap, bank: f.org.accounts.bank } },
                 { audit: { actorId: f.actor, source: "test" } },
               );
-              return (
-                await db.execute<{ accountId: string; departmentId: string | null; amount: string }>(sql`
+              return await db.execute<{ accountId: string; departmentId: string | null; amount: string }>(sql`
                   select l.account_id as "accountId", l.department_id as "departmentId", l.amount::text as amount
                     from journal_lines l
                     join documents d on d.org_id = l.org_id and d.posted_entry_id = l.entry_id
                    where d.org_id = ${f.org.orgId} and d.id = ${id}
-                `)
-              ).rows;
+                `, "objects");
             });
             const children = legs.filter((l) => l.accountId === f.expenseAccount);
             assert.equal(children.length, 2);
@@ -1276,15 +1254,12 @@ const consolidatedRows = [
                 },
                 { orgId: org.orgId, userId: actor, source: "api" },
               );
-              const lines = (
-                await db.execute<{ groupId: string | null; amount: string }>(sql`
+              const lines = await db.execute<{ groupId: string | null; amount: string }>(sql`
                   select distribution_group_id as "groupId", amount::text as amount
                     from document_lines where document_id = ${id} and org_id = ${org.orgId}
-                `)
-              ).rows;
+                `, "objects");
               assert.equal(
-                (await db.execute<{ n: number }>(sql`select count(*)::int as n from allocation_lineage where org_id = ${org.orgId}`))
-                  .rows[0]?.n,
+                (await db.execute<{ n: number }>(sql`select count(*)::int as n from allocation_lineage where org_id = ${org.orgId}`, "objects"))[0]?.n,
                 0,
               );
               return lines;
@@ -1370,7 +1345,7 @@ const consolidatedRows = [
           return (await withBypassContext(async () =>
             (await db.execute<{ id: string }>(sql`
               select id from inventory_movements
-               where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0]!.id,
+               where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0]!.id,
           ));
         }
 
@@ -1649,7 +1624,7 @@ const consolidatedRows = [
             const foreignIssue = (await withBypassContext(async () =>
               (await db.execute<{ id: string }>(sql`
                 select id from inventory_movements
-                 where org_id = ${fx.org.orgId} and document_line_id = ${invoiceLineId} and kind = 'issue'`)).rows[0]!.id,
+                 where org_id = ${fx.org.orgId} and document_line_id = ${invoiceLineId} and kind = 'issue'`, "objects"))[0]!.id,
             ));
             // A draft credit in A naming B's shipment: refused at save (422), before
             // the posting guard would see it, and nothing is stored.
@@ -1745,7 +1720,7 @@ const consolidatedRows = [
             ));
             const stored = await withOrgContext(org.orgId, async () => (await db.execute<{ quantity: string; unit_price: string }>(sql`
               select quantity::text, unit_price::text from document_lines
-               where document_id = ${id} and org_id = ${org.orgId}`)).rows[0]!);
+               where document_id = ${id} and org_id = ${org.orgId}`, "objects"))[0]!);
             // Premise: storage pads to the column scale.
             assert.equal(stored.unit_price, "200.00000000");
             // The drawer sends back exactly what it read; that must save.
@@ -1761,7 +1736,7 @@ const consolidatedRows = [
               { orgId: org.orgId, userId: actor, source: "api" },
             ));
             const doc = await withOrgContext(org.orgId, async () => (await db.execute<{ subtotal: string; total: string }>(sql`
-              select subtotal::text, total::text from documents where id = ${id} and org_id = ${org.orgId}`)).rows[0]!);
+              select subtotal::text, total::text from documents where id = ${id} and org_id = ${org.orgId}`, "objects"))[0]!);
             assert.equal(doc.subtotal, "400.0000");
             assert.equal(doc.total, "400.0000");
           } finally {
@@ -1888,8 +1863,8 @@ const consolidatedRows = [
               (error: unknown) => error instanceof DocumentEditError && error.status === 422,
             );
             const after = await withOrgContext(org.orgId, async () => (await db.execute<{ subsidiary_id: string | null }>(sql`
-              select subsidiary_id from documents where id = ${id} and org_id = ${org.orgId}`)));
-            assert.equal(after.rows[0]?.subsidiary_id, org.subsidiaryId);
+              select subsidiary_id from documents where id = ${id} and org_id = ${org.orgId}`, "objects")));
+            assert.equal(after[0]?.subsidiary_id, org.subsidiaryId);
           } finally {
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
@@ -1929,8 +1904,8 @@ const consolidatedRows = [
             ));
             const after = await withOrgContext(org.orgId, async () => await db.execute<{ custom: Record<string, unknown> }>(sql`
               select custom from documents where id = ${id} and org_id = ${org.orgId}
-            `));
-            assert.deepEqual(after.rows[0]?.custom, { required_code: "R-1", optional_note: "updated" });
+            `, "objects"));
+            assert.deepEqual(after[0]?.custom, { required_code: "R-1", optional_note: "updated" });
           } finally {
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
@@ -1953,7 +1928,7 @@ const consolidatedRows = [
             // This probe deliberately reads across orgs, so it stays under bypass —
             // the scratch org's own scope would deny it to zero rows.
             const foreignAccount = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
-              select id from accounts where org_id = ${foreign.orgId} and is_active and not is_summary limit 1`)).rows[0]!.id);
+              select id from accounts where org_id = ${foreign.orgId} and is_active and not is_summary limit 1`, "objects"))[0]!.id);
             const current = await withOrgContext(org.orgId, () => loadDocumentEditCurrent(id, org.orgId));
             assert.ok(current);
             await assert.rejects(
@@ -1966,8 +1941,8 @@ const consolidatedRows = [
               (error: unknown) => error instanceof DocumentEditError && error.status === 404,
             );
             const lines = await withOrgContext(org.orgId, async () => await db.execute<{ n: number }>(sql`
-              select count(*)::int as n from document_lines where document_id = ${id} and org_id = ${org.orgId}`));
-            assert.equal(lines.rows[0]?.n, 0, "the refused save stores no foreign-account line");
+              select count(*)::int as n from document_lines where document_id = ${id} and org_id = ${org.orgId}`, "objects"));
+            assert.equal(lines[0]?.n, 0, "the refused save stores no foreign-account line");
             // An own-org postable account still saves.
             const reloaded = await withOrgContext(org.orgId, () => loadDocumentEditCurrent(id, org.orgId));
             assert.ok(reloaded);
@@ -1978,8 +1953,8 @@ const consolidatedRows = [
               { orgId: org.orgId, userId: actor, source: "api" },
             ));
             const stored = await withOrgContext(org.orgId, async () => await db.execute<{ account_id: string }>(sql`
-              select account_id from document_lines where document_id = ${id} and org_id = ${org.orgId}`));
-            assert.equal(stored.rows[0]?.account_id, org.accounts.cogs);
+              select account_id from document_lines where document_id = ${id} and org_id = ${org.orgId}`, "objects"));
+            assert.equal(stored[0]?.account_id, org.accounts.cogs);
           } finally {
             await withBypassContext(() => dropScratchOrg(org.orgId));
             await withBypassContext(() => dropScratchOrg(foreign.orgId));
@@ -2012,8 +1987,8 @@ const consolidatedRows = [
               (error: unknown) => error instanceof DocumentEditError && error.status === 422 && /Projects feature is disabled/.test(error.message),
             );
             const after = await withOrgContext(org.orgId, async () => await db.execute<{ project_id: string | null }>(sql`
-              select project_id from documents where id = ${id} and org_id = ${org.orgId}`));
-            assert.equal(after.rows[0]?.project_id, null, "the refused edit attaches no project");
+              select project_id from documents where id = ${id} and org_id = ${org.orgId}`, "objects"));
+            assert.equal(after[0]?.project_id, null, "the refused edit attaches no project");
             // Gate on: the same edit attaches the project.
             await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings,'{features,projects}','true'::jsonb) where id = ${org.orgId}`));
             const reloaded = await withOrgContext(org.orgId, () => loadDocumentEditCurrent(id, org.orgId));
@@ -2025,8 +2000,8 @@ const consolidatedRows = [
               { orgId: org.orgId, userId: actor, source: "api" },
             ));
             const attached = await withOrgContext(org.orgId, async () => await db.execute<{ project_id: string | null }>(sql`
-              select project_id from documents where id = ${id} and org_id = ${org.orgId}`));
-            assert.equal(attached.rows[0]?.project_id, project);
+              select project_id from documents where id = ${id} and org_id = ${org.orgId}`, "objects"));
+            assert.equal(attached[0]?.project_id, project);
           } finally {
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
@@ -2123,8 +2098,8 @@ async function revisionOf(orgId: string, id: string): Promise<string> {
   return withOrgContext(orgId, async () => {
     const r = await db.execute<{ updated_at: string }>(sql`
       select (revision_seq)::text as updated_at from documents
-       where id = ${id} and org_id = ${orgId}`);
-    return r.rows[0]!.updated_at;
+       where id = ${id} and org_id = ${orgId}`, "objects");
+    return r[0]!.updated_at;
   });
 }
 
@@ -2159,8 +2134,8 @@ async function payInFull(
       select jl.id from journal_lines jl
         join journal_entries je on je.id = jl.entry_id
        where je.source_document_id = ${invoiceId} and jl.org_id = ${org.orgId}
-         and jl.is_open_item`);
-    return r.rows[0]!.id;
+         and jl.is_open_item`, "objects");
+    return r[0]!.id;
   });
   await withBypassContext(async () => {
     const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
@@ -2192,21 +2167,15 @@ async function payInFull(
 
 async function invoiceState(orgId: string, id: string) {
   return withOrgContext(orgId, async () => {
-    const doc = (
-      await db.execute<{ currency: string; total: string; status: string; number: string }>(sql`
+    const doc = (await db.execute<{ currency: string; total: string; status: string; number: string }>(sql`
         select currency, total::text as total, status, document_number as number from documents
-         where id = ${id} and org_id = ${orgId}`)
-    ).rows[0]!;
-    const edge = (
-      await db.execute<{ n: number }>(sql`
+         where id = ${id} and org_id = ${orgId}`, "objects"))[0]!;
+    const edge = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_links
-         where org_id = ${orgId} and to_document_id = ${id} and link_type = 'bills'`)
-    ).rows[0]!.n;
-    const lines = (
-      await db.execute<{ n: number }>(sql`
+         where org_id = ${orgId} and to_document_id = ${id} and link_type = 'bills'`, "objects"))[0]!.n;
+    const lines = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines
-         where org_id = ${orgId} and document_id = ${id}`)
-    ).rows[0]!.n;
+         where org_id = ${orgId} and document_id = ${id}`, "objects"))[0]!.n;
     return { ...doc, edgeCount: edge, lineCount: lines };
   });
 }
@@ -2273,8 +2242,8 @@ test(
       const sourceBefore = await withOrgContext(org.orgId, async () => {
         const r = await db.execute<{ status: string; total: string }>(sql`
           select status, total::text as total from documents
-           where id = ${so1} and org_id = ${org.orgId}`);
-        return r.rows[0]!;
+           where id = ${so1} and org_id = ${org.orgId}`, "objects");
+        return r[0]!;
       });
 
       // The relabel is refused and names the source order plus the remedy.
@@ -2294,8 +2263,8 @@ test(
       const sourceAfter = await withOrgContext(org.orgId, async () => {
         const r = await db.execute<{ status: string; total: string }>(sql`
           select status, total::text as total from documents
-           where id = ${so1} and org_id = ${org.orgId}`);
-        return r.rows[0]!;
+           where id = ${so1} and org_id = ${org.orgId}`, "objects");
+        return r[0]!;
       });
       assert.deepEqual(sourceAfter, sourceBefore);
 
@@ -2379,8 +2348,8 @@ test(
       const billed = await withOrgContext(org.orgId, async () => {
         const r = await db.execute<{ quantity_billed: string }>(sql`
           select quantity_billed::text from document_lines
-           where org_id = ${org.orgId} and document_id = ${so1}`);
-        return r.rows[0]!.quantity_billed;
+           where org_id = ${org.orgId} and document_id = ${so1}`, "objects");
+        return r[0]!.quantity_billed;
       });
       assert.equal(billed, "0.00000000");
       const reconverted = await convertOrder(org.orgId, actorId, so1, "customer_invoice");
@@ -2560,8 +2529,8 @@ const consolidatedRows = [
           return withOrgContext(orgId, async () => {
             const r = await db.execute<{ updated_at: string }>(sql`
               select (revision_seq)::text as updated_at from documents
-               where id = ${id} and org_id = ${orgId}`);
-            return r.rows[0]!.updated_at;
+               where id = ${id} and org_id = ${orgId}`, "objects");
+            return r[0]!.updated_at;
           });
         }
 
@@ -2596,8 +2565,8 @@ const consolidatedRows = [
               select jl.id from journal_lines jl
                 join journal_entries je on je.id = jl.entry_id
                where je.source_document_id = ${invoiceId} and jl.org_id = ${org.orgId}
-                 and jl.is_open_item`);
-            return r.rows[0]!.id;
+                 and jl.is_open_item`, "objects");
+            return r[0]!.id;
           });
           await withBypassContext(async () => {
             const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null,
@@ -2629,21 +2598,15 @@ const consolidatedRows = [
 
         async function invoiceState(orgId: string, id: string) {
           return withOrgContext(orgId, async () => {
-            const doc = (
-              await db.execute<{ party: string | null; currency: string; total: string; status: string; number: string }>(sql`
+            const doc = (await db.execute<{ party: string | null; currency: string; total: string; status: string; number: string }>(sql`
                 select party_id as party, currency, total::text as total, status, document_number as number from documents
-                 where id = ${id} and org_id = ${orgId}`)
-            ).rows[0]!;
-            const edge = (
-              await db.execute<{ n: number }>(sql`
+                 where id = ${id} and org_id = ${orgId}`, "objects"))[0]!;
+            const edge = (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from document_links
-                 where org_id = ${orgId} and to_document_id = ${id} and link_type = 'bills'`)
-            ).rows[0]!.n;
-            const lines = (
-              await db.execute<{ n: number }>(sql`
+                 where org_id = ${orgId} and to_document_id = ${id} and link_type = 'bills'`, "objects"))[0]!.n;
+            const lines = (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from document_lines
-                 where org_id = ${orgId} and document_id = ${id}`)
-            ).rows[0]!.n;
+                 where org_id = ${orgId} and document_id = ${id}`, "objects"))[0]!.n;
             return { ...doc, edgeCount: edge, lineCount: lines };
           });
         }
@@ -2711,8 +2674,8 @@ const consolidatedRows = [
               const sourceBefore = await withOrgContext(org.orgId, async () => {
                 const r = await db.execute<{ status: string; total: string; party: string }>(sql`
                   select status, total::text as total, party_id as party from documents
-                   where id = ${so1} and org_id = ${org.orgId}`);
-                return r.rows[0]!;
+                   where id = ${so1} and org_id = ${org.orgId}`, "objects");
+                return r[0]!;
               });
 
               // The move is refused and names the source order plus the remedy.
@@ -2733,8 +2696,8 @@ const consolidatedRows = [
               const sourceAfter = await withOrgContext(org.orgId, async () => {
                 const r = await db.execute<{ status: string; total: string; party: string }>(sql`
                   select status, total::text as total, party_id as party from documents
-                   where id = ${so1} and org_id = ${org.orgId}`);
-                return r.rows[0]!;
+                   where id = ${so1} and org_id = ${org.orgId}`, "objects");
+                return r[0]!;
               });
               assert.deepEqual(sourceAfter, sourceBefore);
 
@@ -2819,8 +2782,8 @@ const consolidatedRows = [
               const billed = await withOrgContext(org.orgId, async () => {
                 const r = await db.execute<{ quantity_billed: string }>(sql`
                   select quantity_billed::text from document_lines
-                   where org_id = ${org.orgId} and document_id = ${so1}`);
-                return r.rows[0]!.quantity_billed;
+                   where org_id = ${org.orgId} and document_id = ${so1}`, "objects");
+                return r[0]!.quantity_billed;
               });
               assert.equal(billed, "0.00000000");
               const reconverted = await convertOrder(org.orgId, actorId, so1, "customer_invoice");
@@ -2934,7 +2897,7 @@ const documentRevisionCases = [{ label: "interactive document revision lifecycle
         await withBypassContext(() => db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount)
           values (${org.orgId},${id},1,${org.accounts.revenue},1,'100','100')`));
         if (operation.startsWith("void")) await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`));
-        const token = (await withBypassContext(() => db.execute<{ revision: string }>(sql`select revision_seq::text as revision from documents where id=${id}`))).rows[0]!.revision;
+        const token = (await withBypassContext(() => db.execute<{ revision: string }>(sql`select revision_seq::text as revision from documents where id=${id}`, "objects")))[0]!.revision;
         if (operation.endsWith("stale")) await withBypassContext(() => db.execute(sql`update documents set memo='Concurrent change',updated_at=updated_at+interval '1 microsecond' where id=${id}`));
         session.user = { id: actor, orgId: org.orgId, name: "Document controller", email: "doc@scratch.test", roles: [], isSuperAdmin: false,
           envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
@@ -2948,7 +2911,7 @@ const documentRevisionCases = [{ label: "interactive document revision lifecycle
             ? 400
             : 409;
         assert.equal(response.status, expectedStatus, JSON.stringify(await response.json()));
-        const row = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`select status from documents where id=${id}`))).rows[0];
+        const row = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`select status from documents where id=${id}`, "objects")))[0];
         if (operation === "delete current") assert.equal(row, undefined);
         else assert.equal(row?.status, operation === "void current" ? "voided" : isVoid ? "approved" : "draft");
       } finally { session.user = null; await dropScratchOrg(org.orgId); }
@@ -2971,8 +2934,8 @@ const currencyRegistryCases = [{ label: "currency registry document to statement
     const org = await withBypassContext(() => createScratchOrg());
     try {
       const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Currency chain clerk', 'admin'));
-      const registry = await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`select code,minor_units from currencies where code in ('JPY','KWD') order by code`));
-      assert.deepEqual(registry.rows, [{ code: 'JPY', minor_units: 0 }, { code: 'KWD', minor_units: 3 }]);
+      const registry = await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`select code,minor_units from currencies where code in ('JPY','KWD') order by code`, "objects"));
+      assert.deepEqual(registry, [{ code: 'JPY', minor_units: 0 }, { code: 'KWD', minor_units: 3 }]);
       const invoice = randomUUID();
       await withBypassContext(async () => {
         await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate,subtotal,tax_total,total,created_by)
@@ -2982,11 +2945,11 @@ const currencyRegistryCases = [{ label: "currency registry document to statement
         await db.execute(sql`update documents set status='approved' where id=${invoice} and org_id=${org.orgId}`);
       });
       const entry = await withBypassContext(() => postDocument(invoice, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }));
-      const legs = await withBypassContext(() => db.execute<{ total: string }>(sql`select coalesce(sum(amount),0)::text as total from journal_lines where entry_id=${entry}`));
-      assert.equal(legs.rows[0]?.total, '0.0000');
-      const balance = await withBypassContext(() => db.execute<{ open_balance: string }>(sql`select open_balance::text as open_balance from documents where id=${invoice}`));
-      assert.equal(balance.rows[0]?.open_balance, atLedgerScale(total));
-      const line = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`))).rows[0]!.id;
+      const legs = await withBypassContext(() => db.execute<{ total: string }>(sql`select coalesce(sum(amount),0)::text as total from journal_lines where entry_id=${entry}`, "objects"));
+      assert.equal(legs[0]?.total, '0.0000');
+      const balance = await withBypassContext(() => db.execute<{ open_balance: string }>(sql`select open_balance::text as open_balance from documents where id=${invoice}`, "objects"));
+      assert.equal(balance[0]?.open_balance, atLedgerScale(total));
+      const line = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`, "objects")))[0]!.id;
       const paymentDocument = await withBypassContext(() => createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId, kind: 'customer_payment', createdBy: actor,
         partyId: org.customerId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency, fxRate }));
       await withBypassContext(() => updateDraftPayment(paymentDocument.id, { bankAccountId: org.accounts.bank, allocations: [{ openLineId: line,
@@ -2995,8 +2958,8 @@ const currencyRegistryCases = [{ label: "currency registry document to statement
 ));
       await withBypassContext(() => db.execute(sql`update documents set status='approved',submitted_by=${actor},submitted_at=now() where id=${paymentDocument.id}`));
       await withBypassContext(() => postPaymentWithApplications(paymentDocument.id, undefined, actor));
-      const balances = await withBypassContext(() => db.execute<{ id: string; open_balance: string }>(sql`select id,open_balance::text as open_balance from documents where id in (${invoice},${paymentDocument.id})`));
-      const byId = new Map(balances.rows.map(row => [row.id,row.open_balance]));
+      const balances = await withBypassContext(() => db.execute<{ id: string; open_balance: string }>(sql`select id,open_balance::text as open_balance from documents where id in (${invoice},${paymentDocument.id})`, "objects"));
+      const byId = new Map(balances.map(row => [row.id,row.open_balance]));
       assert.equal(byId.get(invoice), open); assert.equal(byId.get(paymentDocument.id), '0.0000');
       const statement = await withOrgContext(org.orgId, () => partnerStatement(org.customerId, org.orgId, { from: '2026-07-01', to: '2026-07-31', side: 'ar' }));
       assert.equal(statement.closing, baseOpen); assert.equal(statement.aging.total, baseOpen);

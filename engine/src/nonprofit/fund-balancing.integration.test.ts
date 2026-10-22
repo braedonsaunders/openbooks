@@ -59,18 +59,18 @@ async function account(org: ScratchOrg, actorId: string, type: "asset_current_ot
       (org_id, number, name, type, is_summary, is_active, required_dimensions, created_by, updated_by)
     values (${org.orgId}, ${number}, ${name}, ${type}, false, true, '[]'::jsonb, ${actorId}, ${actorId})
     returning id
-  `);
-  assert.equal(result.rows.length, 1);
-  return result.rows[0]!.id;
+  `, "objects");
+  assert.equal(result.length, 1);
+  return result[0]!.id;
 }
 
 async function entryFundBalances(orgId: string, entryId: string) {
-  return (await withOrgContext(orgId, () => db.execute<{ fundId: string; total: string; lineCount: number }>(sql`
+  return await withOrgContext(orgId, () => db.execute<{ fundId: string; total: string; lineCount: number }>(sql`
     select extra_dims->>'fund' as "fundId", sum(amount)::text as total, count(*)::int as "lineCount"
       from journal_lines
      where org_id = ${orgId} and entry_id = ${entryId}
      group by extra_dims->>'fund' order by extra_dims->>'fund'
-  `))).rows;
+  `, "objects"));
 }
 
 async function assertBalancedByFund(orgId: string, entryId: string, expectedFunds = 2) {
@@ -107,8 +107,8 @@ test("fund balancing stays data-driven and fund postings use configured interfun
            )
          where id = ${org.orgId}
         returning id
-      `);
-      assert.equal(changed.rows.length, 1);
+      `, "objects");
+      assert.equal(changed.length, 1);
     });
     const classifications = {
       OPERATING: { kind: "operating" as const, restrictionClass: "without_donor_restrictions" },
@@ -197,8 +197,8 @@ test("fund balancing stays data-driven and fund postings use configured interfun
         update documents set status = 'approved'
          where org_id = ${org.orgId} and id = ${documentId}
         returning id
-      `);
-      assert.equal(approved.rows.length, 1);
+      `, "objects");
+      assert.equal(approved.length, 1);
     });
     const documentEntry = await withOrgContext(org.orgId, () =>
       postDocument(documentId, {
@@ -223,8 +223,8 @@ test("fund balancing stays data-driven and fund postings use configured interfun
         update accounts set required_dimensions = '["fund"]'::jsonb
          where org_id = ${org.orgId} and id = ${org.accounts.bank}
         returning id
-      `);
-      assert.equal(result.rows.length, 1);
+      `, "objects");
+      assert.equal(result.length, 1);
     });
     await assert.rejects(
       postDirect(org, {
@@ -275,22 +275,22 @@ test("a non-balancing fund segment with unbalanced posted history refuses to bec
   t.after(() => dropScratchOrg(org.orgId));
   const actorId = await withBypass(() => createScratchUser(org.orgId, "Fund Controller", "admin"));
   const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`));
-  assert.equal(enabled.rows.length, 1);
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`, "objects"));
+  assert.equal(enabled.length, 1);
   // An operator-defined reporting segment keyed "fund" that never balanced.
   const segment = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     insert into segment_definitions (org_id, key, name, plural_name, source_kind, is_balancing, created_by, updated_by)
     values (${org.orgId}, 'fund', 'Fund', 'Funds', 'custom', false, ${actorId}, ${actorId})
-    returning id`));
-  assert.equal(segment.rows.length, 1);
+    returning id`, "objects"));
+  assert.equal(segment.length, 1);
   const values = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     insert into segment_values (org_id, segment_id, code, name, created_by, updated_by)
-    values (${org.orgId}, ${segment.rows[0]!.id}, 'OPERATING', 'Operating Fund', ${actorId}, ${actorId}),
-           (${org.orgId}, ${segment.rows[0]!.id}, 'SCHOLARSHIP', 'Youth Scholarship Fund', ${actorId}, ${actorId})
-    returning id`));
-  assert.equal(values.rows.length, 2);
+    values (${org.orgId}, ${segment[0]!.id}, 'OPERATING', 'Operating Fund', ${actorId}, ${actorId}),
+           (${org.orgId}, ${segment[0]!.id}, 'SCHOLARSHIP', 'Youth Scholarship Fund', ${actorId}, ${actorId})
+    returning id`, "objects"));
+  assert.equal(values.length, 2);
   clearBalancingLegProviders();
-  const posted = await postDirect(org, giftEntry(org, `FUND-UNBALANCED-${randomUUID()}`, values.rows[0]!.id, values.rows[1]!.id));
+  const posted = await postDirect(org, giftEntry(org, `FUND-UNBALANCED-${randomUUID()}`, values[0]!.id, values[1]!.id));
   assert.equal(posted.lines.length, 2);
 
   await assert.rejects(
@@ -309,21 +309,21 @@ test("a non-balancing fund segment with unbalanced posted history refuses to bec
   const after = await withOrgContext(org.orgId, () => db.execute<{ isBalancing: boolean; funds: number }>(sql`
     select d.is_balancing as "isBalancing",
            (select count(*)::int from funds f where f.org_id = d.org_id) as funds
-      from segment_definitions d where d.org_id = ${org.orgId} and d.key = 'fund'`));
-  assert.deepEqual(after.rows[0], { isBalancing: false, funds: 0 });
+      from segment_definitions d where d.org_id = ${org.orgId} and d.key = 'fund'`, "objects"));
+  assert.deepEqual(after[0], { isBalancing: false, funds: 0 });
 });
 
 test("fund readers return the drawer projection with same-org isolation", { skip: !DB }, async (t) => {
   const org = await withBypass(() => createScratchOrg());
   t.after(() => dropScratchOrg(org.orgId));
   const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`));
-  assert.equal(enabled.rows.length, 1);
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`, "objects"));
+  assert.equal(enabled.length, 1);
   const foreign = await withBypass(() => createScratchOrg());
   t.after(() => dropScratchOrg(foreign.orgId));
   const foreignEnabled = await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`));
-  assert.equal(foreignEnabled.rows.length, 1);
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`, "objects"));
+  assert.equal(foreignEnabled.length, 1);
   await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "ZZ", name: "Alpha" },
     classifications: { ZZ: { kind: "operating", restrictionClass: "without_donor_restrictions" } } });
   const parent = await createFund({ orgId: org.orgId, code: "MM", name: "Mike",
@@ -343,13 +343,13 @@ test("fund readers return the drawer projection with same-org isolation", { skip
   assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 101 }))).funds.length, 3);
   await assert.rejects(withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 0 })), /at least 1/);
   const reclassified = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update segment_definitions set source_kind='builtin', storage_column='subsidiary_id' where org_id=${org.orgId} and key='fund' returning id`));
-  assert.equal(reclassified.rows.length, 1);
+    update segment_definitions set source_kind='builtin', storage_column='subsidiary_id' where org_id=${org.orgId} and key='fund' returning id`, "objects"));
+  assert.equal(reclassified.length, 1);
   assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId }))).total, 0);
   assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })), null);
   const disabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-    update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`));
-  assert.equal(disabled.rows.length, 1);
+    update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`, "objects"));
+  assert.equal(disabled.length, 1);
   await assert.rejects(withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId })), /fundAccounting/);
   await assert.rejects(withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })), /fundAccounting/);
 });

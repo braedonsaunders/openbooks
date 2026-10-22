@@ -23,15 +23,13 @@ export const metricsNormalizationSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (
-      await db.execute<{
+    (await db.execute<{
         requestedBy: string;
         status: string;
         [key: string]: unknown;
       }>(sql`
  select id,month::text,reason,status,requested_by as "requestedBy",request_hash as "requestHash"
- from saas_metrics_normalization_requests where id=${id}`)
-    ).rows[0] ?? null
+ from saas_metrics_normalization_requests where id=${id}`, "objects"))[0] ?? null
   );
 }
 export const metricsNormalizationFlowAdapter = defineTableSubjectAdapter({

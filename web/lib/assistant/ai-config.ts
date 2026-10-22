@@ -142,11 +142,11 @@ export type AiSettingsInput = {
 async function readAi(orgId: string): Promise<{ ai: RawAi; orgName: string | null }> {
   const r = (await db.execute<{ ai: unknown; name: string }>(sql`
     select settings->'ai' as ai, name from orgs where id = ${orgId}
-  `));
-  const raw = r.rows[0]?.ai;
+  `, "objects"));
+  const raw = r[0]?.ai;
   return {
     ai: (raw && typeof raw === "object" ? raw : {}) as RawAi,
-    orgName: r.rows[0]?.name ?? null,
+    orgName: r[0]?.name ?? null,
   };
 }
 
@@ -315,8 +315,8 @@ async function refusePackEnableWhileFeatureOff(
   if (await lockAndCheckOrgFeature(tx, orgId, "continuousClose")) return;
   const stored = await tx.execute<{ agent_key: string; enabled: boolean }>(sql`
     select agent_key, enabled from ai_agent_policies where org_id = ${orgId} for update
-  `);
-  const enabledByKey = new Map(stored.rows.map((row) => [row.agent_key, row.enabled]));
+  `, "objects");
+  const enabledByKey = new Map(stored.map((row) => [row.agent_key, row.enabled]));
   if (enabling.some((agent) => enabledByKey.get(agent.agentKey) !== true)) {
     throw new Error("feature_disabled");
   }
@@ -338,8 +338,8 @@ export async function saveOrgAiSettings(
     await refusePackEnableWhileFeatureOff(tx, orgId, input.agents);
     const r = (await tx.execute<{ ai: unknown }>(sql`
       select settings->'ai' as ai from orgs where id = ${orgId} for update
-    `));
-    const raw = r.rows[0]?.ai;
+    `, "objects"));
+    const raw = r[0]?.ai;
     const prev = (raw && typeof raw === "object" ? raw : {}) as RawAi;
     const next: RawAi = {
       enabled: input.enabled,
@@ -405,8 +405,8 @@ async function persistAgentPolicy(
       from ai_agent_policies
      where org_id = ${orgId} and agent_key = ${agent.agentKey}
      for update
-  `));
-  const previous = prior.rows[0];
+  `, "objects"));
+  const previous = prior[0];
   const schedulable = globalEnabled && agent.enabled && agent.automaticRuns;
   const scheduleChanged = !previous || !previous.enabled || !previous.automatic_runs || previous.cadence !== agent.cadence;
   const nextRunAt = schedulable
@@ -447,10 +447,10 @@ async function persistAgentPolicy(
       updated_by = excluded.updated_by
     where ai_agent_policies.org_id = ${orgId}
     returning id
-  `));
+  `, "objects"));
   await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'ai_agent_policies', ${saved.rows[0]!.id}, 'update', ${JSON.stringify({
+    values (${orgId}, 'ai_agent_policies', ${saved[0]!.id}, 'update', ${JSON.stringify({
       agentKey: agent.agentKey,
       enabled: agent.enabled,
       automaticRuns: agent.automaticRuns,
@@ -478,8 +478,8 @@ export async function saveOrgAiAgentSettings(
     const org = (await tx.execute<{ enabled: boolean }>(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${orgId} for update
-    `));
-    await persistAgentPolicy(tx, orgId, userId, org.rows[0]?.enabled !== false, agent);
+    `, "objects"));
+    await persistAgentPolicy(tx, orgId, userId, org[0]?.enabled !== false, agent);
   });
   return (await getContinuousClosePolicies(orgId)).find((policy) => policy.agentKey === agent.agentKey)!;
 }

@@ -443,8 +443,8 @@ async function t4ConfidentialFields(
   const rows = (await db.execute<{ sin_encrypted: string | null }>(sql`
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-  `));
-  const sealed = rows.rows[0]?.sin_encrypted ?? null;
+  `, "objects"));
+  const sealed = rows[0]?.sin_encrypted ?? null;
   const sin = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   const label = "Social insurance number";
   // Recompute under the STORED fingerprint's key id: after a rotation the

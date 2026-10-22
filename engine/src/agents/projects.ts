@@ -112,8 +112,8 @@ async function rankProjectFinancials(orgId: string): Promise<ProjectFinancials[]
       left join committed cm on cm.project_id = s.id
      where coalesce(a.cost, 0) <> 0 or coalesce(a.revenue, 0) <> 0
      order by s.code, s.name, s.id
-  `);
-  return res.rows.map((row) => ({
+  `, "objects");
+  return res.map((row) => ({
     id: String(row.id),
     code: (row.code as string | null) ?? null,
     name: String(row.name),
@@ -136,8 +136,8 @@ async function priorPersistedMargin(orgId: string, fingerprint: string): Promise
      where org_id = ${orgId} and agent_key = 'projects' and fingerprint = ${fingerprint}
      order by last_detected_at desc
      limit 1
-  `);
-  return res.rows[0]?.margin ?? null;
+  `, "objects");
+  return res[0]?.margin ?? null;
 }
 
 type StaleUnbilledRow = {
@@ -238,8 +238,8 @@ async function staleUnbilledByProject(orgId: string, cutoff: string): Promise<St
      group by p.id
     having coalesce(sum(c.bill_amount), 0) <> 0
      order by p.id
-  `);
-  return res.rows.map((row) => ({
+  `, "objects");
+  return res.map((row) => ({
     id: String(row.id),
     agedTime: String(row.aged_time),
     agedDocuments: String(row.aged_documents),
@@ -383,8 +383,8 @@ export async function projectsFindings(
       const nameRes = await db.execute<Record<string, unknown>>(sql`
         select id::text as id, code, name from projects
          where org_id = ${orgId} and id in (${sql.join(rows.map((row) => sql`${row.id}::uuid`), sql`, `)})
-      `);
-      for (const row of nameRes.rows) {
+      `, "objects");
+      for (const row of nameRes) {
         names.set(String(row.id), {
           code: (row.code as string | null) ?? null,
           name: String(row.name),

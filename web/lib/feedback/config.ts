@@ -235,8 +235,8 @@ export async function clearFeedbackToken(actorId: string, authorize?: () => Prom
 /** Read the singleton under its row lock. Callers are already inside withBypass. */
 async function lockSettings(): Promise<Record<string, unknown>> {
   const rows = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-    select settings from platform_settings where id = ${PLATFORM_SETTINGS_ID} for update`)
-  return rows.rows[0]?.settings ?? {}
+    select settings from platform_settings where id = ${PLATFORM_SETTINGS_ID} for update`, 'objects')
+  return rows[0]?.settings ?? {}
 }
 
 async function writeSettings(settings: Record<string, unknown>, actorId: string): Promise<void> {

@@ -134,7 +134,7 @@ async function seedPeriod(
   period: { year: number; num: number; name: string; start: string; end: string },
 ): Promise<void> {
   const calId = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${ctx.org.orgId} and is_default = true`)).rows[0]!.id;
+    select id from fiscal_calendars where org_id = ${ctx.org.orgId} and is_default = true`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
     values (${randomUUID()}, ${ctx.org.orgId}, ${period.year}, ${period.num}, ${period.name},
@@ -195,8 +195,8 @@ async function entryLines(orgId: string, entryId: string): Promise<EntryLine[]> 
            contributor_kind, contributor_ref
       from journal_lines
      where org_id = ${orgId} and entry_id = ${entryId}
-     order by line_number`);
-  return r.rows;
+     order by line_number`, "objects");
+  return r;
 }
 
 test("net_zero_pair adds dimensional attribution without moving account totals", { skip: !DB }, async () => {
@@ -233,7 +233,7 @@ test("net_zero_pair adds dimensional attribution without moving account totals",
     const cogsTotal = cogs.reduce((acc, l) => acc + Number(l.amount), 0);
     assert.equal(cogsTotal, 100);
     // Lineage traces every contributed line to its kernel source.
-    const lineage = (await db.execute<{
+    const lineage = await db.execute<{
       journal_line_id: string | null;
       source_journal_line_id: string | null;
       amount: string;
@@ -242,7 +242,7 @@ test("net_zero_pair adds dimensional attribution without moving account totals",
       select journal_line_id, source_journal_line_id, amount::text, share::text
         from allocation_lineage
        where org_id = ${ctx.org.orgId} and mode = 'post'
-       order by amount desc`)).rows;
+       order by amount desc`, "objects");
     assert.equal(lineage.length, 3);
     const kernelIds = new Set(lines.slice(0, 2).map((l) => l.id));
     const contribIds = new Set(lines.slice(2).map((l) => l.id));
@@ -296,7 +296,7 @@ test("a cross-subsidiary contribution is refused with no partial write", { skip:
     const probe = (await db.execute<{ entries: number; lineage: number; status: string }>(sql`
       select (select count(*)::int from journal_entries where org_id = ${ctx.org.orgId}) as entries,
              (select count(*)::int from allocation_lineage where org_id = ${ctx.org.orgId}) as lineage,
-             (select status from documents where id = ${documentId} and org_id = ${ctx.org.orgId}) as status`)).rows[0]!;
+             (select status from documents where id = ${documentId} and org_id = ${ctx.org.orgId}) as status`, "objects"))[0]!;
     assert.equal(probe.entries, 0);
     assert.equal(probe.lineage, 0);
     assert.equal(probe.status, "approved");
@@ -325,10 +325,10 @@ test("secondary-book rules write a separate allocation entry", { skip: !DB }, as
     assert.equal(primary.length, 2);
     assert.ok(primary.every((l) => l.contributor_kind === null));
     // The secondary entry carries the balanced pair with stamps.
-    const secondary = (await db.execute<{ id: string; entry_number: string; origin: string; book_id: string }>(sql`
+    const secondary = await db.execute<{ id: string; entry_number: string; origin: string; book_id: string }>(sql`
       select id, entry_number, origin, book_id from journal_entries
        where org_id = ${ctx.org.orgId} and source_document_id is not null
-         and id <> ${entryId}`)).rows;
+         and id <> ${entryId}`, "objects");
     assert.equal(secondary.length, 1);
     assert.equal(secondary[0]!.origin, "allocation");
     assert.equal(secondary[0]!.book_id, secBook);
@@ -340,9 +340,9 @@ test("secondary-book rules write a separate allocation entry", { skip: !DB }, as
     ]);
     assert.ok(secLines.every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId));
     // Lineage for secondary lines sources the primary kernel line.
-    const lineage = (await db.execute<{ journal_entry_id: string; journal_line_id: string; source_journal_line_id: string }>(sql`
+    const lineage = await db.execute<{ journal_entry_id: string; journal_line_id: string; source_journal_line_id: string }>(sql`
       select journal_entry_id, journal_line_id, source_journal_line_id
-        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`)).rows;
+        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`, "objects");
     assert.equal(lineage.length, 2);
     const kernelIds = new Set(primary.map((l) => l.id));
     for (const row of lineage) {
@@ -368,13 +368,13 @@ test("report_only writes lineage rows and no journal lines", { skip: !DB }, asyn
     const entryId = await postBill(ctx, await seedBill(ctx, "BILL-STAT-1", "100.0000"));
     const lines = await entryLines(ctx.org.orgId, entryId);
     assert.equal(lines.length, 2);
-    const lineage = (await db.execute<{
+    const lineage = await db.execute<{
       journal_entry_id: string;
       journal_line_id: string | null;
       amount: string;
     }>(sql`
       select journal_entry_id, journal_line_id, amount::text
-        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`)).rows;
+        from allocation_lineage where org_id = ${ctx.org.orgId} and mode = 'post'`, "objects");
     assert.equal(lineage.length, 2);
     assert.deepEqual(lineage.map((r) => r.amount).sort(), ["40.0000", "60.0000"]);
     assert.ok(lineage.every((r) => r.journal_entry_id === entryId && r.journal_line_id === null));
@@ -400,7 +400,7 @@ test("feature off contributes nothing and keeps posted data", { skip: !DB }, asy
     const lines = await entryLines(ctx.org.orgId, entryId);
     assert.equal(lines.length, 2);
     const lineage = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from allocation_lineage where org_id = ${ctx.org.orgId}`)).rows[0]!;
+      select count(*)::int as n from allocation_lineage where org_id = ${ctx.org.orgId}`, "objects"))[0]!;
     assert.equal(lineage.n, 0);
   } finally {
     await dropScratchOrg(ctx.org.orgId);
@@ -471,17 +471,17 @@ test("void reverses secondary-book allocation entries too", { skip: !DB }, async
       source: "api",
     });
     assert.equal(result.status, "voided");
-    const reversed = (await db.execute<{ entry_number: string; origin: string; status: string }>(sql`
+    const reversed = await db.execute<{ entry_number: string; origin: string; status: string }>(sql`
       select e.entry_number, e.origin, e.status
         from journal_entries e
        where e.org_id = ${ctx.org.orgId} and e.reverses_entry_id is not null
-       order by e.entry_number`)).rows;
+       order by e.entry_number`, "objects");
     // The primary entry and the secondary allocation entry are both reversed.
     assert.equal(reversed.length, 2);
     assert.ok(reversed.some((r) => r.origin === "allocation" && r.status === "posted"));
     const live = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${ctx.org.orgId} and status = 'posted'`)).rows[0]!;
+       where org_id = ${ctx.org.orgId} and status = 'posted'`, "objects"))[0]!;
     assert.equal(live.n, 2);
   } finally {
     await dropScratchOrg(ctx.org.orgId);
@@ -512,7 +512,7 @@ test("driver-basis rules weight lines by the measured vector end to end", { skip
       [ctx.org.accounts.cogs, ctx.deptSrc, "-100.0000"],
     ]);
     assert.ok(lines.slice(2).every((l) => l.contributor_kind === "rule" && l.contributor_ref === versionId));
-    const lineage = (await db.execute<{
+    const lineage = await db.execute<{
       journal_line_id: string | null;
       driver_value: string | null;
       driver_total: string | null;
@@ -522,7 +522,7 @@ test("driver-basis rules weight lines by the measured vector end to end", { skip
       select journal_line_id, driver_value::text, driver_total::text, share::text, amount::text
         from allocation_lineage
        where org_id = ${ctx.org.orgId} and mode = 'post'
-       order by amount desc`)).rows;
+       order by amount desc`, "objects");
     assert.equal(lineage.length, 3);
     assert.deepEqual(lineage.map((r) => [r.amount, r.driver_value, r.driver_total, r.share]), [
       ["75.0000", "3.0000", "4.0000", "0.7500000000"],

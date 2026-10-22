@@ -142,8 +142,8 @@ export async function loadRebates(sp: Record<string, string | string[] | undefin
     const where = sql`where a.org_id = ${orgId} ${sideScope} ${sidePermission}
       ${sideFilter ? sql`and a.side = ${sideFilter}` : sql``} ${statusFilter} ${q}`
     const total = Number((await db.execute<{ total: string }>(sql`
-      select count(*)::text as total from ${from} ${where}`)).rows[0]?.total ?? 0)
-    const rows = (await db.execute<RawRegisterRow>(sql`
+      select count(*)::text as total from ${from} ${where}`, 'objects'))[0]?.total ?? 0)
+    const rows = await db.execute<RawRegisterRow>(sql`
       select ${view === 'claims' ? sql`c.id` : sql`a.id`} as id,
              a.code || ' · ' || a.name as label,
              coalesce(p.display_name, ${t('classAgreement')}) as party,
@@ -151,7 +151,7 @@ export async function loadRebates(sp: Record<string, string | string[] | undefin
              a.currency, ${view === 'claims' ? sql`c.amount::text` : sql`null::text`} as amount
         from ${from} ${where}
        order by a.code, ${view === 'claims' ? sql`c.created_at desc, c.id` : sql`a.id`}
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`)).rows
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects')
 
     let selected: RebateDrawerData | null = null
     if (selectedId && isUuid(selectedId)) {
@@ -159,25 +159,25 @@ export async function loadRebates(sp: Record<string, string | string[] | undefin
         select a.* from rebate_agreements a
         ${view === 'claims' ? sql`join rebate_claims c on c.org_id = a.org_id and c.agreement_id = a.id` : sql``}
          where a.org_id = ${orgId} and ${view === 'claims' ? sql`c.id` : sql`a.id`} = ${selectedId}
-           ${sideScope} ${sidePermission} ${sideFilter ? sql`and a.side = ${sideFilter}` : sql``}`)).rows[0]
+           ${sideScope} ${sidePermission} ${sideFilter ? sql`and a.side = ${sideFilter}` : sql``}`, 'objects'))[0]
       if (agreement) {
         const claim = view === 'claims'
-          ? (await db.execute<RebateClaim>(sql`select * from rebate_claims where org_id = ${orgId} and id = ${selectedId}`)).rows[0] ?? null
+          ? (await db.execute<RebateClaim>(sql`select * from rebate_claims where org_id = ${orgId} and id = ${selectedId}`, 'objects'))[0] ?? null
           : null
         const [parties, banks, base] = await Promise.all([
           db.execute<{ id: string; name: string }>(sql`
             select distinct p.id, p.display_name as name from rebate_accruals f
             join parties p on p.org_id = f.org_id and p.id = f.party_id
              where f.org_id = ${orgId} and f.agreement_id = ${agreement.id}
-             order by p.display_name, p.id`),
+             order by p.display_name, p.id`, 'objects'),
           db.execute<{ id: string; name: string }>(sql`
             select id, name from accounts where org_id = ${orgId} and type = 'asset_bank'
               and is_active and not is_summary
               and (subsidiary_id is null or subsidiary_id = ${agreement.subsidiary_id})
               ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-             order by number, name`),
+             order by number, name`, 'objects'),
           db.execute<{ base_currency: string }>(sql`
-            select base_currency from subsidiaries where org_id = ${orgId} and id = ${agreement.subsidiary_id}`),
+            select base_currency from subsidiaries where org_id = ${orgId} and id = ${agreement.subsidiary_id}`, 'objects'),
         ])
         const sources = await db.execute<{ lineId: string; documentId: string; label: string }>(sql`
           select dl.id as "lineId", d.id as "documentId",
@@ -192,19 +192,19 @@ export async function loadRebates(sp: Record<string, string | string[] | undefin
              ${agreement.party_id && agreement.activity !== 'downstream_sale' ? sql`and d.party_id = ${agreement.party_id}` : sql``}
              ${agreement.item_id ? sql`and dl.item_id = ${agreement.item_id}` : sql``}
              ${agreement.class_id ? sql`and coalesce(dl.class_id, d.class_id) = ${agreement.class_id}` : sql``}
-           order by d.document_date desc, d.document_number, dl.line_number`)
-        const baseCurrency = base.rows[0]?.base_currency
+           order by d.document_date desc, d.document_number, dl.line_number`, 'objects')
+        const baseCurrency = base[0]?.base_currency
         if (claim !== null || view === 'agreements') {
           if (baseCurrency) {
             selected = {
               agreement,
               claim,
-              parties: parties.rows,
-              banks: banks.rows,
+              parties,
+              banks,
               canPost: can(authz, agreement.side === 'customer' ? 'ar.post' : 'ap.post'),
               today: await businessToday(orgId),
               baseCurrency,
-              sources: sources.rows,
+              sources,
               closeHref: hrefFor(sp, view),
             }
           }

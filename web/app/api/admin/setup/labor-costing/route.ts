@@ -112,7 +112,7 @@ async function guardLaborFeature(orgId: string) {
 }
 async function pinLaborFeature(orgId: string, actorId: string, subsidiaryId: string | null = null) {
   await acquireOrgFeatureGateLock(db, orgId)
-  const actor = (await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]
+  const actor = (await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`, 'objects'))[0]
   if (!actor) throw new ScopeNotFoundError()
   const currentScope = await lockActorCommandAuthority(db, orgId, actorId, subsidiaryId, 'admin.setup.manage')
   if (subsidiaryId === null && currentScope !== null) throw new ScopeNotFoundError()
@@ -150,8 +150,8 @@ async function configuredCurrencies(orgId: string): Promise<string[]> {
       select base_currency as code from orgs where id = ${orgId}
       union
       select base_currency as code from subsidiaries where org_id = ${orgId} and is_active
-    ) configured order by code`)
-  return result.rows.map((row) => row.code)
+    ) configured order by code`, 'objects')
+  return result.map((row) => row.code)
 }
 
 /** The wage-scope tuple of a rate: at most one of these is non-null. */
@@ -190,8 +190,8 @@ async function lockedRateScope(
     select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
            r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId"
       from labor_cost_rates r
-     where r.org_id = ${orgId} and r.id = ${id}`)
-  const row = located.rows[0]
+     where r.org_id = ${orgId} and r.id = ${id}`, 'objects')
+  const row = located[0]
   if (!row) return missingRecord
   if (isOrgWideWageScope(row)) {
     const denied = guardUnrestrictedScope(gate)
@@ -203,7 +203,7 @@ async function lockedRateScope(
   if (row.employeePartyId) {
     const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
-       where org_id = ${orgId} and id = ${row.employeePartyId} for share`)).rows[0]
+       where org_id = ${orgId} and id = ${row.employeePartyId} for share`, 'objects'))[0]
     if (!locked) return missingRecord
     employeeSubsidiary = locked.subsidiaryId
   }
@@ -211,7 +211,7 @@ async function lockedRateScope(
   if (row.departmentId) {
     const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from departments
-       where org_id = ${orgId} and id = ${row.departmentId} for share`)).rows[0]
+       where org_id = ${orgId} and id = ${row.departmentId} for share`, 'objects'))[0]
     if (!locked) return missingRecord
     departmentSubsidiary = locked.subsidiaryId
   }
@@ -288,7 +288,7 @@ async function subsidiaryProblem(orgId: string, subsidiaryId: string): Promise<s
   const row = (await db.execute<{ name: string; isActive: boolean; isElimination: boolean }>(sql`
     select name, is_active as "isActive", is_elimination as "isElimination"
       from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0]
+     where org_id = ${orgId} and id = ${subsidiaryId}`, 'objects'))[0]
   if (!row) return `no subsidiary "${subsidiaryId}" in this organization — check the id and try again`
   if (!row.isActive) return `subsidiary "${row.name}" is inactive — reactivate it or choose an active subsidiary`
   return `subsidiary "${row.name}" is an elimination entity — choose an operating subsidiary`
@@ -323,15 +323,15 @@ async function legacyGET(req: Request) {
         from parties p
         left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id and s.is_active
        where p.org_id = ${gate.user.orgId} and p.id = ${employee}
-       for share of p`)
-    if (employeeContext.rows.length !== 1) return notFound("record")
+       for share of p`, 'objects')
+    if (employeeContext.length !== 1) return notFound("record")
     // Wage data is confidential per subsidiary: an employee outside the
     // caller's subsidiary scope is indistinguishable from a nonexistent one.
-    const scopeDenied = guardSubsidiaryScope(gate, employeeContext.rows[0]!.subsidiaryId, {
+    const scopeDenied = guardSubsidiaryScope(gate, employeeContext[0]!.subsidiaryId, {
       orgWideNull: true,
     })
     if (scopeDenied) return scopeDenied
-    if (!(await pinLaborFeature(gate.user.orgId, gate.user.id, employeeContext.rows[0]!.subsidiaryId))) return projectsDisabledResponse()
+    if (!(await pinLaborFeature(gate.user.orgId, gate.user.id, employeeContext[0]!.subsidiaryId))) return projectsDisabledResponse()
     const today = await businessToday(gate.user.orgId)
     const [rates, org, currencies] = await Promise.all([
       db.execute<Record<string, unknown>>(sql`
@@ -340,15 +340,15 @@ async function legacyGET(req: Request) {
                effective_from <= ${today} and (effective_to is null or effective_to >= ${today}) as is_current
           from labor_cost_rates
          where org_id = ${gate.user.orgId} and employee_party_id = ${employee} and is_active
-         order by effective_from desc`),
-      db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${gate.user.orgId}`),
+         order by effective_from desc`, 'objects'),
+      db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${gate.user.orgId}`, 'objects'),
       configuredCurrencies(gate.user.orgId),
     ])
-    const orgCurrency = org.rows[0]?.base_currency ?? 'CAD'
+    const orgCurrency = org[0]?.base_currency ?? 'CAD'
     return NextResponse.json({
-      rates: rates.rows,
+      rates,
       currencies,
-      defaultCurrency: employeeContext.rows[0]!.base_currency ?? orgCurrency,
+      defaultCurrency: employeeContext[0]!.base_currency ?? orgCurrency,
     })
   })
 }
@@ -462,18 +462,18 @@ export const PUT = defineRoute({
       if (!(await pinLaborFeature(orgId, gate.user.id))) return projectsDisabledResponse()
       await lockLedgerSetupFence(db, orgId, "exclusive")
       const current = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
-        select settings from orgs where id = ${orgId} for update`)
+        select settings from orgs where id = ${orgId} for update`, 'objects')
       if (accountIds.length > 0) {
         const found = await db.execute<{ id: string; type: string; isActive: boolean; isSummary: boolean }>(sql`
           select id, type, is_active as "isActive", is_summary as "isSummary" from accounts
            where org_id = ${orgId}
-             and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)}) order by id for share`)
+             and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)}) order by id for share`, 'objects')
         // The same boundary the posting path enforces: an account of the
         // wrong type is refused here rather than saved and refused later.
         try {
           assertValidControlAccountMappings(
             Object.fromEntries(Object.entries(accounts).filter((entry): entry is [string, string] => entry[1] !== null)),
-            found.rows,
+            found,
           )
         } catch (error) {
           if (error instanceof ControlAccountsIncompleteError) {
@@ -482,7 +482,7 @@ export const PUT = defineRoute({
           throw error
         }
       }
-      const beforeSettings = (current.rows[0]?.settings ?? {}) as Record<string, unknown>
+      const beforeSettings = (current[0]?.settings ?? {}) as Record<string, unknown>
       const beforeControl = (beforeSettings.controlAccounts ?? {}) as Record<string, unknown>
       if (!(await lockAndCheckOrgFeature(db, orgId, 'projects'))) {
         const beforeLabor = (beforeSettings.laborCosting ?? {}) as Record<string, unknown>
@@ -555,29 +555,29 @@ export const POST = defineRoute({
               select p.subsidiary_id as "subsidiaryId"
                 from parties p
                 join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
-               where p.org_id = ${orgId} and p.id = ${employeePartyId} and p.is_active`)
+               where p.org_id = ${orgId} and p.id = ${employeePartyId} and p.is_active`, 'objects')
           : null,
-        tradeId ? db.execute(sql`select 1 from trades where org_id = ${orgId} and id = ${tradeId} and is_active`) : null,
+        tradeId ? db.execute(sql`select 1 from trades where org_id = ${orgId} and id = ${tradeId} and is_active`, 'objects') : null,
         departmentId
           ? db.execute<{ subsidiaryId: string | null }>(sql`
               select subsidiary_id as "subsidiaryId"
                 from departments
-               where org_id = ${orgId} and id = ${departmentId} and is_active`)
+               where org_id = ${orgId} and id = ${departmentId} and is_active`, 'objects')
           : null,
-        subsidiaryId ? db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`) : null,
+        subsidiaryId ? db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination`, 'objects') : null,
       ])
       // One scope tuple, four different failed lookups: the refusal names which
       // scope failed and the id it was given — never one sentence for all four.
       // The four reads above stay a single round trip on the success path; only
       // this failure path resolves which predicate failed.
       const missingScope =
-        employeePartyId !== null && employeeRef?.rows.length !== 1
+        employeePartyId !== null && employeeRef?.length !== 1
           ? `employee wage scope "${employeePartyId}" is not available — no active employee with an active role in this organization`
-          : tradeId !== null && tradeRef?.rows.length !== 1
+          : tradeId !== null && tradeRef?.length !== 1
             ? `trade wage scope "${tradeId}" is not available — no active trade in this organization`
-            : departmentId !== null && departmentRef?.rows.length !== 1
+            : departmentId !== null && departmentRef?.length !== 1
               ? `department wage scope "${departmentId}" is not available — no active department in this organization`
-              : subsidiaryId !== null && subsidiaryRef?.rows.length !== 1
+              : subsidiaryId !== null && subsidiaryRef?.length !== 1
                 ? `subsidiary wage scope "${subsidiaryId}" is not available — no active, non-elimination subsidiary in this organization`
                 : null
       if (missingScope) {
@@ -585,16 +585,16 @@ export const POST = defineRoute({
       }
       // An employee selector with no subsidiary is effectively organization-wide:
       // costing resolution matches it for projects in every legal entity.
-      if (employeePartyId !== null && employeeRef?.rows[0]?.subsidiaryId == null) {
+      if (employeePartyId !== null && employeeRef?.[0]?.subsidiaryId == null) {
         const scopeDenied = guardUnrestrictedScope(gate)
         if (scopeDenied) return scopeDenied
       }
       // Wages are confidential per subsidiary: an employee/department/subsidiary
       // outside the caller's scope is indistinguishable from a missing one.
-      if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, employeeRef?.rows[0]?.subsidiaryId ?? null, { orgWideNull: true })) {
+      if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, employeeRef?.[0]?.subsidiaryId ?? null, { orgWideNull: true })) {
         return notFound("record")
       }
-      if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, departmentRef?.rows[0]?.subsidiaryId ?? null)) {
+      if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, departmentRef?.[0]?.subsidiaryId ?? null)) {
         return notFound("record")
       }
       if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
@@ -647,7 +647,7 @@ export const POST = defineRoute({
           if (employeePartyId) {
             const lockedEmployee = (await db.execute<{ subsidiaryId: string | null }>(sql`
               select p.subsidiary_id as "subsidiaryId" from parties p
-               where p.org_id = ${orgId} and p.id = ${employeePartyId} for share`)).rows[0]
+               where p.org_id = ${orgId} and p.id = ${employeePartyId} for share`, 'objects'))[0]
             if (!lockedEmployee || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedEmployee.subsidiaryId, { orgWideNull: true })) {
               return { ok: false, response: notFound("record") }
             }
@@ -656,7 +656,7 @@ export const POST = defineRoute({
           if (departmentId) {
             const lockedDepartment = (await db.execute<{ subsidiaryId: string | null }>(sql`
               select subsidiary_id as "subsidiaryId" from departments
-               where org_id = ${orgId} and id = ${departmentId} for share`)).rows[0]
+               where org_id = ${orgId} and id = ${departmentId} for share`, 'objects'))[0]
             if (!lockedDepartment || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedDepartment.subsidiaryId)) {
               return { ok: false, response: notFound("record") }
             }
@@ -712,13 +712,11 @@ export const POST = defineRoute({
           const row = scoped.row
 
           await db.execute(scopeLock(orgId, row))
-          const before = (
-            await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
+          const before = (await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
               select ${RATE_ROW_COLUMNS}, employee_party_id as "employeePartyId",
                      department_id as "departmentId", subsidiary_id as "subsidiaryId"
                 from labor_cost_rates
-                where org_id = ${orgId} and id = ${id} for update`)
-          ).rows[0]!
+                where org_id = ${orgId} and id = ${id} for update`, 'objects'))[0]!
           // The rate row itself can be re-pointed between the locked locate
           // and this re-read: a changed scope tuple denies rather than ending
           // another subsidiary's rate.
@@ -768,13 +766,11 @@ export const POST = defineRoute({
           const row = scoped.row
 
           await db.execute(scopeLock(orgId, row))
-          const before = (
-            await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
+          const before = (await db.execute<RateRow & { employeePartyId: string | null; departmentId: string | null; subsidiaryId: string | null }>(sql`
               select ${RATE_ROW_COLUMNS}, employee_party_id as "employeePartyId",
                      department_id as "departmentId", subsidiary_id as "subsidiaryId"
                 from labor_cost_rates
-                where org_id = ${orgId} and id = ${id} for update`)
-          ).rows[0]!
+                where org_id = ${orgId} and id = ${id} for update`, 'objects'))[0]!
           // The rate row itself can be re-pointed between the locked locate
           // and this re-read: a changed scope tuple denies rather than
           // deleting another subsidiary's rate.
@@ -814,8 +810,8 @@ export const POST = defineRoute({
         return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })
       }
       if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) return NextResponse.json({ error: 'subsidiary required' }, { status: 422 })
-      const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
-      if (subsidiary.rows.length !== 1) {
+      const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`, 'objects')
+      if (subsidiary.length !== 1) {
         return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
       }
       if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record")
@@ -839,8 +835,8 @@ export const POST = defineRoute({
       if (!can(gate, 'gl.post')) {
         return NextResponse.json({ error: 'missing permission: gl.post' }, { status: 403 })
       }
-      const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`)
-      if (subsidiary.rows.length !== 1) {
+      const subsidiary = await db.execute(sql`select 1 from subsidiaries where org_id = ${orgId} and id = ${body.subsidiaryId} and is_active and not is_elimination`, 'objects')
+      if (subsidiary.length !== 1) {
         return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
       }
       if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record")

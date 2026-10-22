@@ -39,11 +39,11 @@ async function fixture(run: (f: Fixture) => Promise<void>) {
 
 async function invoiceOf(orgId: string, invoiceId: string) {
   const doc = (await db.execute<{ kind: string; subtotal: string; tax_total: string; total: string }>(
-    sql`select kind, subtotal::text as subtotal, tax_total::text as tax_total, total::text as total from documents where id=${invoiceId} and org_id=${orgId}`,
-  )).rows[0]!;
-  const lines = (await db.execute<{ tax_code_id: string | null; tax_amount: string }>(
-    sql`select tax_code_id, tax_amount::text as tax_amount from document_lines where document_id=${invoiceId} and org_id=${orgId} order by line_number`,
-  )).rows;
+    sql`select kind, subtotal::text as subtotal, tax_total::text as tax_total, total::text as total from documents where id=${invoiceId} and org_id=${orgId}`, "objects",
+  ))[0]!;
+  const lines = await db.execute<{ tax_code_id: string | null; tax_amount: string }>(
+    sql`select tax_code_id, tax_amount::text as tax_amount from document_lines where document_id=${invoiceId} and org_id=${orgId} order by line_number`, "objects",
+  );
   return { doc, lines };
 }
 

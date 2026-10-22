@@ -62,8 +62,8 @@ export const GET = defineRoute({
         left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
        where r.org_id = ${gate.user.orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
          ${payrollRunPopulationScopeFilter(gate.user.orgId, sql`r.document_id`, gate.allowedSubsidiaryIds)}
-       order by r.pay_date desc, d.document_number desc`))
-    return NextResponse.json({ runs: runs.rows })
+       order by r.pay_date desc, d.document_number desc`, 'objects'))
+    return NextResponse.json({ runs })
 
   },
 })
@@ -94,7 +94,7 @@ export const POST = defineRoute({
       const schedule = (await db.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId"
           from pay_schedules
-         where org_id = ${gate.user.orgId} and id = ${payScheduleId} and is_active`)).rows[0]
+         where org_id = ${gate.user.orgId} and id = ${payScheduleId} and is_active`, 'objects'))[0]
       const runSubsidiaryId = schedule?.subsidiaryId
         ?? (schedule
           ? (await db.execute<{ id: string }>(sql`
@@ -102,7 +102,7 @@ export const POST = defineRoute({
                 from subsidiaries
                where org_id = ${gate.user.orgId} and parent_id is null and is_active
                order by created_at
-               limit 1`)).rows[0]?.id ?? null
+               limit 1`, 'objects'))[0]?.id ?? null
           : null)
       const denied = guardSubsidiaryScope(gate, runSubsidiaryId)
       if (denied) return denied
@@ -117,8 +117,8 @@ export const POST = defineRoute({
           select subsidiary_id as "subsidiaryId"
             from parties
            where org_id = ${gate.user.orgId}
-             and id = any(${`{${namedEmployees.join(',')}}`}::uuid[])`)
-        const visible = people.rows.filter((person) =>
+             and id = any(${`{${namedEmployees.join(',')}}`}::uuid[])`, 'objects')
+        const visible = people.filter((person) =>
           subsidiaryScopeAllows(gate.allowedSubsidiaryIds, person.subsidiaryId, { orgWideNull: true }))
         if (visible.length !== namedEmployees.length) {
           return notFound("record")

@@ -32,11 +32,11 @@ export function refundSourceOf(history: unknown): RefundSourceEvidence | null {
 
 /** Refund totals follow the original attempt across every replacement receipt. */
 export async function postedAttemptRefunds(orgId: string, attemptId: string, currency: string): Promise<bigint> {
-  const rows = (await db.execute<{ amount: string }>(sql`
+  const rows = await db.execute<{ amount: string }>(sql`
     select amount::text as amount from payment_disputes
      where org_id = ${orgId} and attempt_id = ${attemptId} and kind = 'refund'
        and status = 'posted' and currency = ${currency}
-  `)).rows;
+  `, "objects");
   return rows.reduce((total, row) => total + toUnits(row.amount), 0n);
 }
 

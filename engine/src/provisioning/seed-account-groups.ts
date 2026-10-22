@@ -16,12 +16,12 @@ import { ensureAccountGroupDefaults } from "./account-group-defaults.ts";
  */
 
 async function groupCounts(orgId: string): Promise<{ costPool: number; burden: number }> {
-  const rows = (await db.execute<{ dimension: string; n: number }>(sql`
+  const rows = await db.execute<{ dimension: string; n: number }>(sql`
     select dimension, count(*)::int as n
       from account_groups
      where org_id = ${orgId} and dimension in ('cost_pool', 'burden')
      group by dimension
-  `)).rows;
+  `, "objects");
   return {
     costPool: rows.find((row) => row.dimension === "cost_pool")?.n ?? 0,
     burden: rows.find((row) => row.dimension === "burden")?.n ?? 0,
@@ -29,9 +29,9 @@ async function groupCounts(orgId: string): Promise<{ costPool: number; burden: n
 }
 
 async function orgName(orgId: string): Promise<string | null> {
-  const rows = (await db.execute<{ name: string }>(sql`
+  const rows = await db.execute<{ name: string }>(sql`
     select name from orgs where id = ${orgId}
-  `)).rows;
+  `, "objects");
   return rows[0]?.name ?? null;
 }
 
@@ -53,11 +53,11 @@ async function main() {
   }
   const orgs = (await db.execute<{ id: string; name: string }>(sql`
     select id, name from orgs order by created_at
-  `));
-  if (orgs.rows.length === 0) {
+  `, "objects"));
+  if (orgs.length === 0) {
     throw new Error("no orgs found — create an org before seeding account groups");
   }
-  for (const org of orgs.rows) {
+  for (const org of orgs) {
     await ensureAccountGroupDefaults(org.id);
     const counts = await groupCounts(org.id);
     console.log(

@@ -25,10 +25,10 @@ export const GET = defineRoute({
   // The party is the record boundary (the loader separately enforces the
   // transaction's own subsidiary + org scope).
   const scope = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${authz.user.orgId}`,
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${authz.user.orgId}`, 'objects',
   ))
-  if (!scope.rows[0]) return notFound("record")
-  const denied = guardSubsidiaryScope(authz, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (!scope[0]) return notFound("record")
+  const denied = guardSubsidiaryScope(authz, scope[0].subsidiaryId, { orgWideNull: true })
   if (denied) return denied
 
   const data = await loadRelatedTransactionDrawerData({

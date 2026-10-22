@@ -87,8 +87,8 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
     sourceCitation: "Test rate notice", reason: "test fixture rate",
     values: { rate: "0.027", wageBase: "9000" } });
   const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${suiAccountId}
-    where org_id=${org.orgId} and employee_party_id=${employeeId} returning employee_party_id`);
-  assert.equal(profile.rows.length, 1);
+    where org_id=${org.orgId} and employee_party_id=${employeeId} returning employee_party_id`, "objects");
+  assert.equal(profile.length, 1);
   // Federal withholding distinguishes nonresident aliens before Pub. 15-T.
   await db.execute(sql`
     insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,
@@ -106,7 +106,7 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
 async function docOf(orgId: string, documentId: string) {
   return (await db.execute<{ subsidiary_id: string; currency: string; status: string }>(sql`
     select subsidiary_id, currency, status from documents where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
 }
 
 test(
@@ -164,7 +164,7 @@ test(
       assert.equal(doc.currency, "USD");
       const stamped = (await db.execute<{ tax_year: number; run_status: string }>(sql`
         select tax_year, run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stamped.run_status, "draft");
       assert.equal(stamped.tax_year, 2026);
 
@@ -174,7 +174,7 @@ test(
       assert.equal(result.gross, "4000.0000");
       const stub = (await db.execute<{ currency_code: string; gross: string }>(sql`
         select currency_code, gross from pay_stubs where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stub.currency_code, "USD");
       assert.equal(stub.gross, "4000.0000");
     } finally {
@@ -232,14 +232,14 @@ test(
       const journal = (await db.execute<{ currency: string; subtotal: string }>(sql`
         select currency, subtotal::text as subtotal from documents
          where org_id = ${f.orgId} and id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(journal.currency, "USD");
       const lines = (await db.execute<{ amount: string }>(sql`
         select amount::text as amount from document_lines
          where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `));
-      assert.ok(lines.rows.length >= 5);
-      assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
+      `, "objects"));
+      assert.ok(lines.length >= 5);
+      assert.equal(cmp(sum(lines.map((l) => l.amount)), "0"), 0, "GL projection balances");
 
       await assert.rejects(
         discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId }),
@@ -284,7 +284,7 @@ test(
       assert.deepEqual(calculation.errors, [], JSON.stringify(calculation.errors));
       const stubsBefore = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stubsBefore.n, 1);
 
       const deniedActor = await createScratchUser(f.orgId, "Payroll reader", "payroll_discard_reader");
@@ -295,17 +295,17 @@ test(
         await assert.rejects(() => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, reason: reason as never }), /discard reason/);
       }
       const discarded = await discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, reason: "  Replace the unused draft run  " });
-      const audit = (await db.execute<{ actor_id: string; changes: { reason: string } }>(sql`
+      const audit = await db.execute<{ actor_id: string; changes: { reason: string } }>(sql`
         select actor_id,changes from audit_log where org_id=${f.orgId} and row_id=${run.documentId}
           and changes->>'operation'='discard_pay_run'
-      `)).rows;
+      `, "objects");
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.actor_id, f.actorId);
       assert.equal(audit[0]!.changes.reason, "Replace the unused draft run");
       const sequence = (await db.execute<{ prefix: string }>(sql`
         select prefix from number_sequences
          where org_id = ${f.orgId} and document_kind = 'pay_run' and subsidiary_id is null
-      `)).rows[0];
+      `, "objects"))[0];
       assert.ok(sequence?.prefix, "the native pay_run number sequence carries a prefix");
       assert.ok(
         discarded.documentNumber.startsWith(sequence.prefix),
@@ -316,7 +316,7 @@ test(
                (select count(*)::int from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}) as runs,
                (select count(*)::int from pay_stubs where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}) as stubs,
                (select count(*)::int from pay_run_adjustments where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}) as adjustments
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(
         [remaining.documents, remaining.runs, remaining.stubs, remaining.adjustments],
         [0, 0, 0, 0],
@@ -325,7 +325,7 @@ test(
       const ledger = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from entitlement_ledger
          where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(ledger.n, 0, "uncommitted ledger movements go with the run");
 
       // Duplicate protection does not outlive the run it protected against.
@@ -409,7 +409,7 @@ test(
       assert.equal(doc.currency, "USD", "the posted run keeps its currency");
       const status = (await db.execute<{ run_status: string }>(sql`
         select run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(status.run_status, "committed");
     } finally {
       await dropScratchOrgReporting(f.orgId);
@@ -449,7 +449,7 @@ test(
       const calculatedStubs = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs
          where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.ok(calculatedStubs > 0, "the calculated run holds stubs for the race to threaten");
 
       // The committing transaction: takes the run row lock (exactly what
@@ -495,12 +495,12 @@ test(
       // The committed run is intact: status, stubs, and entity all stand.
       const status = (await db.execute<{ run_status: string }>(sql`
         select run_status from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(status.run_status, "committed", "the race must never reset a committed run to draft");
       const stubs = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs
          where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(stubs.n, calculatedStubs, "the committed stubs must survive the rescope");
       const doc = (await docOf(f.orgId, run.documentId))!;
       assert.equal(doc.subsidiary_id, f.usSubsidiaryId, "the posted run keeps its entity");

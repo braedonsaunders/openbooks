@@ -29,8 +29,8 @@ async function loadProbeRow(orgId: string, id: string): Promise<ProbeRow | null>
            updated_at as "updatedAt"
       from connections
      where id = ${id} and org_id = ${orgId}
-  `);
-  return loaded.rows[0] ?? null;
+  `, "objects");
+  return loaded[0] ?? null;
 }
 
 async function writeProbeOutcome(
@@ -51,8 +51,8 @@ async function writeProbeOutcome(
        and config is not distinct from ${JSON.stringify(row.config ?? {})}::jsonb
        and secrets is not distinct from ${row.secrets}
      returning id
-  `);
-  return Boolean(written.rows[0]);
+  `, "objects");
+  return Boolean(written[0]);
 }
 
 /**

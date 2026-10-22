@@ -91,8 +91,8 @@ async function deleteRequest(orgId: string, id: string, body: unknown): Promise<
 }
 
 async function orgRows(orgId: string, id: string) {
-  const documents = (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`)).rows[0]!.n;
-  const tickets = (await db.execute<{ n: string }>(sql`select count(*)::text as n from field_tickets where document_id = ${id} and org_id = ${orgId}`)).rows[0]!.n;
+  const documents = (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`, "objects"))[0]!.n;
+  const tickets = (await db.execute<{ n: string }>(sql`select count(*)::text as n from field_tickets where document_id = ${id} and org_id = ${orgId}`, "objects"))[0]!.n;
   return { documents, tickets };
 }
 
@@ -112,7 +112,7 @@ test("DELETE discards an untouched ticket draft", async () => {
       const removed = await deleteRequest(org.orgId, created.id, { expectedRevision: loaded.revision });
       assert.equal(removed.status, 200, `discarding the empty draft must succeed, got ${removed.status}: ${JSON.stringify(removed.json)}`);
       assert.deepEqual(await orgRows(org.orgId, created.id), { documents: "0", tickets: "0" });
-      const audit = (await db.execute<{ action: string }>(sql`select action from audit_log where org_id = ${org.orgId} and row_id = ${created.id} order by at desc limit 1`)).rows[0];
+      const audit = (await db.execute<{ action: string }>(sql`select action from audit_log where org_id = ${org.orgId} and row_id = ${created.id} order by at desc limit 1`, "objects"))[0];
       assert.equal(audit?.action, "delete");
     } finally {
       routeState.authz = null;

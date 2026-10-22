@@ -31,9 +31,9 @@ test("a pay run never claims a non-employee timekeeper's approved hours", { skip
     });
     const calculated = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.deepEqual(calculated.errors, []);
-    const claims = (await db.execute<{ id: string; batch: string | null }>(sql`
+    const claims = await db.execute<{ id: string; batch: string | null }>(sql`
       select id, payroll_batch_ref as batch from time_entries
-       where org_id=${fx.orgId} and employee_party_id=${partner}`)).rows;
+       where org_id=${fx.orgId} and employee_party_id=${partner}`, "objects");
     assert.equal(claims.length, 1);
     assert.equal(claims[0]!.batch, null, "partner hours stay unclaimed: no employment, no stub");
   } finally {

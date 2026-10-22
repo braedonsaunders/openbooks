@@ -67,7 +67,7 @@ async function seedEmployment(orgId: string, subsidiaryId: string, serviceStart:
   `);
   await db.transaction(async (tx) => {
     await tx.execute(sql`set constraints worker_employment_versions_change_tenant_fkey deferred`);
-    const now = (await tx.execute<{ now: Date }>(sql`select now() as now`)).rows[0]!.now;
+    const now = (await tx.execute<{ now: Date }>(sql`select now() as now`, "objects"))[0]!.now;
     const changeId = (await tx.execute<{ id: string }>(sql`
       insert into employment_changes
         (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
@@ -75,7 +75,7 @@ async function seedEmployment(orgId: string, subsidiaryId: string, serviceStart:
       values (${orgId}, ${employmentId}, 1, 'status_changed',
               '{}'::jsonb, 'tick seed', 'system', 'tick-seed', '[]'::jsonb)
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     await tx.execute(sql`
       insert into worker_employment_versions
         (org_id, employment_id, version_no, status, effective_from, recorded_at)
@@ -161,7 +161,7 @@ test("a date_relative scan visits every match past row 200", { skip: !DB }, asyn
     assert.equal(summary.dateRelativeFired, COUNT);
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(runs, COUNT, "every match past row 200 fires exactly once");
   }, { bypass: true });
 });
@@ -201,8 +201,8 @@ test("the automation tick leaves sandbox recipes and queued events untouched", {
       assert.equal((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from automation_runs
          where org_id = ${h.org.orgId} and automation_id in (${schedule.id}, ${event.id})
-      `)).rows[0]!.n, 0);
-      assert.equal((await db.execute<{ status: string }>(sql`select status from automation_event_queue where org_id = ${h.org.orgId}`)).rows[0]?.status, "pending");
+      `, "objects"))[0]!.n, 0);
+      assert.equal((await db.execute<{ status: string }>(sql`select status from automation_event_queue where org_id = ${h.org.orgId}`, "objects"))[0]?.status, "pending");
     } finally {
       await db.execute(sql`update orgs set env_kind = 'production' where id = ${h.org.orgId}`);
     }
@@ -229,7 +229,7 @@ test("the tick fires as the publisher when the oldest user holds no permission",
     assert.equal(summary.dateRelativeFired, 1);
     const run = (await db.execute<{ status: string; createdBy: string | null }>(sql`
       select status, created_by as "createdBy" from automation_runs where automation_id = ${recipe.id} limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(run.status, "succeeded");
     assert.equal(run.createdBy, h.adminId, "the run attributes to the publisher, not the oldest user");
   } finally {
@@ -264,7 +264,7 @@ test("a publisher who lost automations.run fails loudly with the remedy", { skip
     );
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(runs, 0, "nothing fires under another identity");
   } finally {
     await withBypassContext(() => dropScratchOrg(h.org.orgId));
@@ -289,7 +289,7 @@ test("a failed schedule firing keeps its run, holds the cursor, and counts faile
     const row = (await db.execute<{ status: string; lastRunAt: string | null }>(sql`
       select (select status from automation_runs where automation_id = ${recipe.id} limit 1) as status,
              last_run_at as "lastRunAt" from automations where id = ${recipe.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "failed", "the durable run row keeps the failure");
     assert.equal(row.lastRunAt, null, "the schedule cursor does not advance on failure");
   }, { bypass: true });
@@ -361,27 +361,27 @@ test("a stored invalid schedule cron records a failed run and parks the recipe",
     // A failed run row carries the named refusal — never silence.
     const run = (await db.execute<{ status: string; error: { message: string } | null }>(sql`
       select status, error from automation_runs where automation_id = ${legacyId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(run?.status, "failed");
     assert.match(run?.error?.message ?? "", /cron 'not-a-cron' is not a valid cron expression/);
     // The recipe parks in error with the cursor held, and the publisher is notified.
     const recipe = (await db.execute<{ status: string; errorMessage: string | null; lastRunAt: string | null }>(sql`
       select status, error_message as "errorMessage", last_run_at as "lastRunAt" from automations where id = ${legacyId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(recipe.status, "error");
     assert.match(recipe.errorMessage ?? "", /not-a-cron/);
     assert.equal(recipe.lastRunAt, null);
     const notes = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
        where org_id = ${h.org.orgId} and user_id = ${h.adminId} and kind = 'automation_error'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(notes, 1);
     // A second tick records nothing more: the error status parks the recipe.
     const again = await runAutomationTick(new Date());
     assert.equal(again.schedulesFailed, 0);
     const runs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${legacyId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(runs, 1);
   }, { bypass: true });
 });
@@ -447,7 +447,7 @@ test("a failed date_relative subject is not counted fired", { skip: !DB }, async
     assert.equal(summary.dateRelativeFailed, 1);
     const failed = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id} and status = 'failed'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(failed, 1, "the failed subject keeps its run row");
   }, { bypass: true });
 });
@@ -480,7 +480,7 @@ test("a failed event backs off, is not reclaimed early, and parks dead at the ce
     const parked = (await db.execute<{ status: string; attempts: number; dueAt: string | null; error: string | null }>(sql`
       select status, attempt_count as attempts, next_attempt_at as "dueAt", error
         from automation_event_queue where org_id = ${h.org.orgId} limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(parked.status, "pending");
     assert.equal(parked.attempts, 1);
     assert.ok(parked.dueAt && new Date(parked.dueAt).getTime() > Date.now(), "the retry backs off into the future");
@@ -491,7 +491,7 @@ test("a failed event backs off, is not reclaimed early, and parks dead at the ce
     assert.equal(second.eventsFailed, 0);
     const still = (await db.execute<{ attempts: number }>(sql`
       select attempt_count as attempts from automation_event_queue where org_id = ${h.org.orgId} limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(still.attempts, 1, "backoff rows wait instead of hot-looping");
     // Exhaustion parks the row dead with the error kept.
     await db.execute(sql`
@@ -504,12 +504,12 @@ test("a failed event backs off, is not reclaimed early, and parks dead at the ce
     assert.equal(third.eventsFailed, 1);
     const dead = (await db.execute<{ status: string; error: string | null }>(sql`
       select status, error from automation_event_queue where org_id = ${h.org.orgId} limit 1
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(dead.status, "dead");
     assert.ok(dead.error, "the dead row names the failure for the operator");
     const failedRuns = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from automation_runs where automation_id = ${recipe.id} and status = 'failed'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.ok(failedRuns >= 1, "every failed firing keeps its durable run row");
   }, { bypass: true });
 });

@@ -59,7 +59,7 @@ test(
           from journal_lines jl
          where jl.entry_id = ${entryId}
          order by jl.line_number
-      `));
+      `, "objects"));
 
       await assert.rejects(
         db.transaction((tx) =>
@@ -145,8 +145,8 @@ test(
           from journal_lines jl
          where jl.entry_id = ${entryId}
          order by jl.line_number
-      `));
-      assert.deepEqual(after.rows, before.rows, "posted journal evidence never changed");
+      `, "objects"));
+      assert.deepEqual(after, before, "posted journal evidence never changed");
       const persisted = (await db.execute<{
           currency: string;
           subtotal: string;
@@ -156,8 +156,8 @@ test(
         select currency, subtotal::text, total::text, memo
           from documents
          where id = ${documentId} and org_id = ${org.orgId}
-      `));
-      assert.deepEqual(persisted.rows[0], {
+      `, "objects"));
+      assert.deepEqual(persisted[0], {
         currency: "CAD",
         subtotal: "100.0000",
         total: "100.0000",
@@ -167,8 +167,8 @@ test(
         select count(*)::int as count
           from journal_entries
          where source_document_id = ${documentId} and org_id = ${org.orgId}
-      `));
-      assert.equal(entryCount.rows[0]!.count, 1);
+      `, "objects"));
+      assert.equal(entryCount[0]!.count, 1);
     } finally {
       await dropScratchOrg(org.orgId);
     }

@@ -81,10 +81,10 @@ const listPayRuns: AssistantToolDef = {
          ${payrollRunPopulationScopeFilter(authz.user.orgId, sql`r.document_id`, authz.allowedSubsidiaryIds)}
        order by r.pay_date desc, d.document_number desc
        limit ${limit}
-    `));
+    `, "objects"));
     return {
       ok: true,
-      data: { returned: runs.rows.length, runs: runs.rows.map(payRunRow), href: "/payroll/runs" },
+      data: { returned: runs.length, runs: runs.map(payRunRow), href: "/payroll/runs" },
     };
   },
 };
@@ -106,8 +106,8 @@ const getPayRun: AssistantToolDef = {
       ${PAY_RUN_SELECT}
        where r.org_id = ${authz.user.orgId} and r.document_id = ${a.documentId}
          ${payrollRunPopulationScopeFilter(authz.user.orgId, sql`r.document_id`, authz.allowedSubsidiaryIds)}
-    `));
-    const run = runs.rows[0];
+    `, "objects"));
+    const run = runs[0];
     // A run outside the caller's legal-entity scope is indistinguishable from
     // a missing one — the answer the JSON route gives.
     if (!run || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, run.subsidiary_id as string | null)) {
@@ -266,12 +266,12 @@ const listPayrollEmployees: AssistantToolDef = {
          ${like ? sql` and p.display_name ilike ${like}` : sql``}
        order by p.display_name
        limit ${limit}
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
-        returned: rows.rows.length,
-        employees: rows.rows.map((r) => ({
+        returned: rows.length,
+        employees: rows.map((r) => ({
           profileId: r.id,
           employeePartyId: r.employee_party_id,
           name: r.employee_name,
@@ -311,8 +311,8 @@ const payrollEntitlements: AssistantToolDef = {
     const exists = (await db.execute<{ display_name: string }>(sql`
       select display_name from parties
        where org_id = ${authz.user.orgId} and id = ${a.employeePartyId}
-    `));
-    if (!exists.rows[0]) return { ok: false, error: "employee_not_found" };
+    `, "objects"));
+    if (!exists[0]) return { ok: false, error: "employee_not_found" };
     if (await guardPayrollEmployees(authz, [a.employeePartyId])) {
       return { ok: false, error: "employee_not_found" };
     }
@@ -339,7 +339,7 @@ const payrollEntitlements: AssistantToolDef = {
       ok: true,
       data: {
         employeePartyId: a.employeePartyId,
-        employeeName: exists.rows[0].display_name,
+        employeeName: exists[0].display_name,
         asOf: a.asOfDate ?? (await orgToday(authz.user.orgId)),
         balances: capped.items,
         truncated: capped.truncated,

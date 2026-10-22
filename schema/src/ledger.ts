@@ -33,7 +33,7 @@ import { equipmentUnits } from "./assets";
 /**
  * THE KERNEL. Controlled-mutation double-entry journal.
  *
- * Invariants enforced in Postgres (see migrations/generated/0001_baseline.sql):
+ * Invariants enforced in Postgres storage guards:
  *  - SUM(journal_lines.amount) = 0 per entry (deferred constraint trigger)
  *  - posted entries are locked by default; audited engine amendments are
  *    allowed only while both the old and new accounting scopes are open
@@ -214,7 +214,7 @@ export const journalLines = pgTable(
     reconciledAt: timestamp("reconciled_at", { withTimezone: true }),
     reconciliationId: uuid("reconciliation_id"),
     /**
-     * Source-system cleared evidence mirrored by a connector (0158): the day
+     * Source-system cleared evidence mirrored by a connector: the day
      * the source reports this line cleared, plus the stable connector key.
      * Append-only, always set together; the stamp says what the source
      * reported, never what the mirror inferred.
@@ -318,7 +318,7 @@ export const journalLines = pgTable(
     index("jl_org_project").on(t.orgId, t.projectId),
     index("jl_org_party_open").on(t.orgId, t.partyId, t.isOpenItem),
     /**
-     * Dimension FK backing (0261): deleting a department, class, location,
+     * Dimension FK backing: deleting a department, class, location,
      * tax code, payment card, or equipment unit fires one FK check per
      * referencing row — without these, each check scans all of the org's
      * lines. department/class/location double as P&L filter dimensions

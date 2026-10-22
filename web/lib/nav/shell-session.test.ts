@@ -19,9 +19,10 @@ test('session authentication requires the conditional activity update to affect 
   const queries: { sql: string; params: unknown[] }[] = []
   let rows: unknown[] = [{ sessionId, userId, authMethod: 'password', expiresAt: new Date(expiry * 1000) }]
   const execute = db.execute
-  db.execute = (async query => {
+  db.execute = (async (query: Parameters<typeof db.execute>[0], mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     queries.push(dialect.sqlToQuery(query as Parameters<PgDialect['sqlToQuery']>[0]))
-    return { rows, rowCount: rows.length }
+    return inMode({ rows, rowCount: rows.length })
   }) as typeof db.execute
   try {
     assert.equal((await validateSessionToken(token))?.sessionId, sessionId)

@@ -57,7 +57,7 @@ async function seedMonthlyPeriods(
   months: { n: number; name: string; from: string; to: string }[],
 ): Promise<void> {
   const cal = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`)).rows[0]!.id;
+    select fiscal_calendar_id as id from accounting_periods where org_id = ${orgId} limit 1`, "objects"))[0]!.id;
   for (const m of months) {
     await db.execute(sql`
       insert into accounting_periods
@@ -81,7 +81,7 @@ const MONTHS_2026 = [
 ];
 
 async function scheduleRows(orgId: string, leaseId: string) {
-  return (await db.execute<{
+  return await db.execute<{
     sequence: number; due_on: string; period_start: string; period_end: string;
     opening_liability: string; payment: string; interest: string; principal: string;
     closing_liability: string; amortization: string | null; single_cost: string | null;
@@ -93,12 +93,12 @@ async function scheduleRows(orgId: string, leaseId: string) {
            rou_adjustment::text
       from lease_agreement_schedule_lines
      where org_id = ${orgId} and lease_id = ${leaseId}
-     order by sequence`)).rows;
+     order by sequence`, "objects");
 }
 
 async function journalCount(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`)).rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"))[0]!.n;
 }
 
 test("a finance lease onboarded mid-life continues from its stated opening balances", { skip: !DB }, async () => {
@@ -159,12 +159,12 @@ test("a finance lease onboarded mid-life continues from its stated opening balan
       select (initial_liability - coalesce((
         select sum(principal) from lease_agreement_schedule_lines
          where org_id = ${org.orgId} and lease_id = ${leaseId} and payment_entry_id is not null
-      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`)).rows[0]!.v;
+      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`, "objects"))[0]!.v;
     const rouRow = (await db.execute<{ v: string }>(sql`
       select (initial_rou_asset - coalesce((
         select sum(amortization) from lease_agreement_schedule_lines
          where org_id = ${org.orgId} and lease_id = ${leaseId} and payment_entry_id is not null
-      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`)).rows[0]!.v;
+      ), 0))::text as v from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`, "objects"))[0]!.v;
     assert.equal(liabilityRow, add(openingLiability, neg(postedPrincipal)));
     assert.equal(rouRow, add(openingLiability, neg(postedAmort)));
   } finally {
@@ -305,7 +305,7 @@ test("an as-of past the term end is refused at creation and at commencement", { 
               '{}'::jsonb, null, null)`);
     await assert.rejects(commenceLease(org.orgId, legacyId, null), /term|remain/i);
     const lines = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`)).rows[0]!.n;
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`, "objects"))[0]!.n;
     assert.equal(lines, 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -356,7 +356,7 @@ test("a mid-period arrears cutover is refused with a period-end remedy", async (
     assert.equal(commenced.liability, boundaryLiability);
     const kept = (await db.execute<{ n: number; first: number }>(sql`
       select count(*)::int as n, min(sequence)::int as first from lease_agreement_schedule_lines
-       where org_id = ${org.orgId} and lease_id = ${leaseId}`)).rows[0]!;
+       where org_id = ${org.orgId} and lease_id = ${leaseId}`, "objects"))[0]!;
     assert.equal(kept.n, 11, "only the post-cutover periods schedule");
     assert.equal(kept.first, 2);
     // A legacy row persisted before the creation gate fails closed at
@@ -380,7 +380,7 @@ test("a mid-period arrears cutover is refused with a period-end remedy", async (
               '{}'::jsonb, null, null)`);
     await assert.rejects(commenceLease(org.orgId, legacyId, null), /period end/);
     const rows = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`)).rows[0]!.n;
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`, "objects"))[0]!.n;
     assert.equal(rows, 0);
   } finally {
     await dropScratchOrg(org.orgId);

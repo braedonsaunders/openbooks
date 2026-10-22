@@ -91,9 +91,9 @@ async function seedTemplate(
 }
 
 async function stepRows(processId: string): Promise<Array<{ id: string; title: string; due_on: string; status: string }>> {
-  return (await db.execute<{ id: string; title: string; due_on: string; status: string }>(sql`
+  return await db.execute<{ id: string; title: string; due_on: string; status: string }>(sql`
     select id, title, due_on::text as due_on, status from hrm_process_steps
-     where process_id = ${processId} order by position`)).rows;
+     where process_id = ${processId} order by position`, "objects");
 }
 
 const setupProcessesHarness = () => setupChecklistHarness();
@@ -104,27 +104,27 @@ function processTest(title: string, check: (h: Awaited<ReturnType<typeof setupPr
 test("0193 migration exposes four org-isolated tables with the open-process unique", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const tables = (await db.execute<{ tbl: string; force: boolean; policies: number }>(sql`
+    const tables = await db.execute<{ tbl: string; force: boolean; policies: number }>(sql`
       select c.relname as tbl, c.relforcerowsecurity as force, count(p.polname)::int as policies
         from pg_class c join pg_namespace n on n.oid = c.relnamespace
         left join pg_policy p on p.polrelid = c.oid
        where n.nspname = 'public' and c.relname in ('hrm_process_templates', 'hrm_process_template_steps',
              'hrm_processes', 'hrm_process_steps')
-       group by c.relname, c.relforcerowsecurity`)).rows;
+       group by c.relname, c.relforcerowsecurity`, "objects");
     assert.equal(tables.length, 4);
     for (const table of tables) {
       assert.equal(table.force, true, `${table.tbl} must keep FORCE RLS live`);
       assert.equal(table.policies, 1, `${table.tbl} must keep exactly the org_isolation policy`);
     }
     // The partial unique index restricts only open processes.
-    const unique = (await db.execute<{ name: string; def: string }>(sql`
+    const unique = await db.execute<{ name: string; def: string }>(sql`
       select indexname as name, indexdef as def from pg_indexes
-       where schemaname = 'public' and indexname = 'hrm_processes_open_one_per_kind'`)).rows;
+       where schemaname = 'public' and indexname = 'hrm_processes_open_one_per_kind'`, "objects");
     assert.equal(unique.length, 1, "the one-open-process-per-kind partial unique index must exist");
     assert.match(unique[0]!.def, /CREATE UNIQUE INDEX/, "it is unique");
     assert.match(unique[0]!.def, /WHERE .*status[^']*'open'/, "it covers only open processes");
-    const covering = (await db.execute<{ name: string }>(sql`
-      select conname as name from pg_constraint where conname = 'files_org_id_id_unique'`)).rows;
+    const covering = await db.execute<{ name: string }>(sql`
+      select conname as name from pg_constraint where conname = 'files_org_id_id_unique'`, "objects");
     assert.equal(covering.length, 1, "the files covering unique for the evidence FK must exist");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -365,10 +365,10 @@ async function approvedHire(h: Awaited<ReturnType<typeof setupProcessesHarness>>
 
 processTest("approved hire auto-opens onboarding in the apply transaction", async (h) => {
     const { employmentId } = await approvedHire(h, true);
-    const processes = (await db.execute<{ kind: string; opened_by_change_id: string | null; steps: number }>(sql`
+    const processes = await db.execute<{ kind: string; opened_by_change_id: string | null; steps: number }>(sql`
       select p.kind, p.opened_by_change_id::text as opened_by_change_id,
              (select count(*)::int from hrm_process_steps s where s.process_id = p.id) as steps
-        from hrm_processes p where p.employment_id = ${employmentId}`)).rows;
+        from hrm_processes p where p.employment_id = ${employmentId}`, "objects");
     assert.equal(processes.length, 1);
     assert.equal(processes[0]!.kind, "onboarding");
     assert.ok(processes[0]!.opened_by_change_id, "the process evidences the change that opened it");
@@ -410,8 +410,8 @@ processTest("deleting a template that opened processes is refused with the remed
       checklistRefusal("REFUSED", /set is_active = false to retire it/),
     );
     // Cancellation keeps history: terminal processes stay recorded.
-    const processes = (await db.execute<{ id: string }>(sql`
-      select id from hrm_processes where template_id = ${templateId}`)).rows;
+    const processes = await db.execute<{ id: string }>(sql`
+      select id from hrm_processes where template_id = ${templateId}`, "objects");
     await cancelProcess({
       ...checklistActor(h),
       processId: processes[0]!.id,

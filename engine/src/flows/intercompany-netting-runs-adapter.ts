@@ -83,8 +83,8 @@ async function loadRun(subjectId: string): Promise<NettingRunRow | null> {
            coalesce(jsonb_array_length(r.computation->'pairs'), 0)::int as pair_count,
            (select count(*)::int from intercompany_netting_lines l where l.org_id = r.org_id and l.run_id = r.id) as line_count
       from intercompany_netting_runs r
-     where r.id = ${subjectId}`);
-  return result.rows[0] ?? null;
+     where r.id = ${subjectId}`, "objects");
+  return result[0] ?? null;
 }
 
 export const intercompanyNettingRunsFlowAdapter: FlowSubjectAdapter =
@@ -100,13 +100,11 @@ export const intercompanyNettingRunsFlowAdapter: FlowSubjectAdapter =
       // A run spans several entities; it is visible only to a caller who sees
       // every one of them, and it reports its first entity as its owner.
       async subsidiaryOf(orgId, ids, allowed, lock) {
-        const rows = (
-          await db.execute<{ id: string; subsidiary_ids: string[] }>(sql`
+        const rows = await db.execute<{ id: string; subsidiary_ids: string[] }>(sql`
         select id, subsidiary_ids from intercompany_netting_runs
          where org_id = ${orgId}
            and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
-         ${lock ? sql`for share` : sql``}`)
-        ).rows;
+         ${lock ? sql`for share` : sql``}`, "objects");
         return new Map(
           rows.map((row) => [
             row.id,
@@ -194,8 +192,8 @@ export const intercompanyNettingRunsFlowAdapter: FlowSubjectAdapter =
          set status = 'pending_approval', submitted_at = coalesce(submitted_at, now()),
              submitted_by = coalesce(submitted_by, ${ctx.userId ?? null}::uuid), updated_at = now()
        where id = ${subjectId} and org_id = ${ctx.orgId} and status = 'proposed'
-      returning id`);
-      if (parked.rows[0]) return;
+      returning id`, "objects");
+      if (parked[0]) return;
       const current = (await loadRun(subjectId))?.status ?? null;
       if (current !== "pending_approval") {
         throw new Error(
@@ -221,7 +219,7 @@ export const intercompanyNettingRunsFlowAdapter: FlowSubjectAdapter =
       select id::text as id from intercompany_netting_runs
        where org_id = ${orgId} and status = 'pending_approval'
        order by submitted_at desc nulls last
-       limit ${limit}`);
-      return result.rows.map((row) => row.id);
+       limit ${limit}`, "objects");
+      return result.map((row) => row.id);
     },
   });

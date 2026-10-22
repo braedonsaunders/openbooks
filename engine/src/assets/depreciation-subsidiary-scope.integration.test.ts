@@ -112,14 +112,14 @@ test(
         select count(*)::int as n from depreciation_schedule_lines l
         join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
         where s.org_id=${org.orgId} and s.asset_id=${assetId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       const originalExecute = db.execute.bind(db);
       let rehomed = false;
       Object.defineProperty(db, "execute", {
         configurable: true,
         writable: true,
-        value: async (query: SQL) => {
-          const result = await originalExecute(query);
+        value: async (query: SQL, mode?: "objects") => {
+          const result = await originalExecute(query, mode as "objects");
           const statement = new PgDialect().sqlToQuery(query).sql;
           if (!rehomed && /from\s+depreciation_schedules/i.test(statement)) {
             rehomed = true;
@@ -154,7 +154,7 @@ test(
         select count(*)::int as n from depreciation_schedule_lines l
         join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
         where s.org_id=${org.orgId} and s.asset_id=${assetId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(afterLines, beforeLines, "the stale extension must not rewrite an asset after its rehome");
       await db.transaction(async (tx) => {
         await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);

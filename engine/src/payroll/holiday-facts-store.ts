@@ -51,24 +51,24 @@ export async function loadStoredHolidayFacts(
         from employee_payroll_profiles
        where org_id = ${orgId}
          and employee_party_id in (${sql.join(employeePartyIds.map((id) => sql`${id}::uuid`), sql`, `)})
-       order by employee_party_id ${args.lockSources ? sql`for share` : sql``}`);
+       order by employee_party_id ${args.lockSources ? sql`for share` : sql``}`, "objects");
   const assertionRows = await tx.execute<HolidayFactsSource["assertions"][number]>(sql`
       select id, employee_party_id, holiday_key, holiday_date::text as holiday_date, absent_without_consent,
              updated_at::text as updated_at, updated_by
         from pay_run_holiday_assertions
        where org_id = ${orgId} and pay_run_document_id = ${documentId}
          and employee_party_id in (${sql.join(employeePartyIds.map((id) => sql`${id}::uuid`), sql`, `)})
-       order by employee_party_id, holiday_date, holiday_key ${args.lockSources ? sql`for share` : sql``}`);
+       order by employee_party_id, holiday_date, holiday_key ${args.lockSources ? sql`for share` : sql``}`, "objects");
   const entitlementRows = await tx.execute<HolidayFactsSource["entitlementAssessments"][number]>(sql`
       select id, at::text as at, changes, actor_id from audit_log
        where org_id = ${orgId} and table_name = 'pay_run_holiday_assertions'
          and row_id = ${documentId} and action = 'insert'
          and changes->>'event' = 'entitled_pay_days_complete'
-       order by at, id`);
-  for (const row of profileRows.rows) {
+       order by at, id`, "objects");
+  for (const row of profileRows) {
     if (row.paid_on_commission !== null) commissions.set(row.employee_party_id, assertStoredBoolean(row.paid_on_commission));
   }
-  for (const row of assertionRows.rows) {
+  for (const row of assertionRows) {
     const date = String(row.holiday_date).slice(0, 10);
     let perEmployee = assertions.get(row.employee_party_id);
     if (!perEmployee) {
@@ -78,7 +78,7 @@ export async function loadStoredHolidayFacts(
     perEmployee.set(holidayOccurrenceKey(row.holiday_key, date), row.absent_without_consent);
   }
   const roster = new Set(employeePartyIds);
-  for (const row of entitlementRows.rows) {
+  for (const row of entitlementRows) {
     const event = row.changes;
     const employeeId = event.employeePartyId;
     const holidayKey = event.holidayKey;
@@ -99,8 +99,8 @@ export async function loadStoredHolidayFacts(
     perEmployee.set(holidayOccurrenceKey(holidayKey, holidayDate), count);
     source.entitlementAssessments.push(row);
   }
-  source.profiles = profileRows.rows;
-  source.assertions = assertionRows.rows;
+  source.profiles = profileRows;
+  source.assertions = assertionRows;
   return { commissions, assertions, entitledDays, source };
 }
 

@@ -92,7 +92,7 @@ export async function loadPaymentFlyout({
     db.execute<{ id: string; display_name: string; subsidiary_id: string | null }>(sql`
       select id, display_name, subsidiary_id from parties p
        where p.org_id = ${orgId} and ${partyFilter} and is_active ${paymentSharedSubsidiaryFilter(sql`p.subsidiary_id`, authz)}
-       order by display_name limit 2000`),
+       order by display_name limit 2000`, 'objects'),
     // Unsaved-create defaults: today's date plus the org currency.
     // Read-only lookups — opening the drawer still writes nothing.
     creating
@@ -103,18 +103,18 @@ export async function loadPaymentFlyout({
         ])
       : null,
   ])
-  const selectedParty = creating && prefill?.partyId ? parties.rows.find(party => party.id === prefill.partyId) : null
+  const selectedParty = creating && prefill?.partyId ? parties.find(party => party.id === prefill.partyId) : null
   const prefillSubject = selectedParty && prefill?.documentId
     ? (await db.execute<{ subsidiary_id: string | null; currency: string }>(sql`
       select coalesce(d.subsidiary_id, e.subsidiary_id) as subsidiary_id, d.currency from documents d
         join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
        where d.org_id = ${orgId} and d.id = ${prefill.documentId} and d.party_id = ${selectedParty.id}
-         and d.status = 'posted' ${paymentSharedSubsidiaryFilter(sql`coalesce(d.subsidiary_id, e.subsidiary_id)`, authz)}`)).rows[0]
+         and d.status = 'posted' ${paymentSharedSubsidiaryFilter(sql`coalesce(d.subsidiary_id, e.subsidiary_id)`, authz)}`, 'objects'))[0]
     : null
   const needsFundingOptions = creating || (openPayment?.doc.status === 'draft' && can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay'))
   const fundingSubsidiaries = needsFundingOptions
     ? await receiptFundingSubsidiaryOptions(orgId, userId, kind, authz.allowedSubsidiaryIds) : []
-  const root = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null`)).rows[0]?.id
+  const root = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null`, 'objects'))[0]?.id
   const proposedSubsidiaryId = (openPayment?.doc.subsidiary_id as string | null | undefined) ?? prefillSubject?.subsidiary_id
     ?? selectedParty?.subsidiary_id ?? root
   const fundingSubsidiaryId = !needsFundingOptions ? proposedSubsidiaryId : fundingSubsidiaries.some(sub => sub.id === proposedSubsidiaryId) ? proposedSubsidiaryId
@@ -150,7 +150,7 @@ export async function loadPaymentFlyout({
          where org_id = ${orgId} and customer_party_id = ${storedValuePartyId}
            and status in ('active', 'frozen') and balance_minor > 0
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-         order by currency, code_last4`)).rows
+         order by currency, code_last4`, 'objects'))
         .map((row) => ({ ...row, balance: fromUnits(BigInt(row.balanceMinor)) }))
       : []
   const resolvedForm = await resolveFormLayout({
@@ -172,14 +172,14 @@ export async function loadPaymentFlyout({
   const functionalCurrency = fundingSubsidiaryId
     ? (await db.execute<{ base_currency: string }>(sql`
         select base_currency from subsidiaries
-         where org_id = ${orgId} and id = ${fundingSubsidiaryId} and is_active and not is_elimination`)).rows[0]?.base_currency ?? null
+         where org_id = ${orgId} and id = ${fundingSubsidiaryId} and is_active and not is_elimination`, 'objects'))[0]?.base_currency ?? null
     : null
   const governedByFlow = (await isFeatureEnabled(orgId, 'flows')) &&
     (await db.execute<{ one: number }>(sql`
       select 1 as one from flows
        where org_id = ${orgId} and subject_kind = ${kind} and enabled
          and graph->'nodes' @> '[{"data":{"kind":"trigger","trigger":{"trigger":"on_submit"}}}]'::jsonb
-       limit 1`)).rows.length > 0
+       limit 1`, 'objects')).length > 0
   if (creating) {
     // The unsaved-create payload: no row exists, so the drawer edits blanks
     // and posts them once. Draft by default, dated today; party, bank
@@ -188,7 +188,7 @@ export async function loadPaymentFlyout({
     // document), which preselects them. Opening still writes nothing.
     const currency = fundingCurrency
     const prefillParty = prefill?.partyId
-      ? parties.rows.find((party) => party.id === prefill.partyId) ?? null
+      ? parties.find((party) => party.id === prefill.partyId) ?? null
       : null
     const prefillItems = prefillParty
       ? await openItemsForParty(prefillParty.id, side, orgId, fundingSubsidiaryId ? new Set([fundingSubsidiaryId]) : new Set())
@@ -242,7 +242,7 @@ export async function loadPaymentFlyout({
         withholdingEnabled: kind === 'vendor_payment' && await isFeatureEnabled(orgId, 'contractorWithholding'),
       } as PaymentPayload,
       initialOpenItems: prefillItems,
-      parties: parties.rows,
+      parties,
       bankAccounts: banks.rows,
       side,
       layout: resolvedForm.layout,
@@ -255,7 +255,7 @@ export async function loadPaymentFlyout({
       canRetryPostingEffects: can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay') && await isFeatureEnabled(orgId, 'banking'),
       canApplyUnapplied: can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay') },
     initialOpenItems,
-    parties: parties.rows,
+    parties,
     bankAccounts: banks.rows,
     side,
     layout: resolvedForm.layout,

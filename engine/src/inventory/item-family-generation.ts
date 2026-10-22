@@ -52,7 +52,7 @@ export async function previewGenerateVariants(
     const row = (await tx.execute<FamilyRow>(sql`
       select id, code, name, description, category, kind, default_unit, default_rate, status
         from item_families
-       where org_id = ${orgId} and id = ${familyId}`)).rows[0];
+       where org_id = ${orgId} and id = ${familyId}`, "objects"))[0];
     if (!row) {
       throw new ItemFamilyError(
         "the product family is not in this organization",
@@ -164,7 +164,7 @@ export async function generateFamilyVariants(
         continue;
       }
       const collision = (await tx.execute<{ id: string; name: string }>(sql`
-        select id, name from items where org_id = ${orgId} and code = ${code}`)).rows[0];
+        select id, name from items where org_id = ${orgId} and code = ${code}`, "objects"))[0];
       if (collision) {
         throw new ItemFamilyError(
           `variant code ${code} is already used by ${collision.name}`,
@@ -180,7 +180,7 @@ export async function generateFamilyVariants(
         values
           (${orgId}, ${record.kind}, ${code}, ${name}, ${record.category}, ${record.defaultUnit}, ${record.defaultRate},
            ${familyId}, ${JSON.stringify(combination)}::jsonb, true, ${actorId}, ${actorId})
-        returning id`)).rows[0];
+        returning id`, "objects"))[0];
       if (!inserted) throw new InventoryError(`variant ${code} was not created`);
       await writeFamilyAudit(tx, orgId, actorId, "items", inserted.id, "insert", {
         event: "variant_generated",

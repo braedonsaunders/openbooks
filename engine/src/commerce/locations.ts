@@ -81,7 +81,7 @@ function cleanBuffer(value: string | null): string {
 
 async function requireChannel(orgId: string, channelId: string): Promise<{ subsidiaryId: string | null }> {
   const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId} for share`)).rows[0];
+    select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId} for share`, "objects"))[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -171,7 +171,7 @@ export async function upsertChannelLocation(
           from stock_locations sl
           join locations l on l.org_id = sl.org_id and l.id = sl.location_id
          where sl.org_id = ${orgId} and sl.id = ${input.stockLocationId}
-         for share of sl, l`)).rows[0];
+         for share of sl, l`, "objects"))[0];
       const sameChannelEntity = stock && (stock.subsidiary_id === null || stock.subsidiary_id === channel.subsidiaryId);
       const inCallerScope = stock && (input.allowedSubsidiaryIds === undefined
         || subsidiaryScopeAllows(input.allowedSubsidiaryIds, stock.subsidiary_id, { orgWideNull: true }));
@@ -191,7 +191,7 @@ export async function upsertChannelLocation(
     const before = (await db.execute<LocationDbRow>(sql`
       select ${LOCATION_COLUMNS} from sales_channel_locations
        where org_id = ${orgId} and channel_id = ${input.channelId}
-         and external_location_id = ${externalLocationId}`)).rows[0] ?? null;
+         and external_location_id = ${externalLocationId}`, "objects"))[0] ?? null;
     // Re-syncing a known storefront location is expected and benign: the natural key
     // (channel, storefront location) identifies one mapping, so a repeat delivery
     // refreshes it instead of inserting a duplicate.
@@ -212,7 +212,7 @@ export async function upsertChannelLocation(
         stop_selling_at_zero = excluded.stop_selling_at_zero,
         updated_by = excluded.updated_by,
         updated_at = now()
-      returning ${LOCATION_COLUMNS}`)).rows[0];
+      returning ${LOCATION_COLUMNS}`, "objects"))[0];
     if (!upserted) throw new Error("Channel location write returned no row; the mapping was lost");
     const after = toRow(upserted);
     await writeAudit(orgId, after.id, before ? "update" : "insert", actor, before ? toRow(before) : null, after, null);
@@ -223,10 +223,10 @@ export async function upsertChannelLocation(
 export async function listChannelLocations(orgId: string, channelId: string): Promise<ChannelLocationRow[]> {
   return withOrg(orgId, async () => {
     await requireChannel(orgId, channelId);
-    const rows = (await db.execute<LocationDbRow>(sql`
+    const rows = await db.execute<LocationDbRow>(sql`
       select ${LOCATION_COLUMNS} from sales_channel_locations
        where org_id = ${orgId} and channel_id = ${channelId}
-       order by external_name`)).rows;
+       order by external_name`, "objects");
     return rows.map(toRow);
   });
 }
@@ -258,7 +258,7 @@ export async function unlinkChannelLocation(
     const before = (await db.execute<LocationDbRow>(sql`
       select ${LOCATION_COLUMNS} from sales_channel_locations
        where org_id = ${orgId} and channel_id = ${channelId}
-         and external_location_id = ${externalLocationId}`)).rows[0];
+         and external_location_id = ${externalLocationId}`, "objects"))[0];
     if (!before) {
       refuse(
         "channel_location_not_found",
@@ -267,7 +267,7 @@ export async function unlinkChannelLocation(
         "externalLocationId",
       );
     }
-    const deleted = await db.execute(sql`
+    const deleted = await db.execute<never>(sql`
       delete from sales_channel_locations
        where org_id = ${orgId} and channel_id = ${channelId}
          and external_location_id = ${externalLocationId}`);

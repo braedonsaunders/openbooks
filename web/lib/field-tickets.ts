@@ -144,8 +144,8 @@ export async function resolveTicketPeriod(
        when 'project' then 1 when 'customer' then 2 else 3 end,
        policy.effective_from desc
      limit 1
-  `)
-  return valid(resolved.rows[0]?.period) ? resolved.rows[0].period : 'weekly'
+  `, 'objects')
+  return valid(resolved[0]?.period) ? resolved[0].period : 'weekly'
 }
 
 /**
@@ -191,7 +191,7 @@ export async function createFieldTicket(
         select d.id, d.document_number, d.kind, d.project_id, ft.period, d.subsidiary_id
           from documents d
           left join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
-         where d.org_id = ${orgId} and d.id = ${input.requestId}`)).rows[0]
+         where d.org_id = ${orgId} and d.id = ${input.requestId}`, 'objects'))[0]
       if (existing) {
         // A replay discloses nothing outside the caller's legal entities.
         if (!subsidiaryScopeAllows(input.allowedSubsidiaryIds, existing.subsidiary_id)) {
@@ -210,7 +210,7 @@ export async function createFieldTicket(
     const proj = input.projectId
       ? ((await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
             select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-              from projects p where p.id = ${input.projectId} and p.org_id = ${orgId} and p.is_active for share of p`)).rows[0] ?? null)
+              from projects p where p.id = ${input.projectId} and p.org_id = ${orgId} and p.is_active for share of p`, 'objects'))[0] ?? null)
       : null
     if (input.projectId && !proj) throw new FieldTicketError('Project not found')
     // A requested project must be in scope (uniform not-found otherwise);
@@ -232,26 +232,26 @@ export async function createFieldTicket(
     if (input.period !== undefined && !TICKET_PERIODS.includes(input.period)) throw new FieldTicketError('Invalid ticket period')
     const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null, anchorDate))
     const window = ticketWindow(period, anchorDate)
-    const org = await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`)
+    const org = await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects')
     const foreman = await db.execute<{ party_id: string | null }>(sql`
-      select party_id from users where id = ${userId} and org_id = ${orgId}`)
+      select party_id from users where id = ${userId} and org_id = ${orgId}`, 'objects')
     const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', ticketSubsidiaryId ?? undefined)
     const row = await db.execute<{ id: string; document_number: string }>(sql`
       insert into documents (id, org_id, kind, document_number, document_date, currency, status, party_id, project_id,
                              subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
       values (${input.requestId !== undefined ? sql`${input.requestId}::uuid` : sql`gen_random_uuid()`},
-              ${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
+              ${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org[0]?.base_currency ?? 'CAD'},
               'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${ticketSubsidiaryId},
               ${proj?.po ?? null}, 'time_and_materials', '0', '0', '0', '{}'::jsonb, ${userId})
-      returning id, document_number`)
+      returning id, document_number`, 'objects')
     await db.execute(sql`
       insert into field_tickets
         (document_id, org_id, period, period_start, period_end, foreman_party_id,
          created_by, updated_by)
-      values (${row.rows[0]!.id}, ${orgId}, ${period}, ${window.start}, ${window.end},
-              ${foreman.rows[0]?.party_id ?? null}, ${userId}, ${userId})
+      values (${row[0]!.id}, ${orgId}, ${period}, ${window.start}, ${window.end},
+              ${foreman[0]?.party_id ?? null}, ${userId}, ${userId})
     `)
-    return { id: row.rows[0]!.id, documentNumber: row.rows[0]!.document_number, created: true }
+    return { id: row[0]!.id, documentNumber: row[0]!.document_number, created: true }
   })
 }
 
@@ -295,7 +295,7 @@ export async function updateTicketHeader(
           on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
-    `)).rows[0] ?? null,
+    `, 'objects'))[0] ?? null,
       mutate: async (tx) => {
         // Re-homing the ticket onto a project attaches new Projects
         // disable-blockers, so a disable racing this edit must refuse one
@@ -327,9 +327,9 @@ export async function updateTicketHeader(
           if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
           const proj = await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
           select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-            from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId} and p.is_active for share`)
-          if (!proj.rows[0]) throw new FieldTicketError('Project not found')
-          const linkedTime = (await tx.execute<{
+            from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId} and p.is_active for share`, 'objects')
+          if (!proj[0]) throw new FieldTicketError('Project not found')
+          const linkedTime = await tx.execute<{
           status: string
           employee_party_id: string
           employee_subsidiary_id: string | null
@@ -338,11 +338,11 @@ export async function updateTicketHeader(
             from time_entries te
             join parties p on p.id = te.employee_party_id and p.org_id = te.org_id
            where te.org_id = ${orgId} and te.field_ticket_id = ${ticketId}
-           order by te.id for update of te, p`)).rows
+           order by te.id for update of te, p`, 'objects')
           if (linkedTime.some(entry => entry.status !== 'draft')) {
           throw new FieldTicketError('This ticket has submitted or approved time. Resolve that time through its review workflow before changing the project.')
         }
-          const newProject = proj.rows[0]
+          const newProject = proj[0]
           projChange = newProject
           if (!subsidiaryScopeAllows(allowedSubsidiaryIds, newProject.subsidiary_id)) {
           throw new FieldTicketNotFoundError('Ticket not found')
@@ -355,13 +355,13 @@ export async function updateTicketHeader(
               'This ticket has draft crew hours from another legal entity. Remove those hours before changing the project, then add crew from the new project’s legal entity.',
             )
           }
-          const equipmentLines = (await tx.execute<{ subsidiary_id: string }>(sql`
+          const equipmentLines = await tx.execute<{ subsidiary_id: string }>(sql`
             select eu.subsidiary_id
               from document_lines dl
               join equipment_units eu on eu.id = dl.equipment_unit_id and eu.org_id = dl.org_id
              where dl.org_id = ${orgId} and dl.document_id = ${ticketId}
                and dl.equipment_unit_id is not null
-             order by eu.id for update of dl, eu`)).rows
+             order by eu.id for update of dl, eu`, 'objects')
           if (equipmentLines.some(line =>
             newProject.subsidiary_id !== null && line.subsidiary_id !== newProject.subsidiary_id
           )) {
@@ -377,7 +377,7 @@ export async function updateTicketHeader(
         }
         }
 
-        const hourCount = (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`)).rows[0]!.n
+        const hourCount = (await db.execute<{ n: number }>(sql`select count(*)::int as n from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`, 'objects'))[0]!.n
         if ((patch.period !== undefined || patch.documentDate !== undefined) && hourCount === 0) {
         const period = patch.period ?? ft.period
         const anchor = patch.documentDate ?? doc.document_date
@@ -402,7 +402,7 @@ export async function updateTicketHeader(
                 where r.party_id = p.id and r.org_id = p.org_id and r.is_active
              )
              ${foremanEntityFilter}
-           for update of p`)).rows[0]
+           for update of p`, 'objects'))[0]
         if (!validForeman) {
           throw new FieldTicketError(
             'Choose an active employee in this ticket’s legal entity, or clear the foreman before saving.',
@@ -523,7 +523,7 @@ export async function saveCrewGrid(
           on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
-    `)).rows[0] ?? null,
+    `, 'objects'))[0] ?? null,
       mutate: async (tx) => {
         const doc = await loadHeader(orgId, ticketId)
         // Crew hours land as draft time entries carrying the ticket's project
@@ -543,10 +543,10 @@ export async function saveCrewGrid(
 
         const existing = await db.execute<{ id: string; employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string; hours: string }>(sql`
         select id, employee_party_id, item_id, project_task_id, time_type_id, worked_on::text as worked_on, hours
-          from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`)
+          from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}`, 'objects')
         const key = (e: { employee_party_id: string; item_id: string | null; project_task_id: string | null; time_type_id: string; worked_on: string }) =>
         `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}|${e.time_type_id}|${e.worked_on}`
-        const byKey = new Map(existing.rows.map((e) => [key(e), e]))
+        const byKey = new Map(existing.map((e) => [key(e), e]))
         const seen = new Set<string>()
 
         // The field-ticket switch is independent of whether a type is usable in
@@ -557,12 +557,12 @@ export async function saveCrewGrid(
           if (requestedTypeIds.some((id) => !isUuid(id))) {
           throw new FieldTicketError('Choose a valid time type')
         }
-          const existingTypeIds = new Set(existing.rows.map((entry) => entry.time_type_id))
+          const existingTypeIds = new Set(existing.map((entry) => entry.time_type_id))
           const selectable = await db.execute<{ id: string }>(sql`
           select id from time_types
            where org_id = ${orgId} and is_active and show_on_field_ticket
-             and id = any(${`{${requestedTypeIds.join(',')}}`}::uuid[])`)
-        const allowed = new Set([...existingTypeIds, ...selectable.rows.map((type) => type.id)])
+             and id = any(${`{${requestedTypeIds.join(',')}}`}::uuid[])`, 'objects')
+        const allowed = new Set([...existingTypeIds, ...selectable.map((type) => type.id)])
         if (requestedTypeIds.some((id) => !allowed.has(id))) {
           throw new FieldTicketError('Choose a time type enabled for field tickets')
         }
@@ -577,7 +577,7 @@ export async function saveCrewGrid(
       if (requestedEmployeeIds.some((id) => !isUuid(id))) {
         throw new FieldTicketError('Choose a valid crew member')
       }
-      const existingEmployeeIds = new Set(existing.rows.map((entry) => entry.employee_party_id))
+      const existingEmployeeIds = new Set(existing.map((entry) => entry.employee_party_id))
       const newEmployeeIds = requestedEmployeeIds.filter((id) => !existingEmployeeIds.has(id))
       if (newEmployeeIds.length) {
         const crewSubsidiaryFilter = doc.subsidiaryId
@@ -591,8 +591,8 @@ export async function saveCrewGrid(
                 where r.party_id = p.id and r.org_id = p.org_id and r.is_active
              )
              ${crewSubsidiaryFilter}
-             and p.id = any(${`{${newEmployeeIds.join(',')}}`}::uuid[])`)
-        if (crew.rows.length !== newEmployeeIds.length) {
+             and p.id = any(${`{${newEmployeeIds.join(',')}}`}::uuid[])`, 'objects')
+        if (crew.length !== newEmployeeIds.length) {
           throw new FieldTicketError('Choose an active employee in this ticket’s legal entity')
         }
       }
@@ -600,14 +600,14 @@ export async function saveCrewGrid(
       if (requestedItemIds.some((id) => !isUuid(id))) {
         throw new FieldTicketError('Choose a valid item')
       }
-      const existingItemIds = new Set(existing.rows.map((entry) => entry.item_id).filter((id): id is string => Boolean(id)))
+      const existingItemIds = new Set(existing.map((entry) => entry.item_id).filter((id): id is string => Boolean(id)))
       const newItemIds = requestedItemIds.filter((id) => !existingItemIds.has(id))
       if (newItemIds.length) {
         const validItems = await db.execute<{ id: string }>(sql`
           select id from items
            where org_id = ${orgId} and is_active
-             and id = any(${`{${newItemIds.join(',')}}`}::uuid[])`)
-        if (validItems.rows.length !== newItemIds.length) {
+             and id = any(${`{${newItemIds.join(',')}}`}::uuid[])`, 'objects')
+        if (validItems.length !== newItemIds.length) {
           throw new FieldTicketError('Choose an active item')
         }
       }
@@ -618,8 +618,8 @@ export async function saveCrewGrid(
         }
         const validTasks = await db.execute<{ id: string }>(sql`
           select id from project_tasks where org_id = ${orgId} and project_id = ${doc.project_id}
-            and id = any(${`{${requestedTaskIds.join(',')}}`}::uuid[])`)
-        if (validTasks.rows.length !== requestedTaskIds.length) throw new FieldTicketError('Choose a task from this project')
+            and id = any(${`{${requestedTaskIds.join(',')}}`}::uuid[])`, 'objects')
+        if (validTasks.length !== requestedTaskIds.length) throw new FieldTicketError('Choose a task from this project')
       }
 
       for (const row of rows) {
@@ -644,8 +644,8 @@ export async function saveCrewGrid(
                 const rewritten = await tx.execute<{ id: string }>(sql`
                 update time_entries set hours = ${h}, updated_at = now(), updated_by = ${userId}
                  where id = ${cur.id} and org_id = ${orgId} and status = 'draft'
-                 returning id`)
-                if (!rewritten.rows[0]) {
+                 returning id`, 'objects')
+                if (!rewritten[0]) {
                 throw new FieldTicketError(`Crew hours for ${day} were approved and can no longer be changed on this ticket`)
               }
               }
@@ -659,14 +659,14 @@ export async function saveCrewGrid(
           }
         }
         // Remove cleared cells (draft entries only — approved history is immutable).
-        for (const e of existing.rows) {
+        for (const e of existing) {
           if (!seen.has(key(e))) {
             // Like the update above, a zero-row delete means the entry left
             // draft; fail loudly instead of silently keeping the cleared cell.
             const removed = await tx.execute<{ id: string }>(sql`
             delete from time_entries where id = ${e.id} and org_id = ${orgId} and status = 'draft' and field_ticket_id = ${ticketId}
-            returning id`)
-            if (!removed.rows[0]) {
+            returning id`, 'objects')
+            if (!removed[0]) {
             throw new FieldTicketError(`Crew hours for ${e.worked_on} were approved and can no longer be removed from this ticket`)
           }
           }
@@ -725,7 +725,7 @@ export async function addTicketLine(
         join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
-    `)).rows[0] ?? null,
+    `, 'objects'))[0] ?? null,
     mutate: async (tx, locked) => {
       // Item lines on a project ticket feed project billing, so a disable
       // racing this insert must refuse one side or the other. Checked
@@ -764,19 +764,19 @@ async function addTicketLineUnlocked(
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
   const item = await db.execute<{ id: string; name: string; unit: string | null; default_rate: string | null; default_cost: string | null; kind: string }>(sql`
-    select id, name, unit, default_rate, default_cost, kind from items where id = ${input.itemId} and org_id = ${orgId}`)
-  if (!item.rows[0]) throw new FieldTicketError('Item not found')
+    select id, name, unit, default_rate, default_cost, kind from items where id = ${input.itemId} and org_id = ${orgId}`, 'objects')
+  if (!item[0]) throw new FieldTicketError('Item not found')
   // The drawer already hides inventory from the picker. Turning Inventory off
   // must also refuse a new inventory / assembly / kit line so a crafted
   // add-line cannot write one. Lines that already carry those items stay.
-  if (INVENTORY_ITEM_KINDS.has(item.rows[0].kind) && !(await isFeatureEnabled(orgId, 'inventory'))) {
+  if (INVENTORY_ITEM_KINDS.has(item[0].kind) && !(await isFeatureEnabled(orgId, 'inventory'))) {
     throw new FieldTicketError('Inventory is disabled')
   }
   // The drawer already hides equipment_charge from the picker. Turning
   // Equipment off must also refuse a new equipment_charge line so a crafted
   // add-line cannot write one without a unit. Lines that already carry those
   // items stay.
-  if (item.rows[0].kind === 'equipment_charge' && !(await isFeatureEnabled(orgId, 'equipment'))) {
+  if (item[0].kind === 'equipment_charge' && !(await isFeatureEnabled(orgId, 'equipment'))) {
     throw new FieldTicketError('Equipment is disabled')
   }
   const quantity = exactTicketQuantity(input.quantity)
@@ -787,7 +787,7 @@ async function addTicketLineUnlocked(
     // the task must belong to the ticket's own project.
     const task = (await tx.execute(sql`
       select 1 from project_tasks
-       where id = ${input.projectTaskId} and org_id = ${orgId} and project_id = ${doc.project_id}`)).rows[0]
+       where id = ${input.projectTaskId} and org_id = ${orgId} and project_id = ${doc.project_id}`, 'objects'))[0]
     if (!task) throw new FieldTicketError('Choose a task of this ticket’s project')
   }
   // Item lines on a project ticket feed project billing, so a disable
@@ -815,9 +815,9 @@ async function addTicketLineUnlocked(
     }
     const equipment = await db.execute<{ charge_item_id: string | null; status: string; subsidiary_id: string | null }>(sql`
       select charge_item_id, status, subsidiary_id from equipment_units
-       where id = ${input.equipmentUnitId} and org_id = ${orgId}`)
-    if (!equipment.rows[0] || equipment.rows[0].status !== 'active' || equipment.rows[0].charge_item_id !== input.itemId
-      || (doc.subsidiaryId !== null && equipment.rows[0].subsidiary_id !== doc.subsidiaryId)) {
+       where id = ${input.equipmentUnitId} and org_id = ${orgId}`, 'objects')
+    if (!equipment[0] || equipment[0].status !== 'active' || equipment[0].charge_item_id !== input.itemId
+      || (doc.subsidiaryId !== null && equipment[0].subsidiary_id !== doc.subsidiaryId)) {
       throw new FieldTicketError('Choose active equipment linked to this item')
     }
   }
@@ -838,8 +838,8 @@ async function addTicketLineUnlocked(
        where te.org_id = ${orgId} and te.field_ticket_id = ${ticketId}
          and te.employee_party_id = ${input.employeeId}
          ${crewSubsidiaryFilter}
-       limit 1`)
-    if (!crew.rows[0]) throw new FieldTicketError('The operator must be on this ticket’s crew')
+       limit 1`, 'objects')
+    if (!crew[0]) throw new FieldTicketError('The operator must be on this ticket’s crew')
   }
 
   let resolved: Awaited<ReturnType<typeof resolveItemRate>>
@@ -859,10 +859,10 @@ async function addTicketLineUnlocked(
   // The write boundary repeats the preview's refusal: absent pricing is not
   // a zero price, and a line that reaches here past a swallowed preview
   // error must never persist a billable zero. Explicit stored zeros pass.
-  const defaultRate = item.rows[0].default_rate
-  const defaultCost = item.rows[0].default_cost
+  const defaultRate = item[0].default_rate
+  const defaultCost = item[0].default_cost
   if (!resolved && defaultRate == null && defaultCost == null) {
-    throw new FieldTicketError(`No price for ${item.rows[0].name} on ${doc.fieldTicket.periodEnd}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.`)
+    throw new FieldTicketError(`No price for ${item[0].name} on ${doc.fieldTicket.periodEnd}: the rate book has no match and the item has no default rate or cost. Set a default on the item or add a rate-book price covering that date.`)
   }
   const costAmount = resolved?.cost.amount ?? mul(quantity, String(defaultCost ?? '0'))
   const billAmount = resolved?.bill.amount ?? mul(quantity, String(defaultRate ?? defaultCost ?? '0'))
@@ -870,22 +870,22 @@ async function addTicketLineUnlocked(
   // raised an FX-rate error for what is really an empty quantity.
   const costRate = isZero(quantity) ? '0.0000' : div(costAmount, quantity)
   const billRate = isZero(quantity) ? '0.0000' : div(billAmount, quantity)
-  const baseUnit = resolved?.baseUnit ?? item.rows[0].unit ?? 'unit'
+  const baseUnit = resolved?.baseUnit ?? item[0].unit ?? 'unit'
   const baseQuantity = resolved?.baseQuantity ?? quantity
-  const transactionUnit = resolved?.transactionUnitCode ?? item.rows[0].unit ?? 'unit'
+  const transactionUnit = resolved?.transactionUnitCode ?? item[0].unit ?? 'unit'
 
   const next = await tx.execute<{ n: number }>(sql`
-    select coalesce(max(line_number), 0) + 1 as n from document_lines where document_id = ${ticketId} and org_id = ${orgId}`)
+    select coalesce(max(line_number), 0) + 1 as n from document_lines where document_id = ${ticketId} and org_id = ${orgId}`, 'objects')
   const inserted = await tx.execute<{ id: string }>(sql`
     insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
                                 project_id, is_billable, equipment_unit_id, employee_id, rate_version_id, rate_presentation,
                                 base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
                                 field_ticket_id, project_task_id, created_by, updated_by)
-    values (${orgId}, ${ticketId}, ${next.rows[0]!.n}, ${input.itemId}, ${input.description ?? item.rows[0].name},
+    values (${orgId}, ${ticketId}, ${next[0]!.n}, ${input.itemId}, ${input.description ?? item[0].name},
             ${quantity}, ${transactionUnit}, ${billRate}, ${billAmount}, ${doc.project_id}, true, ${input.equipmentUnitId ?? null},
             ${input.employeeId ?? null},
             ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'}, ${baseQuantity}, ${baseUnit},
-            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${input.projectTaskId ?? null}, ${userId}, ${userId}) returning id`)
+            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${input.projectTaskId ?? null}, ${userId}, ${userId}) returning id`, 'objects')
   const components = [
     ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),
     ...(resolved?.bill.components ?? [{ rateLineId: null, unitCode: baseUnit, unitName: baseUnit, quantity, rate: billRate, amount: billAmount }]).map((c) => ({ ...c, role: 'bill' })),
@@ -895,7 +895,7 @@ async function addTicketLineUnlocked(
     await tx.execute(sql`
       insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
                                            quantity, rate, amount, sequence, created_by, updated_by, quantity_ratio)
-      values (${orgId}, ${inserted.rows[0]!.id}, ${component.role}, ${component.rateLineId}, ${component.unitCode},
+      values (${orgId}, ${inserted[0]!.id}, ${component.role}, ${component.rateLineId}, ${component.unitCode},
               ${component.unitName}, ${component.quantity}, ${component.rate}, ${component.amount}, ${sequence++},
               ${userId}, ${userId}, ${'quantityRatio' in component && component.quantityRatio ? JSON.stringify(component.quantityRatio) : null}::jsonb)`)
   }
@@ -923,7 +923,7 @@ export async function removeTicketLine(
         join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
-    `)).rows[0] ?? null,
+    `, 'objects'))[0] ?? null,
     mutate: async (tx, locked) => {
       await assertFieldTicketsEnabledTx(tx, orgId)
       if (locked.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
@@ -938,8 +938,8 @@ export async function removeTicketLine(
 async function removeTicketLineUnlocked(orgId: string, ticketId: string, lineId: string, tx: TicketTransaction): Promise<void> {
   const line = await tx.execute<{ id: string }>(sql`
     select id from document_lines
-     where id = ${lineId} and document_id = ${ticketId} and org_id = ${orgId}`)
-  if (!line.rows[0]) throw new FieldTicketError('Line not found')
+     where id = ${lineId} and document_id = ${ticketId} and org_id = ${orgId}`, 'objects')
+  if (!line[0]) throw new FieldTicketError('Line not found')
   await tx.execute(sql`delete from charge_rate_components where document_line_id = ${lineId} and org_id = ${orgId}`)
   await tx.execute(sql`delete from document_lines where id = ${lineId} and document_id = ${ticketId} and org_id = ${orgId}`)
   await recomputeTotals(orgId, ticketId, tx)
@@ -1001,9 +1001,9 @@ async function loadHeader(
         on ft.document_id = d.id and ft.org_id = d.org_id
      where d.id = ${ticketId} and d.org_id = ${orgId}
        and d.kind = 'field_ticket'
-     ${lockForUpdate ? sql`for update of d, ft` : sql``}`)
-  if (!r.rows[0]) throw new FieldTicketError('Ticket not found')
-  const row = r.rows[0]
+     ${lockForUpdate ? sql`for update of d, ft` : sql``}`, 'objects')
+  if (!r[0]) throw new FieldTicketError('Ticket not found')
+  const row = r[0]
   row.fieldTicket = {
     subsidiaryId: row.subsidiaryId ?? null,
     period: row.period,
@@ -1045,12 +1045,12 @@ async function ensureFieldTicketLaborSnapshot(
        and snapshot.field_ticket_id = ${doc.id}
        and snapshot.superseded_at is null
      limit 1
-  `)
-  if (current.rows[0]) {
+  `, 'objects')
+  if (current[0]) {
     return {
-      id: current.rows[0].id,
-      revision: Number(current.rows[0].revision),
-      lineCount: Number(current.rows[0].line_count),
+      id: current[0].id,
+      revision: Number(current[0].revision),
+      lineCount: Number(current[0].line_count),
     }
   }
 
@@ -1099,15 +1099,15 @@ async function ensureFieldTicketLaborSnapshot(
        and te.hours <> 0
      order by te.worked_on, te.employee_party_id, te.item_id nulls first,
               te.time_type_id nulls first, te.project_task_id nulls first, te.id
-  `)
-  const missingTimeType = entries.rows.find((entry) => !entry.time_type_id)
+  `, 'objects')
+  const missingTimeType = entries.find((entry) => !entry.time_type_id)
   if (missingTimeType) {
     throw new FieldTicketError(
       `Labor entry ${missingTimeType.id} needs a time type before this ticket can be approved`,
     )
   }
 
-  const unresolvedBillRates = entries.rows
+  const unresolvedBillRates = entries
     .filter((entry) => entry.bill_rate == null)
     .map((entry) => entry.id)
   const resolvedBillRates = unresolvedBillRates.length
@@ -1115,7 +1115,7 @@ async function ensureFieldTicketLaborSnapshot(
     : new Map<string, string>()
 
   const lines: FieldTicketLaborEvidenceLine[] = []
-  for (const entry of entries.rows) {
+  for (const entry of entries) {
     const billRate = entry.bill_rate ?? resolvedBillRates.get(entry.id) ?? null
     const costAmount = entry.cost_rate == null
       ? null
@@ -1205,7 +1205,7 @@ export async function discardEmptyTicketDraft(
           on ft.document_id = d.id and ft.org_id = d.org_id
        where d.id = ${ticketId} and d.org_id = ${orgId} and d.kind = 'field_ticket'
        for update of d, ft
-    `)).rows[0] ?? null,
+    `, 'objects'))[0] ?? null,
     mutate: async (tx) => {
       await assertFieldTicketsEnabledTx(tx, orgId)
       const doc = await loadHeader(orgId, ticketId)
@@ -1235,7 +1235,7 @@ export async function discardEmptyTicketDraft(
                (select count(*)::text from document_links where org_id = ${orgId} and (from_document_id = ${ticketId} or to_document_id = ${ticketId})) as links,
                (select count(*)::text from billing_request_field_tickets where org_id = ${orgId} and field_ticket_id = ${ticketId}) as "billingRefs",
                (select coalesce(total, 0)::text from documents where id = ${ticketId} and org_id = ${orgId}) as total
-      `)).rows[0]!
+      `, 'objects'))[0]!
       const blockers: Array<[string, string]> = [
         [usage.lines, 'item lines'],
         [usage.hours, 'crew hours'],
@@ -1305,8 +1305,8 @@ export async function submitFieldTicket(
     if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be submitted')
     const counts = await db.execute<{ hours: number; lines: number }>(sql`
       select (select count(*) from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}) as hours,
-             (select count(*) from document_lines where org_id = ${orgId} and document_id = ${ticketId}) as lines`)
-    const countsRow = counts.rows[0]!
+             (select count(*) from document_lines where org_id = ${orgId} and document_id = ${ticketId}) as lines`, 'objects')
+    const countsRow = counts[0]!
     if (Number(countsRow.hours) === 0 && Number(countsRow.lines) === 0) {
       throw new FieldTicketError('Add hours or lines before submitting')
     }
@@ -1317,7 +1317,7 @@ export async function submitFieldTicket(
              count(*) filter (where t.project_id is distinct from ${doc.project_id}::uuid)::text as other_project
         from field_ticket_quantities q
         join project_tasks t on t.id = q.project_task_id and t.org_id = q.org_id
-       where q.org_id = ${orgId} and q.field_ticket_id = ${ticketId}`)).rows[0]
+       where q.org_id = ${orgId} and q.field_ticket_id = ${ticketId}`, 'objects'))[0]
     if (Number(production?.count ?? '0') > 0 && !(await isFeatureEnabled(orgId, 'projectProgress'))) {
       throw new FieldTicketError(
         'This ticket reports production but Progress tracking is off — turn it on under Projects in Company Settings → Features, or remove the production lines',
@@ -1332,8 +1332,8 @@ export async function submitFieldTicket(
          set submitted_by = ${userId}, submitted_at = now(),
              rejection_reason = null, updated_at = now(), updated_by = ${userId}
        where document_id = ${ticketId} and org_id = ${orgId}
-       returning document_id`)
-    if (submitted.rows.length !== 1) throw new FieldTicketNotFoundError('Ticket not found')
+       returning document_id`, 'objects')
+    if (submitted.length !== 1) throw new FieldTicketNotFoundError('Ticket not found')
 
     const routed = await submitForApproval('field_ticket', ticketId, userId)
     if (routed.flowError) {
@@ -1391,12 +1391,10 @@ export async function releaseFieldTicketApproval(
   const ungated =
     outcome === 'approved' &&
     !approvalRunId &&
-    (
-      await db.execute<{
+    (await db.execute<{
         allowed: boolean
       }>(sql`select public.flow_ungated_submission_authorized(
-    ${orgId},'field_ticket',${ticketId},${userId}) as allowed`)
-    ).rows[0]?.allowed === true
+    ${orgId},'field_ticket',${ticketId},${userId}) as allowed`, 'objects'))[0]?.allowed === true
   if (!decision && !ungated)
     throw new FieldTicketError(
       'Complete the configured native Flow gates before releasing this ticket.',
@@ -1440,17 +1438,17 @@ export async function releaseFieldTicketApproval(
            equipment_unit_id, employee_id, rate_version_id, rate_presentation, base_quantity, base_unit,
            project_task_id
       from document_lines
-     where document_id = ${ticketId} and org_id = ${orgId} and item_id is not null`)
+     where document_id = ${ticketId} and org_id = ${orgId} and item_id is not null`, 'objects')
   let chargeDocumentId = doc.fieldTicket.chargeDocumentId ?? null
-  if (lines.rows.length > 0 && doc.project_id && !chargeDocumentId) {
-    const lineIds = `{${lines.rows.map((line) => line.id).join(',')}}`
+  if (lines.length > 0 && doc.project_id && !chargeDocumentId) {
+    const lineIds = `{${lines.map((line) => line.id).join(',')}}`
     const componentRows = await db.execute<{ document_line_id: string; role: 'cost' | 'bill'; rate_line_id: string | null; unit_code: string;
         unit_name: string; quantity: string; rate: string; amount: string; quantity_ratio: { numerator: string; denominator: string } | null }>(sql`
       select document_line_id, role, rate_line_id, unit_code, unit_name, quantity, rate, amount, quantity_ratio
         from charge_rate_components
        where org_id = ${orgId} and document_line_id = any(${lineIds}::uuid[])
-       order by document_line_id, role, sequence`)
-    const componentsFor = (lineId: string, role: 'cost' | 'bill') => componentRows.rows
+       order by document_line_id, role, sequence`, 'objects')
+    const componentsFor = (lineId: string, role: 'cost' | 'bill') => componentRows
       .filter((component) => component.document_line_id === lineId && component.role === role)
       .map((component) => ({ rateLineId: component.rate_line_id, unitCode: component.unit_code,
         unitName: component.unit_name, quantity: component.quantity, rate: component.rate, amount: component.amount,
@@ -1471,7 +1469,7 @@ export async function releaseFieldTicketApproval(
         fieldTicketId: ticketId,
         referenceNumber: doc.document_number,
         documentDate: doc.fieldTicket.periodEnd,
-        lines: lines.rows.map((l) => {
+        lines: lines.map((l) => {
           const costComponents = componentsFor(l.id, 'cost')
           const billComponents = componentsFor(l.id, 'bill')
           const hasSnapshot = costComponents.length > 0 && billComponents.length > 0
@@ -1579,8 +1577,8 @@ export async function loadFieldTicket(
        and field_ticket_id = ${ticketId}
        and superseded_at is null
      limit 1
-  `)
-  const laborSnapshot = snapshotResult.rows[0] ?? null
+  `, 'objects')
+  const laborSnapshot = snapshotResult[0] ?? null
   const entriesQuery = laborSnapshot
     ? db.execute(sql`
         select line.id, line.employee_party_id, line.employee_name,
@@ -1639,9 +1637,9 @@ export async function loadFieldTicket(
     db.execute<{ display_name: string; email: string | null }>(sql`
       select display_name, email from parties
        where id = coalesce(${doc.party_id}, (select customer_id from projects where id = ${doc.project_id} and org_id = ${orgId}))
-         and org_id = ${orgId}${legalEntityFilter('parties.subsidiary_id')}`),
-    db.execute<{ code: string | null; name: string }>(sql`select code, name from projects where id = ${doc.project_id} and org_id = ${orgId}${legalEntityFilter('projects.subsidiary_id')}`),
-    db.execute<{ display_name: string }>(sql`select display_name from parties where id = ${doc.fieldTicket.foremanPartyId} and org_id = ${orgId}${legalEntityFilter('parties.subsidiary_id')}`),
+         and org_id = ${orgId}${legalEntityFilter('parties.subsidiary_id')}`, 'objects'),
+    db.execute<{ code: string | null; name: string }>(sql`select code, name from projects where id = ${doc.project_id} and org_id = ${orgId}${legalEntityFilter('projects.subsidiary_id')}`, 'objects'),
+    db.execute<{ display_name: string }>(sql`select display_name from parties where id = ${doc.fieldTicket.foremanPartyId} and org_id = ${orgId}${legalEntityFilter('parties.subsidiary_id')}`, 'objects'),
     entriesQuery as unknown as Promise<{ rows: TicketEntryRow[] }>,
     db.execute<TicketLineRow>(sql`
       select dl.id, dl.item_id, i.name as item_name, dl.description, dl.quantity, dl.unit, dl.unit_price, dl.amount,
@@ -1659,7 +1657,7 @@ export async function loadFieldTicket(
         left join equipment_units eu on eu.id = dl.equipment_unit_id and eu.org_id = dl.org_id${legalEntityFilter('eu.subsidiary_id', false)}
        where dl.document_id = ${ticketId} and dl.org_id = ${orgId}
          ${legalEntityFilter('dl.subsidiary_id')}
-       order by dl.line_number`),
+       order by dl.line_number`, 'objects'),
     db.execute<{
          role: 'foreman' | 'customer'
          signer_name: string
@@ -1677,7 +1675,7 @@ export async function loadFieldTicket(
         join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
         left join file_blobs fb on fb.version_id = fv.id
        where s.org_id = ${orgId} and s.field_ticket_id = ${ticketId}
-       order by s.signed_at`),
+       order by s.signed_at`, 'objects'),
     db.execute<{
          recipient: string
          message: string | null
@@ -1691,7 +1689,7 @@ export async function loadFieldTicket(
        where org_id = ${orgId} and field_ticket_id = ${ticketId}
          and sent_at is not null
        order by sent_at desc
-       limit 1`),
+       limit 1`, 'objects'),
     (opts.includeRelated === false ? Promise.resolve({ rows: [] }) : db.execute(sql`
       select 'from'::text as direction, link.link_type, related.id, related.kind,
              related.document_number, related.status
@@ -1763,9 +1761,9 @@ export async function loadFieldTicket(
   // rate-book match) price at $0: surface the unpriced hours so a $0 labor
   // total is never mistaken for valued work (web/lib/field-ticket-totals.ts).
   const unpricedLaborHours = fieldTicketUnpricedHours(entries.rows)
-  const linesTotal = sum(lines.rows.map((l) => String(l.bill_amount ?? l.amount)))
+  const linesTotal = sum(lines.map((l) => String(l.bill_amount ?? l.amount)))
   const signatures: { foreman?: TicketSignature; customer?: TicketSignature } = {}
-  for (const signature of signatureRows.rows) {
+  for (const signature of signatureRows) {
     const bytes = signature.storage_kind === 's3'
       ? await getS3Blob(signature.version_id)
       : signature.bytes
@@ -1778,7 +1776,7 @@ export async function loadFieldTicket(
       at: signature.signed_at,
     }
   }
-  const latestRequest = requestRows.rows[0]
+  const latestRequest = requestRows[0]
   const production = (await db.execute<{
     id: string; project_task_id: string; task_code: string | null; task_name: string
     quantity: string; unit: string; note: string | null
@@ -1788,7 +1786,7 @@ export async function loadFieldTicket(
       from field_ticket_quantities q
       join project_tasks t on t.id = q.project_task_id and t.org_id = q.org_id
      where q.org_id = ${orgId} and q.field_ticket_id = ${ticketId}
-     order by q.created_at, q.id`)).rows.map((row): TicketProductionRow => ({
+     order by q.created_at, q.id`, 'objects')).map((row): TicketProductionRow => ({
     id: row.id,
     projectTaskId: row.project_task_id,
     taskCode: row.task_code,
@@ -1821,15 +1819,15 @@ export async function loadFieldTicket(
     referenceNumber: doc.reference_number,
     memo: doc.memo,
     customerId: doc.party_id,
-    customerName: customer.rows[0]?.display_name ?? '',
-    customerEmail: customer.rows[0]?.email ?? null,
+    customerName: customer[0]?.display_name ?? '',
+    customerEmail: customer[0]?.email ?? null,
     projectId: doc.project_id,
-    projectName: project.rows[0] ? [project.rows[0].code, project.rows[0].name].filter(Boolean).join(' · ') : '',
-    foremanName: foreman.rows[0]?.display_name ?? '',
+    projectName: project[0] ? [project[0].code, project[0].name].filter(Boolean).join(' · ') : '',
+    foremanName: foreman[0]?.display_name ?? '',
     fieldTicket,
     entries: entries.rows,
     laborSnapshot,
-    lines: lines.rows,
+    lines,
     laborTotal,
     unpricedLaborHours,
     linesTotal,
@@ -1899,24 +1897,24 @@ export type TicketLineRow = {
 export async function readActiveProjectForTicket(orgId: string, projectId: string): Promise<{ subsidiaryId: string | null } | null> {
   const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id from projects where org_id = ${orgId} and id = ${projectId} and is_active
-  `)).rows[0]
+  `, 'objects'))[0]
   return row ? { subsidiaryId: row.subsidiary_id } : null
 }
 
 /** Regular, wage-bearing time types shown on field tickets — what scheduled work fills into. */
 export async function fieldTicketScheduleTimeTypes(orgId: string): Promise<{ id: string; name: string }[]> {
-  return (await db.execute<{ id: string; name: string }>(sql`
+  return await db.execute<{ id: string; name: string }>(sql`
     select id, name from time_types where org_id = ${orgId} and is_active and show_on_field_ticket
       and classification = 'regular' and not exclude_from_wages order by name, id
-  `)).rows
+  `, 'objects')
 }
 
 /** Active employees, narrowed to one legal entity when the project names one. */
 export async function activeEmployeePartyIds(orgId: string, subsidiaryId: string | null): Promise<Set<string>> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select p.id from parties p where p.org_id = ${orgId} and p.is_active
       ${subsidiaryId ? sql`and p.subsidiary_id = ${subsidiaryId}` : sql``}
       and exists (select 1 from employee_roles r where r.org_id = p.org_id and r.party_id = p.id and r.is_active)
-  `)).rows
+  `, 'objects')
   return new Set(rows.map((row) => row.id))
 }

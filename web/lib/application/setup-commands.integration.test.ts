@@ -72,12 +72,12 @@ async function callTool(
 }
 
 async function orgName(orgId: string): Promise<string> {
-  const row = (await withOrgContext(orgId, () => db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`))).rows[0]
+  const row = (await withOrgContext(orgId, () => db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`, 'objects')))[0]
   return row!.name
 }
 
 async function orgLegalName(orgId: string): Promise<string | null> {
-  const row = (await withOrgContext(orgId, () => db.execute<{ legal_name: string | null }>(sql`select legal_name from orgs where id = ${orgId}`))).rows[0]
+  const row = (await withOrgContext(orgId, () => db.execute<{ legal_name: string | null }>(sql`select legal_name from orgs where id = ${orgId}`, 'objects')))[0]
   return row!.legal_name
 }
 
@@ -174,7 +174,7 @@ test('update_features toggles through the fenced command and replays idempotentl
     const adminB = await adminContext(orgB)
     await callTool(orgB, tool, adminB, { features: { onlinePayments: true }, idempotencyKey: randomUUID() })
     const flagsA = (await withOrgContext(orgA.orgId, () => db.execute<{ features: Record<string, boolean> }>(sql`
-      select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgA.orgId}`))).rows[0]!.features
+      select coalesce(settings->'features', '{}'::jsonb) as features from orgs where id = ${orgA.orgId}`, 'objects')))[0]!.features
     assert.equal(flagsA.onlinePayments, true)
   } finally {
     await dropScratchOrg(orgA.orgId)
@@ -198,8 +198,8 @@ test('create_setup_record creates through the shared validated command and repla
     const replay = await callTool(orgA, tool, adminA, { entityKey: 'tax-codes', body, idempotencyKey: key })
     assert.equal(replay.ok, true)
     assert.equal(replay.replayed, true)
-    const rows = (await withOrgContext(orgA.orgId, () => db.execute<{ id: string }>(sql`
-      select id from tax_codes where org_id = ${orgA.orgId} and code = 'TOOL-VAT'`))).rows
+    const rows = await withOrgContext(orgA.orgId, () => db.execute<{ id: string }>(sql`
+      select id from tax_codes where org_id = ${orgA.orgId} and code = 'TOOL-VAT'`, 'objects'))
     assert.equal(rows.length, 1, 'the replay must not create a second row')
     assert.equal(rows[0]!.id, id)
     // Permission refusal: a non-admin creates nothing.
@@ -209,7 +209,7 @@ test('create_setup_record creates through the shared validated command and repla
       }),
       /forbidden/,
     )
-    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where org_id = ${orgA.orgId} and code = 'NOPE'`))).rows.length, 0)
+    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where org_id = ${orgA.orgId} and code = 'NOPE'`, 'objects'))).length, 0)
   } finally {
     await dropScratchOrg(orgA.orgId)
   }
@@ -242,7 +242,7 @@ test('update_setup_record edits only the caller org row and replays idempotently
     assert.equal(replay.ok, true)
     assert.equal(replay.replayed, true)
     const name = (await withOrgContext(orgA.orgId, () => db.execute<{ name: string }>(sql`
-      select name from tax_codes where id = ${id} and org_id = ${orgA.orgId}`))).rows[0]!.name
+      select name from tax_codes where id = ${id} and org_id = ${orgA.orgId}`, 'objects')))[0]!.name
     assert.equal(name, 'After')
     // Permission refusal: a non-admin edits nothing.
     await assert.rejects(
@@ -250,7 +250,7 @@ test('update_setup_record edits only the caller org row and replays idempotently
       /forbidden/,
     )
     const still = (await withOrgContext(orgA.orgId, () => db.execute<{ name: string }>(sql`
-      select name from tax_codes where id = ${id} and org_id = ${orgA.orgId}`))).rows[0]!.name
+      select name from tax_codes where id = ${id} and org_id = ${orgA.orgId}`, 'objects')))[0]!.name
     assert.equal(still, 'After')
   } finally {
     await dropScratchOrg(orgA.orgId)
@@ -277,18 +277,18 @@ test('delete_setup_record removes only the caller org row and replays idempotent
       callTool(orgB, tool, adminB, { entityKey: 'tax-codes', id, idempotencyKey: randomUUID() }),
       /not found/,
     )
-    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where id = ${id} and org_id = ${orgA.orgId}`))).rows.length, 1)
+    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where id = ${id} and org_id = ${orgA.orgId}`, 'objects'))).length, 1)
     // Permission refusal: a non-admin deletes nothing.
     await assert.rejects(
       callTool(orgA, tool, await viewerContext(orgA), { entityKey: 'tax-codes', id, idempotencyKey: randomUUID() }),
       /forbidden/,
     )
-    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where id = ${id} and org_id = ${orgA.orgId}`))).rows.length, 1)
+    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where id = ${id} and org_id = ${orgA.orgId}`, 'objects'))).length, 1)
     const key = randomUUID()
     const first = await callTool(orgA, tool, adminA, { entityKey: 'tax-codes', id, idempotencyKey: key })
     assert.equal(first.ok, true)
     assert.equal(first.replayed, false)
-    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where id = ${id} and org_id = ${orgA.orgId}`))).rows.length, 0)
+    assert.equal((await withOrgContext(orgA.orgId, () => db.execute(sql`select id from tax_codes where id = ${id} and org_id = ${orgA.orgId}`, 'objects'))).length, 0)
     const replay = await callTool(orgA, tool, adminA, { entityKey: 'tax-codes', id, idempotencyKey: key })
     assert.equal(replay.ok, true)
     assert.equal(replay.replayed, true)

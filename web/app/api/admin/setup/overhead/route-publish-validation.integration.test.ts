@@ -57,7 +57,7 @@ async function fixture(): Promise<Fixture> {
   const departmentId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into departments (org_id, name, is_active)
     values (${org.orgId}, 'Publish Dept', true)
-    returning id`)).rows[0]!.id)
+    returning id`, 'objects'))[0]!.id)
   return { org, departmentId }
 }
 
@@ -78,8 +78,8 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function publishedRates(orgId: string) {
-  return await withOrgContext(orgId, async () => (await db.execute<{ department_id: string | null }>(sql`
-    select department_id from overhead_rates where org_id = ${orgId}`)).rows)
+  return await withOrgContext(orgId, async () => await db.execute<{ department_id: string | null }>(sql`
+    select department_id from overhead_rates where org_id = ${orgId}`, 'objects'))
 }
 
 test('publish rejects an impossible effectiveFrom instead of throwing', async () => {
@@ -183,14 +183,14 @@ async function scopedFixture(): Promise<{
   const otherSubsidiaryId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into subsidiaries (org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
     values (${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-    returning id`)).rows[0]!.id)
+    returning id`, 'objects'))[0]!.id)
   await withBypassContext(async () => db.execute(sql`
     update departments set subsidiary_id = ${org.subsidiaryId}
      where org_id = ${org.orgId} and subsidiary_id is null`))
   const otherDepartmentId = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
     insert into departments (org_id, name, is_active, subsidiary_id)
     values (${org.orgId}, 'Other Dept', true, ${otherSubsidiaryId})
-    returning id`)).rows[0]!.id)
+    returning id`, 'objects'))[0]!.id)
   return { org, otherSubsidiaryId, otherDepartmentId }
 }
 

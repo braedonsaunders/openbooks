@@ -66,8 +66,8 @@ async function fixture() {
 async function revisionToken(documentId: string): Promise<string> {
   const row = (await db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
-      from documents where id = ${documentId}`))
-  return row.rows[0]!.updatedAt
+      from documents where id = ${documentId}`, 'objects'))
+  return row[0]!.updatedAt
 }
 
 const actionCall = (body: unknown) =>
@@ -109,7 +109,7 @@ test('expense submit waits on a report rehome in flight instead of racing it', a
   let pending: Promise<Response> | undefined
   try {
     const moving = randomUUID()
-    const hidden = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and parent_id=${org.subsidiaryId} limit 1`)).rows[0]!.id
+    const hidden = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and parent_id=${org.subsidiaryId} limit 1`, 'objects'))[0]!.id
     await withBypassContext(() => db.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, subsidiary_id, document_date,

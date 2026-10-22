@@ -64,9 +64,9 @@ function materialLabel(material: Material): string {
 async function loadItemLabels(tx: SqlExecutor, orgId: string, itemIds: string[]): Promise<Map<string, string>> {
   const ids = [...new Set(itemIds)].sort();
   if (ids.length === 0) return new Map();
-  const rows = (await tx.execute<{ id: string; code: string | null; name: string }>(sql`
+  const rows = await tx.execute<{ id: string; code: string | null; name: string }>(sql`
     select id, code, name from items where org_id=${orgId}
-      and id in (${sql.join(ids.map((itemId) => sql`${itemId}::uuid`), sql`,`)}) order by id`)).rows;
+      and id in (${sql.join(ids.map((itemId) => sql`${itemId}::uuid`), sql`,`)}) order by id`, "objects");
   if (rows.length !== ids.length) throw new ManufacturingNotFoundError();
   return new Map(rows.map((row) => [row.id, row.code?.trim() || row.name]));
 }
@@ -77,11 +77,11 @@ function evidence(order: Order) {
   return { workOrderNumber: order.number, bomRevision: order.bom_revision, routingVersion: String(order.routing_version) };
 }
 async function loadOrder(tx: SqlExecutor, orgId: string, id: string, lock = false): Promise<Order> {
-  return rowOrNotFound((await tx.execute<Order>(sql`
+  return rowOrNotFound(await tx.execute<Order>(sql`
     select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
            subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
            standard_cost_snapshot::text,receipt_rework_inspection_id, planned_start::text, short_close_reason
-      from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`)).rows);
+      from mfg_work_orders where org_id=${orgId} and id=${id} ${lock ? sql`for update` : sql``}`, "objects"));
 }
 function refuseIfHeld(order: Order): void {
   if (order.status === "on_hold") {
@@ -95,7 +95,7 @@ async function wipBalance(tx: SqlExecutor, orgId: string, order: Order, accountI
         on entry.org_id=line.org_id and entry.id=line.entry_id
      where line.org_id=${orgId} and line.account_id=${accountId}
        and entry.origin='manufacturing' and entry.custom->>'work_order_number'=${order.number}
-       and entry.status in ('posted','reversed')`)).rows[0];
+       and entry.status in ('posted','reversed')`, "objects"))[0];
   return row?.balance ?? "0.0000";
 }
 function ratioAmount(value: string, numerator: bigint, denominator: bigint): string {
@@ -114,7 +114,7 @@ async function lockPositions(tx: SqlExecutor, itemIds: string[], locationId: str
   for (const itemId of [...new Set(itemIds)].sort()) await lockInventoryPosition(tx as Runner, itemId, locationId);
 }
 async function loadMaterials(tx: SqlExecutor, orgId: string, orderId: string, lock = false): Promise<Material[]> {
-  return (await tx.execute<Material>(sql`
+  return await tx.execute<Material>(sql`
     select material.id, material.component_item_id, item.name as component_name,
            item.code as component_code, material.required_qty::text, material.issued_qty::text, material.backflush_qty::text,
            material.operation_seq, material.waived_at,
@@ -123,20 +123,20 @@ async function loadMaterials(tx: SqlExecutor, orgId: string, orderId: string, lo
       from mfg_wo_materials material join items item
         on item.org_id=material.org_id and item.id=material.component_item_id
      where material.org_id=${orgId} and material.work_order_id=${orderId}
-     order by material.id ${lock ? sql`for update of material` : sql``}`)).rows;
+     order by material.id ${lock ? sql`for update of material` : sql``}`, "objects");
 }
 async function loadByproducts(tx: SqlExecutor, orgId: string, order: Order): Promise<Byproduct[]> {
-  return (await tx.execute<Byproduct>(sql`
+  return await tx.execute<Byproduct>(sql`
     select item.id as item_id, item.code, item.name, byproduct.quantity_per::text,byproduct.quantity_basis,byproduct.formula_output_quantity::text, item.default_rate::text,byproduct.output_cost_weight::text,byproduct.standard_cost_snapshot::text
       from mfg_wo_byproducts byproduct join items item
         on item.org_id=byproduct.org_id and item.id=byproduct.item_id
      where byproduct.org_id=${orgId} and byproduct.work_order_id=${order.id}
-     order by byproduct.item_id`)).rows;
+     order by byproduct.item_id`, "objects");
 }
 async function materialUsageVariance(
   tx: SqlExecutor, orgId: string, order: Order, materials: Material[], completedQuantity: string,
 ): Promise<{ cumulative: string; delta: string; byComponent: Array<{ itemId: string; name: string; cumulative: string; delta: string }> }> {
-  const issueCosts = (await tx.execute<{ item_id: string; quantity: string; unit_value: string; unit_quantity: string }>(sql`
+  const issueCosts = await tx.execute<{ item_id: string; quantity: string; unit_value: string; unit_quantity: string }>(sql`
     select movement.item_id, sum(-movement.quantity)::text as quantity,
            sum(case when movement.kind='assembly_consume' then -movement.total_value else 0 end)::text as unit_value,
            sum(case when movement.kind='assembly_consume' then -movement.quantity else 0 end)::text as unit_quantity
@@ -149,15 +149,15 @@ async function materialUsageVariance(
        or (movement.kind='return' and source.kind='assembly_consume' and source_entry.origin='manufacturing'
          and source_entry.custom->>'work_order_number'=${order.number})
      )
-     group by movement.item_id`)).rows;
+     group by movement.item_id`, "objects");
   const issues = new Map(issueCosts.map((issue) => [issue.item_id, issue]));
   const priorByComponent = new Map<string, string>();
-  const priorRows = (await tx.execute<{ deltas: Record<string, string> | null }>(sql`
+  const priorRows = await tx.execute<{ deltas: Record<string, string> | null }>(sql`
     select custom->'material_usage_variance_delta_by_component' as deltas
       from journal_entries where org_id=${orgId} and origin='manufacturing'
         and custom->>'work_order_number'=${order.number}
         -- Live entries only: reversed completions and their reversal evidence must not contribute twice.
-        and custom ? 'material_usage_variance_delta_by_component' and status='posted' and reverses_entry_id is null`)).rows;
+        and custom ? 'material_usage_variance_delta_by_component' and status='posted' and reverses_entry_id is null`, "objects");
   for (const row of priorRows) {
     if (!row.deltas || typeof row.deltas !== "object" || Array.isArray(row.deltas)) continue;
     for (const [itemId, amount] of Object.entries(row.deltas)) {
@@ -238,8 +238,8 @@ async function postReceiptLayer(
          quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
       values (${orgId}, ${order.subsidiary_id}, ${itemId}, 'assembly_build', ${date}, ${locationId},
         ${piece.lotId}, ${piece.serialId}, ${piece.quantity}, ${unitCost}, ${value}, ${entryId},
-        'posted', ${memo}, ${actorId}, ${actorId}) returning id`);
-    const movementId = rowOrNotFound(inserted.rows).id;
+        'posted', ${memo}, ${actorId}, ${actorId}) returning id`, "objects");
+    const movementId = rowOrNotFound(inserted).id;
     await addLayerAtCost(tx as Runner, orgId, order.subsidiary_id!, itemId, locationId,
       piece.quantity, value, costingMethod, movementId, date, actorId, unitCost);
     await auditChange(tx, { orgId, actorId, table: "inventory_movements", rowId: movementId,
@@ -248,8 +248,8 @@ async function postReceiptLayer(
     if (piece.serialId) {
       const serial = await tx.execute<{ id: string }>(sql`
         update serials set status='in_stock', current_stock_location_id=${locationId}, updated_at=now(), updated_by=${actorId}
-         where org_id=${orgId} and id=${piece.serialId} and (status='registered' or ${order.receipt_rework_inspection_id!==null} and status='shipped') returning id`);
-      if (serial.rows.length !== 1) throw new ManufacturingError("Serial " + (piece.serialNumber ?? "evidence") + " changed before receipt.", { code: "receipt_serial_changed", remedy: "Review the serial history and retry with an unused serial." });
+         where org_id=${orgId} and id=${piece.serialId} and (status='registered' or ${order.receipt_rework_inspection_id!==null} and status='shipped') returning id`, "objects");
+      if (serial.length !== 1) throw new ManufacturingError("Serial " + (piece.serialNumber ?? "evidence") + " changed before receipt.", { code: "receipt_serial_changed", remedy: "Review the serial history and retry with an unused serial." });
     }
     await createReceiptInspection(tx,orgId,actorId,movementId);
   }
@@ -277,9 +277,9 @@ export async function completeWorkOrder(
   const q = decimalValue(input.quantity, "completion quantity", "Enter a positive exact quantity with no more than four decimal places.");
   if (cmp(q, "0") <= 0) refuse("Completion quantity must be positive.", "invalid_completion_quantity", "Enter a positive exact quantity.");
   const completed = add(order.quantity_completed, q);
-  const vendorOperations=(await tx.execute<{status:string;returned:string}>(sql`select contract.status,
+  const vendorOperations=await tx.execute<{status:string;returned:string}>(sql`select contract.status,
     (select coalesce(sum(quantity),0)::text from mfg_subcontract_returns where org_id=contract.org_id and subcontract_id=contract.id) as returned
-    from mfg_subcontracts contract where contract.org_id=${orgId} and contract.work_order_id=${workOrderId} and contract.status<>'cancelled' order by contract.id for share`)).rows;
+    from mfg_subcontracts contract where contract.org_id=${orgId} and contract.work_order_id=${workOrderId} and contract.status<>'cancelled' order by contract.id for share`, "objects");
   if(vendorOperations.length) {
     await assertManufacturingFeature(tx,orgId,'manufacturingSubcontract');
     if(vendorOperations.some(contract=>contract.status!=='received'||cmp(completed,contract.returned)>0))
@@ -290,7 +290,7 @@ export async function completeWorkOrder(
         left join journal_entries cost on cost.org_id=claim.org_id and cost.id=claim.capitalization_entry_id
         where claim.org_id=contract.org_id and claim.subcontract_id=contract.id and claim.reversal_entry_id is null
           -- Live entries only: only standing service cost counts as recorded
-          and bill.status='posted' and bill.posted_entry_id=source.id and source.status='posted' and (claim.amount=0 or cost.status='posted')) limit 1`)).rows.length)
+          and bill.status='posted' and bill.posted_entry_id=source.id and source.status='posted' and (claim.amount=0 or cost.status='posted')) limit 1`, "objects")).length)
       refuse('A vendor service cost is missing or reversed.','subcontract_service_cost_required','Record the actual posted service bill on its subcontract before receiving finished goods.');
   }
   const policies = await getManufacturingPolicies(tx, orgId);
@@ -337,13 +337,13 @@ export async function completeWorkOrder(
   const laborVariance = isStandard ? add(conversion.relievedLabor, neg(conversion.standardLabor)) : "0.0000";
   const overheadVariance = isStandard ? add(conversion.relievedOverhead, neg(conversion.standardOverhead)) : "0.0000";
   const repairOutput=order.receipt_rework_inspection_id?await assertReceiptReworkOutput(tx,orgId,actorId,order.id,q):null;
-  const originalTracking=repairOutput?(await tx.execute<{lotNumber:string|null;serialNumber:string|null}>(sql`select lot.lot_number as "lotNumber",serial.serial_number as "serialNumber" from inventory_inspections inspected left join lots lot on lot.org_id=inspected.org_id and lot.id=inspected.lot_id left join serials serial on serial.org_id=inspected.org_id and serial.id=inspected.serial_id where inspected.org_id=${orgId} and inspected.id=${repairOutput.id}`)).rows[0]:null;
+  const originalTracking=repairOutput?(await tx.execute<{lotNumber:string|null;serialNumber:string|null}>(sql`select lot.lot_number as "lotNumber",serial.serial_number as "serialNumber" from inventory_inspections inspected left join lots lot on lot.org_id=inspected.org_id and lot.id=inspected.lot_id left join serials serial on serial.org_id=inspected.org_id and serial.id=inspected.serial_id where inspected.org_id=${orgId} and inspected.id=${repairOutput.id}`, "objects"))[0]:null;
   const selections = input.lots?.length?input.lots:repairOutput&&originalTracking?[{quantity:q,...(originalTracking.lotNumber?{lotNumber:originalTracking.lotNumber}:{}),...(originalTracking.serialNumber?{serialNumber:originalTracking.serialNumber}:{})}]:[];
   // Output is received on the day production finished: never after today,
   // never before the order's latest completed operation.
   const lastOperation = (await tx.execute<{ completed: string | null }>(sql`
     select max(completed_at)::date::text as completed from mfg_wo_operations
-     where org_id=${orgId} and work_order_id=${order.id} and status='done'`)).rows[0]?.completed ?? null;
+     where org_id=${orgId} and work_order_id=${order.id} and status='done'`, "objects"))[0]?.completed ?? null;
   const date = await operationEventDate(tx, orgId, input.receivedOn, lastOperation, "Work order " + order.number + " receipt") ?? await businessToday(orgId);
   const bookId = await primaryBookId(orgId, tx as Runner);
   const periodId = await periodForDate(orgId, date, tx as Runner);
@@ -478,8 +478,8 @@ export async function completeWorkOrder(
     update mfg_work_orders set quantity_completed=${completed}, status='in_progress',
       started_at=coalesce(started_at, now()), updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id=${order.id} and status in ('released','in_progress')
-       and quantity_completed=${order.quantity_completed} returning id`);
-  if (update.rows.length !== 1) refuse("Work order " + order.number + " changed while completion was posting.", "work_order_changed", "Reload the work order and retry.", 409);
+       and quantity_completed=${order.quantity_completed} returning id`, "objects");
+  if (update.length !== 1) refuse("Work order " + order.number + " changed while completion was posting.", "work_order_changed", "Reload the work order and retry.", 409);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: order.id, action: "update",
     before: order, after: { ...order, quantity_completed: completed, status: "in_progress",
       lastCompletionEntryId: entryId, reason: "Finished goods were received." } });
@@ -503,7 +503,7 @@ export async function waiveMaterial(
   }
   const material = (await tx.execute<{ id: string; waived_at: Date | null; waive_reason: string | null }>(sql`
     select id, waived_at, waive_reason from mfg_wo_materials
-     where org_id=${orgId} and work_order_id=${workOrderId} and id=${materialId} for update`)).rows[0];
+     where org_id=${orgId} and work_order_id=${workOrderId} and id=${materialId} for update`, "objects"))[0];
   if (!material) throw new ManufacturingNotFoundError();
   if (material.waived_at) {
     if (material.waive_reason !== cleanReason) {
@@ -515,8 +515,8 @@ export async function waiveMaterial(
     update mfg_wo_materials set waived_at=now(), waived_by=${actorId}, waive_reason=${cleanReason},
       updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${materialId} and waived_at is null
-     returning id, waived_at`);
-  const after = rowOrNotFound(updated.rows);
+     returning id, waived_at`, "objects");
+  const after = rowOrNotFound(updated);
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_materials", rowId: material.id, action: "update",
     before: { waivedAt: null, waivedBy: null, waiveReason: null },
     after: { waivedAt: after.waived_at, waivedBy: actorId, waiveReason: cleanReason } });
@@ -541,11 +541,11 @@ export async function markWorkOrderDone(
   // is what records its time and backflushes its materials, so an order
   // closed around a running operation would carry output that never
   // consumed its inputs.
-  const unfinished = (await tx.execute<{ sequence: number; status: string }>(sql`
+  const unfinished = await tx.execute<{ sequence: number; status: string }>(sql`
     select operation.sequence, operation.status from mfg_wo_operations operation
      where operation.org_id=${orgId} and operation.work_order_id=${order.id}
        and operation.status in ('running', 'paused')
-     order by operation.sequence`)).rows;
+     order by operation.sequence`, "objects");
   if (unfinished.length) {
     refuse("Work order " + order.number + " has unfinished operation " + unfinished.map((row) => row.sequence + " (" + row.status + ")").join(", ") + ".",
       "operation_unfinished", "Complete each named operation, which records its time and backflushes its materials, before marking the work order done.");
@@ -560,11 +560,11 @@ export async function markWorkOrderDone(
   if (short && !shortCloseReason) {
     refuse("Work order " + order.number + " is being completed below its ordered quantity.", "short_close_reason_required", "Enter a short-close reason before marking the work order done.");
   }
-  const operations = (await tx.execute<{ sequence: number }>(sql`
+  const operations = await tx.execute<{ sequence: number }>(sql`
     select operation.sequence from mfg_wo_operations operation
      where operation.org_id=${orgId} and operation.work_order_id=${order.id}
        and operation.quality_gate='measure' and operation.measured_qty is null
-     order by operation.sequence`)).rows;
+     order by operation.sequence`, "objects");
   if (operations.length) {
     refuse("Work order " + order.number + " has measure operation " + operations.map((row) => row.sequence).join(", ") + " without a measured quantity.", "measure_quantity_missing", "Record the measured quantity for each named operation.");
   }
@@ -574,14 +574,14 @@ export async function markWorkOrderDone(
   if (shortExplicit.length) {
     refuse("Work order " + order.number + " has under-issued explicit material " + shortExplicit.map((line) => line.component_name).join(", ") + ".", "explicit_material_underissued", "Issue the named material or waive its line with a reason.");
   }
-  const openChildren = (await tx.execute<{ number: string }>(sql`
+  const openChildren = await tx.execute<{ number: string }>(sql`
     with recursive children as (
       select id, number, status from mfg_work_orders where org_id=${orgId} and parent_wo_id=${order.id}
       union all
       select child.id, child.number, child.status from mfg_work_orders child
         join children parent on child.parent_wo_id=parent.id where child.org_id=${orgId}
     )
-    select number from children where status<>'done' order by number`)).rows;
+    select number from children where status<>'done' order by number`, "objects");
   if (openChildren.length) {
     refuse("Work order " + order.number + " has child work orders not done: " + openChildren.map((row) => row.number).join(", ") + ".", "child_work_order_open", "Complete each named child work order before marking the parent done.");
   }
@@ -618,8 +618,8 @@ export async function markWorkOrderDone(
     update mfg_work_orders set status='done', short_close_reason=${short ? shortCloseReason : null},
       completed_at=now(), updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id=${order.id} and status=${order.status}
-       and quantity_completed=${order.quantity_completed} returning id`);
-  if (updated.rows.length !== 1) {
+       and quantity_completed=${order.quantity_completed} returning id`, "objects");
+  if (updated.length !== 1) {
     refuse("Work order " + order.number + " changed while it was being marked done.", "work_order_changed", "Reload the work order and retry.", 409);
   }
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: order.id, action: "update",
@@ -640,7 +640,7 @@ async function liveCompletionsAfter(tx: SqlExecutor, orgId: string, workOrderNum
        and completion.status='posted' and completion.reverses_entry_id is null
        and completion.id<>anchor.id
        and (completion.created_at, completion.id::text) > (anchor.created_at, anchor.id::text)
-     order by completion.created_at desc, completion.id desc`)).rows.map((row) => row.entry_number);
+     order by completion.created_at desc, completion.id desc`, "objects")).map((row) => row.entry_number);
 }
 
 /**
@@ -659,30 +659,30 @@ async function reverseCompletionReceipt(
   if (!peek.journal_entry_id || !peek.work_order_number) throw new InventoryError("Only a posted work-order completion receipt can be reversed.");
   const entry = (await tx.execute<{ entry_number: string; status: string; reverses_entry_id: string | null; completion_quantity: string | null }>(sql`
     select entry_number, status, reverses_entry_id, custom->>'completion_quantity' as completion_quantity
-      from journal_entries where org_id=${orgId} and id=${peek.journal_entry_id}`)).rows[0];
+      from journal_entries where org_id=${orgId} and id=${peek.journal_entry_id}`, "objects"))[0];
   if (!entry || entry.reverses_entry_id || entry.completion_quantity == null) {
     throw new InventoryError("Only a posted work-order completion receipt can be reversed.");
   }
-  const sources = (await tx.execute<ReversibleMovement>(sql`
+  const sources = await tx.execute<ReversibleMovement>(sql`
     select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
            serial_id, quantity, unit_cost, total_value, journal_entry_id, paired_movement_id, status
       from inventory_movements where org_id=${orgId} and journal_entry_id=${peek.journal_entry_id}
-       and kind='assembly_build' order by item_id, stock_location_id, id`)).rows;
+       and kind='assembly_build' order by item_id, stock_location_id, id`, "objects");
   if (!sources.length) throw new InventoryError("The work-order completion has no receipt movements.");
   await lockMovementPositions(tx, sources);
   const order = (await tx.execute<Order>(sql`
     select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
            subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
            standard_cost_snapshot::text,receipt_rework_inspection_id, planned_start::text, short_close_reason
-      from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`)).rows[0];
+      from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`, "objects"))[0];
   if (!order) throw new ManufacturingNotFoundError();
   const prior = (await tx.execute<{ id: string }>(sql`
     select id from journal_entries where org_id=${orgId} and reverses_entry_id=${peek.journal_entry_id}
-      and status in ('posted','reversed') order by id limit 1`)).rows[0];
+      and status in ('posted','reversed') order by id limit 1`, "objects"))[0];
   if (prior) {
-    const reversals = (await tx.execute<{ id: string }>(sql`
+    const reversals = await tx.execute<{ id: string }>(sql`
       select id from inventory_movements where org_id=${orgId}
-        and reverses_movement_id in (${sql.join(sources.map((row) => sql`${row.id}`), sql`,`)}) order by id`)).rows;
+        and reverses_movement_id in (${sql.join(sources.map((row) => sql`${row.id}`), sql`,`)}) order by id`, "objects");
     if (reversals.length !== sources.length) {
       throw new InventoryError("The work-order completion reversal is incomplete; contact an administrator before retrying.");
     }
@@ -697,7 +697,7 @@ async function reverseCompletionReceipt(
     refuse("Work order " + order.number + " has later completions " + later.join(", ") + ".", "later_completion_exists",
       "Reverse the completion receipts newest first (" + later.join(", ") + "), then reverse " + entry.entry_number + ".", 409);
   }
-  const locked = (await tx.execute<ReversibleMovement>(sql`
+  const locked = await tx.execute<ReversibleMovement>(sql`
     select movement.id, movement.org_id, movement.subsidiary_id, movement.item_id, movement.kind,
            movement.moved_at::text, movement.stock_location_id, movement.lot_id, movement.serial_id,
            serial.serial_number, movement.quantity, movement.unit_cost, movement.total_value,
@@ -705,7 +705,7 @@ async function reverseCompletionReceipt(
       from inventory_movements movement left join serials serial
         on serial.org_id=movement.org_id and serial.id=movement.serial_id
      where movement.org_id=${orgId} and movement.journal_entry_id=${peek.journal_entry_id}
-       and movement.kind='assembly_build' order by movement.id for update of movement`)).rows;
+       and movement.kind='assembly_build' order by movement.id for update of movement`, "objects");
   if (locked.length !== sources.length || locked.some((row) => row.status !== "posted")) {
     throw new InventoryError("The work-order completion changed before reversal; reload and retry.");
   }
@@ -728,30 +728,30 @@ async function reverseCompletionReceipt(
         ${movement.unit_cost}, ${movement.total_value === null ? null : neg(movement.total_value)},
         ${reversalEntryId}, ${movement.id}, ${reason}, 'posted',
         ${"Reversal of work order " + order.number + " completion for " + (itemLabels.get(movement.item_id) ?? "finished item") + ": " + reason},
-        ${actorId}, ${actorId}) returning id`);
-    const reversalId = rowOrNotFound(inserted.rows).id;
+        ${actorId}, ${actorId}) returning id`, "objects");
+    const reversalId = rowOrNotFound(inserted).id;
     reversalIds.push(reversalId);
-    rowOrNotFound((await tx.execute<{ id: string }>(sql`
+    rowOrNotFound(await tx.execute<{ id: string }>(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'inventory_movements', ${movement.id}, 'void',
         ${JSON.stringify({ reason, reversalDate: input.reversalDate, reversalMovementId: reversalId, reversalEntryId })}::jsonb,
-        ${actorId}) returning id`)).rows);
+        ${actorId}) returning id`, "objects"));
     if (movement.serial_id) {
       const restoreIssuedSerial = order.receipt_rework_inspection_id !== null;
       const serial = await tx.execute<{ id: string }>(sql`
         update serials set status=${restoreIssuedSerial ? "shipped" : "registered"}, current_stock_location_id=null,
           updated_at=now(), updated_by=${actorId}
          where org_id=${orgId} and id=${movement.serial_id} and status='in_stock'
-           and current_stock_location_id=${movement.stock_location_id} returning id`);
-      if (serial.rows.length !== 1) throw new InventoryError("Serial " + (movement.serial_number ?? "evidence") + " changed before completion reversal.");
+           and current_stock_location_id=${movement.stock_location_id} returning id`, "objects");
+      if (serial.length !== 1) throw new InventoryError("Serial " + (movement.serial_number ?? "evidence") + " changed before completion reversal.");
     }
   }
   const completed = add(order.quantity_completed, neg(entry.completion_quantity));
   if (cmp(completed, "0") < 0) throw new InventoryError("Work order " + order.number + " completed quantity would fall below zero.");
   const updated = await tx.execute<{ id: string }>(sql`
     update mfg_work_orders set quantity_completed=${completed}, updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${order.id} and quantity_completed=${order.quantity_completed} returning id`);
-  if (updated.rows.length !== 1) refuse("Work order " + order.number + " changed while the completion was being reversed.", "work_order_changed", "Reload the work order and retry.", 409);
+     where org_id=${orgId} and id=${order.id} and quantity_completed=${order.quantity_completed} returning id`, "objects");
+  if (updated.length !== 1) refuse("Work order " + order.number + " changed while the completion was being reversed.", "work_order_changed", "Reload the work order and retry.", 409);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: order.id, action: "update",
     before: order, after: { ...order, quantity_completed: completed, reversedCompletionEntryId: peek.journal_entry_id, reversalEntryId, reason } });
   return { movementIds: reversalIds.sort(), entryId: reversalEntryId, alreadyReversed: false };
@@ -783,10 +783,10 @@ export async function reverseMaterialIssue(
              entry.custom->>'work_order_number' as work_order_number
         from inventory_movements movement left join journal_entries entry
           on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
-       where movement.org_id=${orgId} and movement.id=${input.movementId}`)).rows[0];
+       where movement.org_id=${orgId} and movement.id=${input.movementId}`, "objects"))[0];
     if (!peek) throw new ManufacturingNotFoundError();
     if (peek.entry_origin !== "manufacturing") throw new InventoryError("The movement is not a manufacturing work-order movement.");
-    const subject=(await tx.execute<{id:string;entity:string|null}>(sql`select id,subsidiary_id as entity from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number}`)).rows[0];
+    const subject=(await tx.execute<{id:string;entity:string|null}>(sql`select id,subsidiary_id as entity from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number}`, "objects"))[0];
     if(!subject||subject.entity!==peek.subsidiary_id)throw new ManufacturingNotFoundError();
     await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,subject.id);
 
@@ -794,27 +794,27 @@ export async function reverseMaterialIssue(
     if (peek.kind !== "assembly_consume" || !peek.journal_entry_id || !peek.work_order_number) {
       throw new InventoryError("Only a posted work-order material issue or backflush can be reversed.");
     }
-    const sourceRows = (await tx.execute<ReversibleMovement>(sql`
+    const sourceRows = await tx.execute<ReversibleMovement>(sql`
       select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
              serial_id, quantity, unit_cost, total_value, journal_entry_id, paired_movement_id, status
         from inventory_movements where org_id=${orgId} and journal_entry_id=${peek.journal_entry_id}
-          and kind='assembly_consume' order by item_id, stock_location_id, id`)).rows;
+          and kind='assembly_consume' order by item_id, stock_location_id, id`, "objects");
     if (!sourceRows.length) throw new InventoryError("The work-order issue has no consume movements.");
     await lockMovementPositions(tx, sourceRows);
     const order = (await tx.execute<Order>(sql`
       select id, number, produced_item_id, status, hold_reason, quantity_ordered::text, quantity_completed::text, quantity_scrapped::text,
              subsidiary_id, receipt_location_id, issue_location_id, bom_revision, routing_version,
              standard_cost_snapshot::text,receipt_rework_inspection_id, planned_start::text, short_close_reason
-        from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`)).rows[0];
+        from mfg_work_orders where org_id=${orgId} and number=${peek.work_order_number} for update`, "objects"))[0];
     if (!order) throw new ManufacturingNotFoundError();
     const prior = (await tx.execute<{ id: string }>(sql`
       select id from journal_entries where org_id=${orgId} and reverses_entry_id=${peek.journal_entry_id}
-        and status in ('posted','reversed') order by id limit 1`)).rows[0];
+        and status in ('posted','reversed') order by id limit 1`, "objects"))[0];
     if (prior) {
-      const reversalMovements = (await tx.execute<{ id: string }>(sql`
+      const reversalMovements = await tx.execute<{ id: string }>(sql`
         select id from inventory_movements where org_id=${orgId}
           and reverses_movement_id in (${sql.join(sourceRows.map((row) => sql`${row.id}`), sql`,`)})
-        order by id`)).rows;
+        order by id`, "objects");
       if (reversalMovements.length !== sourceRows.length) {
         throw new InventoryError("The work-order issue reversal is incomplete; contact an administrator before retrying.");
       }
@@ -835,7 +835,7 @@ export async function reverseMaterialIssue(
         "issue_cost_relieved_to_finished_goods",
         "Reverse the completion receipts posted after this issue, newest first (" + laterCompletions.join(", ") + "), then reverse the issue.", 409);
     }
-    const lockedSources = (await tx.execute<ReversibleMovement>(sql`
+    const lockedSources = await tx.execute<ReversibleMovement>(sql`
       select movement.id, movement.org_id, movement.subsidiary_id, movement.item_id, movement.kind,
              movement.moved_at::text, movement.stock_location_id, movement.lot_id,
              movement.serial_id, serial.serial_number, movement.quantity, movement.unit_cost,
@@ -843,7 +843,7 @@ export async function reverseMaterialIssue(
         from inventory_movements movement left join serials serial
           on serial.org_id=movement.org_id and serial.id=movement.serial_id
        where movement.org_id=${orgId} and movement.journal_entry_id=${peek.journal_entry_id}
-          and movement.kind='assembly_consume' order by movement.id for update of movement`)).rows;
+          and movement.kind='assembly_consume' order by movement.id for update of movement`, "objects");
     if (lockedSources.length !== sourceRows.length || lockedSources.some((row) => row.status !== "posted")) {
       throw new InventoryError("The work-order issue changed before reversal; reload and retry.");
     }
@@ -852,7 +852,7 @@ export async function reverseMaterialIssue(
     const reversalEntryId = await reverseInventoryJournal(tx as Runner, orgId, actorId,
       peek.journal_entry_id, input.reversalDate, reason, { allowManufacturingOrigin: true });
     const entry = (await tx.execute<{ custom: Record<string, unknown> }>(sql`
-      select custom from journal_entries where org_id=${orgId} and id=${peek.journal_entry_id}`)).rows[0];
+      select custom from journal_entries where org_id=${orgId} and id=${peek.journal_entry_id}`, "objects"))[0];
     const isBackflush = typeof entry?.custom?.backflush_trigger === "string";
     const reversalIds: string[] = [];
     for (const movement of lockedSources) {
@@ -866,21 +866,21 @@ export async function reverseMaterialIssue(
           ${movement.unit_cost}, ${movement.total_value === null ? null : neg(movement.total_value)},
           ${reversalEntryId}, ${movement.id}, ${reason}, 'posted',
           ${"Reversal of work order " + order.number + " for " + (itemLabels.get(movement.item_id) ?? "component item") + ": " + reason},
-          ${actorId}, ${actorId}) returning id`);
-      const reversalId = rowOrNotFound(inserted.rows).id;
+          ${actorId}, ${actorId}) returning id`, "objects");
+      const reversalId = rowOrNotFound(inserted).id;
       reversalIds.push(reversalId);
       const audit = await tx.execute<{ id: string }>(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'inventory_movements', ${movement.id}, 'void',
           ${JSON.stringify({ reason, reversalDate: input.reversalDate, reversalMovementId: reversalId, reversalEntryId })}::jsonb,
-          ${actorId}) returning id`);
-      rowOrNotFound(audit.rows);
+          ${actorId}) returning id`, "objects");
+      rowOrNotFound(audit);
       if (movement.serial_id) {
         const serial = await tx.execute<{ id: string }>(sql`
           update serials set status='in_stock', current_stock_location_id=${movement.stock_location_id},
             updated_at=now(), updated_by=${actorId}
-           where org_id=${orgId} and id=${movement.serial_id} and status='shipped' returning id`);
-        if (serial.rows.length !== 1) throw new InventoryError("Serial " + (movement.serial_number ?? "evidence") + " changed before issue reversal.");
+           where org_id=${orgId} and id=${movement.serial_id} and status='shipped' returning id`, "objects");
+        if (serial.length !== 1) throw new InventoryError("Serial " + (movement.serial_number ?? "evidence") + " changed before issue reversal.");
       }
     }
     const totals = new Map<string, string>();
@@ -899,8 +899,8 @@ export async function reverseMaterialIssue(
         const updated = await tx.execute<{ id: string }>(sql`
           update mfg_wo_materials set ${sql.raw(field)}=${next}, updated_by=${actorId}, updated_at=now()
            where org_id=${orgId} and work_order_id=${order.id} and id=${line.id}
-             and ${sql.raw(field)}=${line[field]} returning id`);
-        if (updated.rows.length !== 1) throw new InventoryError("Material " + materialLabel(line) + " changed before issue reversal.");
+             and ${sql.raw(field)}=${line[field]} returning id`, "objects");
+        if (updated.length !== 1) throw new InventoryError("Material " + materialLabel(line) + " changed before issue reversal.");
         await auditChange(tx, { orgId, actorId, table: "mfg_wo_materials", rowId: line.id, action: "update",
           before: { [isBackflush ? "backflushQty" : "issuedQty"]: line[field] },
           after: { [isBackflush ? "backflushQty" : "issuedQty"]: next, reversedEntryId: peek.journal_entry_id } });

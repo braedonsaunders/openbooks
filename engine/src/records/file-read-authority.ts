@@ -53,7 +53,7 @@ export async function requireNativeFileReadAuthority(
     select fi.folder_id as "folderId" from files fi
       join folders fo on fo.id=fi.folder_id and fo.org_id=fi.org_id
      where fi.id=${fileId} and ${visible} and not fo.is_inactive
-     for share of fi, fo`)).rows[0]
+     for share of fi, fo`, 'objects'))[0]
   if (!source) throw new NativeFileReadRefusal()
 
   const captures = await runner.execute<{ visible: boolean; vendorId: string | null; orderId: string | null }>(sql`
@@ -62,8 +62,8 @@ export async function requireNativeFileReadAuthority(
       from ap_capture_items ci
       left join parties vendor on vendor.id=ci.vendor_candidate_id and vendor.org_id=ci.org_id
       left join documents po on po.id=ci.purchase_order_id and po.org_id=ci.org_id
-     where ci.org_id=${orgId} and ci.file_id=${fileId} for share of ci`)
-  for (const capture of captures.rows) {
+     where ci.org_id=${orgId} and ci.file_id=${fileId} for share of ci`, 'objects')
+  for (const capture of captures) {
     if (!viewer.canReadApCapture || !capture.visible) throw new NativeFileReadRefusal()
     // Pin matched records as well: a concurrent rehome cannot outlive the
     // packet's scope check, and an unresolved non-null reference refuses.
@@ -88,9 +88,9 @@ export async function requireNativeFileReadAuthority(
      where record_id is not null or record_table is not null
     union
     select target_table as "targetTable",target_id as "targetId",true as attached from file_attachments
-     where org_id=${orgId} and file_id=${fileId}`)
+     where org_id=${orgId} and file_id=${fileId}`, 'objects')
   let assetAttachmentAccess = false
-  for (const reference of targets.rows) {
+  for (const reference of targets) {
     if (!reference.targetTable || !reference.targetId) throw new NativeFileReadRefusal()
     const target = await loadAttachmentTarget(orgId, reference.targetTable, reference.targetId, runner, true)
     if (!target || !attachmentTargetInScope({ allowedSubsidiaryIds }, target)) throw new NativeFileReadRefusal()
@@ -105,5 +105,5 @@ export async function requireNativeFileReadAuthority(
   // Cabinet downloads also admit an assets.read operator through a real,
   // visible asset attachment. The proof is bound to this file and retains its
   // privacy predicate; it never supplies a broader Cabinet viewer baseline.
-  if (!resourceAccess && !assetAttachmentAccess && captures.rows.length === 0) throw new NativeFileReadRefusal()
+  if (!resourceAccess && !assetAttachmentAccess && captures.length === 0) throw new NativeFileReadRefusal()
 }

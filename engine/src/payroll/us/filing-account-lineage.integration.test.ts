@@ -56,8 +56,8 @@ test('original used account lineage survives activation, cannot shrink across co
       });
       await db.execute(sql`update payroll_us_filing_account_employer_lineage set effective_to='2026-07-21',
         change_reason='Close after the last original payroll date' where org_id=${f.orgId} and id=${lineage}`);
-      const retained = (await db.execute<{ effective_to: string }>(sql`select effective_to::text from payroll_us_filing_account_employer_lineage
-        where org_id=${f.orgId} and id=${lineage}`)).rows;
+      const retained = await db.execute<{ effective_to: string }>(sql`select effective_to::text from payroll_us_filing_account_employer_lineage
+        where org_id=${f.orgId} and id=${lineage}`, 'objects');
       assert.equal(retained[0]!.effective_to,'2026-07-21');
     });
   } finally { await withBypassContext(() => dropScratchOrgReporting(f.orgId)); }
@@ -83,7 +83,7 @@ for (const masked of [false, true]) {
       sandbox = await withBypassContext(() => createSandbox({ productionOrgId:f.orgId,
         name:'Original filing authority review',tier:masked ? 'masked' : 'full',masked }));
       const target = sandbox.sandboxOrgId;
-      const copies = (await withBypassContext(() => db.execute<{ actual: Record<string, unknown>; expected: Record<string, unknown> }>(sql`
+      const copies = await withBypassContext(() => db.execute<{ actual: Record<string, unknown>; expected: Record<string, unknown> }>(sql`
         select to_jsonb(copy) as actual,
           to_jsonb(original) || jsonb_build_object(
             'id',public.ob_rebase(original.id,org.sandbox_seed),'org_id',org.id,
@@ -99,7 +99,7 @@ for (const masked of [false, true]) {
         join payroll_us_filing_account_employer_lineage original on original.org_id=org.sandbox_of and original.id=${lineage}
         join payroll_us_filing_account_employer_lineage copy on copy.org_id=org.id and copy.id=public.ob_rebase(original.id,org.sandbox_seed)
         where org.id=${target}
-      `))).rows;
+      `, 'objects'));
       assert.equal(copies.length,1);
       const actual = copies[0]!.actual;
       assert.deepEqual(actual,copies[0]!.expected,'every original identity, date, timestamp and actor follows the exact native clone projection');
@@ -107,14 +107,14 @@ for (const masked of [false, true]) {
       assert.equal(actual.change_reason,masked ? 'REDACTED' : 'Jordan Smith confirmed the original legal employer');
       const matches = async (candidate: Record<string, unknown>) => (await db.execute<{ allowed: boolean }>(sql`
         select public.payroll_us_filing_account_lineage_clone_matches(${JSON.stringify(candidate)}::jsonb) as allowed
-      `)).rows[0]!.allowed;
+      `, 'objects'))[0]!.allowed;
       await withOrgContext(target,async () => {
         assert.equal(await matches(actual),false,'ordinary tenant access cannot invoke clone admission');
       });
       await withMaintenanceTransaction(null,async () => {
         await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
         assert.equal(await matches(actual),false,'a completed native sandbox is outside the recorded clone lifecycle');
-        const prior = (await db.execute<{ status: string }>(sql`select status from sandboxes where id=${sandbox!.sandboxId} for update`)).rows[0]!.status;
+        const prior = (await db.execute<{ status: string }>(sql`select status from sandboxes where id=${sandbox!.sandboxId} for update`, 'objects'))[0]!.status;
         await db.execute(sql`update sandboxes set status='refreshing' where id=${sandbox!.sandboxId}`);
         assert.equal(await matches(actual),true,'the exact projection is admitted only during native-authorized cloning');
         for (const patch of [

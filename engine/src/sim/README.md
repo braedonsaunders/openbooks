@@ -91,7 +91,7 @@ closed-period immutability at each close), endurance adds:
 
 The finale writes `<runDir>/endurance/endurance-report.json`: days simulated,
 months closed, leap days and year-ends crossed, per-probe counts, and the
-sweep result. The first endurance smoke run halted on simulated day 7: the
-posted-edit probe found that a posted document HEADER's financial identity
-was raw-SQL mutable (the journal side was always guarded) — closed by
-the posted-document financial guard in `schema/migrations/generated/0001_baseline.sql`.
+sweep result. The posted-edit probe attempts a raw-SQL edit of a posted
+document header's total; storage refuses it through the
+`posted_document_financial_guard` trigger, and the stored figures must be
+unchanged afterwards.

@@ -200,15 +200,15 @@ async function crewWorkspaceData(
     const [partyRows, projectRows, today] = await Promise.all([
       db.execute<{ id: string; name: string }>(sql`
         select p.id::text as id, p.display_name as name from parties p
-         where p.org_id = ${orgId} and p.is_active ${partyScopeArm} order by p.display_name limit 500`),
+         where p.org_id = ${orgId} and p.is_active ${partyScopeArm} order by p.display_name limit 500`, 'objects'),
       db.execute<{ id: string; code: string | null; name: string | null }>(sql`
         select id::text as id, code, name from projects
-         where org_id = ${orgId} and is_active ${projectScopeArm} order by name nulls last, code nulls last limit 200`),
+         where org_id = ${orgId} and is_active ${projectScopeArm} order by name nulls last, code nulls last limit 200`, 'objects'),
       businessToday(orgId),
     ])
     createForm = {
-      workers: partyRows.rows,
-      projects: projectRows.rows.map((project) => ({
+      workers: partyRows,
+      projects: projectRows.map((project) => ({
         id: project.id,
         name: [project.code, project.name].filter(Boolean).join(' · ') || project.id,
       })),
@@ -225,17 +225,17 @@ async function crewWorkspaceData(
     const [workers, timeTypes, tasks, units] = await Promise.all([
       db.execute<{ id: string; name: string }>(sql`
         select p.id::text as id, p.display_name as name from parties p
-         where p.org_id = ${orgId} and p.is_active ${partyScopeArm} order by p.display_name limit 500`),
+         where p.org_id = ${orgId} and p.is_active ${partyScopeArm} order by p.display_name limit 500`, 'objects'),
       db.execute<{ id: string; name: string }>(sql`
-        select id::text as id, name from time_types where org_id = ${orgId} and is_active order by name`),
+        select id::text as id, name from time_types where org_id = ${orgId} and is_active order by name`, 'objects'),
       db.execute<{ id: string; name: string }>(sql`
         select t.id::text as id, t.name from project_tasks t
-         where t.org_id = ${orgId} and t.project_id = ${detail.projectId} order by t.name limit 200`),
+         where t.org_id = ${orgId} and t.project_id = ${detail.projectId} order by t.name limit 200`, 'objects'),
       equipmentOn
         ? db.execute<{ id: string; name: string }>(sql`
           select id::text as id, unit_number || ' · ' || name as name from equipment_units
-           where org_id = ${orgId} and status = 'active' order by unit_number limit 200`)
-        : Promise.resolve({ rows: [] as { id: string; name: string }[] }),
+           where org_id = ${orgId} and status = 'active' order by unit_number limit 200`, 'objects')
+        : Promise.resolve([] as { id: string; name: string }[]),
     ])
     // Boards that pre-fill crew time offer the people booked to this project
     // on this day; the foreman adds them and saves through the batch command.
@@ -263,10 +263,10 @@ async function crewWorkspaceData(
         equipmentHours: line.equipmentHours ?? '',
         memo: line.memo ?? '',
       })),
-      workers: workers.rows,
-      timeTypes: timeTypes.rows,
-      tasks: tasks.rows,
-      equipment: units.rows,
+      workers,
+      timeTypes,
+      tasks,
+      equipment: units,
       equipmentOn,
       signatureRequired: settings.signatureRequired,
       signLabel: text.signAndSubmit,

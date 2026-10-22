@@ -15,7 +15,7 @@ export async function assertBankDepositAdjustment(
   const component = (await executor.execute<{
     code: string; kind: string; payment_kind: string; unit_of_measure: string | null; is_active: boolean;
   }>(sql`select code, kind, payment_kind, unit_of_measure, is_active from pay_components
-    where org_id=${input.orgId} and id=${input.componentId} for share`)).rows[0];
+    where org_id=${input.orgId} and id=${input.componentId} for share`, "objects"))[0];
   const name = component?.code ?? input.componentId;
   if (cmp(roundMoney(input.amount, 2), "0") >= 0 || !component?.is_active || component.kind !== "earning"
       || component.payment_kind !== "cash" || component.unit_of_measure === "quantity") {
@@ -24,12 +24,12 @@ export async function assertBankDepositAdjustment(
   if (input.terminationRun) {
     throw new PayrollError(`Payroll component ${name} cannot deposit banked time on a termination run — record the deposit on an ordinary editable run before the final bank settlement`);
   }
-  const plans = (await executor.execute<{
+  const plans = await executor.execute<{
     code: string; unit: string; direction: string; deposit_component_id: string | null;
   }>(sql`select code, unit, direction, deposit_component_id::text from entitlement_plans
     where org_id=${input.orgId} and is_active
       and (payout_component_id=${input.componentId} or deposit_component_id=${input.componentId})
-    order by code for share`)).rows;
+    order by code for share`, "objects");
   if (plans.length !== 1) {
     throw new PayrollError(plans.length === 0
       ? `Payroll component ${name} has negative hours but no active entitlement bank — configure its bank settlement component in Benefits programs, or enter non-negative worked hours`

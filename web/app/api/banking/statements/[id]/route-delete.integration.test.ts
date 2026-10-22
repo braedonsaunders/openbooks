@@ -81,7 +81,7 @@ async function postBankLine(
     const offsetAmount = bankAmount.startsWith("-")
       ? bankAmount.slice(1)
       : `-${bankAmount}`;
-    const [bankLine] = (await tx.execute<{ id: string }>(sql`
+    const [bankLine] = await tx.execute<{ id: string }>(sql`
       insert into journal_lines
         (id, org_id, entry_id, line_number, account_id, subsidiary_id,
          amount, currency, txn_amount, fx_rate, memo)
@@ -93,7 +93,7 @@ async function postBankLine(
          ${org.accounts.adjustment}, ${org.subsidiaryId}, ${offsetAmount}, 'CAD',
          ${offsetAmount}, 1, ${label})
       returning id
-    `)).rows;
+    `, "objects");
     await tx.execute(sql`
       update journal_entries
          set status = 'posted', posted_by = ${actorId}, updated_by = ${actorId}
@@ -186,7 +186,7 @@ test(
       const [lineId] = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and statement_id = ${imported.statementId!}
-      `)).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       const recon = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100.00" },
         ctx,
@@ -205,7 +205,7 @@ test(
       const survivors = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statement_lines
          where statement_id = ${imported.statementId!} and org_id = ${org.orgId}
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(survivors, 1, "the refused delete leaves every line untouched");
     } finally {
       await dropScratchOrg(org.orgId);

@@ -54,9 +54,9 @@ test('partial physical recovery preserves immutable recipe and cost, replays onc
       const recovery = await disassembleAssembly(org.orgId,actor,{...input,buildMovementId:impaired.movementId,quantity:'1',idempotencyKey:randomUUID()})
       assert.equal(recovery.value.value,'6.0000'); assert.equal(recovery.value.components[0]!.value,'6.0000')
       assert.equal(recovery.value.components[0]!.originalCost,'10.0000')
-      const layers = (await db.execute<{ value:string }>(sql`select sum(remaining_quantity*unit_cost)::text as value from cost_layers where org_id=${org.orgId}`)).rows[0]!.value
+      const layers = (await db.execute<{ value:string }>(sql`select sum(remaining_quantity*unit_cost)::text as value from cost_layers where org_id=${org.orgId}`, 'objects'))[0]!.value
       const ledger = (await db.execute<{ value:string }>(sql`select sum(line.amount)::text as value from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
-        where line.org_id=${org.orgId} and line.account_id=${org.accounts.invAsset} and entry.status in ('posted','reversed')`)).rows[0]!.value
+        where line.org_id=${org.orgId} and line.account_id=${org.accounts.invAsset} and entry.status in ('posted','reversed')`, 'objects'))[0]!.value
       assert.equal(layers,'492.00000000'); assert.equal(ledger,'492.0000')
       await writeDownInventoryToNrv(org.orgId,actor,{itemId:org.items.assembly,stockLocationId:org.stockLocationId,subsidiaryId:org.subsidiaryId,nrvPerUnit:'0',date:org.date,memo:'Remaining damaged assemblies have no recoverable value'})
       const zero = await disassembleAssembly(org.orgId,actor,{...input,buildMovementId:impaired.movementId,quantity:'1',idempotencyKey:randomUUID()})
@@ -64,7 +64,7 @@ test('partial physical recovery preserves immutable recipe and cost, replays onc
       assert.equal(zero.value.components[0]!.quantity,'2.0000'); assert.equal(zero.value.components[0]!.value,'0.0000')
       const evidence = (await db.execute<{quantity:string;journal_entry_id:string|null}>(sql`select operation.quantity::text,operation.journal_entry_id
         from assembly_disassemblies operation join inventory_movements movement on movement.org_id=operation.org_id and movement.assembly_disassembly_id=operation.id
-        where movement.org_id=${org.orgId} and movement.id=${zero.value.movementId}`)).rows[0]!
+        where movement.org_id=${org.orgId} and movement.id=${zero.value.movementId}`, 'objects'))[0]!
       assert.equal(evidence.quantity,'1.0000'); assert.equal(evidence.journal_entry_id,null)
       const zeroOptions = await listInventoryOperationOptions(org.orgId,actor,{operation:'reverse',q:'Assembly',limit:100})
       assert.ok(zeroOptions.options.some(option=>option.id===zero.value.movementId))

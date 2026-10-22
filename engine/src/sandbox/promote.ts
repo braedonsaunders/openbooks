@@ -134,7 +134,7 @@ async function auditChangeSetTransition(
 ): Promise<void> {
   const after = (await db.execute<ChangeSetRow>(sql`
     select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-      from change_sets where id = ${id}`)).rows[0];
+      from change_sets where id = ${id}`, "objects"))[0];
   if (!after) throw new Error(`change set disappeared during ${operation}: ${id}`);
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -144,14 +144,14 @@ async function auditChangeSetTransition(
 
 async function assertActiveActor(actorId: string, orgId: string): Promise<void> {
   const actor = await db.execute<{ id: string }>(sql`
-    select id from users where id = ${actorId} and org_id = ${orgId} and is_active`);
-  if (!actor.rows[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
+    select id from users where id = ${actorId} and org_id = ${orgId} and is_active`, "objects");
+  if (!actor[0]) throw new Error(`actor ${actorId} is not an active user of the production organization`);
 }
 
 async function assertCapturedSandboxReady(sandboxOrgId: string | null, productionOrgId: string): Promise<void> {
   if (!sandboxOrgId) throw new Error("change set has no source sandbox — recapture from a live sandbox");
   const sandbox = (await db.execute<{ status: string }>(sql`
-    select status from sandboxes where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId} for share`)).rows[0];
+    select status from sandboxes where org_id = ${sandboxOrgId} and production_org_id = ${productionOrgId} for share`, "objects"))[0];
   if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
   if (sandbox.status !== "ready") {
     throw new Error(`change set's sandbox is ${sandbox.status}, not ready — wait until it is ready and recapture before reviewing or applying`);
@@ -165,12 +165,12 @@ async function withChangeSetSandboxLock<T>(changeSetId: string, work: (productio
   // bypass: cross-org-by-design — a change set links a production organization to its sandbox copy.
   const target = await withBypassContext(async () => {
     const changeSet = (await db.execute<{ org_id: string; sandbox_org_id: string | null }>(sql`
-      select org_id, sandbox_org_id from change_sets where id = ${changeSetId}`)).rows[0];
+      select org_id, sandbox_org_id from change_sets where id = ${changeSetId}`, "objects"))[0];
     if (!changeSet) throw new Error(`change set not found: ${changeSetId}`);
     if (!changeSet.sandbox_org_id) throw new Error("change set has no source sandbox — recapture from a live sandbox");
     const sandbox = (await db.execute<{ id: string }>(sql`
       select id from sandboxes
-       where org_id = ${changeSet.sandbox_org_id} and production_org_id = ${changeSet.org_id}`)).rows[0];
+       where org_id = ${changeSet.sandbox_org_id} and production_org_id = ${changeSet.org_id}`, "objects"))[0];
     if (!sandbox) throw new Error("change set's sandbox is gone — recapture from a live sandbox before reviewing or applying");
     return { sandboxId: sandbox.id, productionOrgId: changeSet.org_id };
   });
@@ -189,15 +189,15 @@ interface PromotionAuthority {
 
 async function promotionAuthority(actorId: string, orgId: string): Promise<PromotionAuthority> {
   const actor = (await db.execute<{ is_super_admin: boolean; is_active: boolean }>(sql`
-    select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`)).rows[0];
+    select is_super_admin,is_active from users where id=${actorId} and org_id=${orgId} for share`, "objects"))[0];
   if (!actor?.is_active) throw new Error("promotion requires an active production actor");
   await db.execute(sql`select id from role_assignments where org_id=${orgId} and user_id=${actorId} order by id for share`);
-  const roles = (await db.execute<{ permissions: string[] }>(sql`
+  const roles = await db.execute<{ permissions: string[] }>(sql`
     select r.permissions from app_roles r where r.org_id=${orgId}
       and exists(select 1 from role_assignments a where a.org_id=${orgId} and a.user_id=${actorId} and a.role_id=r.id)
-     order by r.id for share`)).rows;
-  const overrides = (await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
-    select permission,effect from user_permission_overrides where org_id=${orgId} and user_id=${actorId} order by id for share`)).rows;
+     order by r.id for share`, "objects");
+  const overrides = await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+    select permission,effect from user_permission_overrides where org_id=${orgId} and user_id=${actorId} order by id for share`, "objects");
   const permissions = actor.is_super_admin ? new Set(["*"]) : resolveEffectivePermissions({ rolePermissionSets: roles.map(row => row.permissions), overrides });
   if (!permissionSetCovers(permissions, "admin.sandboxes.manage")) throw new Error("promotion requires admin.sandboxes.manage");
   assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
@@ -228,8 +228,8 @@ async function assertPromotionOwner(
       select u.id from users u join orgs o on o.id=u.org_id
        where o.id=${sandboxOrgId} and o.env_kind='sandbox'
          and u.id=${row[field]} and u.id=ob_rebase(${actor}::uuid,o.sandbox_seed)
-       for share of u,o`);
-    if (counterpart.rows.length) return;
+       for share of u,o`, "objects");
+    if (counterpart.length) return;
   }
   throw new Error(`${table} promotion requires the record owner`);
 }
@@ -262,8 +262,8 @@ export async function buildChangeSet(
   return withSandboxRefreshLock(sid, () => withMaintenanceTransaction(null, async () => {
     await db.execute(sql`set local time zone 'UTC'`);
     const s = await db.execute<SandboxTargetRow>(sql`
-      select org_id, production_org_id, status from sandboxes where id = ${sandboxId}`);
-    const row = s.rows[0];
+      select org_id, production_org_id, status from sandboxes where id = ${sandboxId}`, "objects");
+    const row = s[0];
     if (!row) throw new Error(`sandbox not found: ${sandboxId}`);
     // Only a ready sandbox has a complete, quiescent customization layer to
     // diff. A failed/provisioning sandbox is missing rows (every production
@@ -279,17 +279,17 @@ export async function buildChangeSet(
     const sbx = assertUuid(row.org_id);
     const prod = assertUuid(row.production_org_id);
     if (creator) await assertActiveActor(creator, prod);
-    const seedRes = await db.execute<SandboxSeedRow>(sql`select sandbox_seed from orgs where id = ${row.org_id}`);
-    const seedRow = seedRes.rows[0];
+    const seedRes = await db.execute<SandboxSeedRow>(sql`select sandbox_seed from orgs where id = ${row.org_id}`, "objects");
+    const seedRow = seedRes[0];
     if (!seedRow) throw new Error(`sandbox organization not found: ${row.org_id}`);
     const seed = assertUuid(seedRow.sandbox_seed);
     const subsidiaryMap = await sandboxSubsidiaryMap(prod, sbx, seed);
     const productionSubsidiaries = new Map([...subsidiaryMap.keys()].map(id => [id, id]));
     const toProduction = new Map([...subsidiaryMap].map(([source, target]) => [target, source]));
-    const users = (await db.execute<{ production_id: string; sandbox_id: string | null }>(sql`
+    const users = await db.execute<{ production_id: string; sandbox_id: string | null }>(sql`
       select p.id as production_id, s.id as sandbox_id from users p
       left join users s on s.org_id=${sbx} and s.id=ob_rebase(p.id,${seed}::uuid)
-       where p.org_id=${prod}`)).rows;
+       where p.org_id=${prod}`, "objects");
     const toProductionUser = new Map(users.flatMap(row => row.sandbox_id ? [[row.sandbox_id, row.production_id] as const] : []));
     // A previously corrupted production owner can be repaired through its
     // proven origin, but only as an explicit reviewed change-set item.
@@ -312,8 +312,8 @@ export async function buildChangeSet(
     const present = await db.execute<TableNameRow>(sql`
       select table_name from information_schema.columns
        where table_schema = 'public' and column_name = 'org_id'
-         and table_name = any(${PROMOTABLE_ARRAY}::text[])`);
-    const tables = present.rows.map((r) => r.table_name);
+         and table_name = any(${PROMOTABLE_ARRAY}::text[])`, "objects");
+    const tables = present.map((r) => r.table_name);
 
     let itemCount = 0;
     for (const t of tables) {
@@ -324,8 +324,8 @@ export async function buildChangeSet(
         select s.id as sbx_id, p.id as prod_id, row_to_json(s) as sbx_row, row_to_json(p) as prod_row
           from ${sql.raw(`"${t}"`)} s
           left join ${sql.raw(`"${t}"`)} p on p.org_id = ${prod} and ob_rebase(p.id, ${seed}) = s.id
-         where s.org_id = ${sbx}`);
-      for (const d of diff.rows) {
+         where s.org_id = ${sbx}`, "objects");
+      for (const d of diff) {
         // Keep the raw production record before normalizing reference identities
         // for comparison. A reviewed repair must still match that actual base.
         const expectedBefore = d.prod_row ? structuredClone(d.prod_row) : null;
@@ -363,8 +363,8 @@ export async function buildChangeSet(
       const dels = await db.execute<IdRow>(sql`
         select p.id, row_to_json(p) as expected_before from ${sql.raw(`"${t}"`)} p
          where p.org_id = ${prod}
-           and not exists (select 1 from ${sql.raw(`"${t}"`)} s where s.org_id = ${sbx} and s.id = ob_rebase(p.id, ${seed}))`);
-      for (const dr of dels.rows) {
+           and not exists (select 1 from ${sql.raw(`"${t}"`)} s where s.org_id = ${sbx} and s.id = ob_rebase(p.id, ${seed}))`, "objects");
+      for (const dr of dels) {
         await db.insert(schema.changeSetItems).values({
           orgId: prod,
           changeSetId: cs.id,
@@ -381,7 +381,7 @@ export async function buildChangeSet(
     const finalSandbox = (await db.execute<{ id: string }>(sql`
       select id from sandboxes
        where id = ${sid} and org_id = ${sbx} and production_org_id = ${prod} and status = 'ready'
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!finalSandbox) {
       throw new Error("sandbox changed or was deleted during capture; no change set was published — wait for a ready sandbox and recapture");
     }
@@ -391,8 +391,8 @@ export async function buildChangeSet(
       update change_sets
          set capture_complete = true, item_count = ${itemCount}, updated_at = now(), updated_by = ${creator}
        where id = ${cs.id} and org_id = ${prod} and capture_complete = false
-       returning id`);
-    if (!completed.rows[0]) throw new Error("change-set capture completion matched no row; the draft was not published");
+       returning id`, "objects");
+    if (!completed[0]) throw new Error("change-set capture completion matched no row; the draft was not published");
     return { changeSetId: cs.id, itemCount };
   }));
 }
@@ -406,17 +406,15 @@ export async function reviewChangeSet(
   const actor = requireActor(reviewerId, "change-set review");
   await withChangeSetSandboxLock(id, (productionOrgId) =>
     withMaintenanceTransaction(productionOrgId, async () => {
-      const identity = (
-        await db.execute<{ org_id: string }>(
-          sql`select org_id from change_sets where id=${id}`,
-        )
-      ).rows[0];
+      const identity = (await db.execute<{ org_id: string }>(
+          sql`select org_id from change_sets where id=${id}`, "objects",
+        ))[0];
       if (!identity) throw new Error("The change set is unavailable.");
       await lockApprovalSubject(identity.org_id, "sandbox_change_set", id);
       const result = await db.execute<ChangeSetRow>(sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-        from change_sets where id = ${id} for update`);
-      const c = result.rows[0];
+        from change_sets where id = ${id} for update`, "objects");
+      const c = result[0];
       if (!c) throw new Error(`change set not found: ${id}`);
       const prod = assertUuid(c.org_id);
       await assertActiveActor(actor, prod);
@@ -425,15 +423,15 @@ export async function reviewChangeSet(
       if (!c.capture_complete) throw new Error("change set capture is incomplete");
       await assertCapturedSandboxReady(c.sandbox_org_id, prod);
       const count = await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`);
-      if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
+      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`, "objects");
+      if (Number(count[0]?.count ?? -1) !== Number(c.item_count)) {
       throw new Error("change set item count does not match its captured snapshot");
     }
       const reviewed = await db.execute(sql`
       update change_sets
          set status = 'reviewed', reviewed_at = now(), reviewed_by = ${actor}, updated_at = now(), updated_by = ${actor}
-       where id = ${id} and org_id = ${prod} and status = 'draft' returning id`);
-      if (reviewed.rows.length !== 1)
+       where id = ${id} and org_id = ${prod} and status = 'draft' returning id`, "objects");
+      if (reviewed.length !== 1)
         throw new Error("The capture changed during submission. Reload it.");
       await auditChangeSetTransition(id, prod, actor, "review", c);
       await approveChangeSetInTransaction(id, actor);
@@ -446,17 +444,15 @@ async function approveChangeSetInTransaction(
   actor: string,
   approvalRunId?: string,
 ): Promise<void> {
-  const identity = (
-    await db.execute<{ org_id: string }>(
-      sql`select org_id from change_sets where id=${id}`,
-    )
-  ).rows[0];
+  const identity = (await db.execute<{ org_id: string }>(
+      sql`select org_id from change_sets where id=${id}`, "objects",
+    ))[0];
   if (!identity) throw new Error("The change set is unavailable.");
   await lockApprovalSubject(identity.org_id, "sandbox_change_set", id);
   const result = await db.execute<ChangeSetRow>(sql`
       select org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-        from change_sets where id = ${id} for update`);
-  const c = result.rows[0];
+        from change_sets where id = ${id} for update`, "objects");
+  const c = result[0];
   if (!c) throw new Error(`change set not found: ${id}`);
   const prod = assertUuid(c.org_id);
   await assertActiveActor(actor, prod);
@@ -464,8 +460,8 @@ async function approveChangeSetInTransaction(
   if (c.status !== "reviewed") throw new Error(`change set is ${c.status}, not reviewed`);
   if (!c.capture_complete) throw new Error("change set capture is incomplete");
   const count = await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`);
-  if (Number(count.rows[0]?.count ?? -1) !== Number(c.item_count)) {
+      select count(*)::text as count from change_set_items where change_set_id = ${id} and org_id = ${prod}`, "objects");
+  if (Number(count[0]?.count ?? -1) !== Number(c.item_count)) {
       throw new Error("change set item count does not match its captured snapshot");
     }
   if (
@@ -482,8 +478,8 @@ async function approveChangeSetInTransaction(
   const approved = await db.execute(sql`
       update change_sets
          set status = 'approved', approved_at = now(), approved_by = ${actor}, updated_at = now(), updated_by = ${actor}
-       where id = ${id} and org_id = ${prod} and status = 'reviewed' returning id`);
-  if (approved.rows.length !== 1)
+       where id = ${id} and org_id = ${prod} and status = 'reviewed' returning id`, "objects");
+  if (approved.length !== 1)
     throw new Error(
       "The capture changed before release. Reload its Flow state.",
     );
@@ -499,11 +495,9 @@ export async function releasePromotionApproval(args: {
 }): Promise<void> {
   if (args.outcome !== "approved") return;
   const actor = requireActor(args.ctx.userId, "change-set approval");
-  const row = (
-    await db.execute<{ id: string }>(
-      sql`select id from change_sets where org_id=${args.ctx.orgId} and id=${args.subjectId} for update`,
-    )
-  ).rows[0];
+  const row = (await db.execute<{ id: string }>(
+      sql`select id from change_sets where org_id=${args.ctx.orgId} and id=${args.subjectId} for update`, "objects",
+    ))[0];
   if (!row || !args.approvalRunId)
     throw new Error("The native promotion submission is unavailable.");
   await approveChangeSetInTransaction(
@@ -525,8 +519,8 @@ export async function applyChangeSet(
       await db.execute(sql`set local time zone 'UTC'`);
       const result = await db.execute<ChangeSetRow>(sql`
       select org_id, sandbox_org_id, status, capture_complete, item_count, created_by, reviewed_by, approved_by
-        from change_sets where id = ${id} for update`);
-      const c = result.rows[0];
+        from change_sets where id = ${id} for update`, "objects");
+      const c = result[0];
       if (!c) throw new Error(`change set not found: ${id}`);
       const prod = assertUuid(c.org_id);
       await assertActiveActor(actor, prod);
@@ -540,17 +534,17 @@ export async function applyChangeSet(
 
       const items = await db.execute<ChangeSetItemRow>(sql`
       select table_name, target_id, op, payload, expected_before, base_captured from change_set_items
-       where change_set_id = ${id} and org_id = ${prod} order by created_at, id`);
-      if (items.rows.length !== Number(c.item_count)) {
+       where change_set_id = ${id} and org_id = ${prod} order by created_at, id`, "objects");
+      if (items.length !== Number(c.item_count)) {
       throw new Error("change set item count does not match its captured snapshot");
     }
-      if (items.rows.some(item => !item.base_captured)) {
+      if (items.some(item => !item.base_captured)) {
       throw new Error("change set has no captured production base; recapture and review it before applying");
     }
 
       const authority = await promotionAuthority(actor, prod);
 
-      for (const it of items.rows) {
+      for (const it of items) {
         const t = it.table_name;
         if (!PROMOTABLE.includes(t)) throw new Error(`change set contains non-promotable table: ${t}`);
         const requiredPermission = PROMOTION_PERMISSIONS[t]!;
@@ -574,28 +568,28 @@ export async function applyChangeSet(
                      then ${expectedBefore}::jsonb - ${runtimeColumns}::text[]
                      else ${expectedBefore}::jsonb end) as matches_base
           from ${table} existing
-         where id = ${target} and org_id = ${prod} for update`);
-        const before = prior.rows[0]?.row ?? null;
+         where id = ${target} and org_id = ${prod} for update`, "objects");
+        const before = prior[0]?.row ?? null;
         if (it.op === "insert" ? before !== null : before === null) {
         throw new Error(`promotion target ${t}/${target} ${it.op === "insert" ? "already exists" : "no longer exists"}; recapture the change set`);
       }
-        if (it.op !== "insert" && !prior.rows[0]!.matches_base) {
+        if (it.op !== "insert" && !prior[0]!.matches_base) {
         throw new Error(`promotion target ${t}/${target} changed since capture; recapture and review the change set`);
       }
         await assertPromotionOwner(t, before, actor, authority.permissions, c.sandbox_org_id, true);
         let after: Record<string, unknown> | null = null;
         if (it.op === "delete") {
         if (t === "user_scripts") {
-          const history = await db.execute(sql`select id from script_runs where org_id = ${prod} and script_id = ${target} limit 1`);
-          if (history.rows.length) throw new Error("This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.");
+          const history = await db.execute(sql`select id from script_runs where org_id = ${prod} and script_id = ${target} limit 1`, "objects");
+          if (history.length) throw new Error("This script has run history and cannot be deleted. Deactivate it instead to preserve its audit history.");
         }
         if (t === "report_definitions" && (before!.kind === "built_in" || before!.system)) {
           throw new Error("built-in reports cannot be deleted by promotion");
         }
         if (t === "app_roles") {
           if (before!.is_built_in) throw new Error("built-in roles cannot be deleted by promotion");
-          const held = await db.execute(sql`select id from role_assignments where org_id = ${prod} and role_id = ${target} limit 1`);
-          if (held.rows.length) throw new Error("an assigned role cannot be deleted by promotion; reassign its users first");
+          const held = await db.execute(sql`select id from role_assignments where org_id = ${prod} and role_id = ${target} limit 1`, "objects");
+          if (held.length) throw new Error("an assigned role cannot be deleted by promotion; reassign its users first");
         }
         await db.execute(sql`delete from ${table} where id = ${target} and org_id = ${prod}`);
       } else {
@@ -634,7 +628,7 @@ export async function applyChangeSet(
           const userField = USER_REFERENCE_COLUMNS[t];
           if (userField && payload[userField] !== null) {
           const ownerId = typeof payload[userField] === "string" ? assertUuid(payload[userField]) : null;
-          const owner = (await db.execute(sql`select id from users where org_id=${prod} and id=${ownerId} for key share`)).rows[0];
+          const owner = (await db.execute(sql`select id from users where org_id=${prod} and id=${ownerId} for key share`, "objects"))[0];
           if (!owner) throw new Error(`promotion ${t}/${target}: user reference must belong to production; recapture the change set`);
         }
           await assertPromotionOwner(t, payload, actor, authority.permissions, c.sandbox_org_id, false);
@@ -654,8 +648,8 @@ export async function applyChangeSet(
             payload.permissions = requested;
             // Revalidate a captured scope against live, locked production rows;
             // the target entity can disappear between capture and application.
-            const subsidiaries = (await db.execute<{ id: string }>(sql`
-            select id from subsidiaries where org_id=${prod} order by id for share`)).rows;
+            const subsidiaries = await db.execute<{ id: string }>(sql`
+            select id from subsidiaries where org_id=${prod} order by id for share`, "objects");
             const nextRestriction = remapRoleRestriction(payload.subsidiary_restriction,
             new Map(subsidiaries.map(row => [row.id, row.id])), `promotion role ${target}`);
             const coverage = await loadSubsidiaryGrantCoverage(db, prod, actor);
@@ -688,9 +682,9 @@ export async function applyChangeSet(
           // The payload was captured with row_to_json, so it carries GENERATED
           // ALWAYS projections too. They are known columns (never "obsolete") but
           // are recomputed by the target row and can never be SET or inserted.
-          const catalog = (await db.execute<{ column_name: string; is_generated: string }>(sql`
+          const catalog = await db.execute<{ column_name: string; is_generated: string }>(sql`
           select column_name, is_generated from information_schema.columns
-           where table_schema = 'public' and table_name = ${t} order by ordinal_position`)).rows;
+           where table_schema = 'public' and table_name = ${t} order by ordinal_position`, "objects");
           const known = catalog.map((row) => row.column_name);
           const columns = catalog.filter((row) => row.is_generated === "NEVER").map((row) => row.column_name);
           if (Object.keys(payload).some((key) => !known.includes(key))) {
@@ -706,8 +700,8 @@ export async function applyChangeSet(
           if (!sets.length) throw new Error(`promotion has no updatable fields for ${t}/${target}`);
           const updated = await db.execute<{ row: Record<string, unknown> }>(sql`
             update ${table} existing set ${sql.join(sets, sql`, `)} from ${incoming}
-             where existing.id = ${target} and existing.org_id = ${prod} returning to_jsonb(existing) as row`);
-          after = updated.rows[0]!.row;
+             where existing.id = ${target} and existing.org_id = ${prod} returning to_jsonb(existing) as row`, "objects");
+          after = updated[0]!.row;
         } else {
           const names = [...fields, ...columns.filter((column) => STRUCTURAL.has(column))];
           const values = names.map((column) => {
@@ -719,8 +713,8 @@ export async function applyChangeSet(
           });
           const inserted = await db.execute<{ row: Record<string, unknown> }>(sql`
             insert into ${table} as inserted (${sql.join(names.map((name) => sql.identifier(name)), sql`, `)})
-            select ${sql.join(values, sql`, `)} from ${incoming} returning to_jsonb(inserted) as row`);
-          after = inserted.rows[0]!.row;
+            select ${sql.join(values, sql`, `)} from ${incoming} returning to_jsonb(inserted) as row`, "objects");
+          after = inserted[0]!.row;
         }
         }
         await db.execute(sql`insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)

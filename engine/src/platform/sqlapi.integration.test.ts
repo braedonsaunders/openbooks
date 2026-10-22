@@ -210,8 +210,8 @@ test('the read role cannot execute SQL text, so console SQL cannot return to the
       select p.oid::regprocedure::text as fn from pg_proc p
        where p.pronamespace = 'pg_catalog'::regnamespace
          and p.proname::text = any(${`{${SQL_TEXT_EXECUTING_FUNCTIONS.join(',')}}`}::text[])
-         and has_function_privilege('openbooks_read', p.oid, 'EXECUTE')`))
-    assert.deepEqual(executable.rows, [])
+         and has_function_privilege('openbooks_read', p.oid, 'EXECUTE')`, 'objects'))
+    assert.deepEqual(executable, [])
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }

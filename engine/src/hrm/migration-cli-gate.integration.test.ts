@@ -78,12 +78,10 @@ interface SeededInput {
 
 async function seedInput(org: ScratchOrg, sourceId: string): Promise<SeededInput> {
   const partyId = await withOrg(org.orgId, async () => {
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name)
-      values (${org.orgId}, 'person', ${`Gate ${sourceId}`}) returning id::text as id`)) as unknown as {
-      rows: Array<{ id: string }>;
-    };
-    const id = inserted.rows[0]?.id;
+      values (${org.orgId}, 'person', ${`Gate ${sourceId}`}) returning id::text as id`, "objects");
+    const id = inserted[0]?.id;
     assert.ok(id, "party insert must return exactly one row");
     return id;
   });
@@ -100,11 +98,11 @@ interface TableCounts {
 
 async function tableCounts(orgId: string): Promise<TableCounts> {
   return withBypassContext(async () => {
-    const result = (await db.execute<{ employments: string; changes: string }>(
+    const result = await db.execute<{ employments: string; changes: string }>(
       sql`select (select count(*)::text from worker_employments where org_id = ${orgId}) as employments,
-                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`,
-    )) as unknown as { rows: Array<{ employments: string; changes: string }> };
-    const row = result.rows[0]!;
+                  (select count(*)::text from employment_changes where org_id = ${orgId}) as changes`, "objects",
+    );
+    const row = result[0]!;
     return { employments: Number(row.employments), changes: Number(row.changes) };
   });
 }
@@ -432,16 +430,14 @@ test("a refused apply issues no writes: table write counters do not move", { ski
   try {
     const counters = async (): Promise<Record<string, number>> =>
       withBypassContext(async () => {
-        const result = (await db.execute<{ table: string; ins: string; upd: string; del: string }>(sql`
+        const result = await db.execute<{ table: string; ins: string; upd: string; del: string }>(sql`
           select relname as table, n_tup_ins::text as ins, n_tup_upd::text as upd, n_tup_del::text as del
             from pg_stat_user_tables
            where schemaname = 'public'
              and relname in ('worker_employments', 'worker_employment_versions',
-                             'employment_assignments', 'employment_changes')`)) as unknown as {
-          rows: Array<{ table: string; ins: string; upd: string; del: string }>;
-        };
+                             'employment_assignments', 'employment_changes')`, "objects");
         return Object.fromEntries(
-          result.rows.map((row) => [
+          result.map((row) => [
             row.table,
             Number(row.ins) + Number(row.upd) + Number(row.del),
           ]),

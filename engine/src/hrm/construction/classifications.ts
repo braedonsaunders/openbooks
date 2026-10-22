@@ -52,8 +52,7 @@ export async function listClassifications(
   await assertConstructionFeature(exec, orgId, "Work classifications");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
-  const rows = (
-    await exec.execute<{
+  const rows = await exec.execute<{
       id: string;
       code: string;
       name: string;
@@ -71,8 +70,7 @@ export async function listClassifications(
         from hrm_work_classifications
        where org_id = ${orgId}::uuid
        order by code
-    `)
-  ).rows;
+    `, "objects");
   return rows;
 }
 
@@ -113,8 +111,7 @@ export async function createClassification(
     await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await requireUnrestrictedHrmScope(exec, orgId, actorId);
     try {
-      const created = (
-        await exec.execute<{ id: string }>(sql`
+      const created = (await exec.execute<{ id: string }>(sql`
           insert into hrm_work_classifications
             (org_id, code, name, trade, is_apprentice, apprentice_program_ref,
              journey_classification_id, created_by, updated_by)
@@ -122,8 +119,7 @@ export async function createClassification(
                   ${input.apprenticeProgramRef ?? null}, ${journeyClassificationId}::uuid,
                   ${actorId}::uuid, ${actorId}::uuid)
           returning id::text as id
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       if (!created) throw new HrmConstructionError(`Classification ${code} was not created — no row was written.`);
       const rows = await listClassifications(exec, orgId, actorId);
       const found = rows.find((row) => row.id === created.id);
@@ -161,12 +157,10 @@ export async function assignClassification(
     // refuse identically.
     const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await assertEmploymentInScope(exec, orgId, employmentId, allowed, true);
-    const classification = (
-      await exec.execute<{ id: string }>(sql`
+    const classification = (await exec.execute<{ id: string }>(sql`
         select id from hrm_work_classifications
          where org_id = ${orgId}::uuid and id = ${classificationId}::uuid and is_active
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!classification) {
       throw new HrmConstructionError(
         `Classification ${classificationId} does not exist or is retired in this organization — activate it before assigning.`,
@@ -189,16 +183,14 @@ export async function assignClassification(
          and effective_from <= ${effectiveFrom}::date
          and (effective_to is null or effective_to >= ${effectiveFrom}::date)
     `);
-    const created = (
-      await exec.execute<{ id: string }>(sql`
+    const created = (await exec.execute<{ id: string }>(sql`
         insert into hrm_employment_classifications
           (org_id, employment_id, classification_id, effective_from, home_schedule_id, created_by, updated_by)
         values (${orgId}::uuid, ${employmentId}::uuid, ${classificationId}::uuid,
                 ${effectiveFrom}::date, ${homeScheduleId}::uuid,
                 ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!created) {
       throw new HrmConstructionError(
         `The classification assignment for employment ${employmentId} was not written — no row was created.`,
@@ -227,8 +219,7 @@ export async function classificationAsOf(
   journeyClassificationId: string | null;
   homeScheduleId: string | null;
 } | null> {
-  const row = (
-    await exec.execute<{
+  const row = (await exec.execute<{
       classificationId: string;
       isApprentice: boolean;
       journeyClassificationId: string | null;
@@ -245,7 +236,6 @@ export async function classificationAsOf(
          and ec.effective_from <= ${workedOn}::date
          and (ec.effective_to is null or ec.effective_to >= ${workedOn}::date)
        order by ec.effective_from desc limit 1
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   return row ?? null;
 }

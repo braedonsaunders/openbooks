@@ -95,10 +95,10 @@ test("cancelling an interview kills the outstanding booking link", async () => {
     const orgId = h.org.orgId;
     await cancelInterview({ orgId, actorId: h.recruiterId, interviewId });
     // Proposed slots die with the interview, proved from storage.
-    const slots = (await db.execute<{ kind: string; tokenHash: string | null }>(sql`
+    const slots = await db.execute<{ kind: string; tokenHash: string | null }>(sql`
       select kind, candidate_token_hash as "tokenHash" from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId}
-    `)).rows;
+    `, "objects");
     assert.ok(slots.length > 0);
     for (const slot of slots) {
       assert.equal(slot.kind, "declined");
@@ -153,7 +153,7 @@ test("booking a cancelled interview is refused by name even when the link resolv
     const booked = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_interview_slots
        where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(booked, "0");
   });
 });
@@ -203,7 +203,7 @@ test("concurrent bookings across different slots still book only one sitting", a
     const booked = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from hrm_interview_slots
        where org_id = ${h.org.orgId} and interview_id = ${interviewId} and kind = 'booked'
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     assert.equal(booked, "1");
   });
 });
@@ -221,10 +221,10 @@ test("concurrent proposals leave only the final booking link live", async () => 
         timezone: "UTC",
       }],
     })));
-    const live = (await db.execute<{ tokenHash: string | null }>(sql`
+    const live = await db.execute<{ tokenHash: string | null }>(sql`
       select distinct candidate_token_hash as "tokenHash" from hrm_interview_slots
        where org_id = ${h.org.orgId} and interview_id = ${interviewId} and kind = 'proposed'
-    `)).rows;
+    `, "objects");
     assert.equal(live.length, 1, "one serialized proposal batch owns the live link");
     const hashes = new Set(batches.map((batch) => hashRecruitingToken(batch.bookingToken)));
     assert.ok(hashes.has(live[0]!.tokenHash!));

@@ -41,7 +41,7 @@ for (const policy of ["bank", "location", "inactive subsidiary", "inactive book"
       });
       const counts = (await db.execute<{ journals: number; deposits: number }>(sql`
         select (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
-          (select count(*)::int from security_deposit_transactions where org_id=${org.orgId}) as deposits`)).rows[0]!;
+          (select count(*)::int from security_deposit_transactions where org_id=${org.orgId}) as deposits`, "objects"))[0]!;
       assert.deepEqual(counts,{journals:0,deposits:0});
       await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${org.accounts.bank}`);

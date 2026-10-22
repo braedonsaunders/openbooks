@@ -36,7 +36,7 @@ export async function loadRetainerKpis(
   const byCurrency = new Map<string, { balance: string; drawn: string }>()
   let expiringCount = 0, after: string | null = null
   for (;;) {
-  const rows: RetainerKpiRow[] = (await db.execute<RetainerKpiRow>(sql`
+  const rows: RetainerKpiRow[] = await db.execute<RetainerKpiRow>(sql`
     select r.id,r.currency,
            r.total_amount::text as "totalAmount",
            coalesce(sum(d.amount) filter (where d.state = 'posted'), 0)::text as drawn,
@@ -48,7 +48,7 @@ export async function loadRetainerKpis(
      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      ${after ? sql`and r.id > ${after}::uuid` : sql``}
      group by r.id order by r.id limit 500
-  `)).rows
+  `, 'objects')
   for (const row of rows) {
     // The balance is the landed engine policy, never a local formula: total
     // minus posted drawdowns for this retainer, aggregated by currency.

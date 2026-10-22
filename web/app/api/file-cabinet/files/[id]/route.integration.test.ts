@@ -68,8 +68,8 @@ function patchReq(id: string, body: unknown): [Request, { params: Promise<{ id: 
 async function fileName(orgId: string, id: string): Promise<{ name: string; folderId: string } | null> {
   const r = (await db.execute<{ name: string; folderId: string }>(sql`
     select name, folder_id as "folderId" from files where id = ${id} and org_id = ${orgId}
-  `))
-  return r.rows[0] ?? null
+  `, 'objects'))
+  return r[0] ?? null
 }
 
 /**

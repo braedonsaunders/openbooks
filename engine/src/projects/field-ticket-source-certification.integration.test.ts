@@ -44,24 +44,24 @@ async function party(orgId: string, nsId: string): Promise<string> {
     insert into parties (org_id, kind, display_name, custom)
     values (${orgId}, 'employee', ${nsId}, ${JSON.stringify({ nsId })}::jsonb)
     returning id
-  `)).rows[0]!.id);
+  `, "objects"))[0]!.id);
 }
 
 async function retainedSourceFile(orgId: string, actorId: string): Promise<{ fileId: string; versionId: string }> {
   const folderId = String((await db.execute<{ id: string }>(sql`
     insert into folders (org_id, name) values (${orgId}, 'Source exports') returning id
-  `)).rows[0]!.id);
+  `, "objects"))[0]!.id);
   const fileId = String((await db.execute<{ id: string }>(sql`
     insert into files (org_id, folder_id, name, extension, file_type, content_type, size_bytes, storage_kind, content_hash, created_by)
     values (${orgId}, ${folderId}, 'field-ticket-headers.tsv', 'tsv', 'text', 'text/tab-separated-values',
             ${SOURCE_BYTES.length}, 'db', ${SOURCE_SHA256}, ${actorId})
     returning id
-  `)).rows[0]!.id);
+  `, "objects"))[0]!.id);
   const versionId = String((await db.execute<{ id: string }>(sql`
     insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind, content_hash, created_by)
     values (${fileId}, 1, ${SOURCE_BYTES.length}, 'text/tab-separated-values', 'db', ${SOURCE_SHA256}, ${actorId})
     returning id
-  `)).rows[0]!.id);
+  `, "objects"))[0]!.id);
   await db.execute(sql`insert into file_blobs (version_id, bytes) values (${versionId}, ${SOURCE_BYTES})`);
   await db.execute(sql`update files set current_version_id = ${versionId} where org_id = ${orgId} and id = ${fileId}`);
   return { fileId, versionId };
@@ -78,7 +78,7 @@ async function fixture(status = "approved", marker: unknown = { retained: "nativ
     insert into projects (org_id, subsidiary_id, name, custom)
     values (${orgId}, ${org.subsidiaryId}, 'JOB-1', ${JSON.stringify({ nsId: "JOB-1" })}::jsonb)
     returning id
-  `)).rows[0]!.id);
+  `, "objects"))[0]!.id);
   await db.execute(sql`insert into customer_roles(org_id,party_id) values (${orgId},${org.customerId})`);
   const foremanId = await party(orgId, "F1");
   const superintendentId = await party(orgId, "S1");
@@ -86,13 +86,13 @@ async function fixture(status = "approved", marker: unknown = { retained: "nativ
     where org_id = ${orgId} and id = (select party_id from customer_roles where org_id = ${orgId} order by party_id limit 1)`);
   const customerId = String((await db.execute<{ party_id: string }>(sql`
     select party_id::text from customer_roles where org_id = ${orgId} order by party_id limit 1
-  `)).rows[0]!.party_id);
+  `, "objects"))[0]!.party_id);
 
   const ticketId = String((await db.execute<{ id: string }>(sql`
     insert into documents (org_id, kind, document_number, party_id, project_id, subsidiary_id, document_date, currency, status, subtotal, tax_total, total, custom)
     values (${orgId}, 'field_ticket', 'FT-9', ${customerId}, ${projectId}, ${org.subsidiaryId}, '2024-06-16', 'CAD', ${status}, '95', '0', '95', ${JSON.stringify(marker)}::jsonb)
     returning id
-  `)).rows[0]!.id);
+  `, "objects"))[0]!.id);
   await db.execute(sql`
     insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id, superintendent_party_id)
     values (${ticketId}, ${orgId}, 'weekly', '2024-06-10', '2024-06-16', ${foremanId}, ${superintendentId})
@@ -104,7 +104,7 @@ async function fixture(status = "approved", marker: unknown = { retained: "nativ
 async function revision(orgId: string, ticketId: string): Promise<string> {
   return String((await db.execute<{ revision: string }>(sql`
     select revision_seq::text as revision from documents where org_id = ${orgId} and id = ${ticketId}
-  `)).rows[0]!.revision);
+  `, "objects"))[0]!.revision);
 }
 
 function certificationInput(
@@ -146,13 +146,13 @@ async function protectedFacts(orgId: string, ticketId: string) {
            (select count(*)::int from field_ticket_signatures where org_id = ${orgId} and field_ticket_id = ${ticketId}) as signatures
       from documents d join field_tickets ft on ft.org_id = d.org_id and ft.document_id = d.id
      where d.org_id = ${orgId} and d.id = ${ticketId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
 }
 
 async function certificationCount(orgId: string): Promise<number> {
   return Number((await db.execute<{ count: string }>(sql`
     select count(*)::text as count from field_ticket_source_certifications where org_id = ${orgId}
-  `)).rows[0]!.count);
+  `, "objects"))[0]!.count);
 }
 
 test("project merge refuses to reassign an immutable Field Ticket identity certification", enabled, async () => {
@@ -166,7 +166,7 @@ test("project merge refuses to reassign an immutable Field Ticket identity certi
       values (${row.orgId}, (select subsidiary_id from projects where org_id = ${row.orgId} and id = ${row.projectId}),
               'Survivor', '{}'::jsonb)
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
 
     await assert.rejects(
       mergeProjects(row.orgId, { survivorId, duplicateId: row.projectId, actorId: row.actorId }),
@@ -175,11 +175,11 @@ test("project merge refuses to reassign an immutable Field Ticket identity certi
     const certification = (await db.execute<{ native_project_id: string }>(sql`
       select native_project_id from field_ticket_source_certifications
        where org_id = ${row.orgId} and native_document_id = ${row.ticketId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(certification?.native_project_id, row.projectId);
     const ticket = (await db.execute<{ project_id: string }>(sql`
       select project_id from documents where org_id = ${row.orgId} and id = ${row.ticketId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(ticket?.project_id, row.projectId);
   } finally {
     await dropScratchOrg(row.orgId);
@@ -198,7 +198,7 @@ test("a human-reviewed crosswalk certifies a used ticket as metadata only", enab
     const snapshotId = String((await db.execute<{ id: string }>(sql`
       insert into field_ticket_labor_snapshots (org_id, field_ticket_id, revision, evidence_basis, reason, currency, captured_by)
       values (${row.orgId}, ${row.ticketId}, 1, 'operational_time', 'Approval capture', 'CAD', ${row.actorId}) returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     const employeeId = await party(row.orgId, "E1");
     await db.execute(sql`
       insert into field_ticket_labor_lines
@@ -226,7 +226,7 @@ test("a human-reviewed crosswalk certifies a used ticket as metadata only", enab
     assert.equal(result.sourceExternalId, "100");
 
     assert.deepEqual(await protectedFacts(row.orgId, row.ticketId), before);
-    const stored = (await db.execute<{
+    const stored = await db.execute<{
       source_system: string; source_external_id: string; native_document_number: string;
       native_fingerprint_sha256: string; native_point_in_time: Record<string, unknown>;
       source_row_sha256: string; reference_map: Record<string, unknown>;
@@ -234,7 +234,7 @@ test("a human-reviewed crosswalk certifies a used ticket as metadata only", enab
       select source_system, source_external_id, native_document_number, native_fingerprint_sha256,
              native_point_in_time, source_row_sha256, reference_map
         from field_ticket_source_certifications where org_id = ${row.orgId}
-    `)).rows;
+    `, "objects");
     assert.equal(stored.length, 1);
     assert.equal(stored[0]!.source_system, "legacy-app");
     assert.equal(stored[0]!.native_document_number, "FT-9");
@@ -243,17 +243,17 @@ test("a human-reviewed crosswalk certifies a used ticket as metadata only", enab
 
     const document = (await db.execute<{ custom: { retained: string; source: { system: string; externalId: string; jobRef: string } } }>(sql`
       select custom from documents where org_id = ${row.orgId} and id = ${row.ticketId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(document.custom.retained, "native context");
     assert.deepEqual(
       { system: document.custom.source.system, externalId: document.custom.source.externalId, jobRef: document.custom.source.jobRef },
       { system: "legacy-app", externalId: "100", jobRef: "JOB-1" },
     );
-    const audits = (await db.execute<{ table_name: string; count: string }>(sql`
+    const audits = await db.execute<{ table_name: string; count: string }>(sql`
       select table_name, count(*)::text as count from audit_log
        where org_id = ${row.orgId} and table_name in ('documents', 'field_ticket_source_certifications')
        group by table_name order by table_name
-    `)).rows;
+    `, "objects");
     assert.deepEqual(audits.map((audit) => [audit.table_name, Number(audit.count)]), [
       ["documents", 1],
       ["field_ticket_source_certifications", 1],
@@ -262,7 +262,7 @@ test("a human-reviewed crosswalk certifies a used ticket as metadata only", enab
       select changes from audit_log
        where org_id = ${row.orgId} and table_name = 'documents'
          and changes->>'reason' = 'field_ticket_source_identity_certification'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(documentAudit.changes.before.document.id, row.ticketId);
     assert.equal(documentAudit.changes.after.document.id, row.ticketId);
     assert.equal(documentAudit.changes.after.document.custom.source.externalId, "100");
@@ -320,11 +320,11 @@ test("an uppercase source-system identity is stored exactly as reviewed", enable
     assert.equal(result.sourceSystem, "Legacy-App");
     const stored = (await db.execute<{ source_system: string }>(sql`
       select source_system from field_ticket_source_certifications where org_id = ${row.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stored.source_system, "Legacy-App");
     const document = (await db.execute<{ system: string }>(sql`
       select custom->'source'->>'system' as system from documents where org_id = ${row.orgId} and id = ${row.ticketId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(document.system, "Legacy-App");
   } finally {
     await dropScratchOrg(row.orgId);
@@ -354,7 +354,7 @@ test("wrong file, hash, version and missing-row bindings refuse without certifyi
               (select subsidiary_id from projects where org_id = ${row.orgId} and id = ${row.projectId}),
               '2024-06-16', 'CAD', 'draft', '{}'::jsonb)
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id, superintendent_party_id)
       values (${otherTicket}, ${row.orgId}, 'weekly', '2024-06-10', '2024-06-16', ${row.foremanId}, ${row.superintendentId})
@@ -445,7 +445,7 @@ test("one request identity raced across different tickets admits exactly one cer
               (select subsidiary_id from projects where org_id = ${row.orgId} and id = ${row.projectId}),
               '2024-06-23', 'CAD', 'draft', '{}'::jsonb)
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id, superintendent_party_id)
       values (${otherTicket}, ${row.orgId}, 'weekly', '2024-06-17', '2024-06-23', ${row.foremanId}, ${row.superintendentId})
@@ -477,7 +477,7 @@ test("a source ticket already represented by another source-born ticket cannot b
               '2024-06-16', 'CAD', 'draft',
               ${JSON.stringify({ source: { system: "legacy-app", externalId: "100", number: "FT-OTHER" } })}::jsonb)
       returning id
-    `)).rows[0]!.id);
+    `, "objects"))[0]!.id);
     await db.execute(sql`
       insert into field_tickets (document_id, org_id, period, period_start, period_end, foreman_party_id, superintendent_party_id)
       values (${otherTicket}, ${row.orgId}, 'weekly', '2024-06-10', '2024-06-16', ${row.foremanId}, ${row.superintendentId})
@@ -490,7 +490,7 @@ test("a source ticket already represented by another source-born ticket cannot b
     assert.equal(await certificationCount(row.orgId), 0);
     const selected = (await db.execute<{ custom: unknown }>(sql`
       select custom from documents where org_id = ${row.orgId} and id = ${row.ticketId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.deepEqual(selected.custom, { retained: "native context" });
   } finally {
     await dropScratchOrg(row.orgId);

@@ -48,11 +48,11 @@ async function rowToMethod(row: Record<string, unknown>): Promise<StoredPaymentM
 
 /** Stored methods on file for a customer, default first. */
 export async function listPaymentMethods(orgId: string, partyId: string): Promise<StoredPaymentMethod[]> {
-  const rows = (await db.execute(sql`
+  const rows = await db.execute(sql`
     select * from customer_payment_methods
      where org_id = ${orgId} and party_id = ${partyId} and status <> 'removed'
      order by is_default desc, created_at desc
-  `)).rows;
+  `, "objects");
   return Promise.all(rows.map(rowToMethod));
 }
 
@@ -71,7 +71,7 @@ export async function startMethodSetup(
     await requireAutopayFeature(orgId);
     const party = (await db.execute<{ id: string }>(sql`
       select id from parties where id = ${input.partyId} and org_id = ${orgId} limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!party) throw new AutopayError("customer not found; pick a customer from Customers first");
     const config = await loadPaymentProviderConfig<ProviderConfigRow>(orgId, input.provider);
     if (!config || !config.is_enabled || !config.acceptance_enabled) {
@@ -81,7 +81,7 @@ export async function startMethodSetup(
       select provider_customer_id from customer_payment_methods
        where org_id = ${orgId} and party_id = ${input.partyId} and status = 'active' and provider_customer_id is not null
        order by is_default desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     // The setup token is the customer's Bearer [REDACTED] the hosted setup page: same
     // token handling as payment links (random token, sha256 in storage). The
     // caller mints it so the return URL can carry it to the return page.
@@ -94,8 +94,8 @@ export async function startMethodSetup(
       values (${orgId}, ${input.partyId}, ${input.provider}, 'pending',
               ${paymentLinkTokenHash(setupToken)}, ${input.actorId ?? null}, ${input.actorId ?? null})
       returning id
-    `));
-    const methodId = inserted.rows[0]?.id;
+    `, "objects"));
+    const methodId = inserted[0]?.id;
     if (!methodId) throw new AutopayError("payment method could not be started; try again");
     const adapter = ACCEPTANCE_ADAPTERS[input.provider];
     let session;
@@ -127,8 +127,8 @@ export async function startMethodSetup(
              updated_at = now(), updated_by = ${input.actorId ?? null}
        where id = ${methodId} and org_id = ${orgId} and status = 'pending'
        returning id
-    `));
-    if (!claimed.rows[0]) throw new AutopayError("payment method setup was superseded; start a new setup link");
+    `, "objects"));
+    if (!claimed[0]) throw new AutopayError("payment method setup was superseded; start a new setup link");
     await auditAutopay(orgId, "customer_payment_methods", methodId, {
       event: "setup_started",
       after: { provider: input.provider, setupRef: session.externalRef },
@@ -146,7 +146,7 @@ export async function setupTokenOrgId(setupToken: string): Promise<string | null
     const row = (await db.execute<{ org_id: string }>(sql`
       select org_id from customer_payment_methods
        where token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     return row?.org_id ?? null;
   });
 }
@@ -185,7 +185,7 @@ export async function publicSetupPage(setupToken: string): Promise<PublicSetupPa
         join orgs o on o.id = m.org_id
         join parties p on p.id = m.party_id and p.org_id = m.org_id
        where m.token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) throw new AutopayError("this setup link is not valid; ask for a new one");
     if (!(await orgFeatureEnabled(row.org_id, "autopay"))) {
       throw new AutopayError("automatic payments are not available right now; contact us for another way to pay");
@@ -217,7 +217,7 @@ export async function setupContinueUrl(setupToken: string): Promise<string> {
     return (await db.execute<{ setup_redirect_url: string | null }>(sql`
       select setup_redirect_url from customer_payment_methods
        where token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
-    `)).rows[0]?.setup_redirect_url ?? null;
+    `, "objects"))[0]?.setup_redirect_url ?? null;
   });
   if (!url) throw new AutopayError("this setup link expired before use; ask for a new one");
   return url;
@@ -231,7 +231,7 @@ export async function completeSetupByToken(setupToken: string, fetchFn?: FetchFn
     return (await db.execute<{ id: string }>(sql`
       select id from customer_payment_methods
        where token_hash = ${paymentLinkTokenHash(setupToken)} limit 1
-    `)).rows[0]?.id ?? null;
+    `, "objects"))[0]?.id ?? null;
   });
   if (!methodId) throw new AutopayError("this setup link is not valid; ask for a new one");
   return completeMethodSetup(page.orgId, methodId, null, fetchFn);
@@ -281,7 +281,7 @@ export async function completeMethodSetup(
       select * from customer_payment_methods
        where id = ${methodId} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) throw new AutopayError("payment method not found");
     if (locked.status === "active") return rowToMethod(locked);
     if (locked.status !== "pending") throw new AutopayError("this payment method was removed; send a new setup link instead");
@@ -304,14 +304,14 @@ export async function completeMethodSetup(
              status = 'active', updated_at = now(), updated_by = ${actorId}
        where id = ${methodId} and org_id = ${orgId} and status = 'pending'
        returning *
-    `));
-    if (!updated.rows[0]) throw new AutopayError("payment method setup was superseded; start a new setup link");
+    `, "objects"));
+    if (!updated[0]) throw new AutopayError("payment method setup was superseded; start a new setup link");
     await auditAutopay(orgId, "customer_payment_methods", methodId, {
       event: "setup_completed",
       after: { brand: detail.brand, last4: detail.last4 ? `•••• ${detail.last4}` : null },
       reason: "Provider confirmed the stored method.",
     }, actorId);
-    return rowToMethod(updated.rows[0]);
+    return rowToMethod(updated[0]);
   });
 }
 
@@ -402,7 +402,7 @@ export async function setDefaultMethod(orgId: string, methodId: string, actorId:
       select party_id, status from customer_payment_methods
        where id = ${methodId} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) throw new AutopayError("payment method not found");
     if (locked.status !== "active") throw new AutopayError("only an active method can be the default; finish its setup first");
     await db.execute(sql`
@@ -413,8 +413,8 @@ export async function setDefaultMethod(orgId: string, methodId: string, actorId:
       update customer_payment_methods set is_default = true, updated_at = now(), updated_by = ${actorId}
        where id = ${methodId} and org_id = ${orgId} and status = 'active'
        returning id
-    `));
-    if (!flipped.rows[0]) throw new AutopayError("payment method is no longer active; finish its setup first");
+    `, "objects"));
+    if (!flipped[0]) throw new AutopayError("payment method is no longer active; finish its setup first");
     await auditAutopay(orgId, "customer_payment_methods", methodId, {
       event: "default_changed",
       reason: "Operator chose the default autopay method.",
@@ -447,7 +447,7 @@ export async function removeMethod(
         from customer_payment_methods
        where id = ${methodId} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) throw new AutopayError("payment method not found");
     if (locked.status === "removed") return;
     if (locked.status === "active" && locked.provider_method_id) {
@@ -466,8 +466,8 @@ export async function removeMethod(
          set status = 'removed', is_default = false, updated_at = now(), updated_by = ${actorId}
        where id = ${methodId} and org_id = ${orgId} and status <> 'removed'
        returning id
-    `));
-    if (!flipped.rows[0]) throw new AutopayError("payment method was already removed");
+    `, "objects"));
+    if (!flipped[0]) throw new AutopayError("payment method was already removed");
     await auditAutopay(orgId, "customer_payment_methods", methodId, {
       event: "removed",
       after: { wasDefault: locked.is_default },
@@ -517,7 +517,7 @@ export async function recordCardUpdaterEvent(
        where org_id = ${orgId} and provider = ${provider}
          and provider_method_id = ${detail.providerMethodId} and status = 'active'
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) return "unknown_method";
     const expiryMoved = (locked.exp_month ?? null) !== detail.expMonth || (locked.exp_year ?? null) !== detail.expYear;
     const updated = (await db.execute<{ id: string }>(sql`
@@ -529,8 +529,8 @@ export async function recordCardUpdaterEvent(
              updated_at = now()
        where id = ${locked.id} and org_id = ${orgId}
        returning id
-    `));
-    if (!updated.rows[0]) throw new AutopayError("payment method changed underfoot; refusing to record over it");
+    `, "objects"));
+    if (!updated[0]) throw new AutopayError("payment method changed underfoot; refusing to record over it");
     const changed = (locked.brand ?? null) !== detail.brand || (locked.last4 ?? null) !== detail.last4 || expiryMoved;
     if (!changed) return "card_unchanged";
     await auditAutopay(orgId, "customer_payment_methods", locked.id, {
@@ -563,7 +563,7 @@ export async function setMethodFallbackPriority(
       select status, is_default from customer_payment_methods
        where id = ${methodId} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!locked) throw new AutopayError("payment method not found");
     if (locked.status !== "active") throw new AutopayError("only an active method can join the backup chain; finish its setup first");
     const flipped = (await db.execute<{ id: string }>(sql`
@@ -571,8 +571,8 @@ export async function setMethodFallbackPriority(
          set fallback_priority = ${priority}, updated_at = now(), updated_by = ${actorId}
        where id = ${methodId} and org_id = ${orgId} and status = 'active'
        returning id
-    `));
-    if (!flipped.rows[0]) throw new AutopayError("payment method is no longer active; finish its setup first");
+    `, "objects"));
+    if (!flipped[0]) throw new AutopayError("payment method is no longer active; finish its setup first");
     await auditAutopay(orgId, "customer_payment_methods", methodId, {
       event: "fallback_order_changed",
       after: { fallbackPriority: priority, wasDefault: locked.is_default },
@@ -605,7 +605,7 @@ export async function recordProviderSetupMethod(
          where id = ${event.linkToken} and org_id = ${orgId}
            and provider = ${provider} and status = 'pending'
          limit 1
-      `)).rows[0]?.id ?? null;
+      `, "objects"))[0]?.id ?? null;
     }
     if (!methodId && event.externalRef) {
       methodId = (await db.execute<{ id: string }>(sql`
@@ -613,7 +613,7 @@ export async function recordProviderSetupMethod(
          where provider_method_id = ${event.externalRef} and org_id = ${orgId}
            and provider = ${provider} and status = 'pending'
          limit 1
-      `)).rows[0]?.id ?? null;
+      `, "objects"))[0]?.id ?? null;
     }
     if (!methodId) return "unknown_setup";
     await completeMethodSetup(orgId, methodId, null, undefined, event);

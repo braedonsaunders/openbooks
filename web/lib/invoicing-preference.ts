@@ -36,9 +36,9 @@ export async function resolveInvoicingPreference(orgId: string, projectId: strin
     select p.invoicing_preference as project_pref, cust.invoicing_preference as customer_pref
       from projects p left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `))
-  const custPref = pref(row.rows[0]?.customer_pref)
-  const projPref = pref(row.rows[0]?.project_pref)
+  `, 'objects'))
+  const custPref = pref(row[0]?.customer_pref)
+  const projPref = pref(row[0]?.project_pref)
 
   // pick(field): project override ← customer override ← type default, tracking source.
   function pick<T>(typeVal: T, cKey: keyof InvoicingPreference, pKey: keyof InvoicingPreference): [T, Layer] {

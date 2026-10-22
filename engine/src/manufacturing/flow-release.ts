@@ -16,8 +16,7 @@ export async function releaseWorkOrderApproval(args: {
 }): Promise<void> {
   const { subjectId, outcome, comment, ctx } = args;
   await assertManufacturingFeature(db, ctx.orgId, "manufacturing");
-  const before = (
-    await db.execute<{
+  const before = (await db.execute<{
       id: string;
       number: string;
       status: string;
@@ -25,8 +24,7 @@ export async function releaseWorkOrderApproval(args: {
       updated_by: string | null;
     }>(sql`
     select id, number, status, updated_at, updated_by from mfg_work_orders
-     where org_id=${ctx.orgId} and id=${subjectId} for update`)
-  ).rows[0];
+     where org_id=${ctx.orgId} and id=${subjectId} for update`, "objects"))[0];
   if (!before) throw new ManufacturingNotFoundError();
   if (before.status !== "draft") {
     throw new ManufacturingError(
@@ -76,8 +74,8 @@ export async function releaseWorkOrderApproval(args: {
   }
   const updated = await db.execute(sql`
     update mfg_work_orders set updated_by=${ctx.userId}, updated_at=now()
-     where org_id=${ctx.orgId} and id=${subjectId} and status='draft' returning id`);
-  if (updated.rows.length !== 1) {
+     where org_id=${ctx.orgId} and id=${subjectId} and status='draft' returning id`, "objects");
+  if (updated.length !== 1) {
     throw new ManufacturingError(
       "The work order changed while its approval was being rejected.",
       {

@@ -44,11 +44,11 @@ export async function earnedValueProjectOptions(authz: Authz): Promise<{ id: str
     : allowed.size === 0
       ? sql`and false`
       : sql`and subsidiary_id = any(${pgTextArrayLiteral([...allowed])}::uuid[])`
-  const rows = (await db.execute<{ id: string; code: string | null; name: string }>(sql`
+  const rows = await db.execute<{ id: string; code: string | null; name: string }>(sql`
     select id, code, name from projects
      where org_id = ${authz.user.orgId} and is_active ${scope}
      order by code nulls last, name, id
-     limit 2000`)).rows
+     limit 2000`, 'objects')
   return rows.map((row) => ({ id: row.id, label: row.code ? `${row.code} · ${row.name}` : row.name }))
 }
 

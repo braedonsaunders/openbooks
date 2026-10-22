@@ -75,23 +75,23 @@ for (const unit of ["money", "hours"] as const) {
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, []);
 
-      const ledger = (await db.execute<{ kind: string; amount: string; hours: string | null }>(sql`
+      const ledger = await db.execute<{ kind: string; amount: string; hours: string | null }>(sql`
         select kind, amount::text as amount, hours::text as hours from entitlement_ledger
          where org_id=${fx.orgId} and plan_id=${planId} and employee_party_id=${partyId}
-           and pay_run_document_id=${run.documentId} order by kind`)).rows;
+           and pay_run_document_id=${run.documentId} order by kind`, "objects");
       assert.deepEqual(ledger, [
         { kind: "accrual", amount: accrualValue, hours: null },
         { kind: "payout", amount: unit === "money" ? "-50.0000" : "-1.0000", hours: unit === "money" ? null : "1.00" },
       ]);
       const balance = (await db.execute<{ balance: string }>(sql`
         select sum(amount)::text as balance from entitlement_ledger
-         where org_id=${fx.orgId} and plan_id=${planId} and employee_party_id=${partyId}`)).rows[0]!.balance;
+         where org_id=${fx.orgId} and plan_id=${planId} and employee_party_id=${partyId}`, "objects"))[0]!.balance;
       assert.equal(balance, cap);
-      const payoutLine = (await db.execute<{ amount: string; hours: string | null }>(sql`
+      const payoutLine = await db.execute<{ amount: string; hours: string | null }>(sql`
         select line.amount::text as amount, line.hours::text as hours from pay_stub_lines line
           join pay_stubs stub on stub.id=line.stub_id and stub.org_id=line.org_id
          where stub.org_id=${fx.orgId} and stub.pay_run_document_id=${run.documentId}
-           and stub.employee_party_id=${partyId} and line.component_id=${payout}`)).rows;
+           and stub.employee_party_id=${partyId} and line.component_id=${payout}`, "objects");
       assert.deepEqual(payoutLine, [{
         amount: unit === "money" ? "50.0000" : "30.0000",
         hours: unit === "money" ? null : "1.00",
@@ -129,7 +129,7 @@ test("hours entitlement accrual values a foreign wage in the pay run currency", 
       select l.amount::text as amount from pay_stub_lines l
         join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
        where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${accrual}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(line?.amount, "180.0000", "two banked hours at CAD 90 per hour post CAD 180");
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
@@ -160,15 +160,15 @@ for (const unit of ['hours', 'money'] as const) {
       };
       await mutatePayRunAdjustment(input);
       await mutatePayRunAdjustment(input);
-      const saved = (await db.execute(sql`select amount::text,hours::text from pay_run_adjustments
-        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and component_id=${payout}`)).rows;
+      const saved = await db.execute(sql`select amount::text,hours::text from pay_run_adjustments
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and component_id=${payout}`, "objects");
       assert.deepEqual(saved, [{ amount: '1150.6400', hours: '8.00' }]);
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, []);
-      const paid = (await db.execute(sql`select line.amount::text,line.hours::text from pay_stub_lines line
+      const paid = await db.execute(sql`select line.amount::text,line.hours::text from pay_stub_lines line
         join pay_stubs stub on stub.id=line.stub_id and stub.org_id=line.org_id
         where stub.org_id=${fx.orgId} and stub.pay_run_document_id=${run.documentId}
-          and line.component_id=${payout}`)).rows;
+          and line.component_id=${payout}`, "objects");
       assert.deepEqual(paid, [{ amount: '1150.6400', hours: '8.00' }], 'the keyed rate prices the bank cash line, independently of the current wage');
       assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), unit === 'hours' ? '16.0000' : '1200.0000',
         'a calculated withdrawal does not spend the settled bank');
@@ -203,7 +203,7 @@ test('an audited money-bank input preserves the available-balance refusal', { sk
     assert.match(result.errors[0]!.message, /payout of 1150\.6400 exceeds the available 552\.0000/);
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000');
     assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${fx.orgId}
-      and pay_run_document_id=${run.documentId}`)).rows.length, 0);
+      and pay_run_document_id=${run.documentId}`, "objects")).length, 0);
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
 
@@ -212,7 +212,7 @@ test('vacation paid as earned needs no bank balance while additional bank withdr
   try {
     const { partyId, employmentId } = await employee(fx, 'Vacation Cash Employee');
     const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
-      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`, "objects"))[0]!;
     await db.execute(sql`update payroll_vacation_terms set method='pay_each_period',updated_by=${fx.actorId},updated_at=now()
       where org_id=${fx.orgId} and employment_id=${employmentId}`);
     await hours(fx, partyId, ['2026-07-13']);
@@ -221,11 +221,11 @@ test('vacation paid as earned needs no bank balance while additional bank withdr
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, [], 'newly earned vacation is payable without a carried bank balance');
-      const stubs = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
-        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+      const stubs = await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects");
       assert.deepEqual(stubs, [{ gross: '249.6000', vacation_accrued: '0.0000' }]);
-      const movements = (await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
-        and plan_id=${plan.id} and employee_party_id=${partyId}`)).rows;
+      const movements = await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
+        and plan_id=${plan.id} and employee_party_id=${partyId}`, "objects");
       assert.equal(movements.length, 0, 'current-period cash vacation neither accrues nor withdraws a bank');
     }
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
@@ -241,7 +241,7 @@ test('a zero vacation replacement preserves supplied cash earnings without regen
   try {
     const { partyId, employmentId } = await employee(fx, 'Vacation Replacement Employee');
     const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
-      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`, "objects"))[0]!;
     await db.execute(sql`update payroll_vacation_terms set method='pay_each_period',updated_by=${fx.actorId},updated_at=now()
       where org_id=${fx.orgId} and employment_id=${employmentId}`);
     const suppliedVacation = await earningComponent(fx, 'EARNED-VACATION');
@@ -256,13 +256,13 @@ test('a zero vacation replacement preserves supplied cash earnings without regen
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, []);
       const stub = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
-        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects"))[0];
       assert.deepEqual(stub, { gross: '249.6000', vacation_accrued: '0.0000' }, 'the supplied vacation amount is paid exactly once');
-      const generated = (await db.execute(sql`select l.id from pay_stub_lines l join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
-        where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${plan.payout_component_id}`)).rows;
+      const generated = await db.execute(sql`select l.id from pay_stub_lines l join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
+        where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${plan.payout_component_id}`, "objects");
       assert.equal(generated.length, 0, 'zero replacement remains authoritative for the later vacation phase');
-      const movements = (await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
-        and plan_id=${plan.id} and employee_party_id=${partyId}`)).rows;
+      const movements = await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
+        and plan_id=${plan.id} and employee_party_id=${partyId}`, "objects");
       assert.equal(movements.length, 0);
     }
   } finally { await dropScratchOrgReporting(fx.orgId); }
@@ -293,14 +293,14 @@ test('banked wages retain their declared vacation eligibility without replenishi
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, []);
       const stub = (await db.execute<{ gross: string; vacation_accrued: string }>(sql`select gross::text,vacation_accrued::text
-        from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
+        from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects"))[0]!;
       assert.equal(stub.gross, '480.0000');
       assert.equal(stub.vacation_accrued, eligible ? '19.2000' : '9.6000',
         'vacation accrues on deferred wages precisely when their earning component declares eligibility');
       assert.equal(await balanceOf(fx, partyId, bankId, '2026-07-21'), '500.0000',
         'recalculation leaves the settled bank unchanged');
-      const payouts = (await db.execute(sql`select amount::text from entitlement_ledger
-        where org_id=${fx.orgId} and plan_id=${bankId} and pay_run_document_id=${run.documentId} and kind='payout'`)).rows;
+      const payouts = await db.execute(sql`select amount::text from entitlement_ledger
+        where org_id=${fx.orgId} and plan_id=${bankId} and pay_run_document_id=${run.documentId} and kind='payout'`, "objects");
       assert.deepEqual(payouts, [{ amount: '-240.0000' }], 'recalculation preserves one exact withdrawal');
     }
     await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
@@ -315,7 +315,7 @@ test('a vacation payout on a regular run withdraws from the bank without accruin
     await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
     const { partyId } = await employee(fx, 'Vacation Drawdown Employee');
     const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
-      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`, "objects"))[0]!;
     await db.execute(sql`update pay_components set expense_account_id=${fx.accounts.vacationPayable}
       where org_id=${fx.orgId} and id=${plan.payout_component_id}`);
     await opening(fx, plan.id, partyId, '1000', null);
@@ -326,29 +326,29 @@ test('a vacation payout on a regular run withdraws from the bank without accruin
     const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.deepEqual(result.errors, []);
     // The stub pays 600 in cash and the ledger withdraws it with the stub line linked.
-    const payout = (await db.execute<{ amount: string; stub_line_id: string | null }>(sql`select amount::text as amount,stub_line_id::text
-      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${plan.id} and kind='payout'`)).rows;
+    const payout = await db.execute<{ amount: string; stub_line_id: string | null }>(sql`select amount::text as amount,stub_line_id::text
+      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${plan.id} and kind='payout'`, "objects");
     assert.equal(payout.length, 1);
     assert.equal(payout[0]!.amount, '-600.0000');
     assert.ok(payout[0]!.stub_line_id, 'the withdrawal ties to its stub line');
     // 40 regular hours at 4%: the 600 payout accrues nothing further.
     const stub = (await db.execute<{ vacation_accrued: string }>(sql`select vacation_accrued::text from pay_stubs
-      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects"))[0]!;
     assert.equal(stub.vacation_accrued, '48.0000');
     assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '1000.0000');
     // Recalculation replaces preview bank movements before their stub lines.
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
-    const repayout = (await db.execute<{ amount: string }>(sql`select amount::text as amount
-      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${plan.id} and kind='payout'`)).rows;
+    const repayout = await db.execute<{ amount: string }>(sql`select amount::text as amount
+      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${plan.id} and kind='payout'`, "objects");
     assert.equal(repayout.length, 1);
     assert.equal(repayout[0]!.amount, '-600.0000');
     assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '1000.0000');
     await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.equal(await balanceOf(fx, partyId, plan.id, '2026-07-21'), '448.0000');
-    const bankDebit = (await db.execute<{ amount: string; custom: { payrollExpense: boolean } }>(sql`
+    const bankDebit = await db.execute<{ amount: string; custom: { payrollExpense: boolean } }>(sql`
       select amount::text, custom from document_lines where org_id=${fx.orgId}
         and document_id=${run.documentId} and account_id=${fx.accounts.vacationPayable}
-        and amount > 0`)).rows;
+        and amount > 0`, "objects");
     assert.equal(bankDebit.length, 1);
     assert.equal(bankDebit[0]!.amount, '600.0000');
     assert.equal(bankDebit[0]!.custom.payrollExpense, false, 'withdrawing an accrued liability must not enter payroll expense allocation');
@@ -361,7 +361,7 @@ test('an overdraw refuses naming the balance unless the plan allows negatives', 
     await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
     const { partyId } = await employee(fx, 'Overdraw Employee');
     const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
-      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`, "objects"))[0]!;
     await opening(fx, plan.id, partyId, '1000', null);
     await hours(fx, partyId, ['2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17']);
     const first = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
@@ -429,9 +429,9 @@ test('an hours bank funds from negative deposit lines and pays from positive one
     await db.execute(sql`delete from entitlement_plans where org_id=${fx.orgId} and id=${conflictingPlan}`);
     assert.deepEqual(await preflightPayRunAdjustment(depositInput), { replayed: false });
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_run_adjustments
-      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`)).rows[0]!.count, 0);
+      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`, "objects"))[0]!.count, 0);
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log
-      where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${depositInput.mutation.idempotencyKey}`)).rows[0]!.count, 0);
+      where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${depositInput.mutation.idempotencyKey}`, "objects"))[0]!.count, 0);
     await mutatePayRunAdjustment({ ...input, mutation: { action: 'add', employeePartyId: partyId,
       componentId: overtime, amount: '240', hours: '8' } });
     assert.deepEqual(await mutatePayRunAdjustment(depositInput), { changed: true, replayed: false });
@@ -453,31 +453,31 @@ test('an hours bank funds from negative deposit lines and pays from positive one
     assert.equal(retired.errors.length, 1);
     assert.match(retired.errors[0]!.message, /BANKSTORE.*no active entitlement bank/);
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from entitlement_ledger
-      where org_id=${fx.orgId} and plan_id=${planId}`)).rows[0]!.count, 0);
+      where org_id=${fx.orgId} and plan_id=${planId}`, "objects"))[0]!.count, 0);
     await db.execute(sql`update entitlement_plans set is_active=true where org_id=${fx.orgId} and id=${planId}`);
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from audit_log
-      where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${depositInput.mutation.idempotencyKey}`)).rows[0]!.count, 1);
+      where org_id=${fx.orgId} and table_name='pay_run_adjustments' and row_id=${depositInput.mutation.idempotencyKey}`, "objects"))[0]!.count, 1);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
     // Changing the paid population invalidates derived bank movements before
     // deleting their stub lines, then recalculation recreates each deposit once.
     await mutatePayRunAdjustment({ ...input, mutation: { action: 'exclude', employeePartyId: partyId } });
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from entitlement_ledger
-      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`)).rows[0]!.count, 0);
+      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`, "objects"))[0]!.count, 0);
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from pay_stubs
-      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`)).rows[0]!.count, 0);
+      where org_id=${fx.orgId} and pay_run_document_id=${first.documentId}`, "objects"))[0]!.count, 0);
     assert.equal((await db.execute<{ run_status: string }>(sql`select run_status from pay_runs
-      where org_id=${fx.orgId} and document_id=${first.documentId}`)).rows[0]!.run_status, 'draft');
+      where org_id=${fx.orgId} and document_id=${first.documentId}`, "objects"))[0]!.run_status, 'draft');
     await mutatePayRunAdjustment({ ...input, mutation: { action: 'include', employeePartyId: partyId } });
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
-    const deposit = (await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text as amount,hours::text
-      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${planId} and kind='bank_in'`)).rows;
+    const deposit = await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text as amount,hours::text
+      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${planId} and kind='bank_in'`, "objects");
     assert.equal(deposit.length, 1);
     assert.equal(deposit[0]!.amount, '8.0000');
     assert.equal(cmp(deposit[0]!.hours ?? '0', '8'), 0);
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '0.0000',
       'the calculated deposit becomes available only when its run commits');
-    const cashDeposit = (await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text, hours::text
-      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${cashPlan} and kind='bank_in'`)).rows;
+    const cashDeposit = await db.execute<{ amount: string; hours: string | null }>(sql`select amount::text, hours::text
+      from entitlement_ledger where org_id=${fx.orgId} and plan_id=${cashPlan} and kind='bank_in'`, "objects");
     assert.equal(cashDeposit.length, 1);
     assert.equal(cashDeposit[0]!.amount, '60.0000');
     assert.equal(cashDeposit[0]!.hours, null);
@@ -578,21 +578,21 @@ test('an audited split payout draws only its bank-funded portion at the pay-date
     for (let attempt = 0; attempt < 2; attempt++) {
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, []);
-      const paid = (await db.execute(sql`select line.amount::text,line.hours::text from pay_stub_lines line
+      const paid = await db.execute(sql`select line.amount::text,line.hours::text from pay_stub_lines line
         join pay_stubs stub on stub.id=line.stub_id and stub.org_id=line.org_id
         where stub.org_id=${fx.orgId} and stub.pay_run_document_id=${run.documentId}
-          and line.component_id=${payout} order by line.amount desc`)).rows;
+          and line.component_id=${payout} order by line.amount desc`, "objects");
       assert.deepEqual(paid, [
         { amount: '782.6400', hours: '0.00' },
         { amount: '368.0000', hours: '8.00' },
       ], 'the outside portion carries explicit zero hours; the bank-funded portion carries the worked hours');
       const stub = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
-        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects"))[0];
       assert.deepEqual(stub, { gross: '1150.6400', vacation_accrued: '80.5400' });
       assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000',
         'recalculation leaves the settled bank unchanged');
-      const payouts = (await db.execute(sql`select amount::text from entitlement_ledger
-        where org_id=${fx.orgId} and plan_id=${planId} and pay_run_document_id=${run.documentId} and kind='payout'`)).rows;
+      const payouts = await db.execute(sql`select amount::text from entitlement_ledger
+        where org_id=${fx.orgId} and plan_id=${planId} and pay_run_document_id=${run.documentId} and kind='payout'`, "objects");
       assert.deepEqual(payouts, [{ amount: '-368.0000' }]);
     }
     // An excluded dated treatment excludes both portions alike: funding
@@ -601,7 +601,7 @@ test('an audited split payout draws only its bank-funded portion at the pay-date
       where org_id=${fx.orgId} and pay_component_id=${payout}`);
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
     const excluded = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
-      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, "objects"))[0];
     assert.deepEqual(excluded, { gross: '1150.6400', vacation_accrued: '0.0000' });
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000');
     await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
@@ -793,9 +793,9 @@ test('a per-hour contribution counts bank-funded hours once and outside cash at 
         sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() } });
     const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
     assert.deepEqual(result.errors, [], 'the outside portion at explicit zero hours raises no missing-hours refusal');
-    const allocation = (await db.execute<{ amount: string; hours: string }>(sql`select amount::text,
+    const allocation = await db.execute<{ amount: string; hours: string }>(sql`select amount::text,
         source_snapshot#>>'{basis,hours}' as hours from pay_run_benefit_allocations
-      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${ruleId}`)).rows;
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${ruleId}`, "objects");
     assert.deepEqual(allocation, [{ amount: '18.0000', hours: '9.0000' }],
       'one regular hour plus eight bank-funded hours count once; the outside cash adds zero');
   } finally { await dropScratchOrgReporting(fx.orgId); }
@@ -832,9 +832,9 @@ test('a split valued from a foreign-currency wage refuses until the wage matches
     assert.equal(refused.errors.length, 1);
     assert.match(refused.errors[0]!.message, /valued from a USD wage, but this pay run pays CAD/);
     assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${fx.orgId}
-      and pay_run_document_id=${run.documentId}`)).rows.length, 0, 'the refused split leaves no stub');
+      and pay_run_document_id=${run.documentId}`, "objects")).length, 0, 'the refused split leaves no stub');
     assert.equal((await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
-      and plan_id=${planId} and pay_run_document_id=${run.documentId}`)).rows.length, 0, 'the refused split moves no bank money');
+      and plan_id=${planId} and pay_run_document_id=${run.documentId}`, "objects")).length, 0, 'the refused split moves no bank money');
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000');
     await db.execute(sql`update labor_cost_rates set currency='CAD'
       where org_id=${fx.orgId} and employee_party_id=${partyId}`);
@@ -856,13 +856,13 @@ test('a deposit into a liability-carrying bank credits the plan liability and a 
       liability_account_id,cap_behavior,is_active,created_by,updated_by)
       values(${planId},${fx.orgId},'BANKEDCASH','Banked cash','money','accrue','manual',${cash},
         ${fx.accounts.otherPayable},'warn',true,${fx.actorId},${fx.actorId})`);
-    const settlementLines = async (documentId: string) => (await db.execute<{ amount: string; expense_account_id: string; expense_account_source: string }>(sql`
+    const settlementLines = async (documentId: string) => await db.execute<{ amount: string; expense_account_id: string; expense_account_source: string }>(sql`
       select l.amount::text as amount, l.expense_account_id::text as expense_account_id, l.expense_account_source
         from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-       where s.org_id=${fx.orgId} and s.pay_run_document_id=${documentId} and l.component_id=${cash}`)).rows;
-    const reliefLegs = async (documentId: string) => (await db.execute<{ account_id: string; amount: string; payroll_expense: boolean }>(sql`
+       where s.org_id=${fx.orgId} and s.pay_run_document_id=${documentId} and l.component_id=${cash}`, "objects");
+    const reliefLegs = async (documentId: string) => await db.execute<{ account_id: string; amount: string; payroll_expense: boolean }>(sql`
       select account_id::text as account_id, amount::text as amount, (custom->>'payrollExpense')::boolean as payroll_expense
-        from document_lines where org_id=${fx.orgId} and document_id=${documentId} and custom->>'legKind'='entitlement_relief'`)).rows;
+        from document_lines where org_id=${fx.orgId} and document_id=${documentId} and custom->>'legKind'='entitlement_relief'`, "objects");
 
     await hours(fx, partyId, ['2026-07-13', '2026-07-14']);
     const first = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
@@ -895,7 +895,7 @@ test('an accruing plan without a liability account refuses to pay from its bank 
     await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
     const { partyId } = await employee(fx, 'Unbound Vacation Employee');
     const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
-      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`, "objects"))[0]!;
     await db.execute(sql`update entitlement_plans set liability_account_id=null where org_id=${fx.orgId} and id=${plan.id}`);
     await opening(fx, plan.id, partyId, '500', null);
     await hours(fx, partyId, ['2026-07-13']);
@@ -914,7 +914,7 @@ test('re-pointing a settled plan liability after calculation stales the run inst
     await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
     const { partyId } = await employee(fx, 'Repointed Bank Employee');
     const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
-      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`, "objects"))[0]!;
     await opening(fx, plan.id, partyId, '500', null);
     await hours(fx, partyId, ['2026-07-13']);
     const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
@@ -923,7 +923,7 @@ test('re-pointing a settled plan liability after calculation stales the run inst
     assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
     await db.execute(sql`update entitlement_plans set liability_account_id=${fx.accounts.otherPayable} where org_id=${fx.orgId} and id=${plan.id}`);
     await assert.rejects(commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId }), /changed/);
-    assert.equal((await db.execute(sql`select id from document_lines where org_id=${fx.orgId} and document_id=${run.documentId}`)).rows.length, 0,
+    assert.equal((await db.execute(sql`select id from document_lines where org_id=${fx.orgId} and document_id=${run.documentId}`, "objects")).length, 0,
       'a stale settlement account writes no projection');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });

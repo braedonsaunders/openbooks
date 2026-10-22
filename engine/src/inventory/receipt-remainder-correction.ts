@@ -56,14 +56,14 @@ export async function correctReceiptRemainder(
     }>(sql`
       select document_number, status from documents
        where id = ${receiptId} and org_id = ${orgId} and kind = 'purchase_receipt'
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!header) throw new InventoryError("goods receipt not found");
     if (header.status !== "approved") {
       throw new InventoryError(
         `only an approved goods receipt can correct its remainder — this receipt is ${header.status}`,
       );
     }
-    const receiptLines = (await tx.execute<{
+    const receiptLines = await tx.execute<{
       id: string;
       line_number: number;
       quantity: string;
@@ -73,7 +73,7 @@ export async function correctReceiptRemainder(
              l.custom->'receipt'->>'sourceLineId' as source_line_id
         from document_lines l
        where l.document_id = ${receiptId} and l.org_id = ${orgId}
-       order by l.line_number`)).rows;
+       order by l.line_number`, "objects");
     if (receiptLines.some((line) => !line.source_line_id)) {
       throw new InventoryError(
         "this receipt has a line without order-line provenance — correct the line before adjusting its remainder",
@@ -117,13 +117,13 @@ export async function correctReceiptRemainder(
     // void faces: never below zero, never into billed cover.
     const sourceIds = [...new Set(receiptLines.map((line) => line.source_line_id!))].sort();
     const idArr = `{${sourceIds.join(",")}}`;
-    const orders = (await tx.execute<{ id: string; status: string; document_number: string }>(sql`
+    const orders = await tx.execute<{ id: string; status: string; document_number: string }>(sql`
       select d.id, d.status, d.document_number
         from documents d
        where d.org_id = ${orgId}
          and d.id in (select l.document_id from document_lines l where l.org_id = ${orgId} and l.id = any(${idArr}::uuid[]))
        order by d.id
-       for update`)).rows;
+       for update`, "objects");
     for (const order of orders) {
       if (order.status !== "approved") {
         throw new InventoryError(
@@ -151,7 +151,7 @@ export async function correctReceiptRemainder(
         select (quantity_fulfilled - ${quantity}::numeric) >= 0 as restorable,
                (quantity_fulfilled - ${quantity}::numeric) < quantity_billed as billed_block
           from document_lines where id = ${sourceId} and org_id = ${orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!coverRow) throw new InventoryError("a source order line is missing — reload and correct again");
       if (!coverRow.restorable) {
         throw new InventoryError("correcting would drive a source line below zero received");
@@ -198,13 +198,13 @@ export async function correctReceiptRemainder(
       const reopened = (await tx.execute<{ id: string }>(sql`
         update documents set status = 'draft', updated_at = now(), updated_by = ${actorId}
          where id = ${order.id} and org_id = ${orgId} and status = 'approved'
-        returning id`)).rows[0];
+        returning id`, "objects"))[0];
       if (!reopened) throw new InventoryError("the source order changed while it was being corrected");
-      const orderSources = (await tx.execute<{ id: string; line_number: number; document_number: string }>(sql`
+      const orderSources = await tx.execute<{ id: string; line_number: number; document_number: string }>(sql`
         select l.id, l.line_number, d.document_number
           from document_lines l
           join documents d on d.id = l.document_id and d.org_id = l.org_id
-         where l.org_id = ${orgId} and l.document_id = ${order.id} and l.id = any(${idArr}::uuid[])`)).rows;
+         where l.org_id = ${orgId} and l.document_id = ${order.id} and l.id = any(${idArr}::uuid[])`, "objects");
       for (const source of orderSources) {
         const quantity = bySource.get(source.id);
         if (!quantity) continue;
@@ -213,7 +213,7 @@ export async function correctReceiptRemainder(
              set quantity_fulfilled = quantity_fulfilled - ${quantity}::numeric, updated_at = now(), updated_by = ${actorId}
            where id = ${source.id} and org_id = ${orgId}
              and quantity_fulfilled - ${quantity}::numeric >= 0
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
         if (!restored) throw new InventoryError("a source order line changed while it was being corrected");
         restoredLines.push({
           purchaseOrderNumber: source.document_number,
@@ -224,7 +224,7 @@ export async function correctReceiptRemainder(
       const reapproved = (await tx.execute<{ id: string }>(sql`
         update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
          where id = ${order.id} and org_id = ${orgId} and status = 'draft'
-        returning id`)).rows[0];
+        returning id`, "objects"))[0];
       if (!reapproved) throw new InventoryError("the source order changed while it was being corrected");
     }
     for (const order of orders) {

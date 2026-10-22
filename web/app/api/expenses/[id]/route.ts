@@ -121,14 +121,14 @@ export const PATCH = defineRoute({
     const access = await expenseAccess(gate, 'edit')
     if (!access) return notFound("record")
     const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; partyId: string | null; currency: string; custom: Record<string, unknown> | null; payment_card_id: string | null }>(
-        sql`select status, document_date, subsidiary_id as "subsidiaryId", party_id as "partyId", currency, custom, payment_card_id from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
+        sql`select status, document_date, subsidiary_id as "subsidiaryId", party_id as "partyId", currency, custom, payment_card_id from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`, 'objects',
       ))
-    if (!existing.rows[0] || !expenseAccessAllows(access, existing.rows[0].partyId)) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
+    if (!existing[0] || !expenseAccessAllows(access, existing[0].partyId)) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, existing[0].subsidiaryId)
     if (denied) return denied
-    if (existing.rows[0].status !== 'draft') {
+    if (existing[0].status !== 'draft') {
         return NextResponse.json(
-          { error: `a ${existing.rows[0].status} expense report cannot be edited — create a correcting report instead` },
+          { error: `a ${existing[0].status} expense report cannot be edited — create a correcting report instead` },
           { status: 422 },
         )
       }
@@ -157,13 +157,13 @@ export const PATCH = defineRoute({
     try {
         prepared = await prepareExpenseEdit(body, {
           orgId: user.orgId,
-          existingCustom: existing.rows[0].custom,
-          existingDocumentDate: existing.rows[0].document_date,
-          existingPaymentCardId: existing.rows[0].payment_card_id,
+          existingCustom: existing[0].custom,
+          existingDocumentDate: existing[0].document_date,
+          existingPaymentCardId: existing[0].payment_card_id,
           // The report's locked subsidiary: an employee of another legal entity
           // is refused below with the scope-opaque not-found refusal.
-          reportSubsidiaryId: existing.rows[0].subsidiaryId,
-          reportCurrency: existing.rows[0].currency,
+          reportSubsidiaryId: existing[0].subsidiaryId,
+          reportCurrency: existing[0].currency,
         })
       } catch (e) {
         if (e instanceof DocumentEditError) {
@@ -189,7 +189,7 @@ export const PATCH = defineRoute({
                 from documents
                where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
                for update
-            `)).rows[0]
+            `, 'objects'))[0]
             // Scope and ownership precede revision comparison so a rehomed or
             // reassigned document remains indistinguishable from a missing
             // row, even with a stale token.
@@ -293,10 +293,10 @@ export const DELETE = defineRoute({
     const access = await expenseAccess(gate, 'edit')
     if (!access) return notFound("record")
     const owned = (await db.execute<{ subsidiaryId: string | null; partyId: string | null }>(
-        sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
+        sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`, 'objects',
       ))
-    if (!owned.rows[0] || !expenseAccessAllows(access, owned.rows[0].partyId)) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+    if (!owned[0] || !expenseAccessAllows(access, owned[0].partyId)) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
     if (denied) return denied
 
     const body = (routeBody) as { expectedUpdatedAt?: string }

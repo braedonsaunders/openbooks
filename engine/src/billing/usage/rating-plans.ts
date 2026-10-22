@@ -212,7 +212,7 @@ export async function createUsageRatingPlan(
       refuse("usage_plan_currency_invalid", "The rating plan currency must be an uppercase ISO currency code.", "Choose a supported uppercase currency code for this plan.", "currency");
     }
     const currencyExists = (await db.execute<{ code: string }>(sql`
-      select code from currencies where code = ${currency}`)).rows[0];
+      select code from currencies where code = ${currency}`, "objects"))[0];
     if (!currencyExists) {
       refuse("usage_plan_currency_invalid", `Currency ${currency} is not configured in the ISO currency registry.`, "Choose a supported currency code from the organization currency registry.", "currency");
     }
@@ -220,9 +220,9 @@ export async function createUsageRatingPlan(
       const inserted = await db.execute<UsageRatingPlan>(sql`
         insert into usage_rating_plans (org_id, name, currency_code, status, created_by, updated_by)
         values (${orgId}, ${name}, ${currency}, 'active', ${actor}, ${actor})
-        returning ${PLAN_COLUMNS}`);
-      if (inserted.rows.length !== 1) throw new Error("usage rating plan insert returned an unexpected row count");
-      return inserted.rows[0]!;
+        returning ${PLAN_COLUMNS}`, "objects");
+      if (inserted.length !== 1) throw new Error("usage rating plan insert returned an unexpected row count");
+      return inserted[0]!;
     } catch (error) {
       if (uniqueViolationFor(error, "usage_rating_plans_org_name_unique")) {
         refuse("usage_plan_name_in_use", `A usage rating plan named ${name} already exists in this organization.`, "Choose a different rating plan name.", "name", 409);
@@ -235,8 +235,8 @@ export async function createUsageRatingPlan(
 export async function listUsageRatingPlans(orgId: string): Promise<UsageRatingPlan[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
-    return (await db.execute<UsageRatingPlan>(sql`
-      select ${PLAN_COLUMNS} from usage_rating_plans where org_id = ${orgId} order by name, id`)).rows;
+    return await db.execute<UsageRatingPlan>(sql`
+      select ${PLAN_COLUMNS} from usage_rating_plans where org_id = ${orgId} order by name, id`, "objects");
   });
 }
 
@@ -249,12 +249,12 @@ export async function getUsageRatingPlanVersionWithBands(orgId: string, versionI
     const safeVersionId = uuidText(versionId, "plan_version_id");
     const version = (await db.execute<UsageRatingPlanVersion>(sql`
       select ${VERSION_COLUMNS} from usage_rating_plan_versions
-       where org_id = ${orgId} and id = ${safeVersionId}`)).rows[0];
+       where org_id = ${orgId} and id = ${safeVersionId}`, "objects"))[0];
     if (!version) throw new ScopeNotFoundError();
-    const bands = (await db.execute<UsageRatingBand>(sql`
+    const bands = await db.execute<UsageRatingBand>(sql`
       select ${BAND_COLUMNS} from usage_rating_bands
        where org_id = ${orgId} and plan_version_id = ${safeVersionId}
-       order by meter_id, seq`)).rows;
+       order by meter_id, seq`, "objects");
     return { version, bands };
   });
 }
@@ -267,14 +267,14 @@ export async function retireUsageRatingPlan(orgId: string, actor: string, planId
       update usage_rating_plans
          set status = 'retired', updated_at = now(), updated_by = ${actor}
        where org_id = ${orgId} and id = ${safePlanId} and status = 'active'
-      returning ${PLAN_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+      returning ${PLAN_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       const existing = (await db.execute<{ status: string }>(sql`
-        select status from usage_rating_plans where org_id = ${orgId} and id = ${safePlanId}`)).rows[0];
+        select status from usage_rating_plans where org_id = ${orgId} and id = ${safePlanId}`, "objects"))[0];
       if (!existing) refuse("usage_plan_not_found", "The usage rating plan does not exist in this organization.", "Choose a rating plan from this organization.", "plan_id");
       refuse("usage_plan_already_retired", "The usage rating plan is already retired.", "Choose an active rating plan when opening new subscription links.", "plan_id", 409);
     }
-    return updated.rows[0]!;
+    return updated[0]!;
   });
 }
 
@@ -288,22 +288,22 @@ export async function createUsageRatingPlanVersion(
     const planId = uuidText(input.planId, "plan_id");
     const effectiveFrom = dateText(input.effectiveFrom, "effective_from");
     const plan = (await db.execute<{ status: string }>(sql`
-      select status from usage_rating_plans where org_id = ${orgId} and id = ${planId} for update`)).rows[0];
+      select status from usage_rating_plans where org_id = ${orgId} and id = ${planId} for update`, "objects"))[0];
     if (!plan) refuse("usage_plan_not_found", "The usage rating plan does not exist in this organization.", "Choose a rating plan from this organization.", "plan_id");
     if (plan.status !== "active") {
       refuse("usage_plan_retired", "A retired usage rating plan cannot receive a new version.", "Create a new active rating plan before defining future prices.", "plan_id", 409);
     }
     const latest = (await db.execute<{ versionNo: number | null }>(sql`
       select max(version_no)::int as "versionNo"
-        from usage_rating_plan_versions where org_id = ${orgId} and plan_id = ${planId}`)).rows[0];
+        from usage_rating_plan_versions where org_id = ${orgId} and plan_id = ${planId}`, "objects"))[0];
     const versionNo = (latest?.versionNo ?? 0) + 1;
     const inserted = await db.execute<UsageRatingPlanVersion>(sql`
       insert into usage_rating_plan_versions
         (org_id, plan_id, version_no, status, effective_from, created_by, updated_by)
       values (${orgId}, ${planId}, ${versionNo}, 'draft', ${effectiveFrom}, ${actor}, ${actor})
-      returning ${VERSION_COLUMNS}`);
-    if (inserted.rows.length !== 1) throw new Error("usage rating plan version insert returned an unexpected row count");
-    return inserted.rows[0]!;
+      returning ${VERSION_COLUMNS}`, "objects");
+    if (inserted.length !== 1) throw new Error("usage rating plan version insert returned an unexpected row count");
+    return inserted[0]!;
   });
 }
 
@@ -354,7 +354,7 @@ export async function replaceUsageRatingBands(
     const safeVersionId = uuidText(versionId, "plan_version_id");
     const version = (await db.execute<{ status: string }>(sql`
       select status from usage_rating_plan_versions
-       where org_id = ${orgId} and id = ${safeVersionId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${safeVersionId} for update`, "objects"))[0];
     if (!version) refuse("usage_plan_version_not_found", "The usage rating plan version does not exist in this organization.", "Choose a plan version from this organization.", "plan_version_id");
     assertUsagePlanVersionMutable(version.status);
 
@@ -369,9 +369,9 @@ export async function replaceUsageRatingBands(
     }
     const meterIds = [...new Set(prepared.map((band) => band.meterId))];
     if (meterIds.length > 0) {
-      const meterRows = (await db.execute<{ id: string }>(sql`
+      const meterRows = await db.execute<{ id: string }>(sql`
         select id from usage_meters where org_id = ${orgId}
-          and id in (${sql.join(meterIds.map((id) => sql`${id}`), sql`, `)})`)).rows;
+          and id in (${sql.join(meterIds.map((id) => sql`${id}`), sql`, `)})`, "objects");
       if (meterRows.length !== meterIds.length) {
         refuse("usage_band_meter_unavailable", "A rating band references a meter outside this organization.", "Choose meters that belong to this organization.", "meter_id");
       }
@@ -379,9 +379,9 @@ export async function replaceUsageRatingBands(
 
     const existingBandCount = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from usage_rating_bands
-       where org_id = ${orgId} and plan_version_id = ${safeVersionId}`)).rows[0]?.count ?? 0;
+       where org_id = ${orgId} and plan_version_id = ${safeVersionId}`, "objects"))[0]?.count ?? 0;
     if (existingBandCount > 0) {
-      const deleted = await db.execute(sql`
+      const deleted = await db.execute<never>(sql`
         delete from usage_rating_bands where org_id = ${orgId} and plan_version_id = ${safeVersionId}`);
       if (deleted.rowCount !== existingBandCount) {
         refuse("usage_band_edit_conflict", "The draft bands changed while the replacement was being saved.", "Reload the draft and apply the complete band set again.", "plan_version_id", 409);
@@ -397,9 +397,9 @@ export async function replaceUsageRatingBands(
           (${orgId}, ${safeVersionId}, ${band.meterId}, ${band.kind}, ${band.seq}, ${band.upToQty},
            ${band.unitPrice}, ${band.flatAmount}, ${band.includedQty}, ${band.packageSize},
            ${band.packageRounding}, ${actor}, ${actor})
-        returning ${BAND_COLUMNS}`);
-      if (result.rows.length !== 1) throw new Error("usage rating band insert returned an unexpected row count");
-      inserted.push(result.rows[0]!);
+        returning ${BAND_COLUMNS}`, "objects");
+      if (result.length !== 1) throw new Error("usage rating band insert returned an unexpected row count");
+      inserted.push(result[0]!);
     }
     return inserted;
   });
@@ -499,24 +499,24 @@ export async function publishUsagePlanVersion(
     const safeVersionId = uuidText(versionId, "plan_version_id");
     const version = (await db.execute<{ status: string }>(sql`
       select status from usage_rating_plan_versions
-       where org_id = ${orgId} and id = ${safeVersionId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${safeVersionId} for update`, "objects"))[0];
     if (!version) refuse("usage_plan_version_not_found", "The usage rating plan version does not exist in this organization.", "Choose a plan version from this organization.", "plan_version_id");
     assertUsagePlanVersionMutable(version.status);
-    const bands = (await db.execute<UsageRatingBand>(sql`
+    const bands = await db.execute<UsageRatingBand>(sql`
       select ${BAND_COLUMNS} from usage_rating_bands
        where org_id = ${orgId} and plan_version_id = ${safeVersionId}
-       order by meter_id, seq`)).rows;
+       order by meter_id, seq`, "objects");
     validateBandCoverage(bands);
     const hash = canonicalBandHash(bands);
     const updated = await db.execute<UsageRatingPlanVersion>(sql`
       update usage_rating_plan_versions
          set status = 'published', spec_hash = ${hash}, updated_at = now(), updated_by = ${actor}
        where org_id = ${orgId} and id = ${safeVersionId} and status = 'draft'
-      returning ${VERSION_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+      returning ${VERSION_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       refuse("usage_plan_version_publish_conflict", "The usage rating plan version changed before publication completed.", "Reload the draft and publish it again after resolving concurrent edits.", "plan_version_id", 409);
     }
-    return updated.rows[0]!;
+    return updated[0]!;
   });
 }
 
@@ -571,7 +571,7 @@ export async function createSubscriptionUsageLink(
         join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
        where s.org_id = ${orgId} and s.id = ${subscriptionId}
          ${subsidiaryVisibleFilter(sql`customer.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       for update of s, customer`)).rows[0];
+       for update of s, customer`, "objects"))[0];
     if (!subscription) {
       throw new ScopeNotFoundError();
     }
@@ -592,7 +592,7 @@ export async function createSubscriptionUsageLink(
        from usage_rating_plan_versions v
         join usage_rating_plans p on p.org_id = v.org_id and p.id = v.plan_id
        where v.org_id = ${orgId} and v.id = ${planVersionId}
-       for share of v, p`)).rows[0];
+       for share of v, p`, "objects"))[0];
     if (!planVersion) {
       refuse("usage_link_plan_version_not_found", "The usage rating plan version does not exist in this organization.", "Choose a published rating plan version from this organization.", "plan_version_id");
     }
@@ -617,7 +617,7 @@ export async function createSubscriptionUsageLink(
     const lifecycle = (await db.execute<{ termStartsOn: string; termEndsOn: string | null }>(sql`
       select term_starts_on::text as "termStartsOn", term_ends_on::text as "termEndsOn"
         from subscription_lifecycles
-       where org_id = ${orgId} and subscription_id = ${subscriptionId}`)).rows[0];
+       where org_id = ${orgId} and subscription_id = ${subscriptionId}`, "objects"))[0];
     if (lifecycle) {
       if (
         effectiveFrom < lifecycle.termStartsOn ||
@@ -634,11 +634,11 @@ export async function createSubscriptionUsageLink(
       }
     }
 
-    const meterRows = (await db.execute<{ id: string; itemId: string | null; isActive: boolean }>(sql`
+    const meterRows = await db.execute<{ id: string; itemId: string | null; isActive: boolean }>(sql`
       select id, item_id as "itemId", is_active as "isActive"
         from usage_meters where org_id = ${orgId}
           and id in (${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)})
-       for share`)).rows;
+       for share`, "objects");
     if (meterRows.length !== uniqueMeters.length) {
       refuse("usage_link_meter_unavailable", "The link includes a meter outside this organization.", "Select meters that belong to this organization.", "meter_ids");
     }
@@ -650,17 +650,17 @@ export async function createSubscriptionUsageLink(
     if (inactiveMeter) {
       refuse("usage_link_meter_inactive", `Meter ${inactiveMeter.id} is inactive.`, "Reactivate the meter before opening a new subscription usage link.", "meter_ids", 409);
     }
-    const pricedMeters = (await db.execute<{ meterId: string }>(sql`
+    const pricedMeters = await db.execute<{ meterId: string }>(sql`
       select distinct meter_id as "meterId" from usage_rating_bands
        where org_id = ${orgId} and plan_version_id = ${planVersionId}
-         and meter_id in (${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)})`)).rows;
+         and meter_id in (${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)})`, "objects");
     if (pricedMeters.length !== uniqueMeters.length) {
       const priced = new Set(pricedMeters.map((row) => row.meterId));
       const missing = uniqueMeters.find((meterId) => !priced.has(meterId))!;
       refuse("usage_link_meter_unpriced", `The published version has no rating bands for meter ${missing}.`, "Add and publish bands for every meter selected on the subscription link.", "meter_ids");
     }
 
-    const existingLinks = (await db.execute<{
+    const existingLinks = await db.execute<{
       id: string;
       meterIds: string[];
       effectiveFrom: string;
@@ -669,7 +669,7 @@ export async function createSubscriptionUsageLink(
       select id, meter_ids as "meterIds", effective_from::text as "effectiveFrom",
              effective_to::text as "effectiveTo"
         from subscription_usage_links
-       where org_id = ${orgId} and subscription_id = ${subscriptionId}`)).rows;
+       where org_id = ${orgId} and subscription_id = ${subscriptionId}`, "objects");
     const collision = existingLinks.find((link) =>
       intersect(link.meterIds, uniqueMeters) &&
       (effectiveTo === null || link.effectiveFrom <= effectiveTo) &&
@@ -687,9 +687,9 @@ export async function createSubscriptionUsageLink(
         (${orgId}, ${subscriptionId}, ${customerId}, ${planVersionId}, array[${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)}]::uuid[],
          ${effectiveFrom}, ${effectiveTo}, ${commitAmount}, ${commitPeriod}, ${input.allowOverage ?? true},
          ${actor}, ${actor})
-      returning ${LINK_COLUMNS}`);
-    if (inserted.rows.length !== 1) throw new Error("subscription usage link insert returned an unexpected row count");
-    return inserted.rows[0]!;
+      returning ${LINK_COLUMNS}`, "objects");
+    if (inserted.length !== 1) throw new Error("subscription usage link insert returned an unexpected row count");
+    return inserted[0]!;
   });
 }
 
@@ -710,7 +710,7 @@ export async function closeSubscriptionUsageLink(
         from subscription_usage_links l join parties c on c.org_id = l.org_id and c.id = l.customer_id
        where l.org_id = ${orgId} and l.id = ${safeLinkId}
          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       for update of l, c`)).rows[0];
+       for update of l, c`, "objects"))[0];
     if (!link || !subsidiaryScopeAllows(allowedSubsidiaryIds, link.customerSubsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
   if (link.effectiveTo !== null) {
     refuse("usage_link_already_closed", "The subscription usage link already has an effective_to date.", "Open a new usage link for a later pricing window.", "link_id", 409);
@@ -724,7 +724,7 @@ export async function closeSubscriptionUsageLink(
   const lifecycle = (await db.execute<{ termStartsOn: string; termEndsOn: string | null }>(sql`
     select term_starts_on::text as "termStartsOn", term_ends_on::text as "termEndsOn"
       from subscription_lifecycles
-     where org_id = ${orgId} and subscription_id = ${link.subscriptionId}`)).rows[0];
+     where org_id = ${orgId} and subscription_id = ${link.subscriptionId}`, "objects"))[0];
   if (
     lifecycle &&
     (link.effectiveFrom < lifecycle.termStartsOn ||
@@ -743,11 +743,11 @@ export async function closeSubscriptionUsageLink(
       update subscription_usage_links
          set effective_to = ${effectiveTo}, updated_at = now(), updated_by = ${actor}
        where org_id = ${orgId} and id = ${safeLinkId} and effective_to is null
-      returning ${LINK_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+      returning ${LINK_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       refuse("usage_link_close_conflict", "The subscription usage link changed before it could be closed.", "Reload the current link and retry with the intended effective_to date.", "link_id", 409);
     }
-    return updated.rows[0]!;
+    return updated[0]!;
   });
 }
 
@@ -766,7 +766,7 @@ export async function listSubscriptionUsageLinks(orgId: string, filters: {
       const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId" from parties
          where org_id = ${orgId} and id = ${customerId}
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects"))[0];
       if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
     }
     if (subscriptionId !== null) {
@@ -774,17 +774,17 @@ export async function listSubscriptionUsageLinks(orgId: string, filters: {
         select s.id from subscriptions s
         join parties c on c.org_id = s.org_id and c.id = s.customer_id
         where s.org_id = ${orgId} and s.id = ${subscriptionId}
-          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects"))[0];
       if (!subscription) throw new ScopeNotFoundError();
     }
-    return (await db.execute<SubscriptionUsageLink>(sql`
+    return await db.execute<SubscriptionUsageLink>(sql`
       select ${LINK_COLUMNS} from subscription_usage_links
        where org_id = ${orgId} and (${subscriptionId}::uuid is null or subscription_id = ${subscriptionId})
          and (${customerId}::uuid is null or customer_id = ${customerId})
          and exists (select 1 from parties c where c.org_id = subscription_usage_links.org_id
            and c.id = subscription_usage_links.customer_id
            ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
-       order by effective_from, id`)).rows;
+       order by effective_from, id`, "objects");
   });
 }
 

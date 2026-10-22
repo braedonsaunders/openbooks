@@ -113,8 +113,8 @@ test("custom ledger reports default to the primary book and keep explicit cross-
 
     await withOrgContext(scratch.orgId, async () => {
       const books = await db.execute<{ id: string; name: string }>(sql`
-        select id, name from accounting_books where org_id = ${scratch.orgId} and is_active`);
-      const primaryName = books.rows.find((b) => b.id === scratch.bookId)!.name;
+        select id, name from accounting_books where org_id = ${scratch.orgId} and is_active`, "objects");
+      const primaryName = books.find((b) => b.id === scratch.bookId)!.name;
 
       const defaultPlan: ReportCustomQuery = {
         entity: "ledger_lines",

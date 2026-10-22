@@ -47,9 +47,9 @@ export async function mutateInsight(
           select to_jsonb(i) as snapshot,
             to_char(i.updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from ${sql.identifier(table)} i
           where i.id = ${id} and ${insightVisibilitySql(authz, 'i')} for update of i
-        `)
-        before = row.rows[0]?.snapshot ?? null
-        revision = row.rows[0]?.revision ?? null
+        `, 'objects')
+        before = row[0]?.snapshot ?? null
+        revision = row[0]?.revision ?? null
         if (!before)
           return notFound("record")
       }
@@ -58,8 +58,8 @@ export async function mutateInsight(
       const row = await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
         select to_jsonb(i) as snapshot from ${sql.identifier(table)} i
         where i.id = ${id} and i.org_id = ${authz.user.orgId}
-      `)
-      const after = row.rows[0]?.snapshot ?? null
+      `, 'objects')
+      const after = row[0]?.snapshot ?? null
       if (action === 'delete' ? after !== null : after === null)
         throw new Error(
           'Insight mutation did not produce the expected row state',

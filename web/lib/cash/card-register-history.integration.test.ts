@@ -24,7 +24,7 @@ async function seedAccount(org: ScratchOrg, name: string, type: string): Promise
 async function seedPeriod(org: ScratchOrg, year: number, month: number): Promise<string> {
   const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
     select fiscal_calendar_id from accounting_periods where id = ${org.periodId}
-  `)).rows[0]!.fiscal_calendar_id;
+  `, "objects"))[0]!.fiscal_calendar_id;
   const id = randomUUID();
   const mm = String(month).padStart(2, "0");
   const last = daysInCivilMonth(year, month);

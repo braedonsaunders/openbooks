@@ -145,8 +145,8 @@ export async function payRunGlLegs(
       const costing = await laborCostingSettingsInTx(tx, orgId);
       const control = (await tx.execute<{ c: Record<string, string | null> | null }>(sql`
         select settings->'controlAccounts' as c from orgs where id = ${orgId}
-      `));
-      laborClearing = control.rows[0]?.c?.laborClearing ?? null;
+      `, "objects"));
+      laborClearing = control[0]?.c?.laborClearing ?? null;
 
       const requireAccount = (value: string | null, label: string): string => {
         if (!value) throw new PayrollError(`payroll setup incomplete: ${label} account is not configured`);
@@ -180,7 +180,7 @@ export async function payRunGlLegs(
        where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
          ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        order by s.employee_party_id, l.sequence
-    `));
+    `, "objects"));
     // Frozen resolution: the stub line's own stamp, else the account the
     // committed projection used for the same component, department and
     // project. Account types come from the resolved account itself.
@@ -199,14 +199,14 @@ export async function payRunGlLegs(
     if (frozen) {
       // A line a governed correction relieved posts to its bound liability;
       // its original expense resolution is reported, never required.
-      const ids = [...new Set(stubLines.rows
+      const ids = [...new Set(stubLines
         .filter((line) => (line.kind === "earning" || line.kind === "employer_contribution") && !reliefFor(line))
         .map(frozenExpenseAccount))];
       if (ids.length) {
-        const types = (await tx.execute<{ id: string; type: string }>(sql`
+        const types = await tx.execute<{ id: string; type: string }>(sql`
           select id::text as id, type from accounts
            where org_id = ${orgId} and id in (${sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `)})
-        `)).rows;
+        `, "objects");
         for (const row of types) frozenAccountTypes.set(row.id, row.type);
         if (frozenAccountTypes.size !== ids.length) throw new PayrollError("a committed payroll expense account no longer exists — the projection cannot be rebuilt");
       }
@@ -217,15 +217,15 @@ export async function payRunGlLegs(
       }
       return line.committed_liability_account_id;
     };
-    const stubs=(await tx.execute<{has_value:boolean;has_lines:boolean}>(sql`select
+    const stubs=await tx.execute<{has_value:boolean;has_lines:boolean}>(sql`select
       (s.gross<>0 or s.net_pay<>0 or s.employer_cost<>0 or s.pensionable_earnings<>0 or s.insurable_earnings<>0 or s.vacation_accrued<>0) as has_value,
       exists(select 1 from pay_stub_lines line where line.org_id=s.org_id and line.stub_id=s.id) as has_lines
       from pay_stubs s left join parties p on p.org_id=s.org_id and p.id=s.employee_party_id
       where s.org_id=${orgId} and s.pay_run_document_id=${documentId}
-        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`,allowedSubsidiaryIds)}`)).rows;
+        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`,allowedSubsidiaryIds)}`, "objects");
     if (!stubs.length) throw new PayrollError('Pay run has no calculated stubs — calculate its selected employees before committing');
     if (stubs.some(stub=>stub.has_value && !stub.has_lines)) throw new PayrollError('A calculated pay stub has financial totals but no native lines — recalculate the pay run before committing');
-    if (stubLines.rows.length === 0) {
+    if (stubLines.length === 0) {
       // Unpaid coverage retains native bank movements and allocations without
       // inventing financial entries for an entirely zero-money projection.
       return {legs:[],debitTotal:'0.0000',lineLiabilities:[],lineDestinations:[],reliefs:[]};
@@ -294,7 +294,7 @@ export async function payRunGlLegs(
       }
       return liability;
     };
-    for (const line of stubLines.rows) {
+    for (const line of stubLines) {
       netByEmployee.set(line.employee_party_id!, line.net_pay!);
       const amount = line.amount!;
       const identity = {

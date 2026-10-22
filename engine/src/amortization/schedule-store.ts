@@ -151,7 +151,7 @@ export async function loadSchedule(
   const row = (await runner.execute<ScheduleRow>(sql`
     select ${SCHEDULE_COLUMNS} from expense_amortization_schedules
      where org_id = ${orgId} and id = ${scheduleId}
-     ${options.lock ? sql`for update` : sql``}`)).rows[0];
+     ${options.lock ? sql`for update` : sql``}`, "objects"))[0];
   if (!row) {
     throw new AmortizationError("The amortization schedule does not exist in this organization.", {
       status: 404,
@@ -168,17 +168,17 @@ export async function lockSchedulesForDocument(
   orgId: string,
   documentId: string,
 ): Promise<StoredSchedule[]> {
-  const rows = (await runner.execute<ScheduleRow>(sql`
+  const rows = await runner.execute<ScheduleRow>(sql`
     select ${SCHEDULE_COLUMNS} from expense_amortization_schedules
      where org_id = ${orgId} and source_document_id = ${documentId}
      order by id
-     for update`)).rows;
+     for update`, "objects");
   return rows.map(fromRow);
 }
 
 /** The live plan (planned and posted lines) in period order. */
 export async function livePlanLines(runner: SqlExecutor, orgId: string, scheduleId: string): Promise<PlanLine[]> {
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     id: string;
     plan_revision: number;
     period_start: string;
@@ -194,7 +194,7 @@ export async function livePlanLines(runner: SqlExecutor, orgId: string, schedule
            status, journal_entry_id
       from expense_amortization_schedule_lines
      where org_id = ${orgId} and schedule_id = ${scheduleId} and status in ('planned', 'posted')
-     order by period_start`)).rows;
+     order by period_start`, "objects");
   return rows.map((row) => ({
     id: row.id,
     planRevision: row.plan_revision,
@@ -261,7 +261,7 @@ export async function updateSchedule(
     update expense_amortization_schedules
        set ${sql.join(sets, sql`, `)}
      where org_id = ${schedule.orgId} and id = ${schedule.id} and revision = ${schedule.revision}
-    returning ${SCHEDULE_COLUMNS}`)).rows[0];
+    returning ${SCHEDULE_COLUMNS}`, "objects"))[0];
   if (!row) {
     throw new AmortizationError(`Schedule ${schedule.scheduleNumber} changed while this action ran.`, {
       status: 409,
@@ -291,12 +291,12 @@ export async function closePlannedLines(
   status: "superseded" | "cancelled",
 ): Promise<void> {
   if (lineIds.length === 0) return;
-  const updated = (await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(sql`
     update expense_amortization_schedule_lines
        set status = ${status}, closed_at = now()
      where org_id = ${orgId} and status = 'planned'
        and id = any(${`{${lineIds.join(",")}}`}::uuid[])
-    returning id`)).rows;
+    returning id`, "objects");
   if (updated.length !== lineIds.length) {
     throw new AmortizationError("A planned amortization line changed while this action ran.", {
       status: 409,

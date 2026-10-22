@@ -109,8 +109,8 @@ async function createRun(
 }
 
 async function countRows(query: ReturnType<typeof sql>): Promise<number> {
-  const r = await db.execute<{ n: number }>(query);
-  return Number(r.rows[0]!.n);
+  const r = await db.execute<{ n: number }>(query, "objects");
+  return Number(r[0]!.n);
 }
 
 async function withOrgFixture(fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>): Promise<void> {
@@ -235,7 +235,7 @@ test("a checkpoint orphaned before its side effect is retried", { skip: !DB }, a
     );
     const checkpoint = (await db.execute<{ detail: Record<string, unknown> }>(sql`
       select detail from flow_run_effects where run_id = ${run.runId} and effect_key = ${effectKey}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(checkpoint.detail.action, "notify", "the retried checkpoint is completed");
   });
 });
@@ -338,7 +338,7 @@ test("post_document flow rejects semantically invalid control accounts", { skip:
     assert.match(posted.completed[0]!, /^post_document→/);
     assert.equal(
       (await db.execute<{ status: string }>(sql`
-        select status from documents where id = ${run.subjectId}`)).rows[0]!.status,
+        select status from documents where id = ${run.subjectId}`, "objects"))[0]!.status,
       "posted",
     );
   });

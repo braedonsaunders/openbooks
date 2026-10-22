@@ -80,16 +80,16 @@ async function subsidiaryAndBankOptions(orgId: string, allowed: ReadonlySet<stri
     select id, name, base_currency as "baseCurrency" from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination
        ${subsidiaryVisibleFilter(sql`id`, allowed)}
-     order by name`)).rows.filter((sub) => allowed === null || allowed.has(sub.id))
-  const banks = (await db.execute<{ id: string; label: string; subsidiaryId: string | null; currency: string | null }>(sql`
+     order by name`, 'objects')).filter((sub) => allowed === null || allowed.has(sub.id))
+  const banks = await db.execute<{ id: string; label: string; subsidiaryId: string | null; currency: string | null }>(sql`
     select id, concat_ws(' · ', number, name) as label, subsidiary_id as "subsidiaryId", currency_restriction as currency
       from accounts
      where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
-     order by number nulls last, name`)).rows
-  const currencyRows = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
+     order by number nulls last, name`, 'objects')
+  const currencyRows = await db.execute<{ subsidiary_id: string; currency: string }>(sql`
     select distinct subsidiary_id, currency from journal_lines where org_id = ${orgId}
-      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}`)).rows
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}`, 'objects')
   const currencies = [...new Set([
     ...subsidiaries.map(sub => sub.baseCurrency),
     ...banks.filter(bank => bank.subsidiaryId === null || allowed === null || allowed.has(bank.subsidiaryId)).flatMap(bank => bank.currency ? [bank.currency] : []),
@@ -157,7 +157,7 @@ export async function loadNettingPage(sp: Record<string, string | string[] | und
   const canSettle = can(authz, 'intercompany.settle')
   const runs = await listNettingRuns(orgId, authz.allowedSubsidiaryIds)
   const names = new Map((await db.execute<{ id: string; name: string }>(sql`
-    select id, name from subsidiaries where org_id = ${orgId}`)).rows.map((row) => [row.id, row.name]))
+    select id, name from subsidiaries where org_id = ${orgId}`, 'objects')).map((row) => [row.id, row.name]))
   const runParam = pickString(sp.run)
   const closeHref = mergeHref(BASE, sp, { run: undefined })
   let drawer: Record<string, unknown> | null = null

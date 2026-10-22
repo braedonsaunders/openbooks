@@ -59,11 +59,11 @@ export type ExtensionDraft = { id: string; extension_key: string; bundle: Upload
 export async function getExtensionDraft(context: ApplicationContext, id: string): Promise<ExtensionDraft> {
   await requireExtensionAuthor(context)
   const row = (await db.execute<ExtensionDraft>(sql`select id,extension_key,bundle,content_hash,base_version_id,reason,status,created_at
-    from extension_drafts where org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and id=${id}`)).rows[0]
+    from extension_drafts where org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and id=${id}`, 'objects'))[0]
   if (!row) throw notFound('app draft')
   const previous = row.base_version_id ? (await db.execute<{ path: string; content: string; isBinary: boolean }>(sql`
-    select path,content,is_binary as "isBinary" from app_files where org_id=${context.authz.user.orgId} and version_id=${row.base_version_id}`)).rows : []
-  const previousManifest = row.base_version_id ? (await db.execute<{ manifest: unknown }>(sql`select manifest from app_versions where org_id=${context.authz.user.orgId} and id=${row.base_version_id}`)).rows[0]?.manifest : undefined
+    select path,content,is_binary as "isBinary" from app_files where org_id=${context.authz.user.orgId} and version_id=${row.base_version_id}`, 'objects')) : []
+  const previousManifest = row.base_version_id ? (await db.execute<{ manifest: unknown }>(sql`select manifest from app_versions where org_id=${context.authz.user.orgId} and id=${row.base_version_id}`, 'objects'))[0]?.manifest : undefined
   const before = new Map(previous.map(file => [file.path, file]))
   const after = new Map(row.bundle.files.map(file => [file.path, file]))
   row.changes = {
@@ -84,15 +84,15 @@ export async function draftExtension(context: ApplicationContext, input: { bundl
   const hash = requestHash(bundle)
   const row = await db.transaction(async tx => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + context.authz.user.orgId + ':' + manifest.key}, 0))`)
-    const app = (await tx.execute<{ activeVersionId: string | null }>(sql`select active_version_id as "activeVersionId" from apps where org_id=${context.authz.user.orgId} and key=${manifest.key} for update`)).rows[0]
+    const app = (await tx.execute<{ activeVersionId: string | null }>(sql`select active_version_id as "activeVersionId" from apps where org_id=${context.authz.user.orgId} and key=${manifest.key} for update`, 'objects'))[0]
     if (input.expectedBaseVersionId !== undefined && input.expectedBaseVersionId !== (app?.activeVersionId ?? null)) throw conflict('This app changed while you were editing. Reload its current version before preparing a draft.')
     if (input.sourceDraft) {
-      const source = (await tx.execute<{ id: string }>(sql`select id from extension_drafts where id=${input.sourceDraft.id} and content_hash=${input.sourceDraft.contentHash} and org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and extension_key=${manifest.key} and status='draft' for update`)).rows[0]
+      const source = (await tx.execute<{ id: string }>(sql`select id from extension_drafts where id=${input.sourceDraft.id} and content_hash=${input.sourceDraft.contentHash} and org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and extension_key=${manifest.key} and status='draft' for update`, 'objects'))[0]
       if (!source) throw conflict('This draft has changed or closed. Reload it before saving another revision.')
     }
     await tx.execute(sql`update extension_drafts set status='discarded' where org_id=${context.authz.user.orgId} and created_by=${context.authz.user.id} and extension_key=${manifest.key} and status='draft'`)
     return (await tx.execute<{ id: string }>(sql`insert into extension_drafts(org_id,created_by,extension_key,bundle,content_hash,base_version_id,reason)
-      values(${context.authz.user.orgId},${context.authz.user.id},${manifest.key},${JSON.stringify(bundle)}::jsonb,${hash},${app?.activeVersionId ?? null},${reason}) returning id`)).rows[0]!
+      values(${context.authz.user.orgId},${context.authz.user.id},${manifest.key},${JSON.stringify(bundle)}::jsonb,${hash},${app?.activeVersionId ?? null},${reason}) returning id`, 'objects'))[0]!
   })
   return { draftId: row.id, contentHash: hash, key: manifest.key, status: 'draft', reviewUrl: `/admin/apps?draft=${row.id}`, previewUrl: `/admin/apps/preview/${row.id}`, requestedPermissions: manifest.permissions, activated: false }
 }
@@ -160,10 +160,10 @@ export async function getExtensionPackage(context: ApplicationContext, input: { 
   const app = await getAppByKey(context.authz.user.orgId, input.key)
   if (!app) throw notFound('app')
   const version = (await db.execute<{ id: string; manifest: unknown }>(sql`select id,manifest from app_versions
-    where org_id=${context.authz.user.orgId} and app_id=${app.id} and id=${input.versionId ?? app.activeVersionId}`)).rows[0]
+    where org_id=${context.authz.user.orgId} and app_id=${app.id} and id=${input.versionId ?? app.activeVersionId}`, 'objects'))[0]
   if (!version) throw notFound('app version')
-  const files = (await db.execute<{ path: string; content: string; isBinary: boolean }>(sql`select path,content,is_binary as "isBinary" from app_files
-    where org_id=${context.authz.user.orgId} and app_id=${app.id} and version_id=${version.id} order by path`)).rows
+  const files = await db.execute<{ path: string; content: string; isBinary: boolean }>(sql`select path,content,is_binary as "isBinary" from app_files
+    where org_id=${context.authz.user.orgId} and app_id=${app.id} and version_id=${version.id} order by path`, 'objects')
   return { key: input.key, versionId: version.id, bundle: { manifest: version.manifest, files, grantedPermissions: app.grantedPermissions } }
 }
 
@@ -174,9 +174,9 @@ export async function discardExtensionDraft(context: ApplicationContext, input: 
   if (draft.status === 'discarded') throw conflict('This draft is already discarded. Prepare a new draft if you still need a revision.')
   if (draft.status !== 'draft') throw conflict('This extension draft is no longer available')
   await db.transaction(async tx => {
-    const changed = (await tx.execute(sql`update extension_drafts set status='discarded' where org_id=${context.authz.user.orgId} and id=${draft.id} and created_by=${context.authz.user.id} and status='draft' returning id`)).rows
+    const changed = await tx.execute(sql`update extension_drafts set status='discarded' where org_id=${context.authz.user.orgId} and id=${draft.id} and created_by=${context.authz.user.id} and status='draft' returning id`, 'objects')
     if (!changed.length) {
-      const status = (await tx.execute<{ status: string }>(sql`select status from extension_drafts where org_id=${context.authz.user.orgId} and id=${draft.id}`)).rows[0]?.status
+      const status = (await tx.execute<{ status: string }>(sql`select status from extension_drafts where org_id=${context.authz.user.orgId} and id=${draft.id}`, 'objects'))[0]?.status
       if (status === 'applied') throw conflict('An activated version cannot be discarded. Prepare a new draft to change the installed package.')
       if (status === 'discarded') throw conflict('This draft is already discarded. Prepare a new draft if you still need a revision.')
       throw conflict('This extension draft is no longer available')

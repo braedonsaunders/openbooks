@@ -26,10 +26,10 @@ export async function validatePeopleIntegrity(
     if (rowId) {
       const current = await executor.execute(sql`
         select applies_to as "appliesTo", designer_managed from hrm_process_templates where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Process template not found'
-      if (current.rows[0].designer_managed) return 'Open this template in HRM Checklist templates to edit and publish its whole draft, or use Retire template there.'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+      `, 'objects')
+      if (!current[0]) return 'Process template not found'
+      if (current[0].designer_managed) return 'Open this template in HRM Checklist templates to edit and publish its whole draft, or use Retire template there.'
+      values = { ...(current[0] as Record<string, unknown>), ...body }
     }
     const raw = values.appliesTo
     const parsed: { employer_subsidiary_id?: unknown; department_id?: unknown } =
@@ -50,9 +50,9 @@ export async function validatePeopleIntegrity(
       select
         ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
         ${department ? sql`exists(select 1 from departments where id = ${department} and org_id = ${orgId})` : sql`true`} as department_ok
-    `)
-    if (!refs.rows[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
-    if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
+    `, 'objects')
+    if (!refs[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
+    if (!refs[0]?.department_ok) return 'The applies-to department is not visible in this organization'
   }
   // HRM leave policies (0194): the rule shapes are refused with the engine's
   // own words before the write, and the applies_to targets must be visible
@@ -79,23 +79,23 @@ export async function validatePeopleIntegrity(
         select
           ${subsidiary ? sql`exists(select 1 from subsidiaries where id = ${subsidiary} and org_id = ${orgId})` : sql`true`} as subsidiary_ok,
           ${department ? sql`exists(select 1 from departments where id = ${department} and org_id = ${orgId})` : sql`true`} as department_ok
-      `)
-      if (!refs.rows[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
-      if (!refs.rows[0]?.department_ok) return 'The applies-to department is not visible in this organization'
+      `, 'objects')
+      if (!refs[0]?.subsidiary_ok) return 'The applies-to subsidiary is not visible in this organization'
+      if (!refs[0]?.department_ok) return 'The applies-to department is not visible in this organization'
       const employments = Array.isArray(applies.employment_ids) ? (applies.employment_ids as unknown[]).map(String) : null
       if (employments) {
-        const missing = (await executor.execute(sql`
+        const missing = await executor.execute(sql`
           select value as id from jsonb_array_elements_text(${JSON.stringify(employments)}::jsonb)
            where not exists (select 1 from worker_employments where org_id = ${orgId} and id = value::uuid)
-        `)).rows
+        `, 'objects')
         if (missing.length > 0) return 'The applies-to employments must be employments in this organization'
       }
       const classifications = Array.isArray(applies.classification_ids) ? (applies.classification_ids as unknown[]).map(String) : null
       if (classifications) {
-        const missing = (await executor.execute(sql`
+        const missing = await executor.execute(sql`
           select value as id from jsonb_array_elements_text(${JSON.stringify(classifications)}::jsonb)
            where not exists (select 1 from hrm_work_classifications where org_id = ${orgId} and id = value::uuid)
-        `)).rows
+        `, 'objects')
         if (missing.length > 0) return 'The applies-to classifications must be classifications in this organization'
       }
     }
@@ -107,9 +107,9 @@ export async function validatePeopleIntegrity(
     if (rowId) {
       const current = await executor.execute(sql`select is_active as "isActive", effective_from::text as "effectiveFrom", currency, waiting_period_days as "waitingPeriodDays", waiting_period_months as "waitingPeriodMonths",
         provider_party_id as "providerPartyId", employer_subsidiary_id as "employerSubsidiaryId"
-        from hrm_benefit_plans where id = ${rowId} and org_id = ${orgId}`)
-      if (!current.rows[0]) return 'Benefit plan not found'
-      values = { ...current.rows[0], ...body }
+        from hrm_benefit_plans where id = ${rowId} and org_id = ${orgId}`, 'objects')
+      if (!current[0]) return 'Benefit plan not found'
+      values = { ...current[0], ...body }
     }
     const shape = benefitPlanShapeProblem(values)
     if (shape) return shape
@@ -126,9 +126,9 @@ export async function validatePeopleIntegrity(
     const subsidiary = values.employerSubsidiaryId ? String(values.employerSubsidiaryId) : null
     const refs = await executor.execute(sql`select
       ${provider ? sql`exists(select 1 from parties where id=${provider} and org_id=${orgId})` : sql`true`} as provider_ok,
-      ${subsidiary ? sql`exists(select 1 from subsidiaries where id=${subsidiary} and org_id=${orgId})` : sql`true`} as subsidiary_ok`)
-    if (!refs.rows[0]?.provider_ok) return 'Choose a provider in this organization'
-    if (!refs.rows[0]?.subsidiary_ok) return 'Choose an employer in this organization'
+      ${subsidiary ? sql`exists(select 1 from subsidiaries where id=${subsidiary} and org_id=${orgId})` : sql`true`} as subsidiary_ok`, 'objects')
+    if (!refs[0]?.provider_ok) return 'Choose a provider in this organization'
+    if (!refs[0]?.subsidiary_ok) return 'Choose an employer in this organization'
   }
   // Employer-defined benefit programs: shape plus tenant references. The
   // service owns status moves; the registry edits draft configuration with
@@ -140,9 +140,9 @@ export async function validatePeopleIntegrity(
         select family, currency, frequency, period_basis as "periodBasis",
                legal_entity_id as "legalEntityId", pay_component_id as "payComponentId", delivery_method as "deliveryMethod"
           from hrm_benefit_programs where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Benefit program not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...values }
+      `, 'objects')
+      if (!current[0]) return 'Benefit program not found'
+      values = { ...(current[0] as Record<string, unknown>), ...values }
     }
     const shape = benefitProgramShapeProblem(values)
     if (shape) return shape
@@ -152,9 +152,9 @@ export async function validatePeopleIntegrity(
       select
         ${legalEntity ? sql`exists(select 1 from subsidiaries where id = ${legalEntity} and org_id = ${orgId} and is_active and not is_elimination)` : sql`true`} as entity_ok,
         ${component ? sql`(select json_build_object('kind', kind, 'active', is_active, 'paymentKind', payment_kind) from pay_components where id = ${component} and org_id = ${orgId})` : sql`null`} as component
-    `)
-    if (!refs.rows[0]?.entity_ok) return 'The responsible legal entity is not visible in this organization'
-    const componentRow = refs.rows[0]?.component as { kind?: string | null; active?: boolean; paymentKind?: string } | null
+    `, 'objects')
+    if (!refs[0]?.entity_ok) return 'The responsible legal entity is not visible in this organization'
+    const componentRow = refs[0]?.component as { kind?: string | null; active?: boolean; paymentKind?: string } | null
     if (!component) return 'Link a cash earning for payroll delivery or a non-cash earning for provider delivery before saving the program'
     if (component && !componentRow?.kind) return 'The program pay component is not visible in this organization'
     if (component && componentRow?.active !== true) return 'The program pay component is inactive — reactivate it or link its replacement'
@@ -168,9 +168,9 @@ export async function validatePeopleIntegrity(
     if (rowId) {
       const current = await executor.execute(sql`
         select program_id as "programId" from hrm_benefit_program_scopes where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Benefit program scope not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+      `, 'objects')
+      if (!current[0]) return 'Benefit program scope not found'
+      values = { ...(current[0] as Record<string, unknown>), ...body }
     }
     const program = (values.programId ?? null) as string | null
     const department = (values.departmentId ?? null) as string | null
@@ -181,19 +181,19 @@ export async function validatePeopleIntegrity(
         ${program ? sql`exists(select 1 from hrm_benefit_programs where id = ${program} and org_id = ${orgId})` : sql`false`} as program_ok,
         ${department ? sql`exists(select 1 from departments where id = ${department} and org_id = ${orgId})` : sql`true`} as department_ok,
         ${project ? sql`exists(select 1 from projects where id = ${project} and org_id = ${orgId})` : sql`true`} as project_ok
-    `)
-    if (!refs.rows[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
-    if (!refs.rows[0]?.department_ok) return 'The scope department is not visible in this organization'
-    if (!refs.rows[0]?.project_ok) return 'The scope project is not visible in this organization'
+    `, 'objects')
+    if (!refs[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
+    if (!refs[0]?.department_ok) return 'The scope department is not visible in this organization'
+    if (!refs[0]?.project_ok) return 'The scope project is not visible in this organization'
   }
   if (entity.key === 'benefit-program-sources') {
     let values = body
     if (rowId) {
       const current = await executor.execute(sql`
         select program_id as "programId" from hrm_benefit_program_sources where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Benefit program source not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+      `, 'objects')
+      if (!current[0]) return 'Benefit program source not found'
+      values = { ...(current[0] as Record<string, unknown>), ...body }
     }
     const program = (values.programId ?? null) as string | null
     const account = (values.accountId ?? null) as string | null
@@ -201,18 +201,18 @@ export async function validatePeopleIntegrity(
       select
         ${program ? sql`exists(select 1 from hrm_benefit_programs where id = ${program} and org_id = ${orgId})` : sql`false`} as program_ok,
         ${account ? sql`exists(select 1 from accounts where id = ${account} and org_id = ${orgId} and is_active and not is_summary)` : sql`false`} as account_ok
-    `)
-    if (!refs.rows[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
-    if (!refs.rows[0]?.account_ok) return 'The source account is not a postable account of this organization'
+    `, 'objects')
+    if (!refs[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
+    if (!refs[0]?.account_ok) return 'The source account is not a postable account of this organization'
   }
   if (entity.key === 'benefit-program-members') {
     let values = body
     if (rowId) {
       const current = await executor.execute(sql`
         select program_id as "programId" from hrm_benefit_program_members where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Benefit program membership not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+      `, 'objects')
+      if (!current[0]) return 'Benefit program membership not found'
+      values = { ...(current[0] as Record<string, unknown>), ...body }
     }
     const program = (values.programId ?? null) as string | null
     const employment = (values.employmentId ?? null) as string | null
@@ -220,9 +220,9 @@ export async function validatePeopleIntegrity(
       select
         ${program ? sql`exists(select 1 from hrm_benefit_programs where id = ${program} and org_id = ${orgId})` : sql`false`} as program_ok,
         ${employment ? sql`exists(select 1 from worker_employments where id = ${employment} and org_id = ${orgId})` : sql`false`} as employment_ok
-    `)
-    if (!refs.rows[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
-    if (!refs.rows[0]?.employment_ok) return 'The member employment is not visible in this organization'
+    `, 'objects')
+    if (!refs[0]?.program_ok) return 'The parent benefit program is not visible in this organization'
+    if (!refs[0]?.employment_ok) return 'The member employment is not visible in this organization'
   }
   // HRM process template steps (0193): named owners must be visible parties
   // (named_party needs exactly one, other owners need none), and the parent
@@ -233,9 +233,9 @@ export async function validatePeopleIntegrity(
       const current = await executor.execute(sql`
         select template_id as "templateId", owner_kind as "ownerKind", owner_party_id as "ownerPartyId"
           from hrm_process_template_steps where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Template step not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+      `, 'objects')
+      if (!current[0]) return 'Template step not found'
+      values = { ...(current[0] as Record<string, unknown>), ...body }
     }
     if (values.ownerKind !== undefined && !['manager', 'hr', 'employee', 'named_party'].includes(String(values.ownerKind))) {
       return 'Assign the step to manager, hr, employee, or named_party'
@@ -249,11 +249,11 @@ export async function validatePeopleIntegrity(
       select
         ${values.templateId ? sql`exists(select 1 from hrm_process_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok,
         ${ownerParty ? sql`exists(select 1 from parties where id = ${ownerParty} and org_id = ${orgId})` : sql`true`} as party_ok
-    `)
-    if (!refs.rows[0]?.template_ok) return 'The parent template is not visible in this organization'
-    const parent = await executor.execute(sql`select designer_managed from hrm_process_templates where org_id=${orgId} and id=${values.templateId}`)
-    if (parent.rows[0]?.designer_managed) return 'Edit steps in HRM Checklist templates and publish the complete draft instead.'
-    if (!refs.rows[0]?.party_ok) return 'The owner party is not visible in this organization'
+    `, 'objects')
+    if (!refs[0]?.template_ok) return 'The parent template is not visible in this organization'
+    const parent = await executor.execute(sql`select designer_managed from hrm_process_templates where org_id=${orgId} and id=${values.templateId}`, 'objects')
+    if (parent[0]?.designer_managed) return 'Edit steps in HRM Checklist templates and publish the complete draft instead.'
+    if (!refs[0]?.party_ok) return 'The owner party is not visible in this organization'
   }
   // HRM pipeline stages (0195): the parent funnel must live in this org
   // and the kind must name the fixed vocabulary — terminality derives
@@ -264,9 +264,9 @@ export async function validatePeopleIntegrity(
       const current = await executor.execute(sql`
         select template_id as "templateId", kind from hrm_pipeline_stages
          where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Pipeline stage not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+      `, 'objects')
+      if (!current[0]) return 'Pipeline stage not found'
+      values = { ...(current[0] as Record<string, unknown>), ...body }
     }
     if (values.kind !== undefined && !['screening', 'interview', 'assessment', 'offer', 'hired', 'rejected'].includes(String(values.kind))) {
       return 'The stage kind must be screening, interview, assessment, offer, hired, or rejected'
@@ -274,8 +274,8 @@ export async function validatePeopleIntegrity(
     const refs = await executor.execute(sql`
       select
         ${values.templateId ? sql`exists(select 1 from hrm_pipeline_templates where id = ${values.templateId} and org_id = ${orgId})` : sql`false`} as template_ok
-    `)
-    if (!refs.rows[0]?.template_ok) return 'The parent funnel is not visible in this organization'
+    `, 'objects')
+    if (!refs[0]?.template_ok) return 'The parent funnel is not visible in this organization'
   }
   return INTEGRITY_CONTINUES
 }

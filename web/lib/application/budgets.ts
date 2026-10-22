@@ -105,7 +105,7 @@ export async function updateBudgetCells(context: ApplicationContext, input: {
          and parent_id is null and is_active and not is_elimination
        order by created_at, id
        limit 1
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     assertSubsidiaryAccess(context, root);
   }
   const cells: BudgetCellInput[] = input.cells.map((cell) => ({

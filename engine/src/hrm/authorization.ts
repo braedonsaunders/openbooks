@@ -334,11 +334,9 @@ export async function requireRecruitingFeature(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<void> {
-  const row = (
-    await exec.execute<{ features: Record<string, boolean> | null }>(sql`
+  const row = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
     select settings->'features' as features from orgs where id = ${orgId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!featureEnabled(row?.features ?? {}, "hrmRecruiting")) {
     throw new HrmAuthorizationError(
       "Recruiting is off — turn it on in Company Settings → Features before using this surface; nothing was written",
@@ -401,8 +399,7 @@ async function loadTrustedEmploymentSubject(
   employmentId: string,
   forUpdate = false,
 ): Promise<TrustedEmploymentSubject> {
-  const rows = (
-    await exec.execute<{
+  const rows = (await exec.execute<{
       id: string;
       orgId: string;
       workerPartyId: string;
@@ -417,8 +414,7 @@ async function loadTrustedEmploymentSubject(
       from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
      ${forUpdate ? sql`for update` : sql``}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!rows) {
@@ -668,11 +664,9 @@ export async function loadApprovalPerson(
   orgId: string,
   userId: string,
 ): Promise<ApprovalPerson> {
-  const row = (
-    await exec.execute<{ id: string; partyId: string | null }>(sql`
+  const row = (await exec.execute<{ id: string; partyId: string | null }>(sql`
     select id, party_id as "partyId" from users where org_id = ${orgId} and id = ${userId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmAuthorizationError(
       "Employment approval refused: the identity behind this action is not established in this organization.",
@@ -704,8 +698,7 @@ async function loadTrustedPositionSubject(
   orgId: string,
   positionId: string,
 ): Promise<TrustedPositionSubject> {
-  const rows = (
-    await exec.execute<{
+  const rows = (await exec.execute<{
       id: string;
       orgId: string;
       positionCode: string;
@@ -724,8 +717,7 @@ async function loadTrustedPositionSubject(
            p.revision
       from positions p
      where p.org_id = ${orgId} and p.id = ${positionId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!rows) {
@@ -908,11 +900,9 @@ export async function loadActorPartyId(
   orgId: string,
   actorId: string,
 ): Promise<string | null> {
-  const row = (
-    await exec.execute<{ partyId: string | null }>(sql`
+  const row = (await exec.execute<{ partyId: string | null }>(sql`
     select party_id as "partyId" from users where org_id = ${orgId} and id = ${actorId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   return row?.partyId ?? null;
 }
 
@@ -957,14 +947,12 @@ export async function loadPartyEmployerSubsidiaries(
   orgId: string,
   partyId: string,
 ): Promise<string[]> {
-  const rows = (
-    await exec.execute<{ employerSubsidiaryId: string }>(sql`
+  const rows = await exec.execute<{ employerSubsidiaryId: string }>(sql`
     select distinct employer_subsidiary_id as "employerSubsidiaryId"
       from worker_employments
      where org_id = ${orgId} and worker_party_id = ${partyId}
        and employer_subsidiary_id is not null
-  `)
-  ).rows;
+  `, "objects");
   return rows.map((row) => row.employerSubsidiaryId);
 }
 
@@ -1017,13 +1005,11 @@ export async function requireEmploymentRowInScope(
 ): Promise<void> {
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed === null) return;
-  const row = (
-    await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+  const row = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
     select employer_subsidiary_id as "employerSubsidiaryId"
       from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!subsidiaryScopeAllows(allowed, row?.employerSubsidiaryId)) {
     throw new HrmAuthorizationError(
       "Employment is not visible in this organization and legal-entity scope.",
@@ -1221,12 +1207,10 @@ export async function loadOwnEmploymentIds(
 ): Promise<string[]> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (!person.partyId) return [];
-  const rows = (
-    await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select id from worker_employments
      where org_id = ${orgId} and worker_party_id = ${person.partyId}
-  `)
-  ).rows;
+  `, "objects");
   return rows.map((row) => row.id);
 }
 
@@ -1316,8 +1300,7 @@ async function loadTrustedRequisitionSubject(
   orgId: string,
   requisitionId: string,
 ): Promise<TrustedRequisitionSubject> {
-  const rows = (
-    await exec.execute<{
+  const rows = (await exec.execute<{
       id: string;
       orgId: string;
       requisitionNumber: string;
@@ -1335,8 +1318,7 @@ async function loadTrustedRequisitionSubject(
            revision
       from hrm_requisitions
      where org_id = ${orgId} and id = ${requisitionId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!rows) {
@@ -1538,16 +1520,14 @@ export async function actorOnInterviewPanel(
 ): Promise<boolean> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (!person.partyId) return false;
-  const rows = (
-    await exec.execute<{ one: number }>(sql`
+  const rows = await exec.execute<{ one: number }>(sql`
     select 1 as one
       from hrm_interview_panel p
       join hrm_interviews i on i.org_id = p.org_id and i.id = p.interview_id
      where p.org_id = ${orgId} and p.interview_id = ${interviewId}
        and p.party_id = ${person.partyId}
      limit 1
-  `)
-  ).rows;
+  `, "objects");
   return rows.length > 0;
 }
 
@@ -1694,18 +1674,15 @@ export async function loadManagedEmploymentIds(
 ): Promise<string[]> {
   const person = await loadApprovalPerson(exec, orgId, actorId);
   if (!person.partyId) return [];
-  const own = (
-    await exec.execute<{ id: string }>(sql`
+  const own = (await exec.execute<{ id: string }>(sql`
     select id from worker_employments
      where org_id = ${orgId} and worker_party_id = ${person.partyId}
-  `)
-  ).rows.map((row) => row.id);
+  `, "objects")).map((row) => row.id);
   if (own.length === 0) return [];
   // One parameter per id: bare JS arrays must never be interpolated into
   // ANY() (they bind as row constructors, not PostgreSQL arrays).
   const ids = own.map((id) => sql`${id}::uuid`);
-  const rows = (
-    await exec.execute<{ employmentId: string }>(sql`
+  const rows = await exec.execute<{ employmentId: string }>(sql`
     select distinct r.employment_id as "employmentId"
       from reporting_relationships r
      where r.org_id = ${orgId}
@@ -1714,8 +1691,7 @@ export async function loadManagedEmploymentIds(
        and r.recorded_until is null
        and r.effective_from <= ${asOf}::date
        and (r.effective_to is null or r.effective_to > ${asOf}::date)
-  `)
-  ).rows;
+  `, "objects");
   return rows.map((row) => row.employmentId);
 }
 
@@ -1957,8 +1933,7 @@ export async function loadTeamEmploymentIdsForManager(
   today: string,
 ): Promise<string[]> {
   if (managerEmploymentIds.length === 0) return [];
-  const rows = (
-    await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(sql`
     select distinct r.employment_id::text as id
       from reporting_relationships r
      where r.org_id = ${orgId}
@@ -1968,8 +1943,7 @@ export async function loadTeamEmploymentIdsForManager(
        and r.effective_from <= ${today}::date
        and (r.effective_to is null or r.effective_to > ${today}::date)
      order by id
-  `)
-  ).rows;
+  `, "objects");
   return rows.map((row) => row.id);
 }
 

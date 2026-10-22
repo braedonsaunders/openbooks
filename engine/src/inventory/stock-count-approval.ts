@@ -52,12 +52,10 @@ export async function releaseStockCountReview(input: {
   outcome: "approved" | "rejected";
 }): Promise<void> {
   await withOrgTransaction(input.orgId, async () => {
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         subsidiary_id: string;
       }>(sql`select subsidiary_id from stock_counts
-      where org_id=${input.orgId} and id=${input.countId} and status='review' for update`)
-    ).rows[0];
+      where org_id=${input.orgId} and id=${input.countId} and status='review' for update`, "objects"))[0];
     if (!row)
       throw new InventoryError(
         "The count left review; reopen its current version.",
@@ -73,8 +71,8 @@ export async function releaseStockCountReview(input: {
       review_released=${input.outcome === "approved"},
       status=${input.outcome === "approved" ? "review" : "counting"},
       updated_at=now(),updated_by=${input.actorId}
-      where org_id=${input.orgId} and id=${input.countId} and status='review' returning id`);
-    if (result.rows.length !== 1)
+      where org_id=${input.orgId} and id=${input.countId} and status='review' returning id`, "objects");
+    if (result.length !== 1)
       throw new InventoryError(
         "The stock count changed during its Flow decision.",
       );

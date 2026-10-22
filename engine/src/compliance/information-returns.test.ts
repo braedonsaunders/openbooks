@@ -662,7 +662,7 @@ test("an unknown form is refused rather than defaulted", () => {
 function stubRunner(rowSets: Record<string, unknown>[][]) {
   const queue = [...rowSets];
   return {
-    execute: (async () => ({ rows: queue.shift() ?? [] })) as unknown as Pick<
+    execute: (async (_query: unknown, mode?: string) => Promise.resolve({ rows: queue.shift() ?? [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as Pick<
       typeof db,
       "execute"
     >["execute"],

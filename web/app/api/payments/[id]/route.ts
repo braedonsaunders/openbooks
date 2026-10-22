@@ -102,11 +102,11 @@ async function gateForDocument(
     select kind, subsidiary_id as "subsidiaryId" from documents
      where id = ${id} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${orgId ?? authz.user.orgId}
-  `))
-  if (!r.rows[0]) return notFound("record")
-  const denied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
+  `, 'objects'))
+  if (!r[0]) return notFound("record")
+  const denied = guardSubsidiaryScope(authz, r[0].subsidiaryId)
   if (denied) return denied
-  const kind = r.rows[0].kind
+  const kind = r[0].kind
   // Wrong-direction callers learn nothing either: the kind-specific
   // permission fails closed with the same uniform 404, so an ap.pay-only
   // caller cannot distinguish an existing customer receipt from a missing id.

@@ -21,7 +21,7 @@ async function fixture(run: (org: ScratchOrg, actor: string) => Promise<void>): 
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Usage rating controller", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const enabled = await db.execute(sql`
+      const enabled = await db.execute<never>(sql`
         update orgs set settings = jsonb_set(settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb)
             || '{"subscriptionBilling":true,"usageBilling":true}'::jsonb, true)
@@ -40,8 +40,8 @@ async function meter(org: ScratchOrg, actor: string, recognitionRule = false) {
     itemId = randomUUID();
     await withOrgContext(org.orgId, async () => {
       const item = await db.execute(sql`insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
-        values (${itemId}, ${org.orgId}, 'service', ${`Meter item ${itemId.slice(0, 8)}`}, ${org.accounts.revenue}, true, '{}'::jsonb) returning id`);
-      assert.equal(item.rows.length, 1);
+        values (${itemId}, ${org.orgId}, 'service', ${`Meter item ${itemId.slice(0, 8)}`}, ${org.accounts.revenue}, true, '{}'::jsonb) returning id`, "objects");
+      assert.equal(item.length, 1);
     });
   }
   return createUsageMeter(org.orgId, actor, { key: `requests-${randomUUID()}`, name: "API requests", unit: "request", aggregation: "sum", itemId });
@@ -55,8 +55,8 @@ async function linkedPlan(org: ScratchOrg, actor: string, meterId: string, optio
     await db.execute(sql`insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count)
       values (${planId}, ${org.orgId}, ${subscriptionName}, 0, 'CAD', 'monthly', 1)`);
     const row = await db.execute(sql`insert into subscriptions (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on)
-      values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, 1, 'active', ${org.date}, ${org.date}) returning id`);
-    assert.equal(row.rows.length, 1);
+      values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, 1, 'active', ${org.date}, ${org.date}) returning id`, "objects");
+    assert.equal(row.length, 1);
   });
   const plan = await createUsageRatingPlan(org.orgId, actor, { name: `Plan ${randomUUID()}`, currency: "CAD" });
   const version = await createUsageRatingPlanVersion(org.orgId, actor, { planId: plan.id, effectiveFrom: options.effectiveFrom ?? org.date });
@@ -79,8 +79,8 @@ async function record(org: ScratchOrg, actor: string, meterKey: string, quantity
 
 async function postInvoice(org: ScratchOrg, actor: string, invoiceId: string): Promise<void> {
   await withOrgContext(org.orgId, async () => {
-    const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${invoiceId} and status = 'draft' returning id`);
-    assert.equal(approved.rows.length, 1);
+    const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${invoiceId} and status = 'draft' returning id`, "objects");
+    assert.equal(approved.length, 1);
   });
   await postDocument(invoiceId, { control: await loadRequiredControlAccounts(org.orgId) }, { audit: { actorId: actor, source: "usage-rating-test" } });
 }
@@ -88,14 +88,14 @@ async function postInvoice(org: ScratchOrg, actor: string, invoiceId: string): P
 async function addMonthlyPeriods(org: ScratchOrg, months: readonly number[]): Promise<void> {
   await withOrgContext(org.orgId, async () => {
     const calendar = await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods
-      where org_id = ${org.orgId} and id = ${org.periodId}`);
-    assert.ok(calendar.rows[0]);
+      where org_id = ${org.orgId} and id = ${org.periodId}`, "objects");
+    assert.ok(calendar[0]);
     for (const month of months) {
       const start = `2026-${String(month).padStart(2, "0")}-01`;
       const end = month === 2 ? "2026-02-28" : month === 12 ? "2026-12-31" : `2026-${String(month).padStart(2, "0")}-31`;
       assert.equal((await db.execute(sql`insert into accounting_periods
         (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-        values (${org.orgId}, 2026, ${month}, ${start.slice(0, 7)}, ${start}, ${end}, false, ${calendar.rows[0]!.id}) returning id`)).rows.length, 1);
+        values (${org.orgId}, 2026, ${month}, ${start.slice(0, 7)}, ${start}, ${end}, false, ${calendar[0]!.id}) returning id`, "objects")).length, 1);
     }
   });
 }
@@ -112,12 +112,12 @@ test("graduated rating is traced, idempotent, and draft rerating replaces the in
     assert.equal(first.preview.invoiceLines.length, 2);
     const lines = await db.execute<{ amount: string; trace: { rating?: Record<string, unknown> } }>(sql`
       select amount::text as amount, custom as trace from document_lines
-       where org_id = ${org.orgId} and document_id = ${first.invoiceId} order by line_number`);
-    assert.equal(lines.rows.length, 2);
+       where org_id = ${org.orgId} and document_id = ${first.invoiceId} order by line_number`, "objects");
+    assert.equal(lines.length, 2);
     const lineTotal = await db.execute<{ amount: string }>(sql`select sum(amount)::text as amount from document_lines
-      where org_id = ${org.orgId} and document_id = ${first.invoiceId}`);
-    assert.equal(lineTotal.rows[0]?.amount, "5.0000");
-    for (const line of lines.rows) {
+      where org_id = ${org.orgId} and document_id = ${first.invoiceId}`, "objects");
+    assert.equal(lineTotal[0]?.amount, "5.0000");
+    for (const line of lines) {
       assert.deepEqual([line.trace.rating?.runId, line.trace.rating?.planVersionId], [first.run.id, first.run.planVersionId]);
     }
     const replay = await commitRateRun(org.orgId, actor, link.id, org.date, org.date);
@@ -140,8 +140,8 @@ test("graduated rating is traced, idempotent, and draft rerating replaces the in
       (select count(*)::int from performance_obligations o join document_lines source on source.org_id = o.org_id and source.id = o.document_line_id
         where source.org_id = ${org.orgId} and source.document_id = ${replacement.invoiceId}) as deferred
       from journal_entries e join journal_lines jl on jl.org_id = e.org_id and jl.entry_id = e.id
-      where e.org_id = ${org.orgId} and e.source_document_id = ${replacement.invoiceId} group by e.posting_date`);
-    assert.deepEqual([posting.rows[0]?.postingDate, posting.rows[0]?.income, posting.rows[0]?.deferred], [org.date, "-7.5000", 0]);
+      where e.org_id = ${org.orgId} and e.source_document_id = ${replacement.invoiceId} group by e.posting_date`, "objects");
+    assert.deepEqual([posting[0]?.postingDate, posting[0]?.income, posting[0]?.deferred], [org.date, "-7.5000", 0]);
   });
 });
 
@@ -151,8 +151,8 @@ test("prepaid usage rerating reverses the prior draw and recognition before draw
     const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id);
     await withOrgContext(org.orgId, async () => {
       const changed = await db.execute(sql`update recognition_rules set method = 'usage'
-        where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`);
-      assert.equal(changed.rows.length, 1);
+        where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`, "objects");
+      assert.equal(changed.length, 1);
     });
     const prepaidInvoice = await createSubscriptionInvoice({
       orgId: org.orgId,
@@ -170,7 +170,7 @@ test("prepaid usage rerating reverses the prior draw and recognition before draw
       invoiceDate: org.date,
       autoPost: true,
     });
-    const source = (await db.execute<{ id: string }>(sql`select id from document_lines where org_id = ${org.orgId} and document_id = ${prepaidInvoice.invoiceId}`)).rows[0];
+    const source = (await db.execute<{ id: string }>(sql`select id from document_lines where org_id = ${org.orgId} and document_id = ${prepaidInvoice.invoiceId}`, "objects"))[0];
     assert.ok(source);
     const grant = await createPrepaidGrant(org.orgId, actor, { customerId: org.customerId, sourceDocumentLineId: source.id, amount: "3", currency: "CAD" });
     await record(org, actor, usageMeter.key, "2", org.date, subscriptionId);
@@ -198,11 +198,11 @@ test("prepaid usage rerating reverses the prior draw and recognition before draw
     }>(sql`select id, run_id as "runId", amount::text as amount,
         period_month::text as "periodMonth", reverses_draw_id as "reversesDrawId"
       from usage_prepaid_draws where org_id = ${org.orgId} and grant_id = ${grant.id}
-      order by created_at, id`);
-    assert.equal(draws.rows.length, 3);
-    const originalDraw = draws.rows.find((draw) => draw.runId === first.run.id && draw.reversesDrawId === null);
-    const reversal = draws.rows.find((draw) => draw.reversesDrawId === originalDraw?.id);
-    const newDraw = draws.rows.find((draw) => draw.runId === replacement.run.id && draw.reversesDrawId === null);
+      order by created_at, id`, "objects");
+    assert.equal(draws.length, 3);
+    const originalDraw = draws.find((draw) => draw.runId === first.run.id && draw.reversesDrawId === null);
+    const reversal = draws.find((draw) => draw.reversesDrawId === originalDraw?.id);
+    const newDraw = draws.find((draw) => draw.runId === replacement.run.id && draw.reversesDrawId === null);
     assert.ok(originalDraw);
     assert.deepEqual([reversal?.runId, reversal?.amount, reversal?.periodMonth], [first.run.id, "-3.0000", `${org.date.slice(0, 7)}-01`]);
     assert.deepEqual([newDraw?.amount, newDraw?.periodMonth], ["2.5000", `${org.date.slice(0, 7)}-01`]);
@@ -214,8 +214,8 @@ test("prepaid usage rerating reverses the prior draw and recognition before draw
              min(amount) filter (where amount < 0)::text as "reversalAmount", sum(amount)::text as amount,
              min(period_month)::text as "periodMonth"
         from recognition_events where org_id = ${org.orgId}
-         and source_reference in (${sql.join(references.map((reference) => sql`${reference}`), sql`, `)})`);
-    assert.deepEqual(recognized.rows[0], { count: 3, reversals: 1, reversalAmount: "-3.0000", amount: newDraw!.amount, periodMonth: `${org.date.slice(0, 7)}-01` });
+         and source_reference in (${sql.join(references.map((reference) => sql`${reference}`), sql`, `)})`, "objects");
+    assert.deepEqual(recognized[0], { count: 3, reversals: 1, reversalAmount: "-3.0000", amount: newDraw!.amount, periodMonth: `${org.date.slice(0, 7)}-01` });
   });
 });
 
@@ -232,11 +232,11 @@ test("annual minimums true up only in the year-closing run and recognition rules
     assert.deepEqual([july.preview.commitShortfall, july.preview.totalRated], ["0.0000", "5.0000"]);
     assert.ok(!july.preview.invoiceLines.some((line) => line.kind === "commit_shortfall"));
     await withOrgContext(org.orgId, async () => {
-      const calendar = await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`);
+      const calendar = await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`, "objects");
       const period = await db.execute(sql`insert into accounting_periods
         (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-        values (${org.orgId}, 2026, 12, '2026-12', '2026-12-01', '2026-12-31', false, ${calendar.rows[0]!.id}) returning id`);
-      assert.equal(period.rows.length, 1);
+        values (${org.orgId}, 2026, 12, '2026-12', '2026-12-01', '2026-12-31', false, ${calendar[0]!.id}) returning id`, "objects");
+      assert.equal(period.length, 1);
     });
     const yearEnd = await commitRateRun(org.orgId, actor, link.id, "2026-12-01", "2026-12-31");
     const trueUp = yearEnd.preview.invoiceLines.find((line) => line.kind === "commit_shortfall");
@@ -255,8 +255,8 @@ test("annual minimums sum the rated totals of active monthly runs", DB, async ()
   await fixture(async (org, actor) => {
     const usageMeter = await meter(org, actor);
     const changed = await db.execute(sql`update usage_meters set aggregation = 'max'
-      where org_id = ${org.orgId} and id = ${usageMeter.id} returning id`);
-    assert.equal(changed.rows.length, 1);
+      where org_id = ${org.orgId} and id = ${usageMeter.id} returning id`, "objects");
+    assert.equal(changed.length, 1);
     const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id, {
       effectiveFrom: "2026-01-01",
       commitAmount: "45",
@@ -264,8 +264,8 @@ test("annual minimums sum the rated totals of active monthly runs", DB, async ()
     });
     await withOrgContext(org.orgId, async () => {
       const changedSubscription = await db.execute(sql`update subscriptions set start_on = '2026-01-01', next_bill_on = '2026-01-01'
-        where org_id = ${org.orgId} and id = ${subscriptionId} returning id`);
-      assert.equal(changedSubscription.rows.length, 1);
+        where org_id = ${org.orgId} and id = ${subscriptionId} returning id`, "objects");
+      assert.equal(changedSubscription.length, 1);
     });
     await addMonthlyPeriods(org, [1, 2, 12]);
     await record(org, actor, usageMeter.key, "10", "2026-01-15", subscriptionId);
@@ -287,11 +287,11 @@ test("out-of-order usage rating reserves prepaid draws from later periods", DB, 
     const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id, { effectiveFrom: "2026-01-01" });
     await withOrgContext(org.orgId, async () => {
       const changed = await db.execute(sql`update recognition_rules set method = 'usage'
-        where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`);
-      assert.equal(changed.rows.length, 1);
+        where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`, "objects");
+      assert.equal(changed.length, 1);
       const subscription = await db.execute(sql`update subscriptions set start_on = '2026-01-01', next_bill_on = '2026-01-01'
-        where org_id = ${org.orgId} and id = ${subscriptionId} returning id`);
-      assert.equal(subscription.rows.length, 1);
+        where org_id = ${org.orgId} and id = ${subscriptionId} returning id`, "objects");
+      assert.equal(subscription.length, 1);
     });
     await addMonthlyPeriods(org, [1, 2]);
     const prepaidInvoice = await createSubscriptionInvoice({
@@ -311,7 +311,7 @@ test("out-of-order usage rating reserves prepaid draws from later periods", DB, 
       autoPost: true,
     });
     const source = (await db.execute<{ id: string }>(sql`select id from document_lines
-      where org_id = ${org.orgId} and document_id = ${prepaidInvoice.invoiceId}`)).rows[0];
+      where org_id = ${org.orgId} and document_id = ${prepaidInvoice.invoiceId}`, "objects"))[0];
     assert.ok(source);
     await createPrepaidGrant(org.orgId, actor, {
       customerId: org.customerId,
@@ -332,16 +332,16 @@ test("out-of-order usage rating reserves prepaid draws from later periods", DB, 
 test("a voided prepaid source invoice funds no usage draw", DB, async () => await fixture(async (org, actor) => {
     const usageMeter = await meter(org, actor);
     const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id);
-    const changed = await withOrgContext(org.orgId, async () => db.execute(sql`update recognition_rules set method = 'usage' where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`));
-    assert.equal(changed.rows.length, 1);
+    const changed = await withOrgContext(org.orgId, async () => db.execute(sql`update recognition_rules set method = 'usage' where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`, "objects"));
+    assert.equal(changed.length, 1);
     const invoice = await createSubscriptionInvoice({ orgId: org.orgId, actorId: actor, customerId: org.customerId, subsidiaryId: org.subsidiaryId,
       currency: "CAD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "Prepaid usage", quantity: "1",
       unitPrice: "10", memo: "Prepaid usage", invoiceDate: org.date, autoPost: true });
-    const source = (await db.execute<{ id: string }>(sql`select id from document_lines where org_id = ${org.orgId} and document_id = ${invoice.invoiceId}`)).rows[0]!; assert.ok(source);
+    const source = (await db.execute<{ id: string }>(sql`select id from document_lines where org_id = ${org.orgId} and document_id = ${invoice.invoiceId}`, "objects"))[0]!; assert.ok(source);
     const grant = await createPrepaidGrant(org.orgId, actor, { customerId: org.customerId, sourceDocumentLineId: source.id, amount: "3", currency: "CAD" });
     const cancelled = await cancelRevenueRecognitionForInvoice({ documentId: invoice.invoiceId, orgId: org.orgId, actorId: actor, reason: "Prepaid source invoice cancelled", reversalDate: org.date, allowedSubsidiaryIds: null });
     assert.equal(cancelled.status, "cancelled");
     await record(org, actor, usageMeter.key, "3", org.date, subscriptionId); const run = await commitRateRun(org.orgId, actor, link.id, org.date, org.date);
     assert.deepEqual([run.preview.prepaidDrawn, run.preview.totalRated, Boolean(run.invoiceId)], ["0.0000", "5.0000", true]);
-    const draws = await db.execute<{ count: number }>(sql`select count(*)::int as count from usage_prepaid_draws where org_id = ${org.orgId} and grant_id = ${grant.id}`); assert.equal(draws.rows[0]?.count, 0);
+    const draws = await db.execute<{ count: number }>(sql`select count(*)::int as count from usage_prepaid_draws where org_id = ${org.orgId} and grant_id = ${grant.id}`, "objects"); assert.equal(draws[0]?.count, 0);
 }));

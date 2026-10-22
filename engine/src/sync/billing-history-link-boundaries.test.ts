@@ -11,12 +11,13 @@ test("billing import accepts only observable replays of the same native table an
     { native_id: "same-record", native_table: "parties" },
   ]) {
     let calls = 0;
-    const execute = t.mock.method(db, "execute", async () => {
+    const execute = t.mock.method(db, "execute", async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       calls++;
-      if (calls === 1) return { rows: [], rowCount: 0 };
-      if (calls === 2) return { rows: [], rowCount: 0 };
+      if (calls === 1) return inMode({ rows: [], rowCount: 0 });
+      if (calls === 2) return inMode({ rows: [], rowCount: 0 });
       assert.equal(calls, 3, "a conflict must be re-read before a replay is accepted");
-      return { rows: target ? [target] : [], rowCount: target ? 1 : 0 };
+      return inMode({ rows: target ? [target] : [], rowCount: target ? 1 : 0 });
     });
     try {
       const result = recordBillingLink("org", "chargebee", "site", "customer", "customer-1", "parties", "same-record", null);

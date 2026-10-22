@@ -67,11 +67,11 @@ export function stampPaymentWithholdingCurrency<T extends FunctionalLine>(doc: {
 async function deductionRows(executor: SqlExecutor, orgId: string, deductionIds: string[]): Promise<Deduction[]> {
   if (!deductionIds.length) return [];
   // The posted payment's immutable account evidence, rather than today's enrollment account, identifies the credit.
-  const selected = (await executor.execute<{ paymentId: string }>(sql`
+  const selected = await executor.execute<{ paymentId: string }>(sql`
     select distinct payment_document_id as "paymentId" from withholding_deductions
-     where org_id=${orgId} and id in (${idsSql(deductionIds)})`)).rows;
+     where org_id=${orgId} and id in (${idsSql(deductionIds)})`, "objects");
   if (!selected.length) return refuse("The withholding carrying source deductions are missing.");
-  const rows = (await executor.execute<Deduction>(sql`
+  const rows = await executor.execute<Deduction>(sql`
     select w.id,w.payment_document_id as "paymentId",p.posted_entry_id as "entryId",
            evidence.value->>'liabilityAccountId' as "accountId",
            coalesce(w.transaction_deducted_amount,w.deducted_amount)::text as "transactionAmount",
@@ -81,7 +81,7 @@ async function deductionRows(executor: SqlExecutor, orgId: string, deductionIds:
       join lateral jsonb_array_elements(p.custom->'withholdings') evidence(value)
         on evidence.value->>'openLineId'=w.bill_open_line_id::text and evidence.value->>'enrollmentId'=w.enrollment_id::text
      where w.org_id=${orgId} and w.payment_document_id in (${idsSql(selected.map(row=>row.paymentId))})
-     order by w.payment_document_id,w.id`)).rows;
+     order by w.payment_document_id,w.id`, "objects");
   if (new Set(rows.map(row=>row.id)).size !== rows.length || deductionIds.some(id=>!rows.some(row=>row.id===id))) return refuse("The payment's immutable withholding account evidence is missing or ambiguous.");
   return rows;
 }
@@ -91,10 +91,10 @@ export async function captureWithholdingCarryingSource(executor: SqlExecutor, or
   const rows = await deductionRows(executor, orgId, deductionIds);
   const accounts = rows.filter(row=>deductionIds.includes(row.id)).map(row=>row.accountId);
   if (previousDocumentIds.length) {
-    const previous = (await executor.execute<{ id: string; accounts: unknown }>(sql`
+    const previous = await executor.execute<{ id: string; accounts: unknown }>(sql`
       select d.id,coalesce(d.custom->'withholdingRemittance'->'carrying'->'liabilityAccountIds',d.custom->'withholdingDeposit'->'carrying'->'liabilityAccountIds',
         (select jsonb_agg(distinct l.account_id) from document_lines l where l.org_id=d.org_id and l.document_id=d.id)) as accounts
-       from documents d where d.org_id=${orgId} and d.id in (${idsSql(previousDocumentIds)}) and d.status='posted'`)).rows;
+       from documents d where d.org_id=${orgId} and d.id in (${idsSql(previousDocumentIds)}) and d.status='posted'`, "objects");
     if (previous.length!==previousDocumentIds.length) return refuse("A previous authority carrying source is no longer posted.");
     for (const row of previous) {
       if (!validIds(row.accounts)) return refuse("A previous authority source has no governed liability account evidence.");
@@ -111,7 +111,7 @@ export async function resolveWithholdingCarrying(executor: SqlExecutor, input: {
   const { orgId, subsidiaryId, enrollmentId, source } = input;
   if (!source || !validIds(source.deductionIds) || !validIds(source.previousDocumentIds) || !validIds(source.liabilityAccountIds)
       || source.previousDocumentIds.includes(input.documentId ?? "")) return refuse("The withholding carrying source identities are invalid.");
-  const books = (await executor.execute<{ id: string }>(sql`select id from accounting_books where org_id=${orgId} and ${input.bookId ? sql`id=${input.bookId}` : sql`is_primary`} and is_active and posts_gl for share`)).rows;
+  const books = await executor.execute<{ id: string }>(sql`select id from accounting_books where org_id=${orgId} and ${input.bookId ? sql`id=${input.bookId}` : sql`is_primary`} and is_active and posts_gl for share`, "objects");
   if (books.length!==1) return refuse("Withholding carrying values require an active authoritative posting book.");
   const bookId = books[0]!.id;
   const rows = await deductionRows(executor, orgId, source.deductionIds);
@@ -130,13 +130,13 @@ export async function resolveWithholdingCarrying(executor: SqlExecutor, input: {
   for (const group of groups.values()) {
     if (!group.some(row=>source.deductionIds.includes(row.id))) continue;
     const first = group[0]!;
-    const legs = (await executor.execute<{ amount: string; transactionAmount: string;currency:string }>(sql`
+    const legs = await executor.execute<{ amount: string; transactionAmount: string;currency:string }>(sql`
       select l.currency,sum(l.amount)::text as amount,sum(l.txn_amount)::text as "transactionAmount"
        from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
        -- Live entries only: the carrying amount is read from the payment's standing posting
        where l.org_id=${orgId} and ${input.bookId ? sql`true` : sql`e.id=${first.entryId}`} and e.book_id=${bookId} and e.status='posted' and e.source_document_id=${first.paymentId}
          and l.subsidiary_id=${subsidiaryId} and l.account_id=${first.accountId}
-         and l.memo='Contractor withholding' and l.contributor_kind is null group by l.currency`)).rows;
+         and l.memo='Contractor withholding' and l.contributor_kind is null group by l.currency`, "objects");
     const leg=legs[0];
     const statutory=leg?.currency===first.statutoryCurrency;
     const transactionTotal=sum(group.map(row=>statutory ? row.statutoryAmount : row.transactionAmount));
@@ -148,16 +148,16 @@ export async function resolveWithholdingCarrying(executor: SqlExecutor, input: {
   for (const documentId of source.previousDocumentIds) {
     const previous = (await executor.execute<{ entryId: string; source: { enrollmentId?: string; carrying?: WithholdingCarryingSource } }>(sql`
       select posted_entry_id as "entryId",coalesce(custom->'withholdingRemittance',custom->'withholdingDeposit') as source from documents
-       where org_id=${orgId} and id=${documentId} and subsidiary_id=${subsidiaryId} and status='posted' for share`)).rows[0];
+       where org_id=${orgId} and id=${documentId} and subsidiary_id=${subsidiaryId} and status='posted' for share`, "objects"))[0];
     if (!previous || previous.source?.enrollmentId!==enrollmentId) return refuse("The earlier posted authority source no longer belongs to this withholding enrollment.");
-    const accounts = previous.source.carrying?.liabilityAccountIds ?? (await executor.execute<{ accountId: string }>(sql`select distinct account_id as "accountId" from document_lines where org_id=${orgId} and document_id=${documentId}`)).rows.map(row=>row.accountId);
+    const accounts = previous.source.carrying?.liabilityAccountIds ?? (await executor.execute<{ accountId: string }>(sql`select distinct account_id as "accountId" from document_lines where org_id=${orgId} and document_id=${documentId}`, "objects")).map(row=>row.accountId);
     if (!validIds(accounts) || accounts.some(account=>!source.liabilityAccountIds.includes(account))) return refuse("The previous authority's actual liability accounts no longer match the carrying source.");
-    const legs = (await executor.execute<{ accountId: string; amount: string;currency:string;transactionAmount:string }>(sql`
+    const legs = await executor.execute<{ accountId: string; amount: string;currency:string;transactionAmount:string }>(sql`
       select l.account_id as "accountId",l.currency,l.amount::text as amount,l.txn_amount::text as "transactionAmount" from journal_lines l
        join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
        -- Live entries only: the carrying amount is read from the payment's standing posting
        where l.org_id=${orgId} and ${input.bookId ? sql`true` : sql`e.id=${previous.entryId}`} and e.source_document_id=${documentId} and e.book_id=${bookId} and e.status='posted'
-         and l.subsidiary_id=${subsidiaryId} and l.account_id in (${idsSql(accounts)}) order by l.line_number,l.id`)).rows;
+         and l.subsidiary_id=${subsidiaryId} and l.account_id in (${idsSql(accounts)}) order by l.line_number,l.id`, "objects");
     if (!legs.length) return refuse("The previous authority's posted liability movement is missing.");
     for (const leg of legs) addMovement(leg.accountId,leg.currency,-toUnits(leg.amount),-toUnits(leg.transactionAmount));
   }
@@ -173,16 +173,16 @@ export async function resolveWithholdingCarrying(executor: SqlExecutor, input: {
 }
 
 export async function withholdingRealizedFxAccount(executor: SqlExecutor, orgId: string): Promise<string> {
-  const accountId = (await executor.execute<{ id: string | null }>(sql`select settings->'controlAccounts'->>'fxRealizedGainLoss' as id from orgs where id=${orgId}`)).rows[0]?.id;
+  const accountId = (await executor.execute<{ id: string | null }>(sql`select settings->'controlAccounts'->>'fxRealizedGainLoss' as id from orgs where id=${orgId}`, "objects"))[0]?.id;
   if (!accountId || !isUuid(accountId)) throw new ContractorWithholdingError("The realized FX gain/loss account is not configured.", "Configure Realized FX gain/loss in Setup → Control Accounts, then post the authority document again.");
-  const records = (await executor.execute<{ id: string; type: string; isActive: boolean; isSummary: boolean }>(sql`select id,type,is_active as "isActive",is_summary as "isSummary" from accounts where org_id=${orgId} and id=${accountId} for share`)).rows;
+  const records = await executor.execute<{ id: string; type: string; isActive: boolean; isSummary: boolean }>(sql`select id,type,is_active as "isActive",is_summary as "isSummary" from accounts where org_id=${orgId} and id=${accountId} for share`, "objects");
   try { assertValidControlAccountMappings({fxRealizedGainLoss:accountId},records); }
   catch { throw new ContractorWithholdingError("The realized FX gain/loss account must be active, postable and an income or expense account.", "Review Realized FX gain/loss in Setup → Control Accounts, then post the authority document again."); }
   return accountId;
 }
 
 export async function assertWithholdingCarryingRelease(executor:SqlExecutor,orgId:string,documentId:string):Promise<void> {
-  const dependent=(await executor.execute<{number:string}>(sql`select document_number as number from documents where org_id=${orgId} and id<>${documentId} and status<>'voided' and (custom->'withholdingDeposit'->'carrying'->'previousDocumentIds' ? ${documentId} or custom->'withholdingRemittance'->'carrying'->'previousDocumentIds' ? ${documentId}) order by created_at desc limit 1`)).rows[0];
+  const dependent=(await executor.execute<{number:string}>(sql`select document_number as number from documents where org_id=${orgId} and id<>${documentId} and status<>'voided' and (custom->'withholdingDeposit'->'carrying'->'previousDocumentIds' ? ${documentId} or custom->'withholdingRemittance'->'carrying'->'previousDocumentIds' ? ${documentId}) order by created_at desc limit 1`, "objects"))[0];
   if(dependent) throw new ContractorWithholdingError(`Authority document ${dependent.number} carries this document's posted liability movement.`,"Discard or void the later correction first, then void the earlier authority document.");
 }
 
@@ -192,7 +192,7 @@ export async function insertWithholdingCarryingJournalLines(executor: SqlExecuto
   if (net !== 0n) rows.push({ accountId: await withholdingRealizedFxAccount(executor,orgId), amount: fromUnits(-net) });
   if(rows.length<2) return refuse("The functional carrying correction produced no balanced journal.");
   for(const [index,row] of rows.entries()) {
-    const write=await executor.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount,withholding_treatment,created_by,updated_by) values(${orgId},${documentId},${index+1},${row.accountId},${memo},1,${row.amount},${row.amount},'excluded',${actorId},${actorId})`);
+    const write=await executor.execute<never>(sql`insert into document_lines(org_id,document_id,line_number,account_id,description,quantity,unit_price,amount,withholding_treatment,created_by,updated_by) values(${orgId},${documentId},${index+1},${row.accountId},${memo},1,${row.amount},${row.amount},'excluded',${actorId},${actorId})`);
     if(write.rowCount!==1) throw new ContractorWithholdingError("The functional withholding correction line was not created.");
   }
 }

@@ -100,7 +100,7 @@ async function seed(): Promise<Fixture> {
   const projectId = (await db.execute<{ id: string }>(sql`
     insert into projects (org_id, name, is_active)
     values (${org.orgId}, 'Charge Project', true)
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   await db.execute(sql`
     update items set expense_account_id = ${org.accounts.cogs}
      where id = ${org.items.service} and org_id = ${org.orgId}`);
@@ -131,9 +131,9 @@ async function post(fixture: Fixture, line: Record<string, unknown>): Promise<{ 
 }
 
 async function chargeCount(orgId: string): Promise<number> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
     select count(*)::int as n from documents
-     where org_id = ${orgId} and kind = 'project_charge'`))).rows;
+     where org_id = ${orgId} and kind = 'project_charge'`, "objects"));
   return rows[0]!.n;
 }
 
@@ -168,10 +168,10 @@ test("POST still saves column-maximum rate and quantity with identical read-back
       billRate: "0",
     });
     assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`);
-    const rows = (await withOrgContext(fixture.orgId, () => db.execute<{ quantity: string; bill_rate: string }>(sql`
+    const rows = await withOrgContext(fixture.orgId, () => db.execute<{ quantity: string; bill_rate: string }>(sql`
       select quantity::text as quantity, bill_rate::text as bill_rate
         from document_lines
-       where org_id = ${fixture.orgId}`))).rows;
+       where org_id = ${fixture.orgId}`, "objects"));
     assert.equal(rows[0]!.quantity, "999999999999999.99990000");
     assert.equal(rows[0]!.bill_rate, "0.0000");
   } finally {

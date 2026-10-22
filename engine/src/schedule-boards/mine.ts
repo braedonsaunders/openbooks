@@ -37,21 +37,21 @@ function readMySchedule(input: { orgId: string; actorId: string; from: string; t
     if (!await lockAndCheckOrgFeature(db, input.orgId, "hrm") || !await lockAndCheckOrgFeature(db, input.orgId, "hrmShiftPlanning")) throw new ScopeNotFoundError();
     const person = (await db.execute<{ partyId: string | null; name: string | null }>(sql`select u.party_id as "partyId", p.display_name as name
       from users u left join parties p on p.org_id = u.org_id and p.id = u.party_id
-      where u.org_id = ${input.orgId} and u.id = ${input.actorId} and u.is_active`)).rows[0];
+      where u.org_id = ${input.orgId} and u.id = ${input.actorId} and u.is_active`, "objects"))[0];
     if (!person?.partyId) {
       throw new ScheduleError("Your login is not linked to a person, so there is no schedule to show.", {
         code: "schedule_no_person",
         remedy: "Ask an administrator to link your user to your employee record.",
       });
     }
-    const rows = (await db.execute<Parameters<typeof shapeEntry>[0]>(sql`select ${ENTRY_COLUMNS} ${ENTRY_JOINS}
+    const rows = await db.execute<Parameters<typeof shapeEntry>[0]>(sql`select ${ENTRY_COLUMNS} ${ENTRY_JOINS}
       where e.org_id = ${input.orgId} and e.worker_party_id = ${person.partyId} and e.status = 'published'
         and e.starts_on between ${from} and ${through}
-      order by e.starts_at, e.id`)).rows;
+      order by e.starts_at, e.id`, "objects");
     const entries = rows.map(shapeEntry);
     const boardIds = [...new Set(entries.map((entry) => entry.boardId))];
     const types = boardIds.length ? new Map((await db.execute<{ id: string; boardType: string }>(sql`select id, board_type as "boardType" from schedule_boards
-      where org_id = ${input.orgId} and id = any(${`{${boardIds.join(",")}}`}::uuid[])`)).rows.map((row) => [row.id, row.boardType])) : new Map<string, string>();
+      where org_id = ${input.orgId} and id = any(${`{${boardIds.join(",")}}`}::uuid[])`, "objects")).map((row) => [row.id, row.boardType])) : new Map<string, string>();
     const now = Date.now();
     const requestableEntryIds = entries.filter((entry) => boardHasCapability({ boardType: types.get(entry.boardId) ?? "" }, "shift_requests")
       && !entry.closedAt && !entry.openRequest && !entry.removesPredecessor && Date.parse(entry.startsAt) > now).map((entry) => entry.id);

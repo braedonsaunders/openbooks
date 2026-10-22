@@ -65,8 +65,8 @@ async function fixture() {
   const role = await withBypassContext(() => db.execute<{ id: string }>(sql`
     update app_roles set permissions = '["hrm.compensation.manage"]'::jsonb
      where org_id = ${org.orgId} and key = 'admin'
-     returning id`));
-  assert.equal(role.rows.length, 1, "the scratch admin role exists");
+     returning id`, "objects"));
+  assert.equal(role.length, 1, "the scratch admin role exists");
   await withBypassContext(() => db.execute(sql`
     update orgs
        set settings = jsonb_set(
@@ -86,12 +86,10 @@ const put = (body: unknown) =>
   );
 
 async function storedCompensation(orgId: string): Promise<Record<string, unknown> | null> {
-  const row = (
-    await withBypassContext(() =>
+  const row = (await withBypassContext(() =>
       db.execute<{ settings: Record<string, unknown> | null }>(sql`
-        select settings->'compensation' as settings from orgs where id = ${orgId}`),
-    )
-  ).rows[0];
+        select settings->'compensation' as settings from orgs where id = ${orgId}`, "objects"),
+    ))[0];
   return row?.settings ?? null;
 }
 

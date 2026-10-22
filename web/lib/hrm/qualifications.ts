@@ -183,15 +183,13 @@ async function employmentsForParties(
   allowed: ReadonlySet<string> | null,
 ): Promise<Map<string, string>> {
   if (partyIds.length === 0) return new Map()
-  const rows = (
-    await db.execute<{ party: string; employment: string }>(sql`
+  const rows = await db.execute<{ party: string; employment: string }>(sql`
       select worker_party_id::text as party, id::text as employment
         from worker_employments
        where org_id = ${orgId} and worker_party_id in (select jsonb_array_elements_text(${JSON.stringify(partyIds)}::jsonb)::uuid)
          ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, allowed)}
        order by created_at desc
-    `)
-  ).rows
+    `, 'objects')
   const map = new Map<string, string>()
   for (const row of rows) {
     if (!map.has(row.party)) map.set(row.party, row.employment)
@@ -251,15 +249,13 @@ export async function loadQualificationsPage(
   const gatedProjects = [...new Set(requirements.filter((r) => r.subjectKind === 'project').map((r) => r.subjectId))]
   let expiredAssigned = 0
   if (gatedProjects.length > 0) {
-    const assigned = (
-      await db.execute<{ employment: string }>(sql`
+    const assigned = (await db.execute<{ employment: string }>(sql`
         select distinct e.id::text as employment
           from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id in (select jsonb_array_elements_text(${JSON.stringify(gatedProjects)}::jsonb)::uuid)
            ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
-      `)
-    ).rows.map((r) => r.employment)
+      `, 'objects')).map((r) => r.employment)
     const assignedSet = new Set(assigned)
     expiredAssigned = all.filter((q) => q.status === 'expired' && assignedSet.has(q.employmentId)).length
   }
@@ -269,15 +265,13 @@ export async function loadQualificationsPage(
   // a bounded project/crew prefix reported a smaller count as exact.
   let projectsUnmet = 0
   for (const projectId of gatedProjects) {
-    const crew = (
-      await db.execute<{ employment: string }>(sql`
+    const crew = (await db.execute<{ employment: string }>(sql`
         select distinct e.id::text as employment
           from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id = ${projectId}::uuid
            ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
-      `)
-    ).rows.map((r) => r.employment)
+      `, 'objects')).map((r) => r.employment)
     for (const employmentId of crew) {
       const verdict = await checkAssignmentInternal(db, orgId, employmentId, 'project', projectId, today)
       if (!verdict.ok) {
@@ -357,20 +351,18 @@ export async function loadQualificationsPage(
         join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
        where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
          ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
-    `)).rows[0]?.n ?? 0)
+    `, 'objects'))[0]?.n ?? 0)
     const pageCount = Math.max(1, Math.ceil(coverageTotal / COVERAGE_PER_PAGE))
     const requested = Number.parseInt(sp.crewPage ?? '1', 10)
     coveragePage = Math.min(pageCount, Math.max(1, Number.isNaN(requested) ? 1 : requested))
-    const crewParties = (
-      await db.execute<{ party: string }>(sql`
+    const crewParties = (await db.execute<{ party: string }>(sql`
         select distinct r.party_id::text as party from schedule_resources r
           join worker_employments e on e.org_id = r.org_id and e.worker_party_id = r.party_id
          where r.org_id = ${orgId} and r.project_id = ${coverageProjectId}::uuid and r.party_id is not null
            ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
          order by r.party_id
          limit ${COVERAGE_PER_PAGE} offset ${(coveragePage - 1) * COVERAGE_PER_PAGE}
-      `)
-    ).rows.map((r) => r.party)
+      `, 'objects')).map((r) => r.party)
     // party → employment, then display names through the shared labels.
     // The mapping stays inside the reader's scope: a dual-subsidiary
     // party resolves to its visible employment, never the hidden one.

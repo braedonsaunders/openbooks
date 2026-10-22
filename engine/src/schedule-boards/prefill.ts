@@ -69,7 +69,7 @@ async function readScheduledWork(input: ScheduledWorkQuery): Promise<ScheduledWo
   if (!input.workerPartyId && !input.projectId) throw new ScheduleError("Name a person or a project.", { code: "schedule_invalid" });
   // Scheduling switched off means nothing is offered; existing bookings are preserved.
   if (!await lockAndCheckOrgFeature(db, input.orgId, "hrmShiftPlanning")) return [];
-  const rows = (await db.execute<Omit<ScheduledWork, "hours"> & { minutes: number }>(sql`
+  const rows = await db.execute<Omit<ScheduledWork, "hours"> & { minutes: number }>(sql`
     select e.id as "entryId", b.name as "boardName", e.worker_party_id as "workerPartyId", p.display_name as "workerName",
            e.starts_on::text as "onDate",
            greatest(0, (extract(epoch from e.ends_at - e.starts_at)::integer / 60) - e.break_minutes) as minutes,
@@ -90,6 +90,6 @@ async function readScheduledWork(input: ScheduledWorkQuery): Promise<ScheduledWo
        ${input.workerPartyId ? sql`and e.worker_party_id = ${input.workerPartyId}` : sql``}
        ${input.projectId ? sql`and e.project_id = ${input.projectId}` : sql``}
      order by e.starts_on, p.display_name, e.starts_at, e.id
-  `)).rows;
+  `, "objects");
   return rows.map(({ minutes, ...row }) => ({ ...row, hours: div(String(minutes), "60") }));
 }

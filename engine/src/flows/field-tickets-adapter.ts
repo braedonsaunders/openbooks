@@ -113,8 +113,8 @@ async function loadTicket(subjectId: string): Promise<FieldTicketRow | null> {
       left join projects p on p.id = d.project_id and p.org_id = d.org_id
       left join parties customer on customer.id = d.party_id and customer.org_id = d.org_id
      where d.id = ${subjectId} and d.kind = 'field_ticket'
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const fieldTicketsFlowAdapter: FlowSubjectAdapter =
@@ -139,14 +139,12 @@ export const fieldTicketsFlowAdapter: FlowSubjectAdapter =
         from time_entries te
        where te.org_id = ${ticket.org_id} and te.field_ticket_id = ${ticket.id}
        order by te.worked_on, te.employee_party_id, te.id
-    `);
-      const crewUsers = (
-        await db.execute<{
+    `, "objects");
+      const crewUsers = await db.execute<{
           id: string;
         }>(sql`select distinct u.id from users u join time_entries e
       on e.org_id=u.org_id and e.employee_party_id=u.party_id
-      where e.org_id=${ticket.org_id} and e.field_ticket_id=${ticket.id}`)
-      ).rows;
+      where e.org_id=${ticket.org_id} and e.field_ticket_id=${ticket.id}`, "objects");
       return {
         values: {
           id: ticket.id,
@@ -168,7 +166,7 @@ export const fieldTicketsFlowAdapter: FlowSubjectAdapter =
           foremanSigned: ticket.foreman_signed,
           createdBy: ticket.submitted_by ?? ticket.created_by,
         },
-        rows: { timeEntries: entries.rows },
+        rows: { timeEntries: entries },
         submitterUserId: ticket.submitted_by ?? ticket.created_by,
         makerUserId: ticket.created_by,
         makerUserIds: crewUsers.map((user) => user.id),

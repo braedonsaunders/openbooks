@@ -149,7 +149,7 @@ export async function syncProjectFinancialInputs(
        and ticket_project.org_id = ticket.org_id
      where time.org_id = ${options.orgId}
        and time.custom ->> ${source.refKey} is not null
-  `));
+  `, "objects"));
 
   const referenceRows = (await db.execute<{ kind: string; id: string; source_ref: string | null }>(sql`
     select 'employee' as kind, id, custom ->> ${source.refKey} as source_ref
@@ -166,9 +166,9 @@ export async function syncProjectFinancialInputs(
     union all
     select 'time_type', id, custom ->> ${source.refKey}
       from time_types where org_id = ${options.orgId}
-  `));
+  `, "objects"));
   const idsByKind = new Map<string, Map<string, string>>();
-  for (const row of referenceRows.rows) {
+  for (const row of referenceRows) {
     if (!row.source_ref) continue;
     const refs = idsByKind.get(row.kind) ?? new Map<string, string>();
     if (refs.has(row.source_ref)) {
@@ -204,7 +204,7 @@ export async function syncProjectFinancialInputs(
 
   const targetByRef = new Map<string, TargetBillingState>();
   const duplicateTargetRefs: string[] = [];
-  for (const row of targetResult.rows) {
+  for (const row of targetResult) {
     if (targetByRef.has(row.source_ref)) duplicateTargetRefs.push(row.source_ref);
     else targetByRef.set(row.source_ref, row);
   }
@@ -236,10 +236,10 @@ export async function syncProjectFinancialInputs(
         on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${options.orgId}
        and p.custom ->> ${source.refKey} is not null
-  `));
+  `, "objects"));
   const targetProjectByRef = new Map<string, TargetProjectState>();
   const duplicateTargetProjectRefs: string[] = [];
-  for (const row of targetProjectsResult.rows) {
+  for (const row of targetProjectsResult) {
     if (targetProjectByRef.has(row.source_ref)) {
       duplicateTargetProjectRefs.push(row.source_ref);
     } else {
@@ -258,9 +258,9 @@ export async function syncProjectFinancialInputs(
   const projectTypeResult = (await db.execute<{ id: string; key: string }>(sql`
     select id, key from project_types
      where org_id = ${options.orgId} and is_active
-  `));
+  `, "objects"));
   const projectTypeIdByKey = new Map(
-    projectTypeResult.rows.map((row) => [row.key, row.id]),
+    projectTypeResult.map((row) => [row.key, row.id]),
   );
   const sourceProjectRefs = new Set(
     snapshot.projects.map((project) => project.sourceRef),
@@ -268,7 +268,7 @@ export async function syncProjectFinancialInputs(
   const missingTargetProjects = snapshot.projects.filter(
     (project) => !targetProjectByRef.has(project.sourceRef),
   );
-  const targetOnlyProjects = targetProjectsResult.rows.filter(
+  const targetOnlyProjects = targetProjectsResult.filter(
     (project) => !sourceProjectRefs.has(project.source_ref),
   );
   const changedProjects = snapshot.projects.flatMap((project) => {
@@ -316,7 +316,7 @@ export async function syncProjectFinancialInputs(
   const missingTarget = sourceStates.filter(
     (state) => !targetByRef.has(state.sourceRef),
   );
-  const targetOnly = targetResult.rows.filter(
+  const targetOnly = targetResult.filter(
     (row) => !sourceRefs.has(row.source_ref),
   );
   const changed = sourceStates.flatMap((state) => {
@@ -488,14 +488,14 @@ export async function syncProjectFinancialInputs(
   });
   const result: ProjectFinancialInputSyncResult = {
     sourceTimeEntries: sourceStates.length,
-    targetTimeEntries: targetResult.rows.length,
+    targetTimeEntries: targetResult.length,
     exactTimeEntries:
       sourceStates.length - missingTarget.length - changed.length,
     changedTimeEntries: changed.length,
     missingTargetTimeEntries: missingTarget.length,
     targetOnlyTimeEntries: targetOnly.length - preservedSourceDeletions.timeEntries,
     sourceProjects: snapshot.projects.length,
-    targetProjects: targetProjectsResult.rows.length,
+    targetProjects: targetProjectsResult.length,
     exactProjects:
       snapshot.projects.length -
       missingTargetProjects.length -
@@ -681,10 +681,10 @@ export async function syncProjectFinancialInputs(
           from input
           join updated on updated.id = input.id
           returning row_id
-      `);
-      if (write.rows.length !== batch.length) {
+      `, "objects");
+      if (write.length !== batch.length) {
         throw new Error(
-          `project-financial input sync detected concurrent time-entry edits; retry (expected ${batch.length} updates, applied ${write.rows.length})`,
+          `project-financial input sync detected concurrent time-entry edits; retry (expected ${batch.length} updates, applied ${write.length})`,
         );
       }
     }
@@ -720,7 +720,7 @@ export async function syncProjectFinancialInputs(
       offset += BATCH
     ) {
       const batch = changedProjects.slice(offset, offset + BATCH);
-      const updated = await tx.execute(sql`
+      const updated = await tx.execute<Record<string, unknown>>(sql`
         with input as (
           select *
             from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)

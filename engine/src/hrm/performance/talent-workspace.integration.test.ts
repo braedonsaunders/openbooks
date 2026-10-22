@@ -92,11 +92,9 @@ test("draft publication is separate, stale writes refuse, and launches retain th
       publish: true,
     });
     assert.equal(published.publishedVersion, 1);
-    const projection = (
-      await db.execute<{ prompt: string; weight: string | null }>(
-        sql`select q.prompt,s.weight::text as weight from hrm_review_template_sections s join hrm_review_template_questions q on q.org_id=s.org_id and q.section_id=s.id where s.org_id=${h.org.orgId} and s.template_id=${draft.id}`,
-      )
-    ).rows;
+    const projection = await db.execute<{ prompt: string; weight: string | null }>(
+        sql`select q.prompt,s.weight::text as weight from hrm_review_template_sections s join hrm_review_template_questions q on q.org_id=s.org_id and q.section_id=s.id where s.org_id=${h.org.orgId} and s.template_id=${draft.id}`, "objects",
+      );
     assert.equal(projection[0]!.prompt, "What did you deliver?");
     await assert.rejects(
       saveTemplateDocument({
@@ -128,15 +126,13 @@ test("draft publication is separate, stale writes refuse, and launches retain th
     });
     assert.equal(nextDraft.publishedVersion, 1);
     await openCycle({ ...h.base, cycleId: cycle.id });
-    const captured = (
-      await db.execute<{
+    const captured = (await db.execute<{
         scale: { max: string };
         version: number;
         snapshot: { sections: { id: string; title: string }[] };
       }>(
-        sql`select rating_scale_snapshot as scale,template_version as version,template_document_snapshot as snapshot from hrm_review_cycles where org_id=${h.org.orgId} and id=${cycle.id}`,
-      )
-    ).rows[0]!;
+        sql`select rating_scale_snapshot as scale,template_version as version,template_document_snapshot as snapshot from hrm_review_cycles where org_id=${h.org.orgId} and id=${cycle.id}`, "objects",
+      ))[0]!;
     assert.equal(captured.scale.max, "5");
     assert.equal(captured.version, 1);
     assert.equal(captured.snapshot.sections[0]!.id, h.document.sections[0]!.id);
@@ -171,11 +167,9 @@ test("draft publication is separate, stale writes refuse, and launches retain th
         },
       ],
     });
-    const stored = (
-      await db.execute<{ status: string }>(
-        sql`select status from hrm_reviews where org_id=${h.org.orgId} and id=${review.id}`,
-      )
-    ).rows[0]!;
+    const stored = (await db.execute<{ status: string }>(
+        sql`select status from hrm_reviews where org_id=${h.org.orgId} and id=${review.id}`, "objects",
+      ))[0]!;
     assert.equal(stored.status, "submitted");
   });
 });
@@ -286,11 +280,9 @@ test("required manager gaps refuse an atomic launch and a scoped reviewer assign
       /Assign a manager reviewer for (Review subject|Manager reviewer) in Participants/,
     );
     assert.equal(
-      (
-        await db.execute<{ count: number }>(
-          sql`select count(*)::int as count from hrm_reviews where org_id=${h.org.orgId} and cycle_id=${cycle.id}`,
-        )
-      ).rows[0]!.count,
+      (await db.execute<{ count: number }>(
+          sql`select count(*)::int as count from hrm_reviews where org_id=${h.org.orgId} and cycle_id=${cycle.id}`, "objects",
+        ))[0]!.count,
       0,
     );
     let management = await getCycleManagement({ ...h.base, cycleId: cycle.id });
@@ -384,11 +376,9 @@ test("publication preserves native section metadata and refuses identifiers belo
     const documents = await listTemplateDocuments(h.base);
     assert.equal(documents.length, 1);
     assert.equal(documents[0]!.id, first.id);
-    const row = (
-      await db.execute<{ weight: string; name: string }>(
-        sql`select s.weight::text as weight,t.name from hrm_review_template_sections s join hrm_review_templates t on t.org_id=s.org_id and t.id=s.template_id where s.org_id=${h.org.orgId} and s.id=${h.document.sections[0]!.id}`,
-      )
-    ).rows[0]!;
+    const row = (await db.execute<{ weight: string; name: string }>(
+        sql`select s.weight::text as weight,t.name from hrm_review_template_sections s join hrm_review_templates t on t.org_id=s.org_id and t.id=s.template_id where s.org_id=${h.org.orgId} and s.id=${h.document.sections[0]!.id}`, "objects",
+      ))[0]!;
     assert.equal(row.weight, "1.2500");
     assert.equal(row.name, h.document.name);
   });

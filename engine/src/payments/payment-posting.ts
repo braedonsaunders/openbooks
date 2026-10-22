@@ -36,7 +36,7 @@ async function assertPaymentRunComposition(
   withholdingAmount: string,
   orgId: string,
 ): Promise<void> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     source_open_line_id: string; source_document_id: string; kind: string;
     gross_amount: string; credit_amount: string; discount_amount: string; withholding_amount: string;
     credit_target_allocations: Array<{ toLineId: string; amount: string }> | null;
@@ -51,7 +51,7 @@ async function assertPaymentRunComposition(
      ) and org_id = ${orgId} and status = 'selected'
      order by kind, source_open_line_id
      for update
-  `)).rows;
+  `, "objects");
   // A bill the run settles wholly with credits is reserved by the run but
   // carries no cash allocation; its credits are checked with the credit items.
   const cashItems = rows.filter((row) => row.kind !== "credit"
@@ -109,7 +109,7 @@ export async function postPaymentWithApplications(
     // Claims are locked before the payment row, matching run posting's
     // run → instruction → document order. This also prevents a direct caller
     // from holding the organization fence while waiting on a run poster.
-    const liveClaims = (await db.execute<{
+    const liveClaims = await db.execute<{
       run_id: string; claim_token: string | null; run_status: string;
       instruction_id: string; instruction_status: string;
     }>(sql`
@@ -124,7 +124,7 @@ export async function postPaymentWithApplications(
                             'generated', 'delivered', 'partially_failed', 'confirmed', 'settled', 'returned')
        order by run.id, instruction.id
        for update of run, instruction
-    `)).rows;
+    `, "objects");
     if (options.runClaim) {
       const authorized = liveClaims.length === 1
         && liveClaims[0]!.run_id === options.runClaim.runId
@@ -165,7 +165,7 @@ export async function postPaymentWithApplications(
     // Application triggers update invoice open balances. Lock every source
     // document, entry and line (and the payment document) in the shared order.
     const retained = (await db.execute<{ posted_entry_id: string | null }>(sql`select posted_entry_id from documents
-      where org_id = ${preflight.orgId} and id = ${paymentDocId}`)).rows[0];
+      where org_id = ${preflight.orgId} and id = ${paymentDocId}`, "objects"))[0];
     await lockApplicationEvidence(db, preflight.orgId, discoveredEndpoints, [paymentDocId],
       retained?.posted_entry_id ? [retained.posted_entry_id] : []);
     const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, paymentDocId), eq(schema.documents.orgId, preflight.orgId)));
@@ -203,7 +203,7 @@ export async function postPaymentWithApplications(
       const entry = (await db.execute<{ id: string }>(sql`select id from journal_entries
         where org_id = ${doc.orgId} and id = ${doc.postedEntryId} and source_document_id = ${doc.id}
           and status = 'posted' -- Live entries only: payment effect replay requires its current unreversed journal.
-        `)).rows[0];
+        `, "objects"))[0];
       if (!entry) throw new PaymentError("The posted payment's retained journal is not posted for this receipt; reconcile its native accounting before replaying.");
       return { entryId: entry.id };
     }
@@ -223,10 +223,10 @@ export async function postPaymentWithApplications(
          where org_id = ${doc.orgId} and party_id = ${doc.partyId}
            and is_active and is_on_hold
          limit 1
-      `));
-      if (hold.rows[0]) {
+      `, "objects"));
+      if (hold[0]) {
         throw new PaymentError(
-          `vendor is on payment hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}`,
+          `vendor is on payment hold${hold[0].hold_reason ? ` — ${hold[0].hold_reason}` : ""}`,
         );
       }
     }
@@ -342,8 +342,8 @@ export async function postPaymentWithApplications(
         select id, from_currency, to_currency, rate, as_of::text as as_of
           from fx_rates
          where org_id = ${doc.orgId} and id in ${evidenceIds}
-      `));
-      const evidenceById = new Map(evidenceRows.rows.map((row) => [row.id, row]));
+      `, "objects"));
+      const evidenceById = new Map(evidenceRows.map((row) => [row.id, row]));
       for (const allocation of allocs) {
         if (!allocation.settlementFxRateId) continue;
         const evidence = evidenceById.get(allocation.settlementFxRateId);
@@ -407,11 +407,11 @@ export async function postPaymentWithApplications(
             from documents d
             join parties p on p.id = d.party_id and p.org_id = d.org_id
            where d.org_id = ${doc.orgId} and d.kind = 'vendor_bill'
-             and d.id in (${sql.join(targetDocIds.map((id) => sql`${id}`), sql`, `)})`));
-        if (bills.rows.length > 0) {
+             and d.id in (${sql.join(targetDocIds.map((id) => sql`${id}`), sql`, `)})`, "objects"));
+        if (bills.length > 0) {
           const releaseDecisions = await evaluateBillsForRelease({
             orgId: doc.orgId,
-            bills: bills.rows,
+            bills,
             asOf: await businessToday(doc.orgId),
           });
           const blockedBills = releaseDecisions.filter((decision) => decision.decision === "blocked");
@@ -452,7 +452,7 @@ export async function postPaymentWithApplications(
         ? []
         : (await db.execute<{ account_id: string }>(sql`
             select distinct account_id from journal_lines where org_id = ${doc.orgId} and id in ${allocs.map((a) => a.openLineId)}
-          `)).rows;
+          `, "objects"));
       const derived = targetAccounts.length === 1 ? targetAccounts[0]!.account_id : null;
       if (derived && derived !== controlAccountId) {
         controlAccountId = derived;
@@ -502,8 +502,8 @@ export async function postPaymentWithApplications(
         join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
        where jl.entry_id = ${entryId} and jl.org_id = ${doc.orgId} and jl.account_id = ${controlAccountId}
        limit 1
-    `));
-    const source = sourceResult.rows[0];
+    `, "objects"));
+    const source = sourceResult[0];
     if (!source) throw new PaymentError("posted payment entry has no AP/AR control line");
     if (source.book_id !== bookId || source.party_id !== doc.partyId || source.subsidiary_id !== doc.subsidiaryId) {
       throw new PaymentError("posted payment source must preserve its party, subsidiary, and accounting book");
@@ -528,7 +528,7 @@ export async function postPaymentWithApplications(
             left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
            where jl.org_id = ${doc.orgId} and jl.id in ${allocs.map((a) => a.openLineId)}
            group by jl.id, je.book_id
-        `)).rows;
+        `, "objects"));
     const targetById = new Map(targetsResult.map((row) => [row.id, row]));
 
     let sourceBaseRemaining = fromUnits(toUnits(source.amount) < 0n ? -toUnits(source.amount) : toUnits(source.amount));
@@ -603,14 +603,14 @@ export async function postPaymentWithApplications(
 
     const targetIds = [...allocs.map((a) => a.openLineId), ...creditAllocs.map((a) => a.toLineId)];
     const targets = targetIds.length === 0
-      ? { rows: [] as { doc_id: string }[] }
+      ? [] as { doc_id: string }[]
       : await db.execute<{ doc_id: string }>(sql`
           select distinct je.source_document_id as doc_id
             from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            where jl.org_id = ${doc.orgId} and jl.id in ${targetIds} and je.source_document_id is not null
-        `);
-    if (targets.rows.length > 0) {
-      await db.insert(schema.documentLinks).values(targets.rows.map((target) => ({
+        `, "objects");
+    if (targets.length > 0) {
+      await db.insert(schema.documentLinks).values(targets.map((target) => ({
         orgId: doc.orgId,
         fromDocumentId: doc.id,
         toDocumentId: target.doc_id,

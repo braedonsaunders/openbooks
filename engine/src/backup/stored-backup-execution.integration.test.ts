@@ -61,8 +61,8 @@ test("a queued run remains completed with exact evidence when post-completion re
   try {
     const inserted = await db.execute<{ id: string }>(sql`
       insert into backup_runs (org_id, kind, status)
-      values (${org.orgId}, 'manual', 'queued') returning id`);
-    const runId = inserted.rows[0]!.id;
+      values (${org.orgId}, 'manual', 'queued') returning id`, "objects");
+    const runId = inserted[0]!.id;
     let uploadCount = 0;
     storage.client = {
       async send(command: unknown) {
@@ -94,12 +94,12 @@ test("a queued run remains completed with exact evidence when post-completion re
     };
 
     const execute = db.execute.bind(db);
-    t.mock.method(db, "execute", async (query: Parameters<typeof db.execute>[0]) => {
+    t.mock.method(db, "execute", async (query: Parameters<typeof db.execute>[0], mode?: string) => {
       const statement = new PgDialect().sqlToQuery(query as SQL).sql;
       if (statement.includes("select max_keep from backup_policies")) {
         throw new Error("injected retention policy read outage");
       }
-      return execute(query);
+      return execute(query, mode as never);
     });
 
     await executeBackupRun(runId);
@@ -112,10 +112,10 @@ test("a queued run remains completed with exact evidence when post-completion re
       sha256: string | null;
     }>(sql`
       select status, object_key, file_name, byte_size, sha256
-        from backup_runs where org_id = ${org.orgId} and id = ${runId}`)).rows[0]!;
-    const evidence = (await db.execute<{ changes: { event: string; sha256?: string; byteSize?: number; error?: string } }>(sql`
+        from backup_runs where org_id = ${org.orgId} and id = ${runId}`, "objects"))[0]!;
+    const evidence = await db.execute<{ changes: { event: string; sha256?: string; byteSize?: number; error?: string } }>(sql`
       select changes from audit_log
-       where org_id = ${org.orgId} and row_id = ${runId} order by id`)).rows;
+       where org_id = ${org.orgId} and row_id = ${runId} order by id`, "objects");
     const uploaded = storage.uploaded!;
 
     assert.equal(uploadCount, 1);
@@ -149,8 +149,8 @@ test("an upload failure clears its stored object and commits failure evidence", 
   try {
     const inserted = await db.execute<{ id: string }>(sql`
       insert into backup_runs (org_id, kind, status)
-      values (${org.orgId}, 'manual', 'queued') returning id`);
-    const runId = inserted.rows[0]!.id;
+      values (${org.orgId}, 'manual', 'queued') returning id`, "objects");
+    const runId = inserted[0]!.id;
     storage.client = {
       async send(command: unknown) {
         const request = command as { constructor: { name: string }; input: { Key?: string } };
@@ -164,15 +164,15 @@ test("an upload failure clears its stored object and commits failure evidence", 
     await executeBackupRun(runId);
 
     const run = (await db.execute<{ status: string; object_key: string | null; error: string | null }>(sql`
-      select status, object_key, error from backup_runs where org_id = ${org.orgId} and id = ${runId}`)).rows[0]!;
+      select status, object_key, error from backup_runs where org_id = ${org.orgId} and id = ${runId}`, "objects"))[0]!;
     assert.equal(run.status, "failed");
     assert.equal(run.object_key, null, "the ledger must not point at an object removed after upload failure");
     assert.equal(run.error, "injected upload failure");
     assert.deepEqual(deletedKeys, [backupObjectKey(org.orgId, runId)]);
     assert.deepEqual(
-      (await db.execute<{ event: string; error: string }>(sql`
+      await db.execute<{ event: string; error: string }>(sql`
         select changes->>'event' as event, changes->>'error' as error
-          from audit_log where org_id = ${org.orgId} and row_id = ${runId}`)).rows,
+          from audit_log where org_id = ${org.orgId} and row_id = ${runId}`, "objects"),
       [{ event: "backup_failed", error: "injected upload failure" }],
       "the failed ledger transition must be visible with its reason",
     );
@@ -193,8 +193,8 @@ test("purging records durable intent before deletion and keeps the completed led
     const inserted = await db.execute<{ id: string }>(sql`
       insert into backup_runs (org_id, kind, status, object_key, file_name, byte_size, sha256, completed_at)
       values (${org.orgId}, 'manual', 'completed', 'pending', 'archive.json.gz', 20, ${"a".repeat(64)}, now())
-      returning id`);
-    const runId = inserted.rows[0]!.id;
+      returning id`, "objects");
+    const runId = inserted[0]!.id;
     const objectKey = backupObjectKey(org.orgId, runId);
     await db.execute(sql`update backup_runs set object_key = ${objectKey} where org_id = ${org.orgId} and id = ${runId}`);
     storage.client = {
@@ -221,22 +221,20 @@ test("purging records durable intent before deletion and keeps the completed led
     }));
     await deleteStarted;
     const eventsDuringDelete = (await db.execute<{ event: string }>(sql`
-      select changes->>'event' as event from audit_log where org_id = ${org.orgId} and row_id = ${runId} order by id`))
-      .rows.map((row) => row.event);
+      select changes->>'event' as event from audit_log where org_id = ${org.orgId} and row_id = ${runId} order by id`, "objects")).map((row) => row.event);
     assert.deepEqual(eventsDuringDelete, ["backup_purge_requested"]);
     assert.equal(deletedKey, objectKey);
     releaseDelete();
     assert.equal(await purgePromise, true);
 
     const row = (await db.execute<{ status: string; purged_at: Date | null; purge_reason: string | null }>(sql`
-      select status, purged_at, purge_reason from backup_runs where org_id = ${org.orgId} and id = ${runId}`)).rows[0]!;
+      select status, purged_at, purge_reason from backup_runs where org_id = ${org.orgId} and id = ${runId}`, "objects"))[0]!;
     assert.equal(row.status, "completed", "purge retains the immutable completed run");
     assert.ok(row.purged_at);
     assert.equal(row.purge_reason, "deleted");
     assert.deepEqual(
       (await db.execute<{ event: string }>(sql`
-        select changes->>'event' as event from audit_log where org_id = ${org.orgId} and row_id = ${runId} order by id`))
-        .rows.map((event) => event.event),
+        select changes->>'event' as event from audit_log where org_id = ${org.orgId} and row_id = ${runId} order by id`, "objects")).map((event) => event.event),
       ["backup_purge_requested", "backup_deleted"],
     );
   } finally {
@@ -259,8 +257,8 @@ test("retention preserves the newest run and audits the older run before deletin
       const inserted = await db.execute<{ id: string }>(sql`
         insert into backup_runs (org_id, kind, status, file_name, byte_size, sha256, completed_at, created_at)
         values (${org.orgId}, 'scheduled', 'completed', ${fileName}, 20, ${"b".repeat(64)}, ${createdAt}, ${createdAt})
-        returning id`);
-      const runId = inserted.rows[0]!.id;
+        returning id`, "objects");
+      const runId = inserted[0]!.id;
       ids.push(runId);
       const objectKey = backupObjectKey(org.orgId, runId);
       await db.execute(sql`update backup_runs set object_key = ${objectKey} where org_id = ${org.orgId} and id = ${runId}`);
@@ -277,16 +275,16 @@ test("retention preserves the newest run and audits the older run before deletin
     await rotateBackups(org.orgId);
 
     assert.deepEqual(deletedKeys, [backupObjectKey(org.orgId, ids[0]!)]);
-    const runs = (await db.execute<{ id: string; purged_at: Date | null; purge_reason: string | null }>(sql`
-      select id, purged_at, purge_reason from backup_runs where org_id = ${org.orgId} order by created_at`)).rows;
+    const runs = await db.execute<{ id: string; purged_at: Date | null; purge_reason: string | null }>(sql`
+      select id, purged_at, purge_reason from backup_runs where org_id = ${org.orgId} order by created_at`, "objects");
     assert.ok(runs[0]!.purged_at);
     assert.equal(runs[0]!.purge_reason, "rotated");
     assert.equal(runs[1]!.id, ids[1]);
     assert.equal(runs[1]!.purged_at, null);
     assert.deepEqual(
-      (await db.execute<{ event: string; max_keep: number }>(sql`
+      await db.execute<{ event: string; max_keep: number }>(sql`
         select changes->>'event' as event, (changes->>'maxKeep')::integer as max_keep
-          from audit_log where org_id = ${org.orgId} and row_id = ${ids[0]} order by id`)).rows,
+          from audit_log where org_id = ${org.orgId} and row_id = ${ids[0]} order by id`, "objects"),
       [
         { event: "backup_purge_requested", max_keep: 1 },
         { event: "backup_rotated", max_keep: 1 },

@@ -108,7 +108,7 @@ async function loadWebhookChannel(channelId: string): Promise<WebhookChannel | n
   // bypass: connector-token — a provider-signed delivery carries no org header; the channel row resolves its organization.
   return withBypassContext(async () => {
     const row = (await db.execute<{ org_id: string; kind: string; status: string; webhook_secret: string | null }>(sql`
-      select org_id, kind, status, webhook_secret from sales_channels where id = ${channelId}`)).rows[0];
+      select org_id, kind, status, webhook_secret from sales_channels where id = ${channelId}`, "objects"))[0];
     if (!row || !row.webhook_secret) return null;
     let secret: string;
     try {
@@ -155,7 +155,7 @@ export async function receiveInboundEvent(input: ReceiveInboundInput): Promise<I
     const existing = (await db.execute<EventDbRow>(sql`
       select ${EVENT_COLUMNS} from integration_inbound_events
        where org_id = ${channel.orgId} and channel_id = ${input.channelId}
-         and provider_event_id = ${verified.eventId}`)).rows[0];
+         and provider_event_id = ${verified.eventId}`, "objects"))[0];
     if (existing) return toRow(existing);
     // A retry racing the first store is an expected unique-key collision; re-read below to return the winner.
     const inserted = await db.execute<{ id: string }>(sql`
@@ -167,14 +167,14 @@ export async function receiveInboundEvent(input: ReceiveInboundInput): Promise<I
         ${JSON.stringify(storedHeaders(input.headers))}::jsonb, true, 'pending', null)
       -- A repeated provider event reuses the stored delivery selected below.
       on conflict (channel_id, provider_event_id) do nothing
-      returning id`);
-    const id = inserted.rows[0]?.id ?? (await db.execute<{ id: string }>(sql`
+      returning id`, "objects");
+    const id = inserted[0]?.id ?? (await db.execute<{ id: string }>(sql`
       select id from integration_inbound_events
-       where channel_id = ${input.channelId} and provider_event_id = ${verified.eventId}`)).rows[0]?.id;
+       where channel_id = ${input.channelId} and provider_event_id = ${verified.eventId}`, "objects"))[0]?.id;
     if (!id) throw new Error("Inbound event store returned no row; the delivery was lost");
     const row = (await db.execute<EventDbRow>(sql`
       select ${EVENT_COLUMNS} from integration_inbound_events
-       where org_id = ${channel.orgId} and id = ${id}`)).rows[0];
+       where org_id = ${channel.orgId} and id = ${id}`, "objects"))[0];
     if (!row) throw new Error("Inbound event store returned no row; the delivery was lost");
     return toRow(row);
   });
@@ -200,12 +200,12 @@ export async function processPendingEvents(limit = 50): Promise<{ processed: num
         order by next_attempt_at
         limit ${limit}
         for update skip locked)
-     returning ${EVENT_COLUMNS}`)).then((result) => result.rows);
+     returning ${EVENT_COLUMNS}`, "objects"));
   for (const event of claimed) {
     await runOneEvent(event);
     const done = await withOrgContext(event.org_id, () => db.execute<{ status: string }>(sql`
-      select status from integration_inbound_events where id = ${event.id}`)).then(
-      (result) => result.rows[0],
+      select status from integration_inbound_events where id = ${event.id}`, "objects")).then(
+      (result) => result[0],
     );
     if (done?.status === "processed" || done?.status === "ignored") processed += 1;
     else failed += 1;
@@ -218,7 +218,7 @@ async function runOneEvent(event: EventDbRow): Promise<void> {
   if (!channel) {
     await withOrg(event.org_id, async () => {
       const retryInSeconds = Math.round(backoffMs(event.attempts + 1) / 1000);
-      const failed = await db.execute(sql`
+      const failed = await db.execute<never>(sql`
         update integration_inbound_events
            set status = 'failed', attempts = attempts + 1, error = 'The channel is gone; the event cannot be routed.',
                next_attempt_at = now() + (${retryInSeconds} || ' seconds')::interval,
@@ -234,7 +234,7 @@ async function runOneEvent(event: EventDbRow): Promise<void> {
     // Events for a paused or disconnected channel wait: effects must never
     // start while the operator has the channel held.
     if (channel.status !== "active") {
-      const held = await db.execute(sql`
+      const held = await db.execute<never>(sql`
         update integration_inbound_events
            set status = 'pending', updated_at = now()
          where id = ${event.id} and status = 'processing'`);
@@ -246,7 +246,7 @@ async function runOneEvent(event: EventDbRow): Promise<void> {
     ensureShopifyAdapterRegistered();
     const adapter = channelAdapter(channel.kind);
     const body = (await db.execute<{ raw_body: Buffer; headers: Record<string, string> }>(sql`
-      select raw_body, headers from integration_inbound_events where id = ${event.id}`)).rows[0];
+      select raw_body, headers from integration_inbound_events where id = ${event.id}`, "objects"))[0];
     if (!body) return;
     try {
       const outcome = await adapter.handleEvent({
@@ -257,7 +257,7 @@ async function runOneEvent(event: EventDbRow): Promise<void> {
         rawBody: body.raw_body,
         headers: body.headers ?? {},
       });
-      const done = await db.execute(sql`
+      const done = await db.execute<never>(sql`
         update integration_inbound_events
            set status = ${outcome.action === "ignored" ? "ignored" : "processed"},
                attempts = attempts + 1, error = null,
@@ -270,7 +270,7 @@ async function runOneEvent(event: EventDbRow): Promise<void> {
       const attempts = event.attempts + 1;
       const message = error instanceof Error ? error.message.slice(0, 1000) : String(error).slice(0, 1000);
       const dead = attempts >= INBOUND_MAX_ATTEMPTS;
-      const marked = await db.execute(sql`
+      const marked = await db.execute<never>(sql`
         update integration_inbound_events
            set status = ${dead ? "dead" : "failed"}, attempts = ${attempts}, error = ${message},
                next_attempt_at = ${dead ? new Date(Date.now() + BACKOFF_CAP_MS) : new Date(Date.now() + backoffMs(attempts))},
@@ -310,7 +310,7 @@ export async function replayEvent(
     const before = (await db.execute<EventDbRow>(sql`
       select ${EVENT_COLUMNS} from integration_inbound_events
        where org_id = ${orgId} and id = ${eventId}
-         and (${channelId}::uuid is null or channel_id = ${channelId})`)).rows[0];
+         and (${channelId}::uuid is null or channel_id = ${channelId})`, "objects"))[0];
     if (!before) {
       refuse(
         "inbound_event_not_found",
@@ -326,24 +326,24 @@ export async function replayEvent(
          set status = 'pending', attempts = 0, error = null,
              next_attempt_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${eventId}
-       returning ${EVENT_COLUMNS}`);
-    if (updated.rows.length !== 1) {
+       returning ${EVENT_COLUMNS}`, "objects");
+    if (updated.length !== 1) {
       throw new Error("Inbound event replay matched no row; the event left while it was requeued");
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'integration_inbound_events', ${eventId}, 'update',
-        ${JSON.stringify({ before: toRow(before), after: toRow(updated.rows[0]!), reason: why })}::jsonb, ${actor})`);
-    return toRow(updated.rows[0]!);
+        ${JSON.stringify({ before: toRow(before), after: toRow(updated[0]!), reason: why })}::jsonb, ${actor})`);
+    return toRow(updated[0]!);
   });
 }
 
 /** List one channel's activity for the operator, newest first. */
 export async function listInboundEvents(orgId: string, channelId: string, limit = 100): Promise<InboundEventRow[]> {
-  const rows = (await withOrgContext(orgId, () => db.execute<EventDbRow>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<EventDbRow>(sql`
     select ${EVENT_COLUMNS} from integration_inbound_events
      where org_id = ${orgId} and channel_id = ${channelId}
-     order by received_at desc limit ${limit}`))).rows;
+     order by received_at desc limit ${limit}`, "objects"));
   return rows.map(toRow);
 }
 
@@ -370,8 +370,7 @@ export async function runChannelOrderScan(): Promise<{ posted: number; parked: n
   // bypass: scheduler-tick — the commerce scan drains pending orders across
   // organizations before each row's organization is known.
   const orgs = await withBypassContext(() => db.execute<{ org_id: string }>(sql`
-    select distinct org_id from channel_orders where posting_status = 'pending' limit 50`))
-    .then((result) => result.rows);
+    select distinct org_id from channel_orders where posting_status = 'pending' limit 50`, "objects"));
   for (const org of orgs) {
     try {
       const outcome = await postPendingChannelOrders(org.org_id, null, 100);
@@ -407,7 +406,7 @@ export interface ChannelAttention {
  * cards; channels with no deliveries yet simply have no entry.
  */
 export async function channelAttention(orgId: string): Promise<Record<string, ChannelAttention>> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{
+  const rows = await withOrgContext(orgId, () => db.execute<{
     channel_id: string;
     failed: string;
     dead: string;
@@ -419,7 +418,7 @@ export async function channelAttention(orgId: string): Promise<Record<string, Ch
            max(received_at) as last_received_at
       from integration_inbound_events
      where org_id = ${orgId}
-     group by channel_id`))).rows;
+     group by channel_id`, "objects"));
   const out: Record<string, ChannelAttention> = {};
   for (const row of rows) {
     out[row.channel_id] = { failed: Number(row.failed), dead: Number(row.dead), lastReceivedAt: row.last_received_at };

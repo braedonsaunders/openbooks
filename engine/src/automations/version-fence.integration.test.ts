@@ -43,11 +43,9 @@ async function setupFenceHarness(): Promise<{ org: ScratchOrg; adminId: string }
 }
 
 async function storedName(orgId: string, id: string): Promise<{ name: string; version: number }> {
-  const rows = (
-    await db.execute<{ name: string; version: number }>(sql`
+  const rows = await db.execute<{ name: string; version: number }>(sql`
       select name, version from automations where org_id = ${orgId} and id = ${id}
-    `)
-  ).rows;
+    `, "objects");
   return { name: rows[0]!.name, version: rows[0]!.version };
 }
 

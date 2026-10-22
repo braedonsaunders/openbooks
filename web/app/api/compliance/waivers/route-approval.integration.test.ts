@@ -103,7 +103,7 @@ async function fixture(gated = true) {
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, enforcement, class_id, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${classId}, ${requesterId}, ${requesterId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { org, requesterId, approverId, partyId, requirementId };
 }
 
@@ -147,8 +147,8 @@ test("a requested exception is pending and covers nothing", async () => {
     assert.equal(status.overall, "missing");
     assert.equal(status.blocksPayment, true);
     const row = (await withBypassContext(() => db.execute<{ approved_at: string | null }>(
-      sql`select approved_at from compliance_waivers where id = ${json!.id!}`,
-    ))).rows[0]!;
+      sql`select approved_at from compliance_waivers where id = ${json!.id!}`, "objects",
+    )))[0]!;
     assert.equal(row.approved_at, null);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -157,7 +157,7 @@ test("a requested exception is pending and covers nothing", async () => {
 
 async function pendingGate(orgId: string, id: string) {
   const gate = (await withOrgContext(orgId, () => db.execute<{ id: string }>(sql`
-    select id from flow_gates where org_id=${orgId} and subject_kind='compliance_waiver' and subject_id=${id} and status='pending'`))).rows[0];
+    select id from flow_gates where org_id=${orgId} and subject_kind='compliance_waiver' and subject_id=${id} and status='pending'`, "objects")))[0];
   assert.ok(gate, 'the configured tenant gate must own the exception');
   return gate.id;
 }
@@ -190,7 +190,7 @@ test('a tenant with no exception gate releases the authorized request and retain
     const created = await response.json() as { id: string; status: string };
     assert.equal(created.status, 'approved');
     const row = (await withOrgContext(org.orgId, () => db.execute<{approved_by: string}>(sql`
-      select approved_by from compliance_waivers where org_id=${org.orgId} and id=${created.id}`))).rows[0];
+      select approved_by from compliance_waivers where org_id=${org.orgId} and id=${created.id}`, "objects")))[0];
     assert.equal(row?.approved_by, requesterId);
     assert.equal((await withOrgContext(org.orgId, () => vendorComplianceStatus({orgId: org.orgId, partyId, asOf:'2026-07-01'}))).blocksPayment, false);
   } finally { await dropScratchOrg(org.orgId); }

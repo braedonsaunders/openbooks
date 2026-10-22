@@ -58,7 +58,7 @@ registerHooks({
                 : []
               return { rows }
             },
-            transaction: async (fn) => fn({ execute: async (query) => { state.statements.push(query); return { rows: [] } } }),
+            transaction: async (fn) => fn({ execute: async (query, mode) => { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.statements.push(query); return inMode({ rows: [] }) } }),
           }
         `,
         shortCircuit: true,

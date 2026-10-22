@@ -39,10 +39,8 @@ async function seedEuroOrg(org: Org): Promise<void> {
     [9, "2026-09-01", "2026-09-30"],
     [10, "2026-10-01", "2026-10-31"],
   ] as const) {
-    const calendar = (
-      await db.execute<{ id: string }>(sql`
-        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)
-    ).rows[0]!.id;
+    const calendar = (await db.execute<{ id: string }>(sql`
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${org.orgId}, 2026, ${number}, ${`2026-0${number}`}, ${start}, ${end}, false, ${calendar})`);
@@ -238,7 +236,7 @@ test("a supply voided in a later quarter remains in its original return and corr
   try {
     const actorId = await createScratchUser(org.orgId, "OSS Controller", "admin");
     await seedEuroOrg(org);
-    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
     const currentYear = Number(today.slice(0, 4));
     const currentMonth = Number(today.slice(5, 7));
     const currentQuarter = Math.ceil(currentMonth / 3);
@@ -259,11 +257,11 @@ test("a supply voided in a later quarter remains in its original return and corr
     for (const date of [invoiceDate, today]) {
       const covering = (await db.execute<{ id: string }>(sql`
         select id from accounting_periods where org_id = ${org.orgId}
-          and starts_on <= ${date}::date and ends_on >= ${date}::date limit 1`)).rows[0];
+          and starts_on <= ${date}::date and ends_on >= ${date}::date limit 1`, "objects"))[0];
       if (!covering) {
         const [year, month] = date.slice(0, 7).split("-").map(Number);
         const calendar = (await db.execute<{ id: string }>(sql`
-          select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+          select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
         await db.execute(sql`
           insert into accounting_periods
             (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)

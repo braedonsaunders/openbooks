@@ -220,8 +220,8 @@ export async function validateSessionToken(token: string | undefined): Promise<V
          )
        returning s.user_id as "userId", s.id as "sessionId", s.expires_at as "expiresAt",
                  s.auth_method as "authMethod"
-    `);
-    return result.rows[0] ?? null;
+    `, "objects");
+    return result[0] ?? null;
   });
 }
 
@@ -288,8 +288,8 @@ async function ensureLoginState(emailHash: string, userId: string | null = null)
     select user_id as "userId", failure_count as "failureCount",
            last_failed_at as "lastFailedAt", locked_until as "lockedUntil"
       from auth_login_state where email_hash = ${emailHash} for update
-  `));
-  const row = result.rows[0]!;
+  `, "objects"));
+  const row = result[0]!;
   return {
     ...row,
     lastFailedAt: dateValue(row.lastFailedAt),
@@ -341,8 +341,8 @@ async function consumeDeploymentLoginCapacity() {
         end,
         updated_at = now()
       returning attempt_count as "attemptCount", window_started_at as "windowStartedAt"
-    `));
-    const row = result.rows[0]!;
+    `, "objects"));
+    const row = result[0]!;
     const windowStartedAt = dateValue(row.windowStartedAt);
     return {
       limited: row.attemptCount > DEPLOYMENT_LOGIN_ATTEMPT_LIMIT,
@@ -390,8 +390,8 @@ async function recentAttemptCounts(emailHash: string, networkHash: string | null
            and occurred_at > now() - (${LOGIN_WINDOW_S} * interval '1 second')
            and outcome in ('failure', 'mfa_failure')
       ) user_stats
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   return row ? {
     ...row,
     oldestEmailAttempt: dateValue(row.oldestEmailAttempt),
@@ -534,11 +534,11 @@ export async function login(
        order by u.created_at
        limit 2
        for update of u
-    `))
-      : { rows: [] };
+    `, "objects"))
+      : [];
     // A login identity is global even though users rows are tenant-scoped.
     // Never guess when configuration has produced two active home identities.
-    const user = userResult.rows.length === 1 ? userResult.rows[0] : null;
+    const user = userResult.length === 1 ? userResult[0] : null;
     const counts = await recentAttemptCounts(emailHash, networkHash);
     const limit = attemptRateLimit(counts);
 
@@ -606,8 +606,8 @@ async function hasEnabledMfaAfterUserLock(userId: string): Promise<boolean> {
   const result = await db.execute<{ enabled: boolean }>(sql`
     select exists(select 1 from auth_mfa_factors
       where user_id = ${userId} and enabled_at is not null) as enabled
-  `);
-  return result.rows[0]?.enabled === true;
+  `, "objects");
+  return result[0]?.enabled === true;
 }
 
 function consumeMfaCredential(input: {
@@ -666,21 +666,21 @@ export async function completeMfaLogin(
     const identity = (await db.execute<{ emailHash: string }>(sql`
       select email_hash as "emailHash" from auth_login_challenges
        where id = ${challengeToken.challengeId} and user_id = ${challengeToken.userId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!identity) return { kind: "invalid", retryAfter: 0 };
     await acquireAuthLocks(identity.emailHash, networkHash);
     const activeUser = await db.execute<{ id: string }>(sql`
       select id from users where id = ${challengeToken.userId} and is_active for update
-    `);
-    if (!activeUser.rows[0]) return { kind: "invalid", retryAfter: 0 };
+    `, "objects");
+    if (!activeUser[0]) return { kind: "invalid", retryAfter: 0 };
     const challengeResult = (await db.execute<{ userId: string; emailHash: string; authMethod: AuthMethod; expiresAt: Date; consumedAt: Date | null }>(sql`
       select c.user_id as "userId", c.email_hash as "emailHash", c.auth_method as "authMethod",
              c.expires_at as "expiresAt", c.consumed_at as "consumedAt"
         from auth_login_challenges c
        where c.id = ${challengeToken.challengeId} and c.user_id = ${challengeToken.userId}
        for update
-    `));
-    const challenge = challengeResult.rows[0];
+    `, "objects"));
+    const challenge = challengeResult[0];
     if (!challenge || challenge.consumedAt || (dateValue(challenge.expiresAt)?.getTime() ?? 0) <= Date.now()) {
       return { kind: "invalid", retryAfter: 0 };
     }
@@ -704,8 +704,8 @@ export async function completeMfaLogin(
         from auth_mfa_factors
        where user_id = ${challenge.userId} and enabled_at is not null
        for update
-    `));
-    const factor = factorResult.rows[0];
+    `, "objects"));
+    const factor = factorResult[0];
     // A tampered factor reads as a wrong code, never a 500: the failure
     // branch below still writes its mfa_failure audit row and the caller
     // still refuses invalid credentials.
@@ -754,8 +754,8 @@ export async function getMfaStatus(userId: string): Promise<{ enabled: boolean; 
     const result = (await db.execute<{ enabledAt: Date | null; recoveryCodesRemaining: number }>(sql`
       select enabled_at as "enabledAt", jsonb_array_length(recovery_code_hashes) as "recoveryCodesRemaining"
         from auth_mfa_factors where user_id = ${userId}
-    `));
-    const row = result.rows[0];
+    `, "objects"));
+    const row = result[0];
     return { enabled: !!row?.enabledAt, recoveryCodesRemaining: row?.recoveryCodesRemaining ?? 0 };
   });
 }
@@ -769,8 +769,8 @@ async function reauthenticateMfaEnrollment(
 ): Promise<{ email: string; sessionExpiresAt: Date } | null> {
   const identityResult = (await db.execute<{ email: string }>(sql`
     select email from users where id = ${userId} and is_active
-  `));
-  const email = normalizeLoginEmail(identityResult.rows[0]?.email ?? "");
+  `, "objects"));
+  const email = normalizeLoginEmail(identityResult[0]?.email ?? "");
   if (!email) return null;
   const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
@@ -781,8 +781,8 @@ async function reauthenticateMfaEnrollment(
       from users u
      where u.id = ${userId} and u.is_active
      for update of u
-  `));
-  const user = userResult.rows[0];
+  `, "objects"));
+  const user = userResult[0];
   if (!user || normalizeLoginEmail(user.email) !== email) return null;
   // Lock identity before session, then read session authority from a fresh
   // statement snapshot. A join evaluated before the user lock can retain a
@@ -791,7 +791,7 @@ async function reauthenticateMfaEnrollment(
     select expires_at as "expiresAt" from auth_sessions
      where id = ${currentSessionId} and user_id = ${userId} and revoked_at is null
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   const sessionExpiresAt = dateValue(session?.expiresAt);
   if (!sessionExpiresAt || sessionExpiresAt.getTime() <= Date.now()) return null;
   const state = await ensureLoginState(emailHash, userId);
@@ -862,7 +862,7 @@ export async function beginMfaSetup(
       select enabled_at as "enabledAt", secret_encrypted as "secretEncrypted",
              setup_session_id as "setupSessionId", setup_expires_at as "setupExpiresAt"
         from auth_mfa_factors where user_id = ${userId} for update
-    `)).rows[0]
+    `, "objects"))[0]
     // Password verification and the factor lock may themselves take time.
     if (reauthenticated.sessionExpiresAt.getTime() <= Date.now()) return null;
     if (existing?.enabledAt) throw new MfaSetupConflictError("MFA is already enabled");
@@ -911,13 +911,13 @@ export async function confirmMfaSetup(
   return withBypass(async () => {
     const user = await db.execute<{ id: string }>(sql`
       select id from users where id = ${userId} and is_active for update
-    `);
-    if (!user.rows[0]) return null;
+    `, "objects");
+    if (!user[0]) return null;
     const session = await db.execute<{ id: string; expiresAt: Date | string }>(sql`
       select id, expires_at as "expiresAt" from auth_sessions where id = ${currentSessionId} and user_id = ${userId}
         and revoked_at is null for update
-    `);
-    const sessionExpiresAt = dateValue(session.rows[0]?.expiresAt);
+    `, "objects");
+    const sessionExpiresAt = dateValue(session[0]?.expiresAt);
     if (!sessionExpiresAt || sessionExpiresAt.getTime() <= Date.now()) return null;
     const result = (await db.execute<{
       secretEncrypted: string;
@@ -930,8 +930,8 @@ export async function confirmMfaSetup(
              setup_session_id as "setupSessionId", setup_expires_at as "setupExpiresAt",
              setup_attempt_count as "setupAttemptCount"
         from auth_mfa_factors where user_id = ${userId} for update
-    `));
-    const factor = result.rows[0];
+    `, "objects"));
+    const factor = result[0];
     if (sessionExpiresAt.getTime() <= Date.now()) return null;
     if (!factor || factor.enabledAt) return null;
     const setupExpiresAt = dateValue(factor.setupExpiresAt);
@@ -1012,8 +1012,8 @@ async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
     select secret_encrypted as "secretEncrypted", recovery_code_hashes as "recoveryCodeHashes",
            last_used_step as "lastUsedStep"
       from auth_mfa_factors where user_id = ${userId} and enabled_at is not null for update
-  `));
-  const factor = result.rows[0];
+  `, "objects"));
+  const factor = result[0];
   // A tampered enabled factor reads as a wrong code: the caller still writes
   // its mfa_failure audit row and refuses invalid_credentials, and tamper
   // stays indistinguishable from a wrong code to the caller.
@@ -1075,7 +1075,7 @@ async function lockLiveCallerSession(userId: string, sessionId: string): Promise
      where id = ${sessionId} and user_id = ${userId}
        and revoked_at is null and expires_at > clock_timestamp()
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   return !!row;
 }
 
@@ -1088,8 +1088,8 @@ async function reauthenticateMfaSecurityChange(
 ): Promise<MfaSecurityReauthResult> {
   const identityResult = (await db.execute<{ email: string }>(sql`
     select email from users where id = ${userId} and is_active
-  `));
-  const email = normalizeLoginEmail(identityResult.rows[0]?.email ?? "");
+  `, "objects"));
+  const email = normalizeLoginEmail(identityResult[0]?.email ?? "");
   if (!email) return { ok: false, reason: "invalid_credentials" };
   const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
@@ -1097,8 +1097,8 @@ async function reauthenticateMfaSecurityChange(
   const userResult = (await db.execute<{ email: string; passwordHash: string }>(sql`
     select email, password_hash as "passwordHash"
       from users where id = ${userId} and is_active for update
-  `));
-  const user = userResult.rows[0];
+  `, "objects"));
+  const user = userResult[0];
   if (!user || normalizeLoginEmail(user.email) !== email) return { ok: false, reason: "invalid_credentials" };
   // Fail fast on a dead caller session, before burning scrypt or touching
   // lockout counters. Callers re-check under lock immediately before the
@@ -1232,8 +1232,8 @@ export async function listUserSessions(userId: string, currentSessionId: string)
         from auth_sessions
        where user_id = ${userId} and revoked_at is null and expires_at > now()
        order by last_seen_at desc
-    `));
-    return result.rows;
+    `, "objects"));
+    return result;
   });
 }
 
@@ -1342,8 +1342,8 @@ const renderUser = cache(async (sessionToken: string | undefined, envToken: stri
         from users u
         left join orgs o on o.id = u.org_id
        where u.id = ${session.userId} and u.is_active
-    `);
-    return result.rows[0];
+    `, "objects");
+    return result[0];
   });
   if (!home) return null;
 
@@ -1363,8 +1363,8 @@ const renderUser = cache(async (sessionToken: string | undefined, envToken: stri
          where assignment.org_id = ${activeEnvironment.orgId}
            and assignment.user_id = ${activeEnvironment.actingUserId}
          order by r.is_built_in desc, r.name, r.key
-      `);
-      return result.rows;
+      `, "objects");
+      return result;
     });
   if (!homeUser.isSuperAdmin && roles.length === 0) return null;
   return {
@@ -1405,8 +1405,8 @@ export async function finishOidcLogin(input: {
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
        where identity.issuer = ${input.issuer} and identity.subject = ${input.subject}
        for update of u
-    `));
-    let user = mapped.rows[0] ?? null;
+    `, "objects"));
+    let user = mapped[0] ?? null;
     if (!user) {
       const candidates = (await db.execute<{ id: string }>(sql`
         select u.id
@@ -1416,20 +1416,20 @@ export async function finishOidcLogin(input: {
          order by u.created_at
          limit 2
          for update of u
-      `));
+      `, "objects"));
       // Ambiguous emails must be linked administratively, never guessed.
-      if (candidates.rows.length !== 1) {
+      if (candidates.length !== 1) {
         await recordLoginEvent({ userId: null, emailHash, outcome: "oidc_failure", authMethod: "oidc", networkHash, userAgentHash });
         return { kind: "invalid", retryAfter: 0 };
       }
-      user = candidates.rows[0]!;
+      user = candidates[0]!;
       const linked = (await db.execute<{ userId: string }>(sql`
         insert into auth_oidc_identities (issuer, subject, user_id, email_at_link, last_login_at)
         values (${input.issuer}, ${input.subject}, ${user.id}, ${normalizedEmail}, now())
         on conflict (issuer, subject) do update set last_login_at = now()
         returning user_id as "userId"
-      `));
-      if (linked.rows[0]?.userId !== user.id) {
+      `, "objects"));
+      if (linked[0]?.userId !== user.id) {
         await recordLoginEvent({ userId: null, emailHash, outcome: "oidc_failure", authMethod: "oidc", networkHash, userAgentHash });
         return { kind: "invalid", retryAfter: 0 };
       }

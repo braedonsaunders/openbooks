@@ -42,11 +42,11 @@ async function seedSchedule(
 }
 
 async function draftDueDates(orgId: string): Promise<(string | null)[]> {
-  const rows = (await db.execute<{ due: string | null }>(sql`
+  const rows = await db.execute<{ due: string | null }>(sql`
     select due_date::text as due from documents
      where org_id = ${orgId} and kind = 'customer_invoice' and status = 'draft'
        and document_number not like 'TPL-%'
-     order by due_date nulls last, document_number`)).rows;
+     order by due_date nulls last, document_number`, "objects");
   return rows.map((row) => row.due);
 }
 

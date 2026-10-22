@@ -146,13 +146,13 @@ export async function settle(h: Harness, minor: number, currency = "cad"): Promi
 
 export async function invoiceOpen(orgId: string, invoiceId: string): Promise<string> {
   const row = (await db.execute<{ open_balance: string }>(sql`
-    select open_balance::text from documents where id = ${invoiceId} and org_id = ${orgId}`)).rows[0];
+    select open_balance::text from documents where id = ${invoiceId} and org_id = ${orgId}`, "objects"))[0];
   return row!.open_balance;
 }
 
 export async function disputeRows(orgId: string): Promise<{ id: string; kind: string; status: string; documents_posted: unknown }[]> {
-  return (await db.execute<{ id: string; kind: string; status: string; documents_posted: unknown }>(sql`
-    select id, kind, status, documents_posted from payment_disputes where org_id = ${orgId} order by created_at`)).rows;
+  return await db.execute<{ id: string; kind: string; status: string; documents_posted: unknown }>(sql`
+    select id, kind, status, documents_posted from payment_disputes where org_id = ${orgId} order by created_at`, "objects");
 }
 
 
@@ -165,11 +165,11 @@ export async function seedProviderReviewFlow(orgId: string, actorId: string) {
 
 /** Drive the same gate decision as the native review drawer and read its financial result. */
 export async function decideProviderReview(orgId:string,id:string,actorId:string,decision:"approved"|"rejected",comment?:string) {
-  const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId}
-    and subject_kind='payment_dispute_review' and subject_id=${id} and status='pending'`)).rows;
+  const gates=await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${orgId}
+    and subject_kind='payment_dispute_review' and subject_id=${id} and status='pending'`, "objects");
   assert.equal(gates.length,1,"the declared return review policy must create one native gate");
   await decideGate({gateId:gates[0]!.id,userId:actorId,decision,comment});
-  const row=(await db.execute<{status:string}>(sql`select status from payment_disputes where org_id=${orgId} and id=${id}`)).rows[0];
+  const row=(await db.execute<{status:string}>(sql`select status from payment_disputes where org_id=${orgId} and id=${id}`, "objects"))[0];
   assert.ok(row,"native return decisions must remain visible");
   return row;
 }

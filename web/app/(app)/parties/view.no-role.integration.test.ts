@@ -47,7 +47,7 @@ test('the party directory filters role-less parties behind role=no-role', { skip
       values (${org.orgId}, 'company', 'NoRole Fixture Co', true, '{}'::jsonb),
              (${org.orgId}, 'company', 'NoRole Customer Co', true, '{}'::jsonb)`))
     const customerId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select id from parties where org_id=${org.orgId} and display_name='NoRole Customer Co'`))).rows[0]!.id
+      select id from parties where org_id=${org.orgId} and display_name='NoRole Customer Co'`, 'objects')))[0]!.id
     await withBypassContext(() => db.execute(sql`
       insert into customer_roles (org_id, party_id, is_active, created_by, updated_by)
       values (${org.orgId}, ${customerId}, true, ${reader}, ${reader})`))

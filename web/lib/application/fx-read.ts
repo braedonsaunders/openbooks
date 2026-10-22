@@ -21,16 +21,16 @@ function featureOff(name: string): never {
 export async function listApplicationCurrencies(context: ApplicationContext) {
   const [currencies, org] = await Promise.all([
     db.execute<{ code: string; name: string; minor_units: number }>(
-      sql`select code, name, minor_units from currencies order by code`,
+      sql`select code, name, minor_units from currencies order by code`, "objects",
     ),
     db.execute<{ base_currency: string }>(
-      sql`select base_currency from orgs where id = ${context.authz.user.orgId}`,
+      sql`select base_currency from orgs where id = ${context.authz.user.orgId}`, "objects",
     ),
   ]);
   return {
-    baseCurrency: org.rows[0]?.base_currency ?? null,
-    total: currencies.rows.length,
-    currencies: currencies.rows.map((row) => ({
+    baseCurrency: org[0]?.base_currency ?? null,
+    total: currencies.length,
+    currencies: currencies.map((row) => ({
       code: row.code,
       name: row.name,
       minorUnits: row.minor_units,
@@ -72,12 +72,12 @@ export async function listApplicationFxRates(
       from fx_rates
      where ${where}
      order by as_of desc, created_at desc
-     limit ${limit}`);
+     limit ${limit}`, "objects");
   return {
     fromCurrency: input.fromCurrency,
     toCurrency: input.toCurrency,
-    total: rows.rows.length,
-    rates: rows.rows.map((row) => ({
+    total: rows.length,
+    rates: rows.map((row) => ({
       asOf: row.as_of,
       rateType: row.rate_type,
       rate: row.rate,

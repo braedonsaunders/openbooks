@@ -100,8 +100,8 @@ export async function tick(): Promise<void> {
       select id, org_id, object_key, sha256, byte_size::text as byte_size
         from backup_runs
        where status = 'running' and updated_at < now() - interval '6 hours'
-       limit 25`));
-    for (const run of staleRunning.rows) {
+       limit 25`, "objects"));
+    for (const run of staleRunning) {
       // Claim the row under its lock FIRST, then probe storage while holding
       // it. A heartbeat or completion racing this scan either wins the lock
       // first (the re-check below observes it and this tick stands down) or
@@ -116,8 +116,8 @@ export async function tick(): Promise<void> {
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
            for update
-        `));
-        if (!locked.rows[0]) return null;
+        `, "objects"));
+        if (!locked[0]) return null;
         if (run.object_key && run.sha256 && run.byte_size) {
           try {
             const object = await headBackupObject(run.object_key);
@@ -154,8 +154,8 @@ export async function tick(): Promise<void> {
              set status = 'completed', error = null, completed_at = now(), updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
-           returning id`));
-          if (!finalized.rows[0]) return;
+           returning id`, "objects"));
+          if (!finalized[0]) return;
           await auditBackupEvent({
             orgId: run.org_id,
             tableName: "backup_runs",
@@ -176,8 +176,8 @@ export async function tick(): Promise<void> {
                  completed_at = now(), updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
              and updated_at < now() - interval '6 hours'
-           returning id`));
-          if (!abandoned.rows[0]) return;
+           returning id`, "objects"));
+          if (!abandoned[0]) return;
           await auditBackupEvent({
             orgId: run.org_id,
             tableName: "backup_runs",
@@ -202,8 +202,8 @@ export async function tick(): Promise<void> {
       db.execute<{ id: string; org_id: string; object_key: string }>(sql`
       select id, org_id, object_key from backup_runs
        where status = 'failed' and object_key is not null and purged_at is null
-       limit 25`));
-    for (const run of failedUploads.rows) {
+       limit 25`, "objects"));
+    for (const run of failedUploads) {
       if (run.object_key !== backupObjectKey(run.org_id, run.id)) {
         console.error(
           `[backup-scheduler] refusing orphan cleanup for ${run.id}: object key does not match its ledger identity`,
@@ -231,8 +231,8 @@ export async function tick(): Promise<void> {
           const cleared = (await db.execute<{ id: string }>(sql`
           update backup_runs set object_key = null, updated_at = now()
            where id = ${run.id} and org_id = ${run.org_id} and status = 'failed' and object_key = ${run.object_key}
-           returning id`));
-          if (!cleared.rows[0]) return;
+           returning id`, "objects"));
+          if (!cleared[0]) return;
           await auditBackupEvent({
             orgId: run.org_id,
             tableName: "backup_runs",
@@ -256,9 +256,9 @@ export async function tick(): Promise<void> {
         from backup_policies
        where enabled and next_run_at is not null and next_run_at <= now()
        order by next_run_at
-       limit 25`));
+       limit 25`, "objects"));
 
-    for (const policy of due.rows) {
+    for (const policy of due) {
       // Claim: advance next_run_at past "now"; exactly one scanner wins.
       const next = computeNextRunAt(
         {
@@ -312,8 +312,8 @@ export async function tick(): Promise<void> {
       db.execute<{ id: string; org_id: string }>(sql`
       select id, org_id from backup_runs
        where status = 'queued' and created_at < now() - interval '10 minutes'
-       limit 25`));
-    for (const run of staleQueued.rows) {
+       limit 25`, "objects"));
+    for (const run of staleQueued) {
       await recoverStaleQueuedBackupRun(run);
     }
   } catch (e) {

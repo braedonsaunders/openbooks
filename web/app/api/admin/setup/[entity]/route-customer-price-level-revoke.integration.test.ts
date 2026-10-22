@@ -108,14 +108,14 @@ test("revoking a same-day assignment through setup PATCH keeps the row with its 
       // The row stays: priced lineage must survive the revoke.
       const membership = (await db.execute<{ is_active: boolean; revoked: boolean }>(sql`
         select is_active, (revoked_at is not null) as revoked from customer_price_level_assignments
-         where org_id = ${org.orgId} and id = ${assignmentId}`)).rows[0]!;
+         where org_id = ${org.orgId} and id = ${assignmentId}`, "objects"))[0]!;
       assert.equal(membership.is_active, false);
       assert.equal(membership.revoked, true);
 
       const audits = (await db.execute<{ action: string; actor: string }>(sql`
         select action, actor_id::text as actor from audit_log
          where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments' and row_id = ${assignmentId}
-         order by id desc limit 1`)).rows[0];
+         order by id desc limit 1`, "objects"))[0];
       assert.equal(audits?.action, "update");
       assert.equal(audits?.actor, actorId);
     } finally {
@@ -162,13 +162,13 @@ test("revoking a future-effective assignment through setup PATCH succeeds and is
 
       const remaining = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from customer_price_level_assignments
-         where org_id = ${org.orgId} and id = ${assignmentId}`)).rows[0]!.n;
+         where org_id = ${org.orgId} and id = ${assignmentId}`, "objects"))[0]!.n;
       assert.equal(remaining, 0);
 
       const audits = (await db.execute<{ action: string; actor: string }>(sql`
         select action, actor_id::text as actor from audit_log
          where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments' and row_id = ${assignmentId}
-         order by id desc limit 1`)).rows[0];
+         order by id desc limit 1`, "objects"))[0];
       assert.equal(audits?.action, "delete");
       assert.equal(audits?.actor, actorId);
     } finally {

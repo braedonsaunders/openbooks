@@ -239,7 +239,7 @@ interface ChannelMeta {
 async function loadRefundChannel(orgId: string, channelId: string): Promise<ChannelMeta> {
   const row = (await db.execute<{ name: string; kind: string; external_account: string; currency: string; subsidiary_id: string | null }>(sql`
     select name, kind, external_account, currency, subsidiary_id from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`)).rows[0];
+     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
   if (!row) {
     throw new CommerceError(
       "channel_not_found",
@@ -286,10 +286,10 @@ async function assertRefundPeriodOpen(
 
 /** Money already returned for one order through posted cash refunds, in minor units. */
 async function priorRefundedTotalMinor(orgId: string, orderId: string, currency: string): Promise<bigint> {
-  const rows = (await db.execute<{ total: string }>(sql`
+  const rows = await db.execute<{ total: string }>(sql`
     select total::text as total from documents
      where org_id = ${orgId} and kind = 'cash_refund' and status = 'posted'
-       and custom->>'channelOrderId' = ${orderId}`)).rows;
+       and custom->>'channelOrderId' = ${orderId}`, "objects");
   let sum = 0n;
   for (const row of rows) {
     // Posted refund totals are exact ledger decimals, so the shared
@@ -308,9 +308,9 @@ async function priorRefundedQuantities(
   orgId: string,
   orderId: string,
 ): Promise<Map<string, { numerator: bigint; denominator: bigint }>> {
-  const rows = (await db.execute<{ payload: Record<string, unknown> }>(sql`
+  const rows = await db.execute<{ payload: Record<string, unknown> }>(sql`
     select payload from channel_order_events
-     where org_id = ${orgId} and order_id = ${orderId} and kind = 'refund' and posting_status = 'posted'`)).rows;
+     where org_id = ${orgId} and order_id = ${orderId} and kind = 'refund' and posting_status = 'posted'`, "objects");
   const totals = new Map<string, { numerator: bigint; denominator: bigint }>();
   for (const row of rows) {
     if (!row.payload) continue;
@@ -419,14 +419,14 @@ export async function resolveRefundForPosting(
   let saleAnonymous = false;
   if (order.postingDocumentId) {
     const sale = (await db.execute<{ kind: string; status: string }>(sql`
-      select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`)).rows[0];
+      select kind, status from documents where org_id = ${orgId} and id = ${order.postingDocumentId}`, "objects"))[0];
     if (sale?.kind === "cash_sale" && sale.status === "posted") saleDocumentId = order.postingDocumentId;
   }
   if (!saleDocumentId && order.summaryId) {
     const summary = (await db.execute<{ posting_document_id: string | null }>(sql`
       select s.posting_document_id from channel_daily_summaries s
        join documents d on d.org_id = s.org_id and d.id = s.posting_document_id
-       where s.org_id = ${orgId} and s.id = ${order.summaryId} and d.status = 'posted'`)).rows[0];
+       where s.org_id = ${orgId} and s.id = ${order.summaryId} and d.status = 'posted'`, "objects"))[0];
     saleDocumentId = summary?.posting_document_id ?? null;
     saleAnonymous = saleDocumentId !== null;
   }
@@ -704,7 +704,7 @@ export async function resolveRefundForPosting(
         const card = linked?.nativeTable === "stored_value_accounts"
           ? (await db.execute<{ id: string; currency: string }>(sql`
               select id, currency from stored_value_accounts
-               where org_id = ${orgId} and id = ${linked.nativeId}`)).rows[0]
+               where org_id = ${orgId} and id = ${linked.nativeId}`, "objects"))[0]
           : undefined;
         if (!card) {
           park(
@@ -813,9 +813,9 @@ async function allocateRestockSlices(
   label: string,
 ): Promise<{ slices: RestockSlice[]; stocked: boolean }> {
   const item = (await runner.execute<{ kind: string }>(sql`
-    select kind from items where org_id = ${orgId} and id = ${movementItemId}`)).rows[0];
+    select kind from items where org_id = ${orgId} and id = ${movementItemId}`, "objects"))[0];
   const stocked = !!item && (item.kind === "inventory" || item.kind === "assembly" || item.kind === "kit");
-  const candidates = (await runner.execute<MovementRow>(sql`
+  const candidates = await runner.execute<MovementRow>(sql`
     select m.id, m.item_id as "itemId", m.stock_location_id as "stockLocationId",
            m.quantity::text as quantity, m.total_value::text as "totalValue",
            m.lot_id as "lotId", m.serial_id as "serialId", m.document_line_id as "documentLineId"
@@ -824,7 +824,7 @@ async function allocateRestockSlices(
      where m.org_id = ${orgId} and dl.document_id = ${saleDocumentId}
        and m.kind = 'issue' and m.status = 'posted'
        and m.item_id = ${movementItemId} and dl.item_id = ${saleLineItemId}
-     order by m.moved_at, m.id`)).rows;
+     order by m.moved_at, m.id`, "objects");
   if (candidates.length === 0) {
     return { slices: [], stocked };
   }
@@ -938,7 +938,7 @@ export async function buildCashRefundLines(
       });
     } else {
       const item = (await runner.execute<{ kind: string }>(sql`
-        select kind from items where org_id = ${orgId} and id = ${line.itemId}`)).rows[0];
+        select kind from items where org_id = ${orgId} and id = ${line.itemId}`, "objects"))[0];
       if (!item) {
         park(
           "unmapped_item",
@@ -1200,7 +1200,7 @@ export async function postCashRefundDraft(
   const existing = (await db.execute<{ id: string; status: string; posted_entry_id: string | null }>(sql`
     select id, status, posted_entry_id from documents
      where org_id = ${orgId} and kind = 'cash_refund'
-       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`)).rows[0];
+       and external_source = ${draft.provider} and external_ref = ${draft.externalRef}`, "objects"))[0];
   if (existing && existing.status === "posted" && existing.posted_entry_id) {
     return { documentId: existing.id, journalEntryId: existing.posted_entry_id };
   }
@@ -1211,7 +1211,7 @@ export async function postCashRefundDraft(
     if (!approved) {
       await db.execute(sql`delete from document_line_tax_components where org_id = ${orgId} and document_line_id in (
         select id from document_lines where org_id = ${orgId} and document_id = ${documentId})`);
-      const removed = await db.execute(sql`
+      const removed = await db.execute<never>(sql`
         delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
       void removed.rowCount;
     }
@@ -1228,9 +1228,9 @@ export async function postCashRefundDraft(
         ${draft.externalRef}, ${draft.provider}, ${draft.channelId},
         ${JSON.stringify({ channelOrderId: draft.orderId, channelRefundId: draft.refundId })}::jsonb,
         ${actor}, ${actor})
-      returning id`);
-    if (inserted.rows.length !== 1) throw new Error("Cash refund insert returned an unexpected row count");
-    documentId = inserted.rows[0]!.id;
+      returning id`, "objects");
+    if (inserted.length !== 1) throw new Error("Cash refund insert returned an unexpected row count");
+    documentId = inserted[0]!.id;
   }
   if (!approved) {
     // Payout tenders ride document_tenders (never custom): the kernel's tender
@@ -1258,9 +1258,9 @@ export async function postCashRefundDraft(
           ${line.title}, ${line.quantity}, ${line.unitPrice}, ${line.amount},
           ${line.taxAmount}, ${line.promotionId}, ${line.marketplaceFacilitator},
           ${line.stockLocationId}, ${line.customJson}::jsonb, ${actor}, ${actor})
-        returning id`);
-      if (inserted.rows.length !== 1) throw new Error("Cash refund line insert returned an unexpected row count");
-      const lineId = inserted.rows[0]!.id;
+        returning id`, "objects");
+      if (inserted.length !== 1) throw new Error("Cash refund line insert returned an unexpected row count");
+      const lineId = inserted[0]!.id;
       let sequence = 0;
       for (const tax of line.taxes) {
         sequence += 1;
@@ -1360,7 +1360,7 @@ export async function postChannelRefund(
             return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
           }
           const shopToday = (await db.execute<{ day: string }>(sql`
-            select ((now() at time zone ${policy.cutoffTz})::date)::text as day`)).rows[0]!.day;
+            select ((now() at time zone ${policy.cutoffTz})::date)::text as day`, "objects"))[0]!.day;
           if (refund.refundedAt.slice(0, 10) >= shopToday) {
             return { status: "pending", documentId: null as string | null, effectsDocumentId: null as string | null };
           }
@@ -1386,7 +1386,7 @@ export async function postChannelRefund(
         if (!built.journalEntryId) {
           // Approval-gated: hold the draft on the event without changing its
           // pending state, so the operator approves then replays.
-          const held = await db.execute(sql`
+          const held = await db.execute<never>(sql`
             update channel_order_events
                set posting_document_id = ${built.documentId}, updated_by = ${actor}, updated_at = now()
              where org_id = ${orgId} and id = ${eventId} and posting_status in ('pending', 'exception')`);
@@ -1446,7 +1446,7 @@ export async function claimPendingRefundEvents(
   cutoffTz: string,
   limit = 100,
 ): Promise<string[]> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select e.id from channel_order_events e
      join channel_orders o on o.org_id = e.org_id and o.id = e.order_id
      where e.org_id = ${orgId} and e.channel_id = ${channelId} and e.kind = 'refund'
@@ -1455,7 +1455,7 @@ export async function claimPendingRefundEvents(
        and ((e.occurred_at at time zone ${cutoffTz})::date)::text = ${day}
      order by e.occurred_at
      limit ${limit}
-     for update of e skip locked`)).rows;
+     for update of e skip locked`, "objects");
   return rows.map((row) => row.id);
 }
 
@@ -1575,7 +1575,7 @@ export async function postRefundBatchDocument(
         }, `channel-refunds:${scope.channelId}:${scope.day}:${scope.currency}`);
         if (!built.journalEntryId) {
           for (const entry of entries) {
-            const held = await db.execute(sql`
+            const held = await db.execute<never>(sql`
               update channel_order_events
                  set posting_document_id = ${built.documentId}, updated_by = ${actor}, updated_at = now()
                where org_id = ${orgId} and id = ${entry.eventId} and posting_status = 'pending'`);
@@ -1622,16 +1622,16 @@ export async function postDueRefundBatchesForOrg(
 ): Promise<{ posted: number; parked: number }> {
   let posted = 0;
   let parked = 0;
-  const channels = (await db.execute<{ channel_id: string }>(sql`
+  const channels = await db.execute<{ channel_id: string }>(sql`
     select distinct e.channel_id from channel_order_events e
-     where e.org_id = ${orgId} and e.kind = 'refund' and e.posting_status = 'pending'`)).rows;
+     where e.org_id = ${orgId} and e.kind = 'refund' and e.posting_status = 'pending'`, "objects");
   for (const channel of channels) {
     const meta = (await db.execute<{ kind: string; subsidiary_id: string | null }>(sql`
-      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`)).rows[0];
+      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`, "objects"))[0];
     if (!meta) continue;
     let cutoffTz = "UTC";
     try {
-      const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+      const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
       const policy = await getPostingPolicy(orgId, channel.channel_id, today);
       if (policy.mode !== "daily_summary") continue;
       cutoffTz = policy.cutoffTz;
@@ -1641,20 +1641,20 @@ export async function postDueRefundBatchesForOrg(
     let shopToday: string;
     try {
       shopToday = (await db.execute<{ day: string }>(sql`
-        select ((now() at time zone ${cutoffTz})::date)::text as day`)).rows[0]!.day;
+        select ((now() at time zone ${cutoffTz})::date)::text as day`, "objects"))[0]!.day;
     } catch {
       continue;
     }
     // The sweep only takes refunds whose sales already posted: refunds
     // behind still-pending orders join tonight's sales batch instead, so a
     // sales batch that has not run yet can never strand them as parked.
-    const days = (await db.execute<{ day: string; currency: string }>(sql`
+    const days = await db.execute<{ day: string; currency: string }>(sql`
       select distinct ((e.occurred_at at time zone ${cutoffTz})::date)::text as day, o.shop_currency as currency
         from channel_order_events e
         join channel_orders o on o.org_id = e.org_id and o.id = e.order_id
        where e.org_id = ${orgId} and e.channel_id = ${channel.channel_id}
          and e.kind = 'refund' and e.posting_status = 'pending'
-         and o.posting_status in ('posted', 'summarized')`)).rows;
+         and o.posting_status in ('posted', 'summarized')`, "objects");
     for (const day of days) {
       if (day.day >= shopToday) continue;
       const ids = await claimPendingRefundEvents(orgId, channel.channel_id, day.day, day.currency, cutoffTz);

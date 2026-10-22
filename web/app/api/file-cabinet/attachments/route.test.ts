@@ -39,7 +39,7 @@ const mockSources = new Map<string, string>([
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
       export const db = {
-        execute() { return Promise.resolve({ rows: state.targetRows.shift() ?? [] }) },
+        execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return Promise.resolve({ rows: state.targetRows.shift() ?? [] }).then(inMode) },
       }
       export async function inDbTransaction(fn) { return fn(db) }
     `,

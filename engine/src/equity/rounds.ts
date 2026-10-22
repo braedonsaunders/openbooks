@@ -51,7 +51,7 @@ const unknownRound = () => equityError("roundIdUnknown", {}, { field: "roundId" 
 async function locateRound(orgId: string, roundId: string): Promise<{ subsidiaryId: string; name: string; currency: string }> {
   if (!isUuid(roundId)) throw unknownRound();
   const row = await withOrgTransaction(orgId, async () => (await db.execute<{ subsidiary_id: string; name: string; currency: string }>(sql`
-    select subsidiary_id, name, currency from equity_financing_rounds where org_id = ${orgId} and id = ${roundId}`)).rows[0]);
+    select subsidiary_id, name, currency from equity_financing_rounds where org_id = ${orgId} and id = ${roundId}`, "objects"))[0]);
   if (!row) throw unknownRound();
   return { subsidiaryId: row.subsidiary_id, name: row.name, currency: row.currency };
 }
@@ -73,7 +73,7 @@ function liveRoundSecurities(book: EquityBook, roundId: string): { id: string; s
 async function replayed(orgId: string, idempotencyKey: string | null, roundId: string, kind: "amend" | "void"): Promise<string | null> {
   if (!idempotencyKey) return null;
   const existing = (await db.execute<{ id: string; round_id: string; kind: string }>(sql`
-    select id, round_id, kind from equity_round_amendments where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
+    select id, round_id, kind from equity_round_amendments where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"))[0];
   if (!existing) return null;
   if (existing.round_id !== roundId || existing.kind !== kind) {
     throw equityError("idempotencyConflict", { subject: fig.choice("round") });
@@ -82,7 +82,7 @@ async function replayed(orgId: string, idempotencyKey: string | null, roundId: s
 }
 
 async function roundVoided(orgId: string, roundId: string): Promise<boolean> {
-  return (await db.execute(sql`select 1 from equity_round_amendments where org_id = ${orgId} and round_id = ${roundId} and kind = 'void'`)).rows.length > 0;
+  return (await db.execute(sql`select 1 from equity_round_amendments where org_id = ${orgId} and round_id = ${roundId} and kind = 'void'`, "objects")).length > 0;
 }
 
 const key = (value: unknown): string | null => (typeof value === "string" && value.trim() !== "" ? value.trim() : null);
@@ -152,12 +152,12 @@ export async function applyRoundAmendment(input: AmendRoundInput): Promise<{ id:
       });
     }
     const id = await newEquityId(db);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equity_round_amendments (id, org_id, subsidiary_id, round_id, kind, effective_on, name, price_per_share, pre_money_valuation,
         pre_money_basis_reason, reason, idempotency_key, created_by)
       values (${id}, ${input.orgId}, ${located.subsidiaryId}, ${round.id}, 'amend', ${effectiveOn}::date, ${changes.name}, ${changes.price}::numeric,
         ${changes.preMoney ?? (basisReason ? preMoneyText ?? round.preMoneyValuation : null)}::numeric, ${basisReason}, ${reason}, ${idempotencyKey}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("roundAmendment") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_financing_rounds", rowId: round.id, action: "equity.round.amend", actorId: input.actorId,
@@ -205,10 +205,10 @@ export async function applyRoundVoid(input: VoidRoundInput): Promise<{ id: strin
       throw equityError("roundVoidHasSecurities", { round: fig.text(round.name), securities: fig.list(live.map((row) => row.securityNumber)) });
     }
     const id = await newEquityId(db);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equity_round_amendments (id, org_id, subsidiary_id, round_id, kind, effective_on, reason, idempotency_key, created_by)
       values (${id}, ${input.orgId}, ${located.subsidiaryId}, ${round.id}, 'void', ${effectiveOn}::date, ${reason}, ${idempotencyKey}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("roundVoid") });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_financing_rounds", rowId: round.id, action: "equity.round.void", actorId: input.actorId,

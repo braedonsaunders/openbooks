@@ -26,7 +26,7 @@ test("exact scan resolution is tenant-bound and refuses ambiguity with distinct 
                (${other.orgId}, ${other.customerId}, true)`);
       const unit = (await db.execute<{ unit: string }>(sql`
         select base_unit as unit from item_inventory_profiles
-         where org_id = ${org.orgId} and item_id = ${org.items.fifo}`)).rows[0]!.unit;
+         where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"))[0]!.unit;
       const identifier = randomUUID();
       await db.execute(sql`insert into item_identifiers (org_id, item_id, kind, value, unit)
         values (${org.orgId}, ${org.items.fifo}, 'gtin', ${identifier}, ${unit})`);
@@ -116,7 +116,7 @@ test("setup imports enforce identifier validation and entity write permission", 
     assert.ok(entity);
     const resource = resourceModule.setupResource(entity, org.orgId);
     const item = (await db.execute<{ item_ref: string }>(sql`
-      select coalesce(code, name) as item_ref from items where org_id = ${org.orgId} and id = ${org.items.fifo}`)).rows[0];
+      select coalesce(code, name) as item_ref from items where org_id = ${org.orgId} and id = ${org.items.fifo}`, "objects"))[0];
     assert.ok(item);
     const row = { itemId: item.item_ref, kind: "gtin", value: `GTIN-${randomUUID()}`, unit: "crate" };
     const actorId = randomUUID();

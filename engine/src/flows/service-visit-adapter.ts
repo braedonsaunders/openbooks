@@ -94,8 +94,7 @@ async function loadCompletion(
       "Service visit completions require a native tenant context.",
     );
   return (
-    (
-      await db.execute<CompletionRow>(sql`
+    (await db.execute<CompletionRow>(sql`
     select v.id, v.review_status, coalesce(j.job_number, r.request_number) as job_number, coalesce(j.title, r.title) as job_title,
            p.display_name as customer_name, v.kind, v.priority, (v.completed_at at time zone 'UTC')::date::text as completed_on, v.work_notes,
            (select count(*)::int from service_visit_parts sp where sp.org_id = v.org_id and sp.visit_id = v.id) as parts,
@@ -105,8 +104,7 @@ async function loadCompletion(
       left join service_jobs j on j.org_id = v.org_id and j.id = v.job_id
       left join service_requests r on r.org_id = v.org_id and r.id = v.request_id
       join parties p on p.org_id = v.org_id and p.id = coalesce(j.customer_party_id, r.customer_party_id)
-     where v.org_id = ${orgId} and v.id = ${subjectId}`)
-    ).rows[0] ?? null
+     where v.org_id = ${orgId} and v.id = ${subjectId}`, "objects"))[0] ?? null
   );
 }
 
@@ -203,11 +201,9 @@ export const serviceVisitCompletionsFlowAdapter: FlowSubjectAdapter =
         throw new Error(
           `findCandidateIds for "${SERVICE_VISIT_COMPLETION_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
         );
-      return (
-        await db.execute<{
+      return (await db.execute<{
           id: string;
         }>(sql`select id::text as id from service_visits
-      where org_id = ${orgId} and review_status = 'pending' order by completed_at desc limit ${limit}`)
-      ).rows.map((row) => row.id);
+      where org_id = ${orgId} and review_status = 'pending' order by completed_at desc limit ${limit}`, "objects")).map((row) => row.id);
     },
   });

@@ -52,7 +52,7 @@ export async function insertEmploymentChange(
             ${JSON.stringify(args.closedVersions)}::jsonb,
             ${args.action ?? null}, ${args.reasonCode ?? null}, ${args.actorId}, ${args.actorId})
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -66,7 +66,7 @@ export async function linkAppliedEvidence(
   exec: SqlExecutor,
   args: { orgId: string; actorId: string; request: RequestRow; newRevision: number; changeId: string },
 ): Promise<void> {
-  const linked = (await exec.execute(sql`
+  const linked = await exec.execute(sql`
     update hrm_employment_change_requests
        set status = 'applied', applied_at = now(), applied_by = ${args.actorId},
            applied_employment_revision = ${args.newRevision},
@@ -74,7 +74,7 @@ export async function linkAppliedEvidence(
            updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${args.request.id} and status = 'approved'
     returning id
-  `)).rows;
+  `, "objects");
   if (linked.length !== 1) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -87,12 +87,12 @@ export async function bumpAggregateRevision(
   exec: SqlExecutor,
   args: { orgId: string; actorId: string; request: RequestRow; expected: number; next: number },
 ): Promise<void> {
-  const bumped = (await exec.execute(sql`
+  const bumped = await exec.execute(sql`
     update worker_employments
        set revision = ${args.next}, updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${args.request.employment_id} and revision = ${args.expected}
     returning id
-  `)).rows;
+  `, "objects");
   if (bumped.length !== 1) {
     throw new HrmChangeRequestError(
       "STALE_REVISION",

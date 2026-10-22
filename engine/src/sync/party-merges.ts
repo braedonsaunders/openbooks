@@ -661,8 +661,8 @@ async function loadParty(
 ): Promise<PartyRow | null> {
   const found = (await runner.execute<PartyRow>(sql`
     select id, display_name, is_active, custom from parties
-     where id = ${id} and org_id = ${orgId} limit 1`));
-  return found.rows[0] ?? null;
+     where id = ${id} and org_id = ${orgId} limit 1`, "objects"));
+  return found[0] ?? null;
 }
 
 /** Survivor party id recorded by a previous merge, if this row was merged away. */
@@ -681,21 +681,21 @@ async function customPartyRefs(
   runner: SqlExecutor,
   orgId: string,
 ): Promise<{ targetTable: string; key: string }[]> {
-  const defs = (await runner.execute<{ target_table: string; key: string }>(sql`
+  const defs = await runner.execute<{ target_table: string; key: string }>(sql`
     select target_table, key from custom_field_defs
      where org_id = ${orgId} and field_type = 'reference'
-       and config ->> 'referenceTable' = 'parties' and is_active`)).rows;
+       and config ->> 'referenceTable' = 'parties' and is_active`, "objects");
   const valid: { targetTable: string; key: string }[] = [];
   for (const def of defs) {
     if (!/^[a-z_]+$/.test(def.target_table) || !/^[a-z_][a-z0-9_]*$/.test(def.key)) continue;
     const exists = (await runner.execute<{ n: string }>(sql`
       select count(*)::text as n from information_schema.columns
        where table_schema = 'public' and table_name = ${def.target_table}
-         and column_name = 'custom'`)).rows[0]?.n;
+         and column_name = 'custom'`, "objects"))[0]?.n;
     const orgScoped = (await runner.execute<{ n: string }>(sql`
       select count(*)::text as n from information_schema.columns
        where table_schema = 'public' and table_name = ${def.target_table}
-         and column_name = 'org_id'`)).rows[0]?.n;
+         and column_name = 'org_id'`, "objects"))[0]?.n;
     if (exists === "1" && orgScoped === "1") valid.push({ targetTable: def.target_table, key: def.key });
   }
   return valid;
@@ -710,10 +710,10 @@ async function moveSimple(
   survivorId: string,
   moved: Record<string, number>,
 ): Promise<void> {
-  const updated = (await tx.execute(sql`
+  const updated = await tx.execute(sql`
     update ${sql.identifier(table)} set ${sql.identifier(column)} = ${survivorId}
      where org_id = ${orgId} and ${sql.identifier(column)} = ${absorbedId}
-    returning 1`)).rows;
+    returning 1`, "objects");
   if (updated.length > 0) moved[`${table}.${column}`] = updated.length;
 }
 
@@ -729,11 +729,11 @@ async function moveRoleIfAbsent(
 ): Promise<void> {
   const survivorHas = (await tx.execute<{ n: string }>(sql`
     select count(*)::text as n from ${sql.identifier(table)}
-     where org_id = ${orgId} and ${sql.identifier(column)} = ${survivorId}`)).rows[0]?.n;
+     where org_id = ${orgId} and ${sql.identifier(column)} = ${survivorId}`, "objects"))[0]?.n;
   if (survivorHas !== "0") {
     const left = (await tx.execute<{ n: string }>(sql`
       select count(*)::text as n from ${sql.identifier(table)}
-       where org_id = ${orgId} and ${sql.identifier(column)} = ${absorbedId}`)).rows[0]?.n;
+       where org_id = ${orgId} and ${sql.identifier(column)} = ${absorbedId}`, "objects"))[0]?.n;
     if (left !== "0" && left != null) {
       await tx.execute(sql`
         update ${sql.identifier(table)} set is_active = false
@@ -762,24 +762,24 @@ async function moveJournalLines(
   moved: Record<string, number>,
   retained: Record<string, number>,
 ): Promise<void> {
-  const combos = (await tx.execute<{ period_id: string; book_id: string; subsidiary_id: string }>(sql`
+  const combos = await tx.execute<{ period_id: string; book_id: string; subsidiary_id: string }>(sql`
     select distinct e.period_id, e.book_id, jl.subsidiary_id
       from journal_lines jl
       join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
      where jl.org_id = ${orgId} and jl.party_id = ${absorbedId}
-       and e.status in ('posted', 'reversed')`)).rows;
+       and e.status in ('posted', 'reversed')`, "objects");
   const blocked: { period_id: string; book_id: string; subsidiary_id: string }[] = [];
   for (const combo of combos) {
     const check = (await tx.execute<{ blocked: boolean }>(sql`
       select period_module_blocks_write(
         ${orgId}, ${combo.period_id}, ${combo.book_id}, ${combo.subsidiary_id}, 'gl', true
-      ) as blocked`)).rows[0];
+      ) as blocked`, "objects"))[0];
     if (check?.blocked) blocked.push(combo);
   }
   const tuples = blocked.map(
     (combo) => sql`(${combo.period_id}, ${combo.book_id}, ${combo.subsidiary_id})`,
   );
-  const updated = (await tx.execute(
+  const updated = await tx.execute(
     blocked.length === 0
       ? sql`
         update journal_lines set party_id = ${survivorId}
@@ -792,12 +792,12 @@ async function moveJournalLines(
            and e.id = jl.entry_id and e.org_id = jl.org_id
            and (e.status = 'draft'
              or (e.period_id, e.book_id, jl.subsidiary_id) not in (${sql.join(tuples, sql`, `)}))
-        returning 1`,
-  )).rows;
+        returning 1`, "objects",
+  );
   if (updated.length > 0) moved["journal_lines.party_id"] = updated.length;
   const left = (await tx.execute<{ n: string }>(sql`
     select count(*)::text as n from journal_lines
-     where org_id = ${orgId} and party_id = ${absorbedId}`)).rows[0]?.n;
+     where org_id = ${orgId} and party_id = ${absorbedId}`, "objects"))[0]?.n;
   if (left !== "0" && left != null) retained["journal_lines.party_id"] = Number(left);
 }
 
@@ -810,7 +810,7 @@ async function moveGuarded(
   moved: Record<string, number>,
   retained: Record<string, number>,
 ): Promise<void> {
-  const updated = (await tx.execute(sql`
+  const updated = await tx.execute(sql`
     update ${sql.identifier(ref.table)} as d set ${sql.identifier(ref.column)} = ${survivorId}
      where d.org_id = ${orgId} and d.${sql.identifier(ref.column)} = ${absorbedId}
        and (${sql.raw(ref.moveOnly ?? "true")})
@@ -819,11 +819,11 @@ async function moveGuarded(
           where s.org_id = d.org_id and s.${sql.identifier(ref.column)} = ${survivorId}
             and ${sql.raw(ref.conflict)}
        )
-    returning 1`)).rows;
+    returning 1`, "objects");
   if (updated.length > 0) moved[`${ref.table}.${ref.column}`] = updated.length;
   const left = (await tx.execute<{ n: string }>(sql`
     select count(*)::text as n from ${sql.identifier(ref.table)}
-     where org_id = ${orgId} and ${sql.identifier(ref.column)} = ${absorbedId}`)).rows[0]?.n;
+     where org_id = ${orgId} and ${sql.identifier(ref.column)} = ${absorbedId}`, "objects"))[0]?.n;
   if (left !== "0" && left != null) retained[`${ref.table}.${ref.column}`] = Number(left);
 }
 
@@ -863,10 +863,10 @@ export async function applySourcePartyMerge(
       // setting alone is deliberately not a bypass. Previous values are
       // restored before returning so an ambient transaction never inherits
       // trusted-replay authority from a merge.
-      const prior = (await tx.execute<{ name: string; value: string }>(sql`
+      const prior = await tx.execute<{ name: string; value: string }>(sql`
         select 'openbooks.amend' as name, coalesce(current_setting('openbooks.amend', true), 'off') as value
          union all
-        select 'openbooks.migration', coalesce(current_setting('openbooks.migration', true), 'off')`)).rows;
+        select 'openbooks.migration', coalesce(current_setting('openbooks.migration', true), 'off')`, "objects");
       const restore = new Map(prior.map((r) => [r.name, r.value]));
       await tx.execute(sql`set local openbooks.amend = on`);
       await tx.execute(sql`set local openbooks.migration = on`);
@@ -891,10 +891,10 @@ async function applyMergeTx(
   input: SourcePartyMergeInput,
 ): Promise<PartyMergeResult> {
   const { orgId, absorbedId, survivorId } = input;
-  const locked = (await tx.execute<{ id: string }>(sql`
+  const locked = await tx.execute<{ id: string }>(sql`
     select id from parties
      where org_id = ${orgId} and id in (${sql.join([absorbedId, survivorId].sort().map((id) => sql`${id}`), sql`, `)})
-     order by id for update`)).rows;
+     order by id for update`, "objects");
   if (new Set(locked.map((row) => row.id)).size !== 2) {
     throw new PartyMergeError("both parties must exist in this organization");
   }
@@ -928,13 +928,13 @@ async function applyMergeTx(
   }
 
   for (const [table, column] of IMMUTABLE_PARTY_REFS) {
-    const referenced = (await tx.execute(sql`select id from ${sql.identifier(table)}
-      where org_id=${orgId} and ${sql.identifier(column)}=${absorbedId} limit 1`)).rows;
+    const referenced = await tx.execute(sql`select id from ${sql.identifier(table)}
+      where org_id=${orgId} and ${sql.identifier(column)}=${absorbedId} limit 1`, "objects");
     if (referenced.length) throw new PartyMergeError(`This person has ${IMMUTABLE_PARTY_REF_LABELS[table]}. Keep the employee identities separate to preserve recorded subjects and authorship.`);
   }
   for (const ref of IMMUTABLE_COUNTERPARTY_REFS) {
-    const referenced = (await tx.execute(sql`select id from ${sql.identifier(ref.table)}
-      where org_id=${orgId} and ${sql.identifier(ref.column)}=${absorbedId} limit 1`)).rows;
+    const referenced = await tx.execute(sql`select id from ${sql.identifier(ref.table)}
+      where org_id=${orgId} and ${sql.identifier(ref.column)}=${absorbedId} limit 1`, "objects");
     if (referenced.length) throw new PartyMergeError(`This party has ${ref.label}. ${ref.remedy}`);
   }
 
@@ -954,14 +954,14 @@ async function applyMergeTx(
     "payroll_retro_settlements",
   ] as const;
   for (const table of payrollEmploymentReferences) {
-    const referenced = (await tx.execute(sql`
+    const referenced = await tx.execute(sql`
       select payroll_row.id from ${sql.identifier(table)} payroll_row
       join worker_employments employment
         on employment.org_id = payroll_row.org_id
        and employment.id = payroll_row.employment_id
        and employment.worker_party_id = ${absorbedId}
       where payroll_row.org_id = ${orgId} and payroll_row.employee_party_id = ${absorbedId}
-      limit 1`)).rows;
+      limit 1`, "objects");
     if (referenced.length) {
       throw new PartyMergeError(
         "This employee has payroll records tied to their employment. Keep the employee identities separate to preserve payroll history.",
@@ -988,11 +988,11 @@ async function applyMergeTx(
     await tx.execute(sql`select openbooks_party_payment_stats_rebuild(${orgId})`);
     const customRefs: { table: string; key: string; rows: number }[] = [];
     for (const ref of await customPartyRefs(tx, orgId)) {
-      const updated = (await tx.execute(sql`
+      const updated = await tx.execute(sql`
         update ${sql.identifier(ref.targetTable)}
            set custom = jsonb_set(custom, array[${ref.key}], to_jsonb(${survivorId}::text))
          where org_id = ${orgId} and custom ->> ${ref.key} = ${absorbedId}
-        returning 1`)).rows;
+        returning 1`, "objects");
       if (updated.length > 0) {
         moved[`custom:${ref.targetTable}.${ref.key}`] = updated.length;
         customRefs.push({ table: ref.targetTable, key: ref.key, rows: updated.length });
@@ -1052,7 +1052,7 @@ async function applyMergeTx(
                 customRefs,
                 reason: "source-asserted party merge",
               })}::jsonb, ${input.actorId}, ${input.runId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     const toMoves = (record: Record<string, number>): PartyMergeMove[] =>
       Object.entries(record).map(([table, rows]) => ({ table, rows }));
     return {
@@ -1099,9 +1099,9 @@ export async function findPartyReferences(
       select ${table}::text as tbl, count(*)::text as n from ${sql.identifier(table)}
        where org_id = ${orgId} and ${sql.identifier(column)} = ${partyId}`,
   );
-  const counts = (await runner.execute<{ tbl: string; n: string }>(
-    sql`${sql.join(branches, sql` union all `)}`,
-  )).rows;
+  const counts = await runner.execute<{ tbl: string; n: string }>(
+    sql`${sql.join(branches, sql` union all `)}`, "objects",
+  );
   const hits: PartyMergeMove[] = [];
   for (const row of counts) {
     if (row.n !== "0") hits.push({ table: row.tbl, rows: Number(row.n) });
@@ -1109,7 +1109,7 @@ export async function findPartyReferences(
   for (const ref of await customPartyRefs(runner, orgId)) {
     const n = (await runner.execute<{ n: string }>(sql`
       select count(*)::text as n from ${sql.identifier(ref.targetTable)}
-       where org_id = ${orgId} and custom ->> ${ref.key} = ${partyId}`)).rows[0]?.n;
+       where org_id = ${orgId} and custom ->> ${ref.key} = ${partyId}`, "objects"))[0]?.n;
     if (n !== "0" && n != null) hits.push({ table: `custom:${ref.targetTable}.${ref.key}`, rows: Number(n) });
   }
   return hits.sort((a, b) => b.rows - a.rows || (a.table < b.table ? -1 : 1));

@@ -97,7 +97,7 @@ async function seedRentAccount(org: Scratch): Promise<void> {
  *  posts under a -VOID number linked through reverses_entry_id. */
 async function voidJournal(org: Scratch, actorId: string, entryId: string, tag: string, date: string, periodId: string): Promise<string> {
   return withBypass(async () => {
-    const rows = (await db.execute(sql`select * from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId}`)).rows as Record<string, unknown>[]
+    const rows = (await db.execute(sql`select * from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId}`, 'objects')) as Record<string, unknown>[]
     const mirror = reversalJournalLines(rows.map((line) => ({
       lineNumber: line.line_number as number,
       accountId: line.account_id as string,
@@ -285,7 +285,7 @@ test('a pair split across the window edge is never half-hidden', { skip: !env.OP
     await seedRentAccount(scratch)
     const originalId = await seedExpense(scratch, actorId, 'VOID-JE2', '500.0000')
     const calendar = (await withBypassContext(() => db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where id = ${scratch.periodId}`))).rows[0]
+      select fiscal_calendar_id from accounting_periods where id = ${scratch.periodId}`, 'objects')))[0]
     assert.ok(calendar, 'the scratch period carries a fiscal calendar')
     const augustPeriodId = randomUUID()
     await withBypassContext(() => db.execute(sql`

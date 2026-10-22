@@ -128,7 +128,7 @@ const whoami: AssistantToolDef = {
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
     const org = (await db.execute<{ name: string; base_currency: string }>(
-      sql`select name, base_currency from orgs where id = ${authz.user.orgId}`,
+      sql`select name, base_currency from orgs where id = ${authz.user.orgId}`, "objects",
     ));
     return {
       ok: true,
@@ -136,8 +136,8 @@ const whoami: AssistantToolDef = {
         name: authz.user.name,
         email: authz.user.email,
         roles: authz.user.roles.map(({ key }) => key),
-        org: org.rows[0]?.name ?? null,
-        baseCurrency: org.rows[0]?.base_currency ?? null,
+        org: org[0]?.name ?? null,
+        baseCurrency: org[0]?.base_currency ?? null,
         permissions: [...authz.permissions].sort(),
         canDraft: can(authz, "assistant.write") && can(authz, "gl.post"),
       },
@@ -294,7 +294,7 @@ const findJournalEntries: AssistantToolDef = {
        group by e.id
        order by e.posting_date desc, e.entry_number desc
        limit ${limit}
-    `));
+    `, "objects"));
     // The count must agree with the listing above it (and the UI journal
     // list): an entry with no visible line is listed nowhere, so it is
     // counted nowhere. Counting entry-scoped would inflate the total with
@@ -305,16 +305,16 @@ const findJournalEntries: AssistantToolDef = {
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id${lineSubsidiaryFilter}
        where ${where}
-    `));
-    const total = Number(c.rows[0]?.n ?? 0);
+    `, "objects"));
+    const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
       data: {
         total,
-        sumDebits: money(c.rows[0]?.sum_debits),
-        returned: rows.rows.length,
-        truncated: total > rows.rows.length,
-        items: rows.rows.map((r) => ({
+        sumDebits: money(c[0]?.sum_debits),
+        returned: rows.length,
+        truncated: total > rows.length,
+        items: rows.map((r) => ({
           id: r.id,
           entryNumber: r.entry_number,
           postingDate: r.posting_date,
@@ -470,7 +470,7 @@ const findDocuments: AssistantToolDef = {
        where ${where}
        order by d.document_date desc, d.document_number desc
        limit ${limit}
-    `));
+    `, "objects"));
     const c = (await db.execute<{ n: string; sum_total: string; sum_open: string }>(sql`
       select count(*) as n,
              coalesce(sum(d.total), 0) as sum_total,
@@ -478,17 +478,17 @@ const findDocuments: AssistantToolDef = {
         from documents d
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where ${where}
-    `));
-    const total = Number(c.rows[0]?.n ?? 0);
+    `, "objects"));
+    const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
       data: {
         total,
-        sumTotal: money(c.rows[0]?.sum_total),
-        sumOpenBalance: money(c.rows[0]?.sum_open),
-        returned: rows.rows.length,
-        truncated: total > rows.rows.length,
-        items: rows.rows.map((r) => ({
+        sumTotal: money(c[0]?.sum_total),
+        sumOpenBalance: money(c[0]?.sum_open),
+        returned: rows.length,
+        truncated: total > rows.length,
+        items: rows.map((r) => ({
           id: r.id,
           kind: r.kind,
           documentNumber: r.document_number,
@@ -531,8 +531,8 @@ const getDocument: AssistantToolDef = {
         left join parties p on p.id = d.party_id and p.org_id = d.org_id
        where d.id = ${a.documentId} and d.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-    `));
-    const d = doc.rows[0];
+    `, "objects"));
+    const d = doc[0];
     if (!d) return { ok: false, error: "document_not_found" };
     if (!(await isDocKindEnabled(authz.user.orgId, d.kind))) return { ok: false, error: "document_not_found" };
     const perm = KIND_PERM[d.kind];
@@ -546,7 +546,7 @@ const getDocument: AssistantToolDef = {
        left join items i on i.id = l.item_id and i.org_id = l.org_id
        where l.document_id = ${a.documentId} and l.org_id = ${authz.user.orgId}
        order by l.line_number
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
@@ -567,7 +567,7 @@ const getDocument: AssistantToolDef = {
         memo: truncateText(d.memo, 500),
         postedEntryId: d.posted_entry_id,
         updatedAt: d.documentRevision,
-        lines: lines.rows.map((l) => ({
+        lines: lines.map((l) => ({
           lineNumber: l.line_number,
           account: l.account_name ? `${l.account_number ?? ""} ${l.account_name}`.trim() : null,
           item: l.item_name,
@@ -618,18 +618,18 @@ const findParties: AssistantToolDef = {
         from parties where ${where}
        order by display_name
        limit ${limit}
-    `));
+    `, "objects"));
     const c = (await db.execute<{ n: string }>(
-      sql`select count(*) as n from parties where ${where}`,
+      sql`select count(*) as n from parties where ${where}`, "objects",
     ));
-    const total = Number(c.rows[0]?.n ?? 0);
+    const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
       data: {
         total,
-        returned: rows.rows.length,
-        truncated: total > rows.rows.length,
-        items: rows.rows.map((r) => ({
+        returned: rows.length,
+        truncated: total > rows.length,
+        items: rows.map((r) => ({
           id: r.id,
           kind: r.kind,
           displayName: r.display_name,
@@ -915,13 +915,13 @@ const financialPeriods: AssistantToolDef = {
        group by p.id, r.id
        order by p.ends_on desc, p.period_number desc
        limit ${limit}
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
-        returned: rows.rows.length,
+        returned: rows.length,
         href: "/close",
-        periods: rows.rows.map((row) => ({
+        periods: rows.map((row) => ({
           id: row.id,
           // The stored name is the period's own data; the label reads alike
           // across every fiscal year (`P05 FY2026`, `FY2026 adjustment`).
@@ -1012,7 +1012,7 @@ const budgetVsActualTool: AssistantToolDef = {
                where p.org_id = s.org_id and p.fiscal_year = s.fiscal_year and not p.is_adjustment) as "to"
         from budget_scenarios s
        where s.id = ${scenarioId} and s.org_id = ${authz.user.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     return {
       ok: true,
       note: window
@@ -1091,8 +1091,8 @@ const partyConcentration: AssistantToolDef = {
              case when t.total = 0 then 0 else round((r.amount / t.total) * 100, 2) end::text as share_percent
         from ranked r cross join totals t
        order by r.amount desc limit ${limit}
-    `));
-    return { ok: true, data: { side: a.side, periodLabel: range.label, fromDate: range.from, toDate: range.to, rows: rows.rows, href: a.side === "customer" ? "/ar" : "/ap" } };
+    `, "objects"));
+    return { ok: true, data: { side: a.side, periodLabel: range.label, fromDate: range.from, toDate: range.to, rows, href: a.side === "customer" ? "/ar" : "/ap" } };
   },
 };
 
@@ -1117,9 +1117,9 @@ const projectProfitability: AssistantToolDef = {
         select id, name, status from projects
          where id = ${a.projectId} and org_id = ${authz.user.orgId}
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-      `));
-      if (!exists.rows[0]) return { ok: false, error: "project_not_found" };
-      return { ok: true, data: { project: exists.rows[0], ...(await projectCostSummary(authz.user.orgId, a.projectId, authz.allowedSubsidiaryIds)), href: `/projects?project=${a.projectId}` } };
+      `, "objects"));
+      if (!exists[0]) return { ok: false, error: "project_not_found" };
+      return { ok: true, data: { project: exists[0], ...(await projectCostSummary(authz.user.orgId, a.projectId, authz.allowedSubsidiaryIds)), href: `/projects?project=${a.projectId}` } };
     }
     const limit = Math.min(a.limit ?? 20, 50);
     const like = a.query ? `%${a.query}%` : null;
@@ -1131,21 +1131,21 @@ const projectProfitability: AssistantToolDef = {
          ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
        order by case p.status when 'active' then 0 when 'awarded' then 1 else 2 end, p.name
        limit ${limit}
-    `));
+    `, "objects"));
     const count = (await db.execute<{ n: string }>(sql`
       select count(*) as n
        from projects p left join parties c on c.id = p.customer_id and c.org_id = p.org_id
        where p.org_id = ${authz.user.orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
          ${like ? sql`and (p.name ilike ${like} or c.display_name ilike ${like})` : sql``}
-    `));
-    const total = Number(count.rows[0]?.n ?? 0);
+    `, "objects"));
+    const total = Number(count[0]?.n ?? 0);
     return {
       ok: true,
-      note: total > rows.rows.length
-        ? `${total} projects match; only ${rows.rows.length} listed. Use rank_projects for the full portfolio with margins, totals, and paging.`
+      note: total > rows.length
+        ? `${total} projects match; only ${rows.length} listed. Use rank_projects for the full portfolio with margins, totals, and paging.`
         : undefined,
-      data: { total, returned: rows.rows.length, truncated: total > rows.rows.length, projects: rows.rows, href: "/projects" },
+      data: { total, returned: rows.length, truncated: total > rows.length, projects: rows, href: "/projects" },
     };
   },
 };
@@ -1208,13 +1208,13 @@ const continuousCloseFindings: AssistantToolDef = {
        order by case w.severity when 'critical' then 3 when 'warning' then 2 else 1 end desc,
                 w.materiality desc, w.last_detected_at desc
        limit ${limit}
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
-        returned: rows.rows.length,
-        truncated: rows.rows.length === limit,
-        items: rows.rows.map((row) => ({
+        returned: rows.length,
+        truncated: rows.length === limit,
+        items: rows.map((row) => ({
           id: row.id,
           agent: row.agent_key,
           findingType: row.finding_type,
@@ -1255,8 +1255,8 @@ const getContinuousCloseFinding: AssistantToolDef = {
         ${WORK_ITEM_SUBJECT_JOIN}
        where w.id = ${findingId} and w.org_id = ${authz.user.orgId}
          ${workItemSubjectScopePredicate(authz.user.orgId, authz.allowedSubsidiaryIds)}
-    `));
-    const row = item.rows[0];
+    `, "objects"));
+    const row = item[0];
     if (!row) return { ok: false, error: "finding_not_found" };
     if (typeof row.agent_key !== "string" || !(readableContinuousCloseAgents(authz) as readonly string[]).includes(row.agent_key)) {
       return { ok: false, error: "forbidden" };
@@ -1275,13 +1275,13 @@ const getContinuousCloseFinding: AssistantToolDef = {
        where org_id = ${authz.user.orgId} and work_item_id = ${findingId}
        order by created_at, id
        limit 100
-    `));
+    `, "objects"));
     return {
       ok: true,
       data: {
         ...row,
-        evidence: evidence.rows,
-        evidenceTruncated: evidence.rows.length === 100,
+        evidence,
+        evidenceTruncated: evidence.length === 100,
         href: `/agents?item=${findingId}`,
       },
     };

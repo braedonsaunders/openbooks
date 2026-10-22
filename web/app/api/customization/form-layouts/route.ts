@@ -57,8 +57,8 @@ export const GET = defineRoute({
       from form_layouts
      where org_id = ${user.orgId} and record_type = ${recordType}
      order by is_default desc, name
-  `);
-    return NextResponse.json({ rows: r.rows });
+  `, "objects");
+    return NextResponse.json({ rows: r });
   },
 });
 
@@ -179,8 +179,8 @@ export const POST = defineRoute({
                 ${body.isDefault === true}, ${isActive},
                 ${body.allowedRoles ? JSON.stringify(body.allowedRoles) : null}, ${layout}, ${user.id}, ${user.id})
         returning id, name, to_jsonb(form_layouts) as snapshot
-      `);
-        const inserted = result.rows[0]!;
+      `, "objects");
+        const inserted = result[0]!;
         // Insert evidence follows the {before, after} convention: the created
         // form's full row, so the audit shows what was designed — not just its
         // name. A name alone cannot reconstruct the prior state.

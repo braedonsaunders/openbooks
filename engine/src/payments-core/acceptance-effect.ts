@@ -49,8 +49,8 @@ export async function finalizePaymentAcceptanceForDocument(
        and attempt.journal_entry_id is null
        and payment.status = 'posted'
      for update of attempt
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   if (!row) return;
   const closed = (await db.execute<{ id: string }>(sql`
     update payment_attempts
@@ -59,8 +59,8 @@ export async function finalizePaymentAcceptanceForDocument(
            updated_at = now()
      where id = ${row.attempt_id} and org_id = ${row.org_id} and journal_entry_id is null
      returning id
-  `));
-  if (!closed.rows[0]) return;
+  `, "objects"));
+  if (!closed[0]) return;
   if (cmp(row.open_balance ?? "0", "0") <= 0) {
     await db.execute(sql`
       update payment_links

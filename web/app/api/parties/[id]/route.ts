@@ -141,8 +141,8 @@ async function orgRefExists(
                   : kind === 'workerComp'
                     ? sql`select 1 from worker_comp_groups where id = ${id} and org_id = ${orgId} and is_active`
                     : sql`select 1 from trades where id = ${id} and org_id = ${orgId} and is_active`
-  const result = await db.execute(query)
-  return result.rows.length === 1
+  const result = await db.execute(query, 'objects')
+  return result.length === 1
 }
 
 interface CustomerRoleInput {
@@ -239,10 +239,10 @@ export const GET = defineRoute({
   // Parties are org-wide when their primary subsidiary is null (mirrors the
   // party lists' `is null or = any(...)` predicate).
   const scope = await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
+    sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`, 'objects',
   )
-  if (!scope.rows[0]) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
+  if (!scope[0]) return notFound("record")
+  const denied = guardSubsidiaryScope(gate, scope[0].subsidiaryId, { orgWideNull: true })
   if (denied) return denied
   const payload = await loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(gate) })
   if (!payload) return notFound("record")
@@ -301,9 +301,9 @@ export const PATCH = defineRoute({
       left join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id
       left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
      where p.id = ${id} and p.org_id = ${user.orgId}
-  `)
-  if (!existing.rows[0]) return notFound("record")
-  const existingParty = existing.rows[0]
+  `, 'objects')
+  if (!existing[0]) return notFound("record")
+  const existingParty = existing[0]
   const scopeDenied = guardSubsidiaryScope(gate, existingParty.subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
@@ -472,8 +472,8 @@ export const PATCH = defineRoute({
     const found = await db.execute<{ id: string }>(sql`
       select id from subsidiaries
        where org_id = ${user.orgId} and is_active and not is_elimination
-         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)
-    if (found.rows.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary')
+         and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`, 'objects')
+    if (found.length !== requestedSubsidiaries.length) return bad('Invalid subsidiary')
     // A restricted caller may only assign parties to subsidiaries they can see.
     if (!subsidiariesInScope(gate, requestedSubsidiaries)) return bad('Invalid subsidiary')
   }
@@ -499,8 +499,8 @@ export const PATCH = defineRoute({
         // activating work. Check dependencies only after that lock settles.
         const locked = await tx.execute(sql`
           select id from parties where id=${id} and org_id=${user.orgId}
-            and updated_at=${body.expectedUpdatedAt}::timestamptz for update`)
-        if (!locked.rows.length) throw new PartyPatchConflictError()
+            and updated_at=${body.expectedUpdatedAt}::timestamptz for update`, 'objects')
+        if (!locked.length) throw new PartyPatchConflictError()
         const live = await tx.execute<{ documents: boolean; opportunities: boolean }>(sql`
           select exists (
             select 1 from documents where org_id=${user.orgId} and party_id=${id}
@@ -509,9 +509,9 @@ export const PATCH = defineRoute({
             select 1 from crm_opportunities o
             join crm_opportunity_statuses s on s.id=o.status_id and s.org_id=o.org_id
             where o.org_id=${user.orgId} and o.party_id=${id} and o.is_active and not s.is_closed
-          ) as opportunities`)
-        if (live.rows[0]?.documents) throw new PartyLifecycleError('resolve in-flight transactions and open balances before deactivating this party')
-        if (live.rows[0]?.opportunities) throw new PartyLifecycleError('resolve open opportunities before deactivating this party')
+          ) as opportunities`, 'objects')
+        if (live[0]?.documents) throw new PartyLifecycleError('resolve in-flight transactions and open balances before deactivating this party')
+        if (live[0]?.opportunities) throw new PartyLifecycleError('resolve open opportunities before deactivating this party')
       }
       // Validated custom values replace the free-form payload, but the
       // reserved 'source' sync-identity bridge (unique
@@ -536,8 +536,8 @@ export const PATCH = defineRoute({
       where id = ${id} and org_id = ${user.orgId}
         and updated_at = ${body.expectedUpdatedAt}::timestamptz
       returning id, subsidiary_id
-      `)
-      if (!updatedParty.rows[0]) {
+      `, 'objects')
+      if (!updatedParty[0]) {
         throw new PartyPatchConflictError()
       }
 
@@ -595,10 +595,10 @@ export const PATCH = defineRoute({
                and not exists (
                  select 1 from customer_roles cr
                   where cr.org_id = cp.org_id and cr.party_id = cp.party_id and cr.is_active)
-             limit 1`))
-          if (preCustomer.rows[0]) {
+             limit 1`, 'objects'))
+          if (preCustomer[0]) {
             throwBad(
-              `This account is a ${preCustomer.rows[0].stage}. Promote it to customer on the Relationship tab before giving it receivable terms.`,
+              `This account is a ${preCustomer[0].stage}. Promote it to customer on the Relationship tab before giving it receivable terms.`,
             )
           }
           const paymentTermsId = uuidOrNull(c.paymentTermsId)
@@ -615,10 +615,10 @@ export const PATCH = defineRoute({
               select a.id from accounts a
                where a.id = ${arAccountId} and a.org_id = ${user.orgId}
                  and a.is_active and not a.is_summary and a.type = 'asset_receivable'
-                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty.rows[0]!.subsidiary_id}::uuid)
+                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty[0]!.subsidiary_id}::uuid)
                  ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-               for key share`)
-            if (!account.rows.length) throwBad('Invalid receivable account for this party subsidiary')
+               for key share`, 'objects')
+            if (!account.length) throwBad('Invalid receivable account for this party subsidiary')
           }
           if (!(await orgRefExists('salesRep', salesRepId, user.orgId))) throwBad('Select an active sales employee. Manage eligibility in Sales → Representatives.')
           if (!(await orgRefExists('tax', taxCodeId, user.orgId))) throwBad('Invalid customer tax code')
@@ -702,20 +702,20 @@ export const PATCH = defineRoute({
               select a.id from accounts a
                where a.id = ${apAccountId} and a.org_id = ${user.orgId}
                  and a.is_active and not a.is_summary and a.type = 'liability_payable'
-                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty.rows[0]!.subsidiary_id}::uuid)
+                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty[0]!.subsidiary_id}::uuid)
                  ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-               for key share`)
-            if (!account.rows.length) throwBad('Invalid payable account for this party subsidiary')
+               for key share`, 'objects')
+            if (!account.length) throwBad('Invalid payable account for this party subsidiary')
           }
           if (defaultExpenseAccountId !== null) {
             const account = await tx.execute(sql`
               select a.id from accounts a
                where a.id = ${defaultExpenseAccountId} and a.org_id = ${user.orgId}
                  and a.is_active and not a.is_summary and a.type in ('expense', 'expense_other', 'cogs')
-                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty.rows[0]!.subsidiary_id}::uuid)
+                 and (a.subsidiary_id is null or a.subsidiary_id = ${updatedParty[0]!.subsidiary_id}::uuid)
                  ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-               for key share`)
-            if (!account.rows.length) throwBad('Invalid default expense account for this party subsidiary')
+               for key share`, 'objects')
+            if (!account.length) throwBad('Invalid default expense account for this party subsidiary')
           }
           if (!(await orgRefExists('tax', taxCodeId, user.orgId))) throwBad('Invalid vendor tax code')
           const currency = v.currency !== undefined ? (strOrNull(v.currency)?.toUpperCase() ?? null) : undefined
@@ -802,7 +802,7 @@ export const PATCH = defineRoute({
           // keeps following it, so HRM service credit, benefit waiting periods
           // and payroll read one date.
           if (hiredOn) {
-            const moved = (await tx.execute<{ id: string; before: string | null }>(sql`
+            const moved = await tx.execute<{ id: string; before: string | null }>(sql`
               update worker_employments w set service_start = ${hiredOn}::date, updated_by = ${user.id}, updated_at = now()
                 from (select id, service_start::text as before from worker_employments
                        where org_id = ${user.orgId} and worker_party_id = ${id}
@@ -810,7 +810,7 @@ export const PATCH = defineRoute({
                          and service_start is distinct from ${hiredOn}::date
                        for update) prior
                where w.org_id = ${user.orgId} and w.id = prior.id
-              returning w.id, prior.before`)).rows
+              returning w.id, prior.before`, 'objects')
             for (const row of moved) {
               await tx.execute(sql`
                 insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -949,7 +949,7 @@ export const PATCH = defineRoute({
       const isCustomer = (await tx.execute<{ one: number }>(sql`
         select 1 as one from customer_roles
          where org_id = ${user.orgId} and party_id = ${id} and is_active limit 1
-      `)).rows[0]
+      `, 'objects'))[0]
       if (isCustomer) {
         await emitCustomerUpdated(tx, user.orgId, id)
       }

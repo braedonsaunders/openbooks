@@ -97,14 +97,14 @@ export async function postProjectGlEntryWithinTransaction(
     const override = (await tx.execute<{ id: string }>(sql`
       select id from accounting_books
        where org_id = ${orgId} and id = ${bookId} and is_active and posts_gl
-       limit 1 for share`));
-    if (!override.rows[0]) throw new Error("project GL posting requires an active posting book");
+       limit 1 for share`, "objects"));
+    if (!override[0]) throw new Error("project GL posting requires an active posting book");
   } else {
     const book = (await tx.execute<{ id: string }>(sql`
       select id from accounting_books
        where org_id = ${orgId} and is_primary and is_active and posts_gl
-       limit 1 for share`));
-    bookId = book.rows[0]?.id ?? null;
+       limit 1 for share`, "objects"));
+    bookId = book[0]?.id ?? null;
   }
   if (!bookId) throw new Error("no active primary GL book");
   await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
@@ -114,8 +114,8 @@ export async function postProjectGlEntryWithinTransaction(
   if (!subId) {
     const s = (await tx.execute<{ id: string }>(sql`
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
-       and parent_id is null limit 1`));
-    subId = s.rows[0]?.id ?? null;
+       and parent_id is null limit 1`, "objects"));
+    subId = s[0]?.id ?? null;
   }
   if (!subId) throw new Error("project GL posting requires an active root subsidiary");
   const lineSubIds = [...new Set([subId, ...lines.map((l) => l.subsidiaryId).filter((id): id is string => !!id)])];
@@ -123,8 +123,8 @@ export async function postProjectGlEntryWithinTransaction(
     select id, nullif(trim(base_currency), '') as base_currency
       from subsidiaries
      where org_id = ${orgId} and id = any(${uuidArray(lineSubIds)}::uuid[]) and is_active
-  `));
-  const currencyBySub = new Map(currencies.rows.map((row) => [row.id, row.base_currency]));
+  `, "objects"));
+  const currencyBySub = new Map(currencies.map((row) => [row.id, row.base_currency]));
   for (const lineSubId of lineSubIds) {
     if (!currencyBySub.get(lineSubId)) {
       throw new Error(`subsidiary ${lineSubId} has no configured functional currency`);
@@ -300,8 +300,8 @@ export async function reverseProjectGlEntryWithinTransaction(
     select entry_number, book_id, subsidiary_id, period_id, posting_date, origin, status
       from journal_entries
      where id = ${entryId} and org_id = ${orgId}
-     for update`));
-  const h = head.rows[0];
+     for update`, "objects"));
+  const h = head[0];
   if (!h) return { status: "missing", reversalId: null };
   if (h.status === "reversed") {
     const existing = (await tx.execute<{ id: string }>(sql`
@@ -309,10 +309,10 @@ export async function reverseProjectGlEntryWithinTransaction(
         from journal_entries
        where org_id = ${orgId} and reverses_entry_id = ${entryId}
        order by created_at, id
-       limit 1`));
+       limit 1`, "objects"));
     return {
       status: "already_reversed",
-      reversalId: existing.rows[0]?.id ?? null,
+      reversalId: existing[0]?.id ?? null,
     };
   }
   if (h.status !== "posted") {
@@ -325,7 +325,7 @@ export async function reverseProjectGlEntryWithinTransaction(
         select ${reversalPeriodId}::uuid as id,
                window_start::text as starts_on,
                window_end::text as ends_on
-          from accounting_period_posting_window(${orgId}, ${reversalPeriodId})`)).rows[0] ?? null
+          from accounting_period_posting_window(${orgId}, ${reversalPeriodId})`, "objects"))[0] ?? null
     : await resolveCoveringPeriod(tx, orgId, reversalDate, h.subsidiary_id);
   if (!period) {
     throw new Error(`no accounting period covers ${reversalDate}`);

@@ -20,19 +20,19 @@ export async function readDocumentScope(
       from documents
      where id = ${documentId} and org_id = ${orgId}
        ${options.kind ? sql`and kind = ${options.kind}` : sql``}
-       ${options.lock ? sql`for update` : sql``}`)).rows[0] ?? null
+       ${options.lock ? sql`for update` : sql``}`, 'objects'))[0] ?? null
 }
 
 /** A project's entity, or null when the project is not in the organization. */
 export async function readProjectSubsidiary(orgId: string, projectId: string): Promise<{ subsidiaryId: string | null } | null> {
   return (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${projectId}`)).rows[0] ?? null
+    select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${projectId}`, 'objects'))[0] ?? null
 }
 
 /** Whether a production subcontract belongs to the named work order. */
 export async function subcontractBelongsToWorkOrder(orgId: string, subcontractId: string, workOrderId: string): Promise<boolean> {
   return (await db.execute(sql`
-    select id from mfg_subcontracts where org_id = ${orgId} and id = ${subcontractId} and work_order_id = ${workOrderId}`)).rows.length > 0
+    select id from mfg_subcontracts where org_id = ${orgId} and id = ${subcontractId} and work_order_id = ${workOrderId}`, 'objects')).length > 0
 }
 
 /** Active, non-elimination entities, root first — the default entity a new record lands in. */
@@ -40,17 +40,17 @@ export async function activeOperatingSubsidiaryIds(orgId: string): Promise<strin
   return (await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination
-     order by (parent_id is null) desc, name`)).rows.map((row) => row.id)
+     order by (parent_id is null) desc, name`, 'objects')).map((row) => row.id)
 }
 
 /** The organization's display name. */
 export async function readOrgName(orgId: string): Promise<string> {
-  return (await db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`)).rows[0]?.name ?? ''
+  return (await db.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}`, 'objects'))[0]?.name ?? ''
 }
 
 /** A purchase order's lines with their item kind and category, for the receive form. */
 export async function readPurchaseOrderLinesForReceipt(orgId: string, purchaseOrderId: string) {
-  return (await db.execute<{
+  return await db.execute<{
     id: string
     line_number: number
     item_id: string | null
@@ -72,5 +72,5 @@ export async function readPurchaseOrderLinesForReceipt(orgId: string, purchaseOr
       left join items i on i.id = line.item_id and i.org_id = line.org_id
      where line.org_id = ${orgId} and line.document_id = ${purchaseOrderId}
      order by line.line_number
-  `)).rows
+  `, 'objects')
 }

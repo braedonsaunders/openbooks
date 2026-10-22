@@ -53,8 +53,8 @@ export const DELETE = defineRoute({
      where id = ${id}
        and org_id = ${user.orgId}
        and (${permissions.has("*")} or created_by_user_id = ${user.id})
-     returning id`);
-  if (!deleted.rows[0]) {
+     returning id`, "objects");
+  if (!deleted[0]) {
     return NextResponse.json({ error: "You can only delete your own saved reports." }, { status: 403 });
   }
   return NextResponse.json({ ok: true });

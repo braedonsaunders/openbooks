@@ -143,8 +143,8 @@ export const POST = defineRoute({
         return bad("invalid_currency", "currencyRestriction");
       const currency = await db.execute(sql`
       select 1 from currencies where code = ${currencyRestriction}
-    `);
-      if (!currency.rows[0])
+    `, "objects");
+      if (!currency[0])
         return bad("invalid_currency", "currencyRestriction");
     }
     // Storage requires reconcilable accounts to carry a settlement currency
@@ -161,8 +161,8 @@ export const POST = defineRoute({
       const subsidiary = await db.execute(sql`
       select 1 from subsidiaries
        where id = ${subsidiaryId} and org_id = ${gate.user.orgId}
-    `);
-      if (!subsidiary.rows[0]) return bad("invalid_subsidiary", "subsidiaryId");
+    `, "objects");
+      if (!subsidiary[0]) return bad("invalid_subsidiary", "subsidiaryId");
       // A restricted caller may never mint an account for a subsidiary they
       // cannot see; a missing or foreign id stays invalid_subsidiary above.
       const denied = guardSubsidiaryScope(gate, subsidiaryId);
@@ -181,10 +181,10 @@ export const POST = defineRoute({
     const definitions = await db.execute<{ key: string }>(sql`
     select key from segment_definitions
      where org_id = ${gate.user.orgId} and is_active and allow_account_requirement
-  `);
+  `, "objects");
     const allowedDimensions = new Set([
       "party",
-      ...definitions.rows.map((row) => row.key),
+      ...definitions.map((row) => row.key),
     ]);
     const requestedDimensions = body.requiredDimensions ?? [];
     if (
@@ -245,16 +245,14 @@ export const POST = defineRoute({
             if (!(error instanceof ScopeNotFoundError)) throw error;
             return notFound("record");
           }
-          const parent = (
-            await tx.execute<{
+          const parent = (await tx.execute<{
               is_summary: boolean;
               is_active: boolean;
               type: string;
               subsidiary_id: string | null;
             }>(sql`
           select is_summary, is_active, type, subsidiary_id from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
-        `)
-          ).rows[0];
+        `, "objects"))[0];
           if (!parent) return notFound("record");
           if (!parent.is_summary)
             return bad("parent_must_be_summary", "parentId");
@@ -278,7 +276,7 @@ export const POST = defineRoute({
         // refusal leaves no claim behind for the operator to retry against.
         const priorCreate = (await tx.execute(sql`
           select 1 from accounts where id = ${requestId} and org_id = ${gate.user.orgId}
-        `)).rows[0];
+        `, "objects"))[0];
         if (!priorCreate) {
           await tx.execute(accountNameLock(gate.user.orgId, name));
           const holders = await findNamedAccounts(tx, {
@@ -345,8 +343,8 @@ export const POST = defineRoute({
         -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
-      `);
-        if (!inserted.rows[0]) {
+      `, "objects");
+        if (!inserted[0]) {
           const replay = await resolveIdempotentReplay(tx, {
             orgId: gate.user.orgId,
             table: "accounts",
@@ -386,7 +384,7 @@ export const POST = defineRoute({
               select id, name, number from accounts
                where org_id = ${gate.user.orgId} and number = ${number}
                limit 1
-            `)).rows[0]
+            `, "objects"))[0]
           : undefined;
         return bad("number_in_use", "number", 422, holder ? {
           existingAccountId: holder.id,

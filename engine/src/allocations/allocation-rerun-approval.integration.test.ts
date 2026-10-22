@@ -37,7 +37,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  */
 async function seedTodayPeriod(org: ScratchOrg): Promise<void> {
   const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`)).rows[0]!
+    select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!
     .fiscal_calendar_id;
   const now = new Date();
   const y = now.getFullYear();
@@ -131,7 +131,7 @@ async function runRow(runId: string): Promise<{
   supersededByRunId: string | null;
   error: string | null;
 }> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     status: string;
     journal_entry_id: string | null;
     reversal_entry_id: string | null;
@@ -141,7 +141,7 @@ async function runRow(runId: string): Promise<{
   }>(sql`
     select status, journal_entry_id, reversal_entry_id,
            reverses_run_id::text, superseded_by_run_id::text, error
-      from allocation_runs where id = ${runId}`)).rows;
+      from allocation_runs where id = ${runId}`, "objects");
   const row = rows[0];
   assert.ok(row);
   return {
@@ -155,20 +155,20 @@ async function runRow(runId: string): Promise<{
 }
 
 async function pendingGateForRun(runId: string): Promise<{ id: string } | null> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from flow_gates
-     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`)).rows;
+     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`, "objects");
   return rows[0] ?? null;
 }
 
 /** Pool-account balances per department (null = unattributed). */
 async function deptTotals(orgId: string, accountId: string): Promise<Map<string | null, string>> {
-  const rows = (await db.execute<{ department_id: string | null; total: string }>(sql`
+  const rows = await db.execute<{ department_id: string | null; total: string }>(sql`
     select l.department_id, sum(l.amount)::text as total
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
      where l.org_id = ${orgId} and l.account_id = ${accountId}
        and e.status in ('posted', 'reversed')
-     group by l.department_id`)).rows;
+     group by l.department_id`, "objects");
   return new Map(rows.map((row) => [row.department_id, row.total]));
 }
 
@@ -246,9 +246,9 @@ test("an approval-governed rerun leaves the posted run effective while the repla
     assert.equal(swapped.get(deptB), "600.0000");
     assert.equal(swapped.get(null), "0.0000");
     // Exactly one posted run holds the occurrence: the replacement.
-    const postedCount = (await db.execute<{ count: string }>(sql`
+    const postedCount = await db.execute<{ count: string }>(sql`
       select count(*)::text as count from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`)).rows;
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects");
     assert.equal(Number(postedCount[0]?.count ?? 0), 1);
   } finally {
     await dropScratchOrg(org.orgId);

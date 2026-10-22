@@ -25,10 +25,10 @@ async function openEntryId(h: Harness): Promise<string> {
   const reviewId = (await db.execute<{ id: string }>(sql`
     select id from hrm_reviews
      where org_id = ${h.org.orgId} and cycle_id = ${h.cycleId}
-       and employment_id = ${h.workerEmployment} and kind = 'manager'`)).rows[0]!.id;
+       and employment_id = ${h.workerEmployment} and kind = 'manager'`, "objects"))[0]!.id;
   const impact = (await db.execute<{ id: string }>(sql`
     select id from hrm_review_answers where org_id = ${h.org.orgId} and review_id = ${reviewId}
-     order by position limit 1`)).rows[0]!.id;
+     order by position limit 1`, "objects"))[0]!.id;
   await submitReview({
     orgId: h.org.orgId,
     actorId: h.managerUser,
@@ -80,7 +80,7 @@ test("decided ratings and potential keys validate against the cycle scales", asy
     // Nothing was stored by the refusals.
     const stored = (await db.execute<{ rating: string | null; potential: string | null }>(sql`
       select calibrated_rating::text as rating, potential_key as potential
-        from hrm_calibration_entries where org_id = ${h.org.orgId} and id = ${entryId}`)).rows[0]!;
+        from hrm_calibration_entries where org_id = ${h.org.orgId} and id = ${entryId}`, "objects"))[0]!;
     assert.equal(stored.rating, null);
     assert.equal(stored.potential, null);
     // In-scale values decide normally.
@@ -95,7 +95,7 @@ test("decided ratings and potential keys validate against the cycle scales", asy
     await setPotential({ orgId: h.org.orgId, actorId: h.hrId, entryId, potentialKey: "high" });
     const sessionId = (await db.execute<{ sessionId: string }>(sql`
       select session_id as "sessionId" from hrm_calibration_entries
-       where org_id = ${h.org.orgId} and id = ${entryId}`)).rows[0]!.sessionId;
+       where org_id = ${h.org.orgId} and id = ${entryId}`, "objects"))[0]!.sessionId;
     const session = await getCalibrationSession({ orgId: h.org.orgId, actorId: h.hrId, id: sessionId });
     assert.equal(session.entries[0]!.potentialKey, "high");
   });
@@ -106,7 +106,7 @@ test("the calibration editor offers the cycle scale labels and saves one", async
     const entryId = await openEntryId(h);
     const sessionId = (await db.execute<{ sessionId: string }>(sql`
       select session_id as "sessionId" from hrm_calibration_entries
-       where org_id = ${h.org.orgId} and id = ${entryId}`)).rows[0]!.sessionId;
+       where org_id = ${h.org.orgId} and id = ${entryId}`, "objects"))[0]!.sessionId;
     assert.deepEqual(await calibrationPotentialOptions({ orgId: h.org.orgId, actorId: h.hrId, sessionId }), [
       "low",
       "high",
@@ -122,13 +122,13 @@ test("a template with no scale labels offers no potential options", async () => 
     const templateId = (await db.execute<{ id: string }>(sql`
       insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
       values (${h.org.orgId}, 'Labelless', '{"min": 1, "max": 3}'::jsonb, ${h.hrId}, ${h.hrId})
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     // openCycle requires a required question on the template; a text
     // question keeps the scale label-less, which is what this test probes.
     const labellessSection = (await db.execute<{ id: string }>(sql`
       insert into hrm_review_template_sections (org_id, template_id, position, title, kind, created_by, updated_by)
       values (${h.org.orgId}, ${templateId}, 0, 'Notes', 'competency', ${h.hrId}, ${h.hrId})
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into hrm_review_template_questions
         (org_id, section_id, position, prompt, answer_kind, required, created_by, updated_by)
@@ -163,12 +163,12 @@ for(const count of [0,10])test(`calibration publication applies exactly its ${co
     installEngineSeams();
     const entryId=await openEntryId(h);
     await setCalibratedRating({orgId:h.org.orgId,actorId:h.hrId,entryId,calibratedRating:"3",justification:"Reviewed the same supporting evidence"});
-    const sessionId=(await db.execute<{session_id:string}>(sql`select session_id from hrm_calibration_entries where org_id=${h.org.orgId} and id=${entryId}`)).rows[0]!.session_id;
+    const sessionId=(await db.execute<{session_id:string}>(sql`select session_id from hrm_calibration_entries where org_id=${h.org.orgId} and id=${entryId}`, "objects"))[0]!.session_id;
     for(let index=0;index<count;index++)await seedApprovalFlow(h.org.orgId,{subjectKind:"hrm_calibration_session",assignees:[{type:"user",userId:h.hrId}],mode:"all",preventSelfApproval:false});
     const submitted=await closeCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId});
     assert.equal(submitted.status,count?"open":"closed");
     assert.equal(submitted.approvalPending,count>0);
-    const gates=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_calibration_session' and subject_id=${sessionId} order by id`)).rows;
+    const gates=await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${h.org.orgId} and subject_kind='hrm_calibration_session' and subject_id=${sessionId} order by id`, "objects");
     assert.equal(gates.length,count);
     for(let index=0;index<gates.length;index++){
       const before=(await getCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId}));
@@ -180,7 +180,7 @@ for(const count of [0,10])test(`calibration publication applies exactly its ${co
     assert.equal(closed.status,"closed");
     assert.equal(closed.entries[0]?.calibratedRating,"3.0000");
     const published=(await db.execute<{status:string;calibrated_rating:string}>(sql`select r.status,r.calibrated_rating::text from hrm_reviews r join hrm_calibration_entries e
-      on e.org_id=r.org_id and e.review_id=r.id where e.org_id=${h.org.orgId} and e.id=${entryId}`)).rows[0]!;
+      on e.org_id=r.org_id and e.review_id=r.id where e.org_id=${h.org.orgId} and e.id=${entryId}`, "objects"))[0]!;
     assert.equal(published.status,"calibrated");
     assert.equal(published.calibrated_rating,"3.0000");
     assert.deepEqual(await closeCalibrationSession({orgId:h.org.orgId,actorId:h.hrId,id:sessionId}),closed,"replay reads the same published session");

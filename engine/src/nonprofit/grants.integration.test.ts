@@ -43,8 +43,8 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
             '{"nonprofit":true,"fundAccounting":true,"grantManagement":true}'::jsonb,
           true
         ) where id = ${org.orgId} returning id
-      `);
-      assert.equal(enabled.rows.length, 1);
+      `, "objects");
+      assert.equal(enabled.length, 1);
     });
     await provisionFundAccounting({
       orgId: org.orgId,
@@ -65,15 +65,15 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
         insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
         values (${org.orgId}, 'grant_allowable_costs', 'grant_costs', 'Grant Allowable Costs', '{}'::jsonb, false, true, ${actorId}, ${actorId})
         returning id
-      `);
-      assert.equal(created.rows.length, 1);
-      const group = created.rows[0]!.id;
+      `, "objects");
+      assert.equal(created.length, 1);
+      const group = created[0]!.id;
       const member = await db.execute<{ id: string }>(sql`
         insert into account_group_members (org_id, group_id, account_id, dimension, created_by, updated_by)
         values (${org.orgId}, ${group}, ${org.accounts.cogs}, 'grant_allowable_costs', ${actorId}, ${actorId})
         returning id
-      `);
-      assert.equal(member.rows.length, 1);
+      `, "objects");
+      assert.equal(member.length, 1);
       return group;
     });
     const refundableAdvanceAccountId = await withOrgContext(org.orgId, async () => {
@@ -81,9 +81,9 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
         insert into accounts (org_id, number, name, type, is_summary, is_active, required_dimensions, custom, created_by, updated_by)
         values (${org.orgId}, ${`GRA-${randomUUID().slice(0, 8)}`}, 'Refundable Grant Advance', 'liability_current_other', false, true, '[]'::jsonb, '{}'::jsonb, ${actorId}, ${actorId})
         returning id
-      `);
-      assert.equal(created.rows.length, 1);
-      return created.rows[0]!.id;
+      `, "objects");
+      assert.equal(created.length, 1);
+      return created[0]!.id;
     });
     const accounts: GrantPostingAccounts = {
       bankAccountId: org.accounts.bank,
@@ -139,8 +139,8 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     });
     const advanceLines = await withOrgContext(org.orgId, () => db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text as amount from journal_lines where org_id = ${org.orgId} and entry_id = ${advance.entryId} order by line_number
-    `));
-    assert.deepEqual(advanceLines.rows.map((row) => [row.account_id, row.amount]), [
+    `, "objects"));
+    assert.deepEqual(advanceLines.map((row) => [row.account_id, row.amount]), [
       [org.accounts.bank, "40.0100"],
       [refundableAdvanceAccountId, "-40.0100"],
     ]);
@@ -167,8 +167,8 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     });
     const recognizedLines = await withOrgContext(org.orgId, () => db.execute<{ account_id: string; amount: string }>(sql`
       select account_id, amount::text as amount from journal_lines where org_id = ${org.orgId} and entry_id = ${recognized.entryId} order by line_number
-    `));
-    assert.deepEqual(recognizedLines.rows.map((row) => [row.account_id, row.amount]), [
+    `, "objects"));
+    assert.deepEqual(recognizedLines.map((row) => [row.account_id, row.amount]), [
       [refundableAdvanceAccountId, "40.0100"],
       [org.accounts.revenue, "-40.0100"],
     ]);
@@ -224,8 +224,8 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     const awardLines = await withOrgContext(org.orgId, () => db.execute<{ account_id: string; amount: string; is_open_item: boolean }>(sql`
       select account_id, amount::text as amount, is_open_item from journal_lines
        where org_id = ${org.orgId} and entry_id = ${awarded.entryId} order by line_number
-    `));
-    assert.deepEqual(awardLines.rows.map((row) => [row.account_id, row.amount, row.is_open_item]), [
+    `, "objects"));
+    assert.deepEqual(awardLines.map((row) => [row.account_id, row.amount, row.is_open_item]), [
       [org.accounts.ar, "25.0000", false],
       [org.accounts.revenue, "-25.0000", false],
     ]);
@@ -241,16 +241,16 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     });
     const amendmentAwardEntry = (await withOrgContext(org.orgId, () => db.execute<{ award_entry_id: string }>(sql`
       select award_entry_id from grants where org_id = ${org.orgId} and id = ${issuedAmendment.id}
-    `))).rows[0]!.award_entry_id;
+    `, "objects")))[0]!.award_entry_id;
     const amendmentOpenItems = await withOrgContext(org.orgId, () => db.execute<{ is_open_item: boolean }>(sql`
       select is_open_item from journal_lines where org_id = ${org.orgId} and entry_id = ${amendmentAwardEntry}
-    `));
-    assert.ok(amendmentOpenItems.rows.every((line) => !line.is_open_item),
+    `, "objects"));
+    assert.ok(amendmentOpenItems.every((line) => !line.is_open_item),
       "award amendments stay in the grant subledger instead of creating unsettled AR items");
     const drawdownOpenItems = await withOrgContext(org.orgId, () => db.execute<{ is_open_item: boolean }>(sql`
       select is_open_item from journal_lines where org_id = ${org.orgId} and entry_id = ${firstDrawdown.entryId}
-    `));
-    assert.ok(drawdownOpenItems.rows.every((line) => !line.is_open_item),
+    `, "objects"));
+    assert.ok(drawdownOpenItems.every((line) => !line.is_open_item),
       "drawdown receipts do not create AR credits without matching applications");
     const initialActivity = await listGrantActivity(org.orgId, issuedAmendment.id);
     const initialActivityIds = new Set(initialActivity.journalEntries.map((entry) => entry.id));
@@ -262,11 +262,11 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
       reason: "Correct the first reimbursement", actorId });
     const firstReversalEntry = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id from journal_entries where org_id = ${org.orgId} and reverses_entry_id = ${firstDrawdown.entryId}
-    `))).rows[0]!.id;
+    `, "objects")))[0]!.id;
     const reversalOpenItems = await withOrgContext(org.orgId, () => db.execute<{ is_open_item: boolean }>(sql`
       select is_open_item from journal_lines where org_id = ${org.orgId} and entry_id = ${firstReversalEntry}
-    `));
-    assert.ok(reversalOpenItems.rows.every((line) => !line.is_open_item),
+    `, "objects"));
+    assert.ok(reversalOpenItems.every((line) => !line.is_open_item),
       "drawdown reversals preserve the grant subledger's non-open-item treatment");
     const correctedActivity = await listGrantActivity(org.orgId, issuedAmendment.id);
     assert.ok(correctedActivity.journalEntries.some((entry) => entry.id === firstReversalEntry),
@@ -288,8 +288,8 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
       select d.status as drawdown_status, je.status as entry_status
         from grant_drawdowns d join journal_entries je on je.org_id = d.org_id and je.id = d.receivable_entry_id
        where d.org_id = ${org.orgId} and d.id = ${closedDrawdown.id}
-    `));
-    assert.deepEqual(closedDrawdownState.rows, [{ drawdown_status: "paid", entry_status: "posted" }]);
+    `, "objects"));
+    assert.deepEqual(closedDrawdownState, [{ drawdown_status: "paid", entry_status: "posted" }]);
 
     const draft = await createGrant({
       orgId: org.orgId,
@@ -321,8 +321,8 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
     const versions = await withOrgContext(org.orgId, () => db.execute<{ version: number; award_amount: string; supersedes_id: string | null }>(sql`
       select version, award_amount::text as award_amount, supersedes_id from grants
        where org_id = ${org.orgId} and code = 'GRANT-AMEND-1' order by version
-    `));
-    assert.deepEqual(versions.rows, [
+    `, "objects"));
+    assert.deepEqual(versions, [
       { version: 1, award_amount: "10.0000", supersedes_id: null },
       { version: 2, award_amount: "30.0000", supersedes_id: draft.id },
     ]);
@@ -382,19 +382,19 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
       const group = async (dimension: string, name: string) => (await db.execute<{ id: string }>(sql`
         insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
         values (${org.orgId}, ${dimension}, ${dimension}, ${name}, '{}'::jsonb, false, true, ${actorId}, ${actorId}) returning id
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const account = async (name: string, groups: [string, string][]) => {
         const id = (await db.execute<{ id: string }>(sql`
           insert into accounts (org_id, number, name, type, is_summary, is_active, required_dimensions, custom, created_by, updated_by)
           values (${org.orgId}, ${`GRX-${randomUUID().slice(0, 8)}`}, ${name}, 'expense', false, true, '[]'::jsonb, '{}'::jsonb, ${actorId}, ${actorId})
           returning id
-        `)).rows[0]!.id;
+        `, "objects"))[0]!.id;
         for (const [groupId, dimension] of groups) {
           const pinned = await db.execute<{ id: string }>(sql`
             insert into account_group_members (org_id, group_id, account_id, dimension, created_by, updated_by)
             values (${org.orgId}, ${groupId}, ${id}, ${dimension}, ${actorId}, ${actorId}) returning id
-          `);
-          assert.equal(pinned.rows.length, 1);
+          `, "objects");
+          assert.equal(pinned.length, 1);
         }
         return id;
       };

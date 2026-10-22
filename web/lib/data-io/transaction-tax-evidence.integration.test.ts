@@ -42,7 +42,7 @@ test(
           insert into tax_rates (id, org_id, tax_code_id, rate_percent, effective_from)
           values (${randomUUID()}, ${org.orgId}, ${taxCodeId}, '5', '2000-01-01')`)
         return (await db.execute<{ number: string }>(sql`
-          select number from accounts where id = ${org.accounts.freight}`)).rows[0]!.number
+          select number from accounts where id = ${org.accounts.freight}`, 'objects'))[0]!.number
       })
 
       const cfg = DOC_KINDS.vendor_bill
@@ -62,7 +62,7 @@ test(
 
       const draft = (await withBypassContext(() => db.execute<{ id: string; status: string; tax_total: string; total: string }>(sql`
         select id, status, tax_total::text as tax_total, total::text as total
-          from documents where org_id = ${org.orgId} and kind = 'vendor_bill'`))).rows[0]!
+          from documents where org_id = ${org.orgId} and kind = 'vendor_bill'`, 'objects')))[0]!
       assert.equal(draft.status, 'draft')
       assert.equal(draft.tax_total, '5.0000')
       assert.equal(draft.total, '105.0000')
@@ -71,7 +71,7 @@ test(
         select count(c.id)::text as components, max(l.tax_amount)::text as tax_amount
           from document_lines l
           left join document_line_tax_components c on c.document_line_id = l.id and c.org_id = l.org_id
-         where l.org_id = ${org.orgId} and l.document_id = ${draft.id}`))).rows[0]!
+         where l.org_id = ${org.orgId} and l.document_id = ${draft.id}`, 'objects')))[0]!
       assert.equal(evidence.components, '1', 'the tax-profiled line carries its component evidence')
       assert.equal(evidence.tax_amount, '5.0000')
 
@@ -93,7 +93,7 @@ test(
       const recoverable = (await withBypassContext(() => db.execute<{ amount: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as amount
           from journal_lines l
-         where l.org_id = ${org.orgId} and l.entry_id = ${entryId} and l.account_id = ${org.accounts.taxInput}`))).rows[0]!
+         where l.org_id = ${org.orgId} and l.entry_id = ${entryId} and l.account_id = ${org.accounts.taxInput}`, 'objects')))[0]!
       assert.equal(recoverable.amount, '5.0000', 'the recoverable tax posts from the imported evidence')
     } finally {
       await withBypassContext(() => dropScratchOrg(org.orgId))

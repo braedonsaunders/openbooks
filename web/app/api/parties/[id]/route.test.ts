@@ -80,15 +80,16 @@ stubModules({
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.party-route-hold-test')]
       const sqlText = globalThis.openbooksSqlTextParty
-      const record = (query) => {
+      const record = (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         state.calls.push({ text, values: (query.queryChunks ?? []).flatMap((chunk) => {
           if (chunk === null || typeof chunk !== 'object') return [chunk]
           return []
         }) })
-        if (text.includes('select p.display_name')) return Promise.resolve({ rows: [state.existing] })
-        if (text.includes('update parties set')) return Promise.resolve({ rows: [{ id: '${PARTY_ID}' }] })
-        return Promise.resolve({ rows: [] })
+        if (text.includes('select p.display_name')) return Promise.resolve({ rows: [state.existing] }).then(inMode)
+        if (text.includes('update parties set')) return Promise.resolve({ rows: [{ id: '${PARTY_ID}' }] }).then(inMode)
+        return Promise.resolve({ rows: [] }).then(inMode)
       }
       export const db = {
         execute: record,

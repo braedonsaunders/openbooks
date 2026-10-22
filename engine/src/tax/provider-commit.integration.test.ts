@@ -300,7 +300,7 @@ test("a provider total that disagrees with posted tax is recorded, never adjuste
     // The books stand: the liability is the posted ten, not the provider's.
     const liability = (await db.execute<{ total: string }>(sql`
       select sum(amount)::text as total from journal_lines
-       where org_id = ${org.orgId} and tax_code_id = ${codeId}`)).rows[0]?.total;
+       where org_id = ${org.orgId} and tax_code_id = ${codeId}`, "objects"))[0]?.total;
     assert.equal(liability, "-10.0000");
   } finally {
     await fake.close();

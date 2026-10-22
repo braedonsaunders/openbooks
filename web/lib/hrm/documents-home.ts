@@ -121,9 +121,9 @@ async function partyNames(orgId: string, partyIds: string[]): Promise<Map<string
   const names = new Map<string, string>()
   const unique = [...new Set(partyIds.filter(Boolean))]
   if (unique.length === 0) return names
-  const rows = (await db.execute<{ id: string; name: string }>(sql`
+  const rows = await db.execute<{ id: string; name: string }>(sql`
     select id::text as id, display_name as name from parties
-     where org_id = ${orgId}::uuid and id in (${sql.join(unique.map((id) => sql`${id}::uuid`), sql`, `)})`)).rows
+     where org_id = ${orgId}::uuid and id in (${sql.join(unique.map((id) => sql`${id}::uuid`), sql`, `)})`, 'objects')
   for (const row of rows) names.set(row.id, row.name)
   return names
 }
@@ -153,8 +153,8 @@ export async function loadDocumentsHome(
       ? db.execute<{ status: string; count: string }>(sql`
           select status, count(*)::text as count from hrm_documents
            where org_id = ${authz.orgId}::uuid and status != 'deleted'
-           group by status`)
-      : Promise.resolve({ rows: [] as { status: string; count: string }[] }),
+           group by status`, 'objects')
+      : Promise.resolve([] as { status: string; count: string }[]),
     listCategories({ orgId: authz.orgId, actorId: authz.userId }),
     authz.canManage
       ? listTemplates({ orgId: authz.orgId, actorId: authz.userId })
@@ -165,20 +165,20 @@ export async function loadDocumentsHome(
     documents.map((d) => d.partyId ?? ''),
   )
   const statusLabel = (value: string): string => t(`documents.status.${value}`)
-  const countBy = new Map(counts.rows.map((r) => [r.status, Number(r.count)]))
+  const countBy = new Map(counts.map((r) => [r.status, Number(r.count)]))
   const awaiting = (countBy.get('sent') ?? 0) + (countBy.get('viewed') ?? 0) + (countBy.get('partially_signed') ?? 0)
   const expiringRows = unrestrictedStats ? (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_documents
      where org_id = ${authz.orgId}::uuid and status in ('sent', 'viewed', 'partially_signed')
-       and expires_at is not null and expires_at < now() + interval '14 days'`)).rows[0] : undefined
+       and expires_at is not null and expires_at < now() + interval '14 days'`, 'objects'))[0] : undefined
   const retentionRows = unrestrictedStats ? (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_retention_actions
-     where org_id = ${authz.orgId}::uuid and executed_at is null`)).rows[0] : undefined
+     where org_id = ${authz.orgId}::uuid and executed_at is null`, 'objects'))[0] : undefined
   // Queued AND building: a claimed export is still pending from the
   // operator's view — counting queued alone would hide in-flight builds.
   const exportRows = unrestrictedStats ? (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_data_subject_exports
-     where org_id = ${authz.orgId}::uuid and status in ('queued', 'building')`)).rows[0] : undefined
+     where org_id = ${authz.orgId}::uuid and status in ('queued', 'building')`, 'objects'))[0] : undefined
 
   const tiles: DocumentTile[] = [
     { iconKey: 'pen-line', accent: 'amber', label: t('documents.tiles.awaiting'), value: unrestrictedStats ? String(awaiting) : '—', tone: unrestrictedStats && awaiting > 0 ? 'warning' : 'default' },
@@ -223,12 +223,12 @@ export async function loadDocumentsHome(
       document = await getDocumentDetail({ orgId: authz.orgId, actorId: authz.userId, documentId })
       signerNames = await partyNames(authz.orgId, document.signers.map((s) => s.signerPartyId))
       if (document.fileId) {
-        versions = (await db.execute<{ filename: string; versionNumber: number; createdAt: string }>(sql`
+        versions = await db.execute<{ filename: string; versionNumber: number; createdAt: string }>(sql`
           select f.name as filename, v.version_number as "versionNumber", v.created_at::text as "createdAt"
             from files f join file_versions v on v.file_id = f.id
            where f.org_id = ${authz.orgId}::uuid and f.id = ${document.fileId}::uuid
            order by v.version_number desc
-        `)).rows
+        `, 'objects')
       }
     } catch (error) {
       if (error instanceof HrmDocumentsError && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')) {

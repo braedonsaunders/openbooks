@@ -14,6 +14,6 @@ export async function roleUsers(
       join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id and ar.org_id = u.org_id
      where u.org_id = ${orgId} and u.is_active
        and ar.key = ${role}
-  `);
-  return r.rows;
+  `, "objects");
+  return r;
 }

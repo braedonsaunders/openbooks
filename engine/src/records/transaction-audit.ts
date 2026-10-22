@@ -120,8 +120,8 @@ export async function captureTransactionAuditSnapshot(
         'glImpact', snapshot->'glImpact'
       )::text as comparable_snapshot
       from captured
-  `));
-  const row = result.rows[0];
+  `, "objects"));
+  const row = result[0];
   if (!row) return null;
   const snapshot = parseExactJson(row.snapshot) as TransactionAuditSnapshot;
   freezeEvidence(snapshot);
@@ -246,6 +246,6 @@ export async function recordTransactionAudit(
     values (${input.orgId}, 'documents', ${input.documentId}, ${input.action},
             ${JSON.stringify(envelope)}::jsonb || jsonb_build_object('before', ${beforeJson}::jsonb, 'after', ${afterJson}::jsonb),
             ${input.actorId ?? null}, ${input.source}) returning id
-  `);
-  if (inserted.rows.length !== 1) throw new Error("The transaction audit was not retained; retry the transaction.");
+  `, "objects");
+  if (inserted.length !== 1) throw new Error("The transaction audit was not retained; retry the transaction.");
 }

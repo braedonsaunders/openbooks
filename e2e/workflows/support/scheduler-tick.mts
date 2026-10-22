@@ -42,13 +42,11 @@ async function main(): Promise<void> {
       // runtime role an unscoped read returns zero rows SILENTLY, which
       // surfaced as "no user e2e@openbooks.test" against a database that has
       // one. withBypassContext is the documented remedy for exactly this.
-      const rows = (
-        await withBypassContext(() =>
+      const rows = await withBypassContext(() =>
           db.execute<{ orgId: string }>(sql`
             select u.org_id as "orgId" from users u where u.email = ${email} order by u.created_at limit 1
-          `),
-        )
-      ).rows;
+          `, "objects"),
+        );
       if (!rows[0]) throw new Error(`no user ${email}`);
       emit({ orgId: rows[0].orgId });
       return;
@@ -62,9 +60,9 @@ async function main(): Promise<void> {
             from performance_obligations o
             join revenue_contracts c on c.id = o.contract_id
            where c.contract_number = any(${`{${contracts.join(",")}}`}::text[])
-        `),
+        `, "objects"),
       );
-      emit({ obligations: Object.fromEntries(res.rows.map((r) => [String(r.contract), String(r.id)])) });
+      emit({ obligations: Object.fromEntries(res.map((r) => [String(r.contract), String(r.id)])) });
       return;
     }
     case "contract": {
@@ -72,10 +70,10 @@ async function main(): Promise<void> {
       const res = await withOrg(String(orgId), () =>
         db.execute<Record<string, unknown>>(sql`
           select id from revenue_contracts where contract_number = ${number} limit 1
-        `),
+        `, "objects"),
       );
-      if (!res.rows[0]) throw new Error(`no contract ${number}`);
-      emit({ id: String(res.rows[0].id) });
+      if (!res[0]) throw new Error(`no contract ${number}`);
+      emit({ id: String(res[0].id) });
       return;
     }
     case "dunning-run": {
@@ -94,10 +92,10 @@ async function main(): Promise<void> {
             join documents d on d.id = dl.document_id
             join dunning_stages st on st.id = dl.stage_id
            order by dl.sent_at nulls last, st.sequence
-        `),
+        `, "objects"),
       );
       emit({
-        log: res.rows.map((r) => ({
+        log: res.map((r) => ({
           documentNumber: String(r.documentNumber),
           sequence: Number(r.sequence),
           stageName: String(r.stageName),
@@ -119,10 +117,10 @@ async function main(): Promise<void> {
            where org_id = ${String(orgId)} and party_id = ${String(partyId)}
              and kind in ('customer_invoice', 'customer_credit', 'customer_payment')
            order by created_at
-        `),
+        `, "objects"),
       );
       emit({
-        docs: res.rows.map((r) => ({
+        docs: res.map((r) => ({
           id: String(r.id),
           number: String(r.number),
           kind: String(r.kind),
@@ -137,10 +135,10 @@ async function main(): Promise<void> {
         db.execute<Record<string, unknown>>(sql`
           select payload from scheduler_outbox
            where occurrence_key like 'dunning:%' order by created_at
-        `),
+        `, "objects"),
       );
       emit({
-        outbox: res.rows.map((r) => {
+        outbox: res.map((r) => {
           const payload = r.payload as { subject?: unknown; to?: unknown };
           return {
             subject: String(payload?.subject ?? ""),

@@ -74,8 +74,8 @@ async function glBalance(orgId: string, accountId: string): Promise<bigint> {
   const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status = 'posted'
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`));
-  return toUnits(r.rows[0]!.bal);
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 test("finance lease: commencement, payments, amortization — full lifecycle to zero", { skip: !DB }, async () => {
@@ -197,9 +197,9 @@ test("invalid lease inputs are refused as LeaseError with no rows written", { sk
     };
     const counts = async () => {
       const leases = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`, "objects"))[0]!.n;
       const entries = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"))[0]!.n;
       return { leases, entries };
     };
     const before = await counts();
@@ -262,7 +262,7 @@ test("creation derives the classification term from the schedule, ignoring a mis
     assert.equal(classification.model, "finance");
     assert.deepEqual(classification.criteria, ["term-major-part-of-life"]);
     const stored = (await db.execute<{ inputs: { leaseTermMonths: number } }>(sql`
-      select classification_inputs as inputs from lease_agreements where id = ${leaseId} and org_id = ${org.orgId}`)).rows[0]!;
+      select classification_inputs as inputs from lease_agreements where id = ${leaseId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(stored.inputs.leaseTermMonths, 60);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -298,11 +298,11 @@ test("commencement refuses a legacy huge exempt term with no rows written", { sk
     );
     // Refused before the boundary loop: no schedule rows, no entries, still draft.
     const lines = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${leaseId}`)).rows[0]!.n;
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${leaseId}`, "objects"))[0]!.n;
     const entries = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"))[0]!.n;
     const status = (await db.execute<{ status: string }>(sql`
-      select status from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`)).rows[0]!.status;
+      select status from lease_agreements where org_id = ${org.orgId} and id = ${leaseId}`, "objects"))[0]!.status;
     assert.equal(lines, 0);
     assert.equal(entries, 0);
     assert.equal(status, "draft");
@@ -330,7 +330,7 @@ for (const exemption of [null, "short_term"] as const) {
       });
       assert.deepEqual(canonical(results[0].value), canonical(results[1].value));
       const count = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${leaseId}`)).rows[0]!.n;
+        select count(*)::int as n from lease_agreement_schedule_lines where org_id=${org.orgId} and lease_id=${leaseId}`, "objects"))[0]!.n;
       assert.equal(count, 3);
       assert.equal(await glBalance(org.orgId, accounts.rouAsset), toUnits(results[0].value.rouAsset));
     } finally { await dropScratchOrg(org.orgId); }
@@ -355,7 +355,7 @@ test("concurrent lease schedule runners claim a due payment once", { skip: !DB }
     assert.equal(await glBalance(org.orgId, accounts.payment), -toUnits("1000"));
     const posted = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from lease_agreement_schedule_lines
-       where org_id=${org.orgId} and lease_id=${leaseId} and payment_entry_id is not null and amortization_entry_id is not null`)).rows[0]!.n;
+       where org_id=${org.orgId} and lease_id=${leaseId} and payment_entry_id is not null and amortization_entry_id is not null`, "objects"))[0]!.n;
     assert.equal(posted, 1);
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -397,7 +397,7 @@ for (const phase of ["commencement", "payment"] as const) {
         } else {
           await assert.rejects(run, /restricted to another subsidiary|inactive/);
           const count = (await db.execute<{ n: number }>(sql`
-            select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`)).rows[0]!.n;
+            select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`, "objects"))[0]!.n;
           assert.equal(count, phase === "commencement" ? 0 : 1, "refusal leaves no partial journal");
           await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${accountId}`);
           await db.execute(sql`update locations set subsidiary_id=null where org_id=${org.orgId} and id=${org.locationId}`);
@@ -405,7 +405,7 @@ for (const phase of ["commencement", "payment"] as const) {
           await run();
         }
         const lease = (await db.execute<{ status: string }>(sql`
-          select status from lease_agreements where org_id=${org.orgId} and id=${leaseId}`)).rows[0]!;
+          select status from lease_agreements where org_id=${org.orgId} and id=${leaseId}`, "objects"))[0]!;
         assert.equal(lease.status, "active");
       } finally { await dropScratchOrg(org.orgId); }
     });
@@ -449,7 +449,7 @@ test("lease posting rechecks account scope after a concurrent restriction edit c
     assert.equal(outcome.status, "rejected");
     if (outcome.status === "rejected") assert.match(String(outcome.reason), /restricted to another subsidiary/);
     const count = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='lease'`, "objects"))[0]!.n;
     assert.equal(count, 0);
   } finally {
     await writer.query("rollback");
@@ -486,7 +486,7 @@ for (const phase of ["commencement", "payment"] as const) {
           select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
             (select count(*)::int from lease_agreement_schedule_lines where org_id=${org.orgId}
               and lease_id=${leaseId} and payment_entry_id is not null) as claimed
-          from lease_agreements where org_id=${org.orgId} and id=${leaseId}`)).rows[0]!;
+          from lease_agreements where org_id=${org.orgId} and id=${leaseId}`, "objects"))[0]!;
         assert.deepEqual(state,{status:phase === "payment" ? "active" : "draft",journals:phase === "payment" ? 1 : 0,claimed:0});
         await db.execute(sql`update accounting_books set ${sql.raw(flag)}=true
           where org_id=${org.orgId} and id=${org.bookId}`);
@@ -522,8 +522,8 @@ test("createLeaseAgreement refuses unreadable discount rates before storing anyt
       );
     }
     const rows = await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`);
-    assert.equal(rows.rows[0]!.n, 0);
+      select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`, "objects");
+    assert.equal(rows[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -579,7 +579,7 @@ test("lease creation validates entity references and commencement hides missing 
       where id = ${org.orgId}`);
     await assert.rejects(commenceLease(org.orgId, randomUUID(), actorId), ScopeNotFoundError);
     await assert.rejects(commenceLease(org.orgId, leaseId, actorId), ScopeNotFoundError);
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`)).rows[0]!.n;
+    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 1, "invalid references and duplicate numbers leave no extra lease rows");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -201,13 +201,13 @@ for(const scenario of ['posted control','draft report','foreign currency','secon
         await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,party_id,amount,currency,txn_amount,fx_rate)
           values (${org.orgId},${entry},1,${org.accounts.cogs},${org.subsidiaryId},${employee},${amount},${currency},100,${rate}),
           (${org.orgId},${entry},2,${org.accounts.bank},${org.subsidiaryId},${employee},-${amount}::numeric,${currency},-100,${rate})`);
-        const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${entry} returning id`);
-        assert.deepEqual(posted.rows.map(row=>row.id),[entry],`${scenario}: employee spend journal is posted`);
+        const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${entry} returning id`, 'objects');
+        assert.deepEqual(posted.map(row=>row.id),[entry],`${scenario}: employee spend journal is posted`);
         return entry;
       }
       const entry=await post(org.bookId,base,fx);
-      const postedDocument=await db.execute<{id:string}>(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${document} returning id`);
-      assert.deepEqual(postedDocument.rows.map(row=>row.id),[document],`${scenario}: employee expense document is posted`);
+      const postedDocument=await db.execute<{id:string}>(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${document} returning id`, 'objects');
+      assert.deepEqual(postedDocument.map(row=>row.id),[document],`${scenario}: employee expense document is posted`);
       if(scenario === 'draft report'){
         const draft=randomUUID();
         await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
@@ -264,13 +264,13 @@ for(const scenario of ['in-period payment','early payment','partial payment','fu
         await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,party_id,is_open_item,due_date,amount,currency,txn_amount,fx_rate)
           values (${line},${org.orgId},${id},1,${org.accounts.ap},${org.subsidiaryId},${org.vendorId},true,'2026-07-10',${amount},'CAD',${amount},1),
           (${randomUUID()},${org.orgId},${id},2,${payment ? org.accounts.bank : org.accounts.cogs},${org.subsidiaryId},${org.vendorId},false,null,-${amount}::numeric,'CAD',-${amount}::numeric,1)`);
-        const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`);
-        assert.deepEqual(posted.rows.map(row=>row.id),[id],`${scenario}: vendor settlement journal is posted`);
+        const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`, 'objects');
+        assert.deepEqual(posted.map(row=>row.id),[id],`${scenario}: vendor settlement journal is posted`);
         return {id,line};
       }
       const original=await entry(org.bookId,false,'2026-07-01');
-      const postedInvoice=await db.execute<{id:string}>(sql`update documents set status='posted',posted_entry_id=${original.id},posting_period_id=${org.periodId} where id=${invoice} returning id`);
-      assert.deepEqual(postedInvoice.rows.map(row=>row.id),[invoice],`${scenario}: vendor bill is posted`);
+      const postedInvoice=await db.execute<{id:string}>(sql`update documents set status='posted',posted_entry_id=${original.id},posting_period_id=${org.periodId} where id=${invoice} returning id`, 'objects');
+      assert.deepEqual(postedInvoice.map(row=>row.id),[invoice],`${scenario}: vendor bill is posted`);
       const book=scenario === 'secondary-book payment' ? taxBook : org.bookId;
       const target=scenario === 'secondary-book payment' ? await entry(book,false,'2026-07-01') : original;
       const paidOn=scenario === 'future payment' ? '2026-07-21' : scenario === 'early payment' ? '2026-07-06' : '2026-07-12';
@@ -484,8 +484,8 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
             (${org.orgId},${id},1,${account},${org.subsidiaryId},${department},${amount},'CAD',${amount},1),
             (${org.orgId},${id},2,${org.accounts.bank},${org.subsidiaryId},${department},-${amount}::numeric,'CAD',-${amount}::numeric,1)`);
           if(status === 'posted'){
-            const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`);
-            assert.deepEqual(posted.rows.map(row=>row.id),[id],`${scenario}: true-cost journal is posted`);
+            const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`, 'objects');
+            assert.deepEqual(posted.map(row=>row.id),[id],`${scenario}: true-cost journal is posted`);
           }
         }
         // The posting kernel's net-zero pair: a project-tagged +10 applied leg
@@ -497,8 +497,8 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
           await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,department_id,project_id,amount,currency,txn_amount,fx_rate) values
             (${org.orgId},${id},1,${applied},${org.subsidiaryId},${department},${project},${amount},'CAD',${amount},1),
             (${org.orgId},${id},2,${applied},${org.subsidiaryId},${department},null,${'-'+amount},'CAD',${'-'+amount},1)`);
-          const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`);
-          assert.deepEqual(posted.rows.map(row=>row.id),[id],`${scenario}: applied overhead pair is posted`);
+          const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`, 'objects');
+          assert.deepEqual(posted.map(row=>row.id),[id],`${scenario}: applied overhead pair is posted`);
         }
         for(const [account,amount] of [[rent,'100'],[wages,'40'],[cogs,'30'],[org.accounts.revenue,'-200']])await entry(org.bookId,'posted',org.date,account!,amount!);
         await appliedPair('10');

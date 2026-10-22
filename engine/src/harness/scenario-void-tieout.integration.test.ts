@@ -93,13 +93,13 @@ async function seedPeriod(
   month: number,
 ): Promise<string> {
   const cal = await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`);
+    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects");
   const periodId = randomUUID();
   const mm = String(month).padStart(2, "0");
   const lastDay = utcDateFromParts(year, month, 0).getUTCDate();
   await db.execute(sql`
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-    values (${periodId}, ${org.orgId}, ${year}, ${month}, ${`${year}-${mm}`}, ${`${year}-${mm}-01`}, ${`${year}-${mm}-${lastDay}`}, false, ${cal.rows[0]!.id})`);
+    values (${periodId}, ${org.orgId}, ${year}, ${month}, ${`${year}-${mm}`}, ${`${year}-${mm}-01`}, ${`${year}-${mm}-${lastDay}`}, false, ${cal[0]!.id})`);
   return periodId;
 }
 
@@ -209,7 +209,7 @@ test("subledger-gl-tieout holds across governed voids on both sides of the cutof
     // immutable since 0380 with no amend escape, so the corruption is staged
     // as its own posted entry, never an edit.
     const mirrorPeriod = (await db.execute<{ period_id: string }>(sql`
-      select period_id from journal_entries where id = ${voidA.reversalEntryId} and org_id = ${org.orgId}`)).rows[0]!.period_id;
+      select period_id from journal_entries where id = ${voidA.reversalEntryId} and org_id = ${org.orgId}`, "objects"))[0]!.period_id;
     const corruptId = randomUUID();
     await db.execute(sql`
       insert into journal_entries

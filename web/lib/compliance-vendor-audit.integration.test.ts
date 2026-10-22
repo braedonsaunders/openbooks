@@ -133,8 +133,8 @@ async function roleState(fixture: Fixture): Promise<Record<string, unknown>> {
              tin_type, backup_withholding, is_t4a, is_active, created_at, created_by,
              updated_at, updated_by
         from vendor_roles
-       where org_id = ${fixture.orgId} and party_id = ${fixture.partyId}`);
-    return result.rows[0]!;
+       where org_id = ${fixture.orgId} and party_id = ${fixture.partyId}`, "objects");
+    return result[0]!;
   });
 }
 
@@ -153,8 +153,8 @@ async function audits(fixture: Fixture): Promise<{
         from audit_log
        where org_id = ${fixture.orgId}
          and table_name = 'vendor_roles' and row_id = ${fixture.partyId}
-       order by at, id`);
-    return result.rows;
+       order by at, id`, "objects");
+    return result;
   });
 }
 

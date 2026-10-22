@@ -34,8 +34,8 @@ export async function loadReconcilableAccount(
      where a.id = ${accountId} and a.org_id = ${orgId}
        and a.reconcilable and a.is_active and not a.is_summary
        ${lock ? sql`for update` : sql``}
-  `);
-  const account = r.rows[0];
+  `, "objects");
+  const account = r[0];
   if (!account) throw new BankingError("Account not found or not reconcilable");
   // Scope before eligibility: an out-of-scope account reads exactly like a
   // missing one, never as "exists but ineligible".
@@ -72,13 +72,11 @@ export async function requireBankAccountInScope(
   accountId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const row = (
-    await executor.execute<{ subsidiary_id: string | null }>(sql`
+  const row = (await executor.execute<{ subsidiary_id: string | null }>(sql`
     select a.subsidiary_id
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw new ScopeNotFoundError();
   }
@@ -91,13 +89,11 @@ export async function lockBankAccountInScope(
   accountId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const row = (
-    await executor.execute<{ subsidiary_id: string | null }>(sql`
+  const row = (await executor.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id from accounts
      where id = ${accountId} and org_id = ${orgId}
      for update
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   requireSessionRowInScope(row, scope);
 }
 
@@ -111,8 +107,7 @@ export async function requireStatementLineAccountInScope(
   statementLineId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<{ account_id: string }> {
-  const row = (
-    await executor.execute<{
+  const row = (await executor.execute<{
       account_id: string;
       subsidiary_id: string | null;
     }>(sql`
@@ -120,8 +115,7 @@ export async function requireStatementLineAccountInScope(
       from bank_statement_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${statementLineId} and l.org_id = ${orgId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
     throw new ScopeNotFoundError();
   }
@@ -153,13 +147,11 @@ export async function requireCutoffAfterSignedHistory(
   accountId: string,
   throughDate: string,
 ): Promise<void> {
-  const latestSigned = (
-    await executor.execute<{ through_date: string }>(sql`
+  const latestSigned = (await executor.execute<{ through_date: string }>(sql`
     select through_date from reconciliations
      where org_id = ${orgId} and account_id = ${accountId} and status = 'signed_off'
      order by through_date desc limit 1
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (latestSigned && throughDate <= latestSigned.through_date) {
     throw new BankingError(
       `Through date must be after the last signed-off reconciliation (${latestSigned.through_date})`,

@@ -1,1 +1,0 @@
-Corrective: restores 'profile_changed' to the employment_changes kind vocabulary dropped by 0640; profile_change applications validate again, data untouched.

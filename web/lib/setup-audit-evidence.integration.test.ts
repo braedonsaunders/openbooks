@@ -23,10 +23,10 @@ const authenticate = (org: ScratchOrg) => seedSetupActor(org, state);
 const send = setupWriteSender({ POST, PATCH, DELETE });
 const json = (value: unknown) => JSON.parse(JSON.stringify(value));
 async function row(table: string, id: string) {
-  return (await db.execute(sql`select * from ${sql.identifier(table)} where id=${id}`)).rows[0];
+  return (await db.execute(sql`select * from ${sql.identifier(table)} where id=${id}`, 'objects'))[0];
 }
 async function evidence(id: string, action: string) {
-  return (await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where row_id=${id} and action=${action} order by at desc limit 1`)).rows[0]!;
+  return (await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where row_id=${id} and action=${action} order by at desc limit 1`, 'objects'))[0]!;
 }
 
 test('root subsidiary metadata saves while structural protections remain enforced', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -102,7 +102,7 @@ for (const method of ['POST','PATCH','DELETE'] as const) {
    const actorId=await authenticate(org);const body={code:'ATOMIC',name:'Atomic department',isActive:true};
    let id:string|undefined;
    if(method!=='POST') {const response=await send('POST','departments',body);assert.equal(response.status,200);id=(await response.json()).id;}
-   const snapshot=async()=>(await db.execute(sql`select (select jsonb_agg(to_jsonb(d) order by id) from departments d where org_id=${org.orgId}) as rows,(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${org.orgId} and table_name='departments') as audits`)).rows;
+   const snapshot=async()=>await db.execute(sql`select (select jsonb_agg(to_jsonb(d) order by id) from departments d where org_id=${org.orgId}) as rows,(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${org.orgId} and table_name='departments') as audits`, 'objects');
    const before=await snapshot();const name=`setup_audit_${randomUUID().replaceAll('-','')}`;
    await db.execute(sql.raw(`create function public."${name}"() returns trigger language plpgsql as $$ begin if new.table_name='departments' and new.actor_id='${actorId}'::uuid then raise exception 'forced setup audit failure'; end if; return new; end $$; create trigger "${name}" before insert on audit_log for each row execute function public."${name}"();`));
    cleanup=async()=>{await db.execute(sql.raw(`drop trigger if exists "${name}" on audit_log; drop function if exists public."${name}"();`));};
@@ -121,10 +121,10 @@ test('a referenced tax group refuses deletion and restores all removed members',
   await db.execute(sql`insert into tax_group_members(tax_group_id,tax_code_id,sequence) values(${group},${code},1)`);
   await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate,subtotal,tax_total,total) values(${document},${org.orgId},'vendor_bill','draft','GROUP-REF',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','1','100','0','100')`);
   await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,amount,tax_input_amount,tax_amount,tax_group_id,quantity,unit_price) values(${line},${org.orgId},${document},1,${org.accounts.cogs},'100','100','0',${group},'1','100')`);
-  const before=(await db.execute(sql`select * from tax_group_members where tax_group_id=${group}`)).rows;
+  const before=await db.execute(sql`select * from tax_group_members where tax_group_id=${group}`, 'objects');
   const response=await send('DELETE','tax-groups',{id:group});assert.equal(response.status,409);
-  assert.ok(await row('tax_groups',group));assert.deepEqual((await db.execute(sql`select * from tax_group_members where tax_group_id=${group}`)).rows,before);
-  assert.equal((await db.execute(sql`select id from audit_log where row_id=${group}`)).rows.length,0);
+  assert.ok(await row('tax_groups',group));assert.deepEqual(await db.execute(sql`select * from tax_group_members where tax_group_id=${group}`, 'objects'),before);
+  assert.equal((await db.execute(sql`select id from audit_log where row_id=${group}`, 'objects')).length,0);
  }finally{state.gate=null;await dropScratchOrg(org.orgId);}
 });
 
@@ -156,7 +156,7 @@ for(const method of ['PATCH','DELETE'] as const){
    const created=await send('POST','departments',body);assert.equal(created.status,200);const {id}=await created.json();const before=await row('departments',id);
    await authenticate(other);const response=await send(method,'departments',{...body,id,name:'Cross tenant write'});assert.equal(response.status,404);
    assert.deepEqual(await row('departments',id),before);
-   assert.equal((await db.execute(sql`select id from audit_log where org_id=${other.orgId} and row_id=${id}`)).rows.length,0);
+   assert.equal((await db.execute(sql`select id from audit_log where org_id=${other.orgId} and row_id=${id}`, 'objects')).length,0);
   }finally{state.gate=null;await dropScratchOrg(org.orgId);await dropScratchOrg(other.orgId);}
  });
 }

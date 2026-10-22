@@ -118,7 +118,7 @@ export async function loadLienWaiversPage(
       select id, coalesce(code || ' · ' || name, name) as label from projects
        where org_id = ${orgId} and is_active
          ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-       order by code nulls last, name limit 500`),
+       order by code nulls last, name limit 500`, 'objects'),
     db.execute<{ id: string; label: string; defaultType: string }>(sql`
       select p.id, p.display_name as label,
              coalesce(cls.default_lien_waiver_type, '') as "defaultType"
@@ -127,7 +127,7 @@ export async function loadLienWaiversPage(
        left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
        where p.org_id = ${orgId} and p.is_active
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
-       order by p.display_name limit 2000`),
+       order by p.display_name limit 2000`, 'objects'),
     isFeatureEnabled(orgId, 'informationReturns'),
   ])
   const tabs = await complianceTabs('/compliance/lien-waivers', { projectsEnabled: true, informationReturnsEnabled })
@@ -152,8 +152,7 @@ export async function loadLienWaiversPage(
   // Open bills the vendor could release, so a waiver's amount comes from the
   // money it is exchanged for rather than from retyping.
   const openBills = open
-    ? (
-        await db.execute<{
+    ? (await db.execute<{
           id: string
           label: string
           amount: string
@@ -164,8 +163,7 @@ export async function loadLienWaiversPage(
          where org_id = ${orgId} and party_id = ${open.partyId} and project_id = ${open.projectId}
            and kind in ('vendor_bill', 'expense_report') and status = 'posted'
            ${complianceSubsidiaryFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-         order by document_date desc limit 50`)
-      ).rows
+         order by document_date desc limit 50`, 'objects'))
     : []
 
   const query = new URLSearchParams({
@@ -181,8 +179,8 @@ export async function loadLienWaiversPage(
     toolbar: {
       direction: direction ?? '',
       status: status ?? '',
-      projects: projects.rows,
-      vendors: vendors.rows,
+      projects,
+      vendors,
       canManage,
     },
     emptyTitle: t('lienWaivers.empty.title'),

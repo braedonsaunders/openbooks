@@ -8,7 +8,7 @@ import { lockBankMatchRuleSet } from './banking-rule-set-lock'
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 const tryLock = (orgId: string) => db.transaction(async (tx) =>
-  (await tx.execute<{ got: boolean }>(sql`select pg_try_advisory_xact_lock(hashtextextended(${'bank-match-rule-set:' + orgId}, 0)) as got`)).rows[0]!.got)
+  (await tx.execute<{ got: boolean }>(sql`select pg_try_advisory_xact_lock(hashtextextended(${'bank-match-rule-set:' + orgId}, 0)) as got`, 'objects'))[0]!.got)
 
 test('the rule-set lock is refused on the pool, where it would release before the edit', async () => {
   await assert.rejects(lockBankMatchRuleSet(db, randomUUID()), /must be taken on the transaction that performs the edit or apply/)

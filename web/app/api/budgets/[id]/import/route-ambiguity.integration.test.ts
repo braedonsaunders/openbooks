@@ -66,7 +66,7 @@ async function fixture() {
   }
   const sub = (await db.execute<{ id: string }>(sql`
     insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-    values (${org.orgId}, ${org.subsidiaryId}, 'Hidden Budget Branch', 'CAD', 'CA') returning id`)).rows[0]!
+    values (${org.orgId}, ${org.subsidiaryId}, 'Hidden Budget Branch', 'CAD', 'CA') returning id`, 'objects'))[0]!
   // Two departments sharing one name (codes differ): same refusal.
   for (const [code, subsidiaryId] of [['D1', org.subsidiaryId], ['D2', sub.id]] as const) {
     await db.execute(sql`
@@ -84,7 +84,7 @@ async function fixture() {
     insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
     values (${otherPeriod}, ${org.orgId}, 2026, 7, '2026-07', '2026-07-01', '2026-07-31', false, ${otherCalendar})`)
   const accountNumber = (await db.execute<{ number: string }>(sql`
-    select number from accounts where id = ${org.accounts.cogs}`)).rows[0]!.number
+    select number from accounts where id = ${org.accounts.cogs}`, 'objects'))[0]!.number
   const scenarioId = randomUUID()
   await db.execute(sql`
     insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
@@ -139,7 +139,7 @@ test('import resolves a repeated period name within the default calendar', async
     const committed = await post(f.scenarioId, { format: 'csv', text, expectedRevision: 1, commit: true })
     assert.equal(committed.status, 200)
     const line = (await db.execute<{ period_id: string }>(sql`
-      select period_id from budget_lines where scenario_id = ${f.scenarioId} and org_id = ${f.org.orgId}`)).rows[0]!
+      select period_id from budget_lines where scenario_id = ${f.scenarioId} and org_id = ${f.org.orgId}`, 'objects'))[0]!
     assert.equal(line.period_id, f.org.periodId, 'the line lands on the default-calendar period, not the same-named one')
   } finally {
     await dropScratchOrg(f.org.orgId)

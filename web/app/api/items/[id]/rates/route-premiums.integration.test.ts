@@ -70,7 +70,7 @@ async function fixture() {
 
 async function versionCount(orgId: string, book: string) {
   return Number((await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from item_rate_versions where org_id = ${orgId} and rate_book_id = ${book}`)).rows[0]!.count)
+    select count(*)::text as count from item_rate_versions where org_id = ${orgId} and rate_book_id = ${book}`, 'objects'))[0]!.count)
 }
 
 /**
@@ -133,7 +133,7 @@ test('a valid premium map saves and applies at snapshot', async () => {
     assert.equal(saved.status, 200, await saved.text())
 
     const stored = (await db.execute<{ time_type_bill_rates: Record<string, string> }>(sql`
-      select time_type_bill_rates from item_rate_lines where org_id = ${org.orgId} and item_id = ${org.items.service}`)).rows[0]
+      select time_type_bill_rates from item_rate_lines where org_id = ${org.orgId} and item_id = ${org.items.service}`, 'objects'))[0]
     assert.deepEqual(stored!.time_type_bill_rates, { [timeType]: '300.0000' })
 
     const project = randomUUID(), employee = randomUUID(), entry = randomUUID()

@@ -25,15 +25,12 @@ export async function loadLease(
   id: string,
   allowed: Set<string> | null,
 ) {
-  const lease = (
-    await db.execute<LeaseDisplay>(sql`select id,lease_number,description,status,subsidiary_id,
+  const lease = (await db.execute<LeaseDisplay>(sql`select id,lease_number,description,status,subsidiary_id,
     commencement_on::text,term_periods,payment_frequency,payment_timing,payment_amount::text,annual_discount_rate_percent::text,
     classification,initial_liability::text,initial_rou_asset::text,revision,classification_inputs
-    from lease_agreements la where org_id=${orgId} and id=${id} ${subsidiaryVisibleFilter(sql`la.subsidiary_id`, allowed)}`)
-  ).rows[0];
+    from lease_agreements la where org_id=${orgId} and id=${id} ${subsidiaryVisibleFilter(sql`la.subsidiary_id`, allowed)}`, "objects"))[0];
   if (!lease) return null;
-  const schedule = (
-    await db.execute<{
+  const schedule = await db.execute<{
       id: string;
       sequence: number;
       revision: number;
@@ -50,10 +47,8 @@ export async function loadLease(
     select id,sequence,revision,due_on::text,period_end::text,payment::text,interest::text,amortization::text,single_cost::text,
       payment_posted_at is not null as payment_posted,accrual_posted_at is not null as accrual_posted,
       superseded_by_change_id is not null as superseded
-    from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${id} order by sequence`)
-  ).rows;
-  const changes = (
-    await db.execute<{
+    from lease_agreement_schedule_lines where org_id=${orgId} and lease_id=${id} order by sequence`, "objects");
+  const changes = await db.execute<{
       id: string;
       operation: string;
       effective_on: string;
@@ -61,8 +56,7 @@ export async function loadLease(
       status: string;
     }>(sql`
     select id,operation,effective_on::text,reason,status from financial_changes
-    where org_id=${orgId} and subject_id=${id} and domain='lease' order by created_at desc`)
-  ).rows;
+    where org_id=${orgId} and subject_id=${id} and domain='lease' order by created_at desc`, "objects");
   return { lease, schedule, changes };
 }
 export type LeasePayload = NonNullable<Awaited<ReturnType<typeof loadLease>>>;

@@ -1,1 +1,0 @@
-Narrowing a partial exclusion predicate to wildcard policy pairs; targeted pairs are arbitrated by the advisory-lock preflight, so no data precheck beyond the migration itself.

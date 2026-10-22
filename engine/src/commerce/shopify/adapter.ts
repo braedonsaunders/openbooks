@@ -135,7 +135,7 @@ async function redactCustomerBodies(orgId: string, channelId: string, needles: s
   });
   const conditions = needles.map((needle) => sql`convert_from(raw_body, 'UTF8') like ${`%${needle}%`}`);
   const combined = conditions.reduce((left, right) => sql`${left} or ${right}`);
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update integration_inbound_events
        set raw_body = ${Buffer.from(tombstone, "utf8")},
            error = 'Redacted for a Shopify customer erasure request.',
@@ -148,7 +148,7 @@ async function redactCustomerBodies(orgId: string, channelId: string, needles: s
 
 async function redactChannelBodies(orgId: string, channelId: string, marker: string): Promise<number> {
   const tombstone = JSON.stringify({ redacted: marker, redactedAt: new Date().toISOString() });
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update integration_inbound_events
        set raw_body = ${Buffer.from(tombstone, "utf8")},
            error = 'Redacted for a Shopify shop erasure request.',
@@ -360,11 +360,9 @@ const shopifyAdapter: SalesChannelAdapter = {
       }
       if (topic === "refunds/create") {
         const orderExternalId = eventOrderId(body, "order_id");
-        const order = (
-          await db.execute<{ shop_currency: string }>(sql`
+        const order = (await db.execute<{ shop_currency: string }>(sql`
             select shop_currency from channel_orders
-             where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`)
-        ).rows[0];
+             where org_id = ${orgId} and channel_id = ${channelId} and external_id = ${orderExternalId}`, "objects"))[0];
         if (!order) {
           refuse(
             "channel_order_unknown",

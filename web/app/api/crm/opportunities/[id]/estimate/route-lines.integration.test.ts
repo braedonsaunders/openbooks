@@ -49,12 +49,12 @@ async function fixture(itemless: boolean, empty = false) {
   session.user = { id: actor, orgId: org.orgId, name: 'Seller', email: 'seller@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
   const statusId = await withOrgContext(org.orgId, async () => {
     await ensureCrmDefaults(org.orgId, actor);
-    return (await db.execute<{ id: string }>(sql`select id from crm_opportunity_statuses where org_id=${org.orgId} and is_default and is_active order by sequence limit 1`)).rows[0]!.id;
+    return (await db.execute<{ id: string }>(sql`select id from crm_opportunity_statuses where org_id=${org.orgId} and is_default and is_active order by sequence limit 1`, 'objects'))[0]!.id;
   });
   const opp = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into crm_opportunities (org_id, opportunity_number, title, party_id, owner_user_id, status_id, probability, forecast_category, currency, projected_amount, weighted_amount, is_active, created_by, updated_by)
     values (${org.orgId}, 'OPP-C4', 'Big deal', ${org.customerId}, ${actor}, ${statusId}, 80, 'upside', 'CAD', '300.0000', '240.0000', true, ${actor}, ${actor})
-    returning id`))).rows[0]!.id;
+    returning id`, 'objects')))[0]!.id;
   await withBypassContext(async () => {
     for (const [n, item, description, amount] of (empty ? [] : [
       [1, org.items.service, 'Service', '100.0000'],
@@ -68,7 +68,7 @@ async function fixture(itemless: boolean, empty = false) {
   return { org, opp };
 }
 async function quoteCount(orgId: string) {
-  return (await db.execute(sql`select id from documents where org_id=${orgId} and kind='quote'`)).rows.length;
+  return (await db.execute(sql`select id from documents where org_id=${orgId} and kind='quote'`, 'objects')).length;
 }
 
 test('itemized lines convert with matching counts, amounts and total', async () => {
@@ -77,8 +77,8 @@ test('itemized lines convert with matching counts, amounts and total', async () 
     const response = await POST(post(), paramsOf(opp));
     assert.equal(response.status, 201, await response.clone().text());
     const quoteId = (await response.json() as { id: string }).id;
-    const quote = (await db.execute(sql`select total from documents where id=${quoteId}`)).rows[0]!;
-    const quoteLines = (await db.execute(sql`select line_number, amount from document_lines where document_id=${quoteId} order by line_number`)).rows as { line_number: number; amount: string }[];
+    const quote = (await db.execute(sql`select total from documents where id=${quoteId}`, 'objects'))[0]!;
+    const quoteLines = (await db.execute(sql`select line_number, amount from document_lines where document_id=${quoteId} order by line_number`, 'objects')) as { line_number: number; amount: string }[];
     // Source line count and amounts equal the created quote's lines and total.
     assert.equal(quoteLines.length, 2);
     assert.equal(quoteLines[0]!.amount, '100.0000');

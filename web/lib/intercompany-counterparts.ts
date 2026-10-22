@@ -55,7 +55,7 @@ export async function generateIntercompanyCounterpart(authz: Authz, documentId: 
   let counterpartId: string
   if (plan.pairKind === 'order') {
     const organization = (await db.execute<{ base_currency: string | null }>(sql`
-      select base_currency from orgs where id = ${orgId}`)).rows[0]
+      select base_currency from orgs where id = ${orgId}`, 'objects'))[0]
     if (!organization?.base_currency || organization.base_currency !== plan.currency) {
       throw new IntercompanyError('The counterpart order must retain the source currency. Link an existing order in that currency from the pairing workspace.', 422)
     }

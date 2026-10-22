@@ -62,7 +62,7 @@ const AGREEMENT_COLUMNS = sql`id, revision, subsidiary_id as "subsidiaryId", agr
 
 async function lockAgreement(orgId: string, agreementId: unknown): Promise<StoredAgreement> {
   const row = (await db.execute<StoredAgreement>(sql`select ${AGREEMENT_COLUMNS} from service_agreements
-    where org_id = ${orgId} and id = ${requireUuid(agreementId, "Agreement")} for update`)).rows[0];
+    where org_id = ${orgId} and id = ${requireUuid(agreementId, "Agreement")} for update`, "objects"))[0];
   if (!row) throw new ServiceError("This agreement is not available.", { status: 404, code: "not_found" });
   return row;
 }
@@ -90,14 +90,14 @@ async function normalizeVersion(orgId: string, input: AgreementVersionInput) {
 }
 
 async function insertVersion(actor: ServiceActor, agreementId: string, effectiveFrom: string, version: Awaited<ReturnType<typeof normalizeVersion>>, reason: string): Promise<string> {
-  const row = requireOne((await db.execute<{ id: string }>(sql`insert into service_agreement_versions
+  const row = requireOne(await db.execute<{ id: string }>(sql`insert into service_agreement_versions
       (org_id, agreement_id, effective_from, recurrence, window_starts, window_ends, estimated_minutes, priority, required_qualification_type_ids, instructions, reason, created_by)
     values (${actor.orgId}, ${agreementId}, ${effectiveFrom}, ${JSON.stringify(version.recurrence)}::jsonb, ${version.windowStarts}, ${version.windowEnds},
       ${version.estimatedMinutes}, ${version.priority}, ${`{${version.requiredQualificationTypeIds.join(",")}}`}::uuid[], ${version.instructions}, ${reason}, ${actor.actorId})
-    returning id`)).rows, "The agreement version");
+    returning id`, "objects"), "The agreement version");
   for (const [index, line] of version.lines.entries()) {
-    requireOne((await db.execute(sql`insert into service_agreement_lines (org_id, version_id, line_number, item_id, description, quantity, unit_price, tax_code_id)
-      values (${actor.orgId}, ${row.id}, ${index + 1}, ${line.itemId}, ${line.description}, ${line.quantity}, ${line.unitPrice}, ${line.taxCodeId}) returning id`)).rows, "An agreement line");
+    requireOne(await db.execute(sql`insert into service_agreement_lines (org_id, version_id, line_number, item_id, description, quantity, unit_price, tax_code_id)
+      values (${actor.orgId}, ${row.id}, ${index + 1}, ${line.itemId}, ${line.description}, ${line.quantity}, ${line.unitPrice}, ${line.taxCodeId}) returning id`, "objects"), "An agreement line");
   }
   return row.id;
 }
@@ -114,7 +114,7 @@ export async function createServiceAgreement(actor: ServiceActor & { id: string;
   return withOrgTransaction(actor.orgId, async () => {
     const allowed = await serviceAuthority(actor, "service.manage", null);
     await lockCommandKey("service-agreement", actor.orgId, id);
-    const existing = (await db.execute<StoredAgreement & { createdBy: string }>(sql`select ${AGREEMENT_COLUMNS}, created_by as "createdBy" from service_agreements where org_id = ${actor.orgId} and id = ${id}`)).rows[0];
+    const existing = (await db.execute<StoredAgreement & { createdBy: string }>(sql`select ${AGREEMENT_COLUMNS}, created_by as "createdBy" from service_agreements where org_id = ${actor.orgId} and id = ${id}`, "objects"))[0];
     if (existing) {
       if (existing.createdBy !== actor.actorId) throw new ServiceError("This agreement key was already used.", { status: 409, code: "service_key_reused" });
       return { agreement: existing, generated: 0 };
@@ -122,10 +122,10 @@ export async function createServiceAgreement(actor: ServiceActor & { id: string;
     const customer = await resolveServiceCustomer(actor.orgId, allowed, input);
     const version = await normalizeVersion(actor.orgId, input.version);
     const number = await allocateServiceNumber(actor.orgId, "service_agreement");
-    requireOne((await db.execute(sql`insert into service_agreements (id, org_id, subsidiary_id, agreement_number, customer_party_id, service_address_id, contact_id, title,
+    requireOne(await db.execute(sql`insert into service_agreements (id, org_id, subsidiary_id, agreement_number, customer_party_id, service_address_id, contact_id, title,
         starts_on, ends_on, status, created_by, updated_by)
       values (${id}, ${actor.orgId}, ${customer.subsidiaryId}, ${number}, ${customer.customerPartyId}, ${customer.serviceAddressId}, ${customer.contactId}, ${title},
-        ${startsOn}, ${endsOn}, 'active', ${actor.actorId}, ${actor.actorId}) returning id`)).rows, "The agreement");
+        ${startsOn}, ${endsOn}, 'active', ${actor.actorId}, ${actor.actorId}) returning id`, "objects"), "The agreement");
     await insertJob(actor, {
       id: crypto.randomUUID(), customer, requestId: null, quoteDocumentId: null, agreementId: id, title, description: version.instructions,
       priority: version.priority, requiredQualificationTypeIds: version.requiredQualificationTypeIds, estimatedMinutes: version.estimatedMinutes,
@@ -154,13 +154,13 @@ export async function addAgreementVersion(actor: ServiceActor & { agreementId: s
     if (agreement.status !== "active") throw new ServiceError("Only an active agreement changes its terms.", { status: 409, code: "service_invalid_transition" });
     const today = await businessTodayInTx(db, actor.orgId);
     if (calendarDaysBetween(today, effectiveFrom) <= 0) throw new ServiceError("New terms take effect after today.", { code: "service_invalid_date", remedy: "Choose an effective date from tomorrow; earlier visits keep the terms they were promised under." });
-    const latest = (await db.execute<{ effectiveFrom: string }>(sql`select max(effective_from)::text as "effectiveFrom" from service_agreement_versions where org_id = ${actor.orgId} and agreement_id = ${agreement.id}`)).rows[0]?.effectiveFrom;
+    const latest = (await db.execute<{ effectiveFrom: string }>(sql`select max(effective_from)::text as "effectiveFrom" from service_agreement_versions where org_id = ${actor.orgId} and agreement_id = ${agreement.id}`, "objects"))[0]?.effectiveFrom;
     if (latest && calendarDaysBetween(latest, effectiveFrom) <= 0) throw new ServiceError("New terms take effect after the latest version.", { code: "service_invalid_date", remedy: `Choose a date after ${latest}.` });
     if (agreement.endsOn && calendarDaysBetween(effectiveFrom, agreement.endsOn) < 0) throw new ServiceError("The agreement ends before these terms would start.", { code: "service_invalid_date" });
     const version = await normalizeVersion(actor.orgId, actor.version);
     await insertVersion(actor, agreement.id, effectiveFrom, version, reason);
-    const affected = (await db.execute<{ id: string; status: string }>(sql`select id, status from service_visits where org_id = ${actor.orgId} and agreement_id = ${agreement.id}
-      and occurs_on >= ${effectiveFrom} and status <> 'cancelled' order by occurs_on`)).rows;
+    const affected = await db.execute<{ id: string; status: string }>(sql`select id, status from service_visits where org_id = ${actor.orgId} and agreement_id = ${agreement.id}
+      and occurs_on >= ${effectiveFrom} and status <> 'cancelled' order by occurs_on`, "objects");
     let superseded = 0;
     let kept = 0;
     for (const visit of affected) {
@@ -169,8 +169,8 @@ export async function addAgreementVersion(actor: ServiceActor & { agreementId: s
         superseded += 1;
       } else kept += 1;
     }
-    const bumped = requireOne((await db.execute<StoredAgreement>(sql`update service_agreements set revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${agreement.id} and revision = ${agreement.revision} returning ${AGREEMENT_COLUMNS}`)).rows, "The agreement");
+    const bumped = requireOne(await db.execute<StoredAgreement>(sql`update service_agreements set revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+      where org_id = ${actor.orgId} and id = ${agreement.id} and revision = ${agreement.revision} returning ${AGREEMENT_COLUMNS}`, "objects"), "The agreement");
     await auditService({ orgId: actor.orgId, table: "service_agreement_versions", rowId: agreement.id, action: "insert", actorId: actor.actorId,
       after: { effectiveFrom, version, superseded, kept }, reason });
     const generated = await generateInTransaction(actor, bumped);
@@ -190,12 +190,12 @@ export async function closeServiceAgreement(actor: ServiceActor & { agreementId:
     const today = await businessTodayInTx(db, actor.orgId);
     const endsOn = actor.outcome === "cancelled" ? (agreement.endsOn && calendarDaysBetween(agreement.endsOn, today) > 0 ? agreement.endsOn : today) : requireDate(actor.endsOn, "End date");
     if (calendarDaysBetween(agreement.startsOn, endsOn) < 0) throw new ServiceError("The end date is before the agreement starts.", { code: "service_invalid_date" });
-    const after = (await db.execute<{ id: string }>(sql`select id from service_visits where org_id = ${actor.orgId} and agreement_id = ${agreement.id}
-      and occurs_on > ${endsOn} and status = 'unscheduled' order by occurs_on`)).rows;
+    const after = await db.execute<{ id: string }>(sql`select id from service_visits where org_id = ${actor.orgId} and agreement_id = ${agreement.id}
+      and occurs_on > ${endsOn} and status = 'unscheduled' order by occurs_on`, "objects");
     for (const visit of after) await cancelVisitInTransaction(actor, await lockVisit(actor.orgId, visit.id), reason);
-    const row = requireOne((await db.execute<StoredAgreement>(sql`update service_agreements set status = ${actor.outcome}, ends_on = ${endsOn}, close_reason = ${reason},
+    const row = requireOne(await db.execute<StoredAgreement>(sql`update service_agreements set status = ${actor.outcome}, ends_on = ${endsOn}, close_reason = ${reason},
         revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${agreement.id} and revision = ${agreement.revision} returning ${AGREEMENT_COLUMNS}`)).rows, "The agreement");
+      where org_id = ${actor.orgId} and id = ${agreement.id} and revision = ${agreement.revision} returning ${AGREEMENT_COLUMNS}`, "objects"), "The agreement");
     await auditService({ orgId: actor.orgId, table: "service_agreements", rowId: agreement.id, action: "update", actorId: actor.actorId,
       before: { status: agreement.status, endsOn: agreement.endsOn }, after: { status: actor.outcome, endsOn, cancelledVisits: after.length }, reason });
     return row;
@@ -219,10 +219,10 @@ async function generateInTransaction(actor: ServiceActor, agreement: StoredAgree
   const timeZone = await businessTimeZoneInTx(db, actor.orgId);
   const job = await lockJob(actor.orgId, agreement.jobId);
   if (job.status !== "open") return 0;
-  const versions = (await db.execute<VersionRow>(sql`select id, effective_from::text as "effectiveFrom", recurrence, to_char(window_starts, 'HH24:MI') as "windowStarts",
+  const versions = await db.execute<VersionRow>(sql`select id, effective_from::text as "effectiveFrom", recurrence, to_char(window_starts, 'HH24:MI') as "windowStarts",
       to_char(window_ends, 'HH24:MI') as "windowEnds", estimated_minutes as "estimatedMinutes", priority,
       required_qualification_type_ids::text[] as "requiredQualificationTypeIds", instructions
-    from service_agreement_versions where org_id = ${actor.orgId} and agreement_id = ${agreement.id} order by effective_from`)).rows;
+    from service_agreement_versions where org_id = ${actor.orgId} and agreement_id = ${agreement.id} order by effective_from`, "objects");
   if (!versions.length) return 0;
   const byId = new Map(versions.map((version) => [version.id, version]));
   const parsed = versions.map((version) => ({ id: version.id, effectiveFrom: version.effectiveFrom, recurrence: parseRecurrence(version.recurrence) as ServiceRecurrence }));
@@ -233,8 +233,8 @@ async function generateInTransaction(actor: ServiceActor, agreement: StoredAgree
     const version = byId.get(occurrence.versionId)!;
     const windowStartsAt = windowInstant(occurrence.occursOn, version.windowStarts, timeZone);
     const windowEndsAt = windowInstant(occurrence.occursOn, version.windowEnds, timeZone);
-    const sequence = (await db.execute<{ next: number }>(sql`select coalesce(max(sequence), 0) + 1 as next from service_visits where org_id = ${actor.orgId} and job_id = ${job.id}`)).rows[0]!.next;
-    const inserted = (await db.execute<{ id: string }>(sql`insert into service_visits
+    const sequence = (await db.execute<{ next: number }>(sql`select coalesce(max(sequence), 0) + 1 as next from service_visits where org_id = ${actor.orgId} and job_id = ${job.id}`, "objects"))[0]!.next;
+    const inserted = await db.execute<{ id: string }>(sql`insert into service_visits
         (org_id, subsidiary_id, kind, job_id, sequence, agreement_id, agreement_version_id, occurs_on, status, priority, required_qualification_type_ids,
          estimated_minutes, preferred_on, window_starts_at, window_ends_at, instructions, created_by, updated_by)
       values (${actor.orgId}, ${job.subsidiaryId}, 'service', ${job.id}, ${sequence}, ${agreement.id}, ${version.id}, ${occurrence.occursOn}, 'unscheduled', ${version.priority},
@@ -243,16 +243,16 @@ async function generateInTransaction(actor: ServiceActor, agreement: StoredAgree
         ${actor.actorId === SYSTEM_ACTOR ? null : actor.actorId}, ${actor.actorId === SYSTEM_ACTOR ? null : actor.actorId})
       -- An occurrence already generated, skipped or cancelled is kept as decided: regeneration is idempotent.
       on conflict (org_id, agreement_id, occurs_on) where agreement_id is not null and cancel_kind is distinct from 'superseded' do nothing
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length) {
       generated += 1;
-      requireOne((await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, reason)
-        values (${actor.orgId}, ${inserted[0]!.id}, null, 'unscheduled', 1, ${actor.actorId === SYSTEM_ACTOR ? null : actor.actorId}, ${`Generated from the agreement for ${occurrence.occursOn}`}) returning id`)).rows, "The visit history");
+      requireOne(await db.execute(sql`insert into service_visit_events (org_id, visit_id, from_status, to_status, visit_revision, actor_id, reason)
+        values (${actor.orgId}, ${inserted[0]!.id}, null, 'unscheduled', 1, ${actor.actorId === SYSTEM_ACTOR ? null : actor.actorId}, ${`Generated from the agreement for ${occurrence.occursOn}`}) returning id`, "objects"), "The visit history");
     }
   }
-  requireOne((await db.execute(sql`update service_agreements set generated_through = ${through}, revision = revision + 1, updated_at = now(),
+  requireOne(await db.execute(sql`update service_agreements set generated_through = ${through}, revision = revision + 1, updated_at = now(),
       updated_by = ${actor.actorId === SYSTEM_ACTOR ? sql`updated_by` : actor.actorId}
-    where org_id = ${actor.orgId} and id = ${agreement.id} returning id`)).rows, "The agreement horizon");
+    where org_id = ${actor.orgId} and id = ${agreement.id} returning id`, "objects"), "The agreement horizon");
   return generated;
 }
 
@@ -274,7 +274,7 @@ export async function generateAgreementVisits(actor: ServiceActor & { agreementI
 export async function maintainServiceAgreements(orgId: string): Promise<{ agreements: number; generated: number; failures: { agreementId: string; error: string }[] }> {
   if (!(await orgFeatureEnabled(orgId, "serviceDispatch"))) return { agreements: 0, generated: 0, failures: [] };
   const due = await withOrgTransaction(orgId, async () => (await db.execute<{ id: string }>(sql`select id from service_agreements
-    where org_id = ${orgId} and status = 'active' order by id`)).rows.map((row) => row.id));
+    where org_id = ${orgId} and status = 'active' order by id`, "objects")).map((row) => row.id));
   const failures: { agreementId: string; error: string }[] = [];
   let generated = 0;
   for (const agreementId of due) {

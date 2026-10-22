@@ -38,7 +38,7 @@ test('portal order amounts retain registry precision and customer isolation', { 
         values ('USD', 'US Dollar', 2), ('BHD', 'Bahraini Dinar', 3), ('JPY', 'Japanese Yen', 0)
         -- Existing seeded currencies retain their authoritative registry values.
         on conflict (code) do nothing`)
-      assert.equal((await db.execute(sql`select code from currencies where code = 'RHD'`)).rows.length, 0,
+      assert.equal((await db.execute(sql`select code from currencies where code = 'RHD'`, 'objects')).length, 0,
         'the legacy-code fixture must lack a precision entry')
       await db.execute(sql`
         insert into sales_channels (id, org_id, kind, name, subsidiary_id, currency, external_account)
@@ -102,8 +102,8 @@ test('portal order tracking is scoped to the session customer', { skip: !DB }, a
 async function enableFeatures(orgId: string, features: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || ${features}::jsonb) where id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1)
+      || ${features}::jsonb) where id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1)
 }
 
 async function seedSubscription(org: ScratchOrg): Promise<{ subscriptionId: string; linkId: string }> {
@@ -141,12 +141,12 @@ test('proration preview equals the engine amendment', { skip: !DB }, async () =>
     assert.equal(applied.adjustment, preview.adjustment)
     assert.ok(applied.invoiceId)
     const invoice = (await withBypassContext(() => db.execute<{ kind: string; subtotal: string }>(sql`
-      select kind, subtotal::text as subtotal from documents where id = ${applied.invoiceId} and org_id = ${org.orgId}`))).rows[0]!
+      select kind, subtotal::text as subtotal from documents where id = ${applied.invoiceId} and org_id = ${org.orgId}`, 'objects')))[0]!
     assert.equal(invoice.kind, 'customer_invoice')
     assert.equal(invoice.subtotal, expectedSlice)
     const subscription = (await withBypassContext(() => db.execute<{ quantity: string; price_override: string | null }>(sql`
       select quantity::text as quantity, price_override::text as price_override
-        from subscriptions where org_id = ${org.orgId} and id = ${subscriptionId}`))).rows[0]!
+        from subscriptions where org_id = ${org.orgId} and id = ${subscriptionId}`, 'objects')))[0]!
     assert.equal(subscription.quantity, '2.0000')
     assert.equal(subscription.price_override, null)
     const downgrade = await applySubscriptionChange(org.orgId, org.customerId, linkId, {
@@ -154,7 +154,7 @@ test('proration preview equals the engine amendment', { skip: !DB }, async () =>
     })
     assert.equal(downgrade.adjustment, `-${expectedSlice}`)
     const credit = (await withBypassContext(() => db.execute<{ kind: string }>(sql`
-      select kind from documents where id = ${downgrade.invoiceId} and org_id = ${org.orgId}`))).rows[0]!
+      select kind from documents where id = ${downgrade.invoiceId} and org_id = ${org.orgId}`, 'objects')))[0]!
     assert.equal(credit.kind, 'customer_credit')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })
@@ -170,9 +170,9 @@ test('pause, resume and cancel guard the subscription lifecycle', { skip: !DB },
     await assert.rejects(cancelSubscription(org.orgId, org.customerId, linkId, subscriptionId, '  '),
       (error: unknown) => error instanceof PortalRefusal && error.code === 'invalid_input')
     await cancelSubscription(org.orgId, org.customerId, linkId, subscriptionId, 'Too expensive')
-    const events = (await withBypassContext(() => db.execute<{ action: string; detail: unknown }>(sql`
+    const events = await withBypassContext(() => db.execute<{ action: string; detail: unknown }>(sql`
       select action, detail from customer_portal_events where org_id = ${org.orgId} and party_id = ${org.customerId}
-       order by created_at`))).rows
+       order by created_at`, 'objects'))
     const canceled = events.find((event) => event.action === 'subscription_canceled')
     assert.ok(canceled)
     assert.match(JSON.stringify(canceled.detail), /Too expensive/)
@@ -224,9 +224,9 @@ test('cancel save offer applies the promotion to an open draft quote', { skip: !
     assert.equal(accepted.kind, 'discount')
     assert.equal(accepted.promotionCode, 'SAVE20')
     assert.ok(BigInt(accepted.discountMinor!) > 0n)
-    const discountLines = (await withBypassContext(() => db.execute<{ promotion_id: string; amount: string }>(sql`
+    const discountLines = await withBypassContext(() => db.execute<{ promotion_id: string; amount: string }>(sql`
       select promotion_id, amount::text as amount from document_lines
-       where org_id = ${org.orgId} and document_id = ${draftId} and promotion_id is not null`))).rows
+       where org_id = ${org.orgId} and document_id = ${draftId} and promotion_id is not null`, 'objects'))
     assert.equal(discountLines.length, 1)
     assert.equal(discountLines[0]!.promotion_id, promotion.id)
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }

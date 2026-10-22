@@ -16,7 +16,7 @@ export async function WorkSetupJourney() {
   const data=await withOrgTransaction(orgId,async()=>{
     if (await lockActorCommandAuthority(db,orgId,authz.user.id,null,"admin.setup.manage")!==null) return null;
     const choices=[...(project?await listOperatingProfileChoices(db,orgId,authz.user.id,"project"):[]),...(production?await listOperatingProfileChoices(db,orgId,authz.user.id,"production"):[])];
-    const entities=production?(await db.execute<{value:string;label:string}>(sql`select id as value,name as label from subsidiaries where org_id=${orgId} and is_active and not is_elimination order by name,id limit 500`)).rows:[];
+    const entities=production?(await db.execute<{value:string;label:string}>(sql`select id as value,name as label from subsidiaries where org_id=${orgId} and is_active and not is_elimination order by name,id limit 500`, "objects")):[];
     return {choices,entities};
   });
   return data?<SetupJourneyContent {...data} canCreateProject={can(authz,"projects.manage")} canCreateProduction={can(authz,"manufacturing.manage")}/>:null;

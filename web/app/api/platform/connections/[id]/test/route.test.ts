@@ -54,12 +54,13 @@ stubModules({
       const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
       const sqlText = globalThis.connectionTestSqlText
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes("update connections")) {
             state.updates.push(text)
-            return Promise.resolve({ rows: state.updateMatches ? [{ id: "00000000-0000-4000-8000-000000000002" }] : [] })
+            return Promise.resolve({ rows: state.updateMatches ? [{ id: "00000000-0000-4000-8000-000000000002" }] : [] }).then(inMode)
           }
           if (text.includes("from connections")) {
             return Promise.resolve({
@@ -74,9 +75,9 @@ stubModules({
                 secrets: null,
                 updatedAt: "t0",
               }],
-            })
+            }).then(inMode)
           }
-          return Promise.resolve({ rows: [] })
+          return Promise.resolve({ rows: [] }).then(inMode)
         },
       }
     `,

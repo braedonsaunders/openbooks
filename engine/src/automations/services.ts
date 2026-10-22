@@ -65,8 +65,8 @@ export async function hrmFeatureOn(
     features: Record<string, boolean> | null;
   }>(sql`
     select settings -> 'features' as features from orgs where id = ${orgId} limit 1
-  `);
-  const features = rows.rows[0]?.features ?? {};
+  `, "objects");
+  const features = rows[0]?.features ?? {};
   return featureEnabled(features, key);
 }
 
@@ -120,8 +120,8 @@ export async function listAutomations(
              conditions, actions, priority,
              last_run_at as "lastRunAt", error_message as "errorMessage", version
         from automations where org_id = ${orgId} order by name
-    `);
-    return rows.rows;
+    `, "objects");
+    return rows;
   });
 }
 
@@ -172,8 +172,8 @@ export async function createAutomation(input: {
       returning id, org_id as "orgId", name, description, status, trigger, rules,
                 conditions, actions, priority,
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
-    `);
-    const row = rows.rows[0];
+    `, "objects");
+    const row = rows[0];
     if (!row)
       throw new AutomationServiceError(
         "the automation was not stored — nothing was written; retry the save",
@@ -204,20 +204,20 @@ export async function updateAutomation(input: {
   return withOrgTransaction(input.orgId, async () => {
     const current = await db.execute<{ version: number; status: string }>(sql`
       select version, status from automations where org_id = ${input.orgId} and id = ${input.automationId} for update
-    `);
-    if (current.rows.length === 0) {
+    `, "objects");
+    if (current.length === 0) {
       throw new AutomationServiceError(
         "automation not found — reload the list and try again",
       );
     }
-    const storedVersion = current.rows[0]!.version;
+    const storedVersion = current[0]!.version;
     if (
       input.expectedVersion !== undefined &&
       input.expectedVersion !== storedVersion
     ) {
       throw new AutomationVersionConflictError(storedVersion);
     }
-    const currentStatus = current.rows[0]!.status;
+    const currentStatus = current[0]!.status;
     const sets: string[] = [];
     const params: unknown[] = [];
     void sets;
@@ -269,8 +269,8 @@ export async function updateAutomation(input: {
       returning id, org_id as "orgId", name, description, status, trigger, rules,
                 conditions, actions, priority,
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
-    `);
-    const row = rows.rows[0];
+    `, "objects");
+    const row = rows[0];
     if (!row)
       throw new AutomationServiceError(
         "the automation changed while saving — reload and try again",
@@ -299,8 +299,8 @@ export async function setAutomationStatus(input: {
     }>(sql`
       select trigger, actions, status from automations
        where org_id = ${input.orgId} and id = ${input.automationId} for update
-    `);
-    const row = current.rows[0];
+    `, "objects");
+    const row = current[0];
     if (!row)
       throw new AutomationServiceError(
         "automation not found — reload the list and try again",
@@ -323,8 +323,8 @@ export async function setAutomationStatus(input: {
       returning id, org_id as "orgId", name, description, status, trigger, rules,
                 conditions, actions, priority,
                 last_run_at as "lastRunAt", error_message as "errorMessage", version
-    `);
-    const out = updated.rows[0];
+    `, "objects");
+    const out = updated[0];
     if (!out)
       throw new AutomationServiceError(
         "the automation changed while saving — reload and try again",
@@ -358,8 +358,8 @@ export async function listAutomationRuns(
        where org_id = ${orgId} and automation_id = ${automationId}
          and (${status ?? null}::text is null or status = ${status ?? null}::text)
        order by created_at desc limit 100
-    `);
-    const runs = rows.rows as {
+    `, "objects");
+    const runs = rows as {
       id: string;
       status: string;
       version: number;
@@ -406,8 +406,8 @@ export async function getAutomationRun(
              subject_kind as "subjectKind", subject_id as "subjectId", status,
              started_at as "startedAt", finished_at as "finishedAt", error, steps
         from automation_runs where org_id = ${orgId} and id = ${runId} limit 1
-    `);
-    const row = rows.rows[0] as
+    `, "objects");
+    const row = rows[0] as
       { subjectKind: string | null; subjectId: string | null } | undefined;
     if (!row)
       throw new AutomationServiceError(

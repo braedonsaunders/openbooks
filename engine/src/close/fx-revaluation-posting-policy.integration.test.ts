@@ -26,7 +26,7 @@ test("FX revaluation skips inactive entities with no adjustment in default and e
       assert.ok(result.skipped.some((item) => item.subsidiaryId === branchId && item.reason === 'no revaluation needed'));
     }
     assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries
-      where org_id=${org.orgId}`)).rows[0]!.n, 0);
+      where org_id=${org.orgId}`, "objects"))[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -72,7 +72,7 @@ for (const policy of ["account", "inactive subsidiary", "inactive book", "non-po
       assert.equal(refused.problems.length,1);
       assert.match(refused.problems[0]!,policy === "account" ? /restricted to another subsidiary/
         : policy === "inactive subsidiary" ? /inactive/ : /active primary posting book/);
-      assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,1);
+      assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n,1);
       await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${org.accounts.fxGainLoss}`);
       await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${branchId}`);

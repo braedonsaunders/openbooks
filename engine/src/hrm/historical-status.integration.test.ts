@@ -21,7 +21,7 @@ const observation = { kind: 'status_change', status: 'active', effectiveFrom: '2
 
 async function versions(orgId: string, employmentId: string) {
   return (await db.execute<{ row: Record<string, unknown> }>(sql`select to_jsonb(v) as row
-    from worker_employment_versions v where org_id=${orgId} and employment_id=${employmentId} order by version_no`)).rows.map(r => r.row);
+    from worker_employment_versions v where org_id=${orgId} and employment_id=${employmentId} order by version_no`, 'objects')).map(r => r.row);
 }
 
 test('approved historical status fills one documented day, preserves current history and admits only that Benefits date', { skip: !DB }, async () => {
@@ -34,10 +34,10 @@ test('approved historical status fills one documented day, preserves current his
     const otherSubsidiary = await mkSecondSubsidiary(h.org.orgId, h.org.subsidiaryId, { currency: 'USD', country: 'US' });
     const otherEmployment = await seedEmployment(h.org.orgId, otherSubsidiary, { workerPartyId });
     const otherRun = await committedFixture(h.org.orgId, otherSubsidiary, h.author, workerPartyId, otherEmployment.employmentId);
-    const otherHistory = (await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${otherRun}`)).rows;
+    const otherHistory = await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${otherRun}`, 'objects');
     const before = await versions(h.org.orgId, employmentId);
     const aggregateBefore = (await db.execute<{ service_start: string; service_start_provenance: string }>(sql`
-      select service_start::text,service_start_provenance from worker_employments where id=${employmentId}`)).rows[0];
+      select service_start::text,service_start_provenance from worker_employments where id=${employmentId}`, 'objects'))[0];
     const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.author, employmentId, payload: observation });
     // A second proposal binds the same revision; it cannot silently append after the first applies.
     const stale = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.author, employmentId,
@@ -49,20 +49,20 @@ test('approved historical status fills one documented day, preserves current his
     assert.equal(applied.status, 'applied');
     assert.equal(applied.appliedEmploymentRevision, 2);
     const after = await versions(h.org.orgId, employmentId);
-    assert.deepEqual((await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${otherRun}`)).rows, otherHistory);
+    assert.deepEqual(await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${otherRun}`, 'objects'), otherHistory);
     assert.deepEqual(after[0], before[0], 'no old version is closed, rewritten or linked to a successor');
     assert.equal(after.length, 2);
     assert.equal(after[1]!.status, 'active');
     assert.equal(after[1]!.effective_from, '2020-01-03');
     assert.equal(after[1]!.effective_to, '2020-01-04');
     assert.equal(after[1]!.recorded_until, null);
-    assert.deepEqual((await db.execute(sql`select service_start::text,service_start_provenance from worker_employments where id=${employmentId}`)).rows[0], aggregateBefore);
+    assert.deepEqual((await db.execute(sql`select service_start::text,service_start_provenance from worker_employments where id=${employmentId}`, 'objects'))[0], aggregateBefore);
     const event = (await db.execute<{ closed_versions: unknown[]; prior_snapshot: { historicalObservation: unknown } }>(sql`
-      select closed_versions,prior_snapshot from employment_changes where id=${applied.appliedEmploymentChangeId}`)).rows[0]!;
+      select closed_versions,prior_snapshot from employment_changes where id=${applied.appliedEmploymentChangeId}`, 'objects'))[0]!;
     assert.deepEqual(event.closed_versions, []);
     assert.deepEqual(event.prior_snapshot.historicalObservation, observation.historicalObservation);
-    const audits = (await db.execute<{ actor_id: string; changes: { before: null; after: unknown; sourceReference: string } }>(sql`
-      select actor_id,changes from audit_log where org_id=${h.org.orgId} and table_name='worker_employment_versions' and row_id=${after[1]!.id as string}`)).rows;
+    const audits = await db.execute<{ actor_id: string; changes: { before: null; after: unknown; sourceReference: string } }>(sql`
+      select actor_id,changes from audit_log where org_id=${h.org.orgId} and table_name='worker_employment_versions' and row_id=${after[1]!.id as string}`, 'objects');
     assert.equal(audits.length, 1);
     assert.equal(audits[0]!.actor_id, h.approver);
     assert.equal(audits[0]!.changes.before, null);
@@ -73,7 +73,7 @@ test('approved historical status fills one documented day, preserves current his
       changeId: applied.appliedEmploymentChangeId!, reason: 'Review status evidence', correctedFields: { status: 'on_leave' } }),
       /bounded status change request/);
     assert.deepEqual(await versions(h.org.orgId, employmentId), after, 'direct correction never selects the unrelated current episode');
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_processes where org_id=${h.org.orgId}`)).rows[0]!.n, 0);
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_processes where org_id=${h.org.orgId}`, 'objects'))[0]!.n, 0);
     await assert.rejects(async () => decideGate({ gateId: (await gateOf(stale.id)).id, decision: 'approved', userId: h.approver }), /employment changed|revision|stale/i);
     assert.equal((await versions(h.org.orgId, employmentId)).length, 2);
     const { planId } = await seedPlan(h.org.orgId);
@@ -112,7 +112,7 @@ test('historical observations refuse overlap, future windows and denied authors 
         employmentId, payload: observation }), /not found|not visible|organization|employment/i);
     });
     assert.deepEqual(await versions(h.org.orgId, employmentId), before);
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_employment_change_requests where org_id=${h.org.orgId}`)).rows[0]!.n, 0);
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_employment_change_requests where org_id=${h.org.orgId}`, 'objects'))[0]!.n, 0);
   });
 });
 
@@ -136,13 +136,13 @@ test('a committed subject period appearing after submission refuses observation 
     const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.author, employmentId, payload: observation });
     await submitChangeRequest({ orgId: h.org.orgId, actorId: h.author, requestId: draft.id, reason: 'Document historical status' });
     const runId = await committedFixture(h.org.orgId, h.org.subsidiaryId, h.author, workerPartyId, employmentId);
-    const before = (await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${runId}`)).rows;
+    const before = await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${runId}`, 'objects');
     const gate = await gateOf(draft.id);
     await assert.rejects(decideGate({ gateId: gate.id, decision: 'approved', userId: h.approver }), /committed.*employment window/);
     assert.equal((await getChangeRequest({ orgId: h.org.orgId, actorId: h.author, requestId: draft.id })).status, 'pending_approval');
     assert.equal((await versions(h.org.orgId, employmentId)).length, 1);
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from employment_changes where employment_id=${employmentId}`)).rows[0]!.n, 0);
-    assert.deepEqual((await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${runId}`)).rows, before);
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from employment_changes where employment_id=${employmentId}`, 'objects'))[0]!.n, 0);
+    assert.deepEqual(await db.execute(sql`select to_jsonb(s) as row from pay_stubs s where pay_run_document_id=${runId}`, 'objects'), before);
     await assert.rejects(createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.author, employmentId, payload: observation }), /committed.*employment window/);
   });
 });

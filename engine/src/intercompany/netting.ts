@@ -197,9 +197,9 @@ interface LoadedScope {
 }
 
 async function loadScope(runner: SqlExecutor, orgId: string, subsidiaryIds: string[]): Promise<LoadedScope> {
-  const subs = (await runner.execute<{ id: string; name: string; base_currency: string; is_active: boolean; is_elimination: boolean }>(sql`
+  const subs = await runner.execute<{ id: string; name: string; base_currency: string; is_active: boolean; is_elimination: boolean }>(sql`
     select id, name, base_currency, is_active, is_elimination from subsidiaries
-     where org_id = ${orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])`)).rows;
+     where org_id = ${orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])`, "objects");
   if (subs.length !== subsidiaryIds.length) refuse("a chosen subsidiary does not exist in this organization", 404);
   const inactive = subs.filter((sub) => !sub.is_active || sub.is_elimination);
   if (inactive.length > 0) {
@@ -273,7 +273,7 @@ async function loadOpenItems(
   if (input.keys.length === 0 && !input.lineIds?.length) return [];
   const subs = input.keys.map((key) => key.subsidiaryId);
   const accounts = input.keys.map((key) => key.accountId);
-  return (await runner.execute<OpenItemRow>(sql`
+  return await runner.execute<OpenItemRow>(sql`
     select jl.id, jl.subsidiary_id, jl.account_id, jl.party_id, jl.currency,
            jl.txn_amount::text as txn_amount, jl.amount::text as amount,
            je.posting_date::text as posting_date,
@@ -301,7 +301,7 @@ async function loadOpenItems(
               where k.sub = jl.subsidiary_id and k.acct = jl.account_id)
            and abs(jl.txn_amount) - coalesce(applied.txn, 0) > 0`}
      order by jl.id
-     ${input.lock ? sql`for update of jl` : sql``}`)).rows;
+     ${input.lock ? sql`for update of jl` : sql``}`, "objects");
 }
 
 type PositionRow = { subsidiary_id: string; account_id: string; currency: string; txn: string; base: string };
@@ -315,7 +315,7 @@ async function loadPositions(
   const accounts = input.keys.map((key) => key.accountId);
   // The same position definition FX revaluation measures: revaluation and
   // settlement exchange entries carry no transaction-currency exposure.
-  return (await runner.execute<PositionRow>(sql`
+  return await runner.execute<PositionRow>(sql`
     select jl.subsidiary_id, jl.account_id, jl.currency,
            sum(jl.txn_amount)::text as txn, sum(jl.amount)::text as base
       from journal_lines jl
@@ -331,7 +331,7 @@ async function loadPositions(
           where k.sub = jl.subsidiary_id and k.acct = jl.account_id)
      group by jl.subsidiary_id, jl.account_id, jl.currency
     having sum(jl.txn_amount) <> 0
-     order by jl.subsidiary_id, jl.account_id, jl.currency`)).rows;
+     order by jl.subsidiary_id, jl.account_id, jl.currency`, "objects");
 }
 
 function signedOpen(total: string, open: string): string {
@@ -560,9 +560,9 @@ async function assertBankAccounts(runner: SqlExecutor, orgId: string, lines: Net
   if (banks.length === 0) return;
   const ids = [...new Set(banks.map((line) => line.accountId))];
   for (const id of ids) if (!isUuid(id)) refuse("a chosen bank account is not a valid reference");
-  const rows = (await runner.execute<{ id: string; name: string; type: string; is_active: boolean; is_summary: boolean; currency_restriction: string | null }>(sql`
+  const rows = await runner.execute<{ id: string; name: string; type: string; is_active: boolean; is_summary: boolean; currency_restriction: string | null }>(sql`
     select id, name, type, is_active, is_summary, currency_restriction from accounts
-     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`)).rows;
+     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`, "objects");
   const byId = new Map(rows.map((row) => [row.id, row]));
   for (const line of banks) {
     const account = byId.get(line.accountId);
@@ -639,7 +639,7 @@ export async function proposeNettingRun(
     if (input.idempotencyKey) {
       const prior = (await db.execute<{ id: string; request: string | null }>(sql`
         select id, computation->>'request' as request from intercompany_netting_runs
-         where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
+         where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`, "objects"))[0];
       if (prior) {
         if (prior.request !== request) refuse("this request key already proposed a different netting run; use a new key for a new run", 409);
         return prior.id;
@@ -649,7 +649,7 @@ export async function proposeNettingRun(
       select run_number from intercompany_netting_runs
        where org_id = ${orgId} and status in ('proposed', 'pending_approval', 'approved')
          and cardinality(array(select unnest(subsidiary_ids) intersect select unnest(${uuidArray(input.subsidiaryIds)}::uuid[]))) >= 2
-       order by run_number limit 1`)).rows[0];
+       order by run_number limit 1`, "objects"))[0];
     if (overlapping) {
       refuse(`netting run ${overlapping.run_number} is open for these subsidiaries; post or cancel it before proposing another`, 409);
     }
@@ -660,7 +660,7 @@ export async function proposeNettingRun(
     const stored = { ...computation, request };
     const fingerprint = fingerprintOf(computation, lines);
     const runNumber = await allocateDocumentNumber(db, orgId, NUMBER_KIND, NUMBER_PREFIX);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into intercompany_netting_runs
         (org_id, run_number, as_of_date, book_id, period_id, subsidiary_ids, settle_cash, bank_accounts,
          status, computation, fingerprint, reason, idempotency_key, proposed_by)
@@ -669,11 +669,11 @@ export async function proposeNettingRun(
               ${JSON.stringify(input.bankAccounts ?? {})}::jsonb, 'proposed',
               ${JSON.stringify(stored)}::jsonb, ${fingerprint}, ${input.reason},
               ${input.idempotencyKey}, ${actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(inserted, "the netting run could not be stored");
     const id = inserted[0]!.id;
     for (const line of lines) {
-      const written = (await db.execute<{ id: string }>(sql`
+      const written = await db.execute<{ id: string }>(sql`
         insert into intercompany_netting_lines
           (org_id, run_id, line_number, pair_id, currency, subsidiary_id, counterparty_subsidiary_id,
            component, account_id, journal_line_id, document_id, functional_currency,
@@ -683,7 +683,7 @@ export async function proposeNettingRun(
                 ${line.counterpartySubsidiaryId}, ${line.component}, ${line.accountId}, ${line.journalLineId},
                 ${line.documentId}, ${line.functionalCurrency}, ${line.openTransaction}, ${line.openCarrying},
                 ${line.netted}, ${line.cash}, ${line.rate}, ${line.realizedFx})
-        returning id`)).rows;
+        returning id`, "objects");
       requireOneRow(written, "a netting proposal line could not be stored");
     }
     await auditIntercompany(db, {
@@ -723,7 +723,7 @@ async function lockRun(
            settle_cash, fingerprint, computation, proposed_by, submitted_by, reason
       from intercompany_netting_runs
      where org_id = ${orgId} and id = ${runId}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!run || !scopeCovers(allowedSubsidiaryIds, run.subsidiary_ids)) refuse("netting run not found", 404);
   return run;
 }
@@ -765,14 +765,14 @@ export async function submitNettingRun(
       const gated = dispatch.gatesCreated > 0;
       const status = gated ? "pending_approval" : "approved";
       const gatingRun = dispatch.runs.find((item) => item.gatesCreated > 0)?.runId ?? null;
-      const updated = (await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(sql`
       update intercompany_netting_runs
          set status = ${status}, submitted_by = ${actorId}, submitted_at = now(),
              flow_run_id = ${gatingRun},
              decided_by = ${gated ? null : actorId}, decided_at = ${gated ? null : sql`now()`},
              updated_at = now()
        where org_id = ${orgId} and id = ${runId} and status = 'proposed'
-      returning id`)).rows;
+      returning id`, "objects");
       requireOneRow(updated, "the netting run changed while it was being submitted");
       await auditIntercompany(db, {
       orgId,
@@ -814,7 +814,7 @@ export async function releaseNettingRunApproval(args: {
   const run = (await db.execute<{ status: string; proposed_by: string; submitted_by: string | null }>(sql`
     select status, proposed_by, submitted_by from intercompany_netting_runs
      where org_id = ${orgId} and id = ${runId}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!run) refuse("netting run not found", 404);
   if (run.status !== "pending_approval") refuse(`the netting run is ${run.status.replace("_", " ")}, not awaiting approval`, 409);
   if (actorId === run.proposed_by || actorId === run.submitted_by) {
@@ -833,11 +833,11 @@ export async function releaseNettingRunApproval(args: {
   const note = args.comment?.trim() || null;
   if (outcome === "rejected" && !note) refuse("a rejection reason is required");
   const next = outcome === "approved" ? "approved" : "rejected";
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update intercompany_netting_runs
        set status = ${next}, decided_by = ${actorId}, decided_at = now(), decision_note = ${note}, updated_at = now()
      where org_id = ${orgId} and id = ${runId} and status = 'pending_approval'
-    returning id`)).rows;
+    returning id`, "objects");
   requireOneRow(updated, "the netting run changed while its approval was being released");
   await auditIntercompany(db, {
     orgId,
@@ -865,15 +865,15 @@ export async function cancelNettingRun(
     if (!["proposed", "pending_approval", "approved"].includes(run.status)) {
       refuse(`a ${run.status.replace("_", " ")} netting run cannot be cancelled`, 409);
     }
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update intercompany_netting_runs
          set status = 'cancelled', cancelled_by = ${actorId}, cancelled_at = now(), cancel_reason = ${reason}, updated_at = now()
        where org_id = ${orgId} and id = ${runId} and status = ${run.status}
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(updated, "the netting run changed while it was being cancelled");
     if (run.status === "pending_approval") {
       const flowRuns = (await db.execute<{ flow_run_id: string | null }>(sql`
-        select flow_run_id from intercompany_netting_runs where org_id = ${orgId} and id = ${runId}`)).rows[0]?.flow_run_id;
+        select flow_run_id from intercompany_netting_runs where org_id = ${orgId} and id = ${runId}`, "objects"))[0]?.flow_run_id;
       if (flowRuns) await cancelDispatchRuns(orgId, [flowRuns], { actorId });
     }
     await auditIntercompany(db, {
@@ -932,7 +932,7 @@ export async function postNettingRun(
         409,
       );
     }
-    const stored = (await db.execute<StoredLine>(sql`
+    const stored = await db.execute<StoredLine>(sql`
       select id, line_number, pair_id, currency, subsidiary_id, counterparty_subsidiary_id, component,
              account_id, journal_line_id, functional_currency,
              open_transaction_amount::text as open_transaction_amount,
@@ -941,7 +941,7 @@ export async function postNettingRun(
              settlement_rate::text as settlement_rate
         from intercompany_netting_lines
        where org_id = ${orgId} and run_id = ${runId}
-       order by line_number`)).rows;
+       order by line_number`, "objects");
     if (stored.length === 0) refuse("this netting run has nothing to post", 409);
 
     const modules: ("ar" | "ap" | "banking")[] = ["ar", "ap", ...(run.settle_cash ? ["banking" as const] : [])];
@@ -1161,7 +1161,7 @@ export async function postNettingRun(
           const carrying = magnitude(carryingOf(netting, clearedText));
           const settledBase = magnitude(line.amount);
           const settledTxn = magnitude(clearedText);
-          const inserted = (await db.execute<{ id: string }>(sql`
+          const inserted = await db.execute<{ id: string }>(sql`
             insert into applications (org_id, from_line_id, to_line_id, amount, source_amount,
               source_transaction_amount, source_transaction_currency, target_transaction_amount,
               target_transaction_currency, settlement_rate, settlement_rate_source, settlement_rate_reference,
@@ -1169,26 +1169,26 @@ export async function postNettingRun(
             values (${orgId}, ${settlementLineId}, ${netting.journal_line_id}, ${carrying}, ${settledBase},
               ${settledTxn}, ${currency}, ${settledTxn}, ${currency}, 1, 'same_currency',
               ${`Intercompany netting ${run.run_number}`}, ${run.as_of_date}, ${fxEntryId}, ${actorId}, ${actorId})
-            returning id`)).rows;
+            returning id`, "objects");
           requireOneRow(inserted, "an intercompany settlement could not be applied");
           applicationId = inserted[0]!.id;
         }
         // A position cleared through two translated lines records the first.
-        const stamped = (await db.execute<{ id: string }>(sql`
+        const stamped = await db.execute<{ id: string }>(sql`
           update intercompany_netting_lines
              set settlement_entry_id = ${posted.entryId},
                  settlement_line_id = coalesce(settlement_line_id, ${settlementLineId}),
                  application_id = coalesce(application_id, ${applicationId})
            where org_id = ${orgId} and id = ${netting.id}
-          returning id`)).rows;
+          returning id`, "objects");
         requireOneRow(stamped, "the netting line changed while the run was posting");
       }
     }
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update intercompany_netting_runs
          set status = 'posted', posted_by = ${actorId}, posted_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${runId} and status = 'approved'
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(updated, "the netting run changed while it was posting");
     await auditIntercompany(db, {
       orgId,
@@ -1238,11 +1238,11 @@ export async function reverseNettingRun(
     const modules: ("ar" | "ap" | "banking")[] = ["ar", "ap", ...(run.settle_cash ? ["banking" as const] : [])];
     await assertIntercompanyPeriodsOpen(db, { orgId, date: input.reversalDate, bookId: run.book_id, subsidiaryIds: run.subsidiary_ids, modules });
     // Settlement entries and their realized-exchange entries carry the run.
-    const entries = (await db.execute<{ entry_id: string }>(sql`
+    const entries = await db.execute<{ entry_id: string }>(sql`
       select id as entry_id from journal_entries
        where org_id = ${orgId} and status = 'posted' and reverses_entry_id is null -- Live entries only: an already reversed settlement cannot be reversed again.
          and custom->>'intercompanyNettingRunId' = ${runId}
-       order by entry_number`)).rows;
+       order by entry_number`, "objects");
     let index = 0;
     for (const entry of entries) {
       index += 1;
@@ -1259,12 +1259,12 @@ export async function reverseNettingRun(
         closeModules: modules,
       });
     }
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update intercompany_netting_runs
          set status = 'reversed', reversed_by = ${actorId}, reversed_at = now(),
              reversal_date = ${input.reversalDate}, reverse_reason = ${reason}, updated_at = now()
        where org_id = ${orgId} and id = ${runId} and status = 'posted'
-      returning id`)).rows;
+      returning id`, "objects");
     requireOneRow(updated, "the netting run changed while it was being reversed");
     await auditIntercompany(db, {
       orgId,
@@ -1298,9 +1298,9 @@ export async function loadNettingRun(
            decided_at::text as decided_at, decision_note, posted_by, posted_at::text as posted_at, cancel_reason,
            reverse_reason, reversal_date::text as reversal_date
       from intercompany_netting_runs
-     where org_id = ${orgId} and id = ${runId}`)).rows[0];
+     where org_id = ${orgId} and id = ${runId}`, "objects"))[0];
   if (!run || !scopeCovers(allowedSubsidiaryIds, run.subsidiary_ids)) refuse("netting run not found", 404);
-  const lines = (await runner.execute<{
+  const lines = await runner.execute<{
     line_number: number; pair_id: string; currency: string; subsidiary_id: string; counterparty_subsidiary_id: string;
     component: "open_item" | "due_position" | "cash"; account_id: string; journal_line_id: string | null;
     document_id: string | null; party_id: string | null; functional_currency: string; open_transaction_amount: string;
@@ -1323,7 +1323,7 @@ export async function loadNettingRun(
       left join journal_lines jl on jl.org_id = l.org_id and jl.id = l.journal_line_id
       left join documents d on d.org_id = l.org_id and d.id = l.document_id
      where l.org_id = ${orgId} and l.run_id = ${runId}
-     order by l.line_number`)).rows;
+     order by l.line_number`, "objects");
   const computation = run.computation;
   return {
     id: run.id,
@@ -1403,7 +1403,7 @@ export async function listNettingRuns(
   options: { limit?: number } = {},
 ): Promise<NettingRunSummary[]> {
   const limit = Math.min(Math.max(options.limit ?? 200, 1), 500);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; run_number: string; status: NettingRunStatus; as_of_date: string; subsidiary_ids: string[];
     settle_cash: boolean; pair_count: number; line_count: number; proposed_at: string;
   }>(sql`
@@ -1416,7 +1416,7 @@ export async function listNettingRuns(
        and (${allowedSubsidiaryIds === null}::boolean
             or r.subsidiary_ids <@ ${uuidArray(allowedSubsidiaryIds === null ? [] : [...allowedSubsidiaryIds])}::uuid[])
      order by r.proposed_at desc, r.run_number desc
-     limit ${limit}`)).rows;
+     limit ${limit}`, "objects");
   return rows.map((row) => ({
     id: row.id,
     runNumber: row.run_number,

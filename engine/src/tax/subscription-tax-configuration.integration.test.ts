@@ -52,7 +52,7 @@ async function snapshot(orgId: string) {
     (select count(*)::int from documents where org_id=${orgId}) as documents,
     (select count(*)::int from document_lines where org_id=${orgId}) as lines,
     (select count(*)::int from document_line_tax_components where org_id=${orgId}) as evidence,
-    (select jsonb_agg(to_jsonb(n) order by id) from number_sequences n where org_id=${orgId}) as numbers`)).rows[0];
+    (select jsonb_agg(to_jsonb(n) order by id) from number_sequences n where org_id=${orgId}) as numbers`, "objects"))[0];
 }
 
 test("inactive subscription tax code refuses by code and date before any write", enabled, () => fixture(async (f) => {
@@ -89,8 +89,8 @@ test("lapsed subscription tax rate keeps its effective-rate refusal", enabled, (
 test("configured statutory zero still generates at zero tax", enabled, () => fixture(async (f) => {
   const generated = await createSubscriptionInvoice(spec(f, { taxCodeId: f.zeroCodeId }));
   const doc = (await db.execute<{ tax_total: string; total: string }>(
-    sql`select tax_total::text as tax_total, total::text as total from documents where id=${generated.invoiceId}`,
-  )).rows[0]!;
+    sql`select tax_total::text as tax_total, total::text as total from documents where id=${generated.invoiceId}`, "objects",
+  ))[0]!;
   assert.equal(doc.tax_total, "0.0000", "a matched 0% rate is legitimate zero, not a refusal");
   assert.equal(doc.total, "100.0000");
 }));
@@ -98,14 +98,14 @@ test("configured statutory zero still generates at zero tax", enabled, () => fix
 test("live subscription tax rate still writes positive evidence", enabled, () => fixture(async (f) => {
   const generated = await createSubscriptionInvoice(spec(f));
   const doc = (await db.execute<{ tax_total: string }>(
-    sql`select tax_total::text as tax_total from documents where id=${generated.invoiceId}`,
-  )).rows[0]!;
+    sql`select tax_total::text as tax_total from documents where id=${generated.invoiceId}`, "objects",
+  ))[0]!;
   assert.notEqual(doc.tax_total, "0.0000", "the 13% code must produce tax");
   const evidence = (await db.execute<{ n: number }>(
     sql`select count(*)::int as n from document_line_tax_components c
          join document_lines l on l.id = c.document_line_id
-        where l.document_id=${generated.invoiceId} and l.org_id=${f.org.orgId}`,
-  )).rows[0]!.n;
+        where l.document_id=${generated.invoiceId} and l.org_id=${f.org.orgId}`, "objects",
+  ))[0]!.n;
   assert.ok(evidence > 0, "a taxed subscription line carries calculation evidence");
 }));
 
@@ -114,8 +114,8 @@ test("untaxed subscription generation is unchanged", enabled, () => fixture(asyn
   const skipped = await createSubscriptionInvoice(spec(f, { applyTax: false }));
   for (const generated of [plain, skipped]) {
     const doc = (await db.execute<{ tax_total: string; total: string }>(
-      sql`select tax_total::text as tax_total, total::text as total from documents where id=${generated.invoiceId}`,
-    )).rows[0]!;
+      sql`select tax_total::text as tax_total, total::text as total from documents where id=${generated.invoiceId}`, "objects",
+    ))[0]!;
     assert.equal(doc.tax_total, "0.0000");
     assert.equal(doc.total, "100.0000");
   }
@@ -132,7 +132,7 @@ test("a tax-inclusive subscription price carves the tax out instead of adding it
            l.amount::text as amount, l.tax_amount::text as "taxAmount", l.tax_input_amount::text as "taxInputAmount",
            l.unit_price::text as "unitPrice"
       from documents d join document_lines l on l.document_id = d.id and l.org_id = d.org_id
-     where d.id = ${invoiceId} and d.org_id = ${f.org.orgId}`)).rows[0];
+     where d.id = ${invoiceId} and d.org_id = ${f.org.orgId}`, "objects"))[0];
 
   // A 113.00 plan on a 13% price-includes-tax code charges 113.00 in total:
   // 100.00 of revenue and 13.00 of tax, never 113.00 + 13.00.

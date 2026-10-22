@@ -99,8 +99,8 @@ export async function createPaymentDocument(opts: {
     select coalesce(
       (select subsidiary_id from parties where id = ${opts.partyId ?? null} and org_id = ${opts.orgId}),
       (select id from subsidiaries where org_id = ${opts.orgId} and parent_id is null)
-    ) as id`));
-  const derived = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub.rows[0]?.id ?? null);
+    ) as id`, "objects"));
+  const derived = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub[0]?.id ?? null);
   const resolved = resolveDraftSubsidiary(opts.allowedSubsidiaryIds, derived);
   if (!resolved.ok) throw new PaymentError(resolved.error);
   const subsidiaryId = resolved.subsidiaryId;
@@ -407,10 +407,10 @@ export async function updateDraftPayment(
       const uniqueRefs = [...new Set(refs)];
       const validRefs = (await db.execute<{ id: string; type: string }>(sql`
         select id, type from accounts where org_id = ${doc.orgId} and id in ${uniqueRefs} and is_active and not is_summary
-      `));
-      if (validRefs.rows.length !== uniqueRefs.length) throw new PaymentError("payment accounting account is invalid or inactive");
+      `, "objects"));
+      if (validRefs.length !== uniqueRefs.length) throw new PaymentError("payment accounting account is invalid or inactive");
       if (feeIncomeAccountId) {
-        const feeAccount = validRefs.rows.find((row) => row.id === feeIncomeAccountId);
+        const feeAccount = validRefs.find((row) => row.id === feeIncomeAccountId);
         if (!feeAccount || !["income", "income_other"].includes(feeAccount.type)) {
           throw new PaymentError("fee income account must be an active income account");
         }
@@ -418,9 +418,9 @@ export async function updateDraftPayment(
     }
     if (partyId && partyId !== doc.partyId) {
       const party = (await db.execute<{ id: string }>(
-        sql`select id from parties where id = ${partyId} and org_id = ${doc.orgId} and is_active`,
+        sql`select id from parties where id = ${partyId} and org_id = ${doc.orgId} and is_active`, "objects",
       ));
-      if (!party.rows[0]) throw new PaymentError("party not found");
+      if (!party[0]) throw new PaymentError("party not found");
     }
 
     // Allocations must target real open items of this party, within open balance.
@@ -546,7 +546,7 @@ export async function updateDraftPayment(
           from documents
          where id = ${id} and org_id = ${orgId}
          for update
-      `)).rows[0];
+      `, "objects"))[0];
       if (!locked) throw new PaymentError("payment document not found");
       if (locked.status !== "draft") throw new PaymentError("only draft payments can be edited");
       if (options.expectedRevision !== undefined && options.expectedRevision !== locked.updatedAt) {
@@ -578,7 +578,7 @@ export async function updateDraftPayment(
           taxAmount: "0",
         });
       }
-      const written = await tx.execute(sql`
+      const written = await tx.execute<never>(sql`
         update documents set
           party_id = ${partyId ?? null},
           document_date = coalesce(${patch.documentDate ?? null}, document_date),

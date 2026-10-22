@@ -76,7 +76,7 @@ test('copy_prior_actuals refuses a malformed dimension id instead of broadening 
 
     const after = (await db.execute<{ revision: number; n: number }>(sql`
       select revision, (select count(*)::int from budget_lines where scenario_id = ${scenarioId} and org_id = ${org.orgId}) as n
-        from budget_scenarios where id = ${scenarioId} and org_id = ${org.orgId}`)).rows[0]!
+        from budget_scenarios where id = ${scenarioId} and org_id = ${org.orgId}`, 'objects'))[0]!
     assert.equal(after.revision, 1, 'the refused copy changes no revision')
     assert.equal(after.n, 1, 'the refused copy deletes no lines')
   } finally {

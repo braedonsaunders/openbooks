@@ -48,7 +48,7 @@ test("a billed project charge cannot be voided until its customer invoice releas
                 'time_and_materials', false, 'open', ${actor}, ${actor})`);
       const invoice = await generateInvoiceFromBillingRequest(org.orgId, actor, request);
       const invoiceNumber = (await db.execute<{ n: string }>(sql`
-        select document_number as n from documents where id = ${invoice.id} and org_id = ${org.orgId}`)).rows[0]!.n;
+        select document_number as n from documents where id = ${invoice.id} and org_id = ${org.orgId}`, "objects"))[0]!.n;
 
       const voidCharge = () => requestDocumentVoid({
         documentId: charge, orgId: org.orgId, actorId: actor, reason: "charged to the wrong job", reversalDate: org.date,
@@ -58,7 +58,7 @@ test("a billed project charge cannot be voided until its customer invoice releas
         error.code === "billed-on-invoice" &&
         error.message === `This cost is billed on invoice ${invoiceNumber}; void or delete that invoice first`);
       const stillPosted = (await db.execute<{ status: string }>(sql`
-        select status from documents where id = ${charge} and org_id = ${org.orgId}`)).rows[0]!;
+        select status from documents where id = ${charge} and org_id = ${org.orgId}`, "objects"))[0]!;
       assert.equal(stillPosted.status, "posted", "a refused void leaves the charge untouched");
 
       await deleteDocument(invoice.id, actor, org.orgId, { allowedSubsidiaryIds: null, reason: "rebill after correction" });

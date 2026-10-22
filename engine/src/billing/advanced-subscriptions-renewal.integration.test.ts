@@ -124,8 +124,8 @@ async function renewalAmendments(orgId: string, subscriptionId: string): Promise
       from subscription_amendments
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
      order by amendment_number
-  `));
-  return rows.rows;
+  `, "objects"));
+  return rows;
 }
 
 /**
@@ -143,8 +143,8 @@ async function subscriptionState(orgId: string, subscriptionId: string): Promise
              where pi.org_id = ${orgId} and pi.subscription_id = ${subscriptionId}) as "periodInvoices"
       from subscriptions s
      where s.id = ${subscriptionId} and s.org_id = ${orgId}
-  `));
-  return row.rows[0]!;
+  `, "objects"));
+  return row[0]!;
 }
 
 test(
@@ -186,7 +186,7 @@ test(
         select term_ends_on as "termEndsOn", contract_revision as revision
           from subscription_lifecycles
          where org_id = ${org.orgId} and subscription_id = ${subscriptionId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(lifecycle.termEndsOn, "2027-06-15", "the term advanced by the renewal term months");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -305,7 +305,7 @@ test(
           from subscriptions s join subscription_lifecycles l
             on l.subscription_id = s.id and l.org_id = s.org_id
          where s.id = ${subscriptionId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(before.amendments, 0, "no orphan amendment survives a failed renewal");
       assert.equal(before.termEndsOn, "2026-06-15", "the contract did not extend behind the failed amendment");
       assert.equal(before.revision, 1, "the revision still reads as activated — the renew's bump rolled back");

@@ -448,9 +448,9 @@ export async function ieEmployeeYtd(
       coalesce(sum((s.factors->>'IE_TAXBASE')::numeric), 0) as taxbase,
       coalesce(sum(s.pensionable_earnings), 0) as gross
     from ${employerScopedStatutoryStubs(scope,{employeePartyId,employmentId})} s
-  `);
-  if(r.rows.length!==1)throw new PayrollPackError('IE committed statutory history did not return its required prior totals');
-  return r.rows[0]!;
+  `, "objects");
+  if(r.length!==1)throw new PayrollPackError('IE committed statutory history did not return its required prior totals');
+  return r[0]!;
 }
 
 function elapsedPeriodsForPayDate(payDate: string, periodsPerYear: number): number {

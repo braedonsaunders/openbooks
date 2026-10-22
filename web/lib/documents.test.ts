@@ -88,9 +88,9 @@ async function loadStoredDocument(orgId: string, id: string): Promise<StoredDocu
            (revision_seq)::text as "updatedAt"
       from documents
      where org_id = ${orgId} and id = ${id}
-  `))
-  assert.ok(result.rows[0], `document ${id} should exist`)
-  return result.rows[0]
+  `, 'objects'))
+  assert.ok(result[0], `document ${id} should exist`)
+  return result[0]
 }
 
 function pids(value: unknown): number[] {
@@ -108,7 +108,7 @@ async function waitForBlockedWriter(
 ): Promise<{ pid: number; query: string; blockingPids: number[] }> {
   const deadline = Date.now() + 10_000
   while (Date.now() < deadline) {
-    const rows = await withBypass(async () => (await db.execute<{
+    const rows = await withBypass(async () => await db.execute<{
       pid: number
       query: string
       blockingPids: unknown
@@ -118,7 +118,7 @@ async function waitForBlockedWriter(
        where datname = current_database()
          and pid <> pg_backend_pid()
          and cardinality(pg_blocking_pids(pid)) > 0
-    `)).rows)
+    `, 'objects'))
     for (const row of rows) {
       const blockingPids = pids(row.blockingPids)
       if (
@@ -266,13 +266,13 @@ test('a malformed or impossible edit date fails closed before any write', { skip
     }
     // Nothing persisted, and a well-formed date still saves.
     const stored = (await withBypass(() => db.execute<{ document_date: string }>(sql`
-      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`))).rows[0]!
+      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`, 'objects')))[0]!
     assert.equal(stored.document_date, org.date)
     const current = await withBypass(() => loadDocumentEditCurrent(id, org.orgId))
     assert.ok(current)
     await withOrgContext(org.orgId, () => applyDocumentEdit(id, current, { documentDate: '2024-02-28', expectedUpdatedAt: current.updatedAt }, { orgId: org.orgId, userId: actorId, source: 'api' }))
     const moved = (await withBypass(() => db.execute<{ document_date: string }>(sql`
-      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`))).rows[0]!
+      select document_date::text as document_date from documents where id = ${id} and org_id = ${org.orgId}`, 'objects')))[0]!
     assert.equal(moved.document_date, '2024-02-28')
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
@@ -796,7 +796,7 @@ test(
         const retained = await loadStoredDocument(org.orgId, rollbackId)
         assert.equal(retained.memo, 'rollback header')
         assert.equal(retained.updatedAt, opened.updatedAt)
-        const lines = await withOrgContext(org.orgId, async () => (await db.execute<{
+        const lines = await withOrgContext(org.orgId, async () => await db.execute<{
           id: string
           accountId: string
           description: string
@@ -806,7 +806,7 @@ test(
             from document_lines
            where org_id = ${org.orgId} and document_id = ${rollbackId}
            order by line_number
-        `)).rows)
+        `, 'objects'))
         assert.deepEqual(lines, [{
           id: rollbackLineId,
           accountId: org.accounts.bank,
@@ -862,7 +862,7 @@ test(
           assert.equal(payload.doc.updated_at, persisted.updatedAt)
         }
 
-        const runs = await withOrgContext(org.orgId, async () => (await db.execute<{
+        const runs = await withOrgContext(org.orgId, async () => await db.execute<{
           status: string
         }>(sql`
           select status
@@ -870,7 +870,7 @@ test(
            where org_id = ${org.orgId} and flow_id = ${createFlowId}
              and trigger = 'on_create'
            order by started_at
-        `)).rows)
+        `, 'objects'))
         assert.deepEqual(runs, [
           { status: 'completed' },
           { status: 'completed' },
@@ -942,7 +942,7 @@ test(
         const loser = attempts.find((attempt) => attempt.status === 'rejected')
         assert.ok(loser?.status === 'rejected' && isConflict(loser.reason))
 
-        const links = await withOrgContext(org.orgId, async () => (await db.execute<{
+        const links = await withOrgContext(org.orgId, async () => await db.execute<{
           replacementId: string
           status: string
           memo: string | null
@@ -957,7 +957,7 @@ test(
            where link.org_id = ${org.orgId}
              and link.to_document_id = ${correctionSourceId}
              and link.link_type = 'reverses'
-        `)).rows)
+        `, 'objects'))
         assert.equal(links.length, 1)
         assert.equal(links[0]!.status, 'draft')
         assert.equal(links[0]!.memo, 'retained correction')
@@ -1032,7 +1032,7 @@ test(
              and replacement.id = link.from_document_id
            where source.org_id = ${org.orgId}
              and source.id = ${applicationCorrectionSourceId}
-        `)).rows[0])
+        `, 'objects'))[0])
         assert.deepEqual(committed, {
           sourceStatus: 'voided',
           replacementMemo: 'application correction committed',
@@ -1063,7 +1063,7 @@ test(
             (select count(*)::int from notifications
               where org_id = ${org.orgId} and kind = 'flow'
                 and title = 'Correction committed') as notifications
-        `)).rows[0])
+        `, 'objects'))[0])
         assert.deepEqual(replayEffects, { runs: 1, notifications: 1 })
       })
 
@@ -1158,7 +1158,7 @@ test(
             from documents source
            where source.org_id = ${org.orgId}
              and source.id = ${voidRollbackSourceId}
-        `)).rows[0])
+        `, 'objects'))[0])
         assert.deepEqual(rolledBack, {
           sourceStatus: 'posted',
           links: 0,
@@ -1268,7 +1268,7 @@ test(
             (select count(*)::int from documents
               where org_id = ${org.orgId}
                 and custom->>'correctionOf' = ${voidRollbackSourceId}) as replacements
-        `)).rows[0])
+        `, 'objects'))[0])
         assert.deepEqual(lineage, { links: 0, replacements: 0 })
         assert.equal((await loadStoredDocument(org.orgId, voidRollbackSourceId)).status, 'posted')
 
@@ -1314,7 +1314,7 @@ test(
                      )) as runs
             from documents source
            where source.org_id = ${org.orgId} and source.id = ${voidRollbackSourceId}
-        `)).rows[0])
+        `, 'objects'))[0])
         assert.deepEqual(committed, {
           sourceStatus: 'voided',
           links: 1,
@@ -1495,8 +1495,8 @@ test('provider failure during API document create leaves no document or dependen
         (select count(*) from tax_rate_quotes where org_id = ${org.orgId})::text as quotes,
         (select count(*) from journal_entries where org_id = ${org.orgId})::text as journals,
         (select count(*) from posting_effects where org_id = ${org.orgId})::text as effects,
-        (select count(*) from audit_log where org_id = ${org.orgId} and table_name = 'documents')::text as audits`))
-    assert.deepEqual(counts.rows[0], {
+        (select count(*) from audit_log where org_id = ${org.orgId} and table_name = 'documents')::text as audits`, 'objects'))
+    assert.deepEqual(counts[0], {
       documents: '0',
       lines: '0',
       quotes: '0',

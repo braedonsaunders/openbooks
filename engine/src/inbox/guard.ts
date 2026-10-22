@@ -108,7 +108,7 @@ export async function sourceTableInstalled(table: string): Promise<boolean> {
   if (installedTables.has(table)) return true;
   const found = (await db.execute<{ exists: boolean }>(sql`
     select to_regclass(${`public.${table}`}) is not null as exists
-  `)).rows[0]?.exists === true;
+  `, "objects"))[0]?.exists === true;
   if (found) installedTables.add(table);
   return found;
 }

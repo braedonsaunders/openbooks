@@ -270,8 +270,8 @@ async function pendingFeedbackIntents(orgId: string): Promise<PendingFeedbackInt
           and done.row_id = intent.row_id
           and done.changes ->> 'status' = 'filed'
       )
-  `)
-  return rows.rows.filter((row) => typeof row.payloadHash === 'string' && row.payloadHash)
+  `, 'objects')
+  return rows.filter((row) => typeof row.payloadHash === 'string' && row.payloadHash)
 }
 
 /**

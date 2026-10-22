@@ -87,9 +87,9 @@ test(
         `expected tenant-opaque 404, got ${refusedCreate.status}: ${JSON.stringify(refusedCreate.body)}`,
       );
       const created = await withBypass(() =>
-        db.execute<{ n: number }>(sql`select count(*)::int as n from items where org_id = ${orgA.orgId} and name = 'Foreign ref item'`),
+        db.execute<{ n: number }>(sql`select count(*)::int as n from items where org_id = ${orgA.orgId} and name = 'Foreign ref item'`, "objects"),
       );
-      assert.equal(created.rows[0]?.n ?? -1, 0, "refused create stores nothing");
+      assert.equal(created[0]?.n ?? -1, 0, "refused create stores nothing");
 
       // CREATE with a dangling uuid must fail closed too.
       const dangling = await withOrgContext(orgA.orgId, () =>
@@ -126,10 +126,10 @@ test(
         `expected tenant-opaque 404, got ${refusedUpdate.status}: ${JSON.stringify(refusedUpdate.body)}`,
       );
       const stored = await withBypass(() =>
-        db.execute<{ custom: Record<string, unknown> }>(sql`select custom from items where id = ${itemId}`),
+        db.execute<{ custom: Record<string, unknown> }>(sql`select custom from items where id = ${itemId}`, "objects"),
       );
       assert.equal(
-        (stored.rows[0]?.custom as Record<string, unknown> | undefined)?.ref_party,
+        (stored[0]?.custom as Record<string, unknown> | undefined)?.ref_party,
         own,
         "refused update leaves the stored reference untouched",
       );

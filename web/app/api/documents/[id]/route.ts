@@ -43,9 +43,9 @@ export const GET = defineRoute({
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
     const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
-        sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
+        sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`, 'objects',
       ))
-    const row = owned.rows[0]
+    const row = owned[0]
     if (!row) return notFound("record")
     const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
     if (denied) return denied
@@ -89,9 +89,9 @@ export const PATCH = defineRoute({
                    custom,
                    ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt",
                    subsidiary_id as "subsidiaryId"
-              from documents where id = ${id} and org_id = ${user.orgId}`,
+              from documents where id = ${id} and org_id = ${user.orgId}`, 'objects',
       ))
-    const row = owned.rows[0]
+    const row = owned[0]
     if (!row) return notFound("record")
     const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
     if (denied) return denied
@@ -140,13 +140,13 @@ export const PATCH = defineRoute({
     if (Array.isArray(body.lines) && !(await isFeatureEnabled(user.orgId, 'inventory'))) {
         const stored = (await db.execute<{ item_id: string }>(sql`
           select item_id from document_lines
-           where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`))
-        const storedIds = new Set(stored.rows.map((row) => row.item_id))
+           where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`, 'objects'))
+        const storedIds = new Set(stored.map((row) => row.item_id))
         for (const line of body.lines) {
           if (!line.itemId || !isUuid(line.itemId) || storedIds.has(line.itemId)) continue
           const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
-          if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
+          if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
             return notFound("record")
           }
         }
@@ -154,13 +154,13 @@ export const PATCH = defineRoute({
     if (Array.isArray(body.lines) && !(await isFeatureEnabled(user.orgId, 'equipment'))) {
         const stored = (await db.execute<{ item_id: string }>(sql`
           select item_id from document_lines
-           where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`))
-        const storedIds = new Set(stored.rows.map((row) => row.item_id))
+           where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`, 'objects'))
+        const storedIds = new Set(stored.map((row) => row.item_id))
         for (const line of body.lines) {
           if (!line.itemId || !isUuid(line.itemId) || storedIds.has(line.itemId)) continue
           const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
-          if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
+          if (item[0] && item[0].kind === 'equipment_charge') {
             return notFound("record")
           }
         }
@@ -201,9 +201,9 @@ export const DELETE = defineRoute({
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
     const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
-        sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
+        sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`, 'objects',
       ))
-    const row = owned.rows[0]
+    const row = owned[0]
     if (!row) return notFound("record")
     const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
     if (denied) return denied

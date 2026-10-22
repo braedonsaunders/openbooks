@@ -26,10 +26,10 @@ async function setFeatures(orgId: string, features: Record<string, boolean>) {
 }
 
 async function audits(orgId: string, rowId: string) {
-  return (await db.execute<{ action: string; changes: { before: { tolerance_percent?: string; reason?: string }; after: { tolerance_percent?: string; reason?: string } } }>(sql`
+  return await db.execute<{ action: string; changes: { before: { tolerance_percent?: string; reason?: string }; after: { tolerance_percent?: string; reason?: string } } }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'purchase_over_receipt_tolerances' and row_id = ${rowId}
-     order by at desc, id desc`)).rows;
+     order by at desc, id desc`, "objects");
 }
 
 test("the tolerance entity is registered on the inventory rail under orders", () => {
@@ -59,7 +59,7 @@ test("a tolerance writes through Setup with its reason and a before/after audit"
 
     const stored = (await db.execute<{ item_category: string | null; tolerance_percent: string; reason: string }>(sql`
       select item_category, tolerance_percent::text as tolerance_percent, reason
-        from purchase_over_receipt_tolerances where id = ${id} and org_id = ${org.orgId}`)).rows[0]!;
+        from purchase_over_receipt_tolerances where id = ${id} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(stored.item_category, "Consumables");
     assert.equal(stored.tolerance_percent, "10.0000");
     assert.equal(stored.reason, "mill ships heavy bags; warehouse accepts ten percent");
@@ -109,7 +109,7 @@ test("out-of-range tolerances and a missing reason refuse before any write", { s
       assert.ok(result.status === 400 || result.status === 422, `refused: ${JSON.stringify(body)}`);
     }
     const count = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from purchase_over_receipt_tolerances where org_id = ${org.orgId}`)).rows[0]!.n;
+      select count(*)::int as n from purchase_over_receipt_tolerances where org_id = ${org.orgId}`, "objects"))[0]!.n;
     assert.equal(count, 0);
   } finally {
     await dropScratchOrg(org.orgId);

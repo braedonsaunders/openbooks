@@ -18,8 +18,9 @@ const draftCreate = {
 const calls: unknown[][] = []
 const executor = {
   execute: async (...args: unknown[]) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (args[1] === 'objects' ? result.rows : result)
     calls.push(args)
-    return { rows: [] }
+    return inMode({ rows: [] })
   },
 } as unknown as SqlExecutor
 
@@ -34,13 +35,13 @@ test('a draft-by-default promotion create passes validation without a transition
 
 test('leaving the status unchanged on edit passes validation', async () => {
   const reading = {
-    execute: async () => ({
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({
       rows: [{
         code: 'QA-PROMO10', name: 'QA Ten Percent', description: null, kind: 'percent', status: 'draft',
         percent_value: '10', amount_minor: null, currency: null, buy_quantity: null, get_quantity: null,
         starts_at: null, ends_at: null, usage_limit: null, discount_account_id: null,
       }],
-    }),
+    }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
   }
   const result = await validatePromotionWrite({ entity, orgId: 'org-1', body: {}, rowId: 'promo-1', executor: reading as unknown as SqlExecutor })
   assert.equal(result, undefined)
@@ -48,13 +49,13 @@ test('leaving the status unchanged on edit passes validation', async () => {
 
 test('an illegal archived-to-active edit keeps its named remedy', async () => {
   const reading = {
-    execute: async () => ({
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({
       rows: [{
         code: 'QA-PROMO10', name: 'QA Ten Percent', description: null, kind: 'percent', status: 'archived',
         percent_value: '10', amount_minor: null, currency: null, buy_quantity: null, get_quantity: null,
         starts_at: null, ends_at: null, usage_limit: null, discount_account_id: null,
       }],
-    }),
+    }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
   }
   const result = await validatePromotionWrite({
     entity, orgId: 'org-1', body: { status: 'active' }, rowId: 'promo-1', executor: reading as unknown as SqlExecutor,

@@ -56,14 +56,14 @@ async function seedDraftBill(orgId: string, actor: string, subsidiaryId: string,
 async function docState(orgId: string, id: string) {
   return withBypassContext(async () =>
     (await db.execute<{ status: string; submittedBy: string | null }>(sql`
-      select status, submitted_by as "submittedBy" from documents where id = ${id} and org_id = ${orgId}`)).rows[0]!,
+      select status, submitted_by as "submittedBy" from documents where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!,
   )
 }
 
 async function auditTrail(orgId: string, id: string) {
   return withBypassContext(async () =>
-    (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
-      select action, changes from audit_log where org_id = ${orgId} and table_name = 'documents' and row_id = ${id} order by action`)).rows,
+    await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
+      select action, changes from audit_log where org_id = ${orgId} and table_name = 'documents' and row_id = ${id} order by action`, 'objects'),
   )
 }
 
@@ -80,7 +80,7 @@ test('zero-gate vendor-bill submission releases immediately and retains the exac
  assert.equal((await docState(org.orgId,id)).status,'approved');
  const audits=await auditTrail(org.orgId,id),approvals=audits.filter(row=>row.action==='approve');
  assert.equal(approvals.length,1);assert.equal(approvals[0]?.changes.reason,AUTO_RELEASE_REASON);
- const receipt=(await withBypassContext(()=>db.execute<{kind:string;actor_id:string}>(sql`select policy->>'kind' as kind,actor_id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`))).rows;
+ const receipt=await withBypassContext(()=>db.execute<{kind:string;actor_id:string}>(sql`select policy->>'kind' as kind,actor_id from flow_submissions where org_id=${org.orgId} and subject_id=${id}`, 'objects'));
  assert.deepEqual(receipt,[{kind:'ungated',actor_id:actor}]);
 }));
 
@@ -91,7 +91,7 @@ test('ten configured vendor-bill Flows all decide before the document releases',
  const id=await seedDraftBill(org.orgId,actor,org.subsidiaryId,org.vendorId,org.date);
  const response=await withOrgContext(org.orgId,()=>POST(request({action:'submit',documentId:id})));
  assert.equal(response.status,200,await response.clone().text());assert.equal((await docState(org.orgId,id)).status,'pending_approval');
- const gates=(await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} order by id`))).rows;
+ const gates=await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} order by id`, 'objects'));
  assert.equal(gates.length,10);
  for(const[index,gate]of gates.entries()){
   await decideGate({gateId:gate.id,userId:reviewer,decision:'approved'});
@@ -106,7 +106,7 @@ test('posting a draft bill routes its configured gates and posts no journal whil
  const id=await seedDraftBill(org.orgId,actor,org.subsidiaryId,org.vendorId,org.date);
  const response=await withOrgContext(org.orgId,()=>POST(request({action:'post',documentId:id})));
  assert.equal(response.status,202,await response.clone().text());assert.equal((await docState(org.orgId,id)).status,'pending_approval');
- assert.equal((await withBypassContext(()=>db.execute(sql`select id from journal_entries where org_id=${org.orgId}`))).rows.length,0);
+ assert.equal((await withBypassContext(()=>db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, 'objects'))).length,0);
 }));
 
 test('a later tenant policy never reinterprets an already released bill',DB,async()=>fixture(async(org,actor)=>{

@@ -64,19 +64,19 @@ test(
            where payment_run_id = ${runId} and org_id = ${org.orgId}
              and event_type = 'run_posting_failed'
            order by created_at desc limit 1
-        `),
+        `, "objects"),
       );
-      assert.equal(event.rows.length, 1, "a run_posting_failed event must exist");
-      const details = event.rows[0]!.details as Record<string, unknown>;
+      assert.equal(event.length, 1, "a run_posting_failed event must exist");
+      const details = event[0]!.details as Record<string, unknown>;
       assert.deepEqual(details.failures, [
         { payee: "Acme Vendor", error: "instruction has no payment document" },
       ]);
       const run = await withBypassContext(() =>
         db.execute<{ status: string }>(sql`
           select status from payment_runs where id = ${runId} and org_id = ${org.orgId}
-        `),
+        `, "objects"),
       );
-      assert.equal(run.rows[0]!.status, "partially_failed");
+      assert.equal(run[0]!.status, "partially_failed");
     } finally {
       await withBypassContext(() => dropScratchOrg(org.orgId));
     }

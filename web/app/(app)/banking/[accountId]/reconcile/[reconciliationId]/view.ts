@@ -253,8 +253,8 @@ export async function loadReconciliation(
       left join users u on u.id = r.signed_off_by
      where r.id = ${reconciliationId} and r.account_id = ${accountId}
        and r.org_id = ${authz.user.orgId}
-  `))
-  const recon = reconRes.rows[0]
+  `, 'objects'))
+  const recon = reconRes[0]
   // Sessions on another entity's account (or a shared account, for a
   // restricted reader) do not exist as far as this page is concerned.
   if (!recon || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, recon.account_subsidiary_id)) notFound()
@@ -273,7 +273,7 @@ export async function loadReconciliation(
         select c.display_name from connections c
          where c.org_id = ${ctx.orgId} and c.source = ${recon.evidence_connector}
          order by c.mirror_enabled desc, c.created_at limit 1
-      `)).rows[0]?.display_name ?? t('sourceSystem.other')
+      `, 'objects'))[0]?.display_name ?? t('sourceSystem.other')
     : t('sourceSystem.other')
 
   // Source-evidenced sign-offs stand on mirrored cleared stamps, not on
@@ -297,9 +297,9 @@ export async function loadReconciliation(
          and je.book_id = ${bookId} and je.status in ('posted', 'reversed')
          and jl.currency = ${recon.currency} and jl.posting_date <= ${recon.through_date}
          and ${excludePeriodEndJournals(sql`je.origin`)}
-    `)
-    clearedLines = Number(evidenceCounts.rows[0]?.cleared ?? 0)
-    unclearedLines = Number(evidenceCounts.rows[0]?.uncleared ?? 0)
+    `, 'objects')
+    clearedLines = Number(evidenceCounts[0]?.cleared ?? 0)
+    unclearedLines = Number(evidenceCounts[0]?.uncleared ?? 0)
   }
   // Resolved eagerly: the description below needs a connector label exactly
   // when this reconciliation stands on source evidence.
@@ -354,7 +354,7 @@ export async function loadReconciliation(
   // must show it, not report difference zero over an empty pane. The panes
   // stay read-only once signed; only their data flows again.
   // -- GL-only clearing groups this session (no statement side) --------------
-  const glClearings = (await db.execute<ReconcileGlClearing>(sql`
+  const glClearings = await db.execute<ReconcileGlClearing>(sql`
     select m.group_id, count(*)::int as lines,
            string_agg(distinct je.entry_number, ', ') as entries,
            coalesce(sum(jl.txn_amount), 0)::text as total
@@ -365,7 +365,7 @@ export async function loadReconciliation(
        and m.statement_line_id is null
      group by m.group_id
      order by min(m.created_at)
-  `)).rows
+  `, 'objects')
 
   const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = (await Promise.all([
     db.execute<ReconcileStmtRow>(sql`
@@ -377,11 +377,11 @@ export async function loadReconciliation(
            where ${stmtWhere}
            order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, l.line_number
            limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
-        `),
+        `, 'objects'),
     db.execute<CountRow & { total: string }>(sql`
           select count(*) as n, coalesce(sum(l.amount), 0) as total from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
-           where ${stmtWhere}`),
+           where ${stmtWhere}`, 'objects'),
     db.execute<ReconcileGlRow>(sql`
           select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount,
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
@@ -391,11 +391,11 @@ export async function loadReconciliation(
            where ${glWhere}
            order by ${GL_SORTS[glParams.sort]} ${glParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, jl.line_number
            limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}
-        `),
+        `, 'objects'),
     db.execute<CountRow & { total: string }>(sql`
           select count(*) as n, coalesce(sum(jl.txn_amount), 0) as total from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-           where ${glWhere}`),
+           where ${glWhere}`, 'objects'),
     db.execute<ReconcileMatchedRow>(sql`
       select m.id, m.statement_line_id, m.matched_by, m.confidence,
              sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
@@ -408,13 +408,13 @@ export async function loadReconciliation(
        where ${mWhere}
        order by ${M_SORTS[mParams.sort]} ${mParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, m.created_at
        limit ${mParams.perPage} offset ${(mParams.page - 1) * mParams.perPage}
-    `),
+    `, 'objects'),
     db.execute<CountRow>(sql`
       select count(*) as n from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
         join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where ${mWhere}`),
+       where ${mWhere}`, 'objects'),
   ]))
 
   // Read-time staleness: late in-period postings and reversed matches move
@@ -559,16 +559,16 @@ export async function loadReconciliation(
       statementBalance: String(recon.statement_balance),
       currency: recon.currency,
     },
-    stmtRows: stmtRows.rows,
-    stmtTotal: Number(stmtCount.rows[0]?.n ?? 0),
-    stmtOutstandingTotal: String(stmtCount.rows[0]?.total ?? '0'),
+    stmtRows,
+    stmtTotal: Number(stmtCount[0]?.n ?? 0),
+    stmtOutstandingTotal: String(stmtCount[0]?.total ?? '0'),
     stmtParams,
-    glRows: glRows.rows,
-    glTotal: Number(glCount.rows[0]?.n ?? 0),
-    glOutstandingTotal: String(glCount.rows[0]?.total ?? '0'),
+    glRows,
+    glTotal: Number(glCount[0]?.n ?? 0),
+    glOutstandingTotal: String(glCount[0]?.total ?? '0'),
     glParams,
-    matchedRows: mRows.rows,
-    matchedTotal: Number(mCount.rows[0]?.n ?? 0),
+    matchedRows: mRows,
+    matchedTotal: Number(mCount[0]?.n ?? 0),
     mParams,
     glClearings,
     stale,

@@ -101,8 +101,8 @@ async function orgRow(orgId: string): Promise<OrgRow> {
     select name, base_currency, settings ->> 'brandPrimary' as brand_primary,
            legal_name, tax_ids, settings -> 'companyAddress' as company_address
       from orgs where id = ${orgId}
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   if (!row) throw new MissingPdfOrgError(orgId)
   return row
 }
@@ -118,9 +118,9 @@ async function customFieldValues(
     select key, field_type from custom_field_defs
      where org_id = ${orgId} and target_table = ${targetTable} and is_active
        and (target_kind is null ${targetKind ? sql`or target_kind = ${targetKind}` : sql``})
-  `))
+  `, 'objects'))
   const out: Record<string, string> = {}
-  for (const def of r.rows) {
+  for (const def of r) {
     const v = custom?.[def.key]
     if (v === null || v === undefined || v === '') {
       out[`cf_${def.key}`] = ''
@@ -162,8 +162,8 @@ async function loadDocumentValues(
       ) a on true
       ${documentBalanceDueLateral()}
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${meta.docKind}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
-  `))
-  const doc = r.rows[0]
+  `, 'objects'))
+  const doc = r[0]
   if (!doc) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
@@ -190,7 +190,7 @@ async function loadDocumentValues(
            and cir.item_id = l.item_id and ${customerPartNumbersEnabled}
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `))
+  `, 'objects'))
 
   const address = [
     doc.line1,
@@ -207,7 +207,7 @@ async function loadDocumentValues(
         select ship_to_address
           from drop_ship_orders
          where org_id = ${orgId} and purchase_order_id = ${id}
-      `)).rows[0]?.ship_to_address ?? null
+      `, 'objects'))[0]?.ship_to_address ?? null
     : null
   const shipToAddress = dropShipAddress
     ? [
@@ -228,7 +228,7 @@ async function loadDocumentValues(
   // service party stay in `lines` only, so standalone invoices carry no
   // empty groups.
   const groups = new Map<string, { name: string; lines: Record<string, unknown>[]; subtotal: string[]; tax: string[] }>()
-  const lineValues = lines.rows.map((l) => {
+  const lineValues = lines.map((l) => {
     const line: Record<string, unknown> = {
       line_number: String(l.line_number ?? ''),
       item_name: l.item_name ?? '',
@@ -311,8 +311,8 @@ async function loadJournalValues(
   const r = (await db.execute<Record<string, unknown>>(sql`
     select e.* from journal_entries e
      where e.id = ${id} and e.org_id = ${orgId}${subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)}
-  `))
-  const entry = r.rows[0]
+  `, 'objects'))
+  const entry = r[0]
   if (!entry) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
@@ -325,11 +325,11 @@ async function loadJournalValues(
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
      where l.entry_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `))
+  `, 'objects'))
 
   const debitAmounts: string[] = []
   const creditAmounts: string[] = []
-  const lineRows = lines.rows.map((l) => {
+  const lineRows = lines.map((l) => {
     const amount = String(l.amount ?? '0')
     if (cmp(amount, '0') >= 0) debitAmounts.push(amount)
     else creditAmounts.push(neg(amount))
@@ -378,8 +378,8 @@ async function loadPayStubValues(
          order by is_default_billing desc, created_at limit 1
       ) a on true
      where s.id = ${id} and s.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
-  `))
-  const stub = r.rows[0]
+  `, 'objects'))
+  const stub = r[0]
   if (!stub) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
@@ -392,7 +392,7 @@ async function loadPayStubValues(
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
-  `))
+  `, 'objects'))
 
   // YTD for this employer and currency through this payment. Later payments
   // on the same date must not change an earlier statement. The persisted ID
@@ -438,9 +438,9 @@ async function loadPayStubValues(
        and (s.pay_date, s.created_at, s.id) <= ${statementOrder}
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
        and s.currency_code = ${stub.currency_code}
-  `))
+  `, 'objects'))
 
-  const byKind = (kind: string) => lines.rows
+  const byKind = (kind: string) => lines
     .filter((l) => l.kind === kind)
     .map((l) => ({
       description: l.description ?? '',
@@ -450,10 +450,10 @@ async function loadPayStubValues(
       amount: money(String(l.amount ?? '0')),
     }))
   const deductionsTotal = sum(
-    lines.rows.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
+    lines.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
   )
 
-  const nonCash = sum(lines.rows.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
+  const nonCash = sum(lines.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
 
   // Per-line year-to-date for the statement-of-earnings sections: every
   // committed stub of this employee in the same tax year, legal entity and
@@ -475,10 +475,10 @@ async function loadPayStubValues(
        and d.subsidiary_id is not distinct from ${stub.subsidiary_id}
        and s.currency_code = ${stub.currency_code}
      group by l.component_id, l.kind, l.payment_kind, c.name, c.system_key, c.taxable
-  `))
+  `, 'objects'))
   const statement = buildPayStubStatement(
-    lines.rows.map(toStatementLine),
-    priorLines.rows.map(toStatementLine),
+    lines.map(toStatementLine),
+    priorLines.map(toStatementLine),
     new Set(incomeTaxWithholdingSystemKeys()),
   )
   const sectionRows = (rows: StatementRow[], sign: '+' | '-') => rows.map((row) => ({
@@ -517,9 +517,9 @@ async function loadPayStubValues(
     total_deductions: money(deductionsTotal),
     net_pay: money(String(stub.net_pay ?? '0')),
     vacation_accrued: money(String(stub.vacation_accrued ?? '0')),
-    ytd_gross: money(String(ytd.rows[0]?.gross ?? '0')),
-    ytd_tax: money(String(ytd.rows[0]?.tax ?? '0')),
-    ytd_net: money(String(ytd.rows[0]?.net ?? '0')),
+    ytd_gross: money(String(ytd[0]?.gross ?? '0')),
+    ytd_tax: money(String(ytd[0]?.tax ?? '0')),
+    ytd_net: money(String(ytd[0]?.net ?? '0')),
     ...orgIdentityMergeValues(org),
     printed_date: fmtDate(await businessToday(orgId), locale),
     earnings: byKind('earning'),
@@ -572,8 +572,8 @@ async function loadPayrollChequeValues(
       ) a on true
      where s.id = ${id} and s.org_id = ${orgId} and s.payment_method = 'cheque'
        and s.cheque_number is not null and r.run_status='committed'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
-  `))
-  const stub = r.rows[0]
+  `, 'objects'))
+  const stub = r[0]
   if (!stub) return null
 
   const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
@@ -586,10 +586,10 @@ async function loadPayrollChequeValues(
       left join pay_components c on c.org_id=l.org_id and c.id=l.component_id
      where l.stub_id = ${id} and l.org_id = ${orgId}
      order by l.sequence
-  `))
+  `, 'objects'))
   // Cheque remittance includes every non-cash earning already included in
   // gross. The shared statement groups dated lines without changing amounts.
-  const statement = buildPayStubStatement(lines.rows.map(toStatementLine), [],
+  const statement = buildPayStubStatement(lines.map(toStatementLine), [],
     new Set(incomeTaxWithholdingSystemKeys()), { includeNonTaxableCompanyItems: true })
   const printRows = (rows: StatementRow[], nonCash: boolean) => rows.map(row => ({
     description: row.description,
@@ -599,7 +599,7 @@ async function loadPayrollChequeValues(
     amount: money(row.current),
   }))
   const deductionsTotal = sum(
-    lines.rows.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
+    lines.filter((l) => l.kind === 'deduction').map((l) => String(l.amount ?? '0')),
   )
 
   const address = [
@@ -610,7 +610,7 @@ async function loadPayrollChequeValues(
   ].filter(Boolean).join(', ')
 
   const net = String(stub.net_pay ?? '0')
-  const nonCash = sum(lines.rows.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
+  const nonCash = sum(lines.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
   const chequeBankValues = await chequeBankMergeValues(orgId, id, String(stub.cheque_number))
   const payeeName = chequeBankValues.issued_payee_name ?? stub.employee_name ?? ''
 
@@ -709,10 +709,10 @@ async function loadShipmentValues(
     resolveLocale(),
     shipment.customer
       ? db.execute<{ email: string | null; phone: string | null }>(sql`
-          select email, phone from parties where org_id = ${orgId} and id = ${shipment.customer.id}`)
+          select email, phone from parties where org_id = ${orgId} and id = ${shipment.customer.id}`, 'objects')
       : null,
     db.execute<{ custom: Record<string, unknown> | null }>(sql`
-      select custom from documents where org_id = ${orgId} and id = ${shipment.id}`),
+      select custom from documents where org_id = ${orgId} and id = ${shipment.id}`, 'objects'),
   ])
   const warehouse = await db.execute<{
     address_line1: string | null
@@ -723,20 +723,20 @@ async function loadShipmentValues(
     country: string | null
   }>(sql`
     select address_line1, address_line2, city, region, postal_code, country
-      from warehouses where org_id = ${orgId} and stock_location_id = ${shipment.warehouse.id}`)
+      from warehouses where org_id = ${orgId} and stock_location_id = ${shipment.warehouse.id}`, 'objects')
   const format = createMoneyFormatter(locale, org.base_currency)
   const address = shipment.shipToAddress
   const cartons = [...new Set(
     shipment.lines.map((line) => line.carton?.trim()).filter((carton): carton is string => Boolean(carton)),
   )]
-  const shipFrom = warehouse.rows[0]
+  const shipFrom = warehouse[0]
   const itemIds = [...new Set(shipment.lines.map((line) => line.itemId))]
   const customerSkus = customerPartNumbersEnabled && shipment.customer && itemIds.length > 0
     ? (await db.execute<{ item_id: string; customer_sku: string }>(sql`
         select item_id, customer_sku from customer_item_refs
          where org_id = ${orgId} and customer_id = ${shipment.customer.id}
            and item_id = any(${sql.param(itemIds)}::uuid[])
-      `)).rows
+      `, 'objects'))
     : []
   const customerSkuByItem = new Map(customerSkus.map((row) => [row.item_id, row.customer_sku]))
   const values: Record<string, unknown> = {
@@ -746,8 +746,8 @@ async function loadShipmentValues(
     sales_order_number: shipment.salesOrder?.number ?? '',
     pick_list_number: shipment.pickList?.number ?? '',
     party_name: shipment.customer?.name ?? '',
-    party_email: party?.rows[0]?.email ?? '',
-    party_phone: party?.rows[0]?.phone ?? '',
+    party_email: party?.[0]?.email ?? '',
+    party_phone: party?.[0]?.phone ?? '',
     ship_to_name: address?.label ?? shipment.customer?.name ?? '',
     ship_to_address: address
       ? [address.line1, address.line2, [address.city, address.region, address.postalCode].filter(Boolean).join(', '), address.country]
@@ -788,7 +788,7 @@ async function loadShipmentValues(
       bin: line.binCode,
       lot_serial: line.serialNumber ?? line.lotNumber ?? '',
     })),
-    ...(await customFieldValues(orgId, 'documents', 'shipment', customRow.rows[0]?.custom ?? {}, format)),
+    ...(await customFieldValues(orgId, 'documents', 'shipment', customRow[0]?.custom ?? {}, format)),
   }
   return { values, reference: shipment.documentNumber }
 }
@@ -911,15 +911,15 @@ async function loadFieldTicketValues(
          order by is_default_billing desc, created_at limit 1
       ) a on true
      where p.org_id = ${orgId} and p.id = (select party_id from documents where id = ${id} and org_id = ${orgId})
-  `))
+  `, 'objects'))
 
   // The customer's default billing address, like the document loader prints —
   // the catalog advertises this merge field, so it must never stay blank.
   const partyAddress = [
-    party.rows[0]?.line1,
-    party.rows[0]?.line2,
-    [party.rows[0]?.city, party.rows[0]?.region, party.rows[0]?.postal_code].filter(Boolean).join(', '),
-    party.rows[0]?.country,
+    party[0]?.line1,
+    party[0]?.line2,
+    [party[0]?.city, party[0]?.region, party[0]?.postal_code].filter(Boolean).join(', '),
+    party[0]?.country,
   ]
     .filter(Boolean)
     .join(', ')
@@ -943,9 +943,9 @@ async function loadFieldTicketValues(
     po_number: ticket.referenceNumber ?? '',
     foreman_name: ticket.foremanName,
     work_description: ticket.memo ?? '',
-    party_name: party.rows[0]?.display_name ?? ticket.customerName,
-    party_email: party.rows[0]?.email ?? '',
-    party_phone: party.rows[0]?.phone ?? '',
+    party_name: party[0]?.display_name ?? ticket.customerName,
+    party_email: party[0]?.email ?? '',
+    party_phone: party[0]?.phone ?? '',
     party_address: partyAddress,
     labor_total: m(ticket.laborTotal),
     lines_total: m(ticket.linesTotal),
@@ -991,8 +991,8 @@ export async function findSamplePdfRecordId(
     const r = (await db.execute<{ id: string }>(sql`
       select id from journal_entries where org_id = ${orgId}${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
        order by created_at desc limit 1
-    `))
-    return r.rows[0]?.id ?? null
+    `, 'objects'))
+    return r[0]?.id ?? null
   }
   if (meta.key === 'pay_stub' || meta.key === 'payroll_cheque') {
     const r = (await db.execute<{ id: string }>(sql`
@@ -1002,14 +1002,14 @@ export async function findSamplePdfRecordId(
        where s.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
          and (${meta.key === 'pay_stub'} or (s.payment_method = 'cheque' and s.cheque_number is not null))
        order by s.created_at desc, s.id desc limit 1
-    `))
-    return r.rows[0]?.id ?? null
+    `, 'objects'))
+    return r[0]?.id ?? null
   }
   const r = (await db.execute<{ id: string }>(sql`
     select id from documents where org_id = ${orgId} and kind = ${meta.docKind}${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
      order by created_at desc limit 1
-  `))
-  return r.rows[0]?.id ?? null
+  `, 'objects'))
+  return r[0]?.id ?? null
 }
 
 /** Custom-field merge fields for the builder palette (per record type). */
@@ -1021,8 +1021,8 @@ export async function customMergeFields(recordType: string, orgId: string): Prom
      where org_id = ${orgId} and target_table = 'documents' and is_active
        and (target_kind is null or target_kind = ${meta.docKind})
      order by sort_order, label
-  `))
-  return r.rows.map((d) => ({ key: `cf_${d.key}`, label: d.label, sample: d.label }))
+  `, 'objects'))
+  return r.map((d) => ({ key: `cf_${d.key}`, label: d.label, sample: d.label }))
 }
 
 /**

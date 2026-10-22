@@ -136,23 +136,21 @@ export async function loadInsights(
         from insight_cards
        where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
     db.execute<{ total: string; drafts: string; published: string }>(sql`
       select count(*) as total,
              count(*) filter (where status = 'draft') as drafts,
              count(*) filter (where status = 'published') as published
-        from insight_cards where org_id = ${orgId} and ${visibility} and ${sourceFilter}`),
+        from insight_cards where org_id = ${orgId} and ${visibility} and ${sourceFilter}`, 'objects'),
   ])
-  const c = counts.rows[0]!
+  const c = counts[0]!
   const total = Number(c.total)
   const filteredTotal =
     params.q || status
       ? Number(
-          (
-            await db.execute<{ n: string }>(
-              sql`select count(*) as n from insight_cards where ${where}`,
-            )
-          ).rows[0]!.n,
+          (await db.execute<{ n: string }>(
+              sql`select count(*) as n from insight_cards where ${where}`, 'objects',
+            ))[0]!.n,
         )
       : total
 
@@ -197,7 +195,7 @@ export async function loadInsights(
     columnChart: t('cards.chartColumn'),
     columnStatus: tCommon('labels.status'),
     columnUpdated: tCommon('labels.updated'),
-    rows: cards.rows.map((row) => {
+    rows: cards.map((row) => {
       const query = row.query as { source?: string } | null
       const source = query?.source ? getSource(query.source) : undefined
       const viz = VIZ_META.find((v) => v.value === row.viz_type)

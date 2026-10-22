@@ -82,7 +82,7 @@ async function seedBill(org: ScratchOrg, actor: string, date: string, status: st
 async function docState(orgId: string, id: string) {
   return withBypassContext(async () =>
     (await db.execute<{ status: string; submittedBy: string | null }>(sql`
-      select status, submitted_by as "submittedBy" from documents where id = ${id} and org_id = ${orgId}`)).rows[0]!,
+      select status, submitted_by as "submittedBy" from documents where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!,
   )
 }
 
@@ -91,7 +91,7 @@ async function latestAudit(orgId: string, id: string) {
     (await db.execute<{ action: string; changes: Record<string, unknown> }>(sql`
       select action, changes from audit_log
        where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
-       order by at desc, id desc limit 1`)).rows[0]!,
+       order by at desc, id desc limit 1`, 'objects'))[0]!,
   )
 }
 

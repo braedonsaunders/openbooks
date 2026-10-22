@@ -123,12 +123,12 @@ export async function generateBriefing(authz: Authz): Promise<CachedBriefing> {
   const readAuthz = briefingReadAuthz(authz);
   const inbox = await loadAgentInbox(readAuthz, { limit: 10 });
   const org = await db.execute<{ base_currency: string; name: string }>(
-    sql`select base_currency, name from orgs where id = ${authz.user.orgId}`,
+    sql`select base_currency, name from orgs where id = ${authz.user.orgId}`, "objects",
   );
   const system =
     assistantSystemPrompt({
       orgName: aiConfig?.org?.name ?? null,
-      baseCurrency: org.rows[0]?.base_currency ?? null,
+      baseCurrency: org[0]?.base_currency ?? null,
       userName: authz.user.name,
       today,
       fiscal: await orgFiscalContext(today, authz.user.orgId),
@@ -172,12 +172,12 @@ export async function sendBriefingEmail(
 ): Promise<{ emailed: boolean; emailError?: string }> {
   try {
     const org = await db.execute<{ name: string }>(
-      sql`select name from orgs where id = ${authz.user.orgId}`,
+      sql`select name from orgs where id = ${authz.user.orgId}`, "objects",
     );
     const [{ enqueueEmail, newEmailIntentKey }] = await Promise.all([import("@openbooks/jobs")]);
     const { flowNotificationEmail } = await import("@openbooks/emails");
     const mail = flowNotificationEmail({
-      orgName: org.rows[0]?.name ?? "OpenBooks",
+      orgName: org[0]?.name ?? "OpenBooks",
       subject: "Morning briefing",
       body: text.slice(0, 8000),
     });

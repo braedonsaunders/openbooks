@@ -108,16 +108,14 @@ async function seedApprovedWeek() {
 }
 
 async function auditRows(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => (
-    await db.execute(sql`
+  return withOrgContext(orgId, async () => await db.execute(sql`
       select action, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId}
          and table_name = 'timesheet_weeks'
          and row_id = ${headerId}
        order by at, id
-    `)
-  ).rows);
+    `, "objects"));
 }
 
 async function cleanup(fixture: Awaited<ReturnType<typeof seedApprovedWeek>>) {

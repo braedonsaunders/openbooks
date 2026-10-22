@@ -95,8 +95,8 @@ async function insertPeriodReopenRequest(
          and book_id = ${args.bookId}
          and (subsidiary_id = ${args.subsidiaryId ?? null}::uuid or subsidiary_id is null)
          and module = 'gl'
-       order by (subsidiary_id is not null) desc limit 1`);
-    const governing = gl.rows[0];
+       order by (subsidiary_id is not null) desc limit 1`, "objects");
+    const governing = gl[0];
     if (
       periodLockRequiresApprovedReopen(
         governing && {
@@ -115,8 +115,7 @@ async function insertPeriodReopenRequest(
   // same scope can never both be approved, so the second would strand its
   // approver. A pending request is withdrawn and raised again with every
   // module; an approved window is widened instead.
-  const overlapping = (
-    await tx.execute<{
+  const overlapping = (await tx.execute<{
       id: string;
       status: string;
       modules: CloseModule[];
@@ -129,8 +128,7 @@ async function insertPeriodReopenRequest(
      where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}
        and (r.subsidiary_id is null or ${args.subsidiaryId ?? null}::uuid is null
          or r.subsidiary_id = ${args.subsidiaryId ?? null}::uuid)
-       and (r.status = 'requested' or (r.status = 'approved' and r.expires_at > now()))`)
-  ).rows
+       and (r.status = 'requested' or (r.status = 'approved' and r.expires_at > now()))`, "objects"))
     // A request covering every module of an approved window is that
     // window's widening or extension: an eligible approver decides it, and
     // its approval replaces the window.
@@ -158,17 +156,17 @@ async function insertPeriodReopenRequest(
       (select count(*) from close_signoffs s join close_runs r on r.id = s.run_id and r.org_id = s.org_id
         where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as signoffs,
       (select count(*) from close_task_evidence e join close_runs r on r.id = e.run_id and r.org_id = e.org_id
-        where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as evidence`);
+        where r.org_id = ${args.orgId} and r.period_id = ${args.periodId} and r.book_id = ${args.bookId}) as evidence`, "objects");
   const inserted = await tx.execute<{ id: string }>(sql`
     insert into close_reopen_requests
       (org_id, period_id, book_id, subsidiary_id, modules, reason, impact_snapshot,
        requested_by, created_by, updated_by)
     values (${args.orgId}, ${args.periodId}, ${args.bookId}, ${args.subsidiaryId ?? null},
             ${JSON.stringify(args.modules)}::jsonb, ${args.reason.trim()},
-            ${JSON.stringify({ ...impact.rows[0], ...(amendment ? { amendment } : {}), reports: ["balance-sheet", "pnl", "cash-flow", "trial-balance"] })}::jsonb,
+            ${JSON.stringify({ ...impact[0], ...(amendment ? { amendment } : {}), reports: ["balance-sheet", "pnl", "cash-flow", "trial-balance"] })}::jsonb,
             ${args.actorId}, ${args.actorId}, ${args.actorId})
-    returning id`);
-  const id = inserted.rows[0]?.id;
+    returning id`, "objects");
+  const id = inserted[0]?.id;
   if (!id)
     throw new CloseError("reopen request was not saved; refresh and retry");
   const scope = {
@@ -217,13 +215,11 @@ export async function extendReopenRequest(args: {
   return withOrgTransaction(args.orgId, async () => {
     const tx = db;
     await lockReopenRequestScope(tx, args.orgId, args.requestId);
-    const row = (
-      await tx.execute<CloseReopenRequestRow>(sql`
+    const row = (await tx.execute<CloseReopenRequestRow>(sql`
       select * from close_reopen_requests
        where id = ${args.requestId} and org_id = ${args.orgId}
          and status = 'approved' and expires_at > now()
-       for update`)
-    ).rows[0];
+       for update`, "objects"))[0];
     if (!row)
       throw new CloseError(
         "only an active approved reopen window can be extended",
@@ -233,14 +229,12 @@ export async function extendReopenRequest(args: {
       throw new CloseError("an extension must add time, modules, or both");
     }
     for (const module of added) {
-      const lock = (
-        await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
+      const lock = (await tx.execute<{ state: string; reopen_expires_at: Date | null }>(sql`
         select state, reopen_expires_at from period_locks
          where org_id = ${args.orgId} and period_id = ${row.period_id} and book_id = ${row.book_id}
            and module = ${module}
            and (subsidiary_id is not distinct from ${row.subsidiary_id}::uuid or subsidiary_id is null)
-         order by (subsidiary_id is not null) desc limit 1`)
-      ).rows[0];
+         order by (subsidiary_id is not null) desc limit 1`, "objects"))[0];
       if (
         !periodLockRequiresApprovedReopen(
           lock && {

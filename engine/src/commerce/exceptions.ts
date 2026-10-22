@@ -42,7 +42,7 @@ export async function listChannelExceptions(
   channelId: string | null = null,
   code: string | null = null,
 ): Promise<ChannelExceptionRow[]> {
-  const rows = (await withOrgContext(orgId, () => db.execute<ExceptionDbRow>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<ExceptionDbRow>(sql`
     select o.id as order_id, o.channel_id, c.name as channel_name, o.external_number,
            o.shop_currency, o.total_minor, o.ordered_at,
            o.exception_code as code, o.exception_reason as reason, o.exception_remedy as remedy
@@ -51,7 +51,7 @@ export async function listChannelExceptions(
      where o.org_id = ${orgId} and o.posting_status = 'exception'
        and (${channelId}::uuid is null or o.channel_id = ${channelId})
        and (${code}::text is null or o.exception_code = ${code})
-     order by o.ordered_at`))).rows;
+     order by o.ordered_at`, "objects"));
   return rows.map((row) => ({
     orderId: row.order_id,
     channelId: row.channel_id,
@@ -89,7 +89,7 @@ export async function replayChannelExceptions(
     for (const row of queued) {
       const live = await loadChannelOrder(orgId, row.orderId);
       if (!live || live.postingStatus !== "exception") continue;
-      const reset = await db.execute(sql`
+      const reset = await db.execute<never>(sql`
         update channel_orders
            set posting_status = 'pending',
                posting_document_id = null, summary_id = null,
@@ -146,7 +146,7 @@ export async function listChannelEventExceptions(
   code: string | null = null,
   kind: string | null = null,
 ): Promise<ChannelEventExceptionRow[]> {
-  const rows = (await withOrgContext(orgId, () => db.execute<EventExceptionDbRow>(sql`
+  const rows = await withOrgContext(orgId, () => db.execute<EventExceptionDbRow>(sql`
     select e.id as event_id, e.order_id, e.channel_id, c.name as channel_name, o.external_number,
            e.kind, e.external_id, e.occurred_at,
            e.exception_code as code, e.exception_reason as reason, e.exception_remedy as remedy
@@ -157,7 +157,7 @@ export async function listChannelEventExceptions(
        and (${channelId}::uuid is null or e.channel_id = ${channelId})
        and (${code}::text is null or e.exception_code = ${code})
        and (${kind}::text is null or e.kind = ${kind})
-     order by e.occurred_at`))).rows;
+     order by e.occurred_at`, "objects"));
   return rows.map((row) => ({
     eventId: row.event_id,
     orderId: row.order_id,
@@ -195,7 +195,7 @@ export async function replayChannelEventExceptions(
     for (const row of queued) {
       const live = await loadChannelEvent(orgId, row.eventId);
       if (!live || live.postingStatus !== "exception") continue;
-      const reset = await db.execute(sql`
+      const reset = await db.execute<never>(sql`
         update channel_order_events
            set posting_status = 'pending',
                posting_document_id = null,

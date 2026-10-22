@@ -15,7 +15,7 @@ export async function assertPayrollCountryKnown(
       join documents d on d.org_id=r.org_id and d.id=r.document_id and d.status<>'voided'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
        and r.run_status = 'committed' and s.country is null
-  `);
+  `, "objects");
   const materialHistory = await openingHasMaterialHistorySql('b');
   const openings = await executor.execute<{ employee_party_id: string; display_name: string }>(sql`
     select distinct b.employee_party_id, p.display_name
@@ -23,10 +23,10 @@ export async function assertPayrollCountryKnown(
       join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
      where b.org_id = ${orgId} and b.tax_year = ${taxYear}
        and ${materialHistory}
-  `);
+  `, "objects");
   const unknown = new Map<string, string>();
-  for (const row of stubs.rows) unknown.set(row.employee_party_id, row.display_name);
-  for (const row of openings.rows) {
+  for (const row of stubs) unknown.set(row.employee_party_id, row.display_name);
+  for (const row of openings) {
     let original: Awaited<ReturnType<typeof readEmployeeOpeningLevySources>>;
     try {
       original = await readEmployeeOpeningLevySources(executor, {

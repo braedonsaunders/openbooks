@@ -47,8 +47,8 @@ async function legacyGET() {
            error_message as "errorMessage", started_at as "startedAt", finished_at as "finishedAt"
       from fx_provider_runs where org_id = ${gate.user.orgId}
      order by started_at desc limit 10
-  `))
-  return NextResponse.json({ config, runs: runs.rows, providers: Object.keys(FX_PROVIDER_MANIFESTS) })
+  `, 'objects'))
+  return NextResponse.json({ config, runs, providers: Object.keys(FX_PROVIDER_MANIFESTS) })
 }
 
 

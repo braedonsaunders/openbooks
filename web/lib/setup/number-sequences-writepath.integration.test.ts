@@ -63,7 +63,7 @@ test('the fix stays writable: a colliding row can move series or keep counting',
       insert into number_sequences (org_id, document_kind, prefix, next_number, padding, allocated_through)
       values (${orgId}, 'pay_run', 'PAY-', 1, 5, 0)`))
     const rowId = (await withBypass(() => db.execute<{ id: string }>(sql`
-      select id from number_sequences where org_id = ${orgId} and document_kind = 'pay_run'`))).rows[0]!.id
+      select id from number_sequences where org_id = ${orgId} and document_kind = 'pay_run'`, 'objects')))[0]!.id
     // Moving the pay run onto its own prefix resolves the collision.
     const moved = await withBypass(() => updateSetupRecord(actor(orgId, actorId), 'number-sequences', {
       id: rowId, prefix: 'PR-',
@@ -96,8 +96,8 @@ test('an existing pay_run collision warns in payroll setup without renumbering',
     assert.equal(warnings.length, 1)
     assert.match(warnings[0]!.detail ?? '', /pay_run.*vendor_payment|vendor_payment.*pay_run/)
     assert.match(warnings[0]!.detail ?? '', /posted history keeps its numbers/)
-    const counters = (await withBypass(() => db.execute<{ document_kind: string; next_number: number }>(sql`
-      select document_kind, next_number from number_sequences where org_id = ${orgId}`))).rows
+    const counters = await withBypass(() => db.execute<{ document_kind: string; next_number: number }>(sql`
+      select document_kind, next_number from number_sequences where org_id = ${orgId}`, 'objects'))
     assert.deepEqual(
       Object.fromEntries(counters.map((row) => [row.document_kind, row.next_number])),
       { vendor_payment: 7, pay_run: 3 },

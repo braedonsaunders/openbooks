@@ -100,7 +100,7 @@ async function loadGoal(exec: SqlExecutor, orgId: string, goalId: string): Promi
       join worker_employments e
         on e.org_id = g.org_id and e.id = g.employment_id
      where g.org_id = ${orgId} and g.id = ${goalId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -125,7 +125,7 @@ async function requireGoalAuthority(
   const subject = (await exec.execute<{ workerPartyId: string }>(sql`
     select worker_party_id as "workerPartyId" from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!subject) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -169,7 +169,7 @@ export async function createGoal(args: {
     if (cycleId !== null) {
       const cycle = (await db.execute<{ id: string; appliesTo: unknown }>(sql`
         select id, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!cycle) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
@@ -183,7 +183,7 @@ export async function createGoal(args: {
       const subject = (await db.execute<{ employerSubsidiaryId: string }>(sql`
         select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
          where org_id = ${orgId} and id = ${employmentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       const today = await businessToday(orgId);
       const department = (await db.execute<{ departmentId: string | null }>(sql`
         select department_id as "departmentId"
@@ -196,7 +196,7 @@ export async function createGoal(args: {
            and (effective_to is null or effective_to > ${today}::date)
          order by version_no desc
          limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (
         !scopeMatchesEmployment(scope, {
           employerSubsidiaryId: subject.employerSubsidiaryId,
@@ -221,7 +221,7 @@ export async function createGoal(args: {
         progress_percent as "progressPercent", cycle_id as "cycleId",
         (select worker_party_id from worker_employments
           where org_id = ${orgId} and id = ${employmentId}) as "workerPartyId"
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     await db.execute(sql`
       insert into hrm_goal_updates (org_id, goal_id, progress_percent, note, actor_user_id)
       values (${orgId}, ${row.id}, 0, 'goal set', ${actorId})
@@ -256,7 +256,7 @@ export async function updateGoalProgress(args: {
         `goal ${goalId} is ${goal.status} — only an active goal takes progress; set a new goal instead`,
       );
     }
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_goals
          set progress_percent = ${progress}, updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${goalId} and status = 'active'
@@ -314,7 +314,7 @@ export async function setGoalStatus(args: {
     }
     // Achieving completes the progress; missing and cancelling keep it.
     const progress = args.status === "achieved" ? 100 : goal.progressPercent;
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update hrm_goals
          set status = ${args.status}, progress_percent = ${progress},
              updated_at = now(), updated_by = ${actorId}
@@ -350,7 +350,7 @@ export async function requireGoalReadAuthority(
   const subject = (await exec.execute<{ workerPartyId: string }>(sql`
     select worker_party_id as "workerPartyId" from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!subject) {
     throw new HrmPerformanceError(
       "NOT_FOUND",
@@ -379,13 +379,13 @@ export async function getGoal(args: {
     await assertPerformanceFeature(db, orgId);
     const goal = await loadGoal(db, orgId, goalId);
     await requireGoalReadAuthority(db, orgId, actorId, goal.employmentId);
-    const updates = (await db.execute<{ progressPercent: number; note: string | null; recordedAt: string }>(sql`
+    const updates = await db.execute<{ progressPercent: number; note: string | null; recordedAt: string }>(sql`
       select progress_percent as "progressPercent", note,
              recorded_at as "recordedAt"
         from hrm_goal_updates
        where org_id = ${orgId} and goal_id = ${goalId}
        order by recorded_at
-    `)).rows;
+    `, "objects");
     return { goal: toGoalDTO(goal), updates };
   });
 }

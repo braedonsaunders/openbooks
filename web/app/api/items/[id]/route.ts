@@ -320,8 +320,8 @@ export const PATCH = defineRoute({
       // audit insert below, so concurrent writers cannot falsify evidence.
       const locked = await db.execute<Record<string, unknown>>(sql`
         select * from items where id = ${id} and org_id = ${user.orgId} for update
-      `)
-      const before = locked.rows[0]
+      `, 'objects')
+      const before = locked[0]
       if (!before) throw new PatchNotFound()
 
       if (body.custom !== undefined) {
@@ -425,8 +425,8 @@ export const PATCH = defineRoute({
         if (value === undefined || value === null) return
         const found = await db.execute(sql`
           select 1 from ${sql.raw(table)} where id = ${value} and org_id = ${user.orgId}
-        `)
-        if (!found.rows[0]) throw new PatchInvalid(error)
+        `, 'objects')
+        if (!found[0]) throw new PatchInvalid(error)
       }
       // Where worked hours may land. Expense and COGS cover the ordinary
       // cases; asset_current_other covers capitalised labour — every shipped
@@ -441,8 +441,8 @@ export const PATCH = defineRoute({
         const acct = await db.execute<{ type: string; isActive: boolean; isSummary: boolean }>(sql`
           select type, is_active as "isActive", is_summary as "isSummary"
             from accounts where id = ${value} and org_id = ${user.orgId}
-        `)
-        const row = acct.rows[0]
+        `, 'objects')
+        const row = acct[0]
         if (!row) throw new PatchInvalid('Payroll costing account not found')
         if (!row.isActive) throw new PatchInvalid('Payroll costing account is inactive')
         if (row.isSummary) throw new PatchInvalid('Summary accounts cannot receive worked-hours cost')
@@ -490,8 +490,8 @@ export const PATCH = defineRoute({
           updated_at = now(), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
         returning *
-      `)
-      const after = written.rows[0]
+      `, 'objects')
+      const after = written[0]
       if (!after) throw new Error('item_changed')
 
       const changes: Record<string, unknown> = {

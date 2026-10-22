@@ -46,10 +46,8 @@ async function visibleAsset(
   id: string,
   allowedSubsidiaryIds: Set<string> | null,
 ) {
-  const asset = (
-    await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id from fixed_assets asset where org_id = ${orgId} and id = ${id} ${subsidiaryFence(allowedSubsidiaryIds)}`)
-  ).rows[0];
+  const asset = (await db.execute<{ subsidiary_id: string }>(sql`
+    select subsidiary_id from fixed_assets asset where org_id = ${orgId} and id = ${id} ${subsidiaryFence(allowedSubsidiaryIds)}`, "objects"))[0];
   if (!asset) return null;
   return asset;
 }
@@ -68,8 +66,7 @@ export const GET = defineRoute({
       return notFound("record");
     }
 
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         id: string;
         kind: string;
         occurred_on: string;
@@ -107,8 +104,7 @@ export const GET = defineRoute({
       join fixed_assets asset
         on asset.id = event.asset_id and asset.org_id = event.org_id
      where event.org_id = ${gate.user.orgId} and event.asset_id = ${id} ${subsidiaryFence(gate.allowedSubsidiaryIds)}
-     order by event.occurred_on desc, event.created_at desc`)
-    ).rows;
+     order by event.occurred_on desc, event.created_at desc`, "objects");
 
     return NextResponse.json({
       events: rows.map((row) => {

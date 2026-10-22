@@ -81,7 +81,7 @@ test("the English no-link remedy matches the engine refusal word for word", asyn
   const { actorPartyOf, SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
   type Executor = Pick<import("@openbooks/engine/platform/db").SqlExecutor, "execute">;
   const exec = {
-    execute: async () => ({ rows: [] as { partyId: string | null }[] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] as { partyId: string | null }[] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   } as unknown as Executor;
   const thrown: unknown = await actorPartyOf(exec, "org-1", "user-1").then(
     () => null,

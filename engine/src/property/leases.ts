@@ -44,22 +44,22 @@ export async function createPropertyLease(input: {
         exists(select 1 from customer_roles cr where cr.org_id=p.org_id and cr.party_id=${input.tenantId} and cr.is_active) as tenant_ok,
         (${input.unitId ?? null}::uuid is null or exists(select 1 from property_units u where u.org_id=p.org_id and u.id=${input.unitId ?? null} and u.property_id=p.id and u.status<>'offline')) as unit_ok
       from managed_properties p where p.org_id=${input.orgId} and p.id=${input.propertyId} and p.status='active'
-    `));
-    const property = scope.rows[0];
+    `, "objects"));
+    const property = scope[0];
     if (!property) throw new PropertyManagementError("Active property not found");
     if (!property.tenant_ok) throw new PropertyManagementError("Tenant must be an active customer");
     if (!property.unit_ok) throw new PropertyManagementError("Unit does not belong to this property");
     if (!property.rent_income_account_id) throw new PropertyManagementError("Configure the property rent income account first");
-    const duplicateNumber = (await tx.execute(sql`select 1 from property_leases where org_id=${input.orgId} and lease_number=${leaseNumber} limit 1`));
-    if (duplicateNumber.rows.length) throw new PropertyManagementError("Lease number already exists");
+    const duplicateNumber = (await tx.execute(sql`select 1 from property_leases where org_id=${input.orgId} and lease_number=${leaseNumber} limit 1`, "objects"));
+    if (duplicateNumber.length) throw new PropertyManagementError("Lease number already exists");
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into property_leases(org_id,property_id,unit_id,tenant_id,lease_number,starts_on,ends_on,billing_day,payment_terms_days,
         security_deposit_required,cam_method,cam_share_percent,late_fee_type,late_fee_value,grace_days,auto_invoice,auto_post,created_by,updated_by)
       values(${input.orgId},${input.propertyId},${input.unitId ?? null},${input.tenantId},${leaseNumber},${startsOn},${endsOn},${billingDay},
         ${paymentTermsDays},${deposit},${camMethod},${camShare},
         ${lateFeeType},${lateFeeValue},${graceDays},${autoInvoice},${autoPost},${input.actorId},${input.actorId}) returning id
-    `));
-    const id = inserted.rows[0]!.id;
+    `, "objects"));
+    const id = inserted[0]!.id;
     await tx.execute(sql`insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
       values(${input.orgId},${id},'base_rent','Base rent',${baseRent},'monthly',${startsOn},${endsOn},${property.rent_income_account_id},${input.actorId},${input.actorId})`);
     // Every financial term commits with its complete after-state in the same
@@ -115,8 +115,8 @@ export async function updatePropertyLease(input: {
         l.auto_invoice as "autoInvoice",l.auto_post as "autoPost",
         (select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1) as "baseRent"
       from property_leases l where l.org_id=${input.orgId} and l.id=${input.leaseId} for update
-    `));
-    const current = currentResult.rows[0];
+    `, "objects"));
+    const current = currentResult[0];
     if (!current || !["draft", "active", "notice"].includes(current.status)) throw new PropertyManagementError("Editable lease not found");
     // Both the lease's current property and the move target are locked and
     // rechecked: a draft lease may move properties, and the target check in
@@ -125,8 +125,8 @@ export async function updatePropertyLease(input: {
     // cannot take the same two rows in opposite orders.
     await lockPropertiesInScope(tx, input.orgId, [String(current.propertyId), input.propertyId], input.allowedSubsidiaryIds);
     const duplicateNumber = (await tx.execute(sql`select 1 from property_leases
-      where org_id=${input.orgId} and lease_number=${leaseNumber} and id<>${input.leaseId} limit 1`));
-    if (duplicateNumber.rows.length) throw new PropertyManagementError("Lease number already exists");
+      where org_id=${input.orgId} and lease_number=${leaseNumber} and id<>${input.leaseId} limit 1`, "objects"));
+    if (duplicateNumber.length) throw new PropertyManagementError("Lease number already exists");
     const draft = current.status === "draft";
     if (!draft && (current.propertyId !== input.propertyId || current.unitId !== (input.unitId ?? null) || current.tenantId !== input.tenantId || current.startsOn !== startsOn)) {
       throw new PropertyManagementError("Property, unit, tenant, and start date cannot change after activation");
@@ -143,8 +143,8 @@ export async function updatePropertyLease(input: {
         (${input.unitId ?? null}::uuid is null or exists(select 1 from property_units u where u.org_id=p.org_id and u.id=${input.unitId ?? null} and u.property_id=p.id and u.status<>'offline')) as unit_ok,
         (${input.unitId ?? null}::uuid is null or not exists(select 1 from property_leases x where x.org_id=p.org_id and x.unit_id=${input.unitId ?? null} and x.id<>${input.leaseId} and x.status in ('active','notice'))) as unit_available
       from managed_properties p where p.org_id=${input.orgId} and p.id=${input.propertyId} and p.status='active'
-    `));
-    const property = scope.rows[0];
+    `, "objects"));
+    const property = scope[0];
     if (!property) throw new PropertyManagementError("Active property not found");
     if (!property.tenant_ok) throw new PropertyManagementError("Tenant must be an active customer");
     if (!property.unit_ok || !property.unit_available) throw new PropertyManagementError("Unit is unavailable for this lease");
@@ -171,8 +171,8 @@ export async function updatePropertyLease(input: {
         update lease_charges set effective_to=${endsOn},updated_at=now(),updated_by=${input.actorId}
          where org_id=${input.orgId} and lease_id=${input.leaseId} and charge_type='base_rent' and effective_to=${current.endsOn}
          returning id,effective_from::text as "effectiveFrom",amount::text as amount
-      `));
-      for (const window of extended.rows) {
+      `, "objects"));
+      for (const window of extended) {
         await audit(tx, input.orgId, "lease_charges", window.id, "update", input.actorId, {
           reason: "lease term extended", leaseId: input.leaseId, chargeType: "base_rent",
           before: { effectiveFrom: window.effectiveFrom, effectiveTo: current.endsOn, amount: normalizeMoney(window.amount) },
@@ -220,9 +220,9 @@ export async function cancelPropertyLease(orgId: string, actorId: string, allowe
     const result = (await tx.execute<{ leaseNumber: string }>(sql`
       update property_leases set status='cancelled',updated_at=now(),updated_by=${actorId}
       where org_id=${orgId} and id=${leaseId} and status='draft' returning lease_number as "leaseNumber"
-    `));
-    if (!result.rows[0]) throw new PropertyManagementError("Draft lease not found");
-    await audit(tx, orgId, "property_leases", leaseId, "cancel", actorId, { after: { status: "cancelled" }, leaseNumber: result.rows[0].leaseNumber });
+    `, "objects"));
+    if (!result[0]) throw new PropertyManagementError("Draft lease not found");
+    await audit(tx, orgId, "property_leases", leaseId, "cancel", actorId, { after: { status: "cancelled" }, leaseNumber: result[0].leaseNumber });
   });
 }
 /** Optional uuid refs arrive as "" from unfilled form fields; blanks are absent. */
@@ -255,14 +255,14 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; al
     if (input.incomeAccountId != null) {
       if (!isUuid(input.incomeAccountId)) throw new PropertyManagementError("Charge income account is invalid");
       const income = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from accounts
-        where org_id=${input.orgId} and id=${input.incomeAccountId} and type in ('income','income_other') and is_active and not is_summary) as ok`));
-      if (!income.rows[0]?.ok) throw new PropertyManagementError("Charge income account must be an active income account");
+        where org_id=${input.orgId} and id=${input.incomeAccountId} and type in ('income','income_other') and is_active and not is_summary) as ok`, "objects"));
+      if (!income[0]?.ok) throw new PropertyManagementError("Charge income account must be an active income account");
     }
     if (input.itemId != null) {
       if (!isUuid(input.itemId)) throw new PropertyManagementError("Charge item is invalid");
       const item = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from items
-        where org_id=${input.orgId} and id=${input.itemId} and is_active) as ok`));
-      if (!item.rows[0]?.ok) throw new PropertyManagementError("Charge item must be an active item");
+        where org_id=${input.orgId} and id=${input.itemId} and is_active) as ok`, "objects"));
+      if (!item[0]?.ok) throw new PropertyManagementError("Charge item must be an active item");
     }
     // The charge form has no tax field and posts an empty string when unset;
     // treat it as absent like a missing value rather than a malformed uuid.
@@ -270,8 +270,8 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; al
     if (taxCodeId != null) {
       if (!isUuid(taxCodeId)) throw new PropertyManagementError("Charge tax code is invalid");
       const tax = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from tax_codes
-        where org_id=${input.orgId} and id=${taxCodeId} and is_active) as ok`));
-      if (!tax.rows[0]?.ok) throw new PropertyManagementError("Charge tax code must be an active tax code");
+        where org_id=${input.orgId} and id=${taxCodeId} and is_active) as ok`, "objects"));
+      if (!tax[0]?.ok) throw new PropertyManagementError("Charge tax code must be an active tax code");
     }
     const result = (await tx.execute<{
       id: string; chargeType: string; description: string; amount: string; frequency: string;
@@ -285,8 +285,8 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; al
        where l.org_id=${input.orgId} and l.id=${input.leaseId} and l.status in ('draft','active')
        returning id,charge_type as "chargeType",description,amount::text,frequency,effective_from::text as "effectiveFrom",
          effective_to::text as "effectiveTo",income_account_id::text as "incomeAccountId"
-    `));
-    const charge = result.rows[0];
+    `, "objects"));
+    const charge = result[0];
     if (!charge) throw new PropertyManagementError("Editable lease not found");
     // The schedule this row generates invoices the tenant: it commits only if
     // its audit evidence commits in the same transaction.

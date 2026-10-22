@@ -136,8 +136,8 @@ function bad(message: string, field?: string, status: 400 | 422 = 422): ProjectC
 }
 
 async function partyExists(runner: SqlExecutor, id: string, orgId: string): Promise<boolean> {
-  const r = await runner.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}`);
-  return !!r.rows[0];
+  const r = await runner.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}`, "objects");
+  return !!r[0];
 }
 
 /** Active parties among `ids` that the caller's subsidiary scope can see. */
@@ -153,8 +153,8 @@ async function visibleActiveParties(
        and p.id = any(${`{${ids.join(",")}}`}::uuid[])
        and p.is_active
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope, { orgWideNull: true })}
-  `);
-  return new Set(rows.rows.map((row) => row.id));
+  `, "objects");
+  return new Set(rows.map((row) => row.id));
 }
 
 /**
@@ -248,8 +248,8 @@ async function resolveProjectRow(
     if (value) {
       const subsidiary = await runner.execute(sql`
         select 1 from subsidiaries
-         where id = ${value} and org_id = ${orgId} and is_active and not is_elimination`);
-      if (!subsidiary.rows.length) throw bad("Subsidiary not found", "subsidiaryId");
+         where id = ${value} and org_id = ${orgId} and is_active and not is_elimination`, "objects");
+      if (!subsidiary.length) throw bad("Subsidiary not found", "subsidiaryId");
     }
     subsidiaryId = value;
   }
@@ -321,8 +321,8 @@ async function resolveProjectRow(
     if (v === "invalid") throw bad("Invalid project type", "projectTypeId");
     projectTypeId = v;
     if (v) {
-      const pt = await runner.execute(sql`select 1 from project_types where id = ${v} and org_id = ${orgId} and is_active`);
-      if (pt.rows.length === 0) throw bad("Unknown project type", "projectTypeId");
+      const pt = await runner.execute(sql`select 1 from project_types where id = ${v} and org_id = ${orgId} and is_active`, "objects");
+      if (pt.length === 0) throw bad("Unknown project type", "projectTypeId");
     }
   }
 
@@ -384,7 +384,7 @@ export async function createProjectInTransaction(
   const prior = (await runner.execute<{ versionId: string | null; after: Record<string, unknown> | null }>(sql`
     select p.operating_profile_version_id as "versionId", a.changes->'after' as after from projects p
     left join lateral (select changes from audit_log where org_id=p.org_id and table_name='projects' and row_id=p.id and action='insert' order by created_at limit 1) a on true
-    where p.org_id=${ctx.orgId} and p.id=${id} for share of p`)).rows[0];
+    where p.org_id=${ctx.orgId} and p.id=${id} for share of p`, "objects"))[0];
   if (prior) {
     if (prior.versionId) await checkPinnedOperatingProfileCommand(runner, ctx.orgId, ctx.actorId, { versionId: prior.versionId, family: 'project', subsidiaryId });
     if (prior.after && ('operating_profile_version_id' in prior.after || body.operatingProfile !== undefined || body.operatingDepartmentId !== undefined)) {
@@ -426,12 +426,12 @@ export async function createProjectInTransaction(
     -- A retry is accepted only after the existing audited create image is verified below.
     on conflict (id) do nothing
     returning id
-  `);
-  if (!inserted.rows[0]) {
+  `, "objects");
+  if (!inserted[0]) {
     const prior = await runner.execute<{ id: string }>(sql`
       select id from projects where id = ${id} and org_id = ${ctx.orgId}
-    `);
-    if (!prior.rows[0]) throw new ProjectCreateError("Project not found", 404, undefined, "scope");
+    `, "objects");
+    if (!prior[0]) throw new ProjectCreateError("Project not found", 404, undefined, "scope");
     // Compare replays with the immutable create image in the insert audit
     // event, rather than today's row, so an unchanged retry still succeeds
     // after later edits.

@@ -74,10 +74,10 @@ test("offline replay records each event once, entries once", { skip: !DB }, asyn
     assert.equal(first.filter((r) => "replayed" in r && (r as { replayed: boolean }).replayed).length, 0);
     assert.equal(second.filter((r) => "replayed" in r && (r as { replayed: boolean }).replayed).length, 2);
     const entries = await withOrg(org.orgId, async () => (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0]?.n);
+      select count(*)::text as n from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0]?.n);
     assert.equal(entries, "1");
     const stored = await withOrg(org.orgId, async () => (await db.execute<{ hours: string }>(sql`
-      select hours::text as hours from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0]?.hours);
+      select hours::text as hours from time_entries where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0]?.hours);
     // 8h device time minus the 30-minute declared break, quarter-rounded.
     assert.equal(stored, "7.5000");
   } finally {
@@ -125,7 +125,7 @@ test("stale pairs auto-close with a flag, hours kept", { skip: !DB }, async () =
       assert.ok(result.autoClosedPairId, "the stale pair auto-closes with a flag");
       const flagged = (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from time_clock_events
-         where org_id = ${org.orgId} and auto_closed`)).rows[0]?.n;
+         where org_id = ${org.orgId} and auto_closed`, "objects"))[0]?.n;
       assert.equal(flagged, "1");
     });
   } finally {
@@ -151,7 +151,7 @@ test("five wrong PINs lock the kiosk identity", { skip: !DB }, async () => {
       assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })), "pin_wrong");
       const firstFailure = (await db.execute<{ failed_attempts: number; locked_until: string | null }>(sql`
         select failed_attempts, locked_until::text as locked_until from worker_clock_pins
-         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0];
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`, "objects"))[0];
       assert.equal(firstFailure?.failed_attempts, 1, "the refusal is raised only after its failure count commits");
       assert.equal(firstFailure?.locked_until, null);
       for (let i = 0; i < 3; i++) {
@@ -198,16 +198,16 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
     assert.equal(posted.chargeDocumentIds.length, 1);
     await withOrg(org.orgId, async () => {
       // Posting twice refuses — hours and charges stay single.
-      const batchId = (await db.execute<{ id: string }>(sql`select id::text as id from crew_time_batches where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+      const batchId = (await db.execute<{ id: string }>(sql`select id::text as id from crew_time_batches where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
       assert.equal(await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null })), "batch_already_posted");
-      const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`)).rows[0]?.n;
+      const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`, "objects"))[0]?.n;
       assert.equal(entries, "1");
-      const charges = (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where org_id = ${org.orgId} and kind = 'project_charge'`)).rows[0]?.n;
+      const charges = (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where org_id = ${org.orgId} and kind = 'project_charge'`, "objects"))[0]?.n;
       assert.equal(charges, "1");
       // 4h × 125.3750 = 501.5000 balanced through the charge path.
       const line = (await db.execute<{ cost_amount: string; bill_amount: string; equipment_unit_id: string }>(sql`
         select cost_amount::text, bill_amount::text, equipment_unit_id::text from document_lines
-         where org_id = ${org.orgId} and equipment_unit_id = ${unitId}`)).rows[0];
+         where org_id = ${org.orgId} and equipment_unit_id = ${unitId}`, "objects"))[0];
       assert.equal(line?.cost_amount, "501.5000");
       assert.equal(line?.equipment_unit_id, unitId);
     });
@@ -253,8 +253,8 @@ test("submission signs the batch lines that remain after a concurrent edit", { s
       const result = await withOrg(org.orgId, () => db.execute(sql`
         select pid from pg_stat_activity where datname = current_database()
           and pid <> pg_backend_pid() and wait_event_type = 'Lock'
-          and query ilike '%crew_time_batches%'`));
-      if (result.rows.length > 0) { waiting = true; break; }
+          and query ilike '%crew_time_batches%'`, "objects"));
+      if (result.length > 0) { waiting = true; break; }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     assert.ok(waiting, "submission waits for the edit's batch lock before reading signed lines");
@@ -266,7 +266,7 @@ test("submission signs the batch lines that remain after a concurrent edit", { s
       const result = (await db.execute<{ employee_party_id: string; hours: string; signature_evidence: { linesDigest: string } }>(sql`
         select l.employee_party_id::text as employee_party_id, l.hours::text as hours, b.signature_evidence
           from crew_time_batches b join crew_time_batch_lines l on l.batch_id = b.id
-         where b.org_id = ${org.orgId} and b.id = ${batchId}`)).rows[0];
+         where b.org_id = ${org.orgId} and b.id = ${batchId}`, "objects"))[0];
       assert.equal(result?.employee_party_id, workerB);
       const expected = createHash("sha256").update([workerB, "6.0000", "", "", "", "", "", ""].join("|")).digest("hex");
       assert.equal(result?.signature_evidence.linesDigest, expected, "signature evidence identifies the lines actually submitted");
@@ -307,7 +307,7 @@ test("a foreman double-submit names the existing batch instead of a 500", { skip
       assert.equal(retry.code, "batch_already_exists");
       assert.match(retry.message, new RegExp(`batch ${first}`), "the refusal names the winning batch id");
       const batches = (await db.execute<{ ids: string[] }>(sql`
-        select array_agg(id::text) as ids from crew_time_batches where org_id = ${org.orgId}`)).rows[0]!.ids;
+        select array_agg(id::text) as ids from crew_time_batches where org_id = ${org.orgId}`, "objects"))[0]!.ids;
       assert.deepEqual(batches, [first]);
     });
   } finally {
@@ -330,7 +330,7 @@ test("a submitted batch approves once; a rejected batch never posts", { skip: !D
       await seedApprovalFlow(org.orgId, { subjectKind: "crew_time_batch", assignees: [{ type: "user", userId: reviewer }], mode: "all", preventSelfApproval: true });
       const decide = async (batchId: string, decision: "approved" | "rejected", comment?: string) => {
         const gate = (await db.execute<{id:string}>(sql`select id from flow_gates
-          where org_id=${org.orgId} and subject_kind='crew_time_batch' and subject_id=${batchId} and status='pending'`)).rows[0];
+          where org_id=${org.orgId} and subject_kind='crew_time_batch' and subject_id=${batchId} and status='pending'`, "objects"))[0];
         assert.ok(gate, "the configured tenant Flow must retain a native review gate");
         await decideGate({ gateId: gate.id, userId: reviewer, decision, comment });
       };
@@ -349,14 +349,14 @@ test("a submitted batch approves once; a rejected batch never posts", { skip: !D
       };
       const approvedId = await submitted("2026-09-14");
       await decide(approvedId, "approved");
-      assert.equal((await db.execute<{status:string}>(sql`select status from crew_time_batches where org_id=${org.orgId} and id=${approvedId}`)).rows[0]?.status, "approved");
+      assert.equal((await db.execute<{status:string}>(sql`select status from crew_time_batches where org_id=${org.orgId} and id=${approvedId}`, "objects"))[0]?.status, "approved");
       assert.equal(
         await refusesCode(() => approveBatch({ orgId: org.orgId, actorUserId: actor, batchId: approvedId, allowedSubsidiaryIds: null })),
         "batch_not_approvable",
       );
       const rejectedId = await submitted("2026-09-15");
       await decide(rejectedId, "rejected", "Split the overtime line");
-      const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${rejectedId}`)).rows[0]?.status;
+      const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${rejectedId}`, "objects"))[0]?.status;
       assert.equal(status, "rejected");
       const posted = await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId: rejectedId, allowedSubsidiaryIds: null }));
       assert.equal(posted, "batch_not_approved");
@@ -406,7 +406,7 @@ test("crew post refuses while Projects is off and writes no time", { skip: !DB }
       });
       await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
       assert.equal(await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null })), "projects_off");
-      const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`)).rows[0]?.n;
+      const entries = (await db.execute<{ n: string }>(sql`select count(*)::text as n from time_entries where org_id = ${org.orgId}`, "objects"))[0]?.n;
       assert.equal(entries, "0", "the refused post writes no time");
     });
   } finally {

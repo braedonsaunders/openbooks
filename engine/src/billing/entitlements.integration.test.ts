@@ -128,7 +128,7 @@ async function usageRows(orgId: string, subscriptionId: string, sourceRef: strin
            exists (select 1 from usage_records v where v.org_id = r.org_id and v.reverses_id = r.id) as reversed
       from usage_records r
      where r.org_id = ${orgId} and r.subscription_id = ${subscriptionId}::uuid and r.source_ref = ${sourceRef}
-     order by r.created_at, r.id`)).rows as Array<{ id: string; quantity: string; reversesId: string | null; reversed: boolean }>;
+     order by r.created_at, r.id`, "objects")) as Array<{ id: string; quantity: string; reversesId: string | null; reversed: boolean }>;
 }
 
 test("plan grants resolve by effective date, and history survives the change", { skip: !DB }, async () => {
@@ -154,11 +154,11 @@ test("plan grants resolve by effective date, and history survives the change", {
   assert.equal(late?.features.find((f) => f.featureKey === "seats_included")?.limit, "200");
   const history = await listPlanVersionEntitlements(org.orgId, versionId, "2026-07-01");
   assert.equal(history.length, 1);
-  const closed = (await db.execute<{ from: string; to: string | null }>(sql`
+  const closed = await db.execute<{ from: string; to: string | null }>(sql`
     select effective_from::text as "from", effective_to::text as "to"
       from subscription_plan_version_entitlements
      where org_id = ${org.orgId} and plan_version_id = ${versionId}::uuid
-     order by effective_from`)).rows;
+     order by effective_from`, "objects");
   assert.deepEqual(closed.map((r) => [r.from, r.to]), [["2026-05-01", "2026-06-01"], ["2026-06-01", null]]);
 });
 
@@ -247,10 +247,10 @@ test("overrides win field by field, and expiry restores the plan grant", { skip:
   const sso = overridden?.features.find((f) => f.featureKey === "sso");
   assert.equal(sso?.enabled, false);
   // The override announces itself on the subscriber channel.
-  const events = (await db.execute<{ type: string; subscriptionId: string; featureKey: string }>(sql`
+  const events = await db.execute<{ type: string; subscriptionId: string; featureKey: string }>(sql`
     select event_type as type, payload->>'subscriptionId' as "subscriptionId", payload->>'featureKey' as "featureKey"
       from webhook_events
-     where org_id = ${org.orgId} and event_type = 'entitlement.changed'`)).rows;
+     where org_id = ${org.orgId} and event_type = 'entitlement.changed'`, "objects");
   assert.ok(events.some((e) => e.subscriptionId === subscriptionId && e.featureKey === "seats_included"));
   await expireSubscriptionOverride(org.orgId, actor, {
     subscriptionId, allowedSubsidiaryIds: null, featureKey: "seats_included", effectiveTo: "2026-07-15",
@@ -343,10 +343,10 @@ test("alert allows the usage and notifies billing operators once", { skip: !DB }
   });
   assert.equal(verdict.allowed, true);
   assert.equal(verdict.overage, "40");
-  const notices = (await db.execute<{ title: string; body: string }>(sql`
+  const notices = await db.execute<{ title: string; body: string }>(sql`
     select title, body from notifications
      where org_id = ${org.orgId} and user_id = ${actor} and kind = 'entitlement-overage'
-       and href = ${`/collections?subscription=${subscriptionId}&feature=seats_included`} and read_at is null`)).rows;
+       and href = ${`/collections?subscription=${subscriptionId}&feature=seats_included`} and read_at is null`, "objects");
   assert.equal(notices.length, 1);
   assert.match(notices[0]!.title, /seats_included/);
   assert.match(notices[0]!.body, /override/);
@@ -357,7 +357,7 @@ test("alert allows the usage and notifies billing operators once", { skip: !DB }
   const again = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from notifications
      where org_id = ${org.orgId} and user_id = ${actor} and kind = 'entitlement-overage'
-       and href = ${`/collections?subscription=${subscriptionId}&feature=seats_included`} and read_at is null`)).rows[0]?.n;
+       and href = ${`/collections?subscription=${subscriptionId}&feature=seats_included`} and read_at is null`, "objects"))[0]?.n;
   assert.equal(again, 1);
 });
 

@@ -47,7 +47,7 @@ async function seedBudget(org: ScratchOrg & { fundId: string }, actorId: string,
   const year = (await withOrgContext(org.orgId, () => db.execute<{ fiscalYear: number }>(sql`
     select fiscal_year as "fiscalYear" from accounting_periods
      where org_id = ${org.orgId} and id = ${org.periodId}
-  `))).rows[0]!.fiscalYear;
+  `, "objects")))[0]!.fiscalYear;
   await withBypassContext(async () => {
     await db.execute(sql`
       insert into budget_scenarios
@@ -96,8 +96,8 @@ test("commitments and budget control preserve posting policy and derived balance
             '{"nonprofit":true,"fundAccounting":true,"budgets":true,"encumbrances":true}'::jsonb,
           true
         ) where id = ${org.orgId} returning id
-      `);
-      assert.equal(changed.rows.length, 1);
+      `, "objects");
+      assert.equal(changed.length, 1);
     });
     const fund = await provisionFundAccounting({
       orgId: org.orgId,
@@ -129,8 +129,8 @@ test("commitments and budget control preserve posting policy and derived balance
           `);
           const approved = await db.execute(sql`
             update documents set status = 'approved' where org_id = ${orgId} and id = ${id} returning id
-          `);
-          assert.equal(approved.rows.length, 1, 'the purchase order has a valid line before approval');
+          `, "objects");
+          assert.equal(approved.length, 1, 'the purchase order has a valid line before approval');
         }
         return id;
       };
@@ -317,8 +317,8 @@ test("commitments and budget control preserve posting policy and derived balance
         `);
         const approved = await db.execute<{ id: string }>(sql`
           update documents set status = 'approved' where org_id = ${org.orgId} and id = ${documentId} returning id
-        `);
-        assert.equal(approved.rows.length, 1);
+        `, "objects");
+        assert.equal(approved.length, 1);
       });
       return { documentId, documentLineId };
     };
@@ -368,8 +368,8 @@ test("hard budget control includes later actuals when an expense is backdated", 
             '{"nonprofit":true,"fundAccounting":true,"budgets":true,"encumbrances":true}'::jsonb,
           true
         ) where id = ${org.orgId} returning id
-      `);
-      assert.equal(changed.rows.length, 1);
+      `, "objects");
+      assert.equal(changed.length, 1);
     });
     const fund = await provisionFundAccounting({
       orgId: org.orgId,
@@ -385,7 +385,7 @@ test("hard budget control includes later actuals when an expense is backdated", 
     const periods = await withBypassContext(async () => {
       const calendar = (await db.execute<{ id: string }>(sql`
         select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const marchId = randomUUID();
       const juneId = randomUUID();
       await db.execute(sql`

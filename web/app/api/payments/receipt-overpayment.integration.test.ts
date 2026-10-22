@@ -56,7 +56,7 @@ test("a receipt larger than its applications keeps the excess on account", { ski
     const openLineId = (await db.execute<{ id: string }>(sql`
       select jl.id from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where je.source_document_id = ${invoiceId} and je.status = 'posted' and jl.is_open_item`)).rows[0]!.id;
+       where je.source_document_id = ${invoiceId} and je.status = 'posted' and jl.is_open_item`, "objects"))[0]!.id;
     const allocation = {
       openLineId,
       sourceTransactionAmount: "99",
@@ -90,21 +90,21 @@ test("a receipt larger than its applications keeps the excess on account", { ski
 
     const receipt = (await db.execute<{ total: string; status: string; on_account: string | null }>(sql`
       select total::text as total, status, custom->>'onAccountAmount' as on_account
-        from documents where id = ${draft.doc.id} and org_id = ${org.orgId}`)).rows[0]!;
+        from documents where id = ${draft.doc.id} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(receipt.status, "posted");
     assert.equal(toUnits(receipt.total), toUnits("198"), "the receipt carries the full amount received");
     assert.equal(toUnits(receipt.on_account ?? "0"), toUnits("99"));
     const bank = (await db.execute<{ amount: string }>(sql`
       select coalesce(sum(jl.amount), 0)::text as amount from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where je.source_document_id = ${draft.doc.id} and jl.account_id = ${org.accounts.bank}`)).rows[0]!;
+       where je.source_document_id = ${draft.doc.id} and jl.account_id = ${org.accounts.bank}`, "objects"))[0]!;
     assert.equal(toUnits(bank.amount), toUnits("198"), "the bank is debited the full amount received");
 
     const items = await openItemsForParty(org.customerId, "ar", org.orgId);
     assert.equal(items.find((item) => item.lineId === openLineId), undefined, "the invoice is settled");
     // The receipt's unapplied 99 stays open on it as the customer's credit.
     const open = (await db.execute<{ open_balance: string | null }>(sql`
-      select open_balance::text as open_balance from documents where id = ${draft.doc.id} and org_id = ${org.orgId}`)).rows[0]!;
+      select open_balance::text as open_balance from documents where id = ${draft.doc.id} and org_id = ${org.orgId}`, "objects"))[0]!;
     const unapplied = toUnits(open.open_balance ?? "0");
     assert.equal(unapplied < 0n ? -unapplied : unapplied, toUnits("99"), "the excess stays open as an unapplied credit");
   } finally {

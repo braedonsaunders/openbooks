@@ -234,11 +234,9 @@ test("movement events coalesce to one pair and the first push sets the baseline"
       { quantity: 10, compare: null },
     );
     assert.equal(fake.policies.get("gid://shopify/ProductVariant/9001"), "DENY");
-    const state = (
-      await run(org.orgId, () => db.execute<{ last_pushed_quantity: number; last_status: string }>(sql`
+    const state = (await run(org.orgId, () => db.execute<{ last_pushed_quantity: number; last_status: string }>(sql`
         select last_pushed_quantity, last_status from channel_inventory_push_states
-         where org_id = ${org.orgId} and channel_id = ${channelId}`))
-    ).rows[0];
+         where org_id = ${org.orgId} and channel_id = ${channelId}`, "objects")))[0];
     assert.deepEqual(
       { quantity: state?.last_pushed_quantity, status: state?.last_status },
       { quantity: 10, status: "ok" },
@@ -367,14 +365,11 @@ test("the buffer holds stock back and a kit pushes its component-derived availab
     );
     assert.deepEqual(outcome, { result: "pushed", quantity: 7 });
     // A kit of two components pushes five kits from the same ten units.
-    const kitId = (
-      await run(org.orgId, () => db.execute<{ id: string }>(sql`
+    const kitId = (await run(org.orgId, () => db.execute<{ id: string }>(sql`
         insert into items (org_id, kind, code, name, is_active, created_by, updated_by)
         values (${org.orgId}, 'kit', 'KIT-1', 'Kit One', true, ${actor}, ${actor})
-        returning id`))
-    ).rows[0]!.id;
-    const profile = (
-      await run(org.orgId, () => db.execute<{
+        returning id`, "objects")))[0]!.id;
+    const profile = (await run(org.orgId, () => db.execute<{
         asset: string;
         cogs: string;
         adjustment: string;
@@ -384,8 +379,7 @@ test("the buffer holds stock back and a kit pushes its component-derived availab
                adjustment_account_id::text as adjustment,
                received_not_billed_account_id::text as clearing
           from item_inventory_profiles
-         where org_id = ${org.orgId} and item_id = ${org.items.fifo} limit 1`))
-    ).rows[0]!;
+         where org_id = ${org.orgId} and item_id = ${org.items.fifo} limit 1`, "objects")))[0]!;
     await run(org.orgId, () => db.execute(sql`
       insert into item_inventory_profiles
         (org_id, item_id, costing_method, tracking, asset_account_id, cogs_account_id,

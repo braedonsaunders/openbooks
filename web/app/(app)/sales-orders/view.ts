@@ -150,7 +150,7 @@ export async function loadSalesOrders(
   // button needs it on every render: without a configured currency it keeps
   // the draft-API path (which refuses by name with the setup remedy) instead
   // of opening an unsaved drawer, and a direct create URL opens no draft.
-  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`)).rows[0]?.base_currency ?? null
+  const baseCurrency = (await db.execute<{ base_currency: string | null }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`, 'objects'))[0]?.base_currency ?? null
 
   const [openOrder, pickers] = await Promise.all([
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND, authz.allowedSubsidiaryIds) : null,
@@ -200,7 +200,7 @@ export async function loadSalesOrders(
     ? (await db.execute<{ customer_id: string; item_id: string; customer_sku: string }>(sql`
         select customer_id, item_id, customer_sku from customer_item_refs
          where org_id = ${authz.user.orgId} and customer_id = any(${sql.param(scopedCustomerIds)}::uuid[])
-      `)).rows.map((row) => ({ customerId: row.customer_id, itemId: row.item_id, customerSku: row.customer_sku }))
+      `, 'objects')).map((row) => ({ customerId: row.customer_id, itemId: row.item_id, customerSku: row.customer_sku }))
     : []
   const resolvedForm = openOrder && pickers ? await resolveFormLayout({
     orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,

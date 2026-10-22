@@ -96,11 +96,11 @@ const nowIso = (): string => new Date().toISOString();
 type GateRow = { id: string; status: string; decided_by: string | null };
 
 async function gatesForSubject(orgId: string, subjectKind: string, subjectId: string): Promise<GateRow[]> {
-  return (await db.execute<GateRow>(sql`
+  return await db.execute<GateRow>(sql`
     select id, status, decided_by::text as decided_by from flow_gates
      where org_id = ${orgId} and subject_kind = ${subjectKind} and subject_id = ${subjectId}
      order by id
-  `)).rows;
+  `, "objects");
 }
 
 test("leave approval: inbox act and native decide leave identical rows and events", { skip: !DB }, async () => {
@@ -156,7 +156,7 @@ test("leave approval: inbox act and native decide leave identical rows and event
 
     const requestedBefore = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
-       where org_id = ${org.orgId} and user_id = ${approverId} and kind = 'approval' and read_at is null`)).rows[0]!.n;
+       where org_id = ${org.orgId} and user_id = ${approverId} and kind = 'approval' and read_at is null`, "objects"))[0]!.n;
     assert.ok(requestedBefore > 0, "each gate announced itself to the approver");
 
     // Inbox act on the first gate, native decideGate on the second.
@@ -170,7 +170,7 @@ test("leave approval: inbox act and native decide leave identical rows and event
     // paths: decided work never lingers in My tasks as an unread notice.
     const openRequests = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from notifications
-       where org_id = ${org.orgId} and user_id = ${approverId} and kind = 'approval' and read_at is null`)).rows[0]!.n;
+       where org_id = ${org.orgId} and user_id = ${approverId} and kind = 'approval' and read_at is null`, "objects"))[0]!.n;
     assert.equal(openRequests, 0, "no approval notice stays unread after its gate is decided");
     assert.equal(
       (await listInbox(ctx, { kinds: ["notification"] })).filter((i) => i.title.startsWith("Approval requested")).length,
@@ -183,7 +183,7 @@ test("leave approval: inbox act and native decide leave identical rows and event
       assert.equal(after.decided_by, approverId);
       const reqRow = (await db.execute<{ status: string }>(sql`
         select status from hrm_leave_requests where org_id = ${org.orgId} and id = ${request.id}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(reqRow.status, "approved", `request ${request.id} approved on both paths`);
     }
     // Stale: the inbox refuses the already-decided item by name.
@@ -247,7 +247,7 @@ test("a leave maker reassigned to their own gate sees no decision actions", { sk
     await submitLeaveRequest({ orgId: org.orgId, actorId: workerId, requestId: draft.id });
     const gate = (await db.execute<{ id: string }>(sql`
       select id from flow_gates where org_id = ${org.orgId} and subject_id = ${draft.id} and status = 'pending'
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(gate, "the independent approver receives the leave gate");
     await db.execute(sql`update flow_gates set assignee_user_id = ${workerId} where id = ${gate.id}`);
     const item = (await hrmLeaveRequestAdapter.list({ orgId: org.orgId, actorId: workerId, asOf: nowIso() }))
@@ -288,10 +288,10 @@ test("process step: inbox complete and native complete leave identical rows", { 
     const { completeProcessStep } = await import("../hrm/processes.ts");
     await actOnInboxItem(ctx, items[0]!.id, "complete");
     await completeProcessStep({ orgId: org.orgId, actorId: workerId, stepId: items[1]!.source.id });
-    const rows = (await db.execute<{ id: string; status: string; done_by: string }>(sql`
+    const rows = await db.execute<{ id: string; status: string; done_by: string }>(sql`
       select id, status, done_by::text as done_by from hrm_process_steps
        where org_id = ${org.orgId} and process_id = ${process.id} order by id
-    `)).rows;
+    `, "objects");
     assert.equal(rows.length, 2);
     for (const row of rows) {
       assert.equal(row.status, "done");
@@ -350,7 +350,7 @@ test("change request: inbox approve and native decide release identically throug
     for (const draft of drafts) {
       const reqRow = (await db.execute<{ status: string }>(sql`
         select status from hrm_employment_change_requests where org_id = ${org.orgId} and id = ${draft.id}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.ok(["approved", "applied"].includes(reqRow.status), `request ${draft.id} released on both paths (got ${reqRow.status})`);
       const gate = (await gatesForSubject(org.orgId, HRM_CHANGE_REQUEST_SUBJECT_KIND, draft.id))[0]!;
       assert.equal(gate.status, "approved");
@@ -396,7 +396,7 @@ test("notices: unread rows surface as items and mark-read completes in place", {
     // The native PATCH route and the adapter share one predicate: the row is read.
     const row = (await db.execute<{ read_at: string | null }>(sql`
       select read_at::text as read_at from notifications where org_id = ${org.orgId} and user_id = ${userId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.ok(row.read_at !== null, "mark-read stamps the row the route reads");
   } finally {
     await dropScratchOrg(org.orgId);

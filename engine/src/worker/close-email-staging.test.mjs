@@ -69,7 +69,7 @@ const sources = {
   '@openbooks/emails': 'export const isValidEmailAddress = () => true;',
   '../delivery/email-attachments.ts': emailAttachmentsStub,
   '../platform/db.ts': `
-    export const db = { execute: async () => globalThis.__closeEmailStageTest.queue.shift() ?? { rows: [] } };
+    export const db = { execute: async (_query, mode) => Promise.resolve(globalThis.__closeEmailStageTest.queue.shift() ?? { rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) };
     export const withOrgContext = (_org, fn) => fn();
   `,
   '../organization/actor-subsidiaries.ts': 'export const actorAllowedSubsidiaryIds = async () => null;',

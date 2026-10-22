@@ -18,7 +18,7 @@ for (const operation of ["write-down", "recovery"] as const) {
       const input = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, nrvPerUnit: "4", date: org.date };
       if (operation === "recovery") await writeDownInventoryToNrv(org.orgId, actorId, input);
       const before = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
-      const evidence = async () => (await db.execute(sql`select id,kind,amount,reversed_amount,journal_entry_id from inventory_writedowns where org_id=${org.orgId} order by id`)).rows;
+      const evidence = async () => await db.execute(sql`select id,kind,amount,reversed_amount,journal_entry_id from inventory_writedowns where org_id=${org.orgId} order by id`, "objects");
       const historical = await evidence();
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":false}'::jsonb) where id=${org.orgId}`);
       const run = () => operation === "write-down" ? writeDownInventoryToNrv(org.orgId, actorId, input)

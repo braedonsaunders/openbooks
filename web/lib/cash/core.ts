@@ -702,7 +702,7 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[], includeNull = 
 export async function paymentStats(side: Side, asOfIso: string, subIds?: string[], orgId?: string): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   // Settlement behaviour comes from party_payment_stats, the rollup maintained
-  // at the settlement event (see 0001_baseline.sql). It stores sufficient
+  // by a trigger at the settlement event. It stores sufficient
   // statistics per (party, settlement day) — count, Σdays, Σdays² — so the
   // trailing window is an exact range scan and both the mean and the
   // population standard deviation are reconstructed here without touching the

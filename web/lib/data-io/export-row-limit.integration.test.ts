@@ -15,10 +15,10 @@ const { MASTER_BY_KEY, masterResource } = await import('./master-data-resources.
 const { ExportRowLimitError, MAX_EXPORT_ROWS } = await import('./resource-core.ts')
 
 async function partyCount(orgId: string): Promise<number> {
-  const r = (await withBypass(() =>
-    db.execute(sql`select count(*)::int as n from parties where org_id = ${orgId}`),
-  )) as { rows: { n: number }[] }
-  return r.rows[0]!.n
+  const r = await withBypass(() =>
+    db.execute<{ n: number }>(sql`select count(*)::int as n from parties where org_id = ${orgId}`, 'objects'),
+  )
+  return r[0]!.n
 }
 
 async function topUpParties(orgId: string, target: number, tag: string): Promise<void> {

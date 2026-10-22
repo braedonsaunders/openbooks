@@ -83,7 +83,7 @@ async function fixture() {
   const bankTotal = async (periodId = org.periodId, bookId = org.bookId) => (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id
     where e.org_id=${org.orgId} and e.period_id=${periodId} and e.book_id=${bookId} and e.origin='fx_revaluation'
-      and e.status in ('posted','reversed') and l.account_id=${org.accounts.bank}`)).rows[0]!.amount;
+      and e.status in ('posted','reversed') and l.account_id=${org.accounts.bank}`, "objects"))[0]!.amount;
   return { ...org, actorId, nextPeriodId, seed, record, run, bankTotal };
 }
 
@@ -108,7 +108,7 @@ test("a recorded closing rate prices its exact position through close, mirror an
     assert.equal(recorded.evidence.version, 1);
     assert.equal(recorded.evidence.rateDate, "2026-07-31");
     assert.equal(
-      (await db.execute(sql`select id from fx_rates where org_id=${f.orgId}`)).rows.length,
+      (await db.execute(sql`select id from fx_rates where org_id=${f.orgId}`, "objects")).length,
       0,
       "recording a scoped closing rate never inserts an organization exchange rate",
     );
@@ -129,7 +129,7 @@ test("a recorded closing rate prices its exact position through close, mirror an
     // The posted audit snapshot retains the full selected quote.
     const audit = (await db.execute<{ changes: { positions: Array<{ rateEvidence: Record<string, unknown> }> } }>(sql`
       select changes from audit_log where org_id=${f.orgId} and row_id=${first.posted[0]!.entryId}
-        and request_id='fx_revaluation'`)).rows[0]!;
+        and request_id='fx_revaluation'`, "objects"))[0]!;
     assert.equal(audit.changes.positions[0]!.rateEvidence.id, recorded.evidence.id);
     assert.equal(audit.changes.positions[0]!.rateEvidence.version, 1);
     assert.equal(audit.changes.positions[0]!.rateEvidence.rate, "1.1200000000");
@@ -151,12 +151,12 @@ test("a recorded closing rate prices its exact position through close, mirror an
     assert.equal(await f.bankTotal(), "30.0000");
     const original = (await db.execute<{ rate: string; version: number }>(sql`
       select rate::text as rate, version from fx_revaluation_rate_evidence
-       where org_id=${f.orgId} and id=${recorded.evidence.id}`)).rows[0]!;
+       where org_id=${f.orgId} and id=${recorded.evidence.id}`, "objects"))[0]!;
     assert.deepEqual(original, { rate: "1.1200000000", version: 1 }, "the original quote is never rewritten");
     const evidenceAudit = (await db.execute<{ beforeRate: string; afterRate: string }>(sql`
       select changes#>>'{before,rate}' as "beforeRate", changes#>>'{after,rate}' as "afterRate"
       from audit_log where org_id=${f.orgId}
-        and table_name='fx_revaluation_rate_evidence' and row_id=${successor.evidence.id}`)).rows[0]!;
+        and table_name='fx_revaluation_rate_evidence' and row_id=${successor.evidence.id}`, "objects"))[0]!;
     assert.equal(evidenceAudit.beforeRate, "1.1200000000");
     assert.equal(evidenceAudit.afterRate, "1.1300000000");
     assert.equal((await revaluationReadiness(f.orgId, f.bookId, f.periodId, [f.subsidiaryId])).unrevaluedPositions, 0);
@@ -188,7 +188,7 @@ test("a foreign payable revalues as a liability through its recorded closing rat
     const mirror = (await db.execute<{ amount: string }>(sql`
       select coalesce(sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id
       where e.org_id=${f.orgId} and e.period_id=${f.nextPeriodId} and e.origin='fx_revaluation'
-        and l.account_id=${f.accounts.ap}`)).rows[0]!.amount;
+        and l.account_id=${f.accounts.ap}`, "objects"))[0]!.amount;
     assert.equal(mirror, "10.0000", "the next-period mirror debits the payable back");
   } finally {
     await dropScratchOrg(f.orgId);
@@ -200,7 +200,7 @@ test("recordings refuse wrong scope, stale measurement and missing authority wit
   try {
     await f.seed({ accountId: f.accounts.bank, currency: "EUR", base: "1100", foreign: "1000" });
     const count = async () => (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from fx_revaluation_rate_evidence where org_id=${f.orgId}`)).rows[0]!.n;
+      select count(*)::int as n from fx_revaluation_rate_evidence where org_id=${f.orgId}`, "objects"))[0]!.n;
     await assert.rejects(f.record({ rateDate: "2026-07-30" }), /final day of its assigned period/);
     await assert.rejects(f.record({ measurementCurrency: "USD" }), /measures the legal entity in CAD/);
     await assert.rejects(f.record({ transactionCurrency: "CAD", measurementCurrency: "CAD" }), /no exchange rate to record/);
@@ -260,7 +260,7 @@ test("feature, closed-period and reversal-period boundaries keep recordings non-
     const recorded = await f.record();
     assert.equal(recorded.evidence.version, 1);
     assert.equal(
-      (await db.execute(sql`select id from journal_entries where org_id=${f.orgId} and origin='fx_revaluation'`)).rows.length,
+      (await db.execute(sql`select id from journal_entries where org_id=${f.orgId} and origin='fx_revaluation'`, "objects")).length,
       0,
       "recording into a closed period posts nothing",
     );
@@ -302,8 +302,8 @@ test("replay, expected-head and fork controls admit exactly one current version"
     ]);
     assert.equal(attempts.filter((a) => a.status === "fulfilled").length, 1);
     assert.equal(attempts.filter((a) => a.status === "rejected").length, 1);
-    const versions = (await db.execute<{ version: number }>(sql`
-      select version from fx_revaluation_rate_evidence where org_id=${f.orgId} order by version`)).rows;
+    const versions = await db.execute<{ version: number }>(sql`
+      select version from fx_revaluation_rate_evidence where org_id=${f.orgId} order by version`, "objects");
     assert.deepEqual(versions.map((v) => v.version), [1, 2], "no forked version chain");
 
     // Recorded quotes are immutable at storage level.
@@ -336,7 +336,7 @@ test("one request identity serializes across positions and resolves to the suppo
     const rejected = attempts.find((a) => a.status === "rejected") as PromiseRejectedResult;
     assert.match(String((rejected.reason as Error).message), /already recorded a different closing rate/);
     assert.equal(
-      (await db.execute(sql`select id from fx_revaluation_rate_evidence where org_id=${f.orgId}`)).rows.length,
+      (await db.execute(sql`select id from fx_revaluation_rate_evidence where org_id=${f.orgId}`, "objects")).length,
       1,
     );
   } finally {

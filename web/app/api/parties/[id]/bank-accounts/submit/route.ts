@@ -62,9 +62,9 @@ export const POST = defineRoute({
         from party_bank_accounts
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
        for update
-    `)
-      if (existing.rows.length === 0) return notFound('record')
-      const account = existing.rows[0]!
+    `, 'objects')
+      if (existing.length === 0) return notFound('record')
+      const account = existing[0]!
       if (account.retiredAt) {
         return NextResponse.json(
           { error: 'retired bank details cannot be submitted for approval' },
@@ -88,8 +88,8 @@ export const POST = defineRoute({
          and subject_id = ${accountId}
          and status in ('pending', 'escalated')
        limit 1
-    `)
-      if (live.rows[0]) {
+    `, 'objects')
+      if (live[0]) {
         return NextResponse.json(
           {
             error:
@@ -98,16 +98,14 @@ export const POST = defineRoute({
           { status: 409 },
         )
       }
-      const latest = (
-        await db.execute<{ id: string; status: string }>(sql`
+      const latest = (await db.execute<{ id: string; status: string }>(sql`
       select id, status from flow_runs
        where org_id = ${user.orgId}
          and subject_kind = ${BANK_ACCOUNT_SUBJECT_KIND}
          and subject_id = ${accountId}
        order by started_at desc
        limit 1
-    `)
-      ).rows[0]
+    `, 'objects'))[0]
       // A submit only (re-)drives a record whose runs are all terminal. A
       // failed latest run belongs to the retry path (same run row, resumed
       // idempotently); a running/waiting run is already driving the record.
@@ -157,8 +155,8 @@ export const POST = defineRoute({
                updated_at = now(), updated_by = ${user.id}
          where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
            and approval_status = 'pending' and retired_at is null
-         returning id`)
-        if (!applied.rows[0]) {
+         returning id`, 'objects')
+        if (!applied[0]) {
           throw new BankAccountSubmitError(
             'these bank details changed while submitting — reload and submit again',
           )

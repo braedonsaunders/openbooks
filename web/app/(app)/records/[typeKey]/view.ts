@@ -263,12 +263,12 @@ export async function loadRecordWorkspace(
        where ${where}
        order by ${sortColumn} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, r.created_at desc
        limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
-    `),
+    `, 'objects'),
     db.execute<{ status: string; n: string }>(sql`
       select r.status, count(*) as n from custom_records r
        where ${scope} ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
        group by r.status
-    `),
+    `, 'objects'),
     Promise.all(
       filterFields.map((f) =>
         db.execute(sql`
@@ -278,28 +278,26 @@ export async function loadRecordWorkspace(
                ${showInactive || status === 'inactive' ? sql`` : sql`and r.status <> 'inactive'`}
                and r.data->>${f.id} is not null
              group by 1
-          `),
+          `, 'objects'),
       ),
     ),
   ])
-  const total = statusCounts.rows.reduce((a: number, r) => a + Number(r.n), 0)
+  const total = statusCounts.reduce((a: number, r) => a + Number(r.n), 0)
   const filtered = Boolean(
     status || listParams.q || activeFieldFilters.length > 0,
   )
   const filteredTotal = filtered
     ? Number(
-        (
-          await db.execute<{ n: string }>(
-            sql`select count(*) as n from custom_records r where ${where}`,
-          )
-        ).rows[0]?.n ?? 0,
+        (await db.execute<{ n: string }>(
+            sql`select count(*) as n from custom_records r where ${where}`, 'objects',
+          ))[0]?.n ?? 0,
       )
     : total
 
   const labels = await resolveEntityLabels(
     authz.user.orgId,
     sections,
-    rows.rows.map((r) => (r.data ?? {}) as Record<string, unknown>),
+    rows.map((r) => (r.data ?? {}) as Record<string, unknown>),
   )
 
   const loadedOpenRecord = recId
@@ -315,7 +313,7 @@ export async function loadRecordWorkspace(
       ? loadedOpenRecord
       : null
 
-  const statusOptions = statusCounts.rows.map((r) => ({
+  const statusOptions = statusCounts.map((r) => ({
     value: r.status,
     label: (RECORD_STATUSES as readonly string[]).includes(r.status)
       ? tc(`status.${r.status}`)
@@ -345,7 +343,7 @@ export async function loadRecordWorkspace(
     statusOptions,
     filterChips: filterFields.map((f) => {
       const counts = new Map<string, number>(
-        (filterCounts[filterFields.indexOf(f)]?.rows ?? []).map((r) => [
+        (filterCounts[filterFields.indexOf(f)] ?? []).map((r) => [
           String(r.v),
           Number(r.n),
         ]),
@@ -377,7 +375,7 @@ export async function loadRecordWorkspace(
     })),
     columnStatus: tc('labels.status'),
     columnCreated: tc('labels.created'),
-    rows: rows.rows.map((r) => {
+    rows: rows.map((r) => {
       const data = (r.data ?? {}) as Record<string, unknown>
       const cells: Record<string, string> = {}
       for (const f of columns)

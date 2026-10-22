@@ -50,7 +50,7 @@ test(
     const strayCount = async (entryNumber: string) =>
       (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_entries
-         where org_id = ${org.orgId} and entry_number = ${entryNumber}`))).rows[0]?.n ?? -1;
+         where org_id = ${org.orgId} and entry_number = ${entryNumber}`, "objects")))[0]?.n ?? -1;
     try {
       await withBypassContext(() => db.execute(sql`
         insert into connections
@@ -108,8 +108,8 @@ test(
                changes->'historicalReplay'->>'connectionId' as connection_id,
                (changes->'historicalReplay'->>'periodLocksPreserved')::boolean as locks_preserved
           from audit_log
-         where org_id = ${org.orgId} and row_id = ${posted.entryId}`)));
-      assert.deepEqual(audit.rows, [{
+         where org_id = ${org.orgId} and row_id = ${posted.entryId}`, "objects")));
+      assert.deepEqual(audit, [{
         mode: "authenticated_connector_historical_replay",
         authorization_id: grantId,
         connection_id: connectionId,

@@ -39,7 +39,7 @@ test('a closed-period provision refusal keeps the typed reopen scope', { skip: !
       }
       const changeId = await proposeProvisionAssessment(org.orgId, actors.submitterId, input)
       await submitFinancialChange(org.orgId, changeId, actors.submitterId)
-      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`)).rows[0]!
+      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, 'objects'))[0]!
       await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: 'approved' })
       await withBypassContext(() => db.execute(sql`insert into period_locks
         (org_id,period_id,book_id,subsidiary_id,module,state,locked_at,reason)
@@ -57,7 +57,7 @@ test('a closed-period provision refusal keeps the typed reopen scope', { skip: !
         subsidiaryId: org.subsidiaryId,
         module: 'gl',
       })
-      assert.equal((await db.execute<{ status: string }>(sql`select status from financial_changes where org_id=${org.orgId} and id=${changeId}`)).rows[0]!.status, 'approved')
+      assert.equal((await db.execute<{ status: string }>(sql`select status from financial_changes where org_id=${org.orgId} and id=${changeId}`, 'objects'))[0]!.status, 'approved')
     })
   } finally {
     await dropScratchOrg(org.orgId)

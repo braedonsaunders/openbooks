@@ -61,7 +61,7 @@ async function lockCip(
       from fixed_assets
      where org_id = ${orgId} and id = ${cipAssetId}
        ${allowed ? sql`and subsidiary_id = any(${uuidArray([...allowed])}::uuid[])` : sql``}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!row) refuse("cip_not_found", "construction-in-progress record not found", { status: 404 });
   if (row.status !== "construction" && row.status !== "capitalized") {
     refuse("not_cip", `asset ${row.asset_number} is not a construction-in-progress record`);
@@ -79,7 +79,7 @@ async function assertAccountType(
   message: string,
 ): Promise<void> {
   const account = (await tx.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId} for share`)).rows[0];
+    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId} for share`, "objects"))[0];
   if (!account || !account.is_active || account.is_summary || !types.includes(account.type)) refuse(code, message);
 }
 
@@ -107,7 +107,7 @@ export async function createCipRecord(
     const tx: SqlExecutor = db;
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.capitalize", feature: "constructionInProgress", subsidiaryIds: [args.subsidiaryId] });
     const subsidiary = (await tx.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgId} and id = ${args.subsidiaryId} and is_active and not is_elimination`)).rows[0];
+      select id from subsidiaries where org_id = ${orgId} and id = ${args.subsidiaryId} and is_active and not is_elimination`, "objects"))[0];
     if (!subsidiary) refuse("subsidiary_invalid", "choose an active legal entity");
     await assertAccountType(tx, orgId, args.cipAccountId, CIP_ACCOUNT_TYPES, "cip_account_invalid",
       "the construction-in-progress account must be an active, postable fixed or other noncurrent asset account");
@@ -130,7 +130,7 @@ export async function createCipRecord(
       update fixed_assets set status = 'construction', asset_account_id = ${args.cipAccountId},
              updated_at = clock_timestamp(), updated_by = ${args.actorId}
        where org_id = ${orgId} and id = ${created.id} and status = 'draft'
-       returning id`)).rows[0];
+       returning id`, "objects"))[0];
     await tx.execute(sql`select set_config('openbooks.asset_cip_ledger', 'off', true)`);
     if (!converted) throw new Error(`construction in progress ${created.assetNumber} was not opened; no row changed`);
     await tx.execute(sql`
@@ -161,9 +161,9 @@ export async function listCipCandidateLines(
   const cip = (await db.execute<CipRow>(sql`
     select id, asset_number, name, status, subsidiary_id, asset_account_id, department_id, project_id, location_id
       from fixed_assets where org_id = ${orgId} and id = ${args.cipAssetId}
-       ${args.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${uuidArray([...args.allowedSubsidiaryIds])}::uuid[])` : sql``}`)).rows[0];
+       ${args.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${uuidArray([...args.allowedSubsidiaryIds])}::uuid[])` : sql``}`, "objects"))[0];
   if (!cip || !cip.asset_account_id) return [];
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; entry_id: string; entry_number: string; origin: string; posting_date: string; amount: string;
     memo: string | null; project_id: string | null; document_number: string | null;
   }>(sql`
@@ -180,7 +180,7 @@ export async function listCipCandidateLines(
        ${args.from ? sql`and je.posting_date >= ${args.from}` : sql``}
        ${args.to ? sql`and je.posting_date <= ${args.to}` : sql``}
      order by je.posting_date, je.entry_number, jl.line_number
-     limit ${Math.min(Math.max(args.limit ?? 200, 1), 500)}`)).rows;
+     limit ${Math.min(Math.max(args.limit ?? 200, 1), 500)}`, "objects");
   return rows.map((row) => ({
     journalLineId: row.id,
     entryId: row.entry_id,
@@ -207,7 +207,7 @@ export async function linkCipCosts(
     const cip = await lockCip(tx, orgId, args.cipAssetId, args.allowedSubsidiaryIds);
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.capitalize", feature: "constructionInProgress", subsidiaryIds: [cip.subsidiary_id] });
     if (cip.status !== "construction") refuse("cip_closed", `construction in progress ${cip.asset_number} is closed`, { remedy: "Reverse its last capitalization to reopen it." });
-    const lines = (await tx.execute<{
+    const lines = await tx.execute<{
       id: string; entry_id: string; account_id: string; subsidiary_id: string; amount: string; memo: string | null;
       project_id: string | null; status: string; reverses_entry_id: string | null; origin: string; posting_date: string;
       source_document_id: string | null; primary_book: boolean; linked: boolean;
@@ -221,7 +221,7 @@ export async function linkCipCosts(
         join accounting_books b on b.org_id = je.org_id and b.id = je.book_id
        where jl.org_id = ${orgId} and jl.id = any(${uuidArray(ids)}::uuid[])
        order by jl.id
-       for share of je`)).rows;
+       for share of je`, "objects");
     if (lines.length !== ids.length) refuse("source_line_not_found", "a selected GL line was not found", { status: 404 });
     for (const line of lines) {
       if (line.status !== "posted" || line.reverses_entry_id) refuse("source_not_posted", "only lines of posted, unreversed journals can be linked");
@@ -256,14 +256,14 @@ export async function unlinkCipCost(
   return withOrgTransaction(orgId, async () => {
     const tx: SqlExecutor = db;
     const cost = (await tx.execute<{ cip_asset_id: string; status: string }>(sql`
-      select cip_asset_id, status from asset_cip_costs where org_id = ${orgId} and id = ${args.costId}`)).rows[0];
+      select cip_asset_id, status from asset_cip_costs where org_id = ${orgId} and id = ${args.costId}`, "objects"))[0];
     if (!cost) refuse("cip_cost_not_found", "construction-in-progress cost not found", { status: 404 });
     const cip = await lockCip(tx, orgId, cost.cip_asset_id, args.allowedSubsidiaryIds);
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.capitalize", feature: "constructionInProgress", subsidiaryIds: [cip.subsidiary_id] });
     const fromAcceptance = (await tx.execute(sql`
       select 1 from asset_proposal_allocations al
         join asset_proposal_acceptances ac on ac.org_id = al.org_id and ac.id = al.acceptance_id and ac.status = 'posted'
-       where al.org_id = ${orgId} and al.cip_cost_id = ${args.costId} limit 1`)).rows[0];
+       where al.org_id = ${orgId} and al.cip_cost_id = ${args.costId} limit 1`, "objects"))[0];
     if (fromAcceptance) {
       refuse("cip_cost_from_acceptance", "this cost was added by an accepted asset proposal", {
         status: 409,
@@ -274,7 +274,7 @@ export async function unlinkCipCost(
       update asset_cip_costs
          set status = 'unlinked', unlinked_at = clock_timestamp(), unlinked_by = ${args.actorId}, unlink_reason = ${reason}
        where org_id = ${orgId} and id = ${args.costId} and status = 'linked'
-       returning id`)).rows[0];
+       returning id`, "objects"))[0];
     if (!updated) refuse("cip_cost_not_linked", "the cost is not linked", { status: 409 });
     const balance = await syncCipCarriedCost(tx, { orgId, cipAssetId: cip.id, actorId: args.actorId, closeWhenEmpty: false });
     return { balance };
@@ -339,7 +339,7 @@ export async function capitalizeCip(
     const prior = (await tx.execute<{ id: string; request_hash: string; entry_id: string; capitalized_amount: string; expensed_amount: string; status: string }>(sql`
       select id, request_hash, entry_id, capitalized_amount::text as capitalized_amount,
              expensed_amount::text as expensed_amount, status
-        from asset_cip_capitalizations where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
+        from asset_cip_capitalizations where org_id = ${orgId} and idempotency_key = ${input.idempotencyKey}`, "objects"))[0];
     if (prior) {
       if (prior.request_hash !== hash) {
         refuse("idempotency_conflict", "this request key was already used for a different capitalization", { status: 409, remedy: "Reopen the record to start a fresh capitalization." });
@@ -350,9 +350,9 @@ export async function capitalizeCip(
           remedy: "Use a new request key to capitalize the reopened construction balance.",
         });
       }
-      const assets = (await tx.execute<{ asset_id: string | null; asset_number: string; amount: string }>(sql`
+      const assets = await tx.execute<{ asset_id: string | null; asset_number: string; amount: string }>(sql`
         select asset_id, asset_number, amount::text as amount from asset_cip_capitalization_lines
-         where org_id = ${orgId} and capitalization_id = ${prior.id} and kind <> 'expense' order by line_number`)).rows;
+         where org_id = ${orgId} and capitalization_id = ${prior.id} and kind <> 'expense' order by line_number`, "objects");
       const balance = await cipBalance(tx, orgId, input.cipAssetId);
       return {
         capitalizationId: prior.id,
@@ -370,12 +370,12 @@ export async function capitalizeCip(
     // The as-of balance: costs posted by the capitalization date, less every
     // posted capitalization.
     const asOf = cipOpenBalance(
-      (await tx.execute<{ amount: string; status: "linked" | "unlinked" }>(sql`
+      await tx.execute<{ amount: string; status: "linked" | "unlinked" }>(sql`
         select amount::text as amount, status from asset_cip_costs
-         where org_id = ${orgId} and cip_asset_id = ${cip.id} and posting_date <= ${input.capitalizedOn}`)).rows,
+         where org_id = ${orgId} and cip_asset_id = ${cip.id} and posting_date <= ${input.capitalizedOn}`, "objects"),
       (await tx.execute<{ capitalized_amount: string; expensed_amount: string; status: "posted" | "reversed" }>(sql`
         select capitalized_amount::text as capitalized_amount, expensed_amount::text as expensed_amount, status
-          from asset_cip_capitalizations where org_id = ${orgId} and cip_asset_id = ${cip.id}`)).rows
+          from asset_cip_capitalizations where org_id = ${orgId} and cip_asset_id = ${cip.id}`, "objects"))
         .map((row) => ({ capitalizedAmount: row.capitalized_amount, expensedAmount: row.expensed_amount, status: row.status })),
     );
     const amounts = input.lines.map((line, index) => {
@@ -408,7 +408,7 @@ export async function capitalizeCip(
         }
         const parent = (await tx.execute<{ id: string; asset_number: string; status: string; subsidiary_id: string; parent_asset_id: string | null }>(sql`
           select id, asset_number, status, subsidiary_id, parent_asset_id from fixed_assets
-           where org_id = ${orgId} and id = ${line.parentAssetId} for update`)).rows[0];
+           where org_id = ${orgId} and id = ${line.parentAssetId} for update`, "objects"))[0];
         if (!parent) refuse("asset_not_found", "parent asset not found", { status: 404 });
         if (parent.subsidiary_id !== cip.subsidiary_id) refuse("component_cross_subsidiary", `asset ${parent.asset_number} belongs to a different legal entity`);
         if (parent.parent_asset_id) refuse("component_nesting", `asset ${parent.asset_number} is itself a component; choose its parent`);
@@ -526,7 +526,7 @@ export async function reverseCipCapitalization(
       id: string; cip_asset_id: string; status: string; entry_id: string; reversal_entry_id: string | null; capitalized_on: string;
     }>(sql`
       select id, cip_asset_id, status, entry_id, reversal_entry_id, capitalized_on::text as capitalized_on
-        from asset_cip_capitalizations where org_id = ${orgId} and id = ${args.capitalizationId} for update`)).rows[0];
+        from asset_cip_capitalizations where org_id = ${orgId} and id = ${args.capitalizationId} for update`, "objects"))[0];
     if (!capitalization) refuse("capitalization_not_found", "capitalization not found", { status: 404 });
     const cip = await lockCip(tx, orgId, capitalization.cip_asset_id, args.allowedSubsidiaryIds);
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.capitalize", feature: "constructionInProgress", subsidiaryIds: [cip.subsidiary_id] });
@@ -538,21 +538,21 @@ export async function reverseCipCapitalization(
       select 1 from asset_cip_capitalizations
        where org_id = ${orgId} and cip_asset_id = ${cip.id} and status = 'posted' and id <> ${capitalization.id}
          and (capitalized_on > ${capitalization.capitalized_on} or (capitalized_on = ${capitalization.capitalized_on} and created_at > (select created_at from asset_cip_capitalizations where org_id = ${orgId} and id = ${capitalization.id})))
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (later) refuse("later_capitalization_exists", "a later capitalization of this record is still posted", { status: 409, remedy: "Reverse the later capitalization first." });
-    const created = (await tx.execute<{ asset_id: string; asset_number: string }>(sql`
+    const created = await tx.execute<{ asset_id: string; asset_number: string }>(sql`
       select asset_id, asset_number from asset_cip_capitalization_lines
-       where org_id = ${orgId} and capitalization_id = ${capitalization.id} and asset_id is not null order by line_number`)).rows;
+       where org_id = ${orgId} and capitalization_id = ${capitalization.id} and asset_id is not null order by line_number`, "objects");
     for (const line of created) {
       const asset = (await tx.execute<{ status: string }>(sql`
-        select status from fixed_assets where org_id = ${orgId} and id = ${line.asset_id} for update`)).rows[0];
+        select status from fixed_assets where org_id = ${orgId} and id = ${line.asset_id} for update`, "objects"))[0];
       if (asset && asset.status !== "draft") {
         refuse("asset_not_draft", `asset ${line.asset_number} is ${asset.status}`, {
           status: 409,
           remedy: "Return the asset to draft (it must have no posted depreciation or lifecycle history) before reversing the capitalization.",
         });
       }
-      const blockers = (await tx.execute<{ blocker: string }>(sql`
+      const blockers = await tx.execute<{ blocker: string }>(sql`
         select 'lifecycle history' as blocker where exists (select 1 from asset_events where org_id = ${orgId} and asset_id = ${line.asset_id})
         union all select 'components' where exists (select 1 from fixed_assets where org_id = ${orgId} and parent_asset_id = ${line.asset_id})
         union all select 'an equipment unit' where exists (select 1 from equipment_units where org_id = ${orgId} and fixed_asset_id = ${line.asset_id})
@@ -560,7 +560,7 @@ export async function reverseCipCapitalization(
         union all select 'maintenance schedules' where exists (select 1 from asset_maintenance_schedules where org_id = ${orgId} and asset_id = ${line.asset_id})
         union all select 'meter readings' where exists (select 1 from asset_usage_readings where org_id = ${orgId} and asset_id = ${line.asset_id})
         union all select 'insurance coverage' where exists (select 1 from asset_insurance_coverages where org_id = ${orgId} and asset_id = ${line.asset_id})
-        union all select 'proposal allocations' where exists (select 1 from asset_proposal_allocations where org_id = ${orgId} and asset_id = ${line.asset_id})`)).rows;
+        union all select 'proposal allocations' where exists (select 1 from asset_proposal_allocations where org_id = ${orgId} and asset_id = ${line.asset_id})`, "objects");
       if (blockers.length > 0) {
         refuse("asset_in_use", `asset ${line.asset_number} has ${blockers.map((row) => row.blocker).join(", ")}`, {
           status: 409,
@@ -574,12 +574,12 @@ export async function reverseCipCapitalization(
          set status = 'reversed', reversal_entry_id = ${reversalEntryId}, reversed_at = clock_timestamp(),
              reversed_by = ${args.actorId}, reversal_reason = ${reason}
        where org_id = ${orgId} and id = ${capitalization.id} and status = 'posted'
-       returning id`)).rows[0];
+       returning id`, "objects"))[0];
     if (!flipped) throw new Error("the capitalization was not reversed; no row changed");
     await markCapitalizationEntryReversed(tx, { orgId, actorId: args.actorId, entryId: capitalization.entry_id });
     const removed: string[] = [];
     for (const line of created) {
-      const before = (await tx.execute<Record<string, unknown>>(sql`select * from fixed_assets where org_id = ${orgId} and id = ${line.asset_id}`)).rows[0];
+      const before = (await tx.execute<Record<string, unknown>>(sql`select * from fixed_assets where org_id = ${orgId} and id = ${line.asset_id}`, "objects"))[0];
       if (!before) continue;
       await tx.execute(sql`update asset_cip_capitalization_lines set asset_id = null where org_id = ${orgId} and asset_id = ${line.asset_id}`);
       await tx.execute(sql`
@@ -587,7 +587,7 @@ export async function reverseCipCapitalization(
          where org_id = ${orgId} and schedule_id in (select id from depreciation_schedules where org_id = ${orgId} and asset_id = ${line.asset_id})`);
       await tx.execute(sql`delete from depreciation_schedules where org_id = ${orgId} and asset_id = ${line.asset_id}`);
       const gone = (await tx.execute<{ id: string }>(sql`
-        delete from fixed_assets where org_id = ${orgId} and id = ${line.asset_id} and status = 'draft' returning id`)).rows[0];
+        delete from fixed_assets where org_id = ${orgId} and id = ${line.asset_id} and status = 'draft' returning id`, "objects"))[0];
       if (!gone) throw new Error(`asset ${line.asset_number} was not removed; no row changed`);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -628,7 +628,7 @@ export async function cipReconciliation(
 ): Promise<CipReconciliationRow[]> {
   if (!isIsoCalendarDate(args.asOf)) refuse("date_invalid", "the as-of date must be a calendar date (YYYY-MM-DD)");
   const scope = args.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray([...args.allowedSubsidiaryIds])}::uuid[])` : sql``;
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     subsidiary_id: string; account_id: string; account_number: string | null; account_name: string; subledger: string; ledger: string;
   }>(sql`
     with cip_accounts as (
@@ -663,7 +663,7 @@ export async function cipReconciliation(
                         and je.posting_date <= ${args.asOf}), 0)::text as ledger
       from cip_accounts ca
       join accounts acct on acct.org_id = ${orgId} and acct.id = ca.account_id
-     order by acct.number nulls last, ca.subsidiary_id`)).rows;
+     order by acct.number nulls last, ca.subsidiary_id`, "objects");
   return rows.map((row) => ({
     subsidiaryId: row.subsidiary_id,
     accountId: row.account_id,

@@ -106,7 +106,7 @@ async function main() {
     }
     const [install, fresh, fallback] = clients as [pg.Client, pg.Client, pg.Client];
     const recorded = (await install.query<Identity>("select filename, sha256 from public._applied_migrations where filename <> 'environments.sql' order by filename")).rows;
-    const expected = inputs.plan.toSorted((a, b) => a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0);
+    const expected = [...inputs.plan].sort((a, b) => a.filename < b.filename ? -1 : a.filename > b.filename ? 1 : 0);
     if (JSON.stringify(recorded) !== JSON.stringify(expected)) throw new Error("the fresh installation's migration ledger differs from this tree's release plan; inspect bootstrap output before cutting the release");
     const catalog = await baselineCatalog(install);
     // Discover every nonempty table. Omitting a new system seed is a refusal,

@@ -74,45 +74,37 @@ async function enableCrm(orgId: string): Promise<void> {
 }
 
 async function seedParty(orgId: string, name: string): Promise<string> {
-  return (
-    await withBypassContext(() =>
+  return (await withBypassContext(() =>
       db.execute<{ id: string }>(sql`
         insert into parties (org_id, kind, display_name, is_active)
-        values (${orgId}, 'company', ${name}, true) returning id`),
-    )
-  ).rows[0]!.id;
+        values (${orgId}, 'company', ${name}, true) returning id`, "objects"),
+    ))[0]!.id;
 }
 
 async function profileStage(orgId: string, partyId: string): Promise<string | null> {
-  const rows = (
-    await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
       db.execute<{ lifecycle_stage: string }>(sql`
         select lifecycle_stage from crm_account_profiles
-         where org_id = ${orgId} and party_id = ${partyId}`),
-    )
-  ).rows;
+         where org_id = ${orgId} and party_id = ${partyId}`, "objects"),
+    );
   return rows[0]?.lifecycle_stage ?? null;
 }
 
 async function roleActive(orgId: string, partyId: string): Promise<boolean> {
-  const rows = (
-    await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
       db.execute(sql`
         select 1 from customer_roles
-         where org_id = ${orgId} and party_id = ${partyId} and is_active`),
-    )
-  ).rows;
+         where org_id = ${orgId} and party_id = ${partyId} and is_active`, "objects"),
+    );
   return rows.length > 0;
 }
 
 async function openBalance(orgId: string, partyId: string): Promise<string> {
-  const rows = (
-    await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
       db.execute<{ balance: string }>(sql`
         select coalesce(sum(open_balance), 0)::text as balance from documents
-         where org_id = ${orgId} and party_id = ${partyId} and status = 'posted'`),
-    )
-  ).rows;
+         where org_id = ${orgId} and party_id = ${partyId} and status = 'posted'`, "objects"),
+    );
   return rows[0]!.balance;
 }
 
@@ -207,10 +199,8 @@ async function payInvoiceInFull(
   amount: string,
 ): Promise<void> {
   await withBypassContext(async () => {
-    const line = (
-      await db.execute<{ id: string }>(sql`
-        select id from journal_lines where entry_id = ${entryId} and is_open_item`)
-    ).rows[0]!.id;
+    const line = (await db.execute<{ id: string }>(sql`
+        select id from journal_lines where entry_id = ${entryId} and is_open_item`, "objects"))[0]!.id;
     const payment = await createPaymentDocument({
       allowedSubsidiaryIds: null,
       orgId,
@@ -355,11 +345,9 @@ test("a lifecycle refusal on edit answers 422 with its message", { skip: !DB }, 
     const revision = await withOrgContext(
       org.orgId,
       async () =>
-        (
-          await db.execute<{ revision: string }>(sql`
+        (await db.execute<{ revision: string }>(sql`
             select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-              from documents where id = ${quoteId}`)
-        ).rows[0]!.revision,
+              from documents where id = ${quoteId}`, "objects"))[0]!.revision,
     );
     const other = await seedParty(org.orgId, "Other Company");
     const services = {
@@ -433,7 +421,7 @@ test("repointing an estimate at a customer with an open balance saves", { skip: 
     const revision = await withOrgContext(org.orgId, async () =>
       (await db.execute<{ revision: string }>(sql`
         select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-          from documents where id = ${quoteId}`)).rows[0]!.revision);
+          from documents where id = ${quoteId}`, "objects"))[0]!.revision);
     const res = await withOrgContext(
       org.orgId,
       async () =>

@@ -224,8 +224,8 @@ export const POST = defineRoute({
           select type, is_active, is_summary
             from accounts
            where id = ${id} and org_id = ${gate.user.orgId}
-        `)
-        const row = result.rows[0]
+        `, 'objects')
+        const row = result[0]
         if (!row) throw new CreateInvalid(`${label} not found`)
         if (payroll && !row.is_active) throw new CreateInvalid('Payroll costing account is inactive')
         if (payroll && row.is_summary) throw new CreateInvalid('Summary accounts cannot receive worked-hours cost')
@@ -241,8 +241,8 @@ export const POST = defineRoute({
 
       const assertOwned = async (table: 'tax_codes' | 'recognition_rules', id: string | null, label: string): Promise<void> => {
         if (!id) return
-        const result = await db.execute(sql`select 1 from ${sql.raw(table)} where id = ${id} and org_id = ${gate.user.orgId}`)
-        if (!result.rows[0]) throw new CreateInvalid(`${label} not found`)
+        const result = await db.execute(sql`select 1 from ${sql.raw(table)} where id = ${id} and org_id = ${gate.user.orgId}`, 'objects')
+        if (!result[0]) throw new CreateInvalid(`${label} not found`)
       }
       await assertOwned('tax_codes', references.taxCodeId as string | null, 'Tax code')
       await assertOwned('recognition_rules', references.recognitionRuleId as string | null, 'Recognition rule')
@@ -304,8 +304,8 @@ export const POST = defineRoute({
         -- A retry is accepted only after the existing audited create payload is verified below.
         on conflict (id) do nothing
         returning id
-      `)
-      if (!inserted.rows[0]) {
+      `, 'objects')
+      if (!inserted[0]) {
         const replay = await resolveIdempotentReplay(db, {
           orgId: gate.user.orgId,
           table: 'items',

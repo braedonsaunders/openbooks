@@ -265,8 +265,8 @@ export async function loadCustomization(
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
        order by record_type, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `)
-      : Promise.resolve({ rows: [] }),
+    `, 'objects')
+      : Promise.resolve([]),
     db.execute(sql`
       select id, name, record_type as "recordType", scope, is_default as "isDefault", is_active as "isActive"
         from list_views
@@ -274,35 +274,31 @@ export async function loadCustomization(
          and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}
        order by record_type, scope asc, is_default desc, name
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `),
+    `, 'objects'),
     canManageOrg
       ? db.execute(sql`
       select count(*) as n from form_layouts
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
-    `)
-      : Promise.resolve({ rows: [{ n: 0 }] }),
+    `, 'objects')
+      : Promise.resolve([{ n: 0 }]),
     db.execute(sql`
       select count(*) as n from list_views
        where org_id = ${authz.user.orgId} and ${typeFilter} and ${searchFilter}
          and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}
-    `),
+    `, 'objects'),
   ])
 
   const openForm =
     formId && formId !== 'new' && isUuid(formId)
-      ? ((
-          (await db.execute(
-            sql`select id, name, description, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles", layout, record_type as "recordType" from form_layouts where id = ${formId} and org_id = ${authz.user.orgId}`,
-          )) as unknown as { rows: FormDesignerDef[] }
-        ).rows[0] ?? null)
+      ? ((await db.execute<FormDesignerDef>(
+            sql`select id, name, description, is_default as "isDefault", is_active as "isActive", allowed_roles as "allowedRoles", layout, record_type as "recordType" from form_layouts where id = ${formId} and org_id = ${authz.user.orgId}`, 'objects',
+          ))[0] ?? null)
       : null
   const openView =
     viewId && viewId !== 'new' && isUuid(viewId)
-      ? ((
-          (await db.execute(
-            sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`,
-          )) as unknown as { rows: ListViewDesignerDef[] }
-        ).rows[0] ?? null)
+      ? ((await db.execute<ListViewDesignerDef>(
+            sql`select id, name, scope, is_default as "isDefault", is_active as "isActive", config, record_type as "recordType" from list_views where id = ${viewId} and org_id = ${authz.user.orgId} and ${canManageOrg ? sql`(scope = 'org' or owner_id = ${authz.user.id})` : sql`scope = 'user' and owner_id = ${authz.user.id}`}`, 'objects',
+          ))[0] ?? null)
       : null
   if (formId && formId !== 'new' && isUuid(formId) && !openForm) notFound()
   if (viewId && viewId !== 'new' && isUuid(viewId) && !openView) notFound()
@@ -326,11 +322,9 @@ export async function loadCustomization(
         layout: defaultFormLayout(recordType),
       }
     } else if (isUuid(fromParam)) {
-      const src = (
-        (await db.execute(
-          sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`,
-        )) as unknown as { rows: FormCopySqlRow[] }
-      ).rows[0]
+      const src = (await db.execute<FormCopySqlRow>(
+          sql`select name, layout from form_layouts where id = ${fromParam} and org_id = ${authz.user.orgId} and record_type = ${recordType}`, 'objects',
+        ))[0]
       if (src)
         duplicateFrom = {
           name: t('designer.forms.copyName', { name: src.name }),
@@ -480,8 +474,8 @@ export async function loadCustomization(
     recordType
       ? `/admin/customization?recordType=${recordType}&tab=${t2}`
       : `/admin/customization?tab=${t2}`
-  const totalForms = Number(formCount.rows[0]?.n ?? 0)
-  const totalViews = Number(viewCount.rows[0]?.n ?? 0)
+  const totalForms = Number(formCount[0]?.n ?? 0)
+  const totalViews = Number(viewCount[0]?.n ?? 0)
 
   return {
     title: t('designer.title'),
@@ -511,8 +505,8 @@ export async function loadCustomization(
     newViewRecordType: recordType ?? '',
     showNewView: Boolean(recordType) && tab === 'views',
     showFormsTable: tab === 'forms',
-    showViewsTable: tab === 'views' && views.rows.length > 0,
-    showViewsEmpty: tab === 'views' && views.rows.length === 0,
+    showViewsTable: tab === 'views' && views.length > 0,
+    showViewsEmpty: tab === 'views' && views.length === 0,
     emptyTitle: t('designer.list.newTitle'),
     emptyDescription: t('designer.description'),
     emptyActionName: recordType ? 'new-view' : '',
@@ -523,7 +517,7 @@ export async function loadCustomization(
     columnDefault: t('views.defaultBadge'),
     columnActions: tCommon('labels.actions'),
     columnScope: t('designer.list.scope'),
-    formRows: (forms.rows as unknown as FormListRow[]).map((f) => ({
+    formRows: (forms as unknown as FormListRow[]).map((f) => ({
       id: f.id,
       name: f.name,
       href: `/admin/customization?recordType=${f.recordType}&tab=forms&form=${f.id}`,
@@ -541,7 +535,7 @@ export async function loadCustomization(
       duplicateHref: `/admin/customization?recordType=${f.recordType}&tab=forms&form=new&from=${f.id}`,
       duplicateLabel: t('designer.forms.duplicate'),
     })),
-    viewRows: (views.rows as unknown as ViewListRow[]).map((v) => ({
+    viewRows: (views as unknown as ViewListRow[]).map((v) => ({
       id: v.id,
       name: v.name,
       href: `/admin/customization?recordType=${v.recordType}&tab=views&view=${v.id}`,

@@ -233,8 +233,8 @@ const payrollReportingCases = [
           const empB = randomUUID()
           const employees = await db.execute<{ id: string }>(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id)
             values (${empA}, ${org.orgId}, 'employee', ${NAME_A}, ${org.subsidiaryId}),
-                   (${empB}, ${org.orgId}, 'employee', ${NAME_B}, ${org.subsidiaryId}) returning id`)
-          assert.deepEqual(employees.rows.map(row => row.id).sort(), [empA, empB].sort(), 'payroll reporting employees are stored')
+                   (${empB}, ${org.orgId}, 'employee', ${NAME_B}, ${org.subsidiaryId}) returning id`, "objects")
+          assert.deepEqual(employees.map(row => row.id).sort(), [empA, empB].sort(), 'payroll reporting employees are stored')
           const payDoc = randomUUID()
           // Status stays non-posted: a posted document must reference its posted
           // entry, and the collapse keys on kind, not status.
@@ -262,8 +262,8 @@ const payrollReportingCases = [
           await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate, posting_date)
             values (${randomUUID()}, ${org.orgId}, ${plainId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, null, false, 100, 'USD', 100, 1, ${org.date}),
                    (${randomUUID()}, ${org.orgId}, ${plainId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId}, null, false, -100, 'USD', -100, 1, ${org.date})`)
-          const posted = await db.execute<{ id: string }>(sql`update journal_entries set status = 'posted' where id in (${entryId}, ${plainId}) and org_id = ${org.orgId} returning id`)
-          assert.deepEqual(posted.rows.map(row => row.id).sort(), [entryId, plainId].sort(), 'payroll and ordinary comparison journals are posted once each')
+          const posted = await db.execute<{ id: string }>(sql`update journal_entries set status = 'posted' where id in (${entryId}, ${plainId}) and org_id = ${org.orgId} returning id`, "objects")
+          assert.deepEqual(posted.map(row => row.id).sort(), [entryId, plainId].sort(), 'payroll and ordinary comparison journals are posted once each')
           })
         }
 
@@ -1182,8 +1182,8 @@ const payrollReportingCases = [
           const empB = randomUUID()
           const employees = await db.execute<{ id: string }>(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id)
             values (${empA}, ${org.orgId}, 'employee', ${NAME_A}, ${org.subsidiaryId}),
-                   (${empB}, ${org.orgId}, 'employee', ${NAME_B}, ${org.subsidiaryId}) returning id`)
-          assert.deepEqual(employees.rows.map(row => row.id).sort(), [empA, empB].sort(), 'payroll ledger employees are stored')
+                   (${empB}, ${org.orgId}, 'employee', ${NAME_B}, ${org.subsidiaryId}) returning id`, "objects")
+          assert.deepEqual(employees.map(row => row.id).sort(), [empA, empB].sort(), 'payroll ledger employees are stored')
           const payDoc = randomUUID()
           await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, posting_date, subsidiary_id, currency, subtotal, tax_total, total, fx_rate, status)
             values (${payDoc}, ${org.orgId}, 'pay_run', 'PAY-1', ${org.date}, ${org.date}, ${org.subsidiaryId}, 'USD', 0, 0, 10052.61, 1, 'approved')`)
@@ -1194,8 +1194,8 @@ const payrollReportingCases = [
             values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ap}, ${org.subsidiaryId}, ${empA}, true, -4842.17, 'USD', -4842.17, 1, ${org.date}),
                    (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.ap}, ${org.subsidiaryId}, ${empB}, true, -5210.44, 'USD', -5210.44, 1, ${org.date}),
                    (${randomUUID()}, ${org.orgId}, ${entryId}, 3, ${org.accounts.cogs}, ${org.subsidiaryId}, null, false, 10052.61, 'USD', 10052.61, 1, ${org.date})`)
-          const posted = await db.execute<{ id: string }>(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId} returning id`)
-          assert.deepEqual(posted.rows.map(row => row.id), [entryId], 'payroll ledger journal is posted once')
+          const posted = await db.execute<{ id: string }>(sql`update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId} returning id`, "objects")
+          assert.deepEqual(posted.map(row => row.id), [entryId], 'payroll ledger journal is posted once')
           })
         }
 
@@ -1284,7 +1284,7 @@ const payrollReportingCases = [
         async function fiscalCalendarId(orgId: string, periodId: string): Promise<string> {
           const row = (await db.execute<{ fiscal_calendar_id: string }>(sql`
             select fiscal_calendar_id from accounting_periods
-             where id = ${periodId} and org_id = ${orgId}`)).rows[0]
+             where id = ${periodId} and org_id = ${orgId}`, "objects"))[0]
           assert.ok(row, 'scratch period has a fiscal calendar')
           return row.fiscal_calendar_id
         }
@@ -1342,8 +1342,8 @@ const payrollReportingCases = [
           // Asserting the row count is what turns that back into a failure.
           const posted = await db.execute(sql`
             update journal_entries set status = 'posted', posted_at = now()
-             where id = ${entry} returning id`)
-          assert.equal(posted.rows.length, 1, `seed failed to post entry ${args.tag}`)
+             where id = ${entry} returning id`, "objects")
+          assert.equal(posted.length, 1, `seed failed to post entry ${args.tag}`)
         }
 
         function findLine(view: Awaited<ReturnType<typeof balanceSheetView>>, label: string) {

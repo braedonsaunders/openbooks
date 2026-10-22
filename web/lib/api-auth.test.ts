@@ -157,8 +157,8 @@ test("an active API key owner cannot request unknown catalogue scopes", { skip: 
     const unknown = await withOrgContext(org.orgId, () => POST(jsonRequest({ name: "Unknown scopes", scopes: ["not.a.permission"] })));
     assert.equal(unknown.status, 400);
     assert.match((await unknown.json()).error, /known catalogue keys/);
-    const count = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from api_keys where org_id=${org.orgId}`));
-    assert.equal(count.rows[0]!.n, 0, 'an invalid authority never creates credential material');
+    const count = await withBypassContext(() => db.execute<{ n: number }>(sql`select count(*)::int as n from api_keys where org_id=${org.orgId}`, "objects"));
+    assert.equal(count[0]!.n, 0, 'an invalid authority never creates credential material');
   } finally {
     Object.assign(actorState, previousActor);
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -197,7 +197,7 @@ async function seedOwner(orgId: string, permissions: string[], isSuperAdmin = fa
       insert into app_roles (org_id, key, name, is_built_in, permissions)
       values (${orgId}, ${`api-owner-${userId.slice(0, 8)}`}, 'API Owner', false,
               ${JSON.stringify(permissions)}::jsonb)
-      returning id`)).rows[0]!.id as string;
+      returning id`, "objects"))[0]!.id as string;
     // Users activate only once they hold a role (enforce_user_active_role_assignment).
     await db.execute(sql`
       insert into users (id, org_id, email, name, password_hash, is_active)
@@ -223,7 +223,7 @@ async function insertKey(
                           scopes, is_active, created_by, updated_by)
     values (${orgId}, ${userId}, ${name}, ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
             ${scopes}::jsonb, true, ${userId}, ${userId})
-    returning id`))).rows[0]!.id as string;
+    returning id`, "objects")))[0]!.id as string;
   return { id, plaintext: gen.plaintext };
 }
 
@@ -337,8 +337,8 @@ test(
       assert.equal(denied.status, 403);
       const evidence = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
         select count(*)::text as count from api_key_events where org_id = ${org.orgId} and key_id = ${key.id}
-          and path = '/api/v1/openapi' and status_code = 403`));
-      assert.equal(Number(evidence.rows[0]?.count), 1);
+          and path = '/api/v1/openapi' and status_code = 403`, "objects"));
+      assert.equal(Number(evidence[0]?.count), 1);
     } finally { await dropScratchOrg(org.orgId); }
   },
 );
@@ -399,7 +399,7 @@ test(
       const { id, plaintext } = (await minted.json()) as { id: string; plaintext: string };
 
       const row = (await withOrgContext(orgId, () => db.execute(sql`
-        select scopes from api_keys where id = ${id} and org_id = ${orgId}`))).rows[0] as {
+        select scopes from api_keys where id = ${id} and org_id = ${orgId}`, "objects")))[0] as {
         scopes: string[];
       };
       // The route stores the normalized catalogue-ordered selection.

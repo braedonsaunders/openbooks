@@ -18,11 +18,9 @@ async function accountCount(
   orgId: string,
   viewFilters: { key: string; operator: string; value?: string | null }[] = [],
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from accounts a
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from accounts a
       left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
-      where ${accountWhere({ ...defaultListView("account"), filters: viewFilters as never }, {}, orgId, null)}`)
-  ).rows;
+      where ${accountWhere({ ...defaultListView("account"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 

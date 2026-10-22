@@ -149,15 +149,13 @@ async function findLinkByExternalId(
   objectType: string,
   externalId: string,
 ): Promise<{ nativeTable: string; nativeId: string } | null> {
-  const row = (
-    await withOrgContext(orgId, () =>
+  const row = (await withOrgContext(orgId, () =>
       db.execute<{ native_table: string; native_id: string }>(sql`
         select native_table, native_id from external_links
          where org_id = ${orgId} and provider = 'shopify'
            and external_account = 'test.myshopify.com'
-           and object_type = ${objectType} and external_id = ${externalId}`),
-    )
-  ).rows[0];
+           and object_type = ${objectType} and external_id = ${externalId}`, "objects"),
+    ))[0];
   return row ? { nativeTable: row.native_table, nativeId: row.native_id } : null;
 }
 
@@ -181,14 +179,12 @@ async function setupShop(org: ScratchOrg): Promise<{ actorId: string; channelId:
       insert into items (org_id, kind, code, name, is_active, created_by, updated_by)
       values (${org.orgId}, 'inventory', 'WIDGET-1', 'Widget One', true, ${actorId}, ${actorId})`),
   );
-  const gadget = (
-    await withOrgContext(org.orgId, () =>
+  const gadget = (await withOrgContext(org.orgId, () =>
       db.execute<{ id: string }>(sql`
         insert into items (org_id, kind, code, name, is_active, created_by, updated_by)
         values (${org.orgId}, 'inventory', 'GADGET-2', 'Gadget Two', true, ${actorId}, ${actorId})
-        returning id`),
-    )
-  ).rows[0]!.id;
+        returning id`, "objects"),
+    ))[0]!.id;
   await withOrgContext(org.orgId, () =>
     db.execute(sql`
       insert into item_identifiers (org_id, item_id, kind, value, created_by, updated_by)

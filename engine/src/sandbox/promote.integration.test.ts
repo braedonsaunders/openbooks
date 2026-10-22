@@ -106,8 +106,8 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
       item_count: number;
     }>(sql`
       select org_id, sandbox_org_id, status, name, capture_complete, item_count
-        from change_sets where id = ${changeSetId}`));
-    assert.deepEqual(cs.rows[0], {
+        from change_sets where id = ${changeSetId}`, "objects"));
+    assert.deepEqual(cs[0], {
       org_id: prod.orgId,
       sandbox_org_id: sbxOrgId,
       status: "draft",
@@ -118,11 +118,11 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
 
     const items = (await db.execute<ChangeSetItemRow>(sql`
       select table_name, target_id::text as "target_id", op, payload
-        from change_set_items where change_set_id = ${changeSetId} order by table_name, op`));
-    assert.equal(itemCount, items.rows.length);
+        from change_set_items where change_set_id = ${changeSetId} order by table_name, op`, "objects"));
+    assert.equal(itemCount, items.length);
 
-    const byKey = new Map(items.rows.map((r) => [`${r.table_name}:${r.op}:${r.target_id}`, r]));
-    assert.equal(items.rows.length, 4, `expected exactly 4 diff items, got ${JSON.stringify(items.rows)}`);
+    const byKey = new Map(items.map((r) => [`${r.table_name}:${r.op}:${r.target_id}`, r]));
+    assert.equal(items.length, 4, `expected exactly 4 diff items, got ${JSON.stringify(items)}`);
 
     // Changed pair → update carrying the sandbox content onto the production id.
     const update = byKey.get(`user_scripts:update:${pChangedScript}`);
@@ -132,7 +132,7 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
 
     // Sandbox-only row → insert. Promotion mints a NEW production id rather
     // than carrying the sandbox row id across (payload keeps sandbox content).
-    const insertItem = items.rows.find((r) => r.table_name === "user_scripts" && r.op === "insert");
+    const insertItem = items.find((r) => r.table_name === "user_scripts" && r.op === "insert");
     assert.ok(insertItem, "sandbox-only user_script must produce an insert item");
     assert.equal(insertItem!.payload?.name, "Sandbox Only Script");
     assert.equal(insertItem!.payload?.org_id, prod.orgId);
@@ -149,7 +149,7 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
 
     // Matched-identical pairs in BOTH tables stay out of the change set.
     assert.ok(!byKey.has(`user_scripts:update:${pMatchedScript}`));
-    assert.ok(![...items.rows].some((r) => r.target_id === sMatchedScript || r.target_id === sChangedScript));
+    assert.ok(![...items].some((r) => r.target_id === sMatchedScript || r.target_id === sChangedScript));
 
     // A captured draft is not executable. Reviewing it submits the exact
     // snapshot through the tenant's native zero-gate policy.
@@ -173,30 +173,30 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
     // attributable actor distinct from the creator, reviewer, and approver.
     await applyChangeSet(changeSetId, applierId);
     const appliedScripts = (await db.execute<{ id: string; name: string }>(sql`
-      select id::text as id, name from user_scripts where org_id = ${prod.orgId} order by name`));
-    assert.deepEqual(appliedScripts.rows, [
+      select id::text as id, name from user_scripts where org_id = ${prod.orgId} order by name`, "objects"));
+    assert.deepEqual(appliedScripts, [
       { id: pMatchedScript, name: "Ledger Guard" },
       { id: pChangedScript, name: "Renamed Script" },
       { id: insertItem!.target_id, name: "Sandbox Only Script" },
     ]);
-    assert.ok(!appliedScripts.rows.some((r) => r.id === sNewScript), "the sandbox id must not leak into production");
+    assert.ok(!appliedScripts.some((r) => r.id === sNewScript), "the sandbox id must not leak into production");
     const appliedViews = (await db.execute<{ id: string }>(sql`
-      select id::text as id from saved_views where org_id = ${prod.orgId} order by id`));
-    assert.deepEqual(appliedViews.rows.map((r) => r.id), [pMatchedView]);
+      select id::text as id from saved_views where org_id = ${prod.orgId} order by id`, "objects"));
+    assert.deepEqual(appliedViews.map((r) => r.id), [pMatchedView]);
     const audit = await db.execute<{ table_name: string; changes: { before: Record<string, unknown> | null; after: Record<string, unknown> | null }; actor_id: string }>(sql`
       select table_name, changes, actor_id from audit_log where org_id = ${prod.orgId}
-       and changes->>'changeSetId' = ${changeSetId}`);
-    assert.equal(audit.rows.length, 4, "every promoted configuration has before/after audit evidence");
-    assert.ok(audit.rows.every((row) => row.actor_id === applierId));
-    const scriptAudit = audit.rows.find((row) => row.table_name === "user_scripts" && row.changes.before?.id === pChangedScript)!;
+       and changes->>'changeSetId' = ${changeSetId}`, "objects");
+    assert.equal(audit.length, 4, "every promoted configuration has before/after audit evidence");
+    assert.ok(audit.every((row) => row.actor_id === applierId));
+    const scriptAudit = audit.find((row) => row.table_name === "user_scripts" && row.changes.before?.id === pChangedScript)!;
     assert.equal(scriptAudit.changes.before?.name, "Stale Name");
     assert.equal(scriptAudit.changes.after?.name, "Renamed Script");
     assert.equal(scriptAudit.changes.before?.created_at, scriptAudit.changes.after?.created_at, "updates preserve creation evidence");
     assert.equal(scriptAudit.changes.after?.updated_by, applierId);
-    assert.equal((await db.execute(sql`select id from role_assignments where org_id = ${prod.orgId}`)).rows.length, 3, "promotion preserves every actor's assigned role");
+    assert.equal((await db.execute(sql`select id from role_assignments where org_id = ${prod.orgId}`, "objects")).length, 3, "promotion preserves every actor's assigned role");
     const status = (await db.execute<{ status: string; applied_by: string; approved_by: string; reviewed_by: string }>(sql`
-      select status, applied_by, approved_by, reviewed_by from change_sets where id = ${changeSetId}`));
-    assert.deepEqual(status.rows[0], {
+      select status, applied_by, approved_by, reviewed_by from change_sets where id = ${changeSetId}`, "objects"));
+    assert.deepEqual(status[0], {
       status: "applied",
       applied_by: applierId,
       approved_by: reviewerId,
@@ -210,23 +210,23 @@ test("buildChangeSet diffs multiple promotable tables and applies the approved r
 
 async function rebase(id: string, seed: string): Promise<string> {
   const r = (await db.execute<{ rebased: string }>(sql`
-    select ob_rebase(${id}::uuid, ${seed}::uuid)::text as rebased`));
-  return r.rows[0]!.rebased;
+    select ob_rebase(${id}::uuid, ${seed}::uuid)::text as rebased`, "objects"));
+  return r[0]!.rebased;
 }
 
 async function rolePromotionFixture(kind: "update_assigned" | "delete_assigned" | "delete_builtin" | "update_admin") {
   const prod = await createScratchOrg();
   const actors = await Promise.all(["Creator", "Reviewer", "Approver", "Applier"].map((name) =>
     createScratchUser(prod.orgId, name, "admin")));
-  const adminId = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${prod.orgId} and key = 'admin'`)).rows[0]!.id;
+  const adminId = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${prod.orgId} and key = 'admin'`, "objects"))[0]!.id;
   await db.execute(sql`update app_roles set is_built_in = true, permissions='["*"]'::jsonb where id = ${adminId}`);
   let roleId = adminId;
   if (kind === "delete_builtin") {
     roleId = (await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
-      values (${prod.orgId}, 'controller', 'Controller', true, '[]'::jsonb) returning id`)).rows[0]!.id;
+      values (${prod.orgId}, 'controller', 'Controller', true, '[]'::jsonb) returning id`, "objects"))[0]!.id;
   } else if (kind !== "update_admin") {
     await createScratchUser(prod.orgId, "Role holder", "protected_custom");
-    roleId = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${prod.orgId} and key = 'protected_custom'`)).rows[0]!.id;
+    roleId = (await db.execute<{ id: string }>(sql`select id from app_roles where org_id = ${prod.orgId} and key = 'protected_custom'`, "objects"))[0]!.id;
   }
   const sbxOrgId = randomUUID();
   const seed = randomUUID();
@@ -253,10 +253,10 @@ test("promotion updates assigned roles in place and rolls back configuration whe
   let installed = false;
   try {
     const snapshot = async () => ({
-      roles: (await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`)).rows,
-      assignments: (await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`)).rows,
-      audit: (await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`)).rows,
-      changeSet: (await db.execute(sql`select * from change_sets where id = ${f.changeSetId}`)).rows,
+      roles: await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`, "objects"),
+      assignments: await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`, "objects"),
+      audit: await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`, "objects"),
+      changeSet: await db.execute(sql`select * from change_sets where id = ${f.changeSetId}`, "objects"),
     });
     const before = await snapshot();
     await db.execute(sql.raw(`create function ${trigger}() returns trigger language plpgsql as $$ begin
@@ -292,15 +292,15 @@ for (const kind of ["delete_assigned", "delete_builtin", "update_admin"] as cons
     const f = await rolePromotionFixture(kind);
     try {
       const snapshot = async () => ({
-        roles: (await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`)).rows,
-        assignments: (await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`)).rows,
-        audit: (await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`)).rows,
+        roles: await db.execute(sql`select * from app_roles where org_id = ${f.orgId} order by id`, "objects"),
+        assignments: await db.execute(sql`select * from role_assignments where org_id = ${f.orgId} order by id`, "objects"),
+        audit: await db.execute(sql`select * from audit_log where org_id = ${f.orgId} order by id`, "objects"),
       });
       const before = await snapshot();
       const pattern = kind === "delete_assigned" ? /assigned role cannot be deleted/ : kind === "delete_builtin" ? /built-in roles cannot be deleted/ : /Administrator role cannot be edited/;
       await assert.rejects(applyChangeSet(f.changeSetId, f.actorId), pattern);
       assert.deepEqual(await snapshot(), before);
-      assert.equal((await db.execute(sql`select status from change_sets where id = ${f.changeSetId}`)).rows[0]!.status, "approved");
+      assert.equal((await db.execute(sql`select status from change_sets where id = ${f.changeSetId}`, "objects"))[0]!.status, "approved");
     } finally { await dropScratchOrgReporting(f.sbxOrgId); await dropScratchOrgReporting(f.orgId); }
   });
 }

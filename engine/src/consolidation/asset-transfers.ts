@@ -220,19 +220,16 @@ export async function consolidateAssetTransfers(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`asset-transfer-consolidation:${orgId}`},0))`,
   );
-  const period = (
-    await tx.execute<{ starts_on: string; ends_on: string; label: string }>(
-      sql`select p.starts_on::text,p.ends_on::text,${canonicalPeriodLabelSql("p")} as label from accounting_periods p where p.org_id=${orgId} and p.id=${periodId}`,
-    )
-  ).rows[0];
+  const period = (await tx.execute<{ starts_on: string; ends_on: string; label: string }>(
+      sql`select p.starts_on::text,p.ends_on::text,${canonicalPeriodLabelSql("p")} as label from accounting_periods p where p.org_id=${orgId} and p.id=${periodId}`, "objects",
+    ))[0];
   if (!period) throw new AssetTransferError("consolidation period not found");
   const cutoff = asOf ?? period.ends_on;
   if (cutoff < period.starts_on || cutoff > period.ends_on)
     throw new AssetTransferError(
       "asset transfer cutoff must lie inside the accounting period",
     );
-  const transfers = (
-    await tx.execute<{
+  const transfers = await tx.execute<{
       id: string;
       book_id: string;
       receiving_asset_id: string;
@@ -241,57 +238,47 @@ export async function consolidateAssetTransfers(
       basis: AssetTransferBasis;
       reversed_on: string | null;
     }>(
-      sql`select t.*,t.reversed_on::text as reversed_on from asset_transfer_bases t join accounting_books b on b.org_id=t.org_id and b.id=t.book_id and b.posts_gl and b.is_active where t.org_id=${orgId} ${bookId ? sql`and t.book_id=${bookId}` : sql``} and t.effective_on<=${cutoff} ${buyerSubsidiaryIds ? sql`and t.buyer_subsidiary_id=any(${uuidArray(buyerSubsidiaryIds)}::uuid[])` : sql``} and not exists(select 1 from consolidation_control_losses loss where loss.org_id=t.org_id and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? t.buyer_subsidiary_id::text) order by t.receiving_asset_id,t.book_id,t.id`,
-    )
-  ).rows;
+      sql`select t.*,t.reversed_on::text as reversed_on from asset_transfer_bases t join accounting_books b on b.org_id=t.org_id and b.id=t.book_id and b.posts_gl and b.is_active where t.org_id=${orgId} ${bookId ? sql`and t.book_id=${bookId}` : sql``} and t.effective_on<=${cutoff} ${buyerSubsidiaryIds ? sql`and t.buyer_subsidiary_id=any(${uuidArray(buyerSubsidiaryIds)}::uuid[])` : sql``} and not exists(select 1 from consolidation_control_losses loss where loss.org_id=t.org_id and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? t.buyer_subsidiary_id::text) order by t.receiving_asset_id,t.book_id,t.id`, "objects",
+    );
   const entries: string[] = [];
   for (let transfer of transfers) {
-    const asset = (
-      await tx.execute<{
+    const asset = (await tx.execute<{
         acquisition_cost: string;
         status: string;
         base_currency: string;
       }>(
-        sql`select a.acquisition_cost::text,a.status,s.base_currency from fixed_assets a join subsidiaries s on s.id=a.subsidiary_id and s.org_id=a.org_id where a.org_id=${orgId} and a.id=${transfer.receiving_asset_id} for share of a,s`,
-      )
-    ).rows[0];
+        sql`select a.acquisition_cost::text,a.status,s.base_currency from fixed_assets a join subsidiaries s on s.id=a.subsidiary_id and s.org_id=a.org_id where a.org_id=${orgId} and a.id=${transfer.receiving_asset_id} for share of a,s`, "objects",
+      ))[0];
     if (!asset) throw new AssetTransferError("receiving asset evidence is unavailable");
     // Asset edits and controlled corrections lock the asset before the frozen
     // transfer row. Use that same order: holding t FOR SHARE while waiting on
     // the asset would deadlock a correction upgrading its transfer-row lock.
-    const current = (
-      await tx.execute<(typeof transfers)[number]>(
-        sql`select t.*,t.reversed_on::text as reversed_on from asset_transfer_bases t join accounting_books b on b.org_id=t.org_id and b.id=t.book_id where t.org_id=${orgId} and t.id=${transfer.id} and b.is_active and b.posts_gl for share of t,b`,
-      )
-    ).rows[0];
+    const current = (await tx.execute<(typeof transfers)[number]>(
+        sql`select t.*,t.reversed_on::text as reversed_on from asset_transfer_bases t join accounting_books b on b.org_id=t.org_id and b.id=t.book_id where t.org_id=${orgId} and t.id=${transfer.id} and b.is_active and b.posts_gl for share of t,b`, "objects",
+      ))[0];
     if (!current)
       throw new AssetTransferError(
         "the asset transfer accounting book changed during consolidation; restore the active book before retrying",
       );
     transfer = current;
     if (
-      (
-        await tx.execute(
-          sql`select 1 from consolidation_control_losses loss join asset_transfer_bases t on t.org_id=loss.org_id and t.id=${transfer.id} where loss.org_id=${orgId} and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? t.buyer_subsidiary_id::text limit 1`,
-        )
-      ).rows.length
+      (await tx.execute(
+          sql`select 1 from consolidation_control_losses loss join asset_transfer_bases t on t.org_id=loss.org_id and t.id=${transfer.id} where loss.org_id=${orgId} and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? t.buyer_subsidiary_id::text limit 1`, "objects",
+        )).length
     )
       continue;
 
-    const later = (
-      await tx.execute(
+    const later = (await tx.execute(
         // Live entries only: a reversed later consolidation no longer blocks recalculating this period.
-        sql`select 1 from asset_transfer_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.transfer_id=${transfer.id} and e.posting_date>${cutoff} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`,
-      )
-    ).rows[0];
+        sql`select 1 from asset_transfer_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.transfer_id=${transfer.id} and e.posting_date>${cutoff} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`, "objects",
+      ))[0];
     if (later)
       throw new AssetTransferError(
         "a later asset transfer consolidation exists; correct that close before recalculating an earlier period",
       );
     // Historical carrying values use effective-dated basis changes and posted
     // depreciation only through the requested close, not today's asset status.
-    const value = (
-      await tx.execute<{
+    const value = (await tx.execute<{
         cost: string;
         accumulated: string;
         disposed: boolean;
@@ -300,18 +287,15 @@ export async function consolidateAssetTransfers(
     coalesce(a.opening_accumulated_depreciation,0)+coalesce((select sum(l.posted_amount) from depreciation_schedules s join depreciation_schedule_lines l on l.schedule_id=s.id and l.org_id=s.org_id join accounting_periods p on p.org_id=l.org_id and p.id=l.period_id where s.org_id=a.org_id and s.asset_id=a.id and s.book_id=${transfer.book_id} and p.ends_on<=${cutoff}),0)+coalesce((select sum(x.accumulated_delta) from asset_basis_changes x where x.org_id=a.org_id and x.asset_id=a.id and x.book_id=${transfer.book_id} and x.effective_on<=${cutoff}),0)-coalesce((select sum(v.amount) from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=a.org_id and v.asset_id=a.id and e.book_id=${transfer.book_id} and e.status in('posted','reversed') and v.kind in('impaired','revalued') and v.occurred_on<=${cutoff} and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff})),0) as accumulated,
     exists(select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=a.org_id and v.asset_id=a.id and v.kind in('disposed','written_off') and v.financial_change_id is null and e.book_id=${transfer.book_id} and v.occurred_on<=${cutoff} and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff})) as disposed
     from fixed_assets a where a.org_id=${orgId} and a.id=${transfer.receiving_asset_id}
-  `)
-    ).rows[0]!;
-    const rateRows = (
-      await tx.execute<{
+  `, "objects"))[0]!;
+    const rateRows = await tx.execute<{
         starts_on: string;
         ends_on: string;
         current_rate: string | null;
         average_rate: string | null;
       }>(
-        sql`select p.starts_on::text,p.ends_on::text,r.current_rate::text,r.average_rate::text from accounting_periods p left join consolidated_fx_rates r on r.org_id=p.org_id and r.period_id=p.id and r.from_currency=${asset.base_currency} and r.to_currency=${transfer.group_currency} where p.org_id=${orgId} and p.fiscal_calendar_id=(select fiscal_calendar_id from accounting_periods where org_id=${orgId} and id=${periodId}) and not p.is_adjustment order by p.starts_on`,
-      )
-    ).rows;
+        sql`select p.starts_on::text,p.ends_on::text,r.current_rate::text,r.average_rate::text from accounting_periods p left join consolidated_fx_rates r on r.org_id=p.org_id and r.period_id=p.id and r.from_currency=${asset.base_currency} and r.to_currency=${transfer.group_currency} where p.org_id=${orgId} and p.fiscal_calendar_id=(select fiscal_calendar_id from accounting_periods where org_id=${orgId} and id=${periodId}) and not p.is_adjustment order by p.starts_on`, "objects",
+      );
     const rate = (date: string, kind: "current_rate" | "average_rate") => {
       if (asset.base_currency === transfer.group_currency) return "1";
       const rows = rateRows.filter(
@@ -324,13 +308,10 @@ export async function consolidateAssetTransfers(
       return rows[0]![kind]!;
     };
     const currentBuyerRate = rate(cutoff, "current_rate");
-    const buyerDepreciation = (
-      await tx.execute<{ amount: string; date: string; cost_at: string }>(
-        sql`select l.posted_amount::text as amount,e.posting_date::text as date,(${asset.acquisition_cost}::numeric+coalesce((select sum(x.cost_delta) from asset_basis_changes x where x.org_id=s.org_id and x.asset_id=s.asset_id and x.book_id=s.book_id and (x.effective_on<e.posting_date or (x.effective_on=e.posting_date and x.created_at<e.created_at))),0))::text as cost_at from depreciation_schedules s join depreciation_schedule_lines l on l.org_id=s.org_id and l.schedule_id=s.id join journal_entries e on e.org_id=l.org_id and e.id=l.journal_entry_id where s.org_id=${orgId} and s.asset_id=${transfer.receiving_asset_id} and s.book_id=${transfer.book_id} and e.posting_date<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed') and r.posting_date<=${cutoff}) union all select l.amount::text,e.posting_date::text,(${asset.acquisition_cost}::numeric+coalesce((select sum(prior.cost_delta) from asset_basis_changes prior where prior.org_id=x.org_id and prior.asset_id=x.asset_id and prior.book_id=x.book_id and prior.id<>x.id and (prior.effective_on<x.effective_on or (prior.effective_on=x.effective_on and prior.created_at<x.created_at))),0))::text from asset_basis_changes x join journal_entries e on e.id=x.stub_journal_entry_id and e.org_id=x.org_id join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where x.org_id=${orgId} and x.asset_id=${transfer.receiving_asset_id} and x.book_id=${transfer.book_id} and e.posting_date<=${cutoff} and l.amount>0 and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed') and r.posting_date<=${cutoff})`,
-      )
-    ).rows;
-    const movements = (
-      await tx.execute<{
+    const buyerDepreciation = await tx.execute<{ amount: string; date: string; cost_at: string }>(
+        sql`select l.posted_amount::text as amount,e.posting_date::text as date,(${asset.acquisition_cost}::numeric+coalesce((select sum(x.cost_delta) from asset_basis_changes x where x.org_id=s.org_id and x.asset_id=s.asset_id and x.book_id=s.book_id and (x.effective_on<e.posting_date or (x.effective_on=e.posting_date and x.created_at<e.created_at))),0))::text as cost_at from depreciation_schedules s join depreciation_schedule_lines l on l.org_id=s.org_id and l.schedule_id=s.id join journal_entries e on e.org_id=l.org_id and e.id=l.journal_entry_id where s.org_id=${orgId} and s.asset_id=${transfer.receiving_asset_id} and s.book_id=${transfer.book_id} and e.posting_date<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed') and r.posting_date<=${cutoff}) union all select l.amount::text,e.posting_date::text,(${asset.acquisition_cost}::numeric+coalesce((select sum(prior.cost_delta) from asset_basis_changes prior where prior.org_id=x.org_id and prior.asset_id=x.asset_id and prior.book_id=x.book_id and prior.id<>x.id and (prior.effective_on<x.effective_on or (prior.effective_on=x.effective_on and prior.created_at<x.created_at))),0))::text from asset_basis_changes x join journal_entries e on e.id=x.stub_journal_entry_id and e.org_id=x.org_id join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where x.org_id=${orgId} and x.asset_id=${transfer.receiving_asset_id} and x.book_id=${transfer.book_id} and e.posting_date<=${cutoff} and l.amount>0 and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed') and r.posting_date<=${cutoff})`, "objects",
+      );
+    const movements = await tx.execute<{
         date: string;
         removed_cost: string;
         removed_accumulated: string;
@@ -348,21 +329,16 @@ export async function consolidateAssetTransfers(
        where v.org_id=${orgId} and v.asset_id=${transfer.receiving_asset_id} and e.book_id=${transfer.book_id} and v.kind in('disposed','written_off') and v.financial_change_id is null and v.occurred_on<=${cutoff}
        and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff}) group by v.id,v.occurred_on
       order by date
-    `)
-    ).rows;
-    const valuationRows = (
-      await tx.execute<{ amount: string; date: string; id: string }>(
-        sql`select v.id,v.amount::text,v.occurred_on::text as date from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${transfer.receiving_asset_id} and e.book_id=${transfer.book_id} and v.kind in('impaired','revalued') and v.occurred_on<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff}) order by v.occurred_on,v.created_at,v.id`,
-      )
-    ).rows;
-    const groupRows = (
-      await tx.execute<{
+    `, "objects");
+    const valuationRows = await tx.execute<{ amount: string; date: string; id: string }>(
+        sql`select v.id,v.amount::text,v.occurred_on::text as date from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${transfer.receiving_asset_id} and e.book_id=${transfer.book_id} and v.kind in('impaired','revalued') and v.occurred_on<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff}) order by v.occurred_on,v.created_at,v.id`, "objects",
+      );
+    const groupRows = await tx.execute<{
         source_event_id: string;
         measurement: GroupAssetValuation;
       }>(
-        sql`select m.source_event_id,m.measurement from asset_transfer_measurements m join asset_events v on v.org_id=m.org_id and v.id=m.source_event_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where m.org_id=${orgId} and m.transfer_id=${transfer.id} and m.effective_on<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff}) order by m.effective_on,m.ordinal`,
-      )
-    ).rows;
+        sql`select m.source_event_id,m.measurement from asset_transfer_measurements m join asset_events v on v.org_id=m.org_id and v.id=m.source_event_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where m.org_id=${orgId} and m.transfer_id=${transfer.id} and m.effective_on<=${cutoff} and e.status in('posted','reversed') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id and r.occurred_on<=${cutoff}) order by m.effective_on,m.ordinal`, "objects",
+      );
     if (
       valuationRows.some(
         (v) => !groupRows.some((g) => g.source_event_id === v.id),
@@ -514,17 +490,13 @@ export async function consolidateAssetTransfers(
         denominator: toUnits(asset.acquisition_cost),
       },
     });
-    const prior = (
-      await tx.execute<{ account_id: string; amount: string }>(
-        sql`with recursive history(id) as (select journal_entry_id from asset_transfer_consolidation_entries where org_id=${orgId} and transfer_id=${transfer.id} union select e.id from journal_entries e join history h on e.reverses_entry_id=h.id where e.org_id=${orgId}) select l.account_id,sum(l.amount)::text as amount from history h join journal_entries e on e.id=h.id and e.org_id=${orgId} join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.status in('posted','reversed') and e.posting_date<=${cutoff} group by l.account_id`,
-      )
-    ).rows;
+    const prior = await tx.execute<{ account_id: string; amount: string }>(
+        sql`with recursive history(id) as (select journal_entry_id from asset_transfer_consolidation_entries where org_id=${orgId} and transfer_id=${transfer.id} union select e.id from journal_entries e join history h on e.reverses_entry_id=h.id where e.org_id=${orgId}) select l.account_id,sum(l.amount)::text as amount from history h join journal_entries e on e.id=h.id and e.org_id=${orgId} join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.status in('posted','reversed') and e.posting_date<=${cutoff} group by l.account_id`, "objects",
+      );
     if (transfer.basis.nci) {
-      const sellerLoss = (
-        await tx.execute<{ effective_on: string }>(
-          sql`select loss.effective_on::text from consolidation_control_losses loss join asset_transfer_bases b on b.org_id=loss.org_id and b.id=${transfer.id} where loss.org_id=${orgId} and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? b.seller_subsidiary_id::text order by loss.effective_on limit 1`,
-        )
-      ).rows[0];
+      const sellerLoss = (await tx.execute<{ effective_on: string }>(
+          sql`select loss.effective_on::text from consolidation_control_losses loss join asset_transfer_bases b on b.org_id=loss.org_id and b.id=${transfer.id} where loss.org_id=${orgId} and loss.reversed_by_change_id is null and loss.excluded_subsidiary_ids ? b.seller_subsidiary_id::text order by loss.effective_on limit 1`, "objects",
+        ))[0];
       if (sellerLoss) {
         const nciIds = [
           ...new Set(
@@ -534,11 +506,9 @@ export async function consolidateAssetTransfers(
             ]),
           ),
         ];
-        const pinned = (
-          await tx.execute<{ account_id: string; amount: string }>(
-            sql`select l.account_id,sum(l.amount)::text as amount from asset_transfer_consolidation_entries c join journal_entries e on e.id=c.journal_entry_id and e.org_id=c.org_id join journal_lines l on l.entry_id=e.id and l.org_id=e.org_id where c.org_id=${orgId} and c.transfer_id=${transfer.id} and e.status in('posted','reversed') and e.posting_date<=${sellerLoss.effective_on} and l.account_id=any(${uuidArray(nciIds)}::uuid[]) group by l.account_id`,
-          )
-        ).rows;
+        const pinned = await tx.execute<{ account_id: string; amount: string }>(
+            sql`select l.account_id,sum(l.amount)::text as amount from asset_transfer_consolidation_entries c join journal_entries e on e.id=c.journal_entry_id and e.org_id=c.org_id join journal_lines l on l.entry_id=e.id and l.org_id=e.org_id where c.org_id=${orgId} and c.transfer_id=${transfer.id} and e.status in('posted','reversed') and e.posting_date<=${sellerLoss.effective_on} and l.account_id=any(${uuidArray(nciIds)}::uuid[]) group by l.account_id`, "objects",
+          );
         for (const id of nciIds)
           target[id] = pinned.find((l) => l.account_id === id)?.amount ?? "0";
       }
@@ -575,11 +545,9 @@ export async function consolidateAssetTransfers(
       subsidiaryIds: [entity.id],
       modules: ["assets"],
     });
-    const accounts = (
-      await tx.execute<{ id: string }>(
-        sql`select id from accounts where org_id=${orgId} and id=any(${uuidArray(lines.map((l) => l.accountId))}::uuid[]) and is_active and not is_summary for share`,
-      )
-    ).rows;
+    const accounts = await tx.execute<{ id: string }>(
+        sql`select id from accounts where org_id=${orgId} and id=any(${uuidArray(lines.map((l) => l.accountId))}::uuid[]) and is_active and not is_summary for share`, "objects",
+      );
     if (accounts.length !== new Set(lines.map((l) => l.accountId)).size)
       throw new AssetTransferError(
         "asset transfer consolidation requires active posting accounts",

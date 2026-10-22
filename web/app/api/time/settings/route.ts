@@ -32,7 +32,7 @@ function bad(error: string, status = 422) {
 async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
   const gate = injectedGate as Authz;
   const row = (await db.execute<{ settings: unknown }>(sql`
-    select settings->'fieldTime' as settings from orgs where id = ${gate.user.orgId}`)).rows[0]
+    select settings->'fieldTime' as settings from orgs where id = ${gate.user.orgId}`, 'objects'))[0]
   return NextResponse.json({ settings: row?.settings ?? null })
 }
 
@@ -51,7 +51,7 @@ async function legacyPUT(req: Request, ctx: { params: Promise<unknown> }, inject
     // normalized to absent (see settings-body), so a cleared rule gets
     // the same named refusal as a never-set one.
     const settings = validateFieldTimeSettings(normalizeFieldTimeSettingsBody(parsedBody.data))
-    const moved = (await db.execute(sql`
+    const moved = (await db.execute<never>(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}', ${JSON.stringify({
            roundingIncrement: settings.rounding.incrementMinutes,

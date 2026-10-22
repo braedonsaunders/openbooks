@@ -409,10 +409,10 @@ export async function loadHolidayOverrides(
       from payroll_holidays
      where org_id = ${orgId} and jurisdiction = ${jurisdiction}
      order by effective_from, pack_key nulls last, name
-  `));
+  `, "objects"));
   const day = (value: string | Date | null): string | null =>
     value === null ? null : String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     id: row.id, jurisdiction: row.jurisdiction, packKey: row.pack_key, name: row.name,
     ruleKind: row.rule_kind, ruleMonth: row.rule_month, ruleDay: row.rule_day,
     ruleWeekday: row.rule_weekday, ruleNth: row.rule_nth, ruleOffset: row.rule_offset,
@@ -553,13 +553,13 @@ export async function statutoryHolidayCalendarsOf(input: {
   const scope = input.subsidiaryIds === null
     ? sql``
     : sql`and e.employer_subsidiary_id in (${sql.join(input.subsidiaryIds.map((id) => sql`${id}`), sql`, `)})`;
-  const profiles = (await tx.execute<{
+  const profiles = await tx.execute<{
     country: string; province: string | null; labourJurisdiction: string | null;
   }>(sql`
     select distinct prof.country, prof.province, prof.labour_jurisdiction as "labourJurisdiction"
       from employee_payroll_profiles prof
       left join worker_employments e on e.org_id = prof.org_id and e.id = prof.employment_id
-     where prof.org_id = ${input.orgId} and prof.is_active ${scope}`)).rows;
+     where prof.org_id = ${input.orgId} and prof.is_active ${scope}`, "objects");
   const jurisdictions = payrollHolidayJurisdictionKeys(profiles);
   const overrides = (await Promise.all(
     jurisdictions.map((jurisdiction) => loadHolidayOverrides(tx, input.orgId, jurisdiction)),
@@ -1551,7 +1551,7 @@ export async function statutoryHolidayEmploymentSource(
       `${input.employeeName}: statutory holiday pay needs the selected native employment and paying legal employer — review the payroll employment link and assign the run to its legal employer before calculating`,
     );
   }
-  const rows = (await tx.execute<StatutoryHolidayEmploymentSource>(sql`
+  const rows = await tx.execute<StatutoryHolidayEmploymentSource>(sql`
     select e.org_id::text as "orgId", e.worker_party_id::text as "employeePartyId",
            e.id::text as "employmentId", e.employer_subsidiary_id::text as "subsidiaryId",
            e.revision as "employmentRevision", v.id::text as "versionId", v.version_no as "versionNo",
@@ -1564,7 +1564,7 @@ export async function statutoryHolidayEmploymentSource(
        and e.worker_party_id = ${input.employeePartyId}
        and e.employer_subsidiary_id = ${input.subsidiaryId}
      order by v.effective_from, v.version_no
-  `)).rows;
+  `, "objects");
   if (rows.length === 0) {
     throw new PayrollHolidayError(
       `${input.employeeName}: the selected holiday-pay employment does not belong to this employee, organization and paying legal employer — review the payroll employment link before calculating`,
@@ -2064,7 +2064,7 @@ async function lookbackEarnings(
        and l.kind = 'earning'
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
-  `));
+  `, "objects"));
 
   // A stub whose own pay period is unknown cannot be placed in the window at
   // all: that stays a refusal, because no span exists to attribute across.
@@ -2072,7 +2072,7 @@ async function lookbackEarnings(
   // undated spans by calendar-day overlap (see
   // attributeStubEarningsToWindow), so a straddling undated stub estimates
   // instead of refusing.
-  const unknownPeriod = rows.rows.filter(
+  const unknownPeriod = rows.filter(
     (row) => row.period_start == null || row.period_end == null,
   );
   if (unknownPeriod.length > 0) {
@@ -2082,7 +2082,7 @@ async function lookbackEarnings(
   }
   const totals = await readPayrollPriorEarnings(tx, input, window);
   const proratedPeriods: string[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const day = (value: string | Date) =>
       String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
     // Refused above when unknown; the guard narrows the type for the rest.
@@ -2270,11 +2270,11 @@ export async function loadHolidayDayEvidence(
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and hours > 0
        and worked_on between ${window.from} and ${window.to}
-  `));
+  `, "objects"));
 
   const day = (value: string | Date) =>
     String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
-  const workedOn = worked.rows.map((row) => day(row.worked_on));
+  const workedOn = worked.map((row) => day(row.worked_on));
   if (!needsPaidDays) {
     return { workedOn, paidPeriodsWithoutHours: [], paidHolidays: [] };
   }
@@ -2290,7 +2290,7 @@ export async function loadHolidayDayEvidence(
          and r.run_status = 'committed' and s.pay_run_document_id <> ${input.excludeDocumentId}
          and l.kind = 'earning' and l.earned_from = l.earned_to
          and l.earned_from between ${window.from} and ${window.to}
-       group by l.earned_from having sum(l.amount) > 0`);
+       group by l.earned_from having sum(l.amount) > 0`, "objects");
   const owed = await tx.execute<{ on_date: string | Date }>(sql`
       select distinct a.on_date
         from hrm_absences a
@@ -2302,7 +2302,7 @@ export async function loadHolidayDayEvidence(
          and r.status = 'approved' and t.paid and a.hours > 0
          and a.reversal_of is null
          and not exists (select 1 from hrm_absences reversal
-                          where reversal.org_id = a.org_id and reversal.reversal_of = a.id)`);
+                          where reversal.org_id = a.org_id and reversal.reversal_of = a.id)`, "objects");
 
   // One row per committed stub overlapping the window, with the hours and the
   // earnings on it. The classification is done here rather than in SQL so the
@@ -2326,11 +2326,11 @@ export async function loadHolidayDayEvidence(
        and s.pay_run_document_id <> ${input.excludeDocumentId}
        and r.period_start <= ${window.to} and r.period_end >= ${window.from}
      group by s.id, r.period_start, r.period_end
-  `));
+  `, "objects"));
 
   const paidPeriodsWithoutHours: { from: string; to: string }[] = [];
   const holidayPaidPeriods: { from: string; to: string }[] = [];
-  for (const row of stubs.rows) {
+  for (const row of stubs) {
     const period = { from: day(row.period_start), to: day(row.period_end) };
     if (cmp(row.hours, "0") === 0 && cmp(row.earnings, "0") > 0) {
       paidPeriodsWithoutHours.push(period);
@@ -2346,8 +2346,8 @@ export async function loadHolidayDayEvidence(
 
   return {
     workedOn,
-    earnedOn: earned.rows.map((row) => day(row.earned_on)),
-    owedPaidOn: owed.rows.map((row) => day(row.on_date)),
+    earnedOn: earned.map((row) => day(row.earned_on)),
+    owedPaidOn: owed.map((row) => day(row.on_date)),
     paidPeriodsWithoutHours, paidHolidays,
   };
 }
@@ -2392,8 +2392,8 @@ export async function hoursOn(
       from time_entries
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and worked_on = ${date}
-  `));
-  return roundMoney(rows.rows[0]?.hours ?? "0", 2);
+  `, "objects"));
+  return roundMoney(rows[0]?.hours ?? "0", 2);
 }
 
 /** Approved time in a statute's average-hours lookback; timesheets own hours. */
@@ -2408,8 +2408,8 @@ async function hoursWorkedInLookback(
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and hours > 0
        and worked_on between ${window.from} and ${window.to}
-  `));
-  return rows.rows[0]?.hours ?? "0";
+  `, "objects"));
+  return rows[0]?.hours ?? "0";
 }
 
 // ---------------------------------------------------------------------------

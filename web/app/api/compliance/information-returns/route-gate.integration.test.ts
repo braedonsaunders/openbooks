@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
@@ -165,37 +164,6 @@ test('box rules refuse on subcontractor compliance alone at the setup fence', as
     const refused = await withOrgContext(state.orgId, () =>
       preflightSetupWrite(actor(), 'information-return-box-rules', 'create'))
     assert.equal(refused?.status, 404)
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('existing subcontractor-compliance orgs keep 1099 surfaces through the 0661 backfill', async () => {
-  const { org } = await fixture({ subcontractorCompliance: true })
-  try {
-    const before = await get()
-    assert.equal(before.status, 404)
-    // The published migration bytes, executed as the runner would: only the
-    // data statement (header SETs aside) against this org's database.
-    const migration = readFileSync(new URL('../../../../../schema/migrations/generated/0661_information_returns_feature_split.sql', import.meta.url), 'utf8')
-    const dataStatement = migration.slice(migration.indexOf('WITH candidates'))
-    await withBypassContext(() => db.execute(sql.raw(dataStatement)))
-    const after = await get()
-    assert.equal(after.status, 200, JSON.stringify(await after.json()))
-    const stored = (await withBypassContext(() => db.execute<{ features: Record<string, boolean> }>(sql`
-      select settings->'features' as features from orgs where id = ${org.orgId}`))).rows[0]?.features
-    assert.equal(stored?.informationReturns, true)
-    assert.equal(stored?.subcontractorCompliance, true)
-    const trail = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`))).rows[0]?.n
-    assert.equal(trail, 1)
-    // Re-running the backfill is a no-op.
-    await withBypassContext(() => db.execute(sql.raw(dataStatement)))
-    const trailAfter = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`))).rows[0]?.n
-    assert.equal(trailAfter, 1)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }

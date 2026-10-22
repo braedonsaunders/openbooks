@@ -74,7 +74,7 @@ test("payroll-JE labor cost counts the primary book once", { skip: !DB }, async 
     const laborProfile = { ...profile, laborCost: { source: "payroll_je" as const } };
     // Same burden event in both books: the cogs leg carries the project tag.
     for (const bookId of [org.bookId, (await db.execute<{ id: string }>(sql`
-        select id from accounting_books where org_id = ${org.orgId} and code = 'TAX'`)).rows[0]!.id]) {
+        select id from accounting_books where org_id = ${org.orgId} and code = 'TAX'`, "objects"))[0]!.id]) {
       const entryId = randomUUID();
       await db.execute(sql`
         insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)

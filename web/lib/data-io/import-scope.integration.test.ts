@@ -100,7 +100,7 @@ test(
       const carryInCount = async () =>
         Number((await withOrgContext(fx.orgId, () => db.execute<{ n: string }>(sql`
           select count(*)::text as n from payroll_opening_balances
-           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`))).rows[0]!.n);
+           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`, "objects")))[0]!.n);
       // The mocked session gate carries no connection scope; route calls run
       // under the org, as the middleware provides in production.
       const send = (body: Record<string, unknown>) => withOrgContext(fx.orgId, () => post(body));

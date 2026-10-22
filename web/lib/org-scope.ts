@@ -22,10 +22,8 @@ const requestOrgId = cache(async (): Promise<string> => {
 
 async function requestOrgIdFromSession(): Promise<string | null> {
   try {
-    const r = (await db.execute(sql`select nullif(current_setting('app.current_org', true), '') as org_id`)) as {
-      rows: { org_id: string | null }[]
-    }
-    return r.rows[0]?.org_id ?? null
+    const r = await db.execute<{ org_id: string | null }>(sql`select nullif(current_setting('app.current_org', true), '') as org_id`, 'objects')
+    return r[0]?.org_id ?? null
   } catch {
     return null
   }

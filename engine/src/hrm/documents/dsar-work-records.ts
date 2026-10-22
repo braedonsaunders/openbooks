@@ -71,11 +71,11 @@ export async function gatherPayrollEvidenceRecords(orgId: string, partyId: strin
     { key: "roeSubsequentServiceSources", table: "payroll_roe_subsequent_service_sources", where: subject, denied: employment, updated: true },
   ], project);
   // Occurrences are keyed by their obligation and date rather than a row id.
-  result.holidayPayOccurrences = (await db.execute<Record<string, unknown>>(sql`
+  result.holidayPayOccurrences = await db.execute<Record<string, unknown>>(sql`
     select ${await project("payroll_holiday_occurrences", new Set(["org_id", "employee_party_id"]))}
       from payroll_holiday_occurrences
      where org_id=${orgId} and employee_party_id=${partyId}
-     order by holiday_date, obligation_id`)).rows;
+     order by holiday_date, obligation_id`, "objects");
   return result;
 }
 
@@ -121,10 +121,10 @@ async function gatherCollections(orgId: string, collections: Collection[], proje
     const rows: Record<string, unknown>[] = [];
     let lastId: string | null = null;
     for (;;) {
-      const page: (Record<string, unknown> & { id: string })[] = (await db.execute<Record<string, unknown> & { id: string }>(sql`
+      const page: (Record<string, unknown> & { id: string })[] = await db.execute<Record<string, unknown> & { id: string }>(sql`
         select ${columns} from ${sql.identifier(collection.table)}
         where org_id=${orgId} and (${collection.where}) and (${lastId}::uuid is null or id>${lastId}::uuid)
-        order by id limit 1000`)).rows;
+        order by id limit 1000`, "objects");
       rows.push(...page);
       if (page.length < 1000) break;
       lastId = page[page.length - 1]!.id;

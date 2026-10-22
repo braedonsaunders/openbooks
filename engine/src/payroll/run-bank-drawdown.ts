@@ -59,7 +59,7 @@ export async function applyBankDrawdown(
   }
   for (const [componentId, codes] of settlePlans) {
     if (codes.length > 1) {
-      const component = (await tx.execute<{ code: string }>(sql`select code from pay_components where id = ${componentId}`)).rows[0];
+      const component = (await tx.execute<{ code: string }>(sql`select code from pay_components where id = ${componentId}`, "objects"))[0];
       throw new PayrollError(`Payroll component ${component?.code ?? componentId} settles two entitlement plans (${codes.join(", ")}) — dedicate one payout component per plan so withdrawals stay attributable`);
     }
   }

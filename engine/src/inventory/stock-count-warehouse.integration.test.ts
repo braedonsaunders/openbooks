@@ -27,7 +27,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function countRows(orgId: string): Promise<string> {
   return (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from stock_counts where org_id = ${orgId}`)).rows[0]!.n;
+    select count(*)::text as n from stock_counts where org_id = ${orgId}`, "objects"))[0]!.n;
 }
 
 async function openCounted(org: ScratchOrg & { actorId: string }, counted: string): Promise<{ countId: string; lineId: string }> {
@@ -39,7 +39,7 @@ async function openCounted(org: ScratchOrg & { actorId: string }, counted: strin
   });
   await startStockCount(org.orgId, null, count.id);
   const lineId = (await db.execute<{ id: string }>(sql`
-    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
+    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`, "objects"))[0]!.id;
   await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
   await confirmCountObservation(org.orgId,count.id,lineId,counted);
   return { countId: count.id, lineId };
@@ -130,7 +130,7 @@ test("a restriction edited after creation refuses at submit with the count still
     );
     assert.equal(
       (await db.execute<{ status: string }>(sql`
-        select status from stock_counts where org_id = ${org.orgId} and id = ${countId}`)).rows[0]!.status,
+        select status from stock_counts where org_id = ${org.orgId} and id = ${countId}`, "objects"))[0]!.status,
       "counting",
       "the count stays open for counting instead of stranding in review",
     );
@@ -148,7 +148,7 @@ test("a warehouse deactivated after review refuses at post with no adjustment", 
     await db.execute(sql`
       update stock_locations set is_active = false where org_id = ${org.orgId} and id = ${org.stockLocationId}`);
     const movementsBefore = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`)).rows[0]!.n;
+      select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n;
     await assert.rejects(
       withOrgTransaction(org.orgId, () => postStockCount(org.orgId, org.actorId, countId)),
       (e: unknown) => {
@@ -161,13 +161,13 @@ test("a warehouse deactivated after review refuses at post with no adjustment", 
     );
     assert.equal(
       (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`)).rows[0]!.n,
+        select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n,
       movementsBefore,
       "no adjustment may post — not even a zero-variance one",
     );
     assert.equal(
       (await db.execute<{ status: string }>(sql`
-        select status from stock_counts where org_id = ${org.orgId} and id = ${countId}`)).rows[0]!.status,
+        select status from stock_counts where org_id = ${org.orgId} and id = ${countId}`, "objects"))[0]!.status,
       "review",
       "the count stays in review",
     );

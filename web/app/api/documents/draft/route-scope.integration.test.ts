@@ -88,10 +88,10 @@ async function setup() {
 }
 
 async function billDrafts(orgId: string) {
-  return (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  return await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select id, subsidiary_id from documents
      where org_id = ${orgId} and kind = 'vendor_bill'
-  `)).rows
+  `, 'objects')
 }
 
 test('a restricted document draft lands in their own subsidiary, never the root', async () => {

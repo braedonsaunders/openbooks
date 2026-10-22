@@ -12,9 +12,10 @@ type Runner = Pick<typeof db, "execute">;
 
 const stubRunner = (rows: unknown[], onQuery?: () => void): Runner =>
   ({
-    execute: async () => {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       onQuery?.();
-      return { rows };
+      return inMode({ rows });
     },
   }) as unknown as Runner;
 

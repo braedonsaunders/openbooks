@@ -35,12 +35,12 @@ test(
       const original = cppBefore.liabilityAccountId;
 
       // Every committed liability line carries its credited account.
-      const stamped = (await db.execute<{ source: string; n: string }>(sql`
+      const stamped = await db.execute<{ source: string; n: string }>(sql`
         select l.liability_account_source as source, count(*)::text as n
           from pay_stub_lines l join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${input.documentId}
            and l.kind in ('deduction', 'employer_contribution')
-         group by 1`)).rows;
+         group by 1`, "objects");
       assert.deepEqual(stamped.map((r) => r.source), ["commit"]);
       assert.ok(Number(stamped[0]!.n) > 0);
 
@@ -82,7 +82,7 @@ test(
       });
       const debited = (await db.execute<{ account_id: string }>(sql`
         select account_id from document_lines
-         where org_id = ${fx.orgId} and document_id = ${bill.documentId}`)).rows.map((r) => r.account_id);
+         where org_id = ${fx.orgId} and document_id = ${bill.documentId}`, "objects")).map((r) => r.account_id);
       assert.ok(debited.includes(original));
       assert.ok(!debited.includes(replacement));
 

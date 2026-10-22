@@ -169,8 +169,8 @@ async function loadRun(
       left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
       left join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
      where r.id = ${subjectId} and r.direction = ${direction}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 function createPaymentRunsFlowAdapter(
@@ -195,8 +195,7 @@ function createPaymentRunsFlowAdapter(
       // entity reports the entity its evidence proves, so restricted callers
       // see the same runs here as on the run list.
       async subsidiaryOf(orgId, ids, allowed, lock) {
-        const rows = (
-          await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+        const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
           select r.id,
                  coalesce(r.subsidiary_id, (
                    select d.subsidiary_id from payment_run_items i
@@ -209,8 +208,7 @@ function createPaymentRunsFlowAdapter(
            where r.org_id = ${orgId}
              and r.id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
            ${lock ? sql`for share of r` : sql``}
-        `)
-        ).rows as Array<{
+        `, "objects")) as Array<{
           id: string;
           subsidiaryId: string | null;
           visible: boolean;
@@ -313,8 +311,8 @@ function createPaymentRunsFlowAdapter(
          where id = ${subjectId} and org_id = ${ctx.orgId} and direction = ${direction}
            and status = 'draft' and payment_count > 0 and total_amount > 0
         returning id, status
-      `);
-      if (parked.rows[0]) {
+      `, "objects");
+      if (parked[0]) {
         await db.execute(sql`
           insert into payment_events (org_id, payment_run_id, event_type, from_status, to_status, details, actor_id)
           values (${ctx.orgId}, ${subjectId}, 'run_submitted', 'draft', 'pending_approval',
@@ -352,8 +350,8 @@ function createPaymentRunsFlowAdapter(
          where org_id = ${orgId} and direction = ${direction} and status = 'pending_approval'
          order by submitted_at desc nulls last
          limit ${limit}
-      `);
-      return result.rows.map((row) => row.id);
+      `, "objects");
+      return result.map((row) => row.id);
     },
   });
 }

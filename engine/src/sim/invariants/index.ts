@@ -28,8 +28,8 @@ export interface InvariantResult {
 }
 
 async function scalar(q: ReturnType<typeof sql>): Promise<string> {
-  const r = (await db.execute<Record<string, unknown>>(q));
-  const row = r.rows[0] ?? {};
+  const r = (await db.execute<Record<string, unknown>>(q, "objects"));
+  const row = r[0] ?? {};
   return String(Object.values(row)[0] ?? "");
 }
 

@@ -39,8 +39,8 @@ async function seed(): Promise<Fixture> {
     const feature = await db.execute<{ id: string }>(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"subcontractorCompliance":true,"informationReturns":true}'::jsonb)
-       where id = ${org.orgId} returning id`);
-    assert.equal(feature.rows.length, 1, "the native compliance feature must be enabled for this fixture");
+       where id = ${org.orgId} returning id`, "objects");
+    assert.equal(feature.length, 1, "the native compliance feature must be enabled for this fixture");
     const branchId = randomUUID();
     const hiddenPartyId = randomUUID();
     await db.execute(sql`
@@ -72,8 +72,8 @@ async function authorize(fixture: Fixture, allowedSubsidiaryIds: ReadonlySet<str
     const role = await db.execute<{ id: string }>(sql`
       update app_roles set permissions = '["compliance.manage"]'::jsonb,
         subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb
-       where org_id = ${fixture.orgId} and key = 'compliance_manager' returning id`);
-    assert.equal(role.rows.length, 1, "the fixture must configure its assigned native role");
+       where org_id = ${fixture.orgId} and key = 'compliance_manager' returning id`, "objects");
+    assert.equal(role.length, 1, "the fixture must configure its assigned native role");
     return resolveAuthzByUserId(fixture.orgId, fixture.actorId);
   });
   assert.ok(fixture.authz, "the native resolver must admit the active fixture actor");
@@ -103,8 +103,8 @@ async function tinState(fixture: Fixture): Promise<{ last4: string | null; type:
   return withOrgContext(fixture.orgId, async () => {
     const result = await db.execute<{ last4: string | null; type: string | null }>(sql`
       select tin_last4 as "last4", tin_type as "type" from vendor_roles
-       where org_id = ${fixture.orgId} and party_id = ${fixture.hiddenPartyId}`);
-    return result.rows[0]!;
+       where org_id = ${fixture.orgId} and party_id = ${fixture.hiddenPartyId}`, "objects");
+    return result[0]!;
   });
 }
 
@@ -162,10 +162,10 @@ test(
           select action, actor_id as "actor", changes from audit_log
            where org_id = ${fixture.orgId} and table_name = 'vendor_roles'
              and row_id = ${fixture.hiddenPartyId}
-           order by at desc limit 1`),
+           order by at desc limit 1`, "objects"),
       );
-      assert.equal(audits.rows.length, 1, "the TIN save writes one audit row");
-      const entry = audits.rows[0]!;
+      assert.equal(audits.length, 1, "the TIN save writes one audit row");
+      const entry = audits[0]!;
       assert.equal(entry.action, "update");
       assert.equal(entry.actor, fixture.actorId);
       assert.equal(entry.changes.reason, "W-9 reviewed by compliance");

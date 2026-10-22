@@ -22,7 +22,7 @@ export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
   orgId: string; payDate: string; employeePartyIds: readonly string[]; lockRows?: boolean;
 }): Promise<EmployerAssignmentSource[]> {
   if (!input.employeePartyIds.length) return [];
-  return (await tx.execute<EmployerAssignmentSource & Record<string, unknown>>(sql`select id::text, employee_party_id::text as "employeePartyId",
+  return await tx.execute<EmployerAssignmentSource & Record<string, unknown>>(sql`select id::text, employee_party_id::text as "employeePartyId",
     subsidiary_id::text as "subsidiaryId", assignment_kind as kind, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
     filing_account_id::text as "filingAccountId",worker_comp_group_id::text as "workerCompGroupId",
     to_char(created_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "createdAt",source_reference as "sourceReference"
@@ -30,7 +30,7 @@ export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
       and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.employeePartyIds)}::jsonb)::uuid)
       and ${input.payDate}::date between effective_from and effective_to
     order by employee_party_id,assignment_kind,id
-    ${input.lockRows ? sql`for share` : sql``}`)).rows;
+    ${input.lockRows ? sql`for share` : sql``}`, 'objects');
 }
 
 /** Caller owns employee/year fences before locking the current assignment sources. */
@@ -64,7 +64,7 @@ export async function applyEmployeeEmployerAssignmentHistory(tx: Reader, orgId: 
         continue;
       } else {
         const account = (await tx.execute<{ country: string; account_number: string }>(sql`select country,account_number
-          from payroll_filing_accounts where org_id=${orgId} and id=${assignment.filingAccountId} for share`)).rows[0];
+          from payroll_filing_accounts where org_id=${orgId} and id=${assignment.filingAccountId} for share`, 'objects'))[0];
         if (!account || account.country !== employee.country) throw new PayrollError(`${employee.display_name}: the dated filing account does not match the employee payroll country — review the recorded assignment.`);
         employee.effective_filing_account_id = assignment.filingAccountId;
         employee.filing_account_country = account.country;
@@ -103,22 +103,22 @@ export async function recordHistoricalEmployerAssignment(input: {
     const profile=(await tx.execute<{ country: string; subsidiary_id: string | null; filing_account_id: string | null }>(sql`
       select prof.country,p.subsidiary_id,prof.filing_account_id from employee_payroll_profiles prof
       join parties p on p.org_id=prof.org_id and p.id=prof.employee_party_id
-      where prof.org_id=${input.orgId} and prof.employee_party_id=${input.employeePartyId} for update of prof`)).rows[0];
+      where prof.org_id=${input.orgId} and prof.employee_party_id=${input.employeePartyId} for update of prof`, 'objects'))[0];
     if (!profile?.subsidiary_id) throw new PayrollError('Save this employee’s payroll profile and legal employer before recording an assignment.');
     let current=profile.filing_account_id;
     if (input.kind==='worker_comp') {
       const role=(await tx.execute<{ id: string }>(sql`select id from employee_roles
         where org_id=${input.orgId} and party_id=${input.employeePartyId} and is_active
-        order by updated_at desc,id limit 1 for share`)).rows[0];
+        order by updated_at desc,id limit 1 for share`, 'objects'))[0];
       if (!role) throw new PayrollError('Save an active native employee role before recording its historical worker-compensation assignment.');
       current=(await tx.execute<{ worker_comp_group_id: string | null }>(sql`
         select public.payroll_worker_comp_group_at(${input.orgId}::uuid, ${input.employeePartyId}::uuid, current_date)::text as worker_comp_group_id
-      `)).rows[0]?.worker_comp_group_id ?? null;
+      `, 'objects'))[0]?.worker_comp_group_id ?? null;
     }
-    const prior=(await tx.execute<{ id: string; effective_from: string; effective_to: string; target: string | null; source_reference: string; reason: string; expected_current_id: string | null }>(sql`
+    const prior=await tx.execute<{ id: string; effective_from: string; effective_to: string; target: string | null; source_reference: string; reason: string; expected_current_id: string | null }>(sql`
       select id,effective_from::text,effective_to::text,coalesce(filing_account_id,worker_comp_group_id)::text as target,source_reference,reason,expected_current_id::text
       from payroll_employee_employer_assignments where org_id=${input.orgId} and employee_party_id=${input.employeePartyId}
-        and assignment_kind=${input.kind} and effective_from<=${input.effectiveTo}::date and effective_to>=${input.effectiveFrom}::date for share`)).rows;
+        and assignment_kind=${input.kind} and effective_from<=${input.effectiveTo}::date and effective_to>=${input.effectiveFrom}::date for share`, 'objects');
     if (prior.length) {
       const p=prior[0]!;
       if (prior.length===1 && p.effective_from===input.effectiveFrom && p.effective_to===input.effectiveTo && p.target===input.assignmentId && p.source_reference===sourceReference && p.reason===reason && p.expected_current_id===input.expectedCurrentId) return {changed:false,id:p.id};
@@ -126,12 +126,12 @@ export async function recordHistoricalEmployerAssignment(input: {
     }
     if (current!==input.expectedCurrentId) throw new PayrollError('The current employer assignment differs from the reviewed value — export and preview the historical assignment again.');
     const target = input.assignmentId === null ? [] : input.kind==='filing_account'
-      ? (await tx.execute(sql`select id from payroll_filing_accounts where org_id=${input.orgId} and id=${input.assignmentId} and country=${profile.country} and (subsidiary_id is null or subsidiary_id=${profile.subsidiary_id}) and is_active for share`)).rows
-      : (await tx.execute(sql`select id from worker_comp_groups where org_id=${input.orgId} and id=${input.assignmentId} and is_active for share`)).rows;
+      ? (await tx.execute(sql`select id from payroll_filing_accounts where org_id=${input.orgId} and id=${input.assignmentId} and country=${profile.country} and (subsidiary_id is null or subsidiary_id=${profile.subsidiary_id}) and is_active for share`, 'objects'))
+      : (await tx.execute(sql`select id from worker_comp_groups where org_id=${input.orgId} and id=${input.assignmentId} and is_active for share`, 'objects'));
     if (input.assignmentId !== null && target.length!==1) throw new PayrollError('Choose an active assignment in this organization, the employee’s own legal employer and payroll country.');
     if ((await tx.execute(sql`select s.id from pay_stubs s join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
       join documents d on d.org_id=r.org_id and d.id=r.document_id where s.org_id=${input.orgId} and s.employee_party_id=${input.employeePartyId}
-        and r.run_status='committed' and d.status<>'voided' and r.pay_date between ${input.effectiveFrom}::date and ${input.effectiveTo}::date limit 1`)).rows.length) {
+        and r.run_status='committed' and d.status<>'voided' and r.pay_date between ${input.effectiveFrom}::date and ${input.effectiveTo}::date limit 1`, 'objects')).length) {
       throw new PayrollError('Committed payroll already used these dates — preserve its evidence and use a controlled correction run.');
     }
     if(input.dryRun) return {changed:true,id:null};
@@ -139,7 +139,7 @@ export async function recordHistoricalEmployerAssignment(input: {
       (org_id,employee_party_id,subsidiary_id,assignment_kind,tax_year,effective_from,effective_to,filing_account_id,worker_comp_group_id,expected_current_id,source_reference,reason,created_by)
       values (${input.orgId},${input.employeePartyId},${profile.subsidiary_id},${input.kind},${Number(input.effectiveFrom.slice(0,4))},
         ${input.effectiveFrom}::date,${input.effectiveTo}::date,${input.kind==='filing_account'?input.assignmentId:null},
-        ${input.kind==='worker_comp'?input.assignmentId:null},${input.expectedCurrentId},${sourceReference},${reason},${input.actorId}) returning id`)).rows[0];
+        ${input.kind==='worker_comp'?input.assignmentId:null},${input.expectedCurrentId},${sourceReference},${reason},${input.actorId}) returning id`, 'objects'))[0];
     if(!saved) throw new PayrollError('The historical assignment was not saved — reload the employee and preview again.');
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values (${input.orgId},'payroll_employee_employer_assignments',${saved.id},'insert',

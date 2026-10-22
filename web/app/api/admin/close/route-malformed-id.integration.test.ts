@@ -26,9 +26,9 @@ const request = (body: unknown) =>
 async function enableAdvancedClose(orgId: string) {
   const enabled = await withBypassContext(() => db.execute<{ id: string }>(sql`
     update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb
-     where id = ${orgId} returning id`));
-  assert.equal(enabled.rows.length, 1, "close audit setup updates exactly one organization");
-  assert.equal(enabled.rows[0]?.id, orgId, "close audit setup updates its own organization");
+     where id = ${orgId} returning id`, "objects"));
+  assert.equal(enabled.length, 1, "close audit setup updates exactly one organization");
+  assert.equal(enabled[0]?.id, orgId, "close audit setup updates its own organization");
 }
 
 async function setupCloseActor(name: string, role: string, enableFeature = true) {
@@ -49,8 +49,8 @@ test("close fixture setup remains observable after the route import and refuses 
   try {
     const settings = await withOrgContext(org.orgId, () => db.execute<{ enabled: boolean }>(sql`
       select settings #>> '{features,advancedClose}' = 'true' as enabled
-        from orgs where id = ${org.orgId}`));
-    assert.equal(settings.rows[0]?.enabled, true, "the constrained tenant read sees the fixture feature update");
+        from orgs where id = ${org.orgId}`, "objects"));
+    assert.equal(settings[0]?.enabled, true, "the constrained tenant read sees the fixture feature update");
     await assert.rejects(enableAdvancedClose(randomUUID()), /close audit setup updates exactly one organization/);
   } finally {
     state.user = { orgId: "", id: "" };
@@ -96,8 +96,8 @@ test("close configuration saves reject malformed ids instead of creating new row
         (select count(*)::int from fiscal_calendars where org_id = ${org.orgId} and name = 'Malformed Calendar') as calendars,
         (select count(*)::int from close_blueprints where org_id = ${org.orgId} and name = 'Malformed Blueprint') as blueprints,
         (select count(*)::int from close_automation_rules where org_id = ${org.orgId} and name = 'Malformed Automation') as automations,
-        (select count(*)::int from close_reporting_packages where org_id = ${org.orgId} and name = 'Malformed Package') as packages`));
-    assert.deepEqual(counts.rows[0], { calendars: 0, blueprints: 0, automations: 0, packages: 0 });
+        (select count(*)::int from close_reporting_packages where org_id = ${org.orgId} and name = 'Malformed Package') as packages`, "objects"));
+    assert.deepEqual(counts[0], { calendars: 0, blueprints: 0, automations: 0, packages: 0 });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -133,8 +133,8 @@ test("close policy saves emit one audit event for each mutation", async () => {
         from audit_log
        where org_id = ${org.orgId}
          and table_name = 'close_policies'
-         and action in ('insert', 'update')`));
-    assert.equal(audit.rows[0]?.count, 2);
+         and action in ('insert', 'update')`, "objects"));
+    assert.equal(audit[0]?.count, 2);
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);
@@ -174,8 +174,8 @@ test("close automation saves emit one audit event for each mutation", async () =
        where org_id = ${org.orgId}
          and table_name = 'close_automation_rules'
          and row_id = ${automationId}
-         and action in ('insert', 'update')`));
-    assert.equal(audit.rows[0]?.count, 2);
+         and action in ('insert', 'update')`, "objects"));
+    assert.equal(audit[0]?.count, 2);
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);
@@ -215,8 +215,8 @@ test("close calendar saves emit one audit event for each mutation", async () => 
        where org_id = ${org.orgId}
          and table_name = 'fiscal_calendars'
          and row_id = ${calendarId}
-         and action in ('insert', 'update')`));
-    assert.equal(audit.rows[0]?.count, 2);
+         and action in ('insert', 'update')`, "objects"));
+    assert.equal(audit[0]?.count, 2);
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);
@@ -249,9 +249,9 @@ test("close blueprint saves emit audit evidence for versioned mutations", async 
         from audit_log
        where org_id = ${org.orgId}
          and table_name = 'close_blueprints'
-         and action in ('insert', 'update')`));
+         and action in ('insert', 'update')`, "objects"));
     // The update versions the source row, so create + source deactivation + new version are three mutations.
-    assert.equal(audit.rows[0]?.count, 3);
+    assert.equal(audit[0]?.count, 3);
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);
@@ -293,8 +293,8 @@ test("close reporting-package saves emit one audit event for each mutation", asy
        where org_id = ${org.orgId}
          and table_name = 'close_reporting_packages'
          and row_id = ${packageId}
-         and action in ('insert', 'update')`));
-    assert.equal(audit.rows[0]?.count, 2);
+         and action in ('insert', 'update')`, "objects"));
+    assert.equal(audit[0]?.count, 2);
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);

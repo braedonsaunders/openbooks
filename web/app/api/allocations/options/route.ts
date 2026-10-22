@@ -52,8 +52,8 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       select id::text as id, ${label} as label from ${sql.raw(table)}
        where org_id = ${orgId} and is_active
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-       order by ${sql.raw(order)}`);
-    return rows.rows;
+       order by ${sql.raw(order)}`, "objects");
+    return rows;
   };
 
   const [accounts, departments, locations, classes, projects, books, periods, rules, reports, flows] = await Promise.all([
@@ -62,7 +62,7 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
         from accounts
        where org_id = ${orgId} and is_active and not is_summary
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-       order by number, name`),
+       order by number, name`, "objects"),
     named("departments", "name"),
     named("locations", "name"),
     named("classes", "name"),
@@ -71,13 +71,13 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       select id::text as id, code || ' · ' || name as label, code as extra
         from accounting_books
        where org_id = ${orgId} and is_active and posts_gl
-       order by is_primary desc, code`),
+       order by is_primary desc, code`, "objects"),
     db.execute<{ id: string; label: string; extra: string }>(sql`
       select p.id::text as id, ${periodDisplayLabelSql(locale, "p")} as label,
              p.starts_on::text || '…' || p.ends_on::text as extra
         from accounting_periods p
        where p.org_id = ${orgId}
-       order by p.starts_on desc, p.is_adjustment, p.id limit 24`),
+       order by p.starts_on desc, p.is_adjustment, p.id limit 24`, "objects"),
     db.execute<{ id: string; label: string; extra: string }>(sql`
       select id::text as id, name as label, key as extra
         from allocation_rules
@@ -88,12 +88,12 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
               and target.version_id = allocation_rules.current_version_id
               ${subsidiaryVisibleFilter(sql`target.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
          )`})
-       order by sort_order, name`),
+       order by sort_order, name`, "objects"),
     db.execute<{ id: string; label: string; extra: string }>(sql`
       select id::text as id, name as label, slug as extra
         from report_definitions
        where org_id = ${orgId} and archived_at is null
-       order by name`),
+       order by name`, "objects"),
     // Approval-flow picker (A14): only enabled flows authored over the
     // allocation_run subject can gate a run — every other kind would fail
     // closed at post time, so the picker never offers them.
@@ -101,7 +101,7 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       select id::text as id, name as label
         from flows
        where org_id = ${orgId} and enabled and subject_kind = 'allocation_run'
-       order by name`),
+       order by name`, "objects"),
   ]);
 
   let subsidiaries: Option[];
@@ -109,12 +109,10 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
     subsidiaries = await named("subsidiaries", "name", false);
   } else {
     const ids = [...gate.allowedSubsidiaryIds];
-    subsidiaries = ids.length === 0 ? [] : (
-      await db.execute<{ id: string; label: string }>(sql`
+    subsidiaries = ids.length === 0 ? [] : (await db.execute<{ id: string; label: string }>(sql`
         select id::text as id, name as label from subsidiaries
          where org_id = ${orgId} and is_active and id = any(${`{${ids.join(",")}}`}::uuid[])
-         order by name`)
-    ).rows;
+         order by name`, "objects"));
   }
 
   // An empty entity scope discloses none of the subsidiary-aware records,
@@ -137,11 +135,11 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       ) r on r.party_id = p.id
      where p.org_id = ${orgId} and p.is_active
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-     group by p.id order by p.display_name limit 5000`)).rows;
+     group by p.id order by p.display_name limit 5000`, "objects"));
 
-  const items = (await db.execute<Option>(sql`
+  const items = await db.execute<Option>(sql`
     select id::text as id, name as label, code as extra from items
-     where org_id = ${orgId} and is_active order by name limit 5000`)).rows;
+     where org_id = ${orgId} and is_active order by name limit 5000`, "objects");
 
   const segmentRows = emptyScope ? [] : (await db.execute<{ key: string; id: string; label: string; extra: string | null }>(sql`
     select sd.key as key, sv.id::text as id, sv.name as label, sv.code as extra
@@ -150,11 +148,11 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
      where sv.org_id = ${orgId} and sv.is_active
        and sd.org_id = ${orgId} and sd.is_active and sd.source_kind = 'custom'
        ${subsidiaryVisibleFilter(sql`sv.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-     order by sd.sort_order, sd.name, sv.name limit 5000`)).rows;
+     order by sd.sort_order, sd.name, sv.name limit 5000`, "objects"));
   const segmentDefs = emptyScope ? [] : (await db.execute<{ key: string; label: string }>(sql`
     select key, plural_name as label from segment_definitions
      where org_id = ${orgId} and is_active and source_kind = 'custom'
-     order by sort_order, name`)).rows;
+     order by sort_order, name`, "objects"));
   const segments: SegmentOptions[] = segmentDefs.map((def) => ({
     key: def.key,
     label: def.label,
@@ -163,22 +161,22 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       .map((row) => ({ id: row.id, label: row.label, ...(row.extra === null ? {} : { extra: row.extra }) })),
   }));
 
-  const expenseAccounts = (await db.execute<Option>(sql`select id::text, number || ' · ' || name as label from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'cogs', 'expense_other') ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by number, name`)).rows;
-  const payComponents = (await db.execute<Option>(sql`select id::text, code || ' · ' || name as label from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') order by sequence, code`)).rows;
+  const expenseAccounts = await db.execute<Option>(sql`select id::text, number || ' · ' || name as label from accounts where org_id = ${orgId} and is_active and not is_summary and type in ('expense', 'cogs', 'expense_other') ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by number, name`, "objects");
+  const payComponents = await db.execute<Option>(sql`select id::text, code || ' · ' || name as label from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') order by sequence, code`, "objects");
   return NextResponse.json({
     expenseAccounts,
     payComponents,
-    accounts: accounts.rows,
+    accounts,
     departments,
     locations,
     classes,
     projects,
     subsidiaries,
-    books: books.rows,
-    periods: periods.rows,
-    rules: rules.rows,
-    reports: reports.rows,
-    flows: flows.rows,
+    books,
+    periods,
+    rules,
+    reports,
+    flows,
     measures: NATIVE_MEASURES.map((measure) => ({ id: measure, label: measure })),
     parties,
     items,

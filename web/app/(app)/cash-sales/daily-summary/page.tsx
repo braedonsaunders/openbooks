@@ -40,8 +40,8 @@ export default async function CashDailySummary() {
        where org_id = ${authz.user.orgId} and is_active and not is_summary
          and type in ('asset_bank', 'asset_current_other')
          ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope, { orgWideNull: true })}
-       order by number nulls last, name`).then((r) =>
-      r.rows.map((row) => ({
+       order by number nulls last, name`, 'objects').then((r) =>
+      r.map((row) => ({
         value: row.id,
         label: [row.number, row.name].filter(Boolean).join(' — '),
       })),
@@ -58,8 +58,8 @@ export default async function CashDailySummary() {
       rows.map((row) => ({ value: row.id, label: row.display_name })),
     ),
     db
-      .execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`)
-      .then((r) => r.rows[0]?.base_currency ?? 'CAD'),
+      .execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${authz.user.orgId}`, 'objects')
+      .then((r) => r[0]?.base_currency ?? 'CAD'),
     businessToday(authz.user.orgId),
   ])
   const optionLabel = (option: { id: string; label?: string; number?: string; name?: string; code?: string }) =>

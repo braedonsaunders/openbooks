@@ -114,7 +114,7 @@ async function subsidiaryProblem(platform: OrderEditServices['platform'], orgId:
   const row = (await platform.db.execute<{ name: string; isActive: boolean; isElimination: boolean }>(platform.sql`
     select name, is_active as "isActive", is_elimination as "isElimination"
       from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId}`)).rows[0]
+     where org_id = ${orgId} and id = ${subsidiaryId}`, 'objects'))[0]
   if (!row) return `no subsidiary "${subsidiaryId}" in this organization — check the id and try again`
   if (!row.isActive) return `subsidiary "${row.name}" is inactive — reactivate it or choose an active subsidiary`
   return `subsidiary "${row.name}" is an elimination entity — choose an operating subsidiary`
@@ -129,12 +129,12 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
     allowedSubsidiaryIds: context.allowedSubsidiaryIds,
   };
   const existing = (await services.platform.db.execute<{ status: string; document_date: string; currency: string; party_id: string | null; subsidiaryId: string | null; updated_at: string }>(
-    services.platform.sql`select status, document_date, currency, party_id, subsidiary_id as "subsidiaryId", ${services.platform.documentRevisionCounterSql(services.platform.sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+    services.platform.sql`select status, document_date, currency, party_id, subsidiary_id as "subsidiaryId", ${services.platform.documentRevisionCounterSql(services.platform.sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`, 'objects',
   ))
-  if (!existing.rows[0]) return notFound("record")
-  const recordDenied = services.authz.guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
+  if (!existing[0]) return notFound("record")
+  const recordDenied = services.authz.guardSubsidiaryScope(gate, existing[0].subsidiaryId)
   if (recordDenied) return recordDenied
-  const status = existing.rows[0].status
+  const status = existing[0].status
 
   const body = input
 
@@ -257,8 +257,8 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
       select 1 from subsidiaries
        where id = ${body.subsidiaryId} and org_id = ${user.orgId}
          and is_active and not is_elimination
-    `))
-    if (!subsidiary.rows[0]) {
+    `, 'objects'))
+    if (!subsidiary[0]) {
       throw new OrderEditError(422, { error: await subsidiaryProblem(services.platform, user.orgId, body.subsidiaryId) })
     }
   } else if (body.subsidiaryId === null && gate.allowedSubsidiaryIds) {
@@ -278,7 +278,7 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
       // the void pipeline. requestDocumentVoid re-checks the same token
       // inside its claim transaction, so a row that changes after this
       // probe still cannot be voided from the stale view.
-      if (staleRevision(body.expectedUpdatedAt, existing.rows[0].updated_at)) {
+      if (staleRevision(body.expectedUpdatedAt, existing[0].updated_at)) {
         throw new OrderEditError(409, { error: STALE_REVISION })
       }
       try {
@@ -336,8 +336,8 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
-      `))
-      const current = locked.rows[0]
+      `, 'objects'))
+      const current = locked[0]
       if (!current) return notFound("record")
       // The aggregate lock is held: recheck scope against the locked row —
       // the route pre-check ran unlocked, so a rehome landing between the
@@ -456,7 +456,7 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
     }
     const computed = services.order.computeOrderTotals(
       valid,
-      await services.order.orderTaxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
+      await services.order.orderTaxProfileMap(user.orgId, body.documentDate ?? existing[0].document_date),
     )
     const subtotal = services.order.exactOrderMoney(computed.subtotal)
     if (subtotal === 'invalid') {
@@ -500,9 +500,9 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
       const priceBasis = await resolveLinePriceBasis({
         lineNumber: i + 1,
         orgId: user.orgId,
-        customerId: body.partyId !== undefined ? body.partyId : existing.rows[0].party_id,
-        currency: existing.rows[0].currency,
-        documentDate: body.documentDate ?? existing.rows[0].document_date,
+        customerId: body.partyId !== undefined ? body.partyId : existing[0].party_id,
+        currency: existing[0].currency,
+        documentDate: body.documentDate ?? existing[0].document_date,
         line: l,
         overallItemQuantity: itemQuantities.get(l.itemId ?? '') ?? (l.quantity ?? '0'),
       })
@@ -525,13 +525,13 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
     if (!(await services.features.isFeatureEnabled(user.orgId, 'inventory'))) {
       const stored = (await services.platform.db.execute<{ item_id: string }>(services.platform.sql`
         select item_id from document_lines
-         where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`))
-      const storedIds = new Set(stored.rows.map((row) => row.item_id))
+         where org_id = ${user.orgId} and document_id = ${id} and item_id is not null`, 'objects'))
+      const storedIds = new Set(stored.map((row) => row.item_id))
       for (const l of preparedLines) {
         if (!l.itemId || storedIds.has(l.itemId)) continue
         const item = (await services.platform.db.execute<{ kind: string }>(services.platform.sql`
-          select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`))
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`, 'objects'))
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           return notFound("record")
         }
       }
@@ -557,15 +557,15 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
         from documents
        where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
        for update
-    `))
-    if (!locked.rows[0]) return 'not_found' as const
+    `, 'objects'))
+    if (!locked[0]) return 'not_found' as const
     // The aggregate lock is held: recheck scope against the locked row —
     // the pre-check above ran unlocked, so a rehome landing between the
     // two must deny here rather than save into the new subsidiary.
-    const lockedDenied = services.authz.guardSubsidiaryScope(gate, locked.rows[0].subsidiaryId)
+    const lockedDenied = services.authz.guardSubsidiaryScope(gate, locked[0].subsidiaryId)
     if (lockedDenied) return lockedDenied
-    if (staleRevision(body.expectedUpdatedAt, locked.rows[0].updated_at)) return 'stale' as const
-    if (locked.rows[0].status !== 'draft') return 'not_editable' as const
+    if (staleRevision(body.expectedUpdatedAt, locked[0].updated_at)) return 'stale' as const
+    if (locked[0].status !== 'draft') return 'not_editable' as const
 
     if (preparedLines) {
       await tx.execute(services.platform.sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
@@ -584,10 +584,10 @@ export async function applyOrderEdit(context: OrderEditContext, cfg: OrderHandle
                   ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb,
                   ${l.workFrom ?? null}, ${l.workTo ?? null})
           returning id
-        `))
+        `, 'objects'))
         await services.bills.persistLineTaxComponents(tx, {
           orgId: user.orgId,
-          documentLineId: inserted.rows[0]!.id,
+          documentLineId: inserted[0]!.id,
           components: l.taxComponents,
           actorId: user.id,
         })

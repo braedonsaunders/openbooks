@@ -27,9 +27,9 @@ export const GET = defineRoute({ authorize: authorizeTransfers, feature: transfe
   handler: async ({ authz }) => withOrgTransaction(authz.user.orgId, async () => {
     // Recent metadata never exposes source samples or findings after a grant
     // change. Opening the job rechecks its resource authority separately.
-    const jobs = (await db.execute<TransferSummary>(sql`select id,kind,file_name as filename,state from data_transfer_jobs
+    const jobs = await db.execute<TransferSummary>(sql`select id,kind,file_name as filename,state from data_transfer_jobs
       where org_id=${authz.user.orgId} and actor_id=${authz.user.id} and ${transferMetadataScope(authz.allowedSubsidiaryIds, sql`scope`)}
-      order by created_at desc,id desc limit 20`)).rows
+      order by created_at desc,id desc limit 20`, 'objects')
     return NextResponse.json({ jobs }, { headers: { 'Cache-Control': 'no-store' } })
   }),
 })

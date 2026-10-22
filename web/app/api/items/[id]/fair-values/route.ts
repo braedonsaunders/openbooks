@@ -36,8 +36,8 @@ const fairValueUpdateBody = fairValueCreateBody.extend({ id: uuidId })
  */
 
 async function itemExists(id: string, orgId: string) {
-  const r = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`)))
-  return Boolean(r.rows[0])
+  const r = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${orgId}`, 'objects')))
+  return Boolean(r[0])
 }
 
 function money(value: unknown): string | null | 'range' | 'unreadable' {
@@ -66,13 +66,13 @@ export const GET = defineRoute({ permission: 'items.read', feature: 'revenueReco
     select id, currency, unit_price, low_value, high_value, effective_from, effective_to, is_active
       from fair_value_prices
      where org_id = ${gate.user.orgId} and item_id = ${id}
-     order by currency, effective_from desc nulls last`)))
+     order by currency, effective_from desc nulls last`, 'objects')))
   // The picker offers the organization's enabled currencies, once each.
   const seen = new Set<string>()
   const currencies = (await organizationCurrencyOptions(db, gate.user.orgId, gate.allowedSubsidiaryIds))
     .filter((option) => (seen.has(option.value) ? false : (seen.add(option.value), true)))
     .map(({ value, label }) => ({ value, label }))
-  return NextResponse.json({ prices: rows.rows, currencies })
+  return NextResponse.json({ prices: rows, currencies })
 } })
 
 /** Shared field extraction/validation for POST and PATCH. */
@@ -126,8 +126,8 @@ export const POST = defineRoute({
         (${orgId}, ${id}, ${parsed.currency}, ${parsed.unitPrice}, ${parsed.lowValue}, ${parsed.highValue},
          ${parsed.effectiveFrom}, ${parsed.effectiveTo}, ${parsed.isActive}, ${actorId}, ${actorId})
       returning *
-    `))
-    const createdRow = row.rows[0]!
+    `, 'objects'))
+    const createdRow = row[0]!
     await auditSetupChange({
       orgId,
       table: 'fair_value_prices',
@@ -156,8 +156,8 @@ export const PATCH = defineRoute({
     const before = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
       for update
-    `)))
-    if (!before.rows[0]) {
+    `, 'objects')))
+    if (!before[0]) {
       recordMissing = true
       return
     }
@@ -169,13 +169,13 @@ export const PATCH = defineRoute({
         is_active = ${parsed.isActive}, updated_at = now(), updated_by = ${actorId}
        where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
       returning *
-    `)))
+    `, 'objects')))
     await auditSetupChange({
       orgId,
       table: 'fair_value_prices',
       rowId,
       action: 'update',
-      changes: { before: before.rows[0], after: updated.rows[0] },
+      changes: { before: before[0], after: updated[0] },
       actorId,
     }, tx)
   })
@@ -196,8 +196,8 @@ export const DELETE = defineRoute({
     const existing = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
       for update
-    `)))
-    if (!existing.rows[0]) {
+    `, 'objects')))
+    if (!existing[0]) {
       recordMissing = true
       return
     }
@@ -209,7 +209,7 @@ export const DELETE = defineRoute({
       table: 'fair_value_prices',
       rowId,
       action: 'delete',
-      changes: { before: existing.rows[0] },
+      changes: { before: existing[0] },
       actorId,
     }, tx)
   })

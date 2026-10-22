@@ -198,13 +198,14 @@ function stubContext(
     // The sealed profile BSN verifies (the suite always sets OPENBOOKS_DATA_KEY), so unit runs
     // price the standard tables, never the anonymous rate.
     tx: {
-      execute: (async (query: unknown) => {
+      execute: (async (query: unknown, mode?: string) => {
+        const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
         assert.ok(query instanceof SQL);const text=new PgDialect().sqlToQuery(query).sql;
-        if(text.includes("sin_encrypted"))return {rows:[{sin_encrypted:sealSecret("123456782",{orgId:"11111111-1111-4111-8111-111111111111",purpose:"payroll.employee.sin"})}]};
-        if(text.includes("d.kind='pay_run'"))return {rows:[{subsidiaryId:"44444444-4444-4444-8444-444444444444",currency:"EUR",taxYear:2026}]};
-        if(text.includes('select s.id from pay_stubs s'))return {rows:[]};
-        if(text.includes('jsonb_array_elements_text'))return {rows:[]};
-      if(text.includes('history_run_pay_date'))return {rows:[{sv:"0"}]};
+        if(text.includes("sin_encrypted"))return inMode({rows:[{sin_encrypted:sealSecret("123456782",{orgId:"11111111-1111-4111-8111-111111111111",purpose:"payroll.employee.sin"})}]});
+        if(text.includes("d.kind='pay_run'"))return inMode({rows:[{subsidiaryId:"44444444-4444-4444-8444-444444444444",currency:"EUR",taxYear:2026}]});
+        if(text.includes('select s.id from pay_stubs s'))return inMode({rows:[]});
+        if(text.includes('jsonb_array_elements_text'))return inMode({rows:[]});
+      if(text.includes('history_run_pay_date'))return inMode({rows:[{sv:"0"}]});
         throw new Error('Unexpected database read outside the declared Dutch statutory history fixture');
       }),
     } as never,

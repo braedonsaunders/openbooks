@@ -30,10 +30,10 @@ export async function retirementFingerprint(catalog: Catalog, orgId: string): Pr
       select ${table.name}::text as "table",count(*)::text as count,
         encode(digest(coalesce(string_agg(row_hash,E'\n' order by row_hash),''),'sha256'),'hex') as digest
       from (select encode(digest(to_jsonb(owned_row)::text,'sha256'),'hex') as row_hash
-        from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`), sql` union all `));
+        from public.${sql.identifier(table.name)} owned_row where ${retirementPredicate(table, orgId)}) owned_rows`), sql` union all `), "objects");
     const requested = new Set(batch.map(table => table.name));
     const received = new Map<string, RetirementFingerprint["tables"][number]>();
-    for (const row of result.rows) {
+    for (const row of result) {
       if (!requested.has(row.table)) throw new Error(`Unexpected retirement fingerprint table ${row.table}`);
       if (received.has(row.table)) throw new Error(`Duplicate retirement fingerprint for ${row.table}`);
       if (typeof row.count !== "string" || !/^(0|[1-9][0-9]*)$/.test(row.count)
@@ -133,9 +133,9 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
         )
         select (select count(*)::text from owned_batch) as expected,
           (select count(*)::text from deleted) as removed,
-          ${journal ? sql`(select entry_id::text from candidates order by entry_id desc limit 1)` : sql`null::text`} as "nextEntryId"`);
-      const row = result.rows[0];
-      if (result.rows.length !== 1 || !row || typeof row.expected !== "string" || typeof row.removed !== "string"
+          ${journal ? sql`(select entry_id::text from candidates order by entry_id desc limit 1)` : sql`null::text`} as "nextEntryId"`, "objects");
+      const row = result[0];
+      if (result.length !== 1 || !row || typeof row.expected !== "string" || typeof row.removed !== "string"
           || !/^(0|[1-9][0-9]*)$/.test(row.expected) || !/^(0|[1-9][0-9]*)$/.test(row.removed)
           || row.expected !== row.removed) {
         throw new Error(`Retirement did not remove exactly its claimed ${table.name} batch`);
@@ -150,7 +150,7 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
   };
   const targets = catalog.tenantTables.filter(t => t.name !== "orgs");
   const byName = new Map(targets.map(table => [table.name, table]));
-  const foreignKeys = (await db.execute<RetirementForeignKey & Record<string, unknown>>(sql`
+  const foreignKeys = await db.execute<RetirementForeignKey & Record<string, unknown>>(sql`
     select c.relname as table,p.relname as "referencedTable",fk.confdeltype::text as "deleteAction",fk.condeferrable as deferrable,
       array_agg(child.attname::text order by position) as columns,array_agg(parent.attname::text order by position) as "referencedColumns"
     from pg_constraint fk join pg_class c on c.oid=fk.conrelid join pg_namespace n on n.oid=c.relnamespace
@@ -159,7 +159,7 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
     join pg_attribute child on child.attrelid=fk.conrelid and child.attnum=fk.conkey[position]
     join pg_attribute parent on parent.attrelid=fk.confrelid and parent.attnum=fk.confkey[position]
     where n.nspname='public' and pn.nspname='public' and fk.contype='f'
-    group by c.relname,p.relname,fk.oid,fk.confdeltype,fk.condeferrable order by c.relname,p.relname,fk.oid`)).rows;
+    group by c.relname,p.relname,fk.oid,fk.confdeltype,fk.condeferrable order by c.relname,p.relname,fk.oid`, "objects");
   const order = retirementDeletionOrder(targets.map(table => table.name), foreignKeys);
   const selfEdges = foreignKeys.filter(edge => edge.table === edge.referencedTable && (edge.deleteAction !== "a" || !edge.deferrable));
   const removed: Record<string, string> = {};
@@ -178,10 +178,10 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
       await db.execute(sql`savepoint retirement_table`);
       try {
         const count = await deleteBatches(table, leaves);
-        const remaining = await db.execute(sql`select 1 from public.${sql.identifier(name)} where ${retirementPredicate(table, orgId)} limit 1`);
+        const remaining = await db.execute(sql`select 1 from public.${sql.identifier(name)} where ${retirementPredicate(table, orgId)} limit 1`, "objects");
         await db.execute(sql`release savepoint retirement_table`);
         removed[name] = (BigInt(removed[name] ?? "0") + count).toString();
-        if (!remaining.rows.length) progress = true;
+        if (!remaining.length) progress = true;
         else { refused.push(name); if (count > 0n) progress = true; }
       } catch (error) {
         await db.execute(sql`rollback to savepoint retirement_table`);
@@ -193,8 +193,8 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
     if (!progress) throw new Error(`Retirement cannot remove native foreign-key cycles without changing protected rows: ${refused.join(", ")}. Target transaction rolled back; preserve its quarantine and recovery evidence.`);
     pending = refused;
   }
-  const result = await db.execute(sql`delete from public.orgs where id=${orgId}::uuid returning id`);
-  if (result.rows.length !== 1) throw new Error("Retirement did not delete exactly its owned organization");
+  const result = await db.execute(sql`delete from public.orgs where id=${orgId}::uuid returning id`, "objects");
+  if (result.length !== 1) throw new Error("Retirement did not delete exactly its owned organization");
   removed.orgs = "1";
   // Deferred guards and FK constraints must succeed before the durable receipt.
   await db.execute(sql`set constraints all immediate`);
@@ -214,17 +214,17 @@ export async function unclassifiedRetirementChildren(tenantTables: readonly stri
         where fk.contype='f' and fk.conrelid=child.oid and parent.relname=any(${sql.param(known)}::text[]))
       or exists (select 1 from pg_attribute a where a.attrelid=child.oid and not a.attisdropped
         and a.atttypid='uuid'::regtype and (a.attname='user_id' or a.attname like '%_user_id')))
-    order by child.relname`);
-  return result.rows.map(row => row.table);
+    order by child.relname`, "objects");
+  return result.map(row => row.table);
 }
 
 /** Published and withdrawn marketplace snapshots retain their publisher.
  * Withdrawal preserves the shared row and therefore cannot authorize deletion. */
 export async function retirementSharedDependencies(orgIds: readonly string[]) {
-  return (await db.execute<{ table: string; orgId: string; count: string }>(sql`
+  return await db.execute<{ table: string; orgId: string; count: string }>(sql`
     select 'app_listings' as table,publisher_org_id as "orgId",count(*)::text as count
     from public.app_listings where publisher_org_id=any(${sql.param([...orgIds])}::uuid[])
-    group by publisher_org_id order by publisher_org_id`)).rows;
+    group by publisher_org_id order by publisher_org_id`, "objects");
 }
 
 /** Queued or leased work must be resolved through its native lifecycle before
@@ -243,6 +243,6 @@ export async function retirementOutstandingWork(orgIds: readonly string[]) {
     union all select 'payment_runs',org_id,count(*)::text from payment_runs where org_id=any(${sql.param([...orgIds])}::uuid[]) and status='processing' group by org_id
     union all select 'payment_files',org_id,count(*)::text from payment_files where org_id=any(${sql.param([...orgIds])}::uuid[]) and status in ('delivering','delivery_uncertain') group by org_id
     union all select 'sftp_import_schedules',org_id,count(*)::text from sftp_import_schedules where org_id=any(${sql.param([...orgIds])}::uuid[]) and run_claim_token is not null group by org_id
-    order by 1,2`);
-  return result.rows;
+    order by 1,2`, "objects");
+  return result;
 }

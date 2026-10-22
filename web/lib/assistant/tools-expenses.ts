@@ -85,7 +85,7 @@ const listExpenseReports: AssistantToolDef = {
          where d.org_id = ${authz.user.orgId} and d.kind = 'expense_report'${filters}${scope}
          order by d.document_date desc, d.created_at desc
          limit ${limit}
-      `),
+      `, "objects"),
       db.execute<Record<string, unknown>>(sql`
         select d.status, d.currency, count(*)::int as count,
                coalesce(sum(d.total), 0)::text as total,
@@ -94,10 +94,10 @@ const listExpenseReports: AssistantToolDef = {
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.kind = 'expense_report'${filters}${scope}
          group by d.status, d.currency order by d.status, d.currency
-      `),
+      `, "objects"),
     ]);
     const capped = capList(
-      page.rows.map((r) => ({
+      page.map((r) => ({
         reportId: r.id,
         documentNumber: r.document_number,
         documentDate: r.document_date,
@@ -116,10 +116,10 @@ const listExpenseReports: AssistantToolDef = {
       ok: true,
       data: {
         returned: capped.items.length,
-        total: byStatus.rows.reduce((n, r) => n + Number(r.count ?? 0), 0),
+        total: byStatus.reduce((n, r) => n + Number(r.count ?? 0), 0),
         truncated: capped.truncated,
         reports: capped.items,
-        byStatus: byStatus.rows.map((r) => ({
+        byStatus: byStatus.map((r) => ({
           status: r.status,
           currency: r.currency,
           count: Number(r.count ?? 0),

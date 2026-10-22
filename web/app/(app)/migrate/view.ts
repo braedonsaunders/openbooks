@@ -35,10 +35,10 @@ export interface MigrationCutoverData {
 }
 
 async function chartPostingAccounts(orgId: string): Promise<CutoverAccountChoice[]> {
-  const rows = (await db.execute<{ id: string; number: string | null; name: string }>(sql`
+  const rows = await db.execute<{ id: string; number: string | null; name: string }>(sql`
     select id, number, name from accounts
      where org_id = ${orgId} and is_active and not is_summary
-     order by number nulls last, name`)).rows
+     order by number nulls last, name`, 'objects')
   return rows.map((row) => ({ id: row.id, number: row.number, name: row.name }))
 }
 

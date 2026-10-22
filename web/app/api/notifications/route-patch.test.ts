@@ -52,16 +52,17 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.notifications-route-test')]
       const sqlText = globalThis.openbooksSqlTextNotifications
       export const db = {
-        execute: (query) => {
+        execute: (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
           if (/update\\s+notifications\\s+set\\s+read_at/i.test(text)) {
-            return Promise.resolve({ rows: state.unreadIds.map((id) => ({ id })) })
+            return Promise.resolve({ rows: state.unreadIds.map((id) => ({ id })) }).then(inMode)
           }
           if (/count\\(\\*\\)/i.test(text)) {
-            return Promise.resolve({ rows: [{ n: state.unreadIds.length + state.readIds.length }] })
+            return Promise.resolve({ rows: [{ n: state.unreadIds.length + state.readIds.length }] }).then(inMode)
           }
-          return Promise.resolve({ rows: [] })
+          return Promise.resolve({ rows: [] }).then(inMode)
         },
       }
       export async function withOrgTransaction(_orgId, work) { return work() }

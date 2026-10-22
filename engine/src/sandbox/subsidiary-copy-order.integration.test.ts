@@ -19,7 +19,7 @@ for (const tier of ["full", "masked", "dev", "as_of"] as const) {
       await db.execute(sql`update subsidiaries set name='Root moved after children' where id=${org.subsidiaryId}`);
       sandbox = await createSandbox({ productionOrgId: org.orgId, name: 'Scratch ordered tree', tier, masked: tier === 'masked', asOfPeriodId: tier === 'as_of' ? org.periodId : null });
       await refreshSandbox(sandbox.sandboxId);
-      const copied = (await db.execute<{ id: string; parent_id: string | null }>(sql`select id,parent_id from subsidiaries where org_id=${sandbox!.sandboxOrgId}`)).rows;
+      const copied = await db.execute<{ id: string; parent_id: string | null }>(sql`select id,parent_id from subsidiaries where org_id=${sandbox!.sandboxOrgId}`, "objects");
       assert.equal(copied.length, 3);
       const root = copied.find(row => row.parent_id === null)!;
       assert.ok(root);

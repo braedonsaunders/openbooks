@@ -97,7 +97,7 @@ async function seedSalesOrder(
     select (revision_seq)::text as updated_at
       from documents
      where id = ${id} and org_id = ${org.orgId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   return { id, updatedAt: updated.updated_at };
 }
 
@@ -254,13 +254,13 @@ test(
       );
       assert.match(refusal.message, /310\.0100 CAD.*310\.0000 CAD/);
 
-      const states = (await db.execute<{ document_number: string; status: string }>(sql`
+      const states = await db.execute<{ document_number: string; status: string }>(sql`
         select document_number, status
           from documents
          where org_id = ${org.orgId}
            and id in (${below.id}, ${at.id}, ${over.id})
          order by document_number
-      `)).rows;
+      `, "objects");
       assert.deepEqual(states, [
         { document_number: "SO-CREDIT-AT-1", status: "approved" },
         { document_number: "SO-CREDIT-BELOW-1", status: "approved" },
@@ -305,13 +305,13 @@ test(
           && result.reason.code === "CUSTOMER_CREDIT_LIMIT_EXCEEDED",
       ).length, 1);
 
-      const states = (await db.execute<{ status: string; count: number }>(sql`
+      const states = await db.execute<{ status: string; count: number }>(sql`
         select status, count(*)::int as count
           from documents
          where org_id = ${org.orgId} and id in (${first.id}, ${second.id})
          group by status
          order by status
-      `)).rows;
+      `, "objects");
       assert.deepEqual(states, [
         { status: "approved", count: 1 },
         { status: "draft", count: 1 },
@@ -431,7 +431,7 @@ test(
            and action = 'approve'
          order by at desc
          limit 1
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(evidence, {
         id: evidence.id,
         actor_id: approverId,

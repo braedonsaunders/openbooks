@@ -443,8 +443,8 @@ test("an empty milestone schedule reports a problem and never satisfies the obli
     );
 
     const status = (await db.execute<{ status: string }>(sql`
-      select status from performance_obligations where id = ${obligationId}`));
-    assert.equal(status.rows[0]!.status, "open");
+      select status from performance_obligations where id = ${obligationId}`, "objects"));
+    assert.equal(status[0]!.status, "open");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -492,8 +492,8 @@ test("buildRecognitionSchedule throws when a planned month has no accounting per
 
     const schedule = (await db.execute<{ line_count: string }>(sql`
       select count(*)::text as line_count from recognition_schedule_lines
-       where schedule_id in (select id from recognition_schedules where obligation_id = ${obligationId} and org_id = ${org.orgId})`));
-    assert.equal(Number(schedule.rows[0]!.line_count), 0, "no schedule lines should be persisted for a failed build");
+       where schedule_id in (select id from recognition_schedules where obligation_id = ${obligationId} and org_id = ${org.orgId})`, "objects"));
+    assert.equal(Number(schedule[0]!.line_count), 0, "no schedule lines should be persisted for a failed build");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -505,7 +505,7 @@ test("a schedule rebuild names the already-posted months it skips", { skip: !DB 
   try {
     // Second month so the two-month term spans two periods.
     const calId = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calId})`);
@@ -560,7 +560,7 @@ test("milestone events produce a non-zero recognition schedule and post through 
   try {
     // Create additional accounting periods for the event months.
     const calId = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"))[0]!.id;
     for (const { year, num, name, start, end } of [
       { year: 2026, num: 1, name: "2026-01", start: "2026-01-01", end: "2026-01-31" },
       { year: 2026, num: 2, name: "2026-02", start: "2026-02-01", end: "2026-02-28" },
@@ -615,8 +615,8 @@ test("milestone events produce a non-zero recognition schedule and post through 
     assert.equal(run.totalAmount, "5000.0000");
     // Obligation should be satisfied.
     const status = (await db.execute<{ status: string }>(sql`
-      select status from performance_obligations where id = ${obligationId}`));
-    assert.equal(status.rows[0]!.status, "satisfied");
+      select status from performance_obligations where id = ${obligationId}`, "objects"));
+    assert.equal(status[0]!.status, "satisfied");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -627,7 +627,7 @@ test("usage events produce a non-zero recognition schedule with correct amounts"
   const actorId = randomUUID();
   try {
     const calId = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${org.orgId}, 2026, 1, '2026-01', '2026-01-01', '2026-01-31', false, ${calId})`);
@@ -711,7 +711,7 @@ test("milestone schedule rebuilds on new event and preserves posted history", { 
   const actorId = randomUUID();
   try {
     const calId = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"))[0]!.id;
     // Create periods for Jan and Feb 2026.
     for (const { num, name, start, end } of [
       { num: 1, name: "2026-01", start: "2026-01-01", end: "2026-01-31" },
@@ -813,13 +813,13 @@ test("recognition event storage keeps legacy NULL rows readable but rejects new 
         from information_schema.columns
        where table_schema = 'public'
          and table_name = 'recognition_events'
-         and column_name = 'source_reference'`)).rows[0]!;
+         and column_name = 'source_reference'`, "objects"))[0]!;
     assert.equal(column.is_nullable, "YES", "legacy source references remain physically nullable");
     const constraint = (await db.execute<{ convalidated: boolean }>(sql`
       select convalidated
         from pg_constraint
        where conrelid = 'public.recognition_events'::regclass
-         and conname = 'recognition_events_source_reference_nonblank'`)).rows[0]!;
+         and conname = 'recognition_events_source_reference_nonblank'`, "objects"))[0]!;
     assert.equal(constraint.convalidated, false, "the strict source-key check remains NOT VALID for legacy rows");
 
     const legacyId = randomUUID();
@@ -841,7 +841,7 @@ test("recognition event storage keeps legacy NULL rows readable but rejects new 
             and length(btrim(source_reference)) between 1 and 500
           ) not valid`);
       const legacy = (await tx.execute<{ source_reference: string | null }>(sql`
-        select source_reference from recognition_events where id = ${legacyId}`)).rows[0]!;
+        select source_reference from recognition_events where id = ${legacyId}`, "objects"))[0]!;
       assert.equal(legacy.source_reference, null, "a pre-0074 NULL event remains readable");
     });
 
@@ -919,7 +919,7 @@ test("recognition event retries replay one event and reject payload changes", { 
           where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as events,
         (select count(*)::text from recognition_schedule_lines line
           join recognition_schedules schedule on schedule.id = line.schedule_id
-         where schedule.org_id = ${fixture.org.orgId} and schedule.obligation_id = ${fixture.obligationId}) as lines`)).rows[0]!;
+         where schedule.org_id = ${fixture.org.orgId} and schedule.obligation_id = ${fixture.obligationId}) as lines`, "objects"))[0]!;
     assert.equal(counts.events, "1");
     assert.equal(counts.lines, "1", "the retry does not rebuild a duplicate schedule line");
   } finally {
@@ -950,7 +950,7 @@ test("concurrent recognition event retries converge on one event and schedule", 
           where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as events,
         (select count(*)::text from recognition_schedule_lines line
           join recognition_schedules schedule on schedule.id = line.schedule_id
-         where schedule.org_id = ${fixture.org.orgId} and schedule.obligation_id = ${fixture.obligationId}) as lines`)).rows[0]!;
+         where schedule.org_id = ${fixture.org.orgId} and schedule.obligation_id = ${fixture.obligationId}) as lines`, "objects"))[0]!;
     assert.equal(counts.events, "1");
     assert.equal(counts.lines, "1");
   } finally {
@@ -977,7 +977,7 @@ test("recognition event and schedule rebuild roll back together on failure", { s
         (select count(*)::text from recognition_events
           where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as events,
         (select count(*)::text from recognition_schedules
-          where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as schedules`)).rows[0]!;
+          where org_id = ${fixture.org.orgId} and obligation_id = ${fixture.obligationId}) as schedules`, "objects"))[0]!;
     assert.equal(rolledBack.events, "0");
     assert.equal(rolledBack.schedules, "0", "a failed all-book rebuild leaves no partial schedule");
 
@@ -1064,8 +1064,8 @@ async function scheduledLines(orgId: string, obligationId: string): Promise<Book
     select s.book_id, l.planned_amount, l.period_id
       from recognition_schedule_lines l
       join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
-     where s.obligation_id = ${obligationId} and l.org_id = ${orgId}`);
-  return r.rows.map((row) => ({ bookId: row.book_id, planned: row.planned_amount, periodId: row.period_id }));
+     where s.obligation_id = ${obligationId} and l.org_id = ${orgId}`, "objects");
+  return r.map((row) => ({ bookId: row.book_id, planned: row.planned_amount, periodId: row.period_id }));
 }
 
 test("multi-book percent-complete sync plans every book from one source value", { skip: !DB }, async () => {
@@ -1123,8 +1123,8 @@ test("forced crash between books during multi-book sync leaves zero changes", { 
       .transaction(async (realTx) => {
         const realTxTyped = realTx as SqlExecutor;
         const faultTx: SqlExecutor = {
-          execute: ((query) => {
-            const r = realTxTyped.execute(query);
+          execute: ((query: Parameters<SqlExecutor["execute"]>[0], mode?: "objects") => {
+            const r = realTxTyped.execute(query, mode as "objects");
             if (/insert into recognition_schedule_lines/i.test(sqlText(query))) {
               lineInserts++;
               // Throw while the second book's line is being written.

@@ -41,7 +41,7 @@ async function disableRevenueContracts(orgId: string): Promise<void> {
 async function seedDealPeriods(org: Org): Promise<void> {
   const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
     select fiscal_calendar_id from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0];
+     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects"))[0];
   assert.ok(calendar?.fiscal_calendar_id);
   for (let year = 2026; year <= 2029; year += 1) {
     for (let month = 1; month <= 12; month += 1) {
@@ -124,10 +124,10 @@ async function seedSalesOrder(
               ${`Year ${lineNumber} service`}, '1', ${line.amount}, ${line.amount},
               '0', '{}'::jsonb, '{}'::jsonb, ${adminId}, ${adminId})`);
   }
-  const approved = (await db.execute<{ id: string }>(sql`
+  const approved = await db.execute<{ id: string }>(sql`
     update documents set status = 'approved', updated_at = now()
      where id = ${orderId} and org_id = ${org.orgId} and status = 'draft'
-    returning id`)).rows;
+    returning id`, "objects");
   assert.equal(approved.length, 1);
   return { orderId, lineIds };
 }
@@ -182,9 +182,9 @@ async function postOrderInvoice(
 }
 
 async function allocatedSum(orgId: string, contractId: string): Promise<string> {
-  const rows = (await db.execute<{ allocated_price: string }>(sql`
+  const rows = await db.execute<{ allocated_price: string }>(sql`
     select allocated_price from performance_obligations
-     where org_id = ${orgId} and contract_id = ${contractId}`)).rows;
+     where org_id = ${orgId} and contract_id = ${contractId}`, "objects");
   return rows.reduce((sum, row) => (Number(sum) + Number(row.allocated_price)).toFixed(4), "0.0000");
 }
 
@@ -211,7 +211,7 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     const shell = (await db.execute<{
       scope: string; status: string; total_consideration: string; source_document_id: string;
     }>(sql`select scope, status, total_consideration::text, source_document_id
-              from revenue_contracts where id = ${shellId} and org_id = ${org.orgId}`)).rows[0];
+              from revenue_contracts where id = ${shellId} and org_id = ${org.orgId}`, "objects"))[0];
     assert.equal(shell?.scope, "order");
     assert.equal(shell?.status, "draft");
     assert.equal(shell?.total_consideration, "0.0000");
@@ -223,9 +223,9 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
       { itemId: setupItemId, amount: "3000" },
       { itemId: org.items.service, amount: "12000" },
     ]);
-    const contracts = (await db.execute<{ id: string; status: string; total_consideration: string; modification_seq: number }>(sql`
+    const contracts = await db.execute<{ id: string; status: string; total_consideration: string; modification_seq: number }>(sql`
       select id, status, total_consideration::text, modification_seq from revenue_contracts
-       where org_id = ${org.orgId}`)).rows;
+       where org_id = ${org.orgId}`, "objects");
     assert.equal(contracts.length, 1);
     assert.equal(contracts[0]!.id, shellId);
     assert.equal(contracts[0]!.status, "active");
@@ -236,7 +236,7 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     assert.equal(await allocatedSum(org.orgId, shellId), "15000.0000");
     assert.equal((await db.execute<{ amount: string }>(sql`
       select amount::text as amount from revenue_contract_billings
-       where org_id = ${org.orgId} and contract_id = ${shellId}`)).rows.length, 1);
+       where org_id = ${org.orgId} and contract_id = ${shellId}`, "objects")).length, 1);
 
     await runRevenueRecognition(org.orgId, "2026-07-31", adminId);
     let position = await contractPosition(db, org.orgId, shellId);
@@ -251,9 +251,9 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     await postOrderInvoice(org, adminId, orderId, "INV-Y2", "2027-07-15", [
       { itemId: org.items.service, amount: "12000" },
     ]);
-    const yearTwo = (await db.execute<{ id: string; total_consideration: string; modification_seq: number }>(sql`
+    const yearTwo = await db.execute<{ id: string; total_consideration: string; modification_seq: number }>(sql`
       select id, total_consideration::text, modification_seq from revenue_contracts
-       where org_id = ${org.orgId}`)).rows;
+       where org_id = ${org.orgId}`, "objects");
     assert.equal(yearTwo.length, 1);
     assert.equal(yearTwo[0]!.id, shellId);
     assert.equal(yearTwo[0]!.total_consideration, "27000.0000");
@@ -289,8 +289,8 @@ test("order-scoped revenue contracts accumulate annual billings", { skip: !DB },
     await postOrderInvoice(org, adminId, order2, "INV-Y2-B", "2027-07-15", [
       { itemId: org.items.service, amount: "12000" },
     ]);
-    const scoped = (await db.execute<{ scope: string }>(sql`
-      select scope from revenue_contracts where org_id = ${org.orgId} order by created_at`)).rows;
+    const scoped = await db.execute<{ scope: string }>(sql`
+      select scope from revenue_contracts where org_id = ${org.orgId} order by created_at`, "objects");
     assert.deepEqual(scoped.map((row) => row.scope), ["order", "invoice", "invoice"]);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -313,11 +313,11 @@ test("cancelling one order billing preserves sibling recognition and uses its ac
     ]);
     const contractId = (await db.execute<{ contract_id: string }>(sql`
       select contract_id from revenue_contract_billings
-       where org_id = ${org.orgId} and document_id = ${firstInvoiceId}`)).rows[0]?.contract_id;
+       where org_id = ${org.orgId} and document_id = ${firstInvoiceId}`, "objects"))[0]?.contract_id;
     assert.ok(contractId);
     assert.equal((await db.execute<{ contract_id: string }>(sql`
       select contract_id from revenue_contract_billings
-       where org_id = ${org.orgId} and document_id = ${targetInvoiceId}`)).rows[0]?.contract_id, contractId);
+       where org_id = ${org.orgId} and document_id = ${targetInvoiceId}`, "objects"))[0]?.contract_id, contractId);
 
     await runRevenueRecognition(org.orgId, "2026-07-31", adminId);
     await runRevenueRecognition(org.orgId, "2027-07-31", adminId);
@@ -343,7 +343,7 @@ test("cancelling one order billing preserves sibling recognition and uses its ac
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
        and fc.is_default and fc.is_active
        where p.org_id = ${org.orgId} and p.starts_on <= '2027-07-31'
-         and p.ends_on >= '2027-07-31' and not p.is_adjustment`)).rows[0]?.id;
+         and p.ends_on >= '2027-07-31' and not p.is_adjustment`, "objects"))[0]?.id;
     assert.ok(activePeriodId);
 
     const cancelled = await cancelRevenueRecognitionForInvoice({
@@ -357,20 +357,20 @@ test("cancelling one order billing preserves sibling recognition and uses its ac
     assert.equal(cancelled.status, "cancelled");
     assert.ok(cancelled.recognitionReversalEntryIds.length > 0);
 
-    const obligations = (await db.execute<{ document_id: string; status: string }>(sql`
+    const obligations = await db.execute<{ document_id: string; status: string }>(sql`
       select line.document_id, obligation.status
         from performance_obligations obligation
         join document_lines line
           on line.id = obligation.document_line_id and line.org_id = obligation.org_id
        where obligation.org_id = ${org.orgId} and obligation.contract_id = ${contractId}
-       order by line.document_id`)).rows;
+       order by line.document_id`, "objects");
     assert.ok(obligations.some((row) => row.document_id === firstInvoiceId && row.status !== "cancelled"));
     assert.ok(obligations.some((row) => row.document_id === targetInvoiceId && row.status === "cancelled"));
 
     const reversalIds = `{${cancelled.recognitionReversalEntryIds.join(",")}}`;
-    const reversalPeriods = (await db.execute<{ period_id: string }>(sql`
+    const reversalPeriods = await db.execute<{ period_id: string }>(sql`
       select period_id from journal_entries
-       where org_id = ${org.orgId} and id = any(${reversalIds}::uuid[])`)).rows;
+       where org_id = ${org.orgId} and id = any(${reversalIds}::uuid[])`, "objects");
     assert.ok(reversalPeriods.length > 0);
     assert.ok(reversalPeriods.every((row) => row.period_id === activePeriodId));
     assert.ok(reversalPeriods.every((row) => row.period_id !== inactivePeriodId));
@@ -378,7 +378,7 @@ test("cancelling one order billing preserves sibling recognition and uses its ac
     const contract = (await db.execute<{
       status: string; total_transaction_price: string; total_consideration: string;
     }>(sql`select status, total_transaction_price::text, total_consideration::text
-             from revenue_contracts where id = ${contractId} and org_id = ${org.orgId}`)).rows[0];
+             from revenue_contracts where id = ${contractId} and org_id = ${org.orgId}`, "objects"))[0];
     assert.equal(contract?.status, "active");
     assert.equal(contract?.total_transaction_price, "12000.0000");
     assert.equal(contract?.total_consideration, "12000.0000");
@@ -386,9 +386,9 @@ test("cancelling one order billing preserves sibling recognition and uses its ac
     assert.equal(position.billed, "12000.0000");
     assert.equal(position.recognized, "12000.0000");
     assert.equal(position.remaining, "0.0000");
-    const invoiceStates = (await db.execute<{ id: string; status: string }>(sql`
+    const invoiceStates = await db.execute<{ id: string; status: string }>(sql`
       select id, status from documents where org_id = ${org.orgId}
-       and id in (${firstInvoiceId}, ${targetInvoiceId})`)).rows;
+       and id in (${firstInvoiceId}, ${targetInvoiceId})`, "objects");
     assert.equal(invoiceStates.find((row) => row.id === firstInvoiceId)?.status, "posted");
     assert.equal(invoiceStates.find((row) => row.id === targetInvoiceId)?.status, "voided");
   } finally {
@@ -438,7 +438,7 @@ test("scoped billing refuses an invoice billing two orders", { skip: !DB }, asyn
     );
     assert.equal(
       (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from revenue_contracts where org_id = ${org.orgId}`)).rows[0]!.n,
+        select count(*)::int as n from revenue_contracts where org_id = ${org.orgId}`, "objects"))[0]!.n,
       0,
     );
   } finally {

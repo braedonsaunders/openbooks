@@ -55,14 +55,14 @@ export async function assignEmployeeWorkerCompGroup(input: {
     const employee = (await tx.execute<{ id: string }>(sql`
       select p.id from parties p where p.org_id=${input.orgId} and p.id=${input.employeePartyId}
       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
-      ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authority)} for update`)).rows[0];
+      ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authority)} for update`, 'objects'))[0];
     if (!employee) throw new WorkerCompAssignmentError('The employee is not available in your legal entity — review the employee ID');
     const before = (await tx.execute<{ id: string; worker_comp_group_id: string | null }>(sql`
       select id, worker_comp_group_id from employee_roles
-      where org_id=${input.orgId} and party_id=${input.employeePartyId} and is_active for update`)).rows[0];
+      where org_id=${input.orgId} and party_id=${input.employeePartyId} and is_active for update`, 'objects'))[0];
     if (!before) throw new WorkerCompAssignmentError('No active employee role is available — review the employee record before assigning worker compensation');
     if (input.groupId !== null && !(await tx.execute(sql`
-      select id from worker_comp_groups where org_id=${input.orgId} and id=${input.groupId} and is_active for share`)).rows.length) {
+      select id from worker_comp_groups where org_id=${input.orgId} and id=${input.groupId} and is_active for share`, 'objects')).length) {
       throw new WorkerCompAssignmentError('The worker-compensation group is unavailable in this organization — choose an active group in Company Settings');
     }
     if (before.worker_comp_group_id === input.groupId) return { changed: false };
@@ -70,15 +70,15 @@ export async function assignEmployeeWorkerCompGroup(input: {
       throw new WorkerCompAssignmentError('The employee worker-compensation assignment changed — export and review the current group before applying');
     }
     if (input.dryRun) return { changed: true };
-    const updated = (await tx.execute(sql`update employee_roles
+    const updated = await tx.execute(sql`update employee_roles
       set worker_comp_group_id=${input.groupId}, updated_by=${input.actorId},
         updated_at=greatest(clock_timestamp(), updated_at + interval '1 microsecond')
       where org_id=${input.orgId} and id=${before.id}
-        and worker_comp_group_id is not distinct from ${input.expectedGroupId}::uuid returning id`)).rows;
+        and worker_comp_group_id is not distinct from ${input.expectedGroupId}::uuid returning id`, 'objects');
     if (updated.length !== 1) throw new WorkerCompAssignmentError('The employee worker-compensation assignment changed — preview the import again');
-    const party = (await tx.execute(sql`update parties set updated_by=${input.actorId},
+    const party = await tx.execute(sql`update parties set updated_by=${input.actorId},
       updated_at=greatest(clock_timestamp(), updated_at + interval '1 microsecond')
-      where org_id=${input.orgId} and id=${input.employeePartyId} returning id`)).rows;
+      where org_id=${input.orgId} and id=${input.employeePartyId} returning id`, 'objects');
     if (party.length !== 1) throw new WorkerCompAssignmentError('The employee is no longer available — reload the employee record');
     await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values (${input.orgId},'employee_roles',${before.id},'update',

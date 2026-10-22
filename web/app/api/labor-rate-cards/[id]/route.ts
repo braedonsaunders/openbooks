@@ -292,20 +292,20 @@ export const PUT = defineRoute({
       from labor_rate_adjustment_targets at
       join labor_rate_adjustments a on a.id = at.adjustment_id and a.org_id = at.org_id
      where a.version_id = ${id} and a.org_id = ${orgId}
-       and at.target_type = 'item' and at.target_value_id is not null`));
-  const storedTargetIds = new Set(storedItemTargets.rows.map((row) => row.target_value_id));
+       and at.target_type = 'item' and at.target_value_id is not null`, "objects"));
+  const storedTargetIds = new Set(storedItemTargets.map((row) => row.target_value_id));
   // Stored rate-card lines stay when itemId is omitted. Re-sending the stored
   // item is allowed. A new inventory / assembly / kit item is Inventory configuration.
   if (!(await isFeatureEnabled(orgId, "inventory"))) {
     const stored = (await db.execute<{ item_id: string }>(sql`
       select item_id from item_rate_lines
-       where version_id = ${id} and org_id = ${orgId} and item_id is not null`));
-    const storedIds = new Set(stored.rows.map((row) => row.item_id));
+       where version_id = ${id} and org_id = ${orgId} and item_id is not null`, "objects"));
+    const storedIds = new Set(stored.map((row) => row.item_id));
     for (const line of lines) {
       if (!line.itemId || storedIds.has(line.itemId)) continue;
       const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${line.itemId} and org_id = ${orgId}`));
-      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+        select kind from items where id = ${line.itemId} and org_id = ${orgId}`, "objects"));
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
         return notFound("record");
       }
     }
@@ -313,8 +313,8 @@ export const PUT = defineRoute({
       for (const target of adjustment.targets ?? []) {
         if (target.targetType !== "item" || !target.targetValueId || storedTargetIds.has(target.targetValueId)) continue;
         const item = (await db.execute<{ kind: string }>(sql`
-          select kind from items where id = ${target.targetValueId} and org_id = ${orgId}`));
-        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          select kind from items where id = ${target.targetValueId} and org_id = ${orgId}`, "objects"));
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
           return notFound("record");
         }
       }
@@ -329,31 +329,31 @@ export const PUT = defineRoute({
       const current = (await tx.execute<{ rate_book_id: string }>(
         sql`select v.rate_book_id from item_rate_versions v
           join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
-          where v.id=${id} and v.org_id=${orgId} for update of v,p`,
+          where v.id=${id} and v.org_id=${orgId} for update of v,p`, "objects",
       ));
-      if (!current.rows[0]) throw new Error("notFound");
+      if (!current[0]) throw new Error("notFound");
       if (lineIds.size) {
-        const kept = (await tx.execute<{ id: string }>(sql`
+        const kept = await tx.execute<{ id: string }>(sql`
           select id from item_rate_lines where org_id=${orgId} and version_id=${id}
-           and id=any(${uuidArray([...lineIds])}::uuid[]) for update`)).rows;
+           and id=any(${uuidArray([...lineIds])}::uuid[]) for update`, "objects");
         if (kept.length !== lineIds.size) throw new Error("item");
       }
       const before = (await tx.execute<{ snapshot: unknown }>(sql`select jsonb_build_object(
         'version',(select to_jsonb(v) from item_rate_versions v where v.id=${id} and v.org_id=${orgId}),
-        'book',(select to_jsonb(b) from item_rate_books b where b.id=${current.rows[0].rate_book_id} and b.org_id=${orgId}),
+        'book',(select to_jsonb(b) from item_rate_books b where b.id=${current[0].rate_book_id} and b.org_id=${orgId}),
         'policy',(select to_jsonb(p) from labor_rate_version_policies p where p.version_id=${id} and p.org_id=${orgId}),
         'scopes',(select coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) from labor_rate_version_scopes s where s.version_id=${id} and s.org_id=${orgId}),
         'lines',(select coalesce(jsonb_agg(to_jsonb(l)),'[]'::jsonb) from item_rate_lines l where l.version_id=${id} and l.org_id=${orgId}),
         'adjustments',(select coalesce(jsonb_agg(to_jsonb(a)),'[]'::jsonb) from labor_rate_adjustments a where a.version_id=${id} and a.org_id=${orgId}),
         'targets',(select coalesce(jsonb_agg(to_jsonb(at)),'[]'::jsonb) from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId}),
         'terms',(select coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) from labor_rate_terms t where t.version_id=${id} and t.org_id=${orgId})
-      ) snapshot`));
+      ) snapshot`, "objects"));
 
       if (itemIds.size) {
         const found = (await tx.execute<{ id: string }>(
-          sql`select id from items where org_id=${orgId} and is_active and id=any(${uuidArray([...itemIds])}::uuid[])`,
+          sql`select id from items where org_id=${orgId} and is_active and id=any(${uuidArray([...itemIds])}::uuid[])`, "objects",
         ));
-        if (found.rows.length !== itemIds.size) throw new Error("item");
+        if (found.length !== itemIds.size) throw new Error("item");
       }
       for (const [type, table] of Object.entries(UUID_TARGET_TABLES)) {
         const ids = [
@@ -372,9 +372,9 @@ export const PUT = defineRoute({
         ].filter(Boolean);
         if (!ids.length) continue;
         const found = (await tx.execute<{ id: string }>(
-          sql`select id from ${sql.raw(table)} where org_id=${orgId} and id=any(${uuidArray(ids)}::uuid[])`,
+          sql`select id from ${sql.raw(table)} where org_id=${orgId} and id=any(${uuidArray(ids)}::uuid[])`, "objects",
         ));
-        if (found.rows.length !== ids.length)
+        if (found.length !== ids.length)
           throw new Error(type === "item" ? "item" : "target");
       }
       const customerIds = [
@@ -388,9 +388,9 @@ export const PUT = defineRoute({
       ].filter(Boolean);
       if (customerIds.length) {
         const found = (await tx.execute<{ id: string }>(
-          sql`select p.id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`,
+          sql`select p.id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`, "objects",
         ));
-        if (found.rows.length !== customerIds.length) throw new Error("target");
+        if (found.length !== customerIds.length) throw new Error("target");
       }
 
       // Pricing-policy boundary: every entity-bearing reference must sit
@@ -416,9 +416,9 @@ export const PUT = defineRoute({
         ];
         if (newSubsidiaryIds.length) {
           const found = (await tx.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id=${orgId} and id=any(${uuidArray(newSubsidiaryIds)}::uuid[]) and id=any(${uuidArray([...allowed])}::uuid[])`,
+            sql`select id from subsidiaries where org_id=${orgId} and id=any(${uuidArray(newSubsidiaryIds)}::uuid[]) and id=any(${uuidArray([...allowed])}::uuid[])`, "objects",
           ));
-          if (found.rows.length !== newSubsidiaryIds.length) throw new Error("target");
+          if (found.length !== newSubsidiaryIds.length) throw new Error("target");
         }
         const newProjectIds = [
           ...new Set(
@@ -432,16 +432,16 @@ export const PUT = defineRoute({
           ),
         ];
         const storedProjectIds = (await tx.execute<{ target_value_id: string }>(sql`
-          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='project' and at.target_value_id is not null`));
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='project' and at.target_value_id is not null`, "objects"));
         const storedCustomerIds = (await tx.execute<{ target_value_id: string }>(sql`
-          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='customer' and at.target_value_id is not null`));
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='customer' and at.target_value_id is not null`, "objects"));
         const projectLockIds = [...new Set([
           ...newProjectIds,
-          ...storedProjectIds.rows.map((row) => row.target_value_id),
+          ...storedProjectIds.map((row) => row.target_value_id),
         ])];
         const customerLockIds = [...new Set([
           ...customerIds,
-          ...storedCustomerIds.rows.map((row) => row.target_value_id),
+          ...storedCustomerIds.map((row) => row.target_value_id),
         ])];
         // Match the canonical lock order (party before project), while
         // selecting only live stored references so dangling legacy targets
@@ -460,10 +460,10 @@ export const PUT = defineRoute({
         }
         if (newProjectIds.length) {
           const rows = (await tx.execute<{ id: string; subsidiary_id: string | null }>(
-            sql`select id, subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(newProjectIds)}::uuid[])`,
+            sql`select id, subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(newProjectIds)}::uuid[])`, "objects",
           ));
-          if (rows.rows.length !== newProjectIds.length) throw new Error("target");
-          for (const row of rows.rows) {
+          if (rows.length !== newProjectIds.length) throw new Error("target");
+          for (const row of rows) {
             // A null-subsidiary project fails closed, like unattributed
             // documents elsewhere: restricted callers never price it.
             if (!row.subsidiary_id || !allowed.has(row.subsidiary_id)) throw new Error("target");
@@ -471,10 +471,10 @@ export const PUT = defineRoute({
         }
         if (customerIds.length) {
           const rows = (await tx.execute<{ id: string; subsidiary_id: string | null }>(
-            sql`select p.id, p.subsidiary_id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`,
+            sql`select p.id, p.subsidiary_id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`, "objects",
           ));
-          if (rows.rows.length !== customerIds.length) throw new Error("target");
-          for (const row of rows.rows) {
+          if (rows.length !== customerIds.length) throw new Error("target");
+          for (const row of rows) {
             if (!row.subsidiary_id || !allowed.has(row.subsidiary_id)) throw new Error("target");
           }
         }
@@ -487,23 +487,23 @@ export const PUT = defineRoute({
         const storedSubsidiaryIds = (await tx.execute<{ scope_value_id: string }>(sql`
           select scope_value_id from labor_rate_version_scopes where version_id=${id} and org_id=${orgId} and scope_type='subsidiary' and scope_value_id is not null
            union
-          select at.target_value_id as scope_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='subsidiary' and at.target_value_id is not null`));
-        if (storedSubsidiaryIds.rows.length) {
+          select at.target_value_id as scope_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='subsidiary' and at.target_value_id is not null`, "objects"));
+        if (storedSubsidiaryIds.length) {
           const live = (await tx.execute<{ id: string }>(sql`
             select id from subsidiaries where org_id=${orgId}
-             and id=any(${uuidArray(storedSubsidiaryIds.rows.map((row) => row.scope_value_id))}::uuid[])
-             and not (id=any(${uuidArray([...allowed])}::uuid[])) limit 1`));
-          if (live.rows.length) throw new Error("notFound");
+             and id=any(${uuidArray(storedSubsidiaryIds.map((row) => row.scope_value_id))}::uuid[])
+             and not (id=any(${uuidArray([...allowed])}::uuid[])) limit 1`, "objects"));
+          if (live.length) throw new Error("notFound");
         }
-        if (storedProjectIds.rows.length) {
+        if (storedProjectIds.length) {
           const rows = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-            select subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(storedProjectIds.rows.map((row) => row.target_value_id))}::uuid[])`));
-          if (rows.rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id))) throw new Error("notFound");
+            select subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(storedProjectIds.map((row) => row.target_value_id))}::uuid[])`, "objects"));
+          if (rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id))) throw new Error("notFound");
         }
-        if (storedCustomerIds.rows.length) {
+        if (storedCustomerIds.length) {
           const rows = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-            select subsidiary_id from parties where org_id=${orgId} and id=any(${uuidArray(storedCustomerIds.rows.map((row) => row.target_value_id))}::uuid[])`));
-          if (rows.rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id))) throw new Error("notFound");
+            select subsidiary_id from parties where org_id=${orgId} and id=any(${uuidArray(storedCustomerIds.map((row) => row.target_value_id))}::uuid[])`, "objects"));
+          if (rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id))) throw new Error("notFound");
         }
       }
 
@@ -511,14 +511,14 @@ export const PUT = defineRoute({
       // so the keep-vs-overwrite branch must select whole statements.
       const savedBook = await tx.execute(
         body.currency === undefined
-          ? sql`update item_rate_books set name=${cardName},code=${cardCode},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId} returning id`
-          : sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current.rows[0].rate_book_id} and org_id=${orgId} returning id`,
+          ? sql`update item_rate_books set name=${cardName},code=${cardCode},updated_at=now(),updated_by=${gate.user.id} where id=${current[0].rate_book_id} and org_id=${orgId} returning id`
+          : sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current[0].rate_book_id} and org_id=${orgId} returning id`, "objects",
       );
-      if (savedBook.rows.length !== 1) throw new Error("notFound");
+      if (savedBook.length !== 1) throw new Error("notFound");
       const savedPolicy = await tx.execute(
-        sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id} and org_id=${orgId} returning id`,
+        sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id} and org_id=${orgId} returning id`, "objects",
       );
-      if (savedPolicy.rows.length !== 1) throw new Error("notFound");
+      if (savedPolicy.length !== 1) throw new Error("notFound");
 
       await tx.execute(
         sql`delete from labor_rate_version_scopes where version_id=${id} and org_id=${orgId}`,
@@ -539,9 +539,9 @@ export const PUT = defineRoute({
       for (const [sortOrder, line] of lines.entries()) {
         if (line.id) {
           const savedLine = await tx.execute(
-            sql`update item_rate_lines set item_id=${line.itemId ? line.itemId : sql`item_id`},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId} returning id`,
+            sql`update item_rate_lines set item_id=${line.itemId ? line.itemId : sql`item_id`},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId} returning id`, "objects",
           );
-          if (savedLine.rows.length !== 1) throw new Error("item");
+          if (savedLine.length !== 1) throw new Error("item");
         } else
           await tx.execute(
             sql`insert into item_rate_lines(org_id,version_id,item_id,unit_code,unit_name,base_quantity,bill_rate,time_type_bill_rates,sort_order,created_by,updated_by) values(${orgId},${id},${line.itemId},'hour','Hour',1,${line.regular || null},${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,${sortOrder},${gate.user.id},${gate.user.id})`,
@@ -556,21 +556,21 @@ export const PUT = defineRoute({
       );
       for (const [sortOrder, adjustment] of adjustments.entries()) {
         const inserted = (await tx.execute<{ id: string }>(
-          sql`insert into labor_rate_adjustments(org_id,version_id,code,name,category,calculation,value,unit,presentation,threshold,threshold_unit,reference_text,sort_order,created_by,updated_by) values(${orgId},${id},${adjustment.code!.trim().toLowerCase()},${adjustment.name!.trim()},${adjustment.category},${adjustment.calculation},${adjustment.calculation === "text" ? null : adjustment.value || null},${adjustment.unit?.trim() || null},${adjustment.presentation},${adjustment.threshold || null},${adjustment.thresholdUnit?.trim() || null},${adjustment.referenceText?.trim() || null},${sortOrder},${gate.user.id},${gate.user.id}) returning id`,
+          sql`insert into labor_rate_adjustments(org_id,version_id,code,name,category,calculation,value,unit,presentation,threshold,threshold_unit,reference_text,sort_order,created_by,updated_by) values(${orgId},${id},${adjustment.code!.trim().toLowerCase()},${adjustment.name!.trim()},${adjustment.category},${adjustment.calculation},${adjustment.calculation === "text" ? null : adjustment.value || null},${adjustment.unit?.trim() || null},${adjustment.presentation},${adjustment.threshold || null},${adjustment.thresholdUnit?.trim() || null},${adjustment.referenceText?.trim() || null},${sortOrder},${gate.user.id},${gate.user.id}) returning id`, "objects",
         ));
         let wroteItemTarget = false;
         for (const target of adjustment.targets ?? []) {
           if (target.targetType === "item" && !target.targetValueId) continue;
           if (target.targetType === "item" && target.targetValueId) wroteItemTarget = true;
           await tx.execute(
-            sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0]!.id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
+            sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted[0]!.id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
           );
         }
         if (!wroteItemTarget) {
           const code = adjustment.code!.trim().toLowerCase();
-          for (const stored of storedItemTargets.rows.filter((row) => row.code === code)) {
+          for (const stored of storedItemTargets.filter((row) => row.code === code)) {
             await tx.execute(
-              sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted.rows[0]!.id},'item',${stored.target_value_id},null,${stored.include_children},${gate.user.id},${gate.user.id})`,
+              sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted[0]!.id},'item',${stored.target_value_id},null,${stored.include_children},${gate.user.id},${gate.user.id})`,
             );
           }
         }
@@ -588,14 +588,14 @@ export const PUT = defineRoute({
       // child writes while the stored status is still draft, so a save that
       // activates the card must finish rewriting children first.
       const savedVersion = await tx.execute(
-        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId} returning id`,
+        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId} returning id`, "objects",
       );
-      if (savedVersion.rows.length !== 1) throw new Error("notFound");
+      if (savedVersion.length !== 1) throw new Error("notFound");
 
       const audit = await tx.execute(
-        sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before.rows[0]?.snapshot, after: body })}::jsonb,${gate.user.id}) returning id`,
+        sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before[0]?.snapshot, after: body })}::jsonb,${gate.user.id}) returning id`, "objects",
       );
-      if (audit.rows.length !== 1) throw new Error("save");
+      if (audit.length !== 1) throw new Error("save");
     });
     return NextResponse.json({ ok: true, id });
   } catch (cause) {

@@ -53,7 +53,7 @@ async function postInvoiceShipping(
   await postDocument(documentId, depsFor(org));
   const issue = (await db.execute<{ id: string }>(sql`
     select id from inventory_movements
-     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0];
+     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0];
   assert.ok(issue);
   return { documentId, lineId, issueMovementId: issue.id };
 }
@@ -326,7 +326,7 @@ async function postCustomerCreditReturn(
   await postDocument(creditId, depsFor(org));
   const receipt = (await db.execute<{ id: string }>(sql`
     select id from inventory_movements
-     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`)).rows[0];
+     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'receipt'`, "objects"))[0];
   assert.ok(receipt, "a posted customer credit return records a receipt movement");
   return { creditId, lineId, returnMovementId: receipt.id };
 }

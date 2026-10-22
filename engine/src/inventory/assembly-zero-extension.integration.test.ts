@@ -36,7 +36,7 @@ test("a zero-rounded component extension is refused by name with nothing written
       select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
              (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
              (select count(*)::int from cost_layers where org_id = ${org.orgId}) as layers
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const componentBefore = await getOnHand(org.orgId, org.items.component, org.stockLocationId);
     await assert.rejects(
       buildAssembly(org.orgId, null, {
@@ -60,7 +60,7 @@ test("a zero-rounded component extension is refused by name with nothing written
         select (select count(*)::int from inventory_movements where org_id = ${org.orgId}) as movements,
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from cost_layers where org_id = ${org.orgId}) as layers
-      `)).rows[0]!,
+      `, "objects"))[0]!,
       before,
       "zero stock or GL change: no movement, journal, or layer may be written",
     );

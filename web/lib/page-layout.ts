@@ -11,7 +11,7 @@ import type { PageLayoutPrefs } from '@openbooks/schema'
 export async function userPageLayout(userId: string, page: string): Promise<PageLayoutPrefs> {
   const r = (await db.execute<{ layout: PageLayoutPrefs }>(sql`
     select layout from user_page_layouts where user_id = ${userId} and page = ${page} limit 1
-  `))
-  const layout = r.rows[0]?.layout
+  `, 'objects'))
+  const layout = r[0]?.layout
   return layout && typeof layout === 'object' ? layout : {}
 }

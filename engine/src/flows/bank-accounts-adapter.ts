@@ -130,16 +130,14 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
       if (!row) return null;
       let partyName: string | null = null;
       const r = await db.execute<{ display_name: string }>(
-        sql`select display_name from parties where id = ${row.partyId} and org_id = ${row.orgId}`,
+        sql`select display_name from parties where id = ${row.partyId} and org_id = ${row.orgId}`, "objects",
       );
-      partyName = r.rows[0]?.display_name ?? null;
+      partyName = r[0]?.display_name ?? null;
       const routing = (row.routing ?? {}) as Record<string, string>;
-      const fingerprint = (
-        await db.execute<{
+      const fingerprint = (await db.execute<{
           value: string;
         }>(sql`select public.bank_approval_fingerprint(b) as value
-      from party_bank_accounts b where b.org_id=${row.orgId} and b.id=${subjectId}`)
-      ).rows[0]?.value;
+      from party_bank_accounts b where b.org_id=${row.orgId} and b.id=${subjectId}`, "objects"))[0]?.value;
       if (!fingerprint)
         throw new Error(
           "The bank details are unavailable for approval routing.",
@@ -203,12 +201,10 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
       await db.transaction(async (tx) => {
         // Pre-read the party link so locks order party-then-bank (the submit
         // route's order); the link is re-verified once both locks are held.
-        const link = (
-          await tx.execute<{ partyId: string }>(sql`
+        const link = (await tx.execute<{ partyId: string }>(sql`
         select party_id as "partyId" from party_bank_accounts
          where id = ${subjectId} and org_id = ${ctx.orgId}
-      `)
-        ).rows[0];
+      `, "objects"))[0];
         if (!link) throw new Error(`bank account ${subjectId} not found`);
         // Locked subsidiary recheck: the route's precheck can
         // pass while a concurrent party rehome lands before this write
@@ -230,8 +226,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
             },
           );
         }
-        const row = (
-          await tx.execute<{
+        const row = (await tx.execute<{
             partyId: string;
             approvalStatus: string;
           }>(sql`
@@ -239,8 +234,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
           from party_bank_accounts
          where id = ${subjectId} and org_id = ${ctx.orgId}
          for update
-      `)
-        ).rows[0];
+      `, "objects"))[0];
         if (!row) throw new Error(`bank account ${subjectId} not found`);
         if (row.partyId !== link.partyId) {
           throw new Error(
@@ -255,7 +249,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
         }
         const written =
           (
-            await tx.execute(sql`
+            await tx.execute<never>(sql`
         update party_bank_accounts
            set approval_status = ${to}, approved_at = null, approved_by = null,
                is_active = false, updated_at = now(), updated_by = ${ctx.userId ?? null}
@@ -293,12 +287,10 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
         );
       const today = await businessToday(ctx.orgId);
       await db.transaction(async (tx) => {
-        const link = (
-          await tx.execute<{ partyId: string }>(sql`
+        const link = (await tx.execute<{ partyId: string }>(sql`
         select party_id as "partyId" from party_bank_accounts
          where id = ${subjectId} and org_id = ${ctx.orgId}
-      `)
-        ).rows[0];
+      `, "objects"))[0];
         if (!link) return;
         // Same locked subsidiary recheck as changeStatus: an approval that
         // was in scope when its gate was decided must not release onto a
@@ -316,8 +308,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
             },
           );
         }
-        const row = (
-          await tx.execute<{
+        const row = (await tx.execute<{
             partyId: string;
             approvalStatus: string;
             retiredAt: string | null;
@@ -330,8 +321,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
           from party_bank_accounts
          where id = ${subjectId} and org_id = ${ctx.orgId}
          for update
-      `)
-        ).rows[0];
+      `, "objects"))[0];
         if (!row || row.retiredAt || row.approvalStatus !== "pending") return;
         if (row.partyId !== link.partyId) {
           throw new Error(
@@ -355,7 +345,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter =
         }
         const written =
           (
-            await tx.execute(sql`
+            await tx.execute<never>(sql`
         update party_bank_accounts
            set approval_status = ${outcome === "approved" ? "approved" : "rejected"},
                approved_at = ${outcome === "approved" ? today : null},

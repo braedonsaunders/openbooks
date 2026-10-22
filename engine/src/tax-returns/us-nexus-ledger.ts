@@ -84,18 +84,18 @@ async function resolveEntityScope(
   }
   const rows = (await db.execute<{ id: string; base_currency: string; is_elimination: boolean }>(sql`
     select id, base_currency, is_elimination from subsidiaries
-     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`))
-  const known = new Set(rows.rows.map((r) => r.id))
+     where org_id = ${orgId} and id = any(${uuidArray(ids)}::uuid[])`, 'objects'))
+  const known = new Set(rows.map((r) => r.id))
   const unknown = ids.filter((id) => !known.has(id))
   if (unknown.length > 0) {
     throw new TaxRequestValidationError(`nexus filing entity references subsidiaries outside this organization: ${unknown.join(', ')}`)
   }
-  const elimination = rows.rows.filter((r) => r.is_elimination)
+  const elimination = rows.filter((r) => r.is_elimination)
   if (elimination.length > 0) {
     throw new TaxRequestValidationError('nexus filing entity cannot include an elimination entity — only legal filers hold nexus')
   }
   if (!opts.currency) {
-    const currencies = [...new Set(rows.rows.map((r) => r.base_currency))]
+    const currencies = [...new Set(rows.map((r) => r.base_currency))]
     if (currencies.length > 1) {
       throw new TaxRequestValidationError(
         `nexus filing entity spans functional currencies (${currencies.sort().join(' and ')}) — pass currency to declare the working currency`,
@@ -176,7 +176,7 @@ export async function computeUsNexusStatus(
   // so month-end as-of dates land exactly (JS month rollback would shift
   // Feb-29 windows by a day).
   const measuredFrom = (await db.execute<{ from: string }>(sql`
-    select ((${to}::date - (${US_NEXUS_MEASUREMENT_MONTHS}::int * interval '1 month') + interval '1 day'))::text as "from"`)).rows[0]!.from
+    select ((${to}::date - (${US_NEXUS_MEASUREMENT_MONTHS}::int * interval '1 month') + interval '1 day'))::text as "from"`, 'objects'))[0]!.from
   const entity = await resolveEntityScope(orgId, opts)
   const target = entity.currency
   const entityFilter =
@@ -256,7 +256,7 @@ export async function computeUsNexusStatus(
          nullif(${resolvedCountry}, '') is null
          or upper(${resolvedCountry}) = 'US'
        )
-  `))
+  `, 'objects'))
 
   const byState = new Map<string, { sales: string; marketplace: string; txnCount: number; marketplaceTxnCount: number }>()
   const rateCache = new Map<string, Promise<string>>()
@@ -298,7 +298,7 @@ export async function computeUsNexusStatus(
     return mulRate(amount, await rateToTarget(row.currency, row.as_of))
   }
 
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const converted = await convert(row.amount, row)
     const convertedMarketplace = await convert(row.marketplace_amount, row)
     const key = row.state.trim()

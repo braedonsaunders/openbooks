@@ -114,7 +114,7 @@ export async function loadEquipmentPage(
                where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted') -- Live entries only: equipment totals include currently approved and posted charges
              )),0) billable
         from equipment_units e where e.org_id=${authz.user.orgId} ${allowed}
-    `),
+    `, 'objects'),
     equipmentId && isUuid(equipmentId) ? loadEquipment(equipmentId, authz.user.orgId, authz.allowedSubsidiaryIds) : null,
     equipmentId || creating ? Promise.all([
       db.execute<EquipmentItemRow>(sql`select id,code,name from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`),
@@ -208,10 +208,10 @@ export async function loadEquipmentPage(
     currentParams: sp,
     canManage,
     kpis: [
-      { label: t('metrics.active'), value: String(summary.rows[0]?.active ?? 0) },
-      { label: t('metrics.purchaseBasis'), value: money(summary.rows[0]?.purchase) },
-      { label: t('metrics.recovery'), value: money(summary.rows[0]?.recovery) },
-      { label: t('metrics.billable'), value: money(summary.rows[0]?.billable) },
+      { label: t('metrics.active'), value: String(summary[0]?.active ?? 0) },
+      { label: t('metrics.purchaseBasis'), value: money(summary[0]?.purchase) },
+      { label: t('metrics.recovery'), value: money(summary[0]?.recovery) },
+      { label: t('metrics.billable'), value: money(summary[0]?.billable) },
     ],
     tabs: await loadAssetWorkspaceTabs(authz.user.orgId, 'equipment', {
       register: ta('tabs.register'),

@@ -98,9 +98,9 @@ async function headerControlMessage(error: ProjectHeaderControlError): Promise<s
 
 async function partyExists(id: string, orgId: string): Promise<boolean> {
   const r = (await db.execute(
-    sql`select 1 from parties where id = ${id} and org_id = ${orgId}`,
+    sql`select 1 from parties where id = ${id} and org_id = ${orgId}`, 'objects',
   ))
-  return !!r.rows[0]
+  return !!r[0]
 }
 
 export const GET = defineRoute({ permission: 'projects.read', feature: 'projects', params: projectParams, handler: async ({ authz: gate, params: { id } }) => {
@@ -141,9 +141,9 @@ export const PATCH = defineRoute({
   }>(sql`
     select name, is_active, custom, subsidiary_id
       from projects where id = ${id} and org_id = ${user.orgId}
-  `))
-  if (!existing.rows[0]) return notFound("record")
-  const existingDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiary_id)
+  `, 'objects'))
+  if (!existing[0]) return notFound("record")
+  const existingDenied = guardSubsidiaryScope(gate, existing[0].subsidiary_id)
   if (existingDenied) return existingDenied
 
   if (body.tasks !== undefined) {
@@ -172,8 +172,8 @@ export const PATCH = defineRoute({
     return bad('Project name must be a string')
   }
   const name = body.name !== undefined ? body.name.trim() : undefined
-  const willBeActive = body.isActive ?? existing.rows[0].is_active
-  const effectiveName = name ?? existing.rows[0].name.trim()
+  const willBeActive = body.isActive ?? existing[0].is_active
+  const effectiveName = name ?? existing[0].name.trim()
   if (willBeActive && (!effectiveName || effectiveName === 'New project')) {
     return bad(
       body.isActive === true ? 'Give the project a real name before activating it' : 'An active project needs a name',
@@ -238,8 +238,8 @@ export const PATCH = defineRoute({
     if (value) {
       const subsidiary = ((await db.execute(sql`
         select 1 from subsidiaries
-         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`)))
-      if (!subsidiary.rows.length) return bad('Subsidiary not found')
+         where id = ${value} and org_id = ${user.orgId} and is_active and not is_elimination`, 'objects')))
+      if (!subsidiary.length) return bad('Subsidiary not found')
     }
     subsidiaryId = value
   }
@@ -295,8 +295,8 @@ export const PATCH = defineRoute({
     if (v === 'invalid') return bad('Invalid project type')
     projectTypeId = v
     if (v) {
-      const pt = (await db.execute(sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`))
-      if (pt.rows.length === 0) return bad('Unknown project type')
+      const pt = (await db.execute(sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`, 'objects'))
+      if (pt.length === 0) return bad('Unknown project type')
     }
   }
 
@@ -327,12 +327,12 @@ export const PATCH = defineRoute({
         from projects
        where id = ${id} and org_id = ${user.orgId}
        for update
-    `))
-    if (!locked.rows[0] || guardSubsidiaryScope(gate, locked.rows[0].subsidiary_id)) {
+    `, 'objects'))
+    if (!locked[0] || guardSubsidiaryScope(gate, locked[0].subsidiary_id)) {
       scopeRefused = true
       return
     }
-    const before = locked.rows[0]
+    const before = locked[0]
     // Activation re-validates the name on the locked row: the entry check
     // above ran on a pre-lock read, so a concurrent blank-name PATCH could
     // otherwise land in between and this write would activate a nameless
@@ -365,7 +365,7 @@ export const PATCH = defineRoute({
       const booked = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from time_entries
          where org_id = ${user.orgId} and project_id = ${id}
-      `)).rows[0]!.n
+      `, 'objects'))[0]!.n
       if (booked > 0) {
         txRefused = bad('This project has booked time and its internal flag is immutable')
         return

@@ -54,7 +54,7 @@ async function lockApCaptureScope(
   const capture = (await tx.execute<{ vendorId: string | null; purchaseOrderId: string | null }>(sql`
     select vendor_candidate_id as "vendorId", purchase_order_id as "purchaseOrderId"
       from ap_capture_items where org_id = ${orgId} and id = ${id} for update
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!capture) return false
   try {
     await lockScopeRows(tx, orgId, [
@@ -93,8 +93,8 @@ export const POST = defineRoute({
                where org_id = ${gate.user.orgId} and id = ${id} and status <> 'materialized'
                  and ${apCaptureVisibleExists(gate.user.orgId, id, gate.allowedSubsidiaryIds)}
                returning id
-            `))
-            if (!changed.rows[0]) throw new Error('not_rejectable')
+            `, 'objects'))
+            if (!changed[0]) throw new Error('not_rejectable')
             await tx.execute(sql`
               insert into ap_capture_events (org_id, capture_item_id, event_kind, actor_id)
               values (${gate.user.orgId}, ${id}, 'rejected', ${gate.user.id})
@@ -116,7 +116,7 @@ export const POST = defineRoute({
             const corrected = (await tx.execute<{ n: number }>(sql`
               select count(*)::int as n from ap_capture_corrections
                where org_id = ${gate.user.orgId} and capture_item_id = ${id}
-            `)).rows[0]!.n
+            `, 'objects'))[0]!.n
             if (corrected > 0 && !confirmDiscard) {
               const error = new Error(`reprocessing discards ${corrected} operator correction${corrected === 1 ? '' : 's'} — resubmit with confirmDiscardCorrections to discard them and reprocess`) as Error & { errorCode?: string; corrections?: number }
               error.errorCode = 'confirm_required'
@@ -133,9 +133,9 @@ export const POST = defineRoute({
                where org_id = ${gate.user.orgId} and id = ${id} and status in ('failed','needs_review','ready','duplicate')
                  and ${apCaptureVisibleExists(gate.user.orgId, id, gate.allowedSubsidiaryIds)}
                returning id, attempts
-            `))
-            if (!changed.rows[0]) throw new Error('not_reprocessable')
-            const generation = changed.rows[0].attempts
+            `, 'objects'))
+            if (!changed[0]) throw new Error('not_reprocessable')
+            const generation = changed[0].attempts
             await tx.execute(sql`
               insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
               values (${gate.user.orgId}, ${id}, 'reprocess_queued',
@@ -188,8 +188,8 @@ export const POST = defineRoute({
               left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
              where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
              ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-          `))
-          if (!visible.rows[0]) throw new Error('Capture item not found')
+          `, 'objects'))
+          if (!visible[0]) throw new Error('Capture item not found')
           const created = await materializeCapture({
             orgId: gate.user.orgId,
             captureItemId: id,

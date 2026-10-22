@@ -76,7 +76,8 @@ const mockSources = new Map<string, string>([
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.executed.push(text)
           // The save branch first: its before-image select embeds the same
@@ -86,10 +87,10 @@ const mockSources = new Map<string, string>([
               ? state.updateResponses.shift()
               : { rows: [{ revision: String(state.revision + 1) }] }
             if (response.rows.length) state.revision += 1
-            return response
+            return inMode(await response)
           }
           if (text.includes("select settings -> 'analytics' -> 'trueCost' as cfg")) {
-            return { rows: [{ cfg: { revision: String(state.revision), activeProfileId: 'profile-1', profiles: [${JSON.stringify(profile)}] } }] }
+            return inMode({ rows: [{ cfg: { revision: String(state.revision), activeProfileId: 'profile-1', profiles: [${JSON.stringify(profile)}] } }] })
           }
           throw new Error('unexpected database query: ' + text)
         },

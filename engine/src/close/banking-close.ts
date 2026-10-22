@@ -78,7 +78,7 @@ async function bankingClosePopulation(
   const lineScope = args.subsidiaryId
     ? sql`jl.subsidiary_id = ${args.subsidiaryId}::uuid`
     : sql`true`;
-  return (await db.execute<{ id: string; number: string | null; name: string }>(sql`
+  return await db.execute<{ id: string; number: string | null; name: string }>(sql`
     select a.id, a.number, a.name
       from accounts a
      where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
@@ -109,7 +109,7 @@ async function bankingClosePopulation(
          )
        )
      order by a.number nulls last, a.name
-  `)).rows;
+  `, "objects");
 }
 
 export async function bankingCloseStatus(
@@ -119,7 +119,7 @@ export async function bankingCloseStatus(
   const period = (await db.execute<{ ends_on: string }>(sql`
     select ends_on::text as ends_on from accounting_periods
      where id = ${args.periodId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!period) throw new CloseError("period not found");
   const accounts = await bankingClosePopulation(orgId, args, period.ends_on);
   const sourceEvidenceOn = await sourceEvidencePolicyActive(orgId);
@@ -139,7 +139,7 @@ export async function bankingCloseStatus(
          and through_date >= ${period.ends_on}::date
          and (${sourceEvidenceOn} or evidence_kind = 'statement')
        order by through_date desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (covering) {
       const staleness = await reconciliationStaleness(covering.id, ctx);
       statuses.push({
@@ -160,7 +160,7 @@ export async function bankingCloseStatus(
        where org_id = ${orgId} and account_id = ${account.id} and status <> 'signed_off'
          and through_date <= ${period.ends_on}::date
        order by through_date desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!open) {
       statuses.push({
         accountId: account.id,
@@ -204,7 +204,7 @@ export async function bankingUnmatchedStatementLines(
   const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
     select starts_on::text as starts_on, ends_on::text as ends_on from accounting_periods
      where id = ${args.periodId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!period) throw new CloseError("period not found");
   const population = await bankingClosePopulation(orgId, args, period.ends_on);
   if (population.length === 0) return 0;
@@ -213,8 +213,8 @@ export async function bankingUnmatchedStatementLines(
     select count(*)::text as n from bank_statement_lines
      where org_id = ${orgId} and account_id = any(${`{${ids.join(",")}}`}::uuid[])
        and match_status = 'unmatched'
-       and posted_on between ${period.starts_on}::date and ${period.ends_on}::date`));
-  return Number(unmatched.rows[0]?.n ?? 0);
+       and posted_on between ${period.starts_on}::date and ${period.ends_on}::date`, "objects"));
+  return Number(unmatched[0]?.n ?? 0);
 }
 
 async function bankingStrictPolicy(orgId: string): Promise<boolean> {
@@ -222,7 +222,7 @@ async function bankingStrictPolicy(orgId: string): Promise<boolean> {
     select rules from close_policies
      where org_id = ${orgId} and code = ${BANK_SIGNED_RECONCILIATION_POLICY_CODE} and is_active
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!policy) return false;
   return policy.rules?.requireSignedReconciliation !== false;
 }

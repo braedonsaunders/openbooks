@@ -145,8 +145,8 @@ async function seedCustomGlScript(
 
 async function accountNumber(accountId: string): Promise<string> {
   const r = await db.execute<{ number: string }>(sql`
-    select number from accounts where id = ${accountId}`);
-  return r.rows[0]!.number;
+    select number from accounts where id = ${accountId}`, "objects");
+  return r[0]!.number;
 }
 
 /**
@@ -193,9 +193,9 @@ async function postJournal(
   });
   const r = await withOrgContext(org.orgId, () =>
     db.execute<{ entry_id: string }>(sql`
-      select posted_entry_id as "entry_id" from documents where id = ${documentId}`),
+      select posted_entry_id as "entry_id" from documents where id = ${documentId}`, "objects"),
   );
-  return r.rows[0]!.entry_id;
+  return r[0]!.entry_id;
 }
 
 test("custom_gl_lines land on the same journal entry with script stamps", { skip: !DB }, async () => {
@@ -220,11 +220,11 @@ test("custom_gl_lines land on the same journal entry with script stamps", { skip
         select account_id, amount::text, contributor_kind, contributor_ref
           from journal_lines
          where org_id = ${org.orgId} and entry_id = ${entryId}
-         order by line_number`),
+         order by line_number`, "objects"),
     );
-    assert.equal(lines.rows.length, 4, "kernel (2) + script (2) lines on one entry");
-    const kernel = lines.rows.filter((l) => l.contributor_kind === null);
-    const scripted = lines.rows.filter((l) => l.contributor_kind === "script");
+    assert.equal(lines.length, 4, "kernel (2) + script (2) lines on one entry");
+    const kernel = lines.filter((l) => l.contributor_kind === null);
+    const scripted = lines.filter((l) => l.contributor_kind === "script");
     assert.equal(kernel.length, 2);
     assert.equal(scripted.length, 2);
     for (const l of scripted) assert.equal(l.contributor_ref, scriptId);
@@ -236,18 +236,18 @@ test("custom_gl_lines land on the same journal entry with script stamps", { skip
     const total = await withOrgContext(org.orgId, () =>
       db.execute<{ total: string }>(sql`
         select sum(amount)::text as total from journal_lines
-         where org_id = ${org.orgId} and entry_id = ${entryId}`),
+         where org_id = ${org.orgId} and entry_id = ${entryId}`, "objects"),
     );
-    assert.equal(toUnits(total.rows[0]!.total), 0n);
+    assert.equal(toUnits(total[0]!.total), 0n);
 
     const runs = await withOrgContext(org.orgId, () =>
       db.execute<{ status: string; logs: unknown }>(sql`
         select status, logs from script_runs
-         where org_id = ${org.orgId} and script_id = ${scriptId} and target_id = ${documentId}`),
+         where org_id = ${org.orgId} and script_id = ${scriptId} and target_id = ${documentId}`, "objects"),
     );
-    assert.equal(runs.rows.length, 1, "script_runs evidence recorded");
-    assert.equal(runs.rows[0]!.status, "ok");
-    assert.match(JSON.stringify(runs.rows[0]!.logs), /kernel lines seen/);
+    assert.equal(runs.length, 1, "script_runs evidence recorded");
+    assert.equal(runs[0]!.status, "ok");
+    assert.match(JSON.stringify(runs[0]!.logs), /kernel lines seen/);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -287,9 +287,9 @@ test("unbalanced script lines refuse posting with no journal write", { skip: !DB
         select (select status from documents where id = ${documentId}) as status,
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as runs,
-               (select status from script_runs where org_id = ${org.orgId} and target_id = ${documentId} limit 1) as run_status`),
+               (select status from script_runs where org_id = ${org.orgId} and target_id = ${documentId} limit 1) as run_status`, "objects"),
     );
-    assert.deepEqual(after.rows[0], {
+    assert.deepEqual(after[0], {
       status: "approved",
       entries: 0,
       runs: 1,
@@ -324,9 +324,9 @@ test("ledger-scale script lines share the journal bound", { skip: !DB }, async (
       db.execute<{ amount: string }>(sql`
         select amount::text as amount from journal_lines
          where org_id = ${org.orgId} and entry_id = ${entryId} and contributor_kind = 'script'
-         order by line_number`),
+         order by line_number`, "objects"),
     );
-    assert.deepEqual(posted.rows.map((l) => l.amount), ["20000000000000.0000", "-20000000000000.0000"]);
+    assert.deepEqual(posted.map((l) => l.amount), ["20000000000000.0000", "-20000000000000.0000"]);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -361,9 +361,9 @@ test("oversize script lines are refused with the shared bound message", { skip: 
     );
     const entries = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`),
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(entries.rows[0]!.n, 0);
+    assert.equal(entries[0]!.n, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -403,9 +403,9 @@ test("balanced script lines whose sides overflow the ledger are refused by name"
     );
     const entries = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`),
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(entries.rows[0]!.n, 0);
+    assert.equal(entries[0]!.n, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -440,9 +440,9 @@ test("unknown accountCode is refused with no write", { skip: !DB }, async () => 
     );
     const entries = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`),
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(entries.rows[0]!.n, 0);
+    assert.equal(entries[0]!.n, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -478,9 +478,9 @@ test("a script that mutates kernelLines fails and halts posting", { skip: !DB },
     );
     const entries = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`),
+        select count(*)::int as n from journal_entries where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(entries.rows[0]!.n, 0, "the mutating script halted posting with no write");
+    assert.equal(entries[0]!.n, 0, "the mutating script halted posting with no write");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -528,9 +528,9 @@ test("gates off: scripts run nowhere when any gate in the chain is disabled", { 
     const check = await withOrgContext(org.orgId, () =>
       db.execute<{ lines: number; runs: number }>(sql`
         select (select count(*)::int from journal_lines where org_id = ${org.orgId}) as lines,
-               (select count(*)::int from script_runs where org_id = ${org.orgId}) as runs`),
+               (select count(*)::int from script_runs where org_id = ${org.orgId}) as runs`, "objects"),
     );
-    assert.deepEqual(check.rows[0], { lines: 6, runs: 0 }, "kernel lines only, no script evidence");
+    assert.deepEqual(check[0], { lines: 6, runs: 0 }, "kernel lines only, no script evidence");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -573,9 +573,9 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
     const lines = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_lines
-         where org_id = ${org.orgId} and contributor_kind = 'script'`),
+         where org_id = ${org.orgId} and contributor_kind = 'script'`, "objects"),
     );
-    assert.equal(lines.rows[0]!.n, 2, "the gl.post holder's contributions land");
+    assert.equal(lines[0]!.n, 2, "the gl.post holder's contributions land");
 
     // A system posting has no caller: the script's run-as user answers for its lines.
     const system = await withOrgContext(org.orgId, () =>
@@ -591,9 +591,9 @@ test("gl.post gate: a caller without ledger rights cannot contribute", { skip: !
     const afterSystem = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_lines
-         where org_id = ${org.orgId} and contributor_kind = 'script'`),
+         where org_id = ${org.orgId} and contributor_kind = 'script'`, "objects"),
     );
-    assert.equal(afterSystem.rows[0]!.n, 4, "the run-as user's authority covers the system posting");
+    assert.equal(afterSystem[0]!.n, 4, "the run-as user's authority covers the system posting");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -689,9 +689,9 @@ test("documentKind narrowing: a vendor_bill script does not fire on a journal", 
     await postJournal(org, documentId, actorId);
     const runs = await withOrgContext(org.orgId, () =>
       db.execute<{ n: number }>(sql`
-        select count(*)::int as n from script_runs where org_id = ${org.orgId}`),
+        select count(*)::int as n from script_runs where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(runs.rows[0]!.n, 0);
+    assert.equal(runs[0]!.n, 0);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -762,10 +762,10 @@ test("the first error halts the chain: later scripts never run", { skip: !DB }, 
     const runs = await withOrgContext(org.orgId, () =>
       db.execute<{ script_id: string; status: string }>(sql`
         select script_id, status from script_runs
-         where org_id = ${org.orgId} and target_id = ${documentId}`),
+         where org_id = ${org.orgId} and target_id = ${documentId}`, "objects"),
     );
-    assert.equal(runs.rows.length, 1, "only the first script ran");
-    assert.notEqual(runs.rows[0]!.script_id, secondId);
+    assert.equal(runs.length, 1, "only the first script ran");
+    assert.notEqual(runs[0]!.script_id, secondId);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -816,9 +816,9 @@ test("an attributed custom_gl_lines run cannot stamp a subsidiary outside the ac
     const after = await withOrgContext(org.orgId, () =>
       db.execute<{ entries: number; scripted: number }>(sql`
         select (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
-               (select count(*)::int from journal_lines where org_id = ${org.orgId} and contributor_kind = 'script') as scripted`),
+               (select count(*)::int from journal_lines where org_id = ${org.orgId} and contributor_kind = 'script') as scripted`, "objects"),
     );
-    assert.deepEqual(after.rows[0], { entries: 0, scripted: 0 });
+    assert.deepEqual(after[0], { entries: 0, scripted: 0 });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
@@ -856,12 +856,12 @@ test("a refused attempt keeps its error evidence and a fixed retry posts once wi
         select (select status from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as status,
                (select error_message from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as error_message,
                (select logs from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as logs,
-               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`),
+               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`, "objects"),
     );
-    assert.equal(failed.rows[0]!.entries, 0, "the refused post wrote no journal");
-    assert.equal(failed.rows[0]!.status, "error");
-    assert.match(failed.rows[0]!.error_message ?? "", /retry-probe-boom/);
-    assert.match(JSON.stringify(failed.rows[0]!.logs), /about to fail/);
+    assert.equal(failed[0]!.entries, 0, "the refused post wrote no journal");
+    assert.equal(failed[0]!.status, "error");
+    assert.match(failed[0]!.error_message ?? "", /retry-probe-boom/);
+    assert.match(JSON.stringify(failed[0]!.logs), /about to fail/);
 
     // Fix the script and retry the same approved document: the post commits
     // with exactly one new ok row — the re-recorded error row is not
@@ -881,10 +881,10 @@ test("a refused attempt keeps its error evidence and a fixed retry posts once wi
       db.execute<{ statuses: string[]; entries: number }>(sql`
         select (select array_agg(status order by at) from script_runs
                  where org_id = ${org.orgId} and target_id = ${documentId}) as statuses,
-               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`),
+               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`, "objects"),
     );
-    assert.deepEqual(retried.rows[0]!.statuses, ["error", "ok"]);
-    assert.equal(retried.rows[0]!.entries, 1);
+    assert.deepEqual(retried[0]!.statuses, ["error", "ok"]);
+    assert.equal(retried[0]!.entries, 1);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

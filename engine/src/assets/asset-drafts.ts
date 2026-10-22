@@ -63,7 +63,7 @@ export async function lockCategoryForCapitalization(
            default_life_months, default_convention
       from asset_categories
      where org_id = ${orgId} and id = ${categoryId} and is_active
-     for share`)).rows[0];
+     for share`, "objects"))[0];
   if (!row) refuse("category_invalid", "choose an active asset category");
   if (!row.asset_account_id) {
     refuse("category_unconfigured", `asset category ${row.name} has no asset cost account`, {
@@ -100,7 +100,7 @@ export async function createDraftAsset(
   const next = (await tx.execute<{ n: number }>(sql`
     select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
       from fixed_assets
-     where org_id = ${input.orgId} and asset_number ~ '^FA-\\d+$'`)).rows[0];
+     where org_id = ${input.orgId} and asset_number ~ '^FA-\\d+$'`, "objects"))[0];
   const assetNumber = `FA-${String(Number(next?.n ?? 1)).padStart(4, "0")}`;
   const id = randomUUID();
   const after = {
@@ -140,7 +140,7 @@ export async function createDraftAsset(
        ${after.department_id}, ${after.project_id}, ${after.location_id},
        ${category.defaultMethod}, ${category.defaultDepreciationMethodId}, ${category.defaultLifeMonths},
        ${category.defaultConvention}, '{}'::jsonb, ${input.actorId}, ${input.actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!inserted) throw new Error("the asset insert returned no row");
   await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -170,7 +170,7 @@ export async function placeDraftInService(
   }>(sql`
     select asset_number, status, in_service_on::text as in_service_on, depreciation_method,
            depreciation_method_id, useful_life_months, depreciation_units_total::text as depreciation_units_total
-      from fixed_assets where org_id = ${args.orgId} and id = ${args.assetId} for update`)).rows[0];
+      from fixed_assets where org_id = ${args.orgId} and id = ${args.assetId} for update`, "objects"))[0];
   if (!asset) refuse("asset_not_found", "asset not found", { status: 404 });
   if (asset.status !== "draft") refuse("asset_not_draft", `asset ${asset.asset_number} is already ${asset.status}`);
   if (!asset.in_service_on) refuse("in_service_date_required", `set an in-service date for ${asset.asset_number} before placing it in service`);
@@ -185,7 +185,7 @@ export async function placeDraftInService(
   const placed = (await tx.execute<{ id: string }>(sql`
     update fixed_assets set status = 'in_service', updated_at = clock_timestamp(), updated_by = ${args.actorId}
      where org_id = ${args.orgId} and id = ${args.assetId} and status = 'draft'
-     returning id`)).rows[0];
+     returning id`, "objects"))[0];
   if (!placed) throw new Error(`asset ${asset.asset_number} was not placed in service; no row changed`);
   await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

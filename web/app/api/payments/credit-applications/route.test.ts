@@ -103,11 +103,12 @@ registerHooks({
         export * from ${JSON.stringify(real)};
         const s = globalThis[Symbol.for("openbooks.credit-applications-route-test")];
         export const db = {
-          async execute(query) {
+          async execute(query, mode) {
+            const inMode = (result) => (mode === 'objects' ? result.rows : result);
             const text = String(query?.queryChunks?.map?.((c) => (typeof c === "string" ? c : c?.value ?? "")).join("") ?? "");
-            if (text.includes("from parties")) return { rows: s.partyRow ? [s.partyRow] : [] };
-            if (text.includes("from documents")) return { rows: s.documentRow ? [s.documentRow] : [] };
-            return { rows: s.settlementRow ? [s.settlementRow] : [] };
+            if (text.includes("from parties")) return inMode({ rows: s.partyRow ? [s.partyRow] : [] });
+            if (text.includes("from documents")) return inMode({ rows: s.documentRow ? [s.documentRow] : [] });
+            return inMode({ rows: s.settlementRow ? [s.settlementRow] : [] });
           },
           async transaction(fn) { return fn(db); },
         };

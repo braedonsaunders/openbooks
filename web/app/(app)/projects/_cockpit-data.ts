@@ -78,9 +78,9 @@ export async function loadProjectCockpit(
   const locked = await db.execute<{ contractValue: string | null }>(sql`
     select id, contract_value::text as "contractValue" from projects where id = ${projectId} and org_id = ${orgId}
       ${subsidiaryVisibleFilter(sql`subsidiary_id`, scope)}
-      for share`);
-  if (!locked.rows[0]) return null;
-  const contractValue = locked.rows[0].contractValue ?? null;
+      for share`, 'objects');
+  if (!locked[0]) return null;
+  const contractValue = locked[0].contractValue ?? null;
   const [projectType, fieldTicketsEnabled, equipmentEnabled, inventoryEnabled, today, fieldTimeEnabled, primaryBookId] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
@@ -111,20 +111,20 @@ export async function loadProjectCockpit(
              bool_and(dl.billed_by_line_id is not null) filter (where dl.is_billable) as billed
         from documents d left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind = 'project_charge' and d.project_id = ${projectId}
-       group by d.id order by d.document_date desc, d.document_number desc`),
+       group by d.id order by d.document_date desc, d.document_number desc`, 'objects'),
     db.execute<ChargeItemRow>(sql`
       select id, name, default_cost as "defaultCost", default_rate as "defaultRate"
         from items where org_id = ${orgId} and is_active
          ${inventoryEnabled ? sql`` : sql`and kind not in ('inventory', 'assembly', 'kit')`}
          ${equipmentEnabled ? sql`` : sql`and kind <> 'equipment_charge'`}
-       order by name limit 2000`),
+       order by name limit 2000`, 'objects'),
     equipmentEnabled
       ? db.execute<ChargeEquipmentRow>(sql`
       select id, name, unit_number as "unitNumber", charge_item_id as "itemId"
         from equipment_units where org_id = ${orgId} and status = 'active'
          and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
-       order by unit_number limit 2000`)
-      : Promise.resolve({ rows: [] }),
+       order by unit_number limit 2000`, 'objects')
+      : Promise.resolve([]),
     // Operators an equipment charge can be attributed to: active employees
     // the caller may see. The org-wide join disclosed out-of-scope staff, so
     // this rides the scoped party options like every other party picker.
@@ -144,38 +144,38 @@ export async function loadProjectCockpit(
         from projects p
         left join revenue_contracts c on c.org_id = p.org_id and c.project_id = p.id
        left join performance_obligations o on o.contract_id = c.id and o.org_id = c.org_id
-       where p.id = ${projectId} and p.org_id = ${orgId}`),
-    db.execute(sql`
+       where p.id = ${projectId} and p.org_id = ${orgId}`, 'objects'),
+    db.execute<{ from: string; to: string }>(sql`
       select coalesce(min(e.posting_date), ${today})::text as "from",
              greatest(coalesce(max(e.posting_date), ${today}), ${today})::text as "to"
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId}
          and l.project_id = ${projectId}
-         and e.status in ('posted', 'reversed')`),
+         and e.status in ('posted', 'reversed')`, 'objects'),
     options.includeApplicationBilling
-      ? db.execute(sql`
+      ? db.execute<{ id: string; number: string | null; name: string }>(sql`
           select id, number, name
             from accounts
            where org_id = ${orgId}
              and type in ('income', 'income_other')
              and is_active
-           order by number nulls last, name`)
-      : Promise.resolve({ rows: [] }),
+           order by number nulls last, name`, 'objects')
+      : Promise.resolve([]),
   ])
 
   // Budget versus actual (the original sold budget, the working budget and
   // actuals to date); invoiced to date comes from the financials above.
   const budget = await projectBudgetComparison(orgId, projectId, { allowedSubsidiaryIds: scope, includeInvoiced: false })
 
-  const charges = chargeRes.rows
-  const items = itemRes.rows
-  const equipment = equipmentRes.rows
+  const charges = chargeRes
+  const items = itemRes
+  const equipment = equipmentRes
   const operators = operatorRes
 
   // Recognition status for the Financials tab card — shown for fixed-price /
   // percent-complete project types; posting stays with the central run.
-  const recRow = recognizedRes.rows[0]
+  const recRow = recognizedRes[0]
   const recognitionPolicy = projectType.invoicingProfile.recognition
   let recognition = null
   if (recognitionPolicy === 'percent_complete_cost') {
@@ -246,7 +246,7 @@ export async function loadProjectCockpit(
       allowedBackupTypes: invoicing.allowedBackupTypes,
       source: invoicing.source,
     },
-    applicationIncomeAccounts: (incomeAccountRes as unknown as { rows: { id: string; number: string | null; name: string }[] }).rows.map((account) => ({
+    applicationIncomeAccounts: incomeAccountRes.map((account) => ({
       id: account.id,
       label: [account.number, account.name].filter(Boolean).join(' · '),
     })),
@@ -260,7 +260,7 @@ export async function loadProjectCockpit(
       billValue: formatMoney(sum(charges.map((c) => String(c.billValue))), 2),
     },
     recognition,
-    glRange: ((glRangeRes as unknown as { rows: { from: string; to: string }[] }).rows[0]
+    glRange: (glRangeRes[0]
       ?? { from: today, to: today }),
     transactions: financials.documents as ProjectCockpitData['transactions'],
   }

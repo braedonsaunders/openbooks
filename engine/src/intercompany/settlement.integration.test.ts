@@ -72,14 +72,14 @@ async function counts(orgId: string) {
   return (await db.execute<{ transfers: number; entries: number; runs: number }>(sql`
     select (select count(*)::int from intercompany_fund_transfers where org_id = ${orgId}) as transfers,
            (select count(*)::int from journal_entries where org_id = ${orgId}) as entries,
-           (select count(*)::int from intercompany_netting_runs where org_id = ${orgId}) as runs`)).rows[0]!;
+           (select count(*)::int from intercompany_netting_runs where org_id = ${orgId}) as runs`, "objects"))[0]!;
 }
 
 async function accountBalance(orgId: string, accountId: string) {
   const row = (await db.execute<{ balance: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as balance from journal_lines l
     join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
-    where l.org_id = ${orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`)).rows[0]!;
+    where l.org_id = ${orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`, "objects"))[0]!;
   return toUnits(row.balance);
 }
 
@@ -88,9 +88,9 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 test('a transfer balances each entity, replays once, and reverses through the native read path', { skip: !DB }, async () => scenario(async f => {
   const posted = await postIntercompanyFundTransfer(f.org.orgId, f.actorId, null, f.transfer);
   assert.equal(posted.status, 'posted');
-  const entityBalances = (await db.execute<{ subsidiary_id: string; balance: string }>(sql`
+  const entityBalances = await db.execute<{ subsidiary_id: string; balance: string }>(sql`
     select subsidiary_id, sum(amount)::text as balance from journal_lines
-    where org_id = ${f.org.orgId} and entry_id = ${posted.entryId} group by subsidiary_id`)).rows;
+    where org_id = ${f.org.orgId} and entry_id = ${posted.entryId} group by subsidiary_id`, "objects");
   assert.equal(entityBalances.length, 2);
   assert.ok(entityBalances.every(row => toUnits(row.balance) === 0n));
   assert.equal(await accountBalance(f.org.orgId, f.fromPositionId), 1_000_000n);
@@ -120,7 +120,7 @@ test('a transfer respects a destination entity close on its effective fiscal cal
     const priorDefaultPeriodId = randomUUID();
     const defaultCalendar = (await db.execute<{ id: string }>(sql`
       select id from fiscal_calendars where org_id = ${f.org.orgId} and is_default and is_active
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(defaultCalendar, 'the scratch organization has an active default calendar');
     await db.execute(sql`
       insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,

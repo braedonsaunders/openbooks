@@ -40,15 +40,15 @@ export async function countChannelExceptions(orgId: string, allowed: ReadonlySet
     db.execute<{ count: string }>(
       sql`select count(*)::text as count from channel_orders o
             join sales_channels c on c.org_id = o.org_id and c.id = o.channel_id
-           where o.org_id = ${orgId} and o.posting_status = 'exception'${scope}`,
+           where o.org_id = ${orgId} and o.posting_status = 'exception'${scope}`, 'objects',
     ),
     db.execute<{ count: string }>(
       sql`select count(*)::text as count from channel_order_events e
             join sales_channels c on c.org_id = e.org_id and c.id = e.channel_id
-           where e.org_id = ${orgId} and e.posting_status = 'exception'${scope}`,
+           where e.org_id = ${orgId} and e.posting_status = 'exception'${scope}`, 'objects',
     ),
   ])
-  return Number(orders.rows[0]?.count ?? '0') + Number(events.rows[0]?.count ?? '0')
+  return Number(orders[0]?.count ?? '0') + Number(events[0]?.count ?? '0')
 }
 
 export async function loadChannelOrders(

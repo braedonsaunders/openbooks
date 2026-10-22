@@ -32,15 +32,15 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function gateId(subjectId: string): Promise<string> {
   const rows = (await db.execute<{ id: string }>(sql`
-    select id from flow_gates where subject_id = ${subjectId} order by created_at`));
-  assert.equal(rows.rows.length, 1, `expected one gate, got ${rows.rows.length}`);
-  return rows.rows[0]!.id;
+    select id from flow_gates where subject_id = ${subjectId} order by created_at`, "objects"));
+  assert.equal(rows.length, 1, `expected one gate, got ${rows.length}`);
+  return rows[0]!.id;
 }
 
 async function runStatus(orgId: string, documentId: string): Promise<string> {
   const rows = (await db.execute<{ run_status: string }>(sql`
-    select run_status from pay_runs where org_id = ${orgId} and document_id = ${documentId}`));
-  return rows.rows[0]!.run_status;
+    select run_status from pay_runs where org_id = ${orgId} and document_id = ${documentId}`, "objects"));
+  return rows[0]!.run_status;
 }
 
 test("an approved pay run commits (second-user approval releases the commit)", { skip: !DB }, async () => {
@@ -137,7 +137,7 @@ test("a concurrent attempt to rewrite a recorded gate is refused while the appro
     // run_scope is definitively past the pre-check.
     const snapshot = (await db.execute<{ snapshot: unknown }>(sql`
       select calculation_source_snapshot as snapshot from pay_runs
-       where org_id = ${fx.orgId} and document_id = ${input.documentId}`)).rows[0]!.snapshot as {
+       where org_id = ${fx.orgId} and document_id = ${input.documentId}`, "objects"))[0]!.snapshot as {
       claimEntryIds: string[];
     };
     assert.ok(snapshot.claimEntryIds.includes(entryId), "the fixture entry is what the commit claims");
@@ -190,7 +190,7 @@ test("a concurrent attempt to rewrite a recorded gate is refused while the appro
              and pid <> pg_backend_pid()
              and state = 'active'
              and wait_event is not null
-             and query ilike '%run_scope%'`)).rows[0]!.n;
+             and query ilike '%run_scope%'`, "objects"))[0]!.n;
         return seen >= 1;
       };
       const parkDeadline = Date.now() + 15000;
@@ -210,10 +210,10 @@ test("a concurrent attempt to rewrite a recorded gate is refused while the appro
         const live = (await db.execute<{ pid: number; state: string; wait: string | null; query: string }>(sql`
           select pid, state, wait_event as "wait", left(query, 160) as query from pg_stat_activity
            where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
-           order by pid`));
+           order by pid`, "objects"));
         assert.fail(
           `the commit never parked inside run_scope during the attempted approval rewrite `
-          + `(live backends: ${JSON.stringify(live.rows)})`,
+          + `(live backends: ${JSON.stringify(live)})`,
         );
       }
 
@@ -223,7 +223,7 @@ test("a concurrent attempt to rewrite a recorded gate is refused while the appro
         (error:unknown)=>error instanceof Error && /recorded gate decision is immutable/.test(
           error.message+" "+((error as {cause?:Error}).cause?.message??"")));
       assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates
-        where org_id=${fx.orgId} and id=${decidedGateId}`)).rows[0]?.status,"approved");
+        where org_id=${fx.orgId} and id=${decidedGateId}`, "objects"))[0]?.status,"approved");
     } finally {
       releaseResolve();
       assert.equal(
@@ -236,7 +236,7 @@ test("a concurrent attempt to rewrite a recorded gate is refused while the appro
     assert.equal(await runStatus(fx.orgId, input.documentId), "committed");
     const lines = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from document_lines
-       where org_id = ${fx.orgId} and document_id = ${input.documentId}`)).rows[0]!.n;
+       where org_id = ${fx.orgId} and document_id = ${input.documentId}`, "objects"))[0]!.n;
     assert.ok(lines > 0, "the unchanged native approval permits the balanced payroll projection");
   } finally {
     await dropScratchOrg(fx.orgId);
@@ -245,15 +245,15 @@ test("a concurrent attempt to rewrite a recorded gate is refused while the appro
 
 async function documentStatus(orgId: string, documentId: string): Promise<string> {
   const rows = (await db.execute<{ status: string }>(sql`
-    select status from documents where org_id = ${orgId} and id = ${documentId}`));
-  return rows.rows[0]!.status;
+    select status from documents where org_id = ${orgId} and id = ${documentId}`, "objects"));
+  return rows[0]!.status;
 }
 
 async function pendingGateId(subjectId: string): Promise<string> {
   const rows = (await db.execute<{ id: string }>(sql`
-    select id from flow_gates where subject_id = ${subjectId} and status = 'pending' order by created_at`));
-  assert.equal(rows.rows.length, 1, `expected one pending gate, got ${rows.rows.length}`);
-  return rows.rows[0]!.id;
+    select id from flow_gates where subject_id = ${subjectId} and status = 'pending' order by created_at`, "objects"));
+  assert.equal(rows.length, 1, `expected one pending gate, got ${rows.length}`);
+  return rows[0]!.id;
 }
 
 /** A calculated run submitted and approved by the second user, as production does it. */
@@ -304,7 +304,7 @@ test("recalculating a stale approved run withdraws its approval, audits the reas
     const audit = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from audit_log
        where org_id = ${fx.orgId} and table_name = 'documents' and row_id = ${documentId}
-         and action = 'update' and changes::text like ${"%Inputs changed since approval%"}`)).rows[0]!.n;
+         and action = 'update' and changes::text like ${"%Inputs changed since approval%"}`, "objects"))[0]!.n;
     assert.equal(audit, 1, "the withdrawal records the stale inputs as its audited reason");
 
     await assert.rejects(

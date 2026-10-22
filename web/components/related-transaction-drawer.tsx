@@ -73,8 +73,8 @@ async function maskPayRunDrawerLines(
   const refs = (await db.execute<{ id: string; account_id: string; party_id: string | null }>(sql`
     select id, account_id, party_id from document_lines
      where org_id = ${orgId} and document_id = ${documentId}
-  `))
-  const byId = new Map(refs.rows.map((row) => [row.id, row]))
+  `, 'objects'))
+  const byId = new Map(refs.map((row) => [row.id, row]))
   const mapped = lines.map((line) => {
     const ref = byId.get(String(line.id))
     return {
@@ -151,8 +151,8 @@ export async function loadRelatedTransactionDrawerData({
              ? sql`and d.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
              : sql`and false`
            : sql``}
-    `))
-    if (!related.rows[0]) return null
+    `, 'objects'))
+    if (!related[0]) return null
   }
   if (kind === 'field_ticket') {
     const props = await loadFieldTicketDrawerData({ authz, ticketId: id, formLayoutId })
@@ -221,7 +221,7 @@ export async function loadRelatedTransactionDrawerData({
                 where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
              )
            )
-         order by name limit 2000`),
+         order by name limit 2000`, 'objects'),
       taxCodeOptions(),
       taxGroupOptions(),
       reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
@@ -244,7 +244,7 @@ export async function loadRelatedTransactionDrawerData({
         kind: orderKind,
         parties: parties.rows,
         accounts: accounts.rows,
-        items: items.rows,
+        items,
         taxCodes: (taxCodes),
         taxGroups: (taxGroups),
         departments: dimensions.departments,
@@ -388,7 +388,7 @@ export async function loadRelatedTransactionDrawerData({
               where org_id = ${authz.user.orgId} and document_id = ${id} and item_id is not null
            )
          )
-       order by coalesce(code, name), name limit 2000`).then((r) => r.rows),
+       order by coalesce(code, name), name limit 2000`, 'objects'),
     config.fundingSource === 'card' ? listScopedCardOptions(authz.user.orgId, authz.allowedSubsidiaryIds) : Promise.resolve(undefined),
     config.fundingSource === 'card'
       ? scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: ['liability_card'], activeOnly: true, postingOnly: true, reconcilableOnly: true })

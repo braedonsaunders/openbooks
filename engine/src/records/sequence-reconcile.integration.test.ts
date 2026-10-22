@@ -28,14 +28,14 @@ async function sequenceRow(orgId: string, kind: string) {
   const rows = (await db.execute<{ prefix: string; next_number: number; allocated_through: number }>(sql`
     select prefix, next_number, allocated_through
       from number_sequences
-     where org_id = ${orgId} and document_kind = ${kind}`));
-  return rows.rows;
+     where org_id = ${orgId} and document_kind = ${kind}`, "objects"));
+  return rows;
 }
 
 async function documentNumbers(orgId: string): Promise<string[]> {
   const rows = (await db.execute<{ n: string }>(sql`
-    select document_number as n from documents where org_id = ${orgId} order by document_number`));
-  return rows.rows.map((r) => r.n);
+    select document_number as n from documents where org_id = ${orgId} order by document_number`, "objects"));
+  return rows.map((r) => r.n);
 }
 
 test("sample-issued numbers continue into live allocation without renumbering", { skip: !DB }, async () => {

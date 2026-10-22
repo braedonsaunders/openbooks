@@ -73,7 +73,7 @@ export async function committedPlHistory(input: {
       min(pay_date)::text as payer_first_pay,
       min(period_start)::text as payer_first_period
       from payer
-  `)).rows[0];
+  `, "objects"))[0];
   return {
     dochod: row?.dochod ?? "0",
     podstawaSpoleczne: row?.podstawa ?? "0",

@@ -35,7 +35,7 @@ function baseUrl(req: Request): string {
 async function orgName(orgId: string): Promise<string> {
   const row = (await db.execute<{ name: string }>(sql`
     select name from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.name ?? "Your organization";
 }
 

@@ -29,16 +29,14 @@ export async function authorizeChange(id: string, intent: "submit" | "apply" = "
       return NextResponse.json({ error: "change not found" }, { status: 404 });
     throw error;
   }
-  const row = (
-    await db.execute<{
+  const row = (await db.execute<{
       domain: keyof typeof changeAuthority;
       operation: string;
       subsidiary_id: string;
       required_subsidiary_ids: string[] | null;
     }>(
-      sql`select domain,operation,subsidiary_id,payload->'requiredSubsidiaryIds' as required_subsidiary_ids from financial_changes where org_id=${auth.user.orgId} and id=${id}`,
-    )
-  ).rows[0];
+      sql`select domain,operation,subsidiary_id,payload->'requiredSubsidiaryIds' as required_subsidiary_ids from financial_changes where org_id=${auth.user.orgId} and id=${id}`, "objects",
+    ))[0];
   if (
     !row ||
     (auth.allowedSubsidiaryIds &&

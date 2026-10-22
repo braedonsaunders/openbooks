@@ -50,7 +50,7 @@ async function setup(): Promise<Setup> {
   await withBypassContext(() => db.execute(sql`
     update items set code = ${code} where id = ${org.items.service} and org_id = ${org.orgId}`));
   const item = (await withBypassContext(() => db.execute<{ id: string; code: string | null }>(sql`
-    select id, code from items where id = ${org.items.service} and org_id = ${org.orgId}`))).rows[0]!;
+    select id, code from items where id = ${org.items.service} and org_id = ${org.orgId}`, "objects")))[0]!;
   assert.equal(item.code, code, "the scratch service item takes a code");
   return {
     orgId: org.orgId,
@@ -162,7 +162,7 @@ test("full order create posts the drawer's totals and lines", { skip: !DB }, asy
       ),
     );
     const token = (await withBypassContext(() => db.execute<{ t: string }>(sql`
-      select revision_seq::text as t from documents where id = ${draft.result.id}`))).rows[0]!.t;
+      select revision_seq::text as t from documents where id = ${draft.result.id}`, "objects")))[0]!.t;
     const drawer = await withOrgContext(fixture.orgId, () =>
       applyOrderEdit(
         {
@@ -210,7 +210,7 @@ test("full order create posts the drawer's totals and lines", { skip: !DB }, asy
     // The dedupe key landed on the stored row.
     const stored = (await withBypassContext(() => db.execute<{ external_ref: string | null; external_source: string | null; status: string }>(sql`
       select external_ref, external_source, status from documents
-       where id = ${result.id} and org_id = ${fixture.orgId}`))).rows[0];
+       where id = ${result.id} and org_id = ${fixture.orgId}`, "objects")))[0];
     assert.equal(stored?.external_ref, ref);
     assert.equal(stored?.external_source, "shopify");
     assert.equal(stored?.status, "draft");
@@ -264,7 +264,7 @@ test("a duplicate external reference returns 409 with the existing id", { skip: 
     );
     const count = (await withBypassContext(() => db.execute<{ n: string }>(sql`
       select count(*)::text as n from documents
-       where org_id = ${fixture.orgId} and external_source = 'shopify' and external_ref = ${ref}`))).rows[0]!.n;
+       where org_id = ${fixture.orgId} and external_source = 'shopify' and external_ref = ${ref}`, "objects")))[0]!.n;
     assert.equal(count, "1");
   } finally {
     await teardown(fixture.orgId);
@@ -367,11 +367,11 @@ test("lines replace and issue drive a draft to issued", { skip: !DB }, async () 
     assert.equal(issued.status, 200, JSON.stringify(issued.json));
     assert.equal(issued.json.status, "approved");
     const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`
-      select status from documents where id = ${id} and org_id = ${fixture.orgId}`))).rows[0]!.status;
+      select status from documents where id = ${id} and org_id = ${fixture.orgId}`, "objects")))[0]!.status;
     assert.equal(status, "approved");
 
     const currentToken = (await withBypassContext(() => db.execute<{ t: string }>(sql`
-      select revision_seq::text as t from documents where id = ${id}`))).rows[0]!.t;
+      select revision_seq::text as t from documents where id = ${id}`, "objects")))[0]!.t;
     assert.equal(String(issued.json.expectedUpdatedAt), currentToken);
     const reissued = await callV1(
       fixture.orgId,

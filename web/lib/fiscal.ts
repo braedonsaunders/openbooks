@@ -32,9 +32,9 @@ export async function fiscalStartMonth(orgId?: string): Promise<number> {
   const r = (await db.execute<{ m: number }>(
     sql`select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m
           from orgs
-         where id = ${activeOrgId}`,
+         where id = ${activeOrgId}`, 'objects',
   ))
-  const m = r.rows[0]?.m ?? 1
+  const m = r[0]?.m ?? 1
   return m >= 1 && m <= 12 ? m : 1
 }
 
@@ -53,8 +53,8 @@ export async function defaultFiscalCalendarPeriods(
   const cal = (await db.execute<{ cadence: string }>(sql`
     select cadence from fiscal_calendars
      where org_id = ${activeOrgId} and is_default and is_active
-     order by created_at limit 1`))
-  const cadence = cal.rows[0]?.cadence
+     order by created_at limit 1`, 'objects'))
+  const cadence = cal[0]?.cadence
   if (!cadence) return null
   const r = (await db.execute<{
     fiscal_year: number
@@ -67,10 +67,10 @@ export async function defaultFiscalCalendarPeriods(
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${activeOrgId} and fc.is_default and fc.is_active and not p.is_adjustment
-     order by p.starts_on, p.ends_on`))
+     order by p.starts_on, p.ends_on`, 'objects'))
   return {
     cadence,
-    periods: r.rows.map((p) => ({
+    periods: r.map((p) => ({
       fiscalYear: p.fiscal_year,
       periodNumber: p.period_number,
       // Labelled from the fiscal position, not the free-text stored name, so

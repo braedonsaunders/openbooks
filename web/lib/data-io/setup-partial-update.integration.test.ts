@@ -10,11 +10,11 @@ test('partial component imports preserve existing financial configuration throug
  const org = await createScratchOrg();
  try {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  const account = (await db.execute<{id:string}>(sql`select id from accounts where org_id=${org.orgId} and is_active limit 1`)).rows[0]!;
+  const account = (await db.execute<{id:string}>(sql`select id from accounts where org_id=${org.orgId} and is_active limit 1`, 'objects'))[0]!;
   await db.execute(sql`insert into pay_components (org_id,code,name,kind,country,basis,value,expense_account_id,liability_account_id,taxable,pensionable,insurable,vacationable,created_by,updated_by)
    values (${org.orgId},'QUANTITY','Travel allowance','earning','CA','fixed_amount','19.1234',${account.id},${account.id},false,true,false,true,${actorId},${actorId})`);
   const read = async () => (await db.execute(sql`select country,value,expense_account_id,liability_account_id,taxable,pensionable,insurable,vacationable,unit_of_measure
-   from pay_components where org_id=${org.orgId} and code='QUANTITY'`)).rows[0]!;
+   from pay_components where org_id=${org.orgId} and code='QUANTITY'`, 'objects'))[0]!;
   const before = await read();
   const resource = setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId);
   const rows = [{code:'QUANTITY',name:'Travel allowance',kind:'earning',basis:'fixed_amount',unitOfMeasure:'quantity',reason:'Approved non-hour quantity presentation'}];
@@ -26,8 +26,8 @@ test('partial component imports preserve existing financial configuration throug
   assert.equal(committed.updated,1,JSON.stringify(committed));
   assert.equal(committed.failed,0);
   assert.deepEqual(await read(),{...before,unit_of_measure:'quantity'});
-  const evidence = (await db.execute<{actor_id:string;changes:{before:Record<string,unknown>;after:Record<string,unknown>;reason:string}}>(sql`select actor_id,changes from audit_log
-   where org_id=${org.orgId} and table_name='pay_components' and changes->'after'->>'code'='QUANTITY'`)).rows;
+  const evidence = await db.execute<{actor_id:string;changes:{before:Record<string,unknown>;after:Record<string,unknown>;reason:string}}>(sql`select actor_id,changes from audit_log
+   where org_id=${org.orgId} and table_name='pay_components' and changes->'after'->>'code'='QUANTITY'`, 'objects');
   assert.equal(evidence.length,1);
   assert.equal(evidence[0]!.actor_id,actorId);
   assert.equal(evidence[0]!.changes.reason,rows[0]!.reason);

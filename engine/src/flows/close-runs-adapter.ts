@@ -91,8 +91,8 @@ async function loadCloseRun(subjectId: string): Promise<CloseRunRow | null> {
       join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
       join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id
      where r.id = ${subjectId}
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 function periodType(

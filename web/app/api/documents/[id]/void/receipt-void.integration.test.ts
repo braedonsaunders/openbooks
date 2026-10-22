@@ -79,8 +79,7 @@ async function receiveFull(
 }
 
 async function receiptFacts(orgId: string, receiptId: string, lineId: string) {
-  const rows = (
-    await db.execute<{
+  const rows = (await db.execute<{
       status: string;
       received: string;
       movements: number;
@@ -98,15 +97,13 @@ async function receiptFacts(orgId: string, receiptId: string, lineId: string) {
                join document_lines line on line.id = movement.document_line_id and line.org_id = movement.org_id
               where reversal.org_id = ${orgId} and line.document_id = ${receiptId}
                 and reversal.kind = 'return' and reversal.status = 'posted') as reversals
-    `)
-  ).rows[0]!;
+    `, "objects"))[0]!;
   return rows;
 }
 
 /** Every account the receipt touched must net to exactly zero after the void. */
 async function receiptGlNetsToZero(orgId: string, receiptId: string): Promise<void> {
-  const rows = (
-    await db.execute<{ account: string; net: string }>(sql`
+  const rows = await db.execute<{ account: string; net: string }>(sql`
       with receipt_movements as (
         select movement.id, movement.journal_entry_id
           from inventory_movements movement
@@ -126,8 +123,7 @@ async function receiptGlNetsToZero(orgId: string, receiptId: string): Promise<vo
         from journal_lines line
         join void_entries on void_entries.entry_id = line.entry_id
        where line.org_id = ${orgId}
-       group by line.account_id`)
-  ).rows;
+       group by line.account_id`, "objects");
   assert.ok(rows.length > 0, "the receipt and its reversal must leave journal evidence");
   for (const row of rows) {
     assert.equal(row.net, "0.0000", `account ${row.account} must net to zero across receipt + reversal`);
@@ -173,10 +169,8 @@ test("voiding a posted goods receipt reverses stock, GL and fulfilled counters",
     );
     await receiptGlNetsToZero(org.orgId, receipt.id);
 
-    const movementCount = (
-      await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`)
-    ).rows[0]!.n;
+    const movementCount = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n;
     const again = await requestDocumentVoid({
       documentId: receipt.id,
       orgId: org.orgId,
@@ -188,10 +182,8 @@ test("voiding a posted goods receipt reverses stock, GL and fulfilled counters",
     );
     assert.ok(again instanceof DocumentVoidError, "a repeated void refuses instead of reposting");
     assert.equal(
-      (
-        await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`)
-      ).rows[0]!.n,
+      (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n,
       movementCount,
       "the refused repeat writes no movement",
     );
@@ -312,8 +304,7 @@ test("a closed receipt period moves the void default to the first open period", 
     assert.equal(outcome.status, "voided");
     // The reservation date is consumed on completion: the reversal rows
     // carry the evidence instead.
-    const stored = (
-      await db.execute<{ reversalDate: string; postingDate: string }>(sql`
+    const stored = (await db.execute<{ reversalDate: string; postingDate: string }>(sql`
         select reversal.moved_at::date::text as "reversalDate",
                entry.posting_date::date::text as "postingDate"
           from inventory_movements reversal
@@ -326,8 +317,7 @@ test("a closed receipt period moves the void default to the first open period", 
          where reversal.org_id = ${org.orgId} and line.document_id = ${receipt.id}
            and reversal.kind = 'return'
          limit 1
-      `)
-    ).rows[0]!;
+      `, "objects"))[0]!;
     assert.ok(stored, "the reversal movement and journal exist");
     assert.equal(stored.reversalDate, "2026-08-01");
     assert.equal(stored.postingDate, "2026-08-01", "the reversal posts in the open period");

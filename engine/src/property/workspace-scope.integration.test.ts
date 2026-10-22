@@ -121,11 +121,11 @@ test("property workspace snapshot does not tear across a concurrent rehome", asy
     const seen = await withScopeSnapshot(fx.orgId, async () => {
       const first = (await db.execute<{ id: string }>(sql`
         select id from managed_properties where org_id = ${fx.orgId}
-          and subsidiary_id = ${fx.subA} order by id`)).rows.map((row) => row.id);
+          and subsidiary_id = ${fx.subA} order by id`, "objects")).map((row) => row.id);
       await moveMidSnapshot();
       const second = (await db.execute<{ id: string }>(sql`
         select id from managed_properties where org_id = ${fx.orgId}
-          and subsidiary_id = ${fx.subA} order by id`)).rows.map((row) => row.id);
+          and subsidiary_id = ${fx.subA} order by id`, "objects")).map((row) => row.id);
       return { first, second };
     });
     assert.deepEqual(seen.first, [fx.propA]);
@@ -203,7 +203,7 @@ test("property write waits out a concurrent rehome and then refuses", async () =
       await assertScopeNotFound(pending);
       assert.equal(settled, true);
       const name = (await withBypass(() => db.execute<{ name: string }>(sql`
-        select name from managed_properties where id = ${fx.propA} and org_id = ${fx.orgId}`))).rows[0]!.name;
+        select name from managed_properties where id = ${fx.propA} and org_id = ${fx.orgId}`, "objects")))[0]!.name;
       assert.equal(name, "Entity A house", "the refused write changed nothing");
     } finally {
       // Roll back before releasing: a pooled connection never rolls back on

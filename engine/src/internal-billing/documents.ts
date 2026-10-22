@@ -140,7 +140,7 @@ async function assertDimension(
 ): Promise<void> {
   if (!id) return;
   const row = (await runner.execute<{ is_active: boolean }>(sql`
-    select is_active from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`)).rows[0];
+    select is_active from ${sql.raw(table)} where org_id = ${orgId} and id = ${id}`, "objects"))[0];
   if (!row) throw new InternalBillingError(`${label} was not found`);
   if (!row.is_active) throw new InternalBillingError(`${label} is inactive; choose an active one`);
 }
@@ -154,7 +154,7 @@ async function assertProject(
 ): Promise<void> {
   if (!projectId) return;
   const row = (await runner.execute<{ subsidiary_id: string | null; status: string }>(sql`
-    select subsidiary_id, status from projects where org_id = ${orgId} and id = ${projectId}`)).rows[0];
+    select subsidiary_id, status from projects where org_id = ${orgId} and id = ${projectId}`, "objects"))[0];
   if (!row) throw new InternalBillingError(`${label} was not found`);
   if (row.subsidiary_id && row.subsidiary_id !== subsidiaryId) {
     throw new InternalBillingError(`${label} belongs to another subsidiary; choose that subsidiary or another project`);
@@ -164,7 +164,7 @@ async function assertProject(
 
 async function assertSubsidiary(runner: SqlExecutor, orgId: string, id: string, label: string): Promise<string> {
   const row = (await runner.execute<{ base_currency: string; is_active: boolean }>(sql`
-    select base_currency, is_active from subsidiaries where org_id = ${orgId} and id = ${id}`)).rows[0];
+    select base_currency, is_active from subsidiaries where org_id = ${orgId} and id = ${id}`, "objects"))[0];
   if (!row) throw new InternalBillingError(`${label} was not found`);
   if (!row.is_active) throw new InternalBillingError(`${label} is inactive`);
   return row.base_currency;
@@ -172,7 +172,7 @@ async function assertSubsidiary(runner: SqlExecutor, orgId: string, id: string, 
 
 async function rootSubsidiaryId(runner: SqlExecutor, orgId: string): Promise<string> {
   const id = (await runner.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`)).rows[0]?.id;
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`, "objects"))[0]?.id;
   if (!id) throw new InternalBillingError("the organization has no root subsidiary");
   return id;
 }
@@ -247,7 +247,7 @@ export async function saveInternalBillingDraft(args: {
                ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as revision
           from documents d
          where d.org_id = ${orgId} and d.id = ${args.id}
-         for update`)).rows.find((row) => row.kind === KIND) ?? null;
+         for update`, "objects")).find((row) => row.kind === KIND) ?? null;
       if (!existing || !subsidiaryScopeAllows(args.allowedSubsidiaryIds, existing.subsidiaryId)) {
         throw new InternalBillingError("not found", 404);
       }
@@ -337,7 +337,7 @@ export async function saveInternalBillingDraft(args: {
       let itemName: string | null = null;
       if (itemId) {
         const item = (await db.execute<{ name: string }>(sql`
-          select name from items where org_id = ${orgId} and id = ${itemId}`)).rows[0];
+          select name from items where org_id = ${orgId} and id = ${itemId}`, "objects"))[0];
         if (!item) throw new InternalBillingError(`line ${lineNumber}: item was not found`);
         itemName = item.name;
       }
@@ -385,8 +385,8 @@ export async function saveInternalBillingDraft(args: {
                subtotal = ${total}, tax_total = '0', total = ${total},
                updated_at = now(), updated_by = ${args.actorId}
          where org_id = ${orgId} and id = ${existing.id} and status = 'draft'
-         returning id`);
-      if (!updated.rows[0]) throw new InternalBillingError("this document changed while you were saving; reload and try again", 409);
+         returning id`, "objects");
+      if (!updated[0]) throw new InternalBillingError("this document changed while you were saving; reload and try again", 409);
       await db.execute(sql`delete from document_lines where org_id = ${orgId} and document_id = ${existing.id}`);
       id = existing.id;
       documentNumber = existing.documentNumber;
@@ -401,7 +401,7 @@ export async function saveInternalBillingDraft(args: {
                 ${providerSubsidiaryId}, ${header.departmentId}, ${header.projectId}, ${header.locationId}, ${header.classId},
                 ${rule.id}, ${referenceNumber}, ${memo},
                 ${total}, '0', ${total}, ${args.actorId}, ${args.actorId})
-        returning id`)).rows[0];
+        returning id`, "objects"))[0];
       if (!inserted) throw new Error("internal billing insert returned no row");
       id = inserted.id;
     }
@@ -426,7 +426,7 @@ export async function saveInternalBillingDraft(args: {
     }
     const revision = (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision
-        from documents where org_id = ${orgId} and id = ${id}`)).rows[0]!.revision;
+        from documents where org_id = ${orgId} and id = ${id}`, "objects"))[0]!.revision;
     return { id, documentNumber, status: "draft", revision };
   });
 }
@@ -452,7 +452,7 @@ export async function postInternalBilling(args: {
     const current = (await db.execute<{ kind: string; status: string; subsidiaryId: string | null }>(sql`
       select kind, status, subsidiary_id as "subsidiaryId" from documents
        where org_id = ${orgId} and id = ${args.id}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!current || current.kind !== KIND || !subsidiaryScopeAllows(args.allowedSubsidiaryIds, current.subsidiaryId)) {
       throw new InternalBillingError("not found", 404);
     }
@@ -502,7 +502,7 @@ export async function voidInternalBilling(args: {
   const { orgId } = args;
   if (!isUuid(args.id)) throw new InternalBillingError("not found", 404);
   const current = (await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
-    select kind, subsidiary_id as "subsidiaryId" from documents where org_id = ${orgId} and id = ${args.id}`)).rows[0];
+    select kind, subsidiary_id as "subsidiaryId" from documents where org_id = ${orgId} and id = ${args.id}`, "objects"))[0];
   if (!current || current.kind !== KIND || !subsidiaryScopeAllows(args.allowedSubsidiaryIds, current.subsidiaryId)) {
     throw new InternalBillingError("not found", 404);
   }
@@ -577,14 +577,14 @@ export async function loadInternalBilling(
            d.posted_entry_id as "postedEntryId", d.internal_billing_rule_id as "ruleId",
            ${documentRevisionCounterSql(sql.raw("d.revision_seq"))} as revision
       from documents d
-     where d.org_id = ${orgId} and d.id = ${id}`)).rows[0];
+     where d.org_id = ${orgId} and d.id = ${id}`, "objects"))[0];
   if (!document || document.kind !== KIND || !subsidiaryScopeAllows(allowedSubsidiaryIds, document.subsidiaryId)) return null;
   const rule = document.ruleId
     ? (await db.execute<NonNullable<InternalBillingDetail["rule"]>>(sql`
         select id, code, name, method, effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
-          from internal_billing_rules where org_id = ${orgId} and id = ${document.ruleId}`)).rows[0] ?? null
+          from internal_billing_rules where org_id = ${orgId} and id = ${document.ruleId}`, "objects"))[0] ?? null
     : null;
-  const lines = (await db.execute<InternalBillingDetail["lines"][number]>(sql`
+  const lines = await db.execute<InternalBillingDetail["lines"][number]>(sql`
     select id, line_number as "lineNumber", item_id as "itemId", description,
            quantity::text as quantity, unit_price::text as rate, amount::text as amount,
            subsidiary_id as "subsidiaryId", department_id as "departmentId", project_id as "projectId",
@@ -593,7 +593,7 @@ export async function loadInternalBilling(
            billed_by_line_id is not null as billed
       from document_lines
      where org_id = ${orgId} and document_id = ${id}
-     order by line_number`)).rows;
+     order by line_number`, "objects");
   const { kind: _kind, ruleId: _ruleId, ...header } = document;
   return { document: header, rule, lines };
 }

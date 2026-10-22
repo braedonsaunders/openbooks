@@ -31,21 +31,21 @@ async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = await withBypassContext(() => createManufacturingOperator(org.orgId, "Shop lead"));
   await withBypassContext(async () => {
-    const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId} returning id`);
-    assert.equal(rows.rows.length, 1);
+    const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb) where id=${org.orgId} returning id`, "objects");
+    assert.equal(rows.length, 1);
   });
   return { org, actorId };
 }
 
 async function propose(f: Fixture, extraComponents = 2) {
   const version = await run(f.org.orgId, (tx) => readBomPolicyVersion(tx, f.org.orgId, f.org.items.assembly));
-  const existing = await run(f.org.orgId, (tx) => tx.execute<{ componentItemId: string; quantityPer: string; effectiveFrom: string | null; effectiveTo: string | null }>(sql`select component_item_id as "componentItemId", quantity_per::text as "quantityPer", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} order by sort_order`));
-  assert.ok(existing.rows.length >= 1, "the scratch recipe carries a retained line");
+  const existing = await run(f.org.orgId, (tx) => tx.execute<{ componentItemId: string; quantityPer: string; effectiveFrom: string | null; effectiveTo: string | null }>(sql`select component_item_id as "componentItemId", quantity_per::text as "quantityPer", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} order by sort_order`, "objects"));
+  assert.ok(existing.length >= 1, "the scratch recipe carries a retained line");
   const today = await run(f.org.orgId, (tx) => businessTodayInTx(tx, f.org.orgId));
-  const spares = [f.org.items.component, f.org.items.standard, f.org.items.fifo, f.org.items.movingAvg].filter((id) => !existing.rows.some((row) => row.componentItemId === id));
+  const spares = [f.org.items.component, f.org.items.standard, f.org.items.fifo, f.org.items.movingAvg].filter((id) => !existing.some((row) => row.componentItemId === id));
   assert.ok(spares.length >= extraComponents, "the scratch catalog carries spare components");
   const components = [
-    ...existing.rows.map((row) => ({ componentItemId: row.componentItemId, quantityPer: row.quantityPer, effectiveFrom: row.effectiveFrom, effectiveTo: row.effectiveTo, operationSeq: null, scrapPct: null, isByproduct: false })),
+    ...existing.map((row) => ({ componentItemId: row.componentItemId, quantityPer: row.quantityPer, effectiveFrom: row.effectiveFrom, effectiveTo: row.effectiveTo, operationSeq: null, scrapPct: null, isByproduct: false })),
     ...spares.slice(0, extraComponents).map((componentItemId) => ({ componentItemId, quantityPer: "1", effectiveFrom: today, effectiveTo: null, operationSeq: null, scrapPct: null, isByproduct: false })),
   ];
   const proposal = await run(f.org.orgId, (tx) => saveBomPolicy(tx, f.org.orgId, f.actorId, {
@@ -57,7 +57,7 @@ async function propose(f: Fixture, extraComponents = 2) {
 }
 
 async function changeRow(f: Fixture, changeId: string) {
-  return (await withBypassContext(async () => db.execute<{ status: string; submitted_by: string; approved_by: string | null; payload: unknown }>(sql`select status, submitted_by, approved_by, payload from financial_changes where org_id=${f.org.orgId} and id=${changeId}`))).rows[0];
+  return (await withBypassContext(async () => db.execute<{ status: string; submitted_by: string; approved_by: string | null; payload: unknown }>(sql`select status, submitted_by, approved_by, payload from financial_changes where org_id=${f.org.orgId} and id=${changeId}`, "objects")))[0];
 }
 
 test("BOM proposal applies with no Flow", { skip: !DB }, async () => {
@@ -78,10 +78,10 @@ test("BOM proposal applies with no Flow", { skip: !DB }, async () => {
     assert.equal(applied?.status, "applied");
     assert.equal(applied?.approved_by, f.actorId);
     assert.equal(applied?.submitted_by, f.actorId);
-    const lines = await run(f.org.orgId, (tx) => tx.execute<{ n: string }>(sql`select count(*) as n from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`));
-    assert.equal(lines.rows[0]?.n, "3");
-    const audit = await run(f.org.orgId, (tx) => tx.execute<{ changes: unknown }>(sql`select changes from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${f.org.items.assembly} order by id desc limit 1`));
-    assert.equal((audit.rows[0]?.changes as { approvalChangeId?: string }).approvalChangeId, changeId);
+    const lines = await run(f.org.orgId, (tx) => tx.execute<{ n: string }>(sql`select count(*) as n from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`, "objects"));
+    assert.equal(lines[0]?.n, "3");
+    const audit = await run(f.org.orgId, (tx) => tx.execute<{ changes: unknown }>(sql`select changes from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${f.org.items.assembly} order by id desc limit 1`, "objects"));
+    assert.equal((audit[0]?.changes as { approvalChangeId?: string }).approvalChangeId, changeId);
   } finally {
     await dropScratchOrg(f.org.orgId);
   }
@@ -113,8 +113,8 @@ test("kit recipes accept unprofiled kits and commercial-only components", { skip
     assert.deepEqual(result, { assemblyItemId: kitId, version: await run(f.org.orgId, (tx) => readBomPolicyVersion(tx, f.org.orgId, kitId)), componentCount: 1 });
     const stored = await run(f.org.orgId, (tx) => tx.execute<{ componentItemId: string }>(sql`
       select component_item_id as "componentItemId" from bom_components
-       where org_id=${f.org.orgId} and assembly_item_id=${kitId}`));
-    assert.deepEqual(stored.rows, [{ componentItemId: f.org.items.service }]);
+       where org_id=${f.org.orgId} and assembly_item_id=${kitId}`, "objects"));
+    assert.deepEqual(stored, [{ componentItemId: f.org.items.service }]);
   } finally {
     await dropScratchOrg(f.org.orgId);
   }
@@ -128,12 +128,12 @@ test("BOM routes through gates when a Flow exists", { skip: !DB }, async () => {
     const { changeId } = await propose(f);
     const proposed = await changeRow(f, changeId);
     assert.equal((proposed?.payload as { decision?: unknown }).decision, undefined);
-    const before = await run(f.org.orgId, (tx) => tx.execute<{ n: string }>(sql`select count(*) as n from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`));
+    const before = await run(f.org.orgId, (tx) => tx.execute<{ n: string }>(sql`select count(*) as n from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`, "objects"));
     await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, changeId));
     assert.equal((await changeRow(f, changeId))?.status, "pending");
-    const gates = (await withBypassContext(async () => db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${changeId} and status='pending'`))).rows;
+    const gates = await withBypassContext(async () => db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${changeId} and status='pending'`, "objects"));
     assert.equal(gates.length, 1);
-    assert.deepEqual((await run(f.org.orgId, (tx) => tx.execute<{ n: string }>(sql`select count(*) as n from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`))).rows, before.rows);
+    assert.deepEqual(await run(f.org.orgId, (tx) => tx.execute<{ n: string }>(sql`select count(*) as n from bom_components where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly}`, "objects")), before);
     await decideGate({ gateId: gates[0]!.id, userId: approver, decision: "approved" });
     const result = await withOrgContext(f.org.orgId, () => applyBomRevision(f.org.orgId, f.actorId, changeId));
     assert.equal(result.componentCount, 3);
@@ -150,13 +150,11 @@ test(
       const { changeId } = await propose(f);
       await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, changeId, f.actorId));
       assert.equal((await changeRow(f, changeId))?.status, "approved");
-      const receipts = (
-        await run(f.org.orgId, (tx) =>
+      const receipts = await run(f.org.orgId, (tx) =>
           tx.execute<{ policy: { kind: string } }>(
-            sql`select policy from flow_submissions where org_id=${f.org.orgId} and subject_id=${changeId}`,
+            sql`select policy from flow_submissions where org_id=${f.org.orgId} and subject_id=${changeId}`, "objects",
           ),
-        )
-      ).rows;
+        );
       assert.equal(receipts.length, 1);
       assert.equal(receipts[0]?.policy.kind, "ungated");
     } finally {
@@ -177,13 +175,11 @@ test(
       await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, changeId, f.actorId));
       assert.equal((await changeRow(f, changeId))?.status, "approved");
       assert.equal(
-        (
-          await run(f.org.orgId, (tx) =>
+        (await run(f.org.orgId, (tx) =>
             tx.execute(
-              sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${changeId}`,
+              sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${changeId}`, "objects",
             ),
-          )
-        ).rows.length,
+          )).length,
         0,
       );
     } finally {
@@ -206,7 +202,7 @@ async function releaseReady(f: Fixture) {
       values(${wipId},${f.org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('mfgWip',${wipId}::text),true) where id=${f.org.orgId}`);
   });
-  const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${f.org.orgId}, 'Assembly') returning id`))).rows[0]!.id);
+  const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${f.org.orgId}, 'Assembly') returning id`, "objects")))[0]!.id);
   await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
     (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
     values (${f.org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2020-01-01', true, ${f.actorId}, ${f.actorId})`));
@@ -215,9 +211,9 @@ async function releaseReady(f: Fixture) {
 
 async function emptyAssemblyItem(f: Fixture) {
   for (const itemId of [f.org.items.standard, f.org.items.fifo, f.org.items.movingAvg, f.org.items.component]) {
-    const item = (await run(f.org.orgId, (tx) => tx.execute<{ kind: string }>(sql`select kind from items where org_id=${f.org.orgId} and id=${itemId}`))).rows[0];
+    const item = (await run(f.org.orgId, (tx) => tx.execute<{ kind: string }>(sql`select kind from items where org_id=${f.org.orgId} and id=${itemId}`, "objects")))[0];
     if (!item || item.kind === "kit") continue;
-    const lines = (await run(f.org.orgId, (tx) => tx.execute(sql`select id from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} limit 1`))).rows;
+    const lines = await run(f.org.orgId, (tx) => tx.execute(sql`select id from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} limit 1`, "objects"));
     if (lines.length === 0) return itemId;
   }
   throw new Error("the scratch catalog carries no line-free assembly-capable item");
@@ -285,14 +281,14 @@ test("back-dated first revision applies with no production and serves back-dated
     const changeId = proposal.changeId as string;
     await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, changeId));
     assert.equal((await changeRow(f, changeId))?.status, "applied");
-    const stored = (await run(f.org.orgId, (tx) => tx.execute<{ effectiveFrom: string | null }>(sql`select effective_from::text as "effectiveFrom" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`))).rows;
+    const stored = await run(f.org.orgId, (tx) => tx.execute<{ effectiveFrom: string | null }>(sql`select effective_from::text as "effectiveFrom" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`, "objects"));
     assert.equal(stored.length, 3);
     assert.ok(stored.every((row) => row.effectiveFrom === past));
     const exploded = await run(f.org.orgId, (tx) => explodeBom(tx, f.org.orgId, itemId, "1", past));
     assert.equal(exploded.components.length, 3);
-    const audit = await run(f.org.orgId, (tx) => tx.execute<{ reason: string; approval: string }>(sql`select changes->>'reason' as reason, changes->>'approvalChangeId' as approval from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`));
-    assert.equal(audit.rows[0]?.reason, reason);
-    assert.equal(audit.rows[0]?.approval, changeId);
+    const audit = await run(f.org.orgId, (tx) => tx.execute<{ reason: string; approval: string }>(sql`select changes->>'reason' as reason, changes->>'approvalChangeId' as approval from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`, "objects"));
+    assert.equal(audit[0]?.reason, reason);
+    assert.equal(audit[0]?.approval, changeId);
     await activeRoute(f, itemId, past, departmentId);
     const draft = await run(f.org.orgId, (tx) => createWorkOrder(tx, f.org.orgId, f.actorId, {
       producedItemId: itemId, quantityOrdered: "1", subsidiaryId: f.org.subsidiaryId,
@@ -362,11 +358,11 @@ test("back-dated revision of an existing recipe applies with no production", { s
     const changeId = revision.changeId as string;
     await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, changeId));
     assert.equal((await changeRow(f, changeId))?.status, "applied");
-    const stored = (await run(f.org.orgId, (tx) => tx.execute<{ effectiveFrom: string | null }>(sql`select effective_from::text as "effectiveFrom" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} order by effective_from nulls first`))).rows;
+    const stored = await run(f.org.orgId, (tx) => tx.execute<{ effectiveFrom: string | null }>(sql`select effective_from::text as "effectiveFrom" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} order by effective_from nulls first`, "objects"));
     assert.deepEqual(stored.map((row) => row.effectiveFrom), [past60, past30]);
-    const audit = await run(f.org.orgId, (tx) => tx.execute<{ before: unknown[]; after: unknown[] }>(sql`select changes->'before' as before, changes->'after' as after from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`));
-    assert.equal(audit.rows[0]?.before.length, 1);
-    assert.equal(audit.rows[0]?.after.length, 2);
+    const audit = await run(f.org.orgId, (tx) => tx.execute<{ before: unknown[]; after: unknown[] }>(sql`select changes->'before' as before, changes->'after' as after from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`, "objects"));
+    assert.equal(audit[0]?.before.length, 1);
+    assert.equal(audit[0]?.after.length, 2);
     const exploded = await run(f.org.orgId, (tx) => explodeBom(tx, f.org.orgId, itemId, "1", past60));
     assert.equal(exploded.components.length, 1);
   } finally { await dropScratchOrg(f.org.orgId); }
@@ -467,7 +463,7 @@ test(
       const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Cost approver", ["manufacturing.manage", "items.manage"]));
       await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", preventSelfApproval: true }));
       await withOrgContext(f.org.orgId, () => submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId));
-      const gate = await run(f.org.orgId, async (tx) => (await tx.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`)).rows[0]!);
+      const gate = await run(f.org.orgId, async (tx) => (await tx.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`, "objects"))[0]!);
       await withBypassContext(() => decideGate({ gateId: gate.id, userId: approver, decision: "approved" }));
       await withOrgContext(f.org.orgId, () => applyStandardRollup(f.org.orgId, f.actorId, proposal.changeId));
       const version = await run(f.org.orgId, (tx) => readBomPolicyVersion(tx, f.org.orgId, itemId));
@@ -509,20 +505,20 @@ test("recipe revision round-trips per-line fields through propose, submit and ap
     assert.equal(Number(frozen.components[1]?.outputCostWeight), 2);
     await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, changeId));
     assert.equal((await changeRow(f, changeId))?.status, "applied");
-    const stored = (await run(f.org.orgId, (tx) => tx.execute<{
+    const stored = await run(f.org.orgId, (tx) => tx.execute<{
       componentItemId: string; operationSeq: number | null; scrap: string | null; basis: string; formula: string; byproduct: boolean; weight: string | null;
     }>(sql`select component_item_id as "componentItemId", operation_seq as "operationSeq", scrap_pct::text as scrap,
       quantity_basis as basis, formula_output_quantity::text as formula, is_byproduct as byproduct, output_cost_weight::text as weight
-      from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} order by sort_order`))).rows;
+      from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId} order by sort_order`, "objects"));
     assert.equal(stored.length, 2);
     assert.deepEqual([stored[0]?.operationSeq, Number(stored[0]?.scrap), stored[0]?.basis, stored[0]?.byproduct, stored[0]?.weight],
       [10, 5, "per_unit", false, null]);
     assert.deepEqual([stored[1]?.operationSeq, stored[1]?.scrap, stored[1]?.basis, Number(stored[1]?.formula), stored[1]?.byproduct, Number(stored[1]?.weight)],
       [20, null, "per_unit", 1, true, 2]);
-    const audit = await run(f.org.orgId, (tx) => tx.execute<{ after: Array<Record<string, unknown>> }>(sql`select changes->'after' as after from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`));
-    assert.equal(audit.rows[0]?.after.length, 2);
-    assert.equal(audit.rows[0]?.after[0]?.operationSeq, 10);
-    assert.equal(Number(audit.rows[0]?.after[1]?.outputCostWeight), 2);
+    const audit = await run(f.org.orgId, (tx) => tx.execute<{ after: Array<Record<string, unknown>> }>(sql`select changes->'after' as after from audit_log where org_id=${f.org.orgId} and table_name='bom_components' and row_id=${itemId} order by id desc limit 1`, "objects"));
+    assert.equal(audit[0]?.after.length, 2);
+    assert.equal(audit[0]?.after[0]?.operationSeq, 10);
+    assert.equal(Number(audit[0]?.after[1]?.outputCostWeight), 2);
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
@@ -542,7 +538,7 @@ test("re-added line defaults its operation sequence from a single consuming oper
     const changeId = proposal.changeId as string;
     assert.equal(((await changeRow(f, changeId))?.payload as { components: Array<{ operationSeq: number | null }> }).components[0]?.operationSeq, 10);
     await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, changeId));
-    const stored = (await run(f.org.orgId, (tx) => tx.execute<{ operationSeq: number | null }>(sql`select operation_seq as "operationSeq" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`))).rows;
+    const stored = await run(f.org.orgId, (tx) => tx.execute<{ operationSeq: number | null }>(sql`select operation_seq as "operationSeq" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`, "objects"));
     assert.deepEqual(stored.map((row) => row.operationSeq), [10]);
   } finally { await dropScratchOrg(f.org.orgId); }
 });
@@ -578,7 +574,7 @@ test("blank operation sequence stands without a consuming operation", { skip: !D
     }));
     assert.ok("changeId" in proposal);
     await withOrgContext(f.org.orgId, () => submitBomRevision(f.org.orgId, f.actorId, proposal.changeId as string));
-    const stored = (await run(f.org.orgId, (tx) => tx.execute<{ operationSeq: number | null }>(sql`select operation_seq as "operationSeq" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`))).rows;
+    const stored = await run(f.org.orgId, (tx) => tx.execute<{ operationSeq: number | null }>(sql`select operation_seq as "operationSeq" from bom_components where org_id=${f.org.orgId} and assembly_item_id=${itemId}`, "objects"));
     assert.deepEqual(stored.map((row) => row.operationSeq), [null]);
   } finally { await dropScratchOrg(f.org.orgId); }
 });

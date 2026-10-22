@@ -20,8 +20,8 @@ test('qualification badges count the complete personal population without loadin
     const own = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, 'Qualification holder');
     const other = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, 'Another holder');
     const linked = await db.execute(sql`update users set party_id=${own.partyId}
-      where org_id=${h.org.orgId} and id=${h.actorId} returning id`);
-    assert.equal(linked.rows.length, 1);
+      where org_id=${h.org.orgId} and id=${h.actorId} returning id`, 'objects');
+    assert.equal(linked.length, 1);
     const record = async (index: number, options: { employmentId?: string; expiresOn?: string | null; verified?: boolean } = {}) => {
       const type = await createQualificationType(db, { orgId: h.org.orgId, actorId: h.actorId,
         code: `CERT-${index}`, name: `Credential ${index}`, category: 'certification',
@@ -39,8 +39,8 @@ test('qualification badges count the complete personal population without loadin
     await record(27, { verified: false });
     await record(28, { employmentId: other.employmentId });
     const ctx = { orgId: h.org.orgId, actorId: h.actorId, asOf: '2026-10-08' };
-    const before = (await db.execute(sql`select id,status,expires_on from hrm_worker_qualifications
-      where org_id=${h.org.orgId} order by id`)).rows;
+    const before = await db.execute(sql`select id,status,expires_on from hrm_worker_qualifications
+      where org_id=${h.org.orgId} order by id`, 'objects');
     assert.equal(before.length, 29);
     const listed = await listInbox(ctx, { kinds: ['hrm_qualification_alert'] });
     assert.equal(listed.length, 20);
@@ -61,8 +61,8 @@ test('qualification badges count the complete personal population without loadin
     }), async foreign => {
       const worker = await seedNamedWorker(foreign.org.orgId, foreign.org.subsidiaryId, 'Separate holder');
       const linkedForeign = await db.execute(sql`update users set party_id=${worker.partyId}
-        where org_id=${foreign.org.orgId} and id=${foreign.actorId} returning id`);
-      assert.equal(linkedForeign.rows.length, 1);
+        where org_id=${foreign.org.orgId} and id=${foreign.actorId} returning id`, 'objects');
+      assert.equal(linkedForeign.length, 1);
       const type = await createQualificationType(db, { orgId: foreign.org.orgId, actorId: foreign.actorId,
         code: 'CERT-0', name: 'Credential 0', category: 'certification', validityMonths: null,
         requiresEvidence: false, renewalLeadDays: 30 });
@@ -77,11 +77,11 @@ test('qualification badges count the complete personal population without loadin
       assert.equal(await countInbox(ctx, { kinds: ['hrm_qualification_alert'] }), 25);
     });
     const disabled = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,hrm}','false'::jsonb)
-      where id=${h.org.orgId} returning id`);
-    assert.equal(disabled.rows.length, 1);
+      where id=${h.org.orgId} returning id`, 'objects');
+    assert.equal(disabled.length, 1);
     assert.equal(await countInbox(ctx, { kinds: ['hrm_qualification_alert'] }), 0);
-    assert.deepEqual((await db.execute(sql`select id,status,expires_on from hrm_worker_qualifications
-      where org_id=${h.org.orgId} order by id`)).rows, before,
+    assert.deepEqual(await db.execute(sql`select id,status,expires_on from hrm_worker_qualifications
+      where org_id=${h.org.orgId} order by id`, 'objects'), before,
       'read and feature changes preserve the qualification ledger');
   });
 });

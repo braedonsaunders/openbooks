@@ -256,7 +256,7 @@ export interface ContractPricingResult {
 export async function getContractPricingSubsidiary(orgId: string, contractId: string): Promise<string | null | undefined> {
   return withOrgTransaction(orgId, async () => {
     const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId" from revenue_contracts where org_id = ${orgId} and id = ${contractId}`)).rows[0];
+      select subsidiary_id as "subsidiaryId" from revenue_contracts where org_id = ${orgId} and id = ${contractId}`, "objects"))[0];
     return row ? row.subsidiaryId : undefined;
   });
 }
@@ -280,10 +280,10 @@ export async function setContractPricing(
     await assertEnabled(db, orgId);
     const contract = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from revenue_contracts
-       where org_id = ${orgId} and id = ${contractId} for update`)).rows[0];
+       where org_id = ${orgId} and id = ${contractId} for update`, "objects"))[0];
     if (!contract || !subsidiaryScopeAllows(allowedSubsidiaryIds, contract.subsidiaryId)) throw new ScopeNotFoundError();
     const allocated = (await db.execute<{ id: string }>(sql`
-      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`)).rows[0];
+      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`, "objects"))[0];
     if (allocated) {
       throw new TransactionPriceError(
         "The contract has been allocated to performance obligations.",
@@ -324,8 +324,8 @@ export async function setContractPricing(
              updated_at = now(), updated_by = ${actorId}
        where id = ${contractId} and org_id = ${orgId}
          and not exists (select 1 from performance_obligations o where o.org_id=${orgId} and o.contract_id=${contractId})
-       returning id`);
-    if (updated.rows.length !== 1) {
+       returning id`, "objects");
+    if (updated.length !== 1) {
       throw new TransactionPriceError(
         "Contract pricing changed before it could be saved.",
         { status: 409, code: "revenue_contract_pricing_conflict", remedy: "Reload Revenue → contract → Pricing and submit the intended values again." },

@@ -42,21 +42,21 @@ for (const masked of [false, true]) {
       });
       sandbox = await withBypassContext(() => createSandbox({ productionOrgId: source.orgId, name: "Scratch financial history", tier: masked ? "masked" : "full", masked }));
       const target = sandbox.sandboxOrgId;
-      const projection = async () => (await db.execute<{ amount: string; txn: string; currency: string; tagged: boolean; residual: string }>(sql`
+      const projection = async () => await db.execute<{ amount: string; txn: string; currency: string; tagged: boolean; residual: string }>(sql`
         select l.amount::text,l.txn_amount::text as txn,l.currency,l.is_currency_adjustment as tagged,
           (select sum(all_lines.amount)::text from journal_lines all_lines where all_lines.org_id=l.org_id and all_lines.account_id=l.account_id) as residual
-        from journal_lines l where l.org_id=${target} and l.is_currency_adjustment`)).rows;
+        from journal_lines l where l.org_id=${target} and l.is_currency_adjustment`, "objects");
       assert.deepEqual(await projection(),[{amount:'1.0000',txn:'0.0000',currency:'USD',tagged:true,residual:'0.0000'}]);
       if (!masked) {
         assert.equal((await db.execute<{ securityId: string }>(sql`
           select custom->>'equitySecurityId' as "securityId" from journal_lines
-           where org_id=${target} and custom->>'equityRole'='malformed_snapshot'`)).rows[0]?.securityId, "z".repeat(36));
+           where org_id=${target} and custom->>'equityRole'='malformed_snapshot'`, "objects"))[0]?.securityId, "z".repeat(36));
       }
-      const registry = (await db.execute<{ key: string }>(sql`select key from fx_rate_types where org_id=${target} order by key`)).rows;
+      const registry = await db.execute<{ key: string }>(sql`select key from fx_rate_types where org_id=${target} order by key`, "objects");
       assert.deepEqual(registry.map(row=>row.key),['average','corporate','historical','spot']);
-      assert.equal((await db.execute<{ rate: string }>(sql`select posting_rate_type as rate from subsidiary_accounting_preferences where org_id=${target}`)).rows[0]?.rate,'corporate');
-      assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int from journal_reversal_instructions where org_id=${target}`)).rows[0]?.count,0);
-      assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int from journal_reversal_instructions where org_id=${source.orgId}`)).rows[0]?.count,1);
+      assert.equal((await db.execute<{ rate: string }>(sql`select posting_rate_type as rate from subsidiary_accounting_preferences where org_id=${target}`, "objects"))[0]?.rate,'corporate');
+      assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int from journal_reversal_instructions where org_id=${target}`, "objects"))[0]?.count,0);
+      assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int from journal_reversal_instructions where org_id=${source.orgId}`, "objects"))[0]?.count,1);
       await assert.rejects(() => withMaintenanceTransaction(null, async () => {
         await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
         await db.execute(sql`update sandboxes set status='refreshing' where id=${sandbox!.sandboxId}`);

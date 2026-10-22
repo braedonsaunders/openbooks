@@ -50,7 +50,7 @@ export const GET = defineRoute({
       }>(sql`
         select c.id, c.register_id as "registerId", c.pay_run_document_id as "payRunDocumentId"
           from payroll_parallel_comparisons c
-         where c.org_id = ${gate.user.orgId} and c.id = ${id}`)).rows[0]
+         where c.org_id = ${gate.user.orgId} and c.id = ${id}`, 'objects'))[0]
       if (!comparison) return notFound("record")
 
       const registerOutside = ids.length
@@ -65,7 +65,7 @@ export const GET = defineRoute({
              select 1
                from payroll_prior_stubs s
                left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
-              where s.org_id = r.org_id and s.register_id = r.id ${registerOutside})`)).rows[0]
+              where s.org_id = r.org_id and s.register_id = r.id ${registerOutside})`, 'objects'))[0]
       if (!register) return notFound("record")
 
       const run = (await db.execute<{ id: string }>(sql`
@@ -73,7 +73,7 @@ export const GET = defineRoute({
           from pay_runs r
           join documents d on d.id = r.document_id and d.org_id = r.org_id
          where r.org_id = ${gate.user.orgId} and r.document_id = ${comparison.payRunDocumentId}
-           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`)).rows[0]
+           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'))[0]
       if (!run) return notFound("record")
 
       const findingOutside = (await db.execute<{ id: string }>(sql`
@@ -83,7 +83,7 @@ export const GET = defineRoute({
          where f.org_id = ${gate.user.orgId} and f.comparison_id = ${id}
            and (p.id is null or p.subsidiary_id is null
              or not (p.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])))
-         limit 1`)).rows[0]
+         limit 1`, 'objects'))[0]
       if (findingOutside) return notFound("record")
     }
 

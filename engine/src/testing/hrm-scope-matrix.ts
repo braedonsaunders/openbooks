@@ -158,5 +158,5 @@ export async function refusesLikeUnknown<E extends abstract new (...args: never[
 
 /** Row count for `from ... where ...`, used to prove a refused write stored nothing. */
 export async function countRows(from: SQL): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`select count(*)::int as n ${from}`)).rows[0]!.n;
+  return (await db.execute<{ n: number }>(sql`select count(*)::int as n ${from}`, "objects"))[0]!.n;
 }

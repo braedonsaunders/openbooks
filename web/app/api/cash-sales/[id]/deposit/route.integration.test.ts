@@ -114,17 +114,17 @@ test('a till without the deposit grant is refused before any write', async () =>
     state.permissions = NO_DEPOSIT
     const org = await db.execute<{ date: string; bank: string }>(sql`
       select (select document_date::text from documents where org_id = ${orgId} and id = ${saleId}) as date,
-             (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank`)
+             (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank`, 'objects')
     const denied = await postDrop(orgId, saleId, {
       amount: '10.0000',
-      date: org.rows[0]!.date,
-      bankAccountId: org.rows[0]!.bank,
+      date: org[0]!.date,
+      bankAccountId: org[0]!.bank,
       slipNumber: 'NOPE',
     }, randomUUID())
     assert.equal(denied.status, 403)
     assert.match(String(denied.json.error), /cash_sales\.deposit/)
     const count = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from documents where org_id = ${orgId} and kind = 'transfer'`)).rows[0]?.n
+      select count(*)::text as n from documents where org_id = ${orgId} and kind = 'transfer'`, 'objects'))[0]?.n
     assert.equal(count, '0')
   } finally {
     await cleanup()
@@ -137,11 +137,11 @@ test('a cashier records a posted bank drop', async () => {
     state.permissions = CASHIER
     const org = await db.execute<{ date: string; bank: string }>(sql`
       select (select document_date::text from documents where org_id = ${orgId} and id = ${saleId}) as date,
-             (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank`)
+             (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank`, 'objects')
     const saved = await postDrop(orgId, saleId, {
       amount: '30.0000',
-      date: org.rows[0]!.date,
-      bankAccountId: org.rows[0]!.bank,
+      date: org[0]!.date,
+      bankAccountId: org[0]!.bank,
       slipNumber: 'SLIP-ROUTE-1',
     }, randomUUID())
     assert.equal(saved.status, 201, JSON.stringify(saved.json))
@@ -150,8 +150,8 @@ test('a cashier records a posted bank drop', async () => {
     // A second drop past the remaining till cash refuses with the remainder.
     const over = await postDrop(orgId, saleId, {
       amount: '60.0000',
-      date: org.rows[0]!.date,
-      bankAccountId: org.rows[0]!.bank,
+      date: org[0]!.date,
+      bankAccountId: org[0]!.bank,
       slipNumber: 'SLIP-ROUTE-2',
     }, randomUUID())
     assert.equal(over.status, 422, JSON.stringify(over.json))
@@ -181,11 +181,11 @@ test('a sale lists its recorded drops and hides them without the grant', async (
     state.permissions = CASHIER
     const org = await db.execute<{ date: string; bank: string }>(sql`
       select (select document_date::text from documents where org_id = ${orgId} and id = ${saleId}) as date,
-             (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank`)
+             (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank`, 'objects')
     const saved = await postDrop(orgId, saleId, {
       amount: '30.0000',
-      date: org.rows[0]!.date,
-      bankAccountId: org.rows[0]!.bank,
+      date: org[0]!.date,
+      bankAccountId: org[0]!.bank,
       slipNumber: 'SLIP-LIST-1',
     }, randomUUID())
     assert.equal(saved.status, 201, JSON.stringify(saved.json))

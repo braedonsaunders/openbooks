@@ -39,11 +39,11 @@ test("statistical journals post exact non-monetary quantities and refuse money o
   const account=randomUUID();await db.execute(sql`insert into accounts(id,org_id,number,name,type) values(${account},${org.orgId},'STAT-1','Floor area','statistical')`);
   const id=await journal(org,actor,'statistical',[{account,amount:'0',quantity:'25.1234',unit:'sqm'}]);
   const entry=await postDocument(id,controls(org),{audit:{actorId:actor,source:"ui"}});
-  const saved=(await db.execute<{amount:string;txn:string;quantity:string;unit:string;period:string}>(sql`select amount::text,txn_amount::text as txn,quantity::text,unit,period_id as period from journal_lines where org_id=${org.orgId} and entry_id=${entry}`)).rows;
+  const saved=await db.execute<{amount:string;txn:string;quantity:string;unit:string;period:string}>(sql`select amount::text,txn_amount::text as txn,quantity::text,unit,period_id as period from journal_lines where org_id=${org.orgId} and entry_id=${entry}`, "objects");
   assert.deepEqual(saved,[{amount:'0.0000',txn:'0.0000',quantity:'25.1234',unit:'sqm',period:org.periodId}]);
   const invalid=await journal(org,actor,'monetary',[{account,amount:'10'},{account:org.accounts.cogs,amount:'-10'}]);
   await assert.rejects(()=>postDocument(invalid,controls(org)),error=>error instanceof JournalInstructionError);
-  assert.equal((await db.execute<{count:number}>(sql`select count(*)::int from journal_entries where org_id=${org.orgId} and source_document_id=${invalid}`)).rows[0]?.count,0);
+  assert.equal((await db.execute<{count:number}>(sql`select count(*)::int from journal_entries where org_id=${org.orgId} and source_document_id=${invalid}`, "objects"))[0]?.count,0);
  });}finally{await dropScratchOrg(org.orgId);}
 });
 
@@ -57,7 +57,7 @@ test("an approved dated accrual reverses exactly once and retains the original p
   assert.equal(results.reduce((count,result)=>count+result.reversed,0),1);
   const proof=(await db.execute<{source:string;status:string;reversals:number;net:string}>(sql`select e.status as source,i.status,(select count(*)::int from journal_entries where org_id=e.org_id and reverses_entry_id=e.id) as reversals,
    (select sum(l.amount)::text from journal_lines l where l.org_id=e.org_id and l.entry_id in(e.id,i.reversal_entry_id)) as net
-   from journal_entries e join journal_reversal_instructions i on i.org_id=e.org_id and i.source_entry_id=e.id where e.org_id=${org.orgId} and e.id=${entry}`)).rows[0];
+   from journal_entries e join journal_reversal_instructions i on i.org_id=e.org_id and i.source_entry_id=e.id where e.org_id=${org.orgId} and e.id=${entry}`, "objects"))[0];
   assert.deepEqual(proof,{source:'posted',status:'completed',reversals:1,net:'0.0000'});
   await assert.rejects(()=>assertJournalVoidNotAutomaticallyReversed(db,org.orgId,id),error=>error instanceof JournalInstructionError);
  });}finally{await dropScratchOrg(org.orgId);}
@@ -78,10 +78,10 @@ test("scheduled reversals include live allocation entries in secondary books",{s
 
   const result=await runScheduledJournalReversals({orgId:org.orgId,actorId:actor,asOf:reverseOn});
   assert.deepEqual(result,{reversed:1,blocked:[]});
-  const reversals=(await db.execute<{book_id:string;reverses_entry_id:string;period_id:string}>(sql`
+  const reversals=await db.execute<{book_id:string;reverses_entry_id:string;period_id:string}>(sql`
    select book_id,reverses_entry_id,period_id from journal_entries
     where org_id=${org.orgId} and reverses_entry_id in (${sourceEntry},${allocation.entryId}) and status='posted'
-    order by (book_id = ${org.bookId}) desc, book_id`)).rows;
+    order by (book_id = ${org.bookId}) desc, book_id`, "objects");
   assert.deepEqual(reversals,[
    {book_id:org.bookId,reverses_entry_id:sourceEntry,period_id:org.periodId},
    {book_id:secondaryBook,reverses_entry_id:allocation.entryId,period_id:org.periodId},
@@ -102,7 +102,7 @@ test("named rate types preserve spot lookup and entity posting uses the selected
   assert.deepEqual(await validateJournalInstructions(db,org.orgId,advanced),{debits:'140.0000',credits:'140.0000'});
   const id=await journal(org,actor,'monetary',[{account:org.accounts.cogs,amount:'100'},{account:org.accounts.ap,amount:'-100'}],{currency:'USD',fx:'1.4'});
   const entry=await postDocument(id,controls(org));
-  const amounts=(await db.execute<{amount:string;currency:string;txn:string}>(sql`select amount::text,currency,txn_amount::text as txn from journal_lines where org_id=${org.orgId} and entry_id=${entry} order by line_number`)).rows;
+  const amounts=await db.execute<{amount:string;currency:string;txn:string}>(sql`select amount::text,currency,txn_amount::text as txn from journal_lines where org_id=${org.orgId} and entry_id=${entry} order by line_number`, "objects");
   assert.deepEqual(amounts,[{amount:'140.0000',currency:'USD',txn:'100.0000'},{amount:'-140.0000',currency:'USD',txn:'-100.0000'}]);
   await assert.rejects(()=>db.execute(sql`update subsidiary_accounting_preferences set posting_rate_type='spot' where org_id=${org.orgId}`));
  });}finally{await dropScratchOrg(org.orgId);}
@@ -131,12 +131,12 @@ test("entity calendars resolve posting and refuse activity in that entity's clos
   assert.equal((await resolveCoveringPeriod(db,org.orgId,org.date))?.id,org.periodId);
   const id=await journal(org,actor,'monetary',[{account:org.accounts.cogs,amount:'10'},{account:org.accounts.ap,amount:'-10'}]);
   const entry=await postDocument(id,controls(org));
-  assert.equal((await db.execute<{id:string}>(sql`select period_id as id from journal_entries where org_id=${org.orgId} and id=${entry}`)).rows[0]?.id,period);
+  assert.equal((await db.execute<{id:string}>(sql`select period_id as id from journal_entries where org_id=${org.orgId} and id=${entry}`, "objects"))[0]?.id,period);
   await db.execute(sql`insert into period_locks(org_id,period_id,book_id,subsidiary_id,module,state,locked_at,locked_by,reason)
    values(${org.orgId},${period},${org.bookId},${org.subsidiaryId},'gl','closed',now(),${actor},'Controller close')`);
   const closed=await journal(org,actor,'monetary',[{account:org.accounts.cogs,amount:'1'},{account:org.accounts.ap,amount:'-1'}]);
   await assert.rejects(()=>postDocument(closed,controls(org)));
-  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and source_document_id=${closed}`)).rows[0]?.n,0);
+  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and source_document_id=${closed}`, "objects"))[0]?.n,0);
  });}finally{await dropScratchOrg(org.orgId);}
 });
 
@@ -152,7 +152,7 @@ test("closed-period GL audit numbering is gapless under concurrent retries and p
    values(${org.orgId},${org.periodId},${org.bookId},${org.subsidiaryId},'gl','closed',now(),${actor},'Controller close')`);
   const allocations=await Promise.all([assignGlAuditNumbers(input),assignGlAuditNumbers(input)]);
   assert.equal(allocations.reduce((total,result)=>total+result.assigned,0),2);
-  const numbers=(await db.execute<{ordinal:number}>(sql`select ordinal from gl_audit_number_assignments where org_id=${org.orgId} order by ordinal`)).rows.map(row=>row.ordinal);
+  const numbers=(await db.execute<{ordinal:number}>(sql`select ordinal from gl_audit_number_assignments where org_id=${org.orgId} order by ordinal`, "objects")).map(row=>row.ordinal);
   assert.deepEqual(numbers,[1,2]);
   assert.equal((await assignGlAuditNumbers(input)).assigned,0);
   await assert.rejects(()=>db.execute(sql`delete from gl_audit_number_assignments where org_id=${org.orgId}`));
@@ -165,7 +165,7 @@ test("adjustment-only books resolve primary plus adjustments while full books re
   const adjustment=randomUUID();const full=randomUUID();
   await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,posts_gl,replication_mode,replication_from)
    values(${adjustment},${org.orgId},'ADJ','Adjustments',false,true,'adjustment_only',null),(${full},${org.orgId},'FULL','Full book',false,true,'full',${org.date})`);
-  const basis=async(book:string)=>(await db.execute<{id:string}>(sql`select public.reporting_book_ids(${org.orgId},${book}) as id`)).rows.map(row=>row.id).sort();
+  const basis=async(book:string)=>(await db.execute<{id:string}>(sql`select public.reporting_book_ids(${org.orgId},${book}) as id`, "objects")).map(row=>row.id).sort();
   assert.deepEqual(await basis(adjustment),[org.bookId,adjustment].sort());
   assert.deepEqual(await basis(full),[full]);
   assert.deepEqual(await basis(org.bookId),[org.bookId]);
@@ -176,7 +176,7 @@ test("adjustment-only books resolve primary plus adjustments while full books re
    {accountId:org.accounts.cogs,amount:'1',currency:'CAD'},
    {accountId:org.accounts.bank,amount:'-1',currency:'CAD'},
   ]}),/not an active posting book/);
-  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${full}`)).rows[0]?.n,0);
+  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${full}`, "objects"))[0]?.n,0);
   await assert.rejects(()=>basis(randomUUID()));
  });}finally{await dropScratchOrg(org.orgId);}
 });
@@ -194,12 +194,12 @@ test("a residual adjustment clears zero foreign exposure and its automatic rever
   const reverseOn=org.date.slice(0,8)+'16';
   const id=await journal(org,actor,'currency_adjustment',[{account:org.accounts.bank,amount:'1',currency:'USD'},{account:org.accounts.fxGainLoss,amount:'-1'}],{reverseOn});
   const entry=await postDocument(id,controls(org),{audit:{actorId:actor,source:'ui'}});
-  const balance=async()=>(await db.execute<{base:string;foreign:string}>(sql`select sum(l.amount)::text as base,sum(case when l.currency='USD' then l.txn_amount else 0 end)::text as foreign from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and l.account_id=${org.accounts.bank} and e.status in('posted','reversed')`)).rows[0];
+  const balance=async()=>(await db.execute<{base:string;foreign:string}>(sql`select sum(l.amount)::text as base,sum(case when l.currency='USD' then l.txn_amount else 0 end)::text as foreign from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and l.account_id=${org.accounts.bank} and e.status in('posted','reversed')`, "objects"))[0];
   assert.deepEqual(await balance(),{base:'0.0000',foreign:'0.0000'});
   const result=await runScheduledJournalReversals({orgId:org.orgId,actorId:actor,asOf:reverseOn});
   assert.equal(result.reversed,1);assert.deepEqual(result.blocked,[]);
   assert.deepEqual(await balance(),{base:'-1.0000',foreign:'0.0000'});
-  const tagged=(await db.execute<{amount:string;txn:string;original:string}>(sql`select l.amount::text,l.txn_amount::text as txn,e.reverses_entry_id as original from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and e.reverses_entry_id=${entry} and l.is_currency_adjustment`)).rows;
+  const tagged=await db.execute<{amount:string;txn:string;original:string}>(sql`select l.amount::text,l.txn_amount::text as txn,e.reverses_entry_id as original from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id where l.org_id=${org.orgId} and e.reverses_entry_id=${entry} and l.is_currency_adjustment`, "objects");
   assert.deepEqual(tagged,[{amount:'-1.0000',txn:'0.0000',original:entry}]);
  });}finally{await dropScratchOrg(org.orgId);}
 });
@@ -214,8 +214,8 @@ test("native statistical storage accepts measurements and refuses zero-money mon
    values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},'STAT-STORAGE',${org.date},${org.periodId},'manual','draft')`);
   await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,quantity,unit)
    values(${org.orgId},${entry},1,${account},${org.subsidiaryId},0,'CAD',0,1,'25.1234','sqm')`);
-  const snapshot=async()=>(await db.execute(sql`select account_id,amount::text,txn_amount::text,quantity::text,unit from journal_lines
-   where org_id=${org.orgId} and entry_id=${entry} order by line_number`)).rows;
+  const snapshot=async()=>await db.execute(sql`select account_id,amount::text,txn_amount::text,quantity::text,unit from journal_lines
+   where org_id=${org.orgId} and entry_id=${entry} order by line_number`, "objects");
   const before=await snapshot();assert.equal(before.length,1);
   await assert.rejects(()=>db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,quantity,unit)
    values(${org.orgId},${entry},2,${org.accounts.cogs},${org.subsidiaryId},0,'CAD',0,1,'25.1234','sqm')`),
@@ -247,7 +247,7 @@ test("native statistical document precision refuses rounding and retains monetar
    error=>errorChainMatches(error,/Statistical quantities require at most four exact decimal places/));
   await assert.rejects(()=>db.execute(sql`update document_lines set document_id=${statistical},line_number=2,account_id=${account} where org_id=${org.orgId} and document_id=${monetary}`),
    error=>errorChainMatches(error,/Statistical quantities require at most four exact decimal places/));
-  const quantity=async(documentId:string)=>(await db.execute<{quantity:string}>(sql`select quantity::text from document_lines where org_id=${org.orgId} and document_id=${documentId}`)).rows[0]?.quantity;
+  const quantity=async(documentId:string)=>(await db.execute<{quantity:string}>(sql`select quantity::text from document_lines where org_id=${org.orgId} and document_id=${documentId}`, "objects"))[0]?.quantity;
   assert.equal(await quantity(statistical),'25.12340000');assert.equal(await quantity(monetary),'25.12345678');
   await assert.rejects(()=>db.execute(sql`update documents set journal_mode='statistical' where org_id=${org.orgId} and id=${monetary}`),
    error=>errorChainMatches(error,/correct the journal quantities before changing its mode/));

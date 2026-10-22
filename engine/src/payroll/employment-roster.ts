@@ -119,7 +119,7 @@ export async function historicalEmploymentRosterSource(
     employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
     periodStart: sql`r.period_start`, periodEnd: sql`r.period_end`,
   };
-  return (await tx.execute<HistoricalEmploymentRosterSource & Record<string, unknown>>(sql`
+  return await tx.execute<HistoricalEmploymentRosterSource & Record<string, unknown>>(sql`
     select distinct p.id::text as "employeePartyId", e.id::text as "employmentId",
            v.version_no as "versionNo", v.status,
            v.effective_from::text as "effectiveFrom", v.effective_to::text as "effectiveTo",
@@ -142,21 +142,21 @@ export async function historicalEmploymentRosterSource(
        and not exists (select 1 from pay_run_adjustments a where a.org_id = r.org_id
          and a.pay_run_document_id = r.document_id and a.employee_party_id = p.id and a.adjustment_type = 'exclude')
      order by "employeePartyId", "employmentId", "versionNo"
-  `)).rows;
+  `, "objects");
 }
 
 /** Fence possible admissions before yearly payroll locks, including previously excluded workers. */
 export async function lockPayrollEmploymentRoster(
   tx: Pick<SqlExecutor, "execute">, orgId: string, documentId: string,
 ): Promise<void> {
-  const employees = (await tx.execute<{ employee_party_id: string }>(sql`
+  const employees = await tx.execute<{ employee_party_id: string }>(sql`
     select prof.employee_party_id from employee_payroll_profiles prof
     join pay_runs r on r.org_id = prof.org_id and r.pay_schedule_id = prof.pay_schedule_id
     where r.org_id = ${orgId} and r.document_id = ${documentId} and prof.is_active
     union select employee_party_id from pay_stubs
     where org_id = ${orgId} and pay_run_document_id = ${documentId}
     order by employee_party_id
-  `)).rows;
+  `, "objects");
   for (const employee of employees) {
     await takeEmployeeConfigurationFence(tx, orgId, employee.employee_party_id);
   }

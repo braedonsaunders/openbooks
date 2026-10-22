@@ -130,8 +130,7 @@ export async function resolveApiKeyAuth(
   // bypass: identity-bootstrap — an API key's organization is unknown until its row is read.
   const keyRow = await withBypassContext(
     async () =>
-      (
-        (await db.execute(sql`
+      (await db.execute<ApiKeySqlRow>(sql`
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
              k.rate_limit_per_min,
              u.email, u.name, u.is_active as user_active,
@@ -141,8 +140,7 @@ export async function resolveApiKeyAuth(
         join users u on u.id = k.user_id and u.org_id = k.org_id
         join orgs o on o.id = k.org_id and o.id = u.org_id
        where k.key_hash = ${keyHash}
-       limit 1`)) as unknown as { rows: ApiKeySqlRow[] }
-      ).rows[0],
+       limit 1`, "objects"))[0],
   );
   if (!keyRow) return null;
   if (!keyRow.is_active || !keyRow.user_active) return null;
@@ -226,8 +224,8 @@ export async function resolveApiKeyAuth(
             and u.org_id = api_keys.org_id
             and u.is_active
        )
-     returning id`);
-  if (!stamped.rows[0]) return null;
+     returning id`, "objects");
+  if (!stamped[0]) return null;
 
   return {
     user,
@@ -263,8 +261,8 @@ export async function enforceRateLimit(auth: ApiKeyAuth): Promise<NextResponse |
              else 1 end,
            rate_window_start = date_trunc('minute', now())
      where id = ${auth.keyId} and org_id = ${auth.user.orgId}
-     returning rate_window_count as count`));
-  const updated = r.rows[0] as { count?: unknown } | undefined;
+     returning rate_window_count as count`, "objects"));
+  const updated = r[0] as { count?: unknown } | undefined;
   // A 0-row UPDATE is not "count 1 / under the ceiling". The key did not
   // authenticate: the window was not recorded, so the request is refused.
   if (!updated) {

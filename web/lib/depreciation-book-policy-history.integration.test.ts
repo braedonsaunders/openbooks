@@ -47,9 +47,9 @@ for (const method of ['POST','PATCH','DELETE'] as const) {
       await buildSchedule(f.assetId,org.orgId,f.actorId,org.bookId);
       assert.equal((await runDepreciation(org.orgId,'2026-07-31',f.actorId,f.assetId)).posted,1);
       const snapshot=async()=>({
-        policies:(await db.execute(sql`select * from depreciation_book_policies where org_id=${org.orgId} order by id`)).rows,
-        audit:(await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`)).rows,
-        schedule:(await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} order by id`)).rows,
+        policies:await db.execute(sql`select * from depreciation_book_policies where org_id=${org.orgId} order by id`, 'objects'),
+        audit:await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`, 'objects'),
+        schedule:await db.execute(sql`select * from depreciation_schedule_lines where org_id=${org.orgId} order by id`, 'objects'),
       });
       const before=await snapshot();
       const body={...(method==='PATCH'?{id:policyId}:{}),bookId:org.bookId,categoryId:f.categoryId,method:'straight_line',lifeMonths:20,convention:'full_month'};

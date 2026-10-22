@@ -74,8 +74,8 @@ export async function loadReturns(sp: Record<string, string | string[] | undefin
           select it.id, it.code, it.name, it.unit,
                  exists (select 1 from item_inventory_profiles p where p.org_id = it.org_id and p.item_id = it.id) as has_inventory_profile
             from items it where it.org_id = ${authz.user.orgId} and it.is_active
-            order by coalesce(it.code, it.name), it.name limit 2000`).then((result) => result.rows.map((row) => ({ ...row, code: row.code ?? undefined }))),
-        db.execute<{ id: string; code: string | null }>(sql`select id, code from stock_locations where org_id = ${authz.user.orgId} and is_active order by code`).then((result) => result.rows),
+            order by coalesce(it.code, it.name), it.name limit 2000`, 'objects').then((result) => result.map((row) => ({ ...row, code: row.code ?? undefined }))),
+        db.execute<{ id: string; code: string | null }>(sql`select id, code from stock_locations where org_id = ${authz.user.orgId} and is_active order by code`, 'objects'),
         isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
           if (!multi) return null
           const options = await subsidiaryOptions()

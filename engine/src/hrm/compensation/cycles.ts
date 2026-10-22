@@ -283,7 +283,7 @@ export async function createCycle(query: CreateCycleQuery): Promise<CompCycleDTO
                 employer_subsidiary_id: query.scope?.employerSubsidiaryId ?? null,
                 department_id: query.scope?.departmentId ?? null,
               })}::jsonb, ${actorId}, ${actorId})
-      returning ${CYCLE_COLUMNS}`)).rows[0];
+      returning ${CYCLE_COLUMNS}`, "objects"))[0];
     if (!row) throw new CompensationError("REFUSED", "the cycle insert matched no row — the save is refused, never a silent success");
     await recordEvent(db, orgId, row.id, null, "opened", actorId, "cycle created");
     return toCycleDTO(row);
@@ -319,7 +319,7 @@ async function requirePayrollForMeritCycle(orgId: string): Promise<void> {
 async function loadCycleForUpdate(orgId: string, cycleId: string): Promise<CycleRow> {
   const row = (await db.execute<CycleRow>(sql`
     select ${CYCLE_COLUMNS} from hrm_comp_cycles
-     where org_id = ${orgId} and id = ${cycleId} for update`)).rows[0];
+     where org_id = ${orgId} and id = ${cycleId} for update`, "objects"))[0];
   if (!row) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
   return row;
 }
@@ -371,12 +371,12 @@ async function assertCycleWriteScope(
   if (allowed !== null && subsidiary !== null && !allowed.has(subsidiary)) throw cycleNotVisible();
   if (allowed === null) {
     if (employmentIds.length > 0) {
-      const rows = (await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(sql`
         select id from worker_employments
          where org_id = ${orgId}::uuid
            and id in (select jsonb_array_elements_text(${JSON.stringify([...new Set(employmentIds)].sort())}::jsonb)::uuid)
          order by id
-         for update`)).rows;
+         for update`, "objects");
       if (rows.length !== new Set(employmentIds).size) throw cycleNotVisible();
     }
     return;
@@ -395,12 +395,12 @@ async function assertCycleWriteScope(
 
 /** Lines are locked before their employment rows to keep one cycle-wide order. */
 async function lineEmploymentIds(orgId: string, cycleId: string): Promise<string[]> {
-  const rows = (await db.execute<{ employment_id: string }>(sql`
+  const rows = await db.execute<{ employment_id: string }>(sql`
     select employment_id
       from hrm_comp_cycle_lines
      where org_id = ${orgId} and cycle_id = ${cycleId}
      order by id
-     for update`)).rows;
+     for update`, "objects");
   return rows.map((row) => row.employment_id);
 }
 
@@ -414,10 +414,10 @@ async function lineEmploymentIds(orgId: string, cycleId: string): Promise<string
 async function assertLineEmploymentScope(orgId: string, actorId: string, employmentId: string): Promise<void> {
   const allowed = await loadCompensationLens(db, orgId, actorId);
   if (allowed === null) {
-    const rows = (await db.execute<{ id: string }>(sql`
+    const rows = await db.execute<{ id: string }>(sql`
       select id from worker_employments
        where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
-       for update`)).rows;
+       for update`, "objects");
     if (!rows[0]) throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
     return;
   }
@@ -441,7 +441,7 @@ export async function getCycle(query: { orgId: string; actorId: string; cycleId:
   const cycleId = requireId(query.cycleId, "cycleId");
   const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
   const row = (await db.execute<CycleRow>(sql`
-    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
+    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`, "objects"))[0];
   if (!row) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
   assertCycleVisible(row, allowed);
   return toCycleDTO(row);
@@ -451,8 +451,8 @@ export async function listCycles(query: { orgId: string; actorId: string }): Pro
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const allowed = await requireAggregateCompensationRead(db, orgId, actorId);
-  const rows = (await db.execute<CycleRow>(sql`
-    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} order by effective_on desc nulls last, id`)).rows;
+  const rows = await db.execute<CycleRow>(sql`
+    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} order by effective_on desc nulls last, id`, "objects");
   return rows
     .filter((row) => {
       if (allowed === null) return true;
@@ -475,14 +475,14 @@ export async function listCycleLines(query: {
   // the round is visible first, with the same message as a missing round
   // (never an existence oracle), mirroring getCycle.
   const cycle = (await db.execute<CycleRow>(sql`
-    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
+    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`, "objects"))[0];
   if (!cycle) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
   assertCycleVisible(cycle, allowed);
   // The line predicate joins the trusted employment row on this runner, so
   // the employer subsidiary is loaded from storage, never caller input. The
   // allowlist crosses as JSON (bare JS arrays interpolate as row
   // constructors, never PostgreSQL arrays); an empty set matches nothing.
-  const rows = (await db.execute<LineRow & { worker_party_id: string }>(sql`
+  const rows = await db.execute<LineRow & { worker_party_id: string }>(sql`
     select ${LINE_COLUMNS}, e.worker_party_id
       from hrm_comp_cycle_lines l
       join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
@@ -491,7 +491,7 @@ export async function listCycleLines(query: {
             or e.employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
             ))
-     order by e.worker_party_id`)).rows;
+     order by e.worker_party_id`, "objects");
   return rows.map((row) => toLineDTO(row, String((row as { worker_party_id: string }).worker_party_id)));
 }
 
@@ -510,7 +510,7 @@ interface ScopeEmployment {
 }
 
 async function inServiceEmployments(orgId: string, scope: CycleScope, asOf: string): Promise<ScopeEmployment[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     employment_id: string;
     worker_party_id: string;
     employer_subsidiary_id: string;
@@ -540,7 +540,7 @@ async function inServiceEmployments(orgId: string, scope: CycleScope, asOf: stri
        and (${scope.employerSubsidiaryId ?? null}::uuid is null
             or e.employer_subsidiary_id is not distinct from ${scope.employerSubsidiaryId ?? null}::uuid)
        and (${scope.departmentId ?? null}::uuid is null
-            or aav.department_id is not distinct from ${scope.departmentId ?? null}::uuid)`)).rows;
+            or aav.department_id is not distinct from ${scope.departmentId ?? null}::uuid)`, "objects");
   return rows.map((row) => {
     const started = row.started_on === null ? asOf : String(row.started_on).slice(0, 10);
     const tenureYears = exactGuidelineTenure(started, asOf);
@@ -577,7 +577,7 @@ async function latestSharedRating(orgId: string, employmentId: string, before: s
        and r.status in ('shared', 'acknowledged')
        and (r.shared_at is null or r.shared_at::date <= ${before}::date)
      order by r.shared_at desc nulls last
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!row) return null;
   const rating = exactReviewRating(row.calibrated_rating ?? row.overall_rating);
   if (rating === null) return { rating: null, bucket: null };
@@ -632,7 +632,7 @@ async function resolveLineGuideline(
        and effective_from <= ${asOf}::date
        and (effective_to is null or effective_to >= ${asOf}::date)
      order by effective_from desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   const nativeBasis = native ? requirePayRateBasis(native.basis) : null;
   const basis: BandBasis = nativeBasis === "hour" ? "hourly" : "annual";
   const currentRate = !native || nativeBasis === null
@@ -661,10 +661,10 @@ async function resolveLineGuideline(
          and (effective_to is null or effective_to >= ${asOf}::date)
          and recorded_until is null
        order by effective_from desc
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (position?.level_id) {
       const level = (await db.execute<{ family_id: string | null }>(sql`
-        select family_id from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`)).rows[0];
+        select family_id from hrm_job_levels where org_id = ${orgId} and id = ${position.level_id}`, "objects"))[0];
       const band = await resolveBandForScope(
         orgId,
         {
@@ -758,10 +758,10 @@ export async function openCycle(query: {
     // reprices these copies on any path.
     const cycleCurrency = String(cycle.currency);
     const pricingDate = String(cycle.effective_on).slice(0, 10);
-    const groupBudgets = (await db.execute<{ currency: string }>(sql`
+    const groupBudgets = await db.execute<{ currency: string }>(sql`
       select distinct currency::text as currency from hrm_comp_cycle_budgets
        where org_id = ${orgId} and cycle_id = ${cycleId}
-    `)).rows;
+    `, "objects");
     if (groupBudgets.some((budget) => budget.currency.trim() !== cycleCurrency)) {
       throw new CompensationError(
         "REFUSED",
@@ -823,7 +823,7 @@ export async function openCycle(query: {
          set status = 'open', opened_at = now(), revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${cycleId} and status = 'draft' and revision = ${cycle.revision}
-       returning ${CYCLE_COLUMNS}`)).rows[0];
+       returning ${CYCLE_COLUMNS}`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the cycle moved while it was opening — reload it and open again");
     }
@@ -853,7 +853,7 @@ async function canProposeForEmployment(
 async function loadLineForUpdate(orgId: string, lineId: string): Promise<LineRow> {
   const row = (await db.execute<LineRow>(sql`
     select ${LINE_COLUMNS} from hrm_comp_cycle_lines l
-     where l.org_id = ${orgId} and l.id = ${lineId} for update`)).rows[0];
+     where l.org_id = ${orgId} and l.id = ${lineId} for update`, "objects"))[0];
   if (!row) throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
   return row;
 }
@@ -868,7 +868,7 @@ async function loadCycleAndLineForUpdate(
   lineId: string,
 ): Promise<{ cycle: CycleRow; line: LineRow }> {
   const parent = (await db.execute<{ cycle_id: string }>(sql`
-    select cycle_id from hrm_comp_cycle_lines where org_id = ${orgId} and id = ${lineId}`)).rows[0];
+    select cycle_id from hrm_comp_cycle_lines where org_id = ${orgId} and id = ${lineId}`, "objects"))[0];
   if (!parent) throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
   const cycle = await loadCycleForUpdate(orgId, parent.cycle_id);
   const line = await loadLineForUpdate(orgId, lineId);
@@ -955,7 +955,7 @@ export async function cyclePacing(orgId: string, actorId: string, cycleId: strin
  */
 async function computePacing(orgId: string, cycleId: string, allowed: Set<string> | null): Promise<PacingRead> {
   const cycle = (await db.execute<CycleRow>(sql`
-    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`)).rows[0];
+    select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId}`, "objects"))[0];
   // A deleted or other-org cycle is not an empty envelope: without this,
   // pacing a missing round returned the exact shape of a real round with
   // no envelope. Refuse by name (404 at the route) like every other read.
@@ -972,7 +972,7 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
     select department_id, manager_party_id, currency::text as currency, amount::text as amount
       from hrm_comp_cycle_budgets where org_id = ${orgId} and cycle_id = ${cycleId}
      order by department_id nulls last, manager_party_id nulls last
-  `)).rows;
+  `, "objects"));
   const cycleCurrency = String(cycle.currency);
   const mismatch = groupBudgets.find((budget) => budget.currency.trim() !== cycleCurrency);
   if (mismatch) {
@@ -982,7 +982,7 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
     );
   }
   if (!usesTotal && groupBudgets.length === 0) return { totalPct: null, overBudget: false };
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     line_id: string;
     current_rate: string;
     proposed_rate: string | null;
@@ -1032,7 +1032,7 @@ async function computePacing(orgId: string, cycleId: string, allowed: Set<string
        and (${allowed === null}::boolean
             or e.employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
-            ))`)).rows;
+            ))`, "objects");
   let increase = "0.0000";
   const envelope = usesTotal ? String(cycle.budget_total) : null;
   const groupIncreases = new Map<string, string>();
@@ -1302,7 +1302,7 @@ export async function proposeLine(
              reason = ${reason}, revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${lineId} and revision = ${line.revision}
-       returning ${LINE_COLUMNS}`)).rows[0];
+       returning ${LINE_COLUMNS}`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the line moved while it was proposed — reload it and propose again");
     }
@@ -1330,7 +1330,7 @@ export async function proposeLine(
     }
     await recordEvent(db, orgId, line.cycle_id, lineId, "proposed", actorId, reason);
     const worker = (await db.execute<{ worker_party_id: string }>(sql`
-      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${line.employment_id}`)).rows[0];
+      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${line.employment_id}`, "objects"))[0];
     return toLineDTO(updated, worker?.worker_party_id ?? "");
   });
 }
@@ -1382,13 +1382,13 @@ export async function reopenLine(query: {
              reason = ${reason}, revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${lineId} and revision = ${line.revision}
-       returning ${LINE_COLUMNS}`)).rows[0];
+       returning ${LINE_COLUMNS}`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the line moved while it was reopened — reload it and reopen again");
     }
     await recordEvent(db, orgId, line.cycle_id, lineId, "reopened", actorId, reason);
     const worker = (await db.execute<{ worker_party_id: string }>(sql`
-      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${line.employment_id}`)).rows[0];
+      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${line.employment_id}`, "objects"))[0];
     return toLineDTO(updated, worker?.worker_party_id ?? "");
   });
 }
@@ -1443,11 +1443,9 @@ async function decideLine(
         approvalRunId,
       }))
     ) {
-      const worker = (
-        await db.execute<{ worker_party_id: string }>(
-          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${line.employment_id}`,
-        )
-      ).rows[0];
+      const worker = (await db.execute<{ worker_party_id: string }>(
+          sql`select worker_party_id from worker_employments where org_id=${orgId} and id=${line.employment_id}`, "objects",
+        ))[0];
       return toLineDTO(line, worker?.worker_party_id ?? "");
     }
     if (
@@ -1469,20 +1467,20 @@ async function decideLine(
       throw new CompensationError("INVALID_INPUT", "a rejection needs its reason — the manager reads it");
     }
     const approverParty = (await db.execute<{ party_id: string | null }>(sql`
-      select party_id from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.party_id ?? null;
+      select party_id from users where org_id = ${orgId} and id = ${actorId}`, "objects"))[0]?.party_id ?? null;
     const updated = (await db.execute<LineRow>(sql`
       update hrm_comp_cycle_lines as l
          set status = ${decision}, approver_party_id = ${approverParty}, decided_at = now(),
              reason = coalesce(${reason}, reason), revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${lineId} and revision = ${line.revision}
-       returning ${LINE_COLUMNS}`)).rows[0];
+       returning ${LINE_COLUMNS}`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the line moved while it was decided — reload it and decide again");
     }
     await recordEvent(db, orgId, line.cycle_id, lineId, decision, actorId, reason);
     const worker = (await db.execute<{ worker_party_id: string }>(sql`
-      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${line.employment_id}`)).rows[0];
+      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${line.employment_id}`, "objects"))[0];
     return toLineDTO(updated, worker?.worker_party_id ?? "");
   });
 }
@@ -1546,7 +1544,7 @@ export async function submitCycleForApproval(query: { orgId: string; actorId: st
     }
     const undecided = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from hrm_comp_cycle_lines
-       where org_id = ${orgId} and cycle_id = ${cycleId} and status = 'pending'`)).rows[0];
+       where org_id = ${orgId} and cycle_id = ${cycleId} and status = 'pending'`, "objects"))[0];
     if (undecided && Number(undecided.n) > 0) {
       throw new CompensationError(
         "REFUSED",
@@ -1565,14 +1563,12 @@ export async function submitCycleForApproval(query: { orgId: string; actorId: st
     const gatedRun = routing.gatingRunId
       ? { runId: routing.gatingRunId }
       : null;
-    const updated = (
-      await db.execute<CycleRow>(sql`
+    const updated = (await db.execute<CycleRow>(sql`
       update hrm_comp_cycles
          set status = ${gatedRun ? "in_review" : "approved"}, approved_at=case when ${gatedRun === null} then now() else null end, flow_run_id = ${gatedRun?.runId ?? null}, revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${cycleId} and status = 'open' and revision = ${cycle.revision}
-       returning ${CYCLE_COLUMNS}`)
-    ).rows[0];
+       returning ${CYCLE_COLUMNS}`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the cycle moved while it was submitted — reload it and submit again");
     }
@@ -1595,7 +1591,7 @@ export async function releaseCompCycleDecision(
 ): Promise<void> {
   return withOrgTransaction(orgId, async () => {
     const cycle = (await db.execute<CycleRow>(sql`
-      select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId} for update`)).rows[0];
+      select ${CYCLE_COLUMNS} from hrm_comp_cycles where org_id = ${orgId} and id = ${cycleId} for update`, "objects"))[0];
     if (!cycle) throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
     if (cycle.status !== "in_review") {
       throw new CompensationError(
@@ -1618,23 +1614,19 @@ export async function releaseCompCycleDecision(
       throw new CompensationError("REFUSED", "Complete this compensation cycle's submitted Flow approval before releasing its decision");
     }
     if (decision === "approved") {
-      const updated = (
-        await db.execute<CycleRow>(sql`
+      const updated = (await db.execute<CycleRow>(sql`
         update hrm_comp_cycles
            set status = 'approved', approved_at = now(), flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now(),updated_by=${deciderId}
          where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
-         returning ${CYCLE_COLUMNS}`)
-      ).rows[0];
+         returning ${CYCLE_COLUMNS}`, "objects"))[0];
       if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
       await recordEvent(db, orgId, cycleId, null, "approved", deciderId, "flows approval released");
     } else {
-      const updated = (
-        await db.execute<CycleRow>(sql`
+      const updated = (await db.execute<CycleRow>(sql`
         update hrm_comp_cycles
            set status = 'open', flow_run_id = ${approvalRunId}, revision = revision + 1, updated_at = now(),updated_by=${deciderId}
          where org_id = ${orgId} and id = ${cycleId} and status = 'in_review'
-         returning ${CYCLE_COLUMNS}`)
-      ).rows[0];
+         returning ${CYCLE_COLUMNS}`, "objects"))[0];
       if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it was released — the gate stays pending");
       await recordEvent(db, orgId, cycleId, null, "rejected", deciderId, "flows approval rejected — rework and resubmit");
     }
@@ -1677,11 +1669,11 @@ export async function pushCycle(query: {
       );
     }
     const effectiveOn = String(cycle.effective_on).slice(0, 10);
-    const lines = (await db.execute<LineRow & { worker_party_id: string }>(sql`
+    const lines = await db.execute<LineRow & { worker_party_id: string }>(sql`
       select ${LINE_COLUMNS}, e.worker_party_id
         from hrm_comp_cycle_lines l
         join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
-       where l.org_id = ${orgId} and l.cycle_id = ${cycleId} for update of l`)).rows;
+       where l.org_id = ${orgId} and l.cycle_id = ${cycleId} for update of l`, "objects");
     const undecided = lines.filter((l) => l.status === "proposed" || l.status === "pending");
     if (undecided.length > 0) {
       throw new CompensationError(
@@ -1698,7 +1690,7 @@ export async function pushCycle(query: {
       // foreign row halts the push, never skips silently.
       if (line.pushed_rate_id !== null) {
         const rate = (await db.execute<{ id: string }>(sql`
-          select id from labor_cost_rates where org_id = ${orgId} and id = ${line.pushed_rate_id}`)).rows[0];
+          select id from labor_cost_rates where org_id = ${orgId} and id = ${line.pushed_rate_id}`, "objects"))[0];
         if (!rate) {
           throw new CompensationError(
             "REFUSED",
@@ -1741,7 +1733,7 @@ export async function pushCycle(query: {
            set status = 'pushed', pushed_rate_id = ${outcome.rateId}, revision = revision + 1,
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${line.id} and status = 'approved' and pushed_rate_id is null
-         returning id`)).rows[0];
+         returning id`, "objects"))[0];
       if (!stamped) {
         throw new CompensationError("STALE_REVISION", "a line moved while the round pushed — the push halts; re-push resumes from the remaining lines");
       }
@@ -1755,14 +1747,14 @@ export async function pushCycle(query: {
       select count(*)::text as n
         from pay_runs r
        where r.org_id = ${orgId} and r.run_status = 'committed' and r.run_type <> 'retro'
-         and r.period_end >= ${effectiveOn}::date`)).rows[0];
+         and r.period_end >= ${effectiveOn}::date`, "objects"))[0];
     const retroReviewDue = committed !== undefined && Number(committed.n) > 0;
     const updated = (await db.execute<CycleRow>(sql`
       update hrm_comp_cycles
          set status = 'pushed', pushed_at = now(), revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${cycleId} and status = 'approved' and revision = ${cycle.revision}
-       returning ${CYCLE_COLUMNS}`)).rows[0];
+       returning ${CYCLE_COLUMNS}`, "objects"))[0];
     if (!updated) {
       throw new CompensationError("STALE_REVISION", "the cycle moved while it pushed — reload it before pushing again");
     }
@@ -1802,7 +1794,7 @@ export async function closeCycle(query: { orgId: string; actorId: string; cycleI
          set status = 'closed', closed_at = now(), revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${cycleId} and status = 'pushed' and revision = ${cycle.revision}
-       returning ${CYCLE_COLUMNS}`)).rows[0];
+       returning ${CYCLE_COLUMNS}`, "objects"))[0];
     if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it closed — reload it and close again");
     await recordEvent(db, orgId, cycleId, null, "closed", actorId, null);
     return toCycleDTO(updated);
@@ -1854,7 +1846,7 @@ export async function cancelCycle(query: {
          set status = 'cancelled', revision = revision + 1,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${cycleId} and revision = ${cycle.revision}
-       returning ${CYCLE_COLUMNS}`)).rows[0];
+       returning ${CYCLE_COLUMNS}`, "objects"))[0];
     if (!updated) throw new CompensationError("STALE_REVISION", "the cycle moved while it cancelled — reload it and cancel again");
     await recordEvent(db, orgId, cycleId, null, "cancelled", actorId, reason);
     return toCycleDTO(updated);

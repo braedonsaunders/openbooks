@@ -185,7 +185,7 @@ test(
           sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: 'list', subsidiaryIds: [fixture.subsidiaryId] })}::jsonb where org_id=${oid} and key='review_reader'`,
         )
         const originalSettings = await db.execute(
-          sql`select settings from orgs where id=${oid}`,
+          sql`select settings from orgs where id=${oid}`, 'objects',
         )
         await db.execute(
           sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}','{"projects":false,"timeTracking":false}'::jsonb) where id=${oid}`,
@@ -196,7 +196,7 @@ test(
           assert.match(await blocked.text(), /feature is disabled/)
         }
         await db.execute(
-          sql`update orgs set settings=${JSON.stringify(originalSettings.rows[0]!.settings)}::jsonb where id=${oid}`,
+          sql`update orgs set settings=${JSON.stringify(originalSettings[0]!.settings)}::jsonb where id=${oid}`,
         )
         const deniedPayroll = await insight(
           request({ query: { source: 'pay_stubs' } }),
@@ -267,10 +267,10 @@ test(
         const viewer = await getAuthz()
         assert.ok(viewer)
         const visible = await db.execute(
-          sql`select id from insight_cards where ${insightVisibilitySql(viewer)}`,
+          sql`select id from insight_cards where ${insightVisibilitySql(viewer)}`, 'objects',
         )
         assert.ok(
-          !visible.rows.some(
+          !visible.some(
             (row) =>
               row.id === privateCard || row.id === draftCard,
           ),
@@ -330,14 +330,14 @@ test(
         }
         assert.equal((await schedule(request(cadence))).status, 403)
         const rev = await db.execute(
-          sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from report_definitions where id=${def}`,
+          sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from report_definitions where id=${def}`, 'objects',
         )
         assert.equal(
           (
             await patch(
               request({
                 query: { entity: 'documents', columns: ['document_number'] },
-                expectedUpdatedAt: rev.rows[0]!.revision,
+                expectedUpdatedAt: rev[0]!.revision,
               }),
               { params: Promise.resolve({ id: def }) },
             )
@@ -362,9 +362,9 @@ test(
         )
         const created = await createdSchedule.json()
         const audit = await db.execute(
-          sql`select changes from audit_log where org_id=${oid} and table_name='report_schedules' and row_id=${created.schedule.id}`,
+          sql`select changes from audit_log where org_id=${oid} and table_name='report_schedules' and row_id=${created.schedule.id}`, 'objects',
         )
-        assert.equal(audit.rows.length, 1)
+        assert.equal(audit.length, 1)
         await assert.rejects(
           db.execute(
             sql`update report_runs set authorization_snapshot=null where id=${rid} and org_id=${oid}`,
@@ -600,10 +600,10 @@ test(
           boardPublished,
         )
         const counts = await db.execute(
-          sql`select (select count(*) from insight_cards where org_id=${oid}) as cards,(select count(*) from insight_dashboards where org_id=${oid}) as boards`,
+          sql`select (select count(*) from insight_cards where org_id=${oid}) as cards,(select count(*) from insight_dashboards where org_id=${oid}) as boards`, 'objects',
         )
-        assert.equal(counts.rows[0]!.cards, '1')
-        assert.equal(counts.rows[0]!.boards, '1')
+        assert.equal(counts[0]!.cards, '1')
+        assert.equal(counts[0]!.boards, '1')
         await admin.query(`drop trigger ${trigger} on audit_log`)
         await admin.query(`drop function public.${trigger}()`)
         assert.equal((await deleteCard(request({}), ctx(card.id))).status, 200)
@@ -628,14 +628,14 @@ test(
           200,
         )
         const audit = await db.execute(
-          sql`select table_name,action,changes,actor_id from audit_log where org_id=${oid} and table_name in ('insight_cards','insight_dashboards') order by at,id`,
+          sql`select table_name,action,changes,actor_id from audit_log where org_id=${oid} and table_name in ('insight_cards','insight_dashboards') order by at,id`, 'objects',
         )
         assert.equal(
-          audit.rows.length,
+          audit.length,
           9,
           'only committed lifecycle changes have evidence',
         )
-        for (const event of audit.rows as Array<{
+        for (const event of audit as Array<{
           action: string
           actor_id: string
           changes: Record<string, unknown>

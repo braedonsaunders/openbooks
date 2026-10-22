@@ -41,11 +41,11 @@ for (const scenario of scenarios) {
         date_trunc('second',now()+interval '1 day')+interval '123450 microseconds')`);
       const row = async () => JSON.parse(JSON.stringify((await db.execute(sql`select f.*,
         ${documentRevisionSql(sql`created_at`)} as created_at,${documentRevisionSql(sql`updated_at`)} as updated_at
-        from custom_field_defs f where id=${id}`)).rows[0]));
+        from custom_field_defs f where id=${id}`, 'objects'))[0]));
       const revision = (await row()).updated_at as string;
-      const snapshot = async () => (await db.execute(sql`select
+      const snapshot = async () => await db.execute(sql`select
         (select jsonb_agg(to_jsonb(f) order by f.id) from custom_field_defs f where org_id=${org.orgId}) as definitions,
-        (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${org.orgId}) as audit`)).rows;
+        (select jsonb_agg(to_jsonb(a) order by a.id) from audit_log a where org_id=${org.orgId}) as audit`, 'objects');
       const request = (method: string, body: unknown) => new Request('http://audit.local/api/admin/custom-fields', {
         method, headers: { 'Content-Type': 'application/json', 'X-Request-Id': 'custom-field-control-review' }, body: JSON.stringify(body),
       });
@@ -63,8 +63,8 @@ for (const scenario of scenarios) {
       if (scenario === 'create evidence') {
         const response = await create(); assert.equal(response.status, 200);
         const created = await response.json();
-        const definition = (await db.execute(sql`select f.*,${documentRevisionSql(sql`created_at`)} as created_at,${documentRevisionSql(sql`updated_at`)} as updated_at from custom_field_defs f where id=${created.id}`)).rows[0]!;
-        const audits = (await db.execute(sql`select * from audit_log where row_id=${created.id} and org_id=${org.orgId} and table_name='custom_field_defs'`)).rows;
+        const definition = (await db.execute(sql`select f.*,${documentRevisionSql(sql`created_at`)} as created_at,${documentRevisionSql(sql`updated_at`)} as updated_at from custom_field_defs f where id=${created.id}`, 'objects'))[0]!;
+        const audits = await db.execute(sql`select * from audit_log where row_id=${created.id} and org_id=${org.orgId} and table_name='custom_field_defs'`, 'objects');
         assert.equal(audits.length, 1);
         assert.equal(audits[0]!.actor_id, actor); assert.equal(audits[0]!.action, 'insert');
         assert.equal(audits[0]!.request_id, 'custom-field-control-review');
@@ -82,7 +82,7 @@ for (const scenario of scenarios) {
           const after = await row();
           assert.ok(isDocumentRevisionToken(result.updatedAt)); assert.ok(result.updatedAt > token); assert.equal(result.updatedAt, after.updated_at);
           assert.equal(after.updated_by, actor); assert.deepEqual(after.config, before.config);
-          const audits = (await db.execute(sql`select * from audit_log where org_id=${org.orgId} and row_id=${id} order by at desc,id desc`)).rows;
+          const audits = await db.execute(sql`select * from audit_log where org_id=${org.orgId} and row_id=${id} order by at desc,id desc`, 'objects');
           assert.deepEqual(audits[0]!.changes, { before, after });
           assert.equal(audits[0]!.actor_id, actor); assert.equal(audits[0]!.request_id, 'custom-field-control-review');
           token = result.updatedAt;
@@ -92,7 +92,7 @@ for (const scenario of scenarios) {
       if (scenario === 'concurrent editors') {
         const results = await Promise.all([patch({ label: 'Editor one' }), patch({ config: { min: '10.0001' } })]);
         assert.deepEqual(results.map(result => result.status).sort(), [200, 409]);
-        assert.equal((await db.execute(sql`select id from audit_log where row_id=${id} and org_id=${org.orgId}`)).rows.length, 1);
+        assert.equal((await db.execute(sql`select id from audit_log where row_id=${id} and org_id=${org.orgId}`, 'objects')).length, 1);
         return;
       }
       if (scenario === 'waiting writer') {

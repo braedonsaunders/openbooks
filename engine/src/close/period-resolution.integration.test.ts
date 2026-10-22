@@ -14,8 +14,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function calendarOf(orgId: string, periodId: string): Promise<string> {
   const r = await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where id = ${periodId}`);
-  return r.rows[0]!.fiscal_calendar_id;
+    select fiscal_calendar_id from accounting_periods where id = ${periodId}`, "objects");
+  return r[0]!.fiscal_calendar_id;
 }
 
 test("covering resolution prefers the default calendar under overlap", { skip: !DB }, async () => {

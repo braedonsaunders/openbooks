@@ -90,10 +90,8 @@ test("a live token redeems through the route from a cross-loopback Origin", asyn
     assert.equal(forged.status, 403);
 
     // The password actually took: the placeholder hash is gone.
-    const hash = await withBypassContext(async () => (
-      await db.execute<{ password_hash: string }>(sql`
-        select password_hash from users where id = ${seeded.userId}`)
-    ).rows[0]!.password_hash);
+    const hash = await withBypassContext(async () => (await db.execute<{ password_hash: string }>(sql`
+        select password_hash from users where id = ${seeded.userId}`, "objects"))[0]!.password_hash);
     assert.notEqual(hash, "unusable");
   } finally {
     await dropScratchOrg(seeded.org.orgId);

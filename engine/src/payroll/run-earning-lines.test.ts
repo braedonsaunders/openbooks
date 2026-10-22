@@ -17,7 +17,7 @@ const row = (values: Record<string, unknown> = {}) => ({
 async function apply(rows: Record<string, unknown>[], lines: Line[] = []) {
   // Database reads are the boundary; native line construction and arithmetic
   // run unchanged, including the bank-input guard.
-  const tx = { execute: async () => ({ rows }) } as unknown as Parameters<typeof applyRunLineAdjustments>[0];
+  const tx = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as unknown as Parameters<typeof applyRunLineAdjustments>[0];
   const replaced = await applyRunLineAdjustments(tx, {
     orgId: "b3d89b81-95bd-405d-b2ee-e75a4602bd43",
     documentId: "3f429ce4-dc08-4b6b-a3f3-60250c9b82e1",

@@ -92,7 +92,7 @@ async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>): Pr
   try {
     const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Inbox tester", "admin"));
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
       assert.equal(result.rowCount, 1);
     });
     await run(org, actor);
@@ -130,8 +130,8 @@ function delivery(secret: string, eventId: string, topic = "orders/create", extr
 }
 
 async function eventCount(orgId: string): Promise<number> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from integration_inbound_events where org_id = ${orgId}`))).rows;
+  const rows = await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
+    select count(*)::int as n from integration_inbound_events where org_id = ${orgId}`, "objects"));
   return rows[0]!.n;
 }
 
@@ -163,7 +163,7 @@ test("a duplicate delivery stores once and one effect follows two runs", DB, asy
     assert.equal(await eventCount(org.orgId), 1);
     // Only the signature, topic, id, and shop headers are kept; customer data in headers is dropped.
     const headers = (await withOrgContext(org.orgId, () => db.execute<{ headers: Record<string, string> }>(sql`
-      select headers from integration_inbound_events where id = ${stored.id}`))).rows[0]!.headers;
+      select headers from integration_inbound_events where id = ${stored.id}`, "objects")))[0]!.headers;
     assert.equal(headers["x-customer-email"], undefined);
     assert.equal(headers["x-test-topic"], "orders/create");
     const firstRun = await processPendingEvents(10);
@@ -171,7 +171,7 @@ test("a duplicate delivery stores once and one effect follows two runs", DB, asy
     const secondRun = await processPendingEvents(10);
     assert.deepEqual([secondRun.processed, calls.length], [0, 1]);
     const status = (await withOrgContext(org.orgId, () => db.execute<{ status: string; result_ref: unknown }>(sql`
-      select status, result_ref from integration_inbound_events where id = ${stored.id}`))).rows[0]!;
+      select status, result_ref from integration_inbound_events where id = ${stored.id}`, "objects")))[0]!;
     assert.equal(status.status, "processed");
     assert.ok(JSON.stringify(status.result_ref).includes("evt-dupe-1"));
     // Replay is the audited operator action that re-runs the adapter on purpose.
@@ -191,18 +191,18 @@ test("a failing handler backs off and then dead-letters", DB, async () => {
       const stored = await receiveInboundEvent({ channelId: id, ...delivery(secret, "evt-boom-1", "boom") });
       await processPendingEvents(10);
       const failed = (await withOrgContext(org.orgId, () => db.execute<{ status: string; attempts: number; error: string | null; next_attempt_at: string }>(sql`
-        select status, attempts, error, next_attempt_at from integration_inbound_events where id = ${stored.id}`))).rows[0]!;
+        select status, attempts, error, next_attempt_at from integration_inbound_events where id = ${stored.id}`, "objects")))[0]!;
       assert.equal(failed.status, "failed");
       assert.equal(failed.attempts, 1);
       assert.ok(failed.error?.includes("boom"));
       assert.ok(new Date(failed.next_attempt_at).getTime() > Date.now(), "backs off before retrying");
       await withOrgContext(org.orgId, async () => {
-        const result = await db.execute(sql`update integration_inbound_events set attempts = 7, next_attempt_at = now(), status = 'failed' where id = ${stored.id}`);
+        const result = await db.execute<never>(sql`update integration_inbound_events set attempts = 7, next_attempt_at = now(), status = 'failed' where id = ${stored.id}`);
         assert.equal(result.rowCount, 1);
       });
       await processPendingEvents(10);
       const dead = (await withOrgContext(org.orgId, () => db.execute<{ status: string; attempts: number }>(sql`
-        select status, attempts from integration_inbound_events where id = ${stored.id}`))).rows[0]!;
+        select status, attempts from integration_inbound_events where id = ${stored.id}`, "objects")))[0]!;
       assert.deepEqual([dead.status, dead.attempts], ["dead", 8]);
     } finally {
       failTopics.delete("boom");
@@ -219,7 +219,7 @@ test("a paused channel holds events and lifecycle guards refuse", DB, async () =
     await processPendingEvents(10);
     assert.equal(calls.length, 0);
     const held = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`
-      select status from integration_inbound_events where id = ${stored.id}`))).rows[0]!;
+      select status from integration_inbound_events where id = ${stored.id}`, "objects")))[0]!;
     assert.equal(held.status, "pending");
     await resumeChannel(org.orgId, actor, id, "Stocktake finished");
     // Resuming an active channel is not a move: the guard names the refusal instead of no-op success.

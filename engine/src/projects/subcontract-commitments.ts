@@ -38,16 +38,16 @@ export async function directSubcontractOpenCommitment(
        and s.status in ('active', 'substantially_complete')
        and s.purchase_order_id is null
      group by 1
-  `));
+  `, "objects"));
   // FX "as of" is the org's business day, never the UTC day (which is tomorrow
   // in the evening for the Americas).
   const today = await businessToday(orgId);
   const ctx = await flowTranslation(
     orgId,
-    result.rows.map((r) => ({ func: r.func ?? null, date: today })),
+    result.map((r) => ({ func: r.func ?? null, date: today })),
   );
   let total = "0";
-  for (const r of result.rows) {
+  for (const r of result) {
     total = add(total, translateFlowAmount(String(r.committed ?? 0), r.func ?? null, today, ctx.rateAt));
   }
   return normalizeMoney(total);

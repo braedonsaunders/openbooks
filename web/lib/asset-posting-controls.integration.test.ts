@@ -55,12 +55,12 @@ for (const operation of ['dispose', 'remeasure'] as const) {
         await buildSchedule(assetId, org.orgId, actorId, org.bookId);
         const depreciation = await runDepreciation(org.orgId, '2026-07-31', actorId, assetId);
         assert.equal(depreciation.totalAmount, '100.0000');
-        const snapshot = async () => (await db.execute(sql`
+        const snapshot = async () => await db.execute(sql`
           select (select jsonb_agg(to_jsonb(a) order by id) from fixed_assets a where org_id=${org.orgId}) as assets,
                  (select jsonb_agg(to_jsonb(e) order by id) from asset_events e where org_id=${org.orgId}) as events,
                  (select jsonb_agg(to_jsonb(e) order by id) from journal_entries e where org_id=${org.orgId}) as entries,
                  (select jsonb_agg(to_jsonb(l) order by id) from depreciation_schedule_lines l where org_id=${org.orgId}) as schedule_lines
-        `)).rows;
+        `, 'objects');
         const before = await snapshot();
         const dates: Record<string, unknown> = { 'malformed date':'31-07-2026', 'empty date':'', 'null date':null, 'invalid calendar':'2026-02-30' };
         const date = scenario in dates ? dates[scenario] : '2026-07-31';
@@ -79,9 +79,9 @@ for (const operation of ['dispose', 'remeasure'] as const) {
           return;
         }
         assert.equal(response.status,200,JSON.stringify(body));
-        const lines = (await db.execute<{ account_id:string; amount:string }>(sql`
+        const lines = await db.execute<{ account_id:string; amount:string }>(sql`
           select account_id,amount::text from journal_lines where org_id=${org.orgId} and entry_id=${body.entryId}
-        `)).rows;
+        `, 'objects');
         assert.equal(lines.find(line=>line.account_id===accumulatedAccountId)?.amount, operation==='dispose' ? '100.0000' : '-100.0000');
         if (operation==='dispose') assert.equal(lines.find(line=>line.account_id===assetAccountId)?.amount,'-1000.0000');
         assert.equal(lines.find(line=>line.account_id===org.accounts.adjustment)?.amount,operation==='dispose' ? '900.0000' : '100.0000');
@@ -117,9 +117,9 @@ for (const operation of ['dispose', 'remeasure'] as const) {
       const response = await pending;
       assert.equal(response.status,422);
       assert.match((await response.json()).error,/not found|scope|permitted/);
-      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`)).rows.length,0);
-      assert.equal((await db.execute(sql`select id from asset_events where org_id=${org.orgId}`)).rows.length,0);
-      const asset = (await db.execute<{ subsidiary_id:string; status:string }>(sql`select subsidiary_id,status from fixed_assets where id=${assetId}`)).rows[0]!;
+      assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId}`, 'objects')).length,0);
+      assert.equal((await db.execute(sql`select id from asset_events where org_id=${org.orgId}`, 'objects')).length,0);
+      const asset = (await db.execute<{ subsidiary_id:string; status:string }>(sql`select subsidiary_id,status from fixed_assets where id=${assetId}`, 'objects'))[0]!;
       assert.equal(asset.subsidiary_id,outsideId);
       assert.equal(asset.status,'in_service');
     } finally {

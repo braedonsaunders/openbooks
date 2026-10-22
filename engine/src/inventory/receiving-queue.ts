@@ -11,8 +11,7 @@ export async function purchaseReceiptQueue(
 ) {
   if (!(await orgFeatureEnabled(orgId, "warehousing", tx)))
     throw new InventoryError("Turn on Warehousing before receiving stock");
-  return (
-    await tx.execute<{
+  return await tx.execute<{
       lineId: string;
       number: string;
       itemLabel: string;
@@ -31,6 +30,5 @@ export async function purchaseReceiptQueue(
         and movement.kind='receipt' and movement.status='posted')
       and not exists(select 1 from warehouse_execution_tasks task where task.org_id=line.org_id and task.document_line_id=line.id
         and task.stage='receive' and task.status='done')
-    order by receipt.document_date desc,receipt.id desc,line.line_number limit 500`)
-  ).rows;
+    order by receipt.document_date desc,receipt.id desc,line.line_number limit 500`, "objects");
 }

@@ -74,8 +74,8 @@ async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> 
            posting_date::text as "postingDate"
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
-  `))
-  const doc = found.rows[0]
+  `, 'objects'))
+  const doc = found[0]
   if (!doc) return notFound("record")
   const denied = guardSubsidiaryScope(authz, doc.subsidiaryId)
   if (denied) return denied
@@ -155,7 +155,7 @@ export const GET = defineRoute({
              )
            where p.org_id = ${gate.authz.user.orgId} and p.is_adjustment
            order by p.starts_on, p.ends_on, p.id
-        `)).rows
+        `, 'objects'))
       : []
     // The revision token the void POST fences on: linked documents (a goods
     // receipt from its purchase order) have no drawer holding it, so the
@@ -163,7 +163,7 @@ export const GET = defineRoute({
     const revision = (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
         from documents where id = ${id} and org_id = ${gate.authz.user.orgId}
-    `)).rows[0]?.revision ?? null
+    `, 'objects'))[0]?.revision ?? null
     return NextResponse.json({ adjustmentPeriods: periods, ...suggestion, revision })
   },
 });

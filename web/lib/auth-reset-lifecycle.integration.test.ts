@@ -27,7 +27,7 @@ const priorSecret = process.env.SESSION_SECRET;
       // scope their own queries internally.
       const { userId, email } = await withBypassContext(async () => {
         const userId = (await seedFlowActors(org.orgId)).adminId;
-        const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+        const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`, 'objects'))[0]!.email;
         await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
         await db.execute(sql`update users set password_hash=${await auth.hashPassword(oldPassword)} where id=${userId}`);
         if (scenario === 'pending login') {
@@ -137,7 +137,7 @@ const consolidatedRows = [
           try {
             const { userId, email } = await withBypassContext(async () => {
               const userId = (await seedFlowActors(org.orgId)).adminId;
-              const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+              const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`, 'objects'))[0]!.email;
               await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
               for (let index = 0; index < 2; index++) {
                 await db.execute(sql`insert into auth_password_resets (user_id,token_hash,expires_at)
@@ -151,14 +151,14 @@ const consolidatedRows = [
               // accepts a link. This also keeps provider I/O outside the user lock.
               const visible = await withBypass(async () => (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from auth_password_resets
-                 where user_id=${userId} and used_at is null and expires_at>now()`)).rows[0]!.n);
+                 where user_id=${userId} and used_at is null and expires_at>now()`, 'objects'))[0]!.n);
               assert.equal(visible, 1);
             };
             await Promise.all(Array.from({ length: 8 }, () => requestPasswordReset(email, { networkAddress: "127.0.0.1", userAgent: "isolated concurrency test" })));
             // Verification reads run in the scratch org's scope.
             const counts = await withOrgContext(org.orgId, async () => (await db.execute<{ issued: number; usable: number }>(sql`
               select count(*)::int as issued, count(*) filter (where used_at is null and expires_at>now())::int as usable
-                from auth_password_resets where user_id=${userId}`)).rows[0]!);
+                from auth_password_resets where user_id=${userId}`, 'objects'))[0]!);
             assert.deepEqual(counts, { issued: 3, usable: 1 });
             assert.equal(deliveries.length, 1);
             const token = new URL(deliveries[0]!).searchParams.get("token")!;
@@ -191,10 +191,10 @@ const consolidatedRows = [
             // Verification reads run in the scratch org's scope.
             await withOrgContext(org.orgId, async () => {
               const remaining = (await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_password_resets
-                where user_id=${userId} and used_at is null and expires_at>now()`)).rows[0]!.n;
+                where user_id=${userId} and used_at is null and expires_at>now()`, 'objects'))[0]!.n;
               assert.equal(remaining, 0);
               const audit = (await db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
-                where org_id=${org.orgId} and row_id=${userId} and changes->>'passwordReset'='true'`)).rows[0]!.n;
+                where org_id=${org.orgId} and row_id=${userId} and changes->>'passwordReset'='true'`, 'objects'))[0]!.n;
               assert.equal(audit, 1);
             });
           } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
@@ -211,7 +211,7 @@ const consolidatedRows = [
           try {
             const { userId, email } = await withBypassContext(async () => {
               const userId = (await seedFlowActors(org.orgId)).adminId;
-              const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+              const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`, 'objects'))[0]!.email;
               await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
               return { userId, email };
             });
@@ -222,7 +222,7 @@ const consolidatedRows = [
               user: { id: userId, org_id: org.orgId, name: "Gate subject", email },
               context,
               authorize: async () => {
-                gateXid = (await db.execute<{ xid: string }>(sql`select pg_current_xact_id()::text as xid`)).rows[0]!.xid;
+                gateXid = (await db.execute<{ xid: string }>(sql`select pg_current_xact_id()::text as xid`, 'objects'))[0]!.xid;
               },
             });
             assert.ok(issuance, "issuance succeeds when the gate allows it");
@@ -230,8 +230,8 @@ const consolidatedRows = [
             const minted = await withBypassContext(() => db.execute<{ xid: string }>(sql`
               select xmin::text as xid from auth_password_resets
                where user_id=${userId} and used_at is null and expires_at>now()
-               order by created_at desc limit 1`));
-            assert.equal(minted.rows[0]!.xid, gateXid, "gate and mint commit atomically in one transaction");
+               order by created_at desc limit 1`, 'objects'));
+            assert.equal(minted[0]!.xid, gateXid, "gate and mint commit atomically in one transaction");
             // A refusal thrown by the gate rolls the whole issuance back: the token
             // count is unchanged, so no link exists to hand out.
             await assert.rejects(
@@ -246,8 +246,8 @@ const consolidatedRows = [
             );
             const live = await withBypassContext(() => db.execute<{ n: number }>(sql`
               select count(*)::int as n from auth_password_resets
-               where user_id=${userId} and used_at is null and expires_at>now()`));
-            assert.equal(live.rows[0]!.n, 1, "the refused issuance minted nothing");
+               where user_id=${userId} and used_at is null and expires_at>now()`, 'objects'));
+            assert.equal(live[0]!.n, 1, "the refused issuance minted nothing");
           } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
         });
   } },
@@ -304,7 +304,7 @@ const consolidatedRows = [
         async function seedUser(orgId: string) {
           return withBypassContext(async () => {
             const userId = (await seedFlowActors(orgId)).adminId;
-            const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+            const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`, 'objects'))[0]!.email;
             await db.execute(sql`update orgs set env_kind='production' where id=${orgId}`);
             return { userId, email };
           });
@@ -347,7 +347,7 @@ const consolidatedRows = [
             let minted = 0;
             while (minted < 2 && Date.now() < mintedDeadline) {
               minted = await withBypass(async () => (await db.execute<{ n: number }>(sql`
-                select count(*)::int as n from auth_password_resets where user_id=${userId}`)).rows[0]!.n);
+                select count(*)::int as n from auth_password_resets where user_id=${userId}`, 'objects'))[0]!.n);
               if (minted < 2) await new Promise((resolve) => setTimeout(resolve, 10));
             }
             assert.equal(minted, 2);
@@ -390,7 +390,7 @@ const consolidatedRows = [
             const staleToken = tokenOf(deliveries[0]!);
             const sent = await withOrgContext(org.orgId, async () => {
               const user = (await db.execute<{ id: string; org_id: string; name: string | null; email: string }>(sql`
-                select id, org_id, name, email from users where id=${userId}`)).rows[0]!;
+                select id, org_id, name, email from users where id=${userId}`, 'objects'))[0]!;
               return deliverResetEmail(user, { provider: "isolated" } as never, staleToken);
             });
             assert.equal(sent, false);
@@ -448,7 +448,7 @@ const consolidatedRows = [
               const userId = (await seedFlowActors(org.orgId)).adminId;
               const originalHash = (await db.execute<{ password_hash: string | null }>(sql`
                 select password_hash from users where id=${userId}
-              `)).rows[0]!.password_hash;
+              `, 'objects'))[0]!.password_hash;
               const token = randomBytes(32).toString("base64url");
               if (scenario !== "unknown") {
                 await db.execute(sql`insert into auth_password_resets (user_id,token_hash,expires_at,used_at)
@@ -479,7 +479,7 @@ const consolidatedRows = [
               assert.equal(state.hashes, ["valid", "consumed during KDF", "deactivated during KDF"].includes(scenario) ? 1 : 0);
               const stored = (await db.execute<{ password_hash: string | null }>(sql`
                 select password_hash from users where id=${userId}
-              `)).rows[0]!.password_hash;
+              `, 'objects'))[0]!.password_hash;
               if (scenario === "valid") {
                 assert.ok(stored);
                 assert.equal((await verifyPassword(password, stored)).valid, true);
@@ -489,7 +489,7 @@ const consolidatedRows = [
               const audits = (await db.execute<{ n: number }>(sql`
                 select count(*)::int as n from audit_log where org_id=${org.orgId}
                   and row_id=${userId} and changes->>'passwordReset'='true'
-              `)).rows[0]!.n;
+              `, 'objects'))[0]!.n;
               assert.equal(audits, scenario === "valid" ? 1 : 0);
             } finally {
               state.beforeHash = async () => {};
@@ -515,15 +515,15 @@ const authCredentialCases = [
         const context = { networkAddress: "127.0.0.1", userAgent: "blank-email regression" };
 
         async function nullHashStateRows(): Promise<number> {
-          const rows = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-            select count(*)::int as n from auth_login_state where email_hash is null`))).rows;
+          const rows = await withBypassContext(() => db.execute<{ n: number }>(sql`
+            select count(*)::int as n from auth_login_state where email_hash is null`, 'objects'));
           return rows[0]!.n;
         }
 
         async function recentNullUserStateRows(): Promise<Array<{ email_hash: string }>> {
-          return (await withBypassContext(() => db.execute<{ email_hash: string }>(sql`
+          return await withBypassContext(() => db.execute<{ email_hash: string }>(sql`
             select email_hash from auth_login_state
-             where user_id is null and updated_at > now() - interval '5 minutes'`))).rows;
+             where user_id is null and updated_at > now() - interval '5 minutes'`, 'objects'));
         }
 
         test("blank, whitespace and malformed login emails get a generic invalid with no null-hash state", { skip: !DB }, async () => {
@@ -602,7 +602,7 @@ const authCredentialCases = [
                 const hold = new Promise<void>(resolve => { release = resolve; });
                 let holderPid = 0;
                 holder = withBypass(async () => {
-                  holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+                  holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid;
                   await db.execute(sql`select id from users where id=${userId} for update`);
                   staged();
                   await hold;
@@ -618,7 +618,7 @@ const authCredentialCases = [
                 while (!settled && Date.now() < deadline) {
                   blocked = await withBypassContext(async () => (await db.execute<{ blocked: boolean }>(sql`select exists(
                     select 1 from pg_stat_activity where datname=current_database() and ${holderPid}=any(pg_blocking_pids(pid))
-                  ) as blocked`)).rows[0]!.blocked);
+                  ) as blocked`, 'objects'))[0]!.blocked);
                   if (blocked) break;
                   await new Promise(resolve => setTimeout(resolve, 10));
                 }
@@ -628,7 +628,7 @@ const authCredentialCases = [
                   while (Date.now() < deadline) {
                     expired = await withOrgContext(org.orgId, async () => (await db.execute<{ expired: boolean }>(method === "reset"
                       ? sql`select expires_at <= clock_timestamp() as expired from auth_password_resets where user_id=${userId}`
-                      : sql`select expires_at <= ${new Date()} as expired from auth_sessions where id=${sessionId}`)).rows[0]!.expired);
+                      : sql`select expires_at <= ${new Date()} as expired from auth_sessions where id=${sessionId}`, 'objects'))[0]!.expired);
                     if (expired) break;
                     await new Promise(resolve => setTimeout(resolve, 20));
                   }
@@ -641,11 +641,11 @@ const authCredentialCases = [
                 await withOrgContext(org.orgId, async () => {
                   if (method === "reset") {
                     assert.deepEqual(result, expires ? { ok: false, reason: "invalid_token" } : { ok: true });
-                    if (expires) assert.equal((await db.execute<{ password_hash: string }>(sql`select password_hash from users where id=${userId}`)).rows[0]!.password_hash, originalHash);
+                    if (expires) assert.equal((await db.execute<{ password_hash: string }>(sql`select password_hash from users where id=${userId}`, 'objects'))[0]!.password_hash, originalHash);
                   } else {
                     if (expires) assert.equal(result, null);
                     else assert.ok(result);
-                    const factor = (await db.execute<{ enabled_at: string | null }>(sql`select enabled_at from auth_mfa_factors where user_id=${userId}`)).rows[0];
+                    const factor = (await db.execute<{ enabled_at: string | null }>(sql`select enabled_at from auth_mfa_factors where user_id=${userId}`, 'objects'))[0];
                     if (method === "begin MFA" && expires) assert.equal(factor, undefined);
                     if (method === "confirm MFA") assert.equal(Boolean(factor?.enabled_at), !expires);
                   }
@@ -788,8 +788,8 @@ const authCredentialCases = [
         }
 
         async function revokedById(orgId: string, userId: string) {
-          return withOrgContext(orgId, async () => (await db.execute<{ id: string; revoked: boolean }>(sql`
-            select id, (revoked_at is not null) as revoked from auth_sessions where user_id=${userId} order by id`)).rows);
+          return withOrgContext(orgId, async () => await db.execute<{ id: string; revoked: boolean }>(sql`
+            select id, (revoked_at is not null) as revoked from auth_sessions where user_id=${userId} order by id`, 'objects'));
         }
 
         test("revokeOtherUserSessions refuses when the keeper session was revoked first", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -885,14 +885,14 @@ const authCredentialCases = [
             const hold = new Promise<void>((resolve) => { release = resolve; });
             let holderPid = 0;
             held = withBypass(async () => {
-              holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+              holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid;
               await db.execute(sql`update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=${caller}`);
               await hold;
             });
             const deadline = Date.now() + 10_000;
             while ((await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
               select count(*)::int as n from pg_stat_activity where datname=current_database() and pid=${holderPid} and state <> 'idle'
-            `)).rows[0]!.n)) === 0 && Date.now() < deadline) {
+            `, 'objects'))[0]!.n)) === 0 && Date.now() < deadline) {
               await new Promise((resolve) => setTimeout(resolve, 10));
             }
             contender = auth.revokeOtherUserSessions(userId, caller);
@@ -904,7 +904,7 @@ const authCredentialCases = [
               blocked = await withBypassContext(async () => (await db.execute<{ blocked: boolean }>(sql`select exists(
                 select 1 from pg_stat_activity where datname=current_database()
                   and ${holderPid}=any(pg_blocking_pids(pid))
-              ) as blocked`)).rows[0]!.blocked);
+              ) as blocked`, 'objects'))[0]!.blocked);
               if (blocked) break;
               await new Promise((resolve) => setTimeout(resolve, 10));
             }
@@ -969,8 +969,8 @@ const previousSecret = process.env.SESSION_SECRET;
           await db.execute(sql`insert into auth_mfa_factors(user_id,secret_encrypted,recovery_code_hashes,enabled_at,setup_session_id,setup_expires_at)
             values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},${JSON.stringify(previousHashes)}::jsonb,${action === "mfa_enabled" ? sql`null` : sql`now()`},
               ${action === "mfa_enabled" ? sessionId : null},${action === "mfa_enabled" ? new Date(Date.now()+30*60_000) : null})`);
-          const factorBefore = (await db.execute(sql`select * from auth_mfa_factors where user_id=${userId}`)).rows[0]!;
-          const sessionsBefore = (await db.execute(sql`select * from auth_sessions where user_id=${userId} order by id`)).rows;
+          const factorBefore = (await db.execute(sql`select * from auth_mfa_factors where user_id=${userId}`, 'objects'))[0]!;
+          const sessionsBefore = await db.execute(sql`select * from auth_sessions where user_id=${userId} order by id`, 'objects');
           if (failAudit) {
             // Isolated test database only. Match this tenant's material event so
             // fixture cleanup and unrelated audit writes retain normal behavior.
@@ -996,8 +996,8 @@ const previousSecret = process.env.SESSION_SECRET;
           });
           // Verification reads run in the scratch org's scope.
           await withOrgContext(org.orgId, async () => {
-            assert.deepEqual((await db.execute(sql`select * from auth_mfa_factors where user_id=${userId}`)).rows[0], factorBefore);
-            assert.deepEqual((await db.execute(sql`select * from auth_sessions where user_id=${userId} order by id`)).rows, sessionsBefore);
+            assert.deepEqual((await db.execute(sql`select * from auth_mfa_factors where user_id=${userId}`, 'objects'))[0], factorBefore);
+            assert.deepEqual(await db.execute(sql`select * from auth_sessions where user_id=${userId} order by id`, 'objects'), sessionsBefore);
           });
         } else {
           const result = await invoke();
@@ -1012,11 +1012,11 @@ const previousSecret = process.env.SESSION_SECRET;
           if (!Array.isArray(result)) assert.deepEqual((result as { ok: boolean }).ok, true);
           // Verification reads run in the scratch org's scope.
           await withOrgContext(org.orgId, async () => {
-            const audits = (await db.execute<{ actor_id: string; org_id: string; at: string; changes: unknown }>(sql`
+            const audits = await db.execute<{ actor_id: string; org_id: string; at: string; changes: unknown }>(sql`
               select actor_id,org_id,at,changes from audit_log
                where org_id=${org.orgId} and table_name='users' and row_id=${userId}
                  and changes->>'securityChange'=${action}
-            `)).rows;
+            `, 'objects');
             assert.equal(audits.length, 1);
             assert.equal(audits[0]!.actor_id, userId);
             assert.equal(audits[0]!.org_id, org.orgId);
@@ -1032,7 +1032,7 @@ const previousSecret = process.env.SESSION_SECRET;
         }
         if (failAudit) await withOrgContext(org.orgId, async () => {
           assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from audit_log
-            where org_id=${org.orgId} and changes->>'securityChange'=${action}`)).rows[0]!.n, 0);
+            where org_id=${org.orgId} and changes->>'securityChange'=${action}`, 'objects'))[0]!.n, 0);
         });
       } finally {
         if (triggerInstalled) await withBypassContext(async () => {
@@ -1077,7 +1077,7 @@ const consolidatedRows = [
               // login calls under test scope their own queries internally.
               const { userId, email } = await withBypassContext(async () => {
                 const userId = (await seedFlowActors(org.orgId)).adminId;
-                const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+                const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`, 'objects'))[0]!.email;
                 await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
                 await db.execute(sql`update users set password_hash=${await auth.hashPassword(password)} where id=${userId}`);
                 if (method === "mapped OIDC identity") {
@@ -1093,7 +1093,7 @@ const consolidatedRows = [
               let holderPid = 0;
               // Hold the same user → factor transaction boundary as MFA confirmation.
               held = withBypass(async () => {
-                holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+                holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid;
                 await db.execute(sql`select id from users where id=${userId} for update`);
                 await db.execute(sql`insert into auth_mfa_factors (user_id,secret_encrypted,enabled_at)
                   values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},now())`);
@@ -1112,7 +1112,7 @@ const consolidatedRows = [
                 blocked = await withBypassContext(async () => (await db.execute<{ blocked: boolean }>(sql`select exists(
                   select 1 from pg_stat_activity where datname=current_database()
                     and ${holderPid}=any(pg_blocking_pids(pid))
-                ) as blocked`)).rows[0]!.blocked);
+                ) as blocked`, 'objects'))[0]!.blocked);
                 if (blocked) break;
                 await new Promise(resolve => setTimeout(resolve, 10));
               }
@@ -1124,7 +1124,7 @@ const consolidatedRows = [
               assert.ok(result.kind === "mfa_required");
               // Verification reads run in the scratch org's scope.
               await withOrgContext(org.orgId, async () => {
-                assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_sessions where user_id=${userId}`)).rows[0]!.n, 0);
+                assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from auth_sessions where user_id=${userId}`, 'objects'))[0]!.n, 0);
               });
               assert.equal((await auth.completeMfaLogin(result.challengeToken, totpCode(secret)!.code, context)).kind, "success");
             } finally {
@@ -1149,7 +1149,7 @@ const consolidatedRows = [
             const requestContext = { networkAddress: "127.0.0.1", userAgent: "concurrent MFA setup regression" };
             const { userId, email } = await withBypassContext(async () => {
               const userId = (await seedFlowActors(org.orgId)).adminId;
-              const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+              const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`, 'objects'))[0]!.email;
               await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
               await db.execute(sql`update users set password_hash=${await auth.hashPassword(password)} where id=${userId}`);
               return { userId, email };
@@ -1331,10 +1331,10 @@ const consolidatedRows = [
 
         async function sessionState(orgId: string, userId: string) {
           return withOrgContext(orgId, async () => ({
-            factor: (await db.execute(sql`select enabled_at from auth_mfa_factors where user_id=${userId}`)).rows[0] as
+            factor: (await db.execute(sql`select enabled_at from auth_mfa_factors where user_id=${userId}`, 'objects'))[0] as
               { enabled_at: Date | null } | undefined,
-            sessions: (await db.execute<{ id: string; revoked: boolean }>(sql`
-              select id, (revoked_at is not null) as revoked from auth_sessions where user_id=${userId} order by id`)).rows,
+            sessions: await db.execute<{ id: string; revoked: boolean }>(sql`
+              select id, (revoked_at is not null) as revoked from auth_sessions where user_id=${userId} order by id`, 'objects'),
           }));
         }
 
@@ -1398,7 +1398,7 @@ const consolidatedRows = [
             // Hold the caller session row uncommitted: the disable must block on its
             // liveness lock, then observe the revocation once this commits.
             held = withBypass(async () => {
-              holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+              holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid;
               await db.execute(sql`update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=${sessionId}`);
               await hold;
             });
@@ -1406,7 +1406,7 @@ const consolidatedRows = [
             const deadline = Date.now() + 10_000;
             while ((await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
               select count(*)::int as n from pg_stat_activity where datname=current_database() and pid=${holderPid} and state <> 'idle'
-            `)).rows[0]!.n)) === 0 && Date.now() < deadline) {
+            `, 'objects'))[0]!.n)) === 0 && Date.now() < deadline) {
               await new Promise((resolve) => setTimeout(resolve, 10));
             }
             contender = auth.disableMfa(userId, password, codes[0]!, sessionId, CONTEXT);
@@ -1418,7 +1418,7 @@ const consolidatedRows = [
               blocked = await withBypassContext(async () => (await db.execute<{ blocked: boolean }>(sql`select exists(
                 select 1 from pg_stat_activity where datname=current_database()
                   and ${holderPid}=any(pg_blocking_pids(pid))
-              ) as blocked`)).rows[0]!.blocked);
+              ) as blocked`, 'objects'))[0]!.blocked);
               if (blocked) break;
               await new Promise((resolve) => setTimeout(resolve, 10));
             }
@@ -1446,7 +1446,7 @@ const consolidatedRows = [
             const password = "Isolated recovery rotation liveness password 6630";
             const { userId, sessionId, codes } = await seedMfaUser(org.orgId, password);
             const hashesBefore = (await withBypassContext(async () => (await db.execute<{ hashes: unknown }>(sql`
-              select recovery_code_hashes as hashes from auth_mfa_factors where user_id=${userId}`)).rows[0]!.hashes));
+              select recovery_code_hashes as hashes from auth_mfa_factors where user_id=${userId}`, 'objects'))[0]!.hashes));
             await withBypassContext(async () => {
               await db.execute(sql`update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=${sessionId}`);
             });
@@ -1455,7 +1455,7 @@ const consolidatedRows = [
               { ok: false, reason: "caller_session_revoked" },
             );
             const hashesAfterRefusal = (await withBypassContext(async () => (await db.execute<{ hashes: unknown }>(sql`
-              select recovery_code_hashes as hashes from auth_mfa_factors where user_id=${userId}`)).rows[0]!.hashes));
+              select recovery_code_hashes as hashes from auth_mfa_factors where user_id=${userId}`, 'objects'))[0]!.hashes));
             assert.deepEqual(hashesAfterRefusal, hashesBefore);
           } finally {
             if (priorSecret === undefined) delete process.env.SESSION_SECRET;
@@ -1511,14 +1511,14 @@ const consolidatedRows = [
         async function tamperFactor(userId: string): Promise<void> {
           await withBypassContext(async () => {
             const row = (await db.execute<{ sealed: string }>(sql`
-              select secret_encrypted as sealed from auth_mfa_factors where user_id=${userId}`)).rows[0]!;
+              select secret_encrypted as sealed from auth_mfa_factors where user_id=${userId}`, 'objects'))[0]!;
             await db.execute(sql`update auth_mfa_factors set secret_encrypted=${tamperSeal(row.sealed)} where user_id=${userId}`);
           });
         }
 
         async function mfaFailures(userId: string): Promise<number> {
           return withBypassContext(async () => (await db.execute<{ n: number }>(sql`
-            select count(*)::int as n from auth_login_events where user_id=${userId} and outcome='mfa_failure'`)).rows[0]!.n);
+            select count(*)::int as n from auth_login_events where user_id=${userId} and outcome='mfa_failure'`, 'objects'))[0]!.n);
         }
 
         test("confirming setup against a tampered factor reads as an invalid code and consumes an attempt", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -1530,7 +1530,7 @@ const consolidatedRows = [
             await tamperFactor(userId);
             assert.equal(await auth.confirmMfaSetup(userId, sessionId, "000000"), null);
             const attempts = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
-              select setup_attempt_count as n from auth_mfa_factors where user_id=${userId}`)).rows[0]!.n);
+              select setup_attempt_count as n from auth_mfa_factors where user_id=${userId}`, 'objects'))[0]!.n);
             assert.equal(attempts, 1, "tamper consumes a setup attempt exactly like a wrong code");
           } finally {
             if (priorSecret === undefined) delete process.env.SESSION_SECRET;
@@ -1569,7 +1569,7 @@ const consolidatedRows = [
             const password = "Isolated tamper login password 4091";
             const { auth, userId, codes } = await seedUser(password, org.orgId, true);
             const email = await withBypassContext(async () => (await db.execute<{ email: string }>(sql`
-              select email from users where id=${userId}`)).rows[0]!.email);
+              select email from users where id=${userId}`, 'objects'))[0]!.email);
             const challenged = await auth.login(email, password, CONTEXT);
             assert.equal(challenged.kind, "mfa_required");
             if (challenged.kind !== "mfa_required") throw new Error("expected an MFA challenge");

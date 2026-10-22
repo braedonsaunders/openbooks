@@ -85,14 +85,12 @@ export const POST = defineRoute({
     if (scopeDenied) return scopeDenied
 
     if (subsidiaryId !== null) {
-      const [subsidiary] = (
-        await db.execute<{ id: string }>(sql`
+      const [subsidiary] = await db.execute<{ id: string }>(sql`
           select id
             from subsidiaries
            where id = ${subsidiaryId}
              and org_id = ${orgId}
-             and is_active`)
-      ).rows
+             and is_active`, 'objects')
       if (!subsidiary) return notFound("record")
     }
 

@@ -37,8 +37,8 @@ async function insertDeclaredFixture(table: Table, row: Record<string, unknown>)
   for (const [key] of entries) if (!columns[key]) throw new Error(`Unknown fixture field ${getTableName(table)}.${key}`);
   const written = await db.execute(sql`insert into ${sql.identifier(getTableName(table))}
     (${sql.join(entries.map(([key]) => sql.identifier(columns[key]!.name)), sql`, `)})
-    values (${sql.join(entries.map(([key, value]) => sql.param(value, columns[key]!)), sql`, `)}) returning 1 as written`);
-  if (written.rows.length !== 1) throw new Error(`Native fixture ${getTableName(table)} did not record its declared row`);
+    values (${sql.join(entries.map(([key, value]) => sql.param(value, columns[key]!)), sql`, `)}) returning 1 as written`, "objects");
+  if (written.length !== 1) throw new Error(`Native fixture ${getTableName(table)} did not record its declared row`);
 }
 
 /** Component flags and accounting destinations remain explicit in each native scenario. */
@@ -88,8 +88,8 @@ export async function seedPayrollVendorRole(orgId: string, partyId: string, acto
 export async function seedPayrollSettings(orgId: string, settings: Record<string, unknown>): Promise<void> {
   await assertFixtureDatabase();
   const written = await db.execute(sql`update orgs set settings = settings || ${JSON.stringify(settings)}::jsonb
-    where id = ${orgId} returning id`);
-  if (written.rows.length !== 1) throw new Error('Payroll fixture configuration did not match its scratch organization');
+    where id = ${orgId} returning id`, "objects");
+  if (written.length !== 1) throw new Error('Payroll fixture configuration did not match its scratch organization');
 }
 
 /** Enable payroll for a posting scenario with only its explicitly supplied accounting configuration. */
@@ -119,8 +119,8 @@ export async function seedPayrollAccountingConfiguration(orgId: string, payroll:
       if (!slot || slot.components.length === 0) throw new Error(`Payroll fixture slot ${country}/${key} is not declared`);
       const changed = await db.execute(sql`update pay_components set liability_account_id=${accountId}
         where org_id=${orgId} and country=${country}
-          and code in (${sql.join(slot.components.map(component => sql`${component.code}`), sql`, `)}) returning id`);
-      if (changed.rows.length !== slot.components.length) throw new Error(`Payroll fixture slot ${country}/${key} was not fully configured`);
+          and code in (${sql.join(slot.components.map(component => sql`${component.code}`), sql`, `)}) returning id`, "objects");
+      if (changed.length !== slot.components.length) throw new Error(`Payroll fixture slot ${country}/${key} was not fully configured`);
     }
     await seedPayrollComponents(orgId, null, country);
   }
@@ -159,7 +159,7 @@ export async function seedVacationTerms(orgId: string, employmentId: string, act
   percentFloor: string | null = "4", method: VacationFixture["method"] = "accrue",
   executor: Pick<typeof db, "execute"> = db): Promise<void> {
   await assertFixtureDatabase();
-  const plan = (await executor.execute<{ id: string }>(sql`select id from entitlement_plans where org_id=${orgId} and system_key='vacation'`)).rows[0];
+  const plan = (await executor.execute<{ id: string }>(sql`select id from entitlement_plans where org_id=${orgId} and system_key='vacation'`, "objects"))[0];
   if (!plan) throw new Error('Vacation-term fixtures require an explicitly configured native vacation program.');
   await executor.execute(sql`
     insert into payroll_vacation_terms (org_id, employment_id, plan_id, method, percent_floor, effective_from, reason, source_snapshot, created_by, updated_by)
@@ -778,14 +778,14 @@ export async function createScratchUser(
         ${JSON.stringify(nativeRole?.permissions ?? [])}::jsonb)
       on conflict (org_id, key) do update set updated_at = now()
       returning id
-    `);
+    `, "objects");
     await tx.execute(sql`
       insert into users (id, org_id, email, name, password_hash, is_active)
       values (${userId}, ${orgId}, ${`u-${userId.slice(0, 8)}@scratch.test`}, ${name}, 'x', true)
     `);
     await tx.execute(sql`
       insert into role_assignments (org_id, user_id, role_id)
-      values (${orgId}, ${userId}, ${role.rows[0]!.id})
+      values (${orgId}, ${userId}, ${role[0]!.id})
     `);
   });
   return userId;
@@ -800,8 +800,8 @@ export async function grantScratchPermissions(orgId: string, userId: string, per
       values (${orgId}, ${userId}, ${permission}, 'grant')
       on conflict (user_id, permission) do update set effect = 'grant'
       where user_permission_overrides.org_id = excluded.org_id
-      returning permission`);
-    if (granted.rows.length !== 1) throw new Error(`fixture permission ${permission} was not granted`);
+      returning permission`, "objects");
+    if (granted.length !== 1) throw new Error(`fixture permission ${permission} was not granted`);
   }
 }
 
@@ -1019,8 +1019,8 @@ export async function listOrgIdTables(): Promise<string[]> {
      where c.table_schema = 'public'
        and c.column_name = 'org_id'
        and t.table_type = 'BASE TABLE'
-     order by c.table_name`);
-  return result.rows.map((r) => r.tableName);
+     order by c.table_name`, "objects");
+  return result.map((r) => r.tableName);
 }
 
 /**
@@ -1069,8 +1069,8 @@ async function orgRowCountsCommitted(
       ],
       sql` union all `,
     );
-    const result = await tx.execute<{ tableName: string; n: number }>(union);
-    for (const row of result.rows) if (Number(row.n) > 0) counts[row.tableName] = Number(row.n);
+    const result = await tx.execute<{ tableName: string; n: number }>(union, "objects");
+    for (const row of result) if (Number(row.n) > 0) counts[row.tableName] = Number(row.n);
   });
   return counts;
 }
@@ -1263,8 +1263,8 @@ async function clearDisposableProjectAwardReferences(tx: TeardownTx, orgId: stri
 async function guardTeardownTransaction(tx: TeardownTx, orgId: string, kind: DisposableOrgKind): Promise<void> {
   await setTeardownGucs(tx);
   const r = await tx.execute(sql`
-    select id from orgs where id = ${orgId} and ${disposableOrgPredicate(kind)} for update`);
-  if (r.rows.length !== 1) throw new Error(`dropDisposableOrg refused: org ${orgId} no longer satisfies the ${kind} identity guard`);
+    select id from orgs where id = ${orgId} and ${disposableOrgPredicate(kind)} for update`, "objects");
+  if (r.length !== 1) throw new Error(`dropDisposableOrg refused: org ${orgId} no longer satisfies the ${kind} identity guard`);
 }
 
 /**
@@ -1305,8 +1305,8 @@ async function bulkDeletePass(
       end
       $teardown$`);
     const r = await tx.execute<{ table: string; error: string }>(sql`
-      select table_name as "table", error from scratch_teardown_failures`);
-    return r.rows;
+      select table_name as "table", error from scratch_teardown_failures`, "objects");
+    return r;
   });
 }
 
@@ -1382,8 +1382,8 @@ async function deleteQualifiedCabinetFixtureSources(
     ["payroll_opening_levy_source_authorities", "payroll_opening_levy_source_authority_guard"],
   ] as const) {
     if (!present.has(table)) continue;
-    const rows = await tx.execute(sql`select 1 from ${qualified(table)} where org_id=${orgId} limit 1`);
-    if (!rows.rows.length) continue;
+    const rows = await tx.execute(sql`select 1 from ${qualified(table)} where org_id=${orgId} limit 1`, "objects");
+    if (!rows.length) continue;
     await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
     await tx.execute(sql`delete from ${qualified(table)} where org_id=${orgId}`);
     await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
@@ -1430,8 +1430,8 @@ async function dropDisposableOrgEscaped(
   const orgRow = await db.transaction(async (tx) => {
     await setTeardownGucs(tx);
     const r = await tx.execute<{ name: string; allowed: boolean }>(sql`
-      select name, coalesce((${disposableOrgPredicate(kind)}), false) as allowed from orgs where id = ${orgId}`);
-    return r.rows[0];
+      select name, coalesce((${disposableOrgPredicate(kind)}), false) as allowed from orgs where id = ${orgId}`, "objects");
+    return r[0];
   });
   if (!orgRow) {
     // "Already deleted" must be proven, not assumed: if the org row is merely
@@ -1480,8 +1480,8 @@ async function dropDisposableOrgEscaped(
     // are unconditional; use the same exact-trigger, scoped transaction as
     // other immutable fixture evidence. The locked disposable-org identity
     // above applies to every delete, and ALTER locks hide the gap from writers.
-    const captureItems = await tx.execute(sql`select 1 from ap_capture_items where org_id = ${orgId} limit 1`);
-    if (captureItems.rows.length > 0) {
+    const captureItems = await tx.execute(sql`select 1 from ap_capture_items where org_id = ${orgId} limit 1`, "objects");
+    if (captureItems.length > 0) {
       for (const [table, trigger] of [
         ["ap_capture_fields", "ap_capture_fields_append_only"],
         ["ap_capture_runs", "ap_capture_runs_immutable"],
@@ -1502,9 +1502,9 @@ async function dropDisposableOrgEscaped(
     // delete below; the ALTERs take an exclusive lock, so pay for them only
     // when such rows exist.
     const bankFiles = await tx.execute(
-      sql`select 1 as x from pay_run_bank_files where org_id = ${orgId} limit 1`,
+      sql`select 1 as x from pay_run_bank_files where org_id = ${orgId} limit 1`, "objects",
     );
-    const hasBankFiles = bankFiles.rows.length > 0;
+    const hasBankFiles = bankFiles.length > 0;
     if (hasBankFiles) {
       await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
       await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
@@ -1542,9 +1542,9 @@ async function dropDisposableOrgEscaped(
     await db.transaction(async (tx) => {
       await guardTeardownTransaction(tx, orgId, kind);
       const r = await tx.execute(
-        sql`select 1 as x from ${qualified(table)} where org_id = ${orgId} limit 1`,
+        sql`select 1 as x from ${qualified(table)} where org_id = ${orgId} limit 1`, "objects",
       );
-      if (r.rows.length === 0) return;
+      if (r.length === 0) return;
       await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
       await tx.execute(sql`delete from ${qualified(table)} where org_id = ${orgId}`);
       await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
@@ -1673,7 +1673,7 @@ export async function dropSampleCloneOrg(orgId: string): Promise<void> {
              ((settings ? 'sampleCompany')
               or (settings ? 'sampleTemplatePromotion')
               or coalesce((settings->>'simHarness')::boolean, false)) as "isSample"
-        from orgs where id = ${orgId}`)).rows[0];
+        from orgs where id = ${orgId}`, "objects"))[0];
     if (!row) {
       throw new Error(
         `dropSampleCloneOrg(${orgId}): orgs row is gone; refusing to report an unverified delete as success`,
@@ -1692,8 +1692,8 @@ export async function dropSampleCloneOrg(orgId: string): Promise<void> {
     if (row.envKind === "preview") {
       await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
     }
-    const sandboxRows = (await db.execute<{ id: string }>(sql`
-      select id from sandboxes where org_id = ${orgId}`)).rows;
+    const sandboxRows = await db.execute<{ id: string }>(sql`
+      select id from sandboxes where org_id = ${orgId}`, "objects");
     if (sandboxRows.length !== 1) {
       throw new Error(
         `dropSampleCloneOrg(${orgId}): expected exactly one sandboxes row, found ${sandboxRows.length}`,
@@ -1701,7 +1701,7 @@ export async function dropSampleCloneOrg(orgId: string): Promise<void> {
     }
     await deleteSandbox(sandboxRows[0]!.id);
     const remaining = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from orgs where id = ${orgId}`)).rows[0]!.n;
+      select count(*)::int as n from orgs where id = ${orgId}`, "objects"))[0]!.n;
     if (remaining !== 0) {
       throw new Error(`dropSampleCloneOrg(${orgId}): orgs row survived deleteSandbox`);
     }
@@ -1729,9 +1729,9 @@ async function loadOrgTableColumns(tables: readonly string[]): Promise<OrgTableC
      where table_schema = 'public'
        and table_name in (${sql.join(tables.map((table) => sql`${table}`), sql`, `)})
        and is_generated = 'NEVER'
-     order by table_name, ordinal_position`);
+     order by table_name, ordinal_position`, "objects");
   const columns = new Map<string, string[]>();
-  for (const row of result.rows) {
+  for (const row of result) {
     const tableColumns = columns.get(row.table_name) ?? [];
     if (!columns.has(row.table_name)) columns.set(row.table_name, tableColumns);
     tableColumns.push(row.column_name);
@@ -1766,9 +1766,9 @@ async function loadUniqueKeys(tables: readonly string[]): Promise<Map<string, st
      where ((i.indisunique and i.indexprs is null) or i.indisexclusion)
        and i.indisvalid and not i.indisprimary
        and t.relname in (${sql.join(tables.map((table) => sql`${table}`), sql`, `)})
-     order by "index", k.ord`);
+     order by "index", k.ord`, "objects");
   const byIndex = new Map<string, { table: string; columns: string[] }>();
-  for (const row of result.rows) {
+  for (const row of result) {
     let entry = byIndex.get(row.index);
     if (!entry) {
       entry = { table: row.table, columns: [] };
@@ -1867,11 +1867,11 @@ export async function probeScratchOrgTouchedTables(
         (select count(*)::int from ${sql.raw(`public.${quoteIdentifier(table)}`)} where ${predicate(table)}) as "live",
         (select count(*)::int from ${sql.raw(`${snapshot}.${quoteIdentifier(table)}`)}) as "snap"`);
     const counts = await tx.execute<{ table: string; live: number; snap: number }>(
-      sql.join(countBranches, sql` union all `),
+      sql.join(countBranches, sql` union all `), "objects",
     );
     const touched = new Set<string>();
     const candidates: string[] = [];
-    for (const row of counts.rows) {
+    for (const row of counts) {
       if (row.live !== row.snap) touched.add(row.table);
       else if (row.snap > 0) candidates.push(row.table);
     }
@@ -1893,9 +1893,9 @@ export async function probeScratchOrgTouchedTables(
           ) d2)
         ) as "diff"`);
       const diffs = await tx.execute<{ table: string; diff: number }>(
-        sql.join(diffBranches, sql` union all `),
+        sql.join(diffBranches, sql` union all `), "objects",
       );
-      for (const row of diffs.rows) {
+      for (const row of diffs) {
         if (row.diff !== 0) touched.add(row.table);
       }
     }
@@ -1912,8 +1912,8 @@ export async function probeScratchOrgTouchedTables(
         exists(select 1 from tax_group_members
           where tax_group_id in (select id from tax_groups where org_id = ${orgId})) as "members",
         exists(select 1 from auth_password_resets
-          where user_id in (select id from users where org_id = ${orgId})) as "resets"`);
-    const flag = special.rows[0];
+          where user_id in (select id from users where org_id = ${orgId})) as "resets"`, "objects");
+    const flag = special[0];
     return {
       tables: [...touched],
       special: !flag || flag.blobs || flag.versions || flag.members || flag.resets,
@@ -2170,7 +2170,7 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
         }
         await clearDisposableProjectAwardReferences(tx, org.orgId);
-        const hasBankFiles = (await tx.execute(sql`select 1 as x from pay_run_bank_files where org_id = ${org.orgId} limit 1`)).rows.length > 0;
+        const hasBankFiles = (await tx.execute(sql`select 1 as x from pay_run_bank_files where org_id = ${org.orgId} limit 1`, "objects")).length > 0;
         if (hasBankFiles) {
           await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
           await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
@@ -2184,8 +2184,8 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
         // unconditional blob delete runs FIRST and would hit the guard with
         // the items still standing, failing every pooled release for any
         // test that captured a document.
-        const captureItems = await tx.execute(sql`select 1 from ap_capture_items where org_id = ${org.orgId} limit 1`);
-        if (captureItems.rows.length > 0) {
+        const captureItems = await tx.execute(sql`select 1 from ap_capture_items where org_id = ${org.orgId} limit 1`, "objects");
+        if (captureItems.length > 0) {
           for (const [table, trigger] of [
             ["ap_capture_fields", "ap_capture_fields_append_only"],
             ["ap_capture_runs", "ap_capture_runs_immutable"],
@@ -2230,8 +2230,8 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           ].filter((t) => touched.has(t));
           let captureRows = false;
           for (const t of captureTables) {
-            const probe = await tx.execute(sql`select 1 as x from ${qualified(t)} where org_id = ${org.orgId} limit 1`);
-            if (probe.rows.length > 0) {
+            const probe = await tx.execute(sql`select 1 as x from ${qualified(t)} where org_id = ${org.orgId} limit 1`, "objects");
+            if (probe.length > 0) {
               captureRows = true;
               break;
             }

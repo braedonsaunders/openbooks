@@ -45,8 +45,8 @@ const COLS = sql`
 export async function orgBrandPrimary(orgId: string): Promise<string | null> {
   const r = (await db.execute<{ brand_primary: string | null }>(sql`
     select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${orgId}
-  `))
-  return r.rows[0]?.brand_primary ?? null
+  `, 'objects'))
+  return r[0]?.brand_primary ?? null
 }
 
 export async function listPdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
@@ -55,8 +55,8 @@ export async function listPdfTemplates(orgId: string, recordType?: string): Prom
     select ${COLS} from pdf_templates
      where org_id = ${orgId}${filter}
      order by record_type, is_default desc, name
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 export async function getPdfTemplate(orgId: string, id: string): Promise<PdfTemplateRow | null> {
@@ -65,8 +65,8 @@ export async function getPdfTemplate(orgId: string, id: string): Promise<PdfTemp
   if (!isUuid(id)) return null
   const r = (await db.execute<PdfTemplateRow>(sql`
     select ${COLS} from pdf_templates where org_id = ${orgId} and id = ${id}
-  `))
-  return r.rows[0] ?? null
+  `, 'objects'))
+  return r[0] ?? null
 }
 
 /** Templates available through read surfaces, with the canonical document-kind feature fence applied. */
@@ -160,11 +160,11 @@ export async function loadRecordDesignatedTemplateName(
   id: string,
 ): Promise<string | null> {
   if (!docKind) return null
-  const rows = (await db.execute<{ name: string | null }>(sql`
+  const rows = await db.execute<{ name: string | null }>(sql`
     select custom ->> 'template' as name from documents
      where org_id = ${orgId} and id = ${id} and kind = ${docKind}
      limit 1
-  `)).rows
+  `, 'objects')
   const name = (rows[0]?.name ?? '').trim()
   return name ? name : null
 }
@@ -207,7 +207,7 @@ export async function resolvePdfTemplate(
       select ${COLS} from pdf_templates
        where org_id = ${orgId} and record_type = ${recordType} and is_active and name = ${designation}
        limit 1
-    `)).rows[0]
+    `, 'objects'))[0]
     if (named) {
       return {
         ...named,
@@ -220,8 +220,8 @@ export async function resolvePdfTemplate(
     select ${COLS} from pdf_templates
      where org_id = ${orgId} and record_type = ${recordType} and is_active
      order by is_default desc, name limit 1
-  `))
-  const found = r.rows.find((t) => t.isDefault) ?? r.rows[0]
+  `, 'objects'))
+  const found = r.find((t) => t.isDefault) ?? r[0]
   if (found) {
     return {
       ...found,

@@ -35,7 +35,7 @@ test('bank-rule criteria retain validation under an empty catalog search path', 
     for (const [criteria, expected] of cases) {
       const row = (await tx.execute<{ admitted: boolean }>(sql`
         select public.openbooks_bank_rule_criteria_is_valid(${JSON.stringify(criteria)}::jsonb) as admitted
-      `)).rows[0]
+      `, 'objects'))[0]
       assert.equal(row?.admitted, expected, `expected admission ${expected}`)
     }
   })

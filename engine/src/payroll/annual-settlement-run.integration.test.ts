@@ -97,7 +97,7 @@ async function seedHarness(orgId: string, actorId: string): Promise<Harness> {
 
   const root = (await db.execute<{ id: string }>(sql`
     select id from subsidiaries where org_id = ${orgId} and parent_id is null and is_active
-     order by created_at limit 1`)).rows[0]!.id;
+     order by created_at limit 1`, "objects"))[0]!.id;
   const itSubId = randomUUID();
   await db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
@@ -133,9 +133,9 @@ async function seedHarness(orgId: string, actorId: string): Promise<Harness> {
 
   const bonus = (await db.execute<{ id: string }>(sql`
     select id from pay_components
-     where org_id = ${orgId} and code = 'BONUS' and kind = 'earning' and system_key = 'bonus'`));
-  assert.equal(bonus.rows.length, 1, "shared BONUS component seeded");
-  return { orgId, actorId, scheduleId, subsidiaryId: itSubId, bonusComponentId: bonus.rows[0]!.id };
+     where org_id = ${orgId} and code = 'BONUS' and kind = 'earning' and system_key = 'bonus'`, "objects"));
+  assert.equal(bonus.length, 1, "shared BONUS component seeded");
+  return { orgId, actorId, scheduleId, subsidiaryId: itSubId, bonusComponentId: bonus[0]!.id };
 }
 
 async function seedEmployee(
@@ -229,8 +229,8 @@ async function stubLines(orgId: string, documentId: string, employeeId: string):
       left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where l.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        and s.employee_party_id = ${employeeId}
-     order by l.sequence, l.description`));
-  return rows.rows;
+     order by l.sequence, l.description`, "objects"));
+  return rows;
 }
 
 async function stubFactors(orgId: string, documentId: string, employeeId: string)
@@ -238,9 +238,9 @@ async function stubFactors(orgId: string, documentId: string, employeeId: string
   const rows = (await db.execute<{ factors: Record<string, string> }>(sql`
     select factors from pay_stubs
      where org_id = ${orgId} and pay_run_document_id = ${documentId}
-       and employee_party_id = ${employeeId}`));
-  assert.equal(rows.rows.length, 1, "one stub for the employee on the run");
-  return rows.rows[0]!.factors;
+       and employee_party_id = ${employeeId}`, "objects"));
+  assert.equal(rows.length, 1, "one stub for the employee on the run");
+  return rows[0]!.factors;
 }
 
 const settlementTuples = (lines: StubLine[]) =>
@@ -374,7 +374,7 @@ test(
                where s.org_id = ${org.orgId} and s.employee_party_id = ${employeeId}
                  and s.tax_year = 2026
                  and (r.run_status = 'committed' or s.pay_run_document_id = ${december.documentId})
-                 and c.system_key = ${key}`)).rows[0]!.total;
+                 and c.system_key = ${key}`, "objects"))[0]!.total;
             const factorKey = key === "ti_payout" ? "CONG_TI_PAID" : "CONG_SOMMA_PAID";
             assert.equal(
               factors[factorKey], lineSum,
@@ -406,7 +406,7 @@ test(
           const stub = (await db.execute<{ gross: string; net_pay: string }>(sql`
             select gross::text as gross, net_pay::text as net_pay from pay_stubs
              where org_id = ${org.orgId} and pay_run_document_id = ${december.documentId}
-               and employee_party_id = ${employeeId}`)).rows[0]!;
+               and employee_party_id = ${employeeId}`, "objects"))[0]!;
           const lines = await stubLines(org.orgId, december.documentId, employeeId);
           const signed = (kinds: string[]) =>
             lines.filter((line) => kinds.includes(line.kind))
@@ -419,8 +419,8 @@ test(
         }
         const journal = (await db.execute<{ total: string }>(sql`
           select coalesce(sum(amount), 0)::text as total from document_lines
-           where org_id = ${org.orgId} and document_id = ${december.documentId}`));
-        assert.equal(cmp(journal.rows[0]!.total, "0"), 0, "journal projection balances");
+           where org_id = ${org.orgId} and document_id = ${december.documentId}`, "objects"));
+        assert.equal(cmp(journal[0]!.total, "0"), 0, "journal projection balances");
 
         // The remittance ties: the payable is withholdings minus credits, so
         // the joiner's refund reduces what the employer owes the destination.
@@ -435,7 +435,7 @@ test(
             join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
             join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
            where s.org_id = ${org.orgId} and s.pay_run_document_id = ${december.documentId}
-             and r.run_status = 'committed'`)).rows[0]!;
+             and r.run_status = 'committed'`, "objects"))[0]!;
         assert.equal(cmp(withIncomeTax[0]!.total, add(ref.ded, neg(ref.cred))), 0);
         const incomeTaxRow = withIncomeTax[0]!.components
           .filter((c) => c.systemKey === "income_tax")
@@ -447,7 +447,7 @@ test(
             join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
             join pay_components c on c.id = l.component_id and c.org_id = l.org_id
            where s.org_id = ${org.orgId} and s.pay_run_document_id = ${december.documentId}
-             and c.system_key = 'income_tax'`)).rows[0]!;
+             and c.system_key = 'income_tax'`, "objects"))[0]!;
         assert.equal(cmp(incomeTaxRow, add(incomeTaxRef.ded, neg(incomeTaxRef.cred))), 0);
 
         // The bank-file population is whole: control plus excluded cheque still
@@ -456,13 +456,13 @@ test(
         const population = await payRunBankFilePopulation(org.orgId, december.documentId);
         const netTotal = (await db.execute<{ net: string }>(sql`
           select net_total::text as net from pay_runs
-           where org_id = ${org.orgId} and document_id = ${december.documentId}`)).rows[0]!.net;
+           where org_id = ${org.orgId} and document_id = ${december.documentId}`, "objects"))[0]!.net;
         assert.equal(cmp(add(population.total, population.excludedTotal), netTotal), 0);
         assert.deepEqual(population.entries.map((e) => e.employeePartyId), [joiner]);
         const joinerNet = (await db.execute<{ net_pay: string }>(sql`
           select net_pay::text as net_pay from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${december.documentId}
-             and employee_party_id = ${joiner}`)).rows[0]!.net_pay;
+             and employee_party_id = ${joiner}`, "objects"))[0]!.net_pay;
         assert.equal(population.entries[0]!.amount, joinerNet);
       } finally {
         await dropScratchOrgReporting(org.orgId);
@@ -501,7 +501,7 @@ test(
         const documentId = december.documentId;
         const stored = (await db.execute<{ errors: unknown }>(sql`
           select calculation_errors as errors from pay_runs
-           where org_id = ${org.orgId} and document_id = ${documentId}`)).rows[0]!;
+           where org_id = ${org.orgId} and document_id = ${documentId}`, "objects"))[0]!;
         const errors = (stored.errors ?? []) as { employeePartyId: string; message: string }[];
         const mine = errors.filter((e) => e.employeePartyId === employeeId);
         assert.equal(mine.length, 1, "the employee is refused, nobody else is affected");
@@ -542,7 +542,7 @@ test(
         const documentId = december.documentId;
         const stored = (await db.execute<{ errors: unknown }>(sql`
           select calculation_errors as errors from pay_runs
-           where org_id = ${org.orgId} and document_id = ${documentId}`)).rows[0]!;
+           where org_id = ${org.orgId} and document_id = ${documentId}`, "objects"))[0]!;
         const errors = (stored.errors ?? []) as { employeePartyId: string; message: string }[];
         const mine = errors.filter((e) => e.employeePartyId === employeeId);
         assert.equal(mine.length, 1, "the employee is refused, nobody else is affected");

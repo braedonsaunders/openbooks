@@ -46,7 +46,7 @@ export const POST = defineRoute({
     select coalesce(max(sort_order), -1) + 1 as n
       from insight_dashboard_pins
      where org_id = ${user.orgId} and user_id = ${user.id}
-  `);
+  `, "objects");
 
     await db
       .insert(insightDashboardPins)
@@ -54,7 +54,7 @@ export const POST = defineRoute({
         orgId: user.orgId,
         userId: user.id,
         dashboardId: id,
-        sortOrder: Number(next.rows[0]?.n ?? 0),
+        sortOrder: Number(next[0]?.n ?? 0),
       })
       // An identical user-dashboard pin already expresses the requested pinned state.
       .onConflictDoNothing();

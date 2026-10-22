@@ -95,7 +95,7 @@ export async function checkAssignment(
      where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
        and (${employmentScope}::uuid[] is null or employer_subsidiary_id = any(${employmentScope}::uuid[]))
      for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!visibleEmployment) {
     throw new HrmQualificationError(
       "The employment was not found in this organization or you cannot read it — use a visible employment and retry the qualification check.",
@@ -138,7 +138,7 @@ export async function checkAssignmentInternal(
   subjectId: string,
   on: string,
 ): Promise<GateVerdict> {
-  const requirements = (await exec.execute<ApplicableRequirement>(sql`
+  const requirements = await exec.execute<ApplicableRequirement>(sql`
     select r.type_id::text as type_id, t.code as type_code, t.name as type_name,
            t.renewal_lead_days, r.severity
       from hrm_qualification_requirements r
@@ -150,15 +150,15 @@ export async function checkAssignmentInternal(
        and r.required_from <= ${on}::date
        and (r.required_to is null or r.required_to >= ${on}::date)
      order by t.code
-  `)).rows;
+  `, "objects");
   if (requirements.length === 0) return { ok: true, warnings: [] };
-  const held = (await exec.execute<HeldRow>(sql`
+  const held = await exec.execute<HeldRow>(sql`
     select q.id::text as id, q.type_id::text as type_id, q.status,
            q.expires_on::text, q.issued_on::text
       from hrm_worker_qualifications q
      where q.org_id = ${orgId}::uuid and q.employment_id = ${employmentId}::uuid
      order by q.issued_on desc
-  `)).rows;
+  `, "objects");
   const blocking: GateFinding[] = [];
   const warnings: GateFinding[] = [];
   for (const req of requirements) {
@@ -284,7 +284,7 @@ export async function noteWarnedDispatch(
       values (${orgId}::uuid, ${warning.qualificationId}::uuid, 'warned',
               ${actorId}::uuid, ${`${context}: ${warning.detail}`}::text)
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!inserted) {
       throw new HrmQualificationError("The dispatch warning was not recorded — no row was written; retry the action.");
     }
@@ -356,7 +356,7 @@ export async function gateScheduleAssignment(
     select name, party_id::text, project_id::text
       from schedule_resources
      where org_id = ${orgId}::uuid and id = ${resourceId}::uuid
-  `)).rows[0];
+  `, "objects"))[0];
   if (!resource) {
     throw new HrmQualificationError(
       "The schedule resource was not found in this organization — refresh the board and try again.",
@@ -375,7 +375,7 @@ export async function gateScheduleAssignment(
     const task = (await exec.execute<{ project_id: string }>(sql`
       select project_id::text as project_id from project_tasks
        where org_id = ${orgId}::uuid and id = ${taskId}::uuid
-    `)).rows[0];
+    `, "objects"))[0];
     if (!task) {
       throw new HrmQualificationError(
         "The schedule task was not found in this organization — refresh the board and try again.",
@@ -397,7 +397,7 @@ export async function gateScheduleAssignment(
     const project = (await exec.execute<{ subsidiary_id: string | null }>(sql`
       select subsidiary_id::text as subsidiary_id from projects
        where org_id = ${orgId}::uuid and id = ${projectId}::uuid
-    `)).rows[0];
+    `, "objects"))[0];
     if (!project) {
       throw new HrmQualificationError(
         `The schedule resource "${resource.name}" names a project that is not visible in this organization — refresh the board and assign again.`,
@@ -411,7 +411,7 @@ export async function gateScheduleAssignment(
   // effective rows means no person to gate (as before); several means
   // the gate cannot know which record's credentials answer, so it
   // refuses by name instead of silently gating the newest row.
-  const effective = (await exec.execute<{ id: string; employer_subsidiary_id: string }>(sql`
+  const effective = await exec.execute<{ id: string; employer_subsidiary_id: string }>(sql`
     select e.id::text as id, e.employer_subsidiary_id::text as employer_subsidiary_id
       from worker_employments e
      where e.org_id = ${orgId}::uuid
@@ -423,7 +423,7 @@ export async function gateScheduleAssignment(
             and v.effective_from <= ${on}::date
             and (v.effective_to is null or v.effective_to > ${on}::date)
        )
-  `)).rows;
+  `, "objects");
   if (effective.length === 0) return { ...passThrough, resourceName: resource.name };
   let candidates = effective;
   if (projectSubsidiaryId) {

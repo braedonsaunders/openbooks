@@ -101,7 +101,7 @@ async function authorizeSubject(
 /** Own-subject enrollment rows: one employment, no aggregate list. */
 async function readOwnEnrollments(orgId: string, employmentId: string): Promise<EnrollmentSummary[]> {
   const asOf = await businessToday(orgId);
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(sql`
     select e.id, e.employment_id as "employmentId", e.window_id as "windowId",
            p.display_name as "employeeName",
            plan.code as "planCode", plan.name as "planName",
@@ -120,7 +120,7 @@ async function readOwnEnrollments(orgId: string, employmentId: string): Promise<
         on cls.org_id = e.org_id and cls.plan_id = e.plan_id and cls.class_key = e.class_key
      where e.org_id = ${orgId} and e.employment_id = ${employmentId}
      order by e.effective_from desc
-  `)).rows;
+  `, "objects");
   const textOrNull = (value: unknown): string | null =>
     value === null || value === undefined ? null : String(value);
   return rows.map((row) => ({
@@ -168,7 +168,7 @@ export function statementEvidence(value: unknown): Record<string, unknown> | nul
  * without selecting confidential source or policy objects.
  */
 async function readOwnAwards(orgId: string, employmentId: string): Promise<StatementAward[]> {
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(sql`
     select r.run_status as "runStatus", doc.status as "runDocumentStatus",
            a.id, a.program_snapshot->>'name' as "programName", a.program_id as "programId", a.employment_id as "employmentId",
            a.period_from::text as "periodFrom", a.period_to::text as "periodTo",
@@ -184,7 +184,7 @@ async function readOwnAwards(orgId: string, employmentId: string): Promise<State
       left join documents doc on doc.org_id = a.org_id and doc.id = a.pay_run_document_id
      where a.org_id = ${orgId} and a.employment_id = ${employmentId}
      order by a.period_from desc, a.created_at desc
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     id: String(row.id),
     deliveryState: row.status !== "delivered" ? "pending"
@@ -230,7 +230,7 @@ async function employmentStatement(
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .map(([currency, units]) => ({ currency, total: fromUnits(units) }));
 
-  const stubRows = (await db.execute<{
+  const stubRows = await db.execute<{
     id: string; pay_date: string; currency: string; gross: string; net_pay: string;
   }>(sql`
     select s.id::text as id, s.pay_date::text as pay_date, s.currency_code as currency,
@@ -241,10 +241,10 @@ async function employmentStatement(
      where s.org_id = ${orgId} and s.employment_id = ${employmentId}
        and r.run_status = 'committed' and d.status <> 'voided'
      order by s.pay_date desc
-  `)).rows;
+  `, "objects");
   const payrollRecords: StatementStub[] = [];
   for (const stub of stubRows) {
-    const lineRows = (await db.execute<{
+    const lineRows = await db.execute<{
       component_code: string | null; kind: string; description: string; amount: string;
     }>(sql`
       select c.code as component_code, l.kind, l.description, l.amount::text as amount
@@ -252,7 +252,7 @@ async function employmentStatement(
         left join pay_components c on c.org_id = l.org_id and c.id = l.component_id
        where l.org_id = ${orgId} and l.stub_id = ${stub.id}::uuid
        order by l.sequence, l.id
-    `)).rows;
+    `, "objects");
     payrollRecords.push({
       payDate: stub.pay_date.slice(0, 10),
       currency: stub.currency,

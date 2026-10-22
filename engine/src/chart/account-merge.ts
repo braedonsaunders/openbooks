@@ -232,14 +232,14 @@ function cleanExtraDims(value: unknown): Record<string, string> {
 }
 
 async function loadAccounts(tx: SqlExecutor, orgId: string, ids: string[], lock: boolean): Promise<Map<string, AccountRow>> {
-  const rows = (await tx.execute<AccountRow>(sql`
+  const rows = await tx.execute<AccountRow>(sql`
     select id, number, name, type, is_summary, is_active, currency_restriction, eliminate,
            subsidiary_id, subsidiary_include_children, reconcilable, monetary,
            required_dimensions, parent_id, merged_into_id
       from accounts
      where org_id = ${orgId} and id in ${ids}
      order by id
-     ${lock ? sql`for update` : sql``}`)).rows;
+     ${lock ? sql`for update` : sql``}`, "objects");
   return new Map(rows.map((row) => [row.id, row]));
 }
 
@@ -283,7 +283,7 @@ async function planAccountMerge(
 
   const existingMerge = (await tx.execute<{ id: string; target_account_id: string }>(sql`
     select id, target_account_id from account_merges
-     where org_id = ${orgId} and source_account_id = ${source.id}`)).rows[0];
+     where org_id = ${orgId} and source_account_id = ${source.id}`, "objects"))[0];
   const alreadyMerged = existingMerge ? { mergeId: existingMerge.id, targetAccountId: existingMerge.target_account_id } : null;
   if (source.merged_into_id && source.merged_into_id !== target.id) {
     refuse("source_merged", `${accountLabel(source)} was already merged into another account.`, "Open the surviving account instead; a merge is permanent.");
@@ -324,14 +324,14 @@ async function planAccountMerge(
       select id from accounts where org_id = ${orgId} and parent_id = ${source.id}
       union
       select child.id from accounts child join below on child.parent_id = below.id where child.org_id = ${orgId}
-    ) select exists (select 1 from below where id = ${target.id}) as found`)).rows[0]?.found === true;
+    ) select exists (select 1 from below where id = ${target.id}) as found`, "objects"))[0]?.found === true;
   if (descendant) {
     refuse("target_below_source", `The surviving account ${accountLabel(target)} sits beneath ${accountLabel(source)} in the chart.`, "Move the surviving account out from under the source account first.");
   }
-  const children = (await tx.execute<{ id: string; number: string | null; name: string }>(sql`
+  const children = await tx.execute<{ id: string; number: string | null; name: string }>(sql`
     select id, number, name from accounts
      where org_id = ${orgId} and parent_id = ${source.id} and id <> ${target.id}
-     order by number nulls last, name, id`)).rows;
+     order by number nulls last, name, id`, "objects");
 
   // Effective date and period.
   const today = await businessTodayInTx(tx, orgId);
@@ -343,7 +343,7 @@ async function planAccountMerge(
       from journal_lines l
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${source.id}
-     order by l.subsidiary_id`)).rows.map((row) => row.subsidiary_id);
+     order by l.subsidiary_id`, "objects")).map((row) => row.subsidiary_id);
   if (source.subsidiary_id && !sourceSubsidiaries.includes(source.subsidiary_id)) sourceSubsidiaries.push(source.subsidiary_id);
   sourceSubsidiaries.sort();
   const periodsBySubsidiary = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveCoveringPeriod>>>>();
@@ -359,7 +359,7 @@ async function planAccountMerge(
       const starts = (await tx.execute<{ starts: string | null }>(sql`
         select min(starts_on)::text as starts from accounting_periods
          where org_id = ${orgId} and fiscal_calendar_id = ${entityPeriod.fiscal_calendar_id}
-           and fiscal_year = ${entityPeriod.fiscal_year} and not is_adjustment`)).rows[0]?.starts;
+           and fiscal_year = ${entityPeriod.fiscal_year} and not is_adjustment`, "objects"))[0]?.starts;
       balanceFromBySubsidiary.set(subsidiaryId, starts ?? entityPeriod.starts_on);
     }
   }
@@ -373,7 +373,7 @@ async function planAccountMerge(
     select max(e.posting_date)::text as latest
       from journal_lines l
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${orgId} and l.account_id = ${source.id}`)).rows[0]?.latest ?? null;
+     where l.org_id = ${orgId} and l.account_id = ${source.id}`, "objects"))[0]?.latest ?? null;
   if (latest && latest > request.effectiveDate) {
     refuse("postings_after_date", `${accountLabel(source)} has postings dated ${latest}, after the effective date.`, `Choose an effective date on or after ${latest}.`);
   }
@@ -391,7 +391,7 @@ async function planAccountMerge(
     : sql``;
 
   // Balances to move.
-  const balanceRows = (await tx.execute<{
+  const balanceRows = await tx.execute<{
     book_id: string; book_name: string; book_active: boolean; subsidiary_id: string; subsidiary_name: string;
     functional_currency: string; currency: string; amount: string; txn_amount: string;
     department_id: string | null; project_id: string | null; location_id: string | null; class_id: string | null;
@@ -413,7 +413,7 @@ async function planAccountMerge(
               l.department_id, l.project_id, l.location_id, l.class_id, l.party_id,
               l.equipment_unit_id, l.payment_card_id, l.extra_dims
     having sum(l.amount) <> 0 or sum(l.txn_amount) <> 0
-     order by e.book_id, l.subsidiary_id, l.currency`)).rows;
+     order by e.book_id, l.subsidiary_id, l.currency`, "objects");
 
   const balances: MergeBalanceTransfer[] = [];
   const groups: (BalanceGroup & { fxRate: string })[] = [];
@@ -491,8 +491,8 @@ async function planAccountMerge(
   // Legal-entity availability: the survivor must accept every entity the source carries.
   const subsidiaryContext = await loadSubsidiaryContext(tx, orgId);
   const carried = new Set<string>(balanceRows.map((row) => row.subsidiary_id));
-  const posted = (await tx.execute<{ subsidiary_id: string }>(sql`
-    select distinct subsidiary_id from journal_lines where org_id = ${orgId} and account_id = ${source.id}`)).rows;
+  const posted = await tx.execute<{ subsidiary_id: string }>(sql`
+    select distinct subsidiary_id from journal_lines where org_id = ${orgId} and account_id = ${source.id}`, "objects");
   for (const row of posted) carried.add(row.subsidiary_id);
   if (source.subsidiary_id) carried.add(source.subsidiary_id);
   for (const subsidiaryId of carried) {
@@ -510,7 +510,7 @@ async function planAccountMerge(
        where l.org_id = ${orgId} and l.account_id = ${source.id} and l.is_open_item
        group by e.book_id, l.party_id
       having sum(l.amount) <> 0
-    ) open_items`)).rows[0]?.n ?? 0;
+    ) open_items`, "objects"))[0]?.n ?? 0;
   if (Number(openParties) > 0) {
     refuse("open_items", `${accountLabel(source)} carries open receivable or payable items for ${openParties} part${Number(openParties) === 1 ? "y" : "ies"}.`, "Settle or apply the open items on the source account, then merge.");
   }
@@ -521,14 +521,14 @@ async function planAccountMerge(
         join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
        where l.org_id = ${orgId} and l.account_id = ${source.id}
          and e.status = 'posted' -- Live entries only: a reversed entry and its reversal cancel out and are never reconciled
-         and e.reverses_entry_id is null and l.reconciled_at is null`)).rows[0]?.n ?? 0;
+         and e.reverses_entry_id is null and l.reconciled_at is null`, "objects"))[0]?.n ?? 0;
     if (Number(unreconciled) > 0) {
       refuse("unreconciled_lines", `${accountLabel(source)} has ${unreconciled} unreconciled posted line(s).`, "Reconcile the source account through the effective date, then merge.");
     }
   }
 
   // Control-account roles.
-  const roleRows = (await tx.execute<{ scope: string; scope_name: string; role: string; account_id: string }>(sql`
+  const roleRows = await tx.execute<{ scope: string; scope_name: string; role: string; account_id: string }>(sql`
     select 'organization' as scope, 'Organization' as scope_name, kv.key as role, kv.value as account_id
       from orgs o, jsonb_each_text(coalesce(o.settings -> 'controlAccounts', '{}'::jsonb)) kv
      where o.id = ${orgId} and kv.value in (${source.id}, ${target.id})
@@ -537,7 +537,7 @@ async function planAccountMerge(
       from subsidiaries s, jsonb_each_text(coalesce(s.control_accounts, '{}'::jsonb)) kv
      where s.org_id = ${orgId} and jsonb_typeof(coalesce(s.control_accounts, '{}'::jsonb)) = 'object'
        and kv.value in (${source.id}, ${target.id})
-     order by 1, 3`)).rows;
+     order by 1, 3`, "objects");
   const controlRoles: AccountMergePreview["controlRoles"] = [];
   for (const row of roleRows) {
     if (row.account_id !== source.id) continue;
@@ -556,10 +556,10 @@ async function planAccountMerge(
   const discovered = await discoverAccountReferenceColumns(tx);
   const columns = new Map<string, { table: string; column: string }>();
   for (const column of discovered) columns.set(`${column.table}.${column.column}`, column);
-  const declared = (await tx.execute<{ table_name: string; column_name: string }>(sql`
+  const declared = await tx.execute<{ table_name: string; column_name: string }>(sql`
     select table_name::text, column_name::text from information_schema.columns
      where table_schema = 'public' and is_generated = 'NEVER'
-       and (table_name || '.' || column_name) in ${Object.keys(ACCOUNT_REFERENCE_RULES)}`)).rows;
+       and (table_name || '.' || column_name) in ${Object.keys(ACCOUNT_REFERENCE_RULES)}`, "objects");
   for (const row of declared) columns.set(`${row.table_name}.${row.column_name}`, { table: row.table_name, column: row.column_name });
 
   const references: MergeReferenceImpact[] = [];
@@ -574,7 +574,7 @@ async function planAccountMerge(
              count(*) filter (where ${classification?.disposition === "redirect" ? (classification.redirectWhere ?? sql`true`) : sql`false`})::int as redirect,
              count(*) filter (where ${blockedWhere ?? sql`false`})::int as blocked
         from ${sql.identifier(column.table)} r
-       where r.org_id = ${orgId} and r.${sql.identifier(column.column)} = ${source.id}`)).rows[0];
+       where r.org_id = ${orgId} and r.${sql.identifier(column.column)} = ${source.id}`, "objects"))[0];
     const total = Number(counts?.total ?? 0);
     if (total === 0) {
       if (classification) referenceColumns.push({ ...column, rule: classification });
@@ -619,7 +619,7 @@ async function planAccountMerge(
         from ${sql.identifier(ref.table)} r
        where r.${sql.identifier(ref.orgColumn)} = ${orgId}
          and ${value}::text like ${needle}
-         ${referenceScope}`)).rows[0];
+         ${referenceScope}`, "objects"))[0];
     const total = Number(counts?.total ?? 0);
     if (total === 0) continue;
     const blocked = Number(counts?.blocked ?? 0);
@@ -653,7 +653,7 @@ async function planAccountMerge(
     select id from financial_changes
      where org_id = ${orgId} and domain = 'ledger' and operation = ${ACCOUNT_MERGE_OPERATION}
        and subject_id = ${source.id} and status in ('draft', 'pending', 'approved')
-     order by created_at desc limit 1`)).rows[0];
+     order by created_at desc limit 1`, "objects"))[0];
 
   const consequences = {
     version: 1,
@@ -734,7 +734,7 @@ async function lockMerges(tx: SqlExecutor, orgId: string): Promise<void> {
 async function replayedMerge(tx: SqlExecutor, orgId: string, idempotencyKey: string, request: AccountMergeRequest): Promise<AccountMergeResult | null> {
   const prior = (await tx.execute<{ id: string; source_account_id: string; target_account_id: string; effective_date: string; result: Record<string, unknown> }>(sql`
     select id, source_account_id, target_account_id, effective_date::text as effective_date, result
-      from account_merges where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
+      from account_merges where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`, "objects"))[0];
   if (!prior) return null;
   if (prior.source_account_id !== request.sourceAccountId || prior.target_account_id !== request.targetAccountId || prior.effective_date !== request.effectiveDate) {
     throw new AccountMergeError("This request key already belongs to a different account merge.", "account_merge_key_conflict", "Review the earlier merge; use a new request key only for a separate merge.", 409);
@@ -752,8 +752,8 @@ async function audit(tx: SqlExecutor, orgId: string, table: string, rowId: strin
   const inserted = await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, ${table}, ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`);
-  if (inserted.rows.length !== 1) throw new Error("account merge audit was not recorded");
+    returning id`, "objects");
+  if (inserted.length !== 1) throw new Error("account merge audit was not recorded");
 }
 
 /** The single writer: apply a planned merge inside the caller's transaction. */
@@ -774,11 +774,11 @@ async function applyMerge(
     if (rule.disposition !== "redirect") continue;
     let rows: { id: string | null }[];
     try {
-      rows = await withTransactionSavepoint(tx, async () => (await tx.execute<{ id: string | null }>(sql`
+      rows = await withTransactionSavepoint(tx, async () => await tx.execute<{ id: string | null }>(sql`
         update ${sql.identifier(table)} as r set ${sql.identifier(column)} = ${target.id}
          where r.org_id = ${orgId} and r.${sql.identifier(column)} = ${source.id}
            ${rule.redirectWhere ? sql`and ${rule.redirectWhere}` : sql``}
-        returning (to_jsonb(r) ->> 'id') as id`)).rows);
+        returning (to_jsonb(r) ->> 'id') as id`, "objects"));
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       throw new AccountMergeError(
@@ -812,13 +812,13 @@ async function applyMerge(
     const assignment = ref.path
       ? sql`${sql.identifier(ref.column)} = jsonb_set(r.${sql.identifier(ref.column)}, array[${ref.path}]::text[], ${replaced}, false)`
       : sql`${sql.identifier(ref.column)} = ${replaced}`;
-    const rows = (await tx.execute<{ id: string | null }>(sql`
+    const rows = await tx.execute<{ id: string | null }>(sql`
       update ${sql.identifier(ref.table)} as r set ${assignment}
        where r.${sql.identifier(ref.orgColumn)} = ${orgId}
          and ${value}::text like ${`%${sourceNeedle}%`}
          ${ref.scope ? sql`and ${ref.scope}` : sql``}
          ${ref.blockWhere ? sql`and not (${ref.blockWhere.predicate})` : sql``}
-      returning (to_jsonb(r) ->> 'id') as id`)).rows;
+      returning (to_jsonb(r) ->> 'id') as id`, "objects");
     if (rows.length > 0) {
       moved[ref.key] = rows.length;
       redirectAudits.push({ table: ref.table, column: ref.path ? `${ref.column}.${ref.path}` : ref.column, rowIds: rows.map((row) => row.id) });
@@ -828,16 +828,16 @@ async function applyMerge(
   const draftLines = await repointDraftAccountLines(tx, { orgId, fromId: source.id, toId: target.id });
   if (draftLines > 0) moved["journal_lines.draft"] = draftLines;
 
-  const children = (await tx.execute<{ id: string }>(sql`
+  const children = await tx.execute<{ id: string }>(sql`
     update accounts set parent_id = ${target.id}, updated_at = now(), updated_by = ${input.actorId}
      where org_id = ${orgId} and parent_id = ${source.id} and id <> ${target.id}
-    returning id`)).rows;
+    returning id`, "objects");
   if (children.length > 0) moved["accounts.parent_id"] = children.length;
   if (target.parent_id === source.id) {
     const reparented = await tx.execute(sql`
       update accounts set parent_id = ${source.parent_id}, updated_at = now(), updated_by = ${input.actorId}
-       where org_id = ${orgId} and id = ${target.id} returning id`);
-    if (reparented.rows.length !== 1) throw new Error("the surviving account could not take the source account's place in the chart");
+       where org_id = ${orgId} and id = ${target.id} returning id`, "objects");
+    if (reparented.length !== 1) throw new Error("the surviving account could not take the source account's place in the chart");
   }
 
   // Balances move through the posting kernel.
@@ -848,8 +848,8 @@ async function applyMerge(
       // The reclass credits the source; an inactive duplicate is posted to
       // inside this transaction only, then marked merged and inactive.
       const reactivated = await tx.execute(sql`
-        update accounts set is_active = true where org_id = ${orgId} and id = ${source.id} and not is_active returning id`);
-      if (reactivated.rows.length !== 1) throw new Error("the source account could not be prepared for its reclass");
+        update accounts set is_active = true where org_id = ${orgId} and id = ${source.id} and not is_active returning id`, "objects");
+      if (reactivated.length !== 1) throw new Error("the source account could not be prepared for its reclass");
     }
     let sequence = 0;
     for (const entry of entries) {
@@ -915,16 +915,16 @@ async function applyMerge(
       idempotency_key, financial_change_id, preview_digest, result, merged_by)
     values (${mergeId}, ${orgId}, ${source.id}, ${target.id}, ${plan.preview.effectiveDate}, ${reason},
       ${input.idempotencyKey}, ${input.financialChangeId}, ${plan.preview.digest}, ${JSON.stringify(result)}::jsonb, ${input.actorId})
-    returning id`);
-  if (recorded.rows.length !== 1) throw new Error("the account merge could not be recorded");
+    returning id`, "objects");
+  if (recorded.length !== 1) throw new Error("the account merge could not be recorded");
 
   const marked = await tx.execute(sql`
     update accounts
        set is_active = false, merged_into_id = ${target.id}, merged_at = now(), merged_by = ${input.actorId},
            merge_reason = ${reason}, updated_at = now(), updated_by = ${input.actorId}
      where org_id = ${orgId} and id = ${source.id} and merged_into_id is null
-    returning id`);
-  if (marked.rows.length !== 1) throw new Error("the source account could not be marked merged");
+    returning id`, "objects");
+  if (marked.length !== 1) throw new Error("the source account could not be marked merged");
 
   await audit(tx, orgId, "accounts", source.id, "merge", {
     before: { isActive: source.is_active, parentId: source.parent_id, mergedIntoId: null },
@@ -1007,7 +1007,7 @@ export async function requestAccountMerge(
       effective_on: string; reason: string; submitted_by: string; payload: Record<string, unknown>;
     }>(sql`
       select id, subject_id, domain, operation, status, effective_on::text, reason, submitted_by, payload
-        from financial_changes where org_id = ${orgId} and idempotency_key = ${command.idempotencyKey}`)).rows[0];
+        from financial_changes where org_id = ${orgId} and idempotency_key = ${command.idempotencyKey}`, "objects"))[0];
     if (existingChange) {
       if (existingChange.domain !== "ledger" || existingChange.operation !== ACCOUNT_MERGE_OPERATION ||
         existingChange.subject_id !== command.sourceAccountId || existingChange.payload?.targetAccountId !== command.targetAccountId ||
@@ -1026,7 +1026,7 @@ export async function requestAccountMerge(
     const plan = await planAccountMerge(tx, orgId, command, { lock: true, allowedSubsidiaryIds: command.allowedSubsidiaryIds });
     if (plan.preview.alreadyMerged && plan.preview.alreadyMerged.targetAccountId === command.targetAccountId) {
       const prior = (await tx.execute<{ result: Record<string, unknown> }>(sql`
-        select result from account_merges where org_id = ${orgId} and id = ${plan.preview.alreadyMerged.mergeId}`)).rows[0];
+        select result from account_merges where org_id = ${orgId} and id = ${plan.preview.alreadyMerged.mergeId}`, "objects"))[0];
       return {
         status: "completed",
         mergeId: plan.preview.alreadyMerged.mergeId,
@@ -1044,7 +1044,7 @@ export async function requestAccountMerge(
     }
     {
       const anchor = plan.source.subsidiary_id ?? (await tx.execute<{ id: string }>(sql`
-        select id from subsidiaries where org_id = ${orgId} and parent_id is null and not is_elimination order by created_at, id limit 1`)).rows[0]?.id;
+        select id from subsidiaries where org_id = ${orgId} and parent_id is null and not is_elimination order by created_at, id limit 1`, "objects"))[0]?.id;
       if (!anchor) throw new AccountMergeError("The company has no root subsidiary to record the proposal against.", "account_merge_no_entity", "Create the company's root subsidiary first.");
       const required = [...new Set([anchor, ...plan.preview.balances.map((row) => row.subsidiaryId)])].sort();
       const changeId = await proposeFinancialChange(tx, {
@@ -1155,7 +1155,7 @@ export async function listAccountMerges(
         from financial_changes f
        where f.org_id = ${orgId} and f.domain = 'ledger' and f.operation = ${ACCOUNT_MERGE_OPERATION}
          and f.status <> 'applied'`;
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       id: string; kind: "merge" | "proposal"; status: AccountMergeHistoryRow["status"];
       source_account_id: string; target_account_id: string; effective_date: string; reason: string;
       actor_id: string | null; at: Date | string; entry_ids: string[];
@@ -1170,12 +1170,12 @@ export async function listAccountMerges(
        where true ${accountFilter}
          ${sourceScope} ${targetScope}
        order by x.at desc, x.id
-       limit ${options.limit} offset ${options.offset}`)).rows;
+       limit ${options.limit} offset ${options.offset}`, "objects");
     const matching = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from (${base}) x
         join accounts sa on sa.org_id = ${orgId} and sa.id = x.source_account_id
         join accounts ta on ta.org_id = ${orgId} and ta.id = x.target_account_id
-       where true ${accountFilter} ${sourceScope} ${targetScope}`)).rows[0]?.n ?? 0;
+       where true ${accountFilter} ${sourceScope} ${targetScope}`, "objects"))[0]?.n ?? 0;
     return {
       total: matching,
       rows: rows.map((row) => ({

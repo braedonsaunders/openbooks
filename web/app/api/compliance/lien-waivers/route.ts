@@ -105,16 +105,13 @@ export const POST = defineRoute({
       return NextResponse.json({ error: 'throughDate must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
     }
 
-    const [org] = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
-      .rows
-    const party = (
-      await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+    const [org] = await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects')
+    const party = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
       select id, subsidiary_id as "subsidiaryId"
         from parties
        where org_id = ${orgId} and id = ${body.partyId} and is_active
          ${complianceSubsidiaryFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-    `)
-    ).rows[0]
+    `, 'objects'))[0]
     if (!party) return NextResponse.json({ error: 'party not found' }, { status: 404 })
     const project = await db.execute<{
       id: string
@@ -127,10 +124,10 @@ export const POST = defineRoute({
         left join compliance_classes cls on cls.id = vr.compliance_class_id and cls.org_id = p.org_id
        where p.org_id = ${orgId} and p.id = ${body.projectId} and p.is_active
          ${complianceSubsidiaryFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
-    `)
-    if (project.rows.length === 0) return NextResponse.json({ error: 'project not found' }, { status: 404 })
+    `, 'objects')
+    if (project.length === 0) return NextResponse.json({ error: 'project not found' }, { status: 404 })
 
-    const waiverType = body.waiverType ?? project.rows[0]!.class_default ?? 'unconditional_progress'
+    const waiverType = body.waiverType ?? project[0]!.class_default ?? 'unconditional_progress'
     if (!WAIVER_TYPES.has(waiverType)) {
       return NextResponse.json({ error: 'unknown lien waiver type' }, { status: 400 })
     }
@@ -170,13 +167,11 @@ export const POST = defineRoute({
       return NextResponse.json({ error: 'invalid payApplicationId' }, { status: 400 })
     }
     if (body.payApplicationId) {
-      const payApplication = (
-        await db.execute<{ projectId: string }>(sql`
+      const payApplication = (await db.execute<{ projectId: string }>(sql`
         select project_id as "projectId"
           from pay_applications
          where org_id = ${orgId} and id = ${body.payApplicationId}
-      `)
-      ).rows[0]
+      `, 'objects'))[0]
       if (!payApplication) return NextResponse.json({ error: 'pay application not found' }, { status: 404 })
       if (payApplication.projectId !== body.projectId) {
         return NextResponse.json({ error: 'that pay application belongs to a different project' }, { status: 422 })
@@ -196,8 +191,8 @@ export const POST = defineRoute({
          where org_id = ${orgId} and id = ${body.billDocumentId}
            and kind in ('vendor_bill', 'expense_report')
            ${complianceSubsidiaryFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-      `)
-      const row = bill.rows[0]
+      `, 'objects')
+      const row = bill[0]
       if (!row) return NextResponse.json({ error: 'bill not found' }, { status: 404 })
       if (row.party_id !== body.partyId) {
         return NextResponse.json({ error: 'that bill belongs to a different vendor' }, { status: 422 })
@@ -235,8 +230,8 @@ export const POST = defineRoute({
                   ${jurisdiction}, ${body.billDocumentId ?? null},
                   ${body.payApplicationId ?? null}, ${body.notes ?? null}, ${actorId}, ${actorId})
           returning id
-        `)
-          const id = inserted.rows[0]!.id
+        `, 'objects')
+          const id = inserted[0]!.id
           await db.execute(sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'lien_waivers', ${id}, 'insert',

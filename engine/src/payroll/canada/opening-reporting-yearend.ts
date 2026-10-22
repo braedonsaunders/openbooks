@@ -30,11 +30,11 @@ export function canadianOpeningAllocationYtd(allocation: CanadianOpeningReportin
 }
 
 export async function readCanadianOpeningYearEndSlices(tx: SqlExecutor, orgId: string, taxYear: number): Promise<CanadianOpeningYearEndSlice[]> {
-  const employees = (await tx.execute<{id: string; name: string}>(sql`
+  const employees = await tx.execute<{id: string; name: string}>(sql`
     select b.employee_party_id as id,p.display_name as name from payroll_opening_balances b
     join parties p on p.org_id=b.org_id and p.id=b.employee_party_id
     where b.org_id=${orgId} and b.tax_year=${taxYear} order by b.employee_party_id
-  `)).rows;
+  `, 'objects');
   const slices: CanadianOpeningYearEndSlice[] = [];
   for (const employee of employees) {
     const original=await readEmployeeOpeningLevySources(tx,{orgId,employeePartyId:employee.id,taxYear});

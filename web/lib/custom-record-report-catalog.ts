@@ -14,13 +14,13 @@ export async function customRecordReportCatalog(authz: Authz): Promise<Record<st
   const [definitions, assignments] = await Promise.all([
     db.execute<{ id: string; key: string; name: string; description: string | null; fields: unknown; allowed_roles: string[] | null }>(sql`
       select id,key,name,description,fields,allowed_roles from custom_record_types
-      where org_id=${authz.user.orgId} and status='published' order by sort_order,name`),
+      where org_id=${authz.user.orgId} and status='published' order by sort_order,name`, 'objects'),
     db.execute<{ key: string }>(sql`select r.key from role_assignments a
       join app_roles r on r.id=a.role_id and r.org_id=a.org_id
-      where a.org_id=${authz.user.orgId} and a.user_id=${authz.user.id}`),
+      where a.org_id=${authz.user.orgId} and a.user_id=${authz.user.id}`, 'objects'),
   ])
-  const roles = assignments.rows.map(r => r.key)
-  const entities = definitions.rows.flatMap(d => {
+  const roles = assignments.map(r => r.key)
+  const entities = definitions.flatMap(d => {
     if (!authz.user.isSuperAdmin && !inTypeAudience(roles, d.allowed_roles)) return []
     const fields = lintRecordFields(d.fields, d.name)
     return fields.success ? customRecordEntities({ ...d, fields: fields.sections }) : []

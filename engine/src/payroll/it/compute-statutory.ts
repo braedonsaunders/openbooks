@@ -1107,8 +1107,8 @@ export async function itSubstituteYtd(input: {
        and s.country = 'IT'
        and s.tax_year = ${input.taxYear}
        and s.pay_date <= ${input.payDate}::date
-       and s.pay_run_document_id <> ${input.excludeDocumentId}`);
-  return rows.rows[0] ?? { rinovi: "0", turni: "0", premi: "0" };
+       and s.pay_run_document_id <> ${input.excludeDocumentId}`, "objects");
+  return rows[0] ?? { rinovi: "0", turni: "0", premi: "0" };
 }
 
 export async function computeItStatutoryWithRates(
@@ -1158,8 +1158,8 @@ export async function computeItStatutoryWithRates(
       select 1 from payroll_opening_balances
        where org_id = ${ctx.orgId}
          and employee_party_id = ${ctx.employeePartyId}
-         and tax_year = ${taxYear} limit 1`);
-    if (carry.rows.length > 0) {
+         and tax_year = ${taxYear} limit 1`, "objects");
+    if (carry.length > 0) {
       throw new ItPayrollRefusal(
         `IT ${taxYear} refuses substitute-regime pay with a pre-adoption carry-in: prior-provider `
         + "substitute bases are unknown, so the 1.500/5.000 annual caps cannot bind — settle the "

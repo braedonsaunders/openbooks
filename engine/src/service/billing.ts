@@ -68,22 +68,22 @@ export interface ServiceInvoicePlan {
 
 async function attemptNumber(orgId: string, jobId: string, visitId: string | null): Promise<number> {
   const released = (await db.execute<{ count: number }>(sql`select count(*)::int as count from service_billings
-    where org_id = ${orgId} and job_id = ${jobId} and ${visitId ? sql`visit_id = ${visitId}` : sql`visit_id is null`} and released_at is not null`)).rows[0]!.count;
+    where org_id = ${orgId} and job_id = ${jobId} and ${visitId ? sql`visit_id = ${visitId}` : sql`visit_id is null`} and released_at is not null`, "objects"))[0]!.count;
   return released + 1;
 }
 
 async function itemName(orgId: string, itemId: string): Promise<string> {
-  return (await db.execute<{ name: string }>(sql`select coalesce(nullif(code, '') || ' — ', '') || name as name from items where org_id = ${orgId} and id = ${itemId}`)).rows[0]?.name ?? "Item";
+  return (await db.execute<{ name: string }>(sql`select coalesce(nullif(code, '') || ' — ', '') || name as name from items where org_id = ${orgId} and id = ${itemId}`, "objects"))[0]?.name ?? "Item";
 }
 
 async function scopeLines(orgId: string, job: StoredJob, visit: { agreementVersionId: string | null } | null): Promise<PlannedLine[]> {
   const rows = visit?.agreementVersionId
     ? (await db.execute<{ itemId: string; description: string | null; quantity: string; unitPrice: string; taxCodeId: string | null }>(sql`select item_id as "itemId", description,
         quantity::text, unit_price::text as "unitPrice", tax_code_id as "taxCodeId" from service_agreement_lines
-        where org_id = ${orgId} and version_id = ${visit.agreementVersionId} order by line_number`)).rows
+        where org_id = ${orgId} and version_id = ${visit.agreementVersionId} order by line_number`, "objects"))
     : (await db.execute<{ itemId: string; description: string | null; quantity: string; unitPrice: string; taxCodeId: string | null }>(sql`select item_id as "itemId", description,
         quantity::text, unit_price::text as "unitPrice", tax_code_id as "taxCodeId" from service_job_lines
-        where org_id = ${orgId} and job_id = ${job.id} order by line_number`)).rows;
+        where org_id = ${orgId} and job_id = ${job.id} order by line_number`, "objects"));
   const out: PlannedLine[] = [];
   for (const row of rows) {
     out.push({ itemId: row.itemId, invoiceItem: true, description: row.description ?? await itemName(orgId, row.itemId), quantity: row.quantity, unitPrice: row.unitPrice, taxCodeId: row.taxCodeId, timeEntryIds: [] });
@@ -93,12 +93,12 @@ async function scopeLines(orgId: string, job: StoredJob, visit: { agreementVersi
 
 async function partLines(orgId: string, visitIds: readonly string[]): Promise<PlannedLine[]> {
   if (!visitIds.length) return [];
-  const rows = (await db.execute<{ itemId: string; name: string; quantity: string; unitPrice: string; profiled: boolean; memo: string | null }>(sql`
+  const rows = await db.execute<{ itemId: string; name: string; quantity: string; unitPrice: string; profiled: boolean; memo: string | null }>(sql`
     select sp.item_id as "itemId", coalesce(nullif(i.code, '') || ' — ', '') || i.name as name, sp.quantity::text, sp.unit_price::text as "unitPrice", sp.memo,
            exists (select 1 from item_inventory_profiles p where p.org_id = sp.org_id and p.item_id = sp.item_id) as profiled
       from service_visit_parts sp join items i on i.org_id = sp.org_id and i.id = sp.item_id
      where sp.org_id = ${orgId} and sp.visit_id = any(${`{${visitIds.join(",")}}`}::uuid[]) and sp.billable
-     order by sp.created_at, sp.id`)).rows;
+     order by sp.created_at, sp.id`, "objects");
   return rows.map((row) => ({
     itemId: row.itemId, invoiceItem: !row.profiled, description: row.memo ? `${row.name} — ${row.memo}` : row.name,
     quantity: row.quantity, unitPrice: row.unitPrice, taxCodeId: null, timeEntryIds: [],
@@ -108,11 +108,11 @@ async function partLines(orgId: string, visitIds: readonly string[]): Promise<Pl
 /** Approved, unbilled labor on the visits, one line per technician; unapproved labor refuses. */
 async function laborLines(orgId: string, job: StoredJob, visitIds: readonly string[]): Promise<PlannedLine[]> {
   if (!job.laborItemId || !job.laborUnitPrice || !visitIds.length) return [];
-  const entries = (await db.execute<{ id: string; status: string; hours: string; billingStatus: string; isBillable: boolean; worker: string; workerName: string }>(sql`
+  const entries = await db.execute<{ id: string; status: string; hours: string; billingStatus: string; isBillable: boolean; worker: string; workerName: string }>(sql`
     select te.id, te.status, te.hours::text, te.billing_status as "billingStatus", te.is_billable as "isBillable", te.employee_party_id as worker, p.display_name as "workerName"
       from time_entries te join parties p on p.org_id = te.org_id and p.id = te.employee_party_id
      where te.org_id = ${orgId} and te.service_visit_id = any(${`{${visitIds.join(",")}}`}::uuid[]) and te.status <> 'rejected'
-     order by p.display_name, te.worked_on, te.id for update of te`)).rows;
+     order by p.display_name, te.worked_on, te.id for update of te`, "objects");
   const unapproved = entries.filter((entry) => entry.isBillable && entry.billingStatus === "unbilled" && entry.status !== "approved");
   if (unapproved.length) {
     throw new ServiceError(`${unapproved.length} labor ${unapproved.length === 1 ? "entry is" : "entries are"} not yet approved.`, {
@@ -144,18 +144,18 @@ async function planInvoice(actor: ServiceActor, job: StoredJob, visitId: string 
     if (visit.jobId !== job.id) throw new ScopeNotFoundError();
     if (visit.status !== "completed") throw new ServiceError("Only a completed visit is invoiced.", { status: 409, code: "service_invalid_transition", remedy: "Complete the visit first." });
     if (visit.reviewStatus === "pending") throw new ServiceError("The visit's completion is awaiting review.", { status: 409, code: "service_review_pending", remedy: "Decide the review in Approvals first." });
-    const billed = (await db.execute(sql`select 1 from service_billings where org_id = ${actor.orgId} and visit_id = ${visit.id} and released_at is null`)).rows[0];
+    const billed = (await db.execute(sql`select 1 from service_billings where org_id = ${actor.orgId} and visit_id = ${visit.id} and released_at is null`, "objects"))[0];
     if (billed) throw new ServiceError("This visit is already invoiced.", { status: 409, code: "service_already_billed", remedy: "Open its invoice; void it to invoice the visit again." });
     const lines = [...await scopeLines(actor.orgId, job, visit), ...await partLines(actor.orgId, [visit.id]), ...await laborLines(actor.orgId, job, [visit.id])];
     return { visitIds: [visit.id], lines, label: `visit ${visit.sequence}` };
   }
   if (job.billingMode !== "per_job") throw new ServiceError("This job is invoiced per visit.", { code: "service_invalid", remedy: "Invoice each completed visit." });
   if (job.status !== "completed") throw new ServiceError("A job invoiced as a whole is invoiced once it is complete.", { status: 409, code: "service_invalid_transition", remedy: "Complete the job first." });
-  const billed = (await db.execute(sql`select 1 from service_billings where org_id = ${actor.orgId} and job_id = ${job.id} and visit_id is null and released_at is null`)).rows[0];
+  const billed = (await db.execute(sql`select 1 from service_billings where org_id = ${actor.orgId} and job_id = ${job.id} and visit_id is null and released_at is null`, "objects"))[0];
   if (billed) throw new ServiceError("This job is already invoiced.", { status: 409, code: "service_already_billed", remedy: "Open its invoice; void it to invoice the job again." });
-  const pending = (await db.execute(sql`select 1 from service_visits where org_id = ${actor.orgId} and job_id = ${job.id} and review_status = 'pending' limit 1`)).rows[0];
+  const pending = (await db.execute(sql`select 1 from service_visits where org_id = ${actor.orgId} and job_id = ${job.id} and review_status = 'pending' limit 1`, "objects"))[0];
   if (pending) throw new ServiceError("A visit's completion is awaiting review.", { status: 409, code: "service_review_pending", remedy: "Decide the review in Approvals first." });
-  const visitIds = (await db.execute<{ id: string }>(sql`select id from service_visits where org_id = ${actor.orgId} and job_id = ${job.id} and status = 'completed' order by sequence`)).rows.map((row) => row.id);
+  const visitIds = (await db.execute<{ id: string }>(sql`select id from service_visits where org_id = ${actor.orgId} and job_id = ${job.id} and status = 'completed' order by sequence`, "objects")).map((row) => row.id);
   const lines = [...await scopeLines(actor.orgId, job, null), ...await partLines(actor.orgId, visitIds), ...await laborLines(actor.orgId, job, visitIds)];
   return { visitIds, lines, label: "job" };
 }
@@ -193,7 +193,7 @@ export async function invoiceServiceWork(actor: ServiceActor & { jobId: string; 
     const key = serviceInvoiceKey(actor.orgId, visitId ? `visit:${visitId}` : `job:${job.id}`, attempt);
     const existing = (await db.execute<{ id: string; documentNumber: string }>(sql`select d.id, d.document_number as "documentNumber" from service_billings b
       join documents d on d.org_id = b.org_id and d.id = b.invoice_document_id
-      where b.org_id = ${actor.orgId} and b.invoice_document_id = ${key} and b.released_at is null and d.status <> 'voided'`)).rows[0];
+      where b.org_id = ${actor.orgId} and b.invoice_document_id = ${key} and b.released_at is null and d.status <> 'voided'`, "objects"))[0];
     if (existing) return { invoiceId: existing.id, documentNumber: existing.documentNumber, replayed: true };
     const plan = await planInvoice(actor, job, visitId);
     if (!plan.lines.length) throw new ServiceError("There is nothing to invoice.", { code: "service_nothing_to_bill", remedy: "Add scope lines to the job or billable parts and labor to its visits." });
@@ -214,7 +214,7 @@ export async function invoiceServiceWork(actor: ServiceActor & { jobId: string; 
       });
     }
     const today = await businessToday(actor.orgId);
-    const header = (await db.execute<{ jobNumber: string }>(sql`select job_number as "jobNumber" from service_jobs where org_id = ${actor.orgId} and id = ${job.id}`)).rows[0]!;
+    const header = (await db.execute<{ jobNumber: string }>(sql`select job_number as "jobNumber" from service_jobs where org_id = ${actor.orgId} and id = ${job.id}`, "objects"))[0]!;
     const multiCurrency = await orgFeatureEnabled(actor.orgId, "multiCurrency");
     const body = {
       partyId: job.customerPartyId, documentDate: today, subsidiaryId: job.subsidiaryId,
@@ -224,16 +224,16 @@ export async function invoiceServiceWork(actor: ServiceActor & { jobId: string; 
       lines,
     };
     const created = await createDocument({ orgId: actor.orgId, userId: actor.actorId, kind: "customer_invoice", key, body, subsidiaryId: job.subsidiaryId, requestBody: { serviceInvoice: { jobId: job.id, visitId, attempt } } });
-    requireOne((await db.execute(sql`insert into service_billings (org_id, job_id, visit_id, invoice_document_id, created_by)
-      values (${actor.orgId}, ${job.id}, ${visitId}, ${created.id}, ${actor.actorId}) returning id`)).rows, "The billing link");
-    const invoiceLines = (await db.execute<{ id: string; lineNumber: number }>(sql`select id, line_number as "lineNumber" from document_lines
-      where org_id = ${actor.orgId} and document_id = ${created.id} order by line_number`)).rows;
+    requireOne(await db.execute(sql`insert into service_billings (org_id, job_id, visit_id, invoice_document_id, created_by)
+      values (${actor.orgId}, ${job.id}, ${visitId}, ${created.id}, ${actor.actorId}) returning id`, "objects"), "The billing link");
+    const invoiceLines = await db.execute<{ id: string; lineNumber: number }>(sql`select id, line_number as "lineNumber" from document_lines
+      where org_id = ${actor.orgId} and document_id = ${created.id} order by line_number`, "objects");
     for (const [index, line] of plan.lines.entries()) {
       if (!line.timeEntryIds.length) continue;
       const invoiceLine = invoiceLines[index];
       if (!invoiceLine) throw new ServiceError("The invoice lines do not match the planned labor.", { code: "service_not_saved", remedy: "Try again; nothing was saved." });
-      const marked = (await db.execute(sql`update time_entries set billing_status = 'billed', invoiced_by_line_id = ${invoiceLine.id}, updated_at = now(), updated_by = ${actor.actorId}
-        where org_id = ${actor.orgId} and id = any(${`{${line.timeEntryIds.join(",")}}`}::uuid[]) and billing_status = 'unbilled' and status = 'approved' returning id`)).rows;
+      const marked = await db.execute(sql`update time_entries set billing_status = 'billed', invoiced_by_line_id = ${invoiceLine.id}, updated_at = now(), updated_by = ${actor.actorId}
+        where org_id = ${actor.orgId} and id = any(${`{${line.timeEntryIds.join(",")}}`}::uuid[]) and billing_status = 'unbilled' and status = 'approved' returning id`, "objects");
       if (marked.length !== line.timeEntryIds.length) throw new ServiceError("Labor changed while the invoice was being created.", { status: 409, code: "service_stale", remedy: "Reload the job and invoice again." });
     }
     await auditService({ orgId: actor.orgId, table: "service_billings", rowId: created.id, action: "insert", actorId: actor.actorId,
@@ -251,7 +251,7 @@ export async function recordServiceDeposit(actor: ServiceActor & { jobId: string
     if (job.status === "cancelled") throw new ServiceError("A cancelled job takes no deposit.", { status: 409, code: "service_invalid_transition" });
     const paymentId = requireUuid(actor.paymentDocumentId, "Payment");
     const payment = (await db.execute<{ kind: string; status: string; partyId: string | null; subsidiaryId: string | null }>(sql`select kind, status, party_id as "partyId", subsidiary_id as "subsidiaryId"
-      from documents where org_id = ${actor.orgId} and id = ${paymentId} for share`)).rows[0];
+      from documents where org_id = ${actor.orgId} and id = ${paymentId} for share`, "objects"))[0];
     if (!payment || payment.kind !== "customer_payment") throw new ScopeNotFoundError();
     if (payment.status !== "posted") throw new ServiceError("The deposit payment must be posted.", { status: 409, code: "service_invalid", remedy: "Post the payment in Payments first." });
     if (payment.partyId !== job.customerPartyId) throw new ServiceError("The payment is from another customer.", { code: "service_invalid", remedy: "Choose a payment received from the job's customer." });
@@ -260,8 +260,8 @@ export async function recordServiceDeposit(actor: ServiceActor & { jobId: string
       .filter((item) => item.documentId === paymentId);
     const amount = sum(unapplied.map((item) => item.transactionOpen));
     if (cmp(amount, "0") <= 0) throw new ServiceError("The payment has no amount held on account.", { code: "service_invalid", remedy: "Receive the deposit as a payment with its amount left on account." });
-    const row = requireOne((await db.execute<{ id: string }>(sql`insert into service_job_deposits (org_id, job_id, payment_document_id, amount, created_by)
-      values (${actor.orgId}, ${job.id}, ${paymentId}, ${amount}, ${actor.actorId}) returning id`)).rows, "The deposit");
+    const row = requireOne(await db.execute<{ id: string }>(sql`insert into service_job_deposits (org_id, job_id, payment_document_id, amount, created_by)
+      values (${actor.orgId}, ${job.id}, ${paymentId}, ${amount}, ${actor.actorId}) returning id`, "objects"), "The deposit");
     await auditService({ orgId: actor.orgId, table: "service_job_deposits", rowId: row.id, action: "insert", actorId: actor.actorId, after: { jobId: job.id, paymentId, amount } });
     return { depositId: row.id, amount };
   }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
@@ -279,14 +279,14 @@ export async function applyServiceDeposits(actor: ServiceActor & { jobId: string
     await serviceAuthority(actor, "service.manage", job.subsidiaryId);
     const allowed = await lockActorCommandAuthority(db, actor.orgId, actor.actorId, job.subsidiaryId, "ar.create");
     const invoiceId = requireUuid(actor.invoiceDocumentId, "Invoice");
-    const linked = (await db.execute(sql`select 1 from service_billings where org_id = ${actor.orgId} and job_id = ${job.id} and invoice_document_id = ${invoiceId} and released_at is null`)).rows[0];
+    const linked = (await db.execute(sql`select 1 from service_billings where org_id = ${actor.orgId} and job_id = ${job.id} and invoice_document_id = ${invoiceId} and released_at is null`, "objects"))[0];
     if (!linked) throw new ServiceError("The invoice is not one of this job's invoices.", { code: "service_invalid" });
     const deposits = (await db.execute<{ paymentId: string }>(sql`select payment_document_id as "paymentId" from service_job_deposits
-      where org_id = ${actor.orgId} and job_id = ${job.id} order by created_at, id`)).rows.map((row) => row.paymentId);
+      where org_id = ${actor.orgId} and job_id = ${job.id} order by created_at, id`, "objects")).map((row) => row.paymentId);
     if (!deposits.length) return null;
     const invoiceItems = (await openItemsForParty(job.customerPartyId, "ar", actor.orgId, allowed)).filter((item) => item.documentId === invoiceId);
     if (!invoiceItems.length) {
-      const status = (await db.execute<{ status: string }>(sql`select status from documents where org_id = ${actor.orgId} and id = ${invoiceId}`)).rows[0]?.status;
+      const status = (await db.execute<{ status: string }>(sql`select status from documents where org_id = ${actor.orgId} and id = ${invoiceId}`, "objects"))[0]?.status;
       if (status !== "posted") throw new ServiceError("Deposits apply to a posted invoice.", { status: 409, code: "service_invalid", remedy: "Post the invoice first." });
       return null;
     }
@@ -334,9 +334,9 @@ export async function serviceDepositCandidates(actor: ServiceActor & { jobId: st
     const job = await lockJob(actor.orgId, actor.jobId);
     await serviceAuthority(actor, "service.manage", job.subsidiaryId);
     const allowed = await lockActorCommandAuthority(db, actor.orgId, actor.actorId, job.subsidiaryId, "ar.read");
-    const taken = new Set((await db.execute<{ id: string }>(sql`select payment_document_id as id from service_job_deposits where org_id = ${actor.orgId}`)).rows.map((row) => row.id));
+    const taken = new Set((await db.execute<{ id: string }>(sql`select payment_document_id as id from service_job_deposits where org_id = ${actor.orgId}`, "objects")).map((row) => row.id));
     const subsidiaries = new Map((await db.execute<{ id: string; subsidiaryId: string | null }>(sql`select id, subsidiary_id as "subsidiaryId" from documents
-      where org_id = ${actor.orgId} and party_id = ${job.customerPartyId} and kind = 'customer_payment' and status = 'posted'`)).rows.map((row) => [row.id, row.subsidiaryId]));
+      where org_id = ${actor.orgId} and party_id = ${job.customerPartyId} and kind = 'customer_payment' and status = 'posted'`, "objects")).map((row) => [row.id, row.subsidiaryId]));
     const totals = new Map<string, ServiceDepositCandidate>();
     for (const item of await creditItemsForParty(job.customerPartyId, "ar", actor.orgId, allowed, { includeUnappliedPayments: true })) {
       if (!item.documentId || item.documentKind !== "customer_payment" || taken.has(item.documentId) || !subsidiaries.has(item.documentId)) continue;

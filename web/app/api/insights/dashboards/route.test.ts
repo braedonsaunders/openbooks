@@ -76,9 +76,9 @@ stubModules({
         return Promise.resolve(respond(text))
       }
       export const db = {
-        execute: (query) => record('execute', query),
+        execute: (query, mode) => Promise.resolve(record('execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: async (work) => {
-          const tx = { execute: (query) => record('tx-execute', query) }
+          const tx = { execute: (query, mode) => Promise.resolve(record('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) }
           return work(tx)
         },
       }

@@ -38,7 +38,7 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
     const preview = async (job: TransferJob) => run(await withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, {
       action: 'preview', revision: job.revision, options: { mapping: { code: 'code', name: 'name', kind: 'kind' }, importMode: 'insert' },
     })))
-    const countItems = (prefix: string) => withOrgTransaction(org.orgId, async () => Number((await db.execute<{ n: string }>(sql`select count(*) n from items where org_id=${org.orgId} and code like ${`${prefix}-%`}`)).rows[0]!.n))
+    const countItems = (prefix: string) => withOrgTransaction(org.orgId, async () => Number((await db.execute<{ n: string }>(sql`select count(*) n from items where org_id=${org.orgId} and code like ${`${prefix}-%`}`, 'objects'))[0]!.n))
 
     await t.test('duplicates across batch boundaries refuse approval with every source row identified', async () => {
       const job = await preview(await source('DUPLICATE', 251, true))
@@ -48,9 +48,9 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
       assert.match(job.preview.errors[0]!.message, /keep one record per natural key/)
       const evidence = await withOrgTransaction(org.orgId, () => db.execute<{ source: string; approval: string }>(sql`select
         evidence->>'sourceHash' as source,evidence->>'approvalHash' as approval from data_transfer_events
-        where org_id=${org.orgId} and job_id=${job.id} and action='preview-completed'`))
-      assert.ok(evidence.rows[0]!.source)
-      assert.equal(evidence.rows[0]!.approval, job.approvalHash, 'Approval evidence contains the hash that was actually published')
+        where org_id=${org.orgId} and job_id=${job.id} and action='preview-completed'`, 'objects'))
+      assert.ok(evidence[0]!.source)
+      assert.equal(evidence[0]!.approval, job.approvalHash, 'Approval evidence contains the hash that was actually published')
       await assert.rejects(withOrgTransaction(org.orgId, () => commandTransfer(authz, job.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! })), /clean preview.*correct the row errors/)
       assert.equal(await countItems('DUPLICATE'), 0)
     })
@@ -84,13 +84,13 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
         assert.equal(failed.outcome.created, 250)
         assert.match(failed.error ?? '', /batch was refused and rolled back.*retry from the stored checkpoint/)
         assert.equal(await countItems('CHECKPOINT'), 250)
-        const audit = await withOrgTransaction(org.orgId, () => db.execute<{ n: string }>(sql`select count(*) n from audit_log a join items i on i.org_id=a.org_id and i.id=a.row_id where a.org_id=${org.orgId} and a.table_name='items' and i.code like 'CHECKPOINT-%'`))
-        assert.equal(Number(audit.rows[0]!.n), 250)
+        const audit = await withOrgTransaction(org.orgId, () => db.execute<{ n: string }>(sql`select count(*) n from audit_log a join items i on i.org_id=a.org_id and i.id=a.row_id where a.org_id=${org.orgId} and a.table_name='items' and i.code like 'CHECKPOINT-%'`, 'objects'))
+        assert.equal(Number(audit[0]!.n), 250)
         committing = failed
       } finally { await withBypassContext(() => db.execute(sql`alter table items drop constraint transfer_test_refusal`)) }
       const retry = await withOrgTransaction(org.orgId, () => commandTransfer(authz, committing.id, { action: 'retry', revision: committing.revision }))
-      const retryHistory = await withOrgTransaction(org.orgId, () => db.execute<{ failed_count: number }>(sql`select failed_count from import_jobs where org_id=${org.orgId} and id=${retry.id}`))
-      assert.equal(retryHistory.rows[0]!.failed_count, 0, 'History exposes the new checkpoint rather than the refused batch outcome')
+      const retryHistory = await withOrgTransaction(org.orgId, () => db.execute<{ failed_count: number }>(sql`select failed_count from import_jobs where org_id=${org.orgId} and id=${retry.id}`, 'objects'))
+      assert.equal(retryHistory[0]!.failed_count, 0, 'History exposes the new checkpoint rather than the refused batch outcome')
       const complete = await run(retry)
       assert.equal(complete.state, 'completed', complete.error ?? '')
       assert.equal(complete.processedRows, 501)
@@ -99,8 +99,8 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
       const replay = await withOrgTransaction(org.orgId, () => commandTransfer(authz, complete.id, { action: 'commit', revision: job.revision, approvalHash: job.approvalHash! }))
       assert.equal(replay.id, complete.id)
       assert.equal(replay.state, 'completed')
-      const history = await withOrgTransaction(org.orgId, () => db.execute<{ status: string; created_count: number }>(sql`select status,created_count from import_jobs where org_id=${org.orgId} and id=${complete.id}`))
-      assert.deepEqual(history.rows[0], { status: 'committed', created_count: 501 })
+      const history = await withOrgTransaction(org.orgId, () => db.execute<{ status: string; created_count: number }>(sql`select status,created_count from import_jobs where org_id=${org.orgId} and id=${complete.id}`, 'objects'))
+      assert.deepEqual(history[0], { status: 'committed', created_count: 501 })
     })
 
     await t.test('revoked import authority reaches the operator and commits no records', async () => {
@@ -136,8 +136,8 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
     await t.test('tenant RLS hides job sources and source evidence cannot be rewritten', async () => {
       const job = await source('ISOLATED', 1)
       await assert.rejects(withOrgTransaction(other.orgId, () => loadTransfer(other.orgId, job.id)), /Transfer not found/)
-      const hidden = await withOrgTransaction(other.orgId, () => db.execute<{ n: string }>(sql`select count(*) n from data_transfer_chunks where job_id=${job.id}`))
-      assert.equal(Number(hidden.rows[0]!.n), 0)
+      const hidden = await withOrgTransaction(other.orgId, () => db.execute<{ n: string }>(sql`select count(*) n from data_transfer_chunks where job_id=${job.id}`, 'objects'))
+      assert.equal(Number(hidden[0]!.n), 0)
       const forged = await withOrgTransaction(other.orgId, async () => {
         await db.execute(sql`select set_config('app.bypass_rls','on',true)`)
         return db.execute<{ n: string }>(sql`select count(*) n from data_transfer_chunks where job_id=${job.id}`)
@@ -181,11 +181,11 @@ test('durable transfers preserve tenant boundaries, approvals and atomic checkpo
       const job = await withOrgTransaction(org.orgId, () => createTransfer({ ...authz, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }, {
         requestKey: randomUUID(), kind: 'export', resource: 'items', format: 'csv', filename: 'scoped-items.csv', bytes: 0, options: { columns: ['code'] },
       }))
-      const visible = (scope: ReadonlySet<string> | null) => withOrgTransaction(org.orgId, () => db.execute(sql`select id from data_transfer_jobs where org_id=${org.orgId} and id=${job.id} and ${transferMetadataScope(scope, sql`scope`)}`))
-      assert.equal((await visible(new Set([org.subsidiaryId]))).rows.length, 1)
-      assert.equal((await visible(new Set([other.subsidiaryId]))).rows.length, 0)
-      assert.equal((await visible(new Set())).rows.length, 0)
-      assert.equal((await visible(null)).rows.length, 1)
+      const visible = (scope: ReadonlySet<string> | null) => withOrgTransaction(org.orgId, () => db.execute(sql`select id from data_transfer_jobs where org_id=${org.orgId} and id=${job.id} and ${transferMetadataScope(scope, sql`scope`)}`, 'objects'))
+      assert.equal((await visible(new Set([org.subsidiaryId]))).length, 1)
+      assert.equal((await visible(new Set([other.subsidiaryId]))).length, 0)
+      assert.equal((await visible(new Set())).length, 0)
+      assert.equal((await visible(null)).length, 1)
     })
 
     await t.test('long imports yield a claim without publishing an incomplete approval', async () => {

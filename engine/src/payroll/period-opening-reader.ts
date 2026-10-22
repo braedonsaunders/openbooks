@@ -44,17 +44,17 @@ export async function payrollPeriodOpeningForEmployee(input: {
     }>(sql`select p.subsidiary_id as "subsidiaryId",ep.country,ep.pay_schedule_id as "assignedScheduleId"
       from parties p join employee_payroll_profiles ep on ep.org_id=p.org_id and ep.employee_party_id=p.id
       where p.org_id=${input.orgId} and p.id=${input.employeePartyId}
-      ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}`)).rows[0];
+      ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}`, 'objects'))[0];
     if (!employee) throw new PayrollError('The employee is unavailable in your payroll scope — return to the employee list');
     if (!employee.subsidiaryId) throw new PayrollError('Assign the employee to its native legal employer before recording period payments');
     const authority = await lockActorCommandAuthority(db, input.orgId, input.actorId, employee.subsidiaryId, 'payroll.read');
     const employer = (await db.execute<{ name: string; currency: string | null }>(sql`
       select s.name,s.base_currency as currency from subsidiaries s
       where s.org_id=${input.orgId} and s.id=${employee.subsidiaryId} and s.is_active
-      ${payrollSubsidiaryScopeFilter(sql`s.id`, authority)}`)).rows[0];
+      ${payrollSubsidiaryScopeFilter(sql`s.id`, authority)}`, 'objects'))[0];
     if (!employer?.currency) throw new PayrollError('Configure the active legal employer and its payroll currency in Company Settings');
     const available = (await db.execute<{ available: boolean }>(sql`
-      select to_regclass('public.payroll_period_openings') is not null as available`)).rows[0]?.available;
+      select to_regclass('public.payroll_period_openings') is not null as available`, 'objects'))[0]?.available;
     if (!available) throw new PayrollPeriodOpeningUnavailableError();
     const { payrollPack } = await import('./packs.ts');
     const treatment = payrollPack(employee.country).periodOpeningTreatment;
@@ -66,15 +66,15 @@ export async function payrollPeriodOpeningForEmployee(input: {
         amounts,annual_bounds as "annualBounds",contract_hash as "contractHash",revision,
         source_reference as "sourceReference",reason,updated_at::text as "updatedAt"
       from payroll_period_openings where org_id=${input.orgId}
-        and employee_party_id=${input.employeePartyId} and tax_year=${year}`)).rows[0] ?? null;
+        and employee_party_id=${input.employeePartyId} and tax_year=${year}`, 'objects'))[0] ?? null;
     const annual = (await db.execute<{ updatedAt: string }>(sql`
       select updated_at::text as "updatedAt" from payroll_opening_balances
-      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and tax_year=${year}`)).rows[0];
-    const schedules = (await db.execute<{ id: string; name: string }>(sql`
+      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and tax_year=${year}`, 'objects'))[0];
+    const schedules = await db.execute<{ id: string; name: string }>(sql`
       select id,name from pay_schedules where org_id=${input.orgId} and is_active
         and (subsidiary_id is null or subsidiary_id=${employee.subsidiaryId})
         and (${employee.assignedScheduleId}::uuid is null or id=${employee.assignedScheduleId}::uuid)
-      order by name,id`)).rows;
+      order by name,id`, 'objects');
     const currencies = (await organizationCurrencyOptions(db, input.orgId, new Set([employee.subsidiaryId])))
       .filter(option => option.scopeValue === null || option.scopeValue === employee.subsidiaryId)
       .map(({ value, label }) => ({ value, label }));

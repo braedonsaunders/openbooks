@@ -74,7 +74,7 @@ async function transitionWarehouse(
     if (!TRANSITION_FROM[verb].includes(before.status)) throw transitionRefusal(verb, before);
     if (verb === "retire") await assertWarehouseEmpty(tx, orgId, before);
     const target = TRANSITION_TARGET[verb];
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute<never>(sql`
       update warehouses
          set status = ${target}, status_changed_at = now(), status_changed_by = ${actorId},
              updated_at = now(), updated_by = ${actorId}
@@ -84,7 +84,7 @@ async function transitionWarehouse(
     }
     const after = (await tx.execute<WarehouseRecord>(sql`
       ${WAREHOUSE_SELECT}
-       where w.org_id = ${orgId} and w.stock_location_id = ${input.warehouseId}`)).rows[0]!;
+       where w.org_id = ${orgId} and w.stock_location_id = ${input.warehouseId}`, "objects"))[0]!;
     await writeWarehouseAudit(tx, orgId, actorId, input.warehouseId, "update", {
       event: "warehouse_status",
       reason,
@@ -144,7 +144,7 @@ export async function resolveDefaultWarehouse(
   // The designations table arrives with its migration; orgs that have not
   // installed it yet resolve the implicit default instead of failing.
   const installed = (await runner.execute<{ installed: boolean }>(sql`
-    select to_regclass('public.warehouse_defaults') is not null as installed`)).rows[0]?.installed;
+    select to_regclass('public.warehouse_defaults') is not null as installed`, "objects"))[0]?.installed;
   let designated: { warehouse_id: string } | undefined;
   if (installed) {
     designated = (await runner.execute<{ warehouse_id: string }>(sql`
@@ -154,7 +154,7 @@ export async function resolveDefaultWarehouse(
        and is_active
        and (subsidiary_id is null or subsidiary_id = ${subsidiaryId})
      order by subsidiary_id nulls last
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   }
   if (designated) {
     const usable = (await runner.execute<{ id: string }>(sql`
@@ -167,7 +167,7 @@ export async function resolveDefaultWarehouse(
          and sl.is_active
          and sl.kind = 'warehouse'
          and w.status = 'active'
-         ${ENTITY_VISIBLE_WAREHOUSES(orgId, subsidiaryId)}`)).rows[0];
+         ${ENTITY_VISIBLE_WAREHOUSES(orgId, subsidiaryId)}`, "objects"))[0];
     if (!usable) {
       throw new WarehouseRefusal(
         `the designated default warehouse is not an active warehouse visible to this legal entity — choose another default in Setup → Warehouse defaults`,
@@ -178,7 +178,7 @@ export async function resolveDefaultWarehouse(
     }
     return usable.id;
   }
-  const single = (await runner.execute<{ id: string }>(sql`
+  const single = await runner.execute<{ id: string }>(sql`
     select sl.id
       from stock_locations sl
       join locations l on l.id = sl.location_id and l.org_id = sl.org_id
@@ -187,7 +187,7 @@ export async function resolveDefaultWarehouse(
        and sl.is_active
        and sl.kind = 'warehouse'
        and w.status = 'active'
-       ${ENTITY_VISIBLE_WAREHOUSES(orgId, subsidiaryId)}`)).rows;
+       ${ENTITY_VISIBLE_WAREHOUSES(orgId, subsidiaryId)}`, "objects");
   return single.length === 1 ? single[0]!.id : null;
 }
 
@@ -218,10 +218,10 @@ export async function ensureDefaultWarehouse(
   if (resolved) return resolved;
   const total = (await runner.execute<{ n: string }>(sql`
     select count(*)::text as n from stock_locations
-     where org_id = ${orgId} and is_active and kind = 'warehouse'`)).rows[0];
+     where org_id = ${orgId} and is_active and kind = 'warehouse'`, "objects"))[0];
   if (Number(total?.n ?? "0") > 0) return null;
-  const locations = (await runner.execute<{ id: string; name: string; code: string | null }>(sql`
-    select id, name, code from locations where org_id = ${orgId} and is_active`)).rows;
+  const locations = await runner.execute<{ id: string; name: string; code: string | null }>(sql`
+    select id, name, code from locations where org_id = ${orgId} and is_active`, "objects");
   if (locations.length !== 1) return null;
   await assertWarehousingFeature(runner as Runner, orgId, { lock: true });
   const site = locations[0]!;
@@ -234,7 +234,7 @@ export async function ensureDefaultWarehouse(
       values (${orgId}, ${site.id}, ${code}, 'warehouse', true, ${actorId}, ${actorId})
       -- A code already taken is benign: the loop tries the next suffix.
       on conflict do nothing
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (inserted) {
       await runner.execute(sql`
         update warehouses
@@ -244,7 +244,7 @@ export async function ensureDefaultWarehouse(
          where org_id = ${orgId} and stock_location_id = ${inserted.id}`);
       const record = (await runner.execute<WarehouseRecord>(sql`
         ${WAREHOUSE_SELECT}
-         where w.org_id = ${orgId} and w.stock_location_id = ${inserted.id}`)).rows[0]!;
+         where w.org_id = ${orgId} and w.stock_location_id = ${inserted.id}`, "objects"))[0]!;
       await writeWarehouseAudit(runner, orgId, actorId, inserted.id, "insert", {
         event: "warehouse_created",
         source: "default",
@@ -265,7 +265,7 @@ export async function ensureDefaultWarehouse(
          and sl.code = ${code}
          and sl.is_active
          and w.status = 'active'
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (winner) return winner.id;
   }
   return null;

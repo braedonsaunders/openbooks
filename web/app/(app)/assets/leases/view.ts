@@ -40,8 +40,8 @@ export async function loadLeasesPage(
   await requireFeatureEnabled(orgId, 'fixedAssets')
   const allowed = await allowedSubsidiaryIds(auth.user.id, orgId)
   const [accounts, subsidiaries, payload, t] = await Promise.all([
-    db.execute<Option>(sql`select id as value,number||' · '||name as label from accounts where org_id=${orgId} and is_active and not is_summary order by number`),
-    db.execute<Option>(sql`select id as value,name as label from subsidiaries s where org_id=${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`s.id`, allowed)} order by name`),
+    db.execute<Option>(sql`select id as value,number||' · '||name as label from accounts where org_id=${orgId} and is_active and not is_summary order by number`, 'objects'),
+    db.execute<Option>(sql`select id as value,name as label from subsidiaries s where org_id=${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`s.id`, allowed)} order by name`, 'objects'),
     typeof sp.lease === 'string' && isUuid(sp.lease)
       ? loadLease(orgId, sp.lease, allowed)
       : Promise.resolve(null),
@@ -59,14 +59,14 @@ export async function loadLeasesPage(
     }),
     currentParams: sp,
     canManage,
-    accounts: accounts.rows,
-    subsidiaries: subsidiaries.rows,
+    accounts,
+    subsidiaries,
     drawer: payload ? {
       remountKey: payload.lease.id,
       payload,
       canManage,
-      accounts: accounts.rows,
-      subsidiaries: subsidiaries.rows,
+      accounts,
+      subsidiaries,
       closeHref: mergeHref('/assets/leases', sp, { lease: undefined }),
     } : null,
   }

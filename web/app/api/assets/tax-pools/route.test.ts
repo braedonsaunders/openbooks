@@ -109,30 +109,31 @@ const mockSources = new Map<string, string>([
         return text.match(/where id = '?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)?.[1] ?? null
       }
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes('from accounting_books')) {
             const requestedBookId = whereId(text)
             if (requestedBookId) {
-              return state.explicitBookExists ? { rows: [{ id: requestedBookId }] } : { rows: [] }
+              return inMode(await (state.explicitBookExists ? { rows: [{ id: requestedBookId }] } : { rows: [] }))
             }
-            return { rows: [{ id: 'book-1' }] }
+            return inMode({ rows: [{ id: 'book-1' }] })
           }
           if (text.includes('from tax_pool_periods')) {
-            return { rows: [{ tax_year: '2026', class_code: '8', regime: 'ca_cca' }] }
+            return inMode({ rows: [{ tax_year: '2026', class_code: '8', regime: 'ca_cca' }] })
           }
           if (text.includes('from subsidiaries')) {
             if (text.includes('is_elimination')) {
               // Subsidiary-context load: the elder sibling sorts first so
               // only a parent-null (root) default passes the pin below.
-              return { rows: [
+              return inMode({ rows: [
                 { id: 'sub-elder', parentId: 'sub-root', name: 'Elder', baseCurrency: 'CAD', isElimination: false, isActive: true },
                 { id: 'sub-root', parentId: null, name: 'Root', baseCurrency: 'CAD', isElimination: false, isActive: true },
-              ] }
+              ] })
             }
-            if (!state.explicitSubsidiaryExists) return { rows: [] }
-            return { rows: [{ id: whereId(text) ?? SUB_VISIBLE }] }
+            if (!state.explicitSubsidiaryExists) return inMode({ rows: [] })
+            return inMode({ rows: [{ id: whereId(text) ?? SUB_VISIBLE }] })
           }
           throw new Error('unexpected database query: ' + text)
         },

@@ -31,15 +31,15 @@ async function qualifyCanadianOpening(fx: AdoptionFixture, amounts: Record<strin
     taxYear: 2026, amounts, ...facts, allocations }));
   const sourceSha256 = createHash("sha256").update(bytes).digest("hex");
   assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
-    values(${folderId},${fx.orgId},'Original Canadian opening report',true,${fx.actorId},${fx.actorId},${fx.actorId}) returning id`)).rows.length, 1);
+    values(${folderId},${fx.orgId},'Original Canadian opening report',true,${fx.actorId},${fx.actorId},${fx.actorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
-    values(${sourceFileId},${fx.orgId},${folderId},'original-opening.json','application/json',${bytes.length},${fx.actorId},${fx.actorId}) returning id`)).rows.length, 1);
+    values(${sourceFileId},${fx.orgId},${folderId},'original-opening.json','application/json',${bytes.length},${fx.actorId},${fx.actorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-    values(${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId}) returning id`)).rows.length, 1);
+    values(${sourceVersionId},${sourceFileId},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId}) returning id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes)
-    values(${sourceVersionId},${bytes}) returning version_id`)).rows.length, 1);
+    values(${sourceVersionId},${bytes}) returning version_id`, "objects")).length, 1);
   assert.equal((await db.execute(sql`update files set current_version_id=${sourceVersionId}
-    where org_id=${fx.orgId} and id=${sourceFileId} returning id`)).rows.length, 1);
+    where org_id=${fx.orgId} and id=${sourceFileId} returning id`, "objects")).length, 1);
   const contextInput = { orgId: fx.orgId, actorId: fx.actorId, employeePartyId: fx.employeeId,
     taxYear: 2026, sourceFileId, allowedSubsidiaryIds: null };
   const employer = await readOpeningEmployerContext(contextInput);
@@ -104,10 +104,10 @@ test(
         assert.equal(refused.errors[0]!.kind, "refusal");
         assert.match(refused.errors[0]!.message, /opening.*(source|legal-employer|qualif)/i);
         assert.equal((await db.execute(sql`select id from pay_stubs
-          where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`)).rows.length, 0);
+          where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`, "objects")).length, 0);
         await assert.rejects(commitPayRun(input), /refused|no calculated stubs/);
-        assert.deepEqual((await db.execute<{ status: string }>(sql`select run_status as status from pay_runs
-          where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows, [{ status: "calculated" }]);
+        assert.deepEqual(await db.execute<{ status: string }>(sql`select run_status as status from pay_runs
+          where org_id=${fx.orgId} and document_id=${input.documentId}`, "objects"), [{ status: "calculated" }]);
 
         const packet = await qualifyCanadianOpening(fx, amounts);
         assert.ok((await payRunStaleness(fx.orgId, input.documentId)).reasons.includes("openingBalances"));
@@ -174,7 +174,7 @@ test(
       await db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId} where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
       const precheck = (await db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id from parties where org_id = ${fx.orgId} and id = ${fx.employeeId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(precheck?.subsidiary_id, fx.subsidiaryId, "the route precheck sees the employee in scope");
 
       // Both statements autocommit: the move lands after the precheck and
@@ -189,8 +189,8 @@ test(
       }), (error: unknown) => error instanceof ScopeNotFoundError);
       const stored = await db.execute(sql`
         select 1 from payroll_opening_balances where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}
-      `);
-      assert.equal(stored.rows.length, 0, "the out-of-scope carry-in writes no balance row");
+      `, "objects");
+      assert.equal(stored.length, 0, "the out-of-scope carry-in writes no balance row");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -214,8 +214,8 @@ test(
         delete from pay_stub_lines where org_id = ${fx.orgId} and stub_id in (
           select id from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId})`);
       const removed = await db.execute(sql`
-        delete from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId} returning id`);
-      assert.equal(removed.rows.length, 1);
+        delete from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId} returning id`, "objects");
+      assert.equal(removed.length, 1);
       await db.execute(sql`
         update pay_runs set calculation_errors = ${JSON.stringify([{
           employeePartyId: fx.employeeId, employee: "Refused employee", kind: "refusal",

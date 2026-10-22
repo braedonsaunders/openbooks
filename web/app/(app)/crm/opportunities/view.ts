@@ -91,7 +91,7 @@ export async function loadOpportunities(
         select id, key, name, sequence, probability, default_forecast_category, is_closed, is_won
           from crm_opportunity_statuses
          where org_id = ${authz.user.orgId} and is_active
-         order by sequence`),
+         order by sequence`, 'objects'),
       db.execute<{
         id: string
         opportunity_number: string
@@ -140,10 +140,10 @@ export async function loadOpportunities(
            ${boardOwnerUserId ? sql`and o.owner_user_id = ${boardOwnerUserId}` : sql``}
            ${boardSalesTeamId ? sql`and o.sales_team_id = ${boardSalesTeamId}` : sql``}
          order by o.expected_close_date nulls last, o.created_at desc
-    `),
+    `, 'objects'),
     ])
 
-    const kanbanStatuses: KanbanStatus[] = statusesResult.rows.map((row) => ({
+    const kanbanStatuses: KanbanStatus[] = statusesResult.map((row) => ({
       id: row.id,
       key: row.key,
       name: row.name,
@@ -154,7 +154,7 @@ export async function loadOpportunities(
       isWon: row.is_won,
     }))
 
-    const kanbanOpportunities: KanbanOpportunity[] = opportunitiesResult.rows.map((row) => {
+    const kanbanOpportunities: KanbanOpportunity[] = opportunitiesResult.map((row) => {
       const activeTimestamp = row.last_activity_at || row.updated_at
       const isStagnant =
         activeTimestamp ? new Date(activeTimestamp).getTime() < fourteenDaysAgo : false
@@ -203,12 +203,12 @@ export async function loadOpportunities(
     ])
     const [open, statuses, owners, accounts, contacts, teams, sources, items, currencies, representatives] = await Promise.all([
       loadOpportunity(openId, authz.user.orgId, authz.allowedSubsidiaryIds),
-      (db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`)),
-      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`)),
-      (db.execute(sql`select c.id,c.party_id,c.name from contacts c left join parties p on p.id=c.party_id and p.org_id=c.org_id where c.org_id=${authz.user.orgId} and c.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by c.name`)),
-      (db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`)),
-      (db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`)),
+      (db.execute(sql`select * from crm_opportunity_statuses where org_id=${authz.user.orgId} and is_active order by sequence`, 'objects')),
+      (db.execute(sql`select id,name from users where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
+      (db.execute(sql`select p.id,p.display_name name from crm_account_profiles cp join parties p on p.id=cp.party_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`, 'objects')),
+      (db.execute(sql`select c.id,c.party_id,c.name from contacts c left join parties p on p.id=c.party_id and p.org_id=c.org_id where c.org_id=${authz.user.orgId} and c.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by c.name`, 'objects')),
+      (db.execute(sql`select id,name from crm_sales_teams where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
+      (db.execute(sql`select id,name from crm_lead_sources where org_id=${authz.user.orgId} and is_active order by name`, 'objects')),
       (db.execute(sql`
         select id, concat_ws(' · ', code, name) name from items
          where org_id = ${authz.user.orgId} and is_active
@@ -220,11 +220,11 @@ export async function loadOpportunities(
                 where org_id = ${authz.user.orgId} and opportunity_id = ${openId} and item_id is not null
              )
            )
-         order by name`)),
+         order by name`, 'objects')),
       multiCurrency
-        ? db.execute<ElementOf<OpportunityDrawerProps['currencies']>>(sql`select code,name from currencies order by code`)
-        : Promise.resolve({ rows: [] }),
-      db.execute(sql`select p.id,p.display_name as name from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id where e.org_id=${authz.user.orgId} and e.is_sales_rep and e.is_active and p.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`),
+        ? db.execute<ElementOf<OpportunityDrawerProps['currencies']>>(sql`select code,name from currencies order by code`, 'objects')
+        : Promise.resolve([]),
+      db.execute(sql`select p.id,p.display_name as name from employee_roles e join parties p on p.id=e.party_id and p.org_id=e.org_id where e.org_id=${authz.user.orgId} and e.is_sales_rep and e.is_active and p.is_active${crmSharedScope(sql`p.subsidiary_id`,authz.allowedSubsidiaryIds)} order by p.display_name`, 'objects'),
     ])
     const requestedReturn = pickString(sp.drawerReturn)
     const closeHref = requestedReturn?.startsWith('/crm/opportunities')
@@ -237,15 +237,15 @@ export async function loadOpportunities(
         // props into A's dirty form.
         remountKey: openId,
         data: open as unknown as OpportunityDrawerProps['data'],
-        statuses: statuses.rows as unknown as OpportunityDrawerProps['statuses'],
-        representatives: representatives.rows as unknown as OpportunityDrawerProps['representatives'],
-        owners: owners.rows as unknown as OpportunityDrawerProps['owners'],
-        accounts: accounts.rows as unknown as OpportunityDrawerProps['accounts'],
-        contacts: contacts.rows as unknown as OpportunityDrawerProps['contacts'],
-        teams: teams.rows as unknown as OpportunityDrawerProps['teams'],
-        sources: sources.rows as unknown as OpportunityDrawerProps['sources'],
-        items: items.rows as unknown as OpportunityDrawerProps['items'],
-        currencies: currencies.rows as unknown as OpportunityDrawerProps['currencies'],
+        statuses: statuses as unknown as OpportunityDrawerProps['statuses'],
+        representatives: representatives as unknown as OpportunityDrawerProps['representatives'],
+        owners: owners as unknown as OpportunityDrawerProps['owners'],
+        accounts: accounts as unknown as OpportunityDrawerProps['accounts'],
+        contacts: contacts as unknown as OpportunityDrawerProps['contacts'],
+        teams: teams as unknown as OpportunityDrawerProps['teams'],
+        sources: sources as unknown as OpportunityDrawerProps['sources'],
+        items: items as unknown as OpportunityDrawerProps['items'],
+        currencies: currencies as unknown as OpportunityDrawerProps['currencies'],
         closeHref,
         canManage: manage,
         multiCurrency,

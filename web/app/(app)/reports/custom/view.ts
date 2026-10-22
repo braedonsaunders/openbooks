@@ -178,21 +178,21 @@ export async function loadCustomReports(
        -- conformance harness caught it as two runs disagreeing about which
        -- report came first.
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, id asc
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
+       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`, 'objects'),
     db.execute<{ kind: string; n: string }>(sql`
       select kind, count(*) as n from report_definitions
-       where org_id = ${authz.user.orgId} and archived_at is null${visible} group by kind`),
-    db.execute<{ n: string }>(sql`select count(*) as n from report_definitions where ${where}`),
+       where org_id = ${authz.user.orgId} and archived_at is null${visible} group by kind`, 'objects'),
+    db.execute<{ n: string }>(sql`select count(*) as n from report_definitions where ${where}`, 'objects'),
   ])
 
-  const total = counts.rows.reduce((a, r) => a + Number(r.n), 0)
+  const total = counts.reduce((a, r) => a + Number(r.n), 0)
 
   return {
     title: t('list.title'),
     description: t('list.description'),
     searchPlaceholder: t('list.searchPlaceholder'),
     kindFilterLabel: t('list.kindFilterLabel'),
-    kindOptions: counts.rows.map((r) => ({
+    kindOptions: counts.map((r) => ({
       value: r.kind,
       label: r.kind === 'built_in' ? t('kind.builtIn') : t('kind.custom'),
       count: Number(r.n),
@@ -207,7 +207,7 @@ export async function loadCustomReports(
     columnKind: t('list.columns.kind'),
     columnUpdated: tc('labels.updated'),
     columnActions: tc('labels.actions'),
-    rows: defs.rows.map((d) => {
+    rows: defs.map((d) => {
       const row = d as { id: string; kind: string; slug: string; name: string; description: string | null }
       return {
         id: String(d.id),
@@ -221,7 +221,7 @@ export async function loadCustomReports(
         updated: String(d.updated_at).slice(0, 10),
       }
     }),
-    total: Number(filtered.rows[0]?.n ?? 0),
+    total: Number(filtered[0]?.n ?? 0),
     currentPage: params.page,
     perPage: params.perPage,
     sort: params.sort,

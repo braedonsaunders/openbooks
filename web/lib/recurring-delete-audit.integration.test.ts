@@ -76,8 +76,8 @@ async function seedSchedule(withOccurrence: boolean): Promise<Seed> {
 }
 
 async function auditRows(orgId: string, rowId: string): Promise<Array<{ action: string; changes: unknown }>> {
-  return (await db.execute<{ action: string; changes: unknown }>(sql`select action, changes from audit_log
-    where org_id=${orgId} and table_name='recurring_schedules' and row_id=${rowId} order by at`)).rows;
+  return await db.execute<{ action: string; changes: unknown }>(sql`select action, changes from audit_log
+    where org_id=${orgId} and table_name='recurring_schedules' and row_id=${rowId} order by at`, "objects");
 }
 
 test("deleting a missing schedule reports not found and writes no audit", async () => {
@@ -101,7 +101,7 @@ test("deleting a schedule with generated documents refuses and deletes nothing",
     assert.equal(body.code, "generated_documents_exist");
     assert.match(body.error, /generated documents exist/, "the refusal names what blocks it");
     const remaining = (await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules
-      where org_id=${orgId} and id=${schedule}`)).rows[0]!.n;
+      where org_id=${orgId} and id=${schedule}`, "objects"))[0]!.n;
     assert.equal(remaining, 1, "the refused delete removes nothing");
     assert.deepEqual((await auditRows(orgId, schedule)).map((row) => row.action), [],
       "the refused delete audits nothing");
@@ -116,7 +116,7 @@ test("deleting a clean schedule removes it and audits the before state", async (
     assert.equal(response.status, 200);
     assert.deepEqual(await response.json(), { ok: true });
     const remaining = (await db.execute<{ n: number }>(sql`select count(*)::int as n from recurring_schedules
-      where org_id=${orgId} and id=${schedule}`)).rows[0]!.n;
+      where org_id=${orgId} and id=${schedule}`, "objects"))[0]!.n;
     assert.equal(remaining, 0, "the schedule row is gone");
     const audits = await auditRows(orgId, schedule);
     assert.equal(audits.length, 1, "exactly one audit row explains the disappearance");
@@ -135,7 +135,7 @@ test("run now attributes the generated document to the authenticated caller", as
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     const generated = (await response.json()) as { documentId: string };
     const row = (await db.execute<{ createdBy: string }>(sql`select created_by as "createdBy" from documents
-      where org_id=${orgId} and id=${generated.documentId}`)).rows[0]!;
+      where org_id=${orgId} and id=${generated.documentId}`, "objects"))[0]!;
     assert.equal(row.createdBy, actor, "the run records who ran it, and the template stays untouched");
     assert.notEqual(generated.documentId, template);
   } finally { state.user = null; await dropScratchOrg(orgId); }

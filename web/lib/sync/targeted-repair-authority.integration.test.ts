@@ -30,7 +30,7 @@ test("bounded source repair refuses unauthorized, inactive and restricted actors
     const command = () => withOrgContext(org.orgId, () => requestConnectionRun({ orgId: org.orgId, userId: actor }, connectionId,
       "targeted_repair", { sourceRefs: ["722205"] }));
     const before = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from sync_runs where org_id=${org.orgId}`))).rows[0]!.n;
+      select count(*)::text as n from sync_runs where org_id=${org.orgId}`, "objects")))[0]!.n;
     assert.equal((await command()).status, 403, "a current local user without sync.run cannot enqueue");
     await withBypassContext(() => grantScratchPermissions(org.orgId, actor, ["sync.run"]));
     await withBypassContext(() => db.execute(sql`
@@ -47,10 +47,10 @@ test("bounded source repair refuses unauthorized, inactive and restricted actors
       "targeted_repair", { sourceRefs: ["722205"] }));
     assert.equal(missing.status, 404);
     const after = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from sync_runs where org_id=${org.orgId}`))).rows[0]!.n;
+      select count(*)::text as n from sync_runs where org_id=${org.orgId}`, "objects")))[0]!.n;
     assert.equal(after, before, "authority refusals create no sync run or cursor transition");
     const connection = (await withBypassContext(() => db.execute<{ status: string; cursor: unknown; mirrorEnabled: boolean }>(sql`
-      select status,cursor,mirror_enabled as "mirrorEnabled" from connections where org_id=${org.orgId} and id=${connectionId}`))).rows[0]!;
+      select status,cursor,mirror_enabled as "mirrorEnabled" from connections where org_id=${org.orgId} and id=${connectionId}`, "objects")))[0]!;
     assert.deepEqual(connection, { status: "paused", cursor: null, mirrorEnabled: false });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

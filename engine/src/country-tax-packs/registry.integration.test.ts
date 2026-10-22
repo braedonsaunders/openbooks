@@ -55,25 +55,25 @@ for (const { selections, reportLines } of GROUPS) {
       const readState = () => withOrgContext(target.orgId, async () => {
         const forms = (await db.execute(sql`
           select code from tax_return_forms where org_id = ${target.orgId} and code in (${inList(selections)})
-        `)).rows as Array<{ code: string }>;
+        `, "objects")) as Array<{ code: string }>;
         const codes = (await db.execute(sql`
           select code.code, count(rate.id)::int as "rateCount"
             from tax_codes code
             left join tax_rates rate on rate.org_id = code.org_id and rate.tax_code_id = code.id
            where code.org_id = ${target.orgId}
            group by code.id, code.code
-        `)).rows as Array<{ code: string; rateCount: number }>;
+        `, "objects")) as Array<{ code: string; rateCount: number }>;
         const manifests = (await db.execute(sql`
           select pack_code as "packCode", version, status,
                  manifest->'completeness'->>'standardRates' as "standardRates"
             from tax_country_pack_installations
            where org_id = ${target.orgId} and pack_code in (${inList(packs.map((pack) => pack.code))})
-        `)).rows as Array<{ packCode: string; version: string; status: string; standardRates: string }>;
+        `, "objects")) as Array<{ packCode: string; version: string; status: string; standardRates: string }>;
         const counts = (await db.execute(sql`
           select
             (select count(*)::int from tax_registrations where org_id = ${target.orgId} and is_active) as registrations,
             (select count(*)::int from tax_report_lines where org_id = ${target.orgId} and report_code in (${inList(selections)})) as lines
-        `)).rows[0] as { registrations: number; lines: number };
+        `, "objects"))[0] as { registrations: number; lines: number };
         return {
           forms: forms.map((row) => row.code).sort(),
           codes: codes.map((row) => [row.code, row.rateCount]).sort(byFirst),

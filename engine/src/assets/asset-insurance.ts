@@ -60,7 +60,7 @@ function normalizePolicy(input: InsurancePolicyInput) {
 }
 
 async function assertInsurer(tx: SqlExecutor, orgId: string, partyId: string): Promise<void> {
-  const party = (await tx.execute(sql`select 1 from parties where org_id = ${orgId} and id = ${partyId}`)).rows[0];
+  const party = (await tx.execute(sql`select 1 from parties where org_id = ${orgId} and id = ${partyId}`, "objects"))[0];
   if (!party) refuse("insurer_invalid", "the insurer does not exist in this organization");
 }
 
@@ -75,7 +75,7 @@ async function lockPolicy(
            coverage_ends_on::text as coverage_ends_on from asset_insurance_policies
      where org_id = ${orgId} and id = ${policyId}
        ${allowed ? sql`and subsidiary_id = any(${uuidArray([...allowed])}::uuid[])` : sql``}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!row) refuse("policy_not_found", "insurance policy not found", { status: 404 });
   return row;
 }
@@ -99,7 +99,7 @@ export async function createInsurancePolicy(
       const tx: SqlExecutor = db;
       await assertAssetAccess(tx, { orgId, actorId: options.actorId, permission: "assets.maintain", feature: "assetInsurance", subsidiaryIds: [input.subsidiaryId] });
       const subsidiary = (await tx.execute<{ base_currency: string }>(sql`
-        select base_currency from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId} and is_active and not is_elimination`)).rows[0];
+        select base_currency from subsidiaries where org_id = ${orgId} and id = ${input.subsidiaryId} and is_active and not is_elimination`, "objects"))[0];
       if (!subsidiary) refuse("subsidiary_invalid", "choose an active legal entity");
       await assertInsurer(tx, orgId, input.insurerPartyId);
       const row = (await tx.execute<{ id: string }>(sql`
@@ -110,7 +110,7 @@ export async function createInsurancePolicy(
           (${orgId}, ${input.subsidiaryId}, ${input.insurerPartyId}, ${policy.policyNumber}, ${policy.description},
            ${policy.coverageStartsOn}, ${policy.coverageEndsOn}, ${policy.premium}, ${policy.deductible},
            ${subsidiary.base_currency}, ${policy.renewalLeadDays}, ${input.renewsPolicyId ?? null}, ${options.actorId}, ${options.actorId})
-        returning id`)).rows[0];
+        returning id`, "objects"))[0];
       if (!row) throw new Error("the insurance policy was not stored");
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -151,7 +151,7 @@ export async function updateInsurancePolicy(
                updated_by = ${options.actorId}
          where org_id = ${orgId} and id = ${policyId}
          returning *, updated_at::text as updated_at, coverage_starts_on::text as coverage_starts_on,
-                   coverage_ends_on::text as coverage_ends_on`)).rows[0];
+                   coverage_ends_on::text as coverage_ends_on`, "objects"))[0];
       if (!after) throw new Error("the insurance policy was not updated; no row changed");
       if (before.coverage_ends_on !== after.coverage_ends_on || before.renewal_lead_days !== after.renewal_lead_days) {
         // A new expiry or lead time is a new renewal ladder.
@@ -193,7 +193,7 @@ export async function renewInsurancePolicy(
     const source = await lockPolicy(tx, orgId, args.policyId, args.allowedSubsidiaryIds);
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.maintain", feature: "assetInsurance", subsidiaryIds: [source.subsidiary_id] });
     const existing = (await tx.execute(sql`
-      select 1 from asset_insurance_policies where org_id = ${orgId} and renews_policy_id = ${args.policyId} and status = 'active' limit 1`)).rows[0];
+      select 1 from asset_insurance_policies where org_id = ${orgId} and renews_policy_id = ${args.policyId} and status = 'active' limit 1`, "objects"))[0];
     if (existing) refuse("policy_already_renewed", `policy ${source.policy_number} already has an active renewal`, { status: 409 });
     const created = await createInsurancePolicy(orgId, {
       subsidiaryId: source.subsidiary_id,
@@ -232,25 +232,25 @@ export async function setInsuranceCoverage(
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.maintain", feature: "assetInsurance", subsidiaryIds: [policy.subsidiary_id] });
     if (policy.status !== "active") refuse("policy_cancelled", `policy ${policy.policy_number} is cancelled`);
     const asset = (await tx.execute<{ asset_number: string; subsidiary_id: string; status: string }>(sql`
-      select asset_number, subsidiary_id, status from fixed_assets where org_id = ${orgId} and id = ${args.assetId} for share`)).rows[0];
+      select asset_number, subsidiary_id, status from fixed_assets where org_id = ${orgId} and id = ${args.assetId} for share`, "objects"))[0];
     if (!asset) refuse("asset_not_found", "asset not found", { status: 404 });
     if (asset.subsidiary_id !== policy.subsidiary_id) {
       refuse("coverage_cross_subsidiary", `asset ${asset.asset_number} belongs to a different legal entity than the policy`);
     }
     if (asset.status === "disposed" || asset.status === "written_off") refuse("asset_not_live", `asset ${asset.asset_number} is ${asset.status}`);
     const before = (await tx.execute<Record<string, unknown>>(sql`
-      select * from asset_insurance_coverages where org_id = ${orgId} and policy_id = ${args.policyId} and asset_id = ${args.assetId} for update`)).rows[0] ?? null;
+      select * from asset_insurance_coverages where org_id = ${orgId} and policy_id = ${args.policyId} and asset_id = ${args.assetId} for update`, "objects"))[0] ?? null;
     const row = before
       ? (await tx.execute<{ id: string }>(sql`
           update asset_insurance_coverages
              set insured_value = ${insuredValue}, replacement_value = ${replacementValue},
                  updated_at = clock_timestamp(), updated_by = ${args.actorId}
            where org_id = ${orgId} and id = ${String(before.id)}
-           returning id`)).rows[0]
+           returning id`, "objects"))[0]
       : (await tx.execute<{ id: string }>(sql`
           insert into asset_insurance_coverages (org_id, policy_id, asset_id, insured_value, replacement_value, created_by, updated_by)
           values (${orgId}, ${args.policyId}, ${args.assetId}, ${insuredValue}, ${replacementValue}, ${args.actorId}, ${args.actorId})
-          returning id`)).rows[0];
+          returning id`, "objects"))[0];
     if (!row) throw new Error("the coverage was not stored; no row changed");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -272,7 +272,7 @@ export async function removeInsuranceCoverage(
     await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.maintain", feature: "assetInsurance", subsidiaryIds: [policy.subsidiary_id] });
     const removed = (await tx.execute<Record<string, unknown>>(sql`
       delete from asset_insurance_coverages where org_id = ${orgId} and policy_id = ${args.policyId} and asset_id = ${args.assetId}
-      returning *`)).rows[0];
+      returning *`, "objects"))[0];
     if (!removed) refuse("coverage_not_found", "the asset is not on this policy", { status: 404 });
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -300,7 +300,7 @@ export async function insuredValueComparison(
   orgId: string,
   args: { allowedSubsidiaryIds?: readonly string[] | null; policyId?: string | null; asOf: string },
 ): Promise<InsuredValueRow[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     policy_id: string; policy_number: string; currency: string; asset_id: string; asset_number: string; asset_name: string;
     insured_value: string; replacement_value: string | null; carrying_value: string | null;
   }>(sql`
@@ -316,7 +316,7 @@ export async function insuredValueComparison(
        and p.coverage_starts_on <= ${args.asOf} and p.coverage_ends_on >= ${args.asOf}
        ${args.policyId ? sql`and p.id = ${args.policyId}` : sql``}
        ${args.allowedSubsidiaryIds ? sql`and p.subsidiary_id = any(${uuidArray([...args.allowedSubsidiaryIds])}::uuid[])` : sql``}
-     order by p.policy_number, a.asset_number`)).rows;
+     order by p.policy_number, a.asset_number`, "objects");
   return rows.map((row) => {
     const nbv = add(row.carrying_value ?? "0", "0");
     const comparison = insuredValueStanding(row.insured_value, nbv);
@@ -349,7 +349,7 @@ export async function runInsuranceRenewalScan(_now: Date): Promise<{ orgId: stri
       if (!(await lockAndCheckOrgFeature(tx, orgId, "assetInsurance"))) return 0;
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"asset-insurance-alerts:" + orgId}, 0))`);
       const today = await businessToday(orgId);
-      const policies = (await tx.execute<{
+      const policies = await tx.execute<{
         id: string; subsidiary_id: string; policy_number: string; coverage_ends_on: string; renewal_lead_days: number; insurer: string | null;
       }>(sql`
         select p.id, p.subsidiary_id, p.policy_number, p.coverage_ends_on::text as coverage_ends_on, p.renewal_lead_days,
@@ -359,7 +359,7 @@ export async function runInsuranceRenewalScan(_now: Date): Promise<{ orgId: stri
          where p.org_id = ${orgId} and p.status = 'active' and p.coverage_ends_on >= ${today}::date - 1
            and not exists (select 1 from asset_insurance_policies r
                             where r.org_id = p.org_id and r.renews_policy_id = p.id and r.status = 'active')
-         order by p.coverage_ends_on, p.id`)).rows;
+         order by p.coverage_ends_on, p.id`, "objects");
       let count = 0;
       for (const policy of policies) {
         const reached = reachedRenewalLeads(today, policy.coverage_ends_on, policy.renewal_lead_days);
@@ -370,7 +370,7 @@ export async function runInsuranceRenewalScan(_now: Date): Promise<{ orgId: stri
             insert into asset_insurance_alerts (org_id, policy_id, lead_days) values (${orgId}, ${policy.id}, ${lead})
             -- Each rung notifies once; a repeat scan finds the row and stays quiet.
             on conflict (org_id, policy_id, lead_days) do nothing
-            returning id`)).rows[0];
+            returning id`, "objects"))[0];
           if (inserted) fresh = true;
         }
         if (!fresh) continue;

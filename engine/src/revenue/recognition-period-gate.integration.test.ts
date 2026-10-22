@@ -70,8 +70,8 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 
 async function journalCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`));
-  return r.rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  return r[0]!.n;
 }
 
 async function seedDueLine(
@@ -82,7 +82,7 @@ async function seedDueLine(
   const ruleId = randomUUID(), contractId = randomUUID(), oblId = randomUUID();
   const accounts = (await db.execute<{ deferred: string; recognized: string }>(sql`
     select (select id from accounts where org_id = ${org.orgId} and number = '2200') as deferred,
-           (select id from accounts where org_id = ${org.orgId} and number = '4010') as recognized`)).rows[0]!;
+           (select id from accounts where org_id = ${org.orgId} and number = '4010') as recognized`, "objects"))[0]!;
   await db.execute(sql`insert into recognition_rules
     (id,org_id,code,name,method,is_forecast,recognition_periods,start_date_source,end_date_source,period_offset,start_offset_days,initial_amount_percent,deferred_account_id,recognized_account_id,is_active)
     values (${ruleId},${org.orgId},${`F2R-${tag}`},${`F2 revenue rule ${tag}`},'straight_line_even',false,1,'contract','contract',0,0,'0',${accounts.deferred},${accounts.recognized},true)`);
@@ -101,8 +101,8 @@ async function seedRecognitionTermPeriods(org: ScratchOrg): Promise<void> {
   const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
     select fiscal_calendar_id
       from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`);
-  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
+  const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
     [2026, 8, "2026-08-01", "2026-08-31"],
@@ -190,7 +190,7 @@ test("open period: the runner still posts (setup can post, refusal is load-beari
              (select array_agg(l.memo order by l.line_number) from journal_lines l
                where l.org_id = e.org_id and l.entry_id = e.id) as line_memos
         from journal_entries e
-       where e.org_id = ${org.orgId} and e.id = ${run.entries[0]!.entryId}`)).rows[0]!;
+       where e.org_id = ${org.orgId} and e.id = ${run.entries[0]!.entryId}`, "objects"))[0]!;
     assert.equal(posted.memo, "Revenue recognition — F2 revenue obl open (P07 FY2026)");
     assert.deepEqual(posted.line_memos, ["Revenue recognition P07 FY2026", "Revenue recognition P07 FY2026"]);
     assert.match(posted.entry_number, /^REV-F2R-C-open-2026-07-/);

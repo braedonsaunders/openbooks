@@ -51,8 +51,8 @@ export async function loadPublishedInsightCards(orgId: string): Promise<LibraryC
       from insight_cards
      where org_id = ${orgId} and status = 'published' and ${insightVisibilitySql(authz)}
      order by name asc
-  `)))
-  return res.rows as LibraryCard[]
+  `, 'objects')))
+  return res as LibraryCard[]
 }
 
 async function loadInsightCardNodes(
@@ -74,9 +74,9 @@ async function loadInsightCardNodes(
       from insight_cards
      where org_id = ${orgId} and id = any(${`{${uuidIds.join(',')}}`}::uuid[])
        and status = 'published' and ${insightVisibilitySql(authz)}
-  `)
+  `, 'objects')
   const nodes: Record<string, React.ReactNode> = {}
-  for (const row of res.rows) {
+  for (const row of res) {
     const data: CardTileData = {
       id: row.id,
       name: row.name,

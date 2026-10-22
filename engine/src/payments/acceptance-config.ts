@@ -301,8 +301,8 @@ export async function saveAcceptanceConfig(
                 publishable_key, surcharge_rule_id, settings, secrets,
                 default_disputed_funds_account_id, default_chargeback_loss_account_id,
                 default_dispute_fee_account_id
-    `);
-    const saved = savedRows.rows[0];
+    `, "objects");
+    const saved = savedRows[0];
     if (!saved)
       throw new PaymentAcceptanceError("provider config failed to persist");
     await tx.execute(sql`

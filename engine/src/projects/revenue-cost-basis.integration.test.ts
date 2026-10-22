@@ -48,7 +48,7 @@ async function snapshot(orgId: string) {
     'obligations',(select jsonb_agg(to_jsonb(o) order by o.id) from performance_obligations o where org_id=${orgId}),
     'schedules',(select jsonb_agg(to_jsonb(s) order by s.id) from recognition_schedules s where org_id=${orgId}),
     'lines',(select jsonb_agg(to_jsonb(s) order by s.id) from recognition_schedule_lines s where org_id=${orgId})
-  ) as evidence`)).rows[0]!.evidence;
+  ) as evidence`, "objects"))[0]!.evidence;
 }
 
 test("project cost progress counts primary functional costs once and shares 25% across posting books", enabled, async () => {
@@ -62,10 +62,10 @@ test("project cost progress counts primary functional costs once and shares 25% 
     const result = await syncProjectRevenueContracts(org.orgId, null, org.date, projectId);
     assert.deepEqual(result.problems, []);
     assert.equal(result.synced[0]?.percentComplete, "25.0000");
-    const planned = (await db.execute<{ book_id: string; amount: string }>(sql`
+    const planned = await db.execute<{ book_id: string; amount: string }>(sql`
       select s.book_id,sum(l.planned_amount)::text as amount from recognition_schedule_lines l
        join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-       where l.org_id=${org.orgId} group by s.book_id order by s.book_id`)).rows;
+       where l.org_id=${org.orgId} group by s.book_id order by s.book_id`, "objects");
     assert.deepEqual(planned, [org.bookId, taxBook].sort().map(book_id => ({ book_id, amount: "250.0000" })));
   } finally { await dropScratchOrg(org.orgId); }
 });
@@ -126,7 +126,7 @@ for (const invalid of ["missing-primary", "inactive-primary", "nonposting-primar
         // refusal and the single survivor instead of building ambiguous data.
         await assert.rejects(db.execute(sql`insert into accounting_books(org_id,code,name,is_primary) values(${org.orgId},'OTHER','Other',true)`),
           (error: unknown) => errorChainMatches(error, /accounting_books_one_primary_per_org/));
-        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from accounting_books where org_id=${org.orgId} and is_primary`)).rows[0]?.n, 1);
+        assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from accounting_books where org_id=${org.orgId} and is_primary`, "objects"))[0]?.n, 1);
         return;
       }
       if (invalid === "inactive-owner") {

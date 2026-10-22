@@ -32,8 +32,8 @@ async function settings(orgId: string, patch: Record<string, unknown>): Promise<
   const result = await db.execute(sql`
     update orgs set settings = settings || ${JSON.stringify(patch)}::jsonb
      where id = ${orgId} returning id
-  `);
-  assert.equal(result.rows.length, 1);
+  `, "objects");
+  assert.equal(result.length, 1);
 }
 
 test("HR scans use each tenant's calendar and RLS scope, then restore the caller's scope", { skip: !DB }, async () => {
@@ -44,17 +44,17 @@ test("HR scans use each tenant's calendar and RLS scope, then restore the caller
       const days = new Map<string, string>();
       await withSimClock("2026-10-01T00:30:00Z", () => withOrgContext(west.org.orgId, async () => {
         await runHrmOrganizationDuty("calendar-check", "hrmDocuments", async (orgId, today) => {
-          const visible = (await db.execute<{ id: string; role: string }>(sql`
+          const visible = await db.execute<{ id: string; role: string }>(sql`
             select id, current_user as role from orgs
              where id in (${west.org.orgId}, ${east.org.orgId})
-          `)).rows;
+          `, "objects");
           assert.deepEqual(visible.map((row) => row.id), [orgId]);
           assert.equal(visible[0]?.role, "openbooks_app");
           days.set(orgId, today);
         });
         assert.deepEqual((await db.execute<{ id: string }>(sql`
           select id from orgs where id in (${west.org.orgId}, ${east.org.orgId})
-        `)).rows.map((row) => row.id), [west.org.orgId]);
+        `, "objects")).map((row) => row.id), [west.org.orgId]);
       }));
       assert.equal(days.get(west.org.orgId), "2026-09-30");
       assert.equal(days.get(east.org.orgId), "2026-10-01");
@@ -98,14 +98,14 @@ test("all four native HR duties work without an ambient tenant and persist their
       assert.deepEqual(await runWorkerDuties(), duties.map(([key]) => ({ key, ok: true })));
       assert.equal((await db.execute<{ status: string }>(sql`
         select status from hrm_documents where org_id = ${h.org.orgId} and id = ${expiredId}
-      `)).rows[0]?.status, "expired");
+      `, "objects"))[0]?.status, "expired");
       const run = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_retention_runs where org_id = ${h.org.orgId} and rule_id = ${rule.id}
-      `)).rows[0]?.n;
+      `, "objects"))[0]?.n;
       assert.equal(run, 1);
       const exported = (await db.execute<{ status: string; file_id: string | null; scope: { module: string; status: string; detail?: string }[] }>(sql`
         select status, file_id, scope from hrm_data_subject_exports where org_id = ${h.org.orgId} and id = ${requested.id}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(exported?.status, "incomplete", "the fixture's documents have no stored file bytes");
       assert.ok(exported.file_id);
       assert.equal(exported.scope.find((entry) => entry.module === "documents")?.status, "incomplete");
@@ -113,19 +113,19 @@ test("all four native HR duties work without an ambient tenant and persist their
       assert.equal((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from notifications
          where org_id = ${h.org.orgId} and user_id = ${h.hrId} and kind = 'hrm.document.reminder'
-      `)).rows[0]?.n, 1);
+      `, "objects"))[0]?.n, 1);
       assert.equal((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_document_events
          where org_id = ${h.org.orgId} and document_id = ${reminderId} and kind = 'reminded'
-      `)).rows[0]?.n, 1);
+      `, "objects"))[0]?.n, 1);
       assert.deepEqual(await runWorkerDuties(), duties.map(([key]) => ({ key, ok: true })));
       assert.equal((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_retention_runs where org_id = ${h.org.orgId} and rule_id = ${rule.id}
-      `)).rows[0]?.n, 1, "same-day recruiting runs are durable and idempotent");
+      `, "objects"))[0]?.n, 1, "same-day recruiting runs are durable and idempotent");
       assert.equal((await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_document_events
          where org_id = ${h.org.orgId} and document_id = ${reminderId} and kind = 'reminded'
-      `)).rows[0]?.n, 1, "a retry does not deliver another reminder");
+      `, "objects"))[0]?.n, 1, "a retry does not deliver another reminder");
     } finally {
       clearWorkerDuties();
     }
@@ -156,7 +156,7 @@ test("invalid tenant calendars remain named refusals for every duty while health
         assert.ok(siblingRan);
         assert.equal((await db.execute<{ status: string }>(sql`
           select status from hrm_documents where org_id = ${healthy.org.orgId} and id = ${documentId}
-        `)).rows[0]?.status, "expired", "a bad organization cannot prevent another tenant's work");
+        `, "objects"))[0]?.status, "expired", "a bad organization cannot prevent another tenant's work");
       } finally {
         clearWorkerDuties();
       }
@@ -197,10 +197,10 @@ test("failed subject-access builds retain refusal evidence, continue the queue, 
       assert.match(error.message, /Company Settings/);
       return true;
     });
-    const failed = (await db.execute<{ status: string; error: string; file_id: string | null }>(sql`
+    const failed = await db.execute<{ status: string; error: string; file_id: string | null }>(sql`
       select status, error, file_id from hrm_data_subject_exports
        where org_id = ${h.org.orgId} and id in (${first.id}, ${second.id})
-    `)).rows;
+    `, "objects");
     assert.equal(failed.length, 2);
     for (const row of failed) {
       assert.equal(row.status, "failed");
@@ -238,9 +238,9 @@ test("a zero-row recruiting run refuses with its rule and remedy while the next 
         assert.match(error.message, /retention run was not recorded.*no row was written; retry the request/);
         return true;
       });
-      const runs = (await db.execute<{ rule_id: string }>(sql`
+      const runs = await db.execute<{ rule_id: string }>(sql`
         select rule_id from hrm_retention_runs where org_id = ${h.org.orgId}
-      `)).rows;
+      `, "objects");
       assert.deepEqual(runs.map((row) => row.rule_id), [healthy.id]);
     } finally {
       await db.execute(sql`drop trigger if exists hrm_scheduler_test_refuse_run on hrm_retention_runs`);

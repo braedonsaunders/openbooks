@@ -60,9 +60,9 @@ function readSettings(value: unknown): ManufacturingPolicies {
 
 export async function getManufacturingPolicies(tx: SqlExecutor, orgId: string): Promise<ManufacturingPolicies> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  const result = await tx.execute<{ manufacturing: unknown }>(sql`select settings->'manufacturing' as manufacturing from orgs where id=${orgId}`);
-  if (!result.rows[0]) throw new ManufacturingError("The organization could not be found.", { status: 404, code: "not_found" });
-  return readSettings(result.rows[0].manufacturing);
+  const result = await tx.execute<{ manufacturing: unknown }>(sql`select settings->'manufacturing' as manufacturing from orgs where id=${orgId}`, "objects");
+  if (!result[0]) throw new ManufacturingError("The organization could not be found.", { status: 404, code: "not_found" });
+  return readSettings(result[0].manufacturing);
 }
 
 export async function updateManufacturingPolicies(
@@ -86,8 +86,8 @@ export async function updateManufacturingPolicies(
       refused("The approval threshold cannot be negative.", "invalid_scrap_threshold", "abnormalScrapApprovalThreshold", "Enter a non-negative amount or clear the threshold.");
     }
   }
-  const locked = await tx.execute(sql`select id from orgs where id=${orgId} for update`);
-  if (!locked.rows.length) throw new ManufacturingError("The organization could not be found.", { status: 404, code: "not_found" });
+  const locked = await tx.execute(sql`select id from orgs where id=${orgId} for update`, "objects");
+  if (!locked.length) throw new ManufacturingError("The organization could not be found.", { status: 404, code: "not_found" });
   const before = await getManufacturingPolicies(tx, orgId);
   const after = { shortagePolicy: input.shortagePolicy, completionTolerancePct, abnormalScrapApprovalThreshold };
   const result = await tx.execute<{ id: string }>(sql`
@@ -95,8 +95,8 @@ export async function updateManufacturingPolicies(
        set settings=jsonb_set(coalesce(settings, '{}'::jsonb), '{manufacturing}', ${JSON.stringify(after)}::jsonb, true),
            updated_at=now(), updated_by=${actorId}
      where id=${orgId}
-    returning id`);
-  if (result.rows.length !== 1) throw new ManufacturingError("Manufacturing policies were not saved.", { status: 404, code: "not_found", remedy: "Reload setup and try again." });
+    returning id`, "objects");
+  if (result.length !== 1) throw new ManufacturingError("Manufacturing policies were not saved.", { status: 404, code: "not_found", remedy: "Reload setup and try again." });
   await auditChange(tx, { orgId, actorId, table: "orgs", rowId: orgId, action: "update", before: { manufacturing: before }, after: { manufacturing: after } });
   return after;
 }

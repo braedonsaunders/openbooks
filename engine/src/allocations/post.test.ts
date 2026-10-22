@@ -14,7 +14,7 @@ import {
 import type { AllocationRuleTarget, RuleInEffect, WeightedTarget } from "./types.ts";
 
 const emptyRunner = {
-  execute: (async () => ({ rows: [] })) as unknown as PostRunner["execute"],
+  execute: (async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as PostRunner["execute"],
 };
 
 /** Stub runner answering registry reads by matching the query text. */
@@ -22,7 +22,7 @@ function stubRunner(
   answer: (queryText: string) => Record<string, unknown>[],
 ): PostRunner {
   return {
-    execute: (async (query: unknown) => ({ rows: answer(JSON.stringify(query)) })) as unknown as PostRunner["execute"],
+    execute: (async (query: unknown, mode?: string) => Promise.resolve({ rows: answer(JSON.stringify(query)) }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result))) as unknown as PostRunner["execute"],
   };
 }
 

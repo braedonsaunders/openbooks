@@ -69,13 +69,11 @@ test(
              set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
                    coalesce(settings -> 'features', '{}'::jsonb) || '{"crm": true}'::jsonb)
            where id = ${org.orgId}`);
-        const partyId = (
-          await db.execute<{ id: string }>(sql`
+        const partyId = (await db.execute<{ id: string }>(sql`
             insert into parties (org_id, kind, display_name, is_active, custom)
             values (${org.orgId}, 'company', ${`Source Customer ${label}`}, true,
                     '{"nsId": "NS-CUST-1"}'::jsonb)
-            returning id`)
-        ).rows[0]!.id;
+            returning id`, "objects"))[0]!.id;
         parties[org.orgId] = partyId;
         await db.execute(sql`
           insert into connections (org_id, source, display_name, status, config, secrets)
@@ -105,9 +103,9 @@ test(
       const profiles = await db.execute<{ orgId: string; partyId: string; stage: string }>(sql`
         select org_id as "orgId", party_id as "partyId", lifecycle_stage as stage
           from crm_account_profiles
-         where org_id in (${orgA.orgId}, ${orgB.orgId})`);
+         where org_id in (${orgA.orgId}, ${orgB.orgId})`, "objects");
       assert.deepEqual(
-        profiles.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
+        profiles.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
           { orgId: orgA.orgId, partyId: parties[orgA.orgId], stage: "prospect" },
           { orgId: orgB.orgId, partyId: parties[orgB.orgId], stage: "customer" },
@@ -119,8 +117,8 @@ test(
           from crm_account_stage_events e
           join crm_account_profiles p on p.id = e.account_profile_id and p.org_id = e.org_id
          where e.org_id = ${orgA.orgId} and p.party_id = ${parties[orgA.orgId]}
-           and e.to_stage = 'prospect' and e.source_kind = 'import'`);
-      assert.deepEqual(transition.rows, [{ fromStage: "customer", toStage: "prospect" }]);
+           and e.to_stage = 'prospect' and e.source_kind = 'import'`, "objects");
+      assert.deepEqual(transition, [{ fromStage: "customer", toStage: "prospect" }]);
 
       const opportunities = await db.execute<{
         orgId: string;
@@ -134,9 +132,9 @@ test(
                weighted_amount::text as "weightedAmount"
           from crm_opportunities
          where org_id in (${orgA.orgId}, ${orgB.orgId})
-           and custom -> 'netsuite' ->> 'id' = 'NS-OPP-1'`);
+           and custom -> 'netsuite' ->> 'id' = 'NS-OPP-1'`, "objects");
       assert.deepEqual(
-        opportunities.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
+        opportunities.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
           { orgId: orgA.orgId, probability: 37, currency: "CAD", projectedAmount: "100.0100", weightedAmount: "37.0037" },
           { orgId: orgB.orgId, probability: 37, currency: "CAD", projectedAmount: "100.0100", weightedAmount: "37.0037" },
@@ -146,18 +144,18 @@ test(
       const activities = await db.execute<{ orgId: string; id: string; subject: string }>(sql`
         select org_id as "orgId", id, subject from crm_activities
          where org_id in (${orgA.orgId}, ${orgB.orgId})
-           and custom -> 'netsuite' ->> 'recordType' = 'note'`);
-      assert.equal(activities.rows.length, 2);
-      const byOrg = new Map(activities.rows.map((row) => [row.orgId, row]));
+           and custom -> 'netsuite' ->> 'recordType' = 'note'`, "objects");
+      assert.equal(activities.length, 2);
+      const byOrg = new Map(activities.map((row) => [row.orgId, row]));
       assert.notEqual(byOrg.get(orgA.orgId)!.id, byOrg.get(orgB.orgId)!.id);
       assert.equal(byOrg.get(orgA.orgId)!.subject, "Plant visit");
 
       const links = await db.execute<{ orgId: string; n: number }>(sql`
         select org_id as "orgId", count(*)::int as n from crm_activity_links
          where org_id in (${orgA.orgId}, ${orgB.orgId})
-         group by org_id`);
+         group by org_id`, "objects");
       assert.deepEqual(
-        links.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
+        links.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
           { orgId: orgA.orgId, n: 1 },
           { orgId: orgB.orgId, n: 1 },

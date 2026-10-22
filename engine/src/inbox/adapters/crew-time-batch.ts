@@ -58,7 +58,7 @@ export const crewTimeBatchAdapter: InboxAdapter = {
     }
     const partyId = await actorPartyId(ctx);
     if (partyId) {
-      const batches = (await exec.execute<OwnBatchRow>(sql`
+      const batches = await exec.execute<OwnBatchRow>(sql`
         select b.id::text as id, b.worked_on::text as worked_on, b.status,
                p.name as project_name
           from crew_time_batches b
@@ -68,7 +68,7 @@ export const crewTimeBatchAdapter: InboxAdapter = {
            and b.status in ('draft', 'rejected')
          order by b.worked_on desc
          limit 10
-      `)).rows;
+      `, "objects");
       for (const batch of batches) {
         out.push({
           id: inboxItemId("crew_time_batch", `own:${batch.id}`),

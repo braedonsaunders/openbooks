@@ -73,11 +73,9 @@ test(
           error instanceof DepreciationRefusalError && /must be in service/.test(error.message),
         "building a schedule for a draft asset is refused",
       );
-      const schedules = (
-        await db.execute(sql`
+      const schedules = await db.execute(sql`
           select 1 from depreciation_schedules where org_id = ${org.orgId} and asset_id = ${draftId} limit 1
-        `)
-      ).rows;
+        `, "objects");
       assert.equal(schedules.length, 0, "no schedule row may exist for the draft");
 
       // Even a hand-planted draft line (legacy data, or a writer bypassing
@@ -94,12 +92,10 @@ test(
       `);
       const run = await runDepreciation(org.orgId, "2026-07-31", actorId, draftId);
       assert.equal(run.posted, 0, "the run must post nothing for a draft asset");
-      const line = (
-        await db.execute<{ posted_amount: string | null }>(sql`
+      const line = (await db.execute<{ posted_amount: string | null }>(sql`
           select posted_amount from depreciation_schedule_lines
            where org_id = ${org.orgId} and schedule_id = ${scheduleId}
-        `)
-      ).rows[0]!;
+        `, "objects"))[0]!;
       assert.equal(line.posted_amount, null, "the draft line stays unposted");
     } finally {
       await dropScratchOrg(org.orgId);

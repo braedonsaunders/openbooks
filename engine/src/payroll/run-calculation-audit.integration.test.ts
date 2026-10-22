@@ -69,13 +69,13 @@ type CalculationEvent = {
 };
 
 async function calculationEvents(orgId: string, documentId: string): Promise<CalculationEvent[]> {
-  return (await db.execute<CalculationEvent>(sql`
+  return await db.execute<CalculationEvent>(sql`
     select id, action, actor_id, at::text as at, row_id, changes
       from audit_log
      where org_id = ${orgId} and table_name = 'pay_runs' and row_id = ${documentId}
        and changes ->> 'event' = 'pay_run_calculated'
      order by at, id
-  `)).rows;
+  `, "objects");
 }
 
 async function persistedState(orgId: string, documentId: string) {
@@ -108,7 +108,7 @@ async function persistedState(orgId: string, documentId: string) {
                                and row_id = ${documentId}
                                and changes ->> 'event' = 'pay_run_calculated')
     ) as state
-  `)).rows[0]!.state;
+  `, "objects"))[0]!.state;
 }
 
 async function addApprovedTime(fx: AdoptionFixture, workedOn: string, hours: number): Promise<string> {
@@ -117,7 +117,7 @@ async function addApprovedTime(fx: AdoptionFixture, workedOn: string, hours: num
       is_billable, billing_status, costing_basis, created_by, updated_by)
     values (${fx.orgId}, ${fx.employeeId}, ${workedOn}, ${hours}, 'approved', false,
       'unbilled', 'actual', ${fx.actorId}, ${fx.actorId}) returning id
-  `)).rows[0]!.id;
+  `, "objects"))[0]!.id;
 }
 
 test(
@@ -165,7 +165,7 @@ test(
           from pay_runs r
           join pay_stubs s on s.org_id = r.org_id and s.pay_run_document_id = r.document_id
          where r.org_id = ${fx.orgId} and r.document_id = ${input.documentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(after.run.calculationSourceDigest, stored.digest);
       assert.deepEqual(
         after.run.calculationSourceSnapshot,
@@ -183,7 +183,7 @@ test(
         select id::text as id from entitlement_ledger
          where org_id = ${fx.orgId} and pay_run_document_id = ${input.documentId}
          order by id
-      `)).rows.map((row) => row.id);
+      `, "objects")).map((row) => row.id);
       assert.deepEqual(
         after.entitlements.map((movement) => movement.movementId).sort(),
         entitlementIds,

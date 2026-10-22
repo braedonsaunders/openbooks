@@ -99,7 +99,7 @@ export async function loadReceiptReport(
       from documents
      where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'expense_report'
      ${input.forUpdate ? sql`for update` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, row.subsidiaryId)
     || !expenseAccessAllows(input.access ?? ALL_EXPENSE_REPORTS, row.partyId)) {
     throw new ReceiptCaptureRefusal(404, "not_found", "Expense report not found");
@@ -135,7 +135,7 @@ export async function registerReceiptCapture(
             'extracting', 1, ${input.reader.provider}, ${input.reader.model},
             ${input.reader.apiVersion}, ${input.actorId}, ${input.actorId})
     returning id, attempts
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) throw new Error("Receipt capture did not persist");
   return { id: inserted.id, attempt: Number(inserted.attempts) };
 }
@@ -152,11 +152,11 @@ type ReviewContext = {
 async function postableAccounts(orgId: string, ids: Array<string | null>): Promise<Set<string>> {
   const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
   if (wanted.length === 0) return new Set();
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from accounts
      where org_id = ${orgId} and is_active and not is_summary
        and id in (${sql.join(wanted.map((id) => sql`${id}`), sql`, `)})
-  `)).rows;
+  `, "objects");
   return new Set(rows.map((row) => row.id));
 }
 
@@ -180,7 +180,7 @@ export async function suggestReceiptAccount(input: {
            and c.merchant_key = ${input.merchantKey} and d.party_id = ${input.employeePartyId}
          order by c.confirmed_at desc
          limit 1
-      `)).rows[0]?.account_id ?? null
+      `, "objects"))[0]?.account_id ?? null
     : null;
   const organizationHistory = input.merchantKey
     ? (await db.execute<{ account_id: string }>(sql`
@@ -189,13 +189,13 @@ export async function suggestReceiptAccount(input: {
          where org_id = ${input.orgId} and status = 'confirmed' and merchant_key = ${input.merchantKey}
          order by confirmed_at desc
          limit 1
-      `)).rows[0]?.account_id ?? null
+      `, "objects"))[0]?.account_id ?? null
     : null;
   const vendorDefault = input.merchantPartyId
     ? (await db.execute<{ account_id: string | null }>(sql`
         select default_expense_account_id as account_id from vendor_roles
          where org_id = ${input.orgId} and party_id = ${input.merchantPartyId} and is_active
-      `)).rows[0]?.account_id ?? null
+      `, "objects"))[0]?.account_id ?? null
     : null;
   return chooseAccountSuggestion({
     employeeHistory,
@@ -216,7 +216,7 @@ export async function findReceiptDuplicates(input: {
   total: string | null;
 }): Promise<ReceiptDuplicateCandidate[]> {
   const identity = input.merchantKey && input.transactionDate && input.total;
-  const rows = (await db.execute<{ id: string; document_id: string; document_number: string | null; same_file: boolean }>(sql`
+  const rows = await db.execute<{ id: string; document_id: string; document_number: string | null; same_file: boolean }>(sql`
     select c.id, c.document_id, d.document_number, (c.content_hash = ${input.contentHash}) as same_file
       from expense_receipt_captures c
       join documents d on d.id = c.document_id and d.org_id = c.org_id
@@ -231,7 +231,7 @@ export async function findReceiptDuplicates(input: {
        )
      order by c.created_at
      limit 10
-  `)).rows;
+  `, "objects");
   return rows.map((row) => ({
     captureId: row.id,
     reason: row.same_file ? "same_file" as const : "same_receipt" as const,
@@ -308,7 +308,7 @@ export async function extractReceiptCapture(input: {
     select document_id, file_id, content_hash from expense_receipt_captures
      where org_id = ${input.orgId} and id = ${input.captureId}
        and status = 'extracting' and attempts = ${input.attempt}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!capture) return;
   try {
     if (!capture.document_id) throw new Error("The expense report for this receipt no longer exists");
@@ -361,8 +361,8 @@ export async function extractReceiptCapture(input: {
        where org_id = ${input.orgId} and id = ${input.captureId}
          and status = 'extracting' and attempts = ${input.attempt}
        returning id
-    `);
-    if (!finalized.rows[0]) {
+    `, "objects");
+    if (!finalized[0]) {
       console.warn(`[receipt-capture] capture ${input.captureId}: attempt ${input.attempt} was superseded before it finished`);
     }
   } catch (error) {
@@ -393,7 +393,7 @@ export async function claimReceiptRetry(
        and file_id is not null
        and (status = 'failed' or (status = 'extracting' and updated_at < ${cutoff}::timestamptz))
      returning attempts
-  `)).rows[0];
+  `, "objects"))[0];
   if (!claimed) {
     await refuseUnknownCapture(executor, input);
     throw new ReceiptCaptureRefusal(409, "not_retryable", "Only a failed or interrupted receipt scan can be retried — reload the report to see its current state");
@@ -405,7 +405,7 @@ async function refuseUnknownCapture(executor: SqlExecutor, input: { orgId: strin
   const exists = (await executor.execute(sql`
     select 1 from expense_receipt_captures
      where org_id = ${input.orgId} and id = ${input.captureId} and document_id = ${input.documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!exists) throw new ReceiptCaptureRefusal(404, "not_found", "Receipt not found on this expense report");
 }
 
@@ -423,7 +423,7 @@ export async function discardReceiptCapture(
     select status from expense_receipt_captures
      where org_id = ${input.orgId} and id = ${input.captureId} and document_id = ${input.documentId}
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!current) throw new ReceiptCaptureRefusal(404, "not_found", "Receipt not found on this expense report");
   const discarded = (await executor.execute<{ id: string }>(sql`
     update expense_receipt_captures
@@ -433,7 +433,7 @@ export async function discardReceiptCapture(
        and (status in ('extracted', 'failed', 'confirmed')
             or (status = 'extracting' and updated_at < ${cutoff}::timestamptz))
      returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!discarded) {
     throw new ReceiptCaptureRefusal(409, "not_discardable", "This receipt is still being read or was already discarded — reload the report to see its current state");
   }
@@ -518,7 +518,7 @@ export async function confirmReceiptLines(
      where org_id = ${input.orgId} and document_id = ${input.documentId}
        and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
      for update
-  `)).rows.map((row) => [row.id, row]));
+  `, "objects")).map((row) => [row.id, row]));
 
   const vendorIds = [...new Set(input.confirmations.map((c) => c.merchantPartyId).filter((id): id is string => Boolean(id)))];
   const vendors = vendorIds.length
@@ -527,7 +527,7 @@ export async function confirmReceiptLines(
           join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
          where p.org_id = ${input.orgId} and p.is_active
            and p.id in (${sql.join(vendorIds.map((id) => sql`${id}`), sql`, `)})
-      `)).rows.map((row) => row.id))
+      `, "objects")).map((row) => row.id))
     : new Set<string>();
 
   for (const confirmation of input.confirmations) {
@@ -578,8 +578,8 @@ export async function confirmReceiptLines(
        where org_id = ${input.orgId} and id = ${confirmation.captureId}
          and document_id = ${input.documentId} and status = 'extracted'
        returning id
-    `);
-    if (!confirmed.rows[0]) throw new Error(`receipt capture ${confirmation.captureId} could not be confirmed`);
+    `, "objects");
+    if (!confirmed[0]) throw new Error(`receipt capture ${confirmation.captureId} could not be confirmed`);
     await executor.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'expense_receipt_captures', ${confirmation.captureId}, 'update',
@@ -650,7 +650,7 @@ async function redactForeignDuplicates(orgId: string, access: ExpenseAccess, vie
      where org_id = ${orgId} and kind = 'expense_report' and party_id = ${access.partyId}
        and (document_number in (${sql.join(named.map((value) => sql`${value}`), sql`, `)})
             or id::text in (${sql.join(named.map((value) => sql`${value}`), sql`, `)}))
-  `)).rows.flatMap((row) => [row.id, ...(row.number ? [row.number] : [])]));
+  `, "objects")).flatMap((row) => [row.id, ...(row.number ? [row.number] : [])]));
   return views.map((view) => ({
     ...view,
     issues: view.issues.map((issue) => issue.code !== "possible_duplicate" || !issue.detail || own.has(issue.detail)
@@ -672,7 +672,7 @@ export async function listReceiptCaptures(
   access: ExpenseAccess = ALL_EXPENSE_REPORTS,
 ): Promise<ReceiptCaptureView[]> {
   const cutoff = new Date(now.getTime() - RECEIPT_EXTRACTION_STALE_MS).toISOString();
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; document_id: string; file_id: string | null; content_type: string | null; original_filename: string;
     status: ReceiptCaptureView["status"]; interrupted: boolean; attempts: number; last_error: string | null;
     overall_confidence: string | null; normalized: NormalizedReceipt | null; issues: CaptureIssue[] | null;
@@ -691,7 +691,7 @@ export async function listReceiptCaptures(
       left join parties p on p.id = c.merchant_party_id and p.org_id = c.org_id
      where c.org_id = ${orgId} and c.document_id = ${documentId} and c.status <> 'discarded'
      order by c.created_at, c.id
-  `)).rows;
+  `, "objects");
   return redactForeignDuplicates(orgId, access, rows.map((row) => ({
     id: row.id,
     documentId: row.document_id,

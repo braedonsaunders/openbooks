@@ -12,7 +12,7 @@ import { getLlmCaptureTestConfig } from "./ap-capture-config.ts";
 // the provider it was saved for, and a typed base URL passes the same
 // public-address check as a saved one.
 async function settings(orgId: string): Promise<unknown> {
-  return (await db.execute<{ ai: unknown }>(sql`select settings->'ai' as ai from orgs where id = ${orgId}`)).rows[0]?.ai;
+  return (await db.execute<{ ai: unknown }>(sql`select settings->'ai' as ai from orgs where id = ${orgId}`, "objects"))[0]?.ai;
 }
 
 test("the AI capture test uses the typed provider settings without storing them", async () => {

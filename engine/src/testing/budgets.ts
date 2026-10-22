@@ -11,7 +11,7 @@ export async function approveBudgetScenarioFixture(orgId: string, scenarioId: st
   installEngineSeams();
   const actorId = await createWorkOperator(orgId, "Budget author", ["budgets.manage"]);
   const draft = (await db.execute<{ revision: number }>(sql`
-    select revision from budget_scenarios where org_id=${orgId} and id=${scenarioId} and status='draft'`)).rows[0];
+    select revision from budget_scenarios where org_id=${orgId} and id=${scenarioId} and status='draft'`, "objects"))[0];
   if (!draft) throw new Error("The budget fixture must identify a native draft.");
   const submitted = await submitBudgetScenario(orgId, actorId, scenarioId, draft.revision);
   if (submitted.status !== "approved") throw new Error("This reporting fixture requires its declared zero-gate budget policy.");

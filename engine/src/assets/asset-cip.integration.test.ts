@@ -83,13 +83,13 @@ async function balance(org: Org, accountId: string): Promise<string> {
   const row = (await withOrgContext(org.orgId, () => db.execute<{ total: string }>(sql`
     select coalesce(sum(jl.amount), 0)::numeric(19,4)::text as total from journal_lines jl
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id and je.status in ('posted', 'reversed')
-     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId}`))).rows[0];
+     where jl.org_id = ${org.orgId} and jl.account_id = ${accountId}`, "objects")))[0];
   return row!.total;
 }
 
 async function cipRow(org: Org, id: string) {
   return (await withOrgContext(org.orgId, () => db.execute<{ status: string; acquisition_cost: string }>(sql`
-    select status, acquisition_cost::text as acquisition_cost from fixed_assets where org_id = ${org.orgId} and id = ${id}`))).rows[0]!;
+    select status, acquisition_cost::text as acquisition_cost from fixed_assets where org_id = ${org.orgId} and id = ${id}`, "objects")))[0]!;
 }
 
 test(
@@ -145,7 +145,7 @@ test(
         ...request, idempotencyKey: randomUUID(), lines: [{ kind: "asset", name: "Too much", categoryId, amount: "2000.01" }],
       }, { actorId: actors.adminId }));
       const costId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-        select id from asset_cip_costs where org_id = ${org.orgId} and cip_asset_id = ${record.id}`))).rows[0]!.id;
+        select id from asset_cip_costs where org_id = ${org.orgId} and cip_asset_id = ${record.id}`, "objects")))[0]!.id;
       await refusedWith("cip_balance_negative", () => unlinkCipCost(org.orgId, { costId, reason: "Wrong project", actorId: actors.adminId }));
 
       const reversal = await reverseCipCapitalization(org.orgId, { capitalizationId: capitalized.capitalizationId, date: org.date, reason: "Booked to the wrong phase", actorId: actors.adminId });
@@ -162,7 +162,7 @@ test(
       assert.equal(full.remaining, "0.0000");
       assert.deepEqual(await cipRow(org, record.id), { status: "capitalized", acquisition_cost: "0.0000" });
       const placed = (await withOrgContext(org.orgId, () => db.execute<{ status: string; in_service_on: string }>(sql`
-        select status, in_service_on::text as in_service_on from fixed_assets where org_id = ${org.orgId} and id = ${full.assets[0]!.id}`))).rows[0]!;
+        select status, in_service_on::text as in_service_on from fixed_assets where org_id = ${org.orgId} and id = ${full.assets[0]!.id}`, "objects")))[0]!;
       assert.deepEqual(placed, { status: "in_service", in_service_on: org.date });
       const more = await postCost(org, cip, "50.00");
       await refusedWith("cip_closed", () => linkCipCosts(org.orgId, { cipAssetId: record.id, journalLineIds: [more.lineId], actorId: actors.adminId }));

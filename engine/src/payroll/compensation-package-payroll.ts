@@ -84,7 +84,7 @@ export async function prepareCompensationPackages(tx: SqlExecutor, context: Comp
   }
   prepared.replacementIds = new Set((await tx.execute<{ component_id: string }>(sql`select component_id from pay_run_adjustments
     where org_id=${context.orgId} and pay_run_document_id=${context.documentId} and employee_party_id=${context.employeePartyId}
-      and adjustment_type='line' and replace_component order by component_id`)).rows.map(row => row.component_id));
+      and adjustment_type='line' and replace_component order by component_id`, 'objects')).map(row => row.component_id));
   prepared.preliminaryLines = lines.map(line => ({ ...line }));
   await applyAssignedComponentLines(tx, { ...context, assignedRows: context.assignedRows.filter(row => row.basis !== 'percent_of_gross'),
     lines: prepared.preliminaryLines });
@@ -172,7 +172,7 @@ export async function appendCompensationPackageStage(tx: SqlExecutor, prepared: 
         join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
         where l.org_id=${context.orgId} and s.employee_party_id=${context.employeePartyId} and l.component_id=${component.id}
           and r.run_status='committed' and r.document_id<>${context.documentId} and r.pay_schedule_id=${context.payScheduleId}
-          and r.period_start<=${context.periodEnd}::date and r.period_end>=${context.periodStart}::date`)).rows[0]?.amount : '0';
+          and r.period_start<=${context.periodEnd}::date and r.period_end>=${context.periodStart}::date`, 'objects'))[0]?.amount : '0';
       if (period === undefined) throw new PayrollError('Native component period consumption could not be resolved — reload payroll sources before retrying.');
       contexts.set(component.id, { currencyMinorUnits: source.currencyMinorUnits, lines: cappableHourLines(earningFacts), periodToDate: add(period, current), yearToDate: add(year, current) });
     }
@@ -212,8 +212,8 @@ export async function persistCompensationPackageCalculations(tx: SqlExecutor, pr
       values(${prepared.context.orgId},${prepared.context.documentId},${source.assignmentId},${source.employmentId},${JSON.stringify(source)}::jsonb,
         ${JSON.stringify({ algorithm: 'compensation-package-payroll-v1', stages: result.stages,
           finalLines: result.lines.map(line => ({ componentId: line.componentId, kind: line.kind, amount: line.amount, earnedFrom: line.earnedFrom, earnedTo: line.earnedTo })) })}::jsonb,
-        ${prepared.context.actorId}) returning id`);
-    if (inserted.rows.length !== 1) throw new PayrollError('Compensation package calculation evidence was not stored — recalculate before committing; a payable package must retain its approved sources.');
+        ${prepared.context.actorId}) returning id`, 'objects');
+    if (inserted.length !== 1) throw new PayrollError('Compensation package calculation evidence was not stored — recalculate before committing; a payable package must retain its approved sources.');
   }
 }
 

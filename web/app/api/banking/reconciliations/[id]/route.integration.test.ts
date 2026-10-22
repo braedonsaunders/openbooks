@@ -63,13 +63,13 @@ function patch(id: string, body: Record<string, unknown>) {
 
 async function snapshot(orgId: string, id: string) {
   return (await db.execute<{ through_date: string; statement_balance: string; status: string }>(sql`
-    select through_date,statement_balance,status from reconciliations where org_id=${orgId} and id=${id}`)).rows[0]!
+    select through_date,statement_balance,status from reconciliations where org_id=${orgId} and id=${id}`, 'objects'))[0]!
 }
 
 async function adjustmentAudits(orgId: string, id: string) {
   return (await db.execute<{ changes: { before: { throughDate: string; statementBalance: string }; after: { throughDate: string; statementBalance: string } } }>(sql`
     select changes from audit_log where org_id=${orgId} and row_id=${id} and changes->>'mode'='session_adjustment'
-    order by id`)).rows.map(row => row.changes)
+    order by id`, 'objects')).map(row => row.changes)
 }
 
 test('bank adjustment cannot move a new session onto an already signed-off cutoff', { skip: !enabled }, async (t) => {
@@ -153,7 +153,7 @@ test('bank sign-off refuses legacy overlapping cutoffs even when the balance cro
     await withBypassContext(() => (db.execute(sql`update reconciliations set through_date=${org.date} where id=${next.id} and org_id=${org.orgId}`)))
     await assert.rejects(markReconciled(next.id, org.ctx), /after the last signed-off reconciliation/)
     assert.equal((await snapshot(org.orgId, next.id)).status, 'in_progress')
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${next.id} and action='approve'`)).rows.length, 0)
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${next.id} and action='approve'`, 'objects')).length, 0)
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })
 
@@ -176,6 +176,6 @@ test('completed bank sign-off remains idempotent after its book is deactivated',
     const signed = await markReconciled(org.reconciliationId, org.ctx)
     await withBypassContext(() => (db.execute(sql`update accounting_books set is_active=false where org_id=${org.orgId} and id=${org.bookId}`)))
     assert.deepEqual(await markReconciled(org.reconciliationId, org.ctx), signed)
-    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${org.reconciliationId} and action='approve'`)).rows.length, 1)
+    assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${org.reconciliationId} and action='approve'`, 'objects')).length, 1)
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }
 })

@@ -67,15 +67,15 @@ export const POST = defineRoute({
           values (${user.orgId}, ${String(body.name).trim()}, ${JSON.stringify(built.criteria)}::jsonb,
                   ${JSON.stringify(built.outcome)}::jsonb, ${prio.priority}, ${body.isActive !== false}, ${user.id})
           returning *
-        `))
+        `, 'objects'))
         await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id)
           values
-            (${user.orgId}, 'bank_match_rules', ${String(row.rows[0]!.id)}, 'insert',
-             ${JSON.stringify({ after: row.rows[0] })}::jsonb, ${user.id})
+            (${user.orgId}, 'bank_match_rules', ${String(row[0]!.id)}, 'insert',
+             ${JSON.stringify({ after: row[0] })}::jsonb, ${user.id})
         `)
-        return row.rows[0]!
+        return row[0]!
       })
     return NextResponse.json({ id: ((created)).id as string })
   },
@@ -112,8 +112,8 @@ export const PATCH = defineRoute({
         const before = (await tx.execute<Record<string, unknown>>(sql`
           select * from bank_match_rules where id = ${body.id} and org_id = ${user.orgId}
            for update
-        `))
-        if (!before.rows[0]) return true
+        `, 'objects'))
+        if (!before[0]) return true
         const updated = (await tx.execute<Record<string, unknown>>(sql`
           update bank_match_rules set
             name = ${String(body.name).trim()}, criteria = ${JSON.stringify(built.criteria)}::jsonb,
@@ -121,13 +121,13 @@ export const PATCH = defineRoute({
             is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
           where id = ${body.id} and org_id = ${user.orgId}
           returning *
-        `))
+        `, 'objects'))
         await tx.execute(sql`
           insert into audit_log
             (org_id, table_name, row_id, action, changes, actor_id)
           values
             (${user.orgId}, 'bank_match_rules', ${String(body.id)}, 'update',
-             ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb, ${user.id})
+             ${JSON.stringify({ before: before[0], after: updated[0] })}::jsonb, ${user.id})
         `)
         return false
       })

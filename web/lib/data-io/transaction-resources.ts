@@ -256,13 +256,13 @@ export function transactionResource(
       // cap proves completeness. Refuse rather than truncate silently.
       const includeLines = !readCtx?.page?.columns || readCtx.page.columns.includes('lines')
       if (includeLines && readCtx?.page && docs.rows.length) {
-        const sizes = (await db.execute<{ document_id: string; bytes: string }>(sql`
+        const sizes = await db.execute<{ document_id: string; bytes: string }>(sql`
           select l.document_id,sum(octet_length(jsonb_build_object('amount',l.amount::text,'description',l.description,
             'account',a.number,'taxCode',t.code,'distributionKey',ar.key,'quantity',l.quantity::text,'unit',l.unit,'currency',l.journal_currency,'fxRate',l.journal_fx_rate::text,'eliminate',l.journal_eliminate)::text)+1)::text as bytes
           from document_lines l left join accounts a on a.org_id=l.org_id and a.id=l.account_id
           left join tax_codes t on t.org_id=l.org_id and t.id=l.tax_code_id
           left join allocation_rules ar on ar.org_id=l.org_id and ar.id=l.distribution_rule_id
-          where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) group by l.document_id`)).rows
+          where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) group by l.document_id`, 'objects')
         const byId = new Map(sizes.map((row) => [row.document_id, Number(row.bytes)]))
         let bytes = 0, keep = 0
         for (const doc of docs.rows) {
@@ -284,7 +284,7 @@ export function transactionResource(
         from document_lines l left join accounts a on a.id=l.account_id and a.org_id=l.org_id
         left join tax_codes t on t.id=l.tax_code_id and t.org_id=l.org_id
         left join allocation_rules ar on ar.id=l.distribution_rule_id and ar.org_id=l.org_id
-        where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) order by l.document_id,l.line_number`)).rows : null
+        where l.org_id=${orgId} and l.document_id in (${sql.join(docs.rows.map((doc) => sql`${doc.id}::uuid`), sql`, `)}) order by l.document_id,l.line_number`, 'objects')) : null
       const linesByDocument = new Map<string, NonNullable<typeof batchLines>>()
       for (const line of batchLines ?? []) {
         const entries = linesByDocument.get(line.document_id) ?? []
@@ -351,19 +351,15 @@ async function writeTransactions(
 ): Promise<WriteOutcome> {
   const resolver = new RefResolver(ctx.orgId)
   const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
-  const baseCurrency = ((await db.execute(sql`select base_currency from orgs where id = ${ctx.orgId}`)) as {
-    rows: { base_currency: string }[]
-  }).rows[0]?.base_currency ?? 'CAD'
+  const baseCurrency = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${ctx.orgId}`, 'objects'))[0]?.base_currency ?? 'CAD'
   const multiCurrencyOn = await orgFeatureEnabled(ctx.orgId, 'multiCurrency')
   const multiSubsidiaryOn = await orgFeatureEnabled(ctx.orgId, 'multiSubsidiary')
   // The kernel posts a NULL-subsidiary document's legs to the org root, so an
   // omitted subsidiary defaults to the root explicitly: document and GL agree,
   // and subsidiary-fenced surfaces can see the row. Exactly one root exists
   // (subsidiaries_org_root); without one the insert keeps today's NULL.
-  const rootSubsidiaryId = ((await db.execute(sql`
-    select id from subsidiaries where org_id = ${ctx.orgId} and parent_id is null limit 1`)) as {
-    rows: { id: string }[]
-  }).rows[0]?.id ?? null
+  const rootSubsidiaryId = (await db.execute<{ id: string }>(sql`
+    select id from subsidiaries where org_id = ${ctx.orgId} and parent_id is null limit 1`, 'objects'))[0]?.id ?? null
   const deps = ctx.post ? await controlDeps(ctx.orgId) : null
   // Intra-file natural-key fence: documents are unique per
   // (org_id, kind, document_number) (documents_org_kind_number), and a
@@ -530,7 +526,7 @@ async function writeTransactions(
           distributionRuleId = lookup.rule.rule.id
         }
         const instructions=cfg.kind==='journal' ? journalLineSchema().parse({quantity:l.quantity,unit:l.unit,currency:l.currency,fxRate:l.fxRate,eliminate:l.eliminate}) : null
-        const accountType=cfg.kind==='journal' ? (await db.execute<{type:string}>(sql`select type from accounts where org_id=${ctx.orgId} and id=${acctId}`)).rows[0]?.type ?? '' : ''
+        const accountType=cfg.kind==='journal' ? (await db.execute<{type:string}>(sql`select type from accounts where org_id=${ctx.orgId} and id=${acctId}`, 'objects'))[0]?.type ?? '' : ''
         built.push({ accountType,instructions, accountId: acctId, amount, description: l.description ? String(l.description) : null, taxCodeId, distributionRuleId })
       }
       if (lineErr) {
@@ -550,11 +546,9 @@ async function writeTransactions(
       // which row is refused.
       const wantNumber = String(src.documentNumber ?? '').trim()
       if (wantNumber) {
-        const dup = (await db.execute(sql`
-          select 1 from documents where org_id = ${ctx.orgId} and kind = ${cfg.kind} and document_number = ${wantNumber} limit 1`)) as {
-          rows: unknown[]
-        }
-        if (dup.rows.length > 0) {
+        const dup = await db.execute(sql`
+          select 1 from documents where org_id = ${ctx.orgId} and kind = ${cfg.kind} and document_number = ${wantNumber} limit 1`, 'objects')
+        if (dup.length > 0) {
           outcome.failed++
           outcome.errors.push({ row: rowNo, message: `document ${wantNumber} already exists` })
           continue
@@ -658,14 +652,14 @@ async function writeTransactions(
             for(const [index,line] of built.entries()){
               const instruction=line.instructions!
               const changed=await tx.execute(sql`update document_lines set journal_currency=${instruction.currency ?? null},journal_fx_rate=${instruction.fxRate ?? null},journal_eliminate=${instruction.eliminate ?? false}
-                where org_id=${ctx.orgId} and document_id=${doc.id} and line_number=${index+1} returning id`)
-              if(changed.rows.length!==1)throw new Error('Journal import instruction did not match its saved line.')
+                where org_id=${ctx.orgId} and document_id=${doc.id} and line_number=${index+1} returning id`, 'objects')
+              if(changed.length!==1)throw new Error('Journal import instruction did not match its saved line.')
             }
             const { validateJournalInstructions } = await import("@openbooks/engine/ledger/journal-instructions")
             const totals = await validateJournalInstructions(tx,ctx.orgId,doc.id)
             const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
-              where org_id=${ctx.orgId} and id=${doc.id} and status='draft' returning id`)
-            if(measured.rows.length!==1)throw new Error("The imported journal's header-currency total could not be saved.")
+              where org_id=${ctx.orgId} and id=${doc.id} and status='draft' returning id`, 'objects')
+            if(measured.length!==1)throw new Error("The imported journal's header-currency total could not be saved.")
             const after=await captureTransactionAuditSnapshot(tx,doc.id,ctx.orgId)
             if(!before || !after)throw new Error('The imported journal disappeared before its instructions were audited.')
             await recordTransactionAudit(tx,{orgId:ctx.orgId,documentId:doc.id,action:'update',actorId:ctx.actorId,source:'import',before,after})

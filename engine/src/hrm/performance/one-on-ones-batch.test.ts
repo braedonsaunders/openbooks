@@ -16,30 +16,31 @@ let active = true, unrestricted = true;
 let failure: Error | null = null;
 const queries: { sql: string; params: unknown[] }[] = [];
 const boundary = {
-  async execute(query: Parameters<PgDialect["sqlToQuery"]>[0]) {
+  async execute(query: Parameters<PgDialect["sqlToQuery"]>[0], mode?: string) {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
     const compiled = dialect.sqlToQuery(query), text = compiled.sql;
     const params = compiled.params.map(p => typeof p === "string" ? p.toLowerCase() : p);
     queries.push(compiled);
     assert.ok(compiled.params.includes(orgId), "every read and lock must name the organization");
-    if (text.includes("from orgs")) return { rows: [{ features: Object.fromEntries(FEATURES.map(f => [f.key, true])), time_zone: "UTC" }] };
-    if (text.includes("from users")) return { rows: [{ id: actorId, partyId, isActive: active, isSuperAdmin: unrestricted }] };
-    if (text.includes("subsidiary_restriction")) return { rows: [{ restriction: { mode: "list", subsidiaryIds: [subsidiaryA] } }] };
-    if (text.includes("role_assignments")) return { rows: [{ permissions: ["hrm.performance.read"] }] };
-    if (text.includes("user_permission_overrides")) return { rows: [] };
-    if (text.includes("from subsidiaries")) return { rows: [{ id: subsidiaryA, parentId: null }, { id: subsidiaryB, parentId: null }] };
+    if (text.includes("from orgs")) return inMode({ rows: [{ features: Object.fromEntries(FEATURES.map(f => [f.key, true])), time_zone: "UTC" }] });
+    if (text.includes("from users")) return inMode({ rows: [{ id: actorId, partyId, isActive: active, isSuperAdmin: unrestricted }] });
+    if (text.includes("subsidiary_restriction")) return inMode({ rows: [{ restriction: { mode: "list", subsidiaryIds: [subsidiaryA] } }] });
+    if (text.includes("role_assignments")) return inMode({ rows: [{ permissions: ["hrm.performance.read"] }] });
+    if (text.includes("user_permission_overrides")) return inMode({ rows: [] });
+    if (text.includes("from subsidiaries")) return inMode({ rows: [{ id: subsidiaryA, parentId: null }, { id: subsidiaryB, parentId: null }] });
     if (text.includes("from worker_employments") && text.includes("for update")) {
       if (failure) throw failure;
       assert.match(text, /where e\.org_id =/);
       assert.match(text, /order by e\.id\s+for update of e/);
-      return { rows: subjects.filter(row => row.orgId === orgId && params.includes(row.id)).sort((a, b) => a.id.localeCompare(b.id)) };
+      return inMode({ rows: subjects.filter(row => row.orgId === orgId && params.includes(row.id)).sort((a, b) => a.id.localeCompare(b.id)) });
     }
-    if (text.includes("from worker_employments")) return { rows: [] };
+    if (text.includes("from worker_employments")) return inMode({ rows: [] });
     if (text.includes("from hrm_one_on_one_items")) {
-      return { rows: agenda.filter(row => params.includes(row.one_on_one_id)) };
+      return inMode({ rows: agenda.filter(row => params.includes(row.one_on_one_id)) });
     }
     if (text.includes("from hrm_one_on_ones")) {
       const selected = params.find(p => meetings.some(m => m.id === p));
-      return { rows: selected ? meetings.filter(m => m.id === selected) : meetings };
+      return inMode({ rows: selected ? meetings.filter(m => m.id === selected) : meetings });
     }
     throw new Error("Unexpected query: " + text);
   },

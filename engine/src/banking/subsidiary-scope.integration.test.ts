@@ -156,20 +156,20 @@ async function importLines(
     select id from bank_statement_lines
      where org_id = ${fx.orgId} and account_id = ${account}
      order by line_number
-  `);
-  return { statementId: result.statementId, lineIds: rows.rows.map((r) => r.id) };
+  `, "objects");
+  return { statementId: result.statementId, lineIds: rows.map((r) => r.id) };
 }
 
 async function countReconciliations(fx: TwoEntity): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from reconciliations where org_id = ${fx.orgId}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
 }
 
 async function matchStatus(fx: TwoEntity, lineId: string): Promise<string> {
   return (await db.execute<{ s: string }>(sql`
     select match_status as s from bank_statement_lines where id = ${lineId} and org_id = ${fx.orgId}
-  `)).rows[0]!.s;
+  `, "objects"))[0]!.s;
 }
 
 function scopeOf(fx: TwoEntity, sub: "A" | "B"): ReadonlySet<string> {
@@ -263,7 +263,7 @@ test("import refuses an out-of-scope bank account and writes nothing", { skip: !
     );
     const lines = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from bank_statement_lines where org_id = ${fx.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(lines, 0);
     const ok = await importLines(fx, fx.bankB, "scope-import-b", ["10"], scopeOf(fx, "B"));
     assert.ok(ok.statementId);
@@ -434,7 +434,7 @@ test("sign-off refuses a session holding out-of-scope matches", { skip: !DB }, a
     );
     const status = (await db.execute<{ s: string }>(sql`
       select status as s from reconciliations where id = ${session.id} and org_id = ${fx.orgId}
-    `)).rows[0]!.s;
+    `, "objects"))[0]!.s;
     assert.notEqual(status, "signed_off");
   } finally {
     await dropScratchOrg(fx.orgId);

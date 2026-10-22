@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -54,7 +53,7 @@ async function seedComparison(
 }
 
 test(
-  "legacy unattributed duplicates repair once and stay unique per tenant and run",
+  "an unattributed finding cell is unique per tenant and run",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -86,90 +85,35 @@ test(
            'total', ${slot}, ${slot}, ${classification}, '100.0000', '90.0000', '10.0000')
       `);
 
-      // Build the exact pre-0072 state: the ordinary unique index allowed two
-      // NULL employee keys for one cell. Keep an attributed row and two
-      // independent runs/tenants to prove repair scope.
       await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross");
       await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:net_pay");
       await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross", employeePartyId, "difference");
 
-      // Put this test database into the legacy state regardless of whether
-      // the template started before or after 0072. Dropping the strict
-      // constraint also removes its backing index; an old template instead
-      // has only the ordinary index to drop.
-      await db.execute(sql.raw(`
-        do $$
-        begin
-          if exists (
-            select 1
-              from pg_constraint c
-              join pg_class r on r.oid = c.conrelid
-              join pg_namespace n on n.oid = r.relnamespace
-             where c.conname = 'payroll_parallel_findings_cell'
-               and r.relname = 'payroll_parallel_findings'
-               and n.nspname = 'public'
-          ) then
-            alter table public.payroll_parallel_findings
-              drop constraint payroll_parallel_findings_cell;
-          else
-            drop index if exists public.payroll_parallel_findings_cell;
-          end if;
-        end $$
-      `));
-      await db.execute(sql`
-        create unique index payroll_parallel_findings_cell
-          on payroll_parallel_findings (comparison_id, employee_party_id, kind, slot)
-      `);
-      await insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross");
-      await insertFinding(org.orgId, otherRunComparisonId, randomUUID(), "unattributed:gross");
-      await insertFinding(otherOrg.orgId, otherTenantComparisonId, randomUUID(), "unattributed:gross");
-
-      const migration = readFileSync(
-        new URL("../../../schema/migrations/generated/0072_payroll_parallel_unattributed_uniqueness.sql", import.meta.url),
-        "utf8",
+      // A NULL employee key is one unattributed cell, not a fresh value:
+      // ordinary UNIQUE semantics would admit a second row for the same
+      // comparison/kind/slot.
+      await assert.rejects(
+        insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross"),
+        isCellUniquenessViolation,
       );
-      await db.execute(sql.raw(migration));
-
-      const repaired = await db.execute<{ n: number }>(sql`
+      const cells = await db.execute<{ n: number }>(sql`
         select count(*)::int as n
           from payroll_parallel_findings
          where comparison_id = ${comparisonId}
-      `);
-      assert.equal(repaired.rows[0]?.n, 3, "repair keeps one NULL row, the distinct NULL cell, and the attributed row");
+      `, "objects");
+      assert.equal(cells[0]?.n, 3, "the refused duplicate leaves both unattributed cells and the attributed row");
 
-      const attributed = await db.execute<{ n: number }>(sql`
-        select count(*)::int as n
-          from payroll_parallel_findings
-         where comparison_id = ${comparisonId} and employee_party_id = ${employeePartyId}
-      `);
-      assert.equal(attributed.rows[0]?.n, 1, "legacy repair never removes attributed findings");
-
+      // The cell identity is run- and tenant-scoped.
+      await insertFinding(org.orgId, otherRunComparisonId, randomUUID(), "unattributed:gross");
+      await insertFinding(otherOrg.orgId, otherTenantComparisonId, randomUUID(), "unattributed:gross");
       const independentRuns = await db.execute<{ n: number }>(sql`
         select count(*)::int as n
           from payroll_parallel_findings
          where comparison_id in (${otherRunComparisonId}, ${otherTenantComparisonId})
            and employee_party_id is null
            and kind = 'total' and slot = 'unattributed:gross'
-      `);
-      assert.equal(independentRuns.rows[0]?.n, 2, "the cell identity remains run- and tenant-scoped");
-
-      // Replaying the same forward migration must not delete or rewrite the
-      // surviving rows and must not attempt to drop the constraint's index.
-      await db.execute(sql.raw(migration));
-      const replayed = await db.execute<{ n: number }>(sql`
-        select count(*)::int as n
-          from payroll_parallel_findings
-         where comparison_id = ${comparisonId}
-      `);
-      assert.equal(replayed.rows[0]?.n, 3);
-
-      // RED before 0072: PostgreSQL's ordinary UNIQUE semantics allow a
-      // second NULL employee key for the same comparison/kind/slot. GREEN
-      // after 0072: the NULL bucket is one unattributed cell.
-      await assert.rejects(
-        insertFinding(org.orgId, comparisonId, randomUUID(), "unattributed:gross"),
-        isCellUniquenessViolation,
-      );
+      `, "objects");
+      assert.equal(independentRuns[0]?.n, 2, "the cell identity remains run- and tenant-scoped");
     } finally {
       await dropScratchOrgReporting(otherOrg.orgId);
       await dropScratchOrgReporting(org.orgId);

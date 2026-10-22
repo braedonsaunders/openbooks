@@ -94,30 +94,24 @@ function auditingAgainst(fx: Fixture, sink: AppInvocationAuditRow[]) {
 /** Committed-state row counts: verification escapes any ambient tx scope. */
 const committedEffects = async (orgId: string): Promise<number> =>
   Number(
-    (
-      await withOrgContext(orgId, () =>
-        db.execute<{ n: string }>(sql`select count(*) as n from documents where org_id = ${orgId}`),
-      )
-    ).rows[0]!.n,
+    (await withOrgContext(orgId, () =>
+        db.execute<{ n: string }>(sql`select count(*) as n from documents where org_id = ${orgId}`, "objects"),
+      ))[0]!.n,
   );
 
 const claimCount = async (orgId: string): Promise<number> =>
   Number(
-    (
-      await withOrgContext(orgId, () =>
+    (await withOrgContext(orgId, () =>
         db.execute<{ n: string }>(sql`
           select count(*) as n from application_idempotency_keys
-           where org_id = ${orgId} and source = 'app'`),
-      )
-    ).rows[0]!.n,
+           where org_id = ${orgId} and source = 'app'`, "objects"),
+      ))[0]!.n,
   );
 
 const runStatuses = async (orgId: string): Promise<string[]> =>
-  (
-    await withOrgContext(orgId, () =>
-      db.execute<{ status: string }>(sql`select status from app_runs where org_id = ${orgId} order by at`),
-    )
-  ).rows.map((r) => r.status);
+  (await withOrgContext(orgId, () =>
+      db.execute<{ status: string }>(sql`select status from app_runs where org_id = ${orgId} order by at`, "objects"),
+    )).map((r) => r.status);
 
 test(
   "an invocation rechecks installed state after a concurrent disable gets the shared lock",
@@ -200,9 +194,9 @@ test(
         db.execute<{ response: unknown }>(sql`
           select response from application_idempotency_keys
            where org_id = ${fx.orgId} and source = 'app'
-             and operation = 'apps.call_backend.do'`),
+             and operation = 'apps.call_backend.do'`, "objects"),
       );
-      assert.deepEqual(claim.rows[0]?.response ?? null, { effect: stagedEffect });
+      assert.deepEqual(claim[0]?.response ?? null, { effect: stagedEffect });
       assert.equal(await committedEffects(fx.orgId), 1);
     } finally {
       await dropScratchOrg(fx.orgId);
@@ -246,10 +240,10 @@ for (const refusal of [
         const failedClaim = await withOrgContext(fx.orgId, () =>
           db.execute<{ completedAt: Date | null }>(sql`
             select completed_at as "completedAt" from application_idempotency_keys
-             where org_id = ${fx.orgId} and source = 'app'`),
+             where org_id = ${fx.orgId} and source = 'app'`, "objects"),
         );
-        assert.equal(failedClaim.rows.length, 1);
-        assert.equal(failedClaim.rows[0]!.completedAt, null);
+        assert.equal(failedClaim.length, 1);
+        assert.equal(failedClaim[0]!.completedAt, null);
         // …and exactly one durable invocation record proves it happened.
         assert.deepEqual(await runStatuses(fx.orgId), [refusal.attempt().status]);
         assert.equal(executions, 1);
@@ -275,10 +269,10 @@ for (const refusal of [
         const recoveredClaims = await withOrgContext(fx.orgId, () =>
           db.execute<{ completedAt: Date | null }>(sql`
             select completed_at as "completedAt" from application_idempotency_keys
-             where org_id = ${fx.orgId} and source = 'app'`),
+             where org_id = ${fx.orgId} and source = 'app'`, "objects"),
         );
-        assert.equal(recoveredClaims.rows.length, 1);
-        assert.ok(recoveredClaims.rows[0]!.completedAt != null);
+        assert.equal(recoveredClaims.length, 1);
+        assert.ok(recoveredClaims[0]!.completedAt != null);
       } finally {
         await dropScratchOrg(fx.orgId);
       }

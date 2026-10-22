@@ -42,16 +42,17 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.inventory-advanced-route-test')]
       const sqlText = globalThis.inventoryAdvancedSqlText
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
           if (text.includes('landed_cost_vouchers') && !state.missingVoucher && state.voucherSubsidiary) {
-            return { rows: [{ subsidiary_id: state.voucherSubsidiary }] }
+            return inMode({ rows: [{ subsidiary_id: state.voucherSubsidiary }] })
           }
           if (text.includes('transfer_orders') && !state.missingOrder && state.orderSubsidiary) {
-            return { rows: [{ subsidiary_id: state.orderSubsidiary }] }
+            return inMode({ rows: [{ subsidiary_id: state.orderSubsidiary }] })
           }
-          return { rows: [] }
+          return inMode({ rows: [] })
         },
       }
           // Like the engine's: runs the work in the org's transaction scope,

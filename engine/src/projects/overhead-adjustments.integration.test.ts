@@ -82,7 +82,7 @@ test(
            where a.org_id = ${org.orgId}
              and a.table_name = 'project_overhead_adjustments'
              and a.row_id = ${adjustment.id}
-        `)).rows[0],
+        `, "objects"))[0],
       );
       assert.deepEqual(audit, {
         row_id: adjustment.id,

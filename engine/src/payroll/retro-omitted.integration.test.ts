@@ -81,7 +81,7 @@ test(
           wcbExempt: true, wcbExemptReason: "The declared employee is outside the employer workers-compensation coverage.",
         });
         assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-          where org_id=${org.orgId} and employee_party_id=${employeeId} returning id`)).rows.length, 1);
+          where org_id=${org.orgId} and employee_party_id=${employeeId} returning id`, "objects")).length, 1);
         return employeeId;
       };
 
@@ -155,10 +155,10 @@ test(
         orgId: org.orgId, documentId: retro.documentId, actorId,
       });
       assert.deepEqual(retroCalculated.errors, []);
-      const references = (await db.execute<{ referenceRunId: string }>(sql`
+      const references = await db.execute<{ referenceRunId: string }>(sql`
         select reference->>'referenceRunId' as "referenceRunId" from pay_runs,
           jsonb_array_elements(calculation_source_snapshot->'bonusIncomeReferences') reference
-         where org_id=${org.orgId} and document_id=${retro.documentId}`)).rows;
+         where org_id=${org.orgId} and document_id=${retro.documentId}`, "objects");
       assert.deepEqual(references, [{ referenceRunId: current.documentId }],
         "retro tax references current committed regular income, independently of the old earning window");
       assert.equal(retroCalculated.gross, "3000.0000", "the retro cheque IS her September wages");

@@ -110,16 +110,17 @@ function storedConfigs(statements: unknown[]): Record<string, unknown>[] {
 
 function installDb() {
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
   }
   state.statements = []
   state.db = {
-    execute: async () => ({ rows: [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
     transaction: async (fn) => {
       const tx = {
-        execute: async (query: unknown) => {
+        execute: async (query: unknown, mode?: string) => {
+          const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
           state.statements.push(query)
-          return { rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Default view' }] }
+          return inMode({ rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Default view' }] })
         },
       }
       return fn(tx)
@@ -174,15 +175,16 @@ test('POST refuses a non-boolean isDefault by name and writes nothing', async ()
 test('POST refuses overlapping defaults by name', async () => {
   installDb()
   const state = (globalThis as Record<symbol, unknown>)[stateKey] as unknown as DbState & {
-    db: { execute: (query: unknown) => Promise<{ rows: unknown[] }>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
+    db: { execute: (query: unknown, mode?: string) => Promise<unknown>; transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown> }
   }
   state.db = {
-    execute: async () => ({ rows: [] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)),
     transaction: async (fn) => {
       const tx = {
-        execute: async (query: unknown) => {
+        execute: async (query: unknown, mode?: string) => {
+          const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
           state.statements.push(query)
-          return { rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Default view', n: 2 }] }
+          return inMode({ rows: [{ id: '99999999-9999-4999-8999-999999999999', name: 'Default view', n: 2 }] })
         },
       }
       return fn(tx)

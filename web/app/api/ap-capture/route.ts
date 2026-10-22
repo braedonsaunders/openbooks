@@ -105,8 +105,8 @@ export const POST = defineRoute({
             values (${gate.user.orgId}, ${stored.id}, 'queued', 'upload', ${upload.filename},
                     ${upload.hash}, ${gate.user.id}, ${gate.user.id})
             returning id
-          `))
-          const id = inserted.rows[0]!.id
+          `, 'objects'))
+          const id = inserted[0]!.id
           await tx.execute(sql`
             insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
             values (${gate.user.orgId}, ${id}, 'uploaded',
@@ -122,11 +122,11 @@ export const POST = defineRoute({
         // for every staged version, then keep the existing failure handling.
         if (storedId) {
           try {
-            const staged = (await db.execute<{ id: string }>(sql`
+            const staged = await db.execute<{ id: string }>(sql`
               select fv.id from file_versions fv
               join files fi on fi.id = fv.file_id and fi.org_id = ${gate.user.orgId}
               where fv.file_id = ${storedId} and fv.storage_kind = 's3'
-            `)).rows
+            `, 'objects')
             for (const version of staged) {
               await enqueueStorageCleanupStandalone({
                 orgId: gate.user.orgId,

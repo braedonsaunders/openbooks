@@ -108,8 +108,8 @@ export async function saveBudgetCells(input: {
         from budget_scenarios
        where id = ${input.scenarioId} and org_id = ${input.orgId}
        for update
-    `))
-    const scenario = locked.rows[0]
+    `, 'objects'))
+    const scenario = locked[0]
     if (!scenario) throw new BudgetMutationError('not_found', 404)
     if (scenario.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
     if (Number(scenario.revision) !== input.expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
@@ -125,8 +125,8 @@ export async function saveBudgetCells(input: {
            and parent_id is null and is_active and not is_elimination
          order by created_at, id
          limit 1
-      `)
-      const rootId = root.rows[0]?.id
+      `, 'objects')
+      const rootId = root[0]?.id
       if (!rootId) throw new BudgetMutationError('invalid_subsidiary')
       normalized = normalized.map((cell) => ({ ...cell, subsidiaryId: cell.subsidiaryId ?? rootId }))
     }
@@ -142,24 +142,24 @@ export async function saveBudgetCells(input: {
         select id, number, name, type from accounts
          where org_id = ${input.orgId} and id = any(${uuidArray(accountIds)}::uuid[])
            and is_active and not is_summary
-      `)
+      `, 'objects')
     const periods = await tx.execute<{ id: string }>(sql`
         select p.id from accounting_periods p
           join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
          where p.org_id = ${input.orgId} and p.id = any(${uuidArray(periodIds)}::uuid[])
            and p.fiscal_year = ${scenario.fiscal_year} and not p.is_adjustment and fc.is_default
-      `)
-    if (new Set(accounts.rows.map((row) => row.id)).size !== new Set(accountIds).size) {
+      `, 'objects')
+    if (new Set(accounts.map((row) => row.id)).size !== new Set(accountIds).size) {
       throw new BudgetMutationError('invalid_account')
     }
     // Budgets cover the P&L only: a balance-sheet account refuses by name
     // instead of landing in a line the worksheet hides but the totals count.
-    const nonPnl = accounts.rows.filter((row) => !PNL_TYPES.includes(row.type))
+    const nonPnl = accounts.filter((row) => !PNL_TYPES.includes(row.type))
     if (nonPnl.length > 0) {
       const names = nonPnl.map((row) => (row.number ? `${row.name} (${row.number})` : row.name)).join(', ')
       throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${names}`)
     }
-    if (new Set(periods.rows.map((row) => row.id)).size !== new Set(periodIds).size) {
+    if (new Set(periods.map((row) => row.id)).size !== new Set(periodIds).size) {
       throw new BudgetMutationError('invalid_period')
     }
 
@@ -169,8 +169,8 @@ export async function saveBudgetCells(input: {
         select id from subsidiaries
          where org_id = ${input.orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])
            and is_active and not is_elimination
-      `)
-      if (subsidiaries.rows.length !== subsidiaryIds.length) throw new BudgetMutationError('invalid_subsidiary')
+      `, 'objects')
+      if (subsidiaries.length !== subsidiaryIds.length) throw new BudgetMutationError('invalid_subsidiary')
     }
 
     const dimensionIds = {
@@ -222,9 +222,9 @@ export async function saveBudgetCells(input: {
        where org_id = ${input.orgId} and scenario_id = ${input.scenarioId}
          and account_id = any(${uuidArray(accountIds)}::uuid[])
          and period_id = any(${uuidArray(periodIds)}::uuid[])
-    `))
+    `, 'objects'))
     const before = new Map(
-      beforeRows.rows.map((row) => [
+      beforeRows.map((row) => [
         cellKey({
           accountId: row.account_id,
           periodId: row.period_id,

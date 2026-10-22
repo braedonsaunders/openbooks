@@ -66,9 +66,9 @@ async function discountFixture(
 }
 
 async function runDiscounts(orgId: string, runId: string): Promise<{ discount: string; payment: string }[]> {
-  const rows = (await db.execute<{ discount: string; payment: string }>(sql`
+  const rows = await db.execute<{ discount: string; payment: string }>(sql`
     select i.discount_amount::text as discount, i.payment_amount::text as payment
-      from payment_run_items i where i.org_id = ${orgId} and i.payment_run_id = ${runId}`)).rows;
+      from payment_run_items i where i.org_id = ${orgId} and i.payment_run_id = ${runId}`, "objects");
   return rows;
 }
 

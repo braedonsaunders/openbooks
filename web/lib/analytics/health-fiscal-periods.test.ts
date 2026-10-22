@@ -27,18 +27,19 @@ Object.assign(globalThis, { __healthFiscalQuery: (query: Parameters<InstanceType
 
 const mocks: Record<string, string> = {
   "server-only": "export {}",
-  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query){
+  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query, mode){
+    const inMode = (result) => (mode === 'objects' ? result.rows : result);
     const text = globalThis.__healthFiscalQuery(query);
     // The fiscal-period series reads journal lines without the monthly rollup
     // and without a dimension join; every other ledger read in this module
     // is irrelevant here.
     if (text.includes("operating_revenue") && !text.includes("gl_month_activity") && !text.includes("departments") && !text.includes("classes") && !text.includes("locations")) {
-      return { rows: [
+      return inMode({ rows: [
         { month: "period_0", func: null, late: "2026-03-31", revenue: "100", operating_revenue: "100", cogs: "40", opex: "10", other_exp: "0" },
         { month: "period_1", func: null, late: "2026-06-30", revenue: "200", operating_revenue: "200", cogs: "80", opex: "20", other_exp: "0" },
-      ] };
+      ] });
     }
-    return { rows: [] };}}`,
+    return inMode({ rows: [] });}}`,
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return false}",
   "../fx-presentation": `export async function flowRates(){ return { rateAt: () => "1" }; }`,

@@ -264,8 +264,8 @@ export async function payrollFindings(
                  and l.kind in ('deduction', 'employer_contribution', 'credit')
                  and l.amount <> 0), 0) <> 0
        order by min(s.pay_date) desc limit 25
-    `));
-    for (const run of runs.rows) {
+    `, "objects"));
+    for (const run of runs) {
       findings.push({
         agentKey: "payroll",
         findingType: "payroll_unknown_accounts",
@@ -306,8 +306,8 @@ export async function payrollFindings(
          and ((prof.country = 'CA' and (prof.federal_claim_code is null or prof.provincial_claim_code is null))
            or (prof.country = 'US' and prof.filing_status is null))
        group by prof.country
-    `));
-    for (const row of countries.rows) {
+    `, "objects"));
+    for (const row of countries) {
       const people = (await db.execute<{ id: string; name: string }>(sql`
         select p.id, p.display_name as name
           from employee_payroll_profiles prof
@@ -316,7 +316,7 @@ export async function payrollFindings(
            and ((prof.country = 'CA' and (prof.federal_claim_code is null or prof.provincial_claim_code is null))
              or (prof.country = 'US' and prof.filing_status is null))
          order by p.display_name limit 10
-      `));
+      `, "objects"));
       findings.push({
         agentKey: "payroll",
         findingType: "payroll_missing_elections",
@@ -330,7 +330,7 @@ export async function payrollFindings(
           employees: Number(row.employees),
           href: EMPLOYEES_HREF,
         },
-        evidence: people.rows.map((person) => ({
+        evidence: people.map((person) => ({
           kind: "employee",
           sourceType: "employee",
           sourceId: person.id,
@@ -344,8 +344,8 @@ export async function payrollFindings(
   if (yearendPolicy?.enabled) {
     const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
       select settings->'payroll' as p from orgs where id = ${orgId}
-    `));
-    const installed = await installedPayrollCountries(orgId, blob.rows[0]?.p ?? {});
+    `, "objects"));
+    const installed = await installedPayrollCountries(orgId, blob[0]?.p ?? {});
     for (const country of installed) {
       const { taxYear } = payrollTaxYearForDate(country, today);
       for (const gap of await payrollStatutoryRateGaps(orgId, country, taxYear)) {
@@ -387,8 +387,8 @@ export async function payrollFindings(
           from employee_payroll_profiles prof
          where prof.org_id = ${orgId} and prof.is_active and prof.country = ${country}
            and prof.sin_encrypted is null
-      `));
-      if (Number(noSin.rows[0]?.employees ?? 0) > 0) {
+      `, "objects"));
+      if (Number(noSin[0]?.employees ?? 0) > 0) {
         const people = (await db.execute<{ id: string; name: string }>(sql`
           select p.id, p.display_name as name
             from employee_payroll_profiles prof
@@ -396,7 +396,7 @@ export async function payrollFindings(
            where prof.org_id = ${orgId} and prof.is_active and prof.country = ${country}
              and prof.sin_encrypted is null
            order by p.display_name limit 10
-        `));
+        `, "objects"));
         findings.push({
           agentKey: "payroll",
           findingType: "payroll_yearend_gaps",
@@ -407,11 +407,11 @@ export async function payrollFindings(
           subjectType: "employees",
           summary: {
             country,
-            employees: Number(noSin.rows[0]?.employees ?? 0),
+            employees: Number(noSin[0]?.employees ?? 0),
             reason: "year_end_slips_require_sin",
             href: EMPLOYEES_HREF,
           },
-          evidence: people.rows.map((person) => ({
+          evidence: people.map((person) => ({
             kind: "employee",
             sourceType: "employee",
             sourceId: person.id,

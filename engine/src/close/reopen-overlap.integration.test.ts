@@ -53,7 +53,7 @@ for (const order of ['global first','entity first','race','separate entities'] a
         await approve(first);
         await assert.rejects(request(scopes[1]),(error:unknown)=>error instanceof CloseError && /approved reopen window .* is active; to widen or extend it/.test(error.message));
       }
-        const statuses=(await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} order by created_at,id`)).rows.map(r=>r.status).sort();
+        const statuses=(await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} order by created_at,id`, 'objects')).map(r=>r.status).sort();
         assert.deepEqual(statuses,order === 'separate entities' ? ['approved','approved'] : ['approved']);
       } finally {
         await dropScratchOrg(org.orgId);
@@ -83,9 +83,9 @@ test(
         }),
         /nothing to reopen/,
       );
-      const locks = await db.execute<{n:number}>(sql`select count(*)::int as n from period_locks where org_id=${org.orgId}`);
-      assert.equal(locks.rows[0]!.n,0,'a refused reopen must arm no lock row');
-      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${mistakenId}`)).rows[0]!.status,'requested');
+      const locks = await db.execute<{n:number}>(sql`select count(*)::int as n from period_locks where org_id=${org.orgId}`, 'objects');
+      assert.equal(locks[0]!.n,0,'a refused reopen must arm no lock row');
+      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${mistakenId}`, 'objects'))[0]!.status,'requested');
 
       // A request that mixes a closed module with an open one is refused the
       // same way: the open module's window would be pure time bomb. Narrowing
@@ -114,7 +114,7 @@ test(
         decision: "approved",
         hours: 2,
       });
-      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${narrowId}`)).rows[0]!.status,'approved');
+      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where id=${narrowId}`, 'objects'))[0]!.status,'approved');
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -188,7 +188,7 @@ test(
         }),
         /GL must be included/,
       );
-      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${requestId}`)).rows[0]!.status,'requested');
+      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${requestId}`, 'objects'))[0]!.status,'requested');
       // Creation-time validation: with GL closed, an AP-only request is refused
       // with the remedy instead of stranding the approver with Reject as the
       // only path forward.
@@ -207,7 +207,7 @@ test(
         decision: "approved",
         hours: 2,
       });
-      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${widenedId}`)).rows[0]!.status,'approved');
+      assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${widenedId}`, 'objects'))[0]!.status,'approved');
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -224,7 +224,7 @@ test('tenant Flow decisions retain period involvement as audit evidence without 
    values(${doc},${org.orgId},${org.subsidiaryId},'customer_invoice','approved',${doc},${org.date},${org.date},${org.periodId},'CAD','10','0','10',${actors.approver1Id},${actors.approver1Id})`);
   const requestId=await requestReviewedReopenFixture({...target,modules:['gl'],actorId:actors.adminId,reason:'Correct the original period'});
   await decideReopenFixture({orgId:org.orgId,requestId,actorId:actors.approver1Id,decision:'approved'});
-  const audit=(await db.execute<{changes:{after:{conflicts:{kind:string;count:number}[];conflictAcknowledged?:unknown}}}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${requestId} and action='approve'`)).rows;
+  const audit=await db.execute<{changes:{after:{conflicts:{kind:string;count:number}[];conflictAcknowledged?:unknown}}}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${requestId} and action='approve'`, 'objects');
   assert.equal(audit.length,1);assert.ok(audit[0]!.changes.after.conflicts.some(row=>row.kind==='authored_documents'&&row.count>0));
   assert.equal(Object.hasOwn(audit[0]!.changes.after,'conflictAcknowledged'),false);
  }finally{await dropScratchOrg(org.orgId);}
@@ -262,7 +262,7 @@ test(
     const [first,second]=await Promise.all([recloseExpiredReopens(),recloseExpiredReopens()]);
     assert.equal(first+second,2,'two concurrent ticks re-close exactly the two expired windows between them');
     assert.ok(first<=2&&second<=2,'no tick reports windows it did not re-close');
-    const statuses=(await db.execute<{status:string}>(sql`select status from close_reopen_requests where id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows.map(r=>r.status).sort();
+    const statuses=(await db.execute<{status:string}>(sql`select status from close_reopen_requests where id = any(${`{${ids.join(",")}}`}::uuid[])`, 'objects')).map(r=>r.status).sort();
     assert.deepEqual(statuses,['reclosed','reclosed']);
   } finally { await dropScratchOrg(org.orgId); }
 },
@@ -296,12 +296,12 @@ test('an expired reopen blocked by an open subledger does not stop other expirie
       where org_id=${org.orgId} and id=any(${`{${[...ids.values()].join(',')}}`}::uuid[])`);
 
     assert.equal(await recloseExpiredReopens(),1);
-    const states=(await db.execute<{id:string;status:string}>(sql`select id,status from close_reopen_requests
-      where org_id=${org.orgId} and id=any(${`{${[...ids.values()].join(',')}}`}::uuid[])`)).rows;
+    const states=await db.execute<{id:string;status:string}>(sql`select id,status from close_reopen_requests
+      where org_id=${org.orgId} and id=any(${`{${[...ids.values()].join(',')}}`}::uuid[])`, 'objects');
     assert.equal(states.find(row=>row.id===ids.get(org.subsidiaryId))?.status,'approved');
     assert.equal(states.find(row=>row.id===ids.get(other))?.status,'reclosed');
-    const blocked=(await db.execute<{payload:{requestId:string;reason:string}}>(sql`select payload from close_events
-      where org_id=${org.orgId} and event_type='period.reopen_expiry_blocked'`)).rows;
+    const blocked=await db.execute<{payload:{requestId:string;reason:string}}>(sql`select payload from close_events
+      where org_id=${org.orgId} and event_type='period.reopen_expiry_blocked'`, 'objects');
       assert.equal(blocked.length, 1);
       assert.equal(blocked[0]!.payload.requestId,ids.get(org.subsidiaryId));
       assert.match(blocked[0]!.payload.reason,/AP remains open/);

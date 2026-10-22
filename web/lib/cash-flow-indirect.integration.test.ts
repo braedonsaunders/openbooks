@@ -346,7 +346,7 @@ const consolidatedRows = [
             await withBypassContext(async () => {
               await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
                 values (${taxBookId}, ${org.orgId}, 'TAX', 'Tax book', false, true, true)`)
-              const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`)).rows[0]!
+              const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!
               const junePeriodId = randomUUID()
               await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
                 values (${junePeriodId}, ${org.orgId}, 2026, 6, '2026-06', '2026-06-01', '2026-06-30', false, ${calendar.fiscal_calendar_id})`)

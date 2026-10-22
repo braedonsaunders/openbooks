@@ -58,7 +58,7 @@ test("equipment PATCH refuses an impossible service date with a 422", { skip: !e
     const bad = await patch(unitId, { acquiredOn: "2026-02-30", revision: 0 });
     assert.equal(bad.status, 422);
     const stored = (await db.execute<{ acquired_on: string | null }>(sql`
-      select acquired_on::text as acquired_on from equipment_units where id = ${unitId} and org_id = ${org.orgId}`)).rows[0]!;
+      select acquired_on::text as acquired_on from equipment_units where id = ${unitId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(stored.acquired_on, null);
 
     const badService = await patch(unitId, { acquiredOn: "2026-01-15", inServiceOn: "2026-02-30", revision: 0 });

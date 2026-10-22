@@ -77,7 +77,7 @@ export async function loadApplication(
   return (await exec.execute<ApplicationRow>(sql`
     select ${APPLICATION_COLUMNS} from hrm_applications
      where org_id = ${orgId} and id = ${applicationId}
-  `)).rows[0] ?? null;
+  `, "objects"))[0] ?? null;
 }
 
 async function loadApplicationForUpdate(
@@ -88,7 +88,7 @@ async function loadApplicationForUpdate(
   const row = (await exec.execute<ApplicationRow>(sql`
     select ${APPLICATION_COLUMNS} from hrm_applications
      where org_id = ${orgId} and id = ${applicationId} for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
   }
@@ -115,7 +115,7 @@ export async function appendApplicationEvent(
             ${args.fromStageId ?? null}, ${args.toStageId ?? null},
             ${args.reason ?? null}, ${args.actorId})
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) {
     throw new RecruitingError("REFUSED", "the funnel event was not recorded — no row was written; retry the request");
   }
@@ -165,7 +165,7 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
     const requisition = (await db.execute<{ status: string; pipelineTemplateId: string | null }>(sql`
       select status, pipeline_template_id as "pipelineTemplateId"
         from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!requisition) {
       throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
     }
@@ -177,7 +177,7 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
     }
     const candidateLock = (await db.execute<{ id: string }>(sql`
       select id from hrm_candidates where org_id = ${orgId} and id = ${candidateId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     const candidate = candidateLock ? await loadCandidate(db, orgId, candidateId) : null;
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
@@ -216,7 +216,7 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
       throw new RecruitingError("REFUSED", "the requisition's pipeline is gone — re-open the requisition onto a live funnel first");
     }
     const start = firstStage(template);
-    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today;
+    const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
     let inserted: ApplicationRow | undefined;
     try {
       inserted = (await db.execute<ApplicationRow>(sql`
@@ -224,7 +224,7 @@ export async function createApplication(query: CreateApplicationQuery): Promise<
           (org_id, requisition_id, candidate_id, stage_id, status, applied_on, created_by, updated_by)
         values (${orgId}, ${requisitionId}, ${candidateId}, ${start.id}, 'active', ${today}::date, ${actorId}, ${actorId})
         returning ${APPLICATION_COLUMNS}
-      `)).rows[0];
+      `, "objects"))[0];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new RecruitingError(
@@ -332,7 +332,7 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
     const requisition = (await db.execute<{ pipelineTemplateId: string | null }>(sql`
       select pipeline_template_id as "pipelineTemplateId"
         from hrm_requisitions where org_id = ${orgId} and id = ${current.requisitionId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!requisition?.pipelineTemplateId) {
       throw new RecruitingError("REFUSED", "the requisition's pipeline is gone — re-open the requisition onto a live funnel first");
     }
@@ -362,7 +362,7 @@ export async function moveApplicationStage(query: MoveApplicationStageQuery): Pr
          set stage_id = ${toStageId}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${applicationId} and status = 'active'
       returning ${APPLICATION_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError(
         "STALE_REVISION",
@@ -415,7 +415,7 @@ export async function rejectApplication(query: RejectApplicationQuery): Promise<
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${applicationId} and status = 'active'
       returning ${APPLICATION_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError("STALE_REVISION", "the application changed while rejecting — reload it and try again");
     }
@@ -459,7 +459,7 @@ export async function withdrawApplication(query: WithdrawApplicationQuery): Prom
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${applicationId} and status = 'active'
       returning ${APPLICATION_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError("STALE_REVISION", "the application changed while withdrawing — reload it and try again");
     }
@@ -499,7 +499,7 @@ export async function markApplicationHired(
            updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${args.applicationId} and status = 'active'
     returning ${APPLICATION_COLUMNS}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!updated) {
     throw new RecruitingError("REFUSED", "the application changed while hiring — the hire is refused rather than recorded twice");
   }

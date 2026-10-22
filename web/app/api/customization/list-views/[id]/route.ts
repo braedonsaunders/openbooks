@@ -52,8 +52,8 @@ async function loadOwn(orgId: string, userId: string, id: string) {
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
       from list_views where org_id = ${orgId} and id = ${id}
-  `);
-  const row = r.rows[0] ?? null;
+  `, "objects");
+  const row = r[0] ?? null;
   if (!row) return null;
   // org-scope rows are visible org-wide; user-scope only to the owner.
   if (row.scope === "user" && row.ownerId !== userId) return null;
@@ -220,8 +220,7 @@ export const PATCH = defineRoute({
       // db.execute goes through the pool (each statement may land on a different
       // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
       const updated = await db.transaction(async (tx) => {
-        const locked = (
-          await tx.execute<{
+        const locked = (await tx.execute<{
             id: string;
             recordType: string;
             scope: string;
@@ -234,8 +233,7 @@ export const PATCH = defineRoute({
                is_default as "isDefault", is_active as "isActive", config
           from list_views
          where id = ${id} and org_id = ${user.orgId}
-         for update`)
-        ).rows[0];
+         for update`, "objects"))[0];
         if (!locked) return { kind: "not_found" as const };
         if (proposedConfig) {
           const currentConfig = parseListView(locked.config);
@@ -272,13 +270,11 @@ export const PATCH = defineRoute({
           await lockListViewDefaultScope(tx, defaultScope);
         // Next-state default+inactive must match zero rows even if the JS
         // refusal is skipped — refuse by name, never {ok:true}.
-        const written = (
-          await tx.execute<{ id: string }>(sql`
+        const written = (await tx.execute<{ id: string }>(sql`
         update list_views set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
            and not (${nextDefaultSql} and not ${nextActiveSql})
-         returning id`)
-        ).rows[0];
+         returning id`, "objects"))[0];
         if (!written) {
           if (nextFlags.isDefault && !nextFlags.isActive) {
             return {
@@ -353,13 +349,11 @@ export const DELETE = defineRoute({
     // Delete + audit in one transaction so a failed audit insert rolls back the
     // deletion instead of leaving an untraceable configuration change behind.
     const deleted = await db.transaction(async (tx) => {
-      const result = (await tx.execute(sql`
+      const result = await tx.execute<{ name: string; scope: string }>(sql`
       delete from list_views
        where id = ${id} and org_id = ${user.orgId}
-       returning name, scope`)) as {
-        rows: Array<{ name: string; scope: string }>;
-      };
-      const row = result.rows[0];
+       returning name, scope`, "objects");
+      const row = result[0];
       if (!row) return null;
       await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

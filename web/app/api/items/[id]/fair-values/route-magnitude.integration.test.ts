@@ -18,8 +18,8 @@ async function call(method: 'POST' | 'PATCH', id: string, body: unknown) {
 }
 
 async function rowCount(itemId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from fair_value_prices where item_id = ${itemId}`)).rows
+  const rows = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from fair_value_prices where item_id = ${itemId}`, 'objects')
   return rows[0]!.n
 }
 
@@ -58,8 +58,8 @@ test('PATCH refuses a unit price wider than numeric(19,4) without writing', asyn
     const result = await call('PATCH', itemId, { id: rowId, currency: 'CAD', unitPrice: '99999999999999999999' })
     assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.match(String((result.json as { error: string }).error), /Unit price.*15 whole digits/)
-    const rows = (await db.execute<{ unit_price: string }>(sql`
-      select unit_price::text as unit_price from fair_value_prices where id = ${rowId}`)).rows
+    const rows = await db.execute<{ unit_price: string }>(sql`
+      select unit_price::text as unit_price from fair_value_prices where id = ${rowId}`, 'objects')
     assert.equal(rows[0]!.unit_price, '10.0000')
   } finally {
     await dropScratchOrg(org.orgId)
@@ -72,8 +72,8 @@ test('POST still saves a column-maximum unit price with identical read-back', as
     const result = await call('POST', itemId, { currency: 'CAD', unitPrice: '999999999999999.9999' })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     const rowId = (result.json as { id: string }).id
-    const rows = (await db.execute<{ unit_price: string }>(sql`
-      select unit_price::text as unit_price from fair_value_prices where id = ${rowId}`)).rows
+    const rows = await db.execute<{ unit_price: string }>(sql`
+      select unit_price::text as unit_price from fair_value_prices where id = ${rowId}`, 'objects')
     assert.equal(rows[0]!.unit_price, '999999999999999.9999')
   } finally {
     await dropScratchOrg(org.orgId)

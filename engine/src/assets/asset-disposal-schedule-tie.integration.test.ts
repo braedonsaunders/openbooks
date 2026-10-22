@@ -26,7 +26,7 @@ test(
     try {
       const actorId = (await seedFlowActors(org.orgId)).adminId;
       const calendarId = (await db.execute<{ id: string }>(sql`
-        select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id;
+        select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!.id;
       for (let i = 1; i < 10; i++) {
         const start = new Date(Date.UTC(2026, 6 + i, 1));
         const end = new Date(Date.UTC(2026, 7 + i, 0));
@@ -84,9 +84,9 @@ test(
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
          where l.org_id = ${org.orgId} and e.id = ${disposal.entryId}
-         order by l.line_number`));
+         order by l.line_number`, "objects"));
       assert.deepEqual(
-        gl.rows.map((r) => [r.accountId, r.amount]),
+        gl.map((r) => [r.accountId, r.amount]),
         [
           [org.accounts.invAsset, "-1000.0000"],
           [org.accounts.clearing, "200.0000"],

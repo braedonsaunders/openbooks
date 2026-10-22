@@ -78,7 +78,7 @@ const projectFeatureCases = [
             await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"revenueRecognition":true}'::jsonb) where id=${org.orgId}`);
             await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,status,is_active,custom)
               values(${projectId},${org.orgId},${org.subsidiaryId},'PERCENT-FENCE','Percentage fence','active',true,'{}'::jsonb)`);
-            const snapshot = async () => (await db.execute(sql`select custom,updated_at,updated_by from projects where org_id=${org.orgId} and id=${projectId}`)).rows[0]!;
+            const snapshot = async () => (await db.execute(sql`select custom,updated_at,updated_by from projects where org_id=${org.orgId} and id=${projectId}`, 'objects'))[0]!;
             const before = await snapshot();
             // The override starts unset, so the mandatory compare-and-swap evidence is null.
             const send = () => PUT(new Request("https://openbooks.test/api/projects/fixture/percent-complete", {
@@ -140,7 +140,7 @@ const projectFeatureCases = [
                 (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404 && /projects feature is disabled/i.test(error.message),
               )
               assert.equal(
-                (await db.execute<{ n: number }>(sql`select count(*)::int as n from project_tasks where org_id=${org.orgId}`)).rows[0]!.n,
+                (await db.execute<{ n: number }>(sql`select count(*)::int as n from project_tasks where org_id=${org.orgId}`, 'objects'))[0]!.n,
                 0,
               )
             } finally {
@@ -553,12 +553,12 @@ test('schedule dependency and task-creation inputs fail closed', enabled, async 
       ] as const) {
         await assert.rejects(attempt(), (error: unknown) => error instanceof ScheduleError && reason.test(error.message))
       }
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_dependencies where org_id=${org.orgId}`)).rows[0]!.n, 0)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_dependencies where org_id=${org.orgId}`, 'objects'))[0]!.n, 0)
 
       // Legal values still persist.
       await createScheduleDependency(org.orgId, project, { predecessorId: taskA, successorId: taskB, type: 'SS', lagDays: -2 }, actor, null)
       await createScheduleTask(org.orgId, project, { name: 'Good order', order: 3 }, actor, null)
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_dependencies where org_id=${org.orgId}`)).rows[0]!.n, 1)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_dependencies where org_id=${org.orgId}`, 'objects'))[0]!.n, 1)
 
       const otherProject = randomUUID()
       const baseline = randomUUID()
@@ -567,7 +567,7 @@ test('schedule dependency and task-creation inputs fail closed', enabled, async 
       await db.execute(sql`insert into schedule_baseline_tasks (org_id, baseline_id, task_id, task_name) values (${org.orgId}, ${baseline}, ${taskA}, 'Pinned snapshot')`)
       await assert.rejects(deleteScheduleBaseline(org.orgId, project, baseline, null),
         (error: unknown) => error instanceof ScheduleError && error.status === 404)
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_baseline_tasks where baseline_id=${baseline}`)).rows[0]!.n, 1)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from schedule_baseline_tasks where baseline_id=${baseline}`, 'objects'))[0]!.n, 1)
       await assert.rejects(deleteScheduleDependency(org.orgId, project, randomUUID(), null),
         (error: unknown) => error instanceof ScheduleError && error.status === 404)
     } finally {
@@ -604,7 +604,7 @@ const consolidatedRows = [
                 (error: unknown) => error instanceof ScheduleError && error.status === 404 && /project scheduling feature is disabled/i.test(error.message),
               )
               assert.equal(
-                (await db.execute<{ n: number }>(sql`select count(*)::int as n from project_tasks where org_id=${org.orgId} and project_id=${projectId}`)).rows[0]!.n,
+                (await db.execute<{ n: number }>(sql`select count(*)::int as n from project_tasks where org_id=${org.orgId} and project_id=${projectId}`, 'objects'))[0]!.n,
                 0,
               )
             } finally {
@@ -655,7 +655,7 @@ const consolidatedRows = [
               }
               const parentOf = async (id: string) =>
                 (await db.execute<{ parent_id: string | null }>(sql`
-                  select parent_id from project_tasks where id = ${id} and org_id = ${org.orgId}`)).rows[0]!.parent_id
+                  select parent_id from project_tasks where id = ${id} and org_id = ${org.orgId}`, 'objects'))[0]!.parent_id
 
               // A task cannot parent to itself.
               await assert.rejects(
@@ -729,14 +729,14 @@ const consolidatedRows = [
               const untouched = (await db.execute<{ start: string | null; n: number }>(sql`
                 select schedule_start::text as start,
                        (select count(*)::int from schedule_task_assignments where org_id=${org.orgId} and task_id=${taskId}) as n
-                  from project_tasks where id=${taskId} and org_id=${org.orgId}`)).rows[0]!
+                  from project_tasks where id=${taskId} and org_id=${org.orgId}`, 'objects'))[0]!
               assert.equal(untouched.start, null)
               assert.equal(untouched.n, 0)
 
               // Real values still apply.
               await updateScheduleTask(org.orgId, projectId, taskId, { startDate: '2026-02-27', endDate: '2026-02-28' }, actor, null)
               assert.equal((await db.execute<{ start: string }>(sql`
-                select schedule_start::text as start from project_tasks where id=${taskId} and org_id=${org.orgId}`)).rows[0]!.start, '2026-02-27')
+                select schedule_start::text as start from project_tasks where id=${taskId} and org_id=${org.orgId}`, 'objects'))[0]!.start, '2026-02-27')
             } finally {
               await dropScratchOrg(org.orgId)
             }

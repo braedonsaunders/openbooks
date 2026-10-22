@@ -62,7 +62,7 @@ export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, sch
       join accounts xa on xa.org_id = s.org_id and xa.id = s.destination_account_id
       left join documents d on d.org_id = s.org_id and d.id = s.source_document_id
       left join document_lines dl on dl.org_id = s.org_id and dl.id = s.source_line_id
-     where s.org_id = ${orgId} and s.id = ${scheduleId}`)).rows[0]!;
+     where s.org_id = ${orgId} and s.id = ${scheduleId}`, "objects"))[0]!;
   const lines = await livePlanLines(runner, orgId, scheduleId);
   const balance = scheduleBalance(schedule, lines);
   const accountNames = new Map(
@@ -71,9 +71,9 @@ export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, sch
         from accounts a
        where a.org_id = ${orgId}
          and a.id in (select destination_account_id from expense_amortization_schedule_lines
-                       where org_id = ${orgId} and schedule_id = ${scheduleId})`)).rows.map((row) => [row.id, row.label]),
+                       where org_id = ${orgId} and schedule_id = ${scheduleId})`, "objects")).map((row) => [row.id, row.label]),
   );
-  const history = (await runner.execute<{
+  const history = await runner.execute<{
     id: string;
     kind: string;
     reason: string;
@@ -90,12 +90,12 @@ export async function loadScheduleDetail(runner: SqlExecutor, orgId: string, sch
       from expense_amortization_schedule_events e
       left join users u on u.org_id = e.org_id and u.id = e.created_by
      where e.org_id = ${orgId} and e.schedule_id = ${scheduleId}
-     order by e.created_at, e.id`)).rows;
-  const superseded = (await runner.execute<{ plan_revision: number; period_start: string; planned_amount: string; status: string }>(sql`
+     order by e.created_at, e.id`, "objects");
+  const superseded = await runner.execute<{ plan_revision: number; period_start: string; planned_amount: string; status: string }>(sql`
     select plan_revision, period_start::text as period_start, planned_amount::text as planned_amount, status
       from expense_amortization_schedule_lines
      where org_id = ${orgId} and schedule_id = ${scheduleId} and status in ('superseded', 'cancelled')
-     order by plan_revision, period_start`)).rows;
+     order by plan_revision, period_start`, "objects");
   return {
     schedule: {
       ...schedule,

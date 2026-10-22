@@ -119,7 +119,7 @@ async function resolveHrmChangeRequests(
   const out = new Map<string, ApprovalSubjectDetail>()
   const ids = [...new Set(subjectIds)].filter((id) => isUuid(id))
   if (ids.length === 0) return out
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string
     employeeName: string | null
     payload: Record<string, unknown>
@@ -129,7 +129,7 @@ async function resolveHrmChangeRequests(
       join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
       join parties p on p.id = e.worker_party_id and p.org_id = r.org_id
      where r.org_id = ${orgId} and r.id = any(${pgTextArrayLiteral(ids)}::uuid[])
-  `)).rows
+  `, 'objects')
   for (const row of rows) {
     out.set(String(row.id), {
       partyName: row.employeeName,
@@ -174,7 +174,7 @@ async function resolveFinancialChanges(
   const out = new Map<string, ApprovalSubjectDetail>()
   const ids = [...new Set(subjectIds)].filter((id) => isUuid(id))
   if (ids.length === 0) return out
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string
     domain: string
     operation: string
@@ -184,7 +184,7 @@ async function resolveFinancialChanges(
     select id::text as id, domain, operation, subject_id::text as "subjectId", payload
       from financial_changes
      where org_id = ${orgId} and id = any(${pgTextArrayLiteral(ids)}::uuid[])
-  `)).rows
+  `, 'objects')
   for (const row of rows) {
     const payload = (row.payload ?? {}) as Record<string, unknown>
     const subjectLabel = await loadFinancialChangeSubjectLabel(
@@ -238,7 +238,7 @@ async function resolveEquityActions(
   const ids = [...new Set(subjectIds)].filter((id) => isUuid(id))
   if (ids.length === 0) return out
   const [t, ta] = await Promise.all([getTranslations('equity'), getTranslations('approvals')])
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string
     action: string
     subjectLabel: string
@@ -258,7 +258,7 @@ async function resolveEquityActions(
         on r.action = 'reverse' and reversed.org_id = r.org_id and reversed.security_id = r.subject_id
        and reversed.id::text = r.payload->>'reversesEventId'
      where r.org_id = ${orgId} and r.id = any(${pgTextArrayLiteral(ids)}::uuid[])
-  `)).rows
+  `, 'objects')
   for (const row of rows) {
     const action = t.has(`approval.action.${row.action}`) ? t(`approval.action.${row.action}` as never) : row.action
     const amount = exactDecimal(row.amount)

@@ -69,12 +69,13 @@ stubModules({
       const state = globalThis[Symbol.for('openbooks.benford-route-test')]
       const sqlText = globalThis.openbooksBenfordSqlText
       export const db = {
-        execute(query) {
+        execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.calls.push(text)
           return Promise.resolve({
             rows: text.includes('select count(*)') ? [state.aggregateRow] : state.detailRows,
-          })
+          }).then(inMode)
         },
       }
     `,

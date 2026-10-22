@@ -30,13 +30,11 @@ export const SOURCE_EVIDENCE_POLICY_CODE = "source-reconciliation-evidence";
 export async function sourceEvidencePolicyActive(
   orgId: string,
 ): Promise<boolean> {
-  const row = (
-    await db.execute<{ is_active: boolean }>(sql`
+  const row = (await db.execute<{ is_active: boolean }>(sql`
     select is_active from close_policies
      where org_id = ${orgId} and code = ${SOURCE_EVIDENCE_POLICY_CODE}
      limit 1
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   return row?.is_active ?? true;
 }
 
@@ -104,8 +102,8 @@ export async function applySourceLineEvidence(
         const actual = await tx.execute<{ count: string }>(sql`
           select count(*)::text as count from journal_lines
            where org_id = ${orgId} and entry_id = ${entry.entryId} and account_id = ${accountId}
-        `);
-        if (group.length !== Number(actual.rows[0]!.count)) continue;
+        `, "objects");
+        if (group.length !== Number(actual[0]!.count)) continue;
         const maxDate = [...dates].sort().at(-1)!;
         const stamped = await tx.execute<{ id: string }>(sql`
           update journal_lines jl
@@ -117,8 +115,8 @@ export async function applySourceLineEvidence(
                 where a.id = jl.account_id and a.org_id = jl.org_id and a.reconcilable
              )
           returning jl.id
-        `);
-        linesStamped += stamped.rows.length;
+        `, "objects");
+        linesStamped += stamped.length;
       }
     }
   });
@@ -149,8 +147,7 @@ export async function refreshSourceReconciliationState(
   const key = connector?.trim() ?? "";
   if (!key) throw new BankingError("Source evidence requires a connector key");
   const bookId = await reconciliationBookId(db, orgId);
-  const rows = (
-    await db.execute<{
+  const rows = await db.execute<{
       account_id: string;
       number: string | null;
       name: string;
@@ -171,8 +168,7 @@ export async function refreshSourceReconciliationState(
      group by a.id, a.number, a.name
     having count(*) > 0
      order by a.number nulls last, a.name
-  `)
-  ).rows;
+  `, "objects");
   await db.transaction(async (tx) => {
     for (const row of rows) {
       if (row.through) {
@@ -262,13 +258,11 @@ export async function signOffFromSourceEvidence(
     opts.accountId,
     ctx.allowedSubsidiaryIds,
   );
-  const state = (
-    await db.execute<{ connector: string; reconciled_through: string }>(sql`
+  const state = (await db.execute<{ connector: string; reconciled_through: string }>(sql`
     select connector, reconciled_through::text
       from source_reconciliation_state
      where org_id = ${ctx.orgId} and account_id = ${account.id}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!state) {
     return {
       signed: false,
@@ -302,8 +296,7 @@ export async function signOffFromSourceEvidence(
     );
     const bookId = await reconciliationBookId(tx, ctx.orgId);
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
-    const coverage = (
-      await tx.execute<{ cleared: string; open: string; balance: string }>(sql`
+    const coverage = (await tx.execute<{ cleared: string; open: string; balance: string }>(sql`
       select
         count(*) filter (
           where (jl.source_cleared_date is not null and jl.source_cleared_date <= ${state.reconciled_through})
@@ -321,16 +314,15 @@ export async function signOffFromSourceEvidence(
          and jl.currency = ${account.currency}
          and je.posting_date <= ${state.reconciled_through}
          and ${excludePeriodEndJournals(sql`je.origin`)}
-    `)
-    ).rows[0]!;
+    `, "objects"))[0]!;
     const clearedLines = Number(coverage.cleared);
     const openLines = Number(coverage.open);
     const open = await tx.execute<{ id: string }>(sql`
       select id from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status <> 'signed_off' and (${opts.reconciliationId ?? null}::uuid is null or id<>${opts.reconciliationId ?? null}::uuid)
        limit 1
-    `);
-    if (open.rows[0]) {
+    `, "objects");
+    if (open[0]) {
       return {
         signed: false,
         reason: "open-session",
@@ -339,13 +331,11 @@ export async function signOffFromSourceEvidence(
         unclearedLines: openLines,
       };
     }
-    const latestSigned = (
-      await tx.execute<{ through_date: string }>(sql`
+    const latestSigned = (await tx.execute<{ through_date: string }>(sql`
       select through_date::text from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (latestSigned && state.reconciled_through <= latestSigned.through_date) {
       return {
         signed: false,
@@ -367,8 +357,7 @@ export async function signOffFromSourceEvidence(
     const statementBalance = fromUnits(toUnits(coverage.balance));
     let recon: { id: string };
     if (opts.reconciliationId) {
-      const existing = (
-        await tx.execute<{
+      const existing = (await tx.execute<{
           id: string;
           through_date: string;
           statement_balance: string;
@@ -376,8 +365,7 @@ export async function signOffFromSourceEvidence(
           status: string;
         }>(sql`
         select id,through_date::text,statement_balance::text,evidence_connector,status from reconciliations
-        where org_id=${ctx.orgId} and id=${opts.reconciliationId} and account_id=${account.id} and evidence_kind='source' for update`)
-      ).rows[0];
+        where org_id=${ctx.orgId} and id=${opts.reconciliationId} and account_id=${account.id} and evidence_kind='source' for update`, "objects"))[0];
       if (
         !existing ||
         existing.status === "signed_off" ||
@@ -390,12 +378,10 @@ export async function signOffFromSourceEvidence(
         );
       recon = existing;
     } else {
-      const inserted = (
-        await tx.execute<{
+      const inserted = (await tx.execute<{
           id: string;
         }>(sql`insert into reconciliations(org_id,account_id,through_date,currency,statement_balance,status,created_by,evidence_kind,evidence_connector)
-        values(${ctx.orgId},${account.id},${state.reconciled_through},${account.currency},${statementBalance},'in_progress',${ctx.userId},'source',${state.connector}) returning id`)
-      ).rows[0];
+        values(${ctx.orgId},${account.id},${state.reconciled_through},${account.currency},${statementBalance},'in_progress',${ctx.userId},'source',${state.connector}) returning id`, "objects"))[0];
       if (!inserted)
         throw new BankingError("The source reconciliation was not stored.");
       recon = inserted;
@@ -439,7 +425,7 @@ export async function signOffFromSourceEvidence(
               and je.book_id = ${bookId} and je.posting_date <= ${state.reconciled_through}
          )
       returning jl.id
-    `);
+    `, "objects");
     await tx.execute(sql`
       update reconciliations
          set status = 'signed_off', signed_off_by = ${ctx.userId}, signed_off_at = now(),
@@ -459,8 +445,8 @@ export async function signOffFromSourceEvidence(
            statementBalance,
            currency: account.currency,
            throughDate: state.reconciled_through,
-           clearedJournalLines: stamped.rows.length,
-           previouslyReconciledLines: clearedLines - stamped.rows.length,
+           clearedJournalLines: stamped.length,
+           previouslyReconciledLines: clearedLines - stamped.length,
            throughBasis: "max-source-cleared-date",
          })}::jsonb,
          ${ctx.userId})
@@ -469,8 +455,8 @@ export async function signOffFromSourceEvidence(
       signed: true,
       reconciliationId: recon.id,
       throughDate: state.reconciled_through,
-      clearedLines: stamped.rows.length,
-      previouslyReconciledLines: clearedLines - stamped.rows.length,
+      clearedLines: stamped.length,
+      previouslyReconciledLines: clearedLines - stamped.length,
       advanced: Boolean(latestSigned),
     };
   });

@@ -44,8 +44,8 @@ export async function subsidiaryOptions(
            country, is_elimination as "isElimination", is_active as "isActive"
       from subsidiaries
      where org_id = ${tenant}
-     order by name`));
-  const rows = r.rows.filter((s) => (includeInactive || s.isActive) && (includeElimination || !s.isElimination));
+     order by name`, "objects"));
+  const rows = r.filter((s) => (includeInactive || s.isActive) && (includeElimination || !s.isElimination));
   const byParent = new Map<string | null, typeof rows>();
   for (const s of rows) {
     const list = byParent.get(s.parentId) ?? [];
@@ -92,9 +92,9 @@ export async function rootSubsidiaryId(orgId: string): Promise<string> {
  */
 export async function rootSubsidiary(orgId: string): Promise<{ id: string; name: string }> {
   const r = (await db.execute<{ id: string; name: string }>(sql`
-    select id, name from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`));
-  if (!r.rows[0]) throw new Error("org has no root subsidiary");
-  return r.rows[0];
+    select id, name from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects"));
+  if (!r[0]) throw new Error("org has no root subsidiary");
+  return r[0];
 }
 
 /** `subId`'s subtree (inclusive) over a preloaded option list. */

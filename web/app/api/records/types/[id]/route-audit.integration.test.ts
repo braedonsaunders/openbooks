@@ -93,11 +93,11 @@ async function openedRevision(id: string): Promise<string> {
 }
 
 async function auditEvents(orgId: string, rowId: string) {
-  return (await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
+  return await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
     select action, changes, actor_id from audit_log
      where org_id = ${orgId} and table_name = 'custom_record_types' and row_id = ${rowId}
      order by at, id
-  `)).rows
+  `, 'objects')
 }
 
 test(

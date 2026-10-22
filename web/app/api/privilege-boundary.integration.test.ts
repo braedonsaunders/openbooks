@@ -118,7 +118,7 @@ test("least-privileged viewer is refused by every mutating route", async () => {
       mode: "any",
     }));
     await withBypassContext(() => submitForApproval("vendor_bill", draftId, actors.submitterId));
-    const gateId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`select id from flow_gates where subject_id = ${draftId} order by created_at limit 1`))).rows[0]!.id;
+    const gateId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`select id from flow_gates where subject_id = ${draftId} order by created_at limit 1`, "objects")))[0]!.id;
 
     setUser(viewer);
     const cells: Array<{ name: string; run: () => Promise<Response> }> = [

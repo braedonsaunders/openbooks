@@ -144,8 +144,8 @@ test("hour/active PATCH keeps a restricted authorization_snapshot when the edito
         const result = await db.execute(sql`
             select authorization_snapshot from report_schedules
              where id = ${scheduleId} and org_id = ${oid}
-          `);
-        return result.rows[0] as { authorization_snapshot: typeof pin } | undefined;
+          `, "objects");
+        return result[0] as { authorization_snapshot: typeof pin } | undefined;
       });
       assert.ok(stored, `${label} PATCH left a schedule row`);
       assert.notEqual(

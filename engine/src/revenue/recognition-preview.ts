@@ -174,35 +174,35 @@ async function recognitionPreviewNames(
   if (ids.accountIds.length > 0) {
     for (const row of (await runner.execute<{ id: string; number: string | null; name: string | null }>(sql`
       select id, number, name from accounts
-       where org_id = ${orgId} and id = any(${list(ids.accountIds)}::uuid[])`)).rows) {
+       where org_id = ${orgId} and id = any(${list(ids.accountIds)}::uuid[])`, "objects"))) {
       accounts.set(String(row.id), { number: row.number, name: row.name });
     }
   }
   if (ids.bookIds.length > 0) {
     for (const row of (await runner.execute<{ id: string; name: string }>(sql`
       select id, name from accounting_books
-       where org_id = ${orgId} and id = any(${list(ids.bookIds)}::uuid[])`)).rows) {
+       where org_id = ${orgId} and id = any(${list(ids.bookIds)}::uuid[])`, "objects"))) {
       books.set(String(row.id), row.name);
     }
   }
   if (ids.subsidiaryIds.length > 0) {
     for (const row of (await runner.execute<{ id: string; name: string }>(sql`
       select id, name from subsidiaries
-       where org_id = ${orgId} and id = any(${list(ids.subsidiaryIds)}::uuid[])`)).rows) {
+       where org_id = ${orgId} and id = any(${list(ids.subsidiaryIds)}::uuid[])`, "objects"))) {
       subsidiaries.set(String(row.id), row.name);
     }
   }
   if (ids.departmentIds.length > 0) {
     for (const row of (await runner.execute<{ id: string; name: string }>(sql`
       select id, name from departments
-       where org_id = ${orgId} and id = any(${list(ids.departmentIds)}::uuid[])`)).rows) {
+       where org_id = ${orgId} and id = any(${list(ids.departmentIds)}::uuid[])`, "objects"))) {
       departments.set(String(row.id), row.name);
     }
   }
   if (ids.projectIds.length > 0) {
     for (const row of (await runner.execute<{ id: string; name: string }>(sql`
       select id, name from projects
-       where org_id = ${orgId} and id = any(${list(ids.projectIds)}::uuid[])`)).rows) {
+       where org_id = ${orgId} and id = any(${list(ids.projectIds)}::uuid[])`, "objects"))) {
       projects.set(String(row.id), row.name);
     }
   }
@@ -245,7 +245,7 @@ export async function previewRevenueRecognition(
           select l.id from recognition_schedule_lines l
            join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
            join performance_obligations o on o.id = s.obligation_id and o.org_id = s.org_id
-           where l.org_id = ${orgId} and o.contract_id = ${input.contractId}`)).rows.map((row) =>
+           where l.org_id = ${orgId} and o.contract_id = ${input.contractId}`, "objects")).map((row) =>
           String(row.id),
         ),
       )

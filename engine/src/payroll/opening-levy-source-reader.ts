@@ -53,7 +53,7 @@ export async function readEmployeeOpeningLevySources(tx: Executor, input: {
   const exactAnnualAmounts = sql`(select jsonb_object_agg(v.key,v.amount) from (values
     ${sql.join(amountColumns.map(column => sql`(${column}::text,${sql.raw('b.' + column)}::text)`),sql`,`)}
   ) as v(key,amount))`;
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     openingChildren: OriginalOpeningSourceChildren; hasMaterialHistory: boolean;
     openingSnapshot: Record<string, unknown>; employerAuthorityId: string; sourceFileId: string; sourceVersionId: string;
     sourceSha256: string; sourceReference: string; openingSha256: string;
@@ -103,7 +103,7 @@ export async function readEmployeeOpeningLevySources(tx: Executor, input: {
       left join payroll_opening_levy_source_authorities h on h.org_id=b.org_id and h.opening_balance_id=b.id
         and ${currentOpeningLevySourceSql('h')}
      where b.org_id=${input.orgId} and b.employee_party_id=${input.employeePartyId} and b.tax_year=${input.taxYear}
-  `)).rows;
+  `, 'objects');
   if (!rows.length) return { hasOpening: false, hasMaterialHistory: false, hasWageHistory: false, hasFutaWageHistory: false, hasSuiWageHistory: false, facts: null, openingSnapshot: null, openingChildren: null, authority: null, allocations: [] };
   if (rows.length !== 1) throw new PayrollError('The employee/year statutory opening identity is ambiguous');
   const opening = rows[0]!;
@@ -125,13 +125,13 @@ export async function readEmployeeOpeningLevySources(tx: Executor, input: {
   if (input.beforeDate !== undefined && opening.coverageEnd >= input.beforeDate) {
     throw new PayrollError('The original opening report covers this payroll date or a later date; use a pay run after the certified opening coverage ends');
   }
-  const allocations = (await tx.execute<OpeningLevySourceAllocation>(sql`
+  const allocations = await tx.execute<OpeningLevySourceAllocation>(sql`
     select a.program_key as "programKey",a.region,a.sub_region as "subRegion",
       a.filing_account_id as "filingAccountId",a.federal_account_id as "federalAccountId",a.amount::text as amount
       from payroll_opening_levy_source_allocations a
      where a.org_id=${input.orgId} and a.authority_id=${opening.sourceAuthorityId}
      order by a.program_key,a.region,a.sub_region,a.filing_account_id nulls first,a.federal_account_id nulls first
-  `)).rows;
+  `, 'objects');
   return { hasOpening: true, hasMaterialHistory: opening.hasMaterialHistory, hasWageHistory: opening.hasWageHistory,
     hasFutaWageHistory: opening.hasFutaWageHistory, hasSuiWageHistory: opening.hasSuiWageHistory, facts: { originalCountry: opening.originalCountry, originalCurrency: opening.originalCurrency, coverageStart: opening.coverageStart, coverageEnd: opening.coverageEnd, coverageComplete: opening.coverageComplete },
     openingSnapshot: opening.openingSnapshot, openingChildren: opening.openingChildren,
@@ -170,7 +170,7 @@ export async function requireEmployerOpeningLevySources(tx: Executor, input: {
   orgId: string; subsidiaryId: string; taxYear: number; beforeDate?: string; programKey: OpeningLevyProgram; region: string;
 }): Promise<string> {
   const materialHistory = await openingHasMaterialHistorySql('b');
-  const unknown = (await tx.execute(sql`
+  const unknown = await tx.execute(sql`
     select b.id from payroll_opening_balances b
       left join payroll_opening_employer_authorities e on e.org_id=b.org_id and e.opening_balance_id=b.id
       left join payroll_opening_levy_source_authorities h on h.org_id=b.org_id and h.opening_balance_id=b.id
@@ -193,9 +193,9 @@ export async function requireEmployerOpeningLevySources(tx: Executor, input: {
          or h.opening_children_sha256<>encode(public.digest(h.opening_children_snapshot::text,'sha256'),'hex')
          or h.allocation_sha256<>encode(public.digest(h.allocation_snapshot::text,'sha256'),'hex'))
      limit 1
-  `)).rows;
+  `, 'objects');
   if (unknown.length) throw new PayrollError(`Employer health tax history contains an opening with unknown legal payer or levy allocation. ${SOURCE_REFUSAL}`);
-  const missing = (await tx.execute(sql`
+  const missing = await tx.execute(sql`
     select b.id from payroll_opening_balances b
       join payroll_opening_employer_authorities e on e.org_id=b.org_id and e.opening_balance_id=b.id
       left join payroll_opening_levy_source_authorities h on h.org_id=b.org_id and h.opening_balance_id=b.id
@@ -225,7 +225,7 @@ export async function requireEmployerOpeningLevySources(tx: Executor, input: {
           where a.org_id=h.org_id and a.authority_id=h.id and a.program_key=${input.programKey}
             and a.region=${input.region}
        )) limit 1
-  `)).rows;
+  `, 'objects');
   if (missing.length) throw new PayrollError(`Employer health tax opening history lacks an explicit ${input.region} source allocation. ${SOURCE_REFUSAL}`);
   const total = (await tx.execute<{ amount: string }>(sql`
     select coalesce(sum(a.amount),0)::text as amount
@@ -235,6 +235,6 @@ export async function requireEmployerOpeningLevySources(tx: Executor, input: {
        and ${currentOpeningLevySourceSql('h')}
        and h.original_country='CA' and h.original_currency='CAD'
        and a.program_key=${input.programKey} and a.region=${input.region}
-  `)).rows[0]!.amount;
+  `, 'objects'))[0]!.amount;
   return total;
 }

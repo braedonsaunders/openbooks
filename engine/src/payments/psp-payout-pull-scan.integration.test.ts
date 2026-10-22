@@ -64,10 +64,10 @@ test("scheduled pull imports each payout once across refetches", { skip: !DB }, 
       const first = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
       assert.equal(first.failed, 0, `scan errors: ${JSON.stringify(first.orgErrors)}`);
       assert.equal(first.ran, 1);
-      const batches = (await db.execute<{ external_ref: string }>(sql`
+      const batches = await db.execute<{ external_ref: string }>(sql`
         select external_ref from psp_settlement_batches
          where org_id = ${org.orgId} and provider = 'stripe'
-      `)).rows;
+      `, "objects");
       assert.deepEqual(batches.map((row) => row.external_ref), ["po_scan_1"]);
 
       const second = await withOrgContext(org.orgId, () => runDuePspPayoutPulls(new Date("2026-07-10T12:00:00Z"), stubFetch()));
@@ -75,11 +75,11 @@ test("scheduled pull imports each payout once across refetches", { skip: !DB }, 
       const rescan = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from psp_settlement_batches
          where org_id = ${org.orgId} and provider = 'stripe'
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(rescan, 1, "a refetch converges instead of duplicating");
 
       const cursor = (await db.execute<{ last_pull_at: string | null }>(sql`
-        select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`)).rows[0];
+        select last_pull_at from psp_provider_configs where org_id = ${org.orgId} and provider = 'stripe'`, "objects"))[0];
       assert.ok(cursor!.last_pull_at, "pull cursor advances after the scan");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -101,7 +101,7 @@ test("scheduled pull skips orgs with the banking feature off", { skip: !DB }, as
       const batches = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from psp_settlement_batches
          where org_id = ${org.orgId} and provider = 'stripe'
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(batches, 0, "a gated-off org pulls nothing");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -127,7 +127,7 @@ test("a later provider page failure leaves the scheduled import and pull cursor 
         assert.match(JSON.stringify(result.orgErrors), /po_truncated.*Provider temporarily unavailable.*retry/);
         const stored = (await db.execute<{ n: number; last_pull_at: string | null }>(sql`
           select (select count(*)::int from psp_settlement_batches where org_id=${org.orgId}) n, last_pull_at
-          from psp_provider_configs where org_id=${org.orgId} and provider='stripe'`)).rows[0]!;
+          from psp_provider_configs where org_id=${org.orgId} and provider='stripe'`, "objects"))[0]!;
         assert.deepEqual(stored, { n: 0, last_pull_at: null });
       } finally { await dropScratchOrg(org.orgId); }
   });

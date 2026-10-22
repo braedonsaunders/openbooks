@@ -21,16 +21,16 @@ async function fixture() {
     const actors = await seedFlowActors(org.orgId);
     const equity = await seedPostingAccount(org.orgId, "3100", "Share capital", "equity");
     assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb)
-      where id=${org.orgId} returning id`)).rows.length, 1);
+      where id=${org.orgId} returning id`, "objects")).length, 1);
     for (const actor of [actors.submitterId, actors.approver1Id])
       await grantScratchPermissions(org.orgId, actor, ["close.run", "documents.read"]);
     await seedApprovalFlow(org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: actors.approver1Id }], mode: "any", preventSelfApproval: true });
     const folderId = randomUUID();
     assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id)
-      values(${folderId},${org.orgId},'Capital contribution sources',true,${actors.adminId}) returning id`)).rows.length, 1);
+      values(${folderId},${org.orgId},'Capital contribution sources',true,${actors.adminId}) returning id`, "objects")).length, 1);
     for (const actor of [actors.submitterId, actors.approver1Id])
       assert.equal((await db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
-        values(${org.orgId},'folder',${folderId},'user',${actor},'viewer',${actors.adminId}) returning id`)).rows.length, 1);
+        values(${org.orgId},'folder',${folderId},'user',${actor},'viewer',${actors.adminId}) returning id`, "objects")).length, 1);
     return { actors, equity, folderId };
   });
   const bytes = Buffer.from("Dated source capital schedule: CAD measurement, USD presentation, independently evidenced historic layers.");
@@ -47,7 +47,7 @@ async function fixture() {
         reversesEntryId, actorId: authority.actorId,
         lines: [{ accountId: setup.equity, subsidiaryId: org.subsidiaryId, amount, currency: "CAD", txnAmount: amount, fxRate: "1" },
           { accountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`, currency: "CAD", txnAmount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`, fxRate: "1" }] });
-      const line = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} and account_id=${setup.equity}`)).rows;
+      const line = await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${posted.entryId} and account_id=${setup.equity}`, "objects");
       assert.equal(line.length, 1);
       return { entryId: posted.entryId, lineId: line[0]!.id };
     });
@@ -59,15 +59,15 @@ async function fixture() {
   async function approve(changeId: string, verifyDeniedReviewer = false) {
     await withOrgContext(org.orgId, async () => {
       await submitFinancialChange(org.orgId, changeId, authority.actorId);
-      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`)).rows[0];
+      const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'`, "objects"))[0];
       assert.ok(gate);
       if (verifyDeniedReviewer) {
         assert.equal((await withBypassContext(() => db.execute(sql`delete from resource_grants where org_id=${org.orgId}
           and resource_type='folder' and resource_id=${setup.folderId} and principal_type='user'
-          and principal_id=${setup.actors.approver1Id} returning id`))).rows.length, 1);
+          and principal_id=${setup.actors.approver1Id} returning id`, "objects"))).length, 1);
         await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: setup.actors.approver1Id }), /Source file is unavailable/);
         assert.equal((await withBypassContext(() => db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
-          values(${org.orgId},'folder',${setup.folderId},'user',${setup.actors.approver1Id},'viewer',${setup.actors.adminId}) returning id`))).rows.length, 1);
+          values(${org.orgId},'folder',${setup.folderId},'user',${setup.actors.approver1Id},'viewer',${setup.actors.adminId}) returning id`, "objects"))).length, 1);
       }
       await decideGate({ gateId: gate.id, decision: "approved", userId: setup.actors.approver1Id });
     });
@@ -85,10 +85,10 @@ test("approved exact contribution sources translate in a read-only snapshot and 
     const input = { ...f.authority, instruction: f.instruction(first.lineId, "-100", "1.20"),
       reason: "Retain independently reviewed original contribution rate", idempotencyKey: randomUUID() };
     assert.equal((await withBypassContext(() => db.execute(sql`delete from resource_grants where org_id=${f.org.orgId}
-      and resource_type='folder' and resource_id=${f.folderId} and principal_type='user' and principal_id=${f.authority.actorId} returning id`))).rows.length, 1);
+      and resource_type='folder' and resource_id=${f.folderId} and principal_type='user' and principal_id=${f.authority.actorId} returning id`, "objects"))).length, 1);
     await assert.rejects(proposeHistoricalTranslationContribution(input), /Source file is unavailable/);
     assert.equal((await withBypassContext(() => db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
-      values(${f.org.orgId},'folder',${f.folderId},'user',${f.authority.actorId},'viewer',${f.actors.adminId}) returning id`))).rows.length, 1);
+      values(${f.org.orgId},'folder',${f.folderId},'user',${f.authority.actorId},'viewer',${f.actors.adminId}) returning id`, "objects"))).length, 1);
     const proposed = await proposeHistoricalTranslationContribution(input);
     assert.deepEqual(await proposeHistoricalTranslationContribution(input), proposed);
     await assert.rejects(applyHistoricalTranslationContribution({ ...f.authority, changeId: proposed.changeId }), /approval|Flows/i);
@@ -113,8 +113,8 @@ test("approved exact contribution sources translate in a read-only snapshot and 
     assert.equal(read.b.translatedAmount, "-140.00000000000000");
     assert.equal(read.identity.translatedAmount, "-100.0000");
     assert.ok("identity" in read.identity && read.identity.identity);
-    const physical = await withOrgTransaction(f.org.orgId, () => db.execute<{ amount: string }>(sql`select amount::text from journal_lines where org_id=${f.org.orgId} and id=${first.lineId}`));
-    assert.equal(physical.rows[0]!.amount, "-100.0000");
+    const physical = await withOrgTransaction(f.org.orgId, () => db.execute<{ amount: string }>(sql`select amount::text from journal_lines where org_id=${f.org.orgId} and id=${first.lineId}`, "objects"));
+    assert.equal(physical[0]!.amount, "-100.0000");
     await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`update historical_translation_layers set rate=1.9 where org_id=${f.org.orgId} and basis_id=${applied.basisId}`)), error => errorChainMatches(error, /immutable/i));
     await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`delete from historical_translation_contributions where org_id=${f.org.orgId} and id=${applied.basisId}`)), error => errorChainMatches(error, /immutable/i));
     await assert.rejects(withOrgTransaction(f.org.orgId, () => db.execute(sql`update file_versions set content_hash=${"b".repeat(64)}
@@ -147,7 +147,7 @@ test("same-currency source identity is explicitly assessed and read through the 
     assert.equal(read.identity, true);
     assert.equal(read.layers[0]?.rate, "1.0000000000");
     assert.equal((await withBypassContext(() => db.execute(sql`delete from resource_grants where org_id=${f.org.orgId}
-      and resource_type='folder' and resource_id=${f.folderId} and principal_type='user' and principal_id=${f.authority.actorId} returning id`))).rows.length, 1);
+      and resource_type='folder' and resource_id=${f.folderId} and principal_type='user' and principal_id=${f.authority.actorId} returning id`, "objects"))).length, 1);
     await assert.rejects(readHistoricalTranslationAuthoringContext({ ...f.authority, sourceLineId: entry.lineId }), /Source file is unavailable/);
   } finally { await dropScratchOrg(f.org.orgId); }
 });
@@ -162,13 +162,13 @@ test("unknown identity and tenant substitution refuse, and apply rolls back its 
       instruction: f.instruction(posted.lineId, "-100", "1.2"), reason: "Review an exact original source contribution", idempotencyKey: randomUUID() }), /not found|Source file is unavailable/i);
     const proposed = await f.propose(f.instruction(posted.lineId, "-100", "1.2"));
     await f.approve(proposed.changeId);
-    const snapshot = await withOrgTransaction(f.org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from historical_translation_contributions where org_id=${f.org.orgId}`));
-    assert.equal(snapshot.rows[0]!.n, 0);
+    const snapshot = await withOrgTransaction(f.org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from historical_translation_contributions where org_id=${f.org.orgId}`, "objects"));
+    assert.equal(snapshot[0]!.n, 0);
     await assert.rejects(withOrgTransaction(f.org.orgId, async () => {
       await applyHistoricalTranslationContribution({ ...f.authority, changeId: proposed.changeId });
       throw new Error("Rollback the complete approved evidence transaction");
     }), /Rollback the complete/);
-    assert.equal((await withOrgTransaction(f.org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from historical_translation_contributions where org_id=${f.org.orgId}`))).rows[0]!.n, 0);
+    assert.equal((await withOrgTransaction(f.org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from historical_translation_contributions where org_id=${f.org.orgId}`, "objects")))[0]!.n, 0);
     const applied = await applyHistoricalTranslationContribution({ ...f.authority, changeId: proposed.changeId });
     assert.ok(applied.basisId);
   } finally { await dropScratchOrg(other.orgId); await dropScratchOrg(f.org.orgId); }
@@ -180,10 +180,10 @@ test("inaccessible optional originals do not block authoring or expose their ret
     const privateFolderId = randomUUID();
     await withBypassContext(async () => {
       assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id)
-        values(${privateFolderId},${f.org.orgId},'Private capital sources',true,${f.actors.adminId}) returning id`)).rows.length, 1);
+        values(${privateFolderId},${f.org.orgId},'Private capital sources',true,${f.actors.adminId}) returning id`, "objects")).length, 1);
       for (const actor of [f.authority.actorId, f.actors.approver1Id])
         assert.equal((await db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
-          values(${f.org.orgId},'folder',${privateFolderId},'user',${actor},'viewer',${f.actors.adminId}) returning id`)).rows.length, 1);
+          values(${f.org.orgId},'folder',${privateFolderId},'user',${actor},'viewer',${f.actors.adminId}) returning id`, "objects")).length, 1);
     });
     const bytes = Buffer.from('A separately protected original shareholder contribution schedule.');
     const privateFile = await withOrgTransaction(f.org.orgId, () => createCabinetFile({ orgId: f.org.orgId, folderId: privateFolderId,
@@ -206,7 +206,7 @@ test("inaccessible optional originals do not block authoring or expose their ret
     await applyHistoricalTranslationContribution({ ...f.authority, changeId: visibleProposal.changeId });
     assert.equal((await withBypassContext(() => db.execute(sql`delete from resource_grants where org_id=${f.org.orgId}
       and resource_type='folder' and resource_id=${privateFolderId} and principal_type='user'
-      and principal_id=${f.authority.actorId} returning id`))).rows.length, 1);
+      and principal_id=${f.authority.actorId} returning id`, "objects"))).length, 1);
 
     const newSource = await f.entry('100');
     const context = await readHistoricalTranslationAuthoringContext({ ...f.authority, sourceLineId: newSource.lineId });
@@ -233,18 +233,18 @@ test("mapped tenant members and foreign platform operators retain their actual a
     await withBypassContext(async () => {
       assert.equal((await db.execute(sql`insert into app_roles(id,org_id,key,name,is_built_in,permissions,subsidiary_restriction)
         values(${roleId},${f.org.orgId},'capital_operator','Capital operator',false,'["close.run","documents.read"]'::jsonb,
-          '{"mode":"all"}'::jsonb) returning id`)).rows.length, 1);
+          '{"mode":"all"}'::jsonb) returning id`, "objects")).length, 1);
       assert.equal((await db.execute(sql`insert into role_assignments(org_id,user_id,role_id)
-        values(${f.org.orgId},${memberActorId},${roleId}) returning id`)).rows.length, 1);
+        values(${f.org.orgId},${memberActorId},${roleId}) returning id`, "objects")).length, 1);
       assert.equal((await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id)
-        values(${homeActorId},${f.org.orgId},${memberActorId}) returning id`)).rows.length, 1);
+        values(${homeActorId},${f.org.orgId},${memberActorId}) returning id`, "objects")).length, 1);
       assert.equal((await db.execute(sql`insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
-        values(${f.org.orgId},'folder',${f.folderId},'user',${memberActorId},'viewer',${f.actors.adminId}) returning id`)).rows.length, 1);
+        values(${f.org.orgId},'folder',${f.folderId},'user',${memberActorId},'viewer',${f.actors.adminId}) returning id`, "objects")).length, 1);
     });
     for (const platform of [false, true]) {
       if (platform) await withBypassContext(async () => {
-        assert.equal((await db.execute(sql`delete from resource_grants where org_id=${f.org.orgId} and principal_id=${memberActorId} returning id`)).rows.length, 1);
-        assert.equal((await db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${homeActorId} returning id`)).rows.length, 1);
+        assert.equal((await db.execute(sql`delete from resource_grants where org_id=${f.org.orgId} and principal_id=${memberActorId} returning id`, "objects")).length, 1);
+        assert.equal((await db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${homeActorId} returning id`, "objects")).length, 1);
       });
       const actorId = platform ? homeActorId : memberActorId;
       const posted = await f.entry('-100');
@@ -252,8 +252,8 @@ test("mapped tenant members and foreign platform operators retain their actual a
       await f.approve(proposed.changeId);
       const result = await applyHistoricalTranslationContribution({ orgId: f.org.orgId, actorId, changeId: proposed.changeId });
       const retained = await withOrgTransaction(f.org.orgId, () => db.execute<{ createdBy: string }>(sql`
-        select created_by as "createdBy" from historical_translation_contributions where org_id=${f.org.orgId} and id=${result.basisId}`));
-      assert.equal(retained.rows[0]?.createdBy, actorId);
+        select created_by as "createdBy" from historical_translation_contributions where org_id=${f.org.orgId} and id=${result.basisId}`, "objects"));
+      assert.equal(retained[0]?.createdBy, actorId);
       assert.deepEqual(await applyHistoricalTranslationContribution({ orgId: f.org.orgId, actorId, changeId: proposed.changeId }), result);
     }
   } finally { await dropScratchOrg(f.org.orgId); await dropScratchOrg(home.orgId); }
@@ -285,8 +285,8 @@ test("concurrent corrections cannot consume more than one original contribution 
     assert.ok(refused?.status === "rejected");
     assert.match(String(refused.reason), /remaining applied parent layer|allocation state changed/);
     const used = await withOrgTransaction(f.org.orgId, () => db.execute<{ total: string }>(sql`select sum(abs(amount))::text as total
-      from historical_translation_layers where org_id=${f.org.orgId} and original_layer_id=${layer.id}`));
-    assert.equal(used.rows[0]!.total, "75.0000");
+      from historical_translation_layers where org_id=${f.org.orgId} and original_layer_id=${layer.id}`, "objects"));
+    assert.equal(used[0]!.total, "75.0000");
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
@@ -345,11 +345,11 @@ test("a later correction cannot reinterpret the original consumed state reviewed
     await f.approve(refreshed.changeId);
     await applyHistoricalTranslationContribution({ ...f.authority, changeId: refreshed.changeId });
     const products = await withOrgTransaction(f.org.orgId, () => db.execute<{ total: string }>(sql`select sum(translated_amount)::text as total
-      from historical_translation_layers where org_id=${f.org.orgId}`));
-    assert.equal(products.rows[0]!.total, "0.00000000000000");
+      from historical_translation_layers where org_id=${f.org.orgId}`, "objects"));
+    assert.equal(products[0]!.total, "0.00000000000000");
     assert.deepEqual(await applyHistoricalTranslationContribution({ ...f.authority, changeId: corrections[0]!.changeId }),
       (await withOrgTransaction(f.org.orgId, () => db.execute<{ result: { basisId: string } }>(sql`select result from financial_changes
-        where org_id=${f.org.orgId} and id=${corrections[0]!.changeId}`))).rows[0]!.result);
+        where org_id=${f.org.orgId} and id=${corrections[0]!.changeId}`, "objects")))[0]!.result);
   } finally { await dropScratchOrg(f.org.orgId); }
 });
 
@@ -373,7 +373,7 @@ test("an applied correction can be reversed and corrected again without releasin
         'layers',(select jsonb_agg(to_jsonb(layer) order by layer_number) from historical_translation_layers layer where org_id=${f.org.orgId} and basis_id=${first.basisId}),
         'version',(select to_jsonb(version) from file_versions version where file_id=${f.source.fileId} and id=${f.source.versionId}),
         'bytes',(select jsonb_agg(to_jsonb(blob)) from file_blobs blob where version_id=${f.source.versionId})
-      ) as state`)).rows[0]!.state);
+      ) as state`, "objects"))[0]!.state);
     const preserved = await snapshot();
     const firstLayer = first.layers[0]!;
     const instructionFor = (lineId: string, amount: string, parent: typeof firstLayer): HistoricalTranslationInstruction => ({
@@ -411,10 +411,10 @@ test("an applied correction can be reversed and corrected again without releasin
       from historical_translation_layers parent left join historical_translation_layers child
         on child.org_id=parent.org_id and child.original_layer_id=parent.id
       where parent.org_id=${f.org.orgId} and parent.id in (${firstLayer.id},${reductionLayer.id},${restored.layers[0]!.id})
-      group by parent.id`));
-    assert.equal(allocations.rows.find(row => row.id === firstLayer.id)!.used, "60.0000");
-    assert.equal(allocations.rows.find(row => row.id === reductionLayer.id)!.used, "60.0000");
-    assert.equal(allocations.rows.find(row => row.id === restored.layers[0]!.id)!.used, "30.0000");
+      group by parent.id`, "objects"));
+    assert.equal(allocations.find(row => row.id === firstLayer.id)!.used, "60.0000");
+    assert.equal(allocations.find(row => row.id === reductionLayer.id)!.used, "60.0000");
+    assert.equal(allocations.find(row => row.id === restored.layers[0]!.id)!.used, "30.0000");
     assert.deepEqual(await snapshot(), preserved);
     assert.deepEqual(restored.layers[0]!.source, firstLayer.source);
     assert.equal(restored.layers[0]!.versionNumber, firstLayer.versionNumber);
@@ -422,7 +422,7 @@ test("an applied correction can be reversed and corrected again without releasin
       set original_layer_id=${firstLayer.id} where org_id=${f.org.orgId} and id=${restored.layers[0]!.id}`)), error => errorChainMatches(error, /immutable/i));
     assert.equal((await withBypassContext(() => db.execute(sql`delete from resource_grants where org_id=${f.org.orgId}
       and resource_type='folder' and resource_id=${f.folderId} and principal_type='user'
-      and principal_id=${f.authority.actorId} returning id`))).rows.length, 1);
+      and principal_id=${f.authority.actorId} returning id`, "objects"))).length, 1);
     const privateCandidates = await readHistoricalTranslationAuthoringContext({ ...f.authority, sourceLineId: excess.lineId });
     assert.deepEqual(privateCandidates.originalLayers, []);
     assert.ok(!JSON.stringify(privateCandidates).includes(f.source.fileId));

@@ -32,8 +32,8 @@ async function blockedBy(holderPid: number): Promise<boolean> {
     const result = await withBypassContext(() => db.execute<{ blocked: boolean }>(sql`
       select exists (
         select 1 from pg_stat_activity where ${holderPid} = any(pg_blocking_pids(pid))
-      ) as blocked`));
-    if (result.rows[0]!.blocked) return true;
+      ) as blocked`, "objects"));
+    if (result[0]!.blocked) return true;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   return false;
@@ -86,7 +86,7 @@ test("category class PATCH waits on every affected subsidiary's tax-pool lifecyc
       const lockReady = new Promise<number>((resolve) => { ready = resolve; });
       const holder = withOrgContext(org.orgId, () => db.transaction(async (tx) => {
         await lockAssetTaxLifecycle(tx, org.orgId, [subsidiaryId]);
-        const row = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0];
+        const row = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0];
         assert.ok(row);
         ready(Number(row.pid));
         await hold;

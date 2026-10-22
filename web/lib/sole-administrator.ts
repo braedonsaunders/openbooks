@@ -39,7 +39,7 @@ export async function countOtherActiveUserAdministrators(
            select 1 from user_permission_overrides o
             where o.org_id = u.org_id and o.user_id = u.id and o.effect = 'grant'
               and o.permission in ('admin.users.manage', 'admin.*', '*')))
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!row) throw new Error('administrator count returned no row')
   return row.n
 }

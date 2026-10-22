@@ -24,8 +24,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function inventoryEntryCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from journal_entries
-     where org_id = ${orgId} and origin = 'inventory'`));
-  return r.rows[0]!.n;
+     where org_id = ${orgId} and origin = 'inventory'`, "objects"));
+  return r[0]!.n;
 }
 
 async function closeGlForPeriod(

@@ -12,14 +12,14 @@ const lastSyncedAt: SetupColumn = { key: 'lastSyncedAt', kind: 'date' }
 const name: SetupColumn = { key: 'name', kind: 'text' }
 
 async function matches(column: SetupColumn, query: string, locale: string, timeZone = 'UTC'): Promise<string[]> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from (values
       ('a', 'Alpha', '2026-01-01'::date, '2026-03-01 03:30:00+00'::timestamptz),
       ('b', 'Beta', '2025-12-31'::date, null::timestamptz),
       ('c', 'Gamma', null::date, '2026-06-15 12:00:00+00'::timestamptz)
     ) as t(id, name, effective_from, last_synced_at)
     where ${setupColumnSearchSql(column, query, locale, timeZone)}
-    order by id`)).rows
+    order by id`, 'objects')
   return rows.map((row) => row.id)
 }
 

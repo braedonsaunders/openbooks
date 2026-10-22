@@ -85,7 +85,7 @@ async function postConformanceDocument(ctx: CaseContext, input: DraftDocumentInp
 /** Provision periods spanning the twelve-month service fixtures. */
 async function ensureRecognitionPeriods(orgId: string): Promise<void> {
   const calendar = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${orgId} limit 1`)).rows[0];
+    select id from fiscal_calendars where org_id = ${orgId} limit 1`, "objects"))[0];
   if (!calendar) throw new Error("conformance tenant has no fiscal calendar");
   for (let month = 1; month <= 12; month++) {
     const mm = String(month).padStart(2, "0");
@@ -122,24 +122,24 @@ async function createUsageCorpusFixture(
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features', '{}'::jsonb)
         || '{"subscriptionBilling":true,"usageBilling":true}'::jsonb, true)
-     where id = ${ledger.orgId} returning id`));
-  if (enabled.rows.length !== 1) throw new Error("usage conformance organization was not updated");
+     where id = ${ledger.orgId} returning id`, "objects"));
+  if (enabled.length !== 1) throw new Error("usage conformance organization was not updated");
   await withOrgContext(ledger.orgId, async () => {
     const item = await db.execute(sql`
       insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
       values (${itemId}, ${ledger.orgId}, 'service', ${`Usage item ${suffix}`}, ${ctx.roles.revenue}, true, '{}'::jsonb)
-      returning id`);
-    if (item.rows.length !== 1) throw new Error("usage conformance item was not created");
+      returning id`, "objects");
+    if (item.length !== 1) throw new Error("usage conformance item was not created");
     const plan = await db.execute(sql`
       insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count)
       values (${subscriptionPlanId}, ${ledger.orgId}, ${`Usage subscription ${suffix}`}, 0, 'CAD', 'monthly', 1)
-      returning id`);
-    if (plan.rows.length !== 1) throw new Error("usage conformance subscription plan was not created");
+      returning id`, "objects");
+    if (plan.length !== 1) throw new Error("usage conformance subscription plan was not created");
     const subscription = await db.execute(sql`
       insert into subscriptions (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on)
       values (${subscriptionId}, ${ledger.orgId}, ${ledger.customerId}, ${subscriptionPlanId}, 1, 'active', '2026-07-01', '2026-08-01')
-      returning id`);
-    if (subscription.rows.length !== 1) throw new Error("usage conformance subscription was not created");
+      returning id`, "objects");
+    if (subscription.length !== 1) throw new Error("usage conformance subscription was not created");
   });
 
   const meterKey = `conformance-${suffix}`;
@@ -194,8 +194,8 @@ async function postDraftUsageInvoice(ctx: CaseContext, invoiceId: string): Promi
   const approved = await db.execute(sql`
     update documents set status = 'approved'
      where org_id = ${orgId} and id = ${invoiceId} and status = 'draft'
-     returning id`);
-  if (approved.rows.length !== 1) throw new Error("usage invoice did not complete its approval transition");
+     returning id`, "objects");
+  if (approved.length !== 1) throw new Error("usage invoice did not complete its approval transition");
   await postDocument(invoiceId, deps(ctx));
 }
 
@@ -609,16 +609,16 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         ],
       }).then(async () => {
         const row = (await db.execute<{ id: string }>(sql`
-          select id from documents where org_id = ${ledger.orgId} and document_number = 'CONF-REV-3'`));
-        return row.rows[0]!.id;
+          select id from documents where org_id = ${ledger.orgId} and document_number = 'CONF-REV-3'`, "objects"));
+        return row[0]!.id;
       });
 
       const rows = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n
           from performance_obligations
          where org_id = ${ledger.orgId}
-           and document_line_id in (select id from document_lines where document_id = ${documentId})`));
-      return { values: { obligations: String(rows.rows[0]!.n) } };
+           and document_line_id in (select id from document_lines where document_id = ${documentId})`, "objects"));
+      return { values: { obligations: String(rows[0]!.n) } };
     },
   },
 
@@ -733,7 +733,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       const rows = (await db.execute<{ tracedLines: number; lineTotal: string }>(sql`
         select count(*) filter (where custom->'rating'->>'runId' = ${rated.run.id})::int as "tracedLines",
                coalesce(sum(amount), 0)::text as "lineTotal"
-          from document_lines where org_id = ${ledger.orgId} and document_id = ${invoiceId}`)).rows[0];
+          from document_lines where org_id = ${ledger.orgId} and document_id = ${invoiceId}`, "objects"))[0];
       if (!rows) throw new Error("usage invoice lines were not readable");
       return {
         entries: [invoice],
@@ -844,13 +844,13 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       const ledger = ctx.ledger!;
       const fixture = await createUsageCorpusFixture(ctx);
       const rule = await withOrgContext(ledger.orgId, () => db.execute<{ id: string }>(sql`
-        select recognition_rule_id as id from items where org_id = ${ledger.orgId} and id = ${ledger.items.service}`));
-      const ruleId = rule.rows[0]?.id;
+        select recognition_rule_id as id from items where org_id = ${ledger.orgId} and id = ${ledger.items.service}`, "objects"));
+      const ruleId = rule[0]?.id;
       if (!ruleId) throw new Error("prepaid service item has no recognition rule");
       const changed = await withOrgContext(ledger.orgId, () => db.execute(sql`
         update recognition_rules set method = 'usage'
-         where org_id = ${ledger.orgId} and id = ${ruleId} returning id`));
-      if (changed.rows.length !== 1) throw new Error("prepaid recognition rule was not updated");
+         where org_id = ${ledger.orgId} and id = ${ruleId} returning id`, "objects"));
+      if (changed.length !== 1) throw new Error("prepaid recognition rule was not updated");
 
       const prepaidInvoice = await capture(ctx, "prepaid invoice", async () => {
         await postConformanceDocument(ctx, {
@@ -862,7 +862,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       });
       const source = (await db.execute<{ id: string }>(sql`
         select dl.id from document_lines dl join documents d on d.org_id = dl.org_id and d.id = dl.document_id
-         where dl.org_id = ${ledger.orgId} and d.document_number like 'CONF-USAGE-PREPAID-%'`)).rows[0];
+         where dl.org_id = ${ledger.orgId} and d.document_number like 'CONF-USAGE-PREPAID-%'`, "objects"))[0];
       if (!source) throw new Error("posted prepaid invoice line was not readable");
       await createPrepaidGrant(ledger.orgId, ledger.actorId, {
         customerId: ledger.customerId,
@@ -989,7 +989,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       })
       return withOrgContext(ledger.orgId,async()=> {
         await postConformanceDocument(ctx,{kind:'customer_invoice',number:'CONF-BREAKAGE',partyId:ledger.customerId,lines:[{itemId:ledger.items.service,accountId:ctx.roles.revenue,quantity:'1',unitPrice:'100',amount:'100'}]})
-        const source=(await db.execute<{id:string}>(sql`select line.id from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${ledger.orgId} and document.document_number='CONF-BREAKAGE'`)).rows[0]!
+        const source=(await db.execute<{id:string}>(sql`select line.id from document_lines line join documents document on document.org_id=line.org_id and document.id=line.document_id where line.org_id=${ledger.orgId} and document.document_number='CONF-BREAKAGE'`, "objects"))[0]!
         const grant=await createPrepaidGrant(ledger.orgId,ledger.actorId,{customerId:ledger.customerId,sourceDocumentLineId:source.id,amount:'100',currency:'CAD'})
         await ingestCorpusUsage(ctx,fixture,'25')
         const run=await commitRateRun(ledger.orgId,ledger.actorId,fixture.linkId,'2026-07-01','2026-07-31')
@@ -998,7 +998,7 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         if(usage.problems.length)throw new Error(usage.problems.join('; '))
         const id=await proposeExpectedBreakage(ledger.orgId,actors.submitterId,{grantId:grant.id,effectiveOn:'2026-07-31',reason:'Recognize the supported expected breakage proportionally',idempotencyKey:randomUUID(),estimate:{method:'expected_proportional',expectedBreakage:'20',entitled:true,meetsReversalConstraint:true,thirdPartyObligation:false,evidence:'Redemption history supports twenty of expected breakage without significant reversal; legal review confirms entitlement and no unclaimed-property obligation.'}})
         await submitFinancialChange(ledger.orgId,id,actors.submitterId)
-        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`, "objects"))[0]!
         await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
         const measurement=await applyExpectedBreakage(ledger.orgId,id,actors.submitterId)
         const entry=await capture(ctx,'expected breakage',async()=>{const result=await runRevenueRecognition(ledger.orgId,'2026-07-31',ledger.actorId);if(result.problems.length)throw new Error(result.problems.join('; '))})
@@ -1236,8 +1236,8 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       const salesOrderApproved = await db.execute<{ id: string }>(sql`
         update documents set status = 'approved'
          where id = ${salesOrderId} and org_id = ${ledger.orgId} and status = 'draft'
-        returning id`);
-      if (salesOrderApproved.rows.length !== 1) throw new Error("conformance drop-ship sales order was not approved");
+        returning id`, "objects");
+      if (salesOrderApproved.length !== 1) throw new Error("conformance drop-ship sales order was not approved");
       await routeDropShipLine({
         orgId: ledger.orgId,
         actorId: ledger.actorId,
@@ -1311,8 +1311,8 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
       const receiptApproved = await db.execute<{ id: string }>(sql`
         update documents set status = 'approved'
          where id = ${receiptId} and org_id = ${ledger.orgId} and status = 'draft'
-        returning id`);
-      if (receiptApproved.rows.length !== 1) throw new Error("conformance drop-ship receipt was not approved");
+        returning id`, "objects");
+      if (receiptApproved.length !== 1) throw new Error("conformance drop-ship receipt was not approved");
       await db.execute(sql`
         insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
         values (${ledger.orgId}, ${purchaseOrderId}, ${receiptId}, 'fulfills', ${ledger.actorId}, ${ledger.actorId})`);
@@ -1320,8 +1320,8 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         const approved = await db.execute<{ id: string }>(sql`
           update documents set status = 'approved'
            where id = ${invoiceDraftId} and org_id = ${ledger.orgId} and status = 'draft'
-          returning id`);
-        if (approved.rows.length !== 1) throw new Error("conformance invoice was not approved");
+          returning id`, "objects");
+        if (approved.length !== 1) throw new Error("conformance invoice was not approved");
         await postDocument(invoiceDraftId, deps(ctx));
       });
       const confirmationEntry = await capture(ctx, "vendor shipment", async () => {
@@ -1380,16 +1380,16 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
             values(${id},${ledger.orgId},${kind},${number},${party},${ledger.subsidiaryId},${ledger.date},'CAD','draft')`)
           await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit,unit_price,amount,tax_amount,stock_location_id)
             values(${line},${ledger.orgId},${id},1,${ledger.items.standard},${ctx.roles.revenue},'Vendor-controlled goods','1','ea',${amount},${amount},'0',${ledger.stockLocationId})`)
-          if(kind==='sales_order' && (await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${id} and status='draft' returning id`)).rows.length!==1)throw new Error('Paired agency order could not be approved')
+          if(kind==='sales_order' && (await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${id} and status='draft' returning id`, "objects")).length!==1)throw new Error('Paired agency order could not be approved')
         }
         await routeDropShipLine({orgId:ledger.orgId,actorId:ledger.actorId,salesOrderId:salesId,salesOrderLineId:salesLine,allowedSubsidiaryIds:null})
         await attachDropShipPurchaseOrder({orgId:ledger.orgId,actorId:ledger.actorId,salesOrderId:salesId,purchaseOrderId:purchaseId,shipToAddress:{name:'Agency customer'},lines:[{salesOrderLineId:salesLine,purchaseOrderLineId:purchaseLine}],allowedSubsidiaryIds:null})
-        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${purchaseId} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency purchase order could not be approved')
+        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${purchaseId} and status='draft' returning id`, "objects")).length!==1)throw new Error('Agency purchase order could not be approved')
         const id=await proposeDropShipAssessment(ledger.orgId,actors.submitterId,{salesOrderLineId:salesLine,controlsBeforeTransfer:false,passThroughAccountId:ctx.roles.vendorPassThrough,
           controlEvidence:'The vendor retains control, inventory risk and responsibility for satisfying the specified goods until transfer to the customer; the company only arranges that transfer for its contracted fee.',
           effectiveOn:ledger.date,reason:'Recognize the contractual arranging fee under the approved agent assessment',idempotencyKey:randomUUID()})
         await submitFinancialChange(ledger.orgId,id,actors.submitterId)
-        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${ledger.orgId} and subject_id=${id} and status='pending'`, "objects"))[0]!
         await decideGate({gateId:gate.id,userId:actors.approver1Id,decision:'approved'})
         await applyDropShipAssessment(ledger.orgId,id,actors.submitterId)
         const makeConverted=async(kind:'customer_invoice'|'vendor_bill',number:string,amount:string,orderId:string,lineId:string)=> {
@@ -1397,10 +1397,10 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
             lines:[{itemId:ledger.items.standard,accountId:ctx.roles.revenue,quantity:'1',unitPrice:amount,amount,stockLocationId:ledger.stockLocationId}]})
           await db.execute(sql`update document_lines set unit='ea',custom=${JSON.stringify({convertedFrom:{documentId:orderId,lineId,quantity:'1'},...(kind==='vendor_bill' ? {purchaseOrderLineId:lineId} : {})})}::jsonb where org_id=${ledger.orgId} and document_id=${document}`)
           await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by,updated_by) values(${ledger.orgId},${orderId},${document},'bills',${ledger.actorId},${ledger.actorId})`)
-          if((await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${orderId} and status='approved' returning id`)).rows.length!==1)throw new Error('Agency order could not advance its billing cover')
-          if((await db.execute(sql`update document_lines set quantity_billed='1' where org_id=${ledger.orgId} and id=${lineId} returning id`)).rows.length!==1)throw new Error('Agency order billing cover could not be recorded')
-          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${orderId} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency order could not restore its approval')
-          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${document} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency document could not be approved')
+          if((await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${orderId} and status='approved' returning id`, "objects")).length!==1)throw new Error('Agency order could not advance its billing cover')
+          if((await db.execute(sql`update document_lines set quantity_billed='1' where org_id=${ledger.orgId} and id=${lineId} returning id`, "objects")).length!==1)throw new Error('Agency order billing cover could not be recorded')
+          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${orderId} and status='draft' returning id`, "objects")).length!==1)throw new Error('Agency order could not restore its approval')
+          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${document} and status='draft' returning id`, "objects")).length!==1)throw new Error('Agency document could not be approved')
           return document
         }
         const invoice=await makeConverted('customer_invoice','CONF-AGENT-INVOICE','100',salesId,salesLine)
@@ -1410,18 +1410,18 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,quantity,unit,unit_price,amount,tax_amount,custom)
           values(${receiptLine},${ledger.orgId},${receipt},1,${ledger.items.standard},'1','ea','80','80','0',${JSON.stringify({receipt:{sourceLineId:purchaseLine}})}::jsonb)`)
         await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by,updated_by) values(${ledger.orgId},${purchaseId},${receipt},'fulfills',${ledger.actorId},${ledger.actorId})`)
-        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${receipt} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency shipment could not be approved')
+        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${receipt} and status='draft' returning id`, "objects")).length!==1)throw new Error('Agency shipment could not be approved')
         const fulfillment=randomUUID()
         await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status,custom)
           values(${fulfillment},${ledger.orgId},'sales_fulfillment','CONF-AGENT-FULFILLMENT',${ledger.customerId},${ledger.subsidiaryId},${ledger.date},'CAD','draft',${JSON.stringify({dropShipConfirmation:{purchaseReceiptId:receipt}})}::jsonb)`)
         await db.execute(sql`insert into document_lines(org_id,document_id,line_number,item_id,quantity,unit,unit_price,amount,tax_amount,custom)
           values(${ledger.orgId},${fulfillment},1,${ledger.items.standard},'1','ea','100','100','0',${JSON.stringify({fulfillment:{sourceLineId:salesLine}})}::jsonb)`)
         await db.execute(sql`insert into document_links(org_id,from_document_id,to_document_id,link_type,created_by,updated_by) values(${ledger.orgId},${salesId},${fulfillment},'fulfills',${ledger.actorId},${ledger.actorId})`)
-        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${fulfillment} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency fulfillment could not be approved')
+        if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${fulfillment} and status='draft' returning id`, "objects")).length!==1)throw new Error('Agency fulfillment could not be approved')
         for(const [orderId,lineId] of [[salesId,salesLine],[purchaseId,purchaseLine]]) {
-          if((await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${orderId} and status='approved' returning id`)).rows.length!==1)throw new Error('Agency order could not advance shipment cover')
-          if((await db.execute(sql`update document_lines set quantity_fulfilled='1' where org_id=${ledger.orgId} and id=${lineId} returning id`)).rows.length!==1)throw new Error('Agency shipment cover could not be recorded')
-          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${orderId} and status='draft' returning id`)).rows.length!==1)throw new Error('Agency order could not restore approval')
+          if((await db.execute(sql`update documents set status='draft' where org_id=${ledger.orgId} and id=${orderId} and status='approved' returning id`, "objects")).length!==1)throw new Error('Agency order could not advance shipment cover')
+          if((await db.execute(sql`update document_lines set quantity_fulfilled='1' where org_id=${ledger.orgId} and id=${lineId} returning id`, "objects")).length!==1)throw new Error('Agency shipment cover could not be recorded')
+          if((await db.execute(sql`update documents set status='approved' where org_id=${ledger.orgId} and id=${orderId} and status='draft' returning id`, "objects")).length!==1)throw new Error('Agency order could not restore approval')
         }
         const customer=await capture(ctx,'agent invoice and shipment',async()=>{await postDocument(invoice,deps(ctx));await applyDropShipConfirmationInventory(db,ledger.orgId,ledger.actorId,receipt)})
         const bill=await makeConverted('vendor_bill','CONF-AGENT-BILL','80',purchaseId,purchaseLine)

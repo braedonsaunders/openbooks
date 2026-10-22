@@ -117,7 +117,7 @@ test('reconciliation count dedupes a multi-functional account', { skip: !env.OPE
         assert.equal(home.unmatchedLines, 3)
         assert.equal(await bankingReconCount(org.orgId), 3)
         assert.equal(await bankingReconCount(org.orgId), home.unmatchedLines)
-        const journalBefore = (await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`)).rows
+        const journalBefore = await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`, 'objects')
         await db.execute(sql`delete from fx_rates where org_id=${org.orgId}`)
         const statements: string[] = []
         const stopObserving = registerQueryObserver((statement) => statements.push(statement))
@@ -147,7 +147,7 @@ test('reconciliation count dedupes a multi-functional account', { skip: !env.OPE
         assert.equal(await bankingReconCount(randomUUID()), 0, 'another organization cannot expose this account')
         await db.execute(sql`update accounts set is_active=false where org_id=${org.orgId} and id=${org.accounts.bank}`)
         assert.equal(await bankingReconCount(org.orgId), 0, 'inactive accounts stay outside roster membership')
-        assert.deepEqual((await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`)).rows, journalBefore)
+        assert.deepEqual(await db.execute(sql`select * from journal_lines where org_id=${org.orgId} order by id`, 'objects'), journalBefore)
       })
     })
   } finally {

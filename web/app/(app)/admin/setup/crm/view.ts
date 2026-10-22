@@ -63,9 +63,9 @@ export async function loadCrmSetup(
       db.execute(sql`
         select * from crm_account_statuses
          where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or lifecycle_stage ilike ${term})` : sql``}
-         order by lifecycle_stage, sequence, name limit ${list.perPage} offset ${offset}`),
+         order by lifecycle_stage, sequence, name limit ${list.perPage} offset ${offset}`, 'objects'),
       db.execute(
-        sql`select count(*)::int n from crm_account_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or lifecycle_stage ilike ${term})` : sql``}`,
+        sql`select count(*)::int n from crm_account_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or lifecycle_stage ilike ${term})` : sql``}`, 'objects',
       ),
     ])
   } else if (tab === 'opportunityStatuses') {
@@ -73,9 +73,9 @@ export async function loadCrmSetup(
       db.execute(sql`
         select * from crm_opportunity_statuses
          where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or default_forecast_category ilike ${term})` : sql``}
-         order by sequence, name limit ${list.perPage} offset ${offset}`),
+         order by sequence, name limit ${list.perPage} offset ${offset}`, 'objects'),
       db.execute(
-        sql`select count(*)::int n from crm_opportunity_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or default_forecast_category ilike ${term})` : sql``}`,
+        sql`select count(*)::int n from crm_opportunity_statuses where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term} or default_forecast_category ilike ${term})` : sql``}`, 'objects',
       ),
     ])
   } else {
@@ -83,9 +83,9 @@ export async function loadCrmSetup(
       db.execute(sql`
         select * from crm_lead_sources
          where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term})` : sql``}
-         order by name limit ${list.perPage} offset ${offset}`),
+         order by name limit ${list.perPage} offset ${offset}`, 'objects'),
       db.execute(
-        sql`select count(*)::int n from crm_lead_sources where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term})` : sql``}`,
+        sql`select count(*)::int n from crm_lead_sources where org_id=${orgId} ${list.q ? sql`and (name ilike ${term} or description ilike ${term})` : sql``}`, 'objects',
       ),
     ])
   }
@@ -97,26 +97,26 @@ export async function loadCrmSetup(
     let selectedResult
     if (tab === 'accountStatuses')
       selectedResult = await db.execute(
-        sql`select * from crm_account_statuses where id=${rowParam} and org_id=${orgId}`,
+        sql`select * from crm_account_statuses where id=${rowParam} and org_id=${orgId}`, 'objects',
       )
     else if (tab === 'opportunityStatuses')
       selectedResult = await db.execute(
-        sql`select * from crm_opportunity_statuses where id=${rowParam} and org_id=${orgId}`,
+        sql`select * from crm_opportunity_statuses where id=${rowParam} and org_id=${orgId}`, 'objects',
       )
     else
       selectedResult = await db.execute(
-        sql`select * from crm_lead_sources where id=${rowParam} and org_id=${orgId}`,
+        sql`select * from crm_lead_sources where id=${rowParam} and org_id=${orgId}`, 'objects',
       )
-    selected = (selectedResult.rows[0] as Record<string, unknown> | undefined) ?? null
+    selected = (selectedResult[0] as Record<string, unknown> | undefined) ?? null
   }
 
   return {
     tab,
-    rows: rowsResult.rows as unknown as Record<string, unknown>[],
+    rows: rowsResult as unknown as Record<string, unknown>[],
     selected,
     creating,
     total: Number(
-      (countResult.rows[0] as { n?: unknown } | undefined)?.n ?? 0,
+      (countResult[0] as { n?: unknown } | undefined)?.n ?? 0,
     ),
     page: list.page,
     perPage: list.perPage,

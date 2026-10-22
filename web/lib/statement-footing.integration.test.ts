@@ -1604,9 +1604,8 @@ test(
     const source = `
       import assert from "node:assert/strict";
       import { randomUUID } from "node:crypto";
-      import { readFileSync } from "node:fs";
       import { sql } from "drizzle-orm";
-      import { db, withBypass, withBypassContext, withOrg } from "./engine/src/platform/db.ts";
+      import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import {
         createScratchOrg,
@@ -1631,8 +1630,8 @@ test(
           insert into departments (id, org_id, name)
           values (\${departmentId}, \${scratch.orgId}, 'Ops')\`);
 
-        // Post the SAME -100 revenue to each book CONCURRENTLY. Pre-0016 this
-        // raced into one gl_month_activity row crediting 200 for the pair.
+        // Post the SAME -100 revenue to each book CONCURRENTLY: the summary
+        // must keep one row per book, never one row crediting 200 for the pair.
         const postRevenue = async (bookId, tag) => {
           const entryId = randomUUID();
           await db.execute(sql\`
@@ -1894,80 +1893,6 @@ test(
                1, 'same_currency', 'multi-book cash-basis regression',
                \${scratch.date}, \${actorId}, \${actorId})\`);
           assert.equal(await cashRevenue(), "200.0000", "paid accrual invoice recognizes revenue on cash basis");
-        });
-
-        // Migration atomicity: replaying 0016 inside a transaction that then
-        // FAILS must leave the prior summary exactly as it was — same shape,
-        // same rows, working trigger maintenance — after rollback recovers it.
-        // Explicit bypass scope: the lazy web imports above replace the test
-        // bypass resolver, so past this point an unscoped client runs deny-all
-        // and this whole check goes vacuous (replay touches zero rows, the
-        // forced insert inserts zero rows and never conflicts).
-        await withBypassContext(async () => {
-                const migration = readFileSync(
-                  "schema/migrations/generated/0016_gl_month_activity_book_id.sql", "utf8");
-                const before = await db.execute(sql\`
-                  select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
-                    from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);
-                await assert.rejects(
-                  withBypass(async () => {
-                    await db.execute(sql.raw(migration));
-                    // The trusted maintenance transaction must see the seeded
-                    // summary row; a constrained raw pool could see zero rows.
-                    const visible = await db.execute(sql\`
-                      select account_id from gl_month_activity where org_id = \${scratch.orgId} limit 1\`);
-                    assert.equal(visible.rows.length, 1, "migration rollback probe sees seeded summary evidence");
-                    // Force a duplicate against the NEW constraint mid-flight.
-                    await db.execute(sql\`
-                      insert into gl_month_activity (org_id, account_id, book_id, month, subsidiary_id)
-                      select org_id, account_id, book_id, month, subsidiary_id
-                        from gl_month_activity where org_id = \${scratch.orgId} limit 1\`);
-                    assert.fail("forced duplicate-key failure did not raise");
-                  }),
-                  (error) => {
-                    let current = error;
-                    while (current && typeof current === "object") {
-                      if (current.code === "23505" && current.constraint === "gl_month_activity_pkey") return true;
-                      current = current.cause;
-                    }
-                    return false;
-                  },
-                  "duplicate summary evidence rolls back the whole migration replay",
-                );
-                const after = await db.execute(sql\`
-                  select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
-                    from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);
-                assert.deepEqual(after.rows, before.rows, "failed migration preserved the prior summary rows");
-
-                // And the recovered summary still maintains itself: another posting
-                // lands on its own per-book row via the triggers.
-                const extraEntry = randomUUID();
-                await db.execute(sql\`
-                  insert into journal_entries
-                    (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-                     period_id, memo, status, origin)
-                  values
-                    (\${extraEntry}, \${scratch.orgId}, \${taxBookId}, \${scratch.subsidiaryId},
-                     'MULTIBOOK-AFTER', \${scratch.date}, \${scratch.periodId}, 'after',
-                     'draft', 'manual')\`);
-                await db.execute(sql\`
-                  insert into journal_lines
-                    (org_id, entry_id, line_number, account_id, subsidiary_id,
-                     amount, currency, txn_amount, fx_rate)
-                  values
-                    (\${scratch.orgId}, \${extraEntry}, 1, \${scratch.accounts.bank},
-                     \${scratch.subsidiaryId}, '50.0000', 'CAD', '50.0000', '1'),
-                    (\${scratch.orgId}, \${extraEntry}, 2, \${scratch.accounts.revenue},
-                     \${scratch.subsidiaryId}, '-50.0000', 'CAD', '-50.0000', '1')\`);
-                await db.execute(sql\`
-                  update journal_entries set status = 'posted', posted_at = now()
-                   where id = \${extraEntry}\`);
-                const postRollback = await db.execute(sql\`
-                  select g.credit_total from gl_month_activity g
-                   where g.org_id = \${scratch.orgId}
-                     and g.account_id = \${scratch.accounts.revenue}
-                     and g.book_id = \${taxBookId}\`);
-                assert.deepEqual(postRollback.rows.map((r) => r.credit_total).sort(), ["150.0000"]);
         });
       } finally {
         await withBypass(() => dropScratchOrg(scratch.orgId));

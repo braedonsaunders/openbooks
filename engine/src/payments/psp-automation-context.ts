@@ -89,8 +89,7 @@ export async function loadAutomationContext(
   orgId: string,
   attemptId: string,
 ): Promise<AutomationContext> {
-  const attempt = (
-    await db.execute<{
+  const attempt = (await db.execute<{
       id: string;
       status: string;
       provider: string;
@@ -105,12 +104,10 @@ export async function loadAutomationContext(
       from payment_attempts
      where id = ${attemptId} and org_id = ${orgId}
      for update
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!attempt)
     throw new PspAutomationError("payment attempt is not in this organization");
-  const link = (
-    await db.execute<{
+  const link = (await db.execute<{
       id: string;
       document_id: string;
       party_id: string;
@@ -123,13 +120,11 @@ export async function loadAutomationContext(
            l.currency, l.created_by
       from payment_links l
      where l.id = ${attempt.link_id} and l.org_id = ${orgId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!link)
     throw new PspAutomationError("payment link is not in this organization");
   const receipt = attempt.payment_document_id
-    ? ((
-        await db.execute<{
+    ? ((await db.execute<{
           id: string;
           status: string;
           document_number: string;
@@ -140,11 +135,9 @@ export async function loadAutomationContext(
         select id, status, document_number, total::text, currency, custom
           from documents
          where id = ${attempt.payment_document_id} and org_id = ${orgId}
-      `)
-      ).rows[0] ?? null)
+      `, "objects"))[0] ?? null)
     : null;
-  const invoice = (
-    await db.execute<{
+  const invoice = (await db.execute<{
       id: string;
       document_number: string;
       open_balance: string;
@@ -152,12 +145,10 @@ export async function loadAutomationContext(
     select id, document_number, open_balance::text
       from documents
      where id = ${link.document_id} and org_id = ${orgId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!invoice)
     throw new PspAutomationError("invoice is not in this organization");
-  const config = (
-    await db.execute<{
+  const config = (await db.execute<{
       default_disputed_funds_account_id: string | null;
       default_chargeback_loss_account_id: string | null;
       default_dispute_fee_account_id: string | null;
@@ -166,8 +157,7 @@ export async function loadAutomationContext(
            default_chargeback_loss_account_id, default_dispute_fee_account_id
       from psp_provider_configs
      where org_id = ${orgId} and provider = ${attempt.provider}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   return {
     attempt: {
       id: attempt.id,
@@ -205,7 +195,7 @@ export async function lockReturnReceiptAuthority(orgId: string, plan: { sourceRe
   const source = (await db.execute<{ created_by: string | null }>(sql`
     select created_by from documents where org_id=${orgId} and id=${plan.sourceReceiptId}
       and kind='customer_payment' and subsidiary_id=${plan.subsidiaryId}
-      and party_id=${plan.partyId} and currency=${plan.currency} and status in('posted','voided') for share`)).rows[0];
+      and party_id=${plan.partyId} and currency=${plan.currency} and status in('posted','voided') for share`, "objects"))[0];
   if (!source?.created_by) throw new PspAutomationError(
     "The original receipt has no acting user. Review its payment history before submitting this provider return.",
   );

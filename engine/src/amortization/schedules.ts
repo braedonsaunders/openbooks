@@ -211,7 +211,7 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
     await lockLedgerSetupFence(db, input.orgId, "shared");
     await requireAmortizationAuthority(db, input.orgId, input.actorId, input.subsidiaryId, "amortization.manage");
     const subsidiary = (await db.execute<{ base_currency: string; is_active: boolean | null }>(sql`
-      select base_currency, is_active from subsidiaries where org_id = ${input.orgId} and id = ${input.subsidiaryId}`)).rows[0];
+      select base_currency, is_active from subsidiaries where org_id = ${input.orgId} and id = ${input.subsidiaryId}`, "objects"))[0];
     if (!subsidiary || subsidiary.is_active === false) {
       throw new AmortizationError("The subsidiary does not exist in this organization or is inactive.", {
         status: 404,
@@ -249,7 +249,7 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
       });
     }
     const book = await loadBookProfile(db, input.orgId, bookId);
-    const available = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${input.orgId} and id = ${bookId} and is_active and posts_gl for share`)).rows[0];
+    const available = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${input.orgId} and id = ${bookId} and is_active and posts_gl for share`, "objects"))[0];
     if (!book || !available) throw new AmortizationError("The selected accounting book is not an active posting book of this organization.", { status: 404 });
     if (!book.isPrimary && !await lockAndCheckOrgFeature(db, input.orgId, "multiBookAccounting")) throw new AmortizationError("Multi-book accounting is off.", { remedy: "Turn on Multi-book accounting in Company Settings → Features, or choose the primary book." });
     const basis = (await resolveBookBases(db, { orgId: input.orgId, book, subsidiaryIds: [input.subsidiaryId], postingDate: fromPeriod })).get(input.subsidiaryId)!;
@@ -287,7 +287,7 @@ export async function createManualSchedule(input: CreateManualScheduleInput): Pr
         ${deferralAccountId}, ${bookDestinationAccountId},
         ${dims.departmentId ?? null}, ${dims.projectId ?? null}, ${dims.locationId ?? null}, ${dims.classId ?? null},
         ${JSON.stringify(dims.extraDims ?? {})}::jsonb, ${input.memo ?? null}, ${input.actorId}, ${input.actorId})
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!row) throw new AmortizationError("The schedule was not stored; nothing was saved.", { status: 409 });
     await insertPlanLines(db, {
       orgId: input.orgId,
@@ -631,7 +631,7 @@ export async function reduceSchedule(input: ScheduleChangeInput & {
 /** A credit document must be a posted credit of the same organization and entity. */
 async function assertCreditDocument(runner: SqlExecutor, schedule: StoredSchedule, documentId: string): Promise<void> {
   const doc = (await runner.execute<{ kind: string; status: string; subsidiary_id: string | null }>(sql`
-    select kind, status, subsidiary_id from documents where org_id = ${schedule.orgId} and id = ${documentId}`)).rows[0];
+    select kind, status, subsidiary_id from documents where org_id = ${schedule.orgId} and id = ${documentId}`, "objects"))[0];
   if (!doc || doc.status !== "posted" || doc.subsidiary_id !== schedule.subsidiaryId || !["vendor_credit", "journal"].includes(doc.kind)) {
     throw new AmortizationError("The credit must be a posted vendor credit or journal for this schedule's legal entity.", {
       code: "amortization_credit_document_invalid",
@@ -736,7 +736,7 @@ export async function reversePostedAmortization(
   schedule: StoredSchedule,
   input: { postingDate: string; entrySuffix: string; idempotencyKey: string; memo: string; actorId: string | null },
 ): Promise<{ entryId: string | null; amount: bigint }> {
-  const rows = (await runner.execute<{ account_id: string; amount: string }>(sql`
+  const rows = await runner.execute<{ account_id: string; amount: string }>(sql`
     with schedule_entries as (
       select journal_entry_id as entry_id from expense_amortization_schedule_lines
        where org_id = ${schedule.orgId} and schedule_id = ${schedule.id} and journal_entry_id is not null
@@ -754,7 +754,7 @@ export async function reversePostedAmortization(
        and jl.account_id <> ${schedule.deferralAccountId}
      group by jl.account_id
     having sum(jl.amount) <> 0
-     order by jl.account_id`)).rows;
+     order by jl.account_id`, "objects");
   const legs = rows.map((row) => ({ accountId: row.account_id, amount: -ledgerUnits(row.amount, "the posted amortization") }));
   const amount = -legs.reduce((acc, leg) => acc + leg.amount, 0n);
   if (legs.length === 0 || amount === 0n) return { entryId: null, amount: 0n };

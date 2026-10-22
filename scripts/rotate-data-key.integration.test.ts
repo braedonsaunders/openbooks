@@ -77,13 +77,13 @@ test("dry run probes every row and --apply re-seals under the active key", { ski
     const connections = probe.find((r) => r.table === "connections")!;
     assert.equal(connections.resealed, 1, "dry run must report the stale blob");
     const stillStale = await db.execute<{ secrets: string }>(sql`
-      select secrets from connections where org_id = ${org.orgId}`);
-    assert.equal(stillStale.rows[0]!.secrets, stale, "dry run writes nothing");
+      select secrets from connections where org_id = ${org.orgId}`, "objects");
+    assert.equal(stillStale[0]!.secrets, stale, "dry run writes nothing");
     const applied = await rotateDataKey({ apply: true, org: org.orgId });
     assert.equal(applied.find((r) => r.table === "connections")!.resealed, 1);
     const after = await db.execute<{ secrets: string }>(sql`
-      select secrets from connections where org_id = ${org.orgId}`);
-    assert.deepEqual(describeSealedBlob(after.rows[0]!.secrets), { version: "v2", keyId: "k2" });
+      select secrets from connections where org_id = ${org.orgId}`, "objects");
+    assert.deepEqual(describeSealedBlob(after[0]!.secrets), { version: "v2", keyId: "k2" });
   } finally {
     useSingleKey(K1_HEX);
     await dropScratchOrg(org.orgId);

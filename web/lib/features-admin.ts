@@ -67,9 +67,9 @@ export async function applyFeatureChanges(
     // together.
     const before = await db.execute<{ features: Record<string, boolean> }>(sql`
       select coalesce(settings->'features', '{}'::jsonb) as features
-        from orgs where id = ${orgId} for update`)
-    if (!before.rows[0]) return { ok: false, error: 'not-found' }
-    const currentState = before.rows[0].features ?? {}
+        from orgs where id = ${orgId} for update`, 'objects')
+    if (!before[0]) return { ok: false, error: 'not-found' }
+    const currentState = before[0].features ?? {}
     const after = { ...currentState, ...clean }
     // A feature whose disable-check is hard-blocked can't be turned off — its
     // data is structurally load-bearing (e.g. the ledger is partitioned per

@@ -63,10 +63,10 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     // before the transaction can retain a demoted book while setup commits.
     // Hold the book row through the first journal insert so its history guard
     // cannot pass concurrently with this organization's first posting.
-    const books = (await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+    const books = await tx.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
       select id, is_active, posts_gl from accounting_books
        where org_id = ${doc.orgId} and is_primary order by id for share
-    `)).rows;
+    `, "objects");
     if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl)
       throw new PostingError("posting requires exactly one active primary posting book");
     // A book-specific journal posts to its target book only; every other
@@ -217,8 +217,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
             left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
            where e.org_id = ${doc.orgId}
              and e.entry_number = ${entryNumber}
-           limit 1`));
-        const other = claimant.rows[0];
+           limit 1`, "objects"));
+        const other = claimant[0];
         if (other && other.source_document_id !== doc.id) {
           throw new PostingError(
             `journal entry number "${entryNumber}" is already used by ${other.kind ?? "another document"} ${other.document_number ?? ""}`,
@@ -379,8 +379,8 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
             before: { payment_terms_snapshot: null },
             after: { payment_terms_snapshot: paymentTermsSnapshot },
           })}::jsonb, null, 'document_posting') returning id
-      `);
-      if (audit.rows.length !== 1) throw new PostingError("The posted payment terms audit was not retained.");
+      `, "objects");
+      if (audit.length !== 1) throw new PostingError("The posted payment terms audit was not retained.");
     }
 
     // A cash sale's stored-value tenders redeem inside the posting commit:
@@ -500,9 +500,9 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     if (secondaryByBook.size > 0) {
       // Revalidate under the setup fence: a book deactivated after contribution
       // planning refuses instead of posting into a dead book.
-      const bookRows = (await tx.execute<{ id: string; code: string; is_active: boolean; posts_gl: boolean }>(sql`
+      const bookRows = await tx.execute<{ id: string; code: string; is_active: boolean; posts_gl: boolean }>(sql`
         select id, code, is_active, posts_gl from accounting_books
-         where org_id = ${doc.orgId} and id = any(${`{${[...secondaryByBook.keys()].join(",")}}`}::uuid[])`)).rows;
+         where org_id = ${doc.orgId} and id = any(${`{${[...secondaryByBook.keys()].join(",")}}`}::uuid[])`, "objects");
       const bookById = new Map(bookRows.map((b) => [b.id, b]));
       for (const [bookId, bookLines] of secondaryByBook) {
         const book = bookById.get(bookId);

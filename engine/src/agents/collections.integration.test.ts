@@ -33,7 +33,7 @@ test(
           join journal_lines line on line.entry_id = document.posted_entry_id
            and line.org_id = document.org_id and line.account_id = ${org.accounts.ar}
          where document.id = ${invoiceId} and document.org_id = ${org.orgId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
 
       // A posted credit memo has an older due date than its invoice target.
       // The old OR join counted this application twice and used that source
@@ -60,7 +60,7 @@ test(
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`);
       const sourceLine = (await db.execute<{ id: string }>(sql`
         select id from journal_lines where entry_id = ${entryId} and line_number = 1 and org_id = ${org.orgId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       await db.execute(sql`
         insert into applications
           (org_id, from_line_id, to_line_id, amount, source_amount,
@@ -236,11 +236,11 @@ test(
       const items = await withBypassContext(
         () => db.execute<{ finding_type: string; materiality: string }>(sql`
           select finding_type, materiality::text
-            from ai_work_items where org_id = ${org.orgId} and agent_key = 'collections'`),
+            from ai_work_items where org_id = ${org.orgId} and agent_key = 'collections'`, "objects"),
       );
-      assert.equal(items.rows.length, 1);
-      assert.equal(items.rows[0]!.finding_type, "overdue_customer_balance");
-      assert.equal(items.rows[0]!.materiality, "2500.0000");
+      assert.equal(items.length, 1);
+      assert.equal(items[0]!.finding_type, "overdue_customer_balance");
+      assert.equal(items[0]!.materiality, "2500.0000");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }

@@ -210,8 +210,8 @@ async function loadConnection(connectionId: string): Promise<ConnectionRow> {
   const r = (await db.execute<ConnectionRow>(sql`
     select last_sync_at, status, last_error
       from bank_feed_connections where id = ${connectionId}
-  `));
-  return r.rows[0]!;
+  `, "objects"));
+  return r[0]!;
 }
 
 type AttemptRow = ConnectionRow & { last_attempt_at: Date | null };
@@ -221,8 +221,8 @@ async function loadAttemptBookkeeping(connectionId: string): Promise<AttemptRow>
   const r = (await db.execute<AttemptRow>(sql`
     select last_sync_at, last_attempt_at, status, last_error
       from bank_feed_connections where id = ${connectionId}
-  `));
-  return r.rows[0]!;
+  `, "objects"));
+  return r[0]!;
 }
 
 /** Raw SQL reads surface timestamptz as Date or string depending on driver; compare instants. */
@@ -302,8 +302,8 @@ async function loadStatementLines(orgId: string, accountId: string): Promise<Sta
       from bank_statement_lines
      where org_id = ${orgId} and account_id = ${accountId}
      order by bank_transaction_id
-  `));
-  return r.rows;
+  `, "objects"));
+  return r;
 }
 
 type FeedImportActors = {
@@ -324,8 +324,8 @@ async function loadLatestFeedImportActors(orgId: string): Promise<FeedImportActo
      where bs.org_id = ${orgId} and bs.source = 'feed_api'
      order by bs.imported_at desc
      limit 1
-  `));
-  return r.rows[0]!;
+  `, "objects"));
+  return r[0]!;
 }
 
 /** Zero UUID must be absent from every actor column the sync can touch. */
@@ -336,8 +336,8 @@ async function countZeroUuidActorRows(orgId: string): Promise<number> {
       (select count(*) from bank_statements where org_id = ${orgId} and created_by = ${ZERO_UUID}) +
       (select count(*) from bank_statement_lines where org_id = ${orgId} and created_by = ${ZERO_UUID})
     )::int as n
-  `));
-  return Number(r.rows[0]!.n);
+  `, "objects"));
+  return Number(r[0]!.n);
 }
 
 // Complete asynchronous setup before registering tests so --test-force-exit
@@ -1142,7 +1142,7 @@ test(
       const deletedProbe = await deletingProbe;
       assert.equal(deletedProbe.status, 409);
       assert.deepEqual(await deletedProbe.json(), { error: "deleted while testing" });
-      assert.equal((await db.execute(sql`select 1 from bank_feed_connections where id=${f.connectionId} and org_id=${f.orgId}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select 1 from bank_feed_connections where id=${f.connectionId} and org_id=${f.orgId}`, "objects")).length, 0);
     } finally {
       globalThis.fetch = originalFetch;
       routeState.authz = null;
@@ -1172,8 +1172,8 @@ test(
         select count(*)::int as count from audit_log
          where org_id = ${f.orgId} and table_name = 'bank_feed_connections'
            and row_id = ${f.connectionId} and action = 'delete'
-      `);
-      assert.equal(audits.rows[0]?.count, 1);
+      `, "objects");
+      assert.equal(audits[0]?.count, 1);
     } finally {
       routeState.authz = null;
       await dropScratchOrgReporting(f.orgId);
@@ -1194,7 +1194,7 @@ test("scheduled sync fences both claim and provider response against connection 
     const pending = runDueBankFeeds();
     let waiting = false;
     for (let i = 0; i < 600 && !waiting; i++) {
-      waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%update bank_feed_connections c%') as waiting`)).rows[0]!.waiting;
+      waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%update bank_feed_connections c%') as waiting`, "objects"))[0]!.waiting;
       if (!waiting) await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assert.equal(waiting, true);
@@ -1270,8 +1270,8 @@ test(
       const payload = (await response.json()) as { error?: string };
       assert.match(payload.error ?? "", /not found/);
       const rows = await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from bank_statement_lines where org_id=${f.orgId} and account_id=${f.accountId}`);
-      assert.equal(rows.rows[0]!.n, 0, "out-of-scope feed results must not become statement rows");
+        select count(*)::int as n from bank_statement_lines where org_id=${f.orgId} and account_id=${f.accountId}`, "objects");
+      assert.equal(rows[0]!.n, 0, "out-of-scope feed results must not become statement rows");
     } finally {
       globalThis.fetch = originalFetch;
       routeState.authz = null;
@@ -1464,8 +1464,8 @@ test(
           (select count(*) from bank_statements where org_id = ${f.orgId}) +
           (select count(*) from bank_statement_lines where org_id = ${f.orgId})
         )::int as n
-      `));
-      assert.equal(Number(rows.rows[0]!.n), 0);
+      `, "objects"));
+      assert.equal(Number(rows[0]!.n), 0);
       // Control: the same statement imports cleanly under a real actor.
       const result = await withOrg(f.orgId, () =>
         importStatement(

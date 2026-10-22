@@ -84,7 +84,7 @@ test("30-day forecast tiles tie the cockpit positions item for item", { skip: !D
     const may = randomUUID();
     await withBypass(async () => {
       const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`)).rows[0]!.fiscal_calendar_id;
+        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`, "objects"))[0]!.fiscal_calendar_id;
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${may},${org.orgId},2026,5,'2026-05','2026-05-01','2026-05-31',false,${cal})`);
     });

@@ -40,21 +40,21 @@ export const POST = defineRoute({
         // the link commits instead of slipping between the check and the insert.
         const exists = await lockCrmLinkSubject(tx, user.orgId, body.subjectKind, body.subjectId)
         const valid = exists
-          ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${body.subjectKind}`,sql`${body.subjectId}`,gate.allowedSubsidiaryIds)}`)
-          : { rows: [] }
-        if (!valid.rows.length) return notFound("record")
+          ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${body.subjectKind}`,sql`${body.subjectId}`,gate.allowedSubsidiaryIds)}`, 'objects')
+          : []
+        if (!valid.length) return notFound("record")
       }
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into crm_activities
           (org_id, kind, subject, status, owner_user_id, assigned_user_id, created_by, updated_by)
         values (${user.orgId}, ${kind}, 'New activity', 'planned', ${user.id}, ${user.id}, ${user.id}, ${user.id})
-        returning id`))
+        returning id`, 'objects'))
       if (body.subjectKind && body.subjectId) {
         await tx.execute(sql`
           insert into crm_activity_links (org_id, activity_id, subject_kind, subject_id, created_by, updated_by)
-          values (${user.orgId}, ${inserted.rows[0]!.id}, ${body.subjectKind}, ${body.subjectId}, ${user.id}, ${user.id})`)
+          values (${user.orgId}, ${inserted[0]!.id}, ${body.subjectKind}, ${body.subjectId}, ${user.id}, ${user.id})`)
       }
-      return inserted.rows[0]!
+      return inserted[0]!
     })
     if (activity instanceof NextResponse) return activity
     return NextResponse.json(activity)

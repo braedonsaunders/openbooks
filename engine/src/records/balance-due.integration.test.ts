@@ -45,7 +45,7 @@ async function postDoc(
   await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
   const entry = await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
   const line = (await db.execute<{ id: string }>(sql`select id from journal_lines
-    where entry_id = ${entry} and is_open_item`)).rows[0]!.id;
+    where entry_id = ${entry} and is_open_item`, "objects"))[0]!.id;
   return { id, line };
 }
 
@@ -55,13 +55,13 @@ async function readApplied(docId: string): Promise<{ applied: number; appliedBas
       from documents d
       ${documentBalanceDueLateral("d", { base: true })}
      where d.id = ${docId}
-  `));
-  return { applied: Number(r.rows[0]!.applied), appliedBase: Number(r.rows[0]!.applied_base) };
+  `, "objects"));
+  return { applied: Number(r[0]!.applied), appliedBase: Number(r[0]!.applied_base) };
 }
 
 async function cachedBalance(docId: string): Promise<string | null> {
   return (await db.execute<{ open_balance: string | null }>(sql`select open_balance::text as open_balance
-    from documents where id = ${docId}`)).rows[0]!.open_balance;
+    from documents where id = ${docId}`, "objects"))[0]!.open_balance;
 }
 
 test("FX settlement applies the transaction leg, not the base carrying amount", { skip: !DB }, async () => {
@@ -84,7 +84,7 @@ test("FX settlement applies the transaction leg, not the base carrying amount", 
              (${org.orgId}, ${pay}, 2, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, '-100', 'USD', '-80', '1.25', true)`);
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${pay}`);
     const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines
-      where entry_id = ${pay} and is_open_item`)).rows[0]!.id;
+      where entry_id = ${pay} and is_open_item`, "objects"))[0]!.id;
     await db.execute(sql`insert into applications
       (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
        source_transaction_currency, target_transaction_amount, target_transaction_currency,
@@ -113,10 +113,10 @@ test("FX settlement applies the transaction leg, not the base carrying amount", 
     }
     const result = await runDunningForOrg(org.orgId, "2026-07-20");
     assert.equal(result.sent, 1);
-    const outbox = (await db.execute<{ payload: Record<string, unknown> }>(sql`
+    const outbox = await db.execute<{ payload: Record<string, unknown> }>(sql`
       select payload from scheduler_outbox
        where kind = 'flow_email' and occurrence_key like ${`dunning:${inv.id}:%`}
-    `)).rows;
+    `, "objects");
     assert.equal(outbox.length, 1);
     assert.match(String((outbox[0]!.payload as { text: string }).text), /EUR 50\.0000/);
   } finally {

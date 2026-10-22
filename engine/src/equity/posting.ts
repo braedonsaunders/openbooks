@@ -78,7 +78,7 @@ export async function resolveAccountPolicy(runner: SqlExecutor, orgId: string, s
       from equity_account_policies
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and effective_from <= ${on}::date
      order by effective_from desc
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!row) {
     throw equityError("accountPolicyMissing", { date: fig.date(on) });
   }
@@ -100,7 +100,7 @@ export async function resolveAccountPolicy(runner: SqlExecutor, orgId: string, s
 
 /** Whether an account is classified as equity (an equity-classified convertible is never remeasured for exchange rates). */
 export async function isEquityAccount(runner: SqlExecutor, orgId: string, accountId: string): Promise<boolean> {
-  const row = (await runner.execute<{ type: string }>(sql`select type from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+  const row = (await runner.execute<{ type: string }>(sql`select type from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
   return row?.type === "equity";
 }
 
@@ -113,7 +113,7 @@ export async function requireConsiderationAccount(runner: SqlExecutor, orgId: st
     throw equityError("considerationAccountMissing", { field: fig.term("considerationAccount") }, { field: "considerationAccountId" });
   }
   const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+    select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
   if (!row || !row.is_active || row.is_summary || !(CONSIDERATION_ACCOUNT_TYPES as readonly string[]).includes(row.type)) {
     throw equityError("considerationAccountInvalid", { field: fig.term("considerationAccount") }, { field: "considerationAccountId" });
   }
@@ -161,7 +161,7 @@ export async function instrumentBalance(
   role: InstrumentBalanceRole,
   asOf?: string | null,
 ): Promise<InstrumentBalanceGroup[]> {
-  const rows = (await runner.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
+  const rows = await runner.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
     with entries as materialized (
       select id from journal_entries
        where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and origin = ${EQUITY_JOURNAL_ORIGIN} and status in ('posted', 'reversed')
@@ -174,7 +174,7 @@ export async function instrumentBalance(
      where coalesce(a.security_id::text, l.custom->>'equitySecurityId') = ${securityId}
        and coalesce(a.role, l.custom->>'equityRole') = ${role}
      group by l.account_id, l.currency, l.fx_rate
-     order by l.account_id, l.currency, l.fx_rate`)).rows;
+     order by l.account_id, l.currency, l.fx_rate`, "objects");
   return rows
     .map((row) => ({ accountId: row.account_id, currency: row.currency, fxRate: row.fx_rate, units: toUnits(row.amount), txnUnits: toUnits(row.txn_amount) }))
     .filter((group) => group.units !== 0n || group.txnUnits !== 0n);
@@ -184,7 +184,7 @@ export async function instrumentBalance(
 async function periodFigure(runner: SqlExecutor, orgId: string, periodId: string) {
   const row = (await runner.execute<{ fiscal_year: number; period_number: number; is_adjustment: boolean; starts_on: string; ends_on: string }>(sql`
     select fiscal_year, period_number, is_adjustment, starts_on::text as starts_on, ends_on::text as ends_on
-      from accounting_periods where org_id = ${orgId} and id = ${periodId}`)).rows[0];
+      from accounting_periods where org_id = ${orgId} and id = ${periodId}`, "objects"))[0];
   if (!row) return null;
   return fig.period(canonicalPeriodLabel({ fiscalYear: row.fiscal_year, periodNumber: row.period_number, adjustment: row.is_adjustment }), row.starts_on, row.ends_on);
 }
@@ -216,7 +216,7 @@ async function refusal(runner: SqlExecutor, orgId: string, periodId: string, on:
 /** The primary book; a posting holds it shared so it cannot be retired underneath, while a probe only reads it. */
 async function primaryBook(runner: SqlExecutor, orgId: string, lock = true): Promise<string> {
   const book = (await runner.execute<{ id: string }>(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 ${lock ? sql`for share` : sql``}`)).rows[0];
+    select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 ${lock ? sql`for share` : sql``}`, "objects"))[0];
   if (!book) {
     throw equityError("bookMissing");
   }
@@ -298,12 +298,12 @@ export interface RunPeriodAfter {
  * period of the default calendar ending after it that is open for posting.
  */
 export async function nextRunPeriodAfter(runner: SqlExecutor, orgId: string, subsidiaryId: string, after: string): Promise<RunPeriodAfter | null> {
-  const periods = (await runner.execute<{ id: string; fiscal_year: number; period_number: number; ends_on: string }>(sql`
+  const periods = await runner.execute<{ id: string; fiscal_year: number; period_number: number; ends_on: string }>(sql`
     select p.id, p.fiscal_year, p.period_number, p.ends_on::text as ends_on from accounting_periods p
      where p.org_id = ${orgId} and not p.is_adjustment and p.ends_on > ${after}::date
        and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active)
      order by p.ends_on, p.id
-     limit 36`)).rows;
+     limit 36`, "objects");
   const today = await businessTodayInTx(runner, orgId);
   for (const period of periods) {
     if (await postingPeriodOpen(runner, orgId, subsidiaryId, period.ends_on)) return { periodId: period.id, name: canonicalPeriodLabel({ fiscalYear: period.fiscal_year, periodNumber: period.period_number, adjustment: false }), endsOn: period.ends_on, ended: period.ends_on <= today };
@@ -323,7 +323,7 @@ export async function runPeriodsToGenerate(runner: SqlExecutor, orgId: string, a
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.fiscal_calendar_id in (select id from fiscal_calendars where org_id = ${orgId} and is_default and is_active)
      order by p.ends_on desc, p.id
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (!latest || latest.ends_on > after) return null;
   return { calendarId: latest.calendar_id, fiscalYear: latest.fiscal_year + 1 };
 }
@@ -409,7 +409,7 @@ export async function reverseEquityEntry(
   const header = (await runner.execute<{ subsidiary_id: string; entry_number: string; origin: string; status: string }>(sql`
     select subsidiary_id, entry_number, origin, status from journal_entries
      where org_id = ${input.orgId} and id = ${input.entryId}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!header || header.origin !== EQUITY_JOURNAL_ORIGIN) {
     throw equityError("entryUnknown");
   }
@@ -417,10 +417,10 @@ export async function reverseEquityEntry(
   if (header.status !== "posted") {
     throw equityError("entryNotPosted", { entry: fig.text(header.entry_number) });
   }
-  const lines = (await runner.execute<{ account_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string; line_number: number; custom: Record<string, unknown> | null }>(sql`
+  const lines = await runner.execute<{ account_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string; line_number: number; custom: Record<string, unknown> | null }>(sql`
     select account_id, amount::text as amount, currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate, line_number, custom
       from journal_lines where org_id = ${input.orgId} and entry_id = ${input.entryId}
-     order by line_number`)).rows;
+     order by line_number`, "objects");
   const bookId = await primaryBook(runner, input.orgId);
   const periodId = await coveringPeriod(runner, input.orgId, header.subsidiary_id, input.reversalDate);
   try {

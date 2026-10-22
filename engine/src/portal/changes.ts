@@ -76,7 +76,7 @@ async function loadClassicSub(runner: SqlExecutor, orgId: string, subscriptionId
       left join subscription_lifecycles sl on sl.org_id = s.org_id and sl.subscription_id = s.id
      where s.org_id = ${orgId} and s.id = ${subscriptionId}
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw portalRefusal("That subscription was not found in your account", "not_found", 404, "Return to your portal home and choose from your own subscriptions");
   return row;
 }
@@ -160,12 +160,12 @@ async function previewAdvancedChange(
   if (!input.componentKey?.trim()) {
     throw portalRefusal("Choose the subscription line to change", "invalid_input", 422, "Pick one subscription line to upgrade or downgrade");
   }
-  const components = (await db.execute<{ componentKey: string; quantity: string; unitPrice: string }>(sql`
+  const components = await db.execute<{ componentKey: string; quantity: string; unitPrice: string }>(sql`
     select component_key as "componentKey", quantity::text as quantity, unit_price::text as "unitPrice"
       from subscription_components
      where org_id = ${orgId} and subscription_id = ${subscriptionId}
        and effective_from <= ${effectiveOn} and (effective_to is null or effective_to >= ${effectiveOn})
-  `)).rows;
+  `, "objects");
   const current = components.find((component) => component.componentKey === input.componentKey);
   if (!current) {
     throw portalRefusal("That subscription line is not active", "invalid_input", 422, "Pick an active subscription line");
@@ -303,7 +303,7 @@ async function transitionSubscription(
              updated_at = now(), updated_by = ${PORTAL_ACTOR_ID}
        where org_id = ${orgId} and id = ${subscriptionId} and status = ${sub.status}
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw portalRefusal("The subscription changed while saving", "changed_concurrently", 409, "Reload the subscription and try again");
     }
@@ -386,7 +386,7 @@ export async function acceptSaveOffer(
        order by created_at desc
        limit 1
       for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!draft) {
       throw portalRefusal(
         "There is no open draft to discount",
@@ -460,7 +460,7 @@ export async function validatePortalReturn(
     const sourceRow = (await db.execute<{ documentDate: string; subsidiaryId: string }>(sql`
       select document_date::text as "documentDate", subsidiary_id as "subsidiaryId"
         from documents where org_id = ${orgId} and id = ${input.sourceDocumentId} limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!sourceRow) throw portalRefusal("That record was not found in your account", "not_found", 404, "Return to your portal home and choose from your own records");
     const today = await businessToday(orgId);
     const deadline = returnWindowDeadline(sourceRow.documentDate, settings.returnWindowDays);
@@ -516,7 +516,7 @@ export async function validatePortalReturn(
         join document_lines source_line on source_line.org_id = movement.org_id and source_line.id = movement.document_line_id
        where movement.org_id = ${orgId}
          and movement.id = any(${`{${lines.map((line) => line.sourceIssueMovementId).join(",")}}`}::uuid[])
-    `)).rows.map((row) => [row.movementId, row.documentId]));
+    `, "objects")).map((row) => [row.movementId, row.documentId]));
     lines.forEach((line, index) => {
       if (shipped.get(line.sourceIssueMovementId) !== input.sourceDocumentId.toLowerCase()) {
         throw portalRefusal(

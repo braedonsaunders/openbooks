@@ -95,13 +95,13 @@ test("the third confirmation writes an activation audit and reports the rule", {
     const kinds = third.rulesActivated.map((rule) => rule.ruleKind).sort();
     assert.deepEqual(kinds, ["vendor_account", "vendor_alias"]);
 
-    const events = (await db.execute<{
+    const events = await db.execute<{
       kind: string; detail: Record<string, unknown>; actorId: string | null; itemId: string;
     }>(sql`
       select event_kind as "kind", detail, actor_id as "actorId", capture_item_id as "itemId"
         from ap_capture_events
        where org_id = ${org.orgId} and event_kind = 'rule_activated'
-       order by at`)).rows;
+       order by at`, "objects");
     assert.equal(events.length, 2, "each activation leaves its own audit row");
     for (const event of events) {
       assert.equal(event.itemId, thirdCaptureId, "the audit names the triggering capture");
@@ -114,9 +114,9 @@ test("the third confirmation writes an activation audit and reports the rule", {
     const accountEvent = events.find((event) => event.detail.ruleKind === "vendor_account")!;
     assert.deepEqual(accountEvent.detail.output, { accountId: org.accounts.cogs });
 
-    const rules = (await db.execute<{ kind: string; active: boolean; count: number }>(sql`
+    const rules = await db.execute<{ kind: string; active: boolean; count: number }>(sql`
       select rule_kind as "kind", is_active as "active", confirmation_count as "count"
-        from ap_capture_rules where org_id = ${org.orgId}`)).rows;
+        from ap_capture_rules where org_id = ${org.orgId}`, "objects");
     assert.ok(rules.every((rule) => rule.active && rule.count === 3));
   } finally {
     await dropScratchOrg(org.orgId);

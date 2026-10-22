@@ -307,12 +307,12 @@ async function readPrerequisites(executor: SqlExecutor, orgId: string, lock: boo
   const book = (await executor.execute<{ id: string }>(sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active and posts_gl
-     limit 1`)).rows[0] ?? null;
+     limit 1`, "objects"))[0] ?? null;
   if (!book) blockers.push(blocker("no_posting_book"));
   const root = (await executor.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${orgId} and is_active and not is_elimination and parent_id is null
-     limit 1`)).rows[0] ?? null;
+     limit 1`, "objects"))[0] ?? null;
   if (!root) blockers.push(blocker("no_root_subsidiary"));
   return { blockers, bookId: book?.id ?? null, rootSubsidiaryId: root?.id ?? null };
 }
@@ -331,7 +331,7 @@ async function collectUnpostedRows(
   through: string,
   scope: { bookId: string; rootSubsidiaryId: string },
 ): Promise<UnpostedLaborRow[]> {
-  const candidates = (await executor.execute<CandidateRow>(sql`
+  const candidates = await executor.execute<CandidateRow>(sql`
     select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on::text as worked_on,
            coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id,
            coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency
@@ -345,7 +345,7 @@ async function collectUnpostedRows(
        and te.cost_rate is not null
        and te.worked_on <= ${through}::date
        and coalesce(p.is_internal, false) = false
-     order by te.worked_on, te.id`)).rows;
+     order by te.worked_on, te.id`, "objects");
 
   const costed = candidates.flatMap((row) => {
     const cost = mul(String(row.hours ?? "0"), String(row.cost_rate ?? "0"));
@@ -462,7 +462,7 @@ export async function postUnpostedLaborCost(
     const stamped = new Set(journalEntryIds.length === 0 ? [] : (await db.execute<{ id: string }>(sql`
       select id from time_entries
        where org_id = ${orgId}
-         and cost_journal_entry_id = any(${`{${journalEntryIds.join(",")}}`}::uuid[])`)).rows.map((row) => row.id));
+         and cost_journal_entry_id = any(${`{${journalEntryIds.join(",")}}`}::uuid[])`, "objects")).map((row) => row.id));
     const posted = rows.filter((row) => stamped.has(row.id));
     const postedSummary = summarizeUnpostedRows(posted).totals;
 

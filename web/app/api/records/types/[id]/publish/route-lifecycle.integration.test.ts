@@ -129,11 +129,11 @@ test(
         const audits = (await db.execute<{ count: string }>(sql`
           select count(*) from audit_log
            where org_id = ${org.orgId} and table_name = 'custom_record_types' and row_id = ${draftId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(audits?.count, '0', 'the refusal commits no audit event')
         const stillThere = (await db.execute<{ status: string }>(sql`
           select status from custom_record_types where id = ${draftId} and org_id = ${org.orgId}
-        `)).rows[0]
+        `, 'objects'))[0]
         assert.equal(stillThere?.status, 'draft', 'the refusal changes no status')
       })
     } finally {
@@ -158,11 +158,11 @@ test(
         const draftId = await withBypass(() => insertDraft(org.orgId, actorId))
         const published = await lifecycle(draftId, 'publish')
         assert.equal(published.status, 200, await published.clone().text())
-        const events = (await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
+        const events = await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
           select action, changes, actor_id from audit_log
            where org_id = ${org.orgId} and table_name = 'custom_record_types' and row_id = ${draftId}
            order by id
-        `)).rows
+        `, 'objects')
         assert.equal(events.length, 1, 'one transition event per publish')
         assert.equal(events[0]!.action, 'update')
         assert.equal(events[0]!.actor_id, actorId)
@@ -202,7 +202,7 @@ test(
         assert.match(deleteBody.error ?? '', /Only draft types can be deleted/)
         const stillThere = (await db.execute(sql`
           select status from custom_record_types where id = ${publishedId} and org_id = ${org.orgId}
-        `)).rows[0] as { status: string } | undefined
+        `, 'objects'))[0] as { status: string } | undefined
         assert.equal(stillThere?.status, 'published')
 
         const goneId = await withBypass(() => insertDraft(org.orgId, actorId))

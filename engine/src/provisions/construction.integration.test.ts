@@ -46,14 +46,14 @@ test('governed construction forecasts recognize remaining loss once, refuse stal
       ])
       const approve = async (id: string) => {
         await submitFinancialChange(org.orgId, id, actors.submitterId)
-        const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
         await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: 'approved' })
       }
       await assert.rejects(proposeProvisionAssessment(org.orgId,actors.submitterId,{...input,construction:{...input.construction!,relatedAssetsReviewed:false}}),/post required impairments/)
       // A forecast above contract value with no assessment in the period is
       // what the loss policy reports at close; applying the assessment clears it.
       const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
-        select starts_on::text, ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!
+        select starts_on::text, ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, 'objects'))[0]!
       const lossScope = { periodStartsOn: period.starts_on, periodEndsOn: period.ends_on, bookId: org.bookId, subsidiaryIds: [] }
       assert.equal(await projectLossPolicyMode(db, org.orgId, '1999-12-31'), 'off')
       assert.equal(await projectLossPolicyMode(db, org.orgId, period.ends_on), 'require')
@@ -111,7 +111,7 @@ test('loss-contract detection follows the project owner and the closing book', {
     })
     await withOrgContext(org.orgId, async () => {
       const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
-        select starts_on::text, ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!
+        select starts_on::text, ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, 'objects'))[0]!
       const lossScope = { periodStartsOn: period.starts_on, periodEndsOn: period.ends_on, bookId: org.bookId, subsidiaryIds: [] }
       assert.deepEqual((await unassessedLossContracts(db, org.orgId, lossScope)).map((row) => row.code), ['ROOT-LOSS'])
       assert.deepEqual((await unassessedLossContracts(db, org.orgId, { ...lossScope, subsidiaryIds: [org.subsidiaryId] })).map((row) => row.code), ['ROOT-LOSS'],
@@ -119,7 +119,7 @@ test('loss-contract detection follows the project owner and the closing book', {
 
       const approve = async (id: string) => {
         await submitFinancialChange(org.orgId, id, actors.submitterId)
-        const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, 'objects'))[0]!
         await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: 'approved' })
       }
       const assess = async (bookId: string) => {
@@ -135,9 +135,9 @@ test('loss-contract detection follows the project owner and the closing book', {
         await applyProvisionAssessment(org.orgId, change, actors.submitterId)
       }
       await assert.rejects(assess(taxBook), /Assign this project to the selected legal entity/)
-      assert.equal((await db.execute(sql`select id from provision_obligations where org_id=${org.orgId}`)).rows.length, 0)
+      assert.equal((await db.execute(sql`select id from provision_obligations where org_id=${org.orgId}`, 'objects')).length, 0)
       assert.equal((await db.execute(sql`update projects set subsidiary_id=${org.subsidiaryId}
-        where org_id=${org.orgId} and id=${projectId} returning id`)).rows.length, 1)
+        where org_id=${org.orgId} and id=${projectId} returning id`, 'objects')).length, 1)
       await assess(taxBook)
       assert.deepEqual((await unassessedLossContracts(db, org.orgId, lossScope)).map((row) => row.code), ['ROOT-LOSS'],
         'another book\'s assessment does not satisfy the primary close')
@@ -154,8 +154,8 @@ test('loss-contract detection follows the project owner and the closing book', {
           assert.match(String(cause), /root/i);
           return true;
         })
-      assert.deepEqual((await db.execute<{ id: string }>(sql`select id from subsidiaries
-        where org_id=${org.orgId} and parent_id is null`)).rows, [{ id: org.subsidiaryId }])
+      assert.deepEqual(await db.execute<{ id: string }>(sql`select id from subsidiaries
+        where org_id=${org.orgId} and parent_id is null`, 'objects'), [{ id: org.subsidiaryId }])
       assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [])
       assert.deepEqual(await unownedContractProjects(db, org.orgId), [])
     })

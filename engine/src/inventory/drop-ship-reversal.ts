@@ -84,7 +84,7 @@ export async function reverseDropShipConfirmationPair(
         from documents
        where org_id = ${input.orgId} and id = ${receiptId} and kind = 'purchase_receipt'
        for update nowait
-    `)).rows[0];
+    `, "objects"))[0];
   } catch (error) {
     if (isLockNotAvailable(error)) {
       throw new DropShipPairVoidRefusal(
@@ -107,7 +107,7 @@ export async function reverseDropShipConfirmationPair(
 
   const receipt = kind === "purchase_receipt" ? input.document as DropShipPairDocument : pair;
   const fulfillment = kind === "sales_fulfillment" ? input.document as DropShipPairDocument : pair;
-  const sourceEntries = (await tx.execute<{
+  const sourceEntries = await tx.execute<{
     id: string;
     entry_number: string;
     status: string;
@@ -121,8 +121,8 @@ export async function reverseDropShipConfirmationPair(
        and custom->'dropShipConfirmation'->>'receiptId' = ${receiptId}
      order by id
      for update
-  `)).rows;
-  const receiptLines = (await tx.execute<{id:string}>(sql`select id from document_lines where org_id=${input.orgId} and document_id=${receiptId}`)).rows;
+  `, "objects");
+  const receiptLines = await tx.execute<{id:string}>(sql`select id from document_lines where org_id=${input.orgId} and document_id=${receiptId}`, "objects");
   let agencyOnly = receiptLines.length > 0;
   for (const line of receiptLines) if (!await isAgencyConfirmationLine(tx,input.orgId,receiptId,line.id)) agencyOnly=false;
   if (agencyOnly && (await tx.execute(sql`select 1 from drop_ship_agent_allocations allocation
@@ -130,7 +130,7 @@ export async function reverseDropShipConfirmationPair(
     join financial_changes change on change.org_id=allocation.org_id and change.id=allocation.change_id
     join document_lines receipt_line on receipt_line.org_id=change.org_id and receipt_line.document_id=${receiptId}
       and receipt_line.custom->'receipt'->>'sourceLineId'=change.before_state->>'purchase_line_id'
-    where allocation.org_id=${input.orgId} and allocation.kind='customer_invoice' and invoice.status='posted' limit 1`)).rows.length) {
+    where allocation.org_id=${input.orgId} and allocation.kind='customer_invoice' and invoice.status='posted' limit 1`, "objects")).length) {
     throw new DropShipPairVoidRefusal('Void or correct the posted agency customer invoices through their controlled document workflow before reversing this vendor shipment');
   }
   if (sourceEntries.length === 0 && !agencyOnly) {
@@ -149,7 +149,7 @@ export async function reverseDropShipConfirmationPair(
        where rm.org_id = ${input.orgId}
          and rm.journal_line_id in (select id from journal_lines where org_id = ${input.orgId} and entry_id = ${entry.id})
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (reconciliation) {
       throw new DropShipPairVoidRefusal(
         `Drop-ship confirmation entry ${entry.entry_number} is bank-reconciled; remove its reconciliation match before voiding ${receipt.document_number}`,
@@ -161,7 +161,7 @@ export async function reverseDropShipConfirmationPair(
          and (a.from_line_id in (select id from journal_lines where org_id = ${input.orgId} and entry_id = ${entry.id})
            or a.to_line_id in (select id from journal_lines where org_id = ${input.orgId} and entry_id = ${entry.id}))
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (applications) {
       throw new DropShipPairVoidRefusal(
         `Drop-ship confirmation entry ${entry.entry_number} has a live application; unapply it before voiding ${receipt.document_number}`,
@@ -237,8 +237,8 @@ export async function reverseDropShipConfirmationPair(
      where org_id = ${input.orgId} and id = ${pair.id} and status = 'approved'
        and void_requested_at is null
     returning id
-  `);
-  if (pairUpdate.rows.length !== 1) {
+  `, "objects");
+  if (pairUpdate.length !== 1) {
     throw new DropShipPairVoidRefusal(`Paired document ${pair.document_number} changed while the confirmation was being voided`);
   }
   const after = await captureTransactionAuditSnapshot(tx, pair.id, input.orgId);

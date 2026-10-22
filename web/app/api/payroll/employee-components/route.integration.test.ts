@@ -104,9 +104,9 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
       -- Keep only ids an RFC 9562 check would refuse: version nibble outside
       -- 1-8 or variant nibble outside 8-b, as sandbox-derived ids often are.
       where substr(id::text, 15, 1) not between '1' and '8' or substr(id::text, 20, 1) not in ('8', '9', 'a', 'b')
-      order by n limit 3`))
-    assert.equal(nativeIds.rows.length, 3)
-    const [partyId, scheduleId, componentId] = nativeIds.rows.map(row => row.id) as [string, string, string]
+      order by n limit 3`, 'objects'))
+    assert.equal(nativeIds.length, 3)
+    const [partyId, scheduleId, componentId] = nativeIds.map(row => row.id) as [string, string, string]
     assert.equal(new Set([partyId, scheduleId, componentId]).size, 3)
     await withBypassContext(async () => {
       await seedPayrollPerson(org.orgId, partyId, 'Route Assignment Employee')
@@ -159,8 +159,8 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
     assert.deepEqual((await withBypassContext(() => calculatePayRun({ orgId: org.orgId, actorId, documentId: run.documentId }))).errors, [])
     const recurringLines = async (documentId: string) => withBypassContext(() => db.execute(sql`
       select l.id from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-      where s.org_id=${org.orgId} and s.pay_run_document_id=${documentId} and l.component_id=${componentId}`));
-    assert.equal((await recurringLines(run.documentId)).rows.length, 1);
+      where s.org_id=${org.orgId} and s.pay_run_document_id=${documentId} and l.component_id=${componentId}`, 'objects'));
+    assert.equal((await recurringLines(run.documentId)).length, 1);
     await withBypassContext(() => seedPayrollTime(org.orgId, partyId, actorId, {
       workedOn: '2026-07-20', hours: '8', projectId: null, status: 'approved', isBillable: false,
       billingStatus: 'unbilled', costingBasis: 'actual',
@@ -168,17 +168,17 @@ test('save lists, overlaps refuse, and consumed rows end but never delete', { sk
     const supplemental = await withBypassContext(() => createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId,
       periodStart: '2026-07-19', periodEnd: '2026-07-25', runType: 'supplemental' }));
     assert.deepEqual((await withBypassContext(() => calculatePayRun({ orgId: org.orgId, actorId, documentId: supplemental.documentId }))).errors, []);
-    assert.equal((await recurringLines(supplemental.documentId)).rows.length, 0);
+    assert.equal((await recurringLines(supplemental.documentId)).length, 0);
     const consumed = await post({ action: 'delete-assignment', id: saved.body.id })
     assert.equal(consumed.status, 422)
     assert.match(consumed.body.error ?? '', /already priced a pay stub — end it instead of deleting it/)
     const ended = await post({ action: 'end-assignment', id: saved.body.id, effectiveTo: '2026-12-31' })
     assert.equal(ended.status, 200)
     const audit = await withBypassContext(() => db.execute<{ action: string; changes: { after: { runApplicability: string } } }>(sql`select action, changes from audit_log
-      where org_id = ${org.orgId} and table_name = 'employee_pay_components' and row_id = ${saved.body.id} order by at`))
-    assert.deepEqual(audit.rows.map((row) => row.action), ['insert', 'update'])
-    assert.equal(audit.rows[0]!.changes.after.runApplicability, 'regular_only')
-    assert.equal(audit.rows[1]!.changes.after.runApplicability, 'regular_only')
+      where org_id = ${org.orgId} and table_name = 'employee_pay_components' and row_id = ${saved.body.id} order by at`, 'objects'))
+    assert.deepEqual(audit.map((row) => row.action), ['insert', 'update'])
+    assert.equal(audit[0]!.changes.after.runApplicability, 'regular_only')
+    assert.equal(audit[1]!.changes.after.runApplicability, 'regular_only')
   } finally {
     state.authz = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
@@ -200,9 +200,9 @@ test('a statutory component refuses with its remedy', { skip: !DB }, async () =>
     })
     const employmentId = await withBypassContext(() => seedWorkerEmployment(org.orgId, partyId, org.subsidiaryId))
     const statutory = await withBypassContext(() => db.execute<{ id: string }>(sql`select id from pay_components
-      where org_id = ${org.orgId} and system_key is not null and kind = 'deduction' limit 1`))
+      where org_id = ${org.orgId} and system_key is not null and kind = 'deduction' limit 1`, 'objects'))
     const refused = await post({
-      action: 'save-assignment', employeePartyId: partyId, employmentId, componentId: statutory.rows[0]!.id,
+      action: 'save-assignment', employeePartyId: partyId, employmentId, componentId: statutory[0]!.id,
       value: '5', effectiveFrom: '2026-01-01', effectiveTo: null,
     })
     assert.equal(refused.status, 422,JSON.stringify(refused.body))

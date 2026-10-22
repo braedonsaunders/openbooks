@@ -78,8 +78,8 @@ export async function settleAttempt(
       from payment_attempts a
       join payment_links l on l.id = a.link_id and l.org_id = a.org_id
      where a.org_id = ${orgId} and a.id = ${attemptId}
-  `));
-  const a = rows.rows[0];
+  `, "objects"));
+  const a = rows[0];
   if (!a) throw new PaymentAcceptanceError("attempt not found");
   // Validate every accounting reference before reserving a receipt document.
   // A provider webhook can arrive after an administrator deactivates an
@@ -93,8 +93,8 @@ export async function settleAttempt(
   const doc = (await db.execute<{ id: string; document_number: string; open_balance: string }>(sql`
     select id, document_number, open_balance from documents where id = ${a.document_id} and org_id = ${orgId}
      for update
-  `));
-  const invoice = doc.rows[0];
+  `, "objects"));
+  const invoice = doc[0];
   if (!invoice) throw new PaymentAcceptanceError("invoice not found");
   // If another channel cleared the invoice after checkout, the provider's
   // collection is still real money. Continue by posting the full receipt as
@@ -146,8 +146,8 @@ export async function settleAttempt(
   if (paymentId) {
     const existing = (await db.execute<{ status: string }>(sql`
       select status from documents where id = ${paymentId} and org_id = ${orgId}
-    `));
-    const reservedStatus = existing.rows[0]?.status;
+    `, "objects"));
+    const reservedStatus = existing[0]?.status;
     if (reservedStatus === "posted") {
       // Posted earlier but the closing bookkeeping never ran (interrupted
       // settle) — finish it; finalize is journal-keyed and once-only.

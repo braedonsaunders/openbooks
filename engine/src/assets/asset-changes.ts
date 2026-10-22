@@ -264,22 +264,18 @@ async function snapshot(
   input: AssetChangeInput,
 ) {
   await lockAssetRow(tx, orgId, assetId);
-  const asset = (
-    await tx.execute<Asset>(
-      sql`select *,acquired_on::text,in_service_on::text,updated_at::text from fixed_assets where org_id=${orgId} and id=${assetId}`,
-    )
-  ).rows[0]!;
-  const entities = (
-    await tx.execute<{
+  const asset = (await tx.execute<Asset>(
+      sql`select *,acquired_on::text,in_service_on::text,updated_at::text from fixed_assets where org_id=${orgId} and id=${assetId}`, "objects",
+    ))[0]!;
+  const entities = await tx.execute<{
       id: string;
       base_currency: string;
       parent_id: string | null;
       is_active: boolean;
       is_elimination: boolean;
     }>(
-      sql`select id,base_currency,parent_id,is_active,is_elimination from subsidiaries where org_id=${orgId} order by id for share`,
-    )
-  ).rows;
+      sql`select id,base_currency,parent_id,is_active,is_elimination from subsidiaries where org_id=${orgId} order by id for share`, "objects",
+    );
   const seller = entities.find((s) => s.id === asset.subsidiary_id),
     buyer = input.transfer
       ? entities.find((s) => s.id === input.transfer!.subsidiaryId)
@@ -305,11 +301,9 @@ async function snapshot(
     (!elimination?.is_active || !elimination.is_elimination)
   )
     throw new AssetValidationError("select the active group elimination entity");
-  const groupScope = (
-    await tx.execute<{ elimination_subsidiary_id: string }>(
-      sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`,
-    )
-  ).rows.map((r) => r.elimination_subsidiary_id);
+  const groupScope = (await tx.execute<{ elimination_subsidiary_id: string }>(
+      sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`, "objects",
+    )).map((r) => r.elimination_subsidiary_id);
   const requiredSubsidiaryIds = [
     ...new Set([
       seller.id,
@@ -325,11 +319,9 @@ async function snapshot(
     requiredSubsidiaryIds,
     !!buyer || groupScope.length > 0,
   );
-  const category = (
-    await tx.execute<Category>(
-      sql`select * from asset_categories where org_id=${orgId} and id=${asset.category_id}`,
-    )
-  ).rows[0]!;
+  const category = (await tx.execute<Category>(
+      sql`select * from asset_categories where org_id=${orgId} and id=${asset.category_id}`, "objects",
+    ))[0]!;
   const accounts = resolveAssetAccounts(
     {
       assetAccountId: asset.asset_account_id,
@@ -348,11 +340,9 @@ async function snapshot(
     throw new AssetValidationError(
       "configure the asset category gain/loss account before proposing a disposal",
     );
-  const books = (
-    await tx.execute<Book>(
-      sql`select id,name,posts_gl,is_active,is_primary from accounting_books where org_id=${orgId} and (is_active or exists(select 1 from depreciation_schedules s where s.org_id=${orgId} and s.book_id=accounting_books.id and s.asset_id=${assetId})) order by id for share`,
-    )
-  ).rows;
+  const books = await tx.execute<Book>(
+      sql`select id,name,posts_gl,is_active,is_primary from accounting_books where org_id=${orgId} and (is_active or exists(select 1 from depreciation_schedules s where s.org_id=${orgId} and s.book_id=accounting_books.id and s.asset_id=${assetId})) order by id for share`, "objects",
+    );
   if (
     books.filter((b) => b.is_primary && b.is_active && b.posts_gl).length !== 1
   )
@@ -368,18 +358,15 @@ async function snapshot(
     )
   )
     throw new AssetValidationError("group depreciation plan names a book outside this asset");
-  const schedules = (
-    await tx.execute<{
+  const schedules = await tx.execute<{
       id: string;
       book_id: string;
       method: string;
       units_total: string | null;
     }>(
-      sql`select id,book_id,method,units_total::text from depreciation_schedules where org_id=${orgId} and asset_id=${assetId} order by book_id for update`,
-    )
-  ).rows;
-  const lines = (
-    await tx.execute<{
+      sql`select id,book_id,method,units_total::text from depreciation_schedules where org_id=${orgId} and asset_id=${assetId} order by book_id for update`, "objects",
+    );
+  const lines = await tx.execute<{
       id: string;
       book_id: string;
       source: string;
@@ -389,9 +376,8 @@ async function snapshot(
       ends_on: string;
       journal_entry_id: string | null;
     }>(
-      sql`select l.id,s.book_id,l.source,l.planned_amount::text,l.posted_amount::text,p.starts_on::text,p.ends_on::text,l.journal_entry_id from depreciation_schedule_lines l join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id where l.org_id=${orgId} and s.asset_id=${assetId} order by s.book_id,p.starts_on,l.sequence,l.id for update of l`,
-    )
-  ).rows;
+      sql`select l.id,s.book_id,l.source,l.planned_amount::text,l.posted_amount::text,p.starts_on::text,p.ends_on::text,l.journal_entry_id from depreciation_schedule_lines l join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id join accounting_periods p on p.id=l.period_id and p.org_id=l.org_id where l.org_id=${orgId} and s.asset_id=${assetId} order by s.book_id,p.starts_on,l.sequence,l.id for update of l`, "objects",
+    );
   type AssetChangePreview = ReturnType<typeof measurePartialDisposal> & {
     bookId: string;
     calendarId: string;
@@ -429,11 +415,9 @@ async function snapshot(
       assetId,
       book.id,
     );
-    const bookPeriods = (
-      await tx.execute<{ starts_on: string; ends_on: string }>(
-        sql`select starts_on::text,ends_on::text from accounting_periods where org_id=${orgId} and fiscal_calendar_id=${calendarId} and not is_adjustment and ends_on>=${input.effectiveOn} order by starts_on for share`,
-      )
-    ).rows;
+    const bookPeriods = await tx.execute<{ starts_on: string; ends_on: string }>(
+        sql`select starts_on::text,ends_on::text from accounting_periods where org_id=${orgId} and fiscal_calendar_id=${calendarId} and not is_adjustment and ends_on>=${input.effectiveOn} order by starts_on for share`, "objects",
+      );
     const overdue = bookLines.find(
       (l) => l.posted_amount === null && l.ends_on < input.effectiveOn,
     );
@@ -455,11 +439,9 @@ async function snapshot(
       throw new AssetValidationError(
         `post or replace the recorded ${futureInputs.source} depreciation input in ${book.name} before changing its basis`,
       );
-    const values = (
-      await tx.execute<{ cost: string; accumulated: string; salvage: string }>(
-        sql`select cost::text,accumulated::text,salvage::text from asset_book_carrying_values where org_id=${orgId} and asset_id=${assetId} and book_id=${book.id}`,
-      )
-    ).rows[0]!;
+    const values = (await tx.execute<{ cost: string; accumulated: string; salvage: string }>(
+        sql`select cost::text,accumulated::text,salvage::text from asset_book_carrying_values where org_id=${orgId} and asset_id=${assetId} and book_id=${book.id}`, "objects",
+      ))[0]!;
     const basis = await assetBasisDelta(tx, orgId, assetId, book.id);
     const oldValuation = await netRemeasurementDelta(
       orgId,
@@ -600,11 +582,9 @@ async function snapshot(
       unitsRemaining: string | null = null;
     const schedule = schedules.find((s) => s.book_id === book.id)!;
     if (schedule.method === "units_of_production") {
-      const used = (
-        await tx.execute<{ amount: string }>(
-          sql`select coalesce(sum(i.production_units),0)::text as amount from depreciation_inputs i join accounting_periods p on p.org_id=i.org_id and p.id=i.period_id where i.org_id=${orgId} and i.schedule_id=${schedule.id} and i.voided_at is null ${basis.cutoff ? sql`and p.ends_on>=${basis.cutoff}` : sql``}`,
-        )
-      ).rows[0]!.amount;
+      const used = (await tx.execute<{ amount: string }>(
+          sql`select coalesce(sum(i.production_units),0)::text as amount from depreciation_inputs i join accounting_periods p on p.org_id=i.org_id and p.id=i.period_id where i.org_id=${orgId} and i.schedule_id=${schedule.id} and i.voided_at is null ${basis.cutoff ? sql`and p.ends_on>=${basis.cutoff}` : sql``}`, "objects",
+        ))[0]!.amount;
       const total = basis.unitsRemaining ?? schedule.units_total;
       if (total === null)
         throw new AssetValidationError(
@@ -719,11 +699,9 @@ async function snapshot(
       ].map((accountId) => ({ accountId, amount: "0" })),
     );
     buyerCategory =
-      (
-        await tx.execute<Category>(
-          sql`select * from asset_categories where org_id=${orgId} and id=${input.transfer!.categoryId} for update`,
-        )
-      ).rows[0] ?? null;
+      (await tx.execute<Category>(
+          sql`select * from asset_categories where org_id=${orgId} and id=${input.transfer!.categoryId} for update`, "objects",
+        ))[0] ?? null;
     if (!buyerCategory?.is_active)
       throw new AssetValidationError("select an active receiving asset category");
     if (
@@ -778,11 +756,9 @@ async function snapshot(
       throw new AssetValidationError(
         "same-currency seller proceeds and buyer cost must agree",
       );
-    const duplicate = (
-      await tx.execute(
-        sql`select id from fixed_assets where org_id=${orgId} and asset_number=${input.transfer.assetNumber.trim()}`,
-      )
-    ).rows[0];
+    const duplicate = (await tx.execute(
+        sql`select id from fixed_assets where org_id=${orgId} and asset_number=${input.transfer.assetNumber.trim()}`, "objects",
+      ))[0];
     if (duplicate)
       throw new AssetValidationError(
         "the receiving asset number is already in use; choose an unused asset number",
@@ -827,17 +803,15 @@ async function snapshot(
     buyerPath = input.transfer ? lineage(buyer!.id) : [];
   const pathIds = [...new Set([...sellerPath, ...buyerPath])];
   const ownership = input.transfer
-    ? (
-        await tx.execute<{
+    ? (await tx.execute<{
           subsidiary_id: string;
           method: string;
           ownership_percent: string;
           nci_equity_account_id: string | null;
           nci_income_account_id: string | null;
         }>(
-          sql`select subsidiary_id,method,ownership_percent::text,nci_equity_account_id,nci_income_account_id from subsidiary_ownership_interests where org_id=${orgId} and is_active and effective_from<=${input.effectiveOn} and (effective_to is null or effective_to>=${input.effectiveOn}) order by subsidiary_id for share`,
-        )
-      ).rows.filter((p) => pathIds.includes(p.subsidiary_id))
+          sql`select subsidiary_id,method,ownership_percent::text,nci_equity_account_id,nci_income_account_id from subsidiary_ownership_interests where org_id=${orgId} and is_active and effective_from<=${input.effectiveOn} and (effective_to is null or effective_to>=${input.effectiveOn}) order by subsidiary_id for share`, "objects",
+        )).filter((p) => pathIds.includes(p.subsidiary_id))
     : [];
   if (ownership.some((p) => p.method !== "full"))
     throw new AssetValidationError(
@@ -845,11 +819,9 @@ async function snapshot(
     );
   if (
     input.transfer &&
-    (
-      await tx.execute(
-        sql`select 1 from consolidation_control_losses where org_id=${orgId} and reversed_by_change_id is null and effective_on<${input.effectiveOn} and exists(select 1 from jsonb_array_elements_text(excluded_subsidiary_ids) sub(id) where sub.id in(select jsonb_array_elements_text(${JSON.stringify(pathIds)}::jsonb))) limit 1`,
-      )
-    ).rows.length
+    (await tx.execute(
+        sql`select 1 from consolidation_control_losses where org_id=${orgId} and reversed_by_change_id is null and effective_on<${input.effectiveOn} and exists(select 1 from jsonb_array_elements_text(excluded_subsidiary_ids) sub(id) where sub.id in(select jsonb_array_elements_text(${JSON.stringify(pathIds)}::jsonb))) limit 1`, "objects",
+      )).length
   )
     throw new AssetValidationError(
       "an asset owner is outside the controlled group after its disposal; this is not an internal group transfer",
@@ -878,8 +850,7 @@ async function snapshot(
     }
     ownershipPath.push(percent);
   }
-  const predecessors = (
-    await tx.execute<{
+  const predecessors = await tx.execute<{
       id: string;
       book_id: string;
       basis: {
@@ -894,18 +865,15 @@ async function snapshot(
       elimination_subsidiary_id: string;
       group_currency: string;
     }>(
-      sql`select id,book_id,basis,elimination_subsidiary_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} order by book_id for share`,
-    )
-  ).rows;
+      sql`select id,book_id,basis,elimination_subsidiary_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} order by book_id for share`, "objects",
+    );
   const predecessorValuations: Record<string, GroupAssetValuation[]> = {};
   const groupComponents: Record<string, GroupAssetValuation> = {};
   for (const predecessor of predecessors) {
-    const unresolved = (
-      await tx.execute(
+    const unresolved = await tx.execute(
         // Live entries only: a reversed remeasurement needs no transfer measurement.
-        sql`select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${predecessor.book_id} and v.kind in('impaired','revalued') and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) and not exists(select 1 from asset_transfer_measurements m where m.org_id=v.org_id and m.source_event_id=v.id) limit 1`,
-      )
-    ).rows;
+        sql`select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${predecessor.book_id} and v.kind in('impaired','revalued') and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) and not exists(select 1 from asset_transfer_measurements m where m.org_id=v.org_id and m.source_event_id=v.id) limit 1`, "objects",
+      );
     if (unresolved.length)
       throw new AssetValidationError(
         "record and approve the receiving asset Group valuation before disposing or transferring its changed group basis",
@@ -925,11 +893,9 @@ async function snapshot(
       throw new AssetValidationError(
         "record the identified component's group cost, accumulated depreciation, residual value and retained service in the asset change's Group component section",
       );
-    const periods = (
-      await tx.execute<{ starts_on: string; ends_on: string }>(
-        sql`select starts_on::text,ends_on::text from accounting_periods where org_id=${orgId} and fiscal_calendar_id=${preview.calendarId} and not is_adjustment and ends_on>=${input.effectiveOn} order by starts_on`,
-      )
-    ).rows;
+    const periods = await tx.execute<{ starts_on: string; ends_on: string }>(
+        sql`select starts_on::text,ends_on::text from accounting_periods where org_id=${orgId} and fiscal_calendar_id=${preview.calendarId} and not is_adjustment and ends_on>=${input.effectiveOn} order by starts_on`, "objects",
+      );
     groupComponents[predecessor.book_id] = measureGroupComponent({
       basis: predecessor.basis,
       history: predecessorValuations[predecessor.book_id]!,
@@ -981,17 +947,13 @@ export async function proposeAssetChange(
   return withOrg(orgId, () =>
     withTransactionSavepoint(db, async () => {
       const tx = db;
-      const identity = (
-        await tx.execute<{ subsidiary_id: string }>(
-          sql`select subsidiary_id from fixed_assets where org_id=${orgId} and id=${assetId}`,
-        )
-      ).rows[0];
+      const identity = (await tx.execute<{ subsidiary_id: string }>(
+          sql`select subsidiary_id from fixed_assets where org_id=${orgId} and id=${assetId}`, "objects",
+        ))[0];
       if (!identity) throw new AssetValidationError("asset not found");
-      const groupScope = (
-        await tx.execute<{ elimination_subsidiary_id: string }>(
-          sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`,
-        )
-      ).rows.map((r) => r.elimination_subsidiary_id);
+      const groupScope = (await tx.execute<{ elimination_subsidiary_id: string }>(
+          sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${assetId} and reversed_by_change_id is null order by elimination_subsidiary_id`, "objects",
+        )).map((r) => r.elimination_subsidiary_id);
       const required = [
         ...new Set([
           identity.subsidiary_id,
@@ -1133,9 +1095,9 @@ export async function applyAssetChange(
       const full = state.previews[0]!.full;
       if (full) {
         const updated = await tx.execute(
-          sql`update fixed_assets set status='disposed',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${change.subject_id} and status in('in_service','fully_depreciated') returning id`,
+          sql`update fixed_assets set status='disposed',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${change.subject_id} and status in('in_service','fully_depreciated') returning id`, "objects",
         );
-        if (updated.rows.length !== 1)
+        if (updated.length !== 1)
           throw new Error("asset disposal state was not recorded");
       } else
         for (const preview of state.previews) {
@@ -1157,9 +1119,9 @@ export async function applyAssetChange(
         const t = input.transfer,
           c = state.buyerCategory;
         const inserted = await tx.execute(
-          sql`insert into fixed_assets(id,org_id,subsidiary_id,category_id,asset_number,name,status,acquired_on,in_service_on,acquisition_cost,salvage_value,useful_life_months,depreciation_units_total,transferred_from_asset_id,created_by,updated_by) values(${receivingAssetId},${orgId},${state.buyer.id},${c.id},${t.assetNumber.trim()},${t.name.trim()},'in_service',${input.effectiveOn},${input.effectiveOn},${t.buyerAmount},${t.buyerSalvage},${t.lifeMonths},${t.buyerProductionUnits ?? null},${change.subject_id},${actorId},${actorId}) returning id`,
+          sql`insert into fixed_assets(id,org_id,subsidiary_id,category_id,asset_number,name,status,acquired_on,in_service_on,acquisition_cost,salvage_value,useful_life_months,depreciation_units_total,transferred_from_asset_id,created_by,updated_by) values(${receivingAssetId},${orgId},${state.buyer.id},${c.id},${t.assetNumber.trim()},${t.name.trim()},'in_service',${input.effectiveOn},${input.effectiveOn},${t.buyerAmount},${t.buyerSalvage},${t.lifeMonths},${t.buyerProductionUnits ?? null},${change.subject_id},${actorId},${actorId}) returning id`, "objects",
         );
-        if (inserted.rows.length !== 1)
+        if (inserted.length !== 1)
           throw new Error("receiving asset was not created");
         for (const preview of state.previews) {
           const entryId = preview.postsGl

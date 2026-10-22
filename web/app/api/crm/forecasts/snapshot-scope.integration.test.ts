@@ -43,7 +43,7 @@ async function fixture(action:(org:Awaited<ReturnType<typeof createScratchOrg>>,
    // One open opportunity owned by the reviewer, one posted invoice owned by
    // nobody: the org-wide summary books both, the reviewer's personal scope
    // books only the opportunity.
-   const status=(await db.execute<{id:string}>(sql`select id from crm_opportunity_statuses where org_id=${org.orgId} and is_default and not is_closed limit 1`)).rows[0]!.id;
+   const status=(await db.execute<{id:string}>(sql`select id from crm_opportunity_statuses where org_id=${org.orgId} and is_default and not is_closed limit 1`, 'objects'))[0]!.id;
    const opp=randomUUID();
    await db.execute(sql`insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,owner_user_id,status_id,forecast_category,currency,is_active,projected_amount,weighted_amount,expected_close_date)
     values (${opp},${org.orgId},${opp},'Scoped work',${org.customerId},${actor},${status},'upside','CAD',true,12000,1200,'2026-07-15')`);
@@ -65,8 +65,8 @@ async function fixture(action:(org:Awaited<ReturnType<typeof createScratchOrg>>,
 }
 
 async function snapshots(orgId:string){
- return (await withBypassContext(()=>db.execute<{owner_user_id:string|null;sales_team_id:string|null;pipeline_amount:string;closed_amount:string}>(sql`
-  select owner_user_id,sales_team_id,pipeline_amount::text,closed_amount::text from crm_forecast_snapshots where org_id=${orgId}`))).rows;
+ return await withBypassContext(()=>db.execute<{owner_user_id:string|null;sales_team_id:string|null;pipeline_amount:string;closed_amount:string}>(sql`
+  select owner_user_id,sales_team_id,pipeline_amount::text,closed_amount::text from crm_forecast_snapshots where org_id=${orgId}`, 'objects'));
 }
 
 test('an unfiltered snapshot preserves the org-wide summary scope',async()=>fixture(async(org)=>{

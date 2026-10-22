@@ -120,7 +120,7 @@ export const POST = defineRoute({
                     limit 1
                  ), false) as "sameRequest"
             from documents d
-           where d.id = ${key} and d.org_id = ${user.orgId}`)).rows[0];
+           where d.id = ${key} and d.org_id = ${user.orgId}`, 'objects'))[0];
         if (existing) {
           if (!existing.sameRequest) throw new DocumentCreateConflict();
           return 'replayed';
@@ -135,10 +135,10 @@ export const POST = defineRoute({
                   ${body.documentDate ?? today}, ${reportCurrency}, '0', '0', '0', ${user.id})
           -- A conflicting key is rejected below; it never completes a create.
           on conflict (id) do nothing
-          returning id`);
+          returning id`, 'objects');
         // A same-key row of this org was found above under the advisory lock,
         // so a conflict here belongs to another org's key: fail closed.
-        if (!inserted.rows[0]) throw new DocumentCreateConflict();
+        if (!inserted[0]) throw new DocumentCreateConflict();
         await tx.execute(sql`
           insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
           values (${user.orgId}, 'documents', ${key}, 'insert',

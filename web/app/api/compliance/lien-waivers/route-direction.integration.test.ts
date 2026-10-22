@@ -44,16 +44,16 @@ const json = (body: unknown) =>
 
 async function directionOf(orgId: string, id: string): Promise<string | undefined> {
   const r = await withBypassContext(() =>
-    db.execute<{ direction: string }>(sql`select direction from lien_waivers where id = ${id} and org_id = ${orgId}`),
+    db.execute<{ direction: string }>(sql`select direction from lien_waivers where id = ${id} and org_id = ${orgId}`, "objects"),
   );
-  return r.rows[0]?.direction;
+  return r[0]?.direction;
 }
 
 async function waiverCount(orgId: string): Promise<number> {
   const r = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${orgId}`),
+    db.execute<{ n: number }>(sql`select count(*)::int as n from lien_waivers where org_id = ${orgId}`, "objects"),
   );
-  return r.rows[0]!.n;
+  return r[0]!.n;
 }
 
 test("lien-waiver creation rejects an unrecognised direction", async () => {

@@ -50,7 +50,7 @@ async function fixture() {
   return withBypassContext(async () => {
     const org = await createScratchOrg()
     const actorId = (await seedFlowActors(org.orgId)).adminId
-    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`)).rows[0]
+    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id=${org.orgId} and is_base and is_active`, 'objects'))[0]
     assert.ok(baseLevel, 'migration must seed one active base price level')
     return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, itemId: org.items.service, priceLevelId: baseLevel.id }
   })
@@ -85,7 +85,7 @@ test('an exact schedule retry replays once and a changed payload refuses without
       select
         (select count(*)::int from item_price_schedules where org_id=${f.orgId} and id=${key}) as schedules,
         (select count(*)::int from audit_log where org_id=${f.orgId} and table_name='item_price_schedules' and row_id=${key}) as audits
-    `)).rows[0]
+    `, 'objects'))[0]
     assert.deepEqual(counts, { schedules: 1, audits: 1 })
   } finally {
     await dropScratchOrgReporting(f.orgId)
@@ -106,7 +106,7 @@ test('a foreign price level is refused before schedule or audit insertion', asyn
       select
         (select count(*)::int from item_price_schedules where org_id=${own.orgId} and id=${key}) as schedules,
         (select count(*)::int from audit_log where org_id=${own.orgId} and table_name='item_price_schedules' and row_id=${key}) as audits
-    `)).rows[0]
+    `, 'objects'))[0]
     assert.deepEqual(counts, { schedules: 0, audits: 0 })
   } finally {
     await dropScratchOrgReporting(own.orgId)
@@ -123,7 +123,7 @@ test('a subsidiary-restricted actor cannot create an organization-wide price-lev
     assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
     const count = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from item_price_schedules where org_id=${f.orgId} and id=${key}
-    `)).rows[0]
+    `, 'objects'))[0]
     assert.equal(count?.count, 0, 'the refused create leaves no organization-wide schedule')
   } finally {
     await dropScratchOrgReporting(f.orgId)
@@ -151,7 +151,7 @@ test('customer price schedules and picker entries stay hidden outside the actor 
 
     const denied = await post({ ...f, customerId }, randomUUID(), '12.3400', new Set())
     assert.deepEqual([denied.status, await denied.json()], [404, { error: 'not_found' }])
-    const count = (await db.execute<{ count: number }>(sql`select count(*)::int as count from item_price_schedules where org_id=${f.orgId} and id<>${key} and customer_id=${customerId}`)).rows[0]
+    const count = (await db.execute<{ count: number }>(sql`select count(*)::int as count from item_price_schedules where org_id=${f.orgId} and id<>${key} and customer_id=${customerId}`, 'objects'))[0]
     assert.equal(count?.count, 0, 'the denied write leaves no schedule for the hidden customer')
   } finally {
     await dropScratchOrgReporting(f.orgId)

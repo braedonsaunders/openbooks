@@ -75,9 +75,9 @@ function requireKey<T>(map: Map<string, T>, id: string, what: string): T {
 async function exportAccounts(world: SimOrg): Promise<CorpusAccount[]> {
   const ids = Object.values(world.accounts);
   const rows = (await db.execute<{ id: string; number: string; name: string; type: string }>(sql`
-    select id, number, name, type from accounts where id in ${ids} order by number`));
+    select id, number, name, type from accounts where id in ${ids} order by number`, "objects"));
   const keyById = new Map(Object.entries(world.accounts).map(([key, id]) => [id, key]));
-  return rows.rows.map((r) => ({ key: keyById.get(r.id)!, number: r.number, name: r.name, type: r.type }));
+  return rows.map((r) => ({ key: keyById.get(r.id)!, number: r.number, name: r.name, type: r.type }));
 }
 
 async function exportProjects(world: SimOrg, maps: Maps): Promise<CorpusProject[]> {
@@ -86,14 +86,14 @@ async function exportProjects(world: SimOrg, maps: Maps): Promise<CorpusProject[
   for (const job of world.jobs) {
     const sov = (await db.execute<{ description: string; scheduled_value: string }>(sql`
       select description, scheduled_value::text as scheduled_value from sov_lines
-       where project_id = ${job.id} and org_id = ${world.orgId} order by sort_order`));
+       where project_id = ${job.id} and org_id = ${world.orgId} order by sort_order`, "objects"));
     out.push({
       key: job.code,
       name: job.name,
       method: job.method,
       customer: custKey(job.customerId),
       contractValue: job.contractValue,
-      sovLines: sov.rows.length ? sov.rows.map((l) => ({ description: l.description, scheduledValue: l.scheduled_value })) : undefined,
+      sovLines: sov.length ? sov.map((l) => ({ description: l.description, scheduledValue: l.scheduled_value })) : undefined,
     });
   }
   for (const eng of world.engagements) {
@@ -106,8 +106,8 @@ async function exportProjects(world: SimOrg, maps: Maps): Promise<CorpusProject[
 async function entryGlLines(entryId: string, maps: Maps): Promise<CorpusDocLine[]> {
   const rows = (await db.execute<{ account_id: string; project_id: string | null; amount: string; memo: string | null }>(sql`
     select account_id, project_id, amount::text as amount, memo from journal_lines
-     where entry_id = ${entryId} order by line_number`));
-  return rows.rows.map((l) => ({
+     where entry_id = ${entryId} order by line_number`, "objects"));
+  return rows.map((l) => ({
     account: requireKey(maps.accountKeyById, l.account_id, "account"),
     amount: fromUnits(toUnits(l.amount)),
     project: l.project_id ? requireKey(maps.projectKeyById, l.project_id, "project") : null,
@@ -165,7 +165,7 @@ export async function exportDataset(
     if (row.doc_id && row.kind && COMMERCIAL_KINDS.includes(row.kind)) {
       const docLines = (await db.execute<{ account_id: string; project_id: string | null; amount: string; description: string | null }>(sql`
         select account_id, project_id, amount::text as amount, description from document_lines
-         where document_id = ${row.doc_id} and org_id = ${world.orgId} order by line_number`));
+         where document_id = ${row.doc_id} and org_id = ${world.orgId} order by line_number`, "objects"));
       const id = uniqueId(row.document_number ?? row.doc_id);
       eventIdByDocId.set(row.doc_id, id);
       documents++;
@@ -177,7 +177,7 @@ export async function exportDataset(
           dueDate: row.due_date,
           party: requireKey(maps.partyKeyById, row.party_id!, "party"),
           memo: row.memo ?? undefined,
-          lines: docLines.rows.map((l) => ({
+          lines: docLines.map((l) => ({
             account: requireKey(maps.accountKeyById, l.account_id, "account"),
             amount: fromUnits(toUnits(l.amount)),
             project: l.project_id ? requireKey(maps.projectKeyById, l.project_id, "project") : null,
@@ -220,7 +220,7 @@ export async function exportDataset(
         join journal_lines tl on tl.id = a.to_line_id
         join documents td on td.posted_entry_id = tl.entry_id
        where fl.entry_id = ${row.entry_id} and a.unapplied_at is null
-       order by a.created_at`));
+       order by a.created_at`, "objects"));
     const id = uniqueId(row.document_number ?? row.doc_id!);
     eventIdByDocId.set(row.doc_id!, id);
     documents++;
@@ -231,7 +231,7 @@ export async function exportDataset(
         date: row.document_date ?? row.posting_date,
         party: requireKey(maps.partyKeyById, row.party_id!, "party"),
         memo: row.memo ?? undefined,
-        allocations: allocs.rows.map((a) => {
+        allocations: allocs.map((a) => {
           const target = eventIdByDocId.get(a.target_doc);
           if (!target) throw new Error(`payment ${id} settles document ${a.target_doc} that was not exported`);
           return { event: target, amount: fromUnits(toUnits(a.amount)) };

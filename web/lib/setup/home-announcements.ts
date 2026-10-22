@@ -39,9 +39,9 @@ function coerceList(value: unknown): HomeAnnouncement[] {
 }
 
 async function readList(exec: Pick<typeof db, 'execute'>, orgId: string): Promise<HomeAnnouncement[]> {
-  const rows = (await exec.execute<{ settings: unknown }>(sql`
+  const rows = await exec.execute<{ settings: unknown }>(sql`
     select settings from orgs where id = ${orgId}
-  `)).rows
+  `, 'objects')
   const settings = (rows[0]?.settings ?? {}) as Record<string, unknown>
   const home = (settings.home ?? {}) as Record<string, unknown>
   return coerceList(home.announcements)
@@ -82,7 +82,7 @@ async function writeList(
   await exec.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'home-announcements:' + orgId}, 0))`)
   const current = (await exec.execute<{ settings: unknown }>(sql`
     select settings from orgs where id = ${orgId} for update
-  `)).rows[0]?.settings as Record<string, unknown> | null
+  `, 'objects'))[0]?.settings as Record<string, unknown> | null
   if (!current) throw new Error('organization not found')
   const home = { ...((current.home ?? {}) as Record<string, unknown>), announcements: list }
   await exec.execute(sql`

@@ -46,7 +46,7 @@ async function fixture() {
     return (await db.execute<{ id: string }>(sql`
       insert into crm_activities (org_id, kind, status, subject)
       values (${org.orgId}, 'call', 'open', 'Original subject')
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
   })
   return { org, activityId }
 }
@@ -83,8 +83,8 @@ async function revisionToken(activityId: string): Promise<string> {
 
 async function subject(activityId: string): Promise<string | null> {
   return await withOrgContext(state.orgId, async () => {
-    const rows = (await db.execute<{ subject: string | null }>(sql`
-      select subject from crm_activities where id = ${activityId}`)).rows
+    const rows = await db.execute<{ subject: string | null }>(sql`
+      select subject from crm_activities where id = ${activityId}`, 'objects')
     return rows[0]!.subject
   })
 }
@@ -136,7 +136,7 @@ test('PATCH stores custom values only after validating them against the activity
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
       values (${org.orgId}, 'crm_activities', 'channel', 'Channel', 'select', '{"options":["phone","email"]}'::jsonb)`))
     const stored = async () => (await withBypassContext(() => db.execute<{ custom: unknown }>(sql`
-      select custom from crm_activities where id = ${activityId}`))).rows[0]!.custom
+      select custom from crm_activities where id = ${activityId}`, 'objects')))[0]!.custom
     for (const [custom, status, refusal] of [
       [{ channel: 'email' }, 200, null],
       [{ channel: 'fax' }, 422, /Channel: invalid option/],

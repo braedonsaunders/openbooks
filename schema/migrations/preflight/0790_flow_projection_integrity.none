@@ -1,1 +1,0 @@
-This migration preserves recorded decisions and financial history. It replaces approval projection guards, recognizes completed tenant stock-count Flow review, and permits valid retained equity withdrawals without rewriting any rows.

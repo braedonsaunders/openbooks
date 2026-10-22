@@ -80,8 +80,8 @@ async function filingAdjustmentRecords(orgId: string, raw: unknown): Promise<Fil
   if (authorIds.length > 0) {
     const users = await db.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from users
-       where org_id = ${orgId} and id::text in (${sql.join(authorIds.map((id) => sql`${id}`), sql`, `)})`)
-    for (const user of users.rows) names.set(user.id, user.name)
+       where org_id = ${orgId} and id::text in (${sql.join(authorIds.map((id) => sql`${id}`), sql`, `)})`, 'objects')
+    for (const user of users) names.set(user.id, user.name)
   }
   return entries.map((entry) => ({
     lineCode: entry.lineCode,
@@ -173,8 +173,8 @@ export async function loadTax(
            notice_key, official_pdf_file_id is not null as has_official
       from tax_return_forms
      where org_id = ${orgId} and is_active
-     order by country nulls last, name`))
-  const forms = await filterTaxReturnFormsByFeatures(orgId, formsResult.rows)
+     order by country nulls last, name`, 'objects'))
+  const forms = await filterTaxReturnFormsByFeatures(orgId, formsResult)
 
   const filters = sql`where org_id = ${orgId}
     ${status === 'prepared' || status === 'filed' ? sql`and status = ${status}` : sql``}
@@ -197,22 +197,22 @@ export async function loadTax(
   // The full history rows are only queried when that tab is open. The Activity
   // tab's badge counts failed provider commits — the rows that need the operator.
   const [failedResult, historyResult, countResult, selectedResult, activityResult] = await Promise.all([
-    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_provider_transactions where org_id = ${orgId} and status = 'failed'`),
+    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_provider_transactions where org_id = ${orgId} and status = 'failed'`, 'objects'),
     tab === 'history'
       ? db.execute<FilingRow>(sql`
           select id, form_name, form_code, country, period_from::text, period_to::text,
                  version, status, filing_reference, filed_at::text, snapshot_hash, boxes, created_at::text
             from tax_filings ${filters}
            order by ${order}
-           limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`)
-      : Promise.resolve({ rows: [] as FilingRow[] }),
-    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings ${filters}`),
+           limit ${list.perPage} offset ${(list.page - 1) * list.perPage}`, 'objects')
+      : Promise.resolve([] as FilingRow[]),
+    db.execute<{ count: number }>(sql`select count(*)::int as count from tax_filings ${filters}`, 'objects'),
     filingId && isUuid(filingId)
       ? db.execute<SelectedFilingRow>(sql`
           select id, form_name, form_code, country, period_from::text, period_to::text,
                  version, status, filing_reference, filed_at::text, snapshot_hash, boxes, adjustments
-            from tax_filings where id = ${filingId} and org_id = ${orgId} limit 1`)
-      : Promise.resolve({ rows: [] as SelectedFilingRow[] }),
+            from tax_filings where id = ${filingId} and org_id = ${orgId} limit 1`, 'objects')
+      : Promise.resolve([] as SelectedFilingRow[]),
     activityId && isUuid(activityId)
       ? db.execute<ProviderActivityPayload>(sql`
           select t.id::text as id, t.document_id::text as "documentId",
@@ -223,19 +223,19 @@ export async function loadTax(
                  t.provider_response_excerpt as "excerpt"
             from tax_provider_transactions t
             join documents d on d.id = t.document_id and d.org_id = t.org_id
-           where t.id = ${activityId} and t.org_id = ${orgId} limit 1`)
-      : Promise.resolve({ rows: [] as ProviderActivityPayload[] }),
+           where t.id = ${activityId} and t.org_id = ${orgId} limit 1`, 'objects')
+      : Promise.resolve([] as ProviderActivityPayload[]),
   ])
-  const failedCount = Number(failedResult.rows[0]?.count ?? 0)
-  const history = historyResult.rows
-  const total = Number(countResult.rows[0]?.count ?? 0)
-  const selectedRow = selectedResult.rows[0]
+  const failedCount = Number(failedResult[0]?.count ?? 0)
+  const history = historyResult
+  const total = Number(countResult[0]?.count ?? 0)
+  const selectedRow = selectedResult[0]
   const selected = selectedRow
     ? { ...selectedRow, adjustments: await filingAdjustmentRecords(orgId, selectedRow.adjustments) }
     : undefined
   const conversionDate = (await readMigrationPlan(orgId)).cutoverDate
   const closeHref = mergeHref('/tax', sp, { filing: undefined })
-  const activity = activityResult.rows[0]
+  const activity = activityResult[0]
   const activityCloseHref = mergeHref('/tax', sp, { activity: undefined })
   const activityDrawer: TaxData['activityDrawer'] = activity
     ? {

@@ -36,8 +36,8 @@ async function principalExists(
   const table = principalType === 'user' ? sql`users` : sql`app_roles`
   const r = (await db.execute(sql`
     select 1 from ${table} where id = ${principalId} and org_id = ${orgId} limit 1
-  `))
-  return r.rows.length > 0
+  `, 'objects'))
+  return r.length > 0
 }
 
 /** A grant anchor the caller's org cannot observe reads as not found. */

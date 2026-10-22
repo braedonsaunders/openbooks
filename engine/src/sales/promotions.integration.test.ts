@@ -19,8 +19,8 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 async function enablePromotions(orgId: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-      || '{"promotions": true}'::jsonb) where id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1)
+      || '{"promotions": true}'::jsonb) where id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1)
 }
 
 async function ensureIsoRegistry(): Promise<void> {
@@ -31,8 +31,8 @@ async function ensureIsoRegistry(): Promise<void> {
     insert into currencies (code, name, minor_units)
     values ('BHD', 'Bahraini Dinar', 3), ('JPY', 'Japanese Yen', 0)
     on conflict (code) do nothing`))
-  const rows = (await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`
-    select code, minor_units from currencies where code in ('BHD', 'JPY') order by code`))).rows
+  const rows = await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`
+    select code, minor_units from currencies where code in ('BHD', 'JPY') order by code`, 'objects'))
   assert.deepEqual(rows, [{ code: 'BHD', minor_units: 3 }, { code: 'JPY', minor_units: 0 }])
 }
 
@@ -57,15 +57,15 @@ async function draftSale(org: ScratchOrg, lines: { itemId: string; quantity: str
 }
 
 async function discountLines(orgId: string, documentId: string) {
-  return (await db.execute<{ amount: string; promotion_id: string | null; account_id: string }>(sql`
+  return await db.execute<{ amount: string; promotion_id: string | null; account_id: string }>(sql`
     select amount::text, promotion_id, account_id from document_lines
      where org_id = ${orgId} and document_id = ${documentId} and promotion_id is not null
-     order by line_number`)).rows
+     order by line_number`, 'objects')
 }
 
 async function usageCount(orgId: string, promotionId: string): Promise<number> {
   const row = (await db.execute<{ usage_count: number }>(sql`
-    select usage_count from promotions where org_id = ${orgId} and id = ${promotionId}`)).rows[0]
+    select usage_count from promotions where org_id = ${orgId} and id = ${promotionId}`, 'objects'))[0]
   assert.ok(row)
   return row.usage_count
 }
@@ -98,7 +98,7 @@ test('percent promotion discounts every eligible line and sums exactly', { skip:
         from documents d
         join document_lines l on l.org_id = d.org_id and l.document_id = d.id
        where d.org_id = ${org.orgId} and d.id = ${documentId}
-       group by d.org_id, d.id`))).rows[0]!
+       group by d.org_id, d.id`, 'objects')))[0]!
     assert.deepEqual([totals.subtotal, totals.total, totals.line_total], ['0.2500', '0.2500', '0.2500'])
     assert.notEqual(totals.revision_seq, '0')
     assert.equal(totals.updated_by, actorId)
@@ -283,10 +283,10 @@ test('a promotion applies once per document and stacked discounts never exceed t
     assert.ok(current)
     const lines = await withOrg(org.orgId, () => db.execute<{ id: string; account_id: string; item_id: string | null; amount: string; quantity: string; unit_price: string; tax_code_id: string | null; description: string | null }>(sql`
       select id,account_id,item_id,amount::text,quantity::text,unit_price::text,tax_code_id,description from document_lines
-       where org_id=${org.orgId} and document_id=${documentId} order by line_number desc`))
+       where org_id=${org.orgId} and document_id=${documentId} order by line_number desc`, 'objects'))
     await withOrg(org.orgId, () => applyDocumentEdit(documentId,current,{
       expectedUpdatedAt:current.updatedAt,
-      lines:lines.rows.map(line=>({lineId:line.id,accountId:line.account_id,itemId:line.item_id,amount:line.amount,quantity:line.quantity,unitPrice:line.unit_price,taxCodeId:line.tax_code_id,description:`${line.description ?? ''} reviewed`})),
+      lines:lines.map(line=>({lineId:line.id,accountId:line.account_id,itemId:line.item_id,amount:line.amount,quantity:line.quantity,unitPrice:line.unit_price,taxCodeId:line.tax_code_id,description:`${line.description ?? ''} reviewed`})),
     }, { orgId:org.orgId,userId:actorId,source:'ui',allowedSubsidiaryIds:null,runFlows:false }))
     await assert.rejects(apply('sixty'), (error: unknown) => error instanceof PromotionRefusal
       && error.code === 'already_applied' && error.status === 409
@@ -332,8 +332,8 @@ test('amount promotion applies ISO fils on BHD, never hundredths', { skip: !DB }
     assert.ok(stored.every((line) => line.promotion_id === promotion.id))
     // The audit carries the quantum with the ISO total, so the 234 stays
     // interpretable as fils without consulting later registry state.
-    const audit = (await db.execute<{ changes: { event: string; discountMinor: string; currency: string; minorUnits: number } }>(sql`
-      select changes from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${documentId}`)).rows
+    const audit = await db.execute<{ changes: { event: string; discountMinor: string; currency: string; minorUnits: number } }>(sql`
+      select changes from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${documentId}`, 'objects')
     const appliedEvent = audit.find((row) => row.changes.event === 'promotion_applied')
     assert.deepEqual(
       [appliedEvent?.changes.discountMinor, appliedEvent?.changes.currency, appliedEvent?.changes.minorUnits],
@@ -400,8 +400,8 @@ test('fixed yen promotion with fils apportioning and stacked caps', { skip: !DB 
       (await withOrg(org.orgId, () => discountLines(org.orgId, doc))).map((line) => line.amount),
       ['-0.6670', '-1.3330', '-0.5680', '-1.1340'],
     )
-    const audit = (await db.execute<{ changes: { event: string; code: string; discountMinor: string; cappedFromMinor?: string } }>(sql`
-      select changes from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${doc}`)).rows
+    const audit = await db.execute<{ changes: { event: string; code: string; discountMinor: string; cappedFromMinor?: string } }>(sql`
+      select changes from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${doc}`, 'objects')
     const events = audit.filter((row) => row.changes.event === 'promotion_applied')
     assert.equal(events.length, 2)
     assert.equal(events.find((row) => row.changes.code === 'BIG2')?.changes.cappedFromMinor, '2000')
@@ -479,8 +479,8 @@ test('unknown registry precision refuses before any line is written', { skip: !D
   // ZZZ is alphabetic but absent from the ISO registry, so the shape check
   // passes and the precision refusal fires: the application refuses with the
   // seeded-precision remedy and writes no discount line and no redemption.
-  const rows = (await withBypassContext(() => db.execute<{ code: string }>(sql`
-    select code from currencies where code = 'ZZZ'`))).rows
+  const rows = await withBypassContext(() => db.execute<{ code: string }>(sql`
+    select code from currencies where code = 'ZZZ'`, 'objects'))
   assert.equal(rows.length, 0)
   const org = await withBypassContext(() => createScratchOrg())
   try {

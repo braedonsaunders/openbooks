@@ -18,8 +18,8 @@ const evidenceTables = [
 
 async function evidence(orgId: string) {
   return Promise.all(evidenceTables.map(async table => ({ table: table.name,
-    rows: (await db.execute(sql`select to_jsonb(e) as row from ${sql.identifier(table.name)} e
-      where org_id=${orgId} order by ${sql.identifier(table.key)}`)).rows })));
+    rows: await db.execute(sql`select to_jsonb(e) as row from ${sql.identifier(table.name)} e
+      where org_id=${orgId} order by ${sql.identifier(table.key)}`, "objects") })));
 }
 
 async function wipeFlags() {
@@ -71,28 +71,28 @@ for (const masked of [false, true]) {
       const assertCopy = async () => {
         for (const table of evidenceTables) {
           const replacements = table.ids.map(key => sql`${key}::text,ob_rebase(original.${sql.identifier(key)},target.sandbox_seed)`);
-          const copied = (await db.execute<{ matched: boolean }>(sql`
+          const copied = await db.execute<{ matched: boolean }>(sql`
             select to_jsonb(copied)=(to_jsonb(original)||jsonb_build_object('org_id',target.id,${sql.join(replacements, sql`, `)})) as matched
               from ${sql.identifier(table.name)} original join orgs target on target.id=${target}
               join ${sql.identifier(table.name)} copied on copied.org_id=target.id
                 and copied.${sql.identifier(table.key)}=ob_rebase(original.${sql.identifier(table.key)},target.sandbox_seed)
-             where original.org_id=${org.orgId}`)).rows;
+             where original.org_id=${org.orgId}`, "objects");
           assert.equal(copied.length, table.count, table.name);
           assert.ok(copied.every(row => row.matched), `${table.name} preserves every stored field and counterpart`);
           assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count
-            from ${sql.identifier(table.name)} where org_id=${target}`)).rows[0]!.count, table.count);
+            from ${sql.identifier(table.name)} where org_id=${target}`, "objects"))[0]!.count, table.count);
         }
         const current = (await db.execute<{ count: number }>(sql`select count(*)::int as count
-          from field_ticket_labor_snapshots where org_id=${target} and superseded_at is null`)).rows[0]!.count;
+          from field_ticket_labor_snapshots where org_id=${target} and superseded_at is null`, "objects"))[0]!.count;
         assert.equal(current, 1);
-        const signature = (await db.execute<{ same_org: boolean; storage_kind: string }>(sql`
+        const signature = await db.execute<{ same_org: boolean; storage_kind: string }>(sql`
           select f.org_id=s.org_id as same_org,f.storage_kind from field_ticket_signatures s
-          join files f on f.id=s.signature_file_id where s.org_id=${target}`)).rows;
+          join files f on f.id=s.signature_file_id where s.org_id=${target}`, "objects");
         assert.equal(signature.length, 1);
         assert.equal(signature[0]!.same_org, true);
         assert.equal(signature[0]!.storage_kind, masked ? MASKED_STORAGE_KIND : "db");
         assert.deepEqual(await evidence(org.orgId), before);
-        assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`)).rows[0]!.status, "ready");
+        assert.equal((await db.execute<{ status: string }>(sql`select status from sandboxes where id=${created.sandboxId}`, "objects"))[0]!.status, "ready");
       };
       await assertCopy();
 
@@ -109,7 +109,7 @@ for (const masked of [false, true]) {
             error => errorChainMatches(error, pattern));
         }
         await assert.rejects(withMaintenanceTransaction(null, async () => {
-          assert.equal((await db.execute(sql`delete from sandboxes where id=${created.sandboxId} returning id`)).rows.length, 1);
+          assert.equal((await db.execute(sql`delete from sandboxes where id=${created.sandboxId} returning id`, "objects")).length, 1);
           await wipeFlags();
           await db.execute(sql`delete from ${sql.identifier(table)} where org_id=${target}`);
         }), error => errorChainMatches(error, pattern));
@@ -123,7 +123,7 @@ for (const masked of [false, true]) {
       const historic = (await db.execute<{ id: string; row: Record<string, unknown> }>(sql`
         select line.id,to_jsonb(line) as row from field_ticket_labor_lines line
         join field_ticket_labor_snapshots snapshot on snapshot.id=line.snapshot_id and snapshot.org_id=line.org_id
-        where line.org_id=${target} and snapshot.superseded_at is not null`)).rows[0]!;
+        where line.org_id=${target} and snapshot.superseded_at is not null`, "objects"))[0]!;
       const historicalRefusal = /line must belong to the current snapshot and ticket in the same organization/;
       for (const [scope, privileged, change] of [
         [target, false, {}],
@@ -136,12 +136,12 @@ for (const masked of [false, true]) {
       ] as const) {
         const original = (await db.execute<{ row: Record<string, unknown> }>(sql`select to_jsonb(line) as row
           from field_ticket_labor_lines line join field_ticket_labor_snapshots snapshot on snapshot.id=line.snapshot_id
-          where line.org_id=${org.orgId} and snapshot.superseded_at is not null`)).rows[0]!.row;
+          where line.org_id=${org.orgId} and snapshot.superseded_at is not null`, "objects"))[0]!.row;
         const candidate = scope === target ? { ...historic.row, ...change } : original;
         const write = async () => {
           await wipeFlags();
           if (privileged && scope === target) {
-            assert.equal((await db.execute(sql`delete from field_ticket_labor_lines where org_id=${target} and id=${historic.id} returning id`)).rows.length, 1);
+            assert.equal((await db.execute(sql`delete from field_ticket_labor_lines where org_id=${target} and id=${historic.id} returning id`, "objects")).length, 1);
           }
           await db.execute(sql`insert into field_ticket_labor_lines
             select (jsonb_populate_record(null::field_ticket_labor_lines,${JSON.stringify(candidate)}::jsonb)).*`);
@@ -155,17 +155,17 @@ for (const masked of [false, true]) {
       await assertCopy();
       await withOrgContext(org.orgId, () => deleteSandbox(created.sandboxId, { actorId }));
       for (const table of evidenceTables) {
-        assert.equal((await db.execute(sql`select 1 from ${sql.identifier(table.name)} where org_id=${target}`)).rows.length, 0);
+        assert.equal((await db.execute(sql`select 1 from ${sql.identifier(table.name)} where org_id=${target}`, "objects")).length, 0);
       }
-      assert.equal((await db.execute(sql`select 1 from files where org_id=${target}`)).rows.length, 0);
-      assert.equal((await db.execute(sql`select 1 from orgs where id=${target}`)).rows.length, 0);
+      assert.equal((await db.execute(sql`select 1 from files where org_id=${target}`, "objects")).length, 0);
+      assert.equal((await db.execute(sql`select 1 from orgs where id=${target}`, "objects")).length, 0);
       assert.deepEqual(await evidence(org.orgId), before);
     } catch (error) {
       originalError = error;
       throw error;
     } finally {
       try {
-        const retained = (await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`)).rows;
+        const retained = await db.execute<{ id: string }>(sql`select id from sandboxes where production_org_id=${org.orgId} and name=${name}`, "objects");
         for (const sandbox of retained) await deleteSandbox(sandbox.id, { systemReason: "Remove Field Ticket sandbox fixture" });
         await dropScratchOrgReporting(org.orgId);
       } catch (cleanupError) {

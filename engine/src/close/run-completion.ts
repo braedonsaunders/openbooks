@@ -18,8 +18,8 @@ export async function closeApprovedRun(
     if(!await lockAndCheckOrgFeature(db,orgId,"continuousClose"))throw new CloseError("Enable Continuous Close in Company Settings → Features before locking a close run.");
     if(await lockActorCommandAuthority(db,orgId,actorId,null,"close.approve")!==null)throw new CloseError("Close run commands require access to the whole organization.");
     const target = (await tx.execute<{ period_id: string; book_id: string }>(sql`
-      select period_id, book_id from close_runs where id = ${runId} and org_id = ${orgId}`));
-    if (!target.rows[0]) throw new CloseError("close run not found");
+      select period_id, book_id from close_runs where id = ${runId} and org_id = ${orgId}`, "objects"));
+    if (!target[0]) throw new CloseError("close run not found");
     // Take the exclusive side of the close/posting fence BEFORE the final
     // refresh. The kernel's je_guard holds the shared side across every
     // posting's [period check -> commit] window, so from this point until
@@ -28,7 +28,7 @@ export async function closeApprovedRun(
     // is either fully evaluated by this close or rejected once these locks
     // commit. Refreshing outside this fence (the old order) is exactly the
     // race that let a posting commit after approval evidence was frozen.
-    await periodScopeAdvisoryLock(tx, orgId, target.rows[0].period_id, target.rows[0].book_id);
+    await periodScopeAdvisoryLock(tx, orgId, target[0].period_id, target[0].book_id);
     await refreshCloseRun(orgId, runId, actorId);
     const run = (await tx.execute<{
         period_id: string;
@@ -39,27 +39,27 @@ export async function closeApprovedRun(
         scope: { subsidiaryIds?: string[] };
       }>(sql`
       select period_id, book_id, status, approved_by, data_fingerprint, scope from close_runs
-       where id = ${runId} and org_id = ${orgId} for update`));
-    const row = run.rows[0];
+       where id = ${runId} and org_id = ${orgId} for update`, "objects"));
+    const row = run[0];
     if (!row) throw new CloseError("close run not found");
     if (row.status !== "approved")
       return "the close run changed after approval; review its updated readiness and obtain approval again before locking";
     const currentDecision=(await tx.execute<{valid:boolean}>(sql`select public.flow_subject_decision_authorized(
-      ${orgId},'close_run',${runId},${row.approved_by},public.close_run_approval_fingerprint(${orgId},${runId}),'approved') as valid`)).rows[0]?.valid;
+      ${orgId},'close_run',${runId},${row.approved_by},public.close_run_approval_fingerprint(${orgId},${runId}),'approved') as valid`, "objects"))[0]?.valid;
     if(!currentDecision){
       await tx.execute(sql`update close_runs set status='in_progress',current_stage='review',approved_at=null,approved_by=null,
         updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${runId}`);
       const changed=await tx.execute(sql`update close_run_tasks set status='invalidated',completed_at=null,completed_by=null,
         reviewed_at=null,reviewed_by=null,updated_at=now(),updated_by=${actorId}
-        where org_id=${orgId} and run_id=${runId} and task_type='approval' and status in('complete','submitted','waived') returning id`);
+        where org_id=${orgId} and run_id=${runId} and task_type='approval' and status in('complete','submitted','waived') returning id`, "objects");
       await tx.execute(sql`insert into close_events(org_id,run_id,event_type,actor_id,payload)
-        values(${orgId},${runId},'run.data_changed',${actorId},${JSON.stringify({reason:"approval_evidence_changed",before:{status:row.status,approvedBy:row.approved_by},after:{status:"in_progress"},invalidated:changed.rows.length})}::jsonb)`);
+        values(${orgId},${runId},'run.data_changed',${actorId},${JSON.stringify({reason:"approval_evidence_changed",before:{status:row.status,approvedBy:row.approved_by},after:{status:"in_progress"},invalidated:changed.length})}::jsonb)`);
       return "The close approval evidence changed. Review the current evidence and submit the run through Flows before locking.";
     }
     const blockers = (await tx.execute<{ count: string }>(sql`
       select count(*) as count from close_exceptions
-       where run_id = ${runId} and org_id = ${orgId} and status = 'open' and severity in ('error','critical')`));
-    if (Number(blockers.rows[0]!.count) > 0) {
+       where run_id = ${runId} and org_id = ${orgId} and status = 'open' and severity in ('error','critical')`, "objects"));
+    if (Number(blockers[0]!.count) > 0) {
       await tx.execute(sql`
         update close_runs set status = 'in_progress', current_stage = 'readiness',
                approved_at = null, approved_by = null, updated_at = now(), updated_by = ${actorId}
@@ -112,17 +112,17 @@ export async function closeApprovedRun(
       }
     }
     const lockTasks=await tx.execute(sql`select id from close_run_tasks where run_id=${runId} and org_id=${orgId}
-      and key in ('lock-subledgers','lock-gl') for update`);
+      and key in ('lock-subledgers','lock-gl') for update`, "objects");
     const completedLocks=await tx.execute(sql`
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
              data_fingerprint=${row.data_fingerprint},updated_at = now(), updated_by = ${actorId}
-       where run_id = ${runId} and org_id = ${orgId} and key in ('lock-subledgers','lock-gl') returning id`);
-    if(completedLocks.rows.length!==lockTasks.rows.length)throw new CloseError("The close lock tasks changed; revalidate the current run before locking.");
+       where run_id = ${runId} and org_id = ${orgId} and key in ('lock-subledgers','lock-gl') returning id`, "objects");
+    if(completedLocks.length!==lockTasks.length)throw new CloseError("The close lock tasks changed; revalidate the current run before locking.");
     const closed = await tx.execute(sql`
       update close_runs set status = 'closed', current_stage = 'publish', closed_at = now(),
              closed_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${runId} and org_id = ${orgId} and status='approved' returning id`);
-    if (closed.rows.length !== 1)
+       where id = ${runId} and org_id = ${orgId} and status='approved' returning id`, "objects");
+    if (closed.length !== 1)
       throw new CloseError("The approved close run was not locked; reload its current state.");
     await tx.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
@@ -164,9 +164,9 @@ export async function publishCloseRun(
       select status, data_fingerprint, binder_snapshot, binder_hash, published_at::text, published_by::text,
              (select count(*) from close_events e
                where e.org_id = ${orgId} and e.run_id = ${runId} and e.event_type = 'run.published') as publish_count
-        from close_runs where id = ${runId} and org_id = ${orgId} for update`));
-    if (!run.rows[0]) throw new CloseError("close run not found");
-    if (run.rows[0].status !== "closed")
+        from close_runs where id = ${runId} and org_id = ${orgId} for update`, "objects"));
+    if (!run[0]) throw new CloseError("close run not found");
+    if (run[0].status !== "closed")
       throw new CloseError(
         "the period must be closed before its package can be published",
       );
@@ -175,7 +175,7 @@ export async function publishCloseRun(
     // evidence BEFORE the snapshot is replaced, and the new publication must
     // carry a restatement note. Without this the original package became
     // unrecoverable the moment the corrected one froze.
-    const prior = run.rows[0];
+    const prior = run[0];
     const version = Number(prior.publish_count) + 1;
     const restatementNote = comment?.trim() ? comment.trim() : null;
     if (prior.binder_hash !== null && restatementNote === null) {
@@ -199,17 +199,17 @@ export async function publishCloseRun(
     }
     await tx.execute(sql`
       update close_run_tasks set status = 'complete', completed_at = now(), completed_by = ${actorId},
-             data_fingerprint = ${run.rows[0].data_fingerprint}, updated_at = now(), updated_by = ${actorId}
+             data_fingerprint = ${run[0].data_fingerprint}, updated_at = now(), updated_by = ${actorId}
        where run_id = ${runId} and org_id = ${orgId} and key = 'publish-package'`);
     const published = await tx.execute(sql`
       update close_runs set status = 'published', current_stage = 'publish', published_at = now(),
              published_by = ${actorId}, updated_at = now(), updated_by = ${actorId}
-       where id = ${runId} and org_id = ${orgId} and status='closed' returning id`);
-    if (published.rows.length !== 1)
+       where id = ${runId} and org_id = ${orgId} and status='closed' returning id`, "objects");
+    if (published.length !== 1)
       throw new CloseError("The closed run was not published; reload its current state.");
     await tx.execute(sql`
       insert into close_signoffs (org_id, run_id, signoff_type, decision, comment, data_fingerprint, signed_by)
-      values (${orgId}, ${runId}, 'publish', 'approved', ${comment ?? null}, ${run.rows[0].data_fingerprint}, ${actorId})`);
+      values (${orgId}, ${runId}, 'publish', 'approved', ${comment ?? null}, ${run[0].data_fingerprint}, ${actorId})`);
     await tx.execute(sql`
       insert into close_events (org_id, run_id, event_type, actor_id, payload)
       values (${orgId}, ${runId}, 'run.published', ${actorId}, ${JSON.stringify({ comment: comment ?? null })}::jsonb)`);
@@ -220,24 +220,24 @@ export async function publishCloseRun(
         bp.name as blueprint_name, bp.version as blueprint_version, pkg.name as package_name, pkg.reports as package_reports
         from close_runs r join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id join accounting_books b on b.id = r.book_id and b.org_id = r.org_id
         join close_blueprints bp on bp.id = r.blueprint_id and bp.org_id = r.org_id left join close_reporting_packages pkg on pkg.id = r.reporting_package_id and pkg.org_id = r.org_id
-        where r.id = ${runId} and r.org_id = ${orgId}`);
+        where r.id = ${runId} and r.org_id = ${orgId}`, "objects");
     const tasks = await tx.execute(
-      sql`select * from close_run_tasks where run_id = ${runId} and org_id = ${orgId} order by sort_order, id`,
+      sql`select * from close_run_tasks where run_id = ${runId} and org_id = ${orgId} order by sort_order, id`, "objects",
     );
     const evidence = await tx.execute(
-      sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
+      sql`select * from close_task_evidence where run_id = ${runId} and org_id = ${orgId} order by created_at, id`, "objects",
     );
     const exceptions = await tx.execute(
-      sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by created_at, id`,
+      sql`select * from close_exceptions where run_id = ${runId} and org_id = ${orgId} order by created_at, id`, "objects",
     );
     const signoffs = await tx.execute(
-      sql`select * from close_signoffs where run_id = ${runId} and org_id = ${orgId} order by signed_at, id`,
+      sql`select * from close_signoffs where run_id = ${runId} and org_id = ${orgId} order by signed_at, id`, "objects",
     );
     const events = await tx.execute(
-      sql`select * from close_events where run_id = ${runId} and org_id = ${orgId} order by at, id`,
+      sql`select * from close_events where run_id = ${runId} and org_id = ${orgId} order by at, id`, "objects",
     );
     const locks = await tx.execute(sql`select * from period_locks where org_id = ${orgId} and period_id = (select period_id from close_runs where id = ${runId} and org_id = ${orgId})
-        and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`);
+        and book_id = (select book_id from close_runs where id = ${runId} and org_id = ${orgId}) order by subsidiary_id nulls first, module`, "objects");
     const snapshot = {
       format: "openbooks.close-binder.v1",
       // Package versioning: the first publication is version 1; every
@@ -249,13 +249,13 @@ export async function publishCloseRun(
       supersedes: prior.binder_hash,
       restatementNote: version > 1 ? restatementNote : null,
       frozenAt: new Date().toISOString(),
-      run: publishedRun.rows[0],
-      tasks: tasks.rows,
-      evidence: evidence.rows,
-      exceptions: exceptions.rows,
-      signoffs: signoffs.rows,
-      events: events.rows,
-      locks: locks.rows,
+      run: publishedRun[0],
+      tasks,
+      evidence,
+      exceptions,
+      signoffs,
+      events,
+      locks,
     };
     const binderHash = createHash("sha256")
       .update(canonicalJson(snapshot), "utf8")
@@ -272,8 +272,8 @@ export async function publishCloseRun(
   // This stays a cadence-driven (unmarked) job on purpose: manual-cadence
   // packages skip the publish tick and only deliver on explicit Send now.
   const packageRow = (await db.execute<{ reporting_package_id: string | null }>(sql`
-    select reporting_package_id from close_runs where id = ${runId} and org_id = ${orgId}`));
-  const packageId = packageRow.rows[0]?.reporting_package_id;
+    select reporting_package_id from close_runs where id = ${runId} and org_id = ${orgId}`, "objects"));
+  const packageId = packageRow[0]?.reporting_package_id;
   if (packageId) {
     try {
       const { enqueueCloseDelivery } = await import("@openbooks/jobs");

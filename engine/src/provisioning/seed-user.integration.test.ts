@@ -32,8 +32,8 @@ async function fixture() {
 }
 
 async function usersWithEmail(orgId: string, email: string) {
-  return (await db.execute<{ id: string; is_active: boolean; password_hash: string }>(sql`
-    select id, is_active, password_hash from users where org_id = ${orgId} and email = ${email}`)).rows;
+  return await db.execute<{ id: string; is_active: boolean; password_hash: string }>(sql`
+    select id, is_active, password_hash from users where org_id = ${orgId} and email = ${email}`, "objects");
 }
 
 test("seeding names the newer org and leaves the oldest production org alone", { skip: !DB }, async () => {
@@ -59,20 +59,20 @@ test("seeding names the newer org and leaves the oldest production org alone", {
     assert.notEqual(target[0]!.password_hash, "old-hash");
     assert.ok(target[0]!.password_hash.includes(":"));
     assert.deepEqual(await usersWithEmail(older.orgId, email), []);
-    const grants = (await db.execute<{ key: string }>(sql`
+    const grants = await db.execute<{ key: string }>(sql`
       select r.key from role_assignments a join app_roles r on r.id = a.role_id
-       where a.org_id = ${newer.orgId} and a.user_id = ${target[0]!.id}`)).rows;
+       where a.org_id = ${newer.orgId} and a.user_id = ${target[0]!.id}`, "objects");
     assert.deepEqual(grants.map((grant) => grant.key), ["admin"]);
-    const audit = (await db.execute<{ row_id: string; action: string; actor_id: string | null; changes: { email: string; role: string } }>(sql`
+    const audit = await db.execute<{ row_id: string; action: string; actor_id: string | null; changes: { email: string; role: string } }>(sql`
       select row_id, action, actor_id, changes from audit_log
-       where org_id = ${newer.orgId} and table_name = 'users' and row_id = ${target[0]!.id}`)).rows;
+       where org_id = ${newer.orgId} and table_name = 'users' and row_id = ${target[0]!.id}`, "objects");
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.action, "seed_user");
     assert.equal(audit[0]!.actor_id, null);
     assert.equal(audit[0]!.changes.email, email);
     assert.equal(audit[0]!.changes.role, "admin");
-    const decoyAudit = (await db.execute(sql`
-      select id from audit_log where org_id = ${older.orgId} and table_name = 'users'`)).rows;
+    const decoyAudit = await db.execute(sql`
+      select id from audit_log where org_id = ${older.orgId} and table_name = 'users'`, "objects");
     assert.deepEqual(decoyAudit, []);
   } finally {
     await dropScratchOrgReporting(newer.orgId);

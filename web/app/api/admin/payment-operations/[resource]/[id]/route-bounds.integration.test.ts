@@ -65,10 +65,10 @@ const patch = (mandateId: string, body: unknown) =>
   );
 
 async function signedOn(orgId: string, mandateId: string): Promise<string | null> {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ signed_on: string | null }>(
-      sql`select signed_on::text as signed_on from payment_mandates where org_id = ${orgId} and id = ${mandateId}`,
-    ))).rows;
+      sql`select signed_on::text as signed_on from payment_mandates where org_id = ${orgId} and id = ${mandateId}`, "objects",
+    ));
   return rows[0]?.signed_on ?? null;
 }
 

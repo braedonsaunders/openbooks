@@ -28,8 +28,8 @@ async function postReceivable(org: Org, actor: string, input: {
   await db.execute(sql`insert into document_lines
     (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${org.orgId}, ${id}, 1, ${input.receipt ? org.accounts.bank : org.accounts.revenue}, 1, ${input.amount}, ${input.amount}, 0, ${input.amount})`)
-  const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${id} returning id`)
-  assert.equal(approved.rows.length, 1, 'the fixture document must reach its approved state before posting')
+  const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${id} returning id`, 'objects')
+  assert.equal(approved.length, 1, 'the fixture document must reach its approved state before posting')
   // Missing due dates represent imported history; ordinary posting resolves
   // current due-on-receipt terms and cannot create that historical condition.
   return await postDocument(id, { migration: input.due === null, control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } })
@@ -60,11 +60,11 @@ async function unassignedReceivable(org: Org) {
     values (${org.orgId}, ${entry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, true, 1000, 'CAD', 1000, 1),
            (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, false, -1000, 'CAD', -1000, 1)`)
   const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
-    where org_id = ${org.orgId} and id = ${entry} returning id`)
-  assert.equal(posted.rows.length, 1)
+    where org_id = ${org.orgId} and id = ${entry} returning id`, 'objects')
+  assert.equal(posted.length, 1)
   const linked = await db.execute(sql`update documents set status = 'posted', posted_entry_id = ${entry}, posting_period_id = ${org.periodId}
-    where org_id = ${org.orgId} and id = ${document} returning id`)
-  assert.equal(linked.rows.length, 1)
+    where org_id = ${org.orgId} and id = ${document} returning id`, 'objects')
+  assert.equal(linked.length, 1)
 }
 
 test('receivables totals reconcile to native open items with exact credits, aging and empty legal-entity scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -148,8 +148,8 @@ test('foreign-functional receivables round each line before grouping and refuse 
       assert.equal((await receivablesData(org.orgId, AS_OF, new Set([org.subsidiaryId]))).summary.outstanding, '0.0000')
     })
     await withBypassContext(async () => {
-      const removed = await db.execute(sql`delete from fx_rates where org_id = ${org.orgId} returning 1`)
-      assert.ok(removed.rows.length > 0)
+      const removed = await db.execute(sql`delete from fx_rates where org_id = ${org.orgId} returning 1`, 'objects')
+      assert.ok(removed.length > 0)
     })
     await withOrgContext(org.orgId, () => assert.rejects(receivablesData(org.orgId, AS_OF, null), (error: unknown) => {
       assert.ok(error instanceof MissingExchangeRateError)
@@ -169,7 +169,7 @@ test('collection portfolio uses contractual dates, exact cash recovery and bound
       const invoice = await postReceivable(org, actor, { amount: '100.0001', due: '2026-05-01' })
       const receipt = await postReceivable(org, actor, { amount: '40.0000', due: null, receipt: true })
       const credit = await postReceivable(org, actor, { amount: '20.0000', due: null, credit: true })
-      const openLine = async (entry: string) => (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and is_open_item`)).rows[0]!.id
+      const openLine = async (entry: string) => (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${org.orgId} and entry_id=${entry} and is_open_item`, 'objects'))[0]!.id
       invoiceLine = await openLine(invoice); receiptLine = await openLine(receipt); creditLine = await openLine(credit)
       for (const [line, amount, date] of [[receiptLine, '40.0000', '2026-07-20'], [creditLine, '20.0000', '2026-07-21']] as const) {
         await db.execute(sql`insert into applications

@@ -33,7 +33,7 @@ export async function TransactionRulesDrawer({ authz, programId }: { authz: Auth
       options['segment-definitions'] = references.segments
       options['benefit-transaction-groups'] = references.groups
       // Responsibilities are confined to the program's responsible legal employer.
-      const employed = (await db.execute<{ id: string }>(sql`select id from worker_employments where org_id=${orgId} and employer_subsidiary_id=${program.legalEntityId}`)).rows
+      const employed = await db.execute<{ id: string }>(sql`select id from worker_employments where org_id=${orgId} and employer_subsidiary_id=${program.legalEntityId}`, 'objects')
       const employmentIds = new Set(employed.map(row => row.id))
       options['worker-employments'] = (options['worker-employments'] ?? []).filter(option => employmentIds.has(option.value))
       const row = { id: program.id, revision: record?.programRevision ?? program.revision, document_kind: policy.documentKind, date_basis: policy.dateBasis, grouping_segment_id: policy.groupingSegmentId, positions: policy.positions, unassigned_share: policy.unassignedShare ?? 'refuse', rounding: policy.rounding ?? 'per_group', cap_percent: policy.capPercent ?? null, cap_project_type_id: policy.capProjectTypeId ?? null, responsibilities: policy.responsibilities, limits: policy.limits, reason: '',

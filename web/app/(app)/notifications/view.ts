@@ -106,13 +106,13 @@ export async function loadNotifications(
         from notifications
        where ${filtered}
        order by created_at desc
-       limit ${params.perPage} offset ${offset}`),
+       limit ${params.perPage} offset ${offset}`, 'objects'),
     db.execute<{ total: number; unread: number; scoped: number }>(sql`
       select count(*)::int as total,
              count(*) filter (where read_at is null)::int as unread,
              count(*) filter (where ${filtered})::int as scoped
         from notifications
-       where ${mine}`),
+       where ${mine}`, 'objects'),
     // Chip counts follow the scope (unread vs everything) but NOT the chosen
     // kind, so switching between chips never hides the chip you came from.
     db.execute<{ kind: string; n: number }>(sql`
@@ -120,13 +120,13 @@ export async function loadNotifications(
         from notifications
        where ${scoped}
        group by kind
-       order by count(*) desc, kind asc`),
+       order by count(*) desc, kind asc`, 'objects'),
   ])
 
-  const unread = counts.rows[0]?.unread ?? 0
+  const unread = counts[0]?.unread ?? 0
   const visibility = pagedListVisibility(
-    counts.rows[0]?.scoped ?? 0,
-    rows.rows.length,
+    counts[0]?.scoped ?? 0,
+    rows.length,
   )
   const kindText = (code: string) =>
     KNOWN_KINDS.has(code) ? t(`kinds.${code}` as never) : humanize(code)
@@ -143,14 +143,14 @@ export async function loadNotifications(
       active: scope === value,
     })),
     kindLabel: t('kindLabel'),
-    kindOptions: kinds.rows.map((row) => ({
+    kindOptions: kinds.map((row) => ({
       value: row.kind,
       label: kindText(row.kind),
       count: row.n,
     })),
     currentParams: sp,
     unread,
-    rows: rows.rows.map((row) => ({
+    rows: rows.map((row) => ({
       id: row.id,
       title: row.title,
       body: row.body,
@@ -168,7 +168,7 @@ export async function loadNotifications(
     emptyTitle: scope === 'unread' ? t('emptyUnreadTitle') : t('emptyTitle'),
     emptyDescription:
       scope === 'unread' ? t('emptyUnreadDescription') : t('emptyDescription'),
-    total: counts.rows[0]?.scoped ?? 0,
+    total: counts[0]?.scoped ?? 0,
     currentPage: params.page,
     perPage: params.perPage,
   }

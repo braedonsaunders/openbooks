@@ -19,7 +19,7 @@ async function evidence(orgId: string) {
     'projection',(select jsonb_agg(to_jsonb(l) order by id) from document_lines l where org_id=${orgId}),
     'sequences',(select jsonb_agg(to_jsonb(s) order by id) from number_sequences s where org_id=${orgId}),
     'time',(select jsonb_agg(to_jsonb(t) order by id) from time_entries t where org_id=${orgId})
-  ) as state`)).rows[0]!.state;
+  ) as state`, "objects"))[0]!.state;
 }
 
 for (const operation of ["create", "calculate", "dry-run", "simulate", "commit", "opening balances", "employer levies", "entitlement openings"] as const) {

@@ -16,7 +16,7 @@ export async function installOperatingBanking(c: DemoContext): Promise<void> {
   for (const [index, key] of ["operations-bank", "reserve-bank", "payroll-bank", "settlement-bank"].entries()) {
     const accountId = scenarioRecordId(c, "accounts", key);
     // An operator-owned or completed session is never rewound by sample refresh.
-    const prior = (await db.execute<{ id: string; status: string }>(sql`select id,status from reconciliations where org_id=${c.orgId} and account_id=${accountId} order by through_date desc,id limit 1`)).rows[0];
+    const prior = (await db.execute<{ id: string; status: string }>(sql`select id,status from reconciliations where org_id=${c.orgId} and account_id=${accountId} order by through_date desc,id limit 1`, "objects"))[0];
     if (prior) continue;
     const entries: Array<{ entryId: string; date: string; amount: string; description: string; bankTransactionId: string }> = [];
     const amounts = index === 0 ? ["50000.00", "1250.00", "850.00", "-275.00", "-480.00", "-75.00"] : index === 1 ? ["25000.00", "25.00", "-10.00"] : ["18000.00", "-35.00", "15.00"];
@@ -32,14 +32,14 @@ export async function installOperatingBanking(c: DemoContext): Promise<void> {
       closing += toUnits(amount);
     }
     {
-      const payments = (await db.execute<{ entryId: string; date: string; amount: string; description: string; documentId: string }>(sql`
+      const payments = await db.execute<{ entryId: string; date: string; amount: string; description: string; documentId: string }>(sql`
         select e.id as "entryId",e.posting_date::text as date,l.txn_amount::text as amount,d.memo as description,d.id as "documentId"
         from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
         join documents d on d.org_id=e.org_id and d.posted_entry_id=e.id
         -- Live entries only: sample banking seeds from standing balances
         where l.org_id=${c.orgId} and l.account_id=${accountId} and e.status='posted'
           and (d.external_source='industry_demo' or (d.kind in ('vendor_payment','customer_payment') and d.memo like 'Demonstration operating %')) order by d.kind,d.document_number
-      `)).rows;
+      `, "objects");
       for (const payment of payments) {
         entries.push({ ...payment, bankTransactionId: `industry-demo:${c.orgId}:${key}:${payment.documentId}` });
         closing += toUnits(payment.amount);
@@ -54,8 +54,8 @@ export async function installOperatingBanking(c: DemoContext): Promise<void> {
       sourceEvidence: { content: csv, filename: `${key}-synthetic.csv`, contentType: "text/csv", csvMapping } }, ctx);
     const reconciliation = await startReconciliation({ accountId, throughDate: date, statementBalance: fromUnits(closing) }, ctx);
     for (const entry of entries) {
-      const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${c.orgId} and account_id=${accountId} and bank_transaction_id=${entry.bankTransactionId}`)).rows[0];
-      const journal = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${c.orgId} and entry_id=${entry.entryId} and account_id=${accountId}`)).rows;
+      const statement = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines where org_id=${c.orgId} and account_id=${accountId} and bank_transaction_id=${entry.bankTransactionId}`, "objects"))[0];
+      const journal = await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${c.orgId} and entry_id=${entry.entryId} and account_id=${accountId}`, "objects");
       if (!statement || journal.length !== 1) throw new SampleCompanyError("Native bank statement or posted cash line could not be read back for matching.");
       await createMatch({ reconciliationId: reconciliation.id, statementLineIds: [statement.id], journalLineIds: [journal[0]!.id] }, ctx);
     }

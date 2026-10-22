@@ -152,13 +152,11 @@ test(
         ),
       );
       assert.equal(res.status, 200, await res.text());
-      const rows = await withOrgContext(fixture.org.orgId, async () => (
-        await db.execute<{ changes: unknown }>(sql`
+      const rows = await withOrgContext(fixture.org.orgId, async () => await db.execute<{ changes: unknown }>(sql`
           select changes from audit_log
            where org_id = ${fixture.org.orgId} and table_name = 'timesheet_weeks'
              and changes->>'event' = 'no_hours_declared'
-        `)
-      ).rows);
+        `, "objects"));
       assert.equal(rows.length, 1, "the declaration leaves exactly one audit row");
       const changes = rows[0]!.changes as {
         reason: string;

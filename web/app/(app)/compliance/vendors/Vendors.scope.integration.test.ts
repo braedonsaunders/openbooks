@@ -34,11 +34,9 @@ async function seedVendors() {
     await db.execute(sql`
       insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
       values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`)
-    const kind = (
-      await db.execute<{ kind: string }>(
-        sql`select kind from parties where org_id = ${org.orgId} and id = ${org.vendorId}`,
-      )
-    ).rows[0]!.kind
+    const kind = (await db.execute<{ kind: string }>(
+        sql`select kind from parties where org_id = ${org.orgId} and id = ${org.vendorId}`, 'objects',
+      ))[0]!.kind
     await db.execute(sql`
       insert into parties(id,org_id,kind,display_name,subsidiary_id)
       values (${hiddenVendor},${org.orgId},${kind},'Hidden Vendor',${hidden})`)

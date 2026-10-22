@@ -40,20 +40,20 @@ async function withFixture(run: (f: Fixture) => Promise<void>, initializeFeature
   } finally { await withBypassContext(() => dropScratchOrgReporting(org.orgId)); }
 }
 async function write(query: SQL) {
-  const result = await db.execute(query);
+  const result = await db.execute<Record<string, unknown>>(query);
   assert.equal(result.rowCount, 1);
 }
 async function setFeatures(f: Fixture, values: Record<string, boolean>): Promise<void> {
-  const rows = await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(values)}::jsonb, true) where id = ${f.orgId} returning id`));
+  const rows = await withBypassContext(() => db.execute<Record<string, unknown>>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(values)}::jsonb, true) where id = ${f.orgId} returning id`));
   assert.equal(rows.rowCount, 1);
 }
 async function pendingRequest(f: Fixture) {
   await withBypassContext(() => seedApprovalFlow(f.orgId, { subjectKind: RESOURCING_REQUEST_SUBJECT_KIND, assignees: [{ type: "user", userId: f.approverId }], mode: "any" }));
   const draft = await createResourceRequest(requestInput(f));
   const submitted = await submitResourceRequest({ ...ctx(f), requestId: draft.id });
-  const gates = await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates where org_id = ${f.orgId} and run_id = ${submitted.flowInstanceId} and status = 'pending'`));
-  assert.equal(gates.rows.length, 1);
-  return { draft, gateId: gates.rows[0]!.id };
+  const gates = await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates where org_id = ${f.orgId} and run_id = ${submitted.flowInstanceId} and status = 'pending'`, "objects"));
+  assert.equal(gates.length, 1);
+  return { draft, gateId: gates[0]!.id };
 }
 async function decide(f: Fixture, gateId: string) { installEngineSeams(); return decideGate({ gateId, decision: "approved", userId: f.approverId, allowedSubsidiaryIds: null }); }
 async function createTestRetainer(f: Fixture, totalHours = "5.0000") { return createRetainer({ ...ctx(f), projectId: f.projectId, customerPartyId: f.customerId, kind: "hours", totalHours, unitRate: "100.0000", startsOn: "2026-10-01", endsOn: "2026-10-31", retainerItemId: f.serviceItemId }); }
@@ -91,26 +91,26 @@ test("all service writes refuse by feature name and preserve rows while off", en
   await assert.rejects(upsertAssignment(assignmentInput(f, "2026-10-18")), refused("resourcing_feature_disabled"));
   await assert.rejects(releaseAssignment({ ...ctx(f), assignmentId: first.assignment.id }), refused("resourcing_feature_disabled"));
   await assert.rejects(deleteAssignment({ ...ctx(f), assignmentId: second.assignment.id }), refused("resourcing_feature_disabled"));
-  const assignmentCounts = await withBypassContext(() => db.execute<{ assignments: number }>(sql`select count(*)::int assignments from res_assignments where org_id = ${f.orgId}`));
-  assert.equal(assignmentCounts.rows[0]?.assignments, 2);
+  const assignmentCounts = await withBypassContext(() => db.execute<{ assignments: number }>(sql`select count(*)::int assignments from res_assignments where org_id = ${f.orgId}`, "objects"));
+  assert.equal(assignmentCounts[0]?.assignments, 2);
   await setFeatures(f, { resourcing: true, resourceRequests: false });
   await assert.rejects(createResourceRequest(requestInput(f)), refused("resource_requests_feature_disabled"));
   await assert.rejects(submitResourceRequest({ ...ctx(f), requestId: draft.id }), refused("resource_requests_feature_disabled"));
   await assert.rejects(cancelResourceRequest({ ...ctx(f), requestId: submitted.draft.id, reason: "cancel" }), refused("resource_requests_feature_disabled"));
-  const requestCounts = await withBypassContext(() => db.execute<{ requests: number }>(sql`select count(*)::int requests from res_requests where org_id = ${f.orgId}`));
-  assert.equal(requestCounts.rows[0]?.requests, 2);
+  const requestCounts = await withBypassContext(() => db.execute<{ requests: number }>(sql`select count(*)::int requests from res_requests where org_id = ${f.orgId}`, "objects"));
+  assert.equal(requestCounts[0]?.requests, 2);
   await setFeatures(f, { resourceRequests: true, retainerBilling: false });
   await assert.rejects(createTestRetainer(f), refused("retainer_billing_disabled"));
   await assert.rejects(draftHoursDrawdown({ ...ctx(f), retainerId: retainer.id, sunday: "2026-10-04" }), refused("retainer_billing_disabled"));
-  const drawdownCounts = await withBypassContext(() => db.execute<{ drawdowns: number }>(sql`select count(*)::int drawdowns from res_retainer_drawdowns where org_id = ${f.orgId}`));
-  assert.equal(drawdownCounts.rows[0]?.drawdowns, 0);
+  const drawdownCounts = await withBypassContext(() => db.execute<{ drawdowns: number }>(sql`select count(*)::int drawdowns from res_retainer_drawdowns where org_id = ${f.orgId}`, "objects"));
+  assert.equal(drawdownCounts[0]?.drawdowns, 0);
 }));
 
 test("a release while Resource Requests is off rolls back and can be retried", enabled, async () => withFixture(async (f) => {
   const { draft, gateId } = await pendingRequest(f);
   await setFeatures(f, { resourceRequests: false });
   await assert.rejects(decide(f, gateId), (error: unknown) => { assert.ok(error instanceof ReleaseError); assert.match(error.message, /Resource requests are disabled/); return true; });
-  const state = async () => (await withBypassContext(() => db.execute<{ request: string; gate: string; count: number }>(sql`select r.status request, g.status gate, (select count(*)::int from res_assignments a where a.org_id = r.org_id and a.request_id = r.id) count from res_requests r join flow_gates g on g.org_id = r.org_id and g.run_id = r.flow_instance_id where r.org_id = ${f.orgId} and r.id = ${draft.id}`))).rows[0];
+  const state = async () => (await withBypassContext(() => db.execute<{ request: string; gate: string; count: number }>(sql`select r.status request, g.status gate, (select count(*)::int from res_assignments a where a.org_id = r.org_id and a.request_id = r.id) count from res_requests r join flow_gates g on g.org_id = r.org_id and g.run_id = r.flow_instance_id where r.org_id = ${f.orgId} and r.id = ${draft.id}`, "objects")))[0];
   assert.deepEqual(await state(), { request: "submitted", gate: "pending", count: 0 });
   await setFeatures(f, { resourceRequests: true });
   await decide(f, gateId);
@@ -127,8 +127,8 @@ test("turning planning features off preserves rows and re-enabling restores writ
     select (select to_jsonb(a)::text from res_assignments a where org_id = ${f.orgId} and id = ${assignment.assignment.id}) assignment,
       (select to_jsonb(r)::text from res_requests r where org_id = ${f.orgId} and id = ${request.id}) request,
       (select to_jsonb(r)::text from res_retainers r where org_id = ${f.orgId} and id = ${retainer.id}) retainer,
-      (select to_jsonb(d)::text from res_retainer_drawdowns d where org_id = ${f.orgId} and id = ${drawdown.id}) drawdown`));
-  const before = (await snapshot()).rows[0];
+      (select to_jsonb(d)::text from res_retainer_drawdowns d where org_id = ${f.orgId} and id = ${drawdown.id}) drawdown`, "objects"));
+  const before = (await snapshot())[0];
   assert.ok(before && Object.values(before).every(Boolean));
   await setFeatures(f, { resourcing: false });
   await assert.rejects(upsertAssignment(assignmentInput(f, "2026-10-11")), refused("resourcing_feature_disabled"));
@@ -137,9 +137,9 @@ test("turning planning features off preserves rows and re-enabling restores writ
   await assert.rejects(cancelResourceRequest({ ...ctx(f), requestId: request.id, reason: "cancel" }), refused("resource_requests_feature_disabled"));
   await assert.rejects(createTestRetainer(f), refused("retainer_billing_disabled"));
   await assert.rejects(draftHoursDrawdown({ ...ctx(f), retainerId: retainer.id, sunday: "2026-10-04" }), refused("retainer_billing_disabled"));
-  assert.deepEqual((await snapshot()).rows[0], before);
+  assert.deepEqual((await snapshot())[0], before);
   await setFeatures(f, KEYS);
-  assert.deepEqual((await snapshot()).rows[0], before);
+  assert.deepEqual((await snapshot())[0], before);
   assert.ok((await upsertAssignment(assignmentInput(f, "2026-10-11"))).assignment.id);
   assert.ok((await createResourceRequest(requestInput(f, "2026-10-11"))).id);
   assert.ok((await createTestRetainer(f)).id);

@@ -51,8 +51,8 @@ export async function validateAcceptanceBankAccount(orgId: string, accountId: st
      where org_id = ${orgId} and id = ${accountId}
        and type = 'asset_bank' and is_active and not is_summary
      limit 1
-  `);
-  if (!row.rows[0]) {
+  `, "objects");
+  if (!row[0]) {
     throw new PaymentAcceptanceError("bank account must be an active bank-type account");
   }
 }
@@ -66,8 +66,8 @@ export async function validateSurchargeIncomeAccount(orgId: string, accountId: s
      where org_id = ${orgId} and id = ${accountId}
        and type in ('income', 'income_other') and is_active and not is_summary
      limit 1
-  `);
-  if (!row.rows[0]) {
+  `, "objects");
+  if (!row[0]) {
     throw new PaymentAcceptanceError("surcharge income account must be an active income account");
   }
 }
@@ -106,8 +106,8 @@ export async function validateConfiguredSurchargeRule(
       from payment_surcharge_rules
      where org_id = ${orgId} and id = ${ruleId}
      limit 1
-  `);
-  const rule = row.rows[0];
+  `, "objects");
+  const rule = row[0];
   if (!rule) {
     throw new PaymentAcceptanceError(
       `surcharge rule ${ruleId} was not found in this organization; ` +
@@ -231,8 +231,8 @@ export async function resolveSurcharge(
          and (provider is null or provider = ${opts.provider})
          and payment_method in ('all', ${providerPaymentMethod(opts.provider)})
        limit 1
-    `));
-    const rule = r.rows[0];
+    `, "objects"));
+    const rule = r[0];
     // Unreachable unless the rule changed between the validation above and
     // this read: fail closed on the explicit reference rather than falling
     // back to whatever rule happens to match.
@@ -258,8 +258,8 @@ export async function resolveSurcharge(
                effective_from desc,
                id desc
      limit 1
-  `));
-  const rule = r.rows[0];
+  `, "objects"));
+  const rule = r[0];
   if (!rule) return { amount: "0", ruleId: null, feeIncomeAccountId: null };
   await validateSurchargeIncomeAccount(orgId, rule.fee_income_account_id);
   // The quote must be collectible: currency is required so the fee arrives

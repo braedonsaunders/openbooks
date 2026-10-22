@@ -125,12 +125,10 @@ test(
     await withHarness(setup, async ({ org, reader }) => {
       const worker = await seedEmployment(org.orgId, org.subsidiaryId);
       const componentId = randomUUID();
-      const clearing = (
-        await db.execute<{ id: string }>(sql`insert into accounts
+      const clearing = (await db.execute<{ id: string }>(sql`insert into accounts
       (org_id, number, name, type, is_active, is_summary)
       values (${org.orgId}, '1455', 'Recognition benefit clearing', 'asset_current_other', true, false)
-      returning id`)
-      ).rows[0]!;
+      returning id`, "objects"))[0]!;
       await seedPayrollComponent(org.orgId, componentId, {
         code: "RECOGNITION",
         name: "Recognition benefit",

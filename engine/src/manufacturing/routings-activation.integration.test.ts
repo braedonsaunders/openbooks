@@ -33,17 +33,17 @@ async function setup(): Promise<Fixture> {
   await withBypassContext(async () => {
     const account = await db.execute(sql`insert into accounts
       (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
-      values(${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`);
-    assert.equal(account.rows.length, 1);
+      values(${wipId},${org.orgId},'1210','Manufacturing WIP','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true) returning id`, "objects");
+    assert.equal(account.length, 1);
     const result = await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true,"inventory":true,"warehousing":true}'::jsonb),'{controlAccounts}',
-      coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('mfgWip',${wipId}::text),true) where id=${org.orgId} returning id`);
-    assert.equal(result.rows.length, 1);
+      coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('mfgWip',${wipId}::text),true) where id=${org.orgId} returning id`, "objects");
+    assert.equal(result.length, 1);
   });
-  const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`))).rows[0]!.id);
+  const departmentId = String((await withBypassContext(() => db.execute(sql`insert into departments (org_id, name) values (${org.orgId}, 'Assembly') returning id`, "objects")))[0]!.id);
   const rate = await withBypassContext(() => db.execute(sql`insert into labor_cost_rates
     (org_id, department_id, currency, rate, basis, annual_hours, effective_from, is_active, created_by, updated_by)
-    values (${org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${actorId}, ${actorId}) returning id`));
-  assert.equal(rate.rows.length, 1);
+    values (${org.orgId}, ${departmentId}, 'CAD', '0', 'hour', '2080', '2026-01-01', true, ${actorId}, ${actorId}) returning id`, "objects"));
+  assert.equal(rate.length, 1);
   return { org, actorId, departmentId };
 }
 
@@ -95,7 +95,7 @@ test(
       assert.equal(before.routings.some((row) => row.value === routingId), false);
       const after = await submitRoutingActivation(f, routingId);
       assert.equal(after.status, "active");
-      const change = await withBypassContext(async () => (await db.execute<{ status: string; submitted_by: string; approved_by: string; payload: unknown; result: unknown }>(sql`select status, submitted_by, approved_by, payload, result from financial_changes where org_id=${f.org.orgId} and subject_id=${routingId} and operation='routing_revision_activation'`)).rows[0]);
+      const change = await withBypassContext(async () => (await db.execute<{ status: string; submitted_by: string; approved_by: string; payload: unknown; result: unknown }>(sql`select status, submitted_by, approved_by, payload, result from financial_changes where org_id=${f.org.orgId} and subject_id=${routingId} and operation='routing_revision_activation'`, "objects"))[0]);
       assert.equal(change?.status, "applied");
       assert.equal(change?.approved_by, f.actorId);
       assert.equal(change?.submitted_by, f.actorId);
@@ -132,11 +132,11 @@ test(
       const next = await run(f.org.orgId, (tx) => createNextRoutingVersion(tx, f.org.orgId, f.actorId, first));
       await run(f.org.orgId, (tx) => updateRouting(tx, f.org.orgId, f.actorId, String(next.id), { effectiveFrom: "2026-06-01", effectiveTo: null }));
       await submitRoutingActivation(f, String(next.id));
-      const rows = await withBypassContext(async () => (await db.execute<{ id: string; status: string; effective_to: string | null }>(sql`select id, status, effective_to::text as effective_to from mfg_routings where org_id=${f.org.orgId} and produced_item_id=${f.org.items.assembly} order by version`)).rows);
+      const rows = await withBypassContext(async () => await db.execute<{ id: string; status: string; effective_to: string | null }>(sql`select id, status, effective_to::text as effective_to from mfg_routings where org_id=${f.org.orgId} and produced_item_id=${f.org.items.assembly} order by version`, "objects"));
       assert.deepEqual(rows.map((row) => [row.status, row.effective_to]), [["active", "2026-06-01"], ["active", null]]);
-      const applied = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from financial_changes where org_id=${f.org.orgId} and subject_id=${String(next.id)} and operation='routing_revision_activation' and status='applied'`)).rows);
+      const applied = await withBypassContext(async () => await db.execute<{ id: string }>(sql`select id from financial_changes where org_id=${f.org.orgId} and subject_id=${String(next.id)} and operation='routing_revision_activation' and status='applied'`, "objects"));
       assert.equal(applied.length, 1);
-      const supersession = await withBypassContext(async () => (await db.execute<{ changes: { before: { effectiveTo: string | null }; after: { effectiveTo: string; approvalChangeId: string } } }>(sql`select changes from audit_log where org_id=${f.org.orgId} and table_name='mfg_routings' and row_id=${first} and action='update' and changes->'after'->>'effectiveTo'='2026-06-01'`)).rows);
+      const supersession = await withBypassContext(async () => await db.execute<{ changes: { before: { effectiveTo: string | null }; after: { effectiveTo: string; approvalChangeId: string } } }>(sql`select changes from audit_log where org_id=${f.org.orgId} and table_name='mfg_routings' and row_id=${first} and action='update' and changes->'after'->>'effectiveTo'='2026-06-01'`, "objects"));
       assert.equal(supersession.length, 1);
       assert.equal(supersession[0]!.changes.before.effectiveTo, null);
       assert.equal(supersession[0]!.changes.after.approvalChangeId, applied[0]!.id);
@@ -159,7 +159,7 @@ test(
       subsidiaryId: f.org.subsidiaryId, reason: "Approve the configured production revision", idempotencyKey: randomUUID(),
     }));
       await submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId);
-      const gates = (await withBypassContext(async () => db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`))).rows;
+      const gates = await withBypassContext(async () => db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${proposal.changeId} and status='pending'`, "objects"));
       assert.equal(gates.length, 1);
       await decideGate({ gateId: gates[0]!.id, userId: approver, decision: "approved" });
       const activated = await run(f.org.orgId, (tx) => activateRouting(tx, f.org.orgId, f.actorId, routingId, proposal.changeId));
@@ -193,10 +193,10 @@ test(
       );
       const current = await run(f.org.orgId, (tx) =>
         tx.execute<{ status: string }>(
-          sql`select status from financial_changes where org_id=${f.org.orgId} and id=${proposal.changeId}`,
+          sql`select status from financial_changes where org_id=${f.org.orgId} and id=${proposal.changeId}`, "objects",
         ),
       );
-      assert.equal(current.rows[0]?.status, "draft");
+      assert.equal(current[0]?.status, "draft");
       await rejected(
         run(f.org.orgId, (tx) => activateRouting(tx, f.org.orgId, f.actorId, routingId, proposal.changeId)),
         "routing_approval_required",
@@ -221,10 +221,10 @@ test(
       await withBypassContext(() => submitFinancialChange(f.org.orgId, proposal.changeId, f.actorId));
       const ready = await run(f.org.orgId, (tx) =>
         tx.execute<{ status: string }>(
-          sql`select status from financial_changes where org_id=${f.org.orgId} and id=${proposal.changeId}`,
+          sql`select status from financial_changes where org_id=${f.org.orgId} and id=${proposal.changeId}`, "objects",
         ),
       );
-      assert.equal(ready.rows[0]?.status, "approved");
+      assert.equal(ready[0]?.status, "approved");
       const approver = await withBypassContext(() => createWorkOperator(f.org.orgId, "Engineering approver", ["manufacturing.manage"]));
       await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "financial_change", assignees: [{ type: "user", userId: approver }], mode: "any", preventSelfApproval: true }));
       const second = await draftRouting(f, f.org.items.standard);
@@ -232,7 +232,7 @@ test(
       subsidiaryId: f.org.subsidiaryId, reason: "Approve the configured production revision", idempotencyKey: randomUUID(),
     }));
       await withBypassContext(() => submitFinancialChange(f.org.orgId, governed.changeId, f.actorId));
-      const gates = (await withBypassContext(async () => db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${governed.changeId} and status='pending'`))).rows;
+      const gates = await withBypassContext(async () => db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${f.org.orgId} and subject_kind='financial_change' and subject_id=${governed.changeId} and status='pending'`, "objects"));
       assert.equal(gates.length, 1);
     } finally {
       await dropScratchOrg(f.org.orgId);

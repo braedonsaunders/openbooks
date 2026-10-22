@@ -130,36 +130,36 @@ export async function loadAdminUsers(
         left join parties p on p.id = u.party_id and p.org_id = u.org_id
        where ${where}
        order by ${orderBy}
-       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}`),
-    db.execute<{ c: number }>(sql`select count(*)::int as c from users u where ${where}`),
+       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}`, 'objects'),
+    db.execute<{ c: number }>(sql`select count(*)::int as c from users u where ${where}`, 'objects'),
     db.execute<{ is_active: boolean; c: number }>(sql`
       select u.is_active, count(*)::int as c from users u
-       where ${searchWhere} group by u.is_active`),
+       where ${searchWhere} group by u.is_active`, 'objects'),
     db.execute<{ id: string; key: string; name: string; is_built_in: boolean; description: string | null }>(sql`
       select id, key, name, is_built_in, description from app_roles
        where org_id = ${orgId}
-       order by is_built_in desc, name asc`),
+       order by is_built_in desc, name asc`, 'objects'),
   ])
 
-  const users = rowsR.rows
-  const total = Number(countR.rows[0]?.c ?? 0)
+  const users = rowsR
+  const total = Number(countR[0]?.c ?? 0)
   const statusCounts = Object.fromEntries(
-    statusCountsR.rows.map((r) => [r.is_active ? 'active' : 'inactive', Number(r.c)]),
+    statusCountsR.map((r) => [r.is_active ? 'active' : 'inactive', Number(r.c)]),
   ) as Record<string, number>
-  const allRoles = rolesR.rows
+  const allRoles = rolesR
 
   const userIds = users.map((u) => u.id)
   const assignmentsR =
     userIds.length === 0
-      ? { rows: [] as { user_id: string; role_id: string; role_name: string }[] }
+      ? [] as { user_id: string; role_id: string; role_name: string }[]
       : await db.execute<{ user_id: string; role_id: string; role_name: string }>(sql`
           select a.user_id, r.id as role_id, r.name as role_name
             from role_assignments a
             join app_roles r on r.id = a.role_id and r.org_id = a.org_id
            where a.org_id = ${orgId} and a.user_id = any(${`{${userIds.join(',')}}`}::uuid[])
-           order by r.name asc`)
+           order by r.name asc`, 'objects')
   const rolesByUser = new Map<string, { id: string; name: string }[]>()
-  for (const a of assignmentsR.rows) {
+  for (const a of assignmentsR) {
     const list = rolesByUser.get(a.user_id) ?? []
     list.push({ id: a.role_id, name: a.role_name })
     rolesByUser.set(a.user_id, list)

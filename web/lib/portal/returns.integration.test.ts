@@ -21,8 +21,8 @@ async function enablePortal(orgId: string): Promise<void> {
   const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
       || '{"customerPortal": true, "warehousing": true, "fulfillment": true, "returnAuthorizations": true}'::jsonb)
-     where id = ${orgId} returning id`))
-  assert.equal(result.rows.length, 1)
+     where id = ${orgId} returning id`, 'objects'))
+  assert.equal(result.length, 1)
 }
 
 async function postedSale(org: ScratchOrg, quantity: string): Promise<{ documentId: string; issueId: string }> {
@@ -39,11 +39,11 @@ async function postedSale(org: ScratchOrg, quantity: string): Promise<{ document
                                 stock_location_id, custom, tax_overridden)
     values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, ${quantity},
             '10', '100', '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`)
-  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`)
-  assert.equal(approved.rows.length, 1)
+  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`, 'objects')
+  assert.equal(approved.length, 1)
   await postDocument(documentId, postingDeps(org))
   const issue = (await db.execute<{ id: string }>(sql`
-    select id from inventory_movements where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0]
+    select id from inventory_movements where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, 'objects'))[0]
   assert.ok(issue)
   return { documentId, issueId: issue.id }
 }
@@ -82,20 +82,20 @@ test('a portal return request creates an RMA through the standard pipeline', { s
     assert.equal(authorization.stage, 'requested')
     assert.match(authorization.documentNumber, /^RMA/)
     const stored = (await withBypassContext(() => db.execute<{ memo: string | null }>(sql`
-      select memo from documents where id = ${authorization.id} and org_id = ${org.orgId}`))).rows[0]!
+      select memo from documents where id = ${authorization.id} and org_id = ${org.orgId}`, 'objects')))[0]!
     assert.match(stored.memo ?? '', /damaged/)
     assert.match(stored.memo ?? '', /store_credit/)
-    const events = (await withBypassContext(() => db.execute<{ action: string; reason_code: string | null; detail: unknown }>(sql`
+    const events = await withBypassContext(() => db.execute<{ action: string; reason_code: string | null; detail: unknown }>(sql`
       select action, reason_code, detail from customer_portal_events
-       where org_id = ${org.orgId} and party_id = ${org.customerId} and action = 'return_requested'`))).rows
+       where org_id = ${org.orgId} and party_id = ${org.customerId} and action = 'return_requested'`, 'objects'))
     assert.equal(events.length, 1)
     assert.equal(events[0]!.reason_code, 'damaged')
     const detail = events[0]!.detail as Record<string, unknown>
     assert.equal(detail['resolution'], 'store_credit')
     assert.equal(detail['rmaId'], authorization.id)
     const ungated = await withBypassContext(() => db.execute<{ status: string }>(sql`
-      select status from documents where org_id=${org.orgId} and id=${authorization.id}`))
-    assert.equal(ungated.rows[0]!.status, 'approved')
+      select status from documents where org_id=${org.orgId} and id=${authorization.id}`, 'objects'))
+    assert.equal(ungated[0]!.status, 'approved')
     await withBypassContext(async () => {
       const actors = await seedFlowActors(org.orgId)
       await grantScratchPermissions(org.orgId, actors.approver1Id, ['orders.fulfill'])
@@ -107,20 +107,20 @@ test('a portal return request creates an RMA through the standard pipeline', { s
       lines: [{ sourceIssueMovementId: sale.issueId, quantity: '1' }],
     }))
     const pending = await withBypassContext(() => db.execute<{ status: string }>(sql`
-      select status from documents where org_id=${org.orgId} and id=${gated.id}`))
-    assert.equal(pending.rows[0]!.status, 'pending_approval')
+      select status from documents where org_id=${org.orgId} and id=${gated.id}`, 'objects'))
+    assert.equal(pending[0]!.status, 'pending_approval')
     const request = (await withBypassContext(() => db.execute<{ request: Record<string, unknown> }>(sql`
-      select custom->'portalRequest' as request from documents where org_id=${org.orgId} and id=${gated.id}`))).rows[0]!.request
+      select custom->'portalRequest' as request from documents where org_id=${org.orgId} and id=${gated.id}`, 'objects')))[0]!.request
     const sourceValid = (subjectOrg: string, sourceRequest: Record<string, unknown>) => withOrg(org.orgId, async () =>
       (await db.execute<{ valid: boolean }>(sql`select public.flow_portal_return_source_valid(
-        ${subjectOrg}::uuid,${gated.id}::uuid,${JSON.stringify(sourceRequest)}::jsonb) as valid`)).rows[0]!.valid)
+        ${subjectOrg}::uuid,${gated.id}::uuid,${JSON.stringify(sourceRequest)}::jsonb) as valid`, 'objects'))[0]!.valid)
     assert.equal(await sourceValid(org.orgId, request), true)
     assert.equal(await sourceValid(randomUUID(), request), false)
     assert.equal(await sourceValid(org.orgId, { ...request, partyId: randomUUID() }), false)
     assert.equal(await sourceValid(org.orgId, { ...request, linkId: randomUUID() }), false)
     const receipt = (await withBypassContext(() => db.execute<{ actor_id: string | null; source: string }>(sql`
       select actor_id,context->>'event_source' as source from flow_submissions
-      where org_id=${org.orgId} and subject_id=${gated.id}`))).rows[0]!
+      where org_id=${org.orgId} and subject_id=${gated.id}`, 'objects')))[0]!
     assert.equal(receipt.actor_id, null)
     assert.equal(receipt.source, 'portal')
     await revokePortalSession(token)
@@ -156,7 +156,7 @@ test('a portal return outside the configured window refuses by name', { skip: !D
     )
     const rmas = (await withBypassContext(() => db.execute<{ count: string }>(sql`
       select count(*)::text as count from documents
-       where org_id = ${org.orgId} and kind = 'rma'`))).rows[0]!.count
+       where org_id = ${org.orgId} and kind = 'rma'`, 'objects')))[0]!.count
     assert.equal(rmas, '0')
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)) }
 })

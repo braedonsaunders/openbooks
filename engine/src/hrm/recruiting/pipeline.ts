@@ -79,7 +79,7 @@ async function loadTemplateStages(
   orgId: string,
   templateId: string,
 ): Promise<PipelineStageDTO[]> {
-  const rows = (await exec.execute<{
+  const rows = await exec.execute<{
     id: string;
     templateId: string;
     position: number;
@@ -93,7 +93,7 @@ async function loadTemplateStages(
       from hrm_pipeline_stages
      where org_id = ${orgId} and template_id = ${templateId}
      order by position
-  `)).rows;
+  `, "objects");
   return rows.map(toStageDTO);
 }
 
@@ -111,7 +111,7 @@ export async function loadPipelineTemplate(
     select id, name, is_default as "isDefault", is_active as "isActive"
       from hrm_pipeline_templates
      where org_id = ${orgId} and id = ${templateId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   return { ...row, stages: await loadTemplateStages(exec, orgId, templateId) };
 }
@@ -124,7 +124,7 @@ async function loadDefaultPipelineTemplate(
     select id from hrm_pipeline_templates
      where org_id = ${orgId} and is_default and is_active
      order by created_at limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   return loadPipelineTemplate(exec, orgId, row.id);
 }
@@ -178,7 +178,7 @@ export async function ensureDefaultPipelineTemplate(
   const id = (await exec.execute<{ id: string }>(sql`
     select id from hrm_pipeline_templates
      where org_id = ${orgId} and name = ${DEFAULT_TEMPLATE_NAME} limit 1
-  `)).rows[0]?.id;
+  `, "objects"))[0]?.id;
   if (!id) {
     throw new RecruitingError(
       "REFUSED",
@@ -279,7 +279,7 @@ export async function createPipelineTemplate(query: CreatePipelineTemplateQuery)
       insert into hrm_pipeline_templates (org_id, name, is_default, is_active, created_by, updated_by)
       values (${orgId}, ${query.name as string}, false, true, ${actorId}, ${actorId})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw new RecruitingError("REFUSED", "the pipeline template was not stored — no row was written; retry the request");
     }

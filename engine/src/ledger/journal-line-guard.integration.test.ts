@@ -60,9 +60,9 @@ async function postBalanced(org: Org, number: string): Promise<string> {
 
 async function lineCount(entry: string): Promise<number> {
   const r = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from journal_lines where entry_id = ${entry}`,
+    sql`select count(*)::int as n from journal_lines where entry_id = ${entry}`, "objects",
   );
-  return r.rows[0]!.n;
+  return r[0]!.n;
 }
 
 /**
@@ -151,9 +151,9 @@ test("retargeting a posted line at another tenant's entry raises a foreign-key e
  */
 test("jl_guard source contract pins every inherited check", { skip: !DB }, async () => {
   const r = await db.execute<{ definition: string }>(
-    sql`select pg_get_functiondef('public.jl_guard()'::regprocedure) as definition`,
+    sql`select pg_get_functiondef('public.jl_guard()'::regprocedure) as definition`, "objects",
   );
-  const body = r.rows[0]!.definition;
+  const body = r[0]!.definition;
   assert.match(body, /where id = v_entry and org_id = v_line_org/, "tenant-coherent parent lookup");
   assert.match(body, /journal entry % does not exist in organization %/, "23503 tenant-coherence error");
   assert.match(body, /old\.entry_id/, "original-parent lookup on UPDATE/DELETE");

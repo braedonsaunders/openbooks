@@ -52,10 +52,10 @@ export async function employeesNearLimit(
      group by l.plan_id, pl.code, pl.name, pl.unit, l.employee_party_id, p.display_name
      having sum(l.amount) <> 0
      order by pl.code, p.display_name
-  `));
+  `, "objects"));
 
   const results: NearLimitEmployee[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const limit = await resolvePlanLimit(db, orgId, row.plan_id, row.employee_party_id, onDate);
     if (!limit) continue;
     const balance = roundMoney(String(row.balance), 4);
@@ -129,12 +129,12 @@ export async function milestonesReachedInPeriod(
      where t.org_id = ${orgId} and t.is_active and t.effective_from <= ${to}::date
        and (t.employer_subsidiary_id is null or t.employer_subsidiary_id=e.employer_subsidiary_id)
        and (t.effective_to is null or t.effective_to >= ${from}::date)
-  `);
+  `, "objects");
   const result: ServiceMilestone[] = [];
   const seen = new Set<string>();
   const effectiveAt = (date: string, start: unknown, end: unknown): boolean =>
     (start == null || date >= String(start).slice(0, 10)) && (end == null || date <= String(end).slice(0, 10));
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const baselines: ServiceCreditBaseline[] = [];
     if (row.credit_id) baselines.push({ id: String(row.credit_id), convention: row.convention as ServiceCreditBaseline['convention'],
       asOfDate: String(row.as_of_date).slice(0, 10), creditedDays: row.credited_days == null ? null : String(row.credited_days),
@@ -144,9 +144,9 @@ export async function milestonesReachedInPeriod(
       const milestoneDate = serviceCreditMilestoneDate(baseline, Number(row.after_months));
       if (milestoneDate < from || milestoneDate > to || !effectiveAt(milestoneDate, row.tier_from, row.tier_to)) continue;
       if (baseline.id && !effectiveAt(milestoneDate, row.credit_from, row.credit_to)) continue;
-      if (!baseline.id && rows.rows.some((candidate) => candidate.employment_id === row.employment_id && candidate.credit_id && effectiveAt(milestoneDate, candidate.credit_from, candidate.credit_to))) continue;
+      if (!baseline.id && rows.some((candidate) => candidate.employment_id === row.employment_id && candidate.credit_id && effectiveAt(milestoneDate, candidate.credit_from, candidate.credit_to))) continue;
       // A scoped ladder replaces the organization default only while that ladder is effective.
-      if (row.tier_employer == null && rows.rows.some((candidate) => candidate.employment_id === row.employment_id
+      if (row.tier_employer == null && rows.some((candidate) => candidate.employment_id === row.employment_id
         && candidate.tier_employer === row.employer_subsidiary_id && candidate.plan_id === row.plan_id && candidate.component_id === row.component_id
         && effectiveAt(milestoneDate, candidate.tier_from, candidate.tier_to))) continue;
       const key = `${String(row.employment_id)}:${String(row.tier_id)}:${milestoneDate}`;

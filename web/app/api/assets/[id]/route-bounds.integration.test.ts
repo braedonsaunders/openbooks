@@ -58,7 +58,7 @@ async function fixture(): Promise<{ orgId: string; assetId: string; token: strin
             'Press', 'draft', ${org.date}, '12000.0000', '2000.0000', 'manual', '{}'::jsonb)`));
   const token = (await withBypassContext(() => db.execute<{ updated_at: string }>(sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
-      from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`))).rows[0]!.updated_at;
+      from fixed_assets where id = ${assetId} and org_id = ${org.orgId}`, "objects")))[0]!.updated_at;
   return { orgId: org.orgId, assetId, token };
 }
 
@@ -75,10 +75,10 @@ const patch = (assetId: string, body: unknown) =>
   );
 
 async function assetOf(orgId: string, assetId: string) {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ acquired_on: string; acquisition_cost: string }>(
-      sql`select acquired_on::text as acquired_on, acquisition_cost::text as acquisition_cost from fixed_assets where org_id = ${orgId} and id = ${assetId}`,
-    ))).rows;
+      sql`select acquired_on::text as acquired_on, acquisition_cost::text as acquisition_cost from fixed_assets where org_id = ${orgId} and id = ${assetId}`, "objects",
+    ));
   return rows[0]!;
 }
 

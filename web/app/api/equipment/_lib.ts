@@ -19,8 +19,8 @@ async function loadEquipmentRows(
      where e.id = ${id} and e.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowedSubsidiaryIds)}
      for share of e
-  `)))
-  if (!unit.rows[0]) return null
+  `, 'objects')))
+  if (!unit[0]) return null
   const metrics = ((await executor.execute(sql`
     select
       coalesce((select sum(dl.base_quantity) from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
@@ -45,8 +45,8 @@ async function loadEquipmentRows(
         join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id and ds.org_id = eu.org_id
         join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id and dsl.org_id = ds.org_id
         where eu.id = ${id} and eu.org_id = ${orgId} and dsl.posted_amount is not null), 0) as depreciation
-  `)))
-  return { unit: unit.rows[0], metrics: metrics.rows[0] }
+  `, 'objects')))
+  return { unit: unit[0], metrics: metrics[0] }
 }
 
 export async function loadEquipment(

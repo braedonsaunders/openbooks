@@ -75,10 +75,10 @@ export async function deleteSetupRecord(
         if (refusal) throw new SetupWriteRefusal(refusal, 409)
         const retired = await tx.execute<Record<string, unknown>>(sql`update ${sql.raw(entity.table)}
           set is_active=false ${entity.actorCols ? sql`, updated_by=${actorId}, updated_at=now()` : sql``}
-          where ${sql.raw(idColumn(entity))}=${id}${orgFilter} returning *`)
-        if (retired.rows.length !== 1) return false
+          where ${sql.raw(idColumn(entity))}=${id}${orgFilter} returning *`, 'objects')
+        if (retired.length !== 1) return false
         await audit({orgId: entity.orgScoped ? orgId : null, table: entity.table, rowId: id,
-          action: 'update', changes: {before, after: retired.rows[0], reason: auditReason.reason ?? 'Archive configuration record'}, actorId}, tx)
+          action: 'update', changes: {before, after: retired[0], reason: auditReason.reason ?? 'Archive configuration record'}, actorId}, tx)
         return true
       }
       if (entity.key === 'stock-locations') await assertStockLocationDeletionAllowed(tx, orgId, id)
@@ -88,8 +88,8 @@ export async function deleteSetupRecord(
         if (refusal) throw new SetupWriteRefusal(refusal, 409)
       }
       if (entity.key === 'account-groups') {
-        const pinned = await tx.execute(sql`select 1 from account_group_members where group_id = ${id} and org_id = ${orgId} limit 1`)
-        if (pinned.rows.length > 0) throw new SetupWriteRefusal('account group still has pinned accounts — unpin or reassign them before deleting the group', 409)
+        const pinned = await tx.execute(sql`select 1 from account_group_members where group_id = ${id} and org_id = ${orgId} limit 1`, 'objects')
+        if (pinned.length > 0) throw new SetupWriteRefusal('account group still has pinned accounts — unpin or reassign them before deleting the group', 409)
       }
       // Memberships belong to this group. External references still refuse the
       // parent deletion and roll these removals back with the audit transaction.
@@ -97,8 +97,8 @@ export async function deleteSetupRecord(
       const deleted = ((await tx.execute(sql`
         delete from ${sql.raw(entity.table)}
          where ${sql.raw(idColumn(entity))} = ${id}${orgFilter}
-        returning ${sql.raw(idColumn(entity))} as id`)))
-      if (deleted.rows.length === 0) return false
+        returning ${sql.raw(idColumn(entity))} as id`, 'objects')))
+      if (deleted.length === 0) return false
       // The audit is part of the delete transaction. If audit_log rejects the
       // event, the setup row must roll back with it rather than disappearing
       // without evidence.

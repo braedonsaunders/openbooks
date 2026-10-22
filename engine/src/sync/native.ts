@@ -185,10 +185,8 @@ export async function buildNativeContext(
   refKey: string,
   baseCurrency: string,
 ): Promise<NativeContext> {
-  const [org] = (
-    (await db.execute<{ ctrl: Record<string, string> }>(sql`
-      select settings->'controlAccounts' as ctrl from orgs where id = ${orgId}`))
-  ).rows;
+  const [org] = await db.execute<{ ctrl: Record<string, string> }>(sql`
+      select settings->'controlAccounts' as ctrl from orgs where id = ${orgId}`, "objects");
   const ctrl = org?.ctrl ?? {};
   const control: PostingDeps["control"] = {
     ar: ctrl.ar!,
@@ -202,11 +200,9 @@ export async function buildNativeContext(
   const accountByRef = new Map<string, { id: string; number: string | null; name: string; type: string }>();
   const accountRefById = new Map<string, string>();
   const ownedAccountIds = new Set<string>();
-  for (const r of (
-    (await db.execute<{ id: string; number: string | null; name: string; type: string; ref: string | null }>(sql`
+  for (const r of (await db.execute<{ id: string; number: string | null; name: string; type: string; ref: string | null }>(sql`
       select id, number, name, type, custom->>${refKey} as ref
-        from accounts where org_id = ${orgId}`))
-  ).rows) {
+        from accounts where org_id = ${orgId}`, "objects"))) {
     ownedAccountIds.add(r.id);
     if (r.ref) {
       accountByRef.set(r.ref, { id: r.id, number: r.number, name: r.name, type: r.type });
@@ -224,8 +220,8 @@ export async function buildNativeContext(
   const idMap = async (table: string): Promise<Map<string, string>> => {
     const rows = (await db.execute<{ id: string; ref: string }>(sql`
       select id, custom->>${refKey} as ref from ${sql.raw(table)}
-       where org_id = ${orgId} and custom->>${refKey} is not null`));
-    return new Map(rows.rows.map((r) => [r.ref, r.id]));
+       where org_id = ${orgId} and custom->>${refKey} is not null`, "objects"));
+    return new Map(rows.map((r) => [r.ref, r.id]));
   };
   const mergeAwarePartyMap = async (
     partyOrgId: string,
@@ -237,8 +233,8 @@ export async function buildNativeContext(
                where s.org_id = p.org_id and s.id = (p.custom->'merged_into'->>'survivor')::uuid
                limit 1) as survivor
         from parties p
-       where p.org_id = ${partyOrgId} and p.custom->>${partyRefKey} is not null`));
-    const byId = new Map(rows.rows.map((r) => [r.id, r]));
+       where p.org_id = ${partyOrgId} and p.custom->>${partyRefKey} is not null`, "objects"));
+    const byId = new Map(rows.map((r) => [r.id, r]));
     const resolve = (id: string, seen: Set<string>): string => {
       if (seen.has(id)) return id;
       seen.add(id);
@@ -247,7 +243,7 @@ export async function buildNativeContext(
       return resolve(row.survivor, seen);
     };
     const map = new Map<string, string>();
-    for (const row of rows.rows) {
+    for (const row of rows) {
       map.set(row.ref, row.survivor ? resolve(row.survivor, new Set([row.id])) : row.id);
     }
     return map;
@@ -270,8 +266,8 @@ export async function buildNativeContext(
       join segment_values sv on sv.segment_id = sd.id and sv.org_id = sd.org_id
      where sd.org_id = ${orgId} and sd.source_kind = 'custom'
        and sv.custom->>${refKey} is not null
-  `));
-  for (const row of segmentRows.rows) {
+  `, "objects"));
+  for (const row of segmentRows) {
     const values = segmentValueByRef.get(row.key) ?? new Map<string, string>();
     values.set(row.ref, row.id);
     segmentValueByRef.set(row.key, values);
@@ -279,13 +275,11 @@ export async function buildNativeContext(
 
   const taxByRate = new Map<string, { id: string; rate: string }>();
   const taxCodeByRef = new Map<string, string>();
-  for (const r of (
-    (await db.execute<{ id: string; rate: string | null; ref: string | null }>(sql`
+  for (const r of (await db.execute<{ id: string; rate: string | null; ref: string | null }>(sql`
       select tc.id, tr.rate_percent as rate, tc.custom->>${refKey} as ref from tax_codes tc
         left join tax_rates tr on tr.tax_code_id = tc.id and tr.org_id = tc.org_id
        where tc.org_id = ${orgId}
-       order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`))
-  ).rows) {
+       order by (tc.custom->>${refKey} is null), tc.created_at, tc.id`, "objects"))) {
     const rate = r.rate ?? "0";
     const key = normalizeMoney(rate);
     if (!taxByRate.has(key)) taxByRate.set(key, { id: r.id, rate });
@@ -294,8 +288,7 @@ export async function buildNativeContext(
     if (r.ref) taxCodeByRef.set(r.ref, r.id);
   }
 
-  const periods = (
-    (await db.execute<{
+  const periods = await db.execute<{
         id: string;
         starts_on: string;
         ends_on: string;
@@ -306,8 +299,7 @@ export async function buildNativeContext(
              custom->>${refKey} as source_ref
         from accounting_periods
        where org_id = ${orgId}
-       order by starts_on, ends_on, period_number`))
-  ).rows;
+       order by starts_on, ends_on, period_number`, "objects");
   const periodFor = (d: string) =>
     periods.find(
       (period) =>
@@ -332,8 +324,8 @@ export async function buildNativeContext(
     });
   }
   const root = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`));
-  if (!root.rows[0]) throw new Error(`org ${orgId} has no root subsidiary`);
+    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`, "objects"));
+  if (!root[0]) throw new Error(`org ${orgId} has no root subsidiary`);
 
   return {
     orgId,
@@ -348,7 +340,7 @@ export async function buildNativeContext(
     itemByRef,
     subsidiaryByRef,
     segmentValueByRef,
-    rootSubsidiaryId: root.rows[0].id,
+    rootSubsidiaryId: root[0].id,
     taxByRate,
     taxCodeByRef,
     periodByRef,

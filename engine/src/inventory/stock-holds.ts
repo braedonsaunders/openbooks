@@ -30,15 +30,12 @@ export async function setStockHold(
     if (!(await actorHasPermission(db, orgId, actorId, "items.manage")))
       throw new ScopeNotFoundError();
     const table = input.kind === "lot" ? sql`lots` : sql`serials`;
-    const subject = (
-      await db.execute<{ item_id: string }>(
-        sql`select item_id from ${table} where org_id=${orgId} and id=${input.id}`,
-      )
-    ).rows[0];
+    const subject = (await db.execute<{ item_id: string }>(
+        sql`select item_id from ${table} where org_id=${orgId} and id=${input.id}`, "objects",
+      ))[0];
     if (!subject)
       throw new InventoryNotFoundError("Stock identifier not found");
-    const positions = (
-      await db.execute<{
+    const positions = await db.execute<{
         item_id: string;
         stock_location_id: string;
         subsidiary_id: string;
@@ -49,8 +46,7 @@ export async function setStockHold(
       ) positions
       where org_id=${orgId} and item_id=${subject.item_id}
         and ${input.kind === "lot" ? sql`lot_id` : sql`serial_id`}=${input.id}
-      order by item_id,stock_location_id,subsidiary_id`)
-    ).rows;
+      order by item_id,stock_location_id,subsidiary_id`, "objects");
     for (const p of positions)
       await lockInventoryPosition(db, p.item_id, p.stock_location_id);
     const allowed = await lockActorCommandAuthority(
@@ -67,27 +63,23 @@ export async function setStockHold(
     )
       throw new InventoryNotFoundError("Stock identifier not found");
     await assertInventoryFeature(db, orgId);
-    const before = (
-      await db.execute<{
+    const before = (await db.execute<{
         hold_reason: string | null;
       }>(sql`select hold_reason from ${table}
-      where org_id=${orgId} and id=${input.id} for update`)
-    ).rows[0];
+      where org_id=${orgId} and id=${input.id} for update`, "objects"))[0];
     if (!before) throw new InventoryNotFoundError("Stock identifier not found");
     if (allowed !== null) {
-      const owners = (
-        await db.execute<{
+      const owners = await db.execute<{
           subsidiary_id: string;
         }>(sql`select distinct subsidiary_id from (
         select org_id,item_id,lot_id,serial_id,subsidiary_id from inventory_movements
         union all select org_id,item_id,lot_id,serial_id,subsidiary_id from consignment_stock
       ) positions where org_id=${orgId} and item_id=${subject.item_id}
-        and ${input.kind === "lot" ? sql`lot_id` : sql`serial_id`}=${input.id}`)
-      ).rows;
+        and ${input.kind === "lot" ? sql`lot_id` : sql`serial_id`}=${input.id}`, "objects");
       if (owners.some((owner) => !allowed.has(owner.subsidiary_id)))
         throw new InventoryNotFoundError("Stock identifier not found");
     }
-    const inspectionReason=(await db.execute<{reason:string|null}>(sql`select ${inspectionHoldReason(sql`${orgId}`,input.kind==='lot'?sql`${input.id}::uuid`:sql`null::uuid`,input.kind==='serial'?sql`${input.id}::uuid`:sql`null::uuid`)} as reason`)).rows[0]?.reason??null;
+    const inspectionReason=(await db.execute<{reason:string|null}>(sql`select ${inspectionHoldReason(sql`${orgId}`,input.kind==='lot'?sql`${input.id}::uuid`:sql`null::uuid`,input.kind==='serial'?sql`${input.id}::uuid`:sql`null::uuid`)} as reason`, "objects"))[0]?.reason??null;
     if (!input.held && before.hold_reason===null && inspectionReason!==null) throw new InventoryError("This stock is held by an inspection. Complete its inspection or governed quality disposition in Manufacturing; a manual release cannot clear it.");
     if ((before.hold_reason !== null) === input.held)
       throw new InventoryError(
@@ -96,14 +88,14 @@ export async function setStockHold(
     const after = input.held ? reason : null;
     const changed =
       await db.execute(sql`update ${table} set hold_reason=${after}, updated_at=now(),updated_by=${actorId}
-      where org_id=${orgId} and id=${input.id} returning id`);
-    if (!changed.rows.length)
+      where org_id=${orgId} and id=${input.id} returning id`, "objects");
+    if (!changed.length)
       throw new InventoryError("Stock hold changed — reload and retry");
     const audit =
       await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${orgId},${input.kind === "lot" ? "lots" : "serials"},${input.id},'update',
-        ${JSON.stringify({ operation: input.held ? "hold" : "release", reason, before, after: { hold_reason: after } })}::jsonb,${actorId}) returning id`);
-    if (!audit.rows.length)
+        ${JSON.stringify({ operation: input.held ? "hold" : "release", reason, before, after: { hold_reason: after } })}::jsonb,${actorId}) returning id`, "objects");
+    if (!audit.length)
       throw new InventoryError("Stock hold was not audited");
     return { id: input.id, holdReason: after??inspectionReason };
   });

@@ -202,15 +202,15 @@ async function bookMeasurementCurrency(
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<string> {
   const row = (await runner.execute<{ currency: string | null }>(sql`
-    select public.accounting_book_currency(${orgId}, ${bookId}, ${subsidiaryId}) as currency`)).rows[0];
+    select public.accounting_book_currency(${orgId}, ${bookId}, ${subsidiaryId}) as currency`, "objects"))[0];
   return row?.currency ?? functionalCurrency;
 }
 
 async function primaryBookId(orgId: string): Promise<string> {
   const r = (await db.execute<{ id: string }>(
-    sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`,
+    sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`, "objects",
   ));
-  const id = r.rows[0]?.id;
+  const id = r[0]?.id;
   if (!id) throw new RevaluationError("primary accounting book is not configured");
   return id;
 }
@@ -287,10 +287,10 @@ async function loadExposures(
     select account_id, currency, sum(carrying_base)::text as carrying_base,
            sum(foreign_balance)::text as foreign_balance, bool_or(invalid_residual) as invalid_residual
       from position_lines group by account_id,currency
-     having sum(foreign_balance)<>0 or sum(carrying_base)<>0 or bool_or(invalid_residual)`);
+     having sum(foreign_balance)<>0 or sum(carrying_base)<>0 or bool_or(invalid_residual)`, "objects");
 
   const exposures: RevaluationExposure[] = [];
-  for (const row of r.rows) {
+  for (const row of r) {
     if (row.invalid_residual) {
       throw new RevaluationError(`inconsistent open-item residual for account ${row.account_id} in ${row.currency}`);
     }
@@ -397,7 +397,7 @@ export async function listRevaluationExposures(
         number: string | null; name: string; subsidiary_id: string | null; subsidiary_include_children: boolean;
       }>(sql`
         select number, name, subsidiary_id, subsidiary_include_children from accounts
-         where org_id = ${orgId} and id = ${exposure.accountId}`)).rows[0];
+         where org_id = ${orgId} and id = ${exposure.accountId}`, "objects"))[0];
       // An account the native restrictions no longer admit to this entity
       // cannot take a recorded rate for it: surface the same refusal the
       // posting path would raise instead of offering an inert reference.
@@ -447,8 +447,8 @@ async function loadEffectiveAdjustments(
        and e.origin in ('fx_revaluation','currency_adjustment') and ${scope}
        and a.type not in
          ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
-     group by l.account_id having sum(l.amount) <> 0`);
-  return result.rows.map((row) => ({ accountId: row.account_id, amount: row.amount }));
+     group by l.account_id having sum(l.amount) <> 0`, "objects");
+  return result.map((row) => ({ accountId: row.account_id, amount: row.amount }));
 }
 
 /** One authoritative residual per account, including accounts that now have no
@@ -499,8 +499,8 @@ async function loadRevaluationPeriod(orgId: string, periodId: string): Promise<R
                and n.fiscal_calendar_id = p.fiscal_calendar_id
              order by n.starts_on asc limit 1) as next_label
       from accounting_periods p
-     where p.org_id = ${orgId} and p.id = ${periodId}`));
-  const period = periodRes.rows[0];
+     where p.org_id = ${orgId} and p.id = ${periodId}`, "objects"));
+  const period = periodRes[0];
   if (!period) throw new RevaluationError(`accounting period ${periodId} not found`);
   return period;
 }
@@ -642,7 +642,7 @@ async function postRevaluationEntry(
       select pg_advisory_xact_lock(hashtextextended(${revaluationLockKey(orgId, bookId, periodId, subsidiaryId)}, 0))`);
     const book = (await tx.execute<{ id: string; code: string; is_primary: boolean; is_active: boolean; posts_gl: boolean }>(sql`
       select id, code, is_primary, is_active, posts_gl from accounting_books
-       where org_id=${orgId} and id=${bookId} for share`)).rows[0];
+       where org_id=${orgId} and id=${bookId} for share`, "objects"))[0];
     if (!book || !book.is_active || !book.posts_gl) {
       throw new RevaluationError(
         book && !book.is_primary

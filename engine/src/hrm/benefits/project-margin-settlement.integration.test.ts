@@ -50,8 +50,8 @@ async function purchaseCommitment(
   assert.equal(release.gated, false);
   assert.equal(release.flowError, null);
   assert.equal(release.gated, false);
-  const stored = (await db.execute<{ status:string }>(sql`select status from documents
-    where org_id=${h.org.orgId} and id=${documentId}`)).rows;
+  const stored = await db.execute<{ status:string }>(sql`select status from documents
+    where org_id=${h.org.orgId} and id=${documentId}`, "objects");
   assert.equal(stored.length, 1);
   assert.equal(stored[0]!.status,"approved","commitments enter the measure only after native release");
 }
@@ -138,7 +138,7 @@ test("project-margin preview retains its cutoff when later revenue, costs and co
     assert.equal(later.computation.totalAwarded,"100.0000");
     assert.notEqual(advanced.digest,original.digest);
     const awards = (await db.execute<{ count:number }>(sql`select count(*)::int as count
-      from hrm_benefit_awards where org_id=${h.org.orgId} and program_id=${program.id}`)).rows[0];
+      from hrm_benefit_awards where org_id=${h.org.orgId} and program_id=${program.id}`, "objects"))[0];
     assert.equal(awards?.count,0,"both native previews leave award history untouched");
   }));
 
@@ -169,15 +169,15 @@ for (const legacy of [false, true]) {
       }
       const readHistory = async () => (await db.execute<{ history:unknown }>(sql`
         select jsonb_agg(to_jsonb(a) order by a.id) as history from hrm_benefit_awards a
-        where a.org_id=${h.org.orgId} and a.program_id=${program.id}`)).rows[0]!.history;
+        where a.org_id=${h.org.orgId} and a.program_id=${program.id}`, "objects"))[0]!.history;
       const before = await readHistory();
       const retried = await settleIncentivePeriod(query);
       assert.deepEqual(retried.awards.map(a => a.id),[awardId]);
       assert.deepEqual(await readHistory(),before,"same-span retry makes no new award or history write");
-      const stored = (await db.execute<{ id:string;source_snapshot:{
+      const stored = await db.execute<{ id:string;source_snapshot:{
         measurement:{ settlement:{ projectMargin:ProjectMarginSnapshot;digest:string } } } }>(sql`
         select id,source_snapshot from hrm_benefit_awards
-        where org_id=${h.org.orgId} and program_id=${program.id} and id=${awardId}`)).rows;
+        where org_id=${h.org.orgId} and program_id=${program.id} and id=${awardId}`, "objects");
       assert.equal(stored.length,1,"retained protected award evidence exists in the same organization");
       assert.equal(stored[0]!.id,awardId);
       const retained = stored[0]!.source_snapshot.measurement.settlement;
@@ -201,8 +201,8 @@ test("global-project margin excludes another legal entity's cost, commitments an
   withHarness(setup, async h => {
     const { query, projectId } = await seedMargin(h, "2026-08-10");
     const global = await db.execute(sql`update projects set subsidiary_id=null
-      where org_id=${h.org.orgId} and id=${projectId} returning id`);
-    assert.equal(global.rows.length,1);
+      where org_id=${h.org.orgId} and id=${projectId} returning id`, "objects");
+    assert.equal(global.length,1);
     const baseline = await previewIncentiveSettlement(query);
     assert.equal(baseline.computation.totalAwarded,"350.0000");
     const original = projectSnapshot(baseline);
@@ -238,8 +238,8 @@ test("new margin awards retain complete economic policy while dated changes and 
 
  type Retained={id:string;program_snapshot:Record<string,unknown>;source_snapshot:Record<string,unknown>};
  const read=async(id:string)=>{
-  const rows=(await db.execute<Retained>(sql`select id,program_snapshot,source_snapshot from hrm_benefit_awards
-   where org_id=${h.org.orgId} and id=${id}`)).rows;assert.equal(rows.length,1);return rows[0]!;
+  const rows=await db.execute<Retained>(sql`select id,program_snapshot,source_snapshot from hrm_benefit_awards
+   where org_id=${h.org.orgId} and id=${id}`, "objects");assert.equal(rows.length,1);return rows[0]!;
  };
  const original=await read(award.id);
  const policy=await getBenefitProgram(db,h.org.orgId,h.actorId,program.id);
@@ -268,5 +268,5 @@ test("new margin awards retain complete economic policy while dated changes and 
  await assert.rejects(createAdjustingAward({...adjustmentInput,reason:"Changed original-period adjustment"}),/this correction request was already recorded with different details/);
  assert.deepEqual(await read(adjustment.id),retainedAdjustment);assert.deepEqual(await read(award.id),original);
  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from hrm_benefit_awards
-  where org_id=${h.org.orgId} and program_id=${program.id}`)).rows[0]!.n,2,"Retry creates no duplicate correction or replacement of original history");
+  where org_id=${h.org.orgId} and program_id=${program.id}`, "objects"))[0]!.n,2,"Retry creates no duplicate correction or replacement of original history");
 }));

@@ -84,8 +84,8 @@ test("offsetting variances stay visibly discrepant; no cross-item sum is shown",
       ],
     });
     await startStockCount(org.orgId, null, count.id);
-    const lines = (await db.execute<{ id: string; item_id: string }>(sql`
-      select id, item_id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows;
+    const lines = await db.execute<{ id: string; item_id: string }>(sql`
+      select id, item_id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`, "objects");
     // −5 on one line, +5 on the other: a quantity sum would read 0.
     for (const line of lines) {
       await recordCountedQuantity(org.orgId, null, {

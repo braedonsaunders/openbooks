@@ -21,15 +21,15 @@ for (const policy of ["changed", "cleared"] as const) {
       const childId = caller === "scoped entity" ? randomUUID() : null;
       if (childId) {
         assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-          values(${childId},${fx.orgId},${fx.subsidiaryId},'Payroll entity','CAD','CA') returning id`)).rows.length, 1);
+          values(${childId},${fx.orgId},${fx.subsidiaryId},'Payroll entity','CAD','CA') returning id`, "objects")).length, 1);
         // Establish entity ownership on the editable projection before posting freezes it.
         assert.equal((await db.execute(sql`update documents set subsidiary_id=${childId}
-          where org_id=${fx.orgId} and id=${input.documentId} returning id`)).rows.length, 1);
+          where org_id=${fx.orgId} and id=${input.documentId} returning id`, "objects")).length, 1);
         assert.equal((await db.execute(sql`update parties set subsidiary_id=${childId}
-          where org_id=${fx.orgId} and id=${fx.employeeId} returning id`)).rows.length, 1);
+          where org_id=${fx.orgId} and id=${fx.employeeId} returning id`, "objects")).length, 1);
       }
-      const accounts = (await db.execute<{ id: string; type: string }>(sql`
-        select id,type from accounts where org_id=${fx.orgId}`)).rows;
+      const accounts = await db.execute<{ id: string; type: string }>(sql`
+        select id,type from accounts where org_id=${fx.orgId}`, "objects");
       const account = (type: string) => {
         const id = accounts.find((row) => row.type === type)?.id;
         assert.ok(id, `fixture account ${type}`);
@@ -44,7 +44,7 @@ for (const policy of ["changed", "cleared"] as const) {
         select jl.id,jl.account_id,jl.amount from documents d
         join journal_lines jl on jl.entry_id=d.posted_entry_id and jl.org_id=d.org_id
         where d.org_id=${fx.orgId} and d.id=${input.documentId}
-          and jl.party_id=${fx.employeeId} and jl.is_open_item and jl.amount<0`)).rows[0]!;
+          and jl.party_id=${fx.employeeId} and jl.is_open_item and jl.amount<0`, "objects"))[0]!;
       assert.ok(source);
       const replacement = policy === "changed" ? account("liability_payable") : null;
       assert.notEqual(replacement, source.account_id);
@@ -56,16 +56,16 @@ for (const policy of ["changed", "cleared"] as const) {
         await assert.rejects(() => payrollSettings(fx.orgId, allowed), /payroll settings not found/);
         // A later employee transfer cannot change ownership of the posted liability.
         assert.equal((await db.execute(sql`update parties set subsidiary_id=${fx.subsidiaryId}
-          where org_id=${fx.orgId} and id=${fx.employeeId} returning id`)).rows.length, 1);
+          where org_id=${fx.orgId} and id=${fx.employeeId} returning id`, "objects")).length, 1);
         for (const scope of [new Set<string>(), new Set([fx.subsidiaryId])]) {
           await assert.rejects(() => recordPayRunPayment({ ...input, bankAccountId, allowedSubsidiaryIds: scope }), /pay run not found/);
         }
       }
       const payment = await recordPayRunPayment({ ...input, bankAccountId, allowedSubsidiaryIds: allowed });
-      const settlement = (await db.execute<{ account_id: string; target_id: string; amount: string }>(sql`
+      const settlement = await db.execute<{ account_id: string; target_id: string; amount: string }>(sql`
         select jl.account_id,a.to_line_id as target_id,a.amount from journal_lines jl
         join applications a on a.from_line_id=jl.id and a.org_id=jl.org_id
-        where jl.org_id=${fx.orgId} and jl.entry_id=${payment.entryId}`)).rows;
+        where jl.org_id=${fx.orgId} and jl.entry_id=${payment.entryId}`, "objects");
       assert.equal(settlement.length, 1);
       assert.equal(settlement[0]!.account_id, source.account_id);
       assert.equal(settlement[0]!.target_id, source.id);
@@ -73,7 +73,7 @@ for (const policy of ["changed", "cleared"] as const) {
       const state = (await db.execute<{ paid_entry_id: string; balanced: boolean }>(sql`
         select paid_entry_id,(select sum(amount)=0 from journal_lines
           where org_id=${fx.orgId} and entry_id=${payment.entryId}) as balanced
-        from pay_runs where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]!;
+        from pay_runs where org_id=${fx.orgId} and document_id=${input.documentId}`, "objects"))[0]!;
       assert.deepEqual(state, { paid_entry_id: payment.entryId, balanced: true });
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -88,8 +88,8 @@ for (const evidence of ["absent", "ambiguous"] as const) {
     try {
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
-      const accounts = (await db.execute<{ id: string; type: string }>(sql`
-        select id,type from accounts where org_id=${fx.orgId}`)).rows;
+      const accounts = await db.execute<{ id: string; type: string }>(sql`
+        select id,type from accounts where org_id=${fx.orgId}`, "objects");
       const account = (type: string) => {
         const id = accounts.find((row) => row.type === type)?.id;
         assert.ok(id, `fixture account ${type}`);
@@ -123,7 +123,7 @@ for (const evidence of ["absent", "ambiguous"] as const) {
         select paid_at,paid_entry_id,
           (select count(*)::int from journal_entries where org_id=${fx.orgId}) as entries,
           (select count(*)::int from applications where org_id=${fx.orgId}) as applications
-        from pay_runs where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]!;
+        from pay_runs where org_id=${fx.orgId} and document_id=${input.documentId}`, "objects"))[0]!;
       assert.deepEqual(state, { paid_at: null, paid_entry_id: null, entries: 1, applications: 0 });
     } finally {
       await dropScratchOrgReporting(fx.orgId);

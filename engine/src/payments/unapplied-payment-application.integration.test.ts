@@ -34,7 +34,7 @@ async function postDocumentOf(org: ScratchOrg, userId: string, kind: "customer_i
   await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
   const lineId = (await db.execute<{ id: string }>(sql`
     select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-     where jl.org_id = ${org.orgId} and je.source_document_id = ${id} and jl.is_open_item`)).rows[0]!.id;
+     where jl.org_id = ${org.orgId} and je.source_document_id = ${id} and jl.is_open_item`, "objects"))[0]!.id;
   return { id, lineId };
 }
 
@@ -49,7 +49,7 @@ async function postPayment(org: ScratchOrg, userId: string, kind: "customer_paym
   await db.execute(sql`update documents set status = 'approved', updated_at = now() where id = ${payment.id} and org_id = ${org.orgId}`);
   const { entryId } = await withOrgTransaction(org.orgId, () => postPaymentWithApplications(payment.id, allocations, userId, "ui", { deferEffects: true }));
   const lineId = (await db.execute<{ id: string }>(sql`
-    select id from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId} and is_open_item`)).rows[0]!.id;
+    select id from journal_lines where org_id = ${org.orgId} and entry_id = ${entryId} and is_open_item`, "objects"))[0]!.id;
   return { id: payment.id, lineId };
 }
 
@@ -81,11 +81,11 @@ test("a receipt's unapplied credit is listed, applied to another invoice, and re
       assert.equal(settled.amount, "50.0000");
       assert.equal(await openOf(org, "ar", second.lineId), "30.0000");
       const application = (await db.execute<{ reference: string; source: string }>(sql`
-        select settlement_rate_reference as reference, settlement_rate_source as source from applications where org_id = ${org.orgId} and id = ${settled.applicationIds[0]}`)).rows[0]!;
+        select settlement_rate_reference as reference, settlement_rate_source as source from applications where org_id = ${org.orgId} and id = ${settled.applicationIds[0]}`, "objects"))[0]!;
       assert.deepEqual(application, { reference: UNAPPLIED_PAYMENT_APPLICATION_REFERENCE, source: "same_currency" });
       const audit = (await db.execute<{ from_payment: boolean }>(sql`
         select (changes->'after'->>'fromUnappliedPayment')::boolean as from_payment from audit_log
-         where org_id = ${org.orgId} and table_name = 'applications' and row_id = ${settled.applicationIds[0]} and action = 'insert'`)).rows[0]!;
+         where org_id = ${org.orgId} and table_name = 'applications' and row_id = ${settled.applicationIds[0]} and action = 'insert'`, "objects"))[0]!;
       assert.equal(audit.from_payment, true);
 
       const state = await creditSettlementState(org.orgId, receipt.id, null);
@@ -94,7 +94,7 @@ test("a receipt's unapplied credit is listed, applied to another invoice, and re
 
       // The receipt's own posting-time application belongs to the receipt.
       const own = (await db.execute<{ id: string }>(sql`
-        select a.id from applications a where a.org_id = ${org.orgId} and a.from_line_id = ${receipt.lineId} and a.to_line_id = ${first.lineId}`)).rows[0]!;
+        select a.id from applications a where a.org_id = ${org.orgId} and a.from_line_id = ${receipt.lineId} and a.to_line_id = ${first.lineId}`, "objects"))[0]!;
       await assert.rejects(unapplyCreditSettlement(org.orgId, userId, own.id, null), (error: unknown) => error instanceof PaymentError && /cash application/.test(error.message));
 
       await unapplyCreditSettlement(org.orgId, userId, settled.applicationIds[0]!, null);
@@ -184,7 +184,7 @@ test("two concurrent applications of the same unapplied cash cannot both settle 
     const outcomes = await Promise.allSettled([apply(fixture.a.lineId), apply(fixture.b.lineId)]);
     assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
     const live = (await withBypassContext(() => db.execute<{ n: number }>(sql`
-      select count(*)::int as n from applications where org_id = ${org.orgId} and from_line_id = ${fixture.receipt.lineId} and unapplied_at is null`))).rows[0]!.n;
+      select count(*)::int as n from applications where org_id = ${org.orgId} and from_line_id = ${fixture.receipt.lineId} and unapplied_at is null`, "objects")))[0]!.n;
     assert.equal(live, 1);
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));

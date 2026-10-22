@@ -231,7 +231,7 @@ test("a draft tender naming a hidden account refuses exactly like a missing one"
     const secondId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`))).rows[0]!.id;
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects")))[0]!.id;
     const foreign = await withBypass(() =>
       issueStoredValue({
         orgId: org.orgId, allowedSubsidiaryIds: null, subsidiaryId: secondId, programId: program.id,
@@ -282,7 +282,7 @@ test("a draft tender across entities is refused at save as well as posting", { s
     const secondId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
-        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`))).rows[0]!.id;
+        from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`, "objects")))[0]!.id;
     const foreign = await withBypass(() =>
       issueStoredValue({
         orgId: org.orgId, allowedSubsidiaryIds: null, subsidiaryId: secondId, programId: program.id,

@@ -41,8 +41,8 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       where l.org_id=${input.orgId} and l.id=${input.leaseId}
       for update of l, p for share of s
-    `));
-    const row = ctx.rows[0];
+    `, "objects"));
+    const row = ctx[0];
     if (!row) throw new PropertyManagementError("Lease not found");
     assertLockedSubsidiaryInScope(input.allowedSubsidiaryIds, row.subsidiary_id);
     // Resolve after locking the property's current entity so a rehome cannot
@@ -51,7 +51,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     if (!depositPeriod) throw new PropertyManagementError("An open GL period is required");
     const depositPeriodId: string = depositPeriod.id;
     const liability = (await tx.execute<{ type: string }>(sql`select type from accounts
-      where org_id=${input.orgId} and id=${row.deposit_liability_account_id} for share`)).rows[0];
+      where org_id=${input.orgId} and id=${row.deposit_liability_account_id} for share`, "objects"))[0];
     if (!row.deposit_liability_account_id || !liability || !["liability_current_other", "liability_long_term"].includes(liability.type)) {
       throw new PropertyManagementError("Configure a liability account for property security deposits");
     }
@@ -77,14 +77,14 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       throw error;
     }
 
-    const prior = (await tx.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${input.leaseId}`));
-    const nextBalance = depositBalance([...prior.rows, { kind: input.kind, amount }]);
+    const prior = (await tx.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${input.leaseId}`, "objects"));
+    const nextBalance = depositBalance([...prior, { kind: input.kind, amount }]);
     if (cmp(nextBalance, "0") < 0) throw new PropertyManagementError("Deposit transaction exceeds the tenant balance");
     const importKey = input.importKey?.trim() || null;
     if (importKey) {
       const duplicate = (await tx.execute(sql`select 1 from security_deposit_transactions
-        where org_id=${input.orgId} and import_key=${importKey} limit 1`));
-      if (duplicate.rows.length) throw new PropertyManagementError("Security deposit was already imported");
+        where org_id=${input.orgId} and import_key=${importKey} limit 1`, "objects"));
+      if (duplicate.length) throw new PropertyManagementError("Security deposit was already imported");
     }
 
     const increase = shape.liabilitySide === "credit";
@@ -92,8 +92,8 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     const bankId = ["received", "refunded"].includes(input.kind) ? input.bankAccountId ?? row.default_bank_account_id : null;
     if (["received", "refunded"].includes(input.kind) && !bankId) throw new PropertyManagementError("A bank account is required");
     if (bankId) {
-      const bank = (await tx.execute<{ type: string }>(sql`select type from accounts where org_id=${input.orgId} and id=${bankId} and is_active and not is_summary for share`));
-      if (bank.rows[0]?.type !== "asset_bank") throw new PropertyManagementError("Security-deposit cash must use an active bank account");
+      const bank = (await tx.execute<{ type: string }>(sql`select type from accounts where org_id=${input.orgId} and id=${bankId} and is_active and not is_summary for share`, "objects"));
+      if (bank[0]?.type !== "asset_bank") throw new PropertyManagementError("Security-deposit cash must use an active bank account");
     }
 
     // Cash kinds post against the bank recorded on the subledger row — a
@@ -110,7 +110,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     if (!applied && !cashKind && offsetId) {
       if (!isUuid(offsetId)) throw new PropertyManagementError("Offset account is invalid");
       const offset = (await tx.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-        select type,is_active,is_summary from accounts where org_id=${input.orgId} and id=${offsetId} for share`)).rows[0];
+        select type,is_active,is_summary from accounts where org_id=${input.orgId} and id=${offsetId} for share`, "objects"))[0];
       if (!offset) throw new PropertyManagementError("Offset account not found");
       if (!offset.is_active || offset.is_summary) throw new PropertyManagementError("Offset account must be an active posting account");
       if (offsetId === row.deposit_liability_account_id) throw new PropertyManagementError("Offset account cannot be the deposit liability account");
@@ -126,7 +126,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
         where d.org_id=${input.orgId} and d.id=${input.appliedDocumentId!} and d.kind='customer_invoice'
           and d.party_id=${row.tenant_id} and d.status='posted' and coalesce(d.open_balance,0)>=${amount}
         order by jl.line_number limit 1
-      `)).rows[0];
+      `, "objects"))[0];
       if (!candidate) throw new PropertyManagementError("Posted tenant invoice with sufficient open balance not found");
       await lockApplicationEvidence(tx, input.orgId, [candidate.id], [input.appliedDocumentId!]);
       const target = (await tx.execute<{ id: string; account_id: string; invoiceCurrency: string; lineCurrency: string; documentNumber: string }>(sql`
@@ -137,8 +137,8 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
           and d.party_id=${row.tenant_id} and d.status='posted' and coalesce(d.open_balance,0)>=${amount}
           and jl.id=${candidate.id}
         order by jl.line_number limit 1
-      `));
-      const targetRow = target.rows[0];
+      `, "objects"));
+      const targetRow = target[0];
       targetLineId = targetRow?.id ?? null;
       offsetId = targetRow?.account_id ?? null;
       if (!targetLineId || !offsetId || !targetRow) throw new PropertyManagementError("Posted tenant invoice with sufficient open balance not found");
@@ -220,8 +220,8 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
         values(${input.orgId},${creditLineId},${targetLineId},${amount},${amount},${amount},${row.currency},${amount},${row.currency},1,'same_currency','Security deposit application',${occurredOn},${input.actorId},${input.actorId})`);
     }
     const inserted = (await tx.execute<{ id: string }>(sql`insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,applied_document_id,journal_entry_id,import_key,memo,created_by,updated_by)
-      values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${importKey},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`));
-    return { id: inserted.rows[0]!.id, entryId, balance: nextBalance };
+      values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${importKey},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`, "objects"));
+    return { id: inserted[0]!.id, entryId, balance: nextBalance };
   }).catch((error: unknown) => {
     if (isSecurityDepositImportConflict(error)) throw new PropertyManagementError("Security deposit was already imported");
     throw error;
@@ -243,8 +243,8 @@ export async function reverseSecurityDepositTransaction(input: {
         join security_deposit_transactions t on t.lease_id=l.id and t.org_id=l.org_id
        where t.org_id=${input.orgId} and t.id=${input.transactionId}
        for update of l
-    `);
-    if (!lease.rows[0]) throw new PropertyManagementError("Deposit transaction not found");
+    `, "objects");
+    if (!lease[0]) throw new PropertyManagementError("Deposit transaction not found");
     const context = (await tx.execute<DepositReversalRow>(sql`
       select t.*,p.subsidiary_id,p.currency,s.base_currency,je.book_id,
         exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed
@@ -254,8 +254,8 @@ export async function reverseSecurityDepositTransaction(input: {
       join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       join journal_entries je on je.id=t.journal_entry_id and je.org_id=t.org_id
       where t.org_id=${input.orgId} and t.id=${input.transactionId} for update of t, p
-    `));
-    const row = context.rows[0];
+    `, "objects"));
+    const row = context[0];
     if (!row) throw new PropertyManagementError("Deposit transaction not found");
     // The property lock above serializes a concurrent rehome with the
     // lease lock taken at the top: the subsidiary is current here.
@@ -283,15 +283,15 @@ export async function reverseSecurityDepositTransaction(input: {
     if (row.currency !== row.base_currency) throw new PropertyManagementError("Security-deposit reversals require functional-currency deposits");
 
     const kind = depositReversalKind(row.kind);
-    const prior = (await tx.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${row.lease_id}`));
-    const balance = depositBalance([...prior.rows, { kind, amount: row.amount }]);
+    const prior = (await tx.execute<{ kind: string; amount: string }>(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${row.lease_id}`, "objects"));
+    const balance = depositBalance([...prior, { kind, amount: row.amount }]);
     if (cmp(balance, "0") < 0) throw new PropertyManagementError("Later deposit activity must be corrected before this transaction can be reversed");
 
     const entryNumber = `DEP-REV-${occurredOn}-${input.transactionId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
     // The reversal mirrors the source lines exactly through the ONE ledger
     // API. Reversal line ids come back keyed by line number for the
     // application re-linking below.
-    const mirrorSource = (await tx.execute<{
+    const mirrorSource = await tx.execute<{
       id: string;
       line_number: number;
       account_id: string;
@@ -319,7 +319,7 @@ export async function reverseSecurityDepositTransaction(input: {
         party_id,department_id,project_id,location_id,class_id,equipment_unit_id,payment_card_id,extra_dims,
         quantity::text as quantity,unit,due_date::text as due_date,is_open_item,tax_code_id,custom
       from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id} order by line_number
-    `)).rows;
+    `, "objects");
     await lockApplicationEvidence(
       tx,
       input.orgId,
@@ -390,8 +390,8 @@ export async function reverseSecurityDepositTransaction(input: {
       insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,journal_entry_id,reversal_of_id,memo,created_by,updated_by)
       values(${input.orgId},${row.lease_id},${kind},${occurredOn},${row.amount},${["received", "refunded"].includes(kind) ? row.bank_account_id : null},
         ${["received", "refunded"].includes(kind) ? row.bank_account_id : row.offset_account_id},${entryId},${input.transactionId},${`Reversal: ${reason}`},${input.actorId},${input.actorId}) returning id
-    `));
-    await audit(tx, input.orgId, "security_deposit_transactions", inserted.rows[0]!.id, "reverse", input.actorId, { reversalOfId: input.transactionId, reason, occurredOn });
-    return { id: inserted.rows[0]!.id, entryId, balance };
+    `, "objects"));
+    await audit(tx, input.orgId, "security_deposit_transactions", inserted[0]!.id, "reverse", input.actorId, { reversalOfId: input.transactionId, reason, occurredOn });
+    return { id: inserted[0]!.id, entryId, balance };
   });
 }

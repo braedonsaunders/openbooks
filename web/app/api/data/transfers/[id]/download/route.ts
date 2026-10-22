@@ -39,7 +39,7 @@ export const GET = defineRoute({ authorize: authorizeTransfers, feature: transfe
             const live = await loadTransfer(orgId, job.id)
             // Resolve the actor again during a long download, including deactivation.
             await transferAuthority(live)
-            return (await db.execute<{ data: Buffer; sha256: string }>(sql`select data,sha256 from data_transfer_chunks where org_id=${orgId} and job_id=${job.id} and direction='output' and part_no=${part}`)).rows[0]
+            return (await db.execute<{ data: Buffer; sha256: string }>(sql`select data,sha256 from data_transfer_chunks where org_id=${orgId} and job_id=${job.id} and direction='output' and part_no=${part}`, 'objects'))[0]
           }))
           if (cancelled) return
           if (!chunk) {

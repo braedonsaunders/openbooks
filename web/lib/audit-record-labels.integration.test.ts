@@ -17,7 +17,7 @@ test('every audit label source reads columns the schema has', { skip: !DB }, asy
     for (const table of LABELLED_AUDIT_TABLES) {
       const query = auditRecordLabelSource(table, orgId, [randomUUID()])!
       try {
-        const rows = (await db.execute(query)).rows
+        const rows = await db.execute(query, 'objects')
         assert.deepEqual(rows, [], `${table} labels nothing outside its organization`)
       } catch (error) {
         failures.push(`${table}: ${(error as Error).message}`)

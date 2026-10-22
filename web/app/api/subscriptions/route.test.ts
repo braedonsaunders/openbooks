@@ -172,14 +172,16 @@ stubModules({
         return { rows: [] }
       }
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.queries.push(query)
-          return response(query)
+          return inMode(await response(query))
         },
         transaction: async (work) => work({
-          execute: async (query) => {
+          execute: async (query, mode) => {
+            const inMode = (result) => (mode === 'objects' ? result.rows : result)
             state.transactionQueries.push(query)
-            return response(query)
+            return inMode(await response(query))
           },
         }),
       }

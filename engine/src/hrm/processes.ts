@@ -261,8 +261,7 @@ export async function listProcessTemplates(query: {
     } else {
       await requireHrmProcessConfig(db, orgId, actorId);
     }
-    const rows = (
-      await db.execute<TemplateRow & { step_count: number }>(sql`
+    const rows = await db.execute<TemplateRow & { step_count: number }>(sql`
       select t.id, t.org_id, t.kind, t.name, t.applies_to, t.is_active,
              t.created_at, t.created_by, t.updated_at, t.updated_by,
              count(s.id)::int as step_count
@@ -274,8 +273,7 @@ export async function listProcessTemplates(query: {
          ${kind ? sql`and t.kind = ${kind}` : sql``}
        group by t.id
        order by t.kind, t.name, t.id
-    `)
-    ).rows;
+    `, "objects");
     // The catalogue lists only what the actor may see: B-targeted rows
     // are invisible to an A-restricted reader, exactly as the write path
     // refuses them as not-found.
@@ -311,14 +309,12 @@ export async function getProcessTemplate(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const row = (
-      await db.execute<TemplateRow>(sql`
+    const row = (await db.execute<TemplateRow>(sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for share
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -404,12 +400,10 @@ async function scopeTemplateRows<T extends Pick<TemplateRow, "applies_to">>(
   ];
   const departmentOwner = new Map<string, string | null>();
   if (departmentIds.length > 0) {
-    const owners = (
-      await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const owners = await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
       select id::text as id, subsidiary_id::text as subsidiary_id from departments
        where org_id = ${orgId} and id = any (${`{${departmentIds.join(",")}}`}::uuid[])
-    `)
-    ).rows;
+    `, "objects");
     for (const owner of owners) departmentOwner.set(owner.id, owner.subsidiary_id);
   }
   return rows.filter((row) => {
@@ -450,13 +444,11 @@ async function assertAppliesToTargets(
     // One scoped-existence check covers unknown, cross-org, and
     // out-of-scope subsidiaries identically: a B subsidiary reads to an
     // A-scoped actor exactly like a fabricated id.
-    const found = (
-      await exec.execute(sql`
+    const found = (await exec.execute(sql`
       select 1 as one from subsidiaries
        where org_id = ${orgId} and id = ${appliesTo.employerSubsidiaryId}
          ${allowed === null ? sql`` : sql`and id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!found) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -465,16 +457,14 @@ async function assertAppliesToTargets(
     }
   }
   if (appliesTo.departmentId !== null) {
-    const department = (
-      await exec.execute<{ subsidiary_id: string | null; owner_exists: boolean }>(sql`
+    const department = (await exec.execute<{ subsidiary_id: string | null; owner_exists: boolean }>(sql`
       select d.subsidiary_id,
              (d.subsidiary_id is null or s.id is not null) as owner_exists
         from departments d
         left join subsidiaries s on s.org_id = d.org_id and s.id = d.subsidiary_id
        where d.org_id = ${orgId} and d.id = ${appliesTo.departmentId}
        for update of d
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (
       !department?.owner_exists ||
       (department.subsidiary_id !== null &&
@@ -515,11 +505,9 @@ async function assertOwnerParty(
       `owner party ${JSON.stringify(ownerPartyId)} is not a uuid — name a party of this organization`,
     );
   }
-  const found = (
-    await exec.execute(sql`
+  const found = (await exec.execute(sql`
     select 1 as one from parties where org_id = ${orgId} and id = ${ownerPartyId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!found) {
     throw new HrmProcessError(
       "REFUSED",
@@ -580,8 +568,7 @@ export async function createProcessTemplate(
     await assertAppliesToTargets(db, orgId, actorId, appliesTo);
     let inserted: TemplateRow[];
     try {
-      inserted = (
-        await db.execute<TemplateRow>(sql`
+      inserted = (await db.execute<TemplateRow>(sql`
         insert into hrm_process_templates (org_id, kind, name, applies_to, created_by, updated_by)
         values (${orgId}, ${kind}, ${name},
                 ${JSON.stringify({ employer_subsidiary_id: appliesTo.employerSubsidiaryId, department_id: appliesTo.departmentId })}::jsonb,
@@ -591,8 +578,7 @@ export async function createProcessTemplate(
                   is_active as "is_active",
                   created_at as "created_at", created_by as "created_by",
                   updated_at as "updated_at", updated_by as "updated_by"
-      `)
-      ).rows as TemplateRow[];
+      `, "objects")) as TemplateRow[];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new HrmProcessError(
@@ -631,14 +617,12 @@ export async function updateProcessTemplate(
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const current = (
-      await db.execute<TemplateRow>(sql`
+    const current = (await db.execute<TemplateRow>(sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!current) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -672,8 +656,7 @@ export async function updateProcessTemplate(
     await assertAppliesToTargets(db, orgId, actorId, appliesTo);
     let updated: TemplateRow[];
     try {
-      updated = (
-        await db.execute<TemplateRow>(sql`
+      updated = (await db.execute<TemplateRow>(sql`
         update hrm_process_templates
            set name = ${name},
                applies_to = ${JSON.stringify({ employer_subsidiary_id: appliesTo.employerSubsidiaryId, department_id: appliesTo.departmentId })}::jsonb,
@@ -681,8 +664,7 @@ export async function updateProcessTemplate(
          where org_id = ${orgId} and id = ${templateId}
         returning id, org_id, kind, name, applies_to, is_active,
                   created_at, created_by, updated_at, updated_by
-      `)
-      ).rows as TemplateRow[];
+      `, "objects")) as TemplateRow[];
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new HrmProcessError(
@@ -700,11 +682,9 @@ export async function updateProcessTemplate(
       );
     }
     const count =
-      (
-        await db.execute<{ n: number }>(sql`
+      (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_process_template_steps where org_id = ${orgId} and template_id = ${templateId}
-    `)
-      ).rows[0]?.n ?? 0;
+    `, "objects"))[0]?.n ?? 0;
     return toTemplateDTO(row, count);
   });
 }
@@ -725,14 +705,12 @@ export async function deleteProcessTemplate(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const current = (
-      await db.execute<TemplateRow>(sql`
+    const current = (await db.execute<TemplateRow>(sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!current) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -743,17 +721,13 @@ export async function deleteProcessTemplate(query: {
     // locked-row scope as updating.
     await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(current.applies_to));
     const opened =
-      (
-        await db.execute<{ n: number }>(sql`
+      (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_processes where org_id = ${orgId} and template_id = ${templateId}
-    `)
-      ).rows[0]?.n ?? 0;
+    `, "objects"))[0]?.n ?? 0;
     const versions =
-      (
-        await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from hrm_process_template_versions where org_id=${orgId} and template_id=${templateId}`,
-        )
-      ).rows[0]?.n ?? 0;
+      (await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from hrm_process_template_versions where org_id=${orgId} and template_id=${templateId}`, "objects",
+        ))[0]?.n ?? 0;
     if (versions > 0)
       throw new HrmProcessError(
         "REFUSED",
@@ -765,11 +739,9 @@ export async function deleteProcessTemplate(query: {
         `${opened} process(es) were opened from this template and it is retained as history — set is_active = false to retire it instead of deleting it`,
       );
     }
-    const deleted = (
-      await db.execute(sql`
+    const deleted = await db.execute(sql`
       delete from hrm_process_templates where org_id = ${orgId} and id = ${templateId} returning id
-    `)
-    ).rows;
+    `, "objects");
     if (deleted.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -827,14 +799,12 @@ export async function upsertProcessTemplateStep(
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const template = (
-      await db.execute<TemplateRow>(sql`
+    const template = (await db.execute<TemplateRow>(sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!template) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -851,8 +821,7 @@ export async function upsertProcessTemplateStep(
     let row: TemplateStepRow | undefined;
     if (query.stepId === undefined) {
       try {
-        row = (
-          await db.execute<TemplateStepRow>(sql`
+        row = (await db.execute<TemplateStepRow>(sql`
           insert into hrm_process_template_steps
             (org_id, template_id, position, title, description, owner_kind, owner_party_id,
              due_offset_days, required, evidence_kind, created_by, updated_by)
@@ -860,8 +829,7 @@ export async function upsertProcessTemplateStep(
                   ${dueOffsetDays}, ${required}, ${evidenceKind}, ${actorId}, ${actorId})
           returning id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
                     due_offset_days, required, evidence_kind
-        `)
-        ).rows[0];
+        `, "objects"))[0];
       } catch (error) {
         if (isUniqueViolation(error)) {
           throw new HrmProcessError(
@@ -873,8 +841,7 @@ export async function upsertProcessTemplateStep(
       }
     } else {
       try {
-        row = (
-          await db.execute<TemplateStepRow>(sql`
+        row = (await db.execute<TemplateStepRow>(sql`
           update hrm_process_template_steps
              set position = ${position}, title = ${title}, description = ${description},
                  owner_kind = ${ownerKind}, owner_party_id = ${ownerPartyId},
@@ -883,8 +850,7 @@ export async function upsertProcessTemplateStep(
            where org_id = ${orgId} and id = ${query.stepId} and template_id = ${templateId}
           returning id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
                     due_offset_days, required, evidence_kind
-        `)
-        ).rows[0];
+        `, "objects"))[0];
       } catch (error) {
         if (isUniqueViolation(error)) {
           throw new HrmProcessError(
@@ -923,12 +889,10 @@ export async function reorderProcessTemplateSteps(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const template = (
-      await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(sql`
+    const template = (await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(sql`
       select id, applies_to from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!template) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -939,11 +903,9 @@ export async function reorderProcessTemplateSteps(query: {
     // same locked-template scope as every other step write.
     await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(template.applies_to));
     await refuseLegacyDesignerEdit(db, orgId, templateId);
-    const current = (
-      await db.execute<{ id: string }>(sql`
+    const current = (await db.execute<{ id: string }>(sql`
       select id from hrm_process_template_steps where org_id = ${orgId} and template_id = ${templateId}
-    `)
-    ).rows.map((row) => row.id);
+    `, "objects")).map((row) => row.id);
     const wanted = [...query.orderedStepIds];
     if (
       wanted.length !== current.length ||
@@ -957,14 +919,12 @@ export async function reorderProcessTemplateSteps(query: {
     }
     // Step aside through negative positions so no two rows share one.
     for (let index = 0; index < wanted.length; index += 1) {
-      const moved = (
-        await db.execute(sql`
+      const moved = await db.execute(sql`
         update hrm_process_template_steps
            set position = ${-(index + 1)}, updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${wanted[index]} and template_id = ${templateId}
         returning id
-      `)
-      ).rows;
+      `, "objects");
       if (moved.length !== 1) {
         throw new HrmProcessError(
           "REFUSED",
@@ -973,14 +933,12 @@ export async function reorderProcessTemplateSteps(query: {
       }
     }
     for (let index = 0; index < wanted.length; index += 1) {
-      const moved = (
-        await db.execute(sql`
+      const moved = await db.execute(sql`
         update hrm_process_template_steps
            set position = ${index}, updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${wanted[index]} and template_id = ${templateId}
         returning id
-      `)
-      ).rows;
+      `, "objects");
       if (moved.length !== 1) {
         throw new HrmProcessError(
           "REFUSED",
@@ -988,15 +946,13 @@ export async function reorderProcessTemplateSteps(query: {
         );
       }
     }
-    const rows = (
-      await db.execute<TemplateStepRow>(sql`
+    const rows = await db.execute<TemplateStepRow>(sql`
       select id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
              due_offset_days, required, evidence_kind
         from hrm_process_template_steps
        where org_id = ${orgId} and template_id = ${templateId}
        order by position
-    `)
-    ).rows;
+    `, "objects");
     return rows.map(toTemplateStepDTO);
   });
 }
@@ -1014,12 +970,10 @@ export async function deleteProcessTemplateStep(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
-    const template = (
-      await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(sql`
+    const template = (await db.execute<{ id: string; applies_to: TemplateRow["applies_to"] }>(sql`
       select id, applies_to from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId} for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!template) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -1032,13 +986,11 @@ export async function deleteProcessTemplateStep(query: {
     await refuseLegacyDesignerEdit(db, orgId, templateId);
     // Opened processes hold snapshots, so deleting a template step never
     // rewrites history — lineage on copied steps simply clears (SET NULL).
-    const deleted = (
-      await db.execute(sql`
+    const deleted = await db.execute(sql`
       delete from hrm_process_template_steps
        where org_id = ${orgId} and id = ${stepId} and template_id = ${templateId}
       returning id
-    `)
-    ).rows;
+    `, "objects");
     if (deleted.length !== 1) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -1118,21 +1070,17 @@ async function loadStepForUpdate(
   orgId: string,
   stepId: string,
 ): Promise<StepRow> {
-  const identity = (
-    await exec.execute<{ process_id: string }>(
-      sql`select process_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
-    )
-  ).rows[0];
+  const identity = (await exec.execute<{ process_id: string }>(
+      sql`select process_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects",
+    ))[0];
   if (identity) await loadProcessForUpdate(exec, orgId, identity.process_id);
-  const row = (
-    await exec.execute<StepRow>(sql`
+  const row = (await exec.execute<StepRow>(sql`
     select ${STEP_COLUMNS}
       from hrm_process_steps s
       join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
       join worker_employments e on e.org_id = s.org_id and e.id = p.employment_id
      where s.org_id = ${orgId} and s.id = ${stepId} for update of s
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
   if (!row) {
@@ -1149,15 +1097,13 @@ async function loadProcessForUpdate(
   orgId: string,
   processId: string,
 ): Promise<ProcessRow> {
-  const row = (
-    await exec.execute<ProcessRow>(sql`
+  const row = (await exec.execute<ProcessRow>(sql`
     select id, org_id, template_id, employment_id, kind,
            effective_date::text as effective_date, status,
            opened_by_change_id, completed_at, cancelled_at, cancel_reason
       from hrm_processes
      where org_id = ${orgId} and id = ${processId} for update
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new HrmProcessError(
       "NOT_FOUND",
@@ -1186,12 +1132,10 @@ export async function resolveStepActor(
     // Permission alone is not scope: the manager must also see the employer.
     const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
     if (allowed !== null) {
-      const employer = (
-        await exec.execute<{ employer_subsidiary_id: string }>(sql`
+      const employer = (await exec.execute<{ employer_subsidiary_id: string }>(sql`
         select employer_subsidiary_id from worker_employments
          where org_id = ${orgId} and id = ${step.employment_id}
-      `)
-      ).rows[0];
+      `, "objects"))[0];
       if (!employer || !allowed.has(employer.employer_subsidiary_id)) {
         return "stranger";
       }
@@ -1233,8 +1177,7 @@ async function assertAttachmentReadable(
     );
   }
   const canReadApCapture = await actorHasPermission(exec, orgId, actorId, "ap.read");
-  const readable = (
-    await exec.execute<{ readable: boolean }>(sql`
+  const readable = (await exec.execute<{ readable: boolean }>(sql`
     with recursive capture_folders as (
       select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
       union
@@ -1275,8 +1218,7 @@ async function assertAttachmentReadable(
                             or (g.principal_type = 'role' and g.principal_id in (
                                   select role_id from role_assignments
                                    where org_id = ${orgId} and user_id = ${actorId})))))) as readable
-  `)
-  ).rows[0]?.readable;
+  `, "objects"))[0]?.readable;
   if (!readable) {
     throw new HrmProcessError(
       "UNREADABLE_ATTACHMENT",
@@ -1305,20 +1247,17 @@ export async function loadOpeningEmploymentContext(
   employmentId: string,
   effectiveDate: string,
 ): Promise<OpeningEmploymentContext> {
-  const stable = (
-    await exec.execute<{ employer_subsidiary_id: string }>(sql`
+  const stable = (await exec.execute<{ employer_subsidiary_id: string }>(sql`
     select employer_subsidiary_id from worker_employments
      where org_id = ${orgId} and id = ${employmentId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!stable) {
     throw new HrmProcessError(
       "NOT_FOUND",
       "employment not found in this organization — check the employment id",
     );
   }
-  const assignment = (
-    await exec.execute<{ department_id: string | null }>(sql`
+  const assignment = (await exec.execute<{ department_id: string | null }>(sql`
     select av.department_id::text as department_id
       from employment_assignment_versions av
      where av.org_id = ${orgId} and av.employment_id = ${employmentId}
@@ -1327,8 +1266,7 @@ export async function loadOpeningEmploymentContext(
        and (av.effective_to is null or av.effective_to > ${effectiveDate}::date)
      order by av.is_primary desc, av.version_no desc
      limit 1
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   return {
     employerSubsidiaryId: stable.employer_subsidiary_id,
     departmentId: assignment?.department_id ?? null,
@@ -1346,16 +1284,14 @@ export async function assertLiveVersionOn(
   employmentId: string,
   effectiveDate: string,
 ): Promise<void> {
-  const live = (
-    await exec.execute(sql`
+  const live = (await exec.execute(sql`
     select 1 as one from worker_employment_versions
      where org_id = ${orgId} and employment_id = ${employmentId}
        and recorded_until is null
        and effective_from <= ${effectiveDate}::date
        and (effective_to is null or effective_to > ${effectiveDate}::date)
      limit 1
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!live) {
     throw new HrmProcessError(
       "NO_LIVE_VERSION",
@@ -1375,14 +1311,12 @@ async function resolveTemplateChoice(
   templateId: string | null,
 ): Promise<{ template: TemplateChoice; steps: TemplateStepRow[] }> {
   if (templateId !== null) {
-    const row = (
-      await exec.execute<TemplateRow>(sql`
+    const row = (await exec.execute<TemplateRow>(sql`
       select id, org_id, kind, name, applies_to, is_active,
              created_at, created_by, updated_at, updated_by
         from hrm_process_templates
        where org_id = ${orgId} and id = ${templateId}
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -1421,14 +1355,12 @@ async function resolveTemplateChoice(
     return { template: { id: row.id, kind, name: row.name }, steps };
   }
   const context = await loadOpeningEmploymentContext(exec, orgId, employmentId, effectiveDate);
-  const candidates = (
-    await exec.execute<TemplateRow>(sql`
+  const candidates = await exec.execute<TemplateRow>(sql`
     select id, org_id, kind, name, applies_to, is_active,
            created_at, created_by, updated_at, updated_by
       from hrm_process_templates
      where org_id = ${orgId} and kind = ${kind} and is_active for share
-  `)
-  ).rows;
+  `, "objects");
   let matchables: MatchableTemplate[];
   try {
     matchables = candidates.map((row) => ({
@@ -1455,15 +1387,13 @@ async function loadTemplateSteps(
   templateId: string,
   includeRetired = false,
 ): Promise<TemplateStepRow[]> {
-  return (
-    await exec.execute<TemplateStepRow>(sql`
+  return await exec.execute<TemplateStepRow>(sql`
     select id, org_id, template_id, position, title, description, owner_kind, owner_party_id,
            due_offset_days, required, evidence_kind, design
       from hrm_process_template_steps
      where org_id = ${orgId} and template_id = ${templateId} ${includeRetired ? sql`` : sql`and is_current`}
      order by position
-  `)
-  ).rows;
+  `, "objects");
 }
 
 // --- Open a process ----------------------------------------------------------
@@ -1538,14 +1468,12 @@ export async function openProcessInTx(
 ): Promise<ProcessDTO> {
   const { orgId, actorId, employmentId, kind, effectiveDate, templateId, openedByChangeId } = args;
   await assertLiveVersionOn(exec, orgId, employmentId, effectiveDate);
-  const dupe = (
-    await exec.execute(sql`
+  const dupe = (await exec.execute(sql`
     select id from hrm_processes
      where org_id = ${orgId} and employment_id = ${employmentId}
        and kind = ${kind} and status = 'open'
      limit 1
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (dupe) {
     throw new HrmProcessError(
       "DUPLICATE_OPEN",
@@ -1595,11 +1523,9 @@ export async function openProcessInTx(
     );
   }
   choice.steps = choice.steps.filter((step) => included.some((item) => item.id === step.id));
-  const publication = (
-    await exec.execute<{ published_version: number }>(
-      sql`select published_version from hrm_process_templates where org_id = ${orgId} and id = ${choice.template.id} for share`,
-    )
-  ).rows[0];
+  const publication = (await exec.execute<{ published_version: number }>(
+      sql`select published_version from hrm_process_templates where org_id = ${orgId} and id = ${choice.template.id} for share`, "objects",
+    ))[0];
   let snapshots;
   try {
     snapshots = snapshotTemplateSteps(
@@ -1622,15 +1548,13 @@ export async function openProcessInTx(
   }
   let processId: string;
   try {
-    const inserted = (
-      await exec.execute<{ id: string }>(sql`
+    const inserted = (await exec.execute<{ id: string }>(sql`
       insert into hrm_processes
         (org_id, template_id, employment_id, kind, effective_date, opened_by_change_id, created_by, updated_by, template_version)
       values (${orgId}, ${choice.template.id}, ${employmentId}, ${kind},
               ${effectiveDate}::date, ${openedByChangeId}, ${actorId}, ${actorId}, ${publication?.published_version ?? 0})
       returning id
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!inserted) {
       throw new HrmProcessError(
         "REFUSED",
@@ -1648,8 +1572,7 @@ export async function openProcessInTx(
     throw error;
   }
   for (const snapshot of snapshots) {
-    const stored = (
-      await exec.execute(sql`
+    const stored = await exec.execute(sql`
       insert into hrm_process_steps
         (org_id, process_id, template_step_id, position, title, description,
          owner_kind, owner_party_id, due_on, required, evidence_kind, created_by, updated_by, design)
@@ -1658,8 +1581,7 @@ export async function openProcessInTx(
               ${snapshot.ownerPartyId}, ${snapshot.dueOn}::date,
               ${snapshot.required}, ${snapshot.evidenceKind}, ${actorId}, ${actorId}, ${JSON.stringify(choice.steps.find((step) => step.id === snapshot.templateStepId)?.design ?? emptyStepDesign())}::jsonb)
       returning id
-    `)
-    ).rows;
+    `, "objects");
     if (stored.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -1703,12 +1625,10 @@ async function readProgress(
   orgId: string,
   processId: string,
 ): Promise<ProcessDTO["progress"]> {
-  const rows = (
-    await exec.execute<{ required: boolean; status: string }>(sql`
+  const rows = await exec.execute<{ required: boolean; status: string }>(sql`
     select required, status from hrm_process_steps
      where org_id = ${orgId} and process_id = ${processId}
-  `)
-  ).rows;
+  `, "objects");
   try {
     const summary = summarizeProgress(rows);
     return {
@@ -1776,16 +1696,14 @@ export async function completeProcessStep(
         "this step is owned by someone else — ask its owner or a manager to complete it, or hold hrm.process.manage in the employer's scope",
       );
     }
-    let reviewed = (
-      await db.execute<{
+    let reviewed = (await db.execute<{
         design: unknown;
         approval_status: string;
         response: Record<string, unknown> | null;
         attachment_id: string | null;
       }>(
-        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
-      )
-    ).rows[0];
+        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects",
+      ))[0];
     const design = checklistStepDesignSchema.parse(reviewed?.design ?? {});
     if (design.form && query.response)
       query = { ...query, response: withComputedFormulas(design.form.sections, query.response) };
@@ -1794,24 +1712,20 @@ export async function completeProcessStep(
       reviewed?.approval_status !== "pending"
     ) {
       await submitChecklistStepApproval(query);
-      reviewed = (
-        await db.execute<{
+      reviewed = (await db.execute<{
         design: unknown;
         approval_status: string;
         response: Record<string, unknown> | null;
         attachment_id: string | null;
       }>(sql`
-        select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`)
-      ).rows[0];
+        select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects"))[0];
     }
     if (reviewed?.approval_status === "pending")
       return { status: "pending_approval" as const };
     if (reviewed?.approval_status === "approved") {
-      const matches = (
-        await db.execute<{ matches: boolean }>(
-          sql`select response is not distinct from ${JSON.stringify(query.response ?? null)}::jsonb and attachment_id is not distinct from ${query.attachmentId ?? null}::uuid as matches from hrm_process_steps where org_id=${orgId} and id=${stepId}`,
-        )
-      ).rows[0]?.matches;
+      const matches = (await db.execute<{ matches: boolean }>(
+          sql`select response is not distinct from ${JSON.stringify(query.response ?? null)}::jsonb and attachment_id is not distinct from ${query.attachmentId ?? null}::uuid as matches from hrm_process_steps where org_id=${orgId} and id=${stepId}`, "objects",
+        ))[0]?.matches;
       if (!matches)
         throw new HrmProcessError(
           "REFUSED",
@@ -1835,15 +1749,13 @@ export async function completeProcessStep(
         `this step takes ${step.evidence_kind} evidence — drop the attachment to complete it`,
       );
     }
-    const done = (
-      await db.execute(sql`
+    const done = await db.execute(sql`
       update hrm_process_steps
          set status = 'done', done_by = ${actorId}, done_at = now(),
              attachment_id = ${attachmentId}, response = ${JSON.stringify(query.response ?? null)}::jsonb, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${stepId} and status = 'pending'
       returning id
-    `)
-    ).rows;
+    `, "objects");
     if (done.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -1922,25 +1834,21 @@ export async function skipProcessStep(query: SkipStepQuery): Promise<void> {
         );
       }
     }
-    const waitingRuns = (
-      await db.execute<{ id: string }>(
-        sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id=${stepId} and status in ('running','waiting')`,
-      )
-    ).rows;
+    const waitingRuns = await db.execute<{ id: string }>(
+        sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id=${stepId} and status in ('running','waiting')`, "objects",
+      );
     await cancelDispatchRuns(
       orgId,
       waitingRuns.map((r) => r.id),
       { actorId },
     );
-    const skipped = (
-      await db.execute(sql`
+    const skipped = await db.execute(sql`
       update hrm_process_steps
          set status = 'skipped', skip_reason = ${reason},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${stepId} and status = 'pending'
       returning id
-    `)
-    ).rows;
+    `, "objects");
     if (skipped.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -1981,14 +1889,12 @@ export async function completeProcess(query: {
       );
     }
     await requireHrmProcessManage(db, orgId, actorId, process.employment_id);
-    const pending = (
-      await db.execute<{ title: string }>(sql`
+    const pending = await db.execute<{ title: string }>(sql`
       select title from hrm_process_steps
        where org_id = ${orgId} and process_id = ${processId}
          and required and status = 'pending'
        order by position
-    `)
-    ).rows;
+    `, "objects");
     if (pending.length > 0) {
       const names = pending
         .slice(0, 3)
@@ -2000,15 +1906,13 @@ export async function completeProcess(query: {
         `${pending.length} required step(s) still pending (${names}${more}) — complete or skip them before completing the process`,
       );
     }
-    const completed = (
-      await db.execute(sql`
+    const completed = await db.execute(sql`
       update hrm_processes
          set status = 'completed', completed_at = now(),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${processId} and status = 'open'
       returning id
-    `)
-    ).rows;
+    `, "objects");
     if (completed.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -2041,11 +1945,9 @@ export async function cancelProcess(query: {
   const reason = requireNonBlank("reason", query.reason);
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
-    const stepIds = (
-      await db.execute<{ id: string }>(
-        sql`select id from hrm_process_steps where org_id=${orgId} and process_id=${processId} order by id`,
-      )
-    ).rows;
+    const stepIds = await db.execute<{ id: string }>(
+        sql`select id from hrm_process_steps where org_id=${orgId} and process_id=${processId} order by id`, "objects",
+      );
     for (const step of stepIds)
       await lockApprovalSubject(orgId, CHECKLIST_STEP_SUBJECT_KIND, step.id);
     const process = await loadProcessForUpdate(db, orgId, processId);
@@ -2056,25 +1958,21 @@ export async function cancelProcess(query: {
       );
     }
     await requireHrmProcessManage(db, orgId, actorId, process.employment_id);
-    const runs = (
-      await db.execute<{ id: string }>(
-        sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id in (select id from hrm_process_steps where org_id=${orgId} and process_id=${processId}) and status in ('running','waiting')`,
-      )
-    ).rows;
+    const runs = await db.execute<{ id: string }>(
+        sql`select id from flow_runs where org_id=${orgId} and subject_kind=${CHECKLIST_STEP_SUBJECT_KIND} and subject_id in (select id from hrm_process_steps where org_id=${orgId} and process_id=${processId}) and status in ('running','waiting')`, "objects",
+      );
     await cancelDispatchRuns(
       orgId,
       runs.map((r) => r.id),
       { actorId },
     );
-    const cancelled = (
-      await db.execute(sql`
+    const cancelled = await db.execute(sql`
       update hrm_processes
          set status = 'cancelled', cancelled_at = now(), cancel_reason = ${reason},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${processId} and status = 'open'
       returning id
-    `)
-    ).rows;
+    `, "objects");
     if (cancelled.length !== 1) {
       throw new HrmProcessError(
         "REFUSED",
@@ -2232,16 +2130,14 @@ export async function getChecklistDesigner(query: {
 }): Promise<ChecklistDesignerValue> {
   return withOrgTransaction(query.orgId, async () => {
     const detail = await getProcessTemplate(query);
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         draft_document: unknown;
         draft_revision: number;
         published_version: number;
         published_revision: number;
         is_active: boolean;
       }>(sql`
-      select draft_document, draft_revision, published_version, published_revision, is_active from hrm_process_templates where org_id = ${query.orgId} and id = ${detail.id}`)
-    ).rows[0];
+      select draft_document, draft_revision, published_version, published_revision, is_active from hrm_process_templates where org_id = ${query.orgId} and id = ${detail.id}`, "objects"))[0];
     if (!row)
       throw new HrmProcessError(
         "NOT_FOUND",
@@ -2270,16 +2166,14 @@ export async function getChecklistDesigner(query: {
         "NOT_FOUND",
         "Checklist draft is not visible in this organization and legal-entity scope.",
       );
-    const versions = (
-      await db.execute<{
+    const versions = await db.execute<{
         version: number;
         publishedAt: string;
         publishedBy: string;
         reason: string;
       }>(
-        sql`select v.version,v.published_at::text as "publishedAt",u.name as "publishedBy",v.reason from hrm_process_template_versions v join users u on u.org_id=v.org_id and u.id=v.published_by where v.org_id=${query.orgId} and v.template_id=${detail.id} order by v.version desc limit 50`,
-      )
-    ).rows;
+        sql`select v.version,v.published_at::text as "publishedAt",u.name as "publishedBy",v.reason from hrm_process_template_versions v join users u on u.org_id=v.org_id and u.id=v.published_by where v.org_id=${query.orgId} and v.template_id=${detail.id} order by v.version desc limit 50`, "objects",
+      );
     return {
       versions,
       id: detail.id,
@@ -2323,8 +2217,7 @@ export async function saveChecklistDraft(query: {
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${orgId + ":checklist:" + id},0))`,
     );
-    const current = (
-      await db.execute<{
+    const current = (await db.execute<{
         applies_to: TemplateRow["applies_to"];
         kind: string;
         draft_revision: number;
@@ -2333,8 +2226,7 @@ export async function saveChecklistDraft(query: {
         published_revision: number;
         is_active: boolean;
       }>(sql`
-      select applies_to, kind, draft_revision, draft_document, published_version, published_revision, is_active from hrm_process_templates where org_id = ${orgId} and id = ${id} for update`)
-    ).rows[0];
+      select applies_to, kind, draft_revision, draft_document, published_version, published_revision, is_active from hrm_process_templates where org_id = ${orgId} and id = ${id} for update`, "objects"))[0];
     if (current) {
       await assertTemplateWriteScope(db, orgId, actorId, templateAppliesTo(current.applies_to));
       if (current.kind !== document.kind)
@@ -2345,11 +2237,9 @@ export async function saveChecklistDraft(query: {
       if (current.draft_revision !== query.revision) {
         if (
           current.draft_revision === query.revision + 1 &&
-          (
-            await db.execute<{ matches: boolean }>(
-              sql`select draft_document = ${JSON.stringify(document)}::jsonb as matches from hrm_process_templates where org_id=${orgId} and id=${id}`,
-            )
-          ).rows[0]?.matches
+          (await db.execute<{ matches: boolean }>(
+              sql`select draft_document = ${JSON.stringify(document)}::jsonb as matches from hrm_process_templates where org_id=${orgId} and id=${id}`, "objects",
+            ))[0]?.matches
         )
           return {
             id,
@@ -2372,11 +2262,9 @@ export async function saveChecklistDraft(query: {
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${orgId + ":checklist-name:" + document.kind + ":" + document.name.trim()},0))`,
     );
-    const duplicateName = (
-      await db.execute(
-        sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`,
-      )
-    ).rows;
+    const duplicateName = await db.execute(
+        sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`, "objects",
+      );
     if (duplicateName.length)
       throw new HrmProcessError(
         "REFUSED",
@@ -2387,15 +2275,11 @@ export async function saveChecklistDraft(query: {
       if (step.ownerPartyId) await assertOwnerParty(db, orgId, step.ownerPartyId);
     const revision = query.revision + 1;
     const rows = current
-      ? (
-          await db.execute(
-            sql`update hrm_process_templates set draft_document = ${JSON.stringify(document)}::jsonb, draft_revision = ${revision}, designer_managed = true, updated_by = ${actorId}, updated_at = now() where org_id = ${orgId} and id = ${id} and draft_revision = ${query.revision} returning id`,
-          )
-        ).rows
-      : (
-          await db.execute(sql`insert into hrm_process_templates(id,org_id,kind,name,applies_to,is_active,designer_managed,draft_document,draft_revision,created_by,updated_by)
-          values(${id},${orgId},${document.kind},${document.name.trim()},${JSON.stringify({ employer_subsidiary_id: document.appliesTo.employerSubsidiaryId, department_id: document.appliesTo.departmentId })}::jsonb,false,true,${JSON.stringify(document)}::jsonb,${revision},${actorId},${actorId}) returning id`)
-        ).rows;
+      ? (await db.execute(
+            sql`update hrm_process_templates set draft_document = ${JSON.stringify(document)}::jsonb, draft_revision = ${revision}, designer_managed = true, updated_by = ${actorId}, updated_at = now() where org_id = ${orgId} and id = ${id} and draft_revision = ${query.revision} returning id`, "objects",
+          ))
+      : (await db.execute(sql`insert into hrm_process_templates(id,org_id,kind,name,applies_to,is_active,designer_managed,draft_document,draft_revision,created_by,updated_by)
+          values(${id},${orgId},${document.kind},${document.name.trim()},${JSON.stringify({ employer_subsidiary_id: document.appliesTo.employerSubsidiaryId, department_id: document.appliesTo.departmentId })}::jsonb,false,true,${JSON.stringify(document)}::jsonb,${revision},${actorId},${actorId}) returning id`, "objects"));
     if (rows.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -2427,11 +2311,9 @@ async function refuseLegacyDesignerEdit(
   orgId: string,
   templateId: string,
 ): Promise<void> {
-  const row = (
-    await exec.execute<{ designer_managed: boolean }>(
-      sql`select designer_managed from hrm_process_templates where org_id=${orgId} and id=${templateId}`,
-    )
-  ).rows[0];
+  const row = (await exec.execute<{ designer_managed: boolean }>(
+      sql`select designer_managed from hrm_process_templates where org_id=${orgId} and id=${templateId}`, "objects",
+    ))[0];
   if (row?.designer_managed)
     throw new HrmProcessError(
       "REFUSED",
@@ -2472,11 +2354,9 @@ export async function retireChecklistTemplate(query: {
       );
     if (!current.isActive) return current;
     await db.execute(sql`select set_config('app.checklist_publish',${id},true)`);
-    const updated = (
-      await db.execute(
-        sql`update hrm_process_templates set is_active=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and is_active returning id`,
-      )
-    ).rows;
+    const updated = await db.execute(
+        sql`update hrm_process_templates set is_active=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and is_active returning id`, "objects",
+      );
     if (updated.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -2524,11 +2404,9 @@ export async function publishChecklistDraft(query: {
         "REFUSED",
         "The draft changed before publication — review and publish the latest revision.",
       );
-    const marker = (
-      await db.execute<{ published_revision: number }>(
-        sql`select published_revision from hrm_process_templates where org_id=${orgId} and id=${id}`,
-      )
-    ).rows[0];
+    const marker = (await db.execute<{ published_revision: number }>(
+        sql`select published_revision from hrm_process_templates where org_id=${orgId} and id=${id}`, "objects",
+      ))[0];
     if (
       marker?.published_revision === query.revision &&
       locked.publishedVersion > 0 &&
@@ -2537,11 +2415,9 @@ export async function publishChecklistDraft(query: {
       return locked;
     const document = locked.document,
       issues = checklistIssues(document);
-    const foreignIdentities = (
-      await db.execute(
-        sql`select id from hrm_process_template_steps where id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(document.steps.map((s) => s.id))}::jsonb) as ids(value)) and (org_id<>${orgId} or template_id<>${id}) limit 1`,
-      )
-    ).rows;
+    const foreignIdentities = await db.execute(
+        sql`select id from hrm_process_template_steps where id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(document.steps.map((s) => s.id))}::jsonb) as ids(value)) and (org_id<>${orgId} or template_id<>${id}) limit 1`, "objects",
+      );
     if (foreignIdentities.length)
       throw new HrmProcessError(
         "REFUSED",
@@ -2551,11 +2427,9 @@ export async function publishChecklistDraft(query: {
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtextextended(${orgId + ":checklist-name:" + document.kind + ":" + document.name.trim()},0))`,
     );
-    const duplicateName = (
-      await db.execute(
-        sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`,
-      )
-    ).rows;
+    const duplicateName = await db.execute(
+        sql`select id from hrm_process_templates where org_id=${orgId} and kind=${document.kind} and id<>${id} and (name=${document.name.trim()} or draft_document->>'name'=${document.name.trim()}) limit 1`, "objects",
+      );
     if (duplicateName.length)
       throw new HrmProcessError(
         "REFUSED",
@@ -2613,16 +2487,12 @@ export async function publishChecklistDraft(query: {
       const existing = currentSteps.some((s) => s.id === step.id);
       const design = JSON.stringify(step.design);
       const rows = existing
-        ? (
-            await db.execute(
-              sql`update hrm_process_template_steps set is_current=true,position=${position},title=${step.title.trim()},description=${step.description},owner_kind=${step.ownerKind},owner_party_id=${step.ownerPartyId},due_offset_days=${step.dueOffsetDays},required=${step.required},evidence_kind=${step.evidenceKind},design=${design}::jsonb,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${step.id} returning id`,
-            )
-          ).rows
-        : (
-            await db.execute(
-              sql`insert into hrm_process_template_steps(id,org_id,template_id,position,title,description,owner_kind,owner_party_id,due_offset_days,required,evidence_kind,design,created_by,updated_by) values(${step.id},${orgId},${id},${position},${step.title.trim()},${step.description},${step.ownerKind},${step.ownerPartyId},${step.dueOffsetDays},${step.required},${step.evidenceKind},${design}::jsonb,${actorId},${actorId}) returning id`,
-            )
-          ).rows;
+        ? (await db.execute(
+              sql`update hrm_process_template_steps set is_current=true,position=${position},title=${step.title.trim()},description=${step.description},owner_kind=${step.ownerKind},owner_party_id=${step.ownerPartyId},due_offset_days=${step.dueOffsetDays},required=${step.required},evidence_kind=${step.evidenceKind},design=${design}::jsonb,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${step.id} returning id`, "objects",
+            ))
+        : (await db.execute(
+              sql`insert into hrm_process_template_steps(id,org_id,template_id,position,title,description,owner_kind,owner_party_id,due_offset_days,required,evidence_kind,design,created_by,updated_by) values(${step.id},${orgId},${id},${position},${step.title.trim()},${step.description},${step.ownerKind},${step.ownerPartyId},${step.dueOffsetDays},${step.required},${step.evidenceKind},${design}::jsonb,${actorId},${actorId}) returning id`, "objects",
+            ));
       if (rows.length !== 1)
         throw new HrmProcessError(
           "REFUSED",
@@ -2632,11 +2502,9 @@ export async function publishChecklistDraft(query: {
     // Keep the source identity of every historical execution step. Removed
     // definitions are excluded from future snapshots, never detached from history.
     for (const old of currentSteps.filter((s) => !document.steps.some((n) => n.id === s.id))) {
-      const removed = (
-        await db.execute(
-          sql`update hrm_process_template_steps set is_current=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${old.id} returning id`,
-        )
-      ).rows;
+      const removed = await db.execute(
+          sql`update hrm_process_template_steps set is_current=false,updated_by=${actorId},updated_at=now() where org_id=${orgId} and template_id=${id} and id=${old.id} returning id`, "objects",
+        );
       if (removed.length !== 1)
         throw new HrmProcessError(
           "REFUSED",
@@ -2644,21 +2512,17 @@ export async function publishChecklistDraft(query: {
         );
     }
     const version = locked.publishedVersion + 1;
-    const stored = (
-      await db.execute(
-        sql`insert into hrm_process_template_versions(org_id,template_id,version,document,published_by,reason) values(${orgId},${id},${version},${JSON.stringify(document)}::jsonb,${actorId},${reason}) returning id`,
-      )
-    ).rows;
+    const stored = await db.execute(
+        sql`insert into hrm_process_template_versions(org_id,template_id,version,document,published_by,reason) values(${orgId},${id},${version},${JSON.stringify(document)}::jsonb,${actorId},${reason}) returning id`, "objects",
+      );
     if (stored.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
         "Publication evidence was not stored — nothing was published.",
       );
-    const updated = (
-      await db.execute(
-        sql`update hrm_process_templates set name=${document.name.trim()},applies_to=${JSON.stringify({ employer_subsidiary_id: scope.employerSubsidiaryId, department_id: scope.departmentId })}::jsonb,is_active=true,designer_managed=true,published_version=${version},published_revision=${query.revision},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} returning id`,
-      )
-    ).rows;
+    const updated = await db.execute(
+        sql`update hrm_process_templates set name=${document.name.trim()},applies_to=${JSON.stringify({ employer_subsidiary_id: scope.employerSubsidiaryId, department_id: scope.departmentId })}::jsonb,is_active=true,designer_managed=true,published_version=${version},published_revision=${query.revision},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} returning id`, "objects",
+      );
     if (updated.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -2686,27 +2550,21 @@ async function validateDesignedCompletion(
   query: CompleteStepQuery,
   submitting = false,
 ) {
-  const row = (
-    await exec.execute<{ design: unknown; approval_status: string }>(
-      sql`select design,approval_status from hrm_process_steps where org_id=${orgId} and id=${step.id}`,
-    )
-  ).rows[0];
+  const row = (await exec.execute<{ design: unknown; approval_status: string }>(
+      sql`select design,approval_status from hrm_process_steps where org_id=${orgId} and id=${step.id}`, "objects",
+    ))[0];
   if (!row)
     throw new HrmProcessError(
       "NOT_FOUND",
       "Checklist step is no longer visible — reload the checklist.",
     );
   const design = checklistStepDesignSchema.parse(row.design ?? {});
-  const pending = (
-    await exec.execute<{ title: string }>(
-      sql`select title from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as deps(value)) and status='pending' order by position`,
-    )
-  ).rows;
-  const dependencyCount = (
-    await exec.execute<{ count: number }>(
-      sql`select count(*)::int as count from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as ids(value))`,
-    )
-  ).rows[0]?.count;
+  const pending = await exec.execute<{ title: string }>(
+      sql`select title from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as deps(value)) and status='pending' order by position`, "objects",
+    );
+  const dependencyCount = (await exec.execute<{ count: number }>(
+      sql`select count(*)::int as count from hrm_process_steps where org_id=${orgId} and process_id=${step.process_id} and template_step_id in(select value::uuid from jsonb_array_elements_text(${JSON.stringify(design.dependencies)}::jsonb) as ids(value))`, "objects",
+    ))[0]?.count;
   if (dependencyCount !== design.dependencies.length)
     throw new HrmProcessError(
       "REFUSED",
@@ -2742,11 +2600,9 @@ async function validateDesignedCompletion(
               "EVIDENCE_REQUIRED",
               `Choose a valid reference for ${field.label} from its picker.`,
             );
-          const target = (
-            await exec.execute(
-              sql`select id from ${sql.identifier(field.type === "party" ? "parties" : "accounts")} where org_id=${orgId} and id=${value} and is_active`,
-            )
-          ).rows[0];
+          const target = (await exec.execute(
+              sql`select id from ${sql.identifier(field.type === "party" ? "parties" : "accounts")} where org_id=${orgId} and id=${value} and is_active`, "objects",
+            ))[0];
           if (!target)
             throw new HrmProcessError(
               "EVIDENCE_REQUIRED",
@@ -2791,16 +2647,14 @@ export async function submitChecklistStepApproval(
         "BAD_STATE",
         "Only a pending step on an open checklist can be submitted.",
       );
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         design: unknown;
         approval_status: string;
         response: unknown;
         attachment_id: string | null;
       }>(
-        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${id}`,
-      )
-    ).rows[0];
+        sql`select design,approval_status,response,attachment_id from hrm_process_steps where org_id=${orgId} and id=${id}`, "objects",
+      ))[0];
     if (!row)
       throw new HrmProcessError("NOT_FOUND", "Checklist step not found — reload the checklist.");
     const design = checklistStepDesignSchema.parse(row.design);
@@ -2826,11 +2680,9 @@ export async function submitChecklistStepApproval(
         );
       await assertAttachmentReadable(db, orgId, actorId, query.attachmentId);
     }
-    const prepared = (
-      await db.execute(
-        sql`update hrm_process_steps set submitted_by=${actorId},submitted_at=now(),response=${JSON.stringify(query.response ?? null)}::jsonb,attachment_id=${query.attachmentId ?? null},approval_status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and status='pending' returning id`,
-      )
-    ).rows;
+    const prepared = await db.execute(
+        sql`update hrm_process_steps set submitted_by=${actorId},submitted_at=now(),response=${JSON.stringify(query.response ?? null)}::jsonb,attachment_id=${query.attachmentId ?? null},approval_status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${id} and status='pending' returning id`, "objects",
+      );
     if (prepared.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -2845,11 +2697,9 @@ export async function submitChecklistStepApproval(
       subjectId: id,
     });
     const gated = dispatch.runs.find((run) => run.gatesCreated > 0);
-    const stored = (
-      await db.execute(
-        sql`update hrm_process_steps set flow_run_id=${gated?.runId ?? null},approval_status=${policy.kind === "gated" ? "pending" : "approved"} where org_id=${orgId} and id=${id} and approval_status='pending' returning id`,
-      )
-    ).rows;
+    const stored = await db.execute(
+        sql`update hrm_process_steps set flow_run_id=${gated?.runId ?? null},approval_status=${policy.kind === "gated" ? "pending" : "approved"} where org_id=${orgId} and id=${id} and approval_status='pending' returning id`, "objects",
+      );
     if (stored.length !== 1)
       throw new HrmProcessError(
         "REFUSED",
@@ -2894,11 +2744,9 @@ export async function releaseChecklistStepApproval(args: {
   await assertHrmFeatureOn(db, orgId);
   const step = await loadStepForUpdate(db, orgId, args.subjectId);
   await requireHrmProcessManage(db, orgId, actorId, step.employment_id);
-  const row = (
-    await db.execute<{ approval_status: string; submitted_by: string; flow_run_id: string | null }>(
-      sql`select approval_status,submitted_by,flow_run_id from hrm_process_steps where org_id=${orgId} and id=${step.id}`,
-    )
-  ).rows[0];
+  const row = (await db.execute<{ approval_status: string; submitted_by: string; flow_run_id: string | null }>(
+      sql`select approval_status,submitted_by,flow_run_id from hrm_process_steps where org_id=${orgId} and id=${step.id}`, "objects",
+    ))[0];
   if (row?.approval_status !== "pending") return;
   if (step.process_status !== "open" || step.status !== "pending")
     throw new HrmProcessError(
@@ -2916,11 +2764,9 @@ export async function releaseChecklistStepApproval(args: {
       "FORBIDDEN",
       "The submitted Flow policy requires another authorized approver for this checklist evidence.",
     );
-  const changed = (
-    await db.execute(
-      sql`update hrm_process_steps set approval_status=${args.outcome},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${step.id} and approval_status='pending' returning id`,
-    )
-  ).rows;
+  const changed = await db.execute(
+      sql`update hrm_process_steps set approval_status=${args.outcome},updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${step.id} and approval_status='pending' returning id`, "objects",
+    );
   if (changed.length !== 1)
     throw new HrmProcessError(
       "REFUSED",
@@ -3006,27 +2852,21 @@ export async function runChecklistReminders(orgId: string): Promise<number> {
   return withOrgTransaction(orgId, async () => {
     if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) return 0;
     const today = await businessToday(orgId);
-    const candidates = (
-      await db.execute<{ id: string; process_id: string }>(
-        sql`select s.id,s.process_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id where s.org_id=${orgId} and p.status='open' and s.status='pending' and s.design->>'reminderDays' is not null and s.due_on + (s.design->>'reminderDays')::int <= ${today}::date and (s.reminder_sent_on is null or s.reminder_sent_on<${today}::date) order by s.process_id,s.id limit 100`,
-      )
-    ).rows;
-    const users = (
-      await db.execute<{ id: string }>(
-        sql`select id from users where org_id=${orgId} and is_active order by id`,
-      )
-    ).rows;
+    const candidates = await db.execute<{ id: string; process_id: string }>(
+        sql`select s.id,s.process_id from hrm_process_steps s join hrm_processes p on p.org_id=s.org_id and p.id=s.process_id where s.org_id=${orgId} and p.status='open' and s.status='pending' and s.design->>'reminderDays' is not null and s.due_on + (s.design->>'reminderDays')::int <= ${today}::date and (s.reminder_sent_on is null or s.reminder_sent_on<${today}::date) order by s.process_id,s.id limit 100`, "objects",
+      );
+    const users = await db.execute<{ id: string }>(
+        sql`select id from users where org_id=${orgId} and is_active order by id`, "objects",
+      );
     let sent = 0;
     for (const candidate of candidates) {
       const process = await loadProcessForUpdate(db, orgId, candidate.process_id);
       if (process.status !== "open") continue;
       const step = await loadStepForUpdate(db, orgId, candidate.id);
       if (step.status !== "pending") continue;
-      const current = (
-        await db.execute<{ sent: boolean }>(
-          sql`select reminder_sent_on>=${today}::date as sent from hrm_process_steps where org_id=${orgId} and id=${step.id}`,
-        )
-      ).rows[0];
+      const current = (await db.execute<{ sent: boolean }>(
+          sql`select reminder_sent_on>=${today}::date as sent from hrm_process_steps where org_id=${orgId} and id=${step.id}`, "objects",
+        ))[0];
       if (current?.sent) continue;
       const recipients: { userId: string; href: string }[] = [];
       for (const user of users) {
@@ -3042,22 +2882,18 @@ export async function runChecklistReminders(orgId: string): Promise<number> {
       }
       if (!recipients.length) continue;
       for (const { userId, href } of recipients) {
-        const notification = (
-          await db.execute(
-            sql`insert into notifications(org_id,user_id,kind,title,body,href) values(${orgId},${userId},'hrm_checklist',${`Checklist step due: ${step.title}`},${`This ${step.process_kind} checklist step was due ${step.due_on}. Open the task to review its instructions and complete the outstanding work.`},${href}) returning id`,
-          )
-        ).rows;
+        const notification = await db.execute(
+            sql`insert into notifications(org_id,user_id,kind,title,body,href) values(${orgId},${userId},'hrm_checklist',${`Checklist step due: ${step.title}`},${`This ${step.process_kind} checklist step was due ${step.due_on}. Open the task to review its instructions and complete the outstanding work.`},${href}) returning id`, "objects",
+          );
         if (notification.length !== 1)
           throw new HrmProcessError(
             "REFUSED",
             "The checklist reminder was not stored — the next automation tick will retry it.",
           );
       }
-      const changed = (
-        await db.execute(
-          sql`update hrm_process_steps set reminder_sent_on=${today}::date where org_id=${orgId} and id=${step.id} and (reminder_sent_on is null or reminder_sent_on<${today}::date) returning id`,
-        )
-      ).rows;
+      const changed = await db.execute(
+          sql`update hrm_process_steps set reminder_sent_on=${today}::date where org_id=${orgId} and id=${step.id} and (reminder_sent_on is null or reminder_sent_on<${today}::date) returning id`, "objects",
+        );
       if (changed.length !== 1)
         throw new HrmProcessError(
           "REFUSED",
@@ -3080,11 +2916,9 @@ export async function getChecklistVersion(query: {
     throw new HrmProcessError("REFUSED", "Choose a published version from checklist history.");
   return withOrgTransaction(query.orgId, async () => {
     await getChecklistDesigner(query);
-    const row = (
-      await db.execute<{ document: unknown }>(
-        sql`select document from hrm_process_template_versions where org_id=${query.orgId} and template_id=${query.templateId} and version=${query.version}`,
-      )
-    ).rows[0];
+    const row = (await db.execute<{ document: unknown }>(
+        sql`select document from hrm_process_template_versions where org_id=${query.orgId} and template_id=${query.templateId} and version=${query.version}`, "objects",
+      ))[0];
     if (!row)
       throw new HrmProcessError(
         "NOT_FOUND",

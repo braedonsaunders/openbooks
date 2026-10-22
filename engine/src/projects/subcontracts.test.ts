@@ -210,13 +210,14 @@ function sqlText(query: unknown): string {
     .join("");
 }
 
-type FakeTx = { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> };
+type FakeTx = { execute: (query: unknown, mode?: string) => Promise<unknown> };
 
 function mockTransaction(t: TestContext, features: Record<string, boolean>, seen: string[]): void {
   const tx: FakeTx = {
-    execute: async (query: unknown) => {
+    execute: async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       seen.push(sqlText(query));
-      return { rows: [{ features }] };
+      return inMode({ rows: [{ features }] });
     },
   };
   const transactionDb = db as unknown as {
@@ -276,10 +277,11 @@ test("createSubcontract refuses a disabled Projects parent gate first", async (t
 test("createSubcontract proceeds past enabled gates to the project lookup", async (t) => {
   let calls = 0;
   const tx: FakeTx = {
-    execute: async () => {
+    execute: async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       calls += 1;
-      if (calls === 1) return { rows: [] };
-      if (calls <= 3) return { rows: [{ features: { projects: true, subcontracts: true } }] };
+      if (calls === 1) return inMode({ rows: [] });
+      if (calls <= 3) return inMode({ rows: [{ features: { projects: true, subcontracts: true } }] });
       throw new Error("beyond-gate");
     },
   };

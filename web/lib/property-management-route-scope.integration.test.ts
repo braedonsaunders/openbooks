@@ -87,8 +87,8 @@ test('R4: updateLease cannot re-parent a lease into a property outside the calle
       baseRent: '1000', billingDay: 1, paymentTermsDays: 0, securityDepositRequired: '0', camMethod: 'none',
       lateFeeType: 'none', lateFeeValue: '0', graceDays: 0, autoInvoice: true, autoPost: false,
     });
-    const currentProperty = () => db.execute<{ property_id: string }>(sql`select property_id::text from property_leases where org_id=${fx.orgId} and id=${leaseId}`)
-      .then((r) => r.rows[0]!.property_id);
+    const currentProperty = () => db.execute<{ property_id: string }>(sql`select property_id::text from property_leases where org_id=${fx.orgId} and id=${leaseId}`, 'objects')
+      .then((r) => r[0]!.property_id);
 
     const hidden = await withOrgContext(org.orgId, () => post(body(fx.hiddenPropertyId)));
     assert.equal(hidden.status, 404);
@@ -126,8 +126,8 @@ test('property create/update refuse foreign reference custom values', { skip: !p
     });
     const refusedCreate = await withOrgContext(org.orgId, () => post(createBody({ ref_party: foreign.customerId })));
     assert.equal(refusedCreate.status, 404, `expected 404, got ${refusedCreate.status}: ${JSON.stringify(await refusedCreate.clone().json().catch(() => null))}`);
-    const created = await db.execute<{ n: number }>(sql`select count(*)::int as n from managed_properties where org_id = ${org.orgId} and code = 'PRP-CF'`);
-    assert.equal(created.rows[0]?.n ?? -1, 0, 'refused create stores nothing');
+    const created = await db.execute<{ n: number }>(sql`select count(*)::int as n from managed_properties where org_id = ${org.orgId} and code = 'PRP-CF'`, 'objects');
+    assert.equal(created[0]?.n ?? -1, 0, 'refused create stores nothing');
     const okCreate = await withOrgContext(org.orgId, () => post(createBody({ ref_party: fx.tenantId })));
     assert.equal(okCreate.status, 201, `expected 201, got ${okCreate.status}: ${JSON.stringify(await okCreate.clone().json().catch(() => null))}`);
     const propertyId = ((await okCreate.json()) as { id: string }).id;
@@ -145,7 +145,7 @@ test('property create/update refuse foreign reference custom values', { skip: !p
     assert.equal(seedUpdate.status, 200, `seed update must stay green: ${JSON.stringify(await seedUpdate.clone().json().catch(() => null))}`);
     const refusedUpdate = await withOrgContext(org.orgId, () => post(updateBody({ ref_party: foreign.customerId })));
     assert.equal(refusedUpdate.status, 404, `expected 404, got ${refusedUpdate.status}: ${JSON.stringify(await refusedUpdate.clone().json().catch(() => null))}`);
-    const storedUpdate = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from managed_properties where id = ${propertyId}`)).rows[0]?.custom;
+    const storedUpdate = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from managed_properties where id = ${propertyId}`, 'objects'))[0]?.custom;
     assert.equal((storedUpdate as Record<string, unknown> | undefined)?.ref_party, fx.tenantId, 'refused update leaves stored custom untouched');
     const okUpdate = await withOrgContext(org.orgId, () => post(updateBody({})));
     assert.equal(okUpdate.status, 200, `own update must stay green: ${JSON.stringify(await okUpdate.clone().json().catch(() => null))}`);

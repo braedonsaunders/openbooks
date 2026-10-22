@@ -69,11 +69,11 @@ export async function acknowledgePayRunRefusals(input: {
   const { orgId, documentId, actorId } = input;
   return await withOrgTransaction(orgId, () => withTransactionSavepoint(db, async () => {
     const tx = db;
-    const sourceIdentity = (await tx.execute<{taxYear: number}>(sql`
+    const sourceIdentity = await tx.execute<{taxYear: number}>(sql`
       select r.tax_year as "taxYear" from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
        where r.org_id=${orgId} and r.document_id=${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
-    `)).rows;
+    `, "objects");
     if (sourceIdentity.length !== 1) throw new PayrollError("pay run not found");
     await takeOpeningSourceYearFence(tx, orgId, sourceIdentity[0]!.taxYear);
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
@@ -81,8 +81,8 @@ export async function acknowledgePayRunRefusals(input: {
       select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       where r.org_id = ${orgId} and r.document_id = ${documentId} for update
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (Number(run.tax_year) !== sourceIdentity[0]!.taxYear) throw new PayrollError("The payroll source year changed — reload and calculate the run before committing");
     if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id as string | null)) {
@@ -119,7 +119,7 @@ export async function acknowledgePayRunRefusals(input: {
     `);
     const afterRun = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_runs where org_id = ${orgId} and document_id = ${documentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!afterRun) throw new PayrollError("pay run not found");
     // Committing authorizes pay; acknowledging authorizes leaving people out.
     // Same evidence shape as the commit transition, so an auditor finds both
@@ -156,11 +156,11 @@ export async function commitPayRun(input: {
   // Restore our projection, liability stamps, and time claims before returning it.
   return await withOrgTransaction(orgId, () => withTransactionSavepoint(db, async () => {
     const tx = db;
-    const sourceIdentity = (await tx.execute<{taxYear: number}>(sql`
+    const sourceIdentity = await tx.execute<{taxYear: number}>(sql`
       select r.tax_year as "taxYear" from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
        where r.org_id=${orgId} and r.document_id=${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
-    `)).rows;
+    `, "objects");
     if (sourceIdentity.length !== 1) throw new PayrollError("pay run not found");
     await takeOpeningSourceYearFence(tx, orgId, sourceIdentity[0]!.taxYear);
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
@@ -168,8 +168,8 @@ export async function commitPayRun(input: {
       select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id, d.document_number from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       where r.org_id = ${orgId} and r.document_id = ${documentId} for update
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (Number(run.tax_year) !== sourceIdentity[0]!.taxYear) throw new PayrollError("The payroll source year changed — reload and calculate the run before committing");
     if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id)) {
@@ -198,14 +198,14 @@ export async function commitPayRun(input: {
       select distinct s.employee_party_id
         from pay_stubs s
        where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-    `));
+    `, "objects"));
     await takeEmployeeTaxYearFences(
       tx,
-      fencedEmployees.rows.map((e) =>
+      fencedEmployees.map((e) =>
         employeeTaxYearFenceKey(orgId, e.employee_party_id, run.tax_year),
       ),
     );
-    await lockEmployerAssignmentProfiles(tx, orgId, fencedEmployees.rows.map(e => e.employee_party_id));
+    await lockEmployerAssignmentProfiles(tx, orgId, fencedEmployees.map(e => e.employee_party_id));
     await lockPayrollAnomalyReview(tx, orgId);
     const anomalyGate = await payrollAnomalyFinalizeCheck(tx, { orgId, documentId });
     if (anomalyGate.openBlockCount > 0) {
@@ -336,7 +336,7 @@ export async function commitPayRun(input: {
         select distinct employee_party_id::text as employee_party_id
           from pay_stubs
          where org_id = ${orgId} and pay_run_document_id = ${documentId}
-      `)).rows.map((row) => row.employee_party_id);
+      `, "objects")).map((row) => row.employee_party_id);
       const leaveProblem = await leavePayrollInputProblems(tx, {
         orgId,
         runDocumentId: documentId,
@@ -433,8 +433,8 @@ export async function commitPayRun(input: {
                as stamp(line_id, account_id, party_text)
          where l.org_id = ${orgId} and l.id = stamp.line_id
         returning l.id::text as id
-      `));
-      if (stamped.rows.length !== lineLiabilities.length) {
+      `, "objects"));
+      if (stamped.length !== lineLiabilities.length) {
         throw new PayrollError("pay run commit could not stamp its liability history — recalculate and commit again");
       }
     }
@@ -479,9 +479,9 @@ export async function commitPayRun(input: {
          and te.worked_on between ${run.period_start} and ${run.period_end}
          and te.payroll_batch_ref is null
       returning te.id::text as id
-    `));
+    `, "objects"));
     const expectedClaimIds = [...storedSource.claimEntryIds].sort();
-    const actualClaimIds = claimed.rows.map((row) => row.id).sort();
+    const actualClaimIds = claimed.map((row) => row.id).sort();
     if (canonicalJson(actualClaimIds) !== canonicalJson(expectedClaimIds)) {
       throw new PayrollError(staleCalculationMessage(["time"], run.doc_status));
     }
@@ -495,7 +495,7 @@ export async function commitPayRun(input: {
        where org_id = ${orgId} and pay_schedule_id = ${run.pay_schedule_id}
          and is_active and country is not null
        order by country
-    `)).rows.map((row) => row.country);
+    `, "objects")).map((row) => row.country);
     const ratePacks = rateCountries.flatMap((country) => {
       const pack = PAYROLL_COUNTRY_PACKS[country];
       return pack ? [pack.statutoryRates] : [];
@@ -536,7 +536,7 @@ export async function commitPayRun(input: {
     // recalculable from that digest, so the run transition is the evidence.
     const afterRun = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_runs where org_id = ${orgId} and document_id = ${documentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!afterRun) throw new PayrollError("pay run not found");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -558,17 +558,17 @@ export async function previewPayRunGl(
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<{legs: (PayRunGlLeg & {accountLabel:string;partyName:string|null;projectName:string|null})[];debitTotal:string}> {
-  const source=(await db.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
+  const source=await db.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
     join documents d on d.org_id=r.org_id and d.id=r.document_id
     where r.org_id=${orgId} and r.document_id=${documentId}
-      ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`,allowedSubsidiaryIds)}`)).rows;
+      ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`,allowedSubsidiaryIds)}`, "objects");
   if(source.length!==1) throw new PayrollError('pay run not found');
   return withOpeningReportingSnapshot(orgId,source[0]!.taxYear,async tx=>{
     await tx.execute(sql`select id from orgs where id=${orgId} for share`);
-    const locked=(await tx.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
+    const locked=await tx.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
       join documents d on d.org_id=r.org_id and d.id=r.document_id
       where r.org_id=${orgId} and r.document_id=${documentId}
-        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`,allowedSubsidiaryIds)} for share of r,d`)).rows;
+        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`,allowedSubsidiaryIds)} for share of r,d`, "objects");
     if(locked.length!==1 || locked[0]!.taxYear!==source[0]!.taxYear) throw new PayrollError('The payroll source identity changed — reload the GL preview');
     await lockPayrollEmploymentRoster(tx,orgId,documentId);
     await lockAndCheckPayrollRunPopulation(tx,orgId,documentId,allowedSubsidiaryIds);
@@ -588,9 +588,9 @@ async function previewPayRunGlInSnapshot(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  if (!runRows.rows[0]) throw new PayrollError("pay run not found");
-  if (runRows.rows[0].run_status === "draft") {
+  `, "objects"));
+  if (!runRows[0]) throw new PayrollError("pay run not found");
+  if (runRows[0].run_status === "draft") {
     throw new PayrollError("calculate the pay run to preview its GL impact");
   }
   const { legs, debitTotal } = await payRunGlLegs(
@@ -604,19 +604,19 @@ async function previewPayRunGlInSnapshot(
   const projectIds = [...new Set(legs.map((l) => l.projectId).filter(Boolean))] as string[];
   const [accounts, parties, projects] = (await Promise.all([
     tx.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
-                    where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`),
+                    where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`, "objects"),
     partyIds.length
       ? tx.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
-                        where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
-      : { rows: [] },
+                        where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`, "objects")
+      : [],
     projectIds.length
       ? tx.execute<{ id: string; name: string }>(sql`select id, name from projects
-                        where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`)
-      : { rows: [] },
+                        where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`, "objects")
+      : [],
   ]));
-  const accountById = new Map(accounts.rows.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
-  const partyById = new Map(parties.rows.map((p) => [p.id, p.display_name]));
-  const projectById = new Map(projects.rows.map((p) => [p.id, p.name]));
+  const accountById = new Map(accounts.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
+  const partyById = new Map(parties.map((p) => [p.id, p.display_name]));
+  const projectById = new Map(projects.map((p) => [p.id, p.name]));
   return {
     debitTotal,
     legs: legs.map((leg) => ({

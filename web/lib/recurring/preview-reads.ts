@@ -21,17 +21,17 @@ export async function readScheduleForPreview(scope: Scope, scheduleId: string) {
       join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
      where rs.id = ${scheduleId} and rs.org_id = ${scope.orgId}
        ${recurringTemplateScopeFilter(scope.orgId, sql`d.id`, sql`d.subsidiary_id`, scope.allowedSubsidiaryIds ?? null)}
-  `)).rows[0] ?? null
+  `, 'objects'))[0] ?? null
 }
 
 /** The template document named by id or number, when exactly one is visible to the caller. */
 export async function resolveTemplateDocument(scope: Scope, by: { id?: string | null; number?: string | null }): Promise<string | null> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select d.id from documents d where d.org_id = ${scope.orgId}
       and ${by.id ? sql`d.id = ${by.id}` : sql`d.document_number = ${by.number ?? ''}`}
       ${recurringTemplateScopeFilter(scope.orgId, sql`d.id`, sql`d.subsidiary_id`, scope.allowedSubsidiaryIds ?? null)}
     order by d.id limit 2
-  `)).rows
+  `, 'objects')
   return rows.length === 1 && rows[0] ? rows[0].id : null
 }
 
@@ -40,5 +40,5 @@ export async function readTemplateSummary(orgId: string, templateId: string) {
   return (await db.execute<{ number: string; total: string; currency: string; kind: string }>(sql`
     select document_number as "number", total::text as "total", currency, kind
       from documents where id = ${templateId} and org_id = ${orgId}
-  `)).rows[0] ?? null
+  `, 'objects'))[0] ?? null
 }

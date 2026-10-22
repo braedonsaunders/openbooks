@@ -183,7 +183,7 @@ export async function loadPersonaMetrics(
       db.execute<{ pay_date: string }>(sql`
         select pay_date::text as pay_date from pay_stubs
          where org_id = ${orgId} and employee_party_id = ${partyId}
-         order by pay_date desc limit 1`),
+         order by pay_date desc limit 1`, 'objects'),
       // The EMPLOYEE's own schedule from their active payroll profile — the
       // org default is wrong wherever colleagues pay on different
       // frequencies. First active profile wins; the tile names one date.
@@ -192,11 +192,11 @@ export async function loadPersonaMetrics(
           from employee_payroll_profiles pr
           join pay_schedules s on s.id = pr.pay_schedule_id and s.org_id = pr.org_id
          where pr.org_id = ${orgId} and pr.employee_party_id = ${partyId} and pr.is_active and s.is_active
-         order by pr.created_at limit 1`),
+         order by pr.created_at limit 1`, 'objects'),
     ])
-    const lastPayDate = stub.rows[0]?.pay_date ?? null
+    const lastPayDate = stub[0]?.pay_date ?? null
     let nextPayDate: string | null = null
-    const row = schedule.rows[0]
+    const row = schedule[0]
     if (row) {
       try {
         // Every frequency through the payroll calendar — the same call the
@@ -261,13 +261,13 @@ export async function loadPersonaMetrics(
            where org_id = ${orgId} and employment_id in (select jsonb_array_elements_text(${JSON.stringify([...mine])}::jsonb)::uuid)
              and kind = 'line' and recorded_until is null
              and effective_from <= ${today}::date and (effective_to is null or effective_to > ${today}::date)
-        `)).rows.map((row) => row.id)
+        `, 'objects')).map((row) => row.id)
         scopeIds = await loadTeamEmploymentIdsForManager(db, orgId, managers, today).catch(() => [])
       }
     }
     if (scopeIds.length > 0) {
       const { start, end } = weekWindow(today)
-      const rows = (await db.execute<{ name: string; starts_on: string; ends_on: string }>(sql`
+      const rows = await db.execute<{ name: string; starts_on: string; ends_on: string }>(sql`
         select p.display_name as name, r.starts_on::text as starts_on, r.ends_on::text as ends_on
           from hrm_leave_requests r
           join worker_employments e on e.org_id = r.org_id and e.id = r.employment_id
@@ -275,7 +275,7 @@ export async function loadPersonaMetrics(
          where r.org_id = ${orgId} and r.status = 'approved'
            and r.starts_on <= ${end}::date and r.ends_on >= ${start}::date
            and r.employment_id in (select jsonb_array_elements_text(${JSON.stringify(scopeIds)}::jsonb)::uuid)
-         order by r.starts_on, p.display_name limit 10`)).rows
+         order by r.starts_on, p.display_name limit 10`, 'objects')
       // Viewer dates, never raw ISO: the range renders in the request
       // locale, noon-anchored so a bare civil date cannot render a day early
       // west of Greenwich.
@@ -335,7 +335,7 @@ export async function loadPersonaMetrics(
 
   if (need('celebrations') && (await widgetFeatureOn(orgId, 'celebrations-list'))) {
     const teamScope = isManager ? teamIds : null
-    const rows = (await db.execute<{ name: string; service_start: string }>(sql`
+    const rows = await db.execute<{ name: string; service_start: string }>(sql`
       select p.display_name as name, min(v.effective_from)::text as service_start
         from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
@@ -346,7 +346,7 @@ export async function loadPersonaMetrics(
        having min(v.effective_from) >= ${today}::date - 30
            or to_char(min(v.effective_from)::date, 'MM-DD') in (
              select to_char(d::date, 'MM-DD') from generate_series(${today}::date - 3, ${today}::date + 3, '1 day') d)
-       order by min(v.effective_from) desc limit 8`)).rows
+       order by min(v.effective_from) desc limit 8`, 'objects')
     // Server-side copy uses ICU plurals and locale dates — never English
     // string-concat (`2 years`, `1 step(s)`); see `_persona-copy`.
     out.celebrations = rows.map((row) => ({
@@ -361,7 +361,7 @@ export async function loadPersonaMetrics(
   }
 
   if (need('teamSteps') && isManager) {
-    const rows = (await db.execute<{ title: string; owner: string; due_on: string }>(sql`
+    const rows = await db.execute<{ title: string; owner: string; due_on: string }>(sql`
       select s.title, wp.display_name as owner, s.due_on::text as due_on
         from hrm_process_steps s
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
@@ -369,7 +369,7 @@ export async function loadPersonaMetrics(
         join parties wp on wp.org_id = s.org_id and wp.id = e.worker_party_id
        where s.org_id = ${orgId} and p.status = 'open' and s.status = 'pending' and s.due_on < ${today}::date
          and p.employment_id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)
-       order by s.due_on limit 8`)).rows
+       order by s.due_on limit 8`, 'objects')
     out.teamSteps = rows.map((row) => ({ title: row.title, owner: row.owner, due: row.due_on }))
   }
 
@@ -378,22 +378,22 @@ export async function loadPersonaMetrics(
       select count(*)::int as n from hrm_process_steps s
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
        where s.org_id = ${orgId} and p.status = 'open' and s.status = 'pending' and s.due_on < ${today}::date
-         and p.employment_id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`)).rows[0]?.n ?? 0
+         and p.employment_id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`, 'objects'))[0]?.n ?? 0
     const joiners = (await db.execute<{ n: number }>(sql`
       select count(distinct e.id)::int as n from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
        where e.org_id = ${orgId} and v.effective_from >= ${today}::date - 30
-         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`)).rows[0]?.n ?? 0
+         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`, 'objects'))[0]?.n ?? 0
     out.teamNudges = teamNudgeTexts(overdue, joiners, (key, params) => tp(key, params))
   }
 
   if (need('teamHeadcount') && isManager && (await widgetFeatureOn(orgId, 'team-headcount'))) {
-    const rows = (await db.execute<{ n: number }>(sql`
+    const rows = await db.execute<{ n: number }>(sql`
       select count(distinct e.id)::int as n from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
        where e.org_id = ${orgId} and v.status = 'active'
          and v.effective_from <= ${today}::date and (v.effective_to is null or v.effective_to > ${today}::date)
-         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`)).rows
+         and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`, 'objects')
     out.teamHeadcount = rows[0]?.n ?? 0
   }
 
@@ -438,7 +438,7 @@ export async function loadPersonaMetrics(
     try {
       unmatched = can(authz, 'banking.read') ? (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from bank_statement_lines
-         where org_id = ${orgId} and match_status = 'unmatched'`)).rows[0]?.n ?? 0 : 0
+         where org_id = ${orgId} and match_status = 'unmatched'`, 'objects'))[0]?.n ?? 0 : 0
     } catch {
       unmatched = null
     }
@@ -448,7 +448,7 @@ export async function loadPersonaMetrics(
     try {
       openClose = can(authz, 'close.run') ? (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from close_runs
-         where org_id = ${orgId} and status not in ('closed', 'cancelled')`)).rows[0]?.n ?? 0 : 0
+         where org_id = ${orgId} and status not in ('closed', 'cancelled')`, 'objects'))[0]?.n ?? 0 : 0
     } catch {
       openClose = null
     }
@@ -462,7 +462,7 @@ export async function loadPersonaMetrics(
     try {
       failed = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from flow_runs
-         where org_id = ${orgId} and status = 'failed'`)).rows[0]?.n ?? 0
+         where org_id = ${orgId} and status = 'failed'`, 'objects'))[0]?.n ?? 0
     } catch {
       failed = null
     }

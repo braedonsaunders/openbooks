@@ -69,11 +69,9 @@ test("legacy unattributed payroll surfaces unfiled without poisoning the remitta
     );
 
     // Reviewed account evidence clears the flag before the bill is created.
-    const stubs = (
-      await db.execute<{ id: string }>(
-        sql`select id from pay_stubs where org_id = ${fx.orgId} order by id`,
-      )
-    ).rows.map((row) => row.id);
+    const stubs = (await db.execute<{ id: string }>(
+        sql`select id from pay_stubs where org_id = ${fx.orgId} order by id`, "objects",
+      )).map((row) => row.id);
     assert.ok(stubs.length > 0);
     const reconciled = await reconcilePayrollFilingAccounts({
       orgId: fx.orgId,

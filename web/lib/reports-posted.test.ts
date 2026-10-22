@@ -25,7 +25,8 @@ test("formula TAX_RATE resolves configured rates and fails closed", () => {
       ["org-zero", null, "federal", "0", "2026-08-01", null],
     ];
     globalThis.__reportRateDatabase = {
-      async execute(query) {
+      async execute(query, mode) {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result);
         const rendered = dialect.sqlToQuery(query);
         assert.match(rendered.sql, /from income_tax_rates/);
         assert.match(rendered.sql, /where org_id =/);
@@ -33,9 +34,9 @@ test("formula TAX_RATE resolves configured rates and fails closed", () => {
         assert.match(rendered.sql, /subsidiary_id is not distinct from/);
         const [orgId, asOfIso, throughIso, subsidiaryId] = rendered.params;
         assert.equal(asOfIso, throughIso);
-        return { rows: fixtures.filter(([org, sub, , , from, to]) =>
+        return inMode({ rows: fixtures.filter(([org, sub, , , from, to]) =>
           org === orgId && sub === subsidiaryId && from <= asOfIso && (to === null || to >= asOfIso)
-        ).map(([, , jurisdiction, rate]) => ({ jurisdiction, rate })) };
+        ).map(([, , jurisdiction, rate]) => ({ jurisdiction, rate })) });
       },
     };
     const dbUrl = pathToFileURL(process.cwd() + "/engine/src/platform/db.ts").href;

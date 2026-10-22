@@ -49,8 +49,8 @@ async function visibleRegisterIds(orgId: string, allowed: ReadonlySet<string> | 
          select 1
            from payroll_prior_stubs s
            left join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
-          where s.org_id = r.org_id and s.register_id = r.id ${outside})`)
-  return new Set(rows.rows.map((row) => row.id))
+          where s.org_id = r.org_id and s.register_id = r.id ${outside})`, 'objects')
+  return new Set(rows.map((row) => row.id))
 }
 
 async function visibleRunIds(orgId: string, allowed: ReadonlySet<string> | null): Promise<Set<string> | null> {
@@ -59,8 +59,8 @@ async function visibleRunIds(orgId: string, allowed: ReadonlySet<string> | null)
     select r.document_id as id
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}`)
-  return new Set(rows.rows.map((row) => row.id))
+     where r.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}`, 'objects')
+  return new Set(rows.map((row) => row.id))
 }
 
 async function scopeComparisonIds(
@@ -85,8 +85,8 @@ async function scopeComparisonIds(
            left join parties p on p.id = f.employee_party_id and p.org_id = f.org_id
           where f.org_id = c.org_id and f.comparison_id = c.id
             and (p.id is null or p.subsidiary_id is null
-              or not (p.subsidiary_id = any(${`{${[...allowed].join(',')}}`}::uuid[]))))`)
-  return new Set(rows.rows.map((row) => row.id))
+              or not (p.subsidiary_id = any(${`{${[...allowed].join(',')}}`}::uuid[]))))`, 'objects')
+  return new Set(rows.map((row) => row.id))
 }
 
 async function assertComparisonInputsInScope(

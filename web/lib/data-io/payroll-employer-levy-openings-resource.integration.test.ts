@@ -134,8 +134,8 @@ async function stubFactors(orgId: string, documentId: string): Promise<Record<st
       from pay_stubs s
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-  `));
-  return Object.fromEntries(rows.rows.map((row) => [row.employee, row.factors]));
+  `, "objects"));
+  return Object.fromEntries(rows.map((row) => [row.employee, row.factors]));
 }
 
 test(
@@ -209,8 +209,8 @@ test(
         assert.equal(outcome.errors.length, 1);
         assert.match(outcome.errors[0]!.message, /not declared by the CA pack/);
         const count = (await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from payroll_employer_levy_opening where org_id = ${org.orgId}`));
-        assert.equal(count.rows[0]!.n, 0);
+          select count(*)::int as n from payroll_employer_levy_opening where org_id = ${org.orgId}`, "objects"));
+        assert.equal(count[0]!.n, 0);
       });
     } finally {
       await dropScratchOrgReporting(org.orgId);

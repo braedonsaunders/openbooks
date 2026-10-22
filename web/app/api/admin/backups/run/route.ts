@@ -63,11 +63,11 @@ async function legacyPOST() {
           update backup_runs
              set status = 'failed', error = ${message}, completed_at = now(), updated_at = now()
            where id = ${runId} and org_id = ${orgId} and status = 'queued'
-          returning id`);
-        if (transitioned.rows.length !== 1) {
+          returning id`, "objects");
+        if (transitioned.length !== 1) {
           const current = await db.execute<{ status: string }>(sql`
-            select status from backup_runs where id = ${runId} and org_id = ${orgId}`);
-          if (current.rows[0] && current.rows[0].status !== "queued") return "accepted";
+            select status from backup_runs where id = ${runId} and org_id = ${orgId}`, "objects");
+          if (current[0] && current[0].status !== "queued") return "accepted";
           throw new Error(`backup run ${runId} was not queued when enqueue failure cleanup ran`);
         }
         await db.execute(sql`

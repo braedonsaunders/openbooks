@@ -60,7 +60,7 @@ test("a non-finite age refuses instead of landing in a bucket", () => {
 // that cannot be read refuses by name instead of silently defaulting.
 test("a configured row resolves; an unreadable row refuses by name", async () => {
   const valid = await agingBucketPolicyFor("org-valid", "2026-07-01", {
-    execute: async () => ({ rows: [{ boundaries: [7, 14], effective_from: "2026-01-01" }] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ boundaries: [7, 14], effective_from: "2026-01-01" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   } as never);
   assert.equal(valid.source, "policy");
   assert.deepEqual([...valid.boundaries], [7, 14]);
@@ -72,7 +72,7 @@ test("a configured row resolves; an unreadable row refuses by name", async () =>
   for (const boundaries of corrupt) {
     await assert.rejects(
       agingBucketPolicyFor("org-broken", "2026-07-01", {
-        execute: async () => ({ rows: [{ boundaries, effective_from: "2026-01-01" }] }),
+        execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ boundaries, effective_from: "2026-01-01" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
       } as never),
       (error: unknown) => {
         assert.ok(error instanceof AgingBucketPolicyUnreadableError);

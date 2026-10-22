@@ -23,11 +23,11 @@ export async function sampleRefreshPlan(industryKey?: string, options: SampleOpe
   const candidates = await withBypassContext(() => db.execute<{
     id: string; name: string; settings: Record<string, unknown>; env: string;
   }>(sql`select id,name,settings,env_kind as env from orgs
-    where settings ? 'sampleTemplate' or settings ? 'sampleCompany' order by id`));
+    where settings ? 'sampleTemplate' or settings ? 'sampleCompany' order by id`, "objects"));
   const targets: SampleRefreshTarget[] = [];
   const preserved: Array<{ orgId: string; name: string; reason: string }> = [];
   const excluded: Array<{ orgId: string; name: string; reason: string }> = [];
-  for (const row of candidates.rows) {
+  for (const row of candidates) {
     const member = row.settings.sampleCompany as Record<string, unknown> | undefined;
     const master = row.settings.sampleTemplate as Record<string, unknown> | undefined;
     const data = row.settings.demoData as Record<string, unknown> | undefined;
@@ -54,7 +54,7 @@ export async function sampleRefreshPlan(industryKey?: string, options: SampleOpe
   const operatorRequirements = [...new Set(targets.map(target => target.industryKey))].sort().map(key => ({ industryKey: key,
     permissions: sampleOperatorPermissions(key), requiresLocalAuthor: sampleOperatorAuthorship(key).length > 0, authorship: sampleOperatorAuthorship(key) }));
   if (operatorActorId) for (const target of targets) await withOrgTransaction(target.orgId, async () => {
-    const subsidiary = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${target.orgId} and parent_id is null and is_active limit 1`)).rows[0];
+    const subsidiary = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${target.orgId} and parent_id is null and is_active limit 1`, "objects"))[0];
     if (!subsidiary) throw new SampleCompanyError("The refresh target has no active root legal entity; restore its native configuration before planning.");
     await assertSampleOperator(db, target.orgId, operatorActorId, subsidiary.id, target.industryKey, false);
   }, { readOnly: true });
@@ -67,34 +67,34 @@ export async function sampleRefreshPlan(industryKey?: string, options: SampleOpe
 /** Per-company transactions preserve history; successful tenants are reusable after interruption. */
 export async function refreshSampleCompany(orgId: string, industryKey: string, options: SampleOperatorOptions = {}): Promise<{ orgId: string; industryKey: string; version: number; kind: "master" | "member"; preservedEntries: number; historyDigest: string; preservedRecords: number; preservationDigest: string }> {
   return withSampleOperator(orgId, options, () => withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id=${orgId} for update`)).rows[0];
+    const row = (await db.execute<{ settings: Record<string, unknown> }>(sql`select settings from orgs where id=${orgId} for update`, "objects"))[0];
     if (!row) throw new SampleCompanyError("The refresh target no longer exists; inspect the native sample inventory.");
     const member = !!row.settings.sampleCompany;
     const recordsBefore = await snapshotSampleRecords(orgId, await sampleScenarioPreservationTables(orgId, industryKey, options));
-    const before = (await db.execute<{ id: string; digest: string }>(sql`
+    const before = await db.execute<{ id: string; digest: string }>(sql`
       select e.id,md5((to_jsonb(e)-'updated_at'-'updated_by')::text || coalesce((select jsonb_agg(to_jsonb(l) order by l.id)::text from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id),'[]')) as digest
       from journal_entries e where e.org_id=${orgId} and e.status in ('posted','reversed') order by e.id
-    `)).rows;
+    `, "objects");
     await installDemoScenarios(orgId, industryKey, options);
     await reconcileDocumentSequences(db, orgId);
-    const after = (await db.execute<{ id: string; digest: string }>(sql`
+    const after = await db.execute<{ id: string; digest: string }>(sql`
       select e.id,md5((to_jsonb(e)-'updated_at'-'updated_by')::text || coalesce((select jsonb_agg(to_jsonb(l) order by l.id)::text from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id),'[]')) as digest
       from journal_entries e where e.org_id=${orgId} and e.status in ('posted','reversed') order by e.id
-    `)).rows;
+    `, "objects");
     const preserved = new Map(after.map(entry => [entry.id, entry.digest]));
     if (before.some(entry => preserved.get(entry.id) !== entry.digest)) throw new SampleCompanyError("Refresh changed existing posted accounting evidence; the company upgrade has been rolled back.");
     const result = await verifyDemoScenarios(orgId, industryKey, options);
     if (!result.ready) throw new SampleCompanyError(`Refresh did not meet native readiness: ${result.missing.join(", ")}`);
     const historyDigest = createHash("sha256").update(JSON.stringify(before)).digest("hex");
-    const current = (await db.execute<{ settings: Record<string, unknown>; actorId: string }>(sql`select settings,settings->'demoData'->>'installedBy' as "actorId" from orgs where id=${orgId}`)).rows[0]!;
+    const current = (await db.execute<{ settings: Record<string, unknown>; actorId: string }>(sql`select settings,settings->'demoData'->>'installedBy' as "actorId" from orgs where id=${orgId}`, "objects"))[0]!;
     const verificationActorId = sampleOperatorId(options) ?? current.actorId;
     const preservation = await assertSampleRecordsPreserved(orgId, recordsBefore);
     assertSampleSettingsPreserved(row.settings, current.settings, industryKey);
     const previousProof = (current.settings.demoData as Record<string, unknown>).refreshVerification;
     const proof = { version: DEMO_DATA_VERSION, status: "passed", preservedEntries: before.length, historyDigest, preservedRecords: preservation.records, preservationDigest: preservation.digest, protectedTables: [...recordsBefore.keys()], verifiedAt: new Date().toISOString(), verifiedBy: verificationActorId };
     if ((previousProof as { historyDigest?: string } | undefined)?.historyDigest !== historyDigest || (previousProof as { preservationDigest?: string } | undefined)?.preservationDigest !== preservation.digest) {
-      const updated = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{demoData,refreshVerification}',${JSON.stringify(proof)}::jsonb),updated_by=${verificationActorId},updated_at=now() where id=${orgId} returning id`);
-      if (updated.rows.length !== 1) throw new SampleCompanyError("The company disappeared while recording preserving refresh evidence.");
+      const updated = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{demoData,refreshVerification}',${JSON.stringify(proof)}::jsonb),updated_by=${verificationActorId},updated_at=now() where id=${orgId} returning id`, "objects");
+      if (updated.length !== 1) throw new SampleCompanyError("The company disappeared while recording preserving refresh evidence.");
       await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,actor_id,changes) values(${orgId},'orgs',${orgId},'update',${verificationActorId},${JSON.stringify({ reason: "Verify additive sample upgrade preserves existing records, drafts, approvals, configuration and posted history", before: previousProof ?? null, after: proof })}::jsonb)`);
     }
     return { orgId, industryKey, version: DEMO_DATA_VERSION, kind: member ? "member" : "master", preservedEntries: before.length, historyDigest, preservedRecords: preservation.records, preservationDigest: preservation.digest };

@@ -57,11 +57,11 @@ async function fixture() {
   const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_requirements (org_id, code, name, category, class_id, enforcement, created_by, updated_by)
     values (${org.orgId}, 'COI', 'Certificate of insurance', 'insurance', ${classId}, 'block_payment', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   const recordId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into compliance_records (org_id, party_id, requirement_id, effective_from, coverage_amount, created_by, updated_by)
     values (${org.orgId}, ${partyId}, ${requirementId}, '2026-01-01', '1000000.00', ${actorId}, ${actorId})
-    returning id`))).rows[0]!.id;
+    returning id`, "objects")))[0]!.id;
   return { org, recordId };
 }
 
@@ -78,10 +78,10 @@ const patch = (recordId: string, body: unknown) =>
   );
 
 async function rowOf(recordId: string) {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ revision: number; verified_revision: number | null; issuer_name: string | null; status: string }>(
-      sql`select revision, verified_revision, issuer_name, status from compliance_records where id = ${recordId}`,
-    ))).rows;
+      sql`select revision, verified_revision, issuer_name, status from compliance_records where id = ${recordId}`, "objects",
+    ));
   return rows[0]!;
 }
 

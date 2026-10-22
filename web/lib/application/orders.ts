@@ -209,7 +209,7 @@ async function sourceOrder(orgId: string, documentId: string): Promise<{ kind: O
     select kind, subsidiary_id from documents
      where id = ${documentId} and org_id = ${orgId}
        and kind in ('quote', 'sales_order', 'purchase_order')
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw notFound("order");
   return { kind: row.kind as OrderKind, subsidiaryId: row.subsidiary_id };
 }
@@ -348,7 +348,7 @@ async function resolveLineItem(
       throw invalidInput(`Order line ${lineNumber}: itemId must be a UUID`);
     }
     const row = (await db.execute<{ id: string }>(sql`
-      select id from items where id = ${itemId} and org_id = ${orgId}`)).rows[0];
+      select id from items where id = ${itemId} and org_id = ${orgId}`, "objects"))[0];
     if (!row) {
       throw invalidInput(
         `Order line ${lineNumber}: item "${itemId}" not found in this organization — check the id or create the item first`,
@@ -361,7 +361,7 @@ async function resolveLineItem(
       throw invalidInput(`Order line ${lineNumber}: itemCode must not be blank`);
     }
     const row = (await db.execute<{ id: string }>(sql`
-      select id from items where code = ${itemCode.trim()} and org_id = ${orgId}`)).rows[0];
+      select id from items where code = ${itemCode.trim()} and org_id = ${orgId}`, "objects"))[0];
     if (!row) {
       throw invalidInput(
         `Order line ${lineNumber}: item code "${itemCode.trim()}" not found in this organization — check the code or create the item first`,
@@ -522,7 +522,7 @@ async function resolveFullOrderCustomer(
     }
     if (!isUuid(customer.id)) throw invalidInput("customer.id must be a UUID");
     const row = (await db.execute<{ id: string }>(sql`
-      select id from parties where id = ${customer.id} and org_id = ${orgId}`)).rows[0];
+      select id from parties where id = ${customer.id} and org_id = ${orgId}`, "objects"))[0];
     // A write that matches zero rows is a failure, not a success: the save
     // below would otherwise bind a stranger's id or fail on the FK as a 500.
     if (!row) throw invalidInput(`customer "${customer.id}" not found in this organization`);
@@ -584,7 +584,7 @@ export async function createFullApplicationOrder(
   );
   if (input.currency !== undefined) {
     const base = (await db.execute<{ base_currency: string | null }>(sql`
-      select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency;
+      select base_currency from orgs where id = ${orgId}`, "objects"))[0]?.base_currency;
     if (!base || String(input.currency).trim().toUpperCase() !== base.toUpperCase()) {
       throw invalidInput(
         base
@@ -604,7 +604,7 @@ export async function createFullApplicationOrder(
   // back rather than inventing one, exactly as the drawer reloads before saving.
   const fresh = (await db.execute<{ token: string }>(sql`
     select revision_seq::text as token from documents
-     where id = ${draft.result.id} and org_id = ${orgId}`)).rows[0];
+     where id = ${draft.result.id} and org_id = ${orgId}`, "objects"))[0];
   if (!fresh) throw notFound("order");
   const patch: OrderPatchBody = {
     expectedUpdatedAt: fresh.token,
@@ -713,7 +713,7 @@ export async function issueApplicationOrder(
   const source = (await db.execute<{ subsidiary_id: string | null; document_number: string }>(sql`
     select subsidiary_id, document_number from documents
      where id = ${input.documentId} and org_id = ${orgId} and kind = 'sales_order'
-  `)).rows[0];
+  `, "objects"))[0];
   // The route issues one order kind: any other id is not this route's order.
   if (!source) throw notFound("order");
   assertSubsidiaryAccess(context, source.subsidiary_id);
@@ -729,7 +729,7 @@ export async function issueApplicationOrder(
     // caller can convert or void without another read.
     const token = (await db.execute<{ token: string }>(sql`
       select revision_seq::text as token from documents
-       where id = ${input.documentId} and org_id = ${orgId}`)).rows[0];
+       where id = ${input.documentId} and org_id = ${orgId}`, "objects"))[0];
     if (!token) throw notFound("order");
     if (issued.submission.gated) {
       return {

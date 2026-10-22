@@ -90,7 +90,7 @@ async function openItemBalance(orgId: string, documentId: string): Promise<strin
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.source_document_id = ${documentId} and jl.is_open_item
-       group by jl.id`)).rows[0],
+       group by jl.id`, "objects"))[0],
   );
   return row!.open;
 }
@@ -98,7 +98,7 @@ async function openItemBalance(orgId: string, documentId: string): Promise<strin
 async function entryCount(orgId: string): Promise<number> {
   const row = await withBypass(async () =>
     (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from journal_entries where org_id = ${orgId}`)).rows[0],
+      select count(*)::text as n from journal_entries where org_id = ${orgId}`, "objects"))[0],
   );
   return Number(row!.n);
 }
@@ -106,19 +106,19 @@ async function entryCount(orgId: string): Promise<number> {
 async function creditMemoCount(orgId: string): Promise<number> {
   const row = await withBypass(async () =>
     (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from documents where org_id = ${orgId} and kind = 'customer_credit'`)).rows[0],
+      select count(*)::text as n from documents where org_id = ${orgId} and kind = 'customer_credit'`, "objects"))[0],
   );
   return Number(row!.n);
 }
 
 async function postedLines(orgId: string, documentId: string): Promise<Array<{ accountId: string; amount: string }>> {
   const rows = await withBypass(async () =>
-    (await db.execute<{ account_id: string; amount: string }>(sql`
+    await db.execute<{ account_id: string; amount: string }>(sql`
       select jl.account_id, jl.amount::text as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${orgId} and je.source_document_id = ${documentId}
-       order by jl.id`)).rows,
+       order by jl.id`, "objects"),
   );
   return rows.map((row) => ({ accountId: row.account_id, amount: row.amount }));
 }

@@ -91,21 +91,18 @@ export const POST = defineRoute({
       // passed it before the winner committed observes draft here and is
       // refused instead of writing a second 'reopened' audit over a week that
       // is already draft.
-      const header = (
-        await db.execute<{ id: string; status: string }>(sql`
+      const header = (await db.execute<{ id: string; status: string }>(sql`
       select id, status from timesheet_weeks
        where org_id = ${orgId}
          and employee_party_id = ${employee}
          and week_start = ${week}::date
        for update
-    `)
-      ).rows[0];
+    `, "objects"))[0];
       if (!header || header.status !== "approved") {
         return bad("Only an approved week can be reopened");
       }
 
-      const rows = (
-        await db.execute<{
+      const rows = await db.execute<{
           invoiced_by_line_id: string | null;
           payroll_batch_ref: string | null;
           cost_journal_entry_id: string | null;
@@ -121,8 +118,7 @@ export const POST = defineRoute({
          and employee_party_id = ${employee}
          and worked_on >= ${weekFrom} and worked_on <= ${weekTo}
          and status = 'approved'
-       for update`)
-      ).rows;
+       for update`, "objects");
 
       const entries: EntryProvenance[] = rows.map((r) => ({
         invoicedByLineId: r.invoiced_by_line_id,
@@ -148,8 +144,7 @@ export const POST = defineRoute({
       // hours with no original to negate. Inspect the link in both directions:
       // offsets pointing back at an original, and originals pointed at by an
       // offset. Either side makes the week append-only.
-      const offsets = (
-        await db.execute<{ n: number }>(sql`
+      const offsets = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n
         from time_entries entry
        where entry.org_id = ${orgId}
@@ -162,8 +157,7 @@ export const POST = defineRoute({
               where contra.org_id = entry.org_id
                 and contra.amends_entry_id = entry.id
            )
-         )`)
-      ).rows[0]!.n;
+         )`, "objects"))[0]!.n;
       if (Number(offsets) > 0) {
         return bad(
           "This week carries amendment offsets — correct it with a new amendment, not a reopen",

@@ -38,7 +38,7 @@ function validateCenter(input: WorkCenterInput): WorkCenterInput {
 async function duplicateCode(tx: SqlExecutor, orgId: string, code: string, excludeId?: string) {
   return (await tx.execute<{ id: string; name: string }>(sql`
     select id, name from mfg_work_centers where org_id=${orgId} and code=${code}
-      and id is distinct from ${excludeId ?? null} limit 1`)).rows[0];
+      and id is distinct from ${excludeId ?? null} limit 1`, "objects"))[0];
 }
 
 function duplicateCodeRefusal(code: string, existingName?: string): never {
@@ -54,12 +54,12 @@ function storageConstraint(error: unknown): string | undefined {
 
 async function validateReferences(tx: SqlExecutor, orgId: string, input: WorkCenterInput, scope: ReadonlySet<string> | null): Promise<void> {
   if (input.departmentId) {
-    const department = await tx.execute(sql`select 1 from departments where org_id=${orgId} and id=${input.departmentId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,scope,{orgWideNull:true})} for share`);
-    if (!department.rows.length) refused("The selected department is not active in this organization.", "invalid_department", "departmentId", "Choose an active department from this organization.");
+    const department = await tx.execute(sql`select 1 from departments where org_id=${orgId} and id=${input.departmentId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`,scope,{orgWideNull:true})} for share`, "objects");
+    if (!department.length) refused("The selected department is not active in this organization.", "invalid_department", "departmentId", "Choose an active department from this organization.");
   }
   if (input.calendarId) {
-    const calendar = await tx.execute(sql`select 1 from schedule_calendars where org_id=${orgId} and id=${input.calendarId} and project_id is null for share`);
-    if (!calendar.rows.length) refused("The selected calendar must be a company calendar in this organization.", "invalid_calendar", "calendarId", "Choose a company calendar; project-specific calendars remain with their project.");
+    const calendar = await tx.execute(sql`select 1 from schedule_calendars where org_id=${orgId} and id=${input.calendarId} and project_id is null for share`, "objects");
+    if (!calendar.length) refused("The selected calendar must be a company calendar in this organization.", "invalid_calendar", "calendarId", "Choose a company calendar; project-specific calendars remain with their project.");
   }
 }
 
@@ -84,7 +84,7 @@ export async function createWorkCenter(
     values (coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${orgId}, ${input.code}, ${input.name}, ${input.subsidiaryId ?? null}, ${input.kind},
       ${input.capacityHoursPerDay}, ${input.efficiencyPct}, ${input.departmentId ?? null},
       ${input.absorbsOverhead}, ${input.calendarId ?? null}, ${actorId}, ${actorId})
-    returning ${centerColumns}`)).rows[0];
+    returning ${centerColumns}`, "objects"))[0];
   } catch (error) {
     await tx.execute(sql`rollback to savepoint mfg_work_center_create`);
     await tx.execute(sql`release savepoint mfg_work_center_create`);
@@ -101,8 +101,8 @@ export async function createWorkCenter(
 
 export async function getWorkCenter(tx: SqlExecutor, orgId: string, id: string) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
-  const result = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id}`);
-  return result.rows[0] ?? null;
+  const result = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id}`, "objects");
+  return result[0] ?? null;
 }
 
 export async function updateWorkCenter(
@@ -111,8 +111,8 @@ export async function updateWorkCenter(
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingCenterAuthority(tx,orgId,actorId,id);
-  const locked = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id} for update`);
-  const before = locked.rows[0] ?? null;
+  const locked = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id} for update`, "objects");
+  const before = locked[0] ?? null;
   if (!before) throw new ManufacturingNotFoundError();
   const merged = validateCenter({
     code: String(patch.code ?? before.code), name: String(patch.name ?? before.name),
@@ -127,7 +127,7 @@ export async function updateWorkCenter(
   const targetScope = await lockManufacturingManageAuthority(tx,orgId,actorId,merged.subsidiaryId ?? null);
   if (!subsidiaryScopeAllows(targetScope,merged.subsidiaryId ?? null)) throw new ManufacturingNotFoundError();
   if ((merged.kind !== before.kind || merged.absorbsOverhead !== before.absorbsOverhead)
-    && (await tx.execute(sql`select id from mfg_wo_operations where org_id=${orgId} and work_center_id=${id} limit 1`)).rows.length)
+    && (await tx.execute(sql`select id from mfg_wo_operations where org_id=${orgId} and work_center_id=${id} limit 1`, "objects")).length)
     refused('This work center already belongs to released production history.','work_center_cost_identity_frozen','workCenter','Create another work center for a changed kind or overhead treatment; retained operations keep their original conversion-cost treatment.');
   await validateReferences(tx, orgId, merged, targetScope);
   const duplicate = await duplicateCode(tx, orgId, merged.code, id);
@@ -140,7 +140,7 @@ export async function updateWorkCenter(
       kind=${merged.kind}, capacity_hours_per_day=${merged.capacityHoursPerDay}, efficiency_pct=${merged.efficiencyPct},
       department_id=${merged.departmentId ?? null}, absorbs_overhead=${merged.absorbsOverhead},
       calendar_id=${merged.calendarId ?? null}, updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} returning ${centerColumns}`)).rows[0];
+     where org_id=${orgId} and id=${id} returning ${centerColumns}`, "objects"))[0];
   } catch (error) {
     await tx.execute(sql`rollback to savepoint mfg_work_center_update`);
     await tx.execute(sql`release savepoint mfg_work_center_update`);
@@ -158,15 +158,15 @@ export async function updateWorkCenter(
 async function setActive(tx: SqlExecutor, orgId: string, actorId: string, id: string, active: boolean) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingCenterAuthority(tx,orgId,actorId,id);
-  const prior = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id} for update`);
-  const before = prior.rows[0];
+  const prior = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id} for update`, "objects");
+  const before = prior[0];
   if (!before) throw new ManufacturingNotFoundError();
   if (before.isActive === active) return before;
   const result = await tx.execute<Record<string, unknown>>(sql`
     update mfg_work_centers set is_active=${active}, deactivated_at=${active ? null : sql`now()`},
       updated_by=${actorId}, updated_at=now() where org_id=${orgId} and id=${id} and is_active=${!active}
-    returning ${centerColumns}`);
-  const after = result.rows[0];
+    returning ${centerColumns}`, "objects");
+  const after = result[0];
   if (!after) throw new ManufacturingNotFoundError();
   await auditChange(tx, { orgId, actorId, table: "mfg_work_centers", rowId: id, action: "update", before, after });
   return after;
@@ -182,9 +182,9 @@ export async function addWorkCenterRate(
 ) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingCenterAuthority(tx,orgId,actorId,workCenterId);
-  const center = await tx.execute<{ kind: WorkCenterKind }>(sql`select kind from mfg_work_centers where org_id=${orgId} and id=${workCenterId} and is_active for share`);
-  if (!center.rows[0]) throw new ManufacturingNotFoundError();
-  if (center.rows[0].kind === "labor") refused("Machine rates apply only to machine or cell work centers.", "rate_not_applicable", "workCenterId", "Choose a machine or cell work center.");
+  const center = await tx.execute<{ kind: WorkCenterKind }>(sql`select kind from mfg_work_centers where org_id=${orgId} and id=${workCenterId} and is_active for share`, "objects");
+  if (!center[0]) throw new ManufacturingNotFoundError();
+  if (center[0].kind === "labor") refused("Machine rates apply only to machine or cell work centers.", "rate_not_applicable", "workCenterId", "Choose a machine or cell work center.");
   const amount: Money = parseMoney(decimalValue(input.machineRatePerHour, "machineRatePerHour", "Enter a non-negative rate with no more than four decimal places."));
   const from = isoDate(input.effectiveFrom, "effectiveFrom");
   const to = input.effectiveTo == null ? null : isoDate(input.effectiveTo, "effectiveTo");
@@ -204,8 +204,8 @@ export async function addWorkCenterRate(
       insert into mfg_work_center_rates (id, org_id, work_center_id, machine_rate_per_hour, effective_from, effective_to, created_by, updated_by)
       values (coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${orgId}, ${workCenterId}, ${amount}, ${from}, ${to}, ${actorId}, ${actorId})
       returning id, org_id as "orgId", work_center_id as "workCenterId", machine_rate_per_hour::text as "machineRatePerHour",
-        effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`);
-    row = inserted.rows[0];
+        effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`, "objects");
+    row = inserted[0];
     if (!row) throw new ManufacturingError("The machine rate was not created.", { code: "write_failed", remedy: "Retry the save." });
   } catch (error) {
     await tx.execute(sql`rollback to savepoint mfg_work_center_rate_insert`);
@@ -228,15 +228,15 @@ export async function endWorkCenterRate(tx: SqlExecutor, orgId: string, actorId:
   const priorResult = await tx.execute<Record<string, unknown>>(sql`
     select id, org_id as "orgId", work_center_id as "workCenterId", machine_rate_per_hour::text as "machineRatePerHour",
       effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
-      from mfg_work_center_rates where org_id=${orgId} and work_center_id=${workCenterId} and id=${rateId} for update`);
-  const before = priorResult.rows[0];
+      from mfg_work_center_rates where org_id=${orgId} and work_center_id=${workCenterId} and id=${rateId} for update`, "objects");
+  const before = priorResult[0];
   if (!before) throw new ManufacturingNotFoundError();
   if (end <= String(before.effectiveFrom)) refused("The rate end date must be after its start date.", "invalid_rate_range", "effectiveTo", "Choose an end date after the start date.");
   const overlap = await tx.execute<{ effective_from: string; effective_to: string | null }>(sql`
     select effective_from::text, effective_to::text from mfg_work_center_rates
      where org_id=${orgId} and work_center_id=${workCenterId} and id<>${rateId}
-       and effective_from < ${end}::date and ${String(before.effectiveFrom)}::date < coalesce(effective_to, 'infinity'::date) limit 1`);
-  if (overlap.rows[0]) refused(`The rate end date overlaps the existing machine rate from ${overlap.rows[0].effective_from} to ${overlap.rows[0].effective_to ?? "open-ended"}.`, "rate_overlap", "effectiveTo", "Choose an end date that does not overlap the existing rate.");
+       and effective_from < ${end}::date and ${String(before.effectiveFrom)}::date < coalesce(effective_to, 'infinity'::date) limit 1`, "objects");
+  if (overlap[0]) refused(`The rate end date overlaps the existing machine rate from ${overlap[0].effective_from} to ${overlap[0].effective_to ?? "open-ended"}.`, "rate_overlap", "effectiveTo", "Choose an end date that does not overlap the existing rate.");
   await tx.execute(sql`savepoint mfg_work_center_rate_end`);
   let after: Record<string, unknown> | undefined;
   try {
@@ -244,7 +244,7 @@ export async function endWorkCenterRate(tx: SqlExecutor, orgId: string, actorId:
       update mfg_work_center_rates set effective_to=${end}, updated_by=${actorId}, updated_at=now()
        where org_id=${orgId} and work_center_id=${workCenterId} and id=${rateId}
        returning id, org_id as "orgId", work_center_id as "workCenterId", machine_rate_per_hour::text as "machineRatePerHour",
-         effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`)).rows[0];
+         effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"`, "objects"))[0];
   } catch (error) {
     await tx.execute(sql`rollback to savepoint mfg_work_center_rate_end`);
     await tx.execute(sql`release savepoint mfg_work_center_rate_end`);
@@ -252,7 +252,7 @@ export async function endWorkCenterRate(tx: SqlExecutor, orgId: string, actorId:
     const conflict = (await tx.execute<{ effective_from: string; effective_to: string | null }>(sql`
       select effective_from::text, effective_to::text from mfg_work_center_rates
        where org_id=${orgId} and work_center_id=${workCenterId} and id<>${rateId}
-         and effective_from < ${end}::date and ${String(before.effectiveFrom)}::date < coalesce(effective_to, 'infinity'::date) limit 1`)).rows[0];
+         and effective_from < ${end}::date and ${String(before.effectiveFrom)}::date < coalesce(effective_to, 'infinity'::date) limit 1`, "objects"))[0];
     refused(`The rate end date overlaps the existing machine rate from ${conflict?.effective_from ?? "another rate"} to ${conflict?.effective_to ?? "open-ended"}.`, "rate_overlap", "effectiveTo", "Choose an end date that does not overlap the existing rate.");
   }
   await tx.execute(sql`release savepoint mfg_work_center_rate_end`);
@@ -266,6 +266,6 @@ export async function getWorkCenterRate(tx: SqlExecutor, orgId: string, workCent
   const result = await tx.execute<Record<string, unknown>>(sql`
     select id, org_id as "orgId", work_center_id as "workCenterId", machine_rate_per_hour::text as "machineRatePerHour",
       effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
-      from mfg_work_center_rates where org_id=${orgId} and work_center_id=${workCenterId} and id=${rateId}`);
-  return result.rows[0] ?? null;
+      from mfg_work_center_rates where org_id=${orgId} and work_center_id=${workCenterId} and id=${rateId}`, "objects");
+  return result[0] ?? null;
 }

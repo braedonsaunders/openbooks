@@ -34,7 +34,7 @@ async function refuseDuplicate(exec: SqlExecutor, orgId: string, projectId: stri
   const dup = (await exec.execute<{ id: string }>(sql`
     select id from project_geofences
      where org_id = ${orgId} and project_id = ${projectId} and kind = ${kind}
-       ${exceptId ? sql`and id <> ${exceptId}` : sql``} limit 1`)).rows[0]
+       ${exceptId ? sql`and id <> ${exceptId}` : sql``} limit 1`, 'objects'))[0]
   if (dup) {
     throw new FieldTimeError(
       'geofence_duplicate',
@@ -90,7 +90,7 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
   // one subsidiary never enumerates another's fences. A fence whose project
   // row is gone carries no subsidiary and fails closed for restricted
   // callers, exactly like the save/delete record gate below.
-  const rows = (await db.execute(sql`
+  const rows = await db.execute(sql`
     select g.id::text as id, g.project_id::text as "projectId", p.name as "projectName",
            g.kind, g.center, g.radius_m as "radiusM", g.polygon, g.is_active as "isActive"
       from project_geofences g
@@ -98,7 +98,7 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
      where g.org_id = ${gate.user.orgId}
        ${projectId ? sql`and g.project_id = ${projectId}` : sql``}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope)}
-     order by p.name, g.kind`)).rows
+     order by p.name, g.kind`, 'objects')
   return NextResponse.json({ geofences: rows })
 }
 
@@ -132,10 +132,10 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
             from project_geofences g
             left join projects p on p.org_id = g.org_id and p.id = g.project_id
            where g.org_id = ${user.orgId} and g.id = ${body.id}
-           for update of g`)).rows[0]
+           for update of g`, 'objects'))[0]
         if (!row) return 'unknown' as const
         if (guardSubsidiaryScope(scopedGate, row.subsidiaryId)) return 'hidden' as const
-        const moved = (await tx.execute(sql`
+        const moved = (await tx.execute<never>(sql`
           delete from project_geofences where org_id = ${user.orgId} and id = ${body.id}`)).rowCount ?? 0
         if (moved !== 1) {
           throw new FieldTimeError('geofence_not_stored', 'The geofence is unknown in this organization — reload and retry')
@@ -175,13 +175,13 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
             from project_geofences g
             left join projects p on p.org_id = g.org_id and p.id = g.project_id
            where g.org_id = ${user.orgId} and g.id = ${id}
-           for update of g`)).rows[0]
+           for update of g`, 'objects'))[0]
         if (!existing) return unrestricted ? 'fence-unknown' as const : 'hidden' as const
         if (guardSubsidiaryScope(scopedGate, existing.subsidiaryId)) return 'hidden' as const
       }
       await refuseDuplicate(tx, user.orgId, fence.projectId, fence.kind, id ?? undefined)
       if (id) {
-        const moved = (await tx.execute(sql`
+        const moved = (await tx.execute<never>(sql`
           update project_geofences
              set center = ${fence.center ? JSON.stringify(fence.center) : null}::jsonb,
                  radius_m = ${fence.radiusM ?? null},
@@ -203,7 +203,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
            ${fence.radiusM ?? null},
            ${fence.polygon ? JSON.stringify(fence.polygon) : null}::jsonb,
            ${fence.isActive !== false}, ${user.id}, ${user.id})
-        returning id::text as id`)).rows[0]
+        returning id::text as id`, 'objects'))[0]
       if (!inserted) throw new FieldTimeError('geofence_not_stored', 'The geofence was not stored — no row was written; retry')
       return { id: inserted.id } as const
     })

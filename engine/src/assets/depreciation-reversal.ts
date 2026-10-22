@@ -40,13 +40,11 @@ async function applySourceManagedDepreciationReversal(input: {
       "Record a correction reason between 8 and 500 characters.",
     );
   return withOrgTransaction(input.orgId, async () => {
-    const asset = (
-      await db.execute<{
+    const asset = (await db.execute<{
         subsidiary_id: string;
         custom: Record<string, unknown>;
       }>(sql`
-      select subsidiary_id,custom from fixed_assets where org_id=${input.orgId} and id=${input.assetId} for update`)
-    ).rows[0];
+      select subsidiary_id,custom from fixed_assets where org_id=${input.orgId} and id=${input.assetId} for update`, "objects"))[0];
     if (!asset)
       throw new DepreciationRefusalError("The fixed asset was not found.");
     await lockActorCommandAuthority(
@@ -75,14 +73,13 @@ async function applySourceManagedDepreciationReversal(input: {
         "Select a local depreciation posting on a source-managed asset.",
       );
     const connection = await db.execute(
-      sql`select id from connections where org_id=${input.orgId} and id=${asset.custom.sourceConnectionId} for share`,
+      sql`select id from connections where org_id=${input.orgId} and id=${asset.custom.sourceConnectionId} for share`, "objects",
     );
-    if (connection.rows.length !== 1)
+    if (connection.length !== 1)
       throw new DepreciationRefusalError(
         "The owning connection was not found; restore its configuration before correcting the asset.",
       );
-    const line = (
-      await db.execute<{
+    const line = (await db.execute<{
         id: string;
         schedule_id: string;
         period_id: string;
@@ -93,8 +90,7 @@ async function applySourceManagedDepreciationReversal(input: {
         non_gl_recognized_at: unknown;
       }>(sql`select l.id,l.schedule_id,l.period_id,s.book_id,l.source,l.posted_amount::text,l.journal_entry_id,l.non_gl_recognized_at
       from depreciation_schedules s join depreciation_schedule_lines l on l.org_id=s.org_id and l.schedule_id=s.id
-      where s.org_id=${input.orgId} and s.asset_id=${input.assetId} and l.id=${input.lineId} for update of s,l`)
-    ).rows[0];
+      where s.org_id=${input.orgId} and s.asset_id=${input.assetId} and l.id=${input.lineId} for update of s,l`, "objects"))[0];
     if (
       !line ||
       ["imported", "reversal"].includes(line.source) ||
@@ -106,16 +102,14 @@ async function applySourceManagedDepreciationReversal(input: {
       throw new DepreciationRefusalError(
         "Select one nonzero, locally posted depreciation line. Imported source history cannot be reversed here.",
       );
-    const prior = (
-      await db.execute<{
+    const prior = (await db.execute<{
         id: string;
         journal_entry_id: string;
         reversal_reason: string;
         created_by: string;
       }>(sql`
       select id,journal_entry_id,reversal_reason,created_by from depreciation_schedule_lines
-      where org_id=${input.orgId} and reverses_line_id=${line.id}`)
-    ).rows[0];
+      where org_id=${input.orgId} and reverses_line_id=${line.id}`, "objects"))[0];
     if (prior) {
       if (
         prior.reversal_reason !== reason ||
@@ -131,8 +125,7 @@ async function applySourceManagedDepreciationReversal(input: {
         created: false,
       };
     }
-    const entry = (
-      await db.execute<{
+    const entry = (await db.execute<{
         status: string;
         origin: string;
         book_id: string;
@@ -142,8 +135,7 @@ async function applySourceManagedDepreciationReversal(input: {
         created_at: string;
       }>(sql`
       select status,origin,book_id,subsidiary_id,period_id,posting_date::text,created_at::text from journal_entries
-      where org_id=${input.orgId} and id=${line.journal_entry_id} for update`)
-    ).rows[0];
+      where org_id=${input.orgId} and id=${line.journal_entry_id} for update`, "objects"))[0];
     if (
       !entry ||
       entry.status !== "posted" ||
@@ -159,8 +151,8 @@ async function applySourceManagedDepreciationReversal(input: {
       select 1 from asset_basis_changes where org_id=${input.orgId} and asset_id=${input.assetId}
         and book_id=${line.book_id} and (effective_on>=${entry.posting_date} or created_at>=${entry.created_at}::timestamptz)
       union all select 1 from asset_events where org_id=${input.orgId} and asset_id=${input.assetId}
-        and journal_entry_id is not null and created_at>=${entry.created_at}::timestamptz limit 1`);
-    if (later.rows.length)
+        and journal_entry_id is not null and created_at>=${entry.created_at}::timestamptz limit 1`, "objects");
+    if (later.length)
       throw new DepreciationRefusalError(
         "The asset has subsequent lifecycle measurements. Correct those dependencies through their governed workflows before reversing this depreciation.",
       );
@@ -217,20 +209,18 @@ async function applySourceManagedDepreciationReversal(input: {
       entryId: line.journal_entry_id,
       actorId: input.actorId,
     });
-    const saved = (
-      await db.execute<{ id: string }>(sql`
+    const saved = (await db.execute<{ id: string }>(sql`
       insert into depreciation_schedule_lines(org_id,schedule_id,period_id,sequence,planned_amount,posted_amount,journal_entry_id,source,reverses_line_id,reversal_reason,created_by,updated_by)
       values(${input.orgId},${line.schedule_id},${line.period_id},
         (select coalesce(max(sequence),-1)+1 from depreciation_schedule_lines where org_id=${input.orgId} and schedule_id=${line.schedule_id}),
-        ${neg(line.posted_amount)},${neg(line.posted_amount)},${posted.entryId},'reversal',${line.id},${reason},${input.actorId},${input.actorId}) returning id`)
-    ).rows[0];
+        ${neg(line.posted_amount)},${neg(line.posted_amount)},${posted.entryId},'reversal',${line.id},${reason},${input.actorId},${input.actorId}) returning id`, "objects"))[0];
     if (!saved)
       throw new Error("The depreciation correction evidence was not saved.");
     const audit =
       await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${input.orgId},'depreciation_schedule_lines',${saved.id},'insert',
-        ${JSON.stringify({ event: "depreciation_reversed", assetId: input.assetId, originalLineId: line.id, originalEntryId: line.journal_entry_id, reversalEntryId: posted.entryId, amount: neg(line.posted_amount), reason })}::jsonb,${input.actorId}) returning id`);
-    if (audit.rows.length !== 1)
+        ${JSON.stringify({ event: "depreciation_reversed", assetId: input.assetId, originalLineId: line.id, originalEntryId: line.journal_entry_id, reversalEntryId: posted.entryId, amount: neg(line.posted_amount), reason })}::jsonb,${input.actorId}) returning id`, "objects");
+    if (audit.length !== 1)
       throw new Error("The depreciation correction audit was not saved.");
     return {
       originalEntryId: line.journal_entry_id,
@@ -274,8 +264,8 @@ async function retainedCorrectionResult(
     where l.org_id=${orgId} and l.id=${result.reversalLineId} and l.reverses_line_id=${lineId}
       and l.journal_entry_id=${result.reversalEntryId} and j.reverses_entry_id=${result.originalEntryId}
       -- Live entries only: a reversed correction no longer offsets the original depreciation posting.
-      and j.status='posted'`);
-  if (found.rows.length !== 1)
+      and j.status='posted'`, "objects");
+  if (found.length !== 1)
     throw new DepreciationRefusalError(
       "The retained correction is not visible through its native depreciation and journal history.",
     );
@@ -296,8 +286,7 @@ async function correctionSubject(input: {
   lineId: string;
   actorId: string;
 }) {
-  const row = (
-    await db.execute<{
+  const row = (await db.execute<{
       subsidiaryId: string;
       bookId: string;
       periodId: string;
@@ -312,8 +301,7 @@ async function correctionSubject(input: {
     join journal_entries j on j.org_id=l.org_id and j.id=l.journal_entry_id
     where a.org_id=${input.orgId} and a.id=${input.assetId} and l.id=${input.lineId}
       and a.custom->'sourceManaged'='true'::jsonb and l.source not in ('imported','reversal')
-    for update of a,s,l,j`)
-  ).rows[0];
+    for update of a,s,l,j`, "objects"))[0];
   if (!row)
     throw new DepreciationRefusalError(
       "Select a locally posted depreciation line on this source-managed asset.",
@@ -357,11 +345,9 @@ export async function reverseSourceManagedDepreciation(input: {
     await db.execute(
       sql`select pg_advisory_xact_lock(hashtext(${"financial-change:" + input.orgId + ":" + requestKey}))`,
     );
-    const prior = (
-      await db.execute<{ id: string }>(
-        sql`select id from financial_changes where org_id=${input.orgId} and idempotency_key=${requestKey}`,
-      )
-    ).rows[0];
+    const prior = (await db.execute<{ id: string }>(
+        sql`select id from financial_changes where org_id=${input.orgId} and idempotency_key=${requestKey}`, "objects",
+      ))[0];
     if (prior)
       await lockApprovalSubject(input.orgId, "financial_change", prior.id);
     const subject = await correctionSubject(input);

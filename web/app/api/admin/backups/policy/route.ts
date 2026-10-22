@@ -113,8 +113,8 @@ export const PUT = defineRoute({
         max_keep: number;
       }>(sql`
       select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
-        from backup_policies where org_id = ${orgId} for update`));
-      const before = existing.rows[0];
+        from backup_policies where org_id = ${orgId} for update`, "objects"));
+      const before = existing[0];
 
       await db.execute(sql`
         insert into backup_policies
@@ -143,7 +143,7 @@ export const PUT = defineRoute({
         max_keep: number;
       }>(sql`
         select enabled, frequency, hour_utc, day_of_week, day_of_month, max_keep
-          from backup_policies where org_id = ${orgId} for update`)).rows[0];
+          from backup_policies where org_id = ${orgId} for update`, "objects"))[0];
       if (!after) throw new Error('backup policy upsert matched no row');
       const changes: Record<string, unknown> = { event: "backup_policy_updated" };
       const fields = [

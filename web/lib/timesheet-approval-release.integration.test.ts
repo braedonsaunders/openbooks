@@ -84,22 +84,20 @@ async function seedWeek(status: "submitted", entryHours: string) {
     assignees: [{ type: "user", userId: actorId }], preventSelfApproval: true }));
   await withOrgTransaction(org.orgId, () => routeSubjectSubmission({ orgId: org.orgId,
     actorId: submitterId, subjectKind: "timesheet_week", subjectId: headerId }));
-  const gates = await withOrgContext(org.orgId, async () => (await db.execute<{ id: string }>(sql`
+  const gates = await withOrgContext(org.orgId, async () => await db.execute<{ id: string }>(sql`
     select id from flow_gates where org_id=${org.orgId} and subject_kind='timesheet_week'
-      and subject_id=${headerId} and status='pending'`)).rows);
+      and subject_id=${headerId} and status='pending'`, "objects"));
   assert.equal(gates.length, 1);
   return { org, actorId, employeeId, headerId, timeEntryId, gateId: gates[0]!.id };
 }
 
 async function weekAudit(orgId: string, headerId: string) {
-  return withOrgContext(orgId, async () => (
-    await db.execute<{ event: string; actorId: string; changes: Record<string, unknown> }>(sql`
+  return withOrgContext(orgId, async () => await db.execute<{ event: string; actorId: string; changes: Record<string, unknown> }>(sql`
       select changes->>'event' as event, actor_id as "actorId", changes
         from audit_log
        where org_id = ${orgId} and table_name = 'timesheet_weeks' and row_id = ${headerId}
        order by at, id
-    `)
-  ).rows);
+    `, "objects"));
 }
 
 async function cleanup(fixture: Awaited<ReturnType<typeof seedWeek>>) {
@@ -137,10 +135,8 @@ test("a flow-gated rejection audits the decision reason on the week", async () =
 
 test("a flow-gated approval records its comment and costs no zero-hour declaration", async () => {
   const fixture = await seedWeek("submitted", "0.0000");
-  const journalsBefore = await withOrgContext(fixture.org.orgId, async () => (
-    await db.execute<{ n: string }>(sql`
-      select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`)
-  ).rows[0]!.n);
+  const journalsBefore = await withOrgContext(fixture.org.orgId, async () => (await db.execute<{ n: string }>(sql`
+      select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`, "objects"))[0]!.n);
   try {
     const decision = await decideGate({ gateId: fixture.gateId, userId: fixture.actorId,
       decision: "approved", comment: "Leave week looks right" });
@@ -159,10 +155,8 @@ test("a flow-gated approval records its comment and costs no zero-hour declarati
     assert.deepEqual(changes.entryIds, [fixture.timeEntryId]);
     // No wage row covers this employee and no journals may appear: zero
     // hours approve with the week but never enter costing effects.
-    const journalsAfter = await withOrgContext(fixture.org.orgId, async () => (
-      await db.execute<{ n: string }>(sql`
-        select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`)
-    ).rows[0]!.n);
+    const journalsAfter = await withOrgContext(fixture.org.orgId, async () => (await db.execute<{ n: string }>(sql`
+        select count(*) as n from journal_entries where org_id = ${fixture.org.orgId}`, "objects"))[0]!.n);
     assert.equal(journalsAfter, journalsBefore);
   } finally {
     await cleanup(fixture);

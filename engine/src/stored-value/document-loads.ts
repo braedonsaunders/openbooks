@@ -81,7 +81,7 @@ export async function attachDocumentLoad(input: DocumentLoadInput): Promise<Docu
   const replayed = (await db.execute<{ account_id: string; id: string }>(sql`
     select account_id, id from stored_value_entries
      where org_id = ${input.orgId} and idempotency_key = ${`stored-value:load-entry:${input.idempotencyKey}`}
-  `)).rows[0];
+  `, "objects"))[0];
   if (replayed) {
     return { accountId: replayed.account_id, code: null, entryId: replayed.id, replayed: true };
   }
@@ -151,14 +151,14 @@ async function topUpAccount(input: DocumentLoadInput, doc: DocumentFxContext): P
   const eventRate = await resolveEventRate(db, input.orgId, input.currency, baseCurrency, doc.postingDate, doc);
   const functional = functionalMinor(input.amountMinor, eventRate.units);
   const balanceMinor = account.balanceMinor + input.amountMinor;
-  const updated = (await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update stored_value_accounts
        set balance_minor = ${balanceMinor.toString()},
            last_activity_on = CURRENT_DATE,
            updated_at = now(), updated_by = ${input.actorId ?? null}
      where org_id = ${input.orgId} and id = ${account.id} and balance_minor = ${account.balanceMinor.toString()}
     returning id
-  `)).rows;
+  `, "objects");
   if (updated.length !== 1) {
     throw storedValueRefusal({
       message: `Stored-value …${account.codeLast4} changed while loading; the load was not applied.`,
@@ -235,7 +235,7 @@ async function mintAccount(input: DocumentLoadInput, doc: DocumentFxContext): Pr
   for (let attempt = 0; attempt < 3; attempt++) {
     const code = generateStoredValueCode();
     const codeHash = hashStoredValueCode(input.orgId, code);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into stored_value_accounts
         (org_id, program_id, kind, code_hash, code_last4, customer_party_id, currency,
          subsidiary_id,
@@ -250,7 +250,7 @@ async function mintAccount(input: DocumentLoadInput, doc: DocumentFxContext): Pr
       -- A generated code collision mints a new code on the next bounded retry.
       on conflict (org_id, code_hash) do nothing
       returning id
-    `)).rows;
+    `, "objects");
     // A code collision is expected to be vanishingly rare but possible: the
     // conflict is benign, so mint a fresh code and retry rather than fail.
     if (inserted.length !== 1 || !inserted[0]) continue;

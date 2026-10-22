@@ -30,7 +30,7 @@ const { NextRequest } = await import('next/server');
 const period = { periodStart: '2026-07-01', periodEnd: '2026-07-31' };
 const request = (body: Record<string, unknown>) => new NextRequest('http://audit.local', { method: 'POST', body: JSON.stringify({ ...period, ...body }) });
 async function snapshotCount(orgId: string) {
-  return (await db.execute(sql`select id from crm_forecast_snapshots where org_id=${orgId}`)).rows.length;
+  return (await db.execute(sql`select id from crm_forecast_snapshots where org_id=${orgId}`, 'objects')).length;
 }
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());

@@ -28,7 +28,7 @@ function contextFor(orgId: string, actor: string, allowed: Set<string> | null): 
 
 async function subsidiaryOf(orgId: string, id: string): Promise<string | null> {
   const row = (await withBypassContext(() => db.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from documents where id = ${id} and org_id = ${orgId}`))).rows[0];
+    select subsidiary_id from documents where id = ${id} and org_id = ${orgId}`, "objects")))[0];
   return row?.subsidiary_id ?? null;
 }
 

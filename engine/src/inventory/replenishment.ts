@@ -71,7 +71,7 @@ export async function lastReceiptVendors(
   itemIds: readonly string[],
 ): Promise<Map<string, { id: string; name: string }>> {
   if (itemIds.length === 0) return new Map();
-  const rows = (await runner.execute<{ item_id: string; vendor_id: string; vendor_name: string }>(sql`
+  const rows = await runner.execute<{ item_id: string; vendor_id: string; vendor_name: string }>(sql`
     select distinct on (m.item_id) m.item_id, d.party_id as vendor_id, p.display_name as vendor_name
       from inventory_movements m
       join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
@@ -87,7 +87,7 @@ export async function lastReceiptVendors(
           where reversal.org_id = m.org_id and reversal.reverses_movement_id = m.id)
        and d.kind in ('purchase_receipt', 'vendor_bill')
        and m.item_id in (${sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `)})
-     order by m.item_id, m.moved_at desc, m.id desc`)).rows;
+     order by m.item_id, m.moved_at desc, m.id desc`, "objects");
   return new Map(rows.map((row) => [row.item_id, { id: row.vendor_id, name: row.vendor_name }]));
 }
 

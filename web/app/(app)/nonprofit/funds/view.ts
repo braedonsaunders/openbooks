@@ -144,14 +144,14 @@ export async function loadFunds(
         join accounts at on at.org_id = p.org_id and at.id = p.due_to_account_id
        where p.org_id = ${orgId} and p.is_active
          and (p.from_fund_id = ${fundId} or p.to_fund_id = ${fundId})
-       order by ff.code, tf.code`),
+       order by ff.code, tf.code`, 'objects'),
     db.execute<ReleaseRow>(sql`
       select id::text as id, release_number, amount::text as amount,
              release_date::text as release_date, status
         from fund_releases
        where org_id = ${orgId} and (from_fund_id = ${fundId} or to_fund_id = ${fundId})
        order by release_date desc, release_number desc
-       limit 5`),
+       limit 5`, 'objects'),
   ])
 
   return {
@@ -168,7 +168,7 @@ export async function loadFunds(
         budgetaryControl: found.budgetaryControl,
         isActive: found.isActive,
       },
-      pairs: pairs.rows.map((row) => ({
+      pairs: pairs.map((row) => ({
         id: row.id,
         fromFundId: row.from_fund_id,
         toFundId: row.to_fund_id,
@@ -177,7 +177,7 @@ export async function loadFunds(
         dueFromNumber: row.due_from_number,
         dueToNumber: row.due_to_number,
       })),
-      releases: releases.rows.map((row) => ({
+      releases: releases.map((row) => ({
         id: row.id,
         number: row.release_number,
         amount: row.amount,

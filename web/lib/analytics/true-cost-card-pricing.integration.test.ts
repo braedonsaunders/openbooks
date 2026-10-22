@@ -68,9 +68,9 @@ async function perEntryPricing(orgId: string, scope: ReadonlySet<string> | null)
                     and v.effective_from <= t.worked_on and (v.effective_to is null or v.effective_to >= t.worked_on)
                   order by v.effective_from desc limit 1) = 'none'
        )
-  `)
-  assert.ok(result.rows[0])
-  return result.rows[0]
+  `, 'objects')
+  assert.ok(result[0])
+  return result[0]
 }
 
 test('grouped standard-card pricing preserves exact entries, dated specificity, legal-entity scope and fresh cards', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -113,7 +113,7 @@ test('grouped standard-card pricing preserves exact entries, dated specificity, 
       await db.execute(sql`insert into time_entries(org_id,employee_party_id,worked_on,hours,status,department_id,project_id)
         values(${orgId},${otherEmployee},'2026-07-14','10','approved',${seed.deptIds[0]},${seed.projectIds[1]})`)
     })
-    const history = async () => (await db.execute(sql`select * from journal_lines where org_id=${orgId} order by id`)).rows
+    const history = async () => await db.execute(sql`select * from journal_lines where org_id=${orgId} order by id`, 'objects')
     const before = await history()
     const compare = async (scope: ReadonlySet<string> | null, amount: string, entries: number) => {
       const reference = await perEntryPricing(orgId, scope)

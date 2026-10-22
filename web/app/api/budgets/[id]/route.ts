@@ -71,8 +71,8 @@ export const PATCH = defineRoute({
             select name, description, kind, book_id, fiscal_year, status, revision,
                    exists (select 1 from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}) as has_lines
               from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-          `))
-          const before = locked.rows[0]
+          `, 'objects'))
+          const before = locked[0]
           if (!before) throw new BudgetMutationError('not_found', 404)
           // A rename/re-scope the caller cannot read answers as missing: the
           // scenario's lines escape their scope, so there is nothing in-scope
@@ -88,8 +88,8 @@ export const PATCH = defineRoute({
           if (nextBookId !== before.book_id) {
             const validBook = (await tx.execute(sql`
               select 1 from accounting_books where id = ${nextBookId} and org_id = ${user.orgId} and is_active
-            `))
-            if (!validBook.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
+            `, 'objects'))
+            if (!validBook[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
           }
           // Book and fiscal year pin the plan to one ledger and one period set:
           // reinterpreting existing lines against a different book (or year)
@@ -104,8 +104,8 @@ export const PATCH = defineRoute({
             const validYear = (await tx.execute(sql`
               select 1 from accounting_periods
                where org_id = ${user.orgId} and fiscal_year = ${nextFiscalYear} and not is_adjustment limit 1
-            `))
-            if (!validYear.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
+            `, 'objects'))
+            if (!validYear[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
           }
           const nextRevision = expectedRevision + 1
           await tx.execute(sql`
@@ -156,8 +156,8 @@ export const DELETE = defineRoute({
           const locked = (await tx.execute<Record<string, unknown>>(sql`
             select name, status, revision from budget_scenarios
              where id = ${id} and org_id = ${user.orgId} for update
-          `))
-          const row = locked.rows[0]
+          `, 'objects'))
+          const row = locked[0]
           if (!row) throw new BudgetMutationError('not_found', 404)
           // Same shape as PATCH: deleting a scenario the caller cannot read
           // answers as missing.

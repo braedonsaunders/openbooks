@@ -113,7 +113,7 @@ export async function applyDropShipConfirmationInventory(
                 and link.link_type = 'fulfills'
            ) as has_drop_ship_order
       from documents receipt where receipt.org_id = ${orgId} and receipt.id = ${receiptId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!receipt || receipt.kind !== "purchase_receipt") {
     throw new DropShipRefusal("Drop-ship receipt not found", "not_found", 404);
   }
@@ -128,7 +128,7 @@ export async function applyDropShipConfirmationInventory(
   if (receipt.status !== "approved") {
     throw new DropShipRefusal("Drop-ship receipt must be approved before its cost is posted", "confirmation_not_ready", 409, "Complete the receipt and fulfilment confirmation together");
   }
-  const lines = (await runner.execute<DropShipPostingLine>(sql`
+  const lines = await runner.execute<DropShipPostingLine>(sql`
     select rl.id as line_id, rl.line_number, rl.item_id, rl.amount::text as amount,
            profile.cogs_account_id, profile.received_not_billed_account_id as clearing_account_id,
            profile.item_id is not null as has_profile,
@@ -154,7 +154,7 @@ export async function applyDropShipConfirmationInventory(
       left join item_inventory_profiles profile on profile.item_id = rl.item_id and profile.org_id = rl.org_id
      where rl.org_id = ${orgId} and rl.document_id = ${receiptId}
      order by rl.line_number
-  `)).rows;
+  `, "objects");
   if (lines.length === 0) {
     throw new DropShipRefusal("Drop-ship confirmation receipt has no stock lines", "invalid_pairing", 422, "Create the receipt from the routed purchase-order lines");
   }
@@ -192,7 +192,7 @@ export async function applyDropShipConfirmationInventory(
   const currency = await subsidiaryCurrency(orgId, subsidiaryId, runner);
   let count = 0;
   for (const line of lines) {
-    const sourceLine = (await runner.execute<{id:string}>(sql`select custom->'receipt'->>'sourceLineId' as id from document_lines where org_id=${orgId} and id=${line.line_id}`)).rows[0]?.id;
+    const sourceLine = (await runner.execute<{id:string}>(sql`select custom->'receipt'->>'sourceLineId' as id from document_lines where org_id=${orgId} and id=${line.line_id}`, "objects"))[0]?.id;
     if (sourceLine && await agencyForPurchaseLine(runner,orgId,sourceLine,receipt.document_date)) {
       if (!await isAgencyConfirmationLine(runner,orgId,receiptId,line.line_id)) throw new DropShipRefusal('The shipment does not match its approved agency arrangement','invalid_pairing',422,'Recreate the vendor shipment from the assessed purchase order so its item, quantity, consideration and legal entity are preserved');
       continue;
@@ -216,7 +216,7 @@ export async function applyDropShipConfirmationInventory(
       select name, is_active, is_summary from accounts
        where org_id = ${orgId} and id = ${line.cogs_account_id}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!cogsAccount || !cogsAccount.is_active || cogsAccount.is_summary) {
       throw new DropShipRefusal(`Item ${line.item_name} has no active posting COGS account`, "cogs_account_required", 422, `Open Items, select ${line.item_name}, and choose an active posting COGS account in its Costing profile`);
     }
@@ -224,13 +224,13 @@ export async function applyDropShipConfirmationInventory(
       select name, is_active, is_summary from accounts
        where org_id = ${orgId} and id = ${clearing.accountId}
        for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!clearingAccount || !clearingAccount.is_active || clearingAccount.is_summary) {
       throw new DropShipRefusal(`Item ${line.item_name} has no active posting received-not-billed account`, "received_not_billed_account_required", 422, `Open Items, select ${line.item_name}, and choose an active posting received-not-billed account in its Costing profile, or set the company control account`);
     }
     const entryNumber = `INV-DS-${line.line_id}`;
     const existing = (await runner.execute(sql`
-      select 1 from journal_entries where org_id = ${orgId} and entry_number = ${entryNumber} limit 1`)).rows[0];
+      select 1 from journal_entries where org_id = ${orgId} and entry_number = ${entryNumber} limit 1`, "objects"))[0];
     if (existing) continue;
     const locationId = line.stock_location_id
       ? await stockLocationDim(runner, orgId, line.stock_location_id, line.location_id)
@@ -275,8 +275,8 @@ async function audit(
   const written = await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'drop_ship_lines', ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
-    returning id`);
-  if (written.rows.length === 0) throw new Error("drop-ship routing change was not audited");
+    returning id`, "objects");
+  if (written.length === 0) throw new Error("drop-ship routing change was not audited");
 }
 
 type OrderLine = Record<string, unknown> & {
@@ -301,7 +301,7 @@ async function lockEligibleLine(
     select id, kind, status, subsidiary_id
       from documents
      where org_id = ${orgId} and id = ${salesOrderId}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!header || header.kind !== "sales_order" || !subsidiaryScopeAllows(scope, header.subsidiary_id)) {
     throw new DropShipRefusal("Sales order not found", "not_found", 404);
   }
@@ -322,7 +322,7 @@ async function lockEligibleLine(
       left join item_inventory_profiles profile
         on profile.org_id = dl.org_id and profile.item_id = dl.item_id
      where dl.org_id = ${orgId} and dl.document_id = ${salesOrderId} and dl.id = ${salesOrderLineId}
-     for update of dl`)).rows[0];
+     for update of dl`, "objects"))[0];
   if (!line) throw new DropShipRefusal("Sales-order line not found", "not_found", 404);
   if (!line.item_id || !line.has_inventory_profile) {
     throw new DropShipRefusal(
@@ -358,7 +358,7 @@ export async function routeDropShipLine(input: RouteDropShipLineInput): Promise<
     const line = await lockEligibleLine(tx, input.orgId, input.salesOrderId, input.salesOrderLineId, input.allowedSubsidiaryIds);
     const existing = (await tx.execute(sql`
       select 1 from drop_ship_lines
-       where org_id = ${input.orgId} and sales_order_line_id = ${line.id}`)).rows[0];
+       where org_id = ${input.orgId} and sales_order_line_id = ${line.id}`, "objects"))[0];
     if (existing) {
       throw new DropShipRefusal(
         `Sales-order line ${line.line_number} is already routed for vendor shipment`,
@@ -370,8 +370,8 @@ export async function routeDropShipLine(input: RouteDropShipLineInput): Promise<
     const inserted = await tx.execute<{ sales_order_line_id: string }>(sql`
       insert into drop_ship_lines (org_id, sales_order_line_id, routed_by)
       values (${input.orgId}, ${line.id}, ${input.actorId})
-      returning sales_order_line_id`);
-    if (inserted.rows.length === 0) {
+      returning sales_order_line_id`, "objects");
+    if (inserted.length === 0) {
       throw new DropShipRefusal(
         `Sales-order line ${line.line_number} is already routed for vendor shipment`,
         "already_routed",
@@ -395,7 +395,7 @@ export async function unrouteDropShipLine(input: RouteDropShipLineInput): Promis
       select purchase_order_line_id
         from drop_ship_lines
        where org_id = ${input.orgId} and sales_order_line_id = ${line.id}
-       for update`)).rows[0];
+       for update`, "objects"))[0];
     if (!route) throw new DropShipRefusal("Drop-ship route not found", "not_found", 404);
     if (route.purchase_order_line_id) {
       throw new DropShipRefusal(
@@ -409,8 +409,8 @@ export async function unrouteDropShipLine(input: RouteDropShipLineInput): Promis
       delete from drop_ship_lines
        where org_id = ${input.orgId} and sales_order_line_id = ${line.id}
          and purchase_order_line_id is null
-       returning sales_order_line_id`);
-    if (deleted.rows.length === 0) {
+       returning sales_order_line_id`, "objects");
+    if (deleted.length === 0) {
       throw new DropShipRefusal("Drop-ship route changed while it was being removed", "changed_concurrently", 409, "Reload the sales order and retry removing the route");
     }
     await audit(tx, input.orgId, input.actorId, line.id, "delete", {
@@ -453,10 +453,10 @@ export async function attachDropShipPurchaseOrderInTx(
     await assertDropShippingFeature(tx, input.orgId);
     const po = (await tx.execute<{ id: string; kind: string; status: string; subsidiary_id: string | null }>(sql`
       select id, kind, status, subsidiary_id from documents
-       where id = ${input.purchaseOrderId} and org_id = ${input.orgId} for update`)).rows[0];
+       where id = ${input.purchaseOrderId} and org_id = ${input.orgId} for update`, "objects"))[0];
     const so = (await tx.execute<{ id: string; kind: string; status: string; subsidiary_id: string | null }>(sql`
       select id, kind, status, subsidiary_id from documents
-       where id = ${input.salesOrderId} and org_id = ${input.orgId} for update`)).rows[0];
+       where id = ${input.salesOrderId} and org_id = ${input.orgId} for update`, "objects"))[0];
     if (!po || po.kind !== "purchase_order" || !so || so.kind !== "sales_order"
       || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, po.subsidiary_id)
       || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, so.subsidiary_id)) {
@@ -475,7 +475,7 @@ export async function attachDropShipPurchaseOrderInTx(
     }
     const existing = (await tx.execute<{ sales_order_id: string }>(sql`
       select sales_order_id from drop_ship_orders
-       where org_id = ${input.orgId} and purchase_order_id = ${input.purchaseOrderId}`)).rows[0];
+       where org_id = ${input.orgId} and purchase_order_id = ${input.purchaseOrderId}`, "objects"))[0];
     if (existing) {
       if (existing.sales_order_id === input.salesOrderId) return;
       throw new DropShipRefusal("Purchase order is already linked to another sales order", "invalid_pairing", 409, "Create a separate purchase order for this sales order");
@@ -491,8 +491,8 @@ export async function attachDropShipPurchaseOrderInTx(
            and routed.purchase_order_line_id is null
            and sol.org_id = routed.org_id and sol.id = routed.sales_order_line_id
            and sol.document_id = ${input.salesOrderId}
-        returning routed.sales_order_line_id`);
-      if (updated.rows.length !== 1) {
+        returning routed.sales_order_line_id`, "objects");
+      if (updated.length !== 1) {
         throw new DropShipRefusal("A routed sales-order line changed before the purchase order was saved", "changed_concurrently", 409, "Reload the sales order and create a new drop-ship purchase order");
       }
       const pairLines = (await tx.execute<{
@@ -507,7 +507,7 @@ export async function attachDropShipPurchaseOrderInTx(
          from document_lines pol
          join document_lines sol on sol.id = ${pair.salesOrderLineId} and sol.org_id = pol.org_id
          where pol.org_id = ${input.orgId} and pol.document_id = ${input.purchaseOrderId}
-           and pol.id = ${pair.purchaseOrderLineId} and sol.document_id = ${input.salesOrderId}`)).rows[0];
+           and pol.id = ${pair.purchaseOrderLineId} and sol.document_id = ${input.salesOrderId}`, "objects"))[0];
       if (!pairLines || pairLines.po_item_id !== pairLines.so_item_id
         || cmp(pairLines.po_quantity, pairLines.so_open_quantity) !== 0) {
         throw new DropShipRefusal(
@@ -522,8 +522,8 @@ export async function attachDropShipPurchaseOrderInTx(
     const inserted = await tx.execute<{ purchase_order_id: string }>(sql`
       insert into drop_ship_orders (org_id, purchase_order_id, sales_order_id, ship_to_address)
       values (${input.orgId}, ${input.purchaseOrderId}, ${input.salesOrderId}, ${snapshot}::jsonb)
-      returning purchase_order_id`);
-    if (inserted.rows.length !== 1) throw new Error("drop-ship purchase-order link was not stored");
+      returning purchase_order_id`, "objects");
+    if (inserted.length !== 1) throw new Error("drop-ship purchase-order link was not stored");
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'drop_ship_orders', ${input.purchaseOrderId}, 'insert',
@@ -540,7 +540,7 @@ export async function dropShipOrderStatus(
 ): Promise<Array<{ salesOrderLineId: string; purchaseOrderLineId: string | null; purchaseOrderId: string | null }>> {
   await assertDropShippingFeature(runner, orgId);
   const order = (await runner.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from documents where org_id = ${orgId} and id = ${salesOrderId} and kind = 'sales_order'`)).rows[0];
+    select subsidiary_id from documents where org_id = ${orgId} and id = ${salesOrderId} and kind = 'sales_order'`, "objects"))[0];
   if (!order || !subsidiaryScopeAllows(allowedSubsidiaryIds, order.subsidiary_id)) {
     throw new DropShipRefusal("Sales order not found", "not_found", 404);
   }
@@ -554,7 +554,7 @@ export async function dropShipOrderStatus(
           where po.org_id = routed.org_id and po.id = routed.purchase_order_line_id)
      where routed.org_id = ${orgId}
        and routed.sales_order_line_id in (select id from document_lines where org_id = ${orgId} and document_id = ${salesOrderId})
-     order by routed.sales_order_line_id`)).rows.map((row) => ({
+     order by routed.sales_order_line_id`, "objects")).map((row) => ({
       salesOrderLineId: row.sales_order_line_id,
       purchaseOrderLineId: row.purchase_order_line_id,
       purchaseOrderId: row.purchase_order_id,

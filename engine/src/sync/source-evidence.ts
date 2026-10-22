@@ -49,7 +49,7 @@ export async function evidenceWindowStart(orgId: string): Promise<string | null>
           where l.org_id = p.org_id and l.period_id = p.id
             and l.module = 'gl' and l.state = 'closed'
        )
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.start ?? null;
 }
 
@@ -60,12 +60,12 @@ export async function resolveDocEntries(
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (sourceRefs.length === 0) return out;
-  const rows = (await db.execute<{ source_ref: string; entry_id: string }>(sql`
+  const rows = await db.execute<{ source_ref: string; entry_id: string }>(sql`
     select d.custom->>${refKey} as source_ref, d.posted_entry_id as entry_id
       from documents d
      where d.org_id = ${orgId} and d.posted_entry_id is not null
        and d.custom->>${refKey} = any(${sql.param(sourceRefs)}::text[])
-  `)).rows;
+  `, "objects");
   for (const row of rows) out.set(row.source_ref, row.entry_id);
   return out;
 }
@@ -79,7 +79,7 @@ export async function resolveRefreshLines(
   if (states.length === 0) return out;
   const docRefs = [...new Set(states.map((s) => s.docRef))];
   const lineRefs = [...new Set(states.map((s) => s.lineRef))];
-  const rows = (await db.execute<{ doc_ref: string; line_ref: string; accountId: string; entry_id: string }>(sql`
+  const rows = await db.execute<{ doc_ref: string; line_ref: string; accountId: string; entry_id: string }>(sql`
     select d.custom->>${refKey} as doc_ref,
            dl.custom->>'sourceLineRef' as line_ref,
            dl.account_id as "accountId",
@@ -89,7 +89,7 @@ export async function resolveRefreshLines(
      where dl.org_id = ${orgId} and d.posted_entry_id is not null
        and d.custom->>${refKey} = any(${sql.param(docRefs)}::text[])
        and dl.custom->>'sourceLineRef' = any(${sql.param(lineRefs)}::text[])
-  `)).rows;
+  `, "objects");
   for (const row of rows) out.set(`${row.doc_ref}|${row.line_ref}`, { entryId: row.entry_id, accountId: row.accountId });
   return out;
 }

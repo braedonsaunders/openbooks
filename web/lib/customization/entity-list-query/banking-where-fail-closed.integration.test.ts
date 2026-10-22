@@ -15,11 +15,9 @@ const { defaultListView } = await import("@openbooks/customization");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function reconCount(orgId: string, adhoc: { filters?: Record<string, string> }): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from reconciliations r
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from reconciliations r
       join accounts bank_account on bank_account.id = r.account_id and bank_account.org_id = r.org_id
-      where ${bankReconciliationWhere({ ...defaultListView("bank_reconciliation"), filters: [] }, { filters: adhoc.filters }, orgId, null)}`)
-  ).rows;
+      where ${bankReconciliationWhere({ ...defaultListView("bank_reconciliation"), filters: [] }, { filters: adhoc.filters }, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 
@@ -28,11 +26,9 @@ async function statementCount(
   adhoc: { filters?: Record<string, string> },
   viewFilters: { key: string; operator: string; value?: string | null }[] = [],
 ): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from bank_statements bs
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from bank_statements bs
       join accounts statement_account on statement_account.id = bs.account_id and statement_account.org_id = bs.org_id
-      where ${bankStatementWhere({ ...defaultListView("bank_statement"), filters: viewFilters as never }, { filters: adhoc.filters }, orgId, null)}`)
-  ).rows;
+      where ${bankStatementWhere({ ...defaultListView("bank_statement"), filters: viewFilters as never }, { filters: adhoc.filters }, orgId, null)}`, "objects");
   return rows[0]!.n;
 }
 

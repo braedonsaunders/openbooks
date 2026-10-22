@@ -18,8 +18,8 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.pdf-template-id-route-test')]
       export const db = {
-        async transaction(work) { state.writes += 1; return work({ execute: async () => ({ rows: [] }) }) },
-        async execute() { return { rows: [] } },
+        async transaction(work) { state.writes += 1; return work({ execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }) },
+        async execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return inMode({ rows: [] }) },
       }
     `,
   ],

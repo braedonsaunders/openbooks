@@ -65,7 +65,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.email-action-route-test')]
       export const db = {
-        execute: async () => ({ rows: [{ ...state.summary }] }),
+        execute: async (_query, mode) => Promise.resolve({ rows: [{ ...state.summary }] }).then((result) => (mode === 'objects' ? result.rows : result)),
       }
       export function withBypassContext(fn) { return fn() }
       export function withOrgContext(orgId, fn) { return fn() }

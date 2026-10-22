@@ -61,8 +61,8 @@ export const GET = defineRoute({
          where sc.org_id = ${gate.user.orgId}
            ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}
          order by sc.created_at desc
-      `))
-    return NextResponse.json({ schedules: r.rows })
+      `, 'objects'))
+    return NextResponse.json({ schedules: r })
   },
 });
 
@@ -88,19 +88,19 @@ export const POST = defineRoute({
       }
     const server = (await db.execute(sql`
         select 1 from sftp_servers where id = ${body.sftpServerId} and org_id = ${user.orgId}
-      `))
-    if (!server.rows[0]) return notFound('record')
+      `, 'objects'))
+    if (!server[0]) return notFound('record')
     const account = (await db.execute<{ currency: string | null; subsidiary_id: string | null }>(sql`
         select currency_restriction as currency, subsidiary_id from accounts
          where id = ${body.accountId} and org_id = ${user.orgId}
            and reconcilable and is_active and not is_summary
-      `))
-    if (!account.rows[0]) {
+      `, 'objects'))
+    if (!account[0]) {
         return NextResponse.json({ error: 'Account not found or not reconcilable' }, { status: 422 })
       }
-    const scoped = guardSubsidiaryScope(gate, account.rows[0]!.subsidiary_id)
+    const scoped = guardSubsidiaryScope(gate, account[0]!.subsidiary_id)
     if (scoped) return scoped
-    if (!account.rows[0].currency) {
+    if (!account[0].currency) {
         return NextResponse.json({ error: 'Reconcilable accounts require an explicit currency before statement import or reconciliation' }, { status: 422 })
       }
     const format = FORMATS.has(String(body.format)) ? body.format : 'auto'
@@ -131,7 +131,7 @@ export const POST = defineRoute({
               join accounts a on a.org_id = sv.org_id and a.id = ${body.accountId}
              where sv.id = ${body.sftpServerId} and sv.org_id = ${user.orgId}
              for share of sv, o, a
-          `)).rows[0]
+          `, 'objects'))[0]
           if (!eligibility) return { notFound: true as const }
           if (!eligibility.account_reconcilable || !eligibility.account_active || eligibility.account_summary) {
             return { ineligible: true as const }
@@ -144,7 +144,7 @@ export const POST = defineRoute({
           if (!eligibility.account_currency) {
             return { conflict: 'Reconcilable accounts require an explicit currency before statement import or reconciliation' }
           }
-          const siblings = (await tx.execute<{ id: string; folder: string; account_label: string }>(sql`
+          const siblings = await tx.execute<{ id: string; folder: string; account_label: string }>(sql`
             select sc.id, sc.folder,
                    coalesce(nullif(a.number, ''), a.name, sc.account_id::text) as account_label
               from sftp_import_schedules sc
@@ -152,7 +152,7 @@ export const POST = defineRoute({
              where sc.org_id = ${user.orgId} and sc.sftp_server_id = ${body.sftpServerId}
                and sc.is_active
              for update of sc
-          `)).rows
+          `, 'objects')
           const siblingRefs = siblings.map((row) => ({
             id: row.id,
             folder: row.folder,
@@ -183,7 +183,7 @@ export const POST = defineRoute({
                   ${body.csvMapping ? JSON.stringify(body.csvMapping) : null}::jsonb, ${expectedExternalAccountId ?? null}, ${user.id})
           returning id, sftp_server_id, account_id, format, folder, csv_mapping, expected_external_account_id,
                     is_active, created_by, updated_by
-        `)).rows[0]
+        `, 'objects'))[0]
           if (!inserted) throw new Error('SFTP schedule insert returned no row')
           await auditSetupChange({
             orgId: user.orgId,
@@ -205,7 +205,7 @@ export const POST = defineRoute({
         return NextResponse.json({ id: r.inserted.id })
       } catch (e) {
         // A parent deleted between the checks above and the insert still refuses
-        // at the storage layer (0242 composite FKs) — surface the same typed
+        // at the storage layer (composite tenant foreign keys) — surface the same typed
         // refusal the checks return instead of a raw 500.
         if (pgErrorCode(e) === '23503') {
           const constraint = String(

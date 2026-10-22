@@ -18,7 +18,7 @@ export async function retireSourceProjectInputs(options: {
           select to_jsonb(r) as record,coalesce(r.custom,'{}'::jsonb) as custom
           from ${table} r where r.org_id=${options.orgId} and r.id=${input.id}
             and r.custom->>${options.refKey}=${input.sourceRef} for update
-        `)).rows[0];
+        `, "objects"))[0];
         if (!before) throw new Error("The source-deleted project input changed before retirement; retry the sync");
         const existing = before.custom.sourceRetirement as Record<string, unknown> | undefined;
         if (existing) {
@@ -42,7 +42,7 @@ export async function retireSourceProjectInputs(options: {
           where r.org_id=${options.orgId} and r.id=${input.id}
             and r.custom->>${options.refKey}=${input.sourceRef}
           returning to_jsonb(r) as record
-        `)).rows[0];
+        `, "objects"))[0];
         if (!after) throw new Error("The source-deleted project input was not retired");
         await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id,request_id)
           values(${options.orgId},${kind === "projects" ? "projects" : "time_entries"},${input.id},'update',

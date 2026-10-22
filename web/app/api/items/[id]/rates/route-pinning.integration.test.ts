@@ -112,12 +112,12 @@ test('saving a version pins policy per item and carries other items forward', as
     })
     assert.equal(february.status, 200, await february.text())
 
-    const pins = (await db.execute<{ effective_from: string; item_id: string; pricing_policy: string }>(sql`
+    const pins = await db.execute<{ effective_from: string; item_id: string; pricing_policy: string }>(sql`
       select v.effective_from::text, p.item_id, p.pricing_policy
         from item_rate_version_profiles p
         join item_rate_versions v on v.id = p.version_id and v.org_id = p.org_id
        where p.org_id = ${org.orgId} and v.rate_book_id = ${book}
-       order by v.effective_from, p.item_id`)).rows
+       order by v.effective_from, p.item_id`, 'objects')
     assert.deepEqual(
       pins
         .map((r) => [r.effective_from.slice(0, 10), r.item_id === org.items.service ? 'main' : 'aide', r.pricing_policy])

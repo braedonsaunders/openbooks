@@ -115,12 +115,12 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
 
       const schedule = (await db.execute<{ total: string }>(sql`
         select coalesce(sum(payment), 0)::text as total from lease_agreement_schedule_lines
-         where org_id = ${ledger.orgId} and lease_id = ${leaseId}`));
+         where org_id = ${ledger.orgId} and lease_id = ${leaseId}`, "objects"));
       return {
         entries: [entry],
         values: {
           openingLiability: commenced!.liability,
-          undiscountedPayments: fromUnits(toUnits(schedule.rows[0]!.total)),
+          undiscountedPayments: fromUnits(toUnits(schedule[0]!.total)),
         },
       };
     },
@@ -679,7 +679,7 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       // provisioned the way any operator would provision a new open period.
       const calendarId = (await db.execute<{ id: string }>(sql`
         select fiscal_calendar_id as id from accounting_periods
-         where org_id = ${ledger.orgId} limit 1`)).rows[0]!.id;
+         where org_id = ${ledger.orgId} limit 1`, "objects"))[0]!.id;
       await db.execute(sql`
         insert into accounting_periods
           (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -705,8 +705,8 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       });
       await commenceLease(ledger.orgId, leaseId, ledger.actorId);
       const journals = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from journal_entries where org_id = ${ledger.orgId}`)).rows[0]!.n;
-      const rows = (await db.execute<{
+        select count(*)::text as n from journal_entries where org_id = ${ledger.orgId}`, "objects"))[0]!.n;
+      const rows = await db.execute<{
         sequence: number;
         opening: string;
         principal: string;
@@ -716,7 +716,7 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
                principal::text as principal, closing_liability::text as closing
           from lease_agreement_schedule_lines
          where org_id = ${ledger.orgId} and lease_id = ${leaseId}
-         order by sequence`)).rows;
+         order by sequence`, "objects");
       const run = await postDueLeaseSchedules(ledger.orgId, "2025-07-31", ledger.actorId);
       return {
         values: {

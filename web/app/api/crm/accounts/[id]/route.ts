@@ -95,24 +95,24 @@ export const GET = defineRoute({
     if (!isUuid(id)) return notFound("record")
     const orgId = gate.user.orgId
     const visible = (await db.execute(sql`
-      select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}`))
-    if (!visible.rows.length) return notFound("record")
+      select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}`, 'objects'))
+    if (!visible.length) return notFound("record")
     const [account, statuses, owners, territories, sources] = await Promise.all([
       loadCrmAccount(id, orgId, gate.allowedSubsidiaryIds),
       db.execute<{ id: string; name: string; lifecycle_stage: string; is_default: boolean }>(sql`
         select id, name, lifecycle_stage, is_default from crm_account_statuses
-         where org_id = ${orgId} and is_active order by lifecycle_stage, sequence, name`),
-      db.execute<{ id: string; name: string }>(sql`select id, name from users where org_id = ${orgId} and is_active order by name`),
-      db.execute<{ id: string; name: string }>(sql`select id, name from crm_sales_territories where org_id = ${orgId} and is_active order by priority, name`),
-      db.execute<{ id: string; name: string }>(sql`select id, name from crm_lead_sources where org_id = ${orgId} and is_active order by name`),
+         where org_id = ${orgId} and is_active order by lifecycle_stage, sequence, name`, 'objects'),
+      db.execute<{ id: string; name: string }>(sql`select id, name from users where org_id = ${orgId} and is_active order by name`, 'objects'),
+      db.execute<{ id: string; name: string }>(sql`select id, name from crm_sales_territories where org_id = ${orgId} and is_active order by priority, name`, 'objects'),
+      db.execute<{ id: string; name: string }>(sql`select id, name from crm_lead_sources where org_id = ${orgId} and is_active order by name`, 'objects'),
     ])
     return NextResponse.json({
       account,
       options: {
-        statuses: statuses.rows,
-        owners: owners.rows,
-        territories: territories.rows,
-        sources: sources.rows,
+        statuses,
+        owners,
+        territories,
+        sources,
       },
     })
 
@@ -140,28 +140,28 @@ export const POST = defineRoute({
     if (!isUuid(id)) return notFound("record")
     const created = await db.transaction(async (tx) => {
       const party = (await tx.execute<{ id: string }>(sql`
-        select id from parties where id = ${id} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)} for update`))
-      if (!party.rows.length) return 'missing' as const
+        select id from parties where id = ${id} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)} for update`, 'objects'))
+      if (!party.length) return 'missing' as const
       const existing = (await tx.execute<{ id: string }>(sql`
-        select id from crm_account_profiles where org_id = ${user.orgId} and party_id = ${id}`))
-      if (existing.rows.length) return 'exists' as const
+        select id from crm_account_profiles where org_id = ${user.orgId} and party_id = ${id}`, 'objects'))
+      if (existing.length) return 'exists' as const
       const isCustomer = (await tx.execute(sql`
-        select 1 from customer_roles where org_id = ${user.orgId} and party_id = ${id} and is_active`)).rows.length > 0
+        select 1 from customer_roles where org_id = ${user.orgId} and party_id = ${id} and is_active`, 'objects')).length > 0
       const stage: Stage = isCustomer ? 'customer' : 'lead'
       const status = (await tx.execute<{ id: string }>(sql`
         select id from crm_account_statuses
          where org_id = ${user.orgId} and lifecycle_stage = ${stage} and is_default and is_active
-         order by sequence limit 1`))
+         order by sequence limit 1`, 'objects'))
       const profile = (await tx.execute<{ id: string }>(sql`
         insert into crm_account_profiles
           (org_id, party_id, lifecycle_stage, status_id, owner_user_id, converted_at, is_active, created_by, updated_by)
-        values (${user.orgId}, ${id}, ${stage}, ${status.rows[0]?.id ?? null}, ${user.id},
+        values (${user.orgId}, ${id}, ${stage}, ${status[0]?.id ?? null}, ${user.id},
                 ${stage === 'customer' ? sql`now()` : null}, true, ${user.id}, ${user.id})
-        returning id`))
+        returning id`, 'objects'))
       await tx.execute(sql`
         insert into crm_account_stage_events
           (org_id, account_profile_id, to_stage, source_kind, reason, created_by, updated_by)
-        values (${user.orgId}, ${profile.rows[0]!.id}, ${stage}, 'manual', 'Relationship tracking started', ${user.id}, ${user.id})`)
+        values (${user.orgId}, ${profile[0]!.id}, ${stage}, 'manual', 'Relationship tracking started', ${user.id}, ${user.id})`)
       return 'created' as const
     })
     if (created === 'missing') return notFound("record")
@@ -186,8 +186,8 @@ export const PATCH = defineRoute({
     const current = (await db.execute<{ id: string; lifecycle_stage: string; owner_user_id: string | null; territory_id: string | null; revision: string }>(sql`
       select cp.*, ${documentRevisionSql(sql`cp.updated_at`)} as revision, p.display_name, p.is_active as party_active
         from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
-       where cp.party_id = ${id} and cp.org_id = ${user.orgId}${crmSharedScope(sql`p.subsidiary_id`,gate.allowedSubsidiaryIds)}`))
-    const row = current.rows[0]
+       where cp.party_id = ${id} and cp.org_id = ${user.orgId}${crmSharedScope(sql`p.subsidiary_id`,gate.allowedSubsidiaryIds)}`, 'objects'))
+    const row = current[0]
     if (!row) return notFound("record")
     // Mandatory optimistic-concurrency evidence (same contract as the party,
     // bank-account, and opportunity saves): the relationship tab holds its
@@ -268,8 +268,8 @@ export const PATCH = defineRoute({
     let statusStage: string | null = null
     if (statusId && typeof statusId === 'string') {
       const owner = (await db.execute<{ lifecycle_stage: string }>(sql`
-        select lifecycle_stage from crm_account_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`))
-      statusStage = owner.rows[0]?.lifecycle_stage ?? null
+        select lifecycle_stage from crm_account_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`, 'objects'))
+      statusStage = owner[0]?.lifecycle_stage ?? null
       // Unknown or inactive statuses always fail closed. A stage change can
       // explain a known status from the old stage because the drawer submits
       // its whole form, including that now-stale value.
@@ -295,16 +295,16 @@ export const PATCH = defineRoute({
     }
 
     const denied = await db.transaction(async (tx) => {
-      const visible = await tx.execute(sql`select id from parties where id=${id} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
-      if (!visible.rows.length) return notFound("record")
+      const visible = await tx.execute(sql`select id from parties where id=${id} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`, 'objects')
+      if (!visible.length) return notFound("record")
       // Re-check the token under the profile lock: the pre-transaction
       // comparison raced this lock's acquisition, and the stage transitions
       // below bump updated_at (so the field update cannot pin the token
       // itself) — the lock plus this re-check is what serializes two tabs.
       const locked = await tx.execute<{ revision: string; custom: Record<string, unknown> | null }>(sql`
         select ${documentRevisionSql(sql`updated_at`)} as revision, custom from crm_account_profiles
-         where id = ${row.id} and org_id = ${user.orgId} for update`)
-      if (!locked.rows[0] || locked.rows[0].revision !== body.expectedUpdatedAt) {
+         where id = ${row.id} and org_id = ${user.orgId} for update`, 'objects')
+      if (!locked[0] || locked[0].revision !== body.expectedUpdatedAt) {
         return NextResponse.json(
           { error: 'This relationship changed after you opened it; reload and reapply your changes' },
           { status: 409 },
@@ -318,7 +318,7 @@ export const PATCH = defineRoute({
         const defs = await loadFieldDefs('crm_account_profiles')
         const unknownKey = unknownCustomFieldKey(defs, body.custom)
         if (unknownKey) return NextResponse.json({ error: `unknown custom field: ${unknownKey}` }, { status: 422 })
-        const existingCustom = locked.rows[0]!.custom ?? {}
+        const existingCustom = locked[0]!.custom ?? {}
         const result = validateCustomValues(defs, { ...existingCustom, ...body.custom })
         if (!result.ok) return NextResponse.json({ error: Object.values(result.errors)[0], fieldErrors: result.errors }, { status: 422 })
         const suppliedCustom: Record<string, unknown> = {}
@@ -405,7 +405,7 @@ export const PATCH = defineRoute({
       const after = (await tx.execute(sql`
         select cp.*, p.display_name, p.is_active as party_active
           from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
-         where cp.id = ${row.id} and cp.org_id = ${user.orgId}`)).rows[0]
+         where cp.id = ${row.id} and cp.org_id = ${user.orgId}`, 'objects'))[0]
       if (body.route === true) await routeSalesAccount(tx, user.orgId, row.id, user.id)
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

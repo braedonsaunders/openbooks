@@ -133,7 +133,7 @@ describe("run-lifecycle", () => {
     const stored = (await db.execute<{ period_start: string; period_end: string }>(sql`
       select period_start::text as period_start, period_end::text as period_end
         from pay_runs where org_id = ${org.orgId} and document_id = ${next.documentId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stored.period_start, "2026-07-12");
     assert.equal(stored.period_end, "2026-07-25");
 
@@ -159,10 +159,10 @@ describe("run-boundary", () => {
         await db.execute(sql`update orgs set settings = settings || '{"features":{"payroll":true}}'::jsonb where id = ${org.orgId}`)
         await db.execute(sql`insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, is_active, created_by, updated_by)
           values (${scheduleId}, ${org.orgId}, 'Boundary schedule', 'biweekly', 26, '2026-07-18', 3, true, ${actorId}, ${actorId})`)
-        const snapshot = async () => (await db.execute(sql`select
+        const snapshot = async () => await db.execute(sql`select
           (select count(*) from documents where org_id = ${org.orgId}) as documents,
           (select count(*) from pay_runs where org_id = ${org.orgId}) as runs,
-          (select jsonb_agg(to_jsonb(s) order by s.id) from number_sequences s where org_id = ${org.orgId}) as sequences`)).rows
+          (select jsonb_agg(to_jsonb(s) order by s.id) from number_sequences s where org_id = ${org.orgId}) as sequences`, "objects")
         const before = await snapshot()
         await assert.rejects(createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId, ...dates }), PayrollError)
         assert.deepEqual(await snapshot(), before)
@@ -219,14 +219,14 @@ describe("run-assignment-window", () => {
     });
     assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
 
-    const lines = (await db.execute<{ code: string; amount: string }>(sql`
+    const lines = await db.execute<{ code: string; amount: string }>(sql`
       select c.code, l.amount::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         join pay_components c on c.id = l.component_id and c.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          and l.component_id in (${midId}, ${beforeId}, ${fullId})
-    `)).rows;
+    `, "objects");
     const byCode = new Map(lines.map((l) => [l.code, l.amount]));
     // 6 of the 14 period days covered: 6/14 × 50.00, rounded to cents.
     assert.equal(byCode.get("MIDSUM"), "21.4300",
@@ -273,14 +273,14 @@ describe("run-assignment-window", () => {
     });
     assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
 
-    const lines = (await db.execute<{ amount: string }>(sql`
+    const lines = await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          and l.component_id = ${componentId}
        order by l.amount
-    `)).rows;
+    `, "objects");
     assert.equal(lines.length, 2, "both slices of the amended component are paid");
     // 15/31 × 3000.00 and 16/31 × 3100.00, rounded to cents: ≈ half each.
     assert.equal(lines[0]!.amount, "1451.6100");
@@ -333,22 +333,22 @@ describe("run-entitlement-hours-payout", () => {
     });
     assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
 
-    const lines = (await db.execute<{ amount: string }>(sql`
+    const lines = await db.execute<{ amount: string }>(sql`
       select l.amount::text as amount
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
        where s.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          and l.component_id = ${payoutComponentId}
-    `)).rows;
+    `, "objects");
     assert.equal(lines.length, 1, "the final pay carries the bank payout line");
     assert.equal(lines[0]!.amount, "1200.0000",
       "40 hours at $30/h pay $1,200 — never the $40.00 hour count");
 
     // The clearing movement stays in the plan's unit: the bank IS hours.
-    const cleared = (await db.execute<{ amount: string; kind: string }>(sql`
+    const cleared = await db.execute<{ amount: string; kind: string }>(sql`
       select amount::text as amount, kind from entitlement_ledger
        where org_id = ${org.orgId} and plan_id = ${planId} and kind = 'payout'
-    `)).rows;
+    `, "objects");
     assert.equal(cleared.length, 1);
     assert.equal(cleared[0]!.amount, "-40.0000");
 
@@ -390,7 +390,7 @@ describe("run-entitlement-hours-payout", () => {
           join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
          where s.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
            and l.component_id=${payoutComponentId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(line?.amount, "3600.0000", "40 hours at USD 60 convert to CAD 90 per hour before payment");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -410,7 +410,7 @@ describe("calculation-rollback", () => {
       'entitlements',(select jsonb_agg(to_jsonb(e) order by id) from entitlement_ledger e where org_id=${orgId}),
       'projection',(select jsonb_agg(to_jsonb(d) order by id) from document_lines d where org_id=${orgId}),
       'time',(select jsonb_agg(to_jsonb(t) order by id) from time_entries t where org_id=${orgId})
-    ) as state`)).rows[0]!.state;
+    ) as state`, "objects"))[0]!.state;
   }
 
   test("an employee SQL failure raises its original cause and restores calculation evidence inside an ambient transaction",
@@ -453,7 +453,7 @@ describe("calculation-rollback", () => {
           await db.execute(sql`drop function ${fault}()`);
         }, { isolationLevel: "REPEATABLE READ" });
         assert.equal((await db.execute<{ marker: boolean }>(sql`select (custom->>'callerWork')::boolean as marker
-          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`)).rows[0]!.marker, true,
+          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`, "objects"))[0]!.marker, true,
         "recovering the failed calculation must preserve earlier caller work");
         assert.deepEqual(await evidence(fx.orgId), before);
         assert.deepEqual((await calculatePayRun(input)).errors, [], "the native calculation recovers after the fault is removed");
@@ -491,7 +491,7 @@ describe("calculation-rollback", () => {
           await db.execute(sql`drop function ${fault}()`);
         });
         assert.equal((await db.execute<{marker:boolean}>(sql`select (custom->>'callerWork')::boolean as marker
-          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`)).rows[0]!.marker, true);
+          from parties where org_id=${fx.orgId} and id=${fx.employeeId}`, "objects"))[0]!.marker, true);
         assert.ok((await commitPayRun(input)).lines > 0);
       } finally { await dropScratchOrgReporting(fx.orgId); }
     });
@@ -529,7 +529,7 @@ describe("calculation-rollback", () => {
                 await preview();
               }, { isolationLevel: "REPEATABLE READ" });
               assert.equal((await db.execute<{ marker: boolean }>(sql`select (custom->>'previewCallerWork')::boolean as marker
-                from parties where org_id=${fx.orgId} and id=${fx.employeeId}`)).rows[0]!.marker, true,
+                from parties where org_id=${fx.orgId} and id=${fx.employeeId}`, "objects"))[0]!.marker, true,
               "preview rollback must preserve the caller's earlier work");
             } else await preview();
             assert.deepEqual(await evidence(fx.orgId), before, "committing the caller transaction cannot persist preview writes");

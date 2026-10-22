@@ -208,13 +208,11 @@ async function loadProgramScopes(
   orgId: string,
   programId: string,
 ): Promise<ProgramScopeRows> {
-  const rows = (
-    await exec.execute<ScopeRow>(sql`
+  const rows = await exec.execute<ScopeRow>(sql`
       select department_id, project_id, customer_id, excluded from hrm_benefit_program_scopes
        where org_id = ${orgId} and program_id = ${programId}
        order by department_id, project_id, customer_id
-    `)
-  ).rows;
+    `, "objects");
   return scopeRowsToScopes(rows);
 }
 
@@ -294,12 +292,10 @@ export async function getBenefitProgram(
 ): Promise<BenefitProgram> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   await assertHrmEnabled(exec, orgId);
-  const row = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const row = (await exec.execute<Record<string, unknown>>(sql`
       select ${PROGRAM_COLUMNS} from hrm_benefit_programs
        where org_id = ${orgId} and id = ${programId}
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
     throw new BenefitsError(
       "NOT_FOUND",
@@ -343,16 +339,16 @@ export async function programPolicyInForce(
   const live = await getBenefitProgram(exec, orgId, actorId, programId);
   const revision = await programRevisionInForce(exec, orgId, programId, periodFrom, periodTo);
   if (revision === null) {
-    const sources = (await exec.execute<{ accountId: string; weightBps: number | null }>(sql`
+    const sources = await exec.execute<{ accountId: string; weightBps: number | null }>(sql`
       select account_id as "accountId", weight_bps as "weightBps" from hrm_benefit_program_sources
        where org_id = ${orgId} and program_id = ${programId}
        order by account_id
-    `)).rows;
+    `, "objects");
     return { program: live, sources, transactionPolicy: undefined, revisionId: null };
   }
-  const row = requireOneRow((await exec.execute<Record<string, unknown>>(sql`
+  const row = requireOneRow(await exec.execute<Record<string, unknown>>(sql`
     select ${PROGRAM_COLUMNS} from jsonb_populate_record(null::hrm_benefit_programs, ${JSON.stringify(revision.snapshot.program)}::jsonb)
-  `)).rows, "reading the program rules in force for the period");
+  `, "objects"), "reading the program rules in force for the period");
   const prior = toProgram(row, scopeRowsToScopes(revision.snapshot.scopes));
   return {
     program: { ...prior, status: live.status },
@@ -385,17 +381,14 @@ export async function listBenefitPrograms(query: {
     const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const { limit, offset } = benefitListWindow(query.limit, query.offset);
-    const total = (
-      await db.execute<{ n: number }>(sql`
+    const total = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_benefit_programs
          where org_id = ${orgId}
            ${query.status !== undefined ? sql`and status = ${query.status}` : sql``}
            ${query.family !== undefined ? sql`and family = ${query.family}` : sql``}
            ${scope !== null ? sql`and legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
-      `)
-    ).rows[0]?.n ?? 0;
-    const rows = (
-      await db.execute<Record<string, unknown>>(sql`
+      `, "objects"))[0]?.n ?? 0;
+    const rows = await db.execute<Record<string, unknown>>(sql`
         select ${PROGRAM_COLUMNS} from hrm_benefit_programs
          where org_id = ${orgId}
            ${query.status !== undefined ? sql`and status = ${query.status}` : sql``}
@@ -403,8 +396,7 @@ export async function listBenefitPrograms(query: {
            ${scope !== null ? sql`and legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
          order by code
          ${limit !== null ? sql`limit ${limit} offset ${offset}` : sql`offset ${offset}`}
-      `)
-    ).rows;
+      `, "objects");
     const out: BenefitProgram[] = [];
     for (const row of rows) {
       out.push(toProgram(row, await loadProgramScopes(db, orgId, String(row.id))));
@@ -419,13 +411,11 @@ async function requireLegalEntity(
   legalEntityId: string | null,
 ): Promise<void> {
   if (legalEntityId === null) return;
-  const row = (
-    await exec.execute<{ id: string }>(sql`
+  const row = (await exec.execute<{ id: string }>(sql`
       select id from subsidiaries
        where org_id = ${orgId} and id = ${legalEntityId}
          and is_active and not is_elimination
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
     throw new BenefitsError(
       "REFUSED",
@@ -478,12 +468,10 @@ async function requireProgramPayComponent(
   if (payComponentId === null) {
     throw new BenefitsError("REFUSED", `program ${programCode} names no pay component — link ${deliveryMethod === "external" ? "a non-cash" : "a cash"} earning component in the program; all valued benefits require their native payroll representation`);
   }
-  const row = (
-    await exec.execute<{ kind: string; isActive: boolean; paymentKind: string }>(sql`
+  const row = (await exec.execute<{ kind: string; isActive: boolean; paymentKind: string }>(sql`
       select kind, is_active as "isActive", payment_kind as "paymentKind" from pay_components
        where org_id = ${orgId} and id = ${payComponentId}
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
     throw new BenefitsError(
       "REFUSED",
@@ -679,7 +667,7 @@ async function requireRoleMembershipWeights(exec: SqlExecutor, orgId: string, pr
       join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
      where m.org_id = ${orgId} and m.program_id = ${programId} and (m.weight is null or m.weight <= 0)
      order by m.id limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (invalid) {
     throw new BenefitsError("REFUSED", `program ${code} has a membership for ${invalid.display_name ?? "an employee"} without a positive allocation weight — keep equal allocation, or create a new role-weighted program and enroll members with positive weights`);
   }
@@ -704,8 +692,8 @@ async function auditProgramWrite(
       after,
       reason,
     })}::jsonb, ${actorId}) returning id
-  `);
-  requireOneRow(written.rows, "recording the benefit program audit event");
+  `, "objects");
+  requireOneRow(written, "recording the benefit program audit event");
 }
 
 /**
@@ -734,18 +722,16 @@ async function requireProgramSourceAccounts(
   const ownExpense = moneyMetric && payComponentId !== null
     ? (await exec.execute<{ expense_account_id: string | null }>(sql`
         select expense_account_id from pay_components where org_id = ${orgId} and id = ${payComponentId}
-      `)).rows[0]?.expense_account_id
+      `, "objects"))[0]?.expense_account_id
     : null;
   for (const accountId of [...new Set(accountIds.map(String))]) {
     if (ownExpense && String(ownExpense) === accountId) {
       throw new BenefitsError("REFUSED", `program ${programCode} measures its own incentive expense — remove that account from the measure to avoid a circular payout base`);
     }
-    const row = (
-      await exec.execute<{ id: string; type: string; is_active: boolean; is_summary: boolean; subsidiary_id: string | null }>(sql`
+    const row = (await exec.execute<{ id: string; type: string; is_active: boolean; is_summary: boolean; subsidiary_id: string | null }>(sql`
         select id, type, is_active, is_summary, subsidiary_id
           from accounts where org_id = ${orgId} and id = ${accountId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!row) {
       throw new BenefitsError(
         "REFUSED",
@@ -800,12 +786,12 @@ async function writeProgramScopes(
   `);
   void deleted;
   for (const projectId of new Set(excludedProjectIds.map(String))) {
-    const project = (await exec.execute<{ id: string }>(sql`select id from projects where org_id = ${orgId} and id = ${projectId}`)).rows[0];
+    const project = (await exec.execute<{ id: string }>(sql`select id from projects where org_id = ${orgId} and id = ${projectId}`, "objects"))[0];
     if (!project) throw new BenefitsError("REFUSED", "the program excludes a project outside this organization — choose projects of this org");
-    requireOneRow((await exec.execute(sql`
+    requireOneRow(await exec.execute(sql`
       insert into hrm_benefit_program_scopes (org_id, program_id, project_id, excluded, created_by, updated_by)
       values (${orgId}, ${programId}, ${projectId}, true, ${actorId}, ${actorId}) returning id
-    `)).rows, "recording the excluded project");
+    `, "objects"), "recording the excluded project");
   }
   if (metricScope === null || metricScope === "company") return;
   if (metricScope === "project" && !(await lockAndCheckOrgFeature(exec, orgId, "projects"))) {
@@ -827,26 +813,24 @@ async function writeProgramScopes(
       select p.id from parties p
        where p.org_id = ${orgId} and p.id = ${customerId}
          and exists (select 1 from projects pr where pr.org_id = p.org_id and pr.customer_id = p.id)
-    `)).rows[0];
+    `, "objects"))[0];
     if (!customer) {
       throw new BenefitsError(
         "REFUSED",
         "the program names a customer with no projects in this organization — choose a customer whose projects the program measures",
       );
     }
-    requireOneRow((await exec.execute(sql`
+    requireOneRow(await exec.execute(sql`
       insert into hrm_benefit_program_scopes (org_id, program_id, customer_id, created_by, updated_by)
       values (${orgId}, ${programId}, ${customerId}, ${actorId}, ${actorId})
       returning id
-    `)).rows, "recording program customer scope");
+    `, "objects"), "recording program customer scope");
   }
   for (const { kind, id: scopeId } of unique) {
     if (kind === "department") {
-      const row = (
-        await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      const row = (await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
           select id, subsidiary_id from departments where org_id = ${orgId} and id = ${scopeId}
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       if (!row) {
         throw new BenefitsError(
           "REFUSED",
@@ -859,20 +843,16 @@ async function writeProgramScopes(
           `the program names a department of another legal entity — scope ${programCode} to departments of its employing entity`,
         );
       }
-      const inserted = (
-        await exec.execute(sql`
+      const inserted = await exec.execute(sql`
           insert into hrm_benefit_program_scopes (org_id, program_id, department_id, created_by, updated_by)
           values (${orgId}, ${programId}, ${scopeId}, ${actorId}, ${actorId})
           returning id
-        `)
-      ).rows;
+        `, "objects");
       requireOneRow(inserted, "recording program scope");
     } else {
-      const row = (
-        await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
+      const row = (await exec.execute<{ id: string; subsidiary_id: string | null }>(sql`
           select id, subsidiary_id from projects where org_id = ${orgId} and id = ${scopeId}
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       if (!row) {
         throw new BenefitsError(
           "REFUSED",
@@ -885,13 +865,11 @@ async function writeProgramScopes(
           `the program names a project of another legal entity — scope ${programCode} to projects of its employing entity`,
         );
       }
-      const inserted = (
-        await exec.execute(sql`
+      const inserted = await exec.execute(sql`
           insert into hrm_benefit_program_scopes (org_id, program_id, project_id, created_by, updated_by)
           values (${orgId}, ${programId}, ${scopeId}, ${actorId}, ${actorId})
           returning id
-        `)
-      ).rows;
+        `, "objects");
       requireOneRow(inserted, "recording program scope");
     }
   }
@@ -1034,8 +1012,7 @@ export async function createBenefitProgram(
     await requireProgramSourceAccounts(db, orgId, code, legalEntityId, metric, query.sourceAccountIds ?? [], payComponentId);
     let insertedRows: Record<string, unknown>[];
     try {
-      insertedRows = (
-        await db.execute<Record<string, unknown>>(sql`
+      insertedRows = await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_programs
             (org_id, code, name, family, description, legal_entity_id, currency,
              effective_from, effective_to, pay_component_id, delivery_method,
@@ -1056,8 +1033,7 @@ export async function createBenefitProgram(
                   ${asEligibility(query.eligibility ?? "members")},
                   ${actorId}, ${actorId})
           returning ${PROGRAM_COLUMNS}
-        `)
-      ).rows;
+        `, "objects");
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new BenefitsError(
@@ -1074,13 +1050,11 @@ export async function createBenefitProgram(
     const program = toProgram(inserted, scopes);
     const sources = query.sourceAccountIds ?? [];
     for (const accountId of sources) {
-      const stored = (
-        await db.execute(sql`
+      const stored = await db.execute(sql`
           insert into hrm_benefit_program_sources (org_id, program_id, account_id, created_by, updated_by)
           values (${orgId}, ${program.id}, ${String(accountId)}, ${actorId}, ${actorId})
           returning id
-        `)
-      ).rows;
+        `, "objects");
       requireOneRow(stored, "recording the program funding source");
     }
     await auditProgramWrite(db, orgId, actorId, program.id, "created", null,
@@ -1153,13 +1127,11 @@ export async function updateBenefitProgram(
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const locked = (
-      await db.execute<Record<string, unknown>>(sql`
+    const locked = (await db.execute<Record<string, unknown>>(sql`
         select ${PROGRAM_COLUMNS} from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1288,13 +1260,12 @@ export async function updateBenefitProgram(
     await requireRoleMembershipWeights(db, orgId, programId, before.code, next.allocation);
     const previousSourceIds = (await db.execute<{ account_id: string }>(sql`
       select account_id from hrm_benefit_program_sources where org_id = ${orgId} and program_id = ${programId} order by account_id
-    `)).rows.map((row) => String(row.account_id));
+    `, "objects")).map((row) => String(row.account_id));
     const selectedSourceIds = query.sourceAccountIds ?? previousSourceIds;
     if (next.metric === "transactions") await requireTransactionPolicyStorage(db);
     await requireProgramSourceAccounts(db, orgId, before.code, next.legalEntityId, next.metric, selectedSourceIds, next.payComponentId);
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_programs
              set name = ${next.name}, description = ${next.description},
                  legal_entity_id = ${next.legalEntityId}, currency = ${next.currency},
@@ -1316,8 +1287,7 @@ export async function updateBenefitProgram(
                  revision = revision + 1, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${programId}
           returning ${PROGRAM_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "updating the benefit program",
     );
     await writeProgramScopes(db, orgId, actorId, programId, before.code, next.legalEntityId, next.metricScope, next.scopeIds, next.scopeCustomerIds, next.scopeDepartmentIds, next.scopeExcludedProjectIds);
@@ -1327,13 +1297,11 @@ export async function updateBenefitProgram(
          where org_id = ${orgId} and program_id = ${programId}
       `);
       for (const accountId of query.sourceAccountIds) {
-        const stored = (
-          await db.execute(sql`
+        const stored = await db.execute(sql`
             insert into hrm_benefit_program_sources (org_id, program_id, account_id, created_by, updated_by)
             values (${orgId}, ${programId}, ${String(accountId)}, ${actorId}, ${actorId})
             returning id
-          `)
-        ).rows;
+          `, "objects");
         requireOneRow(stored, "recording the program funding source");
       }
     }
@@ -1357,13 +1325,11 @@ async function setProgramStatus(
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    const locked = (
-      await db.execute<Record<string, unknown>>(sql`
+    const locked = (await db.execute<Record<string, unknown>>(sql`
         select ${PROGRAM_COLUMNS} from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1426,12 +1392,10 @@ async function setProgramStatus(
         const assigned = policy.positions.some((position) => (position.recipientSource ?? "assignment") === "assignment");
         if ((assigned && !policy.responsibilities.length) || (!policy.limits.length && (policy.capPercent ?? null) === null)) throw new BenefitsError("REFUSED","Record dated recipient responsibilities for assigned positions and explicit group ceilings or a budget ceiling in Transaction rules before activation.");
       }
-      const storedAccounts = (
-        await db.execute<{ account_id: string }>(sql`
+      const storedAccounts = (await db.execute<{ account_id: string }>(sql`
           select account_id from hrm_benefit_program_sources
            where org_id = ${orgId} and program_id = ${programId}
-        `)
-      ).rows.map((row) => String(row.account_id));
+        `, "objects")).map((row) => String(row.account_id));
       await requireProgramSourceAccounts(db, orgId, before.code, before.legalEntityId, before.metric, storedAccounts, before.payComponentId);
       const needsMeasurementAccount =
         before.family === "incentive" &&
@@ -1443,7 +1407,7 @@ async function setProgramStatus(
                  count(*) filter (where a.type in ('cogs', 'expense', 'expense_other', 'expense_deferred'))::int as costs
             from hrm_benefit_program_sources s join accounts a on a.org_id = s.org_id and a.id = s.account_id
            where s.org_id = ${orgId} and s.program_id = ${programId}
-        `)).rows[0];
+        `, "objects"))[0];
         if (!shape?.income) {
           throw new BenefitsError("REFUSED", `program ${before.code} measures ${before.metric} without an income source — select at least one actual income account before activation`);
         }
@@ -1453,15 +1417,13 @@ async function setProgramStatus(
       }
     }
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_programs
              set status = ${to}, revision = revision + 1,
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${programId}
           returning ${PROGRAM_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       `${event} the benefit program`,
     );
     const after = toProgram(updated, await loadProgramScopes(db, orgId, programId));
@@ -1531,8 +1493,7 @@ export async function listProgramMemberships(query: {
   return withOrgTransaction(orgId, async () => {
     await assertHrmEnabled(db, orgId);
     await getBenefitProgram(db, orgId, actorId, programId);
-    const rows = (
-      await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(sql`
         select id, program_id as "programId", employment_id as "employmentId",
                effective_from::text as "effectiveFrom",
                effective_to::text as "effectiveTo",
@@ -1540,8 +1501,7 @@ export async function listProgramMemberships(query: {
           from hrm_benefit_program_members
          where org_id = ${orgId} and program_id = ${programId}
          order by effective_from
-      `)
-    ).rows;
+      `, "objects");
     return rows.map(toMember);
   });
 }
@@ -1580,13 +1540,11 @@ export async function addProgramMembership(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
     await assertHrmEnabled(db, orgId);
-    const lockedProgram = (
-      await db.execute(sql`
+    const lockedProgram = (await db.execute(sql`
         select id from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!lockedProgram) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1608,12 +1566,10 @@ export async function addProgramMembership(query: {
       );
     }
     if (program.legalEntityId !== null) {
-      const employment = (
-        await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+      const employment = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
           select employer_subsidiary_id from worker_employments
            where org_id = ${orgId} and id = ${employmentId}
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       const employmentEntity = employment?.employer_subsidiary_id ?? null;
       if (employmentEntity === null || String(employmentEntity) !== program.legalEntityId) {
         throw new BenefitsError(
@@ -1626,20 +1582,18 @@ export async function addProgramMembership(query: {
       const settledThrough = (await db.execute<{ end_date: string | null }>(sql`
         select max(coalesce(period_to, period_from))::text as end_date from hrm_benefit_awards
          where org_id = ${orgId} and program_id = ${programId} and status <> 'voided'
-      `)).rows[0]?.end_date;
+      `, "objects"))[0]?.end_date;
       if (settledThrough && effectiveFrom <= settledThrough) {
         throw new BenefitsError("REFUSED", `membership starts inside an already settled period ending ${settledThrough} — start after that period to preserve recorded allocation history`);
       }
     }
-    const overlap = (
-      await db.execute<{ id: string }>(sql`
+    const overlap = await db.execute<{ id: string }>(sql`
         select id from hrm_benefit_program_members
          where org_id = ${orgId} and program_id = ${programId} and employment_id = ${employmentId}
            and effective_from <= ${effectiveTo ?? "9999-12-31"}::date
            and (effective_to is null or effective_to >= ${effectiveFrom}::date)
          limit 1
-      `)
-    ).rows;
+      `, "objects");
     if (overlap.length > 0) {
       throw new BenefitsError(
         "REFUSED",
@@ -1647,8 +1601,7 @@ export async function addProgramMembership(query: {
       );
     }
     const inserted = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_program_members
             (org_id, program_id, employment_id, effective_from, effective_to,
              weight, role, excluded, created_by, updated_by)
@@ -1659,8 +1612,7 @@ export async function addProgramMembership(query: {
                     effective_from::text as "effectiveFrom",
                     effective_to::text as "effectiveTo",
                     weight::text as "weight", role, excluded
-        `)
-      ).rows,
+        `, "objects"),
       "recording program membership",
     );
     const revisionWrite = await db.execute(sql`
@@ -1668,8 +1620,8 @@ export async function addProgramMembership(query: {
          set revision = revision + 1, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${programId}
        returning id
-    `);
-    requireOneRow(revisionWrite.rows, "advancing the benefit program membership revision");
+    `, "objects");
+    requireOneRow(revisionWrite, "advancing the benefit program membership revision");
     await auditProgramWrite(db, orgId, actorId, programId, "member_added", null, inserted, reason);
     return toMember(inserted);
   });
@@ -1695,25 +1647,21 @@ export async function removeProgramMembership(query: {
     throw new BenefitsError("INVALID_INPUT", "ending membership needs a reason — it is the evidence");
   }
   return withOrgTransaction(orgId, async () => {
-    const membershipProgram = (
-      await db.execute<{ program_id: string }>(sql`
+    const membershipProgram = (await db.execute<{ program_id: string }>(sql`
         select program_id from hrm_benefit_program_members
          where org_id = ${orgId} and id = ${membershipId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!membershipProgram) {
       throw new BenefitsError(
         "NOT_FOUND",
         "program membership not found in this organization — reload and retry",
       );
     }
-    const lockedMembershipProgram = (
-      await db.execute(sql`
+    const lockedMembershipProgram = (await db.execute(sql`
         select id from hrm_benefit_programs
          where org_id = ${orgId} and id = ${membershipProgram.program_id}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!lockedMembershipProgram) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1732,8 +1680,7 @@ export async function removeProgramMembership(query: {
         `membership ends ${endDate} but today is ${businessToday} — backdating into closed or settled periods rewrites source history; end today or later`,
       );
     }
-    const locked = (
-      await db.execute<{ employment_id: string; program_id: string; effective_from: string; effective_to: string | null }>(sql`
+    const locked = (await db.execute<{ employment_id: string; program_id: string; effective_from: string; effective_to: string | null }>(sql`
         select employment_id,
                program_id,
                effective_from::text as effective_from,
@@ -1741,8 +1688,7 @@ export async function removeProgramMembership(query: {
           from hrm_benefit_program_members
          where org_id = ${orgId} and id = ${membershipId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1767,13 +1713,12 @@ export async function removeProgramMembership(query: {
       select max(coalesce(period_to, period_from))::text as end_date from hrm_benefit_awards
        where org_id = ${orgId} and program_id = ${locked.program_id}
          and employment_id = ${locked.employment_id} and status <> 'voided'
-    `)).rows[0]?.end_date;
+    `, "objects"))[0]?.end_date;
     if (awardedThrough && endDate < awardedThrough) {
       throw new BenefitsError("REFUSED", `membership already supports awards through ${awardedThrough} — end on or after that date to preserve their recorded eligibility`);
     }
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_program_members
              set effective_to = ${endDate}::date, updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${membershipId}
@@ -1781,8 +1726,7 @@ export async function removeProgramMembership(query: {
                     effective_from::text as "effectiveFrom",
                     effective_to::text as "effectiveTo",
                     weight::text as "weight", role, excluded
-        `)
-      ).rows,
+        `, "objects"),
       "ending program membership",
     );
     const after = toMember(updated);
@@ -1815,14 +1759,12 @@ export async function listProgramSources(
   if (program.metricScope === "project" && !(await lockAndCheckOrgFeature(exec, orgId, "projects"))) {
     throw new BenefitsError("REFUSED", "project measurement sources are unavailable while Projects is off — enable Projects under Company Settings → Features to use this program");
   }
-  const rows = (
-    await exec.execute<{ id: string; accountId: string; weightBps: number | null }>(sql`
+  const rows = await exec.execute<{ id: string; accountId: string; weightBps: number | null }>(sql`
       select id, account_id as "accountId", weight_bps as "weightBps"
         from hrm_benefit_program_sources
        where org_id = ${orgId} and program_id = ${programId}
        order by account_id
-    `)
-  ).rows;
+    `, "objects");
   return rows;
 }
 

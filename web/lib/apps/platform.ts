@@ -267,15 +267,15 @@ async function listRecords(
       select *${documentRevisionProjection(resolved.table)} from ${table}
        where ${where}
        order by ${sortExpression} ${direction}
-       limit ${perPage} offset ${(page - 1) * perPage}`),
-    db.execute<{ n: string | number }>(sql`select count(*) as n from ${table} where ${where}`),
+       limit ${perPage} offset ${(page - 1) * perPage}`, 'objects'),
+    db.execute<{ n: string | number }>(sql`select count(*) as n from ${table} where ${where}`, 'objects'),
   ]))
 
   const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0])
   return {
-    records: normalizeDocumentRecordRevisions(resolved.table, records.rows).map((row) =>
+    records: normalizeDocumentRecordRevisions(resolved.table, records).map((row) =>
       redactRecordCustomValues(row, definitions, customFieldViewer(ctx))),
-    total: Number(count.rows[0]?.n ?? 0),
+    total: Number(count[0]?.n ?? 0),
     page,
     perPage,
   }
@@ -295,8 +295,8 @@ async function getRecord(ctx: AppPlatformContext, typeKey: string, id: string): 
        ${resolved.documentKinds ? sql`and kind = any(${pgTextArrayLiteral(resolved.documentKinds)}::text[])` : sql``}
        ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
        ${subsidiaryCondition ? sql`and ${subsidiaryCondition}` : sql``}
-     limit 1`))
-  const row = normalizeDocumentRecordRevisions(resolved.table, result.rows)[0]
+     limit 1`, 'objects'))
+  const row = normalizeDocumentRecordRevisions(resolved.table, result)[0]
   if (!row) return null
   const definitions = await loadCustomFieldAccessDefs(resolved.table, resolved.documentKinds?.[0])
   return redactRecordCustomValues(row, definitions, customFieldViewer(ctx))
@@ -414,8 +414,8 @@ async function assertSubsidiaryWriteScope(
          : (allowed.length > 0
            ? sql`and subsidiary_id = any(${pgTextArrayLiteral(allowed)}::uuid[])`
            : sql`and false`)}
-     limit 1`))
-  if (!found.rows[0]) throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
+     limit 1`, 'objects'))
+  if (!found[0]) throw new AppPlatformError('record is outside the caller subsidiary scope', 403)
 }
 
 export function createAppPlatformAdapter(ctx: AppPlatformContext): AppPlatformAdapter {

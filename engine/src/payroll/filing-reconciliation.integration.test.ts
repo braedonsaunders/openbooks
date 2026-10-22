@@ -102,11 +102,11 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
       where org_id = ${fx.orgId}`);
     await tx.execute(sql`alter table pay_stubs enable trigger pay_stub_filing_account_guard`);
   });
-  const stubs = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+  const stubs = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select s.id, d.subsidiary_id
       from pay_stubs s
       join documents d on d.org_id = s.org_id and d.id = s.pay_run_document_id
-     where s.org_id = ${fx.orgId}`)).rows;
+     where s.org_id = ${fx.orgId}`, "objects");
   assert.equal(stubs.length, 2);
   const stubA = stubs.find((s) => s.subsidiary_id === fx.subsidiaryId)!.id;
   const stubB = stubs.find((s) => s.subsidiary_id === entityB)!.id;
@@ -127,7 +127,7 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
      where org_id = ${fx.orgId} and key = 'entity_a_reconciler'`);
 
   const rootName = (await db.execute<{ name: string }>(sql`
-    select name from subsidiaries where org_id = ${fx.orgId} and id = ${fx.subsidiaryId}`)).rows[0]!.name;
+    select name from subsidiaries where org_id = ${fx.orgId} and id = ${fx.subsidiaryId}`, "objects"))[0]!.name;
   return {
     orgId: fx.orgId, adminId: fx.actorId, rootId: fx.subsidiaryId, rootName, entityB,
     stubA, stubB, accountA, accountB, accountOrg, restrictedId,
@@ -137,14 +137,14 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
 async function stubSource(orgId: string, stubId: string) {
   return (await db.execute<{ source: string; account: string | null }>(sql`
     select filing_account_source as source, filing_account_id as account
-      from pay_stubs where org_id = ${orgId} and id = ${stubId}`)).rows[0]!;
+      from pay_stubs where org_id = ${orgId} and id = ${stubId}`, "objects"))[0]!;
 }
 
 async function auditCount(orgId: string, stubId: string) {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log where org_id = ${orgId}
      and table_name = 'pay_stubs' and row_id = ${stubId}
-     and changes ->> 'operation' = 'reconcile_filing_account'`)).rows[0]!.n;
+     and changes ->> 'operation' = 'reconcile_filing_account'`, "objects"))[0]!.n;
 }
 
 test("a restricted actor cannot rewrite another entity's filing history", { skip: !DB }, async () => {

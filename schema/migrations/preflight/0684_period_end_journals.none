@@ -1,1 +1,0 @@
-New tables, functions and triggers only; the seal applies once a generation exists, so no existing row is checked or changed.

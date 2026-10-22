@@ -81,7 +81,7 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
     const clearing = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, '1015', 'Shopify Clearing', 'asset_bank', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     const maps: Array<[string, string, string]> = [
       ["gateway_clearing", "shopify_payments", clearing],
       ["revenue", "", org.accounts.revenue],
@@ -142,12 +142,12 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
     const outcome = await withOrgContext(org.orgId, () => postDueDailySummariesForOrg(org.orgId, actor));
     assert.equal(outcome.posted, 3);
 
-    const summary = (await withOrgContext(org.orgId, () => db.execute<{
+    const summary = await withOrgContext(org.orgId, () => db.execute<{
       id: string; status: string; order_count: number; subtotal_minor: string;
       tax_minor: string; shipping_minor: string; total_minor: string; posting_document_id: string | null;
     }>(sql`
       select id, status, order_count, subtotal_minor, tax_minor, shipping_minor, total_minor, posting_document_id
-        from channel_daily_summaries where org_id = ${org.orgId} and channel_id = ${channelId}`))).rows;
+        from channel_daily_summaries where org_id = ${org.orgId} and channel_id = ${channelId}`, "objects"));
     assert.equal(summary.length, 1);
     assert.equal(summary[0]!.status, "posted");
     assert.equal(summary[0]!.order_count, 3);
@@ -160,14 +160,14 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
     // One cash sale: aggregated product lines, shipping, and one tender.
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ kind: string; status: string; total: string; tax_total: string }>(sql`
       select kind, status, total::text as total, tax_total::text as tax_total
-        from documents where id = ${summary[0]!.posting_document_id} and org_id = ${org.orgId}`))).rows[0]!;
+        from documents where id = ${summary[0]!.posting_document_id} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(doc.kind, "cash_sale");
     assert.equal(doc.status, "posted");
     assert.equal(doc.total, "86.9100");
     assert.equal(doc.tax_total, "6.9100");
-    const docLines = (await withOrgContext(org.orgId, () => db.execute<{ description: string; amount: string; quantity: string }>(sql`
+    const docLines = await withOrgContext(org.orgId, () => db.execute<{ description: string; amount: string; quantity: string }>(sql`
       select description, amount::text as amount, quantity::text as quantity from document_lines
-       where document_id = ${summary[0]!.posting_document_id} and org_id = ${org.orgId} order by line_number`))).rows;
+       where document_id = ${summary[0]!.posting_document_id} and org_id = ${org.orgId} order by line_number`, "objects"));
     const tee = docLines.find((line) => line.description === "Red Tee — M")!;
     assert.equal(tee.amount, "50.0000");
     assert.equal(Number(tee.quantity), 2);
@@ -196,7 +196,7 @@ test("three orders post as one summary cash sale with exact aggregated totals", 
     assert.match(exception!.exceptionRemedy!,/Channels → Settings → Posting/);
     const audit = (await db.execute<{changes:{before:{posting_status:string};after:{posting_status:string}}}>(sql`
       select changes from audit_log where org_id=${org.orgId} and table_name='channel_orders'
-       and row_id=${d.id} order by at desc,id desc limit 1`)).rows[0]!;
+       and row_id=${d.id} order by at desc,id desc limit 1`, "objects"))[0]!;
     assert.equal(audit.changes.before.posting_status,'pending');
     assert.equal(audit.changes.after.posting_status,'exception');
   } finally {

@@ -20,9 +20,9 @@ test("tenant transactions remain isolated from saturated maintenance capacity", 
   const org = await withBypass(() => createScratchOrg());
   const originalName = await withBypassContext(async () => {
     const result = await db.execute<{ name: string }>(
-      sql`select name from orgs where id = ${org.orgId}`,
+      sql`select name from orgs where id = ${org.orgId}`, "objects",
     );
-    return result.rows[0]!.name;
+    return result[0]!.name;
   });
   const maintenanceClients = await Promise.all(
     Array.from({ length: 4 }, () => longPool.connect()),
@@ -36,8 +36,8 @@ test("tenant transactions remain isolated from saturated maintenance capacity", 
       const gucs = await db.execute<{ org: string; bypass: string }>(sql`
         select current_setting('app.current_org', true) as org,
                current_setting('app.bypass_rls', true) as bypass
-      `);
-      assert.deepEqual(gucs.rows[0], { org: org.orgId, bypass: "off" });
+      `, "objects");
+      assert.deepEqual(gucs[0], { org: org.orgId, bypass: "off" });
 
       await withOrg(org.orgId, () =>
         db.execute(sql`update orgs set name = 'must roll back' where id = ${org.orgId}`),
@@ -64,16 +64,16 @@ test("tenant transactions remain isolated from saturated maintenance capacity", 
     await assert.rejects(tenantAttempt, /rollback sentinel/);
 
     const afterRollback = await withBypassContext(() =>
-      db.execute<{ name: string }>(sql`select name from orgs where id = ${org.orgId}`),
+      db.execute<{ name: string }>(sql`select name from orgs where id = ${org.orgId}`, "objects"),
     );
-    assert.equal(afterRollback.rows[0]!.name, originalName);
+    assert.equal(afterRollback[0]!.name, originalName);
 
     const maintenanceAttempt = withMaintenanceTransaction(org.orgId, async () => {
       const gucs = await db.execute<{ org: string; bypass: string }>(
         sql`select current_setting('app.current_org', true) as org,
-                   current_setting('app.bypass_rls', true) as bypass`,
+                   current_setting('app.bypass_rls', true) as bypass`, "objects",
       );
-      assert.deepEqual(gucs.rows[0], { org: org.orgId, bypass: "off" });
+      assert.deepEqual(gucs[0], { org: org.orgId, bypass: "off" });
     });
     assert.equal(
       longPool.waitingCount,
@@ -174,11 +174,11 @@ test("withBypassContext routes through the dedicated bypass database role", { sk
 
     // The call shape that silently returned zero rows: the callback hands back
     // drizzle's un-started thenable instead of awaiting it.
-    const viaHelper = (await withBypassContext(() =>
-      db.execute(sql`select count(*)::int as n from orgs`),
-    )) as unknown as { rows: { n: number }[] };
+    const viaHelper = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from orgs`, "objects"),
+    );
     assert.equal(
-      Number(viaHelper.rows[0]!.n),
+      Number(viaHelper[0]!.n),
       expected,
       "withBypassContext did not carry bypass to the pool — org-spanning reads are silently empty",
     );
@@ -187,9 +187,9 @@ test("withBypassContext routes through the dedicated bypass database role", { sk
     // one row count: inspect the authenticated database role selected by the
     // context rather than a GUC that used to claim it granted privileges.
     const scopedRole = await withBypassContext(() =>
-      db.execute<{ current_user: string }>(sql`select current_user`),
+      db.execute<{ current_user: string }>(sql`select current_user`, "objects"),
     );
-    assert.equal(scopedRole.rows[0]!.current_user, new URL(bypassUrl).username,
+    assert.equal(scopedRole[0]!.current_user, new URL(bypassUrl).username,
       "withBypassContext did not route its pooled statements to the configured bypass role");
 
     // Outside any scope the posture is deny-by-default — but "deny" is a
@@ -202,10 +202,10 @@ test("withBypassContext routes through the dedicated bypass database role", { sk
       // statement with the fail-closed GUCs.
       const unscopedGucs = await db.execute<{ org: string; bypass: string }>(
         sql`select current_setting('app.current_org', true) as org,
-                   current_setting('app.bypass_rls', true) as bypass`,
+                   current_setting('app.bypass_rls', true) as bypass`, "objects",
       );
       assert.deepEqual(
-        { org: unscopedGucs.rows[0]!.org, bypass: unscopedGucs.rows[0]!.bypass },
+        { org: unscopedGucs[0]!.org, bypass: unscopedGucs[0]!.bypass },
         { org: "", bypass: "off" },
         "an unscoped pooled query did not apply the deny-by-default GUCs",
       );
@@ -237,10 +237,10 @@ test("withBypassContext routes through the dedicated bypass database role", { sk
         await denied.end().catch(() => {});
       }
       const unscoped = await db.execute<{ n: number }>(
-        sql`select count(*)::int as n from orgs`,
+        sql`select count(*)::int as n from orgs`, "objects",
       );
       assert.equal(
-        Number(unscoped.rows[0]!.n),
+        Number(unscoped[0]!.n),
         deniedCount,
         "an unscoped pooled read saw more than an explicitly denied session on the same role",
       );

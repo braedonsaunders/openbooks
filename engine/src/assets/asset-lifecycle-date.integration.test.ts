@@ -66,7 +66,7 @@ test("asset lifecycle entries honor the subsidiary assets close on its effective
 });
 
 async function eventFor(orgId: string, entryId: string) {
-  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`)).rows[0]!.id;
+  return (await db.execute<{ id: string }>(sql`select id from asset_events where org_id=${orgId} and journal_entry_id=${entryId}`, 'objects'))[0]!.id;
 }
 
 
@@ -95,20 +95,20 @@ for(const operation of ['dispose','remeasure'] as const){
               (select jsonb_agg(to_jsonb(e) order by id) from journal_entries e where org_id=${org.orgId}) as entries,
               (select jsonb_agg(to_jsonb(l) order by id) from journal_lines l where org_id=${org.orgId}) as lines,
               (select jsonb_agg(to_jsonb(l) order by id) from depreciation_schedule_lines l where org_id=${org.orgId}) as schedule_lines
-     `);
-     const before=(await snapshot()).rows;
+     `, 'objects');
+     const before=await snapshot();
      const perform=()=>operation==='dispose'
        ?disposeAsset(org.orgId,assetId,{actorId,date,writeOff:true})
        :remeasureAsset(org.orgId,assetId,{actorId,date,newCarryingValue:'700'});
      if(timing==='earlier'){
       await assert.rejects(perform(),/before|precede/);
-      assert.deepEqual((await snapshot()).rows,before,'refusal is atomic');
+      assert.deepEqual(await snapshot(),before,'refusal is atomic');
      }else if(operation==='dispose'&&(source==='valuation'||source==='reversed valuation')){
       await assert.rejects(perform(),/unposted depreciation.*Partial disposal \/ transfer/);
-      assert.deepEqual((await snapshot()).rows,before,'a mid-period disposal refusal preserves the complete history');
+      assert.deepEqual(await snapshot(),before,'a mid-period disposal refusal preserves the complete history');
      }else{
       const result=await perform();
-      assert.equal((await db.execute<{date:string}>(sql`select posting_date::text as date from journal_entries where id=${result.entryId}`)).rows[0]!.date,date);
+      assert.equal((await db.execute<{date:string}>(sql`select posting_date::text as date from journal_entries where id=${result.entryId}`, 'objects'))[0]!.date,date);
      }
     }finally{await dropScratchOrg(org.orgId)}
    });

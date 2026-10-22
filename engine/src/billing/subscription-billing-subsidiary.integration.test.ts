@@ -77,7 +77,7 @@ async function invoiceSubsidiary(orgId: string, invoiceId: string): Promise<{ su
     select d.subsidiary_id as "subsidiaryId", sub.org_id as "orgId"
       from documents d left join subsidiaries sub on sub.id = d.subsidiary_id
      where d.id = ${invoiceId} and d.org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   assert.ok(row, "the billed invoice must exist");
   return { subsidiaryId: row.subsidiaryId, orgId: row.orgId ?? orgId };
 }
@@ -126,7 +126,7 @@ test(
       assert.equal(run.billed, 1);
       const invoiceId = (await db.execute<{ id: string }>(sql`
         select last_invoice_id as "id" from subscriptions where id = ${subscriptionId}
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       assert.equal(
         (await invoiceSubsidiary(org.orgId, invoiceId)).subsidiaryId,
         branch.branchId,
@@ -201,7 +201,7 @@ test(
       const subscriptionId = await seedSubscription(org, actorId, plan, org.customerId, { startOn: "2026-07-10", nextBillOn: "2026-07-10" });
       await db.execute(sql`update parties set subsidiary_id = ${branch.branchId} where id = ${org.customerId} and org_id = ${org.orgId}`);
       await assert.rejects(prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", { actorId, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), ScopeNotFoundError);
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`)).rows[0]!.n, 0);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`, "objects"))[0]!.n, 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -230,14 +230,14 @@ test(
       assert.equal(gen.amount, "70.9677", "22 of 31 days are charged");
       const total = (await db.execute<{ total: string }>(sql`
         select total from documents where id = ${gen.invoiceId} and org_id = ${org.orgId}
-      `)).rows[0]!.total;
+      `, "objects"))[0]!.total;
       assert.equal(total, "70.9677");
       // The cycle continues on the period the stub was priced against: the
       // next full invoice covers Aug 1 → Sep 1, not Aug 1 → Sep 10.
       const cycle = (await db.execute<{ nextBillOn: string; anchorDay: number }>(sql`
         select next_bill_on::text as "nextBillOn", anchor_day as "anchorDay"
           from subscriptions where id = ${subscriptionId} and org_id = ${org.orgId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.deepEqual(cycle, { nextBillOn: "2026-08-01", anchorDay: 1 });
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -278,7 +278,7 @@ test(
       const invoices = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind = 'customer_invoice'
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(invoices, 1, "exactly one first-period invoice exists");
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -300,7 +300,7 @@ test(
       const before = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind in ('customer_invoice', 'customer_credit')
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
 
       await assert.rejects(
         billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null),
@@ -314,7 +314,7 @@ test(
       const after = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
          where org_id = ${org.orgId} and kind in ('customer_invoice', 'customer_credit')
-      `)).rows[0]!.n;
+      `, "objects"))[0]!.n;
       assert.equal(after, Number(before), "no invoice may be cut to the root for an untrusted entity");
     } finally {
       await dropScratchOrgReporting(org.orgId);

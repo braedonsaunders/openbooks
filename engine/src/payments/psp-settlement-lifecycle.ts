@@ -55,8 +55,8 @@ export async function reverseSettlementBatch(
         from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId}
        for update
-    `);
-      const b = batch.rows[0];
+    `, "objects");
+      const b = batch[0];
       if (!b) throw new ScopeNotFoundError();
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, b.subsidiary_id))
         throw new ScopeNotFoundError();
@@ -71,12 +71,10 @@ export async function reverseSettlementBatch(
             "void batch is missing its subsidiary for payout-accrual reversal",
           );
         }
-        const reversal = (
-          await tx.execute<{ posting_date: string }>(sql`
+        const reversal = (await tx.execute<{ posting_date: string }>(sql`
         select posting_date::text from journal_entries
          where id = ${b.reversal_entry_id} and org_id = ${orgId}
-      `)
-        ).rows[0];
+      `, "objects"))[0];
         if (!reversal)
           throw new PspSettlementError(
             "void batch reversal journal is missing",
@@ -108,8 +106,8 @@ export async function reverseSettlementBatch(
         from journal_entries
        where id = ${b.journal_entry_id} and org_id = ${orgId}
        for update
-    `);
-      const original = source.rows[0];
+    `, "objects");
+      const original = source[0];
       if (!original || original.status !== "posted") {
         throw new PspSettlementError(
           "settlement source journal is missing or already reversed",
@@ -141,8 +139,8 @@ export async function reverseSettlementBatch(
         from journal_lines
        where entry_id = ${b.journal_entry_id} and org_id = ${orgId}
        order by line_number
-    `);
-      if (lines.rows.length === 0) {
+    `, "objects");
+      if (lines.length === 0) {
         throw new PspSettlementError("settlement source journal has no lines");
       }
 
@@ -161,7 +159,7 @@ export async function reverseSettlementBatch(
         origin: original.origin,
         reversesEntryId: b.journal_entry_id,
         actorId,
-        lines: lines.rows.map((line) => ({
+        lines: lines.map((line) => ({
           accountId: String(line.account_id),
           subsidiaryId: String(line.subsidiary_id),
           amount: neg(String(line.amount)),
@@ -202,7 +200,7 @@ export async function reverseSettlementBatch(
         subsidiaryId: original.subsidiary_id,
         postingDate: input.reversalDate,
       });
-      const updated = await tx.execute(sql`
+      const updated = await tx.execute<never>(sql`
       update psp_settlement_batches
          set status = 'void', reversal_entry_id = ${entryId},
              reversal_reason = ${reason}, reversed_at = now(),
@@ -214,7 +212,7 @@ export async function reverseSettlementBatch(
           "settlement batch could not be marked reversed; retry the reversal",
         );
       }
-      const audited = await tx.execute(sql`
+      const audited = await tx.execute<never>(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values

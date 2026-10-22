@@ -45,9 +45,7 @@ test("boolean custom columns extract real booleans, so stored false is falsy", {
       return id;
     };
     const read = async (id: string): Promise<unknown> => {
-      const rows = (
-        await db.execute<{ v: unknown }>(sql`select ${flag.expr} as v from documents d where d.id = ${id}`)
-      ).rows;
+      const rows = await db.execute<{ v: unknown }>(sql`select ${flag.expr} as v from documents d where d.id = ${id}`, "objects");
       return rows[0]!.v;
     };
 

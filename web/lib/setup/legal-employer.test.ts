@@ -12,9 +12,10 @@ const limit = SETUP_ENTITY_BY_KEY.get('entitlement-plan-limits')!
 
 test('vacation employer ownership needs no multi-subsidiary feature and validates the legal entity', async () => {
   const statements: { sql: string; params: unknown[] }[] = []
-  const executor = { execute: async (statement: SQL) => {
+  const executor = { execute: async (statement: SQL, mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     statements.push(new PgDialect().sqlToQuery(statement))
-    return { rows: [{ id: employerId }] }
+    return inMode({ rows: [{ id: employerId }] })
   } } as SqlExecutor
   assert.equal(await validateEntityIntegrity(limit, { subsidiaryId: employerId }, orgId, undefined, executor), null)
   assert.equal(statements.length, 1)
@@ -24,7 +25,7 @@ test('vacation employer ownership needs no multi-subsidiary feature and validate
 })
 
 test('missing, inactive and foreign legal employers refuse with an actionable message', async () => {
-  const executor = { execute: async () => ({ rows: [] }) } as unknown as SqlExecutor
+  const executor = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)) } as unknown as SqlExecutor
   assert.match(await validateEntityIntegrity(limit, { subsidiaryId: employerId }, orgId, undefined, executor) ?? '', /Choose an active legal employer from this organization/)
   assert.match(await validateEntityIntegrity(limit, { subsidiaryId: 'invalid' }, orgId, undefined, executor) ?? '', /Choose a valid legal employer/)
 })

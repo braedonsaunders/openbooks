@@ -35,7 +35,7 @@ test("a privileged write rechecks super-admin status after waiting for concurren
            where datname = current_database() and state = 'active' and wait_event_type = 'Lock'
              and query ilike '%is_super_admin as "isSuperAdmin"%'
         ) as waiting
-      `))).rows[0]?.waiting === true;
+      `, "objects")))[0]?.waiting === true;
       if (waiting) break;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -46,7 +46,7 @@ test("a privileged write rechecks super-admin status after waiting for concurren
     await revoked;
     const state = (await withBypass(() => db.execute<{ isSuperAdmin: boolean }>(sql`
       select is_super_admin as "isSuperAdmin" from users where id = ${actorId}
-    `))).rows[0];
+    `, "objects")))[0];
     assert.equal(state?.isSuperAdmin, false, "the stale authorization cannot pass after revocation commits");
   } finally {
     unlockHolder();

@@ -27,7 +27,7 @@ export async function resolveProfileLegalEmployer(
   if (employerId !== null) return employerId;
   const subsidiaries = (await exec.execute<{ employer_subsidiary_id: string }>(sql`
     select distinct employer_subsidiary_id from worker_employments
-    where org_id=${orgId} and worker_party_id=${employeePartyId}`)).rows
+    where org_id=${orgId} and worker_party_id=${employeePartyId}`, 'objects'))
     .map(row => row.employer_subsidiary_id);
   if (subsidiaries.length === 0) return null;
   if (subsidiaries.length === 1) return subsidiaries[0]!;
@@ -43,10 +43,10 @@ export async function payrollProfileEmployment(
   linkedId: string | null,
 ): Promise<string | null> {
   const resolvedEmployerId = await resolveProfileLegalEmployer(exec, orgId, employeePartyId, employerId);
-  const rows = (await exec.execute<{ id: string; employer_subsidiary_id: string }>(sql`
+  const rows = await exec.execute<{ id: string; employer_subsidiary_id: string }>(sql`
     select id, employer_subsidiary_id from worker_employments
     where org_id=${orgId} and worker_party_id=${employeePartyId}
-    order by id for share`)).rows;
+    order by id for share`, 'objects');
   if (linkedId !== null) {
     const linked = rows.find(row => row.id === linkedId);
     if (!linked || linked.employer_subsidiary_id !== resolvedEmployerId) {
@@ -88,24 +88,24 @@ export async function resolvePayrollProfileEmploymentLinks(input: {
   return withOrgTransaction(input.orgId, async () => {
     if (!await actorHasPermission(db, input.orgId, input.actorId, 'payroll.manage')) throw new PayrollProfileEmploymentError('Payroll manage permission is required to link employments');
     if (!await lockAndCheckOrgFeature(db, input.orgId, 'payroll')) throw new PayrollProfileEmploymentError('Enable Payroll in Company Settings → Features before linking employments');
-    const candidates = (await db.execute<{ profile_id: string; employee_party_id: string; employee_name: string }>(sql`
+    const candidates = await db.execute<{ profile_id: string; employee_party_id: string; employee_name: string }>(sql`
       select prof.id as profile_id, prof.employee_party_id, p.display_name as employee_name
         from employee_payroll_profiles prof
         join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
        where prof.org_id = ${input.orgId} and prof.employment_id is null
          ${input.employeePartyIds?.length ? sql`and prof.employee_party_id in (${sql.join(input.employeePartyIds.map((id) => sql`${id}`), sql`, `)})` : sql``}
          ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
-       order by p.display_name for update`)).rows;
+       order by p.display_name for update`, 'objects');
     const linked: EmploymentLinkResolution[] = [];
     const unresolved: EmploymentLinkResolution[] = [];
     for (const candidate of candidates) {
-      const employments = (await db.execute<{ id: string; status: string | null }>(sql`
+      const employments = await db.execute<{ id: string; status: string | null }>(sql`
         select e.id, v.status
           from worker_employments e
           left join worker_employment_versions v
             on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
          where e.org_id = ${input.orgId} and e.worker_party_id = ${candidate.employee_party_id}
-         order by e.id for share of e`)).rows;
+         order by e.id for share of e`, 'objects');
       const active = employments.filter(row => row.status === 'active' || row.status === 'on_leave');
       if (employments.length === 0) {
         unresolved.push({ employeePartyId: candidate.employee_party_id, employeeName: candidate.employee_name, employmentId: null, linked: false, reason: 'no employment on file — complete the hire first' });
@@ -120,10 +120,10 @@ export async function resolvePayrollProfileEmploymentLinks(input: {
       }
       const employmentId = active[0]!.id;
       if (!input.dryRun) {
-        const updated = (await db.execute(sql`update employee_payroll_profiles
+        const updated = await db.execute(sql`update employee_payroll_profiles
           set employment_id=${employmentId}, updated_by=${input.actorId},
             updated_at=greatest(clock_timestamp(), updated_at + interval '1 microsecond')
-          where org_id=${input.orgId} and id=${candidate.profile_id} and employment_id is null returning id`)).rows;
+          where org_id=${input.orgId} and id=${candidate.profile_id} and employment_id is null returning id`, 'objects');
         if (updated.length !== 1) throw new PayrollProfileEmploymentError(`The payroll employment link for ${candidate.employee_name} changed — preview the links again`);
         await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
           values (${input.orgId},'employee_payroll_profiles',${candidate.profile_id},'update',
@@ -152,11 +152,11 @@ export async function linkPayrollProfileEmployment(input: {
     const employee = (await db.execute<{ subsidiary_id: string | null }>(sql`
       select p.subsidiary_id from parties p where p.org_id=${input.orgId} and p.id=${input.employeePartyId}
       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
-      for no key update`)).rows[0];
+      for no key update`, 'objects'))[0];
     if (!employee) throw new PayrollProfileEmploymentError('The employee is not available in your legal entity — review the employee ID');
     const before = (await db.execute<{ id: string; employment_id: string | null }>(sql`
       select id, employment_id from employee_payroll_profiles
-      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} for update`)).rows[0];
+      where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} for update`, 'objects'))[0];
     if (!before) throw new PayrollProfileEmploymentError('No payroll profile is available for this employee in your legal entity — create the payroll profile from Employees first');
     await payrollProfileEmployment(db, input.orgId, input.employeePartyId, employee.subsidiary_id, input.employmentId);
     if (before.employment_id !== null && before.employment_id !== input.employmentId) {
@@ -164,10 +164,10 @@ export async function linkPayrollProfileEmployment(input: {
     }
     if (before.employment_id === input.employmentId) return { changed: false };
     if (input.dryRun) return { changed: true };
-    const updated = (await db.execute(sql`update employee_payroll_profiles
+    const updated = await db.execute(sql`update employee_payroll_profiles
       set employment_id=${input.employmentId}, updated_by=${input.actorId},
         updated_at=greatest(clock_timestamp(), updated_at + interval '1 microsecond')
-      where org_id=${input.orgId} and id=${before.id} and employment_id is null returning id`)).rows;
+      where org_id=${input.orgId} and id=${before.id} and employment_id is null returning id`, 'objects');
     if (updated.length !== 1) throw new PayrollProfileEmploymentError('The payroll employment link changed — preview the import again');
     await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values (${input.orgId},'employee_payroll_profiles',${before.id},'update',

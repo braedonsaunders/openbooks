@@ -67,7 +67,7 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
     const before = (await db.execute<{ journals: number; deposits: number; applications: number }>(sql`
       select (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
         (select count(*)::int from security_deposit_transactions where org_id=${org.orgId}) as deposits,
-        (select count(*)::int from applications where org_id=${org.orgId}) as applications`)).rows[0]!;
+        (select count(*)::int from applications where org_id=${org.orgId}) as applications`, "objects"))[0]!;
 
     await assert.rejects(
       recordSecurityDeposit({
@@ -88,7 +88,7 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
     const after = (await db.execute<{ journals: number; deposits: number; applications: number }>(sql`
       select (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
         (select count(*)::int from security_deposit_transactions where org_id=${org.orgId}) as deposits,
-        (select count(*)::int from applications where org_id=${org.orgId}) as applications`)).rows[0]!;
+        (select count(*)::int from applications where org_id=${org.orgId}) as applications`, "objects"))[0]!;
     assert.deepEqual(after, before);
 
     // Same-currency control: billing the lease cuts a posted CAD invoice and
@@ -100,18 +100,18 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
       kind: "applied", occurredOn: org.date, amount: "50", appliedDocumentId: billed.invoices[0]!,
     });
     assert.equal(applied.balance, "50.0000");
-    const legs = (await db.execute<{
+    const legs = await db.execute<{
       source: string; target: string; rate: string; sourceRef: string;
     }>(sql`select a.source_transaction_currency as source, a.target_transaction_currency as target,
         a.settlement_rate as rate, a.settlement_rate_source as "sourceRef"
       from applications a join journal_lines jl on jl.id=a.from_line_id and jl.org_id=a.org_id
-      where a.org_id=${org.orgId} and jl.entry_id=${applied.entryId}`)).rows;
+      where a.org_id=${org.orgId} and jl.entry_id=${applied.entryId}`, "objects");
     assert.equal(legs.length, 1);
     assert.deepEqual(legs[0], { source: "CAD", target: "CAD", rate: "1.0000000000", sourceRef: "same_currency" });
 
     const applicationId = (await db.execute<{ id: string }>(sql`
       select a.id from applications a join journal_lines l on l.org_id=a.org_id and l.id=a.from_line_id
-       where a.org_id=${org.orgId} and l.entry_id=${applied.entryId} and a.unapplied_at is null`)).rows[0]!.id;
+       where a.org_id=${org.orgId} and l.entry_id=${applied.entryId} and a.unapplied_at is null`, "objects"))[0]!.id;
     await db.execute(sql`update applications set unapplied_at=now(),updated_at=now(),updated_by=${actor}
       where org_id=${org.orgId} and id=${applicationId} and unapplied_at is null`);
     const reversed = await reverseSecurityDepositTransaction({
@@ -120,15 +120,15 @@ test("cross-currency deposit application refuses by name", { skip: !DB }, async 
     });
     assert.equal(reversed.balance, "100.0000");
     const journalState = (await db.execute<{ status: string }>(sql`
-      select status from journal_entries where org_id=${org.orgId} and id=${applied.entryId}`)).rows[0]!.status;
+      select status from journal_entries where org_id=${org.orgId} and id=${applied.entryId}`, "objects"))[0]!.status;
     assert.equal(journalState, "reversed", "the source journal and its book copies leave live history");
-    const selfSettlement = (await db.execute<{ amount: string; unapplied_at: string | null }>(sql`
+    const selfSettlement = await db.execute<{ amount: string; unapplied_at: string | null }>(sql`
       select a.amount::text as amount,a.unapplied_at::text as unapplied_at
         from applications a
         join journal_lines source on source.org_id=a.org_id and source.id=a.from_line_id
         join journal_lines mirror on mirror.org_id=a.org_id and mirror.id=a.to_line_id
        where a.org_id=${org.orgId} and source.entry_id=${applied.entryId} and mirror.entry_id=${reversed.entryId}
-    `)).rows;
+    `, "objects");
     assert.deepEqual(selfSettlement, [{ amount: "50.0000", unapplied_at: null }],
       "the original open AR line is settled against its mirror even after its invoice application was released");
   } finally {

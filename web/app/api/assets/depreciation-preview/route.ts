@@ -63,8 +63,8 @@ export const POST = defineRoute({
       const book = await db.execute(sql`
       select 1 from accounting_books
        where id = ${bookId} and org_id = ${user.orgId} and is_active
-    `);
-      if (!book.rows[0]) return bad("book_not_found", "bookId");
+    `, "objects");
+      if (!book[0]) return bad("book_not_found", "bookId");
     }
 
     const periodId = body.periodId?.trim().toLowerCase() || null;
@@ -73,8 +73,8 @@ export const POST = defineRoute({
       const period = await db.execute<{ starts_on: string }>(sql`
       select starts_on::text as starts_on from accounting_periods
        where id = ${periodId} and org_id = ${user.orgId} and not is_adjustment
-    `);
-      if (!period.rows[0]) return bad("period_not_found", "periodId");
+    `, "objects");
+      if (!period[0]) return bad("period_not_found", "periodId");
     }
 
     const postingDate = body.postingDate?.trim() || null;
@@ -98,9 +98,9 @@ export const POST = defineRoute({
         select a.id from fixed_assets a
          where a.org_id = ${user.orgId} and a.id = any(${`{${ids.join(",")}}`}::uuid[])
            ${gate.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-      `);
+      `, "objects");
         const seen = new Set(
-          found.rows.map((row) => String(row.id).toLowerCase()),
+          found.map((row) => String(row.id).toLowerCase()),
         );
         if (ids.some((id) => !seen.has(id)))
           return bad("unknown_asset", "assetIds");

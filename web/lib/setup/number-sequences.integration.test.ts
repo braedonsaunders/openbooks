@@ -18,7 +18,7 @@ async function adminOrg() {
 async function setupRow(orgId: string, id: string) {
   const entity = SETUP_ENTITY_BY_KEY.get('number-sequences')!
   return (await withBypass(() => db.execute<{ next_number: number; allocated_through: number }>(sql`
-    select ${setupReadProjection(entity)} from number_sequences where id = ${id} and org_id = ${orgId}`))).rows[0]!
+    select ${setupReadProjection(entity)} from number_sequences where id = ${id} and org_id = ${orgId}`, 'objects')))[0]!
 }
 
 test('the configured next number is the next number issued', { skip: !env.OPENBOOKS_DB_URL }, async () => {

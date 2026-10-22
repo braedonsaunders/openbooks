@@ -26,11 +26,9 @@ export async function deliverScheduleNotices(args: {
       ...(groups.get(notice.workerPartyId) ?? []),
       notice,
     ])
-  const recipients = (
-    await db.execute<{ partyId: string; userId: string | null }>(
-      sql`select p.id as "partyId",(select u.id from users u where u.org_id=p.org_id and u.party_id=p.id and u.is_active order by u.created_at limit 1) as "userId" from parties p where p.org_id=${args.orgId} and p.id in (select jsonb_array_elements_text(${JSON.stringify([...groups.keys()])}::jsonb)::uuid)`,
+  const recipients = await db.execute<{ partyId: string; userId: string | null }>(
+      sql`select p.id as "partyId",(select u.id from users u where u.org_id=p.org_id and u.party_id=p.id and u.is_active order by u.created_at limit 1) as "userId" from parties p where p.org_id=${args.orgId} and p.id in (select jsonb_array_elements_text(${JSON.stringify([...groups.keys()])}::jsonb)::uuid)`, 'objects',
     )
-  ).rows
   const day = new Intl.DateTimeFormat(undefined, {
     weekday: 'short',
     month: 'short',

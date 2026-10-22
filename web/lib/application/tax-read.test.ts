@@ -27,13 +27,14 @@ const mockDb = `
     }).join("")
   }
   export const db = {
-    execute: async (query) => {
+    execute: async (query, mode) => {
+      const inMode = (result) => (mode === 'objects' ? result.rows : result)
       state.dbCalls += 1
       const text = sqlText(query)
       // The forms list carries the fixture rows; the feature filter behind
       // it reads tax_report_lines, which is empty here so nothing is hidden.
-      if (text.includes("tax_return_forms")) return { rows: state.formRows }
-      if (text.includes("tax_report_lines")) return { rows: [] }
+      if (text.includes("tax_return_forms")) return inMode({ rows: state.formRows })
+      if (text.includes("tax_report_lines")) return inMode({ rows: [] })
       throw new Error("unexpected tax-read query: " + text.slice(0, 120))
     },
   }

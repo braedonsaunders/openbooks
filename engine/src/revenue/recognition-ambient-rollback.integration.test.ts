@@ -55,33 +55,25 @@ test(
         assert.equal(result.problems.length, 1);
         await db.execute(sql`select 1 as usable`);
       });
-      const caller = (
-        await db.execute<{ name: string }>(
-          sql`select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`,
-        )
-      ).rows[0];
+      const caller = (await db.execute<{ name: string }>(
+          sql`select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`, "objects",
+        ))[0];
       assert.equal(caller?.name, "Surviving recognition caller");
-      const entries = (
-        await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='revenue_recognition'`,
-        )
-      ).rows[0]!.n;
+      const entries = (await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='revenue_recognition'`, "objects",
+        ))[0]!.n;
       assert.equal(
         entries,
         1,
         "only the successful posting remains; the failed draft is removed",
       );
-      const failed = (
-        await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='revenue_recognition' and status='draft'`,
-        )
-      ).rows[0]!.n;
+      const failed = (await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='revenue_recognition' and status='draft'`, "objects",
+        ))[0]!.n;
       assert.equal(failed, 0);
-      const lines = (
-        await db.execute<{ n: number }>(
-          sql`select count(*)::int as n from journal_lines jl join journal_entries j on j.org_id=jl.org_id and j.id=jl.entry_id where j.org_id=${org.orgId} and j.origin='revenue_recognition'`,
-        )
-      ).rows[0]!.n;
+      const lines = (await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from journal_lines jl join journal_entries j on j.org_id=jl.org_id and j.id=jl.entry_id where j.org_id=${org.orgId} and j.origin='revenue_recognition'`, "objects",
+        ))[0]!.n;
       assert.equal(
         lines,
         2,
@@ -126,11 +118,9 @@ test(
               /inner application failure/,
             );
             assert.equal(
-              (
-                await db.execute<{ n: number }>(
-                  sql`select count(*)::int as n from parties where org_id=${org.orgId} and id=${outer}`,
-                )
-              ).rows[0]!.n,
+              (await db.execute<{ n: number }>(
+                  sql`select count(*)::int as n from parties where org_id=${org.orgId} and id=${outer}`, "objects",
+                ))[0]!.n,
               1,
             );
             throw new Error("outer application failure");
@@ -139,11 +129,9 @@ test(
         );
         await insert(after);
       });
-      const retained = (
-        await db.execute<{ id: string }>(
-          sql`select id from parties where org_id=${org.orgId} and id in (${before},${outer},${inner},${after})`,
-        )
-      ).rows
+      const retained = (await db.execute<{ id: string }>(
+          sql`select id from parties where org_id=${org.orgId} and id in (${before},${outer},${inner},${after})`, "objects",
+        ))
         .map((row) => row.id)
         .sort();
       assert.deepEqual(retained, [before, after].sort());

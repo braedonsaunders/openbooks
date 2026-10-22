@@ -129,9 +129,9 @@ export const AI_GOVERNANCE_CONTROL_CASES: readonly ControlCase[] = [
       } catch {
         deleteRefused = "true";
       }
-      const rows = (await db.execute<{ outcome: string }>(
-        sql`select outcome from ai_decisions where id = ${id}::uuid`,
-      )).rows;
+      const rows = await db.execute<{ outcome: string }>(
+        sql`select outcome from ai_decisions where id = ${id}::uuid`, "objects",
+      );
       return {
         values: {
           updateRefused,

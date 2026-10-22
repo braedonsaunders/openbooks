@@ -171,8 +171,8 @@ const STAGE_REFUSAL_MESSAGES: Record<OpportunityStageRefusal, string> = {
 async function storedLineCount(executor: QueryExecutor, opportunityId: string, orgId: string): Promise<number> {
   const result = await executor.execute<{ count: string | number }>(sql`
     select count(*)::int as count from crm_opportunity_lines
-     where opportunity_id = ${opportunityId} and org_id = ${orgId}`)
-  return Number(result.rows[0]?.count ?? 0)
+     where opportunity_id = ${opportunityId} and org_id = ${orgId}`, 'objects')
+  return Number(result[0]?.count ?? 0)
 }
 
 type QueryExecutor = Pick<typeof db, 'execute'>
@@ -203,15 +203,15 @@ async function orgUuidExistsWith(executor: QueryExecutor, table: 'parties' | 'co
   if (!isUuid(id)) return false
   const lockClause = lock ? sql` for update` : sql``
   const result = table === 'parties'
-    ? await executor.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`,allowed)}${lockClause}`)
+    ? await executor.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`,allowed)}${lockClause}`, 'objects')
     : table === 'contacts'
-      ? await executor.execute(sql`select 1 from contacts where id = ${id} and org_id = ${orgId}${lockClause}`)
+      ? await executor.execute(sql`select 1 from contacts where id = ${id} and org_id = ${orgId}${lockClause}`, 'objects')
       : table === 'users'
-        ? await executor.execute(sql`select 1 from users where id = ${id} and org_id = ${orgId}${lockClause}`)
+        ? await executor.execute(sql`select 1 from users where id = ${id} and org_id = ${orgId}${lockClause}`, 'objects')
         : table === 'crm_sales_teams'
-          ? await executor.execute(sql`select 1 from crm_sales_teams where id = ${id} and org_id = ${orgId} and is_active${lockClause}`)
-          : await executor.execute(sql`select 1 from crm_lead_sources where id = ${id} and org_id = ${orgId} and is_active${lockClause}`)
-  return (result as unknown as { rows: unknown[] }).rows.length === 1
+          ? await executor.execute(sql`select 1 from crm_sales_teams where id = ${id} and org_id = ${orgId} and is_active${lockClause}`, 'objects')
+          : await executor.execute(sql`select 1 from crm_lead_sources where id = ${id} and org_id = ${orgId} and is_active${lockClause}`, 'objects')
+  return result.length === 1
 }
 
 async function orgUuidExists(table: 'parties' | 'contacts' | 'users' | 'crm_sales_teams' | 'crm_lead_sources', id: string | null, orgId: string): Promise<boolean> {
@@ -243,8 +243,8 @@ export const PATCH = defineRoute({
     const existing = (await db.execute<LockedOpportunityRow>(sql`
       select o.*, s.is_closed, s.is_won from crm_opportunities o
       join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-      where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`))
-    let current = existing.rows[0]
+      where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`, 'objects'))
+    let current = existing[0]
     if (!current) return notFound("record")
     const rawBody = await parseJsonBody(req, jsonObject);
     if (!rawBody.ok) return rawBody.response;
@@ -268,7 +268,7 @@ export const PATCH = defineRoute({
     let leadSourceId = body.leadSourceId === undefined ? current.lead_source_id : textOrNull(body.leadSourceId)
     if (!await orgUuidExistsWith(db, 'parties', partyId, user.orgId, false, gate.allowedSubsidiaryIds)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
     if (!await orgUuidExists('contacts', contactId, user.orgId)) return NextResponse.json({ error: 'invalid contact' }, { status: 422 })
-    if (contactId && !((await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`))).rows[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
+    if (contactId && !(await db.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId}`, 'objects'))[0]) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
     if (!await orgUuidExists('users', ownerUserId, user.orgId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
     if (!await orgUuidExists('crm_sales_teams', salesTeamId, user.orgId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
     if (!await orgUuidExists('crm_lead_sources', leadSourceId, user.orgId)) return NextResponse.json({ error: 'invalid lead source' }, { status: 422 })
@@ -276,8 +276,8 @@ export const PATCH = defineRoute({
     let statusId = body.statusId === undefined ? current.status_id : textOrNull(body.statusId)
     if (!statusId || !isUuid(statusId)) return NextResponse.json({ error: 'status is required' }, { status: 422 })
     const status = (await db.execute(sql`
-      select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`))
-    const initialStatus = status.rows[0]
+      select * from crm_opportunity_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`, 'objects'))
+    const initialStatus = status[0]
     if (!initialStatus) return NextResponse.json({ error: 'invalid status' }, { status: 422 })
     let nextStatus = initialStatus
     if (nextStatus.is_closed) {
@@ -296,7 +296,7 @@ export const PATCH = defineRoute({
       return notFound("record")
     }
     let currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
-    if (!((await db.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
+    if (!(await db.execute(sql`select 1 from currencies where code = ${currency}`, 'objects'))[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
     let winLossReason = body.winLossReason === undefined ? current.win_loss_reason : textOrNull(body.winLossReason)
     // Stage policy is checked after the lines are parsed below: the gates read
     // the line count and the projected amount this save would produce, which do
@@ -345,20 +345,20 @@ export const PATCH = defineRoute({
         return apiErrorResponse(error)
       }
       for (const line of lines) {
-        if (!line.itemId || !isUuid(line.itemId) || !((await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`))).rows[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
+        if (!line.itemId || !isUuid(line.itemId) || !(await db.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active`, 'objects'))[0]) return NextResponse.json({ error: 'a valid item is required for every line' }, { status: 422 })
       }
       // Stored inventory / assembly / kit lines stay. Turning Inventory off must
       // 404 a write that would persist a new one of those kinds.
       if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
         const stored = (await db.execute<{ item_id: string }>(sql`
           select item_id from crm_opportunity_lines
-           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`))
-        const storedIds = new Set(stored.rows.map((row) => row.item_id))
+           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects'))
+        const storedIds = new Set(stored.map((row) => row.item_id))
         for (const line of lines) {
           if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
           const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
-          if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
+          if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
             return notFound("record")
           }
         }
@@ -368,13 +368,13 @@ export const PATCH = defineRoute({
       if (!(await isFeatureEnabled(user.orgId, 'equipment'))) {
         const stored = (await db.execute<{ item_id: string }>(sql`
           select item_id from crm_opportunity_lines
-           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`))
-        const storedIds = new Set(stored.rows.map((row) => row.item_id))
+           where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects'))
+        const storedIds = new Set(stored.map((row) => row.item_id))
         for (const line of lines) {
           if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
           const item = (await db.execute<{ kind: string }>(sql`
-            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
-          if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+            select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`, 'objects'))
+          if (item[0] && item[0].kind === 'equipment_charge') {
             return notFound("record")
           }
         }
@@ -441,8 +441,8 @@ export const PATCH = defineRoute({
           from crm_opportunities o
           join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
          where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}
-         for update of o`))
-      current = lockedResult.rows[0]
+         for update of o`, 'objects'))
+      current = lockedResult[0]
       if (!current) throw new OpportunityDisappeared()
       // Compared against the row locked by this write transaction, never the
       // preflight snapshot (which may have gone stale during validation).
@@ -467,7 +467,7 @@ export const PATCH = defineRoute({
       if (!await orgUuidExistsWith(lockedDb, 'contacts', contactId, user.orgId, true)) {
         throw new OpportunityValidationError('invalid contact')
       }
-      if (contactId && !((await tx.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId} for update`))).rows[0]) {
+      if (contactId && !(await tx.execute(sql`select 1 from contacts where id = ${contactId} and party_id = ${partyId} and org_id = ${user.orgId} for update`, 'objects'))[0]) {
         // The preflight contact check ran against an unlocked snapshot.  This
         // check is against the account from the row we actually locked, so a
         // concurrent party change fails closed before any write.
@@ -483,8 +483,8 @@ export const PATCH = defineRoute({
         throw new OpportunityValidationError('invalid lead source')
       }
 
-      if(salesTeamId && !(await tx.execute(sql`select 1 from crm_sales_teams where org_id=${user.orgId} and id=${salesTeamId} and is_active and subsidiary_id is not distinct from ${current.subsidiary_id??null} for share`)).rows.length) throw new OpportunityValidationError('Select an active sales team in the opportunity legal entity. Manage teams in Sales → Teams.')
-      if(salesRepId){const nativeEmployee=(await tx.execute(sql`select 1 from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${user.orgId} and e.party_id=${salesRepId} and e.is_active and e.is_sales_rep and p.is_active and p.subsidiary_id is not distinct from ${current.subsidiary_id??null} for share of e,p`)).rows.length;if(!nativeEmployee)throw new OpportunityValidationError('Select an active sales employee in the opportunity legal entity. Manage eligibility in Sales → Representatives.')}
+      if(salesTeamId && !(await tx.execute(sql`select 1 from crm_sales_teams where org_id=${user.orgId} and id=${salesTeamId} and is_active and subsidiary_id is not distinct from ${current.subsidiary_id??null} for share`, 'objects')).length) throw new OpportunityValidationError('Select an active sales team in the opportunity legal entity. Manage teams in Sales → Teams.')
+      if(salesRepId){const nativeEmployee=(await tx.execute(sql`select 1 from employee_roles e join parties p on p.org_id=e.org_id and p.id=e.party_id where e.org_id=${user.orgId} and e.party_id=${salesRepId} and e.is_active and e.is_sales_rep and p.is_active and p.subsidiary_id is not distinct from ${current.subsidiary_id??null} for share of e,p`, 'objects')).length;if(!nativeEmployee)throw new OpportunityValidationError('Select an active sales employee in the opportunity legal entity. Manage eligibility in Sales → Representatives.')}
       // Re-read the selected status after the lock.  In particular, an
       // explicitly submitted status may have been deactivated or moved to a
       // different tenant since preflight; never use that stale row's lifecycle
@@ -492,8 +492,8 @@ export const PATCH = defineRoute({
       const lockedStatusResult = await tx.execute(sql`
         select * from crm_opportunity_statuses
          where id = ${statusId} and org_id = ${user.orgId} and is_active
-         for update`)
-      const lockedStatus = lockedStatusResult.rows[0]
+         for update`, 'objects')
+      const lockedStatus = lockedStatusResult[0]
       if (!lockedStatus) throw new OpportunityValidationError('invalid status')
       nextStatus = lockedStatus
       if (nextStatus.is_closed) {
@@ -528,13 +528,13 @@ export const PATCH = defineRoute({
       if (partyId && willBeActive && !nextStatus.is_closed) {
         // The account was locked above; a concurrent retirement cannot be
         // missed or race this activation. Legacy work may still be closed.
-        const party = await tx.execute(sql`select is_active from parties where id=${partyId} and org_id=${user.orgId}`)
-        if (!party.rows[0]?.is_active) throw new OpportunityValidationError('an active account is required for open opportunities')
+        const party = await tx.execute(sql`select is_active from parties where id=${partyId} and org_id=${user.orgId}`, 'objects')
+        if (!party[0]?.is_active) throw new OpportunityValidationError('an active account is required for open opportunities')
       }
       if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
         throw new OpportunityNotFound()
       }
-      if (!((await tx.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) {
+      if (!(await tx.execute(sql`select 1 from currencies where code = ${currency}`, 'objects'))[0]) {
         throw new OpportunityValidationError('invalid currency')
       }
       // Stage policy is enforced below, against the totals this write produces
@@ -575,32 +575,32 @@ export const PATCH = defineRoute({
       if (lines) {
         if (!Array.isArray(lines)) throw new OpportunityValidationError('lines must be an array')
         for (const line of lines) {
-          if (!line.itemId || !isUuid(line.itemId) || !((await tx.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active for update`))).rows[0]) {
+          if (!line.itemId || !isUuid(line.itemId) || !(await tx.execute(sql`select 1 from items where id = ${line.itemId} and org_id = ${user.orgId} and is_active for update`, 'objects'))[0]) {
             throw new OpportunityValidationError('a valid item is required for every line')
           }
         }
         if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
           const stored = await tx.execute<{ item_id: string }>(sql`
             select item_id from crm_opportunity_lines
-             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`)
-          const storedIds = new Set(stored.rows.map((row) => row.item_id))
+             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects')
+          const storedIds = new Set(stored.map((row) => row.item_id))
           for (const line of lines) {
             if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
             const item = await tx.execute<{ kind: string }>(sql`
-              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`)
-            if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) throw new OpportunityNotFound()
+              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`, 'objects')
+            if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) throw new OpportunityNotFound()
           }
         }
         if (!(await isFeatureEnabled(user.orgId, 'equipment'))) {
           const stored = await tx.execute<{ item_id: string }>(sql`
             select item_id from crm_opportunity_lines
-             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`)
-          const storedIds = new Set(stored.rows.map((row) => row.item_id))
+             where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is not null`, 'objects')
+          const storedIds = new Set(stored.map((row) => row.item_id))
           for (const line of lines) {
             if (!isUuid(line.itemId) || storedIds.has(line.itemId)) continue
             const item = await tx.execute<{ kind: string }>(sql`
-              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`)
-            if (item.rows[0]?.kind === 'equipment_charge') throw new OpportunityNotFound()
+              select kind from items where id = ${line.itemId} and org_id = ${user.orgId} for update`, 'objects')
+            if (item[0]?.kind === 'equipment_charge') throw new OpportunityNotFound()
           }
         }
       }
@@ -673,27 +673,27 @@ export const PATCH = defineRoute({
         const stored = await tx.execute<{ id: string; amount: string | number; probability: number | null }>(sql`
           select id, amount, probability from crm_opportunity_lines
            where opportunity_id = ${id} and org_id = ${user.orgId}
-           order by line_number for update`)
-        if (stored.rows.length) {
+           order by line_number for update`, 'objects')
+        if (stored.length) {
           // Rows written before inherited lines were stored as null carry a copy
           // of the then-current header rate; treat those as inherited too.
           const previousProbability = Number(current.probability)
-          const inherited = stored.rows.map((line) => line.probability == null || Number(line.probability) === previousProbability)
+          const inherited = stored.map((line) => line.probability == null || Number(line.probability) === previousProbability)
           const recalculated = computeOpportunityTotals(
-            stored.rows.map((line, index) => ({
+            stored.map((line, index) => ({
               quantity: '1',
               unitPrice: normalizeMoney(String(line.amount)),
               probability: inherited[index] ? null : Number(line.probability),
             })),
             probability,
           )
-          for (let index = 0; index < stored.rows.length; index++) {
+          for (let index = 0; index < stored.length; index++) {
             if (!inherited[index]) continue
             await tx.execute(sql`
               update crm_opportunity_lines
                  set probability = null, expected_amount = ${recalculated.lines[index]!.expectedAmount},
                      updated_at = now(), updated_by = ${user.id}
-               where id = ${stored.rows[index]!.id} and org_id = ${user.orgId}`)
+               where id = ${stored[index]!.id} and org_id = ${user.orgId}`)
           }
           weighted = recalculated.weightedAmount
         } else {
@@ -777,11 +777,11 @@ export const DELETE = defineRoute({
       const locked = await tx.execute<Record<string, unknown>>(sql`
         select o.* from crm_opportunities o
          where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}
-         for update of o`)
-      const current = locked.rows[0]
+         for update of o`, 'objects')
+      const current = locked[0]
       if (!current) return 'missing' as const
-      const linked = await tx.execute(sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${user.orgId} limit 1`)
-      if (linked.rows[0]) return 'linked' as const
+      const linked = await tx.execute(sql`select 1 from crm_opportunity_documents where opportunity_id = ${id} and org_id = ${user.orgId} limit 1`, 'objects')
+      if (linked[0]) return 'linked' as const
       await tx.execute(sql`delete from crm_opportunity_team_members where opportunity_id = ${id} and org_id = ${user.orgId}`)
       await tx.execute(sql`delete from crm_opportunity_lines where opportunity_id = ${id} and org_id = ${user.orgId}`)
       await tx.execute(sql`delete from crm_opportunity_stage_events where opportunity_id = ${id} and org_id = ${user.orgId}`)

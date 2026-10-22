@@ -54,13 +54,13 @@ async function setupOrg(permissions: string[]) {
 
 async function flowRow(orgId: string, id: string) {
   return (await withBypassContext(() => db.execute<{ enabled: boolean }>(sql`
-    select enabled from flows where id = ${id} and org_id = ${orgId}`))).rows[0]
+    select enabled from flows where id = ${id} and org_id = ${orgId}`, 'objects')))[0]
 }
 
 async function auditInserts(orgId: string, id: string) {
   return (await withBypassContext(() => db.execute<{ n: string }>(sql`
     select count(*)::text as n from audit_log
-     where org_id = ${orgId} and table_name = 'flows' and row_id = ${id} and action = 'insert'`))).rows[0]?.n
+     where org_id = ${orgId} and table_name = 'flows' and row_id = ${id} and action = 'insert'`, 'objects')))[0]?.n
 }
 
 function post(body: unknown) {

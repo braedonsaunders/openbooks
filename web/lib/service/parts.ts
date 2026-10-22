@@ -26,7 +26,7 @@ export async function recordPricedVisitPart(actor: { orgId: string; actorId: str
         from service_visits v
         left join service_jobs j on j.org_id = v.org_id and j.id = v.job_id
         left join service_requests r on r.org_id = v.org_id and r.id = v.request_id
-       where v.org_id = ${actor.orgId} and v.id = ${detail.visit.id}`)).rows[0]
+       where v.org_id = ${actor.orgId} and v.id = ${detail.visit.id}`, 'objects'))[0]
     if (!owner) throw new ServiceError('The visit was not found.', { status: 404, code: 'service_not_found' })
     const [currency, today] = await Promise.all([
       jobCurrency(actor.orgId, owner.subsidiaryId, owner.customerPartyId),
@@ -56,8 +56,8 @@ export type PartItemOption = { id: string; code: string | null; name: string; ki
 /** Active items a technician may record as a part, searched by code or name. */
 export async function servicePartItems(orgId: string, query: string): Promise<PartItemOption[]> {
   const pattern = `%${query.trim()}%`
-  return (await db.execute<PartItemOption>(sql`select id, code, name, kind from items
+  return await db.execute<PartItemOption>(sql`select id, code, name, kind from items
      where org_id = ${orgId} and is_active and kind in ('inventory', 'non_inventory', 'assembly', 'kit', 'other_charge')
        and (${query.trim()} = '' or name ilike ${pattern} or coalesce(code, '') ilike ${pattern})
-     order by name, id limit 50`)).rows
+     order by name, id limit 50`, 'objects')
 }

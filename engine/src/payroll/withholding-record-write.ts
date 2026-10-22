@@ -20,6 +20,6 @@ export async function prepareWithholdingRecordWrite(input:{orgId:string;actorId:
     join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
     join documents d on d.org_id=r.org_id and d.id=r.document_id
     where r.org_id=${input.orgId} and s.employee_party_id=${input.employeePartyId} and r.run_status='committed' and d.status<>'voided'
-      and r.pay_date>=${input.effectiveFrom}::date order by r.pay_date desc limit 1`)).rows[0]
+      and r.pay_date>=${input.effectiveFrom}::date order by r.pay_date desc limit 1`, 'objects'))[0]
   if(posted)throw new PayrollError(`Payroll dated ${posted.pay_date} is already committed — make the withholding method election effective after that pay date, or use payroll’s controlled void and replacement workflow before changing that history`)
 }

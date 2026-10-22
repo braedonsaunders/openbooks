@@ -125,8 +125,8 @@ export async function loadPlanVsActual(
     const absenceRows = await db.execute<{ id: string; leave_request_id: string | null }>(sql`
       select id::text as id, leave_request_id::text as leave_request_id
         from hrm_absences where org_id = ${orgId} and id in (${sql.join(absenceIds.map((id) => sql`${id}`), sql`, `)})
-    `);
-    for (const row of absenceRows.rows) leaveRequests.set(row.id, row.leave_request_id);
+    `, "objects");
+    for (const row of absenceRows) leaveRequests.set(row.id, row.leave_request_id);
   }
   const output: PlanVsActualRow[] = [];
   for (const key of keys) {

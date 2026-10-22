@@ -37,16 +37,14 @@ export async function submitPeriodReopen(args: {
       args.requestId,
     );
     await lockReopenRequestScope(db, args.orgId, args.requestId);
-    const row = (
-      await db.execute<
+    const row = (await db.execute<
         CloseReopenRequestRow & {
           status: string;
           submission_policy: SubmissionPolicy | null;
         }
       >(sql`
       select * from close_reopen_requests where org_id=${args.orgId} and id=${args.requestId} for update
-    `)
-    ).rows[0];
+    `, "objects"))[0];
     if (!row) throw new CloseError("Reopen request not found.");
     await lockActorCommandAuthority(
       db,
@@ -81,17 +79,15 @@ export async function submitPeriodReopen(args: {
       const saved =
         await db.execute(sql`update close_reopen_requests set submission_policy=${JSON.stringify(policy)}::jsonb,
         updated_at=now(),updated_by=${args.actorId} where org_id=${args.orgId} and id=${args.requestId}
-        and status='requested' and submission_policy is null returning id`);
-      if (saved.rows.length !== 1)
+        and status='requested' and submission_policy is null returning id`, "objects");
+      if (saved.length !== 1)
         throw new CloseError(
           "The reopen changed during submission; reload it.",
         );
     } else {
-      const receipt = (
-        await db.execute<{ hours: number; max_hours: number }>(
-          sql`select (context->'command'->>'hours')::integer as hours,(context->'command'->>'maxHours')::integer as max_hours from flow_submissions where org_id=${args.orgId} and subject_kind='close_reopen_request' and subject_id=${args.requestId} order by created_at desc,id desc limit 1`,
-        )
-      ).rows[0];
+      const receipt = (await db.execute<{ hours: number; max_hours: number }>(
+          sql`select (context->'command'->>'hours')::integer as hours,(context->'command'->>'maxHours')::integer as max_hours from flow_submissions where org_id=${args.orgId} and subject_kind='close_reopen_request' and subject_id=${args.requestId} order by created_at desc,id desc limit 1`, "objects",
+        ))[0];
       if (
         !receipt ||
         !Number.isInteger(receipt.hours) ||
@@ -146,12 +142,10 @@ export async function finalizePeriodReopenApproval(args: {
       throw new CloseError(
         "Complete the configured Flow gates before releasing this reopen.",
       );
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         requested_by: string;
       }>(sql`select requested_by from close_reopen_requests
-      where org_id=${args.orgId} and id=${args.requestId} for update`)
-    ).rows[0];
+      where org_id=${args.orgId} and id=${args.requestId} for update`, "objects"))[0];
     if (
       !row ||
       (row.requested_by === args.actorId && !proof.allowsSelfApproval)
@@ -256,8 +250,8 @@ async function applyPeriodReopenDecision(args: {
       const request = await tx.execute<CloseReopenRequestRow>(sql`
       select * from close_reopen_requests
        where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
-       for update`);
-      const row = request.rows[0];
+       for update`, "objects");
+      const row = request[0];
       if (!row) throw new CloseError("pending reopen request not found");
       if (args.approve) {
       conflicts = await reopenApprovalConflicts(tx, args.orgId, row, args.actorId);
@@ -274,8 +268,8 @@ async function applyPeriodReopenDecision(args: {
         update close_reopen_requests set status = 'rejected', approved_by = ${args.actorId},
                approved_at = now(), updated_at = now(), updated_by = ${args.actorId}
          where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
-        returning id`);
-        if (updated.rows.length !== 1) throw new CloseError("pending reopen request changed during decision");
+        returning id`, "objects");
+        if (updated.length !== 1) throw new CloseError("pending reopen request changed during decision");
         decided = {
           status: "rejected",
           periodId: row.period_id,
@@ -319,7 +313,7 @@ async function applyPeriodReopenDecision(args: {
          and id <> ${args.requestId}
          and status = 'approved'
          and expires_at > now()
-       for update`);
+       for update`, "objects");
       // A request whose modules were all re-closed outside the re-close
       // workflow (a Setup lock, never consumed) no longer guards live work:
       // end it here, audited, so it cannot block this decision.
@@ -330,9 +324,9 @@ async function applyPeriodReopenDecision(args: {
       subsidiaryId: row.subsidiary_id,
       actorId: args.actorId,
       reason: "superseded by a newer reopen decision",
-      candidateIds: activeRequests.rows.map((request) => request.id) });
+      candidateIds: activeRequests.map((request) => request.id) });
       const consumedIds = new Set(consumed);
-      const live = activeRequests.rows.filter((request) => !consumedIds.has(request.id));
+      const live = activeRequests.filter((request) => !consumedIds.has(request.id));
       // A request covering every module of an approved window widens or
       // extends it: approving it supersedes that window, recorded as such.
       const superseded = live.filter((request) =>
@@ -374,8 +368,8 @@ async function applyPeriodReopenDecision(args: {
            and book_id = ${row.book_id}
            and (subsidiary_id = ${row.subsidiary_id}::uuid or subsidiary_id is null)
            and module = 'gl'
-         order by (subsidiary_id is not null) desc limit 1`);
-        const governing = gl.rows[0];
+         order by (subsidiary_id is not null) desc limit 1`, "objects");
+        const governing = gl[0];
         if (periodLockRequiresApprovedReopen(governing && {
         state: governing.state, reopenExpiresAt: governing.reopen_expires_at, reason: null })) {
         throw new CloseError("GL must be included before a closed subledger can be reopened");
@@ -399,8 +393,8 @@ async function applyPeriodReopenDecision(args: {
          where org_id = ${args.orgId} and period_id = ${row.period_id}
            and book_id = ${row.book_id} and module = ${module}
            and (subsidiary_id is not distinct from ${row.subsidiary_id}::uuid or subsidiary_id is null)
-         order by (subsidiary_id is not null) desc limit 1`);
-        const lock = governing.rows[0];
+         order by (subsidiary_id is not null) desc limit 1`, "objects");
+        const lock = governing[0];
         if (!periodLockRequiresApprovedReopen(lock && {
         state: lock.state,
         reopenExpiresAt: lock.reopen_expires_at,
@@ -418,8 +412,8 @@ async function applyPeriodReopenDecision(args: {
         update close_reopen_requests
            set status = 'superseded', updated_at = now(), updated_by = ${args.actorId}
          where id = ${window.id} and org_id = ${args.orgId} and status = 'approved'
-        returning id`);
-      if (updated.rows.length !== 1) throw new CloseError("approved reopen window changed during decision");
+        returning id`, "objects");
+      if (updated.length !== 1) throw new CloseError("approved reopen window changed during decision");
       const evidence = { requestId: window.id, supersededBy: args.requestId, modules: window.modules, reason: row.reason };
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -465,8 +459,8 @@ async function applyPeriodReopenDecision(args: {
                or state = 'soft_closed'
                or (state = 'open' and reopen_expires_at is not null and
                  (reopen_expires_at <= now() or ${inheritedWindow})))
-           for update`);
-          for (const child of children.rows) {
+           for update`, "objects");
+          for (const child of children) {
           await upsertLock({
             tx,
             orgId: args.orgId,
@@ -488,8 +482,8 @@ async function applyPeriodReopenDecision(args: {
       update close_reopen_requests set status = 'approved', approved_by = ${args.actorId},
              approved_at = now(), expires_at = ${expiresAt.toISOString()}, updated_at = now(), updated_by = ${args.actorId}
        where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
-      returning id`);
-      if (approved.rows.length !== 1) throw new CloseError("pending reopen request changed during decision");
+      returning id`, "objects");
+      if (approved.length !== 1) throw new CloseError("pending reopen request changed during decision");
       await tx.execute(sql`
       update close_runs set status = 'in_progress', current_stage = 'review', approved_at = null,
              approved_by = null, closed_at = null, closed_by = null, published_at = null,
@@ -545,8 +539,8 @@ export async function withdrawPeriodReopen(args: {
     const request = await tx.execute<CloseReopenRequestRow>(sql`
       select * from close_reopen_requests
        where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
-       for update`);
-    const row = request.rows[0];
+       for update`, "objects");
+    const row = request[0];
     if (!row) throw new CloseError("pending reopen request not found");
     if (row.requested_by !== args.actorId) {
       throw new CloseError("Only the requester can withdraw a reopen request; an approver rejects it with a reason");
@@ -558,12 +552,10 @@ export async function withdrawPeriodReopen(args: {
       row.subsidiary_id,
       "close.reopen",
     );
-    const runs = (
-      await tx.execute<{
+    const runs = await tx.execute<{
         id: string;
       }>(sql`select id from flow_runs where org_id=${args.orgId}
-      and subject_kind='close_reopen_request' and subject_id=${args.requestId}`)
-    ).rows;
+      and subject_kind='close_reopen_request' and subject_id=${args.requestId}`, "objects");
     await cancelDispatchRuns(
       args.orgId,
       runs.map((run) => run.id),
@@ -573,8 +565,8 @@ export async function withdrawPeriodReopen(args: {
       update close_reopen_requests
          set status = 'withdrawn', updated_at = now(), updated_by = ${args.actorId}
        where id = ${args.requestId} and org_id = ${args.orgId} and status = 'requested'
-      returning id`);
-    if (updated.rows.length !== 1) {
+      returning id`, "objects");
+    if (updated.length !== 1) {
       throw new CloseError("pending reopen request not found");
     }
     const scope = {

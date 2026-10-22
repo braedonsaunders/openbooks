@@ -43,8 +43,7 @@ export async function submitCertificateVerification(input: {
       ))
     )
       throw new ScopeNotFoundError();
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         status: string;
         project_id: string | null;
         supersedes_id: string | null;
@@ -54,8 +53,7 @@ export async function submitCertificateVerification(input: {
       }>(sql`
    select c.*,p.subsidiary_id as "ownerSubsidiaryId" from compliance_records c
    join parties p on p.org_id=c.org_id and p.id=c.party_id
-   where c.org_id=${input.orgId} and c.id=${input.id} for update of c for share of p`)
-    ).rows[0];
+   where c.org_id=${input.orgId} and c.id=${input.id} for update of c for share of p`, "objects"))[0];
     if (!row) throw new ScopeNotFoundError();
     const scope = await lockActorCommandAuthority(
       db,
@@ -67,11 +65,9 @@ export async function submitCertificateVerification(input: {
     if (scope !== null && row.ownerSubsidiaryId === null && !row.project_id)
       throw new ScopeNotFoundError();
     if (row.project_id) {
-      const project = (
-        await db.execute<{ subsidiary_id: string | null }>(
-          sql`select subsidiary_id from projects where org_id=${input.orgId} and id=${row.project_id} for share`,
-        )
-      ).rows[0];
+      const project = (await db.execute<{ subsidiary_id: string | null }>(
+          sql`select subsidiary_id from projects where org_id=${input.orgId} and id=${row.project_id} for share`, "objects",
+        ))[0];
       if (!project || !subsidiaryScopeAllows(scope, project.subsidiary_id))
         throw new ScopeNotFoundError();
     }
@@ -106,22 +102,22 @@ export async function submitCertificateVerification(input: {
     if (row.supersedes_id) {
       const retired =
         await db.execute(sql`update compliance_records set status='superseded',superseded_by_id=${input.id},updated_at=now(),updated_by=${input.actorId}
-    where org_id=${input.orgId} and id=${row.supersedes_id} and status in ('pending_review','active') returning id`);
-      supersession = retired.rows.length
+    where org_id=${input.orgId} and id=${row.supersedes_id} and status in ('pending_review','active') returning id`, "objects");
+      supersession = retired.length
         ? { supersededId: row.supersedes_id, stale: false }
         : { supersededId: null, stale: true };
     }
     const saved =
       await db.execute<Record<string, unknown>>(sql`update compliance_records set status='active',verified_at=now(),verified_by=${input.actorId},
    verified_revision=${input.revision},rejected_reason=null,revision=revision+1,updated_at=now(),updated_by=${input.actorId}
-   where org_id=${input.orgId} and id=${input.id} and revision=${input.revision} returning *`);
-    if (saved.rows.length !== 1)
+   where org_id=${input.orgId} and id=${input.id} and revision=${input.revision} returning *`, "objects");
+    if (saved.length !== 1)
       throw new CertificateApprovalError(
         "This certificate changed before verification. Reload its current revision.",
         409,
       );
     await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values
-   (${input.orgId},'compliance_records',${input.id},${'verify'},${JSON.stringify({ before, after: saved.rows[0]!, event: "verification_released", revisionBefore: row.revision, revisionAfter: row.revision + 1, mode: input.approvalRunId ? "gated" : "ungated", approvalRunId: input.approvalRunId ?? null, supersession })}::jsonb,${input.actorId})`);
+   (${input.orgId},'compliance_records',${input.id},${'verify'},${JSON.stringify({ before, after: saved[0]!, event: "verification_released", revisionBefore: row.revision, revisionAfter: row.revision + 1, mode: input.approvalRunId ? "gated" : "ungated", approvalRunId: input.approvalRunId ?? null, supersession })}::jsonb,${input.actorId})`);
     return {
       id: input.id,
       revision: row.revision + 1,

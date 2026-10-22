@@ -166,18 +166,18 @@ async function periodState(fixture: Fixture): Promise<{
              c.year_start_month as "calendarMonth"
         from accounting_periods p
         join fiscal_calendars c on c.id = p.fiscal_calendar_id
-       where p.id = ${fixture.periodId}`),
+       where p.id = ${fixture.periodId}`, "objects"),
   );
-  assert.ok(result.rows[0], "scratch period exists");
-  return result.rows[0]!;
+  assert.ok(result[0], "scratch period exists");
+  return result[0]!;
 }
 
 async function canonicalIndexExists(): Promise<boolean> {
   const result = await withBypassContext(() =>
     db.execute<{ name: string | null }>(sql`
-      select to_regclass('public.periods_org_year_num') as name`),
+      select to_regclass('public.periods_org_year_num') as name`, "objects"),
   );
-  return result.rows[0]?.name === "periods_org_year_num";
+  return result[0]?.name === "periods_org_year_num";
 }
 
 async function installStagingPause(orgId: string): Promise<() => Promise<void>> {
@@ -381,21 +381,21 @@ test(
         select (select id from accounting_books where org_id = ${fixture.orgId} and is_primary) as "bookId",
                (select id from subsidiaries where org_id = ${fixture.orgId} and parent_id is null) as "subsidiaryId",
                (select id from accounts where org_id = ${fixture.orgId} and number = '1000') as "bankId",
-               (select id from accounts where org_id = ${fixture.orgId} and number = '4000') as "revenueId"`));
+               (select id from accounts where org_id = ${fixture.orgId} and number = '4000') as "revenueId"`, "objects"));
       const entryId = randomUUID();
       await withBypassContext(() => db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
            period_id, memo, status, origin)
-        values (${entryId}, ${fixture.orgId}, ${spine.rows[0]!.bookId}, ${spine.rows[0]!.subsidiaryId},
+        values (${entryId}, ${fixture.orgId}, ${spine[0]!.bookId}, ${spine[0]!.subsidiaryId},
                 'WIZARD-OMITTED-CURRENCY', '2026-07-15', ${fixture.periodId},
                 'omitted currency evidence', 'draft', 'manual')`));
       await withBypassContext(() => db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount)
-        values (${fixture.orgId}, ${entryId}, 1, ${spine.rows[0]!.bankId}, ${spine.rows[0]!.subsidiaryId},
+        values (${fixture.orgId}, ${entryId}, 1, ${spine[0]!.bankId}, ${spine[0]!.subsidiaryId},
                 '1', 'CAD', '1'),
-               (${fixture.orgId}, ${entryId}, 2, ${spine.rows[0]!.revenueId}, ${spine.rows[0]!.subsidiaryId},
+               (${fixture.orgId}, ${entryId}, 2, ${spine[0]!.revenueId}, ${spine[0]!.subsidiaryId},
                 '-1', 'CAD', '-1')`));
       routeState.authz = authorize(fixture);
       routeState.authzQueue = [];
@@ -422,8 +422,8 @@ test(
       );
       assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
       const after = await withBypassContext(() => db.execute<{ base_currency: string }>(sql`
-        select base_currency from orgs where id = ${fixture.orgId}`));
-      assert.equal(after.rows[0]?.base_currency, "CAD");
+        select base_currency from orgs where id = ${fixture.orgId}`, "objects"));
+      assert.equal(after[0]?.base_currency, "CAD");
     } finally {
       routeState.authz = null;
       routeState.authzQueue = [];
@@ -464,7 +464,7 @@ test(
           })));
       const zoneOf = async (): Promise<unknown> =>
         (await withBypassContext(() => db.execute<{ settings: Record<string, unknown> }>(sql`
-          select settings from orgs where id = ${fixture.orgId}`))).rows[0]!.settings.timeZone;
+          select settings from orgs where id = ${fixture.orgId}`, "objects")))[0]!.settings.timeZone;
 
       // An alias the runtime accepts stores canonical, like Company Settings.
       const aliased = await putBody({ timeZone: "US/Eastern" });
@@ -473,8 +473,8 @@ test(
       const zoneAudit = await withBypassContext(() => db.execute<{ change: unknown }>(sql`
         select changes->'settings'->'timeZone' as change from audit_log
          where org_id = ${fixture.orgId} and table_name = 'orgs'
-         order by at desc limit 1`));
-      assert.deepEqual(zoneAudit.rows[0]?.change, [null, "America/New_York"]);
+         order by at desc limit 1`, "objects"));
+      assert.deepEqual(zoneAudit[0]?.change, [null, "America/New_York"]);
 
       // An unknown zone refuses before the transaction writes anything.
       const refused = await putBody({ timeZone: "Not/AZone" });
@@ -560,8 +560,8 @@ test(
            where datname = current_database()
              and pid <> pg_backend_pid()
              and wait_event_type = 'Lock'
-             and query ilike '%from orgs%'`);
-        if ((waiting.rows[0]?.count ?? 0) > 0) {
+             and query ilike '%from orgs%'`, "objects");
+        if ((waiting[0]?.count ?? 0) > 0) {
           wizardWaiting = true;
           break;
         }
@@ -598,8 +598,8 @@ test(
         key: "base-currency-locked",
       });
       const after = await withBypassContext(() => db.execute<{ base_currency: string }>(sql`
-        select base_currency from orgs where id = ${org.orgId}`));
-      assert.equal(after.rows[0]?.base_currency, "CAD");
+        select base_currency from orgs where id = ${org.orgId}`, "objects"));
+      assert.equal(after[0]?.base_currency, "CAD");
     } finally {
       routeState.authz = null;
       routeState.authzQueue = [];

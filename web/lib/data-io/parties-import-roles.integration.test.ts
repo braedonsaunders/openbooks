@@ -30,13 +30,11 @@ test(
       // scoped to the imported short codes.
       const roleCount = async (table: string): Promise<number> =>
         Number(
-          (
-            await db.execute<{ count: string }>(
+          (await db.execute<{ count: string }>(
               sql`select count(*)::text as count from ${sql.raw(table)} r
                    join parties p on p.id = r.party_id and p.org_id = r.org_id
-                  where r.org_id = ${org.orgId} and p.short_code in ('ACME', 'BETA')`,
-            )
-          ).rows[0]?.count ?? '0',
+                  where r.org_id = ${org.orgId} and p.short_code in ('ACME', 'BETA')`, 'objects',
+            ))[0]?.count ?? '0',
         )
       await withOrgContext(org.orgId, async () => {
         const first = await resource.write(
@@ -49,10 +47,10 @@ test(
         )
         assert.equal(first.created, 2, JSON.stringify(first.errors))
 
-        const stored = (await db.execute<{ short_code: string; kind: string }>(sql`
+        const stored = await db.execute<{ short_code: string; kind: string }>(sql`
           select short_code, kind from parties
            where org_id = ${org.orgId} and short_code in ('ACME', 'BETA')
-           order by short_code`)).rows
+           order by short_code`, 'objects')
         assert.deepEqual(
           stored.map((r) => [r.short_code, r.kind]),
           [['ACME', 'company'], ['BETA', 'vendor']],
@@ -111,10 +109,10 @@ test('parties import admits native employees and refuses corporate employee role
         { shortCode: 'PERSON-NEW', displayName: 'Natural person', kind: 'Person', isEmployee: 'yes' },
       ], 'upsert', ctx)
       assert.equal(accepted.created, 2, JSON.stringify(accepted.errors))
-      const stored = (await db.execute<{ kind: string; active: boolean }>(sql`
+      const stored = await db.execute<{ kind: string; active: boolean }>(sql`
         select p.kind, r.is_active as active from parties p join employee_roles r on r.org_id=p.org_id and r.party_id=p.id
         where p.org_id=${org.orgId} and p.short_code in ('EMP-NEW', 'PERSON-NEW') order by p.short_code
-      `)).rows
+      `, 'objects')
       assert.deepEqual(stored, [{ kind: 'employee', active: true }, { kind: 'person', active: true }])
       for (const dryRun of [true, false]) {
         const refused = await resource.write([{ shortCode: 'CORP-EMP', displayName: 'Corporate identity', kind: 'Company', isEmployee: 'yes' }],
@@ -123,7 +121,7 @@ test('parties import admits native employees and refuses corporate employee role
         assert.match(refused.errors[0]!.message, /requires kind "person" or "employee"/)
         assert.equal(refused.created, 0)
       }
-      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from parties where org_id=${org.orgId} and short_code='CORP-EMP'`)).rows[0]!.n, '0')
+      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from parties where org_id=${org.orgId} and short_code='CORP-EMP'`, 'objects'))[0]!.n, '0')
       const imported = await resource.read()
       assert.equal(imported.rows.find(row => row.shortCode === 'EMP-NEW')?.isEmployee, true)
     })

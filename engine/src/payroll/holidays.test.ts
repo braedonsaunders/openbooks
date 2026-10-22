@@ -1090,7 +1090,7 @@ test("New Brunswick caps a route salesperson's unworked WEEK at the four-week av
     // none). A mock that answers every query with stub lines predates that
     // read and fails its contract instead of pricing the cap.
     const queued = [trailing, [], week, []];
-    return { execute: async () => ({ rows: queued.shift() ?? [] }) };
+    return { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: queued.shift() ?? [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) };
   };
   const base = {
     orgId: "org", employeePartyId: "emp", excludeDocumentId: "run",

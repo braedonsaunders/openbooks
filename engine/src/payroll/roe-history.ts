@@ -122,17 +122,17 @@ async function authorize(input:RoeHistorySubject,write:boolean){
 async function retainSource(input:RoeHistorySubject,ref:RoeReportingSource){
   // Importers upload the source through the native File Cabinet. A private
   // file belonging to another operator is never opened through payroll.
-  const rows=(await db.execute(sql`select v.id from file_versions v join files f on f.id=v.file_id
+  const rows=await db.execute(sql`select v.id from file_versions v join files f on f.id=v.file_id
     where f.org_id=${input.orgId} and f.id=${ref.sourceFileId} and v.id=${ref.sourceVersionId}
-      and v.content_hash=${ref.sourceSha256} and v.created_by=${input.actorId} and not f.is_inactive for share of f,v`)).rows;
+      and v.content_hash=${ref.sourceSha256} and v.created_by=${input.actorId} and not f.is_inactive for share of f,v`, 'objects');
   if(rows.length!==1)throw new PayrollError('Upload the original source to File Cabinet as the importing operator, then select its exact retained version and hash');
 }
 async function unissued(input:RoeHistorySubject){
   await assertRoeLegacySourcesBound(input.orgId,input.employeePartyId);
 }
 async function audit(input:RoeHistorySubject,table:string,id:string,before:unknown,after:unknown,reason:string){
-  const rows=(await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${input.orgId},${table},${id},${after===null?'delete':before?'update':'insert'},${JSON.stringify({before,after,reason})}::jsonb,${input.actorId}) returning id`)).rows;
+  const rows=await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    values(${input.orgId},${table},${id},${after===null?'delete':before?'update':'insert'},${JSON.stringify({before,after,reason})}::jsonb,${input.actorId}) returning id`, 'objects');
   if(rows.length!==1)throw new PayrollError('The reporting evidence import audit was not retained');
 }
 function freshness(current:{id:string;updatedAt:string}|undefined,input:{expectedId:string|null;expectedUpdatedAt:string|null}){
@@ -149,7 +149,7 @@ export async function importRoePriorPeriod(subject:RoeHistorySubject,raw:RoePrio
     await authorize(subject,true);await retainSource(subject,input);
     const current=(await db.execute<RoePriorPeriod>(sql`select ${PERIOD_COLUMNS} from payroll_roe_historical_periods
       where org_id=${subject.orgId} and employment_id=${subject.employmentId}
-        and ${input.expectedId===null?sql`period_start=${input.periodStart}::date and period_end=${input.periodEnd}::date`:sql`id=${input.expectedId}::uuid`} for update`)).rows[0];
+        and ${input.expectedId===null?sql`period_start=${input.periodStart}::date and period_end=${input.periodEnd}::date`:sql`id=${input.expectedId}::uuid`} for update`, 'objects'))[0];
     const values={employmentId:subject.employmentId,subsidiaryId:subject.subsidiaryId,filingAccountId:input.filingAccountId,payScheduleId:input.payScheduleId,
       frequency:input.frequency,periodStart:input.periodStart,periodEnd:input.periodEnd,payDate:input.payDate,earnedFrom:input.earnedFrom,earnedTo:input.earnedTo,
       insurableEarnings:input.insurableEarnings,insurableHours:input.insurableHours,nilPeriod:input.nilPeriod,
@@ -163,13 +163,13 @@ export async function importRoePriorPeriod(subject:RoeHistorySubject,raw:RoePrio
       source_file_id=${input.sourceFileId},source_version_id=${input.sourceVersionId},source_sha256=${input.sourceSha256},source_reference=${input.sourceReference},
       insurance_reference=${input.insuranceReference},hours_reference=${input.hoursReference},change_reason=${input.reason},updated_by=${subject.actorId},
       updated_at=greatest(clock_timestamp(),updated_at+interval '1 microsecond') where org_id=${subject.orgId} and id=${current.id}
-        and updated_at::text=${input.expectedUpdatedAt} returning ${PERIOD_COLUMNS}`)).rows:
+        and updated_at::text=${input.expectedUpdatedAt} returning ${PERIOD_COLUMNS}`, 'objects')):
       (await db.execute<RoePriorPeriod>(sql`insert into payroll_roe_historical_periods(org_id,employee_party_id,employment_id,subsidiary_id,
       filing_account_id,pay_schedule_id,frequency,period_start,period_end,pay_date,earned_from,earned_to,insurable_earnings,insurable_hours,nil_period,
       source_file_id,source_version_id,source_sha256,source_reference,insurance_reference,hours_reference,change_reason,created_by,updated_by)
       values(${subject.orgId},${subject.employeePartyId},${subject.employmentId},${subject.subsidiaryId},${input.filingAccountId},${input.payScheduleId},${input.frequency},
       ${input.periodStart},${input.periodEnd},${input.payDate},${input.earnedFrom},${input.earnedTo},${input.insurableEarnings},${input.insurableHours},${input.nilPeriod},
-      ${input.sourceFileId},${input.sourceVersionId},${input.sourceSha256},${input.sourceReference},${input.insuranceReference},${input.hoursReference},${input.reason},${subject.actorId},${subject.actorId}) returning ${PERIOD_COLUMNS}`)).rows;
+      ${input.sourceFileId},${input.sourceVersionId},${input.sourceSha256},${input.sourceReference},${input.insuranceReference},${input.hoursReference},${input.reason},${subject.actorId},${subject.actorId}) returning ${PERIOD_COLUMNS}`, 'objects'));
     if(rows.length!==1)throw new PayrollError('The prior reporting period was not imported');
     await audit(subject,'payroll_roe_historical_periods',rows[0]!.id,current??null,rows[0],input.reason);return rows[0]!;
   });
@@ -180,11 +180,11 @@ export async function qualifyRoeLine(subject:RoeHistorySubject,raw:RoeLineEviden
   const input=validateRoeLineEvidence(raw);
   return withOrgTransaction(subject.orgId,async()=>{
     await authorize(subject,true);await retainSource(subject,input);
-    const lines=(await db.execute<{snapshot:Record<string,unknown>}>(sql`select public.payroll_roe_reporting_line_snapshot(l.id,l.org_id) as snapshot
+    const lines=await db.execute<{snapshot:Record<string,unknown>}>(sql`select public.payroll_roe_reporting_line_snapshot(l.id,l.org_id) as snapshot
       from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
       join documents d on d.org_id=r.org_id and d.id=r.document_id where l.org_id=${subject.orgId} and l.id=${input.payStubLineId}
         and s.employee_party_id=${subject.employeePartyId} and s.employment_id=${subject.employmentId} and d.subsidiary_id=${subject.subsidiaryId}
-        and s.currency_code='CAD' and r.run_status='committed' and l.kind='earning' for share of l,s,r,d`)).rows;
+        and s.currency_code='CAD' and r.run_status='committed' and l.kind='earning' for share of l,s,r,d`, 'objects');
     if(lines.length!==1||!lines[0]!.snapshot)throw new PayrollError('Choose one committed Canadian earning line in this employee’s native employment');
     const snapshot=lines[0]!.snapshot;
     if(input.isInsurable&&snapshot.hours!==null&&snapshot.hours!==undefined&&toUnits(String(snapshot.hours))!==toUnits(input.insurableHours))throw new PayrollError('Qualified insurable hours must preserve the retained paid-hour source');
@@ -193,7 +193,7 @@ export async function qualifyRoeLine(subject:RoeHistorySubject,raw:RoeLineEviden
     }else if(typeof snapshot.earnedFrom==='string'&&input.earnedFrom!==null&&input.earnedFrom<snapshot.earnedFrom
       ||typeof snapshot.earnedTo==='string'&&input.earnedTo!==null&&input.earnedTo>snapshot.earnedTo)throw new PayrollError('Qualified earned evidence cannot expand the retained payroll span — correct its native source first');
     const current=(await db.execute<RoeLineEvidence>(sql`select ${LINE_COLUMNS} from payroll_roe_line_evidence
-      where org_id=${subject.orgId} and pay_stub_line_id=${input.payStubLineId} for update`)).rows[0];
+      where org_id=${subject.orgId} and pay_stub_line_id=${input.payStubLineId} for update`, 'objects'))[0];
     if(current?.reportingBasis==='separation_payment'&&(input.reportingBasis!=='separation_payment'
       ||input.separationEventId!==current.separationEventId||input.separationPaymentId!=null&&input.separationPaymentId!==current.separationPaymentId))
       throw new PayrollError('Withdraw the unissued separation attribution before changing its payment or event identity');
@@ -217,7 +217,7 @@ export async function qualifyRoeLine(subject:RoeHistorySubject,raw:RoeLineEviden
       insurable_hours=${input.insurableHours},source_file_id=${input.sourceFileId},source_version_id=${input.sourceVersionId},source_sha256=${input.sourceSha256},
       source_reference=${input.sourceReference},insurance_reference=${input.insuranceReference},hours_reference=${input.hoursReference},change_reason=${input.reason},
       updated_by=${subject.actorId},updated_at=greatest(clock_timestamp(),updated_at+interval '1 microsecond')
-      where org_id=${subject.orgId} and id=${current.id} and updated_at::text=${input.expectedUpdatedAt} returning ${LINE_COLUMNS}`)).rows:
+      where org_id=${subject.orgId} and id=${current.id} and updated_at::text=${input.expectedUpdatedAt} returning ${LINE_COLUMNS}`, 'objects')):
       (await db.execute<RoeLineEvidence>(sql`insert into payroll_roe_line_evidence(org_id,employee_party_id,employment_id,subsidiary_id,pay_stub_line_id,line_snapshot,
       reporting_basis,separation_event_id,separation_payment_id,separation_basis_snapshot,
       report_period_start,report_period_end,earned_from,earned_to,is_insurable,insurable_hours,source_file_id,source_version_id,source_sha256,
@@ -225,7 +225,7 @@ export async function qualifyRoeLine(subject:RoeHistorySubject,raw:RoeLineEviden
       values(${subject.orgId},${subject.employeePartyId},${subject.employmentId},${subject.subsidiaryId},${input.payStubLineId},${JSON.stringify(snapshot)}::jsonb,
       ${input.reportingBasis??'service'},${input.separationEventId??null},${basis?.paymentId??null},${basis?JSON.stringify(basis.snapshot):null}::jsonb,
       ${input.reportPeriodStart},${input.reportPeriodEnd},${input.earnedFrom},${input.earnedTo},${input.isInsurable},${input.insurableHours},${input.sourceFileId},${input.sourceVersionId},${input.sourceSha256},
-      ${input.sourceReference},${input.insuranceReference},${input.hoursReference},${input.reason},${subject.actorId},${subject.actorId}) returning ${LINE_COLUMNS}`)).rows;
+      ${input.sourceReference},${input.insuranceReference},${input.hoursReference},${input.reason},${subject.actorId},${subject.actorId}) returning ${LINE_COLUMNS}`, 'objects'));
     if(rows.length!==1)throw new PayrollError('The payroll-line reporting evidence was not retained');
     await audit(subject,'payroll_roe_line_evidence',rows[0]!.id,current??null,rows[0],input.reason);return rows[0]!;
   });
@@ -235,14 +235,14 @@ export async function readRoeHistoricalEvidence(subject:RoeHistorySubject,range?
   if(range)dates(range.periodFrom,range.periodTo,'The reporting evidence review window');
   return withOrgTransaction(subject.orgId,async()=>{
     await authorize(subject,false);
-    const periods=(await db.execute<RoePriorPeriod>(sql`select ${PERIOD_COLUMNS} from payroll_roe_historical_periods
+    const periods=await db.execute<RoePriorPeriod>(sql`select ${PERIOD_COLUMNS} from payroll_roe_historical_periods
       where org_id=${subject.orgId} and employee_party_id=${subject.employeePartyId} and employment_id=${subject.employmentId} and subsidiary_id=${subject.subsidiaryId}
       ${range?sql`and period_end>=${range.periodFrom}::date and period_start<=${range.periodTo}::date`:sql``}
-      order by period_end desc,id limit 107`)).rows;
-    const lines=(await db.execute<RoeLineEvidence>(sql`select ${LINE_COLUMNS} from payroll_roe_line_evidence
+      order by period_end desc,id limit 107`, 'objects');
+    const lines=await db.execute<RoeLineEvidence>(sql`select ${LINE_COLUMNS} from payroll_roe_line_evidence
       where org_id=${subject.orgId} and employee_party_id=${subject.employeePartyId} and employment_id=${subject.employmentId} and subsidiary_id=${subject.subsidiaryId}
       ${range?sql`and report_period_end>=${range.periodFrom}::date and report_period_start<=${range.periodTo}::date`:sql``}
-      order by report_period_end desc,id limit 5001`)).rows;
+      order by report_period_end desc,id limit 5001`, 'objects');
     if(periods.length>106||lines.length>5000)throw new PayrollError('Reporting evidence exceeds the supported per-employee review window — select a bounded reporting period');
     return {periods,lines};
   });
@@ -254,23 +254,23 @@ export async function withdrawRoeLineEvidence(subject:RoeHistorySubject,input:{e
   if(typeof input.reason!=='string'||!input.reason.trim()||input.reason.trim().length>2000)throw new PayrollError('Record why the unissued attribution is being withdrawn');
   return withOrgTransaction(subject.orgId,async()=>{
     await authorize(subject,true);await unissued(subject);
-    const rows=(await db.execute<RoeLineEvidence>(sql`select ${LINE_COLUMNS} from payroll_roe_line_evidence
+    const rows=await db.execute<RoeLineEvidence>(sql`select ${LINE_COLUMNS} from payroll_roe_line_evidence
       where org_id=${subject.orgId} and id=${input.expectedId} and employee_party_id=${subject.employeePartyId}
-        and employment_id=${subject.employmentId} and subsidiary_id=${subject.subsidiaryId} for update`)).rows;
+        and employment_id=${subject.employmentId} and subsidiary_id=${subject.subsidiaryId} for update`, 'objects');
     if(rows.length!==1)throw new PayrollError('The selected unissued line attribution no longer exists — reload its reporting evidence');
     const current=rows[0]!;freshness(current,input);
-    const removed=(await db.execute(sql`delete from payroll_roe_line_evidence where org_id=${subject.orgId} and id=${current.id}
-      and updated_at::text=${input.expectedUpdatedAt} returning id`)).rows;
+    const removed=await db.execute(sql`delete from payroll_roe_line_evidence where org_id=${subject.orgId} and id=${current.id}
+      and updated_at::text=${input.expectedUpdatedAt} returning id`, 'objects');
     if(removed.length!==1)throw new PayrollError('The selected attribution changed before withdrawal');
     await audit(subject,'payroll_roe_line_evidence',current.id,current,null,input.reason.trim());
     if(current.separationPaymentId!==null){
-      const payments=(await db.execute<{snapshot:Record<string,unknown>;generated:boolean}>(sql`select to_jsonb(p) as snapshot,generated_from_line as generated
+      const payments=await db.execute<{snapshot:Record<string,unknown>;generated:boolean}>(sql`select to_jsonb(p) as snapshot,generated_from_line as generated
         from payroll_roe_separation_payments p where org_id=${subject.orgId} and id=${current.separationPaymentId}
-          and source_line_id=${current.payStubLineId} and separation_event_id=${current.separationEventId} for update`)).rows;
+          and source_line_id=${current.payStubLineId} and separation_event_id=${current.separationEventId} for update`, 'objects');
       if(payments.length!==1)throw new PayrollError('The selected separation declaration no longer matches the withdrawn line');
       if(payments[0]!.generated){
-        const deleted=(await db.execute(sql`delete from payroll_roe_separation_payments where org_id=${subject.orgId}
-          and id=${current.separationPaymentId} and generated_from_line and source_line_id=${current.payStubLineId} returning id`)).rows;
+        const deleted=await db.execute(sql`delete from payroll_roe_separation_payments where org_id=${subject.orgId}
+          and id=${current.separationPaymentId} and generated_from_line and source_line_id=${current.payStubLineId} returning id`, 'objects');
         if(deleted.length!==1)throw new PayrollError('The source-generated reporting declaration changed before withdrawal');
         await audit(subject,'payroll_roe_separation_payments',current.separationPaymentId,payments[0]!.snapshot,null,input.reason.trim());
       }
@@ -299,9 +299,9 @@ export async function applyRoeReportingImport(
               where org_id=${subject.orgId} and employment_id=${subject.employmentId}
                 and ${input.evidence.expectedId===null
                   ?sql`period_start=${input.evidence.periodStart}::date and period_end=${input.evidence.periodEnd}::date`
-                  :sql`id=${input.evidence.expectedId}::uuid`} for update`)).rows[0]
+                  :sql`id=${input.evidence.expectedId}::uuid`} for update`, 'objects'))[0]
           : (await db.execute<{id:string;updatedAt:string}>(sql`select id,updated_at::text as "updatedAt" from payroll_roe_line_evidence
-              where org_id=${subject.orgId} and pay_stub_line_id=${input.evidence.payStubLineId} for update`)).rows[0];
+              where org_id=${subject.orgId} and pay_stub_line_id=${input.evidence.payStubLineId} for update`, 'objects'))[0];
         const after=input.kind==='period'
           ?await importRoePriorPeriod(subject,input.evidence):await qualifyRoeLine(subject,input.evidence);
         const result:RoeReportingImportResult={action:!before?'insert':before.updatedAt===after.updatedAt?'unchanged':'update'};

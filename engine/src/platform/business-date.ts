@@ -101,8 +101,8 @@ export async function businessTimeZoneInTx(
 ): Promise<string> {
   const r = (await executor.execute<{ time_zone: string | null }>(sql`
     select settings->>'timeZone' as time_zone from orgs where id = ${orgId}
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   if (!row) {
     throw new Error(
       `organization ${orgId} not found — cannot resolve its business time zone`,

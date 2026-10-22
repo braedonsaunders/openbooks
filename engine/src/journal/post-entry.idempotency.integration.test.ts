@@ -50,8 +50,8 @@ test(
         status: string;
       }>(sql`
         select count(*)::int as n, min(status) as status from journal_entries
-         where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`));
-      assert.deepEqual(stored.rows, [{ n: 1, status: "posted" }]);
+         where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`, "objects"));
+      assert.deepEqual(stored, [{ n: 1, status: "posted" }]);
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -74,8 +74,8 @@ test(
       for (const [org, result] of [[first, one], [second, two]] as const) {
         const stored = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
           select id from journal_entries
-           where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`));
-        assert.deepEqual(stored.rows.map((row) => row.id), [result.entryId]);
+           where org_id = ${org.orgId} and custom->>'idempotencyKey' = ${key}`, "objects"));
+        assert.deepEqual(stored.map((row) => row.id), [result.entryId]);
       }
     } finally {
       await dropScratchOrg(second.orgId);
@@ -141,10 +141,10 @@ test("reusing a journal key with different financial content refuses without cha
     const rows = await withOrgContext(org.orgId, () => db.execute<{ id: string; amount: string; hash: string }>(sql`
       select je.id, jl.amount::text as amount, je.custom->>'postingRequestHash' as hash
       from journal_entries je join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
-      where je.org_id = ${org.orgId} and je.custom->>'idempotencyKey' = ${key} order by jl.line_number`));
-    assert.equal(rows.rows.length, 2);
-    assert.deepEqual(rows.rows.map(r => r.amount), ["-10.0000", "10.0000"]);
-    assert.ok(rows.rows.every(r => r.id === first.entryId && /^[0-9a-f]{64}$/.test(r.hash)));
+      where je.org_id = ${org.orgId} and je.custom->>'idempotencyKey' = ${key} order by jl.line_number`, "objects"));
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map(r => r.amount), ["-10.0000", "10.0000"]);
+    assert.ok(rows.every(r => r.id === first.entryId && /^[0-9a-f]{64}$/.test(r.hash)));
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -156,8 +156,8 @@ test("concurrent different financial requests sharing a key admit only one posti
     assert.equal(outcomes.filter(r => r.status === "fulfilled").length, 1);
     const refused = outcomes.find(r => r.status === "rejected") as PromiseRejectedResult;
     assert.match(String(refused.reason), /different posting content.*review that journal entry/);
-    const count = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int n from journal_entries where org_id=${org.orgId} and custom->>'idempotencyKey'=${key}`));
-    assert.equal(count.rows[0]!.n, 1);
+    const count = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int n from journal_entries where org_id=${org.orgId} and custom->>'idempotencyKey'=${key}`, "objects"));
+    assert.equal(count[0]!.n, 1);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -169,11 +169,11 @@ test("keyed entries without protected request identity refuse without changing t
       entryNumber: `EVIDENCE-${randomUUID().slice(0, 8)}`, postingDate: org.date, periodId: org.periodId, origin: "manual", currency: "CAD",
       lines: [{ accountId: org.accounts.bank, amount: "-10" }, { accountId: org.accounts.cogs, amount: "10" }] };
     const first = await withOrgContext(org.orgId, () => postEntry(db, { ...request, custom: { idempotencyKey: key } }));
-    const before = (await withOrgContext(org.orgId, () => db.execute<{ raw: string }>(sql`
-      select to_jsonb(e)::text as raw from journal_entries e where org_id=${org.orgId} and id=${first.entryId}`))).rows;
+    const before = await withOrgContext(org.orgId, () => db.execute<{ raw: string }>(sql`
+      select to_jsonb(e)::text as raw from journal_entries e where org_id=${org.orgId} and id=${first.entryId}`, "objects"));
     await assert.rejects(() => withOrgContext(org.orgId, () => postEntry(db, { ...request, idempotencyKey: key })), /no protected request identity/);
-    const after = (await withOrgContext(org.orgId, () => db.execute<{ raw: string }>(sql`
-      select to_jsonb(e)::text as raw from journal_entries e where org_id=${org.orgId} and id=${first.entryId}`))).rows;
+    const after = await withOrgContext(org.orgId, () => db.execute<{ raw: string }>(sql`
+      select to_jsonb(e)::text as raw from journal_entries e where org_id=${org.orgId} and id=${first.entryId}`, "objects"));
     assert.deepEqual(after, before);
   } finally { await dropScratchOrg(org.orgId); }
 });

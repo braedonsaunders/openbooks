@@ -83,22 +83,22 @@ export const POST = defineRoute({
               order by starts_on desc limit 1),
             (select max(fiscal_year) from accounting_periods where org_id = ${user.orgId})
           ) as fiscal_year
-      `))
-    const bookId = requestedBook ?? defaults.rows[0]?.book_id
+      `, 'objects'))
+    const bookId = requestedBook ?? defaults[0]?.book_id
     const fiscalYear = requestedYear !== null
         ? requestedYear
-        : Number(defaults.rows[0]?.fiscal_year)
+        : Number(defaults[0]?.fiscal_year)
     if (!bookId || !Number.isInteger(fiscalYear)) {
         return NextResponse.json({ error: 'configure_an_accounting_book_and_periods_first' }, { status: 409 })
       }
     const valid = (await db.execute(sql`
         select 1 from accounting_books where id = ${bookId} and org_id = ${user.orgId} and is_active
-      `))
+      `, 'objects'))
     const havePeriods = (await db.execute(sql`
         select 1 from accounting_periods
          where org_id = ${user.orgId} and fiscal_year = ${fiscalYear} and not is_adjustment limit 1
-      `))
-    if (!valid.rows[0] || !havePeriods.rows[0]) {
+      `, 'objects'))
+    if (!valid[0] || !havePeriods[0]) {
         return NextResponse.json({ error: 'invalid_book_or_fiscal_year' }, { status: 422 })
       }
     const requestedName = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
@@ -110,8 +110,8 @@ export const POST = defineRoute({
             select name from budget_scenarios
              where org_id = ${user.orgId} and book_id = ${bookId} and fiscal_year = ${fiscalYear} and kind = ${kind}
                and (name = ${baseName} or name like ${`${baseName} (%`})
-          `))
-          const used = new Set(names.rows.map((row) => row.name))
+          `, 'objects'))
+          const used = new Set(names.map((row) => row.name))
           let name = baseName
           for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
 
@@ -120,14 +120,14 @@ export const POST = defineRoute({
               (org_id, book_id, fiscal_year, name, description, kind, status, created_by, updated_by)
             values (${user.orgId}, ${bookId}, ${fiscalYear}, ${name}, ${description}, ${kind}, 'draft', ${user.id}, ${user.id})
             returning id, revision
-          `))
-          const scenario = inserted.rows[0]!
+          `, 'objects'))
+          const scenario = inserted[0]!
 
           if (sourceScenarioId) {
             const source = (await tx.execute<{ id: string }>(sql`
               select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
-            `))
-            if (!source.rows[0]) throw new Error('source_not_found')
+            `, 'objects'))
+            if (!source[0]) throw new Error('source_not_found')
             const unmapped = (await tx.execute<{ period_name: string }>(sql`
               select distinct source_period.name as period_name
                 from budget_lines bl
@@ -142,9 +142,9 @@ export const POST = defineRoute({
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
                  and destination.id is null
                order by 1
-            `))
-            if (unmapped.rows.length > 0) {
-              const names = unmapped.rows.map((row) => row.period_name).join(', ')
+            `, 'objects'))
+            if (unmapped.length > 0) {
+              const names = unmapped.map((row) => row.period_name).join(', ')
               throw new BudgetMutationError(`unmapped_periods: no ${fiscalYear} period matches source period(s) ${names}`)
             }
             await tx.execute(sql`

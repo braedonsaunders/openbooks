@@ -414,11 +414,11 @@ async function audit(input: {
       })}::jsonb, ${input.actorId ?? null})`);
 }
 async function installments(orgId: string, pledgeId: string): Promise<InstallmentRow[]> {
-  return (await db.execute<InstallmentRow>(sql`
+  return await db.execute<InstallmentRow>(sql`
     select id, installment_number, due_on::text as due_on, amount::text as amount
       from pledge_installments
      where org_id = ${orgId} and pledge_id = ${pledgeId}
-     order by installment_number, due_on, id`)).rows;
+     order by installment_number, due_on, id`, "objects");
 }
 async function readPledge(orgId: string, id: string, lock = false): Promise<PledgeRow | null> {
   const result = await db.execute<PledgeRow>(sql`
@@ -427,17 +427,17 @@ async function readPledge(orgId: string, id: string, lock = false): Promise<Pled
            present_value::text as present_value, allowance_amount::text as allowance_amount,
            status, booked_on::text as booked_on, booking_entry_id
       from pledges where org_id = ${orgId} and id = ${id}
-      ${sql.raw(lock ? "for update" : "")}`);
-  return result.rows[0] ?? null;
+      ${sql.raw(lock ? "for update" : "")}`, "objects");
+  return result[0] ?? null;
 }
 async function hasActiveBookingEntry(orgId: string, bookingEntryId: string | null): Promise<boolean> {
   if (!bookingEntryId) return false;
   return Boolean((await db.execute(sql`select 1 from journal_entries
     -- Live entries only: a reversed booking cannot authorize further pledge postings.
-    where org_id = ${orgId} and id = ${bookingEntryId} and status = 'posted'`)).rows[0]);
+    where org_id = ${orgId} and id = ${bookingEntryId} and status = 'posted'`, "objects"))[0]);
 }
 async function activity(orgId: string, pledgeId: string, asOfDate?: string): Promise<Activity> {
-  const rows = (await db.execute<{ posting_date: string; custom: Record<string, unknown> | null }>(sql`
+  const rows = await db.execute<{ posting_date: string; custom: Record<string, unknown> | null }>(sql`
     select je.posting_date::text as posting_date, je.custom from journal_entries je
      where je.org_id = ${orgId} and je.origin = 'pledge'
        and je.status in ('posted', 'reversed') and je.reverses_entry_id is null
@@ -448,7 +448,7 @@ async function activity(orgId: string, pledgeId: string, asOfDate?: string): Pro
        )
        and je.custom #>> '{nonprofitPledge,pledgeId}' = ${pledgeId}
        and (${asOfDate ?? null}::date is null or je.posting_date <= ${asOfDate ?? null}::date)
-     order by je.posting_date, je.id`)).rows;
+     order by je.posting_date, je.id`, "objects");
   const out: Activity = {
     collected: new Map(), writtenOff: new Map(), collectionsByMonth: new Map(),
     writeOffsByMonth: new Map(), discountWrittenOffByMonth: new Map(),
@@ -521,7 +521,7 @@ async function postPledge(input: {
     select b.id, s.base_currency as currency
       from accounting_books b join subsidiaries s
         on s.org_id = b.org_id and s.id = ${input.pledge.subsidiary_id}
-     where b.org_id = ${input.orgId} and b.is_primary and b.is_active and b.posts_gl limit 1`)).rows[0];
+     where b.org_id = ${input.orgId} and b.is_primary and b.is_active and b.posts_gl limit 1`, "objects"))[0];
   if (!book) throw fail({
     message: "The pledge's subsidiary has no active primary GL book.",
     status: 409, code: "pledge_book_unavailable",
@@ -581,8 +581,8 @@ export async function createPledge(input: CreatePledgeInput): Promise<{
            select 1 from segment_values sv
            join segment_definitions sd on sd.org_id = sv.org_id and sd.id = sv.segment_id
             where sv.org_id = f.org_id and sv.id = f.id and sv.is_active
-              and sd.key = 'fund' and sd.source_kind = 'custom')`);
-    if (refs.rows.length !== 1) throw fail({
+              and sd.key = 'fund' and sd.source_kind = 'custom')`, "objects");
+    if (refs.length !== 1) throw fail({
       message: "The donor, fund, or subsidiary is not an active record in this organization.",
       code: "pledge_reference_not_found",
       remedy: "Choose an active donor, fund, and subsidiary from this organization.",
@@ -595,8 +595,8 @@ export async function createPledge(input: CreatePledgeInput): Promise<{
       values (${input.orgId}, ${input.subsidiaryId}, ${pledgeNumber}, ${input.donorPartyId},
         ${input.fundId}, ${totalAmount}, ${discountRate}, 'draft',
         ${JSON.stringify(input.custom ?? {})}::jsonb, ${input.actorId ?? null}, ${input.actorId ?? null})
-      returning id`);
-    const id = inserted.rows[0]?.id;
+      returning id`, "objects");
+    const id = inserted[0]?.id;
     if (!id) throw fail({
       message: "The pledge record was not created.", status: 409, code: "pledge_write_missing",
       remedy: "Retry the pledge after checking the organization and accounting references.",
@@ -607,8 +607,8 @@ export async function createPledge(input: CreatePledgeInput): Promise<{
         insert into pledge_installments
           (org_id, pledge_id, installment_number, due_on, amount, created_by)
         values (${input.orgId}, ${id}, ${index + 1}, ${flow.dueOn}, ${flow.amount}, ${input.actorId ?? null})
-        returning id`);
-      if (row.rows.length !== 1) throw fail({
+        returning id`, "objects");
+      if (row.length !== 1) throw fail({
         message: "Pledge installment " + (index + 1) + " was not created.",
         status: 409, code: "pledge_installment_write_missing",
         remedy: "Retry the pledge after checking the installment schedule.",
@@ -684,7 +684,7 @@ export async function bookPledge(input: {
         booking_entry_id = ${posted.entryId}, status = 'booked',
         updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${pledge.id} and status = 'draft'
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "Pledge " + pledge.pledge_number + " changed before booking could be recorded.",
       status: 409, code: "pledge_booking_write_missing", remedy: "Refresh the pledge and retry booking.",
@@ -745,7 +745,7 @@ export async function topUpPledgeAllowance(input: {
     const updated = (await db.execute<{ id: string }>(sql`
       update pledges set allowance_amount = ${balance}, updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${pledge.id} and allowance_amount = ${pledge.allowance_amount}
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "Pledge allowance changed before the top-up could be recorded.",
       status: 409, code: "pledge_allowance_write_missing",
@@ -872,7 +872,7 @@ export async function writeOffPledge(input: {
         updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${pledge.id} and status = ${pledge.status}
          and allowance_amount = ${pledge.allowance_amount}
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "Pledge changed before its write-off could be recorded.",
       status: 409, code: "pledge_writeoff_write_missing", remedy: "Refresh the pledge and retry the write-off.",
@@ -965,7 +965,7 @@ export async function collectPledgeInstallments(input: {
       field: "allowanceAccountId",
     });
     if (released > 0n) {
-      const accounts = (await db.execute<{ allowance_id: string; contributions_id: string }>(sql`
+      const accounts = await db.execute<{ allowance_id: string; contributions_id: string }>(sql`
         select distinct a.account_id as allowance_id, c.account_id as contributions_id
           from journal_entries e
           join journal_lines a on a.org_id = e.org_id and a.entry_id = e.id and a.line_number = 2
@@ -974,7 +974,7 @@ export async function collectPledgeInstallments(input: {
          where e.org_id = ${input.orgId} and e.status = 'posted' and e.origin = 'pledge'
            and e.reverses_entry_id is null
            and e.custom #>> '{nonprofitPledge,pledgeId}' = ${pledge.id}
-           and e.custom #>> '{nonprofitPledge,operation}' = 'allowance_top_up'`)).rows;
+           and e.custom #>> '{nonprofitPledge,operation}' = 'allowance_top_up'`, "objects");
       if (accounts.length !== 1 || accounts[0]?.allowance_id !== input.allowanceAccountId
           || accounts[0]?.contributions_id !== input.contributionsAccountId) throw fail({
         message: "The collection's allowance and contributions accounts do not match this pledge's active allowance postings.",
@@ -1005,7 +1005,7 @@ export async function collectPledgeInstallments(input: {
       update pledges set status = ${nextStatus}, allowance_amount = ${allowanceBalance}, updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${pledge.id} and status = ${pledge.status}
          and allowance_amount = ${pledge.allowance_amount}
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "Pledge changed before its collection could be recorded.",
       status: 409, code: "pledge_collection_write_missing", remedy: "Refresh the pledge and retry collection.",
@@ -1027,7 +1027,7 @@ async function reverseBooking(input: {
     id: string; book_id: string; subsidiary_id: string; entry_number: string; status: string;
   }>(sql`
     select id, book_id, subsidiary_id, entry_number, status from journal_entries
-     where org_id = ${input.orgId} and id = ${input.entryId} for update`)).rows[0];
+     where org_id = ${input.orgId} and id = ${input.entryId} for update`, "objects"))[0];
   if (!source || source.status !== "posted") throw fail({
     message: "Pledge " + input.pledge.pledge_number + "'s booking entry is not posted.",
     status: 409, code: "pledge_booking_not_reversible", remedy: "Use the journal correction workflow.",
@@ -1100,7 +1100,7 @@ export async function cancelPledge(input: {
     const updated = (await db.execute<{ id: string }>(sql`
       update pledges set status = 'cancelled', updated_at = now(), updated_by = ${input.actorId ?? null}
        where org_id = ${input.orgId} and id = ${pledge.id} and status = 'booked'
-      returning id`)).rows[0];
+      returning id`, "objects"))[0];
     if (!updated) throw fail({
       message: "Pledge changed before cancellation could be recorded.",
       status: 409, code: "pledge_cancel_write_missing", remedy: "Refresh the pledge and retry cancellation.",
@@ -1174,7 +1174,7 @@ export async function runPledgeDiscountAmortization(input: {
     if (!(await lockAndCheckOrgFeature(db, input.orgId, FEATURE))) {
       return { posted: 0, skipped: 0, reason: "pledges is disabled in Company Settings → Features" };
     }
-    const rows = (await db.execute<PledgeRow>(sql`
+    const rows = await db.execute<PledgeRow>(sql`
       select pledges.id, pledges.pledge_number, pledges.subsidiary_id, pledges.donor_party_id, pledges.fund_id,
         pledges.total_amount::text as total_amount, pledges.discount_rate::text as discount_rate,
         pledges.present_value::text as present_value, pledges.allowance_amount::text as allowance_amount,
@@ -1187,7 +1187,7 @@ export async function runPledgeDiscountAmortization(input: {
       where pledges.org_id = ${input.orgId}
         and pledges.status in ('booked', 'collecting', 'fulfilled', 'written_off')
         and pledges.booked_on < ${input.periodEnd}
-      order by pledges.booked_on, pledges.id`)).rows;
+      order by pledges.booked_on, pledges.id`, "objects");
     let posted = 0;
     let skipped = 0;
     const month = monthKey(input.periodEnd);

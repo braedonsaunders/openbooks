@@ -20,8 +20,7 @@ export const GET = defineRoute({
     if (!isUuid(id)) return notFound("channel");
     const outOfScope = await guardChannelScope(gate, id);
     if (outOfScope) return outOfScope;
-    const rows = (
-      await withOrgContext(gate.user.orgId, () =>
+    const rows = await withOrgContext(gate.user.orgId, () =>
         db.execute<{ value: string; label: string }>(sql`
           select sl.id as value, concat_ws(' ', nullif(l.name, ''), concat('(', sl.code, ')')) as label
             from stock_locations sl
@@ -30,9 +29,8 @@ export const GET = defineRoute({
            where sl.org_id = ${gate.user.orgId} and sl.is_active
              and (l.subsidiary_id is null or l.subsidiary_id = c.subsidiary_id)
              ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-           order by l.name, sl.code limit 2000`),
-      )
-    ).rows;
+           order by l.name, sl.code limit 2000`, "objects"),
+      );
     return NextResponse.json({ options: rows });
   },
 });

@@ -39,7 +39,7 @@ export async function runExtensionAction(context: ApplicationContext, key: strin
     if (app.activeVersionId !== request.versionId) throw conflict('This extension has changed. Reload the page before submitting.')
     const entry = (await db.execute<{ content: string }>(sql`select content from app_files
       where org_id=${orgId} and app_id=${app.id} and version_id=${request.versionId}
-      and path=${app.manifest.frontend.entry} and not is_binary`)).rows[0]
+      and path=${app.manifest.frontend.entry} and not is_binary`, 'objects'))[0]
     if (!entry) throw notFound('extension screen')
     const screen = parseNativeExtension(entry.content, app.manifest).screens.find(item => item.key === request.screenKey)
     if (!screen || screen.kind !== 'action') throw notFound('extension action')

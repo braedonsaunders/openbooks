@@ -26,11 +26,11 @@ export const POST = defineRoute({
     return NextResponse.json({ errorCode: "notFound" }, { status: 404 });
   }
   const org = (await db.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${gate.user.orgId}`));
+    select base_currency from orgs where id = ${gate.user.orgId}`, "objects"));
   const currency =
     body.currency !== undefined
       ? String(body.currency).trim().toUpperCase()
-      : (org.rows[0]?.base_currency ?? "");
+      : (org[0]?.base_currency ?? "");
   if (typeof body.name !== "string" || !body.name.trim() || !/^[A-Z]{3}$/.test(currency))
     return NextResponse.json({ errorCode: "save" }, { status: 422 });
   const name = body.name.trim();
@@ -45,13 +45,13 @@ export const POST = defineRoute({
       const book = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
         values (${gate.user.orgId}, ${code}, ${name}, ${currency}, false, true, ${gate.user.id}, ${gate.user.id})
-        returning id`));
-      const bookRow = book.rows[0]!;
+        returning id`, "objects"));
+      const bookRow = book[0]!;
       const version = (await tx.execute<{ id: string }>(sql`
         insert into item_rate_versions (org_id, rate_book_id, effective_from, status, custom, created_by, updated_by)
         values (${gate.user.orgId}, ${bookRow.id}, ${today}, 'draft', '{}'::jsonb, ${gate.user.id}, ${gate.user.id})
-        returning id`));
-      const versionRow = version.rows[0]!;
+        returning id`, "objects"));
+      const versionRow = version[0]!;
       await tx.execute(sql`
         insert into labor_rate_version_policies (org_id, version_id, derivation_policy, created_by, updated_by)
         values (${gate.user.orgId}, ${versionRow.id}, 'explicit', ${gate.user.id}, ${gate.user.id})`);

@@ -144,11 +144,11 @@ export async function loadFieldTicketDrawerData({
               where r.party_id = p.id and r.org_id = p.org_id and r.is_active
            )
            ${legalEntityFilter('p.subsidiary_id')}
-         order by p.display_name`),
+         order by p.display_name`, 'objects'),
       db.execute<(FieldTicketDrawerProps['laborItems'])[number]>(sql`
         select id, name from items
          where org_id = ${orgId} and is_active and kind in ('labor', 'service')
-         order by name`),
+         order by name`, 'objects'),
       db.execute<(FieldTicketDrawerProps['timeTypes'])[number]>(sql`
         select tt.id, tt.name, tt.bill_multiplier
           from time_types tt
@@ -173,12 +173,12 @@ export async function loadFieldTicketDrawerData({
                   and snapshot.superseded_at is null
              )
            )
-         order by tt.bill_multiplier, tt.name`),
+         order by tt.bill_multiplier, tt.name`, 'objects'),
       db.execute<(FieldTicketDrawerProps['catalogItems'])[number]>(sql`
         select id, name, kind, default_rate from items
          where org_id = ${orgId} and is_active
            and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
-         order by kind, name`),
+         order by kind, name`, 'objects'),
       ticketProjectOptions(orgId, today, legalEntityFilter),
       ticket.projectId
         ? db.execute<(FieldTicketDrawerProps['projectTasks'])[number]>(sql`
@@ -191,16 +191,16 @@ export async function loadFieldTicketDrawerData({
                   where p.id = project_tasks.project_id and p.org_id = project_tasks.org_id
                     and p.subsidiary_id = ${ticketSubsidiaryId}
                )` : sql``}
-             order by code nulls last, name`)
-        : Promise.resolve({ rows: [] }),
+             order by code nulls last, name`, 'objects')
+        : Promise.resolve([]),
       equipmentEnabled
         ? db.execute<(FieldTicketDrawerProps['equipmentUnits'])[number]>(sql`
             select id, name, unit_number as "unitNumber", charge_item_id as "chargeItemId"
              from equipment_units
              where org_id = ${orgId} and status = 'active' and charge_item_id is not null
                ${legalEntityFilter('subsidiary_id')}
-             order by unit_number, name`)
-        : Promise.resolve({ rows: [] }),
+             order by unit_number, name`, 'objects')
+        : Promise.resolve([]),
       resolveFormLayout({
         orgId,
         userId: authz.user.id,
@@ -214,13 +214,13 @@ export async function loadFieldTicketDrawerData({
 
   return {
     ticket,
-    employees: employees.rows,
-    laborItems: laborItems.rows,
-    timeTypes: timeTypes.rows,
-    catalogItems: catalogItems.rows,
+    employees,
+    laborItems,
+    timeTypes,
+    catalogItems,
     projects: projects.rows,
-    projectTasks: projectTasks.rows,
-    equipmentUnits: equipmentUnits.rows,
+    projectTasks,
+    equipmentUnits,
     equipmentEnabled,
     progressEnabled,
     schedulingEnabled,

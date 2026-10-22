@@ -47,21 +47,22 @@ const mockSources = new Map<string, string>([
       function textOf(query) {
         return Array.isArray(query?.strings) ? query.strings.join(' ') : String(query?.strings ?? query ?? '')
       }
-      async function execute(query) {
+      async function execute(query, mode) {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = textOf(query)
-        if (text.includes('base_currency')) return { rows: [{ base_currency: 'CAD' }] }
+        if (text.includes('base_currency')) return inMode({ rows: [{ base_currency: 'CAD' }] })
         if (text.includes('update document_lines')) {
           // The staged rule reference: values are [ruleId, orgId, documentId, lineNumber].
           const [ruleId, , , lineNumber] = query.values
           const line = state.lines.find((candidate) => candidate.lineNumber === lineNumber)
           if (line) line.distributionRuleId = ruleId
-          return { rows: [] }
+          return inMode({ rows: [] })
         }
-        if (text.includes('from subsidiaries')) return { rows: [] }
-        if (text.includes('from documents where')) return { rows: [] }
-        if (text.includes('from documents d')) return { rows: state.docRows }
-        if (text.includes('from document_lines l')) return { rows: state.lineRows }
-        return { rows: [] }
+        if (text.includes('from subsidiaries')) return inMode({ rows: [] })
+        if (text.includes('from documents where')) return inMode({ rows: [] })
+        if (text.includes('from documents d')) return inMode({ rows: state.docRows })
+        if (text.includes('from document_lines l')) return inMode({ rows: state.lineRows })
+        return inMode({ rows: [] })
       }
       function insertInto(target) {
         return {

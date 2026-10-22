@@ -224,8 +224,8 @@ test("a forced post:true failure commits zero documents or lines — no orphan d
     const r = (await db.execute<{ docs: string; lines: string; effects: string }>(sql`
       select (select count(*) from documents where org_id = ${org.orgId})::text as docs,
              (select count(*) from document_lines where org_id = ${org.orgId})::text as lines,
-             (select count(*) from posting_effects where org_id = ${org.orgId})::text as effects`));
-    assert.deepEqual(r.rows[0], { docs: "0", lines: "0", effects: "0" });
+             (select count(*) from posting_effects where org_id = ${org.orgId})::text as effects`, "objects"));
+    assert.deepEqual(r[0], { docs: "0", lines: "0", effects: "0" });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -250,14 +250,14 @@ test("an actor-less scheduled script posts under explicit system provenance", { 
     assert.ok(res.entryId, "posting returned an entry id");
     const doc = (await db.execute<{ status: string; created_by: string | null; custom: Record<string, string> }>(sql`
       select status::text as status, created_by::text as created_by, custom
-        from documents where id = ${res.id} and org_id = ${org.orgId}`)).rows[0]!;
+        from documents where id = ${res.id} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(doc.status, "posted");
     assert.equal(doc.created_by, null);
     assert.equal(doc.custom.actorKind, "system");
     assert.ok(doc.custom.actorReason);
     const entry = await db.execute(sql`
-      select id from journal_entries where id = ${res.entryId!} and org_id = ${org.orgId}`);
-    assert.equal(entry.rows.length, 1);
+      select id from journal_entries where id = ${res.entryId!} and org_id = ${org.orgId}`, "objects");
+    assert.equal(entry.length, 1);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -301,8 +301,8 @@ test("a scheduled null-actor post:true that fails approval routing is rejected w
       select (select count(*) from documents where org_id = ${org.orgId})::text as docs,
              (select count(*) from document_lines where org_id = ${org.orgId})::text as lines,
              (select count(*) from flow_gates where org_id = ${org.orgId})::text as gates,
-             (select count(*) from flow_runs where org_id = ${org.orgId})::text as runs`));
-    assert.deepEqual(r.rows[0], { docs: "0", lines: "0", gates: "0", runs: "0" });
+             (select count(*) from flow_runs where org_id = ${org.orgId})::text as runs`, "objects"));
+    assert.deepEqual(r[0], { docs: "0", lines: "0", gates: "0", runs: "0" });
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -336,8 +336,8 @@ test("a foreign-organization line department is refused with a domain error and 
     );
     const r = (await db.execute<{ docs: string; lines: string }>(sql`
       select (select count(*) from documents where org_id = ${orgA.orgId})::text as docs,
-             (select count(*) from document_lines where org_id = ${orgA.orgId})::text as lines`));
-    assert.deepEqual(r.rows[0], { docs: "0", lines: "0" });
+             (select count(*) from document_lines where org_id = ${orgA.orgId})::text as lines`, "objects"));
+    assert.deepEqual(r[0], { docs: "0", lines: "0" });
   } finally {
     await dropScratchOrg(orgA.orgId);
     await dropScratchOrg(orgB.orgId);
@@ -394,7 +394,7 @@ test("script journals refuse accounts and projects outside the selected subsidia
     );
     const writes = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'journal'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(writes, 0, "refused references write no draft");
   } finally {
     await dropScratchOrg(org.orgId);

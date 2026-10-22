@@ -33,7 +33,7 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `)).rows[0]!.balance;
+  `, "objects"))[0]!.balance;
 }
 
 async function stockedComponent(org: ScratchOrg, name: string): Promise<string> {
@@ -108,11 +108,11 @@ async function postKitInvoice(
 }
 
 async function kitIssueMovements(orgId: string, lineId: string): Promise<{ id: string; item_id: string; quantity: string; total_value: string; idempotency_key: string }[]> {
-  return (await db.execute<{ id: string; item_id: string; quantity: string; total_value: string; idempotency_key: string }>(sql`
+  return await db.execute<{ id: string; item_id: string; quantity: string; total_value: string; idempotency_key: string }>(sql`
     select id, item_id, quantity::text as quantity, total_value::text as total_value, idempotency_key
       from inventory_movements
      where org_id = ${orgId} and document_line_id = ${lineId} and kind = 'issue'
-     order by item_id`)).rows;
+     order by item_id`, "objects");
 }
 
 test("kit quantities floor to whole kits", () => {
@@ -267,11 +267,11 @@ test(
           update documents set status = 'approved' where id = ${creditId} and org_id = ${org.orgId}`);
         await postDocument(creditId, depsFor(org));
 
-        const receipts = (await db.execute<{ item_id: string; quantity: string; total_value: string }>(sql`
+        const receipts = await db.execute<{ item_id: string; quantity: string; total_value: string }>(sql`
           select item_id, quantity::text as quantity, total_value::text as total_value
             from inventory_movements
            where org_id = ${org.orgId} and document_line_id = ${creditLineId} and kind = 'receipt'
-           order by item_id`)).rows;
+           order by item_id`, "objects");
         assert.equal(receipts.length, 2);
         const byItem = new Map(receipts.map((receipt) => [receipt.item_id, receipt]));
         assert.equal(byItem.get(kettle)?.quantity, "1.0000");

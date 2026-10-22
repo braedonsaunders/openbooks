@@ -164,8 +164,8 @@ test(
       const rows = await withBypass(() => db.execute(sql`
         select count(*)::text as count from custom_records
          where org_id = ${org.orgId} and type_id = ${typeId}
-      `))
-      assert.equal(rows.rows[0]?.count, '0')
+      `, 'objects'))
+      assert.equal(rows[0]?.count, '0')
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId))
     }

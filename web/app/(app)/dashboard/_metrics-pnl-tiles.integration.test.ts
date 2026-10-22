@@ -143,7 +143,7 @@ test("P&L tiles read one consolidated period-to-date call and exclude out-of-win
       await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id,is_summary,is_active)
         values(${cogs},${org.orgId},'5010','Merchandise COGS','cogs',${org.subsidiaryId},false,true)`);
       const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`)).rows[0]!.fiscal_calendar_id;
+        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`, "objects"))[0]!.fiscal_calendar_id;
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${june},${org.orgId},2026,6,'2026-06','2026-06-01','2026-06-30',false,${cal})`);
     });
@@ -278,7 +278,7 @@ test("a business day before the first accounting period refuses on the tiles, ne
       // throws, and the loader must map that misconfiguration into the tile
       // refusal — the dashboard still renders.
       await db.execute(sql`delete from accounting_periods where org_id = ${org.orgId}`);
-      const cal = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+      const cal = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${randomUUID()},${org.orgId},2026,8,'2026-08','2026-08-01','2026-08-31',false,${cal})`);
     });

@@ -42,9 +42,9 @@ export async function setupWriteTransaction<T>(
             select ${sql.raw(column)} from ${sql.raw(entity.table)}
              where ${sql.raw(idColumn(entity))} = ${rowId}
                ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
-             for update`)
-          if (!selected.rows[0]) throw new SetupWriteRefusal('not found', 404)
-          current = selected.rows[0][column]
+             for update`, 'objects')
+          if (!selected[0]) throw new SetupWriteRefusal('not found', 404)
+          current = selected[0][column]
         }
         const requested = body && body[scopeField.key] !== undefined ? body[scopeField.key] : current
         if (typeof requested !== 'string' || !allowed.has(requested.toLowerCase())) {
@@ -59,9 +59,9 @@ export async function setupWriteTransaction<T>(
             select ${sql.raw(column)} from ${sql.raw(entity.table)}
              where ${sql.raw(idColumn(entity))} = ${rowId}
                ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
-             for update`)
-          if (!selected.rows[0]) throw new SetupWriteRefusal('not found', 404)
-          current = selected.rows[0][column]
+             for update`, 'objects')
+          if (!selected[0]) throw new SetupWriteRefusal('not found', 404)
+          current = selected[0][column]
         }
         const requested = body && body[field.key] !== undefined ? body[field.key] : current
         if (requested == null && !scopeField) {
@@ -72,9 +72,9 @@ export async function setupWriteTransaction<T>(
           const visible = await tx.execute<{ subsidiary_id: string | null }>(sql`
             select ${target.subsidiary} as subsidiary_id from ${target.from}
              where ${target.id}=${String(requested)} and ${target.org}=${orgId} for share
-          `)
-          const sharedCustomer = field.ref === 'einvoice-customers' && visible.rows[0]?.subsidiary_id === null
-          if (!visible.rows[0] || (!sharedCustomer && !allowed.has(String(visible.rows[0].subsidiary_id ?? '').toLowerCase()))) {
+          `, 'objects')
+          const sharedCustomer = field.ref === 'einvoice-customers' && visible[0]?.subsidiary_id === null
+          if (!visible[0] || (!sharedCustomer && !allowed.has(String(visible[0].subsidiary_id ?? '').toLowerCase()))) {
             throw new SetupWriteRefusal('The owning record is outside your allowed employer scope', 403)
           }
         }

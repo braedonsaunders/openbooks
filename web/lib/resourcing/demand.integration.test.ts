@@ -28,8 +28,8 @@ test('demand expands visible weeks and weights live CRM opportunities', { skip: 
         (${ids.wonLine},${org.orgId},${ids.visibleDept},'Consultant','2026-04-12','2026-04-12','10.0000',${ids.wonOpp}),
         (${ids.omittedLine},${org.orgId},${ids.visibleDept},'Consultant','2026-04-12','2026-04-12','10.0000',${ids.omittedOpp}),
         (${ids.hiddenLine},${org.orgId},${ids.hiddenDept},'Analyst','2026-04-12','2026-04-12','10.0000',null)`)
-      const off = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":false}'::jsonb,true) where id=${org.orgId} returning id`)
-      assert.equal(off.rows.length, 1)
+      const off = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":false}'::jsonb,true) where id=${org.orgId} returning id`, 'objects')
+      assert.equal(off.length, 1)
     })
     const window = { firstSunday: '2026-04-12', lastSunday: '2026-04-19' }
     await assert.rejects(
@@ -37,8 +37,8 @@ test('demand expands visible weeks and weights live CRM opportunities', { skip: 
       (error: unknown) => typeof error === 'object' && error !== null && 'digest' in error && error.digest === 'NEXT_HTTP_ERROR_FALLBACK;404',
     )
     await withBypassContext(async () => {
-      const on = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":true}'::jsonb,true) where id=${org.orgId} returning id`)
-      assert.equal(on.rows.length, 1)
+      const on = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"resourcing":true}'::jsonb,true) where id=${org.orgId} returning id`, 'objects')
+      assert.equal(on.length, 1)
     })
     const rows = await withOrgContext(org.orgId, () => loadDemandWeeks(org.orgId, new Set([org.subsidiaryId]), window))
     assert.ok(rows.every((row) => row.departmentId !== ids.hiddenDept), 'hidden departments contribute no rows')

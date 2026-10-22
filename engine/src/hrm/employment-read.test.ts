@@ -121,37 +121,38 @@ function emptyState(): FakeState {
 /** Fake runner: routes the real helpers' SQL to in-memory state. */
 function fakeExec(state: FakeState): SqlExecutor {
   return {
-    execute: (async (query: unknown) => {
+    execute: (async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const text = sqlText(query);
       const params = sqlParams(query);
       state.seen.push(text);
       if (/from users/i.test(text)) {
         if (/party_id/i.test(text)) {
           const person = state.users.get(str(params, 1));
-          return { rows: person ? [{ id: str(params, 1), partyId: person.partyId }] : [] };
+          return inMode({ rows: person ? [{ id: str(params, 1), partyId: person.partyId }] : [] });
         }
         const user = state.users.get(str(params, 0));
-        return { rows: user ? [{ isSuperAdmin: user.isSuperAdmin, isActive: user.isActive }] : [] };
+        return inMode({ rows: user ? [{ isSuperAdmin: user.isSuperAdmin, isActive: user.isActive }] : [] });
       }
       if (/role_assignments/i.test(text)) {
         if (/subsidiary_restriction/i.test(text)) {
-          return { rows: [{ restriction: { mode: "all" as const } }] };
+          return inMode({ rows: [{ restriction: { mode: "all" as const } }] });
         }
         const grants = state.roleGrants.get(str(params, 0)) ?? [];
-        return { rows: grants.length ? [{ permissions: grants }] : [] };
+        return inMode({ rows: grants.length ? [{ permissions: grants }] : [] });
       }
       if (/user_permission_overrides/i.test(text)) {
         const denyList = state.denies.get(str(params, 0)) ?? [];
-        return { rows: denyList.map((permission) => ({ permission, effect: "deny" as const })) };
+        return inMode({ rows: denyList.map((permission) => ({ permission, effect: "deny" as const })) });
       }
-      if (/from subsidiaries/i.test(text)) return { rows: [] };
+      if (/from subsidiaries/i.test(text)) return inMode({ rows: [] });
       // Single-statement snapshot: one row with json aggregates, shaped the
       // way pg parses json_agg(row_to_json(...)) — arrays of aliased objects.
       if (/worker_employment_versions/i.test(text)) {
         const record = state.employments.get(`${str(params, 0)}:${str(params, 1)}`);
         const versions = state.employmentVersions.get(`${str(params, 0)}:${str(params, 1)}`) ?? [];
         const assignments = state.assignmentVersions.get(`${str(params, 0)}:${str(params, 1)}`) ?? [];
-        return {
+        return inMode({
           rows: [{
             revision: record ? record.revision : null,
             employment_versions: versions.map((v) => ({
@@ -179,15 +180,15 @@ function fakeExec(state: FakeState): SqlExecutor {
               recorded_until: v.recordedUntil,
             })),
           }],
-        };
+        });
       }
       if (/for share/i.test(text)) {
         const record = state.employments.get(`${str(params, 0)}:${str(params, 1)}`);
-        return { rows: record ? [{ one: 1 }] : [] };
+        return inMode({ rows: record ? [{ one: 1 }] : [] });
       }
       if (/from worker_employments/i.test(text)) {
         const record = state.employments.get(`${str(params, 0)}:${str(params, 1)}`);
-        return {
+        return inMode({
           rows: record
             ? [{
                 id: record.id,
@@ -197,7 +198,7 @@ function fakeExec(state: FakeState): SqlExecutor {
                 revision: record.revision,
               }]
             : [],
-        };
+        });
       }
       throw new Error(`fake runner has no route for: ${text.slice(0, 120)}`);
     }) as SqlExecutor["execute"],

@@ -83,7 +83,7 @@ const partyRevisionCases = [
               await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
               session.user = { id:actor, orgId:org.orgId, name:'Party administrator', email:'party@scratch.test', roles:[], isSuperAdmin:false, envKind:'production', productionOrgId:org.orgId, homeOrgId:org.orgId, homeUserId:actor };
               await db.execute(sql`update parties set updated_at=date_trunc('second',now()+interval '1 day')+interval '123450 microseconds' where id=${org.customerId}`);
-              const exact = (await db.execute<{revision:string}>(sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from parties where id=${org.customerId}`)).rows[0]!.revision;
+              const exact = (await db.execute<{revision:string}>(sql`select to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision from parties where id=${org.customerId}`, 'objects'))[0]!.revision;
               const params = {params:Promise.resolve({id:org.customerId})};
               await withOrgContext(org.orgId,async()=>{
                 const before = await GET(new Request('http://audit.local/api/parties'),params);
@@ -128,7 +128,7 @@ const partyRevisionCases = [
               method:'PATCH',body:JSON.stringify({expectedUpdatedAt:visible!.party.updated_at,additionalSubsidiaryIds:[]}),
             }),{params:Promise.resolve({id:org.customerId})}));
             assert.equal(replaced.status,200,JSON.stringify(await replaced.json()));
-            assert.deepEqual((await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from party_subsidiaries where party_id=${org.customerId}`)).rows.map(row=>row.subsidiary_id),[other]);
+            assert.deepEqual((await db.execute<{subsidiary_id:string}>(sql`select subsidiary_id from party_subsidiaries where party_id=${org.customerId}`, 'objects')).map(row=>row.subsidiary_id),[other]);
             const none=await loadParty(org.customerId,org.orgId,new Set());
             assert.equal(none?.transactionSummary.count,0);
             assert.deepEqual(none?.transactionSummary.currencies,[]);
@@ -184,7 +184,7 @@ const partyDrawerCases = [
                 await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
                 const entry = await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
                 const line = (await db.execute<{ id: string }>(sql`select id from journal_lines
-                  where entry_id = ${entry} and is_open_item`)).rows[0]!.id
+                  where entry_id = ${entry} and is_open_item`, 'objects'))[0]!.id
                 return { id, line }
               }
               const inv = await postDoc('customer_invoice', '100')
@@ -212,7 +212,7 @@ const partyDrawerCases = [
                       -${amount}::numeric, 'CAD', -${amount}::numeric, '1', true)`)
                 await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${pay}`)
                 const payLine = (await db.execute<{ id: string }>(sql`select id from journal_lines
-                  where entry_id = ${pay} and is_open_item`)).rows[0]!.id
+                  where entry_id = ${pay} and is_open_item`, 'objects'))[0]!.id
                 await db.execute(sql`insert into applications
                   (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
                    source_transaction_currency, target_transaction_amount, target_transaction_currency,

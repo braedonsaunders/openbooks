@@ -86,22 +86,24 @@ stubModules({
           .join('')
       }
       const tx = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
-          if (text.includes('for update')) return { rows: state.lockedRow ? [state.lockedRow] : [] }
-          if (text.includes('update tax_return_forms')) return { rows: [], rowCount: state.updateRowCount }
+          if (text.includes('for update')) return inMode({ rows: state.lockedRow ? [state.lockedRow] : [] })
+          if (text.includes('update tax_return_forms')) return inMode({ rows: [], rowCount: state.updateRowCount })
           if (text.includes('insert into audit_log')) {
             state.auditInserts.push(text)
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
           throw new Error('unexpected tx query: ' + text.slice(0, 80))
         },
       }
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           if (text.includes('from tax_return_forms')) {
-            return { rows: state.formRow ? [state.formRow] : [] }
+            return inMode({ rows: state.formRow ? [state.formRow] : [] })
           }
           throw new Error('unexpected database query: ' + text.slice(0, 80))
         },

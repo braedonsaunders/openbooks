@@ -76,7 +76,7 @@ export async function itSurtaxSaldoCarryIns(
   orgId: string,
   taxYear: number,
 ): Promise<SurtaxSaldoCarryIn[]> {
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     employeePartyId: string;
     regionaleSaldo: string;
     comunaleSaldo: string;
@@ -85,7 +85,7 @@ export async function itSurtaxSaldoCarryIns(
            regionale_saldo::text as "regionaleSaldo",
            comunale_saldo::text as "comunaleSaldo"
       from it_addizionali_opening_balances
-     where org_id = ${orgId} and tax_year = ${taxYear}`)).rows;
+     where org_id = ${orgId} and tax_year = ${taxYear}`, "objects");
   return rows.map((row) => ({
     employeePartyId: String(row.employeePartyId),
     regionaleSaldo: String(row.regionaleSaldo),
@@ -161,8 +161,8 @@ export async function saveItSurtaxSaldoCarryIns(input: {
             delete from it_addizionali_opening_balances
              where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
                and tax_year = ${year}
-             returning id`));
-          for (const gone of deleted.rows) {
+             returning id`, "objects"));
+          for (const gone of deleted) {
             result.deleted++;
             await auditSurtaxSaldo(tx, {
               orgId: input.orgId, actorId: input.actorId, rowId: gone.id,
@@ -175,7 +175,7 @@ export async function saveItSurtaxSaldoCarryIns(input: {
           select id from it_addizionali_opening_balances
            where org_id = ${input.orgId} and employee_party_id = ${row.employeePartyId}
              and tax_year = ${year}
-           limit 1`)).rows[0];
+           limit 1`, "objects"))[0];
         const saved = (await tx.execute<{ id: string }>(sql`
           insert into it_addizionali_opening_balances
             (org_id, employee_party_id, tax_year, regionale_saldo, comunale_saldo, created_by, updated_by)
@@ -188,8 +188,8 @@ export async function saveItSurtaxSaldoCarryIns(input: {
                  updated_by = ${input.actorId},
                  updated_at = now()
            where it_addizionali_opening_balances.org_id = ${input.orgId}
-          returning id`));
-        const rowId = saved.rows[0]!.id;
+          returning id`, "objects"));
+        const rowId = saved[0]!.id;
         if (existing) result.updated++;
         else result.created++;
         await auditSurtaxSaldo(tx, {

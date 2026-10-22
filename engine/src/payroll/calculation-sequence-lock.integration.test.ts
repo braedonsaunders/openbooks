@@ -225,12 +225,12 @@ describe("calculation-holds-no-sequence-lock", { skip: !DB }, () => {
       // The defaults that end the shared-prefix ambiguity: the run created
       // above numbers PR-00001, and the only sequence row in the org is the
       // run's own — the calculation allocates nothing further.
-      const rows = (await db.execute<{ document_kind: string; prefix: string; document_number: string }>(sql`
+      const rows = await db.execute<{ document_kind: string; prefix: string; document_number: string }>(sql`
         select s.document_kind, s.prefix, d.document_number
           from number_sequences s
           join pay_runs r on r.org_id = s.org_id and r.document_id = ${fx.documentId}
           join documents d on d.org_id = r.org_id and d.id = r.document_id
-         where s.org_id = ${fx.orgId}`)).rows;
+         where s.org_id = ${fx.orgId}`, "objects");
       assert.deepEqual(rows, [{ document_kind: "pay_run", prefix: "PR-", document_number: "PR-00001" }]);
     } finally {
       await dropScratchOrgReporting(fx.orgId);

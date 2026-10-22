@@ -62,15 +62,15 @@ const validateOverheadRateWrite: SetupEntityValidationHook = async ({ orgId, bod
   // inside the server write path (stripped from client descriptors).
   const { sql } = await import('drizzle-orm')
   const stored = (await executor.execute<{ f: Record<string, boolean> | null }>(
-    sql`select settings->'features' as f from orgs where id = ${orgId}`,
-  )).rows[0]?.f ?? {}
+    sql`select settings->'features' as f from orgs where id = ${orgId}`, 'objects',
+  ))[0]?.f ?? {}
   const projectsOn = featureEnabled(stored, 'projects')
   const manufacturingOn = featureEnabled(stored, 'manufacturing')
   if (!projectsOn && !manufacturingOn) return null
   const current = rowId
     ? (await executor.execute<{ method: string | null; rate_kind: string | null }>(
-      sql`select method, rate_kind from overhead_rates where id = ${rowId} and org_id = ${orgId}`,
-    )).rows[0]
+      sql`select method, rate_kind from overhead_rates where id = ${rowId} and org_id = ${orgId}`, 'objects',
+    ))[0]
     : null
   if (rowId && !current) return 'not found'
   const kind = body.rateKind === undefined || body.rateKind === null

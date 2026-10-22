@@ -52,8 +52,8 @@ export async function createDirectDebitRun(opts: {
      where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
        ${directDebitSubsidiaryScopeFilter(sql`p.subsidiary_id`, opts.allowedSubsidiaryIds)}
      for update of p
-  `));
-    const profile = profileResult.rows[0];
+  `, "objects"));
+    const profile = profileResult[0];
     if (!profile || profile.direction === "credit" || !["nacha_debit", "sepa_debit", "custom"].includes(profile.rail)) {
       throw new PaymentError("select an active direct-debit bank profile");
     }

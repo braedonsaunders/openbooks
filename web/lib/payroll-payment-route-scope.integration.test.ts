@@ -48,7 +48,7 @@ test("payroll payment API carries the caller's scope to historical liability aut
     await withOrgContext(fx.orgId, () => commitPayRun(input));
     await withBypassContext(() => db.execute(sql`update documents set status='approved' where org_id=${fx.orgId} and id=${input.documentId}`));
     const bankId = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`
-      select id from accounts where org_id=${fx.orgId} and type='asset_bank' order by number limit 1`))).rows[0]!.id;
+      select id from accounts where org_id=${fx.orgId} and type='asset_bank' order by number limit 1`, "objects")))[0]!.id;
     // Historical mixed-entity journals are supported: retain the committed GL
     // projection while its liabilities belong to the branch, not the header.
     const postedEntryId = randomUUID();
@@ -85,7 +85,7 @@ test("payroll payment API carries the caller's scope to historical liability aut
     assert.equal(response.status, 422);
     assert.deepEqual(await response.json(), { error: "pay run not found" });
     const run = (await withOrgContext(fx.orgId, () => db.execute<{ paid_at: string | null }>(sql`
-      select paid_at from pay_runs where org_id=${fx.orgId} and document_id=${input.documentId}`))).rows[0]!;
+      select paid_at from pay_runs where org_id=${fx.orgId} and document_id=${input.documentId}`, "objects")))[0]!;
     assert.equal(run.paid_at, null);
     state.gate = { ...state.gate, allowedSubsidiaryIds: null };
     const allowed = await withOrgContext(fx.orgId, () => POST(request(), { params: Promise.resolve({ id: input.documentId }) }));

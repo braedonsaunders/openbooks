@@ -85,8 +85,8 @@ async function seed(orgId: string) {
 
 async function storedCustom(orgId: string, itemId: string): Promise<Record<string, unknown>> {
   const row = await withBypass(() => db.execute<{ custom: Record<string, unknown> }>(sql`
-    select custom from items where id = ${itemId} and org_id = ${orgId}`));
-  return row.rows[0]!.custom;
+    select custom from items where id = ${itemId} and org_id = ${orgId}`, "objects"));
+  return row[0]!.custom;
 }
 
 test(
@@ -189,8 +189,8 @@ test(
       assert.equal(created.status, 403);
 
       const rows = await withBypass(() => db.execute<{ id: string }>(sql`
-        select id from items where org_id = ${org.orgId} and name = ${name}`));
-      assert.equal(rows.rows.length, 0);
+        select id from items where org_id = ${org.orgId} and name = ${name}`, "objects"));
+      assert.equal(rows.length, 0);
     } finally {
       await dropScratchOrg(org.orgId);
     }

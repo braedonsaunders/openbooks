@@ -58,6 +58,6 @@ test('bootstrap refuses an additional unsafe permissive policy rather than maski
   try {
     await client.connect(); await client.query('begin');
     await client.query("create policy unsafe_expense_bypass on pay_component_department_expenses using (current_setting('app.bypass_rls',true)='on') with check (true)");
-    await assert.rejects(client.query(backstop), /pay_component_department_expenses\.unsafe_expense_bypass.*apply the forward tenant-policy repair migration/);
+    await assert.rejects(client.query(backstop), /pay_component_department_expenses\.unsafe_expense_bypass.*replace its bypass with public\.app_bypass_rls_active\(\)/);
   } finally { await client.query('rollback'); await client.end(); }
 });

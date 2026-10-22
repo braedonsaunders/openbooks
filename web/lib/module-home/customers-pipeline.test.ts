@@ -86,12 +86,13 @@ Object.assign(globalThis, {
   __customersPipelineExecutedQueries: executedQueryTexts,
   __customersPipelineOpenItemCalls: openItemCalls,
   __customersPipelineDb: {
-    execute: async (query: unknown) => {
+    execute: async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
       const text = queryText(query)
       executedQueryTexts.push(text)
-      if (text.includes('base_currency')) return { rows: [{ baseCurrency: 'CAD' }] }
-      if (text.includes('from fx_rates')) return { rows: [{ func: 'USD', rate: '1.3500000000', as_of: '2026-01-15' }] }
-      return { rows: [] }
+      if (text.includes('base_currency')) return inMode({ rows: [{ baseCurrency: 'CAD' }] })
+      if (text.includes('from fx_rates')) return inMode({ rows: [{ func: 'USD', rate: '1.3500000000', as_of: '2026-01-15' }] })
+      return inMode({ rows: [] })
     },
   },
 })

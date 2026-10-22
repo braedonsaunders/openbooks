@@ -163,8 +163,8 @@ test(
           from journal_entries source
           join journal_entries reversal on reversal.id = ${reversalId}
          where source.id = ${sourceId}
-      `));
-      assert.deepEqual(lineage.rows[0], {
+      `, "objects"));
+      assert.deepEqual(lineage[0], {
         source_status: "reversed",
         reversal_status: "posted",
         reverses_entry_id: sourceId,
@@ -198,12 +198,12 @@ for (const mode of ["secondary posting", "secondary forecast", "primary forecast
       });
       await assert.rejects(post, /no active primary GL book/);
       const count = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n;
       assert.equal(count, 0);
       await db.execute(sql`update accounting_books set is_active=true,posts_gl=true where org_id=${org.orgId} and id=${org.bookId}`);
       const id = await post();
       const entry = (await db.execute<{ book_id: string }>(sql`
-        select book_id from journal_entries where org_id=${org.orgId} and id=${id}`)).rows[0]!;
+        select book_id from journal_entries where org_id=${org.orgId} and id=${id}`, "objects"))[0]!;
       assert.equal(entry.book_id, org.bookId, "the explicit primary wins over the earlier-sorting alternate");
     } finally { await dropScratchOrg(org.orgId); }
   });
@@ -232,7 +232,7 @@ for (const policy of ["account", "project"] as const) {
       });
       await assert.rejects(post(org.subsidiaryId), /restricted to another subsidiary/);
       const count = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n;
       assert.equal(count, 0);
       await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${org.accounts.adjustment}`);
@@ -263,7 +263,7 @@ test(
       // any journal row exists, not as a 22008 from PostgreSQL.
       await assert.rejects(entry("2026-02-30"), /postingDate must be a valid YYYY-MM-DD date/);
       const posted = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n;
+        select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n;
       assert.equal(posted, 0);
       const sourceId = await entry(org.date);
       assert.ok(sourceId);
@@ -272,7 +272,7 @@ test(
         /reversalDate must be a valid YYYY-MM-DD date/,
       );
       const status = (await db.execute<{ status: string }>(sql`
-        select status from journal_entries where org_id=${org.orgId} and id=${sourceId}`)).rows[0]!.status;
+        select status from journal_entries where org_id=${org.orgId} and id=${sourceId}`, "objects"))[0]!.status;
       assert.equal(status, "posted");
       const reversalId = await reverseProjectGlEntry(org.orgId, actorId, sourceId, "Controller approved project correction", org.date);
       assert.ok(reversalId, "a real calendar date still reverses");
@@ -327,8 +327,8 @@ async function closeAllImported(org: ScratchOrg): Promise<void> {
 
 async function journalCount(orgId: string): Promise<number> {
   const r = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from journal_entries where org_id = ${orgId}`));
-  return r.rows[0]!.n;
+    select count(*)::int as n from journal_entries where org_id = ${orgId}`, "objects"));
+  return r[0]!.n;
 }
 
 function postArgs(
@@ -467,14 +467,14 @@ test("project GL reversal preserves original FX and complete line evidence", { s
           =(to_jsonb(s)-array['id','entry_id','amount','txn_amount','quantity']::text[]))::int as exact
       from journal_lines s join journal_lines r on r.org_id=s.org_id and r.line_number=s.line_number
         and r.entry_id=${reversalId}
-      where s.org_id=${org.orgId} and s.entry_id=${entryId}`)).rows[0]!;
+      where s.org_id=${org.orgId} and s.entry_id=${entryId}`, "objects"))[0]!;
     assert.deepEqual(evidence, { count: 2, exact: 2 });
     const again = await reverseProjectGlEntry(org.orgId, actor, entryId, "Repeat same controlled reversal", org.date);
     assert.equal(again, null);
     const totals = (await db.execute<{ amount: string; txn: string; quantity: string }>(sql`
       select sum(amount)::text as amount,sum(txn_amount)::text as txn,sum(quantity)::text as quantity
       from journal_lines where org_id=${org.orgId} and entry_id in(${entryId},${reversalId})
-        and location_id=${org.locationId}`)).rows[0]!;
+        and location_id=${org.locationId}`, "objects"))[0]!;
     assert.deepEqual(totals, { amount: "0.0000", txn: "0.0000", quantity: "0.0000" });
   } finally {
     await dropScratchOrg(org.orgId);

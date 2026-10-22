@@ -113,12 +113,12 @@ export async function loadReleases(
           from funds f
           join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
          where f.org_id = ${orgId} and sv.is_active
-         order by sv.code nulls last, sv.name, f.id limit 500`),
+         order by sv.code nulls last, sv.name, f.id limit 500`, 'objects'),
       db.execute<{ id: string; number: string | null; name: string }>(sql`
         select id::text as id, number, name from accounts
          where org_id = ${orgId} and is_active and not is_summary
            and type in ('income', 'income_other', 'equity')
-         order by number nulls last, name, id limit 500`),
+         order by number nulls last, name, id limit 500`, 'objects'),
       businessToday(orgId),
     ])
     return {
@@ -126,8 +126,8 @@ export async function loadReleases(
       drawer: {
         mode: 'create',
         remountKey: 'new',
-        funds: fundRows.rows,
-        accounts: accountRows.rows,
+        funds: fundRows,
+        accounts: accountRows,
         canManage,
         today,
         closeHref: '/nonprofit/releases',

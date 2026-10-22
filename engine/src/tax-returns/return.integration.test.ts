@@ -211,12 +211,12 @@ test("a void after the period reports its reversal in the void's period, not now
     const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
       select fiscal_calendar_id
         from accounting_periods
-       where id = ${org.periodId} and org_id = ${org.orgId}`);
+       where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
          starts_on, ends_on, is_adjustment, custom)
-      values (${randomUUID()}, ${org.orgId}, ${calendar.rows[0]!.fiscal_calendar_id},
+      values (${randomUUID()}, ${org.orgId}, ${calendar[0]!.fiscal_calendar_id},
               2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, '{}'::jsonb)`);
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const voided = await requestDocumentVoid({

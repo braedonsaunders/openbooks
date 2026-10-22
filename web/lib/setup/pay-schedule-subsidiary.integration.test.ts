@@ -102,7 +102,7 @@ test(
       assert.equal(created.status, 200);
       const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id from pay_schedules
-         where id = ${String(created.body.id)} and org_id = ${f.orgId}`)).rows[0]!;
+         where id = ${String(created.body.id)} and org_id = ${f.orgId}`, "objects"))[0]!;
       assert.equal(row.subsidiary_id, null);
     } finally {
       await dropScratchOrgReporting(f.orgId);
@@ -127,7 +127,7 @@ test(
       assert.equal(created.status, 200);
       const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id from pay_schedules
-         where id = ${String(created.body.id)} and org_id = ${f.orgId}`)).rows[0]!;
+         where id = ${String(created.body.id)} and org_id = ${f.orgId}`, "objects"))[0]!;
       assert.equal(row.subsidiary_id, f.rootSubsidiaryId);
     } finally {
       await dropScratchOrgReporting(f.orgId);
@@ -152,7 +152,7 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       const before = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
-        select subsidiary_id, currency from documents where id = ${run.documentId}`)).rows[0]!;
+        select subsidiary_id, currency from documents where id = ${run.documentId}`, "objects"))[0]!;
       assert.equal(before.subsidiary_id, f.rootSubsidiaryId);
       assert.equal(before.currency, "CAD");
 
@@ -164,7 +164,7 @@ test(
       assert.deepEqual(updated.body.rescope, { reresolved: 1, untouched: 0, skipped: [] });
 
       const after = (await db.execute<{ subsidiary_id: string; currency: string }>(sql`
-        select subsidiary_id, currency from documents where id = ${run.documentId}`)).rows[0]!;
+        select subsidiary_id, currency from documents where id = ${run.documentId}`, "objects"))[0]!;
       assert.equal(after.subsidiary_id, f.secondId);
       assert.equal(after.currency, "USD");
     } finally {

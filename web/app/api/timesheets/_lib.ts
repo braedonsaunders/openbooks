@@ -160,7 +160,7 @@ export async function pinTimekeeperEntry(
       from time_entries te
       join parties p on p.org_id = te.org_id and p.id = te.employee_party_id
      where te.org_id = ${orgId} and te.id = ${entryId}
-     limit 1`)).rows[0]
+     limit 1`, 'objects'))[0]
   if (!source) return null
   if (
     allowedSubsidiaryIds !== undefined &&
@@ -195,16 +195,16 @@ export async function pinTimesheetLineRefs(
     if (id == null) return null
     const owned = table === 'projects'
       ? (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-          select id, subsidiary_id from projects where org_id = ${orgId} and id = ${id} limit 1`))
+          select id, subsidiary_id from projects where org_id = ${orgId} and id = ${id} limit 1`, 'objects'))
       : table === 'items'
         ? (await db.execute<{ id: string }>(sql`
-            select id from items where org_id = ${orgId} and id = ${id} limit 1`))
+            select id from items where org_id = ${orgId} and id = ${id} limit 1`, 'objects'))
         : table === 'time_types'
           ? (await db.execute<{ id: string }>(sql`
-              select id from time_types where org_id = ${orgId} and id = ${id} limit 1`))
+              select id from time_types where org_id = ${orgId} and id = ${id} limit 1`, 'objects'))
           : (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-              select id, subsidiary_id from departments where org_id = ${orgId} and id = ${id} limit 1`))
-    const row = owned.rows[0] as { id: string; subsidiary_id?: string | null } | undefined
+              select id, subsidiary_id from departments where org_id = ${orgId} and id = ${id} limit 1`, 'objects'))
+    const row = owned[0] as { id: string; subsidiary_id?: string | null } | undefined
     if (!row) return 'missing'
     if (allowedSubsidiaryIds !== undefined && (table === 'projects' || table === 'departments')) {
       const orgWideNull = table === 'departments'
@@ -243,7 +243,7 @@ export async function weekLeaveCover(
   fromIso: string,
   throughIso: string,
 ): Promise<WeekLeaveCover[]> {
-  return (await db.execute<WeekLeaveCover>(sql`
+  return await db.execute<WeekLeaveCover>(sql`
     select r.id as "requestId",
            (t.code || ' — ' || t.name) as "leaveType",
            r.starts_on::text as "from", r.ends_on::text as "to"
@@ -255,7 +255,7 @@ export async function weekLeaveCover(
        and r.status = 'approved'
        and r.starts_on <= ${throughIso} and r.ends_on >= ${fromIso}
      order by r.starts_on desc, r.id desc
-  `)).rows
+  `, 'objects')
 }
 
 export type PendingWeekEntry = {
@@ -358,8 +358,8 @@ export async function loadWeek(
        and te.employee_party_id = ${ownedEmployee}
        and te.worked_on >= ${days[0]} and te.worked_on <= ${days[6]}
      order by te.created_at, te.id
-  `))
-  const provenance: EntryProvenance[] = res.rows.map((r) => ({
+  `, 'objects'))
+  const provenance: EntryProvenance[] = res.map((r) => ({
     invoicedByLineId: r.invoiced_by_line_id,
     payrollBatchRef: r.payroll_batch_ref,
     costJournalEntryId: r.cost_journal_entry_id,
@@ -371,7 +371,7 @@ export async function loadWeek(
 
   const byKey = new Map<string, WeekRow>()
   const allStatuses: string[] = []
-  for (const r of res.rows) {
+  for (const r of res) {
     allStatuses.push(r.status)
     const key = [
       r.project_id ?? '',
@@ -437,7 +437,7 @@ export async function loadWeek(
     week,
     days,
     rows,
-    pendingEntries: res.rows.filter(entry => entry.status === 'draft' || entry.status === 'rejected').map(entry => ({
+    pendingEntries: res.filter(entry => entry.status === 'draft' || entry.status === 'rejected').map(entry => ({
       id: entry.id, updatedAt: entry.entry_updated_at, workedOn: entry.worked_on, hours: String(entry.hours),
       status: entry.status, projectId: entry.project_id, itemId: entry.item_id, fieldTicketId: entry.field_ticket_id,
       fieldTicketNumber: entry.field_ticket_number, fieldTicketStatus: entry.field_ticket_status,
@@ -509,7 +509,7 @@ export async function assertWeekSubmittable(
        and subject_kind = 'timesheet_week'
        and subject_id = ${headerId}
        and status in ('pending', 'escalated')
-  `)).rows[0]?.n ?? 0)
+  `, 'objects'))[0]?.n ?? 0)
   if (openGates > 0) {
     throw new TimeApprovalRefusal(
       'this week is owned by a pending approval workflow — its gates must resolve first',
@@ -530,7 +530,7 @@ export async function assertWeekSubmittable(
                  and te.worked_on >= w.week_start and te.worked_on <= w.week_start + 6
                  and te.hours <> 0) as entries
         from timesheet_weeks w where w.org_id = ${orgId} and w.id = ${headerId}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!header || (header.status !== 'draft' && header.status !== 'rejected')) {
       throw new Error('nothing to submit — the week is already submitted or approved')
     }
@@ -574,8 +574,8 @@ export async function setTimesheetWeekStatus(
            updated_by = ${actorId}::uuid, updated_at = now()
      where org_id = ${orgId} and employee_party_id = ${ownedEmployee}
        and week_start = ${week}::date
-     returning id`))
-  if (updated.rows.length !== 1) {
+     returning id`, 'objects'))
+  if (updated.length !== 1) {
     throw new Error('timesheet week not found')
   }
 }
@@ -667,26 +667,26 @@ export async function loadPickers(
            ))
            or p.id = ${includeEmployeeId ?? null}
          )
-       order by p.display_name`),
+       order by p.display_name`, 'objects'),
     db.execute<Record<string, unknown>>(sql`
           select p.id, p.code, p.name, p.is_internal from projects p
            where p.org_id = ${orgId} and p.is_active
              ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-           order by p.name`),
+           order by p.name`, 'objects'),
     db.execute<Record<string, unknown>>(sql`
       select id, code, name from items
        where org_id = ${orgId} and is_active
          and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
-       order by name`),
+       order by name`, 'objects'),
     db.execute<Record<string, unknown>>(sql`
       select id, name, classification, cost_multiplier, bill_multiplier, exclude_from_wages, is_billable_default,
         to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at from time_types
-       where org_id = ${orgId} and is_active order by cost_multiplier`),
+       where org_id = ${orgId} and is_active order by cost_multiplier`, 'objects'),
     db.execute<Record<string, unknown>>(sql`
           select d.id, d.code, d.name from departments d
            where d.org_id = ${orgId} and d.is_active
              ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null, { orgWideNull: true })}
-           order by d.name`),
+           order by d.name`, 'objects'),
   ]))
 
   const withCode = (r: Record<string, unknown>): PickerOption => ({
@@ -695,14 +695,14 @@ export async function loadPickers(
   })
 
   return {
-    employees: employees.rows.map((r) => ({
+    employees: employees.map((r) => ({
       value: String(r.id),
       label: ((r.label as string) || '(unnamed)') + (r.currently_active ? '' : ' (inactive)'),
     })),
-    projects: projects.rows.map(withCode),
-    internalProjectIds: projects.rows.filter((r) => r.is_internal === true).map((r) => String(r.id)),
-    items: items.rows.map(withCode),
-    timeTypes: flagStandardTimeType(timeTypes.rows.map((r) => ({
+    projects: projects.map(withCode),
+    internalProjectIds: projects.filter((r) => r.is_internal === true).map((r) => String(r.id)),
+    items: items.map(withCode),
+    timeTypes: flagStandardTimeType(timeTypes.map((r) => ({
       value: String(r.id),
       label: r.name as string,
       classification: String(r.classification ?? 'regular'),
@@ -713,7 +713,7 @@ export async function loadPickers(
       isBillableDefault: r.is_billable_default === true,
       isDefault: false,
     }))),
-    departments: departments.rows.map(withCode),
+    departments: departments.map(withCode),
   }
 }
 
@@ -721,6 +721,6 @@ export async function loadPickers(
 export async function userEmployeeId(orgId: string, userId: string): Promise<string | null> {
   const r = (await db.execute<{ party_id: string | null }>(sql`
     select party_id from users where id = ${userId} and org_id = ${orgId}
-  `))
-  return r.rows[0]?.party_id ?? null
+  `, 'objects'))
+  return r[0]?.party_id ?? null
 }

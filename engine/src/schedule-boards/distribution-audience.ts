@@ -22,21 +22,17 @@ export async function resolvePeopleAudience(
       ...(window.sourceRecords ?? []).map((r) => r.workerPartyId),
     ]),
   ];
-  const currentDate = (
-    await db.execute<{ date: string }>(
-      sql`select to_char(now() at time zone ${board.timeZone},'YYYY-MM-DD') as date`,
-    )
-  ).rows[0]!.date;
-  const members = (
-    await db.execute<{
+  const currentDate = (await db.execute<{ date: string }>(
+      sql`select to_char(now() at time zone ${board.timeZone},'YYYY-MM-DD') as date`, "objects",
+    ))[0]!.date;
+  const members = await db.execute<{
       id: string;
       name: string;
       supervisorId: string | null;
       inScope: boolean;
     }>(
-      sql`select p.id,p.display_name as name,er.supervisor_id as "supervisorId",(${boardScopeFilter(board, actor.orgId, currentDate)}) as "inScope" from parties p join employee_roles er on er.org_id=p.org_id and er.party_id=p.id where p.org_id=${actor.orgId} and p.kind='person' and p.is_active and er.is_active and (er.hired_on is null or er.hired_on <= (now() at time zone ${board.timeZone})::date) and (er.terminated_on is null or er.terminated_on >= (now() at time zone ${board.timeZone})::date) ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} order by p.id for share of p,er`,
-    )
-  ).rows;
+      sql`select p.id,p.display_name as name,er.supervisor_id as "supervisorId",(${boardScopeFilter(board, actor.orgId, currentDate)}) as "inScope" from parties p join employee_roles er on er.org_id=p.org_id and er.party_id=p.id where p.org_id=${actor.orgId} and p.kind='person' and p.is_active and er.is_active and (er.hired_on is null or er.hired_on <= (now() at time zone ${board.timeZone})::date) and (er.terminated_on is null or er.terminated_on >= (now() at time zone ${board.timeZone})::date) ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} order by p.id for share of p,er`, "objects",
+    );
   const eligible = members.filter((p) => p.inScope || evidence.includes(p.id));
   let ids =
     cohort === "scheduled"
@@ -49,11 +45,9 @@ export async function resolvePeopleAudience(
       ),
     ].filter((id) => members.some((p) => p.id === id));
   if (cohort === "self") {
-    const self = (
-      await db.execute<{ id: string }>(
-        sql`select party_id as id from users where org_id=${actor.orgId} and id=${actor.actorId} and is_active`,
-      )
-    ).rows[0]?.id;
+    const self = (await db.execute<{ id: string }>(
+        sql`select party_id as id from users where org_id=${actor.orgId} and id=${actor.actorId} and is_active`, "objects",
+      ))[0]?.id;
     ids = self && eligible.some((p) => p.id === self) ? [self] : [];
   }
   if (selected) {

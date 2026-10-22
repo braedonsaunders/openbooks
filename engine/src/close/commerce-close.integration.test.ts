@@ -248,7 +248,7 @@ test("a posted payout with an unmatched charge fails naming the batch", { skip: 
           (org_id, provider, external_ref, currency, settlement_date, status, journal_entry_id, posted_at)
         values (${fx.org.orgId}, 'stripe', 'po_posted_1', 'CAD', ${DAY}::date, 'posted',
                 ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)
-        returning id`)).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
       await db.execute(sql`
         insert into psp_settlement_lines (org_id, batch_id, line_number, kind, external_ref, amount, currency)
         values (${fx.org.orgId}, ${batchId}, 1, 'fee', 'fee_1', 100, 'CAD'),
@@ -278,7 +278,7 @@ test("three unmatched charges in one payout still count one batch", { skip: !DB 
           (org_id, provider, external_ref, currency, settlement_date, status, journal_entry_id, posted_at)
         values (${fx.org.orgId}, 'stripe', 'po_posted_3', 'CAD', ${DAY}::date, 'posted',
                 ${fx.sweepEntryId}, ${`${DAY}T12:00:00Z`}::timestamptz)
-        returning id`)).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
       await db.execute(sql`
         insert into psp_settlement_lines (org_id, batch_id, line_number, kind, external_ref, amount, currency)
         values (${fx.org.orgId}, ${batchId}, 1, 'charge', 'ch_1', 1000, 'CAD'),
@@ -346,20 +346,20 @@ test("commerce close checks honor subsidiary scope across queues and revenue bal
           from channel_orders where org_id=${fx.org.orgId} and external_id='1001'`);
       const contractId = (await db.execute<{ id: string }>(sql`
         insert into revenue_contracts (org_id,customer_id,contract_number,currency,scope,subsidiary_id)
-        values (${fx.org.orgId},${fx.org.customerId},'SCOPED-C','CAD','invoice',${fx.org.subsidiaryId}) returning id`)).rows[0]!.id;
+        values (${fx.org.orgId},${fx.org.customerId},'SCOPED-C','CAD','invoice',${fx.org.subsidiaryId}) returning id`, "objects"))[0]!.id;
       const obligationId = (await db.execute<{ id: string }>(sql`
         insert into performance_obligations
           (org_id,contract_id,description,recognition_rule_id,allocated_price,deferred_account_id,status,created_at)
         values (${fx.org.orgId},${contractId},'Scoped obligation',${fx.org.recognitionRuleId},100,
-                ${fx.org.accounts.deferred},'open',${`${DAY}T00:00:00Z`}::timestamptz) returning id`)).rows[0]!.id;
+                ${fx.org.accounts.deferred},'open',${`${DAY}T00:00:00Z`}::timestamptz) returning id`, "objects"))[0]!.id;
       const scheduleId = (await db.execute<{ id: string }>(sql`
         insert into recognition_schedules (org_id,obligation_id,book_id,status,total_amount)
-        values (${fx.org.orgId},${obligationId},${fx.org.bookId},'planned',100) returning id`)).rows[0]!.id;
+        values (${fx.org.orgId},${obligationId},${fx.org.bookId},'planned',100) returning id`, "objects"))[0]!.id;
       await db.execute(sql`insert into recognition_schedule_lines (org_id,schedule_id,period_id,sequence,planned_amount)
         values (${fx.org.orgId},${scheduleId},${fx.org.periodId},1,100)`);
       const costContractId = (await db.execute<{ id: string }>(sql`
         insert into revenue_contracts (org_id,customer_id,contract_number,currency,scope,subsidiary_id)
-        values (${fx.org.orgId},${fx.org.customerId},'CHILD-COST-C','CAD','invoice',${childId}) returning id`)).rows[0]!.id;
+        values (${fx.org.orgId},${fx.org.customerId},'CHILD-COST-C','CAD','invoice',${childId}) returning id`, "objects"))[0]!.id;
       await db.execute(sql`insert into contract_cost_assets
         (org_id,revenue_contract_id,cost_type,amount_minor,currency,capitalized_on,amort_start_on,amort_end_on,method,status)
         values (${fx.org.orgId},${costContractId},'commission',10000,'CAD',${DAY}::date,${DAY}::date,'2027-06-30','straight_line','active')`);
@@ -496,17 +496,17 @@ test("an unrecognized plan without its deferral fails naming the account", { ski
     await withBypass(async () => {
       const contractId = (await db.execute<{ id: string }>(sql`
         insert into revenue_contracts (org_id, customer_id, contract_number, currency, scope, subsidiary_id)
-        values (${fx.org.orgId}, ${fx.org.customerId}, 'C-1', 'USD', 'invoice', ${fx.org.subsidiaryId}) returning id`)).rows[0]!.id;
+        values (${fx.org.orgId}, ${fx.org.customerId}, 'C-1', 'USD', 'invoice', ${fx.org.subsidiaryId}) returning id`, "objects"))[0]!.id;
       const obligationId = (await db.execute<{ id: string }>(sql`
         insert into performance_obligations (org_id, contract_id, description, recognition_rule_id, allocated_price, deferred_account_id, status, created_at)
         values (${fx.org.orgId}, ${contractId}, 'Annual plan', ${fx.org.recognitionRuleId}, 1200, ${fx.org.accounts.deferred}, 'open', ${`${DAY}T00:00:00Z`}::timestamptz)
-        returning id`)).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
       const scheduleId = (await db.execute<{ id: string }>(sql`
         insert into recognition_schedules (org_id, obligation_id, book_id, status, total_amount)
-        values (${fx.org.orgId}, ${obligationId}, ${fx.org.bookId}, 'planned', 1200) returning id`)).rows[0]!.id;
+        values (${fx.org.orgId}, ${obligationId}, ${fx.org.bookId}, 'planned', 1200) returning id`, "objects"))[0]!.id;
       const lineId = (await db.execute<{ id: string }>(sql`
         insert into recognition_schedule_lines (org_id, schedule_id, period_id, sequence, planned_amount)
-        values (${fx.org.orgId}, ${scheduleId}, ${fx.org.periodId}, 1, 100) returning id`)).rows[0]!.id;
+        values (${fx.org.orgId}, ${scheduleId}, ${fx.org.periodId}, 1, 100) returning id`, "objects"))[0]!.id;
       const futureEntry = await postEntry(db, {
         orgId: fx.org.orgId, bookId: fx.org.bookId, subsidiaryId: fx.org.subsidiaryId,
         entryNumber: "FUTURE-RECOGNITION", postingDate: "2026-07-16", periodId: fx.org.periodId,
@@ -540,11 +540,9 @@ test("a proven commerce task freezes one evidence snapshot, exactly once per fin
     const runId = await withBypass(() =>
       startCloseRun({ orgId: fx.org.orgId, periodId: fx.org.periodId, bookId: fx.org.bookId, actorId: fx.actor }),
     );
-    const taskId = (
-      await withBypass(() => db.execute<{ id: string }>(sql`
+    const taskId = (await withBypass(() => db.execute<{ id: string }>(sql`
         select id from close_run_tasks
-         where org_id = ${fx.org.orgId} and run_id = ${runId} and key = 'commerce-complete'`))
-    ).rows[0]?.id;
+         where org_id = ${fx.org.orgId} and run_id = ${runId} and key = 'commerce-complete'`, "objects")))[0]?.id;
     assert.ok(taskId, "the run carries the commerce task while Sales Channels is on");
     // Nothing to freeze before the proof completes.
     assert.equal(await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), null);
@@ -554,11 +552,9 @@ test("a proven commerce task freezes one evidence snapshot, exactly once per fin
     });
     const evidenceId = await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor));
     assert.ok(evidenceId);
-    const rows = (
-      await withBypass(() => db.execute<{ label: string; snapshot: unknown }>(sql`
+    const rows = await withBypass(() => db.execute<{ label: string; snapshot: unknown }>(sql`
         select label, snapshot from close_task_evidence
-         where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`))
-    ).rows;
+         where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`, "objects"));
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.label, "Commerce completeness evidence");
     const snapshot = rows[0]!.snapshot as { fingerprint: string; checks: { code: string; count: number }[] };
@@ -571,11 +567,9 @@ test("a proven commerce task freezes one evidence snapshot, exactly once per fin
     assert.ok((unreachable?.count ?? 0) > 0);
     assert.equal(await withOrgContext(fx.org.orgId, () => snapshotCommerceCloseEvidence(fx.org.orgId, runId, fx.actor)), evidenceId);
     assert.equal(
-      (
-        await withBypass(() => db.execute<{ count: string }>(sql`
+      (await withBypass(() => db.execute<{ count: string }>(sql`
           select count(*)::text as count from close_task_evidence
-           where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`))
-      ).rows[0]!.count,
+           where org_id = ${fx.org.orgId} and run_id = ${runId} and task_id = ${taskId}`, "objects")))[0]!.count,
       "1",
     );
   } finally {
@@ -621,7 +615,7 @@ test("a journal-recognised line is evidenced and an explained clearing balance p
       lineId = (await db.execute<{ id: string }>(sql`
         insert into psp_settlement_lines (org_id, batch_id, line_number, kind, amount, currency, external_ref)
         values (${fx.org.orgId}, ${batchId}, 1, 'charge', 100, 'CAD', 'charge-1')
-        returning id`)).rows[0]!.id;
+        returning id`, "objects"))[0]!.id;
     });
     const failing = await withBypass(() => commerceCloseChecks(fx.org.orgId, SCOPE(fx.org), { storefrontTotals: matchingProvider() }));
     const payoutsOpen = failing.find((check) => check.code === "commerce-payouts-unposted")!;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { releaseSchemaSql } from "../../../scripts/release-schema-sql.mjs";
 import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake } from "./registry";
 
 /**
@@ -23,20 +23,15 @@ import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake } from ".
  * (or otherwise non-code/name) entity fails here, not in render.
  */
 
-// source-pin-contract: ref-picker column invariant — every registry entity served as a ref-option source must resolve its generic picker value/label/order columns to real fields; subjects derived from the setup registry crossed with every published migration, never hand-listed.
-const MIGRATIONS = "schema/migrations/generated";
+// source-pin-contract: ref-picker column invariant — every registry entity served as a ref-option source must resolve its generic picker value/label/order columns to real fields; subjects derived from the setup registry crossed with the release schema (baseline plus forward migrations), never hand-listed.
 
-/** Real column names per table, from the published DDL. */
+/** Real column names per table, from the release schema DDL. */
 function ddlColumnsByTable(): Map<string, Set<string>> {
-  const sql = readdirSync(MIGRATIONS)
-    .filter((f) => f.endsWith(".sql"))
-    .sort()
-    .map((f) => readFileSync(`${MIGRATIONS}/${f}`, "utf8"))
-    .join("\n");
+  const sql = releaseSchemaSql();
   const out = new Map<string, Set<string>>();
   const skip = /^(constraint|check|primary|foreign|unique|exclude|like)$/i;
   for (const m of sql.matchAll(
-    /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s*\(([\s\S]*?)\n\);/gi,
+    /create\s+table\s+(?:if\s+not\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s*\(([\s\S]*?)\n\);/gi,
   )) {
     const cols = out.get(m[1]!) ?? new Set<string>();
     for (const line of m[2]!.split("\n")) {
@@ -47,12 +42,15 @@ function ddlColumnsByTable(): Map<string, Set<string>> {
     out.set(m[1]!, cols);
   }
   for (const m of sql.matchAll(
-    /alter\s+table\s+(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi,
+    /alter\s+table\s+(?:only\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?([a-z_][a-z0-9_]*)"?/gi,
   )) {
     const cols = out.get(m[1]!) ?? new Set<string>();
     cols.add(m[2]!.toLowerCase());
     out.set(m[1]!, cols);
   }
+  // A reader that parses nothing would silently accept or reject every
+  // term; pin that it sees the schema's tables and their columns.
+  assert.ok(out.size > 500 && out.get("flows")?.has("org_id"), `release schema yielded ${out.size} tables`);
   return out;
 }
 

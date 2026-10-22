@@ -30,8 +30,8 @@ export const GET = defineRoute({
        and trigger_point = 'client'
        and is_active
        and (document_kind is null or document_kind = ${kind})
-     order by sort_order, name`))
+     order by sort_order, name`, 'objects'))
 
-  return NextResponse.json({ scripts: r.rows })
+  return NextResponse.json({ scripts: r })
   },
 })

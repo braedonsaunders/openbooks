@@ -128,8 +128,8 @@ export async function loadContract(
            coalesce(p.display_name, '—') as customer
       from revenue_contracts c
       left join parties p on p.id = c.customer_id and p.org_id = c.org_id
-     where c.id = ${id} and c.org_id = ${orgId} ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where o.contract_id=c.id and o.org_id=c.org_id order by o.id limit 1))`, allowedSubsidiaryIds)}`);
-  const contract = cRes.rows[0];
+     where c.id = ${id} and c.org_id = ${orgId} ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where o.contract_id=c.id and o.org_id=c.org_id order by o.id limit 1))`, allowedSubsidiaryIds)}`, "objects");
+  const contract = cRes[0];
   if (!contract) return null;
 
   // The billed agreement behind a scoped contract: the sales order (with its
@@ -138,7 +138,7 @@ export async function loadContract(
   if (contract.scope === "order" && contract.source_document_id) {
     const order = (await db.execute<{ document_number: string }>(sql`
       select document_number from documents
-       where id = ${contract.source_document_id} and org_id = ${orgId}`)).rows[0];
+       where id = ${contract.source_document_id} and org_id = ${orgId}`, "objects"))[0];
     if (order) {
       source = {
         kind: "order",
@@ -151,7 +151,7 @@ export async function loadContract(
       select coalesce((select p.name from subscription_plans p
                         where p.id = s.plan_id and p.org_id = s.org_id),
                       s.id::text) as plan
-        from subscriptions s where s.id = ${contract.subscription_id} and s.org_id = ${orgId}`)).rows[0];
+        from subscriptions s where s.id = ${contract.subscription_id} and s.org_id = ${orgId}`, "objects"))[0];
     if (subscription) {
       source = {
         kind: "subscription",
@@ -172,7 +172,7 @@ export async function loadContract(
            and inv.kind = 'customer_invoice'
          where o.contract_id = ${id} and o.org_id = ${orgId}
          order by inv.document_number
-         limit 1`)).rows[0] ?? null
+         limit 1`, "objects"))[0] ?? null
     : null;
   contract.sourceInvoiceId = invoice?.id ?? null;
   contract.sourceInvoiceNumber = invoice?.document_number ?? null;
@@ -204,10 +204,10 @@ export async function loadContract(
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
       left join items i on i.id=o.item_id and i.org_id=o.org_id
      where o.contract_id = ${id} and o.org_id = ${orgId}
-     order by o.created_at`);
+     order by o.created_at`, "objects");
 
   const obligations: ObligationRow[] = [];
-  for (const o of oRes.rows) {
+  for (const o of oRes) {
     const lRes = await db.execute<ScheduleLineRow>(sql`
       select ${periodDisplayLabelSql(locale, "p")} as period_name, p.ends_on as period_ends_on,
              l.planned_amount, l.recognized_amount, l.journal_entry_id,l.superseded_by_change_id,l.revision,l.reversal_journal_entry_id
@@ -216,8 +216,8 @@ export async function loadContract(
         join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
        where s.obligation_id = ${o.id} and s.org_id = ${orgId}
-       order by l.sequence`);
-    const planned = lRes.rows.reduce(
+       order by l.sequence`, "objects");
+    const planned = lRes.reduce(
       (a, r) =>
         r.superseded_by_change_id || r.reversal_journal_entry_id
           ? a
@@ -230,7 +230,7 @@ export async function loadContract(
             ),
       "0",
     );
-    const recognized = lRes.rows.reduce(
+    const recognized = lRes.reduce(
       (a, r) =>
         r.journal_entry_id && !r.reversal_journal_entry_id
           ? add(a, String(r.recognized_amount ?? "0"))
@@ -241,20 +241,18 @@ export async function loadContract(
       ...o,
       planned,
       recognized,
-      lines: lRes.rows,
+      lines: lRes,
     });
   }
 
-  const changes = (
-    await db.execute<{
+  const changes = await db.execute<{
       id: string;
       operation: string;
       effective_on: string;
       status: string;
     }>(
-      sql`select id,operation,effective_on::text,status from financial_changes where org_id=${orgId} and domain='revenue' and subject_id=${id} order by created_at desc`,
-    )
-  ).rows;
+      sql`select id,operation,effective_on::text,status from financial_changes where org_id=${orgId} and domain='revenue' and subject_id=${id} order by created_at desc`, "objects",
+    );
 
   const billings = (await db.execute<ContractBillingRow>(sql`
     select b.document_id as id, d.document_number, b.amount::text as amount,
@@ -262,7 +260,7 @@ export async function loadContract(
       from revenue_contract_billings b
       join documents d on d.id = b.document_id and d.org_id = b.org_id
      where b.contract_id = ${id} and b.org_id = ${orgId}
-     order by b.billed_on, d.document_number`)).rows.map((row) => ({
+     order by b.billed_on, d.document_number`, "objects")).map((row) => ({
     id: row.id,
     document_number: row.document_number,
     amount: row.amount,
@@ -285,23 +283,23 @@ export async function revenueModificationOptions(
 ) {
   const [subsidiaries, accounts, rules, books] = await Promise.all([
     db.execute<{ value: string; label: string; currency: string }>(
-      sql`select s.id as value,s.name as label,s.base_currency as currency from subsidiaries s where org_id=${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`s.id`, allowed)} order by name`,
+      sql`select s.id as value,s.name as label,s.base_currency as currency from subsidiaries s where org_id=${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`s.id`, allowed)} order by name`, "objects",
     ),
     db.execute<{ value: string; label: string }>(
-      sql`select id as value,number||' — '||name as label from accounts where org_id=${orgId} and is_active and not is_summary order by number`,
+      sql`select id as value,number||' — '||name as label from accounts where org_id=${orgId} and is_active and not is_summary order by number`, "objects",
     ),
     db.execute<{ value: string; label: string; method: string }>(
-      sql`select id as value,name as label,method from recognition_rules where org_id=${orgId} and is_active and not is_forecast order by name`,
+      sql`select id as value,name as label,method from recognition_rules where org_id=${orgId} and is_active and not is_forecast order by name`, "objects",
     ),
     db.execute<{ value: string; label: string }>(
-      sql`select id as value,name as label from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc,code`,
+      sql`select id as value,name as label from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc,code`, "objects",
     ),
   ]);
   return {
-    subsidiaries: subsidiaries.rows,
-    accounts: accounts.rows,
-    rules: rules.rows,
-    books: books.rows,
+    subsidiaries,
+    accounts,
+    rules,
+    books,
   };
 }
 
@@ -324,8 +322,8 @@ export async function revenueRecognitionCandidates(
      where o.org_id = ${orgId} and o.status <> 'cancelled'
        and l.journal_entry_id is null and l.superseded_by_change_id is null
        ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations source_o join document_lines dl on dl.id=source_o.document_line_id and dl.org_id=source_o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where source_o.contract_id=c.id and source_o.org_id=c.org_id order by source_o.id limit 1))`, allowedSubsidiaryIds)}
-     order by c.contract_number, o.description`)
-  return rows.rows.map((row) => ({
+     order by c.contract_number, o.description`, "objects")
+  return rows.map((row) => ({
     obligationId: row.obligation_id,
     contractId: row.contract_id,
     contractNumber: row.contract_number,

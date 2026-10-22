@@ -46,10 +46,8 @@ async function makeDraftOrder(org: { orgId: string; subsidiaryId: string; date: 
 }
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (
-    await withBypassContext(() => db.execute<{ revision: string }>(sql`
-      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${orgId}`))
-  ).rows[0]!.revision
+  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id = ${id} and org_id = ${orgId}`, 'objects')))[0]!.revision
 }
 
 function errOf(json: unknown): string {
@@ -75,10 +73,8 @@ async function patchOrder(orgId: string, id: string, body: unknown): Promise<{ s
 }
 
 async function storedLocations(orgId: string, id: string): Promise<(string | null)[]> {
-  return (
-    await withBypassContext(() => db.execute<{ stock_location_id: string | null }>(sql`
-      select stock_location_id from document_lines where document_id = ${id} and org_id = ${orgId} order by line_number`))
-  ).rows.map((row) => row.stock_location_id)
+  return (await withBypassContext(() => db.execute<{ stock_location_id: string | null }>(sql`
+      select stock_location_id from document_lines where document_id = ${id} and org_id = ${orgId} order by line_number`, 'objects'))).map((row) => row.stock_location_id)
 }
 
 function line(itemId: string, accountId: string, stockLocationId?: string | null) {

@@ -152,7 +152,7 @@ export async function createWebhookEndpoint(
       values (${orgId}, ${key}, ${url}, ${(input.description ?? "").slice(0, 500)},
               ${textArray(events)}, 'active', ${sealed}, ${actorId}::uuid, ${actorId}::uuid)
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!inserted) {
       throw new WebhookEndpointError("the webhook endpoint was not stored — no row was written; retry the action");
     }
@@ -199,11 +199,11 @@ export async function updateWebhookEndpoint(
     }>(sql`
       select url, description, events, status from webhook_endpoints
        where org_id = ${orgId} and id = ${endpointId}::uuid limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!before) {
       throw new WebhookEndpointError("the webhook endpoint is gone — it may have been deleted; reload the list and try again", 404);
     }
-    const updated = await db.execute(sql`
+    const updated = await db.execute<never>(sql`
       update webhook_endpoints
          set url = coalesce(${url ?? null}, url),
              description = coalesce(${description ?? null}, description),
@@ -241,18 +241,18 @@ export async function setWebhookEndpointStatus(
     await requireWebhooksGate(db, orgId);
     const before = (await db.execute<{ status: string }>(sql`
       select status from webhook_endpoints where org_id = ${orgId} and id = ${endpointId}::uuid limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!before) {
       throw new WebhookEndpointError("the webhook endpoint is gone — it may have been deleted; reload the list and try again", 404);
     }
     const updated = status === "active"
-      ? await db.execute(sql`
+      ? await db.execute<never>(sql`
           update webhook_endpoints
              set status = 'active', consecutive_failures = 0, disabled_at = null, disabled_reason = null,
                  last_error = null, updated_at = now(), updated_by = ${actorId}::uuid
            where org_id = ${orgId} and id = ${endpointId}::uuid
         `)
-      : await db.execute(sql`
+      : await db.execute<never>(sql`
           update webhook_endpoints
              set status = 'disabled', disabled_at = now(),
                  disabled_reason = ${reason ?? "Disabled by the operator."},
@@ -294,7 +294,7 @@ export async function rotateWebhookEndpointSecret(
     const before = (await db.execute<{ secretRotatedAt: Date | null }>(sql`
       select secret_rotated_at as "secretRotatedAt" from webhook_endpoints
        where org_id = ${orgId} and id = ${endpointId}::uuid limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!before) {
       throw new WebhookEndpointError("the webhook endpoint is gone — it may have been deleted; reload the list and try again", 404);
     }
@@ -352,7 +352,7 @@ export async function redeliverWebhookDelivery(
       select event_id as "eventId", status from webhook_deliveries
        where org_id = ${orgId} and endpoint_id = ${endpointId}::uuid
          and id = ${deliveryId}::uuid limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw new WebhookEndpointError("the delivery is gone — it may have been cleaned up; reload the list and try again", 404);
     }
@@ -362,7 +362,7 @@ export async function redeliverWebhookDelivery(
     if (row.status === "pending") {
       throw new WebhookEndpointError("the delivery is already queued — wait for the worker or watch its next attempt");
     }
-    const reset = await db.execute(sql`
+    const reset = await db.execute<never>(sql`
       update webhook_deliveries
          set status = 'pending', attempt_count = 0, first_attempt_at = null,
              next_attempt_at = now(), last_error = null, updated_at = now()
@@ -391,7 +391,7 @@ export async function redeliverWebhookDelivery(
     (await db.execute<{ status: string; code: number | null; error: string | null }>(sql`
       select status, last_response_code as code, last_error as error from webhook_deliveries
        where org_id = ${orgId} and id = ${deliveryId}::uuid limit 1
-    `)).rows[0],
+    `, "objects"))[0],
   );
   if (!outcome) throw new WebhookEndpointError("the redelivered delivery vanished — reload the list and try again");
   return { deliveryId, eventId, status: outcome.status, responseCode: outcome.code, error: outcome.error };
@@ -422,7 +422,7 @@ export async function sendWebhookTestPing(
     const row = (await db.execute<{ id: string; key: string; status: string }>(sql`
       select id, key, status from webhook_endpoints
        where org_id = ${orgId} and id = ${endpointId}::uuid limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row) {
       throw new WebhookEndpointError("the webhook endpoint is gone — it may have been deleted; reload the list and try again", 404);
     }
@@ -460,7 +460,7 @@ export async function sendWebhookTestPing(
   const outcome = (await db.execute<{ status: string; code: number | null; error: string | null }>(sql`
     select status, last_response_code as code, last_error as error from webhook_deliveries
      where org_id = ${orgId} and event_id = ${emitted.eventId}::uuid and endpoint_id = ${endpointId}::uuid limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!outcome) throw new WebhookEndpointError("the test delivery vanished — reload the list and try again");
   await withOrgTransaction(orgId, async () => {
     await recordWebhookAudit(db, {
@@ -489,7 +489,7 @@ async function deliveryIdForEvent(orgId: string, eventId: string, endpointId: st
   const row = (await db.execute<{ id: string }>(sql`
     select id from webhook_deliveries
      where org_id = ${orgId} and event_id = ${eventId}::uuid and endpoint_id = ${endpointId}::uuid limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new WebhookEndpointError("the test delivery was not queued — no row was written; retry the action");
   return row.id;
 }
@@ -502,7 +502,7 @@ export async function resolveAutomationEndpoint(
   const row = (await db.execute<{ id: string; key: string; status: string }>(sql`
     select id, key, status from webhook_endpoints
      where org_id = ${orgId} and key = ${endpointKey} limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new WebhookEndpointError(
       `webhook endpoint '${endpointKey}' does not exist in this organization — create it in Settings → Developers → Webhooks, then run again`,

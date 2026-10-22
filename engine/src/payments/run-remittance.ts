@@ -29,8 +29,8 @@ export async function markAutomaticRemittanceEnqueueFailed(
     )
     select (select status from target) as status,
            (select count(*) from updated)::int as written
-  `);
-  const result = outcome.rows?.[0];
+  `, "objects");
+  const result = outcome?.[0];
   if ((result?.written ?? 0) === 0 && (result?.status === null || result?.status === "pending")) {
     throw new Error(`payment remittance ${remittanceId} enqueue failure was not recorded`);
   }
@@ -96,7 +96,7 @@ export async function queueAutomaticRemittance(
         left join documents d on d.id = i.payment_document_id and d.org_id = i.org_id
         join orgs o on o.id = i.org_id
        where i.id = ${instructionId} and i.org_id = ${orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!row?.auto_remittance || row.direction !== "outbound") return null;
     const already = (await db.execute<{
       id: string;
@@ -110,7 +110,7 @@ export async function queueAutomaticRemittance(
          and status in ('pending', 'sent')
        order by created_at desc, id desc
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (already?.status === "sent") return null;
     // A pending row is the durable outbox identity. Reuse its original
     // recipients on recovery rather than creating a second advice for the
@@ -138,7 +138,7 @@ export async function queueAutomaticRemittance(
             and r.posting_claim_token = ${claim.token}
        )
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!remittance) throw new PaymentRunPostingClaimFencedError(runId);
     return { remittanceId: remittance.id, recipients, instruction: row };
   });
@@ -159,7 +159,7 @@ export async function queueAutomaticRemittance(
         from payment_run_items ri join documents d on d.id = ri.source_document_id and d.org_id = ri.org_id
        where ri.payment_instruction_id = ${instructionId} and ri.org_id = ${orgId} and ri.kind in ('bill', 'expense', 'refund', 'receivable')
        order by d.document_number
-    `));
+    `, "objects"));
     const message = paymentRemittanceEmail({
       orgName: instruction.org_name,
       payeeName: instruction.payee,
@@ -167,7 +167,7 @@ export async function queueAutomaticRemittance(
       paymentDate: instruction.payment_date,
       amount: instruction.amount,
       currency: instruction.currency,
-      documents: documents.rows,
+      documents,
     });
     emailData = {
       orgId,

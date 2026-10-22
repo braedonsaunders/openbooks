@@ -41,8 +41,8 @@ export const POST = defineRoute({
       const book = await db.execute(sql`
       select 1 from accounting_books
        where id = ${bookId} and org_id = ${user.orgId} and is_active
-    `);
-      if (!book.rows[0]) return bad("book_not_found", "bookId");
+    `, "objects");
+      if (!book[0]) return bad("book_not_found", "bookId");
     }
 
     const rawIds = body.assetIds ?? [];
@@ -61,9 +61,9 @@ export const POST = defineRoute({
     select a.id, a.asset_number from fixed_assets a
      where a.org_id = ${user.orgId} and a.id = any(${`{${assetIds.join(",")}}`}::uuid[])
        ${gate.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-  `);
+  `, "objects");
     const byId = new Map(
-      owned.rows.map((row) => [
+      owned.map((row) => [
         String(row.id).toLowerCase(),
         String(row.asset_number),
       ]),

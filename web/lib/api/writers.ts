@@ -148,7 +148,7 @@ async function applyCustomRecord(
   const locked = (await db.execute(sql`
     select *, ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
      where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
-     for update`)).rows[0] as
+     for update`, "objects"))[0] as
     | (Record<string, unknown> & { revision?: unknown })
     | undefined;
   if (!locked) return err(404, "not found");
@@ -259,8 +259,8 @@ async function applyCustomRecord(
     id: string;
     name: string;
     base_currency: string;
-  }>(sql`select id, name, base_currency from orgs where id = ${user.orgId}`);
-  const org = orgRow.rows[0]!;
+  }>(sql`select id, name, base_currency from orgs where id = ${user.orgId}`, "objects");
+  const org = orgRow[0]!;
   const outcomes = await runTriggerScripts(
     "before_submit",
     {
@@ -301,7 +301,7 @@ async function applyCustomRecord(
       updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
     where id = ${id} and org_id = ${user.orgId}
     returning *
-  `)).rows[0];
+  `, "objects"))[0];
   if (!written) return err(404, "not found");
   // The lock, mutation, and immutable audit event share the caller's
   // transaction (same as the interactive route), so the before-image is the
@@ -380,8 +380,8 @@ async function createCustomRecordAttempt(
     values (${user.orgId}, ${type.id}, ${typeKey}, ${recordNumber}, ${JSON.stringify(data)}::jsonb,
             ${searchText}, ${user.id}, ${user.id})
     returning id
-  `);
-  const id = r.rows[0]!.id;
+  `, "objects");
+  const id = r[0]!.id;
 
   // If the caller sent data/status, apply it on top of the seeded draft. The
   // seeded row was just inserted by this same command, so no concurrent
@@ -390,7 +390,7 @@ async function createCustomRecordAttempt(
   if (body.data !== undefined || body.status !== undefined) {
     const fresh = (await db.execute<{ revision: string }>(sql`
       select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
-       where id = ${id} and org_id = ${user.orgId}`)).rows[0];
+       where id = ${id} and org_id = ${user.orgId}`, "objects"))[0];
     const applied = await applyCustomRecord(
       user,
       typeKey,
@@ -473,7 +473,7 @@ async function deleteCustomRecord(
   const locked = (await db.execute<Record<string, unknown>>(sql`
     select * from custom_records
      where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
-     for update`)).rows[0];
+     for update`, "objects"))[0];
   if (!locked) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   if (!recordVisibleInSubsidiaryFence(scope.sections, locked.data as FieldValueMap, allowed)) {
@@ -484,7 +484,7 @@ async function deleteCustomRecord(
   }
   const deleted = (await db.execute<Record<string, unknown>>(sql`
     delete from custom_records where id = ${id} and org_id = ${user.orgId}
-    returning *`)).rows[0];
+    returning *`, "objects"))[0];
   if (!deleted) return err(404, "not found");
   await auditSetupChange({
     orgId: user.orgId,
@@ -595,11 +595,9 @@ async function findUnownedEntityReferences(
   for (const [refTable, entries] of wanted) {
     const ids = [...new Set(entries.map((e) => e.value))];
     const owned = new Set(
-      (
-        await db.execute<{ id: string }>(sql`
+      (await db.execute<{ id: string }>(sql`
           select id from ${sql.raw(`"${refTable}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)
-      ).rows.map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects")).map((r) => r.id),
     );
     for (const entry of entries) {
       if (!owned.has(entry.value)) unowned.push(entry.column);
@@ -664,11 +662,9 @@ async function findUnownedRecordReferences(
   for (const [refTable, entries] of wanted) {
     const ids = [...new Set(entries.map((e) => e.value))];
     const owned = new Set(
-      (
-        await db.execute<{ id: string }>(sql`
+      (await db.execute<{ id: string }>(sql`
           select id from ${sql.raw(`"${refTable}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)
-      ).rows.map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects")).map((r) => r.id),
     );
     for (const entry of entries) {
       if (!owned.has(entry.value)) unowned.push(entry.field);
@@ -759,10 +755,10 @@ async function refuseDisabledItemInventoryKind(
   const nextKind = String(columns.kind);
   if (INVENTORY_ITEM_KINDS.has(nextKind)) return err(404, "not found");
   if (!itemId) return null;
-  const existing = (await db.execute<{ kind: string }>(sql`
+  const existing = await db.execute<{ kind: string }>(sql`
     select kind from items where id = ${itemId} and org_id = ${orgId} limit 1
-  `)) as { rows: Array<{ kind: string }> };
-  const storedKind = existing.rows[0]?.kind;
+  `, "objects");
+  const storedKind = existing[0]?.kind;
   if (
     storedKind &&
     INVENTORY_ITEM_KINDS.has(storedKind) &&
@@ -784,10 +780,10 @@ async function refuseDisabledItemEquipmentKind(
   const nextKind = String(columns.kind);
   if (ITEM_EQUIPMENT_KINDS.has(nextKind)) return err(404, "not found");
   if (!itemId) return null;
-  const existing = (await db.execute<{ kind: string }>(sql`
+  const existing = await db.execute<{ kind: string }>(sql`
     select kind from items where id = ${itemId} and org_id = ${orgId} limit 1
-  `)) as { rows: Array<{ kind: string }> };
-  const storedKind = existing.rows[0]?.kind;
+  `, "objects");
+  const storedKind = existing[0]?.kind;
   if (
     storedKind &&
     ITEM_EQUIPMENT_KINDS.has(storedKind) &&
@@ -886,8 +882,8 @@ async function createEntity(
   try {
     const r = await db.execute(sql`
       insert into ${sql.raw(`"${table}"`)} (${colSql}) values (${valSql})
-      returning *`);
-    const created = r.rows[0] as Record<string, unknown> | undefined;
+      returning *`, "objects");
+    const created = r[0] as Record<string, unknown> | undefined;
     if (!created) return err(422, `could not create record: no row returned`);
     // A role-kind parties kind names its role row — the generic
     // record writer has no role inputs, so it backs the claim with the
@@ -932,12 +928,12 @@ async function updateEntity(
   const existing = await db.execute(sql`
     select *${subsidiaryColumn}
       from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
-      for update`);
-  if (!existing.rows[0]) return err(404, "not found");
+      for update`, "objects");
+  if (!existing[0]) return err(404, "not found");
 
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   const existingSubsidiary = (
-    existing.rows[0] as { subsidiaryId?: string | null }
+    existing[0] as { subsidiaryId?: string | null }
   ).subsidiaryId;
   // Subsidiary scope only constrains tables carrying the dimension (parties,
   // projects, fixed assets) — the same contract the platform list/get paths
@@ -997,7 +993,7 @@ async function updateEntity(
     const activeDefs = await loadFieldDefs(table);
     const deniedCustom = undefinedCustomField(activeDefs, v.customValues);
     if (deniedCustom) return deniedCustom;
-    const storedCustom = (existing.rows[0].custom as Record<string, unknown> | null) ?? {};
+    const storedCustom = (existing[0].custom as Record<string, unknown> | null) ?? {};
     // A hidden field the caller echoes unchanged passes; any change to it is refused,
     // and its stored value is never overwritten by this update.
     const hiddenCustom = hiddenCustomFieldRefusal(activeDefs, viewer, v.customValues, storedCustom);
@@ -1008,7 +1004,7 @@ async function updateEntity(
     // keys still win in the merge below, while unknown/hidden legacy keys are
     // preserved exactly as before.
     const cv = validateCustomValues(defs, {
-      ...((existing.rows[0].custom as Record<string, unknown>) ?? {}),
+      ...((existing[0].custom as Record<string, unknown>) ?? {}),
       ...v.customValues,
     });
     if (!cv.ok)
@@ -1028,7 +1024,7 @@ async function updateEntity(
       });
     }
     const merged = {
-      ...((existing.rows[0].custom as Record<string, unknown>) ?? {}),
+      ...((existing[0].custom as Record<string, unknown>) ?? {}),
       ...cv.cleaned,
     };
     sets.push(sql`custom = ${JSON.stringify(merged)}::jsonb`);
@@ -1040,8 +1036,8 @@ async function updateEntity(
     const r = await db.execute(sql`
       update ${sql.raw(`"${table}"`)} set ${sql.join(sets, sql`, `)}
       where id = ${id} and org_id = ${user.orgId}
-      returning *`);
-    const written = r.rows[0] as Record<string, unknown> | undefined;
+      returning *`, "objects");
+    const written = r[0] as Record<string, unknown> | undefined;
     if (!written) return err(404, "not found");
     // Adopting a role-kind kind on update backs the claim the same
     // way creation does (see above).
@@ -1059,7 +1055,7 @@ async function updateEntity(
       table,
       rowId: id,
       action: "update",
-      changes: { before: existing.rows[0], after: written },
+      changes: { before: existing[0], after: written },
       actorId: user.id,
     });
     return { status: 200, body: await viewerEntityRow(table, written, viewer) };
@@ -1080,8 +1076,8 @@ async function deleteEntity(
   const owned = await db.execute(sql`
     select *${subsidiaryColumn}
       from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
-      for update`);
-  if (!owned.rows[0]) return err(404, "not found");
+      for update`, "objects");
+  if (!owned[0]) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   // Subsidiary scope only constrains tables carrying the dimension (parties,
   // projects, fixed assets) — the same contract updateEntity enforces above.
@@ -1090,7 +1086,7 @@ async function deleteEntity(
     ENTITY_SUBSIDIARY_TABLES.has(table) &&
     !subsidiaryInMutationScope(
       allowed,
-      (owned.rows[0] as { subsidiaryId?: string | null }).subsidiaryId,
+      (owned[0] as { subsidiaryId?: string | null }).subsidiaryId,
     )
   ) {
     return err(404, "not found");
@@ -1098,7 +1094,7 @@ async function deleteEntity(
   try {
     const erased = (await db.execute(sql`
       delete from ${sql.raw(`"${table}"`)} where id = ${id} and org_id = ${user.orgId}
-      returning *`)).rows[0] as Record<string, unknown> | undefined;
+      returning *`, "objects"))[0] as Record<string, unknown> | undefined;
     if (!erased) return err(404, "not found");
     await auditSetupChange({
       orgId: user.orgId,
@@ -1166,8 +1162,8 @@ async function runDocumentLifecycle(
     const status = await db.execute<{ status: string }>(sql`
       select status from documents
        where id = ${id} and org_id = ${user.orgId}
-    `);
-    if (status.rows[0]?.status === "draft") {
+    `, "objects");
+    if (status[0]?.status === "draft") {
       // The submission runs in this transaction so a refused routing throws
       // inside it: without the wrapper the submission's own transaction
       // would commit its before_submit script effects before the 422.
@@ -1399,8 +1395,8 @@ async function updateDocument(
            subsidiary_id as "subsidiaryId",
            ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}
-      for update`);
-  const row = owned.rows[0];
+      for update`, "objects");
+  const row = owned[0];
   if (!row) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   if (
@@ -1463,13 +1459,13 @@ async function deleteDocumentWriter(
   const owned = await db.execute(sql`
     select subsidiary_id as "subsidiaryId"
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}
-      for update`);
-  if (!owned.rows[0]) return err(404, "not found");
+      for update`, "objects");
+  if (!owned[0]) return err(404, "not found");
   const allowed = await mutationSubsidiaryScope(user, allowedScope);
   if (
     !subsidiaryInMutationScope(
       allowed,
-      (owned.rows[0] as { subsidiaryId?: string | null }).subsidiaryId,
+      (owned[0] as { subsidiaryId?: string | null }).subsidiaryId,
     )
   ) {
     return err(404, "not found");

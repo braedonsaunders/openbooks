@@ -61,8 +61,7 @@ export async function loadPspUnmatched(
     // payout the caller may not see reads as missing, with its amount and
     // reference. An unknown scope reads nothing.
     const scope = authz.allowedSubsidiaryIds === undefined ? new Set<string>() : authz.allowedSubsidiaryIds
-    const row = (
-      await db.execute<UnmatchedLineRow>(sql`
+    const row = (await db.execute<UnmatchedLineRow>(sql`
         select l.id, b.provider, l.kind, l.external_ref as "externalRef", l.description,
                l.amount::text as amount, l.currency, b.currency as "batchCurrency",
                b.external_ref as "batchRef", b.settlement_date::text as "settlementDate"
@@ -71,8 +70,7 @@ export async function loadPspUnmatched(
          where l.org_id = ${authz.user.orgId} and l.id = ${selected} and l.document_id is null
            ${subsidiaryVisibleFilter(sql`b.subsidiary_id`, scope)}
          limit 1
-      `)
-    ).rows[0]
+      `, 'objects'))[0]
     // Another tenant's line — or one linked since — reads as missing, never
     // as a foreign refusal.
     if (!row) notFound()

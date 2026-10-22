@@ -26,8 +26,8 @@ export async function assertPostingClaimLive(
        and status = 'processing'
        and posting_claim_token = ${claim.token}
      returning id
-  `);
-  if (!fenced.rows[0]) throw new PaymentRunPostingClaimFencedError(runId);
+  `, "objects");
+  if (!fenced[0]) throw new PaymentRunPostingClaimFencedError(runId);
   await db.execute(sql`
     select set_config('openbooks.payment_run_claim', ${`${runId}:${claim.token}`}, true)
   `);

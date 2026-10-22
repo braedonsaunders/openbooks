@@ -47,7 +47,7 @@ async function seedDustOrg(): Promise<{
             (${randomUUID()},${org.orgId},${deptShop},'Facilities','standard','per_hour',10,'2026-01-01')`);
     const employeeId = (await db.execute<{ id: string }>(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
       values(${randomUUID()},${org.orgId},'person','Dust worker',${org.subsidiaryId},true,'{}'::jsonb)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
       values(${proj},${org.orgId},${org.subsidiaryId},'DUST-1','Dust job',${org.customerId},'active',true,'{}'::jsonb)`);
     // The late dust entry carries an existing custom key the stamp must
@@ -70,8 +70,8 @@ async function seedDustOrg(): Promise<{
 
 async function customOf(orgId: string, id: string): Promise<Record<string, unknown>> {
   const r = (await db.execute<{ custom: Record<string, unknown> }>(sql`
-    select custom from time_entries where org_id = ${orgId} and id = ${id}`));
-  return r.rows[0]?.custom ?? {};
+    select custom from time_entries where org_id = ${orgId} and id = ${id}`, "objects"));
+  return r[0]?.custom ?? {};
 }
 
 test("dust stamps applied-with-zero and clears the backlog", async () => {
@@ -133,7 +133,7 @@ test("the backfill continues past an all-dust batch to later batches", async () 
             (${randomUUID()},${org.orgId},${deptShop},'Facilities','standard','per_hour',10,'2026-01-01')`);
     const employeeId = (await db.execute<{ id: string }>(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
       values(${randomUUID()},${org.orgId},'person','Batch dust worker',${org.subsidiaryId},true,'{}'::jsonb)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
       values(${proj},${org.orgId},${org.subsidiaryId},'DUST-B','Dust batch job',${org.customerId},'active',true,'{}'::jsonb)`);
     // A full first page of dust (the backfill takes 2000 ids per pass)

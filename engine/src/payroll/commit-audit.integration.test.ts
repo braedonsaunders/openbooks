@@ -21,8 +21,7 @@ test("committing a pay run evidences the authorization in audit_log", { skip: !D
     const result = await commitPayRun(input);
     assert.ok(result.lines > 0, "the fixture run commits real legs");
 
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         action: string;
         actor_id: string | null;
         changes: Record<string, unknown>;
@@ -30,8 +29,7 @@ test("committing a pay run evidences the authorization in audit_log", { skip: !D
         select action, actor_id, changes from audit_log
          where org_id = ${fx.orgId} and table_name = 'pay_runs' and row_id = ${input.documentId}
          order by at, id
-      `)
-    ).rows;
+      `, "objects");
     assert.equal(rows.length, 2, "calculation and authorization retain separate events");
     assert.deepEqual(rows.map(row => row.changes.operation).sort(), ["calculate_pay_run", "commit"]);
     const committed = rows.filter(row => row.changes.operation === "commit");

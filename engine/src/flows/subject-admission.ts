@@ -164,11 +164,11 @@ export async function validateFlowSubjectScopeRefs(
       return "this flow names a legal entity outside your subsidiary access — choose only legal entities you administer, or ask an administrator with unrestricted access";
     }
   }
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${orgId}
        and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
-  `)).rows;
+  `, "objects");
   if (rows.length !== ids.length) {
     return "this flow names a legal entity that does not belong to this organization — choose from this organization's legal entities";
   }

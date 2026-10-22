@@ -155,9 +155,10 @@ const mockDb = `
     }
     return { rows: [] }
   }
-  async function execute(query) {
+  async function execute(query, mode) {
+    const inMode = (result) => (mode === 'objects' ? result.rows : result)
     state.queries.push(inspect(query).text)
-    return respond(query)
+    return inMode(await respond(query))
   }
   export const db = {
     execute,

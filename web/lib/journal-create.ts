@@ -126,21 +126,21 @@ export async function createManualJournal(input: {
     const explicit = (await db.execute<{ id: string; base_currency: string }>(sql`
       select id, base_currency from subsidiaries
        where org_id = ${orgId} and id = ${body.subsidiaryId}
-         and is_active and not is_elimination`)).rows[0];
+         and is_active and not is_elimination`, "objects"))[0];
     if (!explicit) fail("invalid subsidiary", "subsidiaryId");
     subsidiary = explicit;
   } else if (input.allowedSubsidiaryIds === null) {
     const root = (await db.execute<{ id: string; base_currency: string }>(sql`
-      select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null`));
-    if (!root.rows[0]) fail("org has no root subsidiary", undefined, 500);
-    subsidiary = root.rows[0];
+      select id, base_currency from subsidiaries where org_id = ${orgId} and parent_id is null`, "objects"));
+    if (!root[0]) fail("org has no root subsidiary", undefined, 500);
+    subsidiary = root[0];
   } else {
     const ids = [...input.allowedSubsidiaryIds].filter((id) => isUuid(id));
     const allowed = ids.length
       ? (await db.execute<{ id: string; base_currency: string }>(sql`
           select id, base_currency from subsidiaries
            where org_id = ${orgId} and is_active and not is_elimination
-             and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows
+             and id = any(${`{${ids.join(",")}}`}::uuid[])`, "objects"))
       : [];
     if (allowed.length === 0) fail("no_available_subsidiary", undefined, 409);
     if (allowed.length !== 1) fail("subsidiary_selection_required", "subsidiaryId", 409);
@@ -187,8 +187,8 @@ export async function createManualJournal(input: {
   const partyId = body.partyId ?? null;
   if (partyId) {
     const party = (await db.execute<{ id: string }>(sql`
-      select id from parties where id = ${partyId} and org_id = ${orgId} and is_active`));
-    if (!party.rows[0]) throw new JournalCreateError("party not found in this organization", 404);
+      select id from parties where id = ${partyId} and org_id = ${orgId} and is_active`, "objects"));
+    if (!party[0]) throw new JournalCreateError("party not found in this organization", 404);
   }
   const requestedSubsidiaries = [...new Set(
     lines.flatMap((line) => (line.subsidiaryId ? [line.subsidiaryId] : [])),
@@ -200,8 +200,8 @@ export async function createManualJournal(input: {
     const owned = (await db.execute(sql`
       select id from subsidiaries
        where org_id = ${orgId} and is_active and not is_elimination
-         and id = any(${`{${requestedSubsidiaries.join(",")}}`}::uuid[])`));
-    if (owned.rows.length !== requestedSubsidiaries.length) fail("invalid subsidiary", "lines");
+         and id = any(${`{${requestedSubsidiaries.join(",")}}`}::uuid[])`, "objects"));
+    if (owned.length !== requestedSubsidiaries.length) fail("invalid subsidiary", "lines");
   }
   // Every submitted leg must name its account: the drawers send every
   // contentful row, so an account-less row arrives here rather than
@@ -222,8 +222,8 @@ export async function createManualJournal(input: {
   const lineAccountIds = [...new Set(checkedAccountIds)];
   const ownedAccounts = (await db.execute<{ id: string }>(sql`
     select id from accounts
-     where org_id = ${orgId} and id = any(${`{${lineAccountIds.join(",")}}`}::uuid[])`));
-  if (ownedAccounts.rows.length !== lineAccountIds.length) {
+     where org_id = ${orgId} and id = any(${`{${lineAccountIds.join(",")}}`}::uuid[])`, "objects"));
+  if (ownedAccounts.length !== lineAccountIds.length) {
     throw new JournalCreateError("account not found in this organization", 404);
   }
   for (const ref of [
@@ -235,8 +235,8 @@ export async function createManualJournal(input: {
     const unique = [...new Set(ref.ids)];
     const found = (await db.execute(sql`
       select id from ${sql.raw(ref.table)}
-       where org_id = ${orgId} and id = any(${`{${unique.join(",")}}`}::uuid[])`));
-    if (found.rows.length !== unique.length) {
+       where org_id = ${orgId} and id = any(${`{${unique.join(",")}}`}::uuid[])`, "objects"));
+    if (found.length !== unique.length) {
       throw new JournalCreateError(`${ref.table} reference not found in this organization`, 404);
     }
   }
@@ -369,8 +369,8 @@ export async function createManualJournal(input: {
         -- Lost insert race or a foreign/global UUID collision: the re-read
         -- below decides replay vs conflict without reading another org's row.
         on conflict (id) do nothing
-        returning id`));
-      if (!inserted.rows[0]) {
+        returning id`, "objects"));
+      if (!inserted[0]) {
         const replay = await resolveIdempotentReplay(tx, {
           orgId, table: "documents", key: requestId, match: replayMatch,
         });
@@ -385,16 +385,16 @@ export async function createManualJournal(input: {
                                       subsidiary_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
           values (${orgId}, ${requestId}, ${i + 1}, ${line.accountId}, ${line.description},
                   ${line.quantity}, ${line.unit}, ${line.currency}, ${line.fxRate}, ${line.eliminate}, ${line.amount}, ${line.amount}, ${line.partyId}, ${line.departmentId}, ${line.projectId},
-                  ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb, ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn}) returning id`);
-        if (savedLine.rows.length !== 1) throw new JournalCreateError(`Line ${i + 1} could not be saved`, 409);
+                  ${line.subsidiaryId}, ${JSON.stringify(line.extraDims)}::jsonb, ${JSON.stringify(line.custom)}::jsonb, ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn}) returning id`, "objects");
+        if (savedLine.length !== 1) throw new JournalCreateError(`Line ${i + 1} could not be saved`, 409);
       }
       // Segment value dependencies on the saved lines, as posting will read them.
       await assertDocumentSegmentDependencies(tx, orgId, requestId);
       await validateSavedAmortizationLines(tx, orgId, requestId);
       const totals = await validateJournalInstructions(tx,orgId,requestId);
       const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
-        where org_id=${orgId} and id=${requestId} and status='draft' returning id`);
-      if (measured.rows.length !== 1) throw new JournalCreateError("The journal's header-currency total could not be saved",409);
+        where org_id=${orgId} and id=${requestId} and status='draft' returning id`, "objects");
+      if (measured.length !== 1) throw new JournalCreateError("The journal's header-currency total could not be saved",409);
       snapshot.subtotal = totals.debits;
       snapshot.total = totals.debits;
       await tx.execute(sql`

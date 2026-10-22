@@ -20,31 +20,31 @@ export async function validateFinanceIntegrity(
     }
     if (rowId) {
       const existing = ((await executor.execute(sql`
-        select source_kind from segment_definitions where id = ${rowId} and org_id = ${orgId}`)))
-      if (!existing.rows[0]) return 'not found'
+        select source_kind from segment_definitions where id = ${rowId} and org_id = ${orgId}`, 'objects')))
+      if (!existing[0]) return 'not found'
     }
   }
 
   if (entity.key === 'segment-values') {
     const existing = rowId
-      ? (((await executor.execute(sql`
-          select segment_id, parent_id from segment_values where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      ? (await executor.execute(sql`
+          select segment_id, parent_id from segment_values where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
       : null
     if (rowId && !existing) return 'not found'
     const segmentId = String(body.segmentId ?? existing?.segment_id ?? '')
     if (!isUuid(segmentId)) return 'Values can only be created for a custom segment'
     const segment = ((await executor.execute(sql`
       select id, is_hierarchical from segment_definitions
-       where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`)))
-    if (!segment.rows[0]) return 'Values can only be created for a custom segment'
+       where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`, 'objects')))
+    if (!segment[0]) return 'Values can only be created for a custom segment'
     const parentId = body.parentId === undefined ? existing?.parent_id ?? null : body.parentId || null
     if (parentId) {
-      if (!segment.rows[0].is_hierarchical) return 'This segment is not hierarchical'
+      if (!segment[0].is_hierarchical) return 'This segment is not hierarchical'
       if (!isUuid(String(parentId))) return 'Choose a parent value from the same segment'
       const parent = ((await executor.execute(sql`
         select id from segment_values where id = ${String(parentId)} and org_id = ${orgId}
-         and segment_id = ${segmentId}`)))
-      if (!parent.rows[0]) return 'Choose a parent value from the same segment'
+         and segment_id = ${segmentId}`, 'objects')))
+      if (!parent[0]) return 'Choose a parent value from the same segment'
       if (rowId) {
         // This is the early, user-facing check. segment_value_guard repeats it
         // after taking the per-tenant/per-segment storage fence, which closes
@@ -58,17 +58,17 @@ export async function validateFinanceIntegrity(
             select value.id from segment_values value
             join descendants descendant on value.parent_id = descendant.id
              where value.org_id = ${orgId} and value.segment_id = ${segmentId}
-          ) select 1 from descendants where id = ${String(parentId)} limit 1`)))
-        if (cycle.rows.length) return 'A segment value cannot be parented beneath itself'
+          ) select 1 from descendants where id = ${String(parentId)} limit 1`, 'objects')))
+        if (cycle.length) return 'A segment value cannot be parented beneath itself'
       }
     }
   }
 
   if (entity.key === 'subsidiaries') {
     const existing = rowId
-      ? ((await executor.execute<{ id: string; parent_id: string | null; is_active: boolean; is_elimination: boolean }>(sql`
+      ? (await executor.execute<{ id: string; parent_id: string | null; is_active: boolean; is_elimination: boolean }>(sql`
           select id, parent_id, is_active, is_elimination from subsidiaries
-           where id = ${rowId} and org_id = ${orgId}`))).rows[0] ?? null
+           where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0] ?? null
       : null
     if (rowId && !existing) return 'not found'
     const parentId = body.parentId === undefined ? existing?.parent_id : body.parentId || null
@@ -79,8 +79,8 @@ export async function validateFinanceIntegrity(
       if (!isUuid(String(parentId))) return 'Invalid parent subsidiary'
       const parent = ((await executor.execute(sql`
         select id from subsidiaries
-         where id = ${String(parentId)} and org_id = ${orgId} and is_active`)))
-      if (!parent.rows[0]) return 'Parent subsidiary not found'
+         where id = ${String(parentId)} and org_id = ${orgId} and is_active`, 'objects')))
+      if (!parent[0]) return 'Parent subsidiary not found'
       if (rowId) {
         const cycle = ((await executor.execute(sql`
           with recursive descendants as (
@@ -88,21 +88,21 @@ export async function validateFinanceIntegrity(
             union all
             select s.id from subsidiaries s join descendants d on s.parent_id = d.id
              where s.org_id = ${orgId}
-          ) select 1 from descendants where id = ${String(parentId)} limit 1`)))
-        if (cycle.rows.length) return 'A subsidiary cannot be parented beneath itself'
+          ) select 1 from descendants where id = ${String(parentId)} limit 1`, 'objects')))
+        if (cycle.length) return 'A subsidiary cannot be parented beneath itself'
       }
     }
     if (rowId && body.isElimination !== undefined && body.isElimination !== existing?.is_elimination) {
       const used = ((await executor.execute(sql`
-        select 1 from journal_entries where org_id = ${orgId} and subsidiary_id = ${rowId} limit 1`)))
-      if (used.rows.length) return 'Elimination status cannot change after the subsidiary has ledger activity'
+        select 1 from journal_entries where org_id = ${orgId} and subsidiary_id = ${rowId} limit 1`, 'objects')))
+      if (used.length) return 'Elimination status cannot change after the subsidiary has ledger activity'
     }
   }
 
   if (entity.key === 'intercompany-pairs') {
     const current = rowId
-      ? (((await executor.execute(sql`
-          select * from intercompany_pairs where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      ? (await executor.execute(sql`
+          select * from intercompany_pairs where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
       : null
     const fromId = String(body.fromSubsidiaryId ?? current?.from_subsidiary_id ?? '')
     const toId = String(body.toSubsidiaryId ?? current?.to_subsidiary_id ?? '')
@@ -111,13 +111,13 @@ export async function validateFinanceIntegrity(
     if (fromId === toId) return 'Intercompany subsidiaries must be different'
     const subsidiaries = ((await executor.execute(sql`
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
-       and id = any(${`{${[fromId, toId].join(',')}}`}::uuid[])`)))
-    if (subsidiaries.rows.length !== 2) return 'Choose two active, non-elimination subsidiaries'
+       and id = any(${`{${[fromId, toId].join(',')}}`}::uuid[])`, 'objects')))
+    if (subsidiaries.length !== 2) return 'Choose two active, non-elimination subsidiaries'
     const accounts = ((await executor.execute<{ id: string; type: string; eliminate: boolean }>(sql`
       select id, type, eliminate from accounts where org_id = ${orgId} and is_active and not is_summary
-       and id = any(${`{${[dueFromId, dueToId].join(',')}}`}::uuid[])`)))
+       and id = any(${`{${[dueFromId, dueToId].join(',')}}`}::uuid[])`, 'objects')))
     const byId = new Map<string, { id: string; type: string; eliminate: boolean }>(
-      accounts.rows.map((a): [string, { id: string; type: string; eliminate: boolean }] => [a.id, a]),
+      accounts.map((a): [string, { id: string; type: string; eliminate: boolean }] => [a.id, a]),
     )
     const dueFrom = byId.get(dueFromId)
     const dueTo = byId.get(dueToId)
@@ -136,8 +136,8 @@ export async function validateFinanceIntegrity(
       const raw = body[key] !== undefined ? body[key] : current?.[column]
       if (raw === null || raw === undefined || raw === '') continue
       if (!isUuid(String(raw))) return `Choose a valid ${label} account`
-      const control = ((await executor.execute<{ type: string; eliminate: boolean; is_active: boolean; is_summary: boolean }>(sql`
-        select type, eliminate, is_active, is_summary from accounts where org_id = ${orgId} and id = ${String(raw)}`))).rows[0]
+      const control = (await executor.execute<{ type: string; eliminate: boolean; is_active: boolean; is_summary: boolean }>(sql`
+        select type, eliminate, is_active, is_summary from accounts where org_id = ${orgId} and id = ${String(raw)}`, 'objects'))[0]
       if (!control || !control.is_active || control.is_summary) return `Choose an active posting account for the ${label} account`
       if (control.type !== type) return `The ${label} account must be a ${type === 'asset_receivable' ? 'receivable' : 'payable'} account`
       if (!control.eliminate) return `The ${label} account must be marked for elimination`
@@ -146,8 +146,8 @@ export async function validateFinanceIntegrity(
       select 1 from intercompany_pairs where org_id = ${orgId}
        and id is distinct from ${rowId ?? null}
        and ((from_subsidiary_id = ${fromId} and to_subsidiary_id = ${toId})
-         or (from_subsidiary_id = ${toId} and to_subsidiary_id = ${fromId})) limit 1`)))
-    if (duplicate.rows.length) return 'An intercompany pair already exists for these subsidiaries'
+         or (from_subsidiary_id = ${toId} and to_subsidiary_id = ${fromId})) limit 1`, 'objects')))
+    if (duplicate.length) return 'An intercompany pair already exists for these subsidiaries'
   }
   if (entity.key === 'payment-cards') {
     // A card is a posting instrument: its holder must be an employee of this
@@ -155,30 +155,30 @@ export async function validateFinanceIntegrity(
     // fence a card could point at another tenant's party or at an expense
     // account, and the failure would surface only at posting time.
     const current = rowId
-      ? (((await executor.execute(sql`
-          select * from payment_cards where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      ? (await executor.execute(sql`
+          select * from payment_cards where id = ${rowId} and org_id = ${orgId}`, 'objects'))[0]
       : null
     const holderId = String(body.holderPartyId ?? current?.holder_party_id ?? '')
     const liabilityId = String(body.liabilityAccountId ?? current?.liability_account_id ?? '')
     const holder = holderId && isUuid(holderId)
-      ? ((await executor.execute(sql`
+      ? await executor.execute(sql`
           select p.id from parties p
            join employee_roles e on e.party_id = p.id and e.org_id = p.org_id and e.is_active
-          where p.id = ${holderId} and p.org_id = ${orgId} and p.is_active`)))
+          where p.id = ${holderId} and p.org_id = ${orgId} and p.is_active`, 'objects')
       : null
-    if (!holder?.rows.length) return 'Choose an active employee of this organization as the cardholder'
+    if (!holder?.length) return 'Choose an active employee of this organization as the cardholder'
     const liability = liabilityId && isUuid(liabilityId)
-      ? ((await executor.execute(sql`
+      ? await executor.execute<{ id: string; type: string }>(sql`
           select id, type from accounts
-           where id = ${liabilityId} and org_id = ${orgId} and is_active and not is_summary`)))
+           where id = ${liabilityId} and org_id = ${orgId} and is_active and not is_summary`, 'objects')
       : null
-    const liabilityRow = (liability?.rows as { id: string; type: string }[] | undefined)?.[0]
+    const liabilityRow = liability?.[0]
     if (!liabilityRow) return 'Choose an active posting account from this organization as the card liability'
     if (!String(liabilityRow.type).startsWith('liability_')) return 'The card liability must be a liability account'
   }
   if (entity.key === 'subsidiary-ownership-interests') {
     const current = rowId
-      ? (((await executor.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`)))).rows[0]
+      ? (await executor.execute(sql`select * from subsidiary_ownership_interests where id=${rowId} and org_id=${orgId}`, 'objects'))[0]
       : null
     const value = (key: string, column: string) => body[key] ?? current?.[column] ?? null
     const method = String(value('method', 'method') ?? 'full')
@@ -200,10 +200,10 @@ export async function validateFinanceIntegrity(
     const ids = [...new Set(accountRules.map(([key, column]) => value(key, column)).filter(Boolean).map(String))]
     if (hasNonUuidEntry(ids)) return 'Ownership accounts must be valid accounts from this organization'
     const rows = ids.length
-      ? (((await executor.execute(sql`
+      ? (await executor.execute(sql`
           select id,type from accounts where org_id=${orgId} and is_active and not is_summary
             and id=any(${uuidArrayParam(ids)}::uuid[])
-        `)))).rows as { id: string; type: string }[]
+        `, 'objects')) as { id: string; type: string }[]
       : []
     const typeById = new Map(rows.map((account) => [account.id, account.type]))
     for (const [key, column, accepts, message] of accountRules) {
@@ -230,8 +230,8 @@ export async function validateFinanceIntegrity(
       return 'Choose two different ISO currency codes'
     }
     const currencies = ((await executor.execute(sql`
-      select code from currencies where code = any(${`{${[from, to].join(',')}}`}::text[])`)))
-    if (currencies.rows.length !== 2) return 'Unknown currency code'
+      select code from currencies where code = any(${`{${[from, to].join(',')}}`}::text[])`, 'objects')))
+    if (currencies.length !== 2) return 'Unknown currency code'
     const rateFields = entity.key === 'fx-rates'
       ? ['rate']
       : ['currentRate', 'averageRate', 'historicalRate']
@@ -246,8 +246,8 @@ export async function validateFinanceIntegrity(
       const periodId = String(body.periodId ?? '')
       if (!rowId) {
         const period = ((await executor.execute(sql`
-          select 1 from accounting_periods where id = ${periodId} and org_id = ${orgId}`)))
-        if (!period.rows.length) return 'Choose an accounting period from this organization'
+          select 1 from accounting_periods where id = ${periodId} and org_id = ${orgId}`, 'objects')))
+        if (!period.length) return 'Choose an accounting period from this organization'
       }
       if (rowId && body.source !== 'manual') {
         return 'Set the source to Manual before overriding a consolidated rate'
@@ -261,9 +261,9 @@ export async function validateFinanceIntegrity(
         select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
                effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis"
           from item_rate_book_assignments where id = ${rowId} and org_id = ${orgId}
-      `)))
-      if (!current.rows[0]) return 'Rate book assignment not found'
-      values = { ...current.rows[0], ...body }
+      `, 'objects')))
+      if (!current[0]) return 'Rate book assignment not found'
+      values = { ...current[0], ...body }
     }
     if (values.customerId && values.projectId) return 'Choose a customer or a project, not both'
     if (!['usage_date','project_start'].includes(String(values.dateBasis ?? 'usage_date'))) return 'Choose a valid schedule date'
@@ -280,7 +280,7 @@ export async function validateFinanceIntegrity(
           exists(select 1 from item_rate_books where id = ${values.rateBookId} and org_id = ${orgId}) as book_ok,
           ${values.customerId ? sql`exists(select 1 from customer_roles where party_id = ${values.customerId} and org_id = ${orgId} and is_active)` : sql`true`} as customer_ok,
           ${values.projectId ? sql`exists(select 1 from projects where id = ${values.projectId} and org_id = ${orgId})` : sql`true`} as project_ok
-      `)
+      `, 'objects')
     const overlap = await executor.execute(sql`
         select 1 from item_rate_book_assignments
          where org_id = ${orgId} and id is distinct from ${rowId ?? null} and is_active
@@ -288,11 +288,11 @@ export async function validateFinanceIntegrity(
            and daterange(effective_from, effective_to, '[]') &&
                daterange(${values.effectiveFrom ?? null}::date, ${values.effectiveTo ?? null}::date, '[]')
          limit 1
-      `)
-    if (!refs.rows[0]?.book_ok || !refs.rows[0]?.customer_ok || !refs.rows[0]?.project_ok) {
+      `, 'objects')
+    if (!refs[0]?.book_ok || !refs[0]?.customer_ok || !refs[0]?.project_ok) {
       return 'Choose records from this organization'
     }
-    if (overlap.rows.length) return 'This scope already has an active rate book for part of that date range'
+    if (overlap.length) return 'This scope already has an active rate book for part of that date range'
   }
   // Consolidation groups: the payer must be a party of this organization
   // and the billing subsidiary an active entity of it — a group pointing
@@ -306,9 +306,9 @@ export async function validateFinanceIntegrity(
         select payer_party_id as "payerPartyId", billing_subsidiary_id as "billingSubsidiaryId",
                cadence, cutoff_day as "cutoffDay", grouping
           from consolidation_groups where id = ${rowId} and org_id = ${orgId}
-      `)
-      if (!current.rows[0]) return 'Consolidation group not found'
-      values = { ...(current.rows[0] as Record<string, unknown>), ...body }
+      `, 'objects')
+      if (!current[0]) return 'Consolidation group not found'
+      values = { ...(current[0] as Record<string, unknown>), ...body }
     }
     if (!['weekly', 'monthly'].includes(String(values.cadence ?? 'monthly'))) return 'Choose a weekly or monthly cadence'
     if (!['by_child', 'by_subscription', 'by_product'].includes(String(values.grouping ?? 'by_child'))) {
@@ -322,9 +322,9 @@ export async function validateFinanceIntegrity(
         ${values.billingSubsidiaryId
           ? sql`exists(select 1 from subsidiaries where id = ${String(values.billingSubsidiaryId)} and org_id = ${orgId} and is_active)`
           : sql`true`} as subsidiary_ok
-    `)
-    if (!refs.rows[0]?.payer_ok) return 'Choose the payer from this organization'
-    if (!refs.rows[0]?.subsidiary_ok) return 'Choose an active billing entity from this organization'
+    `, 'objects')
+    if (!refs[0]?.payer_ok) return 'Choose the payer from this organization'
+    if (!refs[0]?.subsidiary_ok) return 'Choose an active billing entity from this organization'
   }
   return INTEGRITY_CONTINUES
 }

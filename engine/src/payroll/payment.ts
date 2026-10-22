@@ -97,8 +97,8 @@ export async function recordPayRunPayment(input: {
        where r.org_id = ${orgId} and r.document_id = ${documentId}
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, liveScope)}
        for update of r
-    `));
-    const run = runRows.rows[0];
+    `, "objects"));
+    const run = runRows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (run.paid_at) throw new PayrollError("this pay run is already recorded as paid");
     if (run.doc_status !== "posted" || !run.posted_entry_id) {
@@ -110,7 +110,7 @@ export async function recordPayRunPayment(input: {
     const book = (await tx.execute<{ id: string }>(sql`
       select id from accounting_books where org_id=${orgId} and id=${run.book_id}
         and is_active and posts_gl for share
-    `)).rows[0];
+    `, "objects"))[0];
     if (!book) throw new PayrollError("the pay run requires an active posting book for settlement");
 
     // A calculated run may predate the caller's restriction (or have been
@@ -132,8 +132,8 @@ export async function recordPayRunPayment(input: {
              sql`jl.subsidiary_id`, liveScope,
            )})
          limit 1
-      `));
-      if (hidden.rows[0]) throw new PayrollError("pay run not found");
+      `, "objects"));
+      if (hidden[0]) throw new PayrollError("pay run not found");
     }
 
     // commitPayRun tags only net-pay credits with employee parties, and the
@@ -141,11 +141,11 @@ export async function recordPayRunPayment(input: {
     // posted evidence owns the account even after setup changes or is cleared.
     // A native run has one net-pay account; refuse absent/ambiguous evidence
     // rather than guessing from current configuration or settling a subset.
-    const netPayAccounts = (await tx.execute<{ account_id: string }>(sql`
+    const netPayAccounts = await tx.execute<{ account_id: string }>(sql`
       select distinct account_id from journal_lines
        where org_id=${orgId} and entry_id=${run.posted_entry_id}
          and is_open_item and party_id is not null and amount<0
-    `)).rows;
+    `, "objects");
     if (netPayAccounts.length === 0) {
       throw new PayrollError("the posted run has no open net-pay items (already settled?)");
     }
@@ -162,13 +162,13 @@ export async function recordPayRunPayment(input: {
       const bank = (await tx.execute<{ id: string }>(sql`
         select id from accounts where org_id = ${orgId} and id = ${settlementAccountId}
           and type = 'asset_bank' and is_active for share
-      `));
-      if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
+      `, "objects"));
+      if (!bank[0]) throw new PayrollError("choose an active bank account");
     } else {
-      const issued = (await tx.execute<{ id: string }>(sql`
+      const issued = await tx.execute<{ id: string }>(sql`
         select id from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
            and cheque_number is not null limit 1
-      `)).rows;
+      `, "objects");
       if (issued.length > 0) {
         throw new PayrollError("this run has issued cheques — record its payment against the bank account those cheques are drawn on");
       }
@@ -196,14 +196,14 @@ export async function recordPayRunPayment(input: {
          and jl.amount < 0
          ${payrollSubsidiaryScopeFilter(sql`jl.subsidiary_id`, liveScope)}
        order by jl.id
-    `));
-    if (postedItems.rows.length === 0) {
+    `, "objects"));
+    if (postedItems.length === 0) {
       throw new PayrollError("the posted run has no open net-pay items (already settled?)");
     }
     await lockApplicationEvidence(
       tx,
       orgId,
-      postedItems.rows.map((item) => item.id),
+      postedItems.map((item) => item.id),
       [documentId],
       [run.posted_entry_id],
     );
@@ -212,7 +212,7 @@ export async function recordPayRunPayment(input: {
     // a payment that committed while we waited must be visible to this read.
     // Either endpoint can be the payroll liability. Its carrying and transaction
     // amounts are independent of the counterparty's amounts (including FX).
-    const appliedRows = (await tx.execute<{
+    const appliedRows = await tx.execute<{
       id: string; applied: string; transaction_applied: string;
     }>(sql`
       select jl.id,
@@ -221,11 +221,11 @@ export async function recordPayRunPayment(input: {
       from journal_lines jl
       left join applications a on a.org_id=jl.org_id and a.unapplied_at is null
         and (a.from_line_id=jl.id or a.to_line_id=jl.id)
-      where jl.org_id=${orgId} and jl.id=any(${uuidArray(postedItems.rows.map(item => item.id))}::uuid[])
+      where jl.org_id=${orgId} and jl.id=any(${uuidArray(postedItems.map(item => item.id))}::uuid[])
       group by jl.id
-    `)).rows;
+    `, "objects");
     const applied = new Map(appliedRows.map(row => [row.id, row]));
-    const openItems = postedItems.rows.flatMap(item => {
+    const openItems = postedItems.flatMap(item => {
       const used = applied.get(item.id)!;
       const amount = add(item.amount, used.applied);
       const txnAmount = add(item.txn_amount, used.transaction_applied);
@@ -244,8 +244,8 @@ export async function recordPayRunPayment(input: {
       select s.employee_party_id, s.payment_method, s.cheque_number
         from pay_stubs s
        where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
-    `));
-    const rail = new Map(railRows.rows.map((row) => [row.employee_party_id, row]));
+    `, "objects"));
+    const rail = new Map(railRows.map((row) => [row.employee_party_id, row]));
 
     // Ordinary posting uses the pay run entity's effective regular-period calendar.
     const period = await resolveCoveringPeriod(tx, orgId, paidOn, run.subsidiary_id);
@@ -303,8 +303,8 @@ export async function recordPayRunPayment(input: {
            where org_id = ${orgId} and from_currency = ${origin.baseCurrency}
              and to_currency = ${runCurrency} and rate_type = 'spot'
              and as_of <= ${paidOn}
-        ) candidates order by as_of desc limit 1`));
-      originFxRate = fx.rows[0]?.rate ?? "";
+        ) candidates order by as_of desc limit 1`, "objects"));
+      originFxRate = fx[0]?.rate ?? "";
       if (!originFxRate) {
         throw new PayrollError(
           `no spot rate for ${runCurrency}→${origin.baseCurrency} on or before ${paidOn}`,
@@ -436,7 +436,7 @@ export async function recordPayRunPayment(input: {
     const before = await capturePayRunPaymentEvidence(tx, orgId, documentId, liveScope);
     const applicationIds: string[] = [];
     for (const settlement of settlements) {
-      const saved = (await tx.execute<{ id: string }>(sql`
+      const saved = await tx.execute<{ id: string }>(sql`
         insert into applications (org_id, from_line_id, to_line_id, amount, source_amount,
                                   source_transaction_amount, source_transaction_currency,
                                   target_transaction_amount, target_transaction_currency,
@@ -447,22 +447,22 @@ export async function recordPayRunPayment(input: {
                 ${settlement.txnAmount}, ${settlement.currency},
                 1, 'same_currency', ${`Pay run ${run.document_number} settlement`},
                 ${paidOn}, ${actorId}, ${actorId}) returning id
-      `)).rows;
+      `, "objects");
       if (saved.length !== 1) throw new PayrollError("the payroll settlement application was not saved; no payment was recorded");
       applicationIds.push(saved[0]!.id);
     }
-    const stamped = (await tx.execute<{ document_id: string }>(sql`
+    const stamped = await tx.execute<{ document_id: string }>(sql`
       update pay_runs set paid_at = now(), paid_entry_id = ${entryId},
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId} and paid_at is null and paid_entry_id is null
        returning document_id
-    `)).rows;
+    `, "objects");
     if (stamped.length !== 1) throw new PayrollError("the payroll paid state changed; no payment was recorded");
     const after = await capturePayRunPaymentEvidence(tx, orgId, documentId, liveScope);
     if (after.paidEntryId !== entryId || applicationIds.some(id => !after.applications.some(application => application.id === id))) {
       throw new PayrollError("the saved payroll settlement cannot be resolved; no payment was recorded");
     }
-    const audit = (await tx.execute<{ id: string }>(sql`
+    const audit = await tx.execute<{ id: string }>(sql`
       insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${orgId},'pay_runs',${documentId},'update',${JSON.stringify({
         operation: "record_pay_run_payment", reason: "Record the native net-pay ledger settlement",
@@ -470,7 +470,7 @@ export async function recordPayRunPayment(input: {
         settlement: { kind: settlementKind, accountId: settlementAccountId, designation },
         before, after,
       })}::jsonb,${actorId}) returning id
-    `)).rows;
+    `, "objects");
     if (audit.length !== 1) throw new PayrollError("the payroll settlement audit was not saved; no payment was recorded");
     return { entryId, total, eft, cheque, evidence: after };
   }));
@@ -515,14 +515,14 @@ async function capturePayRunPaymentEvidence(tx: SqlExecutor, orgId: string, docu
     left join journal_entries e on e.org_id=d.org_id and e.id=d.posted_entry_id
     where r.org_id=${orgId} and r.document_id=${documentId}
       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, scope)} for share of r,d
-  `)).rows[0];
+  `, "objects"))[0];
   if (!run) throw new PayrollError("pay run not found");
   if (scope != null) {
     const hidden = (await tx.execute<{ id: string }>(sql`
       select id from journal_lines where org_id=${orgId} and entry_id=${run.sourceEntryId}
         and is_open_item and party_id is not null and amount<0
         and (${payrollSubsidiaryOutsideScopeFilter(sql`subsidiary_id`, scope)}) limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (hidden) throw new PayrollError("pay run not found");
   }
   const applications = run.paidEntryId === null ? [] : (await tx.execute<PayRunPaymentEvidence["applications"][number]>(sql`
@@ -537,7 +537,7 @@ async function capturePayRunPaymentEvidence(tx: SqlExecutor, orgId: string, docu
     from applications a join journal_lines f on f.org_id=a.org_id and f.id=a.from_line_id
       join journal_lines t on t.org_id=a.org_id and t.id=a.to_line_id
     where a.org_id=${orgId} and f.entry_id=${run.paidEntryId} order by a.id
-  `)).rows;
+  `, "objects"));
   if (applications.some(a => a.toEntryId !== run.sourceEntryId || !a.employeePartyId ||
     (scope != null && (!a.subsidiaryId || !scope.has(a.subsidiaryId))))) {
     throw new PayrollError("the payroll settlement has inconsistent source endpoints; review its retained journal and application history");

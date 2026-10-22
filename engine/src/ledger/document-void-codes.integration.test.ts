@@ -90,9 +90,9 @@ test("voiding into a date with no accounting period refuses with a typed code", 
     );
     const doc = await db.execute<{ status: string; void_requested_at: Date | null }>(sql`
       select status, void_requested_at from documents where id = ${documentId} and org_id = ${org.orgId}
-    `);
-    assert.equal(doc.rows[0]?.status, "posted");
-    assert.equal(doc.rows[0]?.void_requested_at, null);
+    `, "objects");
+    assert.equal(doc[0]?.status, "posted");
+    assert.equal(doc[0]?.void_requested_at, null);
   } finally {
     await dropScratchOrg(org.orgId);
   }

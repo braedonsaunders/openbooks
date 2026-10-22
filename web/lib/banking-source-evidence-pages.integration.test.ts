@@ -93,7 +93,7 @@ async function seedSourceEvidenceOrg() {
       statementDate: '2026-07-14', openingBalance: '100', closingBalance: '150',
       lines: [{ postedOn: '2026-07-14', amount: '50', description: 'Bank deposit', bankTransactionId: 'statement-deposit' }] }, ctx)
     const statementLine = (await db.execute<{ id: string }>(sql`select id from bank_statement_lines
-      where org_id=${org.orgId} and account_id=${org.accounts.bank} and bank_transaction_id='statement-deposit'`)).rows[0]!
+      where org_id=${org.orgId} and account_id=${org.accounts.bank} and bank_transaction_id='statement-deposit'`, 'objects'))[0]!
     const reconciliation = await startReconciliation({ accountId: org.accounts.bank,
       throughDate: '2026-07-14', statementBalance: '150' }, ctx)
     await createMatch({ reconciliationId: reconciliation.id, statementLineIds: [statementLine.id], journalLineIds: [bankLine] }, ctx)

@@ -29,10 +29,10 @@ async function setup() {
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Close Flags Admin", "close-admin"));
   state.user = { orgId: org.orgId, id: actorId };
   const enabled = await withBypassContext(() =>
-    db.execute<{ id: string }>(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId} returning id`),
+    db.execute<{ id: string }>(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId} returning id`, "objects"),
   );
-  assert.equal(enabled.rows.length, 1, "close flags setup updates exactly one organization");
-  assert.equal(enabled.rows[0]?.id, org.orgId, "close flags setup updates its own organization");
+  assert.equal(enabled.length, 1, "close flags setup updates exactly one organization");
+  assert.equal(enabled[0]?.id, org.orgId, "close flags setup updates its own organization");
   return { org, actorId };
 }
 
@@ -78,8 +78,8 @@ test("close saves refuse a non-boolean isActive without writing", async () => {
         (select count(*)::int from fiscal_calendars where org_id = ${org.orgId} and name = 'Flags Calendar') as calendars,
         (select count(*)::int from close_policies where org_id = ${org.orgId} and code = 'flags-policy') as policies,
         (select count(*)::int from close_automation_rules where org_id = ${org.orgId} and name = 'Flags Automation') as automations,
-        (select count(*)::int from close_reporting_packages where org_id = ${org.orgId} and name = 'Flags Package') as packages`));
-    assert.deepEqual(counts.rows[0], { calendars: 0, policies: 0, automations: 0, packages: 0 });
+        (select count(*)::int from close_reporting_packages where org_id = ${org.orgId} and name = 'Flags Package') as packages`, "objects"));
+    assert.deepEqual(counts[0], { calendars: 0, policies: 0, automations: 0, packages: 0 });
   } finally {
     state.user = { orgId: "", id: "" };
     await dropScratchOrg(org.orgId);
@@ -98,8 +98,8 @@ test("close saves still accept real booleans for isActive", async () => {
     })));
     assert.equal(off.status, 200, await off.text());
     const row = await withBypassContext(() => db.execute<{ is_active: boolean }>(sql`
-      select is_active from fiscal_calendars where org_id = ${org.orgId} and name = 'Inactive Calendar'`));
-    assert.equal(row.rows[0]?.is_active, false);
+      select is_active from fiscal_calendars where org_id = ${org.orgId} and name = 'Inactive Calendar'`, "objects"));
+    assert.equal(row[0]?.is_active, false);
 
     const on = await withOrgContext(org.orgId, () => POST(request({
       action: "save-automation",
@@ -132,8 +132,8 @@ test("close configuration cannot introduce approval authority outside Flows", as
     const counts=await withBypassContext(()=>db.execute(sql`select
       (select count(*)::int from close_blueprints where org_id=${org.orgId} and name='Refused reviewer blueprint') as blueprints,
       (select count(*)::int from close_automation_rules where org_id=${org.orgId} and name='Refused reviewer assignment') as automations,
-      (select count(*)::int from close_policies where org_id=${org.orgId} and code='refused-approval-policy') as policies`));
-    assert.deepEqual(counts.rows[0],{blueprints:0,automations:0,policies:0});
+      (select count(*)::int from close_policies where org_id=${org.orgId} and code='refused-approval-policy') as policies`, "objects"));
+    assert.deepEqual(counts[0],{blueprints:0,automations:0,policies:0});
     const owner=await withOrgContext(org.orgId,()=>POST(request({action:"save-automation",name:"Preparation assignment",trigger:"task_ready",automationAction:"assign",config:{ownerUserId:actorId}})));
     assert.equal(owner.status,200,await owner.text());
   } finally {

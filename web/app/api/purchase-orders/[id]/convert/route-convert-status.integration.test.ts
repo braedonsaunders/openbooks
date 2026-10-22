@@ -72,8 +72,8 @@ test('convert refuses equipment lines with a named remedy when Equipment is off'
     assert.match(error.message, /Equipment is disabled/)
     assert.match(error.message, /Company Settings/)
     const converted = await withBypassContext(() => db.execute(sql`
-      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'vendor_bill'`))
-    assert.equal(converted.rows[0]!.n, 0, 'a refused conversion persists nothing')
+      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'vendor_bill'`, 'objects'))
+    assert.equal(converted[0]!.n, 0, 'a refused conversion persists nothing')
   } finally {
     await dropScratchOrg(org.orgId)
   }

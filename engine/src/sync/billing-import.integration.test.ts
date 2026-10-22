@@ -142,13 +142,13 @@ test(
         select native_id from external_links
          where org_id = ${org.orgId} and provider = 'chargebee' and external_account = 'fixture-site'
            and object_type = 'customer' and external_id = 'cus_fixture_1'
-      `));
-      assert.equal(customerLink.rows[0]?.native_id, org.customerId, 'mapped customers are linked for native Open AR reconciliation');
+      `, "objects"));
+      assert.equal(customerLink[0]?.native_id, org.customerId, 'mapped customers are linked for native Open AR reconciliation');
       const publishedMappedVersions = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from subscription_plan_versions
          where org_id = ${org.orgId} and plan_id in (${starterPlanId}, ${growthPlanId}) and status = 'published'
-      `));
-      assert.equal(publishedMappedVersions.rows[0]?.n, 2, 'mapped plans receive lifecycle versions before subscription import');
+      `, "objects"));
+      assert.equal(publishedMappedVersions[0]?.n, 2, 'mapped plans receive lifecycle versions before subscription import');
 
       const amendments = await withOrgContext(org.orgId, () => db.execute<{ amendment_type: string; effective_on: string }>(sql`
         select a.amendment_type as amendment_type, a.effective_on::text as effective_on
@@ -157,9 +157,9 @@ test(
           join external_links l on l.org_id = s.org_id and l.native_table = 'subscriptions' and l.native_id = s.id
          where a.org_id = ${org.orgId} and l.provider = 'chargebee' and l.external_id = 'sub_fixture_1'
          order by a.amendment_number
-      `));
+      `, "objects"));
       assert.deepEqual(
-        amendments.rows.map((row) => `${row.amendment_type}@${row.effective_on}`),
+        amendments.map((row) => `${row.amendment_type}@${row.effective_on}`),
         ["change_component@2024-03-10", "change_component@2024-05-20"],
       );
       const mrr = Object.fromEntries(first.reconciliation.mrr.map((row) => [row.month, row.openbooksMrrMajor]));
@@ -179,8 +179,8 @@ test(
           join external_links l on l.org_id = d.org_id and l.native_id = d.id
          where d.org_id = ${org.orgId} and d.kind = 'customer_invoice' and d.status = 'draft'
            and l.provider = 'chargebee' and l.native_table = 'documents' and l.object_type = 'invoice'
-      `));
-      assert.deepEqual(openDocs.rows.map((row) => row.total), ["29.0000"]);
+      `, "objects"));
+      assert.deepEqual(openDocs.map((row) => row.total), ["29.0000"]);
 
       const second = await runBillingHistoryImport(fakeSource(), options);
       assert.equal(second.counts.subscriptions, 1);
@@ -190,12 +190,12 @@ test(
            and exists (select 1 from external_links l
                         where l.org_id = s.org_id and l.native_table = 'subscriptions'
                           and l.native_id = s.id and l.provider = 'chargebee' and l.external_id = 'sub_fixture_1')
-      `));
-      assert.equal(subscriptionRows.rows[0]?.n, 1);
+      `, "objects"));
+      assert.equal(subscriptionRows[0]?.n, 1);
       const amendmentRows = await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from subscription_amendments a where a.org_id = ${org.orgId}
-      `));
-      assert.equal(amendmentRows.rows[0]?.n, 2);
+      `, "objects"));
+      assert.equal(amendmentRows[0]?.n, 2);
       assert.equal(second.reconciliation.ties, true);
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));

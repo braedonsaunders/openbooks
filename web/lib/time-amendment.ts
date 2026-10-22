@@ -67,11 +67,9 @@ export async function amendTimeEntry(
   return withOrgTransaction(orgId, async () => {
     // Probe only the employee identity first, then take the authoritative
     // party scope lock before locking the week header or entry.
-    const identity = (
-      await db.execute<{ employee_party_id: string; worked_on: string }>(sql`
+    const identity = (await db.execute<{ employee_party_id: string; worked_on: string }>(sql`
       select employee_party_id, worked_on::text from time_entries where id = ${entryId} and org_id = ${orgId}
-    `)
-    ).rows[0]
+    `, 'objects'))[0]
     if (!identity) throw new TimeAmendmentRefusal('time entry not found')
     await lockScopeRow(
       db,
@@ -96,8 +94,8 @@ export async function amendTimeEntry(
         from time_entries
        where id = ${entryId} and org_id = ${orgId}
        for update
-    `)
-    const row = src.rows[0]
+    `, 'objects')
+    const row = src[0]
     if (!row) throw new TimeAmendmentRefusal('time entry not found')
     if (row.employee_party_id !== identity.employee_party_id)
       throw new ScopeNotFoundError()
@@ -129,8 +127,8 @@ export async function amendTimeEntry(
       select 1 from time_entries
        where org_id = ${orgId} and amends_entry_id = ${entryId}
        limit 1
-    `)
-    if (already.rows.length)
+    `, 'objects')
+    if (already.length)
       throw new TimeAmendmentRefusal('this entry already has an amendment')
 
     if (
@@ -243,13 +241,11 @@ async function lockTimesheetWeek(
   employeeId: string,
   week: string,
 ): Promise<void> {
-  const header = (
-    await db.execute<{ id: string; status: string }>(sql`
+  const header = (await db.execute<{ id: string; status: string }>(sql`
     select id, status from timesheet_weeks
      where org_id = ${orgId} and employee_party_id = ${employeeId} and week_start = ${week}::date
      for update
-  `)
-  ).rows[0]
+  `, 'objects'))[0]
   if (!header) throw new TimeAmendmentRefusal('timesheet week not found')
   // Reading status under the lock deliberately rechecks any approval or
   // submission that completed while this amendment waited for the header.
@@ -314,9 +310,9 @@ async function insertAmendment(
        ${row.bill_rate_currency}, ${row.bill_rate_book_id}, ${row.bill_rate_version_id}, ${row.bill_rate_line_id},
        ${replacementHours === undefined ? row.id : null}, ${replacementHours === undefined ? null : row.id}, ${actorId}, ${actorId})
     returning id
-  `)
-  const contraId = inserted.rows[0]?.id
-  if (inserted.rows.length !== 1 || !contraId)
+  `, 'objects')
+  const contraId = inserted[0]?.id
+  if (inserted.length !== 1 || !contraId)
     throw new TimeAmendmentRefusal(
       'The time amendment could not be recorded. Nothing changed.',
     )
@@ -381,15 +377,13 @@ export async function amendLockedWeek(
     // it does during approval. Re-read status after acquiring the row lock so
     // a concurrent approval cannot leave this amendment acting on stale week
     // state (or deadlock while each transaction owns the other's rows).
-    const header = (
-      await db.execute<{ status: string }>(sql`
+    const header = (await db.execute<{ status: string }>(sql`
       select status from timesheet_weeks
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and week_start = ${week}::date
        for update
-    `)
-    ).rows[0]
+    `, 'objects'))[0]
     if (!header) throw new TimeAmendmentRefusal('timesheet week not found')
     if (header.status !== 'approved') {
       throw new TimeAmendmentRefusal('only an approved week can be amended')
@@ -402,11 +396,11 @@ export async function amendLockedWeek(
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
        for update
-    `)
+    `, 'objects')
 
     let amended = 0
     const correctionIds: string[] = []
-    for (const row of src.rows) {
+    for (const row of src) {
       if (row.amends_entry_id) continue
       if (row.status !== 'approved') continue
       const locks = lockReasonsFor({
@@ -423,8 +417,8 @@ export async function amendLockedWeek(
         select 1 from time_entries
          where org_id = ${orgId} and amends_entry_id = ${row.id}
          limit 1
-      `)
-      if (already.rows.length) continue
+      `, 'objects')
+      if (already.length) continue
       correctionIds.push(await insertAmendment(orgId, actorId, row))
       amended += 1
     }

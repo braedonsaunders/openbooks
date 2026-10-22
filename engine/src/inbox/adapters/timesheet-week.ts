@@ -46,8 +46,7 @@ async function weekNeedsNoTimesheet(
   weekStartIso: string,
 ): Promise<boolean> {
   const exec = ctx.exec ?? db;
-  const facts = (
-    await exec.execute<{
+  const facts = (await exec.execute<{
       entries: number;
       subsidiary_id: string | null;
       leave_days: string[] | null;
@@ -69,8 +68,7 @@ async function weekNeedsNoTimesheet(
             join worker_employments e on e.id = r.employment_id and e.org_id = r.org_id
            where r.org_id = ${ctx.orgId} and e.worker_party_id = ${partyId}
              and r.status = 'approved' and day::date between r.starts_on and r.ends_on)) as leave_days
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   if (!facts || facts.entries > 0) return false;
   const leave = new Set(facts.leave_days ?? []);
   const days = Array.from({ length: 7 }, (_, index) => {
@@ -159,8 +157,7 @@ export const timesheetWeekAdapter: InboxAdapter = {
       // never on the week's own last day, and never by the database
       // server's clock or its Monday-based week.
       const today = ctx.asOf.slice(0, 10);
-      const weeks = (
-        await db.execute<OwnWeekRow>(sql`
+      const weeks = await db.execute<OwnWeekRow>(sql`
         select id::text as id, week_start::text as week_start, status
           from timesheet_weeks
          where org_id = ${ctx.orgId}
@@ -169,8 +166,7 @@ export const timesheetWeekAdapter: InboxAdapter = {
            and week_start + 7 <= ${today}::date
          order by week_start desc
          limit 10
-      `)
-      ).rows;
+      `, "objects");
       for (const week of weeks) {
         // A week with nothing recorded in which every working day was
         // approved leave or a non-working calendar day owes no timesheet.

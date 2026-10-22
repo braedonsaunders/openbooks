@@ -74,8 +74,8 @@ async function revisionToken(orgId: string, documentId: string): Promise<string>
   const row = (await withOrgContext(orgId, () => db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as "updatedAt"
       from documents where id = ${documentId}
-  `)));
-  return row.rows[0]!.updatedAt;
+  `, "objects")));
+  return row[0]!.updatedAt;
 }
 
 test(
@@ -115,7 +115,7 @@ test(
       );
       const lines = (await withOrgContext(orgA.orgId, () => db.execute<{ n: number }>(sql`
         select count(*)::int as n from document_lines where document_id = ${documentId} and org_id = ${orgA.orgId}
-      `))).rows[0]!.n;
+      `, "objects")))[0]!.n;
       assert.equal(lines, 0, 'refused foreign-account lines store nothing');
     } finally {
       routeState.authz = null;

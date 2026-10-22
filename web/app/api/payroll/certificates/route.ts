@@ -87,7 +87,7 @@ async function committedStubInRange(
      where r.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
        and r.run_status = 'committed' and d.status <> 'voided'
        and r.pay_date >= ${fromInclusive}::date and r.pay_date < ${toExclusive}::date
-     order by r.pay_date limit 1`)).rows[0]
+     order by r.pay_date limit 1`, 'objects'))[0]
   return posted?.pay_date ?? null
 }
 
@@ -112,9 +112,9 @@ type StoredRow = {
 }
 
 async function employeeSubsidiaryId(orgId: string, employee: string) {
-  const rows = (await db.execute<{ subsidiaryId: string | null }>(sql`
+  const rows = await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
-     where org_id = ${orgId} and id = ${employee}`)).rows
+     where org_id = ${orgId} and id = ${employee}`, 'objects')
   return rows.length === 1 ? rows[0]!.subsidiaryId : undefined
 }
 
@@ -139,7 +139,7 @@ export const GET = defineRoute({
         certificates: declared.certificates.filter((certificate) => certificate.storage === 'certificate_rows'),
       }
     }
-    const stored = (await db.execute<StoredRow>(sql`
+    const stored = await db.execute<StoredRow>(sql`
       select c.id::text as id, c.certificate_key, c.country, c.region, c.sub_region, c.answers,
              c.effective_from::text as effective_from, c.superseded_on::text as superseded_on,
              c.created_at::text as created_at, c.created_by::text as created_by,
@@ -151,13 +151,13 @@ export const GET = defineRoute({
         left join users ub on ub.id = c.updated_by and ub.org_id = c.org_id
        where c.org_id = ${gate.user.orgId} and c.employee_party_id = ${employee}
        order by c.certificate_key, coalesce(c.region, ''), coalesce(c.sub_region, ''),
-                c.effective_from nulls first`)).rows
+                c.effective_from nulls first`, 'objects')
     // The employment start the certificate form defaults its effective date
     // to: the hire date on the employee role, so a converting org files the
     // certificate as of when the employment began rather than today.
     const employmentStart = (await db.execute<{ hired_on: string | null }>(sql`
       select min(hired_on)::text as hired_on from employee_roles
-       where org_id = ${gate.user.orgId} and party_id = ${employee}`)).rows[0]?.hired_on ?? null
+       where org_id = ${gate.user.orgId} and party_id = ${employee}`, 'objects'))[0]?.hired_on ?? null
     return NextResponse.json({
       countries: Object.keys(PAYROLL_COUNTRY_PACKS),
       declarations,
@@ -249,7 +249,7 @@ export const POST = defineRoute({
     // name is never parsed.
     const profile = (await db.execute<{ country: string; province: string }>(sql`
       select country, province from employee_payroll_profiles
-       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}`)).rows[0]
+       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}`, 'objects'))[0]
     if (!profile) {
       return NextResponse.json(
         { error: 'no payroll profile for this employee — save the profile before filing a certificate' },
@@ -308,24 +308,24 @@ export const POST = defineRoute({
       // only the open rows lets two transactions both decide to insert a
       // current row. The payroll profile exists for every eligible employee and
       // serializes certificate filings for that employee, including first ones.
-      const profileLock = (await db.execute<{ employee_party_id: string }>(sql`
+      const profileLock = await db.execute<{ employee_party_id: string }>(sql`
         select employee_party_id from employee_payroll_profiles
          where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
-         for update`)).rows
+         for update`, 'objects')
       if (profileLock.length !== 1) {
         return NextResponse.json(
           { error: 'no payroll profile for this employee — save the profile before filing a certificate' },
           { status: 422 },
         )
       }
-      const filed = (await db.execute<{ id: string; effective_from: string | null; superseded_on: string | null }>(sql`
+      const filed = await db.execute<{ id: string; effective_from: string | null; superseded_on: string | null }>(sql`
         select id, effective_from::text as effective_from, superseded_on::text as superseded_on
           from employee_tax_certificates
          where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
            and certificate_key = ${certificate.key}
            and coalesce(region, '') = coalesce(${region}, '')
            and coalesce(sub_region, '') = coalesce(${subRegion}, '')
-         for update`)).rows
+         for update`, 'objects')
       // Effective-dated history: a filing takes the interval
       // [effective, next filing) where the next filing is the earliest row
       // already starting after it. A back-filled EARLIER certificate closes at
@@ -376,7 +376,7 @@ export const POST = defineRoute({
         values (${orgId}, ${body.employeePartyId}, ${country}, ${certificate.key},
                 ${region}, ${subRegion}, ${JSON.stringify(answers)}::jsonb,
                 ${effective}::date, ${effectiveTo}::date, ${userId}, ${userId})
-        returning id`)).rows[0]!
+        returning id`, 'objects'))[0]!
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
         values (${orgId}, 'employee_tax_certificates', ${inserted.id}, 'insert',
@@ -420,7 +420,7 @@ export const PATCH = defineRoute({
                region, sub_region, answers,
                effective_from::text as effective_from, superseded_on::text as superseded_on
           from employee_tax_certificates
-         where org_id = ${orgId} and id = ${body.id}`)).rows[0]
+         where org_id = ${orgId} and id = ${body.id}`, 'objects'))[0]
       if (!unloaded) return notFound('record')
       const subsidiaryId = await employeeSubsidiaryId(orgId, unloaded.employee_party_id)
       if (subsidiaryId === undefined) return notFound('record')
@@ -440,10 +440,10 @@ export const PATCH = defineRoute({
       }
       // Lock the stable parent before the row, exactly like the POST path, so
       // concurrent filings and corrections for this employee serialize.
-      const profileLock = (await db.execute<{ employee_party_id: string }>(sql`
+      const profileLock = await db.execute<{ employee_party_id: string }>(sql`
         select employee_party_id from employee_payroll_profiles
          where org_id = ${orgId} and employee_party_id = ${unloaded.employee_party_id}
-         for update`)).rows
+         for update`, 'objects')
       if (profileLock.length !== 1) {
         return NextResponse.json(
           { error: 'no payroll profile for this employee — save the profile before correcting a certificate' },
@@ -456,18 +456,18 @@ export const PATCH = defineRoute({
                effective_from::text as effective_from, superseded_on::text as superseded_on
           from employee_tax_certificates
          where org_id = ${orgId} and id = ${body.id}
-         for update`)).rows[0]
+         for update`, 'objects'))[0]
       if (!row) return notFound('record')
       // The corrected interval, computed exactly like a filing: [new date,
       // next filing), keeping the row's own close when it is earlier.
-      const siblings = (await db.execute<{ effective_from: string | null; superseded_on: string | null }>(sql`
+      const siblings = await db.execute<{ effective_from: string | null; superseded_on: string | null }>(sql`
         select effective_from::text as effective_from, superseded_on::text as superseded_on
           from employee_tax_certificates
          where org_id = ${orgId} and employee_party_id = ${row.employee_party_id}
            and certificate_key = ${row.certificate_key}
            and coalesce(region, '') = coalesce(${row.region}, '')
            and coalesce(sub_region, '') = coalesce(${row.sub_region}, '')
-           and id <> ${row.id}`)).rows
+           and id <> ${row.id}`, 'objects')
       let end: string | null = row.superseded_on
       for (const sibling of siblings) {
         if (sibling.effective_from !== null && sibling.effective_from > body.effectiveFrom
@@ -549,7 +549,7 @@ export const DELETE = defineRoute({
                effective_from::text as effective_from, superseded_on::text as superseded_on
           from employee_tax_certificates
          where org_id = ${orgId} and id = ${body.id}
-         for update`)).rows[0]
+         for update`, 'objects'))[0]
       if (!row) return notFound('record')
       const subsidiaryId = await employeeSubsidiaryId(orgId, row.employee_party_id)
       if (subsidiaryId === undefined) return notFound('record')

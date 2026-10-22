@@ -49,8 +49,8 @@ async function sequenceRow(orgId: string, kind: string) {
   }>(sql`
     select subsidiary_id, prefix, next_number, padding, allocated_through
       from number_sequences
-     where org_id = ${orgId} and document_kind = ${kind}`));
-  return rows.rows;
+     where org_id = ${orgId} and document_kind = ${kind}`, "objects"));
+  return rows;
 }
 
 /** Match a PG violation (code / constraint / message) anywhere in a cause chain. */
@@ -244,7 +244,7 @@ test("standard-cost revaluation refuses to self-cancel with no variance account,
     // The revaluation engine dates its entry on the org's business today, so
     // the org needs an open period covering it (fixture only pins 2026-07).
     const calendar = (await db.execute<{ id: string }>(sql`
-      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`));
+      select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"));
     await db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -254,7 +254,7 @@ test("standard-cost revaluation refuses to self-cancel with no variance account,
              to_char(current_date, 'YYYY-MM'),
              date_trunc('month', current_date)::date,
              (date_trunc('month', current_date) + interval '1 month - 1 day')::date,
-             false, ${calendar.rows[0]!.id}
+             false, ${calendar[0]!.id}
       on conflict do nothing`);
 
     await receiveInventory(org.orgId, null, {
@@ -266,21 +266,21 @@ test("standard-cost revaluation refuses to self-cancel with no variance account,
       const rows = (await db.execute<{ v: string }>(sql`
         select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0)::text as v
           from cost_layers
-         where org_id = ${org.orgId} and item_id = ${org.items.fifo}`));
-      return rows.rows[0]!.v;
+         where org_id = ${org.orgId} and item_id = ${org.items.fifo}`, "objects"));
+      return rows[0]!.v;
     };
     const assetBalance = async () => {
       const rows = (await db.execute<{ v: string }>(sql`
         select coalesce(sum(l.amount), 0)::text as v
           from journal_lines l
-         where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.invAsset}`));
-      return rows.rows[0]!.v;
+         where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.invAsset}`, "objects"));
+      return rows[0]!.v;
     };
     const inventoryEntryCount = async () => {
       const rows = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from journal_entries
-         where org_id = ${org.orgId} and origin = 'inventory'`));
-      return rows.rows[0]!.n;
+         where org_id = ${org.orgId} and origin = 'inventory'`, "objects"));
+      return rows[0]!.n;
     };
 
     // (1) Revaluing with no variance account must be REFUSED with zero

@@ -185,7 +185,7 @@ async function loadRecovery(
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        order by a.created_at desc
        limit 8
-    `),
+    `, 'objects'),
     db.execute<{
       attemptId: string
       invoiceNumber: string
@@ -211,11 +211,11 @@ async function loadRecovery(
          )
        order by a.created_at desc
        limit 8
-    `),
+    `, 'objects'),
   ])
   const expiring = expiringCards.slice(0, 8)
-  const awaitingAuth = awaitingAuthRows.rows
-  const hardStuck = hardStuckRows.rows
+  const awaitingAuth = awaitingAuthRows
+  const hardStuck = hardStuckRows
   // Setup-link currency is per customer, never the book's latest invoice:
   // pricing one party's remedy in another party's currency misprices the
   // provider session. Customers with no invoice carry null and refuse by
@@ -223,7 +223,7 @@ async function loadRecovery(
   const partyCurrency = new Map<string, string>()
   if (expiring.length > 0) {
     const partyIds = [...new Set(expiring.map((row) => row.partyId))]
-    const currencyRows = (await db.execute<{ partyId: string; currency: string }>(sql`
+    const currencyRows = await db.execute<{ partyId: string; currency: string }>(sql`
       select d.party_id as "partyId", d.currency
         from documents d
         join parties p on p.org_id = d.org_id and p.id = d.party_id
@@ -232,7 +232,7 @@ async function loadRecovery(
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
        order by d.document_date desc, d.created_at desc, d.id desc
-    `)).rows
+    `, 'objects')
     for (const row of currencyRows) {
       if (!partyCurrency.has(row.partyId)) partyCurrency.set(row.partyId, row.currency)
     }
@@ -360,7 +360,7 @@ export async function loadCollections(
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
        limit 1
-    `)).rows as AttemptDrawerData['attempt'][]
+    `, 'objects')) as AttemptDrawerData['attempt'][]
     const attempt = rows[0]
     if (attempt) {
       attemptDrawer = {

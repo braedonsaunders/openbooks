@@ -40,7 +40,7 @@ async function seedUser(orgId: string, userId: string): Promise<void> {
     insert into app_roles (org_id, key, name, is_built_in, permissions)
     values (${orgId}, ${`title-${userId.slice(0, 8)}`}, 'Title User', false, '[]'::jsonb)
     returning id
-  `)).rows[0]!.id;
+  `, "objects"))[0]!.id;
   await db.execute(sql`
     insert into users (id, org_id, email, name, password_hash, is_active)
     values (${userId}, ${orgId}, ${`title-${userId.slice(0, 8)}@scratch.test`}, 'Title User', 'x', false)
@@ -92,8 +92,8 @@ test("auto title round-trips and stays owner-scoped", DB_ONLY, async () => {
     assert.equal(await writeAutoTitle(owner, conversationId, "Vendor aging follow-up"), true);
     const raw = await db.execute<{ metadata: unknown }>(sql`
       select metadata from ai_conversations where id = ${conversationId}
-    `);
-    const metadata = raw.rows[0]!.metadata as { pinned_tab?: string; title?: { source?: string } };
+    `, "objects");
+    const metadata = raw[0]!.metadata as { pinned_tab?: string; title?: { source?: string } };
     assert.equal(metadata.pinned_tab, "inbox");
     assert.equal(metadata.title?.source, "auto");
   } finally {

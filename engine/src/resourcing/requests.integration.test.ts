@@ -15,7 +15,7 @@ const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 type Fixture = { orgId: string; actorId: string; approverId: string; subsidiaryId: string; projectId: string; employeePartyId: string };
 
 async function write(query: SQL) {
-  const result = await db.execute(query);
+  const result = await db.execute<Record<string, unknown>>(query);
   assert.equal(result.rowCount, 1);
 }
 async function withFixture(run: (f: Fixture) => Promise<void>): Promise<void> {
@@ -42,9 +42,9 @@ const requestInput = (f: Fixture, firstWeek = "2026-10-04", lastWeek = firstWeek
 
 async function addApprovalFlow(f: Fixture): Promise<void> { await withBypassContext(() => seedApprovalFlow(f.orgId, { subjectKind: RESOURCING_REQUEST_SUBJECT_KIND, assignees: [{ type: "user", userId: f.approverId }], mode: "any" })); }
 async function gateForRequest(f: Fixture, runId: string): Promise<string> {
-  const rows = await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates where org_id = ${f.orgId} and run_id = ${runId} and status = 'pending'`));
-  assert.equal(rows.rows.length, 1);
-  return rows.rows[0]!.id;
+  const rows = await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates where org_id = ${f.orgId} and run_id = ${runId} and status = 'pending'`, "objects"));
+  assert.equal(rows.length, 1);
+  return rows[0]!.id;
 }
 async function decide(f: Fixture, gateId: string, decision: "approved" | "rejected", comment?: string) { installEngineSeams(); return decideGate({ gateId, decision, userId: f.approverId, allowedSubsidiaryIds: null, comment }); }
 
@@ -52,10 +52,10 @@ test("a tenant with no approval gates releases a resource request and retains it
   const draft = await createResourceRequest(requestInput(f));
   const released = await submitResourceRequest({ ...ctx(f), requestId: draft.id });
   assert.equal(released.status, "approved");
-  const row = (await withBypassContext(() => db.execute<{ status: string; flow_instance_id: string | null }>(sql`select status, flow_instance_id from res_requests where org_id = ${f.orgId} and id = ${draft.id}`))).rows[0];
+  const row = (await withBypassContext(() => db.execute<{ status: string; flow_instance_id: string | null }>(sql`select status, flow_instance_id from res_requests where org_id = ${f.orgId} and id = ${draft.id}`, "objects")))[0];
   assert.deepEqual(row, { status: "approved", flow_instance_id: null });
-  const assignments = (await withBypassContext(() => db.execute<{ request_id: string; week_start: string }>(sql`
-    select request_id, week_start::text from res_assignments where org_id=${f.orgId} and request_id=${draft.id}`))).rows;
+  const assignments = await withBypassContext(() => db.execute<{ request_id: string; week_start: string }>(sql`
+    select request_id, week_start::text from res_assignments where org_id=${f.orgId} and request_id=${draft.id}`, "objects"));
   assert.deepEqual(assignments, [{ request_id: draft.id, week_start: "2026-10-04" }]);
 }));
 
@@ -68,7 +68,7 @@ test("resource requests validate every week and reject ranges beyond availabilit
     assert.equal(error.code, "capacity_unknown");
     return true;
   });
-  const state = (await withBypassContext(() => db.execute<{ status: string }>(sql`select status from res_requests where org_id = ${f.orgId} and id = ${draft.id}`))).rows[0];
+  const state = (await withBypassContext(() => db.execute<{ status: string }>(sql`select status from res_requests where org_id = ${f.orgId} and id = ${draft.id}`, "objects")))[0];
   assert.deepEqual(state, { status: "draft" });
   await assert.rejects(createResourceRequest(requestInput(f, "2026-10-04", "2026-10-11")), (error: unknown) => {
     assert.ok(error instanceof ResourcingRefusal);
@@ -91,15 +91,15 @@ test("approval creates one hard request-linked assignment for every requested Su
   const draft = await createResourceRequest(requestInput(f, "2026-10-04", "2026-10-11"));
   const submitted = await submitResourceRequest({ ...ctx(f), requestId: draft.id });
   await decide(f, await gateForRequest(f, submitted.flowInstanceId!), "approved", "Approved for busy season");
-  const rows = await withBypassContext(() => db.execute<{ id: string; week_start: string; booking: string; source: string; request_id: string; planned_hours: string }>(sql`select id::text, week_start::text, booking, source, request_id::text, planned_hours::text from res_assignments where org_id = ${f.orgId} and request_id = ${draft.id} order by week_start`));
-  assert.equal(rows.rows.length, 2);
-  assert.equal(rows.rows[0]?.id, prior.assignment.id);
-  assert.notEqual(rows.rows[0]?.id, rows.rows[1]?.id);
-  assert.deepEqual(rows.rows.map(({ week_start, booking, source, request_id, planned_hours }) => ({ week_start, booking, source, request_id, planned_hours })), [
+  const rows = await withBypassContext(() => db.execute<{ id: string; week_start: string; booking: string; source: string; request_id: string; planned_hours: string }>(sql`select id::text, week_start::text, booking, source, request_id::text, planned_hours::text from res_assignments where org_id = ${f.orgId} and request_id = ${draft.id} order by week_start`, "objects"));
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0]?.id, prior.assignment.id);
+  assert.notEqual(rows[0]?.id, rows[1]?.id);
+  assert.deepEqual(rows.map(({ week_start, booking, source, request_id, planned_hours }) => ({ week_start, booking, source, request_id, planned_hours })), [
     { week_start: "2026-10-04", booking: "hard", source: "request", request_id: draft.id, planned_hours: "50.0000" },
     { week_start: "2026-10-11", booking: "hard", source: "request", request_id: draft.id, planned_hours: "50.0000" },
   ]);
-  const request = (await withBypassContext(() => db.execute<{ status: string; decision_comment: string | null }>(sql`select status, decision_comment from res_requests where org_id = ${f.orgId} and id = ${draft.id}`))).rows[0];
+  const request = (await withBypassContext(() => db.execute<{ status: string; decision_comment: string | null }>(sql`select status, decision_comment from res_requests where org_id = ${f.orgId} and id = ${draft.id}`, "objects")))[0];
   assert.equal(request?.status, "approved");
   assert.match(request?.decision_comment ?? "", /Approved for busy season/);
   assert.match(request?.decision_comment ?? "", /Capacity context:.*90\.0000 hard hours/);
@@ -116,7 +116,7 @@ test("an assignment refusal leaves the approval pending and creates zero weekly 
     assert.match(error.message, /still pending/);
     return true;
   });
-  const state = (await withBypassContext(() => db.execute<{ request_status: string; gate_status: string; assignments: number }>(sql`select r.status request_status, g.status gate_status, (select count(*)::int from res_assignments a where a.org_id = r.org_id and a.request_id = r.id) assignments from res_requests r join flow_gates g on g.org_id = r.org_id and g.run_id = r.flow_instance_id where r.org_id = ${f.orgId} and r.id = ${draft.id}`))).rows[0];
+  const state = (await withBypassContext(() => db.execute<{ request_status: string; gate_status: string; assignments: number }>(sql`select r.status request_status, g.status gate_status, (select count(*)::int from res_assignments a where a.org_id = r.org_id and a.request_id = r.id) assignments from res_requests r join flow_gates g on g.org_id = r.org_id and g.run_id = r.flow_instance_id where r.org_id = ${f.orgId} and r.id = ${draft.id}`, "objects")))[0];
   assert.deepEqual(state, { request_status: "submitted", gate_status: "pending", assignments: 0 });
 }));
 
@@ -124,6 +124,6 @@ test("rejection retains the approver comment and creates no assignments", enable
   await addApprovalFlow(f);
   const draft = await createResourceRequest(requestInput(f)), submitted = await submitResourceRequest({ ...ctx(f), requestId: draft.id });
   await decide(f, await gateForRequest(f, submitted.flowInstanceId!), "rejected", "Project dates are not confirmed");
-  const row = (await withBypassContext(() => db.execute<{ status: string; decided_by: string; decision_comment: string; assignments: number }>(sql`select r.status, r.decided_by::text, r.decision_comment, (select count(*)::int from res_assignments a where a.org_id = r.org_id and a.request_id = r.id) assignments from res_requests r where r.org_id = ${f.orgId} and r.id = ${draft.id}`))).rows[0];
+  const row = (await withBypassContext(() => db.execute<{ status: string; decided_by: string; decision_comment: string; assignments: number }>(sql`select r.status, r.decided_by::text, r.decision_comment, (select count(*)::int from res_assignments a where a.org_id = r.org_id and a.request_id = r.id) assignments from res_requests r where r.org_id = ${f.orgId} and r.id = ${draft.id}`, "objects")))[0];
   assert.deepEqual(row, { status: "rejected", decided_by: f.approverId, decision_comment: "Project dates are not confirmed", assignments: 0 });
 }));

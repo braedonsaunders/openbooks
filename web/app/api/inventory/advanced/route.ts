@@ -115,8 +115,8 @@ export const GET = defineRoute({
        group by l.id, i.code, i.name
        order by l.lot_number
        limit 200
-    `));
-    return NextResponse.json({ lots: rows.rows });
+    `, "objects"));
+    return NextResponse.json({ lots: rows });
   }
 
   if (view === "landed") {
@@ -164,15 +164,15 @@ export const GET = defineRoute({
     const total = Number(
       (await db.execute<{ n: string }>(sql`
         select count(*)::text as n from landed_cost_vouchers
-         where org_id = ${orgId} ${scopeFor(sql`subsidiary_id`)} ${statusScope} ${searchScope}`)).rows[0]?.n ?? 0,
+         where org_id = ${orgId} ${scopeFor(sql`subsidiary_id`)} ${statusScope} ${searchScope}`, "objects"))[0]?.n ?? 0,
     );
     const rows = (await db.execute(sql`
       select id, document_number as "documentNumber", status, amount, basis, voucher_date as "voucherDate", memo
         from landed_cost_vouchers where org_id = ${orgId}
        ${scopeFor(sql`subsidiary_id`)} ${statusScope} ${searchScope} ${cursorScope}
        order by voucher_date desc, id limit ${limit + 1}
-    `));
-    const page = rows.rows as Array<{ voucherDate: string; id: string } & Record<string, unknown>>;
+    `, "objects"));
+    const page = rows as Array<{ voucherDate: string; id: string } & Record<string, unknown>>;
     const hasMore = page.length > limit;
     const visible = hasMore ? page.slice(0, limit) : page;
     const last = visible[visible.length - 1];
@@ -197,8 +197,8 @@ export const GET = defineRoute({
        ${scopeFor(sql`t.subsidiary_id`)}
      order by t.ordered_on desc, t.created_at desc
      limit 50
-  `));
-  return NextResponse.json({ transfers: transfers.rows });
+  `, "objects"));
+  return NextResponse.json({ transfers });
   },
 });
 
@@ -258,9 +258,9 @@ export const POST = defineRoute({
   const orderSubsidiaryInScope = async (orderId: unknown): Promise<boolean> => {
     if (typeof orderId !== "string" || !isUuid(orderId)) return false;
     const r = await db.execute<{ subsidiary_id: string | null }>(
-      sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId}`,
+      sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId}`, "objects",
     );
-    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
+    const subsidiaryId = r[0]?.subsidiary_id ?? null;
     return subsidiaryId !== null && (!gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(subsidiaryId));
   };
 
@@ -268,9 +268,9 @@ export const POST = defineRoute({
   const voucherSubsidiaryInScope = async (voucherId: unknown): Promise<boolean> => {
     if (typeof voucherId !== "string" || !isUuid(voucherId)) return false;
     const r = await db.execute<{ subsidiary_id: string | null }>(
-      sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId}`,
+      sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId}`, "objects",
     );
-    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
+    const subsidiaryId = r[0]?.subsidiary_id ?? null;
     return subsidiaryId !== null && (!gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(subsidiaryId));
   };
 
@@ -295,20 +295,20 @@ export const POST = defineRoute({
   // including a rehome that wins between the probe and this lock.
   const lockedOrderFence = async (orderId: string): Promise<void> => {
     const r = await db.execute<{ subsidiary_id: string | null }>(
-      sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId} for update`,
+      sql`select subsidiary_id from transfer_orders where id = ${orderId} and org_id = ${orgId} for update`, "objects",
     );
-    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
-    if (!r.rows[0] || subsidiaryId === null || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
+    const subsidiaryId = r[0]?.subsidiary_id ?? null;
+    if (!r[0] || subsidiaryId === null || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
       throw new InventoryNotFoundError("not_found");
     }
   };
 
   const lockedVoucherFence = async (voucherId: string): Promise<void> => {
     const r = await db.execute<{ subsidiary_id: string | null }>(
-      sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId} for update`,
+      sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId} for update`, "objects",
     );
-    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
-    if (!r.rows[0] || subsidiaryId === null || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
+    const subsidiaryId = r[0]?.subsidiary_id ?? null;
+    if (!r[0] || subsidiaryId === null || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId))) {
       throw new InventoryNotFoundError("not_found");
     }
   };

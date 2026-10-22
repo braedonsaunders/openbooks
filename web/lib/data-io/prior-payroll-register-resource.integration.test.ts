@@ -72,22 +72,22 @@ async function seedEmployee(orgId: string, actorId: string, name: string): Promi
 
 async function tableCount(orgId: string, table: "payroll_prior_registers" | "payroll_prior_stubs"): Promise<number> {
   const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from ${sql.raw(`public.${table}`)} where org_id = ${orgId}`));
-  return rows.rows[0]!.n;
+    select count(*)::int as n from ${sql.raw(`public.${table}`)} where org_id = ${orgId}`, "objects"));
+  return rows[0]!.n;
 }
 
 async function stubCountFor(orgId: string, label: string): Promise<number> {
   const rows = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from payroll_prior_stubs
-     where org_id = ${orgId} and employee_label = ${label}`));
-  return rows.rows[0]!.n;
+     where org_id = ${orgId} and employee_label = ${label}`, "objects"));
+  return rows[0]!.n;
 }
 
 async function priorAuditCount(orgId: string): Promise<number> {
   const rows = (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name in ('payroll_prior_registers', 'payroll_prior_stubs')`));
-  return rows.rows[0]!.n;
+     where org_id = ${orgId} and table_name in ('payroll_prior_registers', 'payroll_prior_stubs')`, "objects"));
+  return rows[0]!.n;
 }
 
 function row(register: string, employee: string, overrides: Record<string, unknown> = {}) {

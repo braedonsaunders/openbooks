@@ -113,14 +113,15 @@ stubModules({
         text.includes('update report_schedules') ||
         text.includes('delete from report_schedules') ||
         text.includes('insert into audit_log')
-      const record = (query) => {
+      const record = (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
         const text = sqlText(query)
         state.calls.push({ text })
         if (state.failOnText && text.includes(state.failOnText)) {
           throw new Error('forced storage failure: ' + state.failOnText)
         }
         if (isWrite(text)) state[state.inTx ? 'pending' : 'committed'].push(text)
-        return Promise.resolve(state.respond(text))
+        return Promise.resolve(state.respond(text)).then(inMode)
       }
       export const db = { execute: record }
       export async function withOrgTransaction(_orgId, work) {

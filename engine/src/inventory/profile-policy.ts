@@ -40,8 +40,8 @@ export async function assertStockLocationAdmitsSubsidiary(
       from stock_locations sl
       join locations l on l.id = sl.location_id and l.org_id = sl.org_id
      where sl.id = ${stockLocationId} and sl.org_id = ${orgId}
-     for share of sl`));
-  const location = r.rows[0];
+     for share of sl`, "objects"));
+  const location = r[0];
   if (!location) {
     throw new InventoryError(
       `stock location ${stockLocationId} does not belong to the organization`,
@@ -80,8 +80,8 @@ export async function assertNoForeignOnHand(
        and stock_location_id = ${stockLocationId}
        and remaining_quantity > 0
        and subsidiary_id <> ${subsidiaryId}
-     limit 1`));
-  if (r.rows.length) {
+     limit 1`, "objects"));
+  if (r.length) {
     throw new InventoryOwnershipError(
       "on-hand stock at this location is owned by another legal entity",
     );
@@ -113,8 +113,8 @@ export async function resolveProfile(
            variance_account_id, standard_cost, base_unit, unit_conversions, allow_negative_inventory,
            negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}
-     ${lock ? sql`for share` : sql``}`));
-  const p = r.rows[0];
+     ${lock ? sql`for share` : sql``}`, "objects"));
+  const p = r[0];
   if (!p) throw new InventoryError(`item ${itemId} has no inventory profile`);
   if (p.tracking !== "none" && p.costing_method === "moving_average") {
     throw new InventoryError(
@@ -235,8 +235,8 @@ export async function lockItemInventoryProfile(
            allow_negative_inventory, negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles
      where org_id = ${orgId} and item_id = ${itemId}
-     for update`));
-  return r.rows[0] ?? null;
+     for update`, "objects"));
+  return r[0] ?? null;
 }
 
 export interface CostingPolicyAssessment {
@@ -268,8 +268,8 @@ export async function itemHoldsOpenStock(
       where exists (select 1 from cost_layers layer where layer.org_id = ${orgId}
                     and layer.item_id = ${itemId} and layer.remaining_quantity > 0)
          or exists (select 1 from inventory_provisional_costs provisional where provisional.org_id = ${orgId}
-                    and provisional.item_id = ${itemId} and provisional.remaining_quantity > 0)`));
-  return held.rows.length > 0;
+                    and provisional.item_id = ${itemId} and provisional.remaining_quantity > 0)`, "objects"));
+  return held.length > 0;
 }
 
 /**
@@ -327,15 +327,15 @@ export async function assertCostingPolicyChangeAllowed(
     current.tracking !== next.tracking;
   if (!changed) return { changed: false, historyExisted: false };
   if (current && current.tracking !== next.tracking) {
-    const custody = (await tx.execute(sql`select 1 from consignment_stock where org_id=${orgId} and item_id=${itemId} and remaining_quantity>0 limit 1`)).rows;
+    const custody = await tx.execute(sql`select 1 from consignment_stock where org_id=${orgId} and item_id=${itemId} and remaining_quantity>0 limit 1`, "objects");
     if (custody.length) throw new CostingPolicyChangeBlockedError('Return or take ownership of consigned stock before changing its tracking mode');
   }
   const history = (await tx.execute<{ has_history: boolean }>(sql`
     select exists(select 1 from cost_layers where org_id = ${orgId} and item_id = ${itemId})
         or exists(select 1 from inventory_movements where org_id = ${orgId} and item_id = ${itemId})
         or exists(select 1 from consignment_stock where org_id = ${orgId} and item_id = ${itemId})
-      as has_history`));
-  if (history.rows[0]?.has_history !== true) {
+      as has_history`, "objects"));
+  if (history[0]?.has_history !== true) {
     return { changed: true, historyExisted: false };
   }
   const reason = recostingAuthorization?.trim() ?? "";
@@ -385,7 +385,7 @@ export async function assertInventoryOffHoldsNoStock(
 ): Promise<void> {
   const ids = [...new Set(itemIds)].sort();
   if (ids.length === 0) return;
-  const held = (await runner.execute<{ label: string }>(sql`
+  const held = await runner.execute<{ label: string }>(sql`
     select coalesce(nullif(btrim(item.code), ''), item.name) as label
       from items item
      where item.org_id = ${orgId}
@@ -394,7 +394,7 @@ export async function assertInventoryOffHoldsNoStock(
                      and layer.item_id = item.id and layer.remaining_quantity > 0)
          or exists (select 1 from inventory_provisional_costs provisional where provisional.org_id = item.org_id
                      and provisional.item_id = item.id and provisional.remaining_quantity > 0))
-     order by 1`)).rows;
+     order by 1`, "objects");
   if (held.length === 0) return;
   const labels = held.map((row) => row.label).join(", ");
   throw new InventoryError(

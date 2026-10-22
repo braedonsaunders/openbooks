@@ -42,7 +42,7 @@ export class ScheduledScriptNonProductionError extends Error {
 export async function assertProductionEnvForScheduledScript(orgId: string): Promise<void> {
   const row = (await db.execute<{ envKind: string | null }>(sql`
     select env_kind as "envKind" from orgs where id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   const envKind = row?.envKind ?? "production";
   if (envKind !== "production") throw new ScheduledScriptNonProductionError(envKind);
 }

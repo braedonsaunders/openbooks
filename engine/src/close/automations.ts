@@ -52,8 +52,8 @@ async function readCloseExecutionStages(
   const result = (await db.execute<{ stages: Record<string, unknown> }>(sql`
     select stages from close_automation_executions
      where id = ${executionId} and org_id = ${orgId}
-  `));
-  return (result.rows[0]?.stages ?? {}) as Record<string, unknown>;
+  `, "objects"));
+  return (result[0]?.stages ?? {}) as Record<string, unknown>;
 }
 
 /**
@@ -76,8 +76,8 @@ export async function claimCloseAutomationExecution(
             ${context.actorId ?? null}, ${context.actorId ?? null})
     -- A repeated event reuses its execution row and follows the lease/state checks below.
     on conflict (rule_id, event_key) do nothing returning id, lease_token
-  `));
-  let claimed = inserted.rows[0];
+  `, "objects"));
+  let claimed = inserted[0];
   if (!claimed) {
     const existing = (await db.execute<{
       id: string;
@@ -92,7 +92,7 @@ export async function claimCloseAutomationExecution(
         from close_automation_executions
        where org_id = ${context.orgId} and rule_id = ${ruleId}
          and event_key = ${context.eventKey}
-    `)).rows[0];
+    `, "objects"))[0];
     // Terminal rows keep their audit verdict; a live claim means another
     // scheduler is mid-run right now. Only a stale lock is reclaimable (the
     // comparison lives in SQL: executor timestamps arrive as raw strings).
@@ -108,7 +108,7 @@ export async function claimCloseAutomationExecution(
        where id = ${existing.id} and org_id = ${context.orgId} and status = 'running'
          and lease_token is not distinct from ${existing.lease_token}
        returning id, lease_token
-    `)).rows[0];
+    `, "objects"))[0];
     if (!takeover) return null;
     claimed = takeover;
   }
@@ -140,11 +140,11 @@ export async function commitCloseEffectStage(args: {
         from close_automation_executions
        where id = ${args.executionId} and org_id = ${args.orgId} and status = 'running'
          and lease_token = ${args.leaseToken}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!gate) throw new CloseAutomationLeaseFencedError(args.executionId);
     if (gate.done) return false;
     await args.effect(tx);
-    const stamped = await tx.execute(sql`
+    const stamped = await tx.execute<never>(sql`
       update close_automation_executions
          set stages = stages || ${JSON.stringify({ [args.stageKey]: true })}::jsonb,
              updated_at = now()
@@ -171,7 +171,7 @@ export async function finishCloseExecution(args: {
   payload: { ruleId: string; trigger: string; action: string };
 }): Promise<void> {
   await db.transaction(async (tx) => {
-    const marked = await tx.execute(sql`
+    const marked = await tx.execute<never>(sql`
       update close_automation_executions
          set status = ${args.outcome},
              error = ${args.outcome === "failed" ? args.error : null},

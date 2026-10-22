@@ -122,7 +122,7 @@ async function statementLineIds(orgId: string, cardId: string): Promise<string[]
     select id from bank_statement_lines
      where org_id = ${orgId} and account_id = ${cardId}
      order by posted_on asc
-  `)).rows.map((row) => row.id);
+  `, "objects")).map((row) => row.id);
 }
 
 test(
@@ -183,7 +183,7 @@ test(
       const statement2Id = (await db.execute<{ id: string }>(sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'card-second-charge'
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const recon2 = await startReconciliation(
         { accountId: cardId, throughDate: "2026-10-20", statementBalance: "4332.30" },
         ctx,

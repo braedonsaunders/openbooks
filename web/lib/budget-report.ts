@@ -54,9 +54,9 @@ export async function budgetScenarioOptions(
       from budget_scenarios
      where org_id = ${orgId} and status <> 'archived'
      order by fiscal_year desc, name
-  `))
+  `, 'objects'))
   const visible: BudgetScenarioOption[] = []
-  for (const x of r.rows) {
+  for (const x of r) {
     if ((await scenarioOutOfScopeSubsidiaryNames(x.id, orgId, allowedSubsidiaryIds)).length > 0) continue
     visible.push({ id: x.id, name: x.name, fiscalYear: x.fiscal_year, kind: x.kind, status: x.status })
   }
@@ -158,15 +158,15 @@ export async function budgetVsActualView(
 ): Promise<StatementView | null> {
   const sc = (await db.execute<{ id: string; book_id: string; fiscal_year: number; name: string }>(sql`
     select id, book_id, fiscal_year, name from budget_scenarios where id = ${scenarioId} and org_id = ${orgId}
-  `))
-  const scenario = sc.rows[0]
+  `, 'objects'))
+  const scenario = sc[0]
   if (!scenario) return null
   const periodRange = (await db.execute<{ from: string | null; to: string | null }>(sql`
     select min(starts_on)::text as "from", max(ends_on)::text as "to"
       from accounting_periods
      where org_id = ${orgId} and fiscal_year = ${scenario.fiscal_year} and not is_adjustment
-  `))
-  const range = periodRange.rows[0]
+  `, 'objects'))
+  const range = periodRange[0]
   if (!range?.from || !range?.to) return null
   const fy = { from: range.from, to: range.to }
   // The resolved window, echoed on the Actual column below: P&L parity holds
@@ -204,7 +204,7 @@ export async function budgetVsActualView(
        ${dims.classId ? sql`and l.class_id = ${dims.classId}` : sql``}
      -- The scenario's book may carry a subsidiary in its own currency.
      group by l.account_id, bc.func
-  `))
+  `, 'objects'))
 
   const budgetRows = (await db.execute<{ account_id: string; func: string | null; amt: string; late: string | null }>(sql`
     select bl.account_id, sub.base_currency as func, coalesce(sum(bl.amount), 0) as amt,
@@ -220,24 +220,24 @@ export async function budgetVsActualView(
        ${dims.locationId ? sql`and bl.location_id = ${dims.locationId}` : sql``}
        ${dims.classId ? sql`and bl.class_id = ${dims.classId}` : sql``}
      group by bl.account_id, sub.base_currency
-  `))
+  `, 'objects'))
 
-  const actualCtx = await flowRates(orgId, actualRows.rows.map((r) => ({
+  const actualCtx = await flowRates(orgId, actualRows.map((r) => ({
     func: r.func ?? null, date: String(r.late ?? window.to).slice(0, 10),
   })))
   const actualByAccount = new Map<string, string>()
-  for (const r of actualRows.rows) {
+  for (const r of actualRows) {
     const date = String(r.late ?? window.to).slice(0, 10)
     actualByAccount.set(
       r.account_id,
       add(actualByAccount.get(r.account_id) ?? '0', mulDecimal(String(r.amt ?? 0), actualCtx.rateAt(r.func ?? null, date))),
     )
   }
-  const budgetCtx = await flowRates(orgId, budgetRows.rows.map((r) => ({
+  const budgetCtx = await flowRates(orgId, budgetRows.map((r) => ({
     func: r.func ?? null, date: String(r.late ?? window.to).slice(0, 10),
   })))
   const budgetByAccount = new Map<string, string>()
-  for (const r of budgetRows.rows) {
+  for (const r of budgetRows) {
     const date = String(r.late ?? window.to).slice(0, 10)
     budgetByAccount.set(
       r.account_id,
@@ -249,7 +249,7 @@ export async function budgetVsActualView(
     select id, parent_id, number, name, type, is_summary
       from accounts where org_id = ${orgId} and type in ${PNL_TYPES}
      order by number nulls last, name
-  `))
+  `, 'objects'))
 
   const leaf = new Map<string, [ExactDecimal, ExactDecimal]>()
   for (const [accountId, amt] of actualByAccount) leaf.set(accountId, [amt as ExactDecimal, '0.0000'])
@@ -273,7 +273,7 @@ export async function budgetVsActualView(
     return recomputeVariance(m, totals)
   }
 
-  const treeRows = treeify(accounts.rows, leaf)
+  const treeRows = treeify(accounts, leaf)
 
   const columns: StatementColumn[] = [
     // Only the Actual column drills to ledger transactions (from/to = the

@@ -56,7 +56,7 @@ async function postUsdInvoice(f: Fixture, amount: string, fxRate: string): Promi
   await postDocument(id, { control: { ar: f.org.accounts.ar, ap: f.org.accounts.ap, bank: f.org.accounts.bank } });
   const lineId = (await db.execute<{ id: string }>(sql`
     select jl.id from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-     where jl.org_id = ${f.org.orgId} and je.source_document_id = ${id} and jl.is_open_item`)).rows[0]!.id;
+     where jl.org_id = ${f.org.orgId} and je.source_document_id = ${id} and jl.is_open_item`, "objects"))[0]!.id;
   return { id, lineId };
 }
 
@@ -66,12 +66,12 @@ async function openFrames(f: Fixture, lineId: string): Promise<{ txn: string; ba
     select (abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0))::text as txn,
            (abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0))::text as base
       from journal_lines jl left join applications a on a.org_id = jl.org_id and a.to_line_id = jl.id
-     where jl.org_id = ${f.org.orgId} and jl.id = ${lineId} group by jl.id`)).rows[0]!;
+     where jl.org_id = ${f.org.orgId} and jl.id = ${lineId} group by jl.id`, "objects"))[0]!;
 }
 
 async function sumOn(f: Fixture, accountId: string): Promise<number> {
   return Number((await db.execute<{ total: string }>(sql`
-    select coalesce(sum(amount), 0)::text as total from journal_lines where org_id = ${f.org.orgId} and account_id = ${accountId}`)).rows[0]!.total);
+    select coalesce(sum(amount), 0)::text as total from journal_lines where org_id = ${f.org.orgId} and account_id = ${accountId}`, "objects"))[0]!.total);
 }
 
 function writeOff(f: Fixture, invoiceId: string, amount: string, date = f.org.date) {
@@ -102,12 +102,12 @@ test("a USD invoice paid in part, then written off, clears at its carrying rate 
     assert.equal(await sumOn(f, f.badDebt), 52, "the expense is the carrying amount written off");
     assert.equal(await sumOn(f, f.org.accounts.fxGainLoss), gainBefore, "a write-off at the carrying rate realizes no exchange difference");
     const credit = (await db.execute<{ currency: string; fx_rate: string; evidence: { rate: string; source: string } }>(sql`
-      select currency, fx_rate::text as fx_rate, document_fx_rate_evidence as evidence from documents where org_id = ${f.org.orgId} and id = ${result.creditMemoId}`)).rows[0]!;
+      select currency, fx_rate::text as fx_rate, document_fx_rate_evidence as evidence from documents where org_id = ${f.org.orgId} and id = ${result.creditMemoId}`, "objects"))[0]!;
     assert.equal(credit.currency, "USD");
     assert.equal(Number(credit.fx_rate), 1.3);
     assert.equal(credit.evidence.source, "Receivable carrying rate");
     const application = (await db.execute<{ fx: string | null }>(sql`
-      select fx_gain_loss_entry_id as fx from applications where org_id = ${f.org.orgId} and to_line_id = ${invoice.lineId} and id = ${result.applicationIds[0]}`)).rows[0]!;
+      select fx_gain_loss_entry_id as fx from applications where org_id = ${f.org.orgId} and to_line_id = ${invoice.lineId} and id = ${result.applicationIds[0]}`, "objects"))[0]!;
     assert.equal(application.fx, null);
   }));
 
@@ -143,7 +143,7 @@ test("a revalued receivable is written off at its carrying amount; the unrealize
     assert.deepEqual(await openFrames(f, invoice.lineId), { txn: "0.0000", base: "0.0000" });
     assert.equal(await sumOn(f, f.badDebt), 130, "the write-off relieves the 130 CAD carrying amount, not the revalued 140");
     const revaluation = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and origin = 'fx_revaluation' and status in ('posted', 'reversed')`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id = ${f.org.orgId} and origin = 'fx_revaluation' and status in ('posted', 'reversed')`, "objects"))[0]!.n;
     assert.equal(revaluation, 2, "the period-end adjustment and its next-period mirror stand untouched");
   }));
 
@@ -156,6 +156,6 @@ test("a closed receivables period refuses a foreign write-off and records nothin
       values (${f.org.orgId}, ${f.org.periodId}, ${bookId}, ${f.org.subsidiaryId}, 'ar', 'closed', now(), ${f.userId})`);
     await assert.rejects(writeOff(f, invoice.id, "100.00"), /closed/i);
     assert.deepEqual(await openFrames(f, invoice.lineId), { txn: "100.0000", base: "130.0000" });
-    const credits = (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'customer_credit'`)).rows[0]!.n;
+    const credits = (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${f.org.orgId} and kind = 'customer_credit'`, "objects"))[0]!.n;
     assert.equal(credits, 0);
   }));

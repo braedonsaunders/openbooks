@@ -35,5 +35,5 @@ export async function lockScheduleAccount(
       from accounts
      where id = ${accountId} and org_id = ${orgId}
      for update
-  `)).rows[0] ?? null
+  `, 'objects'))[0] ?? null
 }

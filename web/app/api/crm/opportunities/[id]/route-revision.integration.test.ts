@@ -45,19 +45,19 @@ async function fixture() {
     const statusId = (await db.execute<{ id: string }>(sql`
       insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
       values (${org.orgId}, 'open', 'Open', 10, false, false, true)
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     const itemA = (await db.execute<{ id: string }>(sql`
       insert into items (org_id, kind, name, is_active)
       values (${org.orgId}, 'service', 'Revision Item A', true)
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     const itemB = (await db.execute<{ id: string }>(sql`
       insert into items (org_id, kind, name, is_active)
       values (${org.orgId}, 'service', 'Revision Item B', true)
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     const oppId = (await db.execute<{ id: string }>(sql`
       insert into crm_opportunities (org_id, opportunity_number, title, status_id, currency)
       values (${org.orgId}, 'OPP-REV-001', 'Revision Opp', ${statusId}, 'CAD')
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     return { org, statusId, itemA, itemB, oppId }
   })
 }
@@ -139,7 +139,7 @@ test('PATCH stores custom values only after validating them against the opportun
       insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
       values (${org.orgId}, 'crm_opportunities', 'segment', 'Segment', 'select', '{"options":["smb","enterprise"]}'::jsonb)`))
     const stored = async () => (await withBypassContext(() => db.execute<{ custom: unknown }>(sql`
-      select custom from crm_opportunities where id = ${oppId}`))).rows[0]!.custom
+      select custom from crm_opportunities where id = ${oppId}`, 'objects')))[0]!.custom
     const header = {
       description: null, expectedCloseDate: null, forecastCategory: 'most_likely', leadSourceId: null, lines: [],
       nextStep: null, ownerUserId: null, partyId: null, primaryContactId: null, probability: 10, salesTeamId: null,

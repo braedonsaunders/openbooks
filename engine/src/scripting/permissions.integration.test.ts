@@ -102,8 +102,8 @@ async function ledgerRowCounts(orgId: string): Promise<{ docs: string; lines: st
   const r = (await db.execute<{ docs: string; lines: string; entries: string }>(sql`
     select (select count(*) from documents where org_id = ${orgId})::text as docs,
            (select count(*) from document_lines where org_id = ${orgId})::text as lines,
-           (select count(*) from journal_entries where org_id = ${orgId})::text as entries`));
-  return r.rows[0]!;
+           (select count(*) from journal_entries where org_id = ${orgId})::text as entries`, "objects"));
+  return r[0]!;
 }
 
 async function seedEndpointScript(orgId: string, slug: string): Promise<void> {
@@ -146,8 +146,8 @@ test("a scripts.execute-only caller cannot draft a journal through an endpoint s
     assert.match(outcome!.abortReason ?? "", /missing permission: gl\.post/);
     assert.deepEqual(await ledgerRowCounts(seeded.org.orgId), { docs: "0", lines: "0", entries: "0" });
     // The refusal stays on the audit trail as a failed run.
-    const runs = (await db.execute<{ status: string; error_message: string | null }>(sql`
-      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`)).rows;
+    const runs = await db.execute<{ status: string; error_message: string | null }>(sql`
+      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`, "objects");
     assert.equal(runs.length, 1);
     assert.equal(runs[0]!.status, "error");
     assert.match(runs[0]!.error_message ?? "", /gl\.post/);
@@ -193,7 +193,7 @@ test("a gl.post holder creates drafts and posts through the unchanged sandbox pa
     assert.ok(draftResult.documentNumber.startsWith("JE-"));
     assert.equal(draftResult.entryId, undefined, "draft-only creation posts nothing");
     const docRow = (await db.execute<{ created_by: string | null }>(sql`
-      select created_by::text from documents where id = ${draftResult.id} and org_id = ${seeded.org.orgId}`)).rows[0];
+      select created_by::text from documents where id = ${draftResult.id} and org_id = ${seeded.org.orgId}`, "objects"))[0];
     assert.equal(docRow?.created_by, seeded.posterId);
 
     const posted = await runEndpointScript(slug, seeded.org.orgId, caller(seeded.posterId), {
@@ -205,8 +205,8 @@ test("a gl.post holder creates drafts and posts through the unchanged sandbox pa
     const postedResult = posted!.returned as { id: string; entryId?: string };
     assert.ok(postedResult.entryId, "posting returned a ledger entry");
     const entry = await db.execute(sql`
-      select 1 from journal_entries where id = ${postedResult.entryId!} and org_id = ${seeded.org.orgId}`);
-    assert.equal(entry.rows.length, 1);
+      select 1 from journal_entries where id = ${postedResult.entryId!} and org_id = ${seeded.org.orgId}`, "objects");
+    assert.equal(entry.length, 1);
   } finally {
     await dropScratchOrgReporting(seeded.org.orgId);
   }
@@ -287,7 +287,7 @@ function main(ctx) {
     const docRow = (await db.execute<{ created_by: string | null; custom: Record<string, string> }>(sql`
       select d.created_by::text as created_by, d.custom
         from journal_entries e join documents d on d.id = e.source_document_id
-       where e.id = ${result.entryId!} and e.org_id = ${seeded.org.orgId}`)).rows[0];
+       where e.id = ${result.entryId!} and e.org_id = ${seeded.org.orgId}`, "objects"))[0];
     // The write keeps system provenance; the run-as user is who authorized it.
     assert.equal(docRow!.created_by, null);
     assert.equal(docRow!.custom.actorKind, "system");
@@ -338,8 +338,8 @@ async function restrictRole(orgId: string, roleKey: string, subsidiaryIds: strin
 
 async function journalSubsidiaries(orgId: string): Promise<string[]> {
   const r = (await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id::text from documents where org_id = ${orgId} and kind = 'journal'`));
-  return r.rows.map((row) => row.subsidiary_id);
+    select subsidiary_id::text from documents where org_id = ${orgId} and kind = 'journal'`, "objects"));
+  return r.map((row) => row.subsidiary_id);
 }
 
 test("a caller restricted to a child entity never journals into the root, even when posting", { skip: !DB }, async () => {
@@ -363,7 +363,7 @@ test("a caller restricted to a child entity never journals into the root, even w
     assert.ok(result.entryId, "posting succeeded inside the caller's own entity");
     assert.deepEqual(await journalSubsidiaries(seeded.org.orgId), [childId]);
     const entry = (await db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id::text from journal_entries where id = ${result.entryId!} and org_id = ${seeded.org.orgId}`)).rows[0];
+      select subsidiary_id::text from journal_entries where id = ${result.entryId!} and org_id = ${seeded.org.orgId}`, "objects"))[0];
     assert.equal(entry?.subsidiary_id, childId, "the ledger entry is booked in the child entity");
 
     // Explicit root: refused indistinguishably from a missing entity, zero rows written.
@@ -489,8 +489,8 @@ test("a scripts.execute-only caller cannot read the catalog through ob.query, ob
       assert.match(outcome!.abortReason ?? "", /missing permission: sql\.execute/);
       assert.equal(outcome!.returned, undefined);
     }
-    const runs = (await db.execute<{ status: string; error_message: string | null }>(sql`
-      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`)).rows;
+    const runs = await db.execute<{ status: string; error_message: string | null }>(sql`
+      select status::text as status, error_message from script_runs where org_id = ${seeded.org.orgId}`, "objects");
     assert.equal(runs.length, 3);
     for (const run of runs) assert.match(run.error_message ?? "", /sql\.execute/);
   } finally {

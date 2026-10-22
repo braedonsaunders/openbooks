@@ -20,8 +20,7 @@ export async function assetBasisDelta(
   bookId: string,
   asOf?: string,
 ): Promise<AssetBasisDelta> {
-  return (
-    await tx.execute<AssetBasisDelta>(sql`
+  return (await tx.execute<AssetBasisDelta>(sql`
     select coalesce(sum(cost_delta),0)::text as cost,
            coalesce(sum(accumulated_delta),0)::text as accumulated,
            coalesce(sum(salvage_delta),0)::text as salvage,
@@ -31,8 +30,7 @@ export async function assetBasisDelta(
            (select latest.depreciable_after::text from asset_basis_changes latest where latest.org_id=${orgId} and latest.asset_id=${assetId} and latest.book_id=${bookId} ${asOf ? sql`and latest.effective_on<=${asOf}` : sql``} order by latest.effective_on desc,latest.ordinal desc limit 1) as "depreciableAfter"
       from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${bookId}
         ${asOf ? sql`and effective_on<=${asOf}` : sql``}
-  `)
-  ).rows[0]!;
+  `, "objects"))[0]!;
 }
 function money(value: string, name: string): string {
   const result = canonicalDecimal(value, 4);

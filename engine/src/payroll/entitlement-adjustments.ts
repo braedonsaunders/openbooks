@@ -32,7 +32,7 @@ export async function recordEntitlementAdjustment(input: {
       throw new PayrollError("Adjusting entitlement balances needs the payroll.manage permission.");
     }
     const plan = (await db.execute<{ unit: string; isActive: boolean }>(sql`
-      select unit, is_active as "isActive" from entitlement_plans where org_id=${input.orgId} and id=${input.planId}`)).rows[0];
+      select unit, is_active as "isActive" from entitlement_plans where org_id=${input.orgId} and id=${input.planId}`, "objects"))[0];
     if (!plan) throw new PayrollError("The entitlement plan was not found in this organization.");
     if (!plan.isActive) throw new PayrollError("The entitlement plan is inactive; activate it before adjusting balances.");
     const value = plan.unit === "money" ? input.amount : input.hours;
@@ -49,16 +49,16 @@ export async function recordEntitlementAdjustment(input: {
         join worker_employment_versions v on v.org_id=w.org_id and v.employment_id=w.id and v.recorded_until is null
        where w.org_id=${input.orgId} and w.worker_party_id=${input.employeePartyId}
          and v.effective_from<=${input.movementDate}::date and (v.effective_to is null or v.effective_to>${input.movementDate}::date)
-       limit 1`)).rows[0];
+       limit 1`, "objects"))[0];
     if (!employment) throw new PayrollError("The employee has no employment on the adjustment date; date the adjustment within their employment.");
-    const inserted = (await db.execute<EntitlementAdjustment>(sql`
+    const inserted = await db.execute<EntitlementAdjustment>(sql`
       insert into entitlement_ledger (org_id, plan_id, employee_party_id, employment_id, movement_date, amount, hours, kind, note, created_by, updated_by)
       values (${input.orgId}, ${input.planId}, ${input.employeePartyId}, ${employment.id}, ${input.movementDate}::date,
               ${plan.unit === "money" ? normalized : null}, ${plan.unit === "money" ? null : normalized}, 'adjustment', ${reason}, ${input.actorId}, ${input.actorId})
-      returning id, plan_id as "planId", employee_party_id as "employeePartyId", movement_date::text as "movementDate", amount::text as amount, hours::text as hours`)).rows;
+      returning id, plan_id as "planId", employee_party_id as "employeePartyId", movement_date::text as "movementDate", amount::text as amount, hours::text as hours`, "objects");
     if (inserted.length !== 1) throw new PayrollError("The entitlement adjustment was not saved; nothing changed.");
-    const audited = (await db.execute<{ id: string }>(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${input.orgId}, 'entitlement_ledger', ${inserted[0]!.id}, 'insert', ${JSON.stringify({ before: null, after: inserted[0], reason })}::jsonb, ${input.actorId}) returning id`)).rows;
+    const audited = await db.execute<{ id: string }>(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${input.orgId}, 'entitlement_ledger', ${inserted[0]!.id}, 'insert', ${JSON.stringify({ before: null, after: inserted[0], reason })}::jsonb, ${input.actorId}) returning id`, "objects");
     if (audited.length !== 1) throw new PayrollError("The entitlement adjustment could not be audited; nothing changed.");
     return inserted[0]!;
   });

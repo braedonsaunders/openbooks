@@ -112,11 +112,11 @@ async function lockDepartments(
   for (const id of ids) {
     await lockScopeRow(tx, input.orgId, "department", id, input.allowedSubsidiaryIds, "share");
   }
-  const activeRows = (await tx.execute<DepartmentStateRow>(sql`
+  const activeRows = await tx.execute<DepartmentStateRow>(sql`
     select id::text as id, is_active from departments
      where org_id = ${input.orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])
      order by id
-  `)).rows;
+  `, "objects");
   if (activeRows.length !== ids.length) throw new Error("a department disappeared while its scope lock was held");
   const inactive = activeRows.find((row) => !row.is_active);
   if (inactive) {
@@ -138,7 +138,7 @@ async function validateOpportunity(
   const opportunity = (await tx.execute<OpportunityIdRow>(sql`
     select id::text as id from crm_opportunities
      where org_id = ${orgId} and id = ${opportunityId} for share
-  `)).rows[0];
+  `, "objects"))[0];
   if (!opportunity) {
     refuse(
       "demand_opportunity_unknown",

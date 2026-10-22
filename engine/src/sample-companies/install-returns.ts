@@ -18,13 +18,13 @@ export async function installOperatingReturns(c: DemoContext): Promise<void> {
   for (let n = 1; n <= 3; n++) {
     const invoiceId = id("documents", `operations-return-sale-${n}`);
     const returnId = id("documents", `operations-return-${n}`);
-    if ((await db.execute(sql`select id from documents where org_id=${c.orgId} and id=${returnId}`)).rows.length) continue;
+    if ((await db.execute(sql`select id from documents where org_id=${c.orgId} and id=${returnId}`, "objects")).length) continue;
     const itemId = id("items", `operating-stock-${n}`);
     const stockLocationId = id("stock_locations", "main");
     const partyId = id("parties", `operations-customer-${n}`);
     for (const kind of ["customer_invoice", "rma"] as const) {
       const key = kind === "rma" ? returnId : invoiceId;
-      if ((await db.execute(sql`select id from documents where org_id=${c.orgId} and id=${key}`)).rows.length) {
+      if ((await db.execute(sql`select id from documents where org_id=${c.orgId} and id=${key}`, "objects")).length) {
         throw new SampleCompanyError(`Existing return source ${key} has no matching authored return. Its records are preserved; review the native shipment and use a new scenario identity before refreshing.`);
       }
       const body = { partyId, documentDate: c.operationDate ?? c.date, externalSource: "industry_demo",
@@ -45,7 +45,7 @@ export async function installOperatingReturns(c: DemoContext): Promise<void> {
         await postDocument(key, { control: await loadRequiredControlAccounts(c.orgId) }, { audit: { actorId: c.actorId, source: "industry_demo_installation" } });
       }
     }
-    const source = (await db.execute<{ id: string }>(sql`select m.id from inventory_movements m join document_lines l on l.org_id=m.org_id and l.id=m.document_line_id where m.org_id=${c.orgId} and l.document_id=${invoiceId} and m.kind='issue' and m.status='posted'`)).rows;
+    const source = await db.execute<{ id: string }>(sql`select m.id from inventory_movements m join document_lines l on l.org_id=m.org_id and l.id=m.document_line_id where m.org_id=${c.orgId} and l.document_id=${invoiceId} and m.kind='issue' and m.status='posted'`, "objects");
     if (source.length !== 1) throw new SampleCompanyError("The return example needs exactly one native posted shipment movement.");
     const authorization = await authorizeReturn(db, c.orgId, c.actorId, returnId, [{ lineNumber: 1, sourceIssueMovementId: source[0]!.id }], scope);
     if (authorization.status !== "approved") throw new SampleCompanyError("The return requires independent approval before demonstrating its receipt; review Flows before retrying.");

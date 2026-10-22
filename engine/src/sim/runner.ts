@@ -70,8 +70,8 @@ async function reconcileNumberCounters(orgId: string, counters: Record<string, n
     const r = (await db.execute<{ mx: number }>(sql`
       select coalesce(max((regexp_replace(document_number, '^.*-', ''))::int), 0) as mx
         from documents
-       where org_id = ${orgId} and document_number ~ ${`^${prefix}-[0-9]+$`}`));
-    const dbMax = Number(r.rows[0]?.mx ?? 0);
+       where org_id = ${orgId} and document_number ~ ${`^${prefix}-[0-9]+$`}`, "objects"));
+    const dbMax = Number(r[0]?.mx ?? 0);
     if (dbMax > (counters[key] ?? 0)) counters[key] = dbMax;
   }
 }

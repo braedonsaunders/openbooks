@@ -11,15 +11,16 @@ function stubRunner(opts: {
   priorId: string | null;
 }): Runner {
   return {
-    execute: (async (query: unknown) => {
+    execute: (async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const text = JSON.stringify(query);
       if (text.includes("fiscal_calendars")) {
-        return { rows: opts.covering ? [opts.covering] : [] };
+        return inMode({ rows: opts.covering ? [opts.covering] : [] });
       }
       if (text.includes("ends_on <")) {
-        return { rows: opts.priorId ? [{ id: opts.priorId }] : [] };
+        return inMode({ rows: opts.priorId ? [{ id: opts.priorId }] : [] });
       }
-      return { rows: [] };
+      return inMode({ rows: [] });
     }) as Runner["execute"],
   };
 }

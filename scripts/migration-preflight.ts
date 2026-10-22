@@ -18,12 +18,8 @@
  * use it directly.
  */
 import { readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 import pg from "pg";
-
-/** First ordinal covered by the preflight contract (after v0.1.0-alpha.23). */
-export const PREFLIGHT_MIN_ORDINAL = 242;
 
 /** Default ceiling for one preflight statement: 5 minutes. */
 export const PREFLIGHT_STATEMENT_TIMEOUT_DEFAULT_MS = 300_000;
@@ -232,15 +228,6 @@ export function earlierPendingCreatesObject(
   preflightSql?: string,
 ): boolean {
   const raw = error instanceof Error ? error.message : String(error);
-  // This published overload is introduced after the baseline and consumed by
-  // an exact body-checking preflight. Defer only the immutable publisher and
-  // consumer pair; present-body drift and unrelated overloads still refuse.
-  if (raw === 'function "public.journal_lines_check_fx_residual_entries(uuid[],boolean)" does not exist') {
-    const digest = (text: string) => createHash('sha256').update(text).digest('hex');
-    return preflightSql !== undefined
-      && digest(preflightSql) === 'ce56c23c0e95667dc07abf491f07777ea500a6603377bbc5d133b41628991135'
-      && earlierContents.some(content => digest(content) === '1c6d3d800b2f0129a3785d3c04fab20fe0b4b8d8940ebd683fe2d82201b71cc7');
-  }
   // Guard preflights use regprocedure to inspect exact no-argument functions.
   // Their absence is expected only when an earlier pending migration creates
   // that same function. Other missing functions and overloads remain refusals.

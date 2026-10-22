@@ -51,7 +51,7 @@ export async function assignOrderLineWarehouse(
         from documents
        where id = ${input.orderId} and org_id = ${input.orgId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!doc || doc.kind !== input.kind) throw new ConversionError('Order not found', 404)
     if (doc.status === 'draft') {
       throw new ConversionError(
@@ -73,7 +73,7 @@ export async function assignOrderLineWarehouse(
         from document_lines
        where id = ${input.lineId} and org_id = ${input.orgId} and document_id = ${input.orderId}
        for update
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!line) throw new ConversionError('Order line not found', 404)
     if (line.stock_location_id === input.stockLocationId) {
       return { lineId: line.id, lineNumber: line.line_number, stockLocationId: input.stockLocationId }
@@ -89,7 +89,7 @@ export async function assignOrderLineWarehouse(
     const profiled = (await tx.execute<{ item_id: string }>(sql`
       select item_id from item_inventory_profiles
        where org_id = ${input.orgId} and item_id = ${line.item_id}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!profiled) {
       throw new ConversionError(
         `${lineLabel} ${line.line_number} is not a stocked item; a warehouse does not apply`,
@@ -148,7 +148,7 @@ export async function assignOrderLineWarehouse(
          set status = 'draft', updated_by = ${input.userId}
        where id = ${input.orderId} and org_id = ${input.orgId} and status = 'approved'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!reopened) throw new ConversionError('Order changed while assigning the warehouse', 409)
     await tx.execute(sql`
       update document_lines
@@ -160,7 +160,7 @@ export async function assignOrderLineWarehouse(
          set status = 'approved', updated_by = ${input.userId}
        where id = ${input.orderId} and org_id = ${input.orgId} and status = 'draft'
       returning id
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!restored) throw new ConversionError('Order changed while assigning the warehouse', 409)
     await tx.execute(sql`
       insert into audit_log

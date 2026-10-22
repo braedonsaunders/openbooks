@@ -189,9 +189,9 @@ async function deleteStatus(
 async function serverExists(serverId: string): Promise<boolean> {
   return withBypass(async () => {
     const r = await db.execute(
-      sql`select 1 from sftp_servers where id = ${serverId}`,
+      sql`select 1 from sftp_servers where id = ${serverId}`, "objects",
     );
-    return r.rows.length === 1;
+    return r.length === 1;
   });
 }
 
@@ -245,10 +245,10 @@ test(
       );
       const schedule = await withBypass(() =>
         db.execute(
-          sql`select sftp_server_id from sftp_import_schedules where id = ${scheduleId}`,
+          sql`select sftp_server_id from sftp_import_schedules where id = ${scheduleId}`, "objects",
         ),
       );
-      assert.equal(schedule.rows[0]?.sftp_server_id, serverId);
+      assert.equal(schedule[0]?.sftp_server_id, serverId);
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }
@@ -267,11 +267,11 @@ test(
       assert.equal(await serverExists(serverId), false);
       const audits = await withOrgContext(fixture.orgId, () =>
         db.execute(
-          sql`select action from audit_log where org_id = ${fixture.orgId} and table_name = 'sftp_servers' and row_id = ${serverId}`,
+          sql`select action from audit_log where org_id = ${fixture.orgId} and table_name = 'sftp_servers' and row_id = ${serverId}`, "objects",
         ),
       );
       assert.deepEqual(
-        audits.rows.map((row) => (row as { action: string }).action),
+        audits.map((row) => (row as { action: string }).action),
         ["delete"],
       );
     } finally {

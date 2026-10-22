@@ -79,7 +79,7 @@ async function loadFramework(
     select org_id, framework, set_at::text, set_by::text, reason
       from nonprofit_frameworks
      where org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) return null;
   if (!isFrameworkKey(row.framework)) {
     throw new NonprofitError({
@@ -192,7 +192,7 @@ export async function setFramework(input: {
              where jl.org_id = ${input.orgId}
                and jl.extra_dims ? 'fund'
                and je.status is distinct from 'draft'
-          `)).rows[0]?.line_count ?? "0";
+          `, "objects"))[0]?.line_count ?? "0";
           const lineCount = Number(count);
           if (lineCount > 0) throw frameworkHistoryRefusal(lineCount);
         }
@@ -219,7 +219,7 @@ export async function setFramework(input: {
                 updated_at = now(),
                 updated_by = excluded.updated_by
           returning id, framework, set_at::text, set_by::text, reason
-        `)).rows[0];
+        `, "objects"))[0];
         if (!saved) {
           throw new NonprofitError({
             message: "The nonprofit framework was not saved.",

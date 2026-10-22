@@ -12,9 +12,9 @@ export async function projectBillingProcedure(orgId: string, projectId: string):
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${projectId}
-  `))
-  if (!result.rows[0]) return null
-  return result.rows[0].procedure === 'application_for_payment' ? 'application_for_payment' : 'standard'
+  `, 'objects'))
+  if (!result[0]) return null
+  return result[0].procedure === 'application_for_payment' ? 'application_for_payment' : 'standard'
 }
 
 export async function supportsApplicationsForPayment(orgId: string, projectId: string): Promise<boolean> {

@@ -219,9 +219,9 @@ test(
           join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
          where s.org_id = ${fx.orgId} and s.tax_year = 2025 and s.country = 'BR'
          group by p.display_name
-      `));
-      assert.equal(ledger.rows.length, 2);
-      for (const leg of ledger.rows) {
+      `, "objects"));
+      assert.equal(ledger.length, 2);
+      for (const leg of ledger) {
         const row = byEmployee.get(leg.name)!;
         moneyEqual(String(row.rendimentos), String(leg.rendimentos), `${leg.name} tie-out rendimentos`);
         moneyEqual(String(row.inss), String(leg.inss), `${leg.name} tie-out INSS`);
@@ -231,7 +231,7 @@ test(
       const total = (key: string) =>
         data.rows.reduce((acc, row) => add(acc, String(row[key])), "0");
       const ledgerTotal = (key: "rendimentos" | "inss" | "irrf") =>
-        ledger.rows.reduce((acc, leg) => add(acc, String(leg[key])), "0");
+        ledger.reduce((acc, leg) => add(acc, String(leg[key])), "0");
       for (const key of ["rendimentos", "inss", "irrf"] as const) {
         moneyEqual(total(key), ledgerTotal(key), `total ${key}`);
       }

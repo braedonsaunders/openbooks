@@ -66,8 +66,8 @@ export async function entitlementPlans(
     select * from entitlement_plans
      where org_id = ${orgId} and is_active
      order by code
-  `));
-  return r.rows.map(planFromRow);
+  `, "objects"));
+  return r.map(planFromRow);
 }
 
 /**
@@ -105,10 +105,10 @@ async function entitlementEmployment(executor: Executor, orgId: string, employee
           and effective_from <= ${onDate}::date and (effective_to is null or effective_to >= ${onDate}::date)
         union select employment_id from employee_payroll_profiles where org_id = ${orgId} and employee_party_id = ${employeePartyId} and is_active
       )`}
-  `);
-  if (employments.rows.length > 1) throw new PayrollError('Multiple employments resolve for this employee; select the specific employment before resolving service entitlements.');
-  if (employmentId && employments.rows.length === 0) throw new PayrollError('Select an employment belonging to this employee and organization before resolving entitlements.');
-  return employments.rows[0];
+  `, "objects");
+  if (employments.length > 1) throw new PayrollError('Multiple employments resolve for this employee; select the specific employment before resolving service entitlements.');
+  if (employmentId && employments.length === 0) throw new PayrollError('Select an employment belonging to this employee and organization before resolving entitlements.');
+  return employments[0];
 }
 
 /** The scope keys an employee competes on — the wage resolver's inputs. */
@@ -124,8 +124,8 @@ export async function employeeScope(
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   const employment = await entitlementEmployment(executor, orgId, employeePartyId, context?.onDate ?? await businessToday(orgId), context?.employmentId);
   return {
     employeePartyId,
@@ -159,8 +159,8 @@ export async function resolvePlanLimit(
      where org_id = ${orgId} and plan_id = ${planId} and is_active
        and effective_from <= ${onDate}
        and (effective_to is null or effective_to >= ${onDate})
-  `));
-  const rows: EntitlementLimitRow[] = r.rows.map((row) => ({
+  `, "objects"));
+  const rows: EntitlementLimitRow[] = r.map((row) => ({
     id: String(row.id),
     planId: String(row.plan_id),
     employeePartyId: row.employee_party_id != null ? String(row.employee_party_id) : null,
@@ -198,8 +198,8 @@ export async function resolveServiceTier(
        and (effective_to is null or effective_to >= ${onDate}::date)
        and (employer_subsidiary_id is null or employer_subsidiary_id = ${employment?.employer_subsidiary_id ?? null})
      order by after_months
-  `));
-  const rows: ServiceTierRow[] = tiers.rows.map((row) => ({
+  `, "objects"));
+  const rows: ServiceTierRow[] = tiers.map((row) => ({
     id: String(row.id),
     planId: row.plan_id != null ? String(row.plan_id) : null,
     componentId: row.component_id != null ? String(row.component_id) : null,
@@ -277,8 +277,8 @@ export async function entitlementBalances(
        and (${excludeRunDocumentId}::uuid is null
             or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
      group by l.plan_id
-  `));
-  const byPlan = new Map(sums.rows.map((row) => [row.plan_id, row]));
+  `, "objects"));
+  const byPlan = new Map(sums.map((row) => [row.plan_id, row]));
 
   // One transaction-bound wage lookup serves every plan's hours view.
   const resolved = await resolveEntitlementWage(
@@ -339,6 +339,6 @@ export async function planBalanceExcludingRun(
        and ${committedEntitlementMovementSql(sql`l.pay_run_document_id`, sql`r.run_status`)}
        and (${excludeRunDocumentId}::uuid is null
             or l.pay_run_document_id is distinct from ${excludeRunDocumentId}::uuid)
-  `));
-  return roundMoney(String(r.rows[0]?.balance ?? "0"), 4);
+  `, "objects"));
+  return roundMoney(String(r[0]?.balance ?? "0"), 4);
 }

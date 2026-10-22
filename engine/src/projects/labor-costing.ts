@@ -213,9 +213,9 @@ export async function laborCostingSettings(
   orgId: string,
 ): Promise<LaborCostingSettings> {
   const r = (await db.execute<{ c: Partial<LaborCostingSettings> | null }>(
-    sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`,
+    sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`, "objects",
   ));
-  const c = (r.rows[0]?.c ?? {}) as Record<string, unknown>;
+  const c = (r[0]?.c ?? {}) as Record<string, unknown>;
   // Stored settings revalidate through the same strict parser the write API
   // enforces: legacy, imported, or directly-edited garbage refuses by name
   // here instead of reaching computeCostRate, where it priced without the
@@ -242,9 +242,9 @@ export async function laborCostingSettingsInTx(
   orgId: string,
 ): Promise<LaborCostingSettings> {
   const r = (await executor.execute<{ c: Partial<LaborCostingSettings> | null }>(
-    sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`,
+    sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`, "objects",
   ));
-  const c = (r.rows[0]?.c ?? {}) as Record<string, unknown>;
+  const c = (r[0]?.c ?? {}) as Record<string, unknown>;
   return {
     mode: c.mode === "post" ? "post" : "off",
     hoursPerDay: parseLaborHoursSetting(c.hoursPerDay, 8, 24, "hoursPerDay"),
@@ -357,8 +357,8 @@ export async function resolveWageValuationInTx(
         from employee_roles er
         join parties p on p.id = er.party_id and p.org_id = er.org_id
        where er.org_id = ${orgId} and er.party_id = ${employeePartyId}
-       ${opts.lock ? sql`for share of er, p` : sql``}`));
-    const employee = t.rows[0];
+       ${opts.lock ? sql`for share of er, p` : sql``}`, "objects"));
+    const employee = t[0];
     jobTitle =
       jobTitle === undefined ? (employee?.job_title ?? null) : jobTitle;
     tradeId = tradeId === undefined ? (employee?.trade_id ?? null) : tradeId;
@@ -409,8 +409,8 @@ export async function resolveWageValuationInTx(
                    when subsidiary_id is not null then 4 else 5 end,
               effective_from desc
      limit 1
-     ${opts.lock ? sql`for share` : sql``}`));
-  const row = r.rows[0];
+     ${opts.lock ? sql`for share` : sql``}`, "objects"));
+  const row = r[0];
   if (!row) return null;
   const basis = requirePayRateBasis(row.basis);
   const rowAnnualHours = basis !== "hour" && cmp(String(row.annual_hours), "0") > 0 ? String(row.annual_hours) : null;
@@ -471,8 +471,8 @@ export async function resolveAnnualHoursMany(
                    when r.trade_id is not null then 2
                    when r.department_id is not null then 3
                    when r.subsidiary_id is not null then 4 else 5 end,
-              r.effective_from desc nulls last`);
-  for (const row of r.rows) {
+              r.effective_from desc nulls last`, "objects");
+  for (const row of r) {
     if (row.annual_hours !== null && cmp(String(row.annual_hours), "0") > 0) {
       out.set(row.employee_party_id, String(row.annual_hours));
     }
@@ -573,8 +573,8 @@ export async function resolveStandardLaborRateInTx(
                    when subsidiary_id is not null then 1 else 2 end,
               effective_from desc,
               id asc
-     limit 1`));
-  const row = r.rows[0];
+     limit 1`, "objects"));
+  const row = r[0];
   if (!row) return null;
   return {
     rateId: row.id,
@@ -643,8 +643,8 @@ export async function laborFxQuote(
       select (1 / rate)::numeric(19,10) as rate, as_of, source, true as inverse from fx_rates
        where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
          and rate_type = 'spot' and as_of <= ${workedOn}
-    ) candidates order by as_of desc, inverse asc limit 1`));
-  const row = result.rows[0];
+    ) candidates order by as_of desc, inverse asc limit 1`, "objects"));
+  const row = result[0];
   if (!row) return null;
   return { rate: String(row.rate), asOf: String(row.as_of).slice(0, 10), source: String(row.source), inverse: row.inverse === "true" };
 }
@@ -679,8 +679,8 @@ export async function laborFxQuoteInTx(
       select id, (1 / rate)::numeric(19,10) as rate, as_of, source, true as inverse from fx_rates
        where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
          and rate_type = 'spot' and as_of <= ${workedOn}
-    ) candidates order by as_of desc, inverse asc limit 1`));
-  const row = result.rows[0];
+    ) candidates order by as_of desc, inverse asc limit 1`, "objects"));
+  const row = result[0];
   if (!row) return null;
   return { id: String(row.id), rate: String(row.rate), asOf: String(row.as_of).slice(0, 10), source: String(row.source), inverse: row.inverse === "true" };
 }
@@ -850,15 +850,15 @@ export async function snapshotLaborCostRates(
       left join subsidiaries wo_sub on wo_sub.id=wo.subsidiary_id and wo_sub.org_id=te.org_id
       left join subsidiaries project_sub on project_sub.id = project.subsidiary_id and project_sub.org_id = te.org_id
       left join worker_comp_groups wcg on wcg.id = er.worker_comp_group_id and wcg.org_id = te.org_id
-     where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`));
+     where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`, "objects"));
   const org = (await db.execute<{ base_currency: string; root_subsidiary_id: string | null }>(sql`
       select o.base_currency,
              (select id from subsidiaries where org_id = o.id and parent_id is null and is_active limit 1) as root_subsidiary_id
-        from orgs o where o.id = ${orgId}`));
-  const orgCurrency = org.rows[0]?.base_currency;
+        from orgs o where o.id = ${orgId}`, "objects"));
+  const orgCurrency = org[0]?.base_currency;
   if (!orgCurrency)
     throw new Error("organization base currency is not configured");
-  const rootSubsidiaryId = org.rows[0]?.root_subsidiary_id;
+  const rootSubsidiaryId = org[0]?.root_subsidiary_id;
   if (!rootSubsidiaryId)
     throw new Error("organization root subsidiary is not configured");
   let stamped = 0;
@@ -876,7 +876,7 @@ export async function snapshotLaborCostRates(
   const prevailingPriced = new Map<string, boolean>();
   // HR-13 end
   const fxCache = new Map<string, string>();
-  for (const r of rows.rows) {
+  for (const r of rows) {
     if (r.work_order_id) {
       await assertLaborCostObjectFeature(db, orgId, { projectId: r.project_id, workOrderId: r.work_order_id });
       if (!r.work_order_subsidiary_id || !r.target_currency) throw new LaborCostObjectError('The production time entry has no valid work-order legal entity or currency. Review the work order before approving time.');
@@ -971,8 +971,8 @@ export async function snapshotLaborCostRates(
              wage_fx_rate = ${normalizeDecimal(fxRate, 10)},
              cost_rate_currency = ${targetCurrency},
              cost_rate_subsidiary_id = ${targetSubsidiaryId}
-       where id = ${r.id} and org_id = ${orgId} and cost_rate is null returning id`);
-    if (updated.rows.length !== 1) throw new LaborCostObjectError('The time entry changed during its cost snapshot. Reload and retry approval.');
+       where id = ${r.id} and org_id = ${orgId} and cost_rate is null returning id`, "objects");
+    if (updated.length !== 1) throw new LaborCostObjectError('The time entry changed during its cost snapshot. Reload and retry approval.');
     stamped++;
   }
   return stamped;
@@ -1003,10 +1003,10 @@ type LaborExecutor = Pick<LaborTransaction, "execute">;
 
 /** Caller locks the organization first; retain book authority through posting. */
 async function laborPrimaryBook(executor: LaborExecutor, orgId: string): Promise<string> {
-  const books = (await executor.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+  const books = await executor.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
     select id, is_active, posts_gl from accounting_books
      where org_id = ${orgId} and is_primary
-     order by id for share`)).rows;
+     order by id for share`, "objects");
   const book = books[0];
   if (books.length !== 1 || !book?.is_active || !book.posts_gl) {
     throw new Error("labor reconciliation requires exactly one active posting primary GL book");
@@ -1037,14 +1037,14 @@ async function laborClearingReconciliationFrom(
        and e.book_id = ${bookId}
        and ${excludePeriodEndJournals(sql`e.origin`)}
        and l.subsidiary_id = ${subsidiaryId}
-       and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`));
+       and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`, "objects"));
   const open = (await executor.execute<{ balance: string }>(sql`
     select coalesce(sum(l.amount), 0) as balance
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
        and e.book_id = ${bookId}
-       and l.subsidiary_id = ${subsidiaryId}`));
+       and l.subsidiary_id = ${subsidiaryId}`, "objects"));
   // The drill reads the job-tagged labor WIP debit, whose ledger amount is
   // already positive. Keep the headline's clearing-credit negation separate.
   const perProject = (await executor.execute<{ project_id: string; name: string; standard: string }>(sql`
@@ -1059,24 +1059,24 @@ async function laborClearingReconciliationFrom(
      group by l.project_id, p.name
      having sum(l.amount) <> 0
      order by sum(l.amount) desc
-     limit 25`));
-  const perProduction = (await executor.execute<{id:string;name:string;standard:string}>(sql`
+     limit 25`, "objects"));
+  const perProduction = await executor.execute<{id:string;name:string;standard:string}>(sql`
     select w.id,w.number as name,-sum(l.amount)::numeric as standard
     from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
     join mfg_work_orders w on w.org_id=e.org_id and w.number=e.custom->>'work_order_number'
     where l.org_id=${orgId} and l.account_id=${laborClearingAccountId} and l.subsidiary_id=${subsidiaryId}
       and e.book_id=${bookId} and e.origin='manufacturing' and e.custom ? 'conversion_labor_amount'
       and e.status in ('posted','reversed') and e.posting_date>=${periodStart} and e.posting_date<=${periodEnd}
-    group by w.id,w.number having sum(l.amount)<>0 order by -sum(l.amount) desc,w.id limit 25`)).rows;
+    group by w.id,w.number having sum(l.amount)<>0 order by -sum(l.amount) desc,w.id limit 25`, "objects");
   const subsidiary = (await executor.execute<{ base_currency: string }>(sql`
     select base_currency
       from subsidiaries
-     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`));
-  const currency = subsidiary.rows[0]?.base_currency;
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`, "objects"));
+  const currency = subsidiary[0]?.base_currency;
   if (!currency)
     throw new Error("labor reconciliation subsidiary is not available");
 
-  const s = sums.rows[0] ?? { standard_posted: "0", payroll_posted: "0" };
+  const s = sums[0] ?? { standard_posted: "0", payroll_posted: "0" };
   return {
     subsidiaryId,
     currency,
@@ -1086,9 +1086,9 @@ async function laborClearingReconciliationFrom(
       String(s.standard_posted),
       neg(String(s.payroll_posted)),
     ),
-    openBalance: String(open.rows[0]?.balance ?? "0"),
-    perWork: [...perProject.rows.map(row=>({kind:"project" as const,id:row.project_id,name:row.name,standard:String(row.standard)})),...perProduction.map(row=>({kind:"production" as const,id:row.id,name:row.name,standard:String(row.standard)}))],
-    perProject: perProject.rows.map((r) => ({
+    openBalance: String(open[0]?.balance ?? "0"),
+    perWork: [...perProject.map(row=>({kind:"project" as const,id:row.project_id,name:row.name,standard:String(row.standard)})),...perProduction.map(row=>({kind:"production" as const,id:row.id,name:row.name,standard:String(row.standard)}))],
+    perProject: perProject.map((r) => ({
       projectId: r.project_id,
       name: r.name,
       standard: String(r.standard),
@@ -1167,12 +1167,12 @@ export async function postPayrollVariance(opts: {
              settings->'controlAccounts'->>'payrollVariance' as payroll_variance
         from orgs
        where id = ${orgId}
-       for share`));
+       for share`, "objects"));
     if (!(await lockAndCheckOrgFeature(tx, orgId, "projects")) && !(await lockAndCheckOrgFeature(tx, orgId, "manufacturing"))) {
       throw new LaborCostingFeatureDisabledError();
     }
-    const laborClearing = config.rows[0]?.labor_clearing;
-    const varianceAccount = config.rows[0]?.payroll_variance;
+    const laborClearing = config[0]?.labor_clearing;
+    const varianceAccount = config[0]?.payroll_variance;
     if (!laborClearing || !varianceAccount) {
       throw new Error(
         "labor clearing and payroll variance accounts must be configured",
@@ -1192,19 +1192,19 @@ export async function postPayrollVariance(opts: {
          and posting_date = ${periodEnd}
        order by created_at desc, id desc
        limit 1
-       for update`));
-    if (prior.rows[0]) {
+       for update`, "objects"));
+    if (prior[0]) {
       const reversal = await reverseProjectGlEntryWithinTransaction(
         tx,
         orgId,
         actorId,
-        prior.rows[0].id,
+        prior[0].id,
         "Superseded by recalculated payroll variance",
         periodEnd,
       );
       if (reversal.status !== "reversed") {
         throw new Error(
-          `payroll variance journal ${prior.rows[0].id} could not be reversed`,
+          `payroll variance journal ${prior[0].id} could not be reversed`,
         );
       }
     }
@@ -1230,8 +1230,8 @@ export async function postPayrollVariance(opts: {
        where org_id = ${orgId} and origin = 'payroll_variance'
          and subsidiary_id = ${subsidiaryId}
          and posting_date = ${periodEnd}
-         and entry_number like ${`PVAR-%`}`));
-    const genN = (generations.rows[0]?.n ?? 0) + 1;
+         and entry_number like ${`PVAR-%`}`, "objects"));
+    const genN = (generations[0]?.n ?? 0) + 1;
     const entryNumber =
       genN === 1 ? entryNumberBase : `${entryNumberBase}-${genN}`;
 

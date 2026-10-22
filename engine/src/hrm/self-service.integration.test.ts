@@ -350,7 +350,7 @@ test("profile_change files, approves, and applies onto the party with evidence",
     await seedFlow(h.org.orgId, [h.hrId]);
     const revisionBefore = (await db.execute<{ revision: number }>(sql`
       select revision from worker_employments where id = ${h.employmentA}
-    `)).rows[0]!.revision;
+    `, "objects"))[0]!.revision;
     const filed = await fileProfileChangeRequest({
       orgId: h.org.orgId, actorId: h.personAId, employmentId: h.employmentA,
       changes: {
@@ -368,24 +368,24 @@ test("profile_change files, approves, and applies onto the party with evidence",
     await decideGate({ gateId: gate.id, decision: "approved", userId: h.hrId });
     const party = (await db.execute<{ phone: string | null; email: string | null; emergency_contact: unknown }>(sql`
       select phone, email, emergency_contact as "emergency_contact" from parties where id = ${h.partyA}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(party.phone, "+1 555 0100");
     assert.equal(party.email, "a.person@example.com");
     assert.deepEqual(party.emergency_contact, { name: "Kin A", relationship: "sibling", phone: "+1 555 0101" });
-    const address = (await db.execute<{ line1: string | null; city: string | null; country: string | null }>(sql`
+    const address = await db.execute<{ line1: string | null; city: string | null; country: string | null }>(sql`
       select line1, city, country from addresses where org_id = ${h.org.orgId} and party_id = ${h.partyA}
-    `)).rows;
+    `, "objects");
     assert.equal(address.length, 1);
     assert.deepEqual([address[0]!.line1, address[0]!.city, address[0]!.country], ["1 Harbour Road", "Halifax", "CA"]);
     const revisionAfter = (await db.execute<{ revision: number }>(sql`
       select revision from worker_employments where id = ${h.employmentA}
-    `)).rows[0]!.revision;
+    `, "objects"))[0]!.revision;
     assert.equal(revisionAfter, revisionBefore + 1);
-    const events = (await db.execute<{ kind: string; snapshot: unknown; applied: string | null }>(sql`
+    const events = await db.execute<{ kind: string; snapshot: unknown; applied: string | null }>(sql`
       select change_kind as kind, prior_snapshot as snapshot,
              (select applied_employment_change_id::text from hrm_employment_change_requests where id = ${filed.request.id}) as applied
         from employment_changes where employment_id = ${h.employmentA} order by revision
-    `)).rows;
+    `, "objects");
     const profile = events.find((row) => row.kind === "profile_changed");
     assert.ok(profile, "a profile_changed event evidences the application");
     assert.deepEqual((profile.snapshot as { party: unknown }).party, {
@@ -393,7 +393,7 @@ test("profile_change files, approves, and applies onto the party with evidence",
     });
     const status = (await db.execute<{ status: string }>(sql`
       select status from hrm_employment_change_requests where id = ${filed.request.id}
-    `)).rows[0]!.status;
+    `, "objects"))[0]!.status;
     assert.equal(status, "applied");
   });
 });
@@ -413,16 +413,16 @@ test("a profile change with no flow applies directly and the address persists", 
     // proposal, not just the event's before-image, carries it.
     const stored = (await db.execute<{ payload: unknown }>(sql`
       select payload from hrm_employment_change_requests where id = ${filed.request.id}
-    `)).rows[0]!.payload as { address?: { line1?: unknown } };
+    `, "objects"))[0]!.payload as { address?: { line1?: unknown } };
     assert.equal(stored.address?.line1, "4821 19 Street NW", "the draft payload carries the typed address");
-    const address = (await db.execute<{ line1: string | null; city: string | null }>(sql`
+    const address = await db.execute<{ line1: string | null; city: string | null }>(sql`
       select line1, city from addresses where org_id = ${h.org.orgId} and party_id = ${h.partyA}
-    `)).rows;
+    `, "objects");
     assert.equal(address.length, 1);
     assert.deepEqual([address[0]!.line1, address[0]!.city], ["4821 19 Street NW", "Calgary"]);
     const kinds = (await db.execute<{ kind: string }>(sql`
       select change_kind as kind from employment_changes where employment_id = ${h.employmentA}
-    `)).rows.map((row) => row.kind);
+    `, "objects")).map((row) => row.kind);
     assert.ok(kinds.includes("profile_changed"), "a profile_changed event evidences the application");
   });
 });
@@ -448,18 +448,18 @@ test("a stale profile approval refuses with the party untouched", { skip: !DB },
     // Gates are per-assignee: the hr2Id-assigned gate is decided by hr2Id
     // (hrId submitted the race, so the SoD invariant bars hrId from its
     // own gate; mode "any" releases on the first approval).
-    const raceGates = (await db.execute<{ id: string }>(sql`
+    const raceGates = await db.execute<{ id: string }>(sql`
       select id from flow_gates
        where subject_id = ${race.id} and status = 'pending' and assignee_user_id = ${h.hr2Id}
        order by created_at
-    `)).rows;
+    `, "objects");
     assert.equal(raceGates.length, 1, "the race submit opens hr2Id's gate");
     await decide({ gateId: raceGates[0]!.id, decision: "approved", userId: h.hr2Id });
     const gate = (await db.execute<{ id: string }>(sql`
       select id from flow_gates
        where subject_id = ${filed.request.id} and status = 'pending' and assignee_user_id = ${h.hrId}
        order by created_at limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     assert.ok(gate, "the profile submit opens a gate");
     await assert.rejects(decide({ gateId: gate.id, decision: "approved", userId: h.hrId }), (error: unknown) => {
       assert.ok(error instanceof ReleaseError);
@@ -468,11 +468,11 @@ test("a stale profile approval refuses with the party untouched", { skip: !DB },
     });
     const party = (await db.execute<{ phone: string | null }>(sql`
       select phone from parties where id = ${h.partyA}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(party.phone, null, "the stale application wrote nothing");
     const status = (await db.execute<{ status: string }>(sql`
       select status from hrm_employment_change_requests where id = ${filed.request.id}
-    `)).rows[0]!.status;
+    `, "objects"))[0]!.status;
     assert.equal(status, "pending_approval", "the refused decision leaves the request pending");
   });
 });

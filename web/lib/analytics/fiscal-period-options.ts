@@ -15,7 +15,7 @@ import type { ExtraPeriodOption } from '../../app/(app)/reports/ReportFilterBar'
  * with. Capped: a dropdown is a picker, not an archive.
  */
 export async function analyticsFiscalPeriodOptions(orgId: string, locale: string, limit = 25): Promise<ExtraPeriodOption[]> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string
     fiscal_year: number
     period_number: number
@@ -27,7 +27,7 @@ export async function analyticsFiscalPeriodOptions(orgId: string, locale: string
      where org_id = ${orgId} and not is_adjustment
      order by starts_on desc
      limit ${limit}
-  `)).rows
+  `, 'objects')
   return rows.map((row) => ({
     id: row.id,
     label: periodDisplayLabel({

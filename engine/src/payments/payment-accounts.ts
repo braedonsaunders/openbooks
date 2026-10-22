@@ -8,9 +8,9 @@ import { PaymentError } from "../payments-core/payment-errors.ts";
 
 export async function paymentControlDeps(orgId: string): Promise<PostingDeps> {
   const r = (await db.execute<{ c: Record<string, string> | null }>(
-    sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`,
+    sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`, "objects",
   ));
-  const c = r.rows[0]?.c ?? {};
+  const c = r[0]?.c ?? {};
   if (!c.ap || !c.ar || !c.bank) {
     throw new PaymentError(
       "org control accounts are not configured (orgs.settings.controlAccounts.ap/ar/bank)",
@@ -34,10 +34,10 @@ export async function paymentControlDeps(orgId: string): Promise<PostingDeps> {
  * lock and the selected book row through commit. */
 export async function paymentBookId(orgId: string): Promise<string> {
   await db.execute(sql`select pg_advisory_xact_lock_shared(hashtextextended(${`accounting-books:${orgId}`}, 0))`);
-  const books = (await db.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
+  const books = await db.execute<{ id: string; is_active: boolean; posts_gl: boolean }>(sql`
     select id, is_active, posts_gl from accounting_books
      where org_id = ${orgId} and is_primary order by id for share
-  `)).rows;
+  `, "objects");
   if (books.length !== 1 || !books[0]!.is_active || !books[0]!.posts_gl) {
     throw new PaymentError("payments require exactly one active primary posting book");
   }

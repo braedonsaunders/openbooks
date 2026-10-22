@@ -18,12 +18,13 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const chunks = query?.queryChunks
           const text = Array.isArray(chunks)
             ? chunks.map((chunk) => Array.isArray(chunk?.value) ? chunk.value.map(String).join('') : '').join('')
             : ''
-          return text.includes('select subsidiary_id') ? { rows: [{ subsidiary_id: null }] } : { rows: [] }
+          return inMode(await (text.includes('select subsidiary_id') ? { rows: [{ subsidiary_id: null }] } : { rows: [] }))
         },
       }
     `,

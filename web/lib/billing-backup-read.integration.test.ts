@@ -64,14 +64,14 @@ async function setup() {
 
 async function backupRowCount(org: Org, documentId: string): Promise<number> {
   const r = await withBypassContext(() => db.execute<{ n: string }>(sql`
-    select count(*)::text as n from invoice_backups where org_id = ${org.orgId} and document_id = ${documentId}`))
-  return Number(r.rows[0]?.n ?? 0)
+    select count(*)::text as n from invoice_backups where org_id = ${org.orgId} and document_id = ${documentId}`, 'objects'))
+  return Number(r[0]?.n ?? 0)
 }
 
 async function fileCount(org: Org): Promise<number> {
   const r = await withBypassContext(() => db.execute<{ n: string }>(sql`
-    select count(*)::text as n from files where org_id = ${org.orgId}`))
-  return Number(r.rows[0]?.n ?? 0)
+    select count(*)::text as n from files where org_id = ${org.orgId}`, 'objects'))
+  return Number(r[0]?.n ?? 0)
 }
 
 const consolidatedRows = [
@@ -213,7 +213,7 @@ const consolidatedRows = [
             // And the issue gate, which refused without a packet, now lets the
             // invoice through.
             const documentId = (await withBypassContext(() => db.execute<{ invoice_document_id: string }>(sql`
-              select invoice_document_id from billing_requests where id = ${request.id}`))).rows[0]?.invoice_document_id
+              select invoice_document_id from billing_requests where id = ${request.id}`, 'objects')))[0]?.invoice_document_id
             assert.ok(documentId)
             const context = applicationContextFromSession(
               {
@@ -316,8 +316,8 @@ const consolidatedRows = [
 
         async function backupRowCount(org: Org, documentId: string): Promise<number> {
           const r = await withBypassContext(() => db.execute<{ n: string }>(sql`
-            select count(*)::text as n from invoice_backups where org_id = ${org.orgId} and document_id = ${documentId}`))
-          return Number(r.rows[0]?.n ?? 0)
+            select count(*)::text as n from invoice_backups where org_id = ${org.orgId} and document_id = ${documentId}`, 'objects'))
+          return Number(r[0]?.n ?? 0)
         }
 
         test('backup POST generates for a draft and GET then streams it', { skip: !DB }, async () => {
@@ -360,7 +360,7 @@ const consolidatedRows = [
             assert.match(String((await retry.json() as { error: string }).error), /immutable/)
             // The issued packet is untouched: same file, still exactly one row.
             const row = (await withBypassContext(() => db.execute<{ file_id: string }>(sql`
-              select file_id from invoice_backups where org_id = ${org.orgId} and document_id = ${generated.id}`))).rows[0]
+              select file_id from invoice_backups where org_id = ${org.orgId} and document_id = ${generated.id}`, 'objects')))[0]
             assert.equal(row?.file_id, fileId)
             assert.equal(await backupRowCount(org, generated.id), 1)
           } finally {
@@ -495,7 +495,7 @@ const consolidatedRows = [
             assert.equal(error.code, 'invalid_input')
             assert.match(error.message, /backup packet/)
             const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`
-              select status from documents where id = ${generated.id}`))).rows[0]?.status
+              select status from documents where id = ${generated.id}`, 'objects')))[0]?.status
             assert.equal(status, 'draft')
           } finally {
             session.user = null
@@ -510,7 +510,7 @@ const consolidatedRows = [
               projectId: project, basis: 'draw_amount', drawAmount: '100', backupRequired: true, backupType: 'costed_timesheets',
             }))
             const generated = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, required.id, null))
-            const invoiceLine = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from document_lines where org_id=${org.orgId} and document_id=${generated.id} order by line_number limit 1`))).rows[0]?.id
+            const invoiceLine = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from document_lines where org_id=${org.orgId} and document_id=${generated.id} order by line_number limit 1`, 'objects')))[0]?.id
             assert.ok(invoiceLine)
             const source = randomUUID(), sourceLine = randomUUID()
             await withBypassContext(async () => {

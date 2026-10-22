@@ -52,7 +52,7 @@ async function seedOrderWithoutLineAccount(
       ${org.orgId}, ${id}, 1, ${itemId}, null, '10',
       '0', '0', '100', '1000', '1000', '100', ${taxCodeId}, 'Marketplace A', ${actorId}, ${actorId}
     )
-    returning id`)).rows[0]!;
+    returning id`, "objects"))[0]!;
   const tax = computeLineTaxes('1000', await loadTaxProfileConfig(org.orgId, { taxCodeId, taxGroupId: null }, org.date));
   await persistLineTaxComponents(org.orgId, line.id, tax.components, actorId);
   await db.execute(sql`
@@ -78,26 +78,26 @@ test("sales-order conversion preserves income accounts and marketplace tax evide
     });
 
     const converted = await convertOrder(org.orgId, actorId, soId, "customer_invoice");
-    const lines = (await withBypassContext(() => db.execute<{ account_id: string | null; marketplace_facilitator: string | null }>(sql`
-      select account_id, marketplace_facilitator from document_lines where org_id = ${org.orgId} and document_id = ${converted.id} order by line_number`))).rows;
+    const lines = await withBypassContext(() => db.execute<{ account_id: string | null; marketplace_facilitator: string | null }>(sql`
+      select account_id, marketplace_facilitator from document_lines where org_id = ${org.orgId} and document_id = ${converted.id} order by line_number`, "objects"));
     assert.equal(lines.length, 1);
     assert.equal(lines[0]!.account_id, org.accounts.revenue);
     assert.equal(lines[0]!.marketplace_facilitator, 'Marketplace A');
-    const evidence = (await withBypassContext(() => db.execute<{ collected_by: string; facilitator_name: string; tax_amount: string }>(sql`
+    const evidence = await withBypassContext(() => db.execute<{ collected_by: string; facilitator_name: string; tax_amount: string }>(sql`
       select c.collected_by, c.facilitator_name, c.tax_amount::text from document_line_tax_components c
       join document_lines l on l.org_id = c.org_id and l.id = c.document_line_id
-      where l.org_id = ${org.orgId} and l.document_id = ${converted.id}`))).rows;
+      where l.org_id = ${org.orgId} and l.document_id = ${converted.id}`, "objects"));
     assert.deepEqual(evidence, [{ collected_by: 'marketplace', facilitator_name: 'Marketplace A', tax_amount: '100.0000' }]);
 
     await withBypassContext(async () => {
       await db.execute(sql`update documents set status = 'approved' where id = ${converted.id} and org_id = ${org.orgId}`);
       await postDocument(converted.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     });
-    const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`select status from documents where id = ${converted.id}`))).rows[0]!.status;
+    const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`select status from documents where id = ${converted.id}`, "objects")))[0]!.status;
     assert.equal(status, "posted");
     const taxLiability = (await withBypassContext(() => db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id
-      where e.org_id = ${org.orgId} and e.source_document_id = ${converted.id} and l.account_id = ${org.accounts.taxOutput}`))).rows[0]!.n;
+      where e.org_id = ${org.orgId} and e.source_document_id = ${converted.id} and l.account_id = ${org.accounts.taxOutput}`, "objects")))[0]!.n;
     assert.equal(taxLiability, 0, 'marketplace tax must remain outside the merchant tax liability');
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
@@ -131,7 +131,7 @@ const consolidatedRows = [
               },
             );
             const count = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-              select count(*) as n from documents where org_id = ${org.orgId} and kind = 'purchase_order'`))).rows[0]!.n;
+              select count(*) as n from documents where org_id = ${org.orgId} and kind = 'purchase_order'`, "objects")))[0]!.n;
             assert.equal(Number(count), 0);
           } finally {
             await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -144,7 +144,7 @@ const consolidatedRows = [
             const actor = await withBypassContext(() => createScratchUser(org.orgId, "Drafter", "order_drafter"));
             const draft = await withBypassContext(() => createOrderDraft(org.orgId, actor, "purchase_order", randomUUID(), null));
             const row = (await withBypassContext(() => db.execute<{ currency: string }>(sql`
-              select currency from documents where id = ${draft.id} and org_id = ${org.orgId}`))).rows[0]!;
+              select currency from documents where id = ${draft.id} and org_id = ${org.orgId}`, "objects")))[0]!;
             assert.equal(row.currency, "CAD");
           } finally {
             await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -215,8 +215,8 @@ const consolidatedRows = [
             const r = (await db.execute<{ quantity_billed: string }>(sql`
               select quantity_billed::text from document_lines
                where org_id = ${orgId} and document_id = ${documentId}
-               order by line_number limit 1`));
-            return r.rows[0]!.quantity_billed;
+               order by line_number limit 1`, "objects"));
+            return r[0]!.quantity_billed;
           });
         }
 
@@ -397,7 +397,7 @@ const consolidatedRows = [
             await withBypassContext(() => deleteDocument(materialized.documentId, actorId, org.orgId, { reason: "Discard a mistakenly captured draft", allowedSubsidiaryIds: null }));
             assert.equal(await billedOf(org.orgId, poId), "0.00000000");
             const released = await withOrgContext(org.orgId, async () => (await db.execute<{ status: string; document_id: string | null }>(sql`
-              select status, document_id from ap_capture_items where id = ${itemId} and org_id = ${org.orgId}`)).rows[0]!);
+              select status, document_id from ap_capture_items where id = ${itemId} and org_id = ${org.orgId}`, "objects"))[0]!);
             assert.equal(released.status, "needs_review");
             assert.equal(released.document_id, null);
             const again = await convertOrder(org.orgId, actorId, poId, "vendor_bill");
@@ -518,8 +518,8 @@ const consolidatedRows = [
               ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', '1000', '0', '1000',
               ${actorId}, ${actorId}
             ) returning id
-          `);
-          assert.deepEqual(document.rows.map(row => row.id), [id], "concurrent conversion source order is stored");
+          `, "objects");
+          assert.deepEqual(document.map(row => row.id), [id], "concurrent conversion source order is stored");
           const line = await db.execute<{ document_id: string }>(sql`
             insert into document_lines
               (org_id, document_id, line_number, account_id, quantity,
@@ -529,14 +529,14 @@ const consolidatedRows = [
               ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '10',
               '0', '0', '100', '1000', '1000', '0', ${actorId}, ${actorId}
             ) returning document_id
-          `);
-          assert.deepEqual(line.rows.map(row => row.document_id), [id], "concurrent conversion source line is stored");
+          `, "objects");
+          assert.deepEqual(line.map(row => row.document_id), [id], "concurrent conversion source line is stored");
           const approved = await db.execute<{ id: string }>(sql`
             update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${org.orgId}
             returning id
-          `);
-          assert.deepEqual(approved.rows.map(row => row.id), [id], "concurrent conversion source order is approved");
+          `, "objects");
+          assert.deepEqual(approved.map(row => row.id), [id], "concurrent conversion source order is approved");
            return id;
           });
         }
@@ -546,8 +546,8 @@ const consolidatedRows = [
             const r = (await db.execute<{ quantity_billed: string }>(sql`
               select quantity_billed::text from document_lines
                where org_id = ${orgId} and document_id = ${documentId}
-               order by line_number limit 1`));
-            return r.rows[0]!.quantity_billed;
+               order by line_number limit 1`, "objects"));
+            return r[0]!.quantity_billed;
           });
         }
 
@@ -574,7 +574,7 @@ const consolidatedRows = [
             const converter = withBypassContext(() => db.transaction(async (tx) => {
               try {
                 await tx.execute(sql`set local lock_timeout = '15s'`);
-                converterPid = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+                converterPid = (await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid;
                 await tx.execute(sql`
                   select id from documents where id = ${soId} and org_id = ${org.orgId} for update
                 `);
@@ -633,7 +633,7 @@ const consolidatedRows = [
                        and pid <> pg_backend_pid()
                        and ${converterPid} = any(pg_blocking_pids(pid))
                      limit 1
-                  `)).rows[0];
+                  `, "objects"))[0];
                   if (found) { blockedObserved = true; break; }
                   if ((await Promise.race([
                     releaser.then(() => "done" as const, () => "done" as const),
@@ -780,7 +780,7 @@ const orderLifecycleCases = [
                 await paused.promise
                 const writerPid = deferred<number>()
                 writing = withOrgTransaction(org.orgId, async () => {
-                  const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid
+                  const pid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!.pid
                   writerPid.resolve(pid)
                   await withOrg(org.orgId, () => db.execute(sql`update documents set subsidiary_id=${other},memo='Private B-only terms',updated_at=now()
                     where id=${orderId} and org_id=${org.orgId}`))
@@ -794,7 +794,7 @@ const orderLifecycleCases = [
                 // writer; an unprotected read lets it commit before loading its payload.
                 let observed = false
                 for (let i = 0; i < 100; i++) {
-                  const blockers = (await db.execute<{ n: number }>(sql`select cardinality(pg_blocking_pids(${pid})) as n`)).rows[0]!.n
+                  const blockers = (await db.execute<{ n: number }>(sql`select cardinality(pg_blocking_pids(${pid})) as n`, "objects"))[0]!.n
                   if (writerDone || blockers > 0) { observed = true; break }
                   await delay(20)
                 }

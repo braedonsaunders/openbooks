@@ -42,12 +42,10 @@ export async function controlledReopenHours(
   tx: SqlExecutor,
   orgId: string,
 ): Promise<{ defaultHours: number; maxHours: number }> {
-  const row = (
-    await tx.execute<{
+  const row = (await tx.execute<{
       rules: { defaultHours?: number; maxHours?: number };
     }>(sql`
-    select rules from close_policies where org_id = ${orgId} and code = 'controlled-reopen' and is_active limit 1`)
-  ).rows[0];
+    select rules from close_policies where org_id = ${orgId} and code = 'controlled-reopen' and is_active limit 1`, "objects"))[0];
   const defaultHours = Number(row?.rules?.defaultHours ?? 24);
   const maxHours = Number(row?.rules?.maxHours ?? 168);
   if (
@@ -70,10 +68,8 @@ export async function lockReopenRequestScope(
   orgId: string,
   requestId: string,
 ): Promise<void> {
-  const row = (
-    await tx.execute<{ period_id: string; book_id: string }>(sql`
-    select period_id, book_id from close_reopen_requests where id = ${requestId} and org_id = ${orgId}`)
-  ).rows[0];
+  const row = (await tx.execute<{ period_id: string; book_id: string }>(sql`
+    select period_id, book_id from close_reopen_requests where id = ${requestId} and org_id = ${orgId}`, "objects"))[0];
   if (!row) throw new CloseError("reopen request not found");
   await periodScopeAdvisoryLock(tx, orgId, row.period_id, row.book_id);
 }
@@ -102,10 +98,8 @@ export async function reopenApprovalConflicts(
   actorId: string,
 ): Promise<ReopenApprovalConflict[]> {
   const party =
-    (
-      await executor.execute<{ party_id: string | null }>(sql`
-    select party_id from users where id = ${actorId} and org_id = ${orgId}`)
-    ).rows[0]?.party_id ?? null;
+    (await executor.execute<{ party_id: string | null }>(sql`
+    select party_id from users where id = ${actorId} and org_id = ${orgId}`, "objects"))[0]?.party_id ?? null;
   const subsidiaryScope =
     request.subsidiary_id == null
       ? sql`true`
@@ -131,12 +125,12 @@ export async function reopenApprovalConflicts(
        order by d.document_number
     )
     select (select count(*)::text from hits) as n,
-           coalesce((select array_agg(document_number) from (select document_number from hits limit 3) s), '{}') as examples`);
-  if (Number(authored.rows[0]?.n ?? 0) > 0) {
+           coalesce((select array_agg(document_number) from (select document_number from hits limit 3) s), '{}') as examples`, "objects");
+  if (Number(authored[0]?.n ?? 0) > 0) {
     conflicts.push({
       kind: "authored_documents",
-      count: Number(authored.rows[0]!.n),
-      examples: authored.rows[0]!.examples,
+      count: Number(authored[0]!.n),
+      examples: authored[0]!.examples,
     });
   }
   // Manual entries the approver booked themselves. System postings (close,
@@ -153,12 +147,12 @@ export async function reopenApprovalConflicts(
        order by e.entry_number
     )
     select (select count(*)::text from hits) as n,
-           coalesce((select array_agg(entry_number) from (select entry_number from hits limit 3) s), '{}') as examples`);
-  if (Number(posted.rows[0]?.n ?? 0) > 0) {
+           coalesce((select array_agg(entry_number) from (select entry_number from hits limit 3) s), '{}') as examples`, "objects");
+  if (Number(posted[0]?.n ?? 0) > 0) {
     conflicts.push({
       kind: "manual_entries",
-      count: Number(posted.rows[0]!.n),
-      examples: posted.rows[0]!.examples,
+      count: Number(posted[0]!.n),
+      examples: posted[0]!.examples,
     });
   }
   if (party) {
@@ -179,12 +173,12 @@ export async function reopenApprovalConflicts(
            and e.status in ('posted', 'reversed') and ${entryScope} and l.party_id = ${party}
       )
       select (select count(*)::text from hits) as n,
-             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`);
-    if (Number(partyHits.rows[0]?.n ?? 0) > 0) {
+             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`, "objects");
+    if (Number(partyHits[0]?.n ?? 0) > 0) {
       conflicts.push({
         kind: "party_records",
-        count: Number(partyHits.rows[0]!.n),
-        examples: partyHits.rows[0]!.examples,
+        count: Number(partyHits[0]!.n),
+        examples: partyHits[0]!.examples,
       });
     }
     const equity = await executor.execute<{
@@ -200,12 +194,12 @@ export async function reopenApprovalConflicts(
            and l.party_id = ${party} and a.type = 'equity'
       )
       select (select count(*)::text from hits) as n,
-             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`);
-    if (Number(equity.rows[0]?.n ?? 0) > 0) {
+             coalesce((select array_agg(ref) from (select ref from hits order by ref limit 3) s), '{}') as examples`, "objects");
+    if (Number(equity[0]?.n ?? 0) > 0) {
       conflicts.push({
         kind: "equity_lines",
-        count: Number(equity.rows[0]!.n),
-        examples: equity.rows[0]!.examples,
+        count: Number(equity[0]!.n),
+        examples: equity[0]!.examples,
       });
     }
   }
@@ -222,15 +216,13 @@ export async function loadRequestedReopen(
   subsidiary_id: string | null;
 } | null> {
   return (
-    (
-      await executor.execute<{
+    (await executor.execute<{
         period_id: string;
         book_id: string;
         subsidiary_id: string | null;
       }>(sql`
     select period_id, book_id, subsidiary_id from close_reopen_requests
-     where id = ${requestId} and org_id = ${orgId} and status = 'requested'`)
-    ).rows[0] ?? null
+     where id = ${requestId} and org_id = ${orgId} and status = 'requested'`, "objects"))[0] ?? null
   );
 }
 
@@ -261,8 +253,8 @@ export async function governingLockState(
      where org_id = ${args.orgId} and period_id = ${args.periodId}
        and book_id = ${args.bookId} and module = ${args.module}
        and (subsidiary_id is not distinct from ${args.subsidiaryId}::uuid or subsidiary_id is null)
-     order by (subsidiary_id is not null) desc limit 1`);
-  return governing.rows[0]?.state ?? null;
+     order by (subsidiary_id is not null) desc limit 1`, "objects");
+  return governing[0]?.state ?? null;
 }
 
 /**
@@ -300,9 +292,9 @@ export async function endFullyClosedReopenRequests(
        and status = 'approved'
        and expires_at > now()
        ${args.candidateIds?.length ? sql`and id = any(${`{${args.candidateIds.join(",")}}`}::uuid[])` : sql``}
-     for update`);
+     for update`, "objects");
   const consumed: string[] = [];
-  for (const candidate of candidates.rows) {
+  for (const candidate of candidates) {
     const states = [];
     for (const module of candidate.modules) {
       states.push(
@@ -325,8 +317,8 @@ export async function endFullyClosedReopenRequests(
       update close_reopen_requests
          set status = 'reclosed', reclosed_at = now(), updated_at = now(), updated_by = ${args.actorId}
        where id = ${candidate.id} and org_id = ${args.orgId} and status = 'approved'
-      returning id`);
-    if (updated.rows.length !== 1)
+      returning id`, "objects");
+    if (updated.length !== 1)
       throw new CloseError("approved reopen request changed during re-close");
     await tx.execute(sql`
       insert into close_events (org_id, event_type, actor_id, payload)
@@ -353,8 +345,7 @@ export async function describeActiveReopenOverlap(
   orgId: string,
   requestId: string,
 ): Promise<string> {
-  const row = (
-    await tx.execute<{
+  const row = (await tx.execute<{
       modules: CloseModule[];
       approved_at: string | null;
       expires_at: string | null;
@@ -367,8 +358,7 @@ export async function describeActiveReopenOverlap(
       left join accounting_periods p on p.id = r.period_id and p.org_id = r.org_id
       left join users u on u.id = r.approved_by and u.org_id = r.org_id
      where r.id = ${requestId} and r.org_id = ${orgId}
-  `)
-  ).rows[0];
+  `, "objects"))[0];
   const stamp = (value: string | null) =>
     value == null ? "(time unknown)" : value.slice(0, 16).replace("T", " ");
   const what = row

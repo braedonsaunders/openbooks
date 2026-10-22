@@ -40,8 +40,8 @@ export async function listPaymentLinks(
       select subsidiary_id as "subsidiaryId" from documents
        where id = ${documentId} and org_id = ${orgId}
        for update
-    `));
-    if (!owned.rows[0] || !subsidiaryScopeAllows(allowedSubsidiaryIds, owned.rows[0].subsidiaryId)) {
+    `, "objects"));
+    if (!owned[0] || !subsidiaryScopeAllows(allowedSubsidiaryIds, owned[0].subsidiaryId)) {
       throw new ScopeNotFoundError();
     }
     return db.execute<Omit<PaymentLinkView, "tokenState"> & { token_sealed: string | null; token: string | null }>(sql`
@@ -112,8 +112,8 @@ export async function createPaymentLink(
       select id, kind, status, party_id, subsidiary_id, currency, document_number, open_balance
         from documents where id = ${input.documentId} and org_id = ${orgId}
         for update
-    `));
-    const doc = docs.rows[0];
+    `, "objects"));
+    const doc = docs[0];
     if (!doc || !subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiary_id)) throw new ScopeNotFoundError();
     if (doc.kind !== "customer_invoice") throw new PaymentAcceptanceError("payment links attach to customer invoices");
     if (doc.kind !== "customer_invoice") throw new PaymentAcceptanceError("payment links attach to customer invoices");
@@ -153,10 +153,10 @@ export async function createPaymentLink(
               ${doc.open_balance}, ${surcharge.amount}, ${doc.currency}, 'active', ${input.expiresOn ?? null},
               ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id
-    `));
+    `, "objects"));
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'payment_links', ${id.rows[0]!.id}, 'insert',
+      values (${orgId}, 'payment_links', ${id[0]!.id}, 'insert',
               ${JSON.stringify({ after: {
                 documentId: doc.id,
                 documentNumber: doc.document_number,
@@ -169,7 +169,7 @@ export async function createPaymentLink(
               ${actorId})
     `);
     const links = await listPaymentLinks(orgId, doc.id, allowedSubsidiaryIds);
-    return links.find((l) => l.id === id.rows[0]!.id)!;
+    return links.find((l) => l.id === id[0]!.id)!;
   });
 }
 
@@ -189,13 +189,13 @@ export async function voidPaymentLink(
       select document_id from payment_links
        where org_id = ${orgId} and id = ${linkId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!link) throw new ScopeNotFoundError();
     const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from documents
        where id = ${link.document_id} and org_id = ${orgId}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!owned || !subsidiaryScopeAllows(allowedSubsidiaryIds, owned.subsidiaryId)) {
       throw new ScopeNotFoundError();
     }
@@ -203,8 +203,8 @@ export async function voidPaymentLink(
       update payment_links set status = 'void', updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${linkId} and status = 'active'
        returning id
-    `));
-    if (!r.rows[0]) throw new PaymentAcceptanceError("payment link not found or not active");
+    `, "objects"));
+    if (!r[0]) throw new PaymentAcceptanceError("payment link not found or not active");
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payment_links', ${linkId}, 'void', ${JSON.stringify({ before: { status: "active" }, after: { status: "void" } })}::jsonb, ${actorId})
@@ -232,8 +232,8 @@ export async function loadQuotedSurchargeFeeIncomeAccount(
        and action = 'insert'
      order by at desc, id desc
      limit 1
-  `);
-  const changes = result.rows[0]?.changes;
+  `, "objects");
+  const changes = result[0]?.changes;
   const after = changes && typeof changes === 'object' && !Array.isArray(changes)
     ? (changes.after as Record<string, unknown> | undefined)
     : undefined;
@@ -263,12 +263,12 @@ export async function loadLinkByToken(token: string): Promise<LinkWithContext | 
   const tokenHash = paymentLinkTokenHash(token);
   // bypass: connector-token — a public payment link's token hash is resolved before its organization is known.
   const r = await withBypassContext(async () =>
-    db.execute(sql`
+    db.execute<LinkWithContext>(sql`
       select id, org_id as "orgId", ${token} as token, document_id as "documentId", party_id as "partyId",
              subsidiary_id as "subsidiaryId", provider, bank_account_id as "bankAccountId",
              amount, surcharge_amount as "surchargeAmount",
              currency, status, expires_on::text as "expiresOn"
         from payment_links where token_hash = ${tokenHash} limit 1
-    `)) as unknown as { rows: LinkWithContext[] };
-  return r.rows[0] ?? null;
+    `, "objects"));
+  return r[0] ?? null;
 }

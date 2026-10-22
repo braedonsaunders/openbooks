@@ -95,7 +95,7 @@ async function runStatus(orgId: string, runId: string): Promise<{ status: string
   const row = (await withBypassContext(() =>
     db.execute<{ status: string; stats: Record<string, unknown> }>(sql`
       select status, stats from ai_agent_runs where id = ${runId} and org_id = ${orgId}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
   return { status: row.status, stats: row.stats };
 }
 
@@ -121,12 +121,12 @@ async function seedDuePolicy(
 
 async function runs(orgId: string): Promise<RunRow[]> {
   return withBypassContext(async () =>
-    (await db.execute<RunRow>(sql`
+    await db.execute<RunRow>(sql`
       select id::text as id, trigger, status, stats, error_code as "error_code"
         from ai_agent_runs
        where org_id = ${orgId}
        order by started_at, id
-    `)).rows);
+    `, "objects"));
 }
 
 async function scheduledRuns(orgId: string): Promise<RunRow[]> {
@@ -137,7 +137,7 @@ async function policyCursor(orgId: string): Promise<{ nextRunAt: Date | null; la
   const row = (await withBypassContext(() =>
     db.execute<{ next_run_at: Date | string | null; last_run_at: Date | string | null }>(sql`
       select next_run_at, last_run_at from ai_agent_policies where org_id = ${orgId}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
   return {
     nextRunAt: row.next_run_at === null ? null : new Date(row.next_run_at),
     lastRunAt: row.last_run_at === null ? null : new Date(row.last_run_at),
@@ -374,7 +374,7 @@ async function setContinuousCloseFeature(orgId: string, enabled: boolean): Promi
 
 async function workItemCount(orgId: string): Promise<number> {
   return Number((await withBypassContext(() =>
-    db.execute<{ n: string }>(sql`select count(*) as n from ai_work_items where org_id = ${orgId}`))).rows[0]!.n);
+    db.execute<{ n: string }>(sql`select count(*) as n from ai_work_items where org_id = ${orgId}`, "objects")))[0]!.n);
 }
 
 test(
@@ -584,7 +584,7 @@ test(
         select summary from ai_work_items
          where org_id = ${org.orgId} and subject_id = ${reconciliationId}
            and finding_type = 'stale_reconciliation'
-      `))).rows[0];
+      `, "objects")))[0];
       assert.ok(item, "the scan persists its stale reconciliation finding");
       assert.deepEqual(item.summary.proposedCommand, {
         tool: "sign_off_reconciliation",
@@ -631,17 +631,17 @@ test(
       const items = await withBypassContext(() =>
         db.execute<{ id: string; status: string }>(sql`
           select id, status from ai_work_items where org_id = ${org.orgId}
-        `),
+        `, "objects"),
       );
       assert.deepEqual(
-        items.rows,
+        items,
         [{ id: itemId, status: "open" }],
         "the other entity's unmatched item is neither resolved nor touched",
       );
       const runs = await withBypassContext(() =>
-        db.execute<{ n: string }>(sql`select count(*) as n from ai_agent_runs where org_id = ${org.orgId}`),
+        db.execute<{ n: string }>(sql`select count(*) as n from ai_agent_runs where org_id = ${org.orgId}`, "objects"),
       );
-      assert.equal(Number(runs.rows[0]!.n), 0, "a refused scan leaves no run row behind");
+      assert.equal(Number(runs[0]!.n), 0, "a refused scan leaves no run row behind");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }

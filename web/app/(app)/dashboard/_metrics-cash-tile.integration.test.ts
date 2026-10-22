@@ -100,10 +100,8 @@ function legacyDashboardCashQuery(orgId: string, today: string) {
 }
 
 async function legacyCash(orgId: string): Promise<string> {
-  const r = (await db.execute(legacyDashboardCashQuery(orgId, TODAY))) as unknown as {
-    rows: Array<{ cash_balance: string }>;
-  };
-  return r.rows[0]!.cash_balance;
+  const r = await db.execute<{ cash_balance: string }>(legacyDashboardCashQuery(orgId, TODAY), "objects");
+  return r[0]!.cash_balance;
 }
 
 // Fixture writes run under the bypass. Importing a web reader replaces the
@@ -113,7 +111,7 @@ async function ensurePeriod(orgId: string, year: number, month: number, start: s
   const id = randomUUID();
   return withBypass(async () => {
     const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-      select fiscal_calendar_id from accounting_periods where org_id = ${orgId} and starts_on = '2026-07-01'`)).rows[0]!.fiscal_calendar_id;
+      select fiscal_calendar_id from accounting_periods where org_id = ${orgId} and starts_on = '2026-07-01'`, "objects"))[0]!.fiscal_calendar_id;
     await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${id}, ${orgId}, ${year}, ${month}, ${`${year}-0${month}`}, ${start}, ${end}, false, ${cal})`);
     return id;
@@ -202,12 +200,12 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
     // maintenance transaction, which cannot see this block's uncommitted
     // subsidiary/account rows — the journal subsidiary guard would raise.
     await withBypass(async () => {
-      const june = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-06-01'`)).rows[0]!.id;
-      const august = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-08-01'`)).rows[0]!.id;
-      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`)).rows[0]!.id;
-      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`)).rows[0]!.id;
-      const dormantBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1020'`)).rows[0]!.id;
-      const taxBook = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${org.orgId} and code = 'TAX'`)).rows[0]!.id;
+      const june = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-06-01'`, "objects"))[0]!.id;
+      const august = (await db.execute<{ id: string }>(sql`select id from accounting_periods where org_id = ${org.orgId} and starts_on = '2026-08-01'`, "objects"))[0]!.id;
+      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`, "objects"))[0]!.id;
+      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`, "objects"))[0]!.id;
+      const dormantBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1020'`, "objects"))[0]!.id;
+      const taxBook = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${org.orgId} and code = 'TAX'`, "objects"))[0]!.id;
       // Summary branch (June) + sliver branch (July) on the root bank.
       await postBank(org, { amount: "500.0000", date: "2026-06-20", period: june, label: "root-jun" });
       await postBank(org, { amount: "1000.0000", label: "root-jul" });
@@ -257,13 +255,13 @@ test("a missing exchange rate refuses the cash tile by name without failing the 
         values (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US')`);
     });
     await withBypass(async () => {
-      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`)).rows[0]!.id;
+      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`, "objects"))[0]!.id;
       await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
         values (${randomUUID()}, ${org.orgId}, '1010', 'USD Cash', 'asset_bank', ${usSub}, false, true)`);
     });
     await withBypass(async () => {
-      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`)).rows[0]!.id;
-      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`)).rows[0]!.id;
+      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`, "objects"))[0]!.id;
+      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`, "objects"))[0]!.id;
       // No USD→CAD rate exists, so the USD leg cannot be translated.
       await postBank(org, { sub: usSub, account: usdBank, amount: "100.0000", currency: "USD", label: "usd-unrated" });
     });

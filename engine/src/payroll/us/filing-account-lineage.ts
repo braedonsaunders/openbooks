@@ -38,15 +38,15 @@ export async function validateUsFilingAccountLineage(
   if (problem) throw new PayrollError(problem);
   // The storage policy guard takes these parent locks in the same order.
   const ids = [input.filingAccountId, input.federalAccountId].sort();
-  const accounts = (await tx.execute<{ id: string; country: string; program_type: string; subsidiary_id: string | null }>(sql`
+  const accounts = await tx.execute<{ id: string; country: string; program_type: string; subsidiary_id: string | null }>(sql`
     select id, country, program_type, subsidiary_id from payroll_filing_accounts
      where org_id = ${orgId} and id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)})
      order by id for update
-  `)).rows;
+  `, 'objects');
   const state = accounts.find(account => account.id === input.filingAccountId);
   const federal = accounts.find(account => account.id === input.federalAccountId);
-  const employer = (await tx.execute(sql`select id from subsidiaries
-    where org_id = ${orgId} and id = ${input.subsidiaryId} and country = 'US' and not is_elimination for share`)).rows;
+  const employer = await tx.execute(sql`select id from subsidiaries
+    where org_id = ${orgId} and id = ${input.subsidiaryId} and country = 'US' and not is_elimination for share`, 'objects');
   if (employer.length !== 1 || !state || !federal || state.country !== 'US' || federal.country !== 'US'
     || state.program_type !== 'us_state_sui' || federal.program_type !== 'us_ein'
     || state.subsidiary_id !== null && state.subsidiary_id !== input.subsidiaryId

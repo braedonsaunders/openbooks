@@ -112,35 +112,35 @@ async function propertyIdInScope(orgId: string, value: unknown, scope: PropertyW
   const human = String(value ?? '').trim()
   if (!human) return null
   const identity = isUuid(human) ? sql`p.id = ${human}` : sql`p.code = ${human}`
-  const found = (await db.execute(sql`
+  const found = await db.execute<{ id: string }>(sql`
     select p.id from managed_properties p
      where p.org_id = ${orgId} and ${identity}
        ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-     limit 1`)) as { rows: { id: string }[] }
-  return found.rows[0]?.id ?? null
+     limit 1`, 'objects')
+  return found[0]?.id ?? null
 }
 
 async function subsidiaryIdInScope(orgId: string, value: unknown, scope: PropertyWriteScope): Promise<string | null> {
   const human = String(value ?? '').trim()
   if (!human) return null
   const identity = isUuid(human) ? sql`s.id = ${human}` : sql`s.name = ${human}`
-  const found = (await db.execute(sql`
+  const found = await db.execute<{ id: string }>(sql`
     select s.id from subsidiaries s
      where s.org_id = ${orgId} and ${identity}
        ${subsidiaryReadFilter(sql`s.id`, scope)}
-     limit 1`)) as { rows: { id: string }[] }
-  return found.rows[0]?.id ?? null
+     limit 1`, 'objects')
+  return found[0]?.id ?? null
 }
 
 async function leaseInScope(orgId: string, leaseNumber: string, scope: PropertyWriteScope): Promise<{ id: string; status: string } | null> {
-  const found = (await db.execute(sql`
+  const found = await db.execute<{ id: string; status: string }>(sql`
     select l.id, l.status
       from property_leases l
       join managed_properties p on p.org_id = l.org_id and p.id = l.property_id
      where l.org_id = ${orgId} and l.lease_number = ${leaseNumber}
        ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-     limit 1`)) as { rows: { id: string; status: string }[] }
-  return found.rows[0] ?? null
+     limit 1`, 'objects')
+  return found[0] ?? null
 }
 async function naturalId(orgId: string, table: string, column: string, value: unknown): Promise<string | null> {
   const human = String(value ?? '').trim()
@@ -149,9 +149,9 @@ async function naturalId(orgId: string, table: string, column: string, value: un
   // otherwise a file carrying another tenant's id would attach to a foreign
   // subsidiary, location, asset, property, or item.
   const idColumn = isUuid(human) ? 'id' : column
-  const found = (await db.execute(sql`
-    select id from ${sql.raw(table)} where org_id=${orgId} and ${sql.raw(idColumn)}=${human} limit 1`)) as { rows: { id: string }[] }
-  return found.rows[0]?.id ?? null
+  const found = await db.execute<{ id: string }>(sql`
+    select id from ${sql.raw(table)} where org_id=${orgId} and ${sql.raw(idColumn)}=${human} limit 1`, 'objects')
+  return found[0]?.id ?? null
 }
 
 function propertyFields(fixedAssetsOn = true, multiCurrencyOn = true): ResourceField[] {
@@ -216,15 +216,15 @@ function propertyResource(orgId: string): DataResource {
           const code = String(src.code ?? '').trim()
           const name = String(src.name ?? '').trim()
           if (!code || !name || !src.subsidiary) throw new Error('code, name, and subsidiary are required')
-          const existing = (await db.execute(sql`
+          const existing = await db.execute<ManagedPropertyImportRow>(sql`
             select p.* from managed_properties p
              where p.org_id = ${ctx.orgId} and p.code = ${code}
                ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-             limit 1`)) as { rows: ManagedPropertyImportRow[] }
-          if (existing.rows[0] && mode === 'insert') throw new Error(`already exists (code=${code})`)
+             limit 1`, 'objects')
+          if (existing[0] && mode === 'insert') throw new Error(`already exists (code=${code})`)
           const subsidiaryId = await subsidiaryIdInScope(ctx.orgId, src.subsidiary, scope)
           if (!subsidiaryId) throw new Error(`subsidiary "${String(src.subsidiary)}" not found`)
-          const current = existing.rows[0]
+          const current = existing[0]
           const locationId = src.location ? await naturalId(ctx.orgId, 'locations', 'code', src.location) : current?.location_id ?? null
           if (src.location && !locationId) throw new Error(`location "${String(src.location)}" not found`)
           if (!fixedAssetsOn && src.fixedAsset !== undefined) throw new Error('fixedAsset is not available')
@@ -240,23 +240,23 @@ function propertyResource(orgId: string): DataResource {
             if (src[key] && !id) throw new Error(`${key} "${String(src[key])}" not found`)
           }
           if (ctx.dryRun) {
-            if (existing.rows[0]) outcome.updated++; else outcome.created++
+            if (existing[0]) outcome.updated++; else outcome.created++
             continue
           }
           const currentAddress = current?.address ?? {}
           const address = { street: String(src.street ?? currentAddress.street ?? ''), city: String(src.city ?? currentAddress.city ?? ''), region: String(src.region ?? currentAddress.region ?? ''), postalCode: String(src.postalCode ?? currentAddress.postalCode ?? '') }
           // The import route always supplies the caller's fence: rows outside
           // it are refused inside the engine transaction, like the route.
-          const common = { orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: scope, subsidiaryId, locationId, fixedAssetId, code, name, propertyType: String(src.propertyType ?? existing.rows[0]?.property_type ?? 'residential'), address, rentIncomeAccountId, camIncomeAccountId, depositLiabilityAccountId, defaultBankAccountId, ...(multiCurrencyOn ? { currency: String(src.currency ?? existing.rows[0]?.currency ?? '') } : {}) }
-          if (existing.rows[0]) {
-            await updateManagedProperty({ ...common, propertyId: existing.rows[0].id, status: String(src.status ?? existing.rows[0].status), custom: existing.rows[0].custom ?? {} })
+          const common = { orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: scope, subsidiaryId, locationId, fixedAssetId, code, name, propertyType: String(src.propertyType ?? existing[0]?.property_type ?? 'residential'), address, rentIncomeAccountId, camIncomeAccountId, depositLiabilityAccountId, defaultBankAccountId, ...(multiCurrencyOn ? { currency: String(src.currency ?? existing[0]?.currency ?? '') } : {}) }
+          if (existing[0]) {
+            await updateManagedProperty({ ...common, propertyId: existing[0].id, status: String(src.status ?? existing[0].status), custom: existing[0].custom ?? {} })
             outcome.updated++
           } else {
             const created = await createManagedProperty(common)
             if (src.status && src.status !== 'active') {
               if (multiCurrencyOn) {
-                const createdRow = (await db.execute(sql`select currency from managed_properties where org_id=${ctx.orgId} and id=${created.id}`)) as { rows: { currency: string }[] }
-                await updateManagedProperty({ ...common, propertyId: created.id, status: String(src.status), currency: createdRow.rows[0]!.currency, custom: {} })
+                const createdRow = await db.execute<{ currency: string }>(sql`select currency from managed_properties where org_id=${ctx.orgId} and id=${created.id}`, 'objects')
+                await updateManagedProperty({ ...common, propertyId: created.id, status: String(src.status), currency: createdRow[0]!.currency, custom: {} })
               } else {
                 await updateManagedProperty({ ...common, propertyId: created.id, status: String(src.status), custom: {} })
               }
@@ -304,22 +304,22 @@ function unitResource(orgId: string): DataResource {
         const propertyId = await propertyIdInScope(ctx.orgId, src.propertyCode, scope)
         const code = String(src.code ?? '').trim()
         if (!propertyId || !code) throw new Error('valid propertyCode and code are required')
-        const found = (await db.execute(sql`
+        const found = await db.execute<PropertyUnitImportRow>(sql`
           select u.* from property_units u
           join managed_properties p on p.org_id = u.org_id and p.id = u.property_id
           where u.org_id = ${ctx.orgId} and u.property_id = ${propertyId} and u.code = ${code}
             ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-          limit 1`)) as { rows: PropertyUnitImportRow[] }
-        if (found.rows[0] && mode === 'insert') throw new Error(`already exists (${String(src.propertyCode)} + ${code})`)
+          limit 1`, 'objects')
+        if (found[0] && mode === 'insert') throw new Error(`already exists (${String(src.propertyCode)} + ${code})`)
         if (!ctx.dryRun) {
           const values = { orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: scope, code, name: src.name ? String(src.name) : null, unitType: src.unitType ? String(src.unitType) : null, rentableArea: src.rentableArea ? String(src.rentableArea) : null, bedrooms: src.bedrooms === '' || src.bedrooms == null ? null : Number(src.bedrooms) }
-          if (found.rows[0]) await updatePropertyUnit({ ...values, unitId: found.rows[0].id, status: String(src.status ?? found.rows[0].status) })
+          if (found[0]) await updatePropertyUnit({ ...values, unitId: found[0].id, status: String(src.status ?? found[0].status) })
           else {
             const created = await createPropertyUnit({ ...values, propertyId })
             if (src.status === 'offline') await updatePropertyUnit({ ...values, unitId: created.id, status: 'offline' })
           }
         }
-        if (found.rows[0]) outcome.updated++; else outcome.created++
+        if (found[0]) outcome.updated++; else outcome.created++
       } catch (error) { outcome.failed++; outcome.errors.push({ row: index + 1, message: importRowError(error) }) }
       return outcome
     },
@@ -370,9 +370,9 @@ function leaseResource(orgId: string): DataResource {
         const propertyId = await propertyIdInScope(ctx.orgId, src.propertyCode, scope)
         const tenantId = await resolver.resolveId({ resource: 'parties', by: 'short_code' }, src.tenant)
         if (!leaseNumber || !propertyId || !tenantId || !src.startsOn || !src.baseRent) throw new Error('leaseNumber, valid propertyCode, tenant, startsOn, and baseRent are required')
-        const unitId = src.unitCode ? ((await db.execute(sql`select id from property_units where org_id=${ctx.orgId} and property_id=${propertyId} and code=${String(src.unitCode)} limit 1`)) as { rows: { id: string }[] }).rows[0]?.id ?? null : null
+        const unitId = src.unitCode ? (await db.execute<{ id: string }>(sql`select id from property_units where org_id=${ctx.orgId} and property_id=${propertyId} and code=${String(src.unitCode)} limit 1`, 'objects'))[0]?.id ?? null : null
         if (src.unitCode && !unitId) throw new Error(`unit "${String(src.unitCode)}" not found on property`)
-        const found = (await db.execute(sql`
+        const found = await db.execute<PropertyLeaseImportRow>(sql`
           select l.*,
                  (select amount from lease_charges
                    where org_id = l.org_id and lease_id = l.id and charge_type = 'base_rent'
@@ -381,9 +381,9 @@ function leaseResource(orgId: string): DataResource {
             join managed_properties p on p.org_id = l.org_id and p.id = l.property_id
            where l.org_id = ${ctx.orgId} and l.lease_number = ${leaseNumber}
              ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-           limit 1`)) as { rows: PropertyLeaseImportRow[] }
-        if (found.rows[0] && mode === 'insert') throw new Error(`already exists (leaseNumber=${leaseNumber})`)
-        const current = found.rows[0]
+           limit 1`, 'objects')
+        if (found[0] && mode === 'insert') throw new Error(`already exists (leaseNumber=${leaseNumber})`)
+        const current = found[0]
         const values = { orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: scope, propertyId, unitId, tenantId, leaseNumber, startsOn: String(src.startsOn), endsOn: src.endsOn ? String(src.endsOn) : null, baseRent: String(src.baseRent), billingDay: Number(src.billingDay ?? current?.billing_day ?? 1), paymentTermsDays: Number(src.paymentTermsDays ?? current?.payment_terms_days ?? 0), securityDepositRequired: String(src.securityDepositRequired ?? current?.security_deposit_required ?? '0'), camMethod: String(src.camMethod ?? current?.cam_method ?? 'none') as 'none' | 'fixed' | 'pro_rata', camSharePercent: src.camSharePercent == null || src.camSharePercent === '' ? current?.cam_share_percent ?? null : String(src.camSharePercent), lateFeeType: String(src.lateFeeType ?? current?.late_fee_type ?? 'none') as 'none' | 'fixed' | 'percent', lateFeeValue: String(src.lateFeeValue ?? current?.late_fee_value ?? '0'), graceDays: Number(src.graceDays ?? current?.grace_days ?? 0), autoInvoice: src.autoInvoice == null || src.autoInvoice === '' ? current?.auto_invoice ?? true : coerceBoolean(src.autoInvoice), autoPost: src.autoPost == null || src.autoPost === '' ? current?.auto_post ?? false : coerceBoolean(src.autoPost) }
         if (!ctx.dryRun) {
           if (current) await updatePropertyLease({ ...values, leaseId: current.id })
@@ -451,7 +451,7 @@ function leaseChargeResource(orgId: string): DataResource {
         if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || (src.effectiveTo && String(src.effectiveTo) < effectiveFrom)) throw new Error('effective dates must form a valid YYYY-MM-DD range')
         const lease = await leaseInScope(ctx.orgId, leaseNumber, scope)
         if (!lease) throw new Error(`lease "${leaseNumber}" not found in the caller's subsidiary scope`)
-        const existing = (await db.execute(sql`
+        const existing = await db.execute<LeaseChargeImportRow>(sql`
           select c.*, a.number as account_number, i.code as item_code, t.code as tax_code
             from lease_charges c
             join property_leases l on l.org_id = c.org_id and l.id = c.lease_id
@@ -463,12 +463,12 @@ function leaseChargeResource(orgId: string): DataResource {
              and c.charge_type = ${chargeType} and c.effective_from = ${effectiveFrom}
              and c.description = ${description}
              ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-           limit 1`)) as { rows: LeaseChargeImportRow[] }
-        if (existing.rows[0]) {
+           limit 1`, 'objects')
+        if (existing[0]) {
           if (mode === 'insert') throw new Error('charge already exists')
           const itemOmitted = src.item === undefined || src.item === null || src.item === ''
-          const itemSame = itemOmitted || String(existing.rows[0].item_code ?? '') === String(src.item)
-          const same = normalizeMoney(existing.rows[0].amount) === chargeAmount && existing.rows[0].frequency === matchedFrequency && String(existing.rows[0].effective_to ?? '') === String(src.effectiveTo ?? '') && String(existing.rows[0].account_number ?? '') === String(src.incomeAccount ?? '') && itemSame && String(existing.rows[0].tax_code ?? '') === String(src.taxCode ?? '')
+          const itemSame = itemOmitted || String(existing[0].item_code ?? '') === String(src.item)
+          const same = normalizeMoney(existing[0].amount) === chargeAmount && existing[0].frequency === matchedFrequency && String(existing[0].effective_to ?? '') === String(src.effectiveTo ?? '') && String(existing[0].account_number ?? '') === String(src.incomeAccount ?? '') && itemSame && String(existing[0].tax_code ?? '') === String(src.taxCode ?? '')
           if (!same) throw new Error('an existing charge with this key differs; edit it from the lease so scheduled billing evidence is preserved')
           outcome.updated++
           continue
@@ -478,8 +478,8 @@ function leaseChargeResource(orgId: string): DataResource {
         const taxCodeId = src.taxCode ? await resolver.resolveId({ resource: 'tax-codes', by: 'code' }, src.taxCode) : null
         if ((src.incomeAccount && !incomeAccountId) || (src.item && !itemId) || (src.taxCode && !taxCodeId)) throw new Error('incomeAccount, item, or taxCode was not found')
         if (itemId && !inventoryOn) {
-          const item = (await db.execute(sql`select kind from items where id = ${itemId} and org_id = ${ctx.orgId}`)) as { rows: { kind: string }[] }
-          if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) throw new Error('item is not available')
+          const item = await db.execute<{ kind: string }>(sql`select kind from items where id = ${itemId} and org_id = ${ctx.orgId}`, 'objects')
+          if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) throw new Error('item is not available')
         }
         if (!ctx.dryRun) {
           await addLeaseCharge({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: scope, leaseId: lease.id, chargeType, description, amount: chargeAmount, frequency: matchedFrequency, effectiveFrom, effectiveTo: src.effectiveTo ? String(src.effectiveTo) : null, incomeAccountId, itemId, taxCodeId })
@@ -519,14 +519,14 @@ function depositOpeningResource(orgId: string): DataResource {
         const externalKey = String(src.externalKey ?? '').trim()
         const leaseNumber = String(src.leaseNumber ?? '').trim()
         if (!externalKey || !leaseNumber || !src.occurredOn || !src.amount || !src.offsetAccount) throw new Error('externalKey, leaseNumber, occurredOn, amount, and offsetAccount are required')
-        const existing = (await db.execute(sql`
+        const existing = await db.execute<{ id: string; lease_id: string; occurred_on: string; amount: string; offset_account_id: string | null; memo: string | null }>(sql`
           select d.id, d.lease_id, d.occurred_on, d.amount, d.offset_account_id, d.memo
             from security_deposit_transactions d
             join property_leases l on l.org_id = d.org_id and l.id = d.lease_id
             join managed_properties p on p.org_id = l.org_id and p.id = l.property_id
            where d.org_id = ${ctx.orgId} and d.import_key = ${externalKey}
              ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-           limit 1`)) as { rows: { id: string; lease_id: string; occurred_on: string; amount: string; offset_account_id: string | null; memo: string | null }[] }
+           limit 1`, 'objects')
         const lease = await leaseInScope(ctx.orgId, leaseNumber, scope)
         const offsetAccountId = await resolver.resolveId({ resource: 'accounts', by: 'number' }, src.offsetAccount)
         if (!lease || !offsetAccountId) throw new Error('leaseNumber or offsetAccount was not found in the caller\'s subsidiary scope')
@@ -537,16 +537,16 @@ function depositOpeningResource(orgId: string): DataResource {
         }
         const amount = normalizeMoney(exactAmount)
         const memo = src.memo ? String(src.memo) : 'Imported security deposit opening balance'
-        if (existing.rows[0]) {
+        if (existing[0]) {
           if (mode === 'insert') throw new Error(`already exists (externalKey=${externalKey})`)
-          const same = (await db.execute(sql`select
+          const same = await db.execute<{ same: boolean }>(sql`select
             lease_id = ${lease.id}::uuid
             and occurred_on = ${occurredOn}::date
             and amount = ${amount}::numeric
             and offset_account_id is not distinct from ${offsetAccountId}::uuid
             and memo is not distinct from ${memo}::text as same
-            from security_deposit_transactions where org_id=${ctx.orgId} and id=${existing.rows[0].id}`)) as { rows: { same: boolean }[] }
-          if (same.rows[0]?.same !== true) throw new Error(`security deposit with externalKey=${externalKey} already exists with different values; use a new external key`)
+            from security_deposit_transactions where org_id=${ctx.orgId} and id=${existing[0].id}`, 'objects')
+          if (same[0]?.same !== true) throw new Error(`security deposit with externalKey=${externalKey} already exists with different values; use a new external key`)
           continue
         }
         if (!ctx.dryRun) await recordSecurityDeposit({ orgId: ctx.orgId, actorId: ctx.actorId, allowedSubsidiaryIds: scope, leaseId: lease.id, kind: 'adjustment_increase', occurredOn, amount, offsetAccountId, memo, importKey: externalKey })

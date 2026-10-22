@@ -50,13 +50,13 @@ test("the provision consumes recognized reporting-book depreciation without manu
         tax: result[0]!.taxBasis,
         difference: result[0]!.difference,
       }, { book: "11000.0000", tax: "10000.0000", difference: "1000.0000" });
-      const evidence = (await db.execute<{ amount: string; journal_entry_id: string | null; recorded: boolean }>(sql`
+      const evidence = await db.execute<{ amount: string; journal_entry_id: string | null; recorded: boolean }>(sql`
         select l.posted_amount::text as amount,l.journal_entry_id,l.non_gl_recognized_at is not null as recorded
           from depreciation_schedule_lines l join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-         where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${taxBookId}`)).rows;
+         where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${taxBookId}`, "objects");
       assert.deepEqual(evidence, [{ amount: "2000.0000", journal_entry_id: null, recorded: true }]);
       assert.equal((await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${taxBookId}`)).rows[0]!.n, 0);
+        select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${taxBookId}`, "objects"))[0]!.n, 0);
       assert.deepEqual(await computeFixedAssetDifferences(org.orgId, "2026-06-30"), [],
         "recognition must retain the effective service-period cutoff");
       const retry = await runDepreciation(org.orgId, "2026-07-31", adminId, assetId);

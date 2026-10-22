@@ -49,24 +49,24 @@ async function fixture() {
     const statusId = (await db.execute<{ id: string }>(sql`
       insert into crm_opportunity_statuses (org_id, key, name, probability, is_closed, is_won, is_active)
       values (${org.orgId}, 'open', 'Open', 10, false, false, true)
-      returning id`)).rows[0]!.id
+      returning id`, 'objects'))[0]!.id
     return statusId
   })
   const itemId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into items (org_id, kind, name, is_active)
     values (${org.orgId}, 'service', 'Opp Item', true)
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   const oppId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     insert into crm_opportunities (org_id, opportunity_number, title, status_id, currency)
     values (${org.orgId}, 'OPP-001', 'Magnitude Opp', ${statusId}, 'CAD')
-    returning id`))).rows[0]!.id
+    returning id`, 'objects')))[0]!.id
   return { org, statusId, itemId, oppId }
 }
 
 async function revision(id: string): Promise<string> {
   const row = (await db.execute<{ revision: string }>(sql`
     select (revision_seq)::text as revision
-      from crm_opportunities where id = ${id}`)).rows[0]!
+      from crm_opportunities where id = ${id}`, 'objects'))[0]!
   return row.revision
 }
 
@@ -93,8 +93,8 @@ async function patch(id: string, body: Record<string, unknown>): Promise<{ statu
 }
 
 async function lineCount(oppId: string): Promise<number> {
-  const rows = (await withOrgContext(state.orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from crm_opportunity_lines where opportunity_id = ${oppId}`))).rows
+  const rows = await withOrgContext(state.orgId, () => db.execute<{ n: number }>(sql`
+    select count(*)::int as n from crm_opportunity_lines where opportunity_id = ${oppId}`, 'objects'))
   return rows[0]!.n
 }
 
@@ -145,9 +145,9 @@ test('PATCH still saves a column-maximum line with identical read-back', async (
       lines: [{ itemId, description: 'Column-maximum line', unit: 'each', quantity: '1', unitPrice: '999999999999999.9999' }],
     }))
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    const rows = (await withOrgContext(state.orgId, () => db.execute<{ unit_price: string; amount: string }>(sql`
+    const rows = await withOrgContext(state.orgId, () => db.execute<{ unit_price: string; amount: string }>(sql`
       select unit_price::text as unit_price, amount::text as amount
-        from crm_opportunity_lines where opportunity_id = ${oppId}`))).rows
+        from crm_opportunity_lines where opportunity_id = ${oppId}`, 'objects'))
     assert.equal(rows[0]!.unit_price, '999999999999999.9999')
     assert.equal(rows[0]!.amount, '999999999999999.9999')
   } finally {

@@ -32,7 +32,7 @@ export async function lockAssetCategoryTaxLifecycle(
         from fixed_assets
        where org_id = ${orgId} and category_id = ${categoryId}
        order by subsidiary_id
-    `)).rows.map((row) => row.subsidiary_id);
+    `, "objects")).map((row) => row.subsidiary_id);
     const missing = scopes.filter((id) => !locked.has(id));
     if (missing.length === 0) return [...locked].sort();
     await lockAssetTaxLifecycle(tx, orgId, missing);

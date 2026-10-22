@@ -47,12 +47,12 @@ for (const operation of ["receipt", "issue", "transfer", "assembly", "landed cos
           ? reverseLandedCostVoucher(org.orgId, actor, input)
           : operation === "assembly" ? reverseAssemblyBuild(org.orgId, actor, input)
           : reverseInventoryMovement(org.orgId, actor, input);
-        const snapshot = async () => (await db.execute(sql`
+        const snapshot = async () => await db.execute(sql`
           select (select jsonb_agg(to_jsonb(m) order by id) from inventory_movements m where org_id=${org.orgId}) as movements,
                  (select jsonb_agg(to_jsonb(l) order by id) from cost_layers l where org_id=${org.orgId}) as layers,
                  (select jsonb_agg(to_jsonb(e) order by id) from journal_entries e where org_id=${org.orgId}) as entries,
                  (select jsonb_agg(to_jsonb(a) order by id) from landed_cost_allocations a where org_id=${org.orgId}) as allocations
-        `)).rows;
+        `, "objects");
         if (timing === "before source" || timing === "invalid calendar") {
           const before = await snapshot();
           await assert.rejects(reverse, InventoryError);
@@ -66,7 +66,7 @@ for (const operation of ["receipt", "issue", "transfer", "assembly", "landed cos
         const totals = (await db.execute<{ gl: string; layers: string }>(sql`
           select (select coalesce(sum(amount),0)::text from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.invAsset}) as gl,
                  (select coalesce(sum(round(remaining_quantity * unit_cost,4)),0)::text from cost_layers where org_id=${org.orgId}) as layers
-        `)).rows[0]!;
+        `, "objects"))[0]!;
         assert.equal(totals.gl, totals.layers, "inventory GL reconciles to remaining layers");
       } finally { await dropScratchOrg(org.orgId); }
     });

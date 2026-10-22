@@ -36,9 +36,9 @@ const TOKEN = "ghp_integration_example_token";
 async function storedFeedback(): Promise<Record<string, unknown>> {
   const rows = await withBypass(() =>
     db.execute<{ feedback: Record<string, unknown> | null }>(sql`
-      select settings -> 'feedback' as feedback from platform_settings where id = 'platform'`),
+      select settings -> 'feedback' as feedback from platform_settings where id = 'platform'`, "objects"),
   );
-  return rows.rows[0]?.feedback ?? {};
+  return rows[0]?.feedback ?? {};
 }
 
 test("the deployment's issue destination is installation state, sealed and bypass-only", async (t) => {
@@ -50,9 +50,9 @@ test("the deployment's issue destination is installation state, sealed and bypas
 
   await t.test("migration 0173 seeds exactly one row, and a second is impossible", async () => {
     const count = await withBypass(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from platform_settings`),
+      db.execute<{ n: number }>(sql`select count(*)::int as n from platform_settings`, "objects"),
     );
-    assert.equal(count.rows[0]?.n, 1);
+    assert.equal(count[0]?.n, 1);
     // The driver wraps the server error, so the constraint name is on the cause.
     await assert.rejects(
       () => withBypass(() => db.execute(sql`insert into platform_settings (id) values ('other')`)),
@@ -111,9 +111,9 @@ test("the deployment's issue destination is installation state, sealed and bypas
 
     const actor = await withBypass(() =>
       db.execute<{ updatedBy: string | null }>(sql`
-        select updated_by as "updatedBy" from platform_settings where id = 'platform'`),
+        select updated_by as "updatedBy" from platform_settings where id = 'platform'`, "objects"),
     );
-    assert.equal(actor.rows[0]?.updatedBy, ACTOR, "who changed the destination is recorded");
+    assert.equal(actor[0]?.updatedBy, ACTOR, "who changed the destination is recorded");
   });
 
   await t.test("a save with no token keeps the stored credential", async () => {
@@ -146,18 +146,18 @@ test("the deployment's issue destination is installation state, sealed and bypas
     const table = await withBypass(() =>
       db.execute<{ enabled: boolean; forced: boolean }>(sql`
         select relrowsecurity as enabled, relforcerowsecurity as forced
-          from pg_class where relname = 'platform_settings'`),
+          from pg_class where relname = 'platform_settings'`, "objects"),
     );
-    assert.equal(table.rows[0]?.enabled, true, "row-level security is on");
-    assert.equal(table.rows[0]?.forced, true, "and forced, so the owner is not exempt");
+    assert.equal(table[0]?.enabled, true, "row-level security is on");
+    assert.equal(table[0]?.forced, true, "and forced, so the owner is not exempt");
 
     const policies = await withBypass(() =>
       db.execute<{ policyname: string; cmd: string; qual: string; withCheck: string | null }>(sql`
         select policyname, cmd, qual, with_check as "withCheck"
-          from pg_policies where tablename = 'platform_settings'`),
+          from pg_policies where tablename = 'platform_settings'`, "objects"),
     );
-    assert.equal(policies.rows.length, 1, "exactly one way in");
-    const policy = policies.rows[0]!;
+    assert.equal(policies.length, 1, "exactly one way in");
+    const policy = policies[0]!;
     assert.equal(policy.cmd, "ALL", "reads and writes are gated alike");
     for (const clause of [policy.qual, policy.withCheck]) {
       assert.match(
@@ -172,9 +172,9 @@ test("the deployment's issue destination is installation state, sealed and bypas
     const columns = await withBypass(() =>
       db.execute<{ column_name: string }>(sql`
         select column_name from information_schema.columns
-         where table_schema = 'public' and table_name = 'platform_settings'`),
+         where table_schema = 'public' and table_name = 'platform_settings'`, "objects"),
     );
-    const names = columns.rows.map((row) => row.column_name);
+    const names = columns.map((row) => row.column_name);
     assert.ok(
       !names.includes("org_id"),
       "backup, sandbox cloning and org teardown all select tables by org_id",

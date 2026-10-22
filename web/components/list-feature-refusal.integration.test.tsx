@@ -22,8 +22,8 @@ const DB = !!process.env.OPENBOOKS_DB_URL
 async function actor(orgId: string, key: string, permissions: string[]): Promise<string> {
   return withBypassContext(async () => {
     const id = await createScratchUser(orgId, key, key)
-    const updated = await db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb where org_id=${orgId} and key=${key} returning key`)
-    assert.equal(updated.rows.length, 1, `${key} role setup updates one role`)
+    const updated = await db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb where org_id=${orgId} and key=${key} returning key`, 'objects')
+    assert.equal(updated.length, 1, `${key} role setup updates one role`)
     return id
   })
 }

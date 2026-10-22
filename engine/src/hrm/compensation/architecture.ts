@@ -63,8 +63,8 @@ export interface CompensationSettings {
 export async function compensationSettingsDocument(orgId: string): Promise<Record<string, unknown>> {
   const companyId = requireOrgId(orgId);
   const row = (await db.execute<{ compensation: Record<string, unknown> | null }>(
-    sql`select settings->'compensation' as compensation from orgs where id = ${companyId}`,
-  )).rows[0];
+    sql`select settings->'compensation' as compensation from orgs where id = ${companyId}`, "objects",
+  ))[0];
   return row?.compensation ?? {};
 }
 
@@ -126,7 +126,7 @@ export async function updateCompensationSettings(
     }
     const current = (await db.execute<{ compensation: Record<string, unknown> | null }>(sql`
       select settings->'compensation' as compensation from orgs where id = ${orgId} for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!current) throw new CompensationError("NOT_FOUND", "the organization was not found — refresh and try again");
     const next = { ...(current.compensation ?? {}) };
     if (query.comparisonAttributeKey !== undefined) next.comparisonAttributeKey = query.comparisonAttributeKey;
@@ -140,7 +140,7 @@ export async function updateCompensationSettings(
              updated_at = now(), updated_by = ${actorId}
        where id = ${orgId}
        returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!saved) throw new CompensationError("NOT_FOUND", "the compensation settings were not saved — the organization is no longer available; refresh and try again");
     return next;
   });
@@ -247,7 +247,7 @@ export async function createJobFamily(query: CreateJobFamilyQuery): Promise<JobF
         insert into hrm_job_families (org_id, code, name, description, created_by, updated_by)
         values (${orgId}, ${code}, ${query.name.trim().slice(0, 160)},
                 ${query.description?.trim().slice(0, 2000) ?? null}, ${actorId}, ${actorId})
-        returning id, code, name, description, is_active`)).rows[0];
+        returning id, code, name, description, is_active`, "objects"))[0];
       if (!row) throw new CompensationError("REFUSED", "the family insert matched no row — the save is refused, never a silent success");
       return toFamilyDTO(row);
     } catch (e) {
@@ -288,7 +288,7 @@ export async function updateJobFamily(query: UpdateJobFamilyQuery): Promise<JobF
              is_active = coalesce(${query.isActive ?? null}, is_active),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${familyId}
-       returning id, code, name, description, is_active`)).rows[0];
+       returning id, code, name, description, is_active`, "objects"))[0];
     if (!row) {
       throw new CompensationError("NOT_FOUND", "job family is not visible in this organization");
     }
@@ -300,11 +300,11 @@ export async function listJobFamilies(query: { orgId: string; actorId: string; i
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   await requireHrmCompensationRead(db, orgId, actorId);
-  const rows = (await db.execute<FamilyRow>(sql`
+  const rows = await db.execute<FamilyRow>(sql`
     select id, code, name, description, is_active
       from hrm_job_families
      where org_id = ${orgId} and (${query.includeInactive === true} or is_active)
-     order by code`)).rows;
+     order by code`, "objects");
   return rows.map(toFamilyDTO);
 }
 
@@ -334,7 +334,7 @@ export async function createJobLevel(query: CreateJobLevelQuery): Promise<JobLev
     await requireHrmCompensationManage(db, orgId, actorId);
     if (familyId !== null) {
       const family = (await db.execute<{ id: string }>(sql`
-        select id from hrm_job_families where org_id = ${orgId} and id = ${familyId}`)).rows[0];
+        select id from hrm_job_families where org_id = ${orgId} and id = ${familyId}`, "objects"))[0];
       if (!family) {
         throw new CompensationError(
           "NOT_FOUND",
@@ -347,7 +347,7 @@ export async function createJobLevel(query: CreateJobLevelQuery): Promise<JobLev
         insert into hrm_job_levels (org_id, family_id, code, name, rank, equal_value_criteria, created_by, updated_by)
         values (${orgId}, ${familyId}, ${code}, ${query.name.trim().slice(0, 160)},
                 ${query.rank}, ${JSON.stringify(criteria)}::jsonb, ${actorId}, ${actorId})
-        returning id, family_id, code, name, rank, equal_value_criteria, is_active`)).rows[0];
+        returning id, family_id, code, name, rank, equal_value_criteria, is_active`, "objects"))[0];
       if (!row) throw new CompensationError("REFUSED", "the level insert matched no row — the save is refused, never a silent success");
       return toLevelDTO(row as LevelRow);
     } catch (e) {
@@ -401,7 +401,7 @@ export async function updateJobLevel(query: UpdateJobLevelQuery): Promise<JobLev
                is_active = coalesce(${query.isActive ?? null}, is_active),
                updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${levelId}
-         returning id, family_id, code, name, rank, equal_value_criteria, is_active`)).rows[0];
+         returning id, family_id, code, name, rank, equal_value_criteria, is_active`, "objects"))[0];
       if (!row) {
         throw new CompensationError("NOT_FOUND", "job level is not visible in this organization");
       }
@@ -428,13 +428,13 @@ export async function listJobLevels(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   await requireHrmCompensationRead(db, orgId, actorId);
-  const rows = (await db.execute<LevelRow>(sql`
+  const rows = await db.execute<LevelRow>(sql`
     select l.id, l.family_id, l.code, l.name, l.rank, l.equal_value_criteria, l.is_active
       from hrm_job_levels l
      where l.org_id = ${orgId}
        and (${query.familyId === undefined} or l.family_id is not distinct from ${query.familyId ?? null})
        and (${query.includeInactive === true} or l.is_active)
-     order by l.family_id nulls first, l.rank`)).rows;
+     order by l.family_id nulls first, l.rank`, "objects");
   return rows.map((row) => toLevelDTO(row as LevelRow));
 }
 

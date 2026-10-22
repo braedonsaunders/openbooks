@@ -66,8 +66,8 @@ export async function resolveCoveringPeriodsInWindow(
        and fc.id = public.subsidiary_posting_calendar(${orgId}::uuid, ${subsidiaryId ?? null}::uuid, greatest(p.starts_on,${from}::date))
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on <= ${to} and p.ends_on >= ${from}
-     order by p.starts_on, p.ends_on, p.id`);
-  return r.rows;
+     order by p.starts_on, p.ends_on, p.id`, "objects");
+  return r;
 }
 
 export async function resolveCoveringPeriod(
@@ -95,6 +95,6 @@ export async function resolveCoveringPeriod(
      where p.org_id = ${orgId} and not p.is_adjustment
        and p.starts_on <= ${date} and p.ends_on >= ${date}
      order by p.starts_on, p.ends_on, p.id
-     limit 1`);
-  return r.rows[0] ?? null;
+     limit 1`, "objects");
+  return r[0] ?? null;
 }

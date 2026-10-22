@@ -79,9 +79,9 @@ const mockSources = new Map<string, string>([
         return Promise.resolve(respond(kind, text))
       }
       export const db = {
-        execute: (query) => record(scope.getStore()?'tx-execute':'execute', query),
+        execute: (query, mode) => Promise.resolve(record(scope.getStore()?'tx-execute':'execute', query)).then((result) => (mode === 'objects' ? result.rows : result)),
         transaction: async (work) => {
-          const tx = { execute: (query) => record('tx-execute', query) }
+          const tx = { execute: (query, mode) => Promise.resolve(record('tx-execute', query)).then((result) => (mode === 'objects' ? result.rows : result)) }
           return work(tx)
         },
       }

@@ -83,8 +83,8 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter(
         join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
        where r.document_id = ${subjectId} and r.org_id = d.org_id
-    `));
-    const row = run.rows[0];
+    `, "objects"));
+    const row = run[0];
     if (!row) return base;
     return {
       ...base,

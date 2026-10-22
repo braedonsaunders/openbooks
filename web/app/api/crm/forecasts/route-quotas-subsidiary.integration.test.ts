@@ -97,7 +97,7 @@ async function fixture() {
     // employment, and only approved quotas are read by the forecast.
     const employee = (await db.execute<{ id: string }>(sql`
       insert into parties (org_id, kind, display_name, subsidiary_id)
-      values (${org.orgId}, 'employee', 'Quota representative', ${org.subsidiaryId}) returning id`)).rows[0]!.id
+      values (${org.orgId}, 'employee', 'Quota representative', ${org.subsidiaryId}) returning id`, 'objects'))[0]!.id
     await db.execute(sql`
       insert into employee_roles (org_id, party_id, is_sales_rep, sales_rep_since)
       values (${org.orgId}, ${employee}, true, '2020-01-01')`)
@@ -105,7 +105,7 @@ async function fixture() {
       insert into crm_sales_quotas (org_id, employee_id, sales_team_id, name, period_start, period_end, currency, amount, lifecycle, approved_by, approved_at, created_by, updated_by)
       values (${org.orgId}, ${employee}, null, 'Q3 quota', '2026-07-01', '2026-07-31', 'CAD', '50000', 'draft', null, null, ${actor}, ${actor})`)
   })
-  const quota = (await db.execute<{id:string;revision:number}>(sql`select id,revision from crm_sales_quotas where org_id=${org.orgId} and name='Q3 quota'`)).rows[0]!
+  const quota = (await db.execute<{id:string;revision:number}>(sql`select id,revision from crm_sales_quotas where org_id=${org.orgId} and name='Q3 quota'`, 'objects'))[0]!
   await withOrgContext(org.orgId,()=>writeSalesCommand({orgId:org.orgId,actorId:actor,allowedSubsidiaryIds:null},
     {action:'quota-transition',id:quota.id,expectedRevision:quota.revision,lifecycle:'pending_approval',reason:'Approve the quarterly sales target'}))
   state.orgId = org.orgId
@@ -117,11 +117,9 @@ async function fixture() {
 test('a subsidiary-restricted caller gets no quotas and a named notice', async () => {
   const org = await fixture()
   try {
-    const second = (
-      await db.execute<{ id: string }>(
-        sql`select id from subsidiaries where org_id=${org.orgId} and name='Second Co'`,
-      )
-    ).rows[0]!.id
+    const second = (await db.execute<{ id: string }>(
+        sql`select id from subsidiaries where org_id=${org.orgId} and name='Second Co'`, 'objects',
+      ))[0]!.id
     state.allowed = [second]
     const response = await GET(new NextRequest(`http://audit.local?${PERIOD}`))
     assert.equal(response.status, 200)

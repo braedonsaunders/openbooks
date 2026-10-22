@@ -57,7 +57,7 @@ async function counts(orgId: string, runId: string) {
   await refreshCloseRun(orgId, runId);
   return Object.fromEntries((await db.execute<{ code: string; n: number }>(sql`
     select code,(details->>'count')::int as n from close_exceptions
-    where org_id=${orgId} and run_id=${runId} and status='open'`)).rows.map(r => [r.code,r.n]));
+    where org_id=${orgId} and run_id=${runId} and status='open'`, "objects")).map(r => [r.code,r.n]));
 }
 
 async function run(org: ScratchOrg, actor: string, subsidiaryIds?: string[]) {
@@ -240,7 +240,7 @@ test('a computed task stays open while any of its checks has an open exception',
     assert.equal(got['drafts-open'],1);
     assert.equal(got['posting-period-missing']??0,0);
     const task=(await db.execute<{status:string; result:{count:number; checks:Record<string,number>}}>(sql`
-      select status, result from close_run_tasks where run_id=${runId} and key='drafts-cleared'`)).rows[0]!;
+      select status, result from close_run_tasks where run_id=${runId} and key='drafts-cleared'`, "objects"))[0]!;
     assert.equal(task.status,'ready','the task must not be complete while drafts-open is red');
     assert.equal(task.result.count,1);
     assert.equal(task.result.checks['drafts-open'],1);
@@ -286,15 +286,15 @@ test('an existing group close cannot be resumed as an entity close or silently w
     await journal(org,actor,org.subsidiaryId,'10');
     const runId=await run(org,actor);
     assert.equal((await counts(org.orgId,runId))['intercompany-residual'],1);
-    const before=(await db.execute(sql`select * from close_run_tasks
-      where org_id=${org.orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') order by id`)).rows;
+    const before=await db.execute(sql`select * from close_run_tasks
+      where org_id=${org.orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') order by id`, "objects");
     assert.equal(before.length,2);
     await assert.rejects(run(org,actor,[other]), /different subsidiary scope/);
-    assert.deepEqual((await db.execute(sql`select * from close_run_tasks
-      where org_id=${org.orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') order by id`)).rows,before);
+    assert.deepEqual(await db.execute(sql`select * from close_run_tasks
+      where org_id=${org.orgId} and run_id=${runId} and key in ('intercompany-balanced','consolidation') order by id`, "objects"),before);
     assert.equal((await counts(org.orgId,runId))['intercompany-residual'],1);
     assert.equal((await db.execute(sql`select id from close_run_tasks
-      where org_id=${org.orgId} and run_id=${runId} and status='waived'`)).rows.length,0);
+      where org_id=${org.orgId} and run_id=${runId} and status='waived'`, "objects")).length,0);
   } finally {await dropScratchOrg(org.orgId);}
 });
 
@@ -305,21 +305,21 @@ test('new standard scoped run omits group tasks while custom configured group ch
     await journal(org,actor,org.subsidiaryId,'10');
     const runId=await run(org,actor,[other]);
     assert.equal((await db.execute(sql`select id from close_run_tasks where run_id=${runId}
-      and key in ('intercompany-balanced','consolidation')`)).rows.length,0);
+      and key in ('intercompany-balanced','consolidation')`, "objects")).length,0);
     // A tenant-customized blueprint can deliberately retain a group assertion.
     await db.execute(sql`update close_blueprints set name='Explicit group contract' where id=(select blueprint_id from close_runs where id=${runId})`);
     await db.execute(sql`insert into close_run_tasks
       (org_id,run_id,key,title,workstream,task_type,completion_mode,gate_type,status)
       values (${org.orgId},${runId},'intercompany-balanced','Group control','intercompany','check','computed','hard','ready')`);
     assert.equal((await counts(org.orgId,runId))['intercompany-residual'],1);
-    assert.notEqual((await db.execute<{status:string}>(sql`select status from close_run_tasks where run_id=${runId} and key='intercompany-balanced'`)).rows[0]!.status,'waived');
+    assert.notEqual((await db.execute<{status:string}>(sql`select status from close_run_tasks where run_id=${runId} and key='intercompany-balanced'`, "objects"))[0]!.status,'waived');
   } finally {await dropScratchOrg(org.orgId);}
 });
 
 test('variance comparison uses the current period fiscal calendar', {skip:!enabled}, async () => {
   const {org,actor}=await setup();
   try {
-    const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`)).rows[0]!.id;
+    const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`, "objects"))[0]!.id;
     const prior=randomUUID(), otherCalendar=randomUUID();
     await db.execute(sql`insert into accounting_periods (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
       values (${prior},${org.orgId},${calendar},2026,6,'Prior fiscal period','2026-06-01','2026-06-28')`);
@@ -347,12 +347,12 @@ test('scoped close evidence ignores unrelated entity posting and invalidates whe
     const unrelated=await refreshCloseRun(org.orgId,runId,actor);
     assert.equal(unrelated.fingerprint,first.fingerprint);
     assert.equal(unrelated.invalidated,0);
-    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where id=${runId}`)).rows[0]!.status,'approved');
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where id=${runId}`, "objects"))[0]!.status,'approved');
     await journal(org,actor,org.subsidiaryId,'15');
     const changed=await refreshCloseRun(org.orgId,runId,actor);
     assert.notEqual(changed.fingerprint,first.fingerprint);
     assert.ok(changed.invalidated>0);
-    assert.deepEqual((await db.execute(sql`select status,approved_at,approved_by from close_runs where id=${runId}`)).rows[0],
+    assert.deepEqual((await db.execute(sql`select status,approved_at,approved_by from close_runs where id=${runId}`, "objects"))[0],
       {status:'in_progress',approved_at:null,approved_by:null});
   } finally {await dropScratchOrg(org.orgId);}
 });
@@ -362,8 +362,8 @@ test('close resumption preserves captured scope and blueprint and rejects explic
   try {
     const runId=await run(org,actor,[org.subsidiaryId]);
     await seedCloseRunApprovalFixture(org.orgId,runId,actor);
-    const before=(await db.execute(sql`select scope,blueprint_id,status,approved_at,approved_by from close_runs where id=${runId}`)).rows[0];
-    const tasks=(await db.execute(sql`select id,owner_id,reviewer_id from close_run_tasks where run_id=${runId} order by id`)).rows;
+    const before=(await db.execute(sql`select scope,blueprint_id,status,approved_at,approved_by from close_runs where id=${runId}`, "objects"))[0];
+    const tasks=await db.execute(sql`select id,owner_id,reviewer_id from close_run_tasks where run_id=${runId} order by id`, "objects");
     assert.equal(await run(org,actor),runId,'omitted scope resumes the captured scope');
     for (const subsidiaryIds of [[other],[],null]) {
       await assert.rejects(startCloseRun({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,actorId:actor,subsidiaryIds}),/different subsidiary scope/);
@@ -371,8 +371,8 @@ test('close resumption preserves captured scope and blueprint and rejects explic
     const custom=randomUUID();
     await db.execute(sql`insert into close_blueprints (id,org_id,name,is_active) values (${custom},${org.orgId},'Different template',true)`);
     await assert.rejects(startCloseRun({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,actorId:actor,blueprintId:custom}),/different blueprint/);
-    assert.deepEqual((await db.execute(sql`select scope,blueprint_id,status,approved_at,approved_by from close_runs where id=${runId}`)).rows[0],before);
-    assert.deepEqual((await db.execute(sql`select id,owner_id,reviewer_id from close_run_tasks where run_id=${runId} order by id`)).rows,tasks);
+    assert.deepEqual((await db.execute(sql`select scope,blueprint_id,status,approved_at,approved_by from close_runs where id=${runId}`, "objects"))[0],before);
+    assert.deepEqual(await db.execute(sql`select id,owner_id,reviewer_id from close_run_tasks where run_id=${runId} order by id`, "objects"),tasks);
   } finally {await dropScratchOrg(org.orgId);}
 });
 
@@ -387,14 +387,14 @@ for(const changedScope of ["outside","inside"] as const)test(`final close approv
   await seedApprovalFlow(org.orgId,{subjectKind:"close_run",assignees:[{type:"user",userId:approver}],mode:"all"});
   const runId=await startCloseRun({orgId:org.orgId,periodId:org.periodId,bookId:org.bookId,actorId:actor,blueprintId,subsidiaryIds:[org.subsidiaryId]});
   await requestCloseApproval(org.orgId,runId,actor);
-  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_kind='close_run' and subject_id=${runId} and status='pending'`)).rows[0]!;
+  const gate=(await db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_kind='close_run' and subject_id=${runId} and status='pending'`, "objects"))[0]!;
   await journal(org,actor,changedScope==="outside"?other:org.subsidiaryId,'15',changedScope==="outside"?'USD':'CAD');
   if(changedScope==="outside"){
     await decideGate({gateId:gate.id,userId:approver,decision:"approved"});
-    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where org_id=${org.orgId} and id=${runId}`)).rows[0]?.status,"approved");
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where org_id=${org.orgId} and id=${runId}`, "objects"))[0]?.status,"approved");
   }else{
     await assert.rejects(decideGate({gateId:gate.id,userId:approver,decision:"approved"}),/ledger changed during approval/);
-    assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${org.orgId} and id=${gate.id}`)).rows[0]?.status,"pending");
+    assert.equal((await db.execute<{status:string}>(sql`select status from flow_gates where org_id=${org.orgId} and id=${gate.id}`, "objects"))[0]?.status,"pending");
   }
  }finally{await dropScratchOrg(org.orgId);}
 });
@@ -402,7 +402,7 @@ for(const changedScope of ["outside","inside"] as const)test(`final close approv
 test('a scoped approval fingerprints prior-period carrying activity without unrelated entities', {skip:!enabled}, async () => {
   const {org,actor,other}=await setup();
   try {
-    const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`)).rows[0]!.id;
+    const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`, "objects"))[0]!.id;
     const prior=randomUUID();
     await db.execute(sql`insert into accounting_periods (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on)
       values (${prior},${org.orgId},${calendar},2026,6,'Prior period','2026-06-01','2026-06-30')`);
@@ -413,14 +413,14 @@ test('a scoped approval fingerprints prior-period carrying activity without unre
     assert.equal((await refreshCloseRun(org.orgId,runId,actor)).fingerprint,first.fingerprint);
     await journal({...org,periodId:prior,date:'2026-06-15'},actor,org.subsidiaryId,'10');
     assert.notEqual((await refreshCloseRun(org.orgId,runId,actor)).fingerprint,first.fingerprint);
-    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where id=${runId}`)).rows[0]!.status,'in_progress');
+    assert.equal((await db.execute<{status:string}>(sql`select status from close_runs where id=${runId}`, "objects"))[0]!.status,'in_progress');
   } finally {await dropScratchOrg(org.orgId);}
 });
 
 test('fingerprint uses assigned regular and adjustment period ordering for same-end entries', {skip:!enabled}, async () => {
   const {org,actor}=await setup();
   try {
-    const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`)).rows[0]!.id;
+    const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where id=${org.periodId}`, "objects"))[0]!.id;
     const adjustment=randomUUID(), later=randomUUID();
     await db.execute(sql`insert into accounting_periods (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
       values (${adjustment},${org.orgId},${calendar},2026,13,'First adjustment','2026-07-31','2026-07-31',true),

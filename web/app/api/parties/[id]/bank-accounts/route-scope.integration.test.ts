@@ -68,8 +68,8 @@ const createRequest = (partyId: string) =>
 
 async function accountCount(orgId: string, partyId: string): Promise<number> {
   return Number((await db.execute<{ count: string }>(
-    sql`select count(*)::text as count from party_bank_accounts where org_id=${orgId} and party_id=${partyId}`,
-  )).rows[0]!.count)
+    sql`select count(*)::text as count from party_bank_accounts where org_id=${orgId} and party_id=${partyId}`, 'objects',
+  ))[0]!.count)
 }
 
 test('bank-account create refuses an out-of-scope party and writes nothing', async () => {

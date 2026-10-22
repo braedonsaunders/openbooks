@@ -43,9 +43,9 @@ test("a pipeline template with ordered stages persists through Setup", { skip: !
     const second = created(await createSetupRecord(org.actor, "hrm-pipeline-stages", {
       templateId, position: 1, key: "hired", name: "Hired", kind: "hired",
     }));
-    const stages = (await db.execute<{ id: string; position: number; kind: string; is_terminal: boolean }>(sql`
+    const stages = await db.execute<{ id: string; position: number; kind: string; is_terminal: boolean }>(sql`
       select id, position, kind, is_terminal from hrm_pipeline_stages
-       where org_id = ${org.orgId} and template_id = ${templateId} order by position`)).rows;
+       where org_id = ${org.orgId} and template_id = ${templateId} order by position`, "objects");
     assert.deepEqual(stages.map((stage) => stage.id), [first, second]);
     assert.equal(stages[1]!.is_terminal, true, "terminality derives from kind in storage");
 

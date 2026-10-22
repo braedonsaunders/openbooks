@@ -93,13 +93,13 @@ async function setFeatures(orgId: string, features: Record<string, boolean>) {
 }
 
 async function readRate(orgId: string, id: string): Promise<Record<string, unknown>> {
-  const rows = (await db.execute(sql`select id, category, method, rate_kind as "rateKind", rate_percent::text as "ratePercent", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo", created_by as "createdBy", updated_by as "updatedBy" from overhead_rates where id = ${id} and org_id = ${orgId}`)).rows as Record<string, unknown>[];
+  const rows = (await db.execute(sql`select id, category, method, rate_kind as "rateKind", rate_percent::text as "ratePercent", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo", created_by as "createdBy", updated_by as "updatedBy" from overhead_rates where id = ${id} and org_id = ${orgId}`, "objects")) as Record<string, unknown>[];
   assert.ok(rows[0], "the refused-or-created rate must be readable back from storage");
   return rows[0]!;
 }
 
 async function countRates(orgId: string): Promise<number> {
-  return Number((await db.execute<{ n: number }>(sql`select count(*)::int as n from overhead_rates where org_id = ${orgId}`)).rows[0]!.n);
+  return Number((await db.execute<{ n: number }>(sql`select count(*)::int as n from overhead_rates where org_id = ${orgId}`, "objects"))[0]!.n);
 }
 
 test("manufacturing-only admits standard basis cards and refuses project cards by name", { skip: !DB }, async () => {

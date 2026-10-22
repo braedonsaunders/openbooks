@@ -100,8 +100,8 @@ async function legacyPOST() {
   await db.transaction(async (tx) => {
     const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
       select settings from orgs where id = ${orgId} for update
-    `))
-    const settings = current.rows[0]?.settings
+    `, 'objects'))
+    const settings = current[0]?.settings
     if (!settings) {
       throw new Error('org not found')
     }
@@ -199,9 +199,9 @@ export const PUT = defineRoute({
     }
     if (inputCurrency !== undefined) {
       const knownCurrency = (await db.execute(
-        sql`select 1 from currencies where code = ${inputCurrency} limit 1`,
+        sql`select 1 from currencies where code = ${inputCurrency} limit 1`, 'objects',
       ))
-      if (!knownCurrency.rows[0]) {
+      if (!knownCurrency[0]) {
         return NextResponse.json(
           {
             error: 'unsupported-base-currency',
@@ -294,11 +294,9 @@ export const PUT = defineRoute({
       // concurrently. Transaction-scoped, held to commit.
       await acquireFeatureGateLock(orgId, tx)
       // Lock the org row and load current state.
-      const cur = (
-        (await tx.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
+      const cur = (await tx.execute<{ name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }>(sql`
           select name, legal_name, base_currency, country, settings
-            from orgs where id = ${orgId} for update`))
-      ).rows[0]
+            from orgs where id = ${orgId} for update`, 'objects'))[0]
       if (!cur) throw new Error('org not found')
 
       nextSettings = { ...(cur.settings ?? {}) }
@@ -327,8 +325,8 @@ export const PUT = defineRoute({
       ) {
         const evidence = await tx.execute<{ leaseEvidence: boolean; inventoryEvidence: boolean }>(sql`
           select exists (select 1 from lease_agreements where org_id = ${orgId}) as "leaseEvidence",
-                 exists (select 1 from inventory_writedowns where org_id = ${orgId}) as "inventoryEvidence"`)
-        if (evidence.rows[0]?.leaseEvidence || evidence.rows[0]?.inventoryEvidence) {
+                 exists (select 1 from inventory_writedowns where org_id = ${orgId}) as "inventoryEvidence"`, 'objects')
+        if (evidence[0]?.leaseEvidence || evidence[0]?.inventoryEvidence) {
           throw new WizardReportingFrameworkBlocked()
         }
       }
@@ -452,10 +450,10 @@ export const PUT = defineRoute({
           select id, number from accounts where org_id = ${orgId} and number in (${sql.join(
             industry.coa.map((a) => sql`${a.number}`),
             sql`, `,
-          )})`))
+          )})`, 'objects'))
 
         // Build number→id map.
-        const acctMap = new Map(inserted.rows.map((r) => [r.number, r.id]))
+        const acctMap = new Map(inserted.map((r) => [r.number, r.id]))
 
         // 3. Map control accounts from the industry template.
         const curControl = (nextSettings!.controlAccounts ?? {}) as Record<string, string>
@@ -621,8 +619,8 @@ export const PUT = defineRoute({
           from subsidiaries s
          where s.org_id = ${orgId} and s.parent_id is null
          for update
-      `))
-      const root = singleRoot.rows[0]
+      `, 'objects'))
+      const root = singleRoot[0]
       if (root && root.entity_count === 1) {
         const nextName = inputName.trim()
         const nextLegalName = inputLegalName === undefined ? root.legal_name : inputLegalName.trim() || null

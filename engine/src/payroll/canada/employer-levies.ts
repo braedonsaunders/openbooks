@@ -177,13 +177,13 @@ export async function applyCaEmployerLevies(
   const workerCompGroupId = ctx.workerCompGroupId === undefined
     ? (await tx.execute<{ id: string | null }>(sql`
         select public.payroll_worker_comp_group_at(${orgId}::uuid, ${employeePartyId}::uuid, coalesce(${ctx.payDate ?? null}::date, current_date))::text as id
-      `)).rows[0]?.id ?? null
+      `, "objects"))[0]?.id ?? null
     : ctx.workerCompGroupId;
   const wcb = workerCompGroupId === null ? undefined
     : (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
         select rate_percent, max_assessable from worker_comp_groups
          where org_id=${orgId} and id=${workerCompGroupId} for share
-      `)).rows[0];
+      `, "objects"))[0];
   if (workerCompGroupId && (!wcb || wcb.rate_percent === null || cmp(wcb.rate_percent, '0') < 0 || wcb.max_assessable !== null && cmp(wcb.max_assessable, '0') < 0)) {
     throw new PayrollError(`${employeeName}: the dated worker-compensation group has no valid configured rate or assessable ceiling — review its rate and ceiling in Company Setup → Worker compensation groups before calculating.`);
   }
@@ -195,7 +195,7 @@ export async function applyCaEmployerLevies(
   // they would without it. Any employer-contribution levy adjustment
   // without its audited evidence refuses rather than booking an
   // unexplained amount.
-  const levyAdjustmentRows = (await tx.execute<{ id: string; amount: string; note: string | null; system_key: string; is_active: boolean; country: string | null }>(sql`
+  const levyAdjustmentRows = await tx.execute<{ id: string; amount: string; note: string | null; system_key: string; is_active: boolean; country: string | null }>(sql`
     select a.id::text, a.amount::text as amount, a.note, c.system_key, c.is_active, c.country
       from pay_run_adjustments a
       join pay_components c on c.org_id=a.org_id and c.id=a.component_id
@@ -203,7 +203,7 @@ export async function applyCaEmployerLevies(
        and a.employee_party_id=${employeePartyId} and a.adjustment_type='line'
        and c.kind='employer_contribution' and c.system_key in ('eht', 'wcb')
      order by a.created_at, a.id
-  `)).rows;
+  `, "objects");
   let wcbAdjustmentAmount: Money = "0" as Money;
   let ehtAdjustmentAmount: Money = "0" as Money;
   for (const row of levyAdjustmentRows) {
@@ -237,7 +237,7 @@ export async function applyCaEmployerLevies(
     const coverage = (await tx.execute<{ wcb_exempt: boolean | null }>(sql`
       select wcb_exempt from employee_payroll_profiles
        where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!coverage?.wcb_exempt) {
       throw new PayrollError(undecidedWorkerCompError(employeeName));
     }
@@ -256,11 +256,11 @@ export async function applyCaEmployerLevies(
       orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId, beforeDate: ctx.payDate,
     });
     const openingAssessable = employeeOpeningLevyAmount(openingSources, { programKey: 'ca_wcb', region });
-    const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
+    const priorAssessable = (await tx.execute<{ prior: string }>(sql`
       select ${openingAssessable}::numeric + coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
         from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region })} s
        where s.pay_run_document_id <> ${documentId}
-    `))).rows[0]!.prior;
+    `, "objects"))[0]!.prior;
     const assessable = assessableFor("wcb");
     const room = wcb.max_assessable
       ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
@@ -393,11 +393,11 @@ export async function applyCaEmployerLevies(
         const ehtOpening = await requireEmployerOpeningLevySources(tx, {
           orgId, subsidiaryId: historyScope.subsidiaryId, taxYear, programKey: 'ca_eht', region, beforeDate: ctx.payDate,
         });
-        const priorRows = (await tx.execute<{ prior: string }>(sql`
+        const priorRows = await tx.execute<{ prior: string }>(sql`
           select (coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0)
                   + ${ehtOpening}::numeric)::text as prior
             from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
-        `)).rows;
+        `, "objects");
         if (priorRows.length !== 1) throw new PayrollError('Employer health tax prior remuneration could not be resolved uniquely');
         priorInProvince = priorRows[0]!.prior;
       }
@@ -482,7 +482,7 @@ export async function applyCaEmployerLevies(
                                  where l.org_id = ${orgId} and l.stub_id = s.id
                                    and l.kind = 'employer_contribution' and pc.system_key = 'hsf')), 0) as booked
           from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
-          `)).rows[0]!;
+          `, "objects"))[0]!;
           const ytdBase = add(ytd.remuneration, hsfEarnings);
           const rate = quebecHsfRateForPayroll(sector, ytdBase, taxYear);
           const cumulative = mulPercent(ytdBase, rate, 2);
@@ -527,10 +527,10 @@ export async function applyCaEmployerLevies(
         orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId, beforeDate: ctx.payDate,
       });
       const cntOpening = employeeOpeningLevyAmount(cntSources, { programKey: 'ca_cnt', region: 'QC' });
-      const priorCnt = ((await tx.execute<{ prior: string }>(sql`
+      const priorCnt = (await tx.execute<{ prior: string }>(sql`
         select ${cntOpening}::numeric + coalesce(sum((s.factors->>'CNT_EARN')::numeric), 0) as prior
           from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region: 'QC', includeCurrentDocument: true })} s
-      `))).rows[0]!.prior;
+      `, "objects"))[0]!.prior;
       const assessable = assessableFor("cnt");
       const room = cmp(CNT_MAX_2026, priorCnt) > 0 ? add(CNT_MAX_2026, neg(priorCnt)) : "0";
       cntEarnings = (cmp(assessable, room) <= 0 ? assessable : room) as Money;

@@ -35,8 +35,8 @@ export async function verifyUser(orgId: string, userId: string): Promise<Resolve
   const r = await db.execute<ResolvedUser>(sql`
     select id, name, email from users
      where id = ${userId} and org_id = ${orgId} and is_active
-  `);
-  return r.rows[0] ?? null;
+  `, "objects");
+  return r[0] ?? null;
 }
 
 /** The submitter's supervisor: users.partyId → employee_roles.supervisorId → user. */
@@ -49,8 +49,8 @@ export async function supervisorOf(orgId: string, userId: string | null | undefi
       join users su on su.party_id = er.supervisor_id and su.org_id = u.org_id and su.is_active
      where u.id = ${userId} and u.org_id = ${orgId}
      limit 1
-  `);
-  return r.rows[0] ?? null;
+  `, "objects");
+  return r[0] ?? null;
 }
 
 /** Explicit role keys assigned to the user. */
@@ -59,8 +59,8 @@ export async function userRoleKeys(orgId: string, userId: string): Promise<Set<s
     select ar.key from role_assignments ra
       join app_roles ar on ar.id = ra.role_id and ar.org_id = ra.org_id
      where ra.user_id = ${userId} and ra.org_id = ${orgId}
-  `);
-  return new Set(r.rows.map((x) => x.key));
+  `, "objects");
+  return new Set(r.map((x) => x.key));
 }
 
 /**

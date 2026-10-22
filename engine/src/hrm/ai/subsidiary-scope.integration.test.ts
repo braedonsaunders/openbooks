@@ -25,10 +25,10 @@ const employment = (w: World, partyId: string, subsidiaryId: string) => mkEmploy
 async function review(w: World, actorId: string, employmentId: string, subject: string, reviewer: string, kind: "self" | "manager", calibrated?: string) {
   const templateId = (await db.execute<{ id: string }>(sql`
     insert into hrm_review_templates (org_id, name, rating_scale, created_by, updated_by)
-    values (${w.orgId}, ${`Annual ${randomUUID().slice(0, 8)}`}, '{"min": 1, "max": 5}'::jsonb, ${actorId}, ${actorId}) returning id`)).rows[0]!.id;
+    values (${w.orgId}, ${`Annual ${randomUUID().slice(0, 8)}`}, '{"min": 1, "max": 5}'::jsonb, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
   const cycle = async (name: string, year: number) => (await db.execute<{ id: string }>(sql`
     insert into hrm_review_cycles (org_id, template_id, name, period_start_on, period_end_on)
-    values (${w.orgId}, ${templateId}, ${name}, ${`${year}-01-01`}, ${`${year}-12-31`}) returning id`)).rows[0]!.id;
+    values (${w.orgId}, ${templateId}, ${name}, ${`${year}-01-01`}, ${`${year}-12-31`}) returning id`, "objects"))[0]!.id;
   if (calibrated) {
     await db.execute(sql`
       insert into hrm_reviews (org_id, cycle_id, employment_id, subject_party_id, reviewer_party_id, kind, status,
@@ -38,7 +38,7 @@ async function review(w: World, actorId: string, employmentId: string, subject: 
   }
   return (await db.execute<{ id: string }>(sql`
     insert into hrm_reviews (org_id, cycle_id, employment_id, subject_party_id, reviewer_party_id, kind, status)
-    values (${w.orgId}, ${await cycle("FY26", 2026)}, ${employmentId}, ${subject}, ${reviewer}, ${kind}, 'pending') returning id`)).rows[0]!.id;
+    values (${w.orgId}, ${await cycle("FY26", 2026)}, ${employmentId}, ${subject}, ${reviewer}, ${kind}, 'pending') returning id`, "objects"))[0]!.id;
 }
 
 const logDraft = (w: World, actorId: string, subjectKind: string, subjectId: string) => logDecision(db, {
@@ -95,7 +95,7 @@ scopeMatrix([
       const reviewB = await review(w, w.manager, await employment(w, w.party.worker, w.subB), w.party.worker, w.party.manager, "manager", "4.7500");
       const requisitionB = (await db.execute<{ id: string }>(sql`
         insert into hrm_requisitions (org_id, requisition_number, title, employer_subsidiary_id, headcount, created_by, updated_by)
-        values (${orgId}, ${`AI-${randomUUID()}`}, 'B-side role', ${w.subB}, 1, ${w.manager}, ${w.manager}) returning id`)).rows[0]!.id;
+        values (${orgId}, ${`AI-${randomUUID()}`}, 'B-side role', ${w.subB}, 1, ${w.manager}, ${w.manager}) returning id`, "objects"))[0]!.id;
       const decisions = () => countRows(sql`from ai_decisions where org_id = ${orgId} and capability_key = 'hrmDrafting'`);
       const before = await decisions();
 

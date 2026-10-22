@@ -138,14 +138,16 @@ stubModules({
       }
       let inOrgTransaction = false
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           if (inOrgTransaction) state.transactionQueries.push(sqlText(query))
-          return respond(query)
+          return inMode(await respond(query))
         },
         transaction: async (work) => work({
-          execute: async (query) => {
+          execute: async (query, mode) => {
+            const inMode = (result) => (mode === 'objects' ? result.rows : result)
             state.transactionQueries.push(sqlText(query))
-            return respond(query)
+            return inMode(await respond(query))
           },
         }),
       }

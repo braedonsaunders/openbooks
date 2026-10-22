@@ -73,14 +73,14 @@ test("the lifecycle is enforced on real movements and every transition is audite
     assert.equal(suspended.remedy, "reactivate WH-01 in Warehouse → Warehouses");
     await issueInventory(org.orgId, actorId, { itemId: org.items.fifo, stockLocationId: binId, quantity: "2", subsidiaryId: org.subsidiaryId, date: org.date });
 
-    const audit = (await db.execute<{ action: string; changes: { event: string; reason?: string; before?: { status: string }; after: { status: string } } }>(sql`
-      select action, changes from audit_log where org_id = ${org.orgId} and table_name = 'warehouses' and row_id = ${warehouseId} order by at, id`)).rows;
+    const audit = await db.execute<{ action: string; changes: { event: string; reason?: string; before?: { status: string }; after: { status: string } } }>(sql`
+      select action, changes from audit_log where org_id = ${org.orgId} and table_name = 'warehouses' and row_id = ${warehouseId} order by at, id`, "objects");
     assert.deepEqual(
       audit.map((row) => [row.action, row.changes.before?.status ?? null, row.changes.after.status, row.changes.reason ?? null]),
       [["insert", null, "draft", null], ["update", "draft", "active", null], ["update", "active", "suspended", "roof repair"]],
     );
     const stored = (await db.execute<{ country: string; status_changed_by: string }>(sql`
-      select country, status_changed_by from warehouses where org_id = ${org.orgId} and stock_location_id = ${warehouseId}`)).rows[0]!;
+      select country, status_changed_by from warehouses where org_id = ${org.orgId} and stock_location_id = ${warehouseId}`, "objects"))[0]!;
     assert.deepEqual(stored, { country: "CA", status_changed_by: actorId });
   });
 });
@@ -96,7 +96,7 @@ test("retiring a warehouse that holds stock names every item and quantity", { sk
     const refused = await refusal(() => retireWarehouse(org.orgId, actorId, { warehouseId, reason: "lease ended" }));
     assert.equal(refused.code, "warehouse_not_empty");
     assert.match(refused.message, /^cannot retire WH-01: it still holds 2\.5000 of Component, 7\.0000 of FIFO Widget; /);
-    assert.equal((await db.execute(sql`select status from warehouses where stock_location_id = ${warehouseId}`)).rows[0]!.status, "active");
+    assert.equal((await db.execute(sql`select status from warehouses where stock_location_id = ${warehouseId}`, "objects"))[0]!.status, "active");
   });
 });
 

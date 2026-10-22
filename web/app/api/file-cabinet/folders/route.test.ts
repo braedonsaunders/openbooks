@@ -84,16 +84,16 @@ function postRequest(body: unknown): Request {
 
 async function folderCount(orgId: string): Promise<number> {
   const rows = await db.execute<{ n: string }>(
-    sql`select count(*)::text as n from folders where org_id = ${orgId}`,
+    sql`select count(*)::text as n from folders where org_id = ${orgId}`, 'objects',
   )
-  return Number(rows.rows[0]?.n ?? 0)
+  return Number(rows[0]?.n ?? 0)
 }
 
 async function auditCount(orgId: string): Promise<number> {
   const rows = await db.execute<{ n: string }>(
-    sql`select count(*)::text as n from audit_log where org_id = ${orgId}`,
+    sql`select count(*)::text as n from audit_log where org_id = ${orgId}`, 'objects',
   )
-  return Number(rows.rows[0]?.n ?? 0)
+  return Number(rows[0]?.n ?? 0)
 }
 
 test('creating a folder stores the row and an actor-attributed audit event', { skip: !DB }, async () => {
@@ -107,22 +107,18 @@ test('creating a folder stores the row and an actor-attributed audit event', { s
     assert.equal(response.status, 201)
     const body = (await response.json()) as { id?: string }
     assert.ok(typeof body.id === 'string' && body.id.length > 0)
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         name: string
         parent_folder_id: string | null
         created_by: string
-      }>(sql`select name, parent_folder_id, created_by from folders where id = ${body.id} and org_id = ${org.orgId}`)
-    ).rows
+      }>(sql`select name, parent_folder_id, created_by from folders where id = ${body.id} and org_id = ${org.orgId}`, 'objects')
     assert.equal(rows.length, 1)
     assert.equal(rows[0]?.name, 'Legal')
     assert.equal(rows[0]?.parent_folder_id, null)
     assert.equal(rows[0]?.created_by, userId)
-    const audits = (
-      await db.execute<{ actor_id: string; action: string; event: string }>(
-        sql`select actor_id, action, changes->>'event' as event from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${body.id}`,
+    const audits = await db.execute<{ actor_id: string; action: string; event: string }>(
+        sql`select actor_id, action, changes->>'event' as event from audit_log where org_id = ${org.orgId} and table_name = 'folders' and row_id = ${body.id}`, 'objects',
       )
-    ).rows
     assert.equal(audits.length, 1)
     assert.equal(audits[0]?.actor_id, userId)
     assert.equal(audits[0]?.action, 'insert')
@@ -179,11 +175,9 @@ test('a sub-folder links to its parent', { skip: !DB }, async () => {
 
     assert.equal(response.status, 201)
     const body = (await response.json()) as { id: string }
-    const rows = (
-      await db.execute<{ parent_folder_id: string | null }>(
-        sql`select parent_folder_id from folders where id = ${body.id} and org_id = ${org.orgId}`,
+    const rows = await db.execute<{ parent_folder_id: string | null }>(
+        sql`select parent_folder_id from folders where id = ${body.id} and org_id = ${org.orgId}`, 'objects',
       )
-    ).rows
     assert.equal(rows[0]?.parent_folder_id, parent.id)
   } finally {
     state.authz = null

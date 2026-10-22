@@ -115,7 +115,7 @@ export interface ReadScope {
 
 export async function resolveReadScope(orgId: string, viewer: FileViewer, executor: SqlExecutor = db): Promise<ReadScope> {
   // Private subtrees owned by others (hidden from the org-role baseline).
-  const hiddenRes = viewer.isAdmin ? { rows: [] as { id: string }[] } : (await executor.execute<{ id: string }>(sql`
+  const hiddenRes = viewer.isAdmin ? [] as { id: string }[] : (await executor.execute<{ id: string }>(sql`
     with recursive hidden_folders as (
       select id from folders
        where org_id = ${orgId} and is_private and owner_id is distinct from ${viewer.userId}
@@ -125,8 +125,8 @@ export async function resolveReadScope(orgId: string, viewer: FileViewer, execut
        where f.org_id = ${orgId}
     )
     select id from hidden_folders
-  `))
-  const hidden = new Set(hiddenRes.rows.map((x) => x.id))
+  `, 'objects'))
+  const hidden = new Set(hiddenRes.map((x) => x.id))
 
   // Folders granted to the caller (or a role they hold) re-open their whole
   // subtree; subtract them from the hidden set.
@@ -142,8 +142,8 @@ export async function resolveReadScope(orgId: string, viewer: FileViewer, execut
          where f.org_id = ${orgId}
       )
       select id from granted
-    `))
-    for (const row of grantedRes.rows) hidden.delete(row.id)
+    `, 'objects'))
+    for (const row of grantedRes) hidden.delete(row.id)
   }
 
   // AP intake files need the owning AP permission even when an explicit file
@@ -159,16 +159,16 @@ export async function resolveReadScope(orgId: string, viewer: FileViewer, execut
            where f.org_id = ${orgId}
         )
         select id from capture_folders
-      `)).rows.map((row) => row.id)
+      `, 'objects')).map((row) => row.id)
   for (const id of apCaptureFolders) hidden.add(id)
 
   // Files shared directly with the caller.
   const fileGrants = (await executor.execute<{ id: string }>(sql`
     select g.resource_id as id from resource_grants g
      where g.org_id = ${orgId} and g.resource_type = 'file' and ${grantAppliesTo(orgId, viewer)}
-  `))
+  `, 'objects'))
 
-  return { hiddenFolderIds: [...hidden], grantedFileIds: fileGrants.rows.map((x) => x.id), apCaptureFolderIds: apCaptureFolders }
+  return { hiddenFolderIds: [...hidden], grantedFileIds: fileGrants.map((x) => x.id), apCaptureFolderIds: apCaptureFolders }
 }
 
 /**
@@ -402,7 +402,7 @@ export async function folderAccessLevel(
   if (viewer.isAdmin && (viewer.allowedSubsidiaryIds === null || viewer.allowedSubsidiaryIds === undefined)) {
     const exists = (await exec.execute(sql`
       select 1 from folders where id = ${folderId} and org_id = ${orgId} and ${options.includeInactive ? sql`true` : sql`not is_inactive`}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!exists) return 'none'
     return 'manager'
   }
@@ -422,8 +422,8 @@ export async function folderAccessLevel(
       ${grantRankOverFolders(orgId, viewer, sql`select id from ancestors`)} as "grantRank",
       bool_and(${recordFence ?? sql`true`}) as "recordVisible"
       from ancestors a
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   // The aggregate always returns exactly one row — even when the anchor folder
   // does not exist (count zero, every other column null). An absent resource
   // must read as 'none': without this check every documents.manage caller is a
@@ -461,8 +461,8 @@ export async function fileAccessLevel(
       ${attachFence ?? sql`true`} as "attachVisible"
       from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
      where fi.id = ${fileId} and ${ownedFilePredicate(orgId, options)}
-  `))
-  const row = r.rows[0]
+  `, 'objects'))
+  const row = r[0]
   if (!row) return 'none'
   if (viewer.allowedSubsidiaryIds !== null && viewer.allowedSubsidiaryIds !== undefined
       && (!row.folderRecordVisible || !row.attachVisible)) return 'none'

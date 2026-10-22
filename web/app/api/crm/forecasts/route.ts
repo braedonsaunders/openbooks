@@ -72,24 +72,24 @@ export const GET = defineRoute({
     const [forecast, quotas, snapshots] = (await Promise.all([
       calculateForecast({ orgId: gate.user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }),
       quotasRestricted
-        ? Promise.resolve({ rows: [] })
+        ? Promise.resolve([])
         : db.execute(sql`
         select q.*, u.display_name as owner_name, t.name as sales_team_name from crm_sales_quotas q
         left join parties u on u.id = q.employee_id and u.org_id=q.org_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
         where q.org_id = ${gate.user.orgId} and q.lifecycle='approved' and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
           ${ownerUserId ? sql`and q.employee_id = (select party_id from users where id=${ownerUserId} and org_id=q.org_id)` : sql``}
           ${salesTeamId ? sql`and q.sales_team_id = ${salesTeamId}` : sql``}
-        order by q.period_start, coalesce(u.display_name, t.name)`),
+        order by q.period_start, coalesce(u.display_name, t.name)`, 'objects'),
       db.execute(sql`
         select s.*, u.name as owner_name, t.name as sales_team_name from crm_forecast_snapshots s
         left join users u on u.id = s.owner_user_id left join crm_sales_teams t on t.id = s.sales_team_id and t.org_id = s.org_id
         where s.org_id = ${gate.user.orgId} and ${gate.allowedSubsidiaryIds === null} and s.period_start = ${periodStart}::date and s.period_end = ${periodEnd}::date
           ${ownerUserId ? sql`and s.owner_user_id = ${ownerUserId}` : sql``}
           ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
-        order by s.as_of desc limit 50`),
+        order by s.as_of desc limit 50`, 'objects'),
     ]))
     const t = await getTranslations('crm')
-    return NextResponse.json({ periodStart, periodEnd, forecast, quotas: quotas.rows, snapshots: snapshots.rows,
+    return NextResponse.json({ periodStart, periodEnd, forecast, quotas, snapshots,
       quotasNotice: quotasRestricted ? t('forecasts.quotasRestrictedNotice') : null })
 
   },
@@ -149,18 +149,18 @@ export const POST = defineRoute({
       // Postgres would store tenant B's user or team id in tenant A's
       // snapshot. Refuse by name inside the write, mirroring the quota save.
       if (ownerUserId) {
-        const owner = await tx.execute(sql`select id from users where id = ${ownerUserId} and org_id = ${gate.user.orgId}`)
-        if (!owner.rows.length) {
+        const owner = await tx.execute(sql`select id from users where id = ${ownerUserId} and org_id = ${gate.user.orgId}`, 'objects')
+        if (!owner.length) {
           return NextResponse.json({ error: t('forecasts.ownerOutsideOrganization') }, { status: 422 })
         }
       }
       if (salesTeamId) {
-        const team = await tx.execute(sql`select id from crm_sales_teams where id = ${salesTeamId} and org_id = ${gate.user.orgId}`)
-        if (!team.rows.length) {
+        const team = await tx.execute(sql`select id from crm_sales_teams where id = ${salesTeamId} and org_id = ${gate.user.orgId}`, 'objects')
+        if (!team.length) {
           return NextResponse.json({ error: t('forecasts.teamOutsideOrganization') }, { status: 422 })
         }
       }
-      if (requestedCurrency && !(await tx.execute(sql`select code from currencies where code=${requestedCurrency}`)).rows.length) {
+      if (requestedCurrency && !(await tx.execute(sql`select code from currencies where code=${requestedCurrency}`, 'objects')).length) {
         return NextResponse.json({ error: 'invalid forecast currency' }, { status: 422 })
       }
       let rows = requestedCurrency ? forecast.filter(row => row.currency === requestedCurrency) : forecast
@@ -170,7 +170,7 @@ export const POST = defineRoute({
         // otherwise use the organization's configured reporting basis and stamp
         // that choice. No nonzero amount is converted or borrowed from a currency.
         const currency = requestedCurrency ?? (await tx.execute<{ base_currency: string }>(sql`
-          select base_currency from orgs where id=${user.orgId}`)).rows[0]?.base_currency
+          select base_currency from orgs where id=${user.orgId}`, 'objects'))[0]?.base_currency
         if (!currency) return NextResponse.json({ error: 'organization reporting currency is required' }, { status: 422 })
         rows = [{ currency, pipeline_amount: '0.0000', weighted_amount: '0.0000', worst_case_amount: '0.0000',
           most_likely_amount: '0.0000', upside_amount: '0.0000', closed_amount: '0.0000' }]
@@ -187,8 +187,8 @@ export const POST = defineRoute({
           values (${user.orgId}, ${ownerUserId}, ${salesTeamId}, ${periodStart}, ${periodEnd}, ${kind}, ${row.currency},
                   ${row.pipeline_amount}, ${row.weighted_amount}, ${row.worst_case_amount}, ${row.most_likely_amount},
                   ${row.upside_amount}, ${row.closed_amount}, ${overrideAmount}, ${body.note ?? null},
-                  ${JSON.stringify(detail)}::jsonb, ${user.id}, ${user.id}) returning id`))
-        ids.push(result.rows[0]!.id)
+                  ${JSON.stringify(detail)}::jsonb, ${user.id}, ${user.id}) returning id`, 'objects'))
+        ids.push(result[0]!.id)
       }
       return ids
     })

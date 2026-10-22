@@ -23,8 +23,8 @@ async function readsAttachedExpenseEvidence(gate: Authz, fileId: string): Promis
     select d.party_id as "partyId", d.subsidiary_id as "subsidiaryId"
       from file_attachments fa
       join documents d on d.id = fa.target_id and d.org_id = fa.org_id and d.kind = 'expense_report'
-     where fa.org_id = ${gate.user.orgId} and fa.file_id = ${fileId} and fa.target_table = 'documents'`);
-  return reports.rows.some((report) => subsidiaryScopeAllows(gate.allowedSubsidiaryIds, report.subsidiaryId)
+     where fa.org_id = ${gate.user.orgId} and fa.file_id = ${fileId} and fa.target_table = 'documents'`, "objects");
+  return reports.some((report) => subsidiaryScopeAllows(gate.allowedSubsidiaryIds, report.subsidiaryId)
     && expenseAccessAllows(access, report.partyId));
 }
 
@@ -66,8 +66,8 @@ export const GET = defineRoute({
              : sql``
          }
        limit 1
-    `);
-      if (!attachedAsset.rows[0])
+    `, "objects");
+      if (!attachedAsset[0])
         return notFound("record");
       // The attachment relation above limits this exception to evidence on an
       // asset the caller can see; it does not grant cabinet-wide visibility.

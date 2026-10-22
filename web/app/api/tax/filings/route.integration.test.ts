@@ -105,9 +105,9 @@ test('two prepares inside one filing period version the stored (clamped) window'
         select id, period_from::text, period_to::text, version
           from tax_filings
          where org_id = ${org.orgId} and form_code = ${formCode}
-         order by version`)
+         order by version`, 'objects')
       assert.deepEqual(
-        stored.rows.map((row) => ({ ...row })),
+        stored.map((row) => ({ ...row })),
         [
           { id: firstBody.id, period_from: `${year}-04-15`, period_to: `${year}-06-30`, version: 1 },
           { id: secondBody.id, period_from: `${year}-04-15`, period_to: `${year}-06-30`, version: 2 },
@@ -117,9 +117,9 @@ test('two prepares inside one filing period version the stored (clamped) window'
       const audits = await db.execute<{ changes: { from: string; to: string; version: number } }>(sql`
         select changes from audit_log
          where org_id = ${org.orgId} and table_name = 'tax_filings' and action = 'insert'
-         order by at`)
+         order by at`, 'objects')
       assert.deepEqual(
-        audits.rows.map((row) => [row.changes.from, row.changes.to, row.changes.version]),
+        audits.map((row) => [row.changes.from, row.changes.to, row.changes.version]),
         [[`${year}-04-15`, `${year}-06-30`, 1], [`${year}-04-15`, `${year}-06-30`, 2]],
       )
     })

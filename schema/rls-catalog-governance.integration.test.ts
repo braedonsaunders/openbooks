@@ -1,17 +1,8 @@
 /// <reference types="node" />
 
 /**
- * Behavioral coverage for 0334 section 1 (G1/G2/G3) and the tenant-isolation
- * catalog invariant it establishes.
- *
- * 0026 gave scheduler_outbox_terminal_audit FORCE ROW LEVEL SECURITY plus an
- * org_isolation policy but never ENABLEd RLS; 0153 did the same for
- * ai_work_item_notes; 0281 created hrm_exit_record_events with no RLS at
- * all. On a scratch install from the migration chain alone, a tenant
- * session read and wrote every organization's rows on all three. The
- * bootstrap environments.sql backstop masked this on managed installs, so
- * these tests prove the property against the live catalog and the live
- * isolation behavior, never against migration text:
+ * Tenant-isolation catalog invariants, proved against the live catalog and
+ * live isolation behavior rather than migration text:
  *
  * - the derived catalog test fails if ANY public table carrying org_id
  *   lacks ENABLEd + FORCEd RLS or carries no policy, unless it is on the

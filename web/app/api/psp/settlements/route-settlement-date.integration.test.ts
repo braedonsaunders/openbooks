@@ -63,10 +63,10 @@ const postImport = (externalRef: string, settlementDate: string) =>
   );
 
 async function batchCount(orgId: string, externalRef: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ n: string }>(
-      sql`select count(*)::text as n from psp_settlement_batches where org_id = ${orgId} and external_ref = ${externalRef}`,
-    ))).rows;
+      sql`select count(*)::text as n from psp_settlement_batches where org_id = ${orgId} and external_ref = ${externalRef}`, "objects",
+    ));
   return Number(rows[0]!.n);
 }
 

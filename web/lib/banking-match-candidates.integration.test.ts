@@ -57,7 +57,7 @@ async function postInvoice(org: Org, actorId: string, documentNumber: string, am
     select jl.id from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
      where jl.org_id = ${org.orgId} and je.source_document_id = ${invoiceId} and jl.is_open_item
-  `))).rows[0]!.id;
+  `, "objects")))[0]!.id;
   return { invoiceId, openLineId };
 }
 
@@ -107,13 +107,13 @@ function record(f: Fixture, overrides: { expectedOpen?: Record<string, string>; 
 async function receiptCount(orgId: string): Promise<number> {
   return (await withBypassContext(() => db.execute<{ n: number }>(sql`
     select count(*)::int as n from documents where org_id = ${orgId} and kind = 'customer_payment'
-  `))).rows[0]!.n;
+  `, "objects")))[0]!.n;
 }
 
 async function lineStatus(orgId: string, lineId: string): Promise<string> {
   return (await withBypassContext(() => db.execute<{ match_status: string }>(sql`
     select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}
-  `))).rows[0]!.match_status;
+  `, "objects")))[0]!.match_status;
 }
 
 test("record payment and match posts a balanced receipt, settles the invoice and matches the line", { skip: !DB }, async () => {
@@ -136,15 +136,15 @@ test("record payment and match posts a balanced receipt, settles the invoice and
     const payment = (await withBypassContext(() => db.execute<{ status: string; posted_entry_id: string; document_date: string; total: string }>(sql`
       select status, posted_entry_id, document_date::text as document_date, total::text as total
         from documents where org_id = ${f.org.orgId} and id = ${result.paymentId}
-    `))).rows[0]!;
+    `, "objects")))[0]!;
     assert.equal(payment.status, "posted");
     assert.equal(payment.document_date, f.org.date, "the receipt is dated on the statement date");
     assert.equal(toUnits(payment.total), toUnits("1250"));
 
-    const lines = (await withBypassContext(() => db.execute<{ id: string; account_id: string; amount: string }>(sql`
+    const lines = await withBypassContext(() => db.execute<{ id: string; account_id: string; amount: string }>(sql`
       select id, account_id, amount::text as amount from journal_lines
        where org_id = ${f.org.orgId} and entry_id = ${payment.posted_entry_id}
-    `))).rows;
+    `, "objects"));
     assert.equal(lines.reduce((total, line) => total + toUnits(line.amount), 0n), 0n, "the receipt entry balances");
     const bankLine = lines.find((line) => line.account_id === f.org.accounts.bank);
     assert.ok(bankLine && toUnits(bankLine.amount) === toUnits("1250"), "the bank leg debits the line's account");
@@ -153,17 +153,17 @@ test("record payment and match posts a balanced receipt, settles the invoice and
     assert.ok(!open.some((item) => item.lineId === f.openLineId), "the invoice is no longer open");
 
     assert.equal(await lineStatus(f.org.orgId, f.lineId), "matched");
-    const match = (await withBypassContext(() => db.execute<{ journal_line_id: string; matched_by: string }>(sql`
+    const match = await withBypassContext(() => db.execute<{ journal_line_id: string; matched_by: string }>(sql`
       select journal_line_id, matched_by from reconciliation_matches
        where org_id = ${f.org.orgId} and statement_line_id = ${f.lineId}
-    `))).rows;
+    `, "objects"));
     assert.deepEqual(match, [{ journal_line_id: bankLine.id, matched_by: "manual" }]);
 
-    const audit = (await withBypassContext(() => db.execute<{ changes: { paymentDocumentId: string } }>(sql`
+    const audit = await withBypassContext(() => db.execute<{ changes: { paymentDocumentId: string } }>(sql`
       select changes from audit_log
        where org_id = ${f.org.orgId} and table_name = 'bank_statement_lines' and row_id = ${f.lineId}
          and changes->>'operation' = 'record_payment_match'
-    `))).rows;
+    `, "objects"));
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.changes.paymentDocumentId, result.paymentId);
   } finally {

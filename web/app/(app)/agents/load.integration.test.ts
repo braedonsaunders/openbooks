@@ -119,9 +119,9 @@ test('briefing body strips the duplicated title H1 in the loader', { skip: !proc
       const conv = await db.execute<{ id: string }>(sql`insert into ai_conversations
         (org_id, user_id, scope, title, created_by, updated_by)
         values (${org.orgId}, ${state.user!.id}, 'briefing', ${`briefing ${today}`}, ${state.user!.id}, ${state.user!.id})
-        returning id`);
+        returning id`, 'objects');
       await db.execute(sql`insert into ai_messages (org_id, conversation_id, role, content, data, created_by, updated_by)
-        values (${org.orgId}, ${conv.rows[0]!.id}, 'assistant', ${'# briefing.title\n\nBody line.'},
+        values (${org.orgId}, ${conv[0]!.id}, 'assistant', ${'# briefing.title\n\nBody line.'},
           '{"kind":"briefing"}', ${state.user!.id}, ${state.user!.id})`);
       const data = await loadAgents({ briefing: 'true' });
       assert.equal(data.hasBriefing, true);

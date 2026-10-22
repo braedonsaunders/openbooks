@@ -23,10 +23,10 @@ export async function propertyBillingGeneration(orgId: string, key: string, kind
     select id,status from documents where org_id=${orgId} and kind=${kind}
       and (custom->'propertyManagement'->>'billingKey'=${key}
         or custom->'propertyManagement'->>'originalBillingKey'=${key})
-    order by created_at desc,id desc`));
-  const predecessorId = prior.rows[0]?.id;
+    order by created_at desc,id desc`, "objects"));
+  const predecessorId = prior[0]?.id;
   return {
-    documentId: prior.rows.find(row => row.status !== 'voided')?.id,
+    documentId: prior.find(row => row.status !== 'voided')?.id,
     predecessorId,
     generationKey: predecessorId ? `${key}:after:${predecessorId}` : key,
   };
@@ -75,12 +75,12 @@ export async function levelLeaseRentStraightLine(
     throw new PropertyManagementError("Bulk portfolio billing requires unrestricted subsidiary access", 403);
   }
 
-  const candidates = (await db.execute<{ id: string }>(sql`
+  const candidates = await db.execute<{ id: string }>(sql`
     select l.id from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
     where l.org_id=${orgId} and l.status in ('active','notice') and l.ends_on is not null
       and (${opts.onlyLeaseId ?? null}::uuid is null or l.id=${opts.onlyLeaseId ?? null})
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, opts.allowedSubsidiaryIds)}
-    order by l.lease_number,l.id`)).rows;
+    order by l.lease_number,l.id`, "objects");
   const results: LeaseLevellingResult[] = [];
   for (const candidate of candidates) {
     const result = await withOrgTransaction(orgId, async () => {
@@ -90,10 +90,10 @@ export async function levelLeaseRentStraightLine(
       await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
       const slAccount = (await db.execute<{ acct: string | null }>(sql`
         select settings->'controlAccounts'->>'straightLineRent' as acct from orgs where id = ${orgId} for share
-      `));
-      const straightLineRentAccountId = slAccount.rows[0]?.acct ?? null;
+      `, "objects"));
+      const straightLineRentAccountId = slAccount[0]?.acct ?? null;
       const claimed = (await db.execute<{ id: string }>(sql`select id from property_leases
-        where org_id=${orgId} and id=${candidate.id} for update`)).rows[0];
+        where org_id=${orgId} and id=${candidate.id} for update`, "objects"))[0];
       if (!claimed) return null;
       const leaseRows = (await db.execute<{
           id: string; leaseNumber: string; startsOn: string; endsOn: string; billingDay: number;
@@ -108,8 +108,8 @@ export async function levelLeaseRentStraightLine(
           join managed_properties p on p.id = l.property_id and p.org_id = l.org_id
          where l.org_id = ${orgId} and l.status in ('active','notice') and l.ends_on is not null
            and l.id = ${candidate.id}
-         for share of p`));
-      const lease = leaseRows.rows[0];
+         for share of p`, "objects"));
+      const lease = leaseRows[0];
       if (!lease) return null;
       // The lease row is claimed FOR UPDATE above and the property FOR
       // SHARE: a concurrent rehome waits on the share lock, so this
@@ -121,13 +121,13 @@ export async function levelLeaseRentStraightLine(
         select amount, frequency, effective_from as "effectiveFrom", effective_to as "effectiveTo"
           from lease_charges
          where org_id = ${orgId} and lease_id = ${lease.id} and charge_type = 'base_rent'
-         order by effective_from, id for share`));
-      if (charges.rows.length === 0) return null;
+         order by effective_from, id for share`, "objects"));
+      if (charges.length === 0) return null;
 
       // The full contractual stream over the term, with a day-count weight per
       // billing period (1 for full periods, the active/nominal ratio otherwise).
       const rows: { periodEndsOn: string; amount: string; weight: string }[] = [];
-      for (const charge of charges.rows) {
+      for (const charge of charges) {
         if (charge.frequency === "one_time") continue; // not periodic rent
         const step = charge.frequency === "monthly" ? 1 : charge.frequency === "quarterly" ? 3 : 12;
         for (const period of leaseChargeSchedule({
@@ -167,8 +167,8 @@ export async function levelLeaseRentStraightLine(
          where jl.org_id = ${orgId} and je.origin = 'lease'
            and je.custom->'propertyManagement'->>'levellingLeaseId' = ${lease.id}
            and (${straightLineRentAccountId}::uuid is null or jl.account_id = ${straightLineRentAccountId}::uuid)
-      `));
-      const postedAccrual = posted.rows[0]?.accrual ?? "0";
+      `, "objects"));
+      const postedAccrual = posted[0]?.accrual ?? "0";
       const deltaUnits = target - toUnits(postedAccrual);
       const result: LeaseLevellingResult = {
         leaseId: lease.id, leaseNumber: lease.leaseNumber,
@@ -193,9 +193,9 @@ export async function levelLeaseRentStraightLine(
       const levelPeriodId: string = levelPeriod.id;
       const ctx = (await db.execute<{ book_id: string | null }>(sql`
         select (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share) as book_id
-      `));
-      if (!ctx.rows[0]?.book_id) throw new PropertyManagementError("No active primary posting book");
-      const levelBookId: string = ctx.rows[0].book_id;
+      `, "objects"));
+      if (!ctx[0]?.book_id) throw new PropertyManagementError("No active primary posting book");
+      const levelBookId: string = ctx[0].book_id;
       // Direct journal writes bypass the document posting path, so the GL
       // close fence that guards documents never sees this accrual: refuse a
       // closed target period here instead of tripping the storage guard.
@@ -317,9 +317,9 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
       and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
       and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null})
       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)} order by l.id,s.due_on,s.id
-  `));
+  `, "objects"));
   const groups = new Map<string, string[]>();
-  for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row.id]);
+  for (const row of due) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row.id]);
   const invoices: string[] = [];
   for (const [leaseId, candidateIds] of groups) {
     await withOrgTransaction(orgId, async () => {
@@ -335,7 +335,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
         select property_id from property_leases where org_id=${orgId} and id=${leaseId}
           and status in ('active','notice','terminated') and auto_invoice
           and (${onlyPropertyId ?? null}::uuid is null or property_id=${onlyPropertyId ?? null})
-        for no key update`)).rows[0];
+        for no key update`, "objects"))[0];
       if (!lease) return;
       // The property lock below serializes a concurrent rehome; the
       // subsidiary is rechecked inside this same transaction, so a lease
@@ -358,8 +358,8 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
           and (l.status in ('active','notice') or (l.status='terminated' and s.period_ends_on<=least(l.ends_on,l.move_out_on)))
           and s.id::text in (select jsonb_array_elements_text(${JSON.stringify(candidateIds)}::jsonb))
         order by s.id for update of s
-      `));
-      const billRows = locked.rows;
+      `, "objects"));
+      const billRows = locked;
       if (!billRows.length) return;
       const ids = billRows.map((row) => row.id);
       const key = billingKey(leaseId, ids);
@@ -375,8 +375,8 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
           for (const row of billRows) {
             if (!row.itemId) continue;
             const item = (await db.execute<{ kind: string }>(sql`
-              select kind from items where id = ${row.itemId} and org_id = ${orgId}`));
-            if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+              select kind from items where id = ${row.itemId} and org_id = ${orgId}`, "objects"));
+            if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
               throw new PropertyManagementError("Inventory is disabled", 404);
             }
           }
@@ -402,9 +402,9 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
     });
   }
   const billed = invoices.length
-    ? (await db.execute<{ n: number }>(sql`select count(*)::int as n from lease_schedule_lines where org_id=${orgId} and invoice_document_id::text in (select jsonb_array_elements_text(${JSON.stringify(invoices)}::jsonb))`))
-    : { rows: [{ n: 0 }] };
-  return { billed: billed.rows[0]?.n ?? 0, invoices };
+    ? (await db.execute<{ n: number }>(sql`select count(*)::int as n from lease_schedule_lines where org_id=${orgId} and invoice_document_id::text in (select jsonb_array_elements_text(${JSON.stringify(invoices)}::jsonb))`, "objects"))
+    : [{ n: 0 }];
+  return { billed: billed[0]?.n ?? 0, invoices };
 }
 /**
  * Assess late fees for every overdue posted lease invoice as of `asOf`.
@@ -438,9 +438,9 @@ export async function assessLeaseLateFees(orgId: string, actorId: string | null,
       and d.kind='customer_invoice' and d.status='posted' and d.due_date is not null and d.due_date + l.grace_days < ${date}
       and oi.transaction_open::numeric>0
     group by d.id,s.lease_id,l.late_fee_type,l.late_fee_value,p.rent_income_account_id,oi.transaction_open
-  `));
+  `, "objects"));
   let created = 0;
-  for (const row of overdue.rows) {
+  for (const row of overdue) {
     const amount = row.late_fee_type === "fixed" ? exactMoney(row.late_fee_value, "Late-fee value") : mulPercent(row.transaction_open, row.late_fee_value);
     if (cmp(amount, "0") <= 0) continue;
     // The fee pair and its audit evidence commit as one unit: a failed audit
@@ -453,16 +453,16 @@ export async function assessLeaseLateFees(orgId: string, actorId: string | null,
           where not exists(select 1 from lease_schedule_lines where org_id=${orgId} and source_schedule_id=${row.source_schedule_id}) returning id)
         insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,source_schedule_id,created_by,updated_by)
         select ${orgId},${row.lease_id},id,${date},${date},${date},${amount},${row.source_schedule_id},${actorId},${actorId} from charge returning id
-      `));
-      if (!result.rows.length) return;
-      const feeLineId = result.rows[0]!.id;
+      `, "objects"));
+      if (!result.length) return;
+      const feeLineId = result[0]!.id;
       await audit(db, orgId, "lease_schedule_lines", feeLineId, "late_fee_assess", actorId,
         { leaseId: row.lease_id, amount, lateFeeType: row.late_fee_type, sourceScheduleId: row.source_schedule_id,
           ...(actorId === null
             ? { source: "scheduler", actorKind: "system", actorReason: "scheduled lease late fees" }
             : { source: "user" }) },
         actorId === null ? `property-billing:late_fee:${row.lease_id}:${row.source_schedule_id}` : null);
-      created += result.rows.length;
+      created += result.length;
     });
   }
   return { created };
@@ -484,14 +484,14 @@ export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: nu
   // Registry fallback shape: a non-boolean stored value falls back to the
   // default instead of throwing 22P02 like the previous ::boolean cast.
   // bypass: scheduler-tick — the scan lists every organization with property management enabled.
-  const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where case (settings->'features'->>'propertyManagement') when 'true' then true when 'false' then false else false end`)));
-  for (const org of orgs.rows) {
+  const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where case (settings->'features'->>'propertyManagement') when 'true' then true when 'false' then false else false end`, "objects")));
+  for (const org of orgs) {
     try {
       await withOrg(org.id, async () => {
         // Each org bills on its own calendar day.
         const date = asOf ?? await businessToday(org.id);
-        const leases = (await db.execute<{ id: string }>(sql`select id from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`));
-        for (const lease of leases.rows) {
+        const leases = (await db.execute<{ id: string }>(sql`select id from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`, "objects"));
+        for (const lease of leases) {
           // Null-author leases are ordinary scheduler work; no actor is consulted.
           // The scope sentinel is an explicit null: the engine-initiated tick
           // is organization-wide by design, never by omission.

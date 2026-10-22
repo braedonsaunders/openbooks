@@ -108,35 +108,35 @@ async function findStored(orgId: string, projectId: string, weekStart: string, e
   const subjectCond = employeePartyId === null
     ? sql`a.employee_party_id is null and a.job_title = ${jobTitle}`
     : sql`a.employee_party_id = ${employeePartyId}::uuid`
-  const rows = (await db.execute<StoredAssignment>(sql`
+  const rows = await db.execute<StoredAssignment>(sql`
     select a.id, a.employee_party_id, a.job_title, a.planned_hours::text, a.is_billable, a.booking
       from res_assignments a inner join projects p on p.id = a.project_id
      where a.org_id = ${orgId} and a.project_id = ${projectId} and a.week_start = ${weekStart}::date
        and (${subjectCond})
        and ${scopeCond}
-     limit 1`)).rows
+     limit 1`, 'objects')
   return rows[0] ?? null
 }
 
 async function projectIdByCodeOrName(orgId: string, raw: string, scope: ReadonlySet<string> | null): Promise<string | null> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select p.id from projects p
      where p.org_id = ${orgId}
        and (p.code = ${raw} or p.name = ${raw} or p.id::text = ${raw})
        ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-     limit 2`)).rows
+     limit 2`, 'objects')
   if (rows.length > 1) throw new Error(`project "${raw}" is ambiguous in the caller's subsidiary scope — use its project code or id`)
   return rows[0]?.id ?? null
 }
 
 async function employeeIdByNameOrNumber(orgId: string, raw: string, scope: ReadonlySet<string> | null): Promise<string | null> {
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select p.id from parties p
       join employee_roles er on er.org_id = p.org_id and er.party_id = p.id and er.is_active
      where p.org_id = ${orgId} and p.is_active
        and (p.id::text = ${raw} or p.short_code = ${raw} or p.display_name = ${raw} or er.employee_number = ${raw})
        ${subsidiaryReadFilter(sql`p.subsidiary_id`, scope)}
-     limit 2`)).rows
+     limit 2`, 'objects')
   if (rows.length > 1) throw new Error(`employee "${raw}" is ambiguous in the caller's subsidiary scope — use the employee number or id`)
   return rows[0]?.id ?? null
 }

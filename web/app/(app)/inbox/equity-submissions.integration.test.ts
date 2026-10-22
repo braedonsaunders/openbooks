@@ -179,8 +179,8 @@ async function pendingFinancialChangeGate(orgId: string, subsidiaryId: string, s
   await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
     coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${orgId}`));
   await withBypassContext(async () => {
-    const assignees = (await db.execute<{ id: string }>(sql`select a.user_id as id from role_assignments a
-      join app_roles r on r.org_id=a.org_id and r.id=a.role_id where a.org_id=${orgId} and r.key=${role}`)).rows;
+    const assignees = await db.execute<{ id: string }>(sql`select a.user_id as id from role_assignments a
+      join app_roles r on r.org_id=a.org_id and r.id=a.role_id where a.org_id=${orgId} and r.key=${role}`, "objects");
     for (const assignee of assignees) await grantScratchPermissions(orgId, assignee.id, ['close.run', 'documents.read']);
     await seedApprovalFlow(orgId, { subjectKind: 'financial_change', mode: 'any',
       assignees: [{ type: 'role', role }], preventSelfApproval: true });
@@ -193,7 +193,7 @@ async function pendingFinancialChangeGate(orgId: string, subsidiaryId: string, s
         public.accounting_book_currency(${orgId},b.id,${subsidiaryId}) as currency
       from accounting_books b join accounting_periods p on p.org_id=b.org_id
       where b.org_id=${orgId} and b.is_primary and p.starts_on<='2026-07-15' and p.ends_on>='2026-07-15'
-        and not p.is_adjustment order by p.id limit 1`)).rows[0]!;
+        and not p.is_adjustment order by p.id limit 1`, "objects"))[0]!;
     const posted = await postEntry(db, { orgId, actorId: submitterId, bookId: basis.book, periodId: basis.period,
       subsidiaryId, entryNumber: `CAP-${randomUUID()}`, postingDate: '2026-07-15', currency: basis.currency,
       origin: 'manual', lines: [
@@ -201,7 +201,7 @@ async function pendingFinancialChangeGate(orgId: string, subsidiaryId: string, s
         { accountId: basis.bank, subsidiaryId, amount: '100', currency: basis.currency, txnAmount: '100', fxRate: '1' },
       ] });
     const source = (await db.execute<{ id: string }>(sql`select id from journal_lines
-      where org_id=${orgId} and entry_id=${posted.entryId} and account_id=${basis.equity}`)).rows[0]!;
+      where org_id=${orgId} and entry_id=${posted.entryId} and account_id=${basis.equity}`, "objects"))[0]!;
     const changeId = await proposeHistoricalContributionFixture({ orgId, actorId: submitterId, sourceLineId: source.id,
       measurementCurrency: basis.currency, presentationCurrency: basis.currency==='CAD'?'USD':'CAD',
       historicalDate: '2026-07-15', amount: '-100', rate: '1.2' });
@@ -211,8 +211,8 @@ async function pendingFinancialChangeGate(orgId: string, subsidiaryId: string, s
       join role_assignments a on a.org_id=c.org_id join app_roles r on r.org_id=a.org_id and r.id=a.role_id
       where c.org_id=${orgId} and c.id=${changeId} and r.key=${role}`);
     await submitFinancialChange(orgId, changeId, submitterId);
-    const gates = (await db.execute<{ id: string }>(sql`select id from flow_gates
-      where org_id=${orgId} and subject_kind='financial_change' and subject_id=${changeId} and status='pending'`)).rows;
+    const gates = await db.execute<{ id: string }>(sql`select id from flow_gates
+      where org_id=${orgId} and subject_kind='financial_change' and subject_id=${changeId} and status='pending'`, "objects");
     assert.equal(gates.length, 1);
     return { changeId, gateId: gates[0]!.id };
   });
@@ -342,7 +342,7 @@ test("equity subjects name their holder and figures from the recorded request", 
     const amendment = await insert("class_amendment", "Class CS", { shareClassCode: "CS", quantity: "12000000", amount: "0.25" });
     const run = await insert("compensation_run", "Stock compensation", {});
     const base = await withBypassContext(async () => (await db.execute<{ currency: string }>(sql`
-      select base_currency as currency from subsidiaries where org_id = ${org.orgId} and id = ${org.subsidiaryId}`)).rows[0]!.currency);
+      select base_currency as currency from subsidiaries where org_id = ${org.orgId} and id = ${org.subsidiaryId}`, "objects"))[0]!.currency);
     const text = Object.assign((key: string) => key, { has: () => false });
     const details = await withBypassContext(() => resolveApprovalSubjects(org.orgId, [
       { kind: "equity_action", subjectId: repurchase },
@@ -377,7 +377,7 @@ test("a submitted period close is named by its fiscal period label, never the st
     const { periodDisplayLabel } = await import("@openbooks/engine/periods/period-policy");
     const period = (await withBypassContext(() => db.execute<{ id: string; fiscal_year: number; period_number: number; starts_on: string; ends_on: string; name: string }>(sql`
       select id, fiscal_year, period_number, starts_on::text as starts_on, ends_on::text as ends_on, name from accounting_periods
-       where org_id = ${w.org.orgId} and not is_adjustment order by starts_on limit 1`))).rows[0]!;
+       where org_id = ${w.org.orgId} and not is_adjustment order by starts_on limit 1`, "objects")))[0]!;
     const blueprintId = randomUUID();
     const closeRunId = randomUUID();
     await withBypassContext(async () => {

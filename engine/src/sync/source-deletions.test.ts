@@ -119,8 +119,7 @@ test(
           ),
       );
 
-      const afterFailure = (
-        await db.execute<{
+      const afterFailure = (await db.execute<{
           document_status: string;
           document_reversal_entry_id: string | null;
           original_status: string;
@@ -180,8 +179,7 @@ test(
             join journal_entries original
               on original.id = d.posted_entry_id and original.org_id = d.org_id
            where d.id = ${documentId} and d.org_id = ${org.orgId}
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       assert.deepEqual(afterFailure, {
         document_status: "posted",
         document_reversal_entry_id: null,
@@ -206,8 +204,7 @@ test(
       assert.equal(retry.action, "void");
       assert.ok(retry.reversalEntryId);
 
-      const afterRetry = (
-        await db.execute<{
+      const afterRetry = (await db.execute<{
           document_status: string;
           original_status: string;
           reversal_count: number;
@@ -249,8 +246,7 @@ test(
             join journal_entries original
               on original.id = d.posted_entry_id and original.org_id = d.org_id
            where d.id = ${documentId} and d.org_id = ${org.orgId}
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       assert.deepEqual(afterRetry, {
         document_status: "voided",
         original_status: "reversed",

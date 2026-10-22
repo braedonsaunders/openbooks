@@ -199,9 +199,9 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     // Deactivated, not deleted — the audit entries point at rows someone can
     // still read.
     const rows = await db.execute<{ n: string }>(
-      sql`select count(*) as n from page_specs where org_id = ${orgA}`,
+      sql`select count(*) as n from page_specs where org_id = ${orgA}`, 'objects',
     )
-    assert.equal(Number(rows.rows[0]!.n), 5, 'every stored layout survives as an inactive row')
+    assert.equal(Number(rows[0]!.n), 5, 'every stored layout survives as an inactive row')
 
     // Each save/restore/clear is ONE transaction, so its audit rows share the
     // same `at` (transaction now()); the order of the rows inside such a pair
@@ -209,11 +209,11 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
     // sorted rather than one flat sequence — the flat form was order-flaky
     // under the pooled runner.
     const audit = await db.execute<{ action: string; at: string }>(
-      sql`select action, at::text as at from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`,
+      sql`select action, at::text as at from audit_log where org_id = ${orgA} and table_name = 'page_specs' order by at`, 'objects',
     )
     const groups: string[][] = []
     let lastAt: string | null = null
-    for (const row of audit.rows) {
+    for (const row of audit) {
       if (row.at !== lastAt) { groups.push([]); lastAt = row.at }
       groups[groups.length - 1]!.push(row.action)
     }

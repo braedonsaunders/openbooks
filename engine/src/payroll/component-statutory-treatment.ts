@@ -52,11 +52,11 @@ export async function resolveComponentStatutoryTreatments(
        and component.id in (${componentList})
      order by component.id
      for share of component
-  `);
-  if (lockedComponents.rows.length !== ids.length) {
+  `, 'objects');
+  if (lockedComponents.length !== ids.length) {
     throw new PayrollError('An earning component changed while its statutory treatment was being resolved; recalculate the editable pay run.');
   }
-  const rows = (await tx.execute<ResolvedComponentStatutoryTreatment>(sql`
+  const rows = await tx.execute<ResolvedComponentStatutoryTreatment>(sql`
     select treatment.id::text,
            treatment.pay_component_id::text,
            treatment.worker_comp_group_id::text,
@@ -75,7 +75,7 @@ export async function resolveComponentStatutoryTreatments(
        (treatment.worker_comp_group_id is not null) desc,
        treatment.effective_from desc, treatment.id
      for share of treatment
-  `)).rows;
+  `, 'objects');
   return selectComponentStatutoryTreatments(rows, workerCompGroupId, payDate);
 }
 

@@ -61,13 +61,11 @@ interface ChannelSecretRow extends Record<string, unknown> {
 }
 
 export async function loadShopifyChannel(orgId: string, channelId: string): Promise<ShopifyChannelAccess> {
-  const row = (
-    await withOrgContext(orgId, () =>
+  const row = (await withOrgContext(orgId, () =>
       db.execute<ChannelSecretRow>(sql`
         select id, name, status, kind, currency, subsidiary_id, external_account, secrets, webhook_secret, settings
-          from sales_channels where org_id = ${orgId} and id = ${channelId}`),
-    )
-  ).rows[0];
+          from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"),
+    ))[0];
   if (!row || row.kind !== "shopify") {
     refuse(
       "channel_not_found",

@@ -33,13 +33,13 @@ async function reviewId(
   return (await db.execute<{ id: string }>(sql`
     select id from hrm_reviews
      where org_id = ${orgId} and cycle_id = ${cycleId}
-       and employment_id = ${employmentId} and kind = ${kind}`)).rows[0]!.id;
+       and employment_id = ${employmentId} and kind = ${kind}`, "objects"))[0]!.id;
 }
 
 async function answerIds(orgId: string, reviewId: string): Promise<{ id: string; prompt: string }[]> {
-  return (await db.execute<{ id: string; prompt: string }>(sql`
+  return await db.execute<{ id: string; prompt: string }>(sql`
     select id, question_prompt as prompt from hrm_review_answers
-     where org_id = ${orgId} and review_id = ${reviewId} order by position`)).rows;
+     where org_id = ${orgId} and review_id = ${reviewId} order by position`, "objects");
 }
 
 test("submit refuses a missing required answer and an out-of-scale rating by question", { skip: !DB }, async () => {
@@ -90,7 +90,7 @@ test("submit refuses a missing required answer and an out-of-scale rating by que
     assert.equal(submitted.status, "submitted");
     assert.equal(submitted.overallRating, "4.0000");
     const stored = (await db.execute<{ status: string }>(sql`
-      select status from hrm_reviews where org_id = ${h.org.orgId} and id = ${selfId}`)).rows[0]!.status;
+      select status from hrm_reviews where org_id = ${h.org.orgId} and id = ${selfId}`, "objects"))[0]!.status;
     assert.equal(stored, "submitted");
   });
 });
@@ -198,7 +198,7 @@ test("goals progress, achieve, miss and cancel with terminal evidence", { skip: 
       performanceRefusal("BAD_STATE"),
     );
     const updates = (await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from hrm_goal_updates where org_id = ${h.org.orgId} and goal_id = ${goal.id}`)).rows[0]!.n;
+      select count(*)::text as n from hrm_goal_updates where org_id = ${h.org.orgId} and goal_id = ${goal.id}`, "objects"))[0]!.n;
     assert.equal(updates, "3", "set, halfway, achieved");
   });
 });

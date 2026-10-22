@@ -91,7 +91,7 @@ export async function lockSecondaryBook(
     select id, code, name, is_primary, is_active, posts_gl, replication_mode,
            replication_from::text as replication_from, currency_difference_account_id
       from accounting_books where org_id = ${orgId} and id = ${bookId}
-      for update`)).rows[0];
+      for update`, "objects"))[0];
   if (!row) throw new MultiBookError("accounting book not found", 404);
   if (row.is_primary) throw new MultiBookError(`${row.code} is the primary book — the chart of record carries no book-specific configuration`);
   return {
@@ -118,7 +118,7 @@ async function audit(
 }
 
 async function dayBefore(runner: SqlExecutor, date: string): Promise<string> {
-  return (await runner.execute<{ d: string }>(sql`select (${date}::date - 1)::text as d`)).rows[0]!.d;
+  return (await runner.execute<{ d: string }>(sql`select (${date}::date - 1)::text as d`, "objects"))[0]!.d;
 }
 
 export async function listBookCurrencies(
@@ -126,11 +126,11 @@ export async function listBookCurrencies(
   runner: SqlExecutor = db,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<BookCurrencyRow[]> {
-  return (await runner.execute<BookCurrencyRow & Record<string, unknown>>(sql`
+  return await runner.execute<BookCurrencyRow & Record<string, unknown>>(sql`
     select ${CURRENCY_COLUMNS} from accounting_book_currencies
      where org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-     order by book_id, subsidiary_id, effective_from desc`)).rows;
+     order by book_id, subsidiary_id, effective_from desc`, "objects");
 }
 
 export async function listBookAccountMaps(
@@ -138,11 +138,11 @@ export async function listBookAccountMaps(
   runner: SqlExecutor = db,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<BookAccountMapRow[]> {
-  return (await runner.execute<BookAccountMapRow & Record<string, unknown>>(sql`
+  return await runner.execute<BookAccountMapRow & Record<string, unknown>>(sql`
     select ${MAP_COLUMNS} from accounting_book_account_maps
      where org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-     order by book_id, source_account_id, effective_from desc`)).rows;
+     order by book_id, source_account_id, effective_from desc`, "objects");
 }
 
 /**
@@ -177,13 +177,13 @@ export async function createBookCurrencyVersion(args: {
       const refs = (await db.execute<{ subsidiary_ok: boolean; currency_ok: boolean }>(sql`
         select exists(select 1 from subsidiaries where org_id = ${args.orgId} and id = ${subsidiaryId}
                        and is_active and not is_elimination) as subsidiary_ok,
-               exists(select 1 from currencies where code = ${currency}) as currency_ok`)).rows[0];
+               exists(select 1 from currencies where code = ${currency}) as currency_ok`, "objects"))[0];
       if (!refs?.subsidiary_ok) throw new MultiBookError("subsidiary not found or inactive", 404);
       if (!refs.currency_ok) throw new MultiBookError(`${currency} is not a known currency`);
-      const versions = (await db.execute<BookCurrencyRow & Record<string, unknown>>(sql`
+      const versions = await db.execute<BookCurrencyRow & Record<string, unknown>>(sql`
         select ${CURRENCY_COLUMNS} from accounting_book_currencies
          where org_id = ${args.orgId} and book_id = ${book.id} and subsidiary_id = ${subsidiaryId}
-         order by effective_from for update`)).rows;
+         order by effective_from for update`, "objects");
       const later = versions.find((version) => version.effectiveFrom >= effectiveFrom);
       if (later) throw new MultiBookError(`a version from ${later.effectiveFrom} already exists; start this version after it or close that version first`);
       const prior = versions.find((version) => version.effectiveTo === null || version.effectiveTo >= effectiveFrom);
@@ -191,7 +191,7 @@ export async function createBookCurrencyVersion(args: {
         const closeTo = await dayBefore(db, effectiveFrom);
         const closed = (await db.execute<BookCurrencyRow & Record<string, unknown>>(sql`
           update accounting_book_currencies set effective_to = ${closeTo}::date, updated_at = now(), updated_by = ${args.actorId}
-           where org_id = ${args.orgId} and id = ${prior.id} returning ${CURRENCY_COLUMNS}`)).rows[0];
+           where org_id = ${args.orgId} and id = ${prior.id} returning ${CURRENCY_COLUMNS}`, "objects"))[0];
         if (!closed) throw new MultiBookError("the book currency changed while you were saving; reload and try again", 409);
         await audit(db, args.orgId, args.actorId, "accounting_book_currencies", prior.id, "update", prior, closed, reason);
       }
@@ -200,7 +200,7 @@ export async function createBookCurrencyVersion(args: {
                                                 effective_to, reason, created_by, updated_by)
         values (${args.orgId}, ${book.id}, ${subsidiaryId}, ${currency}, ${rateType}, ${effectiveFrom}::date,
                 ${effectiveTo}::date, ${reason}, ${args.actorId}, ${args.actorId})
-        returning ${CURRENCY_COLUMNS}`)).rows[0];
+        returning ${CURRENCY_COLUMNS}`, "objects"))[0];
       if (!created) throw new Error("book currency insert returned no row");
       await audit(db, args.orgId, args.actorId, "accounting_book_currencies", created.id, "insert", null, created, reason);
       return created;
@@ -229,13 +229,13 @@ export async function closeBookCurrencyVersion(args: {
       await requireMultiBookFeature(db, args.orgId);
       await lockLedgerSetupFence(db, args.orgId, "exclusive");
       const current = (await db.execute<BookCurrencyRow & Record<string, unknown>>(sql`
-        select ${CURRENCY_COLUMNS} from accounting_book_currencies where org_id = ${args.orgId} and id = ${id}`)).rows[0];
+        select ${CURRENCY_COLUMNS} from accounting_book_currencies where org_id = ${args.orgId} and id = ${id}`, "objects"))[0];
       if (!current) throw new MultiBookError("book currency not found", 404);
       await lockSecondaryBook(db, args.orgId, current.bookId);
       if (effectiveTo && effectiveTo < current.effectiveFrom) throw new MultiBookError("effective to must be on or after effective from");
       const after = (await db.execute<BookCurrencyRow & Record<string, unknown>>(sql`
         update accounting_book_currencies set effective_to = ${effectiveTo}::date, updated_at = now(), updated_by = ${args.actorId}
-         where org_id = ${args.orgId} and id = ${id} returning ${CURRENCY_COLUMNS}`)).rows[0];
+         where org_id = ${args.orgId} and id = ${id} returning ${CURRENCY_COLUMNS}`, "objects"))[0];
       if (!after) throw new MultiBookError("the book currency changed while you were saving; reload and try again", 409);
       await audit(db, args.orgId, args.actorId, "accounting_book_currencies", id, "update", current, after, reason);
       return after;
@@ -291,7 +291,7 @@ export async function createBookAccountMap(args: {
                                                   effective_from, effective_to, reason, created_by, updated_by)
         values (${args.orgId}, ${book.id}, ${subsidiaryId}, ${source.id}, ${target.id},
                 ${effectiveFrom}::date, ${effectiveTo}::date, ${reason}, ${args.actorId}, ${args.actorId})
-        returning ${MAP_COLUMNS}`)).rows[0];
+        returning ${MAP_COLUMNS}`, "objects"))[0];
       if (!created) throw new Error("book account mapping insert returned no row");
       await audit(db, args.orgId, args.actorId, "accounting_book_account_maps", created.id, "insert", null, created, reason);
       return created;
@@ -320,13 +320,13 @@ export async function closeBookAccountMap(args: {
       await requireMultiBookFeature(db, args.orgId);
       await lockLedgerSetupFence(db, args.orgId, "exclusive");
       const current = (await db.execute<BookAccountMapRow & Record<string, unknown>>(sql`
-        select ${MAP_COLUMNS} from accounting_book_account_maps where org_id = ${args.orgId} and id = ${id}`)).rows[0];
+        select ${MAP_COLUMNS} from accounting_book_account_maps where org_id = ${args.orgId} and id = ${id}`, "objects"))[0];
       if (!current) throw new MultiBookError("account mapping not found", 404);
       await lockSecondaryBook(db, args.orgId, current.bookId);
       if (effectiveTo && effectiveTo < current.effectiveFrom) throw new MultiBookError("effective to must be on or after effective from");
       const after = (await db.execute<BookAccountMapRow & Record<string, unknown>>(sql`
         update accounting_book_account_maps set effective_to = ${effectiveTo}::date, updated_at = now(), updated_by = ${args.actorId}
-         where org_id = ${args.orgId} and id = ${id} returning ${MAP_COLUMNS}`)).rows[0];
+         where org_id = ${args.orgId} and id = ${id} returning ${MAP_COLUMNS}`, "objects"))[0];
       if (!after) throw new MultiBookError("the account mapping changed while you were saving; reload and try again", 409);
       await audit(db, args.orgId, args.actorId, "accounting_book_account_maps", id, "update", current, after, reason);
       return after;

@@ -68,7 +68,7 @@ async function claimNotice(actor: ServiceActor, notice: CustomerNoticeRequest) {
       left join contacts c on c.org_id = v.org_id and c.id = coalesce(j.contact_id, r.contact_id)
       left join addresses a on a.org_id = v.org_id and a.id = coalesce(j.service_address_id, r.service_address_id)
       join orgs o on o.id = v.org_id
-      where v.org_id = ${actor.orgId} and v.id = ${notice.visitId}`)).rows[0];
+      where v.org_id = ${actor.orgId} and v.id = ${notice.visitId}`, "objects"))[0];
     if (!context) return { done: { status: "suppressed" as const, detail: "The visit is no longer available." } };
     const anchor = context.firstStartsAt ?? new Date().toISOString();
     const policy = await policyOn(actor.orgId, localTimeFields(anchor, timeZone)?.date ?? anchor.slice(0, 10));
@@ -76,11 +76,11 @@ async function claimNotice(actor: ServiceActor, notice: CustomerNoticeRequest) {
     if (!enabled) return { done: { status: "not_enabled" as const, detail: null } };
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`service-notice:${actor.orgId}:${notice.visitId}:${notice.kind}:${notice.occurrenceKey}`}, 0))`);
     const existing = (await db.execute<{ status: CustomerNoticeOutcome["status"]; detail: string | null }>(sql`select status, detail from service_customer_notices
-      where org_id = ${actor.orgId} and visit_id = ${notice.visitId} and kind = ${notice.kind} and occurrence_key = ${notice.occurrenceKey}`)).rows[0];
+      where org_id = ${actor.orgId} and visit_id = ${notice.visitId} and kind = ${notice.kind} and occurrence_key = ${notice.occurrenceKey}`, "objects"))[0];
     if (existing) return { done: existing };
     const record = async (status: "suppressed" | "queued", detail: string | null, recipient: string | null, emailLogId: string | null) =>
-      requireOne((await db.execute<{ id: string }>(sql`insert into service_customer_notices (org_id, visit_id, kind, occurrence_key, recipient, status, detail, email_log_id, created_by)
-        values (${actor.orgId}, ${notice.visitId}, ${notice.kind}, ${notice.occurrenceKey}, ${recipient}, ${status}, ${detail}, ${emailLogId}, ${actorRef(actor)}) returning id`)).rows, "The customer notice").id;
+      requireOne(await db.execute<{ id: string }>(sql`insert into service_customer_notices (org_id, visit_id, kind, occurrence_key, recipient, status, detail, email_log_id, created_by)
+        values (${actor.orgId}, ${notice.visitId}, ${notice.kind}, ${notice.occurrenceKey}, ${recipient}, ${status}, ${detail}, ${emailLogId}, ${actorRef(actor)}) returning id`, "objects"), "The customer notice").id;
     const to = context.contactEmail ?? context.customerEmail;
     if (!to) {
       const detail = "No email address on the site contact or the customer record.";
@@ -147,8 +147,8 @@ export async function deliverCustomerNotice(actor: ServiceActor, notice: Custome
     await withOrgTransaction(actor.orgId, () => markEmailFailed(actor.orgId, logId, detail!));
   }
   await withOrgTransaction(actor.orgId, async () => {
-    requireOne((await db.execute(sql`update service_customer_notices set status = ${status}, detail = ${detail}
-      where org_id = ${actor.orgId} and id = ${noticeId} and status = 'queued' returning id`)).rows, "The customer notice outcome");
+    requireOne(await db.execute(sql`update service_customer_notices set status = ${status}, detail = ${detail}
+      where org_id = ${actor.orgId} and id = ${noticeId} and status = 'queued' returning id`, "objects"), "The customer notice outcome");
   });
   return { visitId: notice.visitId, kind: notice.kind, status, detail };
 }

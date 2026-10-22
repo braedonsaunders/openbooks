@@ -238,21 +238,21 @@ export async function loadContinuousClose(
         from ai_work_items w where ${where}
        order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`}, w.id
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `),
+    `, 'objects'),
     db.execute<Record<string, unknown>>(
-      sql`select count(*) as n from ai_work_items w where ${where}`,
+      sql`select count(*) as n from ai_work_items w where ${where}`, 'objects',
     ),
     db.execute<CountRow>(
-      sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`,
+      sql`select agent_key, count(*) as n from ai_work_items w where ${base} group by agent_key`, 'objects',
     ),
     db.execute<CountRow>(
-      sql`select status, count(*) as n from ai_work_items w where ${base} group by status`,
+      sql`select status, count(*) as n from ai_work_items w where ${base} group by status`, 'objects',
     ),
     db.execute<CountRow>(
-      sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`,
+      sql`select severity, count(*) as n from ai_work_items w where ${base} group by severity`, 'objects',
     ),
   ])
-  const total = Number(totalResult.rows[0]?.n ?? 0)
+  const total = Number(totalResult[0]?.n ?? 0)
   const reportBase = sql`r.org_id = ${authz.user.orgId} and r.agent_key in ${readableSql}
     and r.status = 'completed' and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'`
   const reportWhere = sql`${reportBase}
@@ -272,15 +272,15 @@ export async function loadContinuousClose(
         from ai_agent_runs r where ${reportWhere}
        order by r.finished_at desc, r.id desc
        limit ${reportPerPage} offset ${(reportPage - 1) * reportPerPage}
-    `),
+    `, 'objects'),
     db.execute<Record<string, unknown>>(
-      sql`select count(*) as n from ai_agent_runs r where ${reportWhere}`,
+      sql`select count(*) as n from ai_agent_runs r where ${reportWhere}`, 'objects',
     ),
     db.execute<CountRow>(
-      sql`select r.agent_key, count(*) as n from ai_agent_runs r where ${reportBase} group by r.agent_key`,
+      sql`select r.agent_key, count(*) as n from ai_agent_runs r where ${reportBase} group by r.agent_key`, 'objects',
     ),
   ])
-  const reportTotal = Number(reportTotalResult.rows[0]?.n ?? 0)
+  const reportTotal = Number(reportTotalResult[0]?.n ?? 0)
   const itemId = pickString(sp.item)
   let selected: ContinuousCloseWorkItem | null = null
   if (itemId && isUuid(itemId)) {
@@ -295,18 +295,18 @@ export async function loadContinuousClose(
         from ai_agent_runs
        where id = ${reportId} and org_id = ${authz.user.orgId} and agent_key in ${readableSql}
          and status = 'completed' and jsonb_typeof(stats->'enrichment'->'narrative') = 'object'
-    `)
-    selectedNarrative = detail.rows[0] ?? null
+    `, 'objects')
+    selectedNarrative = detail[0] ?? null
   }
 
   const closeHref = mergeHref('/continuous-close', sp, { item: undefined })
   const reportCloseHref = mergeHref('/continuous-close', sp, { report: undefined })
   const canManage = can(authz, 'admin.ai.manage')
   const canWrite = can(authz, 'assistant.write')
-  const activeCount = statusCounts.rows
+  const activeCount = statusCounts
     .filter((row) => row.status === 'open' || row.status === 'in_review')
     .reduce((sum, row) => sum + Number(row.n), 0)
-  const criticalCount = Number(severityCounts.rows.find((row) => row.severity === 'critical')?.n ?? 0)
+  const criticalCount = Number(severityCounts.find((row) => row.severity === 'critical')?.n ?? 0)
   const dateOnly = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' })
   const dateTime = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' })
 
@@ -348,7 +348,7 @@ export async function loadContinuousClose(
       ...readable.map((key) => ({
         key,
         label: t(`metrics.${key}`),
-        value: Number(counts.rows.find((row) => row.agent_key === key)?.n ?? 0),
+        value: Number(counts.find((row) => row.agent_key === key)?.n ?? 0),
       })),
     ],
     searchPlaceholder: t('search'),
@@ -356,23 +356,23 @@ export async function loadContinuousClose(
     agentLabel: t('filters.agent'),
     statusLabel: tc('labels.status'),
     severityLabel: t('filters.severity'),
-    agentOptions: counts.rows.map((row) => ({
+    agentOptions: counts.map((row) => ({
       value: row.agent_key,
       label: t(`agents.${row.agent_key}`),
       count: Number(row.n),
     })),
-    statusOptions: statusCounts.rows.map((row) => ({
+    statusOptions: statusCounts.map((row) => ({
       value: row.status,
       label: t(`status.${row.status}`),
       count: Number(row.n),
     })),
-    severityOptions: severityCounts.rows.map((row) => ({
+    severityOptions: severityCounts.map((row) => ({
       value: row.severity,
       label: t(`severity.${row.severity}`),
       count: Number(row.n),
     })),
     reportSearchPlaceholder: t('reports.search'),
-    reportAgentOptions: reportAgentCounts.rows.map((row) => ({
+    reportAgentOptions: reportAgentCounts.map((row) => ({
       value: row.agent_key,
       label: t(`agents.${row.agent_key}`),
       count: Number(row.n),
@@ -380,7 +380,7 @@ export async function loadContinuousClose(
     reportsTitle: t('reports.title'),
     reportsDescription: t('reports.description'),
     reportsEmpty: t('reports.empty'),
-    reportRows: reportRows.rows.map((report) => ({
+    reportRows: reportRows.map((report) => ({
       id: String(report.id),
       href: mergeHref('/continuous-close', sp, { tab: 'reports', report: report.id }),
       narrative: report.narrative,
@@ -406,7 +406,7 @@ export async function loadContinuousClose(
     columnMateriality: t('table.materiality'),
     columnStatus: tc('labels.status'),
     columnDetected: t('table.detected'),
-    rows: rows.rows.map((row) => ({
+    rows: rows.map((row) => ({
       id: String(row.id),
       title: t(`findings.${row.finding_type}.title`),
       href: mergeHref('/continuous-close', sp, { item: row.id }),

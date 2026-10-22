@@ -65,7 +65,7 @@ async function project(org: Org, typeId: string | null, subsidiaryId: string | n
 }
 
 const contractValue = async (id: string) =>
-  (await db.execute<{ v: string | null }>(sql`select contract_value::text as v from projects where id=${id}`)).rows[0]!.v
+  (await db.execute<{ v: string | null }>(sql`select contract_value::text as v from projects where id=${id}`, 'objects'))[0]!.v
 
 /**
  * Once the first application for payment exists, the contract sum moves only
@@ -156,7 +156,7 @@ test('a project with posted history cannot move to another subsidiary', enabled,
     const other = randomUUID()
     await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
     const subsidiaryOf = async (id: string) =>
-      (await db.execute<{ s: string | null }>(sql`select subsidiary_id as s from projects where id=${id}`)).rows[0]!.s
+      (await db.execute<{ s: string | null }>(sql`select subsidiary_id as s from projects where id=${id}`, 'objects'))[0]!.s
     const postCost = async (projectId: string) => {
       const entry = randomUUID()
       await withOrgTransaction(org.orgId, async () => {

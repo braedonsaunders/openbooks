@@ -10,7 +10,7 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
   const excludedPrograms = CA_EMPLOYER_LEVY_PROGRAMS.filter(program => program.nonTaxableEarningsExcludedByDefault).map(program => program.key);
   const today = await businessTodayInTx(tx, orgId);
   const keys = new Set(excludedPrograms);
-  const rows = (await tx.execute<{
+  const rows = await tx.execute<{
     component_id: string;
     treatment_id: string;
     effective_from: string;
@@ -37,7 +37,7 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
        )
      order by c.id
      for update of c, treatment
-  `)).rows;
+  `, "objects");
   for (const row of rows) {
     if (!row.treatment_id || !Array.isArray(row.program_exclusions)) throw new PayrollPackError(`Pay component ${row.component_id} has invalid statutory treatment effective on ${today}; repair its Payroll Setup history.`);
     const before = row.program_exclusions;
@@ -54,17 +54,17 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
            and effective_from < ${today}::date
            and (effective_to is null or effective_to >= ${today}::date)
          returning id::text as id, effective_to::text as effective_to
-      `);
-      if (closed.rows.length !== 1) throw new PayrollPackError("The statutory treatment changed while Canadian defaults were being provisioned; reload Payroll Setup and retry.");
-      splitFrom = { effectiveTo: closed.rows[0]!.effective_to };
+      `, "objects");
+      if (closed.length !== 1) throw new PayrollPackError("The statutory treatment changed while Canadian defaults were being provisioned; reload Payroll Setup and retry.");
+      splitFrom = { effectiveTo: closed[0]!.effective_to };
       const inserted = await tx.execute<{ id: string }>(sql`
         insert into pay_component_statutory_treatments
           (org_id, pay_component_id, effective_from, effective_to, program_exclusions, vacationable, created_by, updated_by)
         values (${orgId}, ${row.component_id}, ${today}::date, ${row.effective_to}::date, ${pgTextArrayLiteral(after)}::text[], ${row.vacationable}, ${actorId}, ${actorId})
         returning id::text as id
-      `);
-      if (inserted.rows.length !== 1) throw new PayrollPackError("The dated Canadian statutory treatment was not created; retry the setup action.");
-      treatmentId = inserted.rows[0]!.id;
+      `, "objects");
+      if (inserted.length !== 1) throw new PayrollPackError("The dated Canadian statutory treatment was not created; retry the setup action.");
+      treatmentId = inserted[0]!.id;
     } else {
       const updated = await tx.execute(sql`
         update pay_component_statutory_treatments
@@ -72,8 +72,8 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
          where org_id = ${orgId} and id = ${row.treatment_id}::uuid
            and effective_from = ${today}::date and program_exclusions = ${pgTextArrayLiteral(before)}::text[]
          returning id
-      `);
-      if (updated.rows.length !== 1) throw new PayrollPackError("The statutory treatment changed while Canadian defaults were being provisioned; reload Payroll Setup and retry.");
+      `, "objects");
+      if (updated.length !== 1) throw new PayrollPackError("The statutory treatment changed while Canadian defaults were being provisioned; reload Payroll Setup and retry.");
     }
 
     const reason = 'Canadian non-taxable earnings default to excluded from applicable employer levies.';

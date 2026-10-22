@@ -116,8 +116,8 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ resource
       select id, code, name, rail, direction, country, currency, file_extension,
              content_type, formatter_script is not null as has_formatter, is_active
         from payment_formats where org_id = ${gate.user.orgId} order by is_active desc, name
-    `)
-    return NextResponse.json({ rows: rows.rows })
+    `, 'objects')
+    return NextResponse.json({ rows })
   }
   if (resource === 'profiles') {
     // Profiles expose bank account number/name, subsidiary, and SFTP
@@ -137,8 +137,8 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ resource
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        order by p.is_active desc, p.name
-    `)
-    return NextResponse.json({ rows: rows.rows })
+    `, 'objects')
+    return NextResponse.json({ rows })
   }
   if (resource === 'schedules') {
     // Schedules inherit their profile's visibility: the same two predicates
@@ -152,8 +152,8 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ resource
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
          ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
        order by s.is_active desc, s.name
-    `)
-    return NextResponse.json({ rows: rows.rows })
+    `, 'objects')
+    return NextResponse.json({ rows })
   }
   const rows = await db.execute(sql`
     select m.*, p.display_name as party_name, b.bank_name, b.account_last_four
@@ -163,8 +163,8 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ resource
      where m.org_id = ${gate.user.orgId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
      order by m.created_at desc
-  `)
-  return NextResponse.json({ rows: rows.rows })
+  `, 'objects')
+  return NextResponse.json({ rows })
 }
 
 
@@ -259,8 +259,8 @@ export const POST = defineRoute({
               from orgs o
               left join payment_formats f on f.id = ${body.paymentFormatId} and f.org_id = o.id
               left join subsidiaries s on s.id = ${body.subsidiaryId ?? null} and s.org_id = o.id
-             where o.id = ${gate.user.orgId}`))
-          currency = fallback.rows[0]?.currency ?? ''
+             where o.id = ${gate.user.orgId}`, 'objects'))
+          currency = fallback[0]?.currency ?? ''
         }
         if (!/^[A-Z]{3}$/.test(currency)) {
           return NextResponse.json({ error: 'name, bankAccountId, paymentFormatId, and currency are required' }, { status: 400 })
@@ -275,8 +275,8 @@ export const POST = defineRoute({
         }
         const nextRunAt = computeNextRunAt(body.cron!.trim(), new Date(), body.timezone?.trim() || 'UTC')
         if (!nextRunAt) return NextResponse.json({ error: 'cron expression is invalid' }, { status: 400 })
-        const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
-        if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
+        const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`, 'objects'))
+        if (!profile[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
         const row = await db.transaction(async (tx) => {
           const created = (await tx.insert(schema.paymentSchedules).values({
             orgId: gate.user.orgId,
@@ -312,15 +312,15 @@ export const POST = defineRoute({
              and p.is_active
              ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
            for update
-        `)).rows[0]
+        `, 'objects'))[0]
         if (!party) return { kind: 'not-found' as const }
         const mandateBank = (await tx.execute(sql`
           select 1 from party_bank_accounts b
            where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
              and b.org_id = ${gate.user.orgId} and ${payablePayeeBankAccountSql('b')}
            for update
-        `))
-        if (!mandateBank.rows[0]) return { kind: 'invalid-bank' as const }
+        `, 'objects'))
+        if (!mandateBank[0]) return { kind: 'invalid-bank' as const }
         const created = (await tx.insert(schema.paymentMandates).values({
           orgId: gate.user.orgId,
           partyId: body.partyId!,

@@ -122,49 +122,41 @@ async function occurrences(flowId: string): Promise<Array<{
   attempt_count: number;
   result: Record<string, unknown> | null;
 }>> {
-  return (
-    await db.execute<{ id: string; status: string; attempt_count: number; result: Record<string, unknown> | null }>(sql`
+  return (await db.execute<{ id: string; status: string; attempt_count: number; result: Record<string, unknown> | null }>(sql`
       select o.id, o.status, o.attempt_count, o.result
         from flow_scheduled_occurrences o
        where o.flow_id = ${flowId}
        order by o.occurred_at, o.node_id
-    `)
-  ).rows.map((row) => ({ ...row, result: row.result ?? null }));
+    `, "objects")).map((row) => ({ ...row, result: row.result ?? null }));
 }
 
 const runCount = async (orgId: string): Promise<number> =>
   Number(
-    (
-      await db.execute<{ n: number }>(
-        sql`select count(*) as n from flow_runs where org_id = ${orgId}`,
-      )
-    ).rows[0]!.n,
+    (await db.execute<{ n: number }>(
+        sql`select count(*) as n from flow_runs where org_id = ${orgId}`, "objects",
+      ))[0]!.n,
   );
 
 const outboxCount = async (orgId: string): Promise<number> =>
   Number(
-    (
-      await db.execute<{ n: number }>(
-        sql`select count(*) as n from scheduler_outbox where org_id = ${orgId}`,
-      )
-    ).rows[0]!.n,
+    (await db.execute<{ n: number }>(
+        sql`select count(*) as n from scheduler_outbox where org_id = ${orgId}`, "objects",
+      ))[0]!.n,
   );
 
 const notificationCount = async (orgId: string): Promise<number> =>
   Number(
-    (
-      await db.execute<{ n: number }>(
-        sql`select count(*) as n from notifications where org_id = ${orgId}`,
-      )
-    ).rows[0]!.n,
+    (await db.execute<{ n: number }>(
+        sql`select count(*) as n from notifications where org_id = ${orgId}`, "objects",
+      ))[0]!.n,
   );
 
 /** The committed cron cursor of the flow (null while never fired). */
 const cursorOf = async (flowId: string): Promise<Date | null> => {
   const r = await db.execute<{ c: Date | string | null }>(
-    sql`select last_scheduled_run_at as c from flows where id = ${flowId}`,
+    sql`select last_scheduled_run_at as c from flows where id = ${flowId}`, "objects",
   );
-  const raw = r.rows[0]?.c;
+  const raw = r[0]?.c;
   return raw == null ? null : raw instanceof Date ? raw : new Date(raw);
 };
 
@@ -279,23 +271,19 @@ test(
       assert.equal(occ.length, 1, "still exactly one occurrence");
       assert.equal(occ[0]!.status, "fired");
       assert.equal(await runCount(org.orgId), 1, "one run row adopted by the resume");
-      const runs = (
-        await db.execute<{ id: string; occurrenceKey: string | null; status: string; trigger: string }>(sql`
+      const runs = await db.execute<{ id: string; occurrenceKey: string | null; status: string; trigger: string }>(sql`
           select id, occurrence_key as "occurrenceKey", status, trigger
             from flow_runs where org_id = ${org.orgId}
-        `)
-      ).rows;
+        `, "objects");
       assert.equal(runs.length, 1);
       assert.equal(runs[0]!.status, "completed");
       assert.equal(runs[0]!.trigger, "scheduled");
       assert.match(runs[0]!.occurrenceKey ?? "", /^sched\|/, "deterministic occurrence key present");
       assert.equal(await outboxCount(org.orgId), 1, "exactly one deferred email");
       assert.match(
-        (
-          await db.execute<{ k: string }>(sql`
+        (await db.execute<{ k: string }>(sql`
             select occurrence_key as k from scheduler_outbox where org_id = ${org.orgId}
-          `)
-        ).rows[0]!.k,
+          `, "objects"))[0]!.k,
         new RegExp(`^${runs[0]!.id}:email:`),
         "the email key is bound to the adopted run identity",
       );
@@ -336,9 +324,7 @@ test(
       await recoverLostScheduledFlows(staleRecoveryNow());
 
       assert.equal(await runCount(org.orgId), 1, "no duplicate run row");
-      const ids = (
-        await db.execute<{ id: string }>(sql`select id from flow_runs where org_id = ${org.orgId}`)
-      ).rows.map((r) => r.id);
+      const ids = (await db.execute<{ id: string }>(sql`select id from flow_runs where org_id = ${org.orgId}`, "objects")).map((r) => r.id);
       assert.equal(ids.length, 1);
       assert.equal(await outboxCount(org.orgId), 1, "the retry did not double-send");
       assert.equal(await notificationCount(org.orgId), 1, "the retry did not double-notify");

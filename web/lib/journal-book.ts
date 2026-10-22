@@ -32,7 +32,7 @@ export async function resolveJournalBookTarget(args: {
 }): Promise<JournalBookTarget> {
   const runner = args.executor ?? db
   const base = (await runner.execute<{ base_currency: string }>(sql`
-    select base_currency from subsidiaries where org_id = ${args.orgId} and id = ${args.subsidiaryId}`)).rows[0]
+    select base_currency from subsidiaries where org_id = ${args.orgId} and id = ${args.subsidiaryId}`, 'objects'))[0]
   if (!base) throw new JournalBookError('invalid subsidiary', 422)
   if (args.requested === null) return { accountingBookId: null, currency: base.base_currency }
   if (!isUuid(args.requested)) throw new JournalBookError('accounting book not found', 404)
@@ -47,15 +47,15 @@ export async function resolveJournalBookTarget(args: {
   const book = (await runner.execute<{ id: string; currency: string | null }>(sql`
     select id, public.accounting_book_currency(${args.orgId}, id, ${args.subsidiaryId}) as currency
       from accounting_books
-     where org_id = ${args.orgId} and id = ${args.requested} and is_active and posts_gl`)).rows[0]
+     where org_id = ${args.orgId} and id = ${args.requested} and is_active and posts_gl`, 'objects'))[0]
   if (!book) throw new JournalBookError('accounting book not found or not an active posting book', 404)
   return { accountingBookId: book.id, currency: book.currency ?? base.base_currency }
 }
 
 /** Active posting books for the journal book selector, primary first. */
 export async function journalBookOptions(orgId: string): Promise<{ id: string; code: string; name: string; isPrimary: boolean }[]> {
-  return (await db.execute<{ id: string; code: string; name: string; isPrimary: boolean }>(sql`
+  return await db.execute<{ id: string; code: string; name: string; isPrimary: boolean }>(sql`
     select id, code, name, is_primary as "isPrimary" from accounting_books
      where org_id = ${orgId} and is_active and posts_gl
-     order by is_primary desc, code, id`)).rows
+     order by is_primary desc, code, id`, 'objects')
 }

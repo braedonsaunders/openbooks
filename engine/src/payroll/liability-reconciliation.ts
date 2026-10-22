@@ -74,7 +74,7 @@ export async function reconcilePayrollLiabilityAccounts(input: {
           join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
           join documents d on d.org_id=s.org_id and d.id=s.pay_run_document_id
           left join subsidiaries ent on ent.org_id=l.org_id and ent.id=d.subsidiary_id
-          where l.org_id=${input.orgId} and l.id=${row.lineId} for share of d`)).rows[0];
+          where l.org_id=${input.orgId} and l.id=${row.lineId} for share of d`, "objects"))[0];
         const allowed = await actorAllowedSubsidiaryIds(db,input.orgId,input.actorId);
         if (!source || (allowed !== null && (!source.subsidiary_id || !allowed.has(source.subsidiary_id)))) {
           throw new PayrollError("Historical payroll line is not visible in this organization and legal-entity scope.");
@@ -96,7 +96,7 @@ export async function reconcilePayrollLiabilityAccounts(input: {
           select a.subsidiary_id, a.number, a.name, a.type, a.is_summary, ent.name as entity_name
             from accounts a
             left join subsidiaries ent on ent.org_id=a.org_id and ent.id=a.subsidiary_id
-           where a.org_id=${input.orgId} and a.id=${row.accountId}`)).rows[0] ?? null;
+           where a.org_id=${input.orgId} and a.id=${row.accountId}`, "objects"))[0] ?? null;
         if (!account) {
           throw new PayrollError(
             `Cannot reconcile payroll line ${row.lineId} with liability account ${row.accountId}: ` +
@@ -136,8 +136,8 @@ export async function reconcilePayrollLiabilityAccounts(input: {
          where org_id = ${input.orgId} and id = ${row.lineId}
            and liability_account_source = 'unknown'
          returning id
-      `);
-        if (result.rows.length !== 1) {
+      `, "objects");
+        if (result.length !== 1) {
           throw new PayrollError(
             `Payroll line ${row.lineId} is not unresolved legacy payroll in this organization.`,
           );

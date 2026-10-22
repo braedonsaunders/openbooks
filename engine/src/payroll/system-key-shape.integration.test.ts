@@ -56,8 +56,8 @@ test(
         await insertComponent(org.orgId, `SYSKEY-${key}`, key);
       }
       await insertComponent(org.orgId, "SYSKEY-USER", null);
-      const stored = await withBypassContext(async () => (await db.execute<{ system_key: string | null }>(sql`
-        select system_key from pay_components where org_id = ${org.orgId} and code like 'SYSKEY-%'`)).rows);
+      const stored = await withBypassContext(async () => await db.execute<{ system_key: string | null }>(sql`
+        select system_key from pay_components where org_id = ${org.orgId} and code like 'SYSKEY-%'`, "objects"));
       assert.equal(stored.length, LEGACY_KEYS.length + PACK_DECLARED_KEYS.length + 1);
       assert.ok(stored.some((row) => row.system_key === "hsf"), "pack-declared 'hsf' must persist");
 

@@ -80,7 +80,7 @@ async function clearedCount(orgId: string, accountId: string): Promise<number> {
   return Number((await db.execute<{ n: string }>(sql`
     select count(*) as n from journal_lines
      where org_id = ${orgId} and account_id = ${accountId} and source_cleared_date is not null
-  `)).rows[0]!.n);
+  `, "objects"))[0]!.n);
 }
 
 test("source evidence policy defaults on and seeds through close defaults", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -91,7 +91,7 @@ test("source evidence policy defaults on and seeds through close defaults", { sk
     await ensureCloseDefaults(org.orgId, actor);
     const row = (await db.execute<{ code: string; is_active: boolean }>(sql`
       select code, is_active from close_policies where org_id = ${org.orgId} and code = 'source-reconciliation-evidence'
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row?.code, "source-reconciliation-evidence");
     assert.equal(row?.is_active, true);
     assert.equal(await sourceEvidencePolicyActive(org.orgId), true);
@@ -206,20 +206,20 @@ test("signOffFromSourceEvidence signs off fully-cleared accounts without stateme
     const row = (await db.execute<{ status: string; evidence_kind: string; evidence_connector: string }>(sql`
       select status, evidence_kind, evidence_connector from reconciliations
        where id = ${out.signed ? out.reconciliationId : null} and org_id = ${org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.status, "signed_off");
     assert.equal(row.evidence_kind, "source");
     assert.equal(row.evidence_connector, "test-connector");
     // No statement line was invented to support the sign-off.
     assert.equal(
-      Number((await db.execute<{ n: string }>(sql`select count(*) as n from bank_statement_lines where org_id = ${org.orgId}`)).rows[0]!.n),
+      Number((await db.execute<{ n: string }>(sql`select count(*) as n from bank_statement_lines where org_id = ${org.orgId}`, "objects"))[0]!.n),
       0,
     );
     // The cleared lines carry the reconciliation stamp.
     assert.equal(
       Number((await db.execute<{ n: string }>(sql`
         select count(*) as n from journal_lines
-         where org_id = ${org.orgId} and reconciliation_id = ${out.signed ? out.reconciliationId : null}`)).rows[0]!.n),
+         where org_id = ${org.orgId} and reconciliation_id = ${out.signed ? out.reconciliationId : null}`, "objects"))[0]!.n),
       2,
     );
     // A rerun through the same date is already covered, not a second row.
@@ -228,7 +228,7 @@ test("signOffFromSourceEvidence signs off fully-cleared accounts without stateme
     assert.equal(!again.signed && again.reason, "already-covered");
     assert.equal(
       Number((await db.execute<{ n: string }>(sql`
-        select count(*) as n from reconciliations where org_id = ${org.orgId} and account_id = ${org.accounts.bank}`)).rows[0]!.n),
+        select count(*) as n from reconciliations where org_id = ${org.orgId} and account_id = ${org.accounts.bank}`, "objects"))[0]!.n),
       1,
     );
   } finally {
@@ -258,7 +258,7 @@ test("partially-cleared accounts stay open with exact counts", { skip: !process.
     assert.equal(!out.signed && out.clearedLines, 1);
     assert.equal(!out.signed && out.unclearedLines, 1);
     assert.equal(
-      Number((await db.execute<{ n: string }>(sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`)).rows[0]!.n),
+      Number((await db.execute<{ n: string }>(sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`, "objects"))[0]!.n),
       0,
     );
   } finally {

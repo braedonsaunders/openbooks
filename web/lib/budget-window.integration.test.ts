@@ -29,7 +29,7 @@ test('budget actuals equal the P&L for the same window and exclude lines past th
   try {
     let augustPeriodId = ''
     await withBypassContext(async () => {
-      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`)).rows[0]!
+      const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!
       augustPeriodId = randomUUID()
       await db.execute(sql`insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${augustPeriodId}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar.fiscal_calendar_id})`)
@@ -107,10 +107,10 @@ const consolidatedRows = [
             const period2027 = randomUUID()
             await withBypass(async () => {
               const cal = await db.execute<{ id: string }>(sql`
-                select id from fiscal_calendars where org_id = ${scratch.orgId} and is_default limit 1`)
+                select id from fiscal_calendars where org_id = ${scratch.orgId} and is_default limit 1`, 'objects')
               await db.execute(sql`
                 insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-                values (${period2027}, ${scratch.orgId}, 2027, 7, '2027-07', '2027-07-01', '2027-07-31', false, ${cal.rows[0]!.id})`)
+                values (${period2027}, ${scratch.orgId}, 2027, 7, '2027-07', '2027-07-01', '2027-07-31', false, ${cal[0]!.id})`)
               await db.execute(sql`
                 insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
                 values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden budget entity', 'CAD', 'CA')
@@ -157,15 +157,15 @@ const consolidatedRows = [
                 ${joins}
                where ${where}
                order by bs.name
-            `))
+            `, 'objects'))
             // The mixed-scope scenario names a subsidiary the caller cannot see while
             // its GET answers 404, so it must be absent from the list (not redacted);
             // the line-less draft touches nothing and stays visible. (The fixture may
             // seed its own scenarios, so assertions scope to the ids created here.)
-            const listed = new Set(rows.rows.map((row) => row.id))
+            const listed = new Set(rows.map((row) => row.id))
             assert.ok(listed.has(emptyScenario), 'line-less draft stays visible')
             assert.ok(listed.has(visibleScenario), 'wholly in-scope scenario stays visible')
-            assert.equal(rows.rows.find((row) => row.id === visibleScenario)?.amount, '100.0000')
+            assert.equal(rows.find((row) => row.id === visibleScenario)?.amount, '100.0000')
             for (const absent of [mixedScenario, hiddenScenario, hiddenYearScenario]) {
               assert.ok(!listed.has(absent), `out-of-scope scenario listed: ${absent}`)
             }
@@ -177,8 +177,8 @@ const consolidatedRows = [
                 from budget_scenarios bs
                 ${unrestrictedJoins}
                where ${unrestrictedWhere}
-            `))
-            const unrestricted = new Set(unrestrictedRows.rows.map((row) => row.id))
+            `, 'objects'))
+            const unrestricted = new Set(unrestrictedRows.map((row) => row.id))
             for (const id of [emptyScenario, hiddenScenario, hiddenYearScenario, mixedScenario, visibleScenario]) {
               assert.ok(unrestricted.has(id), `unrestricted list hides a scenario: ${id}`)
             }
@@ -235,13 +235,13 @@ const budgetCalendarCases = [
           const createdCalendar = await db.execute<{ id: string }>(sql`
             insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
                                           adjustment_period_enabled, is_default, is_active, config)
-            values (${otherCalendar}, ${orgId}, 'Retail', 'monthly', 1, 1, 'UTC', false, false, true, '{}'::jsonb) returning id`)
-          assert.deepEqual(createdCalendar.rows.map(row => row.id), [otherCalendar], 'second fiscal calendar is stored')
+            values (${otherCalendar}, ${orgId}, 'Retail', 'monthly', 1, 1, 'UTC', false, false, true, '{}'::jsonb) returning id`, 'objects')
+          assert.deepEqual(createdCalendar.map(row => row.id), [otherCalendar], 'second fiscal calendar is stored')
           const otherPeriod = randomUUID()
           const createdPeriod = await db.execute<{ id: string }>(sql`
             insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-            values (${otherPeriod}, ${orgId}, 2026, 7, '2026-07R', '2026-07-01', '2026-07-31', false, ${otherCalendar}) returning id`)
-          assert.deepEqual(createdPeriod.rows.map(row => row.id), [otherPeriod], 'second fiscal calendar period is stored')
+            values (${otherPeriod}, ${orgId}, 2026, 7, '2026-07R', '2026-07-01', '2026-07-31', false, ${otherCalendar}) returning id`, 'objects')
+          assert.deepEqual(createdPeriod.map(row => row.id), [otherPeriod], 'second fiscal calendar period is stored')
           return otherPeriod
           })
         }
@@ -250,13 +250,13 @@ const budgetCalendarCases = [
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const calendarId = (await db.execute<{ id: string }>(sql`
-              select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id
+              select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!.id
             const otherPeriod = await secondCalendarPeriod(org.orgId, calendarId)
             const scenarioId = randomUUID()
             const scenario = await withBypassContext(() => db.execute<{ id: string }>(sql`
               insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Calendar Target', 'budget', 'draft') returning id`))
-            assert.deepEqual(scenario.rows.map(row => row.id), [scenarioId], 'calendar refusal scenario is stored')
+              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Calendar Target', 'budget', 'draft') returning id`, 'objects'))
+            assert.deepEqual(scenario.map(row => row.id), [scenarioId], 'calendar refusal scenario is stored')
             await assert.rejects(
               withOrgContext(org.orgId, () => db.execute(sql`
                 insert into budget_lines
@@ -282,13 +282,13 @@ const budgetCalendarCases = [
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const calendarId = (await db.execute<{ id: string }>(sql`
-              select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id
+              select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!.id
             const otherPeriod = await secondCalendarPeriod(org.orgId, calendarId)
             const scenarioId = randomUUID()
             const scenario = await withBypassContext(() => db.execute<{ id: string }>(sql`
               insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Calendar Save', 'budget', 'draft') returning id`))
-            assert.deepEqual(scenario.rows.map(row => row.id), [scenarioId], 'worksheet refusal scenario is stored')
+              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Calendar Save', 'budget', 'draft') returning id`, 'objects'))
+            assert.deepEqual(scenario.map(row => row.id), [scenarioId], 'worksheet refusal scenario is stored')
             await assert.rejects(
               withOrgContext(org.orgId, () => saveBudgetCells({
                 scenarioId,
@@ -318,13 +318,13 @@ const budgetCalendarCases = [
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const calendarId = (await db.execute<{ id: string }>(sql`
-              select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id
+              select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!.id
             const otherPeriod = await secondCalendarPeriod(org.orgId, calendarId)
             const scenarioId = randomUUID()
             const scenario = await withBypassContext(() => db.execute<{ id: string }>(sql`
               insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Calendar Target', 'budget', 'draft') returning id`))
-            assert.deepEqual(scenario.rows.map(row => row.id), [scenarioId], 'default-calendar worksheet scenario is stored')
+              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Calendar Target', 'budget', 'draft') returning id`, 'objects'))
+            assert.deepEqual(scenario.map(row => row.id), [scenarioId], 'default-calendar worksheet scenario is stored')
             await withBypassContext(() => db.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
@@ -648,22 +648,22 @@ const budgetCalendarCases = [
           try {
             const subsidiary = await withBypassContext(() => db.execute<{ id: string }>(sql`
               insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-              values (${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA') returning id`))
-            assert.equal(subsidiary.rows.length, 1, 'entity-slice fixture creates one subsidiary')
-            const subB = subsidiary.rows[0]!.id
+              values (${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA') returning id`, 'objects'))
+            assert.equal(subsidiary.length, 1, 'entity-slice fixture creates one subsidiary')
+            const subB = subsidiary[0]!.id
             const scenarioId = randomUUID()
             await withBypassContext(async () => {
             const scenario = await db.execute<{ id: string }>(sql`
               insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Entity Slice', 'budget', 'draft') returning id`)
-            assert.deepEqual(scenario.rows.map(row => row.id), [scenarioId], 'entity-slice scenario is stored')
+              values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Entity Slice', 'budget', 'draft') returning id`, 'objects')
+            assert.deepEqual(scenario.map(row => row.id), [scenarioId], 'entity-slice scenario is stored')
             for (const [sub, amount] of [[org.subsidiaryId, '100.0000'], [subB, '200.0000']] as const) {
               const line = await db.execute<{ subsidiary_id: string }>(sql`
                 insert into budget_lines
                   (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
                 values (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${sub},
-                        ${amount}, ${randomUUID()}, ${randomUUID()}) returning subsidiary_id`)
-              assert.deepEqual(line.rows.map(row => row.subsidiary_id), [sub], 'entity-slice line is stored for its subsidiary')
+                        ${amount}, ${randomUUID()}, ${randomUUID()}) returning subsidiary_id`, 'objects')
+              assert.deepEqual(line.map(row => row.subsidiary_id), [sub], 'entity-slice line is stored for its subsidiary')
             }
             })
 
@@ -699,9 +699,9 @@ const budgetCalendarCases = [
               }],
             }))
             assert.equal(saved.revision, 2)
-            const amounts = (await withOrgContext(org.orgId, () => db.execute<{ subsidiary_id: string; amount: string }>(sql`
+            const amounts = await withOrgContext(org.orgId, () => db.execute<{ subsidiary_id: string; amount: string }>(sql`
               select subsidiary_id, amount::text as amount from budget_lines
-               where scenario_id = ${scenarioId} and org_id = ${org.orgId}`))).rows
+               where scenario_id = ${scenarioId} and org_id = ${org.orgId}`, 'objects'))
             assert.deepEqual(
               new Map(amounts.map((r) => [r.subsidiary_id, r.amount])),
               new Map([[org.subsidiaryId, '100.0000'], [subB, '250.0000']]),
@@ -788,14 +788,14 @@ const budgetCalendarCases = [
 
         async function scenarioCount(orgId: string): Promise<number> {
           return (await db.execute<{ n: number }>(sql`
-            select count(*)::int as n from budget_scenarios where org_id = ${orgId}`)).rows[0]!.n
+            select count(*)::int as n from budget_scenarios where org_id = ${orgId}`, 'objects'))[0]!.n
         }
 
         test('loading the unsaved workspace writes nothing and mirrors the persisted sheet', { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
             const fy = (await db.execute<{ fiscal_year: number }>(sql`
-              select fiscal_year from accounting_periods where id = ${org.periodId}`)).rows[0]!.fiscal_year
+              select fiscal_year from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!.fiscal_year
             const before = await scenarioCount(org.orgId)
 
             const unsaved = await loadUnsavedBudgetWorkspace(org.orgId, {
@@ -822,8 +822,8 @@ const budgetCalendarCases = [
             const scenarioId = randomUUID()
             const scenario = await withBypassContext(() => db.execute<{ id: string }>(sql`
               insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-              values (${scenarioId}, ${org.orgId}, ${org.bookId}, ${fy}, 'Parity Probe', 'budget', 'draft') returning id`))
-            assert.deepEqual(scenario.rows.map(row => row.id), [scenarioId], 'unsaved-workspace parity scenario is stored')
+              values (${scenarioId}, ${org.orgId}, ${org.bookId}, ${fy}, 'Parity Probe', 'budget', 'draft') returning id`, 'objects'))
+            assert.deepEqual(scenario.map(row => row.id), [scenarioId], 'unsaved-workspace parity scenario is stored')
             const persisted = await loadBudgetWorkspace(scenarioId, org.orgId, {
               page: 1,
               perPage: 50,

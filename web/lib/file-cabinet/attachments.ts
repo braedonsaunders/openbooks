@@ -34,8 +34,8 @@ export async function listAttachments(
       join files fi on fi.id = fa.file_id and fi.org_id = fa.org_id
      where fa.org_id = ${orgId} and fa.target_table = ${targetTable} and fa.target_id = ${targetId}
      order by fa.created_at desc
-  `))
-  return r.rows
+  `, 'objects'))
+  return r
 }
 
 /**
@@ -78,8 +78,8 @@ export async function attachExisting(input: {
       -- An existing identical file-target association already attaches the file; null denotes no new link.
       on conflict (org_id, file_id, target_table, target_id) do nothing
       returning id
-    `))
-    return r.rows[0]?.id ?? null
+    `, 'objects'))
+    return r[0]?.id ?? null
   })
 }
 
@@ -111,7 +111,7 @@ export async function detachAttachment(
       select file_id as "fileId", target_table as "targetTable", target_id as "targetId"
         from file_attachments
        where id = ${attachmentId} and org_id = ${orgId}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!identity) return { ok: false as const, reason: 'not found' as const }
     await audit?.authorizeAttachmentTarget?.(tx, identity)
     await lockRetainedAttachmentTarget(tx, orgId, identity.targetTable, identity.targetId)
@@ -121,7 +121,7 @@ export async function detachAttachment(
         from file_attachments fa
        where fa.id = ${attachmentId} and fa.org_id = ${orgId}
        for update of fa
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!link) return { ok: false as const, reason: 'not found' as const }
     if (link.retained) return { ok: false as const, reason: 'retained' as const }
     await tx.execute(sql`delete from file_attachments where id = ${attachmentId} and org_id = ${orgId}`)
@@ -146,6 +146,6 @@ export async function getAttachmentLink(orgId: string, attachmentId: string): Pr
     select id, file_id as "fileId", target_table as "targetTable", target_id as "targetId"
       from file_attachments
      where id = ${attachmentId} and org_id = ${orgId}
-  `))
-  return r.rows[0] ?? null
+  `, 'objects'))
+  return r[0] ?? null
 }

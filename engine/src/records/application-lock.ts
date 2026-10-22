@@ -25,8 +25,8 @@ export async function lockApplicationEvidence(
 ): Promise<{ documentIds: readonly string[]; entryIds: readonly string[]; lineIds: readonly string[] }> {
   return lockApplicationEvidenceWithQuery(
     async (statement: SQL) => {
-      const result = await tx.execute<Record<string, unknown>>(statement);
-      return { rows: result.rows as Record<string, unknown>[] };
+      const result = await tx.execute<Record<string, unknown>>(statement, "objects");
+      return { rows: result as Record<string, unknown>[] };
     },
     orgId,
     lineIds,

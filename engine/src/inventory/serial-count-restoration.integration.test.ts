@@ -66,17 +66,15 @@ test(
           serialId: serial,
         }),
       );
-      const transfer = (
-        await run(() =>
+      const transfer = (await run(() =>
           db.execute<{ lot_id: string; serial_id: string }>(
-            sql`select lot_id,serial_id from inventory_movements where org_id=${org.orgId} and id=${moved.toMovementId}`,
+            sql`select lot_id,serial_id from inventory_movements where org_id=${org.orgId} and id=${moved.toMovementId}`, "objects",
           ),
-        )
-      ).rows[0]!;
+        ))[0]!;
       assert.equal(transfer.lot_id, lot);
       assert.equal(transfer.serial_id, serial);
       const destination = (await run(() => db.execute<{ location_id: string }>(sql`
-        select location_id from stock_locations where org_id=${org.orgId} and id=${org.stockLocationId2}`))).rows[0]!;
+        select location_id from stock_locations where org_id=${org.orgId} and id=${org.stockLocationId2}`, "objects")))[0]!;
       assert.ok(destination.location_id, "the transferred stock must have a business location");
       async function reviewCount(quantity: string) {
         const count = await run(() =>
@@ -133,13 +131,13 @@ test(
       const missing = await reviewCount("0");
       await post(missing);
       const missingLine = (await run(() => db.execute<{ adjustment_movement_id: string }>(sql`
-        select adjustment_movement_id from stock_count_lines where org_id=${org.orgId} and id=${missing.line.id}`))).rows[0]!;
+        select adjustment_movement_id from stock_count_lines where org_id=${org.orgId} and id=${missing.line.id}`, "objects")))[0]!;
       const snapshot = () => run(async () => {
-        const state = (await db.execute(sql`select status,current_stock_location_id,current_missing_count_movement_id
-          from serials where org_id=${org.orgId} and id=${serial}`)).rows;
-        const effects = (await db.execute(sql`select (select count(*) from inventory_movements where org_id=${org.orgId}) as movements,
+        const state = await db.execute(sql`select status,current_stock_location_id,current_missing_count_movement_id
+          from serials where org_id=${org.orgId} and id=${serial}`, "objects");
+        const effects = await db.execute(sql`select (select count(*) from inventory_movements where org_id=${org.orgId}) as movements,
           (select count(*) from journal_entries where org_id=${org.orgId}) as entries,
-          (select sum(remaining_quantity) from cost_layers where org_id=${org.orgId}) as remaining`)).rows;
+          (select sum(remaining_quantity) from cost_layers where org_id=${org.orgId}) as remaining`, "objects");
         return { state, effects };
       });
       const absent = await snapshot();
@@ -180,17 +178,15 @@ test(
       await post(missingAgain);
       assert.notEqual((await snapshot()).state[0]!.current_missing_count_movement_id,missingLine.adjustment_movement_id);
       await post(await reviewCount("1"));
-      const restored = (
-        await run(() =>
+      const restored = (await run(() =>
           db.execute<{
             status: string;
             lot_id: string;
             current_stock_location_id: string;
           }>(
-            sql`select status,lot_id,current_stock_location_id from serials where org_id=${org.orgId} and id=${serial}`,
+            sql`select status,lot_id,current_stock_location_id from serials where org_id=${org.orgId} and id=${serial}`, "objects",
           ),
-        )
-      ).rows[0]!;
+        ))[0]!;
       assert.equal(restored.status, "in_stock");
       assert.equal(restored.lot_id, lot);
       assert.equal(restored.current_stock_location_id, org.stockLocationId2);

@@ -108,8 +108,8 @@ async function seed(): Promise<Fixture> {
 
   // createScratchOrg seeds two active locations but returns only the first.
   const locationRows = (await db.execute<{ id: string }>(sql`
-    select id from locations where org_id = ${org.orgId} and is_active order by name`));
-  assert.equal(locationRows.rows.length >= 2, true, "scratch org seeds two locations");
+    select id from locations where org_id = ${org.orgId} and is_active order by name`, "objects"));
+  assert.equal(locationRows.length >= 2, true, "scratch org seeds two locations");
 
   const customers: string[] = [];
   for (const name of ["Customer One", "Customer Two"]) {
@@ -130,7 +130,7 @@ async function seed(): Promise<Fixture> {
     bookId,
     storedLineIds,
     lineItems,
-    locations: [locationRows.rows[0]!.id, locationRows.rows[1]!.id],
+    locations: [locationRows[0]!.id, locationRows[1]!.id],
     customers: customers as [string, string],
   };
 }
@@ -225,7 +225,7 @@ test('labor card saves refuse unowned kept lines and missing registration withou
         'targets',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]'::jsonb) from labor_rate_adjustment_targets t where t.org_id=${orgId}),
         'terms',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]'::jsonb) from labor_rate_terms t where t.org_id=${orgId}),
         'audit',(select coalesce(jsonb_agg(to_jsonb(a) order by a.id),'[]'::jsonb) from audit_log a where a.org_id=${orgId})
-      ) as state`)).rows[0]!.state)
+      ) as state`, "objects"))[0]!.state)
     const before = await snapshot(fixture.orgId)
     const foreignBefore = await snapshot(foreign.orgId)
     for (const invalidLine of [randomUUID(), foreign.storedLineIds[0]!]) {
@@ -239,8 +239,8 @@ test('labor card saves refuse unowned kept lines and missing registration withou
     }
     await withBypass(async () => {
       const removed = await db.execute(sql`delete from labor_rate_version_policies
-        where org_id=${fixture.orgId} and version_id=${fixture.versionId} returning id`)
-      assert.equal(removed.rows.length, 1)
+        where org_id=${fixture.orgId} and version_id=${fixture.versionId} returning id`, "objects")
+      assert.equal(removed.length, 1)
     })
     const unregisteredBefore = await snapshot(fixture.orgId)
     const missing = await withOrgContext(fixture.orgId, () => put(fixture, putBody(fixture)))
@@ -265,12 +265,12 @@ test(
 
       await withOrgContext(fixture.orgId, async () => {
         const book = (await db.execute<{ name: string; code: string }>(sql`
-          select name, code from item_rate_books where id = ${fixture.bookId}`));
-        assert.deepEqual(book.rows[0], { name: "Field Crew Rates", code: "FIELD2" });
+          select name, code from item_rate_books where id = ${fixture.bookId}`, "objects"));
+        assert.deepEqual(book[0], { name: "Field Crew Rates", code: "FIELD2" });
 
         const version = (await db.execute<{ status: string }>(sql`
-          select status from item_rate_versions where id = ${fixture.versionId}`));
-        assert.equal(version.rows[0]?.status, "active");
+          select status from item_rate_versions where id = ${fixture.versionId}`, "objects"));
+        assert.equal(version[0]?.status, "active");
 
         // All three re-sent stored lines survive the not(id = any(...)) prune,
         // re-pointed at their items with fresh rates in payload order.
@@ -278,39 +278,39 @@ test(
           select id, bill_rate::text as "billRate", sort_order as "sortOrder"
             from item_rate_lines
            where version_id = ${fixture.versionId}
-           order by sort_order`));
-        assert.deepEqual(lines.rows.map((row) => row.id), fixture.storedLineIds);
+           order by sort_order`, "objects"));
+        assert.deepEqual(lines.map((row) => row.id), fixture.storedLineIds);
         // All three re-sent stored lines survive the prune: the per-line
         // rate check below cannot pass over an empty set.
-        assert.equal(lines.rows.length, 3);
-        for (const row of lines.rows) assert.equal(row.billRate, "125.5000");
+        assert.equal(lines.length, 3);
+        for (const row of lines) assert.equal(row.billRate, "125.5000");
 
         const adjustments = (await db.execute<{ code: string; n_targets: number }>(sql`
           select a.code, count(at.id)::int as "nTargets"
             from labor_rate_adjustments a
             left join labor_rate_adjustment_targets at on at.adjustment_id = a.id and at.org_id = a.org_id
            where a.version_id = ${fixture.versionId} and a.org_id = ${fixture.orgId}
-           group by a.code order by a.code`));
-        assert.deepEqual(adjustments.rows, [
+           group by a.code order by a.code`, "objects"));
+        assert.deepEqual(adjustments, [
           { code: "markup", nTargets: 3 },
           { code: "rush", nTargets: 2 },
         ]);
 
         const scopes = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from labor_rate_version_scopes
-           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`));
-        assert.equal(scopes.rows[0]?.n, 2);
+           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`, "objects"));
+        assert.equal(scopes[0]?.n, 2);
 
         const terms = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from labor_rate_terms
-           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`));
-        assert.equal(terms.rows[0]?.n, 1);
+           where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}`, "objects"));
+        assert.equal(terms[0]?.n, 1);
 
         const audit = (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from audit_log
            where org_id = ${fixture.orgId} and table_name = 'item_rate_versions'
-             and row_id = ${fixture.versionId} and action = 'update'`));
-        assert.equal(audit.rows[0]?.n, 1);
+             and row_id = ${fixture.versionId} and action = 'update'`, "objects"));
+        assert.equal(audit[0]?.n, 1);
       });
     });  },
 );
@@ -332,8 +332,8 @@ test(
         const remaining = (await db.execute<{ id: string }>(sql`
           select id from item_rate_lines
            where version_id = ${fixture.versionId} and org_id = ${fixture.orgId}
-           order by sort_order`));
-        assert.deepEqual(remaining.rows.map((row) => row.id), keepTwo);
+           order by sort_order`, "objects"));
+        assert.deepEqual(remaining.map((row) => row.id), keepTwo);
       });
     });  },
 );
@@ -374,8 +374,8 @@ test(
       assert.deepEqual(await response.json(), { errorCode: "effectiveDate" });
       await withOrgContext(fixture.orgId, async () => {
         const version = (await db.execute<{ from: string; status: string }>(sql`
-          select effective_from::text as "from", status from item_rate_versions where id = ${fixture.versionId}`));
-        assert.deepEqual(version.rows[0], { from: "2026-07-01", status: "draft" });
+          select effective_from::text as "from", status from item_rate_versions where id = ${fixture.versionId}`, "objects"));
+        assert.deepEqual(version[0], { from: "2026-07-01", status: "draft" });
       });
     });  },
 );
@@ -397,7 +397,7 @@ test(
       const refusedPayload = (await refused.json()) as { errorCode?: string };
       assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(refusedPayload)}`);
       assert.equal(refusedPayload.errorCode, "unknownCustomReference");
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from item_rate_versions where id = ${fixture.versionId}`)).rows[0]?.custom;
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from item_rate_versions where id = ${fixture.versionId}`, "objects"))[0]?.custom;
       assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, "refused references store nothing");
       const saved = await withOrgContext(fixture.orgId, () =>
         put(fixture, { ...putBody(fixture), custom: { ref_party: fixture.customers[0] } }));
@@ -439,8 +439,8 @@ test(
         assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(payload)}`);
         assert.equal(payload.errorCode, "target", JSON.stringify(target));
       }
-      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`));
-      assert.equal(stored.rows[0]?.n, 0, "refused targets store nothing");
+      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`, "objects"));
+      assert.equal(stored[0]?.n, 0, "refused targets store nothing");
     });  },
 );
 
@@ -499,8 +499,8 @@ test(
           from labor_rate_adjustment_targets t
           join labor_rate_adjustments a on a.id = t.adjustment_id and a.org_id = t.org_id
          where a.version_id = ${fixture.versionId} and a.org_id = ${fixture.orgId}
-         order by a.code`));
-      assert.deepEqual(stored.rows, [
+         order by a.code`, "objects"));
+      assert.deepEqual(stored, [
         { target_type: "labor", target_value_id: null, target_value_text: "labor" },
         { target_type: "material", target_value_id: null, target_value_text: "material" },
       ]);
@@ -550,8 +550,8 @@ test(
           ],
         }));
       assert.equal(percent.status, 200, `10dp percent must save: ${JSON.stringify(await percent.json())}`);
-      const stored = (await db.execute<{ value: string }>(sql`select value::text as value from labor_rate_adjustments where version_id = ${fixture.versionId}`));
-      assert.deepEqual(stored.rows.map((row) => row.value), ["3.1234567891"]);
+      const stored = (await db.execute<{ value: string }>(sql`select value::text as value from labor_rate_adjustments where version_id = ${fixture.versionId}`, "objects"));
+      assert.deepEqual(stored.map((row) => row.value), ["3.1234567891"]);
     });  },
 );
 
@@ -582,7 +582,7 @@ test(
         assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(payload)}`);
         assert.equal(payload.errorCode, "calculation", calculation);
       }
-      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`));
-      assert.equal(stored.rows[0]?.n, 0, "refused calculations store nothing");
+      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`, "objects"));
+      assert.equal(stored[0]?.n, 0, "refused calculations store nothing");
     });  },
 );

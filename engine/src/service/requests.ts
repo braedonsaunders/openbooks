@@ -48,7 +48,7 @@ export const REQUEST_COLUMNS = requestColumns(sql`service_requests`);
 
 export async function lockRequest(orgId: string, requestId: unknown): Promise<StoredRequest> {
   const row = (await db.execute<StoredRequest>(sql`select ${REQUEST_COLUMNS} from service_requests
-    where org_id = ${orgId} and id = ${requireUuid(requestId, "Request")} for update`)).rows[0];
+    where org_id = ${orgId} and id = ${requireUuid(requestId, "Request")} for update`, "objects"))[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
 }
@@ -87,13 +87,13 @@ function normalizeRequest(input: ServiceRequestInput) {
 
 async function insertRequest(orgId: string, input: { id: string; customer: Awaited<ReturnType<typeof resolveServiceCustomer>>; fields: ReturnType<typeof normalizeRequest>; source: "staff" | "portal"; actorId: string | null; portalLinkId: string | null }): Promise<StoredRequest> {
   const number = await allocateServiceNumber(orgId, "service_request");
-  const row = requireOne((await db.execute<StoredRequest>(sql`insert into service_requests
+  const row = requireOne(await db.execute<StoredRequest>(sql`insert into service_requests
       (id, org_id, subsidiary_id, request_number, customer_party_id, service_address_id, contact_id, title, description, priority, preferred_on, preferred_time,
        source, portal_link_id, status, created_by, updated_by)
     values (${input.id}, ${orgId}, ${input.customer.subsidiaryId}, ${number}, ${input.customer.customerPartyId}, ${input.customer.serviceAddressId}, ${input.customer.contactId},
       ${input.fields.title}, ${input.fields.description}, ${input.fields.priority}, ${input.fields.preferredOn}, ${input.fields.preferredTime},
       ${input.source}, ${input.portalLinkId}, 'new', ${input.actorId}, ${input.actorId})
-    returning ${REQUEST_COLUMNS}`)).rows, "The service request");
+    returning ${REQUEST_COLUMNS}`, "objects"), "The service request");
   await auditService({ orgId, table: "service_requests", rowId: row.id, action: "insert", actorId: input.actorId, after: row,
     reason: input.source === "portal" ? "Submitted through the customer portal" : null });
   return row;
@@ -106,7 +106,7 @@ export async function createServiceRequest(actor: ServiceActor & { id: string; i
   return withOrgTransaction(actor.orgId, async () => {
     const allowed = await serviceAuthority(actor, "service.manage", null);
     await lockCommandKey("service-request", actor.orgId, id);
-    const existing = (await db.execute<StoredRequest>(sql`select ${REQUEST_COLUMNS} from service_requests where org_id = ${actor.orgId} and id = ${id}`)).rows[0];
+    const existing = (await db.execute<StoredRequest>(sql`select ${REQUEST_COLUMNS} from service_requests where org_id = ${actor.orgId} and id = ${id}`, "objects"))[0];
     if (existing) {
       if (existing.createdBy !== actor.actorId || existing.title !== fields.title || existing.customerPartyId !== actor.input.customerPartyId) {
         throw new ServiceError("This request key was already used for a different request.", { status: 409, code: "service_key_reused", remedy: "Reload; the existing request is preserved." });
@@ -128,7 +128,7 @@ export async function createPortalServiceRequest(input: { orgId: string; partyId
   return withOrgTransaction(input.orgId, async () => {
     await lockServiceFeature(input.orgId);
     await lockCommandKey("service-request", input.orgId, id);
-    const existing = (await db.execute<StoredRequest>(sql`select ${REQUEST_COLUMNS} from service_requests where org_id = ${input.orgId} and id = ${id}`)).rows[0];
+    const existing = (await db.execute<StoredRequest>(sql`select ${REQUEST_COLUMNS} from service_requests where org_id = ${input.orgId} and id = ${id}`, "objects"))[0];
     if (existing) {
       if (existing.customerPartyId !== input.partyId || existing.source !== "portal" || existing.title !== fields.title) {
         throw new ServiceError("This request was already submitted with different details.", { status: 409, code: "service_key_reused", remedy: "Reload the page to see your requests." });
@@ -150,10 +150,10 @@ export async function updateServiceRequest(actor: ServiceActor & { requestId: st
     if (!requestIsOpen(request.status)) throw new ServiceError("A closed request keeps its details.", { status: 409, code: "service_invalid_transition", remedy: "Open the job created from it, or take a new request." });
     if (actor.input.customerPartyId !== request.customerPartyId) throw new ServiceError("A request keeps its customer.", { code: "service_invalid", remedy: "Cancel it and take a new request for the other customer." });
     const customer = await resolveServiceCustomer(actor.orgId, allowed, { ...actor.input, subsidiaryId: request.subsidiaryId });
-    const row = requireOne((await db.execute<StoredRequest>(sql`update service_requests set service_address_id = ${customer.serviceAddressId}, contact_id = ${customer.contactId},
+    const row = requireOne(await db.execute<StoredRequest>(sql`update service_requests set service_address_id = ${customer.serviceAddressId}, contact_id = ${customer.contactId},
         title = ${fields.title}, description = ${fields.description}, priority = ${fields.priority}, preferred_on = ${fields.preferredOn}, preferred_time = ${fields.preferredTime},
         revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning ${REQUEST_COLUMNS}`)).rows, "The request");
+      where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning ${REQUEST_COLUMNS}`, "objects"), "The request");
     await auditService({ orgId: actor.orgId, table: "service_requests", rowId: request.id, action: "update", actorId: actor.actorId, before: request, after: row });
     return row;
   }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
@@ -165,10 +165,10 @@ export async function setRequestStatus(actor: ServiceActor, request: StoredReque
   if (!requestTransitionAllowed(request.status, to)) {
     throw new ServiceError(`A ${request.status.replace(/_/g, " ")} request cannot become ${to.replace(/_/g, " ")}.`, { status: 409, code: "service_invalid_transition", remedy: "Reload the request." });
   }
-  const row = requireOne((await db.execute<StoredRequest>(sql`update service_requests set status = ${to},
+  const row = requireOne(await db.execute<StoredRequest>(sql`update service_requests set status = ${to},
       close_reason = ${to === "declined" || to === "cancelled" ? extra.reason ?? null : null},
       revision = revision + 1, updated_at = now(), updated_by = ${actorRef(actor)}
-    where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning ${REQUEST_COLUMNS}`)).rows, "The request");
+    where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning ${REQUEST_COLUMNS}`, "objects"), "The request");
   await auditService({ orgId: actor.orgId, table: "service_requests", rowId: request.id, action: "update", actorId: actorRef(actor),
     before: { status: request.status }, after: { status: to }, reason: extra.reason ?? null });
   return row;
@@ -182,9 +182,9 @@ export async function closeServiceRequest(actor: ServiceActor & { requestId: str
     const request = await lockRequest(actor.orgId, actor.requestId);
     checkRequestRevision(request, actor.expectedRevision);
     await serviceAuthority(actor, "service.manage", request.subsidiaryId);
-    const visits = (await db.execute<{ id: string }>(sql`select id from service_visits where org_id = ${actor.orgId} and request_id = ${request.id}
-      and status in ('unscheduled','scheduled','dispatched') order by sequence`)).rows;
-    const active = (await db.execute(sql`select 1 from service_visits where org_id = ${actor.orgId} and request_id = ${request.id} and status in ('en_route','on_site') limit 1`)).rows[0];
+    const visits = await db.execute<{ id: string }>(sql`select id from service_visits where org_id = ${actor.orgId} and request_id = ${request.id}
+      and status in ('unscheduled','scheduled','dispatched') order by sequence`, "objects");
+    const active = (await db.execute(sql`select 1 from service_visits where org_id = ${actor.orgId} and request_id = ${request.id} and status in ('en_route','on_site') limit 1`, "objects"))[0];
     if (active) throw new ServiceError("An assessment is in progress.", { status: 409, code: "service_invalid_transition", remedy: "Wait for the assessment visit to finish." });
     for (const { id } of visits) await cancelVisitInTransaction(actor, await lockVisit(actor.orgId, id), reason);
     return setRequestStatus(actor, request, actor.outcome, { reason });
@@ -221,7 +221,7 @@ export type PortalServiceRequest = {
 export async function listPortalServiceRequests(orgId: string, partyId: string): Promise<PortalServiceRequest[]> {
   return withOrgTransaction(orgId, async () => {
     await lockServiceFeature(orgId);
-    return (await db.execute<PortalServiceRequest>(sql`select r.id, r.request_number as "requestNumber", r.title, r.status, r.preferred_on::text as "preferredOn",
+    return await db.execute<PortalServiceRequest>(sql`select r.id, r.request_number as "requestNumber", r.title, r.status, r.preferred_on::text as "preferredOn",
         to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
         (select to_char(min(e.starts_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') from service_visits v
            join schedule_entries e on e.org_id = v.org_id and e.service_visit_id = v.id and e.status = 'published'
@@ -229,6 +229,6 @@ export async function listPortalServiceRequests(orgId: string, partyId: string):
         j.status as "jobStatus"
       from service_requests r left join service_jobs j on j.org_id = r.org_id and j.request_id = r.id
       where r.org_id = ${orgId} and r.customer_party_id = ${partyId}
-      order by r.created_at desc, r.id limit 100`)).rows;
+      order by r.created_at desc, r.id limit 100`, "objects");
   }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
 }

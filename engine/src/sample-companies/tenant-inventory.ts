@@ -14,9 +14,9 @@ export async function sampleTenantInventory() {
 
 /** Shared metadata reader participates in an already pinned read-only snapshot. */
 export async function readSampleTenantInventory() {
-  const mode = (await db.execute<{ readOnly: string }>(sql`select current_setting('transaction_read_only') as "readOnly"`)).rows[0];
+  const mode = (await db.execute<{ readOnly: string }>(sql`select current_setting('transaction_read_only') as "readOnly"`, "objects"))[0];
   if (mode?.readOnly !== 'on') throw new SampleCompanyError('Tenant inventory requires a read-only transaction.');
-    const rows = (await db.execute<{
+    const rows = await db.execute<{
       database: string; serverAddress: string; serverPort: number; clusterName: string; id: string; name: string; environment: string; createdAt: string; sourceOrgId: string | null;
       simHarness: boolean; simProfile: string | null; template: Record<string, unknown> | null;
       member: Record<string, unknown> | null; version: number; documents: number; postedEntries: number;
@@ -32,7 +32,7 @@ export async function readSampleTenantInventory() {
       (select count(*)::int from user_org_access access where access.org_id=o.id and access.is_active) as "memberAccess",
       (select id from sandboxes s where s.org_id=o.id) as "sandboxId",
       (select status from sandboxes s where s.org_id=o.id) as "sandboxStatus"
-      from orgs o order by o.name,o.id`)).rows;
+      from orgs o order by o.name,o.id`, "objects");
     return rows.map(row => {
       const profileId = row.member?.profileId ?? row.template?.profileId ?? row.simProfile;
       const profile = SAMPLE_COMPANY_PROFILES.find(profile => profile.profileId === profileId);

@@ -184,11 +184,11 @@ type ClaimedDelivery = {
 async function claimDueDeliveries(limit: number, now: Date): Promise<ClaimedDelivery[]> {
   // bypass: scheduler-tick — the delivery scan claims due items by id before their organization is in scope.
   return withBypassContext(async () => {
-    const candidates = (await db.execute<{ id: string }>(sql`
+    const candidates = await db.execute<{ id: string }>(sql`
       select id from webhook_deliveries
        where status = 'pending' and next_attempt_at <= ${now}
        order by next_attempt_at asc limit ${limit}
-    `)).rows;
+    `, "objects");
     const claimed: ClaimedDelivery[] = [];
     for (const candidate of candidates) {
       // Atomic per-row claim: a rival that already moved the row matches
@@ -213,7 +213,7 @@ async function claimDueDeliveries(limit: number, now: Date): Promise<ClaimedDeli
                   ep.consecutive_failures as "consecutiveFailures",
                   ep.auto_disable_after as "autoDisableAfter",
                   ep.status as "endpointStatus"
-      `)).rows[0];
+      `, "objects"))[0];
       if (row) claimed.push(row);
     }
     return claimed;
@@ -228,9 +228,9 @@ async function notifyWebhookAdmins(
   orgId: string,
   input: { title: string; body: string; href: string },
 ): Promise<void> {
-  const candidates = (await db.execute<{ id: string }>(sql`
+  const candidates = await db.execute<{ id: string }>(sql`
     select id::text as id from users where org_id = ${orgId} and is_active
-  `)).rows;
+  `, "objects");
   const recipients: { id: string }[] = [];
   for (const candidate of candidates) {
     if (await actorHasPermission(db, orgId, candidate.id, "webhooks.manage")) {
@@ -243,14 +243,14 @@ async function notifyWebhookAdmins(
        where org_id = ${orgId} and user_id = ${recipient.id}::uuid
          and kind = 'webhook_endpoint_disabled' and href = ${input.href} and read_at is null
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (existing) continue;
     const inserted = (await db.execute<{ id: string }>(sql`
       insert into notifications (org_id, user_id, kind, title, body, href)
       values (${orgId}, ${recipient.id}::uuid, 'webhook_endpoint_disabled',
               ${input.title}, ${input.body}, ${input.href})
       returning id
-    `)).rows[0]?.id;
+    `, "objects"))[0]?.id;
     if (!inserted) {
       throw new WebhookDeliveryError("the endpoint-disabled notice was not stored — no row was written; retry the action");
     }
@@ -264,7 +264,7 @@ async function disableEndpoint(
   actorId: string | null,
   now: Date,
 ): Promise<void> {
-  const updated = await db.execute(sql`
+  const updated = await db.execute<never>(sql`
     update webhook_endpoints
        set status = 'disabled', disabled_at = ${now}, disabled_reason = ${reason}, updated_at = now(),
            updated_by = ${actorId}::uuid
@@ -301,7 +301,7 @@ async function recordAttemptOutcome(
 ): Promise<void> {
   await withOrgContext(delivery.orgId, async () => {
     if (outcome.kind === "delivered") {
-      const updated = await db.execute(sql`
+      const updated = await db.execute<never>(sql`
         update webhook_deliveries
            set status = 'delivered', last_response_code = ${outcome.code},
                last_response_excerpt = ${outcome.excerpt}, last_latency_ms = ${latencyMs},
@@ -391,7 +391,7 @@ async function noteEndpointFailure(delivery: ClaimedDelivery, error: string, now
            updated_at = now()
      where org_id = ${delivery.orgId} and id = ${delivery.endpointId}::uuid
     returning consecutive_failures as failures, auto_disable_after as threshold
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new WebhookDeliveryError("the endpoint failure streak was not stored — no row was written; retry the action");
   }
@@ -501,7 +501,7 @@ export async function attemptDeliveryNow(
                 ep.consecutive_failures as "consecutiveFailures",
                 ep.auto_disable_after as "autoDisableAfter",
                 ep.status as "endpointStatus"
-    `)).rows[0];
+    `, "objects"))[0];
     return row ?? null;
   });
   if (!claimed) {

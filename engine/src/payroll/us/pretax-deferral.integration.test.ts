@@ -229,8 +229,8 @@ const stubFactors = async (fx: Fixture, documentId: string, employeePartyId: str
     select factors from pay_stubs
      where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}
        and employee_party_id = ${employeePartyId}
-  `));
-  return r.rows[0]?.factors ?? null;
+  `, "objects"));
+  return r[0]?.factors ?? null;
 };
 
 test(
@@ -407,7 +407,7 @@ test(
       const priorStateStub = (await db.execute<{ province: string }>(sql`
         select province from pay_stubs
          where org_id = ${fx.orgId} and employee_party_id = ${employee}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(priorStateStub?.province, "TX", "the committed stub preserves the prior work state");
       // Year-to-date reads scope stubs to the assigned account's employer,
       // the same scoping the run's own money path passes — otherwise the
@@ -464,7 +464,7 @@ test(
         orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
       });
       assert.deepEqual(result.errors, []);
-      const lines = (await db.execute<{
+      const lines = await db.execute<{
         employee_party_id: string; system_key: string; amount: string;
       }>(sql`
         select s.employee_party_id, pc.system_key, coalesce(sum(l.amount), 0)::text as amount
@@ -473,7 +473,7 @@ test(
           join pay_components pc on pc.org_id = l.org_id and pc.id = l.component_id
          where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind = 'employer_contribution' and pc.system_key in ('futa', 'suta')
-         group by s.employee_party_id, pc.system_key`)).rows;
+         group by s.employee_party_id, pc.system_key`, "objects");
       const amount = (employee: string, systemKey: string) =>
         lines.find((line) => line.employee_party_id === employee && line.system_key === systemKey)?.amount ?? "0";
       assert.equal(amount(futaOnlyExempt, "futa"), "0");
@@ -514,7 +514,7 @@ async function qualifyUsOpeningLevySource(
     reason: 'Qualify the exact original US opening source', allowedSubsidiaryIds: null,
   });
   const expectedOpeningChildrenSha256=(await db.execute<{sha:string}>(sql`select encode(public.digest(public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year)::text,'sha256'),'hex') as sha
-    from payroll_opening_balances b where b.org_id=${fx.orgId} and b.id=${context.record.id}`)).rows[0]!.sha;
+    from payroll_opening_balances b where b.org_id=${fx.orgId} and b.id=${context.record.id}`, "objects"))[0]!.sha;
   await qualifyOpeningLevySourceAuthority({
     expectedOpeningChildrenSha256,
     orgId: fx.orgId, actorId: fx.actorId, openingBalanceId: context.record.id,

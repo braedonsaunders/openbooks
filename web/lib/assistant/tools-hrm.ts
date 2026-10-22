@@ -300,14 +300,14 @@ async function visibleEmploymentIds(
   // Identity enumeration only: a null employer is invisible (authorization
   // refuses such subjects, so the list twin excludes them rather than
   // leaking their ids). Versions and requests come from the loader below.
-  const rows = (await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(sql`
     select id::text as id
       from worker_employments
      where org_id = ${orgId}
        and employer_subsidiary_id is not null
        ${subsidiaryVisibleFilter(sql`employer_subsidiary_id`, allowedSubsidiaryIds)}
      order by id
-     limit ${max + 1}`)).rows;
+     limit ${max + 1}`, "objects");
   return { ids: rows.slice(0, max).map((row) => row.id), truncated: rows.length > max };
 }
 
@@ -403,10 +403,10 @@ const hrmChangeRequests: AssistantToolDef = {
       const appliedIds = [...new Set(collected.map((row) => row.appliedEmploymentChangeId).filter((id): id is string => id !== null))];
       const verbByChange = new Map<string, string>();
       if (appliedIds.length > 0) {
-        const verbs = (await db.execute<{ id: string; verb: string }>(sql`
+        const verbs = await db.execute<{ id: string; verb: string }>(sql`
           select id::text as id, verb from employment_changes
            where org_id = ${authz.user.orgId}::uuid and id = any(${sql.param(appliedIds)}::uuid[])
-        `)).rows;
+        `, "objects");
         for (const v of verbs) verbByChange.set(v.id, v.verb);
       }
       const page = compactRows(
@@ -1482,8 +1482,7 @@ const automationsStatus: AssistantToolDef = {
     try {
       const { listAutomations } = await import("@openbooks/engine/automations/services");
       const automations = await listAutomations(authz.user.orgId, authz.user.id);
-      const runs = (
-        await db.execute<{
+      const runs = await db.execute<{
           id: string;
           automationId: string;
           status: string;
@@ -1499,8 +1498,7 @@ const automationsStatus: AssistantToolDef = {
            where r.org_id = ${authz.user.orgId}::uuid
              and (${a.status ?? null}::text is null or r.status = ${a.status ?? null}::text)
            order by r.created_at desc limit ${limit}
-        `)
-      ).rows;
+        `, "objects");
       return {
         ok: true,
         data: {

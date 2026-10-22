@@ -57,12 +57,13 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
-      export const db = { execute: async (query) => {
-        if (JSON.stringify(query).includes('from documents')) return { rows: [{ submittedBy: state.documentSubmitterId }] }
+      export const db = { execute: async (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
+        if (JSON.stringify(query).includes('from documents')) return inMode({ rows: [{ submittedBy: state.documentSubmitterId }] })
         state.flowQueries += 1
-        if (JSON.stringify(query).includes('flow_gates')) return { rows: state.gateRows ?? [] }
-        if (JSON.stringify(query).includes('flow_runs')) return { rows: state.runRows ?? [] }
-        return { rows: [] }
+        if (JSON.stringify(query).includes('flow_gates')) return inMode({ rows: state.gateRows ?? [] })
+        if (JSON.stringify(query).includes('flow_runs')) return inMode({ rows: state.runRows ?? [] })
+        return inMode({ rows: [] })
       } }
       export async function withOrgContext(_orgId, fn) { return fn() }
       export async function withOrgTransaction(_orgId, fn) { return fn() }

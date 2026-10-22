@@ -86,7 +86,7 @@ test('a back-filled earlier residency certificate makes the earlier run calculat
     }>(sql`
       select answers, effective_from::text as effective_from, superseded_on::text as superseded_on
         from employee_tax_certificates
-       where org_id = ${org.orgId} and employee_party_id = ${hire}`))).rows.map((row) => ({
+       where org_id = ${org.orgId} and employee_party_id = ${hire}`, 'objects'))).map((row) => ({
       certificateKey: 'us_w4_tax_residency', answers: row.answers,
       effectiveFrom: row.effective_from, supersededOn: row.superseded_on,
     }))
@@ -110,7 +110,7 @@ test('a back-filled earlier residency certificate makes the earlier run calculat
       select answers, effective_from::text as effective_from, superseded_on::text as superseded_on
         from employee_tax_certificates
        where org_id = ${org.orgId} and employee_party_id = ${hire}
-       order by effective_from`))).rows.map((row) => ({
+       order by effective_from`, 'objects'))).map((row) => ({
       certificateKey: 'us_w4_tax_residency', answers: row.answers,
       effectiveFrom: row.effective_from, supersededOn: row.superseded_on,
     }))
@@ -157,7 +157,7 @@ test('back-fill works for every row-backed US certificate, not just the federal 
       select answers, effective_from::text as effective_from, superseded_on::text as superseded_on
         from employee_tax_certificates
        where org_id = ${org.orgId} and employee_party_id = ${hire}
-       order by effective_from`))).rows.map((row) => ({
+       order by effective_from`, 'objects'))).map((row) => ({
       certificateKey: 'us_ca_de4', answers: row.answers,
       effectiveFrom: row.effective_from, supersededOn: row.superseded_on,
     }))
@@ -179,15 +179,15 @@ test('voiding a filing keeps history and audits the reason', async () => {
     assert.equal(filed.status, 200, await filed.clone().text())
     const id = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id::text as id from employee_tax_certificates
-       where org_id = ${org.orgId} and employee_party_id = ${hire}`))).rows[0]!.id
+       where org_id = ${org.orgId} and employee_party_id = ${hire}`, 'objects')))[0]!.id
     const voided = await request('DELETE', { id, reason: 'Filed for the wrong employee; re-filing under the correct record.' })
     assert.equal(voided.status, 200, await voided.clone().text())
-    const after = (await withOrgContext(org.orgId, () => db.execute<{
+    const after = await withOrgContext(org.orgId, () => db.execute<{
       answers: Record<string, string>; effective_from: string | null; superseded_on: string | null;
     }>(sql`
       select answers, effective_from::text as effective_from, superseded_on::text as superseded_on
         from employee_tax_certificates
-       where org_id = ${org.orgId} and employee_party_id = ${hire}`))).rows
+       where org_id = ${org.orgId} and employee_party_id = ${hire}`, 'objects'))
     // History is preserved: the row and its answers stay on file, closed.
     assert.equal(after.length, 1)
     assert.deepEqual(after[0]!.answers, { alien_status: 'nonresident_alien' })
@@ -196,7 +196,7 @@ test('voiding a filing keeps history and audits the reason', async () => {
     const audit = (await withOrgContext(org.orgId, () => db.execute<{ changes: unknown }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'employee_tax_certificates' and row_id = ${id}::uuid
-       order by at desc limit 1`))).rows[0]!.changes as {
+       order by at desc limit 1`, 'objects')))[0]!.changes as {
       kind: string; reason: string; before: unknown; after: unknown;
     }
     assert.equal(audit.kind, 'certificate_void')
@@ -221,7 +221,7 @@ test('an unused filing keeps an editable effective date, with audit', async () =
     assert.equal(filed.status, 200, await filed.clone().text())
     const id = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
       select id::text as id from employee_tax_certificates
-       where org_id = ${org.orgId} and employee_party_id = ${hire}`))).rows[0]!.id
+       where org_id = ${org.orgId} and employee_party_id = ${hire}`, 'objects')))[0]!.id
     const corrected = await request('PATCH', {
       id, effectiveFrom: '2024-01-15', reason: 'Certificate was signed at hire; correcting the effective date.',
     })
@@ -229,12 +229,12 @@ test('an unused filing keeps an editable effective date, with audit', async () =
     assert.deepEqual(await corrected.json(), { ok: true, id, effectiveFrom: '2024-01-15', effectiveTo: null })
     const row = (await withOrgContext(org.orgId, () => db.execute<{ effective_from: string }>(sql`
       select effective_from::text as effective_from from employee_tax_certificates
-       where org_id = ${org.orgId} and id = ${id}::uuid`))).rows[0]!
+       where org_id = ${org.orgId} and id = ${id}::uuid`, 'objects')))[0]!
     assert.equal(row.effective_from, '2024-01-15')
     const audit = (await withOrgContext(org.orgId, () => db.execute<{ changes: unknown }>(sql`
       select changes from audit_log
        where org_id = ${org.orgId} and table_name = 'employee_tax_certificates' and row_id = ${id}::uuid
-         and changes->>'kind' = 'certificate_correction'`))).rows[0]!.changes as {
+         and changes->>'kind' = 'certificate_correction'`, 'objects')))[0]!.changes as {
       kind: string; reason: string; before: { effective_from: string; superseded_on: null };
       after: { effective_from: string; superseded_on: null };
     }

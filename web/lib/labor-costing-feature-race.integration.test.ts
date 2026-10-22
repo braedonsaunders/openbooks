@@ -98,10 +98,10 @@ async function setProjects(orgId: string, projects: boolean) {
 async function snapshot(orgId: string) {
   return withOrgContext(orgId, async () => {
     const result: Record<string, unknown> = {};
-    result.org = (await db.execute(sql`select settings,updated_at,updated_by from orgs where id=${orgId}`)).rows;
+    result.org = await db.execute(sql`select settings,updated_at,updated_by from orgs where id=${orgId}`, "objects");
     for (const table of ["labor_cost_rates", "journal_entries", "journal_lines", "audit_log"]) {
-      result[table] = (await db.execute(sql`select to_jsonb(t) as row from ${sql.identifier(table)} t
-        where org_id=${orgId} order by to_jsonb(t)::text`)).rows;
+      result[table] = await db.execute(sql`select to_jsonb(t) as row from ${sql.identifier(table)} t
+        where org_id=${orgId} order by to_jsonb(t)::text`, "objects");
     }
     return result;
   });
@@ -156,7 +156,7 @@ for (const action of ["settings", "save-rate", "end-rate", "delete-rate", "recon
         withOrgContext(org.orgId, () => handler(request(method, body)));
       const seeded = await withOrgContext(org.orgId, () => POST(request("POST", { action: "save-rate", currency: "CAD", rate: "30", effectiveFrom: periodStart })));
       assert.equal(seeded.status, 200);
-      const rate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`select id from labor_cost_rates where org_id=${org.orgId}`))).rows[0]!;
+      const rate = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`select id from labor_cost_rates where org_id=${org.orgId}`, "objects")))[0]!;
       const method = action === "settings" ? "PUT" : "POST";
       const handler = action === "settings" ? PUT : POST;
       const body: Record<string, unknown> = action === "settings"
@@ -256,15 +256,15 @@ test("concurrent labor settings saves serialize their before/after audit images"
       withOrgContext(org.orgId, () => PUT(request("PUT", { settings: { mode: "post", hoursPerDay } }))),
     ));
     assert.deepEqual(responses.map((response) => response.status), [200, 200]);
-    const images = (await withOrgContext(org.orgId, () => db.execute<{ before: { hoursPerDay: string } | null; after: { hoursPerDay: string } }>(sql`
+    const images = await withOrgContext(org.orgId, () => db.execute<{ before: { hoursPerDay: string } | null; after: { hoursPerDay: string } }>(sql`
       select changes->'laborCosting'->0 as before, changes->'laborCosting'->1 as after
-        from audit_log where org_id=${org.orgId} and table_name='orgs'`))).rows;
+        from audit_log where org_id=${org.orgId} and table_name='orgs'`, "objects"));
     assert.equal(images.length, 2);
     const first = images.find((row) => row.before === null)!;
     assert.ok(first, "exactly one settings save observes the original absent policy");
     const second = images.find((row) => row.before !== null)!;
     assert.deepEqual(second.before, first.after, "later save's before image must include the committed first save");
-    const persisted = (await withOrgContext(org.orgId, () => db.execute<{ policy: unknown }>(sql`select settings->'laborCosting' as policy from orgs where id=${org.orgId}`))).rows[0]!;
+    const persisted = (await withOrgContext(org.orgId, () => db.execute<{ policy: unknown }>(sql`select settings->'laborCosting' as policy from orgs where id=${org.orgId}`, "objects")))[0]!;
     assert.deepEqual(persisted.policy, second.after);
   } finally { state.gate = null; await dropScratchOrg(org.orgId); }
 });

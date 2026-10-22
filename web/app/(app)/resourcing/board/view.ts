@@ -96,7 +96,7 @@ export async function loadResourcingBoardPage(
       select id, name from departments where org_id = ${orgId} and is_active
         ${subsidiaryVisibleFilter(sql`departments.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by name, id
-    `),
+    `, "objects"),
     db.execute<JobTitleOption>(sql`
       select distinct er.job_title from employee_roles er
       join parties p on p.org_id = er.org_id and p.id = er.party_id
@@ -104,13 +104,13 @@ export async function loadResourcingBoardPage(
          and p.is_active
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by er.job_title
-    `),
+    `, "objects"),
     certificatesOn
       ? db.execute<QualificationOption>(sql`
           select id, name from hrm_qualification_types
            where org_id = ${orgId} and is_active order by name, id
-        `)
-      : Promise.resolve({ rows: [] as QualificationOption[] }),
+        `, "objects")
+      : Promise.resolve([] as QualificationOption[]),
     db.select({ id: projects.id, name: projects.name })
       .from(projects)
       .where(and(
@@ -220,9 +220,9 @@ export async function loadResourcingBoardPage(
     view,
     canManage: can(authz, "resourcing.manage"),
     filterOptions: {
-      departments: departments.rows.map((row) => ({ value: row.id, label: row.name })),
-      jobTitles: jobTitles.rows.map((row) => ({ value: row.job_title, label: row.job_title })),
-      skills: skills.rows.map((row) => ({ value: row.id, label: row.name })),
+      departments: departments.map((row) => ({ value: row.id, label: row.name })),
+      jobTitles: jobTitles.map((row) => ({ value: row.job_title, label: row.job_title })),
+      skills: skills.map((row) => ({ value: row.id, label: row.name })),
       projects: projectOptions.map((row) => ({ value: row.id, label: row.name })),
     },
     drawer,

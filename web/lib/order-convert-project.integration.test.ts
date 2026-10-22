@@ -31,9 +31,9 @@ test("an invoice converted from a project estimate carries the project and count
     await withBypassContext(() => db.execute(sql`insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity, unit_price, amount, project_id, created_by, updated_by) values (${org.orgId}, ${quote}, 1, ${org.items.service}, ${org.accounts.revenue}, 'Deposit', '1', '4200', '4200', ${project}, ${actor}, ${actor})`));
     await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${quote}`));
     const converted = await convertOrder(org.orgId, actor, quote, "customer_invoice");
-    const header = (await withBypassContext(() => db.execute<{ project_id: string | null }>(sql`select project_id from documents where id=${converted.id}`))).rows[0]!;
+    const header = (await withBypassContext(() => db.execute<{ project_id: string | null }>(sql`select project_id from documents where id=${converted.id}`, "objects")))[0]!;
     assert.equal(header.project_id, project, "converted invoice header carries the estimate project");
-    const lines = (await withBypassContext(() => db.execute<{ project_id: string | null }>(sql`select project_id from document_lines where document_id=${converted.id}`))).rows;
+    const lines = await withBypassContext(() => db.execute<{ project_id: string | null }>(sql`select project_id from document_lines where document_id=${converted.id}`, "objects"));
     assert.ok(lines.length > 0);
     for (const line of lines) assert.equal(line.project_id, project, "converted invoice lines carry the estimate project");
     await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${converted.id}`));

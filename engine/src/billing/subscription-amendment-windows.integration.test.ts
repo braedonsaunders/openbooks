@@ -19,7 +19,7 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
         for (const effectiveFrom of ['2026-02-30','2026-04-31','', 'not-a-date']) {
           await assert.rejects(createPlanVersion(org.orgId,actor,{...input,effectiveFrom}, null), AdvancedSubscriptionError);
         }
-        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_plan_versions where org_id=${org.orgId}`)).rows[0]!.n,0);
+        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_plan_versions where org_id=${org.orgId}`, 'objects'))[0]!.n,0);
         await createPlanVersion(org.orgId,actor,{...input,effectiveFrom:'2028-02-29'}, null);
         return;
       }
@@ -29,7 +29,7 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
         }
         await assert.rejects(createPlanVersion(org.orgId,actor,{...input,interval:'invalid' as 'monthly'}, null),AdvancedSubscriptionError);
         await assert.rejects(createPlanVersion(org.orgId,actor,{...input,billingTiming:'invalid' as 'advance'}, null),AdvancedSubscriptionError);
-        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_plan_versions where org_id=${org.orgId}`)).rows[0]!.n,0);
+        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_plan_versions where org_id=${org.orgId}`, 'objects'))[0]!.n,0);
         await createPlanVersion(org.orgId,actor,{...input,intervalCount:2}, null);
         return;
       }
@@ -47,7 +47,7 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
         for (const renewalTermMonths of [0, -1, 1.5, NaN, Infinity]) {
           await assert.rejects(applyAmendment(org.orgId,actor,{subscriptionId,type:'renew',effectiveOn:'2027-01-01',renewalTermMonths,idempotencyKey:randomUUID()}),AdvancedSubscriptionError);
         }
-        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_amendments where org_id=${org.orgId}`)).rows[0]!.n,0);
+        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_amendments where org_id=${org.orgId}`, 'objects'))[0]!.n,0);
         return;
       }
       await activateLifecycle(org.orgId,actor,{subscriptionId,planVersionId:version,termStartsOn:'2026-01-01',termEndsOn:'2027-01-01',renewalPolicy:'none'});
@@ -55,7 +55,7 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
       if (scenario === 'unknown amendment') {
         const invalid = {...amendment,type:'typo'} as unknown as Parameters<typeof applyAmendment>[2];
         await assert.rejects(applyAmendment(org.orgId,actor,invalid),AdvancedSubscriptionError);
-        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_amendments where org_id=${org.orgId}`)).rows[0]!.n,0);
+        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_amendments where org_id=${org.orgId}`, 'objects'))[0]!.n,0);
         return;
       }
       await applyAmendment(org.orgId,actor,amendment);
@@ -63,7 +63,7 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
         const earlier = {...amendment,effectiveOn:'2026-02-01',unitPrice:'20',idempotencyKey:randomUUID()};
         await applyAmendment(org.orgId,actor,earlier);
         assert.equal((await applyAmendment(org.orgId,actor,earlier)).replayed,true);
-        const rows=(await db.execute(sql`select effective_from::text,effective_to::text,unit_price::text from subscription_components where org_id=${org.orgId} and subscription_id=${subscriptionId} order by effective_from`)).rows;
+        const rows=await db.execute(sql`select effective_from::text,effective_to::text,unit_price::text from subscription_components where org_id=${org.orgId} and subscription_id=${subscriptionId} order by effective_from`, 'objects');
         assert.deepEqual(rows,[
           {effective_from:'2026-01-01',effective_to:'2026-01-31',unit_price:'10.0000'},
           {effective_from:'2026-02-01',effective_to:'2026-02-28',unit_price:'20.0000'},
@@ -71,7 +71,7 @@ for (const scenario of ['invalid dates', 'backdated replacement', 'overlapping a
         ]);
       } else {
         await assert.rejects(applyAmendment(org.orgId,actor,{...amendment,type:'add_component',name:'Overlap',effectiveOn:'2025-12-01',idempotencyKey:randomUUID()}),AdvancedSubscriptionError);
-        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_components where org_id=${org.orgId} and subscription_id=${subscriptionId}`)).rows[0]!.n,2);
+        assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from subscription_components where org_id=${org.orgId} and subscription_id=${subscriptionId}`, 'objects'))[0]!.n,2);
       }
     } finally { await dropScratchOrg(org.orgId); }
   });

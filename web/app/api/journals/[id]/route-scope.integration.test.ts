@@ -70,8 +70,8 @@ async function fixture() {
 async function revisionToken(documentId: string): Promise<string> {
   const row = (await db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
-      from documents where id = ${documentId}`))
-  return row.rows[0]!.updatedAt
+      from documents where id = ${documentId}`, 'objects'))
+  return row[0]!.updatedAt
 }
 
 const ctxFor = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -81,7 +81,7 @@ test('journal drawer loads wait on a rehome before reading detail', async () => 
   const writer = await pool.connect()
   let pending: Promise<Awaited<ReturnType<typeof loadJournalDoc>>> | undefined
   try {
-    const hidden = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and parent_id=${org.subsidiaryId} limit 1`)).rows[0]!.id
+    const hidden = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${org.orgId} and parent_id=${org.subsidiaryId} limit 1`, 'objects'))[0]!.id
     await writer.query('begin')
     await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
     const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
@@ -125,7 +125,7 @@ test('journal GET and DELETE enforce the caller subsidiary scope', async () => {
       )
       assert.equal(hiddenDelete.status, 404, JSON.stringify(await hiddenDelete.clone().json()))
       assert.equal(
-        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where id=${concealed}`)).rows[0]!.n,
+        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where id=${concealed}`, 'objects'))[0]!.n,
         1,
         'a refused delete keeps the journal',
       )
@@ -150,7 +150,7 @@ test('journal GET and DELETE enforce the caller subsidiary scope', async () => {
       )
       assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()))
       assert.equal(
-        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where id=${visible}`)).rows[0]!.n,
+        (await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where id=${visible}`, 'objects'))[0]!.n,
         0,
       )
     })

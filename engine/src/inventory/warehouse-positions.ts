@@ -47,8 +47,8 @@ export async function warehousePositions(
           join inventory_movements mv on mv.id = pc.issue_movement_id and mv.org_id = pc.org_id
          where pc.org_id = ${orgId} and pc.remaining_quantity <> 0 and pc.stock_location_id in (select id from scoped)
       ) p
-     order by 1, 2, 3`);
-  return r.rows;
+     order by 1, 2, 3`, "objects");
+  return r;
 }
 
 type StockLocationTreeRow = { id: string; parent_id: string | null; code: string; depth: number };
@@ -61,7 +61,7 @@ export async function assertStockLocationDeletionAllowed(
   orgId: string,
   stockLocationId: string,
 ): Promise<void> {
-  const locations = (await tx.execute<StockLocationTreeRow>(sql`
+  const locations = await tx.execute<StockLocationTreeRow>(sql`
     with recursive subtree as (
       select id, parent_id, code, 0 as depth
         from stock_locations where org_id = ${orgId} and id = ${stockLocationId}
@@ -73,7 +73,7 @@ export async function assertStockLocationDeletionAllowed(
     select location.id, location.parent_id, location.code, subtree.depth
       from subtree join stock_locations location on location.id = subtree.id and location.org_id = ${orgId}
      order by location.id
-     for update of location`)).rows;
+     for update of location`, "objects");
   if (locations.length === 0) {
     throw new WarehouseRefusal("stock location was not found", "stock_location_not_found", "choose an existing stock location", 422);
   }
@@ -89,7 +89,7 @@ export async function assertStockLocationDeletionAllowed(
       join stock_locations location on location.id = reservations.bin_id and location.org_id = ${orgId}
      where reservations.reserved > 0 and reservations.bin_id = any(${ids}::uuid[])
      order by reservations.pick_list_number, location.code
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (reservation) {
     const remedy = `ship or void pick list ${reservation.pick_list_number} first`;
     throw new WarehouseRefusal(
@@ -134,7 +134,7 @@ export async function assertStockLocationDeletionAllowed(
       join stock_locations location on location.id = refs.location_id and location.org_id = ${orgId}
      where location.id = any(${ids}::uuid[])
      order by location.code, refs.blocker
-     limit 1`)).rows[0];
+     limit 1`, "objects"))[0];
   if (history) {
     throw new WarehouseRefusal(
       `Stock location ${root.code} cannot be deleted because ${history.blocker} at ${history.code} preserves its audit history.`,
@@ -166,9 +166,9 @@ export async function assertWarehouseEmpty(tx: Runner, orgId: string, warehouse:
   }
   const remaining = [...byItem].filter(([, quantity]) => !isZero(quantity));
   if (remaining.length === 0) return;
-  const labels = (await tx.execute<{ id: string; label: string }>(sql`
+  const labels = await tx.execute<{ id: string; label: string }>(sql`
     select id, coalesce(nullif(code, ''), name) as label from items
-     where org_id = ${orgId} and id in (${sql.join(remaining.map(([id]) => sql`${id}`), sql`, `)})`)).rows;
+     where org_id = ${orgId} and id in (${sql.join(remaining.map(([id]) => sql`${id}`), sql`, `)})`, "objects");
   const labelOf = new Map(labels.map((row) => [row.id, row.label]));
   const listed = remaining
     .map(([itemId, quantity]) => ({ label: labelOf.get(itemId) ?? itemId, quantity }))
@@ -217,7 +217,7 @@ export async function warehouseStockTieOut(
       : subsidiaryIds.length === 0
         ? sql`and false`
         : sql`and ${column} in (${sql.join(subsidiaryIds.map((id) => sql`${id}::uuid`), sql`, `)})`;
-  const positions = (await runner.execute<WarehousePosition & { warehouseId: string | null }>(sql`
+  const positions = await runner.execute<WarehousePosition & { warehouseId: string | null }>(sql`
     select p.item_id as "itemId", p.stock_location_id as "stockLocationId", p.subsidiary_id as "subsidiaryId",
            stock_location_warehouse(${orgId}::uuid, p.stock_location_id) as "warehouseId"
       from (
@@ -229,7 +229,7 @@ export async function warehouseStockTieOut(
           join inventory_movements mv on mv.id = pc.issue_movement_id and mv.org_id = pc.org_id
          where pc.org_id = ${orgId} and pc.remaining_quantity <> 0 ${subsidiaryFilter(sql.raw("mv.subsidiary_id"))}
       ) p
-     order by 1, 2, 3`)).rows;
+     order by 1, 2, 3`, "objects");
   const valueByWarehouse = new Map<string | null, string[]>();
   for (const position of positions) {
     const onHand = await getOnHandWith(runner, orgId, position.itemId, position.stockLocationId, {
@@ -239,11 +239,11 @@ export async function warehouseStockTieOut(
     values.push(onHand.value);
     valueByWarehouse.set(position.warehouseId, values);
   }
-  const warehouses = (await runner.execute<{ id: string; code: string; name: string; status: WarehouseStatus }>(sql`
+  const warehouses = await runner.execute<{ id: string; code: string; name: string; status: WarehouseStatus }>(sql`
     select w.stock_location_id as id, sl.code, w.name, w.status
       from warehouses w join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
      where w.org_id = ${orgId}
-     order by sl.code`)).rows;
+     order by sl.code`, "objects");
   const rows: WarehouseTieOutRow[] = warehouses.map((w) => ({
     warehouseId: w.id,
     code: w.code,
@@ -253,8 +253,8 @@ export async function warehouseStockTieOut(
   }));
   const unassigned = valueByWarehouse.get(null);
   if (unassigned) rows.push({ warehouseId: null, code: null, name: null, status: null, value: sum(unassigned) });
-  const accounts = (await runner.execute<{ id: string }>(sql`
-    select distinct asset_account_id as id from item_inventory_profiles where org_id = ${orgId} order by 1`)).rows;
+  const accounts = await runner.execute<{ id: string }>(sql`
+    select distinct asset_account_id as id from item_inventory_profiles where org_id = ${orgId} order by 1`, "objects");
   const controlAccountIds = accounts.map((a) => a.id);
   let controlBalance = "0";
   if (controlAccountIds.length > 0) {
@@ -266,7 +266,7 @@ export async function warehouseStockTieOut(
        where l.org_id = ${orgId}
          and e.status in ('posted', 'reversed')
          and l.account_id in (${sql.join(controlAccountIds.map((id) => sql`${id}::uuid`), sql`, `)})
-         ${subsidiaryFilter(sql.raw("e.subsidiary_id"))}`)).rows[0];
+         ${subsidiaryFilter(sql.raw("e.subsidiary_id"))}`, "objects"))[0];
     controlBalance = sum([balance?.balance ?? "0"]);
   }
   const layerTotal = sum(rows.map((row) => row.value));

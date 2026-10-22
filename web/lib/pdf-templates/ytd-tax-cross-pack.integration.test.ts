@@ -74,7 +74,7 @@ async function seedStub(
         values (${randomUUID()}, ${orgId}, ${systemKey}, ${systemKey}, 'deduction', ${systemKey}, 110)
         on conflict do nothing`)
       const comp = (await db.execute<{ id: string }>(sql`
-        select id from pay_components where org_id = ${orgId} and system_key = ${systemKey}`)).rows[0]!
+        select id from pay_components where org_id = ${orgId} and system_key = ${systemKey}`, 'objects'))[0]!
       await db.execute(sql`
         insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount, sequence)
         values (${orgId}, ${stubId}, ${comp.id}, 'deduction', ${systemKey}, ${amount}, 110)`)

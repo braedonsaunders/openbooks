@@ -14,9 +14,9 @@ export async function validateEntitlementServiceTierConfiguration(executor: Pick
   let stored: Record<string, unknown> = {};
   if (rowId) {
     if (!isUuid(rowId)) throw new PayrollError('Select a saved service tier before changing its schedule.');
-    const result = await executor.execute<Record<string, unknown>>(sql`select * from entitlement_service_tiers where org_id=${orgId} and id=${rowId} for update`);
-    if (result.rows.length !== 1) throw new PayrollError('Service tier was not found in this organization; reopen its entitlement schedule.');
-    stored = Object.fromEntries(Object.entries(result.rows[0]!).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value]));
+    const result = await executor.execute<Record<string, unknown>>(sql`select * from entitlement_service_tiers where org_id=${orgId} and id=${rowId} for update`, 'objects');
+    if (result.length !== 1) throw new PayrollError('Service tier was not found in this organization; reopen its entitlement schedule.');
+    stored = Object.fromEntries(Object.entries(result[0]!).map(([key, value]) => [key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()), value]));
   }
   const values = { ...stored, ...body };
   const supplied = (value: unknown): boolean => value != null && value !== '';
@@ -39,13 +39,13 @@ export async function validateEntitlementServiceTierConfiguration(executor: Pick
   const target = hasPlan ? values.planId : values.componentId;
   if (!isUuid(target)) throw new PayrollError('Choose a saved entitlement plan or pay component for the service tier.');
   const reference = hasPlan
-    ? await executor.execute(sql`select id from entitlement_plans where org_id=${orgId} and id=${String(target)}`)
-    : await executor.execute<{ id: string; name: string; system_key: string | null }>(sql`select id,name,system_key from pay_components where org_id=${orgId} and id=${String(target)}`);
-  if (reference.rows.length !== 1) throw new PayrollError('Select a service-tier target in this organization.');
-  if (hasComponent && (reference.rows[0] as { system_key?: unknown }).system_key != null) throw new PayrollError('Engine-owned payroll components cannot have service gates; choose an employer-defined component instead.');
+    ? await executor.execute(sql`select id from entitlement_plans where org_id=${orgId} and id=${String(target)}`, 'objects')
+    : await executor.execute<{ id: string; name: string; system_key: string | null }>(sql`select id,name,system_key from pay_components where org_id=${orgId} and id=${String(target)}`, 'objects');
+  if (reference.length !== 1) throw new PayrollError('Select a service-tier target in this organization.');
+  if (hasComponent && (reference[0] as { system_key?: unknown }).system_key != null) throw new PayrollError('Engine-owned payroll components cannot have service gates; choose an employer-defined component instead.');
   if (supplied(values.employerSubsidiaryId)) {
     if (!isUuid(values.employerSubsidiaryId)) throw new PayrollError('Choose a saved legal employer or leave the employer empty for an organization-default schedule.');
-    const employer = await executor.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${String(values.employerSubsidiaryId)}`);
-    if (employer.rows.length !== 1) throw new PayrollError('Select a legal employer in this organization for the service schedule.');
+    const employer = await executor.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${String(values.employerSubsidiaryId)}`, 'objects');
+    if (employer.length !== 1) throw new PayrollError('Select a legal employer in this organization for the service schedule.');
   }
 }

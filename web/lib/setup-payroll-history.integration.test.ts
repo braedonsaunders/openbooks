@@ -47,8 +47,8 @@ for (const channel of ['PATCH', 'DELETE', 'import', 'preview'] as const) {
           values(${componentId},${org.orgId},'HISTORY','Historical earning','earning')`);
         await db.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount)
           values(${org.orgId},${stubId},${componentId},'earning','Historical earning','240')`);
-        const before = (await db.execute(sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`)).rows;
-        const auditBefore = (await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`)).rows;
+        const before = await db.execute(sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`, 'objects');
+        const auditBefore = await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`, 'objects');
         const body = {id: componentId, code: 'HISTORY', name: 'Changed earning', kind: 'earning', taxable: false};
         if (channel === 'import' || channel === 'preview') {
           const outcome = await setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId)
@@ -64,9 +64,9 @@ for (const channel of ['PATCH', 'DELETE', 'import', 'preview'] as const) {
           assert.equal(response.status,409);
           assert.match((await response.json()).error,/fixed after committed payroll/);
         }
-        assert.deepEqual((await db.execute(sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`)).rows,before);
-        assert.deepEqual((await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`)).rows,auditBefore);
-        assert.equal((await db.execute(sql`select component_id from pay_stub_lines where org_id=${org.orgId} and stub_id=${stubId}`)).rows[0]?.component_id,componentId);
+        assert.deepEqual(await db.execute(sql`select * from pay_components where org_id=${org.orgId} and id=${componentId}`, 'objects'),before);
+        assert.deepEqual(await db.execute(sql`select * from audit_log where org_id=${org.orgId} order by id`, 'objects'),auditBefore);
+        assert.equal((await db.execute(sql`select component_id from pay_stub_lines where org_id=${org.orgId} and stub_id=${stubId}`, 'objects'))[0]?.component_id,componentId);
       } finally {state.gate=null;await dropScratchOrg(org.orgId);}
     });
 }

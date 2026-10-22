@@ -29,25 +29,25 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function docState(orgId: string, id: string) {
-  const rows = (await db.execute<{ status: string; total: string; revision: string }>(sql`
+  const rows = await db.execute<{ status: string; total: string; revision: string }>(sql`
     select status, total::text as total, revision_seq::text as revision
-      from documents where id = ${id} and org_id = ${orgId}`)).rows;
+      from documents where id = ${id} and org_id = ${orgId}`, "objects");
   return rows[0]!;
 }
 
 async function lineState(orgId: string, orderId: string) {
-  const rows = (await db.execute<{ quantity: string; unitPrice: string; amount: string; taxInputAmount: string; taxAmount: string }>(sql`
+  const rows = await db.execute<{ quantity: string; unitPrice: string; amount: string; taxInputAmount: string; taxAmount: string }>(sql`
     select quantity::text as quantity, unit_price::text as "unitPrice", amount::text as amount,
            tax_input_amount::text as "taxInputAmount", tax_amount::text as "taxAmount"
-      from document_lines where org_id = ${orgId} and document_id = ${orderId}`)).rows;
+      from document_lines where org_id = ${orgId} and document_id = ${orderId}`, "objects");
   return rows[0]!;
 }
 
 async function latestDocumentAudit(orgId: string, id: string) {
-  const rows = (await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } }; requestId: string | null }>(sql`
+  const rows = await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } }; requestId: string | null }>(sql`
     select action, changes, request_id as "requestId" from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
-     order by at desc, id desc limit 1`)).rows;
+     order by at desc, id desc limit 1`, "objects");
   return rows[0]!;
 }
 
@@ -60,11 +60,11 @@ async function reopenAdvanceRestore(orgId: string, orderId: string, column: "qua
 async function seedApprovedPurchaseOrder(orgId: string, actorId: string): Promise<{ orderId: string; lineId: string }> {
   const orderId = await seedDraftDocument(orgId, { kind: "purchase_order", createdBy: actorId });
   const account = (await db.execute<{ id: string }>(sql`
-    select id from accounts where org_id = ${orgId} order by number limit 1`)).rows[0]!.id;
+    select id from accounts where org_id = ${orgId} order by number limit 1`, "objects"))[0]!.id;
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into document_lines(org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
     values (${orgId}, ${orderId}, 1, ${account}, 'Bulk grain', '3040', '10', '30400')
-    returning id`)).rows[0]!.id;
+    returning id`, "objects"))[0]!.id;
   const released = await submitAndReleaseIfUngated("purchase_order", orderId, actorId);
   assert.equal(released.autoApproved, true);
   return { orderId, lineId: inserted };
@@ -225,9 +225,9 @@ test("taxed amendments rebuild tax evidence and enforce the exact cancelled quan
     assert.equal(line.amount, '700.0000');
     assert.equal(line.taxInputAmount, '700.0000');
     assert.equal(line.taxAmount, '70.0000');
-    const components = (await db.execute<{ sequence: number; taxAmount: string }>(sql`
+    const components = await db.execute<{ sequence: number; taxAmount: string }>(sql`
       select sequence, tax_amount::text as "taxAmount" from document_line_tax_components
-       where org_id = ${org.orgId} and document_line_id = ${lineId} order by sequence`)).rows;
+       where org_id = ${org.orgId} and document_line_id = ${lineId} order by sequence`, "objects");
     assert.deepEqual(components, [{ sequence: 1, taxAmount: '70.0000' }]);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -306,20 +306,20 @@ test("a flow-governed order amends into pending_approval with a new run", { skip
     const orderId = await seedDraftDocument(org.orgId, { kind: "purchase_order", createdBy: actors.submitterId });
     const first = await submitForApproval("purchase_order", orderId, actors.submitterId);
     assert.equal(first.gated, true);
-    const gates = (await db.execute<{ id: string }>(sql`
-      select id from flow_gates where subject_id = ${orderId} and org_id = ${org.orgId}`)).rows;
+    const gates = await db.execute<{ id: string }>(sql`
+      select id from flow_gates where subject_id = ${orderId} and org_id = ${org.orgId}`, "objects");
     await decideGate({ gateId: gates[0]!.id, decision: "approved", userId: actors.approver1Id });
     assert.equal((await docState(org.orgId, orderId)).status, "approved");
 
     const account = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${org.orgId} order by number limit 1`)).rows[0]!.id;
+      select id from accounts where org_id = ${org.orgId} order by number limit 1`, "objects"))[0]!.id;
     // Approval predates the line (the flow test seeds a bare draft): reopen,
     // add the line the amendment will change, and restore.
     await db.execute(sql`update documents set status = 'draft' where id = ${orderId} and org_id = ${org.orgId}`);
     const lineId = (await db.execute<{ id: string }>(sql`
       insert into document_lines(org_id, document_id, line_number, account_id, description, quantity, unit_price, amount)
       values (${org.orgId}, ${orderId}, 1, ${account}, 'Bulk grain', '3040', '10', '30400')
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${org.orgId}`);
 
     const result = await amendPurchaseOrder({

@@ -349,10 +349,10 @@ export async function utilizationData(
   // No-billable-expectation departments are an explicit operator attribute
   // on the department record — never inferred from hours, so a quiet
   // department cannot silently leave the company scope.
-  const noBillRows = (await db.execute<{ id: string }>(sql`
+  const noBillRows = await db.execute<{ id: string }>(sql`
     select id from departments
      where org_id = ${orgId} and no_billable_expectation
-  `)).rows;
+  `, "objects");
   const noBillDepts = new Set(noBillRows.map((r) => r.id));
 
   // Overtime is actual hours above the employee's own work schedule for the
@@ -373,10 +373,10 @@ export async function utilizationData(
         select distinct on (er.party_id) er.party_id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id
           from employee_roles er
           join parties p on p.id = er.party_id and p.org_id = er.org_id
-         where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`),
+         where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects"),
       loadWorkSchedules(db, orgId, allowed),
     ]);
-    const keysByEmp = new Map(roleRows.rows.map((r) => [r.party_id, r]));
+    const keysByEmp = new Map(roleRows.map((r) => [r.party_id, r]));
     for (const id of empIds) {
       const keys = keysByEmp.get(id);
       const schedule = pickWorkSchedule(schedules, {

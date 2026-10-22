@@ -69,8 +69,8 @@ function get(subjectKind: string) {
 }
 
 async function docStatus(docId: string): Promise<string | null> {
-  const rows = (await withBypassContext(() => db.execute<{ status: string }>(sql`
-    select status from documents where id = ${docId}`))).rows
+  const rows = await withBypassContext(() => db.execute<{ status: string }>(sql`
+    select status from documents where id = ${docId}`, 'objects'))
   return rows[0]?.status ?? null
 }
 
@@ -83,13 +83,13 @@ test('quick setup creates an enabled, audited flow that gates a submission', asy
     const { id } = (await res.json()) as { id: string }
 
     const row = (await withBypassContext(() => db.execute<{ enabled: boolean; description: string; graph: unknown }>(sql`
-      select enabled, description, graph from flows where id = ${id} and org_id = ${org.orgId}`))).rows[0]
+      select enabled, description, graph from flows where id = ${id} and org_id = ${org.orgId}`, 'objects')))[0]
     assert.equal(row?.enabled, true, 'quick setup leaves the flow enabled')
     assert.equal(row?.description, 'quick-approval', 'the setup marks its own flow')
 
     const audits = (await withBypassContext(() => db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'flows' and row_id = ${id} and action = 'insert'`))).rows[0]?.n
+       where org_id = ${org.orgId} and table_name = 'flows' and row_id = ${id} and action = 'insert'`, 'objects')))[0]?.n
     assert.equal(audits, '1', 'creation is audited')
 
     const docId = await withBypassContext(() =>
@@ -98,7 +98,7 @@ test('quick setup creates an enabled, audited flow that gates a submission', asy
     assert.equal(result.gated, true, 'the submission is gated by the quick flow')
     assert.equal(await docStatus(docId), 'pending_approval')
     const gates = (await withBypassContext(() => db.execute<{ n: string }>(sql`
-      select count(*)::text as n from flow_gates where subject_id = ${docId}`))).rows[0]?.n
+      select count(*)::text as n from flow_gates where subject_id = ${docId}`, 'objects')))[0]?.n
     assert.equal(gates, '1', 'exactly one approval gate owns the submission')
 
     const lookup = await withOrgContext(org.orgId, () => stateOf(get('vendor_bill')))
@@ -158,11 +158,11 @@ test('removing the setup disables the flow through the audited path', async () =
       ))
     assert.equal(disable.status, 200, `disable status: ${disable.status}`)
     const row = (await withBypassContext(() => db.execute<{ enabled: boolean }>(sql`
-      select enabled from flows where id = ${id} and org_id = ${org.orgId}`))).rows[0]
+      select enabled from flows where id = ${id} and org_id = ${org.orgId}`, 'objects')))[0]
     assert.equal(row?.enabled, false, 'removal disables, never deletes')
     const updates = (await withBypassContext(() => db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'flows' and row_id = ${id} and action = 'update'`))).rows[0]?.n
+       where org_id = ${org.orgId} and table_name = 'flows' and row_id = ${id} and action = 'update'`, 'objects')))[0]?.n
     assert.equal(updates, '1', 'the disable is audited')
   } finally {
     state.user = null
@@ -194,7 +194,7 @@ test('quick setup preserves an explicit tenant policy allowing the submitter to 
   const id=await withBypassContext(()=>seedDraftDocument(org.orgId,{kind:'vendor_bill',createdBy:actors.adminId}));
   const submitted=await submitForApproval('vendor_bill',id,actors.adminId);
   assert.equal(submitted.gated,true);
-  const gate=(await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`))).rows[0];
+  const gate=(await withBypassContext(()=>db.execute<{id:string}>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`, 'objects')))[0];
   assert.ok(gate);
   const {decideGate}=await import('@openbooks/engine/testing/flows/gates');
   await decideGate({gateId:gate.id,userId:actors.adminId,decision:'approved'});

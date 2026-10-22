@@ -101,11 +101,9 @@ async function findUnownedRecordReferences(
   for (const [refTable, entries] of wanted) {
     const ids = [...new Set(entries.map((e) => e.value))]
     const owned = new Set(
-      (
-        await db.execute<{ id: string }>(sql`
+      (await db.execute<{ id: string }>(sql`
           select id from ${sql.raw(`"${refTable}"`)}
-           where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`)
-      ).rows.map((r) => r.id),
+           where org_id = ${orgId} and id = any(${`{${ids.join(',')}}`}::uuid[])`, 'objects')).map((r) => r.id),
     )
     for (const entry of entries) {
       if (!owned.has(entry.value)) unowned.push(entry.field)
@@ -215,7 +213,7 @@ export const PATCH = defineRoute({
         select *, ${documentRevisionCounterSql(sql`revision_seq`)} as revision from custom_records
          where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
          for update
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!locked) return { kind: 'not_found' as const }
       const record = locked as typeof scope.record
       if (!recordVisibleInSubsidiaryFence(sections, record.data, gate.allowedSubsidiaryIds)) {
@@ -347,9 +345,9 @@ export const PATCH = defineRoute({
       // User scripts gate the save exactly as they gate a document submit. They
       // run while the row lock is held, so a script cannot observe a stale row.
       const orgRow = (await db.execute<{ id: string; name: string; base_currency: string }>(
-        sql`select id, name, base_currency from orgs where id = ${user.orgId}`,
+        sql`select id, name, base_currency from orgs where id = ${user.orgId}`, 'objects',
       ))
-      const org = orgRow.rows[0]!
+      const org = orgRow[0]!
       const outcomes = await runTriggerScripts(
         'before_submit',
         {
@@ -390,7 +388,7 @@ export const PATCH = defineRoute({
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
         returning *
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!updated) return { kind: 'not_found' as const }
 
       await auditSetupChange({
@@ -449,7 +447,7 @@ export const DELETE = defineRoute({
         select * from custom_records
          where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
          for update
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!before) return { kind: 'not_found' as const }
       if (!recordVisibleInSubsidiaryFence(scope.sections, before.data as FieldValueMap, gate.allowedSubsidiaryIds)) {
         return { kind: 'not_found' as const }
@@ -461,7 +459,7 @@ export const DELETE = defineRoute({
         delete from custom_records
          where id = ${id} and org_id = ${user.orgId} and type_key = ${typeKey}
         returning *
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!deleted) return { kind: 'not_found' as const }
       await auditSetupChange({
         orgId: user.orgId,

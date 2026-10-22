@@ -164,9 +164,9 @@ test(
       "phantom tax on an order must fail the run instead of persisting silently",
     );
 
-    const rows = (await db.execute(sql`
+    const rows = await db.execute(sql`
       select id from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-TAX'`)).rows;
+       where org_id = ${o.orgId} and custom->>'qboId' = 'TST-TAX'`, "objects");
     assert.equal(
       rows.length,
       0,

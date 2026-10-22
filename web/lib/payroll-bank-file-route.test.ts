@@ -62,9 +62,10 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.bank-file-route-test')]
       const sqlText = globalThis.openbooksBankFileSqlText
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
-          if (text.includes('from pay_runs r')) return { rows: [{ subsidiaryId: null }] }
+          if (text.includes('from pay_runs r')) return inMode({ rows: [{ subsidiaryId: null }] })
           throw new Error('bank-file paths must not issue SQL: ' + text.slice(0, 120))
         },
       }

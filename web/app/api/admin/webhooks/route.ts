@@ -69,9 +69,9 @@ export const GET = defineRoute({
              last_error as "lastError", created_at as "createdAt", updated_at as "updatedAt"
         from webhook_endpoints
        where org_id = ${authz.user.orgId} and id = ${endpointId}::uuid limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!endpoint) return NextResponse.json({ error: "the webhook endpoint is gone — reload the list and try again" }, { status: 404 });
-    const deliveries = (await db.execute<Record<string, unknown>>(sql`
+    const deliveries = await db.execute<Record<string, unknown>>(sql`
       select d.id, d.status, d.attempt_count as "attemptCount",
              d.next_attempt_at as "nextAttemptAt", d.first_attempt_at as "firstAttemptAt",
              d.last_attempt_at as "lastAttemptAt", d.last_response_code as "lastResponseCode",
@@ -82,7 +82,7 @@ export const GET = defineRoute({
         from webhook_deliveries d join webhook_events e on e.id = d.event_id and e.org_id = d.org_id
        where d.org_id = ${authz.user.orgId} and d.endpoint_id = ${endpointId}::uuid
        order by d.created_at desc limit 50
-    `)).rows;
+    `, "objects");
     return NextResponse.json({ endpoint, deliveries });
   },
 });

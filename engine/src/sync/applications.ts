@@ -847,6 +847,6 @@ export async function reconcileApplications(
  */
 export async function recomputeOpenBalances(orgId: string): Promise<number> {
   const res = await db.execute<{ healed: number }>(sql`
-    select public.recompute_document_open_balances(${orgId}::uuid) as healed`);
-  return res.rows[0]?.healed ?? 0;
+    select public.recompute_document_open_balances(${orgId}::uuid) as healed`, "objects");
+  return res[0]?.healed ?? 0;
 }

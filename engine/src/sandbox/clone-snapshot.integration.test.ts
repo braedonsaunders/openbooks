@@ -34,7 +34,7 @@ test("a refresh racing production posts keeps a single consistent snapshot", { s
     const baseline = (await db.execute<{ documents: number; entries: number }>(sql`
       select (select count(*)::int from documents where org_id = ${org.orgId}) as documents,
              (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     // Balloon a table copied strictly between documents and journal_entries
     // so its copy runs for seconds: posting the moment that copy is active
     // lands the commit deterministically inside the torn-read window.
@@ -54,7 +54,7 @@ test("a refresh racing production posts keeps a single consistent snapshot", { s
              and state = 'active'
              and query ilike '%insert into "dunning_log"%'
         ) as copying
-      `)).rows[0]!.copying;
+      `, "objects"))[0]!.copying;
       if (copying) break;
       if (Date.now() > gateUntil) assert.fail("refresh never reached the dunning_log copy");
       await new Promise((resolve) => setTimeout(resolve, 25));
@@ -64,7 +64,7 @@ test("a refresh racing production posts keeps a single consistent snapshot", { s
     const clone = (await db.execute<{ documents: number; entries: number }>(sql`
       select (select count(*)::int from documents where org_id = ${created.sandboxOrgId}) as documents,
              (select count(*)::int from journal_entries where org_id = ${created.sandboxOrgId}) as entries
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     // The race commit is invisible to a snapshot taken when the refresh
     // began: RACE-B's entry must not appear without its document.
     assert.equal(clone.documents, baseline.documents);

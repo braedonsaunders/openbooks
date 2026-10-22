@@ -68,17 +68,17 @@ async function resolveAssignee(
     if (!isUuid(assigneeUserId)) return null;
     const found = await db.execute<{ id: string }>(sql`
       select id from users where id = ${assigneeUserId} and org_id = ${orgId} and is_active
-    `);
-    if (found.rows.length === 0) return null;
-    userId = String(found.rows[0]?.id);
+    `, "objects");
+    if (found.length === 0) return null;
+    userId = String(found[0]?.id);
   }
   if (assigneeRole !== undefined && assigneeRole !== null) {
     if (!isUuid(assigneeRole)) return null;
     const found = await db.execute<{ id: string }>(sql`
       select id from app_roles where id = ${assigneeRole} and org_id = ${orgId}
-    `);
-    if (found.rows.length === 0) return null;
-    roleId = String(found.rows[0]?.id);
+    `, "objects");
+    if (found.length === 0) return null;
+    roleId = String(found[0]?.id);
   }
   return { userId, roleId };
 }
@@ -120,8 +120,8 @@ export async function setWorkItemAssignment(
           updated_at = now(), updated_by = ${authz.user.id}
          where id = ${itemId} and org_id = ${authz.user.orgId}
          returning id
-      `);
-      if (changed.rows.length === 0) return false;
+      `, "objects");
+      if (changed.length === 0) return false;
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${authz.user.orgId}, 'ai_work_items', ${itemId}, 'update',
@@ -157,8 +157,8 @@ export async function addWorkItemNote(
         insert into ai_work_item_notes (org_id, work_item_id, user_id, body)
         values (${authz.user.orgId}, ${itemId}, ${authz.user.id}, ${text})
         returning id
-      `);
-      return inserted.rows[0]?.id ?? null;
+      `, "objects");
+      return inserted[0]?.id ?? null;
     },
   );
   if (!insertedId) return { ok: false, error: "not_found" };
@@ -183,8 +183,8 @@ export async function loadWorkItemAssignment(
       left join users u on u.id = w.assignee_user_id and u.org_id = w.org_id
       left join app_roles r on r.id::text = w.assignee_role and r.org_id = w.org_id
      where w.id = ${itemId} and w.org_id = ${authz.user.orgId}
-  `);
-  const row = result.rows[0];
+  `, "objects");
+  const row = result[0];
   if (!row) return null;
   const dueAt = row.due_at ? new Date(row.due_at).toISOString() : null;
   return {
@@ -212,8 +212,8 @@ export async function listWorkItemNotes(authz: Authz, itemId: string): Promise<W
      where n.work_item_id = ${itemId} and n.org_id = ${authz.user.orgId}
      order by n.created_at, n.id
      limit ${MAX_NOTES + 1}
-  `);
-  return result.rows.slice(0, MAX_NOTES).map((row) => ({
+  `, "objects");
+  return result.slice(0, MAX_NOTES).map((row) => ({
     id: String(row.id),
     userId: String(row.user_id),
     userName: row.user_name ? String(row.user_name) : "Unknown",

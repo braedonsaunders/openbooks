@@ -100,7 +100,7 @@ export async function lockSession(
   const lock = mode === "share" ? sql`for share of s` : mode === "update" ? sql`for update of s` : sql``;
   const row = (await runner.execute<RawSession>(sql`
     select ${SESSION_COLUMNS} from pos_sessions s
-     where s.org_id = ${orgId} and s.id = ${sessionId} ${lock}`)).rows[0];
+     where s.org_id = ${orgId} and s.id = ${sessionId} ${lock}`, "objects"))[0];
   if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId)) {
     throw posRefusal("This register session does not exist.", "session_not_found", 404, "Reopen the register and continue in its open session.");
   }
@@ -122,7 +122,7 @@ export function assertSessionOpen(session: PosSessionRow): void {
 export async function openSessionForRegister(runner: SqlExecutor, orgId: string, registerId: string): Promise<PosSessionRow | null> {
   const row = (await runner.execute<RawSession>(sql`
     select ${SESSION_COLUMNS} from pos_sessions s
-     where s.org_id = ${orgId} and s.register_id = ${registerId} and s.status = 'open'`)).rows[0];
+     where s.org_id = ${orgId} and s.register_id = ${registerId} and s.status = 'open'`, "objects"))[0];
   return row ? toSession(row) : null;
 }
 
@@ -156,15 +156,15 @@ export async function openSession(input: OpenSessionInput): Promise<PosSessionRo
     const businessDate = await businessToday(input.orgId);
     const next = (await db.execute<{ next: number }>(sql`
       select coalesce(max(session_number), 0) + 1 as next from pos_sessions
-       where org_id = ${input.orgId} and register_id = ${register.id}`)).rows[0]!.next;
-    const inserted = (await db.execute<{ id: string }>(sql`
+       where org_id = ${input.orgId} and register_id = ${register.id}`, "objects"))[0]!.next;
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into pos_sessions
         (org_id, register_id, subsidiary_id, session_number, status, business_date, currency,
          opening_float_minor, opening_count, opened_by, created_by, updated_by)
       values (${input.orgId}, ${register.id}, ${register.subsidiaryId}, ${Number(next)}, 'open', ${businessDate},
         ${register.currency}, ${count.totalUnits.toString()}::bigint, ${JSON.stringify(count.rows)}::jsonb,
         ${input.actorId}, ${input.actorId}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw new Error("register session insert returned an unexpected row count");
     const sessionId = inserted[0]!.id;
     await audit(db, input.orgId, "pos_sessions", sessionId, "open", {
@@ -215,7 +215,7 @@ export async function readSessionSummary(
 ): Promise<SessionSummary> {
   const session = lockedSession ?? (await lockSession(runner, orgId, sessionId, "none", allowedSubsidiaryIds));
   const register = (await runner.execute<{ id: string; code: string; name: string; cash_account_id: string }>(sql`
-    select id, code, name, cash_account_id from pos_registers where org_id = ${orgId} and id = ${session.registerId}`)).rows[0]!;
+    select id, code, name, cash_account_id from pos_registers where org_id = ${orgId} and id = ${session.registerId}`, "objects"))[0]!;
   const totals = (await runner.execute<{ sale_count: number; refund_count: number; no_charge_sale_count: number; no_charge_refund_count: number; sales_total: string; refunds_total: string }>(sql`
     select count(*) filter (where t.kind = 'sale')::int as sale_count,
            count(*) filter (where t.kind = 'refund')::int as refund_count,
@@ -225,8 +225,8 @@ export async function readSessionSummary(
            coalesce(sum(t.total_minor) filter (where t.kind = 'refund'), 0)::text as refunds_total
       from pos_transactions t
       join documents d on d.org_id = t.org_id and d.id = t.document_id and d.status = 'posted' -- Live entries only: voided transactions do not contribute to current session reconciliation
-     where t.org_id = ${orgId} and t.session_id = ${session.id}`)).rows[0]!;
-  const tenders = (await runner.execute<{ kind: string; method_label: string; sale_minor: string; refund_minor: string; cash_minor: string; refund_cash_minor: string }>(sql`
+     where t.org_id = ${orgId} and t.session_id = ${session.id}`, "objects"))[0]!;
+  const tenders = await runner.execute<{ kind: string; method_label: string; sale_minor: string; refund_minor: string; cash_minor: string; refund_cash_minor: string }>(sql`
     select dt.kind, dt.method_label,
            coalesce(sum(dt.amount_minor) filter (where t.kind = 'sale'), 0)::text as sale_minor,
            coalesce(sum(dt.amount_minor) filter (where t.kind = 'refund'), 0)::text as refund_minor,
@@ -237,14 +237,14 @@ export async function readSessionSummary(
       join document_tenders dt on dt.org_id = t.org_id and dt.document_id = t.document_id
      where t.org_id = ${orgId} and t.session_id = ${session.id}
      group by dt.kind, dt.method_label
-     order by dt.kind, dt.method_label`)).rows;
-  const movements = (await runner.execute<{ id: string; kind: string; reason: string; amount_minor: string; note: string | null; created_at: string; journal_entry_id: string }>(sql`
+     order by dt.kind, dt.method_label`, "objects");
+  const movements = await runner.execute<{ id: string; kind: string; reason: string; amount_minor: string; note: string | null; created_at: string; journal_entry_id: string }>(sql`
     select m.id, m.kind, r.name as reason, m.amount_minor::text as amount_minor, m.note,
            m.created_at::text as created_at, m.journal_entry_id
       from pos_cash_movements m
       join pos_cash_reasons r on r.org_id = m.org_id and r.id = m.reason_id
      where m.org_id = ${orgId} and m.session_id = ${session.id}
-     order by m.created_at`)).rows;
+     order by m.created_at`, "objects");
   const saleCashMinor = tenders.reduce((total, row) => total + BigInt(row.cash_minor), 0n);
   const refundCashMinor = tenders.reduce((total, row) => total + BigInt(row.refund_cash_minor), 0n);
   const payInMinor = movements.filter((m) => m.kind === "pay_in").reduce((total, m) => total + BigInt(m.amount_minor), 0n);
@@ -303,7 +303,7 @@ export async function recordCashMovement(input: CashMovementInput): Promise<{ id
     await assertRegisterFeature(db, input.orgId);
     const prior = (await db.execute<{ id: string; journal_entry_id: string; session_id: string; reason_id: string; amount_minor: string }>(sql`
       select id, journal_entry_id, session_id, reason_id, amount_minor::text as amount_minor from pos_cash_movements
-       where org_id = ${input.orgId} and idempotency_key = ${input.idempotencyKey}`)).rows[0];
+       where org_id = ${input.orgId} and idempotency_key = ${input.idempotencyKey}`, "objects"))[0];
     const session = await lockSession(db, input.orgId, input.sessionId, "share", input.allowedSubsidiaryIds);
     const register = await loadRegisterForUse(db, input.orgId, session.registerId, { allowedSubsidiaryIds: input.allowedSubsidiaryIds });
     const amountUnits = parsePosAmount(input.amount, "The movement amount", register.currencyDecimals);
@@ -323,7 +323,7 @@ export async function recordCashMovement(input: CashMovementInput): Promise<{ id
     const reason = (await db.execute<{ id: string; name: string; direction: "pay_in" | "pay_out"; account_id: string }>(sql`
       select id, name, direction, account_id from pos_cash_reasons
        where org_id = ${input.orgId} and id = ${input.reasonId} and is_active
-       for share`)).rows[0];
+       for share`, "objects"))[0];
     if (!reason) {
       throw posRefusal("That cash reason does not exist or is inactive.", "reason_not_found", 404, "Pick a reason configured in Setup → Sales → Register cash reasons.");
     }
@@ -343,12 +343,12 @@ export async function recordCashMovement(input: CashMovementInput): Promise<{ id
       idempotencyKey: `pos:movement:${input.idempotencyKey}`,
       auditChanges: { registerId: register.id, sessionId: session.id, reasonId: reason.id, kind: reason.direction },
     });
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into pos_cash_movements
         (org_id, session_id, kind, reason_id, amount_minor, note, journal_entry_id, idempotency_key, created_by)
       values (${input.orgId}, ${session.id}, ${reason.direction}, ${reason.id}, ${amountUnits.toString()}::bigint,
         ${note}, ${journalEntryId}, ${input.idempotencyKey}, ${input.actorId})
-      returning id`)).rows;
+      returning id`, "objects");
     if (inserted.length !== 1) throw new Error("drawer movement insert returned an unexpected row count");
     return { id: inserted[0]!.id, journalEntryId, replayed: false };
   });
@@ -417,7 +417,7 @@ export async function closeSession(input: CloseSessionInput): Promise<SessionSum
         auditChanges: { registerId: register.id, sessionId: session.id, expected: fromUnits(summary.expectedCashMinor), counted: fromUnits(count.totalUnits) },
       });
     }
-    const updated = (await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update pos_sessions
          set status = 'closed', closed_at = now(), closed_by = ${input.actorId},
              expected_cash_minor = ${summary.expectedCashMinor.toString()}::bigint,
@@ -428,7 +428,7 @@ export async function closeSession(input: CloseSessionInput): Promise<SessionSum
              close_note = ${note},
              updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${session.id} and status = 'open'
-       returning id`)).rows;
+       returning id`, "objects");
     if (updated.length !== 1) {
       throw posRefusal("The session changed while it was being closed.", "session_not_open", 409, "Reload the register and review the session before closing it again.");
     }
@@ -484,8 +484,8 @@ export async function listSessions(
        ${filters.status ? sql`and s.status = ${filters.status}` : sql``}
        ${filters.from ? sql`and s.business_date >= ${filters.from}::date` : sql``}
        ${filters.to ? sql`and s.business_date <= ${filters.to}::date` : sql``}`;
-  const total = (await runner.execute<{ total: number }>(sql`select count(*)::int as total from pos_sessions s ${where}`)).rows[0]?.total ?? 0;
-  const rows = (await runner.execute<SessionListRow>(sql`
+  const total = (await runner.execute<{ total: number }>(sql`select count(*)::int as total from pos_sessions s ${where}`, "objects"))[0]?.total ?? 0;
+  const rows = await runner.execute<SessionListRow>(sql`
     select s.id, s.register_id as "registerId", r.code as "registerCode", r.name as "registerName",
            s.session_number as "sessionNumber", s.status, s.business_date::text as "businessDate", s.currency,
            s.opened_at::text as "openedAt", ou.name as "openedByName", s.closed_at::text as "closedAt",
@@ -509,7 +509,7 @@ export async function listSessions(
       ) t on true
      ${where}
      order by s.opened_at desc, s.id
-     limit ${limit} offset ${offset}`)).rows;
+     limit ${limit} offset ${offset}`, "objects");
   return { rows, total, hasMore: offset + rows.length < total };
 }
 
@@ -529,18 +529,18 @@ export async function readRegisterContext(
 }> {
   const register = await loadRegisterForUse(runner, orgId, registerId, { allowedSubsidiaryIds });
   const session = await openSessionForRegister(runner, orgId, register.id);
-  const quickKeys = (await runner.execute<{ itemId: string; label: string; code: string | null }>(sql`
+  const quickKeys = await runner.execute<{ itemId: string; label: string; code: string | null }>(sql`
     select k.item_id as "itemId", coalesce(k.label, i.name) as label, i.code
       from pos_quick_keys k
       join items i on i.org_id = k.org_id and i.id = k.item_id and i.is_active
      where k.org_id = ${orgId} and k.is_active and (k.register_id is null or k.register_id = ${register.id})
      order by k.position, coalesce(k.label, i.name)
-     limit 60`)).rows;
-  const cashReasons = (await runner.execute<{ id: string; name: string; direction: string }>(sql`
-    select id, name, direction from pos_cash_reasons where org_id = ${orgId} and is_active order by direction, name`)).rows;
+     limit 60`, "objects");
+  const cashReasons = await runner.execute<{ id: string; name: string; direction: string }>(sql`
+    select id, name, direction from pos_cash_reasons where org_id = ${orgId} and is_active order by direction, name`, "objects");
   const defaultCustomerName = register.defaultCustomerId
     ? (await runner.execute<{ name: string }>(sql`
-        select display_name as name from parties where org_id = ${orgId} and id = ${register.defaultCustomerId}`)).rows[0]?.name ?? null
+        select display_name as name from parties where org_id = ${orgId} and id = ${register.defaultCustomerId}`, "objects"))[0]?.name ?? null
     : null;
   return { register, acceptedTenders: acceptedTenderKinds(register), session, quickKeys, cashReasons, defaultCustomerName };
 }

@@ -18,7 +18,7 @@ export async function requireStandardCost(
 ): Promise<string> {
   if (profile.standardCost != null) return profile.standardCost;
   const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
-    from items where org_id = ${orgId} and id = ${itemId}`)).rows[0]?.label ?? itemId;
+    from items where org_id = ${orgId} and id = ${itemId}`, "objects"))[0]?.label ?? itemId;
   throw new InventoryError(
     `item ${label} uses standard costing but has no standard cost; set its standard cost in the item's Costing settings, then retry`,
   );
@@ -51,12 +51,12 @@ export async function resolveProvisionalUnitCost(
        and kind in ('receipt','return','assembly_build','assembly_recovery','transfer_in')
        and status='posted' and unit_cost is not null
      order by moved_at desc,created_at desc,id desc limit 1
-  `));
-  if (!last.rows[0])
+  `, "objects"));
+  if (!last[0])
     throw new InventoryError(
       "negative inventory has no prior receipt cost; configure a provisional or standard cost",
     );
-  return last.rows[0].unit_cost;
+  return last[0].unit_cost;
 }
 
 /** Draw `quantity` off layers oldest-first for QUANTITY bookkeeping (standard cost). */
@@ -140,8 +140,8 @@ export async function consumeLayers(
      -- Keep remeasurement fragments beside their original receipt. A fragment's
      -- random UUID must never move its residual cost ahead of the original
      -- layer or behind a later receipt on the same business date.
-     order by layer.received_at, source.created_at, source.id, layer.created_at, layer.id for update of layer`));
-  const layers = layersRes.rows;
+     order by layer.received_at, source.created_at, source.id, layer.created_at, layer.id for update of layer`, "objects"));
+  const layers = layersRes;
 
   let cost: string;
   let consumptions: Consumption[] = [];
@@ -222,7 +222,7 @@ export async function consumeLayers(
         const created: { id: string; quantity: string; unitCost: string; consumed: boolean; originalCost: string | null }[] = [];
         for (const layer of layers) {
           if((await tx.execute(sql`update cost_layers set original_quantity=original_quantity-remaining_quantity,
-            remaining_quantity='0',remaining_original_cost=case when remaining_original_cost is null then null else 0 end,updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${layer.id} returning id`)).rows.length!==1)throw new InventoryError('A moving-average source changed before its withdrawal was partitioned.');
+            remaining_quantity='0',remaining_original_cost=case when remaining_original_cost is null then null else 0 end,updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${layer.id} returning id`, "objects")).length!==1)throw new InventoryError('A moving-average source changed before its withdrawal was partitioned.');
         }
         for (const partition of partitions) {
           if (isZero(partition.quantity)) continue;
@@ -234,7 +234,7 @@ export async function consumeLayers(
               (id,org_id,subsidiary_id,item_id,stock_location_id,source_movement_id,received_at,
                original_quantity,remaining_quantity,unit_cost,remaining_original_cost,created_at,created_by,updated_by)
               values (${id},${orgId},${partition.subsidiaryId},${itemId},${stockLocationId},${partition.movementId},${partition.receivedAt},
-                ${fragment.quantity},${fragment.quantity},${fragment.unitCost},${bases[index]},clock_timestamp(),${actorId},${actorId}) returning id`)).rows.length!==1)throw new InventoryError('The moving-average withdrawal did not retain its original receipt fragment.');
+                ${fragment.quantity},${fragment.quantity},${fragment.unitCost},${bases[index]},clock_timestamp(),${actorId},${actorId}) returning id`, "objects")).length!==1)throw new InventoryError('The moving-average withdrawal did not retain its original receipt fragment.');
             created.push({ id, ...fragment, consumed: partition.consumed, originalCost: bases[index]! });
           }
         }
@@ -246,7 +246,7 @@ export async function consumeLayers(
               after: { original_quantity: add(layer.original_quantity, neg(layer.remaining)), remaining_quantity: "0.0000" },
               sourceMovementId: layer.source_movement_id, quantity, value: weightedCost,
               createdFragments: created,
-            })}::jsonb,${actorId}) returning id`)).rows.length!==1)throw new InventoryError('The moving-average source partition was not audited.');
+            })}::jsonb,${actorId}) returning id`, "objects")).length!==1)throw new InventoryError('The moving-average source partition was not audited.');
         }
         r = consumeFifo(created.filter((fragment) => fragment.consumed).map((fragment) => ({
           id: fragment.id, remaining: fragment.quantity, unitCost: fragment.unitCost,
@@ -305,12 +305,12 @@ export async function recordConsumptions(
        where id = ${c.layerId} and org_id = ${orgId} and subsidiary_id=${subsidiaryId}
          and remaining_quantity>=${c.quantity}::numeric and unit_cost=${c.unitCost}::numeric
          and (remaining_original_cost is null or ${c.originalCost??null}::numeric is not null and remaining_original_cost>=${c.originalCost??null}::numeric)
-       returning id`);
-    if(drawn.rows.length!==1)throw new InventoryError('The cost layer changed, belongs to another legal entity or lacks its original-cost evidence; reload the stock movement before retrying.');
+       returning id`, "objects");
+    if(drawn.length!==1)throw new InventoryError('The cost layer changed, belongs to another legal entity or lacks its original-cost evidence; reload the stock movement before retrying.');
     const retained=await tx.execute(sql`
       insert into cost_layer_consumptions (org_id, subsidiary_id, cost_layer_id, issue_movement_id, quantity, unit_cost, original_cost, created_by, updated_by)
-      values (${orgId}, ${subsidiaryId}, ${c.layerId}, ${movementId}, ${c.quantity}, ${c.unitCost}, ${c.originalCost ?? null}, ${actorId}, ${actorId}) returning id`);
-    if(retained.rows.length!==1)throw new InventoryError('The stock movement did not retain its complete cost-layer consumption.');
+      values (${orgId}, ${subsidiaryId}, ${c.layerId}, ${movementId}, ${c.quantity}, ${c.unitCost}, ${c.originalCost ?? null}, ${actorId}, ${actorId}) returning id`, "objects");
+    if(retained.length!==1)throw new InventoryError('The stock movement did not retain its complete cost-layer consumption.');
   }
 }
 
@@ -347,23 +347,23 @@ export async function addLayerAtCost(
     // Transit and vendor custody retain each shipment’s carried value.
     // Ordinary averaging preserves tracked source quantities and original basis.
     const location = (await tx.execute<{ kind: string }>(sql`
-      select kind from stock_locations where org_id=${orgId} and id=${stockLocationId} for share`)).rows[0];
+      select kind from stock_locations where org_id=${orgId} and id=${stockLocationId} for share`, "objects"))[0];
     if (location?.kind !== "transit" && location?.kind!=="subcontract") {
-      const existing = (await tx.execute<{
+      const existing = await tx.execute<{
         id: string; original_quantity: string; remaining_quantity: string; unit_cost: string;
         source_movement_id: string; received_at: string; remaining_original_cost: string | null;
       }>(sql`
         select id, original_quantity, remaining_quantity, unit_cost, source_movement_id, received_at::text, remaining_original_cost
           from cost_layers where org_id=${orgId} and item_id=${itemId}
            and stock_location_id=${stockLocationId} and subsidiary_id=${subsidiaryId} and remaining_quantity>0
-         order by received_at, created_at, id for update`)).rows;
+         order by received_at, created_at, id for update`, "objects");
       if (existing.length) {
         const first = existing[0]!;
         const poolQuantity = add(quantity, sum(existing.map((layer) => layer.remaining_quantity)));
         const poolValue = add(value, sum(existing.map((layer) => extendCost(layer.remaining_quantity, layer.unit_cost))));
         fragments = exactCostFragments(poolQuantity, poolValue);
         originalCost = sumOriginalCosts([originalCost, ...existing.map((layer) => layer.remaining_original_cost)]);
-        const traceRequired=(await tx.execute(sql`select movement.id from inventory_movements movement where movement.org_id=${orgId} and movement.id in (${movementId}::uuid,${sql.join(existing.map(layer=>sql`${layer.source_movement_id}::uuid`),sql`,`)}) and (movement.lot_id is not null or movement.serial_id is not null or exists(select 1 from inventory_inspections inspection where inspection.org_id=movement.org_id and inspection.receipt_movement_id=movement.id)) limit 1`)).rows.length>0;
+        const traceRequired=(await tx.execute(sql`select movement.id from inventory_movements movement where movement.org_id=${orgId} and movement.id in (${movementId}::uuid,${sql.join(existing.map(layer=>sql`${layer.source_movement_id}::uuid`),sql`,`)}) and (movement.lot_id is not null or movement.serial_id is not null or exists(select 1 from inventory_inspections inspection where inspection.org_id=movement.org_id and inspection.receipt_movement_id=movement.id)) limit 1`, "objects")).length>0;
         if(traceRequired) {
           const groups=new Map<string,{quantity:string;originalCost:string|null;sourceMovementId:string;receivedAt:string}>();
           for(const layer of existing) {
@@ -388,7 +388,7 @@ export async function addLayerAtCost(
           if((await tx.execute(sql`update cost_layers
             set original_quantity=original_quantity-remaining_quantity,
                 remaining_quantity='0', remaining_original_cost=case when remaining_original_cost is null then null else 0 end, updated_at=now(), updated_by=${actorId}
-            where org_id=${orgId} and id=${layer.id} and subsidiary_id=${subsidiaryId} returning id`)).rows.length!==1)throw new InventoryError('A moving-average source changed before its remaining value was partitioned.');
+            where org_id=${orgId} and id=${layer.id} and subsidiary_id=${subsidiaryId} returning id`, "objects")).length!==1)throw new InventoryError('A moving-average source changed before its remaining value was partitioned.');
         }
       }
     }
@@ -405,7 +405,7 @@ export async function addLayerAtCost(
         (id, org_id, subsidiary_id, item_id, stock_location_id, source_movement_id, received_at,
          original_quantity, remaining_quantity, unit_cost, remaining_original_cost, created_at, created_by, updated_by)
       values (${id}, ${orgId}, ${subsidiaryId}, ${itemId}, ${stockLocationId}, ${partition.sourceMovementId}, ${partition.receivedAt},
-        ${fragment.quantity}, ${fragment.quantity}, ${fragment.unitCost}, ${bases[index]}, clock_timestamp(), ${actorId}, ${actorId}) returning id`)).rows.length!==1)throw new InventoryError('The receipt did not retain its exact valued cost fragment.');
+        ${fragment.quantity}, ${fragment.quantity}, ${fragment.unitCost}, ${bases[index]}, clock_timestamp(), ${actorId}, ${actorId}) returning id`, "objects")).length!==1)throw new InventoryError('The receipt did not retain its exact valued cost fragment.');
     createdFragments.push({ id, ...fragment });
   }
   }
@@ -416,6 +416,6 @@ export async function addLayerAtCost(
         before: layer,
         after: { original_quantity: add(layer.original_quantity, neg(layer.remaining_quantity)), remaining_quantity: "0.0000", unit_cost: layer.unit_cost },
         sourceMovementId, incomingMovementId: movementId, quantity, value, createdFragments,
-      })}::jsonb,${actorId}) returning id`)).rows.length!==1)throw new InventoryError('The moving-average receipt partition was not audited.');
+      })}::jsonb,${actorId}) returning id`, "objects")).length!==1)throw new InventoryError('The moving-average receipt partition was not audited.');
   }
 }

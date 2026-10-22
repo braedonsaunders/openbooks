@@ -180,7 +180,7 @@ test('a customer name resolves to its effective entitlements', async () => {
   try {
     await withOrgContext(orgId, async () => {
       const name = (await db.execute<{ display_name: string }>(sql`
-        select display_name from parties where org_id = ${orgId} and id = ${customerId}`)).rows[0]!.display_name;
+        select display_name from parties where org_id = ${orgId} and id = ${customerId}`, 'objects'))[0]!.display_name;
       await seedCustomerWithGrant(org, actor, customerId);
       const result = await getV1Entitlements(context(orgId, ['ar.read']), { customer: name, at: '2026-07-01' });
       assert.equal(result.customer.id, customerId);

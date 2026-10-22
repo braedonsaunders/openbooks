@@ -36,7 +36,8 @@ interface Fixtures {
 /** Fake runner: routes the self-service SQL to the fixture tables above. */
 function fakeExec(fx: Fixtures): SqlExecutor {
   return {
-    execute: (async (query: unknown) => {
+    execute: (async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
       let text = "";
       const params: unknown[] = [];
@@ -56,11 +57,11 @@ function fakeExec(fx: Fixtures): SqlExecutor {
       if (/from users/i.test(text)) {
         const userId = String(params[1]);
         const partyId = fx.userParty.has(userId) ? fx.userParty.get(userId) : undefined;
-        return { rows: partyId === undefined ? [] : [{ partyId }] };
+        return inMode({ rows: partyId === undefined ? [] : [{ partyId }] });
       }
       if (/from worker_employments/i.test(text)) {
         const partyId = String(params[1]);
-        return { rows: (fx.partyEmployments.get(partyId) ?? []).map((id) => ({ id })) };
+        return inMode({ rows: (fx.partyEmployments.get(partyId) ?? []).map((id) => ({ id })) });
       }
       if (/from reporting_relationships/i.test(text)) {
         const managers = new Set<string>(JSON.parse(String(params[1])) as string[]);
@@ -85,7 +86,7 @@ function fakeExec(fx: Fixtures): SqlExecutor {
           if (!(rel.effectiveFrom <= today && (rel.effectiveTo === null || rel.effectiveTo > today))) continue;
           seen.add(rel.employmentId);
         }
-        return { rows: [...seen].sort().map((id) => ({ id })) };
+        return inMode({ rows: [...seen].sort().map((id) => ({ id })) });
       }
       throw new Error(`unexpected query in self-service unit fake: ${text.slice(0, 120)}`);
     }) as SqlExecutor["execute"],

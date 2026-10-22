@@ -44,7 +44,7 @@ export async function contractCreationMode(
   orgId: string,
 ): Promise<"first_billing" | "booking"> {
   const row = (await (runner as SqlExecutor).execute<{ mode: string | null }>(sql`
-    select settings->'revenue'->>'contractCreation' as mode from orgs where id = ${orgId}`)).rows[0];
+    select settings->'revenue'->>'contractCreation' as mode from orgs where id = ${orgId}`, "objects"))[0];
   return row?.mode === "booking" ? "booking" : "first_billing";
 }
 
@@ -64,21 +64,21 @@ export async function resolveBillingSource(
   orgId: string,
   invoiceId: string,
 ): Promise<BillingSource | null> {
-  const orders = (await runner.execute<{ id: string; document_number: string }>(sql`
+  const orders = await runner.execute<{ id: string; document_number: string }>(sql`
     select source.id, source.document_number
       from document_links link
       join documents source
         on source.id = link.from_document_id and source.org_id = link.org_id
      where link.org_id = ${orgId} and link.to_document_id = ${invoiceId}
        and link.link_type = 'bills' and source.kind = 'sales_order'
-     order by source.document_number`)).rows;
-  const subscriptions = (await runner.execute<{ id: string; number: string }>(sql`
+     order by source.document_number`, "objects");
+  const subscriptions = await runner.execute<{ id: string; number: string }>(sql`
     select s.id,
            coalesce((select p.name from subscription_plans p where p.id = s.plan_id and p.org_id = s.org_id), s.id::text) as number
       from subscription_period_invoices spi
       join subscriptions s on s.id = spi.subscription_id and s.org_id = spi.org_id
      where spi.org_id = ${orgId} and spi.invoice_id = ${invoiceId}
-     order by spi.period_starts_on`)).rows;
+     order by spi.period_starts_on`, "objects");
   if (orders.length > 1) {
     throw new RevenueRecognitionError(
       `Invoice bills ${orders.length} sales orders (${orders.map((o) => o.document_number).join(", ")}); bill each order on its own invoice so each contract holds one agreement`,
@@ -121,7 +121,7 @@ async function scopedSubject(
       document_number: string; document_date: string;
     }>(sql`
       select party_id, subsidiary_id, currency, document_number, document_date::text as document_date
-        from documents where id = ${source.id} and org_id = ${orgId} and kind = 'sales_order'`)).rows[0];
+        from documents where id = ${source.id} and org_id = ${orgId} and kind = 'sales_order'`, "objects"))[0];
     if (!row || !row.party_id) {
       throw new RevenueRecognitionError(
         `Sales order ${source.number} names no customer; assign the order's customer before billing it to a contract`,
@@ -143,7 +143,7 @@ async function scopedSubject(
     select s.customer_id, s.start_on::text as start_on, p.currency_code as currency
       from subscriptions s
       left join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
-     where s.id = ${source.id} and s.org_id = ${orgId}`)).rows[0];
+     where s.id = ${source.id} and s.org_id = ${orgId}`, "objects"))[0];
   if (!row) {
     throw new RevenueRecognitionError(
       "The billed subscription no longer exists; rebill from the live subscription",
@@ -200,7 +200,7 @@ export async function ensureScopedContract(
             ${actorId}, ${actorId})
     -- An idempotent source reuses the existing contract and verifies its identity below.
     on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (inserted) return { id: inserted.id, created: true };
   const existing = (await runner.execute<{
     id: string; customer_id: string; currency: string | null; scope: string;
@@ -208,7 +208,7 @@ export async function ensureScopedContract(
   }>(sql`
     select id, customer_id, currency, scope, source_document_id, subscription_id
       from revenue_contracts
-     where org_id = ${orgId} and idempotency_key = ${subject.idempotencyKey}`)).rows[0];
+     where org_id = ${orgId} and idempotency_key = ${subject.idempotencyKey}`, "objects"))[0];
   if (!existing) throw new Error("revenue contract idempotency winner was not visible");
   if (existing.scope !== subject.scope) {
     throw new RevenueRecognitionError(
@@ -243,7 +243,7 @@ export async function ensureBookingContract(
   if ((await contractCreationMode(db, orgId)) !== "booking") return null;
   const order = (await db.execute<{ document_number: string; party_id: string | null }>(sql`
     select document_number, party_id from documents
-     where id = ${salesOrderId} and org_id = ${orgId} and kind = 'sales_order'`)).rows[0];
+     where id = ${salesOrderId} and org_id = ${orgId} and kind = 'sales_order'`, "objects"))[0];
   if (!order) throw new Error("sales order disappeared while its revenue contract was being booked");
   if (!order.party_id) {
     throw new RevenueRecognitionError(
@@ -278,13 +278,13 @@ export async function recordContractBilling(
     values (${orgId}, ${contractId}, ${documentId}, ${amount}, ${billedOn}, ${actorId}, ${actorId})
     -- A replay reuses the prior billing only when its amount and contract agree below.
     on conflict (org_id, document_id) do nothing
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   // The conflict above is expected and benign: a posted billing replays to
   // the row its first attempt wrote, and consideration must not grow twice.
   if (!inserted) {
     const prior = (await runner.execute<{ amount: string; contract_id: string }>(sql`
       select amount, contract_id from revenue_contract_billings
-       where org_id = ${orgId} and document_id = ${documentId}`)).rows[0];
+       where org_id = ${orgId} and document_id = ${documentId}`, "objects"))[0];
     if (!prior || prior.contract_id !== contractId || cmp(prior.amount, amount) !== 0) {
       throw new RevenueRecognitionError(
         "This billing was already recorded against a different contract or amount; reconcile the contract before retrying",
@@ -292,7 +292,7 @@ export async function recordContractBilling(
     }
     return { billed: false };
   }
-  const updated = (await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(sql`
     update revenue_contracts
        set total_consideration = total_consideration + ${amount},
            total_transaction_price = case when scope = 'invoice'
@@ -301,7 +301,7 @@ export async function recordContractBilling(
            status = 'active',
            updated_by = ${actorId}, updated_at = now()
      where id = ${contractId} and org_id = ${orgId}
-    returning id`)).rows;
+    returning id`, "objects");
   // Under row-level security an unscoped write silently matches nothing, so
   // a zero-row accumulation is raised, never reported as billed.
   if (updated.length !== 1) throw new Error("revenue contract consideration was not accumulated");
@@ -339,7 +339,7 @@ export async function contractPosition(
                       where billing.org_id = ${orgId} and billing.contract_id = ${contractId}
                         and document.status = 'posted'), 0)::text as billed,
            coalesce((select total_consideration from revenue_contracts
-                      where id = ${contractId} and org_id = ${orgId}), 0)::text as consideration`)).rows[0];
+                      where id = ${contractId} and org_id = ${orgId}), 0)::text as consideration`, "objects"))[0];
   const billed = cmp(billedRes?.billed ?? "0", "0") !== 0
     ? billedRes!.billed
     : (billedRes?.consideration ?? "0");
@@ -355,7 +355,7 @@ export async function contractPosition(
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_primary
       join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where o.contract_id = ${contractId} and o.org_id = ${orgId}
-       and o.status <> 'cancelled'`)).rows[0];
+       and o.status <> 'cancelled'`, "objects"))[0];
   const recognized = scheduleRes?.recognized ?? "0";
   const planned = scheduleRes?.planned ?? "0";
   const netPosition = add(billed, neg(recognized));

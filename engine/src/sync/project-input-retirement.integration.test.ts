@@ -40,15 +40,15 @@ test("source deletion requires positive evidence, preserves history and fences f
       assert.equal(applied.targetOnlyProjects,1,"an unconfirmed project still blocks parity");
       assert.equal(applied.targetOnlyTimeEntries,0);
       assert.equal(applied.applied,true);
-      const time=(await db.execute<{id:string;status:string;hours:string;billing_status:string;custom:{sourceRetirement:{deletedOn:string}}}>(sql`
-        select id,status,hours::text,billing_status,custom from time_entries where org_id=${org.orgId} order by id`)).rows;
+      const time=await db.execute<{id:string;status:string;hours:string;billing_status:string;custom:{sourceRetirement:{deletedOn:string}}}>(sql`
+        select id,status,hours::text,billing_status,custom from time_entries where org_id=${org.orgId} order by id`, "objects");
       assert.equal(time.length,2,"source retirement retains both records");
       assert.equal(time.find(row=>row.id===unbilledId)!.status,"approved");
       assert.equal(time.find(row=>row.id===billedId)!.status,"approved","billed evidence retains its original lifecycle");
       assert.ok(time.every(row=>row.hours==="2.0000"&&row.custom.sourceRetirement.deletedOn==="2026-10-20"));
       for (const [day,expected] of [["2026-10-19",2],["2026-10-20",0]] as const) {
         const available=(await db.execute<{n:number}>(sql`select count(*)::int as n from time_entries
-          where org_id=${org.orgId} and status='approved' and ${sourceTimeAvailableSql(sql`custom`,sql`${day}`)}`)).rows[0]!.n;
+          where org_id=${org.orgId} and status='approved' and ${sourceTimeAvailableSql(sql`custom`,sql`${day}`)}`, "objects"))[0]!.n;
         assert.equal(available,expected,"deletion does not reinterpret availability before its effective date");
       }
       const wage=await loadWageTimeEntries(db,{orgId:org.orgId,employeePartyIds:[employeeId],periodStart:org.date,periodEnd:org.date,documentId:randomUUID()});
@@ -67,17 +67,17 @@ test("source deletion requires positive evidence, preserves history and fences f
       await db.execute(sql`update time_entries set hours=3 where org_id=${org.orgId} and id=${unbilledId}`);
     }),deletedSourceRefusal);
     await withOrg(org.orgId,async()=>{
-      const before=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and request_id=${runId}`)).rows[0]!.n;
+      const before=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and request_id=${runId}`, "objects"))[0]!.n;
       assert.equal(before,3);
       await syncProjectFinancialInputs(source,options);
-      const after=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and request_id=${runId}`)).rows[0]!.n;
+      const after=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and request_id=${runId}`, "objects"))[0]!.n;
       assert.equal(after,before,"replay preserves one retirement and audit per record");
     });
     await assert.rejects(withOrg(org.orgId,()=>retireSourceProjectInputs({...options,actorId:null,source:source.name,refKey:source.refKey,
         projects:[{id:unknownProjectId,sourceRef:"project-unknown",deletedAt:"2026-10-20"},
           {id:randomUUID(),sourceRef:"project-1",deletedAt:"2026-10-20"}],timeEntries:[]})),/changed before retirement/);
     await withOrg(org.orgId,async()=>{
-      const rolledBack=(await db.execute<{is_active:boolean;custom:Record<string,unknown>}>(sql`select is_active,custom from projects where org_id=${org.orgId} and id=${unknownProjectId}`)).rows[0]!;
+      const rolledBack=(await db.execute<{is_active:boolean;custom:Record<string,unknown>}>(sql`select is_active,custom from projects where org_id=${org.orgId} and id=${unknownProjectId}`, "objects"))[0]!;
       assert.equal(rolledBack.is_active,true);
       assert.equal(rolledBack.custom.sourceRetirement,undefined,"a failed batch cannot leave a partial retirement");
     });

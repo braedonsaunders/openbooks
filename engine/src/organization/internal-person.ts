@@ -39,8 +39,8 @@ export async function pinInternalPerson(
               and r.is_active
          )
        )
-     limit 1`));
-  const row = owned.rows[0];
+     limit 1`, "objects"));
+  const row = owned[0];
   if (!row) return null;
   // An employee party is a single-subsidiary record. A restricted caller
   // must not reach a person by guessing their UUID; null also fails closed
@@ -90,6 +90,6 @@ export async function listInternalPersonOptions(
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
      order by p.display_name, p.id
      limit 2000
-  `);
-  return result.rows;
+  `, "objects");
+  return result;
 }

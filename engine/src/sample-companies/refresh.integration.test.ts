@@ -32,16 +32,16 @@ test("native exploration refresh preserves rebased posted history, member drafts
     const draftMasterId = scenarioRecordId({ orgId: master.orgId }, "documents", "expense");
     const draftMasterLineId = scenarioRecordId({ orgId: master.orgId }, "document_lines", "expense");
     await withOrgContext(master.orgId, async () => {
-      const actor = (await db.execute<{ id: string }>(sql`select id from users where org_id=${master.orgId} and is_active order by created_at,id limit 1`)).rows[0]!;
+      const actor = (await db.execute<{ id: string }>(sql`select id from users where org_id=${master.orgId} and is_active order by created_at,id limit 1`, "objects"))[0]!;
       await db.execute(sql`insert into user_org_access(member_user_id,org_id,acting_user_id) values(${memberUserId},${master.orgId},${actor.id}),(${sourceReviewerId},${master.orgId},${actor.id})`);
-      assert.equal((await db.execute(sql`update documents set memo='Operator revised master expense' where org_id=${master.orgId} and id=${draftMasterId} and status='draft' returning id`)).rows.length, 1);
-      assert.equal((await db.execute(sql`update document_lines set description='Operator retained receipt detail' where org_id=${master.orgId} and id=${draftMasterLineId} returning id`)).rows.length, 1);
+      assert.equal((await db.execute(sql`update documents set memo='Operator revised master expense' where org_id=${master.orgId} and id=${draftMasterId} and status='draft' returning id`, "objects")).length, 1);
+      assert.equal((await db.execute(sql`update document_lines set description='Operator retained receipt detail' where org_id=${master.orgId} and id=${draftMasterLineId} returning id`, "objects")).length, 1);
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{onboarding}','{"setupComplete":false,"customReview":"retained"}'::jsonb) where id=${master.orgId}`);
     });
-    const masterDraft = () => withOrgContext(master.orgId, async () => (await db.execute(sql`
+    const masterDraft = () => withOrgContext(master.orgId, async () => await db.execute(sql`
       select to_jsonb(d) as document,to_jsonb(l) as line,o.settings->'onboarding' as onboarding
       from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id
-      join orgs o on o.id=d.org_id where d.org_id=${master.orgId} and d.id=${draftMasterId} and l.id=${draftMasterLineId}`)).rows);
+      join orgs o on o.id=d.org_id where d.org_id=${master.orgId} and d.id=${draftMasterId} and l.id=${draftMasterLineId}`, "objects"));
     const masterDraftBefore = await masterDraft();
     const masterRefresh = await refreshSampleCompany(master.orgId, "general_business");
     assert.ok(masterRefresh.preservedRecords > masterRefresh.preservedEntries);
@@ -57,9 +57,9 @@ test("native exploration refresh preserves rebased posted history, member drafts
     memberOrgId = company.orgId;
     const orgId = memberOrgId;
     const accessRows = (tenantId: string) => withOrgContext(tenantId, async () =>
-      (await db.execute<{ member_user_id: string; is_active: boolean }>(sql`
+      await db.execute<{ member_user_id: string; is_active: boolean }>(sql`
         select member_user_id,is_active from user_org_access where org_id=${tenantId}
-        order by member_user_id`)).rows);
+        order by member_user_id`, "objects"));
     assert.deepEqual(await accessRows(master.orgId), [memberUserId,sourceReviewerId].sort().map(member_user_id => ({ member_user_id,is_active: true })),
       "refresh preserves the source operator's existing access");
     assert.deepEqual(await accessRows(orgId), [{ member_user_id: memberUserId, is_active: true }],
@@ -76,21 +76,21 @@ test("native exploration refresh preserves rebased posted history, member drafts
         join journal_lines jl on jl.org_id=m.org_id and jl.id=m.journal_line_id
         join journal_entries je on je.org_id=m.org_id and je.id=jl.entry_id
         join bank_statement_lines sl on sl.org_id=m.org_id and sl.id=m.statement_line_id
-        where m.org_id=${tenantId} and r.status='signed_off'`)).rows[0]!);
+        where m.org_id=${tenantId} and r.status='signed_off'`, "objects"))[0]!);
     const sourceMatches = await signedOffMatches(master.orgId);
     assert.ok(sourceMatches.matches >= 4, "native source contains signed-off bank evidence to preserve");
     assert.equal(sourceMatches.invalid, 0);
     assert.deepEqual(await signedOffMatches(orgId), sourceMatches,
       "exploration copies preserve signed-off match counts and exact native journal ownership");
-    const identity = await withOrgContext(orgId, async () => (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id=${orgId}`)).rows[0]!);
+    const identity = await withOrgContext(orgId, async () => (await db.execute<{ seed: string }>(sql`select sandbox_seed::text as seed from orgs where id=${orgId}`, "objects"))[0]!);
     const draftId = scenarioRecordId({ orgId, identitySourceOrgId: master.orgId, identitySeed: identity.seed }, "documents", "operations-quote-3");
     await withOrgContext(orgId, async () => {
       await db.execute(sql`update documents set memo='Member-owned scope revision' where org_id=${orgId} and id=${draftId} and status='draft'`);
       await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features,projects}','true'::jsonb),'{features,payroll}','false'::jsonb) where id=${orgId}`);
     });
-    const snapshot = () => withOrgContext(orgId, async () => (await db.execute<{ id: string; digest: string }>(sql`
+    const snapshot = () => withOrgContext(orgId, async () => await db.execute<{ id: string; digest: string }>(sql`
       select e.id,md5(to_jsonb(e)::text || coalesce((select jsonb_agg(to_jsonb(l) order by l.id)::text from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id),'[]')) as digest
-      from journal_entries e where e.org_id=${orgId} and e.status in ('posted','reversed') order by e.id`)).rows);
+      from journal_entries e where e.org_id=${orgId} and e.status in ('posted','reversed') order by e.id`, "objects"));
     const before = await snapshot();
     assert.ok(before.length > 40, "the preservation proof needs substantial real posted history");
     const plan = await sampleRefreshPlan("general_business");
@@ -112,7 +112,7 @@ test("native exploration refresh preserves rebased posted history, member drafts
     await withOrgContext(orgId, async () => {
       const row = (await db.execute<{ projects: boolean; payroll: boolean; memo: string }>(sql`select
         (o.settings->'features'->>'projects')::boolean as projects,(o.settings->'features'->>'payroll')::boolean as payroll,
-        (select memo from documents where org_id=o.id and id=${draftId}) as memo from orgs o where o.id=${orgId}`)).rows[0]!;
+        (select memo from documents where org_id=o.id and id=${draftId}) as memo from orgs o where o.id=${orgId}`, "objects"))[0]!;
       assert.deepEqual(row, { projects: true, payroll: false, memo: "Member-owned scope revision" });
     });
     assert.equal((await sampleRefreshPlan("general_business")).digest, plan.digest, "advancing a version leaves the reviewed membership resumable");
@@ -137,15 +137,15 @@ test("construction refresh requires local field-ticket authors before changing e
     await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actorId}`));
     await withOrgContext(world.orgId, () => db.execute(sql`update orgs set settings=jsonb_set(settings,'{sampleTemplate}',
       '{"enabled":true,"profileId":"general-contractor","version":1}'::jsonb) where id=${world.orgId}`));
-    const snapshot = () => withOrgContext(world.orgId, async () => (await db.execute(sql`
+    const snapshot = () => withOrgContext(world.orgId, async () => await db.execute(sql`
       select o.settings,
         (select coalesce(jsonb_agg(to_jsonb(d) order by d.id),'[]') from documents d where d.org_id=o.id) as documents,
         (select coalesce(jsonb_agg(to_jsonb(l) order by l.id),'[]') from document_lines l where l.org_id=o.id) as lines,
         (select count(*)::int from audit_log where org_id=o.id) as audits,
         (select count(*)::int from field_ticket_labor_snapshots where org_id=o.id) as labor_snapshots
-      from orgs o where o.id=${world.orgId}`)).rows);
-    const accounts = await withOrgContext(world.orgId, async () => (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id=${world.orgId} and is_active and not is_summary order by number limit 2`)).rows);
+      from orgs o where o.id=${world.orgId}`, "objects"));
+    const accounts = await withOrgContext(world.orgId, async () => await db.execute<{ id: string }>(sql`
+      select id from accounts where org_id=${world.orgId} and is_active and not is_summary order by number limit 2`, "objects"));
     assert.equal(accounts.length, 2);
     await withOrgContext(world.orgId, () => createScriptJournal(world.orgId, world.actors.admin, {
       documentDate: "2026-07-15", subsidiaryId: world.subsidiaryId, memo: "Preserve the operator's construction draft",

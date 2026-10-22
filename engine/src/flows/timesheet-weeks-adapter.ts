@@ -80,8 +80,8 @@ export async function resolveTimesheetWeek(
       from timesheet_weeks
      where id = ${subjectId}
        ${orgId ? sql`and org_id = ${orgId}` : sql``}
-  `);
-  const row = result.rows[0];
+  `, "objects");
+  const row = result[0];
   if (!row) return null;
   return {
     orgId: row.org_id,
@@ -139,8 +139,8 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
      where tw.id = ${subjectId}
      group by tw.org_id, employee.display_name, tw.employee_party_id, tw.week_start,
               tw.status, tw.submitted_by, tw.created_by,tw.submitted_at
-  `);
-  return result.rows[0] ?? null;
+  `, "objects");
+  return result[0] ?? null;
 }
 
 export const timesheetWeeksFlowAdapter: FlowSubjectAdapter =
@@ -180,14 +180,13 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter =
          and te.worked_on >= ${week.week_start}::date
          and te.worked_on <= ${week.week_start}::date + 6
        order by te.worked_on, te.id
-    `);
+    `, "objects");
 
       const total = Number(week.total_hours);
       // The week's maker for separation of duties: the single user who wrote
       // its hours, distinct from whoever submitted it. Every author and the
       // employee retain their identity under the frozen tenant separation policy.
-      const makers = (
-        await db.execute<{ id: string }>(sql`
+      const makers = (await db.execute<{ id: string }>(sql`
       select distinct actor as id from (
         select te.created_by as actor from time_entries te
          where te.org_id=${week.org_id} and te.employee_party_id=${week.employee_party_id}
@@ -195,8 +194,7 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter =
         union select u.id from users u
          where u.org_id=${week.org_id} and u.party_id=${week.employee_party_id}
       ) authors where actor is not null
-    `)
-      ).rows.map((row) => row.id);
+    `, "objects")).map((row) => row.id);
       return {
         values: {
           id: subjectId,
@@ -216,7 +214,7 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter =
           submittedBy: week.submitted_by,
           submittedAt: week.submitted_at,
         },
-        rows: { timeEntries: entries.rows },
+        rows: { timeEntries: entries },
         submitterUserId: week.submitted_by,
         makerUserIds: makers,
       };
@@ -280,7 +278,7 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter =
          and status in ('draft', 'submitted', 'rejected')
        order by week_start desc
        limit ${limit}
-    `);
-      return result.rows.map((row) => row.id);
+    `, "objects");
+      return result.map((row) => row.id);
     },
   });

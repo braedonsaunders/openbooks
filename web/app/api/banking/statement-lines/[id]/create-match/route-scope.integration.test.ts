@@ -100,12 +100,12 @@ async function post(lineId: string, reconId: string, offsetAccountId: string) {
 
 async function journalCount(orgId: string): Promise<number> {
   return (await withOrgContext(orgId, () => db.execute<{ n: number }>(sql`
-    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'journal'`))).rows[0]!.n;
+    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'journal'`, "objects")))[0]!.n;
 }
 
 async function lineStatus(orgId: string, lineId: string): Promise<string | null> {
-  const rows = (await withOrgContext(orgId, () => db.execute<{ match_status: string }>(sql`
-    select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}`))).rows;
+  const rows = await withOrgContext(orgId, () => db.execute<{ match_status: string }>(sql`
+    select match_status from bank_statement_lines where org_id = ${orgId} and id = ${lineId}`, "objects"));
   return rows[0]?.match_status ?? null;
 }
 

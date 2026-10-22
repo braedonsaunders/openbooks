@@ -48,20 +48,20 @@ function visibleEntity(column: ReturnType<typeof sql>, allowed: Set<string> | nu
 export async function provisionEditorOptions(orgId: string, actorId: string) {
   return withOrgTransaction(orgId, async () => {
     const allowed = await authority(db, orgId, actorId, null, 'gl.manage')
-    const subsidiaries = (await db.execute<{ id: string; name: string; currency: string }>(sql`
+    const subsidiaries = await db.execute<{ id: string; name: string; currency: string }>(sql`
       select id,name,base_currency as currency from subsidiaries where org_id=${orgId}
         and is_active and not is_elimination ${visibleEntity(sql`id`, allowed)} order by name,id
-    `)).rows
-    const books = (await db.execute<{ id: string; name: string }>(sql`
+    `, 'objects')
+    const books = await db.execute<{ id: string; name: string }>(sql`
       select id,name from accounting_books where org_id=${orgId} and is_active and posts_gl order by name,id
-    `)).rows
+    `, 'objects')
     const ctx = await loadSubsidiaryContext(db, orgId)
     const accounts = (await db.execute<{ id: string; name: string; type: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
       select id,concat_ws(' — ',number,name) as name,type,subsidiary_id as "subsidiaryId",
         subsidiary_include_children as "includeChildren" from accounts where org_id=${orgId}
         and is_active and not is_summary and type in ('expense','expense_other','liability_current_other','liability_long_term')
         order by number,name,id
-    `)).rows.map(account => ({
+    `, 'objects')).map(account => ({
       id: account.id,
       name: account.name,
       type: account.type,
@@ -71,7 +71,7 @@ export async function provisionEditorOptions(orgId: string, actorId: string) {
       ? (await db.execute<{id:string;name:string;subsidiaryId:string}>(sql`select id,name,owner_id as "subsidiaryId" from (
           select id,code,concat_ws(' — ',code,name) as name,${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)} as owner_id from projects
            where org_id=${orgId} and is_active and contract_value is not null) owned
-        where owner_id is not null ${visibleEntity(sql`owner_id`,allowed)} order by code,id`)).rows : []
+        where owner_id is not null ${visibleEntity(sql`owner_id`,allowed)} order by code,id`, 'objects')) : []
     return { subsidiaries, books, accounts, projects, reportingFramework: await framework(db, orgId) }
   })
 }
@@ -83,14 +83,14 @@ export async function readProvisionObligation(orgId: string, actorId: string, id
       select id,subsidiary_id as "subsidiaryId",book_id as "bookId",name,currency,
         expense_account_id as "expenseAccountId",liability_account_id as "liabilityAccountId",project_id as "projectId"
         from provision_obligations where org_id=${orgId} and id=${id} ${visibleEntity(sql`subsidiary_id`, allowed)}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!identity) throw new ScopeNotFoundError()
     if (identity.projectId) await constructionSubject(db,orgId,actorId,identity,true)
-    const assessments = (await db.execute<{ id: string; effectiveOn: string; reason: string; status: string; assessment: ProvisionAssessment; result: Record<string, unknown> | null }>(sql`
+    const assessments = await db.execute<{ id: string; effectiveOn: string; reason: string; status: string; assessment: ProvisionAssessment; result: Record<string, unknown> | null }>(sql`
       select id,effective_on::text as "effectiveOn",reason,status,payload->'assessment' as assessment,result
         from financial_changes where org_id=${orgId} and domain='provision' and subject_id=${id}
         order by effective_on desc,created_at desc,id desc
-    `)).rows
+    `, 'objects')
     return { identity, assessments }
   })
 }
@@ -108,7 +108,7 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
     select id,subsidiary_id as "subsidiaryId",book_id as "bookId",name,currency,
       expense_account_id as "expenseAccountId",liability_account_id as "liabilityAccountId",project_id as "projectId"
       from provision_obligations where org_id=${orgId} and id=${identity.id} for update
-  `)).rows[0]
+  `, 'objects'))[0]
   if (prior) {
     if (Object.keys(prior).some(key => (prior[key as keyof ProvisionIdentity] ?? null) !== (identity[key as keyof ProvisionIdentity] ?? null)))
       throw new ProvisionError('The provision accounting identity differs from the original obligation — use its existing identity or create a separate obligation')
@@ -119,23 +119,23 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
   if (!prior) {
     if (identity.projectId) {
       const project = (await tx.execute<{ subsidiary_id: string | null }>(sql`select subsidiary_id from projects
-        where org_id=${orgId} and id=${identity.projectId} and is_active for share`)).rows[0];
+        where org_id=${orgId} and id=${identity.projectId} and is_active for share`, 'objects'))[0];
       if (!project) throw new ScopeNotFoundError();
       if (project.subsidiary_id !== identity.subsidiaryId)
         throw new ProvisionError('Assign this project to the selected legal entity before creating its loss provision');
     }
     const entity = (await tx.execute<{ currency: string }>(sql`select base_currency as currency from subsidiaries
-      where org_id=${orgId} and id=${identity.subsidiaryId} and is_active and not is_elimination for share`)).rows[0]
+      where org_id=${orgId} and id=${identity.subsidiaryId} and is_active and not is_elimination for share`, 'objects'))[0]
     if (!entity || entity.currency !== identity.currency)
       throw new ProvisionError('Use the active legal entity and its functional currency for this provision')
     const book = (await tx.execute(sql`select id from accounting_books where org_id=${orgId} and id=${identity.bookId}
-      and is_active and posts_gl for share`)).rows[0]
+      and is_active and posts_gl for share`, 'objects'))[0]
     if (!book) throw new ProvisionError('Choose an active posting accounting book for this provision')
   }
-  const accounts = (await tx.execute<{ id: string; type: string; name: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
+  const accounts = await tx.execute<{ id: string; type: string; name: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
     select id,type,name,subsidiary_id as "subsidiaryId",subsidiary_include_children as "includeChildren" from accounts where org_id=${orgId}
       and id in (${identity.expenseAccountId},${identity.liabilityAccountId}) and is_active and not is_summary order by id for share
-  `)).rows
+  `, 'objects')
   if (accounts.length !== 2 || !['expense', 'expense_other'].includes(accounts.find(a => a.id === identity.expenseAccountId)?.type ?? '')
       || !['liability_current_other', 'liability_long_term'].includes(accounts.find(a => a.id === identity.liabilityAccountId)?.type ?? ''))
     throw new ProvisionError('Choose distinct active posting expense and liability accounts for the provision')
@@ -146,8 +146,8 @@ async function lockIdentity(tx: SqlExecutor, orgId: string, actorId: string, ide
   const inserted = await tx.execute(sql`insert into provision_obligations
     (id,org_id,subsidiary_id,book_id,name,currency,expense_account_id,liability_account_id,created_by,project_id)
     values (${identity.id},${orgId},${identity.subsidiaryId},${identity.bookId},${identity.name},${identity.currency},
-      ${identity.expenseAccountId},${identity.liabilityAccountId},${actorId},${identity.projectId ?? null}) returning id`)
-  if (inserted.rows.length !== 1) throw new ProvisionError('The provision obligation could not be recorded — reload and retry')
+      ${identity.expenseAccountId},${identity.liabilityAccountId},${actorId},${identity.projectId ?? null}) returning id`, 'objects')
+  if (inserted.length !== 1) throw new ProvisionError('The provision obligation could not be recorded — reload and retry')
   await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
     values (${orgId},'provision_obligations',${identity.id},'insert',${JSON.stringify({ before: null, after: identity })}::jsonb,${actorId})`)
   return identity
@@ -157,10 +157,10 @@ async function basis(tx: SqlExecutor, orgId: string, actorId: string, identity: 
   const reportingFramework = await framework(tx, orgId)
   const period = await resolveCoveringPeriod(tx, orgId, effectiveOn, identity.subsidiaryId)
   if (!period) throw new ProvisionError('Create the regular accounting period covering the assessment date in the active posting calendar')
-  const events = (await tx.execute<{ id: string; effective_on: string; status: string; result: Record<string, unknown> }>(sql`
+  const events = await tx.execute<{ id: string; effective_on: string; status: string; result: Record<string, unknown> }>(sql`
     select id,effective_on::text,status,result from financial_changes where org_id=${orgId}
       and domain='provision' and subject_id=${identity.id} and status='applied' order by effective_on,id
-  `)).rows
+  `, 'objects')
   if (events.some(event => event.effective_on > effectiveOn))
     throw new ProvisionError('A later assessment has already been applied — use its date or a later date for the correcting assessment')
   // Reversed journal headers remain accounting history: their original legs
@@ -170,7 +170,7 @@ async function basis(tx: SqlExecutor, orgId: string, actorId: string, identity: 
       join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
      where line.org_id=${orgId} and entry.book_id=${identity.bookId} and line.subsidiary_id=${identity.subsidiaryId}
        and line.account_id=${identity.liabilityAccountId} and line.custom->>'provisionId'=${identity.id} and entry.status in ('posted','reversed')
-  `)).rows[0]!.amount
+  `, 'objects'))[0]!.amount
   return { identity, reportingFramework, periodId: period.id, balance: normalizeMoney(balance), events,
     construction:await constructionBasis(tx,orgId,actorId,identity,effectiveOn) }
 }
@@ -207,7 +207,7 @@ export async function proposeProvisionAssessment(orgId: string, actorId: string,
 export async function applyProvisionAssessment(orgId: string, changeId: string, actorId: string) {
   return withOrgTransaction(orgId, async () => {
     const tx = db
-    if (!(await tx.execute(sql`select id from financial_changes where org_id=${orgId} and id=${changeId} and domain='provision' for update`)).rows.length)
+    if (!(await tx.execute(sql`select id from financial_changes where org_id=${orgId} and id=${changeId} and domain='provision' for update`, 'objects')).length)
       throw new ScopeNotFoundError()
     const change = await loadFinancialChange(tx, orgId, changeId)
     if (change.domain !== 'provision' || change.operation !== 'provision_assessment')

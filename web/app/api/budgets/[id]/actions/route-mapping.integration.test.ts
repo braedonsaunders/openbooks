@@ -59,7 +59,7 @@ async function seedOrg(): Promise<Org> {
   state.actorId = randomUUID()
   state.allowed = null
   const calendarId = (await db.execute<{ id: string }>(sql`
-    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`)).rows[0]!.id
+    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, 'objects'))[0]!.id
   // The target year carries exactly one period: any source line outside
   // period 1 has no destination and must block the action.
   await db.execute(sql`
@@ -117,9 +117,9 @@ async function post(id: string, body: unknown) {
 }
 async function scenarioState(id: string, orgId: string) {
   const scenario = (await db.execute<{ revision: number }>(sql`
-    select revision from budget_scenarios where id = ${id} and org_id = ${orgId}`)).rows[0]
+    select revision from budget_scenarios where id = ${id} and org_id = ${orgId}`, 'objects'))[0]
   const lineCount = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from budget_lines where scenario_id = ${id} and org_id = ${orgId}`)).rows[0]!.n
+    select count(*)::int as n from budget_lines where scenario_id = ${id} and org_id = ${orgId}`, 'objects'))[0]!.n
   return { revision: scenario?.revision ?? null, lines: lineCount }
 }
 
@@ -130,7 +130,7 @@ test('copy refuses when the target year misses a source period, writing nothing'
     await seedLine(org, sourceId, org.periodId, '1200.0000')
     const before = await scenarioState(sourceId, org.orgId)
     const scenarioCount = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
 
     const response = await post(sourceId, { action: 'copy', fiscalYear: 2027, expectedRevision: 1 })
     const body = (await response.json()) as { error?: string }
@@ -140,7 +140,7 @@ test('copy refuses when the target year misses a source period, writing nothing'
     const after = await scenarioState(sourceId, org.orgId)
     assert.deepEqual(after, before, 'the refused copy changes neither revision nor lines')
     const countAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`, 'objects'))[0]!.n
     assert.equal(countAfter, scenarioCount, 'the refused copy creates no scenario')
   } finally {
     await dropScratchOrg(org.orgId)
@@ -154,7 +154,7 @@ test('apply_source refuses before its delete, keeping the target lines', async (
     await seedLine(org, sourceId, org.periodId, '1200.0000')
     const targetId = await seedScenario(org, 2027, 'Target 2027')
     const targetPeriod = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2027`)).rows[0]!.id
+      select id from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2027`, 'objects'))[0]!.id
     await seedLine(org, targetId, targetPeriod, '100.0000')
     const before = await scenarioState(targetId, org.orgId)
     assert.equal(before.lines, 1)
@@ -175,7 +175,7 @@ test('apply_source refuses an out-of-scope source before clearing target lines',
   try {
     const hidden = (await db.execute<{ id: string }>(sql`
       insert into subsidiaries (org_id, parent_id, name, base_currency, country)
-      values (${org.orgId}, ${org.subsidiaryId}, 'Hidden budget entity', 'CAD', 'CA') returning id`)).rows[0]!.id
+      values (${org.orgId}, ${org.subsidiaryId}, 'Hidden budget entity', 'CAD', 'CA') returning id`, 'objects'))[0]!.id
     const sourceId = await seedScenario(org, 2026, 'Restricted source')
     await seedLine(org, sourceId, org.periodId, '1200.0000')
     await db.execute(sql`
@@ -184,7 +184,7 @@ test('apply_source refuses an out-of-scope source before clearing target lines',
       values (${org.orgId}, ${sourceId}, ${org.cogsId}, ${org.periodId}, ${hidden}, '300.0000', ${state.actorId}, ${state.actorId})`)
     const targetId = await seedScenario(org, 2027, 'Restricted target')
     const targetPeriod = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2027 and period_number = 1`)).rows[0]!.id
+      select id from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2027 and period_number = 1`, 'objects'))[0]!.id
     // Make every source period map so the subsidiary guard is the refusal.
     await db.execute(sql`
       insert into accounting_periods
@@ -209,7 +209,7 @@ test('copy_prior_actuals refuses before its delete when prior actuals lack a des
   try {
     const targetId = await seedScenario(org, 2027, 'Target 2027')
     const targetPeriod = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2027`)).rows[0]!.id
+      select id from accounting_periods where org_id = ${org.orgId} and fiscal_year = 2027`, 'objects'))[0]!.id
     await seedLine(org, targetId, targetPeriod, '100.0000')
     // Real posted actuals in 2026-07 (period 7): 2027 carries only period 1.
     await seedPostedActual(org, org.periodId)

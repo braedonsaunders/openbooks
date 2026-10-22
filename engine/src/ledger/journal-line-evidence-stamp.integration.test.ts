@@ -80,7 +80,7 @@ async function postedEntryWithDeactivatedAccount(org: Org, number: string): Prom
   // (accounts_reconcilable_currency_required); CAD matches the posted legs.
   await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD', is_active = false where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
   const lineId = (await db.execute<{ id: string }>(sql`
-    select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 1`)).rows[0]!.id;
+    select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 1`, "objects"))[0]!.id;
   return { entryId, lineId };
 }
 
@@ -108,7 +108,7 @@ test("0236: evidence-only stamp on a deactivated account succeeds and returns th
     assert.equal(stamped.rows[0]!.id, lineId);
     const row = (await db.execute<{ d: string; c: string }>(sql`
       select source_cleared_date::text as d, source_cleared_connector as c
-        from journal_lines where id = ${lineId} and org_id = ${org.orgId}`)).rows[0]!;
+        from journal_lines where id = ${lineId} and org_id = ${org.orgId}`, "objects"))[0]!;
     assert.equal(row.d, org.date);
     assert.equal(row.c, "external_ledger");
   } finally {
@@ -149,7 +149,7 @@ test("0236: retargeting a line at an inactive account is still refused", { skip:
   try {
     const { entryId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-D");
     const liveLine = (await db.execute<{ id: string }>(sql`
-      select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 2`)).rows[0]!.id;
+      select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 2`, "objects"))[0]!.id;
     await assert.rejects(
       db.execute(sql`update journal_lines set account_id = ${org.accounts.bank} where id = ${liveLine} and org_id = ${org.orgId}`),
       (e: unknown) => errorChainMatches(e, /is inactive|immutable/),

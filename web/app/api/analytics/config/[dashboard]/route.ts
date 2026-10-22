@@ -96,17 +96,17 @@ export const GET = defineRoute({
              coalesce((settings -> 'analytics' ->> ${revisionKey(dashboard)})::int, 0) as rev,
              settings -> 'analytics' ->> ${configCurrencyKey(dashboard)} as currency
         from orgs where id = ${gate.user.orgId}
-    `),
+    `, "objects"),
     presentationCurrency(gate.user.orgId),
   ]);
   return NextResponse.json({
-    values: mergeConfig(dashboard, r.rows[0]?.cfg ?? null, { stored: r.rows[0]?.currency ?? null, presentation: currency }),
+    values: mergeConfig(dashboard, r[0]?.cfg ?? null, { stored: r[0]?.currency ?? null, presentation: currency }),
     defaults: spec.defaults,
     fields: spec.fields,
     ordered: "ordered" in spec ? spec.ordered : [],
     groups: "groups" in spec ? spec.groups : [],
     currency,
-    revision: Number(r.rows[0]?.rev ?? 0),
+    revision: Number(r[0]?.rev ?? 0),
   });
   },
 })
@@ -152,21 +152,21 @@ export const PUT = defineRoute({
              coalesce((settings -> 'analytics' ->> ${revisionKey(dashboard)})::int, 0) as rev,
              settings -> 'analytics' ->> ${configCurrencyKey(dashboard)} as currency
         from orgs where id = ${gate.user.orgId} for update
-    `);
-    if (!existing.rows[0]) return { kind: "missing" as const };
-    const currentRevision = Number(existing.rows[0].rev);
+    `, "objects");
+    if (!existing[0]) return { kind: "missing" as const };
+    const currentRevision = Number(existing[0].rev);
     if (currentRevision !== expectedRevision) {
       return {
         kind: "conflict" as const,
         revision: currentRevision,
-        values: mergeConfig(dashboard, existing.rows[0].cfg ?? null, { stored: existing.rows[0].currency, presentation: currency }),
+        values: mergeConfig(dashboard, existing[0].cfg ?? null, { stored: existing[0].currency, presentation: currency }),
       };
     }
-    const beforeCurrency = existing.rows[0].currency;
-    const rawBefore = existing.rows[0].cfg;
+    const beforeCurrency = existing[0].currency;
+    const rawBefore = existing[0].cfg;
     const before = rawBefore && typeof rawBefore === "object" ? rawBefore : {};
     const nextRevision = currentRevision + 1;
-    const updated = await tx.execute(sql`
+    const updated = await tx.execute<never>(sql`
       update orgs
       set settings = jsonb_set(
         jsonb_set(

@@ -83,10 +83,10 @@ export async function loadPayrollWorkAllocations(
        and status = 'approved' and work_region is not null
        and worked_on between ${ytdStart}::date and ${input.periodEnd}::date
      order by worked_on, id
-  `);
-  const currentWork = work.rows.filter((row) => row.workedOn >= input.periodStart && row.workedOn <= input.periodEnd);
+  `, "objects");
+  const currentWork = work.filter((row) => row.workedOn >= input.periodStart && row.workedOn <= input.periodEnd);
   const ytdDaysByRegion = new Map<string, Set<string>>();
-  for (const row of work.rows) {
+  for (const row of work) {
     const days = ytdDaysByRegion.get(row.region) ?? new Set<string>();
     days.add(row.workedOn);
     ytdDaysByRegion.set(row.region, days);
@@ -110,8 +110,8 @@ export async function loadPayrollWorkAllocations(
          where org_id = ${input.orgId} and employment_id = ${input.employmentId}
            and period_start = ${input.periodStart}::date and period_end = ${input.periodEnd}::date
          order by region, subregion
-      `)
-    : { rows: [] as AllocationRow[] };
+      `, "objects")
+    : [] as AllocationRow[];
   const hrYtd = input.employmentId
     ? await tx.execute<{ region: string; serviceDays: number }>(sql`
         select region, sum(service_days)::int as "serviceDays"
@@ -132,9 +132,9 @@ export async function loadPayrollWorkAllocations(
                                      and payroll_work_location_allocations.period_end
            )
          group by region
-      `)
-    : { rows: [] as { region: string; serviceDays: number }[] };
-  const hrYtdDays = new Map(hrYtd.rows.map((row) => [row.region, row.serviceDays]));
+      `, "objects")
+    : [] as { region: string; serviceDays: number }[];
+  const hrYtdDays = new Map(hrYtd.map((row) => [row.region, row.serviceDays]));
 
   const source: SourceAllocation[] = currentWork.length > 0
     ? (() => {
@@ -163,7 +163,7 @@ export async function loadPayrollWorkAllocations(
     })()
     : (() => {
       const rowsByRegion = new Map<string, AllocationRow[]>();
-      for (const row of hr.rows) rowsByRegion.set(row.region, [...(rowsByRegion.get(row.region) ?? []), row]);
+      for (const row of hr) rowsByRegion.set(row.region, [...(rowsByRegion.get(row.region) ?? []), row]);
       const regions: SourceAllocation[] = [];
       for (const [region, rows] of rowsByRegion) {
         const explicitRegion = rows.find((row) => row.subregion === null);
@@ -184,7 +184,7 @@ export async function loadPayrollWorkAllocations(
       }
       return [
         ...regions,
-        ...hr.rows.filter((row) => row.subregion !== null).map((row) => ({
+        ...hr.filter((row) => row.subregion !== null).map((row) => ({
           region: row.region, subregion: row.subregion, workShare: row.workShare ?? "0",
           serviceDaysCurrentPeriod: row.serviceDays,
           serviceDaysYearToDate: ytdDaysByRegion.has(row.region) || hrYtdDays.has(row.region)
@@ -255,9 +255,9 @@ export async function loadPayrollWorkAllocations(
      where stub.org_id = ${input.orgId} and stub.employee_party_id = ${input.employeePartyId}
        and stub.tax_year = ${input.taxYear} and stub.pay_run_document_id <> ${input.documentId}
        and run.run_status = 'committed' and doc.status <> 'voided'
-  `);
-  const priorStubCount = priorStubs.rows[0]?.count ?? 0;
-  const sourceWageHistoryComplete = priorStubCount === 0 || priorStubs.rows[0]?.traced === priorStubCount;
+  `, "objects");
+  const priorStubCount = priorStubs[0]?.count ?? 0;
+  const sourceWageHistoryComplete = priorStubCount === 0 || priorStubs[0]?.traced === priorStubCount;
   const wageFactors = await tx.execute<{ region: string; wages: string }>(sql`
     select fact.key as region, sum(fact.value::numeric)::text as wages
       from pay_stubs stub
@@ -269,8 +269,8 @@ export async function loadPayrollWorkAllocations(
        and run.run_status = 'committed' and doc.status <> 'voided'
        and fact.key like 'work_source_wages:%'
      group by fact.key
-  `);
-  const ytdWages = new Map(wageFactors.rows.map((row) => [row.region.slice("work_source_wages:".length), row.wages]));
+  `, "objects");
+  const ytdWages = new Map(wageFactors.map((row) => [row.region.slice("work_source_wages:".length), row.wages]));
   return source.map(({ region, subregion, workShare, source: provenance,
     serviceDaysCurrentPeriod, serviceDaysYearToDate }) => ({
     region,

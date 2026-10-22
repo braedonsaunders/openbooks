@@ -133,9 +133,9 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, c.employment_id, p.display_name
      order by p.display_name, c.employment_id
-  `));
+  `, "objects"));
   const slips: JaaropgaafSlip[] = [];
-  for (const row of rows.rows) {
+  for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
     const opgaaf = await nlOpgaafOnFile(orgId, employeePartyId, taxYear);
     slips.push({
@@ -201,8 +201,8 @@ async function bsnForSlip(orgId: string, employeePartyId: string): Promise<strin
     select prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId} and prof.employee_party_id = ${employeePartyId}
-  `));
-  const sealed = rows.rows[0]?.sin_encrypted ?? null;
+  `, "objects"));
+  const sealed = rows[0]?.sin_encrypted ?? null;
   const bsn = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   const citation = "Handboek Loonheffingen 2026, hoofdstuk 15, §15.3 requires the BSN on the statement";
   const remedy = "add or correct the BSN on the employee payroll profile before issuing";
@@ -219,8 +219,8 @@ async function bsnForSlip(orgId: string, employeePartyId: string): Promise<strin
 async function employerName(orgId: string): Promise<string> {
   const rows = (await db.execute<{ name: string | null }>(sql`
     select name from orgs where id = ${orgId}
-  `));
-  return rows.rows[0]?.name ?? "Unknown employer";
+  `, "objects"));
+  return rows[0]?.name ?? "Unknown employer";
 }
 
 // ---------------------------------------------------------------------------

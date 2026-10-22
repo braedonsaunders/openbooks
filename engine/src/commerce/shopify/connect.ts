@@ -402,14 +402,12 @@ type PostableAccount = {
 };
 
 async function postableAccounts(orgId: string): Promise<PostableAccount[]> {
-  return (
-    await withOrgContext(orgId, () =>
+  return await withOrgContext(orgId, () =>
       db.execute<PostableAccount>(sql`
         select id, name, type, currency_restriction as "currencyRestriction", subsidiary_id as "subsidiaryId"
           from accounts
-         where org_id = ${orgId} and is_active and not is_summary`),
-    )
-  ).rows;
+         where org_id = ${orgId} and is_active and not is_summary`, "objects"),
+    );
 }
 
 function compatible(account: PostableAccount, currency: string, subsidiaryId: string | null): boolean {
@@ -430,12 +428,10 @@ function nameHit(account: PostableAccount, patterns: RegExp[]): boolean {
  */
 export async function proposeShopifyAccountMaps(orgId: string, channelId: string): Promise<AccountProposal[]> {
   const channel = await loadShopifyChannel(orgId, channelId);
-  const subsidiary = (
-    await withOrgContext(orgId, () =>
+  const subsidiary = (await withOrgContext(orgId, () =>
       db.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`),
-    )
-  ).rows[0];
+        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"),
+    ))[0];
   const subsidiaryId = subsidiary?.subsidiary_id ?? null;
   const accounts = (await postableAccounts(orgId)).filter((account) => compatible(account, channel.currency, subsidiaryId));
   const proposals: AccountProposal[] = [];
@@ -532,12 +528,10 @@ export async function acceptShopifyReview(
   input: AcceptReviewInput,
 ): Promise<{ channelId: string; maps: number }> {
   const channel = await loadShopifyChannel(orgId, channelId);
-  const subsidiary = (
-    await withOrgContext(orgId, () =>
+  const subsidiary = (await withOrgContext(orgId, () =>
       db.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`),
-    )
-  ).rows[0];
+        select subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"),
+    ))[0];
   const accounts = await postableAccounts(orgId);
   const effectiveFrom = input.effectiveFrom ?? isoDateOf(new Date());
   let maps = 0;

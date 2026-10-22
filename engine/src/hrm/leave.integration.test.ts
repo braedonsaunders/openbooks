@@ -102,24 +102,24 @@ async function seedPolicy(orgId: string, actorId: string, leaveTypeId: string, o
 }
 
 async function absencesOf(requestId: string): Promise<Array<{ on_date: string; hours: string; reversal_of: string | null }>> {
-  const rows = (await db.execute<{ on_date: string; hours: string; reversal_of: string | null }>(sql`
+  const rows = await db.execute<{ on_date: string; hours: string; reversal_of: string | null }>(sql`
     select on_date::text as on_date, hours::text as hours, reversal_of
       from hrm_absences where leave_request_id = ${requestId} or reversal_of in (
         select id from hrm_absences where leave_request_id = ${requestId}
       ) order by on_date
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
 async function inputsOf(requestId: string): Promise<Array<{ absence_date: string; hours: string; status: string; consumed_by: string | null; kind: string; party: string }>> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     absence_date: string; hours: string; status: string; consumed_by: string | null; kind: string; party: string;
   }>(sql`
     select absence_date::text as absence_date, hours::text as hours, status,
            consumed_by_run_document_id::text as consumed_by, kind,
            employee_party_id::text as party
       from hrm_payroll_inputs where source_leave_request_id = ${requestId} order by absence_date
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -141,13 +141,13 @@ test("0194 tables exist under org_isolation RLS with no amount column on inputs"
       const policy = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pg_policies
          where schemaname = 'public' and tablename = ${table} and policyname = 'org_isolation'
-      `)).rows[0]?.n ?? 0;
+      `, "objects"))[0]?.n ?? 0;
       assert.equal(policy, 1, `${table} carries the org_isolation policy`);
     }
     const amount = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from information_schema.columns
        where table_schema = 'public' and table_name = 'hrm_payroll_inputs' and column_name = 'amount'
-    `)).rows[0]?.n ?? 0;
+    `, "objects"))[0]?.n ?? 0;
     assert.equal(amount, 0, "hrm_payroll_inputs carries no amount column: HR sends hours, the run resolves the rate");
     void h;
   });
@@ -239,7 +239,7 @@ test("submit refused outside live employment, with no rows written", { skip: !DB
         leaveTypeId: type.id, startsOn: "2026-09-01", endsOn: "2026-09-02", hours: "16",
       }),
       /outside live employment/,
-      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId}`)).rows[0]!.n,
+      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId}`, "objects"))[0]!.n,
     );
   });
 });
@@ -268,7 +268,7 @@ test("submit refused on approved overlap and on insufficient time balance", { sk
         leaveTypeId: type.id, startsOn: "2026-09-02", endsOn: "2026-09-03", hours: "16",
       }),
       /overlaps approved request/,
-      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId} and status = 'draft'`)).rows[0]!.n,
+      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId} and status = 'draft'`, "objects"))[0]!.n,
     );
     // 120 earned, 16 taken: 200 hours do not fit.
     await assertLeaveRefusal(
@@ -277,7 +277,7 @@ test("submit refused on approved overlap and on insufficient time balance", { sk
         leaveTypeId: type.id, startsOn: "2026-11-01", endsOn: "2026-11-30", hours: "200",
       }),
       /time balance is .* but the request needs/,
-      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId} and status = 'draft'`)).rows[0]!.n,
+      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId} and status = 'draft'`, "objects"))[0]!.n,
     );
   });
 });
@@ -297,7 +297,7 @@ test("short notice refused to the worker, filed by the manager with a reason", {
         leaveTypeId: type.id, startsOn: soon, endsOn: soon, hours: "8",
       }),
       /needs 30 days notice/,
-      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId}`)).rows[0]!.n,
+      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where org_id = ${h.org.orgId}`, "objects"))[0]!.n,
     );
     const managed = await fileLeaveRequest({
       orgId: h.org.orgId, actorId: h.managerId, employmentId,
@@ -321,25 +321,25 @@ test("requires_attachment refused at submit until evidence is recorded", { skip:
     await assertLeaveRefusal(
       () => submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id }),
       /requires an attachment/,
-      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and status = 'submitted'`)).rows[0]!.n,
+      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and status = 'submitted'`, "objects"))[0]!.n,
     );
     await assertLeaveRefusal(
       () => recordLeaveAttachment({
         orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId: randomUUID(),
       }),
       /existing file from this organization's File Cabinet/,
-      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and attachment_id is not null`)).rows[0]!.n,
+      async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and attachment_id is not null`, "objects"))[0]!.n,
     );
     const foreignOrg = await createScratchOrg();
     try {
       const foreignFolderId = (await db.execute<{ id: string }>(sql`
         insert into folders (org_id, name, owner_id, is_private)
         values (${foreignOrg.orgId}, 'Foreign leave evidence', null, false) returning id
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       const foreignAttachmentId = (await db.execute<{ id: string }>(sql`
         insert into files (org_id, folder_id, name, file_type, content_type, size_bytes)
         values (${foreignOrg.orgId}, ${foreignFolderId}, 'foreign-evidence.pdf', 'pdf', 'application/pdf', 100) returning id
-      `)).rows[0]!.id;
+      `, "objects"))[0]!.id;
       await assert.rejects(
         () => withOrgTransaction(h.org.orgId, () => db.execute(sql`
           update hrm_leave_requests set attachment_id = ${foreignAttachmentId}
@@ -357,7 +357,7 @@ test("requires_attachment refused at submit until evidence is recorded", { skip:
           orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId: foreignAttachmentId,
         }),
         /existing file from this organization's File Cabinet/,
-        async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and attachment_id is not null`)).rows[0]!.n,
+        async () => (await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_leave_requests where id = ${draft.id} and attachment_id is not null`, "objects"))[0]!.n,
       );
     } finally {
       await dropScratchOrg(foreignOrg.orgId);
@@ -365,11 +365,11 @@ test("requires_attachment refused at submit until evidence is recorded", { skip:
     const folderId = (await db.execute<{ id: string }>(sql`
       insert into folders (org_id, name, owner_id, is_private)
       values (${h.org.orgId}, 'Leave evidence', ${h.employeeId}, true) returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const attachmentId = (await db.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, file_type, content_type, size_bytes)
       values (${h.org.orgId}, ${folderId}, 'evidence.pdf', 'pdf', 'application/pdf', 100) returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     await recordLeaveAttachment({
       orgId: h.org.orgId, actorId: h.employeeId, requestId: draft.id, attachmentId,
     });
@@ -462,7 +462,7 @@ test("approval refused with the retro remedy when a committed run covers the day
     }
     assert.ok(refusal, "the decision refuses");
     assert.match(String((refusal as Error)?.message ?? refusal), /retro/);
-    const status = (await db.execute<{ status: string }>(sql`select status from hrm_leave_requests where id = ${draft.id}`)).rows[0]!.status;
+    const status = (await db.execute<{ status: string }>(sql`select status from hrm_leave_requests where id = ${draft.id}`, "objects"))[0]!.status;
     assert.equal(status, "submitted", "the throw rolled the decision back; the gate stays pending");
     assert.equal((await absencesOf(draft.id)).length, 0, "no absence without the decision");
     assert.equal((await inputsOf(draft.id)).length, 0, "no input without the decision");
@@ -541,7 +541,7 @@ test("cancel voids pending inputs and reverses absences; committed consumption r
       assert.ok(error instanceof LeaveError);
       assert.match((error as Error).message, /retro/);
     }
-    const still = (await db.execute<{ status: string }>(sql`select status from hrm_leave_requests where id = ${second.id}`)).rows[0]!.status;
+    const still = (await db.execute<{ status: string }>(sql`select status from hrm_leave_requests where id = ${second.id}`, "objects"))[0]!.status;
     assert.equal(still, "approved", "the refused cancellation changes nothing");
   });
 });
@@ -572,7 +572,7 @@ test("withdraw ends drafts and in-flight approvals; the gate cannot release afte
     await withdrawLeaveRequest({
       orgId: h.org.orgId, actorId: h.employeeId, requestId: second.id, reason: "dates wrong",
     });
-    const gateStatus = (await db.execute<{ status: string }>(sql`select status from flow_gates where id = ${gate.id}`)).rows[0]!.status;
+    const gateStatus = (await db.execute<{ status: string }>(sql`select status from flow_gates where id = ${gate.id}`, "objects"))[0]!.status;
     assert.equal(gateStatus, "cancelled", "no dangling gate can later release the request");
   });
 });
@@ -843,15 +843,15 @@ test("after-the-fact recording writes the absence record and never a pay input",
     });
     assert.equal(recorded.source, "recorded");
     assert.equal(recorded.reason, "approved verbally by the owner");
-    const rows = (await db.execute<{ source: string; reason: string | null }>(sql`
+    const rows = await db.execute<{ source: string; reason: string | null }>(sql`
       select source, reason from hrm_absences where id = ${recorded.id}
-    `)).rows;
+    `, "objects");
     assert.equal(rows[0]!.source, "recorded");
     assert.equal(rows[0]!.reason, "approved verbally by the owner", "the basis is persisted on the record");
-    const audit = (await db.execute<{ action: string; reason: string | null; actor: string }>(sql`
+    const audit = await db.execute<{ action: string; reason: string | null; actor: string }>(sql`
       select action, changes->'after'->>'reason' as reason, actor_id::text as actor from audit_log
        where org_id = ${h.org.orgId} and table_name = 'hrm_absences' and row_id = ${recorded.id}
-    `)).rows;
+    `, "objects");
     assert.equal(audit.length, 1, "the recording writes its audit entry");
     assert.equal(audit[0]!.action, "absence_recorded");
     assert.equal(audit[0]!.reason, "approved verbally by the owner", "the audit entry carries the same basis");
@@ -915,7 +915,7 @@ test("same-scope overlapping policies refuse by name; other scopes and adjacent 
         select count(*)::int as n from hrm_leave_policies
          where org_id = ${h.org.orgId} and leave_type_id = ${type.id}
            and (accrual_rule->>'hours') = '80'
-      `)).rows[0]?.n ?? 0,
+      `, "objects"))[0]?.n ?? 0,
     );
     // Adjacent windows share no day and stay legal.
     await seedPolicy(h.org.orgId, h.managerId, type.id, {
@@ -949,7 +949,7 @@ test("same-scope overlapping policies refuse by name; other scopes and adjacent 
     const windows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_leave_policies
        where org_id = ${h.org.orgId} and leave_type_id = ${type.id} and is_active
-    `)).rows[0]?.n ?? 0;
+    `, "objects"))[0]?.n ?? 0;
     assert.equal(windows, 3, "only the three legal windows exist: two adjacent org-wide plus the department pin");
   });
 });
@@ -1040,7 +1040,7 @@ test("org-wide unlimited never launders a department cap at file time", { skip: 
       async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_leave_requests
          where org_id = ${h.org.orgId} and employment_id = ${employmentId}
-      `)).rows[0]?.n ?? 0,
+      `, "objects"))[0]?.n ?? 0,
     );
     const within = await fileLeaveRequest({
       orgId: h.org.orgId,
@@ -1092,7 +1092,7 @@ test("a department minimum notice binds its workers at file time", { skip: !DB }
       async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_leave_requests
          where org_id = ${h.org.orgId} and employment_id = ${employmentId}
-      `)).rows[0]?.n ?? 0,
+      `, "objects"))[0]?.n ?? 0,
     );
   });
 });
@@ -1173,7 +1173,7 @@ test("a request tail past its policy's end refuses naming the first uncovered da
       async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_leave_requests
          where org_id = ${h.org.orgId} and employment_id = ${employmentId}
-      `)).rows[0]?.n ?? 0,
+      `, "objects"))[0]?.n ?? 0,
     );
   });
 });
@@ -1201,7 +1201,7 @@ test("the uncovered-day refusal is audience-aware: employees hear ask-HR, policy
     const absent = async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_leave_requests
          where org_id = ${h.org.orgId} and employment_id = ${employmentId}
-      `)).rows[0]?.n ?? 0;
+      `, "objects"))[0]?.n ?? 0;
     // The filer holds only hrm.leave.request: the remedy names who can
     // set the policy up, never a setup step they cannot access.
     const employeeError = await assertLeaveRefusal(file, /no active leave policy covers 2026-07-01/, absent);
@@ -1246,7 +1246,7 @@ test("a stricter successor prices the tail it governs, not the first day's grant
       async () => (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from hrm_leave_requests
          where org_id = ${h.org.orgId} and employment_id = ${employmentId}
-      `)).rows[0]?.n ?? 0,
+      `, "objects"))[0]?.n ?? 0,
     );
     // A request the successor's grant covers still files: the range is not
     // blanket-refused, only priced under the policy governing each day.
@@ -1305,7 +1305,7 @@ test("OM-11: manager on-behalf filing succeeds for a managed employment and refu
     assert.ok(offeredIds.includes(employmentId), "the picker offers the managed employment");
     const partyName = (await db.execute<{ display_name: string }>(sql`
       select display_name from parties where id = ${workerParty} and org_id = ${h.org.orgId}
-    `)).rows[0]!.display_name;
+    `, "objects"))[0]!.display_name;
     const offer = offered.find((option) => option.employmentId === employmentId)!;
     assert.ok(offer.label.startsWith(partyName), `the picker names the target employee, got ${offer.label}`);
 
@@ -1327,7 +1327,7 @@ test("OM-11: manager on-behalf filing succeeds for a managed employment and refu
     const stored = (await db.execute<{ employment_id: string; created_by: string; reason: string | null }>(sql`
       select employment_id::text as employment_id, created_by::text as created_by, reason
         from hrm_leave_requests where id = ${filed.id} and org_id = ${h.org.orgId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(stored.employment_id, employmentId, "the request files against the target employment");
     assert.equal(stored.created_by, h.managerId, "the request records the managing actor as filer");
     assert.equal(stored.reason, "covering the ward");
@@ -1372,7 +1372,7 @@ test("OM-11: manager on-behalf filing succeeds for a managed employment and refu
     const childDrafts = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_leave_requests
        where org_id = ${h.org.orgId} and employment_id = ${childEmploymentId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(childDrafts, 0, "a refused on-behalf filing leaves no rows behind");
   });
 });
@@ -1410,7 +1410,7 @@ test("eight concurrent recordings of one day produce one row and seven named ref
     const rows = (await db.execute<{ n: number; hours: string }>(sql`
       select count(*)::int as n, sum(hours)::text as hours from hrm_absences
        where org_id = ${h.org.orgId} and employment_id = ${employmentId} and on_date = '2026-08-15'
-         and reversal_of is null`)).rows[0]!;
+         and reversal_of is null`, "objects"))[0]!;
     assert.equal(rows.n, 1, "the day carries one live row, never two");
     assert.equal(rows.hours, "8.00", "the calendar nets single hours for the day");
   });
@@ -1430,7 +1430,7 @@ test("the absence day guard exists, is valid, and covers live rows only", { skip
               join pg_attribute a on a.attrelid = i.indrelid and a.attnum = o.attnum) as columns
       from pg_index i
       join pg_class c on c.oid = i.indexrelid
-     where c.relname = 'hrm_absences_no_double_record'`)).rows[0];
+     where c.relname = 'hrm_absences_no_double_record'`, "objects"))[0];
   assert.ok(guard, "0337 built the day guard");
   assert.equal(guard.valid, true, "a failed concurrent build must never leave the guard INVALID");
   assert.match(guard.predicate ?? "", /reversal_of IS NULL/);

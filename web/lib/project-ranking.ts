@@ -199,9 +199,9 @@ export async function rankProjects(
        ${args.overBudgetOnly ? sql`and cost_budget > 0 and cost + committed_cost > cost_budget` : sql``}
      order by ${orderBy(sort)}
      limit ${limit} offset ${offset}
-  `)
+  `, 'objects')
 
-  const rows = res.rows.map((r): ProjectRankingRow => {
+  const rows = res.map((r): ProjectRankingRow => {
     const revenue = m(r.revenue)
     const margin = m(r.margin)
     const costBudget = m(r.cost_budget)
@@ -227,5 +227,5 @@ export async function rankProjects(
       unbilledContract: add(contractValue, neg(revenue)),
     }
   })
-  return { total: Number(res.rows[0]?.total ?? 0), rows }
+  return { total: Number(res[0]?.total ?? 0), rows }
 }

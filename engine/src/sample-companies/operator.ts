@@ -71,7 +71,7 @@ export async function withSampleOperator<T>(orgId: string, options: SampleOperat
     if (prior.orgId !== orgId || prior.actorId !== actorId) throw new SampleCompanyError("Sample operator identity cannot change inside an active command.");
     return command();
   }
-  const readLocal = async () => (await db.execute(sql`select id from users where id=${actorId} and org_id=${orgId}`)).rows.length === 1;
+  const readLocal = async () => (await db.execute(sql`select id from users where id=${actorId} and org_id=${orgId}`, "objects")).length === 1;
   const local = orgContext.getStore()?.txDb ? await readLocal() : await withOrgContext(orgId, readLocal);
   if (local) return pinned.run({ orgId, actorId, foreignIdentityLocked: false }, command);
   if (orgContext.getStore()?.txDb) throw new SampleCompanyError("Start a platform-operated sample command at its native entry point so the selected home identity can remain locked for the complete tenant transaction.");
@@ -79,7 +79,7 @@ export async function withSampleOperator<T>(orgId: string, options: SampleOperat
   // keep that exact user's active/superadmin state stable until the command ends.
 // bypass: user-keyed-lookup — a platform operator's home identity lives outside the target tenant, so locking it reads the users row across organizations.
   return withBypassContext(() => withMaintenanceTransaction(null, async () => {
-    const locked = (await db.execute(sql`select id from users where id=${actorId} for share`)).rows;
+    const locked = await db.execute(sql`select id from users where id=${actorId} for share`, "objects");
     const identity = await actorIdentity(db, orgId, actorId);
     if (locked.length !== 1 || !identity?.isActive || !identity.isSuperAdmin) throw new SampleCompanyError("The selected sample operator must be active in the target company or be an active platform superadmin. Select an authorized --actor; sample preparation never grants permissions.");
     return withOrgContext(orgId, () => pinned.run({ orgId, actorId, foreignIdentityLocked: true }, command));
@@ -88,7 +88,7 @@ export async function withSampleOperator<T>(orgId: string, options: SampleOperat
 
 /** Re-read native authority under the command's identity, role and scope locks. */
 export async function assertSampleOperator(tx: SqlExecutor, orgId: string, actorId: string, subsidiaryId: string, industryKey: string, lock: boolean): Promise<void> {
-  const local = (await tx.execute<{ id: string }>(sql`select id from users where org_id=${orgId} and id=${actorId} ${lock ? sql`for share` : sql``}`)).rows[0];
+  const local = (await tx.execute<{ id: string }>(sql`select id from users where org_id=${orgId} and id=${actorId} ${lock ? sql`for share` : sql``}`, "objects"))[0];
   const identity = await actorIdentity(tx, orgId, actorId);
   if (!identity?.isActive || (!local && !identity.isSuperAdmin)) throw new SampleCompanyError("The selected sample operator is unavailable in this company. Choose an active authorized local user or explicitly supply a platform superadmin with --actor UUID.");
   if (lock && !local && (pinned.getStore()?.actorId !== actorId || pinned.getStore()?.orgId !== orgId || !pinned.getStore()?.foreignIdentityLocked)) throw new SampleCompanyError("Foreign sample operator identity must remain locked through the native sample command entry point.");

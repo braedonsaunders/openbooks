@@ -315,9 +315,9 @@ export async function assertNoSiblingConnection(
   const siblings = (await db.execute<{ id: string; display_name: string }>(sql`
     select id, display_name from connections
      where org_id = ${orgId} and source = ${sourceName} and id <> ${connectionId}
-     order by display_name`));
-  if (siblings.rows.length > 0) {
-    const names = siblings.rows.map((row) => row.display_name).join(", ");
+     order by display_name`, "objects"));
+  if (siblings.length > 0) {
+    const names = siblings.map((row) => row.display_name).join(", ");
     throw new Error(
       `organization has another ${sourceName} connection (${names}); document identity is namespaced per source, so two live connections would merge charts and cross-update each other's documents — remove the duplicate connection (or mirror each source system into its own organization) and re-run`,
     );
@@ -465,8 +465,8 @@ export async function verifyCurrentLedgerState(
        and ${sourceProjection}
        and a.custom->>${refKey} is not null
      group by 1
-  `));
-  const oursByRef = new Map(ours.rows.map((row) => [row.ref, toUnits(row.bal)]));
+  `, "objects"));
+  const oursByRef = new Map(ours.map((row) => [row.ref, toUnits(row.bal)]));
   const theirsByRef = new Map(
     theirs.map((row) => [row.accountRef, toUnits(row.balance)]),
   );
@@ -502,8 +502,8 @@ export async function verifyCurrentLedgerState(
         from documents
        where org_id = ${orgId} and custom->>${refKey} is not null
          and kind in (${sql.join(OPEN_ITEM_DOCUMENT_KINDS.map((kind) => sql`${kind}`), sql`, `)})
-    `));
-    openItems = verifyOpenItems(truth, mine.rows);
+    `, "objects"));
+    openItems = verifyOpenItems(truth, mine);
   }
 
   const periodTruth = await source.monthlyActivity();
@@ -534,8 +534,8 @@ export async function verifyCurrentLedgerState(
        and coalesce(e.custom->'sourceProjection'->>'openingBalance', 'false') <> 'true'
      group by 1, 2, 3
     having sum(l.amount) <> 0
-  `));
-  const periods = verifyAccountMonths(periodTruth, periodMine.rows);
+  `, "objects"));
+  const periods = verifyAccountMonths(periodTruth, periodMine);
 
   let projectPeriods: SyncResult["projectPeriods"] = null;
   if (source.projectMonthlyActivity) {
@@ -568,10 +568,10 @@ export async function verifyCurrentLedgerState(
          and a.custom->>${refKey} is not null
        group by 1, 2, 3, 4
       having sum(l.amount) <> 0
-    `));
+    `, "objects"));
     projectPeriods = verifyProjectAccountMonths(
       projectTruth,
-      projectMine.rows,
+      projectMine,
     );
   }
 
@@ -670,7 +670,7 @@ async function lastFullAttachmentSweepAt(orgId: string, connectionId: string): P
        and ((status in ('ok','failed') and kind in ('incremental', 'full_migration')
              and stats->'attachments'->>'scope' = 'all' and stats->'attachments'->>'failures' = '0')
          or (status='ok' and kind = 'attachments' and stats->>'scope' = 'all'))
-  `)).rows[0];
+  `, "objects"))[0];
   return row?.at ? new Date(row.at) : null;
 }
 
@@ -944,18 +944,15 @@ function storedCanonicalKey(
 }
 
 async function storedKey(docId: string, orgId: string): Promise<string> {
-  const [d] = (
-    (await db.execute<StoredDocumentKeyRow>(sql`
+  const [d] = await db.execute<StoredDocumentKeyRow>(sql`
       select kind, party_id, subsidiary_id,
              document_date::text, posting_date::text,
              posting_period_id,
              due_date::text as due,
              memo, reference_number, custom->>'controlAccountId' as ctrl, (select jsonb_object_agg(k,custom->k) from jsonb_object_keys(coalesce(custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom, extra_dims, id,
              posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
-        from documents where id = ${docId} and org_id = ${orgId}`))
-  ).rows;
-  const lines = (
-    (await db.execute<StoredLineKeyRow>(sql`
+        from documents where id = ${docId} and org_id = ${orgId}`, "objects");
+  const lines = await db.execute<StoredLineKeyRow>(sql`
       select line.line_number, line.custom->>'sourceLineRef' as source_line_ref, (select jsonb_object_agg(k,line.custom->k) from jsonb_object_keys(coalesce(line.custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom,
              line.account_id, line.item_id, line.quantity, line.unit, line.unit_price,
              line.amount, line.tax_amount, line.tax_overridden, line.tax_code_id,
@@ -965,8 +962,7 @@ async function storedKey(docId: string, orgId: string): Promise<string> {
              ticket.custom->'source'->>'externalId' as field_ticket_source_ref
         from document_lines line
         left join documents ticket on ticket.org_id = line.org_id and ticket.id = line.field_ticket_id
-       where line.document_id = ${docId} and line.org_id = ${orgId} order by line.line_number`))
-  ).rows;
+       where line.document_id = ${docId} and line.org_id = ${orgId} order by line.line_number`, "objects");
   return storedCanonicalKey(d!, lines);
 }
 
@@ -985,7 +981,7 @@ async function loadStoredKeys(
            posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
       from documents
      where org_id = ${orgId} and custom->>${refKey} is not null
-     order by id`));
+     order by id`, "objects"));
   const lineResult = (await db.execute<StoredLineKeyRow>(sql`
     select dl.document_id, dl.line_number,
            dl.custom->>'sourceLineRef' as source_line_ref, (select jsonb_object_agg(k,dl.custom->k) from jsonb_object_keys(coalesce(dl.custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom,
@@ -1000,15 +996,15 @@ async function loadStoredKeys(
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
       left join documents ticket on ticket.org_id = dl.org_id and ticket.id = dl.field_ticket_id
      where dl.org_id = ${orgId} and d.org_id = ${orgId} and d.custom->>${refKey} is not null
-     order by dl.document_id, dl.line_number`));
+     order by dl.document_id, dl.line_number`, "objects"));
   const linesByDocument = new Map<string, StoredLineKeyRow[]>();
-  for (const line of lineResult.rows) {
+  for (const line of lineResult) {
     const lines = linesByDocument.get(line.document_id);
     if (lines) lines.push(line);
     else linesByDocument.set(line.document_id, [line]);
   }
   return new Map(
-    documents.rows.map((document) => [
+    documents.map((document) => [
       document.id,
       storedCanonicalKey(document, linesByDocument.get(document.id) ?? []),
     ]),
@@ -1054,8 +1050,8 @@ export async function preflightFullSync(
 ): Promise<FullSyncPreflight> {
   const orgRows = (await db.execute<{ id: string }>(sql`
     select id from orgs where id = ${opts.orgId}
-  `));
-  if (!orgRows.rows[0]) throw new Error(`organization ${opts.orgId} not found`);
+  `, "objects"));
+  if (!orgRows[0]) throw new Error(`organization ${opts.orgId} not found`);
   // A preflight that planned across two same-source connections would certify
   // a write the run then refuses: fail here with the same named refusal.
   if (opts.connectionId) {
@@ -1078,14 +1074,14 @@ export async function preflightFullSync(
     select id, kind, status, document_number, custom->>${source.refKey} as ref
       from documents
      where org_id = ${opts.orgId}
-  `));
+  `, "objects"));
   const existingByRef = new Map(
-    existingRows.rows
+    existingRows
       .filter((row): row is typeof row & { ref: string } => row.ref !== null)
       .map((row) => [row.ref, row]),
   );
   const numberOwners = new Map(
-    existingRows.rows.map((row) => [
+    existingRows.map((row) => [
       documentNumberOwnerKey(row.kind, row.document_number),
       row.id,
     ]),
@@ -1144,7 +1140,7 @@ export async function preflightFullSync(
   ];
   const deletionCandidates = sourceDeletionCandidates(
     true,
-    existingRows.rows
+    existingRows
       .filter((row): row is typeof row & { ref: string } => row.ref !== null)
       .filter((row) => row.status !== "voided")
       .map((row) => row.ref),
@@ -1153,13 +1149,13 @@ export async function preflightFullSync(
   );
   const acknowledgedRows =
     opts.connectionId && deletionCandidates.length > 0
-      ? ((await db.execute<{ source_ref: string }>(sql`
+      ? (await db.execute<{ source_ref: string }>(sql`
           select source_ref
             from source_deletion_resolutions
            where org_id = ${opts.orgId}
              and connection_id = ${opts.connectionId}
              and source_ref in ${deletionCandidates}
-        `))).rows
+        `, "objects"))
       : [];
   const acknowledged = new Set(
     acknowledgedRows.map((row) => row.source_ref),
@@ -1258,8 +1254,8 @@ export async function claimSyncRun(opts: {
          and (${qbd} or kind = ${opts.kind}
               or kind in ('incremental', 'full_migration', 'targeted_repair', 'project_financials', 'attachments'))
          and status = 'running'
-       limit 1`);
-    if (live.rows.length > 0) throw new SyncRunAlreadyActiveError(opts.kind);
+       limit 1`, "objects");
+    if (live.length > 0) throw new SyncRunAlreadyActiveError(opts.kind);
     return tx
       .insert(schema.syncRuns)
       .values({
@@ -1428,7 +1424,7 @@ function persistSyncFxRate(value: unknown): string {
 
 /** Custom-field values survive replacement of the same source line, including removal of a mapping rule. */
 async function preservedImportedLineCustom(tx: SyncTx, orgId: string, documentId: string): Promise<Map<string, Record<string, unknown>>> {
-  const rows = (await tx.execute<{ line_number: number; custom: Record<string, unknown> }>(sql`select line_number,custom from document_lines where org_id=${orgId} and document_id=${documentId} for update`)).rows;
+  const rows = await tx.execute<{ line_number: number; custom: Record<string, unknown> }>(sql`select line_number,custom from document_lines where org_id=${orgId} and document_id=${documentId} for update`, "objects");
   const output = new Map<string, Record<string, unknown>>();
   for (const row of rows) {
     const key = typeof row.custom.sourceLineRef === 'string' ? row.custom.sourceLineRef : `line:${row.line_number}`;
@@ -1479,15 +1475,15 @@ async function insertImportedLines(
          and ticket.custom->'source'->>'system' = ${sourceSystem}
          and ticket.custom->'source'->>'externalId' = ${sourceRef}
        limit 2 for share of ticket, ft
-    `);
-    if (matches.rows.length !== 1) {
+    `, "objects");
+    if (matches.length !== 1) {
       throw new Error(
-        matches.rows.length === 0
+        matches.length === 0
           ? `field ticket source ${sourceSystem}:${sourceRef} on line ${line.lineNumber} is not imported in this organization`
           : `field ticket source ${sourceSystem}:${sourceRef} resolves to multiple native tickets; reconcile the source identities before import`,
       );
     }
-    const ticket = matches.rows[0]!;
+    const ticket = matches[0]!;
     if (ticket.project_id !== line.projectId) {
       throw new Error(
         `field ticket source ${sourceSystem}:${sourceRef} on line ${line.lineNumber} belongs to a different project`,
@@ -1596,7 +1592,7 @@ export async function runSync(
     //    sibling same-source connection corrupts long before documents.
     await assertNoSiblingConnection(org.id, connectionId, source.name);
     const connection = (await db.execute<{ source: string; config: Record<string, unknown> }>(sql`
-      select source, config from connections where org_id=${org.id} and id=${connectionId}`)).rows[0];
+      select source, config from connections where org_id=${org.id} and id=${connectionId}`, "objects"))[0];
     if (!connection || connection.source !== source.name) throw new Error("Sync connection identity does not match the source");
     const capabilities = {
       attachments: Boolean(source.syncAttachments), projectFinancials: Boolean(source.projectFinancialInputs),
@@ -1704,11 +1700,9 @@ export async function runSync(
     // predate deterministic rebasing. A UUID from another tenant is never
     // accepted merely because it is syntactically valid.
     if (source.controlAccounts) {
-      const existingCtrl = (
-        (await db.execute<{ ctrl: Record<string, string> | null }>(
-          sql`select settings->'controlAccounts' as ctrl from orgs where id = ${org.id}`,
-        ))
-      ).rows[0]?.ctrl;
+      const existingCtrl = (await db.execute<{ ctrl: Record<string, string> | null }>(
+          sql`select settings->'controlAccounts' as ctrl from orgs where id = ${org.id}`, "objects",
+        ))[0]?.ctrl;
       const refs = await source.controlAccounts();
       const resolved: Record<string, string> = { ...(existingCtrl ?? {}) };
       const sourceControlledKeys = [
@@ -1725,9 +1719,9 @@ export async function runSync(
            and id = any(${`{${Object.values(existingCtrl ?? {})
              .filter((value) => isUuid(value))
              .join(",")}}`}::uuid[])
-      `);
+      `, "objects");
       const ownedIds = new Set(
-        (owned.rows as Array<{ id: string }>).map((row) => row.id),
+        (owned as Array<{ id: string }>).map((row) => row.id),
       );
       for (const key of sourceControlledKeys) {
         const current = resolved[key];
@@ -1742,13 +1736,13 @@ export async function runSync(
              and custom->>${refKey} = ${ref}
            order by id
            limit 2
-        `));
-        if (matches.rows.length !== 1) {
+        `, "objects"));
+        if (matches.length !== 1) {
           throw new Error(
-            `${source.name} control account ${key} reference ${ref} resolved to ${matches.rows.length} organization accounts`,
+            `${source.name} control account ${key} reference ${ref} resolved to ${matches.length} organization accounts`,
           );
         }
-        resolved[key] = matches.rows[0]!.id;
+        resolved[key] = matches[0]!.id;
       }
       const before = existingCtrl ?? {};
       if (JSON.stringify(before) !== JSON.stringify(resolved)) {
@@ -1842,8 +1836,7 @@ export async function runSync(
         documentNumber: string;
       }
     >();
-    const allDocumentRows = (
-      (await db.execute<{
+    const allDocumentRows = await db.execute<{
           id: string;
           kind: string;
           status: string;
@@ -1853,8 +1846,7 @@ export async function runSync(
         }>(sql`
         select id, kind, status, document_number,
                posted_entry_id is not null as posted, custom->>${refKey} as ref
-          from documents where org_id = ${org.id}`))
-    ).rows;
+          from documents where org_id = ${org.id}`, "objects");
     for (const r of allDocumentRows) {
       if (r.ref !== null) {
         existing.set(r.ref, {
@@ -2012,7 +2004,7 @@ export async function runSync(
               const after = await captureTransactionAuditSnapshot(db, row.id, org.id);
               if (!after) throw new Error('The mapped source document is not readable after import');
               const audit = (await db.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-                values(${org.id},'documents',${row.id},'insert',${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId, sourceRef: doc.sourceRef, before: null, after })}::jsonb,${isUuid(triggeredBy) ? triggeredBy : null}) returning id`)).rows[0];
+                values(${org.id},'documents',${row.id},'insert',${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId, sourceRef: doc.sourceRef, before: null, after })}::jsonb,${isUuid(triggeredBy) ? triggeredBy : null}) returning id`, "objects"))[0];
               if (!audit) throw new Error('The mapped source document audit was not saved');
             }
             return row.id;
@@ -2190,8 +2182,8 @@ export async function runSync(
                  and org_id = ${org.id}
                  and document_number = ${have.documentNumber}
               returning id
-            `);
-            if (updated.rows.length !== 1) {
+            `, "objects");
+            if (updated.length !== 1) {
               throw new Error(
                 `document ${have.id} changed during source-number reconciliation`,
               );
@@ -2416,10 +2408,10 @@ export async function runSync(
       // Recorded controller dispositions (retain / manual void) are
       // acknowledged divergences: they stand and are never auto-mirrored.
       const resolvedRows = connectionId
-        ? ((await db.execute<{ source_ref: string }>(sql`
+        ? (await db.execute<{ source_ref: string }>(sql`
             select source_ref from source_deletion_resolutions
              where org_id = ${org.id} and connection_id = ${connectionId}
-               and source_ref in ${[...deletedAtSource]}`))).rows
+               and source_ref in ${[...deletedAtSource]}`, "objects"))
         : [];
       for (const row of resolvedRows) dispositionedRefs.add(row.source_ref);
       for (const ref of unresolvedSourceDeletionCandidates(
@@ -2503,11 +2495,9 @@ export async function runSync(
     //    so it must never fire silently on a live ledger (for example, a production tenant
     //    whose cumulative TB matches but has benign monthly date-allocation drift).
     const trueUpEnabled =
-      (
-        (await db.execute<{ on: boolean | null }>(
-          sql`select (settings->>'glTrueup')::boolean as on from orgs where id = ${org.id}`,
-        ))
-      ).rows[0]?.on === true;
+      (await db.execute<{ on: boolean | null }>(
+          sql`select (settings->>'glTrueup')::boolean as on from orgs where id = ${org.id}`, "objects",
+        ))[0]?.on === true;
     const trueUp = trueUpEnabled && !targetedRefs
       ? await trueUpResidualGl(org.id, source, {
           actorId: isUuid(triggeredBy) ? triggeredBy : null,
@@ -2715,8 +2705,8 @@ export async function runSync(
           update connections set cursor = ${changes.syncedThrough}, last_run_at = now(),
                  status = 'active', last_error = null
            where id = ${connectionId} and org_id = ${org.id} and source = ${source.name}
-           returning id`);
-        if (advanced.rows.length !== 1) throw new Error("sync connection could not be checkpointed");
+           returning id`, "objects");
+        if (advanced.length !== 1) throw new Error("sync connection could not be checkpointed");
       }
     });
     return result;

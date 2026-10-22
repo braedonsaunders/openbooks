@@ -63,7 +63,7 @@ test("email delivery attempts share one canonical row and uncertain outcomes blo
 
       const parked = (await db.execute<{ status: string; error_message: string | null }>(sql`
         select status, error_message from email_log where id = ${firstClaim.id} and org_id = ${org.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(parked?.status, "uncertain");
       assert.match(parked?.error_message ?? "", /timed out/u);
       const deliveryFinding = (await strandedWorkFindings(org.orgId, "1900-01-01"))
@@ -92,7 +92,7 @@ test("email delivery attempts share one canonical row and uncertain outcomes blo
       await markEmailFailed(org.orgId, firstClaim.id, "Definitely not a replacement verdict");
       const stillUncertain = (await db.execute<{ status: string }>(sql`
         select status from email_log where id = ${firstClaim.id} and org_id = ${org.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(stillUncertain?.status, "uncertain");
 
       // Later reconciliation proves acceptance (e.g. provider idempotency replay):
@@ -101,7 +101,7 @@ test("email delivery attempts share one canonical row and uncertain outcomes blo
       assert.ok(completed);
       const finalRow = (await db.execute<{ status: string; provider_message_id: string | null; sent_at: Date | null }>(sql`
         select status, provider_message_id, sent_at from email_log where id = ${firstClaim.id} and org_id = ${org.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(finalRow?.status, "sent");
       assert.equal(finalRow?.provider_message_id, "email_re_accepted_once");
       assert.ok(finalRow?.sent_at);
@@ -125,14 +125,14 @@ test("email delivery attempts share one canonical row and uncertain outcomes blo
       await confirmEmailSentGuarded(org.orgId, suppressedClaim.id, "email_never_sent");
       const suppressedRow = (await db.execute<{ status: string; provider_message_id: string | null }>(sql`
         select status, provider_message_id from email_log where id = ${suppressedClaim.id} and org_id = ${org.orgId}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(suppressedRow?.status, "suppressed");
       assert.equal(suppressedRow?.provider_message_id, null);
 
       // The whole story is auditable from meta.attempts alone.
       const lineage = (await db.execute<{ attempts: Array<Record<string, unknown>> }>(sql`
         select meta -> 'attempts' as attempts from email_log where id = ${firstClaim.id} and org_id = ${org.orgId}
-      `)).rows[0]?.attempts ?? [];
+      `, "objects"))[0]?.attempts ?? [];
       const outcomes = lineage.map((entry) => String(entry.outcome));
       assert.deepEqual(outcomes, ["uncertain", "blocked"]);
       assert.ok(outcomes.includes("uncertain"), "lineage retains the unresolved attempt");

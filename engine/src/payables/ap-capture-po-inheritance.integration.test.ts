@@ -96,7 +96,7 @@ async function insertCapture(
   const capture = normalized(invoiceNumber, org.accounts.cogs, currency);
   if (purchaseOrderId) {
     const line = (await db.execute<{ id: string }>(sql`
-      select id from document_lines where org_id=${org.orgId} and document_id=${purchaseOrderId} and line_number=1`)).rows[0];
+      select id from document_lines where org_id=${org.orgId} and document_id=${purchaseOrderId} and line_number=1`, "objects"))[0];
     assert.ok(line, "the selected purchase order has its matched source line");
     capture.lines[0]!.purchaseOrderLineId = line.id;
   }
@@ -114,9 +114,9 @@ async function insertCapture(
 }
 
 async function billOf(orgId: string, documentId: string): Promise<{ subsidiaryId: string | null; currency: string }> {
-  const rows = (await db.execute<{ subsidiaryId: string | null; currency: string }>(sql`
+  const rows = await db.execute<{ subsidiaryId: string | null; currency: string }>(sql`
     select subsidiary_id as "subsidiaryId", currency from documents
-     where id = ${documentId} and org_id = ${orgId}`)).rows;
+     where id = ${documentId} and org_id = ${orgId}`, "objects");
   return { subsidiaryId: rows[0]!.subsidiaryId, currency: rows[0]!.currency };
 }
 
@@ -179,7 +179,7 @@ test("an unmatched capture in a multi-entity org refuses instead of defaulting t
 
 async function billCount(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'vendor_bill'`)).rows[0]!.n;
+    select count(*)::int as n from documents where org_id = ${orgId} and kind = 'vendor_bill'`, "objects"))[0]!.n;
 }
 
 test("a null-subsidiary order in a multi-entity org is refused by name with no bill inserted", { skip: !DB }, async () => {

@@ -215,7 +215,7 @@ interface EventInsert {
 }
 
 async function insertEvent(runner: SqlExecutor, orgId: string, subsidiaryId: string, actorId: string, row: EventInsert): Promise<void> {
-  const inserted = (await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(sql`
     insert into equity_security_events (id, org_id, subsidiary_id, security_id, kind, effective_on, quantity, price_per_share, amount,
       resulting_security_id, round_id, consideration_account_id, journal_entry_id, reversal_entry_id, reason, idempotency_key, created_by,
       reverses_event_id, interest_amount, interest_accrued_amount, interest_accrued_functional, interest_accrual_entry_id,
@@ -225,7 +225,7 @@ async function insertEvent(runner: SqlExecutor, orgId: string, subsidiaryId: str
       ${row.journalEntryId}, ${row.reversalEntryId}, ${row.reason}, ${row.idempotencyKey}, ${actorId},
       ${row.reversesEventId}, ${row.interestAmount}::numeric, ${row.interestAccruedAmount}::numeric, ${row.interestAccruedFunctional}::numeric,
       ${row.interestAccrualEntryId}, ${row.depositAmount}::numeric, ${row.fairMarketValue}::numeric, ${row.fxRate}::numeric)
-    returning id`)).rows;
+    returning id`, "objects");
   if (inserted.length !== 1) throw equityError("notSaved", { record: fig.choice("event") });
 }
 
@@ -285,7 +285,7 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
       from equity_securities s
       left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
       left join equity_share_classes c on c.org_id = s.org_id and c.id = s.share_class_id
-     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
+     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`, "objects"))[0]);
   if (!located) throw equityError("securityUnknown");
   const action = input.kind in ALLOWED ? governedEventAction(input.kind, located!.kind) : null;
   if (!action) return { status: "applied", requestId: null, ...(await applySecurityEvent(input)) };
@@ -293,7 +293,7 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
   const reversed = input.kind === "reverse" && typeof input.reversesEventId === "string" && isUuid(input.reversesEventId)
     ? await withOrgTransaction(input.orgId, async () => (await db.execute<{ quantity: string | null; amount: string | null }>(sql`
       select quantity::text as quantity, amount::text as amount from equity_security_events
-       where org_id = ${input.orgId} and security_id = ${input.securityId} and id = ${input.reversesEventId}`)).rows[0])
+       where org_id = ${input.orgId} and security_id = ${input.securityId} and id = ${input.reversesEventId}`, "objects"))[0])
     : undefined;
   const { orgId: _org, actorId: _actor, ...payload } = input;
   const outcome = await governEquityAction({
@@ -327,14 +327,14 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
   const idempotencyKey = typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? input.idempotencyKey.trim() : null;
   if (!isUuid(input.securityId)) throw equityError("securityUnknown");
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; kind: SecurityRecord["kind"] }>(sql`
-    select subsidiary_id, kind from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
+    select subsidiary_id, kind from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`, "objects"))[0]);
   if (!located) throw equityError("securityUnknown");
   const subsidiaryId = located!.subsidiary_id;
   return inEquityCommand({ ...input, subsidiaryId }, "equity.manage", async ({ book, currency: functional }) => {
     if (idempotencyKey) {
       const existing = (await db.execute<{ id: string; security_id: string; kind: string; resulting_security_id: string | null; journal_entry_id: string | null; reversal_entry_id: string | null; interest_accrual_entry_id: string | null }>(sql`
         select id, security_id, kind, resulting_security_id, journal_entry_id, reversal_entry_id, interest_accrual_entry_id from equity_security_events
-         where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
+         where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`, "objects"))[0];
       if (existing) {
         if (existing.security_id !== input.securityId || existing.kind !== kind) {
           throw equityError("idempotencyConflict", { subject: fig.choice("event") });
@@ -736,10 +736,10 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
         const origin = book.events.find((row) => row.resultingSecurityId === security.id);
         const originRow = origin
           ? (await db.execute<{ journal_entry_id: string | null; interest_accrual_entry_id: string | null }>(sql`
-              select journal_entry_id, interest_accrual_entry_id from equity_security_events where org_id = ${input.orgId} and id = ${origin.id}`)).rows[0]
+              select journal_entry_id, interest_accrual_entry_id from equity_security_events where org_id = ${input.orgId} and id = ${origin.id}`, "objects"))[0]
           : undefined;
         const issued = (await db.execute<{ journal_entry_id: string | null }>(sql`
-          select journal_entry_id from equity_securities where org_id = ${input.orgId} and id = ${security.id}`)).rows[0];
+          select journal_entry_id from equity_securities where org_id = ${input.orgId} and id = ${security.id}`, "objects"))[0];
         const entryId = originRow?.journal_entry_id ?? issued?.journal_entry_id ?? null;
         if (entryId) {
           event.reversalEntryId = await reverseEquityEntry(db, {
@@ -783,7 +783,7 @@ export async function applySecurityEvent(input: RecordEventInput): Promise<Appli
           }
         }
         const targetRow = (await db.execute<{ journal_entry_id: string | null; interest_accrual_entry_id: string | null }>(sql`
-          select journal_entry_id, interest_accrual_entry_id from equity_security_events where org_id = ${input.orgId} and id = ${target!.id}`)).rows[0];
+          select journal_entry_id, interest_accrual_entry_id from equity_security_events where org_id = ${input.orgId} and id = ${target!.id}`, "objects"))[0];
         if (targetRow?.journal_entry_id) {
           event.reversalEntryId = await reverseEquityEntry(db, {
             orgId: input.orgId, entryId: targetRow.journal_entry_id, reversalDate: effectiveOn,

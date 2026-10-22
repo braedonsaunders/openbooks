@@ -39,10 +39,8 @@ async function seedEuroOrg(org: Org): Promise<void> {
     [9, "2026-09-01", "2026-09-30"],
     [10, "2026-10-01", "2026-10-31"],
   ] as const) {
-    const calendar = (
-      await db.execute<{ id: string }>(sql`
-        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)
-    ).rows[0]!.id;
+    const calendar = (await db.execute<{ id: string }>(sql`
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
     await db.execute(sql`
       insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
       values (${randomUUID()}, ${org.orgId}, 2026, ${number}, ${`2026-0${number}`}, ${start}, ${end}, false, ${calendar})`);
@@ -163,12 +161,10 @@ test("dollar supplies translate at the period-end ECB rate with stored evidence"
     assert.equal(recorded.stored, 1);
     const again = await recordOssFxEvidence(db, org.orgId, actorId, oss);
     assert.equal(again.stored, 1);
-    const rows = (
-      await db.execute<{ currency: string; rate: string }>(sql`
+    const rows = await db.execute<{ currency: string; rate: string }>(sql`
         select currency, rate::text as rate from tax_oss_fx_evidence
          where org_id = ${org.orgId} and scheme = 'union'
-           and period_from = '2026-07-01' and period_to = '2026-09-30'`)
-    ).rows;
+           and period_from = '2026-07-01' and period_to = '2026-09-30'`, "objects");
     assert.equal(rows.length, 1);
     assert.equal(rows[0]!.currency, "USD");
   } finally {

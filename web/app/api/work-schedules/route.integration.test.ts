@@ -65,10 +65,10 @@ async function dayCount(orgId: string, scheduleId: string): Promise<number> {
   const r = await withBypassContext(
     () =>
       db.execute<{ n: number }>(
-        sql`select count(*)::int as n from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId}`,
+        sql`select count(*)::int as n from work_schedule_days where org_id = ${orgId} and schedule_id = ${scheduleId}`, "objects",
       ),
   );
-  return r.rows[0]!.n;
+  return r[0]!.n;
 }
 
 test("a day entry outside the cycle is refused, never silently dropped", async () => {
@@ -80,9 +80,9 @@ test("a day entry outside the cycle is refused, never silently dropped", async (
     assert.equal(response.status, 422, "dayIndex 7 in a 7-day cycle");
     assert.match(((await response.json()) as { error: string }).error, /day/i);
     const count = await withBypassContext(
-      () => db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId}`),
+      () => db.execute<{ n: number }>(sql`select count(*)::int as n from work_schedules where org_id = ${org.orgId}`, "objects"),
     );
-    assert.equal(count.rows[0]!.n, 0, "a refused save must not store a partial pattern");
+    assert.equal(count[0]!.n, 0, "a refused save must not store a partial pattern");
 
     const missing = await POST(save(week([...days, { hours: "8" }])));
     assert.equal(missing.status, 422, "a day entry without a dayIndex");

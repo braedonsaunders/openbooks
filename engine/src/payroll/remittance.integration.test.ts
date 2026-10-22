@@ -59,8 +59,8 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
       (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
     values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0088',
       'Remittance fixture account', 'regular', true)
-    returning id`);
-  assert.equal(filingAccount.rows.length, 1, "remittance fixture must establish its historical filing account");
+    returning id`, "objects");
+  assert.equal(filingAccount.length, 1, "remittance fixture must establish its historical filing account");
   await db.execute(sql`
     insert into accounts
       (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -72,16 +72,16 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
   const vendorRole = await db.execute<{ party_id: string }>(sql`
     insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
     values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-    returning party_id`);
-  assert.equal(vendorRole.rows.length, 1, "remittance fixture must establish its payee role");
+    returning party_id`, "objects");
+  assert.equal(vendorRole.length, 1, "remittance fixture must establish its payee role");
   const destination = await db.execute<{ id: string }>(sql`
     update orgs
        set settings = jsonb_set(
          jsonb_set(coalesce(settings, '{}'::jsonb), '{payroll}',
            coalesce(settings->'payroll', '{}'::jsonb)),
          '{payroll,craRemittancePartyId}', to_jsonb(${org.vendorId}::text))
-     where id = ${org.orgId} returning id`);
-  assert.equal(destination.rows.length, 1, "remittance fixture must assign its CRA destination before billing");
+     where id = ${org.orgId} returning id`, "objects");
+  assert.equal(destination.length, 1, "remittance fixture must assign its CRA destination before billing");
   await seedPayrollComponent(org.orgId, componentId, {
     code: `TESTTAX-${componentId.slice(0, 6)}`, name: 'Test withholding', kind: 'deduction',
     systemKey: 'income_tax', liabilityAccountId: liabilityAccountId, remittancePartyId: org.vendorId, sequence: 10,
@@ -159,7 +159,7 @@ async function waitForRemittanceFenceWaiter(key: string): Promise<void> {
            and classid = ((hashtextextended(${key}, 0) >> 32) & 4294967295)
            and objid = (hashtextextended(${key}, 0) & 4294967295)
       ) as waiting
-    `)).rows[0]?.waiting;
+    `, "objects"))[0]?.waiting;
     if (waiting) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -200,7 +200,7 @@ test(
       );
       assert.equal(
         (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
         "approved",
         "a stale remittance bill remains unposted for review/voiding",
       );
@@ -240,7 +240,7 @@ test(
       });
       assert.equal(
         (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
         "posted",
       );
     } finally {
@@ -261,7 +261,7 @@ test(
       const stub = (await db.execute<{ id: string }>(sql`
         select id::text as id from pay_stubs
          where org_id = ${fixture.org.orgId} and pay_run_document_id = ${source.runDocumentId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       const creditComponentId = randomUUID();
       await seedPayrollComponent(fixture.org.orgId, creditComponentId, {
         code: "REFUND-CREDIT", name: "Refundable payroll credit", kind: "credit",
@@ -280,7 +280,7 @@ test(
       });
       const total = (await db.execute<{ total: string }>(sql`
         select total::text as total from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
-      `)).rows[0]!.total;
+      `, "objects"))[0]!.total;
       assert.equal(cmp(total, "75.00"), 0);
 
       await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
@@ -293,7 +293,7 @@ test(
       });
       assert.equal((await db.execute<{ status: string }>(sql`
         select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
-      `)).rows[0]!.status, "posted");
+      `, "objects"))[0]!.status, "posted");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
     }
@@ -337,7 +337,7 @@ test(
       );
       assert.equal(
         (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
         "approved",
         "a tampered remittance bill remains unposted for review/voiding",
       );
@@ -365,7 +365,7 @@ test(
       // header currency drifted, behind the same lines.
       const stored = (await db.execute<{ currency: string }>(sql`
         select currency from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       await db.execute(sql`
         update documents set currency = ${stored.currency === "USD" ? "CAD" : "USD"}
          where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
@@ -382,7 +382,7 @@ test(
       );
       assert.equal(
         (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
         "approved",
         "a currency-moved remittance bill remains unposted for review/voiding",
       );
@@ -410,12 +410,12 @@ test(
       // drift from the currency drift: only the books move.
       const stored = (await db.execute<{ currency: string; subsidiary_id: string }>(sql`
         select currency, subsidiary_id::text as subsidiary_id from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       const second = (await db.execute<{ id: string }>(sql`
         insert into subsidiaries (org_id, parent_id, name, base_currency, country)
         select org_id, id, 'Second entity', ${stored.currency}, country
           from subsidiaries where org_id = ${fixture.org.orgId} limit 1
-        returning id::text as id`)).rows[0]!;
+        returning id::text as id`, "objects"))[0]!;
       await db.execute(sql`
         update documents set subsidiary_id = ${second.id}
          where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
@@ -432,7 +432,7 @@ test(
       );
       assert.equal(
         (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
         "approved",
         "an entity-moved remittance bill remains unposted for review/voiding",
       );
@@ -474,7 +474,7 @@ test(
       // that moves either refuses by name, even with the lines untouched.
       const stored = (await db.execute<{ currency: string; subsidiary_id: string }>(sql`
         select currency, subsidiary_id::text as subsidiary_id
-          from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+          from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       await assert.rejects(
         assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
           currency: stored.currency === "USD" ? "CAD" : "USD",
@@ -535,7 +535,7 @@ test(
           (${expenseAccount}, ${fixture.org.orgId}, '6100', 'Payroll expense', 'expense',
            false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
       const source = (await db.execute<{ document_id: string }>(sql`
-        select document_id from pay_runs where org_id = ${fixture.org.orgId} limit 1`)).rows[0]!;
+        select document_id from pay_runs where org_id = ${fixture.org.orgId} limit 1`, "objects"))[0]!;
       await db.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, amount, created_by)
         values
@@ -573,7 +573,7 @@ test(
       );
       assert.equal(
         (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${source.document_id}`)).rows[0]!.status,
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${source.document_id}`, "objects"))[0]!.status,
         "posted",
         "the source payroll remains posted when the void is refused",
       );
@@ -597,8 +597,8 @@ test(
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default, subsidiary_id)
         values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0089',
           'CRA remittance account', 'regular', true, ${org.subsidiaryId})
-        returning id`);
-      assert.equal(filingAccount.rows.length, 1, "CRA remittance must have a filing account before payroll calculation");
+        returning id`, "objects");
+      assert.equal(filingAccount.length, 1, "CRA remittance must have a filing account before payroll calculation");
       await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId,
         country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01",
         value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
@@ -611,8 +611,8 @@ test(
       const vendorRole = await db.execute<{ party_id: string }>(sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        returning party_id`);
-      assert.equal(vendorRole.rows.length, 1, "end-to-end CRA fixture must establish its payee role");
+        returning party_id`, "objects");
+      assert.equal(vendorRole.length, 1, "end-to-end CRA fixture must establish its payee role");
       await seedPayrollAccountingConfiguration(org.orgId, {
     slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
@@ -668,9 +668,9 @@ test(
       assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
-      const stub = ((await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
+      const stub = (await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
         select gross, factors from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
 
       // Summary: one CRA group; vacation accrual excluded; totals reconcile.
       const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
@@ -698,16 +698,16 @@ test(
       assert.equal(t4Slip!.box16aCpp2, stub.factors.C2);
       assert.equal(t4Slip!.employerCpp2, stub.factors.C2);
 
-      const cpp2Liability = (await db.execute<{ liability_account_id: string; amount: string }>(sql`
+      const cpp2Liability = await db.execute<{ liability_account_id: string; amount: string }>(sql`
         select line.liability_account_id,line.amount::text
           from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
           join pay_components component on component.org_id=line.org_id and component.id=line.component_id
          where stub.org_id=${org.orgId} and stub.pay_run_document_id=${run.documentId}
-           and component.system_key='cpp2' and component.kind='employer_contribution'`)).rows;
+           and component.system_key='cpp2' and component.kind='employer_contribution'`, "objects");
       assert.deepEqual(cpp2Liability, [{ liability_account_id: cpp2EmployerComponent!.liabilityAccountId!, amount: stub.factors.C2! }]);
       const projectedLiability = (await db.execute<{ amount: string }>(sql`
         select coalesce(sum(amount),0)::text as amount from document_lines
-         where org_id=${org.orgId} and document_id=${run.documentId} and account_id=${craPayable}`)).rows[0]!;
+         where org_id=${org.orgId} and document_id=${run.documentId} and account_id=${craPayable}`, "objects"))[0]!;
       assert.equal(cmp(projectedLiability.amount, neg(cra.total)), 0,
         "the consolidated liability credit includes employee and employer CPP2 exactly once");
 
@@ -715,14 +715,14 @@ test(
       const bill = await createRemittanceBill(org.orgId, actorId, {
         partyId: org.vendorId, from: "2026-07-01", to: "2026-07-31", filingAccountId,
       });
-      const billDoc = ((await db.execute<{
+      const billDoc = (await db.execute<{
         status: string;
         total: string;
         due_date: string;
         custom: Record<string, unknown> | null;
       }>(sql`
         select status, total, due_date, custom from documents where id = ${bill.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(billDoc.status, "draft");
       assert.equal(cmp(billDoc.total, cra.total), 0);
       // The 15th of the following month, moved off the weekend: August 15 2026
@@ -730,9 +730,9 @@ test(
       // time if it is received on the next business day. Before the statutory
       // holiday calendar existed this stamped the Saturday.
       assert.equal(billDoc.due_date, "2026-08-17");
-      const billLines = ((await db.execute<{ account_id: string; amount: string }>(sql`
+      const billLines = await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id, amount from document_lines where document_id = ${bill.documentId}
-      `))).rows;
+      `, "objects");
       assert.ok(billLines.every((l) => l.account_id === craPayable));
       assert.equal(cmp(sum(billLines.map((l) => l.amount)), cra.total), 0);
 
@@ -765,19 +765,19 @@ test(
         orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
         allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       });
-      const stubNet = ((await db.execute<{ net_pay: string }>(sql`
+      const stubNet = (await db.execute<{ net_pay: string }>(sql`
         select net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(cmp(payment.total, stubNet.net_pay), 0);
-      const paidRun = ((await db.execute<{ paid_at: string | null; paid_entry_id: string | null }>(sql`
+      const paidRun = (await db.execute<{ paid_at: string | null; paid_entry_id: string | null }>(sql`
         select paid_at, paid_entry_id from pay_runs where document_id = ${run.documentId}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.ok(paidRun.paid_at && paidRun.paid_entry_id);
-      const settlement = ((await db.execute<{ n: number }>(sql`
+      const settlement = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from applications a
           join journal_lines jl on jl.id = a.from_line_id
          where jl.entry_id = ${paidRun.paid_entry_id}
-      `))).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(settlement.n, 1); // one employee, one applied open item
       await assert.rejects(
         recordPayRunPayment({
@@ -940,7 +940,7 @@ test(
       await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${childSubsidiaryId}`);
       const beforePayment = (await db.execute<{ paid_at: string | null; entries: number }>(sql`
         select r.paid_at,(select count(*)::int from journal_entries e where e.org_id=r.org_id) as entries
-          from pay_runs r where r.org_id=${org.orgId} and r.document_id=${documentId}`)).rows[0]!;
+          from pay_runs r where r.org_id=${org.orgId} and r.document_id=${documentId}`, "objects"))[0]!;
       assert.deepEqual(beforePayment, { paid_at: null, entries: 1 }, "all refusals leave only the source journal");
 
       const payment = await recordPayRunPayment({
@@ -956,10 +956,10 @@ test(
       }>(sql`
         select origin from journal_entries
          where org_id = ${org.orgId} and id = ${payment.entryId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(paymentEntry.origin, "intercompany");
 
-      const subsidiaryBalances = (await db.execute<{
+      const subsidiaryBalances = await db.execute<{
         subsidiary_id: string; total: string;
       }>(sql`
         select subsidiary_id, sum(amount)::text as total
@@ -967,11 +967,11 @@ test(
          where org_id = ${org.orgId} and entry_id = ${payment.entryId}
          group by subsidiary_id
          order by subsidiary_id
-      `)).rows;
+      `, "objects");
       assert.equal(subsidiaryBalances.length, 2);
       assert.ok(subsidiaryBalances.every((row) => cmp(row.total, "0") === 0));
 
-      const dueLegs = (await db.execute<{
+      const dueLegs = await db.execute<{
         account_id: string; subsidiary_id: string; amount: string;
       }>(sql`
         select account_id, subsidiary_id, amount::text as amount
@@ -979,7 +979,7 @@ test(
          where org_id = ${org.orgId} and entry_id = ${payment.entryId}
            and account_id in (${dueFromId}, ${dueToId})
          order by subsidiary_id
-      `)).rows;
+      `, "objects");
       const dueByAccount = new Map(dueLegs.map((row) => [row.account_id, row]));
       assert.deepEqual(dueByAccount.get(dueFromId), {
         account_id: dueFromId, subsidiary_id: org.subsidiaryId, amount: "150.0000",
@@ -993,7 +993,7 @@ test(
           from applications a
           join journal_lines jl on jl.id = a.from_line_id
          where a.org_id = ${org.orgId} and jl.entry_id = ${payment.entryId}
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(applications.n, 2);
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -1026,7 +1026,7 @@ test(
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
            and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
            and status <> 'voided'
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(bills.n, 1);
       const overlappingSummary = await payrollRemittanceSummary(fixture.org.orgId, {
         from: "2026-01-15", to: "2026-02-15",
@@ -1059,20 +1059,20 @@ test(
         partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
       });
       assert.notEqual(second.documentId, first.documentId);
-      const totals = (await db.execute<{ id: string; total: string }>(sql`
+      const totals = await db.execute<{ id: string; total: string }>(sql`
         select id::text as id, total::text as total
           from documents
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
            and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
            and status <> 'voided'
-      `)).rows;
+      `, "objects");
       assert.equal(totals.length, 2);
       const byId = new Map(totals.map((row) => [row.id, row.total]));
       assert.equal(cmp(byId.get(first.documentId)!, "10.00"), 0);
       assert.equal(cmp(byId.get(second.documentId)!, "5.00"), 0);
       // No double bill: every consumed line is covered exactly once, by the
       // bill that billed it, and the two bills' coverage never shares a line.
-      const coverage = (await db.execute<{ line: string; bills: number; amount: string }>(sql`
+      const coverage = await db.execute<{ line: string; bills: number; amount: string }>(sql`
         select cov.stub_line_id::text as line, count(*)::int as bills,
                sum(cov.amount)::text as amount
           from payroll_remittance_coverage cov
@@ -1080,7 +1080,7 @@ test(
             on bill.id = cov.bill_document_id and bill.org_id = cov.org_id
          where cov.org_id = ${fixture.org.orgId} and bill.status <> 'voided'
          group by cov.stub_line_id
-      `)).rows;
+      `, "objects");
       assert.equal(coverage.length, 2);
       for (const row of coverage) assert.equal(row.bills, 1);
       assert.equal(
@@ -1142,7 +1142,7 @@ test(
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
            and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
            and status <> 'voided'
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(bills.n, 0, "a refused billing creates no bill");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1178,7 +1178,7 @@ test(
       const audit = (await db.execute<{ action: string; changes: string }>(sql`
         select action, changes::text as changes from audit_log
          where org_id = ${fixture.org.orgId} and row_id = ${entityless.runDocumentId}
-         order by id desc limit 1`)).rows[0]!;
+         order by id desc limit 1`, "objects"))[0]!;
       assert.equal(audit.action, "update");
       assert.match(audit.changes, /legacy attribution/);
       assert.match(audit.changes, new RegExp(fixture.actorId));
@@ -1193,7 +1193,7 @@ test(
       });
       const total = (await db.execute<{ total: string }>(sql`
         select total::text as total from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       assert.equal(cmp(total.total, "15.00"), 0);
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1233,7 +1233,7 @@ test(
         insert into subsidiaries (org_id, parent_id, name, base_currency, country)
         select org_id, id, 'Retired entity', base_currency, country
           from subsidiaries where org_id = ${fixture.org.orgId} limit 1
-        returning id::text as id`)).rows[0]!;
+        returning id::text as id`, "objects"))[0]!;
       await db.execute(sql`
         update subsidiaries set is_active = false
          where org_id = ${fixture.org.orgId} and id = ${retired.id}`);
@@ -1309,7 +1309,7 @@ test(
       assert.equal(attributed.reclassedLines, 0, "no posted row is rewritten");
       const doc = (await db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id::text as subsidiary_id from documents
-         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`)).rows[0]!;
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`, "objects"))[0]!;
       assert.equal(doc.subsidiary_id, fixture.org.subsidiaryId);
       // Aligned, the posted run remits: its accruals now sit in the root's
       // slice instead of the entityless consolidated group.
@@ -1318,7 +1318,7 @@ test(
       });
       const total = (await db.execute<{ total: string }>(sql`
         select total::text as total from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
       assert.equal(cmp(total.total, "5.00"), 0);
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1350,7 +1350,7 @@ test(
         insert into subsidiaries (org_id, parent_id, name, base_currency, country)
         select org_id, id, 'Second entity', base_currency, country
           from subsidiaries where org_id = ${fixture.org.orgId} limit 1
-        returning id::text as id`)).rows[0]!;
+        returning id::text as id`, "objects"))[0]!;
       await db.execute(sql`
         update documents set subsidiary_id = ${second.id}
          where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`);
@@ -1377,7 +1377,7 @@ test(
       );
       const doc = (await db.execute<{ subsidiary_id: string | null }>(sql`
         select subsidiary_id::text as subsidiary_id from documents
-         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`)).rows[0]!;
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`, "objects"))[0]!;
       assert.equal(doc.subsidiary_id, null, "a refused attribution moves nothing");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1412,7 +1412,7 @@ test(
         select count(*)::int as n
           from documents
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       assert.equal(bills.n, 0, "a refused billing creates no bill");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1468,7 +1468,7 @@ test(
       const total = (await db.execute<{ total: string }>(sql`
         select total::text as total from documents
          where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
-      `)).rows[0]!.total;
+      `, "objects"))[0]!.total;
       assert.equal(cmp(total, "30"), 0);
     } finally {
       release();
@@ -1512,12 +1512,12 @@ test(
       });
       const billTotal = (await db.execute<{ total: string }>(sql`
         select total::text as total from documents
-         where org_id = ${fixture.org.orgId} and id = ${billA.documentId}`)).rows[0]!.total;
+         where org_id = ${fixture.org.orgId} and id = ${billA.documentId}`, "objects"))[0]!.total;
       assert.equal(cmp(billTotal, "100"), 0);
       const coverage = (await db.execute<{ lines: number; covered: string }>(sql`
         select count(*)::int as lines, coalesce(sum(amount), 0)::text as covered
           from payroll_remittance_coverage
-         where org_id = ${fixture.org.orgId} and bill_document_id = ${billA.documentId}`)).rows[0]!;
+         where org_id = ${fixture.org.orgId} and bill_document_id = ${billA.documentId}`, "objects"))[0]!;
       assert.equal(coverage.lines, 1);
       assert.equal(cmp(coverage.covered, "100"), 0);
 
@@ -1578,7 +1578,7 @@ test(
       );
       const bills = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from documents
-         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'`)).rows[0]!.n;
+         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'`, "objects"))[0]!.n;
       assert.equal(bills, 1);
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1601,8 +1601,8 @@ test(
       const vendorRole = await db.execute<{ party_id: string }>(sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        returning party_id`);
-      assert.equal(vendorRole.rows.length, 1, "snapshot-payee fixture must establish its vendor role");
+        returning party_id`, "objects");
+      assert.equal(vendorRole.length, 1, "snapshot-payee fixture must establish its vendor role");
       await seedPayrollAccountingConfiguration(org.orgId, {
     slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
             wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
@@ -1647,7 +1647,7 @@ test(
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-           and l.kind in ('deduction', 'employer_contribution', 'credit')`)).rows[0]!;
+           and l.kind in ('deduction', 'employer_contribution', 'credit')`, "objects"))[0]!;
       assert.ok(stamped.total > 0);
       assert.equal(stamped.stamped, stamped.total);
 
@@ -1665,7 +1665,7 @@ test(
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind in ('deduction', 'employer_contribution', 'credit')
-           and l.remittance_party_id is distinct from ${org.vendorId}`)).rows[0]!.moved;
+           and l.remittance_party_id is distinct from ${org.vendorId}`, "objects"))[0]!.moved;
       assert.equal(frozen, 0);
       const groups = await payrollRemittanceSummary(org.orgId, {
         from: "2026-07-01", to: "2026-07-31",
@@ -1697,16 +1697,16 @@ test(
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
         values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0090',
           'Historical liability account fixture', 'regular', true)
-        returning id`);
-      assert.equal(filingAccount.rows.length, 1, "historical-liability fixture must establish its filing account");
+        returning id`, "objects");
+      assert.equal(filingAccount.length, 1, "historical-liability fixture must establish its filing account");
       await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId,
         country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01",
         value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
       const vendorRole = await db.execute<{ party_id: string }>(sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        returning party_id`);
-      assert.equal(vendorRole.rows.length, 1, "historical-liability fixture must establish its payee role");
+        returning party_id`, "objects");
+      assert.equal(vendorRole.length, 1, "historical-liability fixture must establish its payee role");
       await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: wageExpense,
@@ -1718,7 +1718,7 @@ test(
       assert.equal((await payrollSettings(org.orgId)).craRemittancePartyId, org.vendorId, "the native settings reader resolves the retained CRA destination");
       // Scratch orgs open July only; the second run pays in August.
       const calendar = (await db.execute<{ id: string }>(sql`
-        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
       await db.execute(sql`
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
                                         is_adjustment, fiscal_calendar_id)
@@ -1806,9 +1806,9 @@ test(
       const bill = await createRemittanceBill(org.orgId, actorId, {
         partyId: org.vendorId, from: "2026-07-01", to: "2026-08-31", filingAccountId,
       });
-      const billLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      const billLines = await db.execute<{ account_id: string; amount: string }>(sql`
         select account_id::text as account_id, amount::text as amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${bill.documentId}`)).rows;
+         where org_id = ${org.orgId} and document_id = ${bill.documentId}`, "objects");
       const billedByAccount = new Map<string, string>();
       for (const line of billLines) {
         billedByAccount.set(
@@ -1826,27 +1826,27 @@ test(
       await postDocument(bill.documentId, {
         control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
       });
-      const balances = (await db.execute<{ account_id: string; balance: string }>(sql`
+      const balances = await db.execute<{ account_id: string; balance: string }>(sql`
         select jl.account_id::text as account_id, sum(jl.amount)::text as balance
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id
          where jl.org_id = ${org.orgId} and je.status = 'posted'
            and jl.account_id in (${liabilityA}, ${liabilityB})
-         group by jl.account_id`)).rows;
+         group by jl.account_id`, "objects");
       // After posting, each historical account is cleared of exactly what the
       // bill remitted: actual GL balances, not bill-line echoes. The vacation
       // accrual is an internal accrual — never remitted, but posted to the
       // same liability account — so it legitimately remains payable: the
       // balance must equal precisely that remainder, which the query below
       // pins independently from the committed stub lines.
-      const vacationOwed = (await db.execute<{ account_id: string; owed: string }>(sql`
+      const vacationOwed = await db.execute<{ account_id: string; owed: string }>(sql`
         select l.liability_account_id::text as account_id, sum(l.amount)::text as owed
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           join pay_components c on c.id = l.component_id and c.org_id = l.org_id
          where l.org_id = ${org.orgId} and c.system_key = 'vacation_accrual'
            and l.liability_account_id in (${liabilityA}, ${liabilityB})
-         group by l.liability_account_id`)).rows;
+         group by l.liability_account_id`, "objects");
       assert.equal(balances.length, 2);
       assert.equal(vacationOwed.length, 2);
       for (const row of balances) {

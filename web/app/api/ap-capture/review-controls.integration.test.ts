@@ -38,17 +38,17 @@ async function fixture() {
     values (${org.orgId},${run},'total','100.00')`))
   const revision = async () => (await withOrgContext(org.orgId, () => db.execute<{ updatedAt: string }>(sql`
     select (revision_seq)::text as "updatedAt"
-      from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`))).rows[0]!.updatedAt
+      from ap_capture_items where org_id = ${org.orgId} and id = ${capture}`, 'objects')))[0]!.updatedAt
   const patch = async (body: object) => {
     const expectedUpdatedAt = await revision()
     return withOrgContext(org.orgId, () => PATCH(new Request('http://audit.local/api/ap-capture/'+capture, {
       method: 'PATCH', body: JSON.stringify({ normalized, vendorId: org.vendorId, expectedUpdatedAt, ...body }),
     }), { params: Promise.resolve({ id: capture }) }))
   }
-  const snapshot = async () => (await withOrgContext(org.orgId, () => db.execute(sql`select to_jsonb(ci) as item,
+  const snapshot = async () => await withOrgContext(org.orgId, () => db.execute(sql`select to_jsonb(ci) as item,
     (select count(*) from ap_capture_corrections where org_id=${org.orgId}) as corrections,
     (select count(*) from ap_capture_events where org_id=${org.orgId}) as events
-    from ap_capture_items ci where ci.org_id=${org.orgId} and ci.id=${capture}`))).rows
+    from ap_capture_items ci where ci.org_id=${org.orgId} and ci.id=${capture}`, 'objects'))
   const close = async () => {
     session.user = null
     await dropScratchOrg(org.orgId)
@@ -60,18 +60,18 @@ async function fixture() {
       (select count(*) from ap_capture_fields where org_id=${org.orgId}) +
       (select count(*) from ap_capture_corrections where org_id=${org.orgId}) +
       (select count(*) from ap_capture_events where org_id=${org.orgId})
-    )::text as count`)
-    assert.equal(remaining.rows[0]!.count, '0')
+    )::text as count`, 'objects')
+    assert.equal(remaining[0]!.count, '0')
     if (process.env.OPENBOOKS_TEST_FIXTURE_POOL !== '1' && !process.env.OPENBOOKS_TEST_FIXTURE_OWNER_PORT) {
-      assert.equal((await db.execute(sql`select id from orgs where id=${org.orgId}`)).rows.length, 0)
+      assert.equal((await db.execute(sql`select id from orgs where id=${org.orgId}`, 'objects')).length, 0)
     }
     const guards = await db.execute<{ tgenabled: string }>(sql`select tgenabled from pg_trigger
       where tgrelid in ('public.ap_capture_fields'::regclass, 'public.ap_capture_runs'::regclass,
         'public.ap_capture_corrections'::regclass, 'public.ap_capture_events'::regclass)
       and tgname in ('ap_capture_fields_append_only','ap_capture_runs_immutable',
-        'ap_capture_corrections_append_only','ap_capture_events_append_only')`)
-    assert.equal(guards.rows.length, 4)
-    assert.ok(guards.rows.every(row => row.tgenabled === 'O'), 'all capture retention guards remain enabled')
+        'ap_capture_corrections_append_only','ap_capture_events_append_only')`, 'objects')
+    assert.equal(guards.length, 4)
+    assert.ok(guards.every(row => row.tgenabled === 'O'), 'all capture retention guards remain enabled')
   }
   return { org, capture, normalized, patch, snapshot, close }
 }

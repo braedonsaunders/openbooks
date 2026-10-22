@@ -184,8 +184,8 @@ async function loadRun(
        -- is: a scoped caller must own the complete population, exactly as
        -- the run detail and every other run action require.
        ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
-  `));
-  return rows.rows[0] ?? null;
+  `, "objects"));
+  return rows[0] ?? null;
 }
 
 /**
@@ -321,8 +321,8 @@ export async function listPayRunBankFiles(
      where f.org_id = ${orgId} and f.pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by sequence_number desc
-  `));
-  return rows.rows;
+  `, "objects"));
+  return rows;
 }
 
 /** The artifacts that are still live — anything not superseded. */
@@ -359,17 +359,17 @@ async function ensureBankFileFolder(
   const existing = (await tx.execute<{ id: string }>(sql`
     select id from folders where org_id = ${orgId} and system_kind = ${PAYROLL_BANK_FILE_FOLDER_KIND}
      limit 1
-  `));
-  if (existing.rows[0]) return existing.rows[0].id;
+  `, "objects"));
+  if (existing[0]) return existing[0].id;
   const created = (await tx.execute<{ id: string }>(sql`
     insert into folders (org_id, name, is_system, system_kind, is_private, owner_id,
                          created_by, updated_by, created_at, updated_at)
     values (${orgId}, ${PAYROLL_BANK_FILE_FOLDER_NAME}, true, ${PAYROLL_BANK_FILE_FOLDER_KIND},
             true, null, ${actorId}, ${actorId}, now(), now())
     returning id
-  `));
-  if (!created.rows[0]) throw new PayrollError("could not create the payroll bank-file folder");
-  return created.rows[0].id;
+  `, "objects"));
+  if (!created[0]) throw new PayrollError("could not create the payroll bank-file folder");
+  return created[0].id;
 }
 
 /**
@@ -401,16 +401,16 @@ async function storeBankFileBytes(
             ${input.contentType}, ${input.bytes.length}, ${kind}, ${input.contentHash},
             ${input.actorId}, ${input.actorId}, now(), now())
     returning id
-  `));
-  const fileId = file.rows[0]!.id;
+  `, "objects"));
+  const fileId = file[0]!.id;
   const version = (await tx.execute<{ id: string }>(sql`
     insert into file_versions (file_id, version_number, size_bytes, content_type, storage_kind,
                                content_hash, created_by, created_at)
     values (${fileId}, 1, ${input.bytes.length}, ${input.contentType}, ${kind},
             ${input.contentHash}, ${input.actorId}, now())
     returning id
-  `));
-  const versionId = version.rows[0]!.id;
+  `, "objects"));
+  const versionId = version[0]!.id;
   await tx.execute(sql`update files set current_version_id = ${versionId} where id = ${fileId} and org_id = ${input.orgId}`);
   // Same ordering as the cabinet: the object-store put happens inside the
   // transaction, so a failed upload rolls the metadata back and never leaves
@@ -495,8 +495,8 @@ export async function payRunBankFileAudit(
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by a.at desc
      limit ${limit}
-  `));
-  return rows.rows;
+  `, "objects"));
+  return rows;
 }
 
 // ---------------------------------------------------------------------------
@@ -716,7 +716,7 @@ export async function allocatePayrollNachaModifier(
     select id from payment_bank_profiles
      where id = ${input.bankProfileId} and org_id = ${input.orgId}
      for update
-  `)).rows[0];
+  `, "objects"))[0];
   if (!profileLock) {
     throw new PayrollError(
       "the payment bank profile is gone — reselect it in Setup → Payment operations before generating",
@@ -724,12 +724,12 @@ export async function allocatePayrollNachaModifier(
   }
   const zone = await businessTimeZone(input.orgId);
   const day = formatInZone(input.now, zone);
-  const used = (await exec.execute<{ modifier: string | null }>(sql`
+  const used = await exec.execute<{ modifier: string | null }>(sql`
     select file_id_modifier as "modifier" from pay_run_bank_files
      where org_id = ${input.orgId} and format = 'nacha'
        and payment_bank_profile_id = ${input.bankProfileId}
        and (generated_at at time zone ${zone})::date = ${day}::date
-  `)).rows;
+  `, "objects");
   const letter = lowestFreeNachaModifier(
     used.map((row) => row.modifier).filter((modifier): modifier is string => modifier !== null),
   );
@@ -825,7 +825,7 @@ async function generateAuthorizedPayRunBankFile(
         select p.originator_secrets_encrypted as sealed,p.currency from payment_bank_profiles p
         join payment_formats f on f.org_id=p.org_id and f.id=p.payment_format_id and f.is_active and f.rail='rbc_std152_credit'
         where p.org_id=${orgId} and p.id=${config.paymentBankProfileId} and p.is_active for share of p,f
-      `)).rows[0];
+      `, "objects"))[0];
       const live = validateRbcStd152Settings(row?.sealed ? unsealJson<Partial<RbcStd152Settings>>(row.sealed,{orgId,purpose:"payment.originator.secrets"}) : {});
       if (!live.ok || row?.currency !== "CAD" || !config.rbcStd152 || rbcStd152SettingsDigest(live.settings) !== rbcStd152SettingsDigest(config.rbcStd152)) throw new PayrollError("RBC profile changed while preparing payroll — reload the profile and generate again");
     }
@@ -848,8 +848,8 @@ async function generateAuthorizedPayRunBankFile(
        where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
        for update of r, d
-    `));
-    const lockedRun = locked.rows[0];
+    `, "objects"));
+    const lockedRun = locked[0];
     if (!lockedRun) throw new PayrollError("pay run not found");
     if (lockedRun.run_status !== "committed") {
       throw new PayrollError("commit the pay run before generating its bank file");
@@ -871,10 +871,10 @@ async function generateAuthorizedPayRunBankFile(
       select id, file_number, coalesce(max(sequence_number) over (), 0) as _ignored
         from pay_run_bank_files
        where org_id = ${orgId} and pay_run_document_id = ${documentId} and status <> 'superseded'
-    `));
-    if (live.rows.length > 0 && supersedeReason.length < 5) {
+    `, "objects"));
+    if (live.length > 0 && supersedeReason.length < 5) {
       throw new PayrollError(
-        `this pay run already has bank file ${live.rows[0]!.file_number} — a reason is required to replace it`,
+        `this pay run already has bank file ${live[0]!.file_number} — a reason is required to replace it`,
       );
     }
 
@@ -885,15 +885,15 @@ async function generateAuthorizedPayRunBankFile(
     const seqRow = (await tx.execute<{ n: number }>(sql`
       select coalesce(max(sequence_number), 0) + 1 as n from pay_run_bank_files
        where org_id = ${orgId} and pay_run_document_id = ${documentId}
-    `));
-    const sequenceNumber = Number(seqRow.rows[0]?.n ?? 1);
+    `, "objects"));
+    const sequenceNumber = Number(seqRow[0]?.n ?? 1);
 
     const scoped = entitlement.subsidiaryId
-      ? ((await tx.execute(sql`
+      ? (await tx.execute(sql`
           select 1 from number_sequences
            where org_id = ${orgId} and document_kind = ${PAYROLL_BANK_FILE_SEQUENCE_KIND}
              and subsidiary_id = ${entitlement.subsidiaryId} limit 1
-        `))).rows.length > 0
+        `, "objects")).length > 0
       : false;
     const allocated = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
@@ -903,8 +903,8 @@ async function generateAuthorizedPayRunBankFile(
       do update set next_number = number_sequences.next_number + 1
       where number_sequences.org_id = ${orgId}
       returning prefix, next_number, padding
-    `));
-    const seq = allocated.rows[0]!;
+    `, "objects"));
+    const seq = allocated[0]!;
     const sequenceValue = Number(seq.next_number);
     const fileNumber = `${seq.prefix}${String(sequenceValue).padStart(seq.padding, "0")}`;
 
@@ -1015,10 +1015,10 @@ async function generateAuthorizedPayRunBankFile(
         ${JSON.stringify(rendered.excludedCheque)}::jsonb, ${rendered.excludedTotal},
         'generated', ${now.toISOString()}, ${actorId}, ${actorId}, ${actorId})
       returning ${artifactColumns()}
-    `));
-    const artifact = inserted.rows[0]!;
+    `, "objects"));
+    const artifact = inserted[0]!;
 
-    for (const previous of live.rows) {
+    for (const previous of live) {
       await tx.execute(sql`
         update pay_run_bank_files
            set status = 'superseded', superseded_at = now(), superseded_by = ${actorId},
@@ -1058,7 +1058,7 @@ async function generateAuthorizedPayRunBankFile(
         excludedChequeCount: rendered.excludedCheque.length,
         excludedTotal: rendered.excludedTotal,
         paymentBankProfileId: config.paymentBankProfileId,
-        supersededCount: live.rows.length,
+        supersededCount: live.length,
       },
     });
 
@@ -1121,8 +1121,8 @@ async function releaseAuthorizedPayRunBankFile(
       left join file_blobs fb on fb.version_id = fv.id
      where f.org_id = ${orgId} and f.id = ${artifactId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  const row = rows.rows[0];
+  `, "objects"));
+  const row = rows[0];
   if (!row) throw new PayrollError("payroll bank file not found");
 
   // Masked-clone tombstone: refuse by name before the byte fetch.
@@ -1156,7 +1156,7 @@ async function releaseAuthorizedPayRunBankFile(
        where f.org_id = ${orgId} and f.id = ${artifactId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for update of f, r, d
-    `)).rows[0];
+    `, "objects"))[0];
     if (!lifecycle) throw new PayrollError("payroll bank file not found");
     if (lifecycle.bank_file_status === "superseded") {
       const replacement = lifecycle.replacement_file_number
@@ -1192,8 +1192,8 @@ async function releaseAuthorizedPayRunBankFile(
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${artifactId} and status <> 'superseded'
        returning release_count as "releaseCount"
-    `);
-    const releaseNumber = updated.rows[0]?.releaseCount;
+    `, "objects");
+    const releaseNumber = updated[0]?.releaseCount;
     if (releaseNumber === undefined) {
       throw new PayrollError("payroll bank file not found");
     }
@@ -1221,10 +1221,10 @@ async function releaseAuthorizedPayRunBankFile(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where f.org_id = ${orgId} and f.id = ${artifactId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
+  `, "objects"));
 
   return {
-    artifact: refreshed.rows[0] ?? row,
+    artifact: refreshed[0] ?? row,
     filename: row.filename,
     contentType: row.contentType,
     bytes,

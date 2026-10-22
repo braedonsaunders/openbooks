@@ -49,27 +49,27 @@ type QuoteLine = { id: string; lineNumber: number; itemId: string | null; descri
 
 async function lockQuoteDocument(orgId: string, quoteDocumentId: string): Promise<QuoteDocument> {
   const row = (await db.execute<QuoteDocument & { kind: string }>(sql`select id, document_number as "documentNumber", status, party_id as "partyId", subsidiary_id as "subsidiaryId",
-      currency, total::text as total, memo, kind from documents where org_id = ${orgId} and id = ${requireUuid(quoteDocumentId, "Estimate")} for update`)).rows[0];
+      currency, total::text as total, memo, kind from documents where org_id = ${orgId} and id = ${requireUuid(quoteDocumentId, "Estimate")} for update`, "objects"))[0];
   if (!row || row.kind !== "quote") throw new ScopeNotFoundError();
   return row;
 }
 
 async function quoteLines(orgId: string, quoteDocumentId: string): Promise<QuoteLine[]> {
-  return (await db.execute<QuoteLine>(sql`select id, line_number as "lineNumber", item_id as "itemId", description, quantity::text, unit_price::text as "unitPrice",
+  return await db.execute<QuoteLine>(sql`select id, line_number as "lineNumber", item_id as "itemId", description, quantity::text, unit_price::text as "unitPrice",
       amount::text, coalesce(tax_amount, 0)::text as "taxAmount", tax_code_id as "taxCodeId"
-    from document_lines where org_id = ${orgId} and document_id = ${quoteDocumentId} order by line_number`)).rows;
+    from document_lines where org_id = ${orgId} and document_id = ${quoteDocumentId} order by line_number`, "objects");
 }
 
 const TERMS_COLUMNS = sql`quote_document_id as "quoteDocumentId", status, deposit_basis as "depositBasis", deposit_value::text as "depositValue",
   request_id as "requestId", job_id as "jobId", revision, signature_request_id as "signatureRequestId", accepted_total::text as "acceptedTotal", deposit_due::text as "depositDue"`;
 
 async function lockTerms(orgId: string, quoteDocumentId: string): Promise<ServiceQuoteTerms | null> {
-  return (await db.execute<ServiceQuoteTerms>(sql`select ${TERMS_COLUMNS} from service_quotes where org_id = ${orgId} and quote_document_id = ${quoteDocumentId} for update`)).rows[0] ?? null;
+  return (await db.execute<ServiceQuoteTerms>(sql`select ${TERMS_COLUMNS} from service_quotes where org_id = ${orgId} and quote_document_id = ${quoteDocumentId} for update`, "objects"))[0] ?? null;
 }
 
 async function optionalLineIds(orgId: string, quoteDocumentId: string): Promise<Set<string>> {
   return new Set((await db.execute<{ id: string }>(sql`select document_line_id as id from service_quote_lines
-    where org_id = ${orgId} and quote_document_id = ${quoteDocumentId} and optional`)).rows.map((row) => row.id));
+    where org_id = ${orgId} and quote_document_id = ${quoteDocumentId} and optional`, "objects")).map((row) => row.id));
 }
 
 /** The deposit a total carries under the terms: a percentage or a fixed amount, never more than the total. */
@@ -110,7 +110,7 @@ export async function saveServiceQuoteTerms(actor: ServiceActor & { quoteDocumen
       throw new ServiceError("The customer already answered this quote.", { status: 409, code: "service_invalid_transition", remedy: "Issue a revised estimate for changed terms." });
     }
     if (existing?.status === "sent") {
-      const open = (await db.execute(sql`select 1 from signature_requests where org_id = ${actor.orgId} and id = ${existing.signatureRequestId} and status in ('sent','viewed')`)).rows[0];
+      const open = (await db.execute(sql`select 1 from signature_requests where org_id = ${actor.orgId} and id = ${existing.signatureRequestId} and status in ('sent','viewed')`, "objects"))[0];
       if (open) throw new ServiceError("The quote is with the customer.", { status: 409, code: "service_invalid_transition", remedy: "Edit the estimate (which withdraws the sent link) or wait for the customer's answer." });
     }
     const requestId = actor.requestId === undefined ? existing?.requestId ?? null : (actor.requestId ? requireUuid(actor.requestId, "Request") : null);
@@ -127,18 +127,18 @@ export async function saveServiceQuoteTerms(actor: ServiceActor & { quoteDocumen
     if (lines.length && lines.every((line) => optional.has(line.id))) throw new ServiceError("At least one line must be required.", { code: "service_invalid", remedy: "Leave the core work required and mark only add-ons optional." });
     let terms: ServiceQuoteTerms;
     if (existing) {
-      terms = requireOne((await db.execute<ServiceQuoteTerms>(sql`update service_quotes set request_id = ${requestId}, deposit_basis = ${actor.depositBasis},
+      terms = requireOne(await db.execute<ServiceQuoteTerms>(sql`update service_quotes set request_id = ${requestId}, deposit_basis = ${actor.depositBasis},
           deposit_value = ${depositValue}, status = 'draft', sent_at = null, signature_request_id = null,
           revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-        where org_id = ${actor.orgId} and quote_document_id = ${quote.id} and revision = ${existing.revision} returning ${TERMS_COLUMNS}`)).rows, "The quote terms");
+        where org_id = ${actor.orgId} and quote_document_id = ${quote.id} and revision = ${existing.revision} returning ${TERMS_COLUMNS}`, "objects"), "The quote terms");
     } else {
-      terms = requireOne((await db.execute<ServiceQuoteTerms>(sql`insert into service_quotes (org_id, quote_document_id, request_id, deposit_basis, deposit_value, status, created_by, updated_by)
-        values (${actor.orgId}, ${quote.id}, ${requestId}, ${actor.depositBasis}, ${depositValue}, 'draft', ${actor.actorId}, ${actor.actorId}) returning ${TERMS_COLUMNS}`)).rows, "The quote terms");
+      terms = requireOne(await db.execute<ServiceQuoteTerms>(sql`insert into service_quotes (org_id, quote_document_id, request_id, deposit_basis, deposit_value, status, created_by, updated_by)
+        values (${actor.orgId}, ${quote.id}, ${requestId}, ${actor.depositBasis}, ${depositValue}, 'draft', ${actor.actorId}, ${actor.actorId}) returning ${TERMS_COLUMNS}`, "objects"), "The quote terms");
     }
     await db.execute(sql`delete from service_quote_lines where org_id = ${actor.orgId} and quote_document_id = ${quote.id}`);
     for (const line of lines) {
-      requireOne((await db.execute(sql`insert into service_quote_lines (org_id, quote_document_id, document_line_id, optional)
-        values (${actor.orgId}, ${quote.id}, ${line.id}, ${optional.has(line.id)}) returning document_line_id`)).rows, "A quote line marking");
+      requireOne(await db.execute(sql`insert into service_quote_lines (org_id, quote_document_id, document_line_id, optional)
+        values (${actor.orgId}, ${quote.id}, ${line.id}, ${optional.has(line.id)}) returning document_line_id`, "objects"), "A quote line marking");
     }
     await auditService({ orgId: actor.orgId, table: "service_quotes", rowId: quote.id, action: existing ? "update" : "insert", actorId: actor.actorId,
       before: existing, after: { ...terms, optionalLineIds: [...optional] } });
@@ -176,7 +176,7 @@ export async function sendServiceQuote(actor: ServiceActor & { quoteDocumentId: 
     if (quote.status !== "approved") throw new ServiceError("Issue the estimate before sending it for acceptance.", { status: 409, code: "service_invalid_transition", remedy: "Issue the estimate from its drawer; any configured approval runs there." });
     const lines = await quoteLines(actor.orgId, quote.id);
     if (!lines.length) throw new ServiceError("The estimate has no lines.", { code: "service_invalid" });
-    const marked = new Set((await db.execute<{ id: string }>(sql`select document_line_id as id from service_quote_lines where org_id = ${actor.orgId} and quote_document_id = ${quote.id}`)).rows.map((row) => row.id));
+    const marked = new Set((await db.execute<{ id: string }>(sql`select document_line_id as id from service_quote_lines where org_id = ${actor.orgId} and quote_document_id = ${quote.id}`, "objects")).map((row) => row.id));
     if (lines.some((line) => !marked.has(line.id)) || marked.size !== lines.length) {
       throw new ServiceError("The estimate's lines changed since the add-ons were chosen.", { status: 409, code: "service_stale", remedy: "Review the optional add-ons and save the quote terms again." });
     }
@@ -186,13 +186,13 @@ export async function sendServiceQuote(actor: ServiceActor & { quoteDocumentId: 
     const requestId = randomUUID();
     const token = mintPossessionToken(SERVICE_QUOTE_DOMAIN, actor.orgId, requestId, expiresAt);
     // A previous link that lapsed or was declined stays as history; an open one blocks re-sending.
-    requireOne((await db.execute(sql`insert into signature_requests
+    requireOne(await db.execute(sql`insert into signature_requests
         (id, org_id, subject_table, subject_id, signer_name, signer_email, token_hash, status, expires_at, sent_at, document_hash, consent_text, created_by, updated_by)
       values (${requestId}, ${actor.orgId}, ${SUBJECT_TABLE}, ${quote.id}, ${signerName}, ${signerEmail}, ${hashPossessionToken(token)}, 'sent', ${expiresAt}, now(),
-        ${documentHash}, ${SERVICE_QUOTE_CONSENT}, ${actor.actorId}, ${actor.actorId}) returning id`)).rows, "The acceptance request");
-    requireOne((await db.execute(sql`update service_quotes set status = 'sent', sent_at = now(), signature_request_id = ${requestId},
+        ${documentHash}, ${SERVICE_QUOTE_CONSENT}, ${actor.actorId}, ${actor.actorId}) returning id`, "objects"), "The acceptance request");
+    requireOne(await db.execute(sql`update service_quotes set status = 'sent', sent_at = now(), signature_request_id = ${requestId},
         revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and quote_document_id = ${quote.id} and revision = ${terms.revision} returning quote_document_id`)).rows, "The quote terms");
+      where org_id = ${actor.orgId} and quote_document_id = ${quote.id} and revision = ${terms.revision} returning quote_document_id`, "objects"), "The quote terms");
     if (terms.requestId) {
       const request = await lockRequest(actor.orgId, terms.requestId);
       if (requestIsOpen(request.status) && request.status !== "quoted") await setRequestStatus(actor, request, "quoted");
@@ -217,7 +217,7 @@ async function loadOpenRequest(token: string): Promise<{ claims: { orgId: string
   if (!claims) throw new ServiceError("This quote link is invalid or expired.", { status: 404, code: "service_link_invalid", remedy: "Ask the sender to send the quote again." });
   const row = (await db.execute<OpenRequestRow>(sql`select id, org_id as "orgId", subject_id as "subjectId", status, signer_name as "signerName",
       to_char(expires_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "expiresAt", document_hash as "documentHash", consent_text as "consentText"
-    from signature_requests where org_id = ${claims.orgId} and token_hash = ${hashPossessionToken(token)} for update`)).rows[0];
+    from signature_requests where org_id = ${claims.orgId} and token_hash = ${hashPossessionToken(token)} for update`, "objects"))[0];
   if (!row || row.id !== claims.rowId) throw new ServiceError("This quote link is invalid or expired.", { status: 404, code: "service_link_invalid", remedy: "Ask the sender to send the quote again." });
   return { claims, row };
 }
@@ -225,8 +225,8 @@ async function loadOpenRequest(token: string): Promise<{ claims: { orgId: string
 async function expireIfLapsed(row: OpenRequestRow): Promise<boolean> {
   if (row.status !== "sent" && row.status !== "viewed") return false;
   if (Date.parse(row.expiresAt) >= Date.now()) return false;
-  requireOne((await db.execute(sql`update signature_requests set status = 'expired', updated_at = now()
-    where org_id = ${row.orgId} and id = ${row.id} and status in ('sent','viewed') returning id`)).rows, "The quote link expiry");
+  requireOne(await db.execute(sql`update signature_requests set status = 'expired', updated_at = now()
+    where org_id = ${row.orgId} and id = ${row.id} and status in ('sent','viewed') returning id`, "objects"), "The quote link expiry");
   return true;
 }
 
@@ -254,8 +254,8 @@ export async function publicServiceQuoteView(token: string): Promise<PublicServi
     const { row } = await loadOpenRequest(token);
     if (await expireIfLapsed(row)) throw new ServiceError("This quote link expired.", { status: 410, code: "service_link_expired", remedy: "Ask the sender to send the quote again." });
     if (row.status === "sent") {
-      requireOne((await db.execute(sql`update signature_requests set status = 'viewed', viewed_at = now(), updated_at = now()
-        where org_id = ${row.orgId} and id = ${row.id} and status = 'sent' returning id`)).rows, "The quote view");
+      requireOne(await db.execute(sql`update signature_requests set status = 'viewed', viewed_at = now(), updated_at = now()
+        where org_id = ${row.orgId} and id = ${row.id} and status = 'sent' returning id`, "objects"), "The quote view");
     }
     const quote = await lockQuoteDocument(row.orgId, row.subjectId);
     const terms = await lockTerms(row.orgId, quote.id);
@@ -263,9 +263,9 @@ export async function publicServiceQuoteView(token: string): Promise<PublicServi
     const optional = await optionalLineIds(row.orgId, quote.id);
     const lines = await quoteLines(row.orgId, quote.id);
     const names = (await db.execute<{ orgName: string; customerName: string }>(sql`select o.name as "orgName", p.display_name as "customerName"
-      from orgs o left join parties p on p.org_id = o.id and p.id = ${quote.partyId} where o.id = ${row.orgId}`)).rows[0]!;
+      from orgs o left join parties p on p.org_id = o.id and p.id = ${quote.partyId} where o.id = ${row.orgId}`, "objects"))[0]!;
     const itemNames = new Map((await db.execute<{ id: string; name: string }>(sql`select id, name from items where org_id = ${row.orgId}
-      and id = any(${`{${lines.map((line) => line.itemId).filter(Boolean).join(",")}}`}::uuid[])`)).rows.map((item) => [item.id, item.name]));
+      and id = any(${`{${lines.map((line) => line.itemId).filter(Boolean).join(",")}}`}::uuid[])`, "objects")).map((item) => [item.id, item.name]));
     return {
       orgName: names.orgName, customerName: names.customerName, quoteNumber: quote.documentNumber, title: quote.memo, currency: quote.currency,
       status: row.status === "sent" ? "viewed" : row.status, expiresAt: row.expiresAt, signerName: row.signerName, consentText: row.consentText ?? SERVICE_QUOTE_CONSENT,
@@ -303,17 +303,17 @@ export async function acceptServiceQuote(input: { token: string; name: string; s
     const accepted = lines.filter((line) => !optional.has(line.id) || selected.has(line.id));
     const acceptedTotal = sum(accepted.map((line) => add(line.amount, line.taxAmount)));
     const depositDue = depositFor(terms.depositBasis, terms.depositValue, acceptedTotal);
-    requireOne((await db.execute(sql`update signature_requests set status = 'signed', signed_at = now(), signer_ip = ${input.ip ?? null},
+    requireOne(await db.execute(sql`update signature_requests set status = 'signed', signed_at = now(), signer_ip = ${input.ip ?? null},
         signer_user_agent = ${input.userAgent ?? null}, signature_svg = ${svg}, updated_at = now()
-      where org_id = ${row.orgId} and id = ${row.id} and status in ('sent','viewed') returning id`)).rows, "The acceptance");
+      where org_id = ${row.orgId} and id = ${row.id} and status in ('sent','viewed') returning id`, "objects"), "The acceptance");
     for (const line of lines) {
       const value = optional.has(line.id) ? selected.has(line.id) : true;
-      requireOne((await db.execute(sql`update service_quote_lines set selected = ${value}
-        where org_id = ${row.orgId} and quote_document_id = ${quote.id} and document_line_id = ${line.id} and selected is null returning document_line_id`)).rows, "A quote line selection");
+      requireOne(await db.execute(sql`update service_quote_lines set selected = ${value}
+        where org_id = ${row.orgId} and quote_document_id = ${quote.id} and document_line_id = ${line.id} and selected is null returning document_line_id`, "objects"), "A quote line selection");
     }
-    requireOne((await db.execute(sql`update service_quotes set status = 'accepted', decided_at = now(), decided_name = ${name}, accepted_total = ${acceptedTotal},
+    requireOne(await db.execute(sql`update service_quotes set status = 'accepted', decided_at = now(), decided_name = ${name}, accepted_total = ${acceptedTotal},
         deposit_due = ${depositDue}, revision = revision + 1, updated_at = now()
-      where org_id = ${row.orgId} and quote_document_id = ${quote.id} and revision = ${terms.revision} returning quote_document_id`)).rows, "The quote acceptance");
+      where org_id = ${row.orgId} and quote_document_id = ${quote.id} and revision = ${terms.revision} returning quote_document_id`, "objects"), "The quote acceptance");
     await auditService({ orgId: row.orgId, table: "signature_requests", rowId: row.id, action: "update", actorId: null,
       before: { status: row.status }, after: { status: "signed", signedName: name, selectedOptionalLineIds: [...selected], acceptedTotal, depositDue, documentHash: row.documentHash, consent: row.consentText } });
     return { acceptedTotal, depositDue, currency: quote.currency };
@@ -333,10 +333,10 @@ export async function declineServiceQuote(input: { token: string; name: string; 
     if (row.status !== "sent" && row.status !== "viewed") throw new ServiceError("This quote was already answered or withdrawn.", { status: 409, code: "service_link_used" });
     const terms = await lockTerms(row.orgId, row.subjectId);
     if (!terms || terms.status !== "sent" || terms.signatureRequestId !== row.id) throw new ServiceError("This quote was withdrawn.", { status: 409, code: "service_link_used" });
-    requireOne((await db.execute(sql`update signature_requests set status = 'declined', declined_at = now(), updated_at = now()
-      where org_id = ${row.orgId} and id = ${row.id} and status in ('sent','viewed') returning id`)).rows, "The decline");
-    requireOne((await db.execute(sql`update service_quotes set status = 'declined', decided_at = now(), decided_name = ${name}, revision = revision + 1, updated_at = now()
-      where org_id = ${row.orgId} and quote_document_id = ${row.subjectId} and revision = ${terms.revision} returning quote_document_id`)).rows, "The quote decline");
+    requireOne(await db.execute(sql`update signature_requests set status = 'declined', declined_at = now(), updated_at = now()
+      where org_id = ${row.orgId} and id = ${row.id} and status in ('sent','viewed') returning id`, "objects"), "The decline");
+    requireOne(await db.execute(sql`update service_quotes set status = 'declined', decided_at = now(), decided_name = ${name}, revision = revision + 1, updated_at = now()
+      where org_id = ${row.orgId} and quote_document_id = ${row.subjectId} and revision = ${terms.revision} returning quote_document_id`, "objects"), "The quote decline");
     if (terms.requestId) {
       const request = await lockRequest(row.orgId, terms.requestId);
       if (request.status === "quoted") await setRequestStatus({ orgId: row.orgId, actorId: SYSTEM_ACTOR }, request, "assessed", { reason: reason ?? `Quote declined by ${name}` });
@@ -360,7 +360,7 @@ export async function convertServiceQuote(actor: ServiceActor & { id: string; qu
     const terms = await lockTerms(actor.orgId, quote.id);
     if (!terms || terms.status !== "accepted") throw new ServiceError("Only an accepted quote converts to a job.", { status: 409, code: "service_invalid_transition", remedy: "Send the quote and wait for the customer's acceptance." });
     if (terms.jobId) {
-      const existing = (await db.execute<StoredJob>(sql`select ${JOB_COLUMNS} from service_jobs where org_id = ${actor.orgId} and id = ${terms.jobId}`)).rows[0]!;
+      const existing = (await db.execute<StoredJob>(sql`select ${JOB_COLUMNS} from service_jobs where org_id = ${actor.orgId} and id = ${terms.jobId}`, "objects"))[0]!;
       return { job: existing, visitId: null };
     }
     const request = terms.requestId ? await lockRequest(actor.orgId, terms.requestId) : null;
@@ -368,10 +368,10 @@ export async function convertServiceQuote(actor: ServiceActor & { id: string; qu
       customerPartyId: quote.partyId, subsidiaryId: quote.subsidiaryId,
       serviceAddressId: actor.serviceAddressId ?? request?.serviceAddressId ?? null, contactId: actor.contactId ?? request?.contactId ?? null,
     });
-    const accepted = (await db.execute<{ id: string; itemId: string | null; description: string | null; quantity: string; unitPrice: string; taxCodeId: string | null }>(sql`select l.id, l.item_id as "itemId", l.description,
+    const accepted = await db.execute<{ id: string; itemId: string | null; description: string | null; quantity: string; unitPrice: string; taxCodeId: string | null }>(sql`select l.id, l.item_id as "itemId", l.description,
         l.quantity::text, l.unit_price::text as "unitPrice", l.tax_code_id as "taxCodeId"
       from document_lines l join service_quote_lines q on q.org_id = l.org_id and q.document_line_id = l.id and q.selected
-      where l.org_id = ${actor.orgId} and l.document_id = ${quote.id} order by l.line_number`)).rows;
+      where l.org_id = ${actor.orgId} and l.document_id = ${quote.id} order by l.line_number`, "objects");
     if (accepted.some((line) => !line.itemId)) throw new ServiceError("Every accepted estimate line needs an item to become job scope.", { code: "service_invalid", remedy: "Revise the estimate so each line names an item." });
     const mode = billingMode(actor.billingMode);
     const labor = await validateLabor(actor.orgId, { estimatedMinutes: actor.estimatedMinutes, billingMode: mode, laborItemId: actor.laborItemId, laborUnitPrice: actor.laborUnitPrice });
@@ -383,8 +383,8 @@ export async function convertServiceQuote(actor: ServiceActor & { id: string; qu
       depositRequired: terms.depositDue ?? "0", askedAt: request?.createdAt ?? new Date().toISOString(),
       lines: accepted.map((line) => ({ itemId: line.itemId!, description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, taxCodeId: line.taxCodeId, sourceQuoteLineId: line.id })),
     });
-    requireOne((await db.execute(sql`update service_quotes set job_id = ${job.id}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-      where org_id = ${actor.orgId} and quote_document_id = ${quote.id} and revision = ${terms.revision} returning quote_document_id`)).rows, "The quote conversion");
+    requireOne(await db.execute(sql`update service_quotes set job_id = ${job.id}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+      where org_id = ${actor.orgId} and quote_document_id = ${quote.id} and revision = ${terms.revision} returning quote_document_id`, "objects"), "The quote conversion");
     if (request && requestIsOpen(request.status)) await setRequestStatus(actor, request, "converted");
     let visitId: string | null = null;
     if (actor.firstVisit !== null) {

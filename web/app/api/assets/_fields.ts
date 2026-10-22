@@ -193,9 +193,9 @@ async function accountExists(
   const found = await exec.execute(
     sql`select 1 from accounts a
          where a.id = ${id} and a.org_id = ${orgId} and not a.is_summary
-           ${assetAccountScopeSql(orgId, allowedSubsidiaryIds)}`,
+           ${assetAccountScopeSql(orgId, allowedSubsidiaryIds)}`, "objects",
   );
-  return !!found.rows[0];
+  return !!found[0];
 }
 
 /** SQL scope shared by asset account pickers and submitted account overrides. */
@@ -254,8 +254,8 @@ export async function lockAccountOverridesForAssetWrite(
   const target = await tx.execute(sql`
     select id from subsidiaries
      where id = ${targetSubsidiaryId} and org_id = ${orgId} and is_active and not is_elimination
-     for share`)
-  if (!target.rows[0]) throw new FieldRefusal('invalid_subsidiary')
+     for share`, "objects")
+  if (!target[0]) throw new FieldRefusal('invalid_subsidiary')
   const byId = new Map<string, string>();
   for (const override of overrides) {
     if (override.id) byId.set(override.id, override.code);
@@ -284,8 +284,8 @@ export async function parseDepreciationMethodId(
   if (!isUuid(candidate)) throw new FieldRefusal("invalid_formula");
   const formula = await exec.execute(sql`
     select 1 from depreciation_methods
-     where id = ${candidate} and org_id = ${orgId} and is_active`);
-  if (!formula.rows[0]) throw new FieldRefusal("unknown_formula");
+     where id = ${candidate} and org_id = ${orgId} and is_active`, "objects");
+  if (!formula[0]) throw new FieldRefusal("unknown_formula");
   return candidate;
 }
 
@@ -342,8 +342,8 @@ export async function parseTaxDepreciation(
     if (classCode) {
       const valid = await exec.execute(sql`
         select 1 from tax_pool_classes
-         where org_id = ${orgId} and regime = ${regime} and class_code = ${classCode} and is_active`);
-      if (!valid.rows[0]) throw new FieldRefusal("tax_class_invalid");
+         where org_id = ${orgId} and regime = ${regime} and class_code = ${classCode} and is_active`, "objects");
+      if (!valid[0]) throw new FieldRefusal("tax_class_invalid");
     }
     clean[regime] = {
       classCode,

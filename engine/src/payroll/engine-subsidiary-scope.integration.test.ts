@@ -115,7 +115,7 @@ test(
       await seedPayrollComponents(org.orgId, actorId, "CA", new Set([org.subsidiaryId]));
       const seeded = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_components where org_id = ${org.orgId}
-      `)).rows[0]?.n ?? 0;
+      `, "objects"))[0]?.n ?? 0;
       assert.ok(seeded > 0);
       await assert.rejects(
         seedPayrollComponents(org.orgId, actorId, "CA", new Set()),
@@ -124,7 +124,7 @@ test(
       assert.equal(
         (await db.execute<{ n: number }>(sql`
           select count(*)::int as n from pay_components where org_id = ${org.orgId}
-        `)).rows[0]?.n,
+        `, "objects"))[0]?.n,
         seeded,
       );
 

@@ -34,8 +34,8 @@ import { db, withOrgTransaction } from "../platform/db.ts";
 export async function readOrgEmailConfig(orgId: string): Promise<RawEmailConfig | null> {
   const r = (await db.execute<{ email: RawEmailConfig | null }>(sql`
     select settings -> 'email' as email from orgs where id = ${orgId}
-  `));
-  return r.rows[0]?.email ?? null;
+  `, "objects"));
+  return r[0]?.email ?? null;
 }
 
 /** What the settings UI and audit evidence may see — never the sealed secret, only whether one is set. */
@@ -60,8 +60,8 @@ export type OrgEmailConfigView = RedactedEmailConfig & {
 export async function readOrgEmailConfigView(orgId: string): Promise<OrgEmailConfigView> {
   const r = (await db.execute<{ email: RawEmailConfig | null; updatedAt: string | null }>(sql`
     select settings -> 'email' as email, ${documentRevisionSql(sql`updated_at`)} as "updatedAt" from orgs where id = ${orgId}
-  `));
-  const row = r.rows[0];
+  `, "objects"));
+  const row = r[0];
   return {
     ...redactEmailConfig(row?.email),
     updatedAt: row?.updatedAt ?? null,
@@ -165,8 +165,8 @@ export async function saveOrgEmailConfig(
     const locked = await db.execute<{ email: RawEmailConfig | null; updatedAt: string | null }>(sql`
       select settings -> 'email' as email, ${documentRevisionSql(sql`updated_at`)} as "updatedAt"
         from orgs where id = ${orgId} for update
-    `);
-    const current = locked.rows[0];
+    `, "objects");
+    const current = locked[0];
     if (!current) throw new Error(`organization ${orgId} does not exist`);
     const persistedRevision = current.updatedAt;
     if (
@@ -231,10 +231,10 @@ export async function saveOrgEmailConfig(
 
     const saved = await db.execute<{ updatedAt: string | null }>(sql`
       select ${documentRevisionSql(sql`updated_at`)} as "updatedAt" from orgs where id = ${orgId}
-    `);
+    `, "objects");
     return {
       ...after,
-      updatedAt: saved.rows[0]?.updatedAt ?? null,
+      updatedAt: saved[0]?.updatedAt ?? null,
       readiness: emailDeliveryReadiness(resolveEmailTransportDetailed(next, orgId)),
     };
   });
@@ -304,8 +304,8 @@ export async function insertEmailLog(row: {
       ${createdBy}
     )
     returning id
-  `));
-  return r.rows[0]!.id;
+  `, "objects"));
+  return r[0]!.id;
 }
 
 function refuseZeroRowWrite(label: string): never {
@@ -364,8 +364,8 @@ export async function markEmailSent(orgId: string, id: string, providerMessageId
     update email_log set status = 'sent', provider_message_id = ${providerMessageId}, sent_at = now(), updated_at = now()
      where id = ${id} and org_id = ${orgId}
     returning id
-  `);
-  refuseUnwrittenEmailLog(updated.rows?.length ?? 0, id, "sent");
+  `, "objects");
+  refuseUnwrittenEmailLog(updated?.length ?? 0, id, "sent");
 }
 
 export async function markEmailFailed(orgId: string, id: string, error: string): Promise<void> {
@@ -385,8 +385,8 @@ export async function markEmailFailed(orgId: string, id: string, error: string):
     )
     select (select status from target) as status,
            (select count(*) from updated)::int as written
-  `);
-  refuseUnwrittenGuardedEmailLog(outcome.rows?.[0], GUARDED_EMAIL_LOG_STATES, id, "failed");
+  `, "objects");
+  refuseUnwrittenGuardedEmailLog(outcome?.[0], GUARDED_EMAIL_LOG_STATES, id, "failed");
 }
 
 /**
@@ -404,8 +404,8 @@ export async function markEmailUncertain(orgId: string, id: string, reason: stri
     )
     select (select status from target) as status,
            (select count(*) from updated)::int as written
-  `);
-  refuseUnwrittenGuardedEmailLog(outcome.rows?.[0], GUARDED_EMAIL_LOG_STATES, id, "uncertain");
+  `, "objects");
+  refuseUnwrittenGuardedEmailLog(outcome?.[0], GUARDED_EMAIL_LOG_STATES, id, "uncertain");
 }
 
 /** Acknowledge provider acceptance; legal from any non-suppressed state, so a late reconciliation can still complete a delivery idempotently. */
@@ -414,15 +414,15 @@ export async function confirmEmailSentGuarded(orgId: string, id: string, provide
     update email_log set status = 'sent', provider_message_id = ${providerMessageId}, sent_at = coalesce(sent_at, now()), updated_at = now(), error_message = null
      where id = ${id} and org_id = ${orgId} and status in ('queued', 'failed', 'uncertain')
     returning id
-  `);
-  if (r.rows.length > 0) return true;
+  `, "objects");
+  if (r.length > 0) return true;
   // Already-sent with the identical message id is also success — completion
   // must be idempotent for replayed reconciliations.
   const existing = await db.execute<{ count: number }>(sql`
     select count(*)::int as count from email_log
      where id = ${id} and org_id = ${orgId} and status = 'sent' and provider_message_id = ${providerMessageId}
-  `);
-  return (existing.rows[0]?.count ?? 0) > 0;
+  `, "objects");
+  return (existing[0]?.count ?? 0) > 0;
 }
 
 /** Record the terminal suppression reason on an open row without touching final states. */
@@ -437,8 +437,8 @@ export async function markEmailSuppressed(orgId: string, id: string, reason: str
     )
     select (select status from target) as status,
            (select count(*) from updated)::int as written
-  `);
-  const row = outcome.rows?.[0];
+  `, "objects");
+  const row = outcome?.[0];
   if ((row?.written ?? 0) > 0 || row?.status === "suppressed") return true;
   if (row?.status === "uncertain") return false;
   refuseUnwrittenEmailLog(0, id, "suppressed");
@@ -457,8 +457,8 @@ export async function markPaymentRemittanceAttempt(
            last_attempt_at = now(), error = null, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status = 'pending'
     returning id
-  `);
-  refuseUnwrittenRemittance(updated.rows?.length ?? 0, id, "attempted");
+  `, "objects");
+  refuseUnwrittenRemittance(updated?.length ?? 0, id, "attempted");
 }
 
 /**
@@ -492,8 +492,8 @@ export async function markPaymentRemittanceFailed(
     )
     select (select status from target) as status,
            (select count(*) from updated)::int as written
-  `);
-  const remittance = outcome.rows?.[0];
+  `, "objects");
+  const remittance = outcome?.[0];
   if ((remittance?.written ?? 0) === 0 && (remittance?.status ?? null) === "pending") {
     refuseUnwrittenRemittance(0, id, "failed");
   }
@@ -524,13 +524,13 @@ export async function markPaymentRemittanceSent(orgId: string, id: string): Prom
            error = null, updated_at = now()
      where id = ${id} and org_id = ${orgId} and status in ('pending', 'failed')
      returning payment_instruction_id as "paymentInstructionId"
-  `)).rows[0];
+  `, "objects"))[0];
   if (!remittance) {
     const existing = (await db.execute<{ paymentInstructionId: string }>(sql`
       select payment_instruction_id as "paymentInstructionId"
         from payment_remittances
        where id = ${id} and org_id = ${orgId} and status = 'sent'
-    `)).rows[0];
+    `, "objects"))[0];
     if (!existing) {
       throw new Error(
         `no such pending remittance ${id} in this organization — the send was not recorded. ` +
@@ -580,11 +580,11 @@ export async function markDunningClaimSent(orgId: string, claimId: string): Prom
     update dunning_log set status = 'sent', sent_at = now(), updated_at = now()
      where id = ${claimId} and org_id = ${orgId} and status = 'staged'
     returning id
-  `);
-  if (moved.rows[0]) return true;
+  `, "objects");
+  if (moved[0]) return true;
   const current = (await db.execute<{ status: string }>(sql`
     select status from dunning_log where id = ${claimId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   return current?.status === "sent";
 }
 
@@ -605,11 +605,11 @@ export async function markDunningClaimFailed(
     update dunning_log set status = 'failed', detail = ${detail.slice(0, 500)}, updated_at = now()
      where id = ${claimId} and org_id = ${orgId} and status = 'staged'
     returning id
-  `);
-  if (moved.rows[0]) return true;
+  `, "objects");
+  if (moved[0]) return true;
   const current = (await db.execute<{ status: string }>(sql`
     select status from dunning_log where id = ${claimId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   return current?.status === "failed";
 }
 
@@ -628,8 +628,8 @@ export async function appendEmailAttemptEvent(orgId: string, id: string, event: 
            updated_at = now()
      where id = ${id} and org_id = ${orgId}
     returning id
-  `);
-  if ((updated.rows?.length ?? 0) === 0) {
+  `, "objects");
+  if ((updated?.length ?? 0) === 0) {
     refuseZeroRowWrite(`email_log ${id} attempt lineage was not appended`);
   }
   return readAttemptLineage(orgId, id);
@@ -638,8 +638,8 @@ export async function appendEmailAttemptEvent(orgId: string, id: string, event: 
 async function readAttemptLineage(orgId: string, id: string): Promise<AttemptRecord[]> {
   const r = await db.execute<{ attempts: AttemptRecord[] | null }>(sql`
     select meta -> 'attempts' as attempts from email_log where id = ${id} and org_id = ${orgId}
-  `);
-  return r.rows[0]?.attempts ?? [];
+  `, "objects");
+  return r[0]?.attempts ?? [];
 }
 
 /**
@@ -731,16 +731,16 @@ export async function claimEmailDeliveryLog(row: {
     -- A repeated delivery key reuses the email log and status selected below.
     on conflict (delivery_key) where delivery_key is not null do nothing
     returning id
-  `));
-  if (inserted.rows[0]) {
-    return { id: inserted.rows[0].id, status: row.status ?? "queued", attempts: [] };
+  `, "objects"));
+  if (inserted[0]) {
+    return { id: inserted[0].id, status: row.status ?? "queued", attempts: [] };
   }
   const existing = (await db.execute<{ id: string; status: string; attempts: unknown }>(sql`
     select id, status, meta -> 'attempts' as attempts
       from email_log
      where org_id = ${row.orgId} and delivery_key = ${row.deliveryKey}
-  `));
-  const found = existing.rows[0];
+  `, "objects"));
+  const found = existing[0];
   if (!found) throw new Error("delivery log claim lost between insert conflict and lookup");
   return { id: found.id, status: found.status, attempts: normalizeAttempts(found.attempts) };
 }

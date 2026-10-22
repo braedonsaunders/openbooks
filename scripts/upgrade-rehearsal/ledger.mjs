@@ -42,10 +42,9 @@ export const FINGERPRINTED_TABLES = Object.freeze([
   "document_lines",
   "applications",
 ]);
-// revision_seq is the optimistic-concurrency counter that 0167's trigger bumps
-// on every UPDATE of a document, so any backfill moves it, exactly like
-// updated_at. Rehearsal 36135363346 showed it as the ONLY changed column in
-// every ledger-parity refusal (the 0265/0338 heals).
+// revision_seq is the optimistic-concurrency counter a trigger bumps on every
+// UPDATE of a document, so any backfill moves it, exactly like updated_at.
+// Neither carries ledger meaning.
 const VOLATILE_COLUMNS = new Set(["updated_at", "revision_seq"]);
 
 function quoteIdent(name) {

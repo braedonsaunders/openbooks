@@ -32,7 +32,7 @@ for (const policy of ["inactive book", "account restriction", "inactive owner"] 
           (select jsonb_agg(to_jsonb(m) order by id) from inventory_movements m where org_id=${org.orgId}) as movements,
           (select jsonb_agg(to_jsonb(l) order by id) from cost_layers l where org_id=${org.orgId}) as layers,
           (select jsonb_agg(to_jsonb(e) order by id) from journal_entries e where org_id=${org.orgId}) as entries
-      `)).rows[0];
+      `, "objects"))[0];
       const before = await snapshot();
 
       if (policy === "inactive book") {

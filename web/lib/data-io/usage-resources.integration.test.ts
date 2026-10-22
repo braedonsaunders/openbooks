@@ -17,8 +17,8 @@ test('usage setup delegates to the engine and imported records remain idempotent
       await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', '{"subscriptionBilling":true,"usageBilling":true,"saasMetrics":true}'::jsonb) where id = ${org.orgId}`)
       await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.customerId}, true)`)
       const customer = await db.execute(sql`update parties set subsidiary_id = ${org.subsidiaryId}
-        where org_id = ${org.orgId} and id = ${org.customerId} returning id`)
-      assert.equal(customer.rows.length, 1, 'the import customer belongs to a subsidiary for the scope refusal')
+        where org_id = ${org.orgId} and id = ${org.customerId} returning id`, 'objects')
+      assert.equal(customer.length, 1, 'the import customer belongs to a subsidiary for the scope refusal')
     })
     const created = await withOrgContext(org.orgId, () => createSetupRecord(
       { orgId: org.orgId, id: actorId, permissions: ['admin.setup.manage'] }, 'usage-meters',
@@ -47,10 +47,10 @@ test('usage setup delegates to the engine and imported records remain idempotent
     assert.deepEqual([outsideScope.created, outsideScope.failed], [0, 1], `out-of-scope result: ${JSON.stringify(outsideScope)}`)
     const hiddenImport = await withOrgContext(org.orgId, () => db.execute(sql`
       select id from usage_records
-       where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-outside-scope'`))
-    assert.equal(hiddenImport.rows.length, 0)
-    const stored = await withOrgContext(org.orgId, () => db.execute<{ source: string }>(sql`select source from usage_records where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-1'`))
-    assert.equal(stored.rows[0]?.source, 'import')
+       where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-outside-scope'`, 'objects'))
+    assert.equal(hiddenImport.length, 0)
+    const stored = await withOrgContext(org.orgId, () => db.execute<{ source: string }>(sql`select source from usage_records where org_id = ${org.orgId} and meter_id = ${meterId} and idempotency_key = 'import-1'`, 'objects'))
+    assert.equal(stored[0]?.source, 'import')
     const replay = await withOrgContext(org.orgId, () => resource.write([row], 'upsert', { ...ctx, dryRun: false }))
     assert.deepEqual([replay.created, replay.updated, replay.failed], [0, 0, 0], `replay result: ${JSON.stringify(replay)}`)
     const missingKey = await withOrgContext(org.orgId, () => resource.write([{ ...row, idempotencyKey: '' }], 'insert', { ...ctx, dryRun: false }))

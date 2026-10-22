@@ -130,8 +130,8 @@ export async function runRevenueRecognition(
         const obligation = await tx.execute<{ id: string }>(sql`
           select o.id from performance_obligations o
            where o.org_id = ${orgId} and o.id = ${candidate.obligation_id}
-           for update of o`);
-        if (!obligation.rows[0]) return { status: "already_posted" as const };
+           for update of o`, "objects");
+        if (!obligation[0]) return { status: "already_posted" as const };
         await assertEnabled(tx, orgId);
         const row = (await recognitionPostingRows(
           tx, orgId, asOfDate, fallbackSubsidiaryId, candidate.obligation_id, allowedSubsidiaryIds,
@@ -259,8 +259,8 @@ export async function runRevenueRecognition(
         const linked=await tx.execute(sql`
           update recognition_schedule_lines
              set recognized_amount = ${posting}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
-           where id = ${row.line_id} and org_id = ${orgId} and journal_entry_id is null and superseded_by_change_id is null returning id`);
-        if(linked.rows.length!==1)throw new RevenueRecognitionError('recognition journal could not be linked to its plan');
+           where id = ${row.line_id} and org_id = ${orgId} and journal_entry_id is null and superseded_by_change_id is null returning id`, "objects");
+        if(linked.length!==1)throw new RevenueRecognitionError('recognition journal could not be linked to its plan');
         return { status: "posted" as const, entryId: eid, planned: posting, row };
       }));
       if (posted.status === 'held') {
@@ -334,8 +334,8 @@ export async function runRevenueRecognition(
                join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
               where s.obligation_id = o.id and s.org_id = o.org_id and l.superseded_by_change_id is null)
          )
-       )`));
-  for (const row of emptyPlans.rows) {
+       )`, "objects"));
+  for (const row of emptyPlans) {
     result.problems.push(
       `${row.contract_number} ${row.description}: milestone/usage obligation has no recognition events recorded`,
     );

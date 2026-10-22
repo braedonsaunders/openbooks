@@ -65,7 +65,7 @@ async function accountSubsidiary(orgId: string, accountId: string): Promise<stri
   const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from accounts
      where id = ${accountId} and org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw notFound("account");
   return row.subsidiaryId;
 }
@@ -77,7 +77,7 @@ async function reconciliationSubsidiary(orgId: string, reconciliationId: string)
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.id = ${reconciliationId} and r.org_id = ${orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw notFound("reconciliation");
   return row.subsidiaryId;
 }
@@ -111,7 +111,7 @@ export async function listApplicationReconciliations(
     );
   }
   const limit = clamp(input.limit ?? 50, 1, 200);
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(sql`
     select r.id, r.account_id, r.through_date, r.statement_balance::text as statement_balance,
            r.status, r.signed_off_at, r.created_at,
            a.number as account_number, a.name as account_name
@@ -122,7 +122,7 @@ export async function listApplicationReconciliations(
        ${input.accountId ? sql` and r.account_id = ${input.accountId}` : sql``}
      order by r.created_at desc
      limit ${limit}
-  `)).rows;
+  `, "objects");
   return {
     reconciliations: rows.map((row) => ({
       id: row.id,
@@ -158,7 +158,7 @@ export async function getApplicationReconciliation(context: ApplicationContext, 
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.org_id = ${context.authz.user.orgId} and r.id = ${reconciliationId}
        ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw notFound("reconciliation");
   const totals = await reconciliationTotals(reconciliationId, bankingContext(context));
   return {
@@ -200,17 +200,17 @@ export async function listApplicationUnmatchedBankLines(
        where ${where}
        order by l.posted_on desc, l.line_number
        limit ${limit}
-    `),
+    `, "objects"),
     db.execute<{ n: string }>(sql`
       select count(*) as n
         from bank_statement_lines l
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where ${where}
-    `),
+    `, "objects"),
   ]);
   return {
-    total: Number(count.rows[0]?.n ?? 0),
-    lines: rows.rows.map((line) => ({
+    total: Number(count[0]?.n ?? 0),
+    lines: rows.map((line) => ({
       id: line.id,
       date: line.posted_on,
       description: line.description,
@@ -233,7 +233,7 @@ export async function listApplicationBankFeeds(context: ApplicationContext) {
       404,
     );
   }
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(sql`
     select c.id, c.name, c.provider, c.account_id, c.status,
            c.external_account_id, c.sync_cadence,
            c.next_sync_at, c.last_sync_at, c.last_attempt_at, c.last_result, c.last_error, c.is_active,
@@ -245,7 +245,7 @@ export async function listApplicationBankFeeds(context: ApplicationContext) {
        ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
      order by c.created_at desc
      limit 200
-  `)).rows;
+  `, "objects");
   return {
     connections: rows.map((row) => ({
       id: row.id,

@@ -1,1 +1,0 @@
-No backfill and no data-validated constraint: two nullable columns default NULL, the new CHECKs admit NULL for existing rows, and the engine refuses new or changed rows without a source citation and reason.

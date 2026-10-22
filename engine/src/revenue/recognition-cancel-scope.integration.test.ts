@@ -28,8 +28,8 @@ async function seedRecognitionTermPeriods(
   const calendar = await db.execute<{ fiscal_calendar_id: string }>(sql`
     select fiscal_calendar_id
       from accounting_periods
-     where id = ${org.periodId} and org_id = ${org.orgId}`);
-  const fiscalCalendarId = calendar.rows[0]?.fiscal_calendar_id;
+     where id = ${org.periodId} and org_id = ${org.orgId}`, "objects");
+  const fiscalCalendarId = calendar[0]?.fiscal_calendar_id;
   assert.ok(fiscalCalendarId);
   const periods = [
     [2026, 8, "2026-08-01", "2026-08-31"],
@@ -102,7 +102,7 @@ async function seedScopedRecognition(org: Awaited<ReturnType<typeof createScratc
 
 async function invoiceStatus(orgId: string, documentId: string): Promise<string> {
   return (await db.execute<{ status: string }>(sql`
-    select status from documents where org_id = ${orgId} and id = ${documentId}`)).rows[0]!.status;
+    select status from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0]!.status;
 }
 
 test(

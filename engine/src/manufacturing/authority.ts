@@ -83,7 +83,7 @@ export async function assertManufacturingStockLocationScope(tx: SqlExecutor, org
     on location.org_id=stock.org_id and location.id=stock.location_id
     where stock.org_id=${orgId} and stock.id=${id}
     ${subsidiaryVisibleFilter(sql`location.subsidiary_id`, scope, {orgWideNull:true})}
-    for share of stock, location`)).rows.length) throw new ManufacturingNotFoundError();
+    for share of stock, location`, "objects")).length) throw new ManufacturingNotFoundError();
 }
 
 export async function lockManufacturingCenterAuthority(tx: SqlExecutor, orgId: string, actorId: string, id: string) {
@@ -91,11 +91,11 @@ export async function lockManufacturingCenterAuthority(tx: SqlExecutor, orgId: s
   const scope = await lockManufacturingManageAuthority(tx, orgId, actorId, null);
   if (!(await tx.execute(sql`select center.id from mfg_work_centers center left join departments department on department.org_id=center.org_id and department.id=center.department_id
     where center.org_id=${orgId} and center.id=${id}
-    ${centerResourcesVisible(scope)} for share of center`)).rows.length) throw new ManufacturingNotFoundError();
+    ${centerResourcesVisible(scope)} for share of center`, "objects")).length) throw new ManufacturingNotFoundError();
   await tx.execute(sql`select department.id from departments department join mfg_work_centers center on center.org_id=department.org_id and center.department_id=department.id where center.org_id=${orgId} and center.id=${id} for share of department`);
   await tx.execute(sql`select calendar.id from schedule_calendars calendar join mfg_work_centers center on center.org_id=calendar.org_id and center.calendar_id=calendar.id where center.org_id=${orgId} and center.id=${id} for share of calendar`);
   await tx.execute(sql`select project.id from projects project join schedule_calendars calendar on calendar.org_id=project.org_id and calendar.project_id=project.id join mfg_work_centers center on center.org_id=calendar.org_id and center.calendar_id=calendar.id where center.org_id=${orgId} and center.id=${id} for share of project`);
-  if(!(await tx.execute(sql`select center.id from mfg_work_centers center where center.org_id=${orgId} and center.id=${id} ${centerResourcesVisible(scope)}`)).rows.length)throw new ManufacturingNotFoundError();
+  if(!(await tx.execute(sql`select center.id from mfg_work_centers center where center.org_id=${orgId} and center.id=${id} ${centerResourcesVisible(scope)}`, "objects")).length)throw new ManufacturingNotFoundError();
   return scope;
 }
 
@@ -104,8 +104,8 @@ export async function lockManufacturingRoutingAuthority(tx: SqlExecutor, orgId: 
   if (!isUuid(id)) throw new ManufacturingNotFoundError();
   const scope = await lockManufacturingManageAuthority(tx, orgId, actorId, null);
   if (!(await tx.execute(sql`select r.id from mfg_routings r where r.org_id=${orgId} and r.id=${id}
-    ${routingResourcesVisible(scope,'r')} for update`)).rows.length) throw new ManufacturingNotFoundError();
-  const header = (await tx.execute<{issue:string|null;receipt:string|null}>(sql`select default_issue_location_id as issue, default_receipt_location_id as receipt from mfg_routings where org_id=${orgId} and id=${id}`)).rows[0];
+    ${routingResourcesVisible(scope,'r')} for update`, "objects")).length) throw new ManufacturingNotFoundError();
+  const header = (await tx.execute<{issue:string|null;receipt:string|null}>(sql`select default_issue_location_id as issue, default_receipt_location_id as receipt from mfg_routings where org_id=${orgId} and id=${id}`, "objects"))[0];
   if (!header) throw new ManufacturingNotFoundError();
   await assertManufacturingStockLocationScope(tx,orgId,header.issue,scope);
   await assertManufacturingStockLocationScope(tx,orgId,header.receipt,scope);
@@ -123,20 +123,20 @@ export async function lockManufacturingRoutingAuthority(tx: SqlExecutor, orgId: 
   ) order by project.id for share of project`);
   // Recheck after pinning centers: a scope change while acquiring locks must refuse.
   if (!(await tx.execute(sql`select r.id from mfg_routings r where r.org_id=${orgId} and r.id=${id}
-    ${routingResourcesVisible(scope,'r')}`)).rows.length) throw new ManufacturingNotFoundError();
+    ${routingResourcesVisible(scope,'r')}`, "objects")).length) throw new ManufacturingNotFoundError();
   return scope;
 }
 
 export async function lockManufacturingOrderManageAuthority(tx: SqlExecutor, orgId: string, actorId: string, id: string, requestedScope: ReadonlySet<string> | null = null) {
   if (!isUuid(id)) throw new ManufacturingNotFoundError();
-  const subject = (await tx.execute<{subsidiaryId:string|null}>(sql`select subsidiary_id as "subsidiaryId" from mfg_work_orders where org_id=${orgId} and id=${id}`)).rows[0];
+  const subject = (await tx.execute<{subsidiaryId:string|null}>(sql`select subsidiary_id as "subsidiaryId" from mfg_work_orders where org_id=${orgId} and id=${id}`, "objects"))[0];
   if (!subject) throw new ManufacturingNotFoundError();
   const scope = await lockManufacturingManageAuthority(tx,orgId,actorId,subject.subsidiaryId,requestedScope);
   if (!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${id}
-    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')} for update`)).rows.length) throw new ManufacturingNotFoundError();
+    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')} for update`, "objects")).length) throw new ManufacturingNotFoundError();
   await pinProductionOrderResources(tx,orgId,id);
   if(!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${id}
-    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')}`)).rows.length)throw new ManufacturingNotFoundError();
+    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,'work')}`, "objects")).length)throw new ManufacturingNotFoundError();
   return scope;
 }
 
@@ -164,14 +164,14 @@ export async function lockManufacturingOrderExecutionAuthority(
   receiptLocationId?: string | null,
 ) {
   if (!isUuid(workOrderId)) throw new ManufacturingNotFoundError();
-  const order = (await tx.execute<{subsidiaryId:string|null}>(sql`select subsidiary_id as "subsidiaryId" from mfg_work_orders where org_id=${orgId} and id=${workOrderId}`)).rows[0];
+  const order = (await tx.execute<{subsidiaryId:string|null}>(sql`select subsidiary_id as "subsidiaryId" from mfg_work_orders where org_id=${orgId} and id=${workOrderId}`, "objects"))[0];
   if (!order) throw new ManufacturingNotFoundError();
   const scope=await lockManufacturingExecutionAuthority(tx,orgId,actorId,order.subsidiaryId,requestedScope);
   if (!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${workOrderId}
-    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,"work")} for update`)).rows.length) throw new ManufacturingNotFoundError();
+    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,"work")} for update`, "objects")).length) throw new ManufacturingNotFoundError();
   await pinProductionOrderResources(tx,orgId,workOrderId);
   if (!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${workOrderId}
-    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,"work")}`)).rows.length) throw new ManufacturingNotFoundError();
+    ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,scope)} ${orderResourcesVisible(scope,"work")}`, "objects")).length) throw new ManufacturingNotFoundError();
   await assertManufacturingStockLocationScope(tx,orgId,receiptLocationId,scope);
   return scope;
 }

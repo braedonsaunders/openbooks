@@ -208,7 +208,7 @@ async function validateVendorReturnSource(
      where movement.org_id = ${orgId}
        and movement.id = ${line.selection.sourceReceiptMovementId}
      ${lock ? sql`for update of movement` : sql``}
-  `)).rows[0];
+  `, "objects"))[0];
   const label = `document line ${line.lineNumber} (item ${line.itemId})`;
   if (!source || source.kind !== "receipt" || source.status !== "posted") {
     throw new InventoryError(
@@ -530,7 +530,7 @@ async function returnVendorCreditInventoryLine(
        ${`Vendor return of receipt ${line.selection.sourceReceiptMovementId}`},
        ${movementActorId}, ${movementActorId})
     returning id
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   await recordConsumptions(
     runner,
     orgId,
@@ -570,7 +570,7 @@ export async function applyVendorCreditInventoryReturns(
   }>(sql`
     select kind, party_id from documents
      where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!document || document.kind !== "vendor_credit") {
     throw new InventoryError("inventory vendor return requires a vendor credit");
   }
@@ -599,7 +599,7 @@ export async function applyVendorCreditInventoryReturns(
        where org_id = ${orgId} and document_line_id = ${line.lineId}
          and kind = 'return'
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (seen) continue;
     await returnVendorCreditInventoryLine(
       runner,

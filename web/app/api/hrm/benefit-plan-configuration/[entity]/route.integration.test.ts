@@ -169,24 +169,20 @@ test(
         /Link an employee carry deduction.*same plan/,
       )
       await withBypassContext(async () => {
-        const stored = (
-          await db.execute<{ name: string; active: boolean }>(
-            sql`select name, is_active as active from hrm_benefit_plans where org_id = ${org.orgId} and id = ${requestId}`,
-          )
-        ).rows[0]
+        const stored = (await db.execute<{ name: string; active: boolean }>(
+            sql`select name, is_active as active from hrm_benefit_plans where org_id = ${org.orgId} and id = ${requestId}`, 'objects',
+          ))[0]
         assert.deepEqual(stored, {
           name: 'Extended health coverage',
           active: false,
         })
-        const audits = (
-          await db.execute<{
+        const audits = await db.execute<{
             action: string
             actorId: string
             changes: Record<string, unknown>
           }>(
-            sql`select action, actor_id::text as "actorId", changes from audit_log where org_id = ${org.orgId} and table_name = 'hrm_benefit_plans' and row_id = ${requestId} order by at, id`,
+            sql`select action, actor_id::text as "actorId", changes from audit_log where org_id = ${org.orgId} and table_name = 'hrm_benefit_plans' and row_id = ${requestId} order by at, id`, 'objects',
           )
-        ).rows
         assert.equal(
           audits.length,
           2,
@@ -308,11 +304,9 @@ test(
         )
         await withBypassContext(async () => {
           assert.equal(
-            (
-              await db.execute<{ name: string }>(
-                sql`select name from hrm_benefit_plans where org_id = ${org.orgId} and id = ${id}`,
-              )
-            ).rows[0]?.name,
+            (await db.execute<{ name: string }>(
+                sql`select name from hrm_benefit_plans where org_id = ${org.orgId} and id = ${id}`, 'objects',
+              ))[0]?.name,
             body.name,
           )
         })

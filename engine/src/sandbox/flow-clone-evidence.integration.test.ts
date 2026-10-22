@@ -76,8 +76,7 @@ test(
       custom: { externalReference: subject },
       requestKey: gate,
     };
-    const row = (
-      await db.execute<{
+    const row = (await db.execute<{
         actual: typeof original;
         actor: string;
         flow: string;
@@ -88,8 +87,7 @@ test(
   select public.flow_clone_evidence(${JSON.stringify(original)}::jsonb,${seed}::uuid,'context',${target}::uuid) as actual,
    public.ob_rebase(${actor}::uuid,${seed}::uuid)::text as actor,public.ob_rebase(${flow}::uuid,${seed}::uuid)::text as flow,
    public.ob_rebase(${run}::uuid,${seed}::uuid)::text as run,public.ob_rebase(${subject}::uuid,${seed}::uuid)::text as subject,
-   public.ob_rebase(${gate}::uuid,${seed}::uuid)::text as gate`)
-    ).rows[0]!;
+   public.ob_rebase(${gate}::uuid,${seed}::uuid)::text as gate`, "objects"))[0]!;
     assert.equal(row.actual.orgId, target);
     assert.equal(row.actual.id, row.subject);
     assert.equal(row.actual.createdBy, row.actor);

@@ -157,8 +157,8 @@ async function raceOnce(): Promise<void> {
     }));
     assert.equal(warm.status, 200, JSON.stringify(await warm.clone().json()));
     const beforeRow = (await withBypassContext(() => db.execute(
-      sql`select name from property_units where id = ${fx.unitA} and org_id = ${orgId}`,
-    ))).rows[0] as { name: string | null } | undefined;
+      sql`select name from property_units where id = ${fx.unitA} and org_id = ${orgId}`, 'objects',
+    )))[0] as { name: string | null } | undefined;
     const before = beforeRow?.name ?? null;
     // Hold the property row: the POST precheck (unlocked) still sees entity
     // A and passes, while the engine transaction queues behind this lock.
@@ -246,8 +246,8 @@ async function raceOnce(): Promise<void> {
       holder.release();
     }
     const afterRow = (await withBypassContext(() => db.execute(
-      sql`select name from property_units where id = ${fx.unitA} and org_id = ${orgId}`,
-    ))).rows[0] as { name: string | null } | undefined;
+      sql`select name from property_units where id = ${fx.unitA} and org_id = ${orgId}`, 'objects',
+    )))[0] as { name: string | null } | undefined;
     const after = afterRow?.name ?? null;
     assert.equal(after, before, 'the refused write changed nothing');
   } finally {

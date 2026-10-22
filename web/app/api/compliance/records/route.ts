@@ -122,14 +122,14 @@ export const POST = defineRoute({
     // so the refusal never oracles which ids exist elsewhere.
     const partyScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
-    `)).rows[0]
+    `, 'objects'))[0]
     if (!partyScope) return notFound("record")
     const partyDenied = guardSubsidiaryScope(gate, partyScope.subsidiaryId, { orgWideNull: true })
     if (partyDenied) return partyDenied
     if (body.projectId !== undefined && body.projectId !== null && body.projectId !== '') {
       const projectScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!projectScope) return notFound("record")
       const projectDenied = guardSubsidiaryScope(gate, projectScope.subsidiaryId, { orgWideNull: true })
       if (projectDenied) return projectDenied
@@ -148,7 +148,7 @@ export const POST = defineRoute({
          where org_id = ${orgId} and id = ${rawSupersedesId}
            and party_id = ${body.partyId} and requirement_id = ${body.requirementId}
            and project_id is not distinct from ${body.projectId ?? null}::uuid
-      `)).rows[0]
+      `, 'objects'))[0]
       if (!prior) {
         return NextResponse.json(
           { error: 'supersedesId does not identify a certificate for this vendor, requirement and project' },
@@ -188,8 +188,8 @@ export const POST = defineRoute({
                   ${body.primaryNoncontributory === true}, ${body.notes ?? null},
                   ${actorId}, ${actorId})
           returning id
-        `))
-        const newId = inserted.rows[0]!.id
+        `, 'objects'))
+        const newId = inserted[0]!.id
         await tx.execute(sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'compliance_records', ${newId}, 'insert',

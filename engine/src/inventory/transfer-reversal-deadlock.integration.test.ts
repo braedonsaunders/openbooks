@@ -34,7 +34,7 @@ async function parkedPositionLocks(expected: number): Promise<void> {
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
          and query like '%pg_advisory_xact_lock%'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     steady = parked >= expected ? steady + 1 : 0;
     if (steady >= 2) return;
     assert.ok(Date.now() < deadline, `timed out waiting for ${expected} parked position locks`);
@@ -110,8 +110,8 @@ test("a transfer reversal racing an opposite-direction transfer converges withou
     const unbalanced = (await db.execute<{ entry_id: string }>(sql`
       select entry_id from journal_lines
        where org_id = ${org.orgId}
-       group by entry_id having sum(amount) <> 0`));
-    assert.equal(unbalanced.rows.length, 0);
+       group by entry_id having sum(amount) <> 0`, "objects"));
+    assert.equal(unbalanced.length, 0);
   } finally {
     await brake.end().catch(() => undefined);
     await dropScratchOrg(org.orgId);

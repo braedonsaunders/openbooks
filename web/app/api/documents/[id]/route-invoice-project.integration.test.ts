@@ -35,7 +35,7 @@ const { documentRevisionCounterSql } = await import("@openbooks/engine/records/r
 const { PATCH } = await import('./route.ts')
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`))).rows[0]!.revision
+  return (await withOrgContext(orgId, () => db.execute<{ revision: string }>(sql`select ${documentRevisionCounterSql(sql`revision_seq`)} as revision from documents where id=${id} and org_id=${orgId}`, 'objects')))[0]!.revision
 }
 
 test('a draft invoice accepts a project link through the document edit path', async () => {
@@ -61,7 +61,7 @@ test('a draft invoice accepts a project link through the document edit path', as
       { params: Promise.resolve({ id: invoice }) },
     ));
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
-    const stored = (await withBypassContext(() => db.execute<{ project_id: string | null }>(sql`select project_id from documents where id=${invoice}`))).rows[0]?.project_id;
+    const stored = (await withBypassContext(() => db.execute<{ project_id: string | null }>(sql`select project_id from documents where id=${invoice}`, 'objects')))[0]?.project_id;
     assert.equal(stored, project);
   } finally {
     state.orgId = '';

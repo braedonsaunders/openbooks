@@ -29,12 +29,12 @@ async function seedTargetEmployment(orgId: string, subsidiaryId: string, label: 
     insert into parties (org_id, kind, display_name)
     values (${orgId}, 'person', ${label})
     returning id
-  `)).rows[0]!.id;
+  `, "objects"))[0]!.id;
   return (await db.execute<{ id: string }>(sql`
     insert into worker_employments (org_id, worker_party_id, employer_subsidiary_id)
     values (${orgId}, ${partyId}, ${subsidiaryId})
     returning id
-  `)).rows[0]!.id;
+  `, "objects"))[0]!.id;
 }
 
 test("nonexistent actor id is refused against a real organization", { skip }, async () => {

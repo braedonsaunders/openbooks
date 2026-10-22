@@ -137,7 +137,7 @@ test(
       const instant = (await db.execute<{ epoch: number; utcHour: number }>(sql`
         select extract(epoch from now())::float8 as epoch,
                extract(hour from now() at time zone 'UTC')::int as "utcHour"
-      `)).rows[0]!;
+      `, "objects"))[0]!;
       // Select a valid IANA zone that places this instant on a different local
       // date from UTC, so a UTC-based request cannot accidentally pass.
       const timeZone = instant.utcHour >= 10 ? "Pacific/Kiritimati" : "Etc/GMT+12";
@@ -146,8 +146,8 @@ test(
            set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('timeZone', ${timeZone}::text)
          where id = ${org.orgId}
          returning id
-      `);
-      assert.equal(savedZone.rows.length, 1, "the test organization stores its business time zone");
+      `, "objects");
+      assert.equal(savedZone.length, 1, "the test organization stores its business time zone");
       const dateParts = new Intl.DateTimeFormat("en-CA", {
         timeZone,
         year: "numeric",
@@ -219,8 +219,8 @@ test(
       const failedTick = await runDueFxProviders(now);
       assert.equal(failedTick, 0, "a failed durable claim is not counted as dispatched");
       const afterFailedClaim = await db.execute<{ next_sync_at: string }>(sql`
-        select next_sync_at::text from fx_provider_configs where id = ${org.configId}`);
-      assert.equal(new Date(afterFailedClaim.rows[0]!.next_sync_at).getTime(), dueAt.getTime(),
+        select next_sync_at::text from fx_provider_configs where id = ${org.configId}`, "objects");
+      assert.equal(new Date(afterFailedClaim[0]!.next_sync_at).getTime(), dueAt.getTime(),
         "the due cursor must remain unchanged when run creation rolls back");
 
       await db.execute(sql`delete from fx_provider_runs where org_id = ${org.orgId}`);
@@ -233,9 +233,9 @@ test(
         select r.status, c.next_sync_at::text
           from fx_provider_runs r
           join fx_provider_configs c on c.id = r.provider_config_id
-         where r.org_id = ${org.orgId}`);
-      assert.deepEqual(settled.rows.map((row) => row.status), ["ok"]);
-      assert.ok(new Date(settled.rows[0]!.next_sync_at).getTime() > dueAt.getTime(),
+         where r.org_id = ${org.orgId}`, "objects");
+      assert.deepEqual(settled.map((row) => row.status), ["ok"]);
+      assert.ok(new Date(settled[0]!.next_sync_at).getTime() > dueAt.getTime(),
         "a successful dispatch advances the cursor after durable run creation");
     } finally {
       globalThis.fetch = originalFetch;
@@ -481,8 +481,8 @@ test(
         apiKey: null,
       });
       const config = await db.execute<{ id: string }>(sql`
-        select id from fx_provider_configs where org_id = ${org.orgId}`);
-      const configId = config.rows[0]!.id;
+        select id from fx_provider_configs where org_id = ${org.orgId}`, "objects");
+      const configId = config[0]!.id;
 
       async function plantRunningRow(startedAt: SQL): Promise<void> {
         await db.execute(sql`
@@ -494,8 +494,8 @@ test(
       async function runRows(): Promise<Array<{ status: string; error_message: string | null; lease_token: string | null }>> {
         const r = await db.execute<{ status: string; error_message: string | null; lease_token: string | null }>(sql`
           select status, error_message, lease_token from fx_provider_runs
-           where org_id = ${org.orgId} order by started_at asc, id asc`);
-        return r.rows;
+           where org_id = ${org.orgId} order by started_at asc, id asc`, "objects");
+        return r;
       }
 
       // Crash stage one: the worker died before fetching anything.
@@ -541,8 +541,8 @@ test(
       assert.equal(secondSync.manualOverridesPreserved, 1, "manual overrides survive the recovery path");
       const overridden = await db.execute<{ rate: string }>(sql`
         select rate::text from fx_rates
-         where org_id = ${org.orgId} and from_currency = 'EUR' and to_currency = 'USD' and rate_type = 'spot'`);
-      assert.ok(Number(overridden.rows[0]!.rate) > 90, "the manual override value must be untouched");
+         where org_id = ${org.orgId} and from_currency = 'EUR' and to_currency = 'USD' and rate_type = 'spot'`, "objects");
+      assert.ok(Number(overridden[0]!.rate) > 90, "the manual override value must be untouched");
 
       const finalRows = await runRows();
       const abandoned = finalRows.filter((row) => (row.error_message ?? "").includes("abandoned"));
@@ -582,8 +582,8 @@ async function setupManualFxScratchOrg(): Promise<{ orgId: string; configId: str
       apiKey: null,
     });
     const config = await db.execute<{ id: string }>(sql`
-      select id from fx_provider_configs where org_id = ${org.orgId}`);
-    return { orgId: org.orgId, configId: config.rows[0]!.id };
+      select id from fx_provider_configs where org_id = ${org.orgId}`, "objects");
+    return { orgId: org.orgId, configId: config[0]!.id };
   } catch (error) {
     await withBypass(() => dropScratchOrg(org.orgId));
     throw error;
@@ -649,20 +649,20 @@ test(
         await db.execute(sql`alter table fx_rates drop constraint fx_apply_crash_proof`);
       }
       const rateCount = await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`);
-      assert.equal(rateCount.rows[0]!.count, "0", "no partial application may survive the crash stage");
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`, "objects");
+      assert.equal(rateCount[0]!.count, "0", "no partial application may survive the crash stage");
 
       const crashed = await db.execute<{ status: string; lease_token: string | null }>(sql`
-        select status, lease_token from fx_provider_runs where org_id = ${org.orgId}`);
-      assert.deepEqual(crashed.rows, [{ status: "failed", lease_token: null }],
+        select status, lease_token from fx_provider_runs where org_id = ${org.orgId}`, "objects");
+      assert.deepEqual(crashed, [{ status: "failed", lease_token: null }],
         "the crashed attempt must record its failure and release its fencing token");
       const configState = await db.execute<{ last_error: string | null; last_success_at: Date | null }>(sql`
-        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`);
+        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`, "objects");
       assert.ok(
-        (configState.rows[0]!.last_error ?? "").includes("fx_apply_crash_proof"),
+        (configState[0]!.last_error ?? "").includes("fx_apply_crash_proof"),
         "the config must carry the failure",
       );
-      assert.equal(configState.rows[0]!.last_success_at, null, "a crashed attempt owns no success");
+      assert.equal(configState[0]!.last_success_at, null, "a crashed attempt owns no success");
 
       // Replay from scratch: the recovery run re-claims cleanly and applies
       // every pair exactly once, with run state and rates committing together.
@@ -670,14 +670,14 @@ test(
       assert.equal(replay.ratesInserted, 6, "the replay materializes every directed pair exactly once");
       const pairs = await db.execute<{ from_currency: string; to_currency: string; rate: string }>(sql`
         select from_currency, to_currency, rate::text from fx_rates
-         where org_id = ${org.orgId} order by from_currency, to_currency`);
-      assert.equal(pairs.rows.length, 6);
-      for (const row of pairs.rows) {
+         where org_id = ${org.orgId} order by from_currency, to_currency`, "objects");
+      assert.equal(pairs.length, 6);
+      for (const row of pairs) {
         assert.match(row.rate, /^\d+\.\d{10}$/, `${row.from_currency}→${row.to_currency} stays inside numeric(19,10)`);
       }
       const settledRows = await db.execute<{ status: string; lease_token: string | null }>(sql`
-        select status, lease_token from fx_provider_runs where org_id = ${org.orgId} order by started_at asc, id asc`);
-      assert.deepEqual(settledRows.rows, [
+        select status, lease_token from fx_provider_runs where org_id = ${org.orgId} order by started_at asc, id asc`, "objects");
+      assert.deepEqual(settledRows, [
         { status: "failed", lease_token: null },
         { status: "ok", lease_token: null },
       ], "recovery ends with the failed stage terminal and the replay committed unfenced");
@@ -761,14 +761,14 @@ test(
       assert.equal(result.ratesInserted, expected);
       assert.equal(result.ratesUpdated, 0);
       const stored = await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`);
-      assert.equal(stored.rows[0]!.count, String(expected));
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`, "objects");
+      assert.equal(stored[0]!.count, String(expected));
       // A quoted pair still reproduces the source observation exactly at scale.
       const usdCad = await db.execute<{ rate: string }>(sql`
         select rate::text as rate from fx_rates
          where org_id = ${org.orgId} and from_currency = 'USD' and to_currency = 'CAD'
-           and rate_type = 'spot' limit 1`);
-      assert.equal(usdCad.rows[0]!.rate, "1.0100000000");
+           and rate_type = 'spot' limit 1`, "objects");
+      assert.equal(usdCad[0]!.rate, "1.0100000000");
     } finally {
       globalThis.fetch = originalFetch;
       await close(provider);
@@ -818,8 +818,8 @@ test(
       for (let waited = 0; waited < 10_000 && !lost; waited += 50) {
         const runningRow = await db.execute<{ id: string }>(sql`
           select id from fx_provider_runs
-           where org_id = ${org.orgId} and status = 'running' limit 1`);
-        lost = runningRow.rows[0];
+           where org_id = ${org.orgId} and status = 'running' limit 1`, "objects");
+        lost = runningRow[0];
         if (!lost) await new Promise((resolve) => setTimeout(resolve, 50));
       }
       assert.ok(lost, "the held attempt must claim its run row before fetching");
@@ -844,8 +844,8 @@ test(
 
       const rows = await db.execute<{ id: string; status: string; error_message: string | null; lease_token: string | null }>(sql`
         select id, status, error_message, lease_token from fx_provider_runs
-         where org_id = ${org.orgId} order by started_at asc, id asc`);
-      assert.deepEqual(rows.rows.map((row) => ({
+         where org_id = ${org.orgId} order by started_at asc, id asc`, "objects");
+      assert.deepEqual(rows.map((row) => ({
         status: row.status,
         messageAbandoned: (row.error_message ?? "").includes("abandoned"),
         lease_token: row.lease_token,
@@ -855,13 +855,13 @@ test(
       ], "exactly one ok row survives: the winner's");
 
       const rates = await db.execute<{ count: string }>(sql`
-        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`);
-      assert.equal(rates.rows[0]!.count, "6", "the stale attempt applied nothing before or after losing its lease");
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`, "objects");
+      assert.equal(rates[0]!.count, "6", "the stale attempt applied nothing before or after losing its lease");
 
       const configState = await db.execute<{ last_error: string | null; last_success_at: Date | null }>(sql`
-        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`);
-      assert.equal(configState.rows[0]!.last_error, null, "the fenced attempt may not write config errors either");
-      assert.notEqual(configState.rows[0]!.last_success_at, null, "schedule ownership stays with the winner");
+        select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`, "objects");
+      assert.equal(configState[0]!.last_error, null, "the fenced attempt may not write config errors either");
+      assert.notEqual(configState[0]!.last_success_at, null, "schedule ownership stays with the winner");
     } finally {
       globalThis.fetch = originalFetch;
       await close(provider);
@@ -907,12 +907,12 @@ test(
          where id = ${org.configId}`);
       const before = (await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(sql`
         select next_sync_at::text as next_sync_at, last_success_at
-          from fx_provider_configs where id = ${org.configId}`)).rows[0]!;
+          from fx_provider_configs where id = ${org.configId}`, "objects"))[0]!;
       const result = await runFxProvider(org.orgId, "test");
       assert.equal(result.observationsReceived, 1);
       const after = (await db.execute<{ next_sync_at: string; last_success_at: Date | null }>(sql`
         select next_sync_at::text as next_sync_at, last_success_at
-          from fx_provider_configs where id = ${org.configId}`)).rows[0]!;
+          from fx_provider_configs where id = ${org.configId}`, "objects"))[0]!;
       assert.equal(after.next_sync_at, before.next_sync_at, "a test probe must not move the schedule cursor");
       assert.equal(after.last_success_at, before.last_success_at, "a test probe owns no success");
 
@@ -922,7 +922,7 @@ test(
       await assert.rejects(runFxProvider(org.orgId, "test"), /probe transport down/);
       const afterFailure = (await db.execute<{ next_sync_at: string }>(sql`
         select next_sync_at::text as next_sync_at
-          from fx_provider_configs where id = ${org.configId}`)).rows[0]!;
+          from fx_provider_configs where id = ${org.configId}`, "objects"))[0]!;
       assert.equal(afterFailure.next_sync_at, before.next_sync_at, "a failed test probe must not move the schedule cursor");
     } finally {
       globalThis.fetch = originalFetch;
@@ -980,31 +980,31 @@ test(
       let claimed = false;
       for (let waited = 0; waited < 10_000 && !claimed; waited += 50) {
         const row = await db.execute(sql`
-          select id from fx_provider_runs where org_id = ${org.orgId} and status = 'running' limit 1`);
-        claimed = row.rows.length > 0;
+          select id from fx_provider_runs where org_id = ${org.orgId} and status = 'running' limit 1`, "objects");
+        claimed = row.length > 0;
         if (!claimed) await new Promise((resolve) => setTimeout(resolve, 50));
       }
       assert.equal(claimed, true, "the old-config sync must be paused after claiming its run");
 
       await saveFxProviderConfig(org.orgId, actorId, { ...input, schedule: "weekly", syncHourUtc: 8 });
       const saved = await db.execute<{ schedule: string; sync_hour_utc: number; next_sync_at: Date }>(sql`
-        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`);
+        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`, "objects");
       releaseFetch();
       gated = false;
       await running;
 
       const after = await db.execute<{ schedule: string; sync_hour_utc: number; next_sync_at: Date }>(sql`
-        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`);
-      assert.equal(after.rows[0]!.schedule, "weekly");
-      assert.equal(after.rows[0]!.sync_hour_utc, 8);
-      assert.equal(new Date(after.rows[0]!.next_sync_at).getTime(), new Date(saved.rows[0]!.next_sync_at).getTime(),
+        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`, "objects");
+      assert.equal(after[0]!.schedule, "weekly");
+      assert.equal(after[0]!.sync_hour_utc, 8);
+      assert.equal(new Date(after[0]!.next_sync_at).getTime(), new Date(saved[0]!.next_sync_at).getTime(),
         "completion from the old snapshot must preserve the newer saved schedule cursor");
 
       const audit = await db.execute<{ changes: unknown }>(sql`
         select changes from audit_log where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
            and changes->'after'->>'schedule' = 'daily'
-         order by at asc, id asc limit 1`);
-      const changes = audit.rows[0]!.changes as { before: { schedule: string } | null; after: { schedule: string } };
+         order by at asc, id asc limit 1`, "objects");
+      const changes = audit[0]!.changes as { before: { schedule: string } | null; after: { schedule: string } };
       assert.equal(changes.before?.schedule, "manual");
       assert.equal(changes.after.schedule, "daily");
     } finally {
@@ -1054,10 +1054,10 @@ test(
       const audits = await db.execute<{ action: string; changes: unknown }>(sql`
         select action, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
-         order by at asc, id asc`);
-      assert.equal(audits.rows.length, 1);
-      assert.equal(audits.rows[0]!.action, "insert");
-      const first = audits.rows[0]!.changes as { before: null; after: Record<string, unknown> };
+         order by at asc, id asc`, "objects");
+      assert.equal(audits.length, 1);
+      assert.equal(audits[0]!.action, "insert");
+      const first = audits[0]!.changes as { before: null; after: Record<string, unknown> };
       assert.equal(first.before, null);
       const firstAfter = {
         provider: "bank_of_canada",
@@ -1083,10 +1083,10 @@ test(
       const afterUpdate = await db.execute<{ action: string; changes: unknown }>(sql`
         select action, changes from audit_log
          where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
-         order by at asc, id asc`);
-      assert.equal(afterUpdate.rows.length, 2);
-      assert.equal(afterUpdate.rows[1]!.action, "update");
-      const second = afterUpdate.rows[1]!.changes as { before: Record<string, unknown>; after: Record<string, unknown> };
+         order by at asc, id asc`, "objects");
+      assert.equal(afterUpdate.length, 2);
+      assert.equal(afterUpdate[1]!.action, "update");
+      const second = afterUpdate[1]!.changes as { before: Record<string, unknown>; after: Record<string, unknown> };
       assert.deepEqual(second.before, firstAfter, "the update audit must carry the true before-state");
       assert.deepEqual(second.after, {
         provider: "open_exchange_rates",
@@ -1189,9 +1189,10 @@ test("rate application writes in chunked multi-row upserts, not one statement pe
   // never one statement per pair.
   const seen: unknown[] = [];
   const counting: Pick<typeof db, "execute"> = {
-    execute: (async () => {
+    execute: (async (_query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       seen.push(true);
-      return { rows: [] };
+      return inMode({ rows: [] });
     }) as unknown as typeof db.execute,
   };
   const total = FX_RATE_APPLY_CHUNK * 2 + 200;

@@ -126,9 +126,9 @@ test("a till drop records by till and date before its sales are posted, and wind
     }, { key: randomUUID() });
     assert.equal(first.posted, true, `the drop posts though neither sale is posted: ${first.postRefusal ?? ""}`);
     assert.equal(first.window.difference, "0.0000", "the window's sales explain the drop exactly");
-    const lines = (await withBypassContext(() => db.execute<{ account_id: string; amount: string }>(sql`
+    const lines = await withBypassContext(() => db.execute<{ account_id: string; amount: string }>(sql`
       select l.account_id, l.amount::text from journal_lines l
-       where l.org_id = ${org.orgId} and l.entry_id = ${first.entryId}`))).rows;
+       where l.org_id = ${org.orgId} and l.entry_id = ${first.entryId}`, "objects"));
     assert.ok(lines.some((line) => line.account_id === org.accounts.bank && toUnits(line.amount) === toUnits("200")), "bank debited");
     assert.ok(lines.some((line) => line.account_id === tillId && toUnits(line.amount) === toUnits("-200")), "till credited");
 
@@ -155,7 +155,7 @@ test("a till drop records by till and date before its sales are posted, and wind
       { after: "2026-07-12", sales: 1, tendered: "50.0000", dropped: "70.0000", difference: "20.0000" },
     );
     const custom = (await withBypassContext(() => db.execute<{ custom: { tillDrop?: { reason?: string } } }>(sql`
-      select custom from documents where org_id = ${org.orgId} and id = ${second.transferId}`))).rows[0]!.custom;
+      select custom from documents where org_id = ${org.orgId} and id = ${second.transferId}`, "objects")))[0]!.custom;
     assert.equal(custom.tillDrop?.reason, "Two sales from the afternoon not yet entered", "the count reason rides the drop");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -225,7 +225,7 @@ test("till drops use the selected subsidiary functional currency", { skip: !DB }
     assert.equal(drop.posted, true, drop.postRefusal ?? "");
     stage = "reading the posted transfer";
     const document = (await withBypassContext(() => db.execute<{ currency: string; subsidiary_id: string }>(sql`
-      select currency, subsidiary_id from documents where org_id=${org.orgId} and id=${drop.transferId}`))).rows[0];
+      select currency, subsidiary_id from documents where org_id=${org.orgId} and id=${drop.transferId}`, "objects")))[0];
     assert.equal(document?.currency, "USD");
     assert.equal(document?.subsidiary_id, subsidiaryId);
   } catch (error) {

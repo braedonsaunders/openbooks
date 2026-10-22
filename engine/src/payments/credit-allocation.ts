@@ -26,13 +26,13 @@ export function assertCreditSourceDocument(
 export async function assertCreditSourcesExist(orgId: string, credits: CreditAllocationInput[]): Promise<void> {
   const fromIds = [...new Set(credits.map((credit) => credit.fromLineId))];
   if (fromIds.length === 0) return;
-  const rows = (await db.execute<{ id: string; source_document_id: string | null }>(sql`
+  const rows = await db.execute<{ id: string; source_document_id: string | null }>(sql`
     select jl.id as id, d.id as source_document_id
       from journal_lines jl
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
       left join documents d on d.id = je.source_document_id and d.org_id = jl.org_id
      where jl.org_id = ${orgId} and jl.id in ${fromIds}
-  `)).rows;
+  `, "objects");
   const byId = new Map(rows.map((row) => [row.id, row.source_document_id]));
   for (const credit of credits) {
     assertCreditSourceDocument(credit, byId.get(credit.fromLineId) ?? null);
@@ -67,7 +67,7 @@ export async function validateCreditAllocations(
   validateAllocationInputs(credits.map(a => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
   const ids = [...new Set([...allocations.map(a => a.openLineId), ...credits.flatMap(a => [a.fromLineId, a.toLineId])])];
   await db.execute(sql`select id from journal_lines where org_id = ${scope.orgId} and id in ${ids} order by id for update`);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     id: string; account_id: string; party_id: string | null; subsidiary_id: string;
     book_id: string; status: string; is_open_item: boolean; amount: string; source_document_id: string | null;
     source_document_kind: string | null;
@@ -92,7 +92,7 @@ export async function validateCreditAllocations(
            and (a.from_line_id=jl.id or a.to_line_id=jl.id)
       ) ap on true
      where jl.org_id=${scope.orgId} and jl.id in ${ids}
-  `)).rows;
+  `, "objects");
   const byId = new Map(rows.map(row => [row.id, row]));
   const targetAccounts = new Set(allocations.map(a => byId.get(a.openLineId)?.account_id));
   const deps = scope.controlAccountId ? null : await paymentControlDeps(scope.orgId);

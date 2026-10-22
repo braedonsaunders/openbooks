@@ -54,7 +54,7 @@ async function retained(f:Fixture){
  return (await db.execute<{snapshot:string}>(sql`select jsonb_build_object(
   'submissions',(select jsonb_agg(to_jsonb(s) order by s.id) from payroll_filing_submissions s where s.org_id=${f.orgId}),
   'slips',(select jsonb_agg(to_jsonb(s) order by s.id) from payroll_filing_submission_slips s where s.org_id=${f.orgId}),
-  'bindings',(select jsonb_agg(to_jsonb(s) order by s.id) from payroll_roe_issued_event_sources s where s.org_id=${f.orgId}))::text as snapshot`)).rows[0]!.snapshot;
+  'bindings',(select jsonb_agg(to_jsonb(s) order by s.id) from payroll_roe_issued_event_sources s where s.org_id=${f.orgId}))::text as snapshot`, 'objects'))[0]!.snapshot;
 }
 
 test('issued event A freezes its used source while later event B retains an independent original and artifact',{skip:!DB},async()=>{
@@ -83,7 +83,7 @@ test('issued event A freezes its used source while later event B retains an inde
    revision:'original',params:{employees:roeEventRow(f.employeeId,b.id)+':E'}});
   assert.notEqual(issuedA.submission.id,issuedB.submission.id);assert.equal(issuedB.submission.revisionNumber,2);
   const original=(await db.execute<{body:string;sha:string}>(sql`select artifact_body as body,
-    encode(public.digest(artifact_body,'sha256'),'hex') as sha from payroll_filing_submissions where org_id=${f.orgId} and id=${issuedA.submission.id}`)).rows[0]!;
+    encode(public.digest(artifact_body,'sha256'),'hex') as sha from payroll_filing_submissions where org_id=${f.orgId} and id=${issuedA.submission.id}`, 'objects'))[0]!;
   assert.equal(original.body,issuedA.file?.body);
   assert.equal(original.sha,createHash('sha256').update(issuedA.file!.body).digest('hex'));
   const after=await retained(f);

@@ -11,11 +11,12 @@ const selected = randomUUID()
 const dialect = new PgDialect()
 function runner() {
   const reads: { sql: string; params: unknown[] }[] = []
-  const exec = { execute: async (query: Parameters<PgDialect['sqlToQuery']>[0]) => {
+  const exec = { execute: async (query: Parameters<PgDialect['sqlToQuery']>[0], mode?: string) => {
+    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
     const compiled = dialect.sqlToQuery(query)
-    if (compiled.sql.includes('from users')) return { rows: [{orgId,isSuperAdmin:true,isActive:true}] }
+    if (compiled.sql.includes('from users')) return inMode({ rows: [{orgId,isSuperAdmin:true,isActive:true}] })
     reads.push(compiled)
-    return { rows: [] }
+    return inMode({ rows: [] })
   } } as unknown as SqlExecutor
   return {exec,reads}
 }

@@ -26,7 +26,7 @@ test('personal default lock keys are per owner, not per org', () => {
 
 test('assertSingleListViewDefault refuses overlapping defaults by name', async () => {
   const tx = {
-    execute: (async () => ({ rows: [{ n: 2 }] })) as unknown as ListViewDefaultExecutor['execute'],
+    execute: (async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ n: 2 }] }).then(<T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result))) as unknown as ListViewDefaultExecutor['execute'],
   }
   await assert.rejects(
     () =>

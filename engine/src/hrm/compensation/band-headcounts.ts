@@ -54,6 +54,6 @@ export async function countBandHolders(query: {
        and (${allowed === null}::boolean
             or e.employer_subsidiary_id in (
               select jsonb_array_elements_text(${JSON.stringify([...(allowed ?? [])])}::jsonb)::uuid
-            ))`)).rows[0];
+            ))`, "objects"))[0];
   return Number(row?.n ?? "0");
 }

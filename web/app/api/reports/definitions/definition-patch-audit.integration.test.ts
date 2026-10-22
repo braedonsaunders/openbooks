@@ -74,14 +74,12 @@ test(
              null, null, ${JSON.stringify({ kind: "pnl" })}::jsonb, false, ${actorId}, ${actorId})
         `),
       );
-      const revision = (
-        await withBypass(() =>
+      const revision = (await withBypass(() =>
           db.execute<{ updated_at: string }>(sql`
             select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
               from report_definitions where id = ${definitionId} and org_id = ${org.orgId}
-          `),
-        )
-      ).rows[0]!.updated_at;
+          `, "objects"),
+        ))[0]!.updated_at;
 
       await withOrgContext(org.orgId, async () => {
         const res = await PATCH(
@@ -96,12 +94,10 @@ test(
         const payload = (await res.json()) as { definition: { name: string } };
         assert.equal(payload.definition.name, "Aged audit v2");
 
-        const audits = (
-          await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
+        const audits = await db.execute<{ action: string; actor_id: string; changes: unknown }>(sql`
             select action, actor_id, changes from audit_log
              where org_id = ${org.orgId} and table_name = 'report_definitions' and row_id = ${definitionId}
-          `)
-        ).rows;
+          `, "objects");
         assert.equal(audits.length, 1);
         assert.equal(audits[0]!.action, "update");
         assert.equal(audits[0]!.actor_id, actorId);

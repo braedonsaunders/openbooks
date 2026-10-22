@@ -64,11 +64,9 @@ type EnrollmentContext = {
 };
 async function loadEnrollment(id: string): Promise<EnrollmentContext | null> {
   if (!isUuid(id)) return null;
-  const rows = (
-    await db.execute<EnrollmentContext>(sql`
+  const rows = await db.execute<EnrollmentContext>(sql`
     select id,org_id,status,created_by,submitted_by,flow_run_id,submission_snapshot
-      from hrm_benefit_enrollments where id=${id}`)
-  ).rows;
+      from hrm_benefit_enrollments where id=${id}`, "objects");
   return rows[0] ?? null;
 }
 
@@ -88,11 +86,9 @@ export const benefitEnrollmentsFlowAdapter: FlowSubjectAdapter =
       const enrollment = await loadEnrollment(id);
       if (!enrollment) return null;
       const pinned = enrollment.flow_run_id
-        ? (
-            await db.execute<{ context: Record<string, unknown> }>(sql`
+        ? (await db.execute<{ context: Record<string, unknown> }>(sql`
           select context from flow_runs where org_id=${enrollment.org_id} and id=${enrollment.flow_run_id}
-            and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${id}`)
-          ).rows[0]?.context
+            and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${id}`, "objects"))[0]?.context
         : enrollment.submission_snapshot;
       if (!pinned)
         throw new Error(
@@ -139,11 +135,9 @@ export const benefitEnrollmentsFlowAdapter: FlowSubjectAdapter =
         throw new Error(
           "Benefits enrollment candidates require an ambient organization context.",
         );
-      return (
-        await db.execute<{
+      return (await db.execute<{
           id: string;
         }>(sql`select id from hrm_benefit_enrollments where org_id=${orgId}
-      and status in ('elected','pending_approval') order by created_at desc,id limit ${limit}`)
-      ).rows.map((row) => row.id);
+      and status in ('elected','pending_approval') order by created_at desc,id limit ${limit}`, "objects")).map((row) => row.id);
     },
   });

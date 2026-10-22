@@ -27,7 +27,7 @@ async function seedEmployment(orgId: string): Promise<{ employmentId: string; pa
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${partyId}, ${orgId}, 'person', 'Capped Worker', true, '{}'::jsonb)`);
   const subsidiary = (await db.execute<{ id: string }>(sql`
-    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`)).rows[0]?.id;
+    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`, "objects"))[0]?.id;
   assert.ok(subsidiary, "scratch org needs a subsidiary");
   const employmentId = randomUUID();
   await db.execute(sql`
@@ -59,7 +59,7 @@ async function seedRun(
     values (${randomUUID()}, ${orgId}, ${`Sched ${runId.slice(0, 8)}`}, 'biweekly', 26,
             '2026-09-30', 3, true)`);
   const scheduleId = (await db.execute<{ id: string }>(sql`
-    select id::text as id from pay_schedules where org_id = ${orgId} order by id desc limit 1`)).rows[0]!.id;
+    select id::text as id from pay_schedules where org_id = ${orgId} order by id desc limit 1`, "objects"))[0]!.id;
   await db.execute(sql`
     insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
                            currency, status, created_by, updated_by)
@@ -96,7 +96,7 @@ test("a capped EI line shows YTD, the annual maximum, remaining room, and the ca
   try {
     const { employmentId, partyId } = await seedEmployment(org.orgId);
     const subsidiary = (await db.execute<{ id: string }>(sql`
-      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
     // Components the trace matches by system key: EI on both sides of the
     // stub plus an uncapped tax line that must stay empty.
     const eiDeduction = randomUUID();
@@ -176,7 +176,7 @@ test("an uncapped EI line shows history with room left and no capped flag", { sk
   try {
     const { employmentId, partyId } = await seedEmployment(org.orgId);
     const subsidiary = (await db.execute<{ id: string }>(sql`
-      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+      select id::text as id from subsidiaries where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
     const eiDeduction = randomUUID();
     await db.execute(sql`
       insert into pay_components (id, org_id, code, name, kind, country, system_key, basis, is_active, created_by, updated_by)

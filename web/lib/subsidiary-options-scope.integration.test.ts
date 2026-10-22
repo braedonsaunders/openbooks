@@ -29,8 +29,8 @@ test('subsidiaryOptions never lists another tenant under an org context', { skip
     assert.ok(names.length > 0, 'expected org A to list its own subsidiaries')
     assert.ok(!names.includes(intruder), `org B subsidiary leaked into org A options: ${names.join(', ')}`)
     const orgOf = await withBypass(async () => db.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${orgA.orgId}`))
-    const own = new Set(orgOf.rows.map((r) => r.id))
+      select id from subsidiaries where org_id = ${orgA.orgId}`, 'objects'))
+    const own = new Set(orgOf.map((r) => r.id))
     for (const o of options) assert.ok(own.has(o.id), `option ${o.id} (${o.name}) is not org A's`)
 
     const root = await withBypass(() => rootSubsidiary(orgA.orgId))

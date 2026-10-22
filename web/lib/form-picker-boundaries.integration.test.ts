@@ -65,6 +65,6 @@ for(const enabled of [false,true])test(`project reference picker parent gate ${e
   const id=randomUUID();await db.execute(sql`insert into projects(id,org_id,code,name,subsidiary_id,status,is_active) values (${id},${org.orgId},${id},'Retained project',${org.subsidiaryId},'active',true)`);
   const response=await withOrgContext(org.orgId,()=>GET(new Request('http://audit.local/api/forms/options?source=reference&table=projects')));
   assert.equal(response.status,enabled?200:404);
-  assert.equal((await db.execute(sql`select count(*)::int as count from projects where id=${id}`)).rows[0]!.count,1,'feature disable preserves the project');
+  assert.equal((await db.execute(sql`select count(*)::int as count from projects where id=${id}`, 'objects'))[0]!.count,1,'feature disable preserves the project');
  }finally{session.user=null;await dropScratchOrg(org.orgId)}
 });

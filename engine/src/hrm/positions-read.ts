@@ -125,11 +125,11 @@ async function loadAllVersions(
   const byPosition = new Map<string, StoredPositionVersion[]>();
   if (positionIds.length === 0) return byPosition;
   const ids = positionIds.map((id) => sql`${id}::uuid`);
-  const rows = (await exec.execute<StoredPositionVersion>(sql`
+  const rows = await exec.execute<StoredPositionVersion>(sql`
     select ${VERSION_COLUMNS}
       from position_versions
      where org_id = ${orgId}::uuid and position_id in (${sql.join(ids, sql`, `)})
-     order by position_id, version_no`)).rows;
+     order by position_id, version_no`, "objects");
   for (const row of rows) {
     const list = byPosition.get(row.position_id) ?? [];
     list.push(row);
@@ -158,7 +158,7 @@ async function loadFundingRows(
   const byPosition = new Map<string, FundingPlanRow[]>();
   if (positionIds.length === 0) return byPosition;
   const ids = positionIds.map((id) => sql`${id}::uuid`);
-  const rows = (await exec.execute<FundingPlanRow>(sql`
+  const rows = await exec.execute<FundingPlanRow>(sql`
     select f.id::text as id, f.position_id::text as position_id,
            f.period_id::text as period_id, f.funded_fte::text as funded_fte,
            f.funding_source_id::text as funding_source_id,
@@ -167,7 +167,7 @@ async function loadFundingRows(
       from position_funding f
       join accounting_periods p on p.id = f.period_id
      where f.org_id = ${orgId}::uuid and f.position_id in (${sql.join(ids, sql`, `)})
-     order by f.position_id, p.starts_on`)).rows;
+     order by f.position_id, p.starts_on`, "objects");
   for (const row of rows) {
     const list = byPosition.get(row.position_id) ?? [];
     list.push(row);
@@ -203,7 +203,7 @@ async function loadHolderVersions(
   const byPosition = new Map<string, HolderVersionRow[]>();
   if (positionIds.length === 0) return byPosition;
   const ids = positionIds.map((id) => sql`${id}::uuid`);
-  const rows = (await exec.execute<HolderVersionRow & { position_id: string }>(sql`
+  const rows = await exec.execute<HolderVersionRow & { position_id: string }>(sql`
     select av.position_id::text as position_id,
            av.assignment_id::text as assignment_id, a.assignment_key,
            av.employment_id::text as employment_id,
@@ -223,7 +223,7 @@ async function loadHolderVersions(
       join worker_employments e on e.id = av.employment_id and e.org_id = av.org_id
       left join parties p on p.id = e.worker_party_id and p.org_id = e.org_id
      where av.org_id = ${orgId}::uuid and av.position_id in (${sql.join(ids, sql`, `)})
-     order by av.position_id, av.assignment_id, av.version_no`)).rows;
+     order by av.position_id, av.assignment_id, av.version_no`, "objects");
   for (const row of rows) {
     const list = byPosition.get(row.position_id) ?? [];
     list.push(row);
@@ -390,11 +390,11 @@ function buildRow(args: {
 type StablePosition = { id: string; positionCode: string; revision: number };
 
 async function loadStablePositions(exec: SqlExecutor, orgId: string): Promise<StablePosition[]> {
-  const rows = (await exec.execute<{ id: string; positionCode: string; revision: number }>(sql`
+  const rows = await exec.execute<{ id: string; positionCode: string; revision: number }>(sql`
     select id::text as id, position_code as "positionCode", revision
       from positions
      where org_id = ${orgId}::uuid
-     order by position_code`)).rows;
+     order by position_code`, "objects");
   return rows.map((row) => ({ id: row.id, positionCode: row.positionCode, revision: row.revision }));
 }
 
@@ -512,9 +512,9 @@ async function namesById(
 ): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map();
   const params = ids.map((id) => sql`${id}::uuid`);
-  const rows = (await exec.execute<{ id: string; name: string }>(sql`
+  const rows = await exec.execute<{ id: string; name: string }>(sql`
     select id::text as id, name from ${table === "subsidiaries" ? sql`subsidiaries` : sql`departments`}
-     where org_id = ${orgId}::uuid and id in (${sql.join(params, sql`, `)})`)).rows;
+     where org_id = ${orgId}::uuid and id in (${sql.join(params, sql`, `)})`, "objects");
   return new Map(rows.map((row) => [row.id, row.name] as const));
 }
 
@@ -691,7 +691,7 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
       status: string;
       subsidiaryId: string;
     };
-    const page = (await db.execute<OptionRow>(sql`
+    const page = await db.execute<OptionRow>(sql`
       select p.id::text as "positionId", p.position_code as code,
              v.title, v.status,
              v.employer_subsidiary_id::text as "subsidiaryId"
@@ -707,7 +707,7 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
          ${employerScope}
          ${fragment ? sql`and (p.position_code ilike ${`%${likeEscape(fragment)}%`} escape '\\' or v.title ilike ${`%${likeEscape(fragment)}%`} escape '\\')` : sql``}
        order by p.position_code, p.id
-       limit ${limit}`)).rows;
+       limit ${limit}`, "objects");
     const pinned = includeId
       ? (await db.execute<OptionRow>(sql`
         select p.id::text as "positionId", p.position_code as code,
@@ -722,7 +722,7 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
              limit 1
           ) v on true
          where p.org_id = ${orgId}::uuid and p.id = ${includeId}::uuid
-           ${employerScope}`)).rows[0] ?? null
+           ${employerScope}`, "objects"))[0] ?? null
       : null;
     const rows = pinned
       ? [pinned, ...page.filter((row) => row.positionId !== pinned.positionId)]
@@ -758,7 +758,7 @@ export async function getPositionAsOf(query: PositionAsOfQuery): Promise<Positio
     const subject = (await db.execute<{ positionCode: string; revision: number }>(sql`
       select position_code as "positionCode", revision
         from positions where org_id = ${orgId}::uuid and id = ${query.positionId}::uuid
-    `)).rows[0];
+    `, "objects"))[0];
     if (!subject) {
       throw new HrmPositionError("NOT_FOUND", "position is not visible in this organization and legal-entity scope");
     }

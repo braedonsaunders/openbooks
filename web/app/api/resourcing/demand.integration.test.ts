@@ -41,7 +41,7 @@ test("demand creation fences, validates custom fields, replays idempotently, and
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Demand operator", "admin"));
     const departmentId = randomUUID(), customId = randomUUID();
     const write = async (query: SQL) => {
-      const result = await db.execute(query);
+      const result = await db.execute<Record<string, unknown>>(query);
       assert.equal(result.rowCount, 1);
     };
     await withBypassContext(async () => {
@@ -103,8 +103,8 @@ test("demand creation fences, validates custom fields, replays idempotently, and
     const stored = await withBypassContext(() => db.execute<{ lines: string; audits: string }>(sql`
       select (select count(*)::text from res_demand_lines where org_id = ${org.orgId} and id = ${key}) as lines,
              (select count(*)::text from audit_log where org_id = ${org.orgId} and table_name = 'res_demand_lines' and row_id = ${key} and request_id = ${key}) as audits
-    `));
-    assert.deepEqual(stored.rows[0], { lines: "1", audits: "1" });
+    `, "objects"));
+    assert.deepEqual(stored[0], { lines: "1", audits: "1" });
     state.authz = authz(new Set([randomUUID()]));
     const hidden = await call(body, randomUUID());
     const missing = await call({ ...body, departmentId: randomUUID() }, randomUUID());

@@ -67,8 +67,8 @@ test('journal list shows every GL-native engine origin', { skip: !process.env.OP
     })
     const visible = await withBypassContext(async () => db.execute<{ entry_number: string; origin: string }>(sql`
       select e.entry_number, e.origin from ${sql.raw(JOURNAL_ENTRY_TABLE)} as e
-       where e.org_id = ${org.orgId} and e.entry_number like 'NATIVE-%'`))
-    const seen = new Map(visible.rows.map((row) => [row.entry_number, row.origin]))
+       where e.org_id = ${org.orgId} and e.entry_number like 'NATIVE-%'`, 'objects'))
+    const seen = new Map(visible.map((row) => [row.entry_number, row.origin]))
     const missing: string[] = []
     for (const origin of NATIVE_ORIGINS) {
       const tag = `NATIVE-${origin.replace(/_/g, '-').toUpperCase()}`
@@ -107,13 +107,13 @@ test('the journal list exposes a pay-run entry only inside the caller subsidiary
 
     const visibleToEntity = await withBypassContext(() => db.execute<{ entry_number: string }>(sql`
       select e.entry_number from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set([org.subsidiaryId]))}`))
-    assert.ok(visibleToEntity.rows.some((row) => row.entry_number === entryNumber))
+       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set([org.subsidiaryId]))}`, 'objects'))
+    assert.ok(visibleToEntity.some((row) => row.entry_number === entryNumber))
 
     const visibleToNoSubsidiaries = await withBypassContext(() => db.execute<{ entry_number: string }>(sql`
       select e.entry_number from ${sql.raw(JOURNAL_ENTRY_TABLE)} e
-       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set<string>())}`))
-    assert.equal(visibleToNoSubsidiaries.rows.some((row) => row.entry_number === entryNumber), false)
+       where e.org_id = ${org.orgId} and ${journalScopeWhere(org.orgId, new Set<string>())}`, 'objects'))
+    assert.equal(visibleToNoSubsidiaries.some((row) => row.entry_number === entryNumber), false)
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
@@ -208,7 +208,7 @@ const journalSearchCases = [
                 (org_id, book_id, entry_number, posting_date, period_id, subsidiary_id, origin, status, memo)
                 values (${org.orgId}, ${org.bookId}, ${entryNumber}, ${DATE}, ${org.periodId}, ${org.subsidiaryId},
                   ${origin}, 'draft', ${memo})
-                returning id`)).rows[0]!.id;
+                returning id`, 'objects'))[0]!.id;
               await db.execute(sql`insert into journal_lines
                 (org_id, entry_id, line_number, account_id, amount, txn_amount, currency, subsidiary_id, posting_date)
                 values (${org.orgId}, ${id}, 1, ${org.accounts.bank}, '100.00', '100.00', 'CAD', ${org.subsidiaryId}, ${DATE}),
@@ -219,7 +219,7 @@ const journalSearchCases = [
             await balanced("JE-90000001", "payroll", "orphaned payroll posting");
             await balanced("JE-91772283", "document", "vendor payment posting");
             const entry = (await db.execute<{ id: string }>(sql`select id from journal_entries
-              where org_id = ${org.orgId} and entry_number = 'JE-91772283'`)).rows[0]!.id;
+              where org_id = ${org.orgId} and entry_number = 'JE-91772283'`, 'objects'))[0]!.id;
             await db.execute(sql`insert into documents
               (org_id, kind, document_number, document_date, currency, subsidiary_id, status, posted_entry_id, posting_period_id)
               values (${org.orgId}, 'vendor_payment', 'VPMT-9000001', ${DATE}, 'CAD', ${org.subsidiaryId},

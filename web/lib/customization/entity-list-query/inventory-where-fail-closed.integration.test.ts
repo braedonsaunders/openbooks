@@ -17,18 +17,14 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type Filter = { key: string; operator: string; value?: string | null; to?: string | null };
 
 async function onhandCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from cost_layers oh
-      where ${inventoryOnhandWhere({ ...defaultListView("inventory_onhand"), filters: viewFilters as never }, {}, orgId)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from cost_layers oh
+      where ${inventoryOnhandWhere({ ...defaultListView("inventory_onhand"), filters: viewFilters as never }, {}, orgId)}`, "objects");
   return rows[0]!.n;
 }
 
 async function movementCount(orgId: string, viewFilters: Filter[] = []): Promise<number> {
-  const rows = (
-    await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements m
-      where ${inventoryMovementWhere({ ...defaultListView("inventory_movement"), filters: viewFilters as never }, {}, orgId)}`)
-  ).rows;
+  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements m
+      where ${inventoryMovementWhere({ ...defaultListView("inventory_movement"), filters: viewFilters as never }, {}, orgId)}`, "objects");
   return rows[0]!.n;
 }
 

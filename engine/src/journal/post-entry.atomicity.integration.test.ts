@@ -29,7 +29,7 @@ test(
       // which this connection reads.
       await withBypassContext(() => db.transaction(async (reader) => {
         await reader.execute(sql`select id from parties where id = ${org.customerId} for update`);
-        const { pid } = (await reader.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!;
+        const { pid } = (await reader.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`, "objects"))[0]!;
         writer = withOrgContext(org.orgId, () => postEntry(db, {
           orgId: org.orgId,
           bookId: org.bookId,
@@ -51,7 +51,7 @@ test(
         for (let waited = 0; ; waited += 20) {
           const blocked = (await reader.execute<{ n: number }>(sql`
             select count(*)::int as n from pg_locks
-             where not granted and ${pid}::int = any(pg_blocking_pids(pid))`)).rows[0]!.n;
+             where not granted and ${pid}::int = any(pg_blocking_pids(pid))`, "objects"))[0]!.n;
           if (blocked > 0) break;
           assert.ok(waited < 15_000, "the posting never waited on the held party row");
           // Racing the writer surfaces its own refusal instead of a timeout.

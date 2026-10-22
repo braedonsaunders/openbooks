@@ -127,7 +127,7 @@ async function requirePayrollManage(exec: SqlExecutor, orgId: string, actorId: s
 async function requireAwardEntityScope(exec: SqlExecutor, orgId: string, actorId: string, programId: string): Promise<string> {
   const row = (await exec.execute<{ legal_entity_id: string | null }>(sql`
     select legal_entity_id from hrm_benefit_programs where org_id = ${orgId} and id = ${programId}
-  `)).rows[0];
+  `, "objects"))[0];
   const scope = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (!row?.legal_entity_id || (scope !== null && !scope.has(String(row.legal_entity_id)))) {
     throw new BenefitsError("NOT_FOUND", "benefit award not found in this organization — reload the award list and retry");
@@ -140,7 +140,7 @@ async function lockAwardRun(exec: SqlExecutor, orgId: string, awardId: string, r
   // locks. Always take them before the award lock to keep payout moves ordered.
   const runId = requestedRunId ?? (await exec.execute<{ pay_run_document_id: string | null }>(sql`
     select pay_run_document_id from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId}
-  `)).rows[0]?.pay_run_document_id;
+  `, "objects"))[0]?.pay_run_document_id;
   if (runId) {
     await exec.execute(sql`
       select r.document_id from pay_runs r join documents d on d.org_id = r.org_id and d.id = r.document_id
@@ -157,11 +157,11 @@ async function appendAwardEvent(
   kind: string,
   reason: string,
 ): Promise<void> {
-  requireOneRow((await exec.execute(sql`
+  requireOneRow(await exec.execute(sql`
     insert into hrm_benefit_award_events (org_id, award_id, kind, reason, actor, created_by)
     values (${orgId}, ${awardId}, ${kind}, ${reason}, ${actorId}, ${actorId})
     returning id
-  `)).rows, "recording the benefit award event");
+  `, "objects"), "recording the benefit award event");
 }
 
 async function auditAwardWrite(
@@ -174,7 +174,7 @@ async function auditAwardWrite(
   after: unknown,
   reason: string | null,
 ): Promise<void> {
-  requireOneRow((await exec.execute(sql`
+  requireOneRow(await exec.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'hrm_benefit_awards', ${awardId}, 'update', ${JSON.stringify({
       event,
@@ -184,7 +184,7 @@ async function auditAwardWrite(
       reason,
     })}::jsonb, ${actorId})
     returning id
-  `)).rows, "auditing the benefit award write");
+  `, "objects"), "auditing the benefit award write");
 }
 
 function canonicalValue(value: unknown, signed: boolean): string {
@@ -220,8 +220,7 @@ export async function getBenefitAward(
 ): Promise<BenefitAward> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   await assertHrmReadEnabled(exec, orgId);
-  const row = (
-    await exec.execute<Record<string, unknown>>(sql`
+  const row = (await exec.execute<Record<string, unknown>>(sql`
       select a.id as id, a.program_id as "programId",
              a.employment_id as "employmentId",
              a.period_from::text as "periodFrom", a.period_to::text as "periodTo",
@@ -236,8 +235,7 @@ export async function getBenefitAward(
         from hrm_benefit_awards a
         join hrm_benefit_programs p on p.org_id = a.org_id and p.id = a.program_id
        where a.org_id = ${orgId} and a.id = ${awardId}
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!row) {
     throw new BenefitsError(
       "NOT_FOUND",
@@ -272,8 +270,7 @@ export async function listBenefitAwards(query: {
       await getBenefitProgram(db, orgId, actorId, String(query.programId));
     }
     const { limit, offset } = benefitListWindow(query.limit, query.offset);
-    const rows = (
-      await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(sql`
         select a.id as id, a.program_id as "programId",
                a.employment_id as "employmentId",
                a.period_from::text as "periodFrom", a.period_to::text as "periodTo",
@@ -293,18 +290,15 @@ export async function listBenefitAwards(query: {
            ${scope !== null ? sql`and p.legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
          order by a.period_from desc, a.id desc
          ${limit !== null ? sql`limit ${limit} offset ${offset}` : sql`offset ${offset}`}
-      `)
-    ).rows;
-    const total = (
-      await db.execute<{ n: number }>(sql`
+      `, "objects");
+    const total = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n
           from hrm_benefit_awards a
           join hrm_benefit_programs p on p.org_id = a.org_id and p.id = a.program_id
          where a.org_id = ${orgId}
            ${query.programId !== undefined ? sql`and a.program_id = ${query.programId}` : sql``}
            ${scope !== null ? sql`and p.legal_entity_id = any (${`{${[...scope].join(",")}}`}::uuid[])` : sql``}
-      `)
-    ).rows[0]?.n ?? 0;
+      `, "objects"))[0]?.n ?? 0;
     return { awards: rows.map(toAward), total };
   });
 }
@@ -417,13 +411,11 @@ async function recordAward(
     // every policy, membership, and source read below shares this lock, so a
     // concurrent edit waits instead of landing between the reads and the
     // award. Membership edits bump the program revision under the same lock.
-    const lockedHeader = (
-      await db.execute<Record<string, unknown>>(sql`
+    const lockedHeader = (await db.execute<Record<string, unknown>>(sql`
         select id from hrm_benefit_programs
          where org_id = ${orgId} and id = ${programId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!lockedHeader) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -444,12 +436,10 @@ async function recordAward(
     let originalPolicy: Record<string, unknown> | null = null;
     let originalSources: Record<string, unknown> | null = null;
     if (adjustsAwardId === null && program.legalEntityId !== null) {
-      const employment = (
-        await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+      const employment = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
           select employer_subsidiary_id from worker_employments
            where org_id = ${orgId} and id = ${employmentId}
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       const employmentEntity = employment?.employer_subsidiary_id ?? null;
       if (employmentEntity === null || String(employmentEntity) !== program.legalEntityId) {
         throw new BenefitsError(
@@ -458,16 +448,14 @@ async function recordAward(
         );
       }
     }
-    const covering = (
-      await db.execute<{ id: string }>(sql`
+    const covering = await db.execute<{ id: string }>(sql`
         select id from hrm_benefit_program_members
          where org_id = ${orgId} and program_id = ${programId} and employment_id = ${employmentId}
            and not excluded
            and effective_from <= ${periodFrom}::date
            and (effective_to is null or effective_to >= ${periodTo ?? periodFrom}::date)
          limit 1
-      `)
-    ).rows;
+      `, "objects");
     // Employer-wide programs need no named membership; active service in
     // the period (checked below) is the eligibility.
     const excludedOverPeriod = program.eligibility === "all_employees" && (await db.execute(sql`
@@ -475,7 +463,7 @@ async function recordAward(
          where org_id = ${orgId} and program_id = ${programId} and employment_id = ${employmentId} and excluded
            and effective_from <= ${periodTo ?? periodFrom}::date and (effective_to is null or effective_to >= ${periodFrom}::date)
          limit 1
-      `)).rows.length > 0;
+      `, "objects")).length > 0;
     if (adjustsAwardId === null && excludedOverPeriod) {
       throw new BenefitsError("REFUSED", `this employment is excluded from program ${program.code} over ${periodFrom}..${periodTo ?? periodFrom} — end the exclusion before issuing an award`);
     }
@@ -486,12 +474,10 @@ async function recordAward(
       );
     }
     if (adjustsAwardId !== null) {
-      const adjusted = (
-        await db.execute<Record<string, unknown>>(sql`
+      const adjusted = (await db.execute<Record<string, unknown>>(sql`
           select ${AWARD_COLUMNS} from hrm_benefit_awards
            where org_id = ${orgId} and id = ${adjustsAwardId}
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       if (!adjusted) {
         throw new BenefitsError(
           "NOT_FOUND",
@@ -532,7 +518,7 @@ async function recordAward(
     }
     const currencyDefinition = (await db.execute<{ minor_units: number }>(sql`
       select minor_units from currencies where code = ${currency}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!currencyDefinition || !Number.isInteger(currencyDefinition.minor_units) || currencyDefinition.minor_units < 0 || currencyDefinition.minor_units > 4) {
       throw new BenefitsError("REFUSED", `currency ${currency} has no supported minor-unit definition — configure a valid currency before recording an award`);
     }
@@ -558,12 +544,10 @@ async function recordAward(
         `award period ${periodFrom}..${periodTo ?? periodFrom} falls outside program ${program.code} window ${program.effectiveFrom}..${program.effectiveTo ?? "open"} — issue inside the program window`,
       );
     }
-    const service = (
-      await db.execute<{ service_start: string | null }>(sql`
+    const service = (await db.execute<{ service_start: string | null }>(sql`
         select service_start::text as service_start from worker_employments
          where org_id = ${orgId} and id = ${employmentId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!service) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -593,7 +577,7 @@ async function recordAward(
       from worker_employment_versions
       where org_id = ${orgId} and employment_id = ${employmentId}
         and status = 'active' and recorded_until is null
-    `)).rows[0]?.covered === true;
+    `, "objects"))[0]?.covered === true;
     if (adjustsAwardId === null && !activeCoverage) {
       throw new BenefitsError(
         "REFUSED",
@@ -620,13 +604,11 @@ async function recordAward(
       }
     }
     if (program.budgetAmount !== null) {
-      const spent = (
-        await db.execute<{ total: string | null }>(sql`
+      const spent = (await db.execute<{ total: string | null }>(sql`
           select sum(value)::text as total from hrm_benefit_awards
            where org_id = ${orgId} and program_id = ${programId}
              and status <> 'voided'
-        `)
-      ).rows[0]?.total ?? null;
+        `, "objects"))[0]?.total ?? null;
       const spentUnits = spent === null ? 0n : BigInt(normalizeMoney(spent).replace(".", ""));
       if (spentUnits + BigInt(normalizeMoney(value).replace(".", "")) > BigInt(program.budgetAmount.replace(".", ""))) {
         throw new BenefitsError(
@@ -655,8 +637,7 @@ async function recordAward(
     };
     let insertedRows: Record<string, unknown>[];
     try {
-      insertedRows = (
-        await db.execute<Record<string, unknown>>(sql`
+      insertedRows = await db.execute<Record<string, unknown>>(sql`
           insert into hrm_benefit_awards
             (org_id, program_id, employment_id, period_from, period_to,
              value, currency, program_snapshot, source_snapshot,
@@ -669,8 +650,7 @@ async function recordAward(
                   ${evidence === null ? null : JSON.stringify(evidence)}::jsonb,
                   ${sourceKey}, ${adjustsAwardId}, ${actorId}, ${actorId})
           returning ${AWARD_COLUMNS}
-        `)
-      ).rows;
+        `, "objects");
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new BenefitsError(
@@ -943,9 +923,9 @@ export async function submitBenefitAward(query: {
       await requireHrmBenefitsManage(db, orgId, actorId);
       await assertHrmEnabled(db, orgId);
       await lockApprovalSubject(orgId, BENEFIT_AWARD_SUBJECT_KIND, awardId);
-      const row = requireOneRow((await db.execute<Record<string, unknown>>(sql`
+      const row = requireOneRow(await db.execute<Record<string, unknown>>(sql`
       select ${AWARD_COLUMNS} from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId} for update
-    `)).rows, "loading the reward for submission");
+    `, "objects"), "loading the reward for submission");
       const before = toAward(row);
       await requireAwardEntityScope(db, orgId, actorId, before.programId);
       // A replay adopts the existing submission; it cannot open fresh gates.
@@ -956,7 +936,7 @@ export async function submitBenefitAward(query: {
       )
         return before;
       if (before.status !== "draft") throw new BenefitsError("BAD_STATE", `reward is ${before.status} — only a draft can be submitted; create a new reward for a new decision`);
-      requireOneRow((await db.execute(sql`update hrm_benefit_awards set submitted_by = ${actorId}, submitted_at = now(), updated_by = ${actorId}, updated_at = now() where org_id = ${orgId} and id = ${awardId} and status = 'draft' returning id`)).rows, "recording the reward submitter");
+      requireOneRow(await db.execute(sql`update hrm_benefit_awards set submitted_by = ${actorId}, submitted_at = now(), updated_by = ${actorId}, updated_at = now() where org_id = ${orgId} and id = ${awardId} and status = 'draft' returning id`, "objects"), "recording the reward submitter");
       const { routeSubjectSubmission } =
         await import("../../flows/submission-policy.ts");
       const { policy, dispatch, submissionId } = await routeSubjectSubmission({
@@ -973,14 +953,12 @@ export async function submitBenefitAward(query: {
           : null;
       const after = toAward(
         requireOneRow(
-          (
-            await db.execute<Record<string, unknown>>(sql`
+          await db.execute<Record<string, unknown>>(sql`
       update hrm_benefit_awards set status=${policy.kind === "gated" ? "pending" : "approved"},
         flow_run_id=${gatedRun?.runId ?? null},approved_at=${policy.kind === "ungated" ? sql`now()` : sql`null`},approved_by=null,
         decision_snapshot=${snapshot ? JSON.stringify(snapshot) : null}::jsonb,updated_by=${actorId},updated_at=now()
         where org_id=${orgId} and id=${awardId} and status='draft' returning ${AWARD_COLUMNS}
-    `)
-          ).rows,
+    `, "objects"),
           "submitting the reward through Flows",
         ),
       );
@@ -1011,7 +989,7 @@ export async function submitBenefitAward(query: {
 
 type SubmissionRun = { id: string; status: string; context: Record<string, unknown> };
 async function awardSubmissionRuns(orgId: string, awardId: string): Promise<SubmissionRun[]> {
-  return (await db.execute<SubmissionRun>(sql`select id, status, context from flow_runs where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${awardId} and trigger = 'on_submit' order by created_at, id`)).rows;
+  return await db.execute<SubmissionRun>(sql`select id, status, context from flow_runs where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${awardId} and trigger = 'on_submit' order by created_at, id`, "objects");
 }
 
 /** Complete the existing automatically routed submission without creating another decision run. */
@@ -1022,8 +1000,8 @@ export async function completeBenefitAwardSubmission(query:{orgId:string;actorId
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     await lockApprovalSubject(orgId, BENEFIT_AWARD_SUBJECT_KIND, awardId);
-    const row=requireOneRow((await db.execute<Record<string,unknown>>(sql`select ${AWARD_COLUMNS} from hrm_benefit_awards
-      where org_id=${orgId} and id=${awardId} for update`)).rows,'Loading the original benefit submission');
+    const row=requireOneRow(await db.execute<Record<string,unknown>>(sql`select ${AWARD_COLUMNS} from hrm_benefit_awards
+      where org_id=${orgId} and id=${awardId} for update`, "objects"),'Loading the original benefit submission');
     const before = toAward(row);
     await requireAwardEntityScope(db, orgId, actorId, before.programId);
     const run=await requireCompletedSubmissionRouting({orgId,actorId,subjectKind:BENEFIT_AWARD_SUBJECT_KIND,subjectId:awardId,runId});
@@ -1045,9 +1023,9 @@ export async function completeBenefitAwardSubmission(query:{orgId:string;actorId
       return {status:before.status};
     if(before.status!=='pending'||before.decisionSnapshot!==null)throw new BenefitsError('BAD_STATE','Only this reward’s pending original submission can finish automatically');
     const runs=await awardSubmissionRuns(orgId,awardId),decision={outcome:'approved',mode:'ungated',submissionId:run.submissionId,policy:run.policy,runId,runs,gates:[]};
-    const after=toAward(requireOneRow((await db.execute<Record<string,unknown>>(sql`update hrm_benefit_awards
+    const after=toAward(requireOneRow(await db.execute<Record<string,unknown>>(sql`update hrm_benefit_awards
       set status='approved',approved_at=now(),approved_by=null,decision_snapshot=${JSON.stringify(decision)}::jsonb,updated_by=${actorId},updated_at=now()
-      where org_id=${orgId} and id=${awardId} and status='pending' and flow_run_id=${runId} returning ${AWARD_COLUMNS}`)).rows,'Completing the existing automatic reward submission'));
+      where org_id=${orgId} and id=${awardId} and status='pending' and flow_run_id=${runId} returning ${AWARD_COLUMNS}`, "objects"),'Completing the existing automatic reward submission'));
     await appendAwardEvent(db,orgId,actorId,awardId,'automatically_approved','Ready for payroll under the completed direct processing policy; no human approval was recorded');
     await auditAwardWrite(db,orgId,actorId,awardId,'submitted',before,after,'Completed the same automatic submission run');
     return { status: after.status };
@@ -1084,27 +1062,27 @@ export async function releaseBenefitAwardApproval(query: {
         "REFUSED",
         "Complete this record's current native Flow gates before release.",
       );
-    const row = requireOneRow((await db.execute<Record<string, unknown>>(sql`select ${AWARD_COLUMNS} from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId} for update`)).rows, "loading the reward decision");
+    const row = requireOneRow(await db.execute<Record<string, unknown>>(sql`select ${AWARD_COLUMNS} from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId} for update`, "objects"), "loading the reward decision");
     const before = toAward(row);
     await requireAwardEntityScope(db, orgId, actorId, before.programId);
     if (before.status !== "pending") return;
     if (!before.flowRunId || !before.submittedBy) throw new BenefitsError("REFUSED", "This reward has no workflow submission evidence. Preserve it and submit a new reward through the configured Benefits policy.");
-    const gates = (await db.execute<{ id: string; status: string; decided_by: string | null; decided_at: string | null; comment: string | null; on_behalf_of_user_id: string | null }>(sql`
+    const gates = await db.execute<{ id: string; status: string; decided_by: string | null; decided_at: string | null; comment: string | null; on_behalf_of_user_id: string | null }>(sql`
       select id, status, decided_by, decided_at::text, comment, on_behalf_of_user_id from flow_gates
       where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${awardId} order by created_at, id
-    `)).rows;
+    `, "objects");
     if (gates.some(gate => gate.status === "pending" || gate.status === "escalated")) throw new BenefitsError("REFUSED", "Approval stages remain open. Complete the reward's pending decisions in Approvals before adding it to payroll.");
     if (!gates.some(gate => gate.status === query.outcome && gate.decided_by === actorId)) throw new BenefitsError("REFUSED", "No matching workflow decision authorizes this reward. Decide its assigned gate in Approvals.");
     if (query.outcome === "approved" && gates.some(gate => gate.status === "rejected")) throw new BenefitsError("REFUSED", "The reward was rejected by its approval workflow. Create a new reward rather than releasing the rejected obligation.");
     const runs = await awardSubmissionRuns(orgId, awardId);
     if (!runs.some(run => run.id === before.flowRunId) || runs.some(run => run.status === "failed")) throw new BenefitsError("REFUSED", "The reward's workflow evidence is missing or failed. Review the execution in Flows before retrying the decision.");
     const snapshot = { outcome: query.outcome, mode: "human", runId: before.flowRunId, runs, gates };
-    const after = toAward(requireOneRow((await db.execute<Record<string, unknown>>(sql`
+    const after = toAward(requireOneRow(await db.execute<Record<string, unknown>>(sql`
       update hrm_benefit_awards set status = ${query.outcome}, approved_by = ${query.outcome === "approved" ? actorId : null},
         approved_at = ${query.outcome === "approved" ? sql`now()` : sql`null`}, decision_snapshot = ${JSON.stringify(snapshot)}::jsonb,
         updated_by = ${actorId}, updated_at = now()
       where org_id = ${orgId} and id = ${awardId} and status = 'pending' returning ${AWARD_COLUMNS}
-    `)).rows, "recording the workflow decision"));
+    `, "objects"), "recording the workflow decision"));
     await appendAwardEvent(db, orgId, actorId, awardId, query.outcome, query.comment?.trim() || `Benefits workflow ${query.outcome}`);
     await auditAwardWrite(db, orgId, actorId, awardId, query.outcome, before, after, query.comment?.trim() || null);
   });
@@ -1145,13 +1123,11 @@ export async function queueBenefitAward(query: {
     await requirePayrollManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     await lockAwardRun(db, orgId, awardId, payRunDocumentId);
-    const locked = (
-      await db.execute<Record<string, unknown>>(sql`
+    const locked = (await db.execute<Record<string, unknown>>(sql`
         select ${AWARD_COLUMNS} from hrm_benefit_awards
          where org_id = ${orgId} and id = ${awardId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1178,27 +1154,23 @@ export async function queueBenefitAward(query: {
         decision?.mode === "ungated" &&
         before.approvedBy === null &&
         before.submittedBy !== null &&
-        (
-          await db.execute<{
+        (await db.execute<{
             allowed: boolean;
           }>(sql`select public.flow_ungated_submission_authorized(${orgId},
           ${BENEFIT_AWARD_SUBJECT_KIND},${awardId},${before.submittedBy},
           jsonb_build_object('programId',${before.programId}::text,'employmentId',${before.employmentId}::text,
-            'value',${before.value}::text,'currency',${before.currency}::text)) as allowed`)
-        ).rows[0]?.allowed === true;
+            'value',${before.value}::text,'currency',${before.currency}::text)) as allowed`, "objects"))[0]?.allowed === true;
       if (decision?.outcome !== "approved" || (!flows && !ungated)) {
         throw new BenefitsError("REFUSED", "This reward has no complete pinned approval decision. Void the unissued reward and create a new reward before adding it to payroll.");
       }
       if (flows) {
-        const receipt = (
-          await db.execute<{
+        const receipt = (await db.execute<{
             valid: boolean;
           }>(sql`select exists(select 1 from flow_submissions s
           where s.org_id=${orgId} and s.subject_kind=${BENEFIT_AWARD_SUBJECT_KIND} and s.subject_id=${awardId}
             and s.policy->'runIds' ? ${before.flowRunId} and public.flow_submission_approved(s.org_id,s.subject_kind,s.subject_id,s.id)
             and s.context->>'programId'=${before.programId} and s.context->>'employmentId'=${before.employmentId}
-            and s.context->>'value'=${before.value} and s.context->>'currency'=${before.currency}) as valid`)
-        ).rows[0];
+            and s.context->>'value'=${before.value} and s.context->>'currency'=${before.currency}) as valid`, "objects"))[0];
         if (!receipt?.valid)
           throw new BenefitsError(
             "REFUSED",
@@ -1209,18 +1181,16 @@ export async function queueBenefitAward(query: {
             not exists (select 1 from flow_gates where org_id=${orgId} and subject_kind=${BENEFIT_AWARD_SUBJECT_KIND} and subject_id=${awardId} and status in ('pending','escalated','rejected'))
             and not exists (select 1 from flow_runs where org_id=${orgId} and subject_kind=${BENEFIT_AWARD_SUBJECT_KIND} and subject_id=${awardId} and status in ('running','waiting','failed')) as complete,
             exists (select 1 from flow_gates where org_id=${orgId} and subject_kind=${BENEFIT_AWARD_SUBJECT_KIND} and subject_id=${awardId} and status='approved' and decided_by=${before.approvedBy} and decided_at is not null) as matching_actor
-        `)).rows[0];
+        `, "objects"))[0];
         if (!proof?.complete || (decision?.mode === "human" && !proof.matching_actor)) {
           throw new BenefitsError("REFUSED", "This reward has no complete matching workflow decision. Review its native approval history before adding it to payroll; void an unissued reward with inconsistent evidence and create a new reward.");
         }
       }
     }
-    const employment = (
-      await db.execute<{ employer_subsidiary_id: string | null; worker_party_id: string }>(sql`
+    const employment = (await db.execute<{ employer_subsidiary_id: string | null; worker_party_id: string }>(sql`
         select employer_subsidiary_id, worker_party_id from worker_employments
          where org_id = ${orgId} and id = ${before.employmentId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!employment) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1260,8 +1230,7 @@ export async function queueBenefitAward(query: {
     }
     if (before.status === "queued" || before.status === "delivered") return before;
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_awards
              set status = 'queued',
                  pay_run_document_id = ${payRunDocumentId},
@@ -1269,8 +1238,7 @@ export async function queueBenefitAward(query: {
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${awardId}
           returning ${AWARD_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "queueing the benefit award",
     );
     const after = toAward(updated);
@@ -1306,8 +1274,7 @@ async function requireAwardAdjustment(
   payRunAdjustmentId: string,
   committed: boolean,
 ): Promise<void> {
-  const adjustment = (
-    await exec.execute<{
+  const adjustment = (await exec.execute<{
       employee_party_id: string;
       component_id: string | null;
       amount: string | null;
@@ -1319,8 +1286,7 @@ async function requireAwardAdjustment(
         from pay_run_adjustments
        where org_id = ${orgId} and id = ${payRunAdjustmentId}
          and pay_run_document_id = ${payRunDocumentId}
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!adjustment) {
     throw new BenefitsError(
       "NOT_FOUND",
@@ -1361,19 +1327,17 @@ async function requireAwardAdjustment(
   if (/[^0]/.test((award.value.split(".")[1] ?? "").slice(2))) {
     throw new BenefitsError("REFUSED", "the native payroll adjustment supports two decimal places — this approved award has finer precision; preserve it and resolve the payroll precision before queueing");
   }
-  const run = (
-    await exec.execute<{ run_status: string; document_status: string; subsidiary_id: string | null; currency: string; pay_date: string }>(sql`
+  const run = (await exec.execute<{ run_status: string; document_status: string; subsidiary_id: string | null; currency: string; pay_date: string }>(sql`
       select r.run_status, d.status as document_status, d.subsidiary_id, d.currency, r.pay_date::text as pay_date
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${payRunDocumentId}
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!run) {
     throw new BenefitsError("NOT_FOUND", "pay run not found in this organization — finalize the run before recording delivery");
   }
-  const retained=(await exec.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
-    from hrm_benefit_awards where org_id=${orgId} and id=${award.id}`)).rows;
+  const retained=await exec.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
+    from hrm_benefit_awards where org_id=${orgId} and id=${award.id}`, "objects");
   if(retained.length!==1)throw new BenefitsError("NOT_FOUND","The award's issuance source is unavailable");
   const programPolicy=awardDeliveryPolicy(retained[0]!.program,retained[0]!.source);
   const programEntity=programPolicy.legalEntityId;
@@ -1403,7 +1367,7 @@ async function requireAwardAdjustment(
   if (!committed) {
     const component = (await exec.execute<{ payment_kind: string; kind: string; is_active: boolean }>(sql`
       select payment_kind, kind, is_active from pay_components where org_id = ${orgId} and id = ${payComponentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!component || component.kind !== "earning" || !component.is_active || component.payment_kind !== expectedPaymentKind) {
       throw new BenefitsError("REFUSED", `the program requires an active ${expectedPaymentKind === "non_cash" ? "non-cash" : "cash"} earning component — configure the matching payroll representation before queueing`);
     }
@@ -1418,7 +1382,7 @@ async function requireAwardAdjustment(
          and l.payment_kind = ${expectedPaymentKind}
          and (${expectedPaymentKind} = 'cash' or l.non_cash_account_id is not null)
        limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!consumed) {
       throw new BenefitsError("REFUSED", "the committed run has no matching payroll representation for this award — review the employee's inclusion and calculation; a committed run alone does not prove this benefit was processed");
     }
@@ -1471,13 +1435,11 @@ export async function recordPayrollDelivery(query: {
     await requirePayrollManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     await lockAwardRun(db, orgId, awardId, payRunDocumentId);
-    const locked = (
-      await db.execute<Record<string, unknown>>(sql`
+    const locked = (await db.execute<Record<string, unknown>>(sql`
         select ${AWARD_COLUMNS} from hrm_benefit_awards
          where org_id = ${orgId} and id = ${awardId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1501,12 +1463,10 @@ export async function recordPayrollDelivery(query: {
       );
     }
     await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
-    const employment = (
-      await db.execute<{ employer_subsidiary_id: string | null; worker_party_id: string }>(sql`
+    const employment = (await db.execute<{ employer_subsidiary_id: string | null; worker_party_id: string }>(sql`
         select employer_subsidiary_id, worker_party_id from worker_employments
          where org_id = ${orgId} and id = ${before.employmentId}
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!employment) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1538,8 +1498,7 @@ export async function recordPayrollDelivery(query: {
     );
     if (before.status === "delivered") return before;
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_awards
              set status = 'delivered',
                  pay_run_document_id = ${payRunDocumentId},
@@ -1547,8 +1506,7 @@ export async function recordPayrollDelivery(query: {
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${awardId}
           returning ${AWARD_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "recording payroll delivery",
     );
     const after = toAward(updated);
@@ -1593,15 +1551,13 @@ export async function recordExternalDelivery(query: {
     await assertHrmEnabled(db, orgId);
     const linkage = (await db.execute<{ pay_run_document_id: string | null }>(sql`
       select pay_run_document_id from hrm_benefit_awards where org_id = ${orgId} and id = ${awardId}
-    `)).rows[0];
+    `, "objects"))[0];
     await lockAwardRun(db, orgId, awardId, linkage?.pay_run_document_id ?? null);
-    const locked = (
-      await db.execute<Record<string, unknown>>(sql`
+    const locked = (await db.execute<Record<string, unknown>>(sql`
         select ${AWARD_COLUMNS} from hrm_benefit_awards
          where org_id = ${orgId} and id = ${awardId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1632,20 +1588,18 @@ export async function recordExternalDelivery(query: {
     }
     const employment = (await db.execute<{ worker_party_id: string }>(sql`
       select worker_party_id from worker_employments where org_id = ${orgId} and id = ${before.employmentId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!employment) throw new BenefitsError("NOT_FOUND", "the benefit employment is unavailable — reload the award and resolve its employment before recording fulfillment");
     await requireCommittedAwardAdjustment(db, orgId, program.code, before, employment.worker_party_id,
       program.payComponentId, before.payRunDocumentId, before.payRunAdjustmentId);
     const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_awards
              set status = 'delivered', external_ref = ${externalRef},
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${awardId}
           returning ${AWARD_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "recording external delivery",
     );
     const after = toAward(updated);
@@ -1682,13 +1636,11 @@ export async function voidBenefitAward(query: {
       await assertHrmEnabled(db, orgId);
       await lockApprovalSubject(orgId, BENEFIT_AWARD_SUBJECT_KIND, awardId);
       await lockAwardRun(db, orgId, awardId);
-      const locked = (
-      await db.execute<Record<string, unknown>>(sql`
+      const locked = (await db.execute<Record<string, unknown>>(sql`
         select ${AWARD_COLUMNS} from hrm_benefit_awards
          where org_id = ${orgId} and id = ${awardId}
          for update
-      `)
-    ).rows[0];
+      `, "objects"))[0];
       if (!locked) {
       throw new BenefitsError(
         "NOT_FOUND",
@@ -1714,22 +1666,20 @@ export async function voidBenefitAward(query: {
         select r.run_status, d.status as document_status from pay_runs r
           join documents d on d.org_id = r.org_id and d.id = r.document_id
          where r.org_id = ${orgId} and r.document_id = ${linkedRun}
-      `)).rows[0];
+      `, "objects"))[0];
       if (!run || run.run_status === "committed" || run.document_status !== "draft") {
         throw new BenefitsError("REFUSED", "this award belongs to a finalized pay run — preserve its payroll history and record an adjusting award instead of voiding");
       }
     }
       const updated = requireOneRow(
-      (
-        await db.execute<Record<string, unknown>>(sql`
+      await db.execute<Record<string, unknown>>(sql`
           update hrm_benefit_awards
              set status = 'voided', void_reason = ${reason},
                  pay_run_document_id = null, pay_run_adjustment_id = null,
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${awardId}
           returning ${AWARD_COLUMNS}
-        `)
-      ).rows,
+        `, "objects"),
       "voiding the benefit award",
     );
       if (linkedAdjustment !== null && linkedRun !== null) {

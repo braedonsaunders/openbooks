@@ -72,8 +72,8 @@ export const PATCH = defineRoute({
       const result = await db.execute<{ id: string }>(sql`
         update users set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${preferenceUser.id} and org_id = ${preferenceUser.orgId} and is_active
-         returning id`);
-      if (result.rows.length !== 1) return false;
+         returning id`, "objects");
+      if (result.length !== 1) return false;
       await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${preferenceUser.orgId}, 'users', ${preferenceUser.id}, 'update',

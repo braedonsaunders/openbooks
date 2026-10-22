@@ -128,15 +128,15 @@ test('audit facets combine record families without losing empty or retained docu
           values (${randomUUID()}, ${org.orgId}, 'documents', ${deletedDocument}, 'delete',
             '2026-09-01T12:00:00Z', ${JSON.stringify(kind ? { before: { document: { kind } } } : {})}::jsonb)
           returning id
-        `)
-        assert.equal(written.rows.length, 1)
+        `, 'objects')
+        assert.equal(written.length, 1)
       }
       const written = await db.execute(sql`
         insert into audit_log (id, org_id, table_name, row_id, action, at, changes)
         values (${randomUUID()}, ${org.orgId}, 'customer_invoice', ${randomUUID()}, 'delete',
           '2026-09-02T00:00:00Z', '{"reason":"Duplicate invoice"}') returning id
-      `)
-      assert.equal(written.rows.length, 1)
+      `, 'objects')
+      assert.equal(written.length, 1)
     })
     await withOrgTransaction(org.orgId, async () => {
       await db.execute(sql`set local time zone 'UTC'`)
@@ -176,11 +176,11 @@ test('native calculated and recalculated results resolve through the ordinary au
   try {
     const { input } = await withBypassContext(() => calculatedRun(fixture))
     await withBypassContext(() => calculatePayRun(input))
-    const eventIds = (await withBypassContext(() => db.execute<{ id: string; recalculation: boolean }>(sql`
+    const eventIds = await withBypassContext(() => db.execute<{ id: string; recalculation: boolean }>(sql`
       select id, (changes->>'recalculation')::boolean as recalculation from audit_log
        where org_id=${fixture.orgId} and table_name='pay_runs' and row_id=${input.documentId}
          and changes->>'operation'='calculate_pay_run'
-    `))).rows
+    `, 'objects'))
     assert.equal(eventIds.length, 2)
     const recalculatedId = eventIds.find(row => row.recalculation)!.id
     await withOrgContext(fixture.orgId, async () => {

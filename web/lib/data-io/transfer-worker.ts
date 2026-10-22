@@ -44,7 +44,7 @@ export async function* transferBytes(orgId: string, id: string, direction: 'sour
   for (;;) {
     assertRunning()
     const entry = await independent(orgId, async () => (await db.execute<{ data: Buffer; sha256: string }>(sql`
-      select data,sha256 from data_transfer_chunks where org_id=${orgId} and job_id=${id} and direction=${direction} and part_no=${part}`)).rows[0])
+      select data,sha256 from data_transfer_chunks where org_id=${orgId} and job_id=${id} and direction=${direction} and part_no=${part}`, 'objects'))[0])
     if (!entry) return
     if (digest(entry.data) !== entry.sha256) throw new TransferRefusal(`Stored file part ${part + 1} failed its checksum — upload the source again or create a new export.`, 422)
     hash?.update(entry.data)
@@ -130,15 +130,15 @@ async function storeConstraints(job: StoredTransfer, values: readonly (readonly 
     return sql`(${job.processedRows + i + 1}::bigint,${JSON.stringify(constraints)}::jsonb)`
   })
   const result = await db.execute(sql`update data_transfer_rows r set keys=v.keys from (values ${sql.join(rows, sql`, `)}) as v(row_no,keys)
-    where r.org_id=${job.orgId} and r.job_id=${job.id} and r.row_no=v.row_no returning r.row_no`)
-  if (result.rows.length !== length) throw new Error('Source constraint evidence did not persist for every row')
+    where r.org_id=${job.orgId} and r.job_id=${job.id} and r.row_no=v.row_no returning r.row_no`, 'objects')
+  if (result.length !== length) throw new Error('Source constraint evidence did not persist for every row')
 }
 async function historyCheckpoint(job: StoredTransfer, outcome: WriteOutcome, state: string) {
   const result = await db.execute(sql`update import_jobs set status=${state},total_rows=${job.totalRows},
     created_count=${outcome.created},updated_count=${outcome.updated},failed_count=${outcome.failed},errors=${JSON.stringify(outcome.errors)}::jsonb,
     mapping=${JSON.stringify(job.options.mapping ?? {})}::jsonb, mode=${job.options.importMode ?? 'upsert'}
-    where org_id=${job.orgId} and id=${job.id} returning id`)
-  if (result.rows.length !== 1) throw new Error('Import history checkpoint did not persist')
+    where org_id=${job.orgId} and id=${job.id} returning id`, 'objects')
+  if (result.length !== 1) throw new Error('Import history checkpoint did not persist')
 }
 export const approvalDigest = (job: StoredTransfer) => digest(canonical({
   source: job.sourceHash, schema: job.schemaHash, scope: job.scope, options: job.options,
@@ -151,12 +151,12 @@ async function importBatch(orgId: string, id: string, token: string): Promise<bo
     const preview = job.state === 'previewing'
     if (!preview && job.state !== 'committing') return false
     if (!preview && (job.preview.failed > 0 || job.approvalHash !== approvalDigest(job))) throw new TransferRefusal('The approved preview no longer matches this import — run and approve a new preview before committing.', 422)
-    const page = (await db.execute<{ row_no: string; data: Record<string, unknown> }>(sql`
+    const page = await db.execute<{ row_no: string; data: Record<string, unknown> }>(sql`
       with candidates as materialized (
         select row_no,data from data_transfer_rows where org_id=${orgId} and job_id=${id} and row_no>${job.processedRows} order by row_no limit ${TRANSFER_BATCH_ROWS}
       ), bounded as (
         select row_no,data,sum(octet_length(data::text)) over (order by row_no) as page_bytes from candidates
-      ) select row_no,data from bounded where page_bytes<=${TRANSFER_BATCH_BYTES} or row_no=${job.processedRows + 1} order by row_no`)).rows
+      ) select row_no,data from bounded where page_bytes<=${TRANSFER_BATCH_BYTES} or row_no=${job.processedRows + 1} order by row_no`, 'objects')
     if (!page.length) {
       if (job.processedRows !== job.totalRows) throw new TransferRefusal('The source staging is incomplete — create a new import.', 422)
       if (preview) {
@@ -186,8 +186,8 @@ async function importBatch(orgId: string, id: string, token: string): Promise<bo
             from data_transfer_rows r cross join lateral jsonb_array_elements(r.keys) k
             where r.org_id=${orgId} and r.job_id=${id}
           ) select ${orgId},${id},'preview',row_no,'error',value->>'label',null from evidence where first_value<>last_value`)
-        const failures = (await db.execute<{ count: string }>(sql`select count(distinct row_no) as count from data_transfer_issues where org_id=${orgId} and job_id=${id} and phase='preview' and severity='error'`)).rows[0]
-        const errors = (await db.execute<RowError & Record<string, unknown>>(sql`select row_no::float8 as row,message,field from data_transfer_issues where org_id=${orgId} and job_id=${id} and phase='preview' and severity='error' order by row_no limit 100`)).rows
+        const failures = (await db.execute<{ count: string }>(sql`select count(distinct row_no) as count from data_transfer_issues where org_id=${orgId} and job_id=${id} and phase='preview' and severity='error'`, 'objects'))[0]
+        const errors = await db.execute<RowError & Record<string, unknown>>(sql`select row_no::float8 as row,message,field from data_transfer_issues where org_id=${orgId} and job_id=${id} and phase='preview' and severity='error' order by row_no limit 100`, 'objects')
         const outcome = { ...job.preview, failed: Number(failures?.count ?? 0), errors }
         await updateTransfer(job, { state: 'ready', preview: outcome, approvalHash: approvalDigest(job) }, 'preview-completed')
       } else {
@@ -316,8 +316,8 @@ export async function processTransfer(orgId: string, id: string, token: string, 
     heartbeat = independent(orgId, async () => {
       await currentClaim(orgId, id, token)
       const result = await db.execute(sql`update data_transfer_jobs set claim_until=now()+interval '10 minutes',updated_at=now()
-        where org_id=${orgId} and id=${id} and claim_token=${token} returning id`)
-      if (result.rows.length !== 1) throw new TransferRefusal('The worker claim was replaced; processing must restart from the stored checkpoint.')
+        where org_id=${orgId} and id=${id} and claim_token=${token} returning id`, 'objects')
+      if (result.length !== 1) throw new TransferRefusal('The worker claim was replaced; processing must restart from the stored checkpoint.')
     }).catch((error: unknown) => { current.heartbeatError = error }).finally(() => { heartbeat = null })
   }, 30_000)
   try {
@@ -366,21 +366,21 @@ export async function claimTransfer(target?: { orgId: string; id: string }): Pro
         update data_transfer_jobs set claim_token=${token},claim_until=now()+interval '10 minutes'
         where org_id=${target.orgId} and id=${target.id}
           and state in ('parsing','previewing','committing','exporting')
-          and (claim_until is null or claim_until<now()) returning id`)).rows.length === 1
+          and (claim_until is null or claim_until<now()) returning id`, 'objects')).length === 1
       return claimed ? { orgId: target.orgId, id: target.id, token } : null
     })
   }
   // bypass: scheduler-tick — discover only tenant/job identities whose durable work is due.
-  const due = await withBypassContext(async () => (await db.execute<{ org_id: string; id: string }>(sql`
+  const due = await withBypassContext(async () => await db.execute<{ org_id: string; id: string }>(sql`
     select org_id,id from data_transfer_jobs where state in ('parsing','previewing','committing','exporting')
     and (claim_until is null or claim_until<now())
-    order by updated_at,id limit 20`)).rows)
+    order by updated_at,id limit 20`, 'objects'))
   for (const candidate of due) {
     const token = randomUUID()
     const claimed = await independent(candidate.org_id, async () => (await db.execute(sql`
       update data_transfer_jobs set claim_token=${token},claim_until=now()+interval '10 minutes'
       where org_id=${candidate.org_id} and id=${candidate.id} and state in ('parsing','previewing','committing','exporting')
-        and (claim_until is null or claim_until<now()) returning id`)).rows.length === 1)
+        and (claim_until is null or claim_until<now()) returning id`, 'objects')).length === 1)
     if (claimed) return { orgId: candidate.org_id, id: candidate.id, token }
   }
   return null

@@ -126,7 +126,7 @@ export async function auditRecordLabels(orgId: string, refs: readonly { table: s
   await Promise.all([...byTable].map(async ([table, ids]) => {
     const query = auditRecordLabelSource(table, orgId, [...ids])
     if (!query) return
-    const rows = (await db.execute<{ id: string; label: string | null; on_date: string | null }>(query)).rows
+    const rows = await db.execute<{ id: string; label: string | null; on_date: string | null }>(query, 'objects')
     for (const row of rows) {
       const label = row.label?.trim() ? row.label.trim() : null
       if (label !== null || row.on_date !== null) labels.set(`${table}:${row.id}`, { label, on: row.on_date })

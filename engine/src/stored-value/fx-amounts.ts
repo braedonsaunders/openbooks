@@ -80,7 +80,7 @@ export async function loadDocumentFxContext(
   orgId: string,
   documentId: string,
 ): Promise<DocumentFxContext> {
-  const rows = (await runner.execute<{
+  const rows = await runner.execute<{
     id: string;
     currency: string;
     fxRate: string;
@@ -99,11 +99,11 @@ export async function loadDocumentFxContext(
       left join subsidiaries sub on sub.org_id = d.org_id and sub.id = d.subsidiary_id
       left join subsidiaries root on root.org_id = d.org_id and root.parent_id is null
      where d.org_id = ${orgId} and d.id = ${documentId}
-  `)).rows;
+  `, "objects");
   const row = rows[0];
   if (!row) {
     const count = (await runner.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+      select count(*)::int as n from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
     if (count?.n === 0) {
       throw storedValueRefusal({
         message: "The stored-value movement names a document that does not exist in this organization.",
@@ -194,11 +194,11 @@ export async function accountFunctionalTotal(
   orgId: string,
   accountId: string,
 ): Promise<bigint> {
-  const rows = (await runner.execute<{ total: string }>(sql`
+  const rows = await runner.execute<{ total: string }>(sql`
     select coalesce(sum(functional_amount_minor), 0)::text as total
       from stored_value_entries
      where org_id = ${orgId} and account_id = ${accountId}
-  `)).rows;
+  `, "objects");
   return BigInt(rows[0]?.total ?? "0");
 }
 
@@ -253,10 +253,10 @@ export async function subsidiaryBaseCurrency(
   orgId: string,
   subsidiaryId: string,
 ): Promise<string> {
-  const rows = (await runner.execute<{ currency: string }>(sql`
+  const rows = await runner.execute<{ currency: string }>(sql`
     select nullif(trim(base_currency), '') as currency from subsidiaries
      where org_id = ${orgId} and id = ${subsidiaryId}
-  `)).rows;
+  `, "objects");
   if (!rows[0]?.currency) {
     throw storedValueRefusal({
       message: "The stored-value movement names a legal entity that does not exist in this organization.",

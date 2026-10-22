@@ -40,14 +40,14 @@ test("transaction audit preserves exact native numeric JSON and distinguishes cu
         assert.equal(transactionSnapshotsMatch(before, after), false, "a one-cent change above floating-point precision remains material");
         await recordTransactionAudit(tx, { orgId: org.orgId, documentId: id, action: "update", actorId, source: "api",
           reason: "Correct the invoice amount", before, after });
-        const audit = (await tx.execute<{ before_total: string; after_total: string; line_amount: string; total_type: string; ordinal: string; ordinal_type: string }>(sql`
+        const audit = await tx.execute<{ before_total: string; after_total: string; line_amount: string; total_type: string; ordinal: string; ordinal_type: string }>(sql`
           select changes #>> '{before,document,total}' as before_total,changes #>> '{after,document,total}' as after_total,
             changes #>> '{before,lines,0,amount}' as line_amount,
             jsonb_typeof(changes #> '{before,document,total}') as total_type,
             changes #>> '{before,document,custom,sourceOrdinal}' as ordinal,
             jsonb_typeof(changes #> '{before,document,custom,sourceOrdinal}') as ordinal_type
           from audit_log where org_id=${org.orgId} and table_name='documents' and row_id=${id} and request_id='api'
-        `)).rows;
+        `, "objects");
         assert.equal(audit.length, 1);
         assert.deepEqual(audit[0], { before_total: "999999999999998.9900", after_total: "999999999999999.0000",
           line_amount: "999999999999998.9900", total_type: "number", ordinal: "9007199254740993", ordinal_type: "number" });
@@ -72,7 +72,7 @@ test("transaction audit preserves exact native numeric JSON and distinguishes cu
           where org_id=${org.orgId} and id=${id}`);
         const after = await captureTransactionAuditSnapshot(tx, id, org.orgId);
         assert.ok(after);
-        const missingAuditWrite = { execute: async () => ({ rows: [] }) } as unknown as Pick<typeof db, "execute">;
+        const missingAuditWrite = { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as unknown as Pick<typeof db, "execute">;
         await recordTransactionAudit(missingAuditWrite, { orgId: org.orgId, documentId: id, action: "update", actorId,
           source: "api", reason: "Retain the transaction change", before, after });
       }), /transaction audit was not retained/);
@@ -80,7 +80,7 @@ test("transaction audit preserves exact native numeric JSON and distinguishes cu
         select d.memo,(select count(*)::text from audit_log a
           where a.org_id=d.org_id and a.table_name='documents' and a.row_id=d.id and a.request_id='api') as audits
         from documents d where d.org_id=${org.orgId} and d.id=${id}
-      `)).rows[0];
+      `, "objects"))[0];
       assert.equal(retained?.memo, null, "a missing audit write rolls back the business change");
       assert.equal(retained?.audits, "1");
     });

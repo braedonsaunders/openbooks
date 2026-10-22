@@ -203,12 +203,10 @@ async function resolveQueueRows(
   ]
   const verbByChange = new Map<string, string>()
   if (appliedIds.length > 0) {
-    const verbs = (
-      await db.execute<{ id: string; verb: string }>(sql`
+    const verbs = await db.execute<{ id: string; verb: string }>(sql`
       select id::text as id, verb from employment_changes
        where org_id = ${orgId}::uuid and id = any(${`{${appliedIds.join(',')}}`}::uuid[])
-    `)
-    ).rows
+    `, 'objects')
     for (const v of verbs) verbByChange.set(v.id, v.verb)
   }
   return visible.map((row) => {
@@ -314,8 +312,7 @@ export async function loadQueueLabels(
   >()
   if (employmentIds.length > 0) {
     const ids = employmentIds.map((id) => sql`${id}::uuid`)
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         employmentId: string
         workerName: string | null
         partyId: string | null
@@ -323,8 +320,7 @@ export async function loadQueueLabels(
       select w.id::text as "employmentId", p.display_name as "workerName", p.id::text as "partyId"
         from worker_employments w
         join parties p on p.id = w.worker_party_id and p.org_id = w.org_id
-       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`)
-    ).rows
+       where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})`, 'objects')
     for (const row of rows)
       workerByEmployment.set(row.employmentId, {
         name: row.workerName,
@@ -334,8 +330,7 @@ export async function loadQueueLabels(
   const requesterByUser = new Map<string, string>()
   if (userIds.length > 0) {
     const ids = userIds.map((id) => sql`${id}::uuid`)
-    const rows = (
-      await db.execute<{
+    const rows = await db.execute<{
         userId: string
         workerName: string | null
         userName: string
@@ -343,8 +338,7 @@ export async function loadQueueLabels(
       select u.id::text as "userId", p.display_name as "workerName", u.name as "userName"
         from users u
         left join parties p on p.id = u.party_id and p.org_id = u.org_id
-       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`)
-    ).rows
+       where u.org_id = ${orgId}::uuid and u.id in (${sql.join(ids, sql`, `)})`, 'objects')
     for (const row of rows)
       requesterByUser.set(row.userId, row.workerName ?? row.userName)
   }
@@ -596,10 +590,8 @@ export async function loadChangeRequestQueue(
   )
   // Departments feed the propose/edit drawer, exactly like the employee
   // drawer's own picker: active names, org-scoped, never ids alone.
-  const departments = (
-    await db.execute<{ id: string; name: string }>(sql`
-    select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name`)
-  ).rows
+  const departments = await db.execute<{ id: string; name: string }>(sql`
+    select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name`, 'objects')
 
   const rows: QueueRow[] = await resolveQueueRows(
     t,

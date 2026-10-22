@@ -32,7 +32,7 @@ test("a full refund reverses the receipt and reopens the invoice", { skip: !DB }
     assert.equal((rows[0]!.documents_posted as string[]).length, 1);
 
     const attempt = (await db.execute<{ status: string }>(sql`
-      select status from payment_attempts where id = ${h.attemptId} and org_id = ${h.orgId}`)).rows[0];
+      select status from payment_attempts where id = ${h.attemptId} and org_id = ${h.orgId}`, "objects"))[0];
     assert.equal(attempt!.status, "refunded");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -54,9 +54,9 @@ test("a partial refund posts the exact amount and reissues the remainder", { ski
     // The invoice reopens by the refunded 30, not the full 100.
     assert.equal(await invoiceOpen(h.orgId, h.invoiceId), "30.0000");
 
-    const receipts = (await db.execute<{ total: string; status: string }>(sql`
+    const receipts = await db.execute<{ total: string; status: string }>(sql`
       select total::text as total, status from documents
-       where org_id = ${h.orgId} and kind = 'customer_payment' order by created_at`)).rows;
+       where org_id = ${h.orgId} and kind = 'customer_payment' order by created_at`, "objects");
     const postedTotals = receipts.filter((r) => r.status === "posted").map((r) => r.total);
     assert.deepEqual(postedTotals, ["70.0000"]);
 
@@ -97,7 +97,7 @@ test("a dispute opened then lost posts the loss and settles the invoice", { skip
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-       where jl.org_id = ${h.orgId} and a.name = 'Chargeback Losses' and je.status in ('posted', 'reversed')`)).rows[0];
+       where jl.org_id = ${h.orgId} and a.name = 'Chargeback Losses' and je.status in ('posted', 'reversed')`, "objects"))[0];
     assert.equal(loss!.debit, "100.0000");
 
     const clearing = (await db.execute<{ balance: string }>(sql`
@@ -105,7 +105,7 @@ test("a dispute opened then lost posts the loss and settles the invoice", { skip
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-       where jl.org_id = ${h.orgId} and a.name = 'Disputed Funds Clearing' and je.status in ('posted', 'reversed')`)).rows[0];
+       where jl.org_id = ${h.orgId} and a.name = 'Disputed Funds Clearing' and je.status in ('posted', 'reversed')`, "objects"))[0];
     assert.equal(clearing!.balance, "0.0000");
 
     const rows = await disputeRows(h.orgId);
@@ -131,13 +131,13 @@ test("a lost dispute clears the full hold when the invoice was already settled",
     const dispute = (await disputeRows(h.orgId))[0]!;
     const documents = dispute.documents_posted as string[];
     const holdId = documents.at(-1)!;
-    const lines = (await db.execute<{ id: string; document_id: string }>(sql`
+    const lines = await db.execute<{ id: string; document_id: string }>(sql`
       select jl.id, je.source_document_id as document_id
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where jl.org_id = ${h.orgId} and jl.is_open_item
          and je.source_document_id in (${holdId}, ${h.invoiceId})
-    `)).rows;
+    `, "objects");
     const holdLine = lines.find((line) => line.document_id === holdId);
     const invoiceLine = lines.find((line) => line.document_id === h.invoiceId);
     assert.ok(holdLine && invoiceLine, "the posted hold and invoice retain their open-item lines");
@@ -164,7 +164,7 @@ test("a lost dispute clears the full hold when the invoice was already settled",
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
        where jl.org_id = ${h.orgId} and a.name = 'Chargeback Losses' and je.status in ('posted', 'reversed')
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(loss.debit, "100.0000", "the loss reflects the full provider chargeback amount");
     const clearing = (await db.execute<{ balance: string }>(sql`
       select coalesce(sum(jl.amount), 0)::text as balance
@@ -172,7 +172,7 @@ test("a lost dispute clears the full hold when the invoice was already settled",
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
        where jl.org_id = ${h.orgId} and a.name = 'Disputed Funds Clearing' and je.status in ('posted', 'reversed')
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(clearing.balance, "0.0000", "the full disputed-funds balance is cleared");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -193,12 +193,12 @@ test("a foreign-currency dispute loss posts at the hold receipt's rate with the 
     const lost = await h.fire({ id: `evt_dp_lost_${randomUUID().slice(0, 8)}`, type: "charge.dispute.closed", data: { object: { ...dispute, status: "lost" } } });
     assert.equal(lost?.status, "disputed_posted");
 
-    const lossLine = (await db.execute<{ amount: string; currency: string; txn_amount: string; fx_rate: string; evidence: { rate: string; source: string } | null }>(sql`
+    const lossLine = await db.execute<{ amount: string; currency: string; txn_amount: string; fx_rate: string; evidence: { rate: string; source: string } | null }>(sql`
       select jl.amount::text, jl.currency, jl.txn_amount::text, jl.fx_rate::text, je.custom->'fxEvidence' as evidence
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-       where jl.org_id = ${h.orgId} and a.name = 'Chargeback Losses'`)).rows;
+       where jl.org_id = ${h.orgId} and a.name = 'Chargeback Losses'`, "objects");
     assert.equal(lossLine.length, 1);
     assert.deepEqual(
       { currency: lossLine[0]!.currency, txn: lossLine[0]!.txn_amount, amount: lossLine[0]!.amount, rate: Number(lossLine[0]!.fx_rate) },
@@ -212,7 +212,7 @@ test("a foreign-currency dispute loss posts at the hold receipt's rate with the 
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-       where jl.org_id = ${h.orgId} and a.name = 'Disputed Funds Clearing' and je.status in ('posted', 'reversed')`)).rows[0];
+       where jl.org_id = ${h.orgId} and a.name = 'Disputed Funds Clearing' and je.status in ('posted', 'reversed')`, "objects"))[0];
     assert.deepEqual(clearing, { functional: "0.0000", txn: "0.0000" });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -234,7 +234,7 @@ test("a duplicate refund event is a no-op", { skip: !DB }, async () => {
 
     const reversals = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents
-       where org_id = ${h.orgId} and kind = 'customer_payment' and status = 'voided'`)).rows[0];
+       where org_id = ${h.orgId} and kind = 'customer_payment' and status = 'voided'`, "objects"))[0];
     assert.equal(reversals!.n, 1);
     assert.equal((await disputeRows(h.orgId)).length, 1);
   } finally {
@@ -319,7 +319,7 @@ test("a rejected review moves no money", { skip: !DB }, async () => {
     assert.equal(after[0]!.status, "rejected");
     assert.equal(await invoiceOpen(h.orgId, h.invoiceId), "0.0000");
     const receipts = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${h.orgId} and kind = 'customer_payment'`)).rows[0];
+      select count(*)::int as n from documents where org_id = ${h.orgId} and kind = 'customer_payment'`, "objects"))[0];
     assert.equal(receipts!.n, 1);
   } finally {
     await dropScratchOrg(org.orgId);

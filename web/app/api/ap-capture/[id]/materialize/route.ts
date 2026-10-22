@@ -54,8 +54,8 @@ export const POST = defineRoute({
           left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
          where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
          ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-      `))
-      if (!visible.rows[0]) return NextResponse.json({ error: 'Capture item not found' }, { status: 422 })
+      `, 'objects'))
+      if (!visible[0]) return NextResponse.json({ error: 'Capture item not found' }, { status: 422 })
       return NextResponse.json(await materializeCapture({
         orgId: gate.user.orgId,
         captureItemId: id,

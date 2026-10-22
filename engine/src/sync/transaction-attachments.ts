@@ -29,8 +29,8 @@ export async function linkExistingTransactionFiles(orgId: string, sourceSystem: 
   return db.transaction(async (tx) => {
     const targets = await tx.execute(sql`select f.id, d.id as document_id from (values ${values}) v(sid, did)
       join files f on f.org_id=${orgId} and f.source_system=${sourceSystem} and f.source_id=v.sid
-      join ${sql.identifier(targetTable)} d on d.org_id=f.org_id and d.id=v.did for key share of f, d`);
-    if (targets.rows.length !== unique.length) throw new Error("Source file or its native record is unavailable in this organization; retry after resolving its identity");
+      join ${sql.identifier(targetTable)} d on d.org_id=f.org_id and d.id=v.did for key share of f, d`, 'objects');
+    if (targets.length !== unique.length) throw new Error("Source file or its native record is unavailable in this organization; retry after resolving its identity");
     const result = await tx.execute<{ count: number; auditedCount: number }>(sql`
       with linked as (
         insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
@@ -48,8 +48,8 @@ export async function linkExistingTransactionFiles(orgId: string, sourceSystem: 
           'reason','Synchronize source transaction evidence'), ${actorId} from linked
         returning id
       ) select (select count(*)::int from linked) as count, (select count(*)::int from audited) as "auditedCount"
-    `);
-    const evidence = result.rows[0];
+    `, 'objects');
+    const evidence = result[0];
     if (!evidence || evidence.count !== evidence.auditedCount) throw new Error("Source file relationships were not audited; retry the sync");
     return evidence.count;
   });
@@ -58,19 +58,19 @@ export async function linkExistingTransactionFiles(orgId: string, sourceSystem: 
 /** A complete transaction inventory catches up old records independently of the financial cursor. */
 export async function syncTransactionAttachments(provider: TransactionAttachmentProvider, options: AttachmentSyncOptions): Promise<ImportSummary> {
   if (!s3Enabled) throw new Error('Configure File Cabinet object storage before syncing transaction documents and files');
-  const connection = (await db.execute<{ source: string }>(sql`select source from connections where org_id=${options.orgId} and id=${options.connectionId}`)).rows[0];
+  const connection = (await db.execute<{ source: string }>(sql`select source from connections where org_id=${options.orgId} and id=${options.connectionId}`, 'objects'))[0];
   if (!connection || connection.source !== provider.source) throw new Error('Attachment connection does not match this organization and source');
   if (options.actorId) {
     if (!isUuid(options.actorId)) throw new Error('Attachment actor must be an active user in this organization');
-    const actor = (await db.execute(sql`select id from users where org_id=${options.orgId} and id=${options.actorId} and is_active`)).rows[0];
+    const actor = (await db.execute(sql`select id from users where org_id=${options.orgId} and id=${options.actorId} and is_active`, 'objects'))[0];
     if (!actor) throw new Error('Attachment actor must be an active user in this organization');
   }
   const ambiguousLegacy = (await db.execute(sql`select id from documents where org_id=${options.orgId} and custom->>${provider.refKey} is not null and custom->>'connectionId' is null
-    and exists(select 1 from connections where org_id=${options.orgId} and source=${provider.source} and id<>${options.connectionId}) limit 1`)).rows[0];
+    and exists(select 1 from connections where org_id=${options.orgId} and source=${provider.source} and id<>${options.connectionId}) limit 1`, 'objects'))[0];
   if (ambiguousLegacy) throw new Error('Previously synced transactions lack a unique connector identity; resolve the source connection before importing files');
-  const transactions = (await db.execute<AttachmentTransaction>(sql`select id, kind, custom->>${provider.refKey} as "sourceRef" from documents
+  const transactions = await db.execute<AttachmentTransaction>(sql`select id, kind, custom->>${provider.refKey} as "sourceRef" from documents
     where org_id=${options.orgId} and custom->>${provider.refKey} is not null
-      and (custom->>'connectionId' is null or custom->>'connectionId'=${options.connectionId}) order by id`)).rows;
+      and (custom->>'connectionId' is null or custom->>'connectionId'=${options.connectionId}) order by id`, 'objects');
   const byRef = new Map<string, AttachmentTransaction>();
   for (const transaction of transactions) {
     if (byRef.has(transaction.sourceRef)) throw new Error('Multiple native transactions share one source identity; resolve before syncing files');
@@ -106,7 +106,7 @@ export async function syncTransactionAttachments(provider: TransactionAttachment
       const stored = (await db.execute<{ modifiedAt: Date | string | null; ready: boolean }>(sql`select f.source_modified_at as "modifiedAt",
         (f.storage_kind='s3' and v.storage_kind='s3' and f.content_hash=v.content_hash and f.size_bytes=v.size_bytes) as ready
         from files f left join file_versions v on v.id=f.current_version_id and v.file_id=f.id
-        where f.org_id=${options.orgId} and f.source_system=${provider.source} and f.source_id=${sourceId}`)).rows[0];
+        where f.org_id=${options.orgId} and f.source_system=${provider.source} and f.source_id=${sourceId}`, 'objects'))[0];
       const targets = [...links.get(sourceId)!];
       if (attachment.modifiedAt && stored?.ready && stored.modifiedAt && new Date(stored.modifiedAt).getTime() === attachment.modifiedAt.getTime()) {
         summary.skippedUnchanged++;

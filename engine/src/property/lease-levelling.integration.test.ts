@@ -13,8 +13,8 @@ async function glBalance(orgId: string, accountId: string): Promise<bigint> {
   const r = (await db.execute<{ bal: string }>(sql`
     select coalesce(sum(amount), 0) as bal from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accountId}`));
-  return toUnits(r.rows[0]!.bal);
+     where l.org_id = ${orgId} and l.account_id = ${accountId}`, "objects"));
+  return toUnits(r[0]!.bal);
 }
 
 /**
@@ -130,8 +130,8 @@ test("concurrent levelling runs serialize on the lease and post one accrual", { 
         from journal_entries
        where org_id = ${org.orgId}
          and origin = 'lease'
-         and custom->'propertyManagement'->>'levellingLeaseId' = ${leaseId}`);
-    assert.equal(entries.rows[0]!.count, 1, "concurrent runs must create one levelling entry");
+         and custom->'propertyManagement'->>'levellingLeaseId' = ${leaseId}`, "objects");
+    assert.equal(entries[0]!.count, 1, "concurrent runs must create one levelling entry");
     assert.equal(await glBalance(org.orgId, slAccountId), toUnits("2000"));
     assert.equal(await glBalance(org.orgId, org.accounts.revenue), -toUnits("2000"));
   } finally {
@@ -169,7 +169,7 @@ for (const policy of ["account", "location", "inactive subsidiary", "inactive bo
       const run = () => levelLeaseRentStraightLine(org.orgId,null,{ allowedSubsidiaryIds: null, asOf:org.date,onlyLeaseId:leaseId});
       await assert.rejects(run(), policy === "account" || policy === "location" ? /restricted to another subsidiary/
         : policy === "inactive subsidiary" ? /inactive/ : policy === "foreign currency" ? /functional currency/ : /active primary posting book/);
-      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,0);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n,0);
       await db.execute(sql`update accounts set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
         where org_id=${org.orgId} and id=${slAccountId}`);
       await db.execute(sql`update locations set subsidiary_id=${org.subsidiaryId},subsidiary_include_children=true
@@ -206,7 +206,7 @@ test("rent levelling refuses a GL-closed target period before posting", { skip: 
         && /GL period covering .* is closed/.test(error.message),
     );
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,
+      (await db.execute<{ n: number }>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, "objects"))[0]!.n,
       0,
       "no levelling entry reached the closed period",
     );

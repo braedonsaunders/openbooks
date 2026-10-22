@@ -10,8 +10,8 @@ import { feedbackFeatureEnabled } from "./feedback.ts";
 
 function fakeExec(features: Record<string, boolean> | null): SqlExecutor {
   return {
-    execute: (_query: unknown) =>
-      Promise.resolve({ rows: features === null ? [] : [{ features }] }),
+    execute: (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: features === null ? [] : [{ features }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   } as unknown as SqlExecutor;
 }
 

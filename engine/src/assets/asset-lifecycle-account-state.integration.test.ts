@@ -41,7 +41,7 @@ for (const state of ["inactive", "summary"] as const) {
       const after = (await db.execute<{ status: string; journals: number; events: number }>(sql`
         select status,(select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
           (select count(*)::int from asset_events where org_id=${org.orgId} and asset_id=${assetId}) as events
-        from fixed_assets where org_id=${org.orgId} and id=${assetId}`)).rows[0]!;
+        from fixed_assets where org_id=${org.orgId} and id=${assetId}`, "objects"))[0]!;
       assert.deepEqual(after, { status: "in_service", journals: 0, events: 0 });
     } finally {
       await dropScratchOrg(org.orgId);

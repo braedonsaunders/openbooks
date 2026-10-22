@@ -30,8 +30,8 @@ async function legacyPOST(req: Request, { params }: { params: Promise<{ code: st
   if (file.size > MAX_BYTES) return NextResponse.json({ error: 'file exceeds 25 MB limit' }, { status: 413 })
 
   const exists = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
-    select id, official_pdf_file_id from tax_return_forms where org_id = ${orgId} and code = ${code} limit 1`))
-  if (exists.rows.length === 0) return notFound("record")
+    select id, official_pdf_file_id from tax_return_forms where org_id = ${orgId} and code = ${code} limit 1`, 'objects'))
+  if (exists.length === 0) return notFound("record")
 
   const bytes = Buffer.from(await file.arrayBuffer())
   if (bytes.length === 0) return NextResponse.json({ error: 'file is empty' }, { status: 400 })
@@ -57,10 +57,10 @@ async function legacyPOST(req: Request, { params }: { params: Promise<{ code: st
     const linked = await db.transaction(async (tx) => {
       const locked = (await tx.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
         select id, official_pdf_file_id from tax_return_forms
-         where org_id = ${orgId} and code = ${code} for update`))
-      if (locked.rows.length === 0) return null
-      const current = locked.rows[0]!
-      const updated = await tx.execute(sql`
+         where org_id = ${orgId} and code = ${code} for update`, 'objects'))
+      if (locked.length === 0) return null
+      const current = locked[0]!
+      const updated = await tx.execute<never>(sql`
         update tax_return_forms set official_pdf_file_id = ${meta.id}, updated_at = now(), updated_by = ${gate.user.id}
          where org_id = ${orgId} and code = ${code}`)
       if ((updated.rowCount ?? 0) === 0) return null
@@ -92,18 +92,18 @@ async function legacyDELETE(req: Request, { params }: { params: Promise<{ code: 
   const { code } = await params
   const old = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
     select id, official_pdf_file_id from tax_return_forms
-     where org_id = ${gate.user.orgId} and code = ${code} limit 1`))
-  if (!old.rows[0]) return notFound("record")
+     where org_id = ${gate.user.orgId} and code = ${code} limit 1`, 'objects'))
+  if (!old[0]) return notFound("record")
   // Lock the row and verify the unlink, same as the attach: a zero-row
   // UPDATE (or detaching when nothing is attached) audits nothing and
   // answers a named 404 instead of ok for a no-op.
   const detached = await db.transaction(async (tx) => {
     const locked = (await tx.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
       select id, official_pdf_file_id from tax_return_forms
-       where org_id = ${gate.user.orgId} and code = ${code} for update`))
-    if (locked.rows.length === 0 || !locked.rows[0]!.official_pdf_file_id) return null
-    const current = locked.rows[0]!
-    const updated = await tx.execute(sql`
+       where org_id = ${gate.user.orgId} and code = ${code} for update`, 'objects'))
+    if (locked.length === 0 || !locked[0]!.official_pdf_file_id) return null
+    const current = locked[0]!
+    const updated = await tx.execute<never>(sql`
       update tax_return_forms set official_pdf_file_id = null, updated_at = now(), updated_by = ${gate.user.id}
        where org_id = ${gate.user.orgId} and code = ${code}`)
     if ((updated.rowCount ?? 0) === 0) return null

@@ -35,14 +35,14 @@ for(const scenario of ["missing period","disabled book","reversal book"] as cons
         assert.deepEqual(await getOnHand(org.orgId,org.items.fifo,org.stockLocationId),before,"a caught refusal cannot reduce inventory value");
       });
       assert.deepEqual(await getOnHand(org.orgId,org.items.fifo,org.stockLocationId),before);
-      const caller=(await db.execute<{name:string}>(sql`select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`)).rows[0]!;
+      const caller=(await db.execute<{name:string}>(sql`select display_name as name from parties where org_id=${org.orgId} and id=${org.customerId}`, "objects"))[0]!;
       assert.equal(caller.name,"Surviving NRV caller");
       const counts=(await db.execute<{journals:number;writedowns:number}>(sql`select
         (select count(*)::int from journal_entries where org_id=${org.orgId}) as journals,
-        (select count(*)::int from inventory_writedowns where org_id=${org.orgId}) as writedowns`)).rows[0]!;
+        (select count(*)::int from inventory_writedowns where org_id=${org.orgId}) as writedowns`, "objects"))[0]!;
       assert.deepEqual(counts,{journals:scenario === "reversal book" ? 2 : 1,writedowns:scenario === "reversal book" ? 1 : 0});
       const restored=(await db.execute<{amount:string}>(sql`select coalesce(sum(reversed_amount),0)::text as amount
-        from inventory_writedowns where org_id=${org.orgId}`)).rows[0]!;
+        from inventory_writedowns where org_id=${org.orgId}`, "objects"))[0]!;
       assert.match(restored.amount,/^0(?:\.0+)?$/,"failed recovery cannot consume reversal headroom");
     }finally{await dropScratchOrg(org.orgId);}
   });

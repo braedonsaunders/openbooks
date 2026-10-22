@@ -95,8 +95,8 @@ test('a daily summary creates a taxed draft with tenders and a close-out', async
     const org = await db.execute<{ revenue: string; bank: string; till: string }>(sql`
       select (select id::text from accounts where org_id = ${orgId} and number = '4000') as revenue,
              (select id::text from accounts where org_id = ${orgId} and number = '1000') as bank,
-             (select id::text from accounts where org_id = ${orgId} and number = '1015') as till`)
-    const ids = org.rows[0]!
+             (select id::text from accounts where org_id = ${orgId} and number = '1015') as till`, 'objects')
+    const ids = org[0]!
     // Day total 100 + 10% line tax = 110; card collects 55.00 incl. a 5.00
     // tip; cash counts 60.25 against a +0.25 over: 115.25 tendered.
     const saved = await postSummary(orgId, {
@@ -123,10 +123,10 @@ test('a daily summary creates a taxed draft with tenders and a close-out', async
         parts: [{ position: 2, tip: '5.0000', fee: '0.0000' }],
       },
     })
-    const tenders = (await db.execute<{ kind: string; minor: string }>(sql`
+    const tenders = await db.execute<{ kind: string; minor: string }>(sql`
       select kind, amount_minor::text as minor from document_tenders
        where org_id = ${orgId} and document_id = ${(saved.json as { doc: { id: string } }).doc.id}
-       order by position`)).rows
+       order by position`, 'objects')
     assert.deepEqual(
       tenders.map((row) => [row.kind, row.minor]),
       [['cash', '602500'], ['card', '550000']],
@@ -142,8 +142,8 @@ test('a daily summary without the create grant is refused', async () => {
     state.permissions = ['cash_sales.read']
     const org = await db.execute<{ revenue: string; till: string }>(sql`
       select (select id::text from accounts where org_id = ${orgId} and number = '4000') as revenue,
-             (select id::text from accounts where org_id = ${orgId} and number = '1015') as till`)
-    const ids = org.rows[0]!
+             (select id::text from accounts where org_id = ${orgId} and number = '1015') as till`, 'objects')
+    const ids = org[0]!
     const denied = await postSummary(orgId, {
       date,
       lines: [{ accountId: ids.revenue, amount: '10.0000' }],

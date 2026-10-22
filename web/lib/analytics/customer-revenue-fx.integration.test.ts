@@ -21,7 +21,7 @@ async function invoice(orgId: string, actor: string, subsidiaryId: string, party
   const control = (await db.execute<{ ar: string; ap: string; bank: string }>(sql`
     select (select id from accounts where org_id = ${orgId} and type = 'asset_receivable' limit 1) as ar,
            (select id from accounts where org_id = ${orgId} and type = 'liability_payable' limit 1) as ap,
-           (select id from accounts where org_id = ${orgId} and type = 'asset_bank' limit 1) as bank`)).rows[0]!
+           (select id from accounts where org_id = ${orgId} and type = 'asset_bank' limit 1) as bank`, 'objects'))[0]!
   await postDocument(id, { control: { ar: control.ar, ap: control.ap, bank: control.bank } })
   return id
 }

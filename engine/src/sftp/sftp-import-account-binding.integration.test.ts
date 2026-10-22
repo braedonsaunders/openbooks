@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import test, { before } from "node:test";
+import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
   createScratchOrg,
@@ -18,35 +18,9 @@ const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
 const { runDueSftpImports } = await import("./import-job.ts");
-const { db, pool, withBypass, withOrgContext } = await import("../platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("../platform/db.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-before(async () => {
-  if (!DB) return;
-  const client = await pool.connect();
-  try {
-    const { readFileSync } = await import("node:fs");
-    await client.query(readFileSync("schema/migrations/generated/0291_sftp_import_schedule_expected_account.sql", "utf8"));
-    // The per-shard test DB template can predate this forward migration.
-    // Provision its run-claim shape idempotently for the scheduled-import
-    // behavior exercised here.
-    await client.query(`
-      alter table public.sftp_import_schedules
-        add column if not exists run_claim_token uuid,
-        add column if not exists run_claimed_at timestamptz;
-      do $$ begin
-        if not exists (select 1 from pg_constraint where conname = 'sftp_import_schedules_run_claim_pair') then
-          alter table public.sftp_import_schedules
-            add constraint sftp_import_schedules_run_claim_pair
-            check ((run_claim_token is null) = (run_claimed_at is null));
-        end if;
-      end $$;
-    `);
-  } finally {
-    client.release();
-  }
-});
 
 /** OFX v1 SGML statement, optionally carrying a BANKACCTFROM/ACCTID. */
 function ofxStatement(fitids: string[], acctId?: string): Buffer {

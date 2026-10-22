@@ -253,7 +253,7 @@ export async function documentFxState(
     select currency, document_date::text as document_date, posting_date::text as posting_date,
            document_fx_rate_evidence as evidence
       from documents
-     where org_id = ${orgId} and id = ${documentId}`)).rows[0];
+     where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
   if (!row) throw new DocumentFxError("the document was not found in this organization");
   return {
     currency: row.currency,
@@ -277,5 +277,5 @@ export async function subsidiaryFunctionalCurrency(
   return (await runner.execute<{ base_currency: string }>(sql`
     select base_currency from subsidiaries
      where org_id = ${orgId} and id = ${subsidiaryId} and is_active and not is_elimination
-     for share`)).rows[0]?.base_currency ?? null;
+     for share`, "objects"))[0]?.base_currency ?? null;
 }

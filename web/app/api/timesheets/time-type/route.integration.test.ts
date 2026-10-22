@@ -75,11 +75,11 @@ async function fixture() {
     'http://time.local/api/timesheets/time-type',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)},
   ))))
   const snapshots = () => inOrg(async () => ({
-    time:(await db.execute<{id:string;raw:string}>(sql`select id,to_jsonb(t)::text as raw from time_entries t where org_id=${org.orgId} order by id`)).rows,
-    ticket:(await db.execute<{raw:string}>(sql`select to_jsonb(l)::text as raw from field_ticket_labor_lines l where org_id=${org.orgId} and field_ticket_id=${ticket} order by id`)).rows,
-    header:(await db.execute<{raw:string}>(sql`select to_jsonb(w)::text as raw from timesheet_weeks w where org_id=${org.orgId} order by id`)).rows,
-    journals:(await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`)).rows[0]!.n,
-    audits:(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and changes->>'event'='time_type_corrected'`)).rows[0]!.n,
+    time:await db.execute<{id:string;raw:string}>(sql`select id,to_jsonb(t)::text as raw from time_entries t where org_id=${org.orgId} order by id`, 'objects'),
+    ticket:await db.execute<{raw:string}>(sql`select to_jsonb(l)::text as raw from field_ticket_labor_lines l where org_id=${org.orgId} and field_ticket_id=${ticket} order by id`, 'objects'),
+    header:await db.execute<{raw:string}>(sql`select to_jsonb(w)::text as raw from timesheet_weeks w where org_id=${org.orgId} order by id`, 'objects'),
+    journals:(await db.execute<{n:number}>(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId}`, 'objects'))[0]!.n,
+    audits:(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log where org_id=${org.orgId} and changes->>'event'='time_type_corrected'`, 'objects'))[0]!.n,
   }))
   const cleanup = () => dropScratchOrgReporting(org.orgId)
   return {org,actor,employee,project,regular,overtime,prior,ticket,entry,inOrg,read,authority,request,call,snapshots,cleanup}

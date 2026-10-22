@@ -55,11 +55,12 @@ const mockSources = new Map<string, string>([
       export * from '${dbUrl}'
       const sqlText = globalThis.openbooksFilingStampSqlText
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result);
           const text = sqlText(query)
-          if (text.includes('from currencies')) return { rows: [{code:'EUR',minor_units:2}] };
+          if (text.includes('from currencies')) return inMode({ rows: [{code:'EUR',minor_units:2}] });
           if (text.includes('from tax_filings')) {
-            return { rows: [{
+            return inMode({ rows: [{
               form_code: 'VAT100',
               form_name: 'VAT100',
               period_from: '2026-01-01',
@@ -73,7 +74,7 @@ const mockSources = new Map<string, string>([
               subsidiary_ids: ['${SUB}'],
               registration_id: null,
               registration_number: null,
-            }] }
+            }] })
           }
           throw new Error('unexpected filing export query: ' + text.slice(0, 120))
         },

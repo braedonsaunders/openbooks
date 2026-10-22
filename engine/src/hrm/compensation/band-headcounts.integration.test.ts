@@ -111,7 +111,7 @@ async function legacyUnfencedCount(orgId: string, levelId: string, asOf: string)
      where aav.org_id = ${orgId} and aav.is_primary
        and aav.effective_from <= ${asOf}::date
        and (aav.effective_to is null or aav.effective_to >= ${asOf}::date)
-       and aav.recorded_until is null`)).rows[0];
+       and aav.recorded_until is null`, "objects"))[0];
   return Number(row?.n ?? "0");
 }
 

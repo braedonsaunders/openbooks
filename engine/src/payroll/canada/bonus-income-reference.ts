@@ -71,7 +71,7 @@ export async function resolveCaBonusIncomeReference(
        and (s.factors->>'I')::numeric>0
      order by s.pay_date desc,r.period_end desc,r.updated_at desc,r.document_id desc,s.id desc
      limit 1
-  `)).rows[0];
+  `, 'objects'))[0];
   if (!reference) throw new PayrollError('A separately paid Canadian bonus has no committed regular income for this employment, employer, currency, schedule and filing account — calculate and commit its regular pay before the bonus');
   if (reference.certificate_id && reference.answers?.method !== 'option1') {
     throw new PayrollError('The Canadian bonus reference requires the effective Option 1 withholding method — review the employee’s dated withholding method record and recalculate');

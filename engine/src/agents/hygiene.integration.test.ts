@@ -63,12 +63,12 @@ test(
       // injected rows).
       const scenarioId = randomUUID();
       const fiscalYear = (await withBypassContext(() => db.execute<{ fiscal_year: number }>(sql`
-        select fiscal_year from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`))).rows[0]!.fiscal_year;
+        select fiscal_year from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`, "objects")))[0]!.fiscal_year;
       await withBypassContext(() => db.execute(sql`
         insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
         values (${scenarioId}, ${org.orgId}, ${org.bookId}, ${fiscalYear}, 'Plan', 'budget', 'draft')`));
       const revenueAccount = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-        select id from accounts where org_id = ${org.orgId} and type = 'income' limit 1`))).rows[0]?.id
+        select id from accounts where org_id = ${org.orgId} and type = 'income' limit 1`, "objects")))[0]?.id
         ?? org.accounts.revenue;
       await withBypassContext(() => db.execute(sql`
         insert into budget_lines (id, org_id, scenario_id, account_id, period_id, amount)

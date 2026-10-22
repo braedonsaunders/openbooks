@@ -43,17 +43,17 @@ async function seedVac(orgId: string, actorId: string) {
 }
 
 async function absenceCount(orgId: string, employmentId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_absences where org_id = ${orgId} and employment_id = ${employmentId}
-  `)).rows;
+  `, "objects");
   return rows[0]!.n;
 }
 
 async function auditCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
+  const rows = await db.execute<{ n: number }>(sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = 'hrm_absences' and action = 'absence_recorded'
-  `)).rows;
+  `, "objects");
   return rows[0]!.n;
 }
 
@@ -90,12 +90,12 @@ test("a back-dated recording with a reason saves the basis on the row and in aud
     assert.equal(recorded.reason, "approved verbally by the owner");
     const row = (await db.execute<{ reason: string | null }>(sql`
       select reason from hrm_absences where id = ${recorded.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.reason, "approved verbally by the owner", "the basis is persisted on the record");
-    const audit = (await db.execute<{ reason: string | null; actor: string }>(sql`
+    const audit = await db.execute<{ reason: string | null; actor: string }>(sql`
       select changes->'after'->>'reason' as reason, actor_id::text as actor from audit_log
        where org_id = ${h.org.orgId} and table_name = 'hrm_absences' and row_id = ${recorded.id} and action = 'absence_recorded'
-    `)).rows;
+    `, "objects");
     assert.equal(audit.length, 1, "the recording writes exactly one audit entry");
     assert.equal(audit[0]!.reason, "approved verbally by the owner", "the audit entry carries the same basis");
     assert.equal(audit[0]!.actor, h.managerId);
@@ -127,7 +127,7 @@ test("a future recording for another worker needs the basis; the manager's own f
     assert.equal(recorded.reason, null, "a current own-employment recording needs no basis");
     const row = (await db.execute<{ reason: string | null }>(sql`
       select reason from hrm_absences where id = ${recorded.id}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     assert.equal(row.reason, null);
   });
 });

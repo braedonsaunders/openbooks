@@ -112,8 +112,8 @@ export const PATCH = defineRoute({
             join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
            where lw.org_id = ${orgId} and lw.id = ${id}
            for update of lw
-        `)
-        const waiver = before.rows[0]
+        `, 'objects')
+        const waiver = before[0]
         if (!waiver) return notFound("record")
         const denied = guardSubsidiaryScope(gate, waiver.subsidiaryId as string | null | undefined)
         if (denied) return denied

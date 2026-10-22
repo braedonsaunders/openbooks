@@ -90,8 +90,8 @@ async function partitionIdlessLines(
        where l.org_id = ${orgId} and l.account_id = ${accountId}
          and l.posted_on in (${sql.join(idlessDates.map((d) => sql`${d}`), sql`, `)})
        order by l.id
-    `));
-    for (const row of stored.rows) {
+    `, "objects"));
+    for (const row of stored) {
       const key = `${row.posted_on}\0${normalizeFingerprintText(row.description)}`;
       const list = storedByTuple.get(key) ?? [];
       list.push({ id: row.id, amountUnits: toUnits(row.amount) });
@@ -444,7 +444,7 @@ export async function importStatement(
            and account_id = ${account.id}
            and source_file_sha256 = ${evidence.sha256}
       ) as imported
-    `)).rows[0]?.imported);
+    `, "objects"))[0]?.imported);
     const ids = sourceAlreadyImported
       ? []
       : [
@@ -462,8 +462,8 @@ export async function importStatement(
          where org_id = ${ctx.orgId}
            and account_id = ${account.id}
            and bank_transaction_id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
-      `));
-      for (const row of existing.rows) existingIds.add(row.id);
+      `, "objects"));
+      for (const row of existing) existingIds.add(row.id);
     }
     // ID-less lines partition by content against stored lines on this
     // account. A tuple matching a stored line is a possible duplicate: it
@@ -496,7 +496,7 @@ export async function importStatement(
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (signedThrough) {
       const late = fresh.filter((line) => line.postedOn <= signedThrough.through_date);
       if (late.length > 0) {
@@ -532,7 +532,7 @@ export async function importStatement(
              )
            order by s.statement_date desc, s.imported_at desc
            limit 1
-        `)).rows[0];
+        `, "objects"))[0];
         if (prior?.closing_balance) {
           suggestedOpening = {
             balance: prior.closing_balance,
@@ -755,7 +755,7 @@ export async function correctStatementBalances(
     select s.id, s.account_id
       from bank_statements s
      where s.id = ${statementId} and s.org_id = ${ctx.orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!statement) throw new ScopeNotFoundError();
   const account = await loadReconcilableAccount(ctx.orgId, statement.account_id, ctx.allowedSubsidiaryIds);
   return db.transaction(async (tx) => {
@@ -766,12 +766,12 @@ export async function correctStatementBalances(
         from bank_statements s
        where s.id = ${statementId} and s.org_id = ${ctx.orgId}
        for update
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const matched = (await tx.execute<{ count: number }>(sql`
       select count(*)::int as count from reconciliation_matches m
        join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
        where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     if (matched > 0) {
       throw new BankingError(
         `This import has ${matched} matched line(s) — unmatch them first`,
@@ -784,13 +784,13 @@ export async function correctStatementBalances(
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (signedThrough) {
       const inside = (await tx.execute<{ count: number }>(sql`
         select count(*)::int as count from bank_statement_lines l
          where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
            and l.posted_on <= ${signedThrough.through_date}
-      `)).rows[0]!.count;
+      `, "objects"))[0]!.count;
       if (inside > 0) {
         throw new BankingError(
           `This import reaches on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable`,
@@ -842,13 +842,13 @@ export async function deleteStatementImport(
       from bank_statements s
       join accounts a on a.id = s.account_id and a.org_id = s.org_id
      where s.id = ${statementId} and s.org_id = ${ctx.orgId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!statement) throw new ScopeNotFoundError();
   const account = await loadReconcilableAccount(ctx.orgId, statement.account_id, ctx.allowedSubsidiaryIds);
   return db.transaction(async (tx) => {
     await lockReconciliationAccount(tx, ctx.orgId, account.id);
     await lockBankAccountInScope(tx, ctx.orgId, account.id, ctx.allowedSubsidiaryIds);
-    const lines = (await tx.execute<{
+    const lines = await tx.execute<{
         id: string;
         line_number: number;
         posted_on: string;
@@ -864,7 +864,7 @@ export async function deleteStatementImport(
         from bank_statement_lines l
        where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
        order by l.line_number
-    `)).rows;
+    `, "objects");
     const matched = lines.filter((line) => line.match_status === "matched").length;
     if (matched > 0) {
       throw new BankingError(
@@ -883,7 +883,7 @@ export async function deleteStatementImport(
       select count(*)::int as count from reconciliation_matches m
        join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
        where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     if (matchRows > 0) {
       throw new BankingError(
         `This import has ${matchRows} matched line(s) — unmatch them first`,
@@ -895,7 +895,7 @@ export async function deleteStatementImport(
       select through_date::text as through_date from reconciliations
        where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
        order by through_date desc limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (signedThrough && lines.some((line) => line.posted_on <= signedThrough.through_date)) {
       throw new BankingError(
         `This import reaches on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable`,
@@ -911,7 +911,7 @@ export async function deleteStatementImport(
             where l.statement_id = ${statementId} and l.org_id = ${ctx.orgId}
          )
          and not (o.statement_id = ${statementId} and o.org_id = ${ctx.orgId})
-    `)).rows[0]!.count;
+    `, "objects"))[0]!.count;
     if (inboundFlags > 0) {
       throw new BankingError(
         `This import is flagged as a possible duplicate by ${inboundFlags} other line(s) — clear those flags first`,

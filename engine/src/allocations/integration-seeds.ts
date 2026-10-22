@@ -32,7 +32,7 @@ export function negate(amount: string): string {
 }
 
 export async function journalLineCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from journal_lines where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ count: string }>(sql`
+    select count(*)::text as count from journal_lines where org_id = ${orgId}`, "objects");
   return Number(rows[0]?.count ?? 0);
 }

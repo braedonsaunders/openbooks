@@ -25,9 +25,9 @@ async function guardMergeScope(
   survivorId: string,
   duplicateId: string,
 ): Promise<NextResponse | null> {
-  const rows = (await db.execute<{ subsidiary_id: string | null }>(sql`
+  const rows = await db.execute<{ subsidiary_id: string | null }>(sql`
     select subsidiary_id from projects
-     where org_id = ${gate.user.orgId} and id in (${survivorId}, ${duplicateId})`)).rows;
+     where org_id = ${gate.user.orgId} and id in (${survivorId}, ${duplicateId})`, "objects");
   if (rows.length !== 2) {
     return notFound("record");
   }

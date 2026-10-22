@@ -607,7 +607,7 @@ test("a creditor garnishment never reaches disposable earnings below the exempt 
 test("a protection class the pack does not declare, or a floor wage nobody recorded, refuses by name", async () => {
   const classes = PAYROLL_COUNTRY_PACKS.US!.protectionClasses ?? [];
   const recorded = (value: string | null) => ({
-    execute: async () => ({ rows: value === null ? [] : [{ fact_value: value }] }),
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: value === null ? [] : [{ fact_value: value }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   }) as unknown as Parameters<typeof resolveProtectionExemptFloors>[0]["tx"];
   const input = (tx: ReturnType<typeof recorded>, protectionClass: string) => ({
     tx, orgId: "org", subsidiaryId: "sub", country: "US", classes, payDate: "2026-07-21",

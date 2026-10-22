@@ -42,14 +42,14 @@ function ctxFor(orgId: string, userId: string, permissions: string[]): Applicati
 }
 
 async function revisionOf(orgId: string, id: string): Promise<string> {
-  const rows = (await db.execute<{ revision: string }>(sql`
-    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ revision: string }>(sql`
+    select ${documentRevisionCounterSql(sql.raw("revision_seq"))} as revision from documents where id = ${id} and org_id = ${orgId}`, "objects");
   return rows[0]!.revision;
 }
 
 async function statusOf(orgId: string, id: string): Promise<string> {
-  const rows = (await db.execute<{ status: string }>(sql`
-    select status::text as status from documents where id = ${id} and org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ status: string }>(sql`
+    select status::text as status from documents where id = ${id} and org_id = ${orgId}`, "objects");
   return rows[0]!.status;
 }
 

@@ -165,8 +165,8 @@ test("activated rate evidence is immutable while controlled dating and retiremen
         join labor_rate_version_policies policy on policy.version_id = version.id
         join labor_rate_adjustments adjustment on adjustment.version_id = version.id
         join labor_rate_terms term on term.version_id = version.id
-       where version.id = ${versionId}`));
-    assert.deepEqual(evidence.rows, [{
+       where version.id = ${versionId}`, "objects"));
+    assert.deepEqual(evidence, [{
       status: "retired",
       effective_to: "2026-11-30",
       cost_rate: "75.0000",

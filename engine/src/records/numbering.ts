@@ -89,7 +89,7 @@ async function inferSingleIssuedPrefix(
 ): Promise<string | null> {
   const numbers = (await exec.execute<{ n: string }>(sql`
     select document_number as n from documents
-     where org_id = ${orgId} and kind = ${documentKind}`)).rows.map((r) => r.n);
+     where org_id = ${orgId} and kind = ${documentKind}`, "objects")).map((r) => r.n);
   const prefixes = new Set<string>();
   for (const n of numbers) {
     const match = n.match(/^(.*\D)(\d+)$/);
@@ -113,8 +113,8 @@ async function issuedMax(
      where org_id = ${orgId}
        and kind = ${documentKind}
        and starts_with(document_number, ${prefix})
-       and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`));
-  return Number(issued.rows[0]?.mx ?? 0);
+       and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`, "objects"));
+  return Number(issued[0]?.mx ?? 0);
 }
 
 /**
@@ -143,13 +143,13 @@ export async function reconcileDocumentSequences(
       select document_kind from number_sequences where org_id = ${orgId}
       union
       select kind as document_kind from documents where org_id = ${orgId}
-    ) kinds`)).rows.map((r) => r.document_kind);
+    ) kinds`, "objects")).map((r) => r.document_kind);
 
   const reconciled: ReconciledSequence[] = [];
   for (const kind of kinds) {
     const existing = (await exec.execute<{ prefix: string; next_number: number }>(sql`
       select prefix, next_number from number_sequences
-       where org_id = ${orgId} and document_kind = ${kind}`)).rows[0];
+       where org_id = ${orgId} and document_kind = ${kind}`, "objects"))[0];
     const prefix = existing?.prefix ?? CANONICAL_PREFIXES[kind] ?? (await inferSingleIssuedPrefix(exec, orgId, kind));
     if (!prefix) continue;
     const issued = (await exec.execute<{ mx: number }>(sql`
@@ -158,8 +158,8 @@ export async function reconcileDocumentSequences(
        where org_id = ${orgId}
          and kind = ${kind}
          and starts_with(document_number, ${prefix})
-         and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`));
-    const floor = Number(issued.rows[0]?.mx ?? 0);
+         and substring(document_number from length(${prefix}) + 1) ~ '^[0-9]+$'`, "objects"));
+    const floor = Number(issued[0]?.mx ?? 0);
     if (existing) {
       if (floor > existing.next_number) {
         await exec.execute(sql`
@@ -199,10 +199,10 @@ export async function findDocumentNumberSeriesCollisions(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<DocumentNumberSeriesCollision[]> {
-  const rows = (await exec.execute<{ document_kind: string; prefix: string; padding: number }>(sql`
+  const rows = await exec.execute<{ document_kind: string; prefix: string; padding: number }>(sql`
     select document_kind, prefix, padding from number_sequences
      where org_id = ${orgId}
-     order by prefix, padding, document_kind`)).rows;
+     order by prefix, padding, document_kind`, "objects");
   const collisions: DocumentNumberSeriesCollision[] = [];
   for (let index = 1; index < rows.length; index += 1) {
     const previous = rows[index - 1]!;
@@ -230,11 +230,11 @@ export async function collidingSequenceKind(
   orgId: string,
   input: { documentKind: string; prefix: string; padding: number },
 ): Promise<string | null> {
-  const rows = (await exec.execute<{ document_kind: string }>(sql`
+  const rows = await exec.execute<{ document_kind: string }>(sql`
     select document_kind from number_sequences
      where org_id = ${orgId} and document_kind <> ${input.documentKind}
        and prefix = ${input.prefix} and padding = ${input.padding}
-     order by document_kind limit 1`)).rows;
+     order by document_kind limit 1`, "objects");
   return rows[0]?.document_kind ?? null;
 }
 
@@ -259,7 +259,7 @@ export async function allocateDocumentNumber(
     do update set next_number = number_sequences.next_number + 1
     where number_sequences.org_id = ${orgId}
     returning prefix, next_number, padding
-  `);
-  const s = seq.rows[0]!;
+  `, "objects");
+  const s = seq[0]!;
   return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 }

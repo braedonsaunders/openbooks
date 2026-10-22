@@ -42,8 +42,7 @@ export async function listCompClasses(exec: SqlExecutor, orgId: string, actorId:
   await assertConstructionFeature(exec, orgId, "Comp classes");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
-  const rows = (
-    await exec.execute<{
+  const rows = await exec.execute<{
       id: string;
       code: string;
       name: string;
@@ -56,8 +55,7 @@ export async function listCompClasses(exec: SqlExecutor, orgId: string, actorId:
         from hrm_comp_classes
        where org_id = ${orgId}::uuid
        order by code
-    `)
-  ).rows;
+    `, "objects");
   return rows;
 }
 
@@ -87,16 +85,14 @@ export async function createCompClass(
     await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     await requireUnrestrictedHrmScope(exec, orgId, actorId);
     try {
-      const created = (
-        await exec.execute<{ id: string }>(sql`
+      const created = (await exec.execute<{ id: string }>(sql`
           insert into hrm_comp_classes
             (org_id, code, name, jurisdiction_code, rate_per_100, effective_from, created_by, updated_by)
           values (${orgId}::uuid, ${code}, ${name}, ${input.jurisdictionCode ?? null},
                   ${input.ratePer100 ?? null}, ${effectiveFrom}::date,
                   ${actorId}::uuid, ${actorId}::uuid)
           returning id::text as id
-        `)
-      ).rows[0];
+        `, "objects"))[0];
       if (!created) throw new HrmConstructionError(`Comp class ${code} was not created — no row was written.`);
       const rows = await listCompClasses(exec, orgId, actorId);
       const found = rows.find((row) => row.id === created.id);
@@ -158,24 +154,20 @@ export async function createCompRule(
     } else {
       await requireUnrestrictedHrmScope(exec, orgId, actorId);
     }
-    const compClass = (
-      await exec.execute<{ id: string }>(sql`
+    const compClass = (await exec.execute<{ id: string }>(sql`
         select id from hrm_comp_classes where org_id = ${orgId}::uuid and id = ${compClassId}::uuid
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!compClass) {
       throw new HrmConstructionError(
         `Comp class ${compClassId} does not exist in this organization — point the rule at a declared class.`,
       );
     }
-    const created = (
-      await exec.execute<{ id: string }>(sql`
+    const created = (await exec.execute<{ id: string }>(sql`
         insert into hrm_comp_class_rules (org_id, priority, match, comp_class_id, created_by, updated_by)
         values (${orgId}::uuid, ${input.priority}, ${JSON.stringify(input.match)}::jsonb,
                 ${compClassId}::uuid, ${actorId}::uuid, ${actorId}::uuid)
         returning id::text as id
-      `)
-    ).rows[0];
+      `, "objects"))[0];
     if (!created) throw new HrmConstructionError("The comp-class rule was not written — no row was created.");
     return { id: String(created.id), priority: input.priority, match: input.match, compClassId };
   });
@@ -204,13 +196,11 @@ async function activeRules(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<ReadonlyArray<{ id: string; priority: number; match: CompMatch; compClassId: string }>> {
-  const rows = (
-    await exec.execute<{ id: string; priority: number; match: CompMatch; compClassId: string }>(sql`
+  const rows = await exec.execute<{ id: string; priority: number; match: CompMatch; compClassId: string }>(sql`
       select id::text as id, priority, match, comp_class_id::text as "compClassId"
         from hrm_comp_class_rules
        where org_id = ${orgId}::uuid and is_active
-    `)
-  ).rows;
+    `, "objects");
   return rows;
 }
 
@@ -268,8 +258,7 @@ export async function classify(
       "No comp-class rule matches this hour — declare a rule covering it before costing. The unresolved hour was flagged on the Compliance page.",
     );
   }
-  const compClass = (
-    await exec.execute<{
+  const compClass = (await exec.execute<{
       id: string;
       code: string;
       name: string;
@@ -280,8 +269,7 @@ export async function classify(
              jurisdiction_code as "jurisdictionCode", rate_per_100::text as "ratePer100"
         from hrm_comp_classes
        where org_id = ${orgId}::uuid and id = ${hit.compClassId}::uuid
-    `)
-  ).rows[0];
+    `, "objects"))[0];
   if (!compClass) {
     throw new HrmConstructionError(
       `Comp class ${hit.compClassId} no longer exists — point the matching rule at a declared class.`,
@@ -304,8 +292,7 @@ export async function dailySplit(
   // the reader's lens — a B project reads exactly like a missing one.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
   await assertProjectInScope(exec, orgId, projectId, allowed);
-  const hours = (
-    await exec.execute<{
+  const hours = await exec.execute<{
       partyId: string;
       departmentId: string | null;
       hours: string;
@@ -316,8 +303,7 @@ export async function dailySplit(
        where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
          and te.worked_on = ${workedOn}::date and te.status = 'approved'
        group by te.employee_party_id, te.department_id
-    `)
-  ).rows;
+    `, "objects");
   const out: Array<{ employmentId: string; compClassId: string; compCode: string; hours: string }> = [];
   for (const row of hours) {
     const employment = await resolveEffectiveEmployment(exec, {

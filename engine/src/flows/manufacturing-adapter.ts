@@ -93,8 +93,8 @@ async function loadSubject(
            )) as pending_approval
       from mfg_work_orders order_row
       join items item on item.org_id=order_row.org_id and item.id=order_row.produced_item_id
-     where order_row.org_id=${orgId} and order_row.id=${subjectId}`);
-  return result.rows[0] ?? null;
+     where order_row.org_id=${orgId} and order_row.id=${subjectId}`, "objects");
+  return result[0] ?? null;
 }
 
 async function enabled(row: WorkOrderSubjectRow): Promise<boolean> {

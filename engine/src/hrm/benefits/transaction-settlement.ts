@@ -29,7 +29,7 @@ interface PriorAward extends Record<string, unknown> { id:string; employment_id:
 
 /** Actual obligations consume a ceiling; negative recoveries release room only after approval. */
 async function consumption(orgId: string, programId: string, from: string): Promise<{ totals:Map<string,bigint>; evidence:TransactionSettlementSnapshot["priorAwards"]; usedSources:Set<string> }> {
-  const rows=(await db.execute<PriorAward>(sql`select id,employment_id,value::text,status,adjusts_award_id,source_snapshot,period_from::text,period_to::text from hrm_benefit_awards where org_id=${orgId} and program_id=${programId} order by id for share`)).rows;
+  const rows=await db.execute<PriorAward>(sql`select id,employment_id,value::text,status,adjusts_award_id,source_snapshot,period_from::text,period_to::text from hrm_benefit_awards where org_id=${orgId} and program_id=${programId} order by id for share`, "objects");
   const byId=new Map(rows.map(r=>[r.id,r]));
   if (!rows.some(r=>r.period_from===from && !["voided","rejected"].includes(r.status)) && rows.some(r=>r.period_from>from && !["voided","rejected"].includes(r.status))) throw new BenefitsError("REFUSED","Later transaction awards already consume these group ceilings — settle new periods chronologically; preserve existing awards and use their native adjusting-award action for corrections.");
   const totals=new Map<string,bigint>(),usedSources=new Set<string>();
@@ -75,11 +75,11 @@ async function consumption(orgId: string, programId: string, from: string): Prom
  */
 async function budgetCeilings(orgId:string,program:BenefitProgram,policy:BenefitTransactionPolicy,projectIds:readonly string[],periodFrom:string,rate:string): Promise<Map<string,TransactionIncentiveLimit>> {
   if (program.valuation!=="percent") throw new BenefitsError("REFUSED","A budget ceiling consumes the program percentage of earlier sources — value the program as a percent of amount.");
-  const projects=(await db.execute<{id:string;project_type_id:string|null;budget:string|null}>(sql`
+  const projects=await db.execute<{id:string;project_type_id:string|null;budget:string|null}>(sql`
     select p.id::text as id, p.project_type_id::text as project_type_id,
            (select sum(bl.price)::text from project_budget_baselines b join project_budget_baseline_lines bl on bl.org_id=b.org_id and bl.baseline_id=b.id
              where b.org_id=p.org_id and b.project_id=p.id and b.sequence=1 and bl.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[])) as budget
-      from projects p where p.org_id=${orgId} and p.id=any(${`{${projectIds.join(",")}}`}::uuid[]) for share of p`)).rows;
+      from projects p where p.org_id=${orgId} and p.id=any(${`{${projectIds.join(",")}}`}::uuid[]) for share of p`, "objects");
   if (projects.length!==projectIds.length) throw new BenefitsError("REFUSED","A budget ceiling groups sources by project — group the program by the project dimension so every group is a native project.");
   const status=policy.documentKind==="customer_invoice" ? "posted" : "approved";
   const sourceDate=policy.dateBasis==="work_date" ? sql`coalesce(l.work_from,d.document_date)` : sql`d.document_date`;
@@ -89,7 +89,7 @@ async function budgetCeilings(orgId:string,program:BenefitProgram,policy:Benefit
      where d.org_id=${orgId} and d.subsidiary_id=${program.legalEntityId} and d.kind=${policy.documentKind} and d.status=${status}
        and ${sourceDate} < ${periodFrom}::date and l.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[])
        and coalesce(l.project_id,d.project_id)=any(${`{${projectIds.join(",")}}`}::uuid[])
-     group by 1`)).rows.map(r=>[r.project_id,r.amount]));
+     group by 1`, "objects")).map(r=>[r.project_id,r.amount]));
   const rateUnits=toUnits(rate);
   return new Map<string,TransactionIncentiveLimit>(projects.map(p=>{
     if (policy.capProjectTypeId && p.project_type_id!==policy.capProjectTypeId) return [p.id,{kind:"none" as const}];
@@ -117,7 +117,7 @@ export async function measureTransactionSettlement(input: {
   const status=policy.documentKind==="customer_invoice" ? "posted" : "approved";
   // The work date is the line's recorded work start; lines without one use the document date.
   const sourceDate=policy.dateBasis==="work_date" ? sql`coalesce(l.work_from,d.document_date)` : sql`d.document_date`;
-  const selected=(await db.execute<{id:string}>(sql`select l.id from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id where d.org_id=${orgId} and d.subsidiary_id=${program.legalEntityId} and d.kind=${policy.documentKind} and d.status=${status} and ${sourceDate} between ${periodFrom}::date and ${periodTo}::date and l.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[]) order by d.id,l.id for share of d,l`)).rows;
+  const selected=await db.execute<{id:string}>(sql`select l.id from documents d join document_lines l on l.org_id=d.org_id and l.document_id=d.id where d.org_id=${orgId} and d.subsidiary_id=${program.legalEntityId} and d.kind=${policy.documentKind} and d.status=${status} and ${sourceDate} between ${periodFrom}::date and ${periodTo}::date and l.item_id=any(${`{${policy.itemIds.join(",")}}`}::uuid[]) order by d.id,l.id for share of d,l`, "objects");
   if (!selected.length) throw new BenefitsError("REFUSED","No approved transactions match this program's items and document-date period — review the native source selection before settlement; no empty award is recorded.");
   const source=await measureTransactionIncentiveSources({orgId,actorId,legalEntityId:program.legalEntityId,currency:program.currency,documentKind:policy.documentKind,itemIds:policy.itemIds,lineIds:selected.map(r=>r.id),groupingSegmentId:policy.groupingSegmentId});
   const prior=await consumption(orgId,program.id,periodFrom);
@@ -143,8 +143,8 @@ export async function measureTransactionSettlement(input: {
       from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
       left join field_tickets ft on ft.org_id=d.org_id and ft.document_id=(case when d.kind='field_ticket' then d.id else l.field_ticket_id end)
       left join projects p on p.org_id=d.org_id and p.id=coalesce(l.project_id,d.project_id)
-     where l.org_id=${orgId} and l.id=any(${`{${selected.map(r=>r.id).join(",")}}`}::uuid[])`)).rows.map(r=>[r.id,r]));
-  const memberByParty=new Map((await db.execute<{employment_id:string;party:string}>(sql`select id::text as employment_id,worker_party_id::text as party from worker_employments where org_id=${orgId} and id=any(${`{${[...covered].join(",")}}`}::uuid[])`)).rows.map(r=>[r.party,r.employment_id]));
+     where l.org_id=${orgId} and l.id=any(${`{${selected.map(r=>r.id).join(",")}}`}::uuid[])`, "objects")).map(r=>[r.id,r]));
+  const memberByParty=new Map((await db.execute<{employment_id:string;party:string}>(sql`select id::text as employment_id,worker_party_id::text as party from worker_employments where org_id=${orgId} and id=any(${`{${[...covered].join(",")}}`}::uuid[])`, "objects")).map(r=>[r.party,r.employment_id]));
   const forfeit=policy.unassignedShare==="forfeit";
   const facts=source.lines.map(line=>{
     if (prior.usedSources.has(line.sourceId)) throw new BenefitsError("REFUSED",`Source line ${line.sourceId} already belongs to an earlier award — preserve that obligation and use its native adjusting-award action instead of paying the line again.`);

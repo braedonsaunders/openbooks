@@ -6,7 +6,7 @@ const state = { otherIncome: 0 };
 Object.assign(globalThis, { __healthMarginFlow: state });
 const mocks: Record<string, string> = {
   "server-only": "export {}",
-  "@openbooks/engine/platform/db": "export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(){return {rows:[]}}}",
+  "@openbooks/engine/platform/db": "export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(_query, mode){ const inMode = (result) => (mode === 'objects' ? result.rows : result);return inMode({rows:[]})}}",
   "../money-server": "export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}",
   "../features": "export async function isFeatureEnabled(){return false}",
   "./config": "export async function analyticsConfig(){return {insightCriticalPercent:50,insightWarningPercent:75,revenueDeclineAlertPercent:15,revenueTrendAlertPercent:10,marginCompressionPoints:3,breakevenSafetyPercent:10,breakevenComfortPercent:30,budgetOnTrackPercent:10,budgetWatchPercent:25,segmentHhiWarning:1500,segmentHhiCritical:2500,operatingMarginTarget:15,forecastMethod:\"ets\",forecastHorizon:\"6\",forecastConfidence:\"90\",forecastSeasonality:\"auto\",forecastAdjustment:\"zero\",forecastEtsAlpha:0.3,forecastEtsBeta:0.1,forecastEtsGamma:0.2,forecastDampedPhi:0.9,forecastMa1:0.3,forecastSeasonalityMinCorr:0.3,forecastSeasonalityMinPeriods:24,anomalySigma:2}}",

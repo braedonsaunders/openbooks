@@ -12,7 +12,7 @@ export function checklistRefusal(code: HrmProcessError['code'], message?: RegExp
   return (error: unknown) => error instanceof HrmProcessError && error.code === code && (!message || message.test(error.message));
 }
 export async function checklistRow<T extends Record<string, unknown>>(query: SQL) {
-  return (await db.execute<T>(query)).rows[0];
+  return (await db.execute<T>(query, 'objects'))[0];
 }
 
 export async function setupChecklistHarness(withApprover = false) {

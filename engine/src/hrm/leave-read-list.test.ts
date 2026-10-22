@@ -25,18 +25,19 @@ type FakeOptions = {
 
 function fakeExec(options: FakeOptions): SqlExecutor {
   return {
-    execute: (async (query: unknown) => {
+    execute: (async (query: unknown, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
       const text = sqlText(query);
       options.statements.push(text);
-      if (/from users/i.test(text)) return { rows: [{ isSuperAdmin: false, isActive: true }] };
+      if (/from users/i.test(text)) return inMode({ rows: [{ isSuperAdmin: false, isActive: true }] });
       if (/select role\.permissions/i.test(text)) {
-        return { rows: [{ permissions: options.permission ? ["hrm.leave.read"] : [] }] };
+        return inMode({ rows: [{ permissions: options.permission ? ["hrm.leave.read"] : [] }] });
       }
-      if (/from user_permission_overrides/i.test(text)) return { rows: [] };
+      if (/from user_permission_overrides/i.test(text)) return inMode({ rows: [] });
       if (/subsidiary_restriction as restriction/i.test(text)) {
-        return { rows: [{ restriction: { mode: "all" } }] };
+        return inMode({ rows: [{ restriction: { mode: "all" } }] });
       }
-      if (/from hrm_leave_requests/i.test(text)) return { rows: options.rows ?? [] };
+      if (/from hrm_leave_requests/i.test(text)) return inMode({ rows: options.rows ?? [] });
       throw new Error(`fake leave-list executor has no route for ${text.slice(0, 140)}`);
     }) as SqlExecutor["execute"],
   };

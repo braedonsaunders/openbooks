@@ -153,7 +153,7 @@ async function approveSettlementAward(h: Harness, awardId: string) {
 async function awardCount(orgId: string): Promise<number> {
   return (await db.execute<{ n: number }>(sql`
     select count(*)::int as n from hrm_benefit_awards where org_id = ${orgId}
-  `)).rows[0]!.n;
+  `, "objects"))[0]!.n;
 }
 
 const refuses = async (fn: () => unknown, pattern: RegExp) =>
@@ -180,9 +180,9 @@ settlementTest("settle records one draft award per payable recipient from posted
   // Employee-safe evidence: no company totals, no entry ids.
   assert.equal(evidence["measuredValue"], undefined);
   assert.equal(evidence["sourceEntryIds"], undefined);
-  const stored = (await db.execute<{ value: string; source_key: string }>(sql`
+  const stored = await db.execute<{ value: string; source_key: string }>(sql`
     select value::text as value, source_key from hrm_benefit_awards where org_id = ${h.org.orgId}
-  `)).rows;
+  `, "objects");
   assert.equal(stored.length, 1);
   assert.equal(stored[0]!.value, "600.0000");
   assert.match(stored[0]!.source_key, /^settle:/);
@@ -191,7 +191,7 @@ settlementTest("settle records one draft award per payable recipient from posted
   // ids, and totals.
   const persisted = (await db.execute<{ source_snapshot: unknown; program_snapshot: unknown }>(sql`
     select source_snapshot, program_snapshot from hrm_benefit_awards where org_id = ${h.org.orgId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   const measurement = (
     (persisted.source_snapshot as Record<string, Record<string, Record<string, unknown>>>).measurement as Record<string, Record<string, unknown>>
   ).settlement as Record<string, unknown>;
@@ -280,7 +280,7 @@ settlementTest("signed adjustments have caller-stable identity and retain the or
   await approveSettlementAward(h, award.id);
   const original = (await db.execute<{program: unknown; source: unknown}>(sql`
     select program_snapshot program, source_snapshot source from hrm_benefit_awards where org_id = ${h.org.orgId} and id = ${award.id}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   const correction = {
     orgId: h.org.orgId, actorId: h.settlerId, awardId: award.id,
     correctionId: randomUUID(), value: "50.0000", reason: "July revenue restated upward",
@@ -294,7 +294,7 @@ settlementTest("signed adjustments have caller-stable identity and retain the or
   assert.equal(topUp.periodTo, "2026-08-31");
   const retained = (await db.execute<{program: unknown; source: unknown}>(sql`
     select program_snapshot program, source_snapshot source from hrm_benefit_awards where org_id = ${h.org.orgId} and id = ${topUp.id}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   assert.deepEqual(retained, original, "Paid-period changes retain the original earning-period source and policy");
   assert.equal(topUp.evidence?.sourceReference, correction.sourceReference);
   assert.equal(topUp.evidence?.direction, "reissue");
@@ -399,7 +399,7 @@ settlementTest("hourly incentives retain dated approved time through settlement,
   assert.deepEqual((await settleIncentivePeriod(coveredQuery)).awards.map(a => a.id), [award.id]);
   assert.equal(await awardCount(h.org.orgId), 1);
   const source = (await db.execute<{ source_snapshot: Record<string, Record<string, Record<string, unknown>>> }>(sql`
-    select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source_snapshot.measurement!.settlement!;
+    select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!.source_snapshot.measurement!.settlement!;
   assert.deepEqual(source.hoursAttribution, [{ employmentId: worker.employmentId, hours: "1.0000" }]);
   assert.deepEqual((source.entryIds as string[]).sort(), entries.slice(1, 3).sort());
   assert.equal(source.measuredValue, "1.0000");
@@ -414,8 +414,8 @@ settlementTest("hourly incentives retain dated approved time through settlement,
   await db.execute(sql`update pay_runs set pay_date='2026-08-31' where org_id=${h.org.orgId} and document_id=${runDocumentId}`);
   const queued = await queueAwardForPayRun(delivery);
   assert.equal((await queueAwardForPayRun(delivery)).adjustmentId, queued.adjustmentId);
-  const inputs = (await db.execute<{ amount:string; hours:string|null }>(sql`
-    select amount::text,hours::text from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows;
+  const inputs = await db.execute<{ amount:string; hours:string|null }>(sql`
+    select amount::text,hours::text from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`, "objects");
   assert.equal(inputs.length, 1); assert.equal(inputs[0]!.amount, "0.3300");
   assert.ok(inputs[0]!.hours === null || toUnits(inputs[0]!.hours) === 0n, "an incentive payout never creates more worked hours");
 });
@@ -448,7 +448,7 @@ settlementTest("midweek hires settle only approved activity inside active servic
   assert.equal(award.value, "16.0000");
   assert.deepEqual((await settleIncentivePeriod(query)).awards.map(a => a.id), [award.id]);
   const source = (await db.execute<{ source_snapshot: Record<string, Record<string, Record<string, unknown>>> }>(sql`
-    select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source_snapshot.measurement!.settlement!;
+    select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!.source_snapshot.measurement!.settlement!;
   assert.deepEqual(source.entryIds, [payableEntry]);
   assert.deepEqual(source.hoursAttribution, [{ employmentId: worker.employmentId, hours: "8.0000" }]);
   assert.equal(await awardCount(h.org.orgId), 1);
@@ -488,7 +488,7 @@ settlementTest("approved awards queue onto a draft run as one idempotent adjustm
   const adjustment = (await db.execute<{ amount: string; component_id: string }>(sql`
     select amount::text as amount, component_id::text as component_id from pay_run_adjustments
      where org_id = ${h.org.orgId} and id = ${queued.adjustmentId}
-  `)).rows[0]!;
+  `, "objects"))[0]!;
   assert.equal(adjustment.amount, "1000.0000");
   // Same-run retry replays the stable linkage.
   const replay = await queueAwardForPayRun({
@@ -510,7 +510,7 @@ settlementTest("approved awards queue onto a draft run as one idempotent adjustm
   }), /no matching payroll representation.*review the employee.s inclusion and calculation.*does not prove this benefit was processed/);
   // A committed flag alone is never payment evidence; the end-to-end
   // test below supplies the positive proof through native calculate/commit.
-  assert.equal((await db.execute<{status:string}>(sql`select status from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.status, "queued");
+  assert.equal((await db.execute<{status:string}>(sql`select status from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!.status, "queued");
 });
 
 settlementTest("a run paying before the payable date refuses the queue", async (h) => {
@@ -539,7 +539,7 @@ settlementTest("provider programs refuse missing or cash payroll representations
   await refuses(() => createBenefitProgram(program), /link a non-cash earning component/);
   await refuses(() => createBenefitProgram({ ...program, payComponentId: component }), /requires a non-cash earning component/);
   assert.equal(await awardCount(h.org.orgId), 0);
-  assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_benefit_programs where org_id = ${h.org.orgId}`)).rows[0]!.n, 0);
+  assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from hrm_benefit_programs where org_id = ${h.org.orgId}`, "objects"))[0]!.n, 0);
 });
 
 settlementTest("statements union awards and payroll records without duplicating payments", async (h) => {
@@ -659,7 +659,7 @@ settlementTest(
     assert.ok(saved.programRevision > revision);
     assert.equal(saved.policy.limits[0]!.amount, "60.0000");
     await refuses(() => saveBenefitTransactionPolicy(command), /changed.*reload/);
-    assert.ok((await db.execute(sql`select id from audit_log where org_id=${h.org.orgId} and table_name='hrm_benefit_transaction_responsibilities' and actor_id=${h.settlerId} and changes->>'reason'=${command.reason}`)).rows.length >= 2);
+    assert.ok((await db.execute(sql`select id from audit_log where org_id=${h.org.orgId} and table_name='hrm_benefit_transaction_responsibilities' and actor_id=${h.settlerId} and changes->>'reason'=${command.reason}`, "objects")).length >= 2);
     const seedSource = async (date: string) => {
     const id = randomUUID(), line = randomUUID();
     await db.execute(sql`insert into documents(id,org_id,subsidiary_id,kind,document_number,document_date,currency) values(${id},${h.org.orgId},${h.org.subsidiaryId},'sales_order',${id},${date}::date,'USD')`);
@@ -670,9 +670,9 @@ settlementTest(
     const source = await seedSource("2026-07-09");
     await activateBenefitProgram(command);
     await refuses(async () => saveBenefitTransactionPolicy({ ...command, expectedRevision: (await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision }), /changing an active program needs the date the change applies from — earlier periods keep the current rules/);
-    const storedPositions = async () => (await db.execute<{ position_key: string; weight: string }>(sql`
+    const storedPositions = async () => await db.execute<{ position_key: string; weight: string }>(sql`
     select position_key,weight::text from hrm_benefit_transaction_positions
-    where org_id=${h.org.orgId} and program_id=${program.id} order by position_key`)).rows;
+    where org_id=${h.org.orgId} and program_id=${program.id} order by position_key`, "objects");
     const positionsBefore = await storedPositions();
     const guard = await refusal(db.execute(sql`update hrm_benefit_transaction_positions set weight=3 where org_id=${h.org.orgId} and program_id=${program.id}`), DrizzleQueryError);
     assert.ok(errorChainMatches(guard, /Active benefit transaction rules change through a dated program revision; save them with a change date\./));
@@ -686,7 +686,7 @@ settlementTest(
     const settled = await settleIncentivePeriod(query);
     assert.deepEqual((await settleIncentivePeriod(query)).awards.map(r => r.id), settled.awards.map(r => r.id));
     const award = settled.awards.find(r => r.employmentId === lead.employmentId)!;
-    const stored = (await db.execute<{source_snapshot: {measurement:{settlement:{entryIds:string[];entryCount:number;lineCount:number;transaction:{source:{lines:{sourceId:string}[]}}}}}}>(sql`select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source_snapshot.measurement.settlement;
+    const stored = (await db.execute<{source_snapshot: {measurement:{settlement:{entryIds:string[];entryCount:number;lineCount:number;transaction:{source:{lines:{sourceId:string}[]}}}}}}>(sql`select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"))[0]!.source_snapshot.measurement.settlement;
     assert.deepEqual(stored.entryIds, [source.id]);
     assert.equal(stored.entryCount, 1);
     assert.equal(stored.lineCount, 1);
@@ -698,7 +698,7 @@ settlementTest(
     const delivery = {orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId:early};
     const queued = await queueAwardForPayRun(delivery);
     assert.equal((await queueAwardForPayRun(delivery)).adjustmentId, queued.adjustmentId);
-    assert.equal((await db.execute<{amount:string}>(sql`select amount::text from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows[0]!.amount, "40.0000");
+    assert.equal((await db.execute<{amount:string}>(sql`select amount::text from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`, "objects"))[0]!.amount, "40.0000");
     await seedSource("2026-08-09");
     const later = {...query,periodFrom:"2026-08-01",periodTo:"2026-08-31"};
     assert.equal((await previewIncentiveSettlement(later)).computation.totalAwarded,"0.0000","pending and queued obligations both consume the configured group ceiling");
@@ -722,21 +722,21 @@ settlementTest("context-only recipient fallback preserves legacy snapshots and a
  const project=randomUUID();
  assert.equal((await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,status,is_active,foreman_id,manager_id)
   values(${project},${h.org.orgId},${h.org.subsidiaryId},'ROLE-SOURCE','Recipient source project','active',true,
-   ${foreman.workerPartyId},${manager.workerPartyId}) returning id`)).rows.length,1);
+   ${foreman.workerPartyId},${manager.workerPartyId}) returning id`, "objects")).length,1);
  const seedSources=async(day:string)=>{
   const ticket=randomUUID();
   assert.equal((await db.execute(sql`insert into documents(id,org_id,subsidiary_id,kind,document_number,document_date,currency,project_id)
-   values(${ticket},${h.org.orgId},${h.org.subsidiaryId},'field_ticket',${ticket},${day},'USD',${project}) returning id`)).rows.length,1);
+   values(${ticket},${h.org.orgId},${h.org.subsidiaryId},'field_ticket',${ticket},${day},'USD',${project}) returning id`, "objects")).length,1);
   assert.equal((await db.execute(sql`insert into field_tickets(document_id,org_id,period,period_start,period_end,foreman_party_id,superintendent_party_id)
-   values(${ticket},${h.org.orgId},'daily',${day},${day},${foreman.workerPartyId},null) returning document_id`)).rows.length,1);
-  assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${h.org.orgId} and id=${ticket} returning id`)).rows.length,1);
+   values(${ticket},${h.org.orgId},'daily',${day},${day},${foreman.workerPartyId},null) returning document_id`, "objects")).length,1);
+  assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${h.org.orgId} and id=${ticket} returning id`, "objects")).length,1);
   for(const reference of [ticket,null]){
    const id=randomUUID();
    assert.equal((await db.execute(sql`insert into documents(id,org_id,subsidiary_id,kind,document_number,document_date,currency,project_id)
-    values(${id},${h.org.orgId},${h.org.subsidiaryId},'sales_order',${id},${day},'USD',${project}) returning id`)).rows.length,1);
+    values(${id},${h.org.orgId},${h.org.subsidiaryId},'sales_order',${id},${day},'USD',${project}) returning id`, "objects")).length,1);
    assert.equal((await db.execute(sql`insert into document_lines(org_id,document_id,line_number,item_id,quantity,unit_price,amount,field_ticket_id,project_id)
-    values(${h.org.orgId},${id},1,${h.org.items.service},1,100,100,${reference},${project}) returning id`)).rows.length,1);
-   assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${h.org.orgId} and id=${id} returning id`)).rows.length,1);
+    values(${h.org.orgId},${id},1,${h.org.items.service},1,100,100,${reference},${project}) returning id`, "objects")).length,1);
+   assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${h.org.orgId} and id=${id} returning id`, "objects")).length,1);
   }
  };
  const policy:BenefitTransactionPolicy={documentKind:"sales_order",dateBasis:"document_date",groupingSegmentId:null,
@@ -759,8 +759,8 @@ settlementTest("context-only recipient fallback preserves legacy snapshots and a
  assert.equal(legacy.preview.computation.totalAwarded,"20.0000");
  const legacyTransaction=legacy.preview.sourceSnapshot.transaction as Record<string,unknown>;
  assert.ok(legacyTransaction);assert.equal("recipientContexts" in legacyTransaction,false,"Legacy snapshot bytes gain no context metadata");
- const retained=async()=>(await db.execute(sql`select id,source_snapshot from hrm_benefit_awards
-  where org_id=${h.org.orgId} and program_id=${program.id} order by id`)).rows;
+ const retained=async()=>await db.execute(sql`select id,source_snapshot from hrm_benefit_awards
+  where org_id=${h.org.orgId} and program_id=${program.id} order by id`, "objects");
  const before=await retained();
  assert.deepEqual((await settleIncentivePeriod(july)).awards.map(award=>award.id),legacy.awards.map(award=>award.id));
  assert.deepEqual(await retained(),before);
@@ -789,21 +789,21 @@ settlementTest('approved award queues and replays its original component, note a
   const {program,worker,query}=await seedSettlement(h,'Retained payout policy');
   const settled=await settleIncentivePeriod(query);const award=settled.awards[0]!;
   await approveSettlementAward(h,award.id);
-  const source=(await db.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
-    from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows;
+  const source=await db.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
+    from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects");
   const replacement=await seedComponent(h.org.orgId,{kind:'earning',code:'NEXT_REWARD'});
   await updateBenefitProgram({orgId:h.org.orgId,actorId:h.settlerId,programId:program.id,
     payComponentId:replacement,paymentDelayDays:60,changeEffectiveFrom:'2026-08-01',reason:'Future award delivery policy'});
   const runDocumentId=await seedRun(h,worker.employmentId,worker.workerPartyId,'2026-08-05');
   const queued=await queueAwardForPayRun({orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId});
-  const inputs=(await db.execute<{component:string;note:string;amount:string}>(sql`select component_id::text as component,note,amount::text as amount
-    from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows;
+  const inputs=await db.execute<{component:string;note:string;amount:string}>(sql`select component_id::text as component,note,amount::text as amount
+    from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`, "objects");
   assert.equal(inputs.length,1);assert.equal(inputs[0]!.component,program.payComponentId);
   assert.equal(inputs[0]!.note,`Benefit award ${award.id} (${program.code} ${award.periodFrom}..${award.periodTo ?? 'open'})`);
   assert.equal(inputs[0]!.amount,award.value);
   assert.equal((await queueAwardForPayRun({orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId})).adjustmentId,queued.adjustmentId);
-  assert.deepEqual((await db.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
-    from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows,source);
+  assert.deepEqual(await db.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
+    from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`, "objects"),source);
 });
 
 settlementTest("period reconciliation keeps aggregate benefit authority and exact current measurement", async (h) => {

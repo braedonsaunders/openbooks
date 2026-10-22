@@ -48,9 +48,10 @@ const mockDb = `
     }
   }
   const executor = {
-    async execute(query) {
+    async execute(query, mode) {
+      const inMode = (result) => (mode === 'objects' ? result.rows : result)
       noteWrite(query)
-      return { rows: state.loadRow ? [state.loadRow] : [] }
+      return inMode({ rows: state.loadRow ? [state.loadRow] : [] })
     },
   }
   export const db = {

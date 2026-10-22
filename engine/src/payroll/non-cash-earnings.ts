@@ -86,7 +86,7 @@ export async function applyEarningPaymentKinds(
                (a.subsidiary_id is null or a.subsidiary_id = ${args.subsidiaryId}
                 or (a.subsidiary_include_children and a.subsidiary_id in (select id from ancestors))) as in_scope
           from accounts a where a.org_id = ${args.orgId} and a.id = ${accountId} and a.is_active and not a.is_summary
-      `)).rows[0];
+      `, "objects"))[0];
       const expenseAccountId = component.expense_account_id ?? args.wageExpenseAccountId;
       const problem = nonCashOffsetProblem(account ? { id: accountId, type: account.type } : undefined, expenseAccountId == null ? null : String(expenseAccountId));
       if (problem || !account) {

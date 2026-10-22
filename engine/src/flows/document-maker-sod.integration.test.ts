@@ -46,8 +46,8 @@ async function docRow(
     createdBy: string | null;
   }>(sql`
     select status::text as status, submitted_by::text as "submittedBy", created_by::text as "createdBy"
-      from documents where id = ${id}`);
-  return r.rows[0]!;
+      from documents where id = ${id}`, "objects");
+  return r[0]!;
 }
 
 async function pendingGateFor(
@@ -57,15 +57,15 @@ async function pendingGateFor(
   const r = await db.execute<{ id: string }>(sql`
     select id from flow_gates
      where subject_id = ${subjectId} and assignee_user_id = ${assigneeUserId} and status = 'pending'
-     limit 1`);
-  return r.rows[0]?.id ?? null;
+     limit 1`, "objects");
+  return r[0]?.id ?? null;
 }
 
 async function gateStatus(gateId: string): Promise<string | null> {
   const r = await db.execute<{ status: string }>(
-    sql`select status::text as status from flow_gates where id = ${gateId}`,
+    sql`select status::text as status from flow_gates where id = ${gateId}`, "objects",
   );
-  return r.rows[0]?.status ?? null;
+  return r[0]?.status ?? null;
 }
 
 test(
@@ -104,11 +104,9 @@ test(
       // Refusal records nothing: the gate stays pending and the document stays parked.
       assert.equal(await gateStatus(gateId!), "pending");
       assert.equal((await docRow(docId)).status, "pending_approval");
-      const audit = (
-        await db.execute<{ n: string }>(sql`
+      const audit = (await db.execute<{ n: string }>(sql`
       select count(*) as n from audit_log
-       where org_id = ${org.orgId} and table_name = 'flow_gates' and row_id = ${gateId!}`)
-      ).rows[0]!;
+       where org_id = ${org.orgId} and table_name = 'flow_gates' and row_id = ${gateId!}`, "objects"))[0]!;
       assert.equal(audit.n, "0", "refused decision leaves no audit residue");
       // Truthful attribution is preserved: the submitter is named, not the maker.
       assert.equal((await docRow(docId)).submittedBy, submitter);

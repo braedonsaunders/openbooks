@@ -70,7 +70,7 @@ export type EmitDomainEventResult = {
 } | null;
 
 async function currentXactId(executor: SqlExecutor): Promise<string> {
-  const rows = (await executor.execute<{ xact: string }>(sql`select pg_current_xact_id()::text as xact`)).rows;
+  const rows = await executor.execute<{ xact: string }>(sql`select pg_current_xact_id()::text as xact`, "objects");
   return rows[0]!.xact;
 }
 
@@ -92,11 +92,11 @@ async function insertEventRow(
     -- A dedupe-key replay resolves the existing event below rather than emitting a second event.
     on conflict (org_id, dedupe_key) do nothing
     returning id
-  `)).rows[0]?.id;
+  `, "objects"))[0]?.id;
   if (inserted) return inserted;
   const existing = (await executor.execute<{ id: string }>(sql`
     select id from webhook_events where org_id = ${input.orgId} and dedupe_key = ${input.dedupeKey} limit 1
-  `)).rows[0]?.id;
+  `, "objects"))[0]?.id;
   if (!existing) {
     throw new WebhookEmitError(
       `webhook event '${input.type}' was not stored and no replay row exists — retry the action`,
@@ -113,7 +113,7 @@ async function insertDeliveryRow(
 ): Promise<boolean> {
   // Same replay collapse as the event row: a re-fanned event never
   // double-queues a delivery for one endpoint.
-  const inserted = await executor.execute(sql`
+  const inserted = await executor.execute<never>(sql`
     insert into webhook_deliveries (org_id, event_id, endpoint_id, status, next_attempt_at)
     values (${orgId}, ${eventId}::uuid, ${endpointId}::uuid, 'pending', now())
     -- A re-fanned event retains its existing endpoint delivery instead of dispatching twice.
@@ -137,10 +137,10 @@ export async function emitDomainEvent(
   }
   if (!(await orgFeatureEnabled(input.orgId, "outboundWebhooks", executor))) return null;
   const eventId = await insertEventRow(executor, { ...input, type: input.type });
-  const endpoints = (await executor.execute<{ id: string }>(sql`
+  const endpoints = await executor.execute<{ id: string }>(sql`
     select id from webhook_endpoints
      where org_id = ${input.orgId} and status = 'active' and events @> array[${input.type}]::text[]
-  `)).rows;
+  `, "objects");
   let deliveries = 0;
   for (const endpoint of endpoints) {
     if (await insertDeliveryRow(executor, input.orgId, eventId, endpoint.id)) deliveries += 1;
@@ -191,7 +191,7 @@ async function loadDocumentSnapshot(executor: SqlExecutor, orgId: string, docume
            document_date::text as "documentDate", posting_date::text as "postingDate",
            party_id as "partyId"
       from documents where org_id = ${orgId} and id = ${documentId}::uuid limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) {
     throw new WebhookEmitError("the posted document is gone — the record was deleted; nothing was emitted");
   }
@@ -291,7 +291,7 @@ export async function emitItemUpdated(
   }>(sql`
     select id, code, name, kind, is_active as "isActive"
       from items where org_id = ${orgId} and id = ${itemId}::uuid limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new WebhookEmitError("the updated item is gone — the record was deleted; nothing was emitted");
   return emitDomainEvent(executor, {
     orgId,
@@ -312,7 +312,7 @@ export async function emitCustomerUpdated(
   const row = (await executor.execute<{ id: string; displayName: string | null; email: string | null }>(sql`
     select id, display_name as "displayName", email
       from parties where org_id = ${orgId} and id = ${partyId}::uuid limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   if (!row) throw new WebhookEmitError("the updated customer is gone — the record was deleted; nothing was emitted");
   return emitDomainEvent(executor, {
     orgId,

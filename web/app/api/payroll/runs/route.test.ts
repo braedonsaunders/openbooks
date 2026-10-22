@@ -48,17 +48,18 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
       const sqlText = globalThis.openbooksPayrollRunsSqlText
       export const db = {
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes('from pay_schedules')) {
-            return { rows: [{ subsidiaryId: state.scheduleSubsidiaryId }] }
+            return inMode({ rows: [{ subsidiaryId: state.scheduleSubsidiaryId }] })
           }
           if (text.includes('from parties')) {
-            return { rows: [{ subsidiaryId: 'sub-visible' }] }
+            return inMode({ rows: [{ subsidiaryId: 'sub-visible' }] })
           }
-          if (text.includes('from subsidiaries')) return { rows: [{ id: 'sub-root' }] }
-          return { rows: [] }
+          if (text.includes('from subsidiaries')) return inMode({ rows: [{ id: 'sub-root' }] })
+          return inMode({ rows: [] })
         },
       }
       export const schema = {}

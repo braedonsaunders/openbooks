@@ -46,7 +46,7 @@ const mockSources = new Map<string, string>([
     'mock:db',
     `
       export const db = {
-        execute() { return Promise.resolve({ rows: [] }) },
+        execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return Promise.resolve({ rows: [] }).then(inMode) },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn() }
       export function ambientTenantOrgId() { return null }

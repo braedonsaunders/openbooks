@@ -44,19 +44,19 @@ async function fixture(): Promise<Fixture> {
   const mandateId = (await db.execute<{ id: string }>(sql`
     insert into payment_mandates (org_id, party_id, party_bank_account_id, scheme, mandate_reference, status)
     values (${org.orgId}, ${org.vendorId}, ${bankAccountId}, 'custom', 'MAND-ALLOWLIST-1', 'active')
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   const formatId = (await db.execute<{ id: string }>(sql`
     insert into payment_formats (org_id, code, name, rail, direction, is_active)
     values (${org.orgId}, 'ALLOWLIST', 'Allowlist format', 'custom', 'credit', true)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   const profileId = (await db.execute<{ id: string }>(sql`
     insert into payment_bank_profiles (org_id, name, bank_account_id, payment_format_id, currency, is_active)
     values (${org.orgId}, 'Allowlist profile', ${org.accounts.bank}, ${formatId}, 'CAD', true)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   const scheduleId = (await db.execute<{ id: string }>(sql`
     insert into payment_schedules (org_id, name, payment_bank_profile_id, cron, timezone, action, is_active)
     values (${org.orgId}, 'Allowlist schedule', ${profileId}, '0 9 * * *', 'UTC', 'create_draft', true)
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   return { org, mandateId, scheduleId }
 }
 
@@ -73,12 +73,12 @@ async function patch(resource: string, id: string, body: unknown): Promise<Respo
 
 async function mandateStatus(id: string, orgId: string): Promise<string> {
   return (await db.execute<{ status: string }>(sql`
-    select status from payment_mandates where id = ${id} and org_id = ${orgId}`)).rows[0]!.status
+    select status from payment_mandates where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!.status
 }
 
 async function scheduleAction(id: string, orgId: string): Promise<string> {
   return (await db.execute<{ action: string }>(sql`
-    select action from payment_schedules where id = ${id} and org_id = ${orgId}`)).rows[0]!.action
+    select action from payment_schedules where id = ${id} and org_id = ${orgId}`, 'objects'))[0]!.action
 }
 
 test('mandate PATCH rejects an unknown status instead of storing it', async () => {

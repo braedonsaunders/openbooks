@@ -158,10 +158,10 @@ test(
           join pay_stub_lines l on l.stub_id = s.id and l.org_id = s.org_id
           join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
          where s.org_id = ${fx.orgId} and s.tax_year = 2026 and s.country = 'SG'
-         group by s.employee_party_id`);
-      assert.equal(truth.rows.length, 2);
+         group by s.employee_party_id`, "objects");
+      assert.equal(truth.length, 2);
       for (const row of data.rows) {
-        const expected = truth.rows.find(
+        const expected = truth.find(
           (candidate) => candidate.employee_party_id === row.rowId,
         );
         assert.ok(expected, `population row ${row.rowId} ties to a committed-stub employee`);
@@ -186,7 +186,7 @@ test(
 
       // Totals tie to the same committed-stub sums, to the cent.
       const total = (pick: (row: { income: string; ee: string; er: string }) => string) =>
-        truth.rows.reduce((acc, row) => add(acc, pick(row) ?? "0"), "0");
+        truth.reduce((acc, row) => add(acc, pick(row) ?? "0"), "0");
       const totals = new Map((data.totals ?? []).map((entry) => [entry.label, entry.value]));
       assert.equal(totals.get("Employment income"), total((row) => row.income));
       assert.equal(totals.get("Employee CPF"), total((row) => row.ee));

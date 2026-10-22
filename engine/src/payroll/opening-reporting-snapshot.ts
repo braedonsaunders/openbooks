@@ -17,7 +17,7 @@ export async function withOpeningReportingSnapshot<T>(orgId: string, taxYear: nu
   const active=orgContext.getStore();
   if (active?.txDb && !active.bypass) {
     if (active.orgId!==orgId) throw new PayrollError('The payroll reporting organization cannot change inside an active transaction');
-    const mode=(await active.txDb.execute<{transaction_isolation:string}>(sql`show transaction_isolation`)).rows[0]?.transaction_isolation;
+    const mode=(await active.txDb.execute<{transaction_isolation:string}>(sql`show transaction_isolation`, 'objects'))[0]?.transaction_isolation;
     if (mode==='read committed') {
       await takeOpeningSourceYearFence(active.txDb,orgId,taxYear);
       return reportingSnapshot.run({orgId,taxYear,runner:active.txDb},()=>fn(active.txDb!));

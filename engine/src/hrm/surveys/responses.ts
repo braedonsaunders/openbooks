@@ -183,7 +183,7 @@ async function resolveSegment(
      where e.org_id = ${orgId} and e.worker_party_id = ${partyId}
      order by a.effective_from desc nulls last
      limit 1
-  `)).rows[0];
+  `, "objects"))[0];
   const tenureBand = !row?.start
     ? null
     : (() => {
@@ -229,7 +229,7 @@ export async function submitResponse(input: {
       select id, survey_id, party_id, responded_at::text as responded_at
         from hrm_survey_invitations
        where token_hash = ${hashHrmToken(input.token)}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!invitation) {
       throw new HrmSurveysError("FORBIDDEN", "this survey link is no longer available — ask HR for a fresh invitation");
     }
@@ -250,7 +250,7 @@ export async function submitResponse(input: {
       select id, anonymity, status, opens_at::text as opens_at, closes_at::text as closes_at, min_group_size
         from hrm_surveys where org_id = ${claims.orgId} and id = ${invitation.survey_id}
        for update
-    `)).rows[0];
+    `, "objects"))[0];
     if (!survey || survey.status !== "open") {
       throw new HrmSurveysError("REFUSED", "this survey is not open for responses — ask HR whether it was closed");
     }
@@ -261,11 +261,11 @@ export async function submitResponse(input: {
     if (survey.closes_at && Date.parse(survey.closes_at) < now) {
       throw new HrmSurveysError("REFUSED", "this survey has closed — responses after close are never counted");
     }
-    const questions = (await db.execute<{ id: string; kind: string; options: unknown; driver_key: string | null }>(sql`
+    const questions = await db.execute<{ id: string; kind: string; options: unknown; driver_key: string | null }>(sql`
       select id, kind, options, driver_key from hrm_survey_questions
        where org_id = ${claims.orgId} and survey_id = ${survey.id}
        order by position
-    `)).rows;
+    `, "objects");
     if (!Array.isArray(input.answers) || input.answers.length === 0) {
       throw new HrmSurveysError("VALIDATION", "answer at least one question before submitting");
     }
@@ -302,14 +302,12 @@ export async function submitResponse(input: {
     // carry no link to attribute by — without this list they would be
     // unattributable. Same granularity as the subsidiary name already
     // stored; aggregates only, links never leave.
-    const employerIds = (
-      await db.execute<{ employerSubsidiaryId: string }>(sql`
+    const employerIds = (await db.execute<{ employerSubsidiaryId: string }>(sql`
         select distinct employer_subsidiary_id as "employerSubsidiaryId"
           from worker_employments
          where org_id = ${claims.orgId} and worker_party_id = ${invitation.party_id}
            and employer_subsidiary_id is not null
-      `)
-    ).rows.map((row) => row.employerSubsidiaryId);
+      `, "objects")).map((row) => row.employerSubsidiaryId);
     const snapshotWithScope = { ...segment.snapshot, employerSubsidiaryIds: employerIds };
     let segmentSnapshot: unknown = null;
     let linkEnc: Buffer | null = null;
@@ -336,12 +334,12 @@ export async function submitResponse(input: {
       values (${claims.orgId}, ${survey.id}, ${linkEnc}, ${segmentSnapshot ? JSON.stringify(segmentSnapshot) : null}::jsonb,
               ${JSON.stringify(stored)}::jsonb)
       returning id
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const flipped = (await db.execute<{ n: string }>(sql`
       update hrm_survey_invitations set responded_at = now()
        where org_id = ${claims.orgId} and id = ${invitation.id} and responded_at is null
       returning 1
-    `)).rows.length;
+    `, "objects")).length;
     // Zero flipped rows is a replay that raced us: the response insert
     // above rolls back with this throw — never a counted double vote.
     if (flipped === 0) {
@@ -386,7 +384,7 @@ export async function listOwnInvitations(query: {
   actorId: string;
 }): Promise<OwnInvitation[]> {
   const partyId = await requireSelfRead(query.orgId, query.actorId);
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     invitationId: string;
     surveyId: string;
     surveyName: string;
@@ -403,7 +401,7 @@ export async function listOwnInvitations(query: {
        and i.responded_at is null and s.status = 'open'
        and (s.closes_at is null or s.closes_at > now())
      order by s.closes_at nulls last, s.name
-  `)).rows;
+  `, "objects");
   return rows;
 }
 
@@ -426,7 +424,7 @@ export async function reissueInvitationToken(input: {
       select id, survey_id, responded_at::text as responded_at
         from hrm_survey_invitations
        where org_id = ${input.orgId} and id = ${input.invitationId} and party_id = ${partyId}
-    `)).rows[0];
+    `, "objects"))[0];
     // Zero rows is a failure: unknown id or another person's invitation.
     if (!invitation) {
       throw new HrmSurveysError("NOT_FOUND", "invitation is not visible to you — it may belong to someone else");
@@ -436,7 +434,7 @@ export async function reissueInvitationToken(input: {
     }
     const survey = (await db.execute<{ status: string }>(sql`
       select status from hrm_surveys where org_id = ${input.orgId} and id = ${invitation.survey_id}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!survey || survey.status !== "open") {
       throw new HrmSurveysError("REFUSED", "this survey is not open for responses");
     }
@@ -446,7 +444,7 @@ export async function reissueInvitationToken(input: {
          set token_hash = ${hashHrmToken(token)}
        where org_id = ${input.orgId} and id = ${invitation.id} and responded_at is null
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     // Zero matched rows is a race the respondent won elsewhere.
     if (!updated) {
       throw new HrmSurveysError("REFUSED", "this invitation was just answered — one response per invitation");
@@ -464,10 +462,10 @@ async function countSegmentPeers(
   segment: Segment,
   today: string,
 ): Promise<number> {
-  const invitees = (await exec.execute<{ party_id: string }>(sql`
+  const invitees = await exec.execute<{ party_id: string }>(sql`
     select party_id from hrm_survey_invitations
      where org_id = ${orgId} and survey_id = ${surveyId} and party_id != ${excludePartyId}
-  `)).rows;
+  `, "objects");
   let peers = 1; // the respondent themself
   for (const invitee of invitees) {
     const other = await resolveSegment(exec, orgId, invitee.party_id, today);
@@ -554,7 +552,7 @@ export async function getSurveyResults(query: {
   }>(sql`
     select id, name, kind, anonymity, status, min_group_size from hrm_surveys
      where org_id = ${query.orgId} and id = ${query.surveyId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!survey) throw new HrmSurveysError("NOT_FOUND", "survey is not visible in this organization");
   // Read visibility first: a survey with no in-scope invitee reads as
   // not-found, uniformly with a missing survey.
@@ -562,7 +560,7 @@ export async function getSurveyResults(query: {
   if (!surveyVisibleToScope(employersByParty, allowed)) {
     throw new HrmSurveysError("NOT_FOUND", "survey is not visible in this organization");
   }
-  const questions = (await db.execute<{
+  const questions = await db.execute<{
     id: string;
     kind: string;
     prompt: string;
@@ -571,25 +569,23 @@ export async function getSurveyResults(query: {
     select id, kind, prompt, driver_key from hrm_survey_questions
      where org_id = ${query.orgId} and survey_id = ${survey.id}
      order by position
-  `)).rows;
+  `, "objects");
   // Invitation counts fence to in-scope invitees: the participation
   // denominator must never count B's respondents for an A reader.
-  const invitees = (await db.execute<{ party_id: string; responded: boolean }>(sql`
+  const invitees = await db.execute<{ party_id: string; responded: boolean }>(sql`
     select party_id, (responded_at is not null) as responded
       from hrm_survey_invitations
      where org_id = ${query.orgId} and survey_id = ${survey.id}
-  `)).rows;
+  `, "objects");
   const scopedInvitees = invitees.filter((invite) =>
     partyVisibleToScope(employersByParty.get(invite.party_id) ?? [], allowed),
   );
   const invitations = scopedInvitees.length;
   const respondedCount = scopedInvitees.filter((invite) => invite.responded).length;
-  const responses = (
-    await db.execute<{ answers: unknown; segment_snapshot: unknown; respondent_link_enc: Buffer | null }>(sql`
+  const responses = (await db.execute<{ answers: unknown; segment_snapshot: unknown; respondent_link_enc: Buffer | null }>(sql`
     select answers, segment_snapshot, respondent_link_enc from hrm_survey_responses
      where org_id = ${query.orgId} and survey_id = ${survey.id}
-  `)
-  ).rows.filter((response) =>
+  `, "objects")).filter((response) =>
     responseInScope(
       query.orgId,
       survey.anonymity,
@@ -645,12 +641,12 @@ export async function getSurveyResults(query: {
   // sibling fences to the same lens — a sibling with no in-scope invitee
   // stays out of a restricted reader's trend entirely, and every
   // included sibling's score aggregates in-scope respondents only.
-  const series = (await db.execute<{ id: string; name: string; anonymity: string }>(sql`
+  const series = await db.execute<{ id: string; name: string; anonymity: string }>(sql`
     select id, name, anonymity from hrm_surveys
      where org_id = ${query.orgId} and name = ${survey.name} and kind = ${survey.kind}
        and status in ('open', 'closed')
      order by created_at
-  `)).rows;
+  `, "objects");
   const trend: SurveyResults["trend"] = [];
   for (const sibling of series) {
     const sibEmployers = await loadSurveyInviteeEmployers(db, query.orgId, sibling.id);
@@ -665,7 +661,7 @@ export async function getSurveyResults(query: {
         join hrm_survey_questions q on q.org_id = r.org_id and q.survey_id = r.survey_id and q.kind = 'enps'
        where r.org_id = ${query.orgId} and r.survey_id = ${sibling.id}
        limit 5000
-    `)).rows.filter((row) =>
+    `, "objects")).filter((row) =>
       responseInScope(
         query.orgId,
         sibling.anonymity,
@@ -680,7 +676,7 @@ export async function getSurveyResults(query: {
       select id from hrm_survey_questions
        where org_id = ${query.orgId} and survey_id = ${sibling.id} and kind = 'enps'
        order by position limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (enpsQ) {
       for (const row of sibAnswers) {
         const list = Array.isArray(row.answers) ? row.answers : [];

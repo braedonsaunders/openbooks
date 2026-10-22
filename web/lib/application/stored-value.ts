@@ -120,7 +120,7 @@ export async function redeemStoredValueForInvoice(
         const replayInvoice = (await db.execute<{ subsidiaryId: string | null }>(sql`
           select subsidiary_id as "subsidiaryId" from documents
            where id = ${input.invoiceId} and org_id = ${orgId} and kind = 'customer_invoice'
-        `)).rows[0];
+        `, "objects"))[0];
         if (!replayInvoice) throw notFound("invoice");
         assertSubsidiaryAccess(context, replayInvoice.subsidiaryId);
       });
@@ -137,7 +137,7 @@ export async function redeemStoredValueForInvoice(
               from documents
              where id = ${input.invoiceId} and org_id = ${orgId} and kind = 'customer_invoice'
              limit 1
-          `)).rows[0];
+          `, "objects"))[0];
           if (!invoice) throw notFound("invoice");
           // Scope before lifecycle: a foreign invoice refuses here, before
           // its status or open balance can leak through a named refusal.
@@ -195,7 +195,7 @@ export async function redeemStoredValueForInvoice(
           const posted = await postPaymentWithApplications(created.id, undefined, context.authz.user.id, context.source);
           const balance = (await db.execute<{ balance: string }>(sql`
             select balance_minor::text as balance from stored_value_accounts
-             where id = ${resolved.accountId} and org_id = ${orgId}`)).rows[0];
+             where id = ${resolved.accountId} and org_id = ${orgId}`, "objects"))[0];
           // The receipt carries the posted balance: an unreadable row
           // refuses by name instead of fabricating a zero success.
           if (!balance) {

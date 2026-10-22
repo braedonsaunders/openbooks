@@ -69,8 +69,8 @@ export async function guardPaymentRunPermission(
   const row = await db.execute<{ direction: string }>(sql`
     select r.direction from payment_runs r
      where r.id = ${runId} and ${paymentRunScopeSql(authz)}
-  `)
-  const run = row.rows[0]
+  `, 'objects')
+  const run = row[0]
   if (!run) return notFound("record")
   // Wrong-direction callers learn nothing either: the direction-specific
   // permission fails closed with the same uniform 404, so an ap.pay-only
@@ -102,8 +102,8 @@ export async function assertAllocationTargetsInScope(
     select jl.id, jl.subsidiary_id as "subsidiaryId"
       from journal_lines jl
      where jl.id = any(${`{${openLineIds.join(',')}}`}::uuid[]) and jl.org_id = ${authz.user.orgId} and jl.is_open_item
-  `))
-  const byId = new Map(rows.rows.map((row) => [row.id, row.subsidiaryId]))
+  `, 'objects'))
+  const byId = new Map(rows.map((row) => [row.id, row.subsidiaryId]))
   for (const lineId of openLineIds) {
     // An id that does not resolve in this org fails closed the same way —
     // it is indistinguishable from one outside the caller's scope.

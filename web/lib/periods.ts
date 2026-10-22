@@ -91,8 +91,8 @@ async function accountingPeriodWindow(
       from accounting_periods
      where org_id = ${orgId} and is_adjustment = false
      order by starts_on
-  `))
-  const rows = r.rows
+  `, 'objects'))
+  const rows = r
   if (!rows.length) return null
   // Index of the period containing today, else the latest one that has started.
   let idx = rows.findIndex((p) => p.starts_on <= today && today <= p.ends_on)

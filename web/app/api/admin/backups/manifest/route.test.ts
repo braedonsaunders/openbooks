@@ -44,9 +44,10 @@ const mockSources = new Map<string, string>([
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
       export const db = {
-        execute: async () => {
+        execute: async (_query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.queries += 1
-          return { rows: state.run ? [state.run] : [] }
+          return inMode({ rows: state.run ? [state.run] : [] })
         },
       }
     `,

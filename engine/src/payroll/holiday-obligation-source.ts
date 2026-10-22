@@ -25,7 +25,7 @@ export async function approvedHolidayOccurrenceDates(tx: SqlExecutor, input: {
   orgId: string; employeePartyId: string; employmentId: string; subsidiaryId: string | null | undefined; from: string; to: string;
 }): Promise<ReadonlySet<string>> {
   if (!isUuid(input.employmentId) || !isUuid(input.subsidiaryId)) throw new PayrollError("Resolve the selected native employment and legal employer before selecting approved holiday entitlements.");
-  const dates = (await tx.execute<{ date: string; evidence: SourceBoundHolidayPayment }>(sql`select occurrence.holiday_date::text as date, o.evidence
+  const dates = await tx.execute<{ date: string; evidence: SourceBoundHolidayPayment }>(sql`select occurrence.holiday_date::text as date, o.evidence
     from payroll_holiday_occurrences occurrence
     join payroll_holiday_obligations o on o.org_id=occurrence.org_id and o.id=occurrence.obligation_id
       and o.employee_party_id=occurrence.employee_party_id and o.subsidiary_id=occurrence.subsidiary_id
@@ -35,7 +35,7 @@ export async function approvedHolidayOccurrenceDates(tx: SqlExecutor, input: {
     where occurrence.org_id=${input.orgId} and occurrence.employee_party_id=${input.employeePartyId}
       and o.employment_id=${input.employmentId}
       and occurrence.subsidiary_id=${input.subsidiaryId} and occurrence.holiday_date between ${input.from}::date and ${input.to}::date
-    order by occurrence.holiday_date`)).rows;
+    order by occurrence.holiday_date`, "objects");
   for (const row of dates) {
     const instruction = readAdjudicatedHolidayPayment(row.evidence?.instruction);
     if (instruction.employeePartyId !== input.employeePartyId.toLowerCase() || !instruction.holidayDates.includes(row.date)) {
@@ -51,7 +51,7 @@ export async function approvedHolidayOccurrenceDates(tx: SqlExecutor, input: {
 export async function holidayObligationRunSource(tx: SqlExecutor, orgId: string, documentId: string, allowed?: PayrollSubsidiaryScope,
   candidate?: { employeePartyId: string; employmentId: string },
 ): Promise<HolidayObligationSource[]> {
-  const rows = (await tx.execute<HolidayObligationSource & { currency: string }>(sql`select
+  const rows = await tx.execute<HolidayObligationSource & { currency: string }>(sql`select
     o.id, o.employee_party_id as "employeePartyId", o.employment_id as "employmentId", o.subsidiary_id as "subsidiaryId",
     o.payment_date::text as "paymentDate", o.evidence, f.before_state->'profile' as profile, d.currency,
     (select to_jsonb(c) || jsonb_build_object('value',c.value::text,'protection_max_percent',c.protection_max_percent::text,
@@ -71,8 +71,8 @@ export async function holidayObligationRunSource(tx: SqlExecutor, orgId: string,
       ${payrollSubsidiaryScopeFilter(sql`o.subsidiary_id`, allowed)}
       and (o.payment_date=r.pay_date or exists(select 1 from payroll_holiday_occurrences occurrence
         where occurrence.org_id=o.org_id and occurrence.obligation_id=o.id and occurrence.holiday_date between r.period_start and r.period_end))
-    order by o.employee_party_id,o.id`)).rows;
-  const run = (await tx.execute<{ payDate: string }>(sql`select pay_date::text as "payDate" from pay_runs where org_id=${orgId} and document_id=${documentId}`)).rows[0];
+    order by o.employee_party_id,o.id`, "objects");
+  const run = (await tx.execute<{ payDate: string }>(sql`select pay_date::text as "payDate" from pay_runs where org_id=${orgId} and document_id=${documentId}`, "objects"))[0];
   const result: HolidayObligationSource[] = [];
   for (const row of rows) {
     const { currency, ...source } = row;
@@ -83,7 +83,7 @@ export async function holidayObligationRunSource(tx: SqlExecutor, orgId: string,
       if (!resolved) throw new PayrollError("The unpaid holiday entitlement has no usable wage on its approved wage-basis date; review dated employee wages before calculating.");
       const wage = (await tx.execute<Record<string, unknown>>(sql`select w.id, w.basis, w.rate::text, w.annual_hours::text, w.currency,
         w.payroll_rate_scale,w.payroll_amount_rounding,w.effective_from::text,w.effective_to::text,w.updated_at::text
-        from ${effectivePayRateSql({ org: sql`${orgId}`, employee: sql`${source.employeePartyId}`, onDate: sql`${instruction.wageBasisDate}`, selectList: sql`w.*` })} w`)).rows[0];
+        from ${effectivePayRateSql({ org: sql`${orgId}`, employee: sql`${source.employeePartyId}`, onDate: sql`${instruction.wageBasisDate}`, selectList: sql`w.*` })} w`, "objects"))[0];
       if (!wage) throw new PayrollError("The dated holiday wage source could not be retained; retry calculation.");
       const fx = await resolvePayrollFxSource(tx, orgId, String(wage.currency), currency, instruction.wageBasisDate);
       source.wage = { resolved, source: wage, fx };

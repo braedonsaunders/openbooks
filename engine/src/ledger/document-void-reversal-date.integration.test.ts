@@ -69,19 +69,19 @@ async function seedPostedJournal(
 
 async function reversalSum(documentId: string, orgId: string, reversalEntryId: string): Promise<string> {
   void documentId;
-  const rows = (await db.execute<{ total: string }>(sql`
+  const rows = await db.execute<{ total: string }>(sql`
     select coalesce(sum(amount), 0)::text as total from journal_lines
      where org_id = ${orgId} and entry_id = ${reversalEntryId}
-  `)).rows;
+  `, "objects");
   return rows[0]?.total ?? "missing";
 }
 
 async function voidRequestAudit(orgId: string, documentId: string): Promise<{ reversalDate: string }[]> {
-  return (await db.execute<{ reversalDate: string }>(sql`
+  return await db.execute<{ reversalDate: string }>(sql`
     select changes->>'reversalDate' as "reversalDate" from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${documentId}
        and action = 'update' and changes->>'mode' = 'void_request'
-  `)).rows;
+  `, "objects");
 }
 
 test("a void without a reversal date reverses in the entry's own period", { skip: !DB }, async () => {
@@ -105,7 +105,7 @@ test("a void without a reversal date reverses in the entry's own period", { skip
         from documents d
         join journal_entries e on e.id = ${outcome.reversalEntryId} and e.org_id = d.org_id
        where d.id = ${documentId} and d.org_id = ${org.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(
       stored?.reversalDate,
       null,
@@ -200,7 +200,7 @@ test("adjustment-period voids accept dates in the fiscal posting window", { skip
     const reversal = (await db.execute<{ periodId: string; postingDate: string }>(sql`
       select period_id as "periodId", posting_date::text as "postingDate"
         from journal_entries where org_id = ${org.orgId} and id = ${outcome.reversalEntryId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.deepEqual(reversal, { periodId: adjustmentPeriodId, postingDate: "2026-07-15" });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -278,7 +278,7 @@ test("a closed entry period moves the default to the first open period", { skip:
         from documents d
         join journal_entries e on e.id = ${outcome.reversalEntryId} and e.org_id = d.org_id
        where d.id = ${documentId} and d.org_id = ${org.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(
       stored?.reversalDate,
       null,
@@ -317,7 +317,7 @@ test("an explicit reversal date is honored in an open period", { skip: !DB }, as
         from documents d
         join journal_entries e on e.id = ${outcome.reversalEntryId} and e.org_id = d.org_id
        where d.id = ${documentId} and d.org_id = ${org.orgId}
-    `)).rows[0];
+    `, "objects"))[0];
     assert.equal(
       stored?.reversalDate,
       null,

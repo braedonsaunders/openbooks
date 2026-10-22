@@ -62,10 +62,10 @@ export function makeGET(cfg: OrderHandlerConfig) {
       // Hold its ownership stable from authorization through payload loading;
       // a concurrent rehome must not disclose the new subsidiary's values.
       const owned = (await db.execute<{ subsidiaryId: string | null }>(
-        sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId} for share`,
+        sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId} for share`, 'objects',
       ))
-      if (!owned.rows[0]) return notFound("record")
-      const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+      if (!owned[0]) return notFound("record")
+      const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
       if (denied) return denied
       const order = await loadOrder(id, gate.user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
       if (!order) return notFound("record")
@@ -129,11 +129,11 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
           from documents
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
-      `))
-      if (!owned.rows[0]) return notFound("record")
-      const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+      `, 'objects'))
+      if (!owned[0]) return notFound("record")
+      const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
       if (denied) return denied
-      if (staleRevision(expectedUpdatedAt, owned.rows[0].updated_at)) {
+      if (staleRevision(expectedUpdatedAt, owned[0].updated_at)) {
         return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
       }
       await deleteDocument(id, user.id, user.orgId, { allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
@@ -174,9 +174,9 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     // Scope check: the source must be this kind, in the caller's org, and
     // inside the caller's subsidiary scope.
     const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
-      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`, 'objects',
     ))
-    const source = owns.rows[0]
+    const source = owns[0]
     if (!source) return notFound("record")
     const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
     if (denied) return denied
@@ -252,9 +252,9 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
     // aggregate and re-checks the revision inside its transaction, so a
     // row that changes after this probe still cannot be assigned stale.
     const owns = (await db.execute<{ subsidiaryId: string | null; updated_at: string }>(
-      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
+      sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`, 'objects',
     ))
-    const source = owns.rows[0]
+    const source = owns[0]
     if (!source) return notFound("record")
     const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
     if (denied) return denied

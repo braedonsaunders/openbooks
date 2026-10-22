@@ -65,21 +65,21 @@ export async function recordVisitPart(actor: ServiceActor & { visitId: string; e
       join locations l on l.org_id = sl.org_id and l.id = sl.location_id
       where sl.org_id = ${actor.orgId} and sl.id = ${stockLocationId} and sl.is_active
         and sl.kind <> 'subcontract' and sl.inventory_ownership = 'owned'
-        and (l.subsidiary_id is null or l.subsidiary_id = ${visit.subsidiaryId})`)).rows[0];
+        and (l.subsidiary_id is null or l.subsidiary_id = ${visit.subsidiaryId})`, "objects"))[0];
     if (!location) throw new ServiceError("The stock location is not active.", { code: "service_invalid", remedy: "Choose the van or warehouse the part came from." });
     const lotId = optionalUuid(actor.part.lotId, "Lot");
     const serialId = optionalUuid(actor.part.serialId, "Serial number");
-    if (lotId && !(await db.execute(sql`select 1 from lots where org_id = ${actor.orgId} and id = ${lotId} and item_id = ${item.id}`)).rows[0]) {
+    if (lotId && !(await db.execute(sql`select 1 from lots where org_id = ${actor.orgId} and id = ${lotId} and item_id = ${item.id}`, "objects"))[0]) {
       throw new ServiceError("The lot belongs to another item.", { code: "service_invalid", remedy: "Choose a lot of this part." });
     }
-    if (serialId && !(await db.execute(sql`select 1 from serials where org_id = ${actor.orgId} and id = ${serialId} and item_id = ${item.id}`)).rows[0]) {
+    if (serialId && !(await db.execute(sql`select 1 from serials where org_id = ${actor.orgId} and id = ${serialId} and item_id = ${item.id}`, "objects"))[0]) {
       throw new ServiceError("The serial number belongs to another item.", { code: "service_invalid", remedy: "Choose a serial number of this part." });
     }
     const memo = optionalText(actor.part.memo, "Note", 500);
-    const part = requireOne((await db.execute<{ id: string }>(sql`insert into service_visit_parts
+    const part = requireOne(await db.execute<{ id: string }>(sql`insert into service_visit_parts
         (org_id, visit_id, item_id, stock_location_id, quantity, unit_price, billable, memo, lot_id, serial_id, created_by)
       values (${actor.orgId}, ${visit.id}, ${item.id}, ${stockLocationId}, ${quantity}, ${unitPrice}, ${actor.part.billable}, ${memo}, ${lotId}, ${serialId}, ${actor.actorId})
-      returning id`)).rows, "The part");
+      returning id`, "objects"), "The part");
     const visitRevision = await touchVisit(actor, visit, `Part recorded: ${item.name}`);
     await auditService({ orgId: actor.orgId, table: "service_visit_parts", rowId: part.id, action: "insert", actorId: actor.actorId,
       after: { visitId: visit.id, itemId: item.id, stockLocationId, quantity, unitPrice, billable: actor.part.billable, lotId, serialId } });
@@ -94,9 +94,9 @@ export async function removeVisitPart(actor: ServiceActor & { visitId: string; e
     checkVisitRevision(visit, actor.expectedRevision);
     await visitFieldAuthority(actor, visit);
     activeForWork(visit);
-    const removed = (await db.execute<{ itemId: string; quantity: string }>(sql`delete from service_visit_parts
+    const removed = await db.execute<{ itemId: string; quantity: string }>(sql`delete from service_visit_parts
       where org_id = ${actor.orgId} and id = ${requireUuid(actor.partId, "Part")} and visit_id = ${visit.id} and inventory_movement_id is null
-      returning item_id as "itemId", quantity::text`)).rows;
+      returning item_id as "itemId", quantity::text`, "objects");
     if (removed.length !== 1) throw new ScopeNotFoundError();
     const visitRevision = await touchVisit(actor, visit, "Part removed");
     await auditService({ orgId: actor.orgId, table: "service_visit_parts", rowId: actor.partId, action: "update", actorId: actor.actorId, before: removed[0], after: null, reason: "Removed before completion" });
@@ -160,11 +160,11 @@ async function recordLabor(actor: ServiceActor, visit: StoredVisit, job: { labor
       values (${actor.orgId}, ${worker}, ${sundayOf(workedOn)}::date, 'draft', ${actor.actorId}, ${actor.actorId})
       on conflict do nothing`);
     const billable = Boolean(job?.laborItemId) && job?.billingMode !== "not_billable";
-    const entry = requireOne((await db.execute<{ id: string }>(sql`insert into time_entries
+    const entry = requireOne(await db.execute<{ id: string }>(sql`insert into time_entries
         (org_id, employee_party_id, worked_on, hours, started_at, item_id, is_billable, status, service_visit_id, memo, created_by, updated_by)
       values (${actor.orgId}, ${worker}, ${workedOn}::date, ${hours}, ${startedAt}::timestamptz, ${billable ? job!.laborItemId : null}, ${billable},
         'draft', ${visit.id}, ${"Service visit labor"}, ${actor.actorId}, ${actor.actorId})
-      returning id`)).rows, "A labor entry");
+      returning id`, "objects"), "A labor entry");
     entries.push(entry.id);
   }
   return entries;
@@ -172,13 +172,13 @@ async function recordLabor(actor: ServiceActor, visit: StoredVisit, job: { labor
 
 /** Issue every recorded, unissued stock part of the visit from inventory. */
 async function issueParts(actor: ServiceActor, visit: StoredVisit, issueDate: string): Promise<number> {
-  const parts = (await db.execute<{ id: string; itemId: string; stockLocationId: string; quantity: string; lotId: string | null; serialId: string | null; memo: string | null; profiled: boolean; name: string }>(sql`
+  const parts = await db.execute<{ id: string; itemId: string; stockLocationId: string; quantity: string; lotId: string | null; serialId: string | null; memo: string | null; profiled: boolean; name: string }>(sql`
     select sp.id, sp.item_id as "itemId", sp.stock_location_id as "stockLocationId", sp.quantity::text, sp.lot_id as "lotId", sp.serial_id as "serialId", sp.memo,
            exists (select 1 from item_inventory_profiles p where p.org_id = sp.org_id and p.item_id = sp.item_id) as profiled,
            coalesce(nullif(i.code, ''), i.name) as name
       from service_visit_parts sp join items i on i.org_id = sp.org_id and i.id = sp.item_id
      where sp.org_id = ${actor.orgId} and sp.visit_id = ${visit.id} and sp.inventory_movement_id is null
-     order by sp.created_at, sp.id for update of sp`)).rows;
+     order by sp.created_at, sp.id for update of sp`, "objects");
   let issued = 0;
   for (const part of parts) {
     if (!part.profiled) continue;
@@ -191,8 +191,8 @@ async function issueParts(actor: ServiceActor, visit: StoredVisit, issueDate: st
         lotId: part.lotId, serialId: part.serialId, idempotencyKey: `service-visit-part:${part.id}`,
         memo: part.memo ?? `Service visit part`, tx: db,
       });
-      requireOne((await db.execute(sql`update service_visit_parts set inventory_movement_id = ${movement.movementId}, issued_at = now()
-        where org_id = ${actor.orgId} and id = ${part.id} and inventory_movement_id is null returning id`)).rows, "The part issue");
+      requireOne(await db.execute(sql`update service_visit_parts set inventory_movement_id = ${movement.movementId}, issued_at = now()
+        where org_id = ${actor.orgId} and id = ${part.id} and inventory_movement_id is null returning id`, "objects"), "The part issue");
       issued += 1;
     } catch (error) {
       if (error instanceof ServiceError) throw error;
@@ -256,7 +256,7 @@ export async function completeVisit(
     }
     const job = visit.jobId
       ? ((await db.execute<{ laborItemId: string | null; billingMode: string; status: string }>(sql`select labor_item_id as "laborItemId", billing_mode as "billingMode", status
-      from service_jobs where org_id = ${actor.orgId} and id = ${visit.jobId} for share`)).rows[0] ?? null)
+      from service_jobs where org_id = ${actor.orgId} and id = ${visit.jobId} for share`, "objects"))[0] ?? null)
       : null;
     const timeZone = await businessTimeZoneInTx(db, actor.orgId);
     const today = localTimeFields(new Date().toISOString(), timeZone)?.date ?? new Date().toISOString().slice(0, 10);
@@ -278,9 +278,9 @@ export async function completeVisit(
     let finalRevision = revision;
     if (routing.gated) {
       reviewStatus = "pending";
-      const updated = (await db.execute<{ revision: number }>(sql`update service_visits set review_status = 'pending', review_flow_run_id = ${routing.runId},
+      const updated = await db.execute<{ revision: number }>(sql`update service_visits set review_status = 'pending', review_flow_run_id = ${routing.runId},
           revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-        where org_id = ${actor.orgId} and id = ${visit.id} and revision = ${revision} returning revision`)).rows;
+        where org_id = ${actor.orgId} and id = ${visit.id} and revision = ${revision} returning revision`, "objects");
       finalRevision = requireOne(updated, "The completion review").revision;
     }
     if (visit.requestId) {
@@ -305,17 +305,17 @@ export async function releaseCompletionReview(input: { orgId: string; actorId: s
     throw new ServiceError("This visit completion is not awaiting review.", { status: 409, code: "service_invalid_transition", remedy: "Reload the visit." });
   }
   const reason = input.comment?.trim() || (input.outcome === "approved" ? "Completion approved" : "Completion returned for correction");
-  const decided = (await db.execute<{ revision: number }>(sql`update service_visits set review_status = ${input.outcome}, review_decided_by = ${input.actorId},
+  const decided = await db.execute<{ revision: number }>(sql`update service_visits set review_status = ${input.outcome}, review_decided_by = ${input.actorId},
       review_decided_at = now(), review_reason = ${reason}, revision = revision + 1, updated_at = now(), updated_by = ${input.actorId}
-    where org_id = ${input.orgId} and id = ${visit.id} and revision = ${visit.revision} returning revision`)).rows;
+    where org_id = ${input.orgId} and id = ${visit.id} and revision = ${visit.revision} returning revision`, "objects");
   const revision = requireOne(decided, "The review decision").revision;
   await auditService({ orgId: input.orgId, table: "service_visits", rowId: visit.id, action: "update", actorId: input.actorId,
     before: { reviewStatus: "pending" }, after: { reviewStatus: input.outcome }, reason });
   if (input.outcome === "rejected") {
-    const rejectedLabor = (await db.execute<{ id: string }>(sql`update time_entries
+    const rejectedLabor = await db.execute<{ id: string }>(sql`update time_entries
       set status = 'rejected', rejection_reason = ${reason}, updated_at = now(), updated_by = ${input.actorId}
       where org_id = ${input.orgId} and service_visit_id = ${visit.id} and status in ('draft', 'submitted') and billing_status = 'unbilled'
-      returning id`)).rows;
+      returning id`, "objects");
     for (const entry of rejectedLabor) {
       await auditService({ orgId: input.orgId, table: "time_entries", rowId: entry.id, action: "update", actorId: input.actorId,
         after: { status: "rejected", rejectionReason: reason }, reason });

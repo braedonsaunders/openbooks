@@ -35,7 +35,7 @@ const AUDIT = { actorId: null, reason: "boundary test" };
 /** Scratch orgs open July 2026 only: add regular January + February 2026. */
 async function seedJanFeb(org: ScratchOrg): Promise<{ janId: string; febId: string }> {
   const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-    select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`)).rows[0]!
+    select fiscal_calendar_id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!
     .fiscal_calendar_id;
   const janId = randomUUID();
   const febId = randomUUID();
@@ -137,8 +137,8 @@ async function seedDatedSource(
 }
 
 async function runCount(orgId: string): Promise<number> {
-  const rows = (await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from allocation_runs where org_id = ${orgId}`)).rows;
+  const rows = await db.execute<{ count: string }>(sql`
+    select count(*)::text as count from allocation_runs where org_id = ${orgId}`, "objects");
   return Number(rows[0]?.count ?? 0);
 }
 
@@ -267,8 +267,8 @@ test("a run previewed before a mid-period version appears refuses at post time",
       },
       "posting a run whose period has since been crossed must refuse",
     );
-    const rows = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from allocation_runs where id = ${preview.id}`)).rows;
+    const rows = await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
+      select status, journal_entry_id from allocation_runs where id = ${preview.id}`, "objects");
     assert.equal(rows[0]!.status, "previewed");
     assert.equal(rows[0]!.journal_entry_id, null);
     assert.equal(await journalLineCount(org.orgId), linesBefore);
@@ -374,19 +374,19 @@ test("boundary-aligned versions publish and each run prices under its own versio
     const postedFeb = await postAllocationRun(february.id, actor, "Post February sweep");
     assert.equal(postedFeb.status, "posted");
     // Each run priced under its own version: 60/40 in January, 100 in February.
-    const janAmounts = (await db.execute<{ department_id: string | null; total: string }>(sql`
+    const janAmounts = await db.execute<{ department_id: string | null; total: string }>(sql`
       select l.department_id, sum(l.amount)::text as total
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${org.orgId} and e.id = ${postedJan.journalEntryId}
-         and l.amount > 0 group by l.department_id`)).rows;
+         and l.amount > 0 group by l.department_id`, "objects");
     const janByDept = new Map(janAmounts.map((row) => [row.department_id, row.total]));
     assert.equal(janByDept.get(deptA), "600.0000");
     assert.equal(janByDept.get(deptB), "400.0000");
-    const febAmounts = (await db.execute<{ department_id: string | null; total: string }>(sql`
+    const febAmounts = await db.execute<{ department_id: string | null; total: string }>(sql`
       select l.department_id, sum(l.amount)::text as total
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${org.orgId} and e.id = ${postedFeb.journalEntryId}
-         and l.amount > 0 group by l.department_id`)).rows;
+         and l.amount > 0 group by l.department_id`, "objects");
     assert.equal(febAmounts.length, 1);
     assert.equal(febAmounts[0]!.department_id, deptA);
     assert.equal(febAmounts[0]!.total, "1000.0000");

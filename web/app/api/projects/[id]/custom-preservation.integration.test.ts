@@ -38,7 +38,7 @@ test('project PATCH preserves omitted required custom fields on a partial edit',
     await withOrgContext(org.orgId, async () => {
       const response = await PATCH(patchRequest(projectId, { custom: { optional_note: 'updated' } }), params(projectId))
       assert.equal(response.status, 200, JSON.stringify(await response.json()))
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`)).rows[0]?.custom
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`, 'objects'))[0]?.custom
       assert.deepEqual(stored, { required_code: 'R-1', optional_note: 'updated' })
     })
   } finally {
@@ -65,7 +65,7 @@ test('project PATCH refuses a foreign reference custom value instead of storing 
     await withOrgContext(org.orgId, async () => {
       const refused = await PATCH(patchRequest(projectId, { custom: { ref_party: foreign.vendorId } }), params(projectId))
       assert.equal(refused.status, 422, `expected 422, got ${refused.status}: ${JSON.stringify(await refused.json())}`)
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`)).rows[0]?.custom
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from projects where id=${projectId} and org_id=${org.orgId}`, 'objects'))[0]?.custom
       assert.equal((stored as Record<string, unknown> | undefined)?.ref_party, undefined, 'refused references store nothing')
       const saved = await PATCH(patchRequest(projectId, { custom: { ref_party: org.vendorId } }), params(projectId))
       assert.equal(saved.status, 200, `own-org reference must stay green: ${JSON.stringify(await saved.json())}`)

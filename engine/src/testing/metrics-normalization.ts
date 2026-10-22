@@ -19,7 +19,7 @@ export async function prepareNormalizationFlowFixture(ctx:NormalizationFlowFixtu
 export async function normalizationGateIds(ctx:NormalizationFlowFixture,requestId:string): Promise<string[]> {
   return withOrgContext(ctx.org.orgId,async () => (await db.execute<{id:string}>(sql`select id from flow_gates
     where org_id=${ctx.org.orgId} and subject_kind='metrics_normalization' and subject_id=${requestId}
-      and status='pending' order by created_at,id`)).rows.map(row=>row.id));
+      and status='pending' order by created_at,id`, "objects")).map(row=>row.id));
 }
 
 /** Complete actual native decisions, then resolve the authoritative request and result. */

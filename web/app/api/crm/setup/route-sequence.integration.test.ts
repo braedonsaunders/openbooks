@@ -56,8 +56,8 @@ async function post(body: unknown): Promise<{ status: number; json: unknown }> {
 }
 
 async function probeCount(): Promise<number> {
-  const rows = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from crm_account_statuses where org_id = ${state.orgId} and name = 'Probe'`)).rows
+  const rows = await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from crm_account_statuses where org_id = ${state.orgId} and name = 'Probe'`, 'objects')
   return rows[0]!.n
 }
 
@@ -92,8 +92,8 @@ test('POST still saves an ordinary sequence', async () => {
   try {
     const result = await post(saveAction('3'))
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    const rows = (await db.execute<{ sequence: number }>(sql`
-      select sequence from crm_account_statuses where org_id = ${state.orgId} and name = 'Probe'`)).rows
+    const rows = await db.execute<{ sequence: number }>(sql`
+      select sequence from crm_account_statuses where org_id = ${state.orgId} and name = 'Probe'`, 'objects')
     assert.equal(rows[0]!.sequence, 3)
   } finally {
     await dropScratchOrg(org.orgId)

@@ -35,7 +35,7 @@ async function fixture() {
   const unitId = (await db.execute<{ id: string }>(sql`
     insert into equipment_units (org_id, name, unit_number, status, subsidiary_id, purchase_price)
     values (${org.orgId}, 'Test Unit', 'TEST-001', 'draft', ${org.subsidiaryId}, '100.0000')
-    returning id`)).rows[0]!.id
+    returning id`, 'objects'))[0]!.id
   return { org, unitId }
 }
 
@@ -56,8 +56,8 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 }
 
 async function purchasePrice(unitId: string): Promise<string> {
-  const rows = (await db.execute<{ purchase_price: string }>(sql`
-    select purchase_price::text as purchase_price from equipment_units where id = ${unitId}`)).rows
+  const rows = await db.execute<{ purchase_price: string }>(sql`
+    select purchase_price::text as purchase_price from equipment_units where id = ${unitId}`, 'objects')
   return rows[0]!.purchase_price
 }
 

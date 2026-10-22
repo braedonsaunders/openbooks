@@ -102,7 +102,7 @@ async function movementQuantity(orgId: string, lineId: string, kind: string): Pr
   const row = (await db.execute<{ quantity: string }>(sql`
     select quantity::text as quantity from inventory_movements
      where org_id = ${orgId} and document_line_id = ${lineId} and kind = ${kind}
-     order by created_at desc limit 1`)).rows[0];
+     order by created_at desc limit 1`, "objects"))[0];
   return row?.quantity ?? null;
 }
 
@@ -213,7 +213,7 @@ test("a sales-return line raised in an aliased unit restores 1:1", { skip: !DB }
     assert.equal(issueCount, 1);
     const issue = (await db.execute<{ id: string }>(sql`
       select id from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${shipment.lineId} and kind = 'issue'`)).rows[0];
+       where org_id = ${org.orgId} and document_line_id = ${shipment.lineId} and kind = 'issue'`, "objects"))[0];
     assert.ok(issue, "the shipment must issue before it can be returned");
     const credit = await seedDocument(org, "customer_credit", {
       quantity: "10", unit: "Each", unitPrice: "25", amount: "250",
@@ -242,7 +242,7 @@ test("a purchase-return line raised in an aliased unit relieves 1:1", { skip: !D
     assert.equal(receiptCount, 1);
     const receiptMovement = (await db.execute<{ id: string }>(sql`
       select id from inventory_movements
-       where org_id = ${org.orgId} and document_line_id = ${receipt.lineId} and kind = 'receipt'`)).rows[0];
+       where org_id = ${org.orgId} and document_line_id = ${receipt.lineId} and kind = 'receipt'`, "objects"))[0];
     assert.ok(receiptMovement, "the receipt must post before it can be returned");
     const credit = await seedDocument(org, "vendor_credit", {
       quantity: "10", unit: "Each", unitPrice: "2", amount: "20",

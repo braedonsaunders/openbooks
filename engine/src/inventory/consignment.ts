@@ -74,11 +74,9 @@ export async function moveConsignment(
     if (!(await actorHasPermission(db, orgId, actorId, "items.post")))
       throw new ScopeNotFoundError();
     const source = input.stockId
-      ? (
-          await db.execute<CustodyRow>(
-            sql`select stock.*,received_on::text as received_on from consignment_stock stock where org_id=${orgId} and id=${input.stockId}`,
-          )
-        ).rows[0] ?? null
+      ? (await db.execute<CustodyRow>(
+            sql`select stock.*,received_on::text as received_on from consignment_stock stock where org_id=${orgId} and id=${input.stockId}`, "objects",
+          ))[0] ?? null
       : null;
     if (input.action !== "receive" && !source)
       throw new InventoryNotFoundError("Consigned stock not found");
@@ -115,23 +113,19 @@ export async function moveConsignment(
       subsidiaryId,
       input.action === "receive" ? "inbound" : "outbound",
     );
-    const loc = (
-      await db.execute<{
+    const loc = (await db.execute<{
         inventory_ownership: string;
         owner_party_id: string | null;
       }>(
-        sql`select inventory_ownership,owner_party_id from stock_locations where org_id=${orgId} and id=${locationId} for share`,
-      )
-    ).rows[0];
+        sql`select inventory_ownership,owner_party_id from stock_locations where org_id=${orgId} and id=${locationId} for share`, "objects",
+      ))[0];
     if (!loc || loc.inventory_ownership === "owned" || !loc.owner_party_id)
       throw new InventoryError(
         "Choose a consignment location with an external vendor or customer owner",
       );
-    const party = (
-      await db.execute<{ is_active: boolean; kind: string }>(
-        sql`select is_active,kind from parties where org_id=${orgId} and id=${loc.owner_party_id} for share`,
-      )
-    ).rows[0];
+    const party = (await db.execute<{ is_active: boolean; kind: string }>(
+        sql`select is_active,kind from parties where org_id=${orgId} and id=${loc.owner_party_id} for share`, "objects",
+      ))[0];
     if (!party?.is_active)
       throw new InventoryError(
         "Custody owner must be an active party admitted to this legal entity",
@@ -153,20 +147,16 @@ export async function moveConsignment(
       loc.inventory_ownership === "vendor"
         ? sql`vendor_roles`
         : sql`customer_roles`;
-    const role = (
-      await db.execute(
-        sql`select 1 from ${roleTable} where org_id=${orgId} and party_id=${loc.owner_party_id} for share`,
-      )
-    ).rows;
+    const role = await db.execute(
+        sql`select 1 from ${roleTable} where org_id=${orgId} and party_id=${loc.owner_party_id} for share`, "objects",
+      );
     if (party.kind !== loc.inventory_ownership && !role.length)
       throw new InventoryError(
         "Custody owner must have the selected vendor or customer role",
       );
-    const item = (
-      await db.execute<{ is_active: boolean; kind: string }>(
-        sql`select is_active,kind from items where org_id=${orgId} and id=${itemId} for share`,
-      )
-    ).rows[0];
+    const item = (await db.execute<{ is_active: boolean; kind: string }>(
+        sql`select is_active,kind from items where org_id=${orgId} and id=${itemId} for share`, "objects",
+      ))[0];
     if (!item?.is_active || !["inventory", "assembly"].includes(item.kind))
       throw new InventoryError("Choose an active stocked item for custody");
     const profile = await resolveProfile(orgId, itemId, db, true);
@@ -185,20 +175,16 @@ export async function moveConsignment(
         "custody_receipt",
         actorId,
       );
-      const row = (
-        await db.execute<{ id: string }>(sql`insert into consignment_stock
+      const row = (await db.execute<{ id: string }>(sql`insert into consignment_stock
         (org_id,subsidiary_id,item_id,stock_location_id,owner_party_id,owner_kind,lot_id,serial_id,received_on,original_quantity,remaining_quantity,reason,created_by,updated_by)
-        values(${orgId},${subsidiaryId},${itemId},${locationId},${loc.owner_party_id},${loc.inventory_ownership},${input.lotId ?? null},${input.serialId ?? null},${input.date},${quantity},${quantity},${reason},${actorId},${actorId}) returning id`)
-      ).rows[0];
+        values(${orgId},${subsidiaryId},${itemId},${locationId},${loc.owner_party_id},${loc.inventory_ownership},${input.lotId ?? null},${input.serialId ?? null},${input.date},${quantity},${quantity},${reason},${actorId},${actorId}) returning id`, "objects"))[0];
       if (!row)
         throw new InventoryError("Consignment receipt was not recorded");
       stockId = row.id;
     } else {
-      const held = (
-        await db.execute<CustodyRow>(
-          sql`select stock.*,received_on::text as received_on from consignment_stock stock where org_id=${orgId} and id=${stockId} for update`,
-        )
-      ).rows[0];
+      const held = (await db.execute<CustodyRow>(
+          sql`select stock.*,received_on::text as received_on from consignment_stock stock where org_id=${orgId} and id=${stockId} for update`, "objects",
+        ))[0];
       if (
         !held ||
         held.stock_location_id !== locationId ||
@@ -237,14 +223,12 @@ export async function moveConsignment(
           subsidiaryId,
           "inbound",
         );
-        const dest = (
-          await db.execute<{
+        const dest = (await db.execute<{
             inventory_ownership: string;
             owner_party_id: string | null;
           }>(
-            sql`select inventory_ownership,owner_party_id from stock_locations where org_id=${orgId} and id=${input.toStockLocationId} for share`,
-          )
-        ).rows[0];
+            sql`select inventory_ownership,owner_party_id from stock_locations where org_id=${orgId} and id=${input.toStockLocationId} for share`, "objects",
+          ))[0];
         if (input.action === "transfer") {
           if (
             !dest ||
@@ -257,14 +241,12 @@ export async function moveConsignment(
           // Retire the source serial before inserting its destination custody row.
           const retired =
             await db.execute(sql`update consignment_stock set remaining_quantity=remaining_quantity-${quantity},updated_by=${actorId},updated_at=now()
-            where org_id=${orgId} and id=${held.id} and remaining_quantity>=${quantity} returning id`);
-          if (!retired.rows.length)
+            where org_id=${orgId} and id=${held.id} and remaining_quantity>=${quantity} returning id`, "objects");
+          if (!retired.length)
             throw new InventoryError("Consignment quantity changed");
-          const next = (
-            await db.execute<{ id: string }>(sql`insert into consignment_stock
+          const next = (await db.execute<{ id: string }>(sql`insert into consignment_stock
             (org_id,subsidiary_id,item_id,stock_location_id,owner_party_id,owner_kind,lot_id,serial_id,received_on,original_quantity,remaining_quantity,reason,created_by,updated_by)
-            values(${orgId},${subsidiaryId},${itemId},${input.toStockLocationId},${held.owner_party_id},${held.owner_kind},${held.lot_id},${held.serial_id},${input.date},${quantity},${quantity},${reason},${actorId},${actorId}) returning id`)
-          ).rows[0];
+            values(${orgId},${subsidiaryId},${itemId},${input.toStockLocationId},${held.owner_party_id},${held.owner_kind},${held.lot_id},${held.serial_id},${input.date},${quantity},${quantity},${reason},${actorId},${actorId}) returning id`, "objects"))[0];
           if (!next)
             throw new InventoryError(
               "Custody transfer destination was not recorded",
@@ -281,8 +263,8 @@ export async function moveConsignment(
             );
           const retired =
             await db.execute(sql`update consignment_stock set remaining_quantity=remaining_quantity-${quantity},updated_by=${actorId},updated_at=now()
-            where org_id=${orgId} and id=${held.id} and remaining_quantity>=${quantity} returning id`);
-          if (!retired.rows.length)
+            where org_id=${orgId} and id=${held.id} and remaining_quantity>=${quantity} returning id`, "objects");
+          if (!retired.length)
             throw new InventoryError(
               "Custody quantity changed before ownership recognition",
             );
@@ -306,31 +288,27 @@ export async function moveConsignment(
       if (input.action === "return") {
         const changed =
           await db.execute(sql`update consignment_stock set remaining_quantity=remaining_quantity-${quantity},updated_by=${actorId},updated_at=now()
-          where org_id=${orgId} and id=${held.id} and remaining_quantity>=${quantity} returning id`);
-        if (!changed.rows.length)
+          where org_id=${orgId} and id=${held.id} and remaining_quantity>=${quantity} returning id`, "objects");
+        if (!changed.length)
           throw new InventoryError("Consignment quantity changed");
       }
     }
-    const event = (
-      await db.execute<{
+    const event = (await db.execute<{
         id: string;
       }>(sql`insert into consignment_events(org_id,stock_id,kind,quantity,occurred_on,to_stock_id,receipt_movement_id,reason,created_by)
-      values(${orgId},${stockId},${input.action},${quantity},${input.date},${toStockId},${receiptMovementId},${reason},${actorId}) returning id`)
-    ).rows[0];
+      values(${orgId},${stockId},${input.action},${quantity},${input.date},${toStockId},${receiptMovementId},${reason},${actorId}) returning id`, "objects"))[0];
     if (!event) throw new InventoryError("Custody event was not recorded");
-    const after = (
-      await db.execute<CustodyRow>(
-        sql`select stock.*,received_on::text as received_on from consignment_stock stock where org_id=${orgId} and id=${stockId}`,
-      )
-    ).rows[0];
+    const after = (await db.execute<CustodyRow>(
+        sql`select stock.*,received_on::text as received_on from consignment_stock stock where org_id=${orgId} and id=${stockId}`, "objects",
+      ))[0];
     if (!after)
       throw new InventoryError(
         "Custody position could not be resolved after the operation",
       );
     const audit =
       await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-      values(${orgId},'consignment_stock',${stockId},${input.action === "receive" ? "insert" : "update"},${JSON.stringify({ operation: input.action, reason, before, after, quantity, toStockId, receiptMovementId, eventId: event.id })}::jsonb,${actorId}) returning id`);
-    if (!audit.rows.length)
+      values(${orgId},'consignment_stock',${stockId},${input.action === "receive" ? "insert" : "update"},${JSON.stringify({ operation: input.action, reason, before, after, quantity, toStockId, receiptMovementId, eventId: event.id })}::jsonb,${actorId}) returning id`, "objects");
+    if (!audit.length)
       throw new InventoryError("Custody operation was not audited");
     return { stockId, eventId: event.id, receiptMovementId, toStockId };
   });

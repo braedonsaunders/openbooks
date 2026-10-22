@@ -72,9 +72,9 @@ export async function reloadClaimLine(
        and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
-     for update of l for share of bk`);
-  if (claim.rows[0]) assertLocalDepreciation(claim.rows[0].custom, claim.rows[0].asset_number);
-  return claim.rows[0] ?? null;
+     for update of l for share of bk`, "objects");
+  if (claim[0]) assertLocalDepreciation(claim[0].custom, claim[0].asset_number);
+  return claim[0] ?? null;
 }
 
 /**
@@ -161,7 +161,7 @@ async function runConfirmBatch(
        ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
        ${scope.periodId ? sql`and l.period_id = ${scope.periodId}` : sql``}
        and l.id = any(${uuidArray(lineIds)}::uuid[])
-     order by l.id`);
+     order by l.id`, "objects");
 
   const validated: {
     lineId: string;
@@ -173,14 +173,14 @@ async function runConfirmBatch(
     planned: string;
     postDate: string;
   }[] = [];
-  for (const row of due.rows) {
+  for (const row of due) {
     const rowPeriod = canonicalPeriodLabel(depreciationPeriodRef(row));
     const assetLock = await outer.execute<{ category_id: string; subsidiary_id: string }>(sql`
       select category_id, subsidiary_id
         from fixed_assets
        where id = ${row.asset_id} and org_id = ${orgId}
-       for update`);
-    const assetKey = assetLock.rows[0];
+       for update`, "objects");
+    const assetKey = assetLock[0];
     if (!assetKey) {
       throw new StalePreviewError(
         `asset ${row.asset_id} left the confirmed scope; re-preview before confirming`,
@@ -189,8 +189,8 @@ async function runConfirmBatch(
     const categoryLock = await outer.execute<{ id: string }>(sql`
       select id from asset_categories
        where id = ${assetKey.category_id} and org_id = ${orgId}
-       for update`);
-    if (!categoryLock.rows[0]) {
+       for update`, "objects");
+    if (!categoryLock[0]) {
       throw new StalePreviewError(
         `${row.asset_number} ${rowPeriod}: asset category changed; re-preview before confirming`,
       );
@@ -342,8 +342,8 @@ async function runConfirmBatch(
                non_gl_recognized_at = ${claimed.posts_gl ? sql`null` : sql`clock_timestamp()`},
                updated_at = now(), updated_by = ${actorId}
          where id = ${line.lineId} and org_id = ${orgId} and posted_amount is null
-         returning id`);
-      if (recorded.rows.length !== 1) {
+         returning id`, "objects");
+      if (recorded.length !== 1) {
         throw new Error(
           "depreciation recognition did not record the claimed line; reload the schedule and retry",
         );
@@ -492,8 +492,8 @@ export async function runDepreciation(
                 join accounting_periods pp on pp.id = l.period_id and pp.org_id = l.org_id
                where l.org_id = s.org_id and l.schedule_id = s.id
             ), date '0001-01-01')
-       )`));
-  for (const s of stale.rows) {
+       )`, "objects"));
+  for (const s of stale) {
     try {
       await buildSchedule(s.asset_id, orgId, actorId, s.book_id, allowedSubsidiaryIds);
     } catch (e: unknown) {
@@ -551,9 +551,9 @@ export async function runDepreciation(
        ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
        ${scope?.periodId ? sql`and l.period_id = ${scope.periodId}` : sql``}
        ${scope?.lineIds && scope.lineIds.length > 0 ? sql`and l.id = any(${`{${[...new Set(scope.lineIds)].join(",")}}`}::uuid[])` : sql``}
-     order by a.asset_number, l.sequence`));
+     order by a.asset_number, l.sequence`, "objects"));
 
-  for (const row of due.rows) {
+  for (const row of due) {
     const rowPeriodRef = depreciationPeriodRef(row);
     const rowPeriod = canonicalPeriodLabel(rowPeriodRef);
     try {
@@ -565,8 +565,8 @@ export async function runDepreciation(
           select category_id, subsidiary_id
             from fixed_assets
            where id = ${row.asset_id} and org_id = ${orgId}
-           for update`));
-        const assetKey = assetLock.rows[0];
+           for update`, "objects"));
+        const assetKey = assetLock[0];
         if (!assetKey) return null;
 
         // Category account defaults are another authoritative source. Lock it
@@ -575,8 +575,8 @@ export async function runDepreciation(
         const categoryLock = (await tx.execute<{ id: string }>(sql`
           select id from asset_categories
            where id = ${assetKey.category_id} and org_id = ${orgId}
-           for update`));
-        if (!categoryLock.rows[0]) throw new DepreciationRefusalError("asset category not found");
+           for update`, "objects"));
+        if (!categoryLock[0]) throw new DepreciationRefusalError("asset category not found");
 
         // Restriction validation depends on the complete subsidiary tree. Lock
         // that tree before loading it so parent/active-state edits cannot race
@@ -697,8 +697,8 @@ export async function runDepreciation(
                    non_gl_recognized_at = ${claimed.posts_gl ? sql`null` : sql`clock_timestamp()`},
                    updated_at = now(), updated_by = ${actorId}
              where id = ${row.line_id} and org_id = ${orgId} and posted_amount is null
-             returning id`);
-          if (recorded.rows.length !== 1) throw new Error("depreciation recognition did not record the claimed line; reload the schedule and retry");
+             returning id`, "objects");
+          if (recorded.length !== 1) throw new Error("depreciation recognition did not record the claimed line; reload the schedule and retry");
           return {
             entryId: null,
             recorded: !claimed.posts_gl,
@@ -860,8 +860,8 @@ export async function runDepreciation(
          ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
          ${scope?.periodId ? sql`and l.period_id = ${scope.periodId}` : sql``}
        order by p.ends_on, a.asset_number, l.sequence
-       limit 1`));
-    const upcoming = next.rows[0];
+       limit 1`, "objects"));
+    const upcoming = next[0];
     if (upcoming) {
       const periodRef = depreciationPeriodRef(upcoming);
       result.nextDue = {

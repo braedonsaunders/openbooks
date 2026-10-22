@@ -84,9 +84,9 @@ async function readDoc(id: string) {
       custom: unknown;
       memo: string | null;
       project_id: string | null;
-    }>(sql`select status, custom, memo, project_id from documents where id = ${id}`),
+    }>(sql`select status, custom, memo, project_id from documents where id = ${id}`, "objects"),
   );
-  return r.rows[0]!;
+  return r[0]!;
 }
 
 test(

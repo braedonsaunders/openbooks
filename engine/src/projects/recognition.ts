@@ -49,8 +49,8 @@ async function recognitionAccountsFrom(
       from orgs
      where id = ${orgId}
      ${lock ? sql`for share` : sql``}
-  `));
-  const c = r.rows[0]?.c ?? {};
+  `, "objects"));
+  const c = r[0]?.c ?? {};
   return {
     laborWip: c.laborWip,
     laborClearing: c.laborClearing,
@@ -208,11 +208,11 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
          -- labor cost, so internal time alone moves no company ledger.
          and coalesce(p.is_internal, false) = false
        order by te.id
-       for update of te`));
-    if (rows.rows.length === 0) return [];
+       for update of te`, "objects"));
+    if (rows.length === 0) return [];
 
     const entryIds: string[] = [];
-    for (const group of groupLaborPostings(rows.rows)) {
+    for (const group of groupLaborPostings(rows)) {
       const lines = laborPostingLines(group, { laborWip: accts.laborWip!, laborClearing: accts.laborClearing });
       if (lines.length === 0) continue;
       const postingDate = group.postingDate || await businessToday(orgId);
@@ -239,8 +239,8 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
          where org_id = ${orgId}
            and id = any(${`{${group.timeEntryIds.join(",")}}`}::uuid[])
            and cost_journal_entry_id is null
-         returning id`));
-      if (stamped.rows.length !== group.timeEntryIds.length) {
+         returning id`, "objects"));
+      if (stamped.length !== group.timeEntryIds.length) {
         throw new Error("labor posting source claim changed before journal stamping");
       }
       entryIds.push(entryId);
@@ -266,8 +266,8 @@ export async function reverseProjectLaborCost(
        where org_id = ${orgId}
          and id = any(${idArr}::uuid[])
          and cost_journal_entry_id is not null
-       order by id`));
-    const entryIds = [...new Set(linked.rows.map((row) => row.cost_journal_entry_id))].sort();
+       order by id`, "objects"));
+    const entryIds = [...new Set(linked.map((row) => row.cost_journal_entry_id))].sort();
     for (const entryId of entryIds) {
       // Lock the journal before any member rows. Two callers may request
       // different entries carried by the same journal; row-first locking would

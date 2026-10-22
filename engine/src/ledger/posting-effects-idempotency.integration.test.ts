@@ -72,8 +72,8 @@ async function ensureRecognitionPeriods(orgId: string): Promise<void> {
   const calendar = await db.execute<{ id: string }>(sql`
     select id from fiscal_calendars
      where org_id = ${orgId} and is_default = true
-     limit 1`);
-  const calendarId = calendar.rows[0]?.id;
+     limit 1`, "objects");
+  const calendarId = calendar[0]?.id;
   assert.ok(calendarId, "scratch org has a default fiscal calendar");
 
   for (let offset = 1; offset < 12; offset += 1) {
@@ -117,8 +117,8 @@ async function scheduleState(orgId: string): Promise<ScheduleStateRow[]> {
       left join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
      where o.org_id = ${orgId}
      order by b.code, l.sequence
-  `);
-  return result.rows;
+  `, "objects");
+  return result;
 }
 
 test("duplicate inventory, revenue-contract, and obligation effects violate their storage keys", { skip: !DB }, async () => {
@@ -212,8 +212,8 @@ test("concurrent invoice obligation creation converges on one contract and one o
         join performance_obligations obligation on obligation.contract_id=contract.id
        where contract.org_id=${org.orgId}
          and contract.idempotency_key=${revenueContractPostingEffectKey(documentId)}
-    `);
-    assert.deepEqual(stored.rows, [{
+    `, "objects");
+    assert.deepEqual(stored, [{
       contracts: 1,
       obligations: 1,
       contract_key: revenueContractPostingEffectKey(documentId),
@@ -233,9 +233,9 @@ test("replay after a crash between obligation commit and schedule build converge
     const baseline = await scheduleState(org.orgId);
     const glBooks = await db.execute<{ n: number }>(sql`
       select count(*)::int as n from accounting_books
-       where org_id = ${org.orgId} and is_active and posts_gl`);
+       where org_id = ${org.orgId} and is_active and posts_gl`, "objects");
     assert.equal(baseline.length, 12, "one twelve-month plan for the primary book");
-    assert.equal(glBooks.rows[0]!.n, 1);
+    assert.equal(glBooks[0]!.n, 1);
 
     // Crash aftermath: the obligations committed, the schedule writes did not.
     await db.execute(sql`
@@ -249,7 +249,7 @@ test("replay after a crash between obligation commit and schedule build converge
     assert.equal(replay.created, 0);
 
     const repaired = await scheduleState(org.orgId);
-    assert.equal(new Set(repaired.map((r) => r.schedule_id)).size, glBooks.rows[0]!.n);
+    assert.equal(new Set(repaired.map((r) => r.schedule_id)).size, glBooks[0]!.n);
     assert.deepEqual(
       repaired.map(({ book_code, period_id, sequence, planned, journal_entry_id }) => ({
         book_code,
@@ -358,8 +358,8 @@ test("a schedule-build failure during obligation creation commits nothing", { sk
                where org_id = ${org.orgId} and document_line_id = ${lineId}) as obligations,
              (select count(*)::int from recognition_schedules
                where org_id = ${org.orgId}) as schedules
-    `);
-    assert.deepEqual(persisted.rows[0], { contracts: 0, obligations: 0, schedules: 0 });
+    `, "objects");
+    assert.deepEqual(persisted[0], { contracts: 0, obligations: 0, schedules: 0 });
   } finally {
     await dropScratchOrg(org.orgId);
   }

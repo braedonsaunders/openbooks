@@ -126,7 +126,7 @@ async function seedAsset(
       values (${folderId}, ${org.orgId}, 'Asset evidence', 'fixed_assets', ${assetId}, ${actorId}, ${actorId})`);
     const evidenceFileId = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
-      values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`)).rows[0]!.id;
+      values (${org.orgId}, ${folderId}, 'meter-evidence.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}) returning id`, "objects"))[0]!.id;
     assert.equal(evidenceFileId[14], "7", "evidence uses the native file ID generator");
     await tx.execute(sql`
       insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
@@ -145,7 +145,7 @@ test(
       const unattachedFileId = randomUUID();
       const schedule = await db.execute<{ id: string }>(sql`
       select id from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId} and book_id=${org.bookId}
-    `);
+    `, "objects");
       await db.execute(sql`
       insert into files (id, org_id, folder_id, name, file_type, content_type, size_bytes, created_by, updated_by)
       select ${unattachedFileId}, ${org.orgId}, folder_id, 'unattached.pdf', 'pdf', 'application/pdf', 1, ${actorId}, ${actorId}
@@ -155,7 +155,7 @@ test(
       db.execute(sql`
         insert into depreciation_inputs
           (org_id, schedule_id, period_id, kind, manual_amount, memo, evidence_file_id, created_by, updated_by)
-        values (${org.orgId}, ${schedule.rows[0]!.id}, ${org.periodId}, 'manual', '1.0000',
+        values (${org.orgId}, ${schedule[0]!.id}, ${org.periodId}, 'manual', '1.0000',
                 'Attempted unattached evidence', ${unattachedFileId}, ${actorId}, ${actorId})
       `),
       (error: unknown) => {
@@ -171,9 +171,9 @@ test(
       memo: "Approved manual adjustment", evidenceFileId, actorId,
     });
       const attachment = await db.execute<{ id: string }>(sql`
-      select id from file_attachments where org_id=${org.orgId} and file_id=${evidenceFileId} and target_id=${assetId}`);
+      select id from file_attachments where org_id=${org.orgId} and file_id=${evidenceFileId} and target_id=${assetId}`, "objects");
       await assert.rejects(
-      db.execute(sql`delete from file_attachments where id=${attachment.rows[0]!.id}`),
+      db.execute(sql`delete from file_attachments where id=${attachment[0]!.id}`),
       (error: unknown) => {
         const wrapped = error as { message?: string; cause?: { message?: string } };
         return /file attachment is retained by depreciation evidence/.test(
@@ -191,8 +191,8 @@ test(
       const evidence = await db.execute<{ total: number; voided: number }>(sql`
       select count(*)::int as total,
              count(*) filter (where voided_at is not null)::int as voided
-        from depreciation_inputs where org_id = ${org.orgId}`);
-      assert.deepEqual(evidence.rows[0], { total: 2, voided: 1 });
+        from depreciation_inputs where org_id = ${org.orgId}`, "objects");
+      assert.deepEqual(evidence[0], { total: 2, voided: 1 });
 
       const runs = await Promise.all([
       runDepreciation(org.orgId, "2026-07-31", actorId, assetId),
@@ -205,8 +205,8 @@ test(
         from depreciation_schedule_lines l
         join journal_entries je on je.id = l.journal_entry_id
         join journal_lines jl on jl.entry_id = je.id
-       where l.org_id = ${org.orgId} and l.id = ${second.scheduleLineId}`);
-      assert.deepEqual(ledger.rows[0], { entries: 1, balance: "0.0000", posted_amount: "125.4321" });
+       where l.org_id = ${org.orgId} and l.id = ${second.scheduleLineId}`, "objects");
+      assert.deepEqual(ledger[0], { entries: 1, balance: "0.0000", posted_amount: "125.4321" });
 
       await assert.rejects(
       db.execute(sql`update depreciation_inputs set memo = 'tampered' where id = ${second.inputId}`),
@@ -233,8 +233,8 @@ test(
         left join journal_entries je on je.id = l.journal_entry_id and je.org_id = l.org_id
        where l.org_id = ${org.orgId} and l.schedule_id = (
          select schedule_id from depreciation_schedule_lines where id = ${second.scheduleLineId})
-    `);
-      assert.deepEqual(corrected.rows[0], { accumulated: "100.0000", postings: 2, journals: 2, entry_numbers: 2 });
+    `, "objects");
+      assert.deepEqual(corrected[0], { accumulated: "100.0000", postings: 2, journals: 2, entry_numbers: 2 });
     } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -288,8 +288,8 @@ test(
     const { org, assetId, actorId } = await seedAsset("manual");
     try {
       const schedule = await db.execute<{ id: string }>(sql`
-      select id from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId} and book_id=${org.bookId}`);
-      const scheduleId = schedule.rows[0]!.id;
+      select id from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId} and book_id=${org.bookId}`, "objects");
+      const scheduleId = schedule[0]!.id;
       const calB = randomUUID();
       await db.execute(sql`
       insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, week_starts_on, time_zone,
@@ -354,7 +354,7 @@ test(
       actorId,
     });
       const alternateLocation = (await db.execute<{ id: string }>(sql`
-      select id from locations where org_id = ${org.orgId} and name = 'DC' limit 1`)).rows[0]!.id;
+      select id from locations where org_id = ${org.orgId} and name = 'DC' limit 1`, "objects"))[0]!.id;
       // Native asset overrides are the old posting configuration. The edit below
       // changes both accounts used by the journal and its location dimension.
       await db.execute(sql`
@@ -403,8 +403,8 @@ test(
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where je.id = ${run.entries[0]!.entryId}
-       order by jl.line_number`);
-      assert.deepEqual(lines.rows, [
+       order by jl.line_number`, "objects");
+      assert.deepEqual(lines, [
       { account_id: org.accounts.cogs, location_id: alternateLocation },
       { account_id: org.accounts.ap, location_id: alternateLocation },
     ], "the journal must use the committed asset edit, not the due-query snapshot");
@@ -432,12 +432,12 @@ test(
       await db.execute(sql`
       insert into accounting_books (id, org_id, code, name, is_primary, posts_gl, is_active, created_by, updated_by)
       values (${alternateBookId}, ${org.orgId}, 'ALT', 'Alternate reporting', false, false, true, ${actorId}, ${actorId})`);
-      const category = await db.execute<{ category_id: string }>(sql`select category_id from fixed_assets where id=${assetId}`);
+      const category = await db.execute<{ category_id: string }>(sql`select category_id from fixed_assets where id=${assetId}`, "objects");
       await db.execute(sql`update fixed_assets set useful_life_months=12 where id=${assetId}`);
       await db.execute(sql`
       insert into depreciation_book_policies
         (org_id, book_id, category_id, method, depreciation_method_id, life_months, convention, created_by, updated_by)
-      values (${org.orgId}, ${alternateBookId}, ${category.rows[0]!.category_id}, 'straight_line', ${formulaId}, 12, 'full_month', ${actorId}, ${actorId})`);
+      values (${org.orgId}, ${alternateBookId}, ${category[0]!.category_id}, 'straight_line', ${formulaId}, 12, 'full_month', ${actorId}, ${actorId})`);
 
       const results = await buildAllSchedules(assetId, org.orgId, actorId);
       assert.equal(results.length, 2);
@@ -445,8 +445,8 @@ test(
       select s.depreciation_method_id, count(l.id)::int as lines, coalesce(sum(l.planned_amount),0)::text as total
         from depreciation_schedules s left join depreciation_schedule_lines l on l.schedule_id=s.id
        where s.asset_id=${assetId} and s.book_id=${alternateBookId}
-       group by s.id`);
-      assert.deepEqual(alternate.rows[0], { depreciation_method_id: formulaId, lines: 1, total: "833.3333" });
+       group by s.id`, "objects");
+      assert.deepEqual(alternate[0], { depreciation_method_id: formulaId, lines: 1, total: "833.3333" });
       await assert.rejects(
       db.execute(sql`update depreciation_methods set formula='OC/AL' where id=${formulaId}`),
       (error: unknown) => {
@@ -459,7 +459,7 @@ test(
       const line = (await db.execute<{ id: string }>(sql`
       select l.id from depreciation_schedule_lines l join depreciation_schedules s
         on s.org_id=l.org_id and s.id=l.schedule_id
-       where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${alternateBookId}`)).rows[0]!;
+       where s.org_id=${org.orgId} and s.asset_id=${assetId} and s.book_id=${alternateBookId}`, "objects"))[0]!;
       await setPeriodLockState({orgId:org.orgId,periodId:org.periodId,bookId:alternateBookId,
       module:"assets",state:"closed",actorId,reason:"Protect reporting book while close is reviewed"});
       const closed = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId, undefined, alternateBookId);
@@ -502,20 +502,20 @@ test(
       assert.deepEqual(nonPostingRun.entries, []);
       const recognized = (await db.execute<{ posted:string; journal_entry_id:string|null; recorded:boolean; updated_by:string }>(sql`
       select posted_amount::text as posted,journal_entry_id,non_gl_recognized_at is not null as recorded,updated_by
-        from depreciation_schedule_lines where org_id=${org.orgId} and id=${line.id}`)).rows[0]!;
+        from depreciation_schedule_lines where org_id=${org.orgId} and id=${line.id}`, "objects"))[0]!;
       assert.deepEqual(recognized, {posted:"833.3333",journal_entry_id:null,recorded:true,updated_by:actorId});
       const journalCount = (await db.execute<{ n:number }>(sql`
-      select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${alternateBookId}`)).rows[0]!.n;
+      select count(*)::int as n from journal_entries where org_id=${org.orgId} and book_id=${alternateBookId}`, "objects"))[0]!.n;
       assert.equal(journalCount, 0);
       const carrying = (await db.execute<{ amount:string }>(sql`
       select carrying_value::text as amount from asset_book_carrying_values
-       where org_id=${org.orgId} and asset_id=${assetId} and book_id=${alternateBookId}`)).rows[0]!;
+       where org_id=${org.orgId} and asset_id=${assetId} and book_id=${alternateBookId}`, "objects"))[0]!;
       assert.equal(carrying.amount, "11166.6667", "the observable book carrying amount includes recognition");
-      const audit = async () => (await db.execute<{ actor_id:string; before:string|null; after:string; reason:string }>(sql`
+      const audit = async () => await db.execute<{ actor_id:string; before:string|null; after:string; reason:string }>(sql`
       select actor_id,changes->'before'->>'posted_amount' as before,changes->'after'->>'posted_amount' as after,
              changes->>'reason' as reason from audit_log
        where org_id=${org.orgId} and table_name='depreciation_schedule_lines' and row_id=${line.id}
-         and changes->>'reason'='Recognize reporting-book depreciation without a GL journal'`)).rows;
+         and changes->>'reason'='Recognize reporting-book depreciation without a GL journal'`, "objects");
       assert.deepEqual(await audit(), [{actor_id:actorId,before:null,after:"833.3333",reason:"Recognize reporting-book depreciation without a GL journal"}]);
       const repeat = await runDepreciation(org.orgId, "2026-07-31", actorId, assetId, undefined, alternateBookId);
       assert.equal(repeat.recorded, 0);
@@ -555,8 +555,8 @@ test(
       select l.source, l.planned_amount::text, i.production_units::text, f.name as evidence_file_name
         from depreciation_schedule_lines l join depreciation_inputs i on i.id = l.input_id
         join files f on f.id=i.evidence_file_id
-       where l.id = ${result.scheduleLineId}`);
-      assert.deepEqual(stored.rows[0], {
+       where l.id = ${result.scheduleLineId}`, "objects");
+      assert.deepEqual(stored[0], {
       source: "production_usage", planned_amount: "3333.3330",
       production_units: "333.3333", evidence_file_name: "meter-evidence.pdf",
     });
@@ -647,8 +647,8 @@ test(
 
         const inFlight = await db.execute<{ schedules: number }>(sql`
         select count(*)::int as schedules from depreciation_schedules
-         where org_id = ${org.orgId} and asset_id = ${assetId}`);
-        assert.equal(inFlight.rows[0]!.schedules, 0, "an in-flight build must expose no partial schedule");
+         where org_id = ${org.orgId} and asset_id = ${assetId}`, "objects");
+        assert.equal(inFlight[0]!.schedules, 0, "an in-flight build must expose no partial schedule");
 
         // Session B: a definition edit racing the in-flight first build.
         await mutator.query("begin");
@@ -689,8 +689,8 @@ test(
           join depreciation_schedules s on s.depreciation_method_id = m.id and s.org_id = m.org_id
           left join depreciation_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
          where m.org_id = ${org.orgId} and m.id = ${formulaId} and s.asset_id = ${assetId}
-         group by m.formula, s.depreciation_method_id`);
-        assert.deepEqual(state.rows[0], {
+         group by m.formula, s.depreciation_method_id`, "objects");
+        assert.deepEqual(state[0], {
         formula: "(OC-RV)/AL",
         depreciation_method_id: formulaId,
         lines: 1,

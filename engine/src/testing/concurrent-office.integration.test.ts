@@ -108,14 +108,14 @@ test("two replicas racing one recurring occurrence post exactly one invoice", { 
     const invoices = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents
        where org_id = ${org.orgId} and kind = 'customer_invoice' and status = 'posted'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     const entries = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from journal_entries where org_id = ${org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     const guards = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from recurring_occurrence_documents
        where org_id = ${org.orgId} and schedule_id = ${scheduleId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(invoices, 1, "exactly one posted invoice across both replicas");
     assert.equal(entries, 1, "exactly one journal entry across both replicas");
     assert.equal(guards, 1, "exactly one occurrence guard row");
@@ -167,31 +167,31 @@ test("two replicas racing one dunning notice send exactly one", { skip: !DB || !
     const claimRows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from dunning_log
        where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(claimRows, 1, "exactly one dunning_log claim row across both replicas");
     const claims = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from dunning_log
        where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
          and status = 'staged'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(claims, 1, "exactly one staged claim across both replicas");
     const deferred = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from scheduler_outbox
        where org_id = ${org.orgId} and kind = 'flow_email' and subject_id = ${invoiceId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(deferred, 1, "exactly one deferred letter across both replicas");
     // The email worker's verdict is the only writer that settles the claim.
     const claimId = (await db.execute<{ id: string }>(sql`
       select id from dunning_log
        where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
-    `)).rows[0]!.id;
+    `, "objects"))[0]!.id;
     const { markDunningClaimSent } = await import("../delivery/email-config.ts");
     assert.equal(await markDunningClaimSent(org.orgId, claimId), true);
     const notices = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from dunning_log
        where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
          and status = 'sent'
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(notices, 1, "exactly one fired notice across both replicas");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -208,23 +208,23 @@ test("two replicas refreshing one sandbox leave exactly one consistent clone", {
     const created = await createSandbox({ productionOrgId: org.orgId, name: "Concurrent refresh", tier: "dev", masked: true });
     const prodDocs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${org.orgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     const [first, second] = await racePair("sandbox-refresh", org.orgId, created.sandboxId);
     const outcomes = [first.ok, second.ok];
     const row = (await db.execute<{ status: string; last_error: string | null }>(sql`
       select status, last_error from sandboxes where id = ${created.sandboxId}
-    `)).rows[0]!;
+    `, "objects"))[0]!;
     const cloneDocs = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from documents where org_id = ${created.sandboxOrgId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.deepEqual(outcomes, [true, true], `both refreshes must succeed: ${first.error} / ${second.error}`);
     assert.equal(row.status, "ready");
     assert.equal(row.last_error, null);
     assert.equal(cloneDocs, prodDocs, "the clone must hold exactly one copy of production rows");
   } finally {
     const { deleteSandbox } = await import("../sandbox/lifecycle.ts");
-    const leftovers = await db.execute<{ id: string }>(sql`select id from sandboxes where org_id != ${org.orgId} and production_org_id = ${org.orgId}`);
-    for (const leftover of leftovers.rows) {
+    const leftovers = await db.execute<{ id: string }>(sql`select id from sandboxes where org_id != ${org.orgId} and production_org_id = ${org.orgId}`, "objects");
+    for (const leftover of leftovers) {
       await deleteSandbox(leftover.id).catch(() => undefined);
     }
     await dropScratchOrg(org.orgId);
@@ -258,7 +258,7 @@ test("two replicas racing one scheduled report run render exactly once", { skip:
     assert.equal(claimed.length, 1, "exactly one replica claims the run"); // only a deliveries result rendered; unclaimed/skipped losers stand down cleanly
     const artifacts = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from report_run_artifacts where org_id = ${org.orgId} and run_id = ${runId}
-    `)).rows[0]!.n;
+    `, "objects"))[0]!.n;
     assert.equal(artifacts, 1, "exactly one artifact set across both replicas");
   } finally {
     await dropScratchOrg(org.orgId);

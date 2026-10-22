@@ -5,8 +5,7 @@ import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/eng
 
 /**
  * Read-side of the gl_month_activity summary (maintained by the
- * openbooks_gl_activity_* journal triggers — see 0001_baseline.sql and
- * 0016_gl_month_activity_book_id.sql).
+ * openbooks_gl_activity_* journal triggers, keyed by book_id).
  *
  * Every read resolves one selected reporting basis: journal entries carry a
  * mandatory book_id and the summary keys it, so an unscoped read would fuse

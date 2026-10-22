@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { publishedMigrationSessionPrelude, publishedMigrationSessionSettings, publishedMigrationUsesRunnerLockTimeout } from "./migration-session-headers.mjs";
-import {
-  LOCK_TIMEOUT_AMNESTY_MAX_ORDINAL,
-  scanMigrationFile,
-  scanTree,
-} from "./check-migration-headers.mjs";
+import { scanMigrationFile, scanTree } from "./check-migration-headers.mjs";
 
 const HEADER = [
   "SET statement_timeout = 0;",
@@ -93,28 +88,6 @@ test("a missing header line is refused naming the missing SET", () => {
   );
 });
 
-test("the runner supplies the exact published partial header without admitting changed or unrelated files", () => {
-  const filename = "0572_optional_custom_dimension_assignments.sql";
-  const content = readFileSync(new URL(`../schema/migrations/generated/${filename}`, import.meta.url), "utf8");
-  const settings = publishedMigrationSessionSettings(`generated/${filename}`, content);
-  assert.deepEqual(settings.map(({ name }) => name).sort(), [
-    "client_encoding", "client_min_messages", "idle_in_transaction_session_timeout", "standard_conforming_strings",
-  ]);
-  assert.deepEqual(scanMigrationFile(filename, content), []);
-  const prelude = publishedMigrationSessionPrelude(`generated/${filename}`, content);
-  assert.equal(prelude, `${HEADER.split("\n").slice(1).join("\n")}\n`);
-  assert.equal(publishedMigrationSessionPrelude("generated/0576_other.sql", content), "");
-  assert.equal(scanMigrationFile("0576_other.sql", content).filter(({ kind }) => kind === "header-missing").length, 4);
-  for (const suffix of ["\n-- changed published bytes\n", "\nSET lock_timeout = 0;\n"]) {
-    const changed = content + suffix;
-    assert.throws(() => publishedMigrationSessionPrelude(`generated/${filename}`, changed), /published digest.*forward migration/);
-    const findings = scanMigrationFile(filename, changed);
-    assert.ok(findings.some(({ kind }) => kind === "published-content-changed"));
-    assert.equal(findings.filter(({ kind }) => kind === "header-missing").length, 4);
-    if (suffix.includes("lock_timeout")) assert.ok(findings.some(({ kind }) => kind === "lock_timeout-zero"));
-  }
-});
-
 test("lock_timeout prose in comments is not code", () => {
   const content = [
     "-- SET lock_timeout = 0 used to hang deploys; the runner bounds it now.",
@@ -125,36 +98,15 @@ test("lock_timeout prose in comments is not code", () => {
   assert.deepEqual(scanMigrationFile("0261_prose.sql", content), []);
 });
 
-test("exact published lock header retains identity under the runner bound; changed and unrelated bytes refuse", () => {
-  const filename = "0580_clone_preserves_recorded_document_balances.sql";
-  const content = readFileSync(new URL(`../schema/migrations/generated/${filename}`, import.meta.url), "utf8");
-  assert.equal(publishedMigrationUsesRunnerLockTimeout(`generated/${filename}`, content), true);
-  assert.deepEqual(scanMigrationFile(filename, content), []);
-  assert.equal(publishedMigrationSessionPrelude(`generated/${filename}`, content), "");
-  assert.equal(publishedMigrationUsesRunnerLockTimeout("generated/0581_other.sql", content), false);
-  assert.equal(scanMigrationFile("0581_other.sql", content).filter(({ kind }) => kind === "lock_timeout-zero").length, 1);
-  for (const changed of [content + "\n-- changed bytes\n", content.replace("SET lock_timeout = 0;", "RESET lock_timeout;")]) {
-    assert.throws(() => publishedMigrationSessionPrelude(`generated/${filename}`, changed), /published digest.*forward migration/);
-    const findings = scanMigrationFile(filename, changed);
-    assert.ok(findings.some(({ kind }) => kind === "published-content-changed"));
-    assert.ok(findings.some(({ kind }) => kind === "lock_timeout-zero"));
-  }
-});
-
-test("the amnesty covers 0251 exactly and nothing above it", () => {
-  assert.equal(LOCK_TIMEOUT_AMNESTY_MAX_ORDINAL, 251);
-  assert.deepEqual(
-    scanMigrationFile("0251_payment_link_token_at_rest.sql", `${HEADER}\nSET lock_timeout = 0;`),
-    [],
-  );
-  const findings = scanMigrationFile("0252_next.sql", `${HEADER}\nSET lock_timeout = 0;`);
+test("the first forward migration is held to the full contract", () => {
+  const findings = scanMigrationFile("0001_first.sql", `${HEADER}\nSET lock_timeout = 0;`);
   assert.equal(findings.length, 1);
   assert.equal(findings[0].kind, "lock_timeout-zero");
+  assert.equal(scanMigrationFile("0001_first.sql", "select 1;").filter(({ kind }) => kind === "header-missing").length, 5);
 });
 
 test("scanTree derives the file list from the directory", () => {
   const root = fixtureTree({
-    "0251_old.sql": "select 1;",
     "0261_ok.sql": `${HEADER}\nselect 1;`,
     "0262_bad.sql": `${HEADER}\nSET lock_timeout = 0;`,
     "README.md": "SET lock_timeout = 0;",

@@ -86,18 +86,18 @@ const post = (batchId: string, reversalDate: string) =>
   );
 
 async function batchState(orgId: string, batchId: string): Promise<{ status: string; reversalEntryId: string | null }> {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ status: string; reversalEntryId: string | null }>(
-      sql`select status, reversal_entry_id as "reversalEntryId" from psp_settlement_batches where org_id = ${orgId} and id = ${batchId}`,
-    ))).rows;
+      sql`select status, reversal_entry_id as "reversalEntryId" from psp_settlement_batches where org_id = ${orgId} and id = ${batchId}`, "objects",
+    ));
   return { status: rows[0]!.status, reversalEntryId: rows[0]!.reversalEntryId };
 }
 
 async function journalCount(orgId: string): Promise<number> {
-  const rows = (await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
     db.execute<{ n: string }>(
-      sql`select count(*) as n from journal_entries where org_id = ${orgId}`,
-    ))).rows;
+      sql`select count(*) as n from journal_entries where org_id = ${orgId}`, "objects",
+    ));
   return Number(rows[0]!.n);
 }
 

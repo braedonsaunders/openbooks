@@ -52,8 +52,8 @@ async function withExactDocumentRevision<T extends { doc: Record<string, unknown
   const row = (await db.execute<{ updatedAt: string }>(sql`
     select ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
       from documents where id = ${id} and org_id = ${orgId}
-  `))
-  if (row.rows[0]) payload.doc = { ...payload.doc, updated_at: row.rows[0].updatedAt }
+  `, 'objects'))
+  if (row[0]) payload.doc = { ...payload.doc, updated_at: row[0].updatedAt }
   return payload
 }
 
@@ -75,9 +75,9 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
       sql`select subsidiary_id as "subsidiaryId" from documents
            where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}
              ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-             for share`,
+             for share`, 'objects',
     ))
-    if (!owned.rows[0]) return null
+    if (!owned[0]) return null
     const loaded = await loadJournalDoc(id, gate.user.orgId, gate.allowedSubsidiaryIds)
     if (!loaded) return null
     return withExactDocumentRevision(loaded, id, gate.user.orgId)
@@ -169,14 +169,14 @@ export const PATCH = defineRoute({
     if (!isUuid(id)) return notFound("record")
 
     const existing = (await db.execute<{ status: string; subsidiaryId: string | null; custom: Record<string, unknown> | null }>(
-      sql`select status, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
+      sql`select status, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`, 'objects',
     ))
-    if (!existing.rows[0]) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
+    if (!existing[0]) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, existing[0].subsidiaryId)
     if (denied) return denied
-    if (existing.rows[0].status !== 'draft') {
+    if (existing[0].status !== 'draft') {
       return NextResponse.json(
-        { error: `a ${existing.rows[0].status} journal cannot be edited — create a correcting journal instead` },
+        { error: `a ${existing[0].status} journal cannot be edited — create a correcting journal instead` },
         { status: 422 },
       )
     }
@@ -221,8 +221,8 @@ export const PATCH = defineRoute({
       const subsidiaries = ((await db.execute(sql`
         select id from subsidiaries
          where org_id = ${user.orgId} and is_active and not is_elimination
-           and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`)))
-      if (subsidiaries.rows.length !== requestedSubsidiaries.length) {
+           and id = any(${`{${requestedSubsidiaries.join(',')}}`}::uuid[])`, 'objects')))
+      if (subsidiaries.length !== requestedSubsidiaries.length) {
         return NextResponse.json({ error: 'invalid subsidiary' }, { status: 422 })
       }
     }
@@ -244,8 +244,8 @@ export const PATCH = defineRoute({
       // keys survive. The exact-revision guard below rejects the write if a
       // concurrent edit moved the stored bag after this read.
       const existingCustom =
-        existing.rows[0].custom && typeof existing.rows[0].custom === 'object'
-          ? (existing.rows[0].custom as Record<string, unknown>)
+        existing[0].custom && typeof existing[0].custom === 'object'
+          ? (existing[0].custom as Record<string, unknown>)
           : {}
       // A restricted header field the caller cannot see is refused when changed;
       // an unchanged echo passes, and the stored value is kept by the merge below.
@@ -346,7 +346,7 @@ export const PATCH = defineRoute({
       const owned = lineAccountIds.length
         ? (await db.execute<{ id: string }>(sql`
             select id from accounts
-             where org_id = ${user.orgId} and id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])`)).rows
+             where org_id = ${user.orgId} and id = any(${`{${lineAccountIds.join(',')}}`}::uuid[])`, 'objects'))
         : []
       if (owned.length !== lineAccountIds.length) {
         return NextResponse.json({ error: 'account not found in this organization' }, { status: 404 })
@@ -372,7 +372,7 @@ export const PATCH = defineRoute({
             from documents
            where id = ${id} and kind = 'journal' and org_id = ${user.orgId}
            for update
-        `)).rows[0] ?? null,
+        `, 'objects'))[0] ?? null,
         mutate: async (tx, locked) => {
           if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, locked.subsidiaryId)) {
             throw new ScopeNotFoundError()
@@ -407,7 +407,7 @@ export const PATCH = defineRoute({
               if (error) throw new DocumentEditError(422, `Line ${index + 1}: ${error}`)
             }
           } else if (body.subsidiaryId !== undefined && body.subsidiaryId !== locked.subsidiaryId) {
-            const existingDims = (await tx.execute<{
+            const existingDims = await tx.execute<{
               subsidiary_id: string | null
               extra_dims: Record<string, string | null> | null
             }>(sql`
@@ -415,7 +415,7 @@ export const PATCH = defineRoute({
                where org_id = ${user.orgId} and document_id = ${id}
                order by line_number
                for update
-            `)).rows
+            `, 'objects')
             for (const [index, line] of existingDims.entries()) {
               // Header-only rehome keeps every stored leg: an explicit line
               // subsidiary the caller cannot see would otherwise ride along
@@ -448,7 +448,7 @@ export const PATCH = defineRoute({
           const requestedBook = body.accountingBookId !== undefined ? body.accountingBookId : locked.accountingBookId
           if (body.accountingBookId !== undefined || body.subsidiaryId !== undefined || body.currency !== undefined || body.fxRate !== undefined || body.documentDate !== undefined) {
             const bookSubsidiaryId = targetSubsidiaryId ?? (await tx.execute<{ id: string }>(sql`
-              select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`)).rows[0]?.id
+              select id from subsidiaries where org_id = ${user.orgId} and parent_id is null`, 'objects'))[0]?.id
             if (!bookSubsidiaryId) throw new DocumentEditError(422, 'journal requires a subsidiary')
             try {
               bookTarget = await resolveJournalBookTarget({
@@ -486,8 +486,8 @@ export const PATCH = defineRoute({
                 values (${user.orgId}, ${id}, ${i + 1}, ${l.accountId}, ${l.description},
                         ${l.quantity}, ${l.unit}, ${l.currency}, ${l.fxRate}, ${l.eliminate}, ${l.amount}, ${l.amount}, ${l.partyId}, ${l.departmentId}, ${l.projectId},
                         ${l.subsidiaryId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)}, ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn}) returning id
-              `)
-              if (savedLine.rows.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
+              `, 'objects')
+              if (savedLine.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
             }
           }
 
@@ -515,16 +515,16 @@ export const PATCH = defineRoute({
               updated_by = ${user.id}
             where id = ${id} and org_id = ${user.orgId}
             returning id
-          `)
-          if (savedDocument.rows.length !== 1) throw new DocumentEditError(409, 'Journal could not be saved')
+          `, 'objects')
+          if (savedDocument.length !== 1) throw new DocumentEditError(409, 'Journal could not be saved')
 
           // Segment value dependencies on the saved lines, as posting will read them.
           await assertDocumentSegmentDependencies(tx, user.orgId, id)
           await validateSavedAmortizationLines(tx, user.orgId, id)
           const totals = await validateJournalInstructions(tx,user.orgId,id)
           const measured = await tx.execute(sql`update documents set subtotal=${totals.debits},total=${totals.debits}
-            where org_id=${user.orgId} and id=${id} and status='draft' returning id`)
-          if (measured.rows.length !== 1) throw new DocumentEditError(409,"The journal's header-currency total could not be saved")
+            where org_id=${user.orgId} and id=${id} and status='draft' returning id`, 'objects')
+          if (measured.length !== 1) throw new DocumentEditError(409,"The journal's header-currency total could not be saved")
 
           const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditAfter) throw new Error(`journal ${id} disappeared during update`)
@@ -598,10 +598,10 @@ export const DELETE = defineRoute({
     // path only. The revision fence rides along like PATCH: without it a
     // stale client deletes over a newer save.
     const owned = (await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
+      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`, 'objects',
     ))
-    if (!owned.rows[0]) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+    if (!owned[0]) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, owned[0].subsidiaryId)
     if (denied) return denied
 
 

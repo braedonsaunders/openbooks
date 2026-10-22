@@ -36,7 +36,7 @@ test("list number expressions fall back to the reference on source handles", { s
              ${PAYMENT_BUILT_IN_EXPR.document_number} as payment
         from documents d
        where d.org_id = ${org.orgId}
-       order by d.document_number`))).rows.map((r) => [r.invoice, r.payment] as const);
+       order by d.document_number`, "objects"))).map((r) => [r.invoice, r.payment] as const);
     assert.deepEqual(rows, [
       ["INV-00046", "INV-00046"],
       ["PS-INV103296", "PS-INV103296"],

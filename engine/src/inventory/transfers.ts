@@ -56,18 +56,18 @@ async function restoreLegacyTransitProvenance(
   // The caller owns the item/location position lock. Other order shipments and
   // receipts cannot change either the pool or their line evidence until commit.
   const transit = (await tx.execute(sql`select id from stock_locations
-    where org_id=${orgId} and id=${input.fromStockLocationId} and kind='transit' for share`)).rows[0];
+    where org_id=${orgId} and id=${input.fromStockLocationId} and kind='transit' for share`, "objects"))[0];
   if (!transit) return false;
-  const layers = (await tx.execute<{
+  const layers = await tx.execute<{
     id: string; source_movement_id: string; original_quantity: string; remaining_quantity: string; unit_cost: string;
   }>(sql`select id,source_movement_id,original_quantity,remaining_quantity,unit_cost from cost_layers
     where org_id=${orgId} and item_id=${input.itemId} and stock_location_id=${input.fromStockLocationId}
-      and subsidiary_id=${input.subsidiaryId} and remaining_quantity>0 order by id for update`)).rows;
+      and subsidiary_id=${input.subsidiaryId} and remaining_quantity>0 order by id for update`, "objects");
   if (!layers.length || layers.some((layer) => cmp(layer.original_quantity, layer.remaining_quantity) !== 0)) return false;
   const consumed = (await tx.execute(sql`select id from cost_layer_consumptions
-    where org_id=${orgId} and cost_layer_id=any(${uuidArray(layers.map((layer) => layer.id))}::uuid[]) limit 1`)).rows[0];
+    where org_id=${orgId} and cost_layer_id=any(${uuidArray(layers.map((layer) => layer.id))}::uuid[]) limit 1`, "objects"))[0];
   if (consumed) return false;
-  const shipments = (await tx.execute<{ id: string; quantity: string; total_value: string; unit_cost: string; moved_at: string }>(sql`
+  const shipments = await tx.execute<{ id: string; quantity: string; total_value: string; unit_cost: string; moved_at: string }>(sql`
     select inbound.id,inbound.quantity,inbound.total_value,inbound.unit_cost,inbound.moved_at::text
       from transfer_orders o join transfer_order_lines l on l.org_id=o.org_id and l.transfer_order_id=o.id
       join inventory_movements outbound on outbound.org_id=l.org_id and outbound.id=l.ship_movement_id
@@ -83,7 +83,7 @@ async function restoreLegacyTransitProvenance(
        and (o.transit_stock_location_id is null or o.transit_stock_location_id=inbound.stock_location_id)
        and not exists(select 1 from inventory_movements reversal where reversal.org_id=${orgId}
          and reversal.reverses_movement_id in (inbound.id,outbound.id))
-     order by inbound.moved_at,inbound.created_at,inbound.id`)).rows;
+     order by inbound.moved_at,inbound.created_at,inbound.id`, "objects");
   const shipmentIds = new Set(shipments.map((shipment) => shipment.id));
   if (!shipments.length || shipmentIds.size !== shipments.length ||
       layers.some((layer) => !shipmentIds.has(layer.source_movement_id)) ||
@@ -277,17 +277,17 @@ export async function transferInventoryTx(
   await assertOwnedLocation(tx,orgId,input.fromStockLocationId);
   await assertOwnedLocation(tx,orgId,input.toStockLocationId);
   const locDims = (await tx.execute<{ id: string; location_id: string }>(sql`
-    select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`));
-  if (locDims.rows.length !== 2) {
+    select id, location_id from stock_locations where org_id = ${orgId} and id in (${input.fromStockLocationId}, ${input.toStockLocationId})`, "objects"));
+  if (locDims.length !== 2) {
     throw new InventoryError(
       "both transfer locations must belong to the organization",
     );
   }
   const fromDim =
-    locDims.rows.find((r) => r.id === input.fromStockLocationId)?.location_id ??
+    locDims.find((r) => r.id === input.fromStockLocationId)?.location_id ??
     null;
   const toDim =
-    locDims.rows.find((r) => r.id === input.toStockLocationId)?.location_id ??
+    locDims.find((r) => r.id === input.toStockLocationId)?.location_id ??
     null;
 
   const { consumptions } = await consumeLayers(
@@ -354,8 +354,8 @@ export async function transferInventoryTx(
               ${input.date}, ${input.fromStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${neg(transferQuantity)}, ${unitCost},
               ${neg(cost)}, ${entryId}, 'posted', ${input.memo ?? null},
-              ${actorId}, ${actorId}) returning id`);
-  if(outboundWritten.rows.length!==1) throw new InventoryError("The outbound transfer movement was not recorded; nothing moved.");
+              ${actorId}, ${actorId}) returning id`, "objects");
+  if(outboundWritten.length!==1) throw new InventoryError("The outbound transfer movement was not recorded; nothing moved.");
   const toMovementId = randomUUID();
   const inboundWritten=await tx.execute(sql`
       insert into inventory_movements
@@ -366,8 +366,8 @@ export async function transferInventoryTx(
               ${input.date}, ${input.toStockLocationId}, ${input.lotId ?? null},
               ${input.serialId ?? null}, ${transferQuantity}, ${unitCost}, ${cost},
               ${entryId}, ${fromMovementId}, 'posted', ${input.memo ?? null},
-              ${actorId}, ${actorId}) returning id`);
-  if(inboundWritten.rows.length!==1) throw new InventoryError("The inbound transfer movement was not recorded; nothing moved.");
+              ${actorId}, ${actorId}) returning id`, "objects");
+  if(inboundWritten.length!==1) throw new InventoryError("The inbound transfer movement was not recorded; nothing moved.");
 
   await recordConsumptions(
     tx,
@@ -393,8 +393,8 @@ export async function transferInventoryTx(
              updated_at = now(),
              updated_by = ${actorId}
        where id = ${input.serialId} and org_id = ${orgId} returning id
-    `);
-    if(serialUpdate.rows.length!==1)throw new InventoryError('Serial transfer lifecycle was not recorded');
+    `, "objects");
+    if(serialUpdate.length!==1)throw new InventoryError('Serial transfer lifecycle was not recorded');
   }
 
   return { fromMovementId, toMovementId, entryId, value: cost };

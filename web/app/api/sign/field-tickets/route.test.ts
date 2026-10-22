@@ -30,15 +30,16 @@ const mockSources = new Map<string, string>([
       export const withBypassContext = (fn) => fn()
       const state = globalThis[Symbol.for('openbooks.field-ticket-sign-gate-test')]
       export const db = {
-        async execute() {
+        async execute(_query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.executeCalls += 1
           // Row-locked flag read honors the feature switch (the gate lock itself is mocked above).
-          if (state.executeCalls === 1) return { rows: [{ features: { fieldTickets: state.featureEnabled } }] }
-          if (state.executeCalls === 3) return { rows: [{ id: '${TICKET_ID}', status: 'approved', document_number: 'FT-1' }] }
+          if (state.executeCalls === 1) return inMode({ rows: [{ features: { fieldTickets: state.featureEnabled } }] })
+          if (state.executeCalls === 3) return inMode({ rows: [{ id: '${TICKET_ID}', status: 'approved', document_number: 'FT-1' }] })
           // Slot serialization (bdd8d171f): request claim is call 5, signature insert is call 6.
-          if (state.executeCalls === 5) return { rows: [{ id: '00000000-0000-4000-8000-00000000c004' }] }
-          if (state.executeCalls === 6) return { rows: [{ id: '00000000-0000-4000-8000-00000000c006' }] }
-          return { rows: [] }
+          if (state.executeCalls === 5) return inMode({ rows: [{ id: '00000000-0000-4000-8000-00000000c004' }] })
+          if (state.executeCalls === 6) return inMode({ rows: [{ id: '00000000-0000-4000-8000-00000000c006' }] })
+          return inMode({ rows: [] })
         },
       }
       export async function withOrgTransaction(_orgId, work) { return work() }

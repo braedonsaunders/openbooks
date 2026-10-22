@@ -12,8 +12,8 @@ export async function salesSchemaReady(tx: SqlExecutor = db): Promise<boolean> {
     and exists(select 1 from information_schema.columns where table_schema='public' and table_name='crm_sales_team_members' and column_name='employee_id')
     and exists(select 1 from information_schema.columns where table_schema='public' and table_name='crm_account_profiles' and column_name='sales_rep_id')
     and exists(select 1 from information_schema.tables where table_schema='public' and table_name='crm_sales_evidence')
-    and exists(select 1 from information_schema.tables where table_schema='public' and table_name='crm_sales_territory_versions') as ready`);
-  return result.rows[0]?.ready === true;
+    and exists(select 1 from information_schema.tables where table_schema='public' and table_name='crm_sales_territory_versions') as ready`, "objects");
+  return result[0]?.ready === true;
 }
 export async function requireSalesSchema(tx: SqlExecutor = db): Promise<void> {
   if (!(await salesSchemaReady(tx)))

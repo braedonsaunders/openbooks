@@ -163,10 +163,8 @@ test("transfer orders refuse an unusable in-transit account at creation", { skip
       );
     }
     assert.equal(
-      (
-        (await db.execute<{ count: number }>(sql`
-          select count(*)::int as count from transfer_orders where org_id = ${org.orgId}`))
-      ).rows[0]!.count,
+      (await db.execute<{ count: number }>(sql`
+          select count(*)::int as count from transfer_orders where org_id = ${org.orgId}`, "objects"))[0]!.count,
       0,
       "refused creations persist no drafts",
     );
@@ -223,7 +221,7 @@ test("transfer posting re-validates the in-transit account against its current s
       /profit-and-loss/,
     );
     assert.equal(
-      ((await db.execute<{ status: string }>(sql`select status from transfer_orders where org_id = ${org.orgId} and id = ${order.id}`))).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from transfer_orders where org_id = ${org.orgId} and id = ${order.id}`, "objects"))[0]!.status,
       "draft",
       "a refused shipment stays a draft",
     );
@@ -240,7 +238,7 @@ test("transfer posting re-validates the in-transit account against its current s
     await db.execute(sql`update accounts set is_active = true where org_id = ${org.orgId} and id = ${inTransit}`);
     await receiveTransferOrder(org.orgId, actor, order.id, org.date);
     assert.equal(
-      ((await db.execute<{ status: string }>(sql`select status from transfer_orders where org_id = ${org.orgId} and id = ${order.id}`))).rows[0]!.status,
+      (await db.execute<{ status: string }>(sql`select status from transfer_orders where org_id = ${org.orgId} and id = ${order.id}`, "objects"))[0]!.status,
       "received",
     );
   } finally {

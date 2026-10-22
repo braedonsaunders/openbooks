@@ -203,8 +203,8 @@ async function assertExistingRecordAccess(
   const where = baseWhere(context, scope, { id });
   const row = (await db.execute<{ "?column?": number }>(sql`
     select 1 from ${table} where ${where} limit 1
-  `));
-  if (!row.rows[0]) throw notFound();
+  `, "objects"));
+  if (!row[0]) throw notFound();
 }
 
 export async function listRecordTypes(
@@ -274,9 +274,9 @@ export async function getRecord(
   const where = baseWhere(context, scope, { id: input.id });
   const result = (await db.execute<Record<string, unknown>>(sql`
     select *${documentRevisionProjection(scope.resolved.table)} from ${table} where ${where} limit 1
-  `));
-  if (!result.rows[0]) throw notFound();
-  const row = normalizeDocumentRecordRevisions(scope.resolved.table, result.rows)[0]!;
+  `, "objects"));
+  if (!result[0]) throw notFound();
+  const row = normalizeDocumentRecordRevisions(scope.resolved.table, result)[0]!;
   const definitions = await loadCustomFieldAccessDefs(
     scope.resolved.table,
     scope.resolved.documentKinds?.[0],

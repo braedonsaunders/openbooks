@@ -23,7 +23,7 @@ export async function decideTimesheetFixture(input:{orgId:string;employee:string
  const gate=(await db.execute<{id:string}>(sql`select g.id from timesheet_weeks w join flow_gates g
   on g.org_id=w.org_id and g.subject_id=w.id and g.subject_kind='timesheet_week'
   where w.org_id=${input.orgId} and w.employee_party_id=${input.employee} and w.week_start=${input.week}::date
-  and g.status='pending' order by g.created_at,g.id limit 1`)).rows[0]
+  and g.status='pending' order by g.created_at,g.id limit 1`, 'objects'))[0]
  return decide(new Request('http://time.local/api/flows/gates/decide',{method:'POST',headers:{'content-type':'application/json'},
   body:JSON.stringify({gateId:gate?.id??randomUUID(),decision:input.decision,comment:input.reason})}))
 }

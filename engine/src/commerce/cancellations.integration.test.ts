@@ -68,7 +68,7 @@ async function setup(org: ScratchOrg, actor: string): Promise<Fixture> {
     const id = (await db.execute<{ id: string }>(sql`
       insert into accounts (org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)
-      returning id`)).rows[0]!.id;
+      returning id`, "objects"))[0]!.id;
     extra.set(key, id);
   }
   for (const [role, key, accountId] of [
@@ -161,7 +161,7 @@ test("an unpaid cancellation voids its sales order", { skip: !DB }, async () => 
     if (sale.status !== "posted") {
       const parked = (await withOrgContext(org.orgId, () => db.execute<{ code: string | null; reason: string | null }>(sql`
         select exception_code as code, exception_reason as reason from channel_orders
-         where id = ${stored.id} and org_id = ${org.orgId}`))).rows[0];
+         where id = ${stored.id} and org_id = ${org.orgId}`, "objects")))[0];
       assert.fail(`order parked as ${parked?.code}: ${parked?.reason}`);
     }
     assert.ok(sale.documentId);
@@ -173,7 +173,7 @@ test("an unpaid cancellation voids its sales order", { skip: !DB }, async () => 
     const outcome = await withBypass(() => postChannelCancellation(org.orgId, actor, event.eventId));
     assert.equal(outcome.status, "posted");
     const doc = (await withOrgContext(org.orgId, () => db.execute<{ kind: string; status: string }>(sql`
-      select kind, status from documents where id = ${sale.documentId} and org_id = ${org.orgId}`))).rows[0]!;
+      select kind, status from documents where id = ${sale.documentId} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(doc.kind, "sales_order");
     assert.equal(doc.status, "voided");
     // A replay closes on the voided order instead of voiding twice.
@@ -209,7 +209,7 @@ test("a paid cancellation waits for its refund and never double-posts", { skip: 
     const refunds = (await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
       select count(*)::text as count from documents
        where org_id = ${org.orgId} and kind = 'cash_refund' and status = 'posted'
-         and custom->>'channelOrderId' = ${stored.id}`))).rows[0]!;
+         and custom->>'channelOrderId' = ${stored.id}`, "objects")))[0]!;
     assert.equal(refunds.count, "1");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -229,7 +229,7 @@ test("a cancelled pending order never posts", { skip: !DB }, async () => {
     }));
     assert.equal((await withBypass(() => postChannelCancellation(org.orgId, actor, event.eventId))).status, "posted");
     const order = (await withOrgContext(org.orgId, () => db.execute<{ posting_status: string }>(sql`
-      select posting_status from channel_orders where id = ${stored.id} and org_id = ${org.orgId}`))).rows[0]!;
+      select posting_status from channel_orders where id = ${stored.id} and org_id = ${org.orgId}`, "objects")))[0]!;
     assert.equal(order.posting_status, "excluded");
     assert.equal((await withOrgContext(org.orgId, () => postChannelOrder(org.orgId, actor, stored.id))).status, "excluded");
   } finally {

@@ -142,9 +142,9 @@ async function resolveContext(options: ImportOptions): Promise<{
 }> {
   const orgResult = (await db.execute<{ id: string; name: string }>(sql`
     select id, name from orgs where id::text = ${options.org} or name = ${options.org}
-  `));
-  if (orgResult.rows.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
-  const orgId = orgResult.rows[0]!.id;
+  `, "objects"));
+  if (orgResult.length !== 1) throw new Error(`tenant not found or ambiguous: ${options.org}`);
+  const orgId = orgResult[0]!.id;
 
   const connectionResult = (await db.execute<{ id: string; config: Record<string, unknown>; secrets: string | null }>(sql`
     select id, config, secrets
@@ -152,9 +152,9 @@ async function resolveContext(options: ImportOptions): Promise<{
      where org_id = ${orgId} and source = 'netsuite'
        ${options.connectionId ? sql`and id = ${options.connectionId}` : sql``}
      order by (status = 'active') desc, created_at desc
-  `));
-  if (connectionResult.rows.length > 1) throw new Error('Select one NetSuite connection before importing transaction files');
-  const connection = connectionResult.rows[0];
+  `, "objects"));
+  if (connectionResult.length > 1) throw new Error('Select one NetSuite connection before importing transaction files');
+  const connection = connectionResult[0];
   if (!connection) throw new Error("tenant does not have a NetSuite connection");
   const secret =
     connection.secrets == null
@@ -171,8 +171,8 @@ async function resolveContext(options: ImportOptions): Promise<{
   if (actorId) {
     const actorResult = (await db.execute<{ id: string }>(sql`
       select id from users where id = ${actorId} and org_id = ${orgId} and is_active
-    `));
-    if (!actorResult.rows[0]) {
+    `, "objects"));
+    if (!actorResult[0]) {
       throw new Error("attachment import actor must be an active user in the tenant");
     }
   }
@@ -209,10 +209,10 @@ async function sourceDocuments(orgId: string, connectionId: string, limit?: numb
        ${sourceRefs ? sql`and custom->>'nsId' = any(${`{${sourceRefs.join(",")}}`}::text[])` : sql``}
      order by kind, id
      ${limit ? sql`limit ${limit}` : sql``}
-  `));
+  `, "objects"));
   return {
-    documents: result.rows.filter((row): row is SourceDocument => Boolean(row.nsId)),
-    withoutSourceId: result.rows.filter((row) => !row.nsId).length,
+    documents: result.filter((row): row is SourceDocument => Boolean(row.nsId)),
+    withoutSourceId: result.filter((row) => !row.nsId).length,
   };
 }
 
@@ -259,8 +259,8 @@ async function targetedAttachmentInventory(
        and (custom->>'connectionId' is null or custom->>'connectionId'=${connectionId})
        and custom->>'nsId' in (${sourceIdsSql})
      order by kind, id
-  `));
-  const documents = result.rows.filter(
+  `, "objects"));
+  const documents = result.filter(
     (row): row is SourceDocument => Boolean(row.nsId),
   );
   const documentBySourceId = new Map<string, SourceDocument>();
@@ -362,7 +362,7 @@ async function attachmentInventory(
 /** Imported parties and the NetSuite entity types they mirror, one ref per role. */
 async function sourcePartyRecords(orgId: string, nsIds?: readonly string[]): Promise<SourceRecordRef[]> {
   if (nsIds && nsIds.length === 0) return [];
-  const rows = (await db.execute<{ id: string; nsId: string; customer: boolean; vendor: boolean; employee: boolean }>(sql`
+  const rows = await db.execute<{ id: string; nsId: string; customer: boolean; vendor: boolean; employee: boolean }>(sql`
     select p.id, p.custom->>'nsId' as "nsId",
            exists(select 1 from customer_roles r where r.org_id = p.org_id and r.party_id = p.id) as customer,
            exists(select 1 from vendor_roles r where r.org_id = p.org_id and r.party_id = p.id) as vendor,
@@ -371,7 +371,7 @@ async function sourcePartyRecords(orgId: string, nsIds?: readonly string[]): Pro
      where p.org_id = ${orgId} and p.custom->>'nsId' ~ '^[0-9]+$'
        ${nsIds ? sql`and p.custom->>'nsId' = any(${`{${nsIds.join(",")}}`}::text[])` : sql``}
      order by p.id
-  `)).rows;
+  `, "objects");
   return rows.flatMap((row) => (["customer", "vendor", "employee"] as const)
     .filter((role) => row[role])
     .map((recordType) => ({ id: row.id, nsId: row.nsId, recordType })));
@@ -500,7 +500,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     throw new Error("an incremental attachment sync cannot be combined with file ids or a document limit");
   }
   const { orgId, connectionId, actorId, creds, bridge, soapEndpointVersion } = await resolveContext(options);
-  const otherConnection = (await db.execute(sql`select id from connections where org_id=${orgId} and source='netsuite' and id<>${connectionId} limit 1`)).rows[0];
+  const otherConnection = (await db.execute(sql`select id from connections where org_id=${orgId} and source='netsuite' and id<>${connectionId} limit 1`, "objects"))[0];
   // Legacy NetSuite file identities are account-wide; never reuse them across connections.
   if (otherConnection) throw new Error("NetSuite file sync requires one source connection per organization; resolve the account identity before importing files");
   if (options.execute && !s3Enabled) {
@@ -642,8 +642,8 @@ async function importFileGraph(input: {
       left join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
        and f.source_id = any(${`{${inventoriedIds.join(",")}}`}::text[])
-  `));
-  const importedById = new Map(imported.rows.map((row) => [row.sourceId, row]));
+  `, "objects"));
+  const importedById = new Map(imported.map((row) => [row.sourceId, row]));
   const downloadIds: string[] = [];
   const downloadSet = new Set<string>();
   for (const fileId of fileToDocuments.keys()) {

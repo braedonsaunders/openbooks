@@ -105,20 +105,20 @@ async function addCostingProfile(org: ScratchOrg, itemId: string, baseUnit: stri
 }
 
 async function documentsOf(org: ScratchOrg, kind: string): Promise<Array<{ id: string; total: string }>> {
-  return withBypassContext(async () => (await db.execute<{ id: string; total: string }>(sql`
+  return withBypassContext(async () => await db.execute<{ id: string; total: string }>(sql`
     select id, total::text as total from documents
      where org_id = ${org.orgId} and kind = ${kind}
      order by created_at, id
-  `)).rows);
+  `, "objects"));
 }
 
 async function linesOf(org: ScratchOrg, documentId: string): Promise<Array<{ quantity: string; amount: string; quantity_billed: string }>> {
-  return withBypassContext(async () => (await db.execute<{ quantity: string; amount: string; quantity_billed: string }>(sql`
+  return withBypassContext(async () => await db.execute<{ quantity: string; amount: string; quantity_billed: string }>(sql`
     select quantity::text as quantity, amount::text as amount, quantity_billed::text as quantity_billed
       from document_lines
      where org_id = ${org.orgId} and document_id = ${documentId}
      order by line_number
-  `)).rows);
+  `, "objects"));
 }
 
 function refusal(code: string, message: RegExp) {
@@ -180,13 +180,13 @@ test("a purchase-order bill never drops an inventory line: refused without a cos
     assert.equal(toUnits(bills[0]!.total) + toUnits(first.withheldTotal ?? "0"), orderTotal, "bill plus explicit shortfall equals the order total");
     const evidence = await withBypassContext(async () => (await db.execute<{ custom: { conversionShortfall?: { withheldLines: unknown[]; withheldTotal: string } } }>(sql`
       select custom from documents where id = ${first.id} and org_id = ${org.orgId}
-    `)).rows[0]!);
+    `, "objects"))[0]!);
     assert.equal(evidence.custom.conversionShortfall?.withheldLines.length, 1, "the bill records the line it does not carry");
-    const audit = await withBypassContext(async () => (await db.execute<{ changes: { mode: string; withheldTotal: string; withheldLines: unknown[] }; actor_id: string }>(sql`
+    const audit = await withBypassContext(async () => await db.execute<{ changes: { mode: string; withheldTotal: string; withheldLines: unknown[] }; actor_id: string }>(sql`
       select changes, actor_id from audit_log
        where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${first.id}
          and changes->>'mode' = 'order_converted'
-    `)).rows);
+    `, "objects"));
     assert.equal(audit.length, 1);
     assert.equal(audit[0]!.actor_id, actorId);
     assert.equal(toUnits(audit[0]!.changes.withheldTotal), toUnits("17692.80"));

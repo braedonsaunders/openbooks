@@ -64,10 +64,10 @@ test("levels value follows layers through a writedown and a landed-cost adjustme
              sum(round(remaining_quantity * unit_cost, 4))::text as value
         from cost_layers
        where org_id = ${org.orgId} and item_id = ${org.items.fifo}
-         and stock_location_id = ${org.stockLocationId}`)).rows[0]!;
+         and stock_location_id = ${org.stockLocationId}`, "objects"))[0]!;
     const gl = (await db.execute<{ balance: string }>(sql`
       select coalesce(sum(amount), 0)::text as balance from journal_lines
-       where org_id = ${org.orgId} and account_id = ${org.accounts.invAsset}`)).rows[0]!;
+       where org_id = ${org.orgId} and account_id = ${org.accounts.invAsset}`, "objects"))[0]!;
     const reported = await listApplicationInventoryLevels(context, {});
     assert.equal(reported.levels.length, 1);
     assert.equal(reported.levels[0]?.quantity, "10.0000");

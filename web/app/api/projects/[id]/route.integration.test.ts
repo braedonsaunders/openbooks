@@ -63,7 +63,8 @@ stubModules({
     "@openbooks/engine/platform/db": withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
       export const db = {
-        execute: async (query) => {
+        execute: async (query, mode) => {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.executeCalls += 1
           const chunks = query?.queryChunks ?? []
           const text = chunks.map((chunk) => {
@@ -73,10 +74,10 @@ stubModules({
           }).join('')
           if (text.includes('update projects set')) {
             state.writes += 1
-            return { rows: [] }
+            return inMode({ rows: [] })
           }
-          if (text.includes('for update')) return { rows: state.locked ? [state.locked] : [] }
-          return { rows: [state.existing] }
+          if (text.includes('for update')) return inMode({ rows: state.locked ? [state.locked] : [] })
+          return inMode({ rows: [state.existing] })
         },
       }
       export function withOrgTransaction(_orgId, work) { return work() }

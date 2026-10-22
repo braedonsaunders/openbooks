@@ -142,7 +142,7 @@ async function loadSource(executor: SqlExecutor, orgId: string, entryId: string)
            d.kind as document_kind, ${replicableEntrySql("e")} as replicable
       from journal_entries e
       left join documents d on d.org_id = e.org_id and d.id = e.source_document_id
-     where e.org_id = ${orgId} and e.id = ${entryId}`)).rows[0] ?? null;
+     where e.org_id = ${orgId} and e.id = ${entryId}`, "objects"))[0] ?? null;
 }
 
 /**
@@ -153,7 +153,7 @@ async function loadSource(executor: SqlExecutor, orgId: string, entryId: string)
  * the history it backfills.
  */
 async function lockFullBooks(executor: SqlExecutor, orgId: string, onlyBookId?: string): Promise<(BookProfile & { replicationFrom: string })[]> {
-  const rows = (await executor.execute<{
+  const rows = await executor.execute<{
     id: string; code: string; name: string; replication_mode: "adjustment_only" | "full";
     replication_from: string | null; currency_difference_account_id: string | null; posts_gl: boolean;
   }>(sql`
@@ -163,7 +163,7 @@ async function lockFullBooks(executor: SqlExecutor, orgId: string, onlyBookId?: 
      where org_id = ${orgId} and not is_primary and is_active
        ${onlyBookId ? sql`and id = ${onlyBookId}` : sql``}
      order by id
-     for share`)).rows;
+     for share`, "objects");
   return rows
     .filter((row): row is typeof row & { replication_from: string } =>
       row.posts_gl && row.replication_mode === "full" && row.replication_from !== null)
@@ -179,7 +179,7 @@ async function lockFullBooks(executor: SqlExecutor, orgId: string, onlyBookId?: 
 }
 
 async function loadEntryLines(executor: SqlExecutor, orgId: string, entryId: string): Promise<SourceLine[]> {
-  return (await executor.execute<SourceLine & Record<string, unknown>>(sql`
+  return await executor.execute<SourceLine & Record<string, unknown>>(sql`
     select line_number, eliminate, is_currency_adjustment, account_id, subsidiary_id, amount::text as amount, currency,
            txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo, party_id, department_id,
            project_id, location_id, class_id, equipment_unit_id, payment_card_id, tax_code_id,
@@ -187,7 +187,7 @@ async function loadEntryLines(executor: SqlExecutor, orgId: string, entryId: str
            contributor_kind, contributor_ref
       from journal_lines
      where org_id = ${orgId} and entry_id = ${entryId}
-     order by line_number`)).rows;
+     order by line_number`, "objects");
 }
 
 /**
@@ -220,7 +220,7 @@ export async function replicateEntryToBooks(
   for (const book of books) {
     const existing = (await executor.execute<{ replica_entry_id: string | null; outcome: string }>(sql`
       select replica_entry_id, outcome from book_entry_replications
-       where org_id = ${args.orgId} and book_id = ${book.id} and source_entry_id = ${source.id}`)).rows[0];
+       where org_id = ${args.orgId} and book_id = ${book.id} and source_entry_id = ${source.id}`, "objects"))[0];
     if (existing) {
       outcomes.push({ bookId: book.id, sourceEntryId: source.id, outcome: "already", replicaEntryId: existing.replica_entry_id });
       continue;
@@ -253,7 +253,7 @@ export async function replicateEntryToBooks(
     const reversesReplica = source.reverses_entry_id
       ? (await executor.execute<{ replica_entry_id: string | null }>(sql`
           select replica_entry_id from book_entry_replications
-           where org_id = ${args.orgId} and book_id = ${book.id} and source_entry_id = ${source.reverses_entry_id}`)).rows[0]?.replica_entry_id ?? null
+           where org_id = ${args.orgId} and book_id = ${book.id} and source_entry_id = ${source.reverses_entry_id}`, "objects"))[0]?.replica_entry_id ?? null
       : null;
     // A governed reversal mirrors the original book copy at its recorded
     // accounts and rates; a later mapping or quote cannot reinterpret it.
@@ -333,7 +333,7 @@ async function recordReplication(
     insert into book_entry_replications (org_id, book_id, source_entry_id, replica_entry_id, outcome, detail, run_id, created_by)
     values (${args.orgId}, ${args.bookId}, ${args.sourceEntryId}, ${args.replicaEntryId}, ${args.outcome},
             ${JSON.stringify(args.detail)}::jsonb, ${args.runId}, ${args.actorId})
-    returning id`)).rows[0];
+    returning id`, "objects"))[0];
   if (!inserted) throw new Error(`replication of entry ${args.sourceEntryId} into book ${args.bookId} was not recorded`);
 }
 
@@ -349,7 +349,7 @@ export async function liveReplicaEntryIds(executor: SqlExecutor, orgId: string, 
      where r.org_id = ${orgId} and r.source_entry_id = ${sourceEntryId}
        -- Live entries only: an already reversed copy is not marked again.
        and r.replica_entry_id is not null and replica.status = 'posted'
-     order by r.replica_entry_id`)).rows.map((row) => row.id);
+     order by r.replica_entry_id`, "objects")).map((row) => row.id);
 }
 
 export interface BookReplicationGaps {
@@ -371,7 +371,7 @@ export async function bookReplicationGaps(
 ): Promise<BookReplicationGaps> {
   const book = (await executor.execute<{ replication_mode: string; replication_from: string | null }>(sql`
     select replication_mode, replication_from::text as replication_from
-      from accounting_books where org_id = ${args.orgId} and id = ${args.bookId}`)).rows[0];
+      from accounting_books where org_id = ${args.orgId} and id = ${args.bookId}`, "objects"))[0];
   if (!book || book.replication_mode !== "full" || !book.replication_from) return { missing: 0, sample: [] };
   const scope = args.subsidiaryIds
     ? args.subsidiaryIds.length === 0
@@ -380,7 +380,7 @@ export async function bookReplicationGaps(
                          where scoped.org_id = e.org_id and scoped.entry_id = e.id
                            and scoped.subsidiary_id = any(${`{${args.subsidiaryIds.join(",")}}`}::uuid[]))`
     : sql``;
-  const rows = (await executor.execute<{ id: string; entry_number: string; posting_date: string; total: number }>(sql`
+  const rows = await executor.execute<{ id: string; entry_number: string; posting_date: string; total: number }>(sql`
     select e.id, e.entry_number, e.posting_date::text as posting_date, count(*) over ()::int as total
       from journal_entries e
      where e.org_id = ${args.orgId}
@@ -390,7 +390,7 @@ export async function bookReplicationGaps(
                         where r.org_id = e.org_id and r.book_id = ${args.bookId} and r.source_entry_id = e.id)
        ${scope}
      order by e.posting_date, e.id
-     limit 20`)).rows;
+     limit 20`, "objects");
   return {
     missing: rows[0]?.total ?? 0,
     sample: rows.map((row) => ({ entryId: row.id, entryNumber: row.entry_number, postingDate: row.posting_date })),
@@ -406,13 +406,13 @@ export async function bookReplicationReadiness(
   executor: SqlExecutor,
   args: { orgId: string; bookId: string; through: string; subsidiaryIds?: readonly string[] },
 ): Promise<{ missing: number; books: { bookId: string; code: string; missing: number }[] }> {
-  const books = (await executor.execute<{ id: string; code: string }>(sql`
+  const books = await executor.execute<{ id: string; code: string }>(sql`
     select b.id, b.code from accounting_books b
      where b.org_id = ${args.orgId} and b.replication_mode = 'full' and b.is_active
        and (b.id = ${args.bookId} or exists (
          select 1 from accounting_books run_book
           where run_book.org_id = b.org_id and run_book.id = ${args.bookId} and run_book.is_primary))
-     order by b.code, b.id`)).rows;
+     order by b.code, b.id`, "objects");
   const out: { bookId: string; code: string; missing: number }[] = [];
   for (const book of books) {
     const gaps = await bookReplicationGaps(executor, { orgId: args.orgId, bookId: book.id, through: args.through, subsidiaryIds: args.subsidiaryIds });
@@ -436,5 +436,5 @@ export async function unreplicatedEntryIds(
        and ${replicableEntrySql("e")}
        and not exists (select 1 from book_entry_replications r
                         where r.org_id = e.org_id and r.book_id = ${args.bookId} and r.source_entry_id = e.id)
-     order by e.posting_date, e.created_at, e.id`)).rows.map((row) => row.id);
+     order by e.posting_date, e.created_at, e.id`, "objects")).map((row) => row.id);
 }

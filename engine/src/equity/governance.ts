@@ -133,8 +133,7 @@ export async function governEquityAction<T>(
     );
     await lockEquityEntity(db, request.orgId, request.subsidiaryId);
     if (request.idempotencyKey) {
-      const existing = (
-        await db.execute<{
+      const existing = (await db.execute<{
           id: string;
           action: string;
           subject_id: string | null;
@@ -144,8 +143,7 @@ export async function governEquityAction<T>(
           result: T | null;
         }>(sql`
         select id, action, subject_id, payload, requested_by, status, result from equity_action_requests
-         where org_id = ${request.orgId} and idempotency_key = ${request.idempotencyKey}`)
-      ).rows[0];
+         where org_id = ${request.orgId} and idempotency_key = ${request.idempotencyKey}`, "objects"))[0];
       if (existing) {
         if (
           existing.action !== request.action ||
@@ -175,8 +173,7 @@ export async function governEquityAction<T>(
     {
       // One pending request per subject and action; a run or policy version
       // (no subject) is one per legal entity and date.
-      const pending = (
-        await db.execute<{ id: string }>(sql`
+      const pending = (await db.execute<{ id: string }>(sql`
         select id from equity_action_requests
          where org_id = ${request.orgId} and action = ${request.action} and status = 'pending_approval'
            and ${
@@ -184,8 +181,7 @@ export async function governEquityAction<T>(
                ? sql`subject_id = ${request.subjectId}`
                : sql`subject_id is null and subsidiary_id = ${request.subsidiaryId} and effective_on = ${request.effectiveOn}::date`
            }
-         limit 1`)
-      ).rows[0];
+         limit 1`, "objects"))[0];
       if (pending) {
         throw equityError("actionPending", {
           action: fig.choice(request.action),
@@ -193,20 +189,16 @@ export async function governEquityAction<T>(
         });
       }
     }
-    const id = (
-      await db.execute<{ id: string }>(
-        sql`select public.uuid_generate_v7() as id`,
-      )
-    ).rows[0]!.id;
-    const inserted = (
-      await db.execute<{ id: string }>(sql`
+    const id = (await db.execute<{ id: string }>(
+        sql`select public.uuid_generate_v7() as id`, "objects",
+      ))[0]!.id;
+    const inserted = await db.execute<{ id: string }>(sql`
       insert into equity_action_requests (id, org_id, subsidiary_id, action, subject_id, subject_label, effective_on, reason,
         payload, summary, status, requested_by, idempotency_key)
       values (${id}, ${request.orgId}, ${request.subsidiaryId}, ${request.action}, ${request.subjectId}, ${request.subjectLabel.slice(0, 200)},
         ${request.effectiveOn}::date, ${request.reason}, ${json(request.payload)}::jsonb, ${json(request.summary)}::jsonb,
         'pending_approval', ${request.actorId}, ${request.idempotencyKey})
-      returning id`)
-    ).rows;
+      returning id`, "objects");
     if (inserted.length !== 1)
       throw equityError("notSaved", { record: fig.choice("request") });
     const dispatch = (
@@ -294,15 +286,13 @@ async function completeRequest(
     releasedWithoutApproval: boolean;
   },
 ): Promise<void> {
-  const updated = (
-    await db.execute<{ id: string }>(sql`
+  const updated = await db.execute<{ id: string }>(sql`
     update equity_action_requests
        set status = 'applied', result = ${json(input.result ?? {})}::jsonb, applied_at = now(),
            released_without_approval = ${input.releasedWithoutApproval},
            decided_by = ${input.decidedBy}, decided_at = ${input.decidedBy ? sql`now()` : null}
      where org_id = ${orgId} and id = ${id} and status = 'pending_approval'
-    returning id`)
-  ).rows;
+    returning id`, "objects");
   if (updated.length !== 1) throw equityError("actionChangedWhileApplied");
 }
 
@@ -334,8 +324,7 @@ export async function pendingEquityActions(input: {
         input.actorId,
         input.subsidiaryId,
       );
-      const rows = (
-        await db.execute<{
+      const rows = await db.execute<{
           id: string;
           action: EquityAction;
           subject_id: string | null;
@@ -351,8 +340,7 @@ export async function pendingEquityActions(input: {
         from equity_action_requests r
         left join users u on u.org_id = r.org_id and u.id = r.requested_by
        where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.status = 'pending_approval'
-       order by r.created_at desc`)
-      ).rows;
+       order by r.created_at desc`, "objects");
       return rows.map((row) => ({
         id: row.id,
         action: row.action,
@@ -383,16 +371,14 @@ export async function locateEquityAction(input: {
   return withOrgTransaction(
     input.orgId,
     async () => {
-      const row = (
-        await db.execute<{
+      const row = (await db.execute<{
           action: string;
           subject_id: string | null;
           subsidiary_id: string;
           effective_on: string;
         }>(sql`
       select action, subject_id, subsidiary_id, effective_on::text as effective_on
-        from equity_action_requests where org_id = ${input.orgId} and id = ${input.requestId}`)
-      ).rows[0];
+        from equity_action_requests where org_id = ${input.orgId} and id = ${input.requestId}`, "objects"))[0];
       if (!row) return null;
       await requireEquityReader(
         db,
@@ -446,16 +432,13 @@ export async function withdrawEquityAction(input: {
   }
   return withOrgTransaction(input.orgId, async () => {
     await assertEquityFeature(db, input.orgId);
-    const gates = (
-      await db.execute<{ id: string; run_id: string }>(sql`
+    const gates = await db.execute<{ id: string; run_id: string }>(sql`
       select id, run_id::text as run_id from flow_gates
        where org_id = ${input.orgId} and subject_kind = ${EQUITY_ACTION_SUBJECT_KIND} and subject_id = ${input.requestId}
          and status in ('pending', 'escalated')
        order by id
-       for update`)
-    ).rows;
-    const request = (
-      await db.execute<{
+       for update`, "objects");
+    const request = (await db.execute<{
         id: string;
         action: EquityAction;
         status: string;
@@ -465,8 +448,7 @@ export async function withdrawEquityAction(input: {
         effective_on: string;
       }>(sql`
       select id, action, status, requested_by, subject_id, subsidiary_id, effective_on::text as effective_on
-        from equity_action_requests where org_id = ${input.orgId} and id = ${input.requestId} for update`)
-    ).rows[0];
+        from equity_action_requests where org_id = ${input.orgId} and id = ${input.requestId} for update`, "objects"))[0];
     if (!request) throw equityError("actionUnknown");
     await requireEquityReader(
       db,
@@ -482,25 +464,21 @@ export async function withdrawEquityAction(input: {
         status: fig.choice(request.status),
       });
     }
-    const runs = (
-      await db.execute<{ id: string }>(sql`
+    const runs = (await db.execute<{ id: string }>(sql`
       select id::text as id from flow_runs
        where org_id = ${input.orgId} and subject_kind = ${EQUITY_ACTION_SUBJECT_KIND} and subject_id = ${input.requestId}
-         and status in ('running', 'waiting')`)
-    ).rows.map((row) => row.id);
+         and status in ('running', 'waiting')`, "objects")).map((row) => row.id);
     const cancelledRunIds = [
       ...new Set([...runs, ...gates.map((gate) => gate.run_id)]),
     ].sort();
     await cancelDispatchRuns(input.orgId, cancelledRunIds, {
       actorId: input.actorId,
     });
-    const updated = (
-      await db.execute<{ id: string }>(sql`
+    const updated = await db.execute<{ id: string }>(sql`
       update equity_action_requests
          set status = 'withdrawn', decided_by = ${input.actorId}, decided_at = now(), decision_comment = ${reason}
        where org_id = ${input.orgId} and id = ${request.id} and status = 'pending_approval'
-      returning id`)
-    ).rows;
+      returning id`, "objects");
     if (updated.length !== 1) throw equityError("actionChangedWhileWithdrawn");
     await writeEquityAudit(db, {
       orgId: input.orgId,
@@ -551,8 +529,7 @@ export async function releaseEquityAction(
   const deciderId = args.ctx.userId ?? null;
   if (!deciderId) throw equityError("approvalSignInRequired");
   await withOrgTransaction(orgId, async () => {
-    const request = (
-      await db.execute<{
+    const request = (await db.execute<{
         id: string;
         action: EquityAction;
         status: string;
@@ -563,8 +540,7 @@ export async function releaseEquityAction(
         effective_on: string;
       }>(sql`
       select id, action, status, requested_by, payload, subject_id, subsidiary_id, effective_on::text as effective_on
-        from equity_action_requests where org_id = ${orgId} and id = ${args.subjectId} for update`)
-    ).rows[0];
+        from equity_action_requests where org_id = ${orgId} and id = ${args.subjectId} for update`, "objects"))[0];
     if (!request) throw equityError("actionUnknown");
     if (request.status !== "pending_approval") {
       throw equityError("actionDecided", {
@@ -599,11 +575,9 @@ export async function releaseEquityAction(
     if (args.outcome === "rejected") {
       const comment = args.comment?.trim() ?? "";
       if (!comment) throw equityError("rejectionReasonRequired");
-      const updated = (
-        await db.execute<{ id: string }>(sql`
+      const updated = await db.execute<{ id: string }>(sql`
         update equity_action_requests set status = 'rejected', decided_by = ${deciderId}, decided_at = now(), decision_comment = ${comment.slice(0, 2000)}
-         where org_id = ${orgId} and id = ${request.id} and status = 'pending_approval' returning id`)
-      ).rows;
+         where org_id = ${orgId} and id = ${request.id} and status = 'pending_approval' returning id`, "objects");
       if (updated.length !== 1) throw equityError("actionChangedWhileDecided");
       await writeEquityAudit(db, {
         orgId,

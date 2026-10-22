@@ -44,14 +44,14 @@ export async function resolveInternalBillingPostingContext(
     select id, code, name, method, debit_account_id, credit_account_id,
            effective_from::text as effective_from, effective_to::text as effective_to, is_active
       from internal_billing_rules
-     where org_id = ${doc.orgId} and id = ${doc.internalBillingRuleId}`)).rows[0];
+     where org_id = ${doc.orgId} and id = ${doc.internalBillingRuleId}`, "objects"))[0];
   if (!rule) throw new PostingError(`internal billing rule for ${doc.documentNumber} was not found`);
-  const accounts = (await runner.execute<{
+  const accounts = await runner.execute<{
     id: string; number: string | null; name: string; type: string; eliminate: boolean; is_active: boolean; is_summary: boolean;
   }>(sql`
     select id, number, name, type, eliminate, is_active, is_summary
       from accounts
-     where org_id = ${doc.orgId} and id in (${rule.debit_account_id}, ${rule.credit_account_id})`)).rows;
+     where org_id = ${doc.orgId} and id in (${rule.debit_account_id}, ${rule.credit_account_id})`, "objects");
   const facts = (id: string): InternalBillingAccountFacts => {
     const row = accounts.find((account) => account.id === id);
     if (!row) throw new PostingError(`internal billing rule ${rule.code} names an account that does not exist`);
@@ -67,7 +67,7 @@ export async function resolveInternalBillingPostingContext(
   let providerSubsidiaryId = doc.subsidiaryId;
   if (!providerSubsidiaryId) {
     providerSubsidiaryId = (await runner.execute<{ id: string }>(sql`
-      select id from subsidiaries where org_id = ${doc.orgId} and parent_id is null order by created_at limit 1`)).rows[0]?.id ?? null;
+      select id from subsidiaries where org_id = ${doc.orgId} and parent_id is null order by created_at limit 1`, "objects"))[0]?.id ?? null;
   }
   if (!providerSubsidiaryId) throw new PostingError("the organization has no root subsidiary");
   return {

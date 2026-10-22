@@ -1,1 +1,0 @@
-Replaces a trigger function body only: it adds an append-only evidence transition and changes no stored row, so there is no precondition to probe.

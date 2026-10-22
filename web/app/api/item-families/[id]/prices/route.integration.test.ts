@@ -62,8 +62,8 @@ async function fixture() {
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || '{"itemVariants":true}'::jsonb)
        where id = ${org.orgId}`)
-    const currency = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${org.orgId}`)).rows[0]!.base_currency
-    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id = ${org.orgId} and is_base and is_active`)).rows[0]!
+    const currency = (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${org.orgId}`, 'objects'))[0]!.base_currency
+    const baseLevel = (await db.execute<{ id: string }>(sql`select id from price_levels where org_id = ${org.orgId} and is_base and is_active`, 'objects'))[0]!
     const family = await createItemFamily(org.orgId, actorId, {
       code: 'TEE', name: 'Classic Tee', kind: 'inventory', defaultUnit: 'each', defaultRate: '24.99',
       options: [{ name: 'Size', values: ['S', 'M'] }],
@@ -143,7 +143,7 @@ test('family pricing hides when the variants gate is off', async () => {
     assert.equal((await get(f)).status, 404)
     assert.equal((await post(f, randomUUID())).status, 404)
     const rows = await withBypassContext(async () =>
-      (await db.execute<{ count: string }>(sql`select count(*)::text as count from item_price_schedules where org_id = ${f.orgId}`)).rows[0])
+      (await db.execute<{ count: string }>(sql`select count(*)::text as count from item_price_schedules where org_id = ${f.orgId}`, 'objects'))[0])
     assert.equal(rows?.count, '0')
   } finally {
     await withBypassContext(() => dropScratchOrgReporting(f.orgId))

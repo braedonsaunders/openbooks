@@ -42,8 +42,8 @@ async function retainFile(f: AdoptionFixture, label: string) {
     values (${fileId},${f.orgId},${folderId},'original-report.json','application/json',${bytes.length},${f.actorId},${f.actorId})`);
   await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
     values (${versionId},${fileId},1,${bytes.length},'application/json',${sha256},${f.actorId})`);
-  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values (${versionId},${bytes}) returning version_id`)).rows.length,1);
-  assert.equal((await db.execute(sql`update files set current_version_id=${versionId} where org_id=${f.orgId} and id=${fileId} returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values (${versionId},${bytes}) returning version_id`, 'objects')).length,1);
+  assert.equal((await db.execute(sql`update files set current_version_id=${versionId} where org_id=${f.orgId} and id=${fileId} returning id`, 'objects')).length,1);
   return {sourceFileId:fileId,sourceVersionId:versionId,sourceSha256:sha256};
 }
 
@@ -64,7 +64,7 @@ async function qualifyOriginal(f: AdoptionFixture) {
   const accounts=[randomUUID(),randomUUID()].sort();
   for(const [index,id] of accounts.entries()) {
     assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id,created_by,updated_by)
-      values (${id},${f.orgId},'CA','ca_rp',${'123456789RP000'+String(index+1)},${'Original RP '+String(index+1)},${f.subsidiaryId},${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+      values (${id},${f.orgId},'CA','ca_rp',${'123456789RP000'+String(index+1)},${'Original RP '+String(index+1)},${f.subsidiaryId},${f.actorId},${f.actorId}) returning id`, 'objects')).length,1);
   }
   const context=await readCanadianOpeningReportingSourceContext({...contextInput,sourceFileId:file.sourceFileId});
   const zeroAnnual=Object.fromEntries(Object.keys(context.original.annualAmounts).map(key=>[key,'0']));
@@ -106,14 +106,14 @@ test('original reporting qualification preserves source amounts, order, exact re
     assert.equal(slips.find(slip=>slip.province==='QC')?.box56QpipInsurable,'5000.0000');
     const originalSlips=structuredClone(slips);
     assert.equal((await db.execute(sql`update employee_payroll_profiles set province='BC',filing_account_id=${reporting.allocations[0]!.filingAccountId}
-      where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length,1);
+      where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`, 'objects')).length,1);
     assert.deepEqual(await t4Slips(f.orgId,2026),originalSlips);
     const quebec=await rl1Return(f.orgId,2026);
     assert.equal(quebec.slips.length,1);
     assert.equal(quebec.slips[0]!.boxA,'5000.0000');
     assert.equal(quebec.slips[0]!.boxI,'5000.0000');
-    const audits=(await db.execute<{changes:{after:{id:string};reason:string}}>(sql`select changes from audit_log
-      where org_id=${f.orgId} and table_name='payroll_ca_opening_reporting_authorities' and row_id=${saved.id}`)).rows;
+    const audits=await db.execute<{changes:{after:{id:string};reason:string}}>(sql`select changes from audit_log
+      where org_id=${f.orgId} and table_name='payroll_ca_opening_reporting_authorities' and row_id=${saved.id}`, 'objects');
     assert.equal(audits.length,1);assert.equal(audits[0]!.changes.after.id,saved.id);assert.equal(audits[0]!.changes.reason,reporting.reason);
     await assert.rejects(qualifyCanadianOpeningReportingSource({...reporting,reason:'Changed evidence'}),/already preserves different evidence/);
     await assert.rejects(qualifyCanadianOpeningReportingSource({...reporting,allowedSubsidiaryIds:new Set()}),/outside your payroll authority/);
@@ -123,8 +123,8 @@ test('original reporting qualification preserves source amounts, order, exact re
     await assert.rejects(db.transaction(async tx=>{await tx.execute(sql`update payroll_filing_accounts set account_number='123456789RP0099' where org_id=${f.orgId} and id=${reporting.allocations[0]!.filingAccountId}`);}),error=>errorChainMatches(error,/preserves its RP account/));
     await assert.rejects(db.transaction(async tx=>{await tx.execute(sql`update payroll_filing_accounts set subsidiary_id=null where org_id=${f.orgId} and id=${reporting.allocations[0]!.filingAccountId}`);}),error=>errorChainMatches(error,/preserves its RP account/));
     await withOrgContext(randomUUID(),async()=>{
-      assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_authorities where id=${saved.id}`)).rows.length,0);
-      assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_allocations where authority_id=${saved.id}`)).rows.length,0);
+      assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_authorities where id=${saved.id}`, 'objects')).length,0);
+      assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_allocations where authority_id=${saved.id}`, 'objects')).length,0);
     });
   }); } finally {await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });
@@ -134,12 +134,12 @@ test('a replaced levy certificate invalidates original reporting selection while
   try { await withOrgContext(f.orgId,async()=>{
     const {packet,original,reporting,contextInput}=await qualifyOriginal(f);
     const saved=await qualifyCanadianOpeningReportingSource(reporting);
-    const retained=(await db.execute<{snapshot:unknown}>(sql`select to_jsonb(h) as snapshot from payroll_ca_opening_reporting_authorities h where org_id=${f.orgId} and id=${saved.id}`)).rows[0]!.snapshot;
+    const retained=(await db.execute<{snapshot:unknown}>(sql`select to_jsonb(h) as snapshot from payroll_ca_opening_reporting_authorities h where org_id=${f.orgId} and id=${saved.id}`, 'objects'))[0]!.snapshot;
     const successor=await correctOpeningLevySourceAuthority({...packet,...await retainFile(f,'Reviewed source reference'),
       expectedAuthorityId:original.id,expectedAllocationSha256:original.allocationSha256,requestId:randomUUID(),reason:'Correct the original source reference'});
     await assert.rejects(readEmployeeCanadianOpeningReportingSource(db,contextInput),/current Canadian original reporting source is missing/);
     await assert.rejects(qualifyCanadianOpeningReportingSource(reporting),/exact current Canadian CAD original levy certificate/);
-    assert.deepEqual((await db.execute<{snapshot:unknown}>(sql`select to_jsonb(h) as snapshot from payroll_ca_opening_reporting_authorities h where org_id=${f.orgId} and id=${saved.id}`)).rows[0]!.snapshot,retained);
+    assert.deepEqual((await db.execute<{snapshot:unknown}>(sql`select to_jsonb(h) as snapshot from payroll_ca_opening_reporting_authorities h where org_id=${f.orgId} and id=${saved.id}`, 'objects'))[0]!.snapshot,retained);
     const replacement=await qualifyCanadianOpeningReportingSource({...reporting,requestId:randomUUID(),expectedLevyAuthorityId:successor.id,
       expectedLevyAllocationSha256:successor.allocationSha256});
     assert.notEqual(replacement.id,saved.id);
@@ -158,7 +158,7 @@ test('concurrent original reporting qualifications cannot create conflicting cer
     assert.equal(outcomes.filter(result=>result.status==='fulfilled').length,1);
     assert.equal(outcomes.filter(result=>result.status==='rejected').length,1);
     assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_authorities
-      where org_id=${f.orgId} and levy_authority_id=${reporting.expectedLevyAuthorityId}`)).rows.length,1);
+      where org_id=${f.orgId} and levy_authority_id=${reporting.expectedLevyAuthorityId}`, 'objects')).length,1);
   }); } finally {await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });
 
@@ -168,23 +168,23 @@ test('original reporting enforces feature, permission, entity, source access and
     const {reporting}=await qualifyOriginal(f);
     await assert.rejects(qualifyCanadianOpeningReportingSource({...reporting,allowedSubsidiaryIds:new Set()}),/outside your payroll authority/);
     assert.equal((await db.execute(sql`update user_permission_overrides set effect='deny'
-      where org_id=${f.orgId} and user_id=${f.actorId} and permission='payroll.run' returning user_id`)).rows.length,1);
+      where org_id=${f.orgId} and user_id=${f.actorId} and permission='payroll.run' returning user_id`, 'objects')).length,1);
     await assert.rejects(qualifyCanadianOpeningReportingSource(reporting),/Payroll run permission/);
     assert.equal((await db.execute(sql`update user_permission_overrides set effect='grant'
-      where org_id=${f.orgId} and user_id=${f.actorId} and permission='payroll.run' returning user_id`)).rows.length,1);
+      where org_id=${f.orgId} and user_id=${f.actorId} and permission='payroll.run' returning user_id`, 'objects')).length,1);
     await seedPayrollSettings(f.orgId,{features:{payroll:false}});
     await assert.rejects(qualifyCanadianOpeningReportingSource(reporting),/Payroll feature is disabled/);
     await seedPayrollSettings(f.orgId,{features:{payroll:true}});
     const newVersion=randomUUID();
     assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
-      values (${newVersion},${reporting.sourceFileId},2,1,'application/json',${'a'.repeat(64)},${f.actorId}) returning id`)).rows.length,1);
+      values (${newVersion},${reporting.sourceFileId},2,1,'application/json',${'a'.repeat(64)},${f.actorId}) returning id`, 'objects')).length,1);
     assert.equal((await db.execute(sql`update files set current_version_id=${newVersion}
-      where org_id=${f.orgId} and id=${reporting.sourceFileId} returning id`)).rows.length,1);
+      where org_id=${f.orgId} and id=${reporting.sourceFileId} returning id`, 'objects')).length,1);
     await assert.rejects(qualifyCanadianOpeningReportingSource(reporting),/current exact original Cabinet version uploaded/);
     assert.equal((await db.execute(sql`update folders set owner_id=null where org_id=${f.orgId}
-      and id=(select folder_id from files where org_id=${f.orgId} and id=${reporting.sourceFileId}) returning id`)).rows.length,1);
+      and id=(select folder_id from files where org_id=${f.orgId} and id=${reporting.sourceFileId}) returning id`, 'objects')).length,1);
     await assert.rejects(qualifyCanadianOpeningReportingSource(reporting),error=>errorChainMatches(error,/Source file is unavailable to this operator/));
-    assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_authorities where org_id=${f.orgId}`)).rows.length,0);
-    assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_allocations where org_id=${f.orgId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_authorities where org_id=${f.orgId}`, 'objects')).length,0);
+    assert.equal((await db.execute(sql`select id from payroll_ca_opening_reporting_allocations where org_id=${f.orgId}`, 'objects')).length,0);
   }); } finally {await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });

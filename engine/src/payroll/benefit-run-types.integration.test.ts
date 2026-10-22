@@ -25,8 +25,8 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
       const filingAccountId=await seedCanadianFilingAccountForTest(fx.orgId,fx.actorId,{subsidiaryId:fx.subsidiaryId,
         accountNumber:"123456789RP0001",name:"Benefit-premium employer",effectiveFrom:"2026-01-01",eiEmployerMultiplier:"1.4"});
       assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
-        where org_id=${fx.orgId} and employee_party_id=${partyId} returning employee_party_id`)).rows.length,1);
-      const base=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`)).rows[0]!;
+        where org_id=${fx.orgId} and employee_party_id=${partyId} returning employee_party_id`, 'objects')).length,1);
+      const base=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`, 'objects'))[0]!;
       const prior=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
         periodStart:"2026-06-28",periodEnd:"2026-07-04",runType:"regular",employeePartyIds:[partyId]});
       const priorCommand={orgId:fx.orgId,actorId:fx.actorId,documentId:prior.documentId};
@@ -65,14 +65,14 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
         await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
           mutation: { action: 'add', employeePartyId: partyId, componentId: base.id, amount: '1000', replaceComponent: true } });
         assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
-        const allocations = (await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
+        const allocations = await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
           from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}
-          order by rule_id`)).rows;
+          order by rule_id`, 'objects');
         assert.deepEqual(new Map(allocations.map(row => [row.rule_id, row.amount])),
           new Map((runType === 'regular' ? ruleIds : ruleIds.slice(1)).map(id => [id, '10.0000'])), runType);
         if (runType === 'regular') {
           const premium = (await db.execute<{ id: string }>(sql`select id from pay_components
-            where org_id=${fx.orgId} and code='REGULAR_PREMIUM'`)).rows[0]!;
+            where org_id=${fx.orgId} and code='REGULAR_PREMIUM'`, 'objects'))[0]!;
           for (const amount of ['25', '0']) {
             const replacement = randomUUID();
             await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
@@ -80,25 +80,25 @@ test('regular-only benefit premiums exclude supplemental and one-off runs while 
               mutation: { action: 'add', employeePartyId: partyId, componentId: premium.id, amount,
                 replaceComponent: true, idempotencyKey: replacement } });
             assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
-            const replacedAllocations = (await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
-              from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+            const replacedAllocations = await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
+              from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, 'objects');
             assert.deepEqual(new Map(replacedAllocations.map(row => [row.rule_id, row.amount])), new Map([[ruleIds[1], '10.0000']]));
             const premiumTotal = (await db.execute<{ amount: string }>(sql`select coalesce(sum(l.amount),0)::text as amount
               from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-              where l.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${premium.id}`)).rows[0]!;
+              where l.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${premium.id}`, 'objects'))[0]!;
             assert.equal(cmp(premiumTotal.amount, amount), 0);
             await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
               mutation: { action: 'delete', adjustmentId: replacement } });
           }
           assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
-          const restoredAllocations = (await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
-            from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+          const restoredAllocations = await db.execute<{ rule_id: string; amount: string }>(sql`select rule_id,amount::text
+            from pay_run_benefit_allocations where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`, 'objects');
           assert.deepEqual(new Map(restoredAllocations.map(row => [row.rule_id, row.amount])), new Map(ruleIds.map(id => [id, '10.0000'])));
         }
         await assert.rejects(withdrawUnusedEnrollment({ orgId: fx.orgId, actorId: fx.actorId,
           enrollmentId, reason: 'Contribution basis correction' }), /payroll allocation history/);
         assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_benefit_enrollments
-          where org_id=${fx.orgId} and id=${enrollmentId}`)).rows[0]!.status, 'active');
+          where org_id=${fx.orgId} and id=${enrollmentId}`, 'objects'))[0]!.status, 'active');
         await discardPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       }
       assert.equal((await withdrawUnusedEnrollment({ orgId: fx.orgId, actorId: fx.actorId,

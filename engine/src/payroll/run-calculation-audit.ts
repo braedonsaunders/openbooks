@@ -217,7 +217,7 @@ export async function capturePayRunCalculationEvidence(
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!main) return null;
 
   let holidayAllocationsText: string;
@@ -243,7 +243,7 @@ export async function capturePayRunCalculationEvidence(
              where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
           ) allocation_rows
       ), '[]'::jsonb)::text as evidence
-    `)).rows[0];
+    `, "objects"))[0];
     if (!captured) throw new PayrollError("the calculated holiday evidence could not be read — retry the calculation");
     holidayAllocationsText = captured.evidence;
   }
@@ -266,7 +266,7 @@ export async function capturePayRunCalculationEvidence(
              where c.org_id = ${orgId} and c.pay_run_document_id = ${documentId}
           ) calculation_rows
       ), '[]'::jsonb)::text as evidence
-    `)).rows[0];
+    `, "objects"))[0];
     if (!captured) throw new PayrollError("the calculated compensation evidence could not be read — retry the calculation");
     compensationCalculationsText = captured.evidence;
   }
@@ -313,7 +313,7 @@ export async function recordPayRunCalculationEvent(
   const beforeFragment = beforeEvidence !== null
     ? sql`${beforeEvidence}::jsonb`
     : sql`'null'::jsonb`;
-  const inserted = (await tx.execute<{ id: string }>(sql`
+  const inserted = await tx.execute<{ id: string }>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${input.orgId}, 'pay_runs', ${input.documentId}, 'update',
             jsonb_build_object(
@@ -326,7 +326,7 @@ export async function recordPayRunCalculationEvent(
             ),
             ${input.actorId})
     returning id
-  `)).rows;
+  `, "objects");
   if (inserted.length !== 1) {
     throw new PayrollError(
       "the pay run calculation audit event was not recorded — the calculation has been rolled back; retry the calculation",

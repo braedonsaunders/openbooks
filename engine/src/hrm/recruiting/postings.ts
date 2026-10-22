@@ -144,7 +144,7 @@ async function applyCount(exec: SqlExecutor, orgId: string, postingId: string): 
   const row = (await exec.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_applications
      where org_id = ${orgId} and source_posting_id = ${postingId}
-  `)).rows[0];
+  `, "objects"))[0];
   return Number(row?.count ?? 0);
 }
 
@@ -156,7 +156,7 @@ async function appendPostingEvent(
     insert into hrm_posting_events (org_id, posting_id, kind, payload)
     values (${args.orgId}, ${args.postingId}, ${args.kind}, ${args.payload === undefined ? null : JSON.stringify(args.payload)})
     returning id
-  `)).rows[0];
+  `, "objects"))[0];
   if (!inserted) {
     throw new RecruitingError("REFUSED", "the posting event was not recorded — no row was written; retry the request");
   }
@@ -174,7 +174,7 @@ export async function listPostings(query: {
     // posting's requisition — a scoped reader lists only their entities'
     // postings, never the whole org board.
     const allowed = await requireAggregateRecruitingRead(db, orgId, actorId);
-    const rows = (await db.execute<PostingRow>(sql`
+    const rows = await db.execute<PostingRow>(sql`
       select p.id, p.requisition_id as "requisitionId", p.board_key as "boardKey",
              p.external_ref as "externalRef", p.status,
              p.published_at as "publishedAt", p.closed_at as "closedAt",
@@ -189,7 +189,7 @@ export async function listPostings(query: {
                                    where r.org_id = ${orgId}
                                      ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)})
        order by p.board_key
-    `)).rows;
+    `, "objects");
     return Promise.all(
       rows.map(async (row) => ({ ...row, applyCount: await applyCount(db, orgId, row.id) })),
     );
@@ -210,7 +210,7 @@ export async function publishPosting(query: {
     await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
     const requisition = (await db.execute<{ status: string }>(sql`
       select status from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!requisition) {
       throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
     }
@@ -237,7 +237,7 @@ export async function publishPosting(query: {
                       closed_at = null, error_message = null,
                       updated_by = excluded.updated_by, updated_at = now()
         returning ${POSTING_COLUMNS}
-      `)).rows[0];
+      `, "objects"))[0];
       // on conflict is the republish path, not a dropped write: publishing
       // an already-posted board refreshes it in place, and the event below
       // records the republish.
@@ -260,7 +260,7 @@ export async function publishPosting(query: {
         update hrm_job_postings set external_ref = ${pushed.externalRef}, updated_by = ${actorId}, updated_at = now()
          where org_id = ${orgId} and id = ${row.id}
         returning ${POSTING_COLUMNS}
-      `)).rows[0];
+      `, "objects"))[0];
       if (updated) row = updated;
     }
     await appendPostingEvent(db, { orgId, postingId: row.id, kind: "published", payload: { board_key: boardKey } });
@@ -277,7 +277,7 @@ async function transitionPosting(
   return withOrgTransaction(orgId, async () => {
     const current = (await db.execute<PostingRow & { requisitionId: string }>(sql`
       select ${POSTING_COLUMNS} from hrm_job_postings where org_id = ${orgId} and id = ${postingId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!current) {
       throw new RecruitingError("NOT_FOUND", "posting is not visible in this organization — it may belong to another org");
     }
@@ -292,7 +292,7 @@ async function transitionPosting(
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${postingId} and status <> 'closed'
       returning ${POSTING_COLUMNS}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!updated) {
       throw new RecruitingError("REFUSED", "the posting closed concurrently — reload it instead of transitioning a closed row");
     }
@@ -335,16 +335,16 @@ export async function recordDispositionForApplication(
     select requisition_id as "requisitionId", source_posting_id as "sourcePostingId",
            stage_id as "stageId", status, rejected_reason as "rejectedReason"
       from hrm_applications where org_id = ${args.orgId} and id = ${args.applicationId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!app?.sourcePostingId) return;
   const posting = (await exec.execute<{ boardKey: string }>(sql`
     select board_key as "boardKey" from hrm_job_postings
      where org_id = ${args.orgId} and id = ${app.sourcePostingId}
-  `)).rows[0];
+  `, "objects"))[0];
   if (!posting) return;
   const stage = (await exec.execute<{ key: string | null; name: string | null }>(sql`
     select key, name from hrm_pipeline_stages where org_id = ${args.orgId} and id = ${app.stageId}
-  `)).rows[0];
+  `, "objects"))[0];
   const payload: DispositionPayload = {
     application_id: args.applicationId,
     requisition_id: app.requisitionId,
@@ -386,7 +386,7 @@ export async function resolveFeedOrg(feedToken: string): Promise<string> {
   const row = await withBypassContext(async () => {
     const found = (await db.execute<{ orgId: string }>(sql`
       select id as "orgId" from orgs where id = ${claims.rowId}
-    `)).rows[0];
+    `, "objects"))[0];
     return found ?? null;
   });
   if (!row) throw new RecruitingError("NOT_FOUND", "this feed's organization no longer exists");
@@ -414,7 +414,7 @@ export async function listFeedPostings(orgId: string): Promise<readonly FeedPost
   return withOrgTransaction(orgId, async () => {
     // Same gate for direct service callers bypassing the token.
     await requireDepthFeature(db, orgId);
-    const rows = (await db.execute<FeedPosting>(sql`
+    const rows = await db.execute<FeedPosting>(sql`
       select p.id as "postingId", r.requisition_number as "requisitionNumber",
              r.title, r.employment_kind as "employmentKind", r.description,
              p.published_at as "publishedAt"
@@ -422,7 +422,7 @@ export async function listFeedPostings(orgId: string): Promise<readonly FeedPost
         join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
        where p.org_id = ${orgId} and p.status = 'published' and r.status = 'open'
        order by p.published_at desc
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }
@@ -491,7 +491,7 @@ export async function applyViaPosting(
         from hrm_job_postings p
         join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
        where p.org_id = ${orgId} and p.id = ${postingId}
-    `)).rows[0] as
+    `, "objects"))[0] as
       | { requisitionId: string; status: string; requisitionStatus: string; pipelineTemplateId: string | null }
       | undefined;
     if (!posting || posting.status !== "published" || posting.requisitionStatus !== "open") {
@@ -504,7 +504,7 @@ export async function applyViaPosting(
       select id from hrm_pipeline_stages
        where org_id = ${orgId} and template_id = ${posting.pipelineTemplateId}
        order by position limit 1
-    `)).rows[0];
+    `, "objects"))[0];
     if (!firstStage) {
       throw new RecruitingError("REFUSED", "this opening's funnel has no stages — the hiring team must configure the funnel before taking applications");
     }
@@ -517,7 +517,7 @@ export async function applyViaPosting(
     if (email) {
       candidateId = (await db.execute<{ id: string }>(sql`
         select id from hrm_candidates where org_id = ${orgId} and lower(email) = lower(${email}) limit 1
-      `)).rows[0]?.id ?? null;
+      `, "objects"))[0]?.id ?? null;
       matchedExistingCandidate = candidateId !== null;
     }
     const insertFreshProspect = async (): Promise<string> => {
@@ -525,7 +525,7 @@ export async function applyViaPosting(
         insert into hrm_candidates (org_id, display_name, email, phone, source, source_detail, consent_recorded_at)
         values (${orgId}, ${query.displayName}, ${email}, ${phone}, 'job_board', ${postingId}, now())
         returning id
-      `)).rows[0];
+      `, "objects"))[0];
       if (!inserted) throw new RecruitingError("REFUSED", "the application was not recorded — no row was written; retry the request");
       return inserted.id;
     };
@@ -535,13 +535,13 @@ export async function applyViaPosting(
     const lockCandidateRow = async (id: string): Promise<{ erased: boolean }> => {
       const locked = (await db.execute<{ id: string }>(sql`
         select id from hrm_candidates where org_id = ${orgId} and id = ${id} for update
-      `)).rows[0];
+      `, "objects"))[0];
       if (!locked) {
         throw new RecruitingError("REFUSED", "the candidate changed before the application was recorded — retry the application");
       }
       const marker = (await db.execute<{ displayName: string | null; email: string | null; phone: string | null }>(sql`
         select display_name as "displayName", email, phone from hrm_candidates where org_id = ${orgId} and id = ${id}
-      `)).rows[0];
+      `, "objects"))[0];
       return { erased: marker ? isRetentionErasedCandidate(marker) : false };
     };
     if ((await lockCandidateRow(candidateId)).erased) {
@@ -559,7 +559,7 @@ export async function applyViaPosting(
     const existing = (await db.execute<{ id: string }>(sql`
       select id from hrm_applications
        where org_id = ${orgId} and requisition_id = ${posting.requisitionId} and candidate_id = ${candidateId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (existing) {
       // One candidacy per opening still holds -- nothing is written. The
       // applicant is NOT told they already applied, because that answer
@@ -583,7 +583,7 @@ export async function applyViaPosting(
         (org_id, requisition_id, candidate_id, stage_id, status, applied_on, source_posting_id)
       values (${orgId}, ${posting.requisitionId}, ${candidateId}, ${firstStage.id}, 'active', ${today}, ${postingId})
       returning id
-    `)).rows[0];
+    `, "objects"))[0];
     if (!application) throw new RecruitingError("REFUSED", "the application was not recorded — no row was written; retry the request");
     const { appendApplicationEvent } = await import("./applications.ts");
     await appendApplicationEvent(db, {
@@ -641,7 +641,7 @@ export async function listPostingEvents(query: {
     const posting = (await db.execute<{ requisitionId: string }>(sql`
       select requisition_id as "requisitionId" from hrm_job_postings
        where org_id = ${orgId} and id = ${postingId}
-    `)).rows[0];
+    `, "objects"))[0];
     if (!posting) {
       throw new RecruitingError("NOT_FOUND", "posting is not visible in this organization — it may belong to another org");
     }
@@ -651,12 +651,12 @@ export async function listPostingEvents(query: {
     } catch {
       await requireHrmRecruitingRead(db, orgId, actorId, posting.requisitionId);
     }
-    const rows = (await db.execute<{ id: string; kind: string; recordedAt: string }>(sql`
+    const rows = await db.execute<{ id: string; kind: string; recordedAt: string }>(sql`
       select id, kind, recorded_at as "recordedAt" from hrm_posting_events
        where org_id = ${orgId} and posting_id = ${postingId}
        order by recorded_at
        limit 200
-    `)).rows;
+    `, "objects");
     return rows;
   });
 }

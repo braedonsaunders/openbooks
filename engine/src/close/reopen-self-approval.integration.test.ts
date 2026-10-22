@@ -55,18 +55,14 @@ function request(org: ScratchOrg, actorId: string, hours = 2) {
   });
 }
 async function gates(orgId: string, id: string) {
-  return (
-    await db.execute<{ id: string; status: string }>(
-      sql`select id,status from flow_gates where org_id=${orgId} and subject_kind='close_reopen_request' and subject_id=${id} order by id`,
-    )
-  ).rows;
+  return await db.execute<{ id: string; status: string }>(
+      sql`select id,status from flow_gates where org_id=${orgId} and subject_kind='close_reopen_request' and subject_id=${id} order by id`, "objects",
+    );
 }
 async function status(orgId: string, id: string) {
-  return (
-    await db.execute<{ status: string }>(
-      sql`select status from close_reopen_requests where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0]?.status;
+  return (await db.execute<{ status: string }>(
+      sql`select status from close_reopen_requests where org_id=${orgId} and id=${id}`, "objects",
+    ))[0]?.status;
 }
 
 test(
@@ -77,17 +73,13 @@ test(
       const id = await request(org, actors.adminId);
       assert.equal(await status(org.orgId, id), "approved");
       assert.deepEqual(await gates(org.orgId, id), []);
-      const receipt = (
-        await db.execute<{ kind: string; hours: number }>(
-          sql`select policy->>'kind' as kind,(context->'command'->>'hours')::integer as hours from flow_submissions where org_id=${org.orgId} and subject_id=${id}`,
-        )
-      ).rows[0];
+      const receipt = (await db.execute<{ kind: string; hours: number }>(
+          sql`select policy->>'kind' as kind,(context->'command'->>'hours')::integer as hours from flow_submissions where org_id=${org.orgId} and subject_id=${id}`, "objects",
+        ))[0];
       assert.deepEqual(receipt, { kind: "ungated", hours: 2 });
-      const audit = (
-        await db.execute<{ action: string; actor_id: string; routing: string }>(
-          sql`select action,actor_id,changes->'after'->>'routing' as routing from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='release'`,
-        )
-      ).rows;
+      const audit = await db.execute<{ action: string; actor_id: string; routing: string }>(
+          sql`select action,actor_id,changes->'after'->>'routing' as routing from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='release'`, "objects",
+        );
       assert.deepEqual(audit, [
         { action: "release", actor_id: actors.adminId, routing: "ungated" },
       ]);
@@ -98,11 +90,9 @@ test(
         reason: "The correction is complete; close its access window",
       });
       assert.equal(await status(org.orgId, id), "reclosed");
-      const ended = (
-        await db.execute<{ reason: string; actor_id: string }>(
-          sql`select coalesce(changes->'after'->>'reason',changes->>'reason') as reason,actor_id from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='end'`,
-        )
-      ).rows[0];
+      const ended = (await db.execute<{ reason: string; actor_id: string }>(
+          sql`select coalesce(changes->'after'->>'reason',changes->>'reason') as reason,actor_id from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='end'`, "objects",
+        ))[0];
       assert.equal(ended?.actor_id, actors.adminId);
       assert.match(ended?.reason ?? "", /correction is complete/);
     }),
@@ -143,11 +133,9 @@ test(
         );
         if (index < 9)
           assert.equal(
-            (
-              await db.execute<{ state: string }>(
-                sql`select state from period_locks where org_id=${org.orgId} and period_id=${org.periodId} and module='gl' and subsidiary_id is null`,
-              )
-            ).rows[0]?.state,
+            (await db.execute<{ state: string }>(
+                sql`select state from period_locks where org_id=${org.orgId} and period_id=${org.periodId} and module='gl' and subsidiary_id is null`, "objects",
+              ))[0]?.state,
             "closed",
           );
       }
@@ -174,11 +162,9 @@ test(
         decision: "approved",
       });
       assert.equal(await status(org.orgId, id), "approved");
-      const audit = (
-        await db.execute<{ routing: string; attestation: unknown }>(
-          sql`select changes->'after'->>'routing' as routing,changes->'after'->'attestation' as attestation from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='approve'`,
-        )
-      ).rows[0];
+      const audit = (await db.execute<{ routing: string; attestation: unknown }>(
+          sql`select changes->'after'->>'routing' as routing,changes->'after'->'attestation' as attestation from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='approve'`, "objects",
+        ))[0];
       assert.equal(audit?.routing, "gated");
       assert.equal(audit?.attestation, null);
     }),
@@ -236,11 +222,9 @@ test(
         /resolved/,
       );
       assert.equal(
-        (
-          await db.execute(
-            sql`select id from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='withdraw'`,
-          )
-        ).rows.length,
+        (await db.execute(
+            sql`select id from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='withdraw'`, "objects",
+          )).length,
         1,
       );
     }),
@@ -279,11 +263,9 @@ test(
         comment,
       });
       assert.equal(await status(org.orgId, id), "rejected");
-      const audit = (
-        await db.execute<{ reason: string }>(
-          sql`select changes->'after'->>'decisionReason' as reason from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='reject'`,
-        )
-      ).rows;
+      const audit = await db.execute<{ reason: string }>(
+          sql`select changes->'after'->>'decisionReason' as reason from audit_log where org_id=${org.orgId} and table_name='close_reopen_requests' and row_id=${id} and action='reject'`, "objects",
+        );
       assert.deepEqual(audit, [{ reason: comment }]);
     }),
 );
@@ -332,11 +314,9 @@ test(
         userId: actors.approver1Id,
         decision: "approved",
       });
-      const result = (
-        await db.execute<{ hours: string }>(
-          sql`select extract(epoch from(expires_at-approved_at))/3600 as hours from close_reopen_requests where org_id=${org.orgId} and id=${id}`,
-        )
-      ).rows[0];
+      const result = (await db.execute<{ hours: string }>(
+          sql`select extract(epoch from(expires_at-approved_at))/3600 as hours from close_reopen_requests where org_id=${org.orgId} and id=${id}`, "objects",
+        ))[0];
       assert.ok(result);
       assert.ok(
         Math.abs(Number(result.hours) - 2) < 1 / 3600,

@@ -139,7 +139,7 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
       select id as account_id, number, name, type
         from accounts
        where org_id = ${orgId} and is_active and not is_summary
-    `),
+    `, "objects"),
     db.execute<{ account_id: string; sample_doc_id: string | null }>(sql`
       select jl.account_id, max(d.id::text) as sample_doc_id
         from journal_lines jl
@@ -149,7 +149,7 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
        where jl.org_id = ${orgId} and jl.is_open_item
          and a.type not in ('asset_receivable', 'liability_payable')
        group by jl.account_id
-    `),
+    `, "objects"),
     // Bank-typed accounts behave as cash in every cash reader, so one that
     // persistently carries a credit-normal balance corrupts cash everywhere
     // (for example a tax provision typed asset_bank). Reconcilable
@@ -169,15 +169,15 @@ async function loadControlMismatches(orgId: string): Promise<ControlMismatchRow[
          and coalesce(sum(l.amount) filter (where e.posting_date < ${cutoff}), 0) < 0.005
        order by abs(sum(l.amount)) desc
        limit 50
-    `),
+    `, "objects"),
   ]);
-  const misuseByAccount = new Map(misuse.rows.map((row) => [row.account_id, row.sample_doc_id]));
-  const bankCreditByAccount = new Map(bankCredit.rows.map((row) => [row.account_id, row]));
+  const misuseByAccount = new Map(misuse.map((row) => [row.account_id, row.sample_doc_id]));
+  const bankCreditByAccount = new Map(bankCredit.map((row) => [row.account_id, row]));
   const out: ControlMismatchRow[] = [];
   // One finding per account: the behavioral signal dominates the keyword
   // signal, so a persistently credit-normal unreconciled bank reports its
   // cash impact rather than its name.
-  for (const account of accounts.rows) {
+  for (const account of accounts) {
     const credit = bankCreditByAccount.get(account.account_id);
     if (credit) {
       out.push({
@@ -236,7 +236,7 @@ async function loadDuplicateParties(orgId: string): Promise<DuplicatePartyRow[]>
       having count(*) > 1
        order by 1
        limit 50
-    `),
+    `, "objects"),
     db.execute<{ key: string; party_ids: string[]; display_names: string[] }>(sql`
       select tax_ids::text as key,
              array_agg(id) as party_ids,
@@ -248,17 +248,17 @@ async function loadDuplicateParties(orgId: string): Promise<DuplicatePartyRow[]>
       having count(*) > 1
        order by 1
        limit 50
-    `),
+    `, "objects"),
   ]);
   return [
-    ...byName.rows.map((row) => ({
+    ...byName.map((row) => ({
       key: row.key,
       matchOn: "name" as const,
       partyIds: row.party_ids,
       displayNames: row.display_names,
       taxIds: row.tax_ids,
     })),
-    ...byTax.rows.map((row) => ({
+    ...byTax.map((row) => ({
       key: `tax:${row.key}`,
       matchOn: "tax_id" as const,
       partyIds: row.party_ids,
@@ -275,8 +275,8 @@ async function loadUntaxedItems(orgId: string): Promise<UntaxedItemRow[]> {
      where org_id = ${orgId} and is_active and tax_code_id is null
      order by code nulls last, name
      limit 50
-  `));
-  return rows.rows.map((row) => ({ itemId: row.item_id, code: row.code, name: row.name, kind: row.kind }));
+  `, "objects"));
+  return rows.map((row) => ({ itemId: row.item_id, code: row.code, name: row.name, kind: row.kind }));
 }
 
 async function loadUnbudgetedProjects(orgId: string): Promise<UnbudgetedProjectRow[]> {
@@ -287,8 +287,8 @@ async function loadUnbudgetedProjects(orgId: string): Promise<UnbudgetedProjectR
        and not exists (select 1 from budget_lines bl where bl.org_id = ${orgId} and bl.project_id = p.id)
      order by p.code nulls last, p.name
      limit 50
-  `));
-  return rows.rows.map((row) => ({ projectId: row.project_id, code: row.code, name: row.name }));
+  `, "objects"));
+  return rows.map((row) => ({ projectId: row.project_id, code: row.code, name: row.name }));
 }
 
 async function loadEmptyScenarios(orgId: string): Promise<EmptyScenarioRow[]> {
@@ -299,8 +299,8 @@ async function loadEmptyScenarios(orgId: string): Promise<EmptyScenarioRow[]> {
        and not exists (select 1 from budget_lines bl where bl.org_id = ${orgId} and bl.scenario_id = bs.id)
      order by bs.fiscal_year desc, bs.name
      limit 50
-  `));
-  return rows.rows.map((row) => ({
+  `, "objects"));
+  return rows.map((row) => ({
     scenarioId: row.scenario_id,
     name: row.name,
     fiscalYear: Number(row.fiscal_year),
@@ -324,8 +324,8 @@ async function loadUnmappedComponents(orgId: string): Promise<UnmappedComponentR
            ], null) as missing
       from pay_components
      where org_id = ${orgId} and is_active and kind in ('earning', 'deduction', 'employer_contribution', 'credit')
-  `));
-  return rows.rows
+  `, "objects"));
+  return rows
     .filter((row) => row.missing.length > 0)
     .map((row) => ({
       componentId: row.component_id,

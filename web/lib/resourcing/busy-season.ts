@@ -161,7 +161,7 @@ export async function loadBusySeason(
        and a.week_start >= ${yearStart}::date and a.week_start < ${yearEnd}::date
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by week_start
-  `)).rows.map((row) => row.week_start)
+  `, 'objects')).map((row) => row.week_start)
   const spans = contiguousSpans(markers)
   if (spans.length === 0) {
     return { seasonYear, spans, gaps: [], projects: [] }
@@ -172,7 +172,7 @@ export async function loadBusySeason(
       from departments d
      where d.org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `)).rows.map((row) => [row.id, row.name] as const))
+  `, 'objects')).map((row) => [row.id, row.name] as const))
 
   const people = new Map<string, PersonInfo>()
   for (const person of await allStaffablePeople(orgId, allowedSubsidiaryIds, spans[0]!.firstSunday)) {
@@ -188,7 +188,7 @@ export async function loadBusySeason(
     }
   }
 
-  const projects: BusySeasonProject[] = (await db.execute<ProjectRow>(sql`
+  const projects: BusySeasonProject[] = await db.execute<ProjectRow>(sql`
     select p.id, p.name
       from projects p
      where p.org_id = ${orgId}
@@ -196,7 +196,7 @@ export async function loadBusySeason(
        and p.status not in ('closed', 'cancelled')
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.name, p.id
-  `)).rows
+  `, 'objects')
 
   const gaps: BusySeasonGap[] = []
   for (const span of spans) {
@@ -215,7 +215,7 @@ export async function loadBusySeason(
            and a.week_start >= ${span.firstSunday}::date and a.week_start <= ${span.lastSunday}::date
            ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
          order by a.week_start, a.id
-      `).then((result) => result.rows),
+      `, 'objects'),
     ])
 
     const personIds = [...people.keys()]

@@ -158,9 +158,9 @@ async function ruleState(fixture: Fixture): Promise<RuleSnapshot> {
     const result = await db.execute<RuleSnapshot>(sql`
       select name, criteria, outcome, priority
         from bank_match_rules
-       where id = ${fixture.ruleId} and org_id = ${fixture.orgId}`);
-    assert.ok(result.rows[0], "the seeded banking rule must exist");
-    return result.rows[0]!;
+       where id = ${fixture.ruleId} and org_id = ${fixture.orgId}`, "objects");
+    assert.ok(result[0], "the seeded banking rule must exist");
+    return result[0]!;
   });
 }
 
@@ -178,8 +178,8 @@ async function auditUpdates(
          and table_name = 'bank_match_rules'
          and row_id = ${fixture.ruleId}
          and action = 'update'
-       order by id`);
-    return result.rows;
+       order by id`, "objects");
+    return result;
   });
 }
 
@@ -217,8 +217,8 @@ async function waitForRuleWriters(holderPid: number, expected: number): Promise<
       )
       select count(*)::int as count
         from queued
-       where blockers && array(select pid from blockers_in_chain)`);
-    if ((result.rows[0]?.count ?? 0) >= expected) return;
+       where blockers && array(select pid from blockers_in_chain)`, "objects");
+    if ((result[0]?.count ?? 0) >= expected) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(
@@ -325,8 +325,8 @@ test(
         select count(*)::int as count from audit_log
          where org_id = ${fixture.orgId} and table_name = 'bank_match_rules'
            and row_id = ${fixture.ruleId} and action = 'delete'
-      `));
-      assert.equal(audits.rows[0]?.count, 1);
+      `, "objects"));
+      assert.equal(audits[0]?.count, 1);
     } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);

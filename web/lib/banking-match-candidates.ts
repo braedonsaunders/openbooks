@@ -126,7 +126,7 @@ async function loadSettlementLine(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join reconciliations r on r.id = ${reconciliationId} and r.org_id = l.org_id and r.account_id = l.account_id
      where l.id = ${statementLineId} and l.org_id = ${orgId}
-  `)).rows[0]
+  `, 'objects'))[0]
   if (!row || !subsidiaryScopeAllows(scope, row.account_subsidiary_id)) throw new ScopeNotFoundError()
   if (!row.recon_status) throw new ScopeNotFoundError()
   if (row.recon_status === 'signed_off') {
@@ -504,7 +504,7 @@ export async function recordPaymentAndMatch(
           // The bank leg must move exactly the statement amount: a payment
           // that withholds contractor tax pays less than it settles.
           const saved = (await db.execute<{ total: string }>(sql`
-            select total::text as total from documents where org_id = ${orgId} and id = ${payment.id}`)).rows[0]
+            select total::text as total from documents where org_id = ${orgId} and id = ${payment.id}`, 'objects'))[0]
           if (!saved || toUnits(saved.total) !== toUnits(line.magnitude)) {
             throw new SettlementMatchRefusal(
               `The payment would move ${saved ? fromUnits(toUnits(saved.total)) : 'nothing'} through the bank, not the statement line's ${line.magnitude}; nothing was recorded`,
@@ -526,10 +526,10 @@ export async function recordPaymentAndMatch(
             )
           }
           const { entryId } = await postPaymentWithApplications(payment.id, settlement.allocations, userId, 'ui', { deferEffects: true })
-          const bankLines = (await db.execute<{ id: string }>(sql`
+          const bankLines = await db.execute<{ id: string }>(sql`
             select id from journal_lines
              where org_id = ${orgId} and entry_id = ${entryId} and account_id = ${line.accountId}
-          `)).rows
+          `, 'objects')
           if (bankLines.length !== 1) {
             throw new SettlementMatchRefusal('The recorded payment did not post exactly one line to this bank account, so it cannot be matched to the statement line; nothing was recorded', 422, 'Record the payment from Receipts or Payments and match it manually.')
           }
@@ -669,10 +669,10 @@ async function settleableAllocations(
   input: RecordPaymentMatchInput,
   scope: ReadonlySet<string> | null,
 ) {
-  const owners = (await db.execute<{ id: string; party_id: string | null; subsidiary_id: string | null }>(sql`
+  const owners = await db.execute<{ id: string; party_id: string | null; subsidiary_id: string | null }>(sql`
     select id, party_id, subsidiary_id from journal_lines
      where org_id = ${orgId} and id = any(${sql.param([...openLineIds])}::uuid[]) and is_open_item
-  `)).rows
+  `, 'objects')
   if (owners.length !== openLineIds.length || owners.some((owner) => !subsidiaryScopeAllows(scope, owner.subsidiary_id))) {
     throw new ScopeNotFoundError()
   }
@@ -856,7 +856,7 @@ export async function offsetSuggestionsFromHistory(
     having count(distinct other.account_id) = 1
      order by m.created_at desc, m.id
      limit ${OFFSET_HISTORY_LIMIT}
-  `)).rows.map((row) => ({
+  `, 'objects')).map((row) => ({
     description: row.description,
     counterpartyRef: row.counterparty_ref,
     offsetAccountId: row.offset_account_id,

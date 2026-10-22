@@ -228,8 +228,8 @@ async function runContext(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  return runs.rows[0] ?? null;
+  `, "objects"));
+  return runs[0] ?? null;
 }
 
 /**
@@ -302,18 +302,18 @@ async function scope(
           where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
             and a.adjustment_type = 'exclude' and a.employee_party_id = p.id)
      order by p.display_name
-  `));
+  `, "objects"));
   // Approved hours preview exactly what Calculate prices (wage-hours read),
   // so readiness can never warn about time the run will pay — or stay quiet
   // about time it will not.
   const wageHours = sumWageHoursByEmployee(await loadWageTimeEntries(db, {
     orgId,
-    employeePartyIds: rows.rows.map((row) => String(row.employee_party_id)),
+    employeePartyIds: rows.map((row) => String(row.employee_party_id)),
     periodStart: run.period_start,
     periodEnd: run.period_end,
     documentId,
   }));
-  return rows.rows.map((row) => ({
+  return rows.map((row) => ({
     ...row,
     approved_hours: wageHours.get(String(row.employee_party_id)) ?? "0",
   }));
@@ -339,10 +339,10 @@ export async function installedPayrollCountries(
   if (Array.isArray((payrollBlob as { countries?: unknown }).countries)) {
     return ((payrollBlob as { countries: unknown[] }).countries).map(String);
   }
-  return ((await db.execute<{ country: string }>(sql`
+  return (await db.execute<{ country: string }>(sql`
     select distinct country from pay_components
      where org_id = ${orgId} and system_key is not null and country is not null
-  `))).rows.map((row) => row.country);
+  `, "objects")).map((row) => row.country);
 }
 
 /**
@@ -427,8 +427,8 @@ export async function payrollSetupState(
 
   const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
     select settings->'payroll' as p from orgs where id = ${orgId}
-  `));
-  const blob = blobRes.rows[0]?.p ?? {};
+  `, "objects"));
+  const blob = blobRes[0]?.p ?? {};
   const installed = await installedPayrollCountries(orgId, blob, allowedSubsidiaryIds);
   const settings = await payrollSettings(orgId, allowedSubsidiaryIds);
 
@@ -449,10 +449,10 @@ export async function payrollSetupState(
     // costing credits — one mapping, read the way both of them read it.
     const clearing = (await db.execute<{ id: string | null }>(sql`
       select settings->'controlAccounts'->>'laborClearing' as id from orgs where id = ${orgId}
-    `));
+    `, "objects"));
     checks.push({
       severity: "blocker", code: "setup.laborClearing",
-      ok: Boolean(clearing.rows[0]?.id), href: CONTROL_ACCOUNTS_HREF,
+      ok: Boolean(clearing[0]?.id), href: CONTROL_ACCOUNTS_HREF,
     });
   }
   // Labour costing posts standard labour to WIP against Labor clearing at
@@ -497,10 +497,10 @@ export async function payrollSetupState(
     select exists (
       select 1 from pay_schedules where org_id = ${orgId} and is_active
         ${payrollSubsidiaryScopeFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}) as ok
-  `));
+  `, "objects"));
   checks.push({
     severity: "blocker", code: "setup.schedule",
-    ok: Boolean(schedules.rows[0]?.ok), href: `${setupHref}?tab=schedules`,
+    ok: Boolean(schedules[0]?.ok), href: `${setupHref}?tab=schedules`,
   });
 
   // Statutory remittance vendors — exactly the settings keys the installed
@@ -568,8 +568,8 @@ export async function payrollSetupState(
             from payroll_filing_accounts
            where org_id = ${orgId} and country = ${country} and is_active
            order by is_default desc, account_number
-        `);
-        if (accounts.rows.length === 0) {
+        `, "objects");
+        if (accounts.length === 0) {
           checks.push({
             severity: "warning", code: "setup.remittanceFrequency", ok: false,
             detail: `${schedule.authority} remittance needs a filing account with its remitter type set in Payroll Setup → Filing accounts`,
@@ -577,7 +577,7 @@ export async function payrollSetupState(
           });
           continue;
         }
-        for (const account of accounts.rows) {
+        for (const account of accounts) {
           const filingAccount = {
             id: account.id, accountNumber: account.accountNumber,
             name: account.name, remitterType: account.remitterType,
@@ -759,8 +759,8 @@ export async function payRunReadiness(
     if (settings.wagesTo === "labor_clearing") {
       const clearing = (await db.execute<{ id: string | null }>(sql`
         select settings->'controlAccounts'->>'laborClearing' as id from orgs where id = ${orgId}
-      `));
-      if (!clearing.rows[0]?.id) flag("blocker", "setup.laborClearing", [], { href: CONTROL_ACCOUNTS_HREF });
+      `, "objects"));
+      if (!clearing[0]?.id) flag("blocker", "setup.laborClearing", [], { href: CONTROL_ACCOUNTS_HREF });
     } else if ((await laborCostingSettings(orgId)).mode === "post") {
       flag("warning", "setup.laborWashMode", [], { href: `${setupHref}?tab=accounts` });
     }
@@ -769,8 +769,8 @@ export async function payRunReadiness(
     // to a liability account, or the commit has nowhere to credit withholdings.
     const blob = (await db.execute<{ p: Record<string, unknown> | null }>(sql`
       select settings->'payroll' as p from orgs where id = ${orgId}
-    `));
-    payrollPolicy = blob.rows[0]?.p ?? {};
+    `, "objects"));
+    payrollPolicy = blob[0]?.p ?? {};
     installed = await installedPayrollCountries(orgId, payrollPolicy, allowedSubsidiaryIds);
     const countriesInRun = new Set(people.map((p) => p.country));
     // Slots that do not apply where this run's people work are absent, not
@@ -873,9 +873,9 @@ export async function payRunReadiness(
             from employee_payroll_profiles prof
            where prof.org_id = ${orgId}
              and prof.employee_party_id in (${sql.join(partyIds.map((id) => sql`${id}`), sql`, `)})
-        `));
+        `, "objects"));
         const factsByEmployee = new Map<string, Record<string, string | null>>(
-          factRows.rows.map((row) => [String(row.employee_party_id), row]),
+          factRows.map((row) => [String(row.employee_party_id), row]),
         );
         const missingByFact = new Map<string, { fact: string; label: string; people: ScopeRow[] }>();
         for (const person of people) {
@@ -934,13 +934,13 @@ export async function payRunReadiness(
        and p.is_adjustment = false
      order by (l.subsidiary_id is not null) desc, p.starts_on, p.ends_on, p.id
      limit 1
-  `));
+  `, "objects"));
   // Both period blockers resolve on the periods setup screen (generate the
   // missing period, or reopen the closed one) — the readiness panel promises
   // every item links to where it is fixed.
-  if (!lock.rows[0]) flag("blocker", "period.missing", [], { detail: run.pay_date, href: "/admin/setup/period-close" });
-  else if (lock.rows[0].state !== "open") {
-    flag("blocker", "period.closed", [], { detail: lock.rows[0].label, href: "/admin/setup/period-close" });
+  if (!lock[0]) flag("blocker", "period.missing", [], { detail: run.pay_date, href: "/admin/setup/period-close" });
+  else if (lock[0].state !== "open") {
+    flag("blocker", "period.closed", [], { detail: lock[0].label, href: "/admin/setup/period-close" });
   }
 
   // --- Population ---------------------------------------------------------
@@ -1131,8 +1131,8 @@ async function activePayrollPopulation(
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
      where prof.org_id = ${orgId} and prof.is_active
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  return rows.rows;
+  `, "objects"));
+  return rows;
 }
 
 /**
@@ -1248,7 +1248,7 @@ async function flagRetiredCertificateAnswers(args: {
   const subjects = people.filter((person) => declared.has(person.country));
   if (subjects.length === 0) return;
   const keys = [...new Set([...declared.values()].flat().map((certificate) => certificate.key))];
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     employee_party_id: string; country: string; certificate_key: string;
     answers: Record<string, string> | null; effective_from: string | null; superseded_on: string | null;
   }>(sql`
@@ -1258,7 +1258,7 @@ async function flagRetiredCertificateAnswers(args: {
      where org_id = ${orgId}
        and employee_party_id in (${sql.join(subjects.map((person) => sql`${person.employee_party_id}`), sql`, `)})
        and certificate_key in (${sql.join(keys.map((key) => sql`${key}`), sql`, `)})
-  `)).rows;
+  `, "objects");
   for (const person of subjects) {
     const stored: StoredCertificate[] = rows
       .filter((row) => row.employee_party_id === person.employee_party_id && row.country === person.country)
@@ -1307,14 +1307,14 @@ async function flagMissingOpeningBalances(args: {
      where other.org_id = ${orgId} and other.tax_year = ${run.tax_year}
        and other.run_status = 'committed' and other.document_id <> ${documentId}
      limit 1
-  `));
-  if (prior.rows.length > 0) return; // not the first committed run of the year
+  `, "objects"));
+  if (prior.length > 0) return; // not the first committed run of the year
 
   const entered = (await db.execute<{ employee_party_id: string }>(sql`
     select employee_party_id from payroll_opening_balances
      where org_id = ${orgId} and tax_year = ${run.tax_year}
-  `));
-  const have = new Set(entered.rows.map((r) => r.employee_party_id));
+  `, "objects"));
+  const have = new Set(entered.map((r) => r.employee_party_id));
 
   // Someone hired on or after this period started cannot have been paid by
   // this employer earlier in the year, so they have nothing to carry in.
@@ -1351,11 +1351,11 @@ async function flagMissingOpeningBalances(args: {
           where oc.org_id = epc.org_id and oc.component_id = epc.component_id
             and b.employee_party_id = epc.employee_party_id and b.tax_year = ${run.tax_year})
      order by c.code
-  `));
-  if (capped.rows.length > 0) {
+  `, "objects"));
+  if (capped.length > 0) {
     const byPerson = new Map(people.map((p) => [p.employee_party_id, p]));
     const byComponent = new Map<string, ScopeRow[]>();
-    for (const row of capped.rows) {
+    for (const row of capped) {
       const person = byPerson.get(row.employee_party_id);
       // Same exemption as above: somebody this employer first hired inside the
       // period cannot have consumed any of the limit here earlier in the year.
@@ -1435,8 +1435,8 @@ async function flagMissingEntitlementOpenings(args: {
     union
     select l.employee_party_id from entitlement_ledger l
      where l.org_id = ${orgId} and l.kind = 'opening'
-  `));
-  const adopted = new Set(carried.rows.map((r) => r.employee_party_id));
+  `, "objects"));
+  const adopted = new Set(carried.map((r) => r.employee_party_id));
   if (adopted.size === 0) return;
 
   // Plans no committed run has ever moved: this run is the plan's first.
@@ -1449,16 +1449,16 @@ async function flagMissingEntitlementOpenings(args: {
           where l.org_id = pl.org_id and l.plan_id = pl.id
             and r.run_status = 'committed' and l.pay_run_document_id <> ${documentId})
      order by pl.code
-  `));
-  if (virgin.rows.length === 0) return;
+  `, "objects"));
+  if (virgin.length === 0) return;
 
   const openings = (await db.execute<{ plan_id: string; employee_party_id: string }>(sql`
     select plan_id, employee_party_id from entitlement_ledger
      where org_id = ${orgId} and kind = 'opening'
-  `));
-  const have = new Set(openings.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
+  `, "objects"));
+  const have = new Set(openings.map((r) => `${r.plan_id}:${r.employee_party_id}`));
 
-  for (const plan of virgin.rows) {
+  for (const plan of virgin) {
     // The alternate-day bank accrues only under the declaring jurisdictions:
     // name it only for employees whose resolved labour jurisdiction the pack
     // declaration covers, so an Ontario-governed hire is never asked for a
@@ -1850,8 +1850,8 @@ export async function payRunStaleness(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  const row = rows.rows[0];
+  `, "objects"));
+  const row = rows[0];
   // A missing run is not a fresh run. Fail closed and say why.
   if (!row) return { stale: true, reasons: ["missing"], calculatedAt: null };
   if (row.never_calculated) return { stale: false, reasons: [], calculatedAt: null };
@@ -1895,7 +1895,7 @@ export async function payRunStaleness(
         ) error
        where r.org_id = ${orgId} and r.document_id = ${documentId}
          and error->>'employeePartyId' is not null
-    `)).rows.map((entry) => entry.party_id);
+    `, "objects")).map((entry) => entry.party_id);
     const problem = await leavePayrollInputProblems(executor, {
       orgId,
       runDocumentId: documentId,
@@ -2012,14 +2012,14 @@ async function employerLevyRoomConsumed(
       join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  const info = run.rows[0];
+  `, "objects"));
+  const info = run[0];
   if (!info || info.calculated_at === null) return false;
   // The run's affected employees: the population whose earnings claim room —
   // active schedule profiles, in the schedule's entity, excluding profiles
   // without recorded period coverage or scoped final-pay admission. Employees
   // outside this population neither claim room nor arm a country levy.
-  const mine = (await executor.execute<{
+  const mine = await executor.execute<{
     employee_party_id: string; country: string; province: string | null;
   }>(sql`
     select prof.employee_party_id, prof.country, prof.province
@@ -2036,7 +2036,7 @@ async function employerLevyRoomConsumed(
        })}
        and (${info.schedule_subsidiary_id}::uuid is null
         or p.subsidiary_id = ${info.schedule_subsidiary_id}::uuid)
-  `)).rows;
+  `, "objects");
   interface LevyArm {
     country: string;
     /** Phase-8 hook levies (CA EHT et al): employer room per province. */
@@ -2144,8 +2144,8 @@ async function employerLevyRoomConsumed(
          and other.updated_at > ${calculatedAt}
          and (${sql.join(armPredicates, sql` or `)})
     ) as consumed
-  `));
-  return consumed.rows[0]!.consumed;
+  `, "objects"));
+  return consumed[0]!.consumed;
 }
 
 /**
@@ -2204,7 +2204,7 @@ export async function assertPayRunNotStale(
   if (!stale || calculatedAt === null) return;
   const status = (await executor.execute<{ status: string }>(sql`
     select status from documents where org_id = ${orgId} and id = ${documentId}
-  `)).rows[0]?.status ?? null;
+  `, "objects"))[0]?.status ?? null;
   throw new PayrollError(staleCalculationMessage(reasons, status));
 }
 
@@ -2272,8 +2272,8 @@ export async function payRunFunding(
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `));
-  const t = totals.rows[0] ?? { net: "0", gross: "0", employer: "0" };
+  `, "objects"));
+  const t = totals[0] ?? { net: "0", gross: "0", employer: "0" };
   // Liabilities = what the run owes but does not pay today: employee
   // withholdings (gross − net) plus the employer-side accruals.
   const liabilities = add(add(t.gross, neg(t.net)), t.employer);
@@ -2281,13 +2281,13 @@ export async function payRunFunding(
   // Both rails are always reported, including at zero: the operator has to be
   // able to see that nobody is on cheques, not infer it from an absent row.
   const stubs = await stubPaymentMethods(orgId, documentId);
-  const visibleStubIds = (await db.execute<{ id: string }>(sql`
+  const visibleStubIds = await db.execute<{ id: string }>(sql`
     select s.id
       from pay_stubs s
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
-  `)).rows;
+  `, "objects");
   const visibleStubIdSet = new Set(visibleStubIds.map((row) => row.id));
   const scopedStubs = stubs.filter((stub) => visibleStubIdSet.has(stub.stubId));
   const rails: FundingRail[] = PAYROLL_PAYMENT_METHODS.map((method) => {
@@ -2327,7 +2327,7 @@ export async function payRunFunding(
              )}))`
            : sql`and false`}
      order by a.number nulls last, a.name
-  `));
+  `, "objects"));
 
   return {
     netPay: t.net,
@@ -2336,7 +2336,7 @@ export async function payRunFunding(
     totalCost: add(t.net, liabilities),
     payDate,
     businessDaysToPayDate: businessDaysBetween(today, payDate),
-    accounts: accounts.rows.map((a) => ({ ...a, sufficient: cmp(a.balance, t.net) >= 0 })),
+    accounts: accounts.map((a) => ({ ...a, sufficient: cmp(a.balance, t.net) >= 0 })),
   };
 }
 
@@ -2402,7 +2402,7 @@ export async function payRunChanges(
       from current_stub c
       left join previous_stub pv on pv.employee_party_id = c.employee_party_id
      order by c.name
-  `));
+  `, "objects"));
 
   const fold = (lines: { d: string; a: string; h: string | null }[] | null) => {
     const map = new Map<string, { amount: string; hours: string }>();
@@ -2416,7 +2416,7 @@ export async function payRunChanges(
     return map;
   };
 
-  return rows.rows.map((row) => {
+  return rows.map((row) => {
     const now = fold(row.current_lines);
     const before = fold(row.previous_lines);
     const changes: StubChange["changes"] = [];

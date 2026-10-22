@@ -909,6 +909,6 @@ export async function canSwitchIndustry(
   const r = (await executor.execute<{ posted: boolean }>(sql`
     select exists (
       select 1 from journal_lines where org_id = ${orgId} limit 1
-    ) as posted`))
-  return !(r.rows[0]?.posted ?? false)
+    ) as posted`, 'objects'))
+  return !(r[0]?.posted ?? false)
 }

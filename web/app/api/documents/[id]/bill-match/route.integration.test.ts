@@ -118,7 +118,7 @@ test('bill-match links lines, refuses a second match, and the bill posts', async
     state.user = actorFor(actor, org.orgId)
     const lineIds = (await withBypassContext(() => db.execute<{ id: string }>(sql`
       select id from document_lines where org_id = ${org.orgId} and document_id = ${billId} and line_number in (1, 2)
-      order by line_number`))).rows.map((row) => row.id)
+      order by line_number`, 'objects'))).map((row) => row.id)
     const matched = await withOrgContext(org.orgId, () =>
       POST(billMatch(billId, {
         method: 'POST',
@@ -144,8 +144,8 @@ test('bill-match links lines, refuses a second match, and the bill posts', async
     const posted = await withOrgContext(org.orgId, () => postAction(postBill(billId, { action: 'post', documentId: billId })))
     assert.equal(posted.status, 200, JSON.stringify(await posted.clone().json()))
     const status = await withBypassContext(() => db.execute<{ status: string }>(sql`
-      select status from documents where id = ${billId}`))
-    assert.equal(status.rows[0]!.status, 'posted')
+      select status from documents where id = ${billId}`, 'objects'))
+    assert.equal(status[0]!.status, 'posted')
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }

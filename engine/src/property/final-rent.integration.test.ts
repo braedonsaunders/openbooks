@@ -27,11 +27,11 @@ test('termination preserves billing of earned prorated rent and cancels future p
  await withOrgTransaction(org.orgId,()=>terminatePropertyLease(org.orgId, actor, null, lease,'2026-07-15','Tenant vacated on agreed date'));
  const billed=await billDueLeaseCharges(org.orgId, actor, null, '2026-08-31',lease);
  assert.equal(billed.billed,1);
- const result=(await db.execute<{amount:string;total:string;description:string}>(sql`select s.amount::text,d.total::text,dl.description from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id join document_lines dl on dl.document_id=d.id and dl.org_id=d.org_id where s.id=${schedule} and s.org_id=${org.orgId}`)).rows[0]!;
+ const result=(await db.execute<{amount:string;total:string;description:string}>(sql`select s.amount::text,d.total::text,dl.description from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id join document_lines dl on dl.document_id=d.id and dl.org_id=d.org_id where s.id=${schedule} and s.org_id=${org.orgId}`, 'objects'))[0]!;
  assert.equal(result.amount,'483.8710');
  assert.equal(result.total,result.amount);
  assert.ok(result.description.endsWith('2026-07-15'));
- assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where id=${future} and org_id=${org.orgId}`)).rows[0]!.status,'cancelled');
+ assert.equal((await db.execute<{status:string}>(sql`select status from lease_schedule_lines where id=${future} and org_id=${org.orgId}`, 'objects'))[0]!.status,'cancelled');
  assert.equal((await billDueLeaseCharges(org.orgId, actor, null, '2026-08-31',lease)).billed,0);
 }));
 
@@ -52,7 +52,7 @@ test('billing rechecks final rent after waiting for the real termination transac
  const resume=new Promise<void>(r=>{proceed=r;});
  const termination=withOrgTransaction(org.orgId,async()=>{
   await db.execute(sql`select id from property_leases where id=${lease} and org_id=${org.orgId} for update`);
-  ready((await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid);
+  ready((await db.execute<{pid:number}>(sql`select pg_backend_pid() as pid`, 'objects'))[0]!.pid);
   await resume;
   await terminatePropertyLease(org.orgId, actor, null, lease,'2026-07-15','Concurrent agreed termination');
  });
@@ -69,7 +69,7 @@ test('billing rechecks final rent after waiting for the real termination transac
   proceed();
   await termination;
   assert.equal((await pending).billed,1);
-  const line=(await db.execute<{amount:string;total:string}>(sql`select s.amount::text,d.total::text from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.id=${schedule} and s.org_id=${org.orgId}`)).rows[0]!;
+  const line=(await db.execute<{amount:string;total:string}>(sql`select s.amount::text,d.total::text from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.id=${schedule} and s.org_id=${org.orgId}`, 'objects'))[0]!;
   assert.equal(line.amount,'483.8710');
   assert.equal(line.total,line.amount);
  }finally{proceed();await termination.catch(()=>{});await pending?.catch(()=>{});}

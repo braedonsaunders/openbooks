@@ -86,14 +86,15 @@ const mockSources = new Map<string, string>([
       const sqlText = globalThis.openbooksCustomFieldsSqlText
       export const db = {
         async transaction(run) { return run(db) },
-        async execute(query) {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const text = sqlText(query)
           state.queries.push(text)
           if (text.includes('from custom_field_defs')) {
-            return { rows: state.existing ? [state.existing] : [] }
+            return inMode({ rows: state.existing ? [state.existing] : [] })
           }
-          if (text.includes('update custom_field_defs')) return { rows: [state.existing] }
-          if (text.includes('insert into audit_log')) return { rows: [] }
+          if (text.includes('update custom_field_defs')) return inMode({ rows: [state.existing] })
+          if (text.includes('insert into audit_log')) return inMode({ rows: [] })
           throw new Error('unexpected database query: ' + text)
         },
       }

@@ -112,12 +112,12 @@ export function routingResourcesVisible(scope: ReadonlySet<string> | null, alias
 
 /** Pin mutable entity-bearing references before a command rechecks its complete scope. */
 export async function pinProductionOrderResources(tx:SqlExecutor,orgId:string,workOrderId:string) {
-  const orders=(await tx.execute<{id:string}>(sql`with recursive subjects as (
+  const orders=await tx.execute<{id:string}>(sql`with recursive subjects as (
     select id,receipt_rework_inspection_id,array[id] as path from mfg_work_orders where org_id=${orgId} and id=${workOrderId}
     union all select original.id,original.receipt_rework_inspection_id,subjects.path||original.id from subjects
       join inventory_inspections inspection on inspection.org_id=${orgId} and inspection.id=subjects.receipt_rework_inspection_id
       join mfg_work_orders original on original.org_id=inspection.org_id and original.id=inspection.work_order_id where not original.id=any(subjects.path)
-    ) select id from subjects order by id`)).rows;
+    ) select id from subjects order by id`, "objects");
   const ids=sql.join(orders.map(row=>sql`${row.id}::uuid`),sql`, `);
   if(!orders.length)throw new ScopeNotFoundError();
   await tx.execute(sql`select route.id from mfg_routings route where route.org_id=${orgId} and route.id in (
@@ -145,7 +145,7 @@ export async function pinProductionOrderResources(tx:SqlExecutor,orgId:string,wo
       union select operation.work_center_id from mfg_routing_operations operation join mfg_work_orders work on work.org_id=operation.org_id and work.routing_id=operation.routing_id where work.org_id=${orgId} and work.id in(${ids})
     )
   ) order by project.id for share`);
-  const stocks=(await tx.execute<{id:string}>(sql`select stock.id from stock_locations stock where stock.org_id=${orgId} and stock.id in (
+  const stocks=await tx.execute<{id:string}>(sql`select stock.id from stock_locations stock where stock.org_id=${orgId} and stock.id in (
     select issue_location_id from mfg_work_orders where org_id=${orgId} and id in(${ids})
     union select receipt_location_id from mfg_work_orders where org_id=${orgId} and id in(${ids})
     union select inspection.stock_location_id from inventory_inspections inspection join mfg_work_orders work on work.org_id=inspection.org_id and work.receipt_rework_inspection_id=inspection.id where work.org_id=${orgId} and work.id in(${ids})
@@ -154,7 +154,7 @@ export async function pinProductionOrderResources(tx:SqlExecutor,orgId:string,wo
     union select movement.stock_location_id from inventory_movements movement join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id join mfg_work_orders work on work.org_id=entry.org_id and work.number=entry.custom->>'work_order_number' where work.org_id=${orgId} and work.id in(${ids}) and entry.origin='manufacturing'
     union select route.default_issue_location_id from mfg_routings route join mfg_work_orders work on work.org_id=route.org_id and work.routing_id=route.id where work.org_id=${orgId} and work.id in(${ids})
     union select route.default_receipt_location_id from mfg_routings route join mfg_work_orders work on work.org_id=route.org_id and work.routing_id=route.id where work.org_id=${orgId} and work.id in(${ids})
-  ) order by stock.id for share`)).rows;
+  ) order by stock.id for share`, "objects");
   await tx.execute(sql`select location.id from locations location where location.org_id=${orgId} and location.id in (
     select location_id from stock_locations where org_id=${orgId} ${stocks.length?sql`and id in(${sql.join(stocks.map(row=>sql`${row.id}::uuid`),sql`, `)})`:sql`and false`}
     union select line.location_id from journal_lines line join mfg_subcontract_service_bills claim on claim.org_id=line.org_id and claim.source_entry_id=line.entry_id join mfg_subcontracts contract on contract.org_id=claim.org_id and contract.id=claim.subcontract_id where contract.org_id=${orgId} and contract.work_order_id in(${ids})
@@ -166,9 +166,9 @@ export async function pinProductionOrderResources(tx:SqlExecutor,orgId:string,wo
   await tx.execute(sql`select project.id from projects project where project.org_id=${orgId} and project.id in (
     select line.project_id from journal_lines line join mfg_subcontract_service_bills claim on claim.org_id=line.org_id and claim.source_entry_id=line.entry_id join mfg_subcontracts contract on contract.org_id=claim.org_id and contract.id=claim.subcontract_id where contract.org_id=${orgId} and contract.work_order_id in(${ids})
   ) order by project.id for share`);
-  const bills = (await tx.execute<{id:string}>(sql`select distinct claim.bill_id as id from mfg_subcontract_service_bills claim
+  const bills = await tx.execute<{id:string}>(sql`select distinct claim.bill_id as id from mfg_subcontract_service_bills claim
     join mfg_subcontracts contract on contract.org_id=claim.org_id and contract.id=claim.subcontract_id
-    where contract.org_id=${orgId} and contract.work_order_id in(${ids}) order by claim.bill_id`)).rows;
+    where contract.org_id=${orgId} and contract.work_order_id in(${ids}) order by claim.bill_id`, "objects");
   for (const bill of bills) await pinProductionDocumentResources(tx,orgId,bill.id);
 }
 

@@ -55,7 +55,7 @@ export async function loadPayRuns(
   const t = await getTranslations('payroll')
 
   const scheduleRows = canRun
-    ? (((await db.execute<{
+    ? (await db.execute<{
         id: string
         name: string
         frequency: string
@@ -75,7 +75,7 @@ export async function loadPayRuns(
               order by root.created_at limit 1
            ))`, authz.allowedSubsidiaryIds)}
          group by s.id, s.name, s.frequency, s.pay_date_offset_days, s.anchor_period_end
-         order by s.name`))).rows)
+         order by s.name`, 'objects'))
     : []
 
   // Keep the date controls on the exact same calendar as createPayRun. The
@@ -100,7 +100,7 @@ export async function loadPayRuns(
   // bank), and the engine will only calculate one for people whose employment
   // has ended — so the picker offers exactly those.
   const finalPayCandidates = canRun
-    ? (((await db.execute<{ id: string; name: string; pay_schedule_id: string; terminated_on: string }>(sql`
+    ? (await db.execute<{ id: string; name: string; pay_schedule_id: string; terminated_on: string }>(sql`
         select distinct on (prof.employee_party_id)
                prof.employee_party_id as id, p.display_name as name,
                prof.pay_schedule_id, er.terminated_on::text as terminated_on
@@ -110,7 +110,7 @@ export async function loadPayRuns(
          where prof.org_id = ${orgId} and prof.is_active and er.terminated_on is not null
            ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
            and prof.pay_schedule_id = any(${uuidArray(schedules.map((schedule) => schedule.id))}::uuid[])
-         order by prof.employee_party_id, er.terminated_on desc`))).rows)
+         order by prof.employee_party_id, er.terminated_on desc`, 'objects'))
     : []
 
   return {

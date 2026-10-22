@@ -170,8 +170,8 @@ export async function lockInstalledAppForInvocation(orgId: string, appId: string
   await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`);
   const app = await db.execute<{ status: string; activeVersionId: string | null }>(sql`
     select status, active_version_id as "activeVersionId"
-      from apps where org_id = ${orgId} and id = ${appId} for update`);
-  if (app.rows[0]?.status !== "installed" || app.rows[0]?.activeVersionId !== versionId) {
+      from apps where org_id = ${orgId} and id = ${appId} for update`, "objects");
+  if (app[0]?.status !== "installed" || app[0]?.activeVersionId !== versionId) {
     throw new AppInvocationDisabledError();
   }
 }
@@ -202,8 +202,8 @@ async function readCommittedClaim(
       from application_idempotency_keys
      where org_id = ${orgId} and actor_id = ${actorId} and source = 'app'
        and operation = ${operation} and idempotency_key = ${idempotencyKey}
-     limit 1`);
-  const row = r.rows[0];
+     limit 1`, "objects");
+  const row = r[0];
   if (!row) return null;
   // The database clock decides expiry. Reap only a row the database confirms
   // expired; if no row is deleted, the persisted claim remains authoritative
@@ -213,8 +213,8 @@ async function readCommittedClaim(
   const reaped = await db.execute<{ id: string }>(sql`
       delete from application_idempotency_keys
        where id = ${row.id} and expires_at <= clock_timestamp()
-       returning id`);
-  if (reaped.rows.length > 0) {
+       returning id`, "objects");
+  if (reaped.length > 0) {
     return null;
   }
   return {
@@ -278,8 +278,8 @@ export async function executeAppInvocation(args: {
     await args.authorize();
     const gateName = `${args.operation}|${claimKey}|${actorId}`;
     const gate = await db.execute<{ acquired: boolean }>(sql`
-      select pg_try_advisory_xact_lock(hashtextextended(${gateName}, 0)) as acquired`);
-    if (!gate.rows[0]?.acquired) throw new AppInvocationInFlightError(args.operation);
+      select pg_try_advisory_xact_lock(hashtextextended(${gateName}, 0)) as acquired`, "objects");
+    if (!gate[0]?.acquired) throw new AppInvocationInFlightError(args.operation);
 
     const prior = await readCommittedClaim(orgId, actorId, args.operation, claimKey);
     if (prior?.completedAt != null) {
@@ -315,8 +315,8 @@ export async function executeAppInvocation(args: {
               ${args.requestHash}, now() + interval '30 days')
       -- A retained claim is reused only for identical input; a missing claim is refused below.
       on conflict (org_id, actor_id, source, operation, idempotency_key) do nothing
-      returning id`);
-    const claimId = inserted.rows[0]?.id ?? prior?.id;
+      returning id`, "objects");
+    const claimId = inserted[0]?.id ?? prior?.id;
     if (!claimId) {
       // Only reachable under an advisory-key collision with a rival that ran
       // without our lock namespace: fail closed rather than guess.

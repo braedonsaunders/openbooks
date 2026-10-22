@@ -1,1 +1,0 @@
-Creates new tables, functions and triggers only. No existing row is read, changed or constrained, so no data condition can block the migration.

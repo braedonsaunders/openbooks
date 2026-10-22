@@ -55,14 +55,14 @@ test("intercompany FX residual keeps the origin leg transaction amount in docume
     multi: true,
   };
   const runner = {
-    execute: async () => ({
+    execute: async (_query: unknown, mode?: string) => Promise.resolve({
       rows: [{
         fromId: originSubId,
         toId: counterSubId,
         dueFrom: originDueFrom,
         dueTo: counterDueTo,
       }],
-    }),
+    }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
   } as unknown as Pick<typeof db, "execute">;
   const legs = await intercompanyBalancingLegs(runner, {
     orgId: randomUUID(),
@@ -216,7 +216,7 @@ test(
           left join journal_lines jl
             on jl.org_id = e.org_id and jl.entry_id = e.id
          where d.org_id = ${org.orgId} and d.id = ${documentId}
-         group by d.id`)).rows[0]!;
+         group by d.id`, "objects"))[0]!;
       assert.deepEqual(residue, {
         status: "approved",
         entries: 0,
@@ -264,7 +264,7 @@ test(
           left join journal_lines jl
             on jl.org_id = e.org_id and jl.entry_id = e.id
          where d.org_id = ${org.orgId} and d.id = ${documentId}
-         group by d.id`)).rows[0]!;
+         group by d.id`, "objects"))[0]!;
       assert.deepEqual(posted, {
         status: "posted",
         entries: 1,

@@ -68,8 +68,8 @@ test(
       // The refusal lands before the pull, let alone any write.
       assert.equal(pulled, false);
       const docs = (await db.execute<{ count: number }>(sql`
-        select count(*)::int as count from documents where org_id = ${o.orgId}`));
-      assert.equal(docs.rows[0]?.count, 0);
+        select count(*)::int as count from documents where org_id = ${o.orgId}`, "objects"));
+      assert.equal(docs[0]?.count, 0);
     } finally {
       await dropScratchOrg(o.orgId);
     }

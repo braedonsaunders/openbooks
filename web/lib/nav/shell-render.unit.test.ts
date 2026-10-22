@@ -32,15 +32,16 @@ test('menus share source reads within a render and recheck organization and role
       const calls=[];
       let recordRoles=['auditor'];
       let config=defaultNavConfig();
-      db.execute=async query=>{
+      db.execute=async (query, mode)=>{
+        const inMode = (result) => (mode === 'objects' ? result.rows : result);
         const {sql,params}=dialect.sqlToQuery(query);
         const org=params.find(value=>typeof value==='string'&&value.startsWith('company-'));
         assert.ok(org,'each navigation read is organization-scoped: '+sql);
         calls.push({sql,org});
-        if(sql.includes('from org_nav_configs')) return {rows:[{config,updated_at:new Date()}]};
-        if(sql.includes("settings->'features' as f")) return {rows:[{f:Object.fromEntries(FEATURES.map(feature=>[feature.key,!['multiSubsidiary','multiCurrency'].includes(feature.key)]))}]};
-        if(sql.includes('from apps m')||sql.includes('from apps a')) return {rows:[]};
-        if(sql.includes('from custom_record_types')) return {rows:[{key:'restricted',plural_name:org+' records',icon_key:'File',allowed_roles:recordRoles}]};
+        if(sql.includes('from org_nav_configs')) return inMode({rows:[{config,updated_at:new Date()}]});
+        if(sql.includes("settings->'features' as f")) return inMode({rows:[{f:Object.fromEntries(FEATURES.map(feature=>[feature.key,!['multiSubsidiary','multiCurrency'].includes(feature.key)]))}]});
+        if(sql.includes('from apps m')||sql.includes('from apps a')) return inMode({rows:[]});
+        if(sql.includes('from custom_record_types')) return inMode({rows:[{key:'restricted',plural_name:org+' records',icon_key:'File',allowed_roles:recordRoles}]});
         throw new Error('Unexpected query: '+sql);
       };
       const require=createRequire(import.meta.url);

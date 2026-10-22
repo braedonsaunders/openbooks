@@ -96,22 +96,18 @@ const post = (body: unknown) =>
   );
 
 async function fenceCount(orgId: string): Promise<number> {
-  const rows = (
-    await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from project_geofences where org_id = ${orgId}`),
-    )
-  ).rows;
+  const rows = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from project_geofences where org_id = ${orgId}`, "objects"),
+    );
   return rows[0]!.n;
 }
 
 async function fenceProject(orgId: string, id: string): Promise<string | null> {
-  const rows = (
-    await withBypassContext(() =>
+  const rows = await withBypassContext(() =>
       db.execute<{ project_id: string }>(
-        sql`select project_id from project_geofences where org_id = ${orgId} and id = ${id}`,
+        sql`select project_id from project_geofences where org_id = ${orgId} and id = ${id}`, "objects",
       ),
-    )
-  ).rows;
+    );
   return rows[0]?.project_id ?? null;
 }
 
